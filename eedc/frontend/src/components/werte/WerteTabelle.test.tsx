@@ -170,6 +170,48 @@ describe('WerteTabelle', () => {
     expect(screen.getAllByText(/[▲▼=]/).length).toBeGreaterThan(0)
   })
 
+  // Striker, T89667 #162 — beide Zahlenpaare sind seinem Screenshot der
+  // Tageswerte (Januar 2026, Einspeisung) entnommen, nicht erfunden.
+  describe('Δ erklärt die zwei Spalten daneben (T89667 #162)', () => {
+    /** Δ-Zelle der ersten Metrik-Spalte einer Datenzeile. */
+    function deltaZelleDerErstenZeile() {
+      const zeilen = screen.getAllByRole('row')
+      return within(zeilen[2]).getAllByRole('cell')[3]
+    }
+
+    function zeigeTagesVergleich(aktuellEinsp: number, vergleichEinsp: number) {
+      const aktuell = [tw('2026-01-27', { einspeisung: aktuellEinsp })].map(tagesZeile)
+      const vergleich = [tw('2025-12-27', { einspeisung: vergleichEinsp })]
+        .map(tagesZeile)
+        .map((z) => ({ ...z, vergleichKey: aktuell[0].vergleichKey }))
+      render(
+        <WerteTabelle
+          rows={aktuell} vorjahrRows={vergleich} granularitaet="tag"
+          jahrLabel="Jan" vergleichLabel="Dez" vergleichDefaultAn
+          defaultSpalten={['einspeisung']}
+        />,
+      )
+    }
+
+    it('0 gegen 12 ergibt 12, nicht 11', () => {
+      // Vorher: die Spalten rundeten auf „0" und „12", die Δ-Spalte rechnete
+      // 11,71 − 0,29 weiter und schrieb „▼ 11 (−97,6 %)" daneben.
+      zeigeTagesVergleich(0.29, 11.71)
+      const delta = deltaZelleDerErstenZeile()
+      expect(delta).toHaveTextContent('▼ 12')
+      expect(delta).not.toHaveTextContent('11')
+      expect(delta).toHaveTextContent('100,0 %')
+    })
+
+    it('zweimal 0 nebeneinander behauptet keinen Unterschied', () => {
+      // Vorher: „= 0" wäre richtig gewesen, dastand „▼ 0 (−73,3 %)".
+      zeigeTagesVergleich(0.12, 0.45)
+      const delta = deltaZelleDerErstenZeile()
+      expect(delta).toHaveTextContent('=')
+      expect(delta).not.toHaveTextContent('%')
+    })
+  })
+
   // PN 90204 (Rainer): über „Alle Jahre" lagen mehrere Jahrgänge desselben Monats
   // im Vergleichsfenster — jede Zeile verglich sich mit dem jüngsten, Dez 2025 im
   // Extremfall mit sich selbst (Δ 0,0 %).

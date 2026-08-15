@@ -10,7 +10,7 @@ export {
 export type { WerteZeile } from './zeile'
 export { monatsZeile, tagesZeile, richteMonateAus } from './zeile'
 export { vergleichLookup, gepaarteVergleichsZeilen, vergleichsAggregatBasis } from './vergleich'
-export { fmtWert } from './format'
+export { fmtWert, alsAngezeigt } from './format'
 export { aggregiere } from './aggregate'
 export { bewerteDelta } from './bewertung'
 export type { DeltaUrteil } from './bewertung'

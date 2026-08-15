@@ -5,7 +5,7 @@ import {
   WERTE_METRIKEN, WERTE_GRUPPEN, METRIK_BY_KEY, getMonatWert, getTagWert,
   metrikenFuer, monatsZeile, tagesZeile, richteMonateAus,
   vergleichLookup, gepaarteVergleichsZeilen, vergleichsAggregatBasis,
-  aggregiere, bewerteDelta, exportWerteCsv,
+  aggregiere, bewerteDelta, exportWerteCsv, fmtWert, alsAngezeigt,
 } from './index'
 
 // exportToCSV löst im echten Code einen Download aus — fürs Schema-Testen mocken.
@@ -199,6 +199,22 @@ describe('bewerteDelta', () => {
     expect(bewerteDelta(120, 100, undefined)).toBe('neutral')
     expect(bewerteDelta(100, 100, true)).toBe('neutral')
     expect(bewerteDelta(null, 100, true)).toBe('neutral')
+  })
+})
+
+describe('alsAngezeigt (T89667 #162)', () => {
+  it('liefert genau die Zahl, die fmtWert als Text zeigt', () => {
+    for (const [v, d] of [[11.71, 0], [0.29, 0], [0.45, 0], [16.045, 2], [-3.7, 0]] as const) {
+      expect(fmtWert(alsAngezeigt(v, d), d)).toBe(fmtWert(v, d))
+    }
+  })
+  it('rundet über den Betrag — die Anzeige tut es auch', () => {
+    // `toLocaleString` rundet „halfExpand" (−0,5 → „−1"), `Math.round` zur +∞
+    // hin (−0,5 → −0). Ohne die Betrags-Rundung wiche die Δ-Spalte bei
+    // negativen Finanz-Werten um eine Einheit von ihrer eigenen Anzeige ab.
+    expect(alsAngezeigt(-0.5, 0)).toBe(-1)
+    expect(alsAngezeigt(-2.5, 0)).toBe(-3)
+    expect(alsAngezeigt(0.5, 0)).toBe(1)
   })
 })
 

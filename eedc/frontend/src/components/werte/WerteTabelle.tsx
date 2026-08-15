@@ -26,7 +26,7 @@ import { Table, TableBody, TableFoot, TableHead, TableSortKopf } from '../ui/Tab
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import {
   WERTE_GRUPPEN, GRUPPE_LABELS,
-  fmtWert, aggregiere, bewerteDelta, exportWerteCsv, metrikenFuer,
+  fmtWert, alsAngezeigt, aggregiere, bewerteDelta, exportWerteCsv, metrikenFuer,
   vergleichLookup, vergleichsAggregatBasis, gepaarteVergleichsZeilen,
   type WerteMetrik, type WerteZeile, type Granularitaet,
 } from '../../lib/werte'
@@ -41,11 +41,24 @@ const URTEIL_KLASSE: Record<string, string> = {
   neutral: 'text-gray-400 dark:text-gray-500',
 }
 
+/**
+ * Die Δ-Spalte erklärt die zwei Spalten links von ihr — also rechnet sie mit
+ * genau den Zahlen, die dort stehen (`alsAngezeigt`), nicht mit den Rohwerten
+ * dahinter. Vorher konnte neben „0" und „12" ein „▼ 11 (−97,6 %)" stehen und
+ * neben zweimal „0" ein „▼ 0 (−73,3 %)" (Striker, T89667 #162).
+ *
+ * Folge, die so gewollt ist: Was unterhalb der Anzeige-Genauigkeit liegt, ist
+ * kein Unterschied mehr — die Zeile zeigt „=" statt einer Prozentzahl ohne
+ * sichtbare Grundlage. Wer die Feinheit sehen will, schaltet die Spalte auf
+ * mehr Stellen oder nimmt den CSV-Export, der die Rohwerte trägt.
+ */
 function DeltaZelle({ current, prev, metrik }: { current: number | null; prev: number | null; metrik: WerteMetrik }) {
   if (current == null || prev == null) return <span className="text-gray-300 dark:text-gray-600">—</span>
-  const delta = current - prev
-  const deltaPct = prev !== 0 ? (delta / Math.abs(prev)) * 100 : null
-  const urteil = bewerteDelta(current, prev, metrik.higherIsBetter)
+  const gezeigtCur = alsAngezeigt(current, metrik.decimals)
+  const gezeigtPrev = alsAngezeigt(prev, metrik.decimals)
+  const delta = gezeigtCur - gezeigtPrev
+  const deltaPct = gezeigtPrev !== 0 ? (delta / Math.abs(gezeigtPrev)) * 100 : null
+  const urteil = bewerteDelta(gezeigtCur, gezeigtPrev, metrik.higherIsBetter)
   const pfeil = delta > 0 ? '▲' : delta < 0 ? '▼' : '='
   return (
     <span className={URTEIL_KLASSE[urteil]}>
