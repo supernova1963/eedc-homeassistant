@@ -11,7 +11,7 @@
 
 ## Kommt mit dem nächsten Update
 
-> Zwei Anwender wollten etwas nachsehen können, und beide Male fehlte nicht die Zahl, sondern ihr Weg auf den Bildschirm.
+> Diesmal ging es fast durchweg darum, dass zwei Angaben auf demselben Bildschirm einander widersprachen — ein Wirkungsgrad ohne Einordnung, zwei Beträge mit einem Cent Abstand, eine Δ-Spalte, die nicht zu ihren Nachbarn passte, und eine Null, hinter der nichts gemessen war. Gefunden haben das durchweg Anwender beim genauen Hinsehen.
 
 ### „Sonstiges" lässt sich jetzt als Spalte einblenden — im Monat und am Tag
 
@@ -127,6 +127,28 @@ Dieselbe Ursache traf den **Ø-Preis Netz**. Er wurde aus zwei bereits gerundete
 Die Tageswerte werden jetzt ungerundet weitergereicht und erst bei der Anzeige gerundet, so wie es die Monatsansicht immer schon tat. Der Ø-Preis nennt außerdem den **hinterlegten Tarif deines Tages**, statt ihn zu rekonstruieren.
 
 > **Nebenwirkung, die du magst:** Auch die Summenzeile der Werte-Tabelle rechnet dadurch exakt, statt gerundete Tageswerte zu addieren.
+
+### Die Δ-Spalte passt jetzt zu den zwei Spalten daneben
+
+**Betrifft dich das?** Wenn du in einer Werte-Tabelle den **Vergleich** einschaltest (Vorperiode, Vorjahr oder Periode im Jahr).
+
+In einer Tageszeile stand: **Aktuell 0 · Vorperiode 12 · Δ ▼ 11 (−97,6 %)**. Zwölf minus null ist aber nicht elf. Ein paar Zeilen tiefer standen zweimal **0** nebeneinander — und dazwischen ein **▼ 0 (−73,3 %)**.
+
+Beides kam daher, dass die zwei Wert-Spalten gerundet anzeigen, die Δ-Spalte aber mit den ungerundeten Werten dahinter weiterrechnete. Die Δ-Spalte rechnet jetzt mit genau den Zahlen, die daneben stehen — sie erklärt, was du siehst.
+
+> **Was das für sehr kleine Werte heißt:** Ein Unterschied, den die Spalte gar nicht anzeigen kann, gilt jetzt als kein Unterschied — dort steht „=" statt einer Prozentzahl, für die es keine sichtbare Grundlage gibt. Brauchst du die Feinheit, hilft der **CSV-Export**: Er enthält unverändert die vollen Werte.
+
+### „0 kWh" steht nur noch da, wo wirklich gemessen wurde
+
+**Betrifft dich das?** Wenn für einzelne Zeiträume nur ein Teil deiner Zähler Daten hat — typisch nach einem Import aus der Home-Assistant-Historie, in der ein Sensor weiter zurückreicht als die anderen.
+
+In einer Tageszeile für den Januar stand: **PV „—" · Einspeisung 106 kWh · Netzbezug 0 · Gesamtverbrauch 0**. Die Einspeisung war echt gemessen, für PV und Netzbezug gab es in diesen Monaten überhaupt keinen Zähler — die Null war also die einzige Zahl der Zeile, hinter der nichts stand. Die PV-Spalte sagte das schon richtig; der Netzbezug konnte es bisher gar nicht sagen.
+
+Jetzt sagen es alle: Einspeisung, Netzbezug, Gesamtverbrauch und Direktverbrauch stehen auf **„—"**, wenn an dem Tag nichts erfasst wurde.
+
+> **Eine gemessene Null bleibt eine Null.** Wenn dein Haus einen Tag lang nichts aus dem Netz zieht, siehst du weiterhin eine 0 — das ist eine Aussage über deine Anlage und keine Lücke. Maßgeblich ist, ob ein Wert erfasst ist, nicht ob er größer als null ist.
+
+> **Und das Geld folgt der Menge.** Wo der Netzbezug fehlt, stehen **Netzbezug-Kosten**, **Eigenverbrauchs-Ersparnis**, **Netto-Ertrag** und **Netto-Bilanz** dieses Tages ebenfalls auf „—" statt auf „0,00 €". Der **Einspeise-Erlös** beruht auf einer gemessenen Menge und bleibt stehen. In der Monatsgrafik zeigen solche Tage eine Lücke statt eines Balkens auf Null.
 
 ---
 
