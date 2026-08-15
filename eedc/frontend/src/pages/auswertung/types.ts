@@ -64,6 +64,13 @@ export interface MonatsZeitreihe {
   wallbox_ladung: number | null
   wallbox_pv_ladung: number | null
   wallbox_pv_anteil: number | null
+  /**
+   * Sonstiges je Richtung (BHKW, Heizstab, Pool …) — null = kein solches Gerät
+   * in dem Monat. Die Verbrauchsseite steckt bereits im `gesamtverbrauch`; sie
+   * schlüsselt ihn auf, statt etwas hinzuzufügen.
+   */
+  sonstiges_erzeugung: number | null
+  sonstiges_verbrauch: number | null
   // ── Finanzen ───────────────────────────────────────────────────────────
   // Alle Werte kommen **fertig aus dem Backend** (`/monatsdaten/aggregiert`,
   // SoT `baue_finanz_zeile` + `berechne_finanz_aggregat`). Bis 2026-08-04
@@ -221,6 +228,9 @@ export function createMonatsZeitreihe(
       wallbox_ladung,
       wallbox_pv_ladung,
       wallbox_pv_anteil,
+      // Beide fertig aus der Antwort — hier wird nichts gefaltet (P10).
+      sonstiges_erzeugung: md.sonstige_erzeugung_kwh,
+      sonstiges_verbrauch: md.sonstige_verbrauch_kwh,
       einspeise_erloes: md.einspeise_erloes_euro,
       ev_ersparnis: md.ev_ersparnis_euro + md.bkw_ersparnis_euro,
       netzbezug_kosten: md.netzbezug_kosten_euro,

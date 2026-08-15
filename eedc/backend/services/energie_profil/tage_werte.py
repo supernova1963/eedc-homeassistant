@@ -47,6 +47,7 @@ from backend.core.berechnungen import (
     berechne_finanz_aggregat,
     bilanz_aus_stundenrows,
     erzeuger_kwh_je_investition,
+    sonstiges_kwh_je_richtung,
     summe_bkw_kwh,
     summe_pv_anlage_kwh,
     vollzyklen as berechne_vollzyklen,
@@ -114,6 +115,17 @@ async def baue_tage_werte(
     )
     speicher_invs = list(speicher_result.scalars().all())
 
+    # Sonstiges-Geräte für die beiden Sonstiges-Spalten. Wie beim Speicher pro
+    # Tag ausgewertet — ein Heizstab kann mitten im Zeitraum dazukommen oder
+    # stillgelegt werden ([[feedback_anschaffungsdatum_grenze]]).
+    sonstiges_result = await db.execute(
+        select(Investition).where(and_(
+            Investition.anlage_id == anlage_id,
+            Investition.typ == "sonstiges",
+        ))
+    )
+    sonstiges_invs = list(sonstiges_result.scalars().all())
+
     # Monatsdaten des Zeitraums für den Flex-Ø-Override. Bei dynamischem Tarif
     # trägt `netzbezug_durchschnittspreis_cent` den ABGERECHNETEN Monats-Ø und
     # schlägt den Stammdaten-Arbeitspreis (`resolve_netzbezug_preis_cent`).
@@ -151,6 +163,22 @@ async def baue_tage_werte(
         if not erzeuger_kwh:
             erzeuger_kwh = erzeuger_kwh_je_investition(
                 aggregiere_tep_komponenten(stunden_rows)
+            )
+
+        # Sonstiges je Richtung — dieselbe Quellen-Präzedenz wie eine Zeile
+        # darüber: erst der Boundary-Rollup, sonst die Σ der Stunden. Die
+        # Kategorien werden **je Tag** gebildet, damit die Laufzeitgrenze des
+        # Geräts gilt und nicht die des Zeitraums.
+        sonstiges_kategorien = {
+            str(i.id): ((i.parameter or {}).get("kategorie") or "")
+            for i in sonstiges_invs if i.ist_aktiv_an(tag)
+        }
+        sonstiges = sonstiges_kwh_je_richtung(
+            tz.komponenten_kwh if tz else None, sonstiges_kategorien
+        )
+        if sonstiges.erzeugung_kwh is None and sonstiges.verbrauch_kwh is None:
+            sonstiges = sonstiges_kwh_je_richtung(
+                aggregiere_tep_komponenten(stunden_rows), sonstiges_kategorien
             )
         # §51 gilt nur für Anlagen mit gesetztem Schalter — das Gate liegt im
         # Erlös-Service, nicht hier (bis 2026-08-03 las diese Zeile die Spalte
@@ -215,6 +243,8 @@ async def baue_tage_werte(
                 ),
             ), 2),
             wp_strom=_nz(bilanz.wp_strom_kwh),
+            sonstiges_erzeugung=_r(sonstiges.erzeugung_kwh, 3),
+            sonstiges_verbrauch=_r(sonstiges.verbrauch_kwh, 3),
             # Finanzen
             einspeise_erloes=round(finanz.einspeise_erloes_euro, 2),
             ev_ersparnis=round(finanz.ev_ersparnis_euro, 2),

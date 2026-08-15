@@ -11,7 +11,7 @@ Inline-`startswith("pv_")`-Patterns außerhalb dieses Layers nicht auftauchen.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import NamedTuple, Optional
 
 
 # ─── Whitelist-Konstante (SoT) ──────────────────────────────────────────────
@@ -40,6 +40,7 @@ PV_KOMPONENTEN_PREFIXE: tuple[str, ...] = ("pv_", "bkw_")
 WAERMEPUMPE_KOMPONENTEN_PREFIXE: tuple[str, ...] = ("waermepumpe_",)
 WALLBOX_KOMPONENTEN_PREFIXE: tuple[str, ...] = ("wallbox_", "eauto_")
 BATTERIE_KOMPONENTEN_PREFIXE: tuple[str, ...] = ("batterie_",)
+SONSTIGES_KOMPONENTEN_PREFIX: str = "sonstige_"
 
 
 # ─── Σ-Helper ───────────────────────────────────────────────────────────────
@@ -116,6 +117,78 @@ def erzeuger_kwh_je_investition(komponenten_kwh: Optional[dict]) -> dict[str, fl
             continue
         je_inv[rest] = je_inv.get(rest, 0.0) + float(wert)
     return je_inv
+
+
+class SonstigesTagesSummen(NamedTuple):
+    """Sonstiges-Mengen EINES Tages, nach Richtung getrennt.
+
+    ``None`` heißt „kein Gerät dieser Richtung hat für den Tag etwas geliefert" —
+    nicht 0 (``docs/KONZEPT-UNVOLLSTAENDIGE-WERTE.md``).
+    """
+
+    erzeugung_kwh: Optional[float]
+    verbrauch_kwh: Optional[float]
+
+
+def sonstiges_kwh_je_richtung(
+    komponenten_kwh: Optional[dict],
+    kategorie_je_investition: dict[str, str],
+) -> SonstigesTagesSummen:
+    """Tages-Σ der ``sonstiges``-Geräte, getrennt in Erzeugung und Verbrauch.
+
+    Gegenstück zur Monatsgröße aus ``SonstigesFakten`` — dieselbe Trennung, aber
+    aus dem Komponenten-JSON eines Tages. Die Richtung kommt aus der **gepflegten
+    Kategorie** der Investition (``parameter.kategorie``), nicht aus dem
+    Vorzeichen des Werts, und das ist der Kern dieser Funktion:
+
+    * Der **Leistungspfad** (``TagesEnergieProfil.komponenten``) trägt das
+      Vorzeichen der Seite — ein Verbraucher steht dort negativ
+      (gemessen: ``sonstige_10 = +0,97``/Erzeuger, ``sonstige_12 = −0,6``/Verbraucher).
+    * Der **Boundary-/LTS-Pfad** (``TagesZusammenfassung.komponenten_kwh``)
+      schreibt je Gerät **einen positiven** Wert, dessen Bedeutung erst die
+      Kategorie ergibt (``snapshot/komponenten_beitraege.py``, Either-Or
+      ``verbrauch_kwh``/``erzeugung_kwh``).
+
+    Eine Vorzeichen-Regel lieferte für denselben Tag je nach Schreibpfad ein
+    anderes Ergebnis — genau die Asymmetrie-Klasse aus
+    [[feedback_aggregator_symmetrie]]. Deshalb: Richtung aus der Kategorie,
+    Menge als Betrag.
+
+    ``kategorie_je_investition`` bildet die **Investitions-ID als String** auf
+    die Kategorie ab und trägt damit zugleich den Laufzeit-Filter: wer nicht
+    darin steht (am Tag nicht aktiv, gelöscht, kein ``sonstiges``), zählt nicht.
+
+    **Bewusste Lücke, sie gehört benannt:** Kategorie ``speicher`` bleibt außen
+    vor. Auf Tagesebene gibt es je Gerät genau **eine** Zahl; bei einem
+    bidirektionalen Gerät ist sie ein Netto-Wert und lässt sich weder der
+    Erzeugung noch dem Verbrauch zuschlagen. Der Monat kann das, weil dort zwei
+    getrennte Felder gepflegt werden.
+    """
+    if not komponenten_kwh or not kategorie_je_investition:
+        return SonstigesTagesSummen(None, None)
+    erzeugung: Optional[float] = None
+    verbrauch: Optional[float] = None
+    for key, wert in komponenten_kwh.items():
+        if not isinstance(wert, (int, float)):
+            continue
+        praefix, _, rest = str(key).rpartition("_")
+        if f"{praefix}_" != SONSTIGES_KOMPONENTEN_PREFIX or not rest.isdigit():
+            continue
+        kategorie = kategorie_je_investition.get(rest)
+        if kategorie is None or kategorie == "speicher":
+            continue
+        betrag = abs(float(wert))
+        if kategorie == "erzeuger":
+            erzeugung = (erzeugung or 0.0) + betrag
+        else:
+            # Leere Kategorie zählt als Verbraucher — dieselbe Vorgabe, mit der
+            # **beide** Tages-Schreibpfade den Wert überhaupt erst erzeugt haben
+            # (`live_sensor_config.baue_investitions_serien`,
+            # `snapshot/komponenten_beitraege`). Der Monat nimmt bei leerer
+            # Kategorie beide Felder mit (`imd_typ_beitrag`) — dort stehen sie
+            # auch beide da.
+            verbrauch = (verbrauch or 0.0) + betrag
+    return SonstigesTagesSummen(erzeugung, verbrauch)
 
 
 # ─── Netzpunkt-Bilanz: Gesamterzeugung hinter dem Hauszähler ────────────────

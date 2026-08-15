@@ -228,6 +228,16 @@ class AggregierteMonatsdatenResponse(BaseModel):
     # direktverbrauch/eigenverbrauch unten gerechnet werden. Ohne dieses Feld
     # kann eine UI die Verwendungsseite nicht in ihre Erzeuger zerlegen (A15/N43).
     sonstige_erzeugung_kwh: Optional[float]
+    # Die Verbraucherseite derselben Gerätegruppe (typ=`sonstiges` + Kategorie
+    # `verbraucher`, z. B. Heizstab, Pool, Klimasplit). Sie steckt bereits im
+    # Hausverbrauch — dieses Feld schlüsselt ihn auf, es addiert nichts.
+    # Nachgereicht am 2026-08-14 (Melder rapahl): die Werte-Tabelle konnte
+    # Sonstiges bis dahin überhaupt nicht als Spalte zeigen, weder erzeugend
+    # noch verbrauchend, und damit ließ sich nicht prüfen, ob die gepflegten
+    # Monatswerte ankommen. `None` = es gibt kein solches Gerät im Monat (P4,
+    # `SonstigesFakten.hat_verbraucher_zeile`) — eine 0 hieße „da, hat nichts
+    # gezogen".
+    sonstige_verbrauch_kwh: Optional[float]
     # Die Netzpunkt-Größe: ALLES, was hinter dem einen Hauszähler erzeugt wird
     # (`pv_module_kwh + bkw_kwh + sonstige_erzeugung_kwh`). Name aus dem Layer-SoT
     # `core/berechnungen/energie.py::erzeugung_hinter_zaehler_kwh` — bewusst nicht
@@ -574,6 +584,10 @@ async def list_monatsdaten_aggregiert(
             sonstige_erzeugung_kwh=(
                 round(f.erzeugung.sonstige_erzeuger_kwh, 1)
                 if f.sonstiges.hat_erzeuger_zeile else None
+            ),
+            sonstige_verbrauch_kwh=(
+                round(f.sonstiges.verbrauch_kwh, 1)
+                if f.sonstiges.hat_verbraucher_zeile else None
             ),
             # Dieselbe Zahl, mit der direktverbrauch/eigenverbrauch gerechnet
             # wurden — nicht neu summiert, sonst driftet die ausgelieferte Größe

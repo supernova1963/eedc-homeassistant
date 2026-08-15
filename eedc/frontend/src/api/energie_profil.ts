@@ -107,6 +107,14 @@ export interface TagWerte {
   speicher_effizienz: number | null
   // Wärmepumpe (nur Strom je Tag)
   wp_strom: number | null
+  /**
+   * Sonstiges je Richtung (BHKW, Heizstab, Pool …). ⚠ Andere Quelle als im
+   * Monat: der Tag kennt nur Geräte mit **eigenem Sensor/Zähler**. Wer sein
+   * Sonstiges nur monatlich pflegt, sieht die Monatsspalte gefüllt und die
+   * Tagesspalte leer — `null` heißt „für den Tag nicht gemessen", nicht 0.
+   */
+  sonstiges_erzeugung: number | null
+  sonstiges_verbrauch: number | null
   // Finanzen (€)
   einspeise_erloes: number
   ev_ersparnis: number

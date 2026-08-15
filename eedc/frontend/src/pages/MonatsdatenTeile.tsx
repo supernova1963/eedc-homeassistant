@@ -71,6 +71,13 @@ const COLUMNS: ColumnConfig[] = [
   { key: 'eauto_km', label: 'E-Auto km', shortLabel: 'km', group: 'komponenten', getValue: (md) => md.eauto_km, defaultVisible: false },
   { key: 'wallbox_ladung', label: 'Wallbox Ladung', shortLabel: 'WB', group: 'komponenten', getValue: (md) => md.wallbox_ladung_kwh, format: 'kwh', defaultVisible: false },
   { key: 'wallbox_ladung_pv', label: 'Wallbox PV-Ladung', shortLabel: 'WB PV', group: 'komponenten', getValue: (md) => md.wallbox_ladung_pv_kwh, format: 'kwh', defaultVisible: false },
+  // Sonstiges (BHKW, Heizstab, Pool …) — die Richtung kommt aus der bei der
+  // Investition gepflegten Kategorie. Nachgereicht 2026-08-15: die Pflege-Liste
+  // ist der Ort, an dem man nachsieht, ob ein erfasster Wert angekommen ist,
+  // und genau diese Gerätegruppe fehlte hier (wie in der Werte-Tabelle).
+  // `null` = kein solches Gerät im Monat (P4) — die Zelle bleibt „—".
+  { key: 'sonstige_erzeugung', label: 'Sonstiges Erzeugung', shortLabel: 'Sonst.Erz', group: 'komponenten', getValue: (md) => md.sonstige_erzeugung_kwh, format: 'kwh', defaultVisible: false },
+  { key: 'sonstige_verbrauch', label: 'Sonstiges Verbrauch', shortLabel: 'Sonst.Verbr', group: 'komponenten', getValue: (md) => md.sonstige_verbrauch_kwh, format: 'kwh', defaultVisible: false },
   // Berechnete Werte
   { key: 'direktverbrauch', label: 'Direktverbrauch', shortLabel: 'Direkt', group: 'berechnet', getValue: (md) => md.direktverbrauch_kwh, format: 'kwh', defaultVisible: false },
   { key: 'eigenverbrauch', label: 'Eigenverbrauch', shortLabel: 'Eigen', group: 'berechnet', getValue: (md) => md.eigenverbrauch_kwh, format: 'kwh', defaultVisible: true },

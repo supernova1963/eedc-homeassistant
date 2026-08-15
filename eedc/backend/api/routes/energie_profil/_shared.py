@@ -352,6 +352,15 @@ class TagWerteResponse(BaseModel):
     speicher_vollzyklen: Optional[float] = None
     # Wärmepumpe (nur Strom je Tag ableitbar; Wärme/COP bleiben monat-only)
     wp_strom: Optional[float] = None
+    # Sonstiges (BHKW, Heizstab, Pool …) — Richtung aus der gepflegten
+    # Kategorie, Menge als Betrag (Layer-SoT `sonstiges_kwh_je_richtung`).
+    # ⚠ Andere Quelle als im Monat: hier zählt nur, was einen **eigenen
+    # Sensor/Zähler** hat (Komponenten-JSON des Tages). Ein Gerät, das nur
+    # monatlich von Hand gepflegt wird, hat keine Tageszahl — die Spalte bleibt
+    # dann leer, während die Monatsspalte danebensteht. `None` heißt deshalb
+    # „für diesen Tag nicht gemessen", nicht 0.
+    sonstiges_erzeugung: Optional[float] = None
+    sonstiges_verbrauch: Optional[float] = None
     # Finanzen (€) — einfaches lineares Modell wie createMonatsZeitreihe
     einspeise_erloes: float = 0.0
     ev_ersparnis: float = 0.0

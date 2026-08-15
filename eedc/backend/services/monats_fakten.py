@@ -407,6 +407,10 @@ class SonstigesFakten:
     anlage_ertraege_euro: float = 0.0
     anlage_ausgaben_euro: float = 0.0
     hat_erzeuger_zeile: bool = False
+    #: Gegenstück für die Verbraucherseite (Heizstab, Pool, Klimasplit). Erst
+    #: mit ihm lässt sich die Spalte „Sonstiges Verbrauch" leer lassen, wo es
+    #: gar kein solches Gerät gibt, statt eine 0 zu behaupten.
+    hat_verbraucher_zeile: bool = False
     #: Dieselben sechs Mengen je ``Investition.id`` — die Aufschlüsselung der
     #: Summen oben, nicht eine zweite Quelle. Enthalten sind nur Geräte, die im
     #: Monat **sichtbar** waren (Laufzeit-Filter der Schicht); wer die Liste
@@ -770,6 +774,11 @@ class _RohMonat:
         #: `sonstiges` deckt Erzeuger und Verbraucher ab, und nur der Erzeuger
         #: gehört in die Erzeugungs-Anzeige.
         self.hat_sonstigen_erzeuger = False
+        #: Spiegelbild dazu für die **Verbraucher**-Seite. Ohne ihn müsste eine
+        #: Sicht aus „Verbrauch == 0" auf „gibt es nicht" schließen — genau die
+        #: Verwechslung, die `hat_sonstigen_erzeuger` auf der anderen Seite
+        #: verhindert (P4).
+        self.hat_sonstigen_verbraucher = False
         self.pv_je_modul_roh: dict[int, float] = {}
         self.bkw_je_investition: dict[int, float] = {}
         self.bkw_erzeugung = 0.0
@@ -937,6 +946,10 @@ class _RohMonat:
             # ein Beitrag > 0.
             if b.sonstiges_erzeugung or (inv.parameter or {}).get("kategorie") == "erzeuger":
                 self.hat_sonstigen_erzeuger = True
+            # Dieselbe Regel auf der Verbraucherseite: ein Heizstab, der im
+            # Monat 0 kWh gezogen hat, ist ein echter 0-Wert.
+            if b.sonstiges_verbrauch or (inv.parameter or {}).get("kategorie") == "verbraucher":
+                self.hat_sonstigen_verbraucher = True
 
         # #310: die Finanz-Positionen hängen NICHT am Typ — eine Reparatur am
         # Wechselrichter ist so real wie eine am Speicher.
@@ -1145,6 +1158,7 @@ async def _baue_fakt(
             anlage_ertraege_euro=round(md_summen["ertraege_euro"], 2) if md_summen else 0.0,
             anlage_ausgaben_euro=round(md_summen["ausgaben_euro"], 2) if md_summen else 0.0,
             hat_erzeuger_zeile=roh.hat_sonstigen_erzeuger,
+            hat_verbraucher_zeile=roh.hat_sonstigen_verbraucher,
         ),
         tarif=tarif,
         eeg=EegFakten(neg_preis_kwh=neg_preis_kwh),

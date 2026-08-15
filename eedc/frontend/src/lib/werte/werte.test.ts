@@ -25,6 +25,7 @@ function mz(monat: number, jahr: number, over: Partial<MonatsZeitreihe> = {}): M
     wp_waerme_heizen: null, wp_waerme_warmwasser: null,
     eauto_km: null, eauto_ladung: null, eauto_pv_anteil: null,
     wallbox_ladung: null, wallbox_pv_ladung: null, wallbox_pv_anteil: null,
+    sonstiges_erzeugung: null, sonstiges_verbrauch: null,
     einspeise_erloes: 5, ev_ersparnis: 12, netzbezug_kosten: 9,
     netto_ertrag: 8, netto_bilanz: 8, ust_eigenverbrauch: 0, netzbezug_preis_cent: null, co2_einsparung: 25,
     ...over,
@@ -41,6 +42,7 @@ function tw(datum: string, over: Partial<TagWerte> = {}): TagWerte {
     speicher_ladung: null, speicher_entladung: null, speicher_effizienz: null,
     speicher_vollzyklen: null,
     wp_strom: null,
+    sonstiges_erzeugung: null, sonstiges_verbrauch: null,
     einspeise_erloes: 1, ev_ersparnis: 2, netzbezug_kosten: 1.5,
     netto_ertrag: 3, netto_bilanz: 1.5, co2_einsparung: 11.4,
     ueberschuss_kwh: 8, defizit_kwh: 2, peak_pv_kw: 6.2,
@@ -55,8 +57,8 @@ function tw(datum: string, over: Partial<TagWerte> = {}): TagWerte {
 }
 
 describe('W1-Registry', () => {
-  it('hat 45 Metriken (34 Monat + 11 Tag-native), jede mit gültiger Gruppe + granular', () => {
-    expect(WERTE_METRIKEN).toHaveLength(45)
+  it('hat 47 Metriken (36 Monat + 11 Tag-native), jede mit gültiger Gruppe + granular', () => {
+    expect(WERTE_METRIKEN).toHaveLength(47)
     for (const m of WERTE_METRIKEN) {
       expect(WERTE_GRUPPEN).toContain(m.gruppe)
       expect(m.granular.length).toBeGreaterThan(0)
@@ -80,9 +82,9 @@ describe('W1-Registry', () => {
 })
 
 describe('metrikenFuer (Granularität)', () => {
-  it('Monat = 34 Registry-Metriken, kein Tag-natives Feld', () => {
+  it('Monat = 36 Registry-Metriken, kein Tag-natives Feld', () => {
     const m = metrikenFuer('monat')
-    expect(m).toHaveLength(34)
+    expect(m).toHaveLength(36)
     expect(m.find((x) => x.key === 'peak_pv_kw')).toBeUndefined()
     expect(m.find((x) => x.key === 'wp_waerme')).toBeDefined()
     // Vollständigkeits-Spalten (Gernot 2026-06-26): verfügbare Felder als wählbare Spalten.
@@ -272,5 +274,33 @@ describe('exportWerteCsv (Schema)', () => {
     for (const zelle of out.flat()) {
       if (typeof zelle === 'number') expect(String(zelle)).toMatch(/^-?\d+(\.\d{1,4})?$/)
     }
+  })
+})
+
+describe('Sonstiges-Spalten (Melder rapahl, 2026-08-14)', () => {
+  const keys = ['sonstiges_erzeugung', 'sonstiges_verbrauch']
+
+  it('stehen in Tages- UND Monatstabelle zur Wahl, aber nie ungefragt', () => {
+    for (const key of keys) {
+      const m = METRIK_BY_KEY[key]
+      expect(m.granular).toEqual(['monat', 'tag'])
+      // Rainers Wort war „Spaltenauswahlmöglichkeit" — eine neue Pflichtspalte
+      // änderte vertraute Anzeigen ungefragt.
+      expect(m.defaultVisible).toBe(false)
+      expect(m.gruppe).toBe('sonstiges')
+      // Die Einheit steht im Namen (Kopfzeile „… (kWh)"), damit #377
+      // (Gas/Öl/Wasser in m³/l) eigene Spalten daneben bekommt statt diese zu
+      // übernehmen.
+      expect(m.unit).toBe('kWh')
+    }
+    expect(metrikenFuer('monat').filter((m) => keys.includes(m.key))).toHaveLength(2)
+    expect(metrikenFuer('tag').filter((m) => keys.includes(m.key))).toHaveLength(2)
+  })
+
+  it('werden aus beiden Granularitäts-Zeilen gelesen', () => {
+    expect(getMonatWert(mz(5, 2026, { sonstiges_verbrauch: 45 }), 'sonstiges_verbrauch')).toBe(45)
+    expect(getTagWert(tw('2026-05-10', { sonstiges_erzeugung: 1.94 }), 'sonstiges_erzeugung')).toBe(1.94)
+    // Kein Gerät ⇒ kein Wert, keine 0.
+    expect(getTagWert(tw('2026-05-10'), 'sonstiges_verbrauch')).toBeNull()
   })
 })

@@ -94,6 +94,10 @@ export interface AggregierteMonatsdaten {
   // NICHT in pv_erzeugung_kwh (die bleibt rein PV), aber Teil der
   // Netzpunkt-Bilanz, aus der direktverbrauch/eigenverbrauch gerechnet sind.
   sonstige_erzeugung_kwh: number | null
+  // Verbraucherseite derselben Gruppe (Kategorie `verbraucher`, z. B. Heizstab,
+  // Pool, Klimasplit). Steckt bereits im Hausverbrauch — eine Aufschlüsselung,
+  // keine zusätzliche Menge. `null` = kein solches Gerät im Monat.
+  sonstige_verbrauch_kwh: number | null
   // Netzpunkt-Größe: alles hinter dem Hauszähler Erzeugte
   // (`pv_module_kwh + bkw_kwh + sonstige_erzeugung_kwh`) — genau die Zahl, mit
   // der das Backend direktverbrauch/eigenverbrauch gerechnet hat. NIE als

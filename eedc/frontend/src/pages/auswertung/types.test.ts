@@ -17,7 +17,7 @@ const md = (over: Partial<AggregierteMonatsdaten> = {}): AggregierteMonatsdaten 
   id: 1, anlage_id: 1, jahr: 2026, monat: 5,
   einspeisung_kwh: 1000, netzbezug_kwh: 200,
   globalstrahlung_kwh_m2: null, sonnenstunden: null,
-  pv_erzeugung_kwh: 1500, pv_module_kwh: 1500, bkw_kwh: null, sonstige_erzeugung_kwh: null,
+  pv_erzeugung_kwh: 1500, pv_module_kwh: 1500, bkw_kwh: null, sonstige_erzeugung_kwh: null, sonstige_verbrauch_kwh: null,
   erzeugung_hinter_zaehler_kwh: 1500,
   speicher_ladung_kwh: null, speicher_entladung_kwh: null, speicher_netzladung_kwh: null,
   wp_strom_kwh: null, wp_strom_heizen_kwh: null, wp_strom_warmwasser_kwh: null,
@@ -124,5 +124,19 @@ describe('createMonatsZeitreihe — CO₂ kommt aus dem Kanon (N-21)', () => {
     expect(createMonatsZeitreihe([md()])[0].co2_einsparung).toBeNull()
     // Auch ein Monat, den die Reihe nicht kennt, bleibt leer (kein Fallback).
     expect(createMonatsZeitreihe([md({ monat: 7 })], undefined, [co2()])[0].co2_einsparung).toBeNull()
+  })
+})
+
+describe('Sonstiges-Spalten (Melder rapahl, 2026-08-14)', () => {
+  it('reicht beide Richtungen durch und macht aus „kein Gerät" keine 0', () => {
+    const [zeile] = createMonatsZeitreihe([
+      md({ sonstige_erzeugung_kwh: 300, sonstige_verbrauch_kwh: 45 }),
+    ])
+    expect(zeile.sonstiges_erzeugung).toBe(300)
+    expect(zeile.sonstiges_verbrauch).toBe(45)
+
+    const [ohne] = createMonatsZeitreihe([md()])
+    expect(ohne.sonstiges_erzeugung).toBeNull()
+    expect(ohne.sonstiges_verbrauch).toBeNull()
   })
 })

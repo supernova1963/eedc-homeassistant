@@ -14,7 +14,7 @@
 import type { MonatsZeitreihe } from '../../pages/auswertung/types'
 import type { TagWerte } from '../../api/energie_profil'
 
-export type WerteGruppe = 'basis' | 'quoten' | 'wetter' | 'speicher' | 'waermepumpe' | 'eauto' | 'finanzen' | 'co2' | 'tagdetail' | 'erzeuger'
+export type WerteGruppe = 'basis' | 'quoten' | 'wetter' | 'speicher' | 'waermepumpe' | 'eauto' | 'sonstiges' | 'finanzen' | 'co2' | 'tagdetail' | 'erzeuger'
 export type WerteAggregation = 'sum' | 'avg' | 'none'
 
 /**
@@ -82,6 +82,23 @@ export const WERTE_METRIKEN: WerteMetrik[] = [
   { key: 'wallbox_ladung',     label: 'Wallbox Ladung',    unit: 'kWh',     gruppe: 'eauto',       decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
   { key: 'wallbox_pv_ladung',  label: 'Wallbox PV-Ladung', unit: 'kWh',     gruppe: 'eauto',       decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
   { key: 'wallbox_pv_anteil',  label: 'Wallbox PV-Anteil', unit: '%',       gruppe: 'eauto',       decimals: 1, aggregation: 'avg', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
+  // Sonstiges (BHKW, Heizstab, Pool …) — Melder rapahl, 2026-08-14: ohne diese
+  // Spalten ließ sich nicht prüfen, ob die gepflegten Werte eines
+  // Sonstiges-Geräts überhaupt ankommen. Bewusst **nicht** `defaultVisible`:
+  // wählbar, nicht vorgegeben.
+  //
+  // ⚠ Die Namen tragen die Einheit, und das ist Absicht (#377 Gas/Öl/Wasser):
+  // ein Gas- oder Wasserzähler bringt m³ bzw. l ohne kWh-Bezug. Eine generisch
+  // „Sonstiges" genannte Spalte hätte diese Fläche belegt; so bekommt #377
+  // eigene Spalten mit eigener Einheit in **derselben Gruppe**.
+  //
+  // ⚠ Tag und Monat speisen sich aus verschiedenen Quellen: der Monat aus den
+  // gepflegten `InvestitionMonatsdaten` (P10-Schicht), der Tag aus dem
+  // Komponenten-JSON — dort steht nur, was einen eigenen Sensor hat. Ein nur
+  // monatlich gepflegtes Gerät hat deshalb eine Monats- und keine Tageszahl;
+  // Σ Tage ≠ Monat ist hier der Normalfall, nicht der Fehler.
+  { key: 'sonstiges_erzeugung', label: 'Sonstiges Erzeugung', unit: 'kWh',   gruppe: 'sonstiges',   decimals: 1, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: true },
+  { key: 'sonstiges_verbrauch', label: 'Sonstiges Verbrauch', unit: 'kWh',   gruppe: 'sonstiges',   decimals: 1, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: undefined },
   // Finanzen — Berechnung via createMonatsZeitreihe mit historisch korrektem Tarif pro Monat
   { key: 'einspeise_erloes',   label: 'Einspeise-Erlös',   unit: '€',       gruppe: 'finanzen',    decimals: 2, aggregation: 'sum', defaultVisible: true,  granular: MONAT_TAG, higherIsBetter: true },
   { key: 'ev_ersparnis',       label: 'EV-Ersparnis',      unit: '€',       gruppe: 'finanzen',    decimals: 2, aggregation: 'sum', defaultVisible: true,  granular: MONAT_TAG, higherIsBetter: true },
@@ -119,7 +136,7 @@ export const WERTE_METRIKEN: WerteMetrik[] = [
   { key: 'temperatur_max_c',       label: 'Temp. max',      unit: '°C',     gruppe: 'tagdetail',   decimals: 1, aggregation: 'avg', defaultVisible: false, granular: NUR_TAG, higherIsBetter: undefined },
 ]
 
-export const WERTE_GRUPPEN: WerteGruppe[] = ['basis', 'quoten', 'wetter', 'speicher', 'waermepumpe', 'eauto', 'finanzen', 'co2', 'tagdetail', 'erzeuger']
+export const WERTE_GRUPPEN: WerteGruppe[] = ['basis', 'quoten', 'wetter', 'speicher', 'waermepumpe', 'eauto', 'sonstiges', 'finanzen', 'co2', 'tagdetail', 'erzeuger']
 
 export const GRUPPE_LABELS: Record<WerteGruppe, string> = {
   basis:       'Energie',
@@ -128,6 +145,7 @@ export const GRUPPE_LABELS: Record<WerteGruppe, string> = {
   speicher:    'Speicher',
   waermepumpe: 'Wärmepumpe',
   eauto:       'E-Auto',
+  sonstiges:   'Sonstiges',
   finanzen:    'Finanzen',
   co2:         'CO₂',
   tagdetail:   'Tagesdetail',
