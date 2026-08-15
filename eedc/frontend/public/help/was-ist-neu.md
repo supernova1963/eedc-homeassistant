@@ -66,6 +66,68 @@ Sie erscheint nur im **laufenden** Monat; ist er vorbei, sagen beide Kacheln das
 
 *(Gemeldet von dietmar1968, Forum-Thread zu eedc.)*
 
+### Fehlt der Strompreis für einen Monat, ist das jetzt ein Fehler
+
+**Betrifft dich das?** Wenn du Monate importiert und den Strompreis erst danach angelegt hast.
+
+Das ist der übliche Weg — und die Falle dabei: Das Tarif-Formular schlägt **heute** als „Gültig ab" vor. Alle älteren Monate fallen damit hinter den Tarif und rechnen mit einer Vorbelegung: **30 ct/kWh** Netzbezug und **8,2 ct/kWh** Einspeisung.
+
+eedc muss mit irgendetwas rechnen, sonst gäbe es für diese Monate gar keine Finanzzahl. Aber das Ergebnis ist ein **geratener Preis auf gemessenen Mengen** — Netto-Ertrag, ROI und Jahresbericht dieser Monate tragen dann eine Zahl, die nicht aus deinen Daten stammt. Der Daten-Checker weist das deshalb ab sofort als **Fehler** aus statt als Warnung.
+
+> **Aufgelöst ist er in einem Schritt:** Beim ältesten Tarif das „Gültig ab" auf den Beginn deiner Daten zurückziehen. Die Auswertungen rechnen sofort neu.
+
+### Ein Gerät unter „Sonstiges" ohne Kategorie war unsichtbar
+
+**Betrifft dich das?** Wenn du ein Gerät unter *Sonstiges* führst, bei dem *Erzeuger* oder *Verbraucher* nicht gepflegt ist — typisch bei Altbestand oder nach einem Import.
+
+In *Cockpit → Monat* zeigte der Block „Sonstige Geräte" es nicht an: Ohne die Angabe galt es stillschweigend als **Erzeuger**, und dort erscheint nur, was auch erzeugt hat. Sein Verbrauch lief in den Summen darüber trotzdem mit — die Zahl war also da, das Gerät dazu nicht.
+
+Ist keine Kategorie gepflegt, entscheidet jetzt der **Wert**, in welcher Richtung das Gerät steht. Hast du die Kategorie gepflegt, gilt unverändert sie.
+
+> **Es ändert sich keine Zahl** — das Gerät wird nur dort sichtbar, wo es hingehört. Die Kategorie nachzupflegen bleibt trotzdem der bessere Weg: Sie ist die einzige Angabe, die auch dann trägt, wenn ein Gerät in einem Monat gar nichts geliefert hat.
+
+### Die beiden Prognose-Tabellen stehen wieder spaltengleich untereinander
+
+**Betrifft dich das?** Wenn du in *Auswertungen → Prognose* den Block **Tages-/Stundenprofil** liest.
+
+Dort folgt der **7-Tage-Vergleich** direkt auf den **Stundenvergleich heute**, und beide zeigen dieselben Quellen in derselben Reihenfolge: OpenMeteo, eedc, Solcast und IST — dazu SFML, wenn du sie als Quelle gewählt hast. Genau deshalb liest man sie untereinander.
+
+Nur begannen die Spalten der oberen Tabelle rund **110 Pixel weiter links** als die der unteren: Der 7-Tage-Vergleich führt vor dem Datum noch das Wetter-Symbol, der Stundenvergleich hatte diese Spalte nicht. Die rechte Hälfte deckte sich dadurch, die erste Quelle nicht — beim Vergleichen musste man den Blick versetzen.
+
+Der Stundenvergleich führt diese Spalte jetzt mit. Sie bleibt leer, hält aber den Aufbau beider Tabellen deckungsgleich.
+
+> **Es ändert sich keine Zahl**, und es verschwindet keine Spalte. Die Werte stehen nur dort, wo man sie beim Untereinanderlesen sucht.
+
+*(Gemeldet von rapahl.)*
+
+### Ein Wirkungsgrad über 100 % steht am Tag nicht mehr kommentarlos da
+
+**Betrifft dich das?** Wenn du einen Speicher hast und in *Cockpit → Tag* die Kachel **Wirkungsgrad** liest.
+
+Dort stand der rohe Quotient „Entladung ÷ Ladung" — und der kann an einem einzelnen Tag über 100 % liegen, ohne dass an deinem Speicher etwas kaputt wäre: Beginnst du morgens mit vollem Speicher und endest abends leer, hast du an diesem Tag mehr entnommen, als du geladen hast. Über einen Monat gleicht sich das aus, über einen Tag nicht.
+
+*Cockpit → Monat* rechnet diesen Übertrag längst heraus und schreibt dazu, worauf der Wert beruht. Die Tagesansicht tat beides nicht — sie zeigte einfach 100,5 %. Jetzt gilt derselbe Maßstab:
+
+- **Ist dein Ladestand gemessen** (SoC-Sensor), wird der Übertrag herausgerechnet: „Ladestand am Rand herausgerechnet".
+- **Ist er nicht gemessen** und der Wert bleibt unter 100 %, steht er weiterhin da — mit dem Zusatz „ohne Ladestand gerechnet — ungenau".
+- **Ist er nicht gemessen** und der Wert läge über 100 %, steht dort „—" **mit Begründung** statt einer Zahl, die es nicht geben kann.
+
+> **An deinen Lade- und Entlademengen ändert sich nichts** — nur an der einen Prozentzahl daneben.
+
+*(Gemeldet von Knallfrosch; die richtige Erklärung kam von rapahl im selben Faden.)*
+
+### Zwei Beträge auf der Tagesseite unterschieden sich um einen Cent
+
+**Betrifft dich das?** Wenn du in *Cockpit → Tag* die Kachel **Netto-Ertrag** mit der Finanz-Bilanz darunter vergleichst — oder die Kachel **Ø-Preis Netz** liest.
+
+Die Kachel zeigte 16,05 €, die Tabelle summierte dieselben zwei Posten zu 16,04 €. Beides war für sich richtig: Einmal wurde die Summe gerundet, einmal wurden die Summanden gerundet und dann addiert.
+
+Dieselbe Ursache traf den **Ø-Preis Netz**. Er wurde aus zwei bereits gerundeten Zahlen zurückgerechnet und kam an einem Tag mit nur 0,19 kWh Netzbezug auf **31,6 ct/kWh** — obwohl dieselbe Seite mit rund 29,5 ct rechnete.
+
+Die Tageswerte werden jetzt ungerundet weitergereicht und erst bei der Anzeige gerundet, so wie es die Monatsansicht immer schon tat. Der Ø-Preis nennt außerdem den **hinterlegten Tarif deines Tages**, statt ihn zu rekonstruieren.
+
+> **Nebenwirkung, die du magst:** Auch die Summenzeile der Werte-Tabelle rechnet dadurch exakt, statt gerundete Tageswerte zu addieren.
+
 ---
 
 ## v4.0.15 — Kein stummes Nichts (August 2026)
