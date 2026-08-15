@@ -200,7 +200,22 @@ Die **Monat**-Sicht ist das Referenz-Muster der Zeit-Achse: ein ausgewählter Mo
 - **Komponenten-Sektionen** — Status je vorhandener Komponente mit kWh-Werten
 - **Datenquellen-Kennzeichnung** — pro Feld ist die Herkunft der Werte sichtbar (HA-Statistik, MQTT, Connector, gespeichert)
 - **SOLL/IST** — gegen die Solarprognose
+- **Monatsprognose (PVGIS)** — wie weit der laufende Monat gegen die Prognose für den **ganzen** Monat ist
 - **Community-Vergleich** — eingebettet, wo Daten geteilt sind
+
+> **Zwei Prozentzahlen, zwei Fragen — sie widersprechen sich nicht.** „IST/SOLL"
+> beantwortet *liefert die Anlage, was sie bis heute liefern sollte?* und rechnet gegen die
+> abgelaufenen Tage; steht dort am 4. eines Monats 148 %, liegt deine Anlage vorn.
+> „Monatsprognose" beantwortet *wie weit ist der Monat?* und rechnet gegen die volle
+> Monatssumme — am selben 4. also 19 %. Jede der beiden nennt ihr Fenster im Untertitel
+> („anteilig · 4 von 31 Tagen" bzw. „ganzer Monat"). Die Monatsprognose ist **einzeln
+> parkbar** und erscheint nur im laufenden Monat; ist er vorbei, sind beide Zahlen
+> dieselbe. Sie steht auch dann da, wenn die Kachel daneben die **Grundlast** zeigt —
+> sonst hätte eine Anlage mit Stundenprofilen gar keine Einordnung des laufenden Monats.
+>
+> *Bis Version 4.0.15 gab es nur die erste Zahl: mit der Korrektur des SOLL-Nenners
+> (v4.0.10) war der Bezug auf die ganze Monatsprognose aus der Anzeige verschwunden.
+> Er ist wieder da — als zweite Angabe daneben, nicht als Ersatz.*
 
 > **Wenn ein Geräte-Connector nur einen Teil des Monats gemessen hat**, steht sein
 > Zeitraum direkt am Quellen-Etikett: „Connector (28.–30.07.2025)". Ein Connector-Wert
@@ -717,6 +732,25 @@ Der interaktive Überblick über alle Monatswerte in einer sortierbaren Tabelle 
 > Gerät betroffen ist und wo du ihn zuordnest ([Einstellungen → Datenquellen](HANDBUCH_EINSTELLUNGEN.md)).
 > Eine nach Nennleistung gerechnete Tageszahl gibt es bewusst nicht — sie wäre von einer Messung
 > nicht zu unterscheiden. Der Stunden-Blick auf denselben Tag liegt in [Cockpit → Tag](#22-tag).
+
+> **Sonstiges als Spalte (Monat und Tag).** Der Spalten-Picker führt die Gruppe **„Sonstiges"** mit
+> zwei wählbaren Spalten: **Sonstiges Erzeugung (kWh)** und **Sonstiges Verbrauch (kWh)** — die
+> Summe deiner Geräte vom Typ *Sonstiges*, getrennt nach der bei ihnen gepflegten **Kategorie**
+> (*Erzeuger* z. B. ein Mini-BHKW, *Verbraucher* z. B. ein Heizstab). Beide sind **nicht**
+> voreingestellt; du blendest sie über „Spalten" ein. Der Verbrauch steckt bereits im
+> Gesamtverbrauch — die Spalte schlüsselt ihn auf, sie addiert nichts hinzu.
+>
+> **Monat und Tag speisen sich aus verschiedenen Quellen, und das ist beim Lesen wichtig:** die
+> Monatsspalte zeigt, was beim Gerät **erfasst** ist (Monatsabschluss, Import oder Sensor); die
+> Tagesspalte kann nur zeigen, was ein **eigener Sensor bzw. Zähler** gemessen hat. Pflegst du
+> dein Sonstiges-Gerät nur monatlich, steht in der Monatsspalte ein Wert und in der Tagesspalte
+> „—" — das ist keine Lücke in der Erfassung, sondern die Antwort auf die Frage, ob für den Tag
+> etwas gemessen wurde. Aus demselben Grund ergibt die Summe der Tageszeilen hier nicht
+> zwangsläufig den Monatswert.
+>
+> Ein Gerät mit der Kategorie *Speicher* bleibt in der Tagesansicht außen vor: dort gibt es je
+> Gerät nur **eine** Zahl, und die ist bei einem Speicher ein Saldo aus Laden und Entladen — sie
+> ließe sich weder der Erzeugung noch dem Verbrauch zuschlagen.
 
 > Kompakte Werte-Blöcke sind zusätzlich direkt in Cockpit- und Komponenten-Sichten eingebettet; die volle Werkbank mit Picker und Export liegt hier.
 

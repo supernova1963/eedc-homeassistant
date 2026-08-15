@@ -9,6 +9,65 @@
 
 ---
 
+## Kommt mit dem nächsten Update
+
+> Zwei Anwender wollten etwas nachsehen können, und beide Male fehlte nicht die Zahl, sondern ihr Weg auf den Bildschirm.
+
+### „Sonstiges" lässt sich jetzt als Spalte einblenden — im Monat und am Tag
+
+**Betrifft dich das?** Wenn du ein Gerät unter **Sonstiges** führst — ein Mini-BHKW, einen Heizstab, eine Poolpumpe.
+
+Bisher gab es in *Auswertungen → Tabelle* keine Möglichkeit, dessen Werte anzusehen: Der Spalten-Wähler kannte die Gruppe schlicht nicht. Damit ließ sich auch nicht prüfen, ob die gepflegten Werte überhaupt ankommen.
+
+Unter „Spalten" steht jetzt die Gruppe **Sonstiges** mit zwei Einträgen:
+
+- **Sonstiges Erzeugung (kWh)** — die Summe deiner Geräte mit der Kategorie *Erzeuger*
+- **Sonstiges Verbrauch (kWh)** — die Summe deiner Geräte mit der Kategorie *Verbraucher*
+
+Welche Richtung ein Gerät hat, entscheidet die **Kategorie**, die du bei ihm gepflegt hast (*Komponenten → Sonstiges → bearbeiten*). Beide Spalten sind **nicht** vorausgewählt — du blendest sie ein, wenn du sie brauchst; deine gewohnte Tabelle ändert sich von allein nicht.
+
+> **Warum im Monat manchmal eine Zahl steht und am selben Tag „—":** Die Monatsspalte zeigt, was beim Gerät **erfasst** ist — aus dem Monatsabschluss, einem Import oder einem Sensor. Die Tagesspalte kann nur zeigen, was ein **eigener Sensor oder Zähler** an diesem Tag gemessen hat. Pflegst du dein Gerät nur monatlich, ist das kein Fehler, sondern genau die Auskunft: für den Tag wurde nichts gemessen. Aus demselben Grund ergibt die Summe der Tageszeilen hier nicht zwangsläufig den Monatswert.
+
+Ein Gerät mit der Kategorie *Speicher* bleibt in der **Tagesansicht** außen vor: Dort gibt es je Gerät nur eine Zahl, und die ist bei einem Speicher ein Saldo aus Laden und Entladen — sie ließe sich weder der Erzeugung noch dem Verbrauch zuschlagen.
+
+> **Gas, Öl und Wasser sind nicht dabei** — die bringen eine Menge in m³ oder Litern ohne kWh-Bezug. Deshalb tragen die beiden Spalten ihre Einheit im Namen: Die Zähler aus [#377](https://github.com/supernova1963/eedc-homeassistant/issues/377) bekommen später eigene Spalten in derselben Gruppe, statt diese zu überschreiben.
+
+> **Auch in der Monatsdaten-Liste** (*Einstellungen → Daten*) stehen die beiden Spalten jetzt zur Wahl — sie hat einen eigenen Spalten-Wähler, und die Gerätegruppe fehlte dort genauso.
+
+*(Gemeldet von rapahl.)*
+
+### Der Speicher-Block „Hätte mehr Kapazität geholfen?" lässt sich stückweise wegräumen
+
+**Betrifft dich das?** Wenn du in *Komponenten → Speicher* Anzeigen parkst, die du nicht brauchst.
+
+Über diesem Block lag bisher **eine** Park-Umhüllung: Befundsatz, die drei Kacheln, die Monats-Grafik und der Hinweis bei mehreren Speichern ließen sich nur gemeinsam wegräumen. Und ein Rechtsklick auf eine einzelne Kachel verdunkelte den ganzen Block statt der Kachel — es sah aus, als sei das Parken kaputt.
+
+Jetzt ist jede der Anzeigen einzeln parkbar, so wie überall sonst. Der Block selbst verschwindet erst, wenn du die letzte davon geparkt hast.
+
+> **Falls du diesen Block schon geparkt hattest:** Er ist nach dem Update wieder da. Die alte Sammel-Kennung gibt es nicht mehr — park einfach neu, was du nicht sehen willst. An den Zahlen und der Grafik ändert sich nichts.
+
+> **Dasselbe galt für den Block „Kategorien"** in *Cockpit → Monat*: Erzeugungs- und Verbrauchs-Balken ließen sich nur gemeinsam wegräumen. Auch sie sind jetzt einzeln parkbar — und auch hier ist eine frühere Parkung dieses Blocks nach dem Update aufgehoben.
+>
+> Beide Stellen kamen aus einer Durchsicht **aller** park-fähigen Anzeigen. Übrig bleibt eine einzige, die bewusst zusammenbleibt: Beim Regler „Größerer Speicher?" gehören Schieberegler, Ergebnis und Methoden-Hinweis zusammen — ein Regler ohne seine Anzeige wäre sinnlos.
+
+*(Gemeldet von Gernot am Bild.)*
+
+### Der Fortschritt gegen die volle Monatsprognose ist wieder da
+
+**Betrifft dich das?** Wenn du in *Cockpit → Monat* wissen willst, wie weit der laufende Monat gegen die Jahresprognose steht.
+
+In der Energie-Bilanz steht jetzt die Kachel **„Monatsprognose (PVGIS)"**: wie viel der für den **ganzen** Monat prognostizierten Erzeugung bisher erreicht ist — mit Balken und der Zeile „264 von 1.388 kWh · ganzer Monat (Tag 4 von 31)". Wie jede Anzeige ist sie **einzeln parkbar**.
+
+> **Zwei Prozentzahlen, zwei Fragen — sie widersprechen sich nicht.** Die Kachel daneben („IST/SOLL") beantwortet *liefert meine Anlage, was sie bis heute liefern sollte?* und rechnet gegen die abgelaufenen Tage; am 4. eines Monats bedeutet 148 % dort: du liegst vorn. Die neue Kachel beantwortet *wie weit ist der Monat?* — am selben Tag also 19 %. Beide nennen ihr Fenster im Untertitel.
+
+Sie erscheint nur im **laufenden** Monat; ist er vorbei, sagen beide Kacheln dasselbe. Und sie erscheint auch dann, wenn daneben die **Grundlast** steht — bei einer Anlage mit Stundenprofilen gäbe es sonst gar keine Einordnung des laufenden Monats mehr.
+
+> **Was vorher war:** Mit v4.0.10 wurde der SOLL-Vergleich im laufenden Monat auf die abgelaufenen Tage gekürzt — vorher maß er das Datum statt die Anlage (am 4. August „19 %" für eine Anlage, die übers Jahr auf 119 % kam). Diese Korrektur bleibt. Dabei ist aber der Bezug auf die ganze Monatsprognose verschwunden, und der war als Fortschrittsanzeige nützlich. Jetzt stehen beide da.
+
+*(Gemeldet von dietmar1968, Forum-Thread zu eedc.)*
+
+---
+
 ## v4.0.15 — Kein stummes Nichts (August 2026)
 
 > Drei Anzeigen zeigten etwas, ohne etwas zu sagen: lauter Nullen bei einem neuen Gerät, eine Grafik, die man nicht entschlüsseln konnte, und ein Hinweis, der eine Handlung forderte, die gar nicht wirken konnte. Dazu zwei Zahlen, die an der falschen Bezugsgröße hingen.
