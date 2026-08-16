@@ -73,6 +73,24 @@ function PotentialBefund({ d }: { d: SpeicherPotentialResponse }) {
       </p>
     )
   }
+  // N-254: „nie leer" hat zwei mögliche Gründe mit **entgegengesetzten** Antworten
+  // — groß genug, oder eine eigene Entlade-Untergrenze. Ohne gepflegte nutzbare
+  // Kapazität kann eedc sie nicht trennen und darf keinen davon behaupten.
+  if (d.boden_nie_erreicht) {
+    return (
+      <p className="text-sm text-gray-600 dark:text-gray-300">
+        <strong>Das lässt sich hier nicht beurteilen.</strong> Strom ging ins Netz, während der
+        Speicher voll war ({fmtZahl(d.ueberschuss_kwh, 0)} kWh) — aber er kam in keiner Nacht
+        auch nur in die Nähe von leer
+        {d.soc_min_prozent != null && <>; sein tiefster Ladestand war {fmtZahl(d.soc_min_prozent, 0)} %</>}.
+        Dafür gibt es zwei Erklärungen mit gegensätzlichen Folgen: Entweder ist dein Speicher
+        schon groß genug — dann hätte mehr Kapazität wirklich nichts gebracht. Oder du fährst
+        eine <strong>Entlade-Untergrenze</strong>, dann war er sehr wohl aufgebraucht und mehr
+        Kapazität hätte geholfen. Unterscheiden kann eedc das nur, wenn beim Speicher die{' '}
+        <strong>nutzbare Kapazität</strong> gepflegt ist (<em>Einstellungen → Investitionen</em>).
+      </p>
+    )
+  }
   if (d.nutzbares_zusatzpotential_kwh <= 0) {
     return (
       <p className="text-sm text-gray-600 dark:text-gray-300">
@@ -359,11 +377,15 @@ export function SpeicherPotentialIST({ anlageId, melde }: { anlageId: number; in
         {
           parkId: PARK_IDS_KPI[0],
           title: 'Nutzbares Zusatzpotential',
-          value: fmtZahl(daten.nutzbares_zusatzpotential_kwh, 0),
-          unit: 'kWh',
+          // N-254: „0" wäre hier eine Aussage, die nicht gemessen ist — der
+          // Speicher kam dem Boden nie nahe, also ist der Wert unbekannt.
+          value: daten.boden_nie_erreicht ? '—' : fmtZahl(daten.nutzbares_zusatzpotential_kwh, 0),
+          unit: daten.boden_nie_erreicht ? undefined : 'kWh',
           icon: TrendingUp,
           color: 'blue',      /* Datenrolle Speicher-Entladung */
-          subtitle: `${daten.tage_mit_daten} Tage ausgewertet`,
+          subtitle: daten.boden_nie_erreicht
+            ? 'nicht beurteilbar — siehe Hinweis oben'
+            : `${daten.tage_mit_daten} Tage ausgewertet`,
           formel: 'min(Einspeisung bei vollem Speicher, Netzbezug nach dem Leerlaufen)',
           berechnung: 'je Lade-Entlade-Zyklus einzeln, danach summiert',
           sicht: 'Was ein größerer Speicher zusätzlich durchgesetzt hätte',

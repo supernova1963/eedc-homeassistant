@@ -176,6 +176,9 @@ class PotentialErgebnis:
     #: Zyklen mit Überschuss insgesamt.
     zyklen_gesamt: int = 0
     zyklen: list[ZyklusBefund] = field(default_factory=list)
+    #: Kleinster gemessener Ladestand des Zeitraums. `None`, wenn keine Stunde
+    #: einen SoC trägt — Grundlage von `boden_nie_erreicht` (N-254).
+    soc_min_prozent: Optional[float] = None
 
     @property
     def deckelung_greift(self) -> bool:
@@ -185,6 +188,47 @@ class PotentialErgebnis:
         es sagen können, statt zwei Zahlen kommentarlos nebeneinanderzustellen.
         """
         return self.nutzbares_zusatzpotential_kwh < self.ueberschuss_gesamt_kwh
+
+
+def boden_nie_erreicht(
+    soc_min_prozent: Optional[float],
+    leer_schwelle: Optional[float],
+    schwelle_ist_abgeleitet: bool,
+) -> bool:
+    """Ist die Aussage „mehr Kapazität hätte nichts gebracht" **unbelegt**? (N-254)
+
+    **Der Kern:** Ein Speicher, der nie leer wird, hat dafür genau zwei mögliche
+    Gründe, und sie führen zu **entgegengesetzten** Antworten:
+
+    * Er ist **groß genug** ⇒ zusätzliche Kapazität hätte wirklich nichts
+      gebracht. Das ist der Fall, für den diese Datei gebaut wurde (Dev-Anlage:
+      nie unter 31 %).
+    * Der Anwender fährt eine **Entlade-Untergrenze** ⇒ er *war* aufgebraucht,
+      und mehr Kapazität hätte sehr wohl geholfen. Das ist Glens Fall (#379).
+
+    Ohne die gepflegte nutzbare Kapazität kann eedc die beiden **nicht
+    unterscheiden** — und darf deshalb keinen der beiden Sätze als Tatsache
+    hinschreiben. Dieselbe Doktrin wie „nicht gemessen statt 0": lieber die
+    Lücke benennen als eine Zahl behaupten, die auf einer ungeprüften Annahme
+    steht.
+
+    **Ist die Schwelle abgeleitet, ist die Aussage belastbar** — dann kennt eedc
+    die Untergrenze, und ein Speicher, der sie nicht erreicht, war wirklich groß
+    genug. Deshalb hängt diese Funktion an `schwelle_ist_abgeleitet` und nicht
+    nur am Abstand: Sie beschränkt den Aussageverlust auf die Fälle, in denen er
+    unvermeidlich ist.
+
+    Der Abstand ist `SOC_LEER_TOLERANZ_PP` — dieselbe Spanne, in der ein
+    Speicher als „praktisch am Boden" gilt. Wer im Winter auf 6 % kommt, hat
+    seinen Boden erreicht; wer über zwei Jahre nie unter 21 % fällt, hat ihn
+    nicht einmal berührt.
+    """
+    if soc_min_prozent is None:
+        return False
+    if schwelle_ist_abgeleitet:
+        return False
+    grenze = (SOC_LEER_PROZENT if leer_schwelle is None else leer_schwelle)
+    return soc_min_prozent > grenze + SOC_LEER_TOLERANZ_PP
 
 
 def ist_voll(soc: Optional[float]) -> bool:
@@ -237,6 +281,13 @@ def berechne_zusatzpotential(
     vorige_war_ueberschuss = False
 
     for stunde in stunden:
+        # N-254: der Tiefpunkt entscheidet, ob „nie leer" überhaupt etwas belegt.
+        if stunde.soc_prozent is not None and (
+            ergebnis.soc_min_prozent is None
+            or stunde.soc_prozent < ergebnis.soc_min_prozent
+        ):
+            ergebnis.soc_min_prozent = stunde.soc_prozent
+
         voll = ist_voll(stunde.soc_prozent)
         if voll:
             ergebnis.stunden_voll += 1

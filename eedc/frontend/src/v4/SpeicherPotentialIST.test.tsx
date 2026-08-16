@@ -278,6 +278,49 @@ describe('SpeicherPotentialIST — Spannen-Grafik statt Heatmap', () => {
     expect(screen.queryByText(/deine Entladegrenze/)).not.toBeInTheDocument()
   })
 
+  // -------------------------------------------------------------------------
+  // N-254 — „nie leer" belegt ohne gepflegte Grenze gar nichts
+  // -------------------------------------------------------------------------
+
+  it('behauptet nichts, wo der Speicher dem Boden nie nahe kam', async () => {
+    vi.spyOn(investitionenApi, 'getSpeicherPotential').mockResolvedValue(ANTWORT({
+      boden_nie_erreicht: true,
+      soc_min_prozent: 31,
+    }))
+
+    render(<SpeicherPotentialIST anlageId={1} />)
+
+    expect(await screen.findByText(/lässt sich hier nicht beurteilen/)).toBeInTheDocument()
+    expect(screen.getByText(/tiefster Ladestand war 31 %/)).toBeInTheDocument()
+    expect(screen.getByText(/nutzbare Kapazität/)).toBeInTheDocument()
+    // Der alte Satz darf hier NICHT stehen — er ist die falsche Tatsache.
+    expect(screen.queryByText(/hätte hier nichts gebracht/)).not.toBeInTheDocument()
+  })
+
+  it('zeigt die Kachel als „—" statt als 0 kWh, wo nichts beurteilbar ist', async () => {
+    // „0" wäre auch hier eine Aussage, die niemand gemessen hat.
+    vi.spyOn(investitionenApi, 'getSpeicherPotential').mockResolvedValue(ANTWORT({
+      boden_nie_erreicht: true,
+      soc_min_prozent: 31,
+    }))
+
+    render(<SpeicherPotentialIST anlageId={1} />)
+
+    expect(await screen.findByText(/nicht beurteilbar — siehe Hinweis oben/)).toBeInTheDocument()
+  })
+
+  it('sagt weiter klar „hätte nichts gebracht", wo die Aussage belegt ist', async () => {
+    // Der Fall, für den der Block gebaut wurde — er darf nicht verlorengehen.
+    vi.spyOn(investitionenApi, 'getSpeicherPotential').mockResolvedValue(ANTWORT({
+      boden_nie_erreicht: false,
+    }))
+
+    render(<SpeicherPotentialIST anlageId={1} />)
+
+    expect(await screen.findByText(/hätte hier nichts gebracht/)).toBeInTheDocument()
+    expect(screen.queryByText(/nicht beurteilen/)).not.toBeInTheDocument()
+  })
+
   it('sagt bei einem Monat ohne Ladestand, dass nichts gemessen wurde', async () => {
     vi.spyOn(investitionenApi, 'getSpeicherPotential').mockResolvedValue(ANTWORT({
       monate: [MONAT({ soc_p10: null, soc_p50: null, soc_p90: null, stunden_mit_soc: 0 })],

@@ -21,6 +21,7 @@ from backend.api.deps import get_db
 from backend.core.berechnungen.speicher_potential import (
     SOC_LEER_PROZENT,
     SOC_VOLL_PROZENT,
+    boden_nie_erreicht,
     leer_schwelle_prozent,
 )
 from backend.core.investition_kennwerte import (
@@ -120,6 +121,14 @@ class SpeicherPotentialResponse(BaseModel):
     #: Bis dahin lieferte das Feld konstant 5,0 und die Sicht schrieb die Zahl
     #: als feste Legende hin.
     soc_leer_prozent: float
+    #: Kleinster gemessener Ladestand des Zeitraums. `None` ohne SoC-Messung.
+    soc_min_prozent: Optional[float] = None
+    #: True = „mehr Kapazität hätte nichts gebracht" ist hier **unbelegt** (N-254):
+    #: Der Speicher wurde nie leer, kam dem Boden aber auch nie nahe, und ohne
+    #: gepflegte nutzbare Kapazität lässt sich „groß genug" nicht von „eigene
+    #: Entlade-Untergrenze" trennen. Die Sicht muss dann die Lücke benennen
+    #: statt eine der beiden gegensätzlichen Antworten zu behaupten.
+    boden_nie_erreicht: bool = False
     #: True = die Schwelle stammt aus der gepflegten nutzbaren Kapazität,
     #: False = Rückfall auf 5 %. Die Sicht braucht die Unterscheidung, um „gilt
     #: für deinen Speicher" von „Standardannahme" zu trennen — ohne sie müsste
@@ -223,4 +232,17 @@ async def get_speicher_potential(
         soc_voll_prozent=SOC_VOLL_PROZENT,
         soc_leer_prozent=round(leer_schwelle, 1),
         soc_leer_ist_abgeleitet=abgeleitet,
+        soc_min_prozent=(
+            round(auswertung.gesamt.soc_min_prozent, 1)
+            if auswertung.gesamt.soc_min_prozent is not None else None
+        ),
+        # Die Regel steht vollständig in der Layer-Funktion. Hier stand zuerst
+        # zusätzlich `and zyklen_leergelaufen == 0` — das ist **logisch
+        # impliziert**: Liegt das Minimum über der Schwelle, war keine Stunde je
+        # „leer". Der Sprengsatz-Test blieb deshalb stumm, und genau daran ist es
+        # aufgefallen. Eine Bedingung, die kein Prüfer widerlegen kann, ist keine
+        # Absicherung, sondern eine zweite halbe Regel neben der ersten.
+        boden_nie_erreicht=boden_nie_erreicht(
+            auswertung.gesamt.soc_min_prozent, leer_schwelle, abgeleitet
+        ),
     )

@@ -336,3 +336,74 @@ async def test_die_monatsspalte_rechnet_mit_derselben_schwelle(db):
         "vier von dreizehn Stunden liegen auf 21 % — das ist unter der Schwelle"
     )
     assert monat.zyklen_leergelaufen == 1
+
+
+# ---------------------------------------------------------------------------
+# N-254 — ohne gepflegte Grenze sagt die Route „nicht beurteilbar"
+# ---------------------------------------------------------------------------
+
+
+async def test_ohne_pflege_und_ohne_bodenberuehrung_ist_die_aussage_offen(db):
+    """Der Sommerfall der Dev-Anlage — nie unter 40 %, nichts gepflegt.
+
+    Bisher lieferte die Route hier „0 kWh" und die Sicht schrieb „hätte nichts
+    gebracht". Richtig ist: eedc weiß es nicht. Der Speicher kann groß genug
+    sein **oder** an einer Untergrenze hängen, die niemand gepflegt hat.
+    """
+    anlage_id = await _seed_mit_reserve(db, brutto=30.0, nutzbar=None)
+    tag = date(2026, 6, 10)
+    for h in range(10, 18):
+        db.add(_stunde(anlage_id, tag, h, 100.0, einspeisung=8.0))
+    for h in range(18, 24):
+        db.add(_stunde(anlage_id, tag, h, 40.0, netzbezug=0.5))
+    await db.commit()
+
+    antwort = await get_speicher_potential(anlage_id, von=None, bis=None, db=db)
+
+    assert antwort.boden_nie_erreicht is True
+    assert antwort.soc_min_prozent == 40.0
+    assert antwort.ueberschuss_kwh == 64.0, "die gemessene Menge bleibt sichtbar"
+
+
+async def test_mit_gepflegter_grenze_bleibt_die_klare_aussage_erhalten(db):
+    """**Der Aussageverlust bleibt auf das Unvermeidliche beschränkt.**
+
+    Dieselbe Reihe, aber die nutzbare Kapazität ist gepflegt: eedc kennt die
+    Untergrenze (23 % nach Ableitung), der Speicher blieb mit 40 % darüber ⇒ er
+    war wirklich groß genug, und der Satz „hätte nichts gebracht" trägt.
+    """
+    anlage_id = await _seed_mit_reserve(db, brutto=30.0, nutzbar=24.0)
+    tag = date(2026, 6, 10)
+    for h in range(10, 18):
+        db.add(_stunde(anlage_id, tag, h, 100.0, einspeisung=8.0))
+    for h in range(18, 24):
+        db.add(_stunde(anlage_id, tag, h, 40.0, netzbezug=0.5))
+    await db.commit()
+
+    antwort = await get_speicher_potential(anlage_id, von=None, bis=None, db=db)
+
+    assert antwort.boden_nie_erreicht is False
+    assert antwort.nutzbares_zusatzpotential_kwh == 0.0
+
+
+async def test_wer_seinen_boden_beruehrt_bekommt_weiter_die_klare_aussage(db):
+    """Ungepflegt, aber der Speicher war real unten (3 %) ⇒ Aussage belegt.
+
+    Ohne diesen Fall würde die N-254-Regel jede ungepflegte Anlage stumm
+    schalten — auch die, bei denen die Beobachtung eindeutig ist.
+    """
+    anlage_id = await _seed_mit_reserve(db, brutto=30.0, nutzbar=None)
+    tag = date(2026, 11, 10)
+    for h in range(10, 14):
+        db.add(_stunde(anlage_id, tag, h, 100.0, einspeisung=3.0))
+    for h in range(14, 20):
+        db.add(_stunde(anlage_id, tag, h, 40.0))
+    for h in range(20, 24):
+        db.add(_stunde(anlage_id, tag, h, 3.0, netzbezug=1.0))
+    await db.commit()
+
+    antwort = await get_speicher_potential(anlage_id, von=None, bis=None, db=db)
+
+    assert antwort.boden_nie_erreicht is False
+    assert antwort.zyklen_leergelaufen == 1
+    assert antwort.nutzbares_zusatzpotential_kwh > 0

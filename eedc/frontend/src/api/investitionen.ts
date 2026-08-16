@@ -315,6 +315,14 @@ export interface SpeicherPotentialResponse {
   soc_leer_prozent: number
   /** true = aus der nutzbaren Kapazität abgeleitet, false = Rückfall auf 5 %. */
   soc_leer_ist_abgeleitet?: boolean
+  /** Kleinster gemessener Ladestand des Zeitraums. */
+  soc_min_prozent?: number | null
+  /**
+   * true = „mehr Kapazität hätte nichts gebracht" ist unbelegt (N-254): nie leer,
+   * dem Boden aber auch nie nahe, und ohne gepflegte nutzbare Kapazität lässt sich
+   * „groß genug" nicht von „eigene Entlade-Untergrenze" trennen.
+   */
+  boden_nie_erreicht?: boolean
 }
 
 /** Ein simulierter Kapazitäts-Punkt der Sizing-Kurve (#358 Phase 3). */

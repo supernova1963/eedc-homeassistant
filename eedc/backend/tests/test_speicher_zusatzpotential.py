@@ -16,6 +16,7 @@ from backend.core.berechnungen.speicher_potential import (
     SOC_VOLL_PROZENT,
     SpeicherStunde,
     berechne_zusatzpotential,
+    boden_nie_erreicht,
     leer_schwelle_prozent,
 )
 
@@ -270,3 +271,61 @@ def test_unplausible_pflege_wird_gedeckelt_statt_geglaubt():
     assert SOC_LEER_MAX_PROZENT < SOC_VOLL_PROZENT, (
         "eine Leer-Schwelle oberhalb der Voll-Schwelle wäre sinnlos"
     )
+
+
+# ---------------------------------------------------------------------------
+# N-254 — „nie leer" belegt ohne gepflegte Grenze gar nichts
+# ---------------------------------------------------------------------------
+
+
+def test_ohne_pflege_ist_nie_leer_zweideutig_und_sagt_das():
+    """Zwei Ursachen, entgegengesetzte Antworten — eedc darf keine behaupten.
+
+    Ein Speicher, der nie unter 31 % fällt, ist **entweder** groß genug (dann
+    hätte mehr Kapazität nichts gebracht) **oder** an seiner Untergrenze (dann
+    hätte sie geholfen). Ohne die gepflegte nutzbare Kapazität kann eedc die
+    beiden nicht trennen.
+    """
+    assert boden_nie_erreicht(31.0, SOC_LEER_PROZENT, schwelle_ist_abgeleitet=False)
+
+
+def test_mit_gepflegter_grenze_ist_die_aussage_wieder_belastbar():
+    """**Der Grund, warum diese Regel an der Pflege hängt und nicht am Abstand.**
+
+    Kennt eedc die Untergrenze (hier 23 % nach Ableitung) und der Speicher
+    erreicht sie trotzdem nicht, dann war er wirklich groß genug — die Aussage
+    „hätte nichts gebracht" trägt. Der Aussageverlust bleibt damit auf die Fälle
+    beschränkt, in denen er unvermeidlich ist.
+    """
+    assert not boden_nie_erreicht(45.0, 23.0, schwelle_ist_abgeleitet=True)
+
+
+def test_wer_seinen_boden_beruehrt_hat_bekommt_die_klare_aussage():
+    """Innerhalb der Toleranz gilt „praktisch am Boden" — keine Zweideutigkeit.
+
+    Wer im Winter auf 6 % kommt, hat seinen Speicher wirklich leergefahren; hier
+    ist „nie leer geworden" eine belegte Beobachtung und kein blinder Fleck.
+    """
+    assert not boden_nie_erreicht(6.0, SOC_LEER_PROZENT, schwelle_ist_abgeleitet=False)
+    assert not boden_nie_erreicht(
+        SOC_LEER_PROZENT + SOC_LEER_TOLERANZ_PP, SOC_LEER_PROZENT,
+        schwelle_ist_abgeleitet=False,
+    ), "genau auf der Toleranzgrenze zählt noch als berührt"
+
+
+def test_ohne_soc_messung_wird_nichts_behauptet():
+    """Kein Ladestand gemessen ⇒ kein Urteil, auch kein „nicht beurteilbar"."""
+    assert not boden_nie_erreicht(None, SOC_LEER_PROZENT, schwelle_ist_abgeleitet=False)
+
+
+def test_der_tiefpunkt_wird_ueber_die_ganze_reihe_gemerkt():
+    """`soc_min_prozent` ist die Grundlage der Regel — es muss das Minimum sein."""
+    ergebnis = berechne_zusatzpotential(_reihe(
+        (100.0, 5.0, 0.0),
+        (44.0, 0.0, 0.0),
+        (31.0, 0.0, 1.0),
+        (52.0, 0.0, 0.0),
+    ))
+
+    assert ergebnis.soc_min_prozent == 31.0
+    assert berechne_zusatzpotential([]).soc_min_prozent is None
