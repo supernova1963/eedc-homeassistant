@@ -35,6 +35,22 @@ Sobald dort ein Betrag gepflegt war, verschwand der Zusatz „nicht bewertet" an
 
 ⚠ **An bewerteten Zeilen ändert sich nichts** — sie waren davon nie betroffen.
 
+### Die Prognose-Seite hat wieder eine Spaltenflucht
+
+**Betrifft dich das?** Wenn du *Auswertungen → Prognose* von oben nach unten liest.
+
+OpenMeteo, eedc, Solcast und IST tauchen dort in **vier** Tabellen auf — Quellen-Genauigkeit, Stundenvergleich, 7-Tage-Vergleich und Genauigkeits-Tracking. Jede hat ihre Spalten bisher selbst festgelegt, und keine zwei begannen an derselben Stelle. Für dieselbe Quelle musste man den Blick jedes Mal versetzen.
+
+Mit v4.0.16 waren zwei davon zur Deckung gebracht worden. Gemeldet war aber das Gesamtbild — zu Recht: Es waren vier verschiedene Raster.
+
+Jetzt kommt der Spaltenplan aus **einer** Stelle. Alle vier Tabellen benutzen ihn, und eine künftige fünfte erbt ihn.
+
+> **Zwei Dinge sehen dadurch anders aus.** Tabellen ohne eigene Abweichungs-Spalte tragen an deren Stelle eine **leere** Spalte — das ist der Preis dafür, dass die Quellen fluchten. Und das **Genauigkeits-Tracking blendet die Solcast-Spalten aus, wenn du Solcast nicht eingerichtet hast**; vorher standen dort drei Striche.
+
+⚠ **Es ändert sich keine Zahl.**
+
+*(Gemeldet von rapahl.)*
+
 ### Heizstab, Poolpumpe & Co. haben wieder Tageswerte
 
 **Betrifft dich das?** Wenn du ein Gerät unter *Sonstiges* mit der Kategorie **Verbraucher** führst und ihm einen eigenen kWh-Zähler zugeordnet hast.

@@ -28,7 +28,7 @@
 import { describe, it, expect } from 'vitest'
 import { render } from '@testing-library/react'
 
-import { Pvg24hTabelle, Pvg7TageTabelle, PvgGenauigkeitsTracking, PrognoseVergleichVM } from './PrognoseVergleichTeile'
+import { Pvg24hTabelle, Pvg7TageTabelle, PvgGenauigkeitsTracking, PvgKpiMatrix, prognoseSpaltenplan, PrognoseVergleichVM } from './PrognoseVergleichTeile'
 import type { PrognosenVergleich, StundenProfilEintrag, GenauigkeitsResponse } from '../../api/aussichten'
 
 const profil = (werte: Record<number, number | null>): StundenProfilEintrag[] =>
@@ -64,8 +64,17 @@ const daten = (over: Partial<PrognosenVergleich> = {}): PrognosenVergleich => ({
 const SP24 = { platz: 0, std: 1, om: 2, omD: 3, eedc: 4, eedcD: 5, sc: 6, scD: 7, ist: 8 } as const
 /** Dieselbe Tabelle, wenn SFML die gewählte Quelle ist — eine Wertspalte mehr, kein Δ. */
 const SP24_SFML = { ...SP24, sfml: 8, ist: 9 } as const
-/** Spalten des Genauigkeits-Trackings (Datum, drei Quellen, IST). */
-const SPTR = { datum: 0, om: 1, omD: 2, eedc: 3, eedcD: 4, sc: 5, scD: 6, ist: 7 } as const
+/** Spalten des Genauigkeits-Trackings.
+ *
+ * ⚑ **Seit 16.08.2026 identisch mit `SP7`** — und das ist kein Zufall, sondern
+ * das Ergebnis: Alle Quellen-Tabellen der Seite laufen jetzt auf **einem**
+ * Spaltenplan (`prognoseSpaltenplan`), diese hier hat dafür die führende
+ * Platzhalter-Spalte der Wetter-Spalte bekommen. Vorher begann ihr Datum bei
+ * Index 0 und damit jede Quelle eine Position weiter links als in den zwei
+ * Tabellen darüber — genau das, was rapahl mit „in jedem Block fangen die
+ * Spalten an anderer Position an" gemeldet hat. Die Konstante bleibt unter
+ * eigenem Namen stehen, weil sie eine andere Tabelle benennt. */
+const SPTR = { platz: 0, datum: 1, om: 2, omD: 3, eedc: 4, eedcD: 5, sc: 6, scD: 7, ist: 8 } as const
 /** Spalten der 7-Tage-Tabelle (Wetter-Icon und Datum vorweg). */
 const SP7 = { wetter: 0, datum: 1, om: 2, omD: 3, eedc: 4, eedcD: 5, sc: 6, scD: 7, ist: 8 } as const
 /** Dieselbe Tabelle, wenn SFML die gewählte Quelle ist — eine Wertspalte mehr. */
@@ -402,7 +411,7 @@ describe('Eine Abweichungs-Sprache in allen drei Tabellen (N-50)', () => {
  * Screenshot ~110 px). Der Versatz stammt aus dem IA-V4-Umbau (`eda34e7a`,
  * v4.0.0) und fiel erst auf, als P-5 alle übrigen Spalten zur Deckung brachte.
  */
-describe('Spaltenflucht: beide Tabellen tragen denselben Spaltenplan', () => {
+describe('Spaltenflucht: alle Quellen-Tabellen tragen denselben Spaltenplan', () => {
   const spaltenplan = (c: Element) =>
     Array.from(c.querySelectorAll('colgroup col')).map(col => col.className)
 
@@ -439,5 +448,97 @@ describe('Spaltenflucht: beide Tabellen tragen denselben Spaltenplan', () => {
     const { stunden, tage } = beide(daten({ solcast_verfuegbar: false }))
 
     expect(stunden).toEqual(tage)
+  })
+
+  /**
+   * ⚑ **Erweitert am 16.08.2026 auf ALLE Quellen-Tabellen der Seite.** Der Fix
+   * vom 15.08. brachte zwei von ihnen zur Deckung — Rainers Meldung war aber
+   * das Gesamtbild: „In jedem Block fangen die Spalten an anderer Position an,
+   * obwohl es im Grunde immer die gleichen Kandidaten sind." Gemessen waren es
+   * VIER verschiedene `colgroup`-Raster für dieselben vier Quellen.
+   *
+   * Seither kommt der Plan aus `prognoseSpaltenplan` — eine Stelle statt vier
+   * Kopien. Dieser Block prüft, dass jede Tabelle ihn wirklich benutzt.
+   */
+  const genauigkeitFix = (): GenauigkeitsResponse => ({
+    anzahl_tage: 1, anzahl_ausreisser: 0, ausreisser_schwelle_prozent: 50,
+    openmeteo_mae_prozent: null, openmeteo_mbe_prozent: null, openmeteo_asymmetrie: [],
+    eedc_mae_prozent: null, eedc_mbe_prozent: null, eedc_asymmetrie: [],
+    solcast_mae_prozent: null, solcast_mbe_prozent: null, solcast_asymmetrie: [],
+    tage: [{
+      datum: '2020-06-11', openmeteo_kwh: 5.0, eedc_kwh: 5.0, solcast_kwh: 5.0, ist_kwh: 4.2,
+      wetter_symbol: 'cloudy', temperatur_max_c: 18, ist_ausreisser: false,
+    }],
+  } as unknown as GenauigkeitsResponse)
+
+  const alleVier = (data: PrognosenVergleich, genauigkeit: GenauigkeitsResponse) => {
+    const vm = { data, genauigkeit, genauigkeitsTage: 7, ausreisserAusblenden: false } as PrognoseVergleichVM
+    return {
+      quellen: spaltenplan(render(<PvgKpiMatrix vm={vm} />).container),
+      stunden: spaltenplan(render(<Pvg24hTabelle vm={vm} />).container),
+      tage: spaltenplan(render(<Pvg7TageTabelle vm={vm} />).container),
+      tracking: spaltenplan(render(<PvgGenauigkeitsTracking vm={vm} />).container),
+    }
+  }
+
+  it('alle vier Tabellen fluchten — Regelfall', () => {
+    const { quellen, stunden, tage, tracking } = alleVier(daten(), genauigkeitFix())
+    expect(stunden).toEqual(tage)
+    expect(tracking).toEqual(tage)
+    expect(quellen).toEqual(tage)
+  })
+
+  it('alle vier fluchten auch ohne Solcast und mit SFML', () => {
+    const d = daten({
+      solcast_verfuegbar: false,
+      sfml_verfuegbar: true,
+      sfml_heute_kwh: 11.7, sfml_morgen_kwh: 9.2, sfml_uebermorgen_kwh: null,
+      sfml_stundenprofil: profil(TAGESGANG),
+    })
+    const { quellen, stunden, tage, tracking } = alleVier(d, genauigkeitFix())
+    expect(stunden).toEqual(tage)
+    expect(tracking).toEqual(tage)
+    expect(quellen).toEqual(tage)
+  })
+
+  /**
+   * Ein Spaltenplan allein beweist die Flucht noch nicht: Trägt eine Zeile
+   * weniger Zellen als der Plan Spalten hat, rutscht ihr Inhalt trotzdem. Genau
+   * das ist beim Einbau der Platzhalter in die Quellen-Genauigkeit die
+   * naheliegende Fehlerquelle — sieben Zeilen, je vier Einfügungen.
+   */
+  it.each([
+    ['ohne SFML', false],
+    // ⚑ **Der SFML-Fall gehört dazu, und zwar wegen einer stummen
+    // Sprengsatz-Probe:** Die SFML-Spalte aus dem Plan zu nehmen ließ die
+    // Flucht-Tests grün — alle Tabellen teilen den Plan, also fluchten sie
+    // dann eben alle falsch. Erst der Abgleich Plan gegen **gerenderte
+    // Zellen** bei gewählter SFML-Quelle deckt es auf. Dieselbe Lehre wie im
+    // Block darüber („zwei gleich falsche Pläne wären grün").
+    ['mit SFML als Quelle', true],
+  ])('jede Zeile trägt so viele Zellen, wie der Plan Spalten hat (%s)', (_name, mitSfml) => {
+    const data = mitSfml
+      ? daten({
+          sfml_verfuegbar: true,
+          sfml_heute_kwh: 11.7, sfml_morgen_kwh: 9.2, sfml_uebermorgen_kwh: null,
+          sfml_stundenprofil: profil(TAGESGANG),
+        })
+      : daten()
+    const vm = { data, genauigkeit: genauigkeitFix(), genauigkeitsTage: 7, ausreisserAusblenden: false } as PrognoseVergleichVM
+    const soll = prognoseSpaltenplan({ hasSolcast: true, hasSfml: mitSfml }).length
+    for (const [name, el] of [
+      ['Quellen-Genauigkeit', <PvgKpiMatrix vm={vm} />],
+      ['Stundenvergleich', <Pvg24hTabelle vm={vm} />],
+      ['7-Tage-Vergleich', <Pvg7TageTabelle vm={vm} />],
+      ['Genauigkeits-Tracking', <PvgGenauigkeitsTracking vm={vm} />],
+    ] as const) {
+      const c = render(el).container
+      const zeilen = Array.from(c.querySelectorAll('table tr'))
+      expect(zeilen.length, `${name}: keine Zeilen gerendert`).toBeGreaterThan(0)
+      for (const [i, tr] of zeilen.entries()) {
+        const n = tr.querySelectorAll('th, td').length
+        expect(n, `${name}, Zeile ${i + 1}: ${n} Zellen statt ${soll}`).toBe(soll)
+      }
+    }
   })
 })

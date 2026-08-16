@@ -37,6 +37,54 @@ import {
 const Q = PROGNOSE_QUELLEN_TEXT
 const eedcKlasse = (hasEedc: boolean) => (hasEedc ? Q.eedc : 'text-gray-400 dark:text-gray-500')
 
+// ── Ein Spaltenraster für alle Quellen-Tabellen dieser Seite ────────────────
+//
+// **Warum es das gibt (rapahl, PN 16.08.2026).** Mit `2f30a0e6` (v4.0.16) sind
+// Stundenvergleich und 7-Tage-Vergleich zur Deckung gebracht worden — 110 px
+// Versatz. Seine Meldung war aber die **ganze Seite**: „In jedem Block fangen
+// die Spalten an anderer Position an, obwohl es im Grunde immer die gleichen
+// Kandidaten sind." Er hatte recht; gemessen waren es vier verschiedene
+// `colgroup`-Raster für dieselben vier Quellen (OpenMeteo · eedc · Solcast ·
+// IST). Zwei davon passten zueinander — genau die zwei aus dem Fix.
+//
+// Deshalb steht der Plan jetzt an **einer** Stelle. Wer eine Spalte ändert,
+// ändert sie für alle; wer eine Tabelle hinzufügt, erbt das Raster.
+// Gewächtert in `PrognoseVergleichTeile.stundenvergleich.test.tsx`
+// (§„Spaltenflucht"): die `colgroup`-Klassenfolgen aller Tabellen müssen
+// zeichengleich sein. Bei `table-fixed` bestimmt allein sie die Spaltengrenzen
+// — ein Prüfer, der Pixel misst, gibt es hier bewusst nicht.
+export interface SpaltenplanOpts {
+  hasSolcast: boolean
+  hasSfml: boolean
+}
+
+/** Die Klassenfolge des Spaltenplans — `''` bedeutet „auto" (kein `w-`). */
+export function prognoseSpaltenplan({
+  hasSolcast, hasSfml,
+}: SpaltenplanOpts): string[] {
+  const plan = [
+    'w-20',   // Wetter-Symbol (7-Tage) bzw. Platzhalter
+    'w-24',   // Zeit / Datum / Zeilen-Label
+    '', 'w-24',  // OpenMeteo + Abweichung
+    '', 'w-24',  // eedc + Abweichung
+  ]
+  if (hasSolcast) plan.push('', 'w-24')
+  if (hasSfml) plan.push('')
+  plan.push('')  // IST
+  return plan
+}
+
+/** Der Plan als `<colgroup>` — eine Zeile je Tabelle statt einer Kopie. */
+export function PrognoseColgroup(opts: SpaltenplanOpts) {
+  return (
+    <colgroup>
+      {prognoseSpaltenplan(opts).map((klasse, i) => (
+        <col key={i} className={klasse || undefined} />
+      ))}
+    </colgroup>
+  )
+}
+
 function fmtKwh(v: number | null | undefined): string {
   if (v === null || v === undefined) return '—'
   return `${fmtZahl(v, 1)} kWh`
@@ -608,6 +656,10 @@ export function PvgKpiMatrix({ vm }: { vm: PrognoseVergleichVM }) {
   const { data } = vm
   if (!data) return null
   const hasSolcast = data.solcast_verfuegbar
+  // SFML-Spalte: diese Tabelle führt selbst keine SFML-Werte, muss die Spalte
+  // aber einplanen — sonst bricht die Flucht mit den Tabellen darunter genau
+  // bei denen, die SFML als Quelle gewählt haben (Gernots Auflage vom 15.08.).
+  const hasSfml = data.sfml_verfuegbar === true
   const hasEedc = data.eedc_lernfaktor !== null || data.eedc_heute_kwh !== null
   const lf = data.eedc_lernfaktor
   const progBasisLabel = 'OpenMeteo'
@@ -673,23 +725,28 @@ export function PvgKpiMatrix({ vm }: { vm: PrognoseVergleichVM }) {
       </MobilKarten>
       <TabelleAbSm>
         <Table className="table-fixed">
-          <colgroup><col className="w-32" /><col /><col />{hasSolcast && <col />}<col /></colgroup>
+          <PrognoseColgroup hasSolcast={hasSolcast} hasSfml={hasSfml} />
           <TableHead>
             <tr className="border-b border-gray-200 dark:border-gray-700">
+              <th className={KOPF_ZELLE} aria-hidden="true" />
               <th className={`${KOPF_ZELLE} text-left text-gray-500 dark:text-gray-400`}></th>
               <th className={`${KOPF_ZELLE} text-right ${Q.openmeteo}`}>
                 <SimpleTooltip text="Open-Meteo: GTI-basierte Prognose aus Wettermodell (ICON/ECMWF), 14 Tage Horizont"><span>OpenMeteo</span></SimpleTooltip>
               </th>
+              <th className={KOPF_ZELLE} aria-hidden="true" />
               <th className={`${KOPF_ZELLE} text-right ${eedcKlasse(hasEedc)}`}>
                 <SimpleTooltip text={hasEedc && lf != null ? `eedc: ${progBasisLabel} × Lernfaktor ${fmtZahl(lf, 3)} (MOS-kalibriert${data.eedc_lernfaktor_stufe ? ', ' + data.eedc_lernfaktor_stufe : ''})` : `eedc: Lernfaktor noch nicht verfügbar — siehe Hinweis unten`}>
                   <span>eedc {hasEedc && lf != null && <span className="text-xs font-normal">×{fmtZahl(lf, 2)}</span>}</span>
                 </SimpleTooltip>
               </th>
+              <th className={KOPF_ZELLE} aria-hidden="true" />
               {hasSolcast && (
                 <th className={`${KOPF_ZELLE} text-right ${Q.solcast}`}>
                   <SimpleTooltip text={`Solcast: Satellitenbasierte PV-Prognose mit Konfidenzband, 7 Tage (${data.solcast_quelle === 'solcast_api' ? 'API' : 'HA-Sensor'})`}><span>Solcast</span></SimpleTooltip>
                 </th>
               )}
+              {hasSolcast && <th className={KOPF_ZELLE} aria-hidden="true" />}
+              {hasSfml && <th className={`${KOPF_ZELLE} text-right ${Q.sfml}`}>SFML</th>}
               <th className={`${KOPF_ZELLE} text-right ${Q.ist}`}>
                 <SimpleTooltip text="IST: Tatsächliche PV-Erzeugung aus Sensor-Daten (TagesEnergieProfil)"><span>IST</span></SimpleTooltip>
               </th>
@@ -697,10 +754,15 @@ export function PvgKpiMatrix({ vm }: { vm: PrognoseVergleichVM }) {
           </TableHead>
           <TableBody>
             <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20">
+              <td className={ZELLE} aria-hidden="true" />
               <td className={`${ZELLE} font-medium text-gray-900 dark:text-white`}>Heute</td>
               <td className={`${ZELLE} text-right font-mono`}>{fmtKwh(data.openmeteo_heute_kwh)}</td>
+              <td className={ZELLE} aria-hidden="true" />
               <td className={`${ZELLE} text-right font-mono ${hasEedc ? `font-semibold ${Q.eedc}` : 'text-gray-400 dark:text-gray-500'}`}>{hasEedc ? fmtKwh(data.eedc_heute_kwh) : '—'}</td>
+              <td className={ZELLE} aria-hidden="true" />
               {hasSolcast && <td className={`${ZELLE} text-right font-mono`}>{fmtKwhBand(data.solcast_heute_kwh, data.solcast_p10_kwh, data.solcast_p90_kwh)}</td>}
+              {hasSolcast && <td className={ZELLE} aria-hidden="true" />}
+              {hasSfml && <td className={`${ZELLE} text-right font-mono text-gray-400 dark:text-gray-500`}>—</td>}
               <td className={`${ZELLE} text-right font-mono font-semibold text-green-600 dark:text-green-400`}>
                 {fmtKwh(data.ist_heute_kwh)}
                 {data.ist_unvollstaendig && (
@@ -709,47 +771,77 @@ export function PvgKpiMatrix({ vm }: { vm: PrognoseVergleichVM }) {
               </td>
             </tr>
             <tr className="border-b border-gray-100 dark:border-gray-800">
+              <td className={ZELLE} aria-hidden="true" />
               <td className={`${ZELLE} text-gray-500 dark:text-gray-400`}>
                 <SimpleTooltip text="Tagesprojektion: IST bisher + Prognose für die restlichen Stunden. Pro Spalte mit der jeweiligen Quelle; Gesamtspalte mit der in den Einstellungen gewählten Prognosequelle."><span>↳ Verbleibend</span></SimpleTooltip>
               </td>
               <td className={`${ZELLE} text-right font-mono text-gray-500`}>{fmtKwh(data.verbleibend_om_kwh)}</td>
+              <td className={ZELLE} aria-hidden="true" />
               <td className={`${ZELLE} text-right font-mono text-gray-500`}>{hasEedc ? fmtKwh(data.verbleibend_eedc_kwh) : <span className="text-gray-400 dark:text-gray-500">—</span>}</td>
+              <td className={ZELLE} aria-hidden="true" />
               {hasSolcast && <td className={`${ZELLE} text-right font-mono text-gray-500`}>{fmtKwh(data.verbleibend_solcast_kwh)}</td>}
+              {hasSolcast && <td className={ZELLE} aria-hidden="true" />}
+              {hasSfml && <td className={`${ZELLE} text-right font-mono text-gray-400 dark:text-gray-500`}>—</td>}
               <td className={`${ZELLE} text-right font-mono text-emerald-500`}>{fmtKwh(data.verbleibend_kwh)}</td>
             </tr>
             <tr className="border-b border-gray-100 dark:border-gray-800">
+              <td className={ZELLE} aria-hidden="true" />
               <td className={`${ZELLE} text-gray-400 dark:text-gray-500`}>↳ VM / NM</td>
               <td className={`${ZELLE} text-right font-mono text-gray-500`}>{fmtVmNm(data.openmeteo_tageshaelften?.[0])}</td>
+              <td className={ZELLE} aria-hidden="true" />
               <td className={`${ZELLE} text-right font-mono text-gray-500`}>{hasEedc ? fmtVmNm(data.eedc_tageshaelften?.[0]) : <span className="text-gray-400 dark:text-gray-500">—</span>}</td>
+              <td className={ZELLE} aria-hidden="true" />
               {hasSolcast && <td className={`${ZELLE} text-right font-mono text-gray-500`}>{fmtVmNm(data.solcast_tageshaelften?.[0])}</td>}
+              {hasSolcast && <td className={ZELLE} aria-hidden="true" />}
+              {hasSfml && <td className={`${ZELLE} text-right font-mono text-gray-400 dark:text-gray-500`}>—</td>}
               <td className={`${ZELLE} text-right font-mono text-green-500`}>{fmtVmNm(data.ist_tageshaelfte)}</td>
             </tr>
             <tr className="border-b border-gray-100 dark:border-gray-800">
+              <td className={ZELLE} aria-hidden="true" />
               <td className={`${ZELLE} font-medium text-gray-900 dark:text-white`}>Morgen</td>
               <td className={`${ZELLE} text-right font-mono`}>{fmtKwh(data.openmeteo_morgen_kwh)}</td>
+              <td className={ZELLE} aria-hidden="true" />
               <td className={`${ZELLE} text-right font-mono ${eedcKlasse(hasEedc)}`}>{hasEedc ? fmtKwh(data.eedc_morgen_kwh) : '—'}</td>
+              <td className={ZELLE} aria-hidden="true" />
               {hasSolcast && <td className={`${ZELLE} text-right font-mono`}>{fmtKwhBand(data.solcast_morgen_kwh, data.solcast_morgen_p10_kwh, data.solcast_morgen_p90_kwh)}</td>}
+              {hasSolcast && <td className={ZELLE} aria-hidden="true" />}
+              {hasSfml && <td className={`${ZELLE} text-right font-mono text-gray-400 dark:text-gray-500`}>—</td>}
               <td className={`${ZELLE} text-right text-gray-400 dark:text-gray-500`}>—</td>
             </tr>
             <tr className="border-b border-gray-100 dark:border-gray-800">
+              <td className={ZELLE} aria-hidden="true" />
               <td className={`${ZELLE} text-gray-400 dark:text-gray-500`}>↳ VM / NM</td>
               <td className={`${ZELLE} text-right font-mono text-gray-500`}>{fmtVmNm(data.openmeteo_tageshaelften?.[1])}</td>
+              <td className={ZELLE} aria-hidden="true" />
               <td className={`${ZELLE} text-right font-mono text-gray-500`}>{hasEedc ? fmtVmNm(data.eedc_tageshaelften?.[1]) : <span className="text-gray-400 dark:text-gray-500">—</span>}</td>
+              <td className={ZELLE} aria-hidden="true" />
               {hasSolcast && <td className={`${ZELLE} text-right font-mono text-gray-500`}>{fmtVmNm(data.solcast_tageshaelften?.[1])}</td>}
+              {hasSolcast && <td className={ZELLE} aria-hidden="true" />}
+              {hasSfml && <td className={`${ZELLE} text-right font-mono text-gray-400 dark:text-gray-500`}>—</td>}
               <td className={ZELLE}></td>
             </tr>
             <tr className="border-b border-gray-100 dark:border-gray-800">
+              <td className={ZELLE} aria-hidden="true" />
               <td className={`${ZELLE} font-medium text-gray-900 dark:text-white`}>Übermorgen</td>
               <td className={`${ZELLE} text-right font-mono`}>{fmtKwh(data.openmeteo_uebermorgen_kwh)}</td>
+              <td className={ZELLE} aria-hidden="true" />
               <td className={`${ZELLE} text-right font-mono ${eedcKlasse(hasEedc)}`}>{hasEedc ? fmtKwh(data.eedc_uebermorgen_kwh) : '—'}</td>
+              <td className={ZELLE} aria-hidden="true" />
               {hasSolcast && <td className={`${ZELLE} text-right font-mono`}>{fmtKwh(data.solcast_uebermorgen_kwh)}</td>}
+              {hasSolcast && <td className={ZELLE} aria-hidden="true" />}
+              {hasSfml && <td className={`${ZELLE} text-right font-mono text-gray-400 dark:text-gray-500`}>—</td>}
               <td className={`${ZELLE} text-right text-gray-400 dark:text-gray-500`}>—</td>
             </tr>
             <tr>
+              <td className={ZELLE} aria-hidden="true" />
               <td className={`${ZELLE} text-gray-400 dark:text-gray-500`}>↳ VM / NM</td>
               <td className={`${ZELLE} text-right font-mono text-gray-500`}>{fmtVmNm(data.openmeteo_tageshaelften?.[2])}</td>
+              <td className={ZELLE} aria-hidden="true" />
               <td className={`${ZELLE} text-right font-mono text-gray-500`}>{hasEedc ? fmtVmNm(data.eedc_tageshaelften?.[2]) : <span className="text-gray-400 dark:text-gray-500">—</span>}</td>
+              <td className={ZELLE} aria-hidden="true" />
               {hasSolcast && <td className={`${ZELLE} text-right font-mono text-gray-500`}>{fmtVmNm(data.solcast_tageshaelften?.[2])}</td>}
+              {hasSolcast && <td className={ZELLE} aria-hidden="true" />}
+              {hasSfml && <td className={`${ZELLE} text-right font-mono text-gray-400 dark:text-gray-500`}>—</td>}
               <td className={ZELLE}></td>
             </tr>
           </TableBody>
@@ -892,6 +984,10 @@ export function PvgGenauigkeitsTracking({ vm }: { vm: PrognoseVergleichVM }) {
   const { genauigkeit } = vm
   if (!genauigkeit || genauigkeit.anzahl_tage === 0) return null
   const lf = vm.data?.eedc_lernfaktor ?? null
+  // Dieselben Quellen-Flags wie die zwei Tabellen weiter oben — ohne sie
+  // fluchtet diese Tabelle nur zufällig (rapahl, PN 16.08.2026).
+  const hasSolcast = vm.data?.solcast_verfuegbar === true
+  const hasSfml = vm.data?.sfml_verfuegbar === true
   return (
     <Card>
       <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
@@ -983,12 +1079,12 @@ export function PvgGenauigkeitsTracking({ vm }: { vm: PrognoseVergleichVM }) {
       </MobilKarten>
       <TabelleAbSm>
         <Table className="table-fixed">
-          <colgroup>
-            <col className="w-28" /><col /><col className="w-24" /><col /><col className="w-24" />
-            <col /><col className="w-24" /><col className="w-16" />
-          </colgroup>
+          <PrognoseColgroup hasSolcast={hasSolcast} hasSfml={hasSfml} />
           <TableHead>
             <tr className="border-b border-gray-200 dark:border-gray-700">
+              {/* Platzhalter der Wetter-Spalte — hält die Flucht mit dem
+                  Stundenvergleich und dem 7-Tage-Vergleich (SoT-Plan oben). */}
+              <th className={KOPF_ZELLE} aria-hidden="true" />
               <th className={`${KOPF_ZELLE} text-left text-gray-500`}>Datum</th>
               <th className={`${KOPF_ZELLE} text-right ${Q.openmeteo}`}>OpenMeteo</th>
               <AbweichungKopf quelle="OpenMeteo" klasse={Q.openmeteo} />
@@ -996,8 +1092,9 @@ export function PvgGenauigkeitsTracking({ vm }: { vm: PrognoseVergleichVM }) {
                 <SimpleTooltip text={lf == null ? 'Lernfaktor noch nicht verfügbar — siehe Hinweis oben' : `eedc = OpenMeteo × Lernfaktor ${fmtZahl(lf, 3)}`}><span>eedc</span></SimpleTooltip>
               </th>
               <AbweichungKopf quelle="eedc" klasse={lf != null ? Q.eedc : 'text-gray-400 dark:text-gray-500'} />
-              <th className={`${KOPF_ZELLE} text-right ${Q.solcast}`}>Solcast</th>
-              <AbweichungKopf quelle="Solcast" klasse={Q.solcast} />
+              {hasSolcast && <th className={`${KOPF_ZELLE} text-right ${Q.solcast}`}>Solcast</th>}
+              {hasSolcast && <AbweichungKopf quelle="Solcast" klasse={Q.solcast} />}
+              {hasSfml && <th className={`${KOPF_ZELLE} text-right ${Q.sfml}`}>SFML</th>}
               <th className={`${KOPF_ZELLE} text-right ${Q.ist}`}>IST</th>
             </tr>
           </TableHead>
@@ -1006,13 +1103,15 @@ export function PvgGenauigkeitsTracking({ vm }: { vm: PrognoseVergleichVM }) {
               const ausgeschlossen = vm.ausreisserAusblenden && tag.ist_ausreisser
               return (
                 <tr key={tag.datum} className={`border-b border-gray-100 dark:border-gray-800 ${tag.ist_ausreisser ? 'border-l-2 border-l-amber-400 dark:border-l-amber-500' : ''} ${ausgeschlossen ? 'opacity-40' : ''}`}>
+                  <td className={ZELLE} aria-hidden="true" />
                   <td className={`${ZELLE} text-gray-900 dark:text-white`}>
                     {formatDatum(tag.datum)}
                     {tag.ist_ausreisser && (<SimpleTooltip text={ausgeschlossen ? 'Ausreißer — aus MAE/MBE ausgeschlossen' : 'Ausreißer — große Abweichung, bleibt in der Statistik'}><span className="ml-1 text-amber-500 text-[10px]">⚠</span></SimpleTooltip>)}
                   </td>
                   <PvgPrognoseZelle wert={tag.openmeteo_kwh} ist={tag.ist_kwh} stellen={1} />
                   <PvgPrognoseZelle wert={tag.eedc_kwh} ist={tag.ist_kwh} stellen={1} leerGedimmt />
-                  <PvgPrognoseZelle wert={tag.solcast_kwh} ist={tag.ist_kwh} stellen={1} leerGedimmt />
+                  {hasSolcast && <PvgPrognoseZelle wert={tag.solcast_kwh} ist={tag.ist_kwh} stellen={1} leerGedimmt />}
+                  {hasSfml && <td className={`${ZELLE} text-right font-mono text-gray-400 dark:text-gray-500`}>—</td>}
                   <td className={`${ZELLE} text-right font-mono font-semibold text-green-600 dark:text-green-400`}>{tag.ist_kwh !== null ? fmtZahl(tag.ist_kwh, 1) : '—'}</td>
                 </tr>
               )
@@ -1141,11 +1240,7 @@ export function Pvg24hTabelle({ vm }: { vm: PrognoseVergleichVM }) {
             `PrognoseVergleichTeile.stundenvergleich.test.tsx` — „beide Tabellen
             tragen denselben Spaltenplan". Wer hier eine Spalte ändert, ändert
             sie in `Pvg7TageTabelle` mit. */}
-        <colgroup>
-          <col className="w-20" /><col className="w-24" /><col /><col className="w-24" />
-          <col /><col className="w-24" />
-          {hasSolcast && <><col /><col className="w-24" /></>}{hasSfml && <col />}<col />
-        </colgroup>
+        <PrognoseColgroup hasSolcast={hasSolcast} hasSfml={hasSfml} />
         <TableHead>
           <tr className="border-b border-gray-200 dark:border-gray-700">
             {/* Platzhalter der Wetter-Spalte der 7-Tage-Tabelle — hält den
@@ -1270,11 +1365,7 @@ export function Pvg7TageTabelle({ vm }: { vm: PrognoseVergleichVM }) {
       </MobilKarten>
       <TabelleAbSm>
         <Table className="table-fixed">
-          <colgroup>
-            <col className="w-20" /><col className="w-24" /><col /><col className="w-24" />
-            <col /><col className="w-24" />{hasSolcast && <><col /><col className="w-24" /></>}
-            {hasSfml && <col />}<col />
-          </colgroup>
+          <PrognoseColgroup hasSolcast={hasSolcast} hasSfml={hasSfml} />
           <TableHead>
             <tr className="border-b border-gray-200 dark:border-gray-700">
               <th className={KOPF_ZELLE} aria-label="Wetter"></th>
