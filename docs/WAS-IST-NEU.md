@@ -13,6 +13,30 @@
 
 > Diesmal ging es fast durchweg darum, dass zwei Angaben auf demselben Bildschirm einander widersprachen — ein Wirkungsgrad ohne Einordnung, zwei Beträge mit einem Cent Abstand, eine Δ-Spalte, die nicht zu ihren Nachbarn passte, und eine Null, hinter der nichts gemessen war. Gefunden haben das durchweg Anwender beim genauen Hinsehen.
 
+### „Ein größerer Speicher hätte nichts gebracht" — das stimmte nicht für jeden
+
+**Betrifft dich das?** Wenn du deinen Speicher **nicht bis ganz unten** leerfährst, also eine eigene Entlade-Untergrenze eingestellt hast (10 %, 20 % — was die Zellen schont). Und wenn du beim Speicher die **nutzbare Kapazität** gepflegt hast.
+
+Im Speicher-Hub steht der Block *Hätte mehr Kapazität geholfen?*. Er ist bewusst streng: Mehr Kapazität bringt nur dann etwas, wenn dein Speicher nachts auch wirklich **leer** wird — sonst hätte die zusätzlich gespeicherte Energie am nächsten Morgen niemand abgenommen, sie wäre nur teurer Ballast.
+
+Nur hieß „leer" bisher fest: **Ladestand unter 5 %**. Wenn dein Speicher bei 20 % abschaltet, erreicht er diese 5 % nie. Für eedc lief er damit in **keiner einzigen Nacht** leer — und das Ergebnis konnte gar nichts anderes sein als **0 kWh**. Darüber stand dann der Satz „Ein größerer Speicher hätte hier nichts gebracht", als sei das gemessen worden.
+
+Im gemeldeten Fall sah das so aus: **4.974 kWh** gingen ins Netz, während der Speicher voll war. Nächte mit leerem Speicher: **0 von 207**. Gleichzeitig zeigt die Ladestandskurve, wie der Speicher jede Nacht bis auf 21 % heruntergeht und dort dreht — er **war** aufgebraucht, nur eben an *seiner* Grenze.
+
+Jetzt nimmt eedc deine eigene Grenze. Sie ergibt sich aus der **nutzbaren Kapazität**, die du beim Speicher gepflegt hast: Stehen dort 24 von 30 kWh, sind 20 % Reserve, und ab dort gilt er als leer. Die Kachel sagt es auch: „leer = Ladestand ≤ 23 % (deine Entladegrenze)".
+
+**Warum 23 und nicht 20?** Weil dein Speicher seine Grenze mit etwas Puffer einhält — im Beispiel dreht er bei 21 %, nicht bei 20 %. Dazu kommt, dass der Ladestand in ganzen Prozent gemeldet wird und diese Auswertung mit Stundenmitteln rechnet. Deshalb zählt eedc drei Prozentpunkte über deiner Grenze schon als leer. Ohne diesen Aufschlag hätte die neue Grenze denselben Fehler gemacht wie die alte, nur mit einer anderen Zahl.
+
+**Hast du die nutzbare Kapazität nicht gepflegt, ändert sich für dich nichts** — dann bleibt es bei den 5 %. Wenn du eine Untergrenze fährst, lohnt sich das Nachtragen: *Einstellungen → Investitionen → dein Speicher → nutzbare Kapazität*. Erst dann kann dir dieser Block eine belastbare Antwort geben.
+
+**Und wo eedc es nicht wissen kann, sagt es das jetzt auch.** Der alte Satz stand nämlich auch dann da, wenn dein Speicher dem Boden nie nahe kam **und** du die nutzbare Kapazität nicht gepflegt hast. Dann gibt es zwei Erklärungen, die zu genau gegenteiligen Antworten führen: Entweder ist dein Speicher groß genug — oder du fährst eine Untergrenze, von der eedc nichts weiß. Statt zu raten steht dort jetzt **„Das lässt sich hier nicht beurteilen"**, dazu dein tiefster gemessener Ladestand und der Hinweis, welches Feld die Frage klärt. Die Kachel *Nutzbares Zusatzpotential* zeigt in diesem Fall **„—"** statt **0 kWh**; eine Null wäre auch dort eine Behauptung.
+
+**Wo die Antwort belegt ist, bleibt sie klar.** Hast du die nutzbare Kapazität gepflegt und dein Speicher blieb trotzdem über seiner Grenze, war er wirklich groß genug — dann steht der eindeutige Satz weiterhin da. Und wer seinen Speicher real leerfährt, im Winter etwa auf 3 %, bekommt ebenfalls die klare Aussage. An den gemessenen Mengen daneben ändert sich nie etwas.
+
+**Auch nebenan wirkt es:** Der Block „Größerer Speicher?" zählt „Tage leergelaufen" jetzt nach derselben Grenze — vorher standen im selben Hub zwei Definitionen von „leer" nebeneinander.
+
+*(Gemeldet von kingcap1.)*
+
 ### „Sonstiges" lässt sich jetzt als Spalte einblenden — im Monat und am Tag
 
 **Betrifft dich das?** Wenn du ein Gerät unter **Sonstiges** führst — ein Mini-BHKW, einen Heizstab, eine Poolpumpe.

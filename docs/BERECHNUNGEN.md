@@ -562,6 +562,48 @@ Ein Speicher trägt zwei Kapazitäten, beide im Formular. Die Trennlinie läuft 
 > **daneben** aus und trennt die zwei Ursachen einer Lücke (Ladegrenze ⟷ Ladeverlust) über den
 > tatsächlich genutzten Ladestands-Bereich (`messe_soc_nutzung`).
 
+> ⚑ **Seit #379 (2026-08-15) trägt das Netto-Feld eine dritte Aussage: die Entlade-Untergrenze.**
+> Aus dem Verhältnis beider Kapazitäten leitet `core/berechnungen/speicher_potential.py::
+> leer_schwelle_prozent` ab, ab welchem Ladestand *dieser* Speicher nichts mehr abgibt —
+> `(1 − netto ÷ brutto) × 100`, bei 24 von 30 kWh also 20 %. Vorher stand dort die feste Zahl
+> **5 %**, und das war ein Fehler mit Folgen: Wer eine eigene Untergrenze fährt, dessen Speicher
+> erreicht 5 % **nie**, also lief er nie „leer", also war das *Nutzbare Zusatzpotential*
+> **strukturell 0** — die Sicht behauptete „ein größerer Speicher hätte nichts gebracht", obwohl
+> sie es gar nicht messen konnte.
+>
+> Drei Festlegungen gehören dazu, jede aus einer Messung:
+>
+> * **Aufschlag von 3 Prozentpunkten** (`SOC_LEER_TOLERANZ_PP`). Der Melder hat 20 % eingestellt,
+>   seine Kurve dreht bei **21 %** — Wechselrichter schalten mit Puffer ab, der SoC kommt in ganzen
+>   Prozent, und diese Auswertung liest Stundenmittel. Ohne Aufschlag träfe die neue Schwelle so
+>   zuverlässig daneben wie die alte.
+> * **Deckel bei 50 %** (`SOC_LEER_MAX_PROZENT`) gegen die N-235-Klasse: „1 kWh nutzbar von 30"
+>   ergäbe sonst 96,7 % und ließe den Speicher fast immer als leer gelten — die Kennzahl fiele zu
+>   **hoch** aus, also in die Gegenrichtung der Deckelung.
+> * **Die Reserve sitzt unten.** Bei Heimspeichern der Normalfall; die Oberseite deckt
+>   `SOC_VOLL_PROZENT` ab, und eine gewollte *Lade*-Grenze erkennt `messe_soc_nutzung` an den Daten.
+>
+> ⚠ **Wer nichts pflegt, sieht keine geänderte Zahl** — Rückfall auf 5 %, Abnahmekriterium des Baus.
+> Umgekehrt heißt das: Die Korrektur erreicht nur Anlagen mit gepflegter nutzbarer Kapazität.
+>
+> ⚑ **Und die Umkehrung gehört dazu (N-254):** Ohne gepflegte nutzbare Kapazität ist „der Speicher
+> wurde nie leer" **zweideutig** — er kann groß genug sein (dann hätte mehr Kapazität nichts
+> gebracht) oder an einer Untergrenze hängen (dann hätte sie geholfen). Zwei Ursachen,
+> **entgegengesetzte** Antworten, und eedc kann sie ohne die Pflege nicht trennen.
+> `boden_nie_erreicht(soc_min, schwelle, schwelle_ist_abgeleitet)` erkennt genau diesen Zustand;
+> die Sicht sagt dann „nicht beurteilbar" und die Kachel zeigt **„—" statt 0** — dieselbe Doktrin
+> wie „nicht gemessen statt 0".
+>
+> ⚠ **Die Regel hängt an der Pflege, nicht am Abstand allein** — sonst verlöre auch der Fall seine
+> Aussage, für den die Kennzahl gebaut wurde (Dev-Anlage, nie unter 31 %). Ist die Schwelle
+> abgeleitet, kennt eedc die Untergrenze, und ein Speicher, der sie nicht erreicht, war wirklich
+> groß genug. Wer seinen Boden real berührt (Winter, 6 %), bekommt die klare Aussage ebenfalls.
+>
+> ⚠ **Die Schwelle gilt im ganzen Speicher-Hub, nicht nur in Phase 2.** `speicher_sizing.py`
+> definierte `95.0`/`5.0` bis dahin **selbst** — mit dem Kommentar „dieselben Schwellen wie in
+> `speicher_potential.py`". Die Absicht war formuliert, die Kopplung fehlte; ein `==`-Test hätte
+> nie angeschlagen, weil beide Werte gleich waren. Jetzt Import statt Kopie, geprüft an der Quelle.
+
 **SoT netto (seit A31-2):** `core/investition_kennwerte.py::get_speicher_nutzbare_kapazitaet_kwh` —
 netto, sonst brutto, sonst `None`. Der Brutto-Fallback ist **still** (Entscheidung **E17**): kein
 Hinweis, keine Kennzeichnung, **kein P4-Fall**. Der Brutto-Wert ist nicht *unvollständig*, er ist die
