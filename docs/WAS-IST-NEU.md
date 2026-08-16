@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** August 2026 (v4.0.15)
+> **Stand:** August 2026 (v4.0.16)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -9,7 +9,7 @@
 
 ---
 
-## Kommt mit dem nächsten Update
+## v4.0.16 — Gepflegt statt geraten
 
 > Diesmal ging es fast durchweg darum, dass zwei Angaben auf demselben Bildschirm einander widersprachen — ein Wirkungsgrad ohne Einordnung, zwei Beträge mit einem Cent Abstand, eine Δ-Spalte, die nicht zu ihren Nachbarn passte, und eine Null, hinter der nichts gemessen war. Gefunden haben das durchweg Anwender beim genauen Hinsehen.
 
@@ -76,6 +76,24 @@ Was er sagt: Für die Monate vor deiner Anlage gibt es keine Einspeisungs- und N
 **Was du tun kannst — und was nicht:** Hast du Zählerwerte aus dieser Zeit, trag sie nach. Stimmt umgekehrt das Inbetriebnahme-Datum der **Anlage** nicht, korrigiere dieses. Sonst ist nichts zu tun, und der Hinweis bleibt als Auskunft stehen.
 
 ⚠ **Datiere das Gerät nicht um.** Genau das hat jemand getan, um eine ältere Meldung loszuwerden — danach war die echte Anschaffungshistorie seines Fahrzeugs weg. Diese neue Zeile ist kein Mangel, den du abstellen sollst.
+
+### „Einspeisung und Netzbezug sind beide 0" sagt jetzt, was gilt, wenn du nichts tust
+
+**Betrifft dich das?** Wenn dir dieser Hinweis im Daten-Checker begegnet ist.
+
+Als Begründung stand dort nur „Wahrscheinlich fehlende Daten". Für eine Anlage **ohne Netzanschluss** (Inselbetrieb) oder einen Monat **außer Betrieb** — Umzug, Defekt — ist die 0 aber richtig, und der Hinweis ließ sich durch keine Eingabe abstellen.
+
+Das soll es in eedc nicht geben: Ein Befund, den du nicht auflösen kannst, ist ein Fehler bei uns und keine Aufgabe für dich. Der Text nennt jetzt zuerst den Regelfall — Werte nachtragen, der Link führt direkt in den Monat — und sagt danach, dass 0 richtig sein kann und dann nichts zu tun ist.
+
+### Im Setup-Assistenten gibt es fürs Balkonkraftwerk jetzt alle neun Ausrichtungen
+
+**Betrifft dich das?** Wenn du ein Balkonkraftwerk über den Setup-Assistenten anlegst und es nach **Nordost, Nord oder Nordwest** zeigt.
+
+Diese drei Richtungen fehlten dort — es gab nur sechs zur Auswahl. Legtest du dasselbe Gerät stattdessen unter *Einstellungen → Investitionen* an, bekamst du alle neun. Welche Ausrichtungen zur Wahl standen, hing also davon ab, über welchen Weg du das Gerät angelegt hast; für ein Fassaden-Balkonkraftwerk nach Nordosten war der eine Weg schlicht versperrt.
+
+Jetzt gilt **eine** Liste für Assistent und Formular, für PV-Module wie fürs Balkonkraftwerk.
+
+⚠ **Bereits gepflegte Ausrichtungen bleiben unverändert** — es kommen nur Auswahlmöglichkeiten dazu.
 
 ### „Ein größerer Speicher hätte nichts gebracht" — das stimmte nicht für jeden
 

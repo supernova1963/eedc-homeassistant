@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.0.16] - 2026-08-16 — Gepflegt statt geraten
 
 ### Added
 
