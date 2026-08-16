@@ -18,7 +18,7 @@ import {
   PARAM_BALKONKRAFTWERK,
   PARAM_WAERMEPUMPE_DEFAULTS,
 } from '../../../lib'
-import { getDeviceIcon, PV_AUSRICHTUNG_OPTIONEN, BKW_AUSRICHTUNG_OPTIONEN } from './setupInvestitionHelpers'
+import { getDeviceIcon, AUSRICHTUNG_OPTIONEN } from './setupInvestitionHelpers'
 
 /**
  * SetupInvestitionForm — aufklappbarer Editor EINER Investition im Setup-Wizard
@@ -182,7 +182,7 @@ export function SetupInvestitionForm({
                 value={investition.ausrichtung || ''}
                 onChange={(e) => onUpdate({ ausrichtung: e.target.value || undefined })}
                 placeholder="-- Wählen --"
-                options={PV_AUSRICHTUNG_OPTIONEN}
+                options={AUSRICHTUNG_OPTIONEN}
               />
               <Input
                 label="Neigung (Grad)" required
@@ -308,7 +308,7 @@ export function SetupInvestitionForm({
                   value={(getParam(PARAM_BALKONKRAFTWERK.AUSRICHTUNG) as string) || ''}
                   onChange={(e) => updateParam(PARAM_BALKONKRAFTWERK.AUSRICHTUNG, e.target.value || undefined)}
                   placeholder="-- Wählen --"
-                  options={BKW_AUSRICHTUNG_OPTIONEN}
+                  options={AUSRICHTUNG_OPTIONEN}
                 />
                 <Input
                   label="Neigung (Grad)" required

@@ -3,7 +3,6 @@
  */
 import { Car, Battery, Plug, Cpu, Flame, Sun, Package } from 'lucide-react'
 import type { InvestitionTyp } from '../../../types'
-import type { SelectOption } from '../../ui/Select'
 
 /** Geräte-Icon je Investitionstyp (Setup-Wizard-Kacheln/Header). */
 export function getDeviceIcon(typ: InvestitionTyp) {
@@ -19,25 +18,19 @@ export function getDeviceIcon(typ: InvestitionTyp) {
   }
 }
 
-/** Ausrichtungs-Optionen PV-Modul (voll) — Setup behält den bestehenden Umfang. */
-export const PV_AUSRICHTUNG_OPTIONEN: SelectOption[] = [
-  { value: 'Süd', label: 'Süd (0°)' },
-  { value: 'Südost', label: 'Südost (-45°)' },
-  { value: 'Ost', label: 'Ost (-90°)' },
-  { value: 'Nordost', label: 'Nordost (-135°)' },
-  { value: 'Nord', label: 'Nord (180°)' },
-  { value: 'Nordwest', label: 'Nordwest (135°)' },
-  { value: 'West', label: 'West (90°)' },
-  { value: 'Südwest', label: 'Südwest (45°)' },
-  { value: 'Ost-West', label: 'Ost-West (gemischt)' },
-]
-
-/** Ausrichtungs-Optionen Balkonkraftwerk (reduziert, wie im Setup bislang). */
-export const BKW_AUSRICHTUNG_OPTIONEN: SelectOption[] = [
-  { value: 'Süd', label: 'Süd (0°)' },
-  { value: 'Südost', label: 'Südost (-45°)' },
-  { value: 'Ost', label: 'Ost (-90°)' },
-  { value: 'West', label: 'West (90°)' },
-  { value: 'Südwest', label: 'Südwest (45°)' },
-  { value: 'Ost-West', label: 'Ost-West (gemischt)' },
-]
+/**
+ * Ausrichtungs-Optionen — **eine** Liste für PV-Modul und Balkonkraftwerk, aus
+ * dem Formular-SoT `forms/sections/investitionFormHelpers.ts`.
+ *
+ * ⚑ N-174 (2026-08-16): Hier standen bis dahin **zwei** eigene Listen — eine
+ * wortgleiche Kopie der neun Optionen für PV-Module und eine auf **sechs**
+ * reduzierte fürs Balkonkraftwerk (Nordost, Nord und Nordwest fehlten), mit dem
+ * Kommentar „reduziert, wie im Setup bislang". Das ist keine Begründung,
+ * sondern eine Feststellung — und die Reduktion war ohnehin wirkungslos: Wer
+ * sein BKW im Wizard anlegt und danach **bearbeitet**, bekam im Formular alle
+ * neun. Der Wizard war der Ausreißer, nicht das Formular.
+ *
+ * Re-Export statt Direktimport an den Aufrufstellen, damit dieser Helfer die
+ * eine Anlaufstelle des Wizards bleibt.
+ */
+export { AUSRICHTUNG_OPTIONEN } from '../../forms/sections/investitionFormHelpers'
