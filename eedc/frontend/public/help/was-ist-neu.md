@@ -13,6 +13,44 @@
 
 > Diesmal ging es fast durchweg darum, dass zwei Angaben auf demselben Bildschirm einander widersprachen — ein Wirkungsgrad ohne Einordnung, zwei Beträge mit einem Cent Abstand, eine Δ-Spalte, die nicht zu ihren Nachbarn passte, und eine Null, hinter der nichts gemessen war. Gefunden haben das durchweg Anwender beim genauen Hinsehen.
 
+### Neu: „Nichts ersetzt (Neubau)" — und Klimaanlagen, die heizen, werden endlich bewertet
+
+**Betrifft dich das?** Wenn deine Wärmepumpe **keine** frühere Heizung ersetzt hat (Neubau), oder wenn du eine **Split-Klimaanlage** hast, oder wenn bei deiner Wärmepumpe **kein Wärmebedarf** gepflegt ist.
+
+Beim *alten Energieträger* konntest du bisher nur Erdgas, Heizöl oder Strom wählen — Erdgas war die Vorgabe. Dass es gar keine Vorgängerheizung gab, ließ sich nicht sagen. Also hat eedc auch einer Wärmepumpe im Neubau eine Ersparnis gegenüber einer Gasheizung angerechnet, die es nie gab: in der ROI-Tabelle, in den Aussichten, im Wärmepumpen-Dashboard, im Jahresbericht und im HA-Sensor.
+
+**Neu ist die Option „Nichts ersetzt (Neubau)".** Wer sie wählt, sieht an diesen Stellen **„nicht bewertet"** statt einer Zahl. Stromverbrauch, PV-Anteil, Kosten und der CO₂-Wert des Geräts selbst bleiben unverändert — es entfällt nur der Vergleich mit einer Heizung, die es nicht gibt.
+
+**Für Split-Klimaanlagen ist das zugleich eine Korrektur in die andere Richtung.** eedc hat bei der Wärmepumpenart *Luft-Luft* die Wirtschaftlichkeit bisher **grundsätzlich** unterdrückt, mit der Begründung, so ein Gerät ersetze keine Heizung. Das stimmt nicht: Eine Luft-Luft-Wärmepumpe kann sehr wohl eine Gasheizung ersetzen, und viele heizen damit. Heizt du mit deiner Klimaanlage, trag den **Heizwärmebedarf** ein — die beiden Felder werden dafür wieder angezeigt —, und du bekommst deine Wirtschaftlichkeit wie bei jeder anderen Wärmepumpe. Kühlst du nur, wähle „Nichts ersetzt".
+
+⚠ **An deinen bestehenden Klimaanlagen ändert sich zunächst nichts.** Wo noch die alte Vorbelegung von 12.000 kWh Heizwärme und 3.000 kWh Warmwasser steht — Werte, die eedc selbst eingesetzt hat und die seit v4.0.6 unsichtbar waren —, bleibt die Zeile „nicht bewertet" und sagt dir genau das. Erst dein eigener Wert schaltet die Bewertung frei. **Es wird nichts automatisch umgeschrieben.**
+
+### Ohne gepflegten Wärmebedarf erfindet eedc keinen mehr
+
+**Betrifft dich das?** Wenn bei deiner Wärmepumpe kein Heizwärme- und Warmwasserbedarf eingetragen ist — typisch bei Geräten, die über einen Import oder den Setup-Assistenten angelegt wurden.
+
+Fehlte der Bedarf, sprang bisher ein Standardwert von 12.000 + 3.000 kWh ein, und daraus entstand eine Ersparnis. Diese Zahl hattest du nie eingegeben. Jetzt steht dort **„nicht bewertet"** mit der Bitte, den Bedarf einzutragen (aus dem Energieausweis oder geschätzt).
+
+⚠ **Das ist eine sichtbare Änderung nach unten** — aber die alte Zahl war keine Schätzung von dir, sondern eine Behauptung von eedc.
+
+⚠ **Hast du den Bedarf gepflegt, siehst du keinen Unterschied.** Und auch die halbe Pflege wird jetzt ehrlich gerechnet: Wer nur den Warmwasserbedarf einträgt, bekommt für die Heizwärme **0** statt der erfundenen 12.000 kWh.
+
+### Deine Klimaanlage wird nicht mehr nach einem Wärmemengenzähler gefragt
+
+**Betrifft dich das?** Nur, wenn du ein Gerät mit der Wärmepumpenart **Luft-Luft (Klimaanlage)** führst.
+
+In *Einstellungen → Datenquellen* stand bei diesem Gerät das Feld **Heizwärme** rot markiert, mit aufgeklapptem Hinweis, und wurde unten als offener Punkt mitgezählt. Eine Split-Klimaanlage hat aber üblicherweise gar keinen Wärmemengenzähler — es gab also nichts zuzuordnen, und der rote Punkt ließ sich durch keine Eingabe abstellen.
+
+Dass das so ist, weiß eedc an anderer Stelle längst: Der Daten-Checker verlangt die Heizwärme bei einer Klimaanlage seit v3.30.3 ausdrücklich nicht. Zwei Ansichten sagten damit über dasselbe Gerät das Gegenteil.
+
+**Was sich für dich ändert:** Das Feld ist bei dieser Wärmepumpenart jetzt **optional** — grau, leise, kein offener Punkt. Dasselbe gilt in der MQTT-Themenliste.
+
+⚠ **Der Stromverbrauch bleibt Pflicht.** Bei einer Klimaanlage ist er die Größe, um die es geht.
+
+⚠ **Hast du doch einen Wärmemengenzähler an deiner Klimaanlage, ordne ihn weiter zu.** Das Feld verschwindet nicht, es fordert nur nichts mehr ein.
+
+⚠ **Für klassische Wärmepumpen ändert sich nichts** — bei Luft-Wasser und Sole-Wasser bleibt die Heizwärme Pflicht. Ebenso bei Altgeräten, bei denen keine Wärmepumpenart gepflegt ist: Eine fehlende Angabe schaltet diese Erwartung nicht stillschweigend ab.
+
 ### Fehlende Zählerwerte stehen jetzt als Fehler in der Liste, nicht als Warnung
 
 **Betrifft dich das?** Nur, wenn im Daten-Checker ohnehin schon „MM/JJJJ fehlt" steht oder dein **Inbetriebnahme-Datum** der Anlage nicht gepflegt ist. Wer vollständige Daten hat, merkt von dieser Änderung nichts.
