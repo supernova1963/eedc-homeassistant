@@ -764,6 +764,32 @@ def _wp_nicht_bewertbar(params: dict) -> Optional[str]:
     return None
 
 
+def _angezeigte_jahres_einsparung(
+    *, jahres_einsparung: float, betriebskosten: float, detail: Any
+) -> float:
+    """Die Zahl, die in der Spalte *Jahres-Einsparung* landet — und in der Summe.
+
+    **N-258.** Bis 2026-08-16 stand hier unbedingt
+    ``jahres_einsparung - betriebskosten``. Bei einer Zeile, für die eedc gar
+    keine Ersparnis bewertet (``nicht_bewertet``), ergab das ``0 - 200`` — also
+    **−200 € „Einsparung"** für ein Gerät, dessen Hinweistext mit „Nicht
+    bewertet: …" beginnt. Gemessen an der Demo-Wärmepumpe: die Anlagen-Summe
+    fiel um 1.555 € statt um die 1.355 € der entfallenen Ersparnis.
+
+    ⚠ **Es war nie ein Rechenfehler** — die Betriebskosten fallen real an. Die
+    Behauptung war falsch: Eine Zahl in der *Einsparungs*-Spalte sagt „so viel
+    spart dieses Gerät", und genau das ist hier unbekannt.
+
+    **Die Betriebskosten bleiben deshalb überall sonst stehen** — in
+    ``gesamt_betriebskosten`` und in ``berechne_roi`` (dort als eigenes
+    Argument, nicht als negativer Zähler). Unterdrückt wird ausschließlich der
+    Anzeige- und Summenbeitrag, den die Oberfläche ohnehin als „—" zeigt.
+    """
+    if isinstance(detail, dict) and detail.get('nicht_bewertet'):
+        return 0.0
+    return jahres_einsparung - betriebskosten
+
+
 @router.get("/roi/{anlage_id}", response_model=ROIDashboardResponse)
 async def get_roi_dashboard(
     anlage_id: int,
@@ -1968,12 +1994,25 @@ async def get_roi_dashboard(
             detail['sonstige_netto_euro'] = round(inv_sonstige_ertraege - inv_sonstige_ausgaben, 2)
             detail['sonstige_ausgaben_euro'] = round(inv_sonstige_ausgaben, 2)
             detail['sonstige_ertraege_euro'] = round(inv_sonstige_ertraege, 2)
-            # Hat der Anwender selbst einen Betrag gepflegt, ist die Zeile sehr
-            # wohl bewertet — dann seine Zahl zeigen statt „—" (N-87).
-            if (inv_sonstige_ertraege or inv_sonstige_ausgaben) and detail.get('nicht_bewertet'):
-                detail['nicht_bewertet'] = False
+            # ⛔ **Hier stand bis 2026-08-16 die Rücknahme des Flags (N-87):**
+            # „Hat der Anwender selbst einen Betrag gepflegt, ist die Zeile sehr
+            # wohl bewertet — dann seine Zahl zeigen statt „—"." **Diese
+            # Prämisse ist gefallen (N-258, gemessen):** Die
+            # Einsparungs-Spalte trägt seinen Betrag nie. Eine gepflegte
+            # Förderung von 180 € an einer unbewerteten Wärmepumpe ließ die
+            # Zeile „0,00 €" zeigen — also genau die Fake-0, gegen die N-87
+            # angetreten war; ein Wartungsposten ließ sie „−200,00 €" zeigen.
+            # Der gepflegte Betrag wirkt, wo er hingehört: im
+            # **Kapitaleinsatz** (oben, `inv_kapitaleinsatz` — 8.000 → 7.820
+            # bzw. 8.180) und in `sonstige_*_euro` im `detail`. Die Rücknahme
+            # nahm der Zeile obendrein ihren sichtbaren Grund: der Zusatz
+            # „· nicht bewertet" hängt am selben Flag.
         betriebskosten = inv.betriebskosten_jahr or 0
-        netto_einsparung = jahres_einsparung - betriebskosten
+        netto_einsparung = _angezeigte_jahres_einsparung(
+            jahres_einsparung=jahres_einsparung,
+            betriebskosten=betriebskosten,
+            detail=detail,
+        )
         roi_result = berechne_roi(inv_kapitaleinsatz, jahres_einsparung, 0, betriebskosten)
         gesamt_betriebskosten += betriebskosten
 

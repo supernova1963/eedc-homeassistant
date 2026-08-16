@@ -1,11 +1,39 @@
 # Was ist neu
 
-> **Stand:** August 2026 (v4.0.16)
+> **Stand:** August 2026 (v4.0.17)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.17 — Nicht bewertet heißt keine Zahl
+
+> Ein Nachtrag zu v4.0.16, gefunden beim Durchspielen der neuen Fälle: Die Zeilen, die seit gestern „nicht bewertet" sagen können, zeigten in einer Spalte trotzdem eine Zahl.
+
+### Eine „nicht bewertete" Zeile zeigt keine Jahres-Einsparung mehr
+
+**Betrifft dich das?** Wenn du in *Auswertungen → ROI* eine Zeile mit dem Zusatz **„nicht bewertet"** hast — also eine Wärmepumpe mit „Nichts ersetzt (Neubau)" oder ohne gepflegten Wärmebedarf, oder einen **Speicher ohne gepflegte Kapazität**.
+
+Bei diesen Zeilen stand in der Spalte *Jahres-Einsparung* trotzdem ein Betrag, zum Beispiel **−200,00 €**. Das war die Höhe der bei diesem Gerät gepflegten **Betriebskosten** — abgezogen von einer Ersparnis, die es gar nicht gibt. Die Gesamt-Einsparung deiner Anlage fiel dadurch um 1.555 € statt um die 1.355 €, die mit der Bewertung entfallen.
+
+Dort steht jetzt **„—"**, wie in allen anderen Spalten dieser Zeile auch.
+
+⚠ **Deine Betriebskosten sind nicht verschwunden.** Sie fallen real an und zählen weiterhin dort, wo sie hingehören: in der Amortisationsdauer und in dem Satz darunter, der sie ausdrücklich nennt („inkl. 200,00 €/Jahr Betriebskosten"). Was wegfällt, ist nur die Behauptung, ein Gerät habe **minus** 200 € *gespart*.
+
+⚠ **Wer gepflegte Daten hat, sieht keinen Unterschied.**
+
+### Eine Wartungsrechnung schaltet die Bewertung nicht mehr frei
+
+**Betrifft dich das?** Wenn du an einem solchen Gerät **sonstige Erträge oder Ausgaben** erfasst hast — eine Wartungsrechnung, eine Förderung. Das dürfte auf die meisten Wärmepumpen zutreffen.
+
+Sobald dort ein Betrag gepflegt war, verschwand der Zusatz „nicht bewertet" an der Zeile, und die Zahl aus dem Punkt oben wurde **sichtbar** angezeigt. Der Gedanke dahinter war gut gemeint: Hast du selbst einen Betrag gepflegt, soll deine Zahl dastehen statt eines Strichs.
+
+**Nur zeigt diese Spalte deinen Betrag gar nicht.** Nachgemessen: Eine gepflegte **Förderung von 180 €** ließ die Zeile „0,00 €" anzeigen — also „spart nichts", obwohl nichts bewertet war. Dein Betrag wirkt an der Stelle, an der er hingehört: im **Kapitaleinsatz** dieser Zeile (im Beispiel 8.000 € → 7.820 €) und in der Detail-Aufschlüsselung darunter. Dort ist er unverändert.
+
+⚠ **An bewerteten Zeilen ändert sich nichts** — sie waren davon nie betroffen.
 
 ---
 

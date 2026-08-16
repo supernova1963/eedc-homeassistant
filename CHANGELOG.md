@@ -7,6 +7,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.0.17] - 2026-08-16 — Nicht bewertet heißt keine Zahl
+
+### Fixed
+
+- **Eine Zeile mit dem Hinweis „nicht bewertet" zeigt in der Spalte *Jahres-Einsparung* keine Zahl mehr — und die Anlagen-Summe trägt sie auch nicht.** In *Auswertungen → ROI* stand bei einer Wärmepumpe, für die eedc bewusst keine Ersparnis bewertet, trotzdem ein Betrag: **−200,00 €**. Das ist die Höhe der bei diesem Gerät gepflegten **Betriebskosten** — und sie wurden von einer Ersparnis abgezogen, die es gar nicht gibt. Die Gesamt-Einsparung der Anlage fiel dadurch um **1.555 €** statt um die **1.355 €**, die mit der Bewertung entfallen sind. ⚠ **Es war nie ein Rechenfehler:** Die Betriebskosten fallen real an, und sie zählen weiterhin überall dort, wo sie hingehören — in der Amortisationsdauer und in deren Annahme-Satz („inkl. 200,00 €/Jahr Betriebskosten"). Falsch war die **Aussage**: Eine Zahl in der Spalte *Jahres-Einsparung* behauptet „so viel spart dieses Gerät", und genau das ist bei einer unbewerteten Zeile unbekannt. Dort steht jetzt „—", wie in allen anderen Spalten dieser Zeile auch. ⚠ **Das gilt nicht nur für Wärmepumpen:** Ein **Speicher ohne gepflegte Kapazität** trägt denselben Hinweis und hatte denselben Fehler. ⚠ **Wer gepflegte Daten hat, sieht keine Änderung** — an der Demo-Anlage vor und nach dem Update auf den Cent gleich (1.355,00 € je Gerät, 5.911,92 € Anlagen-Summe).
+
+- **Ein gepflegter Wartungsposten macht aus einer unbewerteten Zeile keine bewertete mehr.** Sobald an einem Gerät **sonstige Erträge oder Ausgaben** erfasst waren — eine Wartungsrechnung, eine Förderung —, verschwand der Zusatz „· nicht bewertet" an der Zeile, und der Betrag aus dem Punkt darüber wurde **sichtbar** angezeigt statt unterdrückt. Der Gedanke dahinter war: „Hat jemand selbst einen Betrag gepflegt, zeigen wir seine Zahl statt eines Strichs." ⚠ **Die Annahme traf nicht zu, und das ist nachgemessen:** Die Einsparungs-Spalte trägt diesen Betrag nie. Eine gepflegte **Förderung von 180 €** ließ die Zeile „**0,00 €**" zeigen — also die Behauptung „spart nichts", während in Wahrheit nichts bewertet war; ein **Wartungsposten** ließ sie „−200,00 €" zeigen. Der gepflegte Betrag wirkt weiterhin unverändert dort, wo er hingehört: im **Kapitaleinsatz** dieser Zeile (im Beispiel 8.000 € → 7.820 €) und in der Detail-Aufschlüsselung. ⚠ **Betroffen war praktisch jede gepflegte Anlage**, denn eine Wartungsrechnung an der Wärmepumpe hat fast jeder. ⚠ **An bewerteten Zeilen ändert sich nichts** — sie waren von diesem Hinweis nie betroffen, mit oder ohne gepflegte Position.
+
+---
+
 ## [4.0.16] - 2026-08-16 — Gepflegt statt geraten
 
 ### Added
