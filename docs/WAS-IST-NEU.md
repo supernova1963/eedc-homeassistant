@@ -164,7 +164,7 @@ Welche Richtung ein Gerät hat, entscheidet die **Kategorie**, die du bei ihm ge
 
 Ein Gerät mit der Kategorie *Speicher* bleibt in der **Tagesansicht** außen vor: Dort gibt es je Gerät nur eine Zahl, und die ist bei einem Speicher ein Saldo aus Laden und Entladen — sie ließe sich weder der Erzeugung noch dem Verbrauch zuschlagen.
 
-> **Gas, Öl und Wasser sind nicht dabei** — die bringen eine Menge in m³ oder Litern ohne kWh-Bezug. Deshalb tragen die beiden Spalten ihre Einheit im Namen: Die Zähler aus [#377](https://github.com/supernova1963/eedc-homeassistant/issues/377) bekommen später eigene Spalten in derselben Gruppe, statt diese zu überschreiben.
+> **Gas, Öl und Wasser sind nicht dabei** — die bringen eine Menge in m³ oder Litern ohne kWh-Bezug. Deshalb tragen die beiden Spalten ihre Einheit im Namen: Eine Litermenge unter der Beschriftung „kWh" wäre schlicht falsch. Was aus [#377](https://github.com/supernova1963/eedc-homeassistant/issues/377) wird, ist offen — käme es, dann in eigenen Spalten mit eigener Einheit und nicht durch Überschreiben dieser beiden.
 
 > **Auch in der Monatsdaten-Liste** (*Einstellungen → Daten*) stehen die beiden Spalten jetzt zur Wahl — sie hat einen eigenen Spalten-Wähler, und die Gerätegruppe fehlte dort genauso.
 

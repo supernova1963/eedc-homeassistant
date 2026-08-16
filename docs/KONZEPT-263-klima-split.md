@@ -12,7 +12,7 @@
 >
 > **Offen:** **K-1** (SEER) · **K-2** (Heizen-vs-Kühlen-Trennung, der Kern) · **K-3** (PV-Anteil je Klima-Komponente). ⚠ **Harte Vorbedingung für K-2/K-3: eine Klimaanlage mit Betriebsmodus-Sensor bei einem Tester** — ohne sie wird die Hersteller-Vielfalt blind gebaut (dieselbe Lehre wie bei den Kompressor-Starts, #238).
 >
-> ⚑ **Die Vorbedingung ist am 2026-08-16 erstmals erfüllt** — kingcap1 (#263, 15.08.), Mitsubishi über MELCloud. **Am Bildmaterial gemessen, nicht aus der Beschreibung übernommen:** §„K-2 — Vermessung am ersten geeigneten Testgerät". Ergebnis in einem Satz: Der Modus ist da, **aber der kWh-Zähler trägt ihn nicht** — K-2 bleibt ein Bau, keine Auswertung vorhandener Felder.
+> ⚑ **Die Vorbedingung ist am 2026-08-16 erstmals erfüllt** — kingcap1 (#263, 15.08.), Mitsubishi über MELCloud. **Am Bildmaterial gemessen, nicht aus der Beschreibung übernommen:** §„K-2 — Vermessung am ersten geeigneten Testgerät". Ergebnis in einem Satz: Der Modus ist da, **aber der kWh-Zähler trägt ihn nicht** — K-2 bleibt ein Bau, keine Auswertung vorhandener Felder. ⚑ **Nachtrag 16.08.:** Er hat die drei Rückfragen mit einem Selbstversuch beantwortet — **der Modus gehört der Anlage, nicht dem Innengerät** (§„K-2 Nachtrag"). Das verbilligt die Sensor-Seite, nicht die Aggregation.
 >
 > ⚠ **Der frühere Satz dieser Stelle ist zurückgezogen.** Er lautete: *„Ein Melder hat einen Modus-Sensor, misst aber drei Innengeräte über einen einzigen Zähler — damit ist K-2 nur zur Hälfte entsperrt"* (Stand 08.08.) und meinte dietmar1968. Der ist damit **falsch wiedergegeben**: Seine Antwort im Forum (#89667/92) lautete *„Zu 1: Es gibt nur entweder, oder"* — das ist eine Aussage über die **Anlage** (nicht gleichzeitig heizen und kühlen), nicht über einen auslesbaren Sensor. Das Fund-Register hatte denselben Post am 03.08. korrekt als **Gegenbeweis** eingeordnet („kein Betriebsmodus-Signal, keine Messung je Innengerät"). Die Roadmap **#110** trägt die falsche Lesart als „halb entsperrt" bis heute weiter — dort ungeprüft nachzuziehen, wenn #110 das nächste Mal angefasst wird.
 
@@ -206,6 +206,61 @@ Klärung. **K-3 (Aufteilung je Innengerät) bleibt damit zu** — daran ändert 
 - Die **Normalisierungs-Schicht ist keine Vorsichtsmaßnahme**, sondern schon an diesem einen
   Anwender belegt: Er betreibt Mitsubishi **und** Einhell.
 
+### K-2 Nachtrag — die drei Rückfragen sind beantwortet (2026-08-16, kingcap1)
+
+**Quelle:** [#263](https://github.com/supernova1963/eedc-homeassistant/issues/263), drei Kommentare
+vom 16.08.2026 (11:51 · 12:03 · 12:16). Er hat die drei Rückfragen aus dem Kommentar desselben Tages
+beantwortet **und dafür an seiner Anlage einen Selbstversuch gefahren**. Die Antworten ändern zwei
+der drei Befunde oben — deshalb hier als Nachtrag statt als stille Korrektur.
+
+**Zu Rückfrage 2 (Betriebszustand) — die wichtigste Antwort, und er hat sie nicht als Befund
+gemeldet:** Er hat ein Innengerät auf *Heizen* gestellt, während die übrigen kühlten. Ergebnis:
+**Das Gerät tut nichts** — Klappe zu, Kontrollleuchte blinkt. Zurück auf *Kühlen* läuft es sofort
+wieder. Seine eigene Einordnung: „entweder bei ALLEN Innen nur Kühlen oder bei ALLEN Innen nur
+Heizen … sonst müsste man ja mind. 2 Kreisläufe haben (also 4 Rohre zu jedem Innen)".
+
+⇒ **Der Betriebsmodus ist eine Eigenschaft der Anlage, nicht des Innengeräts.** Für den Bau ist das
+eine Vereinfachung, und zwar an der teuersten Stelle: **ein** Modus-Signal je Außengerät genügt, und
+es passt genau auf die Mengengröße, die nach Befund 3 als einzige belastbar ist — den Zähler am
+Außengerät. Die modus-gewichtete Aggregation aus Baustein 2 braucht damit **keine** Zuordnung
+Modus↔Innengerät.
+
+⚠ **Die Grenze gehört dazu, sie ist nicht gemessen, sondern Bauart:** Das gilt für
+**2-Rohr-Systeme** — den Regelfall im Wohnhaus, und er nennt die Begründung selbst. Eine
+3-Rohr-Anlage mit Wärmerückgewinnung kann gleichzeitig heizen und kühlen. Eine Bauform, die den
+Modus nur an der Anlage kennt, ist für diesen Fall zu eng; das gehört vor dem Bau entschieden, nicht
+danach entdeckt.
+
+⚠ **`hvac_action` bleibt offen.** Er hat es nicht bestätigt („es gibt sicher ein besseres
+MELCloud-MQTT-Addon, was mehr auslesen kann"). **Befund 1.1 steht also unverändert** — aber er wiegt
+weniger, weil die Automatik „Heizen/Kühlen" bei einer Anlage mit *einem* Modus ohnehin nur eine
+Betriebsart der ganzen Anlage sein kann.
+
+**Zu Rückfrage 3 (Entfeuchtung / Nur Lüftung): „NEIN, wir nutzen eigentlich nur Kühlen oder
+Heizen."** Bei erreichter Zieltemperatur drosselt die Automatik den Luftstrom — bewusst auf Lüftung
+stellt er nicht. ⇒ **Befund 1.2 entschärft sich für die Praxis, entfällt aber nicht:** zwei Klassen
+plus eine benannte Restklasse reichen. Ein Feldpaar `strom_heizen_kwh`/`strom_kuehlen_kwh` **ohne**
+dritte Zeile bleibt trotzdem falsch, weil es den Reststrom einer der beiden Seiten zuschlägt. Belegt
+ist die Aussage für **einen** Haushalt.
+
+**Zu Rückfrage 1 (Zeitbezug) — die Klärung kommt, aber sie rettet Befund 3 nicht:** Der Shelly ging
+„quasi am gleichen Tag online" wie die Anlage (Anfang 2024) und steht **insgesamt bei 3.190 kWh**;
+die 1.103,2 kWh aus der Vermessung sind der 2026er-Ausschnitt davon. Zum Zeitbezug der
+MELCloud-Zahlen kann er nichts sagen — er hatte im **August 2025 einen HA-Crash ohne Recovery**.
+
+⇒ ⚑ **Die naheliegende Erklärung ist damit widerlegt, nicht bestätigt.** „Innen = Lebensdauer,
+Shelly = Jahresfilter" trägt nicht: Das Büro-Innengerät allein steht bei **4.115,70 kWh** und damit
+über dem **Lebensdauer**-Wert der ganzen Anlage (3.190 kWh). Auch Lebensdauer gegen Lebensdauer geht
+die Rechnung nicht auf. ⚠ **Entscheidbar ist es weiterhin nicht** — der HA-Crash kann die
+Shelly-Historie beschnitten haben, der Zähler im Gerät ist davon unberührt. **Befund 3 bleibt
+bestehen, K-3 bleibt zu**, und die Innengeräte-Zähler taugen bis auf Weiteres **nicht einmal** als
+Verteilschlüssel.
+
+**Was das für die Reihenfolge heißt:** Nichts. K-2 bleibt der Kern und bleibt ein ~3–4-Tage-Bau —
+der Modus-Befund macht die Sensor-Seite billiger, nicht die Aggregation. Zu entscheiden ist vor dem
+Bau weiterhin die Zielstruktur der Modus-Klassen (jetzt: zwei plus Rest) und ob der eingestellte
+Modus genügt.
+
 ## Drei offene Bausteine — Architektur + Aufwand
 
 ### 1. SEER (Kühl-Effizienz, Pendant zum SCOP) — klein, aber allein halbnützlich
@@ -223,6 +278,10 @@ Klärung. **K-3 (Aufteilung je Innengerät) bleibt damit zu** — daran ändert 
   (`live_sensor_config.py`, WP-Felder), Werte heizen/kühlen/idle. Modus-Sensor
   ist herstellerabhängig (Daikin/Mitsubishi/ESPHome) → braucht eine
   Normalisierungs-Schicht (analog zur Strompreis-/Counter-Mapping-Logik).
+  ⚑ **Präzisiert 16.08. (K-2 Nachtrag):** **ein** Signal je Investition/Außengerät
+  genügt — der Modus ist bei 2-Rohr-Systemen eine Anlagen-Eigenschaft, und er
+  passt damit auf denselben Bezug wie der einzige belastbare Zähler. **Keine**
+  Zuordnung Modus↔Innengerät nötig.
 - Modus-gewichtete Aggregation: Stromverbrauch je Modus getrennt in
   `verbrauch_daten` (z. B. `strom_heizen_kwh` / `strom_kuehlen_kwh`),
   Snapshot-Aggregator schreibt pro Modus.
