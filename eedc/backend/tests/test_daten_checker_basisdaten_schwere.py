@@ -231,3 +231,42 @@ async def test_gepflegtes_installationsdatum_meldet_ok(db):
 
     assert _mit(ergebnisse, "Installationsdatum nicht gesetzt") == []
     assert _mit(ergebnisse, "Installationsdatum vorhanden")[0].schwere == CheckSeverity.OK
+
+
+# ─── Offener Punkt 3: der Insel-/Ausser-Betrieb-Fall ────────────────────────
+
+async def test_beide_kernfelder_0_sagt_was_ohne_handlung_gilt(db):
+    """P-6: Ein Befund, den man nicht aufloesen kann, ist ein Fehler im Checker.
+
+    "Einspeisung und Netzbezug sind beide 0" trug als vollstaendige Begruendung
+    "Wahrscheinlich fehlende Daten". Fuer eine Anlage ohne Netzanschluss oder
+    einen Monat ausser Betrieb ist die 0 aber richtig -- und der Befund war
+    durch keine Eingabe abstellbar. Der Text sagt jetzt beides: den Regelfall
+    (nachtragen) UND was gilt, wenn man nichts tut.
+
+    ⚠ Bewusst kein Stammdaten-Schalter "Inselanlage" (Gernot, 16.08.: kein
+    einziger bekannter Anwender). Er zoege ausserdem die Finanzseite nach sich:
+    eedc bewertet Eigenverbrauch als eingesparten Netzbezug, eine Insel spart
+    nichts ein.
+    """
+    from backend.models import Monatsdaten as MD
+
+    anlage_id = await _anlage(
+        db,
+        installationsdatum=date(2024, 3, 1),
+        geraete=[("pv-module", date(2024, 3, 1))],
+        monate=[],
+    )
+    db.add(MD(anlage_id=anlage_id, jahr=2024, monat=3,
+              einspeisung_kwh=0.0, netzbezug_kwh=0.0))
+    await db.commit()
+
+    ergebnisse = (await DatenChecker(db).check_anlage(anlage_id)).ergebnisse
+    treffer = _mit(ergebnisse, "Einspeisung und Netzbezug sind beide 0")
+    assert len(treffer) == 1, [e.meldung for e in ergebnisse]
+    # Der Regelfall steht zuerst -- die Auskunft ersetzt ihn nicht.
+    assert "trag sie nach" in treffer[0].details
+    # ... und das ist der Satz, der P-6 aufloest.
+    assert "nichts zu tun" in treffer[0].details
+    assert "Inselbetrieb" in treffer[0].details
+    assert treffer[0].link

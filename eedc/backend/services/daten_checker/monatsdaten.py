@@ -645,11 +645,40 @@ class MonatsdatenChecks:
                     ))
 
             # 4. Beide Kernfelder 0
+            # ⚑ Der Text sagt seit 2026-08-16, was gilt, WENN MAN NICHTS TUT
+            # (P-6). Vorher stand hier als vollständige Begründung
+            # „Wahrscheinlich fehlende Daten" — für eine Anlage ohne
+            # Netzanschluss oder einen Monat außer Betrieb ist die 0 aber
+            # richtig, und der Befund war für sie durch keine Eingabe
+            # abstellbar: die P-6-Falle. Dasselbe Muster wie beim
+            # WP-Spezialtarif-Hinweis und bei „Tarif ohne Einspeisevergütung"
+            # — der Befund bleibt stehen, sagt aber, dass er in diesem Fall
+            # eine Auskunft ist und kein Mangel.
+            #
+            # ⚠ Bewusst KEIN Stammdaten-Schalter „Inselanlage": Er wäre die
+            # richtige Bauform (Tatsachenaussage, widerlegbar über Netzbezug
+            # > 0 — das N-235-Muster), zöge aber die Finanzseite nach sich
+            # (eedc bewertet Eigenverbrauch als eingesparten Netzbezug; eine
+            # Insel spart nichts ein) und bedient eine Gruppe, für die es
+            # keinen einzigen bekannten Anwender gibt (Gernot, 16.08.).
+            # Trigger für den Schalter: ein echter Melder mit Insel- oder
+            # Notstromanlage, oder ein zweiter Check, der dieselbe Erklärung
+            # bräuchte — ab dem zweiten Abnehmer trägt sich eine
+            # Stammdaten-Angabe, für einen Textfall nicht.
             if md.einspeisung_kwh == 0 and md.netzbezug_kwh == 0:
                 ergebnisse.append(CheckErgebnis(
                     kategorie=kat, schwere=CheckSeverity.WARNING,
                     meldung=f"{prefix}: Einspeisung und Netzbezug sind beide 0",
-                    details="Wahrscheinlich fehlende Daten",
+                    details=(
+                        "In den allermeisten Fällen fehlen hier schlicht die "
+                        "Zählerwerte — dann trag sie nach, der Link führt direkt "
+                        "in diesen Monat. Sind beide Werte bei dir tatsächlich 0 "
+                        "— weil die Anlage keinen Netzanschluss hat (Inselbetrieb) "
+                        "oder den ganzen Monat außer Betrieb war (Umzug, Defekt) —, "
+                        "dann ist 0 richtig und es ist nichts zu tun: Der Hinweis "
+                        "bleibt dann als Auskunft stehen und sagt, womit eedc für "
+                        "diesen Monat rechnet."
+                    ),
                     link=md_link,
                 ))
 
