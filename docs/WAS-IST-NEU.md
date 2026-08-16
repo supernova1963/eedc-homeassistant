@@ -13,6 +13,32 @@
 
 > Diesmal ging es fast durchweg darum, dass zwei Angaben auf demselben Bildschirm einander widersprachen — ein Wirkungsgrad ohne Einordnung, zwei Beträge mit einem Cent Abstand, eine Δ-Spalte, die nicht zu ihren Nachbarn passte, und eine Null, hinter der nichts gemessen war. Gefunden haben das durchweg Anwender beim genauen Hinsehen.
 
+### Fehlende Zählerwerte stehen jetzt als Fehler in der Liste, nicht als Warnung
+
+**Betrifft dich das?** Nur, wenn im Daten-Checker ohnehin schon „MM/JJJJ fehlt" steht oder dein **Inbetriebnahme-Datum** der Anlage nicht gepflegt ist. Wer vollständige Daten hat, merkt von dieser Änderung nichts.
+
+Einspeisung und Netzbezug sind die Basis, auf der eedc überhaupt rechnet. Fehlen sie für einen Monat, weiß eedc nicht, woher der Strom eines Geräts kam — **und rechnet trotzdem weiter**. Und zwar so: Der Direktverbrauch ergibt sich als *Erzeugung minus Einspeisung minus Speicherladung*. Fehlt die Einspeisung, liest diese Rechnung sie als **0** — also gilt deine ganze Erzeugung als Eigenverbrauch, und Eigenverbrauch wird mit dem **Strompreis** bewertet statt mit der Einspeisevergütung.
+
+Was das ausmacht, haben wir an einem echten Monat nachgerechnet: **622 € statt 282 €**. Und ein Hausverbrauch von **1.838 kWh statt 520**. Die Zahl war also nicht ein bisschen ungenau — sie war systematisch **zu gut**. Deshalb ist ein fehlender Monat ab jetzt ein Fehler.
+
+**Was sich für dich ändert:** derselbe Befund an derselben Stelle, mit demselben „Beheben"-Link direkt in den betreffenden Monat — nur rot statt amber, und die Statusleiste unten zählt ihn als Fehler. **An keiner gerechneten Zahl ändert sich etwas.**
+
+Dasselbe gilt für ein fehlendes **Inbetriebnahme-Datum der Anlage**: Ohne dieses Datum weiß eedc nicht, ab wann es überhaupt Zählerwerte erwarten darf. Es weicht dann auf deine Erzeuger aus und zuletzt auf den ersten Monat, den es findet — womit der Anfang aus der Lücke abgeleitet wird und eine fehlende Zeile ganz am Beginn deiner Historie niemandem mehr auffällt.
+
+**Neue Anlagen** lassen sich deshalb im Setup nicht mehr ohne dieses Datum anlegen. **Beim Bearbeiten einer bestehenden Anlage bleibt es freiwillig** — wer dort etwas ändert, will meist etwas ganz anderes tun und soll daran nicht hängenbleiben; es steht dann nur ein Hinweis am Feld.
+
+### Ein Gerät darf älter sein als deine Anlage — eedc sagt jetzt, was das bedeutet
+
+**Betrifft dich das?** Wenn du ein E-Auto, eine Wallbox, eine Wärmepumpe oder ein anderes Gerät hast, das du **vor** der PV-Anlage angeschafft hast.
+
+Das ist der Regelfall, und das Anschaffungsdatum gehört auch auf das echte Datum. Bisher stand dazu nirgends etwas. Jetzt gibt es im Daten-Checker unter *Stammdaten* einen **Hinweis** — ausdrücklich kein Fehler und keine Warnung: „Gerät älter als die Anlage: „Passat GTE" seit 12.03.2017".
+
+Was er sagt: Für die Monate vor deiner Anlage gibt es keine Einspeisungs- und Netzbezugswerte. Ohne die kann eedc für diese Zeit nicht sagen, ob der Strom gekauft oder selbst erzeugt war.
+
+**Was du tun kannst — und was nicht:** Hast du Zählerwerte aus dieser Zeit, trag sie nach. Stimmt umgekehrt das Inbetriebnahme-Datum der **Anlage** nicht, korrigiere dieses. Sonst ist nichts zu tun, und der Hinweis bleibt als Auskunft stehen.
+
+⚠ **Datiere das Gerät nicht um.** Genau das hat jemand getan, um eine ältere Meldung loszuwerden — danach war die echte Anschaffungshistorie seines Fahrzeugs weg. Diese neue Zeile ist kein Mangel, den du abstellen sollst.
+
 ### „Ein größerer Speicher hätte nichts gebracht" — das stimmte nicht für jeden
 
 **Betrifft dich das?** Wenn du deinen Speicher **nicht bis ganz unten** leerfährst, also eine eigene Entlade-Untergrenze eingestellt hast (10 %, 20 % — was die Zellen schont). Und wenn du beim Speicher die **nutzbare Kapazität** gepflegt hast.

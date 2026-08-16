@@ -164,6 +164,8 @@ Jede Investition hat zwei Lebenszyklus-Daten, die für **alle** Auswertungen gel
 - **Anschaffungsdatum:** ab hier zählt die Investition. Aggregate (JAZ, Wärme, Strom, Ersparnis usw.) ignorieren Monatsdaten **vor** diesem Datum. Nützlich beim Wechsel der Erfassungsmethode (z. B. von WP-eigener Strommessung auf einen Shelly-Zähler): alte Werte bleiben historisch erhalten, verfälschen aber die aktuelle JAZ nicht.
 - **Stilllegungsdatum:** Endmarker — ab hier zählt die Investition nicht mehr für aktuelle/künftige Auswertungen; historische Aggregate behalten sie.
 
+> **Ein Gerät darf älter sein als die Anlage.** Das E-Auto von 2017 an einer PV-Anlage von 2022 ist der Regelfall, und das Anschaffungsdatum gehört dann auf 2017. Der Daten-Checker erwähnt das als **Hinweis** — nicht als Fehler: Für die Monate vor der Anlage gibt es keine Einspeisungs- und Netzbezugswerte und damit keine Bilanz, eedc kann dort also nicht sagen, ob der Strom gekauft oder selbst erzeugt war. **Datiere das Gerät deshalb nicht um.** Genau das ist einem Anwender passiert, der die Meldung loswerden wollte; die echte Anschaffungshistorie seines Fahrzeugs war danach verloren. Hast du Zählerwerte aus der Zeit davor, trag sie nach; stimmt umgekehrt das Inbetriebnahme-Datum der **Anlage** nicht, korrigiere dieses.
+
 #### Eine Komponente erweitern oder ersetzen
 
 Ein Speicher wird aufgestockt, ein Gerät gegen ein größeres getauscht — die Frage kommt regelmäßig. **Es gibt zwei Wege, und beide sind richtig; sie kosten nur Verschiedenes.** Eine Erweiterung ohne neue Sensoren lässt sich nicht so abbilden, dass jede Sicht rückwirkend stimmt — deshalb entscheidest du, welcher Preis dir lieber ist:
