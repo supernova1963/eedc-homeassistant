@@ -158,6 +158,7 @@ async def lade_potential_auswertung(
     von: Optional[date] = None,
     bis: Optional[date] = None,
     kapazitaet_brutto_kwh: Optional[float] = None,
+    leer_schwelle_prozent: Optional[float] = None,
 ) -> PotentialAuswertung:
     """Wertet den Zeitraum aus — gesamt **und** je Monat.
 
@@ -172,6 +173,12 @@ async def lade_potential_auswertung(
     Kapazität, mit der die Route die Potentialzahl ausweist: die eine Sicht
     fährt den Speicher rechnerisch durch (netto), die andere zählt Zyklen wie
     der Hersteller (brutto). Fehlt der Wert, bleiben die Zyklen `None`.
+
+    `leer_schwelle_prozent` entscheidet, ab wann eine Nacht als „aufgebraucht"
+    zählt (#379). Sie kommt aus `leer_schwelle_prozent()` und gilt für **beide**
+    Ebenen — Gesamtauswertung und Monatsspalten. Die zwei getrennt zu versorgen
+    wäre genau die Drift, gegen die dieser Bau steht: der Monatsanteil „leer"
+    und die Gesamtaussage stünden dann auf verschiedenen Definitionen.
     """
     query = (
         select(TagesEnergieProfil)
@@ -186,11 +193,14 @@ async def lade_potential_auswertung(
     zeilen = list((await db.execute(query)).scalars().all())
     if not zeilen:
         return PotentialAuswertung(
-            gesamt=berechne_zusatzpotential([]), monate=[], tage_mit_daten=0,
+            gesamt=berechne_zusatzpotential([], leer_schwelle_prozent),
+            monate=[], tage_mit_daten=0,
             von=None, bis=None,
         )
 
-    gesamt = berechne_zusatzpotential([_als_speicher_stunde(z) for z in zeilen])
+    gesamt = berechne_zusatzpotential(
+        [_als_speicher_stunde(z) for z in zeilen], leer_schwelle_prozent
+    )
 
     nach_monat: dict[tuple[int, int], list[TagesEnergieProfil]] = {}
     for zeile in zeilen:
@@ -202,7 +212,9 @@ async def lade_potential_auswertung(
 
     monate: list[MonatsPotential] = []
     for (jahr, monat), monats_zeilen in sorted(nach_monat.items()):
-        teil = berechne_zusatzpotential([_als_speicher_stunde(z) for z in monats_zeilen])
+        teil = berechne_zusatzpotential(
+            [_als_speicher_stunde(z) for z in monats_zeilen], leer_schwelle_prozent
+        )
 
         soc_werte = [z.soc_prozent for z in monats_zeilen if z.soc_prozent is not None]
         stunden_mit_soc = len(soc_werte)
@@ -212,7 +224,8 @@ async def lade_potential_auswertung(
                 sum(1 for w in soc_werte if ist_voll(w)) / stunden_mit_soc * 100, 1
             )
             anteil_leer = round(
-                sum(1 for w in soc_werte if ist_leer(w)) / stunden_mit_soc * 100, 1
+                sum(1 for w in soc_werte if ist_leer(w, leer_schwelle_prozent))
+                / stunden_mit_soc * 100, 1
             )
 
         # Ladung und Netzladung je Stunde — die Netzladung ist eine Obergrenze

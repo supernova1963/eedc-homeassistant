@@ -248,3 +248,91 @@ async def test_anlage_ohne_speicher_liefert_keine_kapazitaet(db):
 
     assert antwort.anzahl_speicher == 0
     assert antwort.kapazitaet_kwh is None
+
+
+# ---------------------------------------------------------------------------
+# #379 — die Route leitet die Leer-Schwelle aus den gepflegten Kapazitäten ab
+# ---------------------------------------------------------------------------
+
+
+async def _seed_mit_reserve(db, *, brutto: float, nutzbar: float | None) -> int:
+    """Glens Aufbau: 30 kWh brutto, davon 24 nutzbar ⇒ 20 % Reserve."""
+    anlage = Anlage(anlagenname="Reserve-Test", leistung_kwp=10.0)
+    db.add(anlage)
+    await db.flush()
+    parameter: dict = {"kapazitaet_kwh": brutto}
+    if nutzbar is not None:
+        parameter["nutzbare_kapazitaet_kwh"] = nutzbar
+    db.add(Investition(
+        anlage_id=anlage.id, typ="speicher", bezeichnung="Pylontech 30 kWh",
+        anschaffungsdatum=date(2024, 1, 1), parameter=parameter,
+    ))
+    return anlage.id
+
+
+def _glens_tag(anlage_id: int, tag: date) -> list:
+    """Überschuss am Mittag, nachts runter auf 21 % — seine gemessene Kurve."""
+    zeilen = [_stunde(anlage_id, tag, h, 100.0, einspeisung=5.0) for h in range(11, 15)]
+    zeilen += [_stunde(anlage_id, tag, h, 60.0) for h in range(15, 20)]
+    zeilen += [_stunde(anlage_id, tag, h, 21.0, netzbezug=2.0) for h in range(20, 24)]
+    return zeilen
+
+
+async def test_gepflegte_reserve_macht_die_nacht_sichtbar(db):
+    """Glens Fall am Endpoint: 21 % zählt als leer, weil seine Grenze bei 20 % liegt.
+
+    Ohne diesen Bau lieferte die Route hier 0 kWh und „0 von 1 Nächten leer" —
+    und die Sicht schrieb darüber „ein größerer Speicher hätte nichts gebracht".
+    """
+    anlage_id = await _seed_mit_reserve(db, brutto=30.0, nutzbar=24.0)
+    for zeile in _glens_tag(anlage_id, date(2026, 8, 14)):
+        db.add(zeile)
+    await db.commit()
+
+    antwort = await get_speicher_potential(anlage_id, von=None, bis=None, db=db)
+
+    assert antwort.soc_leer_prozent == 23.0, "20 % Reserve + 3 pp Messtoleranz"
+    assert antwort.soc_leer_ist_abgeleitet is True
+    assert antwort.zyklen_leergelaufen == 1
+    assert antwort.nutzbares_zusatzpotential_kwh == 8.0
+    assert antwort.ueberschuss_kwh == 20.0
+
+
+async def test_ohne_gepflegte_reserve_bleibt_alles_wie_vorher(db):
+    """**Abnahmekriterium:** wer nichts pflegt, sieht keine einzige geänderte Zahl.
+
+    Dieselbe Stundenreihe, nur ohne `nutzbare_kapazitaet_kwh` — die Route fällt
+    auf 5 % zurück und liefert exakt den Zustand vor diesem Bau.
+    """
+    anlage_id = await _seed_mit_reserve(db, brutto=30.0, nutzbar=None)
+    for zeile in _glens_tag(anlage_id, date(2026, 8, 14)):
+        db.add(zeile)
+    await db.commit()
+
+    antwort = await get_speicher_potential(anlage_id, von=None, bis=None, db=db)
+
+    assert antwort.soc_leer_prozent == 5.0
+    assert antwort.soc_leer_ist_abgeleitet is False
+    assert antwort.zyklen_leergelaufen == 0
+    assert antwort.nutzbares_zusatzpotential_kwh == 0.0
+
+
+async def test_die_monatsspalte_rechnet_mit_derselben_schwelle(db):
+    """Gesamtaussage und Monatsanteil dürfen nicht auf zwei Definitionen stehen.
+
+    Ohne Durchreichung an die Monatsschleife stünde in der Spanne-Grafik
+    „0 % der Stunden leer", während die Kachel daneben eine leergelaufene Nacht
+    meldet — zwei Zahlen über denselben Sachverhalt.
+    """
+    anlage_id = await _seed_mit_reserve(db, brutto=30.0, nutzbar=24.0)
+    for zeile in _glens_tag(anlage_id, date(2026, 8, 14)):
+        db.add(zeile)
+    await db.commit()
+
+    antwort = await get_speicher_potential(anlage_id, von=None, bis=None, db=db)
+
+    (monat,) = antwort.monate
+    assert monat.anteil_leer_prozent is not None and monat.anteil_leer_prozent > 0, (
+        "vier von dreizehn Stunden liegen auf 21 % — das ist unter der Schwelle"
+    )
+    assert monat.zyklen_leergelaufen == 1

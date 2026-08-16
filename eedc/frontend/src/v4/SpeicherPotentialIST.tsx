@@ -296,6 +296,12 @@ function MonatsSpuren({ d }: { d: SpeicherPotentialResponse }) {
         (≤ {fmtZahl(d.soc_leer_prozent, 0)} %) war. <strong>Erst beides zusammen macht mehr
         Kapazität sinnvoll</strong> — oben angeschlagen heißt „Überschuss ging ins Netz", unten
         angeschlagen „die Nacht wurde zugekauft".
+        {d.soc_leer_ist_abgeleitet && (
+          <> „Leer" heißt hier <strong>deine</strong> Entladegrenze von{' '}
+          {fmtZahl(d.soc_leer_prozent, 0)} %, nicht 0 % — sie ergibt sich aus der nutzbaren
+          Kapazität, die du beim Speicher gepflegt hast. Darunter gibt das Gerät nichts mehr
+          ab, die Nacht ist damit aufgebraucht.</>
+        )}
         {hatNetzladung && (
           <> Wo Ladung aus dem Netz kam, füllt sich der Speicher ohne Sonne; solche Monate
           beantworten die Frage nach mehr Kapazität nur eingeschränkt. Der Anteil ist eine
@@ -370,7 +376,7 @@ export function SpeicherPotentialIST({ anlageId, melde }: { anlageId: number; in
           icon: Sun,
           color: 'orange',    /* Datenrolle Speicher-Ladung */
           subtitle: 'Obergrenze, nicht Ertrag',
-          formel: 'Σ Einspeisung in Stunden mit Ladestand ≥ 95 %',
+          formel: `Σ Einspeisung in Stunden mit Ladestand ≥ ${fmtZahl(daten.soc_voll_prozent, 0)} %`,
           sicht: 'Wie viel ein beliebig großer Speicher höchstens hätte aufnehmen können',
         },
         {
@@ -379,7 +385,9 @@ export function SpeicherPotentialIST({ anlageId, melde }: { anlageId: number; in
           value: `${daten.zyklen_leergelaufen} / ${daten.zyklen_gesamt}`,
           icon: BatteryCharging,
           color: 'cyan',      /* Datenrolle Speicher-Effizienz */
-          subtitle: `leer = Ladestand ≤ ${fmtZahl(daten.soc_leer_prozent, 0)} %`,
+          subtitle: daten.soc_leer_ist_abgeleitet
+            ? `leer = Ladestand ≤ ${fmtZahl(daten.soc_leer_prozent, 0)} % (deine Entladegrenze)`
+            : `leer = Ladestand ≤ ${fmtZahl(daten.soc_leer_prozent, 0)} %`,
           sicht: 'Nur wenn er leer wird, kann zusätzliche Kapazität etwas abgeben',
         },
       ]} />

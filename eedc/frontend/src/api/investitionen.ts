@@ -311,7 +311,10 @@ export interface SpeicherPotentialResponse {
   /** Brutto — der Nenner der Vollzyklen. `null` = keine Kapazität gepflegt. */
   kapazitaet_brutto_kwh: number | null
   soc_voll_prozent: number
+  /** Anlagenspezifisch seit #379 — abgeleitet aus der gepflegten nutzbaren Kapazität. */
   soc_leer_prozent: number
+  /** true = aus der nutzbaren Kapazität abgeleitet, false = Rückfall auf 5 %. */
+  soc_leer_ist_abgeleitet?: boolean
 }
 
 /** Ein simulierter Kapazitäts-Punkt der Sizing-Kurve (#358 Phase 3). */

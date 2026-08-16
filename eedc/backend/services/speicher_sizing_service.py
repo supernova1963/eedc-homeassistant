@@ -56,7 +56,11 @@ from backend.core.berechnungen.speicher_sizing import (
     messe_soc_nutzung,
     sizing_kurve,
 )
-from backend.core.investition_kennwerte import aggregiere_speicher_basis
+from backend.core.berechnungen.speicher_potential import leer_schwelle_prozent
+from backend.core.investition_kennwerte import (
+    aggregiere_speicher_basis,
+    get_speicher_kapazitaet_kwh,
+)
 from backend.models.investition import Investition, InvestitionTyp
 from backend.models.tages_energie_profil import TagesEnergieProfil
 
@@ -183,6 +187,12 @@ async def lade_sizing_auswertung(
     )).scalars().all())
     gepflegte_kapazitaet, gepflegter_wirkungsgrad = aggregiere_speicher_basis(speicher)
 
+    # Leer-Schwelle wie in Phase 2 nebenan (#379). `aggregiere_speicher_basis`
+    # liefert **netto** (mit stillem Brutto-Fallback), die Brutto-Summe fehlt hier
+    # noch — ohne sie stünden im selben Hub zwei Definitionen von „leer".
+    summe_brutto = sum(get_speicher_kapazitaet_kwh(s) or 0 for s in speicher)
+    leer_schwelle = leer_schwelle_prozent(summe_brutto or None, gepflegte_kapazitaet)
+
     tarife = await lade_tarife_fuer_anlage(db, anlage_id)
     bezug_cent = resolve_strompreis_for_komponente(tarife, "allgemein")
     einspeise_cent = resolve_einspeiseverguetung_cent(tarife)
@@ -206,7 +216,7 @@ async def lade_sizing_auswertung(
     tage_simuliert = len({z.zeit.date() for z in simulierbar})
 
     soc_nutzung = messe_soc_nutzung(
-        stunden, [z.soc_je_speicher for z in zeilen]
+        stunden, [z.soc_je_speicher for z in zeilen], leer_schwelle
     )
     kalibrierung = kalibriere_speicher(stunden)
     if kalibrierung is not None:

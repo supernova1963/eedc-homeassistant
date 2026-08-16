@@ -249,6 +249,35 @@ describe('SpeicherPotentialIST — Spannen-Grafik statt Heatmap', () => {
     expect(screen.queryByText(/Ladung aus dem Netz/)).not.toBeInTheDocument()
   })
 
+  // -------------------------------------------------------------------------
+  // #379 — die Leer-Schwelle gehört der Anlage, und die Sicht sagt das
+  // -------------------------------------------------------------------------
+
+  it('nennt die eigene Entladegrenze statt der Standardannahme', async () => {
+    // Glens Speicher: 20 % Untergrenze, abgeleitet aus 24 von 30 kWh nutzbar.
+    vi.spyOn(investitionenApi, 'getSpeicherPotential').mockResolvedValue(ANTWORT({
+      soc_leer_prozent: 23,
+      soc_leer_ist_abgeleitet: true,
+    }))
+
+    render(<SpeicherPotentialIST anlageId={1} />)
+
+    expect(await screen.findByText(/leer = Ladestand ≤ 23 % \(deine Entladegrenze\)/))
+      .toBeInTheDocument()
+    expect(screen.getByText(/nicht 0 %/)).toBeInTheDocument()
+  })
+
+  it('erklärt die Grenze nicht weg, wo sie die Standardannahme ist', async () => {
+    // Ohne gepflegte nutzbare Kapazität bleibt es beim alten Text — sonst
+    // behauptet die Sicht eine Einstellung, die der Anwender nie gemacht hat.
+    vi.spyOn(investitionenApi, 'getSpeicherPotential').mockResolvedValue(ANTWORT())
+
+    render(<SpeicherPotentialIST anlageId={1} />)
+
+    expect(await screen.findByText(/leer = Ladestand ≤ 5 %/)).toBeInTheDocument()
+    expect(screen.queryByText(/deine Entladegrenze/)).not.toBeInTheDocument()
+  })
+
   it('sagt bei einem Monat ohne Ladestand, dass nichts gemessen wurde', async () => {
     vi.spyOn(investitionenApi, 'getSpeicherPotential').mockResolvedValue(ANTWORT({
       monate: [MONAT({ soc_p10: null, soc_p50: null, soc_p90: null, stunden_mit_soc: 0 })],

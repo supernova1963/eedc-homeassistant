@@ -53,6 +53,12 @@ from datetime import datetime, timedelta
 from statistics import median
 from typing import Iterable, Optional, Sequence
 
+from backend.core.berechnungen.speicher_potential import (
+    SOC_LEER_PROZENT as _SOC_LEER_PROZENT,
+    SOC_VOLL_PROZENT as _SOC_VOLL_PROZENT,
+    ist_leer,
+)
+
 #: Ein Stundenwert gilt als bilanzkonsistent, wenn
 #: ``pv − verbrauch + batterie − (einspeisung − netzbezug)`` betragsmäßig
 #: darunter bleibt. 0,15 kWh ist die Schwelle, mit der die Vorprüfung
@@ -136,11 +142,17 @@ class SimErgebnis:
 #: eine Winteranlage ohne Grenze an vielen Sommertagen (Referenzanlage 247/361).
 ANTEIL_TAGE_VOLL_SCHWELLE: float = 0.20
 
-#: Ab hier gilt ein Ladestand als „voll" bzw. „leer" — dieselben Schwellen wie
-#: in `speicher_potential.py` (Phase 2), damit zwei Blöcke desselben Hubs nicht
+#: Ab hier gilt ein Ladestand als „voll" bzw. „leer" — dieselben Schwellen wie in
+#: `speicher_potential.py` (Phase 2), damit zwei Blöcke desselben Hubs nicht
 #: verschiedene Definitionen von „voll" verwenden.
-SOC_VOLL_PROZENT: float = 95.0
-SOC_LEER_PROZENT: float = 5.0
+#:
+#: ⚠ **Bis 2026-08-15 stand genau das hier als eigene Zahl** (`= 95.0` / `= 5.0`)
+#: statt als Import — die Absicht „dieselben Schwellen" war formuliert und
+#: technisch nicht durchgesetzt. Aufgefallen bei #379: Als die Leer-Schwelle
+#: anlagenspezifisch wurde, hätte dieser Block still bei 5 % weitergerechnet.
+#: Re-Export, weil beide Namen hier schon gelesen werden.
+SOC_VOLL_PROZENT = _SOC_VOLL_PROZENT
+SOC_LEER_PROZENT = _SOC_LEER_PROZENT
 
 
 @dataclass(frozen=True)
@@ -196,6 +208,7 @@ class SocNutzung:
 def messe_soc_nutzung(
     stunden: Sequence[SizingStunde],
     soc_je_speicher: Optional[Sequence[dict]] = None,
+    leer_schwelle: Optional[float] = None,
 ) -> Optional[SocNutzung]:
     """Perzentile und Tages-Extreme des Ladestands. ``None`` ohne SoC-Werte.
 
@@ -203,6 +216,10 @@ def messe_soc_nutzung(
     die Energiebilanz — eine Stunde mit invertiertem `batterie_kwh` trägt einen
     völlig korrekten Ladestand. Die Vorzeichen-Frage betrifft nur die
     Kalibrierung.
+
+    ``leer_schwelle`` aus `speicher_potential.leer_schwelle_prozent()` — sonst
+    zählt `tage_bis_leer` bei jedem Anwender mit eigener Entlade-Untergrenze
+    0 Tage (#379), und zwar in **demselben** Hub, in dem Phase 2 danebensteht.
     """
     mit_soc = [z for z in stunden if z.soc_prozent is not None]
     if not mit_soc:
@@ -235,7 +252,7 @@ def messe_soc_nutzung(
         tages_max_median=median(maxima),
         tage_bis_voll=sum(1 for m in maxima if m >= SOC_VOLL_PROZENT),
         tage_bis_leer=sum(
-            1 for v in je_tag.values() if min(v) <= SOC_LEER_PROZENT
+            1 for v in je_tag.values() if ist_leer(min(v), leer_schwelle)
         ),
     )
 

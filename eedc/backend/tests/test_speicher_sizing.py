@@ -15,6 +15,7 @@ Fehlgriff gebaut und nicht bloß gegen die Theorie:
 
 from __future__ import annotations
 
+import pathlib
 from datetime import datetime, timedelta
 
 import pytest
@@ -413,3 +414,62 @@ def test_soc_nutzung_braucht_keine_bilanzkonsistenz():
 
 def test_ohne_ladestand_gibt_es_keine_aussage():
     assert messe_soc_nutzung(_reihe([(1.0, 0.5)] * 24)) is None
+
+
+# ---------------------------------------------------------------------------
+# #379 — „leer" heißt im ganzen Hub dasselbe
+# ---------------------------------------------------------------------------
+
+
+def test_leer_schwelle_ist_mit_phase_2_gekoppelt_nicht_nur_gleich():
+    """Ein Kopplungs-, kein Gleichheitsnachweis — der Unterschied ist der Befund.
+
+    Bis 2026-08-15 definierte dieses Modul `95.0`/`5.0` **selbst**, mit dem
+    Kommentar „dieselben Schwellen wie in `speicher_potential.py`". Beide Werte
+    waren gleich, also hätte ein `==`-Test nie etwas gemerkt — und als die
+    Leer-Schwelle bei #379 anlagenspezifisch wurde, hätte dieser Block still bei
+    5 % weitergerechnet.
+
+    Dieser Test greift deshalb an der **Quelle** an: Wer sie ändert, muss beide
+    Stellen bewegen. Als Sprengsatz nachgestellt (Konstante in
+    `speicher_potential.py` auf 7,0) — mit der alten Kopie war er grün.
+    """
+    from backend.core.berechnungen import speicher_potential, speicher_sizing
+
+    assert speicher_sizing.SOC_LEER_PROZENT == speicher_potential.SOC_LEER_PROZENT
+    assert speicher_sizing.SOC_VOLL_PROZENT == speicher_potential.SOC_VOLL_PROZENT
+
+    quelle = (
+        pathlib.Path(speicher_sizing.__file__).read_text(encoding="utf-8")
+    )
+    assert "SOC_LEER_PROZENT: float = 5.0" not in quelle, (
+        "eigene Zahl statt Import — genau der Zustand, der #379 überlebt hätte"
+    )
+    assert "SOC_VOLL_PROZENT: float = 95.0" not in quelle
+
+
+def test_tage_bis_leer_zaehlt_die_eigene_entladegrenze_mit():
+    """Glens Fall im Sizing-Block: sein Speicher erreicht nachts 21 %.
+
+    Mit der festen 5-%-Schwelle meldet `tage_bis_leer` **0** — im selben Hub, in
+    dem Phase 2 danebensteht. Beide Blöcke müssen dieselbe Grenze benutzen.
+    """
+    # `_soc_reihe` startet jeden Tag bei 5 % und wäre hier untauglich — dann
+    # zählte **jeder** Tag als leergelaufen, egal welche Schwelle gilt.
+    # Glens Reihe fällt nie unter 21 %.
+    reihe = [
+        SizingStunde(
+            zeit=START + timedelta(days=tag, hours=h),
+            pv_kwh=1.0, verbrauch_kwh=0.5,
+            soc_prozent=21.0 + (h / 23) * 79.0,
+        )
+        for tag in range(3) for h in range(24)
+    ]
+
+    ohne = messe_soc_nutzung(reihe)
+    assert ohne is not None and ohne.tage_bis_leer == 0, (
+        "der ausgelieferte Zustand: sein Speicher gilt an keinem Tag als leer"
+    )
+
+    mit = messe_soc_nutzung(reihe, None, leer_schwelle=23.0)
+    assert mit is not None and mit.tage_bis_leer == 3
