@@ -412,8 +412,11 @@ describe('Eine Abweichungs-Sprache in allen drei Tabellen (N-50)', () => {
  * v4.0.0) und fiel erst auf, als P-5 alle übrigen Spalten zur Deckung brachte.
  */
 describe('Spaltenflucht: alle Quellen-Tabellen tragen denselben Spaltenplan', () => {
+  /** Der gerenderte Spaltenplan: die Prozentbreiten der `<col>`-Elemente.
+   *  (Bis 16.08. waren es Klassennamen — die haben die Flucht nicht bewiesen,
+   *  s. `prognoseSpaltenplan`.) */
   const spaltenplan = (c: Element) =>
-    Array.from(c.querySelectorAll('colgroup col')).map(col => col.className)
+    Array.from(c.querySelectorAll('colgroup col')).map(col => (col as HTMLElement).style.width)
 
   const beide = (data: PrognosenVergleich) => {
     const vm = { data, genauigkeit: null } as PrognoseVergleichVM
@@ -427,9 +430,11 @@ describe('Spaltenflucht: alle Quellen-Tabellen tragen denselben Spaltenplan', ()
     const { stunden, tage } = beide(daten())
 
     expect(stunden).toEqual(tage)
-    // Und die führende Spalte ist wirklich die breitere von beiden — ohne diese
-    // Zeile wäre der Test auch mit zwei gleich falschen Plänen grün.
-    expect(stunden.slice(0, 2)).toEqual(['w-20', 'w-24'])
+    // Und der Plan ist wirklich der SoT-Plan — ohne diese Zeile wäre der Test
+    // auch mit zwei gleich falschen Plänen grün.
+    expect(stunden).toEqual(
+      prognoseSpaltenplan({ hasSolcast: true, hasSfml: false }).map(b => `${b}%`),
+    )
   })
 
   it('deckungsgleich auch mit SFML als gewählter Quelle', () => {
@@ -480,6 +485,35 @@ describe('Spaltenflucht: alle Quellen-Tabellen tragen denselben Spaltenplan', ()
       tracking: spaltenplan(render(<PvgGenauigkeitsTracking vm={vm} />).container),
     }
   }
+
+  /**
+   * ⛔ **Der Prüfer, den es vorher nicht gab — und ohne den der Fix vom 16.08.
+   * wirkungslos blieb.** Die Klassenfolgen waren zeichengleich, die Spalten
+   * fluchteten trotzdem nicht: Bei `table-layout: fixed` holt eine Spalte
+   * **ohne** Breite ihre Breite aus der ersten Zeile, und die Kopftexte sind
+   * verschieden lang („OpenMeteo" gegen „OM" ⇒ 464 px gegen 381 px, an der
+   * laufenden Box gemessen).
+   *
+   * jsdom rechnet kein Layout, ein Unit-Test kann die Pixel also nicht messen.
+   * Was er messen kann, ist die Bedingung, unter der die Flucht überhaupt
+   * eintreten kann: **keine Spalte ohne Breite.**
+   */
+  it('jede Spalte trägt eine Breite und die Summe ist exakt 100 %', () => {
+    for (const opts of [
+      { hasSolcast: true, hasSfml: false },
+      { hasSolcast: false, hasSfml: false },
+      { hasSolcast: true, hasSfml: true },
+      { hasSolcast: false, hasSfml: true },
+    ]) {
+      const plan = prognoseSpaltenplan(opts)
+      const ohne = plan.map((b, i) => (b > 0 ? null : i)).filter(i => i !== null)
+      expect(ohne, `Spalten ohne Breite bei ${JSON.stringify(opts)}: ${ohne}`).toEqual([])
+      // Auf zwei Nachkommastellen exakt — bleibt ein Rest, verteilt der Browser
+      // ihn, und genau daran ist der zweite Anlauf gescheitert.
+      const summe = Math.round(plan.reduce((a, b) => a + b, 0) * 100) / 100
+      expect(summe, `Summe bei ${JSON.stringify(opts)}`).toBe(100)
+    }
+  })
 
   it('alle vier Tabellen fluchten — Regelfall', () => {
     const { quellen, stunden, tage, tracking } = alleVier(daten(), genauigkeitFix())

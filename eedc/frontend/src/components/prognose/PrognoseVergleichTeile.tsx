@@ -58,28 +58,63 @@ export interface SpaltenplanOpts {
   hasSfml: boolean
 }
 
-/** Die Klassenfolge des Spaltenplans — `''` bedeutet „auto" (kein `w-`). */
+/**
+ * Der Spaltenplan als **Prozentbreiten**, die sich zu genau 100 % summieren.
+ *
+ * ⚠ **Zwei Anläufe waren nötig, beide an der laufenden Box widerlegt — die
+ * Lehre steckt darin, dass ein grüner Unit-Test hier nichts beweist:**
+ *
+ * 1. *Gleiche `colgroup`-Klassenfolge genügt.* **Falsch.** Bei
+ *    `table-layout: fixed` gilt die `colgroup` nur, wo eine Breite gesetzt ist;
+ *    eine Spalte **ohne** Breite holt sie aus der ersten Zeile. Dieselbe
+ *    OpenMeteo-Spalte war so im Genauigkeits-Tracking (Kopf „OpenMeteo")
+ *    **464 px** breit und im Stundenvergleich (Kopf „OM") **381 px**. Damit ist
+ *    auch die Begründung des Fixes vom 15.08. widerlegt („bei `table-fixed`
+ *    bestimmt allein sie die Spaltengrenzen").
+ * 2. *Also jeder Spalte eine feste Breite geben.* **Reichte nicht.** Die Summe
+ *    fester Breiten (704 px) liegt unter der Tabellenbreite; den Rest verteilt
+ *    der Browser, und einzelne Zellen holen sich dabei mehr, als der Plan
+ *    vorsieht (gemessen: Label-Spalte 232 gegen 188 px). Die Quellen standen
+ *    danach immer noch bis zu 39 px auseinander.
+ *
+ * **Prozente lösen beides**, weil nichts zu verteilen übrig bleibt: Die Summe
+ * ist exakt 100 %, unabhängig von Containerbreite und Kopftext. Die Gewichte
+ * unten sind relativ — die Umrechnung passiert hier, damit jede Tabelle
+ * dieselbe bekommt.
+ */
+const SPALTEN_GEWICHT = {
+  platzhalter: 1,   // Wetter-Symbol (7-Tage) bzw. Platzhalter
+  label: 2,         // Zeit / Datum / Zeilen-Label
+  wert: 3,          // Quellen-Wertspalte (OM · eedc · Solcast · SFML · IST)
+  delta: 2,         // Abweichung daneben
+} as const
+
+/** Die Spaltenbreiten in Prozent, Summe exakt 100. */
 export function prognoseSpaltenplan({
   hasSolcast, hasSfml,
-}: SpaltenplanOpts): string[] {
-  const plan = [
-    'w-20',   // Wetter-Symbol (7-Tage) bzw. Platzhalter
-    'w-24',   // Zeit / Datum / Zeilen-Label
-    '', 'w-24',  // OpenMeteo + Abweichung
-    '', 'w-24',  // eedc + Abweichung
-  ]
-  if (hasSolcast) plan.push('', 'w-24')
-  if (hasSfml) plan.push('')
-  plan.push('')  // IST
-  return plan
+}: SpaltenplanOpts): number[] {
+  const G = SPALTEN_GEWICHT
+  const gewichte = [G.platzhalter, G.label, G.wert, G.delta, G.wert, G.delta]
+  if (hasSolcast) gewichte.push(G.wert, G.delta)
+  if (hasSfml) gewichte.push(G.wert)
+  gewichte.push(G.wert)  // IST
+  const summe = gewichte.reduce((a, b) => a + b, 0)
+  // Die letzte Spalte bekommt den Rest, damit Rundungsfehler die 100 % nicht
+  // verfehlen — sonst bliebe ein Pixel-Spalt, der je Tabelle anders ausfällt.
+  const breiten = gewichte.map(g => Math.round((g / summe) * 10000) / 100)
+  const rest = Math.round((100 - breiten.slice(0, -1).reduce((a, b) => a + b, 0)) * 100) / 100
+  breiten[breiten.length - 1] = rest
+  return breiten
 }
 
 /** Der Plan als `<colgroup>` — eine Zeile je Tabelle statt einer Kopie. */
 export function PrognoseColgroup(opts: SpaltenplanOpts) {
   return (
     <colgroup>
-      {prognoseSpaltenplan(opts).map((klasse, i) => (
-        <col key={i} className={klasse || undefined} />
+      {/* Breite als Prozent-Style statt Tailwind-Klasse: die Summe muss exakt
+          100 % ergeben, und dafür gibt es keine Klassen-Skala (s. oben). */}
+      {prognoseSpaltenplan(opts).map((prozent, i) => (
+        <col key={i} style={{ width: `${prozent}%` }} />
       ))}
     </colgroup>
   )
