@@ -35,6 +35,22 @@ Sobald dort ein Betrag gepflegt war, verschwand der Zusatz „nicht bewertet" an
 
 ⚠ **An bewerteten Zeilen ändert sich nichts** — sie waren davon nie betroffen.
 
+### Heizstab, Poolpumpe & Co. haben wieder Tageswerte
+
+**Betrifft dich das?** Wenn du ein Gerät unter *Sonstiges* mit der Kategorie **Verbraucher** führst und ihm einen eigenen kWh-Zähler zugeordnet hast.
+
+Sein Verbrauch stand im **Monat** korrekt da — auf **Tagesebene** aber nirgends: keine Spalte in *Auswertungen → Tabelle*, kein Anteil im Stundenverlauf, kein Gerätebeitrag im Tagesdetail. Es sah aus, als wäre der Sensor nicht zugeordnet.
+
+Dahinter steckte ein Feldname, der an zwei Stellen verschieden hieß. Die Zuordnung speichert das Feld als `verbrauch_sonstig_kwh` und eedc veröffentlicht sein MQTT-Topic unter demselben Namen — der Auswerte-Pfad suchte aber nach `verbrauch_kwh`, einem Namen, den es für diesen Gerätetyp gar nicht gibt. eedc hat also ein Topic **selbst veröffentlicht und beim Einlesen wieder weggeworfen**.
+
+> **Ein *Erzeuger* unter Sonstiges war nie betroffen** — ein Mini-BHKW etwa. Dort heißen beide Seiten gleich, und genau deshalb ist es so lange niemandem aufgefallen.
+
+⚠ **Es war keine Zahl falsch.** Der Tagesverbrauch wird aus Erzeugung, Netzbezug, Einspeisung und Speicher gebildet und nicht aus der Summe der einzelnen Geräte. Gefehlt hat die **Aufschlüsselung**, nicht die Menge — Autarkie, Kosten und CO₂ waren unberührt.
+
+⚠ **Und die vergangenen Tage?** Wenn dein Zähler ein **Home-Assistant-Sensor** ist, hol sie dir über *Einstellungen → Daten → Tag neu berechnen*: Dort wird die Langzeitstatistik aus HA neu gelesen, und der Sensor wird jetzt gefunden. Lieferst du die Werte **per MQTT**, gibt es Tageswerte **ab jetzt** — die Messwerte von damals sind nie gespeichert worden, und eedc erfindet sie nicht.
+
+*(Gemeldet von rapahl.)*
+
 ---
 
 ## v4.0.16 — Gepflegt statt geraten

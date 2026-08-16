@@ -357,20 +357,35 @@ def investition_beitraege(
         # Vorzeichen — auch bei Verbraucher-Kategorie. Die Seite leitet das
         # Frontend aus `inv.parameter.kategorie` ab. Wahl primary/secondary
         # spiegelt Snapshot-Variante.
+        # ⚑ **N-259 (Melder rapahl, 16.08.2026): der Verbrauchs-Feldname war
+        # falsch.** Hier stand `verbrauch_kwh` — ein Name, den die Feld-Registry
+        # für diesen Typ **nicht kennt**. Ein *Sonstiges*-Verbraucher heißt dort
+        # `verbrauch_sonstig_kwh`, und genau diesen Key legt die
+        # Zuordnungsfläche ins `sensor_mapping`. `_add("verbrauch_kwh")` prüfte
+        # also auf ein Feld, das nie belegt ist ⇒ **kein Beitrag, kein
+        # `sonstige_<id>` in `komponenten_kwh`, kein Stunden- und kein
+        # Tageswert.** Der Monat kam trotzdem an (`get_sonstiges_verbrauch_kwh`
+        # liest beide Namen) — deshalb sah es nach „Tageswert fehlt" statt nach
+        # „Feld wird nirgends gefunden" aus.
+        # Der Sonstiges-**Erzeuger** war nie betroffen: `erzeugung_kwh` heißt in
+        # beiden Welten gleich.
+        # Der Legacy-Name bleibt als zweiter Kandidat derselben Either-Or-Gruppe
+        # stehen (Altbestand im Mapping), er kann nicht zusätzlich zählen.
         params = getattr(inv, "parameter", None)
         kategorie = (
             params.get("kategorie", "verbraucher")
             if isinstance(params, dict)
             else "verbraucher"
         )
-        primary, secondary = (
-            ("erzeugung_kwh", "verbrauch_kwh")
+        verbrauch_felder = ("verbrauch_sonstig_kwh", "verbrauch_kwh")
+        reihenfolge = (
+            ("erzeugung_kwh", *verbrauch_felder)
             if kategorie == "erzeuger"
-            else ("verbrauch_kwh", "erzeugung_kwh")
+            else (*verbrauch_felder, "erzeugung_kwh")
         )
         gruppe = f"sonstiges_either_or_{inv_id_str}"
-        _add(primary, fallback_gruppe=gruppe)
-        _add(secondary, fallback_gruppe=gruppe)
+        for feld in reihenfolge:
+            _add(feld, fallback_gruppe=gruppe)
 
     return beitraege
 

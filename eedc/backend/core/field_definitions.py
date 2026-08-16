@@ -1180,6 +1180,144 @@ def ist_zaehler_differenz_feld(feld: str) -> bool:
     return feld in _ZAEHLER_FELDER_OHNE_ENERGIE_EINHEIT
 
 
+# ─── Snapshot-Zählerfelder: die Ableitung für `services/snapshot/keys.py` ────
+#
+# **Warum es das gibt (N-259, Melder rapahl, 16.08.2026).** `snapshot/keys.py`
+# führte `KUMULATIVE_ZAEHLER_FELDER` als **zweite, handgepflegte Liste**
+# derselben Feldnamen, die hier oben in `INVESTITION_FELDER` stehen. Die beiden
+# sind auseinandergelaufen, und niemand konnte es sehen:
+#
+# * Ein *Sonstiges*-Verbraucher heißt hier **`verbrauch_sonstig_kwh`** — die
+#   Zuordnungsfläche schreibt diesen Key ins `sensor_mapping`, und
+#   `mqtt_topic_registry` baut daraus das Topic
+#   `…/inv/<id>_<name>/verbrauch_sonstig_kwh`. Die Snapshot-Liste kannte
+#   stattdessen **`verbrauch_kwh`**, einen Namen, den es für diesen Typ gar
+#   nicht gibt. Folge: `_mqtt_key_to_sensor_key` verwarf das **selbst
+#   publizierte** Topic, `_add("verbrauch_kwh")` fand nie ein Mapping ⇒ ein
+#   Heizstab mit eigenem Zähler existierte auf Stunden- und Tagesebene nicht.
+#   Der Monat kam an, weil `get_sonstiges_verbrauch_kwh` **beide** Namen liest.
+# * Der *Sonstiges*-**Erzeuger** war nie betroffen: er heißt in beiden Welten
+#   `erzeugung_kwh`. Genau deshalb fiel es so lange nicht auf.
+#
+# **Die Ableitung ändert das heutige Verhalten NICHT** (außer dem belegten
+# Fehler). Jede Abweichung zwischen Feld-Registry und Snapshot-Liste steht
+# unten mit Grund — „bewusst nicht" ist von „noch nicht bewertet" unterscheidbar
+# geworden, und genau das fehlte. Gewächtert in
+# `test_snapshot_felder_sot_konformitaet.py`.
+
+# (typ, feld) → Grund, warum das kWh-Feld NICHT stündlich gesnapshottet wird.
+_SNAPSHOT_AUSNAHMEN: dict[tuple[str, str], str] = {
+    # — Balkonkraftwerk: Kanon-Entscheid 2026-07-31 (Weg A) —
+    ("balkonkraftwerk", "speicher_ladung_kwh"):
+        "nur_manuell: BKW-Akku ist Kanon-Weg A eine eigene speicher-Investition "
+        "mit Parent BKW; ein zweiter Zählerpfad wäre Doppelerfassung",
+    ("balkonkraftwerk", "speicher_entladung_kwh"):
+        "nur_manuell: siehe speicher_ladung_kwh",
+    ("balkonkraftwerk", "eigenverbrauch_kwh"):
+        "kein Zähler, sondern optionale Verfeinerung aus manueller Pflege/Import "
+        "(Begründung: core/berechnungen/bkw_finanz.py)",
+    # — Sonstiges-Erzeuger: dieselbe Klasse wie beim BKW —
+    ("sonstiges", "eigenverbrauch_kwh"):
+        "wie balkonkraftwerk/eigenverbrauch_kwh — Verfeinerung, kein Zähler",
+    ("sonstiges", "einspeisung_kwh"):
+        "Anteil der Erzeugung, optional gepflegt; die Bilanz führt der "
+        "Anlagen-Einspeisezähler (basis:einspeisung)",
+    # — Teilmengen des Sonstiges-Verbrauchs —
+    ("sonstiges", "bezug_pv_kwh"):
+        "⚠ UNBEWERTET: Teilmenge von verbrauch_sonstig_kwh. Bei der Wallbox ist "
+        "das Gegenstück (ladung_pv_kwh) sehr wohl erfasst — die Ungleichheit ist "
+        "gemessen, aber nicht entschieden. Beim nächsten Eingriff bewerten",
+    ("sonstiges", "bezug_netz_kwh"):
+        "⚠ UNBEWERTET: siehe bezug_pv_kwh",
+    # — E-Auto —
+    ("e-auto", "ladung_extern_kwh"):
+        "Monatswert ohne Snapshot-Erfassung — auswärts geladene Energie fließt "
+        "nicht durch den Hauszähler (so auch im Docstring von "
+        "ist_zaehler_differenz_feld festgehalten)",
+    ("e-auto", "v2h_entladung_kwh"):
+        "⚠ UNBEWERTET: V2H speist ins Haus zurück und ist damit bilanzrelevant; "
+        "warum das Feld nie im Snapshot-Pfad stand, ist nicht dokumentiert. "
+        "Beim nächsten Eingriff am E-Auto-Pfad bewerten",
+    # — Wechselrichter —
+    ("wechselrichter", "pv_erzeugung_kwh"):
+        "⚠ UNBEWERTET: Der Typ hat keinen Komponenten-Präfix "
+        "(snapshot/komponenten_beitraege._TYP_KEY_PREFIX) und damit keinen "
+        "Ziel-Key; die MQTT-Seite kennt ihn dagegen "
+        "(mqtt_energy_history_service._MQTT_FIELD_TO_LIVE_KEY). Beim nächsten "
+        "Eingriff am Wechselrichter-Pfad bewerten",
+}
+
+# Namen, die die Snapshot-Liste führt, obwohl es sie für diesen Typ in der
+# Feld-Registry NICHT gibt. Sie bleiben stehen, weil sie in Altbeständen im
+# `sensor_mapping` liegen können und ein Entfernen dort Zuordnungen unsichtbar
+# machen würde — dieselbe Falle, die `nur_manuell` schon einmal gestellt hat.
+# Wirkungslos sind sie nicht automatisch: `sonstiges/verbrauch_kwh` stand an der
+# Stelle, an der `verbrauch_sonstig_kwh` fehlte, und täuschte Abdeckung vor.
+_SNAPSHOT_KOMPATIBILITAET: dict[str, tuple[str, ...]] = {
+    "wallbox": ("ladung_netz_kwh",),   # Wallbox-Registry kennt nur ladung_kwh/ladung_pv_kwh
+    "e-auto": ("ladung_kwh",),         # Registry führt verbrauch_kwh; komponenten_beitraege nutzt beide
+    "sonstiges": ("verbrauch_kwh",),   # Legacy-Zwilling von verbrauch_sonstig_kwh (s. get_sonstiges_verbrauch_kwh)
+}
+
+
+# (typ, feld) → Grund, warum das Feld zwar als **Zähler** mitgeschnitten wird,
+# aber KEINEN Beitrag zu `komponenten_kwh` liefert.
+#
+# ⚑ **Diese Unterscheidung fehlte, und sie ist die eigentliche N-259-Lehre.**
+# „Wird gesnapshottet" und „zählt in die Bilanz" sind zwei Fragen; bis hierher
+# beantwortete sie eine Liste plus eine Reihe von `if typ ==`-Zweigen, zwischen
+# denen niemand einen Abgleich ziehen konnte. `verbrauch_sonstig_kwh` fehlte in
+# **beiden** — und weil es keine Deckungsprüfung gab, sah das aus wie Absicht.
+_SNAPSHOT_OHNE_KOMPONENTEN_BEITRAG: dict[tuple[str, str], str] = {
+    ("wallbox", "ladung_pv_kwh"):
+        "Teilmenge von ladung_kwh — zusätzlich addiert wäre es die "
+        "Doppelzählung aus #298 (14 + 9,24 = 23,24 statt 14)",
+    ("wallbox", "ladung_netz_kwh"): "Teilmenge von ladung_kwh, s. ladung_pv_kwh",
+    ("e-auto", "ladung_pv_kwh"): "Teilmenge der Ladung, s. wallbox/ladung_pv_kwh",
+    ("e-auto", "ladung_netz_kwh"): "Teilmenge der Ladung, s. wallbox/ladung_pv_kwh",
+    ("speicher", "ladung_netz_kwh"):
+        "Teilmenge von ladung_kwh — sonst Doppelzählung für Arbitrage-Anwender",
+    ("waermepumpe", "heizenergie_kwh"):
+        "THERMISCH (~ Strom × COP), nicht elektrisch — gehört nicht in die "
+        "Energiebilanz, nur in die JAZ-Rechnung",
+    ("waermepumpe", "warmwasser_kwh"): "thermisch, s. heizenergie_kwh",
+}
+
+
+def kumulative_zaehler_felder_je_typ() -> dict[str, tuple[str, ...]]:
+    """Je Investitionstyp die kWh-Felder, die als **kumulativer Zähler**
+    stündlich gesnapshottet werden — abgeleitet aus `INVESTITION_FELDER`.
+
+    Regel: jedes Feld mit Energie-Einheit, außer es steht in
+    `_SNAPSHOT_AUSNAHMEN`. Dazu die Kompatibilitäts-Namen aus
+    `_SNAPSHOT_KOMPATIBILITAET`. Bei `sonstiges` werden die Kategorien
+    (erzeuger/verbraucher/speicher) vereinigt — welche Felder ein konkretes
+    Gerät führt, entscheidet erst `get_felder_fuer_sonstiges`.
+
+    Die Reihenfolge ist stabil (Registry-Reihenfolge, dann Kompatibilität),
+    damit Proben sie vergleichen können.
+    """
+    out: dict[str, tuple[str, ...]] = {}
+    for typ, felder in INVESTITION_FELDER.items():
+        listen = (list(felder.values()) if isinstance(felder, dict) else [felder])
+        namen: list[str] = []
+        for liste in listen:
+            for f in liste:
+                feld = f["feld"]
+                if einheit_klasse(FELD_EINHEITEN.get(feld)) != "energie":
+                    continue
+                if (typ, feld) in _SNAPSHOT_AUSNAHMEN:
+                    continue
+                if feld not in namen:
+                    namen.append(feld)
+        for feld in _SNAPSHOT_KOMPATIBILITAET.get(typ, ()):
+            if feld not in namen:
+                namen.append(feld)
+        if namen:
+            out[typ] = tuple(namen)
+    return out
+
+
 # =============================================================================
 # Reader-Helper für `verbrauch_daten`-JSON
 #

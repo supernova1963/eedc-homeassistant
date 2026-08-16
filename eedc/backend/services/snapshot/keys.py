@@ -13,34 +13,29 @@ from __future__ import annotations
 
 from typing import Optional
 
+from backend.core.field_definitions import kumulative_zaehler_felder_je_typ
+
 
 # Felder die kumulative kWh-Zählerstände enthalten, pro Investitionstyp.
 # Wird von _build_counter_map konsumiert.
-KUMULATIVE_ZAEHLER_FELDER: dict[str, tuple[str, ...]] = {
-    "pv-module": ("pv_erzeugung_kwh",),
-    # Balkonkraftwerk: NUR die Erzeugung. Die BKW-eigenen Felder
-    # `speicher_ladung_kwh`/`speicher_entladung_kwh` standen hier kurzzeitig
-    # (Paket D, 2026-07-31) — zurückgenommen am selben Tag, weil der Kanon für
-    # einen BKW-Akku die **eigene Speicher-Investition mit Parent
-    # Balkonkraftwerk** ist (Weg A). Die trägt Live-Leistung, SoC und
-    # Energiefluss-Knoten und läuft über den Eintrag `"speicher"` unten; ein
-    # zweiter Zählerpfad für dasselbe Gerät wäre die Doppelerfassung, die der
-    # Rückbau gerade beseitigt. `eigenverbrauch_kwh` steht ebenfalls nicht hier:
-    # optionale Verfeinerung aus manueller Pflege/Import, kein Zähler
-    # (Begründung im Modul-Docstring von `core/berechnungen/bkw_finanz.py`).
-    "balkonkraftwerk": ("pv_erzeugung_kwh",),
-    "speicher": ("ladung_kwh", "entladung_kwh", "ladung_netz_kwh"),
-    "waermepumpe": (
-        "stromverbrauch_kwh",
-        "strom_heizen_kwh",
-        "strom_warmwasser_kwh",
-        "heizenergie_kwh",
-        "warmwasser_kwh",
-    ),
-    "wallbox": ("ladung_kwh", "ladung_pv_kwh", "ladung_netz_kwh"),
-    "e-auto": ("ladung_kwh", "ladung_pv_kwh", "ladung_netz_kwh", "verbrauch_kwh"),
-    "sonstiges": ("verbrauch_kwh", "erzeugung_kwh"),
-}
+#
+# ⚑ **Seit 2026-08-16 (N-259) ABGELEITET statt gepflegt.** Bis dahin stand hier
+# eine zweite Liste derselben Feldnamen, die in `core/field_definitions.py`
+# ohnehin als Registry existieren — und die beiden waren auseinandergelaufen:
+# Ein *Sonstiges*-Verbraucher heißt in der Registry `verbrauch_sonstig_kwh`
+# (so schreibt es die Zuordnungsfläche ins `sensor_mapping`, so baut
+# `mqtt_topic_registry` das Topic), diese Liste kannte `verbrauch_kwh`. Damit
+# verwarf `_mqtt_key_to_sensor_key` weiter unten ein Topic, das eedc **selbst
+# publiziert**, und der Heizstab eines Melders existierte auf Stunden- und
+# Tagesebene nicht — während der Monat ankam, weil
+# `get_sonstiges_verbrauch_kwh` beide Namen liest.
+#
+# Die Ausnahmen (welches kWh-Feld bewusst NICHT gesnapshottet wird) stehen
+# jetzt begründet neben der Registry, nicht als Auslassung in einer Aufzählung:
+# `field_definitions._SNAPSHOT_AUSNAHMEN`. Gewächtert in
+# `test_snapshot_felder_sot_konformitaet.py` — dort fällt auf, was hier früher
+# nur fehlte.
+KUMULATIVE_ZAEHLER_FELDER: dict[str, tuple[str, ...]] = kumulative_zaehler_felder_je_typ()
 
 # Reine Counter (Anzahl-/Stunden-Zählwerte ohne kWh-Semantik, Issue #136).
 # Werden vom Snapshot-Job mit erfasst (gleiches Schema, gleiche Tabelle), aber
@@ -314,8 +309,15 @@ def _categorize_counter(
         return "verbrauch_eauto"
     if inv_typ == "sonstiges":
         kategorie = (parameter or {}).get("kategorie", "verbraucher") if isinstance(parameter, dict) else "verbraucher"
-        if feld == "erzeugung_kwh" or (feld == "verbrauch_kwh" and kategorie == "erzeuger"):
+        # `verbrauch_sonstig_kwh` ist der kanonische Registry-Name (N-259),
+        # `verbrauch_kwh` der Legacy-Zwilling — dieselbe Präzedenz wie in
+        # `get_sonstiges_verbrauch_kwh`. Bis 16.08.2026 stand hier NUR der
+        # Legacy-Name, und damit fiel jeder Sonstiges-Verbraucher aus der
+        # Stunden-Kategorisierung: das Feld, das die Zuordnungsfläche
+        # tatsächlich schreibt, traf keinen einzigen Zweig.
+        verbrauch_felder = ("verbrauch_sonstig_kwh", "verbrauch_kwh")
+        if feld == "erzeugung_kwh" or (feld in verbrauch_felder and kategorie == "erzeuger"):
             return "erzeugung_sonstiges"
-        if feld == "verbrauch_kwh":
+        if feld in verbrauch_felder:
             return "verbrauch_sonstiges"
     return None
