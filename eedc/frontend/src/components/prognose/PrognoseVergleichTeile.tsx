@@ -50,9 +50,16 @@ const eedcKlasse = (hasEedc: boolean) => (hasEedc ? Q.eedc : 'text-gray-400 dark
 // Deshalb steht der Plan jetzt an **einer** Stelle. Wer eine Spalte ändert,
 // ändert sie für alle; wer eine Tabelle hinzufügt, erbt das Raster.
 // Gewächtert in `PrognoseVergleichTeile.stundenvergleich.test.tsx`
-// (§„Spaltenflucht"): die `colgroup`-Klassenfolgen aller Tabellen müssen
-// zeichengleich sein. Bei `table-fixed` bestimmt allein sie die Spaltengrenzen
-// — ein Prüfer, der Pixel misst, gibt es hier bewusst nicht.
+// (§„Spaltenflucht"): verglichen werden die **gerenderten Prozentbreiten** aller
+// vier Quellen-Tabellen — nicht die Klassenfolgen. Die waren zeichengleich,
+// während die Spalten trotzdem auseinanderliefen (s. `prognoseSpaltenplan`).
+// Pixel kann der Test nicht messen (jsdom rechnet kein Layout); er prüft
+// stattdessen die Bedingung, unter der die Flucht eintreten kann — jede Spalte
+// trägt eine Breite, Summe exakt 100 %. Der Pixel-Beleg ist die Messung an der
+// laufenden Box.
+//
+// Ausgenommen ist die Wetter-Stratifizierung: ihre Spalten (Klasse · n · MAPE ·
+// MPE) sind keine Quellen, es gibt nichts, wozu sie fluchten könnte.
 export interface SpaltenplanOpts {
   hasSolcast: boolean
   hasSfml: boolean
