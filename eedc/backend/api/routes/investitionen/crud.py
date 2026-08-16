@@ -71,6 +71,7 @@ from backend.services.monats_fakten import (
 from backend.core.berechnungen import (
     PV_ERZEUGER_TYPEN,
     einspeise_erloes_euro,
+    ersetzt_keine_heizung,
     relevante_kosten_aus_investitionen,
 )
 
@@ -690,6 +691,77 @@ class ROIDashboardResponse(BaseModel):
     # der Param-Default. Nur ein Hinweis — bei E-Auto-Berechnungen wird pro
     # Investition aufgelöst (Slider → per-Inv-Param → Monatsdaten → Default).
     benzinpreis_hinweis_euro: Optional[float] = None
+
+
+def _wp_nicht_bewertbar(params: dict) -> Optional[str]:
+    """Warum lässt sich diese Wärmepumpe nicht gegen eine Altanlage rechnen?
+
+    Gibt den Anzeige-Hinweis zurück (truthy) oder ``None``, wenn die Bewertung
+    laufen darf. Zwei Gründe, beide **gepflegt statt geraten** (N-88/F2b):
+
+    1. **Es wurde nichts ersetzt.** Dann gibt es keinen Vergleichsgegenstand —
+       unabhängig von der Bauart. Ein Neubau ohne Vorgängerheizung, eine
+       Klimaanlage, die nur kühlt.
+    2. **Es ist kein Wärmebedarf gepflegt.** Die ROI-Zeile ist eine *Prognose*
+       aus Bedarf × JAZ/COP, nicht die gemessene Ersparnis. Ohne Bedarf gäbe es
+       nichts zu rechnen — bis 2026-08-16 sprang hier ein Default von 12.000 +
+       3.000 kWh ein und erfand damit die Eingabe, die fehlte.
+
+    ⚠ **Sichtbare Folge für Bestandsanlagen:** Eine Wärmepumpe, die nie über das
+    Investitionsformular gespeichert wurde (Import, Setup-Wizard), trug bisher
+    diese 12.000/3.000 stillschweigend und bekam daraus eine Zeile. Sie steht
+    jetzt als „nicht bewertet" da, bis der Bedarf gepflegt ist. Das ist der
+    Punkt: Die alte Zahl war keine Schätzung des Anwenders, sondern eine
+    Behauptung von eedc.
+    """
+    if ersetzt_keine_heizung(params.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"])):
+        return (
+            'Nicht bewertet: Für dieses Gerät ist „nichts ersetzt (Neubau)" '
+            'hinterlegt — es gibt also keine frühere Heizung, gegen die sich '
+            'eine Ersparnis rechnen ließe. Stromverbrauch, PV-Anteil und Kosten '
+            'werden unverändert ausgewertet.'
+        )
+    # Bestandsschutz gegen den K-0b-Phantomwert, ohne Daten still zu ändern:
+    # Das Investitionsformular hat die Vorbelegung 12.000/3.000 bis v4.0.6
+    # MITGESPEICHERT, und seit K-0b sind die zwei Felder für Klimaanlagen
+    # unsichtbar — der Anwender konnte den Wert seither weder sehen noch
+    # korrigieren. Er als „gepflegt" zu lesen, gäbe genau diesen Geräten die
+    # 1.100 €/Jahr zurück, die K-0b abgeschafft hat.
+    #
+    # Deshalb: exakt die unveränderte Vorbelegung an einer Luft-Luft-WP zählt
+    # nicht als Antwort, sondern als offene Frage — Befund plus Weg heraus,
+    # statt eine Migration, die rät ([[feedback_kein_grosser_heiler_knopf]]).
+    # Wer wirklich damit heizt, trägt seinen echten Bedarf ein und bekommt die
+    # Bewertung; wer nur kühlt, wählt „nichts ersetzt". Für klassische
+    # Wärmepumpen bleibt die Vorbelegung eine brauchbare Schätzung und wird
+    # unverändert gerechnet — dort war sie immer sichtbar und änderbar.
+    if ist_luft_luft_waermepumpe(params) and (
+        params.get(PARAM_WAERMEPUMPE["HEIZWAERMEBEDARF_KWH"])
+        == PARAM_WAERMEPUMPE_DEFAULTS["heizwaermebedarf_kwh"]
+        and params.get(PARAM_WAERMEPUMPE["WARMWASSERBEDARF_KWH"])
+        == PARAM_WAERMEPUMPE_DEFAULTS["warmwasserbedarf_kwh"]
+    ):
+        return (
+            'Nicht bewertet: Bei diesem Gerät steht noch die alte Vorbelegung von '
+            '12.000 kWh Heizwärme und 3.000 kWh Warmwasser — Werte, die eedc früher '
+            'selbst eingesetzt hat. Heizt du mit dem Gerät, trag deinen tatsächlichen '
+            'Bedarf ein; kühlst du nur, wähle beim ersetzten Energieträger „nichts '
+            'ersetzt". Stromverbrauch, PV-Anteil und Kosten werden unverändert '
+            'ausgewertet.'
+        )
+    hat_bedarf = any(
+        params.get(PARAM_WAERMEPUMPE[k])
+        for k in ("WAERMEBEDARF_KWH", "HEIZWAERMEBEDARF_KWH", "WARMWASSERBEDARF_KWH")
+    )
+    if not hat_bedarf:
+        return (
+            'Nicht bewertet: Für dieses Gerät ist kein Wärmebedarf gepflegt. '
+            'Trag den Heizwärme- und Warmwasserbedarf pro Jahr ein (Energieausweis '
+            'oder Schätzung), oder wähle beim ersetzten Energieträger „nichts '
+            'ersetzt", wenn es keine Vorgängerheizung gab. Stromverbrauch, '
+            'PV-Anteil und Kosten werden unverändert ausgewertet.'
+        )
+    return None
 
 
 @router.get("/roi/{anlage_id}", response_model=ROIDashboardResponse)
@@ -1729,38 +1801,39 @@ async def get_roi_dashboard(
                     f'{result.km_elektrisch:.0f} km elektrisch'
                 )
 
-        elif inv.typ == InvestitionTyp.WAERMEPUMPE.value and ist_luft_luft_waermepumpe(inv):
-            # N-87 / #263 K-0b: Eine Split-Klimaanlage ersetzt keine Heizung.
-            # Der WP-Zweig darunter unterstellt genau das — und füllte den dafür
-            # nötigen Wärmebedarf aus `PARAM_WAERMEPUMPE_DEFAULTS` (12.000 kWh
-            # Heizwärme + 3.000 kWh Warmwasser) auf, wenn keiner gepflegt war.
-            # Ergebnis waren rund 1.100 €/Jahr und 2.210 kg CO₂ Ersparnis gegen
-            # eine Gasheizung, die es nie gab — Zahlen, die der Anwender nie
-            # eingegeben hat und die zusätzlich in die Anlagen-Summen liefen.
+        elif inv.typ == InvestitionTyp.WAERMEPUMPE.value and _wp_nicht_bewertbar(params):
+            # N-88/F2b — der Nachfolger des `wp_art == luft_luft`-Sonderwegs.
             #
-            # Die vier GEMESSENEN Pfade liefern für dasselbe Gerät 0
-            # (`services/wp_wirtschaftlichkeit.py`, `co2_wp_ersparnis_kg`,
-            # `aussichten.py`, JAZ/COP in `cockpit/uebersicht.py`) — diese
-            # Route war die einzige, die konstruiert hat.
+            # Bis 2026-08-16 stand hier: „Eine Split-Klimaanlage ersetzt keine
+            # Heizung." **Das ist falsch** (Gernot, 16.08.): Eine Luft-Luft-WP
+            # kann sehr wohl eine Gasheizung ersetzen — ob sie dafür die
+            # effizienteste Bauart ist, ist eine andere Frage und nicht die,
+            # die diese Zeile beantwortet. Wer mit seiner Klimaanlage heizt und
+            # den Bedarf pflegt, bekommt seine Bewertung jetzt.
             #
-            # Kein Fake-0 statt Fake-1100: `nicht_bewertet` sagt der Anzeige,
-            # dass hier ein FEHLENDER Wert steht und keine Null-Ersparnis —
-            # dieselbe Unterscheidung, die der AC-Speicher ohne Kapazität oben
-            # trifft. Die Anschaffungskosten zählen weiter (wie beim
-            # Wechselrichter ohne PV-Module): unbewertet heißt nicht unsichtbar.
-            # Der Text sagt den HEUTIGEN Stand und verspricht nichts: die
-            # Luft-Luft-Unterstützung ist nicht abgeschlossen (Gernot 02.08.) —
-            # SEER und die Heizen-/Kühlen-Trennung sind offen (#263).
-            detail = {
-                'hinweis': (
-                    'Klimaanlage (Luft-Luft): eine Wirtschaftlichkeit gegenüber Gas oder Öl '
-                    'wird hier nicht berechnet — dafür müsste das Gerät eine Heizung ersetzt '
-                    'haben, und die abgegebene Wärme müsste gemessen sein. Stromverbrauch, '
-                    'PV-Anteil und Kosten werden unverändert ausgewertet. Die Auswertung von '
-                    'Klimaanlagen wird weiterentwickelt (offenes Thema #263).'
-                ),
-                'nicht_bewertet': True,
-            }
+            # Der echte Defekt von K-0b war nie die Bauart, sondern eine
+            # **erfundene Eingabe**: `heizwaermebedarf`/`warmwasserbedarf`
+            # fielen auf 12.000 + 3.000 kWh zurück, wenn niemand sie gepflegt
+            # hatte ⇒ rund 1.100 €/Jahr und 2.210 kg CO₂ gegen eine Heizung,
+            # die es nie gab. Der Default ist deshalb unten weg; unbewertet ist
+            # jetzt, wer die Frage nicht beantwortet hat statt wer den falschen
+            # Gerätetyp trägt.
+            #
+            # ⚠ **Die Begründung dieses Zweigs war zusätzlich unwahr** und ist
+            # mit ihm gefallen: Sie behauptete, die gemessenen Pfade lieferten
+            # für dasselbe Gerät 0. Das galt nur, solange keine Wärme gepflegt
+            # war — der Schutz dort ist `wp_waerme_kwh <= 0`, keine Typ-Regel.
+            # Sobald jemand die Heizwärme erfasste (und die Zuordnungs-Fläche
+            # verlangte sie bis heute als Pflicht, s. N-86), rechneten Cockpit,
+            # Aussichten, WP-Dashboard, Jahresbericht-PDF und der HA-Sensor
+            # sehr wohl — nur diese Zeile nicht.
+            #
+            # Kein Fake-0 statt eines fehlenden Werts: `nicht_bewertet` sagt der
+            # Anzeige, dass hier etwas FEHLT und keine Null-Ersparnis steht —
+            # dieselbe Unterscheidung wie beim AC-Speicher ohne Kapazität oben.
+            # Die Anschaffungskosten zählen weiter (wie beim Wechselrichter ohne
+            # PV-Module): unbewertet heißt nicht unsichtbar.
+            detail = {'hinweis': _wp_nicht_bewertbar(params), 'nicht_bewertet': True}
 
         elif inv.typ == InvestitionTyp.WAERMEPUMPE.value:
             # Modus-Auswahl: gesamt_jaz (Standard), scop (EU-Label) oder getrennte_cops
@@ -1769,8 +1842,12 @@ async def get_roi_dashboard(
             alter_energietraeger = params.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"], PARAM_WAERMEPUMPE_DEFAULTS["alter_energietraeger"])
             alter_preis = params.get(PARAM_WAERMEPUMPE["ALTER_PREIS_CENT_KWH"], PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"])
             alternativ_zusatzkosten = params.get(PARAM_WAERMEPUMPE["ALTERNATIV_ZUSATZKOSTEN_JAHR"], 0) or 0
-            heizwaermebedarf = params.get(PARAM_WAERMEPUMPE["HEIZWAERMEBEDARF_KWH"], PARAM_WAERMEPUMPE_DEFAULTS["heizwaermebedarf_kwh"])
-            warmwasserbedarf = params.get(PARAM_WAERMEPUMPE["WARMWASSERBEDARF_KWH"], PARAM_WAERMEPUMPE_DEFAULTS["warmwasserbedarf_kwh"])
+            # N-88/F2b: KEIN Default mehr — `_wp_nicht_bewertbar` oben laesst diesen
+            # Zweig nur mit gepflegtem Bedarf ueberhaupt laufen. Der frueher hier
+            # stehende Rueckfall auf 12.000 + 3.000 kWh war die erfundene Eingabe
+            # hinter dem K-0b-Phantomwert.
+            heizwaermebedarf = params.get(PARAM_WAERMEPUMPE["HEIZWAERMEBEDARF_KWH"]) or 0
+            warmwasserbedarf = params.get(PARAM_WAERMEPUMPE["WARMWASSERBEDARF_KWH"]) or 0
 
             if effizienz_modus == 'getrennte_cops':
                 # Getrennte COPs für Heizung und Warmwasser

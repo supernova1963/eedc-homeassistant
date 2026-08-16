@@ -30,6 +30,7 @@ from backend.core.berechnungen import (
     berechne_wp_alternativkosten_ersparnis,
     berechne_spez_ertrag_annualisiert,
     alter_wirkungsgrad,
+    ersetzt_keine_heizung,
     gas_kosten_altanlage,
     berechne_verbrauchs_kennzahlen,
     erzeugung_hinter_zaehler_kwh,
@@ -1435,7 +1436,11 @@ async def calculate_investition_sensors(
                     value = gesamt_waerme / gesamt_strom
                     berechnung = f"{gesamt_waerme:.0f} / {gesamt_strom:.0f}"
             elif sensor.key == "wp_ersparnis_euro":
-                if gesamt_waerme > 0:
+                # N-88/F2b: ohne ersetzte Heizung kein fossiler Vergleich — der
+                # Sensor bleibt dann leer statt eine Ersparnis zu behaupten.
+                if gesamt_waerme > 0 and not ersetzt_keine_heizung(
+                    params.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"])
+                ):
                     fallback_alter_preis = params.get(PARAM_WAERMEPUMPE["ALTER_PREIS_CENT_KWH"], PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"])
                     wirkungsgrad_alt = alter_wirkungsgrad(params.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"]))
                     zusatzkosten_jahr = params.get(PARAM_WAERMEPUMPE["ALTERNATIV_ZUSATZKOSTEN_JAHR"], 0) or 0

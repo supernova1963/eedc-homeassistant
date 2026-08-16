@@ -1,22 +1,31 @@
-"""ROI-Dashboard: Eine Split-Klimaanlage bekommt keine erfundene Heizungs-Ersparnis (N-87).
+"""ROI-Dashboard: bewertet wird, was gepflegt ist — nicht, was eedc sich denkt.
 
-Befund: `get_roi_dashboard` behandelte **jede** `waermepumpe` als Ersatz einer
-Gasheizung. Fehlte der Wärmebedarf, füllten ihn zwei Default-Schichten auf
-(`PARAM_WAERMEPUMPE_DEFAULTS` in `investitionen/crud.py`, ein zweites Mal in
-`calculations.berechne_waermepumpe_einsparung`): 12.000 kWh Heizwärme +
-3.000 kWh Warmwasser. Daraus wurden rund **1.100 €/Jahr** und **2.210 kg CO₂**
-Ersparnis gegen eine Gasheizung, die es bei einer Klimaanlage nie gab — und die
-Beträge liefen zusätzlich in die Anlagen-Summen (`gesamt_jahres_einsparung`,
-`gesamt_roi_prozent`, `gesamt_amortisation_jahre`, `gesamt_co2_einsparung_kg`).
+**Diese Datei hieß bis 2026-08-16 „Split-Klimaanlage bekommt keine erfundene
+Heizungs-Ersparnis" und beruhte auf einer falschen Prämisse.** Sie lautete:
+„Eine Split-Klimaanlage ersetzt keine Heizung." Das stimmt nicht (Gernot,
+16.08.) — eine Luft-Luft-Wärmepumpe **kann** sehr wohl eine Gasheizung
+ersetzen; ob sie dafür die effizienteste Bauart ist, ist eine andere Frage.
 
-Alle GEMESSENEN Pfade liefern für dasselbe Gerät 0 — `wp_wirtschaftlichkeit`,
-`co2_wp_ersparnis_kg`, `aussichten`, JAZ/COP im Cockpit haben denselben
-`wp_waerme_kwh <= 0`-Wächter. Diese Route war die einzige, die konstruiert hat.
+Der Defekt, den N-87/K-0b behoben hat, war nie die Bauart, sondern eine
+**erfundene Eingabe**: Fehlte der Wärmebedarf, füllten ihn zwei Default-
+Schichten auf (12.000 kWh Heizwärme + 3.000 kWh Warmwasser) ⇒ rund 1.100 €/Jahr
+und 2.210 kg CO₂ gegen eine Heizung, die es nie gab, zusätzlich in den
+Anlagen-Summen. Der damalige Fix band das an den **Typ**; seit N-88/F2b hängt
+es an der **Pflege**:
 
-Der wichtigste Test hier ist `…_obwohl_parameter_gepflegt_sind`: das
-Investitionsformular hat die Defaults **vorbelegt und mitgespeichert**, deshalb
-tragen Bestands-Klimaanlagen die 12.000/3.000 real in `parameter`. Ein Fix, der
-nur auf „kein Wert gepflegt" prüft, würde diesen Bestand nicht heilen.
+- ``alter_energietraeger = "nichts"`` — es gab keine Vorgängerheizung. Neu, gilt
+  für **jede** Wärmepumpenart (vorher unmöglich auszudrücken, Default war Gas —
+  weshalb auch eine Luft-Wasser-WP im Neubau eine Gaskessel-Ersparnis bekam).
+- **kein Wärmebedarf gepflegt** — die ROI-Zeile ist eine Prognose aus Bedarf ×
+  JAZ/COP; ohne Bedarf gibt es nichts zu rechnen und keinen Default mehr.
+- **unveränderte Vorbelegung an einer Luft-Luft-WP** — der Bestandsfall unten.
+
+⚠ **Der Bestandsfall ist der wichtigste Test hier und der Grund, warum ein Fix
+der Bauart „nur nichts erfinden, wenn nichts gepflegt ist" NICHT genügt:** Das
+Investitionsformular hat die Vorbelegung bis v4.0.6 **mitgespeichert**, und seit
+K-0b sind die beiden Felder für Klimaanlagen unsichtbar — der Anwender konnte
+den Wert seither weder sehen noch korrigieren. Er zählt deshalb als offene
+Frage, nicht als Antwort. Keine Migration, die rät: Befund plus Weg heraus.
 """
 
 from __future__ import annotations
@@ -99,9 +108,13 @@ async def test_klimaanlage_sagt_warum_statt_still_null_zu_liefern(db):
 
     assert zeile.detail_berechnung["nicht_bewertet"] is True
     hinweis = zeile.detail_berechnung["hinweis"]
-    assert "Klimaanlage" in hinweis
-    # Der Text nennt die Bedingung, unter der es doch ginge — und verspricht nichts.
-    assert "Heizung" in hinweis
+    assert hinweis.startswith("Nicht bewertet:")
+    # Der Text nennt den GRUND (die alte Vorbelegung) und den Weg heraus — beides,
+    # sonst ist es ein Befund ohne Handlung (P-6). Kein Anker auf ein einzelnes
+    # Wort wie „Klimaanlage": das hat beim Umbau 2026-08-16 den Test rot gemacht,
+    # obwohl die Aussage unverändert richtig war.
+    assert "12.000" in hinweis and "3.000" in hinweis
+    assert "nichts ersetzt" in hinweis
 
 
 async def test_klimaanlage_bleibt_als_zeile_sichtbar(db):
@@ -210,3 +223,117 @@ async def test_speicher_ohne_kapazitaet_ist_nicht_bewertet_statt_null(db):
     assert zeile.detail_berechnung["kapazitaet_fehlt"] is True
     assert zeile.detail_berechnung["nicht_bewertet"] is True
     assert "Kapazität" in zeile.detail_berechnung["hinweis"]
+
+
+# ============================================================================
+# N-88/F2b — die Pflege entscheidet, nicht die Bauart
+# ============================================================================
+
+
+async def test_klimaanlage_die_heizt_wird_bewertet(db):
+    """Der Fall, den die alte Typ-Regel zu Unrecht unterdrückt hat.
+
+    Wer mit seiner Luft-Luft-WP heizt, eine Gasheizung ersetzt hat und seinen
+    echten Bedarf pflegt, bekommt seine Zeile — wie jede andere Wärmepumpe.
+    """
+    anlage_id = await _seed_wp(db, wp_art="luft_luft", parameter={
+        **GEPFLEGTE_PHANTOM_PARAMS,
+        # Ein Wert, den ein Mensch eingetragen hat — nicht die Vorbelegung.
+        "heizwaermebedarf_kwh": 7400,
+        "warmwasserbedarf_kwh": 1800,
+    })
+    zeile = _wp_zeile(await _roi(db, anlage_id))
+
+    assert zeile.detail_berechnung.get("nicht_bewertet") is not True
+    assert zeile.jahres_einsparung > 0
+
+
+async def test_nichts_ersetzt_wird_nicht_bewertet_egal_welche_bauart(db):
+    """„nichts ersetzt" schlägt alles — und gilt für JEDE Wärmepumpenart.
+
+    Der Neubau-Fall, den F2(a) am 02.08. offen gelassen hat: eine klassische
+    Luft-Wasser-WP bekam eine Gaskessel-Ersparnis, weil `alter_energietraeger`
+    kein „nichts" kannte und auf Gas fiel.
+    """
+    for art in ("luft_wasser", "luft_luft"):
+        anlage_id = await _seed_wp(db, wp_art=art, parameter={
+            **GEPFLEGTE_PHANTOM_PARAMS,
+            "heizwaermebedarf_kwh": 7400,
+            "warmwasserbedarf_kwh": 1800,
+            "alter_energietraeger": "nichts",
+        })
+        result = await _roi(db, anlage_id)
+        zeile = _wp_zeile(result)
+
+        assert zeile.detail_berechnung["nicht_bewertet"] is True, art
+        assert "nichts ersetzt (Neubau)" in zeile.detail_berechnung["hinweis"], art
+        assert zeile.jahres_einsparung == 0, art
+        # Und die Anlagen-Summen tragen ihn auch nicht.
+        assert result.gesamt_jahres_einsparung == 0, art
+
+
+async def test_ohne_gepflegten_bedarf_wird_nichts_erfunden(db):
+    """Kein Default mehr: ohne Bedarf keine Prognose.
+
+    Trifft Geräte, die nie über das Formular gespeichert wurden (Import,
+    Setup-Wizard) — sie trugen bisher stillschweigend 12.000 + 3.000 kWh.
+    """
+    anlage_id = await _seed_wp(db, wp_art="luft_wasser", parameter={
+        "jaz": 3.5, "effizienz_modus": "gesamt_jaz",
+        "alter_energietraeger": "gas", "alter_preis_cent_kwh": 12,
+    })
+    zeile = _wp_zeile(await _roi(db, anlage_id))
+
+    assert zeile.detail_berechnung["nicht_bewertet"] is True
+    assert "kein Wärmebedarf gepflegt" in zeile.detail_berechnung["hinweis"]
+    assert zeile.jahres_einsparung == 0
+
+
+async def test_klassische_wp_mit_vorbelegung_rechnet_unveraendert(db):
+    """Negativprobe zum Bestandsschutz: die Vorbelegungs-Regel gilt NUR luft_luft.
+
+    Bei einer Luft-Wasser-WP war der Bedarf immer sichtbar und änderbar; 12.000/
+    3.000 sind dort eine brauchbare Schätzung. Ohne diesen Test wäre der
+    Bestandsschutz oben nicht von einem „gilt für alle" zu unterscheiden — und
+    das hätte jeder klassischen Wärmepumpe die Bewertung genommen.
+    """
+    anlage_id = await _seed_wp(db, wp_art="luft_wasser")
+    zeile = _wp_zeile(await _roi(db, anlage_id))
+
+    assert zeile.detail_berechnung.get("nicht_bewertet") is not True
+    assert zeile.jahres_einsparung > 0
+
+
+async def test_halb_gepflegter_bedarf_erfindet_die_andere_haelfte_nicht(db):
+    """Der Restfall, den erst ein stummer Sprengsatz sichtbar gemacht hat.
+
+    `_wp_nicht_bewertbar` lässt den Rechenzweig schon bei EINEM gepflegten
+    Bedarfsfeld laufen (ODER über Gesamt-/Heiz-/Warmwasserbedarf). Wer nur den
+    Warmwasserbedarf einträgt, hätte über den alten Default trotzdem 12.000 kWh
+    Heizwärme zugerechnet bekommen — also erneut den Phantomwert, nur durch die
+    Hintertür. Gemessen wird deshalb die HÖHE, nicht bloß „wird bewertet".
+    """
+    nur_ww = await _seed_wp(db, wp_art="luft_wasser", parameter={
+        "jaz": 3.5, "effizienz_modus": "gesamt_jaz",
+        "alter_energietraeger": "gas", "alter_preis_cent_kwh": 12,
+        "pv_anteil_prozent": 30,
+        "warmwasserbedarf_kwh": 3000,
+    })
+    beides = await _seed_wp(db, wp_art="luft_wasser", parameter={
+        "jaz": 3.5, "effizienz_modus": "gesamt_jaz",
+        "alter_energietraeger": "gas", "alter_preis_cent_kwh": 12,
+        "pv_anteil_prozent": 30,
+        "heizwaermebedarf_kwh": 12000, "warmwasserbedarf_kwh": 3000,
+    })
+
+    zeile_ww = _wp_zeile(await _roi(db, nur_ww))
+    zeile_beides = _wp_zeile(await _roi(db, beides))
+
+    # Bewertet wird beides — aber die halbe Pflege ergibt auch nur den halben Bedarf.
+    assert zeile_ww.detail_berechnung.get("nicht_bewertet") is not True
+    assert zeile_ww.jahres_einsparung > 0
+    assert zeile_ww.jahres_einsparung < zeile_beides.jahres_einsparung
+    # 3.000 statt 15.000 kWh Bedarf ⇒ rund ein Fünftel der Altanlagen-Kosten.
+    assert zeile_ww.detail_berechnung["alte_heizung_kosten_euro"] == pytest.approx(
+        zeile_beides.detail_berechnung["alte_heizung_kosten_euro"] / 5, rel=0.02
+    )

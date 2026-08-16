@@ -39,6 +39,7 @@ from backend.core.investition_kennwerte import (
 from backend.core.investition_parameter import (
     PARAM_SPEICHER,
     PARAM_SPEICHER_DEFAULTS,
+    PARAM_WAERMEPUMPE,
     PARAM_WALLBOX,
     PARAM_WALLBOX_DEFAULTS,
 )
@@ -865,7 +866,12 @@ async def get_waermepumpe_dashboard(
         # in Brennstoff zurückgerechnet werden. Als 4. WP-CO₂-Read-Site driftete das
         # Dashboard nach DI-1 sichtbar gegen Cockpit/Jahresbericht/Nachhaltigkeit
         # (Demo lifetime: 2303,6 → 2744,3 kg, = Σ der Cockpit-Jahreswerte).
-        co2_ersparnis = co2_wp_ersparnis_kg(gesamt_waerme, gesamt_strom)
+        # N-88/F2b: der Traeger entscheidet mit — ohne ersetzte Heizung gibt es
+        # keine vermiedene Verbrennung (Filter im SoT, nicht hier).
+        co2_ersparnis = co2_wp_ersparnis_kg(
+            gesamt_waerme, gesamt_strom,
+            (wp.parameter or {}).get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"]),
+        )
 
         # Kompressor-Starts: Σ Lebensdauer kommt direkt aus dem Hersteller-
         # Sensor (Hersteller zählt seit Werks-Inbetriebnahme, das ist die

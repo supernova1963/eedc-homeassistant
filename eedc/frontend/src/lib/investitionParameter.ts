@@ -173,7 +173,11 @@ export const PARAM_WAERMEPUMPE_DEFAULTS = {
 export type WPEffizienzModus = 'gesamt_jaz' | 'scop' | 'getrennte_cops'
 export type WPArt = 'luft_wasser' | 'sole_wasser' | 'grundwasser' | 'luft_luft'
 export type WPVorlauftemperatur = '35' | '55'
-export type WPAlterEnergietraeger = 'gas' | 'oel' | 'strom'
+// 'nichts' = es gab keine Vorgängerheizung (Neubau, oder ein Gerät, das nur
+// kühlt). Ohne diesen Wert unterstellte eedc jeder Wärmepumpe einen Gaskessel
+// — der Default ist 'gas' (N-88/F2b). Backend-SoT:
+// `core/berechnungen/alternativkosten.py::ERSETZT_NICHTS`.
+export type WPAlterEnergietraeger = 'gas' | 'oel' | 'strom' | 'nichts'
 
 export interface WaermepumpeParameter {
   leistung_kw?: number

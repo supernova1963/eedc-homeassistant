@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.berechnungen import (
     PV_ERZEUGER_TYPEN,
     FinanzMonatsZeile,
+    alle_ersetzen_nichts,
     autarkie_prozent,
     berechne_finanz_aggregat,
     eigenverbrauchsquote_prozent,
@@ -116,6 +117,12 @@ async def build_jahresbericht_context(
 
     hat_speicher = any(i.typ == "speicher" for i in investitionen)
     hat_waermepumpe = any(i.typ == "waermepumpe" for i in investitionen)
+    # N-88/F2b: Ist die Waerme anlagenweit summiert, laesst sie sich hier nicht
+    # mehr je Geraet zuordnen — der fossile Vergleich entfaellt deshalb erst,
+    # wenn KEINE der Waermepumpen etwas ersetzt hat (Begruendung im Layer).
+    wp_ersetzt_nichts = alle_ersetzen_nichts(
+        [i for i in investitionen if i.typ == "waermepumpe"]
+    )
     # DI-3: Dienstwagen zählen nicht als (private) E-Mobilität — konsistent zum
     # Cockpit (`hat_emobilitaet` schließt dienstliche Fahrzeuge aus).
     hat_emobilitaet = any(
@@ -448,7 +455,10 @@ async def build_jahresbericht_context(
     # Komponente roh (kann bei schlechter JAZ negativ sein), Gesamt-Bilanz per
     # max(0, …) geklammert — exakt wie das Cockpit.
     co2_pv = ev_gesamt * CO2_FAKTOR_STROM_KG_KWH
-    co2_wp = co2_wp_ersparnis_kg(wp_waerme, wp_strom) if hat_waermepumpe else 0
+    co2_wp = (
+        0 if (not hat_waermepumpe or wp_ersetzt_nichts)
+        else co2_wp_ersparnis_kg(wp_waerme, wp_strom)
+    )
     co2_emob = emob_km * 0.12 if hat_emobilitaet else 0
     co2_gesamt = co2_pv + max(0, co2_wp) + max(0, co2_emob)
 

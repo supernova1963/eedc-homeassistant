@@ -43,6 +43,7 @@ from backend.core.berechnungen import (
     kapitaleinsatz_euro,
     relevante_kosten_aus_investitionen,
     alter_wirkungsgrad,
+    ersetzt_keine_heizung,
     berechne_wp_alternativkosten_ersparnis,
     eigenverbrauchsquote_prozent,
     einspeise_erloes_euro,
@@ -1253,8 +1254,20 @@ async def get_finanz_prognose(
     # (Gas + Öl) wurde der Wirkungsgrad der letzten auf beide angewendet.
     # Bug #7 (v3.25.0): Default vereinheitlicht auf zentrale 12 ct/kWh aus
     # PARAM_WAERMEPUMPE_DEFAULTS (vorher hier 10.0, andernorts 12.0).
+    #
+    # N-88/F2b: Wer nichts ersetzt hat, gehoert in keine dieser Groessen — weder
+    # mit Wirkungsgrad noch mit Zusatzkosten noch mit seiner Waerme. Deshalb EINE
+    # gefilterte Liste statt drei `continue`: Die Schleife darunter greift mit
+    # `wp_aggregate[wp.id]` zu und wuerde bei einem uebersprungenen Geraet mit
+    # KeyError abstuerzen.
+    wp_mit_ersatz = [
+        wp for wp in waermepumpen
+        if not ersetzt_keine_heizung(
+            (wp.parameter or {}).get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"])
+        )
+    ]
     wp_aggregate: dict[int, dict] = {}
-    for wp in waermepumpen:
+    for wp in wp_mit_ersatz:
         params = wp.parameter or {}
         wp_aggregate[wp.id] = {
             "alter_preis_cent": (
@@ -1454,7 +1467,7 @@ async def get_finanz_prognose(
     # Wirkungsgrad-Mischung). Bewusst NICHT im Ersparnis-Helper, der reine
     # Aggregat-Σ liefert.
     gesamt_wp_thermisch = 0.0
-    for wp in waermepumpen:
+    for wp in wp_mit_ersatz:
         wp_agg = wp_aggregate[wp.id]
         for (inv_id, jahr, monat), daten in historische_inv_daten.items():
             if inv_id == wp.id and wp.ist_aktiv_im_monat(jahr, monat):
@@ -1777,7 +1790,7 @@ async def get_finanz_prognose(
     # Energieträgern (z. B. Gas + Öl) mathematisch saubere Mischung statt
     # last-write-wins.
     jahres_wp_ersparnis = 0.0
-    if waermepumpen and gesamt_wp_thermisch > 0 and anzahl_monate_hist > 0:
+    if wp_mit_ersatz and gesamt_wp_thermisch > 0 and anzahl_monate_hist > 0:
         # Thermische Energie pro Jahr (hochgerechnet)
         wp_thermisch_jahr = gesamt_wp_thermisch / anzahl_monate_hist * 12
         # thermisch-gewichtete Aggregat-Werte

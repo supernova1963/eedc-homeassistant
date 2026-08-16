@@ -39,6 +39,80 @@ from backend.core.wirtschaftlichkeit_defaults import (
 )
 
 
+# Wert von `alter_energietraeger` für „diese Wärmepumpe hat nichts ersetzt".
+#
+# Bis 2026-08-16 kannte das Feld nur `gas` / `oel` / `strom`, Default `gas` —
+# es gab **keine** Möglichkeit zu sagen, dass gar keine Heizung ersetzt wurde.
+# Damit bekam jede Wärmepumpe im **Neubau** eine Gaskessel-Ersparnis
+# angerechnet, die es nie gab; dieselbe Klasse traf Split-Klimaanlagen, die nur
+# kühlen. Der bisherige Ausweg war ein **Typ**-Sonderweg (`wp_art == luft_luft`
+# ⇒ gar nicht bewerten) — und der beruhte auf einer falschen Annahme: Eine
+# Luft-Luft-Wärmepumpe **kann** sehr wohl eine Gasheizung ersetzen (Gernot,
+# 16.08.). Ob sie dafür die effizienteste Bauart ist, ist eine andere Frage und
+# nicht die, die eedc hier beantwortet.
+#
+# Die Frage „hat dieses Gerät eine Heizung ersetzt?" hängt also an der
+# **Installation**, nicht an der Bauart — deshalb ist sie ein Feld und keine
+# Typ-Regel. Vorgeschichte: F2(b) im Auftrag `auftrag-n87-klima-roi-verbraucher.md`
+# (02.08.), damals bewusst auf den Klima-Fall verkürzt und als **N-88** mit
+# Trigger geparkt.
+ERSETZT_NICHTS: str = "nichts"
+
+
+def ersetzt_keine_heizung(energietraeger: Optional[str]) -> bool:
+    """Hat diese Wärmepumpe laut Pflege **keine** Heizung ersetzt?
+
+    Single Source der Frage, an der jede Alternativkosten- und
+    Alternativ-CO₂-Konstruktion hängt. Wer sie mit ``True`` beantwortet bekommt,
+    weist **keine** Ersparnis gegen Gas/Öl/Strom aus — auch keine anteiligen
+    Zusatzkosten (Schornsteinfeger, Wartung, Grundpreis einer Anlage, die es
+    nicht gibt).
+
+    ``None`` bzw. ein ungesetztes Feld heißt bewusst **nicht** „nichts":
+    Bestandsgeräte tragen den alten Default `gas`, und eine fehlende Angabe darf
+    eine bisher ausgewiesene Ersparnis nicht stillschweigend abschalten
+    (dieselbe Begründung wie bei `ist_luft_luft_waermepumpe`).
+    """
+    return energietraeger == ERSETZT_NICHTS
+
+
+def alle_ersetzen_nichts(waermepumpen: Iterable) -> bool:
+    """Tragen **alle** übergebenen Wärmepumpen „nichts ersetzt"?
+
+    Für die **anlagenweit aggregierten** Sichten (Jahresbericht-CO₂,
+    Aussichten-Jahresprognose): Dort ist die Wärme bereits über alle Geräte
+    summiert, eine Zuordnung je Gerät gibt es an der Stelle nicht mehr. Die
+    einzige Aussage, die sich ohne Umbau sicher treffen lässt, ist deshalb die
+    strenge: **erst wenn keine einzige WP etwas ersetzt hat**, entfällt der
+    fossile Vergleich.
+
+    ⚠ **Die Umkehrung ist bewusst konservativ und bleibt ungenau:** Steht neben
+    einer Neubau-WP eine zweite, die eine Gasheizung ersetzt hat, wird weiterhin
+    die **gesamte** Wärme verglichen — auch der Anteil, der nichts ersetzt.
+    Sauber wäre eine Trennung je Gerät in der Aggregation selbst; die berührt
+    Cockpit, Komponenten-Zeitreihe, Aussichten, HA-Export und den Jahresbericht
+    und ist deshalb ein eigenes Paket. **So herum verschlechtert sich für
+    niemanden etwas**, während die häufige Lage (eine WP, oder alle gleich
+    gepflegt) korrekt wird — die per-Gerät-Pfade
+    (`berechne_wp_ersparnis`, `berechne_wp_alternativkosten_ersparnis`) sind
+    ohnehin exakt.
+
+    Leere Eingabe → ``False``: keine WP ist kein „nichts ersetzt", sondern kein
+    Gegenstand.
+    """
+    wps = list(waermepumpen)
+    if not wps:
+        return False
+    return all(
+        ersetzt_keine_heizung(
+            (getattr(wp, "parameter", None) or {}).get(
+                PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"]
+            )
+        )
+        for wp in wps
+    )
+
+
 def alter_wirkungsgrad(energietraeger: Optional[str]) -> float:
     """Erzeugungs-Wirkungsgrad der ersetzten Altanlage je Energieträger.
 
@@ -146,6 +220,16 @@ def berechne_wp_alternativkosten_ersparnis(
     zusatzkosten_jahr_gesamt = 0.0
     monate_gezaehlt: set[tuple[int, int]] = set()
     for wp in waermepumpen:
+        # N-88/F2b: Eine WP, die nichts ersetzt hat, bringt gar nichts in diese
+        # Summe ein — weder Brennstoff-Ersparnis noch die anteiligen fixen
+        # Zusatzkosten. Der `continue` steht VOR `zusatzkosten_jahr_gesamt`,
+        # sonst zahlte der Anwender den Schornsteinfeger einer Anlage, die es
+        # nie gab. Ihre Monate zählen auch nicht in `monate_gezaehlt`; die
+        # Zusatzkosten der übrigen WPs bleiben davon unberührt.
+        if ersetzt_keine_heizung(
+            (wp.parameter or {}).get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"])
+        ):
+            continue
         wp_agg = _wp_aggregate(wp.parameter)
         zusatzkosten_jahr_gesamt += wp_agg["zusatzkosten_jahr"]
         for (inv_id, jahr, monat), daten in historische_inv_daten.items():

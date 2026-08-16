@@ -18,6 +18,7 @@ const ENERGIETRAEGER_OPTIONEN = [
   { value: 'gas', label: 'Erdgas' },
   { value: 'oel', label: 'Heizöl' },
   { value: 'strom', label: 'Strom (Direktheizung)' },
+  { value: 'nichts', label: 'Nichts ersetzt (Neubau)' },
 ]
 
 const MODUS_OPTIONEN = [
@@ -54,11 +55,13 @@ export function WaermepumpeFelder({ paramData, onInputChange, setParam, zeige, m
           />
           {paramData.wp_art === 'luft_luft' && (
             <Alert type="info" title="Split-Klimaanlage">
-              Es genügt der Stromverbrauchs-Sensor. Heizenergie/Warmwasser sind bei Klimas meist nicht gemessen —
-              die JAZ-Kachel bleibt dann leer („—"), die Stromauswertung funktioniert trotzdem.
-              Heizwärme- und Warmwasserbedarf werden deshalb nicht abgefragt, und eine Ersparnis
-              gegenüber Gas oder Öl weist eedc für Klimaanlagen nicht aus — dafür müsste das Gerät
-              eine Heizung ersetzt haben und die Wärme gemessen sein.
+              Es genügt der Stromverbrauchs-Sensor. Heizenergie und Warmwasser sind bei Klimas meist
+              nicht gemessen — die JAZ-Kachel bleibt dann leer („—"), die Stromauswertung funktioniert
+              trotzdem. <strong>Heizt du mit dem Gerät</strong>, trag unten den Heizwärmebedarf ein;
+              dann rechnet eedc die Wirtschaftlichkeit gegenüber der ersetzten Heizung wie bei jeder
+              anderen Wärmepumpe. <strong>Kühlst du nur</strong>, wähle beim alten Energieträger
+              „Nichts ersetzt (Neubau)" — dann wird nichts verglichen. Die Kühl-Effizienz (SEER) und
+              die Trennung von Heiz- und Kühlstrom sind noch offen (Thema #263).
             </Alert>
           )}
 
@@ -166,34 +169,42 @@ export function WaermepumpeFelder({ paramData, onInputChange, setParam, zeige, m
               </>
             )}
 
-            {/* #263 (3dmaster90) / N-87: Bei einer Split-Klimaanlage gibt es
-                weder einen Warmwasserkreis noch einen Heizwärmebedarf aus dem
-                Energieausweis. Beide Felder waren mit 12.000/3.000 kWh
-                vorbelegt, und die ROI-Auswertung rechnete daraus eine Ersparnis
-                gegen eine nie ersetzte Gasheizung. Bei `luft_luft` daher gar
-                nicht erst fragen. Bereits gespeicherte Werte bleiben stehen —
-                die Klima-Unterstützung ist nicht abgeschlossen (#263), da wird
-                nichts weggeworfen, was später noch gebraucht werden könnte. */}
-            {paramData.wp_art !== 'luft_luft' && (
-              <>
-                <Input
-                  label="Heizwärmebedarf (kWh/Jahr)"
-                  name="param_heizwaermebedarf_kwh"
-                  type="number" step="any" min="0"
-                  value={paramData.heizwaermebedarf_kwh as string}
-                  onChange={onInputChange}
-                  hint="Aus Energieausweis oder Schätzung"
-                />
-                <Input
-                  label="Warmwasserbedarf (kWh/Jahr)"
-                  name="param_warmwasserbedarf_kwh"
-                  type="number" step="any" min="0"
-                  value={paramData.warmwasserbedarf_kwh as string}
-                  onChange={onInputChange}
-                  hint="~500 kWh/Person/Jahr typisch"
-                />
-              </>
-            )}
+            {/* N-88/F2b (2026-08-16): Der Guard `wp_art !== 'luft_luft'` ist hier
+                WEG. Er beruhte auf der Annahme, eine Split-Klimaanlage ersetze nie
+                eine Heizung — und die ist falsch (Gernot): Eine Luft-Luft-WP kann
+                sehr wohl eine Gasheizung ersetzen. Wer damit heizt, muss den
+                Bedarf eintragen können, sonst bleibt seine Zeile für immer
+                unbewertet.
+
+                Was bleibt: die Felder werden für `luft_luft` NICHT vorbelegt
+                (`investitionFormHelpers.ts::getInitialParamData`) — genau das war
+                der N-87-Defekt, nicht das Feld selbst. Wer nur kühlt, lässt sie
+                leer und wählt oben „Nichts ersetzt (Neubau)".
+
+                Nebenwirkung, bewusst: Damit ist auch N-91 entschärft — die aus
+                einem Typwechsel im offenen Formular übernommene Vorbelegung ist
+                jetzt SICHTBAR und damit korrigierbar, statt unbemerkt
+                mitgespeichert zu werden. */}
+            <Input
+              label="Heizwärmebedarf (kWh/Jahr)"
+              name="param_heizwaermebedarf_kwh"
+              type="number" step="any" min="0"
+              value={paramData.heizwaermebedarf_kwh as string}
+              onChange={onInputChange}
+              hint={paramData.wp_art === 'luft_luft'
+                ? 'Nur wenn du mit dem Gerät heizt — sonst leer lassen'
+                : 'Aus Energieausweis oder Schätzung'}
+            />
+            <Input
+              label="Warmwasserbedarf (kWh/Jahr)"
+              name="param_warmwasserbedarf_kwh"
+              type="number" step="any" min="0"
+              value={paramData.warmwasserbedarf_kwh as string}
+              onChange={onInputChange}
+              hint={paramData.wp_art === 'luft_luft'
+                ? 'Split-Geräte haben keinen Warmwasserkreis — meist leer'
+                : '~500 kWh/Person/Jahr typisch'}
+            />
           </div>
 
           <SchalterZeile

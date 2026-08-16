@@ -39,6 +39,9 @@ Geplant (step-by-step, wenn Konsumenten angefasst werden):
 from backend.core.berechnungen.alternativkosten import (
     berechne_wp_alternativkosten_ersparnis,
     alter_wirkungsgrad,
+    alle_ersetzen_nichts,
+    ersetzt_keine_heizung,
+    ERSETZT_NICHTS,
     gas_kosten_altanlage,
 )
 from backend.core.berechnungen.co2_amortisation import (
@@ -270,6 +273,9 @@ __all__ = [
     "bilanz_aus_stundenrows",
     "berechne_wp_alternativkosten_ersparnis",
     "alter_wirkungsgrad",
+    "alle_ersetzen_nichts",
+    "ersetzt_keine_heizung",
+    "ERSETZT_NICHTS",
     "gas_kosten_altanlage",
     "QUELLE_OVERRIDE",
     "QUELLE_DEFAULT",

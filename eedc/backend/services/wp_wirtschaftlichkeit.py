@@ -30,7 +30,11 @@ from backend.core.investition_parameter import (
     PARAM_WAERMEPUMPE,
     PARAM_WAERMEPUMPE_DEFAULTS,
 )
-from backend.core.berechnungen import alter_wirkungsgrad, gas_kosten_altanlage
+from backend.core.berechnungen import (
+    alter_wirkungsgrad,
+    ersetzt_keine_heizung,
+    gas_kosten_altanlage,
+)
 from backend.core.wirtschaftlichkeit_defaults import (
     GASPREIS_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
@@ -98,6 +102,15 @@ def berechne_wp_ersparnis(
         WPErsparnisErgebnis mit Ersparnis, Komponenten und Diagnostik.
     """
     if wp_waerme_kwh <= 0:
+        return WPErsparnisErgebnis(0.0, 0.0, 0.0, 0.0, WP_WIRKUNGSGRAD_GAS_DEFAULT)
+
+    # N-88/F2b: Wer nichts ersetzt hat, spart nichts ein — auch nicht die fixen
+    # Zusatzkosten einer Anlage, die es nie gab. Der Wächter steht NEBEN dem
+    # Wärme-Wächter darüber, nicht statt seiner: Ohne gemessene Wärme gibt es
+    # keine Bezugsgröße, ohne ersetzte Heizung keinen Vergleichsgegenstand.
+    if ersetzt_keine_heizung(
+        (wp_parameter or {}).get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"])
+    ):
         return WPErsparnisErgebnis(0.0, 0.0, 0.0, 0.0, WP_WIRKUNGSGRAD_GAS_DEFAULT)
 
     wirkungsgrad = _wp_alter_wirkungsgrad(wp_parameter)

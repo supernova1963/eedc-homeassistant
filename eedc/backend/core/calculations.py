@@ -13,6 +13,7 @@ from backend.core.berechnungen import (
     berechne_netzbezug_kosten,
     eigenverbrauchsquote_prozent,
     einspeise_erloes_euro,
+    ersetzt_keine_heizung,
     gas_kosten_altanlage,
     spezifischer_ertrag_kwh_kwp,
 )
@@ -525,8 +526,16 @@ def berechne_waermepumpe_einsparung(
     # Brennstoff verfeuern; diese Rückrechnung fehlte hier und ließ die
     # ROI-Seite eine andere WP-Ersparnis nennen als Aussichten, HA-Export und
     # WP-Dashboard, die alle über `gas_kosten_altanlage` laufen.
+    # N-88/F2b: Ohne ersetzte Heizung gibt es keine Altanlage — weder ihre
+    # Brennstoffkosten noch ihre fixen Zusatzkosten. Der Wächter steht hier und
+    # nicht in `alter_wirkungsgrad`, weil ein η von 0 die Division darunter
+    # sprengen würde und ein η von 1 stillschweigend eine Stromheizung
+    # unterstellte. Die Ersparnis ist dann das Negative der WP-Stromkosten —
+    # das ist richtig so: Die Anlage kostet Geld und spart nichts ein, das ist
+    # bei einem Neubau ohne Vorgängerheizung die wahre Aussage.
+    ersetzt_nichts = ersetzt_keine_heizung(alter_energietraeger)
     wirkungsgrad = alter_wirkungsgrad(alter_energietraeger)
-    alte_kosten = (
+    alte_kosten = 0.0 if ersetzt_nichts else (
         gas_kosten_altanlage(gesamt_waermebedarf, wirkungsgrad, alter_preis_cent_kwh)
         + alternativ_zusatzkosten_jahr
     )
@@ -539,7 +548,7 @@ def berechne_waermepumpe_einsparung(
         "oel": CO2_FAKTOR_OEL_KG_KWH,
         "strom": CO2_FAKTOR_STROM_KG_KWH,
     }
-    co2_alt = (
+    co2_alt = 0.0 if ersetzt_nichts else (
         gesamt_waermebedarf / wirkungsgrad * co2_faktoren.get(alter_energietraeger, 0)
     )
     co2_wp = wp_strom_kwh * netz_anteil * CO2_FAKTOR_STROM_KG_KWH
@@ -553,7 +562,11 @@ def berechne_waermepumpe_einsparung(
     )
 
 
-def co2_wp_ersparnis_kg(wp_waerme_kwh: float, wp_strom_kwh: float) -> float:
+def co2_wp_ersparnis_kg(
+    wp_waerme_kwh: float,
+    wp_strom_kwh: float,
+    alter_energietraeger: Optional[str] = None,
+) -> float:
     """Kanonische CO₂-Ersparnis einer Wärmepumpe aus GEMESSENEN Werten (kg).
 
     Vermiedenes Gas-CO₂ (die abgegebene Wärme über den Gas-Kessel-Wirkungsgrad
@@ -571,12 +584,23 @@ def co2_wp_ersparnis_kg(wp_waerme_kwh: float, wp_strom_kwh: float) -> float:
         wp_waerme_kwh: Gemessene abgegebene Wärme (Heizung + Warmwasser).
         wp_strom_kwh: Gemessener Stromverbrauch der WP.
 
+    Args (Fortsetzung):
+        alter_energietraeger: ``Investition.parameter['alter_energietraeger']``.
+            Bei ``"nichts"`` gibt es keine vermiedene Verbrennung und damit
+            keine CO₂-Ersparnis (N-88/F2b). Der Parameter ist optional, damit
+            Alt-Aufrufer unverändert weiterlaufen — er gehört aber übergeben:
+            Diese Funktion ist die einzige erlaubte Konstruktions-Stelle, und
+            ein Filter in den zwei Aufrufern wäre genau die Duplizierung, die
+            DI-1 hier abgeschafft hat.
+
     Returns:
         CO₂-Ersparnis in kg, ungerundet. Kann bei sehr schlechter JAZ negativ
         werden; die Anzeige-Sites zeigen die Komponente roh, klammern aber die
         CO₂-Gesamtbilanz per ``max(0, …)``.
     """
     if wp_waerme_kwh <= 0:
+        return 0.0
+    if ersetzt_keine_heizung(alter_energietraeger):
         return 0.0
     vermiedenes_gas_co2 = (
         wp_waerme_kwh / WP_WIRKUNGSGRAD_GAS_DEFAULT * CO2_FAKTOR_GAS_KG_KWH
