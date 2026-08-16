@@ -96,6 +96,20 @@ export default function AnlageStep({ isLoading, error, onSubmit, onGeocode, onBa
       return
     }
 
+    // Pflichtfeld seit 2026-08-16 (Bewertungsgrenze E5) — aber NUR hier, im
+    // Setup einer neuen Anlage. Das Einstellungs-Formular zeigt bei fehlendem
+    // Datum nur eine Warnung und speichert weiter: Wer eine Bestandsanlage
+    // bearbeitet, will meist etwas ganz anderes ändern und soll dabei nicht
+    // aufgehalten werden. Den Bestand holt der Daten-Checker (STAMMDATEN,
+    // seit demselben Tag ein FEHLER).
+    if (!formData.installationsdatum) {
+      setValidationError(
+        'Bitte tragen Sie die Inbetriebnahme Ihrer Anlage ein — '
+        + 'ab diesem Monat erwartet eedc Zählerwerte'
+      )
+      return
+    }
+
     await onSubmit({
       anlagenname: formData.anlagenname.trim(),
       leistung_kwp: parseFloat(formData.leistung_kwp),
@@ -162,7 +176,8 @@ export default function AnlageStep({ isLoading, error, onSubmit, onGeocode, onBa
               label="Inbetriebnahme (Anlage)"
               value={formData.installationsdatum}
               onChange={(v) => { setFormData(prev => ({ ...prev, installationsdatum: v })); setValidationError(null) }}
-              hint="Stammdatum der Gesamt-Anlage (nicht das älteste Gerät) — für Stromtarif-Gültigkeit und Community-Vergleichszeitraum"
+              required
+              hint="Stammdatum der Gesamt-Anlage (nicht das älteste Gerät). Ab diesem Monat erwartet eedc Zählerwerte für Einspeisung und Netzbezug — fehlen sie, meldet der Daten-Checker es als Fehler. Steuert außerdem Stromtarif-Gültigkeit und Community-Vergleichszeitraum."
             />
           </div>
 

@@ -19,6 +19,7 @@ export function DatumFeld({
   max = '2099-12-31',
   required,
   hint,
+  warnung,
   disabled = false,
 }: {
   label: string
@@ -29,6 +30,19 @@ export function DatumFeld({
   max?: string
   required?: boolean
   hint?: string
+  /**
+   * Warn-MELDUNG unterhalb der Fehler-Schwelle (F3-Status-Achse: warnung ≠
+   * error) — steht amber über dem `hint`. Für Felder, deren Fehlen die Auswertung
+   * beeinträchtigt, das Speichern aber nicht blockieren soll.
+   *
+   * ⚠ Bewusst eine MELDUNG und kein Rand-Zustand wie bei {@link Input}: Der
+   * `DatumPicker` trägt seine Rahmenfarbe fest im Trigger, VOR dem
+   * durchgereichten `className` — welche Tailwind-Utility dann gewinnt,
+   * entscheidet die Reihenfolge im generierten Stylesheet, nicht die im
+   * Attribut. Ein amber Rand von außen wäre also nicht verlässlich, und kein
+   * Gate würde es merken.
+   */
+  warnung?: string
   /** Feld deaktivieren (z. B. während eines Reparatur-Laufs). */
   disabled?: boolean
 }) {
@@ -48,6 +62,9 @@ export function DatumFeld({
         ariaLabel={label}
         className="w-full min-h-[42px]"
       />
+      {warnung && (
+        <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">{warnung}</p>
+      )}
       {hint && <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{hint}</p>}
     </div>
   )

@@ -298,11 +298,20 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
           {/* R18-9 (rapahl #208): Label geschärft — das Feld ist das Stammdatum der
               GESAMT-Anlage (geht in Community-Hash + Benchmark-Zeitraum ein), nicht
               das älteste Gerät; genau diese Fehldeutung soll der Hinweis verhindern. */}
+          {/* Bewertungsgrenze E5 (2026-08-16): Das Feld fehlt bei Bestandsanlagen
+              häufig und ist inzwischen mehr als nachrichtlich — es sagt, ab wann
+              eedc Zählerwerte erwartet. Bewusst WARNUNG statt Pflicht: Wer hier
+              landet, will meist etwas anderes ändern und soll dabei nicht
+              aufgehalten werden (Entscheid Gernot). Pflicht ist es nur im
+              Setup-Wizard, für neue Anlagen; den Bestand holt der Daten-Checker. */}
           <DatumFeld
             label="Inbetriebnahme (Anlage)"
             value={formData.installationsdatum}
             onChange={(v) => setFormData(prev => ({ ...prev, installationsdatum: v }))}
-            hint="Stammdatum der Gesamt-Anlage (nicht das älteste Gerät) — steuert u. a. den Community-Vergleichszeitraum „seit Installation“"
+            warnung={formData.installationsdatum
+              ? undefined
+              : 'Fehlt — ohne dieses Datum weiß eedc nicht, ab wann es Zählerwerte erwarten darf.'}
+            hint="Stammdatum der Gesamt-Anlage (nicht das älteste Gerät). Ab diesem Monat erwartet eedc Zählerwerte für Einspeisung und Netzbezug — fehlen sie, meldet der Daten-Checker es als Fehler. Steuert außerdem den Community-Vergleichszeitraum „seit Installation“."
           />
         </div>
         <div className="mt-4">
