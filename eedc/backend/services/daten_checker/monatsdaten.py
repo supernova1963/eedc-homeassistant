@@ -353,16 +353,26 @@ class MonatsdatenChecks:
                 meldung=f"Alle {len(erwartete)} Monate vollständig",
             ))
         else:
-            # Maximal 12 fehlende Monate einzeln auflisten, dann zusammenfassen
+            # ⚑ FEHLER, nicht Warnung (Bewertungsgrenze E4a, 2026-08-16). Einspeisung
+            # und Netzbezug sind die Basis-Daten: Ohne sie gibt es keine Bilanz, und
+            # ohne Bilanz weiß eedc nicht, woher der Strom eines Geräts kam. Eine
+            # fehlende Einspeisung liest `direktverbrauch = max(0, PV − Einspeisung −
+            # Speicherladung)` als 0 — die ganze Erzeugung gilt dann als
+            # Eigenverbrauch und wird mit dem Netz- statt dem Einspeisepreis
+            # bewertet. An einem echten Monat gemessen: 621,83 € statt 281,76 €.
+            # Die Zahl war also nicht ungenau, sondern systematisch zu gut; deshalb
+            # ist ein fehlender Monat ab dem Anker kein Schönheitsfehler.
+            # Der auflösende Schritt steht im Link (P-6): der Monatsabschluss
+            # genau dieses Monats.
             for jahr, monat in fehlende[:12]:
                 ergebnisse.append(CheckErgebnis(
-                    kategorie=kat, schwere=CheckSeverity.WARNING,
+                    kategorie=kat, schwere=CheckSeverity.ERROR,
                     meldung=f"{monat:02d}/{jahr} fehlt",
                     link=f"/monatsabschluss/{anlage.id}/{jahr}/{monat}",
                 ))
             if len(fehlende) > 12:
                 ergebnisse.append(CheckErgebnis(
-                    kategorie=kat, schwere=CheckSeverity.WARNING,
+                    kategorie=kat, schwere=CheckSeverity.ERROR,
                     meldung=f"... und {len(fehlende) - 12} weitere Monate fehlen",
                     link="/einstellungen/monatsdaten",
                 ))

@@ -53,11 +53,22 @@ class StammdatenChecks:
         kat = CheckKategorie.STAMMDATEN
 
         # Installationsdatum
+        # ⚑ FEHLER, nicht Warnung (Bewertungsgrenze E4c, 2026-08-16): Dieses Datum
+        # ist der Anker dafür, ab wann eedc überhaupt Zählerwerte erwartet. Fehlt
+        # er, fällt der Erwartungsrahmen auf die Erzeuger bzw. auf die vorhandenen
+        # Daten selbst zurück (`core/monats_luecken.ermittle_start_anker`) — eine
+        # Lücke am Anfang kann dann niemand mehr sehen, weil der Anfang aus der
+        # Lücke abgeleitet wird.
         if anlage.installationsdatum is None:
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.WARNING,
+                kategorie=kat, schwere=CheckSeverity.ERROR,
                 meldung="Installationsdatum nicht gesetzt",
-                details="Wird für Vollständigkeitsprüfung der Monatsdaten benötigt",
+                details=(
+                    "Ohne dieses Datum weiß eedc nicht, ab wann es Zählerwerte für "
+                    "Einspeisung und Netzbezug erwarten darf — eine fehlende Zeile "
+                    "am Anfang der Historie fällt dann nicht auf. Trage die "
+                    "Inbetriebnahme deiner Anlage ein."
+                ),
                 link="/einstellungen/anlage",
             ))
         else:
@@ -70,12 +81,20 @@ class StammdatenChecks:
         # Dann gab es Erzeugung, bevor die Anlage laut Stammdaten existierte —
         # eines der beiden Daten stimmt nicht, und der erwartete Monatsbereich
         # beginnt zu spät (der Anker ist seit N-243 das Installationsdatum).
-        # ⚠ BEWUSST nur Erzeuger: Eine Wallbox, ein E-Auto oder eine Heizung aus
-        # der Zeit vor der PV-Anlage ist der Normalfall und völlig korrekt
-        # gepflegt. Ein Hinweis darauf wäre die F-30-Klasse — ein zulässiger
-        # Zustand, als Defekt gemeldet — und würde Anwender zum Umdatieren
-        # drängen; genau das hat fridolin22 (Forum T77723 #773) getan und dabei
-        # die echte Historie seines Fahrzeugs verloren.
+        # ⚠ Dieser WARNUNGS-Befund bleibt bewusst auf Erzeuger beschränkt: Nur bei
+        # ihnen stimmt wirklich eines der beiden Daten nicht (es gab Erzeugung,
+        # bevor es die Anlage gab). Eine Wallbox, ein E-Auto oder eine Heizung aus
+        # der Zeit vor der PV-Anlage ist dagegen der Normalfall und völlig korrekt
+        # gepflegt — als Defekt gemeldet wäre das die F-30-Klasse und würde
+        # Anwender zum Umdatieren drängen; genau das hat fridolin22 (Forum T77723
+        # #773) getan und dabei die echte Historie seines Fahrzeugs verloren.
+        #
+        # ⚑ Ergänzt 2026-08-16 (Bewertungsgrenze E4b): Die anderen Typen bekommen
+        # jetzt trotzdem eine Zeile — aber als INFO und mit umgekehrter Richtung
+        # ("pflege Zählerwerte nach bzw. korrigiere das Anlagendatum", NICHT
+        # "datiere das Gerät um"). Der Zustand ist zulässig und bleibt es; was ihn
+        # erwähnenswert macht, ist die Auskunft, dass für die Zeit davor keine
+        # Bilanz existiert. Siehe den Block direkt darunter.
         if anlage.installationsdatum is not None:
             fruehere = [
                 inv for inv in (anlage.investitionen or [])
@@ -100,6 +119,45 @@ class StammdatenChecks:
                         + ". Für die Monate dazwischen fragt eedc keine Zählerwerte ab, "
                         "obwohl dort bereits Strom erzeugt wurde. Korrigiere das Datum, "
                         "das nicht stimmt — meist das Installationsdatum der Anlage."
+                    ),
+                    link="/einstellungen/anlage",
+                ))
+
+            # E4b: Geräte, die KEINE Erzeuger sind und älter als die Anlage. Das
+            # ist zulässig und häufig — deshalb INFO (Auskunft), nicht WARNING
+            # (Defekt). Gemeldet wird nicht das Gerät, sondern die Datenlage: Für
+            # die Zeit vor der Anlage gibt es keine Einspeisungs- und
+            # Netzbezugswerte und damit keine Bilanz; eedc kann für diese Monate
+            # nicht sagen, ob der Strom gekauft oder selbst erzeugt war.
+            aeltere_geraete = [
+                inv for inv in (anlage.investitionen or [])
+                if inv.typ not in PV_ERZEUGER_TYPEN
+                and inv.anschaffungsdatum is not None
+                and inv.anschaffungsdatum < anlage.installationsdatum
+            ]
+            if aeltere_geraete:
+                aeltestes = min(aeltere_geraete, key=lambda i: i.anschaffungsdatum)
+                ergebnisse.append(CheckErgebnis(
+                    kategorie=kat, schwere=CheckSeverity.INFO,
+                    meldung=(
+                        f"Gerät älter als die Anlage: „{aeltestes.bezeichnung}“ seit "
+                        f"{aeltestes.anschaffungsdatum.strftime('%d.%m.%Y')}"
+                    ),
+                    details=(
+                        f"Deine Anlage ist seit dem "
+                        f"{anlage.installationsdatum.strftime('%d.%m.%Y')} eingetragen"
+                        + (
+                            f" ({len(aeltere_geraete)} Geräte betroffen)"
+                            if len(aeltere_geraete) > 1 else ""
+                        )
+                        + ". Das ist normal: Ein Auto oder eine Heizung aus der Zeit "
+                        "vor der PV-Anlage ist der Regelfall. Für die Monate davor "
+                        "liegen keine Einspeisungs- und Netzbezugswerte vor — eedc "
+                        "kann dort nicht sagen, ob der Strom gekauft oder selbst "
+                        "erzeugt war. Hast du Zählerwerte aus dieser Zeit, pflege sie "
+                        "nach; stimmt das Datum der Anlage nicht, korrigiere dieses. "
+                        "Datiere nicht das Gerät um — die Anschaffungshistorie ginge "
+                        "verloren."
                     ),
                     link="/einstellungen/anlage",
                 ))
