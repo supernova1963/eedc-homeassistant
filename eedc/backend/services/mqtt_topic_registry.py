@@ -178,8 +178,8 @@ async def build_expected_topics(
                 "feld_label": live_feld["label"],
                 "einheit": live_feld.get("einheit", ""),
                 "hinweis": live_feld.get("hinweis", ""),
-                "bedarf": get_feld_bedarf(inv.typ, live_feld["key"])[0],
-                "bedarf_gruppe": get_feld_bedarf(inv.typ, live_feld["key"])[1],
+                "bedarf": get_feld_bedarf(inv.typ, live_feld["key"], inv.parameter)[0],
+                "bedarf_gruppe": get_feld_bedarf(inv.typ, live_feld["key"], inv.parameter)[1],
                 "gruppe_id": gruppe_id,
                 "gruppe_titel": gruppe_titel,
             })
@@ -196,8 +196,10 @@ async def build_expected_topics(
                 "feld_label": feld["label"],
                 "einheit": feld.get("einheit", ""),
                 "hinweis": feld.get("hinweis", ""),
-                "bedarf": get_feld_bedarf(inv.typ, feld["feld"])[0],
-                "bedarf_gruppe": get_feld_bedarf(inv.typ, feld["feld"])[1],
+                # Mit `inv.parameter`, weil (typ, feld) allein die Wärmemengen-
+                # Erwartung einer Split-Klimaanlage nicht auflösen kann (N-86).
+                "bedarf": get_feld_bedarf(inv.typ, feld["feld"], inv.parameter)[0],
+                "bedarf_gruppe": get_feld_bedarf(inv.typ, feld["feld"], inv.parameter)[1],
                 # Roh durchgereicht — die Zuordnungs-Fläche wertet selbst aus
                 # (markieren statt filtern, s. get_felder_fuer_investition).
                 # Auch `nur_manuell` wird hier NICHT gefiltert: die Registry ist

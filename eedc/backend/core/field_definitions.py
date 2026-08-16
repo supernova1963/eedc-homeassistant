@@ -52,6 +52,8 @@ Feld-Attribute:
 
 from typing import Optional
 
+from backend.core.investition_parameter import ist_luft_luft_waermepumpe
+
 
 # =============================================================================
 # Basis-Felder (Monatsdaten — Zählerwerte)
@@ -635,6 +637,7 @@ FELD_BEDARF: dict[tuple[str, str], tuple[str, Optional[str]]] = {
     ("waermepumpe", "stromverbrauch_kwh"): ("pflicht", "wp_strom"),
     ("waermepumpe", "strom_heizen_kwh"): ("pflicht", "wp_strom"),
     ("waermepumpe", "strom_warmwasser_kwh"): ("pflicht", "wp_strom"),
+    # Ausnahme Split-Klimaanlage: s. KLIMA_OHNE_WAERMEMENGE unter der Tabelle.
     ("waermepumpe", "heizenergie_kwh"): ("pflicht", None),
     ("waermepumpe", "warmwasser_kwh"): ("optional", None),
     ("waermepumpe", "leistung_w"): ("optional", None),
@@ -667,10 +670,41 @@ FELD_BEDARF: dict[tuple[str, str], tuple[str, Optional[str]]] = {
 # Felder kategorie-abhängig erzeugt werden): nie rot, nie als Lücke gezählt.
 FELD_BEDARF_DEFAULT: tuple[str, Optional[str]] = ("optional", None)
 
+# Felder, deren Pflicht bei einer Split-Klimaanlage (`wp_art="luft_luft"`) entfällt.
+#
+# Die Tabelle oben kennt nur (typ, feld) — für die Wärmepumpe reicht das nicht: eine
+# Split-Klimaanlage hat weder Wärmemengenzähler noch Warmwasserkreis. Genau deshalb
+# stellt der Daten-Checker die „Heizwärme fehlt"-Forderung dort seit K-0 NICHT mehr
+# (`daten_checker/monatsdaten.py::_check_wp_monatsdaten`, Begründung dort:
+# „Dauer-Falschpositiv"). Die Zuordnungs-Fläche stellte sie weiter — dieselbe Anlage,
+# zwei Flächen, gegenteilige Aussage: der Checker schwieg, *Einstellungen →
+# Datenquellen* zeigte „Heizwärme" rot, aufgeklappt und zählte sie als offene Pflicht
+# (Fund N-86; Melder mit Klimaanlage: dietmar1968 #89667/87, kingcap1 #263).
+#
+# „optional" und nicht „inaktiv": inaktiv heißt „ein anderer Weg gewinnt"
+# (Alternativ-Gruppe belegt, verdrängendes Gerät) — hier gewinnt kein anderer Weg,
+# die Größe existiert an diesem Gerät schlicht nicht. Wer doch einen
+# Wärmemengenzähler an seiner Klimaanlage hat, ordnet ihn weiterhin zu.
+#
+# `warmwasser_kwh` steht bewusst nicht hier: es ist ohnehin schon „optional".
+KLIMA_OHNE_WAERMEMENGE: frozenset[tuple[str, str]] = frozenset({
+    ("waermepumpe", "heizenergie_kwh"),
+})
 
-def get_feld_bedarf(typ: str, feld: str) -> tuple[str, Optional[str]]:
-    """Bedarf + Alternativ-Gruppe eines Felds — siehe {@link FELD_BEDARF}."""
-    return FELD_BEDARF.get((typ, feld), FELD_BEDARF_DEFAULT)
+
+def get_feld_bedarf(
+    typ: str, feld: str, parameter: Optional[dict] = None,
+) -> tuple[str, Optional[str]]:
+    """Bedarf + Alternativ-Gruppe eines Felds — siehe {@link FELD_BEDARF}.
+
+    `parameter` ist das `Investition.parameter`-Dict des Geräts (auf Anlagen-Ebene
+    None). Ohne es bleibt die reine (typ, feld)-Einstufung — Aufrufer, die keinen
+    Geräte-Kontext haben, müssen nichts wissen.
+    """
+    bedarf = FELD_BEDARF.get((typ, feld), FELD_BEDARF_DEFAULT)
+    if (typ, feld) in KLIMA_OHNE_WAERMEMENGE and ist_luft_luft_waermepumpe(parameter):
+        return ("optional", bedarf[1])
+    return bedarf
 
 
 # Typen mit SoC-Live-Sensor (aus LIVE_FELDER_INV abgeleitet)

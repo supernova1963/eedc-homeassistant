@@ -280,3 +280,58 @@ async def test_klassische_wp_bekommt_die_gas_vergleichs_hinweise_weiterhin(db):
     offen = _gas_meldungen(ergebnisse)
     for erwartet in GAS_VERGLEICHS_MELDUNGEN:
         assert any(erwartet in m for m in offen), f"fehlt: {erwartet}"
+
+
+# ─── N-86: dieselbe Unterscheidung auf der Zuordnungs-Fläche ─────────────────
+#
+# Der Daten-Checker schweigt seit K-0 zur fehlenden Heizwärme (die Tests oben).
+# *Einstellungen → Datenquellen* und die MQTT-Topic-Liste taten das Gegenteil:
+# sie zeigten „Heizwärme" rot, aufgeklappt und zählten sie als offene Pflicht.
+# Beide lesen ihre Einstufung aus `build_expected_topics`, deshalb wird hier
+# die Fläche geprüft und nicht nur `get_feld_bedarf` — der Weg von der Tabelle
+# bis zum Response-Feld ist der Teil, der vorher gefehlt hat.
+
+async def _bedarf_je_feld(db, *, parameter: dict) -> dict[str, str]:
+    """{feldname: bedarf} der Investitions-Einträge aus der Topic-Registry."""
+    from backend.services.mqtt_topic_registry import build_expected_topics
+
+    anlage, _ = await _anlage_mit_wp(db, parameter=parameter)
+    eintraege = await build_expected_topics(db, anlage, investitionen=anlage.investitionen)
+    return {
+        e["feld"]: e["bedarf"] for e in eintraege
+        if e["match_key"][0] in ("inv_energy", "inv_live")
+    }
+
+
+async def test_klima_fordert_die_heizwaerme_nicht_als_pflicht(db):
+    """Klimaanlage: „Heizwärme" ist auf der Zuordnungs-Fläche optional."""
+    bedarf = await _bedarf_je_feld(db, parameter={"wp_art": "luft_luft"})
+
+    assert bedarf["heizenergie_kwh"] == "optional", (
+        "Eine Split-Klimaanlage hat keinen Wärmemengenzähler — die Fläche darf "
+        "dort keine Pflicht ausweisen, während der Daten-Checker dazu schweigt"
+    )
+    # Der Strom bleibt Pflicht: K-0b entfernt die Wärme-Erwartung, nicht das Gerät.
+    assert bedarf["stromverbrauch_kwh"] == "pflicht"
+
+
+async def test_klassische_wp_fordert_die_heizwaerme_weiterhin(db):
+    """Negativprobe: bei Luft-Wasser bleibt die Heizwärme Pflicht.
+
+    Ohne sie wäre die Ausnahme oben nicht von „heizenergie_kwh ist jetzt
+    überall optional" zu unterscheiden.
+    """
+    bedarf = await _bedarf_je_feld(db, parameter={"wp_art": "luft_wasser"})
+
+    assert bedarf["heizenergie_kwh"] == "pflicht"
+
+
+async def test_wp_ohne_wp_art_bleibt_klassisch(db):
+    """Altbestand ohne `wp_art` zählt als klassische WP — wie der SoT-Helper.
+
+    Eine fehlende Angabe darf die Wärmemengen-Erwartung nicht stillschweigend
+    abschalten (Begründung im Docstring von `ist_luft_luft_waermepumpe`).
+    """
+    bedarf = await _bedarf_je_feld(db, parameter={})
+
+    assert bedarf["heizenergie_kwh"] == "pflicht"
