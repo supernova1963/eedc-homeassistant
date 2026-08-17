@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.0.18] - 2026-08-17 — Einrichtung, die nicht gegen dich arbeitet
 
 ### Added
 
