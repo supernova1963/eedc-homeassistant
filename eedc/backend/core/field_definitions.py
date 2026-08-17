@@ -1391,13 +1391,49 @@ def get_emob_pv_netz_kwh(data: dict, total_kwh: float | None = None) -> tuple[fl
     return (pv, max(0.0, total_kwh - pv))
 
 
+# Die Verbrauchs-Felder eines *Sonstiges*-Geräts, in Präzedenz-Reihenfolge:
+# `verbrauch_sonstig_kwh` ist der **kanonische** Registry-Name — so heißt der
+# `sensor_mapping`-Key, und unter diesem Namen publiziert eedc auch sein
+# MQTT-Topic. `verbrauch_kwh` ist der Legacy-Zwilling und bleibt nur lesbar
+# (Altbestand im Mapping); er darf nie zusätzlich zählen, beide gehören
+# derselben Either-Or-Gruppe an.
+SONSTIGES_VERBRAUCH_FELDER: tuple[str, ...] = ("verbrauch_sonstig_kwh", "verbrauch_kwh")
+
+
+def sonstiges_feld_reihenfolge(kategorie: str | None) -> tuple[str, ...]:
+    """Energie-Felder eines *Sonstiges*-Geräts in **Präzedenz-Reihenfolge**.
+
+    Ein solches Gerät hat entweder eine Erzeugung oder einen Verbrauch, nie
+    beides — die gepflegte ``kategorie`` sagt, welches Feld führt. Wer keine
+    gepflegt hat, wird als Verbraucher gelesen (dieselbe Lesart wie in den
+    Schreibpfaden, siehe ``berechnungen.energie.sonstiges_richtung``).
+
+    **Warum das eine Funktion ist (N-259).** Dieselbe Reihenfolge stand am
+    16.08.2026 an **drei** Stellen handgeschrieben — und ein einziger
+    abweichender Name hat gereicht, damit eedc ein MQTT-Topic **selbst
+    publizierte und beim Einlesen wieder verwarf**: Der Snapshot suchte
+    ``verbrauch_kwh``, die Zuordnungsfläche schrieb ``verbrauch_sonstig_kwh``.
+    Der Monat kam trotzdem an (dieser Getter liest beide), der Tageswert nicht —
+    es sah nach „Wert fehlt" aus statt nach „Feld wird nirgends gefunden".
+    Eine vierte Kopie wäre dieselbe Wette noch einmal.
+    """
+    if kategorie == "erzeuger":
+        return ("erzeugung_kwh", *SONSTIGES_VERBRAUCH_FELDER)
+    return (*SONSTIGES_VERBRAUCH_FELDER, "erzeugung_kwh")
+
+
 def get_sonstiges_verbrauch_kwh(data: dict) -> float:
     """Sonstiges-Verbraucher-Energie. Liest `verbrauch_sonstig_kwh` (kanonisch),
-    Legacy-Fallback `verbrauch_kwh`.
+    Legacy-Fallback `verbrauch_kwh` — Reihenfolge aus
+    `SONSTIGES_VERBRAUCH_FELDER`, damit sie nicht neben dem SoT driftet.
     """
     if not data:
         return 0.0
-    return float(data.get("verbrauch_sonstig_kwh") or data.get("verbrauch_kwh") or 0)
+    for feld in SONSTIGES_VERBRAUCH_FELDER:
+        wert = data.get(feld)
+        if wert:
+            return float(wert)
+    return 0.0
 
 
 def get_wp_strom_kwh(data: dict, params: dict | None = None) -> float:

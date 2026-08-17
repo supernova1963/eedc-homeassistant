@@ -43,6 +43,37 @@ export function berechneHausverbrauch(s: StundenWert, extraVerbraucher: SerieInf
   return round2(Math.max(0, s.verbrauch_kw - (s.waermepumpe_kw ?? 0) - (s.wallbox_kw ?? 0) - vbrS))
 }
 
+/**
+ * Rohwert einer Komponenten-Serie → **Anzeigewert** für Tabelle, Σ-Zeile und CSV.
+ *
+ * **Der Befund (N-261).** `TagesEnergieProfil.komponenten` trägt die Vorzeichen-
+ * Konvention des **Tagesverlauf-Diagramms**: Quellen nach oben, Senken nach
+ * unten, deshalb bekommt jede Senke ein Minus
+ * (`live_tagesverlauf_service.py`, `seite === 'senke'` ⇒ `-abs(...)`). Für ein
+ * gestapeltes Diagramm ist das richtig. Die Stundentabelle gibt dieselben Werte
+ * jedoch **roh** aus — und dort behauptet ein Minus „so viel wurde *nicht*
+ * verbraucht". Gemeldet hat es rapahl, ohne es als Fehler zu benennen: Sein
+ * Heizstab stand mit **−3,14 / −2,45**, Σ **−5,59 kWh** in der Spalte.
+ *
+ * Betroffen ist ausschließlich, was **aus `komponenten` kommt** — an der
+ * dev-Box gemessen: `sonstige_12` 355 negative Stunden, `waermepumpe_4` 2838,
+ * `wallbox_3/5` je 336, während jede Quelle ausnahmslos positiv steht. Die
+ * eigenen Spalten (`waermepumpe_kw`, `wallbox_kw`, `verbrauch_kw`) kommen aus
+ * dem Zähler-Pfad und waren nie betroffen.
+ *
+ * ⚠ **`bidirektional` behält sein Vorzeichen** — genau wie die Batterie-Spalte
+ * daneben: dort *ist* die Richtung die Aussage (Laden gegen Entladen).
+ *
+ * ⚠ **Diese Funktion fasst die Arithmetik NICHT an.** `berechneHausverbrauch`
+ * oben liest die Rohwerte direkt aus `StundenWert.komponenten` und braucht das
+ * Minus (`Math.abs(Math.min(0, …))`). Wer beides zusammenlegt, zieht die
+ * Sonstiges-Verbraucher zweimal ab.
+ */
+export function alsAnzeigewert(roh: number | null | undefined, seite: string): number | null {
+  if (roh == null) return null
+  return seite === 'senke' ? Math.abs(roh) : roh
+}
+
 type TdGroup = 'erzeugung' | 'netz' | 'verbrauch' | 'bilanz' | 'qualitaet'
 
 interface TdColDef {
@@ -181,8 +212,11 @@ export function TagWerteTabelle({ daten, extraSerien, erzeugerSerien = [], datum
           ...raw,
           gesamterzeugung: s ? calcGesamterzeugung(s) : null,
           hausverbrauch:   s ? calcHausverbrauch(s)   : null,
-          ...Object.fromEntries(extraSerien.map(es => [es.key, s?.komponenten?.[es.key] ?? null])),
-          ...Object.fromEntries(erzeugerSpalten.map(es => [es.key, s?.komponenten?.[es.key] ?? null])),
+          // N-261: Senken kommen mit dem Minus des Butterfly-Diagramms herein.
+          // `alsAnzeigewert` streift es hier ab — EINE Stelle für Zelle,
+          // Σ-Zeile und CSV-Export, die alle drei aus `vals` lesen.
+          ...Object.fromEntries(extraSerien.map(es => [es.key, alsAnzeigewert(s?.komponenten?.[es.key], es.seite)])),
+          ...Object.fromEntries(erzeugerSpalten.map(es => [es.key, alsAnzeigewert(s?.komponenten?.[es.key], es.seite)])),
         } as Record<string, number | null>,
       }
     })

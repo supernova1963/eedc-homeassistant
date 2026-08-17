@@ -11,6 +11,32 @@
 
 ## Noch nicht veröffentlicht
 
+### Geräte unter „Sonstiges" zeigen ihren Verbrauch richtig
+
+Ein Heizstab, eine Poolpumpe oder eine Klimasteckdose stand in *Cockpit → Tag* mit **negativen**
+Stundenwerten — in der Summenzeile etwa „−5,59 kWh". Das kam aus dem Diagramm darüber: Dort werden
+Quellen nach oben und Verbraucher nach unten gezeichnet, und dafür bekommt jeder Verbraucher ein
+Minus. In einer **Tabelle** bedeutet dasselbe Minus aber etwas völlig anderes.
+
+In Tabelle, Summenzeile und CSV-Export steht jetzt der Betrag. Die **Batterie behält ihr
+Vorzeichen** — dort sagt die Richtung, ob geladen oder entladen wurde. Es wurde nichts
+umgerechnet: **Auch alle zurückliegenden Tage sind sofort richtig**, du musst nichts neu berechnen.
+Energiebilanz, Hausverbrauch und Monatswerte waren nie betroffen.
+
+### Und sie rechnen jetzt mit deinem Zähler statt mit einer Schätzung
+
+Hast du so einem Gerät einen **kWh-Zähler** zugeordnet, nimmt eedc jetzt dessen Werte. Bisher
+entstanden die Stundenwerte aus dem Mittelwert des **Leistungssensors** — bei einem Heizstab, der
+mit 6 kW an- und wieder ausschaltet, wird das schnell ungenau: gemeldet wurden 5,59 kWh für einen
+Tag, an dem der Energiezähler 3,0 kWh zeigte. Wärmepumpe, Wallbox und PV machen das längst so.
+
+Die **Kurvenform** im Diagramm kommt weiter vom Leistungssensor — nur die Menge stammt jetzt vom
+Zähler. Hast du nur einen Leistungssensor, ändert sich nichts; genauer geht es dort nicht.
+Zurückliegende Tage holst du dir über *Einstellungen → Daten → **Tag neu berechnen***.
+
+*Beides ist an einem Screenshot von rapahl sichtbar geworden — die Ursache der zweiten Sache hat
+er selbst richtig vermutet.*
+
 ### Dein erster Stromtarif deckt jetzt seinen ganzen Monat ab
 
 Legst du deinen **ersten** Tarif an, schlägt eedc als „Gültig ab" das Inbetriebnahme-Datum deiner

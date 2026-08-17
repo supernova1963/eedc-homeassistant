@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any, Callable, Iterable, Optional
 
+from backend.core.field_definitions import sonstiges_feld_reihenfolge
 from backend.services.snapshot.keys import BASIS_ZAEHLER_FELDER, _categorize_counter
 
 # Das Feld, mit dem ein Erzeuger seinen EIGENEN kumulativen PV-Zähler trägt.
@@ -377,12 +378,7 @@ def investition_beitraege(
             if isinstance(params, dict)
             else "verbraucher"
         )
-        verbrauch_felder = ("verbrauch_sonstig_kwh", "verbrauch_kwh")
-        reihenfolge = (
-            ("erzeugung_kwh", *verbrauch_felder)
-            if kategorie == "erzeuger"
-            else (*verbrauch_felder, "erzeugung_kwh")
-        )
+        reihenfolge = sonstiges_feld_reihenfolge(kategorie)
         gruppe = f"sonstiges_either_or_{inv_id_str}"
         for feld in reihenfolge:
             _add(feld, fallback_gruppe=gruppe)

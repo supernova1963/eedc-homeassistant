@@ -22,6 +22,7 @@ from backend.services.live_sensor_config import (
     baue_investitions_serien,
     extract_live_config,
 )
+from backend.core.field_definitions import sonstiges_feld_reihenfolge
 from backend.services.live_history_service import (
     _MONATSABSCHLUSS_KWH,
     _feld_eid,
@@ -34,6 +35,7 @@ logger = logging.getLogger(__name__)
 
 def _resolve_counter_eid(
     typ: str, suffix: Optional[str], felder: dict,
+    parameter: Optional[dict] = None,
 ) -> Optional[str]:
     """kWh-Zähler-Entity einer Investitions-Serie — deckungsgleich mit der
     Bevorzugung in ``get_tages_kwh`` (Kacheln).
@@ -43,12 +45,31 @@ def _resolve_counter_eid(
     Heizen/Warmwasser) haben keinen eigenen kWh-Zähler → None (Mean-Pfad).
     Speicher ist bidirektional → bewusst kein Zähler-Pfad (None → Mean, mit
     erhaltenem Vorzeichen).
+
+    **Neu für *Sonstiges* (N-261, Melder rapahl).** Ein Gerät unter *Sonstiges*
+    fiel hier durch alle Zweige und landete im Mean-Pfad — die Stunden-Energie
+    kam also aus dem **Stundenmittel der Leistung**, auch wenn ein kWh-Zähler
+    gemappt war. Bei einem Heizstab mit kurzen 6-kW-Impulsen überschätzt das
+    grob: gemeldet **5,59 kWh** gegen **3,0 kWh** am Energiemesser. Die
+    Feldreihenfolge kommt aus dem Registry-SoT (``sonstiges_feld_reihenfolge``),
+    nicht aus einer vierten handgepflegten Liste — genau daran hing N-259.
+
+    ⚠ **Der Zähler ersetzt nur die ENERGIE, nicht die Kurvenform** — die kommt
+    weiter aus dem Leistungssensor (``kurven_leistung_mit_live_fallback``). Wer
+    nur den Zähler gemappt hat, bekommt hier nichts Neues; wer nur die Leistung
+    hat, bleibt im Mean-Pfad.
     """
     if typ in ERZEUGER_TYPEN:
         return _feld_eid(felder.get("pv_erzeugung_kwh", {}))
     if suffix is None and typ in _MONATSABSCHLUSS_KWH:
         field, _ = _MONATSABSCHLUSS_KWH[typ]
         return _feld_eid(felder.get(field, {}))
+    if suffix is None and typ == "sonstiges":
+        kategorie = (parameter or {}).get("kategorie")
+        for feld in sonstiges_feld_reihenfolge(kategorie):
+            eid = _feld_eid(felder.get(feld, {}))
+            if eid:
+                return eid
     return None
 
 
@@ -107,7 +128,7 @@ def _baue_short_term_overlays(
         if inv is None:
             continue
         felder = (mapping_inv.get(spec.inv_id, {}) or {}).get("felder", {}) or {}
-        counter_eid = _resolve_counter_eid(inv.typ, spec.suffix, felder)
+        counter_eid = _resolve_counter_eid(inv.typ, spec.suffix, felder, inv.parameter)
         if counter_eid:
             counter_src[power_eid] = counter_eid
         else:
