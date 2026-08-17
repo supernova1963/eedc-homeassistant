@@ -97,6 +97,14 @@ Fast immer steckt eine „Ladung" dahinter, in der nur die **PV-Ladung** steht, 
 **Netzladung** als zweiter Posten daneben gepflegt ist — in das Feld *Ladung* gehört die
 **gesamte** Ladung. Der Daten-Checker sagt dir das, samt betroffenem Feld.
 
+Zwei Stellen — das **Speicher-Dashboard** und die Liste in *Auswertungen → ROI* — haben so einen
+Wert bisher still auf **glatt 100,0 %** gerundet. Das war die unangenehmere Variante: Die Zahl sah
+plausibel aus, und du konntest ihr nicht ansehen, dass gemessen etwas ganz anderes dasteht. Auch
+sie rechnen jetzt nach derselben Regel. Für die **Wirtschaftlichkeits-Prognose** ändert sich
+nichts an der Systematik: Wo sich kein Wirkungsgrad ermitteln lässt, rechnet eedc weiter mit dem
+**gepflegten** Wert aus den Speicher-Parametern — so wie bisher schon bei zu kurzem Zeitraum, und
+weiterhin gekennzeichnet.
+
 **Hast du plausible Werte, ändert sich für dich nichts** — unter 100 % steht dieselbe Zahl wie
 bisher. **Ein Hinweis für Home Assistant:** In diesem Fall liefert der Sensor *Speicher-Effizienz*
 jetzt gar keinen Wert mehr (`unknown`) statt eines falschen. In der Langzeitstatistik entsteht

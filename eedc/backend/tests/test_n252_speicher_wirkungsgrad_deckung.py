@@ -37,30 +37,37 @@ BRAUCHT_DEN_SOT = [
     "api/routes/aktueller_monat.py",
     "core/berechnungen/speicher.py",
     "services/energie_profil/tage_werte.py",
+    # N-264: der letzte Pfad mit eigener Semantik (stilles Cap auf 100 %).
+    "services/speicher_wirtschaftlichkeit.py",
 ]
+
+#: Der Daten-Checker ist der **einzige** legitime Verwender des ungekappten
+#: Diagnose-Helpers — er meldet den Überschuss und braucht ihn dafür sichtbar.
+#: Er steht deshalb weder in `BRAUCHT_DEN_SOT` (er darf gerade nicht kappen)
+#: noch in `BEWUSST_ROH` (er rechnet seit N-264 nicht mehr selbst, sondern ruft
+#: `speicher_effizienz_prozent`). Diese Probe hält beides fest.
+DIAGNOSE_VERWENDER = "services/daten_checker/stammdaten.py"
 
 #: Stellen, die den rohen Quotienten mit voller Absicht behalten — je mit
 #: Grund. Eine Zeile ohne Grund gehört nicht in diese Liste.
 BEWUSST_ROH = {
-    # Der Daten-Checker MELDET den Überschuss gerade — er braucht die
-    # ungekappte Zahl, um sie im Befundtext nennen zu können.
-    "services/daten_checker/stammdaten.py",
     # Prognose- und Potenzialpfade klemmen selbst (min(...)) und brauchen
     # einen Wert, keine fehlende Aussage.
     "services/speicher_potential_service.py",
     "api/routes/aussichten.py",
     # Die Heimat der Regel selbst.
     "core/berechnungen/speicher_wirkungsgrad.py",
-    # ⚠ UNBEWERTET, mit Trigger (N-264): Diese beiden tragen eine DRITTE
-    # Semantik für dieselbe Frage. `services/speicher_wirtschaftlichkeit.py`
-    # klemmt im langen Fenster still auf `min(1.0, …)` — bei 104 % steht dort
-    # also glatt „100 %" statt „nicht ermittelbar"; `speicher.py::
-    # speicher_effizienz_prozent` liefert bewusst ungekappt (F-22: „Diagnose
-    # statt stillem Cap") und hat seit N-252 keinen Produktivverwender mehr.
-    # Beides ist ein Entscheid, kein Nachzug — deshalb hier notiert statt
-    # nebenbei geändert (Regel 6). Trigger: nächster Eingriff an einer der
-    # beiden Stellen.
-    "services/speicher_wirtschaftlichkeit.py",
+    # `speicher.py::speicher_effizienz_prozent` ist der **Diagnose**-Helper:
+    # ungekappt, damit der Daten-Checker den Überschuss zeigen kann. Er darf
+    # keine Anzeige-Größe liefern — das hält der Deckungs-Prüfer unten fest,
+    # denn `speicher.py` steht zugleich in `BRAUCHT_DEN_SOT`.
+    #
+    # ⚑ N-264 (17.08.): `services/speicher_wirtschaftlichkeit.py` stand hier
+    # bis eben als „unbewertet" daneben — sie klemmte im langen Fenster still
+    # auf `min(1.0, …)` und zeigte bei 104 % glatt **100,0 %**, während
+    # *Cockpit → Jahr* seit N-252 „—" schrieb. Die dritte Semantik ist
+    # aufgelöst, die Datei ist raus aus dieser Liste und steht jetzt in
+    # `BRAUCHT_DEN_SOT`.
     "core/berechnungen/speicher.py",
 }
 
@@ -80,28 +87,65 @@ def _py_dateien():
         yield rel, pfad
 
 
-def _prosa_zeilen(quelle: str) -> set[int]:
-    """Zeilennummern, die zu einem String-Literal gehören (Docstrings inklusive).
+def _ohne_prosa(quelle: str) -> list[str]:
+    """Die Quelle zeilenweise, aber mit **ausgeblendeten String-Inhalten**.
 
     Ohne das misst der Prüfer die **Erklärung** der Regel statt ihrer
     Anwendung: Die Docstrings von `speicher.py` und
     `speicher_wirtschaftlichkeit.py` schreiben „entladung / ladung" aus, um zu
     begründen, warum man es *nicht* so machen soll. Ein Prüfer, der darüber
     rot geht, erzieht dazu, die Begründung zu löschen.
+
+    ⚠ **Warum spaltengenau und nicht zeilenweise.** Die erste Fassung hat
+    jede Zeile verworfen, die *irgendwo* ein String-Literal enthielt — und
+    fiel damit beim Sprengsatz-Durchgang zu N-264 durch: Die Zeile
+
+        eta = type('E', (), {'quelle': 'fenster_lang',
+                             'prozent': entladung_kwh / ladung_kwh})()
+
+    trägt vier Literale und war deshalb komplett unsichtbar. Der Sprengsatz
+    zündete, und der Prüfer blieb grün. **Ein Prüfer, der zu viel ausblendet,
+    ist schlimmer als keiner** — er behauptet Deckung, die es nicht gibt.
+    Jetzt verschwindet nur der Text *innerhalb* der Anführungszeichen; Code
+    daneben bleibt sichtbar.
     """
-    zeilen: set[int] = set()
+    zeilen = quelle.splitlines()
     try:
         baum = ast.parse(quelle)
     except SyntaxError:
         # Mindestens eine Datei im Baum trägt ein BOM. Sie soll den baumweiten
-        # Prüfer nicht anhalten — ohne Prosa-Filter prüft er dort strenger,
-        # nie schwächer.
+        # Prüfer nicht anhalten — ohne Filter prüft er dort strenger, nie
+        # schwächer.
         return zeilen
+
+    # `col_offset` zählt UTF-8-**Bytes**, nicht Zeichen — bei Umlauten in
+    # Docstrings läge ein Zeichen-Slice daneben.
+    roh = [z.encode("utf-8") for z in zeilen]
+
+    def leeren(idx: int, von: int, bis: int) -> None:
+        if 0 <= idx < len(roh):
+            z = roh[idx]
+            bis = len(z) if bis < 0 else min(bis, len(z))
+            von = max(0, min(von, len(z)))
+            if von < bis:
+                roh[idx] = z[:von] + b" " * (bis - von) + z[bis:]
+
     for knoten in ast.walk(baum):
-        if isinstance(knoten, ast.Constant) and isinstance(knoten.value, str):
-            ende = getattr(knoten, "end_lineno", knoten.lineno) or knoten.lineno
-            zeilen.update(range(knoten.lineno, ende + 1))
-    return zeilen
+        if not (isinstance(knoten, ast.Constant) and isinstance(knoten.value, str)):
+            continue
+        start_z = knoten.lineno - 1
+        end_z = (getattr(knoten, "end_lineno", knoten.lineno) or knoten.lineno) - 1
+        start_s = knoten.col_offset
+        end_s = getattr(knoten, "end_col_offset", -1)
+        if start_z == end_z:
+            leeren(start_z, start_s, end_s)
+        else:
+            leeren(start_z, start_s, -1)
+            for i in range(start_z + 1, end_z):
+                leeren(i, 0, -1)
+            leeren(end_z, 0, end_s)
+
+    return [z.decode("utf-8", errors="replace") for z in roh]
 
 
 # ── Hälfte 1: Abwesenheit ────────────────────────────────────────────────────
@@ -114,13 +158,11 @@ def test_p252_kein_roher_eta_quotient_ausserhalb_der_ausnahmen():
         if rel in BEWUSST_ROH:
             continue
         quelle = pfad.read_text(encoding="utf-8")
-        prosa = _prosa_zeilen(quelle)
-        for nr, zeile in enumerate(quelle.splitlines(), 1):
-            if nr in prosa:
-                continue
+        original = quelle.splitlines()
+        for nr, zeile in enumerate(_ohne_prosa(quelle), 1):
             nackt = zeile.split("#", 1)[0]
             if _ROH.search(nackt):
-                treffer.append(f"{rel}:{nr}: {zeile.strip()}")
+                treffer.append(f"{rel}:{nr}: {original[nr - 1].strip()}")
     assert not treffer, (
         "Roher Speicher-η-Quotient gefunden. Nutze "
         "`core/berechnungen/speicher_wirkungsgrad.speicher_wirkungsgrad` — er "
@@ -158,6 +200,61 @@ def test_p252_wer_die_regel_braucht_importiert_sie(rel: str):
         "`speicher_wirkungsgrad` nicht. Genau so entsteht die zweite "
         "Definition, die N-252 an sieben Stellen hatte."
     )
+
+
+def test_p252_der_prosa_filter_blendet_text_aus_aber_keinen_code():
+    """Der Prüfer über dem Prüfer — beide Richtungen.
+
+    Beim Sprengsatz-Durchgang zu N-264 blieb der Abwesenheits-Prüfer grün,
+    obwohl der Sprengsatz gezündet hatte: Die erste Fassung des Filters
+    verwarf **ganze Zeilen**, sobald sie irgendein String-Literal enthielten.
+    Diese Probe hält beide Fehlerrichtungen fest — zu wenig ausblenden (die
+    Begründung wird als Verstoß gemeldet) und zu viel (ein Verstoß wird
+    unsichtbar).
+    """
+    # Richtung 1: Text in einem Docstring ist unsichtbar.
+    nur_prosa = '"""Erklärung: entladung_kwh / ladung_kwh ist falsch."""\nx = 1\n'
+    assert not any(_ROH.search(z) for z in _ohne_prosa(nur_prosa))
+
+    # Richtung 2: Code NEBEN einem Literal bleibt sichtbar — der Fall, an dem
+    # der Filter durchfiel.
+    getarnt = "e = type('E', (), {'quelle': 'lang', 'p': entladung_kwh / ladung_kwh})()\n"
+    assert any(_ROH.search(z) for z in _ohne_prosa(getarnt)), (
+        "Der Filter blendet Code aus, nicht nur Text — genau der Fehler, den "
+        "Sprengsatz S9 aufgedeckt hat."
+    )
+
+    # Und Umlaute davor dürfen die Spaltenrechnung nicht verschieben.
+    mit_umlaut = "s = 'Größe über Maß'; y = entladung_kwh / ladung_kwh\n"
+    assert any(_ROH.search(z) for z in _ohne_prosa(mit_umlaut))
+
+
+def test_p264_der_diagnose_verwender_ruft_den_helper_und_kappt_nicht():
+    """Die Trennlinie zwischen Diagnose und Anzeige, an einer Stelle festgehalten.
+
+    Der Daten-Checker meldet „Entladung > Ladung" und muss den Überschuss dafür
+    **sehen** — er ist der einzige, der den ungekappten Helper benutzen darf.
+    Nähme er `speicher_wirkungsgrad`, stünde in seiner eigenen Fehlermeldung
+    „nicht ermittelbar" statt der Zahl, die den Fehler belegt.
+
+    Umgekehrt darf er die Formel nicht **selbst** schreiben: Ein ungenutzter
+    Helper neben einer handgeschriebenen Kopie derselben Formel ist exakt die
+    Ausgangslage, aus der N-252 entstanden ist (N-264).
+    """
+    quelle = (BACKEND / DIAGNOSE_VERWENDER).read_text(encoding="utf-8")
+    assert "speicher_effizienz_prozent(" in quelle, (
+        "Der Daten-Checker muss den Diagnose-Helper rufen, statt die Division "
+        "selbst zu schreiben."
+    )
+    assert "speicher_wirkungsgrad" not in quelle, (
+        "Der Daten-Checker darf NICHT den kappenden SoT nehmen — sonst "
+        "verschwindet die Zahl, mit der er den Befund belegt."
+    )
+
+    # Und der Helper selbst kappt weiterhin nicht — sonst wäre die Diagnose weg.
+    from backend.core.berechnungen.speicher import speicher_effizienz_prozent
+
+    assert speicher_effizienz_prozent(100.0, 107.0) == pytest.approx(107.0)
 
 
 def test_p252_die_liste_der_deckungspflichtigen_ist_nicht_leer_gelaufen():

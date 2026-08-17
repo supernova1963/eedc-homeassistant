@@ -19,7 +19,10 @@ from backend.core.investition_parameter import (
     ist_dienstlich,
     ist_luft_luft_waermepumpe,
 )
-from backend.core.berechnungen import pruefe_speicher_netzladung_kumulativ
+from backend.core.berechnungen import (
+    pruefe_speicher_netzladung_kumulativ,
+    speicher_effizienz_prozent,
+)
 from backend.core.wirtschaftlichkeit_defaults import NETZBEZUG_DEFAULT_CENT
 from backend.core.field_definitions import get_speicher_netzladung_kwh
 from backend.core.investition_kennwerte import (
@@ -874,8 +877,17 @@ class StammdatenChecks:
                 # als reine PV-Ladung gepflegt, Netzladung separat daneben. Dann
                 # ist der Nenner zu klein — und der Check oben schlägt NICHT an,
                 # solange Netz < Gesamt bleibt. Deshalb steht das im Befundtext.
+                #
+                # Seit N-264 über den Diagnose-Helper statt inline: `speicher_
+                # effizienz_prozent` ist genau für diesen einen Zweck gebaut
+                # (ungekappt, damit man den Überschuss SIEHT) und hatte nach
+                # N-252 sonst keinen Verwender mehr — ein ungenutzter Helper
+                # neben einer handgeschriebenen Kopie derselben Formel ist die
+                # Ausgangslage, aus der N-252 entstanden ist.
                 if gesamt_ladung_kwh > 0 and gesamt_entladung_kwh > gesamt_ladung_kwh:
-                    _eta = gesamt_entladung_kwh / gesamt_ladung_kwh * 100
+                    _eta = speicher_effizienz_prozent(
+                        gesamt_ladung_kwh, gesamt_entladung_kwh
+                    ) or 0.0
                     _hinweis = (
                         f"Über die gesamte Historie stehen {gesamt_entladung_kwh:.0f} kWh "
                         f"Entladung gegen {gesamt_ladung_kwh:.0f} kWh Ladung "

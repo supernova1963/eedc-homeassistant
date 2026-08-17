@@ -360,11 +360,38 @@ async def berechne_ist_wirkungsgrad(
         )
 
     # Pfad 1: langes Fenster, ΔSoC vernachlässigbar (mittelt sich aus).
+    #
+    # ⚠ Hier stand bis zum 17.08.2026 `min(1.0, entladung_kwh / ladung_kwh)` —
+    # ein **stilles Cap** und damit eine dritte Semantik derselben Frage
+    # (N-264): Bei 104 % zeigte diese Stelle glatt **100,0 %**, während Pfad 2
+    # direkt darunter längst den Layer-SoT rief und *Cockpit → Jahr* seit
+    # N-252 „—" schreibt. Zwei Sichten derselben Anlage nannten damit
+    # verschiedene Wirkungsgrade, und die plausibel aussehende Zahl war die
+    # falsche — ein Anwender konnte nicht erkennen, dass gemessen etwas
+    # anderes dasteht.
+    #
+    # Ein Wert über 100 % ist keine Aussage über den Speicher, sondern über
+    # die erfassten Mengen (#281). Ihn auf 100 % zu runden verdeckt genau das,
+    # was der Daten-Checker daneben meldet. Das lange Fenster ändert daran
+    # nichts: Es mittelt den SoC-Übertrag aus, nicht eine Fehlpflege.
+    #
+    # `mindest_ladung_kwh=0.0` hält die Schwelle dieses Pfads unverändert
+    # (`ladung_kwh <= 0` steht oben) — wie in Pfad 2.
     if fenster_monate >= WIRKUNGSGRAD_FENSTER_MONATE_MIN:
-        wirkungsgrad = min(1.0, entladung_kwh / ladung_kwh)
+        eta_lang = speicher_wirkungsgrad(
+            ladung_kwh, entladung_kwh, None,
+            mindest_ladung_kwh=0.0,
+            langes_fenster_quelle="fenster_lang",
+        )
         return WirkungsgradErgebnis(
-            quelle="fenster_lang",
-            wirkungsgrad_prozent=wirkungsgrad * 100,
+            # Die Quelle kommt aus derselben Ableitung wie der Wert. Bei einem
+            # unmöglichen Quotienten heißt sie `nicht-ermittelbar` — die
+            # Aufrufer lösen das bereits sauber auf: die Anzeige zeigt „—" mit
+            # Grund, die Prognose-Rechnung fällt auf den gepflegten Param-η
+            # zurück (`_aufloesen_wirkungsgrad`), genau wie bei
+            # `fenster-zu-kurz`.
+            quelle=eta_lang.quelle,
+            wirkungsgrad_prozent=eta_lang.prozent,
             fenster_monate=fenster_monate,
             ladung_kwh=ladung_kwh,
             entladung_kwh=entladung_kwh,

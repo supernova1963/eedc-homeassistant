@@ -43,13 +43,23 @@ class MonatsEffizienz:
 def speicher_effizienz_prozent(
     ladung_kwh: float, entladung_kwh: float
 ) -> Optional[float]:
-    """Round-Trip-Effizienz in % über ein Fenster: entladung / ladung × 100.
+    """Round-Trip-Effizienz in % — **Diagnose-Helper, keine Anzeige-Größe.**
 
-    Nur belastbar über ein Fenster mit ΔSoC ≈ 0 (langes Fenster). Über eine
-    einzelne Monatsgrenze ist der Wert durch den SoC-Übertrag verzerrt und
-    kann 100 % überschreiten — dann KEINE Pro-Monats-Effizienz exponieren,
-    sondern `gleitende_effizienz()` nutzen. Die Funktion klemmt bewusst NICHT
-    (Diagnose statt stillem Cap).
+    Die Funktion klemmt bewusst NICHT: Sie existiert, damit ein Überschuss
+    *sichtbar* wird, statt auf 100 % gerundet zu verschwinden.
+
+    ⚠ **Wer einen Wert für eine Anzeige, einen Sensor oder eine Rechnung
+    braucht, nimmt `speicher_wirkungsgrad` aus
+    `core/berechnungen/speicher_wirkungsgrad.py`** — dort gilt die Obergrenze,
+    und der Rückgabewert trägt seine Herkunft mit. Diese Trennung ist seit
+    N-252/N-264 verbindlich und gewächtert
+    (`test_n252_speicher_wirkungsgrad_deckung.py`).
+
+    **Einziger Verwender ist deshalb der Daten-Checker** (`daten_checker/
+    stammdaten.py`), der den Überschuss meldet und ihn dafür ungekappt
+    braucht. Zwischen N-252 und N-264 hatte die Funktion **gar keinen**
+    Verwender mehr und stand als zweite, wartende Definition im Baum — genau
+    die Ausgangslage, aus der N-252 entstanden war.
 
     Gibt `None` zurück, wenn keine Ladung vorliegt.
     """
