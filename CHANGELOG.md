@@ -7,6 +7,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Der erste Stromtarif einer Anlage gilt jetzt ab Monatsanfang — vorher fiel der Inbetriebnahme-Monat durch.** Wer seinen ersten Tarif anlegt, bekommt „Gültig ab" vorbelegt: mit dem **Inbetriebnahme-Datum** der Anlage. Das ist gut gemeint — es verhindert, dass importierte Altmonate hinter den Tarif fallen —, aber bei den wenigsten ist die Inbetriebnahme der Monatserste. Und eedc fragt beim Rechnen **mit dem Monatsersten** nach dem gültigen Tarif: Ein Tarif ab dem **03.08.** deckt den August damit **nicht** ab, der ganze Monat rechnet mit den Standardwerten (30 ct Netzbezug), obwohl sichtbar ein Tarif gepflegt ist. Wer die Vorbelegung stehen ließ, verlor also reproduzierbar seinen ersten Monat. Die Vorbelegung wird jetzt auf den **Monatsersten desselben Monats** gezogen — an drei Stellen: im Setup-Assistenten, bei dessen „Standardwerte verwenden" und im Formular unter *Einstellungen → Strompreise*. ⚠ **Die Stichtagsregel selbst bleibt unverändert:** Ein Monat hat genau **einen** Preis, ein Tarif ab Monatsmitte wirkt weiterhin erst im Folgemonat. Geändert wird nur der **Vorschlag**, nicht die Rechnung. ⚠ **Ab dem zweiten Tarif ändert sich nichts** — dort ist „heute" die richtige Annahme (Tarifwechsel), und ihn auf den Monatsanfang zu ziehen würde den Wechsel rückdatieren. ⚠ **Bestehende Tarife werden nicht angefasst.** Wer den Effekt bei sich vermutet, sieht ihn im Daten-Checker: Er meldet seit v4.0.16 als **Fehler**, wenn Monate mit Daten vor dem ersten Tarif liegen — das Datum lässt sich dort von Hand korrigieren. *(Gefunden von Knallfrosch, Forum simon42, der die Differenz nachgerechnet hat: 14,27 € erwartet gegen 16,05 € angezeigt.)*
+
+### Changed
+
+- **Intern: die Demo-Daten enthalten jetzt auch einen Verbraucher unter *Sonstiges*.** Bisher stand dort nur ein Erzeuger (das Mini-BHKW). Das war eine Prüf-Blindstelle: Ein *Sonstiges*-Erzeuger heißt intern auf beiden Seiten gleich und war von dem Feldnamen-Fehler aus v4.0.17 nie betroffen — ein *Sonstiges*-**Verbraucher** schon. Neu ist ein „Heizstab Warmwasser" mit saisonalen Monatswerten. Für Anwender ändert sich nichts außer einem zusätzlichen Gerät im Demo-Bestand.
+
+---
+
 ## [4.0.17] - 2026-08-16 — Nicht bewertet heißt keine Zahl
 
 ### Fixed

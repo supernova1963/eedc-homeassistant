@@ -18,6 +18,7 @@ import { strompreiseApi } from '../api/strompreise'
 import { investitionenApi, type InvestitionCreate } from '../api/investitionen'
 import { pvgisApi, type GespeichertePrognose } from '../api/pvgis'
 import { TYP_LABELS } from '../lib/constants'
+import { monatsersterVon } from '../lib/datum'
 import type { Anlage, Strompreis, Investition, InvestitionTyp } from '../types'
 
 // Wizard-Schritte (v1.0: ohne HA)
@@ -346,7 +347,9 @@ export function useSetupWizard(): UseSetupWizardReturn {
       netzbezug_arbeitspreis_cent_kwh: DEFAULT_STROMPREISE.netzbezug_arbeitspreis_cent_kwh,
       einspeiseverguetung_cent_kwh: DEFAULT_STROMPREISE.einspeiseverguetung_cent_kwh,
       grundpreis_euro_monat: DEFAULT_STROMPREISE.grundpreis_euro_monat,
-      gueltig_ab: anlage.installationsdatum || new Date().toISOString().split('T')[0],
+      // N-257: siehe `monatsersterVon` — der Inbetriebnahme-Tag ist selten der
+      // Monatserste, und der Stichtag der Monatsrechnung ist es immer.
+      gueltig_ab: monatsersterVon(anlage.installationsdatum) || new Date().toISOString().split('T')[0],
       tarifname: 'Standard-Tarif',
     })
   }, [wizardState.anlageId, anlage, createStrompreis])

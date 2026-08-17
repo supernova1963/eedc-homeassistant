@@ -9,6 +9,30 @@
 
 ---
 
+## Noch nicht veröffentlicht
+
+### Dein erster Stromtarif deckt jetzt seinen ganzen Monat ab
+
+Legst du deinen **ersten** Tarif an, schlägt eedc als „Gültig ab" das Inbetriebnahme-Datum deiner
+Anlage vor. Das ist sinnvoll — sonst fallen importierte Altmonate hinter den Tarif. Nur: eedc
+rechnet einen Monat immer mit **einem** Preis und fragt dafür am **Monatsersten** nach dem
+gültigen Tarif. Stand dort der 3. August, war der August nicht abgedeckt, und der ganze Monat
+rechnete mit den Standardwerten — obwohl sichtbar ein Tarif gepflegt war.
+
+Der Vorschlag springt jetzt auf den **Monatsanfang**. An deiner Rechnung ändert das nichts: Die
+Regel „ein Monat, ein Preis" bleibt, ein späterer Tarifwechsel wirkt weiterhin erst im
+Folgemonat. Und ab dem **zweiten** Tarif bleibt „heute" der Vorschlag — ein Wechsel soll nicht
+rückwirkend gelten.
+
+**Bestehende Tarife rührt das Update nicht an.** Ob es dich betrifft, sagt dir der Daten-Checker:
+Er meldet als Fehler, wenn Monate mit Daten vor deinem ersten Tarif liegen. Dort kannst du das
+Datum von Hand auf den Monatsanfang ziehen.
+
+*Gefunden hat es Knallfrosch im Forum — er hat nachgerechnet und kam auf 14,27 € statt der
+angezeigten 16,05 €.*
+
+---
+
 ## v4.0.17 — Nicht bewertet heißt keine Zahl
 
 > Ein Nachtrag zu v4.0.16, gefunden beim Durchspielen der neuen Fälle: Die Zeilen, die seit gestern „nicht bewertet" sagen können, zeigten in einer Spalte trotzdem eine Zahl.

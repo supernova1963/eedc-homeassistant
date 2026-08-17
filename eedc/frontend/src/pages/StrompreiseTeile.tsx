@@ -12,7 +12,7 @@ import { Plus, Edit, Trash2, Zap, Calendar, Check } from 'lucide-react'
 import { Button, Card, Modal, EmptyState, Alert, Input, DatumFeld, Select, RadioGroup, FormSection } from '../components/ui'
 import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from '../components/ui'
 import { useAnlage, useStrompreise } from '../hooks'
-import { GELD_TEXT_CLASS, fmtZahl, heuteIso, EINSPEISEVERGUETUNG_FLAT_HINWEIS } from '../lib'
+import { GELD_TEXT_CLASS, fmtZahl, heuteIso, monatsersterVon, EINSPEISEVERGUETUNG_FLAT_HINWEIS } from '../lib'
 import type { Strompreis, StrompreisVerwendung } from '../types'
 import type { StrompreisCreate, StrompreisUpdate } from '../api'
 
@@ -48,6 +48,31 @@ export function aktuelleTarifIds(strompreise: Strompreis[]): Set<number> {
     if (!bisher || sp.gueltig_ab > bisher.gueltig_ab) jungster.set(verwendung, sp)
   }
   return new Set([...jungster.values()].map((sp) => sp.id))
+}
+
+/**
+ * Vorbelegung für „Gültig ab" — **nur beim ersten Tarif einer Anlage**.
+ *
+ * Zwei Regeln in einer Funktion, weil sie sich gegenseitig begrenzen:
+ *
+ * 1. **Erster Tarif → Inbetriebnahme-Datum**, damit importierte Altmonate nicht
+ *    hinter den Tarif fallen (Forum #89667/60, Algie).
+ * 2. **Auf den Monatsersten gezogen (N-257)** — die Monatsrechnung fragt mit dem
+ *    Monatsersten nach dem Tarif, ein Tarif ab dem 03.08. deckt den August also
+ *    nicht ab. Wer die Vorbelegung stehen ließ, verlor reproduzierbar seinen
+ *    ersten Monat.
+ *
+ * ⚠ **Ab dem zweiten Tarif `undefined`, und das ist der Punkt.** Dort ist
+ * „heute" die richtige Annahme (Tarifwechsel); ihn auf den Monatsersten zu
+ * ziehen würde den Wechsel **rückdatieren** und dem laufenden Monat den neuen
+ * Preis geben. Die Regel darf also ausdrücklich nicht weiter gefasst werden.
+ */
+export function erstTarifVorbelegung(
+  anzahlTarife: number,
+  installationsdatum: string | null | undefined,
+): string | undefined {
+  if (anzahlTarife > 0) return undefined
+  return monatsersterVon(installationsdatum)
 }
 
 export function verwendungLabel(v: StrompreisVerwendung): string {
@@ -364,8 +389,9 @@ export function StrompreiseVerwaltung({
   // Nur beim ERSTEN Tarif vorbelegen: ab dem zweiten ist „heute" die richtige
   // Annahme (Tarifwechsel), und ein bestehender Eintrag darf nicht überschrieben
   // wirken. Siehe `gueltigAbVorbelegung` in StrompreisFormProps.
-  const gueltigAbVorbelegung =
-    sorted.length === 0 ? anlage?.installationsdatum || undefined : undefined
+  // Benannte Regel statt Inline-Ausdruck, damit ein Rückbau nicht stumm bleibt:
+  // die Grenze „nur beim ERSTEN Tarif" ist die eigentliche Aussage (N-257).
+  const gueltigAbVorbelegung = erstTarifVorbelegung(sorted.length, anlage?.installationsdatum)
 
   const [showForm, setShowForm] = useState(false)
   const [editingStrompreis, setEditingStrompreis] = useState<Strompreis | null>(null)

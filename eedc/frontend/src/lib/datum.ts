@@ -105,3 +105,29 @@ export function verschiebeIsoTage(iso: string, tage: number): string {
   d.setDate(d.getDate() + tage)
   return toIsoDatum(d)
 }
+
+/**
+ * ISO-Datums-Key → **Monatserster desselben Monats** (`'2026-08-03'` → `'2026-08-01'`).
+ *
+ * **Wozu (N-257).** Ein Tarif gilt ab seinem Stichtag, und die Monatsrechnung
+ * fragt mit dem **Monatsersten** danach — ein Tarif ab dem 03.08. deckt den
+ * August deshalb nicht ab, der ganze Monat rechnet mit Standardwerten. Das ist
+ * die gewollte Regel (ADR-002/P8: ein Monat hat EINEN Preis), und sie bleibt.
+ *
+ * Die Falle stellte eedc selbst: Beim **ersten** Tarif einer Anlage wird
+ * „Gültig ab" mit dem **Inbetriebnahme-Datum** vorbelegt, und das ist bei den
+ * wenigsten der Monatserste. Wer die Vorbelegung stehen ließ, verlor
+ * reproduzierbar seinen ersten Monat — gefunden hat es ein Anwender, der die
+ * Differenz von Hand nachrechnete (14,27 € erwartet gegen 16,05 € angezeigt).
+ *
+ * ⚠ **Nur für die Vorbelegung aus dem Inbetriebnahme-Datum gedacht.** Beim
+ * *zweiten* Tarif ist „heute" die richtige Annahme (Tarifwechsel), und den auf
+ * den Monatsersten zu ziehen würde einen Wechsel rückdatieren.
+ *
+ * Rein textlich gerechnet, ohne `Date` — es gibt hier keine Zeitzone zu kippen.
+ */
+export function monatsersterVon(iso: string | null | undefined): string | undefined {
+  if (!iso) return undefined
+  const m = /^(\d{4})-(\d{2})/.exec(iso)
+  return m ? `${m[1]}-${m[2]}-01` : undefined
+}

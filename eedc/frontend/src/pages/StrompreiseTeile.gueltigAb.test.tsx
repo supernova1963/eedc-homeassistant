@@ -14,7 +14,7 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 
-import { StrompreisForm } from './StrompreiseTeile'
+import { StrompreisForm, erstTarifVorbelegung } from './StrompreiseTeile'
 import type { Strompreis } from '../types'
 
 /** Der DatumPicker ist ein Button mit ausgeschriebenem Datum, kein <input>. */
@@ -74,5 +74,33 @@ describe('StrompreisForm — Vorbelegung „Gültig ab"', () => {
     render(<StrompreisForm anlageId={1} onCreate={async () => {}} onCancel={() => {}} />)
 
     expect(screen.getByText(/Monate davor rechnen mit der Vorbelegung/)).toBeInTheDocument()
+  })
+})
+
+// N-257: Die Ableitung stand bis zum 17.08.2026 als Inline-Ausdruck in der
+// Seite — ein Rückbau daran wäre von den Proben oben NICHT bemerkt worden
+// (sie reichen `gueltigAbVorbelegung` von außen herein). Deshalb ist sie jetzt
+// eine benannte Regel mit eigener Probe.
+describe('erstTarifVorbelegung (N-257)', () => {
+  it('zieht das Inbetriebnahme-Datum auf den Monatsersten', () => {
+    expect(erstTarifVorbelegung(0, '2023-04-17')).toBe('2023-04-01')
+    expect(erstTarifVorbelegung(0, '2025-08-03')).toBe('2025-08-01')
+  })
+
+  it('lässt einen Monatsersten unverändert', () => {
+    expect(erstTarifVorbelegung(0, '2023-04-01')).toBe('2023-04-01')
+  })
+
+  it('schweigt ab dem ZWEITEN Tarif — sonst würde ein Wechsel rückdatiert', () => {
+    // Die eigentliche Aussage der Regel. Ein Tarifwechsel am 12.09. gilt ab dem
+    // 12.09.; auf den 01.09. gezogen bekäme der laufende Monat rückwirkend den
+    // neuen Preis.
+    expect(erstTarifVorbelegung(1, '2023-04-17')).toBeUndefined()
+    expect(erstTarifVorbelegung(5, '2023-04-17')).toBeUndefined()
+  })
+
+  it('schweigt ohne gepflegtes Inbetriebnahme-Datum', () => {
+    expect(erstTarifVorbelegung(0, null)).toBeUndefined()
+    expect(erstTarifVorbelegung(0, undefined)).toBeUndefined()
   })
 })

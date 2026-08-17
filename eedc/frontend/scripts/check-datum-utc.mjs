@@ -80,7 +80,14 @@ const ERLAUBT_ZEILEN = new Map([
   // istGueltigHeute() darüber ist umgestellt; hier geht es um das Formular-Default.
   // ⚠ Zeilennummer, nicht Inhalt: jede Einfügung darüber macht diesen Eintrag
   // falsch-rot (zuletzt am 08.08.2026 durch vier Kommentarzeilen).
-  ['src/pages/StrompreiseTeile.tsx', new Set([549])],
+  // 549 → 575 am 17.08.2026 (N-257: Kommentar + die benannte Regel
+  // `erstTarifVorbelegung` darüber). ⚑ **Dritte Nachführung dieser einen
+  // Pinnung** — die Zeilennummer ist als Anker das eigentliche Problem, und der
+  // Kasten darüber sagt es seit dem 08.08. selbst. Immerhin meldet der Prüfer
+  // die Verschiebung LAUT (rot), er verschluckt sie nicht; der Umbau auf einen
+  // Inhalts-Anker ist deshalb Komfort, nicht Sicherheit, und braucht einen
+  // Entscheid (ein Inhalts-Anker erlaubt dieselbe Zeile ungewollt mehrfach).
+  ['src/pages/StrompreiseTeile.tsx', new Set([575])],
 ])
 
 function quellDateien(dir) {

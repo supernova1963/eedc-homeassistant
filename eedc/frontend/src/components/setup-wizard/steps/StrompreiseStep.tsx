@@ -6,7 +6,7 @@ import { useState, FormEvent } from 'react'
 import { Zap, ArrowLeft, ArrowRight, Sparkles } from 'lucide-react'
 import { Alert, Button, Input, DatumFeld } from '../../ui'
 import { DEFAULT_STROMPREISE } from '../../../hooks/useSetupWizard'
-import { EINSPEISEVERGUETUNG_FLAT_HINWEIS } from '../../../lib'
+import { EINSPEISEVERGUETUNG_FLAT_HINWEIS, monatsersterVon } from '../../../lib'
 import type { Anlage } from '../../../types'
 
 interface StrompreiseStepProps {
@@ -44,7 +44,9 @@ export default function StrompreiseStep({
     netzbezug_arbeitspreis_cent_kwh: DEFAULT_STROMPREISE.netzbezug_arbeitspreis_cent_kwh.toString(),
     einspeiseverguetung_cent_kwh: defaultEinspeisung.toString(),
     grundpreis_euro_monat: DEFAULT_STROMPREISE.grundpreis_euro_monat.toString(),
-    gueltig_ab: anlage?.installationsdatum || new Date().toISOString().split('T')[0],
+    // N-257: Monatserster statt Inbetriebnahme-Tag — ein Tarif ab Monatsmitte
+    // deckt seinen eigenen Monat nicht ab (SoT `monatsersterVon`).
+    gueltig_ab: monatsersterVon(anlage?.installationsdatum) || new Date().toISOString().split('T')[0],
     tarifname: '',
     anbieter: '',
   })

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { formatDatum, formatZeitraumKurz, jaNein, heuteIso, toIsoDatum, verschiebeIsoTage } from './datum'
+import { formatDatum, formatZeitraumKurz, jaNein, heuteIso, toIsoDatum, verschiebeIsoTage, monatsersterVon } from './datum'
 
 // Drift-Gate (detLAN-Gegencheck 6, 2026-06-28): Runtime-Absicherung des Datums-/
 // Boolean-Anzeige-SoT. `check-de-de.mjs` flaggt rohe ISO-Datums-Anzeigen statisch;
@@ -105,5 +105,47 @@ describe('heuteIso / toIsoDatum / verschiebeIsoTage (F-5)', () => {
     expect(verschiebeIsoTage('2026-03-29', 1)).toBe('2026-03-30')
     expect(verschiebeIsoTage('2026-10-24', 1)).toBe('2026-10-25')
     expect(verschiebeIsoTage('2026-10-25', 1)).toBe('2026-10-26')
+  })
+})
+
+// N-257: Die Tarif-Vorbelegung stellte die Falle, die eedc anschließend meldete.
+// „Gültig ab" wurde beim ERSTEN Tarif mit dem Inbetriebnahme-Datum vorbelegt,
+// die Monatsrechnung fragt aber mit dem Monatsersten — ein Tarif ab dem 03.08.
+// deckte den August nicht ab, der ganze Monat rechnete mit Standardwerten.
+// Gefunden hat es ein Anwender, der 14,27 € gegen 16,05 € nachrechnete.
+describe('monatsersterVon (N-257: Tarif-Vorbelegung)', () => {
+  it('zieht einen Tag mitten im Monat auf den Monatsersten', () => {
+    expect(monatsersterVon('2025-08-03')).toBe('2025-08-01')
+    expect(monatsersterVon('2023-06-17')).toBe('2023-06-01')
+    expect(monatsersterVon('2024-02-29')).toBe('2024-02-01')
+    expect(monatsersterVon('2026-12-31')).toBe('2026-12-01')
+  })
+
+  it('lässt einen Monatsersten unverändert (Idempotenz)', () => {
+    expect(monatsersterVon('2025-08-01')).toBe('2025-08-01')
+    expect(monatsersterVon(monatsersterVon('2025-08-03'))).toBe('2025-08-01')
+  })
+
+  it('wechselt WEDER Monat NOCH Jahr — auch nicht am Rand', () => {
+    // Die Falle einer Date-basierten Implementierung: ein Tag am Monatsanfang
+    // oder -ende kippt über die Zeitzone in den Nachbarmonat. Hier wird rein
+    // textlich gerechnet, deshalb steht es als Zusage im Test.
+    expect(monatsersterVon('2026-01-01')).toBe('2026-01-01')
+    expect(monatsersterVon('2026-01-31')).toBe('2026-01-01')
+    expect(monatsersterVon('2025-12-31')).toBe('2025-12-01')
+  })
+
+  it('verträgt einen vollen ISO-Zeitstempel', () => {
+    expect(monatsersterVon('2025-08-03T14:22:00Z')).toBe('2025-08-01')
+  })
+
+  it('gibt undefined zurück, wo nichts gepflegt ist — KEIN heute-Ersatz', () => {
+    // Wichtig für die Aufrufer: sie schreiben `monatsersterVon(x) || heute`.
+    // Käme hier ein Datum heraus, würde eine ungepflegte Anlage still eine
+    // Vorbelegung bekommen, die niemand eingegeben hat.
+    expect(monatsersterVon(null)).toBeUndefined()
+    expect(monatsersterVon(undefined)).toBeUndefined()
+    expect(monatsersterVon('')).toBeUndefined()
+    expect(monatsersterVon('kein Datum')).toBeUndefined()
   })
 })
