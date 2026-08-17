@@ -93,7 +93,7 @@ from backend.core.berechnungen import (
     einspeise_erloes_euro,
     gleitende_effizienz,
     pruefe_speicher_durchsatz_konsistenz,
-    speicher_effizienz_prozent,
+    speicher_wirkungsgrad,
     spezifischer_ertrag_kwh_kwp,
     summe_graue_last,
     vollzyklen as berechne_vollzyklen,
@@ -1127,7 +1127,14 @@ async def get_speicher_dashboard(
         # Effizienz — Σentladung/Σladung über die gesamte Historie. Über ein
         # langes Fenster mittelt sich der SoC-Übertrag aus (siehe
         # core/berechnungen/speicher.py); pro Monat wäre der Wert verzerrt.
-        effizienz = speicher_effizienz_prozent(gesamt_ladung, gesamt_entladung) or 0
+        # Seit N-252 über den Layer-SoT: Er trägt dieselbe Rechnung, aber er
+        # kappt bei 100 % und sagt dann, WARUM kein Wert kommt. Das `or 0`, das
+        # hier stand, machte aus „nicht ermittelbar" eine glatte 0 % — dieselbe
+        # Fake-0-Klasse wie in N-87.
+        _eta = speicher_wirkungsgrad(
+            gesamt_ladung, gesamt_entladung, None, langes_fenster_quelle="fenster_lang"
+        )
+        effizienz = _eta.prozent
         verlauf = gleitende_effizienz(monats_reihe)
         durchsatz = pruefe_speicher_durchsatz_konsistenz(gesamt_ladung, gesamt_entladung)
         if not durchsatz.konsistent:
@@ -1197,7 +1204,10 @@ async def get_speicher_dashboard(
             bezug_preis_cent=eff_strompreis_cent,
             einspeise_verg_cent=eff_einspeise_cent,
             ladung_netz_kwh=gesamt_arbitrage_kwh,
-            **({"wirkungsgrad_prozent": effizienz} if effizienz > 0 else {}),
+            # Nur ein ERMITTELTER η darf die Netz-/PV-Aufteilung steuern; ohne
+            # ihn greift der dokumentierte Default (95 %). Vorher konnte hier
+            # ein Wert über 100 % einlaufen und den Netz-Anteil aufblähen.
+            **({"wirkungsgrad_prozent": effizienz} if effizienz else {}),
             lade_preis_cent=arbitrage_avg_preis if arbitrage_avg_preis > 0 else None,
         )
         ersparnis = _sp.ersparnis_euro
@@ -1206,7 +1216,8 @@ async def get_speicher_dashboard(
         zusammenfassung = {
             'gesamt_ladung_kwh': round(gesamt_ladung, 1),
             'gesamt_entladung_kwh': round(gesamt_entladung, 1),
-            'effizienz_prozent': round(effizienz, 1),
+            'effizienz_prozent': round(effizienz, 1) if effizienz is not None else None,
+            'effizienz_quelle': _eta.quelle,
             'vollzyklen': round(vollzyklen, 1) if vollzyklen is not None else None,
             'zyklen_pro_monat': (
                 (round(vollzyklen / len(monatsdaten), 1) if monatsdaten else 0)
@@ -1666,8 +1677,13 @@ async def get_balkonkraftwerk_dashboard(
         # gemessenen Feld: sonst nennt die Kachel 0 % neben einer Ersparnis > 0.
         eigenverbrauch_quote = eigenverbrauchsquote_prozent(ev_bewertet_kwh, gesamt_erzeugung)
 
-        # Speicher-Effizienz
-        speicher_effizienz = (gesamt_speicher_entladung / gesamt_speicher_ladung * 100) if gesamt_speicher_ladung > 0 else 0
+        # Speicher-Effizienz über den Layer-SoT (N-252) — der integrierte
+        # Speicher eines BKW rechnet nach derselben Regel wie jeder andere.
+        _eta_bkw = speicher_wirkungsgrad(
+            gesamt_speicher_ladung, gesamt_speicher_entladung, None,
+            langes_fenster_quelle="fenster_lang",
+        )
+        speicher_effizienz = _eta_bkw.prozent
 
         # `ersparnis_eigenverbrauch` steht bereits — je Monat aus
         # `bkw_eigenverbrauch_anteil` × Monatstarif (s. Docstring, F-4).
@@ -1708,7 +1724,11 @@ async def get_balkonkraftwerk_dashboard(
             'speicher_kapazitaet_wh': speicher_kapazitaet,
             'speicher_ladung_kwh': round(gesamt_speicher_ladung, 1) if hat_speicher else 0,
             'speicher_entladung_kwh': round(gesamt_speicher_entladung, 1) if hat_speicher else 0,
-            'speicher_effizienz_prozent': round(speicher_effizienz, 1) if hat_speicher else 0,
+            'speicher_effizienz_prozent': (
+                round(speicher_effizienz, 1)
+                if hat_speicher and speicher_effizienz is not None else None
+            ),
+            'speicher_effizienz_quelle': _eta_bkw.quelle if hat_speicher else None,
             # Finanzen
             'ersparnis_eigenverbrauch_euro': round(ersparnis_eigenverbrauch, 2),
             'erloes_einspeisung_euro': round(erloes_einspeisung, 2),  # 0 bei BKW (unvergütet)
@@ -1919,7 +1939,12 @@ async def get_sonstiges_dashboard(
             }
 
         else:  # speicher
-            effizienz = (gesamt_entladung / gesamt_ladung * 100) if gesamt_ladung > 0 else 0
+            # Layer-SoT statt eigener Division (N-252) — dieselbe Zahl wie
+            # Speicher-Dashboard, Cockpit und HA-Sensor.
+            _eta_sonst = speicher_wirkungsgrad(
+                gesamt_ladung, gesamt_entladung, None, langes_fenster_quelle="fenster_lang"
+            )
+            effizienz = _eta_sonst.prozent
             # Ersparnis über den Layer-SoT (#358): Spread zwischen Netzbezug und
             # Einspeisung, beide Seiten aus derselben Monats-Mittelung
             # (ADR-002/P8). Der Spread stand hier als Inline-Formel; ein
@@ -1937,7 +1962,8 @@ async def get_sonstiges_dashboard(
                 'beschreibung': beschreibung,
                 'gesamt_ladung_kwh': round(gesamt_ladung, 1),
                 'gesamt_entladung_kwh': round(gesamt_entladung, 1),
-                'effizienz_prozent': round(effizienz, 1),
+                'effizienz_prozent': round(effizienz, 1) if effizienz is not None else None,
+                'effizienz_quelle': _eta_sonst.quelle,
                 'ersparnis_euro': round(ersparnis, 2),
                 'sonderkosten_euro': round(gesamt_sonstige_ausgaben, 2),
                 'sonstige_ertraege_euro': round(gesamt_sonstige_ertraege, 2),

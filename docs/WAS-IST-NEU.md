@@ -80,6 +80,28 @@ die Erzeugungs-Felder bleiben sichtbar, bereits gepflegte Werte stehen unveränd
 Weg bleibt trotzdem, die Kategorie zu setzen (*Einstellungen → Investitionen*): Dann ist deine
 Erfassungsmaske wieder kurz.
 
+### Kein Speicher-Wirkungsgrad über 100 % mehr
+
+Ein Speicher kann nicht mehr abgeben, als er aufgenommen hat. Trotzdem stand bei manchen Anlagen
+ein Wert wie **104 %** da — in *Cockpit → Jahr*, in *Auswertungen → Komponenten* und *→ Tabelle*,
+im Speicher-Dashboard, beim Balkonkraftwerk und im HA-Sensor *Speicher-Effizienz*. In *Cockpit →
+Jahr* stand unter der Zahl sogar noch „über das ganze Fenster gerechnet" — als wäre sie damit
+abgesichert.
+
+Die Regel dagegen gab es seit v4.0.16 schon, sie galt bisher nur für *Cockpit → Tag* und
+*→ Monat*. Jetzt rechnen **alle** Sichten nach derselben Regel: Statt einer unmöglichen Zahl steht
+dort „—", und daneben der Grund.
+
+**Was so ein Wert dir sagt:** nichts über deinen Speicher, aber viel über die erfassten Mengen.
+Fast immer steckt eine „Ladung" dahinter, in der nur die **PV-Ladung** steht, während die
+**Netzladung** als zweiter Posten daneben gepflegt ist — in das Feld *Ladung* gehört die
+**gesamte** Ladung. Der Daten-Checker sagt dir das, samt betroffenem Feld.
+
+**Hast du plausible Werte, ändert sich für dich nichts** — unter 100 % steht dieselbe Zahl wie
+bisher. **Ein Hinweis für Home Assistant:** In diesem Fall liefert der Sensor *Speicher-Effizienz*
+jetzt gar keinen Wert mehr (`unknown`) statt eines falschen. In der Langzeitstatistik entsteht
+dadurch eine Lücke — genau an den Tagen, an denen dort bisher eine unmögliche Zahl stand.
+
 ---
 
 ## v4.0.17 — Nicht bewertet heißt keine Zahl

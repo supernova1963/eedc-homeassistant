@@ -42,6 +42,9 @@ from backend.core.berechnungen import (
     erzeugung_hinter_zaehler_kwh,
     merge_datenquellen,
     spezifischer_ertrag_kwh_kwp,
+    # Alias, weil in `get_aktueller_monat` eine lokale Variable denselben
+    # Namen trägt (der η-Wert selbst).
+    speicher_wirkungsgrad as berechne_speicher_wirkungsgrad,
     teilzeitraum_felder,
     vollzyklen as berechne_vollzyklen,
 )
@@ -1700,10 +1703,17 @@ async def get_aktueller_monat(
                     # P4 heißt „sagen, was man weiß und wie sicher", nicht
                     # „lieber gar nichts". Ausgeblendet wird nur, was
                     # NACHWEISLICH falsch ist: über 100 % kann kein Speicher.
-                    _roh = se / sl * 100
-                    if _roh <= 100.0:
-                        speicher_wirkungsgrad = round(_roh, 1)
-                        speicher_wirkungsgrad_quelle = "roh-unkorrigiert"
+                    #
+                    # Diese drei Zeilen waren bis zum 17.08.2026 eine wörtliche
+                    # Zweitschrift des unkorrigierten SoT-Zweigs — gefunden vom
+                    # Deckungs-Prüfer zu N-252, nicht vom Abwesenheits-Grep:
+                    # *Cockpit → Monat* galt als „gedeckt", weil es den
+                    # SoC-Pfad benutzt, und trug die Regel daneben trotzdem
+                    # ein zweites Mal.
+                    _roh_eta = berechne_speicher_wirkungsgrad(sl, se, None)
+                    if _roh_eta.prozent is not None:
+                        speicher_wirkungsgrad = round(_roh_eta.prozent, 1)
+                        speicher_wirkungsgrad_quelle = _roh_eta.quelle
                 # Rückwärtskompatibel: das alte Flag bleibt im Vertrag, trägt
                 # jetzt aber die ehrliche Aussage „kein belastbarer η" statt
                 # „SoC ist gedriftet". Clients, die es lesen, blenden weiterhin

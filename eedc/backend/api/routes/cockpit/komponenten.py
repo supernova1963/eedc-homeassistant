@@ -15,6 +15,7 @@ from backend.core.berechnungen import (
     berechne_netzbezug_kosten,
     eauto_effizienz_100km,
     einspeise_erloes_euro,
+    speicher_wirkungsgrad,
 )
 from backend.api.routes.cockpit._shared import MONATSNAMEN
 from backend.services.monats_fakten import MonatsFakt, lade_monats_fakten
@@ -53,6 +54,9 @@ class KomponentenMonat(BaseModel):
     speicher_ladung_kwh: float
     speicher_entladung_kwh: float
     speicher_effizienz_prozent: Optional[float]
+    #: Herkunft der η-Aussage — trennt „kein Speicher" von „die Mengen
+    #: widersprechen sich" (Layer-SoT `speicher_wirkungsgrad`).
+    speicher_effizienz_quelle: Optional[str] = None
     speicher_arbitrage_kwh: float
     speicher_arbitrage_preis_cent: Optional[float]
     wp_waerme_kwh: float
@@ -183,9 +187,12 @@ async def get_komponenten_zeitreihe(
             f.speicher, f.emob, f.wp, f.sonstiges, f.tarif
         )
 
-        speicher_effizienz = (
-            speicher.entladung_kwh / speicher.ladung_kwh * 100
-        ) if speicher.ladung_kwh > 0 else None
+        # η über den Layer-SoT (N-252). Hier steht der Wert je EINZELNEM Monat —
+        # der Fall, in dem der SoC-Übertrag über die Monatsgrenze am stärksten
+        # wirkt und sich gerade nicht ausmittelt. Kein `langes_fenster_quelle`,
+        # und ohne ΔSoC-Sensor bleibt ein Quotient über 100 % deshalb ohne Wert.
+        _eta = speicher_wirkungsgrad(speicher.ladung_kwh, speicher.entladung_kwh, None)
+        speicher_effizienz = _eta.prozent
 
         # Mengengewichteter Ø Ladepreis (nur Zeilen mit gepflegtem Preis).
         speicher_arbitrage_preis = speicher.netzladung_preis_cent
@@ -247,7 +254,9 @@ async def get_komponenten_zeitreihe(
             jahr=jahr, monat=monat, monat_name=MONATSNAMEN[monat],
             speicher_ladung_kwh=round(speicher.ladung_kwh, 1),
             speicher_entladung_kwh=round(speicher.entladung_kwh, 1),
-            speicher_effizienz_prozent=round(speicher_effizienz, 1) if speicher_effizienz else None,
+            # `is not None`: ein η von 0,0 ist eine Messung, keine Leerstelle.
+            speicher_effizienz_prozent=round(speicher_effizienz, 1) if speicher_effizienz is not None else None,
+            speicher_effizienz_quelle=_eta.quelle,
             speicher_arbitrage_kwh=round(speicher.netzladung_kwh, 1),
             speicher_arbitrage_preis_cent=round(speicher_arbitrage_preis, 2) if speicher_arbitrage_preis else None,
             wp_waerme_kwh=round(wp.waerme_kwh, 1),

@@ -58,6 +58,7 @@ def speicher_wirkungsgrad(
     delta_soc_kwh: Optional[float] = None,
     *,
     mindest_ladung_kwh: float = MINDEST_LADUNG_KWH,
+    langes_fenster_quelle: Optional[str] = None,
 ) -> SpeicherWirkungsgrad:
     """η für einen Zeitraum — mit ΔSoC-Korrektur, wenn der Ladestand vorliegt.
 
@@ -68,6 +69,22 @@ def speicher_wirkungsgrad(
 
     Der korrigierte Wert wird auf 0…100 % geklemmt — bei Messfehlern oder
     Restdrift kann der Quotient auch mit ΔSoC kurz über 1,0 schießen.
+
+    ``langes_fenster_quelle`` ist für Aufrufer gedacht, deren Zeitraum den
+    SoC-Übertrag von sich aus ausmittelt (Jahr, gleitendes 12-Monats-Fenster,
+    ganze Historie — ``EFFIZIENZ_FENSTER_MONATE`` in
+    ``core/berechnungen/speicher.py``). Sie ersetzt nur das **Etikett** des
+    unkorrigierten Falls, nicht seine Rechnung: Ein möglicher Wert heißt dann
+    z. B. ``"fenster_lang"`` statt ``"roh-unkorrigiert"``.
+
+    ⚠ **Die Obergrenze gilt auch dort.** Über 100 % kann kein Speicher, und
+    ein langes Fenster macht das nicht besser — es beweist im Gegenteil, dass
+    eine der beiden Mengen falsch gemessen oder gepflegt ist (häufigste
+    Ursache: ``ladung_kwh`` nur mit der PV-Ladung befüllt, Netzladung separat
+    daneben — Issue #281, den der Daten-Checker genau so meldet). Bis zum
+    17.08.2026 trug ``v4/JahrAggregat.tsx`` das Etikett „über das ganze
+    Fenster gerechnet" **unter** einem ungekappten Quotienten und machte die
+    Falschmessung damit zur bestätigten Aussage.
     """
     lad = ladung_kwh or 0.0
     entl = entladung_kwh or 0.0
@@ -80,7 +97,7 @@ def speicher_wirkungsgrad(
 
     roh = entl / lad * 100
     if roh <= 100.0:
-        return SpeicherWirkungsgrad(roh, "roh-unkorrigiert")
+        return SpeicherWirkungsgrad(roh, langes_fenster_quelle or "roh-unkorrigiert")
     return SpeicherWirkungsgrad(None, "nicht-ermittelbar")
 
 

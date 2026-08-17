@@ -21,10 +21,12 @@ export function calcSpezifischerErtrag(erzeugung: number, kwp: number | null | u
   return kwp ? erzeugung / kwp : 0
 }
 
-/** Speicher-Effizienz: Verhältnis Entladung zu Ladung (0–100 %). */
-export function calcSpeicherEffizienz(entladung: number, ladung: number): number | null {
-  return ladung > 0 ? (entladung / ladung) * 100 : null
-}
+/* Speicher-Effizienz stand hier bis zum 17.08.2026 als `calcSpeicherEffizienz`
+ * — ein roher, ungekappter Quotient, also eine zweite Definition neben dem
+ * Layer-SoT `core/berechnungen/speicher_wirkungsgrad.py`. Sie ist ersetzt
+ * durch `lib/speicherWirkungsgrad.ts::speicherWirkungsgrad`, der dieselbe
+ * Rechnung mit Obergrenze UND der Herkunft der Aussage liefert (N-252).
+ * Der Wächter `check:speicher-eta-roh` hält die Stelle frei. */
 
 /** Wärmepumpen-COP: Coefficient of Performance. */
 export function calcCOP(waerme: number, strom: number): number | null {

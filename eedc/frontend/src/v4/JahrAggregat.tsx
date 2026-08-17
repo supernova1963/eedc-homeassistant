@@ -17,6 +17,7 @@
  * (nie Monats-Mittel der Quoten); Preise → Mittel der Monate; Kapazität → Max.
  */
 import { MONAT_KURZ } from '../lib/constants'
+import { speicherWirkungsgrad } from '../lib/speicherWirkungsgrad'
 import type { AktuellerMonatResponse, InvestitionFinancialDetail, SonstigesGeraet } from '../api/aktuellerMonat'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 
@@ -176,6 +177,10 @@ export function baueJahrAlsMonat(monate: AktuellerMonatResponse[], jahr: number)
   const gesamtverbrauch = summe(f('gesamtverbrauch_kwh'))
   const speicherLadung = summe(f('speicher_ladung_kwh'))
   const speicherEntladung = summe(f('speicher_entladung_kwh'))
+  // Jahres-η über den Spiegel des Layer-SoT (N-252). `fenster_lang`, weil ein
+  // Jahr den SoC-Übertrag der Monatsgrenzen ausmittelt — die Obergrenze gilt
+  // trotzdem, und genau daran fehlte es hier.
+  const _etaJahr = speicherWirkungsgrad(speicherLadung, speicherEntladung, 'fenster_lang')
   const speicherLadungNetz = summe(f('speicher_ladung_netz_kwh'))
   const speicherLadungNetzKosten = summe(f('speicher_ladung_netz_kosten_euro'))
   // #358: Die Auslastungs-BASIS wird summiert, der Prozentsatz daraus einmal
@@ -287,7 +292,11 @@ export function baueJahrAlsMonat(monate: AktuellerMonatResponse[], jahr: number)
     speicher_ladung_kwh: speicherLadung,
     speicher_entladung_kwh: speicherEntladung,
     speicher_ladung_netz_kwh: speicherLadungNetz,
-    speicher_wirkungsgrad_prozent: quote(speicherEntladung, speicherLadung),
+    // N-252: NICHT `quote(...)`. Der rohe Quotient kennt keine Obergrenze — ein
+    // Jahr, in dem mehr entladen als geladen gebucht ist, stand hier als
+    // „104 %" und darunter der bestätigende Satz „über das ganze Fenster
+    // gerechnet". Der Spiegel des Layer-SoT kappt und benennt den Fall.
+    speicher_wirkungsgrad_prozent: _etaJahr.prozent,
     speicher_vollzyklen: summe(f('speicher_vollzyklen')),
     speicher_kapazitaet_kwh: max(f('speicher_kapazitaet_kwh')),
     speicher_auslastungs_basis_kwh: speicherAuslastungsBasis,
@@ -304,7 +313,10 @@ export function baueJahrAlsMonat(monate: AktuellerMonatResponse[], jahr: number)
     // „SoC-Drift — Monats-η ausgeblendet" — neben einer Zahl, im Jahreskontext,
     // wegen eines Teilmonats. Der Satz war dreifach falsch.
     speicher_soc_drift_signifikant: false,
-    speicher_wirkungsgrad_quelle: (speicherLadung ?? 0) > 0 ? 'fenster_lang' : null,
+    // Die Quelle wird nicht mehr aus der Ladungsmenge GERATEN, sondern kommt
+    // aus derselben Ableitung wie der Wert (N-252). Vorher hieß jeder Jahres-η
+    // „fenster_lang", auch der unmögliche.
+    speicher_wirkungsgrad_quelle: _etaJahr.quelle,
     speicher_effektiver_ladepreis_cent: mittel(f('speicher_effektiver_ladepreis_cent')),
     speicher_effektiver_ladepreis_quelle:
       monate.find((m) => m.speicher_effektiver_ladepreis_quelle)?.speicher_effektiver_ladepreis_quelle ?? null,

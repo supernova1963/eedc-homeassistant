@@ -111,8 +111,23 @@ def test_route_ruft_den_kanon_statt_selbst_zu_dividieren():
         "und lässt unmögliche durch (F-22)."
     )
     # Der ungeprüfte Fallback ist der Pfad zu Rainers >100 %.
-    assert "_roh <= 100.0" in quelle, (
-        "Der rohe Fallback muss auf Plausibilität geprüft sein (F-22)."
+    #
+    # ⚠ Hier stand bis zum 17.08.2026 `assert "_roh <= 100.0" in quelle` — ein
+    # Anker auf den WORTLAUT der damaligen Inline-Lösung statt auf ihre
+    # Eigenschaft. Als N-252 dieselbe Prüfung durch den Layer-SoT ersetzte
+    # (der sie identisch vornimmt und zusätzlich die Herkunft mitliefert),
+    # ging der Prüfer rot — bei besser gewordenem Code. Gemessen wird jetzt
+    # die Eigenschaft: Der Fallback läuft über die eine Regel, und die
+    # Obergrenze steht dort.
+    assert "berechne_speicher_wirkungsgrad" in quelle, (
+        "Der rohe Fallback muss über den Layer-SoT laufen, damit die "
+        "Plausibilitätsgrenze nicht zweimal geschrieben wird (F-22 · N-252)."
+    )
+    from backend.core.berechnungen.speicher_wirkungsgrad import speicher_wirkungsgrad
+
+    assert speicher_wirkungsgrad(100.0, 104.0, None).prozent is None, (
+        "Der Layer-SoT lässt einen unmöglichen Wert durch — genau der Pfad, "
+        "gegen den F-22 antrat."
     )
 
 

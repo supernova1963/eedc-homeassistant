@@ -36,6 +36,7 @@ from backend.core.berechnungen import (
     erzeugung_hinter_zaehler_kwh,
     imd_typ_beitrag,
     monatsgewichte_aus_pvgis,
+    speicher_wirkungsgrad,
     vollzyklen as berechne_vollzyklen,
 )
 from backend.services.prognose_auswahl import lade_aktive_prognose
@@ -953,8 +954,20 @@ async def calculate_anlage_sensors(
             if kap:
                 speicher_kapazitaet += float(kap)
 
-    if batterie_ladung > 0:
-        speicher_effizienz = (batterie_entladung / batterie_ladung) * 100
+    # η über den Layer-SoT (N-252) — dieselbe Regel wie Cockpit, Komponenten
+    # und Speicher-Dashboard. Der Zeitraum ist hier ein ganzes Jahr, deshalb
+    # `fenster_lang`; die Obergrenze gilt trotzdem.
+    #
+    # ⚠ Bewusste Folge für Home Assistant (Entscheid Gernot 17.08.2026): Wo der
+    # Quotient über 100 % liegt, liefert eedc jetzt GAR KEINEN Sensorwert mehr
+    # statt einer unmöglichen Zahl (`value` bleibt ungesetzt ⇒ der Sensor
+    # meldet `unknown`). Das reißt genau an den Tagen eine Lücke in die
+    # HA-Langzeitstatistik, an denen dort bisher ein falscher Wert stand —
+    # dieselbe Klasse wie der einmalige LTS-Sprung des CO₂-Sensors unter DI-2.
+    _eta_ha = speicher_wirkungsgrad(
+        batterie_ladung, batterie_entladung, None, langes_fenster_quelle="fenster_lang"
+    )
+    speicher_effizienz = _eta_ha.prozent
     # Layer-SoT statt eigener Division — dieselbe Zahl wie Hub/Monat/PDF.
     speicher_zyklen = berechne_vollzyklen(batterie_entladung, speicher_kapazitaet)
 

@@ -22,6 +22,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+# Kein Zirkel: `speicher_wirkungsgrad` importiert nichts aus diesem Modul.
+from backend.core.berechnungen.speicher_wirkungsgrad import speicher_wirkungsgrad
+
 # Fensterbreite, ab der entladung/ladung als belastbare Round-Trip-Effizienz
 # gilt (darunter dominiert der SoC-Übertrag).
 EFFIZIENZ_FENSTER_MONATE: int = 12
@@ -237,6 +240,14 @@ def gleitende_effizienz(
     (inklusive dem Monat selbst); bei kürzerer Historie kumulativ ab Start.
     So mittelt sich der SoC-Übertrag aus — die Reihe zappelt nicht über
     100 %, wie es eine naive Pro-Monats-Effizienz täte.
+
+    ⚠ **„Mittelt sich aus" ist nicht „kann nicht über 100 %"** (N-252): Sind
+    die Mengen selbst falsch gepflegt (Klassiker #281 — „Ladung" enthält nur
+    die PV-Ladung, die Netzladung steht als zweiter Posten daneben), dann
+    liegt auch das 12-Monats-Fenster darüber. Deshalb läuft der Wert seit dem
+    17.08.2026 über den Layer-SoT ``speicher_wirkungsgrad``: Er kappt und
+    liefert ``None``, statt eine unmögliche Zahl in die Verlaufskurve zu
+    schreiben — die sonst neben einer bereits geheilten Kachel stünde.
     """
     ergebnis: list[MonatsEffizienz] = []
     for i, (jahr, monat, _, _) in enumerate(monats_reihe):
@@ -248,9 +259,10 @@ def gleitende_effizienz(
             MonatsEffizienz(
                 jahr=jahr,
                 monat=monat,
-                effizienz_prozent=speicher_effizienz_prozent(
-                    sum_ladung, sum_entladung
-                ),
+                effizienz_prozent=speicher_wirkungsgrad(
+                    sum_ladung, sum_entladung, None,
+                    langes_fenster_quelle="fenster_lang",
+                ).prozent,
                 fenster_monate=len(fenster_rows),
             )
         )

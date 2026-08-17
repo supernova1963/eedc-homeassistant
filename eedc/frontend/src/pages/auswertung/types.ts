@@ -7,8 +7,9 @@ import {
   MONAT_KURZ, TYP_LABELS,
   COLORS, CHART_COLORS, TYP_COLORS,
   calcAutarkie, calcEigenverbrauchsquote, calcSpezifischerErtrag,
-  calcSpeicherEffizienz, calcCOP,
+  calcCOP,
 } from '../../lib'
+import { speicherWirkungsgrad } from '../../lib/speicherWirkungsgrad'
 
 // Re-Export für Rückwärtskompatibilität (bestehende Imports brechen nicht)
 export { COLORS, CHART_COLORS, TYP_COLORS, TYP_LABELS }
@@ -157,12 +158,14 @@ export function createMonatsZeitreihe(
     const spezErtrag = calcSpezifischerErtrag(erzeugung, anlage?.leistung_kwp)
 
     // Speicher: null = keine Speicher-Komponente aktiv (Backend liefert null).
-    // calcSpeicherEffizienz arbeitet auf 0-Default — null-Werte als 0 hineingeben
-    // ergibt null Effizienz (kein Ladestrom).
+    // Der η kommt aus dem Spiegel des Layer-SoT (N-252) — hier steht er je
+    // EINZELNEM Monat, also in genau dem Fall, in dem der Ladestand-Übertrag
+    // über die Monatsgrenze am stärksten wirkt. Ohne SoC-Messung ist ein
+    // Quotient über 100 % deshalb kein Wert, sondern eine fehlende Aussage.
     const speicher_ladung = md.speicher_ladung_kwh
     const speicher_entladung = md.speicher_entladung_kwh
     const speicher_effizienz = (speicher_ladung != null && speicher_entladung != null)
-      ? calcSpeicherEffizienz(speicher_entladung, speicher_ladung)
+      ? speicherWirkungsgrad(speicher_ladung, speicher_entladung).prozent
       : null
 
     // Wärmepumpe: null = WP in dem Monat nicht aktiv. Wenn auch nur eines
