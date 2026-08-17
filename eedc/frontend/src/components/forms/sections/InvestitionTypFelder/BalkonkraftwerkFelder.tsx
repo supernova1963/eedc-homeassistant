@@ -4,14 +4,29 @@ import { AUSRICHTUNG_OPTIONEN } from '../investitionFormHelpers'
 import { SchalterZeile } from '../SchalterZeile'
 import type { TypFelderProps } from './types'
 
-export function BalkonkraftwerkFelder({ paramData, onInputChange, setParam }: TypFelderProps) {
+export function BalkonkraftwerkFelder({ paramData, onInputChange, setParam, modulKinder }: TypFelderProps) {
   const anzahl = parseInt(paramData.anzahl as string) || 0
   const wp = parseInt(paramData.leistung_wp as string) || 0
   const kwp = (anzahl * wp) / 1000
   const wrGrenzeW = parseInt(paramData.wechselrichter_leistung_w as string) || 0
+  // N-266: Sind diesem Balkonkraftwerk PV-Module zugeordnet, tragen SIE die
+  // Nennleistung und die Ausrichtung — genau deshalb gibt es die Zuordnung
+  // (ein BKW hat EIN Ausrichtungsfeld, zwei Module über Eck haben zwei).
+  const abgetreten = (modulKinder ?? 0) > 0
   return (
     <>
       <FormSection title="Balkonkraftwerk">
+        {abgetreten && (
+          <Alert type="info">
+            Diesem Balkonkraftwerk {modulKinder === 1 ? 'ist ' : 'sind '}
+            <strong>{modulKinder} PV-Modul{modulKinder === 1 ? '' : 'e'}</strong>{' '}
+            zugeordnet. <strong>Nennleistung, Ausrichtung und Neigung kommen von dort</strong> —
+            die Felder hier beschreiben nur noch das Gerät und werden nicht mehr gerechnet.
+            Die <em>Wechselrichter-Leistung</em> gilt weiter: sie gehört dem Gerät, nicht den
+            Modulen. Und der Monatswert <em>Erzeugung</em> zählt als Gesamtsumme der Module —
+            eigene Modulwerte haben Vorrang, dieser füllt die Lücken.
+          </Alert>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
           <Input
             label="Anzahl Module"
@@ -26,7 +41,11 @@ export function BalkonkraftwerkFelder({ paramData, onInputChange, setParam }: Ty
             type="number" step="1" min="0"
             value={paramData.leistung_wp as string}
             onChange={onInputChange}
-            hint={kwp > 0 ? `= ${fmtZahl(kwp, 2)} kWp` : undefined}
+            hint={
+              abgetreten
+                ? 'Wird nicht gerechnet — die Leistung kommt aus den zugeordneten PV-Modulen'
+                : kwp > 0 ? `= ${fmtZahl(kwp, 2)} kWp` : undefined
+            }
           />
           <Select
             label="Ausrichtung"
@@ -34,6 +53,7 @@ export function BalkonkraftwerkFelder({ paramData, onInputChange, setParam }: Ty
             value={paramData.ausrichtung as string}
             onChange={(e) => setParam('ausrichtung', e.target.value)}
             options={AUSRICHTUNG_OPTIONEN}
+            hint={abgetreten ? 'Wird nicht gerechnet — jedes zugeordnete Modul trägt seine eigene' : undefined}
           />
           <Input
             label="Neigung (Grad)"
@@ -41,7 +61,7 @@ export function BalkonkraftwerkFelder({ paramData, onInputChange, setParam }: Ty
             type="number" step="1" min="0" max="90"
             value={paramData.neigung_grad as string}
             onChange={onInputChange}
-            hint="0° = flach, 90° = senkrecht"
+            hint={abgetreten ? 'Wird nicht gerechnet — jedes zugeordnete Modul trägt seine eigene' : '0° = flach, 90° = senkrecht'}
           />
           {/* #347: Überbelegung ist beim BKW der Normalfall (3 × 420 Wp an
               600 W). Ohne diese Grenze prognostiziert eedc die volle

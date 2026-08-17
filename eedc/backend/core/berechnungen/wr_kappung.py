@@ -42,6 +42,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Optional, Sequence
 
+from backend.core.berechnungen.erzeuger_traeger import abgetretene_bkw_ids
 from backend.core.investition_kennwerte import (
     SPEICHER_KOPPLUNG_DC,
     get_speicher_kopplung,
@@ -114,15 +115,32 @@ def zuordne_grenzen(
     Prognose-Pfad seine eigene Zuordnung und sie driften auseinander (die
     Klasse, die der vierte ADR-001-Nachtrag benennt).
 
-    Zwei Fälle, und die Reihenfolge ist wichtig:
+    ⚠ **`erzeuger` ist die UNGEFILTERTE Erzeuger-Menge** — der N-266-Selektor
+    ``erzeuger_traeger`` läuft **hier drin** und nicht davor. Wer eine bereits
+    gefilterte Menge übergibt, hat das abtretende Balkonkraftwerk entfernt, und
+    dann finden seine Modul-Kinder ihre 800 VA nicht mehr: sie stünden
+    ungekappt in der Prognose. Gewächtert in
+    ``test_bkw_parent_pv_module_n266.py``.
 
-    1. **Eigene Grenze** (`balkonkraftwerk`): das Gerät ist Erzeuger und
-       Wechselrichter in einem, seine Grenze teilt es mit niemandem. Sie
-       gewinnt auch dann, wenn das BKW zusätzlich einem Wechselrichter
-       zugeordnet wäre — das eigene Gerät ist das nähere.
-    2. **Geteilte Grenze über den Parent** (`pv-module` → `wechselrichter`):
-       alle Strings desselben Wechselrichters bekommen dieselbe `grenz_id` und
-       werden gemeinsam gekappt.
+    Drei Fälle, und die Reihenfolge ist wichtig:
+
+    1. **Eigene Grenze** (`balkonkraftwerk` **ohne** Modul-Kinder): das Gerät
+       ist Erzeuger und Wechselrichter in einem, seine Grenze teilt es mit
+       niemandem. Sie gewinnt auch dann, wenn das BKW zusätzlich einem
+       Wechselrichter zugeordnet wäre — das eigene Gerät ist das nähere.
+    2. **Geteilte Grenze über den Parent** (`pv-module` → `wechselrichter`
+       **oder** → `balkonkraftwerk`): alle Strings desselben Trägers bekommen
+       dieselbe `grenz_id` und werden gemeinsam gekappt.
+    3. **Balkonkraftwerk MIT Modul-Kindern** (N-266): es wechselt die Rolle vom
+       Erzeuger zum **Träger** und taucht im Ergebnis nicht mehr auf; seine
+       Kinder teilen sich seine Grenze unter `bkw:{id}`. Das ist genau die
+       Rolle, die ein `wechselrichter` für seine Strings hat — und der
+       inhaltliche Kern der Etappe: kWp und Ausrichtung tritt das BKW ab, seine
+       **AC-Grenze nicht**. Die 800 VA sind eine Eigenschaft des
+       Wechselrichter-Ausgangs (EEG §8 Abs. 5a · VDE-AR-N 4105), die 2.000 Wp
+       eine der Module — zwei unabhängige Grenzen, und nur die zweite wächst
+       mit den Kindern. Wer sie zusammenwirft, „leitet die Leistung aus den
+       Modulen ab" und kappt anschließend nicht mehr.
 
     Darüber liegt seit F-11 eine dritte Regel: **hängt am Träger der Grenze ein
     DC-gekoppelter Speicher, wird nicht gekappt** (`(None, None)`) — der
@@ -136,31 +154,49 @@ def zuordne_grenzen(
     Ein Erzeuger ohne Grenze bekommt `(None, None)` — der Aufrufer nimmt dann
     den unveränderten Pfad, und die Rechnung bleibt bitgleich zu vorher.
     """
-    wr_grenzen = {
+    traeger_grenzen = {
         wr.id: get_wr_grenze_kw(wr)
         for wr in wechselrichter
         if getattr(wr, "id", None) is not None
     }
+    # N-266: ein abtretendes Balkonkraftwerk ist Träger, nicht Erzeuger. Seine
+    # Grenze kommt aus DEMSELBEN Helper wie die des Wechselrichters — die
+    # Bauform ist identisch, nur eine Ebene tiefer.
+    abgetreten = abgetretene_bkw_ids(erzeuger)
+    for erz in erzeuger:
+        erz_id = getattr(erz, "id", None)
+        if erz_id in abgetreten:
+            traeger_grenzen[erz_id] = get_wr_grenze_kw(erz)
     dc_traeger = _dc_speicher_traeger(speicher)
 
     zuordnung: dict[Any, tuple[Optional[float], Optional[str]]] = {}
     for erz in erzeuger:
         erz_id = getattr(erz, "id", None)
-        if erz_id is None:
+        if erz_id is None or erz_id in abgetreten:
+            # Das abtretende BKW selbst bekommt KEINE Zeile: es steht nicht in
+            # der Erzeuger-Menge der Aufrufer (die läuft durch
+            # `erzeuger_traeger`), und eine Zeile für ein Gerät, das keine
+            # Erzeugung mehr beisteuert, wäre eine Grenze ohne Mitglied.
             continue
         eigene = get_wr_grenze_kw(erz)
         if eigene is not None:
-            # Der Träger der eigenen Grenze ist der Erzeuger selbst (BKW).
+            # Der Träger der eigenen Grenze ist der Erzeuger selbst (BKW ohne
+            # Modul-Kinder).
             zuordnung[erz_id] = (
                 (None, None) if erz_id in dc_traeger else (eigene, f"inv:{erz_id}")
             )
             continue
         parent_id = getattr(erz, "parent_investition_id", None)
-        parent_grenze = wr_grenzen.get(parent_id) if parent_id is not None else None
+        parent_grenze = traeger_grenzen.get(parent_id) if parent_id is not None else None
         if parent_grenze is not None:
-            # Träger ist hier der Wechselrichter, nicht der String.
+            # Träger ist hier der Wechselrichter bzw. das Balkonkraftwerk, nicht
+            # der String. Das Präfix nennt die Bauform, damit ein Pool nicht
+            # zwischen den beiden Ebenen verschmilzt, falls je eine Anlage
+            # dieselbe ID in beiden Rollen führt.
+            praefix = "bkw" if parent_id in abgetreten else "wr"
             zuordnung[erz_id] = (
-                (None, None) if parent_id in dc_traeger else (parent_grenze, f"wr:{parent_id}")
+                (None, None) if parent_id in dc_traeger
+                else (parent_grenze, f"{praefix}:{parent_id}")
             )
         else:
             zuordnung[erz_id] = (None, None)

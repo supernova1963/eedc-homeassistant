@@ -27,6 +27,7 @@ import httpx
 from backend.core.config import settings
 from backend.core.exceptions import not_found
 from backend.core.investition_kennwerte import get_erzeuger_kwp, get_pv_kwp
+from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
 from backend.core.berechnungen.wr_kappung import zuordne_grenzen
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
@@ -441,7 +442,13 @@ async def get_pvgis_prognose(
         .where(Investition.typ.in_(PVGIS_ERZEUGER_TYPEN))
         .where(aktiv_jetzt())
     )
-    pv_module = result.scalars().all()
+    # N-266: `alle_erzeuger` ist die UNGEFILTERTE Menge und geht so in
+    # `zuordne_grenzen` — nur dort findet ein Modul-Kind die AC-Grenze seines
+    # Balkonkraftwerks. `pv_module` ist die gefilterte: ein BKW mit Kindern hat
+    # kWp und Ausrichtung abgetreten und bekommt keine eigene PVGIS-Abfrage
+    # mehr, sonst stünde sein Ertrag zweimal im Anlagen-SOLL.
+    alle_erzeuger = list(result.scalars().all())
+    pv_module = erzeuger_traeger(alle_erzeuger)
 
     if not pv_module:
         raise HTTPException(
@@ -464,7 +471,7 @@ async def get_pvgis_prognose(
         .where(Investition.anlage_id == anlage_id)
         .where(Investition.typ == InvestitionTyp.SPEICHER.value)
     )).scalars().all()
-    grenzen = zuordne_grenzen(pv_module, wechselrichter, speicher)
+    grenzen = zuordne_grenzen(alle_erzeuger, wechselrichter, speicher)
 
     # Prognose für jedes Modul abrufen
     module_prognosen: list[PVModulPrognose] = []

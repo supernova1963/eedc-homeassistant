@@ -338,6 +338,16 @@ def _migrate_pv_erzeugung_aggregat_clear(connection) -> None:
             "WHERE i.anlage_id = :aid AND i.typ IN ('pv-module', 'balkonkraftwerk')"
         ), {"aid": anlage_id, "j": jahr, "m": monat}).fetchall()
 
+        # ⚠ **N-266, Handarbeit-Stelle 2 von 2 — und sie braucht keine Änderung.**
+        # Diese Query bildet dieselbe Menge `{pv-module, balkonkraftwerk}` wie die
+        # Σ-Lesestellen, aber in reinem SQL: ein Selektor im Python-Layer erreicht
+        # sie nie. Sie ist trotzdem ungefährlich, weil sie nichts **liest**,
+        # sondern nur eine Redundanz **prüft**: hängen Module unter einem BKW und
+        # sind beide Werte gepflegt, ist `summe` doppelt so groß wie der
+        # Feldwert, die Toleranzprüfung darunter schlägt fehl und das Feld bleibt
+        # stehen. Das ist genau die sichere Richtung, die der Docstring als
+        # Doktrin nennt — Stehenlassen ist korrigierbar, Löschen nicht. Am Code
+        # geprüft und ausdrücklich als No-op geführt, nicht als übersehene Stelle.
         werte = [
             _wert(typ, vd_raw)
             for typ, aktiv, anschaffung, stilllegung, vd_raw in quellen

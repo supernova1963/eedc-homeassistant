@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Optional
 
+from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
 from backend.core.investition_kennwerte import get_erzeuger_kwp, get_speicher_kapazitaet_kwh
 from backend.core.investition_parameter import ist_dienstlich
 from backend.models.investition import InvestitionTyp
@@ -143,7 +144,13 @@ def summe_graue_last(
     posten: list[GraueLastPosten] = []
     gesamt = 0.0
 
-    for inv in investitionen:
+    # N-266: ein Balkonkraftwerk mit Modul-Kindern hat seine kWp abgetreten —
+    # seine graue Last wäre hier ein zweites Mal `Σ kWp × GRAUE_LAST_PV_KG_PRO_KWP`
+    # und würde die Amortisation der ganzen Anlage nach hinten schieben. Die
+    # Herstellungs-Last des Mikro-Wechselrichters geht dabei nicht verloren: der
+    # Faktor ist ein kWp-Richtwert für die **Anlage**, nicht für das Modul allein
+    # (`core/calculations.py::GRAUE_LAST_PV_KG_PRO_KWP`).
+    for inv in erzeuger_traeger(investitionen):
         if not _ist_beruecksichtigt(inv, stichtag):
             continue
         last, quelle = graue_last_einzeln(inv)

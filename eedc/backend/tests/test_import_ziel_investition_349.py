@@ -303,8 +303,13 @@ async def test_wechselrichter_ohne_module_sagt_was_zu_tun_ist(db):
 
 
 async def test_balkonkraftwerk_traegt_seine_erzeugung_selbst(db):
-    """Unter einem BKW dürfen keine PV-Module hängen (`ERLAUBTE_PARENT_TYPEN`) —
-    es ist selbst der Erzeuger und damit sein eigener Empfänger."""
+    """Ein BKW **ohne** Modul-Kinder ist sein eigener Empfänger.
+
+    Seit N-266 darf ein `pv-module` unter einem Balkonkraftwerk hängen; die
+    Bedingung in `loese_ziel` (`if not pv_module`) trennt die beiden Fälle
+    weiterhin richtig. Mit Kindern schreibt der Import an die Kinder — das prüft
+    `test_bkw_parent_pv_module_n266.py`.
+    """
     anlage = Anlage(anlagenname="Mit BKW", leistung_kwp=0.8)
     db.add(anlage)
     await db.flush()

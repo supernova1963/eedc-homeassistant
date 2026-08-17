@@ -43,8 +43,21 @@ describe('Parent-Kind-Regel — eine Regel, eine Quelle', () => {
     expect(PARENT_REQUIRED).toContain('pv-module')
   })
 
-  it('PV-Module hängen weiterhin ausschließlich am Wechselrichter', () => {
-    expect(parentTypenFuer('pv-module')).toEqual(['wechselrichter'])
+  // ⚠ Diese Prüfung hieß bis 2026-08-17 „PV-Module hängen weiterhin
+  // ausschließlich am Wechselrichter" und pinnte damit eine **Lücke als Regel**:
+  // dass ein Balkonkraftwerk keine Module tragen durfte, war der Grund, warum es
+  // nur EINE Ausrichtung haben konnte (Melder: Discussion #366, Forum T89667
+  // #172). Derselbe Fehlertyp wie die Zeilen-Pinnung aus N-263 — ein Test, der
+  // die heutige Implementierung festhält statt ihrer Eigenschaft.
+  it('PV-Module hängen an einem Wechselrichter ODER einem Balkonkraftwerk (N-266)', () => {
+    expect(parentTypenFuer('pv-module')).toContain('wechselrichter')
+    expect(parentTypenFuer('pv-module')).toContain('balkonkraftwerk')
+  })
+
+  it('die Zuordnung eines PV-Moduls bleibt Pflicht — auch mit dem BKW als Option', () => {
+    // N-266 erweitert die Auswahl, es lockert die Pflicht nicht: ein Modul ohne
+    // Träger hätte weder AC-Grenze noch Zuordnungspfad.
+    expect(PARENT_REQUIRED).toContain('pv-module')
   })
 
   it('Typen ohne Parent liefern eine leere Liste, keinen undefined', () => {

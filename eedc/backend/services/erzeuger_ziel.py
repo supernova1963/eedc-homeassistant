@@ -93,8 +93,12 @@ def loese_ziel(
     pv_module = [i for i in kinder if i.typ == "pv-module"]
     speicher = [i for i in kinder if i.typ == "speicher"]
 
-    # Ein Balkonkraftwerk trägt seine Erzeugung selbst — unter ihm dürfen nur
-    # Speicher hängen (`ERLAUBTE_PARENT_TYPEN`), keine PV-Module.
+    # Ein Balkonkraftwerk OHNE Modul-Kinder trägt seine Erzeugung selbst und ist
+    # damit sein eigener Empfänger. **Mit** Kindern hat es sie abgetreten (N-266,
+    # SoT `core/berechnungen/erzeuger_traeger.py`) und der Import schreibt an die
+    # Kinder — genau das leistet dieses `if not pv_module` schon, seit die
+    # Zuordnung möglich ist. Bis N-266 stand hier „unter einem BKW dürfen nur
+    # Speicher hängen"; die Bedingung war richtig, ihre Begründung nicht mehr.
     if not pv_module and ziel.typ == "balkonkraftwerk":
         pv_module = [ziel]
 

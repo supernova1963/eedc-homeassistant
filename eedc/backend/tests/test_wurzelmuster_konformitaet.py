@@ -1734,6 +1734,13 @@ _P10_SCHICHT = "backend/services/monats_fakten.py"
 P10_SCHREIBEN_IMPORT_CHECKER: frozenset[str] = frozenset({
     # Die P7-Auflösung selbst — die Schicht ruft sie, sie ist ihr Unterbau.
     "backend/services/pv_monatswerte.py::lade_pv_je_monat",
+    # Stufe 2 derselben Auflösung (N-266): die Monatswerte der Balkonkraftwerke,
+    # unter denen `pv-module` hängen. Sie werden hier ausdrücklich **nicht**
+    # summiert, sondern je Elternteil vorgehalten, damit `lade_pv_je_monat`
+    # damit die Lücken der Kinder füllen kann (das nähere Aggregat gewinnt).
+    # Derselbe Unterbau, dieselbe Begründung wie die Zeile darüber — durch die
+    # Schicht geführt wäre es zirkulär: `monats_fakten` ruft `lade_pv_je_monat`.
+    "backend/services/pv_monatswerte.py::_lade_bkw_aggregate",
     # Monatsabschluss: Formular füllen und speichern.
     # (`aktueller_monat.py::_collect_saved_data` stand hier bis C1c — als
     # „Formular füllen" eingeordnet, obwohl es ein reiner Lesepfad mit
@@ -1999,4 +2006,275 @@ def test_p10_finanz_zeile_eingabe_nur_aus_einem_monats_fakt():
         "`services/monats_fakten.py::finanz_zeile_eingabe` aus einem "
         "`MonatsFakt` — nur so tragen alle Sichten denselben Tarif-Stichtag (P8) "
         "und dieselbe BKW-Aufteilung (P9)."
+    )
+
+
+# ============================================================================
+# P11 — Wer die PV-Erzeuger-Menge summiert, geht durch den Selektor (N-266)
+# ============================================================================
+#
+# **Der Anlass.** Seit N-266 darf ein `balkonkraftwerk` Parent von `pv-module`
+# sein — der Weg, auf dem ein BKW mit zwei Modulen über Eck zwei Ausrichtungen
+# tragen kann. Damit liegen zum ersten Mal **Eltern und Kind in derselben
+# Typ-Menge**: `PV_ERZEUGER_TYPEN = ("pv-module", "balkonkraftwerk")` wird
+# baumweit gebildet und flach summiert. Bisher zählte dort nichts doppelt, WEIL
+# PV-Module unter einem `wechselrichter` hängen und der kein PV-Erzeuger-Typ ist.
+#
+# **Die Invariante.** Ein Balkonkraftwerk mit `pv-module`-Kindern hat seine
+# Erzeugungsgrößen (kWp · Erzeugung · Ausrichtung) an die Kinder abgetreten. Wer
+# über die Menge summiert, filtert sie vorher durch
+# `core/berechnungen/erzeuger_traeger.py` — sonst zählt jede Größe zweimal.
+#
+# **Warum ein Wächter und keine Regression.** Der Dispatcher-Kommentar in
+# `investition_kennwerte.py` benennt die Klasse: „Ohne Dispatcher schreibt jede
+# Read-Site wieder ihre eigene `if typ == balkonkraftwerk`-Fallunterscheidung —
+# genau daraus sind die acht erhobenen Varianten der BKW-Formel entstanden."
+# Zwanzig namentlich aufgerufene Stellen fangen die einundzwanzigste nicht.
+#
+# **Was der Wächter NICHT sieht** (gehört in die „gesichert durch"-Spalte): eine
+# Stelle, die die Menge über einen Alias bildet, den er nicht kennt, und eine
+# zweite Summe INNERHALB einer bereits durch den Selektor laufenden Funktion.
+# Dagegen stehen die Wert-Tests in `test_bkw_parent_pv_module_n266.py`.
+
+_P11_SELEKTOR = "backend/core/berechnungen/erzeuger_traeger.py"
+
+#: Die Namen, an denen der Wächter „hier wird die PV-Erzeuger-Menge gebildet"
+#: erkennt. Als Konstante und nicht als Literal im Prüfcode: eine neue
+#: Schreibweise ist ein Listeneintrag, kein Neubau.
+#: Zusätzlich zählt JEDER Name, der auf `ERZEUGER_TYPEN` endet — davon gibt es
+#: heute vier (`PV_ERZEUGER_TYPEN`, `PVGIS_ERZEUGER_TYPEN`, `_ERZEUGER_TYPEN`,
+#: `ERZEUGER_TYPEN`), und der fünfte soll nicht erst auffallen, wenn jemand ihn
+#: hier einträgt. Der erste Entwurf listete nur die zwei öffentlichen und war
+#: für `monats_fakten.py::_erzeuger_aktiv` blind.
+_P11_MENGEN_NAMEN: frozenset[str] = frozenset({
+    "PV_ERZEUGER_TYPEN",
+    "PVGIS_ERZEUGER_TYPEN",
+})
+_P11_MENGEN_SUFFIX = "ERZEUGER_TYPEN"
+
+#: Die Selektor-Aufrufe, die eine Funktion freikaufen.
+_P11_SELEKTOR_AUFRUFE: frozenset[str] = frozenset({
+    "erzeuger_traeger",
+    "abgetretene_bkw_ids",
+    "traegt_erzeugungsgroessen_selbst",
+    "bkw_kwp_aus_kindern",
+    "modul_kinder",
+})
+
+#: Klassifizierte Ausnahmen. Form `modul.py::funktion` — funktions-granular,
+#: damit eine ausgenommene Datei nicht als Ganzes freigestellt ist (dieselbe
+#: Granularität wie der P10-Wächter, aus demselben Grund).
+P11_AUSNAHMEN: frozenset[str] = frozenset({
+    # ── 1. Definition der Menge selbst ─────────────────────────────────────
+    "backend/core/berechnungen/spez_ertrag.py::<modul>",   # PV_ERZEUGER_TYPEN
+    "backend/api/routes/pvgis.py::<modul>",                # PVGIS_ERZEUGER_TYPEN
+    "backend/services/monats_fakten.py::<modul>",          # _ERZEUGER_TYPEN
+    "backend/services/live_sensor_config.py::<modul>",     # ERZEUGER_TYPEN
+    "backend/services/datenquellen_validierung.py::<modul>",  # _PV_KOMPONENTEN_TYPEN
+    "backend/api/routes/connector.py::<modul>",            # _KATEGORIE_TYPEN
+    # Kein Mengen-Bildner, sondern die ANZEIGE-REIHENFOLGE aller Typen — die
+    # Literal-Heuristik sieht nur, dass beide Strings in einer Liste stehen.
+    # Der Eintrag hält den falsch-positiven Fall benannt statt ihn wegzufiltern:
+    # eine Heuristik, die man schweigend entschärft, entschärft irgendwann auch
+    # den echten Fall.
+    "backend/utils/investition_filter.py::<modul>",
+
+    # ── 2. Reine Typ-FILTER und Zählungen ohne Σ einer Größe ───────────────
+    # „Ist das ein PV-Erzeuger?" zählt nichts und kann nichts doppeln. Der
+    # Selektor davor würde die Frage nicht beantworten, sondern verschieben.
+    "backend/main.py::get_database_stats",                 # zählt GERÄTE
+    "backend/services/monats_fakten.py::_erzeuger_aktiv",  # „war einer aktiv?"
+    "backend/api/routes/monatsabschluss/views.py::get_naechster_monat",
+    "backend/api/routes/monatsdaten.py::list_monatsdaten_aggregiert",  # `pv_ziel_aktiv`
+    "backend/services/energie_profil/_helpers.py::_get_tagespeaks_aus_ha_lts",
+    # ⚠ Der ANSCHAFFUNGS-Anker: `get_naechster_monat` und `monats_luecken`
+    # fragen, ab wann ein Monat erfasst sein SOLL. Ein abtretendes BKW gehört
+    # dort dazu — es ist am Netz, seit es angeschafft wurde, unabhängig davon,
+    # wer heute seine kWp trägt. Den Selektor hier anzuwenden würde den
+    # erwarteten Monatsbereich verkürzen (die Klasse aus ARCHITEKTUR §4: zwei
+    # Datums-Ebenen, zwei Fragen).
+
+    # ── 3. Schreib-, Import-, Migrations- und Checker-Pfade ────────────────
+    "backend/services/energie_profil/aggregator.py::aggregate_day",
+    "backend/services/snapshot/keys.py::_categorize_counter",
+    "backend/services/snapshot/komponenten_beitraege.py::investition_beitraege",
+    "backend/core/database.py::_migrate_connector_field_inv_map_backfill",
+    "backend/services/daten_checker/energieprofil.py::_check_energieprofil_abdeckung",
+    "backend/services/daten_checker/monatsdaten.py::_check_monatsdaten_vollstaendigkeit",
+    "backend/services/daten_checker/stammdaten.py::_check_stammdaten",
+    # ⚠ Der Schreibpfad adressiert bewusst BEIDE: hängen Module am BKW, schreibt
+    # `services/erzeuger_ziel.py::loese_ziel` an die Kinder, sonst an das BKW
+    # selbst. Ein Selektor würde dem BKW ohne Kinder seinen Empfänger nehmen.
+
+    # ── 4. Per-Investition-Sichten: keine Anlagensumme ─────────────────────
+    # Hier ist die Ableitung im kWp-SoT zuständig (`get_bkw_kwp` liest die
+    # geladenen Modul-Kinder, E5), nicht ein Mengen-Selektor.
+    "backend/api/routes/investitionen/crud.py::leistung_kwp_effektiv",
+    "backend/api/routes/pvgis.py::get_pvgis_modul_prognose",
+    "backend/services/pdf/builders/anlagendokumentation.py::_build_investition_tech_grid",
+
+    # ── 4b. Live-Pfad: die Zuordnung folgt dem SENSOR, nicht der Struktur ──
+    # Diese vier ordnen einer Investition eine **Entity** zu bzw. summieren
+    # Momentanwerte gemappter Sensoren. Wer einen Sensor hat, zählt — und beim
+    # Melder-Fall ist das gerade das Balkonkraftwerk: sein Wechselrichter ist
+    # oft der EINZIGE Zähler, die Module darunter haben keinen eigenen. Der
+    # Selektor hier würde die einzige Live-Quelle der Anlage stillschweigend
+    # verwerfen. Wer BKW **und** Module mappt, beschreibt dieselbe Energie
+    # zweimal — genau wie heute schon bei Wechselrichter + Modul-Sensoren; das
+    # ist eine Zuordnungs-Frage der Datenquellen-Fläche, keine der Monatsachsen.
+    "backend/services/live_history_service.py::get_tages_kwh",
+    "backend/services/live_komponenten_builder.py::build_komponenten",
+    "backend/services/live_tagesverlauf_service.py::_resolve_counter_eid",
+    "backend/services/live_verbrauchsprofil_service.py::_profil_from_ha",
+
+    # ── 5. Durchreicher an eine Stelle, die den Selektor trägt ─────────────
+    # Sie laden die Menge und geben sie weiter an `orientierungs_gruppen` bzw.
+    # `zuordne_grenzen` — dort läuft der Selektor. Ihn hier ZUSÄTZLICH
+    # anzuwenden wäre schlimmer als redundant: `zuordne_grenzen` braucht die
+    # UNGEFILTERTE Menge, sonst finden die Modul-Kinder die AC-Grenze ihres
+    # Balkonkraftwerks nicht mehr (s. dortiger Docstring).
+    "backend/api/routes/live_wetter.py::get_live_wetter",
+    "backend/api/routes/energie_profil/views.py::get_tagesprognose",
+    "backend/services/prognose_kanon.py::_pv_invs_im_horizont",
+})
+
+
+def _p11_mengen_funktionen() -> dict[str, list[int]]:
+    """`modul.py::funktion` → Zeilen, an denen die PV-Erzeuger-Menge gebildet wird.
+
+    Erkannt wird beides: der benannte SoT (`PV_ERZEUGER_TYPEN`) und die
+    ausgeschriebene Form — ein Container-Literal, das **beide** Typ-Strings
+    enthält. Die zweite Form ist die, aus der die acht BKW-Varianten entstanden
+    sind; ein Wächter, der nur die Konstante kennt, sähe sie nicht.
+    """
+    treffer: dict[str, list[int]] = {}
+
+    for pfad, baum in _quelldateien():
+        modul = f"backend/{pfad.relative_to(_BACKEND).as_posix()}"
+        if modul == _P11_SELEKTOR:
+            continue
+        stapel: list[str] = []
+
+        def ist_menge(knoten: ast.AST) -> bool:
+            if isinstance(knoten, ast.Name) and (
+                knoten.id in _P11_MENGEN_NAMEN
+                or knoten.id.endswith(_P11_MENGEN_SUFFIX)
+            ):
+                return True
+            if isinstance(knoten, (ast.Tuple, ast.List, ast.Set)):
+                werte = {
+                    e.value for e in knoten.elts
+                    if isinstance(e, ast.Constant) and isinstance(e.value, str)
+                }
+                return {"pv-module", "balkonkraftwerk"} <= werte
+            return False
+
+        def besuche(knoten: ast.AST) -> None:
+            if isinstance(knoten, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                stapel.append(knoten.name)
+                for kind in ast.iter_child_nodes(knoten):
+                    besuche(kind)
+                stapel.pop()
+                return
+            if ist_menge(knoten):
+                schluessel = f"{modul}::{stapel[-1] if stapel else '<modul>'}"
+                treffer.setdefault(schluessel, []).append(
+                    getattr(knoten, "lineno", 0)
+                )
+            for kind in ast.iter_child_nodes(knoten):
+                besuche(kind)
+
+        besuche(baum)
+
+    return treffer
+
+
+def _p11_funktionen_mit_selektor() -> set[str]:
+    """`modul.py::funktion` aller Funktionen, die den Selektor aufrufen."""
+    mit: set[str] = set()
+    for pfad, baum in _quelldateien():
+        modul = f"backend/{pfad.relative_to(_BACKEND).as_posix()}"
+        stapel: list[str] = []
+
+        def besuche(knoten: ast.AST) -> None:
+            if isinstance(knoten, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                stapel.append(knoten.name)
+                for kind in ast.iter_child_nodes(knoten):
+                    besuche(kind)
+                stapel.pop()
+                return
+            if (
+                isinstance(knoten, ast.Call)
+                and getattr(knoten.func, "id", None) in _P11_SELEKTOR_AUFRUFE
+            ):
+                # ⚠ Für den GANZEN Rahmen-Stapel eintragen, nicht nur für die
+                # innerste Funktion. `_erzeugung_ausgebaut` bildet die Menge und
+                # ruft den Selektor in seiner verschachtelten `_kwp`-Hilfe — die
+                # Stelle IST gedeckt, und der erste Entwurf dieses Wächters
+                # meldete sie trotzdem als offen.
+                for rahmen in (stapel or ["<modul>"]):
+                    mit.add(f"{modul}::{rahmen}")
+                if not stapel:
+                    mit.add(f"{modul}::<modul>")
+            for kind in ast.iter_child_nodes(knoten):
+                besuche(kind)
+
+        besuche(baum)
+    return mit
+
+
+def test_p11_pv_erzeuger_menge_laeuft_durch_den_selektor():
+    """Baumweit: keine neue Σ über `{pv-module, balkonkraftwerk}` ohne Selektor."""
+    mit_selektor = _p11_funktionen_mit_selektor()
+    offen = sorted(
+        f"{schluessel} (Z. {zeilen[0]})"
+        for schluessel, zeilen in _p11_mengen_funktionen().items()
+        if schluessel not in mit_selektor and schluessel not in P11_AUSNAHMEN
+    )
+
+    assert offen == [], (
+        f"{len(offen)} Funktionen bilden die PV-Erzeuger-Menge ohne Selektor: {offen}\n"
+        "Seit N-266 darf ein `balkonkraftwerk` Parent von `pv-module` sein — "
+        "Eltern und Kind liegen damit in DERSELBEN Typ-Menge. Ein BKW mit "
+        "Modul-Kindern hat kWp, Erzeugung und Ausrichtung an die Kinder "
+        "abgetreten; wer über die Menge summiert, filtert sie vorher durch "
+        "`core/berechnungen/erzeuger_traeger.py::erzeuger_traeger`.\n"
+        "⚠ Der Selektor läuft NACH dem Zeitfilter, nicht davor: in einem Monat "
+        "vor der Anschaffung der Module trägt das BKW seine Größen noch selbst.\n"
+        "Reine Typ-Filter (»ist das ein PV-Erzeuger?«), Schreib-/Import-/"
+        "Zuordnungspfade und per-Investition-Sichten gehören mit Begründung in "
+        "P11_AUSNAHMEN — jede Anlagensumme gehört durch den Selektor."
+    )
+
+
+def test_p11_ausnahmen_sind_alle_erreichbar():
+    """Kein Eintrag in `P11_AUSNAHMEN` zeigt auf eine verschwundene Stelle.
+
+    Ohne diese Probe wächst die Liste mit jedem Umbau weiter und behält
+    Freistellungen für Code, den es nicht mehr gibt — dann deckt sie eines Tages
+    eine Stelle, die niemand geprüft hat (die N-182-Klasse im Wächter selbst).
+    """
+    vorhanden = set(_p11_mengen_funktionen())
+    toter_eintrag = sorted(P11_AUSNAHMEN - vorhanden)
+    assert toter_eintrag == [], (
+        f"P11_AUSNAHMEN nennt Stellen, die die Menge nicht mehr bilden: "
+        f"{toter_eintrag} — Eintrag löschen."
+    )
+
+
+def test_p11_selektor_ist_ohne_lazy_zugriff_gebaut():
+    """Der Selektor liest `parent_investition_id`, NICHT `children`.
+
+    ``children`` ist ein Lazy-Backref; ein Zugriff darauf liefe in async
+    SQLAlchemy auf ``MissingGreenlet`` — genau die Schranke, die im Register als
+    „hart" geführt wurde und an der die Ableitung scheiterte, solange sie im
+    Dispatcher sitzen sollte. Ohne diese Probe könnte ein späterer Umbau den
+    Selektor auf `children` umstellen: er wäre in den Unit-Tests grün (Doubles
+    haben die Beziehung) und in jeder Route ein 500er.
+    """
+    quelle = (_BACKEND / "core/berechnungen/erzeuger_traeger.py").read_text()
+    assert "parent_investition_id" in quelle
+    assert ".children" not in quelle, (
+        "`children` ist ein Lazy-Backref — der Selektor arbeitet auf der "
+        "übergebenen Menge über die Spalte `parent_investition_id`."
     )

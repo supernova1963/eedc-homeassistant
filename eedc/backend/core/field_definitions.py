@@ -317,13 +317,30 @@ INVESTITION_FELDER: dict = {
         },
     ],
 
+    # N-266: Hängen `pv-module` unter dem Balkonkraftwerk (seit 2026-08-17
+    # möglich, damit zwei Module über Eck zwei Ausrichtungen tragen können),
+    # dann wird `pv_erzeugung_kwh` zum **Aggregat seiner Kinder** — genau die
+    # Rolle, die `Monatsdaten.pv_erzeugung_kwh` für die ganze Anlage hat: die
+    # gemessenen Modulwerte gewinnen, das Aggregat füllt nur deren Lücken
+    # (ADR-002/**P7**, aufgelöst in `services/pv_monatswerte.py`).
+    #
+    # ⛔ **Bewusst NICHT das `nur_manuell`-Muster des BKW-Akkus zwei Felder
+    # weiter unten**, obwohl der Auftrag es als Blaupause vorsah. Beim Akku ist
+    # der Kind-Weg strikt reicher (Live-Leistung, SoC, Energiefluss, Zählerpfad)
+    # — das eigene Feld kennt nur einen Monatswert, es zu sperren verliert
+    # nichts. Hier ist es umgekehrt: der Wechselrichter des BKW ist oft der
+    # **einzige** Zähler, den es gibt, und die Module darunter haben gar keinen
+    # eigenen Sensor. Das Feld zu sperren hätte dem Melder-Fall (ein Set, zwei
+    # Ausrichtungen, ein Sensor) jede Erfassung genommen. Also bleibt es
+    # vollständig zuordenbar; die Doppelzählung verhindert die **Leserichtung**,
+    # nicht ein Erfassungsverbot.
     "balkonkraftwerk": [
         {
             "feld": "pv_erzeugung_kwh", "label": "Erzeugung", "einheit": "kWh",
             "csv_suffix": "Erzeugung_kWh",
             "csv_suffix_alt": "kWh",  # Rückwärtskompatibilität
             "aggregiert_in": "pv_erzeugung_sum",
-            "hinweis": "Kumulativer kWh-Zähler (oder Tagessensor) der BKW-Erzeugung vom Wechselrichter. Immer ≥ 0.",
+            "hinweis": "Kumulativer kWh-Zähler (oder Tagessensor) der BKW-Erzeugung vom Wechselrichter. Immer ≥ 0. Sind dem Balkonkraftwerk PV-Module zugeordnet, gilt dieser Wert als deren Gesamtsumme: eigene Modulwerte haben Vorrang, dieser hier füllt die Lücken.",
         },
         {
             "feld": "eigenverbrauch_kwh", "label": "Eigenverbrauch", "einheit": "kWh",

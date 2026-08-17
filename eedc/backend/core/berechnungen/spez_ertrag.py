@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from typing import Iterable, Mapping, Optional, Sequence
 
+from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
 from backend.core.investition_kennwerte import get_erzeuger_kwp
 
 # Typische 52°N-Monatsverteilung (Prozent des Jahresertrags) — Fallback,
@@ -47,13 +48,25 @@ def monatsgewichte_aus_pvgis(monatswerte: Optional[Iterable[Mapping]]) -> dict[i
 
 
 def kwp_aktiv_im_monat(investitionen: Sequence, jahr: int, monat: int) -> float:
-    """Im Monat tatsächlich aktive PV-Leistung (PV-Module + Balkonkraftwerke)."""
+    """Im Monat tatsächlich aktive PV-Leistung (PV-Module + Balkonkraftwerke).
+
+    ``erzeuger_traeger`` (N-266) läuft **nach** dem Aktiv-Filter, und die
+    Reihenfolge ist die eigentliche Aussage: ein Balkonkraftwerk mit
+    `pv-module`-Kindern hat seine kWp an die Kinder abgetreten und zählte hier
+    sonst zweimal — der spezifische Ertrag ist ``pv_erzeugung / kwp``, ein
+    verdoppelter Nenner **halbiert** die Kennzahl. Läge der Selektor davor,
+    verlöre ein Monat **vor** der Anschaffung der Module die BKW-kWp ganz: das
+    Kind ist in der Rohmenge sichtbar (die Abtretung greift), im Monat aber nicht
+    aktiv (es zählt nicht mit) — Nenner 0 statt der kWp des BKW, das damals
+    allein lief. Erst filtern, dann abtreten: dann trägt in genau diesem Monat
+    das BKW seine Größen noch selbst.
+    """
     kwp = 0.0
-    for inv in investitionen:
-        if inv.typ not in PV_ERZEUGER_TYPEN:
-            continue
-        if not inv.ist_aktiv_im_monat(jahr, monat):
-            continue
+    im_monat = [
+        inv for inv in investitionen
+        if inv.typ in PV_ERZEUGER_TYPEN and inv.ist_aktiv_im_monat(jahr, monat)
+    ]
+    for inv in erzeuger_traeger(im_monat):
         # kWp über den SoT-Dispatcher (ADR-002/P3-a). Wer die Nennleistung nur
         # im Detail-Feld (`parameter`) gepflegt hat (#229), zählte hier 0 —
         # damit wurde der NENNER des spez. Ertrags zu klein und die Kennzahl in

@@ -20,6 +20,7 @@ from sqlalchemy import select
 from backend.core.config import settings
 from backend.core.database import get_session
 from backend.models.anlage import Anlage
+from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
 from backend.models.investition import Investition
 from backend.utils.investition_filter import aktiv_jetzt
 from backend.services.prognose_auswahl import lade_aktive_prognose
@@ -88,7 +89,10 @@ async def _prefetch_for_anlage(anlage: Anlage, db) -> dict:
             aktiv_jetzt(),
         )
     )
-    alle_pv = inv_result.scalars().all()
+    # N-266: `erzeuger_traeger` — ein Balkonkraftwerk mit Modul-Kindern hat kWp
+    # UND Ausrichtung abgetreten; es brächte hier eine zusätzliche String-Zeile
+    # mit seiner alten Einzel-Ausrichtung mit.
+    alle_pv = erzeuger_traeger(inv_result.scalars().all())
 
     if not alle_pv:
         return {"status": "keine_pv"}

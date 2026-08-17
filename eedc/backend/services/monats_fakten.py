@@ -75,6 +75,7 @@ from backend.api.routes.strompreise import (
 from backend.core.berechnungen import (
     PvModulWert,
     VerbrauchsKennzahlen,
+    abgetretene_bkw_ids,
     berechne_verbrauchs_kennzahlen,
     bkw_finanz_beitrag,
     erzeugung_hinter_zaehler_kwh,
@@ -596,6 +597,13 @@ async def lade_monats_fakten(
     pv_je_modul = await lade_pv_je_monat(db, anlage_id, pv_module, jahr=_ein_jahr(von, bis))
     pv_summen = pv_summe_je_monat(pv_je_modul)
 
+    # N-266: Balkonkraftwerke, unter denen `pv-module` hängen. Ihre Erzeugung
+    # steckt seit E4 in `pv_je_modul` (der BKW-Monatswert füllt dort die Lücken
+    # seiner Kinder) und darf deshalb nicht zusätzlich als `bkw_erzeugung`
+    # gezählt werden. Ohne Modul-Kinder ist die Menge leer und alles bleibt
+    # bitgleich zu vorher.
+    abgetretene_bkw = abgetretene_bkw_ids(investitionen)
+
     neg_preis_je_monat = await get_neg_preis_einspeisung_je_monat(db, anlage_id)
 
     # Roh-Faltung je Monat aus den sichtbaren IMD-Zeilen.
@@ -606,7 +614,9 @@ async def lade_monats_fakten(
         # zählt nichts — der EINE Ort, an dem dieser Filter gilt.
         if inv is None or not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
             continue
-        roh.setdefault((imd.jahr, imd.monat), _RohMonat()).falte(inv, imd.verbrauch_daten or {})
+        roh.setdefault((imd.jahr, imd.monat), _RohMonat()).falte(
+            inv, imd.verbrauch_daten or {}, abgetretene_bkw=abgetretene_bkw
+        )
 
     # Die lokale Tagesebene als **zusätzliche** Grundgesamtheit (N-121). Ohne
     # das Flag wird sie nicht einmal geladen — die Kosten trägt nur, wer sie
@@ -840,7 +850,23 @@ class _RohMonat:
             self.eauto_ladedaten, self.wallbox_ladedaten
         )
 
-    def falte(self, inv: Investition, data: dict) -> None:
+    def falte(
+        self,
+        inv: Investition,
+        data: dict,
+        *,
+        abgetretene_bkw: frozenset = frozenset(),
+    ) -> None:
+        """Faltet EINE IMD-Zeile ein.
+
+        ``abgetretene_bkw`` sind die IDs der Balkonkraftwerke, unter denen
+        `pv-module` hängen (N-266). **Pflicht-Argument im Geiste, mit Default
+        aus Bequemlichkeit für Tests:** ohne die Menge zählt die Erzeugung eines
+        abtretenden BKW zweimal — einmal über seine Kinder in
+        ``pv_je_modul``/``pv_module_kwh``, einmal hier in ``bkw_erzeugung``.
+        Betroffen wären Autarkie, Eigenverbrauchsquote, CO₂, Finanzen,
+        Community-Payload und HA-Export.
+        """
         b = imd_typ_beitrag(inv, data)
         # Dienstwagen zählen NICHT als Beitrag: sie sind aus dem E-Mob-Pool der
         # Anlage herausgefiltert, und eine Sicht, die daraufhin „0 kWh geladen"
@@ -850,13 +876,29 @@ class _RohMonat:
             self.typen_mit_zeile.add(inv.typ)
 
         if inv.typ == "balkonkraftwerk":
+            # N-266: Hängen `pv-module` an diesem BKW, hat es seine Erzeugung
+            # abgetreten — sie steht schon in `pv_je_modul` (dort füllt der
+            # BKW-Monatswert die Lücken seiner Kinder, `pv_monatswerte.py`
+            # Stufe 2). Hier zählt sie deshalb 0.
+            #
+            # ⚠ Und der **Rest-Eigenverbrauch** wird damit ebenfalls 0, nicht
+            # etwa der Ersatzträger: P9 sagt, der Ersatzträger greift genau
+            # dann, wenn die Erzeugung **nirgends** in die PV-Summe eingeht. Hier
+            # geht sie ein, nur über die Kinder — der selbst verbrauchte Anteil
+            # steckt also wie im Normalfall bereits in der Ableitung
+            # `PV − Einspeisung − Speicherladung`. Ihn zusätzlich zu tragen wäre
+            # exakt die Doppelzählung, gegen die P9 geschrieben ist.
+            hat_abgetreten = inv.id in abgetretene_bkw
             # P9: je (BKW, Monat) trägt genau EINER der beiden Werte die
             # Finanz-Zeile — die Entscheidung fällt der Helfer, nie der Aufrufer.
             beitrag = bkw_finanz_beitrag(
                 erzeugung_kwh=b.bkw_erzeugung,
                 eigenverbrauch_kwh=b.bkw_eigenverbrauch,
             )
-            self.bkw_erzeugung += b.bkw_erzeugung
+            if hat_abgetreten:
+                beitrag = bkw_finanz_beitrag(erzeugung_kwh=None, eigenverbrauch_kwh=None)
+            else:
+                self.bkw_erzeugung += b.bkw_erzeugung
             # Je Investition zusätzlich zur Summe (F-10): der String-Vergleich
             # des Jahresbericht-PDF stellt jeden Erzeuger einzeln seinem SOLL
             # gegenüber und findet ein BKW in `pv_je_modul` nicht — dort stehen
@@ -865,9 +907,16 @@ class _RohMonat:
             # `pv_module_kwh` bleiben unberührt, weil `pv_module_kwh` in die
             # ROI-Rechnung geht, wo das BKW bewusst eine eigene Zeile hat
             # (`investitionen/crud.py::get_pv_erzeugung`) und sonst doppelt zählte.
-            self.bkw_je_investition[inv.id] = (
-                self.bkw_je_investition.get(inv.id, 0.0) + b.bkw_erzeugung
-            )
+            #
+            # N-266: ein abtretendes BKW steht hier NICHT. Beide Leser dieses
+            # Felds addieren es neben `pv_je_modul` — der String-Vergleich des
+            # PDF (dort ist das BKW seit E2 keine eigene Zeile mehr) und die
+            # ROI-Gewichtung in `aussichten.py` (`_erz_gewichte` + `_bkw_gewichte`).
+            # Dort wäre es die Doppelzählung ein zweites Mal, auf der Geldachse.
+            if not hat_abgetreten:
+                self.bkw_je_investition[inv.id] = (
+                    self.bkw_je_investition.get(inv.id, 0.0) + b.bkw_erzeugung
+                )
             self.bkw_eigenverbrauch += b.bkw_eigenverbrauch
             self.bkw_rest_eigenverbrauch += beitrag.rest_eigenverbrauch_kwh
             self.bkw_speicher_ladung += b.bkw_speicher_ladung

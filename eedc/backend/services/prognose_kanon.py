@@ -66,6 +66,7 @@ from backend.services.pv_orientation import (
     resolve_system_losses,
 )
 from backend.core.investition_kennwerte import get_erzeuger_kwp
+from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
 from backend.core.berechnungen.wr_kappung import (
     Mitglied,
     hat_kappung,
@@ -247,7 +248,12 @@ def _kappungs_mitglieder(
     """
     index = {(g.neigung, g.ausrichtung): i for i, g in enumerate(gruppen)}
     mitglieder: list[list[Mitglied]] = [[] for _ in gruppen]
-    for inv in invs:
+    # N-266: dieselbe Menge wie beim Fan-out — ein Balkonkraftwerk mit
+    # Modul-Kindern ist kein Mitglied mehr, sondern der TRÄGER der Grenze
+    # (`zuordne_grenzen` gibt ihm deshalb keine Zeile). Bliebe es drin und
+    # stimmte seine alte Ausrichtung zufällig mit der eines Kindes überein,
+    # stünde es mit voller kWp im Kappungs-Pool und verschöbe die Aufteilung.
+    for inv in erzeuger_traeger(invs):
         if not inv.ist_aktiv_an(tag):
             continue
         kwp = get_erzeuger_kwp(inv)

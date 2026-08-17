@@ -11,6 +11,34 @@
 
 ## Noch nicht veröffentlicht
 
+### Balkonkraftwerk: mehrere Ausrichtungen über zugeordnete PV-Module
+
+Ein Balkonkraftwerk hat in eedc **ein** Feld für die Ausrichtung und **eines** für die Neigung. Wer
+seine Module über Eck hängt — Balkon nach Ost, Terrasse nach West —, konnte das bisher nicht
+abbilden. Und der naheliegende Weg über *Einstellungen → PV-Module* ging nicht: Ein PV-Modul musste
+einem **Wechselrichter** zugeordnet werden, und ein Balkonkraftwerk war keiner. Dabei ist ein
+Balkonkraftwerk Erzeuger und Wechselrichter in einem, und einen Akku durfte es längst tragen.
+
+Jetzt kannst du **PV-Module einem Balkonkraftwerk zuordnen** — im Formular unter *Einstellungen →
+Investitionen* und auch im **Einrichtungsassistenten**. Jedes Modul trägt dann seine eigene
+Ausrichtung und Neigung, und die Prognose rechnet jede Richtung getrennt.
+
+Zwei Dinge, die dabei wichtig sind:
+
+- **Nennleistung, Ausrichtung und Neigung kommen ab dann von den Modulen.** Das Balkonkraftwerk
+  zeigt als Leistung die Summe seiner Module; seine eigenen Felder beschreiben nur noch das Gerät.
+  Das Formular schreibt es an der Stelle dazu.
+- **Die *Wechselrichter-Leistung* gilt weiter.** Die 800 W gehören dem Gerät und begrenzen die
+  **Summe** aller Module — sie ergeben sich nicht aus ihnen. Bitte weiter pflegen, sonst rechnet die
+  Prognose mit der vollen Modulleistung.
+
+Beim **Monatsabschluss** ändert sich für dich nichts: Der Wert *Erzeugung* am Balkonkraftwerk bleibt
+nutzbar — bei einem Set ist der Wechselrichter meist der einzige Zähler. Er gilt dann als
+Gesamtsumme der Module: Hat ein Modul einen eigenen Messwert, gewinnt der; die übrigen bekommen den
+Rest nach Leistungsanteil. Doppelt gezählt wird nichts.
+
+**Wer keine Module zuordnet, sieht keine veränderte Zahl.**
+
 ### „Anlage nicht gefunden" nach dem Löschen der letzten Anlage
 
 eedc merkt sich, welche Anlage du zuletzt ausgewählt hattest. Diese Merkung wurde beim Löschen nie

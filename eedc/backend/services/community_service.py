@@ -10,7 +10,11 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import Anlage, Investition
-from backend.core.berechnungen import PV_ERZEUGER_TYPEN
+from backend.core.berechnungen import (
+    PV_ERZEUGER_TYPEN,
+    bkw_kwp_aus_kindern,
+    erzeuger_traeger,
+)
 from backend.core.config import settings
 from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
 from backend.services.pv_orientation import get_pv_neigung
@@ -195,14 +199,28 @@ async def prepare_community_data(
             wallbox_kw = None
 
     # Balkonkraftwerk Leistung (Wp pro Modul × Anzahl Module)
+    #
+    # ⚠ **N-266, Handarbeit-Stelle 1 von 2.** Diese Zeile liest das
+    # `parameter`-JSON **roh** und erreicht `get_bkw_kwp` von sich aus nie — die
+    # Ableitung aus den Modul-Kindern (E5) kommt hier also nicht an. Sie wird
+    # deshalb hier ausdrücklich nachgezogen: hängen `pv-module` am BKW, ist
+    # deren Σ kWp seine Leistung, und die eigene Pflege ist Altbestand aus der
+    # Zeit vor der Zuordnung. Das ist die einzige N-266-Stelle, deren Zahl das
+    # Haus verlässt — sie bestimmt im öffentlichen Benchmark die
+    # Vergleichsgruppe, und der Server rechnet nichts nach.
     bkw_wp = None
     bkws = [inv for inv in investitionen if inv.typ == "balkonkraftwerk"]
     if bkws:
-        bkw_wp = sum(
-            ((inv.parameter or {}).get(PARAM_BALKONKRAFTWERK["LEISTUNG_WP"], 0) or 0)
-            * ((inv.parameter or {}).get(PARAM_BALKONKRAFTWERK["ANZAHL"], 1) or 1)
-            for inv in bkws
-        )
+        bkw_wp = 0.0
+        for inv in bkws:
+            aus_kindern = bkw_kwp_aus_kindern(inv, investitionen)
+            if aus_kindern:
+                bkw_wp += aus_kindern * 1000
+                continue
+            bkw_wp += (
+                ((inv.parameter or {}).get(PARAM_BALKONKRAFTWERK["LEISTUNG_WP"], 0) or 0)
+                * ((inv.parameter or {}).get(PARAM_BALKONKRAFTWERK["ANZAHL"], 1) or 1)
+            )
         if bkw_wp == 0:
             bkw_wp = None
 
@@ -222,7 +240,14 @@ async def prepare_community_data(
     # rechnet nichts nach (er hat die Rohdaten nie gesehen), also wurde die
     # Anlage still gegen die falsche Vergleichsgruppe gemessen. Von allen
     # F-10-Stellen die einzige, deren falscher Wert das Haus verlässt.
-    pv_module = [inv for inv in investitionen if inv.typ in PV_ERZEUGER_TYPEN]
+    #
+    # N-266: `erzeuger_traeger` — ein Balkonkraftwerk mit Modul-Kindern hat seine
+    # Ausrichtung abgetreten. Bliebe es drin, ginge seine EINE (alte) Ausrichtung
+    # als zusätzlicher Summand in den Ø ein und verschöbe die Vergleichsgruppe
+    # genau gegen die Module, deren Ausrichtungen der Melder erst erfassen wollte.
+    pv_module = erzeuger_traeger(
+        [inv for inv in investitionen if inv.typ in PV_ERZEUGER_TYPEN]
+    )
     if pv_module:
         # Über den SoT-Helper (Spalte → `parameter`): beim BKW kann die Neigung
         # aus Import/Altbestand nur im `parameter`-JSON stehen, dann lieferte der

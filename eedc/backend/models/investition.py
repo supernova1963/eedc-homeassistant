@@ -60,11 +60,37 @@ TYP_LABELS: dict[str, str] = {
 # Das Client-Pendant lebt in
 #   eedc/frontend/src/components/forms/sections/investitionFormHelpers.ts
 # und wird von `useSetupWizard.ts` importiert statt nachgebaut.
+#
+# N-266 (2026-08-17): `pv-module` darf auch einem `balkonkraftwerk` zugeordnet
+# werden. Ein BKW ist funktional Erzeuger UND Wechselrichter in einem (so steht
+# es in `core/berechnungen/wr_kappung.py`), und ein Wechselrichter darf Module
+# tragen — die Sperre war keine Entscheidung, sondern eine Lücke. Sie kostete
+# ein BKW jede zweite Ausrichtung: das Gerät trägt EINE `ausrichtung` und EINE
+# `neigung_grad`, zwei Module über Eck waren damit nicht abbildbar. Melder:
+# azywietz-web (Discussion #366) und Daniel (Forum T89667 #172).
+#
+# Wer diese Zeile liest und eine Σ-Stelle baut: ein BKW mit Modul-Kindern tritt
+# seine kWp, seine Erzeugung und seine Ausrichtung an die Kinder ab — der
+# Selektor dafür ist `core/berechnungen/erzeuger_traeger.py`, NICHT eine eigene
+# `if typ == balkonkraftwerk`-Fallunterscheidung. Seine AC-Grenze tritt es
+# dagegen NICHT ab (die 800 VA sind eine Eigenschaft des Wechselrichters, nicht
+# der Module).
 ERLAUBTE_PARENT_TYPEN: dict[str, tuple[str, ...]] = {
-    InvestitionTyp.PV_MODULE.value: (InvestitionTyp.WECHSELRICHTER.value,),
+    InvestitionTyp.PV_MODULE.value: (
+        InvestitionTyp.WECHSELRICHTER.value,
+        InvestitionTyp.BALKONKRAFTWERK.value,     # N-266 — mehrere Ausrichtungen
+    ),
     InvestitionTyp.SPEICHER.value: (
         InvestitionTyp.WECHSELRICHTER.value,      # Hybrid-Wechselrichter (DC)
-        InvestitionTyp.BALKONKRAFTWERK.value,     # BKW mit Akku (AC)
+        # N-268: hier stand „BKW mit Akku (AC)". Gemeint war die
+        # HAUSANBINDUNG, gelesen wurde es als SPEICHERKOPPLUNG — und die
+        # entscheidet seit F-11 über SOLL-Zahlen (`wr_kappung`: am Träger der
+        # Grenze hängt ein DC-Speicher ⇒ gar nicht kappen). Richtig ist DC:
+        # ein Akku mit gesetztem Parent teilt sich den Erzeugungspfad, nur ein
+        # AC-Speicher bringt seinen eigenen Wechselrichter mit und hat dann in
+        # aller Regel gar keinen Parent. `get_speicher_kopplung` leitet genau
+        # das ab, `wr_kappung.py` hatte recht. Gernots Einwand, 17.08.2026.
+        InvestitionTyp.BALKONKRAFTWERK.value,     # BKW-Akku (DC, Kanon seit v4.0.5)
     ),
 }
 

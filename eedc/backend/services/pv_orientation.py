@@ -33,6 +33,7 @@ from typing import Any
 # braucht und `core/` laut ADR-001 nicht auf `services/` zeigen darf. Hier steht
 # nur noch der Re-Export, damit die bestehenden Importeure unberührt bleiben —
 # KEINE Kopie, es gibt genau eine Implementierung.
+from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
 from backend.core.investition_kennwerte import (  # noqa: F401
     get_erzeuger_kwp,
     get_pv_kwp,
@@ -130,9 +131,20 @@ def orientierungs_gruppen(invs: Any) -> list[Orientierungsgruppe]:
     ``aussichten.py`` mit A24-2 gefahren worden und blieb hier liegen —
     dieselbe Klasse wie die zwei Abweichungen, die A20 in
     ``live_wetter._get_pv_orientierungsgruppen`` eingesammelt hat.
+
+    **N-266 — hier wird der Melder-Wunsch überhaupt erst wirksam.** Die Menge
+    läuft durch ``erzeuger_traeger``: ein Balkonkraftwerk mit
+    `pv-module`-Kindern hat kWp **und** Ausrichtung abgetreten. Bliebe es drin,
+    brächte es seine EINE Ausrichtung als eigene Gruppe mit — zusätzlich zu den
+    Kindern, also doppelte kWp und genau die Einschränkung, die der Melder
+    loswerden wollte. Diese eine Zeile trägt vier Aufrufer: den Fan-out und die
+    Tagesgewichte des Prognose-Kanons, *Cockpit → Live* und die
+    Energieprofil-Prognose. Der Aufrufer hat vorher zeitlich gefiltert
+    (``ist_aktiv_an``/``ist_aktiv_im_zeitraum``); zu einem Zeitpunkt ohne die
+    Kinder trägt das BKW seine Ausrichtung damit weiter selbst.
     """
     gruppen: dict[tuple[int, int], float] = {}
-    for inv in invs or []:
+    for inv in erzeuger_traeger(invs or []):
         kwp = get_erzeuger_kwp(inv)
         if kwp <= 0:
             continue

@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from backend.core.exceptions import not_found
+from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
 from backend.core.investition_kennwerte import get_erzeuger_kwp
 from backend.api.deps import get_db
 from backend.core.berechnungen import (
@@ -320,7 +321,12 @@ async def get_pv_strings(
         .where(Investition.anlage_id == anlage_id)
         .where(Investition.typ.in_(PV_ERZEUGER_TYPEN))
     )
-    pv_module = result.scalars().all()
+    # N-266: `erzeuger_traeger` — ein Balkonkraftwerk mit `pv-module`-Kindern
+    # ist keine eigene String-Zeile mehr, seine Kinder sind es (genau der
+    # Melder-Wunsch: zwei Ausrichtungen an einem BKW). Bliebe es drin, wäre es
+    # eine Zeile zu viel UND der Verteilungsnenner `gesamt_kwp` doppelt, sodass
+    # jeder String zu wenig SOLL bekäme.
+    pv_module = erzeuger_traeger(result.scalars().all())
 
     if not pv_module:
         return PVStringsResponse(
@@ -477,7 +483,12 @@ async def get_pv_strings_gesamtlaufzeit(
         .where(Investition.anlage_id == anlage_id)
         .where(Investition.typ.in_(PV_ERZEUGER_TYPEN))
     )
-    pv_module = result.scalars().all()
+    # N-266: `erzeuger_traeger` — ein Balkonkraftwerk mit `pv-module`-Kindern
+    # ist keine eigene String-Zeile mehr, seine Kinder sind es (genau der
+    # Melder-Wunsch: zwei Ausrichtungen an einem BKW). Bliebe es drin, wäre es
+    # eine Zeile zu viel UND der Verteilungsnenner `gesamt_kwp` doppelt, sodass
+    # jeder String zu wenig SOLL bekäme.
+    pv_module = erzeuger_traeger(result.scalars().all())
 
     _empty = PVStringsGesamtlaufzeitResponse(
         anlage_id=anlage_id, hat_prognose=False,

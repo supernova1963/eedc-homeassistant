@@ -52,6 +52,15 @@ export function SetupInvestitionForm({
   const possibleParents = parentTypen.length
     ? allInvestitionen.filter(i => parentTypen.includes(i.typ) && i.id !== investition.id)
     : []
+  // N-266: Die Meldungen unten nannten hart „Wechselrichter". Seit ein
+  // Balkonkraftwerk Modul-Parent sein darf, wäre das für Daniels Anlage (BKW,
+  // kein Wechselrichter) eine Anleitung ins Leere — sie kommen jetzt aus
+  // `parentLabel`, also aus dem SoT `parentTypenFuer`.
+  const typLabelPlural = INVESTITION_TYP_LABELS[investition.typ]
+  // Hängen an DIESEM Gerät PV-Module? Dann tragen sie Leistung und Ausrichtung.
+  const modulKinder = allInvestitionen.filter(
+    i => i.typ === 'pv-module' && i.parent_investition_id === investition.id
+  ).length
 
   const getParam = (key: string) => investition.parameter?.[key] as number | string | undefined
   const getBoolParam = (key: string) => investition.parameter?.[key] === true
@@ -142,12 +151,12 @@ export function SetupInvestitionForm({
                     ? `${p.bezeichnung} (${INVESTITION_TYP_LABELS[p.typ]})`
                     : p.bezeichnung,
                 }))}
-                error={missingParent ? 'PV-Module müssen einem Wechselrichter zugeordnet werden' : undefined}
+                error={missingParent ? `${typLabelPlural} müssen zugeordnet werden (${parentLabel})` : undefined}
               />
             ) : (
               <Alert type="warning">
                 {isRequired ? (
-                  <>Bitte legen Sie zuerst einen <strong>Wechselrichter</strong> an, bevor Sie PV-Module zuordnen können.</>
+                  <>Bitte legen Sie zuerst <strong>{parentLabel}</strong> an, bevor Sie {typLabelPlural} zuordnen können.</>
                 ) : (
                   <>Kein {parentLabel} vorhanden. Zuordnung ist optional.</>
                 )}
@@ -288,6 +297,28 @@ export function SetupInvestitionForm({
 
           {investition.typ === 'balkonkraftwerk' && (
             <div className="space-y-4">
+              {/* N-266: der Weg zu mehreren Ausrichtungen — genau die Frage, mit
+                  der zwei Melder kamen (Discussion #366, Forum T89667 #172). Ein
+                  Balkonkraftwerk trägt EIN Ausrichtungsfeld; wer Module über Eck
+                  hat, legt sie als PV-Module an und ordnet sie hier zu. */}
+              <Alert type="info">
+                {modulKinder > 0 ? (
+                  <>
+                    Diesem Balkonkraftwerk {modulKinder === 1 ? 'ist ' : 'sind '}
+                    <strong>{modulKinder} PV-Modul{modulKinder === 1 ? '' : 'e'}</strong> zugeordnet:
+                    Leistung, Ausrichtung und Neigung kommen von dort. Die Felder hier beschreiben
+                    nur noch das Gerät — die <em>Wechselrichter-Leistung</em> gilt weiter.
+                  </>
+                ) : (
+                  <>
+                    Zeigen deine Module in <strong>verschiedene Richtungen</strong> (z. B. Balkon und
+                    Terrasse, Ost und West)? Dann lege sie als <strong>PV-Module</strong> an und wähle
+                    unter <em>Gehört zu</em> dieses Balkonkraftwerk — jedes Modul trägt dann seine
+                    eigene Ausrichtung, und die Prognose rechnet sie getrennt. Bei einer einzigen
+                    Ausrichtung genügen die Felder hier.
+                  </>
+                )}
+              </Alert>
               <div className="grid md:grid-cols-2 gap-4 items-start">
                 <Input
                   label="Leistung pro Modul (Wp)" required

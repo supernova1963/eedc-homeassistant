@@ -223,6 +223,36 @@ Die Felder derselben Antwort:
 | `pv_erzeugung_kwh` | `pv_module_kwh + bkw_kwh` — **nicht** die gleichnamige DB-Spalte (s. [Schicht 1](#schicht-1-rohdaten-eingabe)) |
 | **`erzeugung_hinter_zaehler_kwh`** | Σ **aller** drei Erzeuger-Felder = der Nenner der EV-Quote |
 
+> ### Ein Balkonkraftwerk mit zugeordneten PV-Modulen (ADR-002/**P11**)
+>
+> Ein Balkonkraftwerk trägt **eine** Ausrichtung und **eine** Neigung. Wer seine Module über Eck
+> hängen hat (Balkon und Terrasse, Ost und West), legt sie deshalb als **PV-Module** an und ordnet
+> sie unter *Gehört zu* dem Balkonkraftwerk zu — jedes Modul trägt dann seine eigene Ausrichtung,
+> und die Prognose rechnet sie getrennt.
+>
+> **Damit tritt das Balkonkraftwerk drei Größen an seine Module ab**, und zwar immer gemeinsam:
+> die **Nennleistung** (die Anzeige am Gerät zeigt die Σ seiner Module), die **Ausrichtung/Neigung**
+> und die **Erzeugung**. Für die Erzeugung gilt dieselbe Leserichtung wie beim Anlagen-Aggregat
+> (**P7**), nur eine Ebene tiefer — **die Präzedenz hat damit drei Stufen**:
+>
+> 1. der **gemessene Wert des Moduls** gewinnt,
+> 2. der **Monatswert des Balkonkraftwerks** füllt die Lücken *seiner* Module (nach kWp verteilt),
+> 3. das **Anlagen-Aggregat** `Monatsdaten.pv_erzeugung_kwh` füllt, was danach noch offen ist.
+>
+> Der Monatswert am Balkonkraftwerk bleibt also voll erfassbar und zuordenbar — bei einem Set ist
+> der Wechselrichter oft der einzige Zähler, und die Module darunter haben gar keinen eigenen. Er
+> zählt dann aber **nicht mehr zusätzlich** in `bkw_kwh`: `pv_erzeugung_kwh` wäre sonst doppelt, mit
+> Folgen für Autarkie, EV-Quote, CO₂, Finanzen, Community-Datensatz und HA-Sensoren.
+>
+> ⚠ **Nicht abgetreten wird die AC-Grenze.** Die *Wechselrichter-Leistung (W)* gehört dem Gerät und
+> gilt weiter für die **Summe** seiner Module — sie ergibt sich gerade nicht aus ihnen. Das sind zwei
+> unabhängige Grenzen: 800 VA am Wechselrichter-Ausgang und (regulatorisch) 2.000 Wp an den Modulen;
+> nur die zweite wächst mit den Kindern. Für die Kappung wechselt das Balkonkraftwerk deshalb die
+> Rolle vom Erzeuger zum **Träger** — genau die Rolle, die ein Wechselrichter für seine Strings hat.
+>
+> **Ein Balkonkraftwerk ohne zugeordnete Module rechnet unverändert wie bisher.**
+> SoT: `core/berechnungen/erzeuger_traeger.py`. Melder: Discussion #366, Forum T89667 #172.
+
 **Auch die PDF-Berichte rechnen so.** Der Jahresbericht leitete Eigenverbrauch, Autarkie und
 EV-Quote bis v4.0.0 allein aus der PV-Erzeugung ab, während der Einspeise-Zähler daneben die Summe
 **aller** Erzeuger misst — bei einer Anlage mit sonstigem Erzeuger fielen die Werte dort zu niedrig

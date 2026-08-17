@@ -73,19 +73,46 @@ async def test_parent_optionen_bieten_das_balkonkraftwerk_an(db):
     # Optional — ein Hausspeicher darf ohne Parent bleiben.
     assert all(o.required is False for o in optionen["speicher"])
 
-    # PV-Module dagegen: nur Wechselrichter, und Pflicht, weil es einen gibt.
-    assert {o.typ for o in optionen["pv-module"]} == {"wechselrichter"}
+    # PV-Module: Wechselrichter UND Balkonkraftwerk (N-266), und Pflicht, weil
+    # es überhaupt einen möglichen Parent gibt.
+    #
+    # ⚠ Diese Zeile stand bis 2026-08-17 auf `== {"wechselrichter"}` und hat
+    # damit eine **Lücke als Regel gepinnt**: dass ein BKW kein Modul tragen
+    # durfte, war keine Entscheidung, sondern der Grund, warum ein
+    # Balkonkraftwerk nur EINE Ausrichtung haben konnte (Melder: Discussion
+    # #366, Forum T89667 #172). Derselbe Fehlertyp wie die Zeilen-Pinnung aus
+    # N-263 und der Wortlaut-Test aus N-252 — ein Test, der die heutige
+    # Implementierung festhält statt ihrer Eigenschaft.
+    assert {o.typ for o in optionen["pv-module"]} == {"wechselrichter", "balkonkraftwerk"}
     assert all(o.required is True for o in optionen["pv-module"])
 
 
 async def test_parent_pflicht_nur_wenn_es_einen_parent_gibt(db):
-    """Ohne Wechselrichter darf ein PV-Modul parentlos bleiben (Altbestand) —
-    dieselbe Bedingung wie in `_validate_parent_child`."""
-    anlage, _bkw = await _anlage_mit_bkw(db)
+    """Pflicht wird die Zuordnung erst, wenn es einen möglichen Parent gibt —
+    dieselbe Bedingung wie in `_validate_parent_child`.
+
+    ⚠ Bis N-266 prüfte dieser Test `optionen["pv-module"] == []` an einer Anlage
+    MIT Balkonkraftwerk und ohne Wechselrichter. Das ist seit N-266 gerade der
+    Fall, in dem es einen Parent gibt — genau Daniels Anlage. Die Eigenschaft,
+    die der Test meint („ohne Parent-Kandidat keine Pflicht"), wird deshalb an
+    einer Anlage geprüft, die **keinen** Kandidaten hat.
+    """
+    anlage, bkw = await _anlage_mit_bkw(db)
     optionen = await get_parent_options(anlage.id, db)
-    assert optionen["pv-module"] == []
+
+    # Mit BKW, ohne Wechselrichter: das BKW IST der Parent-Kandidat (N-266).
+    assert {(o.typ, o.id) for o in optionen["pv-module"]} == {("balkonkraftwerk", bkw.id)}
+    assert all(o.required is True for o in optionen["pv-module"])
+
     # Das BKW selbst hat keine Parent-Optionen.
     assert optionen["balkonkraftwerk"] == []
+
+    # Und ohne jeden Kandidaten bleibt ein PV-Modul parentlos erlaubt
+    # (Altbestand) — die Eigenschaft, die dieser Test eigentlich meint.
+    leere = Anlage(anlagenname="Ohne Erzeuger", leistung_kwp=0.0)
+    db.add(leere)
+    await db.flush()
+    assert (await get_parent_options(leere.id, db))["pv-module"] == []
 
 
 # ─── 2. Datenquellen-Fläche ─────────────────────────────────────────────────

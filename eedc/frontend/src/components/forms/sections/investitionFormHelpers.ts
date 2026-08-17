@@ -67,9 +67,13 @@ export const AUSRICHTUNG_OPTIONEN: SelectItem[] = [
 // `crud.py::get_parent_options`); nur diese kannte das Balkonkraftwerk.
 // Wer die Regel braucht, importiert `parentTypenFuer` — nicht die Konstante,
 // damit die Array-/Einzelwert-Fallunterscheidung nur EINMAL existiert.
+// N-266: `pv-module` darf auch unter ein Balkonkraftwerk. Ein BKW trägt EINE
+// Ausrichtung und EINE Neigung — zwei Module über Eck waren damit nicht
+// abbildbar, und der Ausweg über *Einstellungen → PV-Module* war gesperrt, weil
+// ein BKW kein erlaubter Parent war (Melder: Discussion #366, Forum T89667 #172).
 export const PARENT_MAPPING: Partial<Record<InvestitionTyp, InvestitionTyp | InvestitionTyp[]>> = {
-  'pv-module': 'wechselrichter',                           // Pflicht
-  'speicher': ['wechselrichter', 'balkonkraftwerk'],       // Optional — Hybrid-WR (DC) oder BKW mit Akku (AC)
+  'pv-module': ['wechselrichter', 'balkonkraftwerk'],      // Pflicht — BKW seit N-266
+  'speicher': ['wechselrichter', 'balkonkraftwerk'],       // Optional — Hybrid-WR oder BKW-Akku (beide DC, s. N-268)
 }
 export const PARENT_REQUIRED: InvestitionTyp[] = ['pv-module']
 

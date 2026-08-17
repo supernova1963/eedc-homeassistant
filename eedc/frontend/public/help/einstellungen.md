@@ -228,26 +228,63 @@ Hersteller/Modell/Seriennummer/Garantie, Ansprechpartner und Wartungsvertrag sin
   >
   > ⚠ **Der Betrag kommt zusätzlich** und wird **nicht** gegen den Einspeise-Erlös der Anlage gerechnet: Zwei Vergütungssätze bedeuten zwei Messungen, in den Einspeisezähler der Anlage gehört also nur die Menge, die zum Anlagentarif abgerechnet wird. Wer den Erlös bisher monatlich als *sonstigen Ertrag* gebucht hat, lässt das ab dem Umstiegsmonat weg — sonst zählt derselbe Betrag zweimal.
 
-### 3.5 Balkonkraftwerk **oder** Wechselrichter + PV-Module?
+### 3.5 Balkonkraftwerk mit mehreren Ausrichtungen — und wann Wechselrichter + PV-Module?
 
-Beide Wege bilden erzeugende Module ab, und die Frage kommt regelmäßig. Die Antwort hängt an **einer** Eigenschaft:
+Beide Wege bilden erzeugende Module ab, und die Frage kommt regelmäßig. Sie hängt an **einer**
+Eigenschaft:
 
-> **Ein Balkonkraftwerk trägt genau *eine* Ausrichtung und *eine* Neigung.** Es ist als Kompaktgerät gedacht — Module, Mikro-Wechselrichter und (optional) Akku in einer Investition. Die Modulzahl steckt in *Leistung je Modul × Anzahl*; alle Module teilen sich zwangsläufig dieselbe Ausrichtung. Der einzige Mehrfach-Fall ist die Option **„Ost-West (gemischt)"**, und die rechnet einen festen **50/50**-Split auf Ost und West — keine dritte Richtung, keine eigene Gewichtung.
+> **Ein Balkonkraftwerk trägt für sich genau *eine* Ausrichtung und *eine* Neigung.** Es ist als
+> Kompaktgerät gedacht — Module, Mikro-Wechselrichter und (optional) Akku in einer Investition. Die
+> Modulzahl steckt in *Leistung je Modul × Anzahl*; alle Module teilen sich dann dieselbe
+> Ausrichtung. Die Option **„Ost-West (gemischt)"** rechnet einen festen **50/50**-Split.
 
-**Wann welcher Typ:**
+**Neu: du kannst dem Balkonkraftwerk PV-Module zuordnen.** Damit wird jede Ausrichtung einzeln
+erfasst — ohne das Gerät als Wechselrichter umdeklarieren zu müssen. So geht es:
+
+1. *Einstellungen → Investitionen → Hinzufügen*, Typ **PV-Module** (im Einrichtungsassistenten
+   genauso).
+2. Unter **Gehört zu** das **Balkonkraftwerk** wählen.
+3. Je Modul(-gruppe) Leistung, Ausrichtung und Neigung eintragen — eine Investition je Richtung.
+
+**Wann welcher Weg:**
 
 | Deine Anlage | Erfassen als | Warum |
 |---|---|---|
-| Stecker-Solargerät, alle Module gleich ausgerichtet | **Balkonkraftwerk** | Ein Gerät, ein Datensatz. Der Mikro-Wechselrichter braucht keine eigene Investition. |
-| Stecker-Solargerät, Module je zur Hälfte Ost und West | **Balkonkraftwerk**, Ausrichtung „Ost-West (gemischt)" | Der 50/50-Split trifft genau diesen Fall. |
-| Module in **drei oder mehr** Ausrichtungen, oder ungleich verteilt | **Wechselrichter + PV-Module** | Jede Ausrichtung bekommt ein eigenes PV-Modulfeld mit eigener Prognose. |
+| Stecker-Solargerät, alle Module gleich ausgerichtet | **Balkonkraftwerk** allein | Ein Gerät, ein Datensatz. Der Mikro-Wechselrichter braucht keine eigene Investition. |
+| Stecker-Solargerät, Module je zur Hälfte Ost und West | **Balkonkraftwerk** allein, Ausrichtung „Ost-West (gemischt)" | Der 50/50-Split trifft genau diesen Fall — der kürzeste Weg. |
+| Stecker-Solargerät, Module in **mehreren** Richtungen oder **ungleich** verteilt (Balkon + Terrasse) | **Balkonkraftwerk + zugeordnete PV-Module** | Jede Richtung bekommt ihre eigene Prognose, das Gerät bleibt in eedc ein Balkonkraftwerk. |
 | Dachanlage, mehrere Strings | **Wechselrichter + PV-Module** | Der Regelfall. |
 
-**Wenn du auf Wechselrichter + PV-Module ausweichst:** Trage beim Wechselrichter die **max. Leistung (kW)** ein — das ist seine **AC-Einspeisegrenze**, bei einem Stecker-Gerät also 0,8 kW (bzw. 0,6 kW bei älteren). eedc kappt dein SOLL damit **stündlich** an dieser Grenze, gemeinsam über alle Strings desselben Wechselrichters. Ohne diesen Eintrag prognostiziert PVGIS die volle Modulleistung, und dein SOLL wäre ein Ziel, das die Anlage konstruktionsbedingt nie erreicht.
+**Was das Balkonkraftwerk abgibt, sobald Module zugeordnet sind:** **Nennleistung, Ausrichtung und
+Neigung** kommen dann von den Modulen — das Gerät zeigt als Leistung die Summe seiner Module, und
+seine eigenen Felder beschreiben nur noch das Gerät. Das Formular sagt es an der Stelle.
 
-> **Achte auf die Nennleistung der Anlage.** Ein Balkonkraftwerk zählt in eedc **nicht** in die Anlagenleistung — es ist eine eigene Anlage mit eigener MaStR-Registrierung. Wechselrichter + PV-Module dagegen schon. Wer von einem Weg auf den anderen wechselt, prüft danach *Einstellungen → Anlage → Leistung (kWp)*.
+> ⚠ **Was es behält, und was du weiter pflegen musst: die *Wechselrichter-Leistung (W)*.** Sie
+> gehört dem Gerät und begrenzt die **Summe** aller zugeordneten Module — sie ergibt sich gerade
+> *nicht* aus ihnen. Bei einem Stecker-Gerät sind das 800 W (bzw. 600 W bei älteren). eedc kappt dein
+> SOLL damit **stündlich** an dieser Grenze, gemeinsam über alle Module. Ohne den Eintrag
+> prognostiziert PVGIS die volle Modulleistung, und dein SOLL wäre ein Ziel, das die Anlage
+> konstruktionsbedingt nie erreicht. Das sind zwei **verschiedene** Grenzen — die AC-Grenze am
+> Wechselrichter-Ausgang und die Modulleistung —, und nur die zweite wächst mit der Zuordnung.
 
-**Was ein Balkonkraftwerk trotzdem alles kann:** eigenes PVGIS-SOLL, eigene Zeile im String-Vergleich und in der Mehrjahres-Performance, eigene Zeile im Jahresbericht, eigene Wirtschaftlichkeit, eigener Eintrag in Energiebilanz und CO₂ — und einen **eigenen Akku** (s. unten). Der Ausweichweg ist also nur bei mehreren Ausrichtungen nötig, nicht um Funktionen freizuschalten.
+**Beim Monatsabschluss ändert sich nichts, was du wissen musst:** Der Wert **Erzeugung** am
+Balkonkraftwerk bleibt nutzbar und zuordenbar — bei einem Set ist der Wechselrichter meist der
+einzige Zähler, den es gibt. Er gilt dann als **Gesamtsumme der Module**: Hat ein Modul einen eigenen
+Messwert, gewinnt der; die übrigen bekommen den Rest nach Leistungsanteil. Doppelt gezählt wird
+nichts.
+
+**Wenn du auf Wechselrichter + PV-Module ausweichst** (Dachanlage oder gewachsene Anlage): Trage beim
+Wechselrichter die **max. Leistung (kW)** ein — dieselbe Rolle wie oben, eine Ebene höher.
+
+> **Achte auf die Nennleistung der Anlage.** Ein Balkonkraftwerk zählt in eedc **nicht** in die
+> Anlagenleistung — es ist eine eigene Anlage mit eigener MaStR-Registrierung. Wechselrichter +
+> PV-Module dagegen schon. Wer von einem Weg auf den anderen wechselt, prüft danach *Einstellungen →
+> Anlage → Leistung (kWp)*.
+
+**Was ein Balkonkraftwerk alles kann:** eigenes PVGIS-SOLL, eigene Zeile im String-Vergleich und in
+der Mehrjahres-Performance, eigene Zeile im Jahresbericht, eigene Wirtschaftlichkeit, eigener Eintrag
+in Energiebilanz und CO₂ — mehrere Ausrichtungen (s. o.) und einen **eigenen Akku** (s. unten). Der
+Weg über den Wechselrichter ist damit kein Ausweichweg mehr, sondern nur noch der Fall Dachanlage.
 
 **Der Akku am Balkonkraftwerk** (Anker Solarbank, Zendure u. ä.) wird als **eigene Speicher-Investition** angelegt, mit dem Balkonkraftwerk als übergeordneter Komponente. Nur so bekommt er Live-Leistung, Ladestand, einen Knoten im Energiefluss und einen eigenen Zählerpfad. Die Speicher-Felder im Monatsabschluss des Balkonkraftwerks selbst sind Altbestand aus der Zeit davor — sie lassen sich weiter pflegen, aber der Akku ist darüber keiner Auswertung zuzuordnen.
 

@@ -201,6 +201,13 @@ from backend.core.berechnungen.prognose_korrektur import (
 from backend.core.berechnungen.prognose_final import (
     soll_final_einfrieren,
 )
+from backend.core.berechnungen.erzeuger_traeger import (
+    abgetretene_bkw_ids,
+    bkw_kwp_aus_kindern,
+    erzeuger_traeger,
+    modul_kinder,
+    traegt_erzeugungsgroessen_selbst,
+)
 from backend.core.berechnungen.spez_ertrag import (
     MONATSGEWICHTE_52N,
     PV_ERZEUGER_TYPEN,
@@ -376,6 +383,11 @@ __all__ = [
     "KorrigiertesTagesprofil",
     "korrigiere_tagesprofil",
     "soll_final_einfrieren",
+    "abgetretene_bkw_ids",
+    "bkw_kwp_aus_kindern",
+    "erzeuger_traeger",
+    "modul_kinder",
+    "traegt_erzeugungsgroessen_selbst",
     "MONATSGEWICHTE_52N",
     "PV_ERZEUGER_TYPEN",
     "berechne_spez_ertrag_annualisiert",

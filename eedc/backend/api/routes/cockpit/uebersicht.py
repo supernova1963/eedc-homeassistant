@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from backend.core.exceptions import not_found
+from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
 from backend.core.investition_kennwerte import get_erzeuger_kwp, get_speicher_kapazitaet_kwh
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
@@ -360,16 +361,20 @@ async def get_cockpit_uebersicht(
     # Anlagenleistung aus Investitionen (nur aktive — stillgelegte nicht mitzählen)
     today = date.today()
     anlagenleistung_kwp = 0.0
-    for inv in investitionen:
-        if not inv.ist_aktiv_an(today):
-            continue
-        # kWp über den SoT-Dispatcher (ADR-002/P3-a): er kennt für PV-Module
-        # Spalte → `parameter` (#229) und für BKW zusätzlich
-        # `leistung_wp × anzahl`. Die frühere Handschrift hier las bei
-        # `leistung_wp: null` `None * anzahl` und warf einen TypeError — ein
-        # 500er in der Cockpit-Übersicht (N-H).
-        if inv.typ in ("pv-module", "balkonkraftwerk"):
-            anlagenleistung_kwp += get_erzeuger_kwp(inv)
+    # kWp über den SoT-Dispatcher (ADR-002/P3-a): er kennt für PV-Module
+    # Spalte → `parameter` (#229) und für BKW zusätzlich `leistung_wp × anzahl`.
+    # Die frühere Handschrift hier las bei `leistung_wp: null` `None * anzahl`
+    # und warf einen TypeError — ein 500er in der Cockpit-Übersicht (N-H).
+    #
+    # N-266: `erzeuger_traeger` NACH dem `ist_aktiv_an`-Filter — ein
+    # Balkonkraftwerk mit Modul-Kindern hat seine kWp abgetreten und wies die
+    # Anlagenleistung sonst doppelt aus.
+    heute_pv = [
+        inv for inv in investitionen
+        if inv.typ in ("pv-module", "balkonkraftwerk") and inv.ist_aktiv_an(today)
+    ]
+    for inv in erzeuger_traeger(heute_pv):
+        anlagenleistung_kwp += get_erzeuger_kwp(inv)
 
     if anlagenleistung_kwp == 0 and anlage.leistung_kwp:
         anlagenleistung_kwp = anlage.leistung_kwp

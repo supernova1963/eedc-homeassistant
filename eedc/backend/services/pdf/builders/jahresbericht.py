@@ -48,6 +48,7 @@ from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionTyp
 from backend.models.monatsdaten import Monatsdaten
 from backend.services.prognose_auswahl import lade_aktive_prognose
+from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
 from backend.core.investition_kennwerte import get_erzeuger_kwp
 from backend.models.strompreis import Strompreis
 
@@ -520,7 +521,13 @@ async def build_jahresbericht_context(
     # bekam hier eine leere Tabelle, obwohl sie seit #367 ein PVGIS-SOLL hat.
     # Derselbe Schnitt wie im API-Pfad `api/routes/cockpit/pv_strings.py`, damit
     # PDF und Cockpit dieselben Zeilen zeigen.
-    pv_module = [i for i in investitionen if i.typ in PV_ERZEUGER_TYPEN]
+    # N-266: `erzeuger_traeger` — ein Balkonkraftwerk mit Modul-Kindern ist hier
+    # keine eigene String-Zeile mehr, seine Kinder sind es. Bliebe es drin,
+    # stünde es doppelt in der Tabelle UND verdoppelte den Verteilungsnenner
+    # `gesamt_kwp` darunter, sodass jeder String zu wenig SOLL bekäme.
+    pv_module = erzeuger_traeger(
+        [i for i in investitionen if i.typ in PV_ERZEUGER_TYPEN]
+    )
     # kWp über den SoT-Dispatcher (Spalte → parameter-JSON, beim BKW
     # `leistung_wp × anzahl`) — sonst ist der SOLL-Verteilungs-Nenner bei
     # `parameter`-gepflegten Modulen eine Teilsumme, und der

@@ -9,6 +9,7 @@ from typing import Optional, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 from pydantic import BaseModel, Field, computed_field
 from datetime import date
@@ -402,6 +403,13 @@ async def list_investitionen(
     # Kanonische Typ-Reihenfolge (Fundament P4 / F7) statt alphabetisch.
     query = query.order_by(Investition.bezeichnung)
 
+    # N-266/E5: Kinder MITLADEN, damit `leistung_kwp_effektiv` an einem
+    # Balkonkraftwerk mit Modul-Kindern deren Σ ausweist statt der eigenen,
+    # inzwischen gesperrten Pflege (`get_bkw_kwp`). `selectinload` statt eines
+    # Lazy-Zugriffs: Letzterer läuft in async SQLAlchemy auf `MissingGreenlet`,
+    # und ohne geladene Beziehung schweigt der Helper bewusst.
+    query = query.options(selectinload(Investition.children))
+
     result = await db.execute(query)
     return sort_investitionen_nach_typ(result.scalars().all())
 
@@ -420,7 +428,14 @@ async def get_investition(investition_id: int, db: AsyncSession = Depends(get_db
     Raises:
         404: Nicht gefunden
     """
-    result = await db.execute(select(Investition).where(Investition.id == investition_id))
+    result = await db.execute(
+        select(Investition)
+        .where(Investition.id == investition_id)
+        # N-266/E5 — wie in `list_investitionen`: ohne geladene Kinder weist
+        # `leistung_kwp_effektiv` an einem abtretenden BKW die eigene, gesperrte
+        # Pflege aus statt der Σ seiner Module.
+        .options(selectinload(Investition.children))
+    )
     inv = result.scalar_one_or_none()
 
     if not inv:

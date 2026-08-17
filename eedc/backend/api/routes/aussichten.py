@@ -93,6 +93,7 @@ from backend.services.wetter.utils import wetter_symbol_aus_tag
 from backend.services.wetter.pvgis import get_pvgis_tmy_defaults
 from backend.services.wetter.models import WETTER_MODELLE
 from backend.services.prognose_service import berechne_pv_ertrag_tag
+from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
 from backend.core.investition_kennwerte import get_erzeuger_kwp
 from backend.services.pv_orientation import resolve_system_losses
 
@@ -405,8 +406,12 @@ async def _lade_anlage_mit_pv(
     # A24-2: `get_erzeuger_kwp` statt `get_pv_kwp` — Letzterer kennt den
     # BKW-Zweig `leistung_wp × anzahl` nicht, ein so gepflegtes
     # Balkonkraftwerk fiel hier still auf 0 (Befund §4.1, Variante 7).
+    # N-266: `erzeuger_traeger` lässt ein Balkonkraftwerk mit Modul-Kindern
+    # heraus — es hat seine kWp abgetreten, und die Aussichten multiplizieren
+    # diese Summe mit dem SOLL-Ertrag. Doppelt gezählt wäre die ganze
+    # Jahresprognose doppelt.
     anlagenleistung_kwp = sum(
-        get_erzeuger_kwp(i) for i in (*pv_module, *balkonkraftwerke)
+        get_erzeuger_kwp(i) for i in erzeuger_traeger([*pv_module, *balkonkraftwerke])
     )
     if anlagenleistung_kwp <= 0:
         anlagenleistung_kwp = anlage.leistung_kwp or 0
@@ -988,8 +993,11 @@ async def get_finanz_prognose(
     aktuelle_pv_module = [m for m in pv_module if m.ist_aktiv_an(_heute)]
     aktuelle_bkw = [b for b in balkonkraftwerke if b.ist_aktiv_an(_heute)]
     # N36/P3: kWp über den SoT-Dispatcher — wie in `_lade_anlage_mit_pv`.
+    # N-266: Selektor NACH dem `ist_aktiv_an`-Filter darüber — vor der
+    # Anschaffung der Module trägt das BKW seine kWp noch selbst.
     anlagenleistung_kwp = sum(
-        get_erzeuger_kwp(i) for i in (*aktuelle_pv_module, *aktuelle_bkw)
+        get_erzeuger_kwp(i)
+        for i in erzeuger_traeger([*aktuelle_pv_module, *aktuelle_bkw])
     ) or anlage.leistung_kwp or 0
 
     # =====================================================================

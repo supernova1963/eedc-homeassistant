@@ -99,11 +99,66 @@ def get_pv_kwp(inv: Any) -> float:
     return 0.0
 
 
+def _bkw_kwp_aus_geladenen_kindern(inv: Any) -> Optional[float]:
+    """Σ kWp der `pv-module`-Kinder — aber **nur**, wenn sie schon geladen sind.
+
+    **N-266/E5, Gernots Entscheid vom 17.08.2026:** *„das BKW leitet aus den
+    Kindern ab, damit kein Zustand entsteht, in dem zwei Zahlen dasselbe
+    behaupten."* Sobald Module unter einem Balkonkraftwerk hängen, ist seine
+    eigene `leistung_wp × anzahl`-Pflege nicht mehr die Quelle — sie ist der
+    Altbestand aus der Zeit vor der Zuordnung. Die Formulare sperren sie
+    deshalb (Client-Pendant `BalkonkraftwerkFelder.tsx`), aber ein gepflegter
+    Wert kann in der DB stehen, und der darf keine zweite Wahrheit sein.
+
+    ⚠ **Kein Lazy-Zugriff, und das ist der ganze Trick.** ``children`` ist ein
+    Lazy-Backref; ein blindes ``inv.children`` liefe in async SQLAlchemy auf
+    ``MissingGreenlet`` (genau die Schranke, die im Register als „hart" geführt
+    wurde). Deshalb wird hier gefragt, ob die Beziehung **bereits geladen** ist
+    — das ist eine reine Zustandsabfrage am Instance-State und löst nichts aus.
+    Ist sie nicht geladen, gibt diese Funktion ``None`` zurück und der Wert
+    bleibt der eigene: Σ-Stellen haben das abtretende BKW dann längst über
+    ``erzeuger_traeger`` verworfen, und für ein einzelnes Gerät ohne geladene
+    Kinder ist „was gepflegt ist" die einzige verfügbare Aussage.
+
+    Wer den abgeleiteten Wert in einer Response braucht, lädt die Kinder mit
+    (``selectinload(Investition.children)`` in `investitionen/crud.py`).
+    """
+    try:
+        from sqlalchemy import inspect as _sa_inspect
+
+        state = _sa_inspect(inv)
+    except Exception:
+        # Kein ORM-Objekt (Test-Double, dict-artige Attrappe) — dann gibt es
+        # auch keine Kinder-Beziehung, und Raten wäre schlimmer als Schweigen.
+        return None
+    if "children" in getattr(state, "unloaded", ()):  # nicht geladen ⇒ nicht fragen
+        return None
+    kinder = [
+        k for k in (getattr(inv, "children", None) or [])
+        if getattr(k, "typ", None) == InvestitionTyp.PV_MODULE.value
+    ]
+    if not kinder:
+        return None
+    summe = sum(get_pv_kwp(k) for k in kinder)
+    # Σ = 0 heißt „die Kinder sagen nichts" (keines hat eine gepflegte kWp) —
+    # dann gilt weiter die eigene Pflege. Sonst wäre das die 0-Werte-Falle in
+    # ihrer teuersten Form: die Zuordnung zweier Module hätte die Nennleistung
+    # des BKW auf 0 gesetzt, und mit ihr die ganze Prognose. Zugleich hält so
+    # die Zusicherung `get_bkw_kwp ⊇ get_pv_kwp` (s. dortiger Test).
+    return summe or None
+
+
 def get_bkw_kwp(inv: Any) -> float:
     """Nennleistung eines Balkonkraftwerks in kWp.
 
-    Priorität: Spalte `leistung_kwp` → parameter["kwp"] / ["leistung_kwp"]
+    Priorität: **Σ kWp der zugeordneten PV-Module** (N-266, nur wenn geladen)
+             → Spalte `leistung_kwp` → parameter["kwp"] / ["leistung_kwp"]
              → parameter["leistung_wp"] × parameter["anzahl"] / 1000 → 0.0
+
+    Die Kinder stehen **an erster Stelle**: hängen Module am BKW, ist deren
+    Summe die Nennleistung des Geräts, und die eigene Pflege ist Altbestand
+    (s. `_bkw_kwp_aus_geladenen_kindern`). Ohne Kinder ändert sich nichts —
+    für jedes bestehende Balkonkraftwerk bleibt die Zahl bitgleich.
 
     Die `parameter`-kWp-Stufe steht **vor** dem `leistung_wp`-Zweig, damit
     `get_bkw_kwp ⊇ get_pv_kwp` gilt: ein BKW, das versehentlich wie ein
@@ -111,6 +166,9 @@ def get_bkw_kwp(inv: Any) -> float:
 
     `anzahl` fehlt ⇒ 1 (`ANZAHL_LESE_DEFAULT`), nicht die Formular-Vorbelegung 2.
     """
+    aus_kindern = _bkw_kwp_aus_geladenen_kindern(inv)
+    if aus_kindern is not None:
+        return aus_kindern
     kwp = get_pv_kwp(inv)
     if kwp:
         return kwp

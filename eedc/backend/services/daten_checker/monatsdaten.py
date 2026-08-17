@@ -9,6 +9,7 @@ from typing import Optional
 
 from backend.core.berechnungen.spez_ertrag import PV_ERZEUGER_TYPEN
 from backend.core.field_definitions import get_speicher_netzladung_kwh
+from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
 from backend.core.investition_kennwerte import get_erzeuger_kwp
 from backend.core.monats_luecken import ermittle_start_anker
 from backend.core.investition_parameter import ist_luft_luft_waermepumpe
@@ -130,8 +131,15 @@ class MonatsdatenChecks:
             return False
 
         def _kwp(jahr: int, monat: int) -> float:
+            # N-266: Selektor NACH dem Monatsfilter — ein Balkonkraftwerk mit
+            # Modul-Kindern hat seine kWp abgetreten, und in Monaten VOR der
+            # Anschaffung der Kinder trägt es sie noch selbst. Ohne den
+            # Selektor sähe der Ausbau-Vergleich einen Sprung, den es nie gab.
             return sum(
-                get_erzeuger_kwp(i) for i in erzeuger if i.ist_aktiv_im_monat(jahr, monat)
+                get_erzeuger_kwp(i)
+                for i in erzeuger_traeger(
+                    [i for i in erzeuger if i.ist_aktiv_im_monat(jahr, monat)]
+                )
             )
 
         kwp_vorher = _kwp(vorjahr.jahr, vorjahr.monat)

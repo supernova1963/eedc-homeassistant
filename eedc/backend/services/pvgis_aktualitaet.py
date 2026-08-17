@@ -48,6 +48,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.config import settings
+from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
 from backend.core.investition_kennwerte import get_erzeuger_kwp
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
@@ -166,7 +167,11 @@ async def pruefe_prognose(
     if anlage is None:
         return None
 
-    module = list(
+    # N-266: `erzeuger_traeger` — ein Balkonkraftwerk mit Modul-Kindern hat kWp
+    # UND Ausrichtung abgetreten. Bliebe es drin, meldete diese Prüfung nach dem
+    # Anlegen der Kinder eine „Abweichung" gegen die Prognose, die es nie gab:
+    # doppelte Nennleistung und eine zusätzliche Ausrichtung.
+    module = erzeuger_traeger(
         (
             await db.execute(
                 select(Investition)

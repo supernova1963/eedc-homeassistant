@@ -29,4 +29,14 @@ export interface TypFelderProps {
    * der Auswahl folgen, die der Anwender gerade trifft.
    */
   hatZuordnung?: boolean
+  /**
+   * Anzahl der PV-Module, die diesem Gerät zugeordnet sind — nur das
+   * Balkonkraftwerk nutzt es (N-266). Sind es mehr als 0, hat das BKW seine
+   * Nennleistung und seine Ausrichtung an die Module abgetreten: dann ist die
+   * eigene `Anzahl × Wp`-Pflege nicht mehr die Quelle, und das Formular sagt
+   * das, statt zwei Zahlen dasselbe behaupten zu lassen.
+   *
+   * `undefined` = noch nicht ermittelt (Anlegen-Fall, kein Fetch nötig).
+   */
+  modulKinder?: number
 }

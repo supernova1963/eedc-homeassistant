@@ -69,6 +69,25 @@ async def lade_pv_je_monat(
         ``{(jahr, monat): {inv_id: PvModulWert}}``. Monate ohne jede PV-Quelle
         und Monate ohne aktives Modul fehlen. Module, die im Monat nicht aktiv
         waren, tauchen im Monat nicht auf (#236).
+
+    **N-266/E4 — die P7-Leserichtung bekommt eine dritte Stufe.** Hängen
+    `pv-module` unter einem `balkonkraftwerk`, ist der BKW-Monatswert für sie
+    genau das, was ``Monatsdaten.pv_erzeugung_kwh`` für die ganze Anlage ist:
+    ein **Aggregat, das nur die Lücken seiner Kinder füllt**. Die Präzedenz
+    lautet damit — vom Nächsten zum Entferntesten:
+
+    1. eigener Messwert des Moduls,
+    2. der Wert **seines** Balkonkraftwerks (verteilt nach kWp auf dessen
+       lückenhafte Kinder),
+    3. das Anlagen-Aggregat für alles, was danach noch offen ist.
+
+    Das ist keine neue Regel, sondern dieselbe Regel eine Ebene tiefer, und sie
+    ist der Grund, warum ``monats_fakten.py`` das abtretende BKW aus
+    ``bkw_erzeugung`` herausnehmen kann, ohne einen gepflegten Wert zu
+    verlieren: er wirkt weiter, nur an der richtigen Stelle. Ohne diese Hälfte
+    stünde ``pv_kwh = pv_modul_summe + bkw_erzeugung`` auf der doppelten
+    Erzeugung — mit Folgen für Autarkie, Eigenverbrauchsquote, CO₂, Finanzen,
+    Community-Payload und HA-Export.
     """
     if not pv_module:
         return {}
@@ -103,16 +122,65 @@ async def lade_pv_je_monat(
         for md in (await db.execute(md_query)).scalars().all()
     }
 
+    # N-266/E4 — Stufe 2 der Präzedenz: die Monatswerte der Balkonkraftwerke,
+    # unter denen Module hängen. Sie werden hier NICHT summiert, sondern als
+    # Aggregat je Elternteil vorgehalten.
+    bkw_aggregate = await _lade_bkw_aggregate(db, anlage_id, pv_module, jahr=jahr)
+
     out: PvMonate = {}
-    kandidaten = set(roh.keys()) | {k for k, v in aggregat.items() if v is not None}
+    kandidaten = (
+        set(roh.keys())
+        | {k for k, v in aggregat.items() if v is not None}
+        | set(bkw_aggregate.keys())
+    )
     for (j, monat) in sorted(kandidaten):
         # #236: nur im Monat aktive Module — sonst verteilt das Aggregat auf
         # Module, die es damals noch nicht gab.
         aktive = [m for m in pv_module if m.ist_aktiv_im_monat(j, monat)]
         if not aktive:
             continue
-        roh_monat = roh.get((j, monat), {})
+        roh_monat = dict(roh.get((j, monat), {}))
         abgeleitet_monat = abgeleitet.get((j, monat), set())
+
+        # Stufe 2 VOR Stufe 3: jedes BKW verteilt seinen Monatswert auf die
+        # Lücken seiner eigenen Kinder. Ergebnis geht als *Messwert-Ersatz* in
+        # `roh_monat` — damit greift darunter Stufe 3 (Anlagen-Aggregat) nur
+        # noch für Module, die auch dann noch offen sind. Die Reihenfolge ist
+        # die Aussage: das nähere Aggregat gewinnt.
+        for bkw_id, bkw_kwh in bkw_aggregate.get((j, monat), {}).items():
+            kinder = [m for m in aktive if m.parent_investition_id == bkw_id]
+            luecken = [k for k in kinder if k.id not in roh_monat]
+            if not luecken:
+                continue
+            # ⚠ **ALLE** Kinder übergeben, nicht nur die lückenhaften: der
+            # verteilte Rest ist `Aggregat − Σ der gemessenen Werte`, und ohne
+            # die gemessenen Geschwister wäre diese Σ 0. Bei 100 kWh am BKW und
+            # 70 kWh gemessen am ersten Modul bekäme das zweite dann 100 statt
+            # 30 — die Anlagensumme stünde auf 170. Beim Bau tatsächlich so
+            # gebaut und von `test_gemessener_modulwert_gewinnt_gegen_den_bkw_wert`
+            # gefangen.
+            verteilt = resolve_pv_je_modul(
+                aggregat_kwh=bkw_kwh,
+                module=[
+                    PvModul(
+                        inv_id=k.id,
+                        leistung_kwp=get_inv_value(k, "leistung_kwp"),
+                        eigen_kwh=roh_monat.get(k.id),
+                        eigen_ist_abgeleitet=k.id in abgeleitet_monat,
+                    )
+                    for k in kinder
+                ],
+            )
+            for k in luecken:
+                wert = verteilt.get(k.id)
+                if wert is None:
+                    continue
+                roh_monat[k.id] = wert.pv_erzeugung_kwh
+                # Der Wert ist eine kWp-Zerlegung, keine Messung (#352): sonst
+                # kürt das String-Ranking einen „besten String" aus Zahlen, die
+                # per Konstruktion proportional zur kWp sind.
+                abgeleitet_monat = abgeleitet_monat | {k.id}
+
         out[(j, monat)] = resolve_pv_je_modul(
             aggregat_kwh=aggregat.get((j, monat)),
             module=[
@@ -125,6 +193,64 @@ async def lade_pv_je_monat(
                 for m in aktive
             ],
         )
+    return out
+
+
+async def _lade_bkw_aggregate(
+    db: AsyncSession,
+    anlage_id: int,
+    pv_module: list[Investition],
+    jahr: Optional[int] = None,
+) -> dict[tuple[int, int], dict[int, float]]:
+    """``{(jahr, monat): {bkw_id: kwh}}`` für Balkonkraftwerke MIT Modul-Kindern.
+
+    Nur die abtretenden BKW (N-266): ohne Modul-Kinder ist der Wert die
+    Erzeugung des Geräts selbst und wird in ``monats_fakten.py`` als eigener
+    Summand geführt — hier wäre er dann ein zweites Mal drin.
+
+    ``{}``, wenn kein Modul der übergebenen Menge einen BKW-Parent hat. Das ist
+    der Normalfall jeder Bestandsanlage; die Funktion kostet dann **eine**
+    zusätzliche, sehr kleine Query und ändert nichts.
+    """
+    parent_ids = {
+        m.parent_investition_id
+        for m in pv_module
+        if m.typ == "pv-module" and m.parent_investition_id is not None
+    }
+    if not parent_ids:
+        return {}
+
+    bkws = (await db.execute(
+        select(Investition)
+        .where(Investition.anlage_id == anlage_id)
+        .where(Investition.id.in_(parent_ids))
+        .where(Investition.typ == "balkonkraftwerk")
+    )).scalars().all()
+    if not bkws:
+        return {}
+
+    bkw_ids = [b.id for b in bkws]
+    imd_query = select(InvestitionMonatsdaten).where(
+        InvestitionMonatsdaten.investition_id.in_(bkw_ids)
+    )
+    if jahr is not None:
+        imd_query = imd_query.where(InvestitionMonatsdaten.jahr == jahr)
+
+    out: dict[tuple[int, int], dict[int, float]] = {}
+    for imd in (await db.execute(imd_query)).scalars().all():
+        vd = imd.verbrauch_daten or {}
+        # Beide Schreibweisen, wie `get_pv_erzeugung_kwh`: das BKW-Formular hat
+        # historisch `erzeugung_kwh` geschrieben, der Kanon ist
+        # `pv_erzeugung_kwh`. Wer nur den Kanon liest, verliert den Altbestand.
+        wert = vd.get("pv_erzeugung_kwh")
+        if wert is None:
+            wert = vd.get("erzeugung_kwh")
+        if wert is None:
+            continue
+        try:
+            out.setdefault((imd.jahr, imd.monat), {})[imd.investition_id] = float(wert)
+        except (TypeError, ValueError):
+            continue
     return out
 
 

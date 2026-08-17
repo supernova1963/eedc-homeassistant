@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from backend.core.exceptions import bad_request, not_found
+from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
 from backend.core.investition_kennwerte import get_erzeuger_kwp
 from backend.api.deps import get_db
 from backend.core.berechnungen import summe_pv_bkw_kwh
@@ -284,7 +285,10 @@ async def _lade_anlage_mit_pv(db: AsyncSession, anlage_id: int):
     # Spalte — weder den `parameter`-Fallback der #229-Klasse noch, beim BKW,
     # `leistung_wp × anzahl`. `kwp` ist hier der Multiplikator des Ertrags,
     # eine zu kleine Summe zieht die ganze Prognosen-Seite mit nach unten (N-J).
-    kwp = sum(get_erzeuger_kwp(i) for i in alle_pv)
+    # N-266: `erzeuger_traeger` — ein BKW mit Modul-Kindern hat seine kWp
+    # abgetreten. `kwp` ist hier der Multiplikator des Ertrags; doppelt gezählt
+    # stünde die ganze Prognosen-Seite auf dem doppelten Wert.
+    kwp = sum(get_erzeuger_kwp(i) for i in erzeuger_traeger(alle_pv))
     if kwp <= 0:
         kwp = anlage.leistung_kwp or 0
     return anlage, pv_module, balkonkraftwerke, kwp

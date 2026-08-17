@@ -85,6 +85,24 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
       .finally(() => setLoadingParents(false))
   }, [parentTypen, anlageId, investition?.id])
 
+  // N-266: Hängen PV-Module an DIESEM Balkonkraftwerk? Dann hat es seine
+  // Nennleistung und seine Ausrichtung an sie abgetreten, und das Formular sagt
+  // das (E5). Nur beim Bearbeiten eines bestehenden BKW — beim Anlegen kann es
+  // noch keine Kinder haben, und ein Fetch ins Leere wäre eine Anfrage, die
+  // niemand braucht.
+  const [modulKinder, setModulKinder] = useState<number | undefined>(undefined)
+  useEffect(() => {
+    if (typ !== 'balkonkraftwerk' || !investition?.id) {
+      setModulKinder(undefined)
+      return
+    }
+    investitionenApi.list(anlageId, 'pv-module')
+      .then(module => setModulKinder(
+        module.filter(m => m.parent_investition_id === investition.id).length
+      ))
+      .catch(() => setModulKinder(undefined))
+  }, [typ, anlageId, investition?.id])
+
   // ── Parameter-Setter (Switch/Select/RadioGroup) + Input-Event-Bridge ──
   const applyParam = (paramName: string, value: string | boolean) => {
     setParamData(prev => {
@@ -468,6 +486,7 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
         setFeldRef={setFeldRef}
         leistungKwp={formData.leistung_kwp}
         hatZuordnung={!!formData.parent_investition_id}
+        modulKinder={modulKinder}
       />
 
       {/* ── Verknüpfte Infothek-Einträge (nur beim Bearbeiten) ── */}
