@@ -382,6 +382,28 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
     )
     db.add(mini_bhkw)
 
+    # Sonstiges/VERBRAUCHER — bewusst als Gegenstück zum Mini-BHKW oben.
+    # Bis 17.08.2026 kannte der Demo-Bestand unter `sonstiges` **nur** einen
+    # Erzeuger, und das war eine Prüf-Blindstelle mit Folgen: Der Erzeuger heißt
+    # in Registry und Snapshot gleich (`erzeugung_kwh`), der Verbraucher nicht
+    # (`verbrauch_sonstig_kwh` gegen den Legacy-Zwilling `verbrauch_kwh`). Genau
+    # daran hing N-259 — eedc verwarf ein MQTT-Topic, das es selbst publiziert —,
+    # und weder Gernots Anlage noch die Demo konnten den Fall zeigen; gefunden
+    # hat ihn ein Anwender. Ein Verbraucher gehört deshalb in den Bestand.
+    heizstab = Investition(
+        anlage_id=anlage.id,
+        typ="sonstiges",
+        bezeichnung="Heizstab Warmwasser",
+        anschaffungsdatum=date(2025, 1, 1),
+        anschaffungskosten_gesamt=400,
+        parameter={
+            "kategorie": "verbraucher",
+            "beschreibung": "Elektrischer Heizstab für Warmwasser-Nacherwärmung",
+        },
+        aktiv=True,
+    )
+    db.add(heizstab)
+
     await db.flush()
 
     # 4. Monatsdaten erstellen
@@ -513,6 +535,22 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
                 bhkw_erzeugung = 30 + (monat % 2) * 10
 
             _add_demo_imd(mini_bhkw.id, jahr, monat, {"erzeugung_kwh": bhkw_erzeugung})
+
+        # Heizstab Warmwasser — der KANONISCHE Feldname `verbrauch_sonstig_kwh`
+        # (nicht der Legacy-Zwilling `verbrauch_kwh`): So schreibt es die
+        # Zuordnungsfläche, und unter diesem Namen publiziert eedc auch sein
+        # MQTT-Topic. Der Legacy-Name bleibt lesbar, gehört aber nicht in einen
+        # frisch erzeugten Bestand.
+        # Mengenbild: im Sommer trägt die PV das Warmwasser, im Winter springt
+        # der Heizstab ein — deshalb die Monats-Staffelung statt einer Konstante.
+        if jahr >= 2025:
+            heizstab_verbrauch = 45 if monat in (11, 12, 1, 2) else (
+                20 if monat in (3, 4, 9, 10) else 6
+            )
+            _add_demo_imd(
+                heizstab.id, jahr, monat,
+                {"verbrauch_sonstig_kwh": heizstab_verbrauch},
+            )
 
         # PV-Module InvestitionMonatsdaten
         if pv_erzeugung > 0:
