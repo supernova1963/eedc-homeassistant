@@ -49,21 +49,31 @@ def test_n250_richtung_ohne_kategorie_kommt_aus_dem_wert(
 # offen und benannt. Der Fund N-250 nannte eine Stelle; dieser Wächter hat beim
 # ersten Lauf drei weitere gefunden, und sie brauchen eine eigene Entscheidung:
 #
-# * `core/field_definitions.py` (2×) entscheidet, **welche Felder** ein
-#   Sonstiges-Gerät überhaupt bekommt — und zwar bevor ein Wert existiert, aus
-#   dem sich die Richtung ableiten ließe. Hier den Default zu drehen ist keine
-#   Kosmetik: Ein Bestandsgerät ohne gepflegte Kategorie, in dem heute
-#   Erzeugungswerte stehen, bekäme im Formular Verbrauchsfelder — die gepflegten
-#   Werte wären nicht mehr sichtbar. Das ist eine Migrationsfrage, keine Zeile.
-# * `api/routes/investitionen/dashboards.py` aggregiert über viele Monate; ein
-#   „hat Erzeugung" gibt es dort nicht als einzelnen Wert.
+# * ~~`core/field_definitions.py` (2×)~~ — **aufgelöst am 17.08.2026 (N-244)**,
+#   und zwar an dem Einwand vorbei, der hier stand. Er lautete: „den Default zu
+#   **drehen** ist eine Migrationsfrage — ein Bestandsgerät mit Erzeugungswerten
+#   bekäme Verbrauchsfelder, die gepflegten Werte wären nicht mehr sichtbar."
+#   Der Einwand war richtig; die Antwort war deshalb **nicht drehen, sondern
+#   vereinigen**: `get_felder_fuer_sonstiges(None)` liefert seither **alle
+#   sieben** Felder beider Richtungen (`SONSTIGES_FELDER_UNGEPFLEGT`). Damit
+#   verschwindet kein einziges gepflegtes Feld aus dem Formular, und die
+#   Migrationsfrage entfällt ersatzlos. Was sie ersetzt: Bis dahin bot die
+#   Zuordnungsfläche einem ungepflegten Gerät **ausschließlich** Erzeuger-Felder
+#   an, während jeder wertführende Pfad es als Verbraucher liest — Schnittmenge
+#   der beiden Feldlisten **leer**, also die N-259-Klasse („Feld wird nirgends
+#   gefunden", nicht „Wert fehlt").
+# * ~~`api/routes/investitionen/dashboards.py`~~ — **aufgelöst am 17.08.2026
+#   (N-244)**. Der Einwand hier lautete: „aggregiert über viele Monate; ein
+#   *hat Erzeugung* gibt es dort nicht als einzelnen Wert." Für **einen** Monat
+#   stimmt das — über den ganzen Bestand ist die Frage beantwortbar, und die
+#   Schleife hatte ihn ohnehin schon geladen (`any(... erzeugung_kwh ...)`).
+#   Vorher aggregierte ein ungepflegtes **Verbrauchs**gerät im Komponenten-Hub
+#   ausschließlich Erzeugungsfelder: lauter Nullen, während die gepflegten
+#   Verbrauchswerte danebenlagen.
 #
-# Wer eine dieser Zeilen auflöst, streicht sie hier. Die Liste darf **nicht**
-# wachsen — eine neue Fundstelle ist ein Fehler, kein Eintrag.
-N250_OFFENE_ERZEUGER_DEFAULTS = {
-    "core/field_definitions.py",
-    "api/routes/investitionen/dashboards.py",
-}
+# **Die Liste ist damit leer — die Erzeuger-Default-Schuld ist getilgt.** Sie
+# bleibt als Mechanik stehen: eine neue Fundstelle ist ein Fehler, kein Eintrag.
+N250_OFFENE_ERZEUGER_DEFAULTS: set[str] = set()
 
 
 def test_n250_kein_neuer_erzeuger_default_im_baum() -> None:

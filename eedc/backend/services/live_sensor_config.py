@@ -9,6 +9,7 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
+from backend.core.field_definitions import SONSTIGES_KATEGORIE_UNGEPFLEGT
 from backend.models.anlage import Anlage
 
 logger = logging.getLogger(__name__)
@@ -185,7 +186,7 @@ def baue_investitions_serien(
         seite = config["seite"]
         bidirektional = config["bidirektional"]
         if typ == "sonstiges" and isinstance(inv.parameter, dict):
-            kat = inv.parameter.get("kategorie", "verbraucher")
+            kat = inv.parameter.get("kategorie", SONSTIGES_KATEGORIE_UNGEPFLEGT)
             if kat == "erzeuger":
                 seite = "quelle"
             elif kat == "speicher":

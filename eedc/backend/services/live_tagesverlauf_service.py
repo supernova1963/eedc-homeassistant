@@ -22,7 +22,10 @@ from backend.services.live_sensor_config import (
     baue_investitions_serien,
     extract_live_config,
 )
-from backend.core.field_definitions import sonstiges_feld_reihenfolge
+from backend.core.field_definitions import (
+    SONSTIGES_KATEGORIE_UNGEPFLEGT,
+    sonstiges_feld_reihenfolge,
+)
 from backend.services.live_history_service import (
     _MONATSABSCHLUSS_KWH,
     _feld_eid,
@@ -698,7 +701,7 @@ async def _get_tagesverlauf_mqtt(
         seite = config["seite"]
         bidirektional = config["bidirektional"]
         if typ == "sonstiges" and isinstance(inv.parameter, dict):
-            kat = inv.parameter.get("kategorie", "verbraucher")
+            kat = inv.parameter.get("kategorie", SONSTIGES_KATEGORIE_UNGEPFLEGT)
             if kat == "erzeuger":
                 seite = "quelle"
             elif kat == "speicher":

@@ -11,6 +11,7 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+from backend.core.field_definitions import SONSTIGES_KATEGORIE_UNGEPFLEGT
 from backend.models.investition import Investition
 
 logger = logging.getLogger(__name__)
@@ -73,7 +74,7 @@ def _key_to_serie_info(
     # seite bestimmen
     seite = _TYP_SEITE.get(inv.typ, "senke")
     if inv.typ == "sonstiges" and isinstance(inv.parameter, dict):
-        kat = inv.parameter.get("kategorie", "verbraucher")
+        kat = inv.parameter.get("kategorie", SONSTIGES_KATEGORIE_UNGEPFLEGT)
         if kat == "erzeuger":
             seite = "quelle"
         elif kat == "speicher":
@@ -115,7 +116,7 @@ def detail_kategorie(info: dict, inv: Optional["Investition"]) -> str:
     if kat == "haushalt":
         return "haushalt"
     if typ == "sonstiges" and inv and isinstance(inv.parameter, dict):
-        unterkat = inv.parameter.get("kategorie", "verbraucher")
+        unterkat = inv.parameter.get("kategorie", SONSTIGES_KATEGORIE_UNGEPFLEGT)
         if unterkat == "erzeuger":
             return "sonstige_erzeuger"
         if unterkat == "speicher":

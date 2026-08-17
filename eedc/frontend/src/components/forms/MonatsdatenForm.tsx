@@ -1116,10 +1116,16 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           istBestaetigt={istInvBestaetigt}
           onBestaetigen={bestaetigeInvFelder}
           hinweisFn={(inv) => {
-            const kat = (inv.parameter?.kategorie as string) || 'erzeuger'
+            const kat = (inv.parameter?.kategorie as string) || ''
             // SoT-Map (R3b S7); Fallback bewusst der rohe kat-Wert (wie zuvor).
-            const label = SONSTIGES_KATEGORIE_LABELS[kat] || kat
-            return inv.parameter?.beschreibung ? `${label} - ${String(inv.parameter.beschreibung)}` : label
+            // N-244: OHNE gepflegte Kategorie steht hier kein Label mehr. Es
+            // stand bis 17.08.2026 „Erzeuger" da — geraten, und seit derselben
+            // Arbeit im Widerspruch zu den Feldern direkt darunter, die für ein
+            // ungepflegtes Gerät beide Richtungen anbieten.
+            const label = kat ? (SONSTIGES_KATEGORIE_LABELS[kat] || kat) : ''
+            const beschreibung = inv.parameter?.beschreibung ? String(inv.parameter.beschreibung) : ''
+            if (label && beschreibung) return `${label} - ${beschreibung}`
+            return label || beschreibung || null
           }}
         />
       )}

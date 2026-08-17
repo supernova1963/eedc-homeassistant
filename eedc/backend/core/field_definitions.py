@@ -50,7 +50,7 @@ Feld-Attribute:
                   ([[feedback_reparatur_statt_loesch_features]]).
 """
 
-from typing import Optional
+from typing import Final, Optional
 
 from backend.core.investition_parameter import ist_luft_luft_waermepumpe
 
@@ -820,9 +820,9 @@ def get_felder_fuer_investition(
     alle_felder = INVESTITION_FELDER.get(typ, [])
 
     if isinstance(alle_felder, dict):
-        # Sonstiges — Kategorie-abhängig
-        kategorie = params.get("kategorie", "erzeuger")
-        return get_felder_fuer_sonstiges(kategorie)
+        # Sonstiges — Kategorie-abhängig. Ohne gepflegte Kategorie wird hier
+        # NICHT geraten (N-244); die Entscheidung liegt im SoT darunter.
+        return get_felder_fuer_sonstiges(params.get("kategorie"))
 
     # Anlage-Kontext vorberechnen (einmalig, nicht pro Feld)
     anlage_typen: set[str] = set()
@@ -907,10 +907,10 @@ def get_alle_felder_fuer_investition(typ: str, parameter: Optional[dict] = None)
     alle_felder = INVESTITION_FELDER.get(typ, [])
 
     if isinstance(alle_felder, dict):
-        # Sonstiges — Kategorie-abhängig
+        # Sonstiges — Kategorie-abhängig. Ohne gepflegte Kategorie wird hier
+        # NICHT geraten (N-244); die Entscheidung liegt im SoT darunter.
         params = parameter or {}
-        kategorie = params.get("kategorie", "erzeuger")
-        return list(get_felder_fuer_sonstiges(kategorie))
+        return list(get_felder_fuer_sonstiges(params.get("kategorie")))
 
     # Kopie je Feld: die Dicts sind Modul-Konstanten, ein direktes Setzen des
     # Labels würde die Definition für alle folgenden Aufrufe umschreiben.
@@ -962,18 +962,98 @@ ALLE_MONATSDATEN_FELDNAMEN: set[str] = {
 }
 
 
-def get_felder_fuer_sonstiges(kategorie: str) -> list[dict]:
+# Die Richtung, als die ein *Sonstiges*-Gerät **ohne gepflegte** `kategorie`
+# gelesen wird — die eine benannte Stelle für eine Annahme, die am 17.08.2026
+# an sechs Stellen als String-Literal `"verbraucher"` und an drei weiteren als
+# `"erzeuger"` stand (N-244).
+#
+# **Warum ausgerechnet Verbraucher?** Weil beide Tages-Schreibpfade den Wert
+# unter dieser Annahme überhaupt erst erzeugen (`live_sensor_config` ·
+# `snapshot/komponenten_beitraege`) — wer ihn danach anders liest, liest an
+# seiner eigenen Schreibweise vorbei. Begründung im Volltext:
+# `berechnungen.energie.sonstiges_kwh_je_richtung`.
+#
+# ⚠ **Kein Ersatz für `energie.sonstiges_richtung`.** Diese Konstante gilt, wenn
+# **kein Wert** vorliegt (Feldauswahl, Schlüsselbildung, Serienaufbau). Liegt
+# einer vor, entscheidet er — das ist eine andere Frage und hat ihre eigene
+# Funktion (N-250).
+SONSTIGES_KATEGORIE_UNGEPFLEGT: Final[str] = "verbraucher"
+
+
+def ist_gepflegte_sonstiges_kategorie(kategorie: Optional[str]) -> bool:
+    """Ist ``kategorie`` eine **gepflegte** Kategorie eines *Sonstiges*-Geräts?
+
+    Abgeleitet aus der Registry, damit eine vierte Kategorie nicht an einer
+    handgeschriebenen Aufzählung vorbeiläuft. Gegenstück zu
+    ``berechnungen.energie.sonstiges_richtung``: die dort getroffene
+    Entscheidung kennt nur die zwei **Richtungen**, diese Frage kennt alle
+    Kategorien — auch ``speicher``, der keine Richtung hat.
+    """
+    return kategorie in INVESTITION_FELDER.get("sonstiges", {})
+
+
+def _sonstiges_felder_ungepflegt() -> list[dict]:
+    """Alle Richtungen eines *Sonstiges*-Geräts, dedupliziert — **abgeleitet**.
+
+    Verbraucher-Felder zuerst: das ist die Richtung, die jeder wertführende Pfad
+    ohne gepflegte Kategorie annimmt (`SONSTIGES_KATEGORIE_UNGEPFLEGT`), also
+    die wahrscheinlichere Eingabe. `speicher` bringt keinen eigenen Feldnamen
+    mit und steht deshalb nicht extra in der Liste — die Ableitung nimmt ihn
+    trotzdem mit, damit eine künftige Erweiterung der Kategorie nicht still
+    danebenfällt.
+
+    **Abgeleitet statt geschrieben, aus demselben Grund wie N-259:** eine
+    handgepflegte vierte Feldliste wäre wieder die Wette darauf, dass jemand
+    sie beim nächsten neuen Feld mitzieht.
+    """
+    sonstiges = INVESTITION_FELDER.get("sonstiges", {})
+    reihenfolge = [SONSTIGES_KATEGORIE_UNGEPFLEGT] + [
+        k for k in sonstiges if k != SONSTIGES_KATEGORIE_UNGEPFLEGT
+    ]
+    gesehen: set[str] = set()
+    out: list[dict] = []
+    for kat in reihenfolge:
+        for feld in sonstiges.get(kat, []):
+            if feld["feld"] in gesehen:
+                continue
+            gesehen.add(feld["feld"])
+            out.append(feld)
+    return out
+
+
+def get_felder_fuer_sonstiges(kategorie: Optional[str]) -> list[dict]:
     """
     Gibt Felder für eine Sonstiges-Investition nach Kategorie zurück.
 
     Args:
-        kategorie: "erzeuger", "verbraucher" oder "speicher"
+        kategorie: "erzeuger", "verbraucher", "speicher" — oder ``None``/leer/
+                   unbekannt für ein Gerät **ohne gepflegte Kategorie**.
 
     Returns:
-        Liste von Feld-Dicts
+        Liste von Feld-Dicts. Ohne gepflegte Kategorie **alle Richtungen**
+        (`SONSTIGES_FELDER_UNGEPFLEGT`), nicht eine geratene.
+
+    **Warum hier nicht mehr geraten wird (N-244).** Bis 17.08.2026 stand hier
+    ``sonstiges.get(kategorie, sonstiges.get("erzeuger", []))`` — ein Gerät ohne
+    gepflegte Kategorie bekam also **Erzeuger**-Felder angeboten
+    (``erzeugung_kwh`` · ``eigenverbrauch_kwh`` · ``einspeisung_kwh`` ·
+    ``einspeise_erloes_euro``), während **jeder** wertführende Pfad denselben
+    Zustand als *Verbraucher* liest und ``verbrauch_sonstig_kwh`` ·
+    ``bezug_pv_kwh`` · ``bezug_netz_kwh`` erwartet (`sonstiges_feld_reihenfolge`
+    28 Zeilen weiter unten, die beiden Tages-Schreibpfade,
+    `berechnungen.energie.sonstiges_kwh_je_richtung`). Die **Schnittmenge beider
+    Feldlisten ist leer** — die Zuordnungsfläche bot damit ausschließlich Felder
+    an, die der Snapshot-Pfad für dieses Gerät nie sucht. Das ist die
+    **N-259-Klasse**: nicht „Wert fehlt", sondern „Feld wird nirgends gefunden".
     """
-    sonstiges = INVESTITION_FELDER.get("sonstiges", {})
-    return sonstiges.get(kategorie, sonstiges.get("erzeuger", []))
+    if ist_gepflegte_sonstiges_kategorie(kategorie):
+        return INVESTITION_FELDER["sonstiges"][kategorie]
+    return SONSTIGES_FELDER_UNGEPFLEGT
+
+
+# Modul-Konstante statt Aufruf je Leser: die Ableitung ist rein und die
+# Feld-Dicts sind ohnehin geteilte Modul-Objekte (wie in `INVESTITION_FELDER`).
+SONSTIGES_FELDER_UNGEPFLEGT: Final[list[dict]] = _sonstiges_felder_ungepflegt()
 
 
 def resolve_legacy_key(key: str) -> str:

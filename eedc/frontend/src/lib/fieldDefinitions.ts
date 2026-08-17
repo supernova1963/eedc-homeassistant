@@ -147,7 +147,9 @@ export function getFelderFuerInvestition(
       case 'balkonkraftwerk':
         return BALKONKRAFTWERK_FELDER
       case 'sonstiges':
-        return getFelderFuerSonstiges((params.kategorie as string) ?? 'erzeuger')
+        // Ohne gepflegte Kategorie wird hier NICHT geraten (N-244) — die
+        // Entscheidung liegt in `getFelderFuerSonstiges`.
+        return getFelderFuerSonstiges(params.kategorie as string | undefined)
       default:
         return []
     }
@@ -189,10 +191,40 @@ export function getFelderFuerInvestition(
 }
 
 /**
- * Gibt Felder für eine Sonstiges-Investition nach Kategorie zurück.
+ * Alle Richtungen eines *Sonstiges*-Geräts, dedupliziert — **abgeleitet**.
+ *
+ * Spiegel von `field_definitions.SONSTIGES_FELDER_UNGEPFLEGT`. Verbraucher
+ * zuerst: das ist die Richtung, als die jeder wertführende Pfad ein Gerät ohne
+ * gepflegte Kategorie liest (`SONSTIGES_KATEGORIE_UNGEPFLEGT` im Backend).
  */
-export function getFelderFuerSonstiges(kategorie: string): FeldDefinition[] {
-  return SONSTIGES_FELDER[kategorie] ?? SONSTIGES_FELDER.erzeuger
+const SONSTIGES_FELDER_UNGEPFLEGT: FeldDefinition[] = (() => {
+  const reihenfolge = ['verbraucher', ...Object.keys(SONSTIGES_FELDER).filter(k => k !== 'verbraucher')]
+  const gesehen = new Set<string>()
+  const out: FeldDefinition[] = []
+  for (const kat of reihenfolge) {
+    for (const feld of SONSTIGES_FELDER[kat] ?? []) {
+      if (gesehen.has(feld.feld)) continue
+      gesehen.add(feld.feld)
+      out.push(feld)
+    }
+  }
+  return out
+})()
+
+/**
+ * Gibt Felder für eine Sonstiges-Investition nach Kategorie zurück.
+ *
+ * **Ohne gepflegte Kategorie alle Richtungen, nicht eine geratene (N-244).**
+ * Bis 17.08.2026 stand hier `?? SONSTIGES_FELDER.erzeuger` — ein Gerät ohne
+ * Kategorie bekam also ausschließlich Erzeuger-Felder angeboten, während jeder
+ * wertführende Pfad es als Verbraucher liest und `verbrauch_sonstig_kwh` ·
+ * `bezug_pv_kwh` · `bezug_netz_kwh` erwartet. Die Schnittmenge beider Listen
+ * ist **leer** — die Zuordnungsfläche bot damit nur Felder an, die für dieses
+ * Gerät nirgends gesucht werden (die N-259-Klasse).
+ */
+export function getFelderFuerSonstiges(kategorie: string | null | undefined): FeldDefinition[] {
+  if (kategorie && kategorie in SONSTIGES_FELDER) return SONSTIGES_FELDER[kategorie]
+  return SONSTIGES_FELDER_UNGEPFLEGT
 }
 
 /**

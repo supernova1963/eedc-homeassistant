@@ -57,6 +57,29 @@ Datum von Hand auf den Monatsanfang ziehen.
 *Gefunden hat es Knallfrosch im Forum — er hat nachgerechnet und kam auf 14,27 € statt der
 angezeigten 16,05 €.*
 
+### Ein „Sonstiges"-Gerät ohne Kategorie zeigt dir jetzt alle passenden Felder
+
+**Betrifft dich das?** Wenn du ein Gerät unter *Sonstiges* führst, bei dem das Feld **Kategorie**
+leer ist. Das kommt bei Geräten aus einem alten Backup oder aus einem Import vor — beim Anlegen
+von Hand ist immer eine gesetzt.
+
+Bisher hat eedc bei so einem Gerät stillschweigend **Erzeuger** angenommen und dir nur dessen vier
+Felder angeboten: Erzeugung, Eigenverbrauch, Einspeisung, Einspeise-Erlös. Ist das Gerät in
+Wirklichkeit ein **Verbraucher**, waren das genau die falschen vier — seinen Verbrauch, den
+PV-Anteil und den Netzbezug konntest du in *Einstellungen → Datenquellen* und im Monatsabschluss
+gar nicht erst zuordnen oder eintragen. Und die Auswertung sucht für dasselbe Gerät genau diese
+drei: eedc bot dir also ausschließlich Felder an, die es bei diesem Gerät nirgends liest.
+
+Ohne gepflegte Kategorie stehen jetzt **alle sieben** Felder bereit — du trägst ein, was das Gerät
+hat. Dasselbe im **Komponenten-Hub**: Dort stand bei so einem Verbraucher überall **0,00**, obwohl
+gepflegte Werte da waren. Jetzt entscheidet der Bestand: Wo Erzeugung erfasst ist, wird als
+Erzeuger ausgewertet, sonst als Verbraucher.
+
+**Hast du eine Kategorie gepflegt, ändert sich für dich nichts.** Es verschwindet auch nichts —
+die Erzeugungs-Felder bleiben sichtbar, bereits gepflegte Werte stehen unverändert da. Der saubere
+Weg bleibt trotzdem, die Kategorie zu setzen (*Einstellungen → Investitionen*): Dann ist deine
+Erfassungsmaske wieder kurz.
+
 ---
 
 ## v4.0.17 — Nicht bewertet heißt keine Zahl

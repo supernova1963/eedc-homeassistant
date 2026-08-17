@@ -82,10 +82,12 @@ from backend.core.field_definitions import (
     get_emob_pv_netz_kwh,
     get_sonstiges_verbrauch_kwh,
     get_speicher_netzladung_kwh,
+    ist_gepflegte_sonstiges_kategorie,
 )
 from backend.core.berechnungen import (
     bkw_eigenverbrauch_anteil,
     imd_typ_beitrag,
+    sonstiges_richtung,
     eauto_effizienz_100km,
     eigenverbrauchsquote_prozent,
     einspeise_erloes_euro,
@@ -1792,7 +1794,21 @@ async def get_sonstiges_dashboard(
         ]
 
         params = inv.parameter or {}
-        kategorie = params.get('kategorie', 'erzeuger')
+        # N-244: ohne gepflegte Kategorie wird hier nicht mehr „Erzeuger"
+        # geraten. Der Einwand aus N-250 („über viele Monate gibt es kein
+        # einzelnes *hat Erzeugung*") stimmt für einen Monat — über den ganzen
+        # Bestand ist die Frage beantwortbar, und genau den hat diese Schleife
+        # schon geladen. Vorher aggregierte ein ungepflegtes **Verbrauchs**gerät
+        # ausschließlich Erzeugungsfelder: der Hub zeigte lauter Nullen, obwohl
+        # gepflegte Verbrauchswerte danebenlagen.
+        kategorie = params.get('kategorie')
+        if not ist_gepflegte_sonstiges_kategorie(kategorie):
+            kategorie = sonstiges_richtung(
+                None,
+                hat_erzeugung=any(
+                    (md.verbrauch_daten or {}).get('erzeugung_kwh') for md in monatsdaten
+                ),
+            )
         beschreibung = params.get('beschreibung', '')
 
         # Aggregation basierend auf Kategorie
