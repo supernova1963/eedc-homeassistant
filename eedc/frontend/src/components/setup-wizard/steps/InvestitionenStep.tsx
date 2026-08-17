@@ -11,6 +11,7 @@ import { useState, useEffect, useRef } from 'react'
 import { ArrowLeft, ArrowRight, Sun, Plus } from 'lucide-react'
 import { Alert, Button } from '../../ui'
 import type { Investition, Anlage, InvestitionTyp } from '../../../types'
+import type { InvestitionUpdate } from '../../../api/investitionen'
 import { INVESTITION_TYP_ORDER, TYP_LABELS as INVESTITION_TYP_LABELS } from '../../../lib/constants'
 import { SetupInvestitionForm } from '../sections/SetupInvestitionForm'
 import { SetupInvestitionMenu } from '../sections/SetupInvestitionMenu'
@@ -21,7 +22,8 @@ interface InvestitionenStepProps {
   anlage: Anlage | null
   isLoading: boolean
   error: string | null
-  onUpdateInvestition: (id: number, data: Partial<Investition>) => Promise<void>
+  // F-32: Nutzlast-Typ (`null` = Feld leeren), s. `SetupInvestitionForm`.
+  onUpdateInvestition: (id: number, data: InvestitionUpdate) => Promise<void>
   onDeleteInvestition: (id: number) => Promise<void>
   onAddInvestition: (typ: InvestitionTyp) => Promise<Investition>
   onCreateDefaultPVSystem?: () => Promise<void>

@@ -2102,9 +2102,29 @@ P11_AUSNAHMEN: frozenset[str] = frozenset({
     "backend/services/daten_checker/energieprofil.py::_check_energieprofil_abdeckung",
     "backend/services/daten_checker/monatsdaten.py::_check_monatsdaten_vollstaendigkeit",
     "backend/services/daten_checker/stammdaten.py::_check_stammdaten",
+    # Prüft JE GERÄT (Ausrichtung, kWp, Kosten gepflegt?) und bildet keine
+    # Anlagensumme — ein abtretendes BKW braucht seine Stammdaten weiterhin,
+    # allen voran die Wechselrichter-Leistung, die es NICHT abtritt.
+    "backend/services/daten_checker/stammdaten.py::_check_investitionen",
     # ⚠ Der Schreibpfad adressiert bewusst BEIDE: hängen Module am BKW, schreibt
     # `services/erzeuger_ziel.py::loese_ziel` an die Kinder, sonst an das BKW
     # selbst. Ein Selektor würde dem BKW ohne Kinder seinen Empfänger nehmen.
+    # (Erst mit der dritten Erkennungsform aus F-32 überhaupt sichtbar geworden —
+    # die Typ-Liste `ZIEL_ERLAUBTE_TYPEN` heißt nicht `…ERZEUGER_TYPEN`.)
+    "backend/services/erzeuger_ziel.py::loese_ziel",
+
+    # ── 3b. Sie IMPLEMENTIEREN die Abtretung, statt sie anzuwenden ─────────
+    # `monats_fakten.py::falte` bekommt die abgetretenen IDs als Argument
+    # (`abgetretene_bkw`, vom Aufrufer über `abgetretene_bkw_ids` erhoben) und
+    # setzt für sie Erzeugung UND Rest-Eigenverbrauch auf 0. Der Selektor würde
+    # die Zeile ganz verwerfen — dann verlöre das BKW auch die Größen, die es
+    # NICHT abtritt (Speicher-Beiträge seines Akkus).
+    "backend/services/monats_fakten.py::falte",
+    # `pv_monatswerte.py::_lade_bkw_aggregate` ist die GEGENRICHTUNG: sie sucht
+    # gezielt die abtretenden BKW, um deren Monatswert als Lückenfüller der
+    # Kinder zu verwenden (P7, Stufe 2). Ein Selektor davor lieferte immer `{}`.
+
+    "backend/services/pv_monatswerte.py::_lade_bkw_aggregate",
 
     # ── 4. Per-Investition-Sichten: keine Anlagensumme ─────────────────────
     # Hier ist die Ableitung im kWp-SoT zuständig (`get_bkw_kwp` liest die
@@ -2169,9 +2189,45 @@ def _p11_mengen_funktionen() -> dict[str, list[int]]:
                 return {"pv-module", "balkonkraftwerk"} <= werte
             return False
 
+        def getrennte_typ_vergleiche(knoten: ast.AST) -> bool:
+            """Dritte Form: die Menge entsteht über ZWEI getrennte Typ-Vergleiche.
+
+            ⚠ **Die Blindstelle, an der F-32 sich verstecken konnte.**
+            ``solar_prognose.py::get_solar_prognose_endpoint`` lädt die Module und
+            die Balkonkraftwerke in **zwei** Queries (``Investition.typ ==
+            "pv-module"`` und ``== "balkonkraftwerk"``) und addiert die Listen —
+            es gibt dort kein Container-Literal, also sah der Wächter oben nichts.
+            Genau diese Funktion hat den Selektor bis F-32 nicht angewendet: das
+            abtretende BKW hätte eine dritte String-Zeile mit seiner alten
+            Einzel-Ausrichtung beigetragen.
+
+            Gemessen (17.08.): baumweit **neun** Funktionen vergleichen beide
+            Typen getrennt; sieben davon kaufen sich über den Selektor frei oder
+            stehen schon klassifiziert in `P11_AUSNAHMEN`. Die enge Form (nur
+            ``<x>.typ == "<literal>"``) ist deshalb trennscharf — die weite
+            Variante (irgendwo beide Strings in der Funktion) lieferte 13
+            Kandidaten bei einem echten Treffer und wurde verworfen.
+            """
+            vergleiche: set[str] = set()
+            for n in ast.walk(knoten):
+                if not isinstance(n, ast.Compare):
+                    continue
+                if not (
+                    isinstance(n.left, ast.Attribute) and n.left.attr == "typ"
+                ):
+                    continue
+                for c in n.comparators:
+                    if isinstance(c, ast.Constant) and isinstance(c.value, str):
+                        vergleiche.add(c.value)
+            return {"pv-module", "balkonkraftwerk"} <= vergleiche
+
         def besuche(knoten: ast.AST) -> None:
             if isinstance(knoten, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 stapel.append(knoten.name)
+                if getrennte_typ_vergleiche(knoten):
+                    treffer.setdefault(f"{modul}::{knoten.name}", []).append(
+                        knoten.lineno
+                    )
                 for kind in ast.iter_child_nodes(knoten):
                     besuche(kind)
                 stapel.pop()

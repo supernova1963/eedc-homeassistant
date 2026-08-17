@@ -23,6 +23,7 @@ from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.utils.investition_filter import aktiv_jetzt
+from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
 from backend.services.prognose_auswahl import lade_aktive_prognose
 from backend.services.solar_forecast_service import (
     get_solar_prognose,
@@ -320,7 +321,15 @@ async def get_solar_prognose_endpoint(
     )
     balkonkraftwerke = result.scalars().all()
 
-    alle_pv = list(pv_module) + list(balkonkraftwerke)
+    # N-266: `erzeuger_traeger` — ein Balkonkraftwerk mit Modul-Kindern hat kWp
+    # UND Ausrichtung abgetreten; ohne den Selektor brächte es hier eine
+    # zusätzliche String-Zeile mit seiner alten Einzel-Ausrichtung mit, und mit
+    # F-32 (Dispatcher unten) trüge diese Zeile die Summe der Kinder — also
+    # dieselbe kWp zweimal. ⚠ Die Menge entsteht hier über ZWEI getrennte
+    # Queries statt über ein Typ-Literal; deshalb hat der P11-Wächter sie bis
+    # F-32 nicht gesehen (Literal-Heuristik). Nicht zu einer Query
+    # zusammenziehen, ohne den Wächter mitzuprüfen.
+    alle_pv = erzeuger_traeger(list(pv_module) + list(balkonkraftwerke))
 
     if not alle_pv:
         raise HTTPException(
@@ -336,11 +345,17 @@ async def get_solar_prognose_endpoint(
     strings: List[PVStringConfig] = []
     hinweise: List[str] = []
 
+    # F-32: `get_erzeuger_kwp` (Typ-Dispatcher, ADR-002/P3-a) statt `get_pv_kwp`.
+    # Ein Balkonkraftwerk, das der Einrichtungsassistent angelegt hat, trägt die
+    # Spalte `leistung_kwp` NICHT — seine Leistung steht nur im `parameter`
+    # (Anzahl × Wp). `get_pv_kwp` lieferte dort 0,0, der String fiel heraus, und
+    # eine reine BKW-Anlage bekam auf `strings == []` einen HTTP 400: keine
+    # Prognose in *Cockpit → Live* und *Cockpit → Aussicht*.
     from backend.services.pv_orientation import (
-        get_pv_kwp, get_pv_neigung, get_pv_azimut,
+        get_erzeuger_kwp, get_pv_neigung, get_pv_azimut,
     )
     for pv in alle_pv:
-        kwp = get_pv_kwp(pv)
+        kwp = get_erzeuger_kwp(pv)
         if kwp <= 0:
             continue
 

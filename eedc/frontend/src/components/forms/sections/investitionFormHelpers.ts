@@ -82,6 +82,35 @@ export const PARENT_TYPE_LABELS: Record<string, string> = {
   'balkonkraftwerk': 'Balkonkraftwerk',
 }
 
+/**
+ * Nennleistung eines Balkonkraftwerks in kWp aus Anzahl × Wp — Client-SoT (F-32).
+ *
+ * **Warum das hier steht und nicht in drei Formularen.** Die Spalte
+ * `Investition.leistung_kwp` ist beim BKW ein **abgeleiteter** Wert: gepflegt
+ * werden „Leistung pro Modul (Wp)" und „Anzahl Module" im `parameter`. Wer die
+ * Spalte nicht mitschreibt, erzeugt genau F-32 — der Einrichtungsassistent tat
+ * das, und die Prognose einer reinen BKW-Anlage fiel auf HTTP 400. Die Formel
+ * stand danach an drei Stellen; Regel 0a verlangt die Zentrale statt der
+ * vierten Kopie.
+ *
+ * **Rückgabe `null` heißt „Feld leeren", nicht „0".** Wird eine der beiden
+ * Eingaben geleert, gibt es keine abgeleitete Nennleistung mehr — ein
+ * stehengebliebener Altwert wäre eine Leistung, die niemand gepflegt hat
+ * (dieselbe Falle wie die nicht lösbare Wechselrichter-Zuordnung, JayJay
+ * v4.0.0). `null` ist die Nutzlast-Sprache von {@link InvestitionUpdate};
+ * Schreibpfade, die nur `undefined` senden können, behalten den Altwert still.
+ * Eine 0 wäre die 0-Werte-Falle: sie sieht wie eine Messung aus.
+ */
+export function bkwLeistungKwp(
+  anzahl: number | string | undefined,
+  leistungWp: number | string | undefined,
+): number | null {
+  const n = typeof anzahl === 'number' ? anzahl : parseInt(String(anzahl ?? ''), 10)
+  const wp = typeof leistungWp === 'number' ? leistungWp : parseInt(String(leistungWp ?? ''), 10)
+  if (!Number.isFinite(n) || !Number.isFinite(wp) || n <= 0 || wp <= 0) return null
+  return (n * wp) / 1000
+}
+
 /** Erlaubte Parent-Typen eines Investitions-Typs — immer als Liste. */
 export function parentTypenFuer(typ: InvestitionTyp): InvestitionTyp[] {
   const raw = PARENT_MAPPING[typ]

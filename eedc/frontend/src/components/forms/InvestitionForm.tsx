@@ -8,6 +8,7 @@ import {
   ausrichtungToGrad,
   gradToAusrichtung,
   AUSRICHTUNG_OPTIONEN,
+  bkwLeistungKwp,
   parentTypenFuer,
   PARENT_REQUIRED,
   PARENT_TYPE_LABELS,
@@ -212,20 +213,6 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
         }
       }
 
-      // Balkonkraftwerk: leistung_kwp aus Anzahl × Wp berechnen
-      let balkonkraftwerkKwp: number | undefined
-      let balkonkraftwerkAusrichtung: string | undefined
-      let balkonkraftwerkNeigung: number | undefined
-      if (typ === 'balkonkraftwerk') {
-        const anzahl = parseInt(paramData.anzahl as string) || 0
-        const leistungWp = parseInt(paramData.leistung_wp as string) || 0
-        if (anzahl > 0 && leistungWp > 0) {
-          balkonkraftwerkKwp = (anzahl * leistungWp) / 1000
-        }
-        balkonkraftwerkAusrichtung = paramData.ausrichtung as string || undefined
-        balkonkraftwerkNeigung = paramData.neigung_grad ? parseFloat(paramData.neigung_grad as string) : undefined
-      }
-
       // Ein geleertes Feld muss beim BEARBEITEN als `null` gehen: `undefined`
       // fällt aus dem JSON, und das Backend behält mit `model_dump(exclude_unset=True)`
       // den Altwert — Zuordnung, Datum & Co. ließen sich dadurch nie wieder
@@ -234,6 +221,23 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
       const leer = investition ? null : undefined
       const txt = (v: string) => v.trim() || leer
       const zahl = (v: string) => (v ? parseFloat(v) : leer)
+
+      // Balkonkraftwerk: `leistung_kwp` ist abgeleitet (Anzahl × Wp) — Formel im
+      // Client-SoT `bkwLeistungKwp` (F-32: der Wizard hatte sie nicht, und ohne
+      // die Spalte fiel die Prognose auf HTTP 400).
+      let balkonkraftwerkKwp: number | null | undefined
+      let balkonkraftwerkAusrichtung: string | undefined
+      let balkonkraftwerkNeigung: number | undefined
+      if (typ === 'balkonkraftwerk') {
+        // `?? leer`: eine geleerte Anzahl LEERT die abgeleitete Spalte, statt den
+        // Altwert stehen zu lassen — bis F-32 blieb hier `undefined` stehen und
+        // das Backend behielt die alte kWp (dieselbe `exclude_unset`-Falle).
+        balkonkraftwerkKwp = bkwLeistungKwp(
+          paramData.anzahl as string, paramData.leistung_wp as string,
+        ) ?? leer
+        balkonkraftwerkAusrichtung = paramData.ausrichtung as string || undefined
+        balkonkraftwerkNeigung = paramData.neigung_grad ? parseFloat(paramData.neigung_grad as string) : undefined
+      }
 
       const data: InvestitionCreate | InvestitionUpdate = {
         ...(investition ? {} : { anlage_id: anlageId, typ }),

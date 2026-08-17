@@ -33,12 +33,27 @@ export default function HubLeerGrund({ anlageId, investitionId }: {
 }) {
   const navigate = useNavigate()
   // Eigener Aufruf, bewusst NUR aus dem leeren Zustand heraus — analog
-  // TagLeerGrund. Der SWR-Key hängt am Gerät, damit der Wechsel zwischen zwei
-  // Geräten desselben Typs nicht den Grund des vorigen stehen lässt.
+  // TagLeerGrund.
+  //
+  // ⚠ **Bewusst OHNE `swrKey` (N-270).** Bis 17.08.2026 stand hier
+  // `v4-hub-leer:${anlageId}:${investitionId}` mit der Begründung, der Wechsel
+  // zwischen zwei Geräten desselben Typs solle nicht den Grund des vorigen
+  // stehen lassen. Genau das bewirkte der Cache aber: diese Komponente ist keine
+  // Datenanzeige, sondern eine **Aussage über die Abwesenheit** von Daten. Wer
+  // den Knopf drückt, Monatswerte erfasst und in *Komponenten* zurückkommt
+  // (Tab-Wechsel = Remount), sah für eine API-Runde „noch keine Monatswerte
+  // erfasst" — über den nun gefüllten Blöcken. Ohne Cache rendert die
+  // Komponente `null`, bis die Antwort da ist: kein Skeleton (es gibt hier
+  // keines zu vermeiden), kein Flackern, und der ursprüngliche Grund für den
+  // Key ist **besser** erfüllt als mit ihm.
+  //
+  // {@link TagLeerGrund} behält seinen Key aus eigener, gemessener Begründung:
+  // es wird nur aus dem bereits leeren Zustand heraus gerendert, zeigt immer
+  // mindestens seinen Text, und sein Key trägt das Datum — ein stale Wert ist
+  // dort die stale Verfeinerung einer bereits korrekten Aussage.
   const { data } = useApiData(
     () => investitionenApi.getHubLeerGrund(anlageId, investitionId),
     [anlageId, investitionId],
-    { swrKey: `v4-hub-leer:${anlageId}:${investitionId}` }, /* de-de-allow: Cache-Key, keine Anzeige */
   )
 
   if (!data?.leer || !data.meldung) return null

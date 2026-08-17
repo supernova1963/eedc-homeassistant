@@ -3,9 +3,11 @@ import { Trash2, ChevronDown, ChevronRight } from 'lucide-react'
 import { Button, Input, Select, Alert, DatumFeld } from '../../ui'
 import { SchalterZeile } from '../../forms/sections/SchalterZeile'
 import type { Investition } from '../../../types'
+import type { InvestitionUpdate } from '../../../api/investitionen'
 import {
   PARENT_REQUIRED,
   PARENT_TYPE_LABELS,
+  bkwLeistungKwp,
   parentTypenFuer,
 } from '../../forms/sections/investitionFormHelpers'
 import { TYP_LABELS as INVESTITION_TYP_LABELS } from '../../../lib/constants'
@@ -36,7 +38,13 @@ export function SetupInvestitionForm({
 }: {
   investition: Investition
   allInvestitionen: Investition[]
-  onUpdate: (data: Partial<Investition>) => void
+  // F-32: die **Nutzlast** `InvestitionUpdate`, nicht `Partial<Investition>`.
+  // Was hier durchgeht, landet in `investitionenApi.update` — und dort heißt
+  // `null` dokumentiert „Feld leeren" (`exclude_unset` behält sonst den
+  // Altwert). Der Entity-Typ `Investition.leistung_kwp` bleibt bewusst
+  // `number | undefined`: er beschreibt einen gelesenen Wert, und 37
+  // Anzeigestellen müssten sonst eine Nutzlast-Semantik mittragen.
+  onUpdate: (data: InvestitionUpdate) => void
   onDelete: () => void
   isNew?: boolean
 }) {
@@ -66,6 +74,26 @@ export function SetupInvestitionForm({
   const getBoolParam = (key: string) => investition.parameter?.[key] === true
   const updateParam = (key: string, value: unknown) => {
     onUpdate({ parameter: { ...investition.parameter, [key]: value } })
+  }
+  /**
+   * Balkonkraftwerk: Anzahl/Wp pflegen **und** die abgeleitete Spalte
+   * `leistung_kwp` mitschreiben (F-32).
+   *
+   * Der Assistent schrieb bis dahin ausschließlich ins `parameter`. Das
+   * Investitionsformular schreibt die Spalte — deshalb traf der Fehler genau
+   * den Erstnutzer mit Balkonkraftwerk: `/api/solar-prognose` antwortete mit
+   * HTTP 400, der Prefetch brach mit `keine_strings` ab. Formel aus dem
+   * Client-SoT; `null` leert die Spalte, wenn eine der Eingaben verschwindet.
+   */
+  const updateBkwParam = (key: string, value: unknown) => {
+    const parameter = { ...investition.parameter, [key]: value }
+    onUpdate({
+      parameter,
+      leistung_kwp: bkwLeistungKwp(
+        parameter[PARAM_BALKONKRAFTWERK.ANZAHL] as number | string | undefined,
+        parameter[PARAM_BALKONKRAFTWERK.LEISTUNG_WP] as number | string | undefined,
+      ),
+    })
   }
   const num = (v: string): number | undefined => parseFloat(v) || undefined
 
@@ -324,14 +352,14 @@ export function SetupInvestitionForm({
                   label="Leistung pro Modul (Wp)" required
                   type="number" min="0" step="any"
                   value={getParam(PARAM_BALKONKRAFTWERK.LEISTUNG_WP) ?? ''}
-                  onChange={(e) => updateParam(PARAM_BALKONKRAFTWERK.LEISTUNG_WP, num(e.target.value))}
+                  onChange={(e) => updateBkwParam(PARAM_BALKONKRAFTWERK.LEISTUNG_WP, num(e.target.value))}
                   placeholder="z.B. 400"
                 />
                 <Input
                   label="Anzahl Module" required
                   type="number" min="1" step="1"
                   value={getParam(PARAM_BALKONKRAFTWERK.ANZAHL) ?? ''}
-                  onChange={(e) => updateParam(PARAM_BALKONKRAFTWERK.ANZAHL, parseInt(e.target.value) || undefined)}
+                  onChange={(e) => updateBkwParam(PARAM_BALKONKRAFTWERK.ANZAHL, parseInt(e.target.value) || undefined)}
                   placeholder="z.B. 2"
                 />
                 <Select

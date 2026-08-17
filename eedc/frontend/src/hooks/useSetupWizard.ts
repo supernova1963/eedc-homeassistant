@@ -16,7 +16,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { ApiError } from '../api/client'
 import { anlagenApi } from '../api/anlagen'
 import { strompreiseApi } from '../api/strompreise'
-import { investitionenApi, type InvestitionCreate } from '../api/investitionen'
+import { investitionenApi, type InvestitionCreate, type InvestitionUpdate } from '../api/investitionen'
 import { pvgisApi, type GespeichertePrognose } from '../api/pvgis'
 import { TYP_LABELS } from '../lib/constants'
 import { monatsersterVon } from '../lib/datum'
@@ -148,7 +148,7 @@ interface UseSetupWizardReturn {
   useDefaultStrompreise: () => Promise<void>
 
   // Investitionen bearbeiten
-  updateInvestition: (id: number, data: Partial<Investition>) => Promise<void>
+  updateInvestition: (id: number, data: InvestitionUpdate) => Promise<void>
   deleteInvestition: (id: number) => Promise<void>
   addInvestition: (typ: InvestitionTyp) => Promise<Investition>
   createDefaultPVSystem: () => Promise<void>
@@ -197,7 +197,7 @@ export function useSetupWizard(): UseSetupWizardReturn {
   const [pvgisError, setPvgisError] = useState<string | null>(null)
 
   // Pending updates für Debouncing (verhindert Race Conditions)
-  const pendingUpdatesRef = useRef<Map<number, { data: Partial<Investition>; timer: ReturnType<typeof setTimeout> }>>(new Map())
+  const pendingUpdatesRef = useRef<Map<number, { data: InvestitionUpdate; timer: ReturnType<typeof setTimeout> }>>(new Map())
 
   // State in LocalStorage speichern
   useEffect(() => {
@@ -384,13 +384,22 @@ export function useSetupWizard(): UseSetupWizardReturn {
   }, [wizardState.anlageId, anlage, createStrompreis])
 
   // Investition aktualisieren mit Debouncing
-  const updateInvestition = useCallback(async (id: number, data: Partial<Investition>) => {
+  // F-32: die Nutzlast ist `InvestitionUpdate`, nicht `Partial<Investition>` —
+  // sie geht unverändert an `investitionenApi.update`, und dort heißt `null`
+  // „Feld leeren" (ohne das behält `exclude_unset` den Altwert). Der
+  // optimistische State bleibt der Entity-Typ; `null` wird beim Einsetzen zu
+  // `undefined` normalisiert, damit „geleert" lokal wie „nicht gepflegt"
+  // aussieht — genau das liefert der Server beim nächsten Laden.
+  const updateInvestition = useCallback(async (id: number, data: InvestitionUpdate) => {
     // 1. Sofort lokalen State optimistisch aktualisieren (für UI-Reaktivität)
     setInvestitionen(prev => prev.map(inv => {
       if (inv.id !== id) return inv
+      const lokal = Object.fromEntries(
+        Object.entries(data).map(([k, v]) => [k, v === null ? undefined : v]),
+      ) as Partial<Investition>
       return {
         ...inv,
-        ...data,
+        ...lokal,
         // Parameter speziell mergen
         parameter: data.parameter
           ? { ...(inv.parameter || {}), ...data.parameter }

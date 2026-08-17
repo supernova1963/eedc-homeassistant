@@ -39,6 +39,35 @@ Rest nach Leistungsanteil. Doppelt gezählt wird nichts.
 
 **Wer keine Module zuordnet, sieht keine veränderte Zahl.**
 
+### Balkonkraftwerk aus dem Einrichtungsassistenten: Prognose war leer
+
+Wer sein Balkonkraftwerk über den **Einrichtungsassistenten** angelegt hat, sah in *Cockpit → Live*
+und *Cockpit → Aussicht* **keine Solarprognose** — obwohl Leistung pro Modul, Anzahl, Ausrichtung
+und Neigung gepflegt waren.
+
+Der Grund: Beim Balkonkraftwerk entsteht die Nennleistung aus „Anzahl × Leistung pro Modul". Der
+Assistent hat nur diese beiden Angaben hinterlegt, das Investitionsformular zusätzlich den daraus
+berechneten Wert — und drei Stellen im Prognose-Pfad lasen ausschließlich den berechneten. Sie
+fanden dort **0 kW** und verwarfen das Gerät als „ohne Leistung". Bei einer Anlage, die **nur** aus
+einem Balkonkraftwerk besteht, blieb damit nichts übrig, worüber sich etwas rechnen ließe.
+
+Beide Hälften sind behoben — die Lesestellen fragen die Leistung jetzt so ab, wie sie beim
+Balkonkraftwerk zustande kommt, und der Assistent hinterlegt sie zusätzlich berechnet.
+
+- **Es wirkt ohne Zutun und rückwirkend**, auch für Anlagen aus einem **Backup**: Die Prognose ist
+  ab dem nächsten Aufruf da. Nichts nachpflegen, nichts neu anlegen.
+- **Betroffen war mehr als die Anzeige:** Der nächtliche Vorablauf, der die Prognosegenauigkeit
+  mitschreibt und daraus den Lernfaktor bildet, brach bei diesen Anlagen ebenfalls ab. Er bekam nur
+  an Tagen einen Messpunkt, an denen jemand *Cockpit → Live* geöffnet hat.
+- **Wer sein Balkonkraftwerk über das Formular angelegt hat, war nie betroffen.**
+
+### Kein alter Hinweis mehr über gefüllten Blöcken
+
+Der Reiter *Komponenten* erklärt bei einem leeren Gerät, **warum** dort nichts steht. Diese
+Erklärung wurde zwischengespeichert — und stand deshalb nach dem Erfassen von Monatswerten beim
+Zurückwechseln noch einen Moment über den nun gefüllten Blöcken. Sie wird jetzt jedes Mal frisch
+geholt und erscheint erst, wenn sie zutrifft. Beim Laden zeigt der Bereich wie bisher nichts an.
+
 ### „Anlage nicht gefunden" nach dem Löschen der letzten Anlage
 
 eedc merkt sich, welche Anlage du zuletzt ausgewählt hattest. Diese Merkung wurde beim Löschen nie

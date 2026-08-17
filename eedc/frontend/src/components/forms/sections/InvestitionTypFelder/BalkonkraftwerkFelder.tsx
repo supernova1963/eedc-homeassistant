@@ -1,13 +1,14 @@
 import { FormSection, Input, Select, Alert } from '../../../ui'
 import { fmtZahl } from '../../../../lib'
-import { AUSRICHTUNG_OPTIONEN } from '../investitionFormHelpers'
+import { AUSRICHTUNG_OPTIONEN, bkwLeistungKwp } from '../investitionFormHelpers'
 import { SchalterZeile } from '../SchalterZeile'
 import type { TypFelderProps } from './types'
 
 export function BalkonkraftwerkFelder({ paramData, onInputChange, setParam, modulKinder }: TypFelderProps) {
-  const anzahl = parseInt(paramData.anzahl as string) || 0
-  const wp = parseInt(paramData.leistung_wp as string) || 0
-  const kwp = (anzahl * wp) / 1000
+  // Formel im Client-SoT `bkwLeistungKwp` (F-32) — der Hinweis hier und die
+  // gespeicherte Spalte sollen nie auseinanderlaufen. 0 heißt „noch nichts
+  // gepflegt" und unterdrückt den Hinweis, wie zuvor.
+  const kwp = bkwLeistungKwp(paramData.anzahl as string, paramData.leistung_wp as string) ?? 0
   const wrGrenzeW = parseInt(paramData.wechselrichter_leistung_w as string) || 0
   // N-266: Sind diesem Balkonkraftwerk PV-Module zugeordnet, tragen SIE die
   // Nennleistung und die Ausrichtung — genau deshalb gibt es die Zuordnung
