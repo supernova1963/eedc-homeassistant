@@ -18,7 +18,12 @@
 
 
 Status: **Konzept, Issue bleibt offen.** Kein Code in dieser Etappe.
-Entwurf für einen #263-Kommentar (Freigabe ausstehend).
+~~Entwurf für einen #263-Kommentar (Freigabe ausstehend).~~
+✅ **Gepostet am 2026-08-17** ([`issuecomment-5318411323`](https://github.com/supernova1963/eedc-homeassistant/issues/263#issuecomment-5318411323), 18:00 UTC) — die
+Quellcode-Erhebung zu den vier Anbindungen steht dort im Anwender-Text; ihre Messungen sind mit
+diesem Nachzug hier eingearbeitet (Befund 1b). **Der Satz „Freigabe ausstehend" stand nach dem
+Posten noch da** — dieselbe Klasse wie der Kopf-Block des Einstiegstextes, der die Anweisung „nicht
+posten" weitertrug: *eine Zustandsangabe, die niemand beim Erledigen anfasst.*
 
 ## Maßnahmen-Register (fortschreibbar — Stand 2026-08-02)
 
@@ -28,7 +33,7 @@ Entwurf für einen #263-Kommentar (Freigabe ausstehend).
 | **K-0b** | **Wegräumen, was es bei einer Klimaanlage nicht gibt:** keine Heizwärme-/Warmwasserbedarfs-Felder, keine konstruierte Ersparnis gegen Gas/Öl, keine daraus abgeleitete CO₂-Ersparnis — die Anlage wird als **Verbraucher** ausgewertet (Strom · PV-Anteil · Kosten) | ✅ gebaut 2026-08-02, ⚠ **Begründung 2026-08-16 korrigiert und Bauform ersetzt (K-0c)** | Die **unbeantwortete Hälfte des Issues** (3dmaster90: „Das sowas wie Warmwasser, Wärmebedarf etc. entfällt"). Einzige Maßnahme **ohne Testgerät**. Auslöser: das ROI-Dashboard wies rund **1.100 €/Jahr** und **2.210 kg CO₂** gegen eine nie ersetzte Gasheizung aus |
 | **K-0c** | **Die Bewertung hängt an der Pflege, nicht an der Bauart:** neue Option `alter_energietraeger = "nichts"` („Nichts ersetzt (Neubau)"), kein erfundener Bedarfs-Default mehr, Typ-Sonderweg entfällt | ✅ gebaut 2026-08-16 | Der Nachfolger von K-0b — **und die Korrektur seiner Begründung**, s. Abschnitt unten. Löst zugleich **N-88** (jede WP im Neubau bekam eine Gaskessel-Ersparnis) und entschärft **N-91**. Layer-SoT `alternativkosten.py::ERSETZT_NICHTS` / `ersetzt_keine_heizung()` / `alle_ersetzen_nichts()`; Proben in `test_wp_ersetzt_nichts_n88.py` (Rechen-Ebene) und `test_roi_klimaanlage_nicht_bewertet.py` (Anzeige-Ebene) |
 | **K-1** | **SEER** (Kühl-Effizienz) als Parameter | ⬜ | ~1–2 Tage. **Allein halbnützlich** — ohne K-2 ein Effizienz-Faktor ohne Bezugsgröße ⇒ **nicht zuerst bauen** |
-| **K-2** | **Heizen-vs-Kühlen-Trennung** über Betriebsmodus-Sensor (+ Normalisierungs-Schicht, modus-gewichtete Aggregation, Serien-Split in 4 Read-Sites) | ⬜ **Kern, zuerst** | ~3–4 Tage + Live-Serien-Split |
+| **K-2** | **Heizen-vs-Kühlen-Trennung** über Betriebsmodus-Sensor (+ Normalisierungs-Schicht, modus-gewichtete Aggregation, Serien-Split in 4 Read-Sites) | ⬜ **Kern, zuerst** — ⚑ **entsperrt, und seit 17.08. ist auch die Zielstruktur entschieden** | ~3–4 Tage + Live-Serien-Split (Schätzung von 08.08., **nicht** neu gemessen). **Sechs** Modus-Klassen statt eines Feldpaars; `hvac_action` wird **nicht** verlangt (Befund 1.1/1.2 + Vergleichstabelle 1b). **Bau unbeauftragt** |
 | **K-3** | PV/Speicher/Netz-Anteil **pro Klima-Komponente** | ⬜ | klein (globale Quote als Näherung) bis groß (echte Prioritäts-Logik) — eigene Etappe |
 
 > **Harte Vorbedingung für K-2/K-3:** eine **Test-Klimaanlage mit Modus-Sensor** bei einem Tester.
@@ -79,6 +84,8 @@ erscheinen als Leerwert `—` mit sichtbarem Grund, nicht als 0.
 abgeschlossen; was heute unbenutzt in `parameter` liegt, wird nicht weggeworfen. Und K-0b greift
 **K-2 nicht vor**: es entfernt nur das falsche Vokabular (Heizwärme/Warmwasser), statt ein neues zu
 setzen — die Heizen-/Kühlen-Trennung rechnet später in `strom_heizen_kwh`/`strom_kuehlen_kwh`.
+⚑ **Seit 17.08. gilt die Sechs-Klassen-Struktur** (Befund 1.2); die zwei Feldnamen hier sind die
+Kurzform von damals und nicht die Zielstruktur.
 
 > ~~**Angrenzend, bewusst offen:** Auch eine klassische Wärmepumpe im **Neubau** ersetzt keine
 > Heizung, bekommt aber weiterhin eine Gaskessel-Ersparnis angerechnet …~~
@@ -159,10 +166,58 @@ Entfeuchtung · Nur Lüftung · Aus**. Damit ist die harte Vorbedingung erfüllt
    **„Heizen/Kühlen"**, ist die Automatik: Steht das Gerät darauf, sagt der eingestellte Modus
    nichts darüber, was es gerade tut. Dafür bräuchte es `hvac_action` (heating/cooling/idle) —
    **ob MELCloud das liefert, ist aus dem Bildmaterial nicht ablesbar und damit offen.**
+
+   > ✅ **ENTSCHIEDEN am 2026-08-17, am Quellcode statt am Bildmaterial:** **MELCloud liefert es
+   > für dieses Gerät nicht.** In `homeassistant/components/melcloud/climate.py` (HA-Core, Branch
+   > `dev`) definiert **nur** `AtwDeviceZoneClimate` — die **Luft-Wasser**-Klasse — eine
+   > `hvac_action`-Property; `AtaDeviceClimate` (Luft-Luft, also die Splitgeräte des Melders) und
+   > die gemeinsame Basisklasse `MelCloudClimate` haben sie **nicht**. Damit ist die Frage nicht
+   > „noch nicht ablesbar", sondern beantwortet: **eedc kann bei MELCloud-Splitgeräten nur den
+   > eingestellten Modus sehen.**
+   >
+   > ⇒ **Folge für den Bau, und sie ist keine Blockade:** `hvac_action` wird **nicht verlangt**.
+   > Wo es da ist (Daikin, s. Tabelle), verfeinert es; wo nicht, gilt der eingestellte Modus. Die
+   > Automatik-Stellung „Heizen/Kühlen" wird dann **nicht geraten**, sondern als eigene Klasse
+   > *unbestimmt* geführt (s. Punkt 2) — die P4-Linie: eine Antwort, die weniger enthält als sie
+   > soll, sagt es selbst.
 2. Es sind **nicht zwei Klassen, sondern mindestens vier**: *Entfeuchtung* und *Nur Lüftung* sind
    weder Wärme noch Kälte. Das im Baustein-2-Abschnitt genannte Feldpaar
    `strom_heizen_kwh`/`strom_kuehlen_kwh` würde diesen Strom stillschweigend einer der beiden
    Seiten zuschlagen. **Die Zielstruktur ist damit offen** und gehört vor den Bau entschieden.
+
+   > ✅ **ENTSCHIEDEN am 2026-08-17 (Gernot): SECHS Klassen** —
+   > `heizen` · `kuehlen` · `entfeuchten` · `lueften` · `aus` · `unbestimmt`.
+   > Die sechste ist der Grund, warum es keine fünf sind: Automatikbetrieb ohne `hvac_action`
+   > erzeugt Zeit, die **keiner** Seite zusteht. Sie einer zuzuschlagen wäre eine erfundene
+   > Aufteilung; sie wegzulassen machte die Summe unvollständig, ohne es zu sagen.
+   > ⇒ Das Feldpaar `strom_heizen_kwh`/`strom_kuehlen_kwh` aus dem Baustein-2-Abschnitt ist damit
+   > **überholt**; die Zielstruktur trägt sechs Größen. Vor dem Bau ist damit nichts mehr offen.
+
+### Befund 1b — was die Anbindungen tatsächlich herausgeben (2026-08-17, am Quellcode erhoben)
+
+**Warum diese Tabelle hier steht:** Die Normalisierungs-Schicht wurde bis dahin mit *einem*
+Anwender begründet, der zwei Fabrikate betreibt. Die Erhebung zeigt, dass die Unterschiede
+**zwischen** den Anbindungen größer sind als zwischen den Geräten — und dass ausgerechnet der
+Ist-Betrieb die seltene Ausnahme ist. Jede Zeile ist an der Quelle belegt, nicht aus dem
+Gedächtnis; wo ein Beleg fehlt, steht das als solches da.
+
+| Anbindung | Modi (`hvac_mode`) | Ist-Betrieb (`hvac_action`) | Energie je Gerät | Beleg |
+| --- | --- | --- | --- | --- |
+| **MELCloud** (Mitsubishi, HA-Core) | ja | **nein** für Luft-Luft | ja, ein modus-blinder kWh-Zähler | `melcloud/climate.py`: `hvac_action` **nur** in `AtwDeviceZoneClimate` (Luft-Wasser), nicht in `AtaDeviceClimate`/`MelCloudClimate` |
+| **Daikin** (Original-WLAN-Modul, HA-Core) | ja | **ja** — und differenziert | modellabhängig | `daikin/climate.py::DaikinClimate.hvac_action`: liefert `IDLE`, wenn `support_compressor_frequency` **und** `compressor_frequency == 0` — also „eingeschaltet, aber läuft gerade nicht" |
+| **Bosch HomeCom Easy** (Climate 3000i/5000i/6000i, HACS `serbanb11/bosch-homecom-hass`) | ja (`off · auto · heat · cool · dry · fan_only`) | **nein** | **keiner** — Messsteckdose nötig | `climate.py`: `BoschComRacClimate` setzt kein `hvac_action`; nur die Kessel-Klasse `BoschComK40Climate` tut es. `sensor.py`: für `deviceType == "rac"` entsteht **genau eine** Entität — `BoschComSensorNotificationsRac` |
+| **Faikout** (ESP32 am S21-Bus, ehem. Faikin) | ja | **nicht belegt** | **ja**, MQTT-Feld `Wh`, kumulativ, Auflösung **100 Wh** | Maintainer-Aussage (RevK); **keine** Momentanleistung über S21. ⚠ Als einzige Zeile nicht am Code nachgeprüft — Quelle ausdrücklich benannt |
+
+⚑ **Drei Lehren für den Bau, jede aus einer Zeile:**
+
+1. **`hvac_action` darf keine Voraussetzung sein** — genau die verbreitetste Anbindung im Feld
+   (MELCloud) hat es für Splitgeräte nicht. Wer es verlangt, baut für Daikin und sperrt den Rest aus.
+2. **„Kein Energiesensor" ist ein realer Fall, kein Randfall** (Bosch RAC). Die Mengengröße kommt
+   dort aus einer **Messsteckdose** — also aus einer Quelle, die vom Modus-Signal getrennt ist und
+   die eedc über die normale Zuordnungsfläche schon kennt.
+3. **Auflösung ist eine eigene Größe**: 100-Wh-Schritte (Faikout) sind für Monatswerte reichlich,
+   für eine minutengenaue Modus-Gewichtung grob. Das gehört in die Normalisierungs-Schicht, nicht
+   in die Read-Sites.
 
 ### Befund 2 — der kWh-Zähler je Innengerät ist modus-blind
 
@@ -201,6 +256,11 @@ Klärung. **K-3 (Aufteilung je Innengerät) bleibt damit zu** — daran ändert 
 - **K-2 ist entsperrt**, aber unverändert ein ~3–4-Tage-Bau plus Live-Serien-Split. Vorher zu
   entscheiden: die Zielstruktur der Modus-Klassen (Befund 1.2) und ob `hvac_action` verlangt wird
   oder der eingestellte Modus genügt (Befund 1.1).
+
+  > ✅ **Beide Punkte sind am 2026-08-17 entschieden** (s. die Vermerke bei Befund 1): **sechs
+  > Klassen** und **`hvac_action` wird nicht verlangt**. **Vor K-2 ist damit nichts mehr offen** —
+  > was bleibt, ist der Bau selbst, und der ist **unbeauftragt**. ⚠ Die Aufwandsangabe oben ist
+  > seit dem 2026-08-16 **nicht** neu gemessen worden; sie ist eine Schätzung, keine Zusage.
 - **K-3 bleibt zu** (Befund 3).
 - **K-1 (SEER) bleibt hinter K-2**, unverändert.
 - Die **Normalisierungs-Schicht ist keine Vorsichtsmaßnahme**, sondern schon an diesem einen
@@ -235,6 +295,11 @@ danach entdeckt.
 MELCloud-MQTT-Addon, was mehr auslesen kann"). **Befund 1.1 steht also unverändert** — aber er wiegt
 weniger, weil die Automatik „Heizen/Kühlen" bei einer Anlage mit *einem* Modus ohnehin nur eine
 Betriebsart der ganzen Anlage sein kann.
+
+> ✅ **Überholt am 2026-08-17 — nicht durch eine Melder-Antwort, sondern am Quellcode:** Die Frage
+> ist **entschieden**, `AtaDeviceClimate` hat kein `hvac_action` (Befund 1.1). Sein Hinweis auf ein
+> „besseres MQTT-Addon" ändert daran nichts: die Integration gibt heraus, was die Klasse definiert.
+> ⇒ Die Formulierung „bleibt offen" gilt nicht mehr; offen war sie, solange nur Bildmaterial vorlag.
 
 **Zu Rückfrage 3 (Entfeuchtung / Nur Lüftung): „NEIN, wir nutzen eigentlich nur Kühlen oder
 Heizen."** Bei erreichter Zieltemperatur drosselt die Automatik den Luftstrom — bewusst auf Lüftung
@@ -285,6 +350,11 @@ Modus genügt.
 - Modus-gewichtete Aggregation: Stromverbrauch je Modus getrennt in
   `verbrauch_daten` (z. B. `strom_heizen_kwh` / `strom_kuehlen_kwh`),
   Snapshot-Aggregator schreibt pro Modus.
+  ⚑ **Präzisiert 17.08.: es sind SECHS Größen, nicht zwei** — `heizen` · `kuehlen` ·
+  `entfeuchten` · `lueften` · `aus` · `unbestimmt` (Entscheid Gernots, s. Befund 1.2).
+  Das Feldpaar oben war die Fassung von vor der Vermessung; **wer nur zwei Felder schreibt,
+  schlägt den Rest still einer Seite zu.** `unbestimmt` trägt die Automatikzeit ohne
+  `hvac_action` — sie wird ausgewiesen, nicht verteilt.
 - Auswirkung auf Read-Sites: Cockpit-WP-Komponente, Monatsbericht, Energieprofil,
   Live-Tagesverlauf (getrennte Serien Heizen/Kühlen wie heute Heizen/Warmwasser).
 - Aufwand: ~3–4 Tage (Sensor-Mapping + Aggregation), Live-Serien-Split zusätzlich.
