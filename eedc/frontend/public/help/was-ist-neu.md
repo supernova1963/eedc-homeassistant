@@ -11,6 +11,21 @@
 
 ## Noch nicht veröffentlicht
 
+### „Anlage nicht gefunden" nach dem Löschen der letzten Anlage
+
+eedc merkt sich, welche Anlage du zuletzt ausgewählt hattest. Diese Merkung wurde beim Löschen nie
+geräumt — und die Prüfung, ob es die gemerkte Anlage noch gibt, lief ausgerechnet dann nicht, wenn
+**gar keine** Anlage mehr da war.
+
+Die Folge: Wer seine einzige Anlage löschte und danach eine Komponente anlegen wollte, füllte das
+Formular aus, klickte auf Speichern — und bekam **„Anlage nicht gefunden"**, für eine Anlage, die er
+selbst gelöscht hatte. Im Einrichtungsassistenten dasselbe: Er merkte beim Start, dass die Anlage
+weg ist, und behielt die Merkung trotzdem.
+
+Beides ist behoben. Die Merkung wird geräumt, sobald feststeht, dass keine Anlage existiert, und der
+Assistent kehrt dann zum Schritt *Anlage* zurück. Ein kurzer **Verbindungsabbruch räumt nichts** —
+sonst wäre die Auswahl bei jedem Aussetzer weg. Wer eine Anlage hat, merkt von alledem nichts.
+
 ### Geräte unter „Sonstiges" zeigen ihren Verbrauch richtig
 
 Ein Heizstab, eine Poolpumpe oder eine Klimasteckdose stand in *Cockpit → Tag* mit **negativen**

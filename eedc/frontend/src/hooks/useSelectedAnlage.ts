@@ -14,6 +14,19 @@ import type { Anlage } from '../types'
 const STORAGE_KEY = 'eedc-selected-anlage-id'
 const CHANGE_EVENT = 'eedc-anlage-changed'
 
+/**
+ * Liest die gespeicherte Anlagen-ID und verwirft, was keine sein kann.
+ *
+ * ⚠ N-265: `parseInt` liefert für einen fremden Speicherwert **NaN**, und NaN
+ * kommt durch jedes `== null` der aufrufenden Seiten hindurch — die ID gilt dann
+ * als vorhanden und landet als `anlage_id` in einem Schreib-Request.
+ */
+export function gespeicherteAnlageId(roh: string | null): number | undefined {
+  if (roh === null) return undefined
+  const id = Number.parseInt(roh, 10)
+  return Number.isInteger(id) && id > 0 ? id : undefined
+}
+
 interface UseSelectedAnlageReturn {
   /** Alle verfügbaren Anlagen. */
   anlagen: Anlage[]
@@ -30,15 +43,35 @@ interface UseSelectedAnlageReturn {
 }
 
 export function useSelectedAnlage(): UseSelectedAnlageReturn {
-  const { anlagen, loading, refresh } = useAnlagen()
-  const [selectedAnlageId, setSelectedAnlageIdRaw] = useState<number | undefined>(() => {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    return stored ? parseInt(stored, 10) : undefined
-  })
+  const { anlagen, loading, error, refresh } = useAnlagen()
+  const [selectedAnlageId, setSelectedAnlageIdRaw] = useState<number | undefined>(
+    () => gespeicherteAnlageId(localStorage.getItem(STORAGE_KEY))
+  )
 
   // Auto-Select: Gespeicherte ID validieren oder erste Anlage wählen
+  //
+  // ⚠ N-265: Hier stand bis 17.08.2026 `if (anlagen.length === 0) return` — die
+  // Prüfung stieg damit genau in dem Fall aus, für den es sie gibt. Wer seine
+  // einzige Anlage löschte, behielt eine tote ID (der Speicher-Key wurde
+  // nirgends geräumt); sie ist als Zahl `truthy`, kam durch jedes `== null` und
+  // quittierte erst beim Speichern mit dem rohen Backend-404 „Anlage nicht
+  // gefunden". Herausgefallen ist der Melder bei der Ersteinrichtung
+  // (T89667 #170) — er kam nur wieder heraus, weil eine NEUE Anlage die Liste
+  // füllte und die Prüfung damit endlich lief.
   useEffect(() => {
-    if (anlagen.length === 0) return
+    // Solange die Liste nicht feststeht, ist eine leere Liste keine Aussage:
+    // `useAnlagen` startet mit [] und meldet auch einen Ladefehler so. Ein
+    // Backend-Aussetzer darf eine gültige Auswahl nicht verwerfen.
+    if (loading || error) return
+
+    if (anlagen.length === 0) {
+      // Es gibt wirklich keine Anlage ⇒ die gespeicherte ID kann keine treffen.
+      if (selectedAnlageId !== undefined) {
+        setSelectedAnlageIdRaw(undefined)
+        localStorage.removeItem(STORAGE_KEY)
+      }
+      return
+    }
 
     if (selectedAnlageId != null) {
       // Gespeicherte ID existiert noch? Wenn nicht → erste Anlage
@@ -49,7 +82,7 @@ export function useSelectedAnlage(): UseSelectedAnlageReturn {
     // Erste Anlage auswählen
     setSelectedAnlageIdRaw(anlagen[0].id)
     localStorage.setItem(STORAGE_KEY, String(anlagen[0].id))
-  }, [anlagen, selectedAnlageId])
+  }, [anlagen, loading, error, selectedAnlageId])
 
   // Auf Änderungen von anderen Hook-Instanzen reagieren
   useEffect(() => {

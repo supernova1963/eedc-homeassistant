@@ -13,6 +13,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { ApiError } from '../api/client'
 import { anlagenApi } from '../api/anlagen'
 import { strompreiseApi } from '../api/strompreise'
 import { investitionenApi, type InvestitionCreate } from '../api/investitionen'
@@ -207,10 +208,38 @@ export function useSetupWizard(): UseSetupWizardReturn {
   }, [wizardState, step])
 
   // Anlage laden wenn ID vorhanden
+  //
+  // ⚠ N-265: Der Fehler wurde hier bis 17.08.2026 mit `.catch(() => {})`
+  // verschluckt. Genau an dieser Stelle ERFÄHRT eedc, dass die gespeicherte
+  // Anlage nicht mehr existiert — und warf die Auskunft weg. Die tote ID blieb
+  // im Wizard-State, ist als Zahl `truthy` und kam damit durch jeden
+  // `if (!wizardState.anlageId)`-Wächter darunter; sichtbar wurde sie erst beim
+  // Speichern, als roher Backend-404 „Anlage nicht gefunden".
   useEffect(() => {
-    if (wizardState.anlageId && !anlage) {
-      anlagenApi.get(wizardState.anlageId).then(setAnlage).catch(() => {})
-    }
+    if (!wizardState.anlageId || anlage) return
+
+    let abgebrochen = false
+    anlagenApi.get(wizardState.anlageId)
+      .then(geladen => { if (!abgebrochen) setAnlage(geladen) })
+      .catch((e: unknown) => {
+        if (abgebrochen) return
+        // NUR der 404 ist eine Aussage über die Anlage. Ein Netz- oder
+        // Neustart-Fehler darf den Wizard-Fortschritt nicht wegwerfen.
+        if (!(e instanceof ApiError) || e.status !== 404) return
+        // Mit der Anlage sind Tarif und Investitionen kaskadiert mitgelöscht
+        // (`models/anlage.py:150-155`) — die gemerkten IDs zeigen ebenfalls ins
+        // Leere. Zurück auf den Schritt, der eine Anlage anlegt: jeder spätere
+        // kann ohne sie nur scheitern.
+        setWizardState(prev => ({
+          ...prev,
+          anlageId: null,
+          strompreisId: null,
+          createdInvestitionen: [],
+        }))
+        setStep('anlage')
+      })
+
+    return () => { abgebrochen = true }
   }, [wizardState.anlageId, anlage])
 
   // Investitionen laden

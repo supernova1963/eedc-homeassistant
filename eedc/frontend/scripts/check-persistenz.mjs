@@ -43,7 +43,11 @@ const BESTAND = new Map([
   ['src/components/ui/SortableSection.tsx', 4], // LEGACY V3 (dito)
   ['src/components/werte/WerteTabelle.tsx', 7],
   ['src/hooks/useSectionOrder.ts', 5],
-  ['src/hooks/useSelectedAnlage.ts', 5],
+  // 5 → 6 am 17.08.2026 (N-265): `removeItem`. Der Key wurde bis dahin
+  // geschrieben, aber NIE geräumt — wer seine einzige Anlage löschte, behielt
+  // eine tote ID, die jeder Schreibpfad als gültige Auswahl weiterreichte.
+  // Das Räumen gehört genau hierher: diese Datei IST der SoT der Anlagenwahl.
+  ['src/hooks/useSelectedAnlage.ts', 6],
   ['src/hooks/useSetupWizard.ts', 3],
   ['src/pages/MonatsdatenTeile.tsx', 2],
   ['src/v4/AnlagenSelektor.tsx', 1],
