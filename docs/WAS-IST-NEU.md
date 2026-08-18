@@ -1,11 +1,103 @@
 # Was ist neu
 
-> **Stand:** August 2026 (v4.0.18)
+> **Stand:** August 2026 (v4.0.19)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.19 — Zahlen, die ihre Grundlage kennen
+
+Vier Korrekturen, die dasselbe Muster haben: eedc nannte eine Zahl, für die es die Grundlage nicht
+hatte. Zweimal war sie zu hoch, zweimal zu niedrig.
+
+### Balkonkraftwerk mit Modulen und Speicher: Ersparnis wurde dreifach gezählt
+
+**Betrifft dich das?** Nur, wenn du **PV-Module oder einen Speicher unter dein Balkonkraftwerk
+gehängt** hast. Wer sein Balkonkraftwerk allein erfasst hat, sieht keine veränderte Zahl.
+
+Seit v4.0.18 kannst du PV-Module einem Balkonkraftwerk zuordnen, einen Speicher schon länger. Unter
+*Auswertungen → ROI* bekam dann **jede Ebene ihre eigene Zeile mit eigener Jahres-Ersparnis** — und
+die Gesamtzeile hat sie addiert. Alle drei Beträge stammen aber aus **derselben** Energie: dem Strom
+deiner Module. An einer gemeldeten Anlage standen so **1.079 € Ersparnis im Jahr** statt der
+gemessenen **606 €**, und die Amortisation bei **1,9 statt 3,3 Jahren** — die Anlage sah rund 43 %
+schneller bezahlt aus, als sie ist.
+
+Bei einem **Wechselrichter** war das nie so: Gerät, Module und Speicher stehen dort seit jeher in
+**einer** Systemzeile, gerade weil sich ihre Ersparnisse nicht addieren lassen. Das gilt jetzt für
+das Balkonkraftwerk genauso — hängt etwas daran, ist es der Kopf eines Systems, und die Komponenten
+stehen aufgeklappt darunter. Die Zeile behält **den Namen deines Geräts** und sein Symbol.
+
+Nebenbei behoben: Das zugeordnete Modul stand mit dem Zusatz **„(ohne WR)"** und der Aufforderung
+„bitte zuordnen" da — obwohl du es zugeordnet **hattest**, nur eben an ein Balkonkraftwerk.
+
+**Was du tun musst:** nichts. Die Zahlen stimmen ab dem nächsten Aufruf.
+
+### Im Monat der Inbetriebnahme sah deine Anlage schlecht aus
+
+**Betrifft dich das?** Ja, wenn deine Anlage **mitten in einem Monat** ans Netz ging — also fast
+jeden einmal.
+
+Unter *Auswertungen → Prognose* stellt eedc der gemessenen Erzeugung je Modul den Erwartungswert
+gegenüber. Im Monat der Inbetriebnahme stand dort die Erwartung für den **ganzen** Monat — auch wenn
+die Anlage erst am 19. lief. Die Kennzahl maß damit dein Einschaltdatum statt deine Anlage: An einer
+gemeldeten Anlage stand der März bei **0,35**, während dieselbe Anlage in **jedem** vollen Monat
+über 1,0 lag — und dieser eine Monat zog die Jahresbilanz von etwa 1,08 auf 0,97.
+
+Jetzt zählt der Erwartungswert nur die Tage, an denen es das Gerät gab: im Beispiel 13 von 31, und
+die Kennzahl springt auf **0,83** — passend zu den übrigen Monaten. Der Monat einer **Stilllegung**
+wird genauso behandelt.
+
+Zwei Feinheiten: Innerhalb des Monats wird **gleichmäßig** verteilt; im Frühjahr trägt die zweite
+Monatshälfte etwas mehr, der gekürzte Erwartungswert fällt dort also eher zu niedrig aus. Und der
+**saisonale** Vergleich („wie fällt der Mai typischerweise aus") bleibt bewusst ungekürzt — er
+mittelt über Jahre, dort wäre die Kürzung eine doppelte Strafe.
+
+**Was du tun musst:** nichts. Volle Monate und deine Historie ändern sich um keine Stelle.
+
+### Prognose: ein Tag mit fast 0 kWh, der keiner war
+
+**Betrifft dich das?** Ja, wenn du unter *Einstellungen* ein **bestimmtes Wettermodell** gewählt
+hast. Wer auf *automatisch* steht, war nie betroffen.
+
+In *Cockpit → Live* und in der 14-Tage-Prognose stand gelegentlich ein Tag mit einem Ertrag nahe
+null und einer Temperatur von „—" — eingerahmt von normalen Werten davor und danach. Es sah nach
+einem außergewöhnlich schlechten Tag aus, war aber gar keine Vorhersage.
+
+Der Grund: Jedes Wettermodell hat eine **Reichweite**, und am letzten Tag innerhalb dieser
+Reichweite liefert es oft nur noch die ersten Stunden. Gemessen an DWD ICON-D2 (Reichweite 2 Tage):
+Das Modell endete um **08:00** — die 15 Stunden danach, also der ganze Ertragszeitraum, fehlten
+schlicht. eedc holt für solche Fälle **zusätzlich** eine allgemeine Vorhersage, hat sie aber genau
+dann verworfen, wenn dein Modell für den Tag „irgendetwas" geliefert hatte — auch wenn es nur ein
+paar Nachtstunden waren.
+
+Jetzt entscheidet nicht mehr, **ob** dein Modell etwas zu dem Tag sagt, sondern **wie viel des
+Tages** es abdeckt. Wo die allgemeine Vorhersage mehr Stunden trägt, trägt sie den Tag — und die
+Quellenangabe nennt dann beide. **Deine Modellwahl bleibt unangetastet:** bei gleicher Abdeckung
+behält dein Modell den Vorrang, Tag für Tag.
+
+Der Tag bekommt auch seine übrigen Werte zurück — Temperatur, Nachmittagsertrag und Niederschlag
+standen dort ebenfalls leer.
+
+**Was du tun musst:** nichts. Betroffen war übrigens mehr als die Anzeige: Dieselbe Prognose speist
+deine Sensoren in Home Assistant und die nächtliche Genauigkeits-Mitschrift.
+
+### Balkonkraftwerk mit mehreren Modulen: nur eines wurde gerechnet
+
+**Betrifft dich das?** Ja, wenn dein Balkonkraftwerk **mehr als ein Modul** hat und du eine Anzahl
+gepflegt hast.
+
+Wo eedc die Wirtschaftlichkeit eines Balkonkraftwerks **schätzt** — also dort, wo keine gemessenen
+Modulwerte vorliegen —, las es die Leistung **eines einzelnen Moduls** und ließ die **Anzahl** außer
+Acht. Ein Balkonkraftwerk mit **4 × 500 Wp** rechnete damit mit 500 Wp statt 2.000 und meldete rund
+**ein Viertel** seiner Ersparnis; unter *Auswertungen → ROI* stand dort eine viel zu lange
+Amortisation. Auch der Hinweistext nannte die falsche Leistung.
+
+**Was du tun musst:** nichts. Deine Zahlen bewegen sich nach oben, in die richtige Richtung. Ein
+Balkonkraftwerk mit einem einzigen Modul sieht keine veränderte Zahl.
 
 ---
 
@@ -36,6 +128,14 @@ Beim **Monatsabschluss** ändert sich für dich nichts: Der Wert *Erzeugung* am 
 nutzbar — bei einem Set ist der Wechselrichter meist der einzige Zähler. Er gilt dann als
 Gesamtsumme der Module: Hat ein Modul einen eigenen Messwert, gewinnt der; die übrigen bekommen den
 Rest nach Leistungsanteil. Doppelt gezählt wird nichts.
+
+> ⚠ **Nachträglich richtiggestellt (August 2026):** Der letzte Satz stimmte für die **Energie**,
+> aber nicht für die **Wirtschaftlichkeit**. Unter *Auswertungen → ROI* wurde die Ersparnis eines
+> Balkonkraftwerks mit zugeordneten Modulen und Speicher tatsächlich mehrfach gezählt — die
+> Gesamt-Amortisation stand dadurch deutlich zu kurz. Behoben in v4.0.19; der Punkt steht dort
+> oben ausführlich. Unauffällig war es, weil Autarkie, Eigenverbrauchsquote und CO₂ von Anfang an
+> korrekt rechneten: die Sperre gegen Doppelzählung saß auf der Energieseite, und die
+> Wirtschaftlichkeit nahm einen anderen Weg.
 
 **Wer keine Module zuordnet, sieht keine veränderte Zahl.**
 

@@ -273,6 +273,13 @@ einzige Zähler, den es gibt. Er gilt dann als **Gesamtsumme der Module**: Hat e
 Messwert, gewinnt der; die übrigen bekommen den Rest nach Leistungsanteil. Doppelt gezählt wird
 nichts.
 
+**In der Wirtschaftlichkeit stehen sie als ein System.** Sobald etwas an deinem Balkonkraftwerk
+hängt — Module oder ein Speicher —, zeigt *Auswertungen → ROI* dafür **eine** Zeile mit deinem
+Gerätenamen; die Komponenten klappst du darunter auf. Das ist Absicht und dieselbe Darstellung wie
+bei einem Wechselrichter mit seinen Strings: Die Ersparnisse der Ebenen lassen sich **nicht
+addieren**, weil sie alle aus derselben Energie stammen. Bis v4.0.18 standen dort drei getrennte
+Zeilen, deren Summe die Amortisation deutlich zu kurz erscheinen ließ.
+
 **Wenn du auf Wechselrichter + PV-Module ausweichst** (Dachanlage oder gewachsene Anlage): Trage beim
 Wechselrichter die **max. Leistung (kW)** ein — dieselbe Rolle wie oben, eine Ebene höher.
 
