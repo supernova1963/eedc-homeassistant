@@ -91,6 +91,21 @@ def snapshot_days(model: Optional[str] = None) -> int:
     Seit A30/N16 reicht der Prognose-Kanon ``Anlage.wetter_modell`` durch —
     die Grenze greift dort seither in echt, nicht mehr nur vorsorglich.
 
+    ⚑ **Nachtrag 2026-08-18 (F-36): dieser Absatz beschrieb eine Schwäche, die
+    er nur zur Hälfte beseitigt hat.** Die Begrenzung nimmt der Kaskade die
+    **ganz leeren** Tage jenseits des Horizonts — den **angeschnittenen Tag am
+    Rand** lässt sie stehen, denn der liegt ja im Fenster. Bei ``icon_d2`` (2
+    Tage) ist das der zweite: Open-Meteo liefert für ihn einen Eintrag, aber
+    nur die Stunden bis zum Ende des Modelllaufs. An Gernots Anlage gemessen
+    (2026-08-18): letzter GTI-Wert ``19.08. 08:00``, danach ``None`` — der
+    Folgetag stand mit **0,3 kWh** zwischen 12,4 und 62,6 kWh.
+    Die eigentliche Ursache, die hier oben richtig benannt ist („bildet
+    ``primary_dates`` aus den Daten der Primär-Antwort"), ist seither behoben:
+    der Merge-Vorrang hängt an der **Abdeckung** statt an der Existenz, siehe
+    ``solar_forecast_service._merge_nach_abdeckung``. **Diese Funktion bleibt
+    trotzdem richtig** — sie spart den sinnlosen Abruf leerer Tage und hält den
+    Cache-Kanon; sie ist nur nicht mehr das, was den Fehler verhindert.
+
     Args:
         model: OpenMeteo-**Modellname** wie im Cache-Key (``icon_d2``,
             ``ecmwf_seamless``, …). ``None`` = best_match/``auto``.

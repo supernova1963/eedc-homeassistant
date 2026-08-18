@@ -1851,6 +1851,33 @@ Bei einem spezifischen Modell versucht eedc zuerst dieses Modell. Schlägt der A
 
 **Geltungsbereich (seit v4.0.2, A30):** Die Modellwahl wirkt auf **alle** Prognose-Pfade, weil der Prognose-Kanon (`services/prognose_kanon.py`) `Anlage.wetter_modell` an `get_solar_prognose` durchreicht — also auch auf die eedc-korrigierte Tagesprognose, die Stundenprofile, die Live-/Persistenz-Werte und den HA-/MQTT-Export (`services/ha_export_prognose.py`). Bis v4.0.1 rechnete dieser Pfad unabhängig von der Einstellung mit `best_match`, während Live-Wetter, 14-Tage-Wettertabelle und die OpenMeteo-Spalte von `/solar-prognose` das Modell bereits nutzten — dieselbe Seite zeigte damit zwei Modelle nebeneinander.
 
+**Am Rand der Modell-Reichweite entscheidet die Abdeckung, nicht die Existenz (seit v4.0.19, F-36).**
+Jedes Modell hat eine Reichweite (Spalte oben, hinterlegt in `WETTER_MODELLE`), und am **letzten
+Tag innerhalb** dieser Reichweite liefert Open-Meteo häufig nur noch die Stunden bis zum Ende des
+Modelllaufs. Gemessen am 2026-08-18: `icon_d2` (2 Tage) endete um **08:00** — die 15 Stunden
+danach, also der gesamte Ertragszeitraum, trugen `null`. Die Kaskade holt für solche Fälle
+ohnehin zusätzlich `best_match`, verwarf diesen Tag aber, sobald das gewählte Modell für ihn
+**irgendetwas** geliefert hatte:
+
+```
+falsch:  Primary gewinnt, wenn der Tag in seiner Antwort VORKOMMT
+richtig: Primary gewinnt, wenn er den Tag mindestens so weit ABDECKT wie best_match
+```
+
+Gezählt werden Stunden mit einem GTI-**Wert**, nicht mit Ertrag — nachts ist GTI `0.0` und damit
+vorhanden; ein vollständiger Tag hat 24. **Bei Gleichstand behält das gewählte Modell den
+Vorrang**, sonst nähme der Fix stillschweigend die Modellwahl weg. Deckt auch `best_match` den
+Tag nur teilweise ab, bleibt er teilweise — die fehlenden Felder bleiben leer, statt zu 0 zu
+werden (ADR-002/**P4**). SoT: `solar_forecast_service._gti_abdeckung_je_tag` und
+`_merge_nach_abdeckung`; der Ein-Abruf-Zweig (`tage ≤ Reichweite`) holt `best_match` in diesem
+Fall nach, sonst wäre die Regel dort blind.
+
+> ⚠ **Diese Lücke war seit dem 2026-07-28 bekannt und wurde zunächst nur umgangen.** Die
+> Snapshot-Begrenzung auf den Modellhorizont (`wetter/cache.snapshot_days`, Auflage E15-a) nimmt
+> der Kaskade die **ganz leeren** Tage jenseits der Reichweite — den **angeschnittenen** Tag am
+> Rand lässt sie stehen, denn der liegt ja im Fenster. Die Begrenzung bleibt richtig (sie spart
+> Abrufe und hält den Cache-Kanon), sie ist nur nicht das, was den Fehler verhindert.
+
 **„Keine Daten" schließt die leere Antwort ein.** Open-Meteo kann für ein Modell mit HTTP 200 antworten und trotzdem für jede Stunde `null` liefern; `_hat_nutzbares_gti` behandelt das wie einen Fehlschlag, damit die `best_match`-Kaskade greift statt einen 0-kWh-Tag zu bauen. **Am 2026-07-28 gemessen betrifft das drei der acht wählbaren Werte:** `ecmwf_ifs04` (HTTP 200, 0 von 72 Stundenwerten gesetzt — das Modell läuft nicht mehr, der Name wird noch akzeptiert) sowie `ecmwf_seamless` und `meteoswiss_seamless` (keine gültigen Modellnamen mehr, HTTP-Fehler). Für diese drei rechnet eedc faktisch mit `best_match`; die Bereinigung der Auswahlliste steht aus.
 
 ### 4.1b Solar Forecast ML (SFML)

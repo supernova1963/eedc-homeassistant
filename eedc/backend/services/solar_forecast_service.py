@@ -443,6 +443,111 @@ def _hat_nutzbares_gti(data: Optional[dict]) -> bool:
     return any(v is not None for v in werte)
 
 
+def _gti_abdeckung_je_tag(data: Optional[dict]) -> dict[str, int]:
+    """Wie viele Stunden je Tag überhaupt einen GTI-Wert tragen (F-36).
+
+    Dieselbe Frage wie ``_hat_nutzbares_gti``, nur eine Ebene tiefer: dort
+    „trägt die **Antwort** einen Wert", hier „trägt der **Tag** welche". Die
+    obere Frage reicht nicht, weil ein Modell mitten in einem Tag enden kann —
+    die Antwort ist dann nutzbar, der letzte Tag aber nicht.
+
+    **Der Anlass** (Gernot, 2026-08-18, seine eigene Anlage): *Cockpit → Live*
+    zeigte für den Folgetag **0,3 kWh** und eine Temperatur von „—", zwischen
+    12,4 kWh davor und 62,6 kWh danach. Am Modell gemessen (``models=icon_d2``,
+    48 h): der letzte GTI- **und** Temperaturwert stand auf ``19.08. 08:00``,
+    danach ``None`` — 15 Stunden fehlten, darunter der gesamte Ertragszeitraum.
+    Das war keine Wetterlage, das war der Modellhorizont.
+
+    ⚑ **Die Lücke war bekannt und wurde umgangen statt geschlossen.** Der
+    Docstring von ``wetter/cache.snapshot_days`` beschreibt sie seit dem
+    2026-07-28 wörtlich: die Kaskade bilde ``primary_dates`` aus der
+    Primär-Antwort und lasse den Fallback „nur die FEHLENDEN Tage auffüllen".
+    Die damalige Antwort darauf war, das Abruf-Fenster auf den Modellhorizont
+    zu begrenzen (``min(16, max_je_modell)``). Das beseitigt die **ganz
+    leeren** Tage jenseits des Horizonts — den **angeschnittenen Tag am Rand**
+    des Horizonts lässt es stehen, denn der liegt ja im Fenster. Genau er ist
+    hier der Fall: bei ``icon_d2`` (2 Tage) ist es der zweite.
+
+    Gezählt werden Stunden mit einem Wert, nicht Stunden mit Ertrag: nachts ist
+    GTI ``0.0`` und damit **vorhanden**. Ein vollständiger Tag hat 24.
+    """
+    if not data:
+        return {}
+    hourly = data.get("hourly") or {}
+    zeiten = hourly.get("time") or []
+    werte = hourly.get("global_tilted_irradiance") or []
+    abdeckung: dict[str, int] = {}
+    for i, ts in enumerate(zeiten):
+        tag = ts[:10]
+        abdeckung.setdefault(tag, 0)
+        if i < len(werte) and werte[i] is not None:
+            abdeckung[tag] += 1
+    return abdeckung
+
+
+def _merge_nach_abdeckung(
+    primary_prognose: SolarPrognoseResponse,
+    fallback_prognose: SolarPrognoseResponse,
+    primary_abdeckung: dict[str, int],
+    fallback_abdeckung: dict[str, int],
+) -> list:
+    """Führt beide Tagesreihen zusammen — je Tag gewinnt die bessere Abdeckung.
+
+    **F-36.** Hier stand die Regel „Primary hat Vorrang, Fallback füllt auf",
+    umgesetzt als ``if tag.datum not in primary_dates``. Sie prüfte, **OB** ein
+    Primary-Tag existiert — nicht, **ob er vollständig ist**. Ein zur Hälfte
+    gelieferter Randtag verdrängte damit den vollständigen best_match-Tag, der
+    danebenlag und einsatzbereit war; übrig blieb ein Ertrag nahe 0, der wie
+    eine Prognose aussah.
+
+    Der Vorrang hängt jetzt an der **Abdeckung**: Primary gewinnt bei
+    Gleichstand (das ist der Normalfall — beide vollständig — und hält das
+    bisherige Verhalten bitgleich), der Fallback gewinnt, wo er **mehr**
+    Stunden trägt. Kein Schwellenwert, keine Stundenkonstante: verglichen wird
+    gegen die tatsächlich vorliegende Alternative.
+
+    ⚠ **Ein Tag, den auch der Fallback nur angeschnitten liefert, bleibt
+    angeschnitten** — dann gibt es schlicht nichts Besseres. Er trägt dann die
+    Quelle mit der besseren Abdeckung, und die unvollständigen Felder bleiben
+    ``None`` statt zu 0 zu werden (ADR-002/P4).
+    """
+    beste: dict[str, tuple[int, object]] = {}
+    for tag in fallback_prognose.tageswerte:
+        beste[tag.datum] = (fallback_abdeckung.get(tag.datum, 0), tag)
+    for tag in primary_prognose.tageswerte:
+        vorhanden = beste.get(tag.datum)
+        eigene = primary_abdeckung.get(tag.datum, 0)
+        # `>=`: bei Gleichstand behält das gewählte Modell den Vorrang.
+        if vorhanden is None or eigene >= vorhanden[0]:
+            beste[tag.datum] = (eigene, tag)
+    return [eintrag[1] for _, eintrag in sorted(beste.items())]
+
+
+def _prognose_mit_tagen(
+    basis: SolarPrognoseResponse,
+    tage: list,
+) -> SolarPrognoseResponse:
+    """Baut eine Response aus ``basis`` mit ausgetauschter Tagesreihe.
+
+    Summe, Durchschnitt, Zeitraum **und** die Quellenangabe werden aus den
+    übergebenen Tagen neu gebildet — sonst behauptete die Kopfzeile ein Modell,
+    das nach dem Merge gar nicht mehr jeden Tag trägt. Beide Merge-Stellen
+    (Kaskade und der nachgeholte Fallback im Ein-Abruf-Zweig) rufen ihn; eine
+    zweite Kopie dieser fünf Felder wäre die Klasse, gegen die der vierte
+    ADR-001-Nachtrag geschrieben ist.
+    """
+    summe = sum(t.pv_ertrag_kwh for t in tage)
+    quellen = list(dict.fromkeys(t.datenquelle for t in tage))
+    return replace(
+        basis,
+        prognose_zeitraum={"von": tage[0].datum, "bis": tage[-1].datum},
+        summe_kwh=round(summe, 1),
+        durchschnitt_kwh_tag=round(summe / len(tage), 2),
+        tageswerte=tage,
+        datenquelle=" + ".join(MODELL_ANZEIGE.get(q, q) for q in quellen),
+    )
+
+
 async def _modell_gti_oder_none(*args, **kwargs) -> Optional[dict]:
     """``fetch_gti_forecast`` für ein GEWÄHLTES Modell; GTI-los zählt als ``None``.
 
@@ -520,6 +625,42 @@ async def _solar_prognose_snapshot(
                 datenquelle_tag = "best_match"
         if not data:
             return None
+        # F-36: auch hier kann der LETZTE Tag angeschnitten sein — bei
+        # `days == max_days` liegt er genau auf dem Modellrand. In diesem Zweig
+        # steht kein Fallback bereit, er wird deshalb nachgeholt, und zwar nur
+        # dann: ein zusätzlicher Abruf im Bedarfsfall statt einer Kaskade für
+        # alle. Ohne das wäre der Fix an einer Stelle blind — dieselbe Sorte
+        # halber Reparatur, die diesen Befund überhaupt hervorgebracht hat.
+        if model_name is not None and datenquelle_tag != "best_match":
+            abdeckung = _gti_abdeckung_je_tag(data)
+            angeschnitten = [t for t, n in abdeckung.items() if 0 < n < 24]
+            if angeschnitten:
+                logger.info(
+                    "Wettermodell %s deckt %s nicht ganz ab — best_match zum Vergleich",
+                    wetter_modell, ", ".join(sorted(angeschnitten)),
+                )
+                fallback_data = await fetch_gti_forecast(
+                    latitude, longitude, neigung, ausrichtung, days,
+                    model=None, skip_jitter=skip_jitter,
+                )
+                primary_prognose = _build_prognose(
+                    data, kwp, neigung, ausrichtung, days, system_losses,
+                    longitude, datenquelle_tag=datenquelle_tag,
+                )
+                fallback_prognose = _build_prognose(
+                    fallback_data, kwp, neigung, ausrichtung, days,
+                    system_losses, longitude, datenquelle_tag="best_match",
+                ) if fallback_data else None
+                if primary_prognose and fallback_prognose:
+                    return _prognose_mit_tagen(
+                        primary_prognose,
+                        _merge_nach_abdeckung(
+                            primary_prognose,
+                            fallback_prognose,
+                            abdeckung,
+                            _gti_abdeckung_je_tag(fallback_data),
+                        ),
+                    )
         return _build_prognose(data, kwp, neigung, ausrichtung, days, system_losses,
                                longitude, datenquelle_tag=datenquelle_tag)
 
@@ -548,10 +689,9 @@ async def _solar_prognose_snapshot(
         return _build_prognose(primary_data, kwp, neigung, ausrichtung, max_days,
                                system_losses, longitude, datenquelle_tag=wetter_modell)
 
-    # Beide verfügbar → zusammenführen
-    # Primary-Tage bestimmen
-    primary_dates = set(primary_data.get("daily", {}).get("time", []))
-
+    # Beide verfügbar → zusammenführen.
+    # (`primary_dates` stand hier bis F-36 und war der ganze Fehler: eine Menge
+    # von Datumsstrings sagt nichts darüber, wie viel von einem Tag da ist.)
     # Primary verarbeiten
     primary_prognose = _build_prognose(
         primary_data, kwp, neigung, ausrichtung, max_days,
@@ -568,38 +708,17 @@ async def _solar_prognose_snapshot(
     if not fallback_prognose:
         return primary_prognose
 
-    # Tage mergen: Primary hat Vorrang, Fallback füllt auf
-    merged_tage = list(primary_prognose.tageswerte)
-    for tag in fallback_prognose.tageswerte:
-        if tag.datum not in primary_dates:
-            merged_tage.append(tag)
-
-    # Nach Datum sortieren
-    merged_tage.sort(key=lambda t: t.datum)
-
-    summe_kwh = sum(t.pv_ertrag_kwh for t in merged_tage)
-    quellen = list(dict.fromkeys(t.datenquelle for t in merged_tage))
-    datenquelle_str = " + ".join(
-        MODELL_ANZEIGE.get(q, q) for q in quellen
+    # Tage mergen: je Tag gewinnt die bessere GTI-Abdeckung (F-36).
+    # Vorher hing der Vorrang an `tag.datum not in primary_dates` — an der
+    # EXISTENZ eines Primary-Tages statt an seiner Vollständigkeit.
+    merged_tage = _merge_nach_abdeckung(
+        primary_prognose,
+        fallback_prognose,
+        _gti_abdeckung_je_tag(primary_data),
+        _gti_abdeckung_je_tag(fallback_data),
     )
 
-    return SolarPrognoseResponse(
-        anlage_id=None,
-        kwp_gesamt=kwp,
-        neigung=neigung,
-        ausrichtung=ausrichtung,
-        system_losses_prozent=round(system_losses * 100, 1),
-        prognose_zeitraum={
-            "von": merged_tage[0].datum,
-            "bis": merged_tage[-1].datum,
-        },
-        summe_kwh=round(summe_kwh, 1),
-        durchschnitt_kwh_tag=round(summe_kwh / len(merged_tage), 2),
-        tageswerte=merged_tage,
-        string_prognosen=None,
-        datenquelle=datenquelle_str,
-        abgerufen_am=datetime.now().isoformat(),
-    )
+    return _prognose_mit_tagen(primary_prognose, merged_tage)
 
 
 def _build_prognose(
