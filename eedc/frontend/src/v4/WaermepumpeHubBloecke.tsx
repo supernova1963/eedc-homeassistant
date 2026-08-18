@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react'
 import {
   WaermepumpeMonatsverlauf, WaermepumpeMonatsTabelle, WaermepumpeVergleich, WaermepumpeKostenvergleich,
+  wpHatVergleich,
 } from '../components/waermepumpe'
 import { Parkbar } from '../components/park'
 import { investitionenApi, type WaermepumpeDashboardResponse } from '../api/investitionen'
@@ -74,5 +75,8 @@ export function WaermepumpeWirtschaftlichkeitIST({ anlageId, inv, melde }: { anl
   useEffect(() => { melde?.(leer ? KEINE : WIRT_IDS) }, [leer, melde])
   if (loading) return <Lade />
   if (!ds) return <Leer text="Keine Wirtschaftlichkeitsdaten erfasst." />
-  return <Parkbar id="chart:wp-kostenvergleich" titel="Kostenvergleich WP vs. Gas/Öl"><WaermepumpeKostenvergleich zusammenfassung={ds.zusammenfassung} /></Parkbar>
+  // F-42: Der Titel darf nichts versprechen, was der Block nicht zeigt — ohne
+  // ersetzte Heizung gibt es keinen Vergleich, sondern nur die Stromkosten.
+  const titel = wpHatVergleich(ds.zusammenfassung) ? 'Kostenvergleich WP vs. Gas/Öl' : 'Stromkosten'
+  return <Parkbar id="chart:wp-kostenvergleich" titel={titel}><WaermepumpeKostenvergleich zusammenfassung={ds.zusammenfassung} /></Parkbar>
 }

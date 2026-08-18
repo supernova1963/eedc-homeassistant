@@ -836,6 +836,23 @@ async def get_waermepumpe_dashboard(
         # wie in `aussichten.py` je Monat gezogen.
         wp_kosten = 0.0
         alte_heizung_kosten = 0.0
+        # F-42: Die Ersparnis kommt aus dem Layer-SoT (ADR-001), statt hier als
+        # Differenz `alte_heizung_kosten - wp_kosten` nachgebaut zu werden. Bei
+        # bewertbaren Wärmepumpen sind beide Wege zahlengleich — der Helper ist
+        # linear —, es bewegt sich also keine bestehende Zahl.
+        #
+        # ⚑ **Gemessen, nicht behauptet:** Diese Umstellung allein ist NICHT der
+        # Schutz. Der Sprengsatz „Differenz statt SoT-Summe" blieb stumm, weil
+        # die `bewertbar`-Sperre unten den Wert ohnehin auf `None` zieht. Rot
+        # wird erst die Kombination *Differenz **und** keine Sperre* — dann
+        # stünde für eine Klimaanlage `0 € Gas − 1.312 € Strom` als **negative
+        # Ersparnis** im Hub. Wer eine der beiden Hälften entfernt, muss die
+        # andere prüfen; der Prüfer dafür ist
+        # `test_f42_route_ersparnis_wird_nie_negativ`.
+        ersparnis = 0.0
+        # Trägt mindestens ein Monat einen echten Vergleich? Sonst gibt es
+        # keine Ersparnis-, Alt-Kosten- und CO₂-Zahl, die etwas behauptet.
+        bewertbar = False
         for md in monatsdaten:
             d = md.verbrauch_daten or {}
             m_waerme = (d.get('heizenergie_kwh', 0) or 0) + (d.get('warmwasser_kwh', 0) or 0)
@@ -860,7 +877,8 @@ async def get_waermepumpe_dashboard(
             )
             wp_kosten += m_ergebnis.wp_kosten_euro
             alte_heizung_kosten += m_ergebnis.alte_heizung_kosten_euro
-        ersparnis = alte_heizung_kosten - wp_kosten
+            ersparnis += m_ergebnis.ersparnis_euro
+            bewertbar = bewertbar or m_ergebnis.bewertbar
 
         # CO2-Ersparnis: kanonischer Helfer (ADR-001, DI-1/DI-2-A). Vorher rechnete
         # dieser Endpoint `wärme × f_gas − strom × f_strom` OHNE den Gas-Kessel-
@@ -937,11 +955,23 @@ async def get_waermepumpe_dashboard(
             'gesamt_heizenergie_kwh': round(gesamt_heizung, 1),
             'gesamt_warmwasser_kwh': round(gesamt_warmwasser, 1),
             'gesamt_waerme_kwh': round(gesamt_waerme, 1),
-            'durchschnitt_cop': round(durchschnitt_cop, 2),
+            # F-42: „nicht bewertet heißt keine Zahl" (N-258-Klasse). Ohne
+            # gemessene Wärme ist die JAZ keine 0, sondern unbekannt; ohne
+            # ersetzte Heizung gibt es weder Alt-Kosten noch Ersparnis noch
+            # vermiedenes CO₂. Vorher stand hier für eine Klimaanlage mit
+            # 4.375 kWh Verbrauch viermal „0,00" — während dieselbe Anlage in
+            # Cockpit → Jahr „—" und in Auswertungen → ROI „nicht bewertet"
+            # sagte. `None` statt 0 heilt alle drei Anzeigen auf einmal
+            # (Komponenten-Hub, Cockpit → Aussicht, Kostenvergleich), weil die
+            # Format-Kette im Client `null` bereits als „—" trägt.
+            #
+            # `wp_kosten_euro` bleibt eine Zahl: Strom × Preis ist immer
+            # bestimmt und die einzige Aussage, die hier ohne Vergleich gilt.
+            'durchschnitt_cop': round(durchschnitt_cop, 2) if gesamt_waerme > 0 else None,
             'wp_kosten_euro': round(wp_kosten, 2),
-            'alte_heizung_kosten_euro': round(alte_heizung_kosten, 2),
-            'ersparnis_euro': round(ersparnis, 2),
-            'co2_ersparnis_kg': round(co2_ersparnis, 1),
+            'alte_heizung_kosten_euro': round(alte_heizung_kosten, 2) if bewertbar else None,
+            'ersparnis_euro': round(ersparnis, 2) if bewertbar else None,
+            'co2_ersparnis_kg': round(co2_ersparnis, 1) if bewertbar else None,
             'anzahl_monate': len(monatsdaten),
             # _summe_erfasst = seit Anschaffung von eedc erfasst (Kachel-Hauptwert);
             # _gesamt = roher Lebensdauer-Zählerstand (Kachel-Tooltip/Info, #238/#290).

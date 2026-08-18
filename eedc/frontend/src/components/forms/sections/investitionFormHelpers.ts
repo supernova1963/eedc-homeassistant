@@ -142,9 +142,15 @@ export const typLabels: Record<InvestitionTyp, string> = {
 export const ERTRAGSFELD_TYPEN: InvestitionTyp[] = ['wallbox', 'sonstiges']
 
 // Kontextabhängige Hints für Alternative Kosten
+//
+// F-41 (#383): Der WP-Hint nannte nur den Regelfall und verschwieg, dass 0 eine
+// gültige Antwort ist. Wer im Neubau baut oder eine Klimaanlage als Komfortgerät
+// führt, hat keine vermiedene Heizungs-Investition — und las trotzdem im
+// Daten-Check „Alternativkosten fehlen", ohne den Weg heraus zu sehen. Fünf
+// andere Typen tragen den Zusatz seit jeher.
 export const alternativkostenHints: Record<InvestitionTyp, string> = {
   'e-auto': 'Kosten eines vergleichbaren Verbrenners (für ROI-Berechnung)',
-  'waermepumpe': 'Kosten einer neuen Gas-/Ölheizung (für ROI-Berechnung)',
+  'waermepumpe': 'Kosten einer neuen Gas-/Ölheizung (für ROI-Berechnung) - im Neubau meist 0',
   'speicher': 'Meist 0 - es gibt keine echte Alternative',
   'wallbox': 'Meist 0 - es gibt keine echte Alternative',
   'wechselrichter': 'Meist 0 - es gibt keine echte Alternative',

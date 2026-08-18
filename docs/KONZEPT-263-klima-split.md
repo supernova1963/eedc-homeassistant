@@ -1,439 +1,436 @@
-# Konzept #263 — Split-Klimaanlagen besser unterstützen
+# Konzept #263 — Split-Klimaanlagen: Heizen und Kühlen trennen
 
-> ## **Status (gemessen 2026-08-08): Fundament gebaut · Kern offen, an ein Testgerät gebunden**
+> ## Status (2026-08-18): **Zielarchitektur steht · E-A…E-E entschieden · Bau BEAUFTRAGT**
 >
-> **Aus `docs/drafts/` nach `docs/` gewandert (2026-08-08).** Es erklärt den Roadmap-Punkt **#263 Klima-WP Phase 2** aus [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) und gehört zum offenen Issue [#263](https://github.com/supernova1963/eedc-homeassistant/issues/263).
-> Es trägt bewusst **keine Versionsnummer, nur dieses Mess-Datum** (Muster aus #359) — ein Status,
-> der eine Version nennt, altert garantiert.
+> **Gernot, 2026-08-18:** den Empfehlungen E-A bis E-E gefolgt, **E-F abgelehnt** (der Schnitt
+> bleibt: F-41 und F-42 fahren mit K-2 in **einem** Paket, vor dem nächsten Release).
+> Bau-Auftrag: `~/.claude/plans/auftrag-263-k2-bau.md`.
 >
-> **Nicht auf der Website und nicht in der In-App-Hilfe:** `website/scripts/sync-docs.sh` und
-> `scripts/sync-help.sh` arbeiten beide mit einer **Allowlist**, in der Konzepte und ADRs bewusst
-> fehlen. Dieses Dokument ist im Repository lesbar — es ist kein Anwender-Handbuch.
+> **Dies ist die geltende Fassung.** Sie ersetzt die Fassung vom 2026-08-08 vollständig — jene war
+> über zehn Nachträge gewachsen und an drei Stellen mit sich selbst im Widerspruch. Die
+> Entstehungsgeschichte (Vermessung am Testgerät, verworfene Zwischenstände, Gegenproben) steht in
+> `~/.claude/plans/vorlage-263-k2-s0-bestandsaufnahme.md` und in der Git-Historie dieser Datei;
+> **hier steht nur, was gilt.**
 >
-> **Offen:** **K-1** (SEER) · **K-2** (Heizen-vs-Kühlen-Trennung, der Kern) · **K-3** (PV-Anteil je Klima-Komponente). ⚠ **Harte Vorbedingung für K-2/K-3: eine Klimaanlage mit Betriebsmodus-Sensor bei einem Tester** — ohne sie wird die Hersteller-Vielfalt blind gebaut (dieselbe Lehre wie bei den Kompressor-Starts, #238).
+> Es trägt bewusst **keine Versionsnummer, nur dieses Mess-Datum** — ein Status, der eine Version
+> nennt, altert garantiert.
 >
-> ⚑ **Die Vorbedingung ist am 2026-08-16 erstmals erfüllt** — kingcap1 (#263, 15.08.), Mitsubishi über MELCloud. **Am Bildmaterial gemessen, nicht aus der Beschreibung übernommen:** §„K-2 — Vermessung am ersten geeigneten Testgerät". Ergebnis in einem Satz: Der Modus ist da, **aber der kWh-Zähler trägt ihn nicht** — K-2 bleibt ein Bau, keine Auswertung vorhandener Felder. ⚑ **Nachtrag 16.08.:** Er hat die drei Rückfragen mit einem Selbstversuch beantwortet — **der Modus gehört der Anlage, nicht dem Innengerät** (§„K-2 Nachtrag"). Das verbilligt die Sensor-Seite, nicht die Aggregation.
+> **Nicht auf der Website und nicht in der In-App-Hilfe:** `sync-docs.sh` und `sync-help.sh`
+> arbeiten mit Allowlists, in denen Konzepte bewusst fehlen. Dieses Dokument ist Entwickler-SoT.
 >
-> ⚠ **Der frühere Satz dieser Stelle ist zurückgezogen.** Er lautete: *„Ein Melder hat einen Modus-Sensor, misst aber drei Innengeräte über einen einzigen Zähler — damit ist K-2 nur zur Hälfte entsperrt"* (Stand 08.08.) und meinte dietmar1968. Der ist damit **falsch wiedergegeben**: Seine Antwort im Forum (#89667/92) lautete *„Zu 1: Es gibt nur entweder, oder"* — das ist eine Aussage über die **Anlage** (nicht gleichzeitig heizen und kühlen), nicht über einen auslesbaren Sensor. Das Fund-Register hatte denselben Post am 03.08. korrekt als **Gegenbeweis** eingeordnet („kein Betriebsmodus-Signal, keine Messung je Innengerät"). Die Roadmap **#110** trägt die falsche Lesart als „halb entsperrt" bis heute weiter — dort ungeprüft nachzuziehen, wenn #110 das nächste Mal angefasst wird.
+> Issue [#263](https://github.com/supernova1963/eedc-homeassistant/issues/263) · Roadmap-SoT
+> [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110).
 
+---
 
-Status: **Konzept, Issue bleibt offen.** Kein Code in dieser Etappe.
-~~Entwurf für einen #263-Kommentar (Freigabe ausstehend).~~
-✅ **Gepostet am 2026-08-17** ([`issuecomment-5318411323`](https://github.com/supernova1963/eedc-homeassistant/issues/263#issuecomment-5318411323), 18:00 UTC) — die
-Quellcode-Erhebung zu den vier Anbindungen steht dort im Anwender-Text; ihre Messungen sind mit
-diesem Nachzug hier eingearbeitet (Befund 1b). **Der Satz „Freigabe ausstehend" stand nach dem
-Posten noch da** — dieselbe Klasse wie der Kopf-Block des Einstiegstextes, der die Anweisung „nicht
-posten" weitertrug: *eine Zustandsangabe, die niemand beim Erledigen anfasst.*
+## 1. Das Problem in drei Sätzen
 
-## Maßnahmen-Register (fortschreibbar — Stand 2026-08-02)
+Eine Split-Klimaanlage ist physikalisch eine **Luft-Luft-Wärmepumpe**: dasselbe Gerät heizt im
+Winter und kühlt im Sommer, über **denselben** Stromzähler. eedc sieht deshalb nur eine Jahreszahl
+„Stromverbrauch" und kann weder sagen, was das Heizen gekostet hat, noch was das Kühlen — und damit
+auch nicht, ob sich das Gerät gegenüber der ersetzten Heizung rechnet.
 
-| # | Maßnahme | Status | Notiz |
-| --- | --- | --- | --- |
-| **K-0** | Subtyp „Luft-Luft (Klimaanlage)" (`wp_art = luft_luft`) · SCOP-Modus · Stromsensor genügt · Daten-Checker ignoriert fehlende Heizwärme | ✅ seit v3.30.3, **Lücke geschlossen 2026-08-16** | Fundament steht. ⚠ **„Stromsensor genügt" galt bis 16.08. nur für den Daten-Checker:** `core/field_definitions.py::FELD_BEDARF` kannte die Wärmepumpen-**Art** nicht und stufte `heizenergie_kwh` für *jede* WP als Pflicht ein ⇒ *Einstellungen → Datenquellen* zeigte einer Klimaanlage „Heizwärme" rot und zählte sie als offene Pflicht, während der Checker dazu schwieg (Fund **N-86**). Diese Zeile behauptete „Fundament steht", ohne dass es jemand gegen den Code gehalten hatte. Jetzt trägt `get_feld_bedarf` den Geräte-Kontext (`KLIMA_OHNE_WAERMEMENGE`); Proben in `test_wp_klimaanlage_phase1.py` **an der Fläche**, mit Negativprobe für Luft-Wasser und für Altbestand ohne `wp_art` |
-| **K-0b** | **Wegräumen, was es bei einer Klimaanlage nicht gibt:** keine Heizwärme-/Warmwasserbedarfs-Felder, keine konstruierte Ersparnis gegen Gas/Öl, keine daraus abgeleitete CO₂-Ersparnis — die Anlage wird als **Verbraucher** ausgewertet (Strom · PV-Anteil · Kosten) | ✅ gebaut 2026-08-02, ⚠ **Begründung 2026-08-16 korrigiert und Bauform ersetzt (K-0c)** | Die **unbeantwortete Hälfte des Issues** (3dmaster90: „Das sowas wie Warmwasser, Wärmebedarf etc. entfällt"). Einzige Maßnahme **ohne Testgerät**. Auslöser: das ROI-Dashboard wies rund **1.100 €/Jahr** und **2.210 kg CO₂** gegen eine nie ersetzte Gasheizung aus |
-| **K-0c** | **Die Bewertung hängt an der Pflege, nicht an der Bauart:** neue Option `alter_energietraeger = "nichts"` („Nichts ersetzt (Neubau)"), kein erfundener Bedarfs-Default mehr, Typ-Sonderweg entfällt | ✅ gebaut 2026-08-16 — ⚠ **im Daten-Checker NICHT angekommen (F-41, 18.08.)** | Der Nachfolger von K-0b — **und die Korrektur seiner Begründung**, s. Abschnitt unten. Löst zugleich **N-88** (jede WP im Neubau bekam eine Gaskessel-Ersparnis) und entschärft **N-91**. Layer-SoT `alternativkosten.py::ERSETZT_NICHTS` / `ersetzt_keine_heizung()` / `alle_ersetzen_nichts()`; Proben in `test_wp_ersetzt_nichts_n88.py` (Rechen-Ebene) und `test_roi_klimaanlage_nicht_bewertet.py` (Anzeige-Ebene) |
-| **K-1** | **SEER** (Kühl-Effizienz) als Parameter | ⬜ | ~1–2 Tage. **Allein halbnützlich** — ohne K-2 ein Effizienz-Faktor ohne Bezugsgröße ⇒ **nicht zuerst bauen** |
-| **K-2** | **Heizen-vs-Kühlen-Trennung** über Betriebsmodus-Sensor (+ Normalisierungs-Schicht, modus-gewichtete Aggregation, Serien-Split in 4 Read-Sites) | ⬜ **Kern, zuerst** — ⚑ **entsperrt, und seit 17.08. ist auch die Zielstruktur entschieden** | ~3–4 Tage + Live-Serien-Split (Schätzung von 08.08., **nicht** neu gemessen). **Sechs** Modus-Klassen statt eines Feldpaars; `hvac_action` wird **nicht** verlangt (Befund 1.1/1.2 + Vergleichstabelle 1b). **Bau unbeauftragt**. ⚑ **F-41 fährt mit** (Entscheid Gernot 18.08.): die drei Stammdaten-Hinweise des Daten-Checkers von der Bauart auf `ersetzt_keine_heizung` umstellen — s. Abschnitt „K-0c ist im Daten-Checker nicht angekommen" |
-| **K-3** | PV/Speicher/Netz-Anteil **pro Klima-Komponente** | ⬜ | klein (globale Quote als Näherung) bis groß (echte Prioritäts-Logik) — eigene Etappe |
+**Die Aufteilung ist nicht aus vorhandenen Feldern rekonstruierbar.** Sie entsteht nur, wenn eedc
+den **Betriebsmodus zur Messzeit mitschreibt** und den Verbrauchszuwachs dem dann geltenden Modus
+zuschlägt.
 
-> **Harte Vorbedingung für K-2/K-3:** eine **Test-Klimaanlage mit Modus-Sensor** bei einem Tester.
-> Ohne sie wird die Hersteller-Vielfalt (Daikin/Mitsubishi/ESPHome) blind gebaut — dieselbe Lehre wie
-> bei den Kompressor-Starts (#238). Deshalb wird das Paket **anlassgebunden** geführt — als
-> [#263](https://github.com/supernova1963/eedc-homeassistant/issues/263) und in der Roadmap
-> [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110),
-> nicht in der Feature-Folge. Verwandt: #331 PHEV-Anteile.
+---
 
-## Was seit v3.30.3 schon da ist
+## 2. Die Datenlage — was am Code und an Testgeräten gemessen wurde
 
-- Wärmepumpenart-Subtyp **„Luft-Luft (Klimaanlage)"** (`wp_art = luft_luft`).
-- **SCOP-Modus** als Effizienz-Berechnungsmodus (EU-Label-Werte statt JAZ-Default).
-- Stromverbrauchssensor reicht; Wärmemengenzähler optional (Klima-Realität) —
-  ⚠ **auf der Zuordnungs-Fläche erst seit 2026-08-16**, s. K-0-Zeile (N-86).
-- Daten-Checker ignoriert fehlende Heizwärme bei Klima-Subtyp.
-
-## K-0b — die Klimaanlage als Verbraucher statt als halbe Wärmepumpe
-
-**Warum das eine eigene Maßnahme ist und nicht Teil von K-0:** K-0 hat dafür gesorgt, dass eedc
-eine Klimaanlage **nicht mehr nach Wärmedaten fragt**. Es hat aber nicht verhindert, dass eedc sich
-die fehlenden Wärmedaten an anderer Stelle **selbst ausdenkt**. Genau das tat die ROI-Auswertung:
-sie behandelte jede `waermepumpe` als Ersatz einer Gasheizung und füllte den dafür nötigen
-Wärmebedarf aus den Vorbelegungen auf (12.000 kWh Heizwärme + 3.000 kWh Warmwasser). Ergebnis waren
-rund **1.100 €/Jahr** und **2.210 kg CO₂** Ersparnis gegen eine Heizung, die es nie gab — während
-dieselbe Komponente in der Nachhaltigkeits-Sicht **0 kg** trug.
-
-**Der dritte Weg statt eines Typwechsels.** Naheliegend wäre gewesen, eine Klimaanlage als
-`sonstiges/verbraucher` zu führen. Das kostet aber den **WP-Spezialtarif** (die Tarif-Kaskade kennt
-nur `waermepumpe` und `wallbox`), erzwingt eine **Migration** und verwaist die Alttage der
-Komponenten-Beiträge. Deshalb: **Typ bleibt `waermepumpe`** — aber solange keine Wärme gemessen
-wird, **zeigt eedc das Gerät als Verbraucher**: Strom, PV-Anteil, Kosten. Die Wärme-Kennzahlen
-erscheinen als Leerwert `—` mit sichtbarem Grund, nicht als 0.
-
-**Was gebaut wurde (2026-08-02):**
-
-- ROI-Dashboard konstruiert für `luft_luft` **keine** Ersparnis und **keine** CO₂-Ersparnis mehr;
-  die Zeile bleibt mit ihren Anschaffungskosten sichtbar und trägt `nicht_bewertet` samt Begründung.
-  Die Anlagen-Summen (Gesamt-Ersparnis, ROI %, Amortisation, Gesamt-CO₂) sind damit ebenfalls frei
-  von dem Phantomwert.
-- Das Investitionsformular fragt bei `luft_luft` **Heizwärme- und Warmwasserbedarf nicht mehr ab**
-  und belegt sie nicht mehr vor.
-- Die drei Daten-Checker-Hinweise, die ausschließlich den Gas-Vergleich füttern (Alternativkosten,
-  alter Energiepreis, Heizwärmebedarf), entfallen für Klimaanlagen — sonst wären sie Forderungen
-  ohne Zweck bzw. gar nicht mehr auflösbar.
-
-**Was K-0b bewusst NICHT tut:** gespeicherte Werte löschen. Die Klima-Unterstützung ist nicht
-abgeschlossen; was heute unbenutzt in `parameter` liegt, wird nicht weggeworfen. Und K-0b greift
-**K-2 nicht vor**: es entfernt nur das falsche Vokabular (Heizwärme/Warmwasser), statt ein neues zu
-setzen — die Heizen-/Kühlen-Trennung rechnet später in `strom_heizen_kwh`/`strom_kuehlen_kwh`.
-⚑ **Seit 17.08. gilt die Sechs-Klassen-Struktur** (Befund 1.2); die zwei Feldnamen hier sind die
-Kurzform von damals und nicht die Zielstruktur.
-
-> ~~**Angrenzend, bewusst offen:** Auch eine klassische Wärmepumpe im **Neubau** ersetzt keine
-> Heizung, bekommt aber weiterhin eine Gaskessel-Ersparnis angerechnet …~~
-> ✅ **Erledigt mit K-0c am 2026-08-16** — das war **N-88** / F2(b), und es ist der Weg, der K-0b
-> ablöst.
-
-## K-0c — die Prämisse von K-0b war falsch, und mit ihr die Bauform (2026-08-16)
-
-⛔ **Der Satz, auf dem K-0b stand, ist gefallen.** Er lautete: *„Eine Split-Klimaanlage ersetzt
-keine Heizung."* **Das stimmt nicht** (Gernot, 16.08.): Eine Luft-Luft-Wärmepumpe **kann** sehr
-wohl eine Gasheizung ersetzen, und viele Anwender heizen damit. Ob sie dafür die effizienteste
-Bauart ist, ist eine andere Frage — und nicht die, die eedc an dieser Stelle beantwortet.
-
-**Der Defekt, den K-0b behoben hat, war nie die Bauart, sondern eine erfundene Eingabe.** Fehlte
-der Wärmebedarf, füllten ihn zwei Default-Schichten auf (12.000 kWh Heizwärme + 3.000 kWh
-Warmwasser) ⇒ rund 1.100 €/Jahr und 2.210 kg CO₂ gegen eine Heizung, die es nie gab. K-0b hat das
-an den **Typ** gebunden; das war der schnelle Weg und hat den Fall gelöst, aber die Klasse nicht —
-genau so war es damals als **F2(a)** entschieden und als **N-88** mit Trigger geparkt
-(`auftrag-n87-klima-roi-verbraucher.md` §F2). Gernots Einwand ist dieser Trigger.
-
-⚠ **Zwei ausgelieferte Behauptungen waren dadurch unwahr und sind mit korrigiert:**
-
-1. Der ROI-Hinweis und der Formular-Alert sagten beide: *„eine Ersparnis gegenüber Gas oder Öl
-   weist eedc für Klimaanlagen nicht aus — dafür müsste das Gerät eine Heizung ersetzt haben und
-   die Wärme gemessen sein."* **Beide Hälften trafen nicht zu.** eedc wies sie an fünf anderen
-   Stellen sehr wohl aus (Cockpit, Aussichten, WP-Dashboard, Jahresbericht-PDF, HA-Sensor), und die
-   genannte Bedingung war gar nicht die, an der die ROI-Zeile hängt: Die ist eine **Prognose aus
-   gepflegten Parametern** (Bedarf × JAZ/COP), nicht die gemessene Ersparnis.
-2. Der Code-Kommentar an der ROI-Fundstelle behauptete als Abgrenzung, *„die vier gemessenen Pfade
-   liefern für dasselbe Gerät 0"*. Das galt nur, solange keine Wärme gepflegt war — der Schutz dort
-   ist `wp_waerme_kwh <= 0`, keine Typ-Regel. Und **N-86 hat bis zum selben Tag dazu gedrängt**, die
-   Heizwärme zu pflegen (rote Pflicht in der Zuordnungs-Fläche).
-
-**Was K-0c stattdessen tut:**
-
-- `alter_energietraeger` bekommt **„nichts ersetzt (Neubau)"** — die Angabe, die die Frage „hat
-  dieses Gerät eine Heizung ersetzt?" überhaupt beantwortbar macht. Sie hängt an der
-  **Installation**, nicht an der Bauart, und gilt für **jede** Wärmepumpenart.
-- Der **erfundene Bedarfs-Default entfällt**. Ohne gepflegten Bedarf steht „nicht bewertet" mit dem
-  Weg heraus. Auch die halbe Pflege rechnet ehrlich (nur Warmwasser gepflegt ⇒ Heizwärme 0 statt
-  12.000 — ein Restfall, den erst ein **stummer Sprengsatz** sichtbar gemacht hat).
-- Die **Bedarfsfelder werden für `luft_luft` wieder angezeigt**, weiterhin **ohne Vorbelegung**.
-  Nebenwirkung, bewusst: Damit ist **N-91** entschärft — eine bei einem Typwechsel im offenen
-  Formular übernommene Vorbelegung ist jetzt sichtbar und korrigierbar.
-- **Bestandsschutz ohne Migration:** Steht an einer Luft-Luft-WP noch **exakt** die unveränderte
-  Vorbelegung (12.000/3.000), zählt sie als offene Frage, nicht als Antwort — der Anwender konnte
-  sie seit K-0b weder sehen noch ändern. Befund plus Weg heraus statt einer Migration, die rät
-  ([[feedback_kein_grosser_heiler_knopf]]). Bei klassischen Wärmepumpen bleibt die Vorbelegung eine
-  brauchbare Schätzung und wird unverändert gerechnet — dort war sie immer sichtbar.
-
-⚠ **Was K-0c bewusst NICHT löst:** In den **anlagenweit aggregierten** Sichten (Jahresbericht-CO₂,
-Aussichten-Jahresprognose) ist die Wärme über alle Geräte summiert. Dort entfällt der fossile
-Vergleich erst, wenn **keine einzige** WP etwas ersetzt hat (`alle_ersetzen_nichts`). Steht neben
-einer Neubau-WP eine zweite, die eine Gasheizung ersetzt hat, wird weiterhin die gesamte Wärme
-verglichen. Sauber wäre eine Trennung je Gerät in der Aggregation selbst; sie berührt Cockpit,
-Komponenten-Zeitreihe, Aussichten, HA-Export und den Jahresbericht und ist ein eigenes Paket. **So
-herum verschlechtert sich für niemanden etwas**, und die per-Gerät-Pfade sind exakt.
-
-## K-2 — Vermessung am ersten geeigneten Testgerät (2026-08-16)
-
-**Quelle:** kingcap1 (Glen), [#263](https://github.com/supernova1963/eedc-homeassistant/issues/263)
-vom 15.08.2026, sechs Screenshots. **Alle sechs geladen und angesehen** — die Angaben unten sind an
-den Bildern abgelesen, nicht aus seinem Text übernommen.
-
-**Aufbau:** Mitsubishi Electric über die **MELCloud**-Integration, **ein** Außengerät und **drei**
-Innengeräte (*GC-Büro* · *Vic-SZ* · *Wohnzimmer*), je Gerät **vier** Entitäten. Daneben ein
-**Shelly 1PM** am Außengerät als eigene Messung, sowie ein **zweites Fabrikat** im Haus
-(`EinhellKlimaSZ-IP168`, eigene Steckdosenmessung).
-
-### Befund 1 — der Modus ist auslesbar, aber nur als eigene Entität
-
-Die `climate`-Entität je Innengerät führt sechs Modi: **Heizen/Kühlen · Heizbetrieb · Kühlbetrieb ·
-Entfeuchtung · Nur Lüftung · Aus**. Damit ist die harte Vorbedingung erfüllt — erstmals.
-
-⚠ **Zwei Einschränkungen, beide für K-2 teuer:**
-
-1. Das ist der **eingestellte** Modus (`hvac_mode`), nicht der Ist-Betrieb. Der erste Eintrag,
-   **„Heizen/Kühlen"**, ist die Automatik: Steht das Gerät darauf, sagt der eingestellte Modus
-   nichts darüber, was es gerade tut. Dafür bräuchte es `hvac_action` (heating/cooling/idle) —
-   **ob MELCloud das liefert, ist aus dem Bildmaterial nicht ablesbar und damit offen.**
-
-   > ✅ **ENTSCHIEDEN am 2026-08-17, am Quellcode statt am Bildmaterial:** **MELCloud liefert es
-   > für dieses Gerät nicht.** In `homeassistant/components/melcloud/climate.py` (HA-Core, Branch
-   > `dev`) definiert **nur** `AtwDeviceZoneClimate` — die **Luft-Wasser**-Klasse — eine
-   > `hvac_action`-Property; `AtaDeviceClimate` (Luft-Luft, also die Splitgeräte des Melders) und
-   > die gemeinsame Basisklasse `MelCloudClimate` haben sie **nicht**. Damit ist die Frage nicht
-   > „noch nicht ablesbar", sondern beantwortet: **eedc kann bei MELCloud-Splitgeräten nur den
-   > eingestellten Modus sehen.**
-   >
-   > ⇒ **Folge für den Bau, und sie ist keine Blockade:** `hvac_action` wird **nicht verlangt**.
-   > Wo es da ist (Daikin, s. Tabelle), verfeinert es; wo nicht, gilt der eingestellte Modus. Die
-   > Automatik-Stellung „Heizen/Kühlen" wird dann **nicht geraten**, sondern als eigene Klasse
-   > *unbestimmt* geführt (s. Punkt 2) — die P4-Linie: eine Antwort, die weniger enthält als sie
-   > soll, sagt es selbst.
-2. Es sind **nicht zwei Klassen, sondern mindestens vier**: *Entfeuchtung* und *Nur Lüftung* sind
-   weder Wärme noch Kälte. Das im Baustein-2-Abschnitt genannte Feldpaar
-   `strom_heizen_kwh`/`strom_kuehlen_kwh` würde diesen Strom stillschweigend einer der beiden
-   Seiten zuschlagen. **Die Zielstruktur ist damit offen** und gehört vor den Bau entschieden.
-
-   > ✅ **ENTSCHIEDEN am 2026-08-17 (Gernot): SECHS Klassen** —
-   > `heizen` · `kuehlen` · `entfeuchten` · `lueften` · `aus` · `unbestimmt`.
-   > Die sechste ist der Grund, warum es keine fünf sind: Automatikbetrieb ohne `hvac_action`
-   > erzeugt Zeit, die **keiner** Seite zusteht. Sie einer zuzuschlagen wäre eine erfundene
-   > Aufteilung; sie wegzulassen machte die Summe unvollständig, ohne es zu sagen.
-   > ⇒ Das Feldpaar `strom_heizen_kwh`/`strom_kuehlen_kwh` aus dem Baustein-2-Abschnitt ist damit
-   > **überholt**; die Zielstruktur trägt sechs Größen. Vor dem Bau ist damit nichts mehr offen.
-
-### Befund 1b — was die Anbindungen tatsächlich herausgeben (2026-08-17, am Quellcode erhoben)
-
-**Warum diese Tabelle hier steht:** Die Normalisierungs-Schicht wurde bis dahin mit *einem*
-Anwender begründet, der zwei Fabrikate betreibt. Die Erhebung zeigt, dass die Unterschiede
-**zwischen** den Anbindungen größer sind als zwischen den Geräten — und dass ausgerechnet der
-Ist-Betrieb die seltene Ausnahme ist. Jede Zeile ist an der Quelle belegt, nicht aus dem
-Gedächtnis; wo ein Beleg fehlt, steht das als solches da.
-
-| Anbindung | Modi (`hvac_mode`) | Ist-Betrieb (`hvac_action`) | Energie je Gerät | Beleg |
-| --- | --- | --- | --- | --- |
-| **MELCloud** (Mitsubishi, HA-Core) | ja | **nein** für Luft-Luft | ja, ein modus-blinder kWh-Zähler | `melcloud/climate.py`: `hvac_action` **nur** in `AtwDeviceZoneClimate` (Luft-Wasser), nicht in `AtaDeviceClimate`/`MelCloudClimate` |
-| **Daikin** (Original-WLAN-Modul, HA-Core) | ja | **ja** — und differenziert | modellabhängig | `daikin/climate.py::DaikinClimate.hvac_action`: liefert `IDLE`, wenn `support_compressor_frequency` **und** `compressor_frequency == 0` — also „eingeschaltet, aber läuft gerade nicht" |
-| **Bosch HomeCom Easy** (Climate 3000i/5000i/6000i, HACS `serbanb11/bosch-homecom-hass`) | ja (`off · auto · heat · cool · dry · fan_only`) | **nein** | **keiner** — Messsteckdose nötig | `climate.py`: `BoschComRacClimate` setzt kein `hvac_action`; nur die Kessel-Klasse `BoschComK40Climate` tut es. `sensor.py`: für `deviceType == "rac"` entsteht **genau eine** Entität — `BoschComSensorNotificationsRac` |
-| **Faikout** (ESP32 am S21-Bus, ehem. Faikin) | ja | **nicht belegt** | **ja**, MQTT-Feld `Wh`, kumulativ, Auflösung **100 Wh** | Maintainer-Aussage (RevK); **keine** Momentanleistung über S21. ⚠ Als einzige Zeile nicht am Code nachgeprüft — Quelle ausdrücklich benannt |
-
-⚑ **Drei Lehren für den Bau, jede aus einer Zeile:**
-
-1. **`hvac_action` darf keine Voraussetzung sein** — genau die verbreitetste Anbindung im Feld
-   (MELCloud) hat es für Splitgeräte nicht. Wer es verlangt, baut für Daikin und sperrt den Rest aus.
-2. **„Kein Energiesensor" ist ein realer Fall, kein Randfall** (Bosch RAC). Die Mengengröße kommt
-   dort aus einer **Messsteckdose** — also aus einer Quelle, die vom Modus-Signal getrennt ist und
-   die eedc über die normale Zuordnungsfläche schon kennt.
-3. **Auflösung ist eine eigene Größe**: 100-Wh-Schritte (Faikout) sind für Monatswerte reichlich,
-   für eine minutengenaue Modus-Gewichtung grob. Das gehört in die Normalisierungs-Schicht, nicht
-   in die Read-Sites.
-
-### Befund 2 — der kWh-Zähler je Innengerät ist modus-blind
-
-Je Innengerät gibt es genau **einen** Zähler, *Energieverbrauch* in kWh. Abgelesen:
-
-| Innengerät | Modus zum Zeitpunkt des Bildes | Energieverbrauch |
+| | Befund | Beleg |
 | --- | --- | --- |
-| Vic Schlafzimmer | Aus | 39,90 kWh |
-| GC Büro | **Kühlbetrieb** | 4.115,70 kWh |
-| Wohnzimmer | Aus | 77,60 kWh |
+| **D1** | **Der Modus ist auslesbar, aber nur als eigene `climate`-Entität.** Er ist der *eingestellte* Modus (`hvac_mode`), nicht der Ist-Betrieb | kingcap1 (Mitsubishi/MELCloud), sechs Screenshots, 2026-08-16 |
+| **D2** | **`hvac_action` (Ist-Betrieb) wird NICHT verlangt.** In `melcloud/climate.py` definiert nur `AtwDeviceZoneClimate` (Luft-**Wasser**) die Property; `AtaDeviceClimate` (Luft-Luft) und die Basisklasse nicht. Wer es verlangt, baut für Daikin und sperrt den Rest aus | HA-Core `dev`, 2026-08-17 |
+| **D3** | **Der Modus gehört der Anlage, nicht dem Innengerät.** Ein Innengerät auf *Heizen* bei kühlenden anderen tut nichts (2-Rohr-Bauart) ⇒ **ein** Signal je Außengerät genügt | kingcap1s Selbstversuch, 2026-08-16 |
+| **D4** | **Der kWh-Zähler ist modus-blind.** Je Gerät genau ein Zähler; Heizen und Kühlen laufen in dieselbe Zahl | ebd. |
+| **D5** | **Die Innengeräte-Zähler sind unverwertbar.** Ein Innengerät steht bei 4.115,70 kWh, die ganze Anlage laut Shelly bei 3.190 kWh Lebensdauer ⇒ **K-3 bleibt zu** | ebd. |
+| **D6** | **„Aus" ist nicht null:** 10 W Dauerverbrauch (~7 kWh/Monat), weil das Außengerät drei Innengeräte samt WLAN versorgt | kingcap1, 2026-08-17 |
+| **D7** | **Es gibt Geräte, die nur kühlen können** (Einhell SKA2500, AN/AUS ohne Inverter). `heizen` darf strukturell fehlen | ebd. |
+| **D8** | **Der Sensor-Lesepfad ist durchgängig `float`-only.** `_state_wert_und_einheit → Optional[tuple[float,str]]`, `get_sensor_history → list[tuple[datetime,float]]`, `live_power_service` `float(...)` im `try/except`. Ein `climate`-Zustand wird an jeder Stelle still zu `None`. **Negativbeweis:** `hvac_mode`/`hvac_action`/`betriebsmodus`/`betriebsart` kommen baumweit **0-mal** vor | 2026-08-18 |
+| **D9** | **Kein Backfill.** `get_sensor_history` liest den **recorder** (Default-Purge 10 Tage); LTS gibt es nur für numerische Sensoren mit `state_class`, ein `climate`-Zustand hat keine | 2026-08-18 |
+| **D10** | **Der Split entsteht nur auf dem Snapshot-Pfad.** `InvestitionMonatsdaten.verbrauch_daten` hat **sieben** Schreiber daneben: `monatsabschluss/wizard.py` · `monatsabschluss/views.py` · `ha_statistics.py` · `custom_import/apply.py` · `import_export/csv_operations.py` · `services/import_writer.py` · `import_export/json_operations.py` | 2026-08-18 |
+| **D11** | **In der Praxis werden nur Heizen und Kühlen gefahren.** Entfeuchten/Nur-Lüften nutzt keiner der drei Melder; der Modus wird saisonal manuell gestellt | kingcap1, dietmar1968 |
 
-Heizen und Kühlen laufen in **dieselbe** Zahl. Es gibt keinen Heiz- und keinen Kühl-Zähler.
+---
 
-⇒ **Konsequenz für den Bau:** eedc kann den Split nicht aus vorhandenen Feldern lesen, sondern muss
-den Modus **zur Snapshot-Zeit** mitschreiben und den kWh-Zuwachs des Intervalls dem dann geltenden
-Modus zuschlagen — genau die modus-gewichtete Aggregation, die der Baustein-2-Abschnitt beschreibt.
-Der Aufwand dort steht damit, er schrumpft durch das Testgerät **nicht**.
+## 3. Zielarchitektur
 
-### Befund 3 — die Innengeräte-Zähler sind ohne Klärung nicht verwertbar
+### 3.1 Grundsatz: die Gesamtmenge bleibt die Wahrheit, die Aufteilung steht daneben
 
-kingcap1 misstraut den Werten selbst („bei WZ finde ich, dass er viel zu wenig anzeigt"). Am Bild
-gemessen ist die Abweichung **größer als sein Verdacht**: Sein Shelly am Außengerät
-(`KlimaSplitMitsubishi-IP179`) meldet für **2026 insgesamt 1.103,2 kWh** — das Büro-Innengerät
-allein steht bei **4.115,70 kWh**, mehr als das Vierfache der Anlagensumme desselben Zeitraums.
+**`stromverbrauch_kwh` bleibt unverändert der Gesamtwert und die einzige Bilanzgröße.** Heizen und
+Kühlen sind **Teilmengen daraus** — sie werden ausgewiesen und **nie** aufaddiert.
 
-⚠ **Plausibelste Lesart, nicht belegt:** der Innen-Zähler ist ein Lebensdauer-Zähler, der Shelly
-ein Jahresfilter. Aus dem Bildmaterial ist das **nicht** entscheidbar — es wäre eine Rückfrage an
-ihn (Zeitraum-Bezug beider Zahlen).
+Diese Bauform ist in eedc bereits Kanon, nicht neu erfunden:
 
-⇒ **Konsequenz:** Die belastbare Mengengröße ist der **Zähler am Außengerät**. Die
-Innengeräte-Zähler taugen allenfalls als **Verteilschlüssel**, und auch das erst nach der
-Klärung. **K-3 (Aufteilung je Innengerät) bleibt damit zu** — daran ändert dieses Testgerät nichts.
+> `services/snapshot/komponenten_beitraege.py:326` — *„`ladung_pv_kwh` / `ladung_netz_kwh` sind
+> **Teilmengen** von `ladung_kwh` — **NICHT** zusätzlich addieren (sonst Doppelzählung wie bei
+> Gernots Wallbox: 14 + 9,24 = 23,24 statt korrekt 14)."*
 
-### Was aus der Vermessung folgt
+Dasselbe beim Speicher (`ladung_netz_kwh`). **`getrennte_strommessung` ist die Ausnahme**, nicht die
+Regel: dort gibt es zwei *physische* Zähler und keinen belastbaren Gesamtzähler. Beim Modus-Split
+gibt es **einen** Zähler (D4) ⇒ er gehört zur Regel.
 
-- **K-2 ist entsperrt**, aber unverändert ein ~3–4-Tage-Bau plus Live-Serien-Split. Vorher zu
-  entscheiden: die Zielstruktur der Modus-Klassen (Befund 1.2) und ob `hvac_action` verlangt wird
-  oder der eingestellte Modus genügt (Befund 1.1).
+**Vier Folgen, alle erwünscht:**
 
-  > ✅ **Beide Punkte sind am 2026-08-17 entschieden** (s. die Vermerke bei Befund 1): **sechs
-  > Klassen** und **`hvac_action` wird nicht verlangt**. **Vor K-2 ist damit nichts mehr offen** —
-  > was bleibt, ist der Bau selbst, und der ist **unbeauftragt**. ⚠ Die Aufwandsangabe oben ist
-  > seit dem 2026-08-16 **nicht** neu gemessen worden; sie ist eine Schätzung, keine Zusage.
-- **K-3 bleibt zu** (Befund 3).
-- **K-1 (SEER) bleibt hinter K-2**, unverändert.
-- Die **Normalisierungs-Schicht ist keine Vorsichtsmaßnahme**, sondern schon an diesem einen
-  Anwender belegt: Er betreibt Mitsubishi **und** Einhell.
+1. **Keine der 28 Read-Sites bricht** — was heute `stromverbrauch_kwh` liest, liest weiter dasselbe.
+2. **Der Rest ist abgeleitet:** `nicht_aufgeteilt = Gesamt − Σ Teilmengen`. Er wird **nie
+   gespeichert** und ist damit **immer** vollständig — für Altmonate, Ausfälle, Importe und manuelle
+   Pflege gleichermaßen. **Es entsteht kein Altdaten-Bruch, er wird nicht abgefedert.**
+3. **Fehlt das Modus-Signal, fehlt nur die Aufteilung** — die Menge stimmt weiter.
+4. Eine spätere siebte Betriebsart kostet ein Feld, keine Migration.
 
-### K-2 Nachtrag — die drei Rückfragen sind beantwortet (2026-08-16, kingcap1)
+### 3.2 Die Mengen
 
-**Quelle:** [#263](https://github.com/supernova1963/eedc-homeassistant/issues/263), drei Kommentare
-vom 16.08.2026 (11:51 · 12:03 · 12:16). Er hat die drei Rückfragen aus dem Kommentar desselben Tages
-beantwortet **und dafür an seiner Anlage einen Selbstversuch gefahren**. Die Antworten ändern zwei
-der drei Befunde oben — deshalb hier als Nachtrag statt als stille Korrektur.
+| Feld | Bedeutung | Herkunft | in der Bilanz? |
+| --- | --- | --- | --- |
+| `stromverbrauch_kwh` | **Gesamtstrom des Geräts** | Sensor | **ja — einzige Bilanzgröße** |
+| `strom_heizen_kwh` | Teilmenge: Strom im Heizbetrieb | Modus-Split **oder** eigener Zähler | nein (Ausweis) |
+| `strom_kuehlen_kwh` | Teilmenge: Strom im Kühlbetrieb | Modus-Split | nein (Ausweis) |
+| `modus_abdeckung_h` | Stunden des Monats mit gültigem Modus-Signal | Modus-Split | nein (Qualitätsmaß) |
+| `heizenergie_kwh` | **Wärme, die ins Heizen ging** | Wärmemengenzähler **oder** abgeleitet | nein (thermisch) |
 
-**Zu Rückfrage 2 (Betriebszustand) — die wichtigste Antwort, und er hat sie nicht als Befund
-gemeldet:** Er hat ein Innengerät auf *Heizen* gestellt, während die übrigen kühlten. Ergebnis:
-**Das Gerät tut nichts** — Klappe zu, Kontrollleuchte blinkt. Zurück auf *Kühlen* läuft es sofort
-wieder. Seine eigene Einordnung: „entweder bei ALLEN Innen nur Kühlen oder bei ALLEN Innen nur
-Heizen … sonst müsste man ja mind. 2 Kreisläufe haben (also 4 Rohre zu jedem Innen)".
+**Genau zwei Felder sind neu** (`strom_kuehlen_kwh`, `modus_abdeckung_h`); Negativbeweis: `kuehl`
+kommt baumweit **0-mal** vor. `strom_heizen_kwh` existiert und wird von **12 Read-Sites** bereits
+angezeigt — es wird wiederverwendet, weil seine Bedeutung identisch ist: *Strom, der ins Heizen ging.*
 
-⇒ **Der Betriebsmodus ist eine Eigenschaft der Anlage, nicht des Innengeräts.** Für den Bau ist das
-eine Vereinfachung, und zwar an der teuersten Stelle: **ein** Modus-Signal je Außengerät genügt, und
-es passt genau auf die Mengengröße, die nach Befund 3 als einzige belastbar ist — den Zähler am
-Außengerät. Die modus-gewichtete Aggregation aus Baustein 2 braucht damit **keine** Zuordnung
-Modus↔Innengerät.
+**Die Summenbildung bleibt an genau einer Stelle** (`core/field_definitions.py::get_wp_strom_kwh`)
+und bekommt eine reine Ergänzung, keinen Eingriff:
 
-⚠ **Die Grenze gehört dazu, sie ist nicht gemessen, sondern Bauart:** Das gilt für
-**2-Rohr-Systeme** — den Regelfall im Wohnhaus, und er nennt die Begründung selbst. Eine
-3-Rohr-Anlage mit Wärmerückgewinnung kann gleichzeitig heizen und kühlen. Eine Bauform, die den
-Modus nur an der Anlage kennt, ist für diesen Fall zu eng; das gehört vor dem Bau entschieden, nicht
-danach entdeckt.
+```
+getrennte_strommessung = True   →  Gesamt = strom_heizen + strom_warmwasser   (unverändert)
+getrennte_strommessung = False  →  Gesamt = stromverbrauch_kwh
+                                   strom_heizen / strom_kuehlen sind Teilmengen daraus
+```
 
-⚠ **`hvac_action` bleibt offen.** Er hat es nicht bestätigt („es gibt sicher ein besseres
-MELCloud-MQTT-Addon, was mehr auslesen kann"). **Befund 1.1 steht also unverändert** — aber er wiegt
-weniger, weil die Automatik „Heizen/Kühlen" bei einer Anlage mit *einem* Modus ohnehin nur eine
-Betriebsart der ganzen Anlage sein kann.
+⚠ **Warum der bestehende Schalter NICHT wiederverwendet wird:** Er ist an drei Stellen ein hartes
+Entweder-Oder, das `stromverbrauch_kwh` verwirft (`get_wp_strom_kwh:1553` · `snapshot/keys.py:303` ·
+`komponenten_beitraege.py:317`). Liefe die Klimaanlage darüber, wäre `Gesamt = heizen + kühlen` —
+und alles dazwischen fiele **aus der Energiebilanz**, bei kingcap1 die 10 W Standby aus D6. Ohne
+Modus-Signal wäre der WP-Strom sogar 0.
 
-> ✅ **Überholt am 2026-08-17 — nicht durch eine Melder-Antwort, sondern am Quellcode:** Die Frage
-> ist **entschieden**, `AtaDeviceClimate` hat kein `hvac_action` (Befund 1.1). Sein Hinweis auf ein
-> „besseres MQTT-Addon" ändert daran nichts: die Integration gibt heraus, was die Klasse definiert.
-> ⇒ Die Formulierung „bleibt offen" gilt nicht mehr; offen war sie, solange nur Bildmaterial vorlag.
+### 3.3 Der Betriebsmodus
 
-**Zu Rückfrage 3 (Entfeuchtung / Nur Lüftung): „NEIN, wir nutzen eigentlich nur Kühlen oder
-Heizen."** Bei erreichter Zieltemperatur drosselt die Automatik den Luftstrom — bewusst auf Lüftung
-stellt er nicht. ⇒ **Befund 1.2 entschärft sich für die Praxis, entfällt aber nicht:** zwei Klassen
-plus eine benannte Restklasse reichen. Ein Feldpaar `strom_heizen_kwh`/`strom_kuehlen_kwh` **ohne**
-dritte Zeile bleibt trotzdem falsch, weil es den Reststrom einer der beiden Seiten zuschlägt. Belegt
-ist die Aussage für **einen** Haushalt.
+**Kanon (sechs Werte, für Klassifikation):**
+`heizen` · `kuehlen` · `entfeuchten` · `lueften` · `aus` · `unbestimmt`.
+`unbestimmt` ist die Automatik-Stellung ohne Ist-Signal (D2) — sie einer Seite zuzuschlagen wäre
+eine erfundene Aufteilung.
 
-**Zu Rückfrage 1 (Zeitbezug) — die Klärung kommt, aber sie rettet Befund 3 nicht:** Der Shelly ging
-„quasi am gleichen Tag online" wie die Anlage (Anfang 2024) und steht **insgesamt bei 3.190 kWh**;
-die 1.103,2 kWh aus der Vermessung sind der 2026er-Ausschnitt davon. Zum Zeitbezug der
-MELCloud-Zahlen kann er nichts sagen — er hatte im **August 2025 einen HA-Crash ohne Recovery**.
+**Gespeichert werden zwei Mengen plus Rest** (§3.2). Die vier übrigen Klassen fallen bewusst in die
+abgeleitete Zeile *„nicht aufgeteilt"* — belegt durch D11. `modus_abdeckung_h` trennt dort die zwei
+Fälle, die der Anwender unterscheiden können muss:
 
-⇒ ⚑ **Die naheliegende Erklärung ist damit widerlegt, nicht bestätigt.** „Innen = Lebensdauer,
-Shelly = Jahresfilter" trägt nicht: Das Büro-Innengerät allein steht bei **4.115,70 kWh** und damit
-über dem **Lebensdauer**-Wert der ganzen Anlage (3.190 kWh). Auch Lebensdauer gegen Lebensdauer geht
-die Rechnung nicht auf. ⚠ **Entscheidbar ist es weiterhin nicht** — der HA-Crash kann die
-Shelly-Historie beschnitten haben, der Zähler im Gerät ist davon unberührt. **Befund 3 bleibt
-bestehen, K-3 bleibt zu**, und die Innengeräte-Zähler taugen bis auf Weiteres **nicht einmal** als
-Verteilschlüssel.
+* **Abdeckung hoch, Rest > 0** → das Gerät lief in anderen Betriebsarten (Standby, Lüften).
+* **Abdeckung niedrig** → eedc hat in dieser Zeit nicht hingesehen.
 
-**Was das für die Reihenfolge heißt:** Nichts. K-2 bleibt der Kern und bleibt ein ~3–4-Tage-Bau —
-der Modus-Befund macht die Sensor-Seite billiger, nicht die Aggregation. Zu entscheiden ist vor dem
-Bau weiterhin die Zielstruktur der Modus-Klassen (jetzt: zwei plus Rest) und ob der eingestellte
-Modus genügt.
+⚑ `modus_abdeckung_h` ist zugleich die **Zeitbasis, die K-1 (SEER) ohnehin braucht** — sie wird
+nicht auf Vorrat gebaut.
 
-## K-0c ist im Daten-Checker nicht angekommen — F-41 (gemeldet als #383, 2026-08-18)
+**Lesepfad (neu, eng gehalten):** `hvac_action` wird **nicht** verlangt (D2); wo es vorhanden ist,
+verfeinert es. Der Lesepfad ist bewusst **kein** generischer Zustandssensor-Umbau: eine feste
+Wertemenge, eine Normalisierungstabelle Hersteller→Kanon, sonst nichts. Ein zweiter Anwendungsfall
+existiert nicht, und die P-11-Lehre lautet: nicht auf Vorrat bauen.
 
-> **Status: bestätigt, Bau vertagt.** Entscheid Gernots (18.08.): **nicht einzeln bauen, sondern
-> mit K-2 mitziehen** — an derselben Stelle zweimal hintereinander aufzureißen, hat noch nie gut
-> funktioniert. Diese Zeile ist der Trigger; wer K-2 baut, baut F-41 mit.
+**Speicherung (der Präzedenzfall steht im Baum):** Der Modus ist ein **Momentanwert je Stunde**, kein
+Zähler — er gehört deshalb **nicht** in `sensor_snapshots` (`wert_kwh: Float`, kumulativ,
+Boundary-Diff), sondern als eigene Spalte in die Stundenzeile:
 
-**Der Melder (azywietz-web, #383) berichtet eine unauflösbare Warnung „Alternativkosten fehlen" für
-zwei Klimaanlagen und schlägt ein Feld „ersetzt Energieträger" vor — das es seit K-0c gibt.** Er hat
-es nicht gefunden, und das ist nicht sein Fehler: Die Rechnung folgt dem Feld, die **Prüfung** nicht.
+```python
+# models/tages_energie_profil.py — neben soc_je_speicher
+betriebsmodus_je_wp: Mapped[Optional[dict]] = mapped_column(
+    JSON(none_as_null=True), nullable=True
+)   # {investition_id: "heizen"}
+```
 
-**Am Code gemessen (18.08.):**
+Das ist **exakt das N-239-Muster**, mit derselben Begründung: eigene Spalte und **nicht** in
+`komponenten` — jenes Dict trägt kW/kWh und wird von Whitelist-Konsumenten summiert; ein
+Zustandswert darin wäre die Einheiten-Verwechslung, aus der der BKW-Doppelzählungs-Bug entstand.
+`none_as_null=True` ist Bedingung, nicht Geschmack (sonst findet die Altbestands-Erkennung je nach
+Herkunft die eine Hälfte nicht).
 
-| Seite | Was sie fragt |
-| --- | --- |
-| **Rechnung** — `wp_wirtschaftlichkeit` · `ha_export` · `investitionen/crud` · `calculations` (2×) · `alternativkosten` (2×) · `aussichten` | `ersetzt_keine_heizung()` — **sieben** Stellen, K-0c vollständig durchgezogen |
-| **Daten-Checker** — `stammdaten.py:1009` (Alternativkosten, WARNING) · `:1058` (alter Preis, INFO) · `:1067` (Heizwärmebedarf, INFO) | `ist_luft_luft_waermepumpe()` — die **Bauart**, also der Sonderweg, den K-0c abgeschafft hat |
+⚑ **Damit entsteht der Split in derselben Zeile, in der die Menge schon steht:**
+`TagesEnergieProfil` führt `komponenten["waermepumpe_<id>"]` als Stunden-kWh je Gerät. Stunde ×
+Modus × kWh — mehr braucht die Aggregation nicht.
 
-**Negativbeweis:** Im gesamten Ordner `backend/services/daten_checker/` kommt `energietraeger`
-**0-mal** vor.
+### 3.4 Die Wärme — ein Feld, eine Bedeutung, zwei Herkünfte
 
-**Der Defekt geht in beide Richtungen:**
+**Eine Luft-Luft-Wärmepumpe liefert dieselbe Heizenergie wie jede andere Wärmepumpe.** Der
+Unterschied ist **messtechnisch, nicht physikalisch**: Bei Luft-Wasser geht die Wärme in einen
+Wasserkreis, in den ein Wärmemengenzähler passt; bei Luft-Luft direkt in die Raumluft, wo es keinen
+Kreis gibt. Das erklärt eine **Häufigkeit, keine Regel** — das Investitionsformular sagt es selbst:
+*„Hast du doch einen Wärmemengenzähler an deiner Klimaanlage, ordne ihn weiter zu."*
 
-1. **Falsch-positiv (gemeldet).** Wer „Nichts ersetzt (Neubau)" wählt — wozu `WaermepumpeFelder.tsx`
-   ausdrücklich rät (*„Kühlst du nur, wähle beim alten Energieträger ‚Nichts ersetzt (Neubau)'"*) —
-   bekommt die drei Hinweise trotzdem und kann sie nicht auflösen. **Trifft jede Wärmepumpe im
-   Neubau**, nicht nur Klimaanlagen ⇒ breiter als das Issue.
-2. **Falsch-negativ (still).** Eine Luft-Luft-WP, die *doch* eine Gasheizung ersetzt — der Fall, der
-   die Bauart-Regel überhaupt erst gekippt hat (K-0c) —, wird über fehlende Alternativkosten **nicht**
-   gewarnt, obwohl ihre Rechnung sie braucht.
+⇒ **`heizenergie_kwh` wird genutzt, nicht umgangen.** Ein Feld, eine Bedeutung, für jede
+Wärmepumpenart. Unterschieden wird über die **Herkunft**, und die Mechanik existiert feldgenau:
+`InvestitionMonatsdaten.source_provenance` wird je Feld geführt (Schlüssel wie
+`"verbrauch_daten.pv_erzeugung_kwh"`), und bei der PV-String-Verteilung reicht eedc genau diese
+Unterscheidung bis in die Anzeige durch (`ist_quelle === 'verteilt'` → *„geschätzt (kWp-Anteil)"*).
 
-**Trennlinie für den Bau: Messbarkeit → Bauart · Bewertbarkeit → Pflege.** Zwei `ist_klima`-Stellen
-bleiben deshalb bewusst **unverändert**: `daten_checker/energieprofil.py:419` und
-`daten_checker/monatsdaten.py:895` fragen nach einem **Wärmemengenzähler**, den ein Split-Gerät
-physisch nicht hat — unabhängig davon, was es ersetzt.
+| Herkunft | wie | Provenance |
+| --- | --- | --- |
+| **gemessen** | Wärmemengenzähler | wie bisher |
+| **abgeleitet** | `strom_heizen_kwh × JAZ` — nur wenn die JAZ gepflegt ist, **nie** aus einem Default | eigener Marker, bis in die Anzeige durchgereicht |
 
-⚠ **Der Altbestand ist der Grund, warum das kein Einzeiler ist.** `alter_energietraeger` existiert
-erst seit dem 16.08.; praktisch jede Klimaanlage im Feld trägt noch den Vorgabewert `gas`. Eine
-harte Umstellung gäbe genau der Gruppe drei neue Hinweise, für die K-0 gebaut wurde. Vorgeschlagen
-und **noch nicht entschieden**: für Geräte mit ungesetztem Feld **und** Bauart `luft_luft` statt der
-Warnung **eine INFO mit dem Weg** („wenn dieses Gerät keine Heizung ersetzt, wähle …") — auflösbar,
-ohne stille Datenänderung. Eine Start-Migration wurde **abgeraten**: sie änderte stumm eine
-Geldzahl, denn eine Klimaanlage, die tatsächlich heizt, verlöre ihre ausgewiesene Ersparnis.
+**Gemessen schlägt abgeleitet** — dasselbe Präzedenz-Muster wie ADR-002/P7 bei der PV.
 
-⚑ **Dieselbe Klasse wie N-86, zwei Tage später und an derselben Tabelle.** Die K-0-Zeile oben trug
-„Fundament steht", ohne dass es jemand gegen den Code gehalten hatte; die K-0c-Zeile trug
-„Typ-Sonderweg entfällt" mit demselben Mangel. **Wer hier eine Maßnahme auf ✅ setzt, misst vorher —
-und zwar Rechnung *und* Prüfung getrennt.**
+⚑ **Das ist keine neue Erfindung, sondern die Umkehrung einer Rechnung, die eedc seit jeher macht.**
+`core/calculations.py:522` wörtlich: *„das belegt `wp_strom_kwh = gesamt_waermebedarf / jaz` oben
+(die JAZ ist als Wärme/Strom definiert)"*. Die ROI-Prognose teilt eine **geschätzte Jahres-Wärme**
+durch die JAZ, um auf den Strom zu kommen. Die neue Richtung ist die **genauere**: der Strom ist
+gemessen und monatsgenau, die Jahresschätzung war geraten.
 
-⚠ **Der CHANGELOG-Text zu v4.0.18 trägt die Behauptung ebenfalls** („Der Umweg über den Gerätetyp
-entfällt damit") und ist damit für den Daten-Checker unzutreffend — ein Korrektur-Vermerk nach dem
-Muster von Schritt 2b ist **vorgelegt, nicht gesetzt**.
+### 3.5 Die eine Regel, die daraus folgt
 
-## Drei offene Bausteine — Architektur + Aufwand
+Sie hat nichts mit der Bauart zu tun — sie trennt **teilen von multiplizieren**:
 
-### 1. SEER (Kühl-Effizienz, Pendant zum SCOP) — klein, aber allein halbnützlich
-- Reine Parameter-Erweiterung analog SCOP: `seer_kuehlung` in
-  `core/investition_parameter.py` (+ Frontend `lib/investitionParameter.ts`),
-  Form-Feld in `InvestitionForm.tsx`, Branch in `core/calculations.py
-  ::berechne_wp_einsparung`.
-- **Haken:** Eine SEER-Zahl ohne getrennte Kühl-kWh sagt nicht, *wie viel* Strom
-  ins Kühlen ging. Ohne Baustein 2 ist das ein Effizienz-Faktor ohne Bezugsgröße
-  → erst zusammen mit der Modus-Trennung wirklich aussagekräftig.
-- Aufwand: ~1–2 Tage.
+| | darf abgeleitete Wärme verwenden? | Stellen |
+| --- | --- | --- |
+| **teilt** Wärme durch Strom → JAZ/COP | **nein** — sonst kommt exakt die gepflegte JAZ heraus, eine Zahl, die nichts misst | `dashboards.py:824` · `:967` · `:970` · `cockpit/komponenten.py:203` · `cockpit/uebersicht.py:451` · `ha_export.py:1449` · `pdf/jahresbericht.py:470` |
+| **multipliziert** Wärme mit Preis / η / CO₂-Faktor | **ja**, mit Kennzeichnung | `gas_kosten_altanlage` · `co2_wp_ersparnis_kg` · `alternativkosten.py` · `aussichten.py` |
 
-### 2. Heizen-vs-Kühlen-Trennung über Modus-Sensor — der eigentliche Kern
-- Neuer optionaler **Betriebsmodus-Sensor** im `sensor_mapping`
-  (`live_sensor_config.py`, WP-Felder), Werte heizen/kühlen/idle. Modus-Sensor
-  ist herstellerabhängig (Daikin/Mitsubishi/ESPHome) → braucht eine
-  Normalisierungs-Schicht (analog zur Strompreis-/Counter-Mapping-Logik).
-  ⚑ **Präzisiert 16.08. (K-2 Nachtrag):** **ein** Signal je Investition/Außengerät
-  genügt — der Modus ist bei 2-Rohr-Systemen eine Anlagen-Eigenschaft, und er
-  passt damit auf denselben Bezug wie der einzige belastbare Zähler. **Keine**
-  Zuordnung Modus↔Innengerät nötig.
-- Modus-gewichtete Aggregation: Stromverbrauch je Modus getrennt in
-  `verbrauch_daten` (z. B. `strom_heizen_kwh` / `strom_kuehlen_kwh`),
-  Snapshot-Aggregator schreibt pro Modus.
-  ⚑ **Präzisiert 17.08.: es sind SECHS Größen, nicht zwei** — `heizen` · `kuehlen` ·
-  `entfeuchten` · `lueften` · `aus` · `unbestimmt` (Entscheid Gernots, s. Befund 1.2).
-  Das Feldpaar oben war die Fassung von vor der Vermessung; **wer nur zwei Felder schreibt,
-  schlägt den Rest still einer Seite zu.** `unbestimmt` trägt die Automatikzeit ohne
-  `hvac_action` — sie wird ausgewiesen, nicht verteilt.
-- Auswirkung auf Read-Sites: Cockpit-WP-Komponente, Monatsbericht, Energieprofil,
-  Live-Tagesverlauf (getrennte Serien Heizen/Kühlen wie heute Heizen/Warmwasser).
-- Aufwand: ~3–4 Tage (Sensor-Mapping + Aggregation), Live-Serien-Split zusätzlich.
+Eine Luft-Wasser-WP **ohne** Wärmemengenzähler fällt unter dieselbe Regel; eine Luft-Luft-WP **mit**
+Zähler ist gemessen wie jede andere.
 
-### 3. PV/Speicher/Netz-Aufteilung pro Klima-Komponente — größter Brocken
-- Heute wird der PV-/Netz-Anteil **global auf Anlagenebene** gerechnet
-  (`calculations.py`), nicht pro Verbraucher. Eine komponenten-spezifische
-  Quote (analog zum E-Mob-Pool-Attribution-Pfad) wäre nötig, um „wie viel
-  Klima-Strom kam aus PV" sauber zu zeigen.
-- Einfache Variante: globale PV-Quote auf den Klima-Stromverbrauch anwenden
-  (grobe Näherung). Saubere Variante: Prioritäts-Aufteilung (Speicher lädt
-  zuerst aus PV, dann Klima) → Snapshot-Aggregator-Erweiterung.
-- Aufwand: klein (Näherung) bis groß (echte Prioritäts-Logik).
+⇒ **Die Klimaanlage wird damit in allen Sichten zur normalen Wärmepumpe** — Kostenvergleich,
+Alternativkosten, CO₂, Monatsbericht, HA-Export — nur ohne Warmwasser-Zweig, und die JAZ-Kachel
+bleibt „—", solange die Wärme abgeleitet ist. **Ohne eine einzige neue Read-Site.**
 
-## Vorgeschlagene Reihenfolge (wenn umgesetzt wird)
+---
 
-1. **Baustein 2 zuerst** (Modus-Trennung) — er schafft die Bezugsgröße, ohne die
-   SEER und Komponenten-Aufteilung in der Luft hängen.
-2. **Baustein 1 (SEER)** direkt danach, dann hat die Kühl-Effizienz auch Kühl-kWh.
-3. **Baustein 3** als eigene Etappe, zunächst als globale Näherung mit klarem
-   Hinweis, später ggf. Prioritäts-Logik.
+## 4. Was der Anwender sieht
 
-Voraussetzung für belastbares Bauen ist eine **Test-Klimaanlage mit
-Modus-Sensor** bei einem Tester — sonst bauen wir die Hersteller-Vielfalt blind
-(gleiche Lehre wie bei den Kompressor-Starts, #238).
+**Komponenten → Wärme/Klima**, Gerät mit Modus-Signal:
 
-## Bezug
+```
+Strom gesamt      1.240 kWh
+  davon Heizen      520 kWh   (42 %)   → Wärme 1.820 kWh · abgeleitet aus JAZ 3,5
+  davon Kühlen      680 kWh   (55 %)
+  nicht aufgeteilt   40 kWh   ( 3 %)   → Standby und andere Betriebsarten
+Modus erfasst     97 % des Monats
+JAZ               —                    (kein Wärmemengenzähler)
+```
 
-- Roadmap-SoT #110. Verwandte Klima-Diskussion: alex_s9027 #548, 3dmaster90 #263.
-- Keine eedc-community-/Datenmodell-Synchronisation nötig (rein lokal).
+Ohne Modus-Signal steht dort **nur** die erste Zeile plus *„Betriebsmodus nicht erfasst — die
+Aufteilung nach Heizen und Kühlen braucht einen Modus-Sensor"*, mit Weg zur Zuordnungsfläche.
+**Keine 0, keine geschätzte Aufteilung** (ADR-002/P4).
+
+**Wirtschaftlichkeit:** Die Heizhälfte wird wie bei jeder Wärmepumpe gegen den ersetzten
+Energieträger gerechnet. Die **Kühlhälfte spart nichts** — sie ist Komfortverbrauch und wird als
+Kosten ausgewiesen, nicht als Ersparnis. Wer „Nichts ersetzt (Neubau)" gepflegt hat, bekommt für
+beide Hälften nur die Kosten.
+
+---
+
+## 5. Grenzen — sie gehören in den Anwender-Text, nicht ins Kleingedruckte
+
+1. ⛔ **Der Split entsteht nur auf dem Snapshot-Pfad** (D10). Wer seine Klimaanlage über den
+   Monatsabschluss, den HA-Statistik-Import oder CSV pflegt, bekommt **nie** eine Aufteilung —
+   dauerhaft, nicht nur rückwirkend. **K-2 ist ein Feature für Anwender mit Live-Anbindung.**
+2. ⛔ **Keine Rückrechnung der Vergangenheit** (D9). Wer den Modus-Sensor heute zuordnet, bekommt
+   den Split ab heute. Ein eedc-Ausfall über 10 Tage reißt ein Loch, das bleibt.
+3. ⛔ **Nur der eingestellte Modus** (D1/D2). Steht das Gerät auf Automatik, ist die Zeit
+   `unbestimmt` und landet in *nicht aufgeteilt* — sie wird **nicht** geraten.
+4. ⛔ **2-Rohr-Systeme** (D3). Eine 3-Rohr-Anlage mit Wärmerückgewinnung kann gleichzeitig heizen
+   und kühlen; sie wird nicht unterstützt. Weil das Signal an der **Investition** hängt (nicht an
+   der Anlage), kostet eine spätere Unterstützung keinen Umbau der Aggregation.
+5. ⛔ **Keine Aufteilung je Innengerät** (D5) — K-3 bleibt zu.
+6. ⚠ **Geräte, die nur kühlen** (D7), tragen `heizen` nie. Das ist kein Fehler und muss als
+   „gibt es hier nicht" erscheinen, nicht als 0.
+
+---
+
+## 6. Etappen
+
+| # | Etappe | Inhalt | Risiko |
+| --- | --- | --- | --- |
+| **S1** | **Lesen** | Zustandssensor-Pfad in `ha_state_service` (Live **und** Historie), Normalisierung Hersteller→Kanon, Feld `betriebsmodus` in der Zuordnungsfläche (`FELD_BEDARF`, **optional**, für **alle** WP-Arten), Validierung, Daten-Checker-Zeile | ⚠ **Risikoträger.** Trägt S1 nicht, ist der Rest wertlos |
+| **S2** | **Mitschreiben** | Spalte `betriebsmodus_je_wp` auf `TagesEnergieProfil`; der 5-Minuten-Snapshot (`CronTrigger(minute="*/5", second=30)`) hält den Modus, die Stunden-Aggregation (`:05`/`:55`) schreibt ihn je Gerät | mittel |
+| **S3** | **Summieren** | `imd_monatsaggregat` bildet `strom_heizen_kwh` · `strom_kuehlen_kwh` · `modus_abdeckung_h` aus den Stundenzeilen; `get_wp_strom_kwh` um den Teilmengen-Zweig ergänzt; `heizenergie_kwh` abgeleitet mit Provenance | mittel |
+| **S4** | **Zeigen** | Aufteilungs-Block im Komponenten-Hub, Monatsbericht, HA-Export; `unbestimmt`/„nicht aufgeteilt" nach §4; die JAZ-Sperre aus §3.5 | klein — die Read-Sites sind unberührt |
+| **S5** | **F-41** | Die drei Daten-Checker-Hinweise dreiteilen (§7, E-C) | klein |
+| **S6** | **F-42** | Die vier erfundenen Nullen im Komponenten-Hub (§7, E-D) | klein |
+
+⚠ **Vor S2 gehört eine Messung an einer echten Instanz** — Gernots Anlage hat keine Klimaanlage,
+kingcap1 hat MELCloud. Ohne diesen Beleg wird die Hersteller-Vielfalt blind gebaut (#238-Lehre).
+
+⚠ **Drei Sichten sind noch ungemessen** und gehören vor S1 nachgeholt: *Cockpit → Live*/Energiefluss,
+das **Monatsabschluss-Formular** (welche Felder eine Klimaanlage angeboten bekommt) und der
+**Jahresbericht-PDF**.
+
+---
+
+## 7. Entscheidungen — **entschieden am 2026-08-18 (Gernot)**
+
+> **E-A bis E-E: den Empfehlungen gefolgt.** **E-F: abgelehnt** — der Schnitt bleibt, F-41 und F-42
+> fahren mit K-2 in **einem** Paket vor dem nächsten Release. **Nicht neu aufrollen.**
+> Die Empfehlungen stehen unverändert darunter, weil sie die Begründung tragen.
+
+### ✅ E-A — Wird die abgeleitete Wärme persistiert oder bei jedem Lesen gerechnet? — **(a) entschieden**
+
+* **(a) Beim Monatsabschluss persistieren**, mit Provenance-Marker.
+* **(b) On-the-fly** aus `strom_heizen_kwh × JAZ`.
+
+> **Empfehlung: (a).** Das ist die **ADR-002/P8-Klasse**: eine on-the-fly gerechnete Wärme schreibt
+> bei jeder JAZ-Korrektur die **gesamte Historie** um — genau der Fehler, den P8 für Tarife
+> abgeschafft hat („ein Wert trägt den Stichtag seines Monats"). Persistiert trägt jeder Monat den
+> damals gültigen Faktor, und die Vergangenheit bleibt stabil.
+
+### ✅ E-B — Wird die Kühlhälfte wirtschaftlich bewertet? — **(a) entschieden**
+
+* **(a) Nein** — Kühlen ist Komfortverbrauch: Kosten ja, Ersparnis nein.
+* **(b) Ja**, gegen ein hypothetisches Vorgängergerät.
+
+> **Empfehlung: (a).** (b) verlangt eine Angabe, die praktisch niemand hat, und erzeugt genau die
+> Sorte konstruierter Ersparnis, die K-0b/N-87 abgeschafft haben. **eedc ist nicht die
+> Strom-Polizei**: der Kühlstrom wird gezeigt und bepreist, aber nicht bewertet.
+
+### ✅ E-C — F-41: die drei Daten-Checker-Hinweise werden **dreigeteilt**, nicht umgehängt — **entschieden**
+
+Gemessen (2026-08-18): `stammdaten.py:1007` gated **eine** Prüfung auf die **Bauart**
+(`ist_luft_luft_waermepumpe`) und leitet daraus **drei** Hinweise ab. Das ist an zwei Stellen falsch:
+
+| Hinweis | hängt am Feld | das Feld speist | die richtige Frage |
+| --- | --- | --- | --- |
+| **Alternativkosten (Gas-/Ölheizung) fehlen** (WARNING) | `anschaffungskosten_alternativ` (Spalte) | `core/berechnungen/investitionskosten.py::relevante_kosten_aus_investitionen` — `Σ max(0, gesamt − alternativ)` ⇒ **USt-Bemessungsgrundlage · Amortisations-Fortschritt · Amortisationsdauer** | *„Was hättest du stattdessen kaufen müssen?"* — **hat mit Ersetzen nichts zu tun.** Ein Neubau ersetzt keine Heizung, hat aber trotzdem keinen Gaskessel gekauft |
+| Alter Energiepreis nicht gesetzt (INFO) | `alter_preis_cent_kwh` | laufende Kosten der **ersetzten** Anlage | `ersetzt_keine_heizung()` |
+| Heizwärmebedarf nicht gesetzt (INFO) | `heizwaermebedarf_kwh` | Einsparungsschätzung gegen die ersetzte Anlage | `ersetzt_keine_heizung()` |
+
+**Negativbeweis:** In `investitionskosten.py` und allen weiteren Lesestellen von
+`anschaffungskosten_alternativ` kommt `alter_energietraeger`/`ersetzt_keine_heizung` **0-mal** vor.
+Die beiden Achsen berühren sich nirgends.
+
+> **Empfehlung:**
+> **(a)** Die zwei **INFO** hängen künftig an `ersetzt_keine_heizung()` statt an der Bauart. Damit
+> ist der Falsch-positiv für **jede** Neubau-Wärmepumpe weg und der Falsch-negativ für die
+> **heizende** Klimaanlage ebenfalls.
+> **(b)** Die **WARNING** wird von **beiden** Achsen gelöst — sie fragt nach der vermiedenen
+> Investition und gilt für jede Wärmepumpe. Was sich ändert, ist **Text und Weg**: der Hinweis nennt
+> **0 als gültige Antwort**, und `investitionFormHelpers.ts:147` bekommt denselben Zusatz, den fünf
+> andere Investitionstypen längst tragen (*„Meist 0 — es gibt keine echte Alternative"*).
+> ⚑ **An der Testinstanz belegt:** eine **0** in *Alternative Kosten (€)* lässt die Warnung
+> verschwinden (`stammdaten.py:1009` prüft `is None`). Der Defekt ist **Beschriftung, nicht
+> Unauflösbarkeit** — die frühere Darstellung war an dieser Stelle zu breit.
+> **(c)** Für den Altbestand wird **keine neue Mechanik erfunden**: `crud.py:969` trägt die Brücke
+> bereits (die exakt unveränderte Vorbelegung 12.000/3.000 zählt als offene Frage, nicht als
+> Antwort). Der Checker benutzt dasselbe Prädikat.
+>
+> ⚠ **Zwei `ist_luft_luft`-Stellen bleiben bewusst unverändert** (`daten_checker/energieprofil.py:419`,
+> `daten_checker/monatsdaten.py:848`) und ebenso `field_definitions.py:722`: sie fragen nach einem
+> **Wärmemengenzähler**, den ein Splitgerät physisch nicht hat — **Messbarkeit → Bauart,
+> Bewertbarkeit → Pflege.**
+
+### ✅ E-D — F-42: die vier erfundenen Nullen im Komponenten-Hub — **entschieden, als S6**
+
+Gemessen an einer Testinstanz mit echter Klimaanlage: 4.375 kWh Strom, kein Wärmemengenzähler,
+„nichts ersetzt" ⇒ *Komponenten → Wärme/Klima* zeigt `JAZ 0,00` · `Stromkosten 0,00 €` ·
+`Gas/Öl 0,00 €` · `Ersparnis 0,00 €`, dazu die Blöcke *„CO₂-Ersparnis 0 kg vs. fossile Heizung"*
+(Guard ist `!= null`, `0.0` ist nicht `null`) und *„Kostenvergleich WP vs. Gas/Öl"* (**ohne jeden
+Guard**). **Dieselbe Anlage sagt in *Cockpit → Jahr* `None` („—") und in *Auswertungen → ROI*
+„nicht bewertet".**
+
+Ursache: `services/wp_wirtschaftlichkeit.py:105/115` gibt beim Frühausstieg auch
+`wp_kosten_euro = 0` zurück — *Strom × Preis* hat mit der ersetzten Heizung aber nichts zu tun.
+
+> **Empfehlung: als eigene Etappe S6 mitbauen.** Es ist die **N-258-Klasse** („nicht bewertet heißt
+> keine Zahl"), die v4.0.17 an der ROI-Tabelle behoben hat und die im Hub stehengeblieben ist — und
+> es ist eine **nicht eingelöste Zusage**: Forum T77723 **#550** (16.05.2026) sagt alex_s9027 zu,
+> die JAZ-Kachel bleibe *„sauber leer („—")"*. Für *Cockpit* stimmt das, für den Hub nicht.
+> ⚑ Mit §3.4/§3.5 löst sich der größere Teil ohnehin auf: sobald die Klimaanlage eine (abgeleitete)
+> Wärme und echte Stromkosten trägt, sind drei der vier Nullen keine Nullen mehr.
+
+### ✅ E-E — Wem wird das Modus-Feld angeboten? — **(a) entschieden: jeder Wärmepumpe**
+
+* **(a) Jeder Wärmepumpe**, optional.
+* **(b) Nur `wp_art = luft_luft`.**
+
+> **Empfehlung: (a).** (b) baut an genau der Gruppe vorbei, die das Thema meldet: azywietz-webs
+> zwei Klimaanlagen laufen als `luft_wasser`, weil das Feld „Wärmepumpenart" als
+> **Community-Einstellung** beschriftet ist (*„Wird für den fairen JAZ-Vergleich in der Community
+> verwendet"*), obwohl es die gesamte Wärmemengen-Erwartung des Daten-Checkers steuert. Es gibt
+> außerdem Luft-Wasser-Wärmepumpen **mit** Kühlfunktion. Kosten von (a): null.
+> ⚑ **Der Feld-Hinweis wird bei dieser Gelegenheit mitgeändert** — er beschreibt heute die
+> Nebenwirkung und verschweigt die Hauptwirkung.
+
+### ⛔ E-F — Der Schnitt: fährt F-41 wirklich mit K-2 mit? — **ABGELEHNT, der Schnitt bleibt**
+
+Der Entscheid vom 18.08. lautete *„F-41 nicht einzeln bauen, sondern mit K-2 mitziehen — an
+derselben Stelle zweimal hintereinander aufzureißen, hat noch nie gut funktioniert."*
+
+> **Empfehlung: den Entscheid revidieren — F-41 und F-42 vorziehen, K-2 danach.**
+>
+> **Begründung, und sie ist eine Messung, kein Zeitargument:** Die Prämisse „dieselbe Stelle" hält
+> nach §3 **nicht mehr**. F-41 sitzt in `daten_checker/stammdaten.py` und fragt nach der
+> **Bewertbarkeit** (`alter_energietraeger`, `anschaffungskosten_alternativ`); K-2 sitzt im
+> Snapshot-/Aggregations-Pfad und in der **Messbarkeit** (`betriebsmodus`). Sie berühren sich in
+> **keiner Funktion** — der Daten-Checker-Anteil von K-2 ist eine **neue** Zeile („Modus-Sensor nicht
+> zugeordnet"), nicht eine Änderung an den drei bestehenden. **Ein Präzedenzfall trägt nur so weit
+> wie seine Begründung, und diese trägt hier nicht.**
+>
+> **Was das löst:** F-41 ist als Fehler klassifiziert und sperrt damit über die stehende Regel
+> („kein Release, solange ein gemeldeter Fehler offen ist") **jedes** Release — auch die bereits
+> gebauten F-38/F-39/F-40, auf die drei Melder warten. F-41 + F-42 sind **klein, unabhängig und in
+> einer Sitzung baubar**. Danach ist das Release frei, und K-2 wird **ohne selbst erzeugten
+> Zeitdruck** gebaut — was einem Bau dieser Größe zusteht.
+>
+> ⚠ **Die Gegenrichtung ehrlich benannt:** azywietz-web hat für #383 ausdrücklich **keine** Zusage
+> zum Zeitplan bekommen, sondern die Auskunft, der Fix fahre mit #263 mit. Ihn früher zu bedienen
+> ist eine positive Abweichung — sie sollte im Release-Text stehen, damit die frühere Aussage nicht
+> unkommentiert überholt wird.
+>
+> ⛔ **Entscheid Gernots (2026-08-18): abgelehnt.** Der Schnitt bleibt — **ein** Paket, und es geht
+> vor dem nächsten Release raus. Damit hält die Auskunft an azywietz-web wortgleich, und die
+> Melder-Punkte F-38/F-39/F-40 warten auf dasselbe Release. **Baureihenfolge frei:** S5/S6 zuerst
+> ist zulässig und empfohlen (klein, melder-relevant, risikofrei) — das ändert den Schnitt nicht.
+
+---
+
+## 8. Maßnahmen-Register
+
+| ID | Maßnahme | Status | Anmerkung |
+| --- | --- | --- | --- |
+| **K-0** | Subtyp `wp_art = luft_luft` · SCOP-Modus · Stromsensor genügt · Daten-Checker verlangt keine Heizwärme | ✅ **gegen den Code geprüft (2026-08-18)** | alle vier belegt: `WP_ART_OPTIONEN`, `effizienz_modus == "scop"`, `KLIMA_OHNE_WAERMEMENGE`, `energieprofil.py:419`, `monatsdaten.py:848` |
+| **K-0b** | Klimaanlage als Verbraucher statt halbe Wärmepumpe | ✅ ersetzt durch K-0c | — |
+| **K-0c** | Die Bewertung hängt an der **Pflege**, nicht an der Bauart (`alter_energietraeger = "nichts"`) | ✅ **durchgezogen — Rechnung (7 Stellen) UND Daten-Checker (S5, 2026-08-18)** | Der Satz „Typ-Sonderweg entfällt" gilt weiterhin **nicht** uneingeschränkt: er bleibt in `crud.py:969` als **Altbestandsschutz** (begründet). An den drei **Messbarkeits**-Stellen (`field_definitions.py:722` · `energieprofil.py:419` · `monatsdaten.py:848`) bleibt die Bauart bewusst maßgeblich. Gemessen an einer Instanz mit zwei Varianten: vorher Klima 0 / Neubau-WP 3 Meldungen, nachher **beide nur die WARNING** (auflösbar) |
+| **F-41** | Die drei Daten-Checker-Hinweise dreiteilen (§7 E-C) | ✅ **gebaut (S5, 2026-08-18)** | Zwei INFO an `ersetzt_keine_heizung`, WARNING von beiden Achsen gelöst + Text nennt 0 als Antwort, Formular-Hint nachgezogen. Wächter `test_f41_f42_klima_bewertbarkeit.py` (12 Proben zu F-41, DB-Weg statt Stub) |
+| **F-42** | Die vier erfundenen Nullen im Komponenten-Hub (§7 E-D) | ✅ **gebaut (S6, 2026-08-18)** | Gelöst **im Backend** statt im Client: `WPErsparnisErgebnis.bewertbar` + `None` statt `0` in der Dashboard-Zusammenfassung. Der Auftrag nannte einen Frontend-Guard — gemessen waren **drei** Konsumenten derselben Null (Hub · *Cockpit → Aussicht* · Kostenvergleich), ein Client-Guard hätte einen davon geheilt. `wp_kosten_euro` wird echt (gemessen 1.340,50 €) |
+| **K-1** | **SEER** (Kühl-Effizienz) | ⬜ offen, **nach K-2** | Negativbeweis: `seer` kommt baumweit **0**-mal vor. Ohne getrennte Kühl-kWh ein Faktor ohne Bezugsgröße; `modus_abdeckung_h` liefert die Zeitbasis |
+| **K-2** | **Heizen/Kühlen-Trennung** | 🔄 **Kern — Zielarchitektur steht (§3), Entscheide gefallen; S1–S4 offen** | Vorbedingung „Testgerät mit Modus-Sensor" seit 2026-08-16 erfüllt (kingcap1, MELCloud). Sitzung A (S5 + S6) ist durch, **ohne** die drei Messbarkeits-Stellen und **ohne** den Modus-Lesepfad zu berühren |
+| **K-3** | Aufteilung **je Innengerät** | ⛔ **zu** | D5 — die Innengeräte-Zähler sind unverwertbar |
+
+> ⚑ **Wer hier eine Maßnahme auf ✅ setzt, misst vorher — und zwar Rechnung *und* Prüfung getrennt.**
+> Das ist zweimal schiefgegangen: K-0 trug „Fundament steht" (⇒ N-86) und K-0c trug „Typ-Sonderweg
+> entfällt" (⇒ F-41), beide ohne dass es jemand gegen den Code gehalten hatte.
+
+---
+
+## 9. Abnahme
+
+* Gates vollständig: beide Zeitzonen (`TZ=UTC`), `lint` vor `tsc`, alle `check:*` über den Exit-Code.
+* **Je Etappe ein Sprengsatz, einzeln gefahren.** Bei S2 ausdrücklich einer, der die
+  **Modus-Zuordnung** aushebelt, nicht nur die Summe — *bei falscher Zuordnung bleibt die Summe
+  gleich*, ein Summen-Prüfer wäre stumm.
+* Ein Wächter, der die **Teilmengen-Invariante** hält: `Σ (strom_heizen + strom_kuehlen) ≤
+  stromverbrauch_kwh`, und dass keine Bilanz-Read-Site die Teilmengen addiert.
+* Ein Wächter für §3.5: keine JAZ/COP-Stelle rechnet mit abgeleiteter Wärme.
+* Doku: dieses Konzept auf dem gemessenen Stand, `HANDBUCH_DATEN_CHECKER.md` §4.6 (✅ **korrigiert
+  2026-08-18** — der Text behauptete, die drei Hinweise versorgten „ausschließlich die
+  Ersparnis-Rechnung", und stellte die Ausnahme auf die Bauart; beides trägt jetzt einen
+  Korrektur-Vermerk), `BERECHNUNGEN.md`, CHANGELOG + WAS-IST-NEU unter `[Unreleased]`.
+* **Die Grenzen aus §5 gehören in den Anwender-Text**, nicht nur in den Commit.
+
+---
+
+## 10. Bezug
+
+* Issue [#263](https://github.com/supernova1963/eedc-homeassistant/issues/263) — Melder **3dmaster90**
+  (Eröffnung), **kingcap1** (Testgerät Mitsubishi/MELCloud + Einhell).
+* Issue [#383](https://github.com/supernova1963/eedc-homeassistant/issues/383) — **azywietz-web**,
+  Midea PortaSplit + Panasonic Multisplit ⇒ **F-41**.
+* Forum **T77723 #548** (2026-05-15) — **alex_s9027**, zwei Split-Klimas; hat die Heizen/Kühlen-
+  Trennung dort zuerst gefordert. ⚠ Das ist ein **Forum**-Beitrag; die frühere Notiz „Discussion
+  #548" ging ins Leere (der Vorgang existiert auf GitHub nicht).
+* Forum **T89667 #87/#92** — **dietmar1968**: ein Gesamtzähler, **kein** Modus-Signal ⇒ seine Anlage
+  ist der Beleg für Grenze §5.1, nicht für die Machbarkeit.
+* Roadmap-SoT [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110).
+* **Keine eedc-community-/Datenmodell-Synchronisation nötig** (rein lokal) — `wp_art` geht bereits
+  in den anonymen Datensatz, die Modus-Aufteilung nicht.

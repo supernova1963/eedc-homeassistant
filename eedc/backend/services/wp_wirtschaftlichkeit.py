@@ -51,6 +51,21 @@ class WPErsparnisErgebnis:
     # Diagnostik: welcher Gaspreis wurde tatsächlich verwendet?
     verwendeter_gaspreis_cent: float
     verwendeter_wirkungsgrad: float
+    # F-42: Konnte gegen eine alte Heizung gerechnet werden?
+    #
+    # `False` heißt: es gibt keinen Vergleichsgegenstand — entweder fehlt die
+    # gemessene Wärme oder die WP hat laut Pflege nichts ersetzt. Die drei
+    # Geld-/CO₂-Felder tragen dann eine **0, die keine Messung ist**, und genau
+    # diese 0 darf nicht angezeigt werden (N-258-Klasse: „nicht bewertet heißt
+    # keine Zahl"). Der Schnitt liegt bewusst hier und nicht in `Optional`-
+    # Feldern: **Summieren darf 0 sein, Anzeigen nicht.** Wer über Geräte oder
+    # Monate aufaddiert (`aktueller_monat`, `cockpit/uebersicht`,
+    # `cockpit/komponenten`), addiert weiterhin korrekt 0 und braucht keine
+    # None-Behandlung; wer eine Zahl **ausweist**, fragt dieses Flag.
+    #
+    # `wp_kosten_euro` ist davon ausgenommen und immer echt — *Strom × Preis*
+    # hat mit der ersetzten Heizung nichts zu tun.
+    bewertbar: bool = True
 
 
 def _wp_alter_wirkungsgrad(wp_parameter: Optional[dict]) -> float:
@@ -101,8 +116,17 @@ def berechne_wp_ersparnis(
     Returns:
         WPErsparnisErgebnis mit Ersparnis, Komponenten und Diagnostik.
     """
+    # F-42: Die Stromkosten stehen auch dann fest, wenn der Vergleich entfällt —
+    # sie hängen an Verbrauch und Tarif, nicht an der alten Heizung. Vorher gab
+    # jeder der beiden Frühausstiege `wp_kosten_euro = 0` zurück; im Hub wurde
+    # daraus „Stromkosten 0,00 €" neben 4.375 kWh Verbrauch.
+    wp_kosten_ohne_vergleich = wp_strom_kwh * wp_strompreis_cent / 100
+
     if wp_waerme_kwh <= 0:
-        return WPErsparnisErgebnis(0.0, 0.0, 0.0, 0.0, WP_WIRKUNGSGRAD_GAS_DEFAULT)
+        return WPErsparnisErgebnis(
+            0.0, 0.0, wp_kosten_ohne_vergleich, 0.0,
+            WP_WIRKUNGSGRAD_GAS_DEFAULT, bewertbar=False,
+        )
 
     # N-88/F2b: Wer nichts ersetzt hat, spart nichts ein — auch nicht die fixen
     # Zusatzkosten einer Anlage, die es nie gab. Der Wächter steht NEBEN dem
@@ -111,7 +135,10 @@ def berechne_wp_ersparnis(
     if ersetzt_keine_heizung(
         (wp_parameter or {}).get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"])
     ):
-        return WPErsparnisErgebnis(0.0, 0.0, 0.0, 0.0, WP_WIRKUNGSGRAD_GAS_DEFAULT)
+        return WPErsparnisErgebnis(
+            0.0, 0.0, wp_kosten_ohne_vergleich, 0.0,
+            WP_WIRKUNGSGRAD_GAS_DEFAULT, bewertbar=False,
+        )
 
     wirkungsgrad = _wp_alter_wirkungsgrad(wp_parameter)
 

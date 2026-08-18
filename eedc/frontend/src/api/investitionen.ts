@@ -224,11 +224,15 @@ export interface WaermepumpeDashboardResponse {
     gesamt_heizenergie_kwh: number
     gesamt_warmwasser_kwh: number
     gesamt_waerme_kwh: number
-    durchschnitt_cop: number
+    /** F-42: `null` = nicht bewertet, nicht „0". `durchschnitt_cop` ohne
+     *  gemessene Wärme, die drei Vergleichsgrößen ohne ersetzte Heizung —
+     *  eine Klimaanlage im Neubau hat weder JAZ noch Gaskessel-Ersparnis.
+     *  `wp_kosten_euro` bleibt immer eine Zahl (Strom × Preis). */
+    durchschnitt_cop: number | null
     wp_kosten_euro: number
-    alte_heizung_kosten_euro: number
-    ersparnis_euro: number
-    co2_ersparnis_kg: number
+    alte_heizung_kosten_euro: number | null
+    ersparnis_euro: number | null
+    co2_ersparnis_kg: number | null
     anzahl_monate: number
     // Getrennte Strommessung (optional)
     gesamt_strom_heizen_kwh?: number

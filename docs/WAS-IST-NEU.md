@@ -32,6 +32,31 @@ verändert; es ging darum, was eedc über deine Anlage behauptet.
   das. Bleibt etwas übrig, kommt der Verdacht weiterhin — dann mit **mehreren möglichen Ursachen**
   statt einer Behauptung. ⚠ Es werden **keine Werte verändert, gekappt oder ausgeblendet.**
 
+Dazu zwei Punkte rund um **Wärmepumpen und Klimaanlagen** — beide drehen sich um dieselbe Frage:
+*Wovon hängt es ab, ob eedc etwas bewerten kann?*
+
+- **Der Daten-Check fragt jetzt die Pflege statt die Bauart** *(#383, azywietz-web)*: Seit v4.0.18
+  kannst du bei einer Wärmepumpe **„Nichts ersetzt (Neubau)"** eintragen, und die Rechnung nimmt
+  das ernst. Der Daten-Check wusste davon nichts — er ging nach der Gerätebauart und lag damit an
+  beiden Enden daneben: Wer im **Neubau** baut, las weiter „Alter Energiepreis nicht gesetzt" und
+  „Heizwärmebedarf nicht gesetzt", obwohl es keine alte Heizung gibt. Und wer mit seiner
+  **Klimaanlage wirklich heizt**, bekam die beiden nie zu sehen, obwohl seine Ersparnis daran
+  hängt. ⚠ **Was du merkst:** Bei „Nichts ersetzt" verschwinden zwei Hinweise. Bei einer
+  **Klimaanlage, in der noch der Vorgabewert „Gas" steht**, erscheinen sie neu — dann aber mit
+  einem Weg heraus: Trag „Nichts ersetzt (Neubau)" ein, wenn du nur kühlst. **Es wird nichts still
+  geändert und nichts migriert.**
+- **„Alternativkosten fehlen" sagt jetzt, dass 0 eine Antwort ist**: Die Frage dahinter ist nicht
+  „welche Heizung hast du ersetzt", sondern „**was hättest du stattdessen kaufen müssen**" — der
+  Betrag mindert deine Anschaffungskosten, nur die Differenz muss sich amortisieren. Gab es keine
+  Alternative, trag **0** ein; der Hinweis verschwindet. Vorher stand das nirgends.
+- **Eine Klimaanlage zeigt „—" statt vier Nullen**: Unter *Komponenten → Wärme/Klima* stand für ein
+  Gerät mit 4.375 kWh Verbrauch viermal `0,00` — JAZ, Stromkosten, Gas/Öl und Ersparnis —, dazu ein
+  CO₂-Block und ein Kostenvergleich ohne Gegenstand. Dieselbe Anlage sagte in *Cockpit → Jahr* „—"
+  und in *Auswertungen → ROI* „nicht bewertet". Jetzt sagen alle drei dasselbe. ⚠ **Eine Zahl kommt
+  neu hinzu:** deine **Stromkosten**. Sie hängen an Verbrauch und Tarif und gelten auch ohne
+  ersetzte Heizung. ⚠ Wärmepumpen mit gemessener Wärme und gepflegtem Energieträger sehen **keine
+  veränderte Zahl**; und wo eine Wärmemenge gemessen ist, bleibt die JAZ stehen.
+
 ---
 
 ## v4.0.20 — Eine Kilowattstunde, ein Preis

@@ -16,13 +16,14 @@ from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
 from backend.core.investition_parameter import (
     BKW_EINSPEISEGRENZE_W_TYPISCH,
     PARAM_PV_MODULE,
+    PARAM_WAERMEPUMPE,
     ist_dienstlich,
-    ist_luft_luft_waermepumpe,
 )
 from backend.core.berechnungen import (
     pruefe_speicher_netzladung_kumulativ,
     speicher_effizienz_prozent,
 )
+from backend.core.berechnungen.alternativkosten import ersetzt_keine_heizung
 from backend.core.wirtschaftlichkeit_defaults import NETZBEZUG_DEFAULT_CENT
 from backend.core.field_definitions import get_speicher_netzladung_kwh
 from backend.core.investition_kennwerte import (
@@ -995,22 +996,59 @@ class StammdatenChecks:
                     ))
 
             elif inv.typ == "waermepumpe":
-                # N-87 / #263: Eine Split-Klimaanlage ersetzt keine Heizung — der
-                # Vergleich gegen Gas/Öl wird für sie nicht mehr gerechnet
-                # (`investitionen/crud.py`, ROI-Dashboard). Die drei Hinweise, die
-                # ausschließlich diesen Vergleich füttern, wären damit Forderungen
-                # ohne Zweck; „Heizwärmebedarf" wäre sogar unauflösbar, weil das
-                # Feld für Klimaanlagen gar nicht mehr angeboten wird. Derselbe
-                # Grundsatz wie in P-6: ein Befund, den der Anwender nicht
-                # auflösen kann, ist ein Fehler bei uns
-                # ([[feedback_daten_checker_kein_akzeptiert]]).
-                ist_klima = ist_luft_luft_waermepumpe(param)
+                # F-41 (#383 azywietz-web, 18.08.): Bis v4.0.20 hingen DREI
+                # Hinweise an EINEM Prädikat — der **Bauart**
+                # (`ist_luft_luft_waermepumpe`). Das war an beiden Enden falsch:
+                #
+                # * **Falsch-positiv:** Jede Wärmepumpe im **Neubau** bekam die
+                #   zwei INFO, obwohl „Nichts ersetzt (Neubau)" gepflegt war —
+                #   wozu das Investitionsformular ausdrücklich rät. Sie waren
+                #   nicht auflösbar, und ein Hinweis, den der Anwender nicht
+                #   auflösen kann, ist ein Fehler bei uns
+                #   ([[feedback_daten_checker_kein_akzeptiert]]).
+                # * **Falsch-negativ:** Eine Klimaanlage, mit der jemand
+                #   **tatsächlich heizt**, bekam sie nie zu sehen — obwohl ihre
+                #   Ersparnis genau daran hängt (N-88/F2b, Gernot 16.08.).
+                #
+                # Seit v4.0.18 ist die Frage ein Feld: `alter_energietraeger`.
+                # Die Rechnung respektiert es an sieben Stellen, der Checker
+                # nicht. **Messbarkeit → Bauart, Bewertbarkeit → Pflege** —
+                # deshalb fragen diese beiden INFO ab jetzt `ersetzt_keine_heizung`,
+                # während `daten_checker/energieprofil.py:419`,
+                # `daten_checker/monatsdaten.py:848` und
+                # `core/field_definitions.py:722` bewusst an der Bauart bleiben:
+                # Sie fragen nach einem **Wärmemengenzähler**, den ein
+                # Splitgerät physisch nicht hat. Konzept: `docs/KONZEPT-263-klima-split.md` §7 E-C.
+                ersetzt_nichts = ersetzt_keine_heizung(
+                    param.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"])
+                )
 
-                if inv.anschaffungskosten_alternativ is None and not ist_klima:
+                # Die WARNING hängt an KEINER der beiden Achsen — und das ist der
+                # dritte Teil von F-41. `anschaffungskosten_alternativ` fragt
+                # „Was hättest du stattdessen kaufen müssen?" und speist über
+                # `core/berechnungen/investitionskosten.py` die
+                # USt-Bemessungsgrundlage, den Amortisations-Fortschritt und die
+                # Amortisationsdauer. Mit *Ersetzen* hat das nichts zu tun: Ein
+                # Neubau ersetzt keine Heizung, hat aber trotzdem keinen
+                # Gaskessel gekauft. Negativbeweis: in `investitionskosten.py`
+                # und allen weiteren Lesestellen des Feldes kommt
+                # `alter_energietraeger` 0-mal vor.
+                #
+                # Auflösbar war sie immer (eine 0 genügt, die Prüfung ist
+                # `is None`) — sie hat es nur nicht gesagt. Der Defekt ist die
+                # **Beschriftung**; derselbe Zusatz steht seit jeher an fünf
+                # anderen Investitionstypen (`investitionFormHelpers.ts`).
+                if inv.anschaffungskosten_alternativ is None:
                     ergebnisse.append(CheckErgebnis(
                         kategorie=kat, schwere=CheckSeverity.WARNING,
                         meldung=f"{name}: Alternativkosten (Gas-/Ölheizung) fehlen",
-                        details="Werden für ROI-Berechnung benötigt (Vergleich mit konventioneller Heizung)",
+                        details=(
+                            "Was hätte eine neue Gas-/Ölheizung gekostet? eedc zieht "
+                            "diesen Betrag von den Anschaffungskosten ab — nur die "
+                            "Differenz muss sich amortisieren. Gab es keine "
+                            "Alternative (z. B. im Neubau), trag 0 ein; das ist eine "
+                            "gültige Antwort und lässt den Hinweis verschwinden."
+                        ),
                         link="/einstellungen/investitionen",
                     ))
 
@@ -1055,7 +1093,7 @@ class StammdatenChecks:
 
                 # Alter Energieträger / Preis für Vergleichsrechnung
                 alter_preis = param.get("alter_preis_cent_kwh")
-                if alter_preis is None and not ist_klima:
+                if alter_preis is None and not ersetzt_nichts:
                     ergebnisse.append(CheckErgebnis(
                         kategorie=kat, schwere=CheckSeverity.INFO,
                         meldung=f"{name}: Alter Energiepreis nicht gesetzt",
@@ -1064,7 +1102,7 @@ class StammdatenChecks:
                     ))
 
                 # Wärmebedarf für Jahres-Einsparungsschätzung
-                if not param.get("heizwaermebedarf_kwh") and not ist_klima:
+                if not param.get("heizwaermebedarf_kwh") and not ersetzt_nichts:
                     ergebnisse.append(CheckErgebnis(
                         kategorie=kat, schwere=CheckSeverity.INFO,
                         meldung=f"{name}: Heizwärmebedarf nicht gesetzt",

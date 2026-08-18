@@ -43,8 +43,39 @@ export function WaermepumpeMonatsverlauf({ monatsdaten }: { monatsdaten: Investi
   )
 }
 
+/**
+ * F-42: Gibt es überhaupt eine ersetzte Heizung, gegen die verglichen werden kann?
+ *
+ * Backend-SoT ist `berechne_wp_ersparnis` (Flag `bewertbar`); hierher kommt das
+ * Ergebnis als `null` statt als 0 an. Der Block darf nicht einfach verschwinden —
+ * die Stromkosten sind eine echte, gepflegte Zahl und gehören weiter gezeigt.
+ * Was entfällt, ist der **Vergleich**.
+ */
+export const wpHatVergleich = (z: Zusammenfassung) => z.ersparnis_euro != null
+
 /** Kostenvergleich WP vs. Gas/Öl (horizontale Balken) + Ersparnis-Zeile. */
 export function WaermepumpeKostenvergleich({ zusammenfassung: z }: { zusammenfassung: Zusammenfassung }) {
+  // F-42: Ohne ersetzte Heizung hat der Balken „Gas/Öl" keinen Gegenstand — vorher
+  // stand hier ein Vergleich gegen 0 € und darunter „Ersparnis: 0,00 €", während
+  // dieselbe Anlage in Cockpit → Jahr „—" und in Auswertungen → ROI „nicht
+  // bewertet" sagte. Statt den Block zu unterdrücken, zeigt er das, was gilt:
+  // die reinen Stromkosten des Geräts.
+  if (!wpHatVergleich(z)) {
+    return (
+      <div className="space-y-2 py-4 text-center">
+        <p className="text-sm text-gray-500 dark:text-gray-400">Stromkosten des Geräts</p>
+        <p className={`text-2xl font-semibold ${GELD_TEXT_CLASS.kosten}`}>
+          {fmtZahl(z.wp_kosten_euro, 2)} €
+        </p>
+        <p className="mx-auto max-w-md text-xs text-gray-500 dark:text-gray-400">
+          Für dieses Gerät ist „Nichts ersetzt (Neubau)" hinterlegt oder es liegt keine
+          gemessene Wärmemenge vor — es gibt also keine frühere Heizung, gegen die sich
+          eine Ersparnis rechnen ließe. Stromverbrauch, PV-Anteil und Kosten werden
+          unverändert ausgewertet.
+        </p>
+      </div>
+    )
+  }
   const data = [
     { name: 'Wärmepumpe', value: z.wp_kosten_euro, fill: GELD_COLORS.ersparnis },
     { name: 'Gas/Öl', value: z.alte_heizung_kosten_euro, fill: GELD_COLORS.kosten },

@@ -238,6 +238,21 @@ async def _anlage_mit_wp(db, *, parameter: dict) -> tuple:
 
 
 # Die drei Meldungen, die am Gas-Vergleich hängen.
+#
+# ⚠ **Die Gruppierung ist mit F-41 zerfallen (18.08.2026) und steht hier nur
+# noch als Namensliste.** Bis dahin gingen alle drei aus EINEM Prädikat hervor —
+# der Bauart — und diese Datei prüfte genau das. Beide Annahmen dahinter sind
+# widerlegt:
+#
+# 1. Die zwei INFO hängen an der **Pflege** (`alter_energietraeger`), nicht an
+#    der Bauart: Eine Klimaanlage, mit der jemand heizt, braucht sie; eine
+#    Neubau-Luft-Wasser-WP nicht.
+# 2. Die WARNING hängt an **keiner** der beiden Achsen — sie fragt nach der
+#    vermiedenen *Investition* und gilt für jede Wärmepumpe.
+#
+# Die neuen Prüfer stehen in `test_f41_f42_klima_bewertbarkeit.py`. Was hier
+# bleibt, ist die Hälfte, die **weiterhin an der Bauart hängt**: die
+# Messbarkeit (Wärmemengenzähler) — siehe die Tests weiter unten.
 GAS_VERGLEICHS_MELDUNGEN = (
     "Alternativkosten (Gas-/Ölheizung) fehlen",
     "Alter Energiepreis nicht gesetzt",
@@ -252,25 +267,38 @@ def _gas_meldungen(ergebnisse) -> list[str]:
     ]
 
 
-async def test_klima_bekommt_keine_gas_vergleichs_hinweise(db):
-    """Klimaanlage: keiner der drei Hinweise zum Gas-/Öl-Vergleich erscheint."""
+async def test_klima_die_bauart_unterdrueckt_die_hinweise_NICHT_mehr(db):
+    """F-41: hieß bis 18.08.2026 `test_klima_bekommt_keine_gas_vergleichs_hinweise`.
+
+    Die alte Behauptung war *„eine Klimaanlage kann diese Hinweise nicht
+    auflösen"* — und sie war an zwei Stellen falsch. Die WARNING ist mit einer
+    **0** auflösbar (die Prüfung ist `is None`), und die zwei INFO sind mit
+    *„Nichts ersetzt (Neubau)"* auflösbar, seit es dieses Feld gibt (v4.0.18).
+    Was blieb, war ein **Falsch-negativ**: Wer mit seiner Klimaanlage heizt,
+    bekam keinen einzigen Hinweis auf die fehlenden Vergleichsgrößen, an denen
+    seine Ersparnis hängt.
+
+    Der Test steht bewusst mit umgekehrtem Vorzeichen weiter hier, statt gelöscht
+    zu werden: Er ist die Stelle, an der die alte Regel gelebt hat, und die
+    Umkehrung ist die sichtbare Folge, die im WAS-IST-NEU angekündigt ist.
+    """
     anlage, monatsdaten = await _anlage_mit_wp(db, parameter={"wp_art": "luft_luft"})
 
     checker = DatenChecker(db)
-    ergebnisse = checker._check_investitionen(anlage, monatsdaten)
+    offen = _gas_meldungen(checker._check_investitionen(anlage, monatsdaten))
 
-    offen = _gas_meldungen(ergebnisse)
-    assert not offen, (
-        "Eine Klimaanlage kann diese Hinweise nicht auflösen — "
-        f"erhielt aber: {offen}"
-    )
+    for erwartet in GAS_VERGLEICHS_MELDUNGEN:
+        assert any(erwartet in m for m in offen), (
+            f"fehlt: {erwartet} — die Bauart darf nicht mehr unterdrücken"
+        )
 
 
 async def test_klassische_wp_bekommt_die_gas_vergleichs_hinweise_weiterhin(db):
-    """Negativprobe: bei einer Luft-Wasser-WP müssen alle drei weiter feuern.
+    """Negativprobe: bei einer Luft-Wasser-WP feuern alle drei unverändert.
 
-    Ohne diesen Test wäre die Bedingung oben nicht von einem „feuert nie mehr"
-    zu unterscheiden.
+    Sie ist seit F-41 keine Abgrenzung gegen die Klimaanlage mehr, sondern die
+    Absicherung, dass die Umstellung auf `alter_energietraeger` den Regelfall
+    nicht stillgelegt hat.
     """
     anlage, monatsdaten = await _anlage_mit_wp(db, parameter={"wp_art": "luft_wasser"})
 
