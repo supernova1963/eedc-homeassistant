@@ -117,6 +117,7 @@ class DatenChecker(
         ergebnisse.extend(await self._check_connector_monatswert(anlage))
         ergebnisse.extend(await self._check_batterie_vorzeichen_historie(anlage))
         ergebnisse.extend(await self._check_soc_nur_ein_speicher(anlage))
+        ergebnisse.extend(await self._check_klima_modus_sensor(anlage))
         ergebnisse.extend(await self._check_leere_tage_trotz_zaehler(anlage))
         ergebnisse.extend(await self._check_pv_ueber_erfassung(anlage))
         ergebnisse.extend(self._check_emob_pool_pflege(anlage))

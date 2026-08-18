@@ -142,6 +142,53 @@ def _state_wert_und_einheit(daten: Optional[dict]) -> Optional[tuple[float, str]
     return (wert, einheit or "")
 
 
+# ── Zustands-Lesepfad (#263 K-2, S1) ──────────────────────────────────
+#
+# Der gesamte Bestandspfad oberhalb ist `float`-only: `_state_wert_und_einheit`
+# gibt `Optional[tuple[float, str]]`, `get_sensor_history` gibt
+# `list[tuple[datetime, float]]`, `live_power_service` ruft `float(...)` im
+# `try/except`. Ein `climate`-State („heat") wird an jeder dieser Stellen still
+# zu `None` — das ist kein Fehler, sondern der Vertrag dieser Funktionen.
+#
+# Der Betriebsmodus einer Klimaanlage ist der erste Wert in eedc, der ein
+# **Zustand** ist und kein Messwert. Er bekommt deshalb einen eigenen Weg
+# **neben** dem vorhandenen, statt die Signaturen aufzuweichen: eine geänderte
+# `get_sensor_history` müsste jeder ihrer Aufrufer neu behandeln, und keiner
+# von ihnen will einen String.
+#
+# ⚠ **Kein Backfill** (Konzept D9): `/history/period` liest den **recorder**
+# (Default-Purge 10 Tage), und Long-Term-Statistics gibt es nur für numerische
+# Sensoren mit `state_class` — ein `climate`-Zustand hat keine. Wer den
+# Modus-Sensor heute zuordnet, bekommt die Aufteilung ab heute.
+
+
+def _state_zustand(daten: Optional[dict]) -> Optional[str]:
+    """Roher State-String plus `hvac_action` aus einem State-Dict — oder None.
+
+    Gibt den State **unverändert** zurück; die Übersetzung in den eedc-Kanon
+    macht `core.betriebsmodus.normalisiere_betriebsmodus`. Diese Trennung ist
+    Absicht: der Lesepfad soll nichts über Wärmepumpen wissen.
+
+    Returns:
+        ``(state, hvac_action|None)`` oder ``None``, wenn die Entity fehlt bzw.
+        `unknown`/`unavailable` meldet.
+    """
+    if not daten:
+        return None
+    state = daten.get("state")
+    if state in (None, "unknown", "unavailable", ""):
+        return None
+    return str(state)
+
+
+def _state_hvac_action(daten: Optional[dict]) -> Optional[str]:
+    """`hvac_action` aus den Attributen — wo die Integration sie liefert (D2)."""
+    if not daten:
+        return None
+    aktion = (daten.get("attributes") or {}).get("hvac_action")
+    return str(aktion) if aktion else None
+
+
 class HAStateService:
     """Holt Sensor-States aus Home Assistant — per Supervisor **oder** Remote-Token.
 
@@ -235,6 +282,133 @@ class HAStateService:
 
         roh = await fetch_selected_states(self.api_url, self.token, entity_ids)
         return {eid: _state_wert_und_einheit(daten) for eid, daten in roh.items()}
+
+    async def get_zustand_states_batch(
+        self, entity_ids: list[str]
+    ) -> dict[str, Optional[tuple[str, Optional[str]]]]:
+        """Aktuelle **Zustände** mehrerer Entities — der nicht-numerische Zweig.
+
+        Schwester von `get_sensor_states_batch`, für Entities, deren State ein
+        Zustand ist statt einer Zahl (heute genau eine: die `climate`-Entität
+        mit dem Betriebsmodus einer Klimaanlage, #263 K-2). Läuft über
+        denselben `fetch_selected_states` — also denselben TTL-Cache, dieselbe
+        gebündelte Verbindung, kein Voll-Dump.
+
+        Returns:
+            entity_id → ``(state, hvac_action|None)`` oder ``None``.
+        """
+        if not self.is_available or not entity_ids:
+            return {}
+
+        roh = await fetch_selected_states(self.api_url, self.token, entity_ids)
+        ergebnis: dict[str, Optional[tuple[str, Optional[str]]]] = {}
+        for eid, daten in roh.items():
+            zustand = _state_zustand(daten)
+            ergebnis[eid] = None if zustand is None else (zustand, _state_hvac_action(daten))
+        return ergebnis
+
+    async def get_zustand_history(
+        self,
+        entity_ids: list[str],
+        start: datetime,
+        end: Optional[datetime] = None,
+    ) -> dict[str, list[tuple[datetime, str]]]:
+        """Zustands-Historie aus `/api/history/period` — der nicht-numerische Zweig.
+
+        Schwester von `get_sensor_history`, die den Zustand als **String**
+        behält statt ihn per `float()` zu verwerfen. Die Bestands-Funktion
+        bleibt unverändert (ihre Aufrufer wollen alle Zahlen).
+
+        ⚠ **`no_attributes` ist hier NICHT gesetzt**, anders als beim
+        numerischen Zweig: ohne die Attribute käme `hvac_action` nicht mit, und
+        genau sie ist der Wert, der den *eingestellten* Modus verfeinert, wo
+        die Integration ihn liefert (D2). Der Preis ist eine größere Antwort —
+        vertretbar, weil dieser Weg genau eine Entity je Wärmepumpe abruft und
+        einmal je Aggregationslauf, nicht im 5-Sekunden-Takt.
+
+        Returns:
+            entity_id → ``[(zeitpunkt, roher_state), ...]``, nach Zeit sortiert.
+            Die Übersetzung in den Kanon macht der Aufrufer — hier steht, was
+            HA gesagt hat.
+        """
+        if not self.is_available or not entity_ids:
+            return {}
+
+        end = end or datetime.now()
+
+        try:
+            params = {
+                "filter_entity_id": ",".join(entity_ids),
+                "end_time": end.isoformat(),
+                "minimal_response": "",
+            }
+
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{self.api_url}/history/period/{start.isoformat()}",
+                    headers={"Authorization": f"Bearer {self.token}"},
+                    params=params,
+                    timeout=15.0,
+                )
+
+                if response.status_code != 200:
+                    logger.warning(f"HA History API (Zustand): Status {response.status_code}")
+                    return {}
+
+                data = response.json()
+
+            result: dict[str, list[tuple[datetime, str]]] = {}
+
+            for entity_history in data:
+                if not entity_history:
+                    continue
+
+                # `minimal_response` liefert die entity_id nur im ERSTEN Eintrag;
+                # die Folgeeinträge tragen nur noch State und Zeitstempel.
+                entity_id = entity_history[0].get("entity_id", "")
+                if not entity_id:
+                    continue
+                points: list[tuple[datetime, str]] = []
+
+                for state_entry in entity_history:
+                    state = state_entry.get("state") or state_entry.get("s")
+                    if state in (None, "unknown", "unavailable", ""):
+                        continue
+
+                    # `hvac_action` schlägt den eingestellten Modus, wo sie da
+                    # ist — dieselbe Vorrangregel wie im Live-Zweig.
+                    attrs = state_entry.get("attributes") or state_entry.get("a") or {}
+                    aktion = attrs.get("hvac_action") if isinstance(attrs, dict) else None
+
+                    ts_str = (
+                        state_entry.get("last_changed")
+                        or state_entry.get("last_updated")
+                        or state_entry.get("lu")
+                    )
+                    if not ts_str:
+                        continue
+
+                    try:
+                        if isinstance(ts_str, (int, float)):
+                            # `minimal_response` gibt `lu` als Unix-Zeitstempel.
+                            ts = datetime.fromtimestamp(ts_str)
+                        else:
+                            ts = datetime.fromisoformat(str(ts_str).replace("Z", "+00:00"))
+                            ts = ts.astimezone().replace(tzinfo=None)
+                    except (ValueError, TypeError, OSError, OverflowError):
+                        continue
+
+                    points.append((ts, str(aktion) if aktion else str(state)))
+
+                if points:
+                    points.sort(key=lambda p: p[0])
+                    result[entity_id] = points
+
+            return result
+
+        except Exception as e:
+            logger.warning(f"HA History API (Zustand) Fehler: {type(e).__name__}: {e}")
+            return {}
 
     async def get_sensor_units(self, entity_ids: list[str]) -> dict[str, str]:
         """

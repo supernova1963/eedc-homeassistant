@@ -9,6 +9,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Added
+
+- **Deine Klimaanlage kann eedc jetzt sagen, ob sie gerade heizt oder kühlt.** Eine Split-Klimaanlage ist technisch eine Wärmepumpe: dasselbe Gerät heizt im Winter und kühlt im Sommer — über **denselben** Stromzähler. eedc sah deshalb nur eine Zahl „Stromverbrauch" und konnte nicht sagen, welcher Teil davon ins Heizen ging. Nachrechnen lässt sich das aus keinem vorhandenen Wert; es geht nur, wenn eedc **zur Messzeit mitschreibt**, in welchem Modus das Gerät läuft. Genau das ist jetzt möglich: Unter *Einstellungen → Datenquellen* gibt es bei jeder Wärmepumpe das neue, **freiwillige** Feld **Betriebsmodus**. Dort ordnest du die `climate`-Entität deines Geräts zu (in Home Assistant meist `climate.…` — die Kachel, auf der Heizen/Kühlen/Aus steht), und eedc hält von da an stündlich fest, in welchem Modus gelaufen wurde. Der Daten-Check weist bei Klimaanlagen darauf hin, solange nichts zugeordnet ist.
+  - ⚠ **Was du davon heute siehst: noch nichts.** Dieser Schritt legt die Mitschrift an — die Auswertung darauf (Heiz- und Kühlstrom getrennt ausgewiesen, Kühl-Effizienz) kommt in einem der nächsten Updates. Der Grund, es trotzdem jetzt auszuliefern, steht im nächsten Punkt.
+  - ⚠ **Die Aufteilung lässt sich nicht rückwirkend nachtragen.** Home Assistant bewahrt Zustände wie „Heizen"/„Kühlen" nur wenige Tage auf — die Langzeit-Statistik gibt es nur für Zahlen-Sensoren. Wer den Sensor **heute** zuordnet, hat die Aufteilung ab heute; wer wartet, verliert die Zeit dazwischen dauerhaft. Deshalb steht das Feld jetzt schon bereit.
+  - ⚠ **Wer nichts zuordnet, merkt nichts.** Der Stromverbrauch zählt unverändert vollständig, keine Zahl bewegt sich, keine Sicht ändert sich.
+  - ⚠ **Es braucht eine laufende Verbindung zu Home Assistant.** Wer seine Klimaanlage über den Monatsabschluss, den Statistik-Import oder CSV pflegt, bekommt die Aufteilung nicht — dort gibt es keinen Zeitpunkt, an dem ein Modus mitgeschrieben werden könnte. Über MQTT geht es aus demselben Grund nicht: dieser Weg nimmt nur Zahlen entgegen, keine Zustände.
+  - ⚠ **Ehrlich zur Erprobung: für diesen Schritt stand kein Gerät zum Testen zur Verfügung.** Er ist gegen nachgebaute Daten abgesichert, nicht an einer echten Klimaanlage. Das ist der Grund, warum das Feld freiwillig ist und nichts an bestehenden Auswertungen anfasst. Rückmeldungen aus der Praxis sind ausdrücklich willkommen ([#263](https://github.com/supernova1963/eedc-homeassistant/issues/263)).
+  - **Nebenbei klarer beschriftet:** Das Feld **Wärmepumpenart** trug den Hinweis „Wird für den fairen JAZ-Vergleich in der Community verwendet" — das ist die Nebenwirkung. Die Hauptwirkung stand nirgends: Die Art entscheidet, **welche Messwerte eedc von dem Gerät überhaupt erwartet** (eine Klimaanlage wird nicht nach Heizwärme gefragt). Zwei gemeldete Klimaanlagen liefen deshalb als „Luft-Wasser". Der Hinweis sagt es jetzt.
+
 ### Fixed
 
 - **Drei Daten-Checker-Hinweise, die niemand auflösen konnte.** Alle drei gemeldet von azywietz-web (#382, #384, #385); keiner von ihnen bewegt eine Zahl — es ging jedes Mal darum, was eedc über deine Anlage *behauptet*.

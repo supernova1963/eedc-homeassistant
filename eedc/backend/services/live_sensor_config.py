@@ -9,7 +9,10 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
-from backend.core.field_definitions import SONSTIGES_KATEGORIE_UNGEPFLEGT
+from backend.core.field_definitions import (
+    SONSTIGES_KATEGORIE_UNGEPFLEGT,
+    ist_zustand_feld,
+)
 from backend.models.anlage import Anlage
 
 logger = logging.getLogger(__name__)
@@ -260,6 +263,14 @@ def extract_live_config(anlage: Anlage) -> tuple[
         inv_live_map: {inv_id: {leistung_w: entity_id, soc: entity_id}}
         basis_invert: {einspeisung_w: True}  — Vorzeichen invertieren
         inv_invert_map: {inv_id: {leistung_w: True}}
+
+    ⚠ **Zustandsfelder sind hier ausgeschlossen** (#263 K-2,
+    `field_definitions.ZUSTAND_LIVE_FELDER`). Alles, was durch diese Funktion
+    kommt, landet in `live_power_service._states_zu_w` und damit in
+    `normalize_to_w(float(state))` — ein `climate`-Zustand („heat") ergibt dort
+    garantiert `None`. Er stünde also alle 5 Sekunden als Abruf in der Liste und
+    lieferte nie etwas. Der Betriebsmodus wird stattdessen einmal je
+    Aggregationslauf über `ha_state_service.get_zustand_history` gelesen.
     """
     mapping = anlage.sensor_mapping or {}
 
@@ -278,7 +289,10 @@ def extract_live_config(anlage: Anlage) -> tuple[
 
     for inv_id, inv_data in mapping.get("investitionen", {}).items():
         if isinstance(inv_data, dict) and isinstance(inv_data.get("live"), dict):
-            live = {k: v for k, v in inv_data["live"].items() if v}
+            live = {
+                k: v for k, v in inv_data["live"].items()
+                if v and not ist_zustand_feld(k)
+            }
             if live:
                 inv_live_map[inv_id] = live
         if isinstance(inv_data, dict) and isinstance(inv_data.get("live_invert"), dict):

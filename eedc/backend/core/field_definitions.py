@@ -513,6 +513,17 @@ LIVE_FELDER_INV: dict = {
         {"key": "warmwasser_temperatur_c", "label": "Warmwasser-Temperatur","einheit": "°C",
          "hinweis": "Temperatur im Warmwasserspeicher in °C — reine Anzeige, geht in keine "
                     "Berechnung ein."},
+        # #263 K-2: der erste Wert in eedc, der ein ZUSTAND ist statt einer Zahl.
+        # `zustand: True` ist keine Kosmetik, sondern die Weiche — siehe
+        # ZUSTAND_LIVE_FELDER unter der Tabelle.
+        {"key": "betriebsmodus", "label": "Betriebsmodus", "einheit": "",
+         "zustand": True,
+         "hinweis": "Die `climate`-Entität der Klimaanlage/Wärmepumpe (z. B. "
+                    "`climate.wohnzimmer`) — sie meldet Heizen, Kühlen, Entfeuchten "
+                    "oder Aus. Optional: ohne sie zählt eedc den Stromverbrauch wie "
+                    "bisher als eine Zahl, mit ihr kann es sagen, welcher Teil davon "
+                    "ins Heizen und welcher ins Kühlen ging. Ein Zustand, kein "
+                    "Messwert — deshalb nur als HA-Sensor zuordenbar, nicht über MQTT."},
     ],
     "balkonkraftwerk": [
         {"key": "leistung_w", "label": "Leistung", "einheit": "W",
@@ -661,6 +672,14 @@ FELD_BEDARF: dict[tuple[str, str], tuple[str, Optional[str]]] = {
     ("waermepumpe", "leistung_heizen_w"): ("optional", None),
     ("waermepumpe", "leistung_warmwasser_w"): ("optional", None),
     ("waermepumpe", "warmwasser_temperatur_c"): ("optional", None),
+    # #263 K-2 (Konzept §7 E-E): JEDER Wärmepumpe angeboten, nicht nur
+    # `wp_art = luft_luft`. Der Grund ist gemessen, nicht vorsorglich:
+    # azywietz-webs zwei Klimaanlagen laufen als `luft_wasser`, weil das Feld
+    # „Wärmepumpenart" als Community-Einstellung beschriftet war — wer nur
+    # `luft_luft` bedient, baut an genau der Gruppe vorbei, die das Thema
+    # meldet. Es gibt außerdem Luft-Wasser-Wärmepumpen MIT Kühlfunktion.
+    # „optional": wer keinen Modus-Sensor zuordnet, merkt nichts.
+    ("waermepumpe", "betriebsmodus"): ("optional", None),
 
     # ── E-Auto ──────────────────────────────────────────────────────────────
     # Kilometer sind der Bezugswert für Effizienz und Benzin-Vergleich.
@@ -729,6 +748,52 @@ SOC_TYPEN: frozenset[str] = frozenset(
     typ for typ, felder in LIVE_FELDER_INV.items()
     if any(f["key"] == "soc" for f in felder)
 )
+
+
+# Live-Felder, deren Wert ein ZUSTAND ist statt einer Zahl (#263 K-2).
+#
+# **Warum diese Menge existiert und nicht drei verstreute Ausnahmen.** Der
+# gesamte Live-Pfad ist numerisch, und zwar an drei Stellen unabhängig
+# voneinander:
+#
+#   1. `live_power_service._states_zu_w` → `normalize_to_w(float(state))` — läuft
+#      über JEDE Live-Zuordnung, alle 5 Sekunden. Ein `climate`-State ergibt dort
+#      garantiert `None`; es wäre ein Dauerabruf ohne Ergebnis.
+#   2. `mqtt_inbound_service` → `float(payload)`. Ein Modus über MQTT ist damit
+#      nicht empfangbar — also wird er auch nicht als Topic **angeboten**, statt
+#      dem Anwender eine Quelle hinzustellen, die nichts liefert (die P-6-Falle:
+#      ein Hinweis bzw. hier ein Angebot, das niemand einlösen kann).
+#   3. `daten_checker/sensoren.py` prüft Einheiten (kW≠kWh) — ein Feld ohne
+#      Einheit hat dort nichts zu suchen.
+#
+# Statt an jeder dieser Stellen `if key == "betriebsmodus"` zu schreiben, steht
+# die Eigenschaft **am Feld** und wird von hier gelesen. Ein zweites
+# Zustandsfeld erbt damit alle drei Weichen, ohne dass jemand sie sucht.
+#
+# ⚠ Die Umkehrung gilt ausdrücklich: was hier NICHT steht, ist eine Zahl. Wer
+# ein Feld ohne `einheit` einträgt, hat damit noch kein Zustandsfeld gebaut.
+ZUSTAND_LIVE_FELDER: frozenset[tuple[str, str]] = frozenset(
+    (typ, f["key"])
+    for typ, felder in LIVE_FELDER_INV.items()
+    for f in felder
+    if f.get("zustand")
+)
+
+# Nur die Feld-Keys — für die Pfade, die ihren Investitionstyp nicht kennen
+# (der Live-Poller sieht `{inv_id: {key: entity}}` ohne Typ-Kontext).
+ZUSTAND_FELD_KEYS: frozenset[str] = frozenset(key for _, key in ZUSTAND_LIVE_FELDER)
+
+
+def ist_zustand_feld(feld: str, typ: Optional[str] = None) -> bool:
+    """Ist dieses Live-Feld ein Zustand statt einer Zahl? — siehe {@link ZUSTAND_LIVE_FELDER}.
+
+    `typ` schärft die Antwort, wo der Aufrufer ihn hat; ohne ihn gilt der
+    Feld-Key allein. Beides ist gewollt: die Zuordnungs-Fläche kennt den Typ,
+    der Live-Poller nicht.
+    """
+    if typ is not None:
+        return (typ, feld) in ZUSTAND_LIVE_FELDER
+    return feld in ZUSTAND_FELD_KEYS
 
 
 # =============================================================================

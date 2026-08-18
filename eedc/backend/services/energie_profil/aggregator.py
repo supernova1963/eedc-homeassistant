@@ -120,6 +120,7 @@ async def aggregate_day(
         TagesZusammenfassung oder None bei Fehler
     """
     from backend.services.energie_profil._helpers import (
+        _get_betriebsmodus_history,
         _get_soc_history,
         _get_strompreis_stunden,
         _get_wetter_ist,
@@ -247,6 +248,21 @@ async def aggregate_day(
         for h, je_geraet in soc_je_stunde.items()
         if (wert := anlagen_soc_prozent(je_geraet, speicher_kapazitaeten)) is not None
     }
+
+    # ── Betriebsmodus je Wärmepumpe holen (#263 K-2) ──────────────────────
+    # `{stunde: {investition_id: "heizen"|...}}`. Leer, solange kein Anwender
+    # einen Modus-Sensor zugeordnet hat — das Feld ist optional, und ohne es
+    # bleibt alles unverändert (die Menge steht weiter in `komponenten`).
+    #
+    # ⚠ Hier und NICHT im Snapshot-Job: Der 5-Minuten-Snapshot steht hinter
+    # `LIVE_SNAPSHOT_5MIN_ENABLED` (Default aus, `run.sh`) und liest HA
+    # short_term_statistics — dort existiert ein `climate`-Zustand nicht. Die
+    # `:05`/`:55`-Jobs wiederum schreiben `sensor_snapshots` (kumulative
+    # kWh-Zählerstände), nicht diese Tabelle. Der Modus gehört dorthin, wo die
+    # Stundenmenge entsteht, und das ist diese Funktion — genau wie beim SoC.
+    betriebsmodus_je_stunde = await _get_betriebsmodus_history(
+        anlage, sensor_mapping, datum, db
+    )
 
     # ── Strompreis-Stundenwerte holen ─────────────────────────────────────
     strompreis_stunden = await _get_strompreis_stunden(anlage, sensor_mapping, datum)
@@ -592,6 +608,14 @@ async def aggregate_day(
             soc_je_speicher=(
                 {str(k): round(v, 1) for k, v in soc_je_stunde[h].items()}
                 if soc_je_stunde.get(h) else None
+            ),
+            # #263 K-2. `None` statt `{}` bei fehlendem Signal: die Spalte
+            # unterscheidet „nicht hingesehen" (NULL) von „hingesehen, Seite
+            # nicht zuordenbar" (Wert `unbestimmt`) — ein leeres Dict wäre
+            # weder das eine noch das andere.
+            betriebsmodus_je_wp=(
+                {str(k): v for k, v in betriebsmodus_je_stunde[h].items()}
+                if betriebsmodus_je_stunde.get(h) else None
             ),
             strompreis_cent=round(strompreis, 2) if strompreis is not None else None,
             boersenpreis_cent=round(boersenpreis, 2) if boersenpreis is not None else None,

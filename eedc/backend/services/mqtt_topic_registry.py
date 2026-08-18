@@ -168,8 +168,18 @@ async def build_expected_topics(
         gruppe_titel = inv.bezeichnung
 
         for live_feld in get_live_felder_fuer_investition(inv.typ, inv.parameter):
+            # #263 K-2: Ein Zustandsfeld bekommt KEIN Standard-Topic. Der
+            # MQTT-Inbound-Parser ist `float(payload)`
+            # (`mqtt_inbound_service:74`) — ein Modus-String käme dort nie an.
+            # Wie beim Preis-Slot (`_basis_preis_eintraege`) bleibt `topic`
+            # deshalb leer: als erwartetes Topic gelistet wäre es eine Lücke,
+            # die niemand schließen kann, und der Abdeckungs-Check (#134)
+            # meldete sie dauerhaft. Das Feld selbst bleibt in der Liste —
+            # die Zuordnungs-Fläche liest sie und bietet HA an.
+            ist_zustand = bool(live_feld.get("zustand"))
             topics.append({
-                "topic": f"{inv_live_prefix}/{live_feld['key']}",
+                "topic": "" if ist_zustand else f"{inv_live_prefix}/{live_feld['key']}",
+                "zustand": ist_zustand,
                 "label": f"{inv.bezeichnung} – {live_feld['label']} ({live_feld['einheit']})",
                 "kategorie": "live",
                 "typ": inv.typ,

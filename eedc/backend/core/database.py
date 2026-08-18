@@ -968,6 +968,17 @@ async def run_migrations(conn):
             # wäre der „große Heiler-Knopf", den dieses Projekt ausschließt.
             if 'soc_je_speicher' not in existing_columns:
                 connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN soc_je_speicher JSON'))
+            # #263 K-2: Betriebsmodus je Wärmepumpe/Klimaanlage in dieser Stunde.
+            # Dieselbe Bauform und dieselbe Zurückhaltung wie eine Zeile darüber:
+            # rein **additiv**, kein Backfill, keine Neuberechnung beim Start.
+            # Hier ist der Verzicht sogar zwingend statt nur vorsichtig — der
+            # Modus lässt sich gar nicht nachtragen: `/history/period` liest den
+            # recorder (Default-Purge 10 Tage), und Long-Term-Statistics gibt es
+            # nur für numerische Sensoren mit `state_class`. Ein `climate`-
+            # Zustand hat keine. Wer den Sensor heute zuordnet, bekommt die
+            # Aufteilung ab heute; Altbestand bleibt `NULL` = „nicht hingesehen".
+            if 'betriebsmodus_je_wp' not in existing_columns:
+                connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN betriebsmodus_je_wp JSON'))
             # v3.26.0: Stündliches Wetter (Bewölkung, Niederschlag, WMO-Code)
             # für Wetter-Stratifizierung und Korrekturprofil — siehe KONZEPT-KORREKTURPROFIL.md
             if 'bewoelkung_prozent' not in existing_columns:

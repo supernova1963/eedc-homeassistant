@@ -108,6 +108,36 @@ class TagesEnergieProfil(Base):
         JSON(none_as_null=True), nullable=True
     )
 
+    # Betriebsmodus je Wärmepumpe in dieser Stunde (#263 K-2):
+    # {investition_id: "heizen"|"kuehlen"|"entfeuchten"|"lueften"|"aus"|"unbestimmt"}.
+    #
+    # Eine Split-Klimaanlage heizt und kühlt über DENSELBEN Zähler; die
+    # Aufteilung ist aus keinem vorhandenen Feld rekonstruierbar. Sie entsteht
+    # nur, wenn eedc den Modus zur Messzeit mitschreibt — und die Stundenzeile
+    # ist genau der Ort, an dem die Menge schon steht (`komponenten` führt
+    # `waermepumpe_<id>` als Stunden-kWh je Gerät). Stunde × Modus × kWh, mehr
+    # braucht die spätere Aggregation nicht.
+    #
+    # Eigene Spalte und NICHT in `komponenten` — dieselbe Begründung wie bei
+    # `soc_je_speicher` eine Zeile darüber: jenes Dict trägt kW/kWh und wird von
+    # Whitelist-Konsumenten summiert; ein Zustandswert darin wäre die
+    # Einheiten-Verwechslung, aus der der BKW-Doppelzählungs-Bug entstand.
+    #
+    # ⚠ `none_as_null=True` ist auch hier Bedingung, nicht Geschmack (s. o.):
+    # `ALTER TABLE ADD COLUMN` hinterlässt bei Altbestand echtes SQL-NULL,
+    # SQLAlchemy schriebe ohne das Flag die Zeichenkette `null`.
+    #
+    # ⚠ **`None` heißt „nicht hingesehen", nicht „kein Modus".** Eine Stunde
+    # ohne Eintrag hat kein Modus-Signal (Sensor nicht zugeordnet, HA-Ausfall,
+    # Tag vor der Zuordnung); der Wert `"unbestimmt"` dagegen heißt
+    # „hingesehen, Seite nicht zuordenbar" (Automatik ohne Ist-Signal). Die
+    # zwei Fälle dürfen nie ineinander übersetzt werden — der Anwender muss
+    # „das Gerät lief anders" von „eedc hat nicht gemessen" unterscheiden
+    # können (Konzept §3.3).
+    betriebsmodus_je_wp: Mapped[Optional[dict]] = mapped_column(
+        JSON(none_as_null=True), nullable=True
+    )
+
     # Strompreis (ct/kWh, Stundenmittel)
     # strompreis_cent: Endpreis aus HA-Sensor (Tibber etc.) — nur wenn Sensor konfiguriert
     strompreis_cent: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

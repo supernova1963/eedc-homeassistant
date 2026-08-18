@@ -27,6 +27,7 @@
    11. [Geräte-Connector ohne Monatswert](#411-geraete-connector-ohne-monatswert)
    12. [Zeitzone – Abweichung zu Home Assistant](#412-zeitzone--abweichung-zu-home-assistant)
    13. [Sonstige Positionen – der Erfassungsort](#413-sonstige-positionen--der-erfassungsort)
+   14. [Klimaanlage – Betriebsmodus](#414-klimaanlage--betriebsmodus)
 5. [Behebungs-Workflows](#5-behebungs-workflows)
 6. [Beziehung zu anderen Werkzeugen](#6-beziehung-zu-anderen-werkzeugen)
 
@@ -529,6 +530,29 @@ Der Sensor-Picker in den Datenquellen zeigt alle Sensoren ohne harten Filter —
 > **Das Feld „Ertrag/Jahr" gibt es nur bei *Wallbox* und *Sonstiges*.** Bei allen anderen Komponenten rechnet eedc die Jahres-Einsparung selbst; dort meldet der Checker auf der Ertragsseite bewusst nichts, statt auf ein Feld zu verweisen, das im Formular nicht steht.
 
 Hintergrund und die verworfenen Alternativen: [Berechnungen §3.6](BERECHNUNGEN.md#36-roi--amortisation) und [Bedienung → Auswertungen → ROI](HANDBUCH_BEDIENUNG.md#42-roi).
+
+---
+
+### 4.14 Klimaanlage – Betriebsmodus <a name="414-klimaanlage--betriebsmodus"></a>
+
+**Was wird geprüft:** Ist bei einer Split-Klimaanlage (Wärmepumpenart *Luft-Luft*) der Betriebsmodus-Sensor zugeordnet?
+
+**Warum das zählt:** Deine Klimaanlage heizt im Winter und kühlt im Sommer — über **denselben** Stromzähler. eedc sieht deshalb nur eine Zahl „Stromverbrauch" und kann nicht sagen, welcher Teil davon ins Heizen ging und welcher ins Kühlen. Aus den vorhandenen Werten lässt sich das auch nicht nachrechnen: Es gibt kein Feld, aus dem die Aufteilung ableitbar wäre. Sie entsteht nur, wenn eedc **zur Messzeit mitschreibt**, in welchem Modus das Gerät gerade läuft.
+
+#### Befunde
+
+| Meldung | Severity | Bedeutung | Behebung |
+|---------|----------|-----------|----------|
+| **„\[Gerät\]": Betriebsmodus nicht zugeordnet — Heiz- und Kühlstrom bleiben zusammen** | ℹ️ INFO | Für dieses Gerät ist keine Modus-Quelle hinterlegt. Der Stromverbrauch zählt vollständig und richtig; es fehlt nur die Aufteilung. | *Einstellungen → Datenquellen*, beim Gerät das Feld **Betriebsmodus** zuordnen. In Home Assistant ist das die **climate-Entität** deines Geräts (meist `climate.…`) — sie zeigt Heizen/Kühlen/Aus. |
+| **Betriebsmodus ist bei N Klimaanlage(n) zugeordnet** | ✅ OK | eedc schreibt stündlich mit, ob geheizt oder gekühlt wurde. | — |
+
+> ⚠ **Die Aufteilung lässt sich nicht rückwirkend nachtragen — das ist der wichtigste Satz hier.** Home Assistant bewahrt Zustände wie „Heizen"/„Kühlen" nur wenige Tage auf (die Langzeit-Statistik gibt es nur für Zahlen-Sensoren). Wer den Sensor heute zuordnet, bekommt die Aufteilung **ab heute**; die Vergangenheit bleibt ungeteilt, und ein längerer eedc-Ausfall reißt eine Lücke, die bleibt. Deshalb lohnt sich die Zuordnung auch dann, wenn man die Auswertung noch nicht braucht.
+
+> **Der Hinweis erscheint nur bei Wärmepumpenart *Luft-Luft*.** Ob ein Gerät überhaupt kühlen kann, hängt an seiner Bauart — eine Luft-Wasser-Wärmepumpe bekäme sonst einen Hinweis auf eine Aufteilung, die es bei ihr nicht gibt. **Das Feld selbst bietet eedc trotzdem jeder Wärmepumpe an**: Es gibt Luft-Wasser-Geräte mit Kühlfunktion, und wer eines hat, findet den Betriebsmodus auf der Datenquellen-Fläche.
+
+> **Der Betriebsmodus ist nur als HA-Sensor zuordenbar, nicht über MQTT.** Er ist ein Zustand, kein Messwert — der MQTT-Weg von eedc nimmt ausschließlich Zahlen entgegen. Die Fläche blendet die MQTT-Optionen für dieses eine Feld deshalb aus, statt eine Quelle anzubieten, die nichts liefern könnte.
+
+Hintergrund: [Issue #263](https://github.com/supernova1963/eedc-homeassistant/issues/263).
 
 ---
 

@@ -304,6 +304,158 @@ async def _get_soc_history(
         return {}
 
 
+async def _get_betriebsmodus_history(
+    anlage: Anlage,
+    sensor_mapping: dict,
+    datum: date,
+    db: AsyncSession,
+) -> dict:
+    """Holt den Betriebsmodus je Wärmepumpe und Stunde für einen Tag (#263 K-2).
+
+    Schwester von `_get_soc_history` — **mit einem bewussten Unterschied, der
+    der ganze Punkt ist**: Ein SoC ist ein Messwert, über eine Stunde wird
+    gemittelt. Ein Betriebsmodus ist ein **Zustand**, und ein Zustand hat eine
+    **Dauer**. Über eine Stunde gewinnt deshalb der Modus mit der längsten
+    Verweildauer, nicht der Mittelwert (den es nicht gibt) und auch nicht der
+    letzte Wert: Wer um 07:58 von Heizen auf Aus stellt, hat diese Stunde
+    geheizt, nicht gestanden.
+
+    ⚑ **Und die Fortschreibung gehört dazu.** Home Assistant schreibt einen
+    State nur bei **Änderung**. Eine Klimaanlage, die den ganzen Winter auf
+    „Heizen" steht, liefert im Januar genau einen Punkt — alle übrigen 743
+    Stunden hätten ohne Fortschreibung kein Signal. Der letzte Punkt **vor**
+    der Stunde trägt deshalb fort. Nur wenn es auch keinen Vorgänger gibt,
+    bleibt die Stunde leer.
+
+    ⚠ **Leer heißt leer, nicht `unbestimmt`.** Eine Stunde ohne Eintrag heißt
+    „eedc hat nicht hingesehen"; `unbestimmt` heißt „hingesehen, Seite nicht
+    zuordenbar" (Automatik ohne Ist-Signal, Konzept D1/D2). Genau diese zwei
+    Fälle muss der Anwender später unterscheiden können — sie ineinander zu
+    übersetzen wäre eine erfundene Aussage über die Datenlage (ADR-002/P4).
+
+    ⚠ **Nur ein Pfad, anders als beim SoC.** `_get_soc_history` versucht zuerst
+    HA-Long-Term-Statistics und fällt auf die State-History zurück. Für einen
+    Zustand gibt es keine LTS: sie existiert nur für numerische Sensoren mit
+    `state_class`, und ein `climate`-Zustand hat keine (Konzept D9). Damit
+    greift auch die recorder-Purge — es gibt **kein Backfill**, die Aufteilung
+    beginnt mit der Zuordnung.
+
+    Returns:
+        ``{stunde: {investition_id: modus}}`` mit Kanon-Werten aus
+        `core.betriebsmodus`. Stunden ohne Signal fehlen; Geräte ohne
+        zugeordneten Sensor fehlen.
+    """
+    from backend.core.betriebsmodus import normalisiere_betriebsmodus
+    from backend.models.investition import Investition
+
+    inv_result = await db.execute(
+        select(Investition.id).where(
+            Investition.anlage_id == anlage.id,
+            Investition.typ == "waermepumpe",
+        )
+    )
+    wp_ids = {str(row) for row in inv_result.scalars().all()}
+    if not wp_ids:
+        return {}
+
+    # Entity → Investitions-IDs. Mehrere Innengeräte dürfen dieselbe
+    # `climate`-Entität tragen: der Modus gehört dem Außengerät, nicht dem
+    # Innengerät (Konzept D3 — ein Innengerät auf „Heizen" bei kühlenden
+    # anderen tut in einer 2-Rohr-Anlage nichts). Dann steht derselbe Modus bei
+    # beiden, und das ist richtig.
+    entity_zu_inv: dict[str, list[int]] = {}
+    for key, val in (sensor_mapping or {}).get("investitionen", {}).items():
+        if str(key) not in wp_ids:
+            continue
+        if isinstance(val, dict) and (val.get("live") or {}).get("betriebsmodus"):
+            entity_zu_inv.setdefault(val["live"]["betriebsmodus"], []).append(int(key))
+
+    modus_entities = list(entity_zu_inv)
+    if not modus_entities:
+        return {}
+
+    try:
+        from backend.services.ha_state_service import get_ha_state_service
+        ha_service = get_ha_state_service()
+
+        start = datetime.combine(datum, datetime.min.time())
+        end = start + timedelta(days=1)
+
+        # Einen Tag Vorlauf: der letzte Punkt VOR Mitternacht ist der Zustand,
+        # in dem der Tag beginnt. Ohne ihn stünde jede Anlage, die ihren Modus
+        # seit Wochen nicht geändert hat, jeden Tag bis zur ersten Änderung
+        # ohne Signal da — bei saisonal gestelltem Modus (D11) also fast immer.
+        history = await ha_service.get_zustand_history(
+            modus_entities, start - timedelta(days=1), end
+        )
+
+        ergebnis: dict = {}
+        for entity_id in modus_entities:
+            punkte = history.get(entity_id, [])
+            if not punkte:
+                continue
+
+            for h in range(24):
+                h_start = start + timedelta(hours=h)
+                h_end = h_start + timedelta(hours=1)
+
+                # Zustand zu Beginn der Stunde = letzter Punkt davor.
+                laufend: Optional[str] = None
+                for ts, roh in punkte:
+                    if ts < h_start:
+                        laufend = roh
+                    else:
+                        break
+
+                in_stunde = [(ts, roh) for ts, roh in punkte if h_start <= ts < h_end]
+                if laufend is None and not in_stunde:
+                    continue   # weder Vorgänger noch Punkt: nicht hingesehen.
+
+                # Verweildauer je Kanon-Modus aufsummieren. Die Intervalle
+                # laufen jeweils bis zum nächsten Wechsel, das letzte bis zum
+                # Stundenende.
+                dauer: dict[str, float] = {}
+                cursor = h_start
+                aktuell = laufend
+                for ts, roh in in_stunde:
+                    modus = normalisiere_betriebsmodus(aktuell)
+                    if modus is not None:
+                        dauer[modus] = dauer.get(modus, 0.0) + (ts - cursor).total_seconds()
+                    cursor, aktuell = ts, roh
+                modus = normalisiere_betriebsmodus(aktuell)
+                if modus is not None:
+                    dauer[modus] = dauer.get(modus, 0.0) + (h_end - cursor).total_seconds()
+
+                if not dauer:
+                    continue
+                # Längste Verweildauer gewinnt; bei Gleichstand entscheidet die
+                # Kanon-Reihenfolge, damit dieselbe Stunde nicht je nach
+                # Dict-Laufrichtung anders ausfällt.
+                gewinner = max(dauer.items(), key=lambda kv: (kv[1], -_KANON_RANG(kv[0])))[0]
+                for inv_id in entity_zu_inv[entity_id]:
+                    ergebnis.setdefault(h, {})[inv_id] = gewinner
+
+        return ergebnis
+
+    except Exception as e:
+        logger.debug(f"Betriebsmodus-History für {datum}: {e}")
+        return {}
+
+
+def _KANON_RANG(modus: str) -> int:
+    """Stabile Reihenfolge für den Gleichstand-Fall in `_get_betriebsmodus_history`.
+
+    Ohne sie entschiede die Einfügereihenfolge des Dicts, welcher von zwei
+    exakt gleich langen Modi gewinnt — dieselbe Stunde könnte je nach Abrufzeit
+    anders ausfallen. Ein seltener Fall, aber ein stiller.
+    """
+    from backend.core.betriebsmodus import BETRIEBSMODUS_KANON
+    try:
+        return BETRIEBSMODUS_KANON.index(modus)
+    except ValueError:
+        return len(BETRIEBSMODUS_KANON)
+
+
 @dataclass
 class StrompreisStunden:
     """Stündliche Strompreise aus zwei unabhängigen Quellen."""

@@ -33,6 +33,7 @@ from backend.services.datenquellen_historie import (
     vermerk_leeren,
     vermerk_lesen,
 )
+from backend.core.field_definitions import ist_zustand_feld
 from backend.services.datenquellen_resolver import resolve_effektive_quelle
 from backend.services.live_sensor_config import extract_live_config
 from backend.services.mqtt_topic_registry import build_expected_topics
@@ -144,8 +145,27 @@ _HA_UNITS = {
 _HA_DEVICE_CLASSES = {"energy", "power", "battery", "temperature", "distance", "monetary"}
 
 
-def _ha_sensor_relevant(state: dict, filter_energy: bool) -> bool:
-    if not str(state.get("entity_id", "")).startswith("sensor."):
+def _ha_sensor_relevant(state: dict, filter_energy: bool, zustand: bool = False) -> bool:
+    """Gehört diese HA-Entity in den Picker für dieses Feld?
+
+    ⚠ **`zustand=True` ist keine Bequemlichkeit, sondern die Bedingung dafür,
+    dass #263 K-2 überhaupt bedienbar ist.** Der Betriebsmodus einer
+    Klimaanlage liegt in HA als eigene **`climate`**-Entität vor (Konzept D1,
+    an kingcap1s MELCloud-Installation belegt) — der Domain-Test darunter hat
+    sie bis dahin unbedingt verworfen, auch bei `filter_energy=false`, weil er
+    **vor** dessen Auswertung steht. Ohne diese Freigabe könnte ein Anwender
+    den Modus-Sensor nicht auswählen, egal wie gut der Lesepfad ist.
+
+    `sensor.` bleibt für Zustandsfelder ausdrücklich zulässig: manche
+    Integrationen (und viele selbstgebaute Template-Sensoren) liefern den Modus
+    als gewöhnlichen Text-Sensor.
+    """
+    eid = str(state.get("entity_id", ""))
+    if zustand:
+        # Zustandsfelder: `climate.` UND `sensor.`, und der Energie-Filter
+        # greift nicht — ein Modus hat weder Einheit noch device_class.
+        return eid.startswith("climate.") or eid.startswith("sensor.")
+    if not eid.startswith("sensor."):
         return False
     if not filter_energy:
         return True
@@ -703,9 +723,14 @@ async def get_ha_sensoren(
         return HaSensorenResponse(
             verfuegbar=True, quelle=kind, fehler=f"HA-States nicht abrufbar (HTTP {resp.status_code})"
         )
+    # #263 K-2: Für ein Zustandsfeld (heute: `betriebsmodus`) ist auch die
+    # `climate.`-Domain zulässig — der Modus einer Klimaanlage liegt in HA
+    # nirgendwo anders. Der Typ schärft die Antwort, wo er mitkommt; ohne ihn
+    # entscheidet der Feld-Key allein (s. `ist_zustand_feld`).
+    ist_zustand = bool(feld) and ist_zustand_feld(feld, inv_typ or None)
     sensoren: list[HaSensor] = []
     for st in resp.json():
-        if not _ha_sensor_relevant(st, filter_energy):
+        if not _ha_sensor_relevant(st, filter_energy, zustand=ist_zustand):
             continue
         attrs = st.get("attributes", {}) or {}
         sensoren.append(HaSensor(
@@ -986,9 +1011,16 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
             "kategorie": e.get("kategorie", "energy"),
             "hinweis": e.get("hinweis", ""),
             "standard_topic": e["topic"],
-            # HA-only-Feld (Preis): die Fläche blendet Gateway/Inbound aus,
-            # statt Quellen anzubieten, die kein Leser abfragt.
-            "nur_ha": bool(e.get("nur_ha")),
+            # HA-only-Feld: die Fläche blendet Gateway/Inbound aus, statt
+            # Quellen anzubieten, die kein Leser abfragt. Zwei Fälle, dieselbe
+            # Begründung — Preis-Slots (kommen nur über HA herein) und
+            # Zustandsfelder (#263 K-2: der MQTT-Inbound-Parser ist
+            # `float(payload)`, ein Modus-String käme dort nie an).
+            "nur_ha": bool(e.get("nur_ha")) or bool(e.get("zustand")),
+            # Zustand statt Zahl (#263 K-2): steuert den Entity-Picker — für
+            # diese Felder ist auch die `climate.`-Domain zulässig, und der
+            # Energie-Filter greift nicht.
+            "zustand": bool(e.get("zustand")),
             "quelle": q,
             # Gateway-Quell-Topic (falls zugeordnet) für die UI-Anzeige.
             "gateway_topic": gateway_topics.get(eintrag.get("mapping_id")),

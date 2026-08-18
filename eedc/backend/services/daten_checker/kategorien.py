@@ -169,6 +169,20 @@ class CheckKategorie(str, Enum):
     # Weg zur Behebung statt eines „Akzeptiert"-Knopfs
     # ([[feedback_daten_checker_kein_akzeptiert]]).
     POSITION_DOPPELERFASSUNG = "position_doppelerfassung"
+    # #263 K-2: Eine Split-Klimaanlage (`wp_art = luft_luft`) heizt und kühlt
+    # über DENSELBEN Zähler. Ohne zugeordneten Modus-Sensor kann eedc nicht
+    # sagen, welcher Teil des Stroms ins Heizen ging — die Aufteilung ist aus
+    # keinem vorhandenen Feld rekonstruierbar. INFO, nie WARNING: das Feld ist
+    # optional, ohne es rechnet alles weiter wie bisher, nur ohne Aufteilung.
+    #
+    # ⚠ **Nur bei `luft_luft`, obwohl das FELD jeder Wärmepumpe angeboten wird**
+    # (Konzept §7 E-E). Das ist kein Widerspruch, sondern dieselbe Trennlinie
+    # wie bei F-41: *Messbarkeit hängt an der Bauart, Bewertbarkeit an der
+    # Pflege.* Ob ein Gerät überhaupt kühlen kann, ist Bauart — eine
+    # Luft-Wasser-Wärmepumpe bekäme sonst einen Hinweis auf eine Aufteilung,
+    # die sie nicht hat. Wer trotzdem eine Kühlfunktion hat, findet das Feld
+    # auf der Zuordnungs-Fläche.
+    KLIMA_MODUS_SENSOR = "klima_modus_sensor"
 
 
 @dataclass

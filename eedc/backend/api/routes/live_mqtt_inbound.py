@@ -303,9 +303,12 @@ async def get_mqtt_topics(
     for anlage in anlagen:
         aname = anlage.anlagenname or f"Anlage {anlage.id}"
         for entry in await build_expected_topics(db, anlage):
-            if entry.get("nur_manuell"):
+            if entry.get("nur_manuell") or entry.get("zustand"):
                 # Nicht zuordenbar ⇒ auch kein Topic, auf das jemand publizieren
                 # soll: der Wert würde von keinem Konsumenten aufgesammelt.
+                # `zustand` aus demselben Grund, nur eine Stufe härter (#263
+                # K-2): der Inbound-Parser ist `float(payload)`, ein
+                # Modus-String käme nicht einmal durch die Tür.
                 continue
             # Endpoint-Konvention: energy-Topics führen typ="energy",
             # live-Topics behalten "basis" oder den Investitions-Typ.

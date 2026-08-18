@@ -1063,6 +1063,95 @@ class DatenquelleChecks:
             action_label="Zeitraum neu aggregieren",
         )]
 
+    async def _check_klima_modus_sensor(self, anlage: Anlage) -> list[CheckErgebnis]:
+        """#263 K-2: Split-Klimaanlage ohne zugeordneten Betriebsmodus-Sensor.
+
+        Eine Klimaanlage heizt im Winter und kühlt im Sommer — über **denselben**
+        Zähler. eedc sieht deshalb nur eine Zahl „Stromverbrauch" und kann nicht
+        sagen, welcher Teil davon ins Heizen ging. **Die Aufteilung ist aus
+        keinem vorhandenen Feld rekonstruierbar**; sie entsteht nur, wenn der
+        Betriebsmodus zur Messzeit mitgeschrieben wird.
+
+        **INFO, nicht WARNING, und mit einem Weg statt eines Vorwurfs.** Das
+        Feld ist optional: ohne es rechnet alles weiter wie bisher, es fehlt
+        nur die Aufteilung. Eine Warnung stünde in keinem Verhältnis — und ein
+        Hinweis ohne Weg wäre die P-6-Falle.
+
+        ⚠ **Nur `wp_art = luft_luft`** — die Trennlinie aus F-41 gilt
+        unverändert: *Messbarkeit hängt an der Bauart, Bewertbarkeit an der
+        Pflege.* Ob ein Gerät kühlen kann, ist Bauart. Das **Feld** dagegen
+        bekommt jede Wärmepumpe angeboten (Konzept §7 E-E), weil es
+        Luft-Wasser-Geräte mit Kühlfunktion gibt und weil zwei gemeldete
+        Klimaanlagen als `luft_wasser` gepflegt sind.
+
+        ⛔ **Kein Befund für Altbestand-Zeiträume.** Der Modus lässt sich nicht
+        nachtragen (Konzept D9: recorder-Purge, keine LTS für Zustände) — wer
+        heute zuordnet, bekommt die Aufteilung ab heute. Ein Hinweis auf die
+        Vergangenheit wäre unauflösbar.
+        """
+        from backend.core.investition_parameter import ist_luft_luft_waermepumpe
+        from backend.models.investition import Investition as _Inv
+
+        kat = CheckKategorie.KLIMA_MODUS_SENSOR.value
+
+        inv_result = await self.db.execute(
+            select(_Inv).where(
+                _Inv.anlage_id == anlage.id,
+                _Inv.typ == "waermepumpe",
+            )
+        )
+        klimas = [
+            i for i in inv_result.scalars().all()
+            if i.aktiv and ist_luft_luft_waermepumpe(i)
+        ]
+        if not klimas:
+            return []
+
+        mapping = (anlage.sensor_mapping or {}).get("investitionen", {}) or {}
+
+        def _hat_modus(inv_id: int) -> bool:
+            eintrag = mapping.get(str(inv_id))
+            if not isinstance(eintrag, dict):
+                return False
+            return bool((eintrag.get("live") or {}).get("betriebsmodus"))
+
+        ohne = [i for i in klimas if not _hat_modus(i.id)]
+        if not ohne:
+            return [CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.OK.value,
+                meldung=(
+                    f"Betriebsmodus ist bei {'allen ' if len(klimas) > 1 else ''}"
+                    f"{len(klimas)} Klimaanlage(n) zugeordnet"
+                ),
+                details=(
+                    "eedc schreibt damit stündlich mit, ob das Gerät geheizt oder "
+                    "gekühlt hat, und kann den Stromverbrauch entsprechend aufteilen."
+                ),
+            )]
+
+        return [CheckErgebnis(
+            kategorie=kat, schwere=CheckSeverity.INFO.value,
+            meldung=(
+                f"„{i.bezeichnung}“: Betriebsmodus nicht zugeordnet — "
+                f"Heiz- und Kühlstrom bleiben zusammen"
+            ),
+            details=(
+                "Deine Klimaanlage heizt und kühlt über denselben Zähler. eedc "
+                "sieht deshalb nur eine Zahl und kann nicht sagen, welcher Teil "
+                "des Stroms ins Heizen ging und welcher ins Kühlen — aus den "
+                "vorhandenen Werten lässt sich das nicht nachrechnen. "
+                "Ordne dafür die climate-Entität des Geräts zu (in Home Assistant "
+                "meist „climate.…“, sie zeigt Heizen/Kühlen/Aus): Einstellungen → "
+                "Datenquellen, beim Gerät das Feld „Betriebsmodus“. "
+                "Das ist freiwillig — ohne die Zuordnung bleibt alles wie bisher, "
+                "der Stromverbrauch zählt vollständig. "
+                "Ein Hinweis zur Erwartung: Die Aufteilung beginnt mit der "
+                "Zuordnung und lässt sich nicht rückwirkend nachtragen."
+            ),
+            link=LINK_DATENQUELLEN,
+            investition_id=i.id,
+        ) for i in ohne]
+
     # Ein Connector, der lange nichts mehr geliefert hat, kann für den laufenden
     # Monat kein Delta bilden — nach diesen Tagen gilt das nicht mehr als
     # „gleich behoben". Kürzer wäre Rauschen: am Monatsersten fehlt der Snapshot

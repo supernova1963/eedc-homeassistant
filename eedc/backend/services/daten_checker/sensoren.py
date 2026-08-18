@@ -71,9 +71,16 @@ class SensorChecks:
         # nicht zuordenbar; als „nie empfangen" gemeldet wären sie eine Lücke,
         # die niemand schließen kann (dieselbe Begründung wie bei den
         # Preis-Slots in `_basis_preis_eintraege`).
+        #
+        # `zustand`-Felder ebenso (#263 K-2): Der MQTT-Inbound-Parser ist
+        # `float(payload)` — ein Betriebsmodus kann über MQTT gar nicht
+        # ankommen, und die Fläche bietet ihn dort auch nicht an. Als „nie
+        # empfangen" gemeldet stünde hier ein Dauer-Hinweis auf ein Topic, auf
+        # das niemand publizieren soll. Sie tragen deshalb schon in der
+        # Registry ein leeres `topic`.
         erwartet = [
             e for e in await build_expected_topics(self.db, anlage)
-            if not e.get("nur_manuell")
+            if not e.get("nur_manuell") and not e.get("zustand")
         ]
         if not erwartet:
             return ergebnisse

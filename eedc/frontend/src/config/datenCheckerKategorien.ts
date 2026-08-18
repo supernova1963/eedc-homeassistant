@@ -46,6 +46,7 @@ export const KATEGORIE_LABELS: Record<string, string> = {
   zeitzone_abweichung: 'Zeitzone – Abweichung zu Home Assistant',
   batterie_vorzeichen_historie: 'Batterie – Vorzeichen-Historie',
   soc_nur_ein_speicher: 'Speicher – Ladestand nur eines Geräts',
+  klima_modus_sensor: 'Klimaanlage – Betriebsmodus',
   pv_ueber_erfassung: 'PV – Doppelerfassungs-Verdacht',
   emob_pool_pflege: 'E-Mobilität – Pool-Pflege',
   // F-21 (10.08.): beide fehlten hier UND in der Reihenfolge unten. Der
@@ -77,6 +78,7 @@ export const KATEGORIE_REIHENFOLGE: string[] = [
   'zeitzone_abweichung',
   'batterie_vorzeichen_historie',
   'soc_nur_ein_speicher',
+  'klima_modus_sensor',
   'pv_ueber_erfassung',
   'emob_pool_pflege',
   'emob_doppelzaehlung_tage',

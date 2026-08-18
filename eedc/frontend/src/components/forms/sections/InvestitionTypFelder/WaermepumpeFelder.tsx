@@ -51,7 +51,13 @@ export function WaermepumpeFelder({ paramData, onInputChange, setParam, zeige, m
             value={paramData.wp_art as string}
             onChange={(e) => setParam('wp_art', e.target.value)}
             options={WP_ART_OPTIONEN}
-            hint="Wird für den fairen JAZ-Vergleich in der Community verwendet"
+            /* N-280: Der Hinweis nannte bis 2026-08-18 NUR die Nebenwirkung
+               („Community-Vergleich") und verschwieg die Hauptwirkung — die
+               Wärmepumpenart steuert, welche Messwerte eedc von diesem Gerät
+               überhaupt erwartet. Zwei gemeldete Klimaanlagen laufen deshalb
+               als „Luft-Wasser" (azywietz-web, #383): die Beschriftung ließ
+               das Feld wie eine Statistik-Einstellung aussehen. */
+            hint="Legt fest, welche Messwerte eedc von diesem Gerät erwartet — eine Klimaanlage wird nicht nach Heizwärme gefragt. Zusätzlich für den fairen JAZ-Vergleich in der Community."
           />
           {paramData.wp_art === 'luft_luft' && (
             <Alert type="info" title="Split-Klimaanlage">
@@ -60,8 +66,15 @@ export function WaermepumpeFelder({ paramData, onInputChange, setParam, zeige, m
               trotzdem. <strong>Heizt du mit dem Gerät</strong>, trag unten den Heizwärmebedarf ein;
               dann rechnet eedc die Wirtschaftlichkeit gegenüber der ersetzten Heizung wie bei jeder
               anderen Wärmepumpe. <strong>Kühlst du nur</strong>, wähle beim alten Energieträger
-              „Nichts ersetzt (Neubau)" — dann wird nichts verglichen. Die Kühl-Effizienz (SEER) und
-              die Trennung von Heiz- und Kühlstrom sind noch offen (Thema #263).
+              „Nichts ersetzt (Neubau)" — dann wird nichts verglichen.
+              <br /><br />
+              <strong>Neu: eedc kann den Betriebsmodus mitschreiben.</strong> Ordne unter
+              Einstellungen → Datenquellen das Feld „Betriebsmodus" zu (die climate-Entität
+              deines Geräts), dann hält eedc ab sofort stündlich fest, ob geheizt oder gekühlt
+              wurde. <strong>Das lässt sich nicht nachtragen</strong> — Home Assistant bewahrt
+              solche Zustände nur wenige Tage auf. Wer die Aufteilung später sehen will, ordnet
+              den Sensor also besser jetzt zu als dann. Die Auswertung dazu (Heiz-/Kühlstrom
+              getrennt, Kühl-Effizienz SEER) ist noch in Arbeit (Thema #263).
             </Alert>
           )}
 
