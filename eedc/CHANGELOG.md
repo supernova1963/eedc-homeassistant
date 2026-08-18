@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.0.20] - 2026-08-18 — Eine Kilowattstunde, ein Preis
+
+### Fixed
+
+- **Die Ersparnis eines Speichers wurde zu einer Zahl addiert, die ihn schon enthielt.** Unter *Auswertungen → ROI* rechnet eedc die Ersparnis der Anlage aus dem **Eigenverbrauch** — also aus allem, was erzeugt und nicht eingespeist wurde. Was durch den Akku läuft, steckt darin: Es wurde ja nicht eingespeist, sondern später im Haus verbraucht. Daneben stand der Speicher trotzdem noch einmal mit seinem eigenen Beitrag, und beides wurde **addiert**. An einer gemeldeten Anlage waren das 2.133 kWh Eigenverbrauch zu 31,95 ct **plus** 717 kWh Entladung zu 23,95 ct — **55,9 ct für eine Kilowattstunde, die einmal geflossen ist**. Die Jahres-Ersparnis stand bei 896 € statt 724 €, die Amortisation bei 2,2 statt 2,8 Jahren. Jetzt wird **zerlegt statt addiert**: Die Gesamtzahl kommt weiterhin aus der Anlagen-Rechnung, und der Speicher bekommt seinen Anteil **daraus** — er behält also seine eigene Zahl, sie zählt nur nicht mehr doppelt. ⚠ **Betroffen war jede Anlage mit Speicher**, unabhängig davon, ob er einem Wechselrichter oder Balkonkraftwerk zugeordnet ist oder eigenständig geführt wird — der häufigste Fall ist der eigenständige AC-Speicher ohne Zuordnung. ⚠ **Deine Zahlen werden kleiner und deine Amortisation länger.** Das ist die Korrektur einer Überschätzung, keine Verschlechterung deiner Anlage. ⚠ **Wer Strom aus dem Netz in den Speicher lädt** (dynamischer Tarif, Arbitrage), behält diesen Anteil unverändert: Er stammt aus der Tarifdifferenz und steckt gerade **nicht** im Eigenverbrauch. ⚠ **Energiebilanz, Autarkie, Eigenverbrauchsquote und CO₂ waren nie betroffen** — dort war die Sperre gegen Doppelzählung immer richtig. *(Gefunden beim Nachstellen der Anlage aus Issue #381 an einer Testinstanz.)*
+
+---
+
 ## [4.0.19] - 2026-08-18 — Zahlen, die ihre Grundlage kennen
 
 ### Fixed
