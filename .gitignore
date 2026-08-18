@@ -83,6 +83,14 @@ eedc/data/*-shm
 # Backup-Targets oder Test-Snapshots in eedc/data/ automatisch mitgreifen.
 eedc/data/*.bak
 
+# Backup-Kopien, die ein Suffix HINTER die .db-Endung hängen (z. B. die
+# Sicherung von plans/mess-f40-ausfall-artefakt.py: "…devbox-pruef-4018.db.vor-f40-sim").
+# Die drei Kommentare oben behaupten "greift automatisch mit" — für diese Form
+# stimmte das nicht: *.db endet auf .db, hier folgt noch etwas. Gemessen am
+# 18.08.: die Sicherung stand als untracked im Baum und hätte release.sh
+# (pruefe_nichts_uebrig, N-56) abbrechen lassen.
+eedc/data/*.db.*
+
 # Lokale Drafts: HANDOVER/AUDIT/PLAN/STAND-Files, die nur zwischen den beiden
 # Entwicklungsrechnern via scripts/sync-claude.sh ausgetauscht werden — nicht
 # nach GitHub. Verbleibende Verbreitung ausschließlich gernot-iMac14-1 ↔ gernot001.

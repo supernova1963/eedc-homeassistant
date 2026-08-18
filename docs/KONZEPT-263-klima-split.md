@@ -31,9 +31,9 @@ posten" weitertrug: *eine Zustandsangabe, die niemand beim Erledigen anfasst.*
 | --- | --- | --- | --- |
 | **K-0** | Subtyp „Luft-Luft (Klimaanlage)" (`wp_art = luft_luft`) · SCOP-Modus · Stromsensor genügt · Daten-Checker ignoriert fehlende Heizwärme | ✅ seit v3.30.3, **Lücke geschlossen 2026-08-16** | Fundament steht. ⚠ **„Stromsensor genügt" galt bis 16.08. nur für den Daten-Checker:** `core/field_definitions.py::FELD_BEDARF` kannte die Wärmepumpen-**Art** nicht und stufte `heizenergie_kwh` für *jede* WP als Pflicht ein ⇒ *Einstellungen → Datenquellen* zeigte einer Klimaanlage „Heizwärme" rot und zählte sie als offene Pflicht, während der Checker dazu schwieg (Fund **N-86**). Diese Zeile behauptete „Fundament steht", ohne dass es jemand gegen den Code gehalten hatte. Jetzt trägt `get_feld_bedarf` den Geräte-Kontext (`KLIMA_OHNE_WAERMEMENGE`); Proben in `test_wp_klimaanlage_phase1.py` **an der Fläche**, mit Negativprobe für Luft-Wasser und für Altbestand ohne `wp_art` |
 | **K-0b** | **Wegräumen, was es bei einer Klimaanlage nicht gibt:** keine Heizwärme-/Warmwasserbedarfs-Felder, keine konstruierte Ersparnis gegen Gas/Öl, keine daraus abgeleitete CO₂-Ersparnis — die Anlage wird als **Verbraucher** ausgewertet (Strom · PV-Anteil · Kosten) | ✅ gebaut 2026-08-02, ⚠ **Begründung 2026-08-16 korrigiert und Bauform ersetzt (K-0c)** | Die **unbeantwortete Hälfte des Issues** (3dmaster90: „Das sowas wie Warmwasser, Wärmebedarf etc. entfällt"). Einzige Maßnahme **ohne Testgerät**. Auslöser: das ROI-Dashboard wies rund **1.100 €/Jahr** und **2.210 kg CO₂** gegen eine nie ersetzte Gasheizung aus |
-| **K-0c** | **Die Bewertung hängt an der Pflege, nicht an der Bauart:** neue Option `alter_energietraeger = "nichts"` („Nichts ersetzt (Neubau)"), kein erfundener Bedarfs-Default mehr, Typ-Sonderweg entfällt | ✅ gebaut 2026-08-16 | Der Nachfolger von K-0b — **und die Korrektur seiner Begründung**, s. Abschnitt unten. Löst zugleich **N-88** (jede WP im Neubau bekam eine Gaskessel-Ersparnis) und entschärft **N-91**. Layer-SoT `alternativkosten.py::ERSETZT_NICHTS` / `ersetzt_keine_heizung()` / `alle_ersetzen_nichts()`; Proben in `test_wp_ersetzt_nichts_n88.py` (Rechen-Ebene) und `test_roi_klimaanlage_nicht_bewertet.py` (Anzeige-Ebene) |
+| **K-0c** | **Die Bewertung hängt an der Pflege, nicht an der Bauart:** neue Option `alter_energietraeger = "nichts"` („Nichts ersetzt (Neubau)"), kein erfundener Bedarfs-Default mehr, Typ-Sonderweg entfällt | ✅ gebaut 2026-08-16 — ⚠ **im Daten-Checker NICHT angekommen (F-41, 18.08.)** | Der Nachfolger von K-0b — **und die Korrektur seiner Begründung**, s. Abschnitt unten. Löst zugleich **N-88** (jede WP im Neubau bekam eine Gaskessel-Ersparnis) und entschärft **N-91**. Layer-SoT `alternativkosten.py::ERSETZT_NICHTS` / `ersetzt_keine_heizung()` / `alle_ersetzen_nichts()`; Proben in `test_wp_ersetzt_nichts_n88.py` (Rechen-Ebene) und `test_roi_klimaanlage_nicht_bewertet.py` (Anzeige-Ebene) |
 | **K-1** | **SEER** (Kühl-Effizienz) als Parameter | ⬜ | ~1–2 Tage. **Allein halbnützlich** — ohne K-2 ein Effizienz-Faktor ohne Bezugsgröße ⇒ **nicht zuerst bauen** |
-| **K-2** | **Heizen-vs-Kühlen-Trennung** über Betriebsmodus-Sensor (+ Normalisierungs-Schicht, modus-gewichtete Aggregation, Serien-Split in 4 Read-Sites) | ⬜ **Kern, zuerst** — ⚑ **entsperrt, und seit 17.08. ist auch die Zielstruktur entschieden** | ~3–4 Tage + Live-Serien-Split (Schätzung von 08.08., **nicht** neu gemessen). **Sechs** Modus-Klassen statt eines Feldpaars; `hvac_action` wird **nicht** verlangt (Befund 1.1/1.2 + Vergleichstabelle 1b). **Bau unbeauftragt** |
+| **K-2** | **Heizen-vs-Kühlen-Trennung** über Betriebsmodus-Sensor (+ Normalisierungs-Schicht, modus-gewichtete Aggregation, Serien-Split in 4 Read-Sites) | ⬜ **Kern, zuerst** — ⚑ **entsperrt, und seit 17.08. ist auch die Zielstruktur entschieden** | ~3–4 Tage + Live-Serien-Split (Schätzung von 08.08., **nicht** neu gemessen). **Sechs** Modus-Klassen statt eines Feldpaars; `hvac_action` wird **nicht** verlangt (Befund 1.1/1.2 + Vergleichstabelle 1b). **Bau unbeauftragt**. ⚑ **F-41 fährt mit** (Entscheid Gernot 18.08.): die drei Stammdaten-Hinweise des Daten-Checkers von der Bauart auf `ersetzt_keine_heizung` umstellen — s. Abschnitt „K-0c ist im Daten-Checker nicht angekommen" |
 | **K-3** | PV/Speicher/Netz-Anteil **pro Klima-Komponente** | ⬜ | klein (globale Quote als Näherung) bis groß (echte Prioritäts-Logik) — eigene Etappe |
 
 > **Harte Vorbedingung für K-2/K-3:** eine **Test-Klimaanlage mit Modus-Sensor** bei einem Tester.
@@ -325,6 +325,58 @@ Verteilschlüssel.
 der Modus-Befund macht die Sensor-Seite billiger, nicht die Aggregation. Zu entscheiden ist vor dem
 Bau weiterhin die Zielstruktur der Modus-Klassen (jetzt: zwei plus Rest) und ob der eingestellte
 Modus genügt.
+
+## K-0c ist im Daten-Checker nicht angekommen — F-41 (gemeldet als #383, 2026-08-18)
+
+> **Status: bestätigt, Bau vertagt.** Entscheid Gernots (18.08.): **nicht einzeln bauen, sondern
+> mit K-2 mitziehen** — an derselben Stelle zweimal hintereinander aufzureißen, hat noch nie gut
+> funktioniert. Diese Zeile ist der Trigger; wer K-2 baut, baut F-41 mit.
+
+**Der Melder (azywietz-web, #383) berichtet eine unauflösbare Warnung „Alternativkosten fehlen" für
+zwei Klimaanlagen und schlägt ein Feld „ersetzt Energieträger" vor — das es seit K-0c gibt.** Er hat
+es nicht gefunden, und das ist nicht sein Fehler: Die Rechnung folgt dem Feld, die **Prüfung** nicht.
+
+**Am Code gemessen (18.08.):**
+
+| Seite | Was sie fragt |
+| --- | --- |
+| **Rechnung** — `wp_wirtschaftlichkeit` · `ha_export` · `investitionen/crud` · `calculations` (2×) · `alternativkosten` (2×) · `aussichten` | `ersetzt_keine_heizung()` — **sieben** Stellen, K-0c vollständig durchgezogen |
+| **Daten-Checker** — `stammdaten.py:1009` (Alternativkosten, WARNING) · `:1058` (alter Preis, INFO) · `:1067` (Heizwärmebedarf, INFO) | `ist_luft_luft_waermepumpe()` — die **Bauart**, also der Sonderweg, den K-0c abgeschafft hat |
+
+**Negativbeweis:** Im gesamten Ordner `backend/services/daten_checker/` kommt `energietraeger`
+**0-mal** vor.
+
+**Der Defekt geht in beide Richtungen:**
+
+1. **Falsch-positiv (gemeldet).** Wer „Nichts ersetzt (Neubau)" wählt — wozu `WaermepumpeFelder.tsx`
+   ausdrücklich rät (*„Kühlst du nur, wähle beim alten Energieträger ‚Nichts ersetzt (Neubau)'"*) —
+   bekommt die drei Hinweise trotzdem und kann sie nicht auflösen. **Trifft jede Wärmepumpe im
+   Neubau**, nicht nur Klimaanlagen ⇒ breiter als das Issue.
+2. **Falsch-negativ (still).** Eine Luft-Luft-WP, die *doch* eine Gasheizung ersetzt — der Fall, der
+   die Bauart-Regel überhaupt erst gekippt hat (K-0c) —, wird über fehlende Alternativkosten **nicht**
+   gewarnt, obwohl ihre Rechnung sie braucht.
+
+**Trennlinie für den Bau: Messbarkeit → Bauart · Bewertbarkeit → Pflege.** Zwei `ist_klima`-Stellen
+bleiben deshalb bewusst **unverändert**: `daten_checker/energieprofil.py:419` und
+`daten_checker/monatsdaten.py:895` fragen nach einem **Wärmemengenzähler**, den ein Split-Gerät
+physisch nicht hat — unabhängig davon, was es ersetzt.
+
+⚠ **Der Altbestand ist der Grund, warum das kein Einzeiler ist.** `alter_energietraeger` existiert
+erst seit dem 16.08.; praktisch jede Klimaanlage im Feld trägt noch den Vorgabewert `gas`. Eine
+harte Umstellung gäbe genau der Gruppe drei neue Hinweise, für die K-0 gebaut wurde. Vorgeschlagen
+und **noch nicht entschieden**: für Geräte mit ungesetztem Feld **und** Bauart `luft_luft` statt der
+Warnung **eine INFO mit dem Weg** („wenn dieses Gerät keine Heizung ersetzt, wähle …") — auflösbar,
+ohne stille Datenänderung. Eine Start-Migration wurde **abgeraten**: sie änderte stumm eine
+Geldzahl, denn eine Klimaanlage, die tatsächlich heizt, verlöre ihre ausgewiesene Ersparnis.
+
+⚑ **Dieselbe Klasse wie N-86, zwei Tage später und an derselben Tabelle.** Die K-0-Zeile oben trug
+„Fundament steht", ohne dass es jemand gegen den Code gehalten hatte; die K-0c-Zeile trug
+„Typ-Sonderweg entfällt" mit demselben Mangel. **Wer hier eine Maßnahme auf ✅ setzt, misst vorher —
+und zwar Rechnung *und* Prüfung getrennt.**
+
+⚠ **Der CHANGELOG-Text zu v4.0.18 trägt die Behauptung ebenfalls** („Der Umweg über den Gerätetyp
+entfällt damit") und ist damit für den Daten-Checker unzutreffend — ein Korrektur-Vermerk nach dem
+Muster von Schritt 2b ist **vorgelegt, nicht gesetzt**.
 
 ## Drei offene Bausteine — Architektur + Aufwand
 
