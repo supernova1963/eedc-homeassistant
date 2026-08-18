@@ -1,11 +1,43 @@
 # Was ist neu
 
-> **Stand:** August 2026 (v4.0.19)
+> **Stand:** August 2026 (v4.0.20)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.20 — Eine Kilowattstunde, ein Preis
+
+### Speicher-Ersparnis wurde doppelt gezählt
+
+**Betrifft dich das?** Ja, wenn du einen **Speicher** erfasst hast — egal ob er einem
+Wechselrichter oder Balkonkraftwerk zugeordnet ist oder eigenständig geführt wird.
+
+Unter *Auswertungen → ROI* rechnet eedc die Ersparnis deiner Anlage aus dem **Eigenverbrauch**,
+also aus allem, was erzeugt und nicht eingespeist wurde. Was durch deinen Akku läuft, steckt da
+schon drin: Es wurde nicht eingespeist, sondern später im Haus verbraucht. Trotzdem stand der
+Speicher daneben noch einmal mit seinem eigenen Beitrag — und beides wurde addiert.
+
+An einer gemeldeten Anlage waren das 2.133 kWh Eigenverbrauch zu 31,95 ct **plus** 717 kWh
+Entladung zu 23,95 ct: **55,9 ct für eine Kilowattstunde, die einmal geflossen ist.** Die
+Jahres-Ersparnis stand bei 896 € statt 724 €, die Amortisation bei 2,2 statt 2,8 Jahren.
+
+Jetzt wird **zerlegt statt addiert**. Die Gesamtzahl kommt weiter aus der Anlagen-Rechnung, und
+dein Speicher bekommt seinen Anteil **daraus**. Er behält also seine eigene Zahl — du siehst
+weiterhin, was der Akku beiträgt —, sie zählt nur nicht mehr zweimal.
+
+**Was du tun musst:** nichts. Deine Zahlen werden kleiner und deine Amortisation länger; das ist
+die Korrektur einer Überschätzung, nicht eine Verschlechterung deiner Anlage.
+
+Zwei Dinge bleiben, wie sie waren:
+
+- **Wer aus dem Netz lädt** (dynamischer Tarif, Arbitrage), behält diesen Anteil unverändert. Er
+  stammt aus der Tarifdifferenz und steckt gerade nicht im Eigenverbrauch.
+- **Energiebilanz, Autarkie, Eigenverbrauchsquote und CO₂ waren nie betroffen.** Dort hat eedc von
+  Anfang an richtig gerechnet.
 
 ---
 

@@ -4,6 +4,7 @@ Investitionen API Routes
 CRUD Endpoints für Investitionen (E-Auto, Wärmepumpe, Speicher, etc.).
 """
 
+from dataclasses import dataclass
 import math
 from typing import Optional, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -714,6 +715,120 @@ class ROIBerechnung(BaseModel):
     komponenten: Optional[list[ROIKomponente]] = None  # Für PV-Systeme
 
 
+@dataclass
+class _SpeicherRoi:
+    """Das ROI-Ergebnis eines Speichers samt der Quellen seiner Eingaben.
+
+    Existiert seit **F-37**. Vorher rechneten der DC-Zweig (Speicher am
+    Trägergerät) und der AC-Zweig (eigenständiger Speicher) dieselbe Kette
+    getrennt herunter — und beide erst **innerhalb** ihrer Schleife. Der Fix
+    braucht die Beträge aber **vor** der Verteilung der PV-Ersparnis, weil er
+    den PV-Anteil des Speichers aus demselben Topf nimmt statt ihn
+    danebenzustellen. Der Helper macht beides möglich: eine Rechnung, dreimal
+    gerufen (Vorablauf, DC-Zweig, AC-Zweig).
+    """
+
+    result: Optional[Any]
+    kapazitaet_fehlt: bool
+    param_wirkungsgrad: float
+    wirkungsgrad_eff: float
+    wirkungsgrad_quelle: str
+    lade_preis_eff: Optional[float]
+    ladepreis_quelle: str
+    nutzt_arbitrage: bool
+    ist_aggregat: Any = None
+
+    @property
+    def pv_anteil_euro(self) -> float:
+        """Der Teil der Ersparnis, der aus PV-Strom stammt — der doppelte (F-37).
+
+        Der **Netz**-Anteil bleibt außen vor: er entsteht aus der Tarifdifferenz
+        beim Laden aus dem Netz und steckt gerade **nicht** im PV-Eigenverbrauch.
+        Ihn mitzukürzen nähme einem Arbitrage-Speicher echte Ersparnis.
+        """
+        return getattr(self.result, "pv_anteil_euro", 0.0) or 0.0 if self.result else 0.0
+
+    @property
+    def co2_pv_kg(self) -> float:
+        """CO₂ aus dem PV-Anteil — dieselbe Doppelzählung eine Spalte weiter."""
+        return getattr(self.result, "co2_einsparung_kg", 0.0) or 0.0 if self.result else 0.0
+
+
+def _speicher_roi(
+    inv: Any,
+    *,
+    strompreis_cent: float,
+    einspeiseverguetung_cent: float,
+    ist_aggregat: Any,
+    eff_ladepreis: Any,
+    eta_ist: Any,
+    entlade_preis_cent: float = 0,
+) -> _SpeicherRoi:
+    """Ersparnis eines Speichers, mit der Auflösung seiner Eingaben (F-37).
+
+    Wortgleich zu dem, was bis v4.0.19 in beiden Schleifen stand — der
+    ``entlade_preis_cent`` bleibt Parameter, weil der DC-Zweig ihn nie übergeben
+    hat und der AC-Zweig schon. Diese Asymmetrie ist **Bestand** und wird hier
+    bewusst nicht eingeebnet; sie einzuebnen bewegte Zahlen für Arbitrage-
+    Speicher und gehört nicht in den Bau von F-37.
+    """
+    # Lokal wie in der Route: `calculations` bleibt aus dem Modul-Import
+    # heraus (dort steht dieselbe Zeile mit derselben Begründung).
+    from backend.core.calculations import berechne_speicher_einsparung
+
+    params = inv.parameter or {}
+    kapazitaet_netto = get_speicher_nutzbare_kapazitaet_kwh(inv)
+    wirkungsgrad = params.get(
+        PARAM_SPEICHER["WIRKUNGSGRAD_PROZENT"],
+        PARAM_SPEICHER_DEFAULTS["wirkungsgrad_prozent"],
+    )
+    # Bug #5 v3.25.0: vorher 'nutzt_arbitrage' (toter Schema-Key), Form/Wizard
+    # schreiben 'arbitrage_faehig'.
+    nutzt_arbitrage = params.get(
+        PARAM_SPEICHER["ARBITRAGE_FAEHIG"],
+        PARAM_SPEICHER_DEFAULTS["arbitrage_faehig"],
+    )
+    lade_preis = params.get(
+        PARAM_SPEICHER["LADE_DURCHSCHNITTSPREIS_CENT"],
+        PARAM_SPEICHER_DEFAULTS["lade_durchschnittspreis_cent"],
+    )
+
+    wirkungsgrad_eff, wirkungsgrad_quelle = _aufloesen_wirkungsgrad(
+        eta_ist, param_wirkungsgrad=wirkungsgrad,
+    )
+    lade_preis_eff, ladepreis_quelle = _aufloesen_ladepreis(
+        eff_ladepreis,
+        nutzt_arbitrage=nutzt_arbitrage,
+        param_lade_preis=lade_preis,
+    )
+
+    # N127: ohne Kapazität und ohne IST-Messung gibt es keine Basis — dann
+    # entfällt der Beitrag, statt eine erfundene Zahl zu bauen.
+    kapazitaet_fehlt = kapazitaet_netto is None and ist_aggregat is None
+    result = None if kapazitaet_fehlt else berechne_speicher_einsparung(
+        kapazitaet_kwh=kapazitaet_netto or 0,
+        wirkungsgrad_prozent=wirkungsgrad_eff,
+        netzbezug_preis_cent=strompreis_cent,
+        einspeiseverguetung_cent=einspeiseverguetung_cent,
+        nutzt_arbitrage=nutzt_arbitrage,
+        lade_preis_cent=lade_preis_eff,
+        entlade_preis_cent=entlade_preis_cent,
+        ist_entladung_kwh=ist_aggregat.entladung_kwh_jahr if ist_aggregat else None,
+        ist_ladung_netz_kwh=ist_aggregat.ladung_netz_kwh_jahr if ist_aggregat else 0,
+    )
+    return _SpeicherRoi(
+        result=result,
+        kapazitaet_fehlt=kapazitaet_fehlt,
+        param_wirkungsgrad=wirkungsgrad,
+        wirkungsgrad_eff=wirkungsgrad_eff,
+        wirkungsgrad_quelle=wirkungsgrad_quelle,
+        lade_preis_eff=lade_preis_eff,
+        ladepreis_quelle=ladepreis_quelle,
+        nutzt_arbitrage=nutzt_arbitrage,
+        ist_aggregat=ist_aggregat,
+    )
+
+
 def _bkw_pauschal_beitrag(
     inv: Any,
     *,
@@ -1408,6 +1523,67 @@ async def get_roi_dashboard(
     # PV-Einsparung einmal berechnen (wird auf Module verteilt)
     pv_jahres_einsparung, pv_co2, pv_detail = await berechne_pv_einsparung_aus_monatsdaten()
 
+    # ==========================================================================
+    # F-37: Der Speicher bekommt seinen Anteil AUS dem PV-Topf, nicht daneben
+    # ==========================================================================
+    #
+    # `pv_jahres_einsparung` ist `Eigenverbrauch × Strompreis + Einspeisung ×
+    # Vergütung` — die **vollständige** Ersparnis der Anlage. Und
+    # `Eigenverbrauch = Erzeugung − Einspeisung` enthält alles, was durch den
+    # Speicher lief: was in den Akku ging und wieder heraus, wurde nicht
+    # eingespeist. (Am Code belegt: `berechnungen/verbrauch.py` zieht die
+    # Speicherladung ab, **um** den Direktverbrauch zu erhalten — sie steckt
+    # also in `pv − einspeisung`.)
+    #
+    # Bis v4.0.19 stellte die ROI-Sicht den Speicher-Spread **daneben** und
+    # addierte beides. An der gemeldeten Anlage (#381) waren das 2.133 kWh ×
+    # 31,95 ct **plus** 717,1 kWh × 23,95 ct — **55,9 ct für eine
+    # Kilowattstunde, die einmal geflossen ist**: 895,64 € statt 723,89 €,
+    # Amortisation 2,24 statt 2,77 Jahre.
+    #
+    # Der Weg ist **Zerlegung statt Addition** — dieselbe Doktrin, die
+    # `aussichten.py` seit 2026-08-10 anwendet („niemand rechnet eine
+    # Komponenten-Ersparnis ein zweites Mal"). Solange die eine Sicht addiert
+    # und die andere zerlegt, nennen zwei Sichten derselben Anlage verschiedene
+    # Zahlen — die Drift-Klasse hinter P9/P10.
+    #
+    # ⚠ **Nur der PV-Anteil wird gekürzt.** Der Netz-Anteil (Arbitrage) entsteht
+    # aus der Tarifdifferenz beim Laden aus dem Netz und steckt gerade **nicht**
+    # im PV-Eigenverbrauch; ihn mitzukürzen nähme einem Arbitrage-Speicher echte
+    # Ersparnis. Die Trennung liefert `berechne_speicher_ersparnis` bereits
+    # fertig (`pv_anteil_euro` / `netz_anteil_euro`).
+    #
+    # ⚠ **Betrifft ALLE Speicher**, nicht nur die am Trägergerät: der häufigste
+    # Fall ist der eigenständige AC-Speicher ohne Zuordnung, und der bekommt
+    # seine Zeile in der Typkette weiter unten. Deshalb steht die Kürzung hier,
+    # vor **beiden** Zweigen.
+    speicher_roi_by_inv: dict[int, _SpeicherRoi] = {
+        sp.id: _speicher_roi(
+            sp,
+            strompreis_cent=strompreis_cent,
+            einspeiseverguetung_cent=einspeiseverguetung_cent,
+            ist_aggregat=speicher_ist_by_inv.get(sp.id),
+            eff_ladepreis=speicher_ladepreis_anlage,
+            eta_ist=speicher_eta_by_inv.get(sp.id),
+            entlade_preis_cent=(sp.parameter or {}).get(
+                PARAM_SPEICHER["ENTLADE_VERMIEDENER_PREIS_CENT"],
+                PARAM_SPEICHER_DEFAULTS["entlade_vermiedener_preis_cent"],
+            ) if sp.parent_investition_id is None else 0,
+            # Bestandserhalt: der DC-Zweig hat `entlade_preis` nie übergeben,
+            # der AC-Zweig schon. Die Asymmetrie bleibt (s. `_speicher_roi`).
+        )
+        for sp in speicher_invs_alle
+    }
+    _speicher_pv_anteil = sum(r.pv_anteil_euro for r in speicher_roi_by_inv.values())
+    _speicher_co2_pv = sum(r.co2_pv_kg for r in speicher_roi_by_inv.values())
+    # `max(0, …)`: liegt der zugerechnete Speicher-Anteil über der gesamten
+    # PV-Ersparnis (dünne oder widersprüchliche Datenlage), bleibt für die
+    # Module 0 statt einer negativen Zeile. Die Summe kann dadurch nicht mehr
+    # über der physikalischen Menge liegen — das ist die Zusicherung, die der
+    # Symmetrie-Test prüft.
+    pv_jahres_einsparung = max(0.0, pv_jahres_einsparung - _speicher_pv_anteil)
+    pv_co2 = max(0.0, pv_co2 - _speicher_co2_pv)
+
     # Gesamt-kWp aller PV-Module für proportionale Verteilung.
     # kWp über den SoT-Helper (ADR-002/P3-a): ein nur im `parameter` gepflegtes
     # Modul (#229) bekam sonst `anteil = 0` — also 0 € Einsparung, 0 kg CO₂ und
@@ -1562,48 +1738,19 @@ async def get_roi_dashboard(
             # Speicher geht nur der nutzbare Hub. `kapazitaet` (brutto) bleibt
             # daneben stehen: sie ist die *Beschreibung* der Komponente
             # (Detail-Feld und Label unten), nicht die Rechengröße.
-            kapazitaet_netto = get_speicher_nutzbare_kapazitaet_kwh(inv)
-            wirkungsgrad = params.get(PARAM_SPEICHER["WIRKUNGSGRAD_PROZENT"], PARAM_SPEICHER_DEFAULTS["wirkungsgrad_prozent"])
-            # Bug #5 v3.25.0: vorher 'nutzt_arbitrage' (toter Schema-Key), Form/Wizard schreiben 'arbitrage_faehig'.
-            nutzt_arbitrage = params.get(PARAM_SPEICHER["ARBITRAGE_FAEHIG"], PARAM_SPEICHER_DEFAULTS["arbitrage_faehig"])
-            lade_preis_dc = params.get(
-                PARAM_SPEICHER["LADE_DURCHSCHNITTSPREIS_CENT"],
-                PARAM_SPEICHER_DEFAULTS["lade_durchschnittspreis_cent"],
-            )
-
-            ist_aggregat = speicher_ist_by_inv.get(inv.id)
-            # Etappe C (#264): dyn. Ladepreis aus TEP überstimmt Param,
-            # IST-η aus SoC-korrigierter Bilanz überstimmt Param-η. Beide
-            # Helper liefern immer ein Ergebnis (C1); Wert ist `None` wenn
-            # Datenbasis zu dünn → Fallback auf Param mit Quelle-Indikator.
+            # F-37: die Rechnung liegt im Vorablauf — sie wird dort gebraucht,
+            # um den PV-Topf zu kürzen, und darf hier kein zweites Mal
+            # entstehen. `_speicher_roi` trägt Ergebnis und Quellen zusammen.
+            _roi = speicher_roi_by_inv[inv.id]
+            ist_aggregat = _roi.ist_aggregat
+            nutzt_arbitrage = _roi.nutzt_arbitrage
+            wirkungsgrad_eff, wirkungsgrad_quelle = _roi.wirkungsgrad_eff, _roi.wirkungsgrad_quelle
+            lade_preis_eff, ladepreis_quelle = _roi.lade_preis_eff, _roi.ladepreis_quelle
             eff_ladepreis = speicher_ladepreis_anlage
             eta_ist = speicher_eta_by_inv.get(inv.id)
-
-            wirkungsgrad_eff, wirkungsgrad_quelle = _aufloesen_wirkungsgrad(
-                eta_ist, param_wirkungsgrad=wirkungsgrad,
-            )
-            lade_preis_eff, ladepreis_quelle = _aufloesen_ladepreis(
-                eff_ladepreis,
-                nutzt_arbitrage=nutzt_arbitrage,
-                param_lade_preis=lade_preis_dc,
-            )
-
-            # N127: Prognose-Modus ohne gepflegte Kapazität = keine Rechnung.
-            # Statt eine erfundene Basis einzusetzen, entfällt der Beitrag —
-            # die Komponente bleibt in der Liste (die Kosten sind ja real), aber
-            # Einsparung und CO₂ sind `None` („—" im UI) statt einer Zahl, und
-            # der Grund steht als Hinweis in `detail` (P4).
-            kapazitaet_fehlt = kapazitaet_netto is None and ist_aggregat is None
-            result = None if kapazitaet_fehlt else berechne_speicher_einsparung(
-                kapazitaet_kwh=kapazitaet_netto or 0,
-                wirkungsgrad_prozent=wirkungsgrad_eff,
-                netzbezug_preis_cent=strompreis_cent,
-                einspeiseverguetung_cent=einspeiseverguetung_cent,
-                nutzt_arbitrage=nutzt_arbitrage,
-                lade_preis_cent=lade_preis_eff,
-                ist_entladung_kwh=ist_aggregat.entladung_kwh_jahr if ist_aggregat else None,
-                ist_ladung_netz_kwh=ist_aggregat.ladung_netz_kwh_jahr if ist_aggregat else 0,
-            )
+            kapazitaet_fehlt = _roi.kapazitaet_fehlt
+            wirkungsgrad = _roi.param_wirkungsgrad   # für den Degradations-Alarm
+            result = _roi.result
             inv_einsparung = result.jahres_einsparung_euro if result else None
             inv_co2 = result.co2_einsparung_kg if result else None
             system_einsparung += inv_einsparung or 0
@@ -1826,41 +1973,21 @@ async def get_roi_dashboard(
                 'kopplung': kopplung,
                 'kopplung_gepflegt': get_speicher_kopplung_gepflegt(inv) is not None,
             }
-            kapazitaet_netto = get_speicher_nutzbare_kapazitaet_kwh(inv)
-            wirkungsgrad = params.get(PARAM_SPEICHER["WIRKUNGSGRAD_PROZENT"], PARAM_SPEICHER_DEFAULTS["wirkungsgrad_prozent"])
-            nutzt_arbitrage = params.get(PARAM_SPEICHER["ARBITRAGE_FAEHIG"], PARAM_SPEICHER_DEFAULTS["arbitrage_faehig"])
-            lade_preis = params.get(PARAM_SPEICHER["LADE_DURCHSCHNITTSPREIS_CENT"], PARAM_SPEICHER_DEFAULTS["lade_durchschnittspreis_cent"])
-            entlade_preis = params.get(PARAM_SPEICHER["ENTLADE_VERMIEDENER_PREIS_CENT"], PARAM_SPEICHER_DEFAULTS["entlade_vermiedener_preis_cent"])
-
-            ist_aggregat = speicher_ist_by_inv.get(inv.id)
-            # Etappe C (#264): siehe DC-Pfad oben — dieselbe Param-Fallback-
-            # Auflösung via _aufloesen_wirkungsgrad / _aufloesen_ladepreis.
+            # F-37: siehe DC-Pfad — die Rechnung liegt im Vorablauf, weil sie
+            # dort den PV-Topf kürzt. Dieser Zweig trägt den eigenständigen
+            # (meist AC-gekoppelten) Speicher und ist der HÄUFIGSTE Fall: ein
+            # AC-Speicher bringt seinen eigenen Wechselrichter mit und hat
+            # darum in aller Regel gar keine Zuordnung.
+            _roi = speicher_roi_by_inv[inv.id]
+            ist_aggregat = _roi.ist_aggregat
+            nutzt_arbitrage = _roi.nutzt_arbitrage
+            wirkungsgrad_eff, wirkungsgrad_quelle = _roi.wirkungsgrad_eff, _roi.wirkungsgrad_quelle
+            lade_preis_eff, ladepreis_quelle = _roi.lade_preis_eff, _roi.ladepreis_quelle
             eff_ladepreis = speicher_ladepreis_anlage
             eta_ist = speicher_eta_by_inv.get(inv.id)
-
-            wirkungsgrad_eff, wirkungsgrad_quelle = _aufloesen_wirkungsgrad(
-                eta_ist, param_wirkungsgrad=wirkungsgrad,
-            )
-            lade_preis_eff, ladepreis_quelle = _aufloesen_ladepreis(
-                eff_ladepreis,
-                nutzt_arbitrage=nutzt_arbitrage,
-                param_lade_preis=lade_preis,
-            )
-
-            # N127: siehe DC-Pfad — ohne Kapazität und ohne IST-Messung gibt es
-            # keine Prognose-Basis, also keinen Beitrag statt eines erfundenen.
-            kapazitaet_fehlt = kapazitaet_netto is None and ist_aggregat is None
-            result = None if kapazitaet_fehlt else berechne_speicher_einsparung(
-                kapazitaet_kwh=kapazitaet_netto or 0,
-                wirkungsgrad_prozent=wirkungsgrad_eff,
-                netzbezug_preis_cent=strompreis_cent,
-                einspeiseverguetung_cent=einspeiseverguetung_cent,
-                nutzt_arbitrage=nutzt_arbitrage,
-                lade_preis_cent=lade_preis_eff,
-                entlade_preis_cent=entlade_preis,
-                ist_entladung_kwh=ist_aggregat.entladung_kwh_jahr if ist_aggregat else None,
-                ist_ladung_netz_kwh=ist_aggregat.ladung_netz_kwh_jahr if ist_aggregat else 0,
-            )
+            kapazitaet_fehlt = _roi.kapazitaet_fehlt
+            wirkungsgrad = _roi.param_wirkungsgrad   # für den Degradations-Alarm
+            result = _roi.result
             if result is None:
                 # `jahres_einsparung`/`co2_einsparung` bleiben bei 0 — die
                 # Gesamtsumme darf keinen Beitrag bekommen. Dass es ein
