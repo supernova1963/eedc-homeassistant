@@ -78,6 +78,53 @@ def monatsfenster(jahr: int, monat: int, heute: Optional[date] = None) -> Monats
     return Monatsfenster(tage=min(heute.day, tage_gesamt), tage_gesamt=tage_gesamt)
 
 
+def monatsfenster_investition(
+    jahr: int,
+    monat: int,
+    *,
+    ab: Optional[date] = None,
+    bis: Optional[date] = None,
+) -> Monatsfenster:
+    """Wie viele Tage des Monats eine **Investition** überhaupt gelaufen ist.
+
+    `ab` = Anschaffungsdatum, `bis` = Stilllegungsdatum (beide inklusive,
+    beide optional). Ein Monat vollständig vor `ab` oder nach `bis` hat null
+    Tage; ein Monat dazwischen hat alle.
+
+    **Warum das eine ZWEITE Funktion ist und nicht ein Parameter von
+    `monatsfenster` (F-34, #366).** Beide liefern dieselbe Dataclass und beide
+    kürzen denselben Nenner — aber sie beantworten die zwei Fragen, die
+    `CLAUDE.md` ausdrücklich getrennt hält: `monatsfenster` fragt *„wie viel
+    des Monats ist am Stichtag vergangen"* (Kalender, Fund N-69),
+    `monatsfenster_investition` fragt *„wie lange gab es dieses Gerät in
+    diesem Monat"* (Stammdaten, `anschaffungsdatum`/`stilllegungsdatum`). Wer
+    sie in einen Aufruf legt, hat genau die Vertauschung gebaut, die schon
+    zweimal zu Abstürzen geführt hat. Wer beide Kanten braucht, ruft beide und
+    nimmt das kleinere Fenster — bewusst am Aufrufer, damit sichtbar bleibt,
+    dass zwei Gründe zusammenkommen.
+
+    **Der Anlass** (azywietz-web, 2026-08-17): Seine Anlage lief ab dem
+    19.03.2026, die „SOLL/IST pro PV-String"-Sicht stellte dem gemessenen März
+    trotzdem das **volle** PVGIS-März-SOLL gegenüber — 175,1 kWh gegen 60,8
+    gemessene, Performance Ratio 0,347, während dieselbe Anlage in jedem
+    vollen Monat über 1,0 lag. Nicht die Anlage war schwach, der Vergleich war
+    schief. Anteilig (13 von 31 Tagen) sind es 73,4 kWh und PR 0,83.
+
+    Zur Gleichverteilungs-Näherung siehe `anteilig` — sie gilt hier genauso
+    und ist im Frühjahr die konservative Richtung (das gekürzte SOLL fällt
+    eher zu niedrig aus, die Quote also eher zu günstig).
+    """
+    tage_gesamt = monthrange(jahr, monat)[1]
+    erster = date(jahr, monat, 1)
+    letzter = date(jahr, monat, tage_gesamt)
+
+    von = max(erster, ab) if ab is not None else erster
+    nach = min(letzter, bis) if bis is not None else letzter
+    if von > nach:
+        return Monatsfenster(tage=0, tage_gesamt=tage_gesamt)
+    return Monatsfenster(tage=(nach - von).days + 1, tage_gesamt=tage_gesamt)
+
+
 def anteilig(wert: Optional[float], fenster: Monatsfenster) -> Optional[float]:
     """Skaliert eine **Monatssumme** auf das gemessene Fenster.
 

@@ -20,7 +20,7 @@ wie stehen sie zu ihrem SOLL" — nicht „welche Investitionen haben den Typ
 """
 
 from datetime import date
-from typing import Iterable, Optional
+from typing import Any, Iterable, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,6 +40,7 @@ from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.services.prognose_auswahl import lade_aktive_prognose
 from backend.services.pv_monatswerte import lade_pv_je_monat
+from backend.core.berechnungen import anteilig, monatsfenster_investition
 from backend.api.routes.cockpit._shared import MONATSNAMEN
 
 router = APIRouter()
@@ -57,6 +58,43 @@ RANKING_NICHT_MOEGLICH = (
     "nicht möglich. Dafür braucht jedes Modul einen eigenen Erzeugungs-Sensor "
     "(Einstellungen → Sensor-Zuordnung)."
 )
+
+
+
+def _soll_im_laufmonat(
+    soll_kwh: float,
+    modul: Any,
+    jahr: int,
+    monat: int,
+) -> float:
+    """Das Monats-SOLL, auf die Laufzeit des Moduls in diesem Monat gekürzt.
+
+    **F-34 (#366, azywietz-web).** Ein Modul, das am 19.03. in Betrieb ging,
+    bekam den **vollen** PVGIS-März gegenübergestellt: 175,1 kWh SOLL gegen
+    60,8 gemessene, Performance Ratio 0,347 — während dieselbe Anlage in jedem
+    vollen Monat über 1,0 lag. Der Vergleich maß das Inbetriebnahme-Datum,
+    nicht die Anlage, und zog das Jahres-PR sichtbar nach unten.
+
+    Der Nenner wird gekürzt, nicht der Monat ausgelassen — derselbe Entscheid
+    wie bei N-69 für das obere Monatsende (Gernot, 2026-08-04): sonst verlöre
+    der Anschaffungsmonat seine einzige Einordnung. Gleichverteilung innerhalb
+    des Monats ist eine Näherung, siehe `anteilig`; im Frühjahr fällt das
+    gekürzte SOLL eher zu niedrig aus, die Quote also eher zu günstig.
+
+    ⚠ Bewusst **nur** die Investitions-Kanten (Anschaffung · Stilllegung). Das
+    obere Ende des **laufenden** Monats ist die andere Frage und hat mit
+    `monatsfenster` ihre eigene Formel — hier zu mischen wäre genau die
+    Vertauschung der zwei Datums-Ebenen, vor der `CLAUDE.md` warnt.
+    """
+    fenster = monatsfenster_investition(
+        jahr,
+        monat,
+        ab=getattr(modul, "anschaffungsdatum", None),
+        bis=getattr(modul, "stilllegungsdatum", None),
+    )
+    if not fenster.ist_angefangen:
+        return soll_kwh
+    return anteilig(soll_kwh, fenster) or 0.0
 
 
 def _rollup_quelle(quellen: Iterable[str]) -> str:
@@ -401,6 +439,9 @@ async def get_pv_strings(
                     prog_monat = modul_prognose.get(monat, 0)
                 else:
                     prog_monat = prognose_monate.get(monat, 0) * kwp_anteil
+                # F-34: im Anschaffungs-/Stilllegungsmonat lief das Modul nur
+                # einen Teil des Monats — das SOLL wird darauf gekürzt.
+                prog_monat = _soll_im_laufmonat(prog_monat, modul, jahr, monat)
             else:
                 prog_monat = 0.0
             ist_monat = md_by_inv.get(modul.id, {}).get(monat, 0)
@@ -575,10 +616,21 @@ async def get_pv_strings_gesamtlaufzeit(
 
         for jahr in jahre:
             months_with_data_year = set(md_by_inv.get(modul.id, {}).get(jahr, {}).keys())
+            # F-34: jeder Monat einzeln auf die Laufzeit des Moduls gekürzt,
+            # dann summiert — sonst trüge das Anschaffungsjahr denselben
+            # schiefen Vergleich wie die Monatssicht.
             if modul_prognose is not None:
-                prognose_jahr = sum(modul_prognose.get(m, 0) for m in months_with_data_year)
+                prognose_jahr = sum(
+                    _soll_im_laufmonat(modul_prognose.get(m, 0), modul, jahr, m)
+                    for m in months_with_data_year
+                )
             else:
-                prognose_jahr = sum(prognose_monate.get(m, 0) for m in months_with_data_year) * kwp_anteil
+                prognose_jahr = sum(
+                    _soll_im_laufmonat(
+                        prognose_monate.get(m, 0) * kwp_anteil, modul, jahr, m
+                    )
+                    for m in months_with_data_year
+                )
             ist_jahr = sum(md_by_inv.get(modul.id, {}).get(jahr, {}).get(m, 0) for m in range(1, 13))
             abweichung_pct = ((ist_jahr - prognose_jahr) / prognose_jahr * 100) if prognose_jahr > 0 else None
             perf_ratio = (ist_jahr / prognose_jahr) if prognose_jahr > 0 else None
@@ -606,6 +658,12 @@ async def get_pv_strings_gesamtlaufzeit(
 
         saisonalwerte = []
         for monat in range(1, 13):
+            # F-34 gilt hier BEWUSST NICHT: die saisonale Zeile stellt einen
+            # IST-Durchschnitt über mehrere Jahre einem Klimamittel gegenüber
+            # und fragt „wie fällt der Mai typischerweise aus". Ein einzelner
+            # angebrochener Anschaffungsmonat darf dieses Mittel nicht kürzen —
+            # er verzerrt bereits den IST-Durchschnitt (`anzahl` zählt ihn voll
+            # mit), und beide Seiten zu kürzen hieße, ihn doppelt zu bestrafen.
             if modul_prognose is not None:
                 prognose_monat = modul_prognose.get(monat, 0)
             else:

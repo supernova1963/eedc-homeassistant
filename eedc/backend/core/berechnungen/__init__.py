@@ -268,6 +268,7 @@ from backend.core.berechnungen.monatsfenster import (
     Monatsfenster,
     anteilig,
     monatsfenster,
+    monatsfenster_investition,
 )
 
 __all__ = [
@@ -276,6 +277,7 @@ __all__ = [
     "Monatsfenster",
     "anteilig",
     "monatsfenster",
+    "monatsfenster_investition",
     "TagesBilanz",
     "bilanz_aus_stundenrows",
     "berechne_wp_alternativkosten_ersparnis",

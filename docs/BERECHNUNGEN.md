@@ -252,6 +252,26 @@ Die Felder derselben Antwort:
 >
 > **Ein Balkonkraftwerk ohne zugeordnete Module rechnet unverändert wie bisher.**
 > SoT: `core/berechnungen/erzeuger_traeger.py`. Melder: Discussion #366, Forum T89667 #172.
+>
+> #### Dieselbe Abtretung gilt für die Wirtschaftlichkeit (ab v4.0.19, F-33/#381)
+>
+> Die ROI-Sicht fasst einen **Wechselrichter mit seinen Modulen und seinem DC-Speicher** seit jeher
+> zu **einer** Systemzeile zusammen: die drei Positionen teilen sich eine Energiemenge, und ihre
+> Ersparnisse sind deshalb **nicht addierbar**. Für ein Balkonkraftwerk als Träger galt das nicht —
+> dort bekam jede Ebene ihre eigene Zeile, und die Gesamtzeile addierte sie. An einer gemeldeten
+> Anlage (BKW + Modul-Kind + Speicher-Kind) standen so **1.079 €/Jahr** statt der gemessenen
+> **606 €**, und die Gesamt-Amortisation bei **1,9 statt 3,3 Jahren**. Das Modul-Kind trug zusätzlich
+> die Aufforderung „(ohne WR) — bitte zuordnen", obwohl es zugeordnet **war**.
+>
+> Seither ist **Trägergerät** die Rolle, nicht der Typ: ein Balkonkraftwerk mit Kindern ist
+> Systemkopf wie ein Wechselrichter. Es tritt seine Ersparnis genauso an die Module ab, wie es
+> oben seine Erzeugung abtritt — hat es **keine** Modul-Kinder (nur einen Speicher), trägt es sie
+> weiterhin selbst und steuert sie der Systemzeile bei. Die Zeile trägt Name und Typ ihres Kopfes,
+> damit ein Balkonkraftwerk nicht als „PV-System" mit fremdem Namen erscheint.
+>
+> ⚠ **Die pauschale BKW-Schätzung ist davon unberührt und bleibt eine Schätzung** (0,9 kWh/Wp,
+> 80 % Eigenverbrauch). Sie greift nur noch für ein Balkonkraftwerk ohne Modul-Kinder — dort, wo
+> keine gemessenen Modulwerte existieren. Melder: Issue #381 (azywietz-web).
 
 **Auch die PDF-Berichte rechnen so.** Der Jahresbericht leitete Eigenverbrauch, Autarkie und
 EV-Quote bis v4.0.0 allein aus der PV-Erzeugung ab, während der Einspeise-Zähler daneben die Summe
@@ -1446,6 +1466,33 @@ SoT der Formel: `core/berechnungen/monatsfenster.py` (auch die Grundlast-Hochrec
 Speicher-Auslastung zählen ihre Tage dort, statt jede für sich). Die Jahres-Sicht summiert die
 Monatswerte und erbt die Kürzung ohne eigene Rechnung; die Oberfläche weist das Fenster aus
 („anteilig · 4 von 31 Tagen").
+
+**Der Anschaffungsmonat zählt ebenso anteilig (ab v4.0.19, F-34):**
+Dieselbe Schieflage gibt es am **anderen** Ende — nur kommt die Kante dort nicht aus dem Kalender,
+sondern aus den Stammdaten. Eine Anlage, die am 19.03. ans Netz ging, bekam den **vollen**
+PVGIS-März gegenübergestellt: 175,1 kWh SOLL gegen 60,8 gemessene, Performance Ratio **0,347** —
+während dieselbe Anlage in jedem vollen Monat über 1,0 lag (April 1,039 · Juli 1,139). Nicht die
+Anlage war schwach, der Vergleich war schief; das Jahres-PR fiel dadurch von ~1,08 auf 0,973.
+
+```
+Tage      = Tage des Monats zwischen Anschaffungs- und Stilllegungsdatum (beide inklusive)
+SOLL_kWh  = PVGIS-Monatswert × Tage ÷ Tage im Monat
+```
+
+Gekürzt wird wieder der **Nenner**, aus demselben Grund. Der Stilllegungsmonat ist die
+Spiegelkante und wird genauso behandelt.
+
+> ⚠ **Zwei Datums-Ebenen, zwei Formeln — bewusst nicht zusammengelegt.**
+> `monatsfenster` beantwortet *„wie viel des Monats ist am Stichtag vergangen"* (Kalender),
+> `monatsfenster_investition` *„wie lange gab es dieses Gerät in diesem Monat"* (Stammdaten). Wer
+> beide braucht, ruft beide und nimmt das kleinere Fenster. Das ist dieselbe Trennung, die
+> [ARCHITEKTUR §4](ARCHITEKTUR.md) für `anschaffungsdatum` gegen `Anlage.installationsdatum`
+> zieht — ihre Vertauschung hat schon zweimal zu Abstürzen geführt.
+
+Die **saisonale** Zeile der Laufzeit-Sicht kürzt bewusst **nicht**: sie stellt einen IST-Durchschnitt
+über mehrere Jahre einem Klimamittel gegenüber und fragt „wie fällt der Mai typischerweise aus".
+Ein einzelner angebrochener Anschaffungsmonat verzerrt dort bereits den IST-Durchschnitt; beide
+Seiten zu kürzen hieße, ihn doppelt zu bestrafen. Melder: Discussion #366 (azywietz-web).
 
 **SOLL im Monatsbericht:** derselbe Grundsatz — der Monatswert kommt aus den Monatszeilen **genau der
 aktiven** Prognose. Vor v4.0.1 stand dort eine Summe über *alle* aktiven Prognosen; bei einem

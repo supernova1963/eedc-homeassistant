@@ -7,6 +7,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Bei einem Balkonkraftwerk mit zugeordneten Modulen und Speicher zählte eedc dieselbe Ersparnis dreimal.** Wer sein Balkonkraftwerk so erfasst hat, wie es seit v4.0.18 möglich ist — **PV-Module** und **Speicher** als zugeordnete Komponenten darunter —, bekam unter *Auswertungen → ROI* für **jede der drei Ebenen eine eigene Zeile mit eigener Jahres-Ersparnis**, und die Gesamtzeile addierte sie. Alle drei Beträge stammen aber aus **derselben** Energie: dem Strom der Module. An der gemeldeten Anlage standen so **1.079 € Ersparnis im Jahr** statt der gemessenen **606 €**, und die Gesamt-Amortisation bei **1,9 statt 3,3 Jahren** — die Anlage sah rund 43 % schneller bezahlt aus, als sie ist. Bei einem **Wechselrichter** war das nie so: dort fasst eedc Gerät, Module und DC-Speicher seit jeher zu **einer** Systemzeile zusammen, gerade weil sich ihre Ersparnisse nicht addieren lassen. Diese Regel gilt jetzt für das Balkonkraftwerk genauso: **hängen Komponenten daran, ist es der Kopf eines Systems** und bekommt eine gemeinsame Zeile, in der die Komponenten aufgeklappt danebenstehen. ⚠ **Die Zeile behält den Namen deines Geräts** und sein Symbol — sie heißt nicht „PV-System". ⚠ **Nebenbei behoben:** Das zugeordnete Modul stand mit dem Zusatz **„(ohne WR)"** und der Aufforderung „bitte zuordnen" da — obwohl es zugeordnet **war**, nur eben an ein Balkonkraftwerk. ⚠ **Ein Balkonkraftwerk ohne zugeordnete Komponenten sieht keine einzige veränderte Zahl.** ⚠ **Betroffen war auch, wer nur einen Speicher zugeordnet hat** (seit v4.0.5 möglich) — dort standen zwei Zeilen statt drei; die Summe bleibt dort unverändert, sie steht jetzt nur an einer Stelle statt an zweien. *(Gemeldet von azywietz-web mit Rechnungen, Messdaten und Rechenweg.)*
+
+- **Im Monat der Inbetriebnahme sah jede Anlage schlecht aus.** Unter *Auswertungen → Prognose* stellt eedc der gemessenen Erzeugung je Modul den PVGIS-Erwartungswert gegenüber. Im **Anschaffungsmonat** stand dort die Erwartung für den **ganzen** Monat — auch wenn die Anlage erst am 19. ans Netz ging. Die Kennzahl maß damit das Inbetriebnahme-Datum statt die Anlage: An der gemeldeten Anlage stand der März bei **0,35** (175,1 kWh erwartet gegen 60,8 gemessene), während dieselbe Anlage in **jedem** vollen Monat über 1,0 lag — und dieser eine Monat zog die Jahresbilanz von etwa 1,08 auf 0,97. Jetzt zählt der Erwartungswert nur die Tage, an denen es das Gerät gab: im Beispiel 13 von 31, also **73,4 kWh** und eine Kennzahl von **0,83**, die zu den übrigen Monaten passt. ⚠ **Der Monat der Stilllegung** wird genauso behandelt. ⚠ **Volle Monate ändern sich um keine Stelle**, und die Historie ebenfalls nicht. ⚠ **Innerhalb des Monats wird gleichmäßig verteilt** — im Frühjahr trägt die zweite Monatshälfte etwas mehr, der gekürzte Erwartungswert fällt dort also eher zu niedrig aus. ⚠ **Der saisonale Vergleich** („wie fällt der Mai typischerweise aus") bleibt bewusst ungekürzt: er mittelt über Jahre, dort wäre die Kürzung eine doppelte Strafe. *(Gemeldet von azywietz-web in einer GitHub-Discussion, mit einer Monatstabelle als Beleg.)*
+
+---
+
 ## [4.0.18] - 2026-08-17 — Einrichtung, die nicht gegen dich arbeitet
 
 ### Added
