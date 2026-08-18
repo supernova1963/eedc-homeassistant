@@ -204,3 +204,104 @@ async def test_komponenten_kwh_mit_nicht_numerischen_werten(db):
     # 45 kWh / 10 kWp = 4.5 kWh/kWp → unter Schwelle, keine Warnung,
     # aber wichtig: kein Crash beim Lesen non-numeric Werte.
     assert _pv_ergebnis(ergebnisse) == []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# F-40 (#385 azywietz-web): Counter-Spike-Tage sind kein Doppelerfassungs-Beleg
+#
+# Nach einem Verbindungsausfall liefert ein `total_increasing`-Sensor den Zuwachs
+# nach; Home Assistant bucht ihn in den ersten Slot danach. Der Tag steht damit
+# weit über dem physikalischen Maximum — **punktuell**, nicht dauerhaft. Genau
+# diese Unterscheidung fehlte: eedc meldete für EIN Ereignis zwei Dinge, einmal
+# richtig (Counter-Spike) und einmal falsch (Doppelerfassung mit behaupteter
+# Ursache). Das Signal dafür lag bereits in derselben Datei.
+#
+# ⚠ Der dritte Test ist der Wächter gegen Maskierung: Eine echte Doppelzählung
+# erzeugt am Mittag selbst Werte über `kWp × 1,5`. Würden Spike-Tage einfach
+# verschwiegen, versteckte sich der Fall, für den der Check gebaut wurde —
+# deshalb bleibt bei leerem Restsignal eine INFO stehen, statt zu schweigen.
+# ─────────────────────────────────────────────────────────────────────────────
+
+from backend.models.tages_energie_profil import TagesEnergieProfil  # noqa: E402
+
+
+async def _add_spike_stunde(db, anlage_id: int, datum: date, *, kw: float) -> None:
+    """Eine Stunde mit physikalisch unmöglichem Wert — der nachgelieferte Sprung."""
+    for stunde in range(24):
+        db.add(TagesEnergieProfil(
+            anlage_id=anlage_id, datum=datum, stunde=stunde,
+            pv_kw=kw if stunde == 7 else 0.0,
+        ))
+
+
+async def test_spike_tage_zaehlen_nicht_als_doppelerfassung(db):
+    """Der Melder-Fall: alle auffälligen Tage tragen einen Counter-Spike."""
+    anlage_id = await _seed_anlage(db, kwp=2.0)
+    heute = date.today()
+    for i in range(1, 5):
+        tag = heute - timedelta(days=i)
+        await _add_tag(db, anlage_id, tag, pr=1.7, pv_kwh=23.0)
+        await _add_spike_stunde(db, anlage_id, tag, kw=10.0)   # 10 kW > 2 kWp × 1,5
+    for i in range(5, 20):
+        await _add_tag(db, anlage_id, heute - timedelta(days=i), pr=0.9, pv_kwh=8.0)
+    await db.commit()
+
+    ergebnisse = await _run_check(db, anlage_id)
+
+    verdacht = [r for r in ergebnisse if "Doppelerfassung" in r.meldung and "kein" not in r.meldung]
+    assert not verdacht, (
+        "Die Ursache dieser Tage ist bekannt und wird nebenan gemeldet — ein "
+        "Doppelerfassungs-Verdacht behauptet hier etwas Ungeprüftes:\n"
+        + "\n".join(f"  {r.meldung}" for r in verdacht)
+    )
+    hinweis = [r for r in ergebnisse if "Counter-Spikes zusammen" in r.meldung]
+    assert hinweis, (
+        "Verschweigen ist nicht die Lösung — die auffälligen Tage bekommen ihre "
+        "Erklärung, fand:\n" + "\n".join(f"  {r.schwere}: {r.meldung}" for r in ergebnisse)
+    )
+    assert hinweis[0].schwere == CheckSeverity.INFO.value
+
+
+async def test_ohne_spike_bleibt_der_verdacht_bestehen(db):
+    """Die Gegenprobe: dieselben Tage ohne Counter-Spike ⇒ Meldung wie bisher."""
+    anlage_id = await _seed_anlage(db, kwp=2.0)
+    heute = date.today()
+    for i in range(1, 5):
+        await _add_tag(db, anlage_id, heute - timedelta(days=i), pr=1.7, pv_kwh=23.0)
+    for i in range(5, 20):
+        await _add_tag(db, anlage_id, heute - timedelta(days=i), pr=0.9, pv_kwh=8.0)
+    await db.commit()
+
+    ergebnisse = await _run_check(db, anlage_id)
+
+    verdacht = [r for r in ergebnisse if "Doppelerfassung" in r.meldung and "kein" not in r.meldung]
+    assert verdacht, "Ohne bekannte Ursache bleibt der Verdacht die richtige Auskunft"
+    # Und die Meldung behauptet keine EINE Ursache mehr.
+    assert "Mögliche Ursachen" in (verdacht[0].details or "")
+
+
+async def test_dauerhafte_ueberhoehung_mit_spikes_wird_weiter_gemeldet(db):
+    """Maskierungs-Wächter: echte Doppelzählung erzeugt selbst Spitzen.
+
+    Sind nur EINIGE der auffälligen Tage Spike-Tage, bleiben genug übrig — der
+    Verdacht steht weiter, wie er soll.
+    """
+    anlage_id = await _seed_anlage(db, kwp=2.0)
+    heute = date.today()
+    for i in range(1, 3):   # zwei Tage mit Spike
+        tag = heute - timedelta(days=i)
+        await _add_tag(db, anlage_id, tag, pr=1.7, pv_kwh=23.0)
+        await _add_spike_stunde(db, anlage_id, tag, kw=10.0)
+    for i in range(3, 9):   # sechs Tage ohne Spike, aber überhöht
+        await _add_tag(db, anlage_id, heute - timedelta(days=i), pr=1.6, pv_kwh=22.0)
+    for i in range(9, 20):
+        await _add_tag(db, anlage_id, heute - timedelta(days=i), pr=0.9, pv_kwh=8.0)
+    await db.commit()
+
+    ergebnisse = await _run_check(db, anlage_id)
+
+    verdacht = [r for r in ergebnisse if "Doppelerfassung" in r.meldung and "kein" not in r.meldung]
+    assert verdacht, (
+        "Sechs unauffällig erklärte Tage bleiben übrig — der Verdacht darf sich "
+        "nicht hinter zwei Spike-Tagen verstecken"
+    )

@@ -7,6 +7,17 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Drei Daten-Checker-Hinweise, die niemand auflösen konnte.** Alle drei gemeldet von azywietz-web (#382, #384, #385); keiner von ihnen bewegt eine Zahl — es ging jedes Mal darum, was eedc über deine Anlage *behauptet*.
+  - **„Einspeisevergütung fehlt" bei Nulleinspeisung (#382).** Der Hinweis erschien, sobald **irgendeine** Kilowattstunde eingespeist war — auch wenn es die reine Regelungstoleranz eines Balkonkraftwerks mit Nulleinspeisung war (beim Melder rund 5 kWh in fünf Monaten). Abstellen ließ er sich nur mit einem **falschen** Vergütungssatz. Jetzt gilt eine Schwelle von **50 kWh im Jahr**, und der Hinweis fordert nichts mehr: Er sagt, **womit eedc rechnet** (0 ct/kWh, so wie es im Tarif steht), und nennt Nulleinspeisung ausdrücklich als richtigen Fall. Entsprechend ist er jetzt eine **Info**, keine Warnung — was du einträgst, wird gerechnet.
+  - **Fehlender Zähler am Balkonkraftwerk, obwohl das Modul misst (#384).** Seit v4.0.18 dürfen PV-Module an einem Balkonkraftwerk hängen; gemessen wird dann **am Modul**. Der Daten-Checker wusste davon nichts und forderte weiter einen eigenen Zähler am Balkonkraftwerk — für einen Wert, den es dort nicht zu holen gibt. Jetzt erkennt er die Zuordnung und sagt es mit einer eigenen Zeile („N Balkonkraftwerk(e) über die zugeordneten PV-Module gedeckt"). ⚠ Ein Balkonkraftwerk **ohne** Modul-Kinder misst weiterhin selbst und wird unverändert geprüft.
+  - **„Verdacht auf PV-Doppelerfassung" nach einem Verbindungsausfall (#385).** Fällt die Verbindung zu einem kumulativen Zähler aus, liefert das Gerät den Zuwachs beim Wiederverbinden nach — Home Assistant bucht ihn in eine einzige Stunde, und der Tag steht weit über dem physikalisch Möglichen. eedc deutete das als Doppelerfassung und **behauptete sogar eine Ursache**, die nicht geprüft war. Diese Tage erkennt eedc längst als „Counter-Spike" und meldet sie mit dem passenden Reparatur-Weg — nur wusste die eine Prüfung nichts von der anderen. Jetzt zählen Spike-Tage nicht mehr als Beleg für Doppelerfassung; sind **alle** auffälligen Tage so erklärt, sagt eedc das ausdrücklich, statt zu schweigen. Bleiben unauffällig erklärte Tage übrig, kommt der Verdacht wie bisher — dann aber mit einer **Liste möglicher Ursachen** statt einer einzigen Behauptung. ⚠ Es werden **keine Werte korrigiert, gekappt oder ausgeblendet**: Der Ausfall ist eine Sache deiner Datenquelle, eedc sagt nur nicht mehr, es wisse etwas, das es nicht weiß.
+
+---
+
 ## [4.0.20] - 2026-08-18 — Eine Kilowattstunde, ein Preis
 
 ### Fixed

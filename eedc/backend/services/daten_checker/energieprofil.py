@@ -18,6 +18,9 @@ from backend.core.investition_parameter import (
     ist_dienstlich,
     ist_luft_luft_waermepumpe,
 )
+from backend.core.berechnungen.erzeuger_traeger import (
+    traegt_erzeugungsgroessen_selbst,
+)
 from backend.core.berechnungen import (
     summe_pv_bkw_kwh as _summe_pv_bkw_kwh,
     klassifiziere_pv_monat,
@@ -174,6 +177,7 @@ class EnergieprofilChecks:
         gemappt_count = 0   # über Sensor-Mapping abgedeckt
         quelle_count = 0    # über manuelle/importierte Datenquelle abgedeckt
         aggregat_count = 0  # über den Anlagen-Gesamtzähler abgedeckt
+        kind_count = 0      # BKW, das seine Erzeugungsgrößen abgetreten hat (F-39)
 
         # Achse C (Stufe 1 zu F-7, 2026-08-07): der Anlagen-Zählerstand
         # `basis["pv_gesamt"]` ist seit diesem Paket ein Snapshot-Zähler und
@@ -210,10 +214,33 @@ class EnergieprofilChecks:
             for w in anlage.investitionen
         )
 
+        # F-39 (#384 azywietz-web): Die Menge, gegen die die Abtretung geprüft
+        # wird, ist die HEUTE aktive — nicht `anlage.investitionen` roh. Der
+        # Selektor beantwortet ausdrücklich nur, was in der übergebenen Menge
+        # steht (`erzeuger_traeger`-Docstring), und irrt dabei in die sichere
+        # Richtung: ohne sichtbare Kinder trägt das BKW seine Größen selbst.
+        # Ein stillgelegtes Modul-Kind darf sein BKW also nicht entlasten —
+        # dieselbe Zeitgrenze, die die Schleife eine Zeile später zieht.
+        aktive = [inv for inv in anlage.investitionen if inv.ist_aktiv_an(heute)]
+
         for inv in sort_investitionen_nach_typ(anlage.investitionen):
             # Stilllegungsdatum respektieren (#608 MartyBr): stillgelegte
             # Komponente braucht keine Sensor-Mapping-Pflege mehr.
             if not inv.ist_aktiv_an(heute):
+                continue
+
+            # F-39: Ein Balkonkraftwerk mit `pv-module`-Kindern hat seine
+            # Erzeugungsgrößen an die Kinder abgetreten (N-266) — die Kinder
+            # stehen als eigene Investitionen in derselben Schleife und werden
+            # dort geprüft. Das BKW selbst braucht dann keinen eigenen
+            # kWh-Zähler; es trotzdem zu fordern ist ein Hinweis, den der
+            # Anwender nicht auflösen kann (P-6), gemeldet als #384.
+            # ⚠ Bewusst über den SoT und NICHT über den Typ allein: Ein BKW
+            # OHNE Modul-Kinder (nur Speicher, seit v4.0.5 möglich) trägt seine
+            # Erzeugung weiter selbst — aus der Falschmeldung würde sonst eine
+            # Nullprüfung (die Beinahe-Falle aus F-33).
+            if inv.typ == "balkonkraftwerk" and not traegt_erzeugungsgroessen_selbst(inv, aktive):
+                kind_count += 1
                 continue
             erwartet = erwartete_felder.get(inv.typ)
             if not erwartet:
@@ -267,7 +294,7 @@ class EnergieprofilChecks:
         if fehlend_pro_komponente:
             gesamt = (
                 len(fehlend_pro_komponente)
-                + gemappt_count + quelle_count + aggregat_count
+                + gemappt_count + quelle_count + aggregat_count + kind_count
             )
             details_parts = [
                 f"{name} ({typ}): {', '.join(fehlend)}"
@@ -291,6 +318,24 @@ class EnergieprofilChecks:
                 ),
                 link=LINK_DATENQUELLEN,
             ))
+        if kind_count > 0:
+            # F-39/E1: eigene Zeile statt Verrechnung mit `aggregat_count` — der
+            # Grund der Entlastung ist ein anderer (Modul-Kind statt
+            # Anlagen-Gesamtzähler), und diese Zeile ist die einzige Stelle, an
+            # der der Anwender sieht, warum er nichts tun muss.
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.OK,
+                meldung=(
+                    f"{kind_count} Balkonkraftwerk(e) über die zugeordneten "
+                    f"PV-Module gedeckt"
+                ),
+                details=(
+                    "Hängen PV-Module an einem Balkonkraftwerk, tragen sie dessen "
+                    "Erzeugung — gemessen wird am Modul. Das Balkonkraftwerk "
+                    "selbst braucht dann keinen eigenen kWh-Zähler."
+                ),
+            ))
+
         if gemappt_count > 0:
             # "Alle" nur wenn keine andere Quelle / kein Fehlend daneben steht
             prefix = "Alle " if (quelle_count == 0 and not fehlend_pro_komponente) else ""
@@ -396,6 +441,45 @@ class EnergieprofilChecks:
             link=LINK_DATENQUELLEN,
         )]
 
+    # ─── Counter-Spikes: EINE Ermittlung, zwei Leser ──────────────────────
+
+    async def _spike_tage(
+        self, anlage: Anlage, von: date, bis: date, schwelle_kw: float,
+    ) -> dict:
+        """Tage mit physikalisch unmöglichen Stundenwerten → {Tag: [(stunde, feld, wert)]}.
+
+        **Warum geteilt (F-40, #385 azywietz-web):** Dieses Signal hatte bis zum
+        18.08.2026 genau einen Leser — die Counter-Spike-Meldung. Der
+        Doppelerfassungs-Verdacht 200 Zeilen weiter unten misst dieselben 30 Tage
+        derselben Anlage und kannte es nicht: Nach einem Verbindungsausfall
+        liefert ein `total_increasing`-Sensor den Zuwachs nach, Home Assistant
+        bucht ihn in den ersten Slot danach, und eedc meldete für **ein**
+        Ereignis **zwei** Dinge — einmal richtig (Counter-Spike) und einmal
+        falsch (»Verdacht auf PV-Doppelerfassung« samt erfundener Ursache).
+        Eine zweite Kopie der Ermittlung wäre die Drift-Klasse gewesen, die
+        dieses Projekt mehrfach eingeholt hat; deshalb eine Funktion, zwei Leser.
+        """
+        from backend.models.tages_energie_profil import TagesEnergieProfil
+
+        result = await self.db.execute(
+            select(TagesEnergieProfil).where(
+                TagesEnergieProfil.anlage_id == anlage.id,
+                TagesEnergieProfil.datum >= von,
+                TagesEnergieProfil.datum <= bis,
+            ).order_by(TagesEnergieProfil.datum, TagesEnergieProfil.stunde)
+        )
+        spike_tage: dict = {}
+        for row in result.scalars().all():
+            for feld_name in ("pv_kw", "einspeisung_kw"):
+                wert = getattr(row, feld_name, None)
+                if wert is None:
+                    continue
+                if abs(wert) > schwelle_kw:
+                    spike_tage.setdefault(row.datum, []).append(
+                        (row.stunde, feld_name, wert)
+                    )
+        return spike_tage
+
     # ─── Energieprofil-Plausibilität (Counter-Spikes) ─────────────────────
 
     async def _check_energieprofil_plausibilitaet(self, anlage: Anlage) -> list[CheckErgebnis]:
@@ -429,26 +513,7 @@ class EnergieprofilChecks:
         bis = date.today()
         von = bis - timedelta(days=30)
 
-        result = await self.db.execute(
-            select(TagesEnergieProfil).where(
-                TagesEnergieProfil.anlage_id == anlage.id,
-                TagesEnergieProfil.datum >= von,
-                TagesEnergieProfil.datum <= bis,
-            ).order_by(TagesEnergieProfil.datum, TagesEnergieProfil.stunde)
-        )
-        zeilen = result.scalars().all()
-
-        # Spike-Tage sammeln: Tag → list[(stunde, feld, wert)]
-        spike_tage: dict[date, list[tuple[int, str, float]]] = {}
-        for row in zeilen:
-            for feld_name in ("pv_kw", "einspeisung_kw"):
-                wert = getattr(row, feld_name, None)
-                if wert is None:
-                    continue
-                if abs(wert) > schwelle_kw:
-                    spike_tage.setdefault(row.datum, []).append(
-                        (row.stunde, feld_name, wert)
-                    )
+        spike_tage = await self._spike_tage(anlage, von, bis, schwelle_kw)
 
         if not spike_tage:
             ergebnisse.append(CheckErgebnis(
@@ -635,6 +700,9 @@ class EnergieprofilChecks:
         """
         from datetime import date, timedelta
         from backend.models.tages_energie_profil import TagesZusammenfassung
+        from backend.services.snapshot.plausibility import (
+            schwelle_pv_einspeisung_stunde_kwh,
+        )
 
         kat = CheckKategorie.PV_UEBER_ERFASSUNG.value
         ergebnisse: list[CheckErgebnis] = []
@@ -657,20 +725,46 @@ class EnergieprofilChecks:
         if not tz_list:
             return ergebnisse
 
+        # F-40 (#385): Tage, an denen ein Counter-Spike steht, sind für den
+        # Doppelerfassungs-Verdacht **kein** Beleg — dort ist die Ursache bereits
+        # bekannt und wird nebenan gemeldet (`_check_energieprofil_plausibilitaet`),
+        # samt Reparatur-Weg. Ein nachgelieferter Zählerstand nach einem
+        # Verbindungsausfall erzeugt genau dieses Muster: punktuell überhöht statt
+        # dauerhaft. Die Unterscheidung ist der Kern der Meldung — ohne sie
+        # behauptet eedc eine Ursache, die es nicht geprüft hat.
+        # ⚠ Die Tage werden NICHT verschwiegen: Bleibt danach kein Signal übrig,
+        # sagt der Checker das ausdrücklich (INFO weiter unten), statt zu
+        # schweigen. Sonst könnte eine echte Doppelzählung, die selbst Spikes
+        # auslöst (2× kWp am Mittag), sich hinter dieser Regel verstecken.
+        schwelle_spike = schwelle_pv_einspeisung_stunde_kwh(kwp)
+        spike_tage = (
+            await self._spike_tage(anlage, von, bis, schwelle_spike)
+            if schwelle_spike is not None else {}
+        )
+
         pr_ueberschreitungen: list[tuple[date, float]] = []
         spez_ertrag_ueberschreitungen: list[tuple[date, float]] = []
+        verdeckt_durch_spike: set = set()
         tage_mit_pr = 0
         for tz in tz_list:
+            ist_spike_tag = tz.datum in spike_tage
+
             if tz.performance_ratio is not None:
                 tage_mit_pr += 1
                 if tz.performance_ratio > self.PR_PLAUSI_SCHWELLE:
-                    pr_ueberschreitungen.append((tz.datum, tz.performance_ratio))
+                    if ist_spike_tag:
+                        verdeckt_durch_spike.add(tz.datum)
+                    else:
+                        pr_ueberschreitungen.append((tz.datum, tz.performance_ratio))
 
             tages_pv = _summe_pv_bkw_kwh(tz.komponenten_kwh)
             if tages_pv > 0:
                 spez = tages_pv / kwp
                 if spez > self.SPEZ_TAGES_ERTRAG_OBERGRENZE_KWH_PRO_KWP:
-                    spez_ertrag_ueberschreitungen.append((tz.datum, spez))
+                    if ist_spike_tag:
+                        verdeckt_durch_spike.add(tz.datum)
+                    else:
+                        spez_ertrag_ueberschreitungen.append((tz.datum, spez))
 
         anzahl_pr_drueber = len(pr_ueberschreitungen)
         anteil_pr = anzahl_pr_drueber / tage_mit_pr if tage_mit_pr > 0 else 0.0
@@ -681,6 +775,28 @@ class EnergieprofilChecks:
         spez_signal = len(spez_ertrag_ueberschreitungen) >= self.PR_PLAUSI_MINDESTTAGE
 
         if not pr_signal and not spez_signal:
+            if verdeckt_durch_spike:
+                # Nichts verschweigen: Die auffälligen Tage sind erklärt, aber
+                # der Anwender hat sie gesehen (spez. Ertrag, PR) und soll
+                # wissen, wohin sie gehören.
+                tage = ", ".join(d.isoformat() for d in sorted(verdeckt_durch_spike, reverse=True)[:5])
+                ergebnisse.append(CheckErgebnis(
+                    kategorie=kat,
+                    schwere=CheckSeverity.INFO.value,
+                    meldung=(
+                        f"{len(verdeckt_durch_spike)} auffällige(r) Tag(e) fallen mit "
+                        f"Counter-Spikes zusammen — kein Doppelerfassungs-Verdacht"
+                    ),
+                    details=(
+                        f"Betroffen: {tage}. An diesen Tagen steht mindestens ein "
+                        "physikalisch unmöglicher Stundenwert — typisch nach einer "
+                        "Verbindungsunterbrechung, wenn ein kumulativer Zähler den "
+                        "Zuwachs nachliefert und Home Assistant ihn in einen Slot "
+                        "bucht. Die übrigen Tage sind unauffällig, eine "
+                        "Doppelerfassung passt deshalb nicht zum Bild. Details und "
+                        "Reparatur-Weg stehen im Befund „Counter-Spike am …“."
+                    ),
+                ))
             return ergebnisse
 
         # Auflistung der jüngsten Treffer (max 5 pro Marker)
@@ -708,10 +824,15 @@ class EnergieprofilChecks:
             details=(
                 f"Diagnose-Marker aus den letzten {self.PR_PLAUSI_FENSTER_TAGE} Tagen:\n"
                 + "\n".join(f"• {zeile}" for zeile in marker_zeilen) + "\n\n"
-                "Häufige Ursache: Der WR-Smart-Meter misst AC-seitig nach dem "
-                "Einspeisepunkt eines Balkonkraftwerks — die BKW-Erzeugung ist "
-                "im WR-Wert bereits enthalten, ein separates BKW-Mapping zählt "
-                "sie nochmal.\n\n"
+                "Mögliche Ursachen — welche zutrifft, weiß eedc nicht:\n"
+                "• Der WR-Smart-Meter misst AC-seitig nach dem Einspeisepunkt "
+                "eines Balkonkraftwerks — die BKW-Erzeugung ist im WR-Wert "
+                "bereits enthalten, ein separates BKW-Mapping zählt sie nochmal.\n"
+                "• Ein Sensor ist zweimal zugeordnet (Anlage und Komponente).\n"
+                "• Die eingetragene kWp ist zu niedrig — dann ist nicht die "
+                "Erzeugung zu hoch, sondern der Vergleichsmaßstab zu klein.\n\n"
+                "Tage mit bekanntem Counter-Spike sind hier bereits "
+                "herausgerechnet (#385).\n\n"
                 "Prüfen: Einstellungen → Datenquellen, Block des "
                 "Balkonkraftwerks.\n"
                 "Test-Variante: die BKW-Zuordnung temporär auf „keine“ setzen "

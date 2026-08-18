@@ -39,6 +39,15 @@ from .kategorien import CheckErgebnis, CheckKategorie, CheckSeverity
 # ein Pflegefehler. Entscheid Gernot 2026-08-04.
 DC_AC_MELDESCHWELLE = 2.0
 
+# Ab dieser auf ein Jahr hochgerechneten Einspeisemenge weist der Checker darauf
+# hin, dass ein Tarif mit 0 ct/kWh rechnet (F-38, #382). Darunter schweigt er:
+# Ein Nulleinspeisungs-System (BKW mit AC-Grenze ≤ Hausverbrauch) speist nur die
+# Regelungstoleranz seines Wechselrichters ein — beim Melder ~5 kWh in fünf
+# Monaten, also gut 12 kWh/Jahr. Die Schwelle liegt bewusst darüber und
+# gleichzeitig weit unter jeder Anlage, bei der ein vergessener Vergütungssatz
+# Geld kostet: 50 kWh sind bei üblichen 8 ct rund 4 € im Jahr.
+EINSPEISUNG_MELDESCHWELLE_KWH_JAHR = 50.0
+
 
 class StammdatenChecks:
     """Prüfungen für Stammdaten, Strompreise und Investitions-Stammwerte."""
@@ -400,30 +409,60 @@ class StammdatenChecks:
         # eingespeist wurde: 0 ct ist bei Volleinspeisung ohne Vergütung oder
         # nach dem Ende der EEG-Förderung ein richtiger Wert, und ein Hinweis,
         # den niemand abstellen kann, ist die P-6-Falle.
+        # F-38 (#382 azywietz-web): Zwei Korrekturen an dieser Regel.
+        #
+        # (1) **Eine Schwelle.** Sie löste bei JEDER erfassten Kilowattstunde
+        #     aus. Ein Balkonkraftwerk mit Nulleinspeisung (AC-Grenze ≤
+        #     Hausverbrauch) speist trotzdem eine Regelungstoleranz ein — beim
+        #     Melder ~5 kWh in fünf Monaten — und 0 ct ist dort der RICHTIGE
+        #     Wert. Ohne Schwelle war das ein Hinweis, den nur ein FALSCHER
+        #     Vergütungssatz abstellt: die P-6-Falle, vor der der Kommentar
+        #     unter dieser Regel seit dem 08.08. selbst warnt.
+        # (2) **Der Text fordert nicht mehr, er nennt die Rechenfolge.**
+        #     Maßgabe Gernots (18.08.): „Was der Benutzer einträgt, wird
+        #     gerechnet." Eine 0 im Feld ist eine Angabe, keine Nachlässigkeit
+        #     — eedc bewertet sie nicht (`feedback_eedc_ist_nicht_die_strom_
+        #     polizei`). Deshalb INFO statt WARNING: es liegt kein Datenfehler
+        #     vor, sondern eine Folge der Eingabe.
+        #
+        # Was die Meldung trotzdem rechtfertigt: seit dem 08.08. belegt eedc das
+        # Feld mit 0 VOR (statt einen EEG-Satz zu raten, Forum T89667 #122) —
+        # „nie angefasst" und „bewusst 0" sind im Feld nicht unterscheidbar. Die
+        # Zeile ist der Ersatz für diese fehlende Unterscheidung, nicht eine
+        # Aufforderung.
         gratis_tarife = [t for t in tarife if not t.einspeiseverguetung_cent_kwh]
-        if gratis_tarife and any(
-            (m.einspeisung_kwh or 0) > 0
+        gratis_monate = [
+            m for m in (monatsdaten or [])
+            if (m.einspeisung_kwh or 0) > 0
             # Stichtag ist der Monatserste, wie bei `baue_finanz_zeile`.
             and any(
                 t.gueltig_ab <= date(m.jahr, m.monat, 1)
                 and (t.gueltig_bis is None or t.gueltig_bis >= date(m.jahr, m.monat, 1))
                 for t in gratis_tarife
             )
-            for m in (monatsdaten or [])
-        ):
+        ]
+        einspeisung_kwh = sum((m.einspeisung_kwh or 0) for m in gratis_monate)
+        # Auf ein Jahr hochgerechnet, damit die Schwelle nicht von der Länge des
+        # erfassten Zeitraums abhängt: fünf Monate mit 5 kWh sind dieselbe Lage
+        # wie zwölf mit 12.
+        jahres_einspeisung = (
+            einspeisung_kwh * 12 / len(gratis_monate) if gratis_monate else 0.0
+        )
+        if gratis_monate and jahres_einspeisung >= EINSPEISUNG_MELDESCHWELLE_KWH_JAHR:
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.WARNING,
+                kategorie=kat, schwere=CheckSeverity.INFO,
                 meldung=(
-                    f"{len(gratis_tarife)} Tarif(e) ohne Einspeisevergütung, "
-                    f"obwohl Einspeisung erfasst ist"
+                    f"{len(gratis_tarife)} Tarif(e) rechnen die Einspeisung mit "
+                    f"0 ct/kWh"
                 ),
                 details=(
-                    "Mit 0 ct/kWh bleibt der Einspeise-Erlös dieser Zeiträume 0 € — "
-                    "in Cockpit, ROI und Jahresbericht. Trag den Satz aus deinem "
-                    "Vergütungsbescheid ein; bei gestaffelter EEG-Vergütung den nach "
-                    "kWp gewichteten Mischsatz, denn eedc rechnet flat mit dem Wert. "
-                    "Ist die Einspeisung tatsächlich unvergütet (Volleinspeisung ohne "
-                    "Vergütung, ausgelaufene Förderung), bleibt 0 richtig."
+                    "eedc rechnet den Einspeise-Erlös dieser Zeiträume mit 0 ct/kWh — "
+                    "so, wie es im Tarif steht; in Cockpit, ROI und Jahresbericht "
+                    "bleibt er damit 0 €. Richtig ist das bei Nulleinspeisung, bei "
+                    "unvergüteter Volleinspeisung und nach dem Ende der EEG-Förderung. "
+                    "Wer eine Vergütung bekommt, trägt seinen Satz ein — bei "
+                    "gestaffelter EEG-Vergütung den nach kWp gewichteten Mischsatz, "
+                    "denn eedc rechnet flat mit dem Wert."
                 ),
                 link="/einstellungen/strompreise",
             ))
