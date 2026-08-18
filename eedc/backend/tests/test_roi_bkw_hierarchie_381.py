@@ -247,3 +247,89 @@ async def test_bkw_ohne_kinder_behaelt_seine_zeile(db):
     # 800 Wp × 0,9 = 720 kWh, davon 80 % Eigenverbrauch × 30 ct = 172,80 €
     # plus Einspeise-Erlös 144 kWh × 8 ct = 11,52 €.
     assert abs(zeile.jahres_einsparung - (172.80 + 11.52)) < 0.01
+
+
+# ============================================================================
+# F-35 — die Pauschale liest die Nennleistung über den SoT-Helper
+# ============================================================================
+#
+# Vorher: `params.get('leistung_wp', 800)` — die Leistung EINES Moduls, ohne
+# `anzahl`. Ein BKW mit 4 × 500 Wp rechnete mit 500 statt 2.000 Wp und meldete
+# ein Viertel seiner Ersparnis. Genau daher stammen die 115 € in der Tabelle
+# aus #381.
+
+
+async def _solo_bkw(db, *, parameter: dict, leistung_kwp: float | None = None):
+    anlage = Anlage(anlagenname="Solo", leistung_kwp=2.0)
+    db.add(anlage)
+    await db.flush()
+    db.add(Monatsdaten(anlage_id=anlage.id, jahr=2026, monat=5,
+                       netzbezug_kwh=100.0, einspeisung_kwh=50.0))
+    bkw = Investition(
+        anlage_id=anlage.id, typ="balkonkraftwerk", bezeichnung="Solo",
+        anschaffungsdatum=date(2025, 1, 1), anschaffungskosten_gesamt=1200.0,
+        leistung_kwp=leistung_kwp, parameter=parameter,
+    )
+    db.add(bkw)
+    await db.flush()
+    return anlage, bkw
+
+
+def _erwartete_ersparnis(leistung_wp: float, *, strom_ct: float, eeg_ct: float) -> float:
+    ertrag = leistung_wp * 0.9
+    return ertrag * 0.8 * strom_ct / 100 + ertrag * 0.2 * eeg_ct / 100
+
+
+async def test_anzahl_zaehlt_mit(db):
+    """Der gemeldete Aufbau: 4 × 500 Wp → 2.000 Wp, nicht 500."""
+    anlage, bkw = await _solo_bkw(db, parameter={"leistung_wp": 500, "anzahl": 4})
+
+    result = await get_roi_dashboard(
+        anlage_id=anlage.id, strompreis_cent=31.95, einspeiseverguetung_cent=8.0,
+        benzinpreis_euro=None, jahr=2026, db=db,
+    )
+    zeile = next(b for b in result.berechnungen if b.investition_id == bkw.id)
+
+    erwartet = _erwartete_ersparnis(2000, strom_ct=31.95, eeg_ct=8.0)
+    assert abs(zeile.jahres_einsparung - erwartet) < 0.01
+    # Vor dem Fix stand hier die Zahl aus 500 Wp — die 115 € aus #381.
+    assert abs(zeile.jahres_einsparung - _erwartete_ersparnis(500, strom_ct=31.95, eeg_ct=8.0)) > 100
+    # Und die Anzeige nennt dieselbe Leistung, mit der gerechnet wurde.
+    assert zeile.detail_berechnung["leistung_wp"] == 2000
+
+
+async def test_ein_modul_bleibt_bitgleich(db):
+    """Gegenprobe: ohne `anzahl` ändert sich nichts (der häufige Fall)."""
+    anlage, bkw = await _solo_bkw(db, parameter={"leistung_wp": 800})
+
+    result = await get_roi_dashboard(
+        anlage_id=anlage.id, strompreis_cent=30.0, einspeiseverguetung_cent=8.0,
+        benzinpreis_euro=None, jahr=2026, db=db,
+    )
+    zeile = next(b for b in result.berechnungen if b.investition_id == bkw.id)
+    assert abs(zeile.jahres_einsparung - (172.80 + 11.52)) < 0.01
+
+
+async def test_kwp_aus_der_spalte_wird_gefunden(db):
+    """#229-Klasse: die Leistung kann auch in der Spalte stehen."""
+    anlage, bkw = await _solo_bkw(db, parameter={}, leistung_kwp=1.6)
+
+    result = await get_roi_dashboard(
+        anlage_id=anlage.id, strompreis_cent=30.0, einspeiseverguetung_cent=8.0,
+        benzinpreis_euro=None, jahr=2026, db=db,
+    )
+    zeile = next(b for b in result.berechnungen if b.investition_id == bkw.id)
+    # 1600 Wp — vorher wäre hier der 800-Wp-Default gelandet.
+    assert abs(zeile.jahres_einsparung - _erwartete_ersparnis(1600, strom_ct=30.0, eeg_ct=8.0)) < 0.01
+
+
+async def test_ohne_jede_leistung_bleibt_der_default(db):
+    """N-273: der 800-Wp-Default greift nur noch, wenn gar nichts gepflegt ist."""
+    anlage, bkw = await _solo_bkw(db, parameter={})
+
+    result = await get_roi_dashboard(
+        anlage_id=anlage.id, strompreis_cent=30.0, einspeiseverguetung_cent=8.0,
+        benzinpreis_euro=None, jahr=2026, db=db,
+    )
+    zeile = next(b for b in result.berechnungen if b.investition_id == bkw.id)
+    assert abs(zeile.jahres_einsparung - (172.80 + 11.52)) < 0.01

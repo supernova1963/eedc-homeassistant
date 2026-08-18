@@ -730,20 +730,29 @@ def _bkw_pauschal_beitrag(
     die Klasse, gegen die der vierte ADR-001-Nachtrag geschrieben ist: eine
     Formel ist nicht durchgesetzt, solange eine Kopie danebensteht.
 
-    ⚠ **Bewusst bitgleich zum Bestand übernommen, Fehler eingeschlossen.**
-    Die Rohform ``params.get('leistung_wp', 800)`` liest die Nennleistung
-    **eines** Moduls und ignoriert ``anzahl`` — ein BKW mit 4 × 500 Wp rechnet
-    hier mit 500 Wp statt 2.000 Wp und meldet rund ein Viertel seiner
-    Ersparnis (an der Anlage aus #381 nachgerechnet: 115 € statt ~460 €).
-    Das ist dieselbe Klasse wie #229 und verstößt gegen ADR-002/P3-a, das für
-    genau diese Größe ``get_bkw_kwp`` vorschreibt. Der Fix bewegt jedoch
-    **bestehende Zahlen** jedes BKW mit ``anzahl > 1`` und gehört deshalb
-    nicht in den Bau von #381 — er ist als eigener Befund im Register geführt.
-    Wer ihn baut, ersetzt hier die drei Zeilen durch ``get_bkw_kwp(inv)`` und
-    prüft die Kappung am Wechselrichter gleich mit.
+    **Die Nennleistung kommt über den SoT-Helper (F-35, ADR-002/P3-a).** Hier
+    stand ``params.get('leistung_wp', 800)`` — die Leistung **eines** Moduls,
+    ohne ``anzahl``. Ein Balkonkraftwerk mit 4 × 500 Wp rechnete damit mit
+    500 Wp statt 2.000 und meldete **ein Viertel** seiner Ersparnis. Genau so
+    entstehen die 115 €, die in der Tabelle aus #381 unter dem Balkonkraftwerk
+    stehen (500 × 0,9 × 0,8 × 0,3195 = 115,02 €) — der Melder hat den Fehler
+    also mitgeliefert, ohne ihn zu kennen. Dieselbe Klasse wie #229: eine
+    Größe, die je nach Herkunft an zwei Orten liegt, roh gelesen.
+    ``get_bkw_kwp`` ist der Ort, an dem beide Formen zusammenlaufen.
+
+    ⚠ **Der 800-Wp-Default bleibt vorerst** — er greift jetzt nur noch, wenn
+    ``get_bkw_kwp`` **gar nichts** findet (weder Spalte noch ``kwp`` noch
+    ``leistung_wp``). Genau genommen ist er dieselbe Sorte Annahme, die N127
+    beim Speicher entfernt hat („keine Kapazität ⇒ keine Rechnung, sondern ein
+    Hinweis"), und ADR-002 ist gegen Defaults geschrieben, die wie eine
+    Messung aussehen. Das ist ein **eigener** Befund (Register N-273), keine
+    stille Mitnahme: ihn zu ziehen ändert die Zeile für Altbestand ohne
+    gepflegte Leistung von einer Zahl auf „—".
     """
-    params = inv.parameter or {}
-    leistung_wp = params.get('leistung_wp', 800)
+    # kWp → Wp: der Helper liefert kWp (Spalte, `parameter`-JSON oder
+    # `leistung_wp × anzahl`), die Pauschale rechnet historisch in Wp.
+    kwp = get_bkw_kwp(inv)
+    leistung_wp = kwp * 1000 if kwp else 800
     # Vereinfachte Berechnung: ca. 0.9 kWh/Wp/Jahr in Deutschland
     jahres_ertrag = leistung_wp * 0.9
     # 80% Eigenverbrauch typisch bei Balkonkraftwerk
@@ -2105,7 +2114,11 @@ async def get_roi_dashboard(
             # #381 in `_bkw_pauschal_beitrag`, damit es nicht zwei Kopien gibt.
             # Hierher kommt nur noch ein BKW OHNE Kinder; mit Kindern ist es
             # Systemkopf und diese Zeile entsteht gar nicht.
-            leistung_wp = params.get('leistung_wp', 800)
+            # F-35: die Anzeige nennt dieselbe Leistung, mit der gerechnet
+            # wurde — sonst stünde im Hinweis „500 Wp" neben einer Zahl aus
+            # 2.000 Wp.
+            _bkw_kwp = get_bkw_kwp(inv)
+            leistung_wp = _bkw_kwp * 1000 if _bkw_kwp else 800
             jahres_ertrag, jahres_einsparung, co2_einsparung = _bkw_pauschal_beitrag(
                 inv,
                 strompreis_cent=strompreis_cent,
