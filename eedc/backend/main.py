@@ -230,6 +230,34 @@ async def lifespan(app: FastAPI):
             asyncio.create_task(sensor_snapshot_startup_recovery())
         except Exception as e:
             logger.debug(f"Snapshot-Recovery konnte nicht gestartet werden: {e}")
+
+        # #387 Schritt 3: einmaliges Nachsenden des Gemeinschaftsdatensatzes.
+        # Mit v4.0.22 gehen der PVGIS-Maßstab, die CO₂-Zahl und der gemessene
+        # Eigenverbrauch erstmals mit; der Community-Server stellt seine
+        # Rangliste am 01.09.2026 darauf um. Ohne diesen Lauf käme der Maßstab
+        # erst mit dem jeweils nächsten Monatsabschluss an — bei wem der Mitte
+        # September liegt, zu spät. Nur Anlagen mit `community_auto_share`,
+        # nur einmal je Schema-Stand, Fehler sind folgenlos (der nächste Start
+        # versucht es erneut).
+        try:
+            from backend.services.community_nachsenden import (
+                fuehre_nachsende_lauf_aus,
+            )
+            from backend.core.database import async_session_maker as _sm
+
+            async def _nachsenden() -> None:
+                await asyncio.sleep(60)  # dem Start nicht in die Quere kommen
+                async with _sm() as _s:
+                    ergebnis = await fuehre_nachsende_lauf_aus(_s)
+                if ergebnis.get("gesendet"):
+                    print(
+                        f"Community: {ergebnis['gesendet']} Datensatz/Datensätze "
+                        "mit dem neuen Maßstab nachgesendet."
+                    )
+
+            asyncio.create_task(_nachsenden())
+        except Exception as e:
+            logger.debug(f"Community-Nachsendung nicht gestartet: {e}")
     else:
         print(
             "Scheduler konnte nicht gestartet werden (APScheduler nicht installiert?)."

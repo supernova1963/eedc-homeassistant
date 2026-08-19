@@ -2094,6 +2094,13 @@ P11_AUSNAHMEN: frozenset[str] = frozenset({
     "backend/api/routes/monatsabschluss/views.py::get_naechster_monat",
     "backend/api/routes/monatsdaten.py::list_monatsdaten_aggregiert",  # `pv_ziel_aktiv`
     "backend/services/energie_profil/_helpers.py::_get_tagespeaks_aus_ha_lts",
+    # LADEPFAD, keine Summe: holt die Erzeuger-Zeilen aus der DB und reicht sie
+    # weiter. Die Menge wird erst in `soll_fuer_monat` gebildet — dort läuft sie
+    # durch den Selektor, und zwar NACH dem Zeitfilter. Den Selektor schon beim
+    # Laden anzuwenden wäre sogar falsch: er entscheidet je Monat, und ein BKW,
+    # das seine kWp erst später abtritt, dürfte für die früheren Monate nicht
+    # fehlen (#387/F-45, `services/pvgis_soll.py`).
+    "backend/services/pvgis_soll.py::lade_erzeuger",
     # ⚠ Der ANSCHAFFUNGS-Anker: `get_naechster_monat` und `monats_luecken`
     # fragen, ab wann ein Monat erfasst sein SOLL. Ein abtretendes BKW gehört
     # dort dazu — es ist am Netz, seit es angeschafft wurde, unabhängig davon,

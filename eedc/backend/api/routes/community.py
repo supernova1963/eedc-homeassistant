@@ -228,6 +228,25 @@ async def get_community_status():
         }
 
 
+@router.get("/nachsende-status")
+async def get_nachsende_status(db: AsyncSession = Depends(get_db)):
+    """Wer muss seinen Datensatz einmal neu teilen? (#387 Schritt 3)
+
+    Mit v4.0.22 gehen vier Felder erstmals mit — der PVGIS-Maßstab je Monat und
+    je Jahr, die CO₂-Zahl nach eedcs Kanon und der gemessene Eigenverbrauch. Der
+    Community-Server stellt seine Rangliste am **01.09.2026** darauf um.
+
+    Anlagen mit ``community_auto_share`` senden einmalig von selbst nach
+    (``services/community_nachsenden.py``, beim nächsten Start). Alle anderen
+    stehen hier unter ``offen`` — für sie ist der Hinweis samt vorhandenem
+    Teilen-Knopf gedacht, **kein** stiller Versand: sie haben dem automatischen
+    Teilen nie zugestimmt.
+    """
+    from backend.services.community_nachsenden import nachsende_status
+
+    return await nachsende_status(db)
+
+
 @router.delete("/delete/{anlage_id}", response_model=DeleteResponse)
 async def delete_from_community(
     anlage_id: int,

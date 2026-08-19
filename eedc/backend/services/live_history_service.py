@@ -267,6 +267,25 @@ async def get_tages_kwh(
     if (eid := _eov("basis:netzbezug", _feld_eid(basis_map.get("netzbezug", {})))):
         basis_kwh_sensors["netzbezug"] = eid
 
+    # F-49 (#388, Mathek 2026-08-19): der **anlagenweite PV-Zähler**. Er stand
+    # hier bis dahin nicht — Einspeisung und Netzbezug lasen ihren Zählerstand,
+    # die PV daneben wurde aus dem Leistungssensor integriert. Beim Melder
+    # standen dadurch 10,0 kWh in der Live-Kachel, während sein eigener
+    # HA-Zähler `sensor.energy_solar_generation_daily` 7,65 zeigte (+31 %).
+    #
+    # Der Widerspruch stand in der Oberfläche: bei einer Modulgruppe ohne
+    # eigenen Zähler sagt der Hilfetext „Über den Anlagen-Zählerstand abgedeckt
+    # — als Summe der ganzen Anlage, **auch für Tag und Stunde**". Für Tag und
+    # Stunde stimmte das (Snapshot-Pfad), für die Live-Kachel nicht.
+    #
+    # Bewusst ein EIGENER Slot statt eines Eintrags in `basis_kwh_sensors`:
+    # dort läge er VOR den Erzeuger-Einzelzählern, und die Präzedenz ist
+    # umgekehrt — derselbe Hilfetext sagt „sobald einer gemessen wird, zählt
+    # für Tag und Stunde nur noch, was je Erzeuger gemessen ist".
+    basis_pv_kwh_sensor = _eov(
+        "basis:pv_gesamt", _feld_eid(basis_map.get("pv_gesamt", {}))
+    )
+
     separate_battery_sensors: dict[str, dict[str, Optional[str]]] = {}
     separate_kwh_sensors: dict[str, str] = {}
     mapping_investitionen = mapping_full.get("investitionen", {})
@@ -350,6 +369,7 @@ async def get_tages_kwh(
            for eid in sep.values() if eid]
         + list(separate_kwh_sensors.values())
         + list(basis_kwh_sensors.values())
+        + ([basis_pv_kwh_sensor] if basis_pv_kwh_sensor else [])
     ))
     if not all_ids:
         return {}
@@ -412,6 +432,15 @@ async def get_tages_kwh(
             if pv_has_kwh:
                 result["pv"] = round(pv_total, 1)
                 continue
+            # F-49: kein Erzeuger misst selbst → der anlagenweite PV-Zähler.
+            # Erst wenn auch der fehlt, wird die Leistung integriert.
+            if basis_pv_kwh_sensor and basis_pv_kwh_sensor in history:
+                kwh = _energy_delta(
+                    basis_pv_kwh_sensor, history, sensor_units, start, end
+                )
+                if kwh is not None:
+                    result["pv"] = round(kwh, 1)
+                    continue
 
         # Fallback: W-Sensoren + Trapezregel
         total_kwh = 0.0

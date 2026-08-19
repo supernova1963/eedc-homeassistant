@@ -9,35 +9,67 @@
 
 ---
 
-## [Unreleased] — Der Community-Vergleich zeigt nur noch echte Jahre
+## [Unreleased] — Der Community-Vergleich bekommt einen echten Maßstab
 
-**azywietz-web hat einen Fehler gemeldet und ihn gleich selbst vorgerechnet** ([#387](https://github.com/supernova1963/eedc-homeassistant/issues/387)):
+**azywietz-web hat einen Fehler gemeldet und ihn gleich selbst vorgerechnet**
+([#387](https://github.com/supernova1963/eedc-homeassistant/issues/387)):
 Seine 2-kWp-Anlage läuft seit dem 19. März. Sechs Monate, alle mit Sonne — und im
 Community-Ranking stand sie auf **Rang 3 von 112**, in NRW sogar auf **Rang 1**.
 
-Der Grund war eine Hochrechnung: Der Community-Server hat aus den vorhandenen Monaten einen
-Mittelwert gebildet und ihn mit zwölf multipliziert. Aus **636,8 kWh/kWp** wurden so **1.273,6**.
-Wer im Frühjahr startet, hat aber genau die Monate im Datensatz, in denen die Sonne scheint —
-und wer ein ganzes Jahr gemessen hat, schleppt Dezember und Januar mit. Die Rangliste hat damit
-nicht gemessen, wer am meisten erzeugt, sondern **wer die wenigsten schwachen Monate hat**.
+Der Grund war eine Hochrechnung mit dem Holzhammer: Der Community-Server hat aus den
+vorhandenen Monaten einen Mittelwert gebildet und ihn mit zwölf multipliziert. Aus
+**636,8 kWh/kWp** wurden so **1.273,6**. Wer im Frühjahr startet, hat aber genau die Monate
+im Datensatz, in denen die Sonne scheint — und wer ein ganzes Jahr gemessen hat, schleppt
+Dezember und Januar mit. Die Rangliste hat damit nicht gemessen, wer am meisten erzeugt,
+sondern **wer die wenigsten schwachen Monate hat**.
 
-**Was sich für dich ändert:**
+### Was sich ändert — und wann
 
-- **Der spezifische Jahresertrag entsteht nur noch aus zwölf zusammenhängenden Kalendermonaten.**
-  Der laufende Monat zählt nicht mit — er ist noch nicht zu Ende.
-- **Fehlt ein Monat, gibt es keinen Jahreswert und keinen Rang** — und stattdessen einen Satz,
-  der sagt, woran es liegt und wie viele Monate schon da sind.
-- **Deine monatlichen Vergleiche bleiben, wie sie waren.** Sie waren nie betroffen und gelten
-  vom ersten Monat an. Nur der *Jahres*-Vergleich wartet auf ein volles Jahr.
-- **Hast du ein volles Jahr, ändert sich deine Zahl nicht.** An einer Anlage mit 38 lückenlosen
-  Monaten nachgemessen: 1.118,7 kWh/kWp vorher wie nachher.
-- **Der Community-Durchschnitt hatte zwei Werte** — 662 im Add-on, 840 auf der Community-Seite.
-  Jetzt ist es einer. Jede Aussage „du liegst X % über dem Schnitt" meint damit erstmals
-  dieselbe Vergleichsgruppe, die auch in der Rangliste steht.
+Ein Teiljahr wird **weiter hochgerechnet**, aber nicht mehr flach. Statt „mal zwölf" gilt
+künftig die **Ertragserwartung deines eigenen Standorts** als Maßstab: Ein Frühling zählt
+als Frühling. Für die Anlage des Melders ergibt das rund **980** statt 1.273,6 kWh/kWp —
+nah an den etwa 940, die er selbst erwartet hatte.
 
-⚠ **Die Bestenliste wird dadurch kürzer, und die Spitzenwerte fallen.** Das ist kein Verlust,
-sondern die Korrektur: Ein Platz, der nur entsteht, weil der Winter fehlt, sagt nichts über
-deine Anlage.
+> ⚠ **Die Umstellung passiert am 1. September 2026, nicht mit diesem Update.**
+> Sie braucht eine Angabe, die erst diese Version mitschickt — und die muss erst bei
+> genügend Anlagen angekommen sein. Deshalb ändert sich die Rangliste an **einem Tag**
+> und nicht schleichend über Wochen. Bis dahin siehst du die alten Zahlen.
+
+**Was du dafür tun kannst:** einmal teilen. Wer *„Monatsdaten nach Abschluss automatisch
+senden"* aktiviert hat, muss gar nichts tun — eedc schickt den neuen Maßstab nach dem
+Update von selbst einmal nach. Alle anderen finden unter *Community* einen Hinweis mit
+Knopf.
+
+### Drei weitere Korrekturen am selben Ort
+
+**Dein angefangener Monat bleibt zu Hause.** Bisher ging auch der laufende, halb volle
+Monat in den Gemeinschaftsdatensatz. Am 19. August wies die Community deshalb für den
+August **46,3 kWh/kWp aus fünf Anlagen** aus — kein August, sondern fünf halbe. Genau diese
+Zahl benutzt eedc als monatlichen Vergleichswert; wer sich damit verglich, sah sich weit
+über dem Schnitt. Ab jetzt gilt ein Monat erst als teilbar, wenn er **im Kalender** vorbei
+ist — unabhängig davon, wann du ihn abschließt.
+
+**Die CO₂-Zahl der Community war zu niedrig.** Der Server hat sie selbst gerechnet, aus dem
+Eigenverbrauch mal einem festen Faktor — **ohne Wärmepumpe und E-Mobilität**. Bei
+ausgewiesenen 318,9 Tonnen fehlten allein durch die Wärmepumpen rund **22 %**. Künftig steht
+dort dieselbe Zahl, die dein Cockpit zeigt.
+
+**Zwei Durchschnitte für dieselbe Größe.** Im Add-on stand **662 kWh/kWp**, auf der
+Community-Seite **840** — im selben Moment. Beide Seiten rechnen künftig über dieselbe
+Vergleichsgruppe.
+
+### Die Live-Ansicht zeigte zu viel PV für heute
+
+**Mathek hat es gemeldet** ([#388](https://github.com/supernova1963/eedc-homeassistant/issues/388))
+und mit drei Bildern belegt: In der Kachel *Heute* standen **10,0 kWh**, sein eigener Zähler
+in Home Assistant zeigte zeitgleich **7,65** — rund 31 % zu viel. In der Tagesansicht stand
+wieder etwas anderes.
+
+Der Grund: eedc hat für diese **eine** Kachel die Leistung hochgerechnet, statt den
+Zählerstand zu lesen — obwohl der Zähler zugeordnet war und Einspeisung und Netzbezug direkt
+daneben genau daraus kamen. Betroffen war, wer seine PV über den **anlagenweiten** Zähler
+erfasst und keine Messung je Modulgruppe hat; das ist der Normalfall. Tages- und
+Monatsansicht waren nie betroffen — das erklärt, warum dieselbe Anlage zwei Zahlen zeigte.
 
 ---
 

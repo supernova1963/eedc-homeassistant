@@ -23,7 +23,16 @@ from backend.core.investition_parameter import (
     PARAM_BALKONKRAFTWERK,
     PARAM_WAERMEPUMPE,
 )
+from typing import Mapping, Sequence
+
 from backend.services.monats_fakten import MonatsFakt, lade_monats_fakten
+from backend.services.monats_co2 import co2_bilanz_aus_fakt
+from backend.services.pvgis_soll import (
+    SollQuelle,
+    lade_erzeuger,
+    lade_soll_quelle,
+    soll_fuer_monat,
+)
 from backend.services.plz_to_state import PLZ_TO_STATE
 
 
@@ -315,26 +324,75 @@ async def prepare_community_data(
     # teilen — `monatswerte` blieb leer und `/community/share` brach mit HTTP
     # 400 ab), den Erzeuger hinter dem Zähler + V2H in der Autarkie (F-1) und
     # den Dienstwagen-Filter.
+    # Der Maßstab (PVGIS) und die CO₂-Eingaben werden EINMAL geladen, nicht je
+    # Monat — beides sind Anlagen-Eigenschaften. `soll_quelle is None` heißt
+    # „keine aktive Prognose": dann trägt der Datensatz keine SOLL-Felder und
+    # der Server fällt auf seine eigene Kaskade zurück (#387).
+    soll_quelle = await lade_soll_quelle(db, anlage_id)
+    erzeuger = await lade_erzeuger(db, anlage_id) if soll_quelle else []
+    eauto_parameter = {
+        inv.id: inv.parameter for inv in investitionen if inv.typ == "e-auto"
+    }
+    data["soll_jahr_kwh"] = (
+        round(soll_quelle.jahr_kwh, 1)
+        if soll_quelle and soll_quelle.jahr_kwh
+        else None
+    )
+
     if include_monatswerte:
         for fakt in await lade_monats_fakten(db, anlage_id):
-            monatswert_data = _monatswert(fakt)
+            monatswert_data = _monatswert(
+                fakt,
+                soll_quelle=soll_quelle,
+                erzeuger=erzeuger,
+                eauto_parameter=eauto_parameter,
+            )
             if monatswert_data is not None:
                 data["monatswerte"].append(monatswert_data)
 
     return data
 
 
-def _monatswert(fakt: MonatsFakt) -> dict | None:
+def _monatswert(
+    fakt: MonatsFakt,
+    *,
+    soll_quelle: SollQuelle | None = None,
+    erzeuger: Sequence = (),
+    eauto_parameter: Mapping[int, dict | None] | None = None,
+) -> dict | None:
     """Ein Community-Monatswert aus einem ``MonatsFakt`` — oder ``None``.
 
-    Zwei Filter, beide aus dem Bestand übernommen und bewusst beibehalten:
+    Drei Filter, die ersten beiden aus dem Bestand übernommen und bewusst
+    beibehalten:
 
     - **ohne Zählerzeile nichts** — Einspeisung und Netzbezug wären 0 und die
       Autarkie damit eine Behauptung ohne Messung (P4). Die alte Fassung lief
       über die ``Monatsdaten``-Zeilen und hatte den Filter dadurch implizit.
     - **ohne PV nichts** — der Benchmark vergleicht PV-Anlagen. Ein Monat vor
       der Inbetriebnahme (oder eine reine BHKW-Anlage) gehört nicht hinein.
+    - **kein angefangener Monat** (F-48, neu 2026-08-19) — siehe unten.
+
+    ⛔ **Der laufende Kalendermonat wird nicht geteilt (F-48).** Bis dahin ging
+    jeder Monat mit Zählerzeile und PV > 0 raus, also auch ein halber. Wer den
+    Abschluss des laufenden Monats schon anlegt (das Formular lässt es zu) oder
+    ihn importiert, schickte ein Bruchstück in einen Bestand voller ganzer
+    Monate. **Live gemessen am 19.08.2026:** ``/api/statistics/monthly-averages``
+    wies für 08/2026 **46,3 kWh/kWp bei n = 5** aus — kein August, sondern fünf
+    halbe —, und der Client benutzt genau diese Reihe als Monats-Vergleichswert.
+
+    ⚠ **„Zu Ende" heißt Kalendermonat vorbei, NICHT „Monatsabschluss
+    erledigt".** Sonst hinge die Vergleichbarkeit an der Pflegedisziplin des
+    Einzelnen: wer früh abschließt, wäre drin, wer spät abschließt, fehlte —
+    und beides wäre unsichtbar. Der Kalender ist für alle derselbe.
+
+    **Was verloren geht, ehrlich:** der eigene neueste Datenpunkt fehlt in der
+    Gemeinschaftssicht bis zum Monatsende. Kein Verlust — eedc zeigt ihn lokal,
+    vergleichbar war er dort nie.
     """
+    heute = date.today()
+    if (fakt.jahr, fakt.monat) >= (heute.year, heute.month):
+        return None
+
     if not fakt.meta.hat_zaehlerzeile:
         return None
 
@@ -367,7 +425,26 @@ def _monatswert(fakt: MonatsFakt) -> dict | None:
         "netzbezug_kwh": round(netzbezug, 1) if netzbezug else None,
         "autarkie_prozent": round(autarkie, 1) if autarkie is not None else None,
         "eigenverbrauch_prozent": round(ev_quote, 1) if ev_quote is not None else None,
+        # Der Eigenverbrauch in kWh, nicht nur als Quote (F-47): der Server hat
+        # ihn bis dahin als `Erzeugung − Einspeisung` rekonstruiert — falsch,
+        # sobald ein weiterer Erzeuger hinter demselben Zähler sitzt oder der
+        # Speicher mitspielt. Hier ist es die kanonische Größe aus der Schicht.
+        "eigenverbrauch_kwh": round(kennzahlen.eigenverbrauch_kwh, 1),
     }
+
+    # Der Maßstab dieses Monats (#387) — tagesgenau gekürzt, siehe
+    # `services/pvgis_soll.py`. Ohne aktive PVGIS-Prognose bleibt das Feld weg;
+    # der Server hat dann keinen anlagenindividuellen Maßstab und sagt es.
+    soll_kwh = soll_fuer_monat(soll_quelle, erzeuger, fakt.jahr, fakt.monat)
+    if soll_kwh is not None and soll_kwh > 0:
+        monatswert_data["soll_ertrag_kwh"] = soll_kwh
+
+    # CO₂ nach eedcs einzigem Kanon (ADR-001/DI-2, F-47) — inklusive Wärmepumpe
+    # und E-Mobilität. Der Server rechnete `Eigenverbrauch × 0,38` und ließ
+    # beides aus; allein die Wärmepumpen fehlten mit rund 22 % der Summe.
+    co2 = co2_bilanz_aus_fakt(fakt, eauto_parameter or {})
+    if co2.co2_gesamt_kg > 0:
+        monatswert_data["co2_vermieden_kg"] = round(co2.co2_gesamt_kg, 1)
 
     speicher = fakt.speicher
     if speicher.ladung_kwh > 0 or speicher.entladung_kwh > 0:
