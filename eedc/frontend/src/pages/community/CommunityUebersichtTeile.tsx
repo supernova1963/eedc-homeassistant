@@ -21,7 +21,7 @@ import {
   ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Legend,
 } from 'recharts'
 import { REGION_NAMEN, EIGENE_SERIE_FARBEN, SERIEN_PALETTE, ACHSEN_TICK, fmtZahl } from '../../lib'
-import { hatJahresfenster, jahresfensterHinweis, jahresfensterStand } from '../../lib/communityFenster'
+import { hatJahresfenster, jahresfensterHinweis, jahresfensterKennzeichnung, jahresfensterStand } from '../../lib/communityFenster'
 
 // Element-Park (IA-V4, Element-Park-Doktrin Gernot 2026-06-27): JEDE Anzeige
 // (KPI/Vergleichs-Karte, Chart, Liste, Achievement, Komponenten-Karte) ist einzeln
@@ -325,6 +325,12 @@ export function RankingHauptKpi({ benchmark, rankingBadge }: { benchmark: Commun
           <AbweichungBadge wert={benchmark.benchmark.spez_ertrag_anlage} durchschnitt={benchmark.benchmark.spez_ertrag_durchschnitt} />
           {hatJahresfenster(benchmark.benchmark) && jahresfensterStand(benchmark.benchmark) && (
             <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{jahresfensterStand(benchmark.benchmark)}</p>
+          )}
+          {/* #387: Ein Wert aus fünf Monaten darf nicht aussehen wie einer aus
+              zwölf. Erscheint von selbst, sobald der Server umgestellt ist
+              (01.09.2026) — vorher sendet er `basis_monate` gar nicht. */}
+          {jahresfensterKennzeichnung(benchmark.benchmark) && (
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{jahresfensterKennzeichnung(benchmark.benchmark)}</p>
           )}
           {jahresfensterHinweis(benchmark.benchmark) && (
             <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">{jahresfensterHinweis(benchmark.benchmark)}</p>

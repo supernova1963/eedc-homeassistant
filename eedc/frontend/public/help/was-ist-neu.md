@@ -40,6 +40,11 @@ senden"* aktiviert hat, muss gar nichts tun — eedc schickt den neuen Maßstab 
 Update von selbst einmal nach. Alle anderen finden unter *Community* einen Hinweis mit
 Knopf.
 
+**Und du brauchst dafür kein zweites Update:** Ab dem 1. September weist eedc einen
+hochgerechneten Wert als solchen aus — *„hochgerechnet aus 5 von 12 Monaten"* steht dann
+unter der Zahl. Diese Version kann das bereits; sie zeigt es, sobald der Server umgestellt
+ist.
+
 ### Drei weitere Korrekturen am selben Ort
 
 **Dein angefangener Monat bleibt zu Hause.** Bisher ging auch der laufende, halb volle

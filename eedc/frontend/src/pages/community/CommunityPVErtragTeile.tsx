@@ -21,7 +21,7 @@ import {
   MONAT_KURZ, STATUS_COLORS, EIGENE_SERIE_FARBEN, SERIE_NEUTRAL, ACHSEN_TICK,
   ACHSEN_MARGIN_TOP, achsenEinheit, achsenTick, fmtZahl,
 } from '../../lib'
-import { jahresfensterHinweis, jahresfensterStand } from '../../lib/communityFenster'
+import { jahresfensterHinweis, jahresfensterKennzeichnung, jahresfensterStand } from '../../lib/communityFenster'
 
 // Element-Park (IA-V4, Element-Park-Doktrin Gernot 2026-06-27): JEDE Anzeige
 // (KPI, Chart, Beschriftung/Legende, Tabelle, Hinweis) ist einzeln parkbar.
@@ -317,9 +317,9 @@ export function VergleichHinweis({ benchmark, performanceStats }: { benchmark: C
       <p className="text-sm text-gray-600 dark:text-gray-400">
         {jahresfensterHinweis(benchmark.benchmark) ?? (
           <>
-            Der Community-Durchschnitt basiert auf {fmtZahl(benchmark.benchmark.anzahl_anlagen_gesamt, 0)} Anlagen
-            mit zwölf zusammenhängenden Monaten.
+            Der Community-Durchschnitt basiert auf {fmtZahl(benchmark.benchmark.anzahl_anlagen_gesamt, 0)} Anlagen.
             Dein spezifischer Ertrag von <strong>{fmtZahl(benchmark.benchmark.spez_ertrag_anlage, 0)} kWh/kWp</strong>
+            {jahresfensterKennzeichnung(benchmark.benchmark) ? ` (${jahresfensterKennzeichnung(benchmark.benchmark)})` : ''}
             {' '}({jahresfensterStand(benchmark.benchmark)}) liegt
             {' '}{(performanceStats?.abweichungGesamt || 0) >= 0 ? 'über' : 'unter'} dem Durchschnitt von
             {' '}<strong>{fmtZahl(benchmark.benchmark.spez_ertrag_durchschnitt, 0)} kWh/kWp</strong>.
