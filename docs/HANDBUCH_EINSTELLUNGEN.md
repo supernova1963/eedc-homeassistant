@@ -66,7 +66,7 @@ Der Anlage-Block zeigt eine Tabelle deiner Anlagen mit einem Bearbeiten-Modal (a
 
 **Wettermodell** (steuert Kurzfrist-Prognose und Wetter-Autofill):
 
-- **auto** (Standard): eedc wählt automatisch (Bright Sky für DE, sonst Open-Meteo best_match). Maßgeblich ist seit v4.0.21 das **Land** aus den Stammdaten — vorher entschied allein ein Koordinaten-Rechteck, das halb Österreich und die Nordostschweiz mit einschloss (siehe [§2.1a](#21a-eedc-außerhalb-deutschlands)).
+- **auto** (Standard): eedc wählt automatisch (Bright Sky für DE, sonst Open-Meteo best_match). Maßgeblich ist dabei das **Land** aus den Stammdaten — bis zur Korrektur von [#386](https://github.com/supernova1963/eedc-homeassistant/issues/386) entschied allein ein Koordinaten-Rechteck, das halb Österreich und die Nordostschweiz mit einschloss (siehe [§2.1a](#21a-eedc-außerhalb-deutschlands)).
 - **MeteoSwiss ICON-CH2** (2 km, empfohlen für alpine Standorte), **ICON-D2** (2,2 km, DWD/DE), **ICON-EU** (mittlere Auflösung), **ECMWF IFS** (global, 0,25°).
 
 Bei fester Modellwahl versucht eedc zuerst das gewählte Modell und fällt bei fehlenden Daten auf den besten verfügbaren Anbieter zurück (Kaskade). Die verwendete Quelle wird pro Tag in der [Aussicht](HANDBUCH_BEDIENUNG.md#25-aussicht) mit einem Kürzel (MS/D2/EU/EC/BM) angezeigt.

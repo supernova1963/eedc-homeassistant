@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.0.21] - 2026-08-19 — Nur noch Zahlen, die eedc gemessen hat
 
 ### Added
 
@@ -6466,6 +6466,15 @@ damit die neuen Entity-Namen erstellt werden.
   - **Open-Meteo Solar:** GTI-basierte Berechnung für geneigte PV-Module
   - Automatische Provider-Auswahl: Bright Sky für DE, Open-Meteo sonst
   - Fallback-Kette bei Nichtverfügbarkeit → PVGIS TMY → Statische Defaults
+
+  > ⚠ **Nachträglich richtiggestellt (August 2026):** Die beiden Sätze oben beschreiben die
+  > Absicht, nicht das, was ausgeliefert war. „Für DE" wurde über ein **Koordinaten-Rechteck**
+  > entschieden, das halb Österreich und die Nordostschweiz einschließt; das Feld *Land* aus den
+  > Stammdaten wurde dabei nie gelesen. Und die **Fallback-Kette griff nicht**, wenn Bright Sky
+  > zwar antwortete, aber keinen einzigen Strahlungswert lieferte — dann stand dort 0,0 kWh/m²,
+  > statt dass Open-Meteo gefragt wurde. Unauffällig blieb das, weil beides nur außerhalb
+  > Deutschlands und an deutschen Standorten ohne Wetterstation in Reichweite auftrat. Behoben mit
+  > dem Release, das diesen Vermerk mitbringt (gemeldet von gruaGit).
 
 - **GTI-basierte Solarprognose**
   - Global Tilted Irradiance (GTI) statt horizontaler Globalstrahlung
