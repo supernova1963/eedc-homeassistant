@@ -9,7 +9,7 @@
 
 ---
 
-## v4.0.21 — Nur noch Zahlen, die eedc gemessen hat
+## v4.0.21 — Heizen und Kühlen getrennt
 
 Drei Meldungen des Daten-Checkers standen bei manchen Anlagen dauerhaft da, **ohne dass sich
 etwas dagegen tun ließ** — alle drei gemeldet von azywietz-web. Keine davon hat je eine Zahl

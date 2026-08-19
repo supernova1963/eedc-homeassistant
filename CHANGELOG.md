@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [4.0.21] - 2026-08-19 — Nur noch Zahlen, die eedc gemessen hat
+## [4.0.21] - 2026-08-19 — Heizen und Kühlen getrennt
 
 ### Added
 
