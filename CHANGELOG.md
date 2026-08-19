@@ -7,6 +7,20 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Der Community-Vergleich rechnet ein Teiljahr nicht mehr auf zwölf Monate hoch** ([#387](https://github.com/supernova1963/eedc-homeassistant/issues/387), gemeldet von azywietz-web). Wer im laufenden Jahr in Betrieb gegangen ist, hat nur Monate mit Sonne im Datensatz — die schwachen Wintermonate fehlen. Der Community-Server hat aus diesen Monaten einen Mittelwert gebildet und ihn mit zwölf multipliziert. Das Ergebnis stand dann in derselben Rangliste wie Anlagen, die wirklich ein Jahr gemessen haben. Der Melder hat es an seiner eigenen 2-kWp-Anlage vorgerechnet: aus **636,8 kWh/kWp** in sechs Monaten wurden **1.273,6** — und damit **Rang 3 von 112**, obwohl der Standort realistisch bei etwa 940 liegt.
+  - **Was jetzt gilt:** Ein spezifischer Jahresertrag entsteht nur noch aus **zwölf zusammenhängenden Kalendermonaten**. Der laufende Monat zählt nie mit — er ist noch nicht zu Ende. Fehlt auch nur ein Monat, gibt es **keinen Jahreswert und keinen Rang**; stattdessen steht dort, woran es liegt („Der Jahresvergleich braucht zwölf zusammenhängende Kalendermonate — davon liegen 5 vor").
+  - ⚠ **Für neue Anlagen verschwindet der Jahresrang, bis das erste volle Jahr zusammen ist.** Das ist die Absicht: Ein Rang, der nur entsteht, weil der Winter fehlt, sagt nichts über die Anlage. **Alle monatlichen Vergleiche bleiben unverändert sichtbar** — sie waren nie betroffen und gelten vom ersten Monat an.
+  - ⚠ **Bestehende Anlagen mit vollem Jahr behalten ihre Zahl exakt.** Nachgemessen an einer Anlage mit 38 lückenlosen Monaten: 1.118,7 kWh/kWp vorher wie nachher.
+  - ⚠ **Die Rangliste wird kürzer und die Spitzenwerte niedriger.** Wer bisher weit oben stand, weil ihm Wintermonate fehlten, steht dort nicht mehr.
+  - **Und der Community-Durchschnitt hatte zwei verschiedene Werte.** Im Add-on stand **662 kWh/kWp**, auf der Community-Seite **840** — dieselbe Größe, derselbe Moment. Ursache war eine Mindestgrenze von sechs Monaten, die an der einen Stelle die Rohsumme mitzählte und an der anderen die Anlage übersprang. Beide Seiten rechnen jetzt über dieselbe Vergleichsgruppe; jede Aussage „du liegst X % über dem Schnitt" bezieht sich damit erstmals auf eine Zahl, die es wirklich gibt.
+  - **Kein Rang heißt nicht mehr Rang 1.** Anlagen ohne Vergleichswert bekamen bisher ersatzweise die Platzierung 1 gemeldet. Sie bekommen jetzt gar keine.
+
+---
+
 ## [4.0.21] - 2026-08-19 — Heizen und Kühlen getrennt
 
 ### Added

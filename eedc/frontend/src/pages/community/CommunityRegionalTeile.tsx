@@ -71,20 +71,20 @@ export const REG_PARK_IDS = {
 export interface RegionalStats {
   region: string
   regionName: string
-  spezErtrag: number
-  regionDurchschnitt: number
-  communityDurchschnitt: number
-  rang: number
+  spezErtrag: number | null
+  regionDurchschnitt: number | null
+  communityDurchschnitt: number | null
+  rang: number | null
   anzahlAnlagen: number
-  abweichungRegion: number
-  abweichungCommunity: number
-  perzentilRegion: number
+  abweichungRegion: number | null
+  abweichungCommunity: number | null
+  perzentilRegion: number | null
 }
 
 export interface RegionalDaten {
   allRegions: RegionStatistik[]
   regionalStats: RegionalStats | null
-  vergleichsData: { name: string; kurz: string; wert: number; fill: string }[]
+  vergleichsData: { name: string; kurz: string; wert: number | null; fill: string }[]
   extraLoading: boolean
 }
 
@@ -116,6 +116,8 @@ export function useRegionalDaten(benchmark: CommunityBenchmarkResponse | null): 
     const { spez_ertrag_anlage, spez_ertrag_region, spez_ertrag_durchschnitt, rang_region, anzahl_anlagen_region } = benchmark.benchmark
     const region = benchmark.anlage.region
 
+    // #387: Jahreswerte dürfen fehlen (kein volles 12-Monats-Fenster). Jede
+    // Ableitung daraus wird dann unterdrückt statt gegen 0 gerechnet.
     return {
       region,
       regionName: BUNDESLAENDER[region]?.name || region,
@@ -124,9 +126,15 @@ export function useRegionalDaten(benchmark: CommunityBenchmarkResponse | null): 
       communityDurchschnitt: spez_ertrag_durchschnitt,
       rang: rang_region,
       anzahlAnlagen: anzahl_anlagen_region,
-      abweichungRegion: ((spez_ertrag_anlage - spez_ertrag_region) / spez_ertrag_region) * 100,
-      abweichungCommunity: ((spez_ertrag_region - spez_ertrag_durchschnitt) / spez_ertrag_durchschnitt) * 100,
-      perzentilRegion: Math.round((1 - rang_region / anzahl_anlagen_region) * 100),
+      abweichungRegion: spez_ertrag_anlage !== null && spez_ertrag_anlage !== undefined && spez_ertrag_region
+        ? ((spez_ertrag_anlage - spez_ertrag_region) / spez_ertrag_region) * 100
+        : null,
+      abweichungCommunity: spez_ertrag_region !== null && spez_ertrag_region !== undefined && spez_ertrag_durchschnitt
+        ? ((spez_ertrag_region - spez_ertrag_durchschnitt) / spez_ertrag_durchschnitt) * 100
+        : null,
+      perzentilRegion: rang_region !== null && rang_region !== undefined && anzahl_anlagen_region
+        ? Math.round((1 - rang_region / anzahl_anlagen_region) * 100)
+        : null,
     }
   }, [benchmark])
 
@@ -275,8 +283,10 @@ export function RegionalKpiStrip({ regionalStats }: { regionalStats: RegionalSta
       <Parkbar id="reg-position-rang" titel="Rang in der Region">
         <KPICard
           title={`Rang in ${BUNDESLAENDER[regionalStats.region]?.kurzname || regionalStats.region}`}
-          value={`#${regionalStats.rang} von ${regionalStats.anzahlAnlagen}`}
-          subtitle={`Besser als ${fmtZahl(regionalStats.perzentilRegion, 0)} % in deiner Region`}
+          value={regionalStats.rang !== null ? `#${regionalStats.rang} von ${regionalStats.anzahlAnlagen}` : fmtZahl(null, 0)}
+          subtitle={regionalStats.perzentilRegion !== null
+            ? `Besser als ${fmtZahl(regionalStats.perzentilRegion, 0)} % in deiner Region`
+            : 'Der Jahresvergleich braucht zwölf zusammenhängende Monate.'}
           color="yellow"
           icon={Trophy}
         />
@@ -286,11 +296,13 @@ export function RegionalKpiStrip({ regionalStats }: { regionalStats: RegionalSta
       <Parkbar id="reg-position-vs-region" titel="vs. Region">
         <KPICard
           title="vs. Region"
-          value={`${regionalStats.abweichungRegion >= 0 ? '+' : ''}${fmtZahl(regionalStats.abweichungRegion, 1)}`}
-          unit="%"
+          value={regionalStats.abweichungRegion !== null
+            ? `${regionalStats.abweichungRegion >= 0 ? '+' : ''}${fmtZahl(regionalStats.abweichungRegion, 1)}`
+            : fmtZahl(null, 1)}
+          unit={regionalStats.abweichungRegion !== null ? '%' : undefined}
           subtitle={`Ø Region: ${fmtZahl(regionalStats.regionDurchschnitt, 0)} kWh/kWp`}
-          color={regionalStats.abweichungRegion >= 0 ? 'green' : 'red'}
-          icon={regionalStats.abweichungRegion >= 0 ? TrendingUp : TrendingDown}
+          color={(regionalStats.abweichungRegion ?? 0) >= 0 ? 'green' : 'red'}
+          icon={(regionalStats.abweichungRegion ?? 0) >= 0 ? TrendingUp : TrendingDown}
         />
       </Parkbar>
     </div>
@@ -346,6 +358,13 @@ export function RegionaleEinordnung({ benchmark, regionalStats }: { benchmark: C
         <h4 className="font-medium text-gray-900 dark:text-white mb-2">
           {regionalStats.regionName} vs. Community
         </h4>
+        {regionalStats.abweichungCommunity === null ? (
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Für diesen Vergleich fehlen noch Jahreswerte — er braucht zwölf zusammenhängende
+            Kalendermonate, hier und im bundesweiten Mittel.
+          </p>
+        ) : (
+          <>
         <div className="flex items-center gap-2 mb-2">
           <span className={`text-lg font-semibold ${
             regionalStats.abweichungCommunity >= 0
@@ -363,6 +382,8 @@ export function RegionaleEinordnung({ benchmark, regionalStats }: { benchmark: C
           Deine Region liegt {regionalStats.abweichungCommunity >= 0 ? 'über' : 'unter'} dem
           bundesweiten Community-Durchschnitt von {fmtZahl(regionalStats.communityDurchschnitt, 0)} kWh/kWp.
         </p>
+          </>
+        )}
       </div>
       </Parkbar>
 

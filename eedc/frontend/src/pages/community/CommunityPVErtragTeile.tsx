@@ -21,6 +21,7 @@ import {
   MONAT_KURZ, STATUS_COLORS, EIGENE_SERIE_FARBEN, SERIE_NEUTRAL, ACHSEN_TICK,
   ACHSEN_MARGIN_TOP, achsenEinheit, achsenTick, fmtZahl,
 } from '../../lib'
+import { jahresfensterHinweis, jahresfensterStand } from '../../lib/communityFenster'
 
 // Element-Park (IA-V4, Element-Park-Doktrin Gernot 2026-06-27): JEDE Anzeige
 // (KPI, Chart, Beschriftung/Legende, Tabelle, Hinweis) ist einzeln parkbar.
@@ -38,10 +39,10 @@ export const PV_PARK_IDS = {
 
 export interface PVErtragDaten {
   distribution: Verteilung | null
-  chartData: { name: string; ertrag: number; durchschnitt: number; isPositive: boolean; fill: string }[]
+  chartData: { name: string; ertrag: number; durchschnitt: number | undefined; isPositive: boolean; fill: string }[]
   jahresStats: { jahr: number; spezErtrag: number; anzahlMonate: number; vollstaendig: boolean }[] | null
   perzentil: number | null
-  performanceStats: { abweichungGesamt: number; abweichungRegion: number; differenzAbsolut: number } | null
+  performanceStats: { abweichungGesamt: number | null; abweichungRegion: number | null; differenzAbsolut: number | null } | null
   extraLoading: boolean
 }
 
@@ -75,8 +76,14 @@ export function usePVErtragDaten(benchmark: CommunityBenchmarkResponse | null): 
       .map((m) => {
         const spezErtrag = m.spez_ertrag_kwh_kwp || 0
         let durchschnitt = avgMap.get(`${m.jahr}-${m.monat}`) ?? avgMap.get(`${m.jahr - 1}-${m.monat}`)
-        if (durchschnitt === undefined) durchschnitt = benchmark.benchmark.spez_ertrag_durchschnitt / 12
-        const abweichung = durchschnitt > 0 ? ((spezErtrag - durchschnitt) / durchschnitt) * 100 : 0
+        // Rückfall auf ein Zwölftel des Community-Jahreswerts, wenn für diesen
+        // Monat kein Community-Mittel vorliegt. Fehlt auch der Jahreswert (#387),
+        // gibt es keinen Vergleich für diesen Monat.
+        if (durchschnitt === undefined) {
+          const jahr = benchmark.benchmark.spez_ertrag_durchschnitt
+          durchschnitt = jahr ? jahr / 12 : undefined
+        }
+        const abweichung = durchschnitt && durchschnitt > 0 ? ((spezErtrag - durchschnitt) / durchschnitt) * 100 : 0
         // D13-16: `fill` je Zeile → der Tooltip zeigt die tatsächliche Balken-
         // (Zell-)Farbe (über/unter Ø) statt Neutral-Grau; der Balken selbst wird
         // weiterhin per <Cell> gefärbt (identische Werte).
@@ -98,16 +105,27 @@ export function usePVErtragDaten(benchmark: CommunityBenchmarkResponse | null): 
   const perzentil = useMemo(() => {
     if (!benchmark) return null
     const { rang_gesamt, anzahl_anlagen_gesamt } = benchmark.benchmark
+    // #387: ohne volles Jahresfenster kein Rang und damit kein Perzentil.
+    if (rang_gesamt === null || rang_gesamt === undefined || !anzahl_anlagen_gesamt) return null
     return Math.round((1 - rang_gesamt / anzahl_anlagen_gesamt) * 100)
   }, [benchmark])
 
   const performanceStats = useMemo(() => {
     if (!benchmark) return null
     const { spez_ertrag_anlage, spez_ertrag_durchschnitt, spez_ertrag_region } = benchmark.benchmark
+    // #387: alle drei Größen sind Differenzen bzw. Quotienten aus Jahreswerten.
+    // Fehlt der eigene Jahreswert, gibt es sie nicht — auch nicht als 0.
+    if (spez_ertrag_anlage === null || spez_ertrag_anlage === undefined) return null
     return {
-      abweichungGesamt: ((spez_ertrag_anlage - spez_ertrag_durchschnitt) / spez_ertrag_durchschnitt) * 100,
-      abweichungRegion: ((spez_ertrag_anlage - spez_ertrag_region) / spez_ertrag_region) * 100,
-      differenzAbsolut: spez_ertrag_anlage - spez_ertrag_durchschnitt,
+      abweichungGesamt: spez_ertrag_durchschnitt
+        ? ((spez_ertrag_anlage - spez_ertrag_durchschnitt) / spez_ertrag_durchschnitt) * 100
+        : null,
+      abweichungRegion: spez_ertrag_region
+        ? ((spez_ertrag_anlage - spez_ertrag_region) / spez_ertrag_region) * 100
+        : null,
+      differenzAbsolut: spez_ertrag_durchschnitt !== null && spez_ertrag_durchschnitt !== undefined
+        ? spez_ertrag_anlage - spez_ertrag_durchschnitt
+        : null,
     }
   }, [benchmark])
 
@@ -117,18 +135,42 @@ export function usePVErtragDaten(benchmark: CommunityBenchmarkResponse | null): 
 // ─── Sektion: KPI-Strip (Position · vs. Community · vs. Region) ────────────────
 
 export function PvKpiStrip({ perzentil, performanceStats }: Pick<PVErtragDaten, 'perzentil' | 'performanceStats'>) {
-  const ag = performanceStats?.abweichungGesamt ?? 0
-  const ar = performanceStats?.abweichungRegion ?? 0
+  // #387: Position und beide Abweichungen sind Ableitungen aus Jahreswerten.
+  // Ohne volles 12-Monats-Fenster gibt es sie nicht — und eine 0 wäre hier
+  // keine Abweichung, sondern eine erfundene Punktlandung auf dem Durchschnitt.
+  const ag = performanceStats?.abweichungGesamt ?? null
+  const ar = performanceStats?.abweichungRegion ?? null
+  const OHNE_FENSTER = 'Erst mit zwölf zusammenhängenden Monaten'
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       <Parkbar id="pv-kennzahlen-position" titel="Deine Position">
-        <KPICard title="Deine Position" value={`Top ${fmtZahl(100 - (perzentil || 0), 0)} %`} subtitle={`Besser als ${fmtZahl(perzentil, 0)} % der Community`} color="blue" icon={Award} />
+        <KPICard
+          title="Deine Position"
+          value={perzentil === null ? fmtZahl(null, 0) : `Top ${fmtZahl(100 - perzentil, 0)} %`}
+          subtitle={perzentil === null ? OHNE_FENSTER : `Besser als ${fmtZahl(perzentil, 0)} % der Community`}
+          color={perzentil === null ? 'gray' : 'blue'}
+          icon={Award}
+        />
       </Parkbar>
       <Parkbar id="pv-kennzahlen-vs-community" titel="vs. Community">
-        <KPICard title="vs. Community" value={`${ag >= 0 ? '+' : ''}${fmtZahl(ag, 1)}`} unit="%" subtitle={`${fmtZahl(performanceStats?.differenzAbsolut, 0)} kWh/kWp Differenz`} color={ag >= 0 ? 'green' : 'red'} icon={ag >= 0 ? TrendingUp : TrendingDown} />
+        <KPICard
+          title="vs. Community"
+          value={ag === null ? fmtZahl(null, 1) : `${ag >= 0 ? '+' : ''}${fmtZahl(ag, 1)}`}
+          unit={ag === null ? undefined : '%'}
+          subtitle={ag === null ? OHNE_FENSTER : `${fmtZahl(performanceStats?.differenzAbsolut, 0)} kWh/kWp Differenz`}
+          color={ag === null ? 'gray' : ag >= 0 ? 'green' : 'red'}
+          icon={(ag ?? 0) >= 0 ? TrendingUp : TrendingDown}
+        />
       </Parkbar>
       <Parkbar id="pv-kennzahlen-vs-region" titel="vs. Region">
-        <KPICard title="vs. Region" value={`${ar >= 0 ? '+' : ''}${fmtZahl(ar, 1)}`} unit="%" subtitle="Vergleich mit deinem Bundesland" color={ar >= 0 ? 'green' : 'red'} icon={Target} />
+        <KPICard
+          title="vs. Region"
+          value={ar === null ? fmtZahl(null, 1) : `${ar >= 0 ? '+' : ''}${fmtZahl(ar, 1)}`}
+          unit={ar === null ? undefined : '%'}
+          subtitle={ar === null ? OHNE_FENSTER : 'Vergleich mit deinem Bundesland'}
+          color={ar === null ? 'gray' : ar >= 0 ? 'green' : 'red'}
+          icon={Target}
+        />
       </Parkbar>
     </div>
   )
@@ -199,8 +241,9 @@ export function JahresUebersicht({ benchmark, jahresStats }: { benchmark: Commun
       </TableHead>
       <TableBody>
         {jahresStats.map((js) => {
-          const abweichung = ((js.spezErtrag - benchmark.benchmark.spez_ertrag_durchschnitt) / benchmark.benchmark.spez_ertrag_durchschnitt) * 100
-          const isPositive = abweichung >= 0
+          const communityJahr = benchmark.benchmark.spez_ertrag_durchschnitt
+          const abweichung = communityJahr ? ((js.spezErtrag - communityJahr) / communityJahr) * 100 : null
+          const isPositive = (abweichung ?? 0) >= 0
           return (
             <tr key={js.jahr} className="border-b border-gray-100 dark:border-gray-800 last:border-0">
               <td className={ZELLE}>
@@ -208,7 +251,7 @@ export function JahresUebersicht({ benchmark, jahresStats }: { benchmark: Commun
                 {!js.vollstaendig && <span className="ml-2 text-xs text-gray-400 dark:text-gray-500">(unvollständig)</span>}
               </td>
               <td className={`${ZELLE} text-right`}><span className="font-semibold text-gray-900 dark:text-white">{fmtZahl(js.spezErtrag, 0)} kWh/kWp</span></td>
-              <td className={`${ZELLE} text-right`}><span className={`font-medium ${isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{isPositive ? '+' : ''}{fmtZahl(abweichung, 1)} %</span></td>
+              <td className={`${ZELLE} text-right`}>{abweichung === null ? <span className="text-gray-400 dark:text-gray-500">{fmtZahl(null, 1)}</span> : <span className={`font-medium ${isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{isPositive ? '+' : ''}{fmtZahl(abweichung, 1)} %</span>}</td>
               <td className={`${ZELLE} text-right text-gray-500 dark:text-gray-400`}>{fmtZahl(js.anzahlMonate, 0)}/12</td>
             </tr>
           )
@@ -236,7 +279,7 @@ export function VerteilungHistogramm({ benchmark, distribution }: { benchmark: C
             <Tooltip content={<ChartTooltip formatter={(value: number) => `${fmtZahl(value, 0)} Anlagen`} labelFormatter={(label) => `${label} kWh/kWp`} />} />
             <Bar dataKey="anzahl" radius={[2, 2, 0, 0]}>
               {distribution.bins.map((bin, index) => {
-                const isOwn = eigen >= bin.von && eigen < bin.bis
+                const isOwn = eigen !== null && eigen !== undefined && eigen >= bin.von && eigen < bin.bis
                 return <Cell key={`cell-${index}`} fill={isOwn ? EIGENE_SERIE_FARBEN.du : SERIE_NEUTRAL} fillOpacity={isOwn ? 1 : 0.7} />
               })}
             </Bar>
@@ -272,12 +315,18 @@ export function VergleichHinweis({ benchmark, performanceStats }: { benchmark: C
     <div className="flex items-start gap-3">
       <Sun className="h-5 w-5 text-primary-500 mt-0.5 flex-shrink-0" />
       <p className="text-sm text-gray-600 dark:text-gray-400">
-        Der Community-Durchschnitt basiert auf {fmtZahl(benchmark.benchmark.anzahl_anlagen_gesamt, 0)} Anlagen.
-        Dein spezifischer Ertrag von <strong>{fmtZahl(benchmark.benchmark.spez_ertrag_anlage, 0)} kWh/kWp</strong> liegt
-        {' '}{(performanceStats?.abweichungGesamt || 0) >= 0 ? 'über' : 'unter'} dem Durchschnitt von
-        {' '}<strong>{fmtZahl(benchmark.benchmark.spez_ertrag_durchschnitt, 0)} kWh/kWp</strong>.
-        Faktoren wie Ausrichtung ({benchmark.anlage.ausrichtung}), Neigung ({fmtZahl(benchmark.anlage.neigung_grad, 0)}°)
-        und regionale Sonneneinstrahlung beeinflussen die Ergebnisse.
+        {jahresfensterHinweis(benchmark.benchmark) ?? (
+          <>
+            Der Community-Durchschnitt basiert auf {fmtZahl(benchmark.benchmark.anzahl_anlagen_gesamt, 0)} Anlagen
+            mit zwölf zusammenhängenden Monaten.
+            Dein spezifischer Ertrag von <strong>{fmtZahl(benchmark.benchmark.spez_ertrag_anlage, 0)} kWh/kWp</strong>
+            {' '}({jahresfensterStand(benchmark.benchmark)}) liegt
+            {' '}{(performanceStats?.abweichungGesamt || 0) >= 0 ? 'über' : 'unter'} dem Durchschnitt von
+            {' '}<strong>{fmtZahl(benchmark.benchmark.spez_ertrag_durchschnitt, 0)} kWh/kWp</strong>.
+            Faktoren wie Ausrichtung ({benchmark.anlage.ausrichtung}), Neigung ({fmtZahl(benchmark.anlage.neigung_grad, 0)}°)
+            und regionale Sonneneinstrahlung beeinflussen die Ergebnisse.
+          </>
+        )}
       </p>
     </div>
     </Parkbar>

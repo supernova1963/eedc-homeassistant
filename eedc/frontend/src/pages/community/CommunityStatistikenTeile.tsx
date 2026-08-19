@@ -52,8 +52,8 @@ export const STAT_PARK_IDS = {
 export interface CommunityStat {
   anzahlAnlagen: number
   anzahlRegion: number
-  durchschnittErtrag: number
-  regionErtrag: number
+  durchschnittErtrag: number | null
+  regionErtrag: number | null
   region: string
   regionName: string
 }
@@ -68,12 +68,12 @@ export interface AusstattungItem {
 }
 
 export interface PositionStat {
-  rangGesamt: number
+  rangGesamt: number | null
   vonGesamt: number
-  perzentilGesamt: number
-  rangRegion: number
+  perzentilGesamt: number | null
+  rangRegion: number | null
   vonRegion: number
-  perzentilRegion: number
+  perzentilRegion: number | null
 }
 
 export interface StatistikenDaten {
@@ -182,8 +182,13 @@ export function useStatistikenDaten(benchmark: CommunityBenchmarkResponse | null
     if (!benchmark) return null
 
     const { rang_gesamt, anzahl_anlagen_gesamt, rang_region, anzahl_anlagen_region } = benchmark.benchmark
-    const perzentilGesamt = Math.round((1 - rang_gesamt / anzahl_anlagen_gesamt) * 100)
-    const perzentilRegion = Math.round((1 - rang_region / anzahl_anlagen_region) * 100)
+    // #387: ohne volles Jahresfenster gibt es keinen Rang — und kein Perzentil.
+    const perzentilGesamt = rang_gesamt !== null && rang_gesamt !== undefined && anzahl_anlagen_gesamt
+      ? Math.round((1 - rang_gesamt / anzahl_anlagen_gesamt) * 100)
+      : null
+    const perzentilRegion = rang_region !== null && rang_region !== undefined && anzahl_anlagen_region
+      ? Math.round((1 - rang_region / anzahl_anlagen_region) * 100)
+      : null
 
     return {
       rangGesamt: rang_gesamt,
@@ -252,6 +257,15 @@ export function DeinePosition({ position, communityStats }: { position: Position
             Community-weit
           </span>
         </div>
+        {/* #387: ohne volles 12-Monats-Fenster gibt es keinen Rang — dann steht
+            hier die Begründung statt „#" und „Besser als  %". */}
+        {position.rangGesamt === null ? (
+          <p className="text-sm text-primary-600 dark:text-primary-400">
+            Noch kein Rang: Der Jahresvergleich braucht zwölf zusammenhängende Kalendermonate.
+            Die Vergleichsgruppe umfasst derzeit {fmtZahl(position.vonGesamt, 0)} Anlagen.
+          </p>
+        ) : (
+          <>
         <div className="flex items-baseline gap-2 mb-2">
           <span className="text-4xl font-bold text-primary-600 dark:text-primary-400">
             #{position.rangGesamt}
@@ -260,10 +274,12 @@ export function DeinePosition({ position, communityStats }: { position: Position
             von {position.vonGesamt}
           </span>
         </div>
-        <ProgressBar value={position.perzentilGesamt} color="primary" />
+        <ProgressBar value={position.perzentilGesamt ?? 0} color="primary" />
         <p className="text-sm text-primary-600 dark:text-primary-400 mt-2">
           Besser als {position.perzentilGesamt} % der Community
         </p>
+          </>
+        )}
       </div>
       </Parkbar>
 
@@ -276,6 +292,13 @@ export function DeinePosition({ position, communityStats }: { position: Position
             In {communityStats.regionName}
           </span>
         </div>
+        {position.rangRegion === null ? (
+          <p className="text-sm text-blue-600 dark:text-blue-400">
+            Noch kein Rang: Der Jahresvergleich braucht zwölf zusammenhängende Kalendermonate.
+            In deiner Region sind es derzeit {fmtZahl(position.vonRegion, 0)} Anlagen.
+          </p>
+        ) : (
+          <>
         <div className="flex items-baseline gap-2 mb-2">
           <span className="text-4xl font-bold text-blue-600 dark:text-blue-400">
             #{position.rangRegion}
@@ -284,10 +307,12 @@ export function DeinePosition({ position, communityStats }: { position: Position
             von {position.vonRegion}
           </span>
         </div>
-        <ProgressBar value={position.perzentilRegion} color="blue" />
+        <ProgressBar value={position.perzentilRegion ?? 0} color="blue" />
         <p className="text-sm text-blue-600 dark:text-blue-400 mt-2">
           Besser als {position.perzentilRegion} % in deiner Region
         </p>
+          </>
+        )}
       </div>
       </Parkbar>
     </div>
@@ -511,7 +536,7 @@ function StatCard({
   icon,
 }: {
   label: string
-  value: number
+  value: number | null
   suffix?: string
   icon: React.ReactNode
 }) {
@@ -525,7 +550,7 @@ function StatCard({
         <span className="text-2xl font-bold text-gray-900 dark:text-white">
           {typeof value === 'number' && value >= 1000
             ? value.toLocaleString('de-DE')
-            : fmtZahl(value, value < 10 ? 1 : 0)}
+            : fmtZahl(value, value !== null && value < 10 ? 1 : 0)}
         </span>
         {suffix && (
           <span className="text-sm text-gray-500 dark:text-gray-400">{suffix}</span>

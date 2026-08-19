@@ -56,7 +56,9 @@ function CommunityRegionalInner({ benchmark, loading, error }: Props) {
     } : null,
     !alleGeparkt(REG_PARK_IDS.einordnung) ? {
       id: 'einordnung', title: 'Regionale Einordnung', icon: Users,
-      summary: `${rs.abweichungCommunity >= 0 ? '+' : ''}${fmtZahl(rs.abweichungCommunity, 1)} % vs. Community`, defaultOpen: false,
+      summary: rs.abweichungCommunity !== null
+        ? `${rs.abweichungCommunity >= 0 ? '+' : ''}${fmtZahl(rs.abweichungCommunity, 1)} % vs. Community`
+        : 'Jahresvergleich noch nicht möglich', defaultOpen: false,
       render: () => <RegionaleEinordnung benchmark={benchmark} regionalStats={rs} />,
     } : null,
     d.allRegions.length > 0 && !alleGeparkt(REG_PARK_IDS.karte) ? {

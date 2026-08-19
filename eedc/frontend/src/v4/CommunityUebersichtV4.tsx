@@ -57,7 +57,10 @@ function CommunityUebersichtInner({ benchmark, loading, error }: Props) {
   const bloecke: (Block | null)[] = [
     !alleGeparkt(UEB_PARK_IDS.ranking) ? {
       id: 'ranking', title: 'Dein PV-Ertrag im Vergleich', icon: Trophy, farbe: 'text-yellow-500',
-      summary: `${fmtZahl(b.spez_ertrag_anlage, 0)} kWh/kWp · Rang ${fmtZahl(b.rang_gesamt, 0)} von ${fmtZahl(b.anzahl_anlagen_gesamt, 0)}`,
+      // #387: ohne volles 12-Monats-Fenster gibt es weder Wert noch Rang.
+      summary: b.spez_ertrag_anlage != null && b.rang_gesamt != null
+        ? `${fmtZahl(b.spez_ertrag_anlage, 0)} kWh/kWp · Rang ${fmtZahl(b.rang_gesamt, 0)} von ${fmtZahl(b.anzahl_anlagen_gesamt, 0)}`
+        : 'Jahresvergleich ab zwölf zusammenhängenden Monaten',
       defaultOpen: true,
       render: () => <RankingHauptKpi benchmark={benchmark} rankingBadge={d.rankingBadge} />,
     } : null,

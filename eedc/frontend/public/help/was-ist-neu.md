@@ -9,6 +9,38 @@
 
 ---
 
+## [Unreleased] — Der Community-Vergleich zeigt nur noch echte Jahre
+
+**azywietz-web hat einen Fehler gemeldet und ihn gleich selbst vorgerechnet** ([#387](https://github.com/supernova1963/eedc-homeassistant/issues/387)):
+Seine 2-kWp-Anlage läuft seit dem 19. März. Sechs Monate, alle mit Sonne — und im
+Community-Ranking stand sie auf **Rang 3 von 112**, in NRW sogar auf **Rang 1**.
+
+Der Grund war eine Hochrechnung: Der Community-Server hat aus den vorhandenen Monaten einen
+Mittelwert gebildet und ihn mit zwölf multipliziert. Aus **636,8 kWh/kWp** wurden so **1.273,6**.
+Wer im Frühjahr startet, hat aber genau die Monate im Datensatz, in denen die Sonne scheint —
+und wer ein ganzes Jahr gemessen hat, schleppt Dezember und Januar mit. Die Rangliste hat damit
+nicht gemessen, wer am meisten erzeugt, sondern **wer die wenigsten schwachen Monate hat**.
+
+**Was sich für dich ändert:**
+
+- **Der spezifische Jahresertrag entsteht nur noch aus zwölf zusammenhängenden Kalendermonaten.**
+  Der laufende Monat zählt nicht mit — er ist noch nicht zu Ende.
+- **Fehlt ein Monat, gibt es keinen Jahreswert und keinen Rang** — und stattdessen einen Satz,
+  der sagt, woran es liegt und wie viele Monate schon da sind.
+- **Deine monatlichen Vergleiche bleiben, wie sie waren.** Sie waren nie betroffen und gelten
+  vom ersten Monat an. Nur der *Jahres*-Vergleich wartet auf ein volles Jahr.
+- **Hast du ein volles Jahr, ändert sich deine Zahl nicht.** An einer Anlage mit 38 lückenlosen
+  Monaten nachgemessen: 1.118,7 kWh/kWp vorher wie nachher.
+- **Der Community-Durchschnitt hatte zwei Werte** — 662 im Add-on, 840 auf der Community-Seite.
+  Jetzt ist es einer. Jede Aussage „du liegst X % über dem Schnitt" meint damit erstmals
+  dieselbe Vergleichsgruppe, die auch in der Rangliste steht.
+
+⚠ **Die Bestenliste wird dadurch kürzer, und die Spitzenwerte fallen.** Das ist kein Verlust,
+sondern die Korrektur: Ein Platz, der nur entsteht, weil der Winter fehlt, sagt nichts über
+deine Anlage.
+
+---
+
 ## v4.0.21 — Heizen und Kühlen getrennt
 
 Drei Meldungen des Daten-Checkers standen bei manchen Anlagen dauerhaft da, **ohne dass sich

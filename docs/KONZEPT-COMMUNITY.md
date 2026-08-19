@@ -109,6 +109,122 @@ Schnellvergleich → Share-Buttons → (SEO-Landing-Pages **+** dynamische Sitem
 
 ---
 
+# Säule 3 — Der Rang und sein Zeitraum (#387 gebaut · #338 offen)
+
+> **Status (2026-08-19): Ebene 1 gebaut, Ebene 2 konzipiert, Ebene 3 unentschieden.**
+> Anlass war der Fehlerbericht **#387** (azywietz-web). Er hat eine Frage aufgeworfen, die
+> #338 seit dem 19.06. offen führt — und dabei die **Prämisse von #338 widerlegt**.
+
+## Was #387 gezeigt hat
+
+Der Community-Server rechnete den spezifischen Jahresertrag als `Σ ÷ n × 12`, wobei `n`
+die Zahl **gespeicherter Monatszeilen** war — nicht die Länge eines Zeitraums. Eine Anlage
+mit sechs Sommermonaten stand damit neben echten Jahreswerten. Der Melder hat es an seiner
+eigenen Anlage vorgerechnet: `636,8 ÷ 6 × 12 = 1.273,6` (Faktor **2,0000**), Rang 3 von 112
+mit 2 kWp. Dieselbe Rechnung stand **sechsmal** im Baum, mit **zwei** verschiedenen
+Auswertungen ihrer Sechs-Monats-Schwelle — daher zwei Community-Durchschnitte, am selben Tag
+gemessen **662,0** (Add-on) gegen **840,0** (Website).
+
+⛔ **Und #338 sagte in seiner eigenen Beschreibung:** *„Heute liefert eedc-community nur ein
+anlagen-übergreifendes 12-Monats-Standing."* **Das war nie so.** Es war ein hochgerechneter
+Mittelwert über beliebig viele Monatszeilen. Ein Konzept, das niemand gegen den Code hält,
+beschreibt irgendwann einen Zustand, den es nicht gibt — dieselbe Klasse wie die
+Roadmap-Zeilen, die am 19.08. an #110 korrigiert wurden.
+
+## Drei Ebenen, die man nicht mischen darf
+
+| Ebene | Frage | Stand |
+| --- | --- | --- |
+| **1. Fenster** | Über *wie viele* Monate wird gerechnet, und dürfen es Teilmonate sein? | **gebaut** (#387) |
+| **2. Periode** | Bezieht sich der Rang auf *dieselbe* Zeitspanne wie die Sicht, in der er steht? | **offen** (#338) |
+| **3. Vergleichsgröße** | Wird spezifischer Ertrag verglichen — oder Performance Ratio? | **unentschieden** |
+
+### Ebene 1 — gebaut (SoT `eedc-community/backend/core/spez_ertrag.py`)
+
+Es wird **nichts mehr hochgerechnet**. Ein spezifischer Jahresertrag entsteht nur aus
+**zwölf lückenlosen Kalendermonaten**; der laufende Monat zählt nie mit. Wer die nicht hat,
+bekommt **keinen Wert und keinen Rang** — nicht eine Schätzung und nicht die vorher
+ausgelieferte Vorgabe-Platzierung 1.
+
+⚑ **Die eine Festlegung, die dabei getroffen wurde:** das Fenster endet **je Anlage** an
+ihrem jüngsten abgeschlossenen Monat, nicht für alle gleich. Ein gemeinsames Fenster wäre der
+exaktere Vergleich, ist aber nicht auslieferbar — am 19.08. hatten **38 von 112** Anlagen
+bereits einen Juli-Wert eingereicht; das Teilen ist manuell. Ein gemeinsames Fenster ließe
+jede Anlage aus der Rangliste fallen, bis ihr Besitzer wieder teilt, und am Monatsersten fast
+alle. Der Rest-Unterschied ist das **Wetterjahr**; deshalb liefert die API das Fenster-Ende
+mit (`basis_bis_jahr`/`basis_bis_monat`) und die Oberfläche darf es anzeigen.
+Zusätzlich: liegt der jüngste Monat mehr als ein Jahr zurück, fällt die Anlage aus dem
+Vergleich — sonst stünde ein Wert von 2023 dauerhaft in einer Rangliste von heute.
+
+### Ebene 2 — #338, periodenbezogener Rang
+
+**Was #338 will:** „Rang X/N gesamt · Y/M regional **für diesen Monat / dieses Jahr**",
+angezeigt dort, wo die Sicht ohnehin eine Periode hat (*Cockpit → Monat*, *Cockpit → Jahr*).
+
+**Warum das nach #387 die richtige Fortsetzung ist — und nicht dasselbe:** Ebene 1 macht den
+*rollenden Jahreswert* ehrlich, aber sie gibt neuen Anlagen keinen Vergleich zurück. Genau das
+kann Ebene 2: Ein Rang für **Juli 2026** braucht **keine** zwölf Monate und **keine**
+Hochrechnung — er braucht einen Juli-Wert. Eine Anlage im ersten Betriebsjahr ist damit
+sofort vergleichbar, ohne dass irgendeine Zahl geschätzt wird.
+
+**Die Daten liegen vor.** `Monatswert` trägt `jahr`/`monat` je Anlage; der Monatsvergleich
+existiert bereits als Endpoint (`/api/benchmark/monat/{jahr}/{monat}`). Was fehlt, ist der
+**Rang** je Periode.
+
+**Bauplan (Etappen, jede für sich auslieferbar):**
+
+1. **Rang je Monat** — Query über alle Anlagen mit einem Wert für `(jahr, monat)`, sortiert
+   nach `ertrag_kwh ÷ kwp`. Rückgabe wie heute: `rang`, `von`, plus Region-Variante.
+   ⚠ **Der laufende Monat bekommt keinen Rang** — er ist bei jeder Anlage verschieden weit.
+   Das ist dieselbe Regel wie in Ebene 1, nicht eine neue.
+2. **Rang je Jahr** — dasselbe über zwölf Monate eines Kalenderjahres, mit der Bedingung aus
+   Ebene 1: **alle zwölf müssen da sein**, sonst kein Rang. Das laufende Jahr hat keinen.
+3. **Anzeige** — in *Cockpit → Monat* und *Cockpit → Jahr* an die Stelle, an der heute die
+   periodenkorrekte **Abweichung zum Median** steht (die #338 selbst als Zwischenlösung
+   eingeführt hat). Abweichung bleibt, der Rang tritt daneben.
+4. **Tag-Sicht: kein Community-Block** — dort gibt es keine Vergleichsperiode. Steht so
+   bereits in #338 und bleibt.
+
+**Was Ebene 2 *nicht* ersetzt:** den rollenden Jahreswert. Er beantwortet „wie gut ist meine
+Anlage insgesamt", der Perioden-Rang beantwortet „wie war ich in diesem Monat". Beide dürfen
+nebeneinander stehen — sie dürfen nur nicht **denselben Namen** tragen.
+
+### Ebene 3 — die Vergleichsgröße (unentschieden, Maintainer-Entscheid)
+
+azywietz hat vorgeschlagen, statt des spezifischen Ertrags den **Performance Ratio** zu
+ranken: *„Da eedc den PR bereits berechnet und PVGIS-Daten bereits abruft, wäre ein
+PR-basiertes Ranking ohne zusätzlichen Implementierungsaufwand der sauberste Fix."*
+
+⛔ **Die Begründung ist am Code widerlegt, der Vorschlag selbst nicht.** Der **Server** hat
+keine PVGIS-Daten: `Anlage` trägt Region, kWp, Ausrichtung, Neigung und Installationsjahr —
+**keinen SOLL-Wert**. Der PR entsteht ausschließlich im Add-on. Ein PR-Ranking verlangt also
+ein **neues Feld im Payload-Vertrag** (`MonatswertInput`), damit in **beiden** Repos eine
+Änderung — und Altbestand ohne Wert, bis jede Anlage einmal neu geteilt hat.
+
+**Fachlich spricht dafür:** PR ist unabhängig von Standort und Betriebsalter und misst
+tatsächlich die Anlagenqualität. **Dagegen spricht:** „kWh je kWp" versteht jeder, „Performance
+Ratio" nicht; und eedc bewertet den Anwender nicht (siehe *Nicht-Ziele*). Ein Mittelweg wäre,
+den PR **zusätzlich** als eigene Rangliste zu führen und den spezifischen Ertrag als
+Hauptkennzahl zu lassen.
+
+## Offene Entscheidungen Säule 3
+
+1. **#338 bauen?** Wenn ja: Etappe 1 (Monat) allein, oder Monat + Jahr zusammen?
+2. **Ebene 3:** spezifischer Ertrag bleibt allein · PR **zusätzlich** · PR **statt**?
+   Bei den letzten beiden: Payload-Erweiterung in beiden Repos, Altbestand ohne Wert.
+3. **Bleibt der rollende Jahreswert** in *Community → Übersicht* die Leitzahl, sobald es
+   Perioden-Ränge gibt?
+
+## Nicht-Ziele Säule 3
+
+- **Keine Schätzung fehlender Monate.** Auch nicht aus dem Community-Monatsmittel, obwohl die
+  Daten dafür vorliegen — eine geschätzte Zahl in einer Bestenliste ist keine Messung.
+- **Keine Bewertung des Anwenders.** Ein Rang ordnet ein, er benotet nicht; wer keinen
+  bekommt, bekommt eine **Begründung**, keinen Mangel bescheinigt.
+
+
+---
+
 # Verwandte / bewusst getrennte Punkte
 
 - ~~**Community-Umfrage** — zurückgestellt bis ≥30 geteilte Anlagen, eigenes Konzept `docs/KONZEPT-UMFRAGE.md`.~~ ⛔ **ARCHIVIERT am 2026-08-13** (`docs/archive/KONZEPT-UMFRAGE.md`, Entscheid Gernot: kein akuter Bedarf mehr). ⚠ Nicht weil die Schwelle unerreicht blieb — **sie ist mit 100 Anlagen mehr als dreifach überschritten** —, sondern weil der fertige Fragebogen nach Funktionen fragte, die seither gebaut wurden.

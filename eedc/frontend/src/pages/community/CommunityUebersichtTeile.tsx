@@ -21,6 +21,7 @@ import {
   ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Legend,
 } from 'recharts'
 import { REGION_NAMEN, EIGENE_SERIE_FARBEN, SERIEN_PALETTE, ACHSEN_TICK, fmtZahl } from '../../lib'
+import { hatJahresfenster, jahresfensterHinweis, jahresfensterStand } from '../../lib/communityFenster'
 
 // Element-Park (IA-V4, Element-Park-Doktrin Gernot 2026-06-27): JEDE Anzeige
 // (KPI/Vergleichs-Karte, Chart, Liste, Achievement, Komponenten-Karte) ist einzeln
@@ -154,6 +155,9 @@ export function useUebersichtDaten(benchmark: CommunityBenchmarkResponse | null)
   const rankingBadge = useMemo(() => {
     if (!benchmark) return null
     const { rang_gesamt, anzahl_anlagen_gesamt } = benchmark.benchmark
+    // #387: ohne volles 12-Monats-Fenster gibt es keinen Rang — und damit auch
+    // kein Abzeichen. Vorher lieferte der Server hier ersatzweise Rang 1.
+    if (rang_gesamt === null || rang_gesamt === undefined || !anzahl_anlagen_gesamt) return null
     const prozent = (rang_gesamt / anzahl_anlagen_gesamt) * 100
     if (prozent <= 10) return { label: 'Top 10%', color: 'bg-yellow-500', textColor: 'text-yellow-500' }
     if (prozent <= 25) return { label: 'Top 25%', color: 'bg-gray-400', textColor: 'text-gray-500' }
@@ -166,15 +170,22 @@ export function useUebersichtDaten(benchmark: CommunityBenchmarkResponse | null)
     const erreichte: Achievement[] = []
     const nichtErreichte: Achievement[] = []
     const { rang_gesamt, anzahl_anlagen_gesamt, rang_region, anzahl_anlagen_region } = benchmark.benchmark
-    const perzentilGesamt = (rang_gesamt / anzahl_anlagen_gesamt) * 100
 
-    const solarprofiErreicht = perzentilGesamt <= 10
-    const solarprofi: Achievement = { id: 'solarprofi', ...ACHIEVEMENT_DEFINITIONEN.solarprofi, erreicht: solarprofiErreicht, fortschritt: solarprofiErreicht ? 100 : Math.max(0, 100 - perzentilGesamt) }
-    ;(solarprofiErreicht ? erreichte : nichtErreichte).push(solarprofi)
+    // #387: Beide Auszeichnungen hängen am Rang. Ohne volles Jahresfenster gibt
+    // es keinen — dann wird die Auszeichnung weggelassen statt mit einem
+    // erfundenen Fortschritt angezeigt.
+    if (rang_gesamt !== null && rang_gesamt !== undefined && anzahl_anlagen_gesamt) {
+      const perzentilGesamt = (rang_gesamt / anzahl_anlagen_gesamt) * 100
+      const solarprofiErreicht = perzentilGesamt <= 10
+      const solarprofi: Achievement = { id: 'solarprofi', ...ACHIEVEMENT_DEFINITIONEN.solarprofi, erreicht: solarprofiErreicht, fortschritt: solarprofiErreicht ? 100 : Math.max(0, 100 - perzentilGesamt) }
+      ;(solarprofiErreicht ? erreichte : nichtErreichte).push(solarprofi)
+    }
 
-    const regionalchampionErreicht = rang_region <= 3
-    const regionalchampion: Achievement = { id: 'regionalchampion', ...ACHIEVEMENT_DEFINITIONEN.regionalchampion, erreicht: regionalchampionErreicht, fortschritt: regionalchampionErreicht ? 100 : Math.max(0, (1 - rang_region / Math.min(10, anzahl_anlagen_region)) * 100) }
-    ;(regionalchampionErreicht ? erreichte : nichtErreichte).push(regionalchampion)
+    if (rang_region !== null && rang_region !== undefined) {
+      const regionalchampionErreicht = rang_region <= 3
+      const regionalchampion: Achievement = { id: 'regionalchampion', ...ACHIEVEMENT_DEFINITIONEN.regionalchampion, erreicht: regionalchampionErreicht, fortschritt: regionalchampionErreicht ? 100 : Math.max(0, (1 - rang_region / Math.min(10, anzahl_anlagen_region)) * 100) }
+      ;(regionalchampionErreicht ? erreichte : nichtErreichte).push(regionalchampion)
+    }
 
     const letzterMonat = neuesterMonat(benchmark.anlage.monatswerte)
     if (letzterMonat?.autarkie_prozent !== undefined && letzterMonat.autarkie_prozent !== null) {
@@ -201,7 +212,10 @@ export function useUebersichtDaten(benchmark: CommunityBenchmarkResponse | null)
     }
 
     const letzteZwoelf = letzteMonate(benchmark.anlage.monatswerte, 12)
-    const durchschnittMonat = benchmark.benchmark.spez_ertrag_durchschnitt / 12
+    // #387: Die Schwelle ist ein Zwölftel des Community-Jahreswerts. Fehlt der,
+    // gibt es keine Schwelle — und damit auch keine Auszeichnung.
+    const durchschnittMonat = (benchmark.benchmark.spez_ertrag_durchschnitt ?? 0) / 12
+    if (!durchschnittMonat) return { erreichte, nichtErreichte }
     let ueberDurchschnittCount = 0
     for (const m of letzteZwoelf) if ((m.spez_ertrag_kwh_kwp || 0) > durchschnittMonat) ueberDurchschnittCount++
     const dauerbrennerErreicht = ueberDurchschnittCount === 12 && letzteZwoelf.length === 12
@@ -216,8 +230,14 @@ export function useUebersichtDaten(benchmark: CommunityBenchmarkResponse | null)
     if (!benchmark) return { staerken: [] as PerformanceMetrik[], schwaechen: [] as PerformanceMetrik[] }
     const metriken: PerformanceMetrik[] = []
 
-    const pvAbw = ((benchmark.benchmark.spez_ertrag_anlage - benchmark.benchmark.spez_ertrag_durchschnitt) / benchmark.benchmark.spez_ertrag_durchschnitt) * 100
-    metriken.push({ label: 'PV-Ertrag', abweichungProzent: pvAbw, einheit: '%', icon: <Sun className="h-4 w-4" />, kategorie: 'pv' })
+    // #387: Quotient aus zwei Jahreswerten — fehlt einer, wird er unterdrückt
+    // statt geschätzt (Doktrin unvollständiger Werte).
+    const eigenerJahreswert = benchmark.benchmark.spez_ertrag_anlage
+    const communityJahreswert = benchmark.benchmark.spez_ertrag_durchschnitt
+    if (eigenerJahreswert !== null && eigenerJahreswert !== undefined && communityJahreswert) {
+      const pvAbw = ((eigenerJahreswert - communityJahreswert) / communityJahreswert) * 100
+      metriken.push({ label: 'PV-Ertrag', abweichungProzent: pvAbw, einheit: '%', icon: <Sun className="h-4 w-4" />, kategorie: 'pv' })
+    }
 
     if (benchmark.benchmark_erweitert?.speicher) {
       const sp = benchmark.benchmark_erweitert.speicher
@@ -256,8 +276,12 @@ export function useUebersichtDaten(benchmark: CommunityBenchmarkResponse | null)
   const radarData = useMemo(() => {
     if (!benchmark) return []
     const data: { kategorie: string; du: number; community: number; fullMark: number }[] = []
-    const pvMax = Math.max(benchmark.benchmark.spez_ertrag_anlage, benchmark.benchmark.spez_ertrag_durchschnitt) * 1.2
-    data.push({ kategorie: 'PV-Ertrag', du: (benchmark.benchmark.spez_ertrag_anlage / pvMax) * 100, community: (benchmark.benchmark.spez_ertrag_durchschnitt / pvMax) * 100, fullMark: 100 })
+    const pvEigen = benchmark.benchmark.spez_ertrag_anlage
+    const pvCommunity = benchmark.benchmark.spez_ertrag_durchschnitt
+    if (pvEigen !== null && pvEigen !== undefined && pvCommunity) {
+      const pvMax = Math.max(pvEigen, pvCommunity) * 1.2
+      data.push({ kategorie: 'PV-Ertrag', du: (pvEigen / pvMax) * 100, community: (pvCommunity / pvMax) * 100, fullMark: 100 })
+    }
     const letzterMonat = neuesterMonat(benchmark.anlage.monatswerte)
     if (letzterMonat?.autarkie_prozent) data.push({ kategorie: 'Autarkie', du: letzterMonat.autarkie_prozent, community: 65, fullMark: 100 })
     if (letzterMonat?.eigenverbrauch_prozent) data.push({ kategorie: 'Eigenverbrauch', du: letzterMonat.eigenverbrauch_prozent, community: 45, fullMark: 100 })
@@ -299,6 +323,12 @@ export function RankingHauptKpi({ benchmark, rankingBadge }: { benchmark: Commun
           <p className="text-4xl font-bold text-primary-500">{fmtZahl(benchmark.benchmark.spez_ertrag_anlage, 0)}</p>
           <p className="text-gray-500 dark:text-gray-400">kWh/kWp</p>
           <AbweichungBadge wert={benchmark.benchmark.spez_ertrag_anlage} durchschnitt={benchmark.benchmark.spez_ertrag_durchschnitt} />
+          {hatJahresfenster(benchmark.benchmark) && jahresfensterStand(benchmark.benchmark) && (
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{jahresfensterStand(benchmark.benchmark)}</p>
+          )}
+          {jahresfensterHinweis(benchmark.benchmark) && (
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">{jahresfensterHinweis(benchmark.benchmark)}</p>
+          )}
         </Parkbar>
         <div className="md:col-span-2">
           <div className="grid grid-cols-2 gap-4">
@@ -465,7 +495,9 @@ export function KomponentenBenchmarks({ benchmark }: { benchmark: CommunityBench
 
 // ─── Helfer-Komponenten ──────────────────────────────────────────────────────
 
-function AbweichungBadge({ wert, durchschnitt }: { wert: number; durchschnitt: number }) {
+function AbweichungBadge({ wert, durchschnitt }: { wert: number | null; durchschnitt: number | null }) {
+  // #387: ein Quotient ohne Zähler oder Nenner ist keine Abweichung von 0.
+  if (wert === null || wert === undefined || !durchschnitt) return null
   const abweichung = ((wert - durchschnitt) / durchschnitt) * 100
   const isPositive = abweichung >= 0
   return (
@@ -482,7 +514,7 @@ const VERGLEICH_TOOLTIPS: Record<string, string> = {
   'Spez. Ertrag': 'Dein normierter Ertrag (kWh/kWp) im Vergleichszeitraum',
 }
 
-function VergleichsBox({ label, wert, einheit, zusatz, icon, isRank, tooltip }: { label: string; wert: number; einheit?: string; zusatz?: string; icon?: React.ReactNode; isRank?: boolean; tooltip?: string }) {
+function VergleichsBox({ label, wert, einheit, zusatz, icon, isRank, tooltip }: { label: string; wert: number | null; einheit?: string; zusatz?: string; icon?: React.ReactNode; isRank?: boolean; tooltip?: string }) {
   const tooltipText = tooltip || VERGLEICH_TOOLTIPS[label]
   return (
     <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
@@ -494,7 +526,7 @@ function VergleichsBox({ label, wert, einheit, zusatz, icon, isRank, tooltip }: 
         </span>
       </div>
       <p className="text-xl font-semibold text-gray-900 dark:text-white">
-        {isRank ? '#' : ''}{fmtZahl(wert, 0)}
+        {isRank && wert !== null && wert !== undefined ? '#' : ''}{fmtZahl(wert, 0)}
         {einheit && <span className="text-sm font-normal text-gray-500 dark:text-gray-400 ml-1">{einheit}</span>}
         {zusatz && <span className="text-sm font-normal text-gray-400 dark:text-gray-500 ml-2">{zusatz}</span>}
       </p>
