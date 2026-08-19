@@ -458,6 +458,14 @@ export interface MonatsVergleich {
 // API Client
 // =============================================================================
 
+/** Antwort von `GET /community/nachsende-status` (#387 Schritt 3). */
+export interface NachsendeStatus {
+  /** Lief der automatische Nachsende-Lauf für den aktuellen Stand schon durch? */
+  erledigt: boolean
+  /** Anlagen, die geteilt haben, aber nicht automatisch nachsenden. */
+  offen: { anlage_id: number; anlagenname: string }[]
+}
+
 export const communityApi = {
   /**
    * Prüft ob der Community-Server erreichbar ist
@@ -478,6 +486,19 @@ export const communityApi = {
    */
   async share(anlageId: number): Promise<ShareResponse> {
     return api.post<ShareResponse>(`/community/share/${anlageId}`)
+  },
+
+  /**
+   * Wer muss seinen Datensatz einmal neu teilen? (#387 Schritt 3)
+   *
+   * Seit v4.0.22 gehen vier Felder mit, die der Community-Server für die neue
+   * Hochrechnung braucht — der PVGIS-Maßstab je Monat und je Jahr, die CO₂-Zahl
+   * nach eedcs Kanon und der gemessene Eigenverbrauch. Anlagen mit
+   * `community_auto_share` senden einmalig von selbst nach; alle anderen stehen
+   * in `offen` und bekommen den Hinweis samt vorhandenem Teilen-Knopf.
+   */
+  async getNachsendeStatus(): Promise<NachsendeStatus> {
+    return api.get<NachsendeStatus>('/community/nachsende-status')
   },
 
   /**

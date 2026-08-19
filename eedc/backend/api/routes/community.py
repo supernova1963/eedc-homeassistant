@@ -129,6 +129,14 @@ async def share_to_community(
                         anlage.community_hash = anlage_hash
                         await db.commit()
 
+                # #387 Schritt 3: Ein Voll-Submit über den Knopf ist dasselbe
+                # wie der automatische Nachsende-Lauf — beide schicken den
+                # kompletten Verlauf im neuen Format. Wer hier gedrückt hat,
+                # braucht den Hinweis nicht mehr.
+                from backend.services.community_nachsenden import merke_gesendet
+
+                await merke_gesendet(db, anlage_id)
+
                 await log_activity(
                     kategorie="community",
                     aktion="Community-Daten geteilt",

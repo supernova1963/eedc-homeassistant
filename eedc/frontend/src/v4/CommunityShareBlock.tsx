@@ -204,6 +204,9 @@ export function CommunityShareBlockInhalt() {
   const [preview, setPreview] = useState<PreviewResponse | null>(null)
   const [laden, setLaden] = useState(false)
   const [uebertrage, setUebertrage] = useState(false)
+  // #387 Schritt 3: Steht diese Anlage noch aus? Nur Anlagen OHNE Auto-Share
+  // stehen hier — die anderen senden beim nächsten Start von selbst nach.
+  const [nachsendenOffen, setNachsendenOffen] = useState(false)
   const communityHash = selectedAnlage?.community_hash ?? null
 
   const ladePreview = useCallback(() => {
@@ -221,6 +224,20 @@ export function CommunityShareBlockInhalt() {
   // den Hash) lädt die Vorschau neu → `bereits_geteilt` springt ohne Reload um.
   useEffect(() => ladePreview(), [ladePreview, communityHash])
 
+  // Nachsende-Status (#387 Schritt 3). Dieselbe Dep-Logik: nach einem Klick auf
+  // „Jetzt übertragen" merkt sich der Server die Anlage, der Hinweis
+  // verschwindet ohne Reload.
+  useEffect(() => {
+    if (selectedAnlageId == null) { setNachsendenOffen(false); return }
+    let aktiv = true
+    communityApi.getNachsendeStatus()
+      .then((st) => {
+        if (aktiv) setNachsendenOffen(st.offen.some((o) => o.anlage_id === selectedAnlageId))
+      })
+      .catch(() => { if (aktiv) setNachsendenOffen(false) })
+    return () => { aktiv = false }
+  }, [selectedAnlageId, communityHash])
+
   if (selectedAnlageId == null) {
     return <p className="text-sm text-gray-500 dark:text-gray-400">Keine Anlage ausgewählt.</p>
   }
@@ -237,6 +254,7 @@ export function CommunityShareBlockInhalt() {
     setUebertrage(true)
     try {
       await communityApi.share(selectedAnlageId)
+      setNachsendenOffen(false) // der Server hat die Anlage soeben vermerkt
       await refresh() // setzt community_hash → Vorschau lädt via Dep neu
     } catch {
       // bleibt „ausstehend" — nächster Monatsabschluss überträgt automatisch
@@ -342,6 +360,23 @@ export function CommunityShareBlockInhalt() {
               <div className="flex flex-wrap items-center gap-3">
                 <p className="text-sm text-yellow-600 dark:text-yellow-400">
                   Erste Übertragung steht noch aus ({fmtZahl(preview.anzahl_monate, 0)} Monatswerte bereit).
+                </p>
+                <Button variant="secondary" size="sm" loading={uebertrage} onClick={jetztUebertragen}>
+                  Jetzt übertragen
+                </Button>
+              </div>
+            ) : nachsendenOffen ? (
+              /* #387 Schritt 3: Seit dieser Version geht die Ertragserwartung
+                 deines Standorts mit — der Community-Vergleich stellt am
+                 1.9.2026 darauf um. Wer automatisch teilt, sendet von selbst
+                 nach; hier steht nur, wer es einmal von Hand tun muss. Der
+                 Knopf ist derselbe wie oben (Voll-Submit), es entsteht keine
+                 zweite Übertragungsart. */
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="text-sm text-yellow-600 dark:text-yellow-400">
+                  Neu: eedc kann jetzt auch die Ertragserwartung deines Standorts mitschicken.
+                  Der Community-Vergleich rechnet damit ab dem 1. September fairer — für Anlagen,
+                  die noch kein volles Jahr gemessen haben. Einmal übertragen genügt.
                 </p>
                 <Button variant="secondary" size="sm" loading={uebertrage} onClick={jetztUebertragen}>
                   Jetzt übertragen

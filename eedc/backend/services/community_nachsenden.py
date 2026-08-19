@@ -68,9 +68,57 @@ async def _marker(db: AsyncSession) -> Optional[dict]:
 
 
 async def ist_erledigt(db: AsyncSession) -> bool:
-    """Wurde für den aktuellen Schema-Stand schon nachgesendet?"""
+    """Lief der automatische Lauf für den aktuellen Schema-Stand schon?
+
+    ⚠ Prüft ``lauf_erledigt``, **nicht** nur den Stand: seit
+    :func:`merke_gesendet` denselben Eintrag auch beim manuellen Teilen
+    fortschreibt, würde ein einziger Knopfdruck sonst den automatischen Lauf
+    für alle übrigen Anlagen abschalten.
+    """
     marker = await _marker(db)
-    return bool(marker and marker.get("stand") == SCHEMA_STAND)
+    return bool(
+        marker
+        and marker.get("stand") == SCHEMA_STAND
+        and marker.get("lauf_erledigt")
+    )
+
+
+async def _erledigte_anlagen(db: AsyncSession) -> set[int]:
+    """Anlagen, die im aktuellen Schema-Stand bereits gesendet haben.
+
+    Nötig, weil der Hinweis für Anlagen **ohne** Auto-Share sonst stehen bliebe,
+    nachdem ihr Besitzer den Knopf gedrückt hat: der globale Marker sagt nur,
+    dass der *automatische* Lauf durch ist, nicht wer manuell geteilt hat.
+    """
+    marker = await _marker(db)
+    if not marker or marker.get("stand") != SCHEMA_STAND:
+        return set()
+    return {int(x) for x in marker.get("anlagen", []) if isinstance(x, (int, str))}
+
+
+async def merke_gesendet(db: AsyncSession, anlage_id: int) -> None:
+    """Hält fest, dass diese Anlage im aktuellen Schema-Stand gesendet hat.
+
+    Wird sowohl vom automatischen Lauf als auch vom Teilen-Knopf aufgerufen —
+    beide erzeugen denselben Voll-Submit, also zählt beides gleich.
+    """
+    result = await db.execute(
+        select(Settings).where(Settings.key == NACHSENDE_SETTINGS_KEY)
+    )
+    vorhanden = result.scalar_one_or_none()
+    alt = vorhanden.value if vorhanden and isinstance(vorhanden.value, dict) else {}
+    anlagen = set(alt.get("anlagen", [])) if alt.get("stand") == SCHEMA_STAND else set()
+    anlagen.add(anlage_id)
+    wert = {
+        "stand": SCHEMA_STAND,
+        "anlagen": sorted(anlagen),
+        "lauf_erledigt": bool(alt.get("lauf_erledigt")) if alt.get("stand") == SCHEMA_STAND else False,
+    }
+    if vorhanden:
+        vorhanden.value = wert
+    else:
+        db.add(Settings(key=NACHSENDE_SETTINGS_KEY, value=wert))
+    await db.commit()
 
 
 async def nachsende_status(db: AsyncSession) -> dict:
@@ -82,6 +130,7 @@ async def nachsende_status(db: AsyncSession) -> dict:
         nachsenden. Genau ihnen gehört der Hinweis.
     """
     erledigt = await ist_erledigt(db)
+    schon_gesendet = await _erledigte_anlagen(db)
     result = await db.execute(
         select(Anlage).where(
             Anlage.community_hash.isnot(None),
@@ -91,6 +140,7 @@ async def nachsende_status(db: AsyncSession) -> dict:
     offen = [
         {"anlage_id": a.id, "anlagenname": a.anlagenname}
         for a in result.scalars().all()
+        if a.id not in schon_gesendet
     ]
     return {"erledigt": erledigt, "offen": offen}
 
@@ -131,6 +181,7 @@ async def fuehre_nachsende_lauf_aus(db: AsyncSession) -> dict:
                 )
             if antwort.status_code == 200:
                 gesendet += 1
+                await merke_gesendet(db, anlage.id)
                 logger.info(
                     "Community-Nachsendung für Anlage %s erfolgreich", anlage.id
                 )
@@ -155,7 +206,9 @@ async def fuehre_nachsende_lauf_aus(db: AsyncSession) -> dict:
             select(Settings).where(Settings.key == NACHSENDE_SETTINGS_KEY)
         )
         vorhanden = eintrag.scalar_one_or_none()
-        wert = {"stand": SCHEMA_STAND, "gesendet": gesendet}
+        alt = vorhanden.value if vorhanden and isinstance(vorhanden.value, dict) else {}
+        anlagen = sorted(set(alt.get("anlagen", []))) if alt.get("stand") == SCHEMA_STAND else []
+        wert = {"stand": SCHEMA_STAND, "anlagen": anlagen, "lauf_erledigt": True}
         if vorhanden:
             vorhanden.value = wert
         else:
