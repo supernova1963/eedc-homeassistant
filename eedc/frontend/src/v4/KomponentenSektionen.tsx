@@ -354,6 +354,17 @@ export function baueKomponentenBloecke(
       ]} />,
     })
     if (wpDetail.length > 0) wpEls.push({ id: 'el:wp-detail', titel: 'Strom-Aufteilung', node: <DetailListe rows={wpDetail} /> })
+    // #263 K-2 (S4): Aufteilung Heizen/Kühlen — nur mit erfasstem Modus.
+    // Der Balken zeigt dieselben drei Größen wie der Komponenten-Hub; ohne
+    // Modus-Signal fehlt der Block ganz, statt drei Nullen zu zeigen.
+    if (hat(d.wp_modus_abdeckung_h) && d.wp_modus_abdeckung_h! > 0) wpEls.push({
+      id: 'el:wp-modus-split', titel: 'Aufteilung Heizen/Kühlen',
+      node: <VerteilungsBalken segmente={[
+        { label: 'Heizen', wert: d.wp_modus_strom_heizen_kwh ?? 0, farbe: ROLLEN_BG.heizung },
+        { label: 'Kühlen', wert: d.wp_modus_strom_kuehlen_kwh ?? 0, farbe: ROLLEN_BG.kuehlung },
+        { label: 'Nicht aufgeteilt', wert: d.wp_modus_nicht_aufgeteilt_kwh ?? 0, farbe: ROLLEN_BG.nicht_aufgeteilt },
+      ]} />,
+    })
     const wpGeraete = geraeteNamen(d, 'waermepumpe')
     if (wpGeraete.length >= 2) wpEls.push({ id: 'el:wp-geraete', titel: 'Geräte-Hinweis', node: <GeraeteHinweis namen={wpGeraete} /> })
     if (!alleGeparkt(park, wpKpis, wpEls)) bloecke.push({

@@ -23,6 +23,7 @@ from backend.core.investition_kennwerte import (
 )
 from backend.api.deps import get_db
 from backend.core.berechnungen import (
+    heizwaerme_ist_abgeleitet,
     DienstlicheLadungZeile,
     FinanzMonatsZeile,
     berechne_dienstliche_ladekosten,
@@ -49,6 +50,9 @@ from backend.api.routes.strompreise import (
     monats_strompreis_lookup,
     resolve_strompreis_for_komponente,
 )
+from backend.core.betriebsmodus import HEIZEN as BM_HEIZEN
+from backend.core.betriebsmodus import KUEHLEN as BM_KUEHLEN
+from backend.core.betriebsmodus import MODUS_ABDECKUNG_FELD, MODUS_STROM_FELD
 from backend.core.field_definitions import get_emob_pv_netz_kwh, get_wp_strom_kwh
 from backend.core.berechnungen.phev_anteil import teile_fahrleistung
 from backend.core.berechnungen.kapitalrechnung import (
@@ -840,11 +844,13 @@ async def calculate_anlage_sensors(
     wp_ids = {w.id for w in waermepumpen}
     co2_wp_waerme_kwh = 0.0
     co2_wp_strom_kwh = 0.0
+    co2_wp_kuehlen_kwh = 0.0
     for (inv_id, _j, _m), daten in historische_inv_daten.items():
         if inv_id in wp_ids:
             _b = imd_typ_beitrag(inv_by_id_export[inv_id], daten)
             co2_wp_waerme_kwh += _b.wp_waerme
             co2_wp_strom_kwh += _b.wp_strom
+            co2_wp_kuehlen_kwh += _b.wp_modus_strom_kuehlen
 
     # DI-2: Gesamt-CO₂-Bilanz (PV-Eigenverbrauch + WP + E-Mob) über den
     # kanonischen Helper — deckungsgleich mit der Cockpit-Kachel `co2_gesamt_kg`.
@@ -852,6 +858,8 @@ async def calculate_anlage_sensors(
         eigenverbrauch_kwh=eigenverbrauch,
         wp_waerme_kwh=co2_wp_waerme_kwh,
         wp_strom_kwh=co2_wp_strom_kwh,
+        # #263 K-2 (E-B): Kühlen ersetzt keine Heizung.
+        wp_strom_kuehlen_kwh=co2_wp_kuehlen_kwh,
         emob_km=co2_emob_km,
         emob_netz_ladung_kwh=co2_emob_netz_kwh,
         benzin_verbrauch_liter=co2_benzin_liter,
@@ -1407,11 +1415,25 @@ async def calculate_investition_sensors(
         gesamt_heizung = 0.0
         gesamt_warmwasser = 0.0
 
+        # #263 K-2 (Konzept §3.5): abgeleitete Wärme trägt keine JAZ — sonst
+        # exportierte eedc die gepflegte JAZ als gemessenen Sensorwert nach HA,
+        # wo sie in Automationen und Langzeitstatistik weiterlebt.
+        waerme_abgeleitet = False
+        # #263 K-2 (S4): Teilmengen nach Betriebsmodus — nie Summanden.
+        gesamt_modus_heizen = 0.0
+        gesamt_modus_kuehlen = 0.0
+        gesamt_modus_abdeckung_h = 0.0
         for md in monatsdaten:
             d = md.verbrauch_daten or {}
+            gesamt_modus_heizen += d.get(MODUS_STROM_FELD[BM_HEIZEN], 0) or 0
+            gesamt_modus_kuehlen += d.get(MODUS_STROM_FELD[BM_KUEHLEN], 0) or 0
+            gesamt_modus_abdeckung_h += d.get(MODUS_ABDECKUNG_FELD, 0) or 0
             gesamt_strom += get_wp_strom_kwh(d, investition.parameter)
             gesamt_heizung += d.get("heizenergie_kwh", 0) or 0
             gesamt_warmwasser += d.get("warmwasser_kwh", 0) or 0
+            waerme_abgeleitet = waerme_abgeleitet or heizwaerme_ist_abgeleitet(
+                md.source_provenance
+            )
 
         gesamt_waerme = gesamt_heizung + gesamt_warmwasser
 
@@ -1445,7 +1467,7 @@ async def calculate_investition_sensors(
             berechnung = None
 
             if sensor.key == "wp_cop_durchschnitt":
-                if gesamt_strom > 0 and gesamt_waerme > 0:
+                if gesamt_strom > 0 and gesamt_waerme > 0 and not waerme_abgeleitet:
                     value = gesamt_waerme / gesamt_strom
                     berechnung = f"{gesamt_waerme:.0f} / {gesamt_strom:.0f}"
             elif sensor.key == "wp_ersparnis_euro":
@@ -1478,6 +1500,17 @@ async def calculate_investition_sensors(
                     wp_kosten = gesamt_strom * wp_netzbezug_preis / 100
                     value = alte_kosten - wp_kosten
                     berechnung = f"{alte_kosten:.2f} (alt) - {wp_kosten:.2f} (WP)"
+            elif sensor.key == "wp_strom_heizen_modus_kwh":
+                # Ohne erfassten Modus bleibt der Sensor leer — er behauptete
+                # sonst „0 kWh geheizt" für ein Gerät, das eedc nicht beobachtet
+                # hat. In HA-Langzeitstatistik lebt so eine 0 weiter.
+                if gesamt_modus_abdeckung_h > 0:
+                    value = gesamt_modus_heizen
+                    berechnung = f"{gesamt_modus_heizen:.1f} von {gesamt_strom:.1f} kWh gesamt"
+            elif sensor.key == "wp_strom_kuehlen_modus_kwh":
+                if gesamt_modus_abdeckung_h > 0:
+                    value = gesamt_modus_kuehlen
+                    berechnung = f"{gesamt_modus_kuehlen:.1f} von {gesamt_strom:.1f} kWh gesamt"
             elif sensor.key == "wp_kompressor_starts":
                 if hat_starts:
                     value = wp_starts_total

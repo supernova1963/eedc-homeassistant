@@ -251,6 +251,47 @@ def summe_waermepumpe_kwh(komponenten_kwh: Optional[dict]) -> float:
     return _summe_prefix(komponenten_kwh, WAERMEPUMPE_KOMPONENTEN_PREFIXE)
 
 
+def waermepumpe_kwh_je_investition(komponenten: Optional[dict]) -> dict[str, float]:
+    """Wärmepumpen-Strom **je Investition** aus einem Komponenten-JSON (#263 K-2).
+
+    Schlüssel ist die **Investitions-ID als String**, Wert der **Betrag** der
+    Energie (kWh). Zwei Fallen, die diese Funktion abfängt und die beide schon
+    einmal Fehler erzeugt haben:
+
+    1. **Die ID ist kein Präfix.** ``waermepumpe_1`` und ``waermepumpe_12`` sind
+       verschiedene Geräte; ein ``startswith("waermepumpe_1")`` faltet sie
+       zusammen. Hier wird die ID **exakt** getrennt.
+    2. **Ein Gerät kann mehrere Keys haben.** Bei getrennter Strommessung führt
+       der Live-Pfad zusätzlich ``waermepumpe_<id>_heizen`` und
+       ``waermepumpe_<id>_warmwasser`` (``live_tagesverlauf_service``); beide
+       gehören derselben Investition und werden summiert.
+
+    ⚠ **Vorzeichen:** ``TagesEnergieProfil.komponenten`` führt die Wärmepumpe
+    **negativ** (Leistungspfad, ``seite: "senke"`` ⇒ ``-abs(...)``),
+    ``TagesZusammenfassung.komponenten_kwh`` **positiv** (Zählerpfad, s.
+    {@link summe_waermepumpe_kwh}). Diese Funktion liefert für **beide**
+    Eingänge den Betrag — sie ist damit die eine Stelle, an der die zwei
+    Vorzeichen-Welten zusammenkommen.
+    """
+    if not komponenten:
+        return {}
+    praefix = WAERMEPUMPE_KOMPONENTEN_PREFIXE[0]
+    je_inv: dict[str, float] = {}
+    for key, wert in komponenten.items():
+        if not isinstance(wert, (int, float)):
+            continue
+        name = str(key)
+        if not name.startswith(praefix):
+            continue
+        rest = name[len(praefix):]
+        # `waermepumpe_7` → "7"; `waermepumpe_7_heizen` → "7" (Suffix verworfen).
+        inv_id, _, _suffix = rest.partition("_")
+        if not inv_id.isdigit():
+            continue
+        je_inv[inv_id] = je_inv.get(inv_id, 0.0) + abs(float(wert))
+    return je_inv
+
+
 def summe_wallbox_eauto_kwh(komponenten_kwh: Optional[dict]) -> float:
     """Σ aller `wallbox_<id>` + `eauto_<id>`-Keys.
 

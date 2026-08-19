@@ -66,6 +66,19 @@ class KomponentenMonat(BaseModel):
     wp_warmwasser_kwh: float
     wp_strom_heizen_kwh: float
     wp_strom_warmwasser_kwh: float
+    # ── Modus-Split (#263 K-2, S4) ──────────────────────────────────────────
+    # **Teilmengen** von `wp_strom_kwh`, keine Summanden — nie addieren.
+    # `None` heißt „keine Aufteilung erfasst" und ist nicht 0: eine 0 hieße
+    # „das Gerät hat nicht geheizt", und das weiß eedc ohne Modus-Signal nicht
+    # (ADR-002/P4).
+    wp_modus_strom_heizen_kwh: Optional[float] = None
+    wp_modus_strom_kuehlen_kwh: Optional[float] = None
+    wp_modus_nicht_aufgeteilt_kwh: Optional[float] = None
+    wp_modus_abdeckung_h: Optional[float] = None
+    #: Ist die Heizwärme aus `Strom × JAZ` abgeleitet statt gemessen? Der Client
+    #: kennzeichnet sie damit — dieselbe Trennung wie „geschätzt (kWp-Anteil)"
+    #: bei der PV-Verteilung.
+    wp_waerme_abgeleitet: bool = False
     # WP-Ersparnis vs. fossile Heizung — pro Monat berechnet (Drift-Audit A1).
     # Frontend muss nicht selbst rechnen → Auswertungen→Komponenten + Cockpit nutzen
     # denselben Wert wie Monatsbericht/Übersicht.
@@ -197,11 +210,12 @@ async def get_komponenten_zeitreihe(
         # Mengengewichteter Ø Ladepreis (nur Zeilen mit gepflegtem Preis).
         speicher_arbitrage_preis = speicher.netzladung_preis_cent
 
-        # JAZ/COP nur wenn beide Seiten gemessen sind (siehe uebersicht.py
-        # für Erklärung — bei Split-Klimaanlagen kein Wärmemengenzähler).
+        # JAZ/COP nur wenn beide Seiten **gemessen** sind (siehe uebersicht.py
+        # für die Erklärung — kein Wärmemengenzähler, oder die Wärme ist aus
+        # `Strom × JAZ` abgeleitet; #263 K-2, Konzept §3.5).
         wp_cop = (
             wp.waerme_kwh / wp.strom_kwh
-        ) if wp.strom_kwh > 0 and wp.waerme_kwh > 0 else None
+        ) if wp.strom_kwh > 0 and wp.waerme_kwh > 0 and wp.jaz_belastbar else None
 
         emob_pv_anteil = (
             emob.ladung_pv_kwh / emob.ladung_kwh * 100
@@ -247,6 +261,8 @@ async def get_komponenten_zeitreihe(
                 wp_strompreis_cent=tarif.wp_preis_cent,
                 wp_parameter=wp_ref_param,
                 monats_gaspreis_cent=tarif.gaspreis_cent_kwh,
+                # E-B: Der Kühlstrom hat kein fossiles Gegenstück.
+                strom_kuehlen_kwh=wp.modus_strom_kuehlen_kwh,
             )
             m_wp_ersparnis = wp_result.ersparnis_euro
 
@@ -266,6 +282,19 @@ async def get_komponenten_zeitreihe(
             wp_warmwasser_kwh=round(wp.warmwasser_kwh, 1),
             wp_strom_heizen_kwh=round(wp.strom_heizen_kwh, 1),
             wp_strom_warmwasser_kwh=round(wp.strom_warmwasser_kwh, 1),
+            wp_modus_strom_heizen_kwh=(
+                round(wp.modus_strom_heizen_kwh, 1) if wp.hat_modus_split else None
+            ),
+            wp_modus_strom_kuehlen_kwh=(
+                round(wp.modus_strom_kuehlen_kwh, 1) if wp.hat_modus_split else None
+            ),
+            wp_modus_nicht_aufgeteilt_kwh=(
+                round(wp.modus_nicht_aufgeteilt_kwh, 1) if wp.hat_modus_split else None
+            ),
+            wp_modus_abdeckung_h=(
+                round(wp.modus_abdeckung_h, 1) if wp.hat_modus_split else None
+            ),
+            wp_waerme_abgeleitet=not wp.jaz_belastbar,
             wp_ersparnis_euro=round(m_wp_ersparnis, 2),
             emob_km=round(emob.km, 0),
             emob_ladung_kwh=round(emob.ladung_kwh, 1),

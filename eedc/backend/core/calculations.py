@@ -566,6 +566,7 @@ def co2_wp_ersparnis_kg(
     wp_waerme_kwh: float,
     wp_strom_kwh: float,
     alter_energietraeger: Optional[str] = None,
+    strom_kuehlen_kwh: float = 0.0,
 ) -> float:
     """Kanonische CO₂-Ersparnis einer Wärmepumpe aus GEMESSENEN Werten (kg).
 
@@ -583,6 +584,18 @@ def co2_wp_ersparnis_kg(
     Args:
         wp_waerme_kwh: Gemessene abgegebene Wärme (Heizung + Warmwasser).
         wp_strom_kwh: Gemessener Stromverbrauch der WP.
+        strom_kuehlen_kwh: #263 K-2 (Entscheid E-B) — der Anteil, der in den
+            **Kühlbetrieb** ging. Er wird abgezogen, **bevor** das Strom-CO₂
+            gegen das vermiedene Gas gestellt wird. Default 0.0 = kein Split
+            erfasst, Verhalten wie bisher.
+
+            ⚑ **Warum, an einer Instanz gemessen:** Eine Klimaanlage mit
+            26,4 kWh Heizen und 158,4 kWh Kühlen wies **−52 kg** CO₂-Ersparnis
+            aus — der Kühlstrom wurde gegen die vermiedene Gasheizung
+            gerechnet. Derselbe Kategorienfehler wie bei den Kosten (E-B):
+            Kühlen ersetzt keine Heizung, es verursacht seine eigene Emission.
+            Die zählt in der Anlagen-CO₂-Bilanz über den Stromverbrauch mit,
+            aber nicht als schlechtere **Heiz**bilanz.
 
     Args (Fortsetzung):
         alter_energietraeger: ``Investition.parameter['alter_energietraeger']``.
@@ -605,7 +618,9 @@ def co2_wp_ersparnis_kg(
     vermiedenes_gas_co2 = (
         wp_waerme_kwh / WP_WIRKUNGSGRAD_GAS_DEFAULT * CO2_FAKTOR_GAS_KG_KWH
     )
-    wp_strom_co2 = wp_strom_kwh * CO2_FAKTOR_STROM_KG_KWH
+    # E-B: nur der Strom, der die Gasheizung tatsächlich ersetzt hat.
+    heiz_strom_kwh = max(0.0, wp_strom_kwh - min(max(strom_kuehlen_kwh, 0.0), max(wp_strom_kwh, 0.0)))
+    wp_strom_co2 = heiz_strom_kwh * CO2_FAKTOR_STROM_KG_KWH
     return vermiedenes_gas_co2 - wp_strom_co2
 
 
@@ -663,6 +678,7 @@ def berechne_co2_bilanz(
     emob_netz_ladung_kwh: float = 0.0,
     benzin_verbrauch_liter: float = 0.0,
     fossil_getankt_liter: float = 0.0,
+    wp_strom_kuehlen_kwh: float = 0.0,
 ) -> Co2Bilanz:
     """Kanonische CO₂-Gesamtbilanz (PV-Eigenverbrauch + WP + E-Mobilität).
 
@@ -683,7 +699,11 @@ def berechne_co2_bilanz(
     `eigener_verbrauch_l_100km` ist er 0 und die Bilanz exakt die von vorher.
     """
     co2_pv = eigenverbrauch_kwh * CO2_FAKTOR_STROM_KG_KWH
-    co2_wp = co2_wp_ersparnis_kg(wp_waerme_kwh, wp_strom_kwh)
+    # #263 K-2 (E-B): Kühlstrom ersetzt keine Heizung — er zählt über den
+    # Eigenverbrauch in der Bilanz mit, aber nicht als schlechtere Heizbilanz.
+    co2_wp = co2_wp_ersparnis_kg(
+        wp_waerme_kwh, wp_strom_kwh, strom_kuehlen_kwh=wp_strom_kuehlen_kwh
+    )
     co2_emob = co2_emob_ersparnis_kg(
         benzin_verbrauch_liter, emob_netz_ladung_kwh, emob_km
     ) - max(0.0, fossil_getankt_liter) * CO2_FAKTOR_BENZIN_KG_LITER

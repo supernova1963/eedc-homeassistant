@@ -24,6 +24,10 @@ from backend.services.energie_profil.backfill import (
     backfill_range,
     resolve_and_backfill_from_statistics,
 )
+from backend.services.energie_profil.modus_split_monat import (
+    lade_modus_split_je_monat,
+    lade_modus_split_monat,
+)
 from backend.services.energie_profil.rollup import rollup_month
 from backend.services.energie_profil.scheduler_jobs import (
     aggregate_today_all,
@@ -38,6 +42,8 @@ __all__ = [
     "backfill_range",
     "BackfillResult",
     "BackfillStatus",
+    "lade_modus_split_je_monat",
+    "lade_modus_split_monat",
     "resolve_and_backfill_from_statistics",
     "rollup_month",
 ]

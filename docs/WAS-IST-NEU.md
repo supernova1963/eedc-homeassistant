@@ -9,7 +9,7 @@
 
 ---
 
-## Unreleased — Hinweise, die man auch abstellen kann
+## Unreleased — Heizen und Kühlen getrennt, und Hinweise, die man abstellen kann
 
 Drei Meldungen des Daten-Checkers standen bei manchen Anlagen dauerhaft da, **ohne dass sich
 etwas dagegen tun ließ** — alle drei gemeldet von azywietz-web. Keine davon hat je eine Zahl
@@ -57,7 +57,7 @@ Dazu zwei Punkte rund um **Wärmepumpen und Klimaanlagen** — beide drehen sich
   ersetzte Heizung. ⚠ Wärmepumpen mit gemessener Wärme und gepflegtem Energieträger sehen **keine
   veränderte Zahl**; und wo eine Wärmemenge gemessen ist, bleibt die JAZ stehen.
 
-**Und ein neues Feld, das nichts anzeigt — aber jetzt schon anfängt zu sammeln.**
+**Und das neue Feld, das die Aufteilung überhaupt erst möglich macht.**
 
 - **Betriebsmodus deiner Klimaanlage** *(#263)*: Eine Split-Klimaanlage ist technisch eine
   Wärmepumpe — sie heizt im Winter und kühlt im Sommer, über **denselben** Stromzähler. eedc sieht
@@ -66,13 +66,10 @@ Dazu zwei Punkte rund um **Wärmepumpen und Klimaanlagen** — beide drehen sich
   unter *Einstellungen → Datenquellen* jetzt bei jeder Wärmepumpe das freiwillige Feld
   **Betriebsmodus**: Du ordnest dort die `climate`-Entität deines Geräts zu — in Home Assistant
   meist `climate.…`, die Kachel, auf der Heizen/Kühlen/Aus steht.
-  - ⚠ **Zu sehen ist davon heute noch nichts.** Dieser Schritt legt die Mitschrift an; die
-    Auswertung darauf — Heiz- und Kühlstrom getrennt, dazu die Kühl-Effizienz — kommt in einem der
-    nächsten Updates.
+  - **Und was du davon siehst:** die Aufteilung selbst — siehe direkt darunter.
   - ⚠ **Warum das Feld trotzdem jetzt da ist:** Die Aufteilung lässt sich **nicht nachträglich**
     erzeugen. Home Assistant hebt Zustände wie „Heizen"/„Kühlen" nur wenige Tage auf. Wer heute
-    zuordnet, hat die Aufteilung ab heute — wer bis zum nächsten Update wartet, verliert die Zeit
-    dazwischen dauerhaft. Der Daten-Check erinnert dich bei Klimaanlagen daran.
+    zuordnet, hat die Aufteilung ab heute — wer wartet, verliert die Zeit dazwischen dauerhaft. Der Daten-Check erinnert dich bei Klimaanlagen daran.
   - ⚠ **Wer nichts zuordnet, merkt nichts:** Der Stromverbrauch zählt unverändert vollständig.
   - ⚠ **Es braucht eine laufende Verbindung zu Home Assistant.** Wer seine Klimaanlage über den
     Monatsabschluss, den Statistik-Import oder CSV pflegt, bekommt die Aufteilung nicht — dort gibt
@@ -86,6 +83,42 @@ Dazu zwei Punkte rund um **Wärmepumpen und Klimaanlagen** — beide drehen sich
     in der Community verwendet". Das ist die Nebenwirkung — die Hauptwirkung stand nirgends: Die
     Art entscheidet, **welche Messwerte eedc von deinem Gerät erwartet**. Eine Klimaanlage wird
     zum Beispiel nicht nach Heizwärme gefragt.
+
+**Und die Auswertung dazu — Heizen und Kühlen getrennt.**
+
+- **Aufteilung Heizen/Kühlen** *(#263)*: Hat dein Gerät einen zugeordneten Betriebsmodus, steht
+  unter *Komponenten → Wärme/Klima* jetzt ein neuer Block: wie viel Strom ins **Heizen** ging, wie
+  viel ins **Kühlen**, was **nicht aufgeteilt** blieb — und über wie viele Stunden des Monats eedc
+  überhaupt mitlesen konnte. Dieselbe Aufteilung findest du in *Cockpit → Monat* und
+  *Cockpit → Jahr*; zwei neue Sensoren tragen sie nach Home Assistant.
+  - **„Nicht aufgeteilt" ist eine ehrliche Zeile.** Darin steckt Standby und alles, was weder
+    Heizen noch Kühlen war (Lüften, Entfeuchten, Automatik ohne Rückmeldung) — **und** die Zeit,
+    in der eedc nicht mitlesen konnte. Die Stundenzahl daneben trennt beides: hohe Abdeckung und
+    trotzdem ein Rest heißt „dein Gerät lief anders"; niedrige Abdeckung heißt „eedc hat nicht
+    hingesehen".
+  - ⚠ **Deine Bilanz ändert sich dadurch nicht.** Heizen und Kühlen sind **Teile** deines
+    Gesamtverbrauchs, keine zusätzlichen Posten — sie werden nirgends dazugezählt. Autarkie,
+    Eigenverbrauchsquote und Energiebilanz bleiben, wie sie waren.
+  - **Ohne Wärmemengenzähler rechnet eedc die Heizwärme jetzt aus dem Heiz-Strom und deiner
+    JAZ** — und schreibt dazu, dass sie abgeleitet ist. Damit zählt deine Klimaanlage in
+    Kostenvergleich, CO₂-Bilanz und Monatsbericht wie jede andere Wärmepumpe. ⚠ **Die JAZ selbst
+    bleibt in diesem Fall „—"**, mit Absicht: Wärme durch Strom zu teilen, wenn die Wärme aus
+    genau diesem Strom gerechnet wurde, ergibt wieder nur deine eingetragene JAZ — eine Zahl, die
+    nichts misst. ⚠ **Ohne gepflegte JAZ wird nichts abgeleitet**, auch nicht aus einem
+    Vorgabewert. ⚠ **Ein Wärmemengenzähler oder ein von Hand gepflegter Wert gewinnt immer.**
+  - ⚠ **Eine später korrigierte JAZ heilt alte Monate nicht.** Jeder Monat behält den Faktor, der
+    beim Abschluss galt — wie ein Tarif den Preis seines Monats behält. Das hält deine Historie
+    stabil, heißt aber auch: Nachträgliches Richtigstellen wirkt nur nach vorn.
+  - ⚠ **Kühlen spart nichts, es kostet.** Die Ersparnis gegenüber deiner alten Heizung wird nur
+    aus der **Heizhälfte** gerechnet. Ohne diese Trennung stand für eine überwiegend kühlende
+    Klimaanlage eine **negative** Ersparnis und eine **negative** CO₂-Bilanz, obwohl sie im Winter
+    sauber geheizt hat — im Testfall −45,04 € und −52 kg statt +2,48 € und +8,2 kg.
+  - ⚠ **Widersprüche werden nicht zurechtgebogen.** Trägst du den Monatsverbrauch nachträglich
+    kleiner ein als die schon erfasste Aufteilung, verwirft eedc die Aufteilung, statt sie passend
+    zu kürzen — und der Daten-Check sagt dir, welche Monate betroffen sind.
+  - ⚠ **Auch hier offen gesagt: kein Testgerät.** Abgesichert gegen nachgebaute Daten und eine
+    eigene Testinstanz, nicht an einer echten Klimaanlage. Rückmeldungen bitte in
+    [#263](https://github.com/supernova1963/eedc-homeassistant/issues/263).
 
 ---
 

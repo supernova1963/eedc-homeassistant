@@ -552,6 +552,25 @@ Hintergrund und die verworfenen Alternativen: [Berechnungen §3.6](BERECHNUNGEN.
 
 > **Der Betriebsmodus ist nur als HA-Sensor zuordenbar, nicht über MQTT.** Er ist ein Zustand, kein Messwert — der MQTT-Weg von eedc nimmt ausschließlich Zahlen entgegen. Die Fläche blendet die MQTT-Optionen für dieses eine Feld deshalb aus, statt eine Quelle anzubieten, die nichts liefern könnte.
 
+
+> **Was du nach der Zuordnung siehst** (seit 2026-08-19): Unter *Komponenten → Wärme/Klima* steht
+> ein Block **„Aufteilung Heizen/Kühlen"** mit den beiden Strommengen, der Zeile *nicht aufgeteilt*
+> und der Zahl der Stunden, in denen eedc mitlesen konnte. Dieselbe Aufteilung erscheint in
+> *Cockpit → Monat* und *Cockpit → Jahr*, dazu zwei Sensoren in Home Assistant. Die Aufteilung
+> entsteht beim **Monatsabschluss**; für den laufenden Monat wird sie direkt aus den Tageswerten
+> gelesen.
+
+#### Zweiter Befund dieser Kategorie: Aufteilung größer als der Gesamtverbrauch
+
+| Meldung | Severity | Bedeutung | Behebung |
+|---------|----------|-----------|----------|
+| **„\[Gerät\]": Heiz- und Kühlstrom zusammen größer als der Gesamtverbrauch (Monate)** | ⚠️ WARNING | Die Aufteilung ist ein **Teil** des Gesamtverbrauchs — zusammen können beide ihn nicht übersteigen. Das entsteht, wenn der Gesamtwert nachträglich kleiner eingetragen wurde als die bereits erfasste Aufteilung. | Zwei Wege: Prüfe den **Stromverbrauch** dieser Monate im Monatsabschluss — oder schließe den Monat **erneut ab**, dann rechnet eedc die Aufteilung neu und verwirft sie, falls sie nicht passt. |
+
+> **eedc biegt hier nichts zurecht.** Es wäre einfach, die Aufteilung stillschweigend auf den
+> Gesamtwert zu kürzen — dann stünde da eine Zahl, die plausibel aussieht und trotzdem falsch ist.
+> Stattdessen bleibt der Widerspruch sichtbar, bis du entschieden hast, welche der beiden Angaben
+> stimmt. ⚠ **Deine Energiebilanz ist davon nicht betroffen:** dort zählt immer der Gesamtwert.
+
 Hintergrund: [Issue #263](https://github.com/supernova1963/eedc-homeassistant/issues/263).
 
 ---

@@ -44,8 +44,53 @@ BETRIEBSMODUS_KANON: Final[tuple[str, ...]] = (
     HEIZEN, KUEHLEN, ENTFEUCHTEN, LUEFTEN, AUS, UNBESTIMMT,
 )
 
-# Die beiden Klassen, für die es später eine eigene Teilmenge gibt.
+# Die beiden Klassen, für die es eine eigene Teilmenge gibt.
 AUFGETEILTE_MODI: Final[frozenset[str]] = frozenset({HEIZEN, KUEHLEN})
+
+
+# ── Feldnamen der Teilmengen (#263 K-2, S3) ──────────────────────────────────
+#
+# **Warum eigene Namen und nicht `strom_heizen_kwh`** (Entscheid E-G, gemessen
+# 2026-08-18; das Konzept empfahl in §3.2 noch die Wiederverwendung): Dieses
+# Feld gibt es bereits, aber es trägt dort eine **andere** Bedeutung — bei
+# `getrennte_strommessung=True` ist es ein **Summand**
+# (`Gesamt = strom_heizen + strom_warmwasser`), hier wäre es eine **Teilmenge**
+# von `stromverbrauch_kwh`. Drei Stellen schließen aus seiner bloßen
+# **Anwesenheit** auf die getrennte Messung und würden mitkippen:
+# `investitionen/dashboards.py` (`if 'strom_heizen_kwh' in d`) → daran hängt
+# `cop_heizen`, und daran wiederum `WaermepumpeHubBloecke.tsx`
+# (`hatGetrennteStrom`). Mit abgeleiteter Wärme (§3.4) käme dort als „JAZ"
+# exakt die gepflegte JAZ heraus — der §3.5-Verstoß, gegen den S3 gebaut ist.
+# Eigene Namen machen die Kollision **strukturell** unmöglich, statt sie an
+# vier Stellen abzufangen; und eine WP mit getrennter Messung **und**
+# Modus-Sensor behält beide Angaben nebeneinander.
+#
+# ⚑ **Die Namen sind an den Kanon gebunden, nicht frei gewählt.** Sie stehen
+# hier ausgeschrieben (nicht generiert), weil dieses Projekt von der
+# Grep-Barkeit lebt — aber `test_263_k2_modus_split.py::test_feldnamen_folgen_dem_kanon`
+# hält sie gegen `AUFGETEILTE_MODI`: für jeden aufgeteilten Modus genau ein
+# Feld, und jeder Name genau `modus_strom_<modus>_kwh`. Eine siebte
+# Betriebsart kostet damit **einen Eintrag oben** — und der Wächter sagt
+# sofort, was dazu fehlt. Ohne ihn wäre „eine spätere Betriebsart kostet ein
+# Feld, keine Migration" (Konzept §3.1, Folge 4) eine Behauptung.
+MODUS_STROM_FELD: Final[dict[str, str]] = {
+    HEIZEN: "modus_strom_heizen_kwh",
+    KUEHLEN: "modus_strom_kuehlen_kwh",
+}
+
+#: Stunden des Monats mit **gültigem Modus-Signal** — das Qualitätsmaß neben
+#: den zwei Mengen (Konzept §3.3). Es trennt die zwei Fälle, die der Anwender
+#: unterscheiden können muss: „lief in anderen Betriebsarten" (Abdeckung hoch,
+#: Rest > 0) gegen „eedc hat nicht hingesehen" (Abdeckung niedrig).
+#: Zugleich die Zeitbasis, die K-1 (SEER) ohnehin braucht.
+MODUS_ABDECKUNG_FELD: Final[str] = "modus_abdeckung_h"
+
+#: Alle drei Felder, die der Modus-Split in `verbrauch_daten` schreibt — für
+#: Schreibpfad, Wächter und die Stellen, die sie **nicht** als Bilanzgröße
+#: behandeln dürfen.
+MODUS_SPLIT_FELDER: Final[tuple[str, ...]] = (
+    *sorted(MODUS_STROM_FELD.values()), MODUS_ABDECKUNG_FELD,
+)
 
 
 # ── Normalisierung Hersteller → Kanon ────────────────────────────────────────

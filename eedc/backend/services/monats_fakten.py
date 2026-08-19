@@ -342,6 +342,60 @@ class WpFakten:
     #: True, sobald **eine** aktive WP getrennte Strommessung führt.
     hat_split: bool = False
 
+    # ── Modus-Split (#263 K-2) ───────────────────────────────────────────────
+    #: **Teilmengen** von ``strom_kwh``, keine Summanden — nie addieren
+    #: (Präzedenz: ``ladung_pv_kwh`` bei der Wallbox, Konzept §3.1).
+    modus_strom_heizen_kwh: float = 0.0
+    modus_strom_kuehlen_kwh: float = 0.0
+    #: Stunden mit gültigem Modus-Signal — das Qualitätsmaß neben den Mengen.
+    modus_abdeckung_h: float = 0.0
+    #: Gesamtstrom **nur der Geräte mit Modus-Split** — die Bezugsgröße für
+    #: {@link modus_nicht_aufgeteilt_kwh}. Auf Anlagenebene ist `strom_kwh` der
+    #: falsche Bezug: er trägt auch Wärmepumpen ohne Modus-Sensor.
+    modus_strom_bezug_kwh: float = 0.0
+    #: Anteil von ``waerme_kwh``, der aus ``Strom × JAZ`` stammt statt aus
+    #: einem Wärmemengenzähler. **Trägt die JAZ-Sperre aus Konzept §3.5** —
+    #: siehe {@link jaz_belastbar}.
+    waerme_abgeleitet_kwh: float = 0.0
+
+    @property
+    def jaz_belastbar(self) -> bool:
+        """Darf aus diesen Zahlen eine JAZ/COP gebildet werden? (Konzept §3.5)
+
+        ``False``, sobald **irgendein** Teil der Wärme abgeleitet ist. Nicht
+        „den abgeleiteten Teil abziehen": dann teilte man gemessene Wärme durch
+        den **Gesamt**strom und bekäme eine zu kleine JAZ — falsch statt
+        unbekannt. Die Kachel bleibt „—", bis ein Wärmemengenzähler da ist.
+        """
+        return self.waerme_abgeleitet_kwh <= 0
+
+    @property
+    def modus_nicht_aufgeteilt_kwh(self) -> float:
+        """``Gesamt − Σ Teilmengen`` — Standby, Lüften, Entfeuchten, Unbestimmt.
+
+        **Wird nie gespeichert** (Konzept §3.1, Folge 2) und ist deshalb immer
+        vollständig: für Altmonate, Ausfälle, Importe und manuelle Pflege
+        gleichermaßen. Auf 0 geklemmt — die Invariante hält das schon im
+        Schreibpfad, aber eine negative „Restmenge" wäre auf jeder Fläche
+        Unsinn.
+
+        ⚠ Bezug ist {@link modus_strom_bezug_kwh}, **nicht** ``strom_kwh``:
+        anlagenweit trägt letzteres auch Wärmepumpen ohne Modus-Sensor, deren
+        Verbrauch dann als „nicht aufgeteilt" der Klimaanlage erschiene
+        (an einer Instanz gemessen: 96,4 statt 6,4 kWh).
+        """
+        return max(
+            0.0,
+            self.modus_strom_bezug_kwh
+            - self.modus_strom_heizen_kwh
+            - self.modus_strom_kuehlen_kwh,
+        )
+
+    @property
+    def hat_modus_split(self) -> bool:
+        """Gibt es überhaupt eine Aufteilung zu zeigen?"""
+        return self.modus_abdeckung_h > 0
+
 
 @dataclass(frozen=True)
 class SonstigesGeraetFakten:
@@ -615,7 +669,9 @@ async def lade_monats_fakten(
         if inv is None or not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
             continue
         roh.setdefault((imd.jahr, imd.monat), _RohMonat()).falte(
-            inv, imd.verbrauch_daten or {}, abgetretene_bkw=abgetretene_bkw
+            inv, imd.verbrauch_daten or {},
+            abgetretene_bkw=abgetretene_bkw,
+            source_provenance=imd.source_provenance,
         )
 
     # Die lokale Tagesebene als **zusätzliche** Grundgesamtheit (N-121). Ohne
@@ -808,6 +864,11 @@ class _RohMonat:
         self.wp_strom_heizen = 0.0
         self.wp_strom_warmwasser = 0.0
         self.wp_hat_split = False
+        self.wp_modus_strom_heizen = 0.0
+        self.wp_modus_strom_kuehlen = 0.0
+        self.wp_modus_abdeckung_h = 0.0
+        self.wp_modus_strom_bezug = 0.0
+        self.wp_waerme_abgeleitet = 0.0
         self.eauto_ladedaten: list[dict] = []
         self.wallbox_ladedaten: list[dict] = []
         self.eauto_km = 0.0
@@ -856,8 +917,14 @@ class _RohMonat:
         data: dict,
         *,
         abgetretene_bkw: frozenset = frozenset(),
+        source_provenance: dict | None = None,
     ) -> None:
         """Faltet EINE IMD-Zeile ein.
+
+        ``source_provenance`` ist die Per-Feld-Herkunft **derselben** Zeile. Sie
+        wird nur für eine Frage gebraucht: ist die Heizwärme gemessen oder aus
+        ``Strom × JAZ`` abgeleitet (#263 K-2, Konzept §3.5)? Default ``None``
+        heißt „gemessen wie bisher" und hält Bestands-Tests unverändert gültig.
 
         ``abgetretene_bkw`` sind die IDs der Balkonkraftwerke, unter denen
         `pv-module` hängen (N-266). **Pflicht-Argument im Geiste, mit Default
@@ -867,7 +934,7 @@ class _RohMonat:
         Betroffen wären Autarkie, Eigenverbrauchsquote, CO₂, Finanzen,
         Community-Payload und HA-Export.
         """
-        b = imd_typ_beitrag(inv, data)
+        b = imd_typ_beitrag(inv, data, source_provenance)
         # Dienstwagen zählen NICHT als Beitrag: sie sind aus dem E-Mob-Pool der
         # Anlage herausgefiltert, und eine Sicht, die daraufhin „0 kWh geladen"
         # schriebe statt „keine Daten", behauptete etwas über ein Fahrzeug, das
@@ -938,6 +1005,11 @@ class _RohMonat:
             self.wp_strom_heizen += b.wp_strom_heizen
             self.wp_strom_warmwasser += b.wp_strom_warmwasser
             self.wp_hat_split = self.wp_hat_split or b.wp_hat_split
+            self.wp_modus_strom_heizen += b.wp_modus_strom_heizen
+            self.wp_modus_strom_kuehlen += b.wp_modus_strom_kuehlen
+            self.wp_modus_abdeckung_h += b.wp_modus_abdeckung_h
+            self.wp_modus_strom_bezug += b.wp_modus_strom_bezug
+            self.wp_waerme_abgeleitet += b.wp_waerme_abgeleitet
 
         elif inv.typ in ("e-auto", "wallbox"):
             if ist_dienstlich(inv):
@@ -1180,6 +1252,11 @@ async def _baue_fakt(
             strom_heizen_kwh=roh.wp_strom_heizen,
             strom_warmwasser_kwh=roh.wp_strom_warmwasser,
             hat_split=roh.wp_hat_split,
+            modus_strom_heizen_kwh=roh.wp_modus_strom_heizen,
+            modus_strom_kuehlen_kwh=roh.wp_modus_strom_kuehlen,
+            modus_abdeckung_h=roh.wp_modus_abdeckung_h,
+            modus_strom_bezug_kwh=roh.wp_modus_strom_bezug,
+            waerme_abgeleitet_kwh=roh.wp_waerme_abgeleitet,
         ),
         sonstiges=SonstigesFakten(
             erzeugung_kwh=roh.sonstiges_erzeugung,

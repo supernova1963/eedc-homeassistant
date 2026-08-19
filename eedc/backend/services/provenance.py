@@ -30,6 +30,7 @@ from typing import Any, Literal, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
+from backend.core.berechnungen.modus_split import REGEL_JAZ_MODUS_SPLIT
 from backend.core.berechnungen.pv_anteil_ladung import REGEL_EINSPEISE_DECKUNG
 from backend.core.source_priority import SOURCE_LABELS, SourcePriority
 from backend.models.data_provenance_log import DataProvenanceLog
@@ -232,6 +233,21 @@ ABGELEITET_EINSPEISE_DECKUNG = REGEL_EINSPEISE_DECKUNG
 #: Teilsumme, die aussieht wie eine Gesamtsumme, ist genau der Fehler, den die
 #: P4-Linie (`docs/KONZEPT-UNVOLLSTAENDIGE-WERTE.md`) verhindern soll.
 ABGELEITET_EINSPEISE_DECKUNG_TEILWEISE = f"{REGEL_EINSPEISE_DECKUNG}_teilweise"
+
+#: #263 K-2 (S3): die Heizwärme wurde **nicht gemessen**, sondern aus dem
+#: modus-aufgeteilten Strom und der gepflegten JAZ gerechnet
+#: (`modus_strom_heizen_kwh × JAZ`, Konzept §3.4). Sie ist damit eine
+#: vollwertige Größe für alles, was Wärme **multipliziert** (Gaskosten, CO₂,
+#: Alternativkosten) — und für alles, was Wärme durch Strom **teilt**
+#: (JAZ/COP), ist sie wertlos: dort käme exakt die gepflegte JAZ wieder heraus.
+#: Genau diese Trennung ist Konzept §3.5, und sie ist nur möglich, weil die
+#: Herkunft am Wert hängt statt an der Bauart des Geräts.
+#:
+#: ⚠ Diese Marke ist **kein** Client-Vertrag und steht deshalb bewusst NICHT in
+#: `ERLAUBTE_ABLEITUNGEN`: sie entsteht ausschließlich serverseitig beim
+#: Monatsabschluss. Ein Client, der sie meldet, behauptete eine Rechnung, die
+#: er nicht gemacht hat.
+ABGELEITET_JAZ_MODUS = REGEL_JAZ_MODUS_SPLIT
 
 # Positivliste: was ein Client als Ableitungs-Marke melden darf. Sie ist der
 # Vertrag zwischen Oberfläche und Provenance — und sie steht hier, nicht in

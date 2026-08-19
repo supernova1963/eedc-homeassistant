@@ -421,6 +421,16 @@ export const ROLLEN_BG = {
   extern: DATENROLLE.extern.bg,
   heizung: 'bg-red-500',       // WP-Heizwärme = WP-Identitätsrot (Regel A; war orange)
   warmwasser: 'bg-blue-500',   // WP-Warmwasser = blau (Gernot 2026-06-25 nach detLAN; = CHART_COLORS.wpWarmwasser + Backend-Live)
+  // #263 K-2: der Kühlbetrieb einer Split-Klimaanlage. Bewusst `sky` und nicht
+  // `blue` (das ist WP-Warmwasser) und nicht `cyan` (Wallbox-Identität) — beide
+  // Rollen hängen am selben Gerät bzw. derselben Sicht, und dieselbe Farbe für
+  // zwei Bedeutungen ist genau das, was Regel „eine Datenrolle = eine Farbe"
+  // verhindert.
+  kuehlung: 'bg-sky-500',
+  // „Weder das eine noch das andere" — Standby, Lüften, Entfeuchten, und die
+  // Zeit ohne Modus-Signal. Neutrales Grau wie `extern`: es ist keine eigene
+  // Betriebsart, sondern der Rest.
+  nicht_aufgeteilt: 'bg-gray-400',
   ladung: DATENROLLE.speicherLadung.bg,
   entladung: DATENROLLE.speicherEntladung.bg,
 } as const

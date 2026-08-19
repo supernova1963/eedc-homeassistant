@@ -241,6 +241,18 @@ export interface WaermepumpeDashboardResponse {
     gesamt_warmwasser_getrennt_kwh?: number
     cop_heizen?: number
     cop_warmwasser?: number
+    // Modus-Split (#263 K-2) — **Teilmengen** von `gesamt_stromverbrauch_kwh`,
+    // nie Summanden. Alle vier fehlen gemeinsam, wenn kein Modus erfasst ist:
+    // eine 0 hieße „hat nicht geheizt", und das weiß eedc ohne Sensor nicht.
+    modus_strom_heizen_kwh?: number
+    modus_strom_kuehlen_kwh?: number
+    modus_nicht_aufgeteilt_kwh?: number
+    modus_abdeckung_h?: number
+    /** Ist `gesamt_heizenergie_kwh` aus `Strom × JAZ` gerechnet statt gemessen?
+     *  Dann bleibt `durchschnitt_cop` null (Konzept §3.5) und die Anzeige
+     *  kennzeichnet die Wärme — wie „geschätzt (kWp-Anteil)" bei der PV. */
+    waerme_abgeleitet?: boolean
+    waerme_abgeleitet_faktor?: number | null
     // Kompressor-Starts (#238/#290): _summe_erfasst = seit Anschaffung von eedc
     // erfasst (Kachel-Hauptwert), _gesamt = roher Lebensdauer-Zählerstand aus
     // dem Hersteller-Sensor (Kachel-Tooltip/Info), Max/Tag aus Tagesinkrementen.

@@ -1040,6 +1040,85 @@ CO2-Einsparung        = CO2_alt - CO2_WP
 | Alternativ-Zusatzkosten | `alternativ_zusatzkosten_jahr` | 0 (€/Jahr) |
 | WP-Strompreis | Spezialtarif `waermepumpe` | Fallback: allgemein |
 
+#### 3.5b Modus-Split: Heizen und Kühlen trennen (#263 K-2)
+
+Eine Split-Klimaanlage heizt und kühlt über **denselben** Zähler. Die Aufteilung ist aus keinem
+gespeicherten Wert rekonstruierbar — sie entsteht nur, wenn eedc den Betriebsmodus **zur Messzeit**
+mitschreibt (`TagesEnergieProfil.betriebsmodus_je_wp`, seit S2).
+
+```text
+je Tag d, je Gerät i:
+  roh_h       = |komponenten["waermepumpe_<i>"]|          # Leistungspfad, NEGATIV gespeichert
+  faktor_d    = zaehler_kwh_d / Σ_h roh_h                 # nur wenn Zählersumme vorhanden
+  kwh[modus] += roh_h × faktor_d                          # Stunden OHNE Modus: nur in den Nenner
+
+je Monat:
+  modus_strom_heizen_kwh  = Σ_d kwh[heizen]
+  modus_strom_kuehlen_kwh = Σ_d kwh[kuehlen]
+  modus_abdeckung_h       = Σ_d Stunden mit Modus-Signal
+  nicht_aufgeteilt        = Bezug − heizen − kuehlen      # NIE gespeichert
+```
+
+SoT: `core/berechnungen/modus_split.py` (rein) · `services/energie_profil/modus_split_monat.py`
+(Lader) · `…/modus_split_schreiben.py` (Schreiber, Schritt 4 des Monatsabschlusses).
+
+> **Teilmengen, keine Summanden.** `stromverbrauch_kwh` bleibt die einzige Bilanzgröße; die zwei
+> Anteile werden **ausgewiesen und nie addiert** (Präzedenz `ladung_pv_kwh` bei der Wallbox).
+> Wächter: `test_263_k2_modus_split.py::test_teilmengen_werden_nirgends_addiert`.
+
+> **Zwei Vorzeichen-Welten.** `TagesEnergieProfil.komponenten` führt die Wärmepumpe **negativ**
+> (Leistungspfad, `seite: "senke"` ⇒ `-abs(...)`), `TagesZusammenfassung.komponenten_kwh`
+> **positiv** (Zählerpfad). `waermepumpe_kwh_je_investition` liefert für beide Beträge — und ist
+> zugleich die Stelle, die `waermepumpe_1` von `waermepumpe_12` unterscheidet (die ID ist **kein**
+> Präfix) und Suffix-Keys (`…_heizen`) demselben Gerät zuschlägt.
+
+> **Normierung ist opportunistisch, die Invariante ist der Schutz.** Wo der Zählerpfad eine
+> Tagesmenge kennt, wird die Stundenform darauf normiert (Präzedenz v3.45.5). Er kennt sie nicht
+> immer — dann gilt die Roh-Summe. Was `Σ Teilmengen ≤ Gesamt` hält, ist die Regel im Schreibpfad:
+> **größer ⇒ gar nicht schreiben**, vorhandene Werte entfernen, Daten-Checker meldet die Monate.
+
+> **Der Bezug von „nicht aufgeteilt" ist nicht der Gesamtstrom.** Anlagenweit trägt `strom_kwh`
+> auch Wärmepumpen **ohne** Modus-Sensor; ihr Verbrauch erschiene sonst als unbeobachtete Zeit der
+> Klimaanlage. Bezug ist `WpFakten.modus_strom_bezug_kwh` — der Strom nur der Geräte mit Split.
+
+#### 3.5c Abgeleitete Heizwärme und die JAZ-Sperre (#263 K-2, Konzept §3.4/§3.5)
+
+Ohne Wärmemengenzähler wird die Heizwärme aus dem modus-aufgeteilten Strom gerechnet:
+
+```text
+heizenergie_kwh = modus_strom_heizen_kwh × Heiz-Effizienz     # NUR wenn gepflegt
+```
+
+Die Heiz-Effizienz kommt je nach `effizienz_modus` aus `jaz` / `scop_heizung` / `cop_heizung`
+(`heiz_effizienz_gepflegt`). ⚠ **Nie aus einem Default** — `PARAM_WAERMEPUMPE_DEFAULTS` trägt
+`jaz: 3.5`, und wer den anwendet, erfindet für jede ungepflegte Wärmepumpe eine Wärmemenge und
+damit eine Ersparnis, eine CO₂-Zahl und einen Kostenvergleich.
+
+Geschrieben wird mit Quelle `auto:monatsabschluss` (`AUTO_AGGREGATION`, Priorität 3) und der
+Provenance-Marke `jaz_modus_split`. **„Gemessen schlägt abgeleitet" folgt daraus per
+Konstruktion:** `MANUAL` ist 1, `EXTERNAL_AUTHORITATIVE` 2 — beide gewinnen.
+
+**Die eine Regel, die daraus folgt** — sie trennt *teilen* von *multiplizieren*:
+
+| | darf abgeleitete Wärme verwenden? | warum |
+|---|---|---|
+| **teilt** Wärme durch Strom → JAZ/COP | **nein** | heraus käme exakt die gepflegte JAZ — eine Zahl, die nichts misst |
+| **multipliziert** Wärme mit Preis / η / CO₂-Faktor | **ja**, mit Kennzeichnung | die Wärmemenge ist die beste verfügbare Schätzung |
+
+Getragen wird die Sperre von `WpFakten.jaz_belastbar` (Fakten-Leser) bzw.
+`heizwaerme_ist_abgeleitet(source_provenance)` (Direktleser). Sie hängt am **Wert**, nicht an der
+Bauart: eine Luft-Wasser-WP ohne Wärmemengenzähler fällt unter dieselbe Regel, eine Klimaanlage
+**mit** Zähler ist gemessen wie jede andere. Wächter:
+`test_263_k2_modus_split.py::test_keine_jaz_stelle_rechnet_mit_abgeleiteter_waerme` (fünf Dateien,
+sieben Formeln).
+
+> ⚠ **Kühlen ersetzt keine Heizung (Konzept E-B).** `berechne_wp_ersparnis` und
+> `co2_wp_ersparnis_kg` nehmen `strom_kuehlen_kwh` aus dem Vergleich heraus; die Kosten bleiben in
+> `wp_kosten_euro` und werden als `kuehl_kosten_euro` eigens ausgewiesen. Ohne diese Trennung
+> gemessen: **−45,04 €** Ersparnis und **−52 kg** CO₂ für eine Klimaanlage, die im Winter geheizt
+> und im Sommer gekühlt hat (nachher +2,48 € / +8,2 kg). Default 0.0 ⇒ ohne Split unverändert.
+
+
 ### 3.6 ROI & Amortisation
 
 **Funktion:** `berechne_roi()` in `core/calculations.py`

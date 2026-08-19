@@ -250,8 +250,8 @@ beide Hälften nur die Kosten.
 | --- | --- | --- | --- |
 | **S1** | **Lesen** | Zustandssensor-Pfad in `ha_state_service` (Live **und** Historie), Normalisierung Hersteller→Kanon, Feld `betriebsmodus` in der Zuordnungsfläche (`FELD_BEDARF`, **optional**, für **alle** WP-Arten), Validierung, Daten-Checker-Zeile | ✅ **gebaut 2026-08-18** (s. §8) |
 | **S2** | **Mitschreiben** | Spalte `betriebsmodus_je_wp` auf `TagesEnergieProfil`, gefüllt vom **`energie_profil/aggregator`** (Jobs *Heute* alle 15 Min · *Vortag* 00:15 · Recovery 02:15) — **nicht** vom Snapshot-Job, s. §8 | ✅ **gebaut 2026-08-18** |
-| **S3** | **Summieren** | `imd_monatsaggregat` bildet `strom_heizen_kwh` · `strom_kuehlen_kwh` · `modus_abdeckung_h` aus den Stundenzeilen; `get_wp_strom_kwh` um den Teilmengen-Zweig ergänzt; `heizenergie_kwh` abgeleitet mit Provenance | mittel |
-| **S4** | **Zeigen** | Aufteilungs-Block im Komponenten-Hub, Monatsbericht, HA-Export; `unbestimmt`/„nicht aufgeteilt" nach §4; die JAZ-Sperre aus §3.5 | klein — die Read-Sites sind unberührt |
+| **S3** | **Summieren** | Faltung `Stunde × Modus × kWh` je Monat, tagesweise auf die Zählersumme normiert; die zwei Teilmengen + Abdeckung beim Monatsabschluss persistiert; `heizenergie_kwh` abgeleitet mit Provenance-Marke | ✅ **gebaut 2026-08-19** (s. §8) |
+| **S4** | **Zeigen** | Aufteilungs-Block im Komponenten-Hub und in Cockpit → Monat/Jahr, zwei HA-Sensoren; „nicht aufgeteilt“ nach §4; die JAZ-Sperre aus §3.5 | ✅ **gebaut 2026-08-19** |
 | **S5** | **F-41** | Die drei Daten-Checker-Hinweise dreiteilen (§7, E-C) | klein |
 | **S6** | **F-42** | Die vier erfundenen Nullen im Komponenten-Hub (§7, E-D) | klein |
 
@@ -402,6 +402,95 @@ derselben Stelle zweimal hintereinander aufzureißen, hat noch nie gut funktioni
 > Melder-Punkte F-38/F-39/F-40 warten auf dasselbe Release. **Baureihenfolge frei:** S5/S6 zuerst
 > ist zulässig und empfohlen (klein, melder-relevant, risikofrei) — das ändert den Schnitt nicht.
 
+### ✅ E-G — Eigene Feldnamen statt Wiederverwendung von `strom_heizen_kwh` — **entschieden (2026-08-19)**
+
+`modus_strom_heizen_kwh` · `modus_strom_kuehlen_kwh` · `modus_abdeckung_h`.
+
+> **Das revidiert §3.2**, wo die Wiederverwendung von `strom_heizen_kwh` empfohlen war („seine
+> Bedeutung ist identisch"). Am Code gemessen hält die Begründung nicht: Die zwölf Read-Sites
+> zeigen das Feld nicht als *Teilmenge*, sondern als **Summand unter getrennter Strommessung** —
+> und **drei** Stellen leiten aus seiner bloßen *Anwesenheit* ein Verhalten ab.
+> `investitionen/dashboards.py` (`if 'strom_heizen_kwh' in d`) setzt daraufhin
+> `hat_getrennte_strom` und liefert `cop_heizen`; daran hängt `WaermepumpeHubBloecke.tsx`
+> (`hatGetrennteStrom`). Mit abgeleiteter Wärme (§3.4) stünde dort als „JAZ" **exakt die
+> gepflegte JAZ** — der §3.5-Verstoß, gegen den S3 gebaut ist.
+>
+> Eigene Namen machen die Kollision **strukturell** unmöglich, statt sie an vier Stellen
+> abzufangen; eine WP mit getrennter Messung **und** Modus-Sensor behält beide Angaben
+> nebeneinander. Kosten: drei neue Feldnamen. **Nebenbei wird §3.2s „Ergänzung im `False`-Zweig
+> von `get_wp_strom_kwh`" gegenstandslos** — der Zweig addiert schon heute nichts.
+>
+> ⚑ **Die Namen sind an den Kanon gebunden, nicht frei gewählt:**
+> `test_263_k2_modus_split.py::test_feldnamen_folgen_dem_kanon` hält `MODUS_STROM_FELD` gegen
+> `AUFGETEILTE_MODI` — für jeden aufgeteilten Modus genau ein Feld, Name
+> `modus_strom_<modus>_kwh`. Eine siebte Betriebsart kostet damit **einen Eintrag im Kanon**, und
+> der Wächter sagt sofort, was dazu fehlt. Ohne ihn wäre §3.1/Folge 4 eine Behauptung.
+
+### ✅ E-H — Zählertreue Normierung, Invariante statt Kappung — **entschieden (2026-08-19)**
+
+Die Stundenform kommt aus `TagesEnergieProfil.komponenten` (Leistungspfad), die **Menge** je Tag
+aus `TagesZusammenfassung.komponenten_kwh` (Zählerpfad). Präzedenz: v3.45.5 Live-Tagesverlauf —
+*„nur die Kurvenform fällt auf den Leistungssensor zurück, die Stunden-Energie bleibt
+zählertreu"*.
+
+> **Die Normierung ist die Verbesserung, die Invariante ist der Schutz.** Die Zählersumme je
+> Gerät ist **nicht garantiert vorhanden** (`get_komponenten_tageskwh` sagt das selbst; an der
+> Demo-Box ist `komponenten_kwh` über alle Tageszeilen `NULL`). Wo sie fehlt, gilt die Roh-Summe
+> — und was `Σ Teilmengen ≤ Gesamt` dann hält, ist allein die Regel im Schreibpfad:
+> **Summe > Gesamtwert ⇒ gar nichts schreiben** und einen vorhandenen Split **wegräumen**, nicht
+> kappen. Eine stille Kappung machte aus einem Widerspruch eine plausibel aussehende Zahl.
+> Auslöser sind zwei reale Fälle: die Achse-2-Drift zwischen den zwei Pfaden (#356, bei der
+> Wallbox einmal Faktor ≈ 2) und der nachträglich kleiner gepflegte Monatswert. Letzterer bekommt
+> im Daten-Checker einen auflösbaren Hinweis mit zwei Wegen.
+>
+> **Keine Hochrechnung:** Stunden ohne Modus-Signal tragen zu keiner Teilmenge bei, ihre Menge
+> gehört aber in den **Nenner** der Normierung. ⛔ Das war im ersten Bau falsch und ist erst an
+> einer Instanz aufgefallen: der SQL-Filter `betriebsmodus_je_wp IS NOT NULL` hatte die
+> Standby-Stunden auch aus dem Nenner entfernt, wodurch die erfassten Stunden auf die volle
+> Tagesmenge hochgerechnet wurden und „nicht aufgeteilt" **0** ergab statt 6,4 kWh. Der Lader
+> wählt deshalb **Tage** über die Modus-Spur aus und lädt **Stunden** vollständig.
+>
+> ⛔ **Zweiter Fund derselben Messung: der Bezug der Restmenge.** `Gesamt − Σ Teilmengen` ist nur
+> **je Gerät** richtig. Auf Anlagenebene wies eine Anlage mit Klimaanlage (191,2 kWh, mit Split)
+> **und** Luft-Wasser-WP ohne Modus-Sensor (90 kWh) „nicht aufgeteilt 96,4 kWh" aus — 90 davon
+> gehörten dem anderen Gerät. Bezug ist deshalb `WpFakten.modus_strom_bezug_kwh`, der Strom
+> **nur der Geräte mit Split**.
+
+### ✅ E-I — Ein Lader, zwei Aufrufer; persistiert mit `auto:monatsabschluss` — **entschieden (2026-08-19)**
+
+Reine Faltung in `core/berechnungen/modus_split.py` (ADR-001), Lader in
+`services/energie_profil/modus_split_monat.py`, Schreiber als **Schritt 4** in
+`run_post_monatsabschluss_aggregation` (nach dem Backfill — er liest dessen Stundenzeilen).
+
+> **Ein Lader, zwei Aufrufer** ist Bedingung, nicht Ordnungsliebe: Einen automatischen
+> Monatsabschluss gibt es in eedc nicht (`monats_aus_tagen.py` sagt es im Modul-Kopf), der
+> **laufende** Monat hat also nie eine gespeicherte Aufteilung. Wer nur den Schreibpfad baut,
+> zwingt die nächste Sitzung zu einer zweiten Faltung daneben — die Drift-Klasse, gegen die
+> dieses Projekt seit zehn Vorfällen arbeitet.
+>
+> ⚑ **„Gemessen schlägt abgeleitet" braucht keine Sonderregel:** `auto:monatsabschluss` ist
+> `SourcePriority.AUTO_AGGREGATION` (3), `MANUAL` ist 1 und `EXTERNAL_AUTHORITATIVE` 2 — beide
+> schlagen den Schreiber. Wer einen Wärmemengenzähler zuordnet oder die Heizwärme von Hand
+> pflegt, behält seinen Wert **per Konstruktion** (Präzedenz ADR-002/P7 bei der PV).
+>
+> ⚠ **Der Preis von E-A, ausgesprochen:** Persistiert trägt jeder Monat den damals gültigen
+> Faktor — eine *korrigierte* JAZ heilt alte Monate deshalb **nicht**. Das gehört in den
+> Anwender-Text.
+
+### ✅ E-B — Nachtrag: die Kühlhälfte war noch im Vergleich — **korrigiert (2026-08-19)**
+
+E-B stand seit dem 18.08. („Kosten ja, Ersparnis nein"), war im Bau aber zunächst **nicht
+umgesetzt**. An einer eigenen Instanz gemessen (Klimaanlage, Juni: 26,4 kWh Heizen · 158,4 kWh
+Kühlen · Gas ersetzt): **Ersparnis −45,04 €** und **CO₂ −52 kg** — die Formeln stellten die
+Stromkosten des *Kühlens* gegen die vermiedenen Gaskosten des *Heizens*.
+
+> Kein Rechenfehler, sondern ein **Kategorienfehler**: Kühlen ersetzt keine Heizung; ohne die
+> Klimaanlage gäbe es schlicht keine Kühlung. `berechne_wp_ersparnis` und `co2_wp_ersparnis_kg`
+> nehmen den Kühlstrom jetzt aus dem Vergleich (Parameter `strom_kuehlen_kwh`, Default 0.0 ⇒
+> Verhalten ohne Split unverändert); die Kosten bleiben in `wp_kosten_euro` und werden als
+> `kuehl_kosten_euro` eigens ausgewiesen. **Gegenmessung: +2,48 € und +8,2 kg**, die
+> Luft-Wasser-WP derselben Anlage unverändert (1.290,43 € · 2.744,3 kg).
+
 ---
 
 ## 8. Maßnahmen-Register
@@ -414,9 +503,12 @@ derselben Stelle zweimal hintereinander aufzureißen, hat noch nie gut funktioni
 | **F-41** | Die drei Daten-Checker-Hinweise dreiteilen (§7 E-C) | ✅ **gebaut (S5, 2026-08-18)** | Zwei INFO an `ersetzt_keine_heizung`, WARNING von beiden Achsen gelöst + Text nennt 0 als Antwort, Formular-Hint nachgezogen. Wächter `test_f41_f42_klima_bewertbarkeit.py` (12 Proben zu F-41, DB-Weg statt Stub) |
 | **F-42** | Die vier erfundenen Nullen im Komponenten-Hub (§7 E-D) | ✅ **gebaut (S6, 2026-08-18)** | Gelöst **im Backend** statt im Client: `WPErsparnisErgebnis.bewertbar` + `None` statt `0` in der Dashboard-Zusammenfassung. Der Auftrag nannte einen Frontend-Guard — gemessen waren **drei** Konsumenten derselben Null (Hub · *Cockpit → Aussicht* · Kostenvergleich), ein Client-Guard hätte einen davon geheilt. `wp_kosten_euro` wird echt (gemessen 1.340,50 €) |
 | **K-1** | **SEER** (Kühl-Effizienz) | ⬜ offen, **nach K-2** | Negativbeweis: `seer` kommt baumweit **0**-mal vor. Ohne getrennte Kühl-kWh ein Faktor ohne Bezugsgröße; `modus_abdeckung_h` liefert die Zeitbasis |
-| **K-2** | **Heizen/Kühlen-Trennung** | 🔄 **Kern — S1 (Lesen) und S2 (Mitschreiben) gebaut (2026-08-18); S3 + S4 offen** | Vorbedingung „Testgerät mit Modus-Sensor" seit 2026-08-16 erfüllt (kingcap1, MELCloud). Sitzung A (S5 + S6) ist durch, **ohne** die drei Messbarkeits-Stellen zu berühren. Sitzung B hat den Zustands-Lesepfad, das optionale Feld, die `climate.`-Freigabe im Picker, die Spalte `betriebsmodus_je_wp` und die Daten-Checker-Zeile gebaut — **mit Fixtures abgenommen, nicht an einem Gerät** (es gibt keins im Zugriff). ⚠ Der Auftrag benannte für S2 den **falschen Job**, s. Zeile darunter |
+| **K-2** | **Heizen/Kühlen-Trennung** | ✅ **S1–S4 gebaut (2026-08-18/19)** | Vorbedingung „Testgerät mit Modus-Sensor“ seit 2026-08-16 erfüllt (kingcap1, MELCloud). Sitzung A (S5+S6), Sitzung B (S1+S2), Sitzung C (S3+S4). **Mit Fixtures und einer eigenen Instanz abgenommen, nicht an einem Gerät** — es gibt keins im Zugriff. Die drei Entscheide der Sitzung C stehen unter §7 als **E-G · E-H · E-I** |
 | **S1** | **Lesen** — Kanon, Zustands-Lesepfad, Feld, Daten-Checker-Zeile | ✅ **gebaut (2026-08-18)** | Neu `core/betriebsmodus.py` (sechs Kanon-Werte, Normalisierung HA→Kanon, `hvac_action` verfeinert wo vorhanden). `ha_state_service.get_zustand_history` steht **neben** dem float-Pfad — `get_sensor_history` unverändert (D8). Feld `betriebsmodus` in `LIVE_FELDER_INV`, `FELD_BEDARF` optional für **jede** WP-Art (E-E), SoT-Markierung `zustand: True` steuert **drei** Weichen statt drei verstreuter `if`. ⛔ **Ein Befund, der in keinem D-Punkt stand:** `datenquellen.py::_ha_sensor_relevant` verwarf jede Nicht-`sensor.`-Entity **unbedingt** (der Test steht vor `filter_energy`) — der Modus-Sensor war damit **gar nicht auswählbar**, egal wie gut der Lesepfad ist. Neue Kategorie `KLIMA_MODUS_SENSOR` (INFO, nur `luft_luft` — Gernots Entscheid 18.08.); N-280 mitgelöst |
 | **S2** | **Mitschreiben** — Stundenzeile trägt den Modus | ✅ **gebaut (2026-08-18)** | Spalte `betriebsmodus_je_wp` (N-239-Muster, `none_as_null=True`), gefüllt von `_get_betriebsmodus_history` im **`energie_profil/aggregator`**. ⛔ **Nicht wie beauftragt:** Der Auftragssatz „5-Minuten-Snapshot hält den Modus, die :05/:55-Aggregation schreibt ihn" hält an **beiden** Enden nicht — der 5-Min-Job steht hinter `LIVE_SNAPSHOT_5MIN_ENABLED` (Default **aus**, `run.sh`) und liest HA short_term_statistics (kein `climate` darin); die :05/:55-Jobs schreiben `sensor_snapshots` (kWh-Zähler), nicht diese Tabelle. Wörtlich gebaut wäre der Split bei Default-Konfiguration **still leer** geblieben. ⚑ **Eine Regel, die eine SoC-Kopie falsch gemacht hätte:** ein Zustand hat eine **Dauer** — je Stunde gewinnt die längste Verweildauer, nicht der Mittelwert und nicht der letzte Wert; der letzte Punkt **davor** trägt fort (HA schreibt nur bei Änderung, D11) |
+| **S3** | **Summieren** — Teilmengen, Abdeckung, abgeleitete Wärme | ✅ **gebaut (2026-08-19)** | Neu `core/berechnungen/modus_split.py` (reine Faltung, volles Kanon-Dict ⇒ K-1 wird ein Lesevorgang) + `services/energie_profil/modus_split_monat.py` (**ein** Lader, zwei Aufrufer: Schreiben beim Abschluss, Lesen für den laufenden Monat — einen automatischen Monatsabschluss gibt es nicht) + `modus_split_schreiben.py` (Schritt 4 in `run_post_monatsabschluss_aggregation`). ⛔ **Der Auftrag nannte den falschen Ort:** `imd_monatsaggregat` ist ein reiner Per-Zeilen-Resolver über `verbrauch_daten` **ohne** Zugriff auf Stundenzeilen (zweite Auftrags-Korrektur nach S2). ⛔ **Und `get_wp_strom_kwh` brauchte gar keinen Eingriff** — sein `False`-Zweig addiert schon heute nichts |
+| **S4** | **Zeigen** — Aufteilungs-Block, HA-Export, JAZ-Sperre | ✅ **gebaut (2026-08-19)** | Komponenten-Hub (§4-Block, Wärme mit Herkunfts-Satz) · Cockpit → Monat/Jahr · zwei HA-Sensoren (`wp_strom_heizen_modus_kwh`/`…kuehlen…`; ohne Modus **abwesend** statt 0) · JAZ-Sperre an allen **sieben** §3.5-Stellen über `WpFakten.jaz_belastbar` bzw. `heizwaerme_ist_abgeleitet`. Farb-SoT um `kuehlung`/`nicht_aufgeteilt` erweitert (Regel 0a, Fall 2). **N-282 entschieden und NICHT gebaut** — s. eigene Zeile |
+| **N-282** | Live-Modus-Icon auf der Achse Heizen/**Warmwasser** | ✅ **entschieden: bleibt** (2026-08-19) | Bei einer Klimaanlage sind beide Leistungsfelder `None`, das Icon bleibt leer — **keine Falschaussage, sondern „keine Aussage“**. Den echten Modus zu zeigen hieße, ihn in den Live-Poller zu holen; S1 hat ihn dort **bewusst** ausgeschlossen (`normalize_to_w` ergibt für einen `climate`-State garantiert `None` ⇒ Dauerabruf alle 5 s ins Leere). Ein Symbol ist das nach der L-1-Entlastung nicht wert; die Begründung steht an der Fundstelle im Code |
 | **K-3** | Aufteilung **je Innengerät** | ⛔ **zu** | D5 — die Innengeräte-Zähler sind unverwertbar |
 
 > ⚑ **Wer hier eine Maßnahme auf ✅ setzt, misst vorher — und zwar Rechnung *und* Prüfung getrennt.**

@@ -107,6 +107,12 @@ export interface AktuellerMonatResponse {
   // #191: Strom-Aufteilung Heizung/Warmwasser. Nur befüllt wenn mindestens
   // eine WP-Investition `getrennte_strommessung=true` hat.
   wp_strom_heizen_kwh: number | null
+  // #263 K-2: Aufteilung nach Betriebsmodus — Teilmengen von `wp_strom_kwh`,
+  // nie Summanden. Alle vier fehlen gemeinsam ohne erfassten Modus.
+  wp_modus_strom_heizen_kwh?: number | null
+  wp_modus_strom_kuehlen_kwh?: number | null
+  wp_modus_nicht_aufgeteilt_kwh?: number | null
+  wp_modus_abdeckung_h?: number | null
   wp_strom_warmwasser_kwh: number | null
   // Issue #169: Kompressor-Starts (aus TagesZusammenfassung über die Tage des Monats)
   wp_starts_max_tag: number | null

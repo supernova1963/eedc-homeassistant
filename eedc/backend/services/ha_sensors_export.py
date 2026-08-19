@@ -386,6 +386,30 @@ WAERMEPUMPE_SENSOREN = [
         device_class="monetary",
         state_class="total",
     ),
+    # #263 K-2 (S4): der Modus-Split. **Teilmengen** von `stromverbrauch_kwh` —
+    # wer sie in HA addiert, zählt doppelt. Sie erscheinen nur, wenn eedc den
+    # Betriebsmodus mitgeschrieben hat; ohne ihn fehlen die Sensoren, statt 0
+    # zu melden (eine 0 hieße „hat nicht geheizt", s. ADR-002/P4).
+    SensorDefinition(
+        key="wp_strom_heizen_modus_kwh",
+        name="Strom Heizbetrieb",
+        unit="kWh",
+        icon="mdi:fire",
+        category=SensorCategory.WAERMEPUMPE,
+        formel="Σ Stunden im Heizbetrieb × Stromverbrauch (Teilmenge des Gesamtstroms)",
+        device_class="energy",
+        state_class="total",
+    ),
+    SensorDefinition(
+        key="wp_strom_kuehlen_modus_kwh",
+        name="Strom Kühlbetrieb",
+        unit="kWh",
+        icon="mdi:snowflake",
+        category=SensorCategory.WAERMEPUMPE,
+        formel="Σ Stunden im Kühlbetrieb × Stromverbrauch (Teilmenge des Gesamtstroms)",
+        device_class="energy",
+        state_class="total",
+    ),
     # Issue #238: Counter-KPIs (nur wenn der jeweilige Zähler gemappt ist).
     SensorDefinition(
         key="wp_kompressor_starts",

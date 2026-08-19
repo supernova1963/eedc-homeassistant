@@ -226,6 +226,10 @@ async def get_cockpit_uebersicht(
     speicher_entladung = sum(f.speicher.entladung_kwh for f in fakten)
     wp_waerme = sum(f.wp.waerme_kwh for f in fakten)
     wp_strom = sum(f.wp.strom_kwh for f in fakten)
+    # #263 K-2 (Konzept §3.5): Wärme, die aus `Strom × JAZ` abgeleitet wurde,
+    # darf nicht wieder durch den Strom geteilt werden — heraus käme exakt die
+    # gepflegte JAZ, also eine Zahl, die nichts misst.
+    wp_waerme_abgeleitet = sum(f.wp.waerme_abgeleitet_kwh for f in fakten)
     wp_heizung = sum(f.wp.heizung_kwh for f in fakten)
     wp_warmwasser = sum(f.wp.warmwasser_kwh for f in fakten)
     bkw_erzeugung = sum(f.bkw.erzeugung_kwh for f in fakten)
@@ -444,11 +448,16 @@ async def get_cockpit_uebersicht(
 
     wp_invs = [i for i in investitionen if i.typ == "waermepumpe" and i.ist_aktiv_an(today)]
     hat_waermepumpe = len(wp_invs) > 0
-    # JAZ/COP nur wenn beide Seiten gemessen sind. Bei Split-Klimaanlagen
-    # (wp_art="luft_luft") ist Wärmemengenzähler typischerweise nicht
-    # vorhanden → wp_waerme=0 obwohl Stromverbrauch läuft. Heute lieferte
-    # die Formel dann 0.0 (irreführende JAZ), jetzt None ("—" im UI).
-    wp_cop = (wp_waerme / wp_strom) if wp_strom > 0 and wp_waerme > 0 else None
+    # JAZ/COP nur wenn beide Seiten **gemessen** sind. Zwei Fälle, ein „—":
+    # (a) kein Wärmemengenzähler → wp_waerme=0 obwohl Strom läuft (die Formel
+    #     lieferte früher 0.0, also eine irreführende JAZ);
+    # (b) #263 K-2: die Wärme ist aus `Strom × JAZ` abgeleitet — dann wäre das
+    #     Ergebnis die gepflegte JAZ selbst (Konzept §3.5, zirkulär).
+    wp_cop = (
+        (wp_waerme / wp_strom)
+        if wp_strom > 0 and wp_waerme > 0 and wp_waerme_abgeleitet <= 0
+        else None
+    )
     # Multi-WP: erste WP als Parameter-Referenz (Wirkungsgrad/Gas-Default).
     # Drift-Audit Domäne A1 / Issue #178: vorher 10ct hartcodiert + ignorierte
     # User-Param `alter_preis_cent_kwh`.
@@ -458,6 +467,8 @@ async def get_cockpit_uebersicht(
         wp_strom_kwh=wp_strom,
         wp_strompreis_cent=wp_preis_cent,
         wp_parameter=wp_ref_parameter,
+        # E-B: Kühlen ersetzt keine Heizung (#263 K-2).
+        strom_kuehlen_kwh=sum(f.wp.modus_strom_kuehlen_kwh for f in fakten),
     )
     wp_ersparnis = wp_ersparnis_result.ersparnis_euro
 
@@ -688,6 +699,8 @@ async def get_cockpit_uebersicht(
         eigenverbrauch_kwh=eigenverbrauch,
         wp_waerme_kwh=wp_waerme,
         wp_strom_kwh=wp_strom,
+        # #263 K-2 (E-B): Kühlen ersetzt keine Heizung.
+        wp_strom_kuehlen_kwh=sum(f.wp.modus_strom_kuehlen_kwh for f in fakten),
         emob_km=emob_km,
         emob_netz_ladung_kwh=emob_netz_ladung,
         benzin_verbrauch_liter=benzin_verbrauch,

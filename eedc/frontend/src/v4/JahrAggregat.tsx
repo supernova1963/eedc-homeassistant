@@ -333,6 +333,17 @@ export function baueJahrAlsMonat(monate: AktuellerMonatResponse[], jahr: number)
     wp_heizung_kwh: summe(f('wp_heizung_kwh')),
     wp_warmwasser_kwh: summe(f('wp_warmwasser_kwh')),
     wp_strom_heizen_kwh: summe(f('wp_strom_heizen_kwh')),
+    // #263 K-2: Teilmengen summieren sich über die Monate wie jede Menge.
+    // `nicht aufgeteilt` wird NICHT summiert, sondern aus den Jahressummen
+    // neu gerechnet — sonst addierten sich die Monats-Rundungen auf.
+    wp_modus_strom_heizen_kwh: summe(f('wp_modus_strom_heizen_kwh')),
+    wp_modus_strom_kuehlen_kwh: summe(f('wp_modus_strom_kuehlen_kwh')),
+    wp_modus_abdeckung_h: summe(f('wp_modus_abdeckung_h')),
+    wp_modus_nicht_aufgeteilt_kwh: Math.max(
+      0,
+      (wpStrom ?? 0) - (summe(f('wp_modus_strom_heizen_kwh')) ?? 0)
+        - (summe(f('wp_modus_strom_kuehlen_kwh')) ?? 0),
+    ),
     wp_strom_warmwasser_kwh: summe(f('wp_strom_warmwasser_kwh')),
     // Jahres-Counter im period-neutralen Σ-Slot; Max/Tag = höchster Einzeltag des Jahres.
     wp_starts_summe_monat: summe(f('wp_starts_summe_monat')),

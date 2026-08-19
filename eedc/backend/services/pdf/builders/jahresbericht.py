@@ -255,6 +255,8 @@ async def build_jahresbericht_context(
     wp_heizung = sum(f.wp.heizung_kwh for f in fakten)
     wp_warmwasser = sum(f.wp.warmwasser_kwh for f in fakten)
     wp_strom = sum(f.wp.strom_kwh for f in fakten)
+    # #263 K-2 (Konzept §3.5): abgeleitete Wärme trägt keine JAZ.
+    wp_waerme_abgeleitet = sum(f.wp.waerme_abgeleitet_kwh for f in fakten)
     # DI-3: Dienstwagen zählen NICHT in km/CO₂/Heimladung/V2H des Berichts —
     # der Filter sitzt in der Schicht (`EmobFakten`), nicht mehr hier.
     emob_km = sum(f.emob.km for f in fakten)
@@ -466,8 +468,12 @@ async def build_jahresbericht_context(
     # Vollzyklen = ENTLADUNG ÷ Kapazität über den Layer-SoT (Kanon 2026-07-28).
     speicher_zyklen = berechne_vollzyklen(speicher_entladung, speicher_kapazitaet)
     speicher_eff = _safe_div(speicher_entladung, speicher_ladung) * 100 if speicher_ladung else None
-    # JAZ/COP nur wenn beide Seiten gemessen sind (Klima ohne Wärmemengenzähler).
-    wp_cop = _safe_div(wp_waerme, wp_strom) if (wp_strom and wp_waerme) else None
+    # JAZ/COP nur wenn beide Seiten **gemessen** sind — kein Wärmemengenzähler
+    # (Klima) oder Wärme aus `Strom × JAZ` abgeleitet (#263 K-2, §3.5).
+    wp_cop = (
+        _safe_div(wp_waerme, wp_strom)
+        if (wp_strom and wp_waerme and wp_waerme_abgeleitet <= 0) else None
+    )
     emob_pv_anteil = _safe_div(emob_pv, emob_ladung) * 100 if emob_ladung else None
 
     # ── WP-Counter (#238): Kompressor-Starts + Betriebsstunden über den

@@ -94,7 +94,24 @@ def build_komponenten(
 
         val_w = values.get("leistung_w")
 
-        # Wärmepumpe: getrennte Leistungswerte summieren + Icon je Betriebsmodus
+        # Wärmepumpe: getrennte Leistungswerte summieren + Icon je Betriebsmodus.
+        #
+        # ⚠ **Die Achse hier ist Heizen/WARMWASSER, nicht Heizen/KÜHLEN** (N-282).
+        # Bei einer Split-Klimaanlage sind beide Felder `None` und das Icon
+        # bleibt leer. Das ist **keine Falschaussage**, sondern „keine Aussage" —
+        # und es bleibt bewusst so:
+        #
+        # Den echten Betriebsmodus gibt es seit #263 K-2 (S1), aber er ist aus
+        # dem Live-Pfad **ausgeschlossen** (`live_sensor_config` filtert
+        # `ist_zustand_feld`). Der Grund steht bei `ZUSTAND_LIVE_FELDER`:
+        # `normalize_to_w` ergibt für einen `climate`-State garantiert `None`,
+        # der Abruf liefe also alle 5 Sekunden über jede Live-Zuordnung ins
+        # Leere. Ihn nur für ein Icon wieder einzuschalten hieße, einen
+        # Dauerabruf gegen ein Symbol zu tauschen — nach der L-1-Entlastung der
+        # HA-Datenbank die falsche Richtung.
+        #
+        # Wo der Modus wirklich hingehört, steht er: in der Stundenzeile (S2)
+        # und in der Aufteilung Heizen/Kühlen im Komponenten-Hub (S4).
         wp_icon = None
         if inv.typ == "waermepumpe":
             heizen_w = values.get("leistung_heizen_w")

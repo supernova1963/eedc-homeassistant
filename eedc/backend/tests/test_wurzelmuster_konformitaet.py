@@ -1741,6 +1741,13 @@ P10_SCHREIBEN_IMPORT_CHECKER: frozenset[str] = frozenset({
     # Derselbe Unterbau, dieselbe Begründung wie die Zeile darüber — durch die
     # Schicht geführt wäre es zirkulär: `monats_fakten` ruft `lade_pv_je_monat`.
     "backend/services/pv_monatswerte.py::_lade_bkw_aggregate",
+    # #263 K-2 (S3): schreibt die Modus-Aufteilung in die IMD-Zeile. Ein
+    # reiner **Schreib**pfad — er lädt genau die eine Zeile, in die er danach
+    # schreibt, und braucht dafür ihren Gesamtwert als Bezugsgröße der
+    # Teilmengen-Invariante. Durch die Schicht geführt käme er an das Objekt
+    # gar nicht heran, in das er schreiben muss: `MonatsFakt` trägt Mengen,
+    # keine Zeilen.
+    "backend/services/energie_profil/modus_split_schreiben.py::_lade_imd",
     # Monatsabschluss: Formular füllen und speichern.
     # (`aktueller_monat.py::_collect_saved_data` stand hier bis C1c — als
     # „Formular füllen" eingeordnet, obwohl es ein reiner Lesepfad mit

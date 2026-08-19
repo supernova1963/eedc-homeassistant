@@ -65,6 +65,8 @@ from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
 )
+from backend.core.betriebsmodus import KUEHLEN as BM_KUEHLEN
+from backend.core.betriebsmodus import MODUS_STROM_FELD
 from backend.core.field_definitions import (
     get_eauto_ladung_kwh,
     get_emob_pv_netz_kwh,
@@ -212,6 +214,13 @@ class AktuellerMonatResponse(BaseModel):
     # Frontend zeigt nur den Gesamtstromverbrauch.
     wp_strom_heizen_kwh: Optional[float] = None
     wp_strom_warmwasser_kwh: Optional[float] = None
+    # #263 K-2 (S4): Aufteilung nach Betriebsmodus — **Teilmengen** von
+    # `wp_strom_kwh`, nie Summanden. Alle vier fehlen gemeinsam, wenn kein
+    # Modus erfasst ist (eine 0 hieße „hat nicht geheizt", ADR-002/P4).
+    wp_modus_strom_heizen_kwh: Optional[float] = None
+    wp_modus_strom_kuehlen_kwh: Optional[float] = None
+    wp_modus_nicht_aufgeteilt_kwh: Optional[float] = None
+    wp_modus_abdeckung_h: Optional[float] = None
     # Issue #169: Kompressor-Starts. Quelle: TagesZusammenfassung.komponenten_starts
     # über die Tage des Monats, summiert über alle WP-Investitionen.
     wp_starts_max_tag: Optional[int] = None
@@ -508,6 +517,9 @@ def _collect_saved_data(
         # Resolver summiert; `waerme` = waerme_kwh oder Heiz+WW.
         ("wp_strom_kwh", fakt.wp.strom_kwh),
         ("wp_waerme_kwh", fakt.wp.waerme_kwh),
+        # #263 K-2 (E-B): der Kühlanteil — Teilmenge von `wp_strom_kwh`, hier
+        # nur mitgeführt, damit die Ersparnis-Rechnung ihn herausnehmen kann.
+        ("wp_modus_kuehlen_kwh", fakt.wp.modus_strom_kuehlen_kwh),
         # Heimladungs-Trias aus EINER Quelle (#262) — Dienstwagen sind in der
         # Schicht bereits heraus ([[feedback_dienstwagen_alle_checks]]).
         ("emob_ladung_kwh", fakt.emob.ladung_kwh),
@@ -627,6 +639,8 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
         result["wp_strom_kwh"] = round(fakt.wp.strom_kwh, 1)
     if fakt.wp.waerme_kwh > 0:
         result["wp_waerme_kwh"] = round(fakt.wp.waerme_kwh, 1)
+    if fakt.wp.modus_strom_kuehlen_kwh > 0:
+        result["wp_modus_kuehlen_kwh"] = round(fakt.wp.modus_strom_kuehlen_kwh, 1)
     if fakt.emob.ladung_kwh > 0:
         result["emob_ladung_kwh"] = round(fakt.emob.ladung_kwh, 1)
     if fakt.emob.km > 0:
@@ -1007,6 +1021,8 @@ def _baue_investition_financial(
                 wp_strompreis_cent=wp_p,
                 wp_parameter=inv.parameter,
                 monats_gaspreis_cent=monats_gaspreis,
+                # E-B: Kühlen ersetzt keine Heizung (#263 K-2).
+                strom_kuehlen_kwh=data.get(MODUS_STROM_FELD[BM_KUEHLEN], 0) or 0,
             )
             inv_ersparnis = round(wp_result.ersparnis_euro, 2)
             inv_label = "Ersparnis vs. Gas"
@@ -1512,6 +1528,8 @@ async def get_aktueller_monat(
             wp_strompreis_cent=wp_preis_cent,
             wp_parameter=wp_ref_parameter,
             monats_gaspreis_cent=monats_gaspreis,
+            # E-B: Kühlen ersetzt keine Heizung (#263 K-2).
+            strom_kuehlen_kwh=get_val("wp_modus_kuehlen_kwh") or 0.0,
         )
         wp_ersparnis = round(wp_ersparnis_result.ersparnis_euro, 2)
 
@@ -1779,6 +1797,10 @@ async def get_aktueller_monat(
     wp_warmwasser = None
     wp_strom_heizen = None
     wp_strom_warmwasser = None
+    wp_modus_heizen = None
+    wp_modus_kuehlen = None
+    wp_modus_rest = None
+    wp_modus_abdeckung = None
     if mf_wp is not None:
         if mf_wp.heizung_kwh > 0:
             wp_heizung = round(mf_wp.heizung_kwh, 2)
@@ -1789,6 +1811,13 @@ async def get_aktueller_monat(
             # vs. "gar nicht getrennt erfasst" unterscheiden kann.
             wp_strom_heizen = round(mf_wp.strom_heizen_kwh, 2)
             wp_strom_warmwasser = round(mf_wp.strom_warmwasser_kwh, 2)
+        # #263 K-2: derselbe Alles-oder-nichts-Grundsatz für den Modus-Split —
+        # ohne erfasste Stunde gibt es keine Aufteilung statt einer 0.
+        if mf_wp.hat_modus_split:
+            wp_modus_heizen = round(mf_wp.modus_strom_heizen_kwh, 2)
+            wp_modus_kuehlen = round(mf_wp.modus_strom_kuehlen_kwh, 2)
+            wp_modus_rest = round(mf_wp.modus_nicht_aufgeteilt_kwh, 2)
+            wp_modus_abdeckung = round(mf_wp.modus_abdeckung_h, 1)
 
     # E-Mobilität: PV/Netz/Extern-Split + V2H
     emob_pv = get_val("emob_pv_ladung_kwh")
@@ -2187,6 +2216,10 @@ async def get_aktueller_monat(
         wp_warmwasser_kwh=wp_warmwasser,
         wp_strom_heizen_kwh=wp_strom_heizen,
         wp_strom_warmwasser_kwh=wp_strom_warmwasser,
+        wp_modus_strom_heizen_kwh=wp_modus_heizen,
+        wp_modus_strom_kuehlen_kwh=wp_modus_kuehlen,
+        wp_modus_nicht_aufgeteilt_kwh=wp_modus_rest,
+        wp_modus_abdeckung_h=wp_modus_abdeckung,
         wp_starts_max_tag=wp_starts_max_tag,
         wp_starts_summe_monat=wp_starts_summe_monat,
         wp_betriebsstunden_max_tag=wp_betriebsstunden_max_tag,

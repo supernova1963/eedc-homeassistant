@@ -31,6 +31,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from backend.core.berechnungen.modus_split import heizwaerme_ist_abgeleitet
+from backend.core.betriebsmodus import MODUS_ABDECKUNG_FELD, MODUS_STROM_FELD
+from backend.core.betriebsmodus import HEIZEN as _HEIZEN
+from backend.core.betriebsmodus import KUEHLEN as _KUEHLEN
 from backend.core.field_definitions import (
     get_eauto_ladung_kwh,
     get_pv_erzeugung_kwh,
@@ -76,6 +80,29 @@ class ImdTypBeitrag:
     wp_strom_heizen: float = 0.0
     wp_strom_warmwasser: float = 0.0
     wp_hat_split: bool = False            # getrennte_strommessung aktiv
+    # #263 K-2 (S3): der Modus-Split. NICHT mit `wp_strom_heizen` verwechseln —
+    # das ist der SUMMAND bei getrennter Strommessung (zwei physische Zähler),
+    # dies hier sind TEILMENGEN von `wp_strom` (ein Zähler, Modus mitgeschrieben).
+    # Genau diese Zweideutigkeit war der Grund für eigene Feldnamen (E-G).
+    wp_modus_strom_heizen: float = 0.0
+    wp_modus_strom_kuehlen: float = 0.0
+    wp_modus_abdeckung_h: float = 0.0
+    #: Der **Gesamtstrom dieser Zeile**, aber nur wenn sie einen Modus-Split
+    #: trägt. Er ist die Bezugsgröße für „nicht aufgeteilt".
+    #:
+    #: ⚠ **Ohne ihn wird die Restmenge auf Anlagenebene falsch.** An einer
+    #: Instanz gemessen: eine Anlage mit einer Klimaanlage (Split, 191,2 kWh)
+    #: **und** einer Luft-Wasser-WP ohne Modus-Sensor (90 kWh) wies
+    #: „nicht aufgeteilt 96,4 kWh" aus — 90 davon gehörten dem anderen Gerät,
+    #: das gar keine Aufteilung hat. `Gesamt − Σ Teilmengen` ist nur je Gerät
+    #: richtig; anlagenweit braucht es diesen Bezug.
+    wp_modus_strom_bezug: float = 0.0
+    # Der Anteil von `wp_waerme`, der aus `Strom × JAZ` stammt statt aus einem
+    # Wärmemengenzähler (Konzept §3.4). Er trägt die JAZ-Sperre aus §3.5 zu
+    # allen Lesestellen — ohne ihn müsste jede Stelle die Provenance selbst
+    # lesen, und die erste, die es vergisst, zeigt die gepflegte JAZ als
+    # gemessene an.
+    wp_waerme_abgeleitet: float = 0.0
 
     # E-Mobilität (Skalar-Summen; Heimladungs-Pool bleibt separat)
     eauto_km: float = 0.0
@@ -110,11 +137,19 @@ def _f(data: dict, key: str) -> float:
     return float(data.get(key, 0) or 0)
 
 
-def imd_typ_beitrag(inv, data: dict | None) -> ImdTypBeitrag:
+def imd_typ_beitrag(
+    inv, data: dict | None, source_provenance: dict | None = None
+) -> ImdTypBeitrag:
     """Kanonischer per-Zeilen-Beitrag einer IMD-Zeile (`inv`, `data`).
 
     `inv` braucht `typ` und (für WP-Split) `parameter`. `data` ist das
     `verbrauch_daten`-Dict (oder None/{}).
+
+    `source_provenance` ist optional und wird **nur** für die Frage gebraucht,
+    ob die Heizwärme gemessen oder abgeleitet ist (#263 K-2, Konzept §3.5).
+    Ohne sie bleibt `wp_waerme_abgeleitet` 0 — das ist der bisherige Zustand
+    und für jede Zeile ohne Modus-Split auch der richtige. Die Funktion bleibt
+    damit rein: sie liest ein zweites Dict, sie holt es nicht.
     """
     data = data or {}
     typ = getattr(inv, "typ", None)
@@ -156,6 +191,18 @@ def imd_typ_beitrag(inv, data: dict | None) -> ImdTypBeitrag:
             wp_strom_heizen=_f(data, "strom_heizen_kwh"),
             wp_strom_warmwasser=_f(data, "strom_warmwasser_kwh"),
             wp_hat_split=hat_split,
+            wp_modus_strom_heizen=_f(data, MODUS_STROM_FELD[_HEIZEN]),
+            wp_modus_strom_kuehlen=_f(data, MODUS_STROM_FELD[_KUEHLEN]),
+            wp_modus_abdeckung_h=_f(data, MODUS_ABDECKUNG_FELD),
+            wp_modus_strom_bezug=(
+                get_wp_strom_kwh(data, params)
+                if _f(data, MODUS_ABDECKUNG_FELD) > 0 else 0.0
+            ),
+            # Ist die Heizwärme abgeleitet, ist der abgeleitete Anteil die
+            # ganze Heizwärme dieser Zeile — es gibt keine Mischung je Zeile.
+            wp_waerme_abgeleitet=(
+                heizung if heizwaerme_ist_abgeleitet(source_provenance) else 0.0
+            ),
         )
 
     if typ == "e-auto":

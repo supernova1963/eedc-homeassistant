@@ -132,6 +132,9 @@ async def get_nachhaltigkeit(
             eigenverbrauch_kwh=fakt.kennzahlen.eigenverbrauch_kwh,
             wp_waerme_kwh=fakt.wp.waerme_kwh,
             wp_strom_kwh=fakt.wp.strom_kwh,
+            # #263 K-2 (E-B): Kühlen ersetzt keine Heizung — sein Strom
+            # gehört nicht in die vermiedene Heiz-Emission.
+            wp_strom_kuehlen_kwh=fakt.wp.modus_strom_kuehlen_kwh,
             emob_km=fakt.emob.km,
             emob_netz_ladung_kwh=fakt.emob.ladung_netz_kwh,
             benzin_verbrauch_liter=fakt.emob.km / 100 * vergleich_l_100km,

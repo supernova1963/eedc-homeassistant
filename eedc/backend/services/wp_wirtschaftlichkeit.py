@@ -67,6 +67,13 @@ class WPErsparnisErgebnis:
     # hat mit der ersetzten Heizung nichts zu tun.
     bewertbar: bool = True
 
+    # #263 K-2 (S4, Entscheid E-B): Stromkosten des **Kühlbetriebs**.
+    # Kühlen ersetzt keine Heizung — es ist Komfortverbrauch. Diese Kosten
+    # stecken in `wp_kosten_euro` mit drin (sie fallen ja an), gehen aber
+    # **nicht** in den Ersparnis-Vergleich ein. 0.0 heißt „kein Kühlbetrieb
+    # erfasst", nicht „kostenlos gekühlt".
+    kuehl_kosten_euro: float = 0.0
+
 
 def _wp_alter_wirkungsgrad(wp_parameter: Optional[dict]) -> float:
     """η der Altanlage aus den WP-Parametern — Wahl über den Layer-SoT.
@@ -98,6 +105,7 @@ def berechne_wp_ersparnis(
     wp_strompreis_cent: float,
     wp_parameter: Optional[dict] = None,
     monats_gaspreis_cent: Optional[float] = None,
+    strom_kuehlen_kwh: float = 0.0,
 ) -> WPErsparnisErgebnis:
     """Berechnet WP-Ersparnis vs. fossile Heizung.
 
@@ -112,20 +120,39 @@ def berechne_wp_ersparnis(
         monats_gaspreis_cent: Optionaler monatlicher Gaspreis-Override aus
             `Monatsdaten.gaspreis_cent_kwh`. Hat Vorrang vor dem Default
             aus den WP-Parametern.
+        strom_kuehlen_kwh: #263 K-2 (Entscheid E-B) — der Anteil von
+            `wp_strom_kwh`, der in den **Kühlbetrieb** ging. Er wird aus dem
+            Ersparnis-Vergleich herausgenommen, bleibt aber in `wp_kosten_euro`
+            enthalten. Default 0.0 = kein Split erfasst, Verhalten wie bisher.
 
     Returns:
         WPErsparnisErgebnis mit Ersparnis, Komponenten und Diagnostik.
+
+    ⚑ **Warum der Kühlstrom herausgerechnet wird, und was ohne ihn passiert:**
+    An einer eigenen Instanz gemessen (Klimaanlage, Juni: 26,4 kWh Heizen,
+    158,4 kWh Kühlen, Gas ersetzt) stand vorher eine Ersparnis von **−45,04 €**
+    und ein CO₂-Wert von **−52 kg** — weil die Formel die Stromkosten des
+    *Kühlens* gegen die vermiedenen Gaskosten des *Heizens* stellte. Das ist
+    kein Rechenfehler, sondern ein Kategorienfehler: eine Klimaanlage, die im
+    Sommer kühlt, hat damit keine schlechtere Heizbilanz. Kühlen ersetzt keine
+    Heizung — es gäbe ohne sie schlicht keine Kühlung.
     """
     # F-42: Die Stromkosten stehen auch dann fest, wenn der Vergleich entfällt —
     # sie hängen an Verbrauch und Tarif, nicht an der alten Heizung. Vorher gab
     # jeder der beiden Frühausstiege `wp_kosten_euro = 0` zurück; im Hub wurde
     # daraus „Stromkosten 0,00 €" neben 4.375 kWh Verbrauch.
     wp_kosten_ohne_vergleich = wp_strom_kwh * wp_strompreis_cent / 100
+    # E-B: Der Kühlanteil wird nie negativ und nie größer als der Gesamtstrom —
+    # die Invariante hält das schon im Schreibpfad, hier steht sie als Zusicherung
+    # für Aufrufer, die ihre Zahlen aus einer anderen Quelle ziehen.
+    kuehl_kwh = min(max(strom_kuehlen_kwh, 0.0), max(wp_strom_kwh, 0.0))
+    kuehl_kosten = kuehl_kwh * wp_strompreis_cent / 100
 
     if wp_waerme_kwh <= 0:
         return WPErsparnisErgebnis(
             0.0, 0.0, wp_kosten_ohne_vergleich, 0.0,
             WP_WIRKUNGSGRAD_GAS_DEFAULT, bewertbar=False,
+            kuehl_kosten_euro=kuehl_kosten,
         )
 
     # N-88/F2b: Wer nichts ersetzt hat, spart nichts ein — auch nicht die fixen
@@ -138,6 +165,7 @@ def berechne_wp_ersparnis(
         return WPErsparnisErgebnis(
             0.0, 0.0, wp_kosten_ohne_vergleich, 0.0,
             WP_WIRKUNGSGRAD_GAS_DEFAULT, bewertbar=False,
+            kuehl_kosten_euro=kuehl_kosten,
         )
 
     wirkungsgrad = _wp_alter_wirkungsgrad(wp_parameter)
@@ -149,7 +177,9 @@ def berechne_wp_ersparnis(
 
     alte_heizung_kosten = gas_kosten_altanlage(wp_waerme_kwh, wirkungsgrad, gaspreis_cent)
     wp_kosten = wp_strom_kwh * wp_strompreis_cent / 100
-    ersparnis = alte_heizung_kosten - wp_kosten
+    # E-B: Verglichen wird die **Heizhälfte** — der Kühlstrom hat auf der
+    # anderen Seite der Gleichung kein Gegenstück.
+    ersparnis = alte_heizung_kosten - (wp_kosten - kuehl_kosten)
 
     return WPErsparnisErgebnis(
         ersparnis_euro=ersparnis,
@@ -157,4 +187,5 @@ def berechne_wp_ersparnis(
         wp_kosten_euro=wp_kosten,
         verwendeter_gaspreis_cent=gaspreis_cent,
         verwendeter_wirkungsgrad=wirkungsgrad,
+        kuehl_kosten_euro=kuehl_kosten,
     )

@@ -123,6 +123,18 @@ from backend.core.berechnungen.imd_monatsaggregat import (
     ImdTypBeitrag,
     imd_typ_beitrag,
 )
+from backend.core.berechnungen.modus_split import (
+    ModusSplit,
+    ModusStunde,
+    REGEL_JAZ_MODUS_SPLIT,
+    abgeleitete_heizwaerme_kwh,
+    heiz_effizienz_gepflegt,
+    heizwaerme_ist_abgeleitet,
+    falte_modus_split_tag,
+    summiere_modus_split,
+    teilmengen_passen,
+    unbekannte_modi,
+)
 from backend.core.berechnungen.netzbezug_kosten import berechne_netzbezug_kosten
 from backend.core.berechnungen.kennzahlen import (
     autarkie_prozent,
@@ -146,6 +158,7 @@ from backend.core.berechnungen.energie import (
     summe_pv_anlage_kwh,
     summe_pv_bkw_kwh,
     summe_waermepumpe_kwh,
+    waermepumpe_kwh_je_investition,
     summe_wallbox_eauto_kwh,
     wert_basis_kwh,
 )
@@ -334,6 +347,16 @@ __all__ = [
     "berechne_ust_eigenverbrauch",
     "ust_eigenverbrauch_fuer_anlage",
     "ImdTypBeitrag",
+    "ModusSplit",
+    "REGEL_JAZ_MODUS_SPLIT",
+    "abgeleitete_heizwaerme_kwh",
+    "heizwaerme_ist_abgeleitet",
+    "heiz_effizienz_gepflegt",
+    "ModusStunde",
+    "falte_modus_split_tag",
+    "summiere_modus_split",
+    "teilmengen_passen",
+    "unbekannte_modi",
     "imd_typ_beitrag",
     "berechne_netzbezug_kosten",
     "autarkie_prozent",
@@ -358,6 +381,7 @@ __all__ = [
     "sonstiges_kwh_je_richtung",
     "sonstiges_richtung",
     "summe_waermepumpe_kwh",
+    "waermepumpe_kwh_je_investition",
     "summe_wallbox_eauto_kwh",
     "batterie_kw_spalte",
     "summe_batterie_netto_kwh",

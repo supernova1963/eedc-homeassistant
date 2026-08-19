@@ -14,6 +14,14 @@ fester Reihenfolge:
 3. **Einmaliger Auto-Vollbackfill** — `resolve_and_backfill_from_statistics`
    läuft genau einmal pro Anlage beim ersten Monatsabschluss nach Upgrade
    (Flag `Anlage.vollbackfill_durchgefuehrt`). Source `external:ha_statistics`.
+4. **Modus-Split festschreiben** (#263 K-2, S3) — `schreibe_modus_split_monat`
+   faltet die Stundenzeilen des Monats nach Betriebsmodus und schreibt die zwei
+   Teilmengen, die Abdeckung und ggf. die abgeleitete Heizwärme.
+   Source `auto:monatsabschluss`.
+
+   ⚠ **Die Reihenfolge ist Bedingung, nicht Geschmack:** Schritt 4 liest die
+   Stundenzeilen, die Schritt 1 gerade erst geschrieben hat. Vorgezogen fände
+   er für den eben abgeschlossenen Monat nichts.
 
 MQTT-Publish und Community-Share sind disjunkt zur Auto-Aggregation und
 bleiben im Background-Orchestrator (`_post_save_hintergrund` in
@@ -36,6 +44,9 @@ from backend.services.energie_profil import (
     resolve_and_backfill_from_statistics,
     rollup_month,
 )
+from backend.services.energie_profil.modus_split_schreiben import (
+    schreibe_modus_split_monat,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +59,11 @@ class MonatsabschlussAggregationResult:
     vollbackfill_status: str = ""
     vollbackfill_geschrieben: int = 0
     vollbackfill_verarbeitet: int = 0
+    #: #263 K-2 (S3): Geräte, für die eine Modus-Aufteilung geschrieben wurde.
+    modus_split_geschrieben: int = 0
+    #: Geräte, deren Aufteilung der Teilmengen-Invariante widersprach und
+    #: deshalb NICHT geschrieben wurde (s. `modus_split_schreiben`).
+    modus_split_widerspruch: int = 0
 
 
 async def run_post_monatsabschluss_aggregation(
@@ -122,5 +138,19 @@ async def run_post_monatsabschluss_aggregation(
             .values(vollbackfill_durchgefuehrt=True)
         )
         await db.commit()
+
+    # 4. Modus-Split festschreiben (#263 K-2, S3). Nach Schritt 1, weil er
+    # dessen Stundenzeilen liest. Eigener Try-Block: eine Anlage ohne
+    # Modus-Sensor ist der Normalfall, und ein Fehler hier darf weder den
+    # Rollup noch den Vollbackfill nachträglich entwerten.
+    try:
+        split = await schreibe_modus_split_monat(db, anlage.id, jahr, monat)
+        result.modus_split_geschrieben = split.geschrieben
+        result.modus_split_widerspruch = len(split.widerspruch)
+        if split.geschrieben or split.widerspruch:
+            await db.commit()
+    except Exception as e:
+        logger.warning(f"Modus-Split fehlgeschlagen: {type(e).__name__}: {e}")
+        await db.rollback()
 
     return result
