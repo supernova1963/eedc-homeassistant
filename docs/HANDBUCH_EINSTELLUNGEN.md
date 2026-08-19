@@ -66,7 +66,7 @@ Der Anlage-Block zeigt eine Tabelle deiner Anlagen mit einem Bearbeiten-Modal (a
 
 **Wettermodell** (steuert Kurzfrist-Prognose und Wetter-Autofill):
 
-- **auto** (Standard): eedc wählt automatisch (Bright Sky für DE, sonst Open-Meteo best_match).
+- **auto** (Standard): eedc wählt automatisch (Bright Sky für DE, sonst Open-Meteo best_match). Maßgeblich ist seit v4.0.21 das **Land** aus den Stammdaten — vorher entschied allein ein Koordinaten-Rechteck, das halb Österreich und die Nordostschweiz mit einschloss (siehe [§2.1a](#21a-eedc-außerhalb-deutschlands)).
 - **MeteoSwiss ICON-CH2** (2 km, empfohlen für alpine Standorte), **ICON-D2** (2,2 km, DWD/DE), **ICON-EU** (mittlere Auflösung), **ECMWF IFS** (global, 0,25°).
 
 Bei fester Modellwahl versucht eedc zuerst das gewählte Modell und fällt bei fehlenden Daten auf den besten verfügbaren Anbieter zurück (Kaskade). Die verwendete Quelle wird pro Tag in der [Aussicht](HANDBUCH_BEDIENUNG.md#25-aussicht) mit einem Kürzel (MS/D2/EU/EC/BM) angezeigt.
@@ -81,6 +81,29 @@ Bei fester Modellwahl versucht eedc zuerst das gewählte Modell und fällt bei f
 
 - **Keine USt-Auswirkung** (Standard): für Anlagen ab 2023 mit Nullsteuersatz (≤ 30 kWp) oder Kleinunternehmer.
 - **Regelbesteuerung**: USt auf Eigenverbrauch wird als Kostenfaktor berechnet (Pre-2023, > 30 kWp, AT/CH). Der USt-Satz ist editierbar (DE 19 %, AT 20 %, CH 8,1 %) und passt sich bei Land-Wechsel automatisch an.
+
+### 2.1a eedc außerhalb Deutschlands
+
+eedc lässt sich in **Deutschland, Österreich, der Schweiz und Italien** betreiben — das Land wählst du in den Stammdaten. Was dabei trägt und was nicht, steht hier bewusst offen, damit du es vor der Einrichtung weißt und nicht danach.
+
+**Was überall gleich gut funktioniert**
+
+Die Rechenkerne von eedc kennen keine Landesgrenze: Energiebilanz, Eigenverbrauch, Autarkie, Speicher- und Wärmepumpen-Auswertung, Amortisation und CO₂ arbeiten mit deinen Messwerten und deinen Tarifen. **PVGIS** deckt ganz Europa ab, **Open-Meteo** liefert weltweit Wetter- und Strahlungsdaten. Für alpine Standorte ist **MeteoSwiss ICON-CH2** das genauere Modell — es rechnet auf 2 km Raster und kennt das Relief, das gröbere Modelle glattbügeln.
+
+**Was an Deutschland hängt**
+
+| Funktion | Außerhalb Deutschlands |
+| --- | --- |
+| **Bright Sky (DWD)** als Wetterquelle | Nicht verfügbar. Das sind Messwerte deutscher Wetterstationen; ihr Netz endet an der Staatsgrenze. eedc nimmt dort automatisch Open-Meteo. |
+| **Börsenstrompreise** | DE und AT über aWATTar/EPEX. Für CH und IT gibt es keine Anbindung. |
+| **Community-Vergleich nach Region** | Innerhalb Deutschlands nach Bundesland, sonst nach Land. |
+| **Kraftstoffpreise** (E-Auto-Vergleich) | DE, AT und IT aus dem EU-Bulletin; für CH rechnet eedc mit den österreichischen Werten als Näherung. |
+
+**Was eedc bewusst *nicht* tut**
+
+Steuerrecht, Netzentgelte, Einspeisevergütungen und Förderprogramme sind in jedem Land anders — und ändern sich dort unabhängig voneinander. eedc bildet sie **nicht** nach. Es rechnet mit den Zahlen, die du einträgst: dein Arbeitspreis, deine Vergütung, dein Umsatzsteuersatz, deine Anschaffungskosten. Der USt-Satz passt sich beim Länderwechsel an (DE 19 %, AT 20 %, CH 8,1 %, IT 22 %), aber ob und wie er auf dich zutrifft, entscheidest du.
+
+Das ist eine bewusste Grenze und keine Lücke, die noch geschlossen wird. Eine Förderdatenbank für vier Länder wäre in dem Moment veraltet, in dem sie fertig ist — und eine falsche Zahl ist schlechter als gar keine. **Wo eedc etwas nicht weiß, fragt es dich, statt zu schätzen.**
 
 ### 2.2 Strompreise
 

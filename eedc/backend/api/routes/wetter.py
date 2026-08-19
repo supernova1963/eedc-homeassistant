@@ -119,9 +119,12 @@ async def get_wetter_monat(
     anlage_id: int,
     jahr: int,
     monat: int,
-    provider: str = Query(
-        default="auto",
-        description="Datenquelle: auto, open-meteo, brightsky"
+    provider: Optional[str] = Query(
+        default=None,
+        description=(
+            "Datenquelle: auto, open-meteo, brightsky. Fehlt der Parameter, "
+            "gilt die an der Anlage gepflegte Einstellung."
+        ),
     ),
     db: AsyncSession = Depends(get_db)
 ):
@@ -138,7 +141,11 @@ async def get_wetter_monat(
         anlage_id: ID der Anlage (für Koordinaten)
         jahr: Jahr (2000-2100)
         monat: Monat (1-12)
-        provider: Gewünschte Datenquelle
+        provider: Gewünschte Datenquelle. **Ohne Angabe** entscheidet
+            `Anlage.wetter_provider` — bis v4.0.20 war dieser Parameter mit
+            `"auto"` vorbelegt, und weil der einzige Aufrufer ihn nicht setzt,
+            konnte die gespeicherte Wahl nie wirken (#386). Ein Feld, das
+            nichts tut, ist schlimmer als keins.
 
     Returns:
         WetterDatenResponse: Wetterdaten mit Quellenangabe
@@ -169,13 +176,17 @@ async def get_wetter_monat(
             detail="Anlage hat keine Geokoordinaten. Bitte latitude/longitude in den Stammdaten ergänzen."
         )
 
+    # Ohne expliziten Wunsch gilt die gespeicherte Wahl der Anlage (#386).
+    gewaehlt = provider or getattr(anlage, "wetter_provider", None) or "auto"
+
     # Wetterdaten mit Multi-Provider abrufen
     data = await get_wetterdaten_multi(
         latitude=anlage.latitude,
         longitude=anlage.longitude,
         jahr=jahr,
         monat=monat,
-        provider=provider  # type: ignore
+        provider=gewaehlt,  # type: ignore
+        land=anlage.standort_land,
     )
 
     return WetterDatenResponse(**data)
@@ -243,6 +254,16 @@ async def get_wetter_monat_by_coords(
     return WetterDatenResponse(**data)
 
 
+#: Anzeigename je Länderkennung — Spiegel von `LAND_OPTIONEN`
+#: (`frontend/src/components/forms/AnlageForm.tsx`).
+LAND_NAMEN = {
+    "DE": "Deutschland",
+    "AT": "Österreich",
+    "CH": "Schweiz",
+    "IT": "Italien",
+}
+
+
 # =============================================================================
 # Neue Endpoints für Provider-Verwaltung
 # =============================================================================
@@ -271,7 +292,9 @@ async def get_wetter_provider(
             detail="Anlage hat keine Koordinaten"
         )
 
-    providers = get_available_providers(anlage.latitude, anlage.longitude)
+    providers = get_available_providers(
+        anlage.latitude, anlage.longitude, anlage.standort_land
+    )
 
     # Aktuellen Provider der Anlage ermitteln
     aktueller_provider = getattr(anlage, "wetter_provider", None) or "auto"
@@ -282,8 +305,14 @@ async def get_wetter_provider(
         for p in providers
     )
 
-    # Land-Name basierend auf Standort (vereinfacht: nur DE erkennen)
-    land = "Deutschland" if in_deutschland else anlage.standort_ort or None
+    # #386: Der Land-NAME kommt aus dem gepflegten Feld, nicht aus der
+    # Provider-Verfügbarkeit. Vorher stand hier „vereinfacht: nur DE erkennen"
+    # — wer Österreich eingestellt hatte, las trotzdem „Deutschland (DWD
+    # verfügbar)" über seinem Formular, in dem zwei Zeilen höher „Österreich"
+    # stand. Der Ortsname als Fallback bleibt für Anlagen ohne Land-Angabe.
+    land = LAND_NAMEN.get(
+        (anlage.standort_land or "").strip().upper()
+    ) or anlage.standort_ort or None
 
     return WetterProviderListResponse(
         standort=StandortInfo(
@@ -328,7 +357,7 @@ async def get_wetter_vergleich(
         raise bad_request("Anlage hat keine Koordinaten")
 
     comparison = await get_provider_comparison(
-        anlage.latitude, anlage.longitude, jahr, monat
+        anlage.latitude, anlage.longitude, jahr, monat, anlage.standort_land
     )
 
     return WetterVergleichResponse(

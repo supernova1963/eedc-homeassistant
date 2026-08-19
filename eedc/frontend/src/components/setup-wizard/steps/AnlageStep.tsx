@@ -11,7 +11,7 @@ interface AnlageStepProps {
   isLoading: boolean
   error: string | null
   onSubmit: (data: AnlageCreateData) => Promise<void>
-  onGeocode: (plz: string, ort?: string, strasse?: string) => Promise<{ latitude: number; longitude: number } | null>
+  onGeocode: (plz: string, ort?: string, strasse?: string) => Promise<{ latitude: number; longitude: number; erkanntes_land: string | null } | null>
   onBack: () => void
 }
 
@@ -22,6 +22,7 @@ interface AnlageCreateData {
   standort_plz?: string
   standort_ort?: string
   standort_strasse?: string
+  standort_land?: string
   latitude?: number
   longitude?: number
 }
@@ -34,6 +35,10 @@ export default function AnlageStep({ isLoading, error, onSubmit, onGeocode, onBa
     standort_plz: '',
     standort_ort: '',
     standort_strasse: '',
+    // #386: kein Eingabefeld — der Wizard fragt das Land bewusst nicht ab.
+    // Er übernimmt nur, was das Geocoding erkannt hat; ändern lässt es sich
+    // danach in den Stammdaten.
+    standort_land: '',
     latitude: '',
     longitude: '',
   })
@@ -69,6 +74,7 @@ export default function AnlageStep({ isLoading, error, onSubmit, onGeocode, onBa
           ...prev,
           latitude: result.latitude.toFixed(6), /* de-de-allow: Input-Value (editierbares number-Feld latitude) */
           longitude: result.longitude.toFixed(6), /* de-de-allow: Input-Value (editierbares number-Feld longitude) */
+          standort_land: result.erkanntes_land || prev.standort_land,
         }))
         setGeocodeSuccess(true)
       } else {
@@ -117,6 +123,7 @@ export default function AnlageStep({ isLoading, error, onSubmit, onGeocode, onBa
       standort_plz: formData.standort_plz || undefined,
       standort_ort: formData.standort_ort || undefined,
       standort_strasse: formData.standort_strasse || undefined,
+      standort_land: formData.standort_land || undefined,
       latitude: formData.latitude ? parseFloat(formData.latitude) : undefined,
       longitude: formData.longitude ? parseFloat(formData.longitude) : undefined,
     })

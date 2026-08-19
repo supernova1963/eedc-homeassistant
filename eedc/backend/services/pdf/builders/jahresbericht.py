@@ -691,9 +691,19 @@ async def build_jahresbericht_context(
         },
         "waermepumpe": {
             "vorhanden": hat_waermepumpe,
-            "waerme_kwh": wp_waerme,
-            "heizung_kwh": wp_heizung,
-            "warmwasser_kwh": wp_warmwasser,
+            # F-43: **Anzeige** trennt „nicht gemessen" von „gemessene 0", die
+            # Rechnung oben nicht (dort ist 0 der richtige Summand). `WpFakten`
+            # trägt `float = 0.0` als Default; ohne diese Trennung rendert
+            # `fmt_kwh(0.0)` ein „0 kWh", während der COP daneben korrekt „–"
+            # sagt — dieselbe Tabelle, zwei Wahrheiten. Eine Klimaanlage ohne
+            # Wärmemengenzähler bekam so drei erfundene Nullen.
+            # Konvention übernommen, nicht erfunden: `aktueller_monat.py`
+            # trägt einen Monatswert ebenfalls nur `if wert > 0` ein — deshalb
+            # sagen Cockpit → Monat und (darüber aggregiert) → Jahr längst „—".
+            # Das PDF war der einzige Konsument, der es nicht tat.
+            "waerme_kwh": wp_waerme if wp_waerme > 0 else None,
+            "heizung_kwh": wp_heizung if wp_heizung > 0 else None,
+            "warmwasser_kwh": wp_warmwasser if wp_warmwasser > 0 else None,
             "strom_kwh": wp_strom,
             "cop": wp_cop,
             "starts_summe": wp_starts_summe,

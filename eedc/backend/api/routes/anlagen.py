@@ -22,6 +22,13 @@ from backend.services.infothek_datei_service import verarbeite_bild, validiere_d
 # Pydantic Schemas
 # =============================================================================
 
+#: Länder, die eedc in der Anlagen-Auswahl anbietet. eedc rechnet außerhalb
+#: Deutschlands mit denselben Formeln, aber Stromtarife, steuerliche
+#: Behandlung und Förderungen sind Ländersache und werden **nicht** modelliert
+#: — siehe „eedc außerhalb Deutschlands" im Einstellungs-Handbuch.
+UNTERSTUETZTE_LAENDER = {"DE", "AT", "CH", "IT"}
+
+
 class AnlageBase(BaseModel):
     """Basis-Schema für Anlage."""
     anlagenname: str = Field(..., min_length=1, max_length=255)
@@ -126,6 +133,13 @@ class GeocodeResponse(BaseModel):
     latitude: float
     longitude: float
     display_name: str
+    #: Ländercode aus der Nominatim-Antwort (``DE``/``AT``/``CH``/``IT``), sonst
+    #: ``None``. Bis v4.0.20 wurde er angefordert (`addressdetails=1`) und
+    #: verworfen — die Oberfläche setzte danach unverändert „Deutschland",
+    #: auch für einen österreichischen Ort (#386). Nur unterstützte Länder
+    #: werden gemeldet: ein Treffer außerhalb DACH/IT soll die Auswahl nicht
+    #: auf einen Wert stellen, den eedc gar nicht anbietet.
+    erkanntes_land: Optional[str] = None
 
 
 class AnlageResponse(AnlageBase):
@@ -324,7 +338,7 @@ async def update_sensor_config(
 async def geocode_address(
     plz: str,
     ort: Optional[str] = None,
-    land: str = "Germany",
+    land: Optional[str] = None,
     strasse: Optional[str] = None,
 ):
     """
@@ -349,11 +363,17 @@ async def geocode_address(
     base_url = "https://nominatim.openstreetmap.org/search"
 
     # Query aufbauen (Straße zuerst — präzisiert den Treffer)
+    #
+    # #386: `land` ist NICHT mehr mit „Germany" vorbelegt. Der Default stand
+    # bis v4.0.20 in der Signatur und wurde hier an die Suchanfrage gehängt —
+    # eedc suchte einen österreichischen Ort also aktiv „…, Germany". Ohne
+    # Angabe sucht Nominatim jetzt ohne Länderzusatz; die PLZ entscheidet.
     query_parts = [strasse] if strasse else []
     query_parts.append(plz)
     if ort:
         query_parts.append(ort)
-    query_parts.append(land)
+    if land:
+        query_parts.append(land)
 
     params = {
         "q": ", ".join(query_parts),
@@ -379,10 +399,15 @@ async def geocode_address(
             )
 
         result = results[0]
+        # `addressdetails=1` wurde immer schon angefordert — jetzt wird die
+        # Antwort auch gelesen (#386).
+        code = (result.get("address") or {}).get("country_code") or ""
+        erkanntes_land = code.upper() if code.upper() in UNTERSTUETZTE_LAENDER else None
         return GeocodeResponse(
             latitude=float(result["lat"]),
             longitude=float(result["lon"]),
-            display_name=result.get("display_name", f"{plz}, {land}")
+            display_name=result.get("display_name", f"{plz}, {land or ''}".rstrip(", ")),
+            erkanntes_land=erkanntes_land,
         )
 
     except httpx.HTTPError as e:

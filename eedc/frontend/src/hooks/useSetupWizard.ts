@@ -67,6 +67,8 @@ interface AnlageCreateData {
   standort_plz?: string
   standort_ort?: string
   standort_strasse?: string
+  /** Aus dem Geocoding übernommen (#386) — der Wizard hat kein Land-Feld. */
+  standort_land?: string
   latitude?: number
   longitude?: number
 }
@@ -141,7 +143,7 @@ interface UseSetupWizardReturn {
 
   // Anlage
   createAnlage: (data: AnlageCreateData) => Promise<void>
-  geocodeAddress: (plz: string, ort?: string) => Promise<{ latitude: number; longitude: number } | null>
+  geocodeAddress: (plz: string, ort?: string) => Promise<{ latitude: number; longitude: number; erkanntes_land: string | null } | null>
 
   // Strompreise
   createStrompreis: (data: StrompreisCreateData) => Promise<void>
@@ -311,7 +313,14 @@ export function useSetupWizard(): UseSetupWizardReturn {
   const geocodeAddress = useCallback(async (plz: string, ort?: string, strasse?: string) => {
     try {
       const result = await anlagenApi.geocode(plz, ort, strasse)
-      return { latitude: result.latitude, longitude: result.longitude }
+      // #386: `erkanntes_land` mitgeben — der Wizard hat kein Land-Feld, und
+      // ohne diesen Wert legte er JEDE Anlage mit dem Backend-Default „DE" an,
+      // auch eine österreichische.
+      return {
+        latitude: result.latitude,
+        longitude: result.longitude,
+        erkanntes_land: result.erkanntes_land ?? null,
+      }
     } catch {
       return null
     }

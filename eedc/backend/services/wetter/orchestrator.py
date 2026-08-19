@@ -18,6 +18,38 @@ from backend.services.wetter.models import WetterProvider
 
 logger = logging.getLogger(__name__)
 
+#: Länder, für die Bright Sky (DWD) **nicht** in Frage kommt. Bewusst als
+#: Ausschluss- statt Einschlussliste: ein unbekanntes Land (``None``) darf die
+#: bisherige Koordinaten-Heuristik nicht abschalten, sonst verlöre jede
+#: deutsche Altanlage ohne gepflegtes Land ihre DWD-Quelle.
+_OHNE_BRIGHTSKY = {"AT", "CH", "IT"}
+
+
+def nutze_brightsky(latitude: float, longitude: float, land: Optional[str] = None) -> bool:
+    """Darf Bright Sky (DWD) für diesen Standort verwendet werden? (#386)
+
+    **Das gepflegte Land schlägt die Koordinaten.** Bis v4.0.20 entschied
+    allein ``is_in_germany`` — eine Bounding-Box, also ein Rechteck. Sie
+    schließt West-/Zentralösterreich und die Nordostschweiz mit ein: Salzburg,
+    Innsbruck, Linz, Bregenz, Zürich und Basel liegen darin. Ein Anwender
+    konnte „Österreich" einstellen und bekam trotzdem DWD — das Feld wurde an
+    dieser Stelle nie gelesen (gemeldet von gruaGit, #386).
+
+    Was Handbuch und Oberfläche seit jeher behaupten („Bright Sky nur für
+    Deutschland"), setzt erst diese Funktion um. Bright Sky liefert
+    DWD-**Stationsmessungen**; deren Netz endet an der Staatsgrenze, und für
+    einen Standort ohne Station in Reichweite kommt keine Globalstrahlung
+    zurück (siehe die Abdeckungsprüfung im Aufrufer).
+
+    ``None`` bedeutet ausdrücklich „Land nicht bekannt", nicht „Deutschland" —
+    dann bleibt es bei der Box.
+    """
+    from backend.services.brightsky_service import is_in_germany
+
+    if land and land.strip().upper() in _OHNE_BRIGHTSKY:
+        return False
+    return is_in_germany(latitude, longitude)
+
 
 async def get_wetterdaten(
     latitude: float,
@@ -92,7 +124,8 @@ async def get_wetterdaten_multi(
     longitude: float,
     jahr: int,
     monat: int,
-    provider: WetterProvider = "auto"
+    provider: WetterProvider = "auto",
+    land: Optional[str] = None,
 ) -> dict:
     """
     Holt Wetterdaten mit konfigurierbarer Quellenauswahl.
@@ -102,14 +135,16 @@ async def get_wetterdaten_multi(
     2. Sonst → Open-Meteo
     3. Fallback: PVGIS TMY → Statische Defaults
 
+    Args:
+        land: Gepflegtes `Anlage.standort_land` (``DE``/``AT``/``CH``/``IT``).
+            **Schlägt die Koordinaten-Heuristik** — siehe `nutze_brightsky`.
+            ``None`` heißt „nicht bekannt", nicht „Deutschland".
+
     Returns:
         dict mit globalstrahlung_kwh_m2, sonnenstunden, datenquelle,
         standort, provider_info
     """
-    from backend.services.brightsky_service import (
-        fetch_brightsky_month,
-        is_in_germany
-    )
+    from backend.services.brightsky_service import fetch_brightsky_month
 
     today = date.today()
     request_date = date(jahr, monat, 1)
@@ -126,7 +161,7 @@ async def get_wetterdaten_multi(
 
     # Provider-Reihenfolge bestimmen
     if provider == "auto":
-        if is_in_germany(latitude, longitude) and settings.brightsky_enabled:
+        if nutze_brightsky(latitude, longitude, land) and settings.brightsky_enabled:
             provider_order = ["brightsky", "open-meteo"]
         else:
             provider_order = ["open-meteo", "brightsky"]
@@ -143,6 +178,25 @@ async def get_wetterdaten_multi(
             if prov == "brightsky" and settings.brightsky_enabled:
                 logger.debug(f"Wetterdaten: Versuche Bright Sky für {monat}/{jahr}")
                 data = await fetch_brightsky_month(latitude, longitude, jahr, monat)
+
+                # #386: Ein Monat OHNE einen einzigen Tag Strahlungsdaten ist
+                # kein Ergebnis, sondern eine Lücke — und `if data:` allein
+                # nahm ihn an, weil das dict nicht leer ist. Meldet die
+                # nächstgelegene DWD-Station keine Strahlung (bei gruaGit:
+                # Marktschellenberg, 49 km, `solar` durchgängig None), lieferte
+                # Bright Sky {globalstrahlung 0.0, tage_mit_daten 0} — und
+                # eedc bot dem Anwender **0,0 kWh/m²** an, statt Open-Meteo zu
+                # fragen, das 206,5 gehabt hätte. Der zweite Provider stand
+                # bereits in der Kette; er wurde nur nie erreicht.
+                # Bewusst hier und nicht in `fetch_brightsky_month`: der
+                # Provider-VERGLEICH unten will die 0 Tage sehen können.
+                if data and data.get("tage_mit_daten", 0) <= 0:
+                    logger.info(
+                        "Bright Sky: %s/%s @ (%s, %s) ohne Strahlungstage — "
+                        "weiter zum nächsten Provider",
+                        monat, jahr, latitude, longitude,
+                    )
+                    data = None
 
                 if data:
                     result.update({
@@ -219,13 +273,17 @@ async def get_wetterdaten_multi(
     return result
 
 
-def get_available_providers(latitude: float, longitude: float) -> list:
+def get_available_providers(
+    latitude: float, longitude: float, land: Optional[str] = None
+) -> list:
     """
     Gibt Liste der verfügbaren Provider für einen Standort zurück.
-    """
-    from backend.services.brightsky_service import is_in_germany
 
-    in_germany = is_in_germany(latitude, longitude)
+    `land` wirkt hier genauso wie bei der Abruf-Automatik (#386) — sonst
+    zeigte die Oberfläche „Bright Sky ✓ verfügbar" für einen Standort, den
+    der Abruf gar nicht mehr an Bright Sky schickt.
+    """
+    in_germany = nutze_brightsky(latitude, longitude, land)
 
     providers = [
         {
@@ -266,15 +324,16 @@ async def get_provider_comparison(
     latitude: float,
     longitude: float,
     jahr: int,
-    monat: int
+    monat: int,
+    land: Optional[str] = None,
 ) -> dict:
     """
     Vergleicht Wetterdaten verschiedener Provider für denselben Monat.
+
+    `land` wirkt wie bei der Automatik (#386): Wo eedc Bright Sky nicht mehr
+    verwendet, darf der Vergleich es nicht als Quelle anbieten.
     """
-    from backend.services.brightsky_service import (
-        fetch_brightsky_month,
-        is_in_germany
-    )
+    from backend.services.brightsky_service import fetch_brightsky_month
 
     results = {
         "jahr": jahr,
@@ -302,7 +361,7 @@ async def get_provider_comparison(
         results["provider"]["open-meteo"] = {"verfuegbar": False, "fehler": str(e)}
 
     # Bright Sky (nur für Deutschland)
-    if is_in_germany(latitude, longitude) and settings.brightsky_enabled:
+    if nutze_brightsky(latitude, longitude, land) and settings.brightsky_enabled:
         try:
             data = await fetch_brightsky_month(latitude, longitude, jahr, monat)
             if data:

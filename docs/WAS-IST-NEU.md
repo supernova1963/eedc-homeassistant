@@ -32,6 +32,28 @@ verändert; es ging darum, was eedc über deine Anlage behauptet.
   das. Bleibt etwas übrig, kommt der Verdacht weiterhin — dann mit **mehreren möglichen Ursachen**
   statt einer Behauptung. ⚠ Es werden **keine Werte verändert, gekappt oder ausgeblendet.**
 
+Dazu **zwei Zahlen, die eedc gar nicht wissen konnte** — und trotzdem angezeigt hat.
+
+- **In Österreich und der Schweiz kam das Wetter vom deutschen Wetterdienst** *(#386, gruaGit)*:
+  Die Quelle „Automatisch" soll Bright Sky (DWD) nur in Deutschland nehmen — entschieden wurde es
+  aber über ein grobes Koordinaten-Rechteck, in dem Salzburg, Innsbruck, Linz, Bregenz, Zürich und
+  Basel mit drinliegen. Dein eingestelltes **Land** wurde dabei nie gelesen. Folge: Wo keine
+  deutsche Wetterstation in Reichweite ist, kam **gar keine Strahlung** zurück, und eedc bot dir
+  beim Monatsabschluss **0,0 kWh/m²** an, statt die zweite Quelle zu fragen. Am Standort des
+  Melders waren es in Wirklichkeit 206,5. ⚠ **Was du merkst:** Steht bei dir Österreich, Schweiz
+  oder Italien, kommt das Wetter ab jetzt von Open-Meteo. Steht dort Deutschland — oder gar
+  nichts, wie bei den meisten —, ändert sich **nichts**. Auch deutsche Standorte ohne
+  Strahlungsstation in der Nähe (Sylt zum Beispiel) bekommen jetzt einen echten Wert.
+  Nebenbei: Beim Eintragen der Adresse **erkennt eedc das Land jetzt selbst**, und die gespeicherte
+  Wetterquelle wirkt endlich — sie wurde bisher gespeichert, angezeigt und beim Abruf ignoriert.
+  Was eedc außerhalb Deutschlands kann und was bewusst nicht, steht jetzt zusammenhängend im
+  [Handbuch](HANDBUCH_EINSTELLUNGEN.md#21a-eedc-außerhalb-deutschlands).
+- **Der Jahresbericht erfand einer Klimaanlage drei Wärmemengen**: Im PDF standen *Wärmeenergie
+  gesamt 0 kWh · davon Heizung 0 kWh · davon Warmwasser 0 kWh* — für ein Gerät, das gar keinen
+  Wärmemengenzähler hat. Die Jahresarbeitszahl daneben sagte korrekt „–". Eine Null behauptet
+  „gemessen, war nichts"; richtig ist „nicht gemessen". Jetzt steht auch dort „–". Dein
+  **Stromverbrauch bleibt** eine Zahl — der ist gemessen.
+
 Dazu zwei Punkte rund um **Wärmepumpen und Klimaanlagen** — beide drehen sich um dieselbe Frage:
 *Wovon hängt es ab, ob eedc etwas bewerten kann?*
 

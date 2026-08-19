@@ -102,6 +102,8 @@ export interface GeocodeResult {
   latitude: number
   longitude: number
   display_name: string
+  /** Ländercode aus der Nominatim-Antwort (DE/AT/CH/IT), sonst null (#386). */
+  erkanntes_land?: string | null
 }
 
 export type AnlageCreate = Omit<Anlage, 'id'>

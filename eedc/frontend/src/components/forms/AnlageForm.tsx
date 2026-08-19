@@ -147,6 +147,10 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
 
   // Track if user manually changed USt-Satz
   const [ustManuell, setUstManuell] = useState(false)
+  // #386: Wie `ustManuell` — das Geocoding darf ein von Hand gewähltes Land
+  // nicht überschreiben. Ohne dieses Flag wäre die Übernahme nicht von einem
+  // Zurücksetzen zu unterscheiden.
+  const [landManuell, setLandManuell] = useState(false)
 
   const [versorgerDaten, setVersorgerDaten] = useState<VersorgerDaten>(
     anlage?.versorger_daten || {}
@@ -177,11 +181,23 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
     try {
       const res = await anlagenApi.geocode(formData.standort_plz.trim(), formData.standort_ort.trim() || undefined)
       if (res?.latitude != null && res?.longitude != null) {
-        setFormData(prev => ({
-          ...prev,
-          latitude: res.latitude.toFixed(6), /* de-de-allow: Input-Value (editierbares number-Feld latitude) */
-          longitude: res.longitude.toFixed(6), /* de-de-allow: Input-Value (editierbares number-Feld longitude) */
-        }))
+        setFormData(prev => {
+          const next = {
+            ...prev,
+            latitude: res.latitude.toFixed(6), /* de-de-allow: Input-Value (editierbares number-Feld latitude) */
+            longitude: res.longitude.toFixed(6), /* de-de-allow: Input-Value (editierbares number-Feld longitude) */
+          }
+          // #386: Das erkannte Land übernehmen — dieselbe Regel wie bei den
+          // Koordinaten, nur was der Nutzer nicht selbst gesetzt hat. Vorher
+          // verwarf das Backend die Länderangabe und eedc stellte für einen
+          // österreichischen Ort unverändert „Deutschland" ein.
+          if (res.erkanntes_land && !landManuell && res.erkanntes_land !== prev.standort_land) {
+            next.standort_land = res.erkanntes_land
+            // Der USt-Satz folgt dem Land wie bei der Auswahl von Hand.
+            if (!ustManuell) next.ust_satz_prozent = UST_DEFAULTS[res.erkanntes_land] || '19'
+          }
+          return next
+        })
       }
     } catch {
       // still ignorieren — Nutzer kann Koordinaten manuell eintragen
@@ -202,6 +218,9 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
       }
       if (name === 'ust_satz_prozent') {
         setUstManuell(true)
+      }
+      if (name === 'standort_land') {
+        setLandManuell(true)
       }
       return next
     })

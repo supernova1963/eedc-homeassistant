@@ -1920,7 +1920,7 @@ Das verwendete Wettermodell ist pro Anlage konfigurierbar (`Anlage.wettermodell`
 
 | Wert | Modell | Auflösung | Einsatz |
 |------|--------|-----------|---------|
-| `auto` | Bright Sky (DWD) für DE, sonst Open-Meteo best_match | variabel | Standard |
+| `auto` | Bright Sky (DWD) für DE, sonst Open-Meteo best_match | variabel | Standard — maßgeblich ist seit #386 das gepflegte **Land**, nicht die Koordinaten-Box |
 | `meteoswiss_icon_ch2` | MeteoSwiss ICON-CH2 | 2 km | Alpine Standorte CH/AT/IT |
 | `icon_d2` | DWD ICON-D2 | 2,2 km | Deutschland (hochauflösend) |
 | `icon_eu` | DWD ICON-EU | ~7 km | Europa |

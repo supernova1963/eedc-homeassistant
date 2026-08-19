@@ -1059,8 +1059,8 @@ Ausgenommen von P10 sind die **Schreib-, Import- und Checker-Pfade** — sie sch
 
 | Provider | Region | Beschreibung |
 |----------|--------|--------------|
-| **auto** (Standard) | - | Automatische Auswahl basierend auf Standort |
-| **brightsky** | Deutschland | DWD-Daten via Bright Sky REST API (höchste Qualität) |
+| **auto** (Standard) | - | Automatische Auswahl: **`Anlage.standort_land`** entscheidet, ersatzweise die Koordinaten-Box (`nutze_brightsky`, #386) |
+| **brightsky** | Deutschland | DWD-Daten via Bright Sky REST API (höchste Qualität). **Stationsmessung** — liefert ein Monat keinen einzigen Strahlungstag, verwirft der Orchestrator das Ergebnis und geht weiter (sonst still 0,0 kWh/m²) |
 | **open-meteo** | Weltweit | Open-Meteo Archive API |
 | **open-meteo-solar** | Weltweit | Open-Meteo Solar mit GTI für geneigte Module |
 
