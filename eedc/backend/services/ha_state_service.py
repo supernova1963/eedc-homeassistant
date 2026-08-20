@@ -312,7 +312,7 @@ class HAStateService:
         entity_ids: list[str],
         start: datetime,
         end: Optional[datetime] = None,
-    ) -> dict[str, list[tuple[datetime, str]]]:
+    ) -> dict[str, list[tuple[datetime, str, Optional[str]]]]:
         """Zustands-Historie aus `/api/history/period` — der nicht-numerische Zweig.
 
         Schwester von `get_sensor_history`, die den Zustand als **String**
@@ -327,9 +327,22 @@ class HAStateService:
         einmal je Aggregationslauf, nicht im 5-Sekunden-Takt.
 
         Returns:
-            entity_id → ``[(zeitpunkt, roher_state), ...]``, nach Zeit sortiert.
-            Die Übersetzung in den Kanon macht der Aufrufer — hier steht, was
-            HA gesagt hat.
+            entity_id → ``[(zeitpunkt, roher_state, hvac_action|None), ...]``,
+            nach Zeit sortiert. Die Übersetzung in den Kanon macht der Aufrufer
+            — hier steht, was HA gesagt hat.
+
+        ⛔ **Zustand und Aktion bleiben GETRENNT — sie dürfen nicht in ein Feld
+        fallen.** Bis 2026-08-20 stand hier
+        ``points.append((ts, str(aktion) if aktion else str(state)))``: die
+        Aktion **ersetzte** den Zustand. Der Aufrufer normalisierte den Punkt
+        dann einargumentig, und die Aktions-Tabelle ``_AKTION_ZU_KANON`` ist
+        nur über den **zweiten** Parameter von `normalisiere_betriebsmodus`
+        erreichbar — den kein Produktivpfad übergab. Folge: ``cooling``,
+        ``heating``, ``defrosting``, ``drying`` und ``fan`` liefen alle in
+        ``unbestimmt``, und **jedes Gerät mit Ist-Signal verlor seine gesamte
+        Aufteilung** (Panasonic, Daikin, die meisten Luft-Wasser-Wärmepumpen).
+        Geräte **ohne** ``hvac_action`` waren nicht betroffen — *das bessere
+        Signal verschlechterte das Ergebnis.*
         """
         if not self.is_available or not entity_ids:
             return {}
@@ -368,7 +381,7 @@ class HAStateService:
                 entity_id = entity_history[0].get("entity_id", "")
                 if not entity_id:
                     continue
-                points: list[tuple[datetime, str]] = []
+                points: list[tuple[datetime, str, Optional[str]]] = []
 
                 for state_entry in entity_history:
                     state = state_entry.get("state") or state_entry.get("s")
@@ -376,7 +389,11 @@ class HAStateService:
                         continue
 
                     # `hvac_action` schlägt den eingestellten Modus, wo sie da
-                    # ist — dieselbe Vorrangregel wie im Live-Zweig.
+                    # ist — dieselbe Vorrangregel wie im Live-Zweig. Sie wird
+                    # hier NUR mitgeführt; angewendet wird sie erst in
+                    # `normalisiere_betriebsmodus(state, aktion)`. Wer sie hier
+                    # in den State schreibt, hebelt die Vorrangregel aus (s.
+                    # Docstring).
                     attrs = state_entry.get("attributes") or state_entry.get("a") or {}
                     aktion = attrs.get("hvac_action") if isinstance(attrs, dict) else None
 
@@ -398,7 +415,7 @@ class HAStateService:
                     except (ValueError, TypeError, OSError, OverflowError):
                         continue
 
-                    points.append((ts, str(aktion) if aktion else str(state)))
+                    points.append((ts, str(state), str(aktion) if aktion else None))
 
                 if points:
                     points.sort(key=lambda p: p[0])

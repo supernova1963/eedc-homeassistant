@@ -400,14 +400,21 @@ async def _get_betriebsmodus_history(
                 h_end = h_start + timedelta(hours=1)
 
                 # Zustand zu Beginn der Stunde = letzter Punkt davor.
-                laufend: Optional[str] = None
-                for ts, roh in punkte:
+                # ⚠ Zustand UND Aktion wandern als Paar mit: `hvac_action` ist
+                # der Ist-Betrieb und schlägt den eingestellten Modus — aber
+                # nur, wenn sie `normalisiere_betriebsmodus` als **zweites**
+                # Argument erreicht. Wer sie vorher in den Zustand faltet,
+                # verliert sie (s. `get_zustand_history`).
+                laufend: Optional[tuple[str, Optional[str]]] = None
+                for ts, roh, akt in punkte:
                     if ts < h_start:
-                        laufend = roh
+                        laufend = (roh, akt)
                     else:
                         break
 
-                in_stunde = [(ts, roh) for ts, roh in punkte if h_start <= ts < h_end]
+                in_stunde = [
+                    (ts, roh, akt) for ts, roh, akt in punkte if h_start <= ts < h_end
+                ]
                 if laufend is None and not in_stunde:
                     continue   # weder Vorgänger noch Punkt: nicht hingesehen.
 
@@ -417,12 +424,12 @@ async def _get_betriebsmodus_history(
                 dauer: dict[str, float] = {}
                 cursor = h_start
                 aktuell = laufend
-                for ts, roh in in_stunde:
-                    modus = normalisiere_betriebsmodus(aktuell)
+                for ts, roh, akt in in_stunde:
+                    modus = normalisiere_betriebsmodus(*aktuell) if aktuell else None
                     if modus is not None:
                         dauer[modus] = dauer.get(modus, 0.0) + (ts - cursor).total_seconds()
-                    cursor, aktuell = ts, roh
-                modus = normalisiere_betriebsmodus(aktuell)
+                    cursor, aktuell = ts, (roh, akt)
+                modus = normalisiere_betriebsmodus(*aktuell) if aktuell else None
                 if modus is not None:
                     dauer[modus] = dauer.get(modus, 0.0) + (h_end - cursor).total_seconds()
 

@@ -269,6 +269,15 @@ class _FakeHaService:
     (`True`) und ohne (`False`, dann trägt allein der Ein-Tag-Vorlauf im
     Produktcode). Ein Fake, der nur den bequemen Fall kennt, hätte den Vorlauf
     als unnötig erscheinen lassen.
+
+    ⛔ **Und ein Fake, der eine Spalte gar nicht kennt, deckt sie auch nicht
+    ab.** Bis 2026-08-20 lieferte dieser Fake **Paare** ``(ts, zustand)`` — die
+    `hvac_action` kam darin schlicht nicht vor. Damit konnte keine Probe hier
+    bemerken, dass der Produktivpfad sie verlor: er verlor etwas, das der Fake
+    nie geliefert hatte. Seither sind es **Tripel** ``(ts, zustand, aktion)``,
+    wie `get_zustand_history` sie zurückgibt. Fixtures dürfen weiterhin Paare
+    schreiben (dann ist die Aktion ``None``) — wer die Aktion prüfen will,
+    schreibt sie als drittes Element hin.
     """
 
     def __init__(self, historie: dict, *, rand_liefern: bool = True):
@@ -277,16 +286,21 @@ class _FakeHaService:
         self.is_available = True
         self.gefragt: list[str] = []
 
+    @staticmethod
+    def _tripel(punkt):
+        """Fixture-Punkt → ``(ts, zustand, aktion)``; Paare bekommen ``None``."""
+        return punkt if len(punkt) == 3 else (punkt[0], punkt[1], None)
+
     async def get_zustand_history(self, entity_ids, start, end):
         self.gefragt = list(entity_ids)
         ergebnis = {}
         for eid in entity_ids:
-            punkte = self._historie.get(eid, [])
-            im_fenster = [(ts, w) for ts, w in punkte if start <= ts < end]
+            punkte = [self._tripel(p) for p in self._historie.get(eid, [])]
+            im_fenster = [(ts, w, a) for ts, w, a in punkte if start <= ts < end]
             if self._rand_liefern:
-                davor = [(ts, w) for ts, w in punkte if ts < start]
+                davor = [(ts, w, a) for ts, w, a in punkte if ts < start]
                 if davor:
-                    im_fenster = [(start, davor[-1][1]), *im_fenster]
+                    im_fenster = [(start, davor[-1][1], davor[-1][2]), *im_fenster]
             ergebnis[eid] = im_fenster
         return ergebnis
 
@@ -582,3 +596,120 @@ async def test_s1_checker_bestaetigt_die_zugeordnete_klimaanlage(db):
 async def test_s1_checker_laesst_stillgelegte_geraete_in_ruhe(db):
     """Ein abgemeldetes Gerät braucht keine Sensor-Zuordnung mehr."""
     assert await _checker_meldungen(db, wp_art="luft_luft", mapping={}, aktiv=False) == []
+
+
+# ============================================================================
+# F — der Ist-Betrieb überlebt den Weg von HA bis in die Stundenzeile
+#
+# ⛔ **Warum diese zwei Proben existieren, obwohl `test_s1_hvac_action_*`
+# schon grün war.** Jene prüft `normalisiere_betriebsmodus("heat", "cooling")`
+# — eine Signatur, die **kein Produktivpfad benutzte**. Der Pfad faltete die
+# Aktion vorher in den Zustand (`get_zustand_history`) und normalisierte dann
+# einargumentig; `_AKTION_ZU_KANON` war damit unerreichbar, und `cooling`
+# landete über den `_ZUSTAND_ZU_KANON`-Default in `unbestimmt`. **Jedes Gerät
+# mit Ist-Signal verlor seine gesamte Aufteilung** — Panasonic, Daikin, die
+# meisten Luft-Wasser-Wärmepumpen. Ein Gerät ohne `hvac_action` war korrekt:
+# *das bessere Signal verschlechterte das Ergebnis.*
+#
+# Die Lehre steckt in der Aufteilung der zwei Proben: eine prüft die **Naht zu
+# HA** (rohe Antwort → getrennte Felder), die andere den **ganzen Weg** bis in
+# `betriebsmodus_je_wp`. Eine Probe auf die Funktion allein hätte beides wieder
+# nicht gesehen.
+# ============================================================================
+
+async def test_f_die_ha_antwort_haelt_zustand_und_aktion_getrennt():
+    """Naht zu HA: `hvac_action` darf den Zustand nicht ersetzen.
+
+    Das ist die Stelle, an der der Fehler saß — die Aktion wurde **anstelle**
+    des Zustands in den Punkt geschrieben. Danach war nicht mehr
+    unterscheidbar, ob `cool` der eingestellte Modus oder ein Ist-Betrieb war,
+    und die Aktions-Tabelle blieb unerreichbar.
+    """
+    import httpx
+
+    from backend.services.ha_state_service import HAStateService
+
+    antwort = [[
+        {
+            "entity_id": "climate.k",
+            "state": "cool",
+            "attributes": {"hvac_action": "cooling"},
+            "last_changed": "2025-06-15T08:00:00",
+        },
+        {
+            "state": "cool",
+            "attributes": {"hvac_action": "idle"},
+            "last_changed": "2025-06-15T09:00:00",
+        },
+    ]]
+
+    # `is_available` ist eine Property über `token` — der Token macht sie wahr.
+    service = HAStateService.__new__(HAStateService)
+    service.api_url = "http://ha.invalid/api"
+    service.token = "t"
+    assert service.is_available
+
+    class _Antwort:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return antwort
+
+    class _Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return False
+
+        async def get(self, *_a, **_k):
+            return _Antwort()
+
+    import unittest.mock
+
+    with unittest.mock.patch.object(httpx, "AsyncClient", _Client):
+        punkte = (await service.get_zustand_history(
+            ["climate.k"], datetime(2025, 6, 15, 0, 0),
+        ))["climate.k"]
+
+    # Drei Felder, nicht zwei — und der Zustand bleibt der Zustand.
+    assert [(p[1], p[2]) for p in punkte] == [("cool", "cooling"), ("cool", "idle")]
+
+
+async def test_f_der_ist_betrieb_erreicht_die_stundenzeile(db, monkeypatch):
+    """Der ganze Weg: HA-Historie mit `hvac_action` → `betriebsmodus_je_wp`.
+
+    Die Anlage steht durchgehend auf `cool`. Von 00:00 bis 10:00 kühlt sie
+    tatsächlich (`cooling`), danach wartet sie (`idle`) — Standby, kein
+    Kühlbetrieb.
+
+    **Der Sprengsatz:** Vor dem Fix stand in JEDER Stunde `unbestimmt`, weil
+    die Aktion den Zustand ersetzte und `cooling` unbekanntes Vokabular war.
+    Ein Prüfer, der nur „nicht leer" verlangt hätte, wäre grün geblieben.
+    """
+    ergebnis, ids, _ = await _modus_je_stunde(
+        db, monkeypatch,
+        historie={"climate.k": [
+            (_t(0, 0), "cool", "cooling"),
+            (_t(10, 0), "cool", "idle"),
+        ]},
+        mapping=lambda ids: {"investitionen": {
+            str(ids[0]): {"live": {"betriebsmodus": "climate.k"}}
+        }},
+    )
+
+    assert ergebnis[5][ids[0]] == KUEHLEN, "Ist-Betrieb `cooling` muss Kühlen ergeben"
+    assert ergebnis[20][ids[0]] == UNBESTIMMT, "`idle` ist weder Kühlen noch Aus"
+
+    # Und die Gegenprobe, die den Unterschied trägt: DIESELBE Historie ohne
+    # Ist-Signal ist eine reine Kühlstunde — auch nach 10:00. Wer die Aktion
+    # ignoriert, bekommt genau das und merkt nichts.
+    ohne_aktion, ids2, _ = await _modus_je_stunde(
+        db, monkeypatch,
+        historie={"climate.k": [(_t(0, 0), "cool")]},
+        mapping=lambda ids: {"investitionen": {
+            str(ids[0]): {"live": {"betriebsmodus": "climate.k"}}
+        }},
+    )
+    assert ohne_aktion[20][ids2[0]] == KUEHLEN

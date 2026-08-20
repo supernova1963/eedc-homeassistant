@@ -7,6 +7,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Der Ist-Betrieb einer Klimaanlage kam in der Aufteilung nicht an** — betroffen ist **jedes Gerät, dessen Integration den laufenden Betrieb meldet** (`hvac_action`): Panasonic, Daikin und die meisten Luft-Wasser-Wärmepumpen. Bei ihnen landete die **gesamte** Heizen/Kühlen-Aufteilung in „nicht aufgeteilt", statt auf die beiden Seiten zu gehen.
+  - **Die Ursache war eine Vorrangregel, die sich selbst aushebelte.** eedc liest zwei Dinge: den *eingestellten* Modus (`cool`) und, wo vorhanden, den *laufenden* Betrieb (`cooling`, `idle`). Der laufende Betrieb soll den eingestellten schlagen — er weiß, ob das Gerät gerade wirklich kühlt oder nur wartet. Beim Lesen der Historie wurde er aber **anstelle** des Modus eingetragen; danach war nicht mehr unterscheidbar, welches von beidem vorlag, und die Vokabeln des laufenden Betriebs (`heating`, `cooling`, `defrosting`, `drying`, `fan`) waren an dieser Stelle unbekannt. Alles davon wurde zu **„unbestimmt"**.
+  - ⚠ **Geräte ohne dieses Signal waren nie betroffen** — eine Mitsubishi-Anlage über MELCloud etwa hat den laufenden Betrieb gar nicht, ihr eingestellter Modus wurde immer richtig gebucht. **Das bessere Signal führte zum schlechteren Ergebnis.**
+  - ⚠ **Still war es obendrein:** Unter *Einstellungen → Datenquellen* stand beim Betriebsmodus der richtige Klartext („Kühlen (cool)"), weil die Fläche den Momentanwert anders liest als die Aufzeichnung. Wer dort nachsah, sah keinen Fehler.
+  - ✅ **Keine Zahl der Energiebilanz war betroffen.** Der Stromverbrauch der Wärmepumpe ist und bleibt die einzige Bilanzgröße; Heizen und Kühlen sind Teilmengen daneben. Falsch war ausschließlich deren Aufteilung.
+  - **Was du tun kannst, wenn du betroffen warst:** Die Aufteilung repariert sich für alle Tage, die du über *Einstellungen → Daten → Energieprofil* neu berechnen lässt — **soweit die Historie in Home Assistant noch reicht**. Bei der Standardeinstellung sind das etwa 10 Tage, mit erhöhter Aufbewahrungsdauer entsprechend mehr. Ältere Monate lassen sich nicht nachträglich aufteilen: Home Assistant hält Gerätezustände nicht dauerhaft vor.
+
+---
+
 ## [4.0.23] - 2026-08-20 — Was zählt, und was nicht
 
 ### Added
