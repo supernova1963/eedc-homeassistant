@@ -245,11 +245,57 @@ Hersteller/Modell/Seriennummer/Garantie, Ansprechpartner und Wartungsvertrag sin
 - **Wärmepumpe:** **JAZ** (Standardwert, falls kein Wärmemengenzähler), **Alternativkosten** (Gas/Öl als Mehrkosten-Basis), **jährliche Zusatzkosten der Alt-Heizung** (Schornsteinfeger, Wartung, Gaszähler-Grundpreis), **Alt-Tarif Gas/Öl** (ct/kWh, Fallback wenn ein Monat keinen eigenen Gaspreis führt).
 - **Wallbox:** max. Ladeleistung (kW), bidirektional.
 - **Wechselrichter:** max. Leistung (kW), MaStR-ID.
-- **Sonstiges:** Kategorie (Erzeuger / Verbraucher / Speicher) + Beschreibung; die Monatsdaten-Felder passen sich der Kategorie an.
+- **Sonstiges:** Kategorie (Erzeuger / Verbraucher / Speicher / **Verbrauchszähler**) + Beschreibung; die Monatsdaten-Felder passen sich der Kategorie an.
 
   > **Zweiter Erzeuger mit eigenem Einspeisetarif.** eedc kennt genau **einen** Einspeisesatz je Anlage — für einen Erzeuger, der anders vergütet wird (zweiter Wechselrichter, Erweiterung mit neuem EEG-Satz), gibt es bei Kategorie *Erzeuger* das Feld **„Einspeise-Erlös (€)"**. Trag den Betrag entweder im Monatsabschluss ein oder — besser — ordne ihm unter [Datenquellen](#7-datenquellen--feld-zentrische-zuordnung) einen Sensor zu: ein **Helfer in Home Assistant**, der den Erlös mit deinem Satz aufsummiert, am besten als Verbrauchszähler **ohne Zyklus** (nie zurücksetzen — eedc bildet die Monatswerte aus der Differenz). Rechnest du per Template, gib dem Sensor `state_class: total_increasing` und `device_class: monetary` mit, damit er in der Auswahl erscheint.
   >
   > ⚠ **Der Betrag kommt zusätzlich** und wird **nicht** gegen den Einspeise-Erlös der Anlage gerechnet: Zwei Vergütungssätze bedeuten zwei Messungen, in den Einspeisezähler der Anlage gehört also nur die Menge, die zum Anlagentarif abgerechnet wird. Wer den Erlös bisher monatlich als *sonstigen Ertrag* gebucht hat, lässt das ab dem Umstiegsmonat weg — sonst zählt derselbe Betrag zweimal.
+
+### 3.4a Verbrauchszähler für Gas, Öl und Wasser (#377)
+
+Unter *Sonstiges* gibt es die Kategorie **Verbrauchszähler**. Sie ist für die
+Zähler gedacht, die neben dem Strom im Haus laufen: Gas, Heizöl, Flüssiggas,
+Pellets, Wasser.
+
+**Was eedc damit macht — und was ausdrücklich nicht.**
+
+eedc führt den **Zählerstand** mit, also genau die Zahl, die auf dem Zähler
+steht. Die einzige Rechnung darauf ist die Differenz zwischen Anfang und Ende
+des Zeitraums, den du gerade ansiehst. Mehr passiert nicht:
+
+| eedc zeigt | eedc rechnet **nicht** |
+| --- | --- |
+| Aktueller Stand (Live, *Auf einen Blick*) | Energiebilanz, Autarkie, Eigenverbrauchsquote |
+| Stand am Anfang/Ende und die Differenz (Cockpit Tag/Monat/Jahr) | Wirtschaftlichkeit, Amortisation, Netto-Ertrag |
+| Verlauf über den Gesamtzeitraum (Komponenten → Sonstiges) | CO₂-Bilanz |
+| Eine Spalte je Zähler in den Tabellen (wählbar) | Gemeinschaftsdaten (dort ist alles Strom) |
+
+**Warum so streng?** Gas- oder Wasserkosten sind Haushaltskosten. Sie in die
+Rechnung der PV-Anlage zu ziehen, machte deren Zahlen unbrauchbar — und für
+einen echten Effizienzvergleich (vor/nach einer Modernisierung) bräuchte eedc
+die Heizung als eigene Komponente mit Wirkungsgrad und Wärmemenge. Sonst stünden
+Kubikmeter gegen Kilowattstunden.
+
+**Einheit.** Beim Anlegen wählst du, was gezählt wird (Gas, Wasser, Heizöl …)
+und in welcher Einheit (m³, l, kg, t, kWh). Beides ist **reine Anzeige**: Die
+Einheit steht neben der Zahl, und eedc rechnet nichts um. Wer seinen Gaszähler
+in kWh abliest, trägt kWh ein — in die Strombilanz kommt der Wert trotzdem
+nicht.
+
+**Woher der Stand kommt.** Entweder aus einem Sensor (unter *Datenquellen*
+zuordnen — dann schreibt eedc stündlich mit), oder du trägst ihn im
+**Monatsabschluss** von Hand ein: das Feld heißt *Zählerstand*. Wo ein Sensor
+läuft, wird der mitgeschriebene Stand als Vorschlag angeboten.
+
+> ⚠ **Zählerwechsel: das alte Gerät stilllegen, ein neues anlegen.**
+> Setz beim alten Zähler ein **Stilllegungsdatum** — und lass ihn dabei
+> **aktiv**. Dann bleibt seine Ablesehistorie in allen Auswertungen erhalten, in
+> deren Zeitraum er gemessen hat, und der Verbrauch über den Wechsel hinweg ist
+> sauber die Summe beider Differenzen.
+>
+> ⛔ **Nicht** den Haken *aktiv* entfernen: Das bedeutet in eedc „wie gelöscht"
+> und blendet das Gerät **auch rückwirkend** aus jeder Sicht aus. Die alten
+> Ablesungen wären dann weg, obwohl sie gemessen wurden.
 
 ### 3.5 Balkonkraftwerk mit mehreren Ausrichtungen — und wann Wechselrichter + PV-Module?
 

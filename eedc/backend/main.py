@@ -87,6 +87,7 @@ from backend.api.routes import (
     dokumentation,
     korrekturprofil,
     repair,
+    zaehlerstaende,
     ha_remote,
     datenquellen,
 )
@@ -523,6 +524,10 @@ app.include_router(
     korrekturprofil.router, prefix="/api/korrekturprofil", tags=["Korrekturprofil"]
 )
 app.include_router(repair.router, prefix="/api/repair", tags=["Reparatur-Werkbank"])
+# #377 — Verbrauchszähler (Gas/Wasser/Heizöl): eine Route für alle vier Anzeigen.
+app.include_router(
+    zaehlerstaende.router, prefix="/api/zaehlerstaende", tags=["Zählerstände"]
+)
 
 # =============================================================================
 # API Routes - MQTT-Export (IMMER — auch Standalone)

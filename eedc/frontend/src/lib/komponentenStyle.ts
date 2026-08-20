@@ -162,6 +162,21 @@ export const SONSTIGES_VERBRAUCHER_KPI = {
   pvErsparnis: { title: 'PV-Ersparnis', icon: Leaf,       color: 'green' as const },
 } as const satisfies Record<string, KpiStyle>
 
+/** Sonstiges/Zähler: Stand · Verbrauch im Zeitraum (#377).
+ *
+ *  Nur ZWEI Kennzahlen, und das ist die Aussage: Ein Verbrauchszähler wird
+ *  erfasst, nicht bewertet — es gibt weder Ersparnis noch CO₂ noch einen
+ *  PV-Anteil. Vier Kacheln zu füllen, indem man Nullen hineinschreibt, ist
+ *  genau der v4.0.17-Befund bei der Klimaanlage.
+ *
+ *  Farbe **neutral (gray)**: Jede andere Farbe im Kanon steht für eine
+ *  Datenrolle in der Energie-, Geld- oder CO₂-Rechnung. Ein Zählerstand hat
+ *  keine solche Rolle. */
+export const SONSTIGES_ZAEHLER_KPI = {
+  stand:     { title: 'Zählerstand', icon: Gauge, color: 'gray' as const },
+  verbrauch: { title: 'Verbrauch',   icon: Zap,   color: 'gray' as const },
+} as const satisfies Record<string, KpiStyle>
+
 /** Sonstiges/Speicher: Ladung · Entladung · Effizienz · Ersparnis */
 export const SONSTIGES_SPEICHER_KPI = {
   ladung:    { title: 'Ladung',    icon: Battery,    color: 'purple' as const },

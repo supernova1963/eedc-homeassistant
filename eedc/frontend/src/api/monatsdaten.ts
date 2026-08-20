@@ -66,6 +66,11 @@ export interface AggregierteMonatsdaten {
   anlage_id: number
   jahr: number
   monat: number
+  /**
+   * #377 — Zählerstand je Verbrauchszähler (Investitions-ID → Stand) am
+   * Monatsende. **Bestandsgröße**: nirgends mitsummiert, nicht Teil der Bilanz.
+   */
+  zaehler_stand?: Record<string, number> | null
   // Zählerwerte (aus Monatsdaten)
   einspeisung_kwh: number
   netzbezug_kwh: number

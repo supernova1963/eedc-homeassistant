@@ -14,7 +14,7 @@
  * NICHT roh notiert, sondern aus `COLOR_CLASSES` (`lib/komponentenStyle`, der
  * EINEN 8er-Farbklassen-Definition; Werte aus `lib/colors.ts`) bezogen.
  */
-import { Activity, Scale, LineChart, Table2, Euro, Users, CloudSun, CalendarRange, TrendingDown, Flame, Leaf } from 'lucide-react'
+import { Activity, Scale, LineChart, Table2, Euro, Users, CloudSun, CalendarRange, TrendingDown, Flame, Leaf, Gauge } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { COLOR_CLASSES } from './komponentenStyle'
 
@@ -26,6 +26,8 @@ export type BlockKind =
   | 'finanzen'
   | 'community'
   | 'co2'
+  // #377 — Verbrauchszähler (Gas/Wasser/Öl). Erfasst, nicht bewertet.
+  | 'zaehlerstaende'
   // Cockpit/Aussicht (A.4) — Projektions-Blöcke
   | 'wetter'
   | 'saison'
@@ -58,4 +60,9 @@ export const BLOCK_IDENTITAET: Record<BlockKind, BlockIdentitaet> = {
   saison:         { icon: CalendarRange }, // neutral
   degradation:    { icon: TrendingDown }, // neutral
   wpAussicht:     { icon: Flame, farbe: COLOR_CLASSES.red.text }, // WP-Identität (rot, dokumentiert)
+  // #377: bewusst NEUTRAL (ohne Farbe). Jede Farbe im Kanon steht für eine
+  // Datenrolle in der Energie-/Geld-/CO₂-Rechnung — ein Zählerstand hat keine
+  // solche Rolle, er wird nicht verrechnet. Ihm eine Rollenfarbe zu geben,
+  // hieße ihn optisch zu einer Bilanzgröße zu machen.
+  zaehlerstaende: { icon: Gauge },
 }

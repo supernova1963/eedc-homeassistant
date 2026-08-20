@@ -531,7 +531,7 @@ export interface SonstigesDashboardResponse {
   investition: Investition
   monatsdaten: InvestitionMonatsdaten[]
   zusammenfassung: {
-    kategorie: 'erzeuger' | 'verbraucher' | 'speicher'
+    kategorie: 'erzeuger' | 'verbraucher' | 'speicher' | 'zaehler'
     beschreibung: string
     // Erzeuger-Felder
     gesamt_erzeugung_kwh?: number
@@ -552,6 +552,23 @@ export interface SonstigesDashboardResponse {
     gesamt_entladung_kwh?: number
     effizienz_prozent?: number
     ersparnis_euro?: number
+    // Zähler-Felder (#377) — erfasst, nicht bewertet. Sie stehen bewusst
+    // OHNE `gesamt_*`-Nachbarn: Für einen Gas- oder Wasserzähler gibt es keine
+    // Ersparnis und kein CO₂, und ein Feld mit 0 wäre eine Behauptung.
+    zaehler_art?: string
+    /** Die Einheit, die neben der Zahl steht — vom Gerät, nie zum Rechnen. */
+    einheit?: string
+    stand_anfang?: number | null
+    stand_ende?: number | null
+    /** `null`, wenn ein Stand fehlt — nicht 0 (ADR-002/P4). */
+    differenz?: number | null
+    anfang_vollstaendig?: boolean
+    verlauf?: Array<{ zeitpunkt: string; stand: number }>
+    /** Verbrauch je Monat (Flussgröße, im Backend gerechnet). */
+    monatsverbrauch?: Array<{ jahr: number; monat: number; verbrauch: number; stand: number }>
+    /** `false` = nicht bewertbar, nicht bloß unbekannt. */
+    bewertet?: boolean
+    nicht_bewertet_grund?: string
     // Gemeinsame Felder
     gesamt_ersparnis_euro?: number
     co2_ersparnis_kg?: number

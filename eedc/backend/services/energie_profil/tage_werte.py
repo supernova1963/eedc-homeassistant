@@ -35,8 +35,9 @@ und Auswertungen → CO₂. Die Spalte heißt im Client deshalb „CO₂-Einspar
 
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime
 
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -65,6 +66,9 @@ from backend.models.monatsdaten import Monatsdaten
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 from backend.services.einspeise_erloes_service import neg_preis_einspeisung_tageswert
 from backend.services.finanz_zeilen import FinanzZeileEingabe, baue_finanz_zeile
+from backend.services.zaehlerstaende import lade_zaehlerstaende
+
+logger = logging.getLogger(__name__)
 
 
 async def baue_tage_werte(
@@ -146,6 +150,27 @@ async def baue_tage_werte(
     md_pro_monat: dict[tuple[int, int], Monatsdaten] = {
         (m.jahr, m.monat): m for m in md_result.scalars().all()
     }
+
+    # #377 — Zählerstände je Tag. **Einmal** für den ganzen Zeitraum geladen und
+    # dann je Tag ausgewertet: eine Abfrage je Tag wären bei einem Jahr 365.
+    #
+    # Der Wert einer Tageszeile ist der **letzte Stand des Tages** — ein
+    # Zählerstand ist eine Bestandsgröße, kein Tagesumsatz. Was sich am Tag
+    # bewegt hat, ist die Differenz zum Vortag, und die bildet der Client aus
+    # zwei benachbarten Zeilen; hier steht der Stand selbst.
+    zaehler_stand_pro_tag: dict[date, dict[str, float]] = defaultdict(dict)
+    try:
+        for _zf in await lade_zaehlerstaende(
+            db, anlage_id,
+            datetime.combine(von, datetime.min.time()),
+            datetime.combine(bis, datetime.max.time()),
+            mit_verlauf=True, nur_aktive=False,
+        ):
+            for _p in _zf.verlauf:
+                # Späterer Punkt gewinnt — der Verlauf ist aufsteigend sortiert.
+                zaehler_stand_pro_tag[_p.zeitpunkt.date()][str(_zf.investition_id)] = _p.stand
+    except Exception:  # pragma: no cover - eine Zusatzspalte kippt die Tabelle nicht
+        logger.exception("Zählerstände für die Tages-Tabelle nicht ladbar")
 
     alle_tage = sorted(set(tep_pro_tag) | set(tz_pro_tag))
     tarif_cache: dict[date, dict] = {}
@@ -372,6 +397,10 @@ async def baue_tage_werte(
             # Spalte „Dach Süd" eine Behauptung über eine Messung, die es nicht
             # gibt (#352-Klasse).
             erzeuger_kwh={k: round(v, 3) for k, v in erzeuger_kwh.items()} or None,
+            # #377: der Stand am Ende dieses Tages, je Zähler-Gerät.
+            zaehler_stand={
+                k: round(v, 3) for k, v in zaehler_stand_pro_tag.get(tag, {}).items()
+            } or None,
         ))
 
     return zeilen

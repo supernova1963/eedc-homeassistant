@@ -453,6 +453,35 @@ INVESTITION_FELDER: dict = {
                 "hinweis": "In den Speicher geladene Energie (kWh, kumulativer Zähler oder Tagessensor).",
             },
         ],
+        # #377 / N-294 — Verbrauchszähler für Gas, Öl, Wasser: **erfassen und
+        # anzeigen, nicht bewerten.** Die Kategorie führt genau EINEN Wert, den
+        # **Zählerstand**; die einzige Rechnung darauf ist `Ende − Anfang` des
+        # betrachteten Fensters. Die Einheit hängt am **Gerät**
+        # (`zaehler_einheit`), nicht am Feld — deshalb steht hier `""`.
+        #
+        # ⚑ **Die leere Einheit IST die Sicherung, nicht eine Auslassung.**
+        # `einheit_klasse("")` ist `None` (s. u.) ⇒ das Feld kann strukturell
+        # nie als Energie gelesen werden: es fällt aus
+        # `kumulative_zaehler_felder_je_typ()` heraus, aus der Energiebilanz,
+        # aus Autarkie/Eigenverbrauch, aus dem Community-Datensatz. Wer hier
+        # „m³" oder gar „kWh" einträgt — auch „nur der Klarheit halber" —,
+        # hebt genau diesen Schutz auf und lässt Gas in die Strombilanz laufen.
+        # Die Anzeige-Einheit kommt aus `einheit_fuer(feld, investition)`.
+        "zaehler": [
+            {
+                "feld": "zaehlerstand", "label": "Zählerstand", "einheit": "",
+                "einheit_je_geraet": "zaehler_einheit",
+                "csv_suffix": "Zaehlerstand",
+                "hinweis": (
+                    "Der abgelesene Zählerstand — die Zahl, die auf dem Zähler steht "
+                    "(Gas, Wasser, Heizöl …). eedc rechnet daraus nur die Differenz "
+                    "zwischen Anfang und Ende des angezeigten Zeitraums; in "
+                    "Energiebilanz, Autarkie, Wirtschaftlichkeit und CO₂ geht der Wert "
+                    "bewusst nicht ein. Aus einem Sensor (stündlich) oder im "
+                    "Monatsabschluss von Hand."
+                ),
+            },
+        ],
     },
 }
 
@@ -784,6 +813,42 @@ ZUSTAND_LIVE_FELDER: frozenset[tuple[str, str]] = frozenset(
 ZUSTAND_FELD_KEYS: frozenset[str] = frozenset(key for _, key in ZUSTAND_LIVE_FELDER)
 
 
+def einheit_fuer(feld: str, investition=None) -> str:
+    """Die Einheit, die neben diesem Wert stehen soll — **der eine Leser** (#377).
+
+    Für fast jedes Feld steht sie fest in der Registry (`FELD_EINHEITEN`). Für
+    den **Zählerstand** nicht: Er ist einheitenlos gespeichert, und was daneben
+    steht (m³, l, kg, t, kWh), hängt am **Gerät** — ein Haushalt kann einen
+    Gaszähler in m³ und einen Wasserzähler in m³ und einen Öltank in Litern
+    führen.
+
+    **Warum die Eigenschaft am Feld steht und nicht als `if feld ==`:**
+    dieselbe Bauform wie `ZUSTAND_LIVE_FELDER`/`ist_zustand_feld` (#263 K-2) —
+    *Eigenschaft am Feld, abgeleitete Menge, ein Leser*. Ein zweites Feld mit
+    geräteabhängiger Einheit kostet damit einen Registry-Eintrag
+    (`einheit_je_geraet: "<param>"`) und keine neue Verzweigung.
+
+    ⚠ **Die Einheit ist Anzeige, nie Rechnung.** eedc rechnet Zählerstände
+    grundsätzlich nicht um. Wer sein Gerät von m³ auf kWh umstellt, ändert das
+    Wort neben der Zahl — die Zahl bleibt, wie der Zähler sie meldet.
+    """
+    param_key = FELD_EINHEIT_JE_GERAET.get(feld)
+    if param_key:
+        if investition is not None:
+            wert = (getattr(investition, "parameter", None) or {}).get(param_key)
+            if wert:
+                return str(wert)
+        # Gerät ohne gepflegte Einheit: der Registry-Default gilt. Lokaler
+        # Import, weil `investition_parameter` die Defaults führt und ein
+        # Top-Level-Import dieses Basis-Modul an es binden würde.
+        from backend.core.investition_parameter import PARAM_SONSTIGES_DEFAULTS
+
+        standard = PARAM_SONSTIGES_DEFAULTS.get(param_key)
+        if standard:
+            return str(standard)
+    return FELD_EINHEITEN.get(feld, "")
+
+
 def ist_zustand_feld(feld: str, typ: Optional[str] = None) -> bool:
     """Ist dieses Live-Feld ein Zustand statt einer Zahl? — siehe {@link ZUSTAND_LIVE_FELDER}.
 
@@ -1061,6 +1126,41 @@ ALLE_MONATSDATEN_FELDNAMEN: set[str] = {
 # Funktion (N-250).
 SONSTIGES_KATEGORIE_UNGEPFLEGT: Final[str] = "verbraucher"
 
+# ─── Der dritte Zustand: Kategorien OHNE Stromrichtung (#377 / N-294) ────────
+#
+# *Sonstiges* war bis v4.0.22 **binär**: eine Kategorie ist entweder Erzeuger
+# oder Verbraucher, und wer keine gepflegt hat, wird als Verbraucher gelesen
+# (`SONSTIGES_KATEGORIE_UNGEPFLEGT`, neun Stellen — N-244). Ein **Zähler** ist
+# weder das eine noch das andere: er trägt gar keine Stromrichtung, weil er gar
+# keinen Strom führt. Ihn in eine der beiden Schubladen zu legen, hieße Gas oder
+# Wasser in die Hausstrom-Aufschlüsselung zu geben.
+#
+# **Diese Konstante ist DER EINE ORT dafür.** Jede Stelle, die „ist das ein
+# Erzeuger oder ein Verbraucher?" fragt, fragt zuerst hier — statt an neun
+# Stellen `if kategorie == "zaehler"` zu schreiben, was die N-244-Wette ein
+# zweites Mal wäre. Präzedenz im Baum: die Kategorie `speicher`, die
+# `berechnungen.energie.sonstiges_kwh_je_richtung` bereits überspringt.
+#
+# ⚠ Eine Kategorie hier einzutragen heißt: sie taucht in **keiner**
+# Energie-Rechnung auf. Wer eine hinzufügt, prüft die Stellen aus
+# `test_377_zaehlerstaende.py` mit.
+SONSTIGES_ZAEHLER_KATEGORIEN: Final[frozenset[str]] = frozenset({"zaehler"})
+
+#: Der eine Feldname der Kategorie — ausgeschrieben statt aus der Registry
+#: gezogen, weil dieses Projekt von der Grep-Barkeit lebt. Dass beide
+#: übereinstimmen, hält `test_377_zaehlerstaende.py` fest.
+ZAEHLERSTAND_FELD: Final[str] = "zaehlerstand"
+
+
+def ist_zaehler_kategorie(kategorie: Optional[str]) -> bool:
+    """Trägt diese *Sonstiges*-Kategorie einen Zählerstand statt Strom?
+
+    Die eine Frage hinter {@link SONSTIGES_ZAEHLER_KATEGORIEN} — als Funktion,
+    damit die Aufrufer nicht das Set importieren und dabei die Prüfung selbst
+    formulieren (dieselbe Begründung wie bei `ist_zustand_feld`).
+    """
+    return kategorie in SONSTIGES_ZAEHLER_KATEGORIEN
+
 
 def ist_gepflegte_sonstiges_kategorie(kategorie: Optional[str]) -> bool:
     """Ist ``kategorie`` eine **gepflegte** Kategorie eines *Sonstiges*-Geräts?
@@ -1087,10 +1187,18 @@ def _sonstiges_felder_ungepflegt() -> list[dict]:
     **Abgeleitet statt geschrieben, aus demselben Grund wie N-259:** eine
     handgepflegte vierte Feldliste wäre wieder die Wette darauf, dass jemand
     sie beim nächsten neuen Feld mitzieht.
+
+    ⛔ **Zähler-Kategorien sind ausgenommen** (#377): Diese Liste beantwortet
+    „welche Felder könnte ein Gerät führen, dessen Kategorie noch **nicht
+    gepflegt** ist?" — und ein Zählerstand gehört nie dazu. Ohne die Ausnahme
+    böte die Zuordnungsfläche eines kategorielosen Geräts `zaehlerstand` neben
+    den Strom-Feldern an, und der Anwender ordnete einen Gassensor einem Gerät
+    zu, das eedc anschließend als Verbraucher liest: **N-244 ein zweites Mal.**
     """
     sonstiges = INVESTITION_FELDER.get("sonstiges", {})
     reihenfolge = [SONSTIGES_KATEGORIE_UNGEPFLEGT] + [
-        k for k in sonstiges if k != SONSTIGES_KATEGORIE_UNGEPFLEGT
+        k for k in sonstiges
+        if k != SONSTIGES_KATEGORIE_UNGEPFLEGT and not ist_zaehler_kategorie(k)
     ]
     gesehen: set[str] = set()
     out: list[dict] = []
@@ -1279,6 +1387,28 @@ def build_feld_einheiten() -> dict[str, str]:
 
 # Vorgefertigtes Einheiten-Dict (einmalig berechnet)
 FELD_EINHEITEN: dict[str, str] = build_feld_einheiten()
+
+
+def _build_einheit_je_geraet() -> dict[str, str]:
+    """`{feld: parameter-schlüssel}` für Felder mit **geräteabhängiger** Einheit.
+
+    **Abgeleitet aus der Registry, nicht danebengeschrieben** — dieselbe
+    Begründung wie bei `ZUSTAND_LIVE_FELDER` (#263 K-2) und `_sonstiges_felder_
+    ungepflegt` (N-259): eine handgepflegte zweite Liste ist die Wette darauf,
+    dass jemand sie beim nächsten Feld mitzieht.
+    """
+    out: dict[str, str] = {}
+    for felder in INVESTITION_FELDER.values():
+        listen = list(felder.values()) if isinstance(felder, dict) else [felder]
+        for liste in listen:
+            for f in liste:
+                if f.get("einheit_je_geraet"):
+                    out[f["feld"]] = f["einheit_je_geraet"]
+    return out
+
+
+#: Felder, deren Einheit erst am Gerät feststeht (#377). Leser: `einheit_fuer`.
+FELD_EINHEIT_JE_GERAET: dict[str, str] = _build_einheit_je_geraet()
 
 
 # ─── Einheiten-Dimension (SoT für Leistung↔Energie-Verwechslung) ────────────
@@ -1578,7 +1708,17 @@ def sonstiges_feld_reihenfolge(kategorie: str | None) -> tuple[str, ...]:
     Der Monat kam trotzdem an (dieser Getter liest beide), der Tageswert nicht —
     es sah nach „Wert fehlt" aus statt nach „Feld wird nirgends gefunden".
     Eine vierte Kopie wäre dieselbe Wette noch einmal.
+
+    ⚠ **Ein Zähler liefert `()` — und das ist kein Sonderfall, sondern die
+    Antwort auf die gestellte Frage** (#377): Diese Funktion nennt die
+    **Energie**-Felder eines Geräts, und ein Gaszähler hat keine. Ohne den
+    leeren Rückgabewert liefe der Fallback in Zeile darunter, und der Snapshot
+    suchte am Gaszähler nach `verbrauch_sonstig_kwh` — die N-259-Klasse in der
+    Gegenrichtung: nicht ein falscher Name, sondern ein Feld, das es an diesem
+    Gerät gar nicht geben darf.
     """
+    if ist_zaehler_kategorie(kategorie):
+        return ()
     if kategorie == "erzeuger":
         return ("erzeugung_kwh", *SONSTIGES_VERBRAUCH_FELDER)
     return (*SONSTIGES_VERBRAUCH_FELDER, "erzeugung_kwh")

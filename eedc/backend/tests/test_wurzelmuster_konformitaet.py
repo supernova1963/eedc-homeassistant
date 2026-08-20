@@ -1823,6 +1823,16 @@ P10_PER_INVESTITION: frozenset[str] = frozenset({
     # Anlagen-Monate, und aus einem aufbereiteten Monat lässt sich nicht ablesen,
     # ob **dieses Gerät** eine eigene Zeile hat — genau das ist die Frage.
     "backend/api/routes/investitionen/dashboards.py::get_hub_leer_grund",
+    # #377 (2026-08-21): der gepflegte ZÄHLERSTAND eines Gas-/Wasser-/Ölzählers.
+    # Dieselbe Begründung wie `get_hub_leer_grund` eine Zeile höher, und aus
+    # demselben Grund **dauerhaft** statt vorläufig: Ein Zählerstand ist keine
+    # abgeleitete Monatsgröße, sondern ein Bestandswert EINES Geräts — und die
+    # Schicht kann ihn strukturell nicht liefern, weil er in einer aufbereiteten
+    # Energie-Monatszeile gar nichts zu suchen hat. Genau das ist der Kern von
+    # #377: der Wert geht in keine Bilanz, keine Autarkie, kein CO₂ ein. Ihn
+    # durch `lade_monats_fakten` zu führen, hieße ihn zur Energiegröße zu
+    # machen — die Bewegung, gegen die das ganze Vorhaben gebaut ist.
+    "backend/services/zaehlerstaende.py::_gepflegte_monatsstaende",
 })
 
 #: **Offene Schuld.** Diese Funktionen falten eine ANLAGEN-weite Monatszeile

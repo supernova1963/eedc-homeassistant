@@ -17,7 +17,7 @@
  * bleiben unverändert (eine Code-Wahrheit mit der IST-v3-Live-Sicht).
  */
 import type { ReactNode } from 'react'
-import { Calendar, Sunrise, Sun, Battery, Thermometer, LayoutGrid } from 'lucide-react'
+import { Calendar, Sunrise, Sun, Battery, Thermometer, Gauge, LayoutGrid } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { FokusKachel } from '../blocks'
 import { Parkbar, usePark } from '../park'
@@ -26,8 +26,10 @@ import SunProgressBar from './SunProgressBar'
 import SolarAussicht3Tage from './SolarAussicht3Tage'
 import LiveSocBalken from './LiveSocBalken'
 import LiveTemperaturen from './LiveTemperaturen'
+import LiveZaehlerstaende from './LiveZaehlerstaende'
 import type { LiveDashboardResponse, LiveWetterResponse } from '../../api/liveDashboard'
 import type { SolarPrognoseTag } from '../../api/wetter'
+import type { ZaehlerStand } from '../../api/zaehlerstaende'
 
 interface Abschnitt {
   key: string
@@ -39,16 +41,21 @@ interface Abschnitt {
   render: () => ReactNode
 }
 
-export default function LiveAufEinenBlick({ data, wetter, prognose3Tage }: {
+export default function LiveAufEinenBlick({ data, wetter, prognose3Tage, zaehlerstaende }: {
   data: LiveDashboardResponse
   wetter: LiveWetterResponse | null
   prognose3Tage: SolarPrognoseTag[] | null
+  /** #377 — Verbrauchszähler (Gas/Wasser/Öl). Leer, wenn keiner gepflegt ist. */
+  zaehlerstaende?: ZaehlerStand[]
 }) {
   const park = usePark()
   const hatSonne = !!(wetter?.sunrise && wetter?.sunset)
   const hatAussicht = !!(prognose3Tage && prognose3Tage.length > 0)
   const hatSoc = !!data.gauges?.some((g) => g.key.startsWith('soc_'))
   const hatTemp = !!(wetter?.aktuell?.temperatur_c != null || data.warmwasser_temperatur_c != null)
+  // #377: Der Abschnitt erscheint nur, wenn wirklich ein Stand vorliegt — ein
+  // angelegter Zähler ohne Messung bekäme sonst eine leere Kachel.
+  const hatZaehler = !!zaehlerstaende?.some((z) => z.stand_ende != null)
 
   const abschnitte: Abschnitt[] = [
     {
@@ -86,6 +93,12 @@ export default function LiveAufEinenBlick({ data, wetter, prognose3Tage }: {
           warmwasserC={data.warmwasser_temperatur_c}
         />
       ),
+    },
+    {
+      // #377 — direkt unter *Temperaturen*, und zwar aus demselben Grund:
+      // beides sind Werte, die eedc anzeigt, ohne sie zu verrechnen.
+      key: 'zaehlerstaende', titel: 'Zählerstände', icon: Gauge, eigenerTitel: false, verfuegbar: hatZaehler,
+      render: () => <LiveZaehlerstaende staende={zaehlerstaende ?? []} />,
     },
   ]
 

@@ -40,7 +40,43 @@ from backend.services.snapshot.source import (
 logger = logging.getLogger(__name__)
 
 
-def _build_counter_map(anlage) -> dict[str, str]:
+async def _stillgelegte_inv_ids(db: AsyncSession, anlage_id: int) -> set[str]:
+    """IDs der Investitionen, deren Stilllegung **vorbei** ist (#377).
+
+    Ein stillgelegtes Gerät ist ausgebaut — sein Sensor liefert nichts mehr
+    oder, schlimmer, den eingefrorenen letzten Stand. Der Snapshot-Job
+    iterierte bisher ausschließlich über das `sensor_mapping` und fragte ihn
+    weiter ab: **Last gegen Home Assistant ohne jeden Nutzen**, stündlich, für
+    immer.
+
+    Praktisch geworden ist das mit dem Zählerwechsel (#377 §4): Der kanonische
+    Weg ist *stilllegen + neu anlegen*, und danach stehen zwangsläufig zwei
+    Zuordnungen im Mapping — die alte gehört einem Gerät, das es nicht mehr
+    gibt.
+
+    **Der Stilllegungstag zählt noch mit** (`< heute`, nicht `<=`): an ihm lief
+    das Gerät. Dieselbe Grenze wie in `Investition.ist_aktiv_im_zeitraum`.
+
+    ⚠ Bewusst **nur** die Stilllegung, nicht `aktiv=False`: Deaktivieren ist
+    laut Modell „wie gelöscht, bis reaktiviert" — wer reaktiviert, will die
+    Lücke nicht geschenkt bekommen. Wer stilllegt, bekommt kein Gerät zurück.
+    """
+    from datetime import date as _date
+
+    from backend.models.investition import Investition
+
+    heute = _date.today()
+    rows = (await db.execute(
+        select(Investition.id, Investition.stilllegungsdatum)
+        .where(Investition.anlage_id == anlage_id)
+        .where(Investition.stilllegungsdatum.isnot(None))
+    )).all()
+    return {str(inv_id) for inv_id, still in rows if still and still < heute}
+
+
+def _build_counter_map(
+    anlage, stillgelegte_inv_ids: Optional[set[str]] = None
+) -> dict[str, str]:
     """
     Sammelt alle gemappten kumulativen kWh-Zähler einer Anlage.
 
@@ -56,9 +92,16 @@ def _build_counter_map(anlage) -> dict[str, str]:
 
     Nur Felder mit strategie="sensor" und einer sensor_id werden aufgenommen.
     Strategien "manuell", "keine" etc. bleiben außen vor.
+
+    Args:
+        stillgelegte_inv_ids: IDs, deren Gerät nicht mehr existiert — ihre
+            Zuordnungen werden übersprungen (s. `_stillgelegte_inv_ids`).
+            `None` heißt „nicht gefiltert" und ist das Verhalten bis v4.0.22;
+            die Bestandsproben rufen weiterhin ohne dieses Argument auf.
     """
     sensor_mapping = anlage.sensor_mapping or {}
     result: dict[str, str] = {}
+    stillgelegt = stillgelegte_inv_ids or set()
 
     # Basis (Einspeisung/Netzbezug — die kumulativen kWh-Zähler, nicht leistung_w)
     basis = sensor_mapping.get("basis", {}) or {}
@@ -73,6 +116,8 @@ def _build_counter_map(anlage) -> dict[str, str]:
     investitionen_map = sensor_mapping.get("investitionen", {}) or {}
     for inv_id_str, inv_data in investitionen_map.items():
         if not isinstance(inv_data, dict):
+            continue
+        if str(inv_id_str) in stillgelegt:
             continue
         felder = inv_data.get("felder", {}) or {}
         for feld, config in felder.items():
@@ -96,6 +141,13 @@ def _build_counter_map(anlage) -> dict[str, str]:
     #          manuell/Durchschnitt/Vorjahr, §2d)
     quellen_energy = extract_quellen_energy(anlage)
     for sensor_key, (quelle, entity_id) in quellen_energy.items():
+        # Der Read-Through darf ein stillgelegtes Gerät nicht wieder
+        # hereinholen — sonst wirkte der Filter oben nur für Zuordnungen aus
+        # der klassischen Struktur, und ausgerechnet die neue Datenquellen-
+        # Fläche liefe daran vorbei.
+        if sensor_key.startswith("inv:") and sensor_key.split(":")[1] in stillgelegt:
+            result.pop(sensor_key, None)
+            continue
         if quelle in QUELLE_HA_ENERGY:
             if entity_id:
                 result[sensor_key] = entity_id
@@ -227,7 +279,7 @@ async def snapshot_anlage(
     # fälschlich als h zu speichern. Falscher Nachbarwert würde Slot-h = 0
     # erzeugen und Slot h+1 = 2-Stunden-Delta als Spike (Forum-Beobachtung
     # Rainer #146, gleicher Mechanismus wie #145 nur in der Job-Schicht).
-    counter_map = _build_counter_map(anlage)
+    counter_map = _build_counter_map(anlage, await _stillgelegte_inv_ids(db, anlage.id))
     ha_svc = get_ha_statistics_service()
     if counter_map and ha_svc.is_available:
         for sensor_key, entity_id in counter_map.items():
@@ -335,7 +387,7 @@ async def snapshot_anlage_5min(
     Returns:
         Anzahl geschriebener Snapshots.
     """
-    counter_map = _build_counter_map(anlage)
+    counter_map = _build_counter_map(anlage, await _stillgelegte_inv_ids(db, anlage.id))
     if not counter_map:
         return 0
 

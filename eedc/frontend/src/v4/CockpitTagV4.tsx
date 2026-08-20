@@ -26,6 +26,7 @@ import { Card, FehlerZustand } from '../components/ui'
 import { AnlageLeer } from './OnboardingLeer'
 import { BlockShell, BlockStackSkeleton, KpiStrip, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
+import ZaehlerstaendeBlock, { useZaehlerstaende, ZAEHLER_PARK_IDS } from '../components/zaehler/ZaehlerstaendeBlock'
 import { useApiData, useScrollErhalt } from '../hooks'
 import { BLOCK_IDENTITAET, DEDIZIERTE_KATEGORIEN, fmtZahl, WT_LANG, heuteIso, verschiebeIsoTage } from '../lib'
 import { TagVerlaufChart, TagWerteTabelle } from '../components/tag'
@@ -195,6 +196,10 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
     merkeScroll(); setDatum(d)
   }, [merkeScroll])
 
+  // #377 — Verbrauchszähler dieses Tages. Eigener Abruf statt Anhängsel an die
+  // Tages-Antwort: ein Zählerstand ist keine Energiegröße.
+  const zaehlerstaende = useZaehlerstaende(anlageId, 'tag', { datum })
+
   const bloecke = useMemo<Block[]>(() => {
     const list: Block[] = []
     // Erzeuger-Serien (#350, Rainer): PV-Strings und Balkonkraftwerke mit eigenem
@@ -269,8 +274,18 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
     // wie Cockpit/Monat (period='tag'). `tagDetail` füttert die tagesgenauen
     // Zusatzwerte (WP-Strom-Split, Speicher-Netzladung/Ladepreis).
     if (tag) list.push(...baueTagKomponentenUndFinanz(tag, stunden, serien, park, tagDetail))
+    // #377: nur wenn wirklich ein Zähler gepflegt IST — ein leerer Block wäre
+    // eine Anzeige über eine Funktion, die dieser Anwender nicht benutzt.
+    if (zaehlerstaende && zaehlerstaende.length > 0 && !ZAEHLER_PARK_IDS.every((id) => park.istGeparkt(id))) list.push({
+      id: 'zaehlerstaende', title: 'Zählerstände', ...BLOCK_IDENTITAET.zaehlerstaende,
+      summary: 'erfasst, nicht bewertet',
+      defaultOpen: false,
+      render: () => (
+        <ZaehlerstaendeBlock staende={zaehlerstaende} zeitraum="tag" />
+      ),
+    })
     return list
-  }, [tag, vortag, wtStats, stunden, serien, datum, tagDetail, park, anlageId, laden])
+  }, [tag, vortag, wtStats, stunden, serien, datum, tagDetail, park, anlageId, laden, zaehlerstaende])
 
   if (!anlageId) {
     return (

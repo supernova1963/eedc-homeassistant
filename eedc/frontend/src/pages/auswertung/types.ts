@@ -30,6 +30,11 @@ export interface MonatsZeitreihe {
   name: string  // z.B. "Jan 24"
   jahr: number
   monat: number
+  /**
+   * #377 — Zählerstand je Verbrauchszähler (Investitions-ID → Stand) am
+   * Monatsende. **Bestandsgröße**: nirgends mitsummiert, nicht Teil der Bilanz.
+   */
+  zaehler_stand?: Record<string, number> | null
   // Energie
   erzeugung: number
   eigenverbrauch: number
@@ -203,6 +208,10 @@ export function createMonatsZeitreihe(
     return {
       name: `${MONAT_KURZ[md.monat]} ${md.jahr.toString().slice(-2)}`,
       jahr: md.jahr,
+      // #377 — Zählerstände unverändert durchreichen. Sie werden hier bewusst
+      // NICHT verrechnet: keine Summe, keine Quote, kein Durchschnitt. Ein
+      // Zählerstand ist eine Bestandsgröße und geht in keine Bilanz ein.
+      zaehler_stand: md.zaehler_stand ?? null,
       monat: md.monat,
       erzeugung,
       eigenverbrauch,

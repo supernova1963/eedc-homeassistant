@@ -190,6 +190,10 @@ def sonstiges_kwh_je_richtung(
     Erzeugung noch dem Verbrauch zuschlagen. Der Monat kann das, weil dort zwei
     getrennte Felder gepflegt werden.
     """
+    # Lokaler Import: dieses Layer-Modul bleibt frei von Top-Level-Abhängigkeiten
+    # zur Feld-Registry (ADR-001 — der Layer rechnet, er lädt nicht).
+    from backend.core.field_definitions import ist_zaehler_kategorie
+
     if not komponenten_kwh or not kategorie_je_investition:
         return SonstigesTagesSummen(None, None)
     erzeugung: Optional[float] = None
@@ -202,6 +206,18 @@ def sonstiges_kwh_je_richtung(
             continue
         kategorie = kategorie_je_investition.get(rest)
         if kategorie is None or kategorie == "speicher":
+            continue
+        # #377 — ein Verbrauchszähler (Gas/Wasser/Öl) hat gar keine
+        # Stromrichtung und gehört in keine der beiden Summen.
+        #
+        # ⚠ **Er fiele sonst in den `else`-Zweig unten und würde als
+        # VERBRAUCHER gezählt** — mit m³ in einer kWh-Summe. Neu angelegte
+        # Zähler erzeugen zwar gar keinen `sonstige_<id>`-Eintrag mehr
+        # (`sonstiges_feld_reihenfolge` liefert für sie `()`), aber wer ein
+        # BESTEHENDES Gerät auf „Zähler" umstellt, hat die alten Einträge
+        # weiterhin in seinen Tageszeilen stehen. Dieselbe Stelle, dieselbe
+        # Begründung wie in `imd_monatsaggregat` für den Monat.
+        if ist_zaehler_kategorie(kategorie):
             continue
         betrag = abs(float(wert))
         if kategorie == "erzeuger":

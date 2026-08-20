@@ -50,8 +50,17 @@ KUMULATIVE_ZAEHLER_FELDER: dict[str, tuple[str, ...]] = kumulative_zaehler_felde
 # Float-Counter — total_increasing in Stunden. Verhältnis Starts/Betriebsstunde
 # bzw. Ø Laufzeit pro Start ist der eigentliche Diagnose-Wert (10 Starts auf
 # 23 h sind ein Performance-Indikator, 10 Starts auf 4 h sind in Ordnung).
+#
+# `sonstiges/zaehlerstand` ist seit #377 dabei — der Zählerstand eines Gas-,
+# Wasser- oder Ölzählers. Er gehört genau hierher und **nicht** zu
+# `KUMULATIVE_ZAEHLER_FELDER`: Diese Liste ist die für Werte ohne
+# kWh-Semantik, die trotzdem mitgeschrieben werden. Die Energie-Liste darüber
+# ist abgeleitet und filtert auf `einheit_klasse == "energie"` — ein
+# einheitenloses Feld fällt dort strukturell heraus, und genau das ist
+# gewollt: so kann ein Gasverbrauch nie in die Strombilanz laufen.
 KUMULATIVE_COUNTER_FELDER: dict[str, tuple[str, ...]] = {
     "waermepumpe": ("wp_starts_anzahl", "wp_betriebsstunden"),
+    "sonstiges": ("zaehlerstand",),
 }
 
 # Counter-Felder, deren Tages-/Stunden-Delta GEBROCHEN ist (Stunden statt
@@ -59,7 +68,13 @@ KUMULATIVE_COUNTER_FELDER: dict[str, tuple[str, ...]] = {
 # Laufzeiten verloren und Tages- vs. Stunden-Aggregation driften auseinander
 # (Forum-Befund Martin 2026-05-11 zur Counter-Drift). Starts bleiben ganzzahlig.
 # Eine Quelle der Wahrheit für daily- + hourly-Aggregator (#238).
-FLOAT_COUNTER_FELDER: frozenset[str] = frozenset({"wp_betriebsstunden"})
+#
+# `zaehlerstand` (#377) steht hier aus demselben Grund: Ein Gaszähler zeigt
+# `312,4`, ein Wasserzähler `1.284,637`. Ohne diesen Eintrag rundeten die
+# Counter-Pfade ganzzahlig, aus 312,4 würde 312 — und die Differenz über einen
+# Monat verlöre bis zu zwei ganze Einheiten an den Rändern. Bei einem
+# Anzahl-Zähler (Starts) ist die Rundung richtig, hier ist sie ein Messfehler.
+FLOAT_COUNTER_FELDER: frozenset[str] = frozenset({"wp_betriebsstunden", "zaehlerstand"})
 
 # Basis-Zähler mit Snapshot-Gegenstück.
 #

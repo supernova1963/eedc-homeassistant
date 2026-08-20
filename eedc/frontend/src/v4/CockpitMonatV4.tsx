@@ -19,6 +19,7 @@ import { fmtCalc, FehlerZustand, ChartDatenTabelle } from '../components/ui'
 import { AnlageLeer, DatenLeer } from './OnboardingLeer'
 import { BlockShell, BlockStackSkeleton, KpiStrip, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
+import ZaehlerstaendeBlock, { useZaehlerstaende, ZAEHLER_PARK_IDS } from '../components/zaehler/ZaehlerstaendeBlock'
 import { useApiData, useScrollErhalt } from '../hooks'
 import { MONAT_KURZ, BLOCK_IDENTITAET } from '../lib'
 import { TagesverlaufChart, baueChartDaten } from './TagesverlaufChart'
@@ -324,6 +325,11 @@ function CockpitMonatInner({ anlageId }: { anlageId: number | undefined }) {
     return gewaehlt.jahr === heute.getFullYear() && gewaehlt.monat === heute.getMonth() + 1
   }, [gewaehlt])
 
+  // #377 — Verbrauchszähler dieses Monats.
+  const zaehlerstaende = useZaehlerstaende(anlageId, 'monat', {
+    jahr: gewaehlt?.jahr, monat: gewaehlt?.monat,
+  })
+
   const bloecke: Block[] = useMemo(() => {
     if (!gewaehlt) return []
     // Energie-Bilanz Block-Summary = Kernwerte auf einen Blick (wie IST), nicht
@@ -418,9 +424,18 @@ function CockpitMonatInner({ anlageId }: { anlageId: number | undefined }) {
       ...(monatData ? baueKomponentenBloecke(monatData, park) : []),
       // Finanz-Teaser (B5) — bewusst GANZ UNTEN: Netto-Ertrag/Monatsergebnis stehen
       // bereits in den Kennzahlen (D), hier nur Aufschlüsselung + Tarif + Cross-Link.
+      // #377 — Verbrauchszähler: nur wenn wirklich einer gepflegt ist.
+      ...(zaehlerstaende && zaehlerstaende.length > 0 && !ZAEHLER_PARK_IDS.every((id) => park.istGeparkt(id)) ? [{
+        id: 'zaehlerstaende', title: 'Zählerstände', ...BLOCK_IDENTITAET.zaehlerstaende,
+        summary: 'erfasst, nicht bewertet',
+        defaultOpen: false,
+        render: () => (
+          <ZaehlerstaendeBlock staende={zaehlerstaende} zeitraum="monat" />
+        ),
+      }] : []),
       ...(finanzBlock ? [finanzBlock] : []),
     ]
-  }, [gewaehlt, tage, monatData, monatAusw, vormonatAgg, glMonStats, park])
+  }, [gewaehlt, tage, monatData, monatAusw, vormonatAgg, glMonStats, park, zaehlerstaende])
 
   if (!anlageId) {
     return (

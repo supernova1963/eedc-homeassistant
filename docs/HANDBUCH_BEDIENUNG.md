@@ -550,6 +550,17 @@ Zusätzlich: JAZ-Heizen / JAZ-Warmwasser getrennt, Saison-/Monatsvergleich, Deta
 
 Für sonstige **Erzeuger** (z. B. BHKW) und sonstige **Verbraucher** mit komponentenspezifischen Kennzahlen. Ein sonstiger Erzeuger hinter dem Hauszähler zählt in die Eigenverbrauchs-/Autarkie-Bilanz; CO₂ und Wirtschaftlichkeit eines Brennstoff-Erzeugers werden bewusst als „nicht bewertet" ausgewiesen, solange kein belastbares Brennstoffmodell vorliegt.
 
+**Verbrauchszähler** (Gas, Wasser, Heizöl …) sind die dritte Art unter *Sonstiges*. Sie zeigen den aktuellen **Zählerstand**, den Stand zu Beginn der Aufzeichnung und den Verbrauch je Monat — und sonst nichts: Wirtschaftlichkeit steht dort ausdrücklich auf **„nicht bewertet"**, weil Gas- und Wasserkosten Haushaltskosten sind und nicht in die Rechnung der PV-Anlage gehören. Wo du sie außerdem findest:
+
+| Sicht | Was dort steht |
+| --- | --- |
+| *Cockpit → Live*, Block **Auf einen Blick** | Aktueller Stand + Veränderung heute |
+| *Cockpit → Tag / Monat / Jahr*, Block **Zählerstände** | Stand am Anfang und Ende des Zeitraums, die Differenz, der Verlauf |
+| *Komponenten → Sonstiges* | Stand und Verbrauch über den Gesamtzeitraum, Verbrauch je Monat |
+| *Auswertungen → Tabelle* | **Eine Spalte je Zähler** — im Spalten-Wähler unter „Zählerstände", nicht vorausgewählt |
+
+> Die Spalten-Fußzeile bleibt bei Zählerständen **leer**, und das ist Absicht: Ein Zählerstand ist eine Bestandsgröße und summiert sich über nichts. Zwei Gaszähler mit 12.345 und 8.900 ergeben nicht 21.245. Was sich addieren lässt, ist die Differenz — und die steht ohnehin schon in jeder Zeile.
+
 ---
 
 ## 4. Auswertungen — die Wie-Achse

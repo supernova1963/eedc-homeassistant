@@ -8,6 +8,10 @@ import { render, screen } from '@testing-library/react'
 
 vi.mock('../hooks', () => ({
   useSchmaleAchse: () => false,
+  // #377: die Sicht liest die Investitionen für die Zähler-Spalten. Ohne
+  // Zähler-Gerät entsteht keine Spalte — genau der Regelfall, den dieser Test
+  // abbildet.
+  useInvestitionen: () => ({ investitionen: [], loading: false, error: null }),
   useSelectedAnlage: () => ({
     anlagen: [{ id: 1, anlagenname: 'Test' }], selectedAnlageId: 1,
     selectedAnlage: { id: 1, anlagenname: 'Test' }, loading: false,

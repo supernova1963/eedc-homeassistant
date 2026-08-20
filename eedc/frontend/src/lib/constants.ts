@@ -92,6 +92,21 @@ export const SONSTIGES_KATEGORIE_LABELS: Record<string, string> = {
   erzeuger: 'Erzeuger',
   verbraucher: 'Verbraucher',
   speicher: 'Speicher',
+  // #377 — der dritte Zustand, ohne Stromrichtung.
+  zaehler: 'Verbrauchszähler',
+}
+
+/**
+ * #377: Medium-Art eines Verbrauchszählers → Label. Reine Anzeige.
+ * Spiegel von `core/investition_parameter.py::ZAEHLER_ARTEN`.
+ */
+export const ZAEHLER_ART_LABELS: Record<string, string> = {
+  gas: 'Gas',
+  wasser: 'Wasser',
+  heizoel: 'Heizöl',
+  pellets: 'Pellets',
+  fluessiggas: 'Flüssiggas',
+  sonstiges: 'Sonstiges',
 }
 
 /**

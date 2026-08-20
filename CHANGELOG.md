@@ -9,6 +9,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Added
+
+- **Verbrauchszähler für Gas, Öl und Wasser — erfassen und anzeigen, ohne zu bewerten** ([#377](https://github.com/supernova1963/eedc-homeassistant/issues/377)). Unter *Sonstiges* gibt es eine vierte Kategorie: **Verbrauchszähler**. eedc führt dafür den **Zählerstand** mit — genau die Zahl, die auf dem Zähler steht — und die einzige Rechnung darauf ist die Differenz zwischen Anfang und Ende des betrachteten Zeitraums.
+  - **Vier Anzeigen:** aktueller Stand und Veränderung heute in *Live → Auf einen Blick*; Stand am Anfang/Ende, Differenz und Verlauf als eigener Block in *Cockpit → Tag / Monat / Jahr*; Stand und Verbrauch je Monat unter *Komponenten → Sonstiges*; **eine Spalte je Zähler** in *Auswertungen → Tabelle* (wählbar, nicht vorausgewählt).
+  - **Der Wert kommt aus einem Sensor** (stündlich mitgeschrieben) **oder von Hand** aus dem Monatsabschluss — wo ein Sensor läuft, wird der mitgeschriebene Stand als Vorschlag angeboten. Die **Einheit** (m³, l, kg, t, kWh) gehört zum Gerät und ist reine Anzeige: eedc rechnet Zählerstände nie um.
+  - ⛔ **Was ausdrücklich NICHT passiert, und warum das der Kern des Ganzen ist:** Der Wert geht in **keine** Energiebilanz, **keine** Autarkie- oder Eigenverbrauchsquote, **keinen** ROI, **keine** CO₂-Bilanz, **nicht** in den Gemeinschaftsdatensatz, **nicht** in den HA-Sensor-Export und in **keine** Serie des Energieflusses. Gas- und Wasserkosten sind Haushaltskosten; sie in die Rechnung der PV-Anlage zu ziehen, machte deren Zahlen unbrauchbar. Die Wirtschaftlichkeit eines Zählers steht deshalb auf **„nicht bewertet"** statt auf vier Nullen. **Wer keinen Zähler anlegt, merkt von alldem nichts — keine bestehende Zahl bewegt sich.**
+  - ⚠ **Zählerwechsel: altes Gerät stilllegen, neues anlegen.** Beim alten Zähler ein **Stilllegungsdatum** setzen und ihn dabei **aktiv lassen** — dann bleibt seine Historie in allen Auswertungen erhalten, in deren Zeitraum er gemessen hat, und der Verbrauch über den Wechsel hinweg ist die Summe beider Differenzen. Den Haken *aktiv* zu entfernen bedeutet in eedc „wie gelöscht" und blendet die Ablesungen **auch rückwirkend** aus.
+  - **Nebenbei behoben:** Der Snapshot-Job fragte stillgelegte Geräte weiter bei Home Assistant ab, solange ihre Zuordnung stehenblieb — stündlich, ohne Nutzen. Er überspringt sie jetzt.
+
 ### Fixed
 
 - **Die Aufteilung Heizen/Kühlen erscheint sofort, statt erst nach dem Monatsabschluss** ([#263](https://github.com/supernova1963/eedc-homeassistant/issues/263), gemeldet von kingcap1). Wer den **Betriebsmodus** seiner Klimaanlage zuordnet, sah bisher **nirgendwo** ein Ergebnis: nicht im Komponenten-Hub, nicht in *Cockpit → Monat* und *→ Jahr*, und die beiden Home-Assistant-Sensoren blieben leer. Der Melder hat am selben Tag zugeordnet und gefragt, ob „erst ein Tag durchlaufen" müsse.

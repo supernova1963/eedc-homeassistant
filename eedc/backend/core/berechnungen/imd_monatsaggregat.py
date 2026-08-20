@@ -39,6 +39,7 @@ from backend.core.field_definitions import (
     get_eauto_ladung_kwh,
     get_pv_erzeugung_kwh,
     get_sonstiges_verbrauch_kwh,
+    ist_zaehler_kategorie,
     get_speicher_netzladung_kwh,
     get_wp_heizenergie_kwh,
     get_wp_strom_kwh,
@@ -236,7 +237,23 @@ def imd_typ_beitrag(
         bezug_pv = _f(data, "bezug_pv_kwh")
         bezug_netz = _f(data, "bezug_netz_kwh")
         erloes_euro = _f(data, "einspeise_erloes_euro")
-        if kategorie == "erzeuger":
+        if ist_zaehler_kategorie(kategorie):
+            # #377 — ein Zähler trägt **nichts** zur Energiebilanz bei, und das
+            # steht hier ausdrücklich statt sich aus leeren Feldern zu ergeben.
+            #
+            # ⚠ **Der Unterschied ist nicht akademisch.** Ein neu angelegter
+            # Zähler hat ohnehin keine Energiefelder — aber wer ein
+            # BESTEHENDES *Sonstiges*-Gerät auf „Zähler" umstellt (etwa weil er
+            # den Gasverbrauch bisher als Verbraucher gepflegt hat), trägt
+            # seine alten `verbrauch_sonstig_kwh`-Zeilen weiter in der
+            # IMD-Zeile. Ohne diesen Zweig liefen sie unverändert in
+            # Hausverbrauch und Autarkie ein — die Kategorie sagte „kein
+            # Strom", die Zahlen sagten weiter etwas anderes.
+            erzeugung = verbrauch = 0.0
+            eigenverbrauch = einspeisung = 0.0
+            bezug_pv = bezug_netz = 0.0
+            erloes_euro = 0.0
+        elif kategorie == "erzeuger":
             verbrauch = 0.0
             bezug_pv = bezug_netz = 0.0
         elif kategorie == "verbraucher":

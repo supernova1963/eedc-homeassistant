@@ -24,6 +24,7 @@ from backend.services.live_sensor_config import (
 )
 from backend.core.field_definitions import (
     SONSTIGES_KATEGORIE_UNGEPFLEGT,
+    ist_zaehler_kategorie,
     sonstiges_feld_reihenfolge,
 )
 from backend.services.live_history_service import (

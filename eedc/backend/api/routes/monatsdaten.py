@@ -4,7 +4,8 @@ Monatsdaten API Routes
 CRUD Endpoints für monatliche Energiedaten.
 """
 
-from datetime import date
+import logging
+from datetime import date, datetime
 from typing import Annotated, Optional, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -56,6 +57,9 @@ from backend.services.provenance import (
     write_with_provenance,
 )
 from backend.services.pv_monatswerte import lade_pv_je_monat, pv_summe_je_monat
+from backend.services.zaehlerstaende import lade_zaehlerstaende
+
+logger = logging.getLogger(__name__)
 
 
 # Source-Tag-Konstanten (Etappe 3d Päckchen 3)
@@ -326,6 +330,14 @@ class AggregierteMonatsdatenResponse(BaseModel):
     # `None` = alles steht so in der Datenbank. Eine Sicht, die solche Monate
     # zeigt, sagt es; ohne das Flag ist es immer `None`.
     aus_tageswerten: Optional[list[str]] = None
+    # #377 — Zählerstand je Verbrauchszähler (Gas/Wasser/Öl) am **Monatsende**,
+    # Schlüssel ist die Investitions-ID als String.
+    #
+    # ⚠ Er wird nirgends mitsummiert und geht in keine Bilanzgröße ein: ein
+    # Zählerstand ist eine Bestandsgröße, die Spalten tragen
+    # `aggregation: 'none'`. Er steht in dieser Antwort nur, damit die
+    # Tabellen-Sicht ihn als eigene Spalte zeigen kann.
+    zaehler_stand: Optional[dict[str, float]] = None
 
     class Config:
         from_attributes = True
@@ -439,6 +451,24 @@ async def list_monatsdaten_aggregiert(
     for f in fakten:
         pv_je_jahr[f.jahr] = pv_je_jahr.get(f.jahr, 0.0) + f.erzeugung.pv_kwh
         monate_je_jahr[f.jahr] = monate_je_jahr.get(f.jahr, 0) + 1
+
+    # #377 — Zählerstände am Monatsende, **einmal** für alle Monate geladen.
+    # Je Monat der letzte bekannte Stand; Monate ohne Messung fehlen einfach.
+    zaehler_stand_je_monat: dict[tuple[int, int], dict[str, float]] = {}
+    if fakten:
+        try:
+            _von = datetime(min(f.jahr for f in fakten), 1, 1)
+            _bis = datetime(max(f.jahr for f in fakten), 12, 31, 23, 59, 59)
+            for _zf in await lade_zaehlerstaende(
+                db, anlage_id, _von, _bis, mit_verlauf=True, nur_aktive=False
+            ):
+                for _p in _zf.verlauf:
+                    schluessel = (_p.zeitpunkt.year, _p.zeitpunkt.month)
+                    zaehler_stand_je_monat.setdefault(schluessel, {})[
+                        str(_zf.investition_id)
+                    ] = _p.stand
+        except Exception:  # pragma: no cover - eine Zusatzspalte kippt die Liste nicht
+            logger.exception("Zählerstände für die Monats-Tabelle nicht ladbar")
 
     result = []
     for f in fakten:
@@ -566,6 +596,11 @@ async def list_monatsdaten_aggregiert(
             anlage_id=md.anlage_id if md is not None else anlage_id,
             jahr=f.jahr,
             monat=f.monat,
+            # #377: Stand am Monatsende je Zähler-Gerät (nie summiert).
+            zaehler_stand={
+                k: round(v, 3)
+                for k, v in zaehler_stand_je_monat.get((f.jahr, f.monat), {}).items()
+            } or None,
             einspeisung_kwh=round(einspeisung, 1),
             netzbezug_kwh=round(netzbezug, 1),
             globalstrahlung_kwh_m2=md.globalstrahlung_kwh_m2 if md is not None else None,

@@ -283,11 +283,31 @@ PARAM_BALKONKRAFTWERK_DEFAULTS: Final[dict[str, object]] = {
 PARAM_SONSTIGES: Final[dict[str, str]] = {
     "KATEGORIE": "kategorie",
     "BESCHREIBUNG": "beschreibung",
+    # #377 — nur für die Kategorie `zaehler`. Beide sind reine
+    # **Anzeige**-Angaben und gehen in keine Rechnung ein: `ZAEHLER_ART`
+    # bestimmt Label und Symbol, `ZAEHLER_EINHEIT` die Einheit, die neben dem
+    # Zählerstand steht. Der Wert selbst bleibt einheitenlos (s.
+    # `field_definitions.INVESTITION_FELDER["sonstiges"]["zaehler"]`).
+    "ZAEHLER_ART": "zaehler_art",
+    "ZAEHLER_EINHEIT": "zaehler_einheit",
 }
 
 PARAM_SONSTIGES_DEFAULTS: Final[dict[str, object]] = {
     "kategorie": "erzeuger",
+    "zaehler_art": "gas",
+    # ⚠ Der Default ist eine ANZEIGE-Vorbelegung, keine Umrechnung. eedc
+    # rechnet Zählerstände nie um; wer m³ auf kWh stellt, ändert das Wort neben
+    # der Zahl und sonst nichts.
+    "zaehler_einheit": "m³",
 }
+
+#: Auswahl für `zaehler_art` — Label und Symbol, sonst ohne Wirkung (#377).
+ZAEHLER_ARTEN: Final[tuple[str, ...]] = (
+    "gas", "wasser", "heizoel", "pellets", "fluessiggas", "sonstiges",
+)
+
+#: Auswahl für `zaehler_einheit` — steht neben der Zahl, wird nie umgerechnet.
+ZAEHLER_EINHEITEN: Final[tuple[str, ...]] = ("m³", "l", "kg", "t", "kWh")
 
 
 # ============================================================================

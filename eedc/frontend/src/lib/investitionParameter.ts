@@ -330,17 +330,48 @@ export interface BalkonkraftwerkParameter {
 export const PARAM_SONSTIGES = {
   KATEGORIE: 'kategorie',
   BESCHREIBUNG: 'beschreibung',
+  // #377 — nur für die Kategorie `zaehler`. Beide sind reine Anzeige-Angaben
+  // und gehen in keine Rechnung ein: `ZAEHLER_ART` bestimmt Label und Symbol,
+  // `ZAEHLER_EINHEIT` das Wort neben dem Zählerstand. Der Wert selbst bleibt
+  // einheitenlos — die Sicherung dagegen, dass Gas in der Strombilanz landet.
+  ZAEHLER_ART: 'zaehler_art',
+  ZAEHLER_EINHEIT: 'zaehler_einheit',
 } as const
 
 export const PARAM_SONSTIGES_DEFAULTS = {
   kategorie: 'erzeuger' as const,
+  zaehler_art: 'gas' as const,
+  // ⚠ Anzeige-Vorbelegung, keine Umrechnung. eedc rechnet Zählerstände nie um.
+  zaehler_einheit: 'm³' as const,
 } as const
 
-export type SonstigesKategorie = 'erzeuger' | 'verbraucher' | 'speicher'
+export type SonstigesKategorie = 'erzeuger' | 'verbraucher' | 'speicher' | 'zaehler'
+
+/**
+ * Die Medium-Arten eines Verbrauchszählers (#377) — Label und Symbol, sonst
+ * ohne Wirkung. Spiegel von `core/investition_parameter.py::ZAEHLER_ARTEN`.
+ */
+export const ZAEHLER_ARTEN = [
+  'gas', 'wasser', 'heizoel', 'pellets', 'fluessiggas', 'sonstiges',
+] as const
+export type ZaehlerArt = (typeof ZAEHLER_ARTEN)[number]
+
+/**
+ * Die wählbaren Anzeige-Einheiten (#377). Spiegel von `ZAEHLER_EINHEITEN`.
+ *
+ * ⚠ `kWh` steht hier bewusst mit drin und ist trotzdem **keine Energiegröße**:
+ * Die Einheit hängt am Gerät, das Feld selbst bleibt einheitenlos. Wer seinen
+ * Gaszähler in kWh abliest, bekommt „kWh" neben die Zahl geschrieben — in die
+ * Strombilanz kommt sie deshalb nicht.
+ */
+export const ZAEHLER_EINHEITEN = ['m³', 'l', 'kg', 't', 'kWh'] as const
+export type ZaehlerEinheit = (typeof ZAEHLER_EINHEITEN)[number]
 
 export interface SonstigesParameter {
   kategorie?: SonstigesKategorie
   beschreibung?: string
+  zaehler_art?: ZaehlerArt
+  zaehler_einheit?: ZaehlerEinheit
 }
 
 // ============================================================================

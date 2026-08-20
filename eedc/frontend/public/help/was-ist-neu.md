@@ -11,6 +11,55 @@
 
 ## Noch nicht veröffentlicht
 
+**Gas, Wasser, Heizöl: Zähler mitführen — ohne dass eedc sie bewertet**
+([#377](https://github.com/supernova1963/eedc-homeassistant/issues/377))
+
+Neben dem Strom laufen im Haus noch andere Zähler. Ab jetzt kannst du sie in eedc
+mitführen: Unter *Einstellungen → Komponenten → Sonstiges* gibt es die neue
+Kategorie **Verbrauchszähler** — für Gas, Wasser, Heizöl, Flüssiggas oder
+Pellets.
+
+eedc merkt sich dabei den **Zählerstand**, also genau die Zahl, die auf dem
+Zähler steht. Die einzige Rechnung darauf ist die Differenz zwischen Anfang und
+Ende des Zeitraums, den du gerade ansiehst. Du siehst das an vier Stellen:
+
+- **Live → Auf einen Blick:** der aktuelle Stand und was sich heute bewegt hat.
+- **Cockpit → Tag / Monat / Jahr:** ein Block *Zählerstände* mit Stand am Anfang,
+  Stand am Ende, der Differenz und dem Verlauf.
+- **Komponenten → Sonstiges:** Stand und Verbrauch über den Gesamtzeitraum.
+- **Auswertungen → Tabelle:** eine Spalte je Zähler, über den Spalten-Wähler
+  unter „Zählerstände". Sie ist nicht vorausgewählt — wer drei Zähler pflegt,
+  bekommt nicht ungefragt drei Spalten dazu.
+
+Den Stand kannst du **von Hand** im Monatsabschluss eintragen (das Feld heißt
+*Zählerstand*) oder aus einem **Sensor** kommen lassen: unter *Datenquellen*
+zuordnen, dann schreibt eedc ihn stündlich mit und schlägt ihn im
+Monatsabschluss vor. Beim Anlegen wählst du außerdem, was gezählt wird und in
+welcher Einheit — beides ist reine Anzeige, **eedc rechnet nichts um**.
+
+⛔ **Und jetzt der wichtigste Teil: eedc bewertet diese Zahlen nicht.** Sie gehen
+in **keine** Energiebilanz, in **keine** Autarkie- oder Eigenverbrauchsquote, in
+**keine** Wirtschaftlichkeit, in **keine** CO₂-Bilanz und **nicht** in die
+Gemeinschaftsdaten. Das ist Absicht: Gas- und Wasserkosten sind Haushaltskosten
+und gehören nicht in die Rechnung deiner PV-Anlage — dort würden sie die Zahlen
+unbrauchbar machen. Bei der Wirtschaftlichkeit eines Zählers steht deshalb
+ausdrücklich „nicht bewertet" und nicht eine Reihe von Nullen.
+
+✅ **Wer keinen Zähler anlegt, merkt von alldem nichts.** Es bewegt sich keine
+einzige bestehende Zahl.
+
+⚠ **Wenn dein Zähler getauscht wird:** Setz beim alten Gerät ein
+**Stilllegungsdatum** und leg ein neues an — und lass den Haken *aktiv* beim
+alten dabei **stehen**. Dann bleibt die bisherige Ablesehistorie erhalten, und
+der Verbrauch über den Wechsel hinweg stimmt (er ist die Summe aus beiden). Den
+Haken *aktiv* zu entfernen heißt in eedc „wie gelöscht" — dann wären die alten
+Ablesungen auch rückwirkend verschwunden.
+
+⚑ **Was eedc dafür ausdrücklich nicht kann:** einen Effizienzvergleich vor und
+nach einer Heizungsmodernisierung. Dafür bräuchte eedc die Heizung als eigene
+Komponente mit Wirkungsgrad und Wärmemenge — sonst stünden Kubikmeter gegen
+Kilowattstunden.
+
 **Klimaanlage: die Aufteilung Heizen/Kühlen ist sofort da**
 ([#263](https://github.com/supernova1963/eedc-homeassistant/issues/263), gemeldet von kingcap1)
 

@@ -21,6 +21,7 @@ import {
   baueErzeugerSpalten, ERZEUGER_OHNE_SENSOR_LABEL, ERZEUGER_OHNE_SENSOR_HINWEIS,
 } from '../lib/erzeugerSpalten'
 import { useInvestitionen, useSelectedAnlage } from '../hooks'
+import { baueZaehlerSpalten, zaehlerMitStand } from '../lib/zaehlerSpalten'
 import type { AuswertungBasis } from './useAuswertungBasis'
 import { useWerteZeitreihe } from './useWerteZeitreihe'
 import { useTagesWerte } from './useTagesWerte'
@@ -84,6 +85,10 @@ function TabelleInner({ basis }: { basis: AuswertungBasis }) {
   // Monatswerte/Strompreise kommen aus der Dispatcher-Basis (EIN Fetch je Achse,
   // Paket Q) — der Hook leitet nur noch ab.
   const { rows, jahre, loading, error } = useWerteZeitreihe(basis, selectedAnlage)
+  // #377 — Stammdaten für die Zähler-Spalten. **Ganz oben**, vor jedem
+  // Early-Return: Hooks müssen in jedem Render in derselben Reihenfolge laufen
+  // (`react-hooks/rules-of-hooks`; der Lint-Lauf hat genau das gefangen).
+  const { investitionen: alleInvestitionen } = useInvestitionen(selectedAnlageId ?? undefined)
 
   // Neuestes (Jahr, Monat) als Default-Anker.
   const anker = useMemo(() => {
@@ -145,6 +150,11 @@ function TabelleInner({ basis }: { basis: AuswertungBasis }) {
   const minJahr = jahre.length ? Math.min(...jahre) : (anker?.jahr ?? 0)
   const maxJahr = jahre.length ? Math.max(...jahre) : (anker?.jahr ?? 0)
   const { prim: monRows, vergleich: monVorjahrRows } = monatsFenster(rows, monVon, monBis)
+  // #377 — Spalten je Verbrauchszähler, aus den Ständen im geladenen Fenster:
+  // Ein nie abgelesener Zähler bekommt keine Spalte, sonst bestünde sie aus
+  // lauter „—". Reine Ableitung, kein Hook (s. o.).
+  const zaehlerSpaltenMonat = baueZaehlerSpalten(alleInvestitionen, zaehlerMitStand(monRows))
+
   const monVorjahr = monVergleich ? monVorjahrRows : null
 
   const monChips: ZeitChip[] = anker ? [
@@ -177,6 +187,7 @@ function TabelleInner({ basis }: { basis: AuswertungBasis }) {
               // Zeitraum mehrere Jahrgänge umfasst („Alle Jahre"). Ohne Vorjahr → „—".
               vorjahrRows={richteMonateAus(monVorjahr ? monVorjahr.map(monatsZeile) : null)}
               granularitaet="monat"
+              zusatzMetriken={zaehlerSpaltenMonat}
               jahrLabel={jahrLabelVon(monVon, monBis)}
               vergleichLabel={monVergleich ? vergleichLabelVon(monVon, monBis) : null}
               vergleichDefaultAn={monVergleich}
@@ -309,6 +320,11 @@ function EnergieprofilBlock({
     () => baueErzeugerSpalten(rows, investitionen, von, bis),
     [rows, investitionen, von, bis],
   )
+  // #377 — dieselbe Regel wie im Monatsblock: Spalte nur, wo ein Stand vorliegt.
+  const zaehlerSpalten = useMemo(
+    () => baueZaehlerSpalten(investitionen, zaehlerMitStand(rows)),
+    [investitionen, rows],
+  )
 
   // Primär-Schnellwahl: füllt nur von–bis (Gernot 2026-06-27). Vormonat = Monat vor dem Anker.
   const vm = anker ? (anker.monat === 1 ? { jahr: anker.jahr - 1, monat: 12 } : { jahr: anker.jahr, monat: anker.monat - 1 }) : null
@@ -361,7 +377,7 @@ function EnergieprofilBlock({
             rows={primZeilen}
             vorjahrRows={vglZeilen}
             granularitaet="tag"
-            zusatzMetriken={erzeuger.metriken}
+            zusatzMetriken={[...erzeuger.metriken, ...zaehlerSpalten]}
             // R20-1a: bei „Periode im Jahr" das Primär-Jahr als Spalten-Label; bei
             // „Vorperiode" neutral „Aktuell" (WerteTabelle-Default) — beide Spalten klar.
             jahrLabel={vglModus === 'periodeImJahr' ? von.slice(0, 4) : undefined}

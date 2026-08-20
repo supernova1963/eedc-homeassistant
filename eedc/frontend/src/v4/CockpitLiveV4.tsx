@@ -29,6 +29,7 @@ import TagesverlaufChart, { tagesverlaufTabelle } from '../components/live/Tages
 import BoersenpreisBlock from '../components/live/BoersenpreisBlock'
 import WetterWidget from '../components/live/WetterWidget'
 import LiveAufEinenBlick from '../components/live/LiveAufEinenBlick'
+import { zaehlerstaendeApi, type ZaehlerStand } from '../api/zaehlerstaende'
 import { FokusKachel, FokusVollbild } from '../components/blocks'
 import { ChartDatenTabelle } from '../components/ui'
 import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
@@ -53,6 +54,8 @@ interface LiveSeed {
   tagesverlauf: TagesverlaufResponse | null
   prognose3Tage: SolarPrognoseTag[] | null
   boersenpreise: BoersenpreisResponse | null
+  /** #377 — Verbrauchszähler; `null`, solange nichts geladen wurde. */
+  zaehlerstaende: ZaehlerStand[] | null
   lastUpdate: string | null
 }
 
@@ -80,6 +83,7 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
   const [tagesverlauf, setTagesverlauf] = useState<TagesverlaufResponse | null>(seed?.tagesverlauf ?? null)
   const [prognose3Tage, setPrognose3Tage] = useState<SolarPrognoseTag[] | null>(seed?.prognose3Tage ?? null)
   const [boersenpreise, setBoersenpreise] = useState<BoersenpreisResponse | null>(seed?.boersenpreise ?? null)
+  const [zaehlerstaende, setZaehlerstaende] = useState<ZaehlerStand[] | null>(seed?.zaehlerstaende ?? null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdate, setLastUpdate] = useState<string | null>(seed?.lastUpdate ?? null)
@@ -89,6 +93,7 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
   const wetterIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const tagesverlaufIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const boersenpreisIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const zaehlerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const activeAnlageRef = useRef(anlageId)
   activeAnlageRef.current = anlageId
 
@@ -140,6 +145,22 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
     }
   }, [anlageId, demoMode])
 
+  // #377 — Zählerstände. Eigener Abruf statt Anhängsel an die Live-Antwort:
+  // ein Zählerstand ist keine Energiegröße und hat in ihr nichts zu suchen.
+  // Fehlschlag ist still — wer keinen Zähler pflegt, soll keine Fehlermeldung
+  // über eine Funktion sehen, die er nicht benutzt.
+  const fetchZaehlerstaende = useCallback(async () => {
+    if (!anlageId) return
+    const reqId = anlageId
+    try {
+      const result = await zaehlerstaendeApi.heute(reqId)
+      if (activeAnlageRef.current !== reqId) return
+      setZaehlerstaende(result)
+    } catch {
+      // still ignorieren — der Abschnitt entfällt, die übrige Sicht bleibt
+    }
+  }, [anlageId])
+
   // Börsenpreise sind KEINE Anlagendaten, sondern öffentliche Marktpreise —
   // deshalb ohne `demo`-Schalter: im Demo-Modus wäre eine erfundene Preiskurve
   // nicht anschaulicher, nur falsch.
@@ -160,10 +181,10 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
   useEffect(() => {
     if (data || wetter || tagesverlauf) {
       swrCacheStore(liveKey, {
-        data, wetter, tagesverlauf, prognose3Tage, boersenpreise, lastUpdate,
+        data, wetter, tagesverlauf, prognose3Tage, boersenpreise, zaehlerstaende, lastUpdate,
       } satisfies LiveSeed)
     }
-  }, [liveKey, data, wetter, tagesverlauf, prognose3Tage, boersenpreise, lastUpdate])
+  }, [liveKey, data, wetter, tagesverlauf, prognose3Tage, boersenpreise, zaehlerstaende, lastUpdate])
 
   useEffect(() => {
     const stoppePolling = () => {
@@ -171,10 +192,12 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
       if (wetterIntervalRef.current) clearInterval(wetterIntervalRef.current)
       if (tagesverlaufIntervalRef.current) clearInterval(tagesverlaufIntervalRef.current)
       if (boersenpreisIntervalRef.current) clearInterval(boersenpreisIntervalRef.current)
+      if (zaehlerIntervalRef.current) clearInterval(zaehlerIntervalRef.current)
       intervalRef.current = null
       wetterIntervalRef.current = null
       tagesverlaufIntervalRef.current = null
       boersenpreisIntervalRef.current = null
+      zaehlerIntervalRef.current = null
     }
 
     const startePolling = () => {
@@ -183,6 +206,9 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
       wetterIntervalRef.current = setInterval(() => fetchWetter(), WETTER_REFRESH_INTERVAL)
       tagesverlaufIntervalRef.current = setInterval(() => fetchTagesverlauf(), TAGESVERLAUF_REFRESH_INTERVAL)
       boersenpreisIntervalRef.current = setInterval(() => fetchBoersenpreise(), BOERSENPREIS_REFRESH_INTERVAL)
+      // #377: Ein Gas- oder Wasserzähler bewegt sich stündlich, nicht im
+      // 5-Sekunden-Takt des Energieflusses — derselbe Takt wie der Tagesverlauf.
+      zaehlerIntervalRef.current = setInterval(() => fetchZaehlerstaende(), TAGESVERLAUF_REFRESH_INTERVAL)
     }
 
     // Eine unsichtbare Seite pollt nicht. Der 5-s-Takt ist für den
@@ -200,6 +226,7 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
       fetchWetter()
       fetchTagesverlauf()
       fetchBoersenpreise()
+      fetchZaehlerstaende()
       startePolling()
     }
 
@@ -207,13 +234,14 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
     fetchWetter()
     fetchTagesverlauf()
     fetchBoersenpreise()
+    fetchZaehlerstaende()
     startePolling()
     document.addEventListener('visibilitychange', beiSichtwechsel)
     return () => {
       document.removeEventListener('visibilitychange', beiSichtwechsel)
       stoppePolling()
     }
-  }, [fetchData, fetchWetter, fetchTagesverlauf, fetchBoersenpreise])
+  }, [fetchData, fetchWetter, fetchTagesverlauf, fetchBoersenpreise, fetchZaehlerstaende])
 
   // PV-SOLL der aktuellen Stunde (SFML → eedc-Fallback) für den Energiefluss.
   const pvSollKw = useMemo<number | null>(() => {
@@ -326,7 +354,7 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
             {/* Kennzahl-Block „Auf einen Blick" (1/3): Heute · Sonnenstand ·
                 Solar-Aussicht · Ladezustand · Temperaturen als ausblendbare
                 Abschnitte in EINEM Container mit einer Vollbild-Funktion. */}
-            <LiveAufEinenBlick data={data} wetter={wetter} prognose3Tage={prognose3Tage} />
+            <LiveAufEinenBlick data={data} wetter={wetter} prognose3Tage={prognose3Tage} zaehlerstaende={zaehlerstaende ?? undefined} />
           </div>
 
           {/* Volle Breite (wie IST): Wetter heute, dann Tagesverlauf — je parkbar. */}

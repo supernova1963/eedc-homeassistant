@@ -159,6 +159,12 @@ export interface TagWerte {
    *  belegt, wo das Gerät einen eigenen Sensor hat — auf Tagesebene wird nichts
    *  nach kWp verteilt. Leer/fehlend heißt „nicht gemessen", nicht „0 kWh". */
   erzeuger_kwh?: Record<string, number> | null
+  /**
+   * #377 — Zählerstand je Verbrauchszähler (Investitions-ID → Stand) am Ende
+   * dieses Tages. **Bestandsgröße**: nirgends mitsummiert, nicht Teil der
+   * Bilanz. Fehlt ein Eintrag, wurde an dem Tag nichts abgelesen.
+   */
+  zaehler_stand?: Record<string, number> | null
 }
 
 /**

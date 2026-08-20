@@ -14,7 +14,7 @@
 import type { MonatsZeitreihe } from '../../pages/auswertung/types'
 import type { TagWerte } from '../../api/energie_profil'
 
-export type WerteGruppe = 'basis' | 'quoten' | 'wetter' | 'speicher' | 'waermepumpe' | 'eauto' | 'sonstiges' | 'finanzen' | 'co2' | 'tagdetail' | 'erzeuger'
+export type WerteGruppe = 'basis' | 'quoten' | 'wetter' | 'speicher' | 'waermepumpe' | 'eauto' | 'sonstiges' | 'finanzen' | 'co2' | 'tagdetail' | 'erzeuger' | 'zaehler'
 export type WerteAggregation = 'sum' | 'avg' | 'none'
 
 /**
@@ -136,7 +136,7 @@ export const WERTE_METRIKEN: WerteMetrik[] = [
   { key: 'temperatur_max_c',       label: 'Temp. max',      unit: '°C',     gruppe: 'tagdetail',   decimals: 1, aggregation: 'avg', defaultVisible: false, granular: NUR_TAG, higherIsBetter: undefined },
 ]
 
-export const WERTE_GRUPPEN: WerteGruppe[] = ['basis', 'quoten', 'wetter', 'speicher', 'waermepumpe', 'eauto', 'sonstiges', 'finanzen', 'co2', 'tagdetail', 'erzeuger']
+export const WERTE_GRUPPEN: WerteGruppe[] = ['basis', 'quoten', 'wetter', 'speicher', 'waermepumpe', 'eauto', 'sonstiges', 'finanzen', 'co2', 'tagdetail', 'erzeuger', 'zaehler']
 
 export const GRUPPE_LABELS: Record<WerteGruppe, string> = {
   basis:       'Energie',
@@ -150,6 +150,8 @@ export const GRUPPE_LABELS: Record<WerteGruppe, string> = {
   co2:         'CO₂',
   tagdetail:   'Tagesdetail',
   erzeuger:    'Je Erzeuger',
+  // #377 — je Gerät, weil ein Zählerstand sich über nichts summiert.
+  zaehler:     'Zählerstände',
 }
 
 /** Präfix der dynamischen Erzeuger-Spalten (`erzeuger:7`) — kein Feld der
@@ -182,6 +184,49 @@ export function erzeugerMetriken(
   }))
 }
 
+/** Präfix der dynamischen Zähler-Spalten (`zaehler:7`) — kein flaches Feld der
+ *  Antwort-Zeile, sondern ein Zugriff in `zaehler_stand` (#377). */
+export const ZAEHLER_METRIK_PREFIX = 'zaehler:'
+
+/**
+ * Spalten „Zählerstand je Gerät" (#377) — **eine Spalte je Verbrauchszähler**.
+ *
+ * ⚑ **Warum je Gerät, obwohl jede andere Metrik hier eine anlagenweite Summe
+ * ist:** Alle bestehenden Metriken sind **Fluss**größen — kWh, km, €. Sie
+ * summieren sich über Geräte und über die Zeit, deshalb trägt dort eine
+ * gemeinsame Spalte. Ein Zählerstand ist eine **Bestands**größe und summiert
+ * sich über **nichts**: zwei Gaszähler mit 12.345 und 8.900 ergeben nicht
+ * 21.245, auch nicht bei gleicher Einheit. Die Registry-Konvention ist auf
+ * Flussgrößen zugeschnitten; hier fällt der Wert nicht wegen seiner Einheit
+ * heraus, sondern wegen seiner **Größenart**.
+ *
+ * Daraus folgt der Rest von selbst: `aggregation: 'none'` (die Fußzeile bleibt
+ * leer, statt eine sinnlose Summe oder einen sinnlosen Durchschnitt zu zeigen)
+ * und `unit` je Gerät statt fest — ein Haushalt kann Gas in m³ und Öl in Litern
+ * führen. Und die Frage nach gemischten Einheiten in EINER Spalte stellt sich
+ * gar nicht erst.
+ *
+ * Wie bei {@link erzeugerMetriken} (#350) bewusst **nicht** `defaultVisible`:
+ * wer drei Zähler pflegt, bekommt sonst drei Spalten ungefragt dazu.
+ */
+export function zaehlerMetriken(
+  zaehler: { id: number | string; name: string; einheit: string }[],
+): WerteMetrik[] {
+  return zaehler.map((z) => ({
+    key: `${ZAEHLER_METRIK_PREFIX}${z.id}`,
+    label: z.name,
+    unit: z.einheit,
+    gruppe: 'zaehler' as WerteGruppe,
+    decimals: 1,
+    aggregation: 'none' as WerteAggregation,
+    defaultVisible: false,
+    granular: MONAT_TAG,
+    // Ein Zählerstand steigt immer — „höher ist besser" wäre hier keine
+    // Bewertung, sondern eine Selbstverständlichkeit. Bewusst offen gelassen.
+    higherIsBetter: undefined,
+  }))
+}
+
 /** Metriken, die in der gegebenen Granularität verfügbar sind (Reihenfolge erhalten). */
 export function metrikenFuer(granularitaet: Granularitaet): WerteMetrik[] {
   return WERTE_METRIKEN.filter((m) => m.granular.includes(granularitaet))
@@ -198,6 +243,14 @@ export const METRIK_BY_KEY: Record<string, WerteMetrik> = Object.fromEntries(
  * Zeilen-Properties (verhaltensgleich zu TabelleTab `row[col.key]`).
  */
 export function getMonatWert(row: MonatsZeitreihe, key: string): number | null {
+  if (key.startsWith(ZAEHLER_METRIK_PREFIX)) {
+    // #377: Der Stand liegt nicht flach in der Zeile, sondern in
+    // `zaehler_stand` (Investitions-ID → Stand). Fehlt der Eintrag, wurde in
+    // diesem Monat nichts abgelesen — `null` (Display-Token „—"), nicht 0:
+    // eine 0 hieße „der Zähler steht auf null".
+    const v = row.zaehler_stand?.[key.slice(ZAEHLER_METRIK_PREFIX.length)]
+    return v == null ? null : v
+  }
   const v = (row as unknown as Record<string, number | null | undefined>)[key]
   return v == null ? null : v
 }
@@ -208,6 +261,11 @@ export function getMonatWert(row: MonatsZeitreihe, key: string): number | null {
  * den Registry-keys (analog `getMonatWert`).
  */
 export function getTagWert(row: TagWerte, key: string): number | null {
+  if (key.startsWith(ZAEHLER_METRIK_PREFIX)) {
+    // #377 — s. `getMonatWert`: Stand statt Menge, `null` statt 0.
+    const v = row.zaehler_stand?.[key.slice(ZAEHLER_METRIK_PREFIX.length)]
+    return v == null ? null : v
+  }
   if (key.startsWith(ERZEUGER_METRIK_PREFIX)) {
     // Erzeuger-Spalten liegen nicht flach in der Zeile, sondern in
     // `erzeuger_kwh` (Investitions-ID → kWh). Fehlt der Eintrag, ist an dem Tag

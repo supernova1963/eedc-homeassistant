@@ -32,6 +32,7 @@ import { fmtCalc, FehlerZustand, ChartDatenTabelle } from '../components/ui'
 import { AnlageLeer, DatenLeer } from './OnboardingLeer'
 import { BlockShell, BlockStackSkeleton, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
+import ZaehlerstaendeBlock, { useZaehlerstaende, ZAEHLER_PARK_IDS } from '../components/zaehler/ZaehlerstaendeBlock'
 import { useApiData, useScrollErhalt } from '../hooks'
 import { BLOCK_IDENTITAET, formatCo2 } from '../lib'
 import { baueJahrKpis, JahrBilanz } from './JahrBilanz'
@@ -253,6 +254,9 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
   const vjFenster = useMemo(() => monatsFenster(vorjahr), [vorjahr])
   const ojFenster = useMemo(() => monatsFenster(oeJahr), [oeJahr])
 
+  // #377 — Verbrauchszähler dieses Jahres.
+  const zaehlerstaende = useZaehlerstaende(anlageId, 'jahr', { jahr: jahr ?? undefined })
+
   const bloecke = useMemo<Block[]>(() => {
     if (jahr == null) return []
     const d = jahrData
@@ -427,11 +431,20 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
         defaultOpen: false,
         render: () => <JahrSpeicherTabelle monate={jahrAntworten} />,
       }] : []),
+      // #377 — Verbrauchszähler: nur wenn wirklich einer gepflegt ist.
+      ...(zaehlerstaende && zaehlerstaende.length > 0 && !ZAEHLER_PARK_IDS.every((id) => park.istGeparkt(id)) ? [{
+        id: 'zaehlerstaende', title: 'Zählerstände', ...BLOCK_IDENTITAET.zaehlerstaende,
+        summary: 'erfasst, nicht bewertet',
+        defaultOpen: false,
+        render: () => (
+          <ZaehlerstaendeBlock staende={zaehlerstaende} zeitraum="jahr" />
+        ),
+      }] : []),
       ...(finanzBlock ? [finanzBlock] : []),
     ]
   }, [jahr, jahrData, jahrVglData, vorjahr, oeJahr, vjFenster, ojFenster, istFenster,
       kennzahlenFenster, monatsZeilen, park, jahrAntworten, speicherZeilen,
-      co2Punkte, co2Monate.length, co2Kumuliert, co2Fehler, co2Reload])
+      co2Punkte, co2Monate.length, co2Kumuliert, co2Fehler, co2Reload, zaehlerstaende])
 
   if (!anlageId) {
     return (

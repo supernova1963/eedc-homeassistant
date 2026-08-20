@@ -19,7 +19,9 @@ schon einmal schiefgegangen:
 
 from __future__ import annotations
 
-from backend.core.field_definitions import ist_zaehler_differenz_feld
+from pathlib import Path
+
+from backend.core.field_definitions import ZAEHLERSTAND_FELD, ist_zaehler_differenz_feld
 from backend.services.datenquellen_mapping_sync import BASIS_ENERGY_FELD, BASIS_PREIS_FELD
 from backend.services.snapshot.keys import (
     KUMULATIVE_COUNTER_FELDER,
@@ -27,14 +29,56 @@ from backend.services.snapshot.keys import (
 )
 
 
+#: Kumulative Felder, die **keine Differenz** sind, sondern ein **Stand** —
+#: und die deshalb einen eigenen Lesepfad haben statt des `MAX − MIN`-Pfads.
+#:
+#: ⚠ **Das ist kein Freibrief, sondern eine Umleitung.** Der Test unten prüft
+#: für jeden Eintrag hier, dass der Ersatzpfad wirklich existiert. Ein Feld
+#: hier einzutragen und keinen Leser zu bauen, ist genau der stille Verlust,
+#: gegen den diese Datei geschrieben ist.
+BESTANDS_FELDER_MIT_EIGENEM_LESER: dict[str, tuple[str, str]] = {
+    # #377: Ein Gaszähler zeigt 12.345 — die Zahl selbst ist der Wert. Durch
+    # den Differenz-Pfad gejagt käme der Monats-VERBRAUCH heraus, also genau
+    # die Zahl, die der Anwender im Monatsabschluss nicht eintragen soll.
+    ZAEHLERSTAND_FELD: (
+        "backend/services/zaehlerstaende.py",
+        "lade_zaehlerstaende",
+    ),
+}
+
+
 def test_alle_kumulativen_felder_sind_lesbar():
     """Kein Zähler-Feld darf still aus den HA-Lesepfaden fallen."""
     zaehler = {f for felder in KUMULATIVE_ZAEHLER_FELDER.values() for f in felder}
     counter = {f for felder in KUMULATIVE_COUNTER_FELDER.values() for f in felder}
-    fehlend = sorted(f for f in zaehler | counter if not ist_zaehler_differenz_feld(f))
+    fehlend = sorted(
+        f for f in zaehler | counter
+        if not ist_zaehler_differenz_feld(f)
+        and f not in BESTANDS_FELDER_MIT_EIGENEM_LESER
+    )
     assert fehlend == [], (
         f"Zähler-Felder, die der HA-Import überspringen würde: {fehlend}"
     )
+
+
+def test_bestandsfelder_haben_ihren_ersatzleser_wirklich():
+    """Die Umleitung muss irgendwo ankommen (#377).
+
+    Ohne diese Probe wäre `BESTANDS_FELDER_MIT_EIGENEM_LESER` eine Allowlist,
+    die den Wächter darüber stumm schaltet — dieselbe Bauform, mit der man
+    einen echten Verlust als Ausnahme buchen kann. Hier wird die Behauptung
+    „es gibt einen anderen Weg" am Baum nachgeprüft.
+    """
+    wurzel = Path(__file__).resolve().parents[1]
+    for feld, (pfad, funktion) in BESTANDS_FELDER_MIT_EIGENEM_LESER.items():
+        datei = wurzel.parent / pfad
+        assert datei.exists(), f"{feld}: Ersatzleser-Datei fehlt — {pfad}"
+        text = datei.read_text(encoding="utf-8")
+        assert f"def {funktion}" in text, (
+            f"{feld}: `{funktion}` steht nicht in {pfad} — der Ersatzpfad ist "
+            "eine Behauptung ohne Deckung."
+        )
+        assert feld in text, f"{feld}: der Ersatzleser nennt das Feld gar nicht"
 
 
 def test_basis_zaehler_bleiben_lesbar():

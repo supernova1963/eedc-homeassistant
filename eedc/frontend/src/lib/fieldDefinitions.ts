@@ -9,6 +9,8 @@
  *   entladung_v2h_kwh        → v2h_entladung_kwh  (E-Auto V2H)
  */
 
+import { PARAM_SONSTIGES_DEFAULTS } from './investitionParameter'
+
 export interface FeldDefinition {
   feld: string
   label: string
@@ -20,6 +22,15 @@ export interface FeldDefinition {
   bedingung?: string
   // #281: konditionelles Label — trifft eine Bedingung zu, ersetzt sie `label`.
   label_wenn?: Record<string, string>
+  /**
+   * #377: Der Parameter-Schlüssel, unter dem die Einheit am **Gerät** steht.
+   *
+   * Steht er, ist `einheit` oben nur der Rückfall — die wahre Einheit kommt aus
+   * `inv.parameter[einheitJeGeraet]`. Gelesen wird das ausschließlich über
+   * {@link einheitFuer}; wer stattdessen `feld.einheit` nimmt, zeigt beim
+   * Zählerstand nichts an. Spiegel von `field_definitions.py::FELD_EINHEIT_JE_GERAET`.
+   */
+  einheitJeGeraet?: string
 }
 
 // =============================================================================
@@ -107,6 +118,17 @@ const SONSTIGES_FELDER: Record<string, FeldDefinition[]> = {
     { feld: 'erzeugung_kwh',        label: 'Erzeugung/Entladung',einheit: 'kWh' },
     { feld: 'verbrauch_sonstig_kwh',label: 'Verbrauch/Ladung',   einheit: 'kWh' },
   ],
+  // #377 — Verbrauchszähler (Gas, Wasser, Heizöl …). Spiegel von
+  // `field_definitions.py::INVESTITION_FELDER["sonstiges"]["zaehler"]`.
+  //
+  // ⚑ **Die leere Einheit ist Absicht und die eigentliche Sicherung.** Was
+  // neben der Zahl steht, hängt am Gerät (`zaehler_einheit`) und wird über
+  // `einheitFuer()` geholt. Träge das Feld hier „m³", wäre die Einheit eine
+  // Eigenschaft des Feldes — und jeder Anwender mit einem Öltank läse Kubik-
+  // meter Heizöl.
+  zaehler: [
+    { feld: 'zaehlerstand', label: 'Zählerstand', einheit: '', einheitJeGeraet: 'zaehler_einheit' },
+  ],
 }
 
 // Alte Feldnamen → neue kanonische Namen (Lese-Kompatibilität mit alten DB-Einträgen)
@@ -191,6 +213,41 @@ export function getFelderFuerInvestition(
 }
 
 /**
+ * Die *Sonstiges*-Kategorien **ohne Stromrichtung** (#377) — der dritte Zustand.
+ *
+ * Spiegel von `field_definitions.SONSTIGES_ZAEHLER_KATEGORIEN`. Ein Zähler ist
+ * weder Erzeuger noch Verbraucher: Er führt gar keinen Strom. Jede Stelle, die
+ * „Erzeuger oder Verbraucher?" fragt, fragt zuerst hier.
+ */
+export const SONSTIGES_ZAEHLER_KATEGORIEN: readonly string[] = ['zaehler']
+
+/** Trägt diese Kategorie einen Zählerstand statt Strom? (#377) */
+export function istZaehlerKategorie(kategorie: string | null | undefined): boolean {
+  return !!kategorie && SONSTIGES_ZAEHLER_KATEGORIEN.includes(kategorie)
+}
+
+/**
+ * Die Einheit, die neben diesem Wert stehen soll — **der eine Leser** (#377).
+ *
+ * Für fast jedes Feld steht sie in der Definition. Beim **Zählerstand** nicht:
+ * Er ist einheitenlos gespeichert, und was daneben steht (m³, l, kg, t, kWh),
+ * hängt am Gerät. Spiegel von `field_definitions.einheit_fuer`.
+ *
+ * ⚠ Anzeige, nie Rechnung — eedc rechnet Zählerstände grundsätzlich nicht um.
+ */
+export function einheitFuer(
+  feld: FeldDefinition,
+  parameter?: InvParameter | null
+): string {
+  if (feld.einheitJeGeraet) {
+    const wert = (parameter ?? {})[feld.einheitJeGeraet]
+    if (wert) return String(wert)
+    return String(PARAM_SONSTIGES_DEFAULTS.zaehler_einheit)
+  }
+  return feld.einheit
+}
+
+/**
  * Alle Richtungen eines *Sonstiges*-Geräts, dedupliziert — **abgeleitet**.
  *
  * Spiegel von `field_definitions.SONSTIGES_FELDER_UNGEPFLEGT`. Verbraucher
@@ -198,7 +255,15 @@ export function getFelderFuerInvestition(
  * gepflegte Kategorie liest (`SONSTIGES_KATEGORIE_UNGEPFLEGT` im Backend).
  */
 const SONSTIGES_FELDER_UNGEPFLEGT: FeldDefinition[] = (() => {
-  const reihenfolge = ['verbraucher', ...Object.keys(SONSTIGES_FELDER).filter(k => k !== 'verbraucher')]
+  const reihenfolge = [
+    'verbraucher',
+    // #377: Zähler-Kategorien bleiben draußen — ein Gerät ohne gepflegte
+    // Kategorie wird als **Verbraucher** gelesen, und ein Zählerstand-Slot
+    // neben den Strom-Feldern verleitet dazu, dort einen Gassensor
+    // zuzuordnen. Das ist der N-244-Schaden mit anderem Vorzeichen.
+    // Spiegel von `_sonstiges_felder_ungepflegt()` im Backend.
+    ...Object.keys(SONSTIGES_FELDER).filter(k => k !== 'verbraucher' && !istZaehlerKategorie(k)),
+  ]
   const gesehen = new Set<string>()
   const out: FeldDefinition[] = []
   for (const kat of reihenfolge) {

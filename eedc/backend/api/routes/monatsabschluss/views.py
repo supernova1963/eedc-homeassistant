@@ -9,7 +9,8 @@ GET  /historie/{anlage_id}                      — Historie der letzten N Monat
 Schreib-Pfad (POST {anlage_id}/{jahr}/{monat}) liegt in wizard.py.
 """
 
-from datetime import date
+from calendar import monthrange
+from datetime import date, datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -23,6 +24,8 @@ from backend.api.routes.strompreise import lade_tarife_fuer_anlage
 from backend.core.database import get_db
 from backend.core.field_definitions import (
     OPTIONALE_FELDER,
+    ZAEHLERSTAND_FELD,
+    einheit_fuer,
     get_basis_felder,
     get_felder_fuer_investition,
     ist_zaehler_differenz_feld,
@@ -44,6 +47,7 @@ from backend.services.provenance import (
     ABGELEITET_KWP_ANTEIL,
 )
 from backend.services.vorschlag_service import Vorschlag, VorschlagQuelle, VorschlagService
+from backend.services.zaehlerstaende import lade_zaehlerstaende
 
 from ._shared import (
     MONAT_NAMEN,
@@ -493,6 +497,27 @@ async def get_monatsabschluss(
             geprueft_gegen=basis_geprueft.get(feld),
         ))
 
+    # Zählerstände zum Monatsende (#377). **Ein eigener Weg, und zwar mit
+    # Absicht:** Jeder andere Vorschlag oben ist eine MENGE — eine
+    # Zählerdifferenz, ein Monatsverbrauch. Der Zählerstand ist ein STAND, und
+    # `ist_zaehler_differenz_feld` liefert für ihn bewusst `False`: würde er
+    # denselben Pfad nehmen, käme `MAX − MIN` heraus, also der **Verbrauch des
+    # Monats** — genau die Zahl, die der Anwender hier NICHT eintragen soll.
+    # Vorgeschlagen wird deshalb der letzte mitgeschriebene Stand des Monats.
+    zaehler_ende: dict[int, float] = {}
+    try:
+        _letzter_tag = monthrange(jahr, monat)[1]
+        for _zf in await lade_zaehlerstaende(
+            db, anlage_id,
+            datetime(jahr, monat, 1),
+            datetime(jahr, monat, _letzter_tag, 23, 59, 59),
+            mit_verlauf=False, nur_aktive=False,
+        ):
+            if _zf.stand_ende is not None:
+                zaehler_ende[_zf.investition_id] = _zf.stand_ende
+    except Exception:  # pragma: no cover - Vorschläge dürfen nie die Seite kippen
+        logger.exception("Zählerstände für den Monatsabschluss nicht ladbar")
+
     # Investitionen aufbereiten
     investitionen_status: list[InvestitionStatus] = []
     for inv in anlage.investitionen:
@@ -552,6 +577,18 @@ async def get_monatsabschluss(
                         beschreibung="Aus HA-Statistik (Recorder-DB)",
                     ))
 
+            # Zählerstand (#377) — der mitgeschriebene Stand, keine Differenz.
+            # Er steht ganz vorn: für dieses Feld gibt es keinen zweiten Weg,
+            # und ein Vormonats-/Durchschnittswert wäre hier sogar schädlich
+            # (der Stand eines Gaszählers hat keinen Mittelwert).
+            if feld == ZAEHLERSTAND_FELD and inv.id in zaehler_ende:
+                vorschlaege.insert(0, Vorschlag(
+                    wert=zaehler_ende[inv.id],
+                    quelle=VorschlagQuelle.ZAEHLERSTAND,
+                    konfidenz=95,
+                    beschreibung="Mitgeschriebener Stand am Monatsende",
+                ))
+
             # Connector-Vorschlag einfügen — bei mehreren Modulen/Speichern ist
             # der Wert der ZERLEGTE Anlagen-Gesamtwert und wird als solcher
             # beschriftet (A3/a2: keine Anzeige behauptet, gemessen zu sein).
@@ -600,7 +637,10 @@ async def get_monatsabschluss(
             felder.append(FeldStatus(
                 feld=feld,
                 label=feld_config["label"],
-                einheit=feld_config["einheit"],
+                # #377: Die Einheit kann am GERÄT hängen (Zählerstand: m³/l/…)
+                # statt am Feld. Ein Leser für alle (S5) — sonst stünde im
+                # Monatsformular nichts neben der Zahl.
+                einheit=einheit_fuer(feld, inv),
                 aktueller_wert=aktueller_wert,
                 quelle=(datenquelle or "manuell") if aktueller_wert is not None else None,
                 vorschlaege=[_vorschlag_to_response(v) for v in vorschlaege],

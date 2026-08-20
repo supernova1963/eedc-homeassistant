@@ -414,6 +414,13 @@ class TagWerteResponse(BaseModel):
     # kWp verteilt (anders als die Monatswerte, `resolve_pv_je_modul`). Ein
     # leeres Dict heißt deshalb „keine Messung je Gerät", nicht „kein Ertrag".
     erzeuger_kwh: Optional[dict[str, float]] = None
+    # #377 — Zählerstand je Verbrauchszähler (Gas/Wasser/Öl), Schlüssel ist die
+    # **Investitions-ID als String**. Der Wert ist der **Stand am Ende des
+    # Tages**, keine Tagesmenge: Ein Zählerstand ist eine Bestandsgröße.
+    #
+    # ⚠ Er wird in dieser Zeile **nirgends mitsummiert** und geht in keine
+    # Bilanzgröße ein — die Spalten tragen `aggregation: 'none'`.
+    zaehler_stand: Optional[dict[str, float]] = None
 
 
 class TagStatusResponse(BaseModel):

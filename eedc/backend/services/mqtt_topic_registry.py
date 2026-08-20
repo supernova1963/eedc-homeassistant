@@ -21,6 +21,7 @@ from backend.models.investition import Investition
 from backend.utils.investition_filter import aktiv_jetzt
 from backend.core.field_definitions import (
     BASIS_LIVE_FELDER,
+    einheit_fuer,
     get_alle_felder_fuer_investition,
     get_feld_bedarf,
     get_live_felder_fuer_investition,
@@ -195,7 +196,13 @@ async def build_expected_topics(
             })
 
         for feld in get_alle_felder_fuer_investition(inv.typ, inv.parameter):
-            einheit_str = f" ({feld['einheit']})" if feld.get("einheit") else ""
+            # #377: Die Einheit kann am GERÄT hängen (Zählerstand: m³ / l / …)
+            # statt am Feld. `einheit_fuer` ist der eine Leser dafür — ohne ihn
+            # bliebe `einheit_str` beim Zählerstand leer, und das Topic hieße
+            # „Gaszähler – Zählerstand" ohne jeden Hinweis darauf, was der
+            # Absender schicken soll.
+            feld_einheit = einheit_fuer(feld["feld"], inv)
+            einheit_str = f" ({feld_einheit})" if feld_einheit else ""
             topics.append({
                 "topic": f"{inv_energy_prefix}/{feld['feld']}",
                 "label": f"{inv.bezeichnung} – {feld['label']}{einheit_str}",
@@ -204,7 +211,7 @@ async def build_expected_topics(
                 "match_key": ("inv_energy", str(inv.id), feld["feld"]),
                 "feld": feld["feld"],
                 "feld_label": feld["label"],
-                "einheit": feld.get("einheit", ""),
+                "einheit": feld_einheit,
                 "hinweis": feld.get("hinweis", ""),
                 # Mit `inv.parameter`, weil (typ, feld) allein die Wärmemengen-
                 # Erwartung einer Split-Klimaanlage nicht auflösen kann (N-86).

@@ -26,6 +26,7 @@ import { formatEnergie, formatEffizienz } from '../lib/einheiten'
 import { MONAT_KURZ, PV_MODUL_FARBEN, PV_MODUL_BG, SONSTIGES_KATEGORIE_LABELS } from '../lib'
 import { CHART_COLORS, ENERGIE_KATEGORIE, KOMPONENTEN_FARBEN, LADEQUELLEN_FARBEN, ROLLEN_BG, SONSTIGES_ERZEUGER_FARBE } from '../lib/colors'
 import { pvVerteiltHerkunft } from '../lib/pvHerkunft'
+import { istZaehlerKategorie } from '../lib/fieldDefinitions'
 import { SPEICHER_KOPPLUNG_LABELS, aufgeloesteSpeicherKopplung, speicherParameter } from '../lib/investitionParameter'
 import { cockpitApi, type PVStringsGesamtlaufzeitResponse } from '../api/cockpit'
 import { investitionenApi, type InvestitionMonatsdaten } from '../api/investitionen'
@@ -33,6 +34,7 @@ import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
 import {
   PV_ANLAGE_KPI, SPEICHER_KPI, WP_KPI, EAUTO_KPI, WALLBOX_KPI, BKW_KPI,
   SONSTIGES_ERZEUGER_KPI, SONSTIGES_VERBRAUCHER_KPI, SONSTIGES_SPEICHER_KPI,
+  SONSTIGES_ZAEHLER_KPI,
   type KpiStyle, type KomponentenColor,
 } from '../lib/komponentenStyle'
 import type { KpiStripItem } from '../components/blocks'
@@ -71,7 +73,15 @@ export interface KompGeraet {
   kennzahlen?: { titel: string; kpis: KpiStripItem[] }
   /** Block ① Hinweise/Alarme (Speicher-Degradation, Durchsatz-Inkonsistenz …) —
    *  als Alert im Status-Block, direkt unter den D2-KPIs. */
-  hinweise?: { ton: 'warning' | 'error'; text: string }[]
+  /**
+   * Hinweise über der Status-Zeile. `ton` geht 1:1 an {@link Alert}, das
+   * `info` von jeher kennt — hier stand es bis #377 nicht, weil es bis dahin
+   * nur Warnungen gab. **`info` ist kein schwaches `warning`:** Es trägt eine
+   * Aussage, die kein Problem meldet, sondern eine Grenze erklärt („dieser
+   * Wert wird bewusst nicht bewertet"). Ohne diese Unterscheidung stünde ein
+   * ganz normaler Gaszähler unter einem gelben Warnbanner.
+   */
+  hinweise?: { ton: 'info' | 'warning' | 'error'; text: string }[]
   /** Block ① Sekundär-KPIs (numerisch, im Strip unter den 4 D2-KPIs). */
   sekundaer?: { titel: string; kpis: KpiStripItem[] }
   /** Block ② Struktur/Verknüpfung (spezifisch: PV-Topologie / Verknüpfungs-Referenz). */
@@ -843,6 +853,54 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
             wirtschaftlichkeit: (z.ersparnis_euro ?? 0) > 0 ? {
               posten: [{ label: 'Eigenverbrauchs-Ersparnis', euro: z.ersparnis_euro, farbe: SEG.ev }],
             } : undefined,
+          }
+        }
+        if (istZaehlerKategorie(z.kategorie)) {
+          // #377 — ein Verbrauchszähler wird ERFASST, nicht bewertet.
+          //
+          // Nur zwei Kennzahlen, und keine davon ist eine Bilanzgröße: der
+          // aktuelle Stand und was er sich seit Aufzeichnungsbeginn bewegt hat.
+          // Es gibt hier bewusst **keine** Ersparnis-, CO₂- oder PV-Anteil-
+          // Kachel: Gas oder Wasser sind Haushaltskosten und gehören nicht in
+          // die Rechnung der PV-Anlage. Vier Kacheln mit Nullen zu füllen wäre
+          // der v4.0.17-Befund von der Klimaanlage.
+          const einheit = (z.einheit as string) ?? ''
+          const monatsverbrauch = (z.monatsverbrauch ?? []) as Array<{
+            jahr: number; monat: number; verbrauch: number
+          }>
+          return {
+            inv, label: inv.bezeichnung, selektorBadge,
+            // Der GRUND gehört auf die Fläche, nicht nur in die Antwort: Ohne
+            // ihn fehlt der Wirtschaftlichkeits-Block einfach, und der
+            // Anwender sieht nicht, ob eedc nichts weiß oder bewusst nichts
+            // sagt. Das ist der Unterschied zwischen „unbekannt" und „nicht
+            // anwendbar" (v4.0.17-Muster).
+            hinweise: [
+              ...(hinweise ?? []),
+              {
+                ton: 'info' as const,
+                text: (z.nicht_bewertet_grund as string) ?? '',
+              },
+            ].filter((h) => h.text),
+            monatswerte: md.length,
+            status: [
+              kpi(SONSTIGES_ZAEHLER_KPI.stand, n1(z.stand_ende), einheit),
+              kpi(SONSTIGES_ZAEHLER_KPI.verbrauch, n1(z.differenz), einheit),
+            ],
+            // ④ Verlauf: der Verbrauch JE MONAT — eine Flussgröße, deshalb
+            // Balken. Der Stand selbst wäre hier falsch dargestellt: eine
+            // monoton steigende Bestandsgröße als Balkenreihe lädt dazu ein,
+            // sie zu addieren. Die Stand-Linie steht in Cockpit Tag/Monat/Jahr.
+            verlauf: monatsverbrauch.length ? {
+              einheit,
+              bars: [{ key: 'verbrauch', label: 'Verbrauch', farbe: KOMPONENTEN_FARBEN['sonstiges'].hex }],
+              rows: monatsverbrauch.map((r) => ({
+                name: `${MONAT_KURZ[r.monat - 1]} ${String(r.jahr).slice(2)}`,
+                verbrauch: r.verbrauch,
+              })),
+            } : undefined,
+            // Keine `aufteilung` (es gibt keine zwei Seiten) und keine
+            // `wirtschaftlichkeit` (nicht anwendbar, nicht bloß unbekannt).
           }
         }
         // Default: Erzeuger. Sonstiger Erzeuger (BHKW/Pellet/Brennstoffzelle) speist

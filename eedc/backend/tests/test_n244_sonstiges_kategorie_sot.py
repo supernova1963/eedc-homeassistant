@@ -32,10 +32,12 @@ from backend.core.field_definitions import (
     INVESTITION_FELDER,
     SONSTIGES_FELDER_UNGEPFLEGT,
     SONSTIGES_KATEGORIE_UNGEPFLEGT,
+    ZAEHLERSTAND_FELD,
     get_alle_felder_fuer_investition,
     get_felder_fuer_investition,
     get_felder_fuer_sonstiges,
     ist_gepflegte_sonstiges_kategorie,
+    ist_zaehler_kategorie,
 )
 
 WURZEL = Path(__file__).resolve().parents[1]
@@ -118,12 +120,41 @@ def test_n244_ungepflegt_bietet_jedes_feld_jeder_richtung() -> None:
     Das ist die Probe, die den Befund gefangen hätte: Vorher lieferte diese
     Frage die Erzeuger-Liste, und der Schnitt mit der Verbraucher-Liste war
     leer.
+
+    ⚑ **Seit #377 gilt „jede RICHTUNG", nicht „jede Kategorie"** — und das ist
+    eine Verschärfung, keine Lockerung. Die Kategorie `zaehler` hat gar keine
+    Stromrichtung (`SONSTIGES_ZAEHLER_KATEGORIEN`, der dritte Zustand). Ihr
+    Feld im ungepflegten Fall anzubieten hieße: Wer noch keine Kategorie
+    gewählt hat, bekommt einen Gaszähler-Slot neben den Strom-Feldern
+    angeboten — und ordnet dort einen Sensor zu, den eedc anschließend als
+    **Verbraucher** liest. Das ist exakt der N-244-Schaden, nur mit anderem
+    Vorzeichen.
     """
-    alle = {f["feld"] for felder in INVESTITION_FELDER["sonstiges"].values() for f in felder}
+    alle = {
+        f["feld"]
+        for kat, felder in INVESTITION_FELDER["sonstiges"].items()
+        if not ist_zaehler_kategorie(kat)
+        for f in felder
+    }
     ungepflegt = {f["feld"] for f in SONSTIGES_FELDER_UNGEPFLEGT}
     assert ungepflegt == alle, (
         "Ein Feld einer Richtung fehlt im ungepflegten Fall — genau so entsteht "
         f"ein nirgends suchbares Feld: {sorted(alle - ungepflegt)}"
+    )
+
+
+def test_n244_ungepflegt_bietet_KEINEN_zaehlerstand() -> None:
+    """Die Gegenrichtung derselben Deckung (#377) — als eigene Aussage.
+
+    Der Test darüber prüft „nichts fehlt". Diese Probe prüft „nichts ist zu
+    viel drin", und zwar namentlich: Ohne sie könnte jemand die Ausnahme oben
+    entfernen und die Deckung bliebe grün, weil beide Mengen dann wieder
+    übereinstimmen.
+    """
+    ungepflegt = {f["feld"] for f in SONSTIGES_FELDER_UNGEPFLEGT}
+    assert ZAEHLERSTAND_FELD not in ungepflegt, (
+        "Ein Gerät ohne gepflegte Kategorie darf keinen Zählerstand angeboten "
+        "bekommen — es wird als Verbraucher gelesen (N-244)."
     )
 
 

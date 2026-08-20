@@ -11,6 +11,7 @@ from typing import Optional
 
 from backend.core.field_definitions import (
     SONSTIGES_KATEGORIE_UNGEPFLEGT,
+    ist_zaehler_kategorie,
     ist_zustand_feld,
 )
 from backend.models.anlage import Anlage
@@ -190,6 +191,14 @@ def baue_investitions_serien(
         bidirektional = config["bidirektional"]
         if typ == "sonstiges" and isinstance(inv.parameter, dict):
             kat = inv.parameter.get("kategorie", SONSTIGES_KATEGORIE_UNGEPFLEGT)
+            # #377: Ein Zähler bekommt **keine Serie**. Er führt keine
+            # Leistung, und m³ auf einer kW-Achse ist genau die
+            # Einheiten-Verwechslung, vor der der `soc_je_speicher`-Kommentar
+            # in `models/tages_energie_profil.py` warnt. Die Alternative
+            # („Serie mit Seite quelle/senke") gibt es nicht — er hat keine
+            # Seite, das ist der dritte Zustand.
+            if ist_zaehler_kategorie(kat):
+                continue
             if kat == "erzeuger":
                 seite = "quelle"
             elif kat == "speicher":

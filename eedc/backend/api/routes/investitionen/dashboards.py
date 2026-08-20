@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from dataclasses import asdict
-from datetime import date
+from datetime import date, datetime
 import logging
 
 from backend.api.deps import get_db
@@ -30,6 +30,11 @@ from backend.api.routes.strompreise import (
 )
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
 from backend.core.hub_leer_grund import bestimme_leer_grund
+from backend.services.zaehlerstaende import (
+    lade_zaehlerstaende,
+    zaehler_art,
+    zaehler_einheit,
+)
 from backend.core.investition_kennwerte import (
     ANZAHL_LESE_DEFAULT,
     get_bkw_kwp,
@@ -84,6 +89,7 @@ from backend.core.field_definitions import (
     get_speicher_netzladung_kwh,
     get_wp_strom_kwh,
     ist_gepflegte_sonstiges_kategorie,
+    ist_zaehler_kategorie,
 )
 from backend.core.betriebsmodus import HEIZEN as BM_HEIZEN
 from backend.core.betriebsmodus import KUEHLEN as BM_KUEHLEN
@@ -1850,6 +1856,42 @@ async def get_balkonkraftwerk_dashboard(
     return dashboards
 
 
+def _monatsverbrauch_aus_verlauf(fenster) -> list[dict]:
+    """Verbrauch je Kalendermonat aus einem Stand-Verlauf (#377).
+
+    Aus einer **Bestands**reihe (Zählerstände) wird eine **Fluss**reihe
+    (Verbrauch je Monat): je Monat der letzte bekannte Stand, dann die Differenz
+    zum letzten Stand des Vormonats.
+
+    ⚠ **Der erste Monat der Aufzeichnung bekommt keinen Wert.** Es gibt keinen
+    Vormonatsstand, gegen den man ihn messen könnte — eine 0 dort wäre die
+    Behauptung „in diesem Monat wurde nichts verbraucht" (ADR-002/P4).
+
+    ⚠ Ein **Rücksprung** (neuer Zähler ohne Stilllegung) ergäbe eine negative
+    Differenz. Sie wird ausgelassen statt gekappt: eine stille Kappung machte
+    aus einem Widerspruch eine plausibel aussehende Zahl. Der Daten-Checker
+    macht daraus einen Hinweis mit dem Weg (§4: stilllegen + neu anlegen).
+    """
+    if fenster is None or not fenster.verlauf:
+        return []
+    letzter_je_monat: dict[tuple[int, int], float] = {}
+    for punkt in fenster.verlauf:
+        letzter_je_monat[(punkt.zeitpunkt.year, punkt.zeitpunkt.month)] = punkt.stand
+
+    out: list[dict] = []
+    vorher: Optional[float] = None
+    for (j, m) in sorted(letzter_je_monat):
+        stand = letzter_je_monat[(j, m)]
+        if vorher is not None and stand >= vorher:
+            out.append({
+                'jahr': j, 'monat': m,
+                'verbrauch': round(stand - vorher, 3),
+                'stand': stand,
+            })
+        vorher = stand
+    return out
+
+
 @router.get("/dashboard/sonstiges/{anlage_id}", response_model=list[SonstigesDashboardResponse])
 async def get_sonstiges_dashboard(
     anlage_id: int,
@@ -2034,6 +2076,71 @@ async def get_sonstiges_dashboard(
                 'pv_anteil_prozent': round(pv_anteil, 1),
                 'kosten_netz_euro': round(kosten_netz, 2),
                 'ersparnis_pv_euro': round(ersparnis_pv, 2),
+                'sonderkosten_euro': round(gesamt_sonstige_ausgaben, 2),
+                'sonstige_ertraege_euro': round(gesamt_sonstige_ertraege, 2),
+                'sonstige_ausgaben_euro': round(gesamt_sonstige_ausgaben, 2),
+                'sonstige_netto_euro': round(gesamt_sonstige_netto, 2),
+                'anzahl_monate': len(monatsdaten),
+            }
+
+        elif ist_zaehler_kategorie(kategorie):
+            # #377 — ein Zähler wird ERFASST, nicht BEWERTET.
+            #
+            # ⚠ **Ohne diesen Zweig fiele er in den Speicher-Zweig darunter**
+            # (`else`) und bekäme eine Effizienz aus Ladung/Entladung, die er
+            # nicht hat, sowie eine Ersparnis aus einem Spread, den es für Gas
+            # nicht gibt — vier Nullen, die wie eine Aussage aussehen. Genau
+            # das ist der v4.0.17-Befund bei der Klimaanlage, und die Antwort
+            # ist dieselbe: **„nicht bewertet" sagen, statt Nullen zu zeigen.**
+            #
+            # Eine Wirtschaftlichkeit ist hier nicht bloß unbekannt, sie ist
+            # nicht anwendbar: Gas- und Wasserkosten sind Haushaltskosten und
+            # gehören nicht in die Bewertung der PV-Anlage (Präzedenz: der
+            # Einspeise-Erlös eines Fremd-Erzeugers, `field_definitions.py`).
+            zaehler_fenster = next(
+                (
+                    z for z in await lade_zaehlerstaende(
+                        db, anlage_id,
+                        datetime(1970, 1, 1), datetime.now(),
+                        mit_verlauf=True, nur_aktive=False,
+                    )
+                    if z.investition_id == inv.id
+                ),
+                None,
+            )
+            zusammenfassung = {
+                'kategorie': kategorie,
+                'beschreibung': beschreibung,
+                'zaehler_art': zaehler_art(inv),
+                'einheit': zaehler_einheit(inv),
+                'stand_anfang': zaehler_fenster.stand_anfang if zaehler_fenster else None,
+                'stand_ende': zaehler_fenster.stand_ende if zaehler_fenster else None,
+                'differenz': zaehler_fenster.differenz if zaehler_fenster else None,
+                'anfang_vollstaendig': (
+                    zaehler_fenster.anfang_vollstaendig if zaehler_fenster else True
+                ),
+                'verlauf': [
+                    {'zeitpunkt': p.zeitpunkt.isoformat(), 'stand': p.stand}
+                    for p in (zaehler_fenster.verlauf if zaehler_fenster else [])
+                ],
+                # Der Verbrauch JE MONAT — die Differenz zweier aufeinander
+                # folgender Stände.
+                #
+                # ⚑ **Warum das Backend sie rechnet und nicht der Hub:** Ein
+                # Zählerstand ist eine Bestandsgröße, sein Verbrauch eine
+                # Flussgröße — das ist ein Wechsel der Größenart, keine
+                # Formatierung. Im Client gerechnet gäbe es die Rechnung
+                # „Ende − Anfang" ein zweites Mal, und die zweite läuft
+                # irgendwann anders (die P10-Klasse).
+                'monatsverbrauch': _monatsverbrauch_aus_verlauf(zaehler_fenster),
+                # Bewusst KEINE der `gesamt_*`-, `ersparnis_*`- oder
+                # `co2_*`-Größen: Ein Feld mit 0 wäre eine Behauptung.
+                'bewertet': False,
+                'nicht_bewertet_grund': (
+                    "Ein Verbrauchszähler wird in eedc erfasst und angezeigt, aber "
+                    "nicht bewertet: Gas, Wasser oder Heizöl sind Haushaltskosten "
+                    "und gehören nicht in die Wirtschaftlichkeit der PV-Anlage."
+                ),
                 'sonderkosten_euro': round(gesamt_sonstige_ausgaben, 2),
                 'sonstige_ertraege_euro': round(gesamt_sonstige_ertraege, 2),
                 'sonstige_ausgaben_euro': round(gesamt_sonstige_ausgaben, 2),

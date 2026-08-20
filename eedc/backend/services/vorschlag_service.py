@@ -34,6 +34,12 @@ class VorschlagQuelle(str, Enum):
     BERECHNUNG = "berechnung"      # Berechnet (COP, kWp, etc.)
     DURCHSCHNITT = "durchschnitt"  # Ø letzte 12 Monate
     PARAMETER = "parameter"        # Aus Investition-Parametern
+    # #377: der mitgeschriebene ZÄHLERSTAND zum Monatsende — eine eigene
+    # Quelle, weil er als einziger Vorschlag **keine Menge** ist, sondern ein
+    # Stand. Ihn unter `HA_STATISTICS` zu führen wäre doppelt falsch: dort
+    # steht überall eine Zählerdifferenz (MAX−MIN), und bei einer
+    # MQTT-Anlage kommt er gar nicht aus HA.
+    ZAEHLERSTAND = "zaehlerstand"
 
 
 @dataclass
