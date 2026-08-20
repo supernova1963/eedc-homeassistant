@@ -239,7 +239,6 @@ async def setup_connector(
         "geraet_typ": test_result.geraet_typ,
         "seriennummer": test_result.seriennummer,
         "firmware": test_result.firmware,
-        "auto_fetch_enabled": False,
         "meter_snapshots": {},
         "last_fetch": now,
     }
@@ -295,7 +294,6 @@ async def get_connector_status(
         "geraet_typ": config.get("geraet_typ"),
         "seriennummer": config.get("seriennummer"),
         "firmware": config.get("firmware"),
-        "auto_fetch_enabled": config.get("auto_fetch_enabled", False),
         "last_fetch": config.get("last_fetch"),
         "snapshot_count": len(snapshots),
         "latest_snapshot": _get_latest_snapshot(snapshots),

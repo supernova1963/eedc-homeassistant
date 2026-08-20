@@ -34,6 +34,9 @@ class SensorChecks:
         """
         from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
         from backend.services.mqtt_topic_registry import build_expected_topics
+        from backend.services.datenquellen_resolver import (
+            erwartet_inbound_topic, feld_id_aus_match_key,
+        )
         from backend.models.settings import Settings as SettingsModel
 
         kat = CheckKategorie.MQTT_TOPIC_ABDECKUNG
@@ -78,9 +81,21 @@ class SensorChecks:
         # empfangen" gemeldet stünde hier ein Dauer-Hinweis auf ein Topic, auf
         # das niemand publizieren soll. Sie tragen deshalb schon in der
         # Registry ein leeres `topic`.
+        #
+        # Und drittens (F-50, #389): Felder, deren Quelle der Anwender bewusst
+        # auf „Keine" oder einen HA-Sensor gesetzt hat. Die Erwartungsliste
+        # kommt aus der Felder-Registry und kannte die Zuordnung bis v4.0.22
+        # gar nicht — vier auf „Keine" gestellte Felder standen deshalb
+        # dauerhaft als „erwartet, nie empfangen" in den Warnungen.
+        # Begründung je Quelle in `erwartet_inbound_topic` (Gateway bleibt
+        # bewusst drin: sein Re-Publish landet im selben Cache).
+        quellen = (anlage.sensor_mapping or {}).get("quellen") or {}
+        if not isinstance(quellen, dict):
+            quellen = {}
         erwartet = [
             e for e in await build_expected_topics(self.db, anlage)
             if not e.get("nur_manuell") and not e.get("zustand")
+            and erwartet_inbound_topic(quellen, feld_id_aus_match_key(e["match_key"]))
         ]
         if not erwartet:
             return ergebnisse
@@ -130,7 +145,10 @@ class SensorChecks:
                 veraltet.append((entry["topic"], age_min))
 
         if nie_empfangen:
-            beispiele = ", ".join(t.split("/")[-1] for t in nie_empfangen[:6])
+            # Voller Topic-Pfad statt nur des letzten Segments (#389): „leistung_w"
+            # gibt es an jedem Gerät — erst der Pfad sagt, an welchem. Der Melder
+            # konnte die Warnung ohne ihn nicht auf ein Gerät zurückführen.
+            beispiele = ", ".join(nie_empfangen[:6])
             if len(nie_empfangen) > 6:
                 beispiele += f" (+{len(nie_empfangen) - 6} weitere)"
             ergebnisse.append(CheckErgebnis(
@@ -151,7 +169,7 @@ class SensorChecks:
 
         if veraltet:
             beispiele = "; ".join(
-                f"{t.split('/')[-1]} (vor {a} min)" for t, a in veraltet[:5]
+                f"{t} (vor {a} min)" for t, a in veraltet[:5]
             )
             if len(veraltet) > 5:
                 beispiele += f" (+{len(veraltet) - 5} weitere)"

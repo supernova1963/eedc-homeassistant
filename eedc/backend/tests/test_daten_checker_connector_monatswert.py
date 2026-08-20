@@ -57,7 +57,6 @@ async def test_kein_connector_kein_befund():
 async def test_ein_snapshot_meldet_den_wortlaut_der_route():
     anlage = _anlage({
         "connector_id": "e3dc", "geraet_name": "E3DC S10",
-        "auto_fetch_enabled": True,
         "meter_snapshots": {_ts(0.1): _werte(1000)},
     })
     befunde = await _befunde(anlage)
@@ -86,14 +85,21 @@ async def test_stillstehender_connector_meldet():
     # und der jüngste ist zu alt, um sich noch von selbst zu erledigen.
     anlage = _anlage({
         "connector_id": "e3dc",
-        "auto_fetch_enabled": False,
         "meter_snapshots": {_ts(40): _werte(800), _ts(35): _werte(850)},
     })
     befunde = await _befunde(anlage)
     assert len(befunde) == 1
     assert befunde[0].schwere == CheckSeverity.WARNING.value
     assert "jüngste Snapshot" in befunde[0].details
-    assert "ausgeschaltet" in befunde[0].details
+    # F-51 (#390): Hier stand `assert "ausgeschaltet" in details` — der Test hat
+    # damit eine FALSCHE Aussage festgeschrieben. `auto_fetch_enabled` hatte nie
+    # einen Schalter (einziger Schreiber: hart False), und
+    # `connector_daily_poll_job` fragt es gar nicht ab. Zugesichert ist jetzt das
+    # Gegenteil: der Hinweis behauptet keinen abgeschalteten Abruf mehr und
+    # nennt den Weg, den es wirklich gibt.
+    assert "ausgeschaltet" not in befunde[0].details
+    assert "03:30" in befunde[0].details
+    assert "Jetzt ablesen" in befunde[0].details
 
 
 async def test_frische_snapshots_ohne_monatswert_schweigen():

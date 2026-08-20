@@ -76,6 +76,33 @@ daneben genau daraus kamen. Betroffen war, wer seine PV über den **anlagenweite
 erfasst und keine Messung je Modulgruppe hat; das ist der Normalfall. Tages- und
 Monatsansicht waren nie betroffen — das erklärt, warum dieselbe Anlage zwei Zahlen zeigte.
 
+### Zwei Hinweise, die dich im Kreis geschickt haben
+
+**gruaGit hat beide gemeldet** — und bei beiden hatte der Hinweis mehr behauptet, als er wusste.
+
+**Der erste:** Wer die Datenquelle eines Feldes auf **Keine** stellt, weil der Wert schon von
+einer anderen Komponente kommt, bekam es trotzdem dauerhaft als „MQTT-Topic erwartet, nie
+empfangen" gemeldet ([#389](https://github.com/supernova1963/eedc-homeassistant/issues/389)).
+Bei ihm vier Stück, die sich nicht abstellen ließen. Der Grund: Die Liste der erwarteten
+Topics entstand aus den Feldern, die deine Anlage kennt — sie hat nie nachgesehen, welche
+Quelle du dem einzelnen Feld zugewiesen hast. Dasselbe galt für Felder an einem **HA-Sensor**;
+dort kann über MQTT ohnehin nie etwas ankommen. **Beides ist weg.** Was bleibt: Felder ohne
+zugewiesene Quelle — dafür ist die Warnung da — und Felder über ein **MQTT-Gateway**, denn
+dessen Werte laufen durch denselben Kanal.
+
+Und weil „leistung_w" an jedem Gerät existiert, nennt die Warnung jetzt den **vollen
+Topic-Pfad**. Genau daran war seine Fehlersuche hängengeblieben.
+
+**Der zweite:** Fehlten dem Geräte-Connector die Zählerstände für den laufenden Monat, sagte
+eedc „Der tägliche Abruf ist ausgeschaltet"
+([Diskussion #390](https://github.com/supernova1963/eedc-homeassistant/discussions/390)).
+**Das stimmte nie.** Der Abruf läuft bei jedem eingerichteten Connector täglich um 3:30 Uhr,
+und einen Schalter dafür gab es gar nicht — der Satz beschrieb einen Zustand, den es nicht
+gibt. Der Knopf *Beheben* führte dazu auf eine Seite, auf der sich nichts daran ändern ließ.
+Jetzt nennt der Hinweis die Uhrzeit und den letzten Abruf und führt zum **Geräte-Connector**
+mit dem Knopf *Jetzt ablesen*. Scheitert ein Abruf, steht der Grund dort und im
+Aktivitätsprotokoll.
+
 ---
 
 ## v4.0.21 — Heizen und Kühlen getrennt

@@ -233,6 +233,12 @@ class DatenCheckResult:
 # auseinanderlaufen.
 LINK_DATENQUELLEN = "/einstellungen/datenquellen"
 
+# Ziel der Connector-Hinweise (F-51, #390). Der Ausweg bei fehlenden Snapshots
+# ist „Jetzt ablesen" im Geräte-Connector-Assistenten — der liegt unter
+# Integration → Import-Assistenten, NICHT auf der Datenquellen-Fläche. Dorthin
+# zeigte der Hinweis bis v4.0.22 und ließ den Melder ohne Weg stehen.
+LINK_INTEGRATION = "/einstellungen/integration"
+
 # Sprechende Kurz-Labels für Provenance-Quellen (Daten-Checker Detail-Zeile,
 # Safi105 #301). Die technischen Source-Strings aus core/source_priority.py
 # (z. B. "manual:form", "external:cloud_import:fronius_solarweb") sollen dem

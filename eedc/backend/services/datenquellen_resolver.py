@@ -130,3 +130,53 @@ def resolve_effektive_quelle(
     if inbound_hat_wert:
         return QUELLE_INBOUND, {"quelle": QUELLE_INBOUND}, None
     return QUELLE_KEINE, None, None
+
+
+# ─── Erwartet eedc ein Standard-Inbound-Topic? (F-50, #389) ──────────────
+
+# Quellen, die den Wert NICHT über das Standard-Inbound-Topic liefern.
+# Gateway fehlt hier bewusst — s. `erwartet_inbound_topic`.
+QUELLEN_OHNE_INBOUND_TOPIC = frozenset({
+    QUELLE_KEINE, QUELLE_HA_APP, QUELLE_HA_CONNECTOR,
+})
+
+
+def feld_id_aus_match_key(match_key) -> str:
+    """Stabile Feld-Kennung aus dem `match_key` der Topic-Registry.
+
+    Spiegel von `api/routes/datenquellen.py::_feld_id` — hier, damit der
+    Daten-Checker die Kennung bilden kann, ohne aus einem Route-Modul zu
+    importieren. Beide Seiten müssen dieselbe Zeichenkette erzeugen, sonst
+    trifft die Quellen-Abfrage ins Leere.
+    """
+    return "_".join(str(x) for x in match_key)
+
+
+def erwartet_inbound_topic(quellen: dict, field_id: str) -> bool:
+    """Erwartet eedc für dieses Feld einen Wert auf dem Standard-Inbound-Topic?
+
+    **Nein**, sobald der Anwender eine andere Quelle GEWÄHLT hat — „Keine"
+    oder einen HA-Sensor. Beides meldete der MQTT-Topic-Abdeckungs-Check
+    bis v4.0.22 als „erwartet, nie empfangen" bzw. „veraltet" (#389, gruaGit):
+    ein Hinweis auf ein Topic, auf das niemand publizieren soll.
+
+    **Ein persistierter Eintrag ist immer eine bewusste Wahl.** Die
+    3-Stufen-Auflösung schreibt bei stummem Inbound NICHTS fort
+    (`resolve_effektive_quelle` liefert dort `persist_entry=None`) — genau
+    der Fall, für den der Check gebaut wurde (#134), bleibt damit drin.
+    Ohne Eintrag gilt wie bisher: Topic wird erwartet.
+
+    **Gateway bleibt ebenfalls drin.** Der Gateway-Service re-publisht auf
+    das EEDC-Inbound-Topic (`mqtt_gateway_service.py`), und der Slug-Teil im
+    Subscriber-Regex ist optional — der Wert landet im selben Cache unter
+    demselben Schlüssel. Ein stummes Gateway-Mapping ist deshalb eine echte
+    Lücke und keine Fehlmeldung.
+
+    Args:
+        quellen: `anlage.sensor_mapping["quellen"]` (Feld-ID → Eintrag).
+        field_id: Kennung aus `feld_id_aus_match_key`.
+    """
+    eintrag = quellen.get(field_id)
+    if not isinstance(eintrag, dict):
+        return True
+    return eintrag.get("quelle") not in QUELLEN_OHNE_INBOUND_TOPIC

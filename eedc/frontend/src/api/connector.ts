@@ -47,7 +47,6 @@ export interface ConnectorStatus {
   geraet_typ?: string
   seriennummer?: string
   firmware?: string
-  auto_fetch_enabled?: boolean
   last_fetch?: string
   snapshot_count?: number
   latest_snapshot?: MeterSnapshot | null

@@ -23,7 +23,8 @@ from backend.core.berechnungen import (
 )
 
 from .kategorien import (
-    CheckErgebnis, CheckKategorie, CheckSeverity, LINK_DATENQUELLEN, _quelle_label,
+    CheckErgebnis, CheckKategorie, CheckSeverity, LINK_DATENQUELLEN,
+    LINK_INTEGRATION, _quelle_label,
 )
 
 logger = logging.getLogger(__name__)
@@ -1213,12 +1214,20 @@ class DatenquelleChecks:
                 "Der jüngste Snapshot ist vom "
                 f"{juengster.strftime('%d.%m.%Y') if juengster else 'unbekannten Datum'}."
             )
+        # F-51 (#390): Hier stand bis v4.0.22 „Der tägliche Abruf ist
+        # ausgeschaltet" — und das war unwahr. Der Satz hing an
+        # `auto_fetch_enabled`, das an genau EINER Stelle geschrieben wird
+        # (`routes/connector.py`, hart auf False) und keinen Schalter hat;
+        # `connector_daily_poll_job` fragt es gar nicht ab und läuft täglich
+        # um 03:30 für jede Anlage mit Connector. Der Hinweis behauptete also
+        # eine Ursache, die es nicht gibt, und nannte ein Mittel, das es nicht
+        # gibt — dieselbe Klasse wie F-27/F-30.
         weg = (
-            "Der tägliche Abruf ist aktiv — mit dem nächsten Snapshot trägt der "
-            "Connector den Monat wieder mit."
-            if config.get("auto_fetch_enabled")
-            else "Der tägliche Abruf ist ausgeschaltet; ohne ihn kommt kein "
-            "weiterer Snapshot dazu."
+            f"Der tägliche Abruf läuft um 03:30 Uhr{_letzter_abruf_satz(config)}. "
+            "Kommt trotzdem kein Snapshot dazu, lies den Zähler unter "
+            "Einstellungen → Integration → Import-Assistenten → Geräte-Connector "
+            "mit „Jetzt ablesen“ von Hand ab; scheitert der Abruf, steht der "
+            "Grund dort und im Aktivitätsprotokoll."
         )
         return [CheckErgebnis(
             kategorie=CheckKategorie.DATENQUELLE_STATUS.value,
@@ -1232,7 +1241,7 @@ class DatenquelleChecks:
                 "Mindestens ein Snapshot vor und einer nach dem Monatsbeginn "
                 f"nötig. {bestand} {weg}"
             ),
-            link=LINK_DATENQUELLEN,
+            link=LINK_INTEGRATION,
         )]
 
 
@@ -1324,6 +1333,23 @@ class DatenquelleChecks:
             ),
             link=LINK_DATENQUELLEN,
         )]
+
+
+def _letzter_abruf_satz(config: dict) -> str:
+    """„, zuletzt am TT.MM.JJJJ" — oder leer, wenn kein Datum vorliegt.
+
+    `last_fetch` setzt der Setup-Pfad und jeder Abruf (`fetch_service`). Ein
+    unlesbarer oder fehlender Wert darf den Hinweis nicht kaputtmachen: dann
+    bleibt der Satz ohne Datum stehen, statt ein falsches zu nennen.
+    """
+    roh = config.get("last_fetch")
+    if not roh:
+        return ""
+    try:
+        ts = datetime.fromisoformat(str(roh).replace("Z", "+00:00")).replace(tzinfo=None)
+    except (ValueError, TypeError):
+        return ""
+    return f", zuletzt am {ts.strftime('%d.%m.%Y')}"
 
 
 def _juengster_snapshot(snapshots: dict) -> Optional[datetime]:
