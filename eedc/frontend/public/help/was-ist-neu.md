@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** August 2026 (v4.0.21)
+> **Stand:** August 2026 (v4.0.22)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -9,7 +9,7 @@
 
 ---
 
-## [Unreleased] — Der Community-Vergleich bekommt einen echten Maßstab
+## v4.0.22 — Nur sagen, was man weiß
 
 **azywietz-web hat einen Fehler gemeldet und ihn gleich selbst vorgerechnet**
 ([#387](https://github.com/supernova1963/eedc-homeassistant/issues/387)):
@@ -2358,6 +2358,14 @@ Zählerstand *im* neuen Monat naturgemäß, bis der Abruf einmal durch ist.
 
 **Muss ich etwas tun?** Nein — außer der Daten-Checker meldet den Connector; dann lohnt der
 Blick, ob der **tägliche Abruf** eingeschaltet und das Gerät erreichbar ist.
+
+> ⚠ **Nachträglich richtiggestellt (August 2026):** Der Satz oben stimmt nicht — einen Schalter
+> für den täglichen Abruf gibt es nicht, und es gab ihn nie. Der Abruf läuft bei **jedem**
+> eingerichteten Geräte-Connector um 3:30 Uhr. Zu prüfen ist deshalb nur, ob das Gerät
+> erreichbar ist; von Hand auslösen lässt sich ein Abruf unter *Einstellungen → Integration →
+> Import-Assistenten → Geräte-Connector* mit **Jetzt ablesen**. Der Daten-Checker hat denselben
+> Satz damals selbst angezeigt — dass er auf nichts verwies, fiel erst auf, als jemand danach
+> suchte.
 
 ---
 
