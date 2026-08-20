@@ -477,6 +477,8 @@ Der Sensor-Picker in den Datenquellen zeigt alle Sensoren ohne harten Filter —
 ### 4.11 Geräte-Connector ohne Monatswert <a name="411-geraete-connector-ohne-monatswert"></a>
 
 > **Variantenhinweis:** Nur relevant, wenn unter *Einstellungen → Datenquellen* ein **Geräte-Connector** eingerichtet ist. Ohne Connector wird die Kategorie still übersprungen — sie meldet nie etwas, das du nicht auflösen könntest.
+>
+> ⚠ **Ein Cloud-Import ist kein Geräte-Connector.** Beide stehen unter *Einstellungen → Integration → Import-Assistenten*, sind aber verschiedene Dinge: Der **Geräte-Connector** spricht deinen Wechselrichter **im eigenen Netz** über seine lokale Schnittstelle an; ein **Cloud-Import** (Fronius Solar.web, SolarEdge, Growatt, EcoFlow …) holt Daten vom **Portal des Herstellers**. Wer nur einen Cloud-Import eingerichtet hat, bekommt hier **keinen** Befund. Bis eedc 4.0.22 war das anders — siehe [Was ist neu](WAS-IST-NEU.md).
 
 **Was wird geprüft:** Kann eedc aus den gespeicherten Zählerständen des Connectors für den **laufenden Monat** überhaupt einen Wert bilden? Ein Connector-Wert ist immer die **Differenz zweier Snapshots** — einer muss vor dem Monatsbeginn liegen, einer danach. Fehlt einer davon, liefert der Connector für diesen Monat gar nichts, und das war bisher nirgends zu sehen: In *Cockpit → Monat* stand einfach eine Quelle weniger, ohne Hinweis darauf, dass eine eingerichtete Quelle gerade schweigt.
 

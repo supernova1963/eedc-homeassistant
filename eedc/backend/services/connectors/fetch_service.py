@@ -44,6 +44,59 @@ SNAPSHOT_KWH_FELDER = [
 ]
 
 
+# F-54 (#390): `Anlage.connector_config` ist ein MEHRZWECKFELD — dieselbe
+# Spalte trägt den Geräte-Connector UND die Cloud-Import-Quellen
+# (`cloud_import`, `services/cloud_import/quellen.py`). „Spalte nicht leer"
+# heißt deshalb NICHT „Geräte-Connector eingerichtet": wer nur einen
+# Cloud-Import anlegt, bekam eine Fläche „Connector aktiv" ohne Gerät, einen
+# unauflösbaren Checker-Hinweis und beim Abruf „Unbekannter Connector: None".
+# Scheduler und MQTT-Bridge fragten von jeher richtig (`connector_id` + `host`);
+# die zwei sichtbaren Stellen kannten die Bedingung nicht. Hier steht sie
+# einmal, alle vier Aufrufer ziehen sie.
+GERAETE_CONNECTOR_SCHLUESSEL = frozenset({
+    "connector_id",
+    "host",
+    "username",
+    "password",
+    "geraet_name",
+    "geraet_typ",
+    "seriennummer",
+    "firmware",
+    "meter_snapshots",
+    "last_fetch",
+    "field_inv_map",
+    "auto_fetch_enabled",  # Altbestand: seit F-51 nicht mehr geschrieben
+})
+
+
+def hat_geraete_connector(config: Optional[dict]) -> bool:
+    """Ist an dieser Anlage ein Geräte-Connector eingerichtet?
+
+    Maßgeblich sind `connector_id` UND `host` — beide setzt ausschließlich
+    `POST /connectors/setup/{anlage_id}`, und ohne beide ist kein Abruf
+    möglich. Eine `connector_config`, die nur `cloud_import` trägt, ist
+    ausdrücklich **kein** Geräte-Connector.
+    """
+    if not config:
+        return False
+    return bool(config.get("connector_id")) and bool(config.get("host"))
+
+
+def ohne_geraete_connector(config: Optional[dict]) -> dict:
+    """Gibt die Config ohne die Geräte-Connector-Schlüssel zurück.
+
+    Gegenstück zu `hat_geraete_connector` für den Entfernen-Pfad: die Spalte
+    wird NICHT auf `None` gesetzt, sonst nimmt „Connector entfernen" die
+    Cloud-Import-Zugangsdaten mit (F-54). Entfernt wird eine **benannte**
+    Liste, nicht „alles außer bekannt" — so kostet ein künftiger fremder
+    Schlüssel höchstens einen Rest, nie einen Datenverlust.
+    """
+    return {
+        k: v for k, v in (config or {}).items()
+        if k not in GERAETE_CONNECTOR_SCHLUESSEL
+    }
+
+
 def decode_password(encoded: str) -> str:
     """Base64-Decoding für das in der connector_config gespeicherte Passwort."""
     if not encoded:
@@ -89,8 +142,11 @@ async def fetch_and_store_snapshot(anlage: Anlage) -> dict:
         {"snapshot": dict, "differenz": dict | None, "timestamp": iso-str}
     """
     config = anlage.connector_config
-    if not config:
-        raise ConnectorNotConfigured("Kein Connector konfiguriert")
+    if not hat_geraete_connector(config):
+        # F-54: Vorher lief dieser Fall in `get_connector(None)` und meldete
+        # „Unbekannter Connector: None" — ein Satz über einen Connector, den
+        # der Anwender nie angelegt hat. Er sagt jetzt, was fehlt.
+        raise ConnectorNotConfigured("Kein Geräte-Connector eingerichtet")
 
     connector_id = config.get("connector_id")
     try:

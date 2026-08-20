@@ -335,12 +335,13 @@ async def build_targets_from_db(session) -> list[ConnectorTarget]:
     """
     from sqlalchemy import select
     from backend.models.anlage import Anlage
+    from backend.services.connectors.fetch_service import hat_geraete_connector
 
     result = await session.execute(select(Anlage))
     targets: list[ConnectorTarget] = []
     for anlage in result.scalars().all():
         cfg = anlage.connector_config
-        if not cfg or not cfg.get("connector_id") or not cfg.get("host"):
+        if not hat_geraete_connector(cfg):
             continue
         # Nur valide int-Werte übernehmen (UI darf null = "keine Zuordnung" senden)
         raw_map = cfg.get("field_inv_map") or {}

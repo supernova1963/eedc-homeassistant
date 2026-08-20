@@ -99,6 +99,37 @@ aus Home Assistant aus als diese Zeile. Wo eine Zuordnung stand, wurde die ganze
 mitgeschrieben, auch während dort ein Strich zu sehen war. Die Aufteilung ist also ab
 dem Tag deiner Zuordnung vorhanden und taucht mit diesem Update auf.
 
+**Wer aus einem Hersteller-Portal importiert, wird nicht mehr zu einem Gerät geschickt,
+das er nie eingerichtet hat**
+([#390](https://github.com/supernova1963/eedc-homeassistant/discussions/390), gemeldet von gruaGit)
+
+In eedc gibt es zwei verschiedene Wege, Daten direkt vom Wechselrichter zu holen — sie
+stehen nebeneinander unter *Einstellungen → Integration → Import-Assistenten*:
+
+- der **Geräte-Connector** spricht dein Gerät **im eigenen Netz** an,
+- ein **Cloud-Import** holt die Daten vom **Portal des Herstellers** (Fronius Solar.web,
+  SolarEdge, Growatt, EcoFlow und weitere).
+
+Wer nur den zweiten Weg nutzt, bekam trotzdem den ersten angezeigt: eine Karte
+*„Connector aktiv"* ohne Gerät, ohne Adresse und ohne einen einzigen Zählerstand — und
+dazu im Daten-Checker die Meldung *„Connector „Connector" liefert für 08/2026 keinen
+Wert"*. Der Melder ist ihr gefolgt, hat *Jetzt ablesen* gedrückt und bekam
+*„Unbekannter Connector: None"*. **Es gab dort nichts zu reparieren**, weil es das Gerät
+nie gab. Genau so etwas soll der Daten-Checker nie melden.
+
+**Jetzt gilt:** Beides bleibt sauber getrennt. Ohne eingerichteten Geräte-Connector
+zeigt die Fläche wieder den Einrichtungsschritt, und der Daten-Checker schweigt.
+
+⚠ **Der wichtigste Teil ist einer, den kaum jemand bemerkt hätte:** Neben dem
+Phantom-Gerät stand ein Knopf **Entfernen** — und der hätte deine **Zugangsdaten zum
+Hersteller-Portal gelöscht**, weil beide in derselben Ablage liegen. Auch das ist
+behoben. **Wer den Knopf nicht gedrückt hat, verliert nichts**, und es gibt nichts
+nachzutragen.
+
+✅ **Deine Daten waren nie in Gefahr, solange du nichts gelöscht hast.** Der nächtliche
+Abruf und die Weitergabe an Home Assistant haben von jeher richtig unterschieden —
+betroffen war nur, was du auf dem Bildschirm gesehen hast.
+
 ---
 
 ## v4.0.22 — Nur sagen, was man weiß

@@ -30,6 +30,8 @@ from backend.services.connectors.fetch_service import (
     calc_difference as _calc_difference,
     fetch_and_store_snapshot,
     get_latest_snapshot as _get_latest_snapshot,
+    hat_geraete_connector,
+    ohne_geraete_connector,
 )
 from backend.services.activity_service import log_activity
 
@@ -279,7 +281,11 @@ async def get_connector_status(
     anlage = await _get_anlage(anlage_id, db)
 
     config = anlage.connector_config
-    if not config:
+    # F-54 (#390): NICHT `if not config` — die Spalte trägt auch die
+    # Cloud-Import-Quellen. Wer nur einen Cloud-Import angelegt hat, bekam
+    # sonst eine Karte „Connector aktiv" mit leerem Gerät, leerem Host und
+    # 0 Snapshots — und daneben einen Knopf „Entfernen".
+    if not hat_geraete_connector(config):
         return {"configured": False}
 
     # Passwort nie an Frontend senden
@@ -419,13 +425,24 @@ async def remove_connector(
     anlage_id: int,
     db: AsyncSession = Depends(get_db),
 ):
-    """Connector-Konfiguration einer Anlage entfernen."""
+    """Geräte-Connector einer Anlage entfernen.
+
+    F-54 (#390): Diese Route setzte `connector_config` auf `None` — und nahm
+    damit die **Cloud-Import-Zugangsdaten** mit, die in derselben Spalte
+    liegen. Zusammen mit der Phantom-Karte aus `get_connector_status` stand
+    der Knopf „Entfernen" bei einem Cloud-Import-Nutzer neben einem Gerät,
+    das es nie gab; ein naheliegender Klick hätte seine Zugangsdaten
+    gelöscht. Entfernt wird jetzt nur, was dem Geräte-Connector gehört.
+    """
     anlage = await _get_anlage(anlage_id, db)
 
-    if not anlage.connector_config:
-        raise HTTPException(status_code=400, detail="Kein Connector konfiguriert")
+    if not hat_geraete_connector(anlage.connector_config):
+        raise HTTPException(
+            status_code=400, detail="Kein Geräte-Connector eingerichtet"
+        )
 
-    anlage.connector_config = None
+    rest = ohne_geraete_connector(anlage.connector_config)
+    anlage.connector_config = rest or None
     flag_modified(anlage, "connector_config")
 
     logger.info(f"Connector für Anlage {anlage_id} entfernt")

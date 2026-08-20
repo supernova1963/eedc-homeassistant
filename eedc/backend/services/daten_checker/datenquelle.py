@@ -1178,12 +1178,23 @@ class DatenquelleChecks:
 
         Kein Connector konfiguriert ⇒ kein Befund — sonst meldete der Checker
         jedem HA-Nutzer etwas Unauflösbares.
+
+        F-54 (#390): „Kein Connector konfiguriert" hieß hier bis v4.0.22
+        `if not config` — und traf damit genau die P-6-Falle, vor der der Satz
+        darüber warnt. `Anlage.connector_config` trägt auch die
+        Cloud-Import-Quellen; wer nur einen Cloud-Import angelegt hat, bekam
+        „Connector „Connector" liefert für MM/JJJJ keinen Wert" für ein Gerät,
+        das er nie eingerichtet hat — mitsamt einem Weg („Jetzt ablesen"), der
+        bei ihm mit „Unbekannter Connector: None" endete. Gemeldet von gruaGit
+        (Discussion #390, 19./20.08., vier Bilder gesehen), an einer
+        Wegwerf-Instanz über den echten Schreibpfad reproduziert.
         """
         from datetime import date
         from backend.api.routes.connector import _calc_month_delta
+        from backend.services.connectors.fetch_service import hat_geraete_connector
 
         config = anlage.connector_config
-        if not config:
+        if not hat_geraete_connector(config):
             return []
 
         snapshots = config.get("meter_snapshots") or {}

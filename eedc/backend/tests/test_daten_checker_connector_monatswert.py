@@ -14,9 +14,19 @@ Tests sichern beide Richtungen:
   nicht gelaufen) ⇒ KEIN Befund — sonst meldete der Checker am 1. jedes Monats
   bei jedem Connector-Nutzer etwas, das sich Stunden später von selbst erledigt.
 - Kein Connector konfiguriert ⇒ kein Befund (P-6: nichts Unauflösbares melden).
+- **Nur ein Cloud-Import in derselben Spalte ⇒ kein Befund** (F-54, s. u.).
 
 Die Zeitstempel sind relativ zu `date.today()` gerechnet — der Test bleibt damit
 CI-hermetisch ([[feedback_tests_ci_hermetisch]], auch die Uhr).
+
+⚠ **F-54 (#390) hat die Fixtures korrigiert, nicht nur ergänzt.** Sie trugen
+`connector_id` **ohne** `host` — einen Zustand, den `POST /connectors/setup`
+nie erzeugt (es schreibt beide zusammen). Solange „Connector eingerichtet"
+`if not config` hieß, fiel das nicht auf; mit dem SoT-Prädikat
+`hat_geraete_connector` (beide Felder, dieselbe Bedingung, die Scheduler und
+MQTT-Bridge seit jeher prüfen) wurden die Proben rot. Die Antwort war, die
+Fixtures an die Produktion anzugleichen — nicht das Prädikat aufzuweichen.
+[[feedback_probe_unerreichbarer_zustand]]
 """
 
 from __future__ import annotations
@@ -56,7 +66,7 @@ async def test_kein_connector_kein_befund():
 
 async def test_ein_snapshot_meldet_den_wortlaut_der_route():
     anlage = _anlage({
-        "connector_id": "e3dc", "geraet_name": "E3DC S10",
+        "connector_id": "e3dc", "host": "192.168.1.50", "geraet_name": "E3DC S10",
         "meter_snapshots": {_ts(0.1): _werte(1000)},
     })
     befunde = await _befunde(anlage)
@@ -74,7 +84,7 @@ async def test_ein_snapshot_meldet_den_wortlaut_der_route():
 async def test_zwei_umrahmende_snapshots_kein_befund():
     # Einer aus dem Vormonat, einer von heute → Delta bildbar.
     anlage = _anlage({
-        "connector_id": "e3dc",
+        "connector_id": "e3dc", "host": "192.168.1.50",
         "meter_snapshots": {_ts(40): _werte(800), _ts(0.1): _werte(1000)},
     })
     assert await _befunde(anlage) == []
@@ -84,7 +94,7 @@ async def test_stillstehender_connector_meldet():
     # Beide Snapshots liegen im Vormonat → für den laufenden Monat kein Delta,
     # und der jüngste ist zu alt, um sich noch von selbst zu erledigen.
     anlage = _anlage({
-        "connector_id": "e3dc",
+        "connector_id": "e3dc", "host": "192.168.1.50",
         "meter_snapshots": {_ts(40): _werte(800), _ts(35): _werte(850)},
     })
     befunde = await _befunde(anlage)
@@ -106,7 +116,7 @@ async def test_frische_snapshots_ohne_monatswert_schweigen():
     # Monatserster vor dem Tagesabruf: zwei Snapshots, beide aus dem Vormonat,
     # der jüngste von gestern. Erledigt sich mit dem nächsten Abruf → kein Lärm.
     anlage = _anlage({
-        "connector_id": "e3dc",
+        "connector_id": "e3dc", "host": "192.168.1.50",
         "meter_snapshots": {_ts(1.5): _werte(800), _ts(0.5): _werte(810)},
     })
     befunde = await _befunde(anlage)

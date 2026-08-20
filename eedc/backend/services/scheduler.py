@@ -907,7 +907,10 @@ async def connector_daily_poll_job() -> None:
         from sqlalchemy import select
         from backend.core.database import get_session
         from backend.models.anlage import Anlage
-        from backend.services.connectors.fetch_service import fetch_and_store_snapshot
+        from backend.services.connectors.fetch_service import (
+            fetch_and_store_snapshot,
+            hat_geraete_connector,
+        )
 
         ok = 0
         fehler = 0
@@ -918,8 +921,7 @@ async def connector_daily_poll_job() -> None:
             anlagen = result.scalars().all()
 
             for anlage in anlagen:
-                cfg = anlage.connector_config
-                if not cfg or not cfg.get("connector_id") or not cfg.get("host"):
+                if not hat_geraete_connector(anlage.connector_config):
                     continue
                 try:
                     await fetch_and_store_snapshot(anlage)
