@@ -7,6 +7,20 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Die Aufteilung Heizen/Kühlen erscheint sofort, statt erst nach dem Monatsabschluss** ([#263](https://github.com/supernova1963/eedc-homeassistant/issues/263), gemeldet von kingcap1). Wer den **Betriebsmodus** seiner Klimaanlage zuordnet, sah bisher **nirgendwo** ein Ergebnis: nicht im Komponenten-Hub, nicht in *Cockpit → Monat* und *→ Jahr*, und die beiden Home-Assistant-Sensoren blieben leer. Der Melder hat am selben Tag zugeordnet und gefragt, ob „erst ein Tag durchlaufen" müsse.
+  - **Die Ursache war weder ein Tag noch ein Rechenfehler:** Die drei Werte standen ausschließlich in der Monatszeile, und die entsteht erst beim **Monatsabschluss** — den man in eedc von Hand startet. Für den laufenden Monat gibt es ihn nie. Wer heute zuordnet, hätte damit bis Anfang des Folgemonats nichts gesehen.
+  - **Was jetzt gilt:** Solange kein Abschluss vorliegt, rechnet eedc die Aufteilung aus den mitgeschriebenen Stunden — dieselbe Rechnung, dieselben Zahlen, nur eben schon während des Monats. Das gilt für **alle vier** Anzeigen, die beiden Home-Assistant-Sensoren eingeschlossen. **Wo ein Abschluss gelaufen ist, bleibt dessen Ergebnis stehen**: ein abgeschlossener Monat wird nicht rückwirkend umgeschrieben, und nichts wird doppelt gezählt.
+  - ⚠ **Unverändert bleibt die Grenze:** Der Modus wird ab der Zuordnung mitgeschrieben, nicht rückwirkend — Home Assistant bewahrt Zustände wie „Heizen"/„Kühlen" nur wenige Tage auf.
+
+- **Ein zugeordneter Betriebsmodus zeigt seinen Wert, statt „–"** (ebenfalls [#263](https://github.com/supernova1963/eedc-homeassistant/issues/263)). Unter *Einstellungen → Datenquellen* stand neben dem zugeordneten Feld ein Strich, obwohl Home Assistant sauber „cool" meldete — die Zeile konnte nur Zahlen anzeigen, und ein Betriebsmodus ist keine. Für den Anwender sah eine einwandfreie Zuordnung damit wie ein Ausfall aus.
+  - Jetzt steht dort der Klartext mit dem Rohwert daneben: **„Kühlen (cool)"**. Kennt eedc eine Schreibweise nicht, heißt sie ausdrücklich **„Unbestimmt"** — dann weiß man, dass diese Zeit später unter „nicht aufgeteilt" landet und nicht still einer Seite zugeschlagen wird. Ein echter Ausfall (`unavailable`) zeigt weiterhin „–".
+
+---
+
 ## [4.0.22] - 2026-08-20 — Nur sagen, was man weiß
 
 ### Fixed

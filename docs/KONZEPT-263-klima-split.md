@@ -468,6 +468,16 @@ Reine Faltung in `core/berechnungen/modus_split.py` (ADR-001), Lader in
 > zwingt die nächste Sitzung zu einer zweiten Faltung daneben — die Drift-Klasse, gegen die
 > dieses Projekt seit zehn Vorfällen arbeitet.
 >
+> ⛔ **Und genau das ist passiert — nachgetragen am 2026-08-20 (F-52).** S3 baute den Lader
+> samt diesem Absatz, schloss aber **nur den Schreibpfad** an; `lade_modus_split_je_monat`
+> hatte baumweit **einen** Aufrufer. Der Modul-Kopf von `modus_split_monat.py` behauptete die
+> zwei trotzdem — eine Aussage über den Code, die von ihrem ersten Tag an falsch war. Sichtbar
+> wurde es beim ersten echten Gerät: kingcap1 ordnete am 19.08. den Modus zu und sah in
+> **allen vier** Sichten nichts. Der zweite Aufrufer sitzt jetzt in
+> `services/monats_fakten.py::_ergaenze_modus_split_ohne_abschluss` — **gespeichert schlägt
+> gerechnet**, und die Teilmengen-Invariante gilt dort genauso, sonst käme ein beim Abschluss
+> *verworfener* Split über den Lesepfad zurück.
+>
 > ⚑ **„Gemessen schlägt abgeleitet" braucht keine Sonderregel:** `auto:monatsabschluss` ist
 > `SourcePriority.AUTO_AGGREGATION` (3), `MANUAL` ist 1 und `EXTERNAL_AUTHORITATIVE` 2 — beide
 > schlagen den Schreiber. Wer einen Wärmemengenzähler zuordnet oder die Heizwärme von Hand

@@ -81,12 +81,13 @@ from backend.core.berechnungen import (
     erzeugung_hinter_zaehler_kwh,
     imd_typ_beitrag,
 )
+from backend.core.betriebsmodus import MODUS_ABDECKUNG_FELD
 from backend.core.investition_parameter import ist_dienstlich
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
 )
-from backend.core.field_definitions import get_emob_pv_netz_kwh
+from backend.core.field_definitions import get_emob_pv_netz_kwh, get_wp_strom_kwh
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.monatsdaten import Monatsdaten
 from backend.services.eauto_wirtschaftlichkeit import (
@@ -100,6 +101,9 @@ from backend.services.einspeise_erloes_service import (
 from backend.services.emob_ladeanteil import (
     hat_gepflegten_pv_anteil,
     reichere_ladezeilen_an,
+)
+from backend.services.energie_profil.modus_split_monat import (
+    lade_modus_split_ohne_abschluss,
 )
 from backend.services.energie_profil.monats_aus_tagen import (
     TagesMonatsSumme,
@@ -662,16 +666,57 @@ async def lade_monats_fakten(
 
     # Roh-Faltung je Monat aus den sichtbaren IMD-Zeilen.
     roh: dict[MonatsSchluessel, _RohMonat] = {}
+    #: (jahr, monat) → {investition_id_als_string: (hat_gespeicherten_split,
+    #: gepflegter_wp_strom_kwh)} — die Buchführung für den Modus-Lesepfad (F-52).
+    #: Sie entsteht **in diesem Durchlauf**, damit der Lesepfad je *Gerät*
+    #: entscheiden kann, statt je Monat: eine Anlage mit zwei Wärmepumpen kann
+    #: für die eine einen Abschluss haben und für die andere nicht.
+    wp_je_monat: dict[MonatsSchluessel, dict[str, tuple[bool, float]]] = {}
     for imd in imd_rows:
         inv = inv_by_id.get(imd.investition_id)
         # #153/#155/#236/#308: vor Anschaffung / nach Stilllegung / deaktiviert
         # zählt nichts — der EINE Ort, an dem dieser Filter gilt.
         if inv is None or not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
             continue
+        daten = imd.verbrauch_daten or {}
         roh.setdefault((imd.jahr, imd.monat), _RohMonat()).falte(
-            inv, imd.verbrauch_daten or {},
+            inv, daten,
             abgetretene_bkw=abgetretene_bkw,
             source_provenance=imd.source_provenance,
+        )
+        if inv.typ == "waermepumpe":
+            wp_je_monat.setdefault((imd.jahr, imd.monat), {})[str(inv.id)] = (
+                float(daten.get(MODUS_ABDECKUNG_FELD) or 0) > 0,
+                get_wp_strom_kwh(daten, inv.parameter),
+            )
+
+    # ── Modus-Split für Monate ohne Abschluss (F-52) ─────────────────────────
+    #
+    # **Der zweite Aufrufer, den `modus_split_monat.py` im eigenen Modul-Kopf
+    # beschreibt.** Er fehlte: die drei Modus-Felder stehen nur in der
+    # IMD-Zeile, und dorthin schreibt allein der von Hand gestartete
+    # Monatsabschluss. Der *laufende* Monat hat nie einen — wer den
+    # Betriebsmodus heute zuordnet, sah bis hierher in **allen vier** Sichten
+    # nichts (Komponenten-Hub, Cockpit Monat, Cockpit Jahr, HA-Sensoren), und
+    # zwar bis zum nächsten Abschluss. Gemeldet von kingcap1 (#263).
+    #
+    # **Gespeichert schlägt gerechnet** — dieselbe Reihenfolge wie beim
+    # Schreibpfad (ADR-002/P8: ein Wert trägt den Stichtag seines Monats). Wo
+    # ein Abschluss gelaufen ist, gilt sein Ergebnis, auch wenn die Tagesebene
+    # inzwischen etwas anderes hergäbe.
+    #
+    # ⚠ **Die Invariante gilt hier genauso**, und sie ist der Grund, warum
+    # dieser Block nicht einfach addiert: Beim Abschluss *verworfene* Splits
+    # (Σ Teilmengen > Gesamt) hinterlassen keine Spur — ohne erneute Prüfung
+    # kämen sie über diesen Weg zurück und die Invariante wäre umgangen.
+    #
+    # **Kosten:** eine `SELECT DISTINCT datum … WHERE betriebsmodus_je_wp IS NOT
+    # NULL`. Eine Anlage ohne Modus-Zuordnung bricht dort ab und lädt nichts
+    # (`modus_split_monat.py`, Modul-Kopf) — deshalb genügt als Vorbedingung,
+    # dass es überhaupt eine Wärmepumpe gibt.
+    if any(i.typ == "waermepumpe" for i in investitionen):
+        await _ergaenze_modus_split_ohne_abschluss(
+            db, anlage_id, roh, wp_je_monat, inv_by_id, von=von, bis=bis
         )
 
     # Die lokale Tagesebene als **zusätzliche** Grundgesamtheit (N-121). Ohne
@@ -729,6 +774,41 @@ async def lade_monats_fakten(
             )
         )
     return fakten
+
+
+async def _ergaenze_modus_split_ohne_abschluss(
+    db: AsyncSession,
+    anlage_id: int,
+    roh: dict[MonatsSchluessel, _RohMonat],
+    wp_je_monat: dict[MonatsSchluessel, dict[str, tuple[bool, float]]],
+    inv_by_id: dict[int, Investition],
+    *,
+    von: Optional[MonatsSchluessel],
+    bis: Optional[MonatsSchluessel],
+) -> None:
+    """Trägt den Modus-Split der Tagesebene nach, wo kein Abschluss ihn hält (F-52).
+
+    Ändert ``roh`` an Ort und Stelle. **Die Regeln stehen nicht hier** — sie
+    liegen in ``lade_modus_split_ohne_abschluss``, weil der HA-Export dieselben
+    braucht und seine IMD-Zeilen je Investition faltet (P10-Restschuld). Ein
+    Nachbau daneben wäre die Drift-Klasse, an der F-52 selbst entstanden ist.
+
+    ⚠ **Es entsteht hier ein neuer Monat**, wo bisher keine Gerätespur lag —
+    und das ist gewollt: ein Monat mit Modus-Spur *hat* eine, sie steht nur in
+    Stundenzeilen statt in einer Monatszeile. Das ist nicht die N-121-Falle
+    (dort ging es um Monate mit reiner Tagesspur ohne jeden Gerätebezug).
+    """
+    angewandt = await lade_modus_split_ohne_abschluss(
+        db, anlage_id, inv_by_id=inv_by_id, gespeichert=wp_je_monat,
+        von=von, bis=bis,
+    )
+    for schluessel, je_inv in angewandt.items():
+        for split in je_inv.values():
+            r = roh.setdefault(schluessel, _RohMonat())
+            r.wp_modus_strom_heizen += split.heizen_kwh
+            r.wp_modus_strom_kuehlen += split.kuehlen_kwh
+            r.wp_modus_abdeckung_h += split.abdeckung_h
+            r.wp_modus_strom_bezug += split.bezug_kwh
 
 
 async def ist_pv_ladeanteil_prozent(

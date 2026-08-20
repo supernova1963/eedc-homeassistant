@@ -73,6 +73,9 @@ from backend.services.emob_ladeanteil import reichere_monatszeilen_an
 from backend.models.anlage import Anlage
 from backend.services.activity_service import log_activity
 from backend.models.monatsdaten import Monatsdaten
+from backend.services.energie_profil.modus_split_monat import (
+    lade_modus_split_ohne_abschluss,
+)
 from backend.models.investition import (
     ERTRAGSFELD_TYPEN,
     Investition,
@@ -1423,17 +1426,47 @@ async def calculate_investition_sensors(
         gesamt_modus_heizen = 0.0
         gesamt_modus_kuehlen = 0.0
         gesamt_modus_abdeckung_h = 0.0
+        #: F-52: Was der Abschluss schon festgeschrieben hat — und der gepflegte
+        #: Gesamtwert je Monat. Beides braucht der Nachtrag unten, um
+        #: „gespeichert schlägt gerechnet" und die Teilmengen-Invariante
+        #: anwenden zu können. Entsteht in DIESEM Durchlauf, damit keine dritte
+        #: Quelle für dieselben Werte aufgemacht wird.
+        gespeichert_je_monat: dict[tuple[int, int], dict[str, tuple[bool, float]]] = {}
         for md in monatsdaten:
             d = md.verbrauch_daten or {}
             gesamt_modus_heizen += d.get(MODUS_STROM_FELD[BM_HEIZEN], 0) or 0
             gesamt_modus_kuehlen += d.get(MODUS_STROM_FELD[BM_KUEHLEN], 0) or 0
             gesamt_modus_abdeckung_h += d.get(MODUS_ABDECKUNG_FELD, 0) or 0
             gesamt_strom += get_wp_strom_kwh(d, investition.parameter)
+            gespeichert_je_monat[(md.jahr, md.monat)] = {
+                str(investition.id): (
+                    float(d.get(MODUS_ABDECKUNG_FELD) or 0) > 0,
+                    get_wp_strom_kwh(d, investition.parameter),
+                )
+            }
             gesamt_heizung += d.get("heizenergie_kwh", 0) or 0
             gesamt_warmwasser += d.get("warmwasser_kwh", 0) or 0
             waerme_abgeleitet = waerme_abgeleitet or heizwaerme_ist_abgeleitet(
                 md.source_provenance
             )
+
+        # F-52: Monate ohne Abschluss tragen ihren Split aus der Tagesebene
+        # nach. **Ohne diesen Block blieben genau diese zwei Sensoren stumm**,
+        # während Komponenten-Hub und Cockpit die Aufteilung schon zeigen —
+        # zwei Zahlen für dieselbe Größe, die Klasse hinter #331 und F-15.
+        # ⚠ Die Regeln stehen NICHT hier, sondern im gemeinsamen Lader; dieser
+        # Pfad faltet je Investition und geht deshalb nicht über die
+        # Monats-Fakten (bekannte P10-Restschuld von `ha_export.py`).
+        nachgetragen = await lade_modus_split_ohne_abschluss(
+            db, investition.anlage_id,
+            inv_by_id={investition.id: investition},
+            gespeichert=gespeichert_je_monat,
+        )
+        for _je_inv in nachgetragen.values():
+            for _split in _je_inv.values():
+                gesamt_modus_heizen += _split.heizen_kwh
+                gesamt_modus_kuehlen += _split.kuehlen_kwh
+                gesamt_modus_abdeckung_h += _split.abdeckung_h
 
         gesamt_waerme = gesamt_heizung + gesamt_warmwasser
 

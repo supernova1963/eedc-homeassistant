@@ -39,8 +39,10 @@ from backend.core.berechnungen import (
     ModusStunde,
     falte_modus_split_tag,
     summiere_modus_split,
+    teilmengen_passen,
     waermepumpe_kwh_je_investition,
 )
+from backend.core.betriebsmodus import HEIZEN, KUEHLEN
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 
 #: ``(jahr, monat)`` — dieselbe Achse wie die Monats-Fakten-Schicht.
@@ -206,3 +208,83 @@ async def lade_modus_split_monat(
         db, anlage_id, von=(jahr, monat), bis=(jahr, monat)
     )
     return alle.get((jahr, monat), {})
+
+
+@dataclass(frozen=True)
+class AngewandterSplit:
+    """Ein Modus-Split, der die Vorrang- und Invariantenprüfung bestanden hat.
+
+    ``bezug_kwh`` ist der Gesamtwert, gegen den geprüft wurde — und aus dem die
+    Zeile „nicht aufgeteilt" entsteht (``bezug − heizen − kuehlen``).
+    """
+
+    heizen_kwh: float
+    kuehlen_kwh: float
+    abdeckung_h: float
+    bezug_kwh: float
+
+
+async def lade_modus_split_ohne_abschluss(
+    db: AsyncSession,
+    anlage_id: int,
+    *,
+    inv_by_id: dict,
+    gespeichert: dict[MonatsSchluessel, dict[str, tuple[bool, float]]],
+    von: Optional[MonatsSchluessel] = None,
+    bis: Optional[MonatsSchluessel] = None,
+) -> dict[MonatsSchluessel, dict[str, AngewandterSplit]]:
+    """Der **zweite Aufrufer** aus dem Modul-Kopf — für Monate ohne Abschluss (F-52).
+
+    **Warum das eine Funktion ist und keine zwei.** Sie hat selbst zwei
+    Aufrufer: die Monats-Fakten-Schicht (Komponenten-Hub, Cockpit Monat/Jahr)
+    und den HA-Export, der seine IMD-Zeilen **je Investition** faltet und
+    deshalb nicht über die Monats-Fakten geht (bekannte P10-Restschuld). Beide
+    brauchen dieselben zwei Regeln — und genau daran ist S3 gescheitert: eine
+    Regel, die an zwei Stellen nachgebaut wird, driftet.
+
+    Args:
+        inv_by_id: die in Frage kommenden Investitionen, nach ID. Nur für sie
+            wird etwas geliefert — der HA-Export übergibt genau eine.
+        gespeichert: ``(jahr, monat) → {inv_id_str: (hat_gespeicherten_split,
+            gepflegter_wp_strom_kwh)}``. Der Aufrufer baut sie beim Falten
+            seiner IMD-Zeilen; diese Funktion liest **keine** Monatszeilen, um
+            keine dritte Quelle für denselben Wert zu öffnen.
+
+    Returns:
+        Nur Monat/Gerät-Paare, für die tatsächlich etwas anzuwenden ist.
+
+    Die zwei Regeln:
+
+    * **Gespeichert schlägt gerechnet** (ADR-002/P8) — wo ein Abschluss lief,
+      gilt sein Ergebnis; ein fertiger Monat wird nicht rückwirkend
+      umgeschrieben.
+    * **Die Teilmengen-Invariante gilt hier genauso.** Beim Abschluss
+      *verworfene* Splits hinterlassen keine Spur (``_entferne_split``); ohne
+      erneute Prüfung kämen sie über diesen Weg zurück.
+    """
+    splits = await lade_modus_split_je_monat(db, anlage_id, von=von, bis=bis)
+    if not splits:
+        return {}
+
+    ergebnis: dict[MonatsSchluessel, dict[str, AngewandterSplit]] = {}
+    for schluessel, je_inv in splits.items():
+        for inv_id_str, split in je_inv.items():
+            inv = inv_by_id.get(int(inv_id_str))
+            # Dieselben drei Achsen wie im Schreibpfad (#153/#155/#236/#308).
+            if inv is None or not inv.ist_aktiv_im_monat(*schluessel):
+                continue
+            hat_gespeicherten, gepflegter_strom = gespeichert.get(
+                schluessel, {}
+            ).get(inv_id_str, (False, 0.0))
+            if hat_gespeicherten:
+                continue
+            bezug = gepflegter_strom if gepflegter_strom > 0 else split.bezug_kwh
+            if not teilmengen_passen(split, bezug):
+                continue
+            ergebnis.setdefault(schluessel, {})[inv_id_str] = AngewandterSplit(
+                heizen_kwh=split.teilmenge_kwh(HEIZEN),
+                kuehlen_kwh=split.teilmenge_kwh(KUEHLEN),
+                abdeckung_h=split.abdeckung_h,
+                bezug_kwh=float(bezug or 0.0),
+            )
+    return ergebnis

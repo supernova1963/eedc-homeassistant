@@ -9,6 +9,43 @@
 
 ---
 
+## Noch nicht veröffentlicht
+
+**Klimaanlage: die Aufteilung Heizen/Kühlen ist sofort da**
+([#263](https://github.com/supernova1963/eedc-homeassistant/issues/263), gemeldet von kingcap1)
+
+Wer den **Betriebsmodus** seiner Klimaanlage zuordnet, bekam bisher nirgendwo ein
+Ergebnis zu sehen — weder im Komponenten-Hub noch in *Cockpit → Monat* und *→ Jahr*,
+und die beiden Home-Assistant-Sensoren blieben leer. Der Melder hat zugeordnet und
+gefragt, ob „erst ein Tag durchlaufen" müsse.
+
+Es lag weder an einem Tag noch an einer falschen Zahl: Die Aufteilung stand nur in der
+**Monatszeile**, und die entsteht erst beim Monatsabschluss — den startest du von Hand,
+und für den laufenden Monat gibt es ihn nie. Wer heute zuordnete, hätte also bis Anfang
+des nächsten Monats nichts gesehen.
+
+**Jetzt rechnet eedc die Aufteilung aus den mitgeschriebenen Stunden, solange kein
+Abschluss vorliegt.** Dieselbe Rechnung, dieselben Zahlen — nur schon während des
+Monats, und in **allen vier** Anzeigen samt den beiden Home-Assistant-Sensoren. Wo du
+einen Monat bereits abgeschlossen hast, bleibt dessen Ergebnis stehen; ein fertiger
+Monat wird nicht rückwirkend umgeschrieben und nichts doppelt gezählt.
+
+⚠ Unverändert: Der Modus wird **ab der Zuordnung** mitgeschrieben, nicht rückwirkend.
+Home Assistant bewahrt Zustände wie „Heizen"/„Kühlen" nur wenige Tage auf.
+
+**Und der zugeordnete Betriebsmodus zeigt endlich seinen Wert**
+
+Unter *Einstellungen → Datenquellen* stand neben dem Feld ein Strich, obwohl Home
+Assistant sauber „cool" meldete — die Zeile konnte nur Zahlen anzeigen, und ein
+Betriebsmodus ist keine. Eine funktionierende Zuordnung sah damit aus wie ein Ausfall.
+
+Jetzt steht dort **„Kühlen (cool)"** — der Klartext mit dem Rohwert daneben. Kennt eedc
+eine Schreibweise nicht, heißt sie ausdrücklich **„Unbestimmt"**; dann weißt du, dass
+diese Zeit später unter *nicht aufgeteilt* landet, statt still einer Seite zugeschlagen
+zu werden. Ein echter Ausfall zeigt weiterhin „–".
+
+---
+
 ## v4.0.22 — Nur sagen, was man weiß
 
 **azywietz-web hat einen Fehler gemeldet und ihn gleich selbst vorgerechnet**

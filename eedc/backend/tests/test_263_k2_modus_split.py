@@ -885,3 +885,191 @@ def test_der_bezug_entsteht_nur_bei_erfasster_abdeckung():
 
     ohne = imd_typ_beitrag(_Inv(), {"stromverbrauch_kwh": 100.0})
     assert ohne.wp_modus_strom_bezug == 0.0
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# F-52 — der Lesepfad für Monate ohne Abschluss (#263, kingcap1)
+#
+# Der Bestand deckte den Schreibpfad vollständig ab und war deshalb grün,
+# während der *laufende* Monat in allen vier Sichten nichts zeigte: die drei
+# Felder stehen nur in der IMD-Zeile, und dorthin schreibt allein der von Hand
+# gestartete Monatsabschluss. Genau die Lücke, die ein Prüfer nicht sieht, der
+# nur das prüft, was gebaut wurde.
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+async def _fakt_wp(db, anlage_id, jahr, monat):
+    """Die WP-Fakten EINES Monats aus der Monats-Fakten-Schicht (P10-SoT)."""
+    from backend.services.monats_fakten import lade_monats_fakten
+
+    fakten = await lade_monats_fakten(
+        db, anlage_id, von=(jahr, monat), bis=(jahr, monat)
+    )
+    return fakten[0].wp if fakten else None
+
+
+async def test_f52_laufender_monat_zeigt_den_split_ohne_abschluss(db):
+    """Der Kern: ohne IMD-Zeile trägt die Tagesebene die Aufteilung."""
+    anlage, inv = await _anlage_mit_klima(db)
+    await _stunden_schreiben(db, anlage.id, inv.id, date(2025, 6, 10), [
+        (HEIZEN, 2.0), (KUEHLEN, 3.0), (AUS, 1.0),
+    ])
+    # Bewusst KEINE `_imd(...)` — das ist der reale Zustand des laufenden
+    # Monats (IMD-Zeilen entstehen erst durch Abschluss, Import oder Pflege).
+    wp = await _fakt_wp(db, anlage.id, 2025, 6)
+
+    assert wp is not None and wp.hat_modus_split
+    assert wp.modus_strom_heizen_kwh == pytest.approx(2.0)
+    assert wp.modus_strom_kuehlen_kwh == pytest.approx(3.0)
+    assert wp.modus_abdeckung_h == pytest.approx(3.0)
+    # Der Bezug kommt aus der Tagesebene ⇒ die „Aus"-Stunde erscheint als
+    # nicht aufgeteilt, statt still zu verschwinden.
+    assert wp.modus_nicht_aufgeteilt_kwh == pytest.approx(1.0)
+
+
+async def test_f52_gespeicherter_split_schlaegt_den_gerechneten(db):
+    """P8-Reihenfolge: wo ein Abschluss lief, gilt SEIN Ergebnis."""
+    anlage, inv = await _anlage_mit_klima(db)
+    await _stunden_schreiben(db, anlage.id, inv.id, date(2025, 6, 10),
+                             [(HEIZEN, 2.0), (KUEHLEN, 3.0)])
+    await _imd(db, inv.id, 2025, 6, {
+        "stromverbrauch_kwh": 10.0,
+        MODUS_STROM_FELD[HEIZEN]: 1.1,
+        MODUS_STROM_FELD[KUEHLEN]: 2.2,
+        MODUS_ABDECKUNG_FELD: 3.3,
+    })
+    wp = await _fakt_wp(db, anlage.id, 2025, 6)
+
+    assert wp.modus_strom_heizen_kwh == pytest.approx(1.1)
+    assert wp.modus_strom_kuehlen_kwh == pytest.approx(2.2)
+    assert wp.modus_abdeckung_h == pytest.approx(3.3)
+
+
+async def test_f52_invariante_gilt_auch_im_lesepfad(db):
+    """Σ Teilmengen > gepflegter Gesamtwert ⇒ GAR KEINE Aufteilung.
+
+    Ohne diese Prüfung käme ein beim Abschluss **verworfener** Split über den
+    Lesepfad zurück — `_entferne_split` hinterlässt keine Spur, an der man ihn
+    erkennen könnte.
+    """
+    anlage, inv = await _anlage_mit_klima(db)
+    await _stunden_schreiben(db, anlage.id, inv.id, date(2025, 6, 10),
+                             [(HEIZEN, 20.0), (KUEHLEN, 14.0)])
+    await _imd(db, inv.id, 2025, 6, {"stromverbrauch_kwh": 5.0})
+    wp = await _fakt_wp(db, anlage.id, 2025, 6)
+
+    assert not wp.hat_modus_split
+    assert wp.modus_strom_heizen_kwh == 0.0
+    assert wp.modus_abdeckung_h == 0.0
+
+
+async def test_f52_gepflegter_monatswert_ist_der_bezug(db):
+    """Gibt es einen gepflegten Gesamtwert, trägt ER die Zeile „nicht aufgeteilt"."""
+    anlage, inv = await _anlage_mit_klima(db)
+    await _stunden_schreiben(db, anlage.id, inv.id, date(2025, 6, 10),
+                             [(HEIZEN, 2.0), (KUEHLEN, 3.0)])
+    await _imd(db, inv.id, 2025, 6, {"stromverbrauch_kwh": 12.0})
+    wp = await _fakt_wp(db, anlage.id, 2025, 6)
+
+    assert wp.modus_strom_heizen_kwh == pytest.approx(2.0)
+    # 12,0 gepflegt − 5,0 aufgeteilt; NICHT 0,0 (das wäre der Tagesebenen-Bezug).
+    assert wp.modus_nicht_aufgeteilt_kwh == pytest.approx(7.0)
+
+
+async def test_f52_stillgelegtes_geraet_bekommt_keine_aufteilung(db):
+    """Dieselben drei Achsen wie im Schreibpfad (#153/#155/#236/#308)."""
+    anlage, inv = await _anlage_mit_klima(db)
+    inv.stilllegungsdatum = date(2025, 5, 31)
+    db.add(inv)
+    await db.commit()
+    await _stunden_schreiben(db, anlage.id, inv.id, date(2025, 6, 10),
+                             [(HEIZEN, 2.0), (KUEHLEN, 3.0)])
+    wp = await _fakt_wp(db, anlage.id, 2025, 6)
+
+    assert wp is None or not wp.hat_modus_split
+
+
+async def test_f52_anlage_ohne_modus_spur_bleibt_unveraendert(db):
+    """Wer keinen Modus zugeordnet hat, sieht nichts Neues — und zahlt nichts."""
+    anlage, inv = await _anlage_mit_klima(db)
+    await _imd(db, inv.id, 2025, 6, {"stromverbrauch_kwh": 10.0})
+    wp = await _fakt_wp(db, anlage.id, 2025, 6)
+
+    assert not wp.hat_modus_split
+    assert wp.strom_kwh == pytest.approx(10.0)
+
+
+async def test_f52_bezug_wird_mit_normiert(db):
+    """Der Bezug folgt der Normierung — sonst wäre „nicht aufgeteilt“ die
+    Differenz zweier verschieden skalierter Größen."""
+    from backend.core.berechnungen import falte_modus_split_tag, ModusStunde
+
+    split = falte_modus_split_tag(
+        [ModusStunde(kwh=1.0, modus=HEIZEN), ModusStunde(kwh=3.0, modus=None)],
+        tages_kwh=8.0,     # Zähler = doppelte Leistungs-Σ
+    )
+    assert split.teilmenge_kwh(HEIZEN) == pytest.approx(2.0)
+    assert split.bezug_kwh == pytest.approx(8.0)
+    # Ohne Zählerspur gilt die Roh-Summe, inkl. der Stunde ohne Signal.
+    roh = falte_modus_split_tag(
+        [ModusStunde(kwh=1.0, modus=HEIZEN), ModusStunde(kwh=3.0, modus=None)]
+    )
+    assert roh.bezug_kwh == pytest.approx(4.0)
+
+
+async def _modus_sensoren(db, inv):
+    """Die zwei HA-Sensoren des Modus-Splits, nach `key` aufgeschlüsselt."""
+    from backend.api.routes.ha_export import calculate_investition_sensors
+
+    sensors = await calculate_investition_sensors(db, inv, None)
+    return {
+        s.definition.key: s.value
+        for s in sensors
+        if s.definition.key in ("wp_strom_heizen_modus_kwh", "wp_strom_kuehlen_modus_kwh")
+    }
+
+
+async def test_f52_ha_sensoren_tragen_den_monat_ohne_abschluss(db):
+    """Die **vierte** Sicht — sie faltet je Investition und geht nicht über die
+    Monats-Fakten (P10-Restschuld von `ha_export.py`).
+
+    Ohne eigenen Anschluss blieben genau diese zwei Sensoren stumm, während
+    Hub und Cockpit die Aufteilung schon zeigen: zwei Zahlen für dieselbe
+    Größe. Deshalb steht die Regel im gemeinsamen Lader und nicht zweimal.
+    """
+    anlage, inv = await _anlage_mit_klima(db)
+    await _stunden_schreiben(db, anlage.id, inv.id, date(2025, 6, 10), [
+        (HEIZEN, 2.0), (KUEHLEN, 3.0), (AUS, 1.0),
+    ])
+    werte = await _modus_sensoren(db, inv)
+
+    assert werte.get("wp_strom_heizen_modus_kwh") == pytest.approx(2.0)
+    assert werte.get("wp_strom_kuehlen_modus_kwh") == pytest.approx(3.0)
+
+
+async def test_f52_ha_sensoren_zaehlen_einen_abschluss_nicht_doppelt(db):
+    """Gespeichert schlägt gerechnet — sonst stünde der Monat zweimal drin."""
+    anlage, inv = await _anlage_mit_klima(db)
+    await _stunden_schreiben(db, anlage.id, inv.id, date(2025, 6, 10),
+                             [(HEIZEN, 2.0), (KUEHLEN, 3.0)])
+    await _imd(db, inv.id, 2025, 6, {
+        "stromverbrauch_kwh": 10.0,
+        MODUS_STROM_FELD[HEIZEN]: 2.0,
+        MODUS_STROM_FELD[KUEHLEN]: 3.0,
+        MODUS_ABDECKUNG_FELD: 2.0,
+    })
+    werte = await _modus_sensoren(db, inv)
+
+    # Genau einmal 2,0 / 3,0 — nicht 4,0 / 6,0.
+    assert werte.get("wp_strom_heizen_modus_kwh") == pytest.approx(2.0)
+    assert werte.get("wp_strom_kuehlen_modus_kwh") == pytest.approx(3.0)
+
+
+async def test_f52_ha_sensoren_bleiben_ohne_modus_stumm(db):
+    """Ohne erfasste Stunde kein Sensorwert — eine 0 lebt in HA-Statistik weiter."""
+    anlage, inv = await _anlage_mit_klima(db)
+    await _imd(db, inv.id, 2025, 6, {"stromverbrauch_kwh": 10.0})
+    werte = await _modus_sensoren(db, inv)
+
+    assert werte.get("wp_strom_heizen_modus_kwh") is None
+    assert werte.get("wp_strom_kuehlen_modus_kwh") is None

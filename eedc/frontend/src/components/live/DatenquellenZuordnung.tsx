@@ -251,7 +251,10 @@ export default function DatenquellenZuordnung() {
     // liefert keinen Wert → Ausfall sichtbar (§2d).
     const istMqtt = istInbound || istGateway
     const wertQuelleLiest = istMqtt || istHA
-    const amber = wertQuelleLiest && f.wert == null
+    // F-53: Ein Zustandsfeld trägt seine Aussage im Text, nicht in `wert` —
+    // sonst gälte eine einwandfreie Zuordnung als Ausfall (amber + „–").
+    const wertVorhanden = f.wert != null || f.wert_text != null
+    const amber = wertQuelleLiest && !wertVorhanden
     // Invert-Toggle für signierte W-Felder — quellen-UNABHÄNGIG (sitzt am Wert):
     // gilt für jede aktive Quelle (HA/Inbound/Gateway). „keine" hat keinen Wert.
     const zeigInvert = f.einheit === 'W' && !istKeine
@@ -269,7 +272,17 @@ export default function DatenquellenZuordnung() {
 
     let wertText = '–'
     let wertTone = 'text-gray-400 dark:text-gray-500'
-    if (wertQuelleLiest && f.wert != null) {
+    if (wertQuelleLiest && f.wert == null && f.wert_text != null) {
+      // F-53: Klartext zuerst, Rohwert daneben — die Fläche beantwortet zwei
+      // Fragen: kommt etwas an, und versteht eedc es? Eine unbekannte
+      // Schreibweise steht hier als „Unbestimmt (xyz)“ und landet später in
+      // „nicht aufgeteilt“, statt einer Seite zugeschlagen zu werden.
+      // Deckungsgleich (deutscher Template-Sensor) ⇒ nur einmal.
+      const roh = f.wert_text
+      const klar = f.wert_klartext
+      wertText = klar && klar.toLowerCase() !== roh.toLowerCase() ? `${klar} (${roh})` : (klar ?? roh)
+      wertTone = 'text-green-700 dark:text-green-400'
+    } else if (wertQuelleLiest && f.wert != null) {
       // Auf 2 Nachkommastellen runden (HA-Rohstates haben oft viele Stellen).
       const wertNum = Math.round(f.wert * 100) / 100
       // eedc-Einheit bei MQTT (Inbound/Gateway, eedc-Topic); HA meldet HA-eigene Einheit.

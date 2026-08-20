@@ -33,6 +33,7 @@ from backend.services.datenquellen_historie import (
     vermerk_leeren,
     vermerk_lesen,
 )
+from backend.core.betriebsmodus import betriebsmodus_klartext
 from backend.core.field_definitions import ist_zustand_feld
 from backend.services.datenquellen_resolver import resolve_effektive_quelle
 from backend.services.live_sensor_config import extract_live_config
@@ -104,13 +105,26 @@ async def _ha_states_detail(db: AsyncSession, entity_ids: set) -> dict:
         eid = st.get("entity_id")
         if eid not in entity_ids:
             continue
+        roh_state = st.get("state")
         try:
-            wert = float(st.get("state"))
+            wert = float(roh_state)
         except (ValueError, TypeError):
             wert = None
         attrs = st.get("attributes") or {}
         out[eid] = {
             "wert": wert,
+            # F-53: der rohe State als Text. **Ein Zustandsfeld ist nie
+            # numerisch** — `float()` warf ihn bisher weg, und die Fläche zeigte
+            # „—" für eine Zuordnung, die einwandfrei funktionierte (kingcap1,
+            # #263). Der Anwender konnte damit nicht unterscheiden, ob nichts
+            # ankommt oder nur nichts angezeigt wird.
+            #
+            # ⚠ Für **numerische** Felder bleibt `wert` maßgeblich; dieser Text
+            # ist dort dieselbe Zahl als String und wird von der Fläche nicht
+            # gezeigt (s. `zustand`-Weiche beim Zusammenbau). Er hier
+            # unbedingt mitzugeben statt bedingt hält diese Funktion frei von
+            # Feld-Wissen — sie kennt Entities, keine Felder.
+            "wert_text": str(roh_state) if roh_state is not None else None,
             "einheit": attrs.get("unit_of_measurement"),
             "state_class": attrs.get("state_class"),
             # Klarname für die Zeilen-Anzeige: die nackte entity_id sagt vielen
@@ -909,6 +923,7 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
     }
     ha_detail = await _ha_states_detail(db, ha_entities)
     ha_werte = {eid: d.get("wert") for eid, d in ha_detail.items()}
+    ha_texte = {eid: d.get("wert_text") for eid, d in ha_detail.items()}
     ha_namen = {eid: d.get("friendly_name") for eid, d in ha_detail.items()}
 
     # §2i — proaktive Zuordnungs-Validierung (rein diagnostisch): pro Feld eine
@@ -994,8 +1009,14 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
         # Wert der TATSÄCHLICH aufgelösten Quelle lesen: HA → REST-Batch, Inbound/
         # Gateway → Cache (Gateway republisht nach C2a-Fix über das Standard-Topic
         # in denselben Inbound-Cache), keine → keiner. Amber = Ausfall sichtbar §2d.
+        wert_text = None
         if q in QUELLEN_HA:
             wert, wert_zeit = ha_werte.get(eintrag.get("entity_id")), None
+            # F-53: Zustandsfelder tragen ihre Aussage im Text, nicht in `wert`.
+            # Nur für sie wird er gefüllt — bei einem Zahlenfeld stünde sonst
+            # dieselbe Zahl zweimal in der Antwort.
+            if e.get("zustand"):
+                wert_text = ha_texte.get(eintrag.get("entity_id"))
         elif q in (QUELLE_STANDARD, QUELLE_GATEWAY):
             wert, wert_zeit = cache_wert.get(fid, (None, None))
         else:  # keine
@@ -1033,6 +1054,14 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
             # quellen-Eintrag), am Read-Endwert angewendet.
             "invertieren": bool(invert_store.get(fid)),
             "wert": wert,
+            # F-53: roher State (nur Zustandsfelder) + seine Deutung im Kanon.
+            # **Beide**, weil die Fläche zwei Fragen beantworten muss: kommt
+            # etwas an, und versteht eedc es? Eine unbekannte Schreibweise
+            # erscheint als „Unbestimmt" neben ihrem Rohwert — sie landet
+            # später in „nicht aufgeteilt", statt einer Seite zugeschlagen zu
+            # werden. Der Kanon-SoT ist `core/betriebsmodus.py`, nicht der Client.
+            "wert_text": wert_text,
+            "wert_klartext": betriebsmodus_klartext(wert_text) if wert_text else None,
             "wert_zeit": wert_zeit,
             # §2i: diagnostische Zuordnungs-Probleme (Einheit/state_class/Redundanz/
             # Doppelmapping) — leere Liste, wenn alles sauber.

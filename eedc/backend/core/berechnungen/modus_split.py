@@ -127,6 +127,22 @@ class ModusSplit:
     #: alles, was „eedc hat kaum hingesehen“ heißen soll).
     abdeckung_h: float = 0.0
 
+    #: Die **volle** Energiemenge des Zeitraums für dieses Gerät — normiert, wo
+    #: der Zählerpfad eine Tagesmenge hatte, sonst die Roh-Summe des
+    #: Leistungspfads. ``None``, wenn der Zeitraum gar keine Stundenmenge trug.
+    #:
+    #: ⚑ **Wozu, wenn es doch ``erfasst_kwh`` gibt** (F-52): ``erfasst_kwh``
+    #: zählt nur Stunden **mit** Modus-Signal. Die Zeile „nicht aufgeteilt"
+    #: soll aber ausdrücklich auch die Stunden tragen, in denen eedc *nicht
+    #: hingesehen* hat (Konzept §4). Der Unterschied ist genau ``bezug_kwh −
+    #: erfasst_kwh``.
+    #:
+    #: ⚠ **Der Schreibpfad benutzt dieses Feld nicht** und darf es nicht: dort
+    #: ist der Bezug der **gepflegte Monatswert** aus der Zeile, gegen den die
+    #: Invariante prüft (zwei Pfade ⇒ möglicher Widerspruch). Hier gibt es nur
+    #: einen Pfad — für den *laufenden* Monat existiert keine Monatszeile, und
+    #: ohne Bezug bliebe „nicht aufgeteilt" stumm bei 0.
+    bezug_kwh: Optional[float] = None
 
     @property
     def aufgeteilt_kwh(self) -> float:
@@ -188,13 +204,19 @@ def falte_modus_split_tag(
         abdeckung += 1.0
         kwh_je_modus[eintrag.modus] = kwh_je_modus.get(eintrag.modus, 0.0) + menge
 
+    bezug = roh_summe if roh_summe > 0 else None
     if tages_kwh is not None and roh_summe > 0:
         ziel = abs(float(tages_kwh))
         if ziel > 0:
             faktor = ziel / roh_summe
             kwh_je_modus = {m: v * faktor for m, v in kwh_je_modus.items()}
+            # Der Bezug wird mitskaliert — sonst wäre „nicht aufgeteilt" die
+            # Differenz zweier verschieden normierter Größen.
+            bezug = ziel
 
-    return ModusSplit(kwh_je_modus=kwh_je_modus, abdeckung_h=abdeckung)
+    return ModusSplit(
+        kwh_je_modus=kwh_je_modus, abdeckung_h=abdeckung, bezug_kwh=bezug
+    )
 
 
 def summiere_modus_split(splits: Iterable[ModusSplit]) -> ModusSplit:
@@ -207,11 +229,18 @@ def summiere_modus_split(splits: Iterable[ModusSplit]) -> ModusSplit:
     """
     kwh_je_modus: dict[str, float] = {}
     abdeckung = 0.0
+    # ``None`` bleibt ``None``, solange KEIN Tag einen Bezug hatte — „keine
+    # Aussage" statt einer 0, die wie eine Messung aussieht (ADR-002/P4).
+    bezug: Optional[float] = None
     for split in splits:
         abdeckung += split.abdeckung_h
+        if split.bezug_kwh is not None:
+            bezug = (bezug or 0.0) + split.bezug_kwh
         for modus, wert in split.kwh_je_modus.items():
             kwh_je_modus[modus] = kwh_je_modus.get(modus, 0.0) + wert
-    return ModusSplit(kwh_je_modus=kwh_je_modus, abdeckung_h=abdeckung)
+    return ModusSplit(
+        kwh_je_modus=kwh_je_modus, abdeckung_h=abdeckung, bezug_kwh=bezug
+    )
 
 
 def teilmengen_passen(

@@ -47,6 +47,22 @@ BETRIEBSMODUS_KANON: Final[tuple[str, ...]] = (
 # Die beiden Klassen, für die es eine eigene Teilmenge gibt.
 AUFGETEILTE_MODI: Final[frozenset[str]] = frozenset({HEIZEN, KUEHLEN})
 
+#: Kanon → deutscher Klartext für die **Zuordnungs-Fläche** (F-52/F-53).
+#:
+#: **Warum das hier steht und nicht im Frontend:** Es ist keine Formatierung,
+#: sondern die Deutung eines Kanon-Werts — und der Kanon liegt in dieser Datei.
+#: Eine zweite Tabelle im Client wäre genau die Drift, gegen die `MODUS_STROM_FELD`
+#: einen Wächter hat. Die Zahlen-Labels der Auswertung („davon Heizen") sind
+#: davon unberührt: sie beschriften eine **Menge**, nicht einen Zustand.
+BETRIEBSMODUS_LABEL: Final[dict[str, str]] = {
+    HEIZEN: "Heizen",
+    KUEHLEN: "Kühlen",
+    ENTFEUCHTEN: "Entfeuchten",
+    LUEFTEN: "Lüften",
+    AUS: "Aus",
+    UNBESTIMMT: "Unbestimmt",
+}
+
 
 # ── Feldnamen der Teilmengen (#263 K-2, S3) ──────────────────────────────────
 #
@@ -187,3 +203,38 @@ def normalisiere_betriebsmodus(
     # kann es nur nicht einordnen. Das ist `unbestimmt`, nicht `None` — sonst
     # sähe die Abdeckungs-Kennzahl aus wie ein Sensor-Ausfall.
     return _ZUSTAND_ZU_KANON.get(roh, UNBESTIMMT)
+
+
+def betriebsmodus_klartext(zustand: Optional[str]) -> Optional[str]:
+    """Roher HA-State → deutscher Klartext für die Zuordnungs-Fläche (F-53).
+
+    Args:
+        zustand: der State der zugeordneten Entität, z. B. ``"cool"``.
+
+    Returns:
+        Den Klartext aus {@link BETRIEBSMODUS_LABEL}, oder ``None``, wenn es
+        keinen verwertbaren Zustand gibt (`unknown`, `unavailable`, leer).
+
+    ⚑ **Warum der Klartext und nicht der Rohwert allein:** Die Fläche soll
+    nicht nur zeigen, dass *etwas* ankommt, sondern ob eedc es **versteht**.
+    Eine unbekannte Herstellerschreibweise erscheint hier als „Unbestimmt" —
+    und genau die landet später in der Zeile „nicht aufgeteilt", statt einer
+    Seite zugeschlagen zu werden. Wer nur ``cool`` läse, sähe den Unterschied
+    zwischen „verstanden" und „durchgewinkt" nicht.
+
+    ⚠ Bewusst **ohne** ``hvac_action``: die Fläche zeigt, was an *diesem* Feld
+    zugeordnet ist. Die Verfeinerung durch den Ist-Betrieb passiert im
+    Aggregator, nicht in der Anzeige.
+    """
+    kanon = normalisiere_betriebsmodus(zustand)
+    if kanon is None:
+        return None
+    # ⚑ **Direkt indiziert, kein `.get(..., fallback)`.** Der erste Entwurf
+    # hatte einen — und ein Sprengsatz darauf blieb STUMM: `normalisiere_…`
+    # liefert ausschließlich Kanon-Werte, und die stehen vollzählig in
+    # `BETRIEBSMODUS_LABEL`. Der Fallback war damit unerreichbarer Code, der
+    # aussah wie eine Absicherung. Die echte Gefahr ist eine **siebte
+    # Betriebsart ohne Label**, und die fängt kein Fallback, sondern der
+    # Wächter `test_jeder_kanon_wert_hat_ein_label` — hier knallt sie dann
+    # sichtbar statt still ein falsches Wort anzuzeigen.
+    return BETRIEBSMODUS_LABEL[kanon]

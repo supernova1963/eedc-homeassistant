@@ -34,6 +34,19 @@ export interface DatenquelleFeld {
   invertieren: boolean
   /** Aktueller Wert aus dem MQTT-Inbound-Cache (null = nichts empfangen). */
   wert: number | null
+  /**
+   * F-53: Roher State eines **Zustandsfelds** (`zustand === true`), z. B.
+   * `'cool'`. Bei Zahlenfeldern immer `null` — dort gilt `wert`.
+   * Ein Zustand ist nie numerisch; `wert` bleibt für ihn `null`, und ohne
+   * dieses Feld sah eine funktionierende Zuordnung wie ein Ausfall aus (#263).
+   */
+  wert_text?: string | null
+  /**
+   * F-53: Die Deutung desselben States im Kanon, z. B. `'Kühlen'` — oder
+   * `'Unbestimmt'`, wenn eedc die Schreibweise nicht kennt. **Kommt aus dem
+   * Backend** (`core/betriebsmodus.py`): eine zweite Tabelle hier wäre Drift.
+   */
+  wert_klartext?: string | null
   /** ISO-Zeit des letzten Cache-Werts (null = keiner). */
   wert_zeit: string | null
   /** §2i: diagnostische Zuordnungs-Probleme (leer = sauber). */
