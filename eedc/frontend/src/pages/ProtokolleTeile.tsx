@@ -19,20 +19,12 @@ import {
   Bug, RotateCw, AlertTriangle,
 } from 'lucide-react'
 import { Button, Input, Select, SegmentControl } from '../components/ui'
+import { useCopyFeedback } from '../hooks'
 import { systemLogsApi } from '../api/systemLogs'
 import type { LogEntry, ActivityEntry, ActivityKategorie } from '../api/systemLogs'
 
-// ─── Shared: Copy-to-Clipboard mit Feedback ─────────────────────────────────
-
-function useCopyFeedback() {
-  const [copied, setCopied] = useState(false)
-  const copy = useCallback(async (text: string) => {
-    await navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }, [])
-  return { copied, copy }
-}
+// Copy-to-Clipboard: SoT ist `hooks/useCopyFeedback` (2026-08-20 zusammengezogen,
+// vorher hier lokal und in `HAExportSettingsTeile` ein zweites Mal inline).
 
 // ─── Shared: Toast-Nachricht ─────────────────────────────────────────────────
 
@@ -63,7 +55,7 @@ function SystemLogsTab() {
 
   const [autoRefresh, setAutoRefresh] = useState(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const { copied, copy } = useCopyFeedback()
+  const { istKopiert, kopiere: copy } = useCopyFeedback()
 
   const loadLogs = useCallback(async () => {
     try {
@@ -174,7 +166,7 @@ function SystemLogsTab() {
           aria-label="Logs als Markdown kopieren"
           title="Als Markdown kopieren (für GitHub Issue)"
         >
-          {copied ? <Check className="h-4 w-4 text-green-600" /> : <ClipboardCopy className="h-4 w-4" />}
+          {istKopiert() ? <Check className="h-4 w-4 text-green-600" /> : <ClipboardCopy className="h-4 w-4" />}
         </Button>
         <Button
           type="button"
@@ -281,7 +273,7 @@ function AktivitaetenTab() {
   const [search, setSearch] = useState<string>('')
   const [offset, setOffset] = useState(0)
   const limit = 30
-  const { copied, copy } = useCopyFeedback()
+  const { istKopiert, kopiere: copy } = useCopyFeedback()
 
   // Debounce: Suche erst nach 400ms Tipp-Pause auslösen
   useEffect(() => {
@@ -383,7 +375,7 @@ function AktivitaetenTab() {
           aria-label="Aktivitäten als Markdown kopieren"
           title="Als Markdown kopieren (für GitHub Issue)"
         >
-          {copied ? <Check className="h-4 w-4 text-green-600" /> : <ClipboardCopy className="h-4 w-4" />}
+          {istKopiert() ? <Check className="h-4 w-4 text-green-600" /> : <ClipboardCopy className="h-4 w-4" />}
         </Button>
         <Button
           type="button"

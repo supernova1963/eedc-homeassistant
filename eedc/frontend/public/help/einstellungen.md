@@ -627,6 +627,13 @@ Klick auf **HA-Sensor** öffnet einen Picker mit allen Entities der aktiven HA-V
 
 > **Topic-Drift:** Kommen in eedc Felder dazu oder wechseln Komponenten-IDs nach einem Re-Import, kann ein statischer Publisher gegen die erwarteten Topics driften. Der [Daten-Checker](HANDBUCH_DATEN_CHECKER.md) meldet das in der Kategorie MQTT-Topic-Abdeckung.
 
+**Alle Topics auf einen Blick.** Wer seine Werte aus ioBroker, FHEM, evcc, Node-RED oder einem eigenen Skript schickt, braucht die Topics am Stück statt verstreut unter den einzelnen Feldern. Dafür gibt es am Ende der Datenquellen-Fläche den zugeklappten Block **„MQTT-Topics"**: er listet die Topics **deiner** Anlage — nach Gerät gruppiert, mit Feldname und Einheit — und hat je Zeile einen Kopier-Knopf sowie oben **„Alle kopieren"** für die ganze Liste.
+
+Zwei Dinge dazu, die Zeit sparen:
+
+- **Zuordnen musst du vorher nichts.** eedc holt auf diesen Topics nichts ab, es hört zu: Sobald auf einem Topic ein Wert ankommt, stellt sich das zugehörige Feld von selbst auf *MQTT-Inbound*. Ein Wert je Nachricht, als Zahl.
+- **Der Namensteil hinter der Anlagennummer ist optional.** `eedc/1/live/…` wirkt genauso wie `eedc/1_Meine-Anlage/live/…` — praktisch, wenn du die Anlage später umbenennst. Ein eingerichteter Geräte-Connector nutzt intern denselben Weg und schreibt die kurze Form.
+
 ### 7.6 Validierung & Probleme je Feld
 
 Zur Zuordnungszeit erkennbare Fehler zeigt eedc **direkt an der Feld-Zeile** — diagnostisch, nie blockierend (rot = Fehler, amber = Warnung):

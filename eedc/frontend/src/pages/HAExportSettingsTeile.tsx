@@ -68,6 +68,7 @@ import {
 import { haApi, anlagenApi } from '../api'
 import { Button, Input, SegmentControl, Switch, EmptyState } from '../components/ui'
 import { VERBINDUNG_GEAENDERT_EVENT } from '../api/datenquellen'
+import { useCopyFeedback } from '../hooks'
 
 const MDI_ICON_MAP: Record<string, string> = {
   'mdi:solar-power': mdiSolarPower,
@@ -156,7 +157,7 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
   // UI State
   const [activeTab, setActiveTab] = useState<'rest' | 'mqtt'>('mqtt')
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['energie', 'finanzen']))
-  const [copiedYaml, setCopiedYaml] = useState(false)
+  const { istKopiert, kopiere } = useCopyFeedback()
 
   // Daten laden
   const loadData = async () => {
@@ -314,24 +315,11 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
     }
   }
 
-  // YAML kopieren
-  const copyYaml = async () => {
+  // YAML kopieren — Logik inkl. `execCommand`-Fallback liegt seit 2026-08-20 im
+  // SoT `hooks/useCopyFeedback` (vorher hier und in `ProtokolleTeile` inline).
+  const copyYaml = () => {
     if (!yamlSnippet) return
-    try {
-      await navigator.clipboard.writeText(yamlSnippet.yaml)
-      setCopiedYaml(true)
-      setTimeout(() => setCopiedYaml(false), 2000)
-    } catch {
-      // Fallback für ältere Browser
-      const textarea = document.createElement('textarea')
-      textarea.value = yamlSnippet.yaml
-      document.body.appendChild(textarea)
-      textarea.select()
-      document.execCommand('copy')
-      document.body.removeChild(textarea)
-      setCopiedYaml(true)
-      setTimeout(() => setCopiedYaml(false), 2000)
-    }
+    kopiere(yamlSnippet.yaml)
   }
 
   // YAML downloaden
@@ -750,7 +738,7 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
               </h2>
               <div className="flex gap-2">
                 <Button type="button" variant="secondary" size="sm" onClick={copyYaml}>
-                  {copiedYaml ? (
+                  {istKopiert() ? (
                     <>
                       <CheckCircle className="w-4 h-4 mr-1 text-green-500" />
                       Kopiert!

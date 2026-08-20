@@ -30,6 +30,7 @@ import { BlockShell } from '../blocks/BlockShell'
 import type { Block } from '../blocks/types'
 import DatenquellenGatewayPicker from './DatenquellenGatewayPicker'
 import DatenquellenHaPicker from './DatenquellenHaPicker'
+import DatenquellenTopicListe from './DatenquellenTopicListe'
 import { useSelectedAnlage } from '../../hooks'
 import { TYP_LABELS } from '../../lib/constants'
 import { STATUS_TEXT_CLASS } from '../../lib/colors'
@@ -457,6 +458,19 @@ export default function DatenquellenZuordnung() {
     )
   }
 
+  // Nachschlagewerk statt Arbeitsschritt: der Block steht am Ende und ist
+  // zugeklappt (Gernot 2026-08-20). Er liest dieselben `gruppen`, die die
+  // Zuordnung oben zeigt — nur vorhandene Geräte, kein zweiter Request.
+  const topicBlock: Block = useMemo(() => ({
+    id: 'dq-topics',
+    title: 'MQTT-Topics',
+    icon: Rss,
+    farbe: 'text-emerald-500',
+    summary: 'zum Kopieren für ioBroker, FHEM & Co.',
+    defaultOpen: false,
+    render: () => <DatenquellenTopicListe gruppen={gruppen} />,
+  }), [gruppen])
+
   const bloecke: Block[] = useMemo(() => cluster.map((tc): Block => {
     const style = typStyle(tc.typ)
     const alleFelder = tc.geraete.flatMap((g) => g.felder)
@@ -520,7 +534,7 @@ export default function DatenquellenZuordnung() {
         />
       )}
 
-      <BlockShell persistKey="v4-einst-datenquellen" bloecke={bloecke} />
+      <BlockShell persistKey="v4-einst-datenquellen" bloecke={[...bloecke, topicBlock]} />
 
       {gatewayFeld && selectedAnlageId != null && (
         <DatenquellenGatewayPicker
