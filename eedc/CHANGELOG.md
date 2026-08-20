@@ -7,6 +7,38 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.0.23] - 2026-08-20 — Was zählt, und was nicht
+
+### Added
+
+- **Verbrauchszähler für Gas, Öl und Wasser — erfassen und anzeigen, ohne zu bewerten** ([#377](https://github.com/supernova1963/eedc-homeassistant/issues/377)). Unter *Sonstiges* gibt es eine vierte Kategorie: **Verbrauchszähler**. eedc führt dafür den **Zählerstand** mit — genau die Zahl, die auf dem Zähler steht — und die einzige Rechnung darauf ist die Differenz zwischen Anfang und Ende des betrachteten Zeitraums.
+  - **Vier Anzeigen:** aktueller Stand und Veränderung heute in *Live → Auf einen Blick*; Stand am Anfang/Ende, Differenz und Verlauf als eigener Block in *Cockpit → Tag / Monat / Jahr*; Stand und Verbrauch je Monat unter *Komponenten → Sonstiges*; **eine Spalte je Zähler** in *Auswertungen → Tabelle* (wählbar, nicht vorausgewählt).
+  - **Der Wert kommt aus einem Sensor** (stündlich mitgeschrieben) **oder von Hand** aus dem Monatsabschluss — wo ein Sensor läuft, wird der mitgeschriebene Stand als Vorschlag angeboten. Die **Einheit** (m³, l, kg, t, kWh) gehört zum Gerät und ist reine Anzeige: eedc rechnet Zählerstände nie um.
+  - ⛔ **Was ausdrücklich NICHT passiert, und warum das der Kern des Ganzen ist:** Der Wert geht in **keine** Energiebilanz, **keine** Autarkie- oder Eigenverbrauchsquote, **keinen** ROI, **keine** CO₂-Bilanz, **nicht** in den Gemeinschaftsdatensatz, **nicht** in den HA-Sensor-Export und in **keine** Serie des Energieflusses. Gas- und Wasserkosten sind Haushaltskosten; sie in die Rechnung der PV-Anlage zu ziehen, machte deren Zahlen unbrauchbar. Die Wirtschaftlichkeit eines Zählers steht deshalb auf **„nicht bewertet"** statt auf vier Nullen. **Wer keinen Zähler anlegt, merkt von alldem nichts — keine bestehende Zahl bewegt sich.**
+  - ⚠ **Zählerwechsel: altes Gerät stilllegen, neues anlegen.** Beim alten Zähler ein **Stilllegungsdatum** setzen und ihn dabei **aktiv lassen** — dann bleibt seine Historie in allen Auswertungen erhalten, in deren Zeitraum er gemessen hat, und der Verbrauch über den Wechsel hinweg ist die Summe beider Differenzen. Den Haken *aktiv* zu entfernen bedeutet in eedc „wie gelöscht" und blendet die Ablesungen **auch rückwirkend** aus.
+  - **Nebenbei behoben:** Der Snapshot-Job fragte stillgelegte Geräte weiter bei Home Assistant ab, solange ihre Zuordnung stehenblieb — stündlich, ohne Nutzen. Er überspringt sie jetzt.
+
+### Fixed
+
+- **Ein Cloud-Import erzeugt keinen Geräte-Connector mehr, den es nie gab** ([#390](https://github.com/supernova1963/eedc-homeassistant/discussions/390), gemeldet von gruaGit). Wer seine Daten aus einem **Hersteller-Portal** holt (Fronius Solar.web, SolarEdge, Growatt, EcoFlow …) und **keinen** Geräte-Connector eingerichtet hat, sah drei Dinge, die alle nicht stimmten — und der Daten-Checker schickte ihn los, sie zu reparieren.
+  - **Der Daten-Checker meldete** „Connector „Connector" liefert für MM/JJJJ keinen Wert" — für ein Gerät, das nie eingerichtet wurde. Der Hinweis war damit **nicht auflösbar**; wer ihm folgte, landete auf einer Fläche, auf der es nichts zu tun gab. Er erscheint jetzt nur noch bei einem wirklich eingerichteten Geräte-Connector.
+  - **Die Fläche zeigte** *„Connector aktiv"* mit leerem Gerät, leerem Host, leerer Seriennummer und 0 Zählerständen. Sie zeigt jetzt wieder den Einrichtungsschritt.
+  - **„Jetzt ablesen" endete mit** „Unbekannter Connector: None" — einer Aussage über ein Gerät, das der Anwender nie angelegt hat. Der Text sagt jetzt, was fehlt.
+  - ⚠ **Der ernsteste Teil war ein Knopf, den niemand drücken musste:** *Entfernen* stand direkt neben diesem Phantom-Gerät — und hätte die **Zugangsdaten des Cloud-Imports gelöscht**, weil beide in derselben Ablage liegen. Entfernt wird jetzt nur, was dem Geräte-Connector gehört; ohne Geräte-Connector ist der Knopf wirkungslos. **Wer betroffen war und nicht geklickt hat, verliert nichts** — die Korrektur wirkt lesend, es gibt nichts nachzutragen.
+  - ✅ **Der nächtliche Abruf und die MQTT-Weitergabe waren nie betroffen** — beide haben von jeher richtig geprüft, ob ein Gerät eingerichtet ist. Deshalb stand im Aktivitätsprotokoll des Melders auch kein einziger Connector-Fehler. Betroffen waren ausschließlich die vier Stellen, die der Anwender sieht.
+  - ⚑ **Dies ist die Fortsetzung eines Befunds aus 4.0.22, nicht seine Wiederholung:** Dort wurde der *Wortlaut* des Hinweises korrigiert („Der tägliche Abruf ist ausgeschaltet" war frei erfunden). Der Melder bekam den Hinweis danach weiter — nur mit besserem Text. Erst jetzt ist die Ursache weg.
+
+- **Die Aufteilung Heizen/Kühlen erscheint sofort, statt erst nach dem Monatsabschluss** ([#263](https://github.com/supernova1963/eedc-homeassistant/issues/263), gemeldet von kingcap1). Wer den **Betriebsmodus** seiner Klimaanlage zuordnet, sah bisher **nirgendwo** ein Ergebnis: nicht im Komponenten-Hub, nicht in *Cockpit → Monat* und *→ Jahr*, und die beiden Home-Assistant-Sensoren blieben leer. Der Melder hat am selben Tag zugeordnet und gefragt, ob „erst ein Tag durchlaufen" müsse.
+  - **Die Ursache war weder ein Tag noch ein Rechenfehler:** Die drei Werte standen ausschließlich in der Monatszeile, und die entsteht erst beim **Monatsabschluss** — den man in eedc von Hand startet. Für den laufenden Monat gibt es ihn nie. Wer heute zuordnet, hätte damit bis Anfang des Folgemonats nichts gesehen.
+  - **Was jetzt gilt:** Solange kein Abschluss vorliegt, rechnet eedc die Aufteilung aus den mitgeschriebenen Stunden — dieselbe Rechnung, dieselben Zahlen, nur eben schon während des Monats. Das gilt für **alle vier** Anzeigen, die beiden Home-Assistant-Sensoren eingeschlossen. **Wo ein Abschluss gelaufen ist, bleibt dessen Ergebnis stehen**: ein abgeschlossener Monat wird nicht rückwirkend umgeschrieben, und nichts wird doppelt gezählt.
+  - ⚠ **Unverändert bleibt die Grenze:** Der Modus wird ab der Zuordnung mitgeschrieben, nicht rückwirkend — Home Assistant bewahrt Zustände wie „Heizen"/„Kühlen" nur wenige Tage auf.
+
+- **Ein zugeordneter Betriebsmodus zeigt seinen Wert, statt „–"** (ebenfalls [#263](https://github.com/supernova1963/eedc-homeassistant/issues/263)). Unter *Einstellungen → Datenquellen* stand neben dem zugeordneten Feld ein Strich, obwohl Home Assistant sauber „cool" meldete — die Zeile konnte nur Zahlen anzeigen, und ein Betriebsmodus ist keine. Für den Anwender sah eine einwandfreie Zuordnung damit wie ein Ausfall aus.
+  - Jetzt steht dort der Klartext mit dem Rohwert daneben: **„Kühlen (cool)"**. Kennt eedc eine Schreibweise nicht, heißt sie ausdrücklich **„Unbestimmt"** — dann weiß man, dass diese Zeit später unter „nicht aufgeteilt" landet und nicht still einer Seite zugeschlagen wird. Ein echter Ausfall (`unavailable`) zeigt weiterhin „–".
+  - ✅ **Betroffen war ausschließlich die Anzeige — mitgeschrieben wurde die ganze Zeit.** Der Betriebsmodus wird über die Historie-Schnittstelle von Home Assistant gelesen, nicht über den Pfad, an dem der Strich entstand. Wo eine Zuordnung stand, ist die Aufteilung ab dem Tag der Zuordnung vorhanden; niemand hat Aufzeichnungszeit verloren. **Der Satz steht hier, weil zwei von zwei Meldern aus dem Strich geschlossen haben, die Funktion tue nichts** ([#263](https://github.com/supernova1963/eedc-homeassistant/issues/263), kingcap1 und OB73-gif) — eine reine Anzeige kann echten Schaden anrichten.
+
+---
+
 ## [4.0.22] - 2026-08-20 — Nur sagen, was man weiß
 
 ### Fixed
