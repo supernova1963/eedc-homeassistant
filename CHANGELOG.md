@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.0.23] - 2026-08-20 — Was zählt, und was nicht
 
 ### Added
 
