@@ -18,6 +18,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 - **Ein zugeordneter Betriebsmodus zeigt seinen Wert, statt „–"** (ebenfalls [#263](https://github.com/supernova1963/eedc-homeassistant/issues/263)). Unter *Einstellungen → Datenquellen* stand neben dem zugeordneten Feld ein Strich, obwohl Home Assistant sauber „cool" meldete — die Zeile konnte nur Zahlen anzeigen, und ein Betriebsmodus ist keine. Für den Anwender sah eine einwandfreie Zuordnung damit wie ein Ausfall aus.
   - Jetzt steht dort der Klartext mit dem Rohwert daneben: **„Kühlen (cool)"**. Kennt eedc eine Schreibweise nicht, heißt sie ausdrücklich **„Unbestimmt"** — dann weiß man, dass diese Zeit später unter „nicht aufgeteilt" landet und nicht still einer Seite zugeschlagen wird. Ein echter Ausfall (`unavailable`) zeigt weiterhin „–".
+  - ✅ **Betroffen war ausschließlich die Anzeige — mitgeschrieben wurde die ganze Zeit.** Der Betriebsmodus wird über die Historie-Schnittstelle von Home Assistant gelesen, nicht über den Pfad, an dem der Strich entstand. Wo eine Zuordnung stand, ist die Aufteilung ab dem Tag der Zuordnung vorhanden; niemand hat Aufzeichnungszeit verloren. **Der Satz steht hier, weil zwei von zwei Meldern aus dem Strich geschlossen haben, die Funktion tue nichts** ([#263](https://github.com/supernova1963/eedc-homeassistant/issues/263), kingcap1 und OB73-gif) — eine reine Anzeige kann echten Schaden anrichten.
 
 ---
 

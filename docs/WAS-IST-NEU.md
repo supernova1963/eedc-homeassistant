@@ -44,6 +44,12 @@ eine Schreibweise nicht, heißt sie ausdrücklich **„Unbestimmt"**; dann weiß
 diese Zeit später unter *nicht aufgeteilt* landet, statt still einer Seite zugeschlagen
 zu werden. Ein echter Ausfall zeigt weiterhin „–".
 
+✅ **Wichtig, falls du diesen Strich gesehen hast: deine Zeit ist nicht verloren.**
+Kaputt war allein die **Anzeige** — eedc liest den Betriebsmodus über einen anderen Weg
+aus Home Assistant aus als diese Zeile. Wo eine Zuordnung stand, wurde die ganze Zeit
+mitgeschrieben, auch während dort ein Strich zu sehen war. Die Aufteilung ist also ab
+dem Tag deiner Zuordnung vorhanden und taucht mit diesem Update auf.
+
 ---
 
 ## v4.0.22 — Nur sagen, was man weiß
