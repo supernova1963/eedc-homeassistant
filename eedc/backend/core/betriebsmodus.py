@@ -94,6 +94,67 @@ MODUS_STROM_FELD: Final[dict[str, str]] = {
     KUEHLEN: "modus_strom_kuehlen_kwh",
 }
 
+
+# ── GEMESSENE Betriebsart-Felder (#263, Fassung 2026-08-21) ──────────────────
+#
+# **Der Unterschied zu `MODUS_STROM_FELD` ist die Herkunft, nicht die Größe.**
+# Dort steht, was eedc aus dem Betriebsmodus **abgeleitet** hat; hier steht,
+# was ein Zähler **gemessen** hat. Beides nebeneinander zu führen ist kein
+# Doppel, sondern dieselbe Unterscheidung, die eedc bei der Heizwärme längst
+# macht (`waerme_abgeleitet`): eine gerechnete Zahl darf nie wie eine gemessene
+# aussehen. Der Vorrang liegt an genau einer Stelle
+# (`core/berechnungen/imd_monatsaggregat.py`): **gemessen schlägt abgeleitet**,
+# nie beides addiert.
+#
+# **Warum eigene Namen und nicht `strom_heizen_kwh`.** Das gibt es schon und
+# bedeutet etwas anderes — bei `getrennte_strommessung=True` ist es ein
+# **Summand** (Gesamt = Heizen + Warmwasser), hier wäre es eine **Teilmenge**
+# des Gesamtverbrauchs. Drei Stellen schließen aus seiner bloßen Anwesenheit
+# auf die getrennte Messung. Dieselbe Begründung wie oben bei
+# `MODUS_STROM_FELD`, nur eine Ebene weiter.
+#
+# **Alle vier Betriebsarten, nicht nur die zwei aufgeteilten.** Der abgeleitete
+# Split kann nur Heizen und Kühlen (mehr gibt ein Modus-Signal nicht her, D11);
+# ein Zähler kann jede Betriebsart messen, und wer sich per Utility-Meter vier
+# Tarife baut, hat vier Zahlen. `AUFGETEILTE_MODI` bleibt davon **unberührt** —
+# die abgeleitete Aufteilung ändert sich nicht.
+#
+# Ausgeschrieben statt generiert, aus demselben Grund wie oben (Grep-Barkeit);
+# `test_263_betriebsart_felder.py` hält beide Tabellen gegen den Kanon.
+
+#: Betriebsarten, für die es einen **messbaren** Verbrauch geben kann.
+MESSBARE_MODI: Final[tuple[str, ...]] = (HEIZEN, KUEHLEN, LUEFTEN, ENTFEUCHTEN)
+
+#: Gemessener **Strom**verbrauch je Betriebsart (Teilmenge des Gesamtverbrauchs).
+BETRIEBSART_STROM_FELD: Final[dict[str, str]] = {
+    HEIZEN: "betriebsart_strom_heizen_kwh",
+    KUEHLEN: "betriebsart_strom_kuehlen_kwh",
+    LUEFTEN: "betriebsart_strom_lueften_kwh",
+    ENTFEUCHTEN: "betriebsart_strom_entfeuchten_kwh",
+}
+
+#: Gemessene **abgegebene Nutzenergie** je Betriebsart (Wärme bzw. Kälte).
+#: Bewusst nicht „waerme": im Kühlbetrieb ist die Nutzenergie Kälte, und ein
+#: Feldname, der etwas anderes behauptet als er trägt, ist die Klasse, an der
+#: `heizenergie_kwh` schon einmal missverstanden wurde (#120).
+BETRIEBSART_NUTZENERGIE_FELD: Final[dict[str, str]] = {
+    HEIZEN: "betriebsart_nutzenergie_heizen_kwh",
+    KUEHLEN: "betriebsart_nutzenergie_kuehlen_kwh",
+    LUEFTEN: "betriebsart_nutzenergie_lueften_kwh",
+    ENTFEUCHTEN: "betriebsart_nutzenergie_entfeuchten_kwh",
+}
+
+#: Deutsche Bezeichnung der Betriebsart für Feld-Labels. Getrennt von
+#: `BETRIEBSMODUS_LABEL`, weil das dort ein **Zustand** ist („Kühlen") und hier
+#: eine **Betriebsphase** benannt wird („Kühlbetrieb") — dieselbe Trennung, die
+#: `betriebsmodus_klartext` von den Mengen-Labels trennt.
+BETRIEBSART_LABEL: Final[dict[str, str]] = {
+    HEIZEN: "Heizbetrieb",
+    KUEHLEN: "Kühlbetrieb",
+    LUEFTEN: "Lüftbetrieb",
+    ENTFEUCHTEN: "Entfeuchtungsbetrieb",
+}
+
 #: Stunden des Monats mit **gültigem Modus-Signal** — das Qualitätsmaß neben
 #: den zwei Mengen (Konzept §3.3). Es trennt die zwei Fälle, die der Anwender
 #: unterscheiden können muss: „lief in anderen Betriebsarten" (Abdeckung hoch,

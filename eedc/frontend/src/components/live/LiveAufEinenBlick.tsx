@@ -27,6 +27,7 @@ import SolarAussicht3Tage from './SolarAussicht3Tage'
 import LiveSocBalken from './LiveSocBalken'
 import LiveTemperaturen from './LiveTemperaturen'
 import LiveZaehlerstaende from './LiveZaehlerstaende'
+import LiveInnengeraete from './LiveInnengeraete'
 import type { LiveDashboardResponse, LiveWetterResponse } from '../../api/liveDashboard'
 import type { SolarPrognoseTag } from '../../api/wetter'
 import type { ZaehlerStand } from '../../api/zaehlerstaende'
@@ -56,6 +57,11 @@ export default function LiveAufEinenBlick({ data, wetter, prognose3Tage, zaehler
   // #377: Der Abschnitt erscheint nur, wenn wirklich ein Stand vorliegt — ein
   // angelegter Zähler ohne Messung bekäme sonst eine leere Kachel.
   const hatZaehler = !!zaehlerstaende?.some((z) => z.stand_ende != null)
+  // #263: dieselbe Regel wie beim Zähler — ein angelegtes Innengerät ohne
+  // jeden Wert bekommt keine leere Kachel.
+  const hatInnengeraete = !!data.innengeraete?.some(
+    (g) => g.leistung_w != null || g.ist_temperatur_c != null || g.soll_temperatur_c != null,
+  )
 
   const abschnitte: Abschnitt[] = [
     {
@@ -99,6 +105,13 @@ export default function LiveAufEinenBlick({ data, wetter, prognose3Tage, zaehler
       // beides sind Werte, die eedc anzeigt, ohne sie zu verrechnen.
       key: 'zaehlerstaende', titel: 'Zählerstände', icon: Gauge, eigenerTitel: false, verfuegbar: hatZaehler,
       render: () => <LiveZaehlerstaende staende={zaehlerstaende ?? []} />,
+    },
+    {
+      // #263 — aus demselben Grund direkt hier: Werte, die eedc anzeigt, ohne
+      // sie zu verrechnen.
+      key: 'innengeraete', titel: 'Innengeräte', icon: Thermometer, eigenerTitel: false,
+      verfuegbar: hatInnengeraete,
+      render: () => <LiveInnengeraete geraete={data.innengeraete ?? []} />,
     },
   ]
 

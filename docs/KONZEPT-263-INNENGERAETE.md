@@ -1,7 +1,9 @@
 # Konzept #263 — Innengeräte einer Luft-Luft-Wärmepumpe
 
-> **Status:** Entwurf, 2026-08-20, fortgeschrieben 2026-08-21.
-> **Gebaut ist bisher nur Etappe F** (§6) — alles Übrige ist Plan.
+> **Status:** ⚑ **Fassung 2026-08-21 (Gernot) — sie ersetzt §3.2 und §4 dieses
+> Dokuments.** Was hier über eine *Faltung mehrerer Modus-Signale* stand, ist
+> **gestrichen**: eedc leitet nichts mehr ab, wo es messen kann.
+> **Gebaut sind F (§6), T1 (§7), T2 (§8) und die Innengeräte-Fassung (§10).**
 > Basis ist der ausgelieferte Stand **v4.0.23**.
 > **Vorgänger:** [`KONZEPT-263-klima-split.md`](KONZEPT-263-klima-split.md) — gilt unverändert
 > weiter für alles, was dort steht und gebaut ist (Teilmengen-Grundsatz, Sechser-Kanon,
@@ -103,83 +105,39 @@ Eine durchnummerierte Position würde beim Löschen alle folgenden Zuordnungen v
 und die Topic-Liste auf der Datenquellen-Fläche zeigt es ohne weiteres Zutun. **Ein Feld = eine
 Quelle** (HA-Sensor · MQTT · Connector) bleibt der Kanon, es gibt keinen Sonderweg.
 
-### 3.2 Die Faltung: n Signale → ein Anlagen-Modus je Stunde
+### 3.2 ⛔ Die Faltung ist gestrichen (Entscheid Gernots, 2026-08-21)
 
-Geschrieben wird weiter **ein** Modus je Wärmepumpe und Stunde
-(`TagesEnergieProfil.betriebsmodus_je_wp`) — neu ist nur, woraus er entsteht. Je Innengerät wird
-wie bisher der Modus mit der längsten Verweildauer der Stunde bestimmt, dann gefaltet:
+Hier stand ein Regelwerk, das aus *n* Modus-Signalen einen Anlagen-Modus je
+Stunde falten sollte. **Es wird nicht gebaut.** Statt eine Regel zu erfinden,
+die im Zweifel schweigt, nimmt eedc entgegen, was gemessen wurde — siehe
+**§10**. Der Betriebsmodus bleibt **ein** Signal je Gerät und **unverändert**
+wie ausgeliefert.
 
-| Lage | Anlagen-Modus |
-| --- | --- |
-| alle Signale `aus` | `aus` |
-| genau eine Betriebsseite vertreten (`heizen` **oder** `kuehlen`) | diese Seite |
-| **`heizen` und `kuehlen` in derselben Stunde** | `unbestimmt` — nicht aufteilbar (E4) |
-| nur `entfeuchten` / `lueften` / `unbestimmt` | der häufigste dieser Werte |
-| kein Signal | **kein Eintrag** — „nicht hingesehen" |
-
-**Zwei Regeln, die nicht verhandelbar sind:**
-
-1. **`aus` zählt nicht mit, solange ein anderes Gerät läuft** (E1). Nur wenn *alle* aus sind, ist
-   die Anlage aus.
-2. **Der Ist-Betrieb schlägt den eingestellten Modus** — je Innengerät, vor der Faltung (E2).
-
-⚑ **Zeile 3 ist der eigentliche Gewinn.** Heute liest eedc ein Gerät, findet „Heizen" und bucht
-die Stunde ins Heizen — auch wenn nebenan gekühlt wird. Mit allen Signalen wird der Widerspruch
-sichtbar und ehrlich als „nicht aufgeteilt" ausgewiesen (ADR-002/P4). **Kein Mehrheitsentscheid**
-(Entscheid Gernots): zwei kühlende gegen ein heizendes Gerät sind keine Kühlstunde, sondern eine
-Stunde, in der die Anlage beides getan hat.
+⚑ **Warum das die bessere Lösung ist, und nicht der Rückzug:** Eine Faltung
+kann falsch liegen (E4: gegenläufige Innengeräte; E10: der eingestellte Modus
+eines mitlaufenden Geräts sagt nichts über seinen Betrieb). Ein Zähler kann das
+nicht. Und sie war ohnehin auf Heizen/Kühlen beschränkt, während ein Zähler
+jede Betriebsart trifft — auch Lüften und Entfeuchten.
 
 ### 3.3 Bestehende Zuordnungen bleiben gültig
 
-Wer heute eine `climate`-Entität an der Wärmepumpe zugeordnet hat (kingcap1, Klausnn, OB73-gif),
-behält sie — sie ist ein Signal wie jedes andere und nimmt an der Faltung teil. Ohne Innengeräte
-verhält sich alles **bitgleich** zu heute. Keine Migration, kein Altdaten-Bruch.
+Wer heute eine `climate`-Entität an der Wärmepumpe zugeordnet hat (kingcap1,
+Klausnn, OB73-gif), behält sie unverändert — die abgeleitete Aufteilung
+funktioniert wie bisher. Ohne Innengeräte und ohne Betriebsart-Zähler verhält
+sich alles **bitgleich** zu heute. Keine Migration, kein Altdaten-Bruch.
 
 ---
 
-## 4. Etappen
+## 4. Was gebaut ist
 
-| # | Etappe | Inhalt |
+| # | Etappe | Stand |
 | --- | --- | --- |
-| **F** | **Folgefehler E8** — Aktion getrennt durchreichen, Pfad-Wächter | ✅ **gebaut 2026-08-20** (s. §6) |
-| **I1** | Innengeräte-Liste am WP-Formular (Bezeichnung, Anlegen/Löschen), ID-Vergabe |
-| **I2** | Felder je Innengerät aus dem Parameter; Zuordnungsfläche zeigt sie gruppiert |
-| **I3** | **Faltung** nach §3.2 — die einzige Etappe, die Zahlen bewegt |
-| **I4** | Soll-/Ist-Temperatur, **erfasst ohne Auswertung** |
-| **I5** | „nicht aufteilbar (gegenläufige Innengeräte)" getrennt ausweisen |
-| **T1** | **Die Spalte „Wärmepumpe" in der Tagesansicht kennt nur einen von zwei Pfaden** (§7) | ✅ **gebaut 2026-08-21** |
-| **T2** | **Die Aufteilungs-Übersicht fehlt in Cockpit → Tag** (§8) | ✅ **gebaut 2026-08-21** |
-
-⚠ **Vor I3 gehört eine Messung an einer echten Anlage mit mehreren Innengeräten** — sonst ist die
-Faltungsregel eine Behauptung. Klausnn und kingcap1 haben passende Geräte.
-
-### 4.1 F ist gebaut — und I1–I5 bleiben 1:1 umsetzbar
-
-**Geprüft am Code, nicht angenommen** (Auflage Gernots, 20.08.): F fasst zwei Stellen an, die
-I1–I5 **nicht** brauchen — den Rückgabetyp von `get_zustand_history` (Paar → Tripel) und die
-Verweildauer-Schleife in `_get_betriebsmodus_history`. I3 setzt an einer **dritten** Stelle an,
-der Zuweisung am Ende derselben Funktion:
-
-```python
-gewinner = max(dauer.items(), …)[0]
-for inv_id in entity_zu_inv[entity_id]:
-    ergebnis.setdefault(h, {})[inv_id] = gewinner   # ← hier hängt sich I3 ein
-```
-
-Heute ist das eine **Zuweisung**, aus ihr wird eine **Faltung**: je Investition die Gewinner aller
-zugehörigen Innengeräte sammeln, dann nach §3.2 zusammenführen. Dazu dreht sich `entity_zu_inv`
-(Entity → Investitionen) zu Investition → Entities. **Kein Umbau an F nötig** — F liefert den
-Stundengewinner je Entity, und genau der ist die Eingabe der Faltung. F ist damit Vorarbeit, kein
-Hindernis.
-
-⚠ **Eine Präzisierung, die aus dem Bau von F folgt und in §3.2 gehört:** Die Faltung arbeitet auf
-den **Stundengewinnern** je Innengerät, nicht auf Zeitscheiben. Wechselt ein Gerät *innerhalb*
-einer Stunde von Heizen auf Kühlen, erscheint die Stunde als „nicht aufteilbar" — obwohl nichts
-gleichzeitig lief. **Das ist gewollt:** die Zählersumme ist stundengranular, eedc könnte die kWh
-dieser Stunde ohnehin nicht auf die beiden Hälften verteilen. „Nicht aufteilbar" ist dort die
-ehrliche Antwort, keine Näherung.
-
----
+| **F** | Folgefehler E8 — Aktion getrennt durchreichen, Pfad-Wächter (§6) | ✅ 2026-08-20 |
+| **T1** | Die Geräte-Spalten der Tagesansicht kennen beide Pfade (§7) | ✅ 2026-08-21 |
+| **T2** | Die Aufteilung Heizen/Kühlen gibt es auch je Tag (§8) | ✅ 2026-08-21 |
+| **I** | Innengeräte-Liste + gemessene Betriebsart-Felder (§10) | ✅ 2026-08-21 |
+| ~~I3~~ | ~~Faltung mehrerer Modus-Signale~~ | ⛔ **gestrichen**, s. §3.2 |
+| ~~I5~~ | ~~„nicht aufteilbar (gegenläufig)" ausweisen~~ | ⛔ **entfällt mit I3** |
 
 ## 5. Grenzen — sie gehören in den Anwender-Text
 
@@ -378,6 +336,122 @@ nur der Lader), die Tagesgrenze, das noch nicht angeschaffte Gerät und die Glei
 **Gates:** pytest **3.306 in beiden Zonen** (vorher 3.299) · lint 0 · tsc 0 ohne Pipe ·
 Vitest 1.191 · **26/26 `check:*` inkl. `park-leertest`** (18 Sichten, **Exit 0**, gegen einen
 frischen Demo-Build auf der Dev-Box — diesmal Pflicht, weil Frontend-Quellcode berührt ist).
+
+---
+
+## 10. ✅ Gebaut: Innengeräte + gemessene Betriebsarten (Fassung 2026-08-21)
+
+**Gernots Modell:** *„Wir brauchen einen Sensor, der den Stromverbrauch gesamt
+ausgibt (Außen- und Innenteile), weitere Sensoren für Stromverbrauch Kühlen,
+Heizen, Lüften und Entfeuchten jeweils pro Innenteil. Im Idealfall pro
+Inneneinheit noch Sensoren für die erzeugten Energien je Modus … Soll sich der
+Benutzer doch damit rumschlagen, was er hat. **Kein Sensor-Wert, keine Anzeige.
+Falscher Sensor-Wert, falsche Anzeige.**"*
+
+### 10.1 Die Felder
+
+Nur bei `wp_art: luft_luft` — Innengeräte sind eine **Bauform** von
+Split-Geräten. Eine Luft-Wasser-Wärmepumpe hat Heizkreise, keine Innengeräte;
+ihre Achse heißt Heizen/Warmwasser und liegt in `strom_heizen_kwh` /
+`strom_warmwasser_kwh`. Der **Betriebsmodus** bleibt davon unberührt und wird
+weiterhin **jeder** Wärmepumpe angeboten (Luft-Wasser mit Kühlfunktion gibt es).
+
+| Feld | Ebene |
+| --- | --- |
+| `betriebsart_strom_{heizen,kuehlen,lueften,entfeuchten}_kwh` | Gerät **und** je Innengerät |
+| `betriebsart_nutzenergie_{…}_kwh` (thermisch) | Gerät **und** je Innengerät |
+| `leistung_w` · `soll_temperatur_c` · `ist_temperatur_c` | Gerät **und** je Innengerät |
+| `betriebsmodus` | **nur** Gerät — ein Signal, keine Faltung |
+
+**Alle optional.** Ohne Zuordnung ist alles bitgleich zu vorher.
+
+### 10.2 Die Innengeräte-Liste
+
+Liste im `Investition.parameter`, **keine eigene Investition** — die Werte je
+Innengerät sind eine **Teilmenge** des Anlagenverbrauchs, kein zweites Gerät.
+Ein Kind-Objekt wäre überall ein zusätzlicher Verbraucher und müsste an jeder
+Aggregation ausgenommen werden; das ist die Doppelzählungs-Klasse, die uns beim
+BKW, beim Speicher und beim Wallbox/E-Auto-Pool je einmal getroffen hat.
+
+**Die Liste ist selbst der Schalter:** `multisplit` wird abgeleitet
+(`len >= 2`) und nirgends gespeichert. **Die ID wird vergeben und nie
+wiederverwendet** — sie steht im Feld-Key (`betriebsart_strom_kuehlen_kwh-3`),
+und eine Positionsnummer würde beim Löschen des mittleren Geräts alle folgenden
+Zuordnungen auf den falschen Raum umhängen. **Beim Löschen** werden die
+Zuordnungen des entfallenen Geräts abgeräumt (`live`, `live_invert`, `felder`,
+`quellen`) — sonst lägen sie unsichtbar und unlöschbar weiter und liefen in die
+Auswertung.
+
+### 10.3 Die eine Auflösung: `basis_feld_key`
+
+Quer durchs Backend entscheiden **Namens-Whitelists** über das Verhalten eines
+Feldes: `ist_zustand_feld` (5-Sekunden-Poller? MQTT-Topic?),
+`_is_kumulativ_feld` (Snapshot?), `FELD_EINHEITEN` (Einheit?),
+`get_feld_bedarf` (rot oder grau?). Alle vergleichen den **ganzen** Key. Ohne
+Auflösung fiele `…-3` durch jede einzelne — **still**: das Feld wäre zuordenbar
+und käme nirgends an. Deshalb löst **jeder** dieser Leser über
+`field_definitions.basis_feld_key` auf. Der Trenner `-` ist sicher: kein
+einziger Registry-Key enthält einen (Probe:
+`test_263_innengeraete.py::test_kein_registry_feld_traegt_einen_bindestrich`).
+
+### 10.4 Vorrang: gemessen schlägt abgeleitet, **ganz oder gar nicht**
+
+SoT ist `core/berechnungen/betriebsart_gemessen.py`:
+
+1. **Das Gerätefeld gewinnt** vor der Summe der Innengeräte — beide beschreiben
+   dieselbe Menge auf verschiedenen Ebenen und werden **nie addiert**.
+2. **Sonst die Summe der Innengeräte.**
+3. **Sonst `None`** — nicht `0.0`: „kein Zähler" und „Zähler stand auf null"
+   sind verschiedene Aussagen (die F-42-Klasse).
+
+⚑ **Und ganz oder gar nicht je Monatszeile.** Sobald *irgendein*
+Betriebsart-Stromzähler vorliegt, gilt für dieses Gerät nur noch Gemessenes;
+eine Betriebsart ohne Zähler erscheint unter „nicht aufgeteilt". **Beim
+Durchspielen der Varianten ist der naheliegende Weg — je Betriebsart einzeln
+zurückfallen — durchgefallen:** dann stünde in *einem* Balken die eine Hälfte
+aus einem Zähler und die andere aus einer Rechnung, während die Herkunfts-Marke
+für beide „gemessen" sagt. *Ein halbwahres Etikett ist schlechter als eine
+fehlende Zahl.*
+
+`modus_gemessen` trägt die Herkunft bis in die Oberfläche: die Aufteilung wird
+auch dann gezeigt, wenn `modus_abdeckung_h` 0 ist — **ein Zähler hat keine
+„Stunden mit Signal"**.
+
+### 10.5 Grenze: kein Komponenten-Beitrag
+
+Die Betriebsart-Zähler werden **gesnapshottet**, erzeugen aber **keinen**
+Komponenten-/Tagesbeitrag (`_SNAPSHOT_OHNE_KOMPONENTEN_BEITRAG`) — Strom je
+Betriebsart ist eine Teilmenge von `stromverbrauch_kwh`, Nutzenergie ist
+thermisch. Als eigener Beitrag stünde die Wärmepumpe in der Tagesbilanz
+doppelt. Der **Monatswert** entsteht davon unberührt über die Vorschläge des
+Monatsabschlusses (HA-Statistik · MQTT · Connector).
+⭐ **Ein Bestandswächter hat diese Lücke gefangen**
+(`test_snapshot_felder_sot_konformitaet`), bevor sie ausgeliefert war.
+
+### 10.6 Woher der Anwender die Werte bekommt
+
+Beide Wege stehen im Handbuch nebeneinander:
+
+* **Utility Meter** (Helfer, im UI einrichtbar) für die **kWh**-Felder — er
+  *zählt* und überlebt Neustarts: Quelle = Energie-Sensor des Geräts,
+  `tariffs` = heizen/kuehlen/lueften/entfeuchten ⇒ je Tarif ein zählender
+  Sensor; eine Automatisierung schaltet den Tarif per `select.select_option`,
+  ausgelöst von `hvac_mode`/`hvac_action` der `climate`-Entität.
+* **Template-Sensor** für Momentanwerte und Umrechnungen — Leistung je Modus,
+  Einheiten- und Vorzeichenkorrektur, Zusammenfassen mehrerer Entitäten. Er hat
+  **kein Gedächtnis** und ersetzt den Utility Meter bei kWh nicht.
+
+### 10.7 Was gewächtert ist
+
+* `test_263_innengeraete.py` — je Eigenschaft eine Probe, **sieben Sprengsätze
+  gezündet** (Basis-Key in `ist_zustand_feld` · in `_is_kumulativ_feld` ·
+  `_hat_modus` · Vorrang · Geräteklassen-Filter · Löschen · Route-Gate).
+* `test_263_innengeraete_varianten.py` — **neun Datenlagen × sechs Flächen**
+  (Komponenten-Hub · Cockpit Monat · Monatsabschluss · Datenquellen-Fläche ·
+  Live-Bild · Invariante). Auf Gernots Auflage vom 2026-08-21: *„Teste bitte
+  alle möglichen Varianten im Detail auf korrekte Berechnung und Anzeige."*
+  Die Invariante `Σ Teilmengen + Rest == Gesamt` ist die Probe gegen jede
+  Doppelzählung — sie hat V7 zu Fall gebracht.
 
 ---
 

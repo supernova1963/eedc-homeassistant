@@ -201,6 +201,64 @@ eigene Speicher-Investition erfasst und publiziert unter deren ID auf
 | `eedc/.../energy/inv/{inv_id}_{name}/warmwasser_kwh` | `warmwasser_kwh` | |
 | ⚠️ `strom_heizen_kwh` / `strom_warmwasser_kwh` | — | **Kein MQTT-Topic** — nur via HA-Sensor |
 
+### 4a. Split-Klimaanlage: Verbrauch je Betriebsart und je Innengerät
+
+> Gilt nur für Wärmepumpen mit **Wärmepumpenart „Luft-Luft (Klimaanlage)"**.
+> Alle Felder sind **optional**: kein Sensor, keine Anzeige.
+
+Eine Klimaanlage heizt, kühlt, lüftet und entfeuchtet über **denselben** Zähler.
+Wer die vier Anteile getrennt messen kann, trägt sie hier ein — sie sind
+**Teilmengen** des Gesamtverbrauchs und werden nie dazuaddiert.
+
+| Feld | Label | Einheit | Sensortyp |
+|------|-------|---------|-----------|
+| `betriebsart_strom_heizen_kwh` | Strom Heizbetrieb | kWh | Kumulativ oder Tagessensor |
+| `betriebsart_strom_kuehlen_kwh` | Strom Kühlbetrieb | kWh | Kumulativ oder Tagessensor |
+| `betriebsart_strom_lueften_kwh` | Strom Lüftbetrieb | kWh | Kumulativ oder Tagessensor |
+| `betriebsart_strom_entfeuchten_kwh` | Strom Entfeuchtungsbetrieb | kWh | Kumulativ oder Tagessensor |
+| `betriebsart_nutzenergie_*_kwh` | Nutzenergie je Betriebsart | kWh | Kumulativ, **thermisch** |
+| `soll_temperatur_c` / `ist_temperatur_c` | Soll-/Raumtemperatur | °C | Momentan, reine Anzeige |
+
+**Mehrere Innengeräte (Multisplit):** Trag sie beim Gerät unter *Innengeräte*
+ein (Bezeichnung, z. B. „Büro"). Danach gibt es **jedes** der Felder oben
+zusätzlich je Innengerät — der Feld-Key trägt dessen Nummer
+(`betriebsart_strom_kuehlen_kwh-3`), das Label den Raumnamen
+(„Büro: Strom Kühlbetrieb").
+
+**Vorrang:** Liegt ein Betriebsart-Zähler vor, gilt er — und zwar für **alle**
+Betriebsarten dieses Geräts. Die Aufteilung, die eedc sonst aus dem
+`betriebsmodus` ableitet, tritt dann zurück; eine Betriebsart ohne Zähler
+erscheint unter „nicht aufgeteilt". Steht ein Wert **am Gerät**, schlägt er die
+Summe der Innengeräte — beide beschreiben dieselbe Menge, sie werden nie addiert.
+
+> ⚠️ **Was ein Innengerät NICHT misst.** An einem Multisplit hängt **ein**
+> Außengerät an mehreren Innengeräten. Was eine Hersteller-App dort als
+> Verbrauch eines Innengeräts anzeigt, ist der Anteil des **Außengeräts**,
+> zugeschrieben an das gerade **anfordernde** Innengerät — und welches das ist,
+> entscheidet die Einschaltreihenfolge. Mitsubishi sagt es selbst:
+> *„It is not possible to attribute the output of the outdoor units to specific
+> indoor units."* Die belastbare Menge ist ein eigener Zähler am Außengerät.
+
+#### So bekommst du die vier Zähler in Home Assistant
+
+**Weg 1 — Utility Meter (empfohlen, für die kWh-Felder).** Er *zählt* und
+übersteht Neustarts; ein Template-Sensor kann das nicht.
+
+1. *Einstellungen → Geräte & Dienste → Helfer → Helfer erstellen → **Utility
+   Meter***.
+2. **Eingangssensor**: der Energie-Sensor deiner Klimaanlage (kWh).
+3. **Tarife**: `heizen`, `kuehlen`, `lueften`, `entfeuchten`.
+   HA legt daraus je Tarif einen eigenen zählenden Sensor an.
+4. Eine Automatisierung schaltet den aktiven Tarif, ausgelöst vom Zustand der
+   `climate`-Entität — Aktion **`select.select_option`** auf die
+   `select.…`-Entität, die der Utility Meter mit angelegt hat.
+5. In eedc unter *Einstellungen → Datenquellen* die vier Tarif-Sensoren den
+   vier Feldern zuordnen.
+
+**Weg 2 — Template-Sensor**, für Momentanwerte und Umrechnungen: Leistung je
+Betriebsart (`{{ leistung if modus == 'cool' else 0 }}`), Einheiten- und
+Vorzeichenkorrekturen, oder das Zusammenfassen mehrerer Entitäten zu einer.
+
 ---
 
 ## 5. E-Auto

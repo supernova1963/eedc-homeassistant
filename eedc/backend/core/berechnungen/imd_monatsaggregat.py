@@ -31,6 +31,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from backend.core.berechnungen.betriebsart_gemessen import (
+    betriebsart_strom_kwh,
+    hat_gemessene_betriebsart,
+)
 from backend.core.berechnungen.modus_split import heizwaerme_ist_abgeleitet
 from backend.core.betriebsmodus import MODUS_ABDECKUNG_FELD, MODUS_STROM_FELD
 from backend.core.betriebsmodus import HEIZEN as _HEIZEN
@@ -88,6 +92,12 @@ class ImdTypBeitrag:
     wp_modus_strom_heizen: float = 0.0
     wp_modus_strom_kuehlen: float = 0.0
     wp_modus_abdeckung_h: float = 0.0
+    #: #263 — die Aufteilung dieser Zeile ist **gemessen**, nicht abgeleitet.
+    #: Trägt zwei Folgen: der aus dem Betriebsmodus gerechnete Split darf hier
+    #: nicht zusätzlich angewandt werden (sonst steht die Menge zweimal), und
+    #: die Aufteilung ist zu zeigen, obwohl `wp_modus_abdeckung_h` 0 ist —
+    #: ein Zähler hat keine „Stunden mit Signal".
+    wp_modus_gemessen: bool = False
     #: Der **Gesamtstrom dieser Zeile**, aber nur wenn sie einen Modus-Split
     #: trägt. Er ist die Bezugsgröße für „nicht aufgeteilt".
     #:
@@ -183,6 +193,9 @@ def imd_typ_beitrag(
         warmwasser = _f(data, "warmwasser_kwh")
         # D1: waerme_kwh hat Vorrang, sonst Heizung + Warmwasser (kanonisch).
         waerme = _f(data, "waerme_kwh") or (heizung + warmwasser)
+        _gem_heizen = betriebsart_strom_kwh(data, _HEIZEN)
+        _gem_kuehlen = betriebsart_strom_kwh(data, _KUEHLEN)
+        _gemessen = hat_gemessene_betriebsart(data)
         return ImdTypBeitrag(
             typ=typ,
             wp_strom=get_wp_strom_kwh(data, params),
@@ -192,12 +205,36 @@ def imd_typ_beitrag(
             wp_strom_heizen=_f(data, "strom_heizen_kwh"),
             wp_strom_warmwasser=_f(data, "strom_warmwasser_kwh"),
             wp_hat_split=hat_split,
-            wp_modus_strom_heizen=_f(data, MODUS_STROM_FELD[_HEIZEN]),
-            wp_modus_strom_kuehlen=_f(data, MODUS_STROM_FELD[_KUEHLEN]),
+            # #263 — **gemessen schlägt abgeleitet** (ADR-002/P8), und zwar
+            # **ganz oder gar nicht je Zeile**.
+            #
+            # ⚠ Der naheliegende Weg wäre je Betriebsart: Kühlen gemessen,
+            # Heizen aus dem Modus nachgereicht. Er ist beim Durchspielen der
+            # Varianten durchgefallen — dann steht in **einem** Balken die
+            # eine Hälfte aus einem Zähler und die andere aus einer Rechnung,
+            # während `wp_modus_gemessen` für beide „gemessen" sagt. Ein
+            # halbwahres Etikett ist schlechter als eine fehlende Zahl
+            # (ADR-002/P4). Wer Kühlen misst und Heizen nicht, sieht Heizen
+            # deshalb nicht in dieser Zeile — nicht als 0 mit falscher
+            # Herkunft.
+            #
+            # Zugleich ist es die Regel, die `monats_fakten` für den
+            # *gerechneten* Split ohnehin schon anwendet (`hat_gemessene_
+            # betriebsart` sperrt ihn je Gerät). Beide Wege sagen jetzt
+            # dasselbe, statt sich je nach Fläche zu unterscheiden.
+            wp_modus_strom_heizen=(
+                (_gem_heizen or 0.0) if _gemessen
+                else _f(data, MODUS_STROM_FELD[_HEIZEN])
+            ),
+            wp_modus_strom_kuehlen=(
+                (_gem_kuehlen or 0.0) if _gemessen
+                else _f(data, MODUS_STROM_FELD[_KUEHLEN])
+            ),
             wp_modus_abdeckung_h=_f(data, MODUS_ABDECKUNG_FELD),
+            wp_modus_gemessen=_gemessen,
             wp_modus_strom_bezug=(
                 get_wp_strom_kwh(data, params)
-                if _f(data, MODUS_ABDECKUNG_FELD) > 0 else 0.0
+                if (_f(data, MODUS_ABDECKUNG_FELD) > 0 or _gemessen) else 0.0
             ),
             # Ist die Heizwärme abgeleitet, ist der abgeleitete Anteil die
             # ganze Heizwärme dieser Zeile — es gibt keine Mischung je Zeile.

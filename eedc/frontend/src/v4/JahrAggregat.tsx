@@ -339,6 +339,9 @@ export function baueJahrAlsMonat(monate: AktuellerMonatResponse[], jahr: number)
     wp_modus_strom_heizen_kwh: summe(f('wp_modus_strom_heizen_kwh')),
     wp_modus_strom_kuehlen_kwh: summe(f('wp_modus_strom_kuehlen_kwh')),
     wp_modus_abdeckung_h: summe(f('wp_modus_abdeckung_h')),
+    // #263 — ein Flag summiert sich nicht, es wird ge-ODER-t: EIN Monat
+    // mit gemessener Aufteilung genügt, damit das Jahr eine hat.
+    wp_modus_gemessen: monate.some(m => !!m.wp_modus_gemessen),
     wp_modus_nicht_aufgeteilt_kwh: Math.max(
       0,
       (wpStrom ?? 0) - (summe(f('wp_modus_strom_heizen_kwh')) ?? 0)

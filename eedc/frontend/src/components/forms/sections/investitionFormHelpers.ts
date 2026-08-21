@@ -12,6 +12,8 @@ import {
   PARAM_BALKONKRAFTWERK_DEFAULTS,
   PARAM_SONSTIGES_DEFAULTS,
 } from '../../../lib'
+import type { Innengeraet } from '../../../lib/investitionParameter'
+import type { ParamWert } from './InvestitionTypFelder/types'
 import type { SelectItem } from '../../ui/Select'
 
 /**
@@ -166,7 +168,7 @@ export const alternativkostenHints: Record<InvestitionTyp, string> = {
 export function getInitialParamData(
   typ: InvestitionTyp,
   params: Record<string, unknown> = {},
-): Record<string, string | boolean> {
+): Record<string, ParamWert> {
   switch (typ) {
     case 'e-auto':
       return {
@@ -209,6 +211,12 @@ export function getInitialParamData(
         leistung_kw: paramStr(params.leistung_kw),
         // Wärmepumpenart für fairen Community-Vergleich
         wp_art: paramStr(params.wp_art, PARAM_WAERMEPUMPE_DEFAULTS.wp_art),
+        // #263 — die Innengeräte-Liste wandert unverändert durch das Formular.
+        // Sie ist selbst der Schalter: „Multisplit" wird aus ihrer Länge
+        // abgeleitet und nirgends gespeichert.
+        innengeraete: Array.isArray(params.innengeraete)
+          ? (params.innengeraete as Innengeraet[])
+          : [],
         // Modus-Auswahl: gesamt_jaz (Standard), scop (EU-Label) oder getrennte_cops
         effizienz_modus: paramStr(params.effizienz_modus, PARAM_WAERMEPUMPE_DEFAULTS.effizienz_modus),
         // Für Modus "gesamt_jaz"

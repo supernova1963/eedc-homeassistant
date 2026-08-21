@@ -221,6 +221,10 @@ class AktuellerMonatResponse(BaseModel):
     wp_modus_strom_kuehlen_kwh: Optional[float] = None
     wp_modus_nicht_aufgeteilt_kwh: Optional[float] = None
     wp_modus_abdeckung_h: Optional[float] = None
+    #: #263 — die Aufteilung ist GEMESSEN (Betriebsart-Zähler) statt aus dem
+    #: Betriebsmodus abgeleitet. Dann ist `wp_modus_abdeckung_h` 0, ohne dass
+    #: etwas fehlt — ein Zähler zählt kWh, keine Stunden mit Signal.
+    wp_modus_gemessen: Optional[bool] = None
     # Issue #169: Kompressor-Starts. Quelle: TagesZusammenfassung.komponenten_starts
     # über die Tage des Monats, summiert über alle WP-Investitionen.
     wp_starts_max_tag: Optional[int] = None
@@ -1801,6 +1805,7 @@ async def get_aktueller_monat(
     wp_modus_kuehlen = None
     wp_modus_rest = None
     wp_modus_abdeckung = None
+    wp_modus_gemessen = None
     if mf_wp is not None:
         if mf_wp.heizung_kwh > 0:
             wp_heizung = round(mf_wp.heizung_kwh, 2)
@@ -1818,6 +1823,7 @@ async def get_aktueller_monat(
             wp_modus_kuehlen = round(mf_wp.modus_strom_kuehlen_kwh, 2)
             wp_modus_rest = round(mf_wp.modus_nicht_aufgeteilt_kwh, 2)
             wp_modus_abdeckung = round(mf_wp.modus_abdeckung_h, 1)
+            wp_modus_gemessen = mf_wp.modus_gemessen
 
     # E-Mobilität: PV/Netz/Extern-Split + V2H
     emob_pv = get_val("emob_pv_ladung_kwh")
@@ -2220,6 +2226,7 @@ async def get_aktueller_monat(
         wp_modus_strom_kuehlen_kwh=wp_modus_kuehlen,
         wp_modus_nicht_aufgeteilt_kwh=wp_modus_rest,
         wp_modus_abdeckung_h=wp_modus_abdeckung,
+        wp_modus_gemessen=wp_modus_gemessen,
         wp_starts_max_tag=wp_starts_max_tag,
         wp_starts_summe_monat=wp_starts_summe_monat,
         wp_betriebsstunden_max_tag=wp_betriebsstunden_max_tag,

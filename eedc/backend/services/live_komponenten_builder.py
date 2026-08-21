@@ -43,6 +43,8 @@ def build_komponenten(
             "summe_verbrauch_kw": float,
             "pv_total_w": float,
             "warmwasser_temperatur_c": float | None,
+            "innengeraete": [ {investition_id, innengeraet_id, bezeichnung,
+                               leistung_w, soll_temperatur_c, ist_temperatur_c} ],
         }
     """
     komponenten = []
@@ -406,6 +408,19 @@ def build_komponenten(
                 warmwasser_temperatur_c = round(ww_temp, 1)
                 break
 
+    # #263 — Innengeräte einer Split-Klimaanlage: Leistung und Raumtemperaturen.
+    #
+    # **Reine Anzeige, ausdrücklich ohne Auswertung** (Entscheid Gernots,
+    # 2026-08-21). Die Werte gehen in keine Bilanz und in keine Summe: die
+    # Leistung eines Innengeräts ist eine **Teilmenge** der Geräteleistung, die
+    # oben bereits als Komponente zählt. Sie zusätzlich zu addieren wäre die
+    # Doppelzählung, gegen die dieses Modul an drei Stellen absichert.
+    #
+    # ⚠ Eine Temperatur läuft durch `normalize_to_w` — dort bleibt sie
+    # unverändert, weil °C keine bekannte Leistungs-Einheit ist (dieselbe
+    # Bauform wie `warmwasser_temperatur_c` darüber, seit v3.24).
+    innengeraete_live = _innengeraete_live(inv_values, investitionen)
+
     return {
         "komponenten": komponenten,
         "gauges": gauges,
@@ -413,4 +428,41 @@ def build_komponenten(
         "summe_verbrauch_kw": round(summe_verbrauch, 3),
         "pv_total_w": pv_total_w,
         "warmwasser_temperatur_c": warmwasser_temperatur_c,
+        "innengeraete": innengeraete_live,
     }
+
+
+def _innengeraete_live(
+    inv_values: dict[str, dict[str, float]],
+    investitionen: dict[str, Investition],
+) -> list[dict]:
+    """Die Live-Werte je Innengerät — Bezeichnung, Leistung, Raum-Ist/Soll.
+
+    Nur Geräte, für die tatsächlich ein Wert ankommt: ohne zugeordneten Sensor
+    steht dort nichts, nicht eine Null (ADR-002/P4). Ein Innengerät ohne jeden
+    Wert erscheint deshalb gar nicht.
+    """
+    from backend.core.field_definitions import feld_je_innengeraet
+    from backend.core.investition_parameter import lade_innengeraete
+
+    out: list[dict] = []
+    for inv_id, values in inv_values.items():
+        inv = investitionen.get(inv_id)
+        if not inv or inv.typ != "waermepumpe":
+            continue
+        for geraet in lade_innengeraete(inv):
+            gid = geraet["id"]
+            leistung = values.get(feld_je_innengeraet("leistung_w", gid))
+            soll = values.get(feld_je_innengeraet("soll_temperatur_c", gid))
+            ist = values.get(feld_je_innengeraet("ist_temperatur_c", gid))
+            if leistung is None and soll is None and ist is None:
+                continue
+            out.append({
+                "investition_id": int(inv_id),
+                "innengeraet_id": gid,
+                "bezeichnung": geraet["bezeichnung"],
+                "leistung_w": round(leistung, 0) if leistung is not None else None,
+                "soll_temperatur_c": round(soll, 1) if soll is not None else None,
+                "ist_temperatur_c": round(ist, 1) if ist is not None else None,
+            })
+    return out

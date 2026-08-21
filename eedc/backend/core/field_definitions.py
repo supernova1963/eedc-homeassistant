@@ -52,7 +52,10 @@ Feld-Attribute:
 
 from typing import Final, Optional
 
-from backend.core.investition_parameter import ist_luft_luft_waermepumpe
+from backend.core.investition_parameter import (
+    ist_luft_luft_waermepumpe,
+    lade_innengeraete,
+)
 
 
 # =============================================================================
@@ -135,6 +138,103 @@ OPTIONALE_FELDER = [
 # _import_investition_monatsdaten_v09() und _build_investition_felder()
 # automatisch ausgewertet — keine hardcodierten Typ-Checks mehr nötig.
 # =============================================================================
+
+# ── #263: die gemessenen Betriebsart-Felder einer Split-Klimaanlage ─────────
+#
+# **Erzeugt statt achtmal getippt.** Die Feldnamen selbst stehen ausgeschrieben
+# im Kanon (`core/betriebsmodus.py`) — dort ist die Grep-Barkeit, die dieses
+# Projekt braucht. Hier entsteht daraus nur die Registry-Zeile, damit Hinweis
+# und Einheit nicht achtmal auseinanderdriften können (dieselbe Bauform wie
+# `_sonstiges_felder_*`, N-259).
+#
+# **Warum `bedingung: luft_luft`.** Eine Betriebsart im Sinne von Heizen ·
+# Kühlen · Lüften · Entfeuchten hat nur ein Klimagerät. Eine Luft-Wasser-WP hat
+# Heizen und Warmwasser — dafür gibt es `strom_heizen_kwh`/
+# `strom_warmwasser_kwh`, und die bedeuten etwas anderes (Summanden, nicht
+# Teilmengen). Die zwei Familien nebeneinander anzubieten wäre genau die
+# Zweideutigkeit, an der ein Tester schon einmal zwei Felder addiert hat
+# (Forum simon42 #89667/62).
+_BETRIEBSART_HINWEIS_STROM = (
+    "Elektrische Energie, die dieses Gerät im {label} verbraucht hat (kWh, "
+    "kumulativer Zähler oder Tagessensor). **Teilmenge** des Gesamtverbrauchs — "
+    "eedc addiert sie nie dazu. Liegt dieser Wert vor, hat er Vorrang vor der "
+    "Aufteilung, die eedc sonst aus dem Betriebsmodus ableitet — und zwar "
+    "für **alle** Betriebsarten dieses Monats: sobald hier ein Zähler steht, "
+    "zählt für dieses Gerät nur noch Gemessenes. Eine Betriebsart ohne Zähler "
+    "erscheint dann unter „nicht aufgeteilt“. "
+    "In Home Assistant bekommt man ihn mit einem **Utility Meter** (Helfer) auf "
+    "den Energie-Sensor des Geräts, mit einem Tarif je Betriebsart. "
+    "⚠ An Multisplit-Geräten misst kein Innengerät seinen eigenen Anteil: Was "
+    "dort als Verbrauch erscheint, ist der Anteil des Außengeräts, der dem "
+    "gerade anfordernden Innengerät zugeschrieben wird."
+)
+_BETRIEBSART_HINWEIS_NUTZ = (
+    "Abgegebene Nutzenergie im {label} (kWh, kumulativer Zähler oder "
+    "Tagessensor) — thermisch, NICHT Strom. Beim Kühlen ist das die abgeführte "
+    "Wärme. Optional; ohne Wärmemengenzähler gibt es diesen Wert nicht, und "
+    "eedc rechnet ihn nicht herbei."
+)
+
+
+#: CSV-Spaltenteil je Betriebsart — **ohne Umlaute**, wie jede bestehende
+#: CSV-Spalte dieses Projekts (`Strom_Heizen_kWh`, `Ladung_PV_kWh`). Ein „ü" im
+#: Spaltennamen überlebt die Runde durch Tabellenkalkulation und
+#: Zeichensatz-Wechsel nicht zuverlässig, und die Spalte ist der Schlüssel, an
+#: dem der Import wiederfindet, wohin ein Wert gehört.
+_BETRIEBSART_CSV: dict[str, str] = {
+    "heizen": "Heizbetrieb",
+    "kuehlen": "Kuehlbetrieb",
+    "lueften": "Lueftbetrieb",
+    "entfeuchten": "Entfeuchtung",
+}
+
+
+def _betriebsart_felder() -> list[dict]:
+    from backend.core.betriebsmodus import (
+        BETRIEBSART_LABEL,
+        BETRIEBSART_NUTZENERGIE_FELD,
+        BETRIEBSART_STROM_FELD,
+        MESSBARE_MODI,
+    )
+    out: list[dict] = []
+    for modus in MESSBARE_MODI:
+        label = BETRIEBSART_LABEL[modus]
+        out.append({
+            "feld": BETRIEBSART_STROM_FELD[modus],
+            "label": f"Strom {label}",
+            "einheit": "kWh",
+            "bedingung": "luft_luft",
+            "je_innengeraet": True,
+            "csv_suffix": f"Strom_{_BETRIEBSART_CSV[modus]}_kWh",
+            "hinweis": _BETRIEBSART_HINWEIS_STROM.format(label=label),
+        })
+    for modus in MESSBARE_MODI:
+        label = BETRIEBSART_LABEL[modus]
+        out.append({
+            "feld": BETRIEBSART_NUTZENERGIE_FELD[modus],
+            "label": f"Nutzenergie {label}",
+            "einheit": "kWh",
+            "bedingung": "luft_luft",
+            "je_innengeraet": True,
+            "csv_suffix": f"Nutzenergie_{_BETRIEBSART_CSV[modus]}_kWh",
+            "hinweis": _BETRIEBSART_HINWEIS_NUTZ.format(label=label),
+        })
+    return out
+
+
+_BETRIEBSART_FELDER: list[dict] = _betriebsart_felder()
+
+#: Die reinen Feldnamen — für die Ausnahmelisten weiter unten, die (typ, feld)
+#: erwarten. Aus derselben Quelle wie die Registry-Zeilen, damit eine spätere
+#: Betriebsart nicht in der einen Liste steht und in der anderen fehlt.
+_BETRIEBSART_STROM_FELDNAMEN: tuple[str, ...] = tuple(
+    f["feld"] for f in _BETRIEBSART_FELDER if f["feld"].startswith("betriebsart_strom_")
+)
+_BETRIEBSART_NUTZENERGIE_FELDNAMEN: tuple[str, ...] = tuple(
+    f["feld"] for f in _BETRIEBSART_FELDER
+    if f["feld"].startswith("betriebsart_nutzenergie_")
+)
+
 
 INVESTITION_FELDER: dict = {
     "pv-module": [
@@ -241,6 +341,10 @@ INVESTITION_FELDER: dict = {
             "csv_suffix": "Warmwasser_kWh",
             "hinweis": "Abgegebene Warmwasser-Wärme (thermisch) in kWh, kumulativ oder Tagessensor. Optional — sonst in der Heizwärme enthalten.",
         },
+        # #263 — GEMESSENER Verbrauch je Betriebsart (Split-Klimaanlage).
+        # Erzeugt aus dem Kanon (`core/betriebsmodus.py`), siehe
+        # `_betriebsart_felder` unter dieser Tabelle.
+        *_BETRIEBSART_FELDER,
     ],
 
     "e-auto": [
@@ -531,6 +635,10 @@ LIVE_FELDER_INV: dict = {
     ],
     "waermepumpe": [
         {"key": "leistung_w",              "label": "Leistung gesamt",      "einheit": "W",
+         # #263: mit Innengeräte-Liste gibt es ihn zusätzlich je Innengerät —
+         # das Gerätefeld bleibt der Anlagenwert, die Kopien sind die Aufschlüsselung.
+         "je_innengeraet": True,
+         "label_je_innengeraet": "Leistung",
          "hinweis": "Momentane elektrische Leistungsaufnahme der Wärmepumpe in W "
                     "(nicht die abgegebene Wärmeleistung)."},
         {"key": "leistung_heizen_w",       "label": "Leistung Heizen",      "einheit": "W",
@@ -553,6 +661,18 @@ LIVE_FELDER_INV: dict = {
                     "bisher als eine Zahl, mit ihr kann es sagen, welcher Teil davon "
                     "ins Heizen und welcher ins Kühlen ging. Ein Zustand, kein "
                     "Messwert — deshalb nur als HA-Sensor zuordenbar, nicht über MQTT."},
+        # #263 — Raumtemperaturen einer Split-Klimaanlage. Bewusst **ohne
+        # Auswertung**: sie gehen in keine Bilanz, keine Effizienz und keine
+        # Bewertung ein, sondern stehen im Live-Block, weil sie da sind
+        # (Entscheid Gernots, 2026-08-21). Mit Innengeräte-Liste je Gerät.
+        {"key": "soll_temperatur_c", "label": "Soll-Temperatur", "einheit": "°C",
+         "bedingung": "luft_luft", "je_innengeraet": True,
+         "hinweis": "Eingestellte Zieltemperatur in °C — reine Anzeige, geht in keine "
+                    "Berechnung ein."},
+        {"key": "ist_temperatur_c", "label": "Raumtemperatur", "einheit": "°C",
+         "bedingung": "luft_luft", "je_innengeraet": True,
+         "hinweis": "Gemessene Raumtemperatur in °C — reine Anzeige, geht in keine "
+                    "Berechnung ein."},
     ],
     "balkonkraftwerk": [
         {"key": "leistung_w", "label": "Leistung", "einheit": "W",
@@ -766,6 +886,8 @@ def get_feld_bedarf(
     None). Ohne es bleibt die reine (typ, feld)-Einstufung — Aufrufer, die keinen
     Geräte-Kontext haben, müssen nichts wissen.
     """
+    # #263 — je-Innengerät-Keys erben die Einstufung ihres Basis-Felds.
+    feld = basis_feld_key(feld)
     bedarf = FELD_BEDARF.get((typ, feld), FELD_BEDARF_DEFAULT)
     if (typ, feld) in KLIMA_OHNE_WAERMEMENGE and ist_luft_luft_waermepumpe(parameter):
         return ("optional", bedarf[1])
@@ -832,6 +954,8 @@ def einheit_fuer(feld: str, investition=None) -> str:
     grundsätzlich nicht um. Wer sein Gerät von m³ auf kWh umstellt, ändert das
     Wort neben der Zahl — die Zahl bleibt, wie der Zähler sie meldet.
     """
+    # #263 — je-Innengerät-Keys tragen die Einheit ihres Basis-Felds.
+    feld = basis_feld_key(feld)
     param_key = FELD_EINHEIT_JE_GERAET.get(feld)
     if param_key:
         if investition is not None:
@@ -856,9 +980,15 @@ def ist_zustand_feld(feld: str, typ: Optional[str] = None) -> bool:
     Feld-Key allein. Beides ist gewollt: die Zuordnungs-Fläche kennt den Typ,
     der Live-Poller nicht.
     """
+    # #263: Der Key kann eine Innengeräte-Adresse tragen
+    # (`betriebsmodus-3`). Die Zustands-Eigenschaft hängt am Feld, nicht am
+    # Innengerät — ohne Auflösung liefe eine `climate`-Entität in den
+    # 5-Sekunden-Poller und in ein MQTT-Topic, das `float(payload)` nie
+    # annehmen kann.
+    basis = basis_feld_key(feld)
     if typ is not None:
-        return (typ, feld) in ZUSTAND_LIVE_FELDER
-    return feld in ZUSTAND_FELD_KEYS
+        return (typ, basis) in ZUSTAND_LIVE_FELDER
+    return basis in ZUSTAND_FELD_KEYS
 
 
 # =============================================================================
@@ -912,6 +1042,113 @@ def get_feld_hinweise() -> dict[str, dict[str, str]]:
     return result
 
 
+# =============================================================================
+# Feld-Keys je Innengerät (#263)
+#
+# **Ein Feld-Key kann eine Adresse tragen.** `modus`-, Verbrauchs- und
+# Live-Felder einer Split-Klimaanlage gibt es einmal je Innengerät; der Key
+# trägt dafür die **vergebene ID** des Innengeräts als Suffix:
+#
+#     betriebsart_strom_kuehlen_kwh-3      soll_temperatur_c-3
+#
+# ⚠ **Warum die ID und nicht die Position.** `sensor_mapping` speichert nach
+# Key. Eine Positionsnummer verschöbe beim Löschen des mittleren von drei
+# Geräten alle folgenden Zuordnungen — jede zeigte danach auf den falschen
+# Raum, ohne dass jemand etwas angefasst hätte.
+#
+# ⚠ **Und warum es EINEN Auflöser gibt.** Quer durchs Backend entscheiden
+# Namens-Whitelists über das Verhalten eines Feldes: `ist_zustand_feld`
+# (kommt es in den 5-Sekunden-Poller?), `_is_kumulativ_feld` (wird es
+# gesnapshottet?), `FELD_EINHEITEN` (welche Einheit?), `get_feld_bedarf`
+# (rot oder grau?). Alle vergleichen den **ganzen** Key. Ohne Auflösung fiele
+# `betriebsart_strom_kuehlen_kwh-3` durch jede einzelne — und zwar still: das
+# Feld wäre zuordenbar und würde nirgends ankommen. Deshalb löst **jeder**
+# dieser Leser über `basis_feld_key` auf, statt an vier Stellen ein Suffix zu
+# kennen.
+#
+# Der Trenner ist `-`, und das ist sicher: kein einziger der 53 Feld-Keys der
+# Registry enthält einen Bindestrich (Proben in
+# `test_263_innengeraete_feld_keys.py`).
+
+INNENGERAET_TRENNER: Final[str] = "-"
+
+
+def feld_je_innengeraet(basis_feld: str, innengeraet_id: int) -> str:
+    """Feld-Key für ein bestimmtes Innengerät — der eine Erzeuger."""
+    return f"{basis_feld}{INNENGERAET_TRENNER}{int(innengeraet_id)}"
+
+
+def basis_feld_key(feld: str) -> str:
+    """Der Feld-Key ohne Innengeräte-Suffix — siehe Kasten oben.
+
+    ``betriebsart_strom_kuehlen_kwh-3`` → ``betriebsart_strom_kuehlen_kwh``.
+    Ein Key ohne Suffix kommt unverändert zurück; die Funktion ist damit
+    überall einsetzbar, wo heute der rohe Key steht.
+    """
+    if not feld:
+        return feld
+    kopf, trenner, rest = feld.rpartition(INNENGERAET_TRENNER)
+    if trenner and kopf and rest.isdigit():
+        return kopf
+    return feld
+
+
+def innengeraet_id_von_feld(feld: str) -> Optional[int]:
+    """Die Innengeräte-ID eines Feld-Keys, oder ``None`` ohne Suffix."""
+    if not feld:
+        return None
+    kopf, trenner, rest = feld.rpartition(INNENGERAET_TRENNER)
+    if trenner and kopf and rest.isdigit():
+        return int(rest)
+    return None
+
+
+#: Felder, die es **je Innengerät** gibt, sobald eine Innengeräte-Liste
+#: gepflegt ist. Abgeleitet: alles, was `bedingung: "luft_luft"` trägt.
+#: Der Betriebsmodus steht bewusst NICHT dabei — er gehört dem Außengerät,
+#: bleibt ein Signal je Gerät, und die abgeleitete Aufteilung ändert sich
+#: durch die Liste nicht (Konzept-Fassung 2026-08-21).
+def _je_innengeraet_keys(felder: list[dict], key_name: str) -> set[str]:
+    return {f[key_name] for f in felder if f.get("je_innengeraet")}
+
+
+def _mit_innengeraeten(
+    felder: list[dict], parameter: Optional[dict], key_name: str,
+) -> list[dict]:
+    """Hängt je Innengerät eine Kopie der Betriebsart-/Raumfelder an.
+
+    **Das Gerätefeld bleibt stehen.** Wer den ganzen Verbrauch je Betriebsart
+    an einem Zähler hat, ordnet ihn dort zu; die Liste ergänzt die
+    Aufschlüsselung, sie ersetzt sie nicht. Ein Feld verschwinden zu lassen,
+    sobald jemand ein Innengerät anlegt, würde eine bestehende Zuordnung
+    unsichtbar machen und unlöschbar zurücklassen — dieselbe Falle, vor der
+    `get_alle_felder_fuer_investition` warnt.
+    """
+    geraete = lade_innengeraete(parameter)
+    if not geraete:
+        return felder
+    kandidaten = _je_innengeraet_keys(felder, key_name)
+    if not kandidaten:
+        return felder
+    out = list(felder)
+    for g in geraete:
+        for feld in felder:
+            if feld[key_name] not in kandidaten:
+                continue
+            kopie = dict(feld)
+            kopie[key_name] = feld_je_innengeraet(feld[key_name], g["id"])
+            kopie["label"] = (
+                f"{g['bezeichnung']}: "
+                f"{feld.get('label_je_innengeraet') or feld['label']}"
+            )
+            kopie["innengeraet_id"] = g["id"]
+            kopie["innengeraet_bezeichnung"] = g["bezeichnung"]
+            if kopie.get("csv_suffix"):
+                kopie["csv_suffix"] = f"{kopie['csv_suffix']}_IG{g['id']}"
+            out.append(kopie)
+    return out
+
+
 def _bedingungs_werte(parameter: Optional[dict]) -> dict[str, bool]:
     """Die Bedingungs-Keys einer Investition — eine Auswertung für alle Feld-Wege.
 
@@ -922,6 +1159,9 @@ def _bedingungs_werte(parameter: Optional[dict]) -> dict[str, bool]:
     params = parameter or {}
     arbitrage_faehig = bool(params.get("arbitrage_faehig"))
     return {
+        # #263: eine Betriebsart (Heizen/Kühlen/Lüften/Entfeuchten) hat nur ein
+        # Klimagerät — bei der Luft-Wasser-WP heißt die Achse Heizen/Warmwasser.
+        "luft_luft": ist_luft_luft_waermepumpe(params),
         "getrennte_strommessung": bool(params.get("getrennte_strommessung")),
         "arbitrage_faehig": arbitrage_faehig,
         # Arbitrage impliziert Netzladung — das Flag ist nur ein Erfassungs-Schalter,
@@ -983,10 +1223,12 @@ def get_felder_fuer_investition(
     laedt_aus_netz = bedingungs_werte["laedt_aus_netz"]
     v2h_faehig = bedingungs_werte["v2h_faehig"]
     hat_speicher = bedingungs_werte["hat_speicher"]
+    luft_luft = bedingungs_werte["luft_luft"]
 
     # Steuer-Schlüssel — hier ausgewertet bzw. nur für die Zuordnungs-Fläche
     # relevant, gehören nicht in die Eingabe-Antwort.
-    SKIP_KEYS = {"bedingung", "bedingung_anlage", "label_wenn", "nur_manuell"}
+    SKIP_KEYS = {"bedingung", "bedingung_anlage", "label_wenn", "nur_manuell",
+                 "je_innengeraet", "label_je_innengeraet"}
 
     for feld in alle_felder:
         bedingung = feld.get("bedingung")
@@ -1019,12 +1261,19 @@ def get_felder_fuer_investition(
             continue
         elif bedingung == "hat_speicher" and not hat_speicher:
             continue
+        elif bedingung == "luft_luft" and not luft_luft:
+            continue
 
-        aufgeloest = {k: v for k, v in feld.items() if k not in SKIP_KEYS}
+        aufgeloest = dict(feld)
         aufgeloest["label"] = _label_aufgeloest(feld, bedingungs_werte)
         result.append(aufgeloest)
 
-    return result
+    # #263 — je Innengerät eine Kopie, VOR dem Abstreifen der Steuer-Schlüssel:
+    # `je_innengeraet` ist selbst einer, und ohne ihn wüsste die Erweiterung
+    # nicht mehr, welche Felder sie vervielfältigen soll.
+    result = _mit_innengeraeten(result, params, "feld")
+
+    return [{k: v for k, v in f.items() if k not in SKIP_KEYS} for f in result]
 
 
 def get_alle_felder_fuer_investition(typ: str, parameter: Optional[dict] = None) -> list[dict]:
@@ -1062,10 +1311,28 @@ def get_alle_felder_fuer_investition(typ: str, parameter: Optional[dict] = None)
     # Kopie je Feld: die Dicts sind Modul-Konstanten, ein direktes Setzen des
     # Labels würde die Definition für alle folgenden Aufrufe umschreiben.
     bedingungs_werte = _bedingungs_werte(parameter)
-    return [
-        {**feld, "label": _label_aufgeloest(feld, bedingungs_werte)}
-        for feld in alle_felder
-    ]
+    # ⚠ **Eine einzige Bedingung wird hier doch gefiltert: `luft_luft`.**
+    #
+    # Die übrigen (`getrennte_strommessung`, `arbitrage_faehig`, …) sind
+    # **Schalter am selben Gerät** — ein Anwender kann sie morgen umlegen, und
+    # bis dahin soll das Feld zuordenbar bleiben. `luft_luft` ist dagegen eine
+    # **Geräteklasse**: eine Luft-Wasser-Wärmepumpe hat keinen Kühl-, Lüft- oder
+    # Entfeuchtungsbetrieb, und acht Felder dafür auf ihrer Zuordnungs-Fläche
+    # wären acht Angebote, die niemand einlösen kann (die P-6-Falle).
+    #
+    # Genau so verfährt diese Funktion bei *Sonstiges* schon lange: dort löst
+    # sie die `kategorie` auf, statt Erzeuger- und Verbraucher-Felder
+    # nebeneinander zu zeigen. Geräteklasse filtern, Schalter markieren.
+    if not bedingungs_werte["luft_luft"]:
+        alle_felder = [f for f in alle_felder if f.get("bedingung") != "luft_luft"]
+    return _mit_innengeraeten(
+        [
+            {**feld, "label": _label_aufgeloest(feld, bedingungs_werte)}
+            for feld in alle_felder
+        ],
+        parameter,
+        "feld",
+    )
 
 
 def get_basis_felder(
@@ -1274,6 +1541,7 @@ def get_live_felder_fuer_investition(typ: str, parameter: Optional[dict] = None)
     alle = LIVE_FELDER_INV.get(typ, [])
     result = []
     getrennte_strommessung = bool(params.get("getrennte_strommessung"))
+    luft_luft = ist_luft_luft_waermepumpe(params)
 
     for feld in alle:
         bedingung = feld.get("bedingung")
@@ -1283,8 +1551,10 @@ def get_live_felder_fuer_investition(typ: str, parameter: Optional[dict] = None)
             result.append({k: v for k, v in feld.items() if k != "bedingung"})
         elif bedingung == "!getrennte_strommessung" and not getrennte_strommessung:
             result.append({k: v for k, v in feld.items() if k != "bedingung"})
+        elif bedingung == "luft_luft" and luft_luft:
+            result.append({k: v for k, v in feld.items() if k != "bedingung"})
 
-    return result
+    return _mit_innengeraeten(result, params, "key")
 
 
 def build_feld_labels() -> dict[str, str]:
@@ -1574,6 +1844,33 @@ _SNAPSHOT_OHNE_KOMPONENTEN_BEITRAG: dict[tuple[str, str], str] = {
         "Energiebilanz, nur in die JAZ-Rechnung",
     ("waermepumpe", "warmwasser_kwh"): "thermisch, s. heizenergie_kwh",
 }
+
+# #263 — die gemessenen Betriebsart-Zähler, aus zwei verschiedenen Gründen:
+#
+# * **Strom je Betriebsart ist eine Teilmenge** von `stromverbrauch_kwh` —
+#   dieselbe Klasse wie `wallbox/ladung_pv_kwh` darüber. Als eigener
+#   Komponenten-Beitrag stünde der Verbrauch der Wärmepumpe in der Tages- und
+#   Stundenbilanz doppelt (einmal gesamt, einmal je Betriebsart).
+# * **Nutzenergie je Betriebsart ist thermisch**, nicht elektrisch — dieselbe
+#   Klasse wie `heizenergie_kwh`.
+#
+# ⚠ Der Monatswert entsteht davon unberührt: er kommt über die Vorschläge des
+# Monatsabschlusses (HA-Statistik · MQTT · Connector) in die IMD-Zeile, nicht
+# über den Komponenten-Beitrag. Gesnapshottet werden die Zähler weiterhin —
+# nur eben ohne eigenen Eintrag in der Energiebilanz.
+_SNAPSHOT_OHNE_KOMPONENTEN_BEITRAG.update({
+    **{
+        ("waermepumpe", _feld):
+            "Teilmenge von stromverbrauch_kwh (#263) — als eigener Beitrag "
+            "stünde der WP-Verbrauch in der Tagesbilanz doppelt"
+        for _feld in _BETRIEBSART_STROM_FELDNAMEN
+    },
+    **{
+        ("waermepumpe", _feld):
+            "THERMISCH, nicht elektrisch (#263) — s. heizenergie_kwh"
+        for _feld in _BETRIEBSART_NUTZENERGIE_FELDNAMEN
+    },
+})
 
 
 def kumulative_zaehler_felder_je_typ() -> dict[str, tuple[str, ...]]:

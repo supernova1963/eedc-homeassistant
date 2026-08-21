@@ -1,4 +1,13 @@
 import type { ChangeEvent } from 'react'
+import type { Innengeraet } from '../../../../lib/investitionParameter'
+
+/**
+ * Ein Parameter-Wert im Formular. Fast alles ist Text oder Schalter; die
+ * Innengeräte-Liste einer Split-Klimaanlage (#263) ist der eine **strukturierte**
+ * Wert — sie wandert unverändert durch die Submit-Pipeline, statt durch die
+ * Zahl/Text-Konvertierung zu laufen (`InvestitionForm`).
+ */
+export type ParamWert = string | boolean | Innengeraet[]
 
 /**
  * Gemeinsame Props der typ-spezifischen Parameterfeld-Komponenten (Slice 5).
@@ -6,11 +15,11 @@ import type { ChangeEvent } from 'react'
  * derzeit nur die Wärmepumpe (Pflicht-COP/SCOP/JAZ je Modus).
  */
 export interface TypFelderProps {
-  paramData: Record<string, string | boolean>
+  paramData: Record<string, ParamWert>
   /** Für `Input name="param_…"` (Event; Shell strippt das `param_`-Präfix). */
   onInputChange: (e: ChangeEvent<HTMLInputElement>) => void
   /** Für `Switch`/`Select`/`RadioGroup` (roher Parametername + Wert). */
-  setParam: (name: string, value: string | boolean) => void
+  setParam: (name: string, value: ParamWert) => void
   /** Sichtbarer Fehler eines Pflichtfelds (nach touched/submitted), sonst undefined. */
   zeige: (name: string) => string | undefined
   markTouched: (name: string) => void

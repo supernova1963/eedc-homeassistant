@@ -19,6 +19,7 @@ import {
 } from './sections/investitionFormHelpers'
 import { SchalterZeile } from './sections/SchalterZeile'
 import { InvestitionTypFelder } from './sections/InvestitionTypFelder'
+import type { ParamWert } from './sections/InvestitionTypFelder/types'
 import { InfothekVerknuepfungen } from './sections/InfothekVerknuepfungen'
 
 interface InvestitionFormProps {
@@ -55,7 +56,7 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
     ha_entity_id: investition?.ha_entity_id || '',
   })
 
-  const [paramData, setParamData] = useState<Record<string, string | boolean>>(
+  const [paramData, setParamData] = useState<Record<string, ParamWert>>(
     () => getInitialParamData(typ, investition?.parameter ?? {}),
   )
 
@@ -105,7 +106,7 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
   }, [typ, anlageId, investition?.id])
 
   // ── Parameter-Setter (Switch/Select/RadioGroup) + Input-Event-Bridge ──
-  const applyParam = (paramName: string, value: string | boolean) => {
+  const applyParam = (paramName: string, value: ParamWert) => {
     setParamData(prev => {
       const next = { ...prev, [paramName]: value }
       // Speicher: Arbitrage impliziert Netzladung — Flag mitziehen, damit das
@@ -114,7 +115,7 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
       return next
     })
   }
-  const setParam = (name: string, value: string | boolean) => applyParam(name, value)
+  const setParam = (name: string, value: ParamWert) => applyParam(name, value)
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
     if (name.startsWith('param_')) applyParam(name.slice(6), value)
@@ -186,7 +187,12 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
       const dateFields: string[] = []
       const convertedParams: Record<string, unknown> = {}
       Object.entries(paramData).forEach(([key, value]) => {
-        if (typeof value === 'boolean') {
+        // #263 — strukturierte Werte (Innengeräte-Liste) gehen unverändert
+        // durch. Die Konvertierung darunter ist für Formular-Text gebaut;
+        // ein Array liefe dort in `parseFloat` und käme als NaN-Text an.
+        if (Array.isArray(value)) {
+          convertedParams[key] = value
+        } else if (typeof value === 'boolean') {
           convertedParams[key] = value
         } else if (value !== '') {
           // Datumsfelder als String behalten

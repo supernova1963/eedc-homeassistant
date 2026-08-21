@@ -11,9 +11,22 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Added
 
+- **Split-Klimaanlage: Verbrauch je Betriebsart — und je Innengerät** ([#263](https://github.com/supernova1963/eedc-homeassistant/issues/263)). Bisher konnte eedc nur *ableiten*, was ins Heizen und was ins Kühlen ging: aus dem zugeordneten Betriebsmodus und den Stunden, in denen er galt. Wer die Anteile **messen** kann, trägt sie jetzt direkt ein — für **Heizen · Kühlen · Lüften · Entfeuchten**, dazu optional die abgegebene Nutzenergie je Betriebsart. **Gemessenes schlägt Abgeleitetes.**
+  - **Mehrere Innengeräte:** Am Gerät lässt sich unter *Innengeräte* eine Liste anlegen (Bezeichnung, z. B. „Büro"). Jedes Innengerät bekommt danach **eigene** Felder — Verbrauch je Betriebsart, Leistung, Soll- und Raumtemperatur —, zuordenbar wie jedes andere Feld (HA-Sensor · MQTT · Connector). Im Live-Bild erscheinen sie unter *Auf einen Blick → Innengeräte*.
+  - **Alles ist optional, und nichts ändert sich ohne Zutun.** Ohne Innengeräte und ohne Betriebsart-Zähler verhält sich eedc **exakt wie bisher**. Eine Luft-Wasser-Wärmepumpe sieht die neuen Felder gar nicht.
+  - ⚠ **Was ein Innengerät nicht misst:** An einem Multisplit hängt **ein** Außengerät an mehreren Innengeräten. Was eine Hersteller-App dort als Verbrauch eines Innengeräts anzeigt, ist der Anteil des **Außengeräts** — zugeschrieben an das gerade *anfordernde* Innengerät, und welches das ist, entscheidet die Einschaltreihenfolge. Der Hersteller sagt es selbst. eedc nimmt die Zahl entgegen und schreibt dazu, was sie bedeutet; die belastbare Menge ist ein eigener Zähler am Außengerät.
+  - **Woher die vier Zähler kommen:** In Home Assistant liefert sie ein **Utility Meter** mit einem Tarif je Betriebsart, umgeschaltet von einer Automatisierung am Zustand der `climate`-Entität. Die Anleitung dazu steht in der [Sensor-Referenz §4a](docs/SENSOR-REFERENZ.md).
+  - **Danke an kingcap1, Klausnn und OB73-gif** — ohne ihre Messungen an drei verschiedenen Anlagen wäre daraus eine Rechenregel geworden statt einer Messung.
+
+- **Börsenpreise: Höchst- und Tiefstpreis des Tages und der Monatsdurchschnitt** (angeregt von rapahl). Der Block zeigte, wie teuer die aktuelle Stunde gegenüber *heute* ist — aber nicht, ob heute überhaupt ein teurer Tag ist. Jetzt stehen **Höchstpreis** und **Tiefstpreis** (je mit ihrer Uhrzeit) sowie der **Monatsdurchschnitt** aus eedcs eigener Mitschrift vorn; die Optimierer-Werte (Ø ohne die 3 teuersten Stunden, Günstig-Schwelle, Abstand) folgen dahinter.
+
 - **Die Aufteilung Heizen/Kühlen gibt es jetzt auch für einen einzelnen Tag** ([#263](https://github.com/supernova1963/eedc-homeassistant/issues/263), angeregt von OB73-gif). Bisher stand sie nur je Monat; in *Cockpit → Tag* fehlte sie. Der Block **„Aufteilung Heizen/Kühlen"** erscheint dort jetzt im Wärmepumpen-Abschnitt — mit denselben drei Größen wie im Monat: *Heizen · Kühlen · nicht aufgeteilt*.
   - **Die Rechnung ist dieselbe, nicht eine zweite.** eedc faltet die Stunden ohnehin tageweise; die Monatssicht summiert sie nur hinterher auf. Beide Sichten nehmen jetzt denselben Weg — was der Tag zeigt, steckt unverändert in der Monatssumme.
   - ⚠ **Ohne zugeordneten Betriebsmodus erscheint der Block gar nicht** — statt mit drei Nullen dazustehen. Eine 0 hieße „hat nicht geheizt"; das weiß eedc ohne Sensor nicht.
+
+### Changed
+
+- **Die Günstig-Schwelle sagt jetzt, was 0 % bedeutet** (angeregt von rapahl). Der Hinweis dazu erschien bisher erst, *nachdem* man die 0 eingetippt hatte — also nach der Entscheidung. Wer die Schwelle „abschalten" wollte, bekam damit **mehr** günstige Stunden statt keine. Die Erklärung steht jetzt in der Beschreibung des Felds: **0 % schaltet nichts ab** — die Schwelle liegt dann genau auf dem Tagesdurchschnitt.
 
 ### Fixed
 

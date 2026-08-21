@@ -15,6 +15,7 @@ import httpx
 
 from sqlalchemy import select
 
+from backend.core.field_definitions import basis_feld_key
 from backend.models.anlage import Anlage
 from backend.models.data_provenance_log import DataProvenanceLog
 from backend.core.berechnungen import (
@@ -1111,10 +1112,21 @@ class DatenquelleChecks:
         mapping = (anlage.sensor_mapping or {}).get("investitionen", {}) or {}
 
         def _hat_modus(inv_id: int) -> bool:
+            """Hat dieses Gerät IRGENDEINE Modus-Zuordnung?
+
+            ⚠ **Nicht `live["betriebsmodus"]` allein** (#263): Mit einer
+            Innengeräte-Liste heißt der Key `betriebsmodus-3`. Wer nur den
+            nackten Namen prüft, meldet „Betriebsmodus nicht zugeordnet" an
+            einer Anlage, an der alle drei Innengeräte zugeordnet sind.
+            """
             eintrag = mapping.get(str(inv_id))
             if not isinstance(eintrag, dict):
                 return False
-            return bool((eintrag.get("live") or {}).get("betriebsmodus"))
+            live = eintrag.get("live") or {}
+            return any(
+                bool(v) and basis_feld_key(k) == "betriebsmodus"
+                for k, v in live.items()
+            )
 
         ohne = [i for i in klimas if not _hat_modus(i.id)]
         if not ohne:

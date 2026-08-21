@@ -91,6 +91,10 @@ from backend.core.field_definitions import (
     ist_gepflegte_sonstiges_kategorie,
     ist_zaehler_kategorie,
 )
+from backend.core.berechnungen import (
+    betriebsart_strom_kwh,
+    hat_gemessene_betriebsart,
+)
 from backend.core.betriebsmodus import HEIZEN as BM_HEIZEN
 from backend.core.betriebsmodus import KUEHLEN as BM_KUEHLEN
 from backend.core.betriebsmodus import MODUS_ABDECKUNG_FELD, MODUS_STROM_FELD
@@ -832,13 +836,32 @@ async def get_waermepumpe_dashboard(
         gesamt_modus_kuehlen = 0.0
         gesamt_modus_abdeckung_h = 0.0
         gesamt_modus_bezug = 0.0
+        # #263 — mindestens ein Monat bringt die Aufteilung GEMESSEN mit.
+        modus_gemessen = False
         for md in monatsdaten:
             d = md.verbrauch_daten or {}
-            gesamt_modus_heizen += d.get(MODUS_STROM_FELD[BM_HEIZEN], 0) or 0
-            gesamt_modus_kuehlen += d.get(MODUS_STROM_FELD[BM_KUEHLEN], 0) or 0
+            # **Gemessen schlägt abgeleitet** (ADR-002/P8), je Monatszeile.
+            # `None` heißt „kein Zähler" und lässt die Ableitung stehen; eine
+            # gemessene 0 ist dagegen eine echte Null.
+            _gem_h = betriebsart_strom_kwh(d, BM_HEIZEN)
+            _gem_k = betriebsart_strom_kwh(d, BM_KUEHLEN)
+            _zeile_gemessen = hat_gemessene_betriebsart(d)
+            modus_gemessen = modus_gemessen or _zeile_gemessen
+            # Ganz oder gar nicht je Zeile — Begründung in
+            # `core/berechnungen/imd_monatsaggregat.py`: ein Balken, dessen
+            # eine Hälfte gemessen und die andere gerechnet ist, trüge ein
+            # halbwahres Etikett.
+            gesamt_modus_heizen += (
+                (_gem_h or 0.0) if _zeile_gemessen
+                else (d.get(MODUS_STROM_FELD[BM_HEIZEN], 0) or 0)
+            )
+            gesamt_modus_kuehlen += (
+                (_gem_k or 0.0) if _zeile_gemessen
+                else (d.get(MODUS_STROM_FELD[BM_KUEHLEN], 0) or 0)
+            )
             _m_abdeckung = d.get(MODUS_ABDECKUNG_FELD, 0) or 0
             gesamt_modus_abdeckung_h += _m_abdeckung
-            if _m_abdeckung > 0:
+            if _m_abdeckung > 0 or _zeile_gemessen:
                 gesamt_modus_bezug += get_wp_strom_kwh(d, wp.parameter)
             gesamt_strom += d.get('stromverbrauch_kwh', 0)
             gesamt_heizung += d.get('heizenergie_kwh', 0)
@@ -1042,7 +1065,11 @@ async def get_waermepumpe_dashboard(
         # Aufteilung — und dann steht dort **keine 0**, sondern gar nichts.
         # Eine 0 hieße „hat nicht geheizt"; das weiß eedc ohne Modus-Signal
         # nicht (ADR-002/P4, die N-258-Klasse).
-        if gesamt_modus_abdeckung_h > 0:
+        # ⚠ **Zwei Wege hierher** (#263): abgeleitet (dann gibt es
+        # Abdeckungs-Stunden) oder gemessen (dann gibt es keine — ein Zähler
+        # zählt kWh, keine Stunden mit Signal). Nur die Abdeckung zu prüfen
+        # hieße, eine gemessene Aufteilung nirgends zu zeigen.
+        if gesamt_modus_abdeckung_h > 0 or modus_gemessen:
             zusammenfassung['modus_strom_heizen_kwh'] = round(gesamt_modus_heizen, 1)
             zusammenfassung['modus_strom_kuehlen_kwh'] = round(gesamt_modus_kuehlen, 1)
             # „nicht aufgeteilt" wird NIE gespeichert, sondern immer gerechnet
@@ -1058,6 +1085,7 @@ async def get_waermepumpe_dashboard(
                 max(0.0, gesamt_modus_bezug - gesamt_modus_heizen - gesamt_modus_kuehlen), 1
             )
             zusammenfassung['modus_abdeckung_h'] = round(gesamt_modus_abdeckung_h, 1)
+            zusammenfassung['modus_gemessen'] = modus_gemessen
         # Die Kennzeichnung der Wärme steht unabhängig davon: sie gilt auch für
         # Monate, deren Split später verworfen wurde.
         zusammenfassung['waerme_abgeleitet'] = waerme_abgeleitet

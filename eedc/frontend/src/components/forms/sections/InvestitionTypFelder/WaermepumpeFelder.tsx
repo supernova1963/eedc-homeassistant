@@ -1,6 +1,80 @@
-import { FormSection, Input, Select, Alert, RadioGroup } from '../../../ui'
+import { X } from 'lucide-react'
+import { FormSection, Input, Select, Alert, RadioGroup, Button } from '../../../ui'
 import { SchalterZeile } from '../SchalterZeile'
+import type { Innengeraet } from '../../../../lib/investitionParameter'
 import type { TypFelderProps } from './types'
+
+/**
+ * Innengeraete einer Split-Klimaanlage (#263).
+ *
+ * **Die Liste ist selbst der Schalter:** "Multisplit" wird aus ihrer Laenge
+ * abgeleitet und nirgends gespeichert - Schalter und Liste koennen damit nicht
+ * auseinanderlaufen. Wer nichts eintraegt, hat einen Monosplit, und alles bleibt
+ * bitgleich zu vorher.
+ *
+ * Die ID wird vergeben und nie wiederverwendet. Sie steht im Feld-Key der
+ * Sensor-Zuordnung; eine Positionsnummer wuerde beim Loeschen des mittleren
+ * Geraets alle folgenden Zuordnungen auf den falschen Raum umhaengen.
+ *
+ * Controls = SoT (Style-Guide Teil D): `Input` fuer die Bezeichnung, `Button`
+ * fuer Anlegen/Entfernen - dasselbe Zeilen-Muster wie
+ * `forms/SonstigePositionenFields`, keine zweite Komponentenklasse.
+ */
+function InnengeraeteListe({
+  geraete, onChange,
+}: { geraete: Innengeraet[]; onChange: (next: Innengeraet[]) => void }) {
+  const naechsteId = geraete.reduce((max, g) => Math.max(max, g.id), 0) + 1
+
+  return (
+    <div className="space-y-2">
+      <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+        Innengeraete
+      </span>
+      {geraete.map((g, index) => (
+        <div key={g.id} className="flex items-center gap-2">
+          <div className="flex-1">
+            <Input
+              label=""
+              name={`innengeraet_${g.id}`}
+              aria-label={`Bezeichnung Innengeraet ${index + 1}`}
+              value={g.bezeichnung}
+              placeholder="z. B. Wohnzimmer"
+              onChange={(e) => onChange(geraete.map(
+                (x) => (x.id === g.id ? { ...x, bezeichnung: e.target.value } : x),
+              ))}
+            />
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => onChange(geraete.filter((x) => x.id !== g.id))}
+            title={`Innengeraet ${index + 1} entfernen`}
+            aria-label={`Innengeraet ${index + 1} entfernen`}
+            className="text-red-500 hover:text-red-600 dark:text-red-400"
+          >
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+      ))}
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        onClick={() => onChange([...geraete, { id: naechsteId, bezeichnung: '' }])}
+      >
+        + Innengeraet
+      </Button>
+      <p className="text-xs text-gray-500 dark:text-gray-400">
+        Nur noetig, wenn mehrere Innengeraete an einem Aussengeraet haengen
+        (Multisplit). Jedes bekommt eigene Felder unter{' '}
+        <em>Einstellungen &rarr; Datenquellen</em> - Verbrauch je Betriebsart,
+        Leistung und Raumtemperatur. Alle sind optional: kein Sensor, keine
+        Anzeige. Ohne Eintrag bleibt alles wie bisher.
+      </p>
+    </div>
+  )
+}
 
 const WP_ART_OPTIONEN = [
   { value: 'luft_wasser', label: 'Luft-Wasser (Außenluft → Wasser)' },
@@ -76,6 +150,13 @@ export function WaermepumpeFelder({ paramData, onInputChange, setParam, zeige, m
               den Sensor also besser jetzt zu als dann. Die Auswertung dazu (Heiz-/Kühlstrom
               getrennt, Kühl-Effizienz SEER) ist noch in Arbeit (Thema #263).
             </Alert>
+          )}
+
+          {paramData.wp_art === 'luft_luft' && (
+            <InnengeraeteListe
+              geraete={(paramData.innengeraete as Innengeraet[]) ?? []}
+              onChange={(next) => setParam('innengeraete', next)}
+            />
           )}
 
           <RadioGroup

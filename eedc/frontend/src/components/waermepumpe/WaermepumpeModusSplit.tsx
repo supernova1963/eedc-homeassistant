@@ -22,6 +22,8 @@ export interface ModusSplitDaten {
   modus_strom_kuehlen_kwh?: number
   modus_nicht_aufgeteilt_kwh?: number
   modus_abdeckung_h?: number
+  /** #263: Aufteilung ist GEMESSEN (Betriebsart-Zähler) statt abgeleitet. */
+  modus_gemessen?: boolean
   gesamt_heizenergie_kwh?: number
   waerme_abgeleitet?: boolean
   waerme_abgeleitet_faktor?: number | null
@@ -29,7 +31,13 @@ export interface ModusSplitDaten {
 
 /** Hat dieses Gerät überhaupt eine Aufteilung? Auch der Hub-Block fragt das. */
 export function hatModusSplit(z: ModusSplitDaten | undefined | null): boolean {
-  return !!z && z.modus_abdeckung_h != null && z.modus_abdeckung_h > 0
+  if (!z) return false
+  // #263 — zwei Wege hierher: abgeleitet aus dem Betriebsmodus (dann gibt es
+  // Abdeckungs-Stunden) oder gemessen aus Betriebsart-Zählern (dann gibt es
+  // keine — ein Zähler zählt kWh, keine Stunden mit Signal). Nur die Abdeckung
+  // zu prüfen hieße, eine gemessene Aufteilung nirgends zu zeigen.
+  if (z.modus_gemessen) return true
+  return z.modus_abdeckung_h != null && z.modus_abdeckung_h > 0
 }
 
 const fmt = (v: number | null | undefined, dec = 0) => fmtCalc(v, dec, '—')
@@ -71,8 +79,13 @@ export function WaermepumpeModusSplit({ zusammenfassung: z }: { zusammenfassung:
           <dd>{fmt(rest)} kWh{anteil(rest, gesamt)}</dd>
         </div>
         <div className="flex justify-between border-t border-gray-100 dark:border-gray-800 pt-1">
-          <dt className="text-gray-600 dark:text-gray-400">Modus erfasst</dt>
-          <dd>{fmt(z.modus_abdeckung_h, 0)} Stunden</dd>
+          {/* #263 — die Herkunft steht neben der Zahl. Ein Betriebsart-Zähler
+              hat keine „Stunden mit Signal"; dort „0 Stunden" zu zeigen sähe
+              aus wie ein Sensor-Ausfall. */}
+          <dt className="text-gray-600 dark:text-gray-400">
+            {z.modus_gemessen ? 'Herkunft' : 'Modus erfasst'}
+          </dt>
+          <dd>{z.modus_gemessen ? 'gemessen' : `${fmt(z.modus_abdeckung_h, 0)} Stunden`}</dd>
         </div>
       </dl>
 
@@ -86,6 +99,14 @@ export function WaermepumpeModusSplit({ zusammenfassung: z }: { zusammenfassung:
           {z.waerme_abgeleitet_faktor != null && <> × {fmtCalc(z.waerme_abgeleitet_faktor, 2, '—')}</>}
           , nicht gemessen. Deshalb steht bei der JAZ „—": aus einer gerechneten
           Wärme kommt wieder genau der Faktor heraus, mit dem sie gerechnet wurde.
+        </p>
+      )}
+
+      {z.modus_gemessen && (
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Diese Aufteilung stammt aus <strong>zugeordneten Zählern je
+          Betriebsart</strong> — sie hat Vorrang vor der Aufteilung, die eedc
+          sonst aus dem Betriebsmodus ableitet.
         </p>
       )}
 

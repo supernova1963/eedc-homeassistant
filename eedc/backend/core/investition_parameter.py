@@ -148,6 +148,7 @@ PARAM_WAERMEPUMPE: Final[dict[str, str]] = {
     "ALTERNATIV_ZUSATZKOSTEN_JAHR": "alternativ_zusatzkosten_jahr",
     "ALTERNATIV_KOSTEN_EURO": "alternativ_kosten_euro",
     "SG_READY": "sg_ready",
+    "INNENGERAETE": "innengeraete",
 }
 
 PARAM_WAERMEPUMPE_DEFAULTS: Final[dict[str, object]] = {
@@ -405,3 +406,77 @@ def ist_luft_luft_waermepumpe(inv_or_parameter) -> bool:
     ) or {}
     val = params.get(PARAM_WAERMEPUMPE["WP_ART"])
     return isinstance(val, str) and val.strip().lower() == "luft_luft"
+
+
+# ── Innengeräte einer Split-Klimaanlage (#263) ───────────────────────────────
+#
+# **Warum eine Liste im Parameter und keine eigene Investition.** Die Werte je
+# Innengerät sind eine **Teilmenge** des Anlagenverbrauchs — genau wie heute
+# schon Heizen/Warmwasser Teilmengen einer Wärmepumpe sind. Ein eigenes Gerät
+# wäre überall ein zusätzlicher Verbraucher und müsste an jeder Aggregation
+# wieder ausgenommen werden; das ist die Doppelzählungs-Klasse, die uns beim
+# BKW, beim Speicher und beim Wallbox/E-Auto-Pool je einmal getroffen hat.
+#
+# **Die Liste ist selbst der Schalter** (Entscheid Gernots, 2026-08-20):
+# „Multisplit" wird abgeleitet (``len(...) >= 2``) und nirgends gespeichert.
+# Damit kann ein Schalter nicht von seiner Liste abweichen — der
+# Widerspruchsfall existiert nicht.
+#
+# ⚠ **Die ID wird vergeben und NIE wiederverwendet.** `sensor_mapping` speichert
+# nach Feld-Key (`modus_strom_kuehlen_kwh-3`); eine Positionsnummer würde beim
+# Löschen des mittleren Geräts alle folgenden Zuordnungen stillschweigend
+# verschieben — jede Zuordnung zeigte danach auf den falschen Raum.
+
+def lade_innengeraete(inv_or_parameter) -> list[dict]:
+    """Die Innengeräte-Liste eines Geräts — der eine Leser.
+
+    Akzeptiert wie `ist_luft_luft_waermepumpe` ein Investition-Objekt, das
+    parameter-Dict oder None. Liefert nur wohlgeformte Einträge (ganzzahlige
+    `id` > 0, `bezeichnung` als Text) in gespeicherter Reihenfolge; alles
+    andere wird übergangen statt zu raten.
+    """
+    if inv_or_parameter is None:
+        return []
+    params = (
+        getattr(inv_or_parameter, "parameter", None)
+        if hasattr(inv_or_parameter, "parameter")
+        else inv_or_parameter
+    ) or {}
+    roh = params.get(PARAM_WAERMEPUMPE["INNENGERAETE"])
+    if not isinstance(roh, list):
+        return []
+    out: list[dict] = []
+    gesehen: set[int] = set()
+    for eintrag in roh:
+        if not isinstance(eintrag, dict):
+            continue
+        try:
+            gid = int(eintrag.get("id"))
+        except (TypeError, ValueError):
+            continue
+        if gid <= 0 or gid in gesehen:
+            continue
+        gesehen.add(gid)
+        bez = eintrag.get("bezeichnung")
+        out.append({
+            "id": gid,
+            "bezeichnung": str(bez).strip() if isinstance(bez, str) and bez.strip()
+                           else f"Innengerät {gid}",
+        })
+    return out
+
+
+def naechste_innengeraet_id(innengeraete: list[dict]) -> int:
+    """Die nächste freie ID — **max + 1**, nie eine Lücke auffüllen.
+
+    Eine wiederverwendete ID erbt die Sensor-Zuordnungen des gelöschten Geräts;
+    der neue Raum zeigte dann fremde Werte, ohne dass jemand etwas zugeordnet
+    hätte.
+    """
+    hoechste = 0
+    for g in innengeraete or []:
+        try:
+            hoechste = max(hoechste, int(g.get("id")))
+        except (TypeError, ValueError):
+            continue
+    return hoechste + 1

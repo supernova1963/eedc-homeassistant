@@ -79,6 +79,7 @@ from backend.core.berechnungen import (
     berechne_verbrauchs_kennzahlen,
     bkw_finanz_beitrag,
     erzeugung_hinter_zaehler_kwh,
+    hat_gemessene_betriebsart,
     imd_typ_beitrag,
 )
 from backend.core.betriebsmodus import MODUS_ABDECKUNG_FELD
@@ -353,6 +354,10 @@ class WpFakten:
     modus_strom_kuehlen_kwh: float = 0.0
     #: Stunden mit gültigem Modus-Signal — das Qualitätsmaß neben den Mengen.
     modus_abdeckung_h: float = 0.0
+    #: #263 — die Aufteilung ist **gemessen** (Betriebsart-Zähler) statt aus
+    #: dem Betriebsmodus abgeleitet. Ein Zähler hat keine „Stunden mit Signal",
+    #: deshalb kann ``modus_abdeckung_h`` dabei 0 sein, ohne dass etwas fehlt.
+    modus_gemessen: bool = False
     #: Gesamtstrom **nur der Geräte mit Modus-Split** — die Bezugsgröße für
     #: {@link modus_nicht_aufgeteilt_kwh}. Auf Anlagenebene ist `strom_kwh` der
     #: falsche Bezug: er trägt auch Wärmepumpen ohne Modus-Sensor.
@@ -397,8 +402,15 @@ class WpFakten:
 
     @property
     def hat_modus_split(self) -> bool:
-        """Gibt es überhaupt eine Aufteilung zu zeigen?"""
-        return self.modus_abdeckung_h > 0
+        """Gibt es überhaupt eine Aufteilung zu zeigen?
+
+        ⚠ **Zwei Wege, ein Ergebnis** (#263): abgeleitet aus dem Betriebsmodus
+        (dann gibt es Abdeckungs-Stunden) **oder** gemessen aus
+        Betriebsart-Zählern (dann gibt es keine — ein Zähler zählt kWh, keine
+        Stunden mit Signal). Nur die Abdeckung zu prüfen hieße, eine gemessene
+        Aufteilung nirgends zu zeigen.
+        """
+        return self.modus_abdeckung_h > 0 or self.modus_gemessen
 
 
 @dataclass(frozen=True)
@@ -685,8 +697,14 @@ async def lade_monats_fakten(
             source_provenance=imd.source_provenance,
         )
         if inv.typ == "waermepumpe":
+            # #263 — eine **gemessene** Betriebsart-Aufteilung wirkt hier wie
+            # ein gelaufener Monatsabschluss: der aus dem Betriebsmodus
+            # gerechnete Split wird für dieses Gerät NICHT zusätzlich
+            # angewandt, sonst stünde dieselbe Menge zweimal in der Zeile.
+            # Dieselbe Weiche, kein zweiter Mechanismus (ADR-002/P8).
             wp_je_monat.setdefault((imd.jahr, imd.monat), {})[str(inv.id)] = (
-                float(daten.get(MODUS_ABDECKUNG_FELD) or 0) > 0,
+                float(daten.get(MODUS_ABDECKUNG_FELD) or 0) > 0
+                or hat_gemessene_betriebsart(daten),
                 get_wp_strom_kwh(daten, inv.parameter),
             )
 
@@ -947,6 +965,8 @@ class _RohMonat:
         self.wp_modus_strom_heizen = 0.0
         self.wp_modus_strom_kuehlen = 0.0
         self.wp_modus_abdeckung_h = 0.0
+        #: #263 — mindestens ein Gerät bringt die Aufteilung GEMESSEN mit.
+        self.wp_modus_gemessen = False
         self.wp_modus_strom_bezug = 0.0
         self.wp_waerme_abgeleitet = 0.0
         self.eauto_ladedaten: list[dict] = []
@@ -1088,6 +1108,7 @@ class _RohMonat:
             self.wp_modus_strom_heizen += b.wp_modus_strom_heizen
             self.wp_modus_strom_kuehlen += b.wp_modus_strom_kuehlen
             self.wp_modus_abdeckung_h += b.wp_modus_abdeckung_h
+            self.wp_modus_gemessen = self.wp_modus_gemessen or b.wp_modus_gemessen
             self.wp_modus_strom_bezug += b.wp_modus_strom_bezug
             self.wp_waerme_abgeleitet += b.wp_waerme_abgeleitet
 
@@ -1335,6 +1356,7 @@ async def _baue_fakt(
             modus_strom_heizen_kwh=roh.wp_modus_strom_heizen,
             modus_strom_kuehlen_kwh=roh.wp_modus_strom_kuehlen,
             modus_abdeckung_h=roh.wp_modus_abdeckung_h,
+            modus_gemessen=roh.wp_modus_gemessen,
             modus_strom_bezug_kwh=roh.wp_modus_strom_bezug,
             waerme_abgeleitet_kwh=roh.wp_waerme_abgeleitet,
         ),

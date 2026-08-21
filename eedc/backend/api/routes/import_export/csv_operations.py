@@ -22,7 +22,24 @@ from backend.utils.investition_filter import aktiv_jetzt, sort_investitionen_nac
 from backend.services.wetter.orchestrator import get_wetterdaten
 from backend.utils.sonstige_positionen import berechne_sonstige_summen, get_sonstige_positionen
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage
-from backend.core.field_definitions import get_felder_fuer_investition, get_felder_fuer_sonstiges
+from backend.core.field_definitions import (
+    INVESTITION_FELDER,
+    basis_feld_key,
+    get_felder_fuer_investition,
+    get_felder_fuer_sonstiges,
+    innengeraet_id_von_feld,
+)
+
+#: Die `csv_suffix`-Einträge der Registry, flach nach Feldname. Damit die
+#: Spaltentabelle unten neue Felder aus der einen Quelle ziehen kann, statt sie
+#: ein zweites Mal zu führen.
+_REGISTRY_CSV_SUFFIX: dict[str, str] = {
+    e["feld"]: e["csv_suffix"]
+    for _felder in INVESTITION_FELDER.values()
+    for _liste in (list(_felder.values()) if isinstance(_felder, dict) else [_felder])
+    for e in _liste
+    if e.get("csv_suffix")
+}
 from backend.services.provenance import seed_provenance, write_with_provenance
 
 from .schemas import ImportResult, CSVTemplateInfo
@@ -106,6 +123,27 @@ async def get_csv_template_info(anlage_id: int, db: AsyncSession = Depends(get_d
         "bezug_netz_kwh":         ("_Bezug_Netz_kWh",        "Bezug Netz {bez} (kWh)"),
         "einspeisung_kwh":        ("_Einspeisung_kWh",       "Einspeisung {bez} (kWh)"),
     }
+    # #263 — die Betriebsart-Zähler einer Split-Klimaanlage. Aus der Registry
+    # gelesen statt hier ein zehntes Mal getippt: `csv_suffix` steht dort am
+    # Feld, und diese Tabelle ist bereits eine zweite Liste derselben Sache.
+    # ⚠ Nur für DIESE Felder — die Bestandsspalten bleiben unangetastet, weil
+    # ihr Name der Schlüssel ist, an dem ein Import Werte wiederfindet.
+    from backend.core.betriebsmodus import (
+        BETRIEBSART_LABEL as _BA_LABEL,
+        BETRIEBSART_NUTZENERGIE_FELD as _BA_NUTZ,
+        BETRIEBSART_STROM_FELD as _BA_STROM,
+        MESSBARE_MODI as _BA_MODI,
+    )
+    for _modus in _BA_MODI:
+        for _feld, _was in ((_BA_STROM[_modus], "Strom"),
+                            (_BA_NUTZ[_modus], "Nutzenergie")):
+            _suffix = _REGISTRY_CSV_SUFFIX.get(_feld)
+            if _suffix:
+                CSV_SPALTEN_SUFFIX[_feld] = (
+                    f"_{_suffix}",
+                    f"{_was} {_BA_LABEL[_modus]} {{bez}} (kWh)",
+                )
+
     # e-auto: ladung_netz_kwh und ladung_pv_kwh haben spezifische Suffixe
     EAUTO_SUFFIX_OVERRIDE = {
         "ladung_netz_kwh": ("_Ladung_Netz_kWh", "Netz-Ladung {bez} (kWh)"),
@@ -125,7 +163,16 @@ async def get_csv_template_info(anlage_id: int, db: AsyncSession = Depends(get_d
             if inv.typ == "e-auto" and feld in EAUTO_SUFFIX_OVERRIDE:
                 suffix, desc_tmpl = EAUTO_SUFFIX_OVERRIDE[feld]
             else:
-                suffix, desc_tmpl = CSV_SPALTEN_SUFFIX.get(feld, (f"_{feld}", f"{feld_def['label']} {{bez}}"))
+                # #263 — je-Innengerät-Felder erben Suffix und Beschreibung
+                # ihres Basis-Felds und hängen ihre ID an. Ohne die Auflösung
+                # hieße die Spalte `…_betriebsart_strom_kuehlen_kwh-3` (der
+                # rohe Key), statt dem Muster aller anderen zu folgen.
+                basis = basis_feld_key(feld)
+                gid = innengeraet_id_von_feld(feld)
+                suffix, desc_tmpl = CSV_SPALTEN_SUFFIX.get(
+                    basis, (f"_{basis}", f"{feld_def['label']} {{bez}}"))
+                if gid is not None:
+                    suffix = f"{suffix}_IG{gid}"
             col = f"{prefix}{suffix}"
             spalten.append(col)
             beschreibung[col] = desc_tmpl.format(bez=bez, label=feld_def["label"])

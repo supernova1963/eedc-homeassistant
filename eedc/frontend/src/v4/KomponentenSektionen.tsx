@@ -357,7 +357,7 @@ export function baueKomponentenBloecke(
     // #263 K-2 (S4): Aufteilung Heizen/Kühlen — nur mit erfasstem Modus.
     // Der Balken zeigt dieselben drei Größen wie der Komponenten-Hub; ohne
     // Modus-Signal fehlt der Block ganz, statt drei Nullen zu zeigen.
-    if (hat(d.wp_modus_abdeckung_h) && d.wp_modus_abdeckung_h! > 0) wpEls.push({
+    if (d.wp_modus_gemessen || (hat(d.wp_modus_abdeckung_h) && d.wp_modus_abdeckung_h! > 0)) wpEls.push({
       id: 'el:wp-modus-split', titel: 'Aufteilung Heizen/Kühlen',
       node: <VerteilungsBalken segmente={[
         { label: 'Heizen', wert: d.wp_modus_strom_heizen_kwh ?? 0, farbe: ROLLEN_BG.heizung },

@@ -350,6 +350,10 @@ class LivePowerService:
             "gestern_eigenverbrauch_kwh": gestern_ev,
             "heute_kwh_pro_komponente": heute_pro_komp or None,
             "warmwasser_temperatur_c": warmwasser_temperatur_c,
+            # #263 — reine Anzeige je Innengerät, ohne Auswertung. `None` statt
+            # leerer Liste, wo nichts ankommt: die Fläche zeigt den Block dann
+            # gar nicht, statt leere Zeilen zu stellen.
+            "innengeraete": build_result.get("innengeraete") or None,
         }
 
     def _empty_response(self, anlage: Anlage) -> dict:
@@ -374,6 +378,7 @@ class LivePowerService:
             "gestern_eigenverbrauch_kwh": None,
             "heute_kwh_pro_komponente": None,
             "warmwasser_temperatur_c": None,
+            "innengeraete": None,
         }
 
     @staticmethod

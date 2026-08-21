@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, computed_field
 from datetime import date
 
 from backend.core.exceptions import not_found
+from backend.core.field_definitions import innengeraet_id_von_feld
 from backend.core.investition_kennwerte import (
     get_bkw_kwp,
     get_erzeuger_kwp,
@@ -53,6 +54,7 @@ from backend.core.investition_parameter import (
     PARAM_WAERMEPUMPE_DEFAULTS,
     SPEICHER_KOPPLUNG_DC,
     ist_luft_luft_waermepumpe,
+    lade_innengeraete,
 )
 from backend.core.wirtschaftlichkeit_defaults import EINSPEISEVERGUETUNG_DEFAULT_CENT
 from backend.core.berechnungen.speicher_wirtschaftlichkeit import (
@@ -633,12 +635,81 @@ async def update_investition(
             exclude_id=investition_id
         )
 
+    # #263 — Innengeräte-Zuordnungen aufräumen, BEVOR der neue Parameter steht.
+    # Sonst bliebe die Zuordnung eines gelöschten Innengeräts im
+    # `sensor_mapping` liegen: auf der Datenquellen-Fläche unsichtbar (das Feld
+    # wird nicht mehr erzeugt) und damit nicht mehr entfernbar — dieselbe
+    # Falle, vor der `get_alle_felder_fuer_investition` warnt. Schlimmer noch:
+    # ihr Wert liefe weiter in die Auswertung.
+    if inv.typ == "waermepumpe" and "parameter" in update_data:
+        await _raeume_innengeraete_zuordnungen(
+            db, inv, neu_parameter=update_data.get("parameter"),
+        )
+
     for field, value in update_data.items():
         setattr(inv, field, value)
 
     await db.flush()
     await db.refresh(inv)
     return inv
+
+
+async def _raeume_innengeraete_zuordnungen(
+    db: AsyncSession, inv: Investition, neu_parameter,
+) -> None:
+    """Entfernt die Sensor-Zuordnungen entfallener Innengeräte (#263).
+
+    **Warum überhaupt aufräumen und nicht nur beim Lesen filtern.** Beides:
+    Die Auswertung geht ohnehin nur über die Geräte der Liste — aber eine
+    Zuordnung, die niemand mehr sieht und niemand mehr löschen kann, ist ein
+    Rest, der beim nächsten Anlegen eines Innengeräts wieder auftauchen würde,
+    wenn jemand die ID doch einmal wiederverwendet. Deshalb wird sie hier
+    entfernt, wo die alte und die neue Liste beide bekannt sind.
+
+    ⚠ **Nur entfallene IDs.** Wer nur eine Bezeichnung ändert, verliert nichts.
+    """
+    alt_ids = {g["id"] for g in lade_innengeraete(inv.parameter)}
+    neu_ids = {g["id"] for g in lade_innengeraete(neu_parameter)}
+    entfallen = alt_ids - neu_ids
+    if not entfallen:
+        return
+
+    anlage = (await db.execute(
+        select(Anlage).where(Anlage.id == inv.anlage_id)
+    )).scalar_one_or_none()
+    if not anlage or not anlage.sensor_mapping:
+        return
+
+    eintrag = (anlage.sensor_mapping.get("investitionen") or {}).get(str(inv.id))
+    if not isinstance(eintrag, dict):
+        return
+
+    def _betroffen(key: str) -> bool:
+        gid = innengeraet_id_von_feld(key)
+        return gid is not None and gid in entfallen
+
+    geaendert = False
+    for abschnitt in ("live", "live_invert", "felder"):
+        werte = eintrag.get(abschnitt)
+        if not isinstance(werte, dict):
+            continue
+        for key in [k for k in werte if _betroffen(k)]:
+            del werte[key]
+            geaendert = True
+
+    # Die feld-zentrische `quellen`-Ablage (Datenquellen-V4) trägt dieselben
+    # Zuordnungen unter `inv:<id>:<feld>` — sie gehört mit aufgeräumt, sonst
+    # holt der Read-Through sie zurück.
+    quellen = anlage.sensor_mapping.get("quellen")
+    if isinstance(quellen, dict):
+        praefix = f"inv:{inv.id}:"
+        for key in [k for k in quellen if k.startswith(praefix)]:
+            if _betroffen(key[len(praefix):]):
+                del quellen[key]
+                geaendert = True
+
+    if geaendert:
+        flag_modified(anlage, "sensor_mapping")
 
 
 @router.delete("/{investition_id}", status_code=status.HTTP_204_NO_CONTENT)

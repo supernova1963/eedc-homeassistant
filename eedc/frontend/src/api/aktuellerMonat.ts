@@ -113,6 +113,8 @@ export interface AktuellerMonatResponse {
   wp_modus_strom_kuehlen_kwh?: number | null
   wp_modus_nicht_aufgeteilt_kwh?: number | null
   wp_modus_abdeckung_h?: number | null
+  /** #263: Aufteilung GEMESSEN statt aus dem Betriebsmodus abgeleitet. */
+  wp_modus_gemessen?: boolean | null
   wp_strom_warmwasser_kwh: number | null
   // Issue #169: Kompressor-Starts (aus TagesZusammenfassung über die Tage des Monats)
   wp_starts_max_tag: number | null

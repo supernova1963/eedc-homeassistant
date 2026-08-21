@@ -9,6 +9,63 @@
 
 ---
 
+## Noch nicht veröffentlicht
+
+**Klimaanlage: messen statt schätzen — und jedes Innengerät einzeln**
+([#263](https://github.com/supernova1963/eedc-homeassistant/issues/263))
+
+Bisher konnte eedc nur *ableiten*, welcher Teil des Stroms ins Heizen und
+welcher ins Kühlen ging: aus dem zugeordneten Betriebsmodus und den Stunden, in
+denen er galt. Wenn du die Anteile **messen** kannst, trägst du sie jetzt direkt
+ein — für **Heizen, Kühlen, Lüften und Entfeuchten**. Was gemessen ist, hat
+Vorrang vor dem, was eedc rechnet.
+
+Hast du mehrere Innengeräte an einem Außengerät, legst du sie beim Gerät unter
+*Innengeräte* an — einfach mit ihrem Namen, „Büro", „Wohnzimmer". Danach hat
+jedes seine **eigenen** Felder: Verbrauch je Betriebsart, Leistung, Soll- und
+Raumtemperatur. Zuordnen wie alles andere, unter *Einstellungen → Datenquellen*.
+Im Live-Bild stehen sie unter *Auf einen Blick → Innengeräte*.
+
+**Alles davon ist freiwillig.** Legst du keine Innengeräte an und ordnest keine
+neuen Sensoren zu, ändert sich für dich **nichts** — eedc rechnet weiter genau
+wie bisher. Eine Luft-Wasser-Wärmepumpe bekommt die neuen Felder gar nicht erst
+angeboten.
+
+> **Ein Punkt, den du wissen solltest:** An einem Multisplit hängt **ein**
+> Außengerät an mehreren Innengeräten. Was eine Hersteller-App als „Verbrauch"
+> eines Innengeräts anzeigt, ist in Wahrheit der Anteil des Außengeräts —
+> zugerechnet auf das Gerät, das gerade anfordert. Und das wechselt, je nachdem
+> welches du zuerst einschaltest. Der Hersteller sagt das selbst. eedc nimmt die
+> Zahl entgegen und schreibt an jedes Feld dazu, was sie bedeutet — die
+> verlässliche Menge ist ein eigener Zähler am Außengerät.
+
+**Woher bekommst du vier getrennte Zähler?** Aus Home Assistant, ohne
+Zusatzsoftware: ein **Utility Meter** mit je einem Tarif für Heizen, Kühlen,
+Lüften und Entfeuchten, umgeschaltet von einer Automatisierung am Zustand deiner
+Klimaanlage. Die Schritt-für-Schritt-Anleitung steht in der
+[Sensor-Referenz](SENSOR-REFERENZ.md).
+
+*Danke an kingcap1, Klausnn und OB73-gif — ihre Messungen an drei verschiedenen
+Anlagen haben aus einer Rechenregel eine Messung gemacht.*
+
+---
+
+**Börsenpreise: Höchst, Tiefst und der Monatsschnitt**
+
+Der Börsenpreis-Block sagte dir, wie teuer die aktuelle Stunde gegenüber dem
+heutigen Tag ist — aber nicht, ob heute überhaupt ein teurer Tag war. Jetzt
+stehen vorne der **Höchst-** und der **Tiefstpreis des Tages** (jeweils mit der
+Uhrzeit) und der **Monatsdurchschnitt**. Die Optimierer-Zahlen kommen dahinter.
+
+Dazu eine kleine Klarstellung an der **Günstig-Schwelle**: „0 %" schaltet sie
+**nicht ab** — die Schwelle liegt dann genau auf dem Tagesdurchschnitt, und
+günstig ist jede Stunde darunter. Das steht jetzt direkt am Feld, statt erst
+aufzutauchen, wenn man die 0 schon eingetippt hat.
+
+*Beides angeregt von rapahl.*
+
+---
+
 ## v4.0.23 — Was zählt, und was nicht
 
 **Gas, Wasser, Heizöl: Zähler mitführen — ohne dass eedc sie bewertet**

@@ -7,7 +7,7 @@ GET /api/live/{anlage_id}/tagesverlauf — Stündlicher Leistungsverlauf.
 
 import logging
 import random
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
+from backend.models.tages_energie_profil import TagesEnergieProfil
 from backend.services.live_power_service import get_live_power_service
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,21 @@ class LiveGauge(BaseModel):
     einheit: str = "%"
 
 
+class LiveInnengeraet(BaseModel):
+    """Ein Innengerät einer Split-Klimaanlage im Live-Bild (#263).
+
+    Alle drei Werte sind optional und einzeln — ein Innengerät kann einen
+    Temperatur-Sensor haben und keinen Leistungs-Sensor. Fehlt einer, steht
+    dort nichts statt einer 0 (ADR-002/P4).
+    """
+    investition_id: int
+    innengeraet_id: int
+    bezeichnung: str
+    leistung_w: Optional[float] = None
+    soll_temperatur_c: Optional[float] = None
+    ist_temperatur_c: Optional[float] = None
+
+
 class LiveDashboardResponse(BaseModel):
     anlage_id: int
     anlage_name: str
@@ -75,6 +91,12 @@ class LiveDashboardResponse(BaseModel):
     heute_kwh_pro_komponente: Optional[dict[str, float]] = None
 
     warmwasser_temperatur_c: Optional[float] = None
+
+    #: #263 — Live-Werte je Innengerät einer Split-Klimaanlage. **Reine
+    #: Anzeige**: sie gehen in keine Summe und keine Bilanz — die Leistung
+    #: eines Innengeräts ist eine Teilmenge der Geräteleistung, die als
+    #: Komponente schon zählt. `None`, solange kein einziger Wert ankommt.
+    innengeraete: Optional[list[LiveInnengeraet]] = None
 
 
 class TagesverlaufSerie(BaseModel):
@@ -130,6 +152,10 @@ class BoersenpreisResponse(BaseModel):
     anlage_id: int
     markt: str                                   # "DE" | "AT"
     tage: list[BoersenpreisTag] = []
+    #: Ø Börsenpreis des laufenden Kalendermonats aus der eigenen stündlichen
+    #: Mitschrift (Zusage an Rainer). `None`, solange nichts vorliegt — dann
+    #: fehlt die Kachel, statt ein halber Tag als „Monatsmittel" zu gelten.
+    monats_durchschnitt_cent: Optional[float] = None
     aktuelle_stunde: Optional[int] = None        # lokale Stunde in der Gebotszone
     heute: Optional[str] = None                  # Datum von „heute" in derselben Zone
     hinweis: Optional[str] = None                # gesetzt, wenn ein Tag fehlt
@@ -496,10 +522,45 @@ async def get_boersenpreise(
         "anlage_id": anlage.id,
         "markt": markt,
         "tage": tage,
+        "monats_durchschnitt_cent": await _monats_durchschnitt_cent(
+            db, anlage_id, heute,
+        ),
         "aktuelle_stunde": now.hour,
         "heute": heute.isoformat(),
         "hinweis": hinweis,
     }
+
+
+async def _monats_durchschnitt_cent(db, anlage_id: int, heute: date) -> Optional[float]:
+    """Ø Börsenpreis des laufenden Kalendermonats — aus der eigenen Mitschrift.
+
+    **Zusage an Rainer** (PN 2026-08-20): Der Börsenpreis-Block sagte, wie teuer
+    diese Stunde gegen *heute* ist, aber nicht, wie teuer heute gegen den Monat
+    ist — und genau das entscheidet, ob sich Warten lohnt.
+
+    Quelle ist ``TagesEnergieProfil.boersenpreis_cent``, dieselbe stündliche
+    Mitschrift, aus der auch der Fallback in ``preis_tag.persistierte_preise``
+    liest. Damit ist es **kein zweiter Preis-Kanal**: es steht dort, was eedc
+    an dieser Anlage tatsächlich gesehen hat.
+
+    ⚠ **Der Monat, soweit er da ist.** Am Zweiten des Monats sind es zwei Tage;
+    Stunden ohne Mitschrift fehlen im Nenner wie im Zähler. ``None``, wenn
+    nichts vorliegt — dann fehlt die Kachel, statt eine Zahl aus einem halben
+    Tag als „Monatsmittel" auszugeben (ADR-002/P4).
+    """
+    from sqlalchemy import func
+
+    monatsbeginn = heute.replace(day=1)
+    res = await db.execute(
+        select(func.avg(TagesEnergieProfil.boersenpreis_cent)).where(
+            TagesEnergieProfil.anlage_id == anlage_id,
+            TagesEnergieProfil.datum >= monatsbeginn,
+            TagesEnergieProfil.datum <= heute,
+            TagesEnergieProfil.boersenpreis_cent.isnot(None),
+        )
+    )
+    wert = res.scalar()
+    return round(float(wert), 2) if wert is not None else None
 
 
 

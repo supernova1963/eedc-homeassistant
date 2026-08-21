@@ -23,6 +23,16 @@ export interface LiveGauge {
   einheit: string
 }
 
+/** Ein Innengerät einer Split-Klimaanlage im Live-Bild (#263). */
+export interface LiveInnengeraet {
+  investition_id: number
+  innengeraet_id: number
+  bezeichnung: string
+  leistung_w: number | null
+  soll_temperatur_c: number | null
+  ist_temperatur_c: number | null
+}
+
 export interface LiveDashboardResponse {
   anlage_id: number
   anlage_name: string
@@ -49,6 +59,12 @@ export interface LiveDashboardResponse {
   heute_kwh_pro_komponente: Record<string, number> | null
 
   warmwasser_temperatur_c: number | null
+  /**
+   * #263 — Live-Werte je Innengerät einer Split-Klimaanlage. Reine Anzeige:
+   * sie gehen in keine Summe und keine Bilanz. `null`, solange kein einziger
+   * Wert ankommt.
+   */
+  innengeraete?: LiveInnengeraet[] | null
 }
 
 export interface WetterStunde {
@@ -309,6 +325,9 @@ export interface BoersenpreisResponse {
   markt: string                     // "DE" | "AT"
   /** Nur Tage MIT Preisen. Fehlt einer, sagt `hinweis` warum (ADR-002/P4). */
   tage: BoersenpreisTag[]
+  /** Ø Börsenpreis des laufenden Monats aus eedcs eigener stündlicher
+   *  Mitschrift — `null`, solange nichts aufgezeichnet ist. */
+  monats_durchschnitt_cent: number | null
   aktuelle_stunde: number | null
   heute: string | null
   hinweis: string | null

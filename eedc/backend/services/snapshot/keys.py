@@ -16,6 +16,7 @@ from typing import Optional
 from backend.core.field_definitions import (
     SONSTIGES_KATEGORIE_UNGEPFLEGT,
     SONSTIGES_VERBRAUCH_FELDER,
+    basis_feld_key,
     kumulative_zaehler_felder_je_typ,
 )
 
@@ -133,7 +134,7 @@ def _mqtt_key_to_sensor_key(mqtt_key: str) -> Optional[str]:
                 {f for felder in KUMULATIVE_ZAEHLER_FELDER.values() for f in felder}
                 | {f for felder in KUMULATIVE_COUNTER_FELDER.values() for f in felder}
             )
-            if feld in alle_felder:
+            if basis_feld_key(feld) in alle_felder:
                 return f"inv:{inv_id}:{feld}"
     return None
 
@@ -151,12 +152,20 @@ def _sensor_key_to_mqtt_key(sensor_key: str) -> Optional[str]:
 
 
 def _is_kumulativ_feld(feld_name: str) -> bool:
-    """Prüft ob ein Feld-Name ein kumulativer Zähler ist (Energie oder Counter)."""
+    """Prüft ob ein Feld-Name ein kumulativer Zähler ist (Energie oder Counter).
+
+    ⚠ **Mit Basis-Key-Auflösung** (#263): Die Betriebsart-Zähler einer
+    Split-Klimaanlage gibt es je Innengerät
+    (`betriebsart_strom_kuehlen_kwh-3`). Die Listen oben führen sie — wie jede
+    Namens-Whitelist — nur unter ihrem Basis-Namen. Ohne die Auflösung wäre ein
+    je-Innengerät-Zähler zuordenbar und würde **nie gesnapshottet**: still, ohne
+    Fehlermeldung, mit einer Tages- und Stundenebene, die es nicht gibt.
+    """
     alle = (
         {f for felder in KUMULATIVE_ZAEHLER_FELDER.values() for f in felder}
         | {f for felder in KUMULATIVE_COUNTER_FELDER.values() for f in felder}
     )
-    return feld_name in alle
+    return basis_feld_key(feld_name) in alle
 
 
 # ─── Datenquellen-V4 C2b: feld-zentrische Quellen-Zuordnung (Energie-Pfad) ───

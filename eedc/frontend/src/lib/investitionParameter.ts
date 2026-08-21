@@ -147,6 +147,7 @@ export const PARAM_WAERMEPUMPE = {
   ALTERNATIV_ZUSATZKOSTEN_JAHR: 'alternativ_zusatzkosten_jahr',
   ALTERNATIV_KOSTEN_EURO: 'alternativ_kosten_euro',
   SG_READY: 'sg_ready',
+  INNENGERAETE: 'innengeraete',
 } as const
 
 export const PARAM_WAERMEPUMPE_DEFAULTS = {
@@ -169,6 +170,20 @@ export const PARAM_WAERMEPUMPE_DEFAULTS = {
   alternativ_zusatzkosten_jahr: 0,
   sg_ready: false,
 } as const
+
+/**
+ * Ein Innengerät einer Split-Klimaanlage (#263).
+ *
+ * ⚠ Die `id` wird beim Anlegen **vergeben und nie wiederverwendet** — sie steht
+ * im Feld-Key der Sensor-Zuordnung (`betriebsart_strom_kuehlen_kwh-3`). Eine
+ * Positionsnummer würde beim Löschen des mittleren Geräts alle folgenden
+ * Zuordnungen auf den falschen Raum umhängen. Backend-SoT:
+ * `core/investition_parameter.py::lade_innengeraete`.
+ */
+export interface Innengeraet {
+  id: number
+  bezeichnung: string
+}
 
 export type WPEffizienzModus = 'gesamt_jaz' | 'scop' | 'getrennte_cops'
 export type WPArt = 'luft_wasser' | 'sole_wasser' | 'grundwasser' | 'luft_luft'
@@ -195,6 +210,7 @@ export interface WaermepumpeParameter {
   heizwaermebedarf_kwh?: number
   warmwasserbedarf_kwh?: number
   waermebedarf_kwh?: number
+  innengeraete?: Innengeraet[]
   pv_anteil_prozent?: number
   alter_energietraeger?: WPAlterEnergietraeger
   alter_preis_cent_kwh?: number

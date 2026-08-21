@@ -248,6 +248,7 @@ export interface WaermepumpeDashboardResponse {
     modus_strom_kuehlen_kwh?: number
     modus_nicht_aufgeteilt_kwh?: number
     modus_abdeckung_h?: number
+    modus_gemessen?: boolean
     /** Ist `gesamt_heizenergie_kwh` aus `Strom × JAZ` gerechnet statt gemessen?
      *  Dann bleibt `durchschnitt_cop` null (Konzept §3.5) und die Anzeige
      *  kennzeichnet die Wärme — wie „geschätzt (kWp-Anteil)" bei der PV. */
