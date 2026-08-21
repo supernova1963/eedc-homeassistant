@@ -9,7 +9,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Added
+
+- **Die Aufteilung Heizen/Kühlen gibt es jetzt auch für einen einzelnen Tag** ([#263](https://github.com/supernova1963/eedc-homeassistant/issues/263), angeregt von OB73-gif). Bisher stand sie nur je Monat; in *Cockpit → Tag* fehlte sie. Der Block **„Aufteilung Heizen/Kühlen"** erscheint dort jetzt im Wärmepumpen-Abschnitt — mit denselben drei Größen wie im Monat: *Heizen · Kühlen · nicht aufgeteilt*.
+  - **Die Rechnung ist dieselbe, nicht eine zweite.** eedc faltet die Stunden ohnehin tageweise; die Monatssicht summiert sie nur hinterher auf. Beide Sichten nehmen jetzt denselben Weg — was der Tag zeigt, steckt unverändert in der Monatssumme.
+  - ⚠ **Ohne zugeordneten Betriebsmodus erscheint der Block gar nicht** — statt mit drei Nullen dazustehen. Eine 0 hieße „hat nicht geheizt"; das weiß eedc ohne Sensor nicht.
+
 ### Fixed
+
+- **Wärmepumpe und Wallbox blieben in der Tagesansicht leer, obwohl der Wert daneben stand** (gemeldet von OB73-gif). Wer sein Gerät über einen **Leistungssensor** erfasst und keinen kWh-Zähler zugeordnet hat — bei Split-Klimaanlagen der Normalfall —, sah in *Cockpit → Tag* eine leere Spalte „Wärmepumpe", während dieselbe Stunde in der gerätebenannten Spalte danebenstand und die Monatsansicht korrekt damit rechnete.
+  - **Die Ursache:** Dieselbe Größe liegt an zwei Stellen — die Sammelspalte las nur den **Zählerpfad**, die Gerätespalte und die Monatsauswertung den **Leistungspfad**. Beide Spalten werden jetzt aus beiden Pfaden bedient: **liegt ein Zähler vor, bleibt er die Wahrheit**; fehlt er, trägt der Leistungswert die Spalte. Gibt es zu einem Gerät gar keine Spur, steht dort weiterhin ein Strich und **keine erfundene Null**.
+  - ⚠ **Mitbehoben, und es war der schwerere Teil:** Der **Hausverbrauch** derselben Tabelle zieht Wärmepumpe und Wallbox vom Gesamtverbrauch ab. Fehlte der Zähler, wurde **nichts** abgezogen — der Hausverbrauch stand um den Verbrauch dieser Geräte **zu hoch**, während sonstige Verbraucher in derselben Zeile korrekt abgezogen wurden. Diese Zahl stimmt jetzt.
+  - ✅ **Unberührt bleiben PV und Gesamtverbrauch.** Das sind Bilanzgrößen, an denen Performance-Ratio sowie Überschuss und Defizit hängen — dort etwas zu ändern hieße, die Bilanz zu ändern statt eine Anzeige. **Keine bestehende Bilanzzahl bewegt sich.**
 
 - **Der Ist-Betrieb einer Klimaanlage kam in der Aufteilung nicht an** — betroffen ist **jedes Gerät, dessen Integration den laufenden Betrieb meldet** (`hvac_action`): Panasonic, Daikin und die meisten Luft-Wasser-Wärmepumpen. Bei ihnen landete die **gesamte** Heizen/Kühlen-Aufteilung in „nicht aufgeteilt", statt auf die beiden Seiten zu gehen.
   - **Die Ursache war eine Vorrangregel, die sich selbst aushebelte.** eedc liest zwei Dinge: den *eingestellten* Modus (`cool`) und, wo vorhanden, den *laufenden* Betrieb (`cooling`, `idle`). Der laufende Betrieb soll den eingestellten schlagen — er weiß, ob das Gerät gerade wirklich kühlt oder nur wartet. Beim Lesen der Historie wurde er aber **anstelle** des Modus eingetragen; danach war nicht mehr unterscheidbar, welches von beidem vorlag, und die Vokabeln des laufenden Betriebs (`heating`, `cooling`, `defrosting`, `drying`, `fan`) waren an dieser Stelle unbekannt. Alles davon wurde zu **„unbestimmt"**.

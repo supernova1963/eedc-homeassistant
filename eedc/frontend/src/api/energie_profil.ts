@@ -210,6 +210,15 @@ export interface TagDetail {
   speicher_effektiver_ladepreis_quelle: string | null
   emob_ladung_pv_kwh: number | null
   emob_ladung_netz_kwh: number | null
+  /** #263/T2 — Aufteilung Heizen/Kühlen DIESES Tages, anlagenweite Σ.
+   *  `null` heißt „kein Modus-Signal an diesem Tag" ⇒ der Block fehlt ganz,
+   *  statt drei Nullen zu zeigen (ADR-002/P4). Der Rest kommt aus dem
+   *  Backend und wird hier NICHT nachgerechnet — welcher Bezug gilt,
+   *  entscheidet die Faltung. */
+  wp_modus_strom_heizen_kwh: number | null
+  wp_modus_strom_kuehlen_kwh: number | null
+  wp_modus_nicht_aufgeteilt_kwh: number | null
+  wp_modus_abdeckung_h: number | null
   soll_pv_kwh: number | null
   einspeise_preis_cent: number | null
   netzbezug_preis_cent: number | null

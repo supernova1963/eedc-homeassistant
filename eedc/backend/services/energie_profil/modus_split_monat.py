@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 
 from sqlalchemy import select
@@ -70,33 +70,20 @@ def _monatsgrenzen(
     return erster, date(jahr, monat, 1)
 
 
-async def lade_modus_split_je_monat(
-    db: AsyncSession,
-    anlage_id: int,
-    *,
-    von: Optional[MonatsSchluessel] = None,
-    bis: Optional[MonatsSchluessel] = None,
-) -> SplitJeMonat:
-    """Faltet die Stundenzeilen je Monat und Wärmepumpe.
+async def _lade_tages_eingaenge(
+    db: AsyncSession, anlage_id: int, ab, vor,
+) -> tuple[dict[date, "_TagesEingang"], dict[date, dict[str, float]]]:
+    """Stundenzeilen + Tages-Zählersummen laden — der Teil, den Monat und Tag teilen.
 
-    Args:
-        db: Session.
-        anlage_id: Anlage.
-        von: frühester Monat ``(jahr, monat)``, **inklusive**. ``None`` = offen.
-        bis: spätester Monat ``(jahr, monat)``, **inklusive**. ``None`` = offen.
+    **Warum extrahiert** (#263/T2): Die Tagesansicht braucht dieselben Eingänge
+    wie die Monatssicht, nur ohne die Zusammenfassung am Ende. Sie ein zweites
+    Mal zu laden hieße, die Auswahlregeln („Tage über die Modus-Spur, Stunden
+    vollständig") zweimal zu pflegen — und der Modul-Kopf sagt, warum das nicht
+    geht: *eine Regel, die an zwei Stellen nachgebaut wird, driftet.*
 
     Returns:
-        Je Monat und Gerät ein ``ModusSplit``. Geräte ohne **eine einzige**
-        Stunde mit Modus-Signal erscheinen **nicht** — Abwesenheit heißt hier
-        „keine Aussage", nicht „null" (ADR-002/P4).
-
-    Zwei Queries, danach reine Rechnung. Die Tages-Normierung braucht die
-    zweite (``TagesZusammenfassung.komponenten_kwh``); fehlt sie für einen Tag
-    oder ein Gerät, gilt für diesen Tag die Roh-Summe des Leistungspfads
-    (``core/berechnungen/modus_split.py``, Modul-Kopf Punkt 3).
+        ``(je_tag, zaehler_je_tag)`` — leer, wenn die Anlage keine Modus-Spur hat.
     """
-    ab, vor = _monatsgrenzen(von, bis)
-
     # ⚠ **Zwei Schritte, und der Grund dafür ist gemessen.** Der erste Entwurf
     # filterte direkt auf `betriebsmodus_je_wp IS NOT NULL` — das hält die
     # Menge klein, hat aber die Stunden **ohne** Modus-Spur auch aus dem
@@ -130,7 +117,7 @@ async def lade_modus_split_je_monat(
 
     tage = {d for (d,) in (await db.execute(tage_query)).all()}
     if not tage:
-        return {}
+        return {}, {}
     tep_query = tep_query.where(TagesEnergieProfil.datum.in_(tage))
 
     tep_result = await db.execute(tep_query)
@@ -166,13 +153,46 @@ async def lade_modus_split_je_monat(
         je_tag[datum] = eingang
 
     if not je_tag:
-        return {}
+        return {}, {}
 
     tz_result = await db.execute(tz_query)
     zaehler_je_tag: dict[date, dict[str, float]] = {}
     for datum, komponenten_kwh in tz_result.all():
         if datum in je_tag and komponenten_kwh:
             zaehler_je_tag[datum] = waermepumpe_kwh_je_investition(komponenten_kwh)
+
+    return je_tag, zaehler_je_tag
+
+
+async def lade_modus_split_je_monat(
+    db: AsyncSession,
+    anlage_id: int,
+    *,
+    von: Optional[MonatsSchluessel] = None,
+    bis: Optional[MonatsSchluessel] = None,
+) -> SplitJeMonat:
+    """Faltet die Stundenzeilen je Monat und Wärmepumpe.
+
+    Args:
+        db: Session.
+        anlage_id: Anlage.
+        von: frühester Monat ``(jahr, monat)``, **inklusive**. ``None`` = offen.
+        bis: spätester Monat ``(jahr, monat)``, **inklusive**. ``None`` = offen.
+
+    Returns:
+        Je Monat und Gerät ein ``ModusSplit``. Geräte ohne **eine einzige**
+        Stunde mit Modus-Signal erscheinen **nicht** — Abwesenheit heißt hier
+        „keine Aussage", nicht „null" (ADR-002/P4).
+
+    Zwei Queries, danach reine Rechnung. Die Tages-Normierung braucht die
+    zweite (``TagesZusammenfassung.komponenten_kwh``); fehlt sie für einen Tag
+    oder ein Gerät, gilt für diesen Tag die Roh-Summe des Leistungspfads
+    (``core/berechnungen/modus_split.py``, Modul-Kopf Punkt 3).
+    """
+    ab, vor = _monatsgrenzen(von, bis)
+    je_tag, zaehler_je_tag = await _lade_tages_eingaenge(db, anlage_id, ab, vor)
+    if not je_tag:
+        return {}
 
     # Tagesweise falten (die Normierung ist tagesweise — s. `summiere_modus_split`),
     # danach je Monat aufsummieren.
@@ -198,6 +218,42 @@ async def lade_modus_split_je_monat(
         if gefiltert:
             ergebnis[schluessel] = gefiltert
     return ergebnis
+
+
+async def lade_modus_split_tag(
+    db: AsyncSession, anlage_id: int, datum: date,
+) -> dict[str, ModusSplit]:
+    """Der Modus-Split **eines Tages**, je Wärmepumpe (#263/T2).
+
+    **Warum es das gibt** (gemeldet von OB73-gif, 2026-08-20): Die Aufteilung
+    Heizen/Kühlen gab es nur je Monat — *„Die Übersicht am Ende (wie beim
+    Monat) … fehlt hier auch."* Die Rechnung selbst ist ohnehin **tagesweise**
+    (`falte_modus_split_tag`, die Normierung braucht die Tages-Zählersumme);
+    die Monatssicht summiert sie nur hinterher auf. Diese Funktion bleibt eine
+    Ebene früher stehen — **derselbe Ladepfad, dieselbe Faltung, kein zweiter
+    Rechenweg.**
+
+    ⚠ **Kein Vorrang gegenüber einem Abschluss.** Der Monatsabschluss
+    persistiert seine Teilmengen (`auto:monatsabschluss`) — auf Tagesebene gibt
+    es dazu kein Gegenstück, weil es keine Tages-Zeile gibt, die etwas anderes
+    behaupten könnte. Was hier steht, ist immer die frisch gefaltete Stunde.
+
+    Returns:
+        ``{investitions_id_str: ModusSplit}`` — Geräte ohne **eine einzige**
+        erfasste Stunde erscheinen **nicht** (P4: keine Aussage statt einer 0).
+    """
+    je_tag, zaehler_je_tag = await _lade_tages_eingaenge(
+        db, anlage_id, datum, datum + timedelta(days=1),
+    )
+    eingang = je_tag.get(datum)
+    if eingang is None:
+        return {}
+    zaehler = zaehler_je_tag.get(datum, {})
+    splits = {
+        inv_id: falte_modus_split_tag(stunden, tages_kwh=zaehler.get(inv_id))
+        for inv_id, stunden in eingang.stunden_je_inv.items()
+    }
+    return {i: s for i, s in splits.items() if not s.ist_leer}
 
 
 async def lade_modus_split_monat(

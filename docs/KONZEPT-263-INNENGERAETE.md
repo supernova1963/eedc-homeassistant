@@ -1,6 +1,7 @@
 # Konzept #263 — Innengeräte einer Luft-Luft-Wärmepumpe
 
-> **Status:** Entwurf, 2026-08-20. **Nichts davon ist gebaut.**
+> **Status:** Entwurf, 2026-08-20, fortgeschrieben 2026-08-21.
+> **Gebaut ist bisher nur Etappe F** (§6) — alles Übrige ist Plan.
 > Basis ist der ausgelieferte Stand **v4.0.23**.
 > **Vorgänger:** [`KONZEPT-263-klima-split.md`](KONZEPT-263-klima-split.md) — gilt unverändert
 > weiter für alles, was dort steht und gebaut ist (Teilmengen-Grundsatz, Sechser-Kanon,
@@ -33,9 +34,28 @@ heute eine Stichprobe von einem Gerät und behandelt sie als Aussage über die A
 | **E6** | **Innengerätespezifisch ist nur der Zustand:** Raum-Ist, Soll, Modus, Lüfterstufe, Lamellen. Klausnn unabhängig: *„das sind sie nicht, bis auf die Inside Temperatur"* | alle drei Melder |
 | **E7** | **Die Recorder-Tiefe variiert** — OB73-gif konnte 90 Tage nachimportieren; D9 („kein Backfill") gilt nur für den Default | OB73-gif, 20.08. |
 | **E8** | **Der ausgelieferte Lesepfad verliert `hvac_action`** (s. §6) | 20.08., am Code gemessen |
+| **E9** | **Es gibt einen lokalen Weg mit deutlich mehr Daten.** `pymitsubishi/homeassistant-mitsubishi` spricht die WLAN-Adapter der Innengeräte **direkt** an (je eigene IP) — **17 Entitäten** statt 4, darunter **`Power` in Watt (live)**, `Operating Status` („In Betrieb"), Inside Temperature *coarse* **und** *fine*, Outside Temperature, Dehumidifier Level, Vane-Stellungen. Der `Energy`-Zähler trägt denselben Wert wie MELCloud (4.130,90 gegen 4.115,70 fünf Tage zuvor) ⇒ **dieselbe Quelle, nur ohne Cloud** | kingcap1, 20.08. |
+| **E10** | **Der Verbrauch hängt am anfordernden Gerät, nicht am Raum.** *„Das erste Gerät, was angeschaltet wird, gibt den Takt an … auch bei dem Gerät wird der Hauptverbrauch gemessen (Innen+Außengerät). Bei den anderen Geräten misst er nur den Standby oder den Ventilator-Strom des Innengerätes."* ⚠ **„Das erste" ist rollierend, keine Geräte-Eigenschaft** — ist es aus, übernimmt ein anderes. Dass bei kingcap1 faktisch alles beim Büro landet, ist seine **Gewohnheit** (*„quasi das Hauptgerät, was ich meist als erstes schalte"*), nicht die Technik | ebd. |
+| **E11** | **Die Größenordnungen bestätigen E10** — Momentanwerte: Shelly am Außengerät **600 W**, anforderndes Büro-Gerät **677 W**, mitlaufendes WZ **14 W**, ausgeschaltetes SZ **1 W**. ⚠ **Kein Beleg für eine Überschätzung:** dasselbe Büro-Gerät zeigt auf seinen Bildern 363 · 377 · 677 W — ein Inverter moduliert binnen Sekunden, und die Ablesungen sind nicht nachweislich zeitgleich. Die 77 W liegen **innerhalb** dieser Unschärfe. **Ungeklärt bleibt allein die kumulierte Differenz** (Σ Innen 4.233 gegen Shelly 3.190 kWh) — dort helfen keine Momentanwerte, und Nullpunkte wie Zeiträume der drei Zähler sind unbekannt (HA-Crash 08/2025). Meldersatz: *„also Shelly ist im Stromverbrauch wohl die BESTE Messquelle"* | ebd. |
 
 **E5 + E6 sind der Kern: ein Innengerät liefert Zustand, keine Menge.** Damit ist K-3 (Aufteilung
 je Innengerät) nicht vertagt, sondern **abgeschlossen** — es gibt nichts zu messen.
+
+⚑ **E10/E11 präzisieren E5, ohne es zu entkräften.** Der Innengerät-Wert ist nicht diffus
+„konsolidiert": **das gerade anfordernde Gerät trägt Innen + Außen, die mitlaufenden nur
+ihren Ventilator.** Das deckt sich mit dem, was die Hersteller selbst sagen (E5) — der
+Außenanteil steckt im Wert eines Innengeräts. **Genau deshalb ist er nicht raumbezogen:**
+
+1. **Wer anfordert, wechselt** (E3/E10). Über Wochen wandert die Anlagenmenge zwischen den
+   Innengeräten. Eine Raum-Aufteilung daraus wäre eine Aussage über die
+   **Einschaltreihenfolge**, nicht über den Raum.
+2. **Die mitlaufenden Geräte melden ihren Ventilator**, nicht ihren Kälteanteil — der Raum,
+   der am meisten gekühlt wird, kann dort mit 14 W stehen.
+
+⛔ **Und damit wäre ein Verbrauchsfeld am Innengerät nicht nur nutzlos, sondern gefährlich:** Wer
+das gerade anfordernde Gerät zuordnet, bekommt eine Zahl in der Größenordnung des
+**Anlagenverbrauchs** — und hält sie für den Raumverbrauch. Wer eines der anderen zuordnet,
+bekommt einen Ventilator. **Und welches von beidem, entscheidet die Einschaltreihenfolge.**
 
 ---
 
@@ -127,6 +147,8 @@ verhält sich alles **bitgleich** zu heute. Keine Migration, kein Altdaten-Bruch
 | **I3** | **Faltung** nach §3.2 — die einzige Etappe, die Zahlen bewegt |
 | **I4** | Soll-/Ist-Temperatur, **erfasst ohne Auswertung** |
 | **I5** | „nicht aufteilbar (gegenläufige Innengeräte)" getrennt ausweisen |
+| **T1** | **Die Spalte „Wärmepumpe" in der Tagesansicht kennt nur einen von zwei Pfaden** (§7) | ✅ **gebaut 2026-08-21** |
+| **T2** | **Die Aufteilungs-Übersicht fehlt in Cockpit → Tag** (§8) | ✅ **gebaut 2026-08-21** |
 
 ⚠ **Vor I3 gehört eine Messung an einer echten Anlage mit mehreren Innengeräten** — sonst ist die
 Faltungsregel eine Behauptung. Klausnn und kingcap1 haben passende Geräte.
@@ -161,8 +183,9 @@ ehrliche Antwort, keine Näherung.
 
 ## 5. Grenzen — sie gehören in den Anwender-Text
 
-1. **Ein Innengerät liefert keinen Verbrauch.** Was so heißt, ist der Wert des Außengeräts (E5).
-   Je Raum messen geht nur mit eigener Messstelle — und die gibt es bei gemeinsamer Zuleitung nicht.
+1. **Ein Innengerät liefert keinen Verbrauch.** Was so heißt, ist der Wert des Außengeräts —
+   und zwar bei dem Gerät, das gerade **anfordert** — und das wechselt (E5/E10). Je Raum messen geht nur mit
+   eigener Messstelle, und die gibt es bei gemeinsamer Zuleitung nicht.
 2. **Mehrkreis-Anlagen sind in gegenläufigen Stunden nicht aufteilbar** — mit beliebig vielen
    Innengeräten nicht. eedc kann sie nur benennen.
 3. **Kein Backfill über die Recorder-Tiefe hinaus** (E7). Wer heute zuordnet, hat ab heute eine
@@ -230,7 +253,135 @@ dazu).
 
 ---
 
-## 7. Bezug
+## 7. T1 — ✅ gebaut: die Geräte-Spalten kennen beide Pfade
+
+**Gemeldet von OB73-gif** (#263, 20.08.): *„Sowohl in den Stundenwerten wie im Stundenverlauf ist
+nur Wärmepumpe aufgeführt und die Werte sind leer."* — von jemandem, der in derselben Nachricht
+bestätigt, dass die **Monatsansicht** Heizen und Kühlen korrekt zeigt.
+
+**Zwei Pfade tragen dieselbe Größe, und die Tagesspalte kennt nur einen:**
+
+| | Quelle | wer liest sie |
+| --- | --- | --- |
+| `TagesEnergieProfil.waermepumpe_kw` | **Zähler-Snapshot** — `snap_h["wp"]` ← `verbrauch_wp` ← ein zugeordneter **kWh-Zählersensor** auf `stromverbrauch_kwh` | die Spalte „Wärmepumpe" der Stundenwerte (`defaultVisible: true`) |
+| `TagesEnergieProfil.komponenten['waermepumpe_<id>']` | **Leistungspfad** | der **Monats-Modus-Split** (`waermepumpe_kwh_je_investition`) und die gerätebenannte Spalte |
+
+`views.py::get_stundenwerte` reicht `waermepumpe_kw=r.waermepumpe_kw` **ohne Fallback** durch.
+
+**An einer nachgestellten Instanz gemessen** (Klima-Investition, `komponenten` gefüllt, kein
+kWh-Zähler):
+
+```
+Sammelspalte waermepumpe_kw : [None, None, None, None] ... alle None? True
+komponenten je Gerät        : [-0.5, -0.5, -0.5, -0.5]
+Serien (dynamische Spalten) : [('waermepumpe_1', 'Splitklima')]
+```
+
+⇒ **Die Spalte „Wärmepumpe" ist leer, während dieselbe Stunde in der gerätebenannten Spalte
+danebensteht** — und genau daraus rechnet der Monat seine Aufteilung. Das erklärt die Meldung
+vollständig: *Monat kann es, Tag nicht.*
+
+**Wen es trifft:** jede Wärmepumpe oder Klimaanlage **ohne kWh-Zählersensor, aber mit
+Leistungssensor**. Bei Split-Klimaanlagen ist das der Normalfall — die Cloud-Wege liefern
+Leistung und Tagessummen (E5, E9), keinen sauberen Verbrauchszähler.
+
+**Gebaut wurde (a) — als Angleichung, nicht als neue Regel** (Entscheid Gernots, 21.08.:
+*„gleiches Verhalten wie bei anderen Geräten auf dieser Seite"*). Die Messung dahinter:
+
+| Wo | Quelle für die Wärmepumpe | Fallback |
+| --- | --- | --- |
+| **Live-Seite** | Leistungspfad; fehlt der Gesamtwert, Σ der Teilwerte (`live_komponenten_builder.py:120`) | **ja** |
+| Tag, Spalte „Wärmepumpe" | Zählerpfad | **nein** ← der Fehler |
+| Tag, **Hausverbrauch** | WP + Wallbox aus **Zähler**, sonstige Verbraucher aus **`komponenten`** | **gemischt** |
+| Monats-Modus-Split | Leistungspfad | — |
+
+⇒ **Die Seite war schon in sich uneinheitlich**, nicht erst gegenüber Live.
+
+⚑ **Die leere Zelle war nicht der schwerste Teil.** `berechneHausverbrauch` zieht die Wärmepumpe
+über `s.waermepumpe_kw ?? 0` ab — ohne Zähler wurde **nichts** abgezogen, obwohl derselbe Wert für
+sonstige Verbraucher in derselben Zeile sehr wohl benutzt wird. **Der Hausverbrauch stand um den
+WP-Verbrauch zu hoch.** Er liest denselben Wert und heilt ohne eigenen Eingriff mit. (Der
+Funktions-Kommentar benannte die Lücke bereits selbst: *„ein `null` heißt ‚nicht vorhanden' **oder**
+‚hat nicht gemessen'"* — die N-95-Klasse.)
+
+**Umsetzung:** neue Layer-Funktion `core/berechnungen/energie.py::geraete_spalte_kw`
+(ADR-001 — die Auflösung ist eine Formel, kein Routen-Detail), aufgerufen in
+`views.py::get_stundenwerte` für `waermepumpe_kw` und `wallbox_kw`. **Bei Lesezeit, nicht beim
+Schreiben:** ein Leistungswert in einer Zählerspalte verlöre seine Herkunft. Im Frontend wären es
+drei Kopien (Tabelle · Chart · CSV) gewesen — Regel 0a.
+
+**Drei Eigenschaften, jede mit eigener Probe:**
+
+1. **Zähler schlägt Leistung.** Wo beides vorliegt, gewinnt der Zähler — sonst zwei Zahlen für
+   dieselbe Größe (Achse-2-Drift, #356).
+2. **Betrag statt Vorzeichen.** `komponenten` führt Senken negativ (N-261); ein −0,5 in der
+   Sammelspalte hieße „so viel wurde *nicht* verbraucht".
+3. **Kein Key heißt `None`, nicht 0.** Ein **vorhandener** Key mit Wert 0 bleibt dagegen eine echte
+   Null — die F-42-Klasse in beide Richtungen.
+
+⛔ **Bewusst nur die Geräte-Spalten.** `pv_kw` und `verbrauch_kw` sind **Bilanzgrößen** — an ihnen
+hängen Performance-Ratio sowie Überschuss/Defizit (`aggregator.py`). Ein Fallback dort änderte die
+**Bilanz**, nicht eine Anzeige; das wäre ein eigener Vorgang mit eigener Messung. Eine Probe hält
+die Grenze fest, damit sie nicht beiläufig verschoben wird.
+
+**Wächter:** `test_263_t1_geraete_spalten_beide_pfade.py` — **sechs Proben auf die ROUTE**, nicht
+auf den Layer allein. Der Layer wäre grün gewesen, ohne dass ein Anwender etwas gesehen hätte —
+genau der Fehler, an dem der `hvac_action`-Wächter scheiterte (§6). Gegenprobe gefahren: alten
+Zustand wiederhergestellt ⇒ die Melder-Probe rot, Rückbau per Dateikopie.
+
+**Gates:** pytest **3.299 in beiden Zonen** (vorher 3.293) · lint 0 · tsc 0 ohne Pipe ·
+Vitest 1.191 · 25/25 `check:*` (`park-leertest` ausgelassen — kein Frontend-Quellcode berührt).
+
+---
+
+## 8. T2 — ✅ gebaut: die Aufteilung gibt es auch je Tag
+
+**Gemeldet von OB73-gif** (ebd.): *„Die Übersicht am Ende (wie beim Monat), wieviel Energie in
+heizen/kühlen/nicht aufgeteilt floss, fehlt hier auch."*
+
+**Zutreffend, und es ist eine Lücke, kein Defekt.** `WaermepumpeModusSplit` ist an **genau einer
+Stelle** eingehängt (`WaermepumpeHubBloecke.tsx:56`); S4 hat den Hub und die Monats-/Jahressicht
+gebaut, der Tag war nie dabei.
+
+**Gebaut — und es war klein, weil die Architektur es hergab.** Drei Messungen vorab:
+
+1. **Die Faltung ist ohnehin tagesweise.** `falte_modus_split_tag` rechnet je Tag (die Normierung
+   braucht die Tages-Zählersumme); die Monatssicht summiert nur hinterher auf. Der neue Lader
+   bleibt **eine Ebene früher** stehen.
+2. **Cockpit → Tag und → Monat teilen sich die Blockfabrik** (`TagKomponenten.tsx`: *„Konvergenz
+   statt zweiter Code-Pfad"* — Tagesdaten werden in ein `AktuellerMonatResponse`-Shape gegossen).
+   Und diese Fabrik **hatte den Balken bereits**, gated durch `wp_modus_abdeckung_h > 0`.
+3. ⇒ **Kein neuer Block, keine zweite Komponente, kein `period`-Sonderfall.** Im Frontend war es
+   eine Zuweisung; die Datenlage entscheidet, wo der Block erscheint.
+
+**Umsetzung:**
+
+* `_lade_tages_eingaenge` aus `lade_modus_split_je_monat` **extrahiert** — Monat und Tag teilen
+  sich jetzt den Ladepfad samt seiner Auswahlregeln („Tage über die Modus-Spur, Stunden
+  vollständig"). Ohne das wären es zwei Pfade, und der Modul-Kopf sagt, warum das nicht geht:
+  *eine Regel, die an zwei Stellen nachgebaut wird, driftet.*
+* Neu `lade_modus_split_tag(db, anlage_id, datum)`.
+* `tag-detail` liefert vier Felder (`wp_modus_strom_heizen_kwh` · `…_kuehlen_kwh` ·
+  `…_nicht_aufgeteilt_kwh` · `wp_modus_abdeckung_h`), anlagenweite Σ wie die übrigen WP-Felder
+  dort. **Mit denselben zwei Achsen wie überall:** `ist_aktiv_an(datum)` und die
+  Teilmengen-Invariante — passt ein Gerät nicht, wird es **ganz** ausgelassen statt gekappt.
+* **Der Rest kommt aus dem Backend**, nicht aus einer Client-Subtraktion: welcher Bezug gilt,
+  entscheidet die Faltung. Zwei Stellen, die denselben Rest rechnen, driften.
+
+⚠ **Ohne Modus-Signal bleiben alle vier Felder `None`** — der Block erscheint dann gar nicht,
+statt drei Nullen zu zeigen (ADR-002/P4, die F-42-Klasse).
+
+**Wächter:** `test_263_t2_modus_split_tag.py`, sieben Proben — darunter **der Endpunkt** (nicht
+nur der Lader), die Tagesgrenze, das noch nicht angeschaffte Gerät und die Gleichheit
+*Σ Tag == Monat*, die belegt, dass beide denselben Weg nehmen. Gegenprobe gefahren.
+
+**Gates:** pytest **3.306 in beiden Zonen** (vorher 3.299) · lint 0 · tsc 0 ohne Pipe ·
+Vitest 1.191 · **26/26 `check:*` inkl. `park-leertest`** (18 Sichten, **Exit 0**, gegen einen
+frischen Demo-Build auf der Dev-Box — diesmal Pflicht, weil Frontend-Quellcode berührt ist).
+
+---
+
+## 9. Bezug
 
 Vorgänger [`KONZEPT-263-klima-split.md`](KONZEPT-263-klima-split.md) ·
 Issue [#263](https://github.com/supernova1963/eedc-homeassistant/issues/263) ·

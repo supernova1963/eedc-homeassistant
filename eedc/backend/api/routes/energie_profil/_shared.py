@@ -468,6 +468,19 @@ class TagDetailResponse(BaseModel):
     # E-Mobilität PV-/Netz-Anteil der Ladung — Tages-Boundary-Diff (nur bei Sensor).
     emob_ladung_pv_kwh: Optional[float] = None
     emob_ladung_netz_kwh: Optional[float] = None
+    # Aufteilung Heizen/Kühlen des Tages (#263/T2) — anlagenweite Σ über alle
+    # Wärmepumpen, wie die übrigen WP-Felder hier. `None` heißt „kein
+    # Modus-Signal an diesem Tag": der Block erscheint dann gar nicht, statt
+    # mit Nullen dazustehen (ADR-002/P4, die F-42-Klasse).
+    #
+    # ⚠ `wp_modus_nicht_aufgeteilt_kwh` kommt **aus dem Backend**, nicht aus einer
+    # Client-Subtraktion: es ist `Bezug − Heizen − Kühlen`, und welcher Bezug
+    # gilt, entscheidet die Faltung (Tages-Zählersumme, sonst Roh-Summe des
+    # Leistungspfads). Zwei Stellen, die denselben Rest rechnen, driften.
+    wp_modus_strom_heizen_kwh: Optional[float] = None
+    wp_modus_strom_kuehlen_kwh: Optional[float] = None
+    wp_modus_nicht_aufgeteilt_kwh: Optional[float] = None
+    wp_modus_abdeckung_h: Optional[float] = None
     # PV Tages-SOLL = OM-Tagesprognose × eedc-Lernfaktor (wie Genauigkeits-Tracking).
     soll_pv_kwh: Optional[float] = None
     # Tages-Tarif (Monatstarif je Tag) — für Wirkungsverluste € + Tarif-Zeile.

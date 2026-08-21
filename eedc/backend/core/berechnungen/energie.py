@@ -317,6 +317,62 @@ def summe_wallbox_eauto_kwh(komponenten_kwh: Optional[dict]) -> float:
     return _summe_prefix(komponenten_kwh, WALLBOX_KOMPONENTEN_PREFIXE)
 
 
+def geraete_spalte_kw(
+    zaehler_wert: Optional[float],
+    komponenten: Optional[dict],
+    praefixe: tuple[str, ...],
+) -> Optional[float]:
+    """Geräte-Sammelspalte einer Stundenzeile — Zähler schlägt Leistungspfad.
+
+    **Warum es diese Funktion gibt** (#263, T1; gemeldet von OB73-gif am
+    2026-08-20): Dieselbe Größe liegt in `TagesEnergieProfil` an **zwei**
+    Stellen, und die Sammelspalten der Tagesansicht kannten nur eine davon.
+
+    * ``waermepumpe_kw`` / ``wallbox_kw`` kommen aus dem **Zähler-Snapshot**
+      (`snap_h["wp"]`) — sie brauchen einen zugeordneten **kWh-Zählersensor**.
+    * ``komponenten['waermepumpe_<id>']`` kommt aus dem **Leistungspfad** — und
+      **daraus** rechnet der Monats-Modus-Split seine Aufteilung.
+
+    Wer eine Wärmepumpe oder Klimaanlage **ohne kWh-Zähler, aber mit
+    Leistungssensor** betreibt — bei Split-Klimaanlagen der Normalfall —, sah
+    deshalb im Monat eine Aufteilung und im Tag eine **leere Spalte**, während
+    der Wert in der gerätebenannten Spalte danebenstand.
+
+    ⚠ **Der Fallback greift nur, wenn der Zähler fehlt.** Wo beides vorliegt,
+    bleibt der Zähler die Wahrheit — sonst stünden zwei Zahlen für dieselbe
+    Größe nebeneinander, und die können abweichen (Achse-2-Drift, #356).
+
+    ⚠ **Vorzeichen:** ``TagesEnergieProfil.komponenten`` führt Senken **negativ**
+    (Leistungspfad, ``seite: "senke"`` ⇒ ``-abs(...)``, N-261). Die Sammelspalte
+    ist ein Betrag ⇒ hier wird der Betrag der Σ genommen.
+
+    ⛔ **Kein Key heißt None, nicht 0.** Ein Gerät ohne jede Spur darf keine
+    erfundene Null bekommen (die F-42-Klasse) — nur „hingesehen und nichts
+    gefunden" wäre eine Aussage, und die haben wir hier nicht. Ein **vorhandener**
+    Key mit Wert 0 ist dagegen eine echte 0 und bleibt es.
+
+    Args:
+        zaehler_wert: die Spalte aus dem Zählerpfad (``r.waermepumpe_kw`` …).
+        komponenten: ``TagesEnergieProfil.komponenten`` derselben Stunde.
+        praefixe: die Key-Präfixe des Geräts, z. B.
+            {@link WAERMEPUMPE_KOMPONENTEN_PREFIXE}.
+
+    Returns:
+        Den Zählerwert, sonst den Betrag der Leistungspfad-Σ, sonst ``None``.
+    """
+    if zaehler_wert is not None:
+        return zaehler_wert
+    if not komponenten:
+        return None
+    treffer = [
+        float(v) for k, v in komponenten.items()
+        if isinstance(v, (int, float)) and any(str(k).startswith(p) for p in praefixe)
+    ]
+    if not treffer:
+        return None
+    return abs(sum(treffer))
+
+
 def summe_batterie_netto_kwh(komponenten_kwh: Optional[dict]) -> float:
     """Σ aller `batterie_<id>`-Keys, signed in Spalten-Konvention:
     ENTLADUNG positiv (Quelle), LADUNG negativ (Senke) — identisch zur

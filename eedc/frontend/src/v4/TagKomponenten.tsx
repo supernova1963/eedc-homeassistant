@@ -87,6 +87,16 @@ export function baueTagAlsMonat(
     wp_heizung_kwh: tagDetail?.wp_heizung_kwh ?? null,
     wp_warmwasser_kwh: tagDetail?.wp_warmwasser_kwh ?? null,
     wp_waerme_kwh: ((tagDetail?.wp_heizung_kwh ?? 0) + (tagDetail?.wp_warmwasser_kwh ?? 0)) || null,
+    // #263/T2 — Aufteilung Heizen/Kühlen des Tages (gemeldet von OB73-gif).
+    // Die Blockfabrik zeigt den Balken bereits, sobald `wp_modus_abdeckung_h`
+    // gesetzt ist — sie ist für Monat UND Tag dieselbe. Hier ist deshalb nur
+    // durchzureichen, was der Tag-Endpoint liefert: **kein neuer Block, keine
+    // zweite Komponente**, und der Rest kommt fertig aus dem Backend statt aus
+    // einer Client-Subtraktion.
+    wp_modus_strom_heizen_kwh: tagDetail?.wp_modus_strom_heizen_kwh ?? null,
+    wp_modus_strom_kuehlen_kwh: tagDetail?.wp_modus_strom_kuehlen_kwh ?? null,
+    wp_modus_nicht_aufgeteilt_kwh: tagDetail?.wp_modus_nicht_aufgeteilt_kwh ?? null,
+    wp_modus_abdeckung_h: tagDetail?.wp_modus_abdeckung_h ?? null,
     wp_starts_summe_monat: wpStartsTag > 0 ? wpStartsTag : null,
     wp_betriebsstunden_summe_monat: wpBetriebsstundenTag > 0 ? wpBetriebsstundenTag : null,
     // E-Mobilität / BKW / Sonstiges — Tagessumme aus Stunden; PV-/Netz-Anteil der

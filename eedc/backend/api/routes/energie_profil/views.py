@@ -24,6 +24,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.berechnungen import (
+    WAERMEPUMPE_KOMPONENTEN_PREFIXE,
+    WALLBOX_KOMPONENTEN_PREFIXE,
+    geraete_spalte_kw,
+)
 from backend.core.berechnungen.kennzahlen import (
     autarkie_prozent,
     eigenverbrauchsquote_prozent,
@@ -222,8 +227,43 @@ async def get_tag_detail(
         tarif_cache={},
     )
 
+    # #263/T2 — die Aufteilung Heizen/Kühlen des Tages, anlagenweite Σ.
+    #
+    # Die Rechnung ist ohnehin tagesweise (`falte_modus_split_tag`); die
+    # Monatssicht summiert sie nur hinterher auf. Hier bleibt sie eine Ebene
+    # früher stehen — derselbe Ladepfad, dieselbe Faltung.
+    #
+    # ⚠ **Die Teilmengen-Invariante gilt hier genauso** (`teilmengen_passen`):
+    # passt ein Gerät nicht, wird es **ganz** ausgelassen statt gekappt — eine
+    # stille Kappung machte aus einem Widerspruch eine plausible Zahl.
+    from backend.core.berechnungen import teilmengen_passen
+    from backend.core.betriebsmodus import HEIZEN, KUEHLEN
+    from backend.services.energie_profil import lade_modus_split_tag
+
+    heizen_tag = kuehlen_tag = rest_tag = abdeckung_tag = 0.0
+    hat_split = False
+    for inv_id_str, split in (await lade_modus_split_tag(db, anlage_id, datum)).items():
+        inv = investitionen_by_id.get(inv_id_str)
+        if inv is None or not inv.ist_aktiv_an(datum):
+            continue
+        if not teilmengen_passen(split, split.bezug_kwh):
+            continue
+        hat_split = True
+        heizen_tag += split.teilmenge_kwh(HEIZEN)
+        kuehlen_tag += split.teilmenge_kwh(KUEHLEN)
+        rest_tag += max(
+            0.0,
+            float(split.bezug_kwh or 0.0)
+            - split.teilmenge_kwh(HEIZEN) - split.teilmenge_kwh(KUEHLEN),
+        )
+        abdeckung_tag += split.abdeckung_h
+
     return TagDetailResponse(
         datum=datum,
+        wp_modus_strom_heizen_kwh=round(heizen_tag, 2) if hat_split else None,
+        wp_modus_strom_kuehlen_kwh=round(kuehlen_tag, 2) if hat_split else None,
+        wp_modus_nicht_aufgeteilt_kwh=round(rest_tag, 2) if hat_split else None,
+        wp_modus_abdeckung_h=round(abdeckung_tag, 1) if hat_split else None,
         wp_strom_heizen_kwh=detail.get("wp_strom_heizen_kwh"),
         wp_strom_warmwasser_kwh=detail.get("wp_strom_warmwasser_kwh"),
         wp_heizung_kwh=detail.get("wp_heizung_kwh"),
@@ -379,6 +419,18 @@ async def get_stundenwerte(
             serien.append(SerieInfo(**info))
             seen.add(key)
 
+    # #263/T1 — die Geräte-Sammelspalten kennen BEIDE Pfade.
+    #
+    # `waermepumpe_kw`/`wallbox_kw` kommen aus dem Zähler-Snapshot und bleiben
+    # leer, wenn nur ein Leistungssensor zugeordnet ist — während derselbe Wert
+    # in `komponenten` steht, die gerätebenannte Spalte daneben ihn zeigt und
+    # der Monats-Modus-Split aus ihm rechnet. Die Auflösung („Zähler schlägt
+    # Leistung, kein Key heißt None") liegt im Layer, nicht hier.
+    #
+    # ⚠ **Bewusst nur die Geräte-Spalten.** `pv_kw` und `verbrauch_kw` sind
+    # Bilanzgrößen — an ihnen hängen Performance-Ratio sowie Überschuss/Defizit
+    # (`aggregator.py`). Ein Fallback dort änderte die Bilanz, nicht eine
+    # Anzeige; das wäre ein eigener Vorgang mit eigener Messung.
     stunden = [
         StundenWertResponse(
             stunde=r.stunde,
@@ -387,8 +439,12 @@ async def get_stundenwerte(
             einspeisung_kw=r.einspeisung_kw,
             netzbezug_kw=r.netzbezug_kw,
             batterie_kw=r.batterie_kw,
-            waermepumpe_kw=r.waermepumpe_kw,
-            wallbox_kw=r.wallbox_kw,
+            waermepumpe_kw=geraete_spalte_kw(
+                r.waermepumpe_kw, r.komponenten, WAERMEPUMPE_KOMPONENTEN_PREFIXE,
+            ),
+            wallbox_kw=geraete_spalte_kw(
+                r.wallbox_kw, r.komponenten, WALLBOX_KOMPONENTEN_PREFIXE,
+            ),
             ueberschuss_kw=r.ueberschuss_kw,
             defizit_kw=r.defizit_kw,
             temperatur_c=r.temperatur_c,
