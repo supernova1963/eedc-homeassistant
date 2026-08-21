@@ -31,10 +31,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from backend.core.berechnungen.betriebsart_gemessen import (
-    betriebsart_strom_kwh,
-    hat_gemessene_betriebsart,
-)
+from backend.core.berechnungen.betriebsart_gemessen import modus_strom_zeile
 from backend.core.berechnungen.modus_split import heizwaerme_ist_abgeleitet
 from backend.core.betriebsmodus import MODUS_ABDECKUNG_FELD, MODUS_STROM_FELD
 from backend.core.betriebsmodus import HEIZEN as _HEIZEN
@@ -193,9 +190,11 @@ def imd_typ_beitrag(
         warmwasser = _f(data, "warmwasser_kwh")
         # D1: waerme_kwh hat Vorrang, sonst Heizung + Warmwasser (kanonisch).
         waerme = _f(data, "waerme_kwh") or (heizung + warmwasser)
-        _gem_heizen = betriebsart_strom_kwh(data, _HEIZEN)
-        _gem_kuehlen = betriebsart_strom_kwh(data, _KUEHLEN)
-        _gemessen = hat_gemessene_betriebsart(data)
+        # F-56: die Weiche liegt im Layer-SoT `modus_strom_zeile` — sie stand
+        # bis dahin hier inline und war im HA-Export daneben nachgebaut, ohne
+        # den Gemessen-Zweig. Eine Regel, zwei Codestellen, eine Drift.
+        _modus = modus_strom_zeile(data)
+        _gemessen = _modus.gemessen
         return ImdTypBeitrag(
             typ=typ,
             wp_strom=get_wp_strom_kwh(data, params),
@@ -222,14 +221,8 @@ def imd_typ_beitrag(
             # *gerechneten* Split ohnehin schon anwendet (`hat_gemessene_
             # betriebsart` sperrt ihn je Gerät). Beide Wege sagen jetzt
             # dasselbe, statt sich je nach Fläche zu unterscheiden.
-            wp_modus_strom_heizen=(
-                (_gem_heizen or 0.0) if _gemessen
-                else _f(data, MODUS_STROM_FELD[_HEIZEN])
-            ),
-            wp_modus_strom_kuehlen=(
-                (_gem_kuehlen or 0.0) if _gemessen
-                else _f(data, MODUS_STROM_FELD[_KUEHLEN])
-            ),
+            wp_modus_strom_heizen=_modus.heizen_kwh,
+            wp_modus_strom_kuehlen=_modus.kuehlen_kwh,
             wp_modus_abdeckung_h=_f(data, MODUS_ABDECKUNG_FELD),
             wp_modus_gemessen=_gemessen,
             wp_modus_strom_bezug=(

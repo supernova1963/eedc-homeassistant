@@ -27,12 +27,17 @@ Wallbox/E-Auto-Pool je einmal getroffen hat.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Optional
 
 from backend.core.betriebsmodus import (
     BETRIEBSART_NUTZENERGIE_FELD,
     BETRIEBSART_STROM_FELD,
+    HEIZEN,
+    KUEHLEN,
     MESSBARE_MODI,
+    MODUS_ABDECKUNG_FELD,
+    MODUS_STROM_FELD,
 )
 from backend.core.field_definitions import basis_feld_key
 
@@ -40,6 +45,8 @@ __all__ = [
     "betriebsart_strom_kwh",
     "betriebsart_nutzenergie_kwh",
     "hat_gemessene_betriebsart",
+    "ModusStromZeile",
+    "modus_strom_zeile",
 ]
 
 
@@ -96,3 +103,74 @@ def hat_gemessene_betriebsart(daten: Optional[dict]) -> bool:
     return any(
         betriebsart_strom_kwh(daten, modus) is not None for modus in MESSBARE_MODI
     )
+
+
+@dataclass(frozen=True)
+class ModusStromZeile:
+    """Die Heizen/Kühlen-Aufteilung **einer** IMD-Zeile — mit ihrer Herkunft.
+
+    ``gemessen`` sagt, welcher der beiden Wege gegriffen hat. Er ist nicht
+    Kosmetik: Wo er ``True`` ist, darf der aus dem Betriebsmodus *gerechnete*
+    Split (``lade_modus_split_ohne_abschluss``) für dieses Gerät **nicht**
+    zusätzlich angewandt werden — sonst stünde dieselbe Menge zweimal in
+    derselben Zeile.
+    """
+
+    heizen_kwh: float
+    kuehlen_kwh: float
+    gemessen: bool
+
+    @property
+    def hat_aufteilung(self) -> bool:
+        """Trägt die Zeile überhaupt eine Aufteilung — gemessen oder abgeleitet?"""
+        return self.gemessen or self.abdeckung_h > 0
+
+    #: Stunden mit gültigem Modus-Signal, aus der Zeile übernommen.
+    abdeckung_h: float = 0.0
+
+
+def modus_strom_zeile(daten: Optional[dict]) -> ModusStromZeile:
+    """**Gemessen schlägt abgeleitet** — ganz oder gar nicht je Zeile (F-56).
+
+    Die Regel steht **nur hier**, obwohl sie an mehreren Flächen gebraucht wird:
+    Monats-Fakten (Cockpit, Komponenten-Hub) und HA-/MQTT-Export, der seine
+    IMD-Zeilen je Investition faltet und deshalb nicht über die Monats-Fakten
+    geht (bekannte P10-Restschuld von ``ha_export.py``).
+
+    ⛔ **Warum sie eine Funktion ist und keine zwei Codestellen — F-56 ist genau
+    daran entstanden.** Die Weiche stand bis dahin inline in
+    ``imd_monatsaggregat``, und der Export baute sie daneben nach: **ohne** den
+    ``hat_gemessene_betriebsart``-Zweig. Folge: Wer die mit v4.0.24 neu
+    eingeführten Zähler zuordnete, sah die Aufteilung in eedc — und bekam in
+    Home Assistant **keinen Wert**. Genau davor warnt der Modul-Kopf von
+    ``modus_split_monat.py`` seit F-52 wörtlich: *„eine Regel, die an zwei
+    Stellen nachgebaut wird, driftet."* Sie ist im selben Paket noch einmal
+    gedriftet.
+
+    ⚠ **Ganz oder gar nicht je Zeile** (Begründung ausführlich in
+    ``imd_monatsaggregat``): Ein Balken, dessen eine Hälfte aus einem Zähler und
+    dessen andere aus einer Rechnung stammt, trägt ein halbwahres Etikett — und
+    das ist schlechter als eine fehlende Zahl (ADR-002/P4).
+    """
+    daten = daten if isinstance(daten, dict) else {}
+    abdeckung = _zahl(daten.get(MODUS_ABDECKUNG_FELD))
+    if hat_gemessene_betriebsart(daten):
+        return ModusStromZeile(
+            heizen_kwh=betriebsart_strom_kwh(daten, HEIZEN) or 0.0,
+            kuehlen_kwh=betriebsart_strom_kwh(daten, KUEHLEN) or 0.0,
+            gemessen=True,
+            abdeckung_h=abdeckung,
+        )
+    return ModusStromZeile(
+        heizen_kwh=_zahl(daten.get(MODUS_STROM_FELD[HEIZEN])),
+        kuehlen_kwh=_zahl(daten.get(MODUS_STROM_FELD[KUEHLEN])),
+        gemessen=False,
+        abdeckung_h=abdeckung,
+    )
+
+
+def _zahl(wert) -> float:
+    try:
+        return float(wert or 0)
+    except (TypeError, ValueError):
+        return 0.0

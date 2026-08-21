@@ -53,6 +53,7 @@ from backend.api.routes.strompreise import (
 from backend.core.betriebsmodus import HEIZEN as BM_HEIZEN
 from backend.core.betriebsmodus import KUEHLEN as BM_KUEHLEN
 from backend.core.betriebsmodus import MODUS_ABDECKUNG_FELD, MODUS_STROM_FELD
+from backend.core.berechnungen.betriebsart_gemessen import modus_strom_zeile
 from backend.core.field_definitions import get_emob_pv_netz_kwh, get_wp_strom_kwh
 from backend.core.berechnungen.phev_anteil import teile_fahrleistung
 from backend.core.berechnungen.kapitalrechnung import (
@@ -1426,6 +1427,11 @@ async def calculate_investition_sensors(
         gesamt_modus_heizen = 0.0
         gesamt_modus_kuehlen = 0.0
         gesamt_modus_abdeckung_h = 0.0
+        #: F-56 — trägt irgendeine Zeile GEMESSENE Betriebsart-Zähler? Dann
+        #: dürfen die beiden Sensoren erscheinen, auch ohne Modus-Abdeckung:
+        #: die Abdeckung ist die Zeitbasis des *abgeleiteten* Wegs und bleibt
+        #: bei gemessenen Zählern zu Recht 0.
+        gesamt_modus_gemessen = False
         #: F-52: Was der Abschluss schon festgeschrieben hat — und der gepflegte
         #: Gesamtwert je Monat. Beides braucht der Nachtrag unten, um
         #: „gespeichert schlägt gerechnet" und die Teilmengen-Invariante
@@ -1434,13 +1440,24 @@ async def calculate_investition_sensors(
         gespeichert_je_monat: dict[tuple[int, int], dict[str, tuple[bool, float]]] = {}
         for md in monatsdaten:
             d = md.verbrauch_daten or {}
-            gesamt_modus_heizen += d.get(MODUS_STROM_FELD[BM_HEIZEN], 0) or 0
-            gesamt_modus_kuehlen += d.get(MODUS_STROM_FELD[BM_KUEHLEN], 0) or 0
-            gesamt_modus_abdeckung_h += d.get(MODUS_ABDECKUNG_FELD, 0) or 0
+            # F-56: **gemessen schlägt abgeleitet**, über den Layer-SoT —
+            # nicht daneben nachgebaut. Genau dieser Nachbau (`d.get(
+            # MODUS_STROM_FELD[…])` plus eine Abdeckungs-Prüfung ohne den
+            # Gemessen-Zweig) ließ die beiden Sensoren stumm, während Cockpit
+            # und Komponenten-Hub die Aufteilung schon zeigten.
+            _zeile = modus_strom_zeile(d)
+            gesamt_modus_heizen += _zeile.heizen_kwh
+            gesamt_modus_kuehlen += _zeile.kuehlen_kwh
+            gesamt_modus_abdeckung_h += _zeile.abdeckung_h
+            gesamt_modus_gemessen = gesamt_modus_gemessen or _zeile.gemessen
             gesamt_strom += get_wp_strom_kwh(d, investition.parameter)
             gespeichert_je_monat[(md.jahr, md.monat)] = {
                 str(investition.id): (
-                    float(d.get(MODUS_ABDECKUNG_FELD) or 0) > 0,
+                    # ⚠ `hat_aufteilung`, nicht nur die Abdeckung: eine
+                    # gemessene Zeile braucht den gerechneten Split nicht und
+                    # darf ihn nicht zusätzlich bekommen (Doppelzählung).
+                    # `monats_fakten.py` wendet dieselbe Weiche an.
+                    _zeile.hat_aufteilung,
                     get_wp_strom_kwh(d, investition.parameter),
                 )
             }
@@ -1533,15 +1550,15 @@ async def calculate_investition_sensors(
                     wp_kosten = gesamt_strom * wp_netzbezug_preis / 100
                     value = alte_kosten - wp_kosten
                     berechnung = f"{alte_kosten:.2f} (alt) - {wp_kosten:.2f} (WP)"
-            elif sensor.key == "wp_strom_heizen_modus_kwh":
+            elif sensor.key == "wp_strom_heizen_modus_kwh":  # noqa: E501
                 # Ohne erfassten Modus bleibt der Sensor leer — er behauptete
                 # sonst „0 kWh geheizt" für ein Gerät, das eedc nicht beobachtet
                 # hat. In HA-Langzeitstatistik lebt so eine 0 weiter.
-                if gesamt_modus_abdeckung_h > 0:
+                if gesamt_modus_abdeckung_h > 0 or gesamt_modus_gemessen:
                     value = gesamt_modus_heizen
                     berechnung = f"{gesamt_modus_heizen:.1f} von {gesamt_strom:.1f} kWh gesamt"
             elif sensor.key == "wp_strom_kuehlen_modus_kwh":
-                if gesamt_modus_abdeckung_h > 0:
+                if gesamt_modus_abdeckung_h > 0 or gesamt_modus_gemessen:
                     value = gesamt_modus_kuehlen
                     berechnung = f"{gesamt_modus_kuehlen:.1f} von {gesamt_strom:.1f} kWh gesamt"
             elif sensor.key == "wp_kompressor_starts":
