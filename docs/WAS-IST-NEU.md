@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** August 2026 (v4.0.24)
+> **Stand:** August 2026 (v4.0.25)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -9,7 +9,7 @@
 
 ---
 
-## [Unreleased]
+## v4.0.25 — Ablesen, nicht aufsummieren
 
 **Dein Gaszähler zeigt jetzt die Zahl, die auf dem Zähler steht**
 

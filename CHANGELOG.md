@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.0.25] - 2026-08-21 — Ablesen, nicht aufsummieren
 
 ### Fixed
 
