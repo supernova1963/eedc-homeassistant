@@ -90,6 +90,10 @@ class ZaehlerFenster:
     #: False, wenn der Anfangsstand **nach** dem Fensterbeginn liegt — dann
     #: deckt `differenz` nur einen Teil des Fensters ab.
     anfang_vollstaendig: bool = True
+    #: True, wenn der Endstand **kleiner** ist als der Anfangsstand. Ein
+    #: Zählerstand läuft nicht rückwärts — dann ist die Reihe gebrochen und
+    #: `differenz` bleibt `None`, statt einen negativen „Verbrauch" zu melden.
+    reihe_gebrochen: bool = False
     verlauf: list[VerlaufPunkt] = field(default_factory=list)
 
 
@@ -287,7 +291,26 @@ async def lade_zaehlerstaende(
                 # Differenz 0 ist hier die richtige Aussage, nicht „unbekannt".
                 fenster.stand_ende = davor[-1].stand
             if fenster.stand_anfang is not None and fenster.stand_ende is not None:
-                fenster.differenz = round(fenster.stand_ende - fenster.stand_anfang, 3)
+                roh = fenster.stand_ende - fenster.stand_anfang
+                if roh < 0:
+                    # **Ein Zählerstand läuft nicht rückwärts.** Fällt er doch,
+                    # ist nicht die Menge negativ — die *Reihe* ist gebrochen:
+                    # Zähler getauscht ohne Stilllegung, Sensor ersetzt, oder
+                    # der gemischte Fall aus Sensor und Handeingabe.
+                    #
+                    # ⚑ Auch der F-58-Übergang erzeugt ihn genau einmal: bis
+                    # v4.0.24 trug der Snapshot HAs `sum` (eine Menge), seither
+                    # den `state` (den Stand). Wo die Summe größer war als der
+                    # Stand, fällt die Reihe an dieser einen Stelle.
+                    #
+                    # Eine negative Differenz auszuweisen wäre die schlechtere
+                    # Antwort: sie sieht aus wie eine gemessene Menge (P4 —
+                    # lieber keine Aussage als eine falsche). Die Reihe heilt
+                    # sich über *Tag neu berechnen* / Vollbackfill, soweit HA
+                    # die Statistik noch hat.
+                    fenster.reihe_gebrochen = True
+                else:
+                    fenster.differenz = round(roh, 3)
             if mit_verlauf:
                 fenster.verlauf = drin
         out.append(fenster)

@@ -287,6 +287,21 @@ zuordnen — dann schreibt eedc stündlich mit), oder du trägst ihn im
 **Monatsabschluss** von Hand ein: das Feld heißt *Zählerstand*. Wo ein Sensor
 läuft, wird der mitgeschriebene Stand als Vorschlag angeboten.
 
+> ⚠ **Entweder Sensor oder Handeingabe — nicht gemischt.** Ein von Hand
+> eingetragener Stand gilt für genau diesen einen Monat; der nächste kommt
+> wieder vom Sensor. Weichen beide voneinander ab, entsteht dazwischen ein
+> Sprung, der wie ein riesiger Verbrauch aussähe. eedc weist ihn deshalb nicht
+> als Menge aus, sondern sagt „Der Stand ist gefallen — die Reihe hat einen
+> Bruch".
+
+> ⚠ **Weicht die Zahl auf deinem Zähler von der im Sensor ab, gehört die
+> Korrektur an den Sensor** — in Home Assistant oder in der App, die die Werte
+> per MQTT schickt. Dort stimmt sie danach überall, auch in deinen
+> HA-Dashboards und Automationen. eedc bietet bewusst kein zweites Startwert-
+> oder Offset-Feld an: Du hättest sonst zwei Zahlen für denselben Zähler. Auf
+> deinen **Verbrauch** hat der Versatz ohnehin keine Wirkung — die einzige
+> Rechnung ist Ende minus Anfang, und die Differenz bleibt dieselbe.
+
 > ⚠ **Zählerwechsel: das alte Gerät stilllegen, ein neues anlegen.**
 > Setz beim alten Zähler ein **Stilllegungsdatum** — und lass ihn dabei
 > **aktiv**. Dann bleibt seine Ablesehistorie in allen Auswertungen erhalten, in

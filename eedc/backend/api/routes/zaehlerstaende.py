@@ -49,6 +49,11 @@ class ZaehlerStandResponse(BaseModel):
     #: False = die Aufzeichnung beginnt **innerhalb** des Fensters, die
     #: Differenz deckt also nur einen Teil davon ab. Die Anzeige sagt es an.
     anfang_vollstaendig: bool = True
+    #: True = der Endstand liegt **unter** dem Anfangsstand. Ein Zählerstand
+    #: läuft nicht rückwärts ⇒ die Reihe ist gebrochen (Zählertausch ohne
+    #: Stilllegung, Sensorwechsel, oder der einmalige F-58-Übergang).
+    #: ``differenz`` ist dann ``None`` — keine Aussage statt einer falschen.
+    reihe_gebrochen: bool = False
     verlauf: list[ZaehlerVerlaufPunktResponse] = []
 
 
@@ -121,6 +126,7 @@ async def get_zaehlerstaende(
             stand_ende=f.stand_ende,
             differenz=f.differenz,
             anfang_vollstaendig=f.anfang_vollstaendig,
+            reihe_gebrochen=f.reihe_gebrochen,
             verlauf=[
                 ZaehlerVerlaufPunktResponse(zeitpunkt=p.zeitpunkt, stand=p.stand)
                 for p in f.verlauf
@@ -157,6 +163,7 @@ async def get_zaehlerstaende_heute(
             stand_ende=f.stand_ende,
             differenz=f.differenz,
             anfang_vollstaendig=f.anfang_vollstaendig,
+            reihe_gebrochen=f.reihe_gebrochen,
         )
         for f in fenster
     ]

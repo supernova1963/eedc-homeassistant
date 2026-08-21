@@ -221,7 +221,11 @@ async def test_get_snapshot_ha_swap_self_heal(db):
     ha_svc = MagicMock()
     ha_svc.is_available = True
     ha_svc.get_value_at = MagicMock(
-        side_effect=lambda eid, zp, tol: 123.0 if eid == "sensor.NEU" else None
+        # `**_` deckt `als_stand` (F-58) ab: Der Leser bekommt seither die Frage
+        # mit, ob ein **Stand** oder eine **Menge** geholt wird. Die Attrappe
+        # spiegelt die Signatur des echten Lesers — sonst prüft sie eine
+        # Aufrufform, die es nicht mehr gibt.
+        side_effect=lambda eid, zp, tol, **_: 123.0 if eid == "sensor.NEU" else None
     )
     qe = {"basis:einspeisung": ("ha_connector", "sensor.NEU")}
     with patch("backend.services.snapshot.reader.get_ha_statistics_service",
@@ -229,7 +233,10 @@ async def test_get_snapshot_ha_swap_self_heal(db):
         wert = await get_snapshot(db, 1, "basis:einspeisung", "sensor.ALT", ts,
                                   quellen_energy=qe)
     assert wert == 123.0
-    ha_svc.get_value_at.assert_called_with("sensor.NEU", ts, 10)
+    # `als_stand=False` gehört zur Aussage: `basis:einspeisung` ist eine
+    # **Menge** und bleibt es (F-58) — sonst füllte der Self-Heal-Pfad die
+    # Lücke mit der falschen Größe.
+    ha_svc.get_value_at.assert_called_with("sensor.NEU", ts, 10, als_stand=False)
 
 
 @pytest.mark.asyncio

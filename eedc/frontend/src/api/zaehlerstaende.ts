@@ -35,6 +35,14 @@ export interface ZaehlerStand {
    * eine zu kleine Zahl kommentarlos hinzustellen.
    */
   anfang_vollstaendig: boolean
+  /**
+   * `true` = der Endstand liegt **unter** dem Anfangsstand. Ein Zählerstand
+   * läuft nicht rückwärts ⇒ die Reihe ist gebrochen (Zählertausch ohne
+   * Stilllegung, Sensorwechsel, oder der einmalige F-58-Übergang von HAs
+   * `sum` auf `state`). `differenz` ist dann `null` — die Anzeige sagt den
+   * Bruch an, statt eine negative „Menge" hinzustellen.
+   */
+  reihe_gebrochen: boolean
   verlauf: ZaehlerVerlaufPunkt[]
 }
 

@@ -17,6 +17,7 @@ from backend.core.field_definitions import (
     SONSTIGES_KATEGORIE_UNGEPFLEGT,
     SONSTIGES_VERBRAUCH_FELDER,
     basis_feld_key,
+    ist_stand_feld,
     kumulative_zaehler_felder_je_typ,
 )
 
@@ -149,6 +150,22 @@ def _sensor_key_to_mqtt_key(sensor_key: str) -> Optional[str]:
             _, inv_id, feld = parts
             return f"inv/{inv_id}/{feld}"
     return None
+
+
+def ist_stand_sensor_key(sensor_key: str) -> bool:
+    """Trägt dieser Snapshot-Key einen **Stand** statt einer Menge? (F-58)
+
+    Die Frage entscheidet, welche Spalte der HA-Statistik gelesen wird —
+    `state` für einen Stand, `sum` für eine Menge. Sie wird **am Feld**
+    beantwortet (`field_definitions.STAND_FELDER`); hier steht nur die
+    Zerlegung des Keys, damit der Schreibpfad sie nicht selbst nachbaut.
+
+    Keys sind `basis:<feld>` oder `inv:<id>:<feld>` — in beiden Fällen ist das
+    Feld der letzte Abschnitt.
+    """
+    if not sensor_key:
+        return False
+    return ist_stand_feld(sensor_key.rpartition(":")[2])
 
 
 def _is_kumulativ_feld(feld_name: str) -> bool:

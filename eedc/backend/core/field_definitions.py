@@ -597,6 +597,21 @@ INVESTITION_FELDER: dict = {
                 "feld": "zaehlerstand", "label": "Zählerstand", "einheit": "",
                 "einheit_je_geraet": "zaehler_einheit",
                 "csv_suffix": "Zaehlerstand",
+                # ⚑ **`stand: True` — der Marker, an dem F-58 hing** (dietmar1968,
+                # T89667 #185, 21.08.2026). Der stündliche Snapshot-Job holte den
+                # Wert wie jeden anderen Zähler über `get_value_at`, und das nimmt
+                # bei `has_sum` **ausschließlich HAs `sum`**: die reset-bereinigte
+                # **Verbrauchssumme seit Aufzeichnungsbeginn**. Für einen
+                # Energiezähler ist das richtig und ausdrücklich so entschieden
+                # (v3.25.18 / #184) — für einen **Zählerstand** ist es die falsche
+                # Größe. Sein Wasserzähler meldete 47,360 m³, eedc zeigte 90.
+                #
+                # Ein Zählerstand ist eine **Bestandsgröße**: die Zahl, die auf dem
+                # Zähler steht. Sie kommt aus `state`, nie aus `sum`, und sie wird
+                # **nicht umgerechnet** (§3 des Modells). Der Marker steht am Feld
+                # und nicht als Liste in `snapshot/keys.py` — das war N-259, wo
+                # genau so eine zweite Handliste auseinandergelaufen ist.
+                "stand": True,
                 "hinweis": (
                     "Der abgelesene Zählerstand — die Zahl, die auf dem Zähler steht "
                     "(Gas, Wasser, Heizöl …). eedc rechnet daraus nur die Differenz "
@@ -1930,6 +1945,67 @@ def kumulative_zaehler_felder_je_typ() -> dict[str, tuple[str, ...]]:
         if namen:
             out[typ] = tuple(namen)
     return out
+
+
+def stand_felder() -> frozenset[str]:
+    """Die Felder, deren Wert ein **Stand** ist und keine Menge — abgeleitet
+    aus `INVESTITION_FELDER` über den Marker ``stand: True``.
+
+    **Warum es diese Unterscheidung gibt (F-58, 21.08.2026).** Die
+    Snapshot-Schiene holt jeden gemappten Zähler über
+    `ha_statistics_service.get_value_at`, und das nimmt bei einem Sensor mit
+    `has_sum` **ausschließlich HAs `sum`** — die reset-bereinigte
+    Verbrauchssumme seit Aufzeichnungsbeginn. Das ist für eine **Flussgröße**
+    richtig und bewusst so entschieden (v3.25.18, Issue #184): ein
+    utility_meter mit Tagesreset hat in `state` den Tageswert, nur `sum` ist
+    die Lebensdauer-Zahl.
+
+    Für eine **Bestandsgröße** ist dieselbe Wahl falsch. Der Zählerstand eines
+    Gas-, Wasser- oder Ölzählers ist die Zahl, die auf dem Zähler steht; sie
+    steht in `state`. Ein Melder sah 90 m³, wo sein Sensor 47,360 m³ meldete —
+    und wir haben ihm zunächst geantwortet, eedc zeige „genau die Zahl, die
+    dein Sensor meldet".
+
+    ⚠ **Der zweite Zweig war genauso falsch:** ohne `has_sum` verlangt
+    `_value_at_wert` eine Energie-Einheit und liefert sonst `None`. Ein
+    Wasserzähler in m³ bekam damit **gar keinen** Snapshot. Ein Stand-Feld
+    braucht beides nicht — es liest `state` und rechnet nichts um.
+
+    ⛔ **Was hier bewusst NICHT steht: `wp_starts_anzahl` und
+    `wp_betriebsstunden`.** Sie sind zwar ebenfalls Bestandsgrößen, aber ihr
+    Snapshot wird **nur differenziert** (`aggregate_day`), und der
+    Lebensdauer-Stand kommt aus einem eigenen Leser
+    (`snapshot/reader.get_counter_lifetime`, HA-Live-State zuerst). Sie
+    umzustellen hieße, eine bestehende Reihe von `sum` auf `state` zu
+    verschieben — bei einer WP, deren Gerätezähler weit über HAs
+    Aufzeichnungssumme liegt, ergäbe das an genau einem Tag einen Sprung in
+    der Größe des Lebensdauer-Zählers. `_get_counter_deltas_for_day` kappt
+    **negative** Deltas, positive nicht. Das ist als Nebenfund geführt, nicht
+    als Auslassung.
+    """
+    namen: set[str] = set()
+    for felder in INVESTITION_FELDER.values():
+        listen = (list(felder.values()) if isinstance(felder, dict) else [felder])
+        for liste in listen:
+            for f in liste:
+                if f.get("stand"):
+                    namen.add(f["feld"])
+    return frozenset(namen)
+
+
+#: Die Stand-Felder als Konstante — einmal abgeleitet, überall dieselbe Antwort.
+STAND_FELDER: Final[frozenset[str]] = stand_felder()
+
+
+def ist_stand_feld(feld: str) -> bool:
+    """Ist der Wert dieses Feldes ein **Stand** (Bestandsgröße)?
+
+    Mit Innengeräte-Auflösung wie jede andere Namens-Whitelist — ein Feld-Key
+    kann das Suffix `-<id>` tragen (`basis_feld_key`).
+    """
+    if not feld:
+        return False
+    return basis_feld_key(feld) in STAND_FELDER
 
 
 # =============================================================================

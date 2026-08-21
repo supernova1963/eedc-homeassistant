@@ -31,6 +31,7 @@ from backend.services.snapshot.keys import (
     _is_kumulativ_feld,
     _mqtt_key_to_sensor_key,
     extract_quellen_energy,
+    ist_stand_sensor_key,
 )
 from backend.services.snapshot.source import (
     SnapshotSource,
@@ -288,8 +289,11 @@ async def snapshot_anlage(
             # an — je Zähler, je Lauf. Bei einer Anlage mit zwanzig Zählern
             # stand die Oberfläche für die Dauer aller zwanzig Abfragen. Der
             # Job darf langsam sein, er darf nur nichts blockieren.
+            # F-58: Ein Stand-Feld (Gas-/Wasser-/Ölzähler) liest `state`, jede
+            # Menge liest `sum`. Entschieden wird am Feld, nicht hier.
             wert = await asyncio.to_thread(
-                ha_svc.get_value_at, entity_id, zeitpunkt, toleranz_minuten=10
+                ha_svc.get_value_at, entity_id, zeitpunkt, 10, False,
+                ist_stand_sensor_key(sensor_key),
             )
             if wert is None:
                 # Recovery-Pfad: existierenden Eintrag löschen, damit ein
@@ -418,7 +422,7 @@ async def snapshot_anlage_5min(
         # Event-Loop. Dieser Job läuft alle fünf Minuten.
         wert = await asyncio.to_thread(
             ha_svc.get_value_at,
-            entity_id, zeitpunkt, toleranz_minuten=3, short_term=True,
+            entity_id, zeitpunkt, 3, True, ist_stand_sensor_key(sensor_key),
         )
         if wert is None:
             if force_resnap:

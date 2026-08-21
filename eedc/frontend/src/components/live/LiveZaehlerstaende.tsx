@@ -35,6 +35,14 @@ export default function LiveZaehlerstaende({ staende }: { staende: ZaehlerStand[
             </div>
             {/* Die Veränderung ist die EINZIGE Rechnung auf einem Zählerstand.
                 Fehlt ein Stand, steht hier nichts — nicht „0" (ADR-002/P4). */}
+            {z.differenz == null && z.reihe_gebrochen && (
+              <div
+                className="text-xs text-gray-500 dark:text-gray-400"
+                title="Der Endstand liegt unter dem Anfangsstand. Das kann ein Zählerstand nicht — die Reihe hat einen Bruch (Zählertausch, Sensorwechsel)."
+              >
+                Reihe gebrochen
+              </div>
+            )}
             {z.differenz != null && (
               <div className="text-xs text-gray-500 dark:text-gray-400">
                 heute {z.differenz >= 0 ? '+' : ''}

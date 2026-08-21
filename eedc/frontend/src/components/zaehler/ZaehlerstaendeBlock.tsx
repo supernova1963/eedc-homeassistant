@@ -133,6 +133,16 @@ export default function ZaehlerstaendeBlock({
                       </div>
                     )}
                   </>
+                ) : z.reihe_gebrochen ? (
+                  /* Kein „—" ohne Grund: Der Stand ist gefallen, und das kann
+                     eine Menge nicht. Wer hier nur einen Strich sieht, sucht
+                     den Fehler bei sich. */
+                  <span className="font-normal text-gray-500 dark:text-gray-400">
+                    <span className="text-gray-400 dark:text-gray-500">—</span>
+                    <div className="text-xs">
+                      Der Stand ist gefallen — die Reihe hat einen Bruch
+                    </div>
+                  </span>
                 ) : (
                   <span className="font-normal text-gray-400 dark:text-gray-500">—</span>
                 )}

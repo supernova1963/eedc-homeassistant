@@ -1204,6 +1204,7 @@ class HAStatisticsService:
         zeitpunkt: datetime,
         toleranz_minuten: int = 120,
         short_term: bool = False,
+        als_stand: bool = False,
     ) -> Optional[float]:
         """
         Holt den kumulativen Zählerstand zu einem bestimmten Zeitpunkt.
@@ -1221,6 +1222,17 @@ class HAStatisticsService:
         Tagesreset-Zählern, wo `state` nach Mitternacht zurück springt),
         Fallback auf `state` wenn sum NULL ist (measurement-Sensoren ohne
         has_sum).
+
+        ⚑ **Ausnahme `als_stand=True` (F-58):** Dann wird `state` gelesen und
+        **nie** `sum`. Das ist kein Sonderweg, sondern die andere Hälfte
+        derselben Regel: `sum` ist eine **Menge** (Verbrauchssumme seit
+        Aufzeichnungsbeginn), `state` ist der **Stand**. Wer einen Zählerstand
+        über den Mengen-Zweig holt, bekommt eine Zahl, die mit dem Zähler
+        nichts zu tun hat — gemeldet an einem Wasserzähler, der 47,360 m³
+        zeigte, während eedc 90 anzeigte. Wer eine Menge über den Stand-Zweig
+        holt, bekommt bei einem Tagesreset-Zähler den Tageswert. **Beide
+        Richtungen sind falsch, deshalb entscheidet das Feld** — der Marker
+        steht in `field_definitions.STAND_FELDER`, nicht hier.
 
         Zweck: Self-Healing-Lookup für SensorSnapshot-Tabelle bei Lücken
         (z.B. Scheduler-Ausfall, Vollbackfill historischer Tage).
@@ -1274,7 +1286,7 @@ class HAStatisticsService:
                     return None
                 naechste = min(kandidaten, key=lambda z: abs(z["start_ts"] - ts_target))
                 row = (naechste["sum"], naechste["state"])
-                return self._value_at_wert(row, meta)
+                return self._value_at_wert(row, meta, als_stand=als_stand)
 
             # Filter UND Sortierung auf dem rohen `start_ts`: beides lief vorher
             # über `FROM_UNIXTIME`/`datetime(...)` und schloss damit den Index
@@ -1303,15 +1315,34 @@ class HAStatisticsService:
             row = result.fetchone()
             if not row:
                 return None
-            return self._value_at_wert(row, meta)
+            return self._value_at_wert(row, meta, als_stand=als_stand)
 
-    def _value_at_wert(self, row, meta: SensorMeta) -> Optional[float]:
-        """Wählt aus `(sum, state)` den gültigen Zählerstand in kWh.
+    def _value_at_wert(
+        self, row, meta: SensorMeta, als_stand: bool = False
+    ) -> Optional[float]:
+        """Wählt aus `(sum, state)` den gültigen Wert.
 
-        Gemeinsam für beide Transporte: welche Spalte ein Zählerstand ist und
-        wann gar keiner geliefert werden darf, ist eine fachliche Regel — die
-        Antwort darf nicht davon abhängen, woher die Zeile kam.
+        Gemeinsam für beide Transporte: welche Spalte gilt und wann gar nichts
+        geliefert werden darf, ist eine fachliche Regel — die Antwort darf
+        nicht davon abhängen, woher die Zeile kam.
         """
+        if als_stand:
+            # F-58: Ein **Stand** steht in `state`, immer. Kein `sum`-Vorzug,
+            # kein `sum`-Fallback — die Summe ist eine andere Größe, und sie
+            # käme hier still und plausibel aussehend heraus.
+            #
+            # ⚠ **Und keine Einheiten-Umrechnung.** Der Energie-Zweig unten
+            # rechnet Wh/MWh nach kWh; ein Zählerstand wird grundsätzlich nicht
+            # umgerechnet (Modell §3, `services/zaehlerstaende.py`) — die
+            # Einheit steht in den Stammdaten des Geräts und dient der Anzeige.
+            # Ein Gaszähler, der in „MWh" meldet, soll seinen Stand zeigen und
+            # nicht das Tausendfache davon.
+            #
+            # Der Energie-Zweig unten würde einen Wasserzähler zusätzlich ganz
+            # verwerfen: ohne `has_sum` verlangt er eine Einheit aus
+            # `_ENERGY_UNIT_TO_KWH`, und „m³" steht dort nicht.
+            wert = row[1]
+            return None if wert is None else round(wert, 3)
         # Bei kumulativen Energiezählern (has_sum=True) ausschließlich
         # `sum` verwenden — niemals auf `state` zurückfallen.
         # `sum` ist HAs reset-bereinigte Lifetime-Summe; `state` kann

@@ -26,6 +26,7 @@ from backend.services.ha_statistics_service import get_ha_statistics_service
 from backend.services.snapshot.keys import (
     KUMULATIVE_COUNTER_FELDER,
     _sensor_key_to_mqtt_key,
+    ist_stand_sensor_key,
     resolve_energy_snapshot_eid,
 )
 from backend.services.snapshot.source import SnapshotSource
@@ -151,7 +152,12 @@ async def get_snapshot(
     if sensor_id:
         ha_svc = get_ha_statistics_service()
         if ha_svc.is_available:
-            wert = ha_svc.get_value_at(sensor_id, zeitpunkt, ha_toleranz_minuten)
+            # F-58: Auch der Self-Healing-Read muss die richtige Spalte
+            # nehmen — sonst repariert er eine Lücke mit der falschen Größe.
+            wert = ha_svc.get_value_at(
+                sensor_id, zeitpunkt, ha_toleranz_minuten,
+                als_stand=ist_stand_sensor_key(sensor_key),
+            )
             if wert is not None:
                 quelle = SnapshotSource.HA_STATISTICS
 
@@ -265,7 +271,10 @@ async def get_counter_lifetime(
     if wert is None:
         ha_svc = get_ha_statistics_service()
         if ha_svc.is_available:
-            wert = ha_svc.get_value_at(entity_id, datetime.now(), toleranz_minuten=120)
+            wert = ha_svc.get_value_at(
+                entity_id, datetime.now(), toleranz_minuten=120,
+                als_stand=ist_stand_sensor_key(f"inv:{inv.id}:{feld}"),
+            )
 
     if wert is None:
         sensor_key = f"inv:{inv.id}:{feld}"

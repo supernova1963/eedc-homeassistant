@@ -27,6 +27,7 @@ from backend.services.snapshot.keys import (
     KUMULATIVE_COUNTER_FELDER,
     _mqtt_key_to_sensor_key,
     extract_quellen_energy,
+    ist_stand_sensor_key,
     resolve_energy_ha_eid,
 )
 from backend.services.snapshot.komponenten_beitraege import (
@@ -207,7 +208,10 @@ async def get_reaggregate_preview(
             # neu: HA-Stats lookup (kein Schreiben)
             neu = None
             if entity_id and ha_verfuegbar:
-                neu = ha_svc.get_value_at(entity_id, zp, toleranz_minuten=10)
+                neu = ha_svc.get_value_at(
+                    entity_id, zp, toleranz_minuten=10,
+                    als_stand=ist_stand_sensor_key(sensor_key),
+                )
             snap_neu[sensor_key][h] = neu
 
             boundaries.append({
@@ -342,8 +346,11 @@ async def get_reaggregate_preview(
             # zugeordnete Counter haben keine HA-„neu"-Projektion.
             neu_entity, behalten = resolve_energy_ha_eid(quellen_energy, sensor_key, entity_id)
             if ha_verfuegbar and behalten and neu_entity:
-                neu_start = ha_svc.get_value_at(neu_entity, tag_0, toleranz_minuten=10)
-                neu_ende = ha_svc.get_value_at(neu_entity, tag_ende, toleranz_minuten=10)
+                _stand = ist_stand_sensor_key(sensor_key)
+                neu_start = ha_svc.get_value_at(
+                    neu_entity, tag_0, toleranz_minuten=10, als_stand=_stand)
+                neu_ende = ha_svc.get_value_at(
+                    neu_entity, tag_ende, toleranz_minuten=10, als_stand=_stand)
                 if neu_start is not None and neu_ende is not None:
                     d = neu_ende - neu_start
                     if d >= 0:
