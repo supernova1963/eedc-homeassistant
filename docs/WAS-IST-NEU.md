@@ -136,6 +136,33 @@ aufzutauchen, wenn man die 0 schon eingetippt hat.
 
 ---
 
+**Die CSV-Vorlage passt wieder zum eigenen Import**
+
+Wenn du dir unter *Einstellungen → Daten* die **personalisierte CSV-Vorlage**
+holst, sie ausfüllst und wieder importierst, meldete eedc „Import erfolgreich" —
+und **drei Werte fehlten danach**, ohne einen Hinweis: die **Netzladung** eines
+Speichers mit Arbitrage, der **Einspeise-Erlös** eines Erzeugers unter
+*Sonstiges*, und der **Zählerstand** eines Verbrauchszählers. Beim Zähler ist
+das der einzige Wert überhaupt — über die Vorlage war er noch nie importierbar.
+
+Die Vorlage schrieb für diese drei Spalten andere Überschriften, als der Import
+erwartete. Jetzt kommen beide aus derselben Quelle, und eine neue Prüfung fährt
+bei jedem Bau den ganzen Weg ab: Vorlage erzeugen, ausfüllen, importieren,
+jeden Wert wiederfinden.
+
+**Was du tun kannst, wenn es dich getroffen hat:** Lade die Vorlage **neu**
+herunter — die alte trägt die falschen Überschriften. Trage die fehlenden Werte
+ein und importiere sie mit gesetztem Haken *Bestehende Monate überschreiben*.
+Alles andere aus deiner alten Datei ist angekommen.
+
+Und noch eine Kleinigkeit: Steht bei dir eine **Wallbox**, bot die Vorlage am
+E-Auto zusätzlich *PV-Ladung* und *Netz-Ladung* an, obwohl der Monatsabschluss
+diese Felder dort ausblendet — die Wallbox misst die Heimladung. Diese Spalten
+sind aus der Vorlage verschwunden. Was du früher eingetragen hast, bleibt
+stehen; der Import nimmt sie weiterhin an.
+
+---
+
 ## v4.0.23 — Was zählt, und was nicht
 
 **Gas, Wasser, Heizöl: Zähler mitführen — ohne dass eedc sie bewertet**

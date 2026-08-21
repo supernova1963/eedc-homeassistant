@@ -23,23 +23,10 @@ from backend.services.wetter.orchestrator import get_wetterdaten
 from backend.utils.sonstige_positionen import berechne_sonstige_summen, get_sonstige_positionen
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage
 from backend.core.field_definitions import (
-    INVESTITION_FELDER,
     basis_feld_key,
     get_felder_fuer_investition,
-    get_felder_fuer_sonstiges,
     innengeraet_id_von_feld,
 )
-
-#: Die `csv_suffix`-Einträge der Registry, flach nach Feldname. Damit die
-#: Spaltentabelle unten neue Felder aus der einen Quelle ziehen kann, statt sie
-#: ein zweites Mal zu führen.
-_REGISTRY_CSV_SUFFIX: dict[str, str] = {
-    e["feld"]: e["csv_suffix"]
-    for _felder in INVESTITION_FELDER.values()
-    for _liste in (list(_felder.values()) if isinstance(_felder, dict) else [_felder])
-    for e in _liste
-    if e.get("csv_suffix")
-}
 from backend.services.provenance import seed_provenance, write_with_provenance
 
 from .schemas import ImportResult, CSVTemplateInfo
@@ -93,41 +80,62 @@ async def get_csv_template_info(anlage_id: int, db: AsyncSession = Depends(get_d
     investitionen = sort_investitionen_nach_typ(inv_result.scalars().all())
 
     # Personalisierte Spalten je nach Investition (v0.9)
-    # Spaltennamen: leserliche Bezeichnungen mit Einheit
-    # Feldnamen-Mapping: aus field_definitions (kanonische Keys)
-    CSV_SPALTEN_SUFFIX = {
-        "pv_erzeugung_kwh":       ("_kWh",                  "{label} {bez} (kWh)"),
-        "ladung_kwh":             ("_Ladung_kWh",            "Ladung {bez} (kWh)"),
-        "entladung_kwh":          ("_Entladung_kWh",         "Entladung {bez} (kWh)"),
-        "ladung_netz_kwh":        ("_Netzladung_kWh",        "Netzladung {bez} (kWh) - Arbitrage"),
-        "speicher_ladepreis_cent":("_Ladepreis_Cent",        "Ø Ladepreis {bez} (ct/kWh) - Arbitrage"),
-        "stromverbrauch_kwh":     ("_Strom_kWh",             "Stromverbrauch {bez} (kWh)"),
-        "strom_heizen_kwh":       ("_Strom_Heizen_kWh",      "Strom Heizen {bez} (kWh)"),
-        "strom_warmwasser_kwh":   ("_Strom_Warmwasser_kWh",  "Strom Warmwasser {bez} (kWh)"),
-        "heizenergie_kwh":        ("_Heizung_kWh",           "Heizenergie {bez} (kWh)"),
-        "warmwasser_kwh":         ("_Warmwasser_kWh",        "Warmwasser {bez} (kWh)"),
-        "km_gefahren":            ("_km",                    "Gefahrene km {bez}"),
-        "verbrauch_kwh":          ("_Verbrauch_kWh",         "Verbrauch {bez} (kWh)"),
-        "ladung_pv_kwh":          ("_Ladung_PV_kWh",         "PV-Ladung {bez} (kWh)"),
-        "ladung_netz_kwh":        ("_Ladung_Netz_kWh",       "Netz-Ladung {bez} (kWh)"),
-        "ladung_extern_kwh":      ("_Ladung_Extern_kWh",     "Externe Ladung {bez} (kWh)"),
-        "ladung_extern_euro":     ("_Ladung_Extern_Euro",    "Externe Ladekosten {bez} (€)"),
-        "v2h_entladung_kwh":      ("_V2H_kWh",               "V2H-Entladung {bez} (kWh)"),
-        "ladevorgaenge":          ("_Ladevorgaenge",          "Ladevorgänge {bez}"),
-        "eigenverbrauch_kwh":     ("_Eigenverbrauch_kWh",    "Eigenverbrauch {bez} (kWh)"),
-        "speicher_ladung_kwh":    ("_Speicher_Ladung_kWh",   "Speicher-Ladung {bez} (kWh)"),
-        "speicher_entladung_kwh": ("_Speicher_Entladung_kWh","Speicher-Entladung {bez} (kWh)"),
-        "erzeugung_kwh":          ("_Erzeugung_kWh",         "Erzeugung {bez} (kWh)"),
-        "verbrauch_sonstig_kwh":  ("_Verbrauch_kWh",         "Verbrauch {bez} (kWh)"),
-        "bezug_pv_kwh":           ("_Bezug_PV_kWh",          "Bezug PV {bez} (kWh)"),
-        "bezug_netz_kwh":         ("_Bezug_Netz_kWh",        "Bezug Netz {bez} (kWh)"),
-        "einspeisung_kwh":        ("_Einspeisung_kWh",       "Einspeisung {bez} (kWh)"),
+    #
+    # ⚠ **Der SPALTENNAME kommt aus der Registry** (`csv_suffix` am Feld) — aus
+    # derselben Quelle wie Export (unten) und Import (`helpers.py`). Diese
+    # Tabelle löst nur noch die **Beschreibungstexte** auf.
+    #
+    # Bis v4.0.23 baute die Vorlage ihren Spaltennamen aus einer zweiten,
+    # handgepflegten Liste. Die beiden liefen auseinander (F-55): drei Werte
+    # gingen beim eigenen Rundlauf schweigend verloren — `ladung_netz_kwh` am
+    # Speicher (`_Ladung_Netz_kWh` statt `_Netzladung_kWh`, das Literal führte
+    # den Key zweimal), `einspeise_erloes_euro` und `zaehlerstand` unter
+    # *Sonstiges* (roher Key statt Registry-Suffix; letzterer seit v4.0.23,
+    # #377 — der Verbrauchszähler war über die Vorlage nie importierbar).
+    # Beim BKW rettete nur `csv_suffix_alt` den Namen. Gemerkt hat es niemand,
+    # weil der Export dieselbe Quelle wie der Import liest: ein Test auf
+    # Export→Import ist grün und beweist nichts. Der Wächter fährt deshalb den
+    # **Rundlauf** (`test_csv_vorlage_rundlauf_f55.py`).
+    CSV_SPALTEN_BESCHREIBUNG = {
+        "pv_erzeugung_kwh":       "{label} {bez} (kWh)",
+        "ladung_kwh":             "Ladung {bez} (kWh)",
+        "entladung_kwh":          "Entladung {bez} (kWh)",
+        "speicher_ladepreis_cent":"Ø Ladepreis {bez} (ct/kWh) - Arbitrage",
+        "stromverbrauch_kwh":     "Stromverbrauch {bez} (kWh)",
+        "strom_heizen_kwh":       "Strom Heizen {bez} (kWh)",
+        "strom_warmwasser_kwh":   "Strom Warmwasser {bez} (kWh)",
+        "heizenergie_kwh":        "Heizenergie {bez} (kWh)",
+        "warmwasser_kwh":         "Warmwasser {bez} (kWh)",
+        "km_gefahren":            "Gefahrene km {bez}",
+        "verbrauch_kwh":          "Verbrauch {bez} (kWh)",
+        "ladung_pv_kwh":          "PV-Ladung {bez} (kWh)",
+        "ladung_extern_kwh":      "Externe Ladung {bez} (kWh)",
+        "ladung_extern_euro":     "Externe Ladekosten {bez} (€)",
+        "v2h_entladung_kwh":      "V2H-Entladung {bez} (kWh)",
+        "ladevorgaenge":          "Ladevorgänge {bez}",
+        "eigenverbrauch_kwh":     "Eigenverbrauch {bez} (kWh)",
+        "speicher_ladung_kwh":    "Speicher-Ladung {bez} (kWh)",
+        "speicher_entladung_kwh": "Speicher-Entladung {bez} (kWh)",
+        "erzeugung_kwh":          "Erzeugung {bez} (kWh)",
+        "verbrauch_sonstig_kwh":  "Verbrauch {bez} (kWh)",
+        "bezug_pv_kwh":           "Bezug PV {bez} (kWh)",
+        "bezug_netz_kwh":         "Bezug Netz {bez} (kWh)",
+        "einspeisung_kwh":        "Einspeisung {bez} (kWh)",
+        "einspeise_erloes_euro":  "Einspeise-Erlös {bez} (€)",
+        "zaehlerstand":           "{label} {bez}",
     }
-    # #263 — die Betriebsart-Zähler einer Split-Klimaanlage. Aus der Registry
-    # gelesen statt hier ein zehntes Mal getippt: `csv_suffix` steht dort am
-    # Feld, und diese Tabelle ist bereits eine zweite Liste derselben Sache.
-    # ⚠ Nur für DIESE Felder — die Bestandsspalten bleiben unangetastet, weil
-    # ihr Name der Schlüssel ist, an dem ein Import Werte wiederfindet.
+    # `ladung_netz_kwh` trägt zwei Bedeutungen an zwei Gerätetypen: beim
+    # Speicher Arbitrage-Netzladung, beim E-Auto die Netz-Heimladung. Der
+    # **Name** unterscheidet sie schon (Registry: `Netzladung_kWh` vs.
+    # `Ladung_Netz_kWh`) — hier braucht es nur noch zwei Texte, nach Typ
+    # getrennt statt als zweiter Eintrag im selben Dict (dort gewann bisher
+    # still der spätere).
+    BESCHREIBUNG_JE_TYP = {
+        ("speicher", "ladung_netz_kwh"): "Netzladung {bez} (kWh) - Arbitrage",
+        ("e-auto",   "ladung_netz_kwh"): "Netz-Ladung {bez} (kWh)",
+    }
+    # #263 — die Betriebsart-Zähler einer Split-Klimaanlage: Text aus den
+    # Modus-Konstanten statt hier ein zehntes Mal getippt.
     from backend.core.betriebsmodus import (
         BETRIEBSART_LABEL as _BA_LABEL,
         BETRIEBSART_NUTZENERGIE_FELD as _BA_NUTZ,
@@ -137,18 +145,9 @@ async def get_csv_template_info(anlage_id: int, db: AsyncSession = Depends(get_d
     for _modus in _BA_MODI:
         for _feld, _was in ((_BA_STROM[_modus], "Strom"),
                             (_BA_NUTZ[_modus], "Nutzenergie")):
-            _suffix = _REGISTRY_CSV_SUFFIX.get(_feld)
-            if _suffix:
-                CSV_SPALTEN_SUFFIX[_feld] = (
-                    f"_{_suffix}",
-                    f"{_was} {_BA_LABEL[_modus]} {{bez}} (kWh)",
-                )
-
-    # e-auto: ladung_netz_kwh und ladung_pv_kwh haben spezifische Suffixe
-    EAUTO_SUFFIX_OVERRIDE = {
-        "ladung_netz_kwh": ("_Ladung_Netz_kWh", "Netz-Ladung {bez} (kWh)"),
-        "ladung_pv_kwh":   ("_Ladung_PV_kWh",   "PV-Ladung {bez} (kWh)"),
-    }
+            CSV_SPALTEN_BESCHREIBUNG[_feld] = (
+                f"{_was} {_BA_LABEL[_modus]} {{bez}} (kWh)"
+            )
 
     for inv in investitionen:
         if inv.typ in ("wechselrichter",):
@@ -156,26 +155,37 @@ async def get_csv_template_info(anlage_id: int, db: AsyncSession = Depends(get_d
         prefix = _sanitize_column_name(inv.bezeichnung)
         bez = inv.bezeichnung
 
-        felder = get_felder_fuer_investition(inv.typ, inv.parameter)
+        # N-302 — `anlage_investitionen` durchreichen, damit die Vorlage
+        # dieselben Felder anbietet wie der Monatsabschluss. Ohne das bot sie
+        # die E-Auto-Heimladung an, obwohl eine Wallbox sie als kanonische
+        # Quelle verdrängt (`bedingung_anlage: keine_wallbox`) — eine Spalte,
+        # die das Formular ausblendet. Der **Import** wertet `bedingung_anlage`
+        # bewusst weiter nicht aus: er darf nie still etwas wegwerfen, und
+        # genau das ist die F-55-Lehre.
+        felder = get_felder_fuer_investition(
+            inv.typ, inv.parameter, anlage_investitionen=investitionen
+        )
         for feld_def in felder:
             feld = feld_def["feld"]
-            # Suffix-Auflösung: E-Auto hat Sonderregel für ladung_netz_kwh
-            if inv.typ == "e-auto" and feld in EAUTO_SUFFIX_OVERRIDE:
-                suffix, desc_tmpl = EAUTO_SUFFIX_OVERRIDE[feld]
-            else:
-                # #263 — je-Innengerät-Felder erben Suffix und Beschreibung
-                # ihres Basis-Felds und hängen ihre ID an. Ohne die Auflösung
-                # hieße die Spalte `…_betriebsart_strom_kuehlen_kwh-3` (der
-                # rohe Key), statt dem Muster aller anderen zu folgen.
-                basis = basis_feld_key(feld)
-                gid = innengeraet_id_von_feld(feld)
-                suffix, desc_tmpl = CSV_SPALTEN_SUFFIX.get(
-                    basis, (f"_{basis}", f"{feld_def['label']} {{bez}}"))
-                if gid is not None:
-                    suffix = f"{suffix}_IG{gid}"
-            col = f"{prefix}{suffix}"
+            # Der Name: Registry-Suffix, sonst der rohe Key — identisch zur
+            # Zeile im Export unten. Bei je-Innengerät-Feldern trägt der
+            # Registry-Suffix das `_IG{id}` bereits (`_mit_innengeraeten`).
+            suffix = feld_def.get("csv_suffix", feld)
+            # Der Text: über das Basis-Feld, damit die Innengerät-Kopien den
+            # Text ihres Basis-Felds erben; den Raumnamen stellen wir voran.
+            basis = basis_feld_key(feld)
+            desc_tmpl = BESCHREIBUNG_JE_TYP.get(
+                (inv.typ, basis),
+                CSV_SPALTEN_BESCHREIBUNG.get(basis, f"{feld_def['label']} {{bez}}"),
+            )
+            col = f"{prefix}_{suffix}"
             spalten.append(col)
-            beschreibung[col] = desc_tmpl.format(bez=bez, label=feld_def["label"])
+            desc = desc_tmpl.format(bez=bez, label=feld_def["label"])
+            if innengeraet_id_von_feld(feld) is not None:
+                raum = feld_def.get("innengeraet_bezeichnung")
+                if raum:
+                    desc = f"{raum}: {desc}"
+            beschreibung[col] = desc
 
         # Sonderkosten für alle Investitionen (optional)
         col_sk = f"{prefix}_Sonderkosten_Euro"
