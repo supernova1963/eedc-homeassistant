@@ -50,6 +50,76 @@ Anlagen haben aus einer Rechenregel eine Messung gemacht.*
 
 ---
 
+**Klimaanlage: der laufende Betrieb kam in der Aufteilung nicht an**
+([#263](https://github.com/supernova1963/eedc-homeassistant/issues/263))
+
+**Betrifft dich das?** Nur, wenn deine Wärmepumpe oder Klimaanlage ihren
+*laufenden* Betrieb meldet — das tun Panasonic, Daikin und die meisten
+Luft-Wasser-Wärmepumpen. Bei ihnen landete die **gesamte** Aufteilung
+Heizen/Kühlen unter „nicht aufgeteilt", statt auf die beiden Seiten zu gehen.
+Geräte ohne dieses Signal (etwa Mitsubishi über MELCloud) waren nie betroffen —
+ausgerechnet das bessere Signal führte zum schlechteren Ergebnis.
+
+**Was du tun kannst:** Die Aufteilung repariert sich für alle Tage, die du über
+*Einstellungen → Daten → Energieprofil* neu berechnen lässt — soweit die
+Historie in Home Assistant noch reicht. Bei der Standardeinstellung sind das
+etwa 10 Tage, mit erhöhter Aufbewahrungsdauer entsprechend mehr. Ältere Monate
+lassen sich nicht nachtragen: Home Assistant hält Gerätezustände nicht dauerhaft
+vor.
+
+Keine Zahl der Energiebilanz war betroffen — der Stromverbrauch stimmte immer,
+falsch war nur seine Aufteilung.
+
+---
+
+**Cockpit → Tag: leere Gerätespalte, und ein zu hoher Hausverbrauch**
+
+**Betrifft dich das?** Ja, wenn du eine Wärmepumpe oder Wallbox über einen
+**Leistungssensor** erfasst und keinen kWh-Zähler zugeordnet hast — bei
+Split-Klimaanlagen ist das der Normalfall. In *Cockpit → Tag* blieb die Spalte
+„Wärmepumpe" dann leer, obwohl derselbe Wert in der gerätebenannten Spalte
+danebenstand und die Monatsansicht korrekt damit rechnete.
+
+**Der wichtigere Teil steckte daneben:** Der **Hausverbrauch** derselben Tabelle
+zieht Wärmepumpe und Wallbox vom Gesamtverbrauch ab. Fehlte der Zähler, wurde
+**nichts** abgezogen — der Hausverbrauch stand um den Verbrauch dieser Geräte zu
+hoch. Diese Zahl stimmt jetzt.
+
+PV-Erzeugung und Gesamtverbrauch bleiben unangetastet: Das sind Bilanzgrößen,
+an denen Performance Ratio sowie Überschuss und Defizit hängen.
+
+---
+
+**Die Aufteilung Heizen/Kühlen gibt es jetzt auch für einen einzelnen Tag**
+
+Bisher stand sie nur je Monat. In *Cockpit → Tag* erscheint der Block
+**„Aufteilung Heizen/Kühlen"** jetzt im Wärmepumpen-Abschnitt — mit denselben
+drei Größen wie im Monat. Es ist dieselbe Rechnung, keine zweite: Was der Tag
+zeigt, steckt unverändert in der Monatssumme.
+
+Ohne zugeordneten Betriebsmodus erscheint der Block gar nicht — statt mit drei
+Nullen dazustehen. Eine 0 hieße „hat nicht geheizt"; das weiß eedc ohne Sensor
+nicht.
+
+*Alle drei Punkte gemeldet von OB73-gif, Klausnn und kingcap1.*
+
+---
+
+**Alle MQTT-Topics auf einen Blick**
+
+**Betrifft dich das?** Ja, wenn du deine Werte aus ioBroker, FHEM oder einem
+eigenen Skript per MQTT schickst. Am Ende von *Einstellungen → Datenquellen*
+steht jetzt ein zugeklappter Block **MQTT-Topics**: nach Gerät gruppiert, je
+Zeile das vollständige Topic mit Feldname und Einheit, mit Kopier-Knopf — und
+einem „Alle kopieren" für die ganze Liste. Das Zusammensuchen aus der
+Sensor-Referenz entfällt.
+
+Gezeigt werden nur die Topics **vorhandener** Geräte, denn nur die sind wirksam.
+Zuordnen musst du vorher nichts: Ein Feld stellt sich beim ersten empfangenen
+Wert selbst auf *Inbound*.
+
+---
+
 **Börsenpreise: Höchst, Tiefst und der Monatsschnitt**
 
 Der Börsenpreis-Block sagte dir, wie teuer die aktuelle Stunde gegenüber dem

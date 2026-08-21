@@ -11,6 +11,9 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Added
 
+- **Alle MQTT-Topics auf einen Blick** — neuer Block *MQTT-Topics* am Ende von *Einstellungen → Datenquellen*. Zugeklappt, nach Gerät gruppiert, je Zeile das vollständige Topic mit Feldname und Einheit, dazu ein Kopier-Knopf je Zeile und ein „Alle kopieren". Für alle, die ihre Werte aus ioBroker, FHEM oder einem eigenen Skript schicken und die Topics bisher aus der Sensor-Referenz zusammensuchen mussten.
+  - Gezeigt werden **nur die Topics vorhandener Geräte** — nur die sind wirksam. Zuordnen muss man vorher nichts: Ein Feld stellt sich beim ersten empfangenen Wert selbst auf *Inbound*.
+
 - **Split-Klimaanlage: Verbrauch je Betriebsart — und je Innengerät** ([#263](https://github.com/supernova1963/eedc-homeassistant/issues/263)). Bisher konnte eedc nur *ableiten*, was ins Heizen und was ins Kühlen ging: aus dem zugeordneten Betriebsmodus und den Stunden, in denen er galt. Wer die Anteile **messen** kann, trägt sie jetzt direkt ein — für **Heizen · Kühlen · Lüften · Entfeuchten**, dazu optional die abgegebene Nutzenergie je Betriebsart. **Gemessenes schlägt Abgeleitetes.**
   - **Mehrere Innengeräte:** Am Gerät lässt sich unter *Innengeräte* eine Liste anlegen (Bezeichnung, z. B. „Büro"). Jedes Innengerät bekommt danach **eigene** Felder — Verbrauch je Betriebsart, Leistung, Soll- und Raumtemperatur —, zuordenbar wie jedes andere Feld (HA-Sensor · MQTT · Connector). Im Live-Bild erscheinen sie unter *Auf einen Blick → Innengeräte*.
   - **Alles ist optional, und nichts ändert sich ohne Zutun.** Ohne Innengeräte und ohne Betriebsart-Zähler verhält sich eedc **exakt wie bisher**. Eine Luft-Wasser-Wärmepumpe sieht die neuen Felder gar nicht.
