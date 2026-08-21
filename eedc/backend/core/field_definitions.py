@@ -339,6 +339,27 @@ INVESTITION_FELDER: dict = {
         {
             "feld": "warmwasser_kwh", "label": "Warmwasser", "einheit": "kWh",
             "csv_suffix": "Warmwasser_kWh",
+            # N-304: **eine Split-Klimaanlage hat keinen Warmwasserkreis.** Das
+            # Feld war dort nicht nur überflüssig, sondern schädlich: es fließt
+            # in dieselbe Summe `wp_waerme` wie die Heizwärme
+            # (`imd_monatsaggregat`, D1) und speist damit `gas_kosten_altanlage`
+            # und die CO₂-Bilanz — ein gefüllter Wert erzeugt an einem Gerät
+            # ohne Warmwasserbereitung eine **erfundene Ersparnis**.
+            #
+            # ⚠ `heizenergie_kwh` bleibt bewusst OHNE diese Bedingung: eine
+            # Klimaanlage gibt sehr wohl Wärme ab, und genau daran hängen die
+            # Gas- und CO₂-Ersparnis, die vor dem #263-Konzept ganz fehlten
+            # (Gernot, 2026-08-21). Nur die Warmwasser-Achse gibt es nicht.
+            #
+            # Die Entscheidung selbst ist älter: `64826a40` (N-86, 16.08.) hat
+            # eine Klimaanlage von der Heizwärme-PFLICHT befreit, weil „die
+            # Größe am Gerät nicht existiert" — umgesetzt aber nur in
+            # `get_feld_bedarf`, also auf der Zuordnungs-Fläche. Der
+            # Monatsabschluss liest `get_felder_fuer_investition` und kannte
+            # die Unterscheidung nicht. Genau das Muster, das jener Commit
+            # selbst beklagt: „dieselbe Anlage, zwei Flächen, gegenteilige
+            # Aussage."
+            "bedingung": "!luft_luft",
             "hinweis": "Abgegebene Warmwasser-Wärme (thermisch) in kWh, kumulativ oder Tagessensor. Optional — sonst in der Heizwärme enthalten.",
         },
         # #263 — GEMESSENER Verbrauch je Betriebsart (Split-Klimaanlage).
@@ -1263,6 +1284,8 @@ def get_felder_fuer_investition(
             continue
         elif bedingung == "luft_luft" and not luft_luft:
             continue
+        elif bedingung == "!luft_luft" and luft_luft:
+            continue
 
         aufgeloest = dict(feld)
         aufgeloest["label"] = _label_aufgeloest(feld, bedingungs_werte)
@@ -1552,6 +1575,8 @@ def get_live_felder_fuer_investition(typ: str, parameter: Optional[dict] = None)
         elif bedingung == "!getrennte_strommessung" and not getrennte_strommessung:
             result.append({k: v for k, v in feld.items() if k != "bedingung"})
         elif bedingung == "luft_luft" and luft_luft:
+            result.append({k: v for k, v in feld.items() if k != "bedingung"})
+        elif bedingung == "!luft_luft" and not luft_luft:
             result.append({k: v for k, v in feld.items() if k != "bedingung"})
 
     return _mit_innengeraeten(result, params, "key")

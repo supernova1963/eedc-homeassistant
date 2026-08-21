@@ -73,7 +73,7 @@ const WAERMEPUMPE_FELDER: FeldDefinition[] = [
     hint: 'Stromaufnahme nur für Warmwasser (elektrisch)' },
   { feld: 'heizenergie_kwh',      label: 'Heizwärme',        einheit: 'kWh',
     hint: 'Abgegebene Heizwärme (thermisch) — COP = Heizwärme / Strom' },
-  { feld: 'warmwasser_kwh',       label: 'Warmwasser',       einheit: 'kWh',
+  { feld: 'warmwasser_kwh',       label: 'Warmwasser',       einheit: 'kWh', bedingung: '!luft_luft',
     hint: 'Abgegebene Warmwasser-Wärme (thermisch)' },
 ]
 
@@ -183,6 +183,10 @@ export function getFelderFuerInvestition(
   const laedtAusNetz = Boolean(params.laedt_aus_netz) || arbitrage
   const v2h = Boolean(params.v2h_faehig || params.nutzt_v2h)
   const hatSpeicher = Boolean(params.hat_speicher)
+  // N-304: eine Split-Klimaanlage hat keinen Warmwasserkreis. Spiegel der
+  // Backend-Regel (`field_definitions.py`, `ist_luft_luft_waermepumpe`) —
+  // Altbestand ohne `wp_art` gilt NICHT als Klimaanlage und behält das Feld.
+  const luftLuft = params.wp_art === 'luft_luft'
 
   // #281: konditionelles Label — dieselben Bedingungs-Keys wie `bedingung`.
   const bedingungsWerte: Record<string, boolean> = {
@@ -201,6 +205,8 @@ export function getFelderFuerInvestition(
     if (f.bedingung === 'laedt_aus_netz')          return laedtAusNetz
     if (f.bedingung === 'v2h_faehig')              return v2h
     if (f.bedingung === 'hat_speicher')            return hatSpeicher
+    if (f.bedingung === 'luft_luft')               return luftLuft
+    if (f.bedingung === '!luft_luft')              return !luftLuft
     return true
   }).map(({ bedingung: _b, label_wenn, ...rest }) => {
     if (label_wenn) {
