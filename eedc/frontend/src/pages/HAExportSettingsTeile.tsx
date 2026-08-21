@@ -472,6 +472,14 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
               Eine Stunde gilt als „günstig", wenn ihr Börsenpreis mindestens diesen Prozentsatz
               unter dem Tagesdurchschnitt (ohne die 3 teuersten Stunden) liegt. Standard: 10&nbsp;%.
+              {/* Zusage an Rainer (PN 2026-08-20): Was 0 % bedeutet, stand bis
+                  hierher nur in einem Hinweis, der erst erscheint, wenn die 0
+                  schon im Feld steht — also nach der Entscheidung. Wer die
+                  Schwelle „abschalten" will, tippt 0 und bekommt MEHR günstige
+                  Stunden statt keine. Der Satz gehört deshalb in die
+                  Beschreibung, nicht in eine Reaktion. */}
+              {' '}<strong>0&nbsp;% schaltet nichts ab</strong> — die Schwelle liegt dann genau
+              auf dem Durchschnitt, und günstig ist jede Stunde darunter.
             </p>
             {/* 0 ist ein gültiger, aber folgenreicher Wert: der Schwellen-Faktor
                 wird 1,0 — die Schwelle liegt damit genau auf dem optimierten Ø.

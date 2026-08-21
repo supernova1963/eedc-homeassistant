@@ -48,6 +48,7 @@ function antwort(over: Partial<BoersenpreisResponse> = {}): BoersenpreisResponse
     anlage_id: 1,
     markt: 'DE',
     tage: [tag('2026-08-06'), tag('2026-08-07')],
+    monats_durchschnitt_cent: null,
     aktuelle_stunde: 3,
     heute: '2026-08-06',
     hinweis: null,
@@ -59,10 +60,13 @@ describe('baueKennzahlen', () => {
   it('nennt aktuellen Preis, Ø, Schwelle und den ct-Abstand', () => {
     const kpis = baueKennzahlen(antwort())
 
-    // Der Abstand steht am ENDE — die drei seit v4.0.10 ausgelieferten Kacheln
-    // behalten ihre Position (N-173).
+    // Reihenfolge = Zusage an Rainer (PN 2026-08-20): die allgemein lesbaren
+    // Zahlen zuerst, die Optimierer-Werte dahinter. Der Abstand bleibt am ENDE
+    // (N-173). Der Monats-Ø fehlt hier, weil die Route ihn nicht liefert —
+    // dann steht dort keine Kachel statt einer 0.
     expect(kpis.map((k) => k.title)).toEqual([
-      'Aktueller Preis', 'Ø ohne 3 Peaks', 'Günstig-Schwelle', 'Abstand zum Ø',
+      'Aktueller Preis', 'Höchstpreis heute', 'Tiefstpreis heute',
+      'Ø ohne 3 Peaks', 'Günstig-Schwelle', 'Abstand zum Ø',
     ])
     expect(kpis[0].value).toBe('11,50')          // Stunde 3 → 10 + 1,5
     expect(kpis[0].subtitle).toContain('unter der Günstig-Schwelle')
@@ -99,7 +103,8 @@ describe('baueKennzahlen', () => {
     // Kachel muss acht sagen — die alte, an den Rang gebundene Zahl war als
     // Divisor in einer Automation zu klein.
     const kpis = baueKennzahlen(antwort())
-    expect(kpis[2].subtitle).toContain('8 Stunden')
+    const schwelle = kpis.find((k) => k.title === 'Günstig-Schwelle')!
+    expect(schwelle.subtitle).toContain('8 Stunden')
   })
 
   it('sagt es, wenn der aktuelle Preis über der Schwelle liegt', () => {
@@ -114,7 +119,34 @@ describe('baueKennzahlen', () => {
     ohneStunde2.stunden = ohneStunde2.stunden.filter((s) => s.stunde !== 2)
     const kpis = baueKennzahlen(antwort({ tage: [ohneStunde2], aktuelle_stunde: 2 }))
 
-    expect(kpis.map((k) => k.title)).toEqual(['Ø ohne 3 Peaks', 'Günstig-Schwelle'])
+    expect(kpis.map((k) => k.title)).toEqual([
+      'Höchstpreis heute', 'Tiefstpreis heute', 'Ø ohne 3 Peaks', 'Günstig-Schwelle',
+    ])
+  })
+
+  it('nennt Höchst- und Tiefstpreis mit ihrer Uhrzeit (Zusage rapahl)', () => {
+    // Die Fixture läuft 10 + h × 0,5 ⇒ Tiefst 10,00 um 00:00, Höchst 21,50 um 23:00.
+    const kpis = baueKennzahlen(antwort())
+    const hoch = kpis.find((k) => k.title === 'Höchstpreis heute')!
+    const tief = kpis.find((k) => k.title === 'Tiefstpreis heute')!
+    expect(hoch.value).toBe('21,50')
+    expect(hoch.subtitle).toBe('um 23:00 Uhr')
+    expect(tief.value).toBe('10,00')
+    expect(tief.subtitle).toBe('um 00:00 Uhr')
+  })
+
+  it('zeigt den Monats-Ø nur, wenn die Route ihn liefert', () => {
+    // Am Monatsersten gibt es noch keine Mitschrift — dann fehlt die Kachel,
+    // statt einen halben Tag als „Monatsmittel" auszugeben.
+    expect(baueKennzahlen(antwort()).map((k) => k.title)).not.toContain('Ø Monat')
+
+    const mit = baueKennzahlen(antwort({ monats_durchschnitt_cent: 14.2 }))
+    const monat = mit.find((k) => k.title === 'Ø Monat')!
+    expect(monat.value).toBe('14,20')
+    expect(monat.subtitle).toContain('bisher aufgezeichnete')
+    // …und zwar VOR den Optimierer-Werten.
+    const titel = mit.map((k) => k.title)
+    expect(titel.indexOf('Ø Monat')).toBeLessThan(titel.indexOf('Ø ohne 3 Peaks'))
   })
 
   it('zeigt keine Kennzahlen, wenn nur morgen vorliegt', () => {

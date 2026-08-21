@@ -195,6 +195,12 @@ export const SONSTIGES_SPEICHER_KPI = {
  *  diese hier benennen Kennzahlen. */
 export const BOERSENPREIS_KPI = {
   aktuell:      { title: 'Aktueller Preis',  icon: Coins, color: 'purple' as const },
+  // Zusage an Rainer (PN 2026-08-20): die allgemein lesbaren Zahlen zuerst —
+  // Höchst, Tiefst, Monatsmittel —, die Optimierer-Werte danach. Dieselbe
+  // Farbrolle: es ist dieselbe Datenrolle (Preis), nur eine andere Bezugszeit.
+  hoechst:      { title: 'Höchstpreis heute', icon: ArrowUpDown, color: 'purple' as const },
+  tiefst:       { title: 'Tiefstpreis heute', icon: ArrowUpDown, color: 'purple' as const },
+  monat:        { title: 'Ø Monat',          icon: Gauge, color: 'purple' as const },
   durchschnitt: { title: 'Ø ohne 3 Peaks',   icon: Gauge, color: 'purple' as const },
   schwelle:     { title: 'Günstig-Schwelle', icon: Hash,  color: 'purple' as const },
   // N-173: der Abstand als Betrag. Bewusst dieselbe Farbrolle wie die drei

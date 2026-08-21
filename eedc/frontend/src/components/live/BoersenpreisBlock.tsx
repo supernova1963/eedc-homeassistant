@@ -39,6 +39,48 @@ export function baueKennzahlen(daten: BoersenpreisResponse): KpiStripItem[] {
       subtitle: jetzt.unter_schwelle ? 'unter der Günstig-Schwelle' : 'über der Günstig-Schwelle',
     })
   }
+
+  // ── Allgemein lesbare Zahlen zuerst (Zusage an Rainer, PN 2026-08-20) ──
+  //
+  // Höchst und Tiefst beantworten „lohnt sich Warten heute überhaupt?", das
+  // Monatsmittel „ist heute ein teurer Tag?". Beides stand nirgends; darunter
+  // folgen die Optimierer-Werte (Ø ohne Peaks, Schwelle, Abstand) wie bisher.
+  //
+  // Höchst/Tiefst werden hier gebildet und nicht im Backend: es ist eine
+  // Auswahl aus der Liste, die ohnehin schon vollständig vorliegt — dieselbe
+  // Bauform wie `guenstigeStunden` zwei Zeilen darüber. Das Monatsmittel
+  // dagegen kommt aus dem Backend, weil dafür Daten nötig sind, die der Client
+  // nie sieht (die stündliche Preis-Mitschrift des Monats).
+  const preise = heute.stunden.map((s) => s.preis_cent).filter((p) => p != null)
+  if (preise.length > 0) {
+    const hoechst = Math.max(...preise)
+    const tiefst = Math.min(...preise)
+    const stundeMax = heute.stunden.find((s) => s.preis_cent === hoechst)
+    const stundeMin = heute.stunden.find((s) => s.preis_cent === tiefst)
+    kpis.push({
+      ...BOERSENPREIS_KPI.hoechst,
+      value: fmtZahl(hoechst, 2),
+      unit: 'ct/kWh',
+      subtitle: stundeMax ? `um ${String(stundeMax.stunde).padStart(2, '0')}:00 Uhr` : undefined,
+    })
+    kpis.push({
+      ...BOERSENPREIS_KPI.tiefst,
+      value: fmtZahl(tiefst, 2),
+      unit: 'ct/kWh',
+      subtitle: stundeMin ? `um ${String(stundeMin.stunde).padStart(2, '0')}:00 Uhr` : undefined,
+    })
+  }
+  if (daten.monats_durchschnitt_cent != null) {
+    kpis.push({
+      ...BOERSENPREIS_KPI.monat,
+      value: fmtZahl(daten.monats_durchschnitt_cent, 2),
+      unit: 'ct/kWh',
+      // Der Zeitraum steht dabei: am Zweiten des Monats sind es zwei Tage.
+      // Ohne diesen Zusatz läse sich die Zahl als volles Monatsmittel.
+      subtitle: 'bisher aufgezeichnete Stunden dieses Monats',
+    })
+  }
+
   if (heute.optimierter_durchschnitt_cent != null) {
     kpis.push({
       ...BOERSENPREIS_KPI.durchschnitt,
