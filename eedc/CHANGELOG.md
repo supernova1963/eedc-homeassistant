@@ -7,6 +7,25 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.0.25] - 2026-08-21 — Ablesen, nicht aufsummieren
+
+### Fixed
+
+- **Der Zählerstand eines Gas-, Wasser- oder Ölzählers war nicht der Zählerstand.** Gemeldet von **dietmar1968** (simon42-Forum), und sein Bild hat es bewiesen: Sein Wasserzähler meldete in Home Assistant **47,360 m³**, eedc zeigte **90**. Betroffen ist jeder Verbrauchszähler, der über einen HA-Sensor läuft — die Kategorie gibt es seit 4.0.23.
+  - **Die Ursache:** eedc holt jeden zugeordneten Zähler stündlich aus Home Assistants Langzeitstatistik, und die führt zwei Spalten — `state` (den abgelesenen Stand) und `sum` (die reset-bereinigte **Verbrauchssumme seit Aufzeichnungsbeginn**). Für einen Stromzähler ist `sum` die richtige und ausdrücklich gewählte Spalte: Ein Tageszähler springt um Mitternacht zurück, nur `sum` läuft durch. Der Zählerstand eines Gaszählers ist aber keine Menge, sondern ein **Stand** — und der steht in `state`. Er lief auf der falschen Schiene mit.
+  - ⚠ **Ein zweiter, stiller Fall steckte darin:** Meldet ein Zähler seinen Stand ohne HA-Statistiksumme, verlangte derselbe Weg eine Energie-Einheit — „m³" gehört nicht dazu. Solche Zähler bekamen **überhaupt keinen** mitgeschriebenen Stand, ohne Meldung.
+  - **Was du davon merkst:** Ab dieser Version steht dort die Zahl deines Zählers. Die **Verbrauchszahlen waren immer richtig** — die einzige Rechnung ist Ende minus Anfang, und die ist gegen einen konstanten Versatz unempfindlich. Wo die alte und die neue Zahl aufeinandertreffen, zeigt eedc **keine** Differenz, sondern sagt *„Der Stand ist gefallen — die Reihe hat einen Bruch"*. Ein Zählerstand läuft nicht rückwärts; eine negative Menge auszuweisen wäre die schlechtere Antwort. Die Historie zieht *Einstellungen → Daten → Tag neu berechnen* nach, soweit Home Assistant die Statistik noch hat.
+  - ⛔ **Ein Startwert- oder Offset-Feld gibt es weiterhin nicht** — und braucht es auch nicht. Weicht die Zahl im Sensor von der auf dem Zähler ab, gehört die Korrektur an den Sensor: dort stimmt sie danach überall, auch in deinen HA-Dashboards und Automationen.
+  - **Danke an dietmar1968**, der der Antwort widersprochen und den Beleg mitgeliefert hat. Ohne sein Bild wäre der Fehler weiter als Eigenart seines Sensors durchgegangen.
+
+- **Die HA-Sensoren kannten die gemessene Aufteilung Heizen/Kühlen nicht.** Wer die mit 4.0.24 eingeführten Betriebsart-Zähler zuordnet — also genau der, an den sich die Version richtet —, sah die Aufteilung in eedc und bekam in Home Assistant **keinen Wert**: Der Sensor-Export las die Rohdaten an der Weiche *gemessen schlägt abgeleitet* vorbei. Betroffen waren REST-Export **und** MQTT. Die Weiche liegt jetzt als **eine** Formel im Berechnungs-Layer, die beide Seiten aufrufen.
+
+### Changed
+
+- **Eine Split-Klimaanlage fragt im Monatsabschluss nicht mehr nach Warmwasser.** Ein Luft-Luft-Gerät hat keinen Warmwasserkreis; ein dort gepflegter Wert erzeugte eine eingesparte Wärme, die das Gerät nie erzeugt hat — mit Wirkung auf die Gas- und CO₂-Ersparnis. Das Feld verschwindet am Monatsabschluss und in der Feldliste (11 → 10 Felder), bleibt aber in der Zuordnungsfläche sichtbar, damit eine bestehende Zuordnung löschbar bleibt. **Die Heizwärme bleibt selbstverständlich** — gerade bei Luft-Luft trägt sie die ganze Gas- und CO₂-Ersparnis.
+
+---
+
 ## [4.0.24] - 2026-08-21 — Was das Gerät wirklich tut
 
 ### Added
