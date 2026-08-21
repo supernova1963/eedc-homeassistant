@@ -7,6 +7,54 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.0.24] - 2026-08-21 — Was das Gerät wirklich tut
+
+### Added
+
+- **Alle MQTT-Topics auf einen Blick** — neuer Block *MQTT-Topics* am Ende von *Einstellungen → Datenquellen*. Zugeklappt, nach Gerät gruppiert, je Zeile das vollständige Topic mit Feldname und Einheit, dazu ein Kopier-Knopf je Zeile und ein „Alle kopieren". Für alle, die ihre Werte aus ioBroker, FHEM oder einem eigenen Skript schicken und die Topics bisher aus der Sensor-Referenz zusammensuchen mussten.
+  - Gezeigt werden **nur die Topics vorhandener Geräte** — nur die sind wirksam. Zuordnen muss man vorher nichts: Ein Feld stellt sich beim ersten empfangenen Wert selbst auf *Inbound*.
+
+- **Split-Klimaanlage: Verbrauch je Betriebsart — und je Innengerät** ([#263](https://github.com/supernova1963/eedc-homeassistant/issues/263)). Bisher konnte eedc nur *ableiten*, was ins Heizen und was ins Kühlen ging: aus dem zugeordneten Betriebsmodus und den Stunden, in denen er galt. Wer die Anteile **messen** kann, trägt sie jetzt direkt ein — für **Heizen · Kühlen · Lüften · Entfeuchten**, dazu optional die abgegebene Nutzenergie je Betriebsart. **Gemessenes schlägt Abgeleitetes.**
+  - **Mehrere Innengeräte:** Am Gerät lässt sich unter *Innengeräte* eine Liste anlegen (Bezeichnung, z. B. „Büro"). Jedes Innengerät bekommt danach **eigene** Felder — Verbrauch je Betriebsart, Leistung, Soll- und Raumtemperatur —, zuordenbar wie jedes andere Feld (HA-Sensor · MQTT · Connector). Im Live-Bild erscheinen sie unter *Auf einen Blick → Innengeräte*.
+  - **Alles ist optional, und nichts ändert sich ohne Zutun.** Ohne Innengeräte und ohne Betriebsart-Zähler verhält sich eedc **exakt wie bisher**. Eine Luft-Wasser-Wärmepumpe sieht die neuen Felder gar nicht.
+  - ⚠ **Was ein Innengerät nicht misst:** An einem Multisplit hängt **ein** Außengerät an mehreren Innengeräten. Was eine Hersteller-App dort als Verbrauch eines Innengeräts anzeigt, ist der Anteil des **Außengeräts** — zugeschrieben an das gerade *anfordernde* Innengerät, und welches das ist, entscheidet die Einschaltreihenfolge. Der Hersteller sagt es selbst. eedc nimmt die Zahl entgegen und schreibt dazu, was sie bedeutet; die belastbare Menge ist ein eigener Zähler am Außengerät.
+  - **Woher die vier Zähler kommen:** In Home Assistant liefert sie ein **Utility Meter** mit einem Tarif je Betriebsart, umgeschaltet von einer Automatisierung am Zustand der `climate`-Entität. Die Anleitung dazu steht in der [Sensor-Referenz §4a](docs/SENSOR-REFERENZ.md).
+  - **Danke an kingcap1, Klausnn und OB73-gif** — ohne ihre Messungen an drei verschiedenen Anlagen wäre daraus eine Rechenregel geworden statt einer Messung.
+
+- **Börsenpreise: Höchst- und Tiefstpreis des Tages und der Monatsdurchschnitt** (angeregt von rapahl). Der Block zeigte, wie teuer die aktuelle Stunde gegenüber *heute* ist — aber nicht, ob heute überhaupt ein teurer Tag ist. Jetzt stehen **Höchstpreis** und **Tiefstpreis** (je mit ihrer Uhrzeit) sowie der **Monatsdurchschnitt** aus eedcs eigener Mitschrift vorn; die Optimierer-Werte (Ø ohne die 3 teuersten Stunden, Günstig-Schwelle, Abstand) folgen dahinter.
+
+- **Die Aufteilung Heizen/Kühlen gibt es jetzt auch für einen einzelnen Tag** ([#263](https://github.com/supernova1963/eedc-homeassistant/issues/263), angeregt von OB73-gif). Bisher stand sie nur je Monat; in *Cockpit → Tag* fehlte sie. Der Block **„Aufteilung Heizen/Kühlen"** erscheint dort jetzt im Wärmepumpen-Abschnitt — mit denselben drei Größen wie im Monat: *Heizen · Kühlen · nicht aufgeteilt*.
+  - **Die Rechnung ist dieselbe, nicht eine zweite.** eedc faltet die Stunden ohnehin tageweise; die Monatssicht summiert sie nur hinterher auf. Beide Sichten nehmen jetzt denselben Weg — was der Tag zeigt, steckt unverändert in der Monatssumme.
+  - ⚠ **Ohne zugeordneten Betriebsmodus erscheint der Block gar nicht** — statt mit drei Nullen dazustehen. Eine 0 hieße „hat nicht geheizt"; das weiß eedc ohne Sensor nicht.
+
+### Changed
+
+- **Die Günstig-Schwelle sagt jetzt, was 0 % bedeutet** (angeregt von rapahl). Der Hinweis dazu erschien bisher erst, *nachdem* man die 0 eingetippt hatte — also nach der Entscheidung. Wer die Schwelle „abschalten" wollte, bekam damit **mehr** günstige Stunden statt keine. Die Erklärung steht jetzt in der Beschreibung des Felds: **0 % schaltet nichts ab** — die Schwelle liegt dann genau auf dem Tagesdurchschnitt.
+
+### Fixed
+
+- **Die CSV-Vorlage erzeugte drei Spalten, die der eigene Import nicht annahm.** Wer unter *Einstellungen → Daten* die **personalisierte Vorlage** herunterlädt, ausfüllt und wieder importiert, bekam „Import erfolgreich" gemeldet — und **drei Werte fehlten danach**, ohne jeden Hinweis:
+  - **Netzladung** eines Speichers mit Arbitrage,
+  - **Einspeise-Erlös** eines Erzeugers unter *Sonstiges* (z. B. BHKW),
+  - der **Zählerstand** eines Verbrauchszählers — bei diesem Gerät ist das der einzige Wert überhaupt, er war über die Vorlage seit seiner Einführung in 4.0.23 nie importierbar.
+  - **Die Ursache:** Die Vorlage baute ihre Spaltennamen aus einer eigenen, von Hand gepflegten Liste, während Export und Import den Namen aus der gemeinsamen Feld-Definition lesen. Die beiden waren auseinandergelaufen. Jetzt kommt der Spaltenname **überall aus derselben Quelle**; eine neue Prüfung fährt bei jedem Bau den vollständigen Rundlauf über alle Gerätetypen — Vorlage erzeugen, ausfüllen, importieren, jeden Wert wiederfinden.
+  - **Was du tun kannst, wenn du betroffen warst:** Lade die Vorlage **neu** herunter (die alte trägt die falschen Spaltennamen), trage die fehlenden Werte ein und importiere sie mit gesetztem Haken *Bestehende Monate überschreiben*. Alle anderen Spalten deiner alten Datei sind angekommen — es fehlen ausschließlich die drei genannten.
+  - ⚠ **Nebenbei geradegerückt:** Steht bei dir eine **Wallbox**, bot die Vorlage am E-Auto zusätzlich Spalten für *PV-Ladung* und *Netz-Ladung* an, obwohl der Monatsabschluss sie dort ausblendet — die Wallbox misst die Heimladung. Diese Spalten sind aus der Vorlage verschwunden; **eingetragen bleibt eingetragen**, der Import nimmt sie weiterhin an und wirft nie still etwas weg.
+
+- **Wärmepumpe und Wallbox blieben in der Tagesansicht leer, obwohl der Wert daneben stand** (gemeldet von OB73-gif). Wer sein Gerät über einen **Leistungssensor** erfasst und keinen kWh-Zähler zugeordnet hat — bei Split-Klimaanlagen der Normalfall —, sah in *Cockpit → Tag* eine leere Spalte „Wärmepumpe", während dieselbe Stunde in der gerätebenannten Spalte danebenstand und die Monatsansicht korrekt damit rechnete.
+  - **Die Ursache:** Dieselbe Größe liegt an zwei Stellen — die Sammelspalte las nur den **Zählerpfad**, die Gerätespalte und die Monatsauswertung den **Leistungspfad**. Beide Spalten werden jetzt aus beiden Pfaden bedient: **liegt ein Zähler vor, bleibt er die Wahrheit**; fehlt er, trägt der Leistungswert die Spalte. Gibt es zu einem Gerät gar keine Spur, steht dort weiterhin ein Strich und **keine erfundene Null**.
+  - ⚠ **Mitbehoben, und es war der schwerere Teil:** Der **Hausverbrauch** derselben Tabelle zieht Wärmepumpe und Wallbox vom Gesamtverbrauch ab. Fehlte der Zähler, wurde **nichts** abgezogen — der Hausverbrauch stand um den Verbrauch dieser Geräte **zu hoch**, während sonstige Verbraucher in derselben Zeile korrekt abgezogen wurden. Diese Zahl stimmt jetzt.
+  - ✅ **Unberührt bleiben PV und Gesamtverbrauch.** Das sind Bilanzgrößen, an denen Performance-Ratio sowie Überschuss und Defizit hängen — dort etwas zu ändern hieße, die Bilanz zu ändern statt eine Anzeige. **Keine bestehende Bilanzzahl bewegt sich.**
+
+- **Der Ist-Betrieb einer Klimaanlage kam in der Aufteilung nicht an** — betroffen ist **jedes Gerät, dessen Integration den laufenden Betrieb meldet** (`hvac_action`): Panasonic, Daikin und die meisten Luft-Wasser-Wärmepumpen. Bei ihnen landete die **gesamte** Heizen/Kühlen-Aufteilung in „nicht aufgeteilt", statt auf die beiden Seiten zu gehen.
+  - **Die Ursache war eine Vorrangregel, die sich selbst aushebelte.** eedc liest zwei Dinge: den *eingestellten* Modus (`cool`) und, wo vorhanden, den *laufenden* Betrieb (`cooling`, `idle`). Der laufende Betrieb soll den eingestellten schlagen — er weiß, ob das Gerät gerade wirklich kühlt oder nur wartet. Beim Lesen der Historie wurde er aber **anstelle** des Modus eingetragen; danach war nicht mehr unterscheidbar, welches von beidem vorlag, und die Vokabeln des laufenden Betriebs (`heating`, `cooling`, `defrosting`, `drying`, `fan`) waren an dieser Stelle unbekannt. Alles davon wurde zu **„unbestimmt"**.
+  - ⚠ **Geräte ohne dieses Signal waren nie betroffen** — eine Mitsubishi-Anlage über MELCloud etwa hat den laufenden Betrieb gar nicht, ihr eingestellter Modus wurde immer richtig gebucht. **Das bessere Signal führte zum schlechteren Ergebnis.**
+  - ⚠ **Still war es obendrein:** Unter *Einstellungen → Datenquellen* stand beim Betriebsmodus der richtige Klartext („Kühlen (cool)"), weil die Fläche den Momentanwert anders liest als die Aufzeichnung. Wer dort nachsah, sah keinen Fehler.
+  - ✅ **Keine Zahl der Energiebilanz war betroffen.** Der Stromverbrauch der Wärmepumpe ist und bleibt die einzige Bilanzgröße; Heizen und Kühlen sind Teilmengen daneben. Falsch war ausschließlich deren Aufteilung.
+  - **Was du tun kannst, wenn du betroffen warst:** Die Aufteilung repariert sich für alle Tage, die du über *Einstellungen → Daten → Energieprofil* neu berechnen lässt — **soweit die Historie in Home Assistant noch reicht**. Bei der Standardeinstellung sind das etwa 10 Tage, mit erhöhter Aufbewahrungsdauer entsprechend mehr. Ältere Monate lassen sich nicht nachträglich aufteilen: Home Assistant hält Gerätezustände nicht dauerhaft vor.
+
+---
+
 ## [4.0.23] - 2026-08-20 — Was zählt, und was nicht
 
 ### Added
