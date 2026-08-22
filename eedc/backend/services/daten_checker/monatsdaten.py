@@ -936,7 +936,15 @@ class MonatsdatenChecks:
             label = f"{monat:02d}/{jahr}"
 
             if getrennte_strommessung:
-                if daten.get("strom_heizen_kwh") is None and daten.get("strom_warmwasser_kwh") is None:
+                # B5 — an einer Split-Klimaanlage gibt es die Warmwasser-Seite
+                # der Achse nicht (`strom_warmwasser_kwh` trägt seit dem
+                # N-304-Nachzug `!luft_luft`). Sie hier weiter abzufragen hieße,
+                # ein Feld zu erwarten, das der Monatsabschluss gar nicht mehr
+                # anbietet — die Klasse, an der N-86 schon einmal hing:
+                # dieselbe Anlage, zwei Flächen, gegenteilige Aussage.
+                if daten.get("strom_heizen_kwh") is None and (
+                    ist_klima or daten.get("strom_warmwasser_kwh") is None
+                ):
                     fehlend_strom.append(label)
             else:
                 if daten.get("stromverbrauch_kwh") is None:
@@ -949,7 +957,12 @@ class MonatsdatenChecks:
             monate_str = ", ".join(fehlend_strom[:6])
             if len(fehlend_strom) > 6:
                 monate_str += f" (+{len(fehlend_strom) - 6} weitere)"
-            strom_label = "Strom Heizen/Warmwasser" if getrennte_strommessung else "Stromverbrauch"
+            if not getrennte_strommessung:
+                strom_label = "Stromverbrauch"
+            elif ist_klima:
+                strom_label = "Strom Heizen"   # B5: keine Warmwasser-Seite
+            else:
+                strom_label = "Strom Heizen/Warmwasser"
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.WARNING,
                 meldung=f"{name}: {strom_label} fehlt in {len(fehlend_strom)} Monat(en)",

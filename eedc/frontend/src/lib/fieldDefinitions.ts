@@ -19,7 +19,16 @@ export interface FeldDefinition {
   datentyp?: 'float' | 'int'
   placeholder?: string
   hint?: string
-  bedingung?: string
+  /**
+   * Bedingung, unter der das Feld überhaupt erscheint — ein Schlüssel aus
+   * `bedingungsWerte`, optional mit `!` negiert.
+   *
+   * **Eine Liste bedeutet UND** (B5): `strom_warmwasser_kwh` verlangt getrennte
+   * Strommessung **und** keine Split-Klimaanlage. Spiegel von
+   * `field_definitions.bedingung_erfuellt` — wer hier etwas ändert, ändert es
+   * dort mit, sonst zeigen Monatsabschluss und Backend verschiedene Felder.
+   */
+  bedingung?: string | string[]
   // #281: konditionelles Label — trifft eine Bedingung zu, ersetzt sie `label`.
   label_wenn?: Record<string, string>
   /**
@@ -69,7 +78,10 @@ const WAERMEPUMPE_FELDER: FeldDefinition[] = [
     hint: 'Stromaufnahme der WP (elektrisch)' },
   { feld: 'strom_heizen_kwh',     label: 'Strom Heizen',     einheit: 'kWh', bedingung: 'getrennte_strommessung',
     hint: 'Stromaufnahme nur für Heizung (elektrisch)' },
-  { feld: 'strom_warmwasser_kwh', label: 'Strom Warmwasser', einheit: 'kWh', bedingung: 'getrennte_strommessung',
+  // B5: die zweite Hälfte von N-304 — eine Split-Klimaanlage hat keinen
+  // Warmwasserkreis, also auch keinen Warmwasser-STROM. Zwei Bedingungen (UND).
+  { feld: 'strom_warmwasser_kwh', label: 'Strom Warmwasser', einheit: 'kWh',
+    bedingung: ['getrennte_strommessung', '!luft_luft'],
     hint: 'Stromaufnahme nur für Warmwasser (elektrisch)' },
   { feld: 'heizenergie_kwh',      label: 'Heizwärme',        einheit: 'kWh',
     hint: 'Abgegebene Heizwärme (thermisch) — COP = Heizwärme / Strom' },
@@ -195,20 +207,28 @@ export function getFelderFuerInvestition(
     laedt_aus_netz: laedtAusNetz,
     v2h_faehig: v2h,
     hat_speicher: hatSpeicher,
+    // `luft_luft` fehlte hier, während die Filter-Kette darunter es kannte —
+    // ein `label_wenn: { luft_luft: … }` wäre im Client still wirkungslos
+    // geblieben, im Backend aber nicht. Beide Wege lesen jetzt dieselbe Map.
+    luft_luft: luftLuft,
   }
 
-  return allFields.filter(f => {
-    if (!f.bedingung) return true
-    if (f.bedingung === 'getrennte_strommessung')  return getrennt
-    if (f.bedingung === '!getrennte_strommessung') return !getrennt
-    if (f.bedingung === 'arbitrage_faehig')        return arbitrage
-    if (f.bedingung === 'laedt_aus_netz')          return laedtAusNetz
-    if (f.bedingung === 'v2h_faehig')              return v2h
-    if (f.bedingung === 'hat_speicher')            return hatSpeicher
-    if (f.bedingung === 'luft_luft')               return luftLuft
-    if (f.bedingung === '!luft_luft')              return !luftLuft
-    return true
-  }).map(({ bedingung: _b, label_wenn, ...rest }) => {
+  // Spiegel von `field_definitions.bedingung_erfuellt`: ein Schlüssel aus
+  // `bedingungsWerte`, optional mit `!` negiert; eine Liste gilt als UND.
+  // Ein unbekannter Schlüssel ZEIGT das Feld (fail-open) — ein Tippfehler darf
+  // kein zugeordnetes Feld unsichtbar machen. Begründung im Backend-Docstring.
+  const erfuellt = (bedingung: string | string[] | undefined): boolean => {
+    if (!bedingung) return true
+    const tokens = typeof bedingung === 'string' ? [bedingung] : bedingung
+    return tokens.every(token => {
+      const negiert = token.startsWith('!')
+      const schluessel = negiert ? token.slice(1) : token
+      if (!(schluessel in bedingungsWerte)) return true
+      return bedingungsWerte[schluessel] !== negiert
+    })
+  }
+
+  return allFields.filter(f => erfuellt(f.bedingung)).map(({ bedingung: _b, label_wenn, ...rest }) => {
     if (label_wenn) {
       for (const [cond, altLabel] of Object.entries(label_wenn)) {
         if (bedingungsWerte[cond]) return { ...rest, label: altLabel }
