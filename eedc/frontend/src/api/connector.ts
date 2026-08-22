@@ -1,3 +1,4 @@
+import { fetchApi } from './fetchApi'
 /**
  * Connector API Client
  * Direkte Verbindung zu Wechselrichtern über lokale REST-API.
@@ -71,7 +72,7 @@ export const connectorApi = {
    * Verfügbare Connector-Typen abrufen
    */
   async getConnectors(): Promise<ConnectorInfo[]> {
-    const response = await fetch(`${API_BASE}/connectors`)
+    const response = await fetchApi(`${API_BASE}/connectors`)
     if (!response.ok) throw new Error('Fehler beim Laden der Connectoren')
     return response.json()
   },
@@ -85,7 +86,7 @@ export const connectorApi = {
     username: string,
     password: string
   ): Promise<ConnectionTestResult> {
-    const response = await fetch(`${API_BASE}/connectors/test`, {
+    const response = await fetchApi(`${API_BASE}/connectors/test`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -114,7 +115,7 @@ export const connectorApi = {
     username: string,
     password: string
   ): Promise<SetupResult> {
-    const response = await fetch(`${API_BASE}/connectors/setup/${anlageId}`, {
+    const response = await fetchApi(`${API_BASE}/connectors/setup/${anlageId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -137,7 +138,7 @@ export const connectorApi = {
    * Connector-Status einer Anlage abrufen
    */
   async getStatus(anlageId: number): Promise<ConnectorStatus> {
-    const response = await fetch(`${API_BASE}/connectors/status/${anlageId}`)
+    const response = await fetchApi(`${API_BASE}/connectors/status/${anlageId}`)
     if (!response.ok) throw new Error('Fehler beim Laden des Connector-Status')
     return response.json()
   },
@@ -146,7 +147,7 @@ export const connectorApi = {
    * Zählerstand manuell vom Gerät ablesen
    */
   async fetch(anlageId: number): Promise<FetchResult> {
-    const response = await fetch(`${API_BASE}/connectors/fetch/${anlageId}`, {
+    const response = await fetchApi(`${API_BASE}/connectors/fetch/${anlageId}`, {
       method: 'POST',
     })
 
@@ -166,7 +167,7 @@ export const connectorApi = {
     anlageId: number,
     fieldInvMap: FieldInvMap
   ): Promise<{ erfolg: boolean; field_inv_map: FieldInvMap }> {
-    const response = await fetch(`${API_BASE}/connectors/mapping/${anlageId}`, {
+    const response = await fetchApi(`${API_BASE}/connectors/mapping/${anlageId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ field_inv_map: fieldInvMap }),
@@ -184,7 +185,7 @@ export const connectorApi = {
    * Connector-Konfiguration entfernen
    */
   async remove(anlageId: number): Promise<void> {
-    const response = await fetch(`${API_BASE}/connectors/${anlageId}`, {
+    const response = await fetchApi(`${API_BASE}/connectors/${anlageId}`, {
       method: 'DELETE',
     })
 
@@ -202,7 +203,7 @@ export const connectorApi = {
     jahr: number,
     monat: number
   ): Promise<ConnectorMonatswerte> {
-    const response = await fetch(`${API_BASE}/connectors/monatswerte/${anlageId}/${jahr}/${monat}`)
+    const response = await fetchApi(`${API_BASE}/connectors/monatswerte/${anlageId}/${jahr}/${monat}`)
 
     if (!response.ok) {
       const error = await response.json()

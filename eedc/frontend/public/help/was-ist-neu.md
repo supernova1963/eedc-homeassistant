@@ -9,6 +9,45 @@
 
 ---
 
+## Noch nicht veröffentlicht — Ansehen ja, ändern nur mit PIN
+
+**eedc erscheint jetzt bei allen Home-Assistant-Benutzern**
+
+Bisher stand eedc nur bei Benutzern mit Administratorrechten in der
+Seitenleiste. Wer für sein Wandtablet einen eigenen HA-Benutzer ohne
+Adminrechte angelegt hatte, fand eedc dort nicht. Das ist behoben — der
+Eintrag erscheint für jeden angemeldeten Benutzer.
+
+**Und du kannst die Einstellungen mit einer PIN schützen**
+
+Das gehört zusammen: Wenn mehr Leute im Haus auf eedc schauen können, willst
+du vielleicht nicht, dass jemand versehentlich etwas verstellt. Unter
+*Einstellungen → Anlage* kannst du deshalb eine **PIN** setzen.
+
+- **Ansehen bleibt immer frei.** Alle Auswertungen, alle Diagramme, alle
+  Zahlen — dafür braucht niemand die PIN.
+- **Zum Ändern** wird sie einmal je Browser-Sitzung abgefragt: Stammdaten,
+  Strompreise, Monatsabschluss, Import, Reparaturen.
+- **Hell/dunkel bleibt frei**, das ist keine Einstellung im Sinne der Sperre.
+- **Ohne PIN ändert sich nichts.** Wer sie nicht einschaltet, merkt von der
+  ganzen Sache nichts — so wird sie auch ausgeliefert.
+
+Es ist bewusst eine **PIN** und kein Benutzerkonto: eedc weiß nicht, wer
+davorsitzt, es gibt genau einen Schlüssel. Das reicht gegen versehentliches
+Verstellen durch Familie und Besucher — mehr soll es nicht sein und mehr kann
+es nicht sein.
+
+**PIN vergessen?** Dann brauchst du Zugriff auf die Maschine: Im Add-on
+schaltest du in der Konfiguration `einstellungen_pin_zuruecksetzen` ein und
+startest eedc neu (danach wieder ausschalten). Im Standalone-Betrieb setzt du
+`EEDC_PIN_RESET=1`. Absichtlich kein Knopf und keine Adresse in der Oberfläche
+— die wäre für jeden erreichbar, den die PIN aussperren soll.
+
+Mehr dazu in der Hilfe unter
+[Einstellungen → Anlage](HANDBUCH_EINSTELLUNGEN.md#21b-einstellungen-mit-einer-pin-schützen).
+
+---
+
 ## v4.0.25 — Ablesen, nicht aufsummieren
 
 **Dein Gaszähler zeigt jetzt die Zahl, die auf dem Zähler steht**

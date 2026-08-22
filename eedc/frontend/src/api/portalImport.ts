@@ -1,3 +1,4 @@
+import { fetchApi } from './fetchApi'
 /**
  * Portal-Import API Client
  * Importiert Energiedaten aus Hersteller-Portal-Exporten (CSV).
@@ -83,7 +84,7 @@ export interface InvestitionsZuordnung {
 
 export const portalImportApi = {
   async getParsers(): Promise<ParserInfo[]> {
-    const response = await fetch(`${API_BASE}/portal-import/parsers`)
+    const response = await fetchApi(`${API_BASE}/portal-import/parsers`)
     if (!response.ok) throw new Error('Fehler beim Laden der Parser')
     return response.json()
   },
@@ -93,7 +94,7 @@ export const portalImportApi = {
     formData.append('file', file)
     const params = new URLSearchParams()
     if (parserId) params.append('parser_id', parserId)
-    const response = await fetch(
+    const response = await fetchApi(
       `${API_BASE}/portal-import/preview?${params.toString()}`,
       { method: 'POST', body: formData }
     )
@@ -105,7 +106,7 @@ export const portalImportApi = {
   },
 
   async getZuordnungInfo(anlageId: number): Promise<ZuordnungInfo> {
-    const response = await fetch(`${API_BASE}/portal-import/zuordnung-info/${anlageId}`)
+    const response = await fetchApi(`${API_BASE}/portal-import/zuordnung-info/${anlageId}`)
     if (!response.ok) throw new Error('Fehler beim Laden der Zuordnungs-Info')
     return response.json()
   },
@@ -127,7 +128,7 @@ export const portalImportApi = {
       return { betroffen: false, monate: 0, felder: 0, beispiele: [] }
     }
     const query = encodeURIComponent(perioden.join(','))
-    const response = await fetch(
+    const response = await fetchApi(
       `${API_BASE}/portal-import/manuelle-werte/${anlageId}?perioden=${query}`,
     )
     if (!response.ok) throw new Error('Fehler beim Prüfen der manuellen Werte')
@@ -152,7 +153,7 @@ export const portalImportApi = {
     const params = new URLSearchParams()
     if (ueberschreiben) params.append('ueberschreiben', 'true')
     if (datenquelle !== 'portal_import') params.append('datenquelle', datenquelle)
-    const response = await fetch(
+    const response = await fetchApi(
       `${API_BASE}/portal-import/apply/${anlageId}?${params.toString()}`,
       {
         method: 'POST',

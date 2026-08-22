@@ -7,6 +7,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Einstellungen lassen sich mit einer PIN schützen — und eedc erscheint bei allen Home-Assistant-Benutzern.** Zwei Meldungen, die dieselbe Lücke von zwei Seiten beschreiben: **jedema1805** ([#393](https://github.com/supernova1963/eedc-homeassistant/issues/393)) betreibt Wandtablets mit einem HA-Benutzer ohne Administratorrechte — dort fehlte eedc in der Seitenleiste, weil `panel_admin` in der Add-on-Konfiguration nicht gesetzt war. **Mathek** ([Discussion #391](https://github.com/supernova1963/eedc-homeassistant/discussions/391)) möchte umgekehrt, dass Familie und Besucher die Auswertungen ansehen, aber nichts verstellen können. Beides zusammen ergibt eine Funktion: `panel_admin: false` macht eedc für alle angemeldeten HA-Benutzer sichtbar, und eine **optionale PIN** unter *Einstellungen → Anlage* fragt beim ersten Änderungsversuch je Browser-Sitzung nach. Ansehen ist nie gesperrt, hell/dunkel bleibt immer frei, und **ohne gesetzte PIN ändert sich gar nichts** — der Auslieferungszustand ist unverändert. Der Rückweg bei vergessener PIN verlangt Zugriff auf die Maschine (Add-on-Option `einstellungen_pin_zuruecksetzen` bzw. `EEDC_PIN_RESET=1`) und ausdrücklich **keine** öffentlich aufrufbare Adresse.
+
+  Bewusst **kein Berechtigungssystem**: eedc kennt weiterhin keine Benutzer, keine Rollen und kein Login. Ein naheliegender Weg wäre gewesen, die Benutzerkennung auszuwerten, die der HA-Supervisor als `X-Remote-User-*` ans Add-on durchreicht — verworfen, weil das genau das Rollenmodell wäre, das es nicht geben soll, und weil es im **Standalone-Betrieb** gar nicht existiert (dort spricht der Browser eedc direkt an, ohne Supervisor dazwischen). Die Sperre funktioniert in beiden Betriebsarten gleich.
+
+  Durchgesetzt wird sie **im Backend** über die HTTP-Methode, nicht über eine gepflegte Routenliste: Jeder schreibende Aufruf ist erfasst, auch jeder künftige. Ein Wächter (`test_einstellungs_sperre_konformitaet.py`) liest die Routen aus der OpenAPI und prüft das für jede einzelne; ein zweiter (`npm run check:sperre-fetch`) hält fest, dass kein Client-Aufruf an der Sperre vorbeigeht. In *Cockpit → Tag* und *Auswertungen → Prognose* wird der Knopf „Tag neu berechnen" bei gesetzter PIN **ausgeblendet** statt abgewiesen — ein Angebot, das zuverlässig in einer Fehlermeldung endet, ist schlechter als keines.
+
+---
+
 ## [4.0.25] - 2026-08-21 — Ablesen, nicht aufsummieren
 
 ### Fixed

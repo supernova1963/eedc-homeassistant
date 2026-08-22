@@ -5,9 +5,19 @@
  * Verwendet relative Pfade für HA Ingress Kompatibilität.
  */
 
+import { entsperrungAnfordern, sperrHeader } from '../lib/sperreSpeicher'
+
 // Relative Basis-URL für HA Ingress Support
 // './api' wird relativ zur aktuellen Seite aufgelöst
 const API_BASE = './api'
+
+/**
+ * Antwort-Code der Einstellungs-Sperre.
+ *
+ * Bewusst 423 und nicht 403: Ein 403 hat in dieser Anwendung andere Ursachen, und der
+ * Entsperr-Dialog soll nur bei genau diesem einen Fall aufgehen.
+ */
+const GESPERRT = 423
 
 class ApiError extends Error {
   status: number
@@ -28,19 +38,30 @@ class ApiClient {
 
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    schonWiederholt = false,
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`
 
     const config: RequestInit = {
       headers: {
         'Content-Type': 'application/json',
+        ...sperrHeader(),
         ...options.headers,
       },
       ...options,
     }
 
     const response = await fetch(url, config)
+
+    // Einstellungs-Sperre: einmal den Dialog anbieten, dann denselben Aufruf
+    // wiederholen. Nur EIN Wiederholungsversuch — sonst dreht sich der Aufruf im
+    // Kreis, wenn der Nachweis serverseitig nicht angenommen wird.
+    if (response.status === GESPERRT && !schonWiederholt) {
+      if (await entsperrungAnfordern()) {
+        return this.request<T>(endpoint, options, true)
+      }
+    }
 
     if (!response.ok) {
       let detail = 'Ein Fehler ist aufgetreten'

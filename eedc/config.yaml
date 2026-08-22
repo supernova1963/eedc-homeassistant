@@ -35,10 +35,19 @@ ingress_port: 8099
 ingress_stream: true
 panel_icon: "mdi:solar-power"
 panel_title: "eedc"
+# Ohne diese Zeile behandelt Home Assistant den Seitenleisten-Eintrag als
+# Administrator-Sache (Vorgabe `panel_admin: true`) — eedc fehlte damit bei jedem
+# Benutzer ohne Administratorrechte, etwa auf Wandtablets (#393, jedema1805). Home
+# Assistant sieht diesen Weg ausdrücklich vor; im Quelltext steht dazu wörtlich
+# „Endpoints needed for ingress can't require admin because add-ons can set
+# `panel_admin: false`". Wer verhindern möchte, dass Mitbewohner etwas verstellen,
+# schaltet in eedc unter *Einstellungen → Anlage* die Einstellungs-PIN ein (#391).
+panel_admin: false
 
 # Benutzer-Optionen
 options:
   log_level: info
+  einstellungen_pin_zuruecksetzen: false
   ha_recorder_db_url: ""
   live_snapshot_5min_enabled: false
   mqtt:
@@ -52,6 +61,11 @@ options:
 
 schema:
   log_level: list(debug|info|warning|error)
+  # Rückweg für eine vergessene Einstellungs-PIN. Einschalten, eedc neu starten,
+  # danach wieder ausschalten — sonst ist die PIN nach jedem Start weg. Bewusst
+  # hier und nicht als Adresse in der Oberfläche: Der Rückweg soll Zugriff auf die
+  # Add-on-Konfiguration verlangen, den Mitbewohner nicht haben.
+  einstellungen_pin_zuruecksetzen: bool?
   # Deprecated (Phase 5 #303): reportlab entfernt, Wert wird ignoriert. Bleibt
   # im Schema, damit bestehende Konfigurationen mit gesetzter Option die
   # Options-Validierung beim Add-on-Update nicht brechen.

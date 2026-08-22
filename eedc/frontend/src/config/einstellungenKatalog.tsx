@@ -26,6 +26,7 @@ import { useSelectedAnlage, useTheme } from '../hooks'
 import { importApi, type DemoDataResult } from '../api/import'
 import { StrompreiseVerwaltung } from '../pages/StrompreiseTeile'
 import { AnlagenVerwaltung } from '../pages/AnlagenTeile'
+import SperreEinstellung from '../components/einstellungen/SperreEinstellung'
 import { MonatsdatenVerwaltung } from '../pages/MonatsdatenTeile'
 import { DatenCheckerVerwaltung } from '../pages/DatenCheckerTeile'
 import { EnergieprofilPflege } from '../pages/EnergieprofilTeile'
@@ -402,10 +403,20 @@ export const EINSTELLUNGEN_KATALOG: EinstellungEintrag[] = [
   {
     id: 'anlage', name: 'Anlage', icon: Settings, kategorie: 'stammdaten',
     route: 'einstellungen/anlage', hilfe: 'Hilfe: Anlage einrichten',
-    schlagworte: ['stammdaten', 'kwp', 'standort', 'ust', 'steuer', 'prognosequelle', 'name', 'geokoordinaten', 'mastr', 'wetter', 'versorger', 'zähler'],
+    schlagworte: ['stammdaten', 'kwp', 'standort', 'ust', 'steuer', 'prognosequelle', 'name', 'geokoordinaten', 'mastr', 'wetter', 'versorger', 'zähler', 'pin', 'sperre', 'schützen', 'passwort', 'nur lesen'],
     // Gernot 2026-07-01: Tabelle aller Anlagen mit Bearbeiten-Modal (Strompreise-
     // Muster), statt inline eingebettetem Voll-Formular — auch bei einer Anlage.
-    inhalt: () => <AnlagenVerwaltung />,
+    inhalt: () => (
+      <div className="space-y-6">
+        <AnlagenVerwaltung />
+        {/* Die Einstellungs-PIN sitzt bewusst hier (Gernot 2026-08-22) und nicht unter
+            „System": Wer die Anlage einrichtet, entscheidet auch, ob sie geschützt
+            werden soll. Ohne gesetzte PIN ändert der Block nichts am Verhalten. */}
+        <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+          <SperreEinstellung />
+        </div>
+      </div>
+    ),
   },
   {
     id: 'strompreise', name: 'Strompreise', icon: Zap, kategorie: 'stammdaten',

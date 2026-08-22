@@ -23,6 +23,12 @@ if [ -f "$CONFIG_PATH" ]; then
 
     # Live-Snapshot 5-Min (Phase 1 — Counter statt Power-Trapez für Live-Linie)
     export LIVE_SNAPSHOT_5MIN_ENABLED=$(jq -r '.live_snapshot_5min_enabled // false' $CONFIG_PATH)
+
+    # Rückweg für eine vergessene Einstellungs-PIN (siehe config.yaml).
+    if [ "$(jq -r '.einstellungen_pin_zuruecksetzen // false' $CONFIG_PATH)" = "true" ]; then
+        export EEDC_PIN_RESET=1
+        echo "[eedc] Einstellungs-PIN wird beim Start zurückgesetzt (Add-on-Option)."
+    fi
 else
     export LOG_LEVEL="info"
     export LIVE_SNAPSHOT_5MIN_ENABLED="false"

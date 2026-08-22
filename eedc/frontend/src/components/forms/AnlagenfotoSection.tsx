@@ -10,6 +10,7 @@
  */
 import { useState } from 'react'
 import { Alert, BildUpload } from '../ui'
+import { fetchApi } from '../../api/fetchApi'
 
 interface AnlagenfotoSectionProps {
   anlageId: number
@@ -28,7 +29,7 @@ export default function AnlagenfotoSection({ anlageId }: AnlagenfotoSectionProps
     try {
       const formData = new FormData()
       formData.append('datei', file)
-      const res = await fetch(`./api/anlagen/${anlageId}/foto`, { method: 'POST', body: formData })
+      const res = await fetchApi(`./api/anlagen/${anlageId}/foto`, { method: 'POST', body: formData })
       if (!res.ok) {
         const detail = await res.json().catch(() => ({ detail: 'Upload fehlgeschlagen' }))
         throw new Error(detail.detail || 'Upload fehlgeschlagen')
@@ -44,7 +45,7 @@ export default function AnlagenfotoSection({ anlageId }: AnlagenfotoSectionProps
   const handleDelete = async () => {
     setError(null)
     try {
-      const res = await fetch(`./api/anlagen/${anlageId}/foto`, { method: 'DELETE' })
+      const res = await fetchApi(`./api/anlagen/${anlageId}/foto`, { method: 'DELETE' })
       if (!res.ok && res.status !== 404) throw new Error('Löschen fehlgeschlagen')
       setCacheBust(Date.now())
     } catch (err) {

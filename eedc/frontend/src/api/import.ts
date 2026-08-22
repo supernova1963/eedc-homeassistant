@@ -4,6 +4,7 @@
  */
 
 import type { ImportResult, JSONImportResult } from '../types'
+import { fetchApi } from './fetchApi'
 
 // Relative Basis-URL für HA Ingress Support
 const API_BASE = './api'
@@ -28,7 +29,7 @@ export const importApi = {
    * CSV Template Info abrufen
    */
   async getTemplateInfo(anlageId: number): Promise<CSVTemplateInfo> {
-    const response = await fetch(`${API_BASE}/import/template/${anlageId}`)
+    const response = await fetchApi(`${API_BASE}/import/template/${anlageId}`)
     if (!response.ok) throw new Error('Fehler beim Laden des Templates')
     return response.json()
   },
@@ -50,7 +51,7 @@ export const importApi = {
     const params = new URLSearchParams()
     if (ueberschreiben) params.append('ueberschreiben', 'true')
 
-    const response = await fetch(
+    const response = await fetchApi(
       `${API_BASE}/import/csv/${anlageId}?${params.toString()}`,
       {
         method: 'POST',
@@ -81,7 +82,7 @@ export const importApi = {
    * Erstellt eine komplette Demo-Anlage mit Investitionen, Strompreisen und Monatsdaten
    */
   async createDemoData(): Promise<DemoDataResult> {
-    const response = await fetch(`${API_BASE}/import/demo`, {
+    const response = await fetchApi(`${API_BASE}/import/demo`, {
       method: 'POST',
     })
 
@@ -97,7 +98,7 @@ export const importApi = {
    * Demo-Daten löschen
    */
   async deleteDemoData(): Promise<{ message: string }> {
-    const response = await fetch(`${API_BASE}/import/demo`, {
+    const response = await fetchApi(`${API_BASE}/import/demo`, {
       method: 'DELETE',
     })
 
@@ -126,7 +127,7 @@ export const importApi = {
     const params = new URLSearchParams()
     if (ueberschreiben) params.append('ueberschreiben', 'true')
 
-    const response = await fetch(
+    const response = await fetchApi(
       `${API_BASE}/import/json?${params.toString()}`,
       {
         method: 'POST',

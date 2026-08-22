@@ -32,6 +32,7 @@ import { formatDatum } from '../lib'
 import { v3RouteZuV4 } from '../config/v3ZuV4Route'
 import { baueTagesMeldung, type ReparaturMeldung } from '../pages/datenCheckerMeldungen'
 import { energieProfilApi } from '../api/energie_profil'
+import { useSperre } from '../context/SperreContext'
 
 /** IST-Text der Stelle — bleibt der Satz, solange der Grund noch lädt oder der
  *  Server ihn nicht liefert (vertraute Anzeigen nur ändern, wo nötig). */
@@ -59,6 +60,7 @@ export default function TagLeerGrund({ anlageId, datum, onRepariert }: {
     { swrKey: `v4-tag-status:${anlageId}:${datum}` }, /* de-de-allow: Cache-Key, keine Anzeige */
   )
   const status = statusQ.data
+  const { entsperrt } = useSperre()
 
   const reparieren = useCallback(async () => {
     setLaeuft(true)
@@ -93,9 +95,13 @@ export default function TagLeerGrund({ anlageId, datum, onRepariert }: {
       {status?.details && (
         <p className="text-xs text-gray-500 dark:text-gray-400">{status.details}</p>
       )}
-      {(status?.aktion_kind === 'reaggregate_day' || ziel) && (
+      {((status?.aktion_kind === 'reaggregate_day' && entsperrt) || ziel) && (
         <div className="flex flex-wrap items-center gap-2 pt-1">
-          {status?.aktion_kind === 'reaggregate_day' && (
+          {/* Bei gesetzter Einstellungs-PIN wird der Nachrechnen-Knopf ausgeblendet
+              statt abgewiesen: Er ist ein Angebot, und ein Angebot, das zuverlässig
+              in einer Fehlermeldung endet, ist schlechter als keines. Der Weg
+              „Beheben" bleibt — er navigiert nur und schreibt nichts. */}
+          {status?.aktion_kind === 'reaggregate_day' && entsperrt && (
             <Button
               type="button"
               variant="secondary"

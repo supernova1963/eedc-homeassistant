@@ -1,3 +1,4 @@
+import { fetchApi } from './fetchApi'
 /**
  * Custom-Import API Client
  * Importiert beliebige CSV/JSON-Dateien mit benutzerdefiniertem Feld-Mapping.
@@ -99,7 +100,7 @@ export const customImportApi = {
     if (anlageId) params.append('anlage_id', String(anlageId))
 
     const url = `${API_BASE}/custom-import/analyze${params.toString() ? '?' + params.toString() : ''}`
-    const response = await fetch(url, { method: 'POST', body: formData })
+    const response = await fetchApi(url, { method: 'POST', body: formData })
 
     if (!response.ok) {
       const error = await response.json()
@@ -122,7 +123,7 @@ export const customImportApi = {
     params.append('mapping_json', JSON.stringify(mapping))
     if (anlageId) params.append('anlage_id', String(anlageId))
 
-    const response = await fetch(
+    const response = await fetchApi(
       `${API_BASE}/custom-import/preview?${params.toString()}`,
       {
         method: 'POST',
@@ -142,7 +143,7 @@ export const customImportApi = {
    * Gespeicherte Templates abrufen
    */
   async getTemplates(): Promise<TemplateInfo[]> {
-    const response = await fetch(`${API_BASE}/custom-import/templates`)
+    const response = await fetchApi(`${API_BASE}/custom-import/templates`)
     if (!response.ok) throw new Error('Fehler beim Laden der Templates')
     const data = await response.json()
     return data.templates
@@ -152,7 +153,7 @@ export const customImportApi = {
    * Template speichern
    */
   async saveTemplate(name: string, mapping: MappingConfig): Promise<void> {
-    const response = await fetch(
+    const response = await fetchApi(
       `${API_BASE}/custom-import/templates/${encodeURIComponent(name)}`,
       {
         method: 'POST',
@@ -170,7 +171,7 @@ export const customImportApi = {
    * Template löschen
    */
   async deleteTemplate(name: string): Promise<void> {
-    const response = await fetch(
+    const response = await fetchApi(
       `${API_BASE}/custom-import/templates/${encodeURIComponent(name)}`,
       { method: 'DELETE' }
     )
@@ -199,7 +200,7 @@ export const customImportApi = {
     params.append('monate_json', JSON.stringify(selectedMonths))
     if (ueberschreiben) params.append('ueberschreiben', 'true')
 
-    const response = await fetch(
+    const response = await fetchApi(
       `${API_BASE}/custom-import/apply/${anlageId}?${params.toString()}`,
       { method: 'POST', body: formData }
     )

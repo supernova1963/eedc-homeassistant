@@ -1,3 +1,4 @@
+import { fetchApi } from './fetchApi'
 /**
  * Cloud-Import API Client
  * Importiert historische Energiedaten aus Hersteller-Cloud-APIs.
@@ -87,7 +88,7 @@ export const cloudImportApi = {
    * Verfügbare Cloud-Import-Provider abrufen
    */
   async getProviders(): Promise<CloudProviderInfo[]> {
-    const response = await fetch(`${API_BASE}/cloud-import/providers`)
+    const response = await fetchApi(`${API_BASE}/cloud-import/providers`)
     if (!response.ok) throw new Error('Fehler beim Laden der Provider')
     return response.json()
   },
@@ -99,7 +100,7 @@ export const cloudImportApi = {
     providerId: string,
     credentials: Record<string, string>
   ): Promise<CloudTestResult> {
-    const response = await fetch(`${API_BASE}/cloud-import/test`, {
+    const response = await fetchApi(`${API_BASE}/cloud-import/test`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ provider_id: providerId, credentials: trimCredentials(credentials) }),
@@ -122,7 +123,7 @@ export const cloudImportApi = {
     endYear: number,
     endMonth: number
   ): Promise<CloudPreviewResult> {
-    const response = await fetch(`${API_BASE}/cloud-import/fetch-preview`, {
+    const response = await fetchApi(`${API_BASE}/cloud-import/fetch-preview`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -158,7 +159,7 @@ export const cloudImportApi = {
     endMonth: number,
     opts?: { onPoll?: () => void; signal?: AbortSignal; pollMs?: number }
   ): Promise<CloudPreviewResult> {
-    const startResp = await fetch(`${API_BASE}/cloud-import/fetch-async`, {
+    const startResp = await fetchApi(`${API_BASE}/cloud-import/fetch-async`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -181,7 +182,7 @@ export const cloudImportApi = {
     // eslint-disable-next-line no-constant-condition
     while (true) {
       if (opts?.signal?.aborted) throw new DOMException('Abgebrochen', 'AbortError')
-      const statusResp = await fetch(
+      const statusResp = await fetchApi(
         `${API_BASE}/cloud-import/fetch-status/${jobId}`,
         { signal: opts?.signal }
       )
@@ -214,7 +215,7 @@ export const cloudImportApi = {
      */
     zielInvestitionId?: number | null
   ): Promise<{ erfolg: boolean; message: string; anzahl_quellen?: number }> {
-    const response = await fetch(
+    const response = await fetchApi(
       `${API_BASE}/cloud-import/save-credentials/${anlageId}`,
       {
         method: 'POST',
@@ -237,7 +238,7 @@ export const cloudImportApi = {
    * Gespeicherte Credentials abrufen (Secrets maskiert)
    */
   async getCredentials(anlageId: number): Promise<CloudCredentials> {
-    const response = await fetch(
+    const response = await fetchApi(
       `${API_BASE}/cloud-import/credentials/${anlageId}`
     )
     if (!response.ok) {
@@ -256,7 +257,7 @@ export const cloudImportApi = {
     quelle?: string
   ): Promise<{ erfolg: boolean; message: string; entfernt?: number }> {
     const query = quelle ? `?quelle=${encodeURIComponent(quelle)}` : ''
-    const response = await fetch(
+    const response = await fetchApi(
       `${API_BASE}/cloud-import/credentials/${anlageId}${query}`,
       { method: 'DELETE' }
     )

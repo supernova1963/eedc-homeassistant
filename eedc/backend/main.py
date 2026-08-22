@@ -41,10 +41,10 @@ logging.basicConfig(
     force=True,
 )
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 from sqlalchemy import select, func
 from backend.core.config import (
@@ -90,6 +90,7 @@ from backend.api.routes import (
     zaehlerstaende,
     ha_remote,
     datenquellen,
+    sperre,
 )
 from backend.core.log_buffer import setup_log_buffer
 from backend.models.anlage import Anlage
@@ -174,6 +175,17 @@ async def lifespan(app: FastAPI):
     setup_log_buffer()
     await init_db()
     print("Datenbank initialisiert.")
+
+    # Rückweg für eine vergessene Einstellungs-PIN — verlangt Zugriff auf die Maschine
+    # (Add-on-Option bzw. Umgebungsvariable), nicht auf eine öffentliche Adresse.
+    try:
+        from backend.core.database import async_session_maker
+        from backend.core.sperre import pruefe_ruecksetzung
+
+        async with async_session_maker() as _session:
+            await pruefe_ruecksetzung(_session)
+    except Exception as e:
+        logger.debug(f"PIN-Rücksetzung nicht prüfbar: {e}")
 
     # Die HA-Langzeitstatistik liest ohne Recorder-Zugang über die WebSocket-API.
     # Der Service ist synchron und kann die Verbindung nicht selbst nachschlagen
@@ -465,6 +477,61 @@ app.add_middleware(
 
 
 # =============================================================================
+# Einstellungs-Sperre (optional, standardmäßig aus)
+# =============================================================================
+
+# Die Sperre greift über die **Methode**, nicht über eine Liste von Routen. Das ist
+# Absicht: Eine gepflegte Liste veraltet in dem Moment, in dem jemand eine Route
+# hinzufügt und sie nicht einträgt — und eine Sperre mit einem Loch ist schlechter als
+# keine. Über die Methode ist jede neue schreibende Route automatisch erfasst.
+#
+# Ausgenommen sind genau zwei Pfade: das Entsperren selbst (sonst käme niemand mehr
+# herein) und das Sperren. Das Setzen/Ändern/Entfernen der PIN läuft bewusst durch die
+# Sperre — siehe ``api/routes/sperre.py``.
+#
+# Ausdrücklich NICHT erfasst, und das ist eine Entscheidung, kein Übersehen:
+# MQTT-Inbound, Scheduler-Jobs und Connector-Abrufe schreiben ohne HTTP-Anfrage. Sie
+# sind Datenquellen, keine Menschen, die Einstellungen verstellen; sie zu sperren würde
+# die Datenerfassung anhalten, ohne irgendjemanden zu schützen. Der REST-Export auf
+# Port 8099 ist lesend und damit ohnehin unberührt.
+SPERRE_METHODEN = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+SPERRE_AUSNAHMEN = frozenset({"/api/sperre/entsperren", "/api/sperre/sperren"})
+
+
+@app.middleware("http")
+async def einstellungs_sperre(request: Request, call_next):
+    """Weist schreibende Aufrufe ab, solange die Sitzung nicht entsperrt ist."""
+    if (
+        request.method not in SPERRE_METHODEN
+        or not request.url.path.startswith("/api/")
+        or request.url.path in SPERRE_AUSNAHMEN
+    ):
+        return await call_next(request)
+
+    from backend.core import sperre as sperre_core
+    from backend.core.database import async_session_maker
+
+    async with async_session_maker() as db:
+        if not await sperre_core.ist_gesetzt(db):
+            return await call_next(request)
+        if await sperre_core.nachweis_gueltig(
+            db, request.headers.get(sperre_core.HEADER)
+        ):
+            return await call_next(request)
+
+    # 423 statt 403: Ein 403 hat in dieser Anwendung andere Ursachen (fremde Anlage,
+    # nicht verfügbare Integration). Der Client soll den Entsperr-Dialog nur bei
+    # genau diesem Fall öffnen und nicht bei jedem verweigerten Aufruf.
+    return JSONResponse(
+        status_code=status.HTTP_423_LOCKED,
+        content={
+            "detail": "Einstellungen sind gesperrt. Bitte mit der PIN entsperren.",
+            "sperre": True,
+        },
+    )
+
+
+# =============================================================================
 # API Routes - Core (immer verfügbar)
 # =============================================================================
 
@@ -496,6 +563,7 @@ app.include_router(
     custom_import.router, prefix="/api/custom-import", tags=["Custom-Import"]
 )
 app.include_router(system_logs.router, prefix="/api/system", tags=["System"])
+app.include_router(sperre.router, prefix="/api/sperre", tags=["Sperre"])
 app.include_router(daten_checker.router, prefix="/api/system", tags=["System"])
 app.include_router(diagnostics.router, prefix="/api/diagnostics", tags=["Diagnostics"])
 app.include_router(

@@ -82,6 +82,25 @@ Bei fester Modellwahl versucht eedc zuerst das gewählte Modell und fällt bei f
 - **Keine USt-Auswirkung** (Standard): für Anlagen ab 2023 mit Nullsteuersatz (≤ 30 kWp) oder Kleinunternehmer.
 - **Regelbesteuerung**: USt auf Eigenverbrauch wird als Kostenfaktor berechnet (Pre-2023, > 30 kWp, AT/CH). Der USt-Satz ist editierbar (DE 19 %, AT 20 %, CH 8,1 %) und passt sich bei Land-Wechsel automatisch an.
 
+### 2.1b Einstellungen mit einer PIN schützen
+
+**Standardmäßig aus.** Wer sie nicht einschaltet, merkt von diesem Abschnitt nichts.
+
+Die Sperre ist für Haushalte gedacht, in denen mehrere Personen auf eedc schauen: Familie und Besucher sollen die Auswertungen ansehen können, aber nichts verstellen. Du findest sie unter *Einstellungen → Anlage*, unterhalb der Anlagen-Tabelle.
+
+**Was sie tut:** Ist eine PIN gesetzt, wird sie **einmal je Browser-Sitzung** abgefragt, sobald du etwas ändern willst. Das gilt für alles Schreibende — Stammdaten, Strompreise, Monatsabschluss, Import, Reparaturen. **Ansehen ist nie gesperrt**, und auch die Umschaltung zwischen heller und dunkler Darstellung bleibt immer frei.
+
+**Was sie nicht ist:** kein Benutzerkonto, keine Rollen, kein Login. eedc weiß nicht, wer davorsitzt — es gibt genau einen Schlüssel. Das Wort „PIN" ist bewusst gewählt: eine Hürde gegen versehentliches oder neugieriges Verstellen, keine Absicherung gegen jemanden, der es darauf anlegt.
+
+**Sie gilt für die ganze eedc-Installation**, nicht nur für die Anlage, in deren Stammdaten du sie einschaltest. Wer mehrere Anlagen führt, hat trotzdem nur eine PIN.
+
+> **PIN vergessen?** Der Rückweg verlangt Zugriff auf die Maschine — absichtlich, denn eine Adresse, die jeder aufrufen kann, wäre keine Sperre.
+>
+> - **Home-Assistant-App:** Add-on-Konfiguration öffnen, `einstellungen_pin_zuruecksetzen` auf `true`, Add-on neu starten, Option wieder auf `false`.
+> - **Standalone:** Container mit `EEDC_PIN_RESET=1` starten.
+
+**Zusammenhang mit der Seitenleiste in Home Assistant:** Seit derselben Version erscheint eedc auch bei Benutzern **ohne** Administratorrechte in der HA-Seitenleiste — etwa auf Wandtablets. Vorher war der Eintrag Administratoren vorbehalten, was für reine Anzeige-Benutzer unpraktisch war. Beides gehört zusammen: der Eintrag macht eedc erreichbar, die PIN entscheidet, wer ändern darf.
+
 ### 2.1a eedc außerhalb Deutschlands
 
 eedc lässt sich in **Deutschland, Österreich, der Schweiz und Italien** betreiben — das Land wählst du in den Stammdaten. Was dabei trägt und was nicht, steht hier bewusst offen, damit du es vor der Einrichtung weißt und nicht danach.

@@ -28,6 +28,12 @@ const SRC = join(ROOT, 'src')
 const SOT = new Set([
   'src/context/ThemeContext.tsx', // eedc-theme
   'src/components/blocks/BlockShell.tsx', // eedc-bloecke:<sichtKey> (Auf/Zu + Reihenfolge)
+  // eedc-sperre-nachweis — der einzige Ort, an dem der Entsperr-Nachweis der
+  // Einstellungs-Sperre liegt (2026-08-22, #391/#393). Bewusst `sessionStorage`:
+  // „entsperrt bis zum Schließen des Browsers" ist damit die Ablage selbst und keine
+  // selbst verwaltete Frist. Alle Leser gehen über dieses Modul — `api/client.ts`
+  // und `api/fetchApi.ts` importieren `sperrHeader()`, niemand liest den Key direkt.
+  'src/lib/sperreSpeicher.ts',
 ])
 
 /** Eingefrorener Bestand (Datei → max. erlaubte `localStorage`-Treffer, Stand 2026-07-03). */

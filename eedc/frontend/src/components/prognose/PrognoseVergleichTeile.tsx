@@ -30,6 +30,7 @@ import { getStratifizierung, StratifizierungResponse, Wetterklasse, wetterBackfi
 import { KorrekturprofilHeatmapCard } from '../../pages/aussichten/KorrekturprofilHeatmapCard'
 import { PROGNOSE_QUELLEN_COLORS, PROGNOSE_QUELLEN_TEXT, PROGNOSE_DASH, STATUS_TEXT_CLASS, fmtZahl, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, slotZeitspanne, heuteIso, verschiebeIsoTage } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
+import { useSperre } from '../../context/SperreContext'
 import {
   ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine,
 } from 'recharts'
@@ -455,6 +456,7 @@ function IstUnvollstaendigPopover({ fehlendeStunden, anlageId, onReloaded }: { f
   const [busy, setBusy] = useState(false)
   const [feedback, setFeedback] = useState<{ tone: 'success' | 'warning' | 'error'; msg: string } | null>(null)
   const ref = useRef<HTMLSpanElement>(null)
+  const { entsperrt } = useSperre()
   useEffect(() => {
     if (!open) return
     const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
@@ -497,7 +499,12 @@ function IstUnvollstaendigPopover({ fehlendeStunden, anlageId, onReloaded }: { f
             <div className={`text-xs mb-2 px-2 py-1 rounded ${feedback.tone === 'success' ? 'bg-green-900/30 text-green-300' : feedback.tone === 'warning' ? 'bg-amber-900/30 text-amber-300' : 'bg-red-900/30 text-red-300'}`}>{feedback.msg}</div>
           )}
           <div className="flex gap-2">
-            <Button type="button" variant="primary" size="sm" className="flex-1" onClick={handleReaggregate} loading={busy}>{busy ? 'Berechne…' : 'Tag neu berechnen'}</Button>
+            {/* Ausgeblendet statt abgewiesen, wenn eine Einstellungs-PIN gesetzt und
+                die Sitzung nicht entsperrt ist — siehe v4/TagLeerGrund.tsx. Der
+                Absprung ins Sensor-Mapping bleibt, er navigiert nur. */}
+            {entsperrt && (
+              <Button type="button" variant="primary" size="sm" className="flex-1" onClick={handleReaggregate} loading={busy}>{busy ? 'Berechne…' : 'Tag neu berechnen'}</Button>
+            )}
             {/* Absprung in die Datenquellen-Fläche (Sensor-/Topic-Zuordnung). */}
             <a
               href="#/einstellungen/datenquellen"
