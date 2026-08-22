@@ -206,3 +206,75 @@ async def test_meldung_traegt_den_vollen_topic_pfad(db, _inbound_laeuft):
 
     details = await _betroffene(db, anlage)
     assert f"eedc/{anlage.id}_Haus/energy/" in details
+
+
+# ─── N-316: der Ausweg muss den Weg nennen, den es GIBT ─────────────────────
+#
+# Drei Meldungen der Kategorie boten als Ausweg „Daten → Einrichtung →
+# MQTT-Inbound" an — die v3-Navigation. Seit v4.0.0 sind die Alt-Wizards
+# abgelöst, und der Empfangs-Schalter („Daten über MQTT empfangen") sitzt unter
+# Einstellungen → Integration. Der Link war nicht kaputt (routeManifest leitet
+# `einstellungen/mqtt-inbound` um), zeigte aber auf die Datenquellen-Fläche —
+# und dort lässt sich MQTT gar nicht abschalten.
+#
+# ⚠ Warum dieser Test existiert: Beim Bau wurde der Sprengsatz gezündet
+# (Meldungstext zerstört + Link auf LINK_DATENQUELLEN zurückgedreht) — **373
+# Tests blieben grün**. Es gab für diese drei Meldungen keinen Prüfer. Reinste
+# F-27/F-30/F-51-Klasse („Text nennt einen Weg, den es nicht gibt"), und bei
+# F-51 war die Lehre dieselbe: der Test hatte die falsche Aussage
+# festgeschrieben. Hier hatte er sie gar nicht erst angesehen.
+
+from backend.services.daten_checker.kategorien import LINK_INTEGRATION  # noqa: E402
+
+
+def _mqtt_meldungen(befunde):
+    return [b for b in befunde if "MQTT-Topic" in b.meldung or "Subscriber" in b.meldung]
+
+
+@pytest.mark.asyncio
+async def test_ausweg_nennt_integration_statt_der_v3_navigation(db, _inbound_laeuft):
+    """Jede MQTT-Meldung weist nach Einstellungen → Integration — Text UND Link."""
+    anlage = Anlage(anlagenname="Haus", leistung_kwp=10.0, sensor_mapping={})
+    db.add(anlage)
+    await db.flush()
+
+    befunde = await DatenChecker(db=db)._check_mqtt_topic_abdeckung(anlage)
+    gemeldet = _mqtt_meldungen(befunde)
+    assert gemeldet, "Gegenprobe: ohne Befund prüft dieser Test nichts"
+
+    for b in gemeldet:
+        details = b.details or ""
+        # Der Weg, den es nicht mehr gibt — in keiner Schreibweise.
+        assert "Daten → Einrichtung" not in details, b.meldung
+        assert "MQTT-Inbound deaktivieren" not in details, b.meldung
+        # Der Weg, den es gibt.
+        assert "Einstellungen → Integration" in details, b.meldung
+        assert b.link == LINK_INTEGRATION, b.meldung
+
+
+@pytest.mark.asyncio
+async def test_auch_die_subscriber_info_weist_nach_integration(db, monkeypatch):
+    """Der dritte Text: MQTT ist aktiviert, aber der Subscriber läuft nicht.
+    Er trägt denselben Ausweg und lief bis N-316 auf dieselbe Fehlweisung."""
+    from backend.models.settings import Settings as SettingsModel
+
+    class _Aus:
+        _running = False
+        cache = _FakeCache()
+
+    monkeypatch.setattr(
+        "backend.services.mqtt_inbound_service.get_mqtt_inbound_service",
+        lambda: _Aus(),
+    )
+    db.add(SettingsModel(key="mqtt_inbound", value={"enabled": True}))
+    anlage = Anlage(anlagenname="Haus", leistung_kwp=10.0, sensor_mapping={})
+    db.add(anlage)
+    await db.flush()
+
+    befunde = await DatenChecker(db=db)._check_mqtt_topic_abdeckung(anlage)
+    treffer = [b for b in befunde if "Subscriber" in b.meldung]
+    assert treffer, "Gegenprobe: die INFO-Meldung muss hier entstehen"
+    for b in treffer:
+        assert "Daten → Einrichtung" not in (b.details or "")
+        assert "Einstellungen → Integration" in (b.details or "")
+        assert b.link == LINK_INTEGRATION

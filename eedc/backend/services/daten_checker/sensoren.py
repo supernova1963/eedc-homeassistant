@@ -14,6 +14,7 @@ from backend.models.anlage import Anlage
 
 from .kategorien import (
     CheckErgebnis, CheckKategorie, CheckSeverity, LINK_DATENQUELLEN,
+    LINK_INTEGRATION,
 )
 
 
@@ -62,11 +63,11 @@ class SensorChecks:
                 details=(
                     "Möglicherweise konnte beim letzten Start keine Verbindung "
                     "zum Broker aufgebaut werden. Prüfe Broker-Adresse und "
-                    "Zugangsdaten unter Daten → Einrichtung → MQTT-Inbound, "
-                    "oder deaktiviere MQTT-Inbound dort, wenn du keine "
+                    "Zugangsdaten unter Einstellungen → Integration, oder "
+                    "schalte dort „Daten über MQTT empfangen“ ab, wenn du keine "
                     "Live-Daten via MQTT brauchst."
                 ),
-                link="/einstellungen/mqtt-inbound",
+                link=LINK_INTEGRATION,
             ))
             return ergebnisse
 
@@ -160,11 +161,11 @@ class SensorChecks:
                     "(HA-Automation, ioBroker, Node-RED) noch nicht eingerichtet, "
                     "oder Investitions-IDs nach Re-Import nicht in der Automation "
                     "nachgezogen. Wenn du keine Live-Daten via MQTT brauchst, "
-                    "kannst du MQTT-Inbound unter Daten → Einrichtung → "
-                    "MQTT-Inbound deaktivieren. "
+                    "kannst du „Daten über MQTT empfangen“ unter "
+                    "Einstellungen → Integration abschalten. "
                     f"Betroffen: {beispiele}"
                 ),
-                link="/einstellungen/mqtt-inbound",
+                link=LINK_INTEGRATION,
             ))
 
         if veraltet:
@@ -181,11 +182,11 @@ class SensorChecks:
                     "10 min aktualisiert werden. Mögliche Ursache: "
                     "Publisher-Automation läuft nicht oder hat ihre Quelle "
                     "verloren. Wenn du keine Live-Daten via MQTT brauchst, "
-                    "kannst du MQTT-Inbound unter Daten → Einrichtung → "
-                    "MQTT-Inbound deaktivieren. "
+                    "kannst du „Daten über MQTT empfangen“ unter "
+                    "Einstellungen → Integration abschalten. "
                     f"Betroffen: {beispiele}"
                 ),
-                link="/einstellungen/mqtt-inbound",
+                link=LINK_INTEGRATION,
             ))
 
         if not nie_empfangen and not veraltet:
