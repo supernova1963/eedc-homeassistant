@@ -44,7 +44,15 @@ Die Standalone-Distribution (dieser Container, `docker-compose up`) bietet **kei
 
 - VPN ins Heimnetz (WireGuard, Tailscale) ist der einfachste und sicherste Weg.
 - Reverse-Proxy mit Basic-Auth / OAuth2-Proxy / Cloudflare Access / Tailscale Funnel davor. Das ist gelöstes Problem mit Standard-Tooling — wir bauen keinen eigenen Auth-Layer im Container nach.
-- Oder: die Home-Assistant-App-Variante installieren — dann übernimmt der HA-Ingress die Auth.
+- Oder: die Home-Assistant-App-Variante installieren — dann übernimmt der HA-Ingress die **Anmeldung**.
+
+> ⚠️ **Was der Ingress leistet und was nicht.** Er sorgt dafür, dass nur an Home Assistant
+> **angemeldete** Personen an eedc kommen. Er unterscheidet aber **nicht zwischen deinen
+> HA-Benutzern**: eedc kennt keine Konten und keine Rollen, und seit v4.0.26 erscheint es
+> bewusst bei **allen** angemeldeten Benutzern in der Seitenleiste (Wunsch für Wandtablets).
+> Wer in einem Mehrpersonen-Haushalt verhindern möchte, dass jemand Einstellungen verstellt,
+> schaltet in eedc unter *Einstellungen → Anlage* die **Einstellungs-PIN** ein — Ansehen
+> bleibt frei, Ändern verlangt sie.
 
 **LAN-Only, niemals ungeschützt ins Internet** — auch wenn die HTTPS-Verbindung TLS-verschlüsselt wäre, fehlt ohne Auth davor die Zugriffskontrolle.
 

@@ -1,4 +1,11 @@
 configuration:
+  einstellungen_pin_zuruecksetzen:
+    name: "Reset settings PIN"
+    description: >-
+      Emergency use only: if you forgot the PIN protecting the settings in eedc.
+      Turn it on, restart eedc — the PIN is then cleared. Afterwards turn it off
+      again, otherwise the PIN is removed on every start. Does nothing if no PIN
+      is set.
   live_snapshot_5min_enabled:
     name: "5-min snapshots (TEST — leave off)"
     description: >-

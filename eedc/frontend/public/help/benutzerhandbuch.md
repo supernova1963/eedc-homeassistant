@@ -92,6 +92,7 @@ Eine **detaillierte, pro Version gegliederte Beschreibung** aller Änderungen �
 
 | Bereich | Änderung | Ab Version |
 |---|---|---|
+| **Zugriff** | eedc erscheint bei **allen** HA-Benutzern in der Seitenleiste (vorher nur bei Administratoren); dazu eine optionale **PIN**, die das Ändern von Einstellungen schützt — Ansehen bleibt frei | v4.0.26 |
 | **Wirtschaftlichkeit** | Kapitaleinsatz als gemeinsamer Nenner aller vier Sichten (einmalige Ausgaben erhöhen ihn, Förderungen mindern ihn), **Amortisations-Fortschritt** je Komponente neben der Dauer, und jede Dauer nennt ihre Annahme | v4.0.12 |
 | **Oberfläche** | Neue Informationsarchitektur: drei Analyse-Achsen + Community statt vieler Einzel-Tabs; Blöcke klapp-/fokussier-/parkbar | v4.0 |
 | **Cockpit → Monat** | Monats-Analysen des alten Energieprofils gehoben: Performance Ratio (Ø Monat), Kategorien-Anteile, typisches Tagesprofil, Top-Stunden, §51-Negativpreis | v4.0 |

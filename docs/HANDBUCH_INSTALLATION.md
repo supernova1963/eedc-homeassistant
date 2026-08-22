@@ -74,6 +74,10 @@ Wie du eedc installierst, hängt von deiner Umgebung ab. Die eigentliche Softwar
    - Klicke in der HA-Sidebar auf „eedc"
    - Oder öffne direkt: `http://homeassistant.local:8099`
 
+> **Wer eedc sieht — und wer etwas ändern darf.** Seit **v4.0.26** erscheint eedc bei **jedem** angemeldeten Home-Assistant-Benutzer in der Seitenleiste, nicht mehr nur bei Administratoren. Das war ein Anwenderwunsch für Wandtablets, die mit einem eigenen HA-Benutzer ohne Adminrechte laufen.
+>
+> eedc selbst kennt keine Benutzer: Wer die Oberfläche öffnen kann, kann auch alles ändern. Wenn in deinem Haushalt mehrere Personen ein HA-Konto haben und du das nicht möchtest, schalte die **Einstellungs-PIN** ein — siehe [Einstellungen §2.1b](HANDBUCH_EINSTELLUNGEN.md#21b-einstellungen-mit-einer-pin-schützen). Ansehen bleibt damit frei, Ändern verlangt die PIN.
+
 Im Add-on-Betrieb erkennt eedc deine Home-Assistant-Sensoren automatisch – der Setup-Wizard schlägt dir im Integrations-Schritt passende Sensoren aus deinem HA-Energy-Dashboard vor (siehe [§3](#3-ersteinrichtung-setup-wizard)).
 
 ### Option B: Docker (Standalone)
