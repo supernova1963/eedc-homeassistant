@@ -55,6 +55,7 @@ export interface MonatsdatenSubmitData {
   batterie_ladung_kwh?: number
   batterie_entladung_kwh?: number
   netzbezug_durchschnittspreis_cent?: number
+  einspeise_durchschnittspreis_cent?: number
   kraftstoffpreis_euro?: number
   gaspreis_cent_kwh?: number
   globalstrahlung_kwh_m2?: number
@@ -175,6 +176,8 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
   // Strompreis für dynamischen Tarif prüfen
   const { strompreis } = useAktuellerStrompreis(anlageId)
   const hatDynamischenTarif = strompreis?.vertragsart === 'dynamisch'
+  // #392: variable Einspeisevergütung — Monatssatz-Feld einblenden
+  const hatVariableEinspeisung = strompreis?.einspeisung_variabel === true
 
   // Hilfsfunktion um HA-Basiswert zu finden
   const getHaBasisWert = (feld: string): string => {
@@ -196,6 +199,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
     sonnenstunden: monatsdaten?.sonnenstunden?.toString() || '',
     durchschnittstemperatur: monatsdaten?.durchschnittstemperatur?.toString() || '',
     netzbezug_durchschnittspreis_cent: monatsdaten?.netzbezug_durchschnittspreis_cent?.toString() || '',
+    einspeise_durchschnittspreis_cent: monatsdaten?.einspeise_durchschnittspreis_cent?.toString() || '',
     kraftstoffpreis_euro: monatsdaten?.kraftstoffpreis_euro?.toString() || '',
     gaspreis_cent_kwh: monatsdaten?.gaspreis_cent_kwh?.toString() || '',
     notizen: monatsdaten?.notizen || '',
@@ -767,6 +771,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
         batterie_ladung_kwh: battLadung,
         batterie_entladung_kwh: battEntladung,
         netzbezug_durchschnittspreis_cent: formData.netzbezug_durchschnittspreis_cent ? parseFloat(formData.netzbezug_durchschnittspreis_cent) : undefined,
+        einspeise_durchschnittspreis_cent: formData.einspeise_durchschnittspreis_cent !== '' ? parseFloat(formData.einspeise_durchschnittspreis_cent) : undefined,
         kraftstoffpreis_euro: formData.kraftstoffpreis_euro ? parseFloat(formData.kraftstoffpreis_euro) : undefined,
         gaspreis_cent_kwh: formData.gaspreis_cent_kwh ? parseFloat(formData.gaspreis_cent_kwh) : undefined,
         globalstrahlung_kwh_m2: formData.globalstrahlung_kwh_m2 ? parseFloat(formData.globalstrahlung_kwh_m2) : undefined,
@@ -884,6 +889,21 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
               feldStatus={basisStatus.netzbezug_durchschnittspreis_cent}
             bestaetigt={bestaetigteFelder.has('netzbezug_durchschnittspreis_cent')}
             onBestaetigen={() => bestaetigeFeld('netzbezug_durchschnittspreis_cent')}
+            />
+          )}
+          {/* #392: variable Einspeisevergütung — 0 ist ein Wert, deshalb
+              prüft der Payload auf leeren String, nicht truthy. */}
+          {hatVariableEinspeisung && (
+            <AssistenzFeld
+              label="Einspeisevergütung (Monat)"
+              name="einspeise_durchschnittspreis_cent"
+              min="0"
+              value={formData.einspeise_durchschnittspreis_cent}
+              onChange={(v) => setFormData(prev => ({ ...prev, einspeise_durchschnittspreis_cent: v }))}
+              hint="Vergütungssatz dieses Monats (ct/kWh), z. B. OeMAG-Marktpreis — schlägt den Stammwert des Tarifs"
+              feldStatus={basisStatus.einspeise_durchschnittspreis_cent}
+              bestaetigt={bestaetigteFelder.has('einspeise_durchschnittspreis_cent')}
+              onBestaetigen={() => bestaetigeFeld('einspeise_durchschnittspreis_cent')}
             />
           )}
           {/* PV-Erzeugung: berechnet → Display (D1, kein Input), sonst editierbar (Legacy) */}

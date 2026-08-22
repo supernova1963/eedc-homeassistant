@@ -1026,7 +1026,15 @@ async def calculate_anlage_sensors(
             berechnung = f"{einspeise_erloes:.2f} + {ev_ersparnis:.2f} + {sonstige_netto_gesamt:.2f} (sonstige)"
         elif sensor.key == "einspeise_erloes_euro":
             value = einspeise_erloes
-            if strompreis:
+            if strompreis and getattr(strompreis, "einspeisung_variabel", False):
+                # #392: der €-Wert daneben ist je Monat mit dem gepflegten
+                # Monatssatz gerechnet — ein einzelner Satz im Text wäre
+                # eine Behauptung, die die Zahl nicht deckt.
+                berechnung = (
+                    f"{einspeisung:.0f} kWh × Monatssatz "
+                    f"(variable Vergütung, je Monat aufgelöst)"
+                )
+            elif strompreis:
                 berechnung = f"{einspeisung:.0f} × {strompreis.einspeiseverguetung_cent_kwh:.2f} ct/kWh"
         elif sensor.key == "eigenverbrauch_ersparnis_euro":
             value = ev_ersparnis

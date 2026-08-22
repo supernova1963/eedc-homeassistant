@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.strompreise import (
     lade_tarife_fuer_anlage,
+    resolve_einspeise_preis_cent,
     resolve_netzbezug_preis_cent,
 )
 from backend.core.berechnungen import FinanzMonatsZeile
@@ -86,6 +87,9 @@ async def baue_finanz_zeile(
     verg_cent = (
         allgemein.einspeiseverguetung_cent_kwh if allgemein else EINSPEISEVERGUETUNG_DEFAULT_CENT
     )
+    # #392: variable Einspeisevergütung — der Satz des Monats schlägt den
+    # Stammwert (dieselbe Bauform wie der Flex-Ø beim Netzbezug unten).
+    verg_cent = resolve_einspeise_preis_cent(eingabe.monatsdaten, verg_cent)
     return FinanzMonatsZeile(
         einspeisung_kwh=eingabe.einspeisung_kwh or 0,
         netzbezug_kwh=eingabe.netzbezug_kwh or 0,

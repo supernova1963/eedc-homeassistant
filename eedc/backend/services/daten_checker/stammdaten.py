@@ -431,16 +431,22 @@ class StammdatenChecks:
         # „nie angefasst" und „bewusst 0" sind im Feld nicht unterscheidbar. Die
         # Zeile ist der Ersatz für diese fehlende Unterscheidung, nicht eine
         # Aufforderung.
-        gratis_tarife = [t for t in tarife if not t.einspeiseverguetung_cent_kwh]
+        # #392: Tarife mit variabler Vergütung ausgenommen — dort ist der
+        # Stammwert nur der Fallback, der Satz des Monats steht in
+        # `Monatsdaten.einspeise_durchschnittspreis_cent`. Ein 0-ct-Stammwert
+        # ist bei so einem Tarif keine „0-ct-Rechnung", und die Meldung wäre
+        # durch keine richtige Eingabe abstellbar (P-6-Falle).
+        gratis_tarife = [
+            t for t in tarife
+            if not t.einspeiseverguetung_cent_kwh
+            and not getattr(t, "einspeisung_variabel", False)
+        ]
         gratis_monate = [
             m for m in (monatsdaten or [])
             if (m.einspeisung_kwh or 0) > 0
-            # Stichtag ist der Monatserste, wie bei `baue_finanz_zeile`.
-            and any(
-                t.gueltig_ab <= date(m.jahr, m.monat, 1)
-                and (t.gueltig_bis is None or t.gueltig_bis >= date(m.jahr, m.monat, 1))
-                for t in gratis_tarife
-            )
+            # Stichtag ist der Monatserste, wie bei `baue_finanz_zeile` —
+            # über das geteilte P8-Prädikat statt handgeschriebener Vergleiche.
+            and any(t.gilt_am(date(m.jahr, m.monat, 1)) for t in gratis_tarife)
         ]
         einspeisung_kwh = sum((m.einspeisung_kwh or 0) for m in gratis_monate)
         # Auf ein Jahr hochgerechnet, damit die Schwelle nicht von der Länge des
@@ -533,6 +539,44 @@ class StammdatenChecks:
                     start = tarif.gueltig_bis + timedelta(days=1)
                 else:
                     start = date.today()  # Offenes Ende = aktuell gültig
+
+        # ── Zwei Tarife derselben Verwendung mit IDENTISCHEM Gültig-ab ───────
+        # B6 (#392-Rest, Prüfbericht 2026-08-22): `lade_tarife_fuer_anlage`
+        # sortiert `gueltig_ab DESC` und nimmt den ersten je Verwendung — bei
+        # Gleichstand entscheidet die DB-Reihenfolge, welcher Satz rechnet:
+        # ein stummer Münzwurf. NUR dieser Gleichstand ist die Anomalie. Die
+        # normale Tarif-Folge (neuer Satz beginnt, der alte bleibt offen) ist
+        # der gestützte Weg — der jüngere gewinnt deterministisch ab seinem
+        # Beginn — und bleibt bewusst ohne Meldung: eine Überlappungs-Warnung
+        # darauf wäre eine Dauer-Meldung auf funktionierenden Anlagen
+        # (P-6-Falle; gemessen 22.08.: kein Auto-Schließen beim Anlegen).
+        nach_start: dict[tuple[str, date], list] = {}
+        for t in anlage.strompreise:
+            nach_start.setdefault(
+                (t.verwendung or "allgemein", t.gueltig_ab), []
+            ).append(t)
+        for (verwendung, ab), gleich in sorted(nach_start.items(), key=lambda kv: (kv[0][0], kv[0][1])):
+            if len(gleich) < 2:
+                continue
+            namen = ", ".join(
+                t.tarifname or f"{t.netzbezug_arbeitspreis_cent_kwh:.1f} ct"
+                for t in gleich
+            )
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.WARNING,
+                meldung=(
+                    f"{len(gleich)} Tarife ({verwendung}) beginnen am selben Tag "
+                    f"({ab.strftime('%d.%m.%Y')})"
+                ),
+                details=(
+                    f"Betroffen: {namen}. Bei gleichem Gültig-ab-Datum ist nicht "
+                    "bestimmt, welcher der Sätze rechnet — eedc nimmt einen der "
+                    "beiden, ohne dass eine Regel entscheidet. Einen der Tarife "
+                    "löschen oder sein Gültig-ab-Datum anpassen; danach ist die "
+                    "Wahl eindeutig."
+                ),
+                link="/einstellungen/strompreise",
+            ))
 
         # Spezialtarife prüfen (WP / E-Auto)
         verwendungen = {s.verwendung for s in anlage.strompreise}

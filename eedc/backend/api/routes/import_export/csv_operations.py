@@ -71,6 +71,13 @@ async def get_csv_template_info(anlage_id: int, db: AsyncSession = Depends(get_d
         spalten.append("Durchschnittspreis_Cent")
         beschreibung["Durchschnittspreis_Cent"] = "Ø Strompreis bei dynamischem Tarif (ct/kWh)"
 
+    # #392: bei variabler Einspeisevergütung die Monatssatz-Spalte
+    if allgemein_tarif and getattr(allgemein_tarif, "einspeisung_variabel", False):
+        spalten.append("Einspeiseverguetung_Cent")
+        beschreibung["Einspeiseverguetung_Cent"] = (
+            "Vergütungssatz des Monats bei variabler Einspeisevergütung (ct/kWh)"
+        )
+
     # Investitionen laden, nach Typ und ID sortiert
     inv_result = await db.execute(
         select(Investition)
@@ -370,6 +377,8 @@ async def import_csv(
             netzbezug = netzbezug_raw or 0
 
             durchschnittspreis = parse_float(row.get("Durchschnittspreis_Cent", ""))
+            # #392: Monatssatz der variablen Einspeisevergütung
+            einspeise_preis = parse_float(row.get("Einspeiseverguetung_Cent", ""))
             globalstrahlung = parse_float_positive(row.get("Globalstrahlung_kWh_m2", ""), "Globalstrahlung")
             sonnenstunden = parse_float_positive(row.get("Sonnenstunden", ""), "Sonnenstunden")
             notizen = row.get("Notizen", "").strip() or None
@@ -533,6 +542,7 @@ async def import_csv(
                 ("globalstrahlung_kwh_m2", globalstrahlung),
                 ("sonnenstunden", sonnenstunden),
                 ("netzbezug_durchschnittspreis_cent", durchschnittspreis),
+                ("einspeise_durchschnittspreis_cent", einspeise_preis),
             ]
             if existing_md:
                 # UPDATE: Hierarchie greift — manual:csv_backup ist MANUAL,
@@ -566,6 +576,7 @@ async def import_csv(
                     globalstrahlung_kwh_m2=globalstrahlung,
                     sonnenstunden=sonnenstunden,
                     netzbezug_durchschnittspreis_cent=durchschnittspreis,
+                    einspeise_durchschnittspreis_cent=einspeise_preis,
                     notizen=notizen,
                     datenquelle="csv"
                 )
@@ -673,6 +684,12 @@ async def export_csv(
     hat_dynamisch_export = export_allgemein and export_allgemein.vertragsart == "dynamisch"
     if hat_dynamisch_export:
         header.append("Durchschnittspreis_Cent")
+    # #392: bei variabler Einspeisevergütung die Monatssatz-Spalte
+    hat_variable_einspeisung_export = bool(
+        export_allgemein and getattr(export_allgemein, "einspeisung_variabel", False)
+    )
+    if hat_variable_einspeisung_export:
+        header.append("Einspeiseverguetung_Cent")
 
     inv_columns: list[tuple[Investition, str, str]] = []
 
@@ -720,6 +737,13 @@ async def export_csv(
         ]
         if hat_dynamisch_export:
             row.append(fmt(md.netzbezug_durchschnittspreis_cent) if md.netzbezug_durchschnittspreis_cent else "")
+        if hat_variable_einspeisung_export:
+            # `is not None`, nicht truthy — 0 ct ist ein gepflegter Wert und
+            # muss den Rundlauf überleben (dieselbe Regel wie der Resolver).
+            row.append(
+                fmt(md.einspeise_durchschnittspreis_cent)
+                if md.einspeise_durchschnittspreis_cent is not None else ""
+            )
 
         for inv, suffix, data_key in inv_columns:
             inv_data = inv_monatsdaten_map.get((inv.id, md.jahr, md.monat), {})

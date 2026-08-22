@@ -126,6 +126,8 @@ export interface Monatsdaten {
   batterie_ladung_netz_kwh?: number
   batterie_ladepreis_cent?: number
   netzbezug_durchschnittspreis_cent?: number
+  // #392: Monatssatz der variablen Einspeisevergütung (ct/kWh)
+  einspeise_durchschnittspreis_cent?: number
   kraftstoffpreis_euro?: number
   gaspreis_cent_kwh?: number
   globalstrahlung_kwh_m2?: number
@@ -237,6 +239,8 @@ export interface Strompreis {
   tarifname?: string
   anbieter?: string
   vertragsart?: string
+  // #392: „Einspeisevergütung wechselt monatlich"
+  einspeisung_variabel?: boolean
   verwendung: StrompreisVerwendung
 }
 

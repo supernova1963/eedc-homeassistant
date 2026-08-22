@@ -82,9 +82,13 @@ BASIS_FELDER = [
 # angezeigt wenn eine Anlage-Bedingung erfüllt ist.
 #
 # bedingung_basis:
-#   "dynamischer_tarif" — Anlage hat einen dynamischen Stromtarif
-#   "hat_eauto"         — Anlage hat mindestens eine aktive E-Auto-Investition
-#   "hat_waermepumpe"   — Anlage hat mindestens eine aktive Wärmepumpe
+#   "dynamischer_tarif"    — Anlage hat einen dynamischen Stromtarif
+#   "variable_einspeisung" — der Tarif trägt „Einspeisevergütung wechselt
+#                            monatlich" (#392) — bewusst eine EIGENE Bedingung,
+#                            nicht `dynamischer_tarif`: gruaGits Fall ist fixer
+#                            Bezug + variable Einspeisung
+#   "hat_eauto"            — Anlage hat mindestens eine aktive E-Auto-Investition
+#   "hat_waermepumpe"      — Anlage hat mindestens eine aktive Wärmepumpe
 # =============================================================================
 
 BEDINGTE_BASIS_FELDER = [
@@ -96,6 +100,14 @@ BEDINGTE_BASIS_FELDER = [
         "mapping_key": "strompreis",
         "gruppe": "preise",
         "hinweis": "Verbrauchsgewichteter Ø-Arbeitspreis des Monats (ct/kWh). Bei dynamischem Tarif sonst automatisch aus dem Strompreis-Sensor (Tibber/aWATTar/EPEX) berechnet.",
+    },
+    {
+        "feld": "einspeise_durchschnittspreis_cent",
+        "label": "Einspeisevergütung (Monat)",
+        "einheit": "ct/kWh",
+        "bedingung_basis": "variable_einspeisung",
+        "gruppe": "preise",
+        "hinweis": "Vergütungssatz dieses Monats (ct/kWh), z. B. der OeMAG-Marktpreis. Schlägt den Stammwert des Tarifs; ohne Eintrag rechnet der Monat mit dem Stammwert. eedc holt den Satz nicht automatisch ab.",
     },
     {
         "feld": "kraftstoffpreis_euro",
@@ -1404,6 +1416,7 @@ def get_alle_felder_fuer_investition(typ: str, parameter: Optional[dict] = None)
 def get_basis_felder(
     hat_dynamischen_tarif: bool = False,
     aktive_inv_typen: Optional[set[str]] = None,
+    hat_variable_einspeisung: bool = False,
 ) -> list[dict]:
     """
     Gibt alle Basis-Felder für eine Anlage zurück (inkl. aufgelöster bedingter Felder).
@@ -1414,6 +1427,8 @@ def get_basis_felder(
     Args:
         hat_dynamischen_tarif: True wenn die Anlage einen dynamischen Stromtarif hat
         aktive_inv_typen: Set der aktiven Investitionstypen (z.B. {"pv-module", "e-auto"})
+        hat_variable_einspeisung: True wenn der (zum Stichtag gültige) allgemeine
+            Tarif „Einspeisevergütung wechselt monatlich" trägt (#392)
 
     Returns:
         Liste von Feld-Dicts (ohne bedingung_basis-Key)
@@ -1424,6 +1439,8 @@ def get_basis_felder(
     for feld in BEDINGTE_BASIS_FELDER:
         bedingung = feld.get("bedingung_basis")
         if bedingung == "dynamischer_tarif" and not hat_dynamischen_tarif:
+            continue
+        if bedingung == "variable_einspeisung" and not hat_variable_einspeisung:
             continue
         if bedingung == "hat_eauto" and "e-auto" not in typen:
             continue

@@ -30,6 +30,7 @@ from backend.models.strompreis import Strompreis
 from backend.models.monatsdaten import Monatsdaten
 from backend.api.routes.strompreise import (
     lade_tarife_fuer_anlage,
+    resolve_einspeise_preis_cent,
     resolve_netzbezug_preis_cent,
     resolve_strompreis_for_komponente,
 )
@@ -961,6 +962,8 @@ async def get_finanz_prognose(
     allgemein_tarif = tarife.get("allgemein")
     wp_tarif = tarife.get("waermepumpe")
 
+    # #392: bewusst der HEUTIGE Stammwert — diese Variable speist die
+    # Hochrechnung nach vorn, und künftige Monate haben keinen Monatswert.
     einspeiseverguetung = allgemein_tarif.einspeiseverguetung_cent_kwh if allgemein_tarif else EINSPEISEVERGUETUNG_DEFAULT_CENT
     netzbezug_preis = allgemein_tarif.netzbezug_arbeitspreis_cent_kwh if allgemein_tarif else NETZBEZUG_DEFAULT_CENT
     wp_netzbezug_preis = wp_tarif.netzbezug_arbeitspreis_cent_kwh if wp_tarif else netzbezug_preis
@@ -1414,6 +1417,10 @@ async def get_finanz_prognose(
         finanz_zeilen.append(_zeile)
         finanz_zeilen_je_jahr[f.jahr].append(_zeile)
 
+    # #392: die Monatszeilen für den Vergütungs-Override in `_monats_tarif` —
+    # ein Lookup je Periode, dieselben Zeilen wie oben geladen.
+    _md_by_periode = {(md.jahr, md.monat): md for md in monatsdaten}
+
     async def _tarife_fuer_stichtag(jahr: int, monat: int) -> dict:
         """Kompletter Tarifsatz des Monats (allgemein + WP/Wallbox).
 
@@ -1440,7 +1447,13 @@ async def get_finanz_prognose(
         m_allgemein = (await _tarife_fuer_stichtag(jahr, monat)).get("allgemein")
         return (
             m_allgemein.netzbezug_arbeitspreis_cent_kwh if m_allgemein else NETZBEZUG_DEFAULT_CENT,
-            m_allgemein.einspeiseverguetung_cent_kwh if m_allgemein else EINSPEISEVERGUETUNG_DEFAULT_CENT,
+            # #392: der gepflegte Monatssatz der variablen Vergütung schlägt
+            # den Stammwert des Monats-Tarifs (rückblickend; die Hochrechnung
+            # nach vorn nimmt weiter den heutigen Stammwert).
+            resolve_einspeise_preis_cent(
+                _md_by_periode.get((jahr, monat)),
+                m_allgemein.einspeiseverguetung_cent_kwh if m_allgemein else EINSPEISEVERGUETUNG_DEFAULT_CENT,
+            ),
         )
 
     # Wärmepumpe Alternativkosten-Ersparnis (vs. Gas/Öl) — die „bisherige"-

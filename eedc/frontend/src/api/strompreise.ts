@@ -16,6 +16,7 @@ export interface StrompreisCreate {
   tarifname?: string
   anbieter?: string
   vertragsart?: string
+  einspeisung_variabel?: boolean
   verwendung?: StrompreisVerwendung
 }
 
@@ -29,6 +30,7 @@ export interface StrompreisUpdate {
   tarifname?: string
   anbieter?: string
   vertragsart?: string
+  einspeisung_variabel?: boolean
   verwendung?: StrompreisVerwendung
 }
 

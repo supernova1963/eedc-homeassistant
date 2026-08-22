@@ -122,6 +122,7 @@ class MonatsabschlussInput(BaseModel):
 
     # Optionale manuelle Felder (nicht aus HA)
     netzbezug_durchschnittspreis_cent: Optional[float] = None
+    einspeise_durchschnittspreis_cent: Optional[float] = None  # #392 variable Vergütung
     kraftstoffpreis_euro: Optional[float] = None  # €/L Monatsdurchschnitt
     gaspreis_cent_kwh: Optional[float] = None  # ct/kWh Endpreis Gas/Öl für WP-Vergleich
     sonderkosten_euro: Optional[float] = None

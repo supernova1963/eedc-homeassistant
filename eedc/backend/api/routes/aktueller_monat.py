@@ -22,7 +22,11 @@ from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.monatsdaten import Monatsdaten
 from backend.services.prognose_auswahl import lade_aktive_monatsprognosen
-from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
+from backend.api.routes.strompreise import (
+    lade_tarife_fuer_anlage,
+    resolve_einspeise_preis_cent,
+    resolve_netzbezug_preis_cent,
+)
 from backend.api.routes.connector import _calc_month_delta
 from backend.core.berechnungen import (
     sonstiges_richtung,
@@ -631,6 +635,8 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
         "einspeisung_kwh": md.einspeisung_kwh,
         "netzbezug_kwh": md.netzbezug_kwh,
         "netzbezug_durchschnittspreis_cent": md.netzbezug_durchschnittspreis_cent,
+        # #392: variable Einspeisevergütung des Vorjahresmonats
+        "einspeise_durchschnittspreis_cent": md.einspeise_durchschnittspreis_cent,
     }
 
     if fakt.erzeugung.pv_kwh > 0:
@@ -729,6 +735,10 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
             # Tarifpreis zurückgefallen.
             if result.get("netzbezug_durchschnittspreis_cent") is not None:
                 netz_preis = result["netzbezug_durchschnittspreis_cent"]
+            # #392: der Vergütungssatz des Vorjahresmonats schlägt den
+            # Stammwert — dieselbe `is not None`-Regel wie zwei Zeilen darüber.
+            if result.get("einspeise_durchschnittspreis_cent") is not None:
+                einsp_preis = result["einspeise_durchschnittspreis_cent"]
             if einsp > 0:
                 # §51 EEG: Einspeisung in Negativpreis-Stunden ist seit
                 # Solarpaket I unvergütet. Wenn das Tages-Aggregat fehlt
@@ -1444,6 +1454,12 @@ async def get_aktueller_monat(
     if allgemein_tarif:
         netzbezug_preis_cent = allgemein_tarif.netzbezug_arbeitspreis_cent_kwh if allgemein_tarif.netzbezug_arbeitspreis_cent_kwh is not None else NETZBEZUG_DEFAULT_CENT
         einspeise_cent = allgemein_tarif.einspeiseverguetung_cent_kwh if allgemein_tarif.einspeiseverguetung_cent_kwh is not None else EINSPEISEVERGUETUNG_DEFAULT_CENT
+        # #392: variable Einspeisevergütung — der gepflegte Satz des Monats
+        # schlägt den Stammwert. Anders als beim Netzbezug (der „Verwendeter
+        # Tarif" und Effektiv-Preis getrennt ausliefert) gibt es hier nur EIN
+        # Response-Feld — Erlös, T-Konto und Anzeige tragen dieselbe Zahl.
+        # Laufender Monat ohne gepflegten Wert → Stammwert (Auftrag #392).
+        einspeise_cent = resolve_einspeise_preis_cent(md_for_gas, einspeise_cent)
         # Der Preis, mit dem GELD gerechnet wird: bei flexiblem Tarif der
         # verbrauchsgewichtete Monatsdurchschnitt, sonst der Tarif-Arbeitspreis.
         # `netzbezug_preis_cent` bleibt daneben der ausgelieferte Tarif-Wert

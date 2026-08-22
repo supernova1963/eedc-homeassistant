@@ -11,6 +11,7 @@ import { useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react
 import { Plus, Edit, Trash2, Zap, Calendar, Check } from 'lucide-react'
 import { Button, Card, Modal, EmptyState, Alert, Input, DatumFeld, Select, RadioGroup, FormSection } from '../components/ui'
 import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from '../components/ui'
+import { SchalterZeile } from '../components/forms/sections/SchalterZeile'
 import { useAnlage, useStrompreise } from '../hooks'
 import { GELD_TEXT_CLASS, fmtZahl, heuteIso, monatsersterVon, EINSPEISEVERGUETUNG_FLAT_HINWEIS } from '../lib'
 import type { Strompreis, StrompreisVerwendung } from '../types'
@@ -576,6 +577,8 @@ export function StrompreisForm({
     gueltig_bis: strompreis?.gueltig_bis || '',
     vertragsart: strompreis?.vertragsart || '',
     verwendung: (strompreis?.verwendung || 'allgemein') as StrompreisVerwendung,
+    // #392: „Einspeisevergütung wechselt monatlich" (z. B. OeMAG-Marktpreis)
+    einspeisung_variabel: strompreis?.einspeisung_variabel || false,
   })
 
   // V1/V2: Inline-Fehler erst nach Berührung (touched) bzw. nach Absende-Versuch.
@@ -657,6 +660,7 @@ export function StrompreisForm({
         anbieter: formData.anbieter || undefined,
         vertragsart: formData.vertragsart || undefined,
         verwendung: formData.verwendung,
+        einspeisung_variabel: formData.einspeisung_variabel,
       }
 
       if (strompreis && onUpdate) {
@@ -766,6 +770,18 @@ export function StrompreisForm({
             hint="Optional — Ausweis in der Jahresaufstellung"
           />
         </div>
+        {/* #392 (gruaGit, OeMAG): die EIGENSCHAFT „wechselt monatlich" statt
+            eines Vertragsmodells „Direktvermarktung" — Begründung im Auftrag.
+            Nur beim allgemeinen Tarif: Spezialtarife (WP/Wallbox) tragen keine
+            Einspeisevergütung. */}
+        {formData.verwendung === 'allgemein' && (
+          <SchalterZeile
+            checked={formData.einspeisung_variabel}
+            onChange={(an) => setFormData(prev => ({ ...prev, einspeisung_variabel: an }))}
+            label="Einspeisevergütung wechselt monatlich"
+            hint={'Z. B. OeMAG-Marktpreis: der Monatsabschluss bietet dann das Feld „Einspeisevergütung (Monat)“ an. Der gepflegte Monatssatz schlägt den Stammwert oben; Monate ohne Eintrag rechnen mit dem Stammwert.'}
+          />
+        )}
       </FormSection>
 
       <FormSection title="Gültigkeit">

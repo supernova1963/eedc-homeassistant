@@ -348,12 +348,18 @@ async def get_monatsabschluss(
     tarife = await lade_tarife_fuer_anlage(db, anlage_id, target_date=date(jahr, monat, 1))
     allgemein_tarif = tarife.get("allgemein")
     hat_dynamischen_tarif = bool(allgemein_tarif and allgemein_tarif.vertragsart == "dynamisch")
+    # #392: dieselbe Stichtags-Logik für die variable Einspeisevergütung —
+    # entscheidend ist der Tarif des abzuschließenden Monats, nicht der heutige.
+    hat_variable_einspeisung = bool(
+        allgemein_tarif and getattr(allgemein_tarif, "einspeisung_variabel", False)
+    )
     aktive_inv_typen = {i.typ for i in anlage.investitionen if not i.stilllegungsdatum}
 
     # Alle Basis-Felder aus Registry (inkl. aufgelöster bedingter Felder)
     alle_basis_felder = get_basis_felder(
         hat_dynamischen_tarif=hat_dynamischen_tarif,
         aktive_inv_typen=aktive_inv_typen,
+        hat_variable_einspeisung=hat_variable_einspeisung,
     )
 
     # Basis-Felder aufbereiten

@@ -640,6 +640,8 @@ async def get_vorbelegung(
             .limit(1)
         )
         tarif = result.scalar_one_or_none()
+        # #392: bewusst der Stammwert, KEIN Monatswert — die Vorbelegung eines
+        # Rechners beschreibt den Vertrag des Anwenders, keine Abrechnung.
         if tarif and tarif.einspeiseverguetung_cent_kwh is not None:
             prefill["verguetung_ct_kwh"] = tarif.einspeiseverguetung_cent_kwh
 

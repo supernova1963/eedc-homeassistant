@@ -6,7 +6,7 @@ Speichert Stromtarife mit Gültigkeitszeiträumen.
 
 from datetime import date, datetime
 from typing import Optional
-from sqlalchemy import Float, String, Date, DateTime, ForeignKey
+from sqlalchemy import Boolean, Float, String, Date, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.core.database import Base
@@ -48,6 +48,19 @@ class Strompreis(Base):
     anbieter: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     vertragsart: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # fix, dynamisch, etc.
 
+    # #392 (gruaGit, OeMAG): die Einspeisevergütung wechselt monatlich.
+    # Gefragt wird die EIGENSCHAFT („wechselt der Betrag je Monat?"), nicht der
+    # Vertragsname — „Direktvermarktung" wurde am 21.08.2026 geprüft und
+    # verworfen (bei geförderter Direktvermarktung ist der Erlös stabil, das
+    # Feld lüde zum Falschausfüllen mit dem Monatsmarktwert ein). Bewusst
+    # unabhängig von `vertragsart`: gruaGits Fall ist fixer Bezug + variable
+    # Einspeisung. Mit dem Häkchen bietet der Monatsabschluss
+    # `Monatsdaten.einspeise_durchschnittspreis_cent` an; der Monatswert
+    # schlägt den Stammwert (`resolve_einspeise_preis_cent`, Symmetrie zu P8).
+    einspeisung_variabel: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+
     # Verwendung (Spezialtarife)
     verwendung: Mapped[str] = mapped_column(String(30), nullable=False, default="allgemein", server_default="allgemein")  # allgemein, waermepumpe, wallbox
 
@@ -57,6 +70,19 @@ class Strompreis(Base):
 
     # Relationships
     anlage = relationship("Anlage", back_populates="strompreise")
+
+    def gilt_am(self, stichtag: date) -> bool:
+        """P8-Prädikat: gilt dieser Tarifsatz am Stichtag?
+
+        Spiegelt die WHERE-Klausel von `lade_tarife_fuer_anlage`
+        (`gueltig_ab <= stichtag` und offenes oder noch nicht erreichtes
+        `gueltig_bis`). Eine Stelle für die Regel statt handgeschriebener
+        Datumsvergleiche je Aufrufer — die Drift-Klasse, gegen die P8 gebaut
+        wurde (Prüfbericht Daten-Checker 2026-08-22/B8, D5).
+        """
+        return self.gueltig_ab <= stichtag and (
+            self.gueltig_bis is None or self.gueltig_bis >= stichtag
+        )
 
     def __repr__(self) -> str:
         return f"<Strompreis(anlage={self.anlage_id}, ab={self.gueltig_ab}, {self.netzbezug_arbeitspreis_cent_kwh}ct)>"

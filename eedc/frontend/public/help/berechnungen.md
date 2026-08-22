@@ -142,7 +142,7 @@ Hardcodierte Werte in `cockpit.py`:
 | `batterie_ladung_kwh` | Speicher | `InvestitionMonatsdaten.verbrauch_daten` (Typ: speicher) |
 | `batterie_entladung_kwh` | Speicher | `InvestitionMonatsdaten.verbrauch_daten` (Typ: speicher) |
 | `v2h_entladung_kwh` | E-Auto V2H | `InvestitionMonatsdaten.verbrauch_daten` (Typ: e-auto) |
-| `einspeiseverguetung_cent` | Tarif | `Strompreis.einspeiseverguetung_cent_kwh` |
+| `einspeiseverguetung_cent` | Tarif, ggf. Monatswert | `Strompreis.einspeiseverguetung_cent_kwh`; bei variabler Vergütung schlägt `Monatsdaten.einspeise_durchschnittspreis_cent` (#392, `resolve_einspeise_preis_cent`) |
 | `netzbezug_preis_cent` | Tarif | `Strompreis.netzbezug_arbeitspreis_cent_kwh` |
 | `grundpreis_euro_monat` | Tarif | `Strompreis.grundpreis_euro_monat` |
 | `netzbezug_durchschnittspreis_cent` | HA-Sensor oder Monatsdaten | Dynamischer Ø-Preis |
@@ -364,6 +364,18 @@ Jahres-Rendite (%)  = Kumulative_Ersparnis / Investition_gesamt * 100
 > (`core/wirtschaftlichkeit_defaults.py`), der ausschließlich greift, wenn **gar kein** Tarif
 > gepflegt ist — und genau das meldet der Daten-Checker. Anwendersicht:
 > [Einstellungen §2.2](HANDBUCH_EINSTELLUNGEN.md#22-strompreise).
+>
+> **Variable Einspeisevergütung (#392, seit 2026-08-22):** Trägt der Tarif das Häkchen
+> „Einspeisevergütung wechselt monatlich“ (`Strompreis.einspeisung_variabel`, z. B.
+> OeMAG-Marktpreis in Österreich), bietet der Monatsabschluss das Feld
+> `Monatsdaten.einspeise_durchschnittspreis_cent` an. Der gepflegte **Monatssatz schlägt den
+> Stammwert** — aufgelöst ausschließlich über `resolve_einspeise_preis_cent`
+> (`api/routes/strompreise.py`), mit `is not None`: **0 ct ist ein Wert**. Monate ohne
+> Eintrag rechnen mit dem Stammwert. Die Hochrechnung nach vorn (Aussichten-Prognose) und
+> die ROI-Rechnung über die Lebensdauer nehmen bewusst weiter den heutigen Stammwert —
+> künftige Monate haben keinen Monatswert (dieselbe Begründung wie beim Netzbezug, N-113).
+> eedc holt den Satz **nicht** automatisch ab (keine länderspezifische Quelle); er wird
+> eingetragen oder per CSV importiert (Spalte `Einspeiseverguetung_Cent`).
 
 > **Kanonisches Finanz-Aggregat (SoT `core/berechnungen/finanz_aggregat.py`):** Netto-Ertrag,
 > Einspeise-Erlös, EV-/BKW-Ersparnis und Sonstige-Netto werden **per-Monat** gerechnet und über die

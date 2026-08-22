@@ -94,6 +94,8 @@ class StrompreisExport(BaseModel):
     gueltig_bis: Optional[date] = None
     vertragsart: Optional[str] = None
     verwendung: str = "allgemein"
+    # #392: variable Einspeisevergütung
+    einspeisung_variabel: bool = False
 
 
 class MonatsdatenExport(BaseModel):
@@ -113,6 +115,8 @@ class MonatsdatenExport(BaseModel):
     batterie_ladepreis_cent: Optional[float] = None
     # Dynamischer Tarif
     netzbezug_durchschnittspreis_cent: Optional[float] = None
+    # #392: variable Einspeisevergütung — der Satz des Monats
+    einspeise_durchschnittspreis_cent: Optional[float] = None
     # Wetterdaten
     globalstrahlung_kwh_m2: Optional[float] = None
     sonnenstunden: Optional[float] = None
@@ -330,6 +334,7 @@ async def _export_anlage_full_impl(anlage_id: int, db: AsyncSession):
             gueltig_bis=sp.gueltig_bis,
             vertragsart=sp.vertragsart,
             verwendung=sp.verwendung or "allgemein",
+            einspeisung_variabel=bool(getattr(sp, "einspeisung_variabel", False)),
         )
         for sp in strompreise
     ]
@@ -425,6 +430,7 @@ async def _export_anlage_full_impl(anlage_id: int, db: AsyncSession):
             batterie_ladung_netz_kwh=md.batterie_ladung_netz_kwh,
             batterie_ladepreis_cent=md.batterie_ladepreis_cent,
             netzbezug_durchschnittspreis_cent=md.netzbezug_durchschnittspreis_cent,
+            einspeise_durchschnittspreis_cent=md.einspeise_durchschnittspreis_cent,
             globalstrahlung_kwh_m2=md.globalstrahlung_kwh_m2,
             sonnenstunden=md.sonnenstunden,
             durchschnittstemperatur=md.durchschnittstemperatur,
@@ -634,6 +640,7 @@ async def import_json(
                 gueltig_bis=_parse_date(sp_data.get("gueltig_bis")),
                 vertragsart=sp_data.get("vertragsart"),
                 verwendung=sp_data.get("verwendung", "allgemein"),
+                einspeisung_variabel=bool(sp_data.get("einspeisung_variabel", False)),
             )
             db.add(strompreis)
             importiert["strompreise"] += 1
@@ -765,6 +772,7 @@ async def import_json(
                 batterie_ladung_netz_kwh=md_data.get("batterie_ladung_netz_kwh"),
                 batterie_ladepreis_cent=md_data.get("batterie_ladepreis_cent"),
                 netzbezug_durchschnittspreis_cent=md_data.get("netzbezug_durchschnittspreis_cent"),
+                einspeise_durchschnittspreis_cent=md_data.get("einspeise_durchschnittspreis_cent"),
                 globalstrahlung_kwh_m2=md_data.get("globalstrahlung_kwh_m2"),
                 sonnenstunden=md_data.get("sonnenstunden"),
                 durchschnittstemperatur=md_data.get("durchschnittstemperatur"),
@@ -783,6 +791,7 @@ async def import_json(
                 "batterie_ladung_kwh", "batterie_entladung_kwh",
                 "batterie_ladung_netz_kwh", "batterie_ladepreis_cent",
                 "netzbezug_durchschnittspreis_cent",
+                "einspeise_durchschnittspreis_cent",
                 "globalstrahlung_kwh_m2", "sonnenstunden", "durchschnittstemperatur",
                 "sonderkosten_euro", "sonstige_positionen",
             ]

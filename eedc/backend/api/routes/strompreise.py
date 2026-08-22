@@ -34,6 +34,9 @@ class StrompreisBase(BaseModel):
     anbieter: Optional[str] = Field(None, max_length=255)
     vertragsart: Optional[str] = Field(None, max_length=50)
     verwendung: str = Field("allgemein", description="Tarif-Verwendung: allgemein, waermepumpe, wallbox")
+    # #392: „Einspeisevergütung wechselt monatlich" — schaltet das Monatsfeld
+    # `einspeise_durchschnittspreis_cent` im Monatsabschluss frei.
+    einspeisung_variabel: bool = False
 
 
 class StrompreisCreate(StrompreisBase):
@@ -53,6 +56,7 @@ class StrompreisUpdate(BaseModel):
     anbieter: Optional[str] = Field(None, max_length=255)
     vertragsart: Optional[str] = Field(None, max_length=50)
     verwendung: Optional[str] = Field(None, description="Tarif-Verwendung: allgemein, waermepumpe, wallbox")
+    einspeisung_variabel: Optional[bool] = None
 
 
 class StrompreisResponse(StrompreisBase):
@@ -227,6 +231,24 @@ def resolve_einspeiseverguetung_cent(
         return allgemein.einspeiseverguetung_cent_kwh
 
     return fallback if fallback is not None else EINSPEISEVERGUETUNG_DEFAULT_CENT
+
+
+def resolve_einspeise_preis_cent(monatsdaten_obj, tarif_verguetung_cent: float) -> float:
+    """
+    Löst die effektive Einspeisevergütung für einen Monat auf (#392).
+
+    Fallback-Kette — dieselbe Bauform wie `resolve_netzbezug_preis_cent`:
+    1. monatsdaten.einspeise_durchschnittspreis_cent (variable Vergütung,
+       z. B. OeMAG-Marktpreis — der Satz des Monats)
+    2. tarif_verguetung_cent (Stammwert aus dem Tarif, typischerweise über
+       `resolve_einspeiseverguetung_cent` mit dem Monats-Stichtag geladen)
+
+    `is not None`, nicht truthy: **0 ct ist ein gepflegter Wert** (seit
+    08.08.2026 die Vorbelegung eines neuen Tarifs) und gewinnt.
+    """
+    if monatsdaten_obj and getattr(monatsdaten_obj, 'einspeise_durchschnittspreis_cent', None) is not None:
+        return monatsdaten_obj.einspeise_durchschnittspreis_cent
+    return tarif_verguetung_cent
 
 
 # =============================================================================

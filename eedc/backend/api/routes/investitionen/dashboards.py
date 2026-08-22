@@ -24,6 +24,7 @@ from backend.models.monatsdaten import Monatsdaten
 from backend.models.tages_energie_profil import TagesZusammenfassung
 from backend.api.routes.strompreise import (
     lade_tarife_fuer_anlage,
+    resolve_einspeise_preis_cent,
     resolve_einspeiseverguetung_cent,
     resolve_netzbezug_preis_cent,
     resolve_strompreis_for_komponente,
@@ -1178,8 +1179,12 @@ async def get_speicher_dashboard(
             m_tarife, "allgemein", fallback=strompreis_cent
         )
         gew_preis_sum += resolve_netzbezug_preis_cent(m, m_basis) * (m.netzbezug_kwh or 0)
-        gew_einspeise_sum += resolve_einspeiseverguetung_cent(
-            m_tarife, fallback=einspeiseverguetung_cent
+        # #392: der Monatssatz der variablen Vergütung schlägt den Stamm-
+        # Monatstarif — dieselbe zweite Auflösungsstufe wie beim Bezugspreis
+        # eine Zeile darüber.
+        gew_einspeise_sum += resolve_einspeise_preis_cent(
+            m,
+            resolve_einspeiseverguetung_cent(m_tarife, fallback=einspeiseverguetung_cent),
         ) * (m.netzbezug_kwh or 0)
     gew_kwh_sum = sum(m.netzbezug_kwh or 0 for m in anlage_md_dict.values())
     eff_strompreis_cent = gew_preis_sum / gew_kwh_sum if gew_kwh_sum > 0 else strompreis_cent

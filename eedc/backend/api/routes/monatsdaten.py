@@ -36,6 +36,7 @@ from backend.utils.sonstige_positionen import ist_gueltige_position
 from backend.core.field_definitions import get_feld_hinweise
 from backend.api.routes.strompreise import (
     lade_tarife_fuer_anlage,
+    resolve_einspeise_preis_cent,
     resolve_netzbezug_preis_cent,
 )
 from backend.core.wirtschaftlichkeit_defaults import (
@@ -88,6 +89,8 @@ class MonatsdatenBase(BaseModel):
     batterie_ladung_netz_kwh: Optional[float] = Field(None, ge=0)
     batterie_ladepreis_cent: Optional[float] = Field(None, ge=0)
     netzbezug_durchschnittspreis_cent: Optional[float] = Field(None, ge=0)
+    # #392: variable Einspeisevergütung — der Satz des Monats (ct/kWh)
+    einspeise_durchschnittspreis_cent: Optional[float] = Field(None, ge=0)
     kraftstoffpreis_euro: Optional[float] = Field(None, ge=0)
     gaspreis_cent_kwh: Optional[float] = Field(None, ge=0)
     globalstrahlung_kwh_m2: Optional[float] = Field(None, ge=0)
@@ -122,6 +125,8 @@ class MonatsdatenUpdate(BaseModel):
     batterie_ladung_netz_kwh: Optional[float] = Field(None, ge=0)
     batterie_ladepreis_cent: Optional[float] = Field(None, ge=0)
     netzbezug_durchschnittspreis_cent: Optional[float] = Field(None, ge=0)
+    # #392: variable Einspeisevergütung — der Satz des Monats (ct/kWh)
+    einspeise_durchschnittspreis_cent: Optional[float] = Field(None, ge=0)
     kraftstoffpreis_euro: Optional[float] = Field(None, ge=0)
     gaspreis_cent_kwh: Optional[float] = Field(None, ge=0)
     globalstrahlung_kwh_m2: Optional[float] = Field(None, ge=0)
@@ -203,6 +208,8 @@ class AggregierteMonatsdatenResponse(BaseModel):
     # None = kein Flex-Wert gepflegt → Frontend fällt auf den statischen Tarif
     # zurück (gleiche Quelle wie Cockpit via resolve_netzbezug_preis_cent, #326).
     netzbezug_durchschnittspreis_cent: Optional[float]
+    # #392: Monatssatz der variablen Einspeisevergütung (None = Stammwert gilt)
+    einspeise_durchschnittspreis_cent: Optional[float]
     # Aggregiert aus InvestitionMonatsdaten - PV
     #
     # ⚠️ ZWEI BEDEUTUNGEN, EIN NAME — bewusst so (A17, Namens-Schritt 1):
@@ -608,6 +615,9 @@ async def list_monatsdaten_aggregiert(
             netzbezug_durchschnittspreis_cent=(
                 md.netzbezug_durchschnittspreis_cent if md is not None else None
             ),
+            einspeise_durchschnittspreis_cent=(
+                md.einspeise_durchschnittspreis_cent if md is not None else None
+            ),
             # Komponenten-Aggregate: None wenn keine aktive IMD beigetragen
             # hat, sonst tatsächlicher Wert (auch 0 ist legitim, z.B. WP im
             # Sommer 0 kWh Heizung).
@@ -772,8 +782,11 @@ async def get_monatsdaten(monatsdaten_id: int, db: AsyncSession = Depends(get_db
         pv_erzeugung_kwh=pv_kwh or 0,
         batterie_ladung_kwh=md.batterie_ladung_kwh or 0,
         batterie_entladung_kwh=md.batterie_entladung_kwh or 0,
-        einspeiseverguetung_cent=(
-            strompreis.einspeiseverguetung_cent_kwh if strompreis else EINSPEISEVERGUETUNG_DEFAULT_CENT
+        # #392: Monatswert der variablen Vergütung vor dem Stammwert —
+        # dieselbe Bauform wie der Flex-Ø beim Netzbezug darunter.
+        einspeiseverguetung_cent=resolve_einspeise_preis_cent(
+            md,
+            strompreis.einspeiseverguetung_cent_kwh if strompreis else EINSPEISEVERGUETUNG_DEFAULT_CENT,
         ),
         netzbezug_preis_cent=resolve_netzbezug_preis_cent(
             md,

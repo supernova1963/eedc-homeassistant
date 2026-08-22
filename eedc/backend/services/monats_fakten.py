@@ -69,6 +69,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.strompreise import (
     lade_tarife_fuer_anlage,
+    resolve_einspeise_preis_cent,
     resolve_netzbezug_preis_cent,
     resolve_strompreis_for_komponente,
 )
@@ -1437,10 +1438,13 @@ async def _lade_tarif(
         # Flex-Ø des Monats vor dem Stammdaten-Arbeitspreis (P8, zweite Form).
         netzbezug_preis_cent=resolve_netzbezug_preis_cent(monatsdaten, stammpreis),
         netzbezug_stammpreis_cent=stammpreis,
-        einspeiseverguetung_cent=(
+        # #392: der Monatswert der variablen Vergütung schlägt den Stammwert —
+        # dieselbe zweite P8-Form wie beim Netzbezug eine Zeile darüber.
+        einspeiseverguetung_cent=resolve_einspeise_preis_cent(
+            monatsdaten,
             allgemein.einspeiseverguetung_cent_kwh
             if allgemein
-            else EINSPEISEVERGUETUNG_DEFAULT_CENT
+            else EINSPEISEVERGUETUNG_DEFAULT_CENT,
         ),
         grundpreis_euro_monat=(allgemein.grundpreis_euro_monat or 0.0) if allgemein else 0.0,
         wp_preis_cent=resolve_strompreis_for_komponente(

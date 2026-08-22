@@ -118,6 +118,14 @@ Verwalte deine Stromtarife als Tabelle mit Gültigkeitszeiträumen — die Basis
 
 > **Einspeisevergütung: eedc rechnet flat mit dem eingetragenen Satz.** Der Einspeise-Erlös ist schlicht *eingespeiste Menge × dein Satz* ([Berechnungsreferenz 3.2](BERECHNUNGEN.md#32-finanzen-cockpit)) — es wird nichts im Hintergrund umgerechnet und nichts aus der Anlagengröße abgeleitet.
 >
+> **Wechselt deine Vergütung monatlich** (z. B. der OeMAG-Marktpreis in Österreich), setze im
+> Tarif das Häkchen **„Einspeisevergütung wechselt monatlich“**. Der Monatsabschluss bietet dann
+> das Feld **„Einspeisevergütung (Monat)“** an: der dort gepflegte Satz gilt für genau diesen
+> Monat und schlägt den Stammwert aus dem Tarif — auch eine **0** ist ein gültiger Wert. Monate
+> ohne Eintrag rechnen mit dem Stammwert; die Prognose nach vorn nimmt immer den Stammwert, denn
+> künftige Monate haben noch keinen Satz. eedc holt die Monatswerte nicht automatisch ab — du
+> trägst sie ein oder importierst sie per CSV (Spalte `Einspeiseverguetung_Cent`).
+>
 > Die EEG-Vergütung ist nach **installierter Leistung** gestaffelt (z. B. ein Satz bis 10 kWp, ein niedrigerer darüber) — nicht nach eingespeister Menge. Für die Gesamtanlage gilt deshalb der nach kWp **gewichtete Mischsatz**, und genau der gehört in dieses Feld. Rechenbeispiel mit **erfundenen** Sätzen — die für dich gültigen stehen in deinem Vergütungsbescheid: 12,5 kWp, davon 10,0 kWp zu 8,20 ct und 2,5 kWp zu 7,10 ct ⇒ (10,0 × 8,20 + 2,5 × 7,10) ÷ 12,5 = **7,98 ct/kWh**. Das ist keine Näherung, sondern exakt der Satz, den der Netzbetreiber im Mittel zahlt.
 >
 > eedc ermittelt diesen Satz **bewusst nicht selbst** — auch nicht als Vorschlag: Die EEG-Sätze ändern sich laufend, und welche Bedingungen für deine Anlage tatsächlich gelten (Inbetriebnahmedatum, Volleinspeisung, PPA, Direktvermarktung), weißt nur du. Ein neuer Tarif startet deshalb mit **0 ct/kWh**; mit 0 bleibt der Einspeise-Erlös des Zeitraums 0 €, und der **Daten-Checker** meldet das, sobald tatsächlich Einspeisung erfasst ist. Ist deine Einspeisung wirklich unvergütet, bleibt 0 richtig und der Hinweis aus.

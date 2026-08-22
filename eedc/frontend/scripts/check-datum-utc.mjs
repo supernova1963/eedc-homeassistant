@@ -87,7 +87,9 @@ const ERLAUBT_ZEILEN = new Map([
   // die Verschiebung LAUT (rot), er verschluckt sie nicht; der Umbau auf einen
   // Inhalts-Anker ist deshalb Komfort, nicht Sicherheit, und braucht einen
   // Entscheid (ein Inhalts-Anker erlaubt dieselbe Zeile ungewollt mehrfach).
-  ['src/pages/StrompreiseTeile.tsx', new Set([575])],
+  // 575 → 576 am 22.08.2026 (#392: SchalterZeile-Import darüber) — die VIERTE
+  // Nachführung; der Entscheid Inhalts-Anker vs. Zeilen-Pin steht weiter aus.
+  ['src/pages/StrompreiseTeile.tsx', new Set([576])],
 ])
 
 function quellDateien(dir) {

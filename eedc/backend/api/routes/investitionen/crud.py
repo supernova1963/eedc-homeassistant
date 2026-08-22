@@ -1166,6 +1166,13 @@ async def get_roi_dashboard(
     # eines neuen Tarifs (eedc rät keinen EEG-Satz mehr) und ein gepflegter
     # Wert — mit `or` rechnete die Wirtschaftlichkeit je Investition still mit
     # 8,2 ct, während Cockpit und Jahresbericht 0 nehmen.
+    #
+    # #392: bewusst der heutige STAMMWERT, kein Monatswert der variablen
+    # Vergütung — dieselbe Entscheidung wie beim Netzbezugspreis zwei Zeilen
+    # darüber (N-113): die ROI-Rechnung bildet einen Durchschnitts-Jahreswert
+    # für die Amortisation über die LEBENSDAUER nach vorn, und dafür ist der
+    # heutige Tarif die richtige Basis. Rückblickende Sichten (Cockpit,
+    # Jahresbericht, Speicher-Dashboard) lösen je Monat auf.
     if einspeiseverguetung_cent is None:
         einspeiseverguetung_cent = (
             allgemein_tarif.einspeiseverguetung_cent_kwh

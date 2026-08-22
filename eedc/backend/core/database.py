@@ -789,6 +789,8 @@ async def run_migrations(conn):
                 ('gaspreis_cent_kwh', 'FLOAT'),
                 # G19-1: Strukturierte sonstige Erträge & Ausgaben (Anlage-Ebene)
                 ('sonstige_positionen', 'JSON'),
+                # #392: variable Einspeisevergütung — der Satz des Monats
+                ('einspeise_durchschnittspreis_cent', 'FLOAT'),
             ]
             for col_name, col_type in new_columns:
                 if col_name not in existing_columns:
@@ -872,6 +874,9 @@ async def run_migrations(conn):
             # G19-1 K3 (R19-3): jährliche Zähler-/Messstellengebühr (Ausweis-only)
             if 'zaehlergebuehr_euro_jahr' not in existing_columns:
                 connection.execute(text("ALTER TABLE strompreise ADD COLUMN zaehlergebuehr_euro_jahr FLOAT"))
+            # #392: Häkchen „Einspeisevergütung wechselt monatlich"
+            if 'einspeisung_variabel' not in existing_columns:
+                connection.execute(text("ALTER TABLE strompreise ADD COLUMN einspeisung_variabel BOOLEAN NOT NULL DEFAULT 0"))
 
         # v3.5.0: Preset-ID für MQTT-Gateway-Mappings
         if 'mqtt_gateway_mappings' in inspector.get_table_names():
