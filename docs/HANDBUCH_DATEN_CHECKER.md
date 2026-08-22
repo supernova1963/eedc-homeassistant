@@ -1,7 +1,7 @@
 
 # eedc Handbuch — Daten-Checker
 
-**Version 4.0** | Stand: 2026-08-02
+**Version 4.0** | Stand: 2026-08-22
 
 > Dieses Handbuch ist Teil der eedc-Dokumentation.
 > Siehe auch: [Teil I: Installation & Einrichtung](HANDBUCH_INSTALLATION.md) | [Teil II: Bedienung](HANDBUCH_BEDIENUNG.md) | [Teil III: Einstellungen](HANDBUCH_EINSTELLUNGEN.md) | [Infothek](HANDBUCH_INFOTHEK.md) | [Glossar](GLOSSAR.md)
@@ -28,6 +28,14 @@
    12. [Zeitzone – Abweichung zu Home Assistant](#412-zeitzone--abweichung-zu-home-assistant)
    13. [Sonstige Positionen – der Erfassungsort](#413-sonstige-positionen--der-erfassungsort)
    14. [Klimaanlage – Betriebsmodus](#414-klimaanlage--betriebsmodus)
+   15. [Sensor-Zuordnung – Leistung ↔ Energie verwechselt](#415-sensor-zuordnung--leistung--energie)
+   16. [Quellen-Konflikte](#416-quellen-konflikte)
+   17. [Datenquellen-Drift zu Home Assistant](#417-datenquellen-drift)
+   18. [PV-Doppelerfassung (Verdacht)](#418-pv-doppelerfassung)
+   19. [Ladung doppelt gezählt (Wallbox + E-Auto)](#419-ladung-doppelt-gezaehlt)
+   20. [Plug-in-Hybrid – elektrischer Anteil unbestimmt](#420-phev-anteil)
+   21. [Batterie-Vorzeichen in der Historie](#421-batterie-vorzeichen-historie)
+   22. [Ladestand bei mehreren Speichern](#422-ladestand-mehrere-speicher)
 5. [Behebungs-Workflows](#5-behebungs-workflows)
 6. [Beziehung zu anderen Werkzeugen](#6-beziehung-zu-anderen-werkzeugen)
 
@@ -91,19 +99,35 @@ Einzelne Befunde haben über Releases hinweg ihre Stufe gewechselt. Beispiele:
 
 ## 3. Verfügbarkeit nach Installationsvariante <a name="3-verfuegbarkeit-nach-installationsvariante"></a>
 
-Zwei Kategorien hängen an Voraussetzungen, die je nach Installation gegeben sind oder nicht. Die anderen sieben sind variantenneutral und greifen identisch.
+eedc prüft **25 Kategorien**. Die meisten greifen in jeder Installation identisch; **fünf** hängen an Voraussetzungen, die je nach Installation gegeben sind oder nicht — sie sind unten fett markiert.
 
 | # | Kategorie | HA Add-on | Standalone (Docker / native) |
 |---|-----------|-----------|------------------------------|
-| 1 | Stammdaten | greift | greift |
-| 2 | Strompreise | greift | greift |
-| 3 | Investitionen | greift | greift |
-| 4 | Monatsdaten – Vollständigkeit | greift | greift |
-| 5 | Monatsdaten – Plausibilität | greift | greift |
-| 6 | Energieprofil – Zähler-Abdeckung | greift (Zuordnung zu HA-Entitäten `sensor.…`) | greift (Zuordnung zu MQTT-Topics) |
-| 7 | Energieprofil – Plausibilität | greift | greift |
-| 8 | MQTT-Topic-Abdeckung | nur wenn MQTT-Import aktiv | nur wenn MQTT-Import aktiv |
-| 9 | Sensor-Mapping – HA-Statistics | greift | **wird übersprungen** (keine HA-LTS verfügbar) |
+| 1 | Stammdaten (§4.1) | greift | greift |
+| 2 | Strompreise (§4.2) | greift | greift |
+| 3 | Investitionen (§4.3) | greift | greift |
+| 4 | Monatsdaten – Vollständigkeit (§4.4) | greift | greift |
+| 5 | Messwerte ohne Monatszeile (§4.4a) | greift | greift |
+| 6 | Monatsdaten – Plausibilität (§4.5) | greift | greift |
+| 7 | Energieprofil – Zähler-Abdeckung (§4.6) | greift (Zuordnung zu HA-Entitäten `sensor.…`) | greift (Zuordnung zu MQTT-Topics) |
+| 8 | Energieprofil – Plausibilität (§4.7) | greift | greift |
+| 9 | **MQTT-Topic-Abdeckung** (§4.8) | nur wenn MQTT-Import aktiv | nur wenn MQTT-Import aktiv |
+| 10 | **Sensor-Mapping – HA-Statistics** (§4.9) | greift | **wird übersprungen** (keine HA-LTS verfügbar) |
+| 11 | Energieprofil – fehlende Tageswerte (§4.10) | greift | greift |
+| 12 | Geräte-Connector ohne Monatswert (§4.11) | greift | greift |
+| 13 | **Zeitzone – Abweichung zu HA** (§4.12) | greift | **wird übersprungen** (keine HA-Verbindung) |
+| 14 | Sonstige Positionen – wiederkehrend (§4.13) | greift | greift |
+| 15 | Sonstige Positionen – Doppelerfassung (§4.13) | greift | greift |
+| 16 | Klimaanlage – Betriebsmodus (§4.14) | greift | greift |
+| 17 | **Sensor-Zuordnung – Leistung ↔ Energie** (§4.15) | greift | **wird übersprungen** (Einheit kommt aus HA) |
+| 18 | Quellen-Konflikte (§4.16) | greift | greift |
+| 19 | **Datenquellen-Drift zu HA** (§4.17) | greift | **wird übersprungen** (keine Vergleichsseite) |
+| 20 | PV-Doppelerfassung (§4.18) | greift | greift |
+| 21 | E-Mobilität – Pflegekonflikt (§4.3.9) | greift | greift |
+| 22 | Ladung doppelt gezählt (§4.19) | greift | greift |
+| 23 | Plug-in-Hybrid – Anteil unbestimmt (§4.20) | greift | greift |
+| 24 | Batterie-Vorzeichen in der Historie (§4.21) | greift | greift |
+| 25 | Ladestand bei mehreren Speichern (§4.22) | greift | greift |
 
 ### Was bedeutet „wird übersprungen"?
 
@@ -247,7 +271,7 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 | **\[Name\]: Heizwärmebedarf nicht gesetzt** | ℹ️ INFO | `heizwaermebedarf_kwh` fehlt — Jahres-Einsparungsschätzung greift auf Defaults zurück. | Geschätzten Jahres-Heizwärmebedarf in kWh eintragen (z. B. aus Energieausweis). |
 | **\[Name\]: Strom Heizen/Warmwasser fehlt in N Monat(en)** | ⚠️ WARNING | Bei aktivierter `getrennte_strommessung`: `strom_heizen_kwh` und `strom_warmwasser_kwh` fehlen für die genannten Monate. | Monatsdaten nachtragen mit getrennten Werten. |
 | **\[Name\]: Stromverbrauch fehlt in N Monat(en)** | ⚠️ WARNING | Ohne getrennte Strommessung: `stromverbrauch_kwh` fehlt. | Monatsdaten nachtragen. |
-| **\[Name\]: Heizenergie fehlt in N Monat(en)** | ℹ️ INFO | `heizenergie_kwh` fehlt — JAZ und COP-Vergleich für die Monate nicht möglich, Stromverbrauch bleibt aber erfasst. | Wenn Wärmemengenzähler vorhanden: Werte nachtragen; sonst akzeptieren. |
+| **\[Name\]: Heizwärme fehlt in N Monat(en)** | ℹ️ INFO | Die abgegebene Wärmemenge fehlt — ohne sie gibt es für diese Monate keine gemessene JAZ und keinen COP-Vergleich. Der Stromverbrauch bleibt vollständig erfasst, die Stromauswertung ist unberührt. | **Mit Wärmemengenzähler:** Werte nachtragen. **Ohne Wärmemengenzähler bleibt der Hinweis stehen** — und das ist Absicht: eedc zeigt bei JAZ/COP dann „—" statt einer Scheinzahl. Der Hinweis sagt dir, *warum* dort ein Strich steht. |
 
 > **Split-Klimaanlagen sind ausgenommen.** Ist die Wärmepumpenart **Luft-Luft (Klimaanlage)** eingetragen, verlangt der Checker weder die monatliche Heizwärme noch die Tages-Zusatzzähler aus §4.6: beides setzt einen Wärmemengenzähler voraus, den solche Geräte praktisch nie haben, und einen Warmwasserkreis gibt es dort gar nicht. Der **Stromverbrauch** bleibt Pflicht, die Stromauswertung funktioniert vollständig; JAZ/COP zeigen „—" statt einer Scheinzahl. Eine Wärmepumpe **ohne** eingetragene Art gilt als klassische Wärmepumpe — eine fehlende Angabe schaltet die Erwartung nicht ab.
 >
@@ -334,7 +358,7 @@ Ein Monat besteht in eedc aus zwei Teilen: der **Zählerzeile** der Anlage (Eins
 | Meldung | Severity | Bedeutung | Behebung |
 |---------|----------|-----------|----------|
 | **MM/JJJJ: \[Feld\] ist negativ (X,X kWh)** | ❌ ERROR | Einspeisung, Netzbezug, PV-Erzeugung oder Batteriewerte sind < 0. Energiemengen können physikalisch nicht negativ sein. | Monatsdaten öffnen, Vorzeichen-/Eingabefehler korrigieren. Bei Sensor-Drift: Zählerstand-Differenz prüfen. |
-| **MM/JJJJ: PV-Erzeugung ungewöhnlich hoch (X kWh)** | ⚠️ WARNING | Wert übersteigt das dynamische Maximum (PVGIS × max(PR; 1,0) × 1,45) bzw. das statische Maximum (kWp × Monatsfaktor). Details nennen den verwendeten Schwellwert. | Wert prüfen — Eingabefehler? Falscher Multiplikator? Falls echt: vermutlich war der Monat außergewöhnlich strahlungsreich, dann WARNING ignorieren. |
+| **MM/JJJJ: PV-Erzeugung ungewöhnlich hoch (X kWh)** | ⚠️ WARNING | Wert übersteigt das dynamische Maximum (PVGIS × max(PR; 1,0) × 1,45) bzw. das statische Maximum (kWp × Monatsfaktor). Details nennen den verwendeten Schwellwert. | Wert prüfen — Eingabefehler? Falscher Multiplikator? **Häufigste echte Ursache ist eine Doppelerfassung** (§4.18): dieselbe Erzeugung an zwei Stellen zugeordnet. Danach erst der strahlungsreiche Monat — dann bleibt der Hinweis als Auskunft stehen und sagt, mit welcher Zahl eedc rechnet. |
 | **MM/JJJJ: Einspeisung (X kWh) > PV-Erzeugung (Y kWh)** | ❌ ERROR | Logisch unmöglich — du kannst nicht mehr einspeisen als erzeugen. | Beide Werte prüfen. Häufige Ursache: PV-Erzeugung wurde nur teilweise erfasst (z. B. ein String fehlt in den Komponenten), oder Einspeisung enthält fälschlich Bezug. |
 | **MM/JJJJ: mehr PV verwendet als erzeugt?** | ⚠️ WARNING | Einspeisung **plus** die aus PV geladene Speichermenge ist größer als die Erzeugung des Monats. Beides kommt aus derselben Quelle — zusammen kann es nicht mehr sein, als die Anlage geliefert hat. Bewusst als **Frage**: die häufigste Ursache ist kein Messfehler. | In dieser Reihenfolge prüfen: **(1)** Wird der Speicher auch aus dem Netz geladen (Arbitrage, Notladung), ohne dass das Feld **Ladung aus Netz** gepflegt ist? Dann stimmt die Energie, nur die Zuordnung fehlt. **(2)** Ist die Erzeugung zu niedrig erfasst (ausgesetzter String-Sensor)? **(3)** Sind Einspeisung und Netzbezug vertauscht — dann meldet die Zeile darüber meist zusätzlich. Kleine Abweichungen (bis 2 % der Erzeugung, mindestens 5 kWh) bleiben still. |
 | **MM/JJJJ: Einspeisung und Netzbezug sind beide 0** | ⚠️ WARNING | Beide Kernfelder sind 0 — in den allermeisten Fällen fehlende Daten, kein echter Null-Verbrauch. Bis v4.0.13 konnte auch der Statistik-Import solche Zeilen anlegen, wenn keine Zähler-Sensoren zugeordnet waren; seither entsteht in dem Fall keine Zeile mehr, bestehende bleiben aber stehen. | **Regelfall: Monatsdaten öffnen, Werte eintragen** — der Link führt direkt in diesen Monat. **Sind beide Werte bei dir tatsächlich 0** — die Anlage hat keinen Netzanschluss (Inselbetrieb), oder sie war den ganzen Monat außer Betrieb (Umzug, Defekt) —, **dann ist 0 richtig und nichts zu tun**: Der Hinweis bleibt als Auskunft stehen und sagt, womit eedc für diesen Monat rechnet (wie die Spezialtarif-Hinweise, siehe Kasten in §2). *(Bis v4.0.15 stand hier als einzige Begründung „wahrscheinlich fehlende Daten" — für Anlagen ohne Netzanschluss war der Befund damit durch keine Eingabe abstellbar.)* |
@@ -545,8 +569,17 @@ Hintergrund und die verworfenen Alternativen: [Berechnungen §3.6](BERECHNUNGEN.
 
 | Meldung | Severity | Bedeutung | Behebung |
 |---------|----------|-----------|----------|
-| **„\[Gerät\]": Betriebsmodus nicht zugeordnet — Heiz- und Kühlstrom bleiben zusammen** | ℹ️ INFO | Für dieses Gerät ist keine Modus-Quelle hinterlegt. Der Stromverbrauch zählt vollständig und richtig; es fehlt nur die Aufteilung. | *Einstellungen → Datenquellen*, beim Gerät das Feld **Betriebsmodus** zuordnen. In Home Assistant ist das die **climate-Entität** deines Geräts (meist `climate.…`) — sie zeigt Heizen/Kühlen/Aus. |
-| **Betriebsmodus ist bei N Klimaanlage(n) zugeordnet** | ✅ OK | eedc schreibt stündlich mit, ob geheizt oder gekühlt wurde. | — |
+| **„\[Gerät\]": Betriebsmodus nicht zugeordnet — Heiz- und Kühlstrom bleiben zusammen** | ℹ️ INFO | Für dieses Gerät gibt es **keinen** der beiden Wege zur Aufteilung (siehe Kasten darunter). Der Stromverbrauch zählt vollständig und richtig; es fehlt nur die Aufteilung. | *Einstellungen → Datenquellen*, beim Gerät das Feld **Betriebsmodus** zuordnen. In Home Assistant ist das die **climate-Entität** deines Geräts (meist `climate.…`) — sie zeigt Heizen/Kühlen/Aus. |
+| **Betriebsmodus ist zugeordnet bei N Klimaanlage(n)** | ✅ OK | eedc schreibt stündlich mit, ob geheizt oder gekühlt wurde, und teilt den Strom danach auf. | — |
+| **Betriebsart wird gemessen bei N Klimaanlage(n)** | ✅ OK | Der Verbrauch je Betriebsart kommt aus eigenen Zählern. eedc liest ihn ab, statt ihn zu rechnen. | — |
+| **Heiz- und Kühlstrom werden getrennt bei N Klimaanlage(n)** | ✅ OK | Gemischt: ein Teil der Geräte misst, beim Rest leitet eedc aus dem Betriebsmodus ab. | — |
+
+> **Es gibt zwei Wege zu dieser Aufteilung, und der gemessene gewinnt.**
+>
+> 1. **Gemessen** — du ordnest eigene Zähler je Betriebsart zu (*Strom Heizbetrieb*, *Kühlbetrieb*, *Lüftbetrieb*, *Entfeuchtung*), am Gerät oder je Innengerät. Wer sie in Home Assistant nicht direkt bekommt, baut sie sich mit einem **Utility Meter** je Betriebsart.
+> 2. **Abgeleitet** — du ordnest den **Betriebsmodus** zu, und eedc schreibt stündlich mit, was das Gerät gerade tat.
+>
+> Liegen **gemessene** Werte vor, rechnet eedc die abgeleitete Aufteilung für dieses Gerät gar nicht erst — ganz oder gar nicht, nie beides gemischt. Eine Zuordnung des Betriebsmodus wäre dann wirkungslos. Deshalb erscheint der Hinweis oben **nicht mehr**, sobald einer der beiden Wege eingerichtet ist (oder Werte auf einem von beiden angekommen sind).
 
 > ⚠ **Die Aufteilung lässt sich nicht rückwirkend nachtragen — das ist der wichtigste Satz hier.** Home Assistant bewahrt Zustände wie „Heizen"/„Kühlen" nur wenige Tage auf (die Langzeit-Statistik gibt es nur für Zahlen-Sensoren). Wer den Sensor heute zuordnet, bekommt die Aufteilung **ab heute**; die Vergangenheit bleibt ungeteilt, und ein längerer eedc-Ausfall reißt eine Lücke, die bleibt. Deshalb lohnt sich die Zuordnung auch dann, wenn man die Auswertung noch nicht braucht.
 
@@ -562,7 +595,9 @@ Hintergrund und die verworfenen Alternativen: [Berechnungen §3.6](BERECHNUNGEN.
 > entsteht beim **Monatsabschluss**; für den laufenden Monat wird sie direkt aus den Tageswerten
 > gelesen.
 
-#### Zweiter Befund dieser Kategorie: Aufteilung größer als der Gesamtverbrauch
+#### Verwandter Befund: Aufteilung größer als der Gesamtverbrauch
+
+> **Wo er steht:** nicht in dieser Kategorie, sondern unter **Investitionen** (§4.3) — er hängt an den Monatswerten des Geräts, nicht an der Sensor-Zuordnung. Hier steht er trotzdem, weil er dieselbe Aufteilung betrifft.
 
 | Meldung | Severity | Bedeutung | Behebung |
 |---------|----------|-----------|----------|
@@ -574,6 +609,143 @@ Hintergrund und die verworfenen Alternativen: [Berechnungen §3.6](BERECHNUNGEN.
 > stimmt. ⚠ **Deine Energiebilanz ist davon nicht betroffen:** dort zählt immer der Gesamtwert.
 
 Hintergrund: [Issue #263](https://github.com/supernova1963/eedc-homeassistant/issues/263).
+
+---
+
+### 4.15 Sensor-Zuordnung – Leistung ↔ Energie verwechselt <a name="415-sensor-zuordnung--leistung--energie"></a>
+
+**Was wird geprüft:** Steht in jedem Feld ein Sensor der passenden Art — ein **Leistungssensor** (W/kW) dort, wo eedc eine Momentanleistung erwartet, und ein **kWh-Zähler** dort, wo es eine Energiemenge erwartet? Verglichen wird die in Home Assistant hinterlegte Einheit, nicht der Wert.
+
+**Warum das zählt:** Die beiden Größen sehen im Sensor-Namen oft gleich aus und bedeuten Verschiedenes. Ein Zählerstand in einem Leistungs-Feld wird als Momentanleistung gelesen — aus 7.130 kWh werden 7.130 W, und der live als Rest berechnete Hausverbrauch klemmt auf 0. Umgekehrt lässt sich aus einem Leistungssensor die Energie nur schätzen.
+
+#### Befunde
+
+| Meldung | Severity | Bedeutung | Behebung |
+|---------|----------|-----------|----------|
+| **Leistungs-Slot „\[Feld\]" trägt einen Energie-Sensor (Einheit kWh)** | ❌ ERROR | Ein kWh-Zähler steht in einem Feld, das eine Momentanleistung erwartet. Der Live-Energiefluss rechnet damit falsch. | *Einstellungen → Datenquellen*, für dieses Feld einen Leistungssensor (W/kW) wählen. Die Meldung nennt die aktuell zugeordnete Entität. |
+| **Energie-Slot „\[Feld\]" trägt einen Leistungssensor (Einheit W)** | ⚠️ WARNING | Ein Leistungssensor steht in einem kWh-Feld. eedc fällt auf eine Näherung zurück (Integration über die Zeit) — ungenauer und anfällig für Lücken. | *Einstellungen → Datenquellen*, einen kumulativen kWh-Zähler wählen. |
+
+> **Nur diese eine Verwechslung wird gemeldet.** Ladestand (%), Temperatur (°C), Preis (ct/kWh) und Kilometer bleiben ungeprüft: Dort sind mehrere Einheiten legitim, und eine Meldung wäre öfter falsch als richtig. **Ohne HA-Verbindung** wird die Kategorie still übersprungen — die Einheit kommt aus Home Assistant.
+
+---
+
+### 4.16 Quellen-Konflikte <a name="416-quellen-konflikte"></a>
+
+**Was wird geprüft:** Gab es in den letzten Tagen Felder, für die **mehr als eine** Quelle einen Wert geliefert hat — etwa ein HA-Sensor und zusätzlich ein MQTT-Topic?
+
+**Warum das zählt:** Es ist kein Fehler. eedc hat sich bereits entschieden: Bei mehreren Quellen für dasselbe Feld gewinnt die höherwertige, und der angezeigte Wert stammt von ihr. Der Hinweis sagt nur, dass es die Konkurrenz gibt — nützlich, wenn eine Zahl anders aussieht als erwartet.
+
+#### Befunde
+
+| Meldung | Severity | Bedeutung | Behebung |
+|---------|----------|-----------|----------|
+| **N Felder hatten in den letzten \[X\] Tagen mehrere Quellen** | ℹ️ INFO | Für diese Felder haben zwei oder mehr Quellen geschrieben. Der angezeigte Wert kommt aus der höchstprioren. | **Nichts zu tun.** Wenn du die zweite Quelle nicht willst, entfernst du sie unter *Einstellungen → Datenquellen* — der Hinweis ist aber kein Auftrag. |
+| **Keine Quellen-Konflikte in den letzten \[X\] Tagen** | ✅ OK | Jedes Feld hatte höchstens eine Quelle. | — |
+
+---
+
+### 4.17 Datenquellen-Drift zu Home Assistant <a name="417-datenquellen-drift"></a>
+
+> **Variantenhinweis:** Nur mit HA-Verbindung. Ohne sie gibt es keine Vergleichsseite, die Kategorie wird still übersprungen.
+
+**Was wird geprüft:** Stimmt die von eedc gespeicherte **PV-Tagessumme** der letzten 90 Tage noch mit dem überein, was Home Assistant für denselben Tag ausweist?
+
+**Warum das zählt:** eedc hat seine Tageswerte über die Zeit aus verschiedenen Quellen aufgebaut. Ältere Tage können auf einem Stand stehen, den ein heutiger Abruf anders beantwortet. Gemeldet wird nur PV — die anderen Größen wandern in aller Regel mit.
+
+#### Befunde
+
+| Meldung | Severity | Bedeutung | Behebung |
+|---------|----------|-----------|----------|
+| **N Tag(e) weichen von HA-Statistics ab** | ℹ️ INFO | Für diese Tage liegen eedc und HA um **mindestens 2 kWh und mindestens 5 %** auseinander. Beide Schwellen zusammen, damit Rundungs-Unterschiede still bleiben. Die Details nennen je Tag beide Zahlen. | Je Tag steht ein Knopf **„Tag neu berechnen"** daneben — er holt den Tag frisch aus HA. Massen-Reparaturen gibt es bewusst nur in der Reparatur-Werkbank, damit sie aktiv gewählt werden. |
+| **Keine signifikanten Abweichungen zu HA-Statistics (letzte 90 Tage)** | ✅ OK | eedc und HA sind sich einig. | — |
+
+> **Verglichen wird nur, was HA für den Tag auch liefern konnte.** Ein Zähler ohne Summen-Spalte (§4.9) taucht hier nicht als Lücke auf — sonst meldete der Vergleich Phantom-Drift und böte einen Knopf an, der korrekte Werte mit 0 überschreibt.
+
+---
+
+### 4.18 PV-Doppelerfassung (Verdacht) <a name="418-pv-doppelerfassung"></a>
+
+**Was wird geprüft:** Liefert deine Anlage an mehreren Tagen **mehr**, als physikalisch plausibel ist? Zwei unabhängige Signale aus den letzten 30 Tagen: eine Performance Ratio über 1,05 und ein spezifischer Tagesertrag über 7 kWh/kWp.
+
+**Warum das zählt:** Der häufigste Grund ist keine Wundertechnik, sondern **dieselbe Erzeugung zweimal gezählt** — etwa ein String-Sensor *und* der Anlagen-Summenzähler, beide zugeordnet. Alles, was auf der Erzeugung aufbaut, wird dadurch zu gut: Eigenverbrauch, Autarkie, Ersparnis, CO₂.
+
+#### Befunde
+
+| Meldung | Severity | Bedeutung | Behebung |
+|---------|----------|-----------|----------|
+| **Verdacht auf PV-Doppelerfassung (PR > 1 oder spez. Ertrag zu hoch)** | ⚠️ WARNING | An mindestens drei Tagen liegen die Kennzahlen über dem physikalisch Möglichen. | *Einstellungen → Datenquellen* öffnen und prüfen, ob dieselbe Erzeugung an zwei Stellen zugeordnet ist. **Regel:** Entweder je Erzeuger ein eigener Zähler **oder** ein Anlagen-Summenzähler — nicht beides. |
+| **N auffällige(r) Tag(e) fallen mit einem Zähler-Sprung zusammen** | ℹ️ INFO | Die Auffälligkeit hat eine andere, bekannte Ursache: einen Ausreißer im Zählerstand. | Erst den Zähler-Sprung beheben (§5.6), danach erneut prüfen. |
+
+> **eedc kürzt hier nichts.** Es gibt keinen Knopf, der die Erzeugung „gerade zieht" — die Entscheidung, welche Zuordnung die richtige ist, kann nur der Anlagenbetreiber treffen.
+
+---
+
+### 4.19 Ladung doppelt gezählt (Wallbox + E-Auto) <a name="419-ladung-doppelt-gezaehlt"></a>
+
+**Was wird geprüft:** Gibt es gespeicherte Tage, an denen **Wallbox und E-Auto dieselbe Ladung** tragen?
+
+**Warum das zählt:** Wer sein Auto zu Hause lädt, hat oft beide Geräte erfasst — die Wallbox misst, das Auto meldet. Beide Zahlen zu addieren verdoppelt den Verbrauch. eedc kennt die Regel inzwischen (*trägt die Wallbox die Ladeenergie, ist sie die Quelle*), aber **bereits gespeicherte** Tage tragen die alte Rechnung weiter.
+
+#### Befunde
+
+| Meldung | Severity | Bedeutung | Behebung |
+|---------|----------|-----------|----------|
+| **N Tag(e) zählen dieselbe Ladung doppelt** | ⚠️ WARNING | Für diese Tage steht die Heimladung zweimal in der Bilanz. Die Details nennen die Tage und beide Beträge. | Die betroffenen Tage über *Einstellungen → Datenverwaltung* neu berechnen. |
+| **Keine doppelt gezählten Ladetage in den letzten \[X\] Tagen** | ✅ OK | Kein Tag trägt die Ladung zweimal. | — |
+
+> ⚠ **Ein OK heißt hier „geprüft, soweit Tageswerte vorliegen"** — nicht „alles sauber". Tage ohne gespeicherte Komponentenwerte kann die Prüfung nicht ansehen.
+>
+> **Warum das kein automatischer Lauf beim Start ist:** Die Heilung überschreibt gespeicherte Messwerte. Das passiert in eedc nie ungefragt — du siehst den Befund, die Tage, und entscheidest.
+
+---
+
+### 4.20 Plug-in-Hybrid – elektrischer Anteil unbestimmt <a name="420-phev-anteil"></a>
+
+**Was wird geprüft:** Ist bei einem Fahrzeug mit Verbrenner-Anteil bestimmbar, **welcher Teil der Kilometer elektrisch** gefahren wurde?
+
+**Warum das zählt:** Trägt ein Fahrzeug einen Verbrauch in l/100 km, hat es einen Verbrennungsmotor. Um die Kilometer aufzuteilen, braucht eedc eine von zwei Angaben: den monatlich erfassten Fahrverbrauch in kWh (gemessen) oder einen gepflegten elektrischen Fahranteil in % (geschätzt). **Fehlen beide, rechnet eedc 100 % elektrisch** — Ersparnis und CO₂-Bilanz fallen dadurch zu gut aus. Ein Richtwert wäre erfunden; deshalb sagt eedc es lieber.
+
+#### Befunde
+
+| Meldung | Severity | Bedeutung | Behebung |
+|---------|----------|-----------|----------|
+| **\[Fahrzeug\]: Verbrenner-Verbrauch gepflegt, aber der elektrische Anteil ist nicht bestimmbar** | ⚠️ WARNING | Weder monatlicher Fahrverbrauch noch elektrischer Fahranteil sind vorhanden. Bis dahin rechnet eedc mit 100 % elektrisch. | Entweder den **Fahrverbrauch (kWh)** im Monatsabschluss erfassen — der gemessene Weg — oder am Fahrzeug den **elektrischen Fahranteil (%)** pflegen. |
+
+---
+
+### 4.21 Batterie-Vorzeichen in der Historie <a name="421-batterie-vorzeichen-historie"></a>
+
+**Was wird geprüft:** Tragen gespeicherte Tage die Batterie-Richtung noch **verkehrt herum**?
+
+**Warum das zählt:** Bis eedc 3.45.7 schrieb die Tages-Aggregation das Batterie-Netto in umgekehrter Richtung. Der Fehler steht in bereits gespeicherten Tagen, bis sie neu berechnet werden. **Die Live-Ansicht ist nicht betroffen** — sie hat einen eigenen Weg. Betroffen sind Energieprofil und Tages-Historie.
+
+Erkannt wird das am **Datensignal**, nicht am Datum: Der gespeicherte Tageswert wird gegen einen frischen Abruf verglichen. Zeigen beide in entgegengesetzte Richtungen, ist der Tag mit der alten Logik gerechnet.
+
+#### Befunde
+
+| Meldung | Severity | Bedeutung | Behebung |
+|---------|----------|-----------|----------|
+| **N Tag(e) mit vertauschtem Batterie-Vorzeichen** | ⚠️ WARNING | Diese Tage tragen Ladung und Entladung vertauscht. | Der Befund bringt einen Knopf mit, der den betroffenen Bereich neu berechnet. |
+| **Batterie-Vorzeichen in der Historie konsistent (letzte 90 Tage)** | ✅ OK | Kein Tag zeigt in die falsche Richtung. | — |
+
+> **Eine reine Betrags-Abweichung wird hier bewusst nicht gemeldet** — nur die vertauschte Richtung. Gleiche Richtung mit anderem Betrag ist ein eigenes Thema und kein Vorzeichenfehler.
+
+---
+
+### 4.22 Ladestand bei mehreren Speichern <a name="422-ladestand-mehrere-speicher"></a>
+
+**Was wird geprüft:** Kennt die gespeicherte Historie bei einer Anlage mit **mehreren** Speichern den Ladestand **aller** Geräte — oder nur den eines einzelnen?
+
+**Warum das zählt:** Bis August 2026 nahm eedc den ersten gefundenen Ladestand-Sensor und rechnete mit ihm, als gälte er für die ganze Anlage. Welcher das war, entschied die Reihenfolge der Zuordnung. Vollzyklen, Ladestand-Hübe und die Speicher-Auslegung lasen ihn aber als anlagenweit.
+
+#### Befunde
+
+| Meldung | Severity | Bedeutung | Behebung |
+|---------|----------|-----------|----------|
+| **N Tag(e) kennen nur den Ladestand eines von \[X\] Speichern** | ⚠️ WARNING | Diese Tage stammen aus der Zeit vor der Korrektur. | Der Befund bringt einen Knopf mit, der den Bereich neu berechnet. |
+| **Ladestand aller \[X\] Speicher wird in der Historie geführt** | ✅ OK | Jeder Speicher steht mit seinem eigenen Ladestand da. | — |
+
+> **Anlagen mit einem Speicher erscheinen hier nie.** Dort war die alte Rechnung mit der neuen wertgleich — es gibt nichts zu reparieren.
 
 ---
 
@@ -683,7 +855,7 @@ Nach jedem Schritt: Daten-Checker erneut prüfen.
 
 1. Befund-Details lesen — sie nennen den verwendeten Schwellwert und die Eingangsgrößen.
 2. Eingabefehler ausschließen: Komma vs. Punkt, Faktor 10, Vorzeichen, Verwechslung Einspeisung/Bezug.
-3. Wenn Werte korrekt sind: WARNING als „zur Kenntnis genommen" akzeptieren — der Daten-Checker hat keine Snooze-Funktion, der Hinweis bleibt sichtbar.
+3. Wenn die Werte korrekt sind: **den Hinweis stehen lassen.** Er wird dann zur Auskunft — er sagt, mit welcher Zahl eedc rechnet, und macht sie für dich und für den Support nachvollziehbar. Einen „Erledigt"-Knopf gibt es bewusst nicht (§1).
 4. Bei Energiebilanz-ERRORs: zuerst Batterie-Daten vervollständigen, dann erneut prüfen — fehlende Batteriewerte sind die häufigste Ursache.
 
 ---
