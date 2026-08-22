@@ -1727,6 +1727,19 @@ def test_p9_durchreicher_sind_noch_belegt():
 # `test_co2_autarkie_sichten_symmetrie` und `test_monats_fakten_schicht` —, und
 # die Lücke schrumpft mit jedem Migrationsschritt, weil sie an die Liste unten
 # gebunden ist.
+#
+# **Zweite dokumentierte Blindstelle (Prüfbericht Daten-Checker 2026-08-22/B8):**
+# `services/daten_checker/` faltet `InvestitionMonatsdaten` an ≥9 Stellen über
+# die eager geladene Relationship `Investition.monatsdaten` — der Lader unten
+# erkennt nur `select(...)`, Relationship-Zugriff ist für ihn unsichtbar. Das
+# ist KEIN Verstoß: Checker-Pfade sind per Definition der ersten Kategorie
+# (SCHREIBEN_IMPORT_CHECKER) legitim — sie prüfen Zeilen, sie leiten keine
+# Auswertungsgröße ab. Die Einordnung steht hier statt als vorsorglicher
+# Allowlist-Eintrag, weil ein Eintrag ohne heutigen Treffer eine Allowlist-
+# Leiche wäre (Sitzung-36-Lehre: sie stellt eine künftige Stelle still frei).
+# Stellt jemand eine Checker-Funktion auf `select(InvestitionMonatsdaten)` um,
+# SOLL der Wächter anschlagen — der Eintrag wird dann bewusst und mit dieser
+# Begründung in P10_SCHREIBEN_IMPORT_CHECKER aufgenommen.
 
 _P10_SCHICHT = "backend/services/monats_fakten.py"
 
