@@ -184,30 +184,3 @@ async def test_gemischter_bestand_nur_passende_anlagen(db):
         assert a.vollbackfill_durchgefuehrt is soll, (
             f"Anlage {aid}: erwartet {soll}, bekommen {a.vollbackfill_durchgefuehrt}"
         )
-
-
-_TESTS = [
-    test_ha_anlage_mit_daten_wird_zurueckgesetzt,
-    test_anlage_ohne_sensor_mapping_unveraendert,
-    test_anlage_ohne_tz_daten_unveraendert,
-    test_ha_lts_nicht_verfuegbar_keine_aenderung,
-    test_idempotenz_zweiter_lauf_kein_problem,
-    test_gemischter_bestand_nur_passende_anlagen,
-]
-
-
-async def _run_all() -> int:
-    failures = 0
-    for test in _TESTS:
-        try:
-            await test()
-            print(f"OK   {test.__name__}")
-        except AssertionError as e:
-            failures += 1
-            print(f"FAIL {test.__name__}\n     {e}")
-        except Exception:
-            failures += 1
-            print(f"ERR  {test.__name__}")
-            traceback.print_exc()
-    return failures
-

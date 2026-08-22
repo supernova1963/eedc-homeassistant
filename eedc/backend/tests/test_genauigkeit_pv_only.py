@@ -123,28 +123,3 @@ async def test_leeres_komponenten_kwh_keine_ist(db):
     assert eintrag.ist_kwh is None, (
         f"Leeres komponenten_kwh → ist_kwh=None, bekommen: {eintrag.ist_kwh}"
     )
-
-
-_TESTS = [
-    test_batterie_nettoladen_zaehlt_nicht,
-    test_pv_und_bkw_werden_summiert,
-    test_nur_verbraucher_ist_null,
-    test_leeres_komponenten_kwh_keine_ist,
-]
-
-
-async def _run_all() -> int:
-    failures = 0
-    for test in _TESTS:
-        try:
-            await test()
-            print(f"OK   {test.__name__}")
-        except AssertionError as e:
-            failures += 1
-            print(f"FAIL {test.__name__}\n     {e}")
-        except Exception:
-            failures += 1
-            print(f"ERR  {test.__name__}")
-            traceback.print_exc()
-    return failures
-

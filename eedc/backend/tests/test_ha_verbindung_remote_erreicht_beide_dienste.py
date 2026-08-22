@@ -130,22 +130,3 @@ def test_5_ein_aufruf_versorgt_beide_dienste():
         stats._ws_client.ws_url
     )
     print("  ✓ 5. Ein Aufruf versorgt beide Dienste")
-
-
-def _main() -> int:
-    tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
-    print(f"\n=== HA-Verbindung erreicht beide Dienste — {len(tests)} Proben ===\n")
-    fehler = 0
-    for t in tests:
-        try:
-            t()
-        except Exception:
-            fehler += 1
-            print(f"  ✗ {t.__name__}")
-            traceback.print_exc()
-    print(f"\n{len(tests) - fehler}/{len(tests)} bestanden")
-    return 1 if fehler else 0
-
-
-if __name__ == "__main__":
-    sys.exit(_main())

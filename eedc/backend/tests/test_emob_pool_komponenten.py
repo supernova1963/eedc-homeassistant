@@ -192,33 +192,3 @@ async def test_dienstwagen_wird_uebersprungen(db):
 
 
 # ── Runner ──────────────────────────────────────────────────────────────────
-
-
-_TESTS = [
-    test_wallbox_und_eauto_keine_doppelung,
-    test_nur_wallbox_kein_eauto,
-    test_nur_eauto_keine_wallbox,
-    test_dienstwagen_wird_uebersprungen,
-]
-
-
-async def _main() -> int:
-    failures = 0
-    for fn in _TESTS:
-        try:
-            await fn()
-            print(f"OK   {fn.__name__}")
-        except AssertionError as e:
-            failures += 1
-            print(f"FAIL {fn.__name__}: {e}")
-            traceback.print_exc()
-        except Exception as e:
-            failures += 1
-            print(f"ERR  {fn.__name__}: {type(e).__name__}: {e}")
-            traceback.print_exc()
-    if failures:
-        print(f"\n{failures}/{len(_TESTS)} Tests fehlgeschlagen.")
-        return 1
-    print(f"\nAlle {len(_TESTS)} Tests grün.")
-    return 0
-

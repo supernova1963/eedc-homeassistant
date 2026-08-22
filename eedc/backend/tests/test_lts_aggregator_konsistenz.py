@@ -320,31 +320,3 @@ async def test_anlage_ohne_pv_keine_pv_keys():
     bkw_keys = [k for k in daily if k.startswith("bkw_")]
     assert not pv_keys, f"Keine pv_*-Keys erwartet, gefunden: {pv_keys}"
     assert not bkw_keys
-
-
-_TESTS = [
-    test_sigma_hourly_pv_gleich_sigma_daily_pv_keys,
-    test_sigma_hourly_einspeisung_netzbezug,
-    test_speicher_vorzeichen_konsistent,
-    test_wp_wallbox_sigma_konsistent,
-    test_balkonkraftwerk_und_sonstiges_keys,
-    test_kein_ha_lts_liefert_leer,
-    test_anlage_ohne_pv_keine_pv_keys,
-]
-
-
-async def _run_all() -> int:
-    failures = 0
-    for test in _TESTS:
-        try:
-            await test()
-            print(f"OK   {test.__name__}")
-        except AssertionError as e:
-            failures += 1
-            print(f"FAIL {test.__name__}\n     {e}")
-        except Exception:
-            failures += 1
-            print(f"ERR  {test.__name__}")
-            traceback.print_exc()
-    return failures
-

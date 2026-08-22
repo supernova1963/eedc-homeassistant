@@ -144,36 +144,3 @@ def test_wh_sensor_state_history_fallback_skaliert_weiterhin():
 
 
 # ── Runner ──────────────────────────────────────────────────────────────────
-
-
-_TESTS = [
-    test_wh_sensor_statistics_pfad_durchreicht_kwh,
-    test_kwh_sensor_statistics_pfad_unveraendert,
-    test_mwh_sensor_statistics_pfad_skaliert_auf_kwh,
-    test_wh_sensor_state_history_fallback_skaliert_weiterhin,
-]
-
-
-def _main() -> int:
-    failures = 0
-    for fn in _TESTS:
-        try:
-            fn()
-            print(f"OK   {fn.__name__}")
-        except AssertionError as e:
-            failures += 1
-            print(f"FAIL {fn.__name__}: {e}")
-            traceback.print_exc()
-        except Exception as e:
-            failures += 1
-            print(f"ERR  {fn.__name__}: {type(e).__name__}: {e}")
-            traceback.print_exc()
-    if failures:
-        print(f"\n{failures}/{len(_TESTS)} Tests fehlgeschlagen.")
-        return 1
-    print(f"\nAlle {len(_TESTS)} Tests grün.")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(_main())

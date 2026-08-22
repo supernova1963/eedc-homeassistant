@@ -358,36 +358,3 @@ async def test_alle_jahre_mit_teil_stilllegung(db):
 
 
 # ── Runner ──────────────────────────────────────────────────────────────────
-
-
-_ASYNC_TESTS = [
-    test_ytd_mit_pvgis_wird_annualisiert,
-    test_komplettes_jahr_unveraendert,
-    test_fallback_ohne_pvgis_nutzt_52n_verteilung,
-    test_alle_jahre_mit_anlagen_erweiterung,
-    test_alle_jahre_mit_teil_stilllegung,
-    test_alle_jahre_ignoriert_vor_pv_monate,
-]
-
-
-async def _main() -> int:
-    failures = 0
-    for fn in _ASYNC_TESTS:
-        try:
-            await fn()
-            print(f"OK   {fn.__name__}")
-        except AssertionError as e:
-            failures += 1
-            print(f"FAIL {fn.__name__}: {e}")
-            traceback.print_exc()
-        except Exception as e:
-            failures += 1
-            print(f"ERR  {fn.__name__}: {type(e).__name__}: {e}")
-            traceback.print_exc()
-    total = len(_ASYNC_TESTS)
-    if failures:
-        print(f"\n{failures}/{total} Tests fehlgeschlagen.")
-        return 1
-    print(f"\nAlle {total} Tests grün.")
-    return 0
-

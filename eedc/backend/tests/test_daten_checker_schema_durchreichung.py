@@ -57,33 +57,3 @@ def test_response_schema_serialisiert_action_felder():
     assert daten["action_kind"] == "reaggregate_day"
     assert daten["action_params"] == {"anlage_id": 1, "datum": "2026-05-15"}
     assert daten["action_label"] == "Tag reparieren"
-
-
-_TESTS = [
-    test_alle_dataclass_felder_im_response_schema,
-    test_response_schema_serialisiert_action_felder,
-]
-
-
-def _run_all() -> int:
-    failures = 0
-    for test in _TESTS:
-        try:
-            test()
-            print(f"OK   {test.__name__}")
-        except AssertionError as e:
-            failures += 1
-            print(f"FAIL {test.__name__}\n     {e}")
-        except Exception:
-            failures += 1
-            print(f"ERR  {test.__name__}")
-            traceback.print_exc()
-    return failures
-
-
-if __name__ == "__main__":
-    failures = _run_all()
-    if failures:
-        print(f"\n{failures} von {len(_TESTS)} Tests fehlgeschlagen.")
-        sys.exit(1)
-    print(f"\nAlle {len(_TESTS)} Tests grün.")

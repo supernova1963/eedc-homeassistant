@@ -245,25 +245,3 @@ def test_keine_felder_leer():
     inv = _inv(3, "pv-module")
     assert investition_beitraege(inv, {}) == []
     assert investition_beitraege(inv, None) == []
-
-
-_TESTS = [
-    test_basis_einspeisung_und_netzbezug,
-    test_basis_ohne_sensor_id_uebersprungen,
-    test_basis_leer,
-    test_pv_module_nur_pv_erzeugung,
-    test_balkonkraftwerk_bkw_key,
-    test_speicher_ladung_und_entladung,
-    test_speicher_ladung_netz_kwh_nicht_addiert,
-    test_wp_nur_stromverbrauch_wenn_kein_split,
-    test_wp_getrennte_strommessung,
-    test_wallbox_nur_ladung_kwh,
-    test_eauto_either_or_ladung_dann_verbrauch,
-    test_eauto_skip_wenn_parent_wallbox,
-    test_eauto_ladung_pv_netz_nicht_addiert,
-    test_sonstiges_verbraucher_nur_einmal_positiv,
-    test_sonstiges_erzeuger_primary_erzeugung,
-    test_sonstiges_fallback_nur_secondary_gemappt,
-    test_unbekannter_typ_leer,
-    test_keine_felder_leer,
-]

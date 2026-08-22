@@ -518,22 +518,3 @@ def test_18_rohantwort_wird_richtig_gelesen():
     assert zeilen[0]["sum"] == 123.456
     assert zeilen[0]["mean"] is None, "Nicht gelieferte Felder müssen None sein, nicht fehlen"
     print("  ✓ 18. Rohantwort: Statistik-Einheit, ms→s, fehlende Felder als None")
-
-
-def _main() -> int:
-    tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
-    print(f"\n=== HA-Statistik über WebSocket — {len(tests)} Proben ===\n")
-    fehler = 0
-    for t in tests:
-        try:
-            t()
-        except Exception:
-            fehler += 1
-            print(f"  ✗ {t.__name__}")
-            traceback.print_exc()
-    print(f"\n{len(tests) - fehler}/{len(tests)} bestanden")
-    return 1 if fehler else 0
-
-
-if __name__ == "__main__":
-    sys.exit(_main())

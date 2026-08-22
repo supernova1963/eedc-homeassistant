@@ -167,36 +167,3 @@ async def test_marker_am_orm_objekt_setzbar():
     # Default für Aufrufer, die den Marker nicht kennen (Altbestand/Doubles).
     tz2 = TagesZusammenfassung(anlage_id=1, datum=_TAG)
     assert getattr(tz2, "komponenten_frisch", True) is True
-
-
-_TESTS = [
-    test_alles_geschrieben,
-    test_waermepumpe_ohne_wert_wird_genannt,
-    test_preserve_lauf_hat_nichts_geschrieben,
-    test_am_tag_inaktive_komponente_wird_nicht_erwartet,
-    test_marker_am_orm_objekt_setzbar,
-]
-
-
-def _run_all() -> int:
-    failures = 0
-    for test in _TESTS:
-        try:
-            asyncio.run(test())
-            print(f"OK   {test.__name__}")
-        except AssertionError as e:
-            failures += 1
-            print(f"FAIL {test.__name__}\n     {e}")
-        except Exception:
-            failures += 1
-            print(f"ERR  {test.__name__}")
-            traceback.print_exc()
-    return failures
-
-
-if __name__ == "__main__":
-    failures = _run_all()
-    if failures:
-        print(f"\n{failures} von {len(_TESTS)} Tests fehlgeschlagen.")
-        sys.exit(1)
-    print(f"\nAlle {len(_TESTS)} Tests grün.")

@@ -203,36 +203,3 @@ def test_unbekannter_sensor_fehlt_im_result():
     )
     assert "sensor.pv" in result
     assert "sensor.does_not_exist" not in result
-
-
-_TESTS = [
-    test_glatter_tag_24_slots,
-    test_einheit_wh_wird_skaliert,
-    test_luecke_in_der_mitte_einzelne_slots_none,
-    test_mehrere_sensoren_in_einem_aufruf,
-    test_unbekannter_sensor_fehlt_im_result,
-]
-
-
-def _run_all() -> int:
-    failures = 0
-    for test in _TESTS:
-        try:
-            test()
-            print(f"OK   {test.__name__}")
-        except AssertionError as e:
-            failures += 1
-            print(f"FAIL {test.__name__}\n     {e}")
-        except Exception:
-            failures += 1
-            print(f"ERR  {test.__name__}")
-            traceback.print_exc()
-    return failures
-
-
-if __name__ == "__main__":
-    failures = _run_all()
-    if failures:
-        print(f"\n{failures} von {len(_TESTS)} Tests fehlgeschlagen.")
-        sys.exit(1)
-    print(f"\nAlle {len(_TESTS)} Tests grün.")

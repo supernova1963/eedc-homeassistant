@@ -143,36 +143,3 @@ def test_null_mean_wird_uebersprungen():
     assert 10 in slots
     assert 11 not in slots
     assert 12 in slots
-
-
-_TESTS = [
-    test_soc_prozent_24_slots,
-    test_strompreis_eur_kwh_rohwert,
-    test_unbekannter_sensor_leer,
-    test_anderer_tag_wird_ignoriert,
-    test_null_mean_wird_uebersprungen,
-]
-
-
-def _run_all() -> int:
-    failures = 0
-    for test in _TESTS:
-        try:
-            test()
-            print(f"OK   {test.__name__}")
-        except AssertionError as e:
-            failures += 1
-            print(f"FAIL {test.__name__}\n     {e}")
-        except Exception:
-            failures += 1
-            print(f"ERR  {test.__name__}")
-            traceback.print_exc()
-    return failures
-
-
-if __name__ == "__main__":
-    failures = _run_all()
-    if failures:
-        print(f"\n{failures} von {len(_TESTS)} Tests fehlgeschlagen.")
-        sys.exit(1)
-    print(f"\nAlle {len(_TESTS)} Tests grün.")

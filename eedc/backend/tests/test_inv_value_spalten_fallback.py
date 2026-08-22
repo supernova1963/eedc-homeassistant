@@ -96,29 +96,3 @@ _SYNC_TESTS = [
     test_distribute_by_param_solaredge_multi_string,
     test_distribute_by_param_parameter_fallback,
 ]
-
-
-def _main() -> int:
-    failures = 0
-    for fn in _SYNC_TESTS:
-        try:
-            fn()
-            print(f"OK   {fn.__name__}")
-        except AssertionError as e:
-            failures += 1
-            print(f"FAIL {fn.__name__}: {e}")
-            traceback.print_exc()
-        except Exception as e:
-            failures += 1
-            print(f"ERR  {fn.__name__}: {type(e).__name__}: {e}")
-            traceback.print_exc()
-    total = len(_SYNC_TESTS)
-    if failures:
-        print(f"\n{failures}/{total} Tests fehlgeschlagen.")
-        return 1
-    print(f"\nAlle {total} Tests grün.")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(_main())

@@ -327,36 +327,3 @@ async def test_H6_szenario_screenshot_eauto_plus_wallbox(db):
 
 
 # ── Runner ──
-
-
-_TESTS = [
-    test_H1_baseline_privat_bool_false,
-    test_H2_dienstwagen_bool_true,
-    test_H3_string_false_sollte_privat_sein,
-    test_H4_string_true_dienstwagen,
-    test_H5_parameter_none,
-    test_H6_szenario_screenshot_eauto_plus_wallbox,
-    test_H7_dienstwagen_plus_nichtdienstliche_wallbox,
-    test_H8_optional_aus_lokalem_backup,
-]
-
-
-async def _main() -> int:
-    failures = 0
-    for fn in _TESTS:
-        try:
-            await fn()
-            print(f"OK   {fn.__name__}")
-        except AssertionError as e:
-            failures += 1
-            print(f"FAIL {fn.__name__}: {e}")
-        except Exception as e:
-            failures += 1
-            print(f"ERR  {fn.__name__}: {type(e).__name__}: {e}")
-            traceback.print_exc()
-    if failures:
-        print(f"\n{failures}/{len(_TESTS)} Tests fehlgeschlagen.")
-        return 1
-    print(f"\nAlle {len(_TESTS)} Tests grün.")
-    return 0
-
