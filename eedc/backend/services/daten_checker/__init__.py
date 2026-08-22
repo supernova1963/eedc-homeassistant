@@ -36,6 +36,7 @@ from .monatsdaten import ErfassungsortChecks, MonatsdatenChecks
 from .energieprofil import EnergieprofilChecks
 from .sensoren import SensorChecks
 from .emob import EmobChecks
+from .zaehler import ZaehlerChecks
 from .datenquelle import DatenquelleChecks
 
 
@@ -48,6 +49,7 @@ class DatenChecker(
     EnergieprofilChecks,
     SensorChecks,
     EmobChecks,
+    ZaehlerChecks,
     DatenquelleChecks,
     _CheckHelpers,
 ):
@@ -125,6 +127,10 @@ class DatenChecker(
         ergebnisse.extend(self._check_emob_sensor_doppelmapping(anlage))
         ergebnisse.extend(await self._check_emob_doppelzaehlung_tage(anlage))
         ergebnisse.extend(self._check_erfassungsort_positionen(anlage))
+        # #377/D3: Verbrauchszähler (Gas/Wasser/Öl) — Quelle, Reihenbruch,
+        # Inaktiv-Falle. Eigene Fragen, kein zweiter Turm über die
+        # Energieprofil-Abdeckung (Begründung in `zaehler.py`).
+        ergebnisse.extend(await self._check_zaehlerstaende(anlage))
 
         # Zusammenfassung
         zusammenfassung = {"error": 0, "warning": 0, "info": 0, "ok": 0}

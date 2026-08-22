@@ -345,10 +345,36 @@ class DatenquelleChecks:
         inv_result = await self.db.execute(
             select(_Inv).where(_Inv.anlage_id == anlage.id)
         )
-        invs_by_id = {str(inv.id): inv for inv in inv_result.scalars().all()}
+        alle_invs = list(inv_result.scalars().all())
 
         drift_pro_tag: list[tuple[date, float, float]] = []  # (datum, eedc, ha)
         for tz in tz_list:
+            # N-64 — **die Aktiv-Grenze gehört PRO TAG gezogen**, sonst entsteht
+            # Phantom-Drift. `get_komponenten_tageskwh_lts` liest, was das
+            # `sensor_mapping` hergibt, und filtert selbst nicht; der Schreiber
+            # der Gegenseite (`energie_profil.aggregator.aggregate_day`) lädt
+            # seine Investitionen dagegen mit `aktiv_am_tag(datum)`. Ein an
+            # diesem Tag noch nicht angeschafftes, bereits stillgelegtes oder
+            # auf `aktiv=False` gesetztes PV-Modul stand damit auf der HA-Seite
+            # mit voller Tagesernte und auf der eedc-Seite gar nicht — Drift
+            # ≥ 2 kWh und ≥ 5 %, also eine Meldung samt „Tag reparieren".
+            # Der Knopf löst sie nicht auf: der Lauf schreibt für diese
+            # Komponente nichts, antwortet HTTP 200, die Meldung bleibt stehen.
+            #
+            # **Exakt der Befund, den der Zwilling `_check_leere_tage_trotz_
+            # zaehler` seit N-57/#368 (v4.0.6) nicht mehr hat** — dort über
+            # `erwartete_komponenten_keys`, ebenfalls tagesabhängig. Dass eine
+            # von zwei baugleichen Funktionen den Filter trägt und die andere
+            # nicht, ist die Klasse aus #236/#239: *ein Filter auf einer Schicht
+            # reicht nicht, wenn zwei Pfade parallel laufen.*
+            #
+            # `ist_aktiv_an` ist die In-Memory-Zwillingsdefinition von
+            # `utils.investition_filter.aktiv_am_tag` (dort im Docstring als
+            # identisch festgehalten) — dieselbe Wahl wie beim Zwilling, aus
+            # demselben Grund: die Investitionen sind bereits geladen.
+            invs_by_id = {
+                str(inv.id): inv for inv in alle_invs if inv.ist_aktiv_an(tz.datum)
+            }
             try:
                 ha_komp = await get_komponenten_tageskwh_lts(
                     anlage, invs_by_id, tz.datum,

@@ -27,6 +27,8 @@ import traceback
 from datetime import date, timedelta
 from pathlib import Path
 from types import SimpleNamespace
+
+from backend.models.investition import Investition
 from unittest.mock import patch, MagicMock, AsyncMock
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
@@ -51,8 +53,22 @@ def _make_anlage():
     })
 
 
-def _make_inv(inv_id=3, typ="pv-module"):
-    return SimpleNamespace(id=inv_id, anlage_id=1, typ=typ, parameter={})
+def _make_inv(inv_id=3, typ="pv-module", aktiv=True,
+              anschaffungsdatum=None, stilllegungsdatum=None):
+    """Echtes Model-Objekt (nicht persistiert) — der Check ruft `ist_aktiv_an`.
+
+    ⚑ **Seit N-64 (D3, 22.08.2026)** zieht `_check_datenquelle_drift` die
+    Aktiv-Grenze pro Tag, wie sein Zwilling `_check_leere_tage_trotz_zaehler`
+    seit N-57. Ein `SimpleNamespace` kennt die Methode nicht; ein Double mit
+    **eigener** Aktiv-Logik wäre die zweite Definition, gegen die beide Funde
+    antreten. Wortgleiche Begründung steht in
+    `test_daten_checker_leere_tage_trotz_zaehler.py`.
+    """
+    return Investition(
+        id=inv_id, anlage_id=1, typ=typ, parameter={},
+        aktiv=aktiv, anschaffungsdatum=anschaffungsdatum,
+        stilllegungsdatum=stilllegungsdatum,
+    )
 
 
 def _build_checker(tz_list, invs_list, ha_tageskwh_func, ha_available=True):

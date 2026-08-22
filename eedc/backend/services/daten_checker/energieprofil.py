@@ -15,9 +15,11 @@ from backend.models.monatsdaten import Monatsdaten
 from backend.services.snapshot.komponenten_beitraege import pv_je_investition_belegt
 from backend.utils.investition_filter import sort_investitionen_nach_typ
 from backend.core.investition_parameter import (
+    PARAM_SONSTIGES,
     ist_dienstlich,
     ist_luft_luft_waermepumpe,
 )
+from backend.core.field_definitions import sonstiges_feld_reihenfolge
 from backend.core.berechnungen.erzeuger_traeger import (
     traegt_erzeugungsgroessen_selbst,
 )
@@ -173,6 +175,44 @@ class EnergieprofilChecks:
             "e-auto": [["verbrauch_kwh", "ladung_kwh"]],
         }
 
+        def _erwartet_sonstiges(inv) -> list[list[str]]:
+            """Was ein *Sonstiges*-Gerät verspricht — **aus der Registry**.
+
+            Bis D3 (22.08.2026) fiel der ganze Typ aus dieser Prüfung
+            (`continue  # sonstiges … skippen`): ein Sauna-Zähler und ein BHKW
+            standen nicht einmal im Nenner der Meldung „N von M Komponenten ohne
+            Abdeckung". Der Aggregator kennt sie längst — `sonstige_<id>` steht
+            in `komponenten_kwh` (`komponenten_beitraege.investition_beitraege`).
+
+            **Registry-getrieben statt vier `if kategorie == …`** (Entscheid
+            Gernot 22.08.): `sonstiges_feld_reihenfolge` ist derselbe SoT, den
+            der Aggregator für seine Either-Or-Gruppe benutzt — der Checker
+            verspricht damit exakt, was der Lauf einlöst. Eine fünfte Kategorie
+            nimmt diese Prüfung automatisch mit; eine handgeschriebene Liste
+            wäre die N-244-Wette ein weiteres Mal.
+
+            ⛔ **Ein Zähler fällt hier heraus, und zwar von selbst** —
+            `sonstiges_feld_reihenfolge("zaehler")` liefert `()` (#377). Das ist
+            der Punkt der Registry-Bindung und **keine Auslassung**: Diese
+            Kategorie beantwortet die Abdeckung des **Energieprofils** —
+            Tages-/Stundenwerte, Prognosen-IST, Heatmap, Lernfaktor,
+            Monatsberichte. In keines davon geht ein Zählerstand ein, er trägt
+            gar keinen `komponenten_kwh`-Beitrag. Ihn hier zu fordern hieße,
+            einen Hinweis zu stellen, den nichts einlöst (P-6), mit einem Text,
+            der für ihn nicht stimmt („Integral-Sensor aus der Leistung bauen").
+            **Seine Quellenfrage stellt `ZaehlerChecks._check_zaehler_quelle`** —
+            datengetrieben und mit der Handpflege als vollwertigem Weg. Zwei
+            Prüfungen auf dieselbe Frage wären der „zweite Turm", den dieses
+            Modul an drei Stellen ausdrücklich vermeidet.
+            """
+            kategorie = (inv.parameter or {}).get(PARAM_SONSTIGES["KATEGORIE"])
+            felder = list(sonstiges_feld_reihenfolge(kategorie))
+            # EINE Alternativen-Liste, nicht mehrere: der Aggregator wertet sie
+            # als Either-Or-Gruppe aus (genau ein Delta je Gruppe). Mehrere
+            # Listen hießen „alle drei nötig" — eine Forderung, die der Lauf
+            # gar nicht einlöst.
+            return [felder] if felder else []
+
         fehlend_pro_komponente: list[tuple[str, str, list[str]]] = []
         gemappt_count = 0   # über Sensor-Mapping abgedeckt
         quelle_count = 0    # über manuelle/importierte Datenquelle abgedeckt
@@ -242,9 +282,12 @@ class EnergieprofilChecks:
             if inv.typ == "balkonkraftwerk" and not traegt_erzeugungsgroessen_selbst(inv, aktive):
                 kind_count += 1
                 continue
-            erwartet = erwartete_felder.get(inv.typ)
+            if inv.typ == "sonstiges":
+                erwartet = _erwartet_sonstiges(inv)
+            else:
+                erwartet = erwartete_felder.get(inv.typ)
             if not erwartet:
-                continue  # sonstiges, wechselrichter etc. skippen
+                continue  # wechselrichter (misst nichts eigenes) etc. skippen
 
             # Dienstwagen: kein PV-Bezug, kein Verbrauchs-Tracking nötig.
             # Konsistent mit `_check_investitionen` (Zeile ~443), wo ROI-Checks

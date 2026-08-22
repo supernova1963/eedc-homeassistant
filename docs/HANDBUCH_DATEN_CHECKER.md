@@ -36,6 +36,7 @@
    20. [Plug-in-Hybrid – elektrischer Anteil unbestimmt](#420-phev-anteil)
    21. [Batterie-Vorzeichen in der Historie](#421-batterie-vorzeichen-historie)
    22. [Ladestand bei mehreren Speichern](#422-ladestand-mehrere-speicher)
+   23. [Verbrauchszähler – Zählerstände](#423-verbrauchszaehler-zaehlerstaende)
 5. [Behebungs-Workflows](#5-behebungs-workflows)
 6. [Beziehung zu anderen Werkzeugen](#6-beziehung-zu-anderen-werkzeugen)
 
@@ -99,7 +100,7 @@ Einzelne Befunde haben über Releases hinweg ihre Stufe gewechselt. Beispiele:
 
 ## 3. Verfügbarkeit nach Installationsvariante <a name="3-verfuegbarkeit-nach-installationsvariante"></a>
 
-eedc prüft **25 Kategorien**. Die meisten greifen in jeder Installation identisch; **fünf** hängen an Voraussetzungen, die je nach Installation gegeben sind oder nicht — sie sind unten fett markiert.
+eedc prüft **26 Kategorien**. Die meisten greifen in jeder Installation identisch; **fünf** hängen an Voraussetzungen, die je nach Installation gegeben sind oder nicht — sie sind unten fett markiert.
 
 | # | Kategorie | HA Add-on | Standalone (Docker / native) |
 |---|-----------|-----------|------------------------------|
@@ -128,6 +129,7 @@ eedc prüft **25 Kategorien**. Die meisten greifen in jeder Installation identis
 | 23 | Plug-in-Hybrid – Anteil unbestimmt (§4.20) | greift | greift |
 | 24 | Batterie-Vorzeichen in der Historie (§4.21) | greift | greift |
 | 25 | Ladestand bei mehreren Speichern (§4.22) | greift | greift |
+| 26 | Verbrauchszähler – Zählerstände (§4.23) | greift | greift |
 
 ### Was bedeutet „wird übersprungen"?
 
@@ -749,6 +751,33 @@ Erkannt wird das am **Datensignal**, nicht am Datum: Der gespeicherte Tageswert 
 
 ---
 
+### 4.23 Verbrauchszähler – Zählerstände <a name="423-verbrauchszaehler-zaehlerstaende"></a>
+
+**Was wird geprüft:** Kommt für einen Gas-, Wasser- oder Ölzähler überhaupt ein Stand an, läuft seine Reihe irgendwo **rückwärts**, und ist das Gerät versehentlich auf *nicht aktiv* gesetzt?
+
+**Warum das zählt:** Ein Verbrauchszähler führt genau **einen** Wert — den Zählerstand. Die einzige Rechnung darauf ist *Ende minus Anfang* des angezeigten Zeitraums. Er geht bewusst in **keine** Bewertung ein: nicht in Energiebilanz, Autarkie, Wirtschaftlichkeit, CO₂-Bilanz oder den Community-Vergleich. Genau deshalb fallen Probleme mit ihm nirgends sonst auf — keine Kennzahl wird auffällig, es steht einfach überall „—".
+
+> **Kein Verbrauchszähler eingerichtet ⇒ diese Kategorie erscheint gar nicht.**
+
+#### Befunde
+
+| Meldung | Severity | Bedeutung | Behebung |
+|---------|----------|-----------|----------|
+| **\[Zähler\]: kein Zählerstand erfasst** | ⚠️ WARNING | Für dieses Gerät liegt kein einziger Stand vor — weder aus einem Sensor noch von Hand. | Zwei gleichwertige Wege: einen Sensor unter *Einstellungen → Datenquellen* zuordnen (eedc schreibt den Stand dann stündlich mit), **oder** den Stand beim Monatsabschluss ablesen und im Feld *Zählerstand* eintragen. Für einen Gaszähler ohne Fernauslesung ist der zweite Weg der vorgesehene. |
+| **\[Zähler\]: der Stand ist N-mal gefallen — die Reihe hat einen Bruch** | ⚠️ WARNING | Ein Zählerstand läuft nicht rückwärts. Für Zeiträume über eine solche Stelle hinweg zeigt eedc deshalb **keine** Differenz statt einer negativen Menge. | Drei mögliche Ursachen, s. u. |
+| **\[Zähler\]: auf „nicht aktiv" gesetzt — N Ablesung(en) ausgeblendet** | ℹ️ INFO | Der Haken *aktiv* ist entfernt. In eedc heißt das „wie gelöscht": die Ablesungen erscheinen nirgends mehr, **auch nicht für die Vergangenheit**. | War es ein Zählerwechsel, ist der Weg ein anderer — s. u. Ist das Gerät bewusst so gesetzt, ist alles in Ordnung; der Hinweis bleibt dann stehen. |
+| **\[Zähler\]: N Zählerstand-Ablesung(en) erfasst** | ✅ OK | Der Zähler liefert. | — |
+
+#### Woher ein Reihenbruch kommt
+
+1. **Zähler gewechselt.** Der neue Zähler beginnt bei einem niedrigeren Stand. → Am **alten** Gerät ein **Stilllegungsdatum** setzen und ein neues anlegen. ⚠ Den Haken *aktiv* dabei **stehen lassen**: er bedeutet „wie gelöscht" und würde die alte Historie aus allen Auswertungen entfernen. Danach ist der Verbrauch über den Wechsel hinweg sauber die **Summe beider** Differenzen.
+2. **Sensor getauscht oder Stand von Hand korrigiert**, und der neue Wert liegt unter dem alten.
+3. **Der Umstieg auf eedc 4.0.25.** Bis dahin schrieb eedc für Verbrauchszähler die *Verbrauchssumme* von Home Assistant mit statt des *Zählerstands* (s. Changelog 4.0.25). Lag die Summe höher als der Stand, fällt die Reihe an genau einer Stelle — an der Umstellung, **einmalig**, und es ist nichts kaputt. Über *Einstellungen → Daten → „Tag neu berechnen"* zieht eedc die Historie nach, soweit Home Assistant sie noch hat.
+
+> **eedc heilt einen Bruch nicht von selbst** — dafür müsste es raten, welcher der beiden Stände gilt. Diese Entscheidung gehört dir, deshalb steht hier der Weg und kein Knopf.
+
+---
+
 ## 5. Behebungs-Workflows
 
 Diese Querschnitts-Anleitungen bündeln Schritte, die mehrere Befunde gleichzeitig betreffen — typischerweise weil ein einzelner Konfigurationsfehler in mehreren Kategorien aufschlägt.
@@ -758,6 +787,8 @@ Diese Querschnitts-Anleitungen bündeln Schritte, die mehrere Befunde gleichzeit
 **Symptom:** Jeder der vier WARNING-Befunde aus §4.9 — *„kWh-Sensor(en) nicht in HA-Long-Term-Statistics"*, *„Counter-Sensor(en) ohne state_class"*, *„kWh-Sensor(en) ohne Summen-Spalte"* und *„Counter-Sensor(en) ohne Summen-Spalte"*. Alle vier führen auf denselben Handgriff.
 
 **Ursache:** HA legt für einen Sensor erst dann Long-Term-Statistics an, wenn dessen Attribut `state_class` gesetzt ist. Typisch sind kumulative Zähler ohne diese Metadaten bei Modbus-Roh-Werten oder Hersteller-Integrationen.
+
+> ⚠ **Für einen Verbrauchszähler (Gas/Wasser/Öl) gilt nur die halbe Anleitung.** Sein Stand wird aus dem Sensor-*Zustand* gelesen, nicht aus einer Verbrauchssumme — eine **Summen-Spalte braucht er nicht**, `state_class: measurement` genügt vollauf. Deshalb meldet eedc für ihn auch keinen „ohne Summen-Spalte"-Befund, sondern nur *„Zählerstand-Sensor(en) nicht in HA-Long-Term-Statistics"*. Einen Verbrauchszähler-Helfer anzulegen wäre hier die falsche Empfehlung: Der zählt eine Menge, du willst die Zahl auf deinem Zähler.
 
 **Lösung (empfohlen): Verbrauchszähler-Helfer über die HA-Oberfläche**
 

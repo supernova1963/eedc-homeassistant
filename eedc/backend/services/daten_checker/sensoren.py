@@ -213,10 +213,33 @@ class SensorChecks:
         - **kWh-Feld + nicht in LTS** → WARNING (Korrektur-Werkzeuge wirken nicht)
         - **Counter-Feld + nicht in LTS** → WARNING (Korrektur-Werkzeuge wirken nicht;
           jeder Aussetzer permanent verloren, einzelne Stunden können fehlen)
+        - **Stand-Feld + nicht in LTS** → WARNING (eigener Text, s. u.)
         - **kWh-/Counter-Feld + in LTS, aber OHNE Summen-Spalte** → WARNING
           (`state_class: measurement` statt `total_increasing`; die Aggregation
           kann daraus keine Deltas bilden — s. u.)
+        - **Stand-Feld ohne Summen-Spalte** → **kein Befund**, s. u.
         - **kWh-Feld + LTS-Eintrag mit Summen-Spalte** → OK
+
+        ⚑ **Der Stand-Zweig ist seit D3 (22.08.2026) getrennt — und er nimmt dem
+        Counter-Zweig einen Fall WEG, den dieser falsch beantwortet hat.**
+        `zaehlerstand` steht in `KUMULATIVE_COUNTER_FELDER` (`snapshot/keys.py`)
+        und lief deshalb durch den **Counter**-Zweig. Der verlangt eine
+        Summen-Spalte — ein **Stand** braucht sie nicht: `get_value_at`
+        liest ihn mit `als_stand=True` ausschließlich aus `state` und nie aus
+        `sum` (F-58, `ha_statistics_service._value_at_wert`). Ein Gas- oder
+        Wasserzähler mit `state_class: measurement` funktioniert vollständig
+        und bekam trotzdem *„Counter-Sensor ohne Summen-Spalte — Korrektur-
+        Werkzeuge wirken nicht"*, samt eines Rats (Verbrauchszähler-Helfer
+        anlegen), der für einen Zählerstand die **falsche** Empfehlung ist: Der
+        Helfer zählt eine Menge, der Anwender will die Zahl auf seinem Zähler.
+        Dieselbe Klasse wie F-60 — eine Meldung, die für ihre eigene Zielgruppe
+        nicht stimmt.
+
+        **Was bleibt:** „nicht in LTS" gilt für einen Stand genauso. Ohne
+        `statistics_meta`-Zeile liefert `get_value_at` gar nichts
+        (`get_metadata` → `None`), und der Zähler bekommt überhaupt keinen
+        mitgeschriebenen Stand — der „zweite, stille Fall" aus dem
+        v4.0.25-CHANGELOG.
 
         Geprüft werden nur **Energie-Felder** (Einheit kWh/Wh/MWh) und die
         reinen Counter. Preis-, km-, Anzahl- und Temperatur-Slots sind hier
@@ -233,6 +256,7 @@ class SensorChecks:
         """
         from backend.core.field_definitions import (
             FELD_EINHEITEN, FELD_LABELS, basis_feld_key, einheit_klasse,
+            ist_stand_feld,
         )
         from backend.services.ha_statistics_service import get_ha_statistics_service
         from backend.services.sensor_snapshot_service import KUMULATIVE_COUNTER_FELDER
@@ -250,6 +274,7 @@ class SensorChecks:
         counter_fields = {f for fs in KUMULATIVE_COUNTER_FELDER.values() for f in fs}
         kwh_sensors: list[tuple[str, str]] = []      # (sensor_id, label)
         counter_sensors: list[tuple[str, str]] = []
+        stand_sensors: list[tuple[str, str]] = []    # Zählerstände (#377/F-58)
 
         basis = mapping.get("basis") or {}
         # Nur kumulative kWh-Counter prüfen. `strompreis` ist ct/kWh bzw. €/kWh
@@ -311,7 +336,14 @@ class SensorChecks:
                     f"{inv_label.get(str(inv_id), f'Inv. {inv_id}')}: "
                     f"{FELD_LABELS.get(basis, feld)}"
                 )
-                if basis in counter_fields:
+                if ist_stand_feld(basis):
+                    # **VOR dem Counter-Zweig**, denn `zaehlerstand` steht in
+                    # beiden Mengen — und der Counter-Zweig beantwortet den Fall
+                    # falsch (s. Docstring). Über den SoT-Helfer statt über eine
+                    # eigene Namensliste: eine zweite handgepflegte Feldliste war
+                    # N-259.
+                    stand_sensors.append((sid, lbl))
+                elif basis in counter_fields:
                     counter_sensors.append((sid, lbl))
                 elif einheit_klasse(FELD_EINHEITEN.get(basis)) == "energie":
                     kwh_sensors.append((sid, lbl))
@@ -332,7 +364,7 @@ class SensorChecks:
                 # Wächter gegen fehlende `FELD_EINHEITEN`-Einträge:
                 # test_daten_checker_lts_summen_spalte.py::test_alle_zaehlerfelder_bleiben_gedeckt
 
-        if not kwh_sensors and not counter_sensors:
+        if not kwh_sensors and not counter_sensors and not stand_sensors:
             return []
 
         ha_service = get_ha_statistics_service()
@@ -348,7 +380,11 @@ class SensorChecks:
         # `has_sum` — `get_hourly_kwh_deltas_for_day` überspringt ihn dann
         # vollständig. Vorher meldete dieser Check dafür OK, während Cockpit/Tag
         # auf 0 stand (Forum simon42 #89667/44).
-        all_sids = list({s for s, _ in kwh_sensors} | {s for s, _ in counter_sensors})
+        all_sids = list(
+            {s for s, _ in kwh_sensors}
+            | {s for s, _ in counter_sensors}
+            | {s for s, _ in stand_sensors}
+        )
         _mit_sum, ohne_sum_sids, missing_sids = await asyncio.to_thread(
             ha_service.filter_summen_faehige_sensor_ids, all_sids
         )
@@ -359,6 +395,12 @@ class SensorChecks:
         counter_missing = [(sid, lbl) for sid, lbl in counter_sensors if sid in missing]
         kwh_ohne_sum = [(sid, lbl) for sid, lbl in kwh_sensors if sid in ohne_sum]
         counter_ohne_sum = [(sid, lbl) for sid, lbl in counter_sensors if sid in ohne_sum]
+        stand_missing = [(sid, lbl) for sid, lbl in stand_sensors if sid in missing]
+        # ⛔ **Ein `stand_ohne_sum` gibt es bewusst NICHT.** Ein Stand kommt aus
+        # `state`; die Summen-Spalte ist für ihn ohne Bedeutung. Diese Zeile
+        # nachzutragen hieße, die Falschmeldung wieder einzubauen, die D3
+        # entfernt hat.
+
 
         if kwh_missing:
             beispiele = "; ".join(f"{lbl} ({sid})" for sid, lbl in kwh_missing[:5])
@@ -481,6 +523,52 @@ class SensorChecks:
                     f"Betroffen: {beispiele}"
                 ),
                 link=LINK_DATENQUELLEN,
+            ))
+
+        if stand_missing:
+            beispiele = "; ".join(f"{lbl} ({sid})" for sid, lbl in stand_missing[:5])
+            if len(stand_missing) > 5:
+                beispiele += f" (+{len(stand_missing) - 5} weitere)"
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.WARNING,
+                meldung=(
+                    f"{len(stand_missing)} Zählerstand-Sensor(en) nicht in "
+                    "HA-Long-Term-Statistics"
+                ),
+                details=(
+                    "Für diese Sensoren führt Home Assistant keine "
+                    "Langzeitstatistik — meist fehlt `state_class`. eedc liest "
+                    "den Zählerstand stündlich genau dort, deshalb wird für "
+                    "diese Zähler **gar kein Stand** mitgeschrieben: Anfang, "
+                    "Ende und Verbrauch des Zeitraums bleiben leer, und zwar "
+                    "ohne dass sonst etwas darauf hinweist. "
+                    "Lösung: in Home Assistant unter Einstellungen → Geräte & "
+                    "Dienste → Helfer für diesen Sensor `state_class` ergänzen "
+                    "(z. B. per `customize`), oder einen Sensor wählen, der sie "
+                    "mitbringt. "
+                    "Ein Zählerstand ist eine Bestandsgröße — eedc liest ihn aus "
+                    "dem Sensor-Zustand und rechnet ihn nicht um. **`total_"
+                    "increasing` oder ein Verbrauchszähler-Helfer sind dafür "
+                    "nicht nötig**; `measurement` genügt. Vergangenes sammelt "
+                    "Home Assistant nicht nach: die Reihe beginnt ab der "
+                    "Umstellung. "
+                    f"Betroffen: {beispiele}"
+                ),
+                link=LINK_DATENQUELLEN,
+            ))
+
+        if stand_sensors and not stand_missing:
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.OK,
+                meldung=(
+                    f"Alle {len(stand_sensors)} Zählerstand-Sensor(en) in "
+                    "HA-Long-Term-Statistics verfügbar"
+                ),
+                details=(
+                    "Eine Summen-Spalte wird hier bewusst nicht verlangt — ein "
+                    "Zählerstand kommt aus dem Sensor-Zustand, nicht aus einer "
+                    "Verbrauchssumme."
+                ),
             ))
 
         if kwh_sensors and not kwh_missing and not kwh_ohne_sum:

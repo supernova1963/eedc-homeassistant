@@ -56,6 +56,10 @@ export const KATEGORIE_LABELS: Record<string, string> = {
   phev_anteil_unbestimmt: 'E-Auto – elektrischer Anteil unbestimmt',
   position_wiederkehrend: 'Sonstige Positionen – wiederkehrend erfasst',
   position_doppelerfassung: 'Sonstige Positionen – doppelt erfasst',
+  // #377/D3: Gas-, Wasser- und Ölzähler. Trägt drei Aussagen — Quelle,
+  // Reihenbruch, Inaktiv-Falle. Label nennt das Gerät, nicht die Prüfung:
+  // „Reihe" allein sagt dem Anwender nichts.
+  zaehlerstand_reihe: 'Verbrauchszähler – Zählerstände',
 }
 
 /** Anzeige-Reihenfolge der Kategorien (Vollständigkeit → Plausibilität → …). */
@@ -88,4 +92,5 @@ export const KATEGORIE_REIHENFOLGE: string[] = [
   // fehlende Kategorie erscheint dort also gar nicht.
   'position_wiederkehrend',
   'position_doppelerfassung',
+  'zaehlerstand_reihe',
 ]

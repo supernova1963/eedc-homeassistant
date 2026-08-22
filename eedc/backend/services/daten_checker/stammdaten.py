@@ -25,7 +25,11 @@ from backend.core.berechnungen import (
 )
 from backend.core.berechnungen.alternativkosten import ersetzt_keine_heizung
 from backend.core.wirtschaftlichkeit_defaults import NETZBEZUG_DEFAULT_CENT
-from backend.core.field_definitions import get_speicher_netzladung_kwh
+from backend.core.field_definitions import (
+    get_speicher_netzladung_kwh,
+    ist_zaehler_kategorie,
+)
+from backend.core.investition_parameter import PARAM_SONSTIGES as _PARAM_SONSTIGES
 from backend.core.investition_kennwerte import (
     get_bkw_kwp,
     get_pv_kwp,
@@ -48,6 +52,22 @@ DC_AC_MELDESCHWELLE = 2.0
 # gleichzeitig weit unter jeder Anlage, bei der ein vergessener Vergütungssatz
 # Geld kostet: 50 kWh sind bei üblichen 8 ct rund 4 € im Jahr.
 EINSPEISUNG_MELDESCHWELLE_KWH_JAHR = 50.0
+
+
+def _ist_zaehler(inv) -> bool:
+    """Ist das ein *Sonstiges*-Gerät der Kategorie ``zaehler`` (#377)?
+
+    Bewusst NICHT `zaehlerstaende.ist_zaehler_investition` importiert: Dieses
+    Modul hängt sonst am Zählerstände-Service, der seinerseits Snapshots und
+    `InvestitionMonatsdaten` lädt — für eine reine Typfrage ein zu schwerer
+    Import. Die **Entscheidung** kommt trotzdem aus dem einen SoT
+    (`ist_zaehler_kategorie`), nur der Zugriff auf den Parameter steht hier.
+    """
+    if inv.typ != "sonstiges":
+        return False
+    return ist_zaehler_kategorie(
+        (inv.parameter or {}).get(_PARAM_SONSTIGES["KATEGORIE"])
+    )
 
 
 class StammdatenChecks:
@@ -1178,7 +1198,24 @@ class StammdatenChecks:
                     link=f"/einstellungen/komponenten?bearbeiten={inv.id}",
                 ))
 
-            if inv.anschaffungskosten_gesamt is None:
+            # ⛔ **Verbrauchszähler ausgenommen (D3, 22.08.2026, Entscheid
+            # Gernot).** Die Begründung dieser INFO lautet „Werden für
+            # ROI-Berechnung benötigt" — und für einen Gas-, Wasser- oder
+            # Ölzähler stimmt sie nicht: Er wird **erfasst, nicht bewertet**
+            # (#377). `investitionen/dashboards.py` schließt ihn ausdrücklich
+            # aus der Wirtschaftlichkeit aus, mit genau diesem Satz; Gas- und
+            # Wasserkosten sind Haushaltskosten und gehören nicht in die
+            # Bewertung der PV-Anlage.
+            #
+            # Ein Hinweis mit erfundenem Grund ist die schlechtere Sorte
+            # Falschmeldung: Er lässt sich nur durch eine Eingabe abstellen, die
+            # anschließend nirgends gelesen wird
+            # ([[feedback_daten_checker_kein_akzeptiert]]).
+            #
+            # ⚠ Das **Anschaffungsdatum** bleibt bewusst Pflicht (ERROR oben) —
+            # es begrenzt den Zeitraum, in dem das Gerät zählt, und diese Frage
+            # hat auch ein Zähler (Konzept #377 §8, Entscheid 2).
+            if inv.anschaffungskosten_gesamt is None and not _ist_zaehler(inv):
                 ergebnisse.append(CheckErgebnis(
                     kategorie=kat, schwere=CheckSeverity.INFO,
                     meldung=f"{name}: Anschaffungskosten fehlen",

@@ -197,6 +197,104 @@ async def _gepflegte_monatsstaende(
     return out
 
 
+async def lade_zaehler_verlaeufe(
+    db: AsyncSession,
+    anlage_id: int,
+    investition_ids: list[int],
+    *,
+    bis: datetime,
+) -> dict[int, list[VerlaufPunkt]]:
+    """Alle bekannten Stände je Zähler bis ``bis``, aufsteigend sortiert.
+
+    **Die eine Zusammenführung der beiden Quellen** — Snapshots aus dem
+    stündlichen Job (Sensor bzw. MQTT) und die von Hand gepflegten
+    Monatsend-Stände. Sie ergänzen einander: Wer abliest, hat gar keinen
+    Sensor; wer einen hat, bekommt den gepflegten Wert dort, wo der Sensor eine
+    Lücke hat. Bei gleichem Zeitpunkt gewinnt der Snapshot.
+
+    **Warum das eine eigene Funktion ist (D3, 22.08.2026).** Bis dahin stand
+    die Zusammenführung inline in `lade_zaehlerstaende`, und der Daten-Checker
+    braucht dieselbe Punktreihe für eine **andere** Frage: nicht „was sagt das
+    Fenster?", sondern „läuft die Reihe irgendwo rückwärts?". Sie ein zweites
+    Mal zu schreiben wäre die N-259-Klasse — zwei Lesarten derselben Reihe, die
+    unbemerkt auseinanderlaufen. Der Fenster-Zuschnitt bleibt beim Aufrufer:
+    **diese Funktion filtert nur nach oben** (`bis`), nie nach unten, weil der
+    Anfangsstand eines Fensters älter sein darf als sein Beginn.
+    """
+    if not investition_ids:
+        return {}
+
+    keys = {sensor_key_fuer(i): i for i in investition_ids}
+
+    snap_rows = (await db.execute(
+        select(SensorSnapshot.sensor_key, SensorSnapshot.zeitpunkt, SensorSnapshot.wert_kwh)
+        .where(SensorSnapshot.anlage_id == anlage_id)
+        .where(SensorSnapshot.sensor_key.in_(list(keys)))
+        .where(SensorSnapshot.zeitpunkt <= bis)
+        .order_by(SensorSnapshot.zeitpunkt)
+    )).all()
+
+    punkte_je_inv: dict[int, list[VerlaufPunkt]] = {i: [] for i in investition_ids}
+    for key, ts, wert in snap_rows:
+        if wert is None:
+            continue
+        punkte_je_inv[keys[key]].append(VerlaufPunkt(ts, float(wert)))
+
+    # Gepflegte Monatsstände dazu — sie füllen Lücken und tragen den Fall
+    # „gar kein Sensor" ganz allein.
+    for inv_id, punkte in (await _gepflegte_monatsstaende(db, investition_ids)).items():
+        vorhanden = {p.zeitpunkt for p in punkte_je_inv[inv_id]}
+        punkte_je_inv[inv_id].extend(
+            p for p in punkte if p.zeitpunkt <= bis and p.zeitpunkt not in vorhanden
+        )
+        punkte_je_inv[inv_id].sort(key=lambda p: p.zeitpunkt)
+
+    return punkte_je_inv
+
+
+@dataclass(frozen=True)
+class ReihenBruch:
+    """Eine Stelle, an der ein Zählerstand **gefallen** ist.
+
+    Ein Zählerstand läuft nicht rückwärts. Fällt er doch, ist nicht die Menge
+    negativ — die **Reihe** ist gebrochen.
+    """
+
+    zeitpunkt: datetime
+    stand_vorher: float
+    stand_nachher: float
+
+    @property
+    def differenz(self) -> float:
+        """Wie weit es nach unten ging (positiv)."""
+        return self.stand_vorher - self.stand_nachher
+
+
+def finde_reihen_brueche(punkte: list[VerlaufPunkt]) -> list[ReihenBruch]:
+    """Jede Stelle, an der die Reihe fällt — **paarweise**, nicht Anfang/Ende.
+
+    ⚠ **Das ist bewusst nicht dieselbe Prüfung wie `ZaehlerFenster.
+    reihe_gebrochen`.** Jenes Flag vergleicht Fenster-**Anfang** gegen
+    Fenster-**Ende** und beantwortet damit die Frage der Anzeige: „darf ich für
+    dieses Fenster eine Differenz hinstellen?". Ein Bruch **mitten** im Fenster,
+    nach dem der Stand wieder über den Anfangswert steigt, ist dort unsichtbar —
+    und genau der ist der Fall, den der Anwender erklärt bekommen muss. Deshalb
+    läuft diese Funktion über alle aufeinanderfolgenden Paare.
+
+    Gleichstand ist kein Bruch: ein Zähler, der still steht, ist ein Zähler, der
+    still steht.
+    """
+    brueche: list[ReihenBruch] = []
+    for vorher, nachher in zip(punkte, punkte[1:]):
+        if nachher.stand < vorher.stand:
+            brueche.append(ReihenBruch(
+                zeitpunkt=nachher.zeitpunkt,
+                stand_vorher=vorher.stand,
+                stand_nachher=nachher.stand,
+            ))
+    return brueche
+
+
 async def lade_zaehlerstaende(
     db: AsyncSession,
     anlage_id: int,
@@ -232,32 +330,7 @@ async def lade_zaehlerstaende(
         return []
 
     ids = [inv.id for inv in zaehler]
-    keys = {sensor_key_fuer(i): i for i in ids}
-
-    # Alle Snapshots BIS zum Fensterende holen — der Anfangsstand kann älter
-    # sein als `von` (der letzte bekannte Stand vor dem Fenster gilt fort).
-    snap_rows = (await db.execute(
-        select(SensorSnapshot.sensor_key, SensorSnapshot.zeitpunkt, SensorSnapshot.wert_kwh)
-        .where(SensorSnapshot.anlage_id == anlage_id)
-        .where(SensorSnapshot.sensor_key.in_(list(keys)))
-        .where(SensorSnapshot.zeitpunkt <= bis)
-        .order_by(SensorSnapshot.zeitpunkt)
-    )).all()
-
-    punkte_je_inv: dict[int, list[VerlaufPunkt]] = {i: [] for i in ids}
-    for key, ts, wert in snap_rows:
-        if wert is None:
-            continue
-        punkte_je_inv[keys[key]].append(VerlaufPunkt(ts, float(wert)))
-
-    # Gepflegte Monatsstände dazu — sie füllen Lücken und tragen den Fall
-    # „gar kein Sensor" ganz allein.
-    for inv_id, punkte in (await _gepflegte_monatsstaende(db, ids)).items():
-        vorhanden = {p.zeitpunkt for p in punkte_je_inv[inv_id]}
-        punkte_je_inv[inv_id].extend(
-            p for p in punkte if p.zeitpunkt <= bis and p.zeitpunkt not in vorhanden
-        )
-        punkte_je_inv[inv_id].sort(key=lambda p: p.zeitpunkt)
+    punkte_je_inv = await lade_zaehler_verlaeufe(db, anlage_id, ids, bis=bis)
 
     out: list[ZaehlerFenster] = []
     for inv in zaehler:

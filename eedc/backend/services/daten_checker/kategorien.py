@@ -183,6 +183,24 @@ class CheckKategorie(str, Enum):
     # die sie nicht hat. Wer trotzdem eine Kühlfunktion hat, findet das Feld
     # auf der Zuordnungs-Fläche.
     KLIMA_MODUS_SENSOR = "klima_modus_sensor"
+    # #377 / N-294 (D3, 22.08.2026): Ein Zählerstand ist eine BESTANDSgröße und
+    # läuft nicht rückwärts. Fällt er doch, ist nicht die Menge negativ — die
+    # **Reihe** ist gebrochen: Zähler getauscht ohne Stilllegung, Sensor
+    # ersetzt, oder der gemischte Fall aus Sensor und Handeingabe.
+    #
+    # **Eigene Kategorie, nicht MONATSDATEN_PLAUSIBILITAET** (Entscheid Gernot
+    # 22.08.): Der Bruch hat mit der Monatszeile nichts zu tun — er kann
+    # zwischen zwei Stunden-Snapshots liegen, und die Kategorie trägt außerdem
+    # die beiden anderen Zähler-Aussagen (gar keine Quelle, auf inaktiv
+    # gesetzt), die auch keine Monatsdaten-Fragen sind.
+    #
+    # ⛔ **Ohne Reparatur-Action, und das ist der Punkt** (Konzept #377 §4):
+    # eedc kann den Bruch nicht heilen, ohne zu raten, welcher der beiden
+    # Stände „richtig" ist. Es gibt einen Weg, und der ist eine Entscheidung
+    # des Anwenders — **erklären und den Weg danebenstellen, nicht heilen**
+    # ([[feedback_kein_grosser_heiler_knopf]] ·
+    # [[feedback_daten_checker_kein_akzeptiert]]).
+    ZAEHLERSTAND_REIHE = "zaehlerstand_reihe"
 
 
 @dataclass
