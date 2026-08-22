@@ -149,25 +149,6 @@ export interface MonatHistorie {
   direktverbrauch_kwh: number | null
 }
 
-export interface CloudMonatswertFeld {
-  feld: string
-  label: string
-  wert: number
-  einheit: string
-  /** #352: siehe `Vorschlag.abgeleitet`. */
-  abgeleitet?: string | null
-}
-
-export interface CloudMonatswerteResponse {
-  basis: CloudMonatswertFeld[]
-  investitionen: Array<{
-    investition_id: number
-    bezeichnung: string
-    typ: string
-    felder: CloudMonatswertFeld[]
-  }>
-}
-
 // =============================================================================
 // API Client
 // =============================================================================
@@ -205,17 +186,6 @@ export const monatsabschlussApi = {
     } catch {
       return null
     }
-  },
-
-  /**
-   * Cloud-Daten für einen Monat abrufen (ohne in DB zu schreiben)
-   */
-  async cloudFetch(
-    anlageId: number,
-    jahr: number,
-    monat: number
-  ): Promise<CloudMonatswerteResponse> {
-    return api.post<CloudMonatswerteResponse>(`/monatsabschluss/${anlageId}/${jahr}/${monat}/cloud-fetch`, {})
   },
 
   /**

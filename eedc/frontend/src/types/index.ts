@@ -258,23 +258,6 @@ export interface JSONImportResult {
   fehler: string[]
 }
 
-// Home Assistant
-export interface HASensor {
-  entity_id: string
-  friendly_name?: string
-  unit_of_measurement?: string
-  device_class?: string
-  state?: string
-}
-
-export interface HASensorMapping {
-  pv_erzeugung?: string
-  einspeisung?: string
-  netzbezug?: string
-  batterie_ladung?: string
-  batterie_entladung?: string
-}
-
 // Investition Create/Update
 export interface InvestitionCreate {
   anlage_id: number

@@ -6,7 +6,7 @@
  */
 
 import { useNavigate } from 'react-router-dom'
-import { Database, Cpu, FileSpreadsheet, Cloud, Upload, Table2, Radio, Network, ChevronRight, CheckCircle2, Circle } from 'lucide-react'
+import { Cpu, FileSpreadsheet, Cloud, Upload, Table2, Network, ChevronRight, CheckCircle2, Circle } from 'lucide-react'
 import { useSelectedAnlage, useApiData } from '../hooks'
 import { useHAAvailable } from '../hooks/useHAAvailable'
 import { connectorApi } from '../api/connector'
@@ -23,39 +23,25 @@ interface DatenquelleCard {
   wizard?: WizardKey
   /** V4-Ziel ohne Wizard (B7): Karte schließt das Overlay und navigiert dorthin. */
   v4Route?: string
-  /** Karte gilt nur in einer der beiden Welten (B7): die HA-/MQTT-Wizards sind in
-   *  V4 zur Datenquellen-Fläche verschmolzen, in V3 bleiben sie bis zum Flip. */
-  nur?: 'v3' | 'v4'
   color: string
   bgColor: string
   haOnly?: boolean
 }
 
 const datenquellen: DatenquelleCard[] = [
-  // B7 (Datenquellen-V4 §2g): in V4 ersetzt die feld-zentrische Fläche die beiden
+  // B7 (Datenquellen-V4 §2g): die feld-zentrische Fläche ersetzt die beiden
   // Alt-Wizards „HA Sensor-Zuordnung" + „MQTT-Inbound" — eine Karte statt zwei, die
   // aufs selbe Ziel zeigen. NICHT haOnly: die MQTT-Seite trägt den Standalone-Pfad.
+  // (Die beiden `nur: 'v3'`-Karten fielen mit der V3-Bereinigung 2026-08, N-242:
+  // diese Seite rendert nur noch im Einstellungs-Overlay, sie waren unerreichbar.)
   {
     title: 'Datenquellen',
     description: 'Jedem eedc-Feld seine Quelle zuordnen: Home-Assistant-Sensor oder MQTT (Inbound-Topic bzw. eigenes Broker-Topic).',
     icon: Network,
     href: '/einstellungen/datenquellen',
     v4Route: '/einstellungen/datenquellen',
-    nur: 'v4',
     color: 'text-green-600 dark:text-green-400',
     bgColor: 'bg-green-50 dark:bg-green-900/20',
-  },
-  {
-    title: 'HA Sensor-Zuordnung',
-    nur: 'v3',
-    description: 'Home Assistant Sensoren den eedc-Feldern zuordnen. Monatswerte werden automatisch aus der HA-Statistik-Datenbank gelesen.',
-    icon: Database,
-    // Alt-1 (Gernot 2026-07-11): V3-href korrigiert — zeigte historisch auf
-    // `ha-export` (= MQTT-Export-Seite). Jetzt deckungsgleich mit Titel + Wizard.
-    href: '/einstellungen/sensor-mapping',
-    color: 'text-green-600 dark:text-green-400',
-    bgColor: 'bg-green-50 dark:bg-green-900/20',
-    haOnly: true,
   },
   {
     title: 'Geräte-Connector',
@@ -92,15 +78,6 @@ const datenquellen: DatenquelleCard[] = [
     wizard: 'custom-import',
     color: 'text-rose-600 dark:text-rose-400',
     bgColor: 'bg-rose-50 dark:bg-rose-900/20',
-  },
-  {
-    title: 'MQTT-Inbound',
-    nur: 'v3',
-    description: 'Live-Leistungsdaten via MQTT empfangen. Universelle Datenbrücke für Node-RED, ioBroker, FHEM, openHAB und andere.',
-    icon: Radio,
-    href: '/einstellungen/mqtt-inbound',
-    color: 'text-blue-600 dark:text-blue-400',
-    bgColor: 'bg-blue-50 dark:bg-blue-900/20',
   },
   {
     title: 'CSV/JSON Import/Export',
@@ -140,9 +117,6 @@ export default function Einrichtung() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {datenquellen
           .filter(q => !q.haOnly || haAvailable)
-          // B7: `imOverlay` ist in dieser Datei der etablierte V3/V4-Diskriminator —
-          // die Ersteinrichtung erreicht V4 ausschließlich als Overlay-Wizard.
-          .filter(q => !q.nur || (q.nur === 'v4') === host.imOverlay)
           .map((quelle) => {
           const Icon = quelle.icon
           const isConnector = quelle.href === '/einstellungen/connector'

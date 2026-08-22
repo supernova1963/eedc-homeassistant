@@ -1,8 +1,10 @@
 /**
  * Home Assistant Integration API Client
  *
- * Bereinigt in v1.1: Nur noch Status, Sensor-Listing und Export.
- * Komplexe Features (Discovery, Statistics-Import, StringMonatsdaten) wurden entfernt.
+ * Nur noch Status und Export (MQTT + YAML). Das Sensor-Listing und das
+ * Legacy-Mapping (`getSensors`/`getMapping`) fielen mit der V3-Bereinigung
+ * 2026-08 — clientlos seit dem IA-V4-Flip, die Sensor-Auswahl läuft über die
+ * Datenquellen-Fläche.
  */
 
 import { api } from './client'
@@ -11,28 +13,11 @@ import { api } from './client'
 // Basic HA Types
 // =============================================================================
 
-export interface HASensor {
-  entity_id: string
-  friendly_name: string | null
-  unit_of_measurement: string | null
-  device_class: string | null
-  state_class: string | null
-  state: string | null
-}
-
 export interface HAStatus {
   connected: boolean
   rest_api?: boolean
   ha_version?: string
   message: string
-}
-
-export interface HASensorMapping {
-  pv_erzeugung: string | null
-  einspeisung: string | null
-  netzbezug: string | null
-  batterie_ladung: string | null
-  batterie_entladung: string | null
 }
 
 // =============================================================================
@@ -125,18 +110,6 @@ export interface MQTTPublishResult {
   fehlgeschlagen?: boolean
 }
 
-export interface SensorDefinition {
-  key: string
-  name: string
-  unit: string
-  icon: string
-  category: string
-  formel: string
-  device_class: string | null
-  state_class: string | null
-  enabled_by_default: boolean
-}
-
 // =============================================================================
 // API Client
 // =============================================================================
@@ -147,20 +120,6 @@ export const haApi = {
    */
   async getStatus(): Promise<HAStatus> {
     return api.get<HAStatus>('/ha/status')
-  },
-
-  /**
-   * Alle Energy-relevanten Sensoren abrufen
-   */
-  async getSensors(): Promise<HASensor[]> {
-    return api.get<HASensor[]>('/ha/sensors')
-  },
-
-  /**
-   * Sensor-Mapping Konfiguration abrufen (Legacy)
-   */
-  async getMapping(): Promise<HASensorMapping> {
-    return api.get<HASensorMapping>('/ha/mapping')
   },
 
   // ===========================================================================
@@ -205,13 +164,6 @@ export const haApi = {
    */
   async getYamlSnippet(anlageId: number): Promise<HAYamlSnippet> {
     return api.get<HAYamlSnippet>(`/ha/export/yaml/${anlageId}`)
-  },
-
-  /**
-   * Alle Sensor-Definitionen abrufen
-   */
-  async getSensorDefinitions(): Promise<{ count: number; sensors: SensorDefinition[] }> {
-    return api.get<{ count: number; sensors: SensorDefinition[] }>('/ha/export/definitions')
   },
 
   /**

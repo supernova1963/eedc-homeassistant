@@ -28,9 +28,9 @@ export default function CompleteStep({ anlage, onGoToDashboard }: CompleteStepPr
     }, 100)
   }
   const handleGoToMonatsdaten = () => springeZu('/einstellungen/monatsdaten')
-  // D2: direkter Absprung in die Sensor-/Topic-Pflege (Datenquellen-Fläche;
-  // V3 = Sensor-Mapping-Route, unter IA_V4 via v3RouteZuV4 → datenquellen).
-  const handleGoToDatenquellen = () => springeZu('/einstellungen/sensor-mapping')
+  // D2: direkter Absprung in die Sensor-/Topic-Pflege (Datenquellen-Fläche).
+  // V3-Bereinigung 2026-08: direkt statt über den sensor-mapping-Redirect.
+  const handleGoToDatenquellen = () => springeZu('/einstellungen/datenquellen')
 
   return (
     <div className="p-8 md:p-12 text-center">

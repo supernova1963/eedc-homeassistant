@@ -516,7 +516,7 @@ eedc-homeassistant/                  ← Source of Truth (alle Änderungen hier)
             │   ├── tag/ · werte/ · finanzen/ · roi/ · aussicht/ · prognose/
             │   ├── pv/ · speicher/ · waermepumpe/ · wallbox/ · eauto/ · balkonkraftwerk/
             │   ├── monatsabschluss/ # das Monatsabschluss-Formular
-            │   ├── sensor-mapping/ · connector/ · import/ · setup-wizard/
+            │   ├── connector/ · import/ · setup-wizard/
             │   ├── infothek/ · repair/ · layout/ · common/ · preview/
             │   └── AppWithSetup.tsx · AppErrorBoundary.tsx · DokumentationsDialog.tsx
             │

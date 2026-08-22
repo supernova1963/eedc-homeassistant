@@ -5,8 +5,8 @@ Vor dem 3d-Etappenabschluss-Refactor lebte der Endpoint-Bestand in einer
 einzigen `routes/monatsabschluss.py`. Im Rahmen des Aufräum-Sprints
 (Konzept-Doc Sektion 7.4) zerlegt in zwei Verantwortlichkeits-Slices:
 
-  - views.py  → Read- und Vorschau-Endpoints (status, cloud-fetch,
-                naechster, historie)
+  - views.py  → Read- und Vorschau-Endpoints (status, naechster,
+                historie; cloud-fetch fiel mit der V3-Bereinigung 2026-08)
   - wizard.py → Save-Pfad mit Provenance-Resolver + Background-Task
                 (MQTT-Publish, Auto-Aggregation, Community-Share)
 

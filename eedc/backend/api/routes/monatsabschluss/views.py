@@ -2,7 +2,6 @@
 Monatsabschluss API — Read- und Vorschau-Endpoints.
 
 GET  /{anlage_id}/{jahr}/{monat}                — Status aller Felder, Vorschläge, Warnungen
-POST /{anlage_id}/{jahr}/{monat}/cloud-fetch    — Cloud-Werte fetchen (read-only, keine DB-Änderung)
 GET  /naechster/{anlage_id}                     — Nächster unvollständiger Monat
 GET  /historie/{anlage_id}                      — Historie der letzten N Monatsabschlüsse
 
@@ -13,7 +12,7 @@ from calendar import monthrange
 from datetime import date, datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,13 +32,7 @@ from backend.core.field_definitions import (
 from backend.models.anlage import Anlage
 from backend.models.investition import InvestitionMonatsdaten
 from backend.models.monatsdaten import Monatsdaten
-from backend.services.activity_service import log_activity
 from backend.services.cloud_import.quellen import lade_quellen
-from backend.services.erzeuger_ziel import ZielFehler, loese_ziel
-from backend.services.import_hauszaehler import (
-    HauszaehlerQuelle,
-    waehle_hauszaehler_quelle,
-)
 from backend.services.ha_state_service import get_ha_state_service
 from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
 from backend.services.provenance import (
@@ -154,26 +147,6 @@ class MonatsabschlussResponse(BaseModel):
 
     # Investition-Felder
     investitionen: list[InvestitionStatus]
-
-
-class CloudMonatswertFeld(BaseModel):
-    feld: str
-    label: str
-    wert: float
-    einheit: str
-    # #352: gesetzt, wenn der Wert die Zerlegung des Anlagen-Gesamtwerts ist.
-    abgeleitet: Optional[str] = None
-
-
-class CloudMonatswerteResponse(BaseModel):
-    basis: list[CloudMonatswertFeld]
-    investitionen: list[dict]
-    # N-229: Der Abruf geht über ALLE gespeicherten Quellen. Was dabei
-    # auffällt, gehört in die Antwort statt ins Log — etwa dass eine von zwei
-    # Stationen nicht erreichbar war, oder dass keine Quelle die Hauszähler
-    # misst (dann bleibt `basis` leer, und das ist kein Fehler, sondern eine
-    # Aussage über den Aufbau).
-    hinweise: list[str] = []
 
 
 class NaechsterMonatResponse(BaseModel):
@@ -709,236 +682,6 @@ async def get_monatsabschluss(
         basis_felder=basis_felder,
         optionale_felder=optionale_felder,
         investitionen=investitionen_status,
-    )
-
-
-@router.post("/{anlage_id}/{jahr}/{monat}/cloud-fetch", response_model=CloudMonatswerteResponse)
-async def fetch_cloud_monatswerte(
-    anlage_id: int,
-    jahr: int,
-    monat: int,
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Ruft Monatswerte für einen einzelnen Monat aus der Cloud-API ab.
-
-    Geht über **alle** gespeicherten Quellen (N-229): eine Hersteller-Wolke
-    führt je Wechselrichter eine eigene „Station", und beide gehören in
-    dieselbe Anlage. Eine Quelle mit Ziel liefert nur die Werte ihres Geräts;
-    die Hauszähler-Größen kommen ausschließlich von einer Quelle **ohne** Ziel,
-    denn Netzbezug und Einspeisung gibt es je Hausanschluss nur einmal.
-
-    Gibt Werte zurück ohne in die DB zu schreiben.
-    """
-    result = await db.execute(
-        select(Anlage)
-        .options(selectinload(Anlage.investitionen))
-        .where(Anlage.id == anlage_id)
-    )
-    anlage = result.scalar_one_or_none()
-    if not anlage:
-        raise not_found("Anlage")
-
-    quellen = lade_quellen(anlage.connector_config)
-    quellen = [q for q in quellen if q["credentials"]]
-    if not quellen:
-        raise HTTPException(status_code=400, detail="Keine Cloud-Import Credentials konfiguriert")
-
-    from backend.services.cloud_import import get_provider
-    from backend.api.routes.connector import _mapped_or_distribute
-
-    field_inv_map = (anlage.connector_config or {}).get("field_inv_map") or {}
-    basis: list[CloudMonatswertFeld] = []
-    # Hauszähler-Beiträge aller Quellen; die Wahl fällt nach der Schleife.
-    hz_kandidaten: list[HauszaehlerQuelle] = []
-    inv_result: list[dict] = []
-    hinweise: list[str] = []
-    fehler: list[str] = []
-    erfolge = 0
-
-    def _feld_anfuegen(inv, eintrag: dict) -> None:
-        """Ein Feld an die Investition hängen — mehrere Quellen können
-        dieselbe Investition beliefern (PV und Speicher am selben Gerät)."""
-        vorhanden = next(
-            (r for r in inv_result if r["investition_id"] == inv.id), None
-        )
-        if vorhanden:
-            vorhanden["felder"].append(eintrag)
-        else:
-            inv_result.append({
-                "investition_id": inv.id,
-                "bezeichnung": inv.bezeichnung,
-                "typ": inv.typ,
-                "felder": [eintrag],
-            })
-
-    for quelle in quellen:
-        provider_id = quelle["provider_id"]
-        ziel_id = quelle["ziel_investition_id"]
-
-        # Herkunft benennen, damit ein Hinweis sagt, WELCHE Quelle gemeint ist.
-        herkunft = quelle["bezeichnung"] or provider_id
-        empfaenger = None
-        if ziel_id is not None:
-            try:
-                empfaenger = loese_ziel(ziel_id, anlage.investitionen, anlage_id=anlage_id)
-                herkunft = quelle["bezeichnung"] or empfaenger.bezeichnung
-            except ZielFehler as e:
-                # Eine unauflösbare Zuordnung (Gerät gelöscht, Module entfernt)
-                # darf den Abruf der ANDEREN Quellen nicht mitreißen.
-                fehler.append(f"{herkunft}: {e}")
-                continue
-
-        try:
-            provider = get_provider(provider_id)
-        except ValueError:
-            fehler.append(f"{herkunft}: Unbekannter Cloud-Provider '{provider_id}'")
-            continue
-
-        try:
-            months = await provider.fetch_monthly_data(
-                quelle["credentials"], jahr, monat, jahr, monat
-            )
-        except Exception as e:
-            fehler.append(f"{herkunft}: {e}")
-            continue
-
-        if not months:
-            hinweise.append(f"{herkunft}: keine Daten für diesen Monat in der Cloud.")
-            continue
-
-        month_data = months[0]
-        erfolge += 1
-
-        # ── Hauszähler-Größen: jede Quelle ist ein Kandidat ──────────────────
-        # Bis 12.08. steuerte nur eine Quelle OHNE Ziel etwas bei — wer wie der
-        # Melder ausschließlich zugeordnete Stationen führt, bekam für
-        # Einspeisung und Netzbezug nie einen Vorschlag. Ein Wechselrichter
-        # misst diese Größen nicht selbst, er liest den Zähler am
-        # Hausanschluss; alle Geräte melden denselben Wert. Entschieden wird
-        # nach der Schleife, weil erst dort alle Kandidaten vorliegen.
-        hz_kandidaten.append(HauszaehlerQuelle(
-            herkunft=herkunft,
-            ohne_ziel=empfaenger is None,
-            einspeisung_kwh=getattr(month_data, "einspeisung_kwh", None),
-            netzbezug_kwh=getattr(month_data, "netzbezug_kwh", None),
-        ))
-
-        # ── PV ───────────────────────────────────────────────────────────────
-        # Ohne Ziel liefert die Cloud EINEN Anlagen-Gesamtwert: er geht an die
-        # zugeordnete Investition, sonst als kWp-Zerlegung an alle — das steht
-        # dann im Label, damit kein zerlegter Wert wie eine Gerätemessung
-        # aussieht (A3/a2, gleicher Wortlaut wie im Connector-Pfad).
-        # Mit Ziel sind die Empfänger die Kinder genau dieses Geräts.
-        pv_kwh = getattr(month_data, "pv_erzeugung_kwh", None)
-        if pv_kwh and pv_kwh > 0:
-            if empfaenger is not None:
-                pv_module = empfaenger.pv_module
-                pv_verteilung = _mapped_or_distribute(
-                    {}, "pv", pv_module, pv_kwh, "leistung_kwp"
-                )
-            else:
-                pv_module = [i for i in anlage.investitionen if i.typ == "pv-module"]
-                pv_verteilung = _mapped_or_distribute(
-                    field_inv_map, "pv", pv_module, pv_kwh, "leistung_kwp"
-                ) if pv_module else []
-            ist_verteilt = len(pv_verteilung) > 1
-            pv_label = (
-                "PV Erzeugung (Gesamtwert, anteilig nach kWp verteilt)"
-                if ist_verteilt else "PV Erzeugung"
-            )
-            for inv, anteil in pv_verteilung:
-                _feld_anfuegen(inv, {
-                    "feld": "pv_erzeugung_kwh", "label": pv_label,
-                    "wert": round(anteil, 1), "einheit": "kWh",
-                    "abgeleitet": ABGELEITET_KWP_ANTEIL if ist_verteilt else None,
-                })
-
-        # ── Speicher ─────────────────────────────────────────────────────────
-        for cloud_feld, inv_feld, label in [
-            ("batterie_ladung_kwh", "ladung_kwh", "Ladung"),
-            ("batterie_entladung_kwh", "entladung_kwh", "Entladung"),
-        ]:
-            bat_val = getattr(month_data, cloud_feld, None)
-            if not (bat_val and bat_val > 0):
-                continue
-            if empfaenger is not None:
-                speicher = empfaenger.speicher
-                bat_verteilung = _mapped_or_distribute(
-                    {}, "speicher", speicher, bat_val, "kapazitaet_kwh"
-                ) if speicher else []
-                if not speicher:
-                    hinweis = (
-                        f"{herkunft}: liefert Speicherwerte, aber an diesem Gerät "
-                        f"hängt kein Speicher — sie wurden nicht übernommen."
-                    )
-                    if hinweis not in hinweise:
-                        hinweise.append(hinweis)
-            else:
-                speicher = [i for i in anlage.investitionen if i.typ == "speicher"]
-                bat_verteilung = _mapped_or_distribute(
-                    field_inv_map, "speicher", speicher, bat_val, "kapazitaet_kwh"
-                ) if speicher else []
-            ist_verteilt = len(bat_verteilung) > 1
-            bat_label = (
-                f"{label} (Gesamtwert, anteilig nach Kapazität verteilt)"
-                if ist_verteilt else label
-            )
-            for inv, anteil in bat_verteilung:
-                _feld_anfuegen(inv, {
-                    "feld": inv_feld, "label": bat_label,
-                    "wert": round(anteil, 1), "einheit": "kWh",
-                    "abgeleitet": ABGELEITET_KAPAZITAET_ANTEIL if ist_verteilt else None,
-                })
-
-    # Alle Quellen gescheitert ⇒ das ist ein Fehlschlag, kein leeres Ergebnis.
-    if erfolge == 0:
-        meldung = " · ".join(fehler + hinweise) or "Keine Daten gefunden"
-        await log_activity(
-            kategorie="cloud_fetch",
-            aktion=f"Cloud-Fetch für {monat:02d}/{jahr} fehlgeschlagen",
-            erfolg=False, details=meldung, anlage_id=anlage_id,
-        )
-        raise HTTPException(
-            status_code=400 if fehler else 404,
-            detail=f"Cloud-Abruf fehlgeschlagen: {meldung}" if fehler else meldung,
-        )
-
-    # Hauszähler-Größen aus allen Kandidaten wählen — übernehmen, nie summieren.
-    wahl = waehle_hauszaehler_quelle(hz_kandidaten)
-    for feld, label, wert in (
-        ("einspeisung_kwh", "Einspeisung", wahl.einspeisung_kwh),
-        ("netzbezug_kwh", "Netzbezug", wahl.netzbezug_kwh),
-    ):
-        if wert is not None:
-            basis.append(CloudMonatswertFeld(
-                feld=feld, label=label, wert=round(wert, 1), einheit="kWh",
-            ))
-    if wahl.hinweis:
-        hinweise.append(wahl.hinweis)
-
-    # Teil-Erfolg sagt es (P4): liefert keine Quelle die Größen des
-    # Hausanschlusses, darf das Ergebnis nicht wie ein vollständiges wirken.
-    hinweise = fehler + hinweise
-    if len(quellen) > 1 and not basis:
-        hinweise.append(
-            "Keine der Quellen misst den Hausanschluss — Netzbezug und Einspeisung "
-            "bitte aus dem Zähler bzw. den Sensoren pflegen."
-        )
-
-    await log_activity(
-        kategorie="cloud_fetch",
-        aktion=f"Cloud-Daten für {monat:02d}/{jahr} abgerufen",
-        erfolg=True,
-        details=(
-            f"{erfolge}/{len(quellen)} Quellen, {len(basis)} Basis-Felder, "
-            f"{len(inv_result)} Investitionen"
-        ),
-        anlage_id=anlage_id,
-    )
-
-    return CloudMonatswerteResponse(
-        basis=basis, investitionen=inv_result, hinweise=hinweise,
     )
 
 

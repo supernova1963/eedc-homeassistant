@@ -171,7 +171,7 @@ async def _anteile_je_sicht(db, anlage_id: int) -> dict[str, float]:
         ea_dash[0].zusammenfassung["pv_anteil_heim_prozent"], 1
     )
 
-    # HA-Export: derselbe Weg wie die Route `/ha/sensors` — Pool-Kontext einmal,
+    # HA-Export: derselbe Weg wie die Route `/ha/export/sensors` — Pool-Kontext einmal,
     # dann je Investition. Der Sensor `e_auto_pv_anteil_prozent` ist der Wert,
     # der in der HA-Langzeitstatistik landet.
     invs = (await db.execute(

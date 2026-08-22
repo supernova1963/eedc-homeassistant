@@ -1,91 +1,15 @@
 /**
- * Sensor-Mapping API Client
+ * Sensor-Mapping API Client — Rest nach der V3-Bereinigung 2026-08.
  *
- * Ermöglicht die Zuordnung von Home Assistant Sensoren zu eedc-Feldern.
+ * Der frühere Wizard-Client (getMapping/saveMapping/deleteMapping/
+ * getAvailableSensors/getStatus/getFeldHinweise) ist gefallen: seine
+ * Backend-Routen wurden mit N-241 (13.08.) stillgelegt, die Zuordnung läuft
+ * seit dem IA-V4-Flip über die Datenquellen-Fläche (`api/datenquellen`).
+ * Geblieben ist der einzige lebende Weg: die HA-Energy-Vorschläge für den
+ * Setup-Wizard (#197 Olli0103, `IntegrationStep`).
  */
 
 import { api } from './client'
-
-// =============================================================================
-// Types
-// =============================================================================
-
-// Achse A1 (v3.39.0): auf sensor/keine reduziert. Die früheren Werte
-// kwp_verteilung/ev_quote/cop_berechnung/manuell waren Dead Code — nur
-// `sensor` wird in den Aggregatoren ausgewertet, der Rest lieferte nie Daten.
-export type StrategieTyp =
-  | 'sensor'           // Direkter HA-Sensor
-  | 'keine'            // Kein Sensor (manuell im Wizard / bewusst leer)
-
-export interface FeldMapping {
-  strategie: StrategieTyp
-  sensor_id?: string | null
-  parameter?: Record<string, number | string> | null
-}
-
-export interface BasisMapping {
-  einspeisung?: FeldMapping | null
-  netzbezug?: FeldMapping | null
-  pv_gesamt?: FeldMapping | null
-  strompreis?: FeldMapping | null  // Ø Strompreis bei dyn. Tarif (ct/kWh)
-  live?: Record<string, string | null> | null  // Live-Sensoren: {einspeisung_w: entity_id, netzbezug_w: entity_id}
-  live_invert?: Record<string, boolean> | null  // Vorzeichen invertieren: {einspeisung_w: true}
-}
-
-export interface InvestitionFelder {
-  felder: Record<string, FeldMapping>
-  live?: Record<string, string | null> | null  // Live-Sensoren: {leistung_w: entity_id, soc: entity_id}
-  live_invert?: Record<string, boolean> | null  // Vorzeichen invertieren: {leistung_w: true}
-}
-
-export interface SensorMappingRequest {
-  basis: BasisMapping
-  investitionen: Record<string, InvestitionFelder>
-  solcast_config?: { modus: string; api_key?: string; resource_ids?: { id: string; name: string }[]; tier?: string }
-}
-
-export interface InvestitionInfo {
-  id: number
-  typ: string
-  bezeichnung: string
-  erwartete_felder: string[]
-  kwp?: number | null
-  cop?: number | null
-  parameter?: Record<string, unknown> | null
-}
-
-export interface SensorMappingResponse {
-  anlage_id: number
-  anlage_name: string
-  mapping: Record<string, unknown> | null
-  investitionen: InvestitionInfo[]
-  gesamt_kwp: number
-}
-
-export interface HASensorInfo {
-  entity_id: string
-  friendly_name?: string | null
-  unit?: string | null
-  device_class?: string | null
-  state?: string | null
-  has_statistics?: boolean  // True wenn state_class gesetzt → in HA-Long-Term-Statistics
-}
-
-export interface SetupResult {
-  success: boolean
-  message: string
-  created_sensors: number
-  errors: string[]
-}
-
-export interface MappingStatus {
-  configured: boolean
-  updated_at?: string | null
-  counts: {
-    sensor: number
-    keine: number
-  }
-}
 
 // HA-Energy Auto-Vorbefüllung (#197 Olli0103)
 export interface HAEnergyDeviceCandidate {
@@ -112,67 +36,7 @@ export interface HAEnergySuggestResponse {
   investition_matches: HAEnergyInvestitionMatch[]
 }
 
-// =============================================================================
-// API Client
-// =============================================================================
-
-/**
- * Feld-Hilfetexte: { kontext: { schluessel: hinweis } }.
- * kontext = Investitionstyp (keyed by Feld), "basis" (keyed by mapping_key) oder
- * "sonstiges:<kategorie>". Single Source of Truth = Backend field_definitions.
- */
-export type FeldHinweise = Record<string, Record<string, string>>
-
 export const sensorMappingApi = {
-  /**
-   * Sensor-Mapping und Investitionen einer Anlage abrufen
-   */
-  async getMapping(anlageId: number): Promise<SensorMappingResponse> {
-    return api.get<SensorMappingResponse>(`/sensor-mapping/${anlageId}`)
-  },
-
-  /**
-   * Feld-Hilfetexte (statisch, kein Anlage-Bezug, immer verfügbar — auch
-   * Standalone). Gleiche Quelle für HA-Sensor-Zuordnungs-, künftigen
-   * MQTT-Inbound-Wizard und manuelle Monatsdaten-Eingabe.
-   */
-  async getFeldHinweise(): Promise<FeldHinweise> {
-    return api.get<FeldHinweise>(`/monatsdaten/feld-hinweise`)
-  },
-
-  /**
-   * Verfügbare HA-Sensoren für Dropdown abrufen
-   */
-  async getAvailableSensors(anlageId: number, filterEnergy = true): Promise<HASensorInfo[]> {
-    const params = new URLSearchParams()
-    if (!filterEnergy) {
-      params.set('filter_energy', 'false')
-    }
-    const query = params.toString() ? `?${params.toString()}` : ''
-    return api.get<HASensorInfo[]>(`/sensor-mapping/${anlageId}/available-sensors${query}`)
-  },
-
-  /**
-   * Sensor-Mapping speichern
-   */
-  async saveMapping(anlageId: number, mapping: SensorMappingRequest): Promise<SetupResult> {
-    return api.post<SetupResult>(`/sensor-mapping/${anlageId}`, mapping)
-  },
-
-  /**
-   * Sensor-Mapping löschen
-   */
-  async deleteMapping(anlageId: number): Promise<void> {
-    await api.delete(`/sensor-mapping/${anlageId}`)
-  },
-
-  /**
-   * Mapping-Status abfragen (schnelle Prüfung)
-   */
-  async getStatus(anlageId: number): Promise<MappingStatus> {
-    return api.get<MappingStatus>(`/sensor-mapping/${anlageId}/status`)
-  },
-
   /**
    * Vorschläge aus der HA-Energiekonfiguration abrufen (#197).
    * Add-on-only: gibt available=false zurück wenn kein SUPERVISOR_TOKEN

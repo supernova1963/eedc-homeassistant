@@ -29,22 +29,11 @@ export type { InvestitionCreate, InvestitionUpdate, ROIKomponente, ROIBerechnung
 export type { StrompreisCreate, StrompreisUpdate } from './strompreise'
 export type { CSVTemplateInfo, DemoDataResult } from './import'
 export type { PVGISPrognose, GespeichertePrognose, AktivePrognoseResponse, PVGISOptimum } from './pvgis'
-export type { HASensor, HAStatus, HASensorMapping } from './ha'
+export type { HAStatus } from './ha'
 export type { CockpitUebersicht } from './cockpit'
 export type { WetterDaten, StandortInfo } from './wetter'
 export type { InvestitionMitFeldern, SensorFeld } from './haImport'
-export type {
-  StrategieTyp,
-  FeldMapping,
-  BasisMapping,
-  InvestitionFelder,
-  SensorMappingRequest,
-  SensorMappingResponse,
-  InvestitionInfo,
-  HASensorInfo,
-  SetupResult,
-  MappingStatus,
-} from './sensorMapping'
+export type { HAEnergySuggestResponse } from './sensorMapping'
 export type {
   Vorschlag,
   Warnung,

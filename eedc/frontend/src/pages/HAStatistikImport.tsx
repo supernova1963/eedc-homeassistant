@@ -549,12 +549,14 @@ export default function HAStatistikImport() {
         <Button
           type="button" variant="ghost" size="sm"
           onClick={() => {
-            if (!host.imOverlay) return navigate('/einstellungen/sensor-mapping')
+            // V3-Bereinigung 2026-08: das Ziel ist in beiden Welten die
+            // Datenquellen-Fläche (die alte Route war nur noch ein Redirect).
+            if (!host.imOverlay) return navigate('/einstellungen/datenquellen')
             host.schliessen()
             navigate('/einstellungen/datenquellen')
           }}
         >
-          ← Zurück zu {host.imOverlay ? 'Datenquellen' : 'Sensor-Zuordnung'}
+          ← Zurück zu Datenquellen
         </Button>
         <Button
           type="button" variant="ghost" size="sm"

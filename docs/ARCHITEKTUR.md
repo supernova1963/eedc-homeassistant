@@ -941,7 +941,7 @@ ist ein Regelbruch, nicht eine Variante:
 | `forms/` | Formular-Controls; **Roh-Controls sind gewächtert** (`check:roh-controls`, `check:form-controls`) |
 | `live/` | `EnergieFluss` (animiertes SVG), `EnergieBilanz`, `WetterWidget` … |
 | `monatsabschluss/` | das Monatsabschluss-**Formular** (seit v4.0.0 ein Formular statt 7 Schritten) |
-| `sensor-mapping/` · `connector/` · `import/` · `setup-wizard/` | Einrichtung und Import |
+| `connector/` · `import/` · `setup-wizard/` | Einrichtung und Import (`sensor-mapping/` fiel mit der V3-Bereinigung 2026-08-13) |
 | gerätespezifisch | `pv/` · `speicher/` · `waermepumpe/` · `wallbox/` · `eauto/` · `balkonkraftwerk/` |
 | fachlich | `finanzen/` · `roi/` · `aussicht/` · `prognose/` · `tag/` · `werte/` · `infothek/` · `repair/` |
 
