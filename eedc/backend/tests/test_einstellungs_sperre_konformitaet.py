@@ -154,22 +154,33 @@ async def test_der_pruefer_kann_ueberhaupt_rot_melden(gesperrt, monkeypatch):
 
 
 async def test_lesende_aufrufe_bleiben_frei(monkeypatch):
-    """Ansehen ist nie gesperrt. Das ist der ganze Zweck der Übung.
+    """Ansehen ist nie gesperrt — und zwar, bevor die Sperre irgendetwas nachschlägt.
 
-    Bewusst **ohne** die ``gesperrt``-Fixture: Die Middleware prüft die Methode als
-    Erstes und lässt lesende Aufrufe durch, bevor sie überhaupt eine Datenbanksitzung
-    öffnet. Diese Probe geht deshalb gegen die echte Ablage — und belegt damit
-    zusätzlich, dass der frühe Ausstieg wirklich früh ist.
+    ⛔ **Diese Probe hat den CI-Lauf zu v4.0.26 rot gemacht, und das lag an ihr.** Sie rief
+    ``GET /api/anlagen/`` auf. Auf dieser Box liegt eine gefüllte Datenbank, auf einem
+    frischen Runner nicht — dort endete sie in *no such table: anlagen*, während das
+    Produkt einwandfrei war (3502 andere Proben grün). *Ein Test, der die Umgebung
+    mitmisst, prüft nicht die Regel, sondern die Box.* Dieselbe Klasse, gegen die
+    ``conftest.py`` beim Netz einen Wächter hat.
+
+    Jetzt ohne Datenbank — und dabei **schärfer** als vorher: Die Sperre bekommt eine
+    ``ist_gesetzt``-Funktion, die beim Aufruf **explodiert**. Kommt der lesende Aufruf
+    trotzdem durch, ist bewiesen, dass die Middleware ihn abzweigt, *bevor* sie eine
+    Sitzung öffnet oder irgendetwas nachschlägt. Vorher belegte die Probe nur „nicht 423".
     """
 
-    async def _gesetzt(_db):
-        return True
+    async def _darf_nicht_aufgerufen_werden(_db):
+        raise AssertionError(
+            "Die Sperre hat bei einem lesenden Aufruf nachgeschlagen — der frühe "
+            "Ausstieg über die Methode greift nicht mehr."
+        )
 
-    monkeypatch.setattr(sperre_core, "ist_gesetzt", _gesetzt)
+    monkeypatch.setattr(sperre_core, "ist_gesetzt", _darf_nicht_aufgerufen_werden)
 
-    for pfad in ("/api/health", "/api/anlagen/", "/api/sperre/status"):
-        antwort = await _ruf("GET", pfad)
-        assert antwort.status_code != 423, f"{pfad} war gesperrt"
+    # `/api/health` braucht keine Datenbank — genau deshalb steht hier diese Route.
+    antwort = await _ruf("GET", "/api/health")
+    assert antwort.status_code == 200
+    assert antwort.status_code != 423
 
 
 async def test_alle_schreib_verben_sind_von_der_sperre_erfasst():
