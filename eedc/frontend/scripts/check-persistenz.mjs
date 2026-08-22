@@ -37,7 +37,6 @@ const BESTAND = new Map([
   ['src/components/live/EnergieFluss.tsx', 4],
   ['src/components/live/WetterWidget.tsx', 3],
   ['src/components/park/ParkContext.tsx', 4],
-  ['src/components/preview/IASkeleton.tsx', 4],
   ['src/components/tag/TagWerteTabelle.tsx', 4],
   ['src/components/ui/CollapsibleSection.tsx', 3], // LEGACY V3 (Persistenz-SoT-Doppel → Cap-Entscheid 2026-06-01)
   ['src/components/ui/SortableSection.tsx', 4], // LEGACY V3 (dito)

@@ -32,9 +32,9 @@ yarn-error.log*
 eedc/frontend/dist/
 *.js.map
 
-# IA-v4 Vorschau-Build (Wegwerf, Etappe 2) — separates Output, NIE committen.
-# preview-dist/ entsteht via `npm run build:preview`; website/public/preview/
-# wird im Pages-Workflow zur Build-Zeit befüllt (vgl. deploy-website.yml).
+# IA-v4 Vorschau-Build: der Apparat fiel mit der V3-Bereinigung 2026-08.
+# Die zwei Ignores bleiben, damit ein liegengebliebenes lokales preview-dist/
+# auf keiner Maschine als untracked auftaucht.
 eedc/frontend/preview-dist/
 website/public/preview/
 

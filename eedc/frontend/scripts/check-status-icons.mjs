@@ -7,8 +7,9 @@
  * (CheckCircle/AlertTriangle/XCircle/Info) und keiner der bekannten Drift-Varianten
  * (CheckCircle2/AlertCircle/Sparkles) aus lucide-react in Sichten-Code.
  *
- * Scope: src/v4/** + von V4 konsumierte geteilte Dateien + IASkeleton (Preview-SoT,
- * Konvergenz-Prinzip). Allowlist = belegte NICHT-Status-Verwendungen (dekorativ).
+ * Scope: src/v4/** + von V4 konsumierte geteilte Dateien. (IASkeleton war bis
+ * zur V3-Bereinigung 2026-08 mit im Scope — mit dem Vorschau-Cluster gefallen.)
+ * Allowlist = belegte NICHT-Status-Verwendungen (dekorativ).
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
@@ -26,7 +27,6 @@ const GETEILTE_SOT = [
   'src/components/blocks/BlockShell.tsx',
   'src/components/blocks/FokusKachel.tsx',
   'src/components/werte/WerteTabelle.tsx',
-  'src/components/preview/IASkeleton.tsx',
 ]
 
 /**
@@ -60,7 +60,10 @@ function lineOf(src, index) {
 }
 
 // lucide-Import-Blöcke (auch mehrzeilig) einsammeln, benannte Importe prüfen.
-const LUCIDE_IMPORT = /import\s*(?:type\s*)?\{([^}]*)\}\s*from\s*'lucide-react'/gs
+// ['"]: die Quote-Form ist Konvention, keine erzwungene Regel (kein
+// `quotes`-Lint) — ein doppelt-quotierter Import lief 2026-08-22 am
+// Sprengsatz vorbei, deshalb beide Formen.
+const LUCIDE_IMPORT = /import\s*(?:type\s*)?\{([^}]*)\}\s*from\s*['"]lucide-react['"]/gs
 
 const dateien = [...tsxFiles(join(SRC, 'v4')), ...GETEILTE_SOT.map((f) => join(ROOT, f))]
 const violations = []

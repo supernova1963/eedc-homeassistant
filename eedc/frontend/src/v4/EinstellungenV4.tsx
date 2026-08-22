@@ -1,7 +1,8 @@
 /**
  * EinstellungenV4 — Einstellungen-Sicht der IA-V4 (Kategorie-Leiste + Blöcke).
  *
- * Struktur = Design-SoT `components/preview/IASkeleton.tsx` (`EinstellungenView`):
+ * Struktur nach dem Design-SoT der Flip-Zeit (`IASkeleton::EinstellungenView`,
+ * mit der V3-Bereinigung 2026-08 gefallen — die Struktur lebt seither hier):
  * zweite Leiste = Kategorien (Stammdaten · Daten · Integration · System · Daten
  * teilen), jede Einstellung = ein {@link BlockShell}-Block. Inhalt kommt aus dem
  * datengetriebenen {@link EINSTELLUNGEN_KATALOG}: leichte Config inline (FormBlock),

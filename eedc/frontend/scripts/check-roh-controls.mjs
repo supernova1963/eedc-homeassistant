@@ -46,7 +46,6 @@ const ROH_INFRA = new Map([
   ['src/components/blocks/BlockShell.tsx', 8], // Park/Fokus/Aufklapp-Mechanik
   ['src/components/park/GeparktBlock.tsx', 4], // Park-Mechanik
   ['src/components/layout/IATopNav.tsx', 4], // Navigation
-  ['src/components/preview/IASkeleton.tsx', 11], // Dev-Preview (nicht user-erreichbar)
   ['src/v4/ZeitStepper.tsx', 3], // mobiler Zeit-Stepper
   ['src/v4/status/StatusFusszeile.tsx', 3], // Status-Fußzeilen-Chips
   ['src/v4/WerkbankZeitraum.tsx', 2], // Zeitraum-Schnellwahl-Chips

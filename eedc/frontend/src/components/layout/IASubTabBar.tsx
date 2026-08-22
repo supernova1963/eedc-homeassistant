@@ -1,8 +1,8 @@
 /**
  * IASubTabBar — geteilte 2. Leiste der IA-v4 (Sub-Tabs, Struktur-SoT).
  *
- * EINE Quelle für die Sub-Tab-Leiste, konsumiert von Vorschau (`IASkeleton`,
- * state-getrieben) und echtem /v4 (`CockpitV4` u. a., router-getrieben) — siehe
+ * EINE Quelle für die Sub-Tab-Leiste, konsumiert vom Routenbaum (`CockpitV4`
+ * u. a., router-getrieben; die Vorab-Vorschau `IASkeleton` fiel 2026-08) — siehe
  * {@link IATopNav}. `h-14` = Höhe der 1. Leiste; primary-getönte aktive Tabs.
  *
  * Dual-API je Eintrag wie {@link IANavItem}: `to` → NavLink, sonst `onClick`+`active`.

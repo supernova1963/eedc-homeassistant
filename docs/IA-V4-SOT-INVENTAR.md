@@ -17,7 +17,7 @@
 >
 > **Abgrenzung:** NUR UI-Regime. Berechnungen/Aggregate gehören in den **Berechnungs-Layer** (ADR-001) mit eigenem Konformitäts-Test — **nicht hier** dupliziert.
 >
-> **Werkbank:** Skeleton (`components/preview/IASkeleton.tsx`, backendlos). **Heimat:** `components/` + `lib/` + [`docs/KONZEPT-STYLE-GUIDE.md`](KONZEPT-STYLE-GUIDE.md). **Wächter:** `npm run check:design` = 0, Regel 0a.
+> **Werkbank:** war das Skeleton (`IASkeleton.tsx`, backendlos) — **mit der V3-Bereinigung 2026-08 gefallen**; seit dem Flip ist die echte Oberfläche selbst die Werkbank. **Heimat:** `components/` + `lib/` + [`docs/KONZEPT-STYLE-GUIDE.md`](KONZEPT-STYLE-GUIDE.md). **Wächter:** `npm run check:design` = 0, Regel 0a.
 >
 > Legende: ✅ SoT steht · 🔄 in Arbeit · ⬜ offen · ❓ Status vor nächstem Touch prüfen
 

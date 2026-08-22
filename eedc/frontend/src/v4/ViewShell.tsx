@@ -7,9 +7,9 @@
  * Safari/Firefox-Ruckeln der früheren `sticky`-Leiste). Unter `lg` scrollt alles
  * zusammen (Mobile-Schale).
  *
- * Aus der IA-v4-Vorschau (`components/preview/IASkeleton.tsx` `ViewShell`) als
- * echte /v4-Komponente übernommen — Regel-SoT, damit Vorschau und Realbau dieselbe
- * Schale tragen. Setzt voraus, dass der `main`-Container von {@link LayoutV4} ab
+ * Aus der IA-v4-Vorab-Vorschau (`IASkeleton::ViewShell`, 2026-08 gefallen) als
+ * echte /v4-Komponente übernommen — seither ist DIES der Regel-SoT der
+ * Schale. Setzt voraus, dass der `main`-Container von {@link LayoutV4} ab
  * `lg` `overflow-hidden lg:flex lg:flex-col lg:min-h-0` ist (gibt die Höhe).
  */
 import type { ReactNode } from 'react'

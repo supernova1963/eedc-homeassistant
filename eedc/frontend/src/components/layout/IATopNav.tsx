@@ -5,10 +5,10 @@
  * Infra-Implementierung — check:v4-migration-Infra-Allowlist (Regel 0a Fall 3,
  * Gernot-Freigabe 2026-07-11).
  *
- * EINE Quelle für die obere Leiste der IA-v4: konsumiert von der öffentlichen
- * Vorschau (`components/preview/IASkeleton`, state-getrieben) UND vom echten
- * /v4-Routenbaum (`v4/LayoutV4`, router-getrieben). Damit gibt es keine zwei
- * driftenden Nav-Kopien mehr (Konvergenz-Leitprinzip). Die frühere zweite Kopie
+ * EINE Quelle für die obere Leiste der IA-v4, konsumiert vom Routenbaum
+ * (`v4/LayoutV4`, router-getrieben). Bis zur V3-Bereinigung 2026-08 zusätzlich
+ * von der Vorab-Vorschau (`IASkeleton`, mit dem Cluster gefallen). Damit gibt es
+ * keine zwei driftenden Nav-Kopien mehr (Konvergenz-Leitprinzip). Die frühere zweite Kopie
  * `components/layout/TopNavigation` ist mit dem IA-V4-Flip gefallen; ihre
  * Spezifika (Settings-Dropdown, Monatsabschluss-Badge, HA-Verfügbarkeit) liegen
  * seither hier, gespeist aus `useGlobalStatus`.

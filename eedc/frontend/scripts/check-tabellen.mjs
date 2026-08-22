@@ -9,8 +9,8 @@
  *  2. Einheit im Header in RUNDEN Klammern `Name (Einheit)` — eckige Einheiten-
  *     Klammern (`[kWh]`, `[{einheit}]` …) in `<th`-Zeilen blocken.
  *
- * Scope: src/v4/** + von V4 konsumierte geteilte Tabellen-Dateien + IASkeleton
- * (Preview-SoT, Konvergenz-Prinzip — war der Drift-Ursprung von S13).
+ * Scope: src/v4/** + von V4 konsumierte geteilte Tabellen-Dateien. (IASkeleton —
+ * der Drift-Ursprung von S13 — fiel 2026-08 mit dem Vorschau-Cluster.)
  */
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs'
 import { join, relative } from 'node:path'
@@ -31,7 +31,6 @@ const GETEILTE_SOT = [
   'src/components/balkonkraftwerk/BkwCharts.tsx',
   'src/components/eauto/EAutoJahresvergleich.tsx',
   'src/components/speicher/SpeicherJahresbilanz.tsx',
-  'src/components/preview/IASkeleton.tsx',
 ]
 
 /** Dokumentierte Ausnahmen: Pfad → erlaubte Treffer-Zahl je Regel-Schlüssel. */
@@ -94,7 +93,6 @@ for (const file of dateien) {
 const T_ALLOWLIST = new Set([
   'src/components/ui/Table.tsx', // die Zentrale selbst
   'src/pages/aussichten/KorrekturprofilHeatmapCard.tsx', // Heatmap-Matrix, keine Datensatz-Semantik
-  'src/components/preview/IASkeleton.tsx', // Design-Attrappe, nicht Teil der App
   // `src/pages/Hilfe.tsx` ist mit dem IA-V4-Flip gefallen, der Eintrag am 13.08. entfernt.
   'src/components/ui/MarkdownDoc.tsx', // Markdown-Render-Tabelle (aus Hilfe.tsx extrahiert, D2)
   // Gernot 2026-07-10: T-Konto bleibt Sonderfall, KEINE Zentralisierung planen.

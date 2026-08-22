@@ -7,7 +7,6 @@ on:
       - 'website/**'
       - 'docs/**'
       - 'CHANGELOG.md'
-      - 'eedc/frontend/**'
   workflow_dispatch:
 
 permissions:

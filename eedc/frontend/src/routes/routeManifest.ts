@@ -125,6 +125,4 @@ export const REAL_ROUTE_PATHS: string[] = [
   // Einstellungen (Kategorien: stammdaten·komponenten·infothek·daten·integration·datenquellen·system)
   'einstellungen',
   'einstellungen/:kategorie',
-  // Dev-only
-  'dev/design-preview',
 ]

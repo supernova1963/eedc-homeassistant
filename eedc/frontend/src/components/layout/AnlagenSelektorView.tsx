@@ -1,11 +1,10 @@
 /**
  * AnlagenSelektorView — präsentations-SoT des globalen Anlagen-Kontextwählers.
  *
- * Geteilt (wie {@link IATopNav}): konsumiert von der öffentlichen Vorschau
- * (`components/preview/IASkeleton`, Demo-Daten, KEIN Backend) UND vom verbundenen
- * `v4/AnlagenSelektor` (zieht `useSelectedAnlage`). Liegt bewusst in
- * `components/layout/` (nicht `v4/`), damit die im Prod-Build enthaltene Vorschau
- * keine v4-Symbole hereinzieht (Flag-Reinheit).
+ * Geteilt (wie {@link IATopNav}): konsumiert vom verbundenen
+ * `v4/AnlagenSelektor` (zieht `useSelectedAnlage`); der zweite Konsument — die
+ * Vorab-Vorschau `IASkeleton` — fiel mit der V3-Bereinigung 2026-08. Liegt
+ * weiterhin in `components/layout/` (Historie: Flag-Reinheit der Vorschau).
  *
  * Sichtbarkeit: NUR ab 2 Anlagen (bei genau einer gibt es nichts zu wählen).
  * Tokens gespiegelt vom Einstellungen-Dropdown (`TopNavigation`): kein neues

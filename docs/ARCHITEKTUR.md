@@ -842,9 +842,8 @@ Flip gefallen.
 │                                            regional · trends · statistiken)
 ├── hilfe                  → HilfeV4
 ├── einstellungen          → Navigate → /einstellungen/stammdaten
-├── einstellungen/:kategorie → EinstellungenV4 (stammdaten · komponenten · infothek · daten ·
-│                                               integration · datenquellen · system)
-└── dev/design-preview     → DesignPreview   (nur Entwicklung)
+└── einstellungen/:kategorie → EinstellungenV4 (stammdaten · komponenten · infothek · daten ·
+                                                integration · datenquellen · system)
 ```
 
 **Alle Alt-Pfade werden umgeleitet, keiner läuft in ein 404.** SoT dafür ist

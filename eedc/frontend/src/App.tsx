@@ -16,11 +16,6 @@ const CommunityV4 = lazy(() => import('./v4/CommunityV4'))
 const EinstellungenV4 = lazy(() => import('./v4/EinstellungenV4'))
 const HilfeV4 = lazy(() => import('./v4/HilfeV4'))
 
-// Dev-only Showcase für Style-Guide-Iteration. Page rendert in Production
-// nichts, der Code wird vom Bundler aber trotzdem mit ausgeliefert.
-// Lazy-Import minimiert das auf einen kleinen separaten Chunk.
-const DesignPreview = lazy(() => import('./pages/DesignPreview'))
-
 /**
  * Stray-Bookmark-Versicherung: Vor-Flip-Vorschau-Links (`#/v4/…`) auf die
  * prefix-freien kanonischen Pfade umbiegen (`#/v4/cockpit/live` → `/cockpit/live`).
@@ -91,10 +86,6 @@ function App() {
             <Route path="aussichten/*" element={<Navigate to="/cockpit/aussicht" replace />} />
             <Route path="monatsabschluss/*" element={<Navigate to="/einstellungen/daten" replace />} />
           </Route>
-
-          {/* Dev-only Vorschau-Skelett — bewusst OHNE Layout. Rendert in
-              Production null (DEV-Guard in der Komponente). */}
-          <Route path="dev/design-preview" element={<DesignPreview />} />
 
           {/* Stray-Bookmarks aus der `/v4`-Vorschauzeit → prefix-frei umbiegen. */}
           <Route path="v4/*" element={<V4LegacyRedirect />} />

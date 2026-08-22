@@ -517,7 +517,7 @@ eedc-homeassistant/                  ← Source of Truth (alle Änderungen hier)
             │   ├── pv/ · speicher/ · waermepumpe/ · wallbox/ · eauto/ · balkonkraftwerk/
             │   ├── monatsabschluss/ # das Monatsabschluss-Formular
             │   ├── connector/ · import/ · setup-wizard/
-            │   ├── infothek/ · repair/ · layout/ · common/ · preview/
+            │   ├── infothek/ · repair/ · layout/ · common/
             │   └── AppWithSetup.tsx · AppErrorBoundary.tsx · DokumentationsDialog.tsx
             │
             ├── pages/               # Einstellungs-Flächen + Teile, die V4 einbindet
@@ -526,8 +526,7 @@ eedc-homeassistant/                  ← Source of Truth (alle Änderungen hier)
             │   ├── EnergieprofilTeile.tsx · DatenCheckerTeile.tsx · ProtokolleTeile.tsx
             │   ├── BackupTeile.tsx · HAExportSettingsTeile.tsx · PVGISSettingsTeile.tsx
             │   ├── HAStatistikImport.tsx · DataImportWizard.tsx · CsvImportWizard.tsx
-            │   ├── CloudImportWizard.tsx · CustomImportWizard.tsx · ConnectorSetupWizard.tsx
-            │   └── DesignPreview.tsx
+            │   └── CloudImportWizard.tsx · CustomImportWizard.tsx · ConnectorSetupWizard.tsx
             │
             ├── lib/                 # SoT-Helfer (keine lokalen Kopien daneben!)
             │   ├── colors.ts        # Farb-SoT — keine Inline-Hex außerhalb
