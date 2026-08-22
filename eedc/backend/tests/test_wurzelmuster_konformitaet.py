@@ -21,8 +21,14 @@ Gewächterte Muster:
   P6 — stille Null bei JSON-Key-Zugriff. Ein falscher Schlüssel auf einem
        JSON-Feld liefert still `0`, und `0` sieht aus wie „keine Daten". So
        lebte der PVGIS-Bug (N38, `e_month_kwh` statt `e_m`) jahrelang, und so
-       liest `api/routes/data_import.py:174` bis heute `parameter["leistung_kwp"]`
-       — ein Schlüssel, den es in keinem Regime gibt (N59, Abfluss A17).
+       las `api/routes/data_import.py` lange `parameter["leistung_kwp"]` — ein
+       Schlüssel, den es in keinem Regime gibt (N59, Abfluss A17). **Diese
+       Stelle ist seit A20 korrigiert** und trägt heute den Gegenkommentar;
+       hier stand bis 2026-08-22 „bis heute" samt Zeilennummer `:174`, wo
+       inzwischen etwas ganz anderes steht (N-177, Inventur Runde B). Der
+       *Befund* bleibt gültig, nur sein Zeiger war tot — ein Wächter-Docstring,
+       der eine geheilte Stelle als lebend führt, kostet die nächste Erhebung
+       eine Suche ins Leere.
        Hier gewächtert: `InvestitionMonatsdaten.verbrauch_daten` /
        `Monatsdaten.verbrauch_daten` gegen die Feld-SoT `core/field_definitions`
        — seit A25 in allen drei Zugriffsformen (`.get()`, Subscript **lesend

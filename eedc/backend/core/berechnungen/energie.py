@@ -95,7 +95,7 @@ def erzeuger_kwh_je_investition(komponenten_kwh: Optional[dict]) -> dict[str, fl
     Erzeuger unter `pv_<id>` (auch ein Balkonkraftwerk,
     `live_komponenten_builder`/`live_history_service`), der Boundary-Keyspace
     unterscheidet `pv_<id>` und `bkw_<id>`
-    (`snapshot/komponenten_beitraege._TYP_PREFIX`). Wer je Roh-Key gruppiert,
+    (`snapshot/komponenten_beitraege._TYP_KEY_PREFIX`). Wer je Roh-Key gruppiert,
     bekommt für **ein** Balkonkraftwerk zwei Spalten, deren Belegung vom
     Schreibpfad des jeweiligen Tages abhängt — dieselbe Mismatch-Klasse, aus der
     der BKW-Doppelzählungs-Bug vom 2026-05-19 entstand (s. Kommentar an
