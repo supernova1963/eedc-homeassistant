@@ -47,7 +47,13 @@ router = APIRouter()
 
 # Quell-Kennungen. B2.2 bietet die aktuell verfügbaren MQTT-Optionen; HA-Sensor
 # und MQTT-Gateway folgen (P2 bzw. B3-Discovery). Präferenz-SoT HA > Gateway >
-# Inbound > manuell (§2d); Default (kein Eintrag) = Standard-Inbound.
+# Inbound > manuell (§2d).
+#
+# ⚠ Hier stand bis 2026-08-22 „Default (kein Eintrag) = Standard-Inbound" (N-315).
+# Das ist seit B8-2 falsch: ohne Eintrag entscheidet `resolve_effektive_quelle`,
+# und dessen Stufe 3 wählt Inbound NUR bei tatsächlichem Wert — sonst „keine",
+# ohne zu persistieren (self-healing). Der Satz beschrieb den Zustand vor B8-2
+# und widersprach dem Resolver-Docstring, an dem der Code hängt.
 QUELLE_STANDARD = "mqtt_inbound_standard"
 QUELLE_KEINE = "keine"
 QUELLE_GATEWAY = "mqtt_gateway"
