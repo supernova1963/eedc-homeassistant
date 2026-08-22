@@ -577,6 +577,11 @@ async def get_monatsauswertung(
     verbrauch_sum = 0.0
     einspeisung_sum = 0.0
     netzbezug_sum = 0.0
+    # Abdeckung je Achse + Paar-Abdeckung der beiden Differenzen (N-92) —
+    # dieselbe Rechnung wie in `core/berechnungen/tagesbilanz.py`, weil dieser
+    # Endpunkt laut Modul-Docstring dessen NULL-Semantik 1:1 trägt.
+    pv_n = verbrauch_n = einspeisung_n = netzbezug_n = 0
+    pv_ein_n = verb_netz_n = 0
     ueberschuss_sum = 0.0
     defizit_sum = 0.0
     batt_lade_sum = 0.0
@@ -621,12 +626,20 @@ async def get_monatsauswertung(
         if pv is not None:
             pv_sum += pv
             pv_pro_tag[r.datum] += pv
+            pv_n += 1
         if verbrauch is not None:
             verbrauch_sum += verbrauch
+            verbrauch_n += 1
         if einspeisung is not None:
             einspeisung_sum += einspeisung
+            einspeisung_n += 1
         if netzbezug is not None:
             netzbezug_sum += netzbezug
+            netzbezug_n += 1
+        if pv is not None and einspeisung is not None:
+            pv_ein_n += 1
+        if verbrauch is not None and netzbezug is not None:
+            verb_netz_n += 1
 
         # Überschuss/Defizit + Direkt-Eigenverbrauch nur wenn beide Werte da
         ueberschuss: Optional[float] = None
@@ -685,14 +698,28 @@ async def get_monatsauswertung(
     # hier ausgeschrieben und stimmten, aber dieselbe Kennzahl inline zu rechnen
     # ist genau der Weg, auf dem N129 entstanden ist — an der dritten Stelle
     # (Tagesvorschau) wich der Zähler ab, und kein Test sah es.
+    #
+    # ⚑ **N-92 (2026-08-22): beide Quoten stehen auf einer DIFFERENZ**, und eine
+    # Differenz erbt die Unvollständigkeit jedes Summanden
+    # (`KONZEPT-UNVOLLSTAENDIGE-WERTE.md` §3 Regel 1). Die Summen darüber
+    # überspringen NULL-Stunden korrekt — die Differenz erbte das nicht: fehlten
+    # der Einspeisung Stunden und der PV keine, war der Eigenverbrauch um genau
+    # die ungemessene Einspeisung zu hoch, und war der Netzbezug **gar nicht**
+    # erfasst, meldete die Autarkie **100 %**. Der Zwilling im Tages-Layer trägt
+    # die Begründung ausführlich; hier steht dieselbe Regel, damit die beiden
+    # Sichten nicht auseinanderlaufen (die N-129-Klasse).
     eigenverbrauch_pv = pv_sum - einspeisung_sum
+    ev_abdeckung_gleich = pv_n > 0 and pv_n == einspeisung_n == pv_ein_n
+    autarkie_abdeckung_gleich = (
+        netzbezug_n > 0 and verbrauch_n == netzbezug_n == verb_netz_n
+    )
     autarkie = (
         round(autarkie_prozent(verbrauch_sum - netzbezug_sum, verbrauch_sum), 1)
-        if verbrauch_sum > 0 else None
+        if verbrauch_sum > 0 and autarkie_abdeckung_gleich else None
     )
     eigenverbrauch = (
         round(eigenverbrauchsquote_prozent(eigenverbrauch_pv, pv_sum), 1)
-        if pv_sum > 0 else None
+        if pv_sum > 0 and ev_abdeckung_gleich else None
     )
 
     grundbedarf = (

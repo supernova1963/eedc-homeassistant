@@ -99,12 +99,31 @@ class TagesBilanz:
     verbrauch_erfasst: bool = False
     einspeisung_erfasst: bool = False
     netzbezug_erfasst: bool = False
+    # **Abdeckung je Achse in Stunden** (N-92, 2026-08-22). `stunden` oben zählt
+    # **Rows**, nicht Feld-Abdeckung — und beantwortet damit die Frage nicht, die
+    # eine Differenz stellt: *haben beide Summanden dieselbe Grundlage?* Die
+    # `*_erfasst`-Flags beantworten nur „mindestens eine Stunde". Dazwischen
+    # liegt der Fall, der `eigenverbrauch_kwh` still zu hoch machte: PV über alle
+    # 24 Stunden, Einspeisung nur über 18 ⇒ die Differenz ist um die sechs nicht
+    # gemessenen Stunden zu gross. Gemessen 22.08.2026: 48 − 18 = 30 kWh statt 24.
+    pv_stunden: int = 0
+    verbrauch_stunden: int = 0
+    einspeisung_stunden: int = 0
+    netzbezug_stunden: int = 0
+    #: Stunden, in denen **beide** Summanden der jeweiligen Differenz vorlagen.
+    #: Nur wenn sie mit **beiden** Einzelabdeckungen übereinstimmen, ruht die
+    #: Differenz auf einer gemeinsamen Grundlage.
+    pv_und_einspeisung_stunden: int = 0
+    verbrauch_und_netzbezug_stunden: int = 0
 
 
 def bilanz_aus_stundenrows(rows: Iterable[_StundenRow]) -> TagesBilanz:
     """Aggregiert stündliche TEP-Rows zur Energie-Bilanz (siehe Modul-Docstring)."""
     pv_sum = 0.0
     pv_erfasst = False
+    # Abdeckung je Achse + die beiden Paar-Abdeckungen der Differenzen (N-92).
+    pv_n = verbrauch_n = einspeisung_n = netzbezug_n = 0
+    pv_ein_n = verb_netz_n = 0
     verbrauch_erfasst = False
     einspeisung_erfasst = False
     netzbezug_erfasst = False
@@ -132,15 +151,23 @@ def bilanz_aus_stundenrows(rows: Iterable[_StundenRow]) -> TagesBilanz:
         if pv is not None:
             pv_sum += pv
             pv_erfasst = True
+            pv_n += 1
         if verbrauch is not None:
             verbrauch_sum += verbrauch
             verbrauch_erfasst = True
+            verbrauch_n += 1
         if einspeisung is not None:
             einspeisung_sum += einspeisung
             einspeisung_erfasst = True
+            einspeisung_n += 1
         if netzbezug is not None:
             netzbezug_sum += netzbezug
             netzbezug_erfasst = True
+            netzbezug_n += 1
+        if pv is not None and einspeisung is not None:
+            pv_ein_n += 1
+        if verbrauch is not None and netzbezug is not None:
+            verb_netz_n += 1
         if wp is not None:
             wp_sum += wp
 
@@ -168,12 +195,45 @@ def bilanz_aus_stundenrows(rows: Iterable[_StundenRow]) -> TagesBilanz:
     # Träger ist `pv_erfasst`, NICHT `pv_sum > 0`: eine gemessene Null
     # (Nacht, Schnee, Anlage aus) ist ein gültiger Wert und muss 0 bleiben
     # ([[feedback_legacy_felder]] — `is not None` statt `if val`).
-    eigenverbrauch = (pv_sum - einspeisung_sum) if pv_erfasst else None
+    #
+    # ⚑ **N-92 (2026-08-22): `pv_erfasst` allein reicht nicht.** Es beantwortet
+    # nur „trug IRGENDEINE Stunde einen PV-Wert" und schützt damit den Total-
+    # Fall. Die Differenz braucht mehr: **beide Summanden müssen dieselbe
+    # Grundlage haben.** Zwei Lagen liefen bis dahin still falsch —
+    #   * *Teilabdeckung:* PV 24 h, Einspeisung 18 h ⇒ 48 − 18 = **30 kWh**
+    #     statt 24; die Differenz ist um die sechs ungemessenen Stunden zu hoch.
+    #   * *Einspeisung nie gemessen:* ⇒ `pv_sum − 0` behauptet, die ganze
+    #     Erzeugung sei selbst verbraucht worden. Die Tageszeile schrieb dabei
+    #     schon „—" in die Einspeisungs-Spalte und daneben eine EV-Zahl, die
+    #     genau diese fehlende Spalte als 0 gelesen hat.
+    # Regel: `KONZEPT-UNVOLLSTAENDIGE-WERTE.md` §3 — eine **Differenz** wird
+    # **unterdrückt**, nicht beschriftet, weil ihre Fehlerrichtung davon abhängt,
+    # *welcher* Summand fehlt. Und §3 Regel 1 wörtlich: „Eine Differenz erbt die
+    # Unvollständigkeit jedes Summanden."
+    eigenverbrauch = (
+        (pv_sum - einspeisung_sum)
+        if pv_erfasst and pv_n == einspeisung_n == pv_ein_n
+        else None
+    )
     # Quoten über den SoT (kennzahlen-Layer); None statt 0 wenn Nenner fehlt,
     # damit die UI '—' statt '0 %' zeigt.
+    #
+    # ⚑ **Die Autarkie ist ebenfalls eine Differenz** (`Verbrauch − Netzbezug`),
+    # und sie war bis 2026-08-22 **gar nicht** geschützt — nicht einmal gegen den
+    # Total-Fall, den `eigenverbrauch` seit dem 15.08. kennt. Gemessen: Verbrauch
+    # über 24 h erfasst, Netzbezug nirgends ⇒ `netzbezug_sum` bleibt 0.0 ⇒
+    # **Autarkie 100,0 %**. Das ist exakt Strikers Januar (T89667 #162) eine
+    # Kachel weiter: dieselbe Tageszeile zeigte in der Netzbezug-Spalte bereits
+    # „—" (die Anzeige liest `netzbezug_erfasst`), daneben aber „100 %
+    # Autarkie" — ein Wert, der aus der fehlenden Spalte gerechnet ist.
+    # Eine 100 %, die niemand gemessen hat, ist keine Bestleistung, sondern
+    # eine Lücke mit Ausrufezeichen.
     autarkie = (
         autarkie_prozent(verbrauch_sum - netzbezug_sum, verbrauch_sum)
-        if verbrauch_sum > 0 else None
+        if verbrauch_sum > 0
+        and netzbezug_erfasst
+        and verbrauch_n == netzbezug_n == verb_netz_n
+        else None
     )
     ev_quote = (
         eigenverbrauchsquote_prozent(eigenverbrauch, pv_sum)
@@ -200,6 +260,12 @@ def bilanz_aus_stundenrows(rows: Iterable[_StundenRow]) -> TagesBilanz:
         speicher_effizienz_prozent=speicher_eff,
         stunden=n,
         pv_erfasst=pv_erfasst,
+        pv_stunden=pv_n,
+        verbrauch_stunden=verbrauch_n,
+        einspeisung_stunden=einspeisung_n,
+        netzbezug_stunden=netzbezug_n,
+        pv_und_einspeisung_stunden=pv_ein_n,
+        verbrauch_und_netzbezug_stunden=verb_netz_n,
         verbrauch_erfasst=verbrauch_erfasst,
         einspeisung_erfasst=einspeisung_erfasst,
         netzbezug_erfasst=netzbezug_erfasst,

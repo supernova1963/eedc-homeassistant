@@ -101,8 +101,16 @@ def test_gemessene_null_bleibt_eine_null():
 
     Genau hier hätte ein Träger ``pv_sum > 0`` denselben Fehler in die andere
     Richtung gemacht: eine Nacht ohne Ertrag verlöre ihren Eigenverbrauch.
+
+    ⚠ **Fixture am 2026-08-22 auf gleiche Abdeckung gezogen (N-92).** Sie trug
+    zuvor ``[pv=0 & einspeisung=0, pv=0]`` — also PV über zwei Stunden und
+    Einspeisung über eine. Damit hing sie **nebenbei** an der Abdeckungs-Regel
+    mit und hätte auf deren Einführung reagiert, obwohl ihr Gegenstand ein ganz
+    anderer ist (``pv_erfasst`` gegen ``pv_sum > 0``). Eine Probe soll auf ihr
+    eigenes Objekt zeigen; die Teilabdeckung prüft
+    ``test_teilabdeckung_unterdrueckt_die_differenz`` unten.
     """
-    rows = [_row(pv_kw=0.0, einspeisung_kw=0.0), _row(pv_kw=0.0)]
+    rows = [_row(pv_kw=0.0, einspeisung_kw=0.0), _row(pv_kw=0.0, einspeisung_kw=0.0)]
 
     bilanz = bilanz_aus_stundenrows(rows)
 
@@ -114,18 +122,35 @@ def test_gemessene_null_bleibt_eine_null():
 
 
 def test_eine_einzige_erfasste_stunde_genuegt():
-    """Teil-Erfassung ist eine Summe, keine Lücke — sie bleibt richtungssicher.
+    """Eine additive Teilsumme bleibt richtungssicher — die Differenz nicht.
 
-    Der Tag trägt 3 kWh PV in einer Stunde; die übrigen Stunden sind NULL.
-    Das Ergebnis ist eine (zu niedrige) Teilsumme, aber kein unmöglicher Wert.
+    ⛔ **Diese Probe behauptete bis 2026-08-22 den Befund N-92 als gewolltes
+    Verhalten.** Sie hieß „Teil-Erfassung ist eine Summe, keine Lücke" und
+    verlangte ``eigenverbrauch_kwh == 2.0`` aus ``3 − 1``. Beide Werte stammen
+    aber aus **verschiedenen Stunden**: die PV aus der ersten, die Einspeisung
+    aus der zweiten. Der Satz stimmt für ``erzeugung_kwh`` (eine additive
+    Teilsumme, richtungssicher zu niedrig) und ist für ``eigenverbrauch_kwh``
+    falsch — das ist eine **Differenz**, und der Modul-Docstring dieser Datei
+    sagt zwei Absätze weiter oben selbst, dass eine „Differenz mit fehlendem
+    Summanden unterdrückt" wird. Die Probe hat die beiden Formelformen
+    verwechselt und den Fund dadurch **grün verteidigt**.
+
+    Was hier geprüft wird, ist deshalb **beides zugleich**: die Teilsumme
+    überlebt, die Differenz nicht.
     """
     rows = [_row(pv_kw=3.0), _row(einspeisung_kw=1.0), _row()]
 
     bilanz = bilanz_aus_stundenrows(rows)
 
     assert bilanz.pv_erfasst is True
+    # Additive Teilsumme: bleibt, „mindestens 3 kWh".
     assert bilanz.erzeugung_kwh == 3.0
-    assert bilanz.eigenverbrauch_kwh == 2.0
+    assert bilanz.einspeisung_kwh == 1.0
+    # Differenz aus zwei disjunkten Abdeckungen: keine Aussage.
+    assert bilanz.eigenverbrauch_kwh is None
+    assert bilanz.pv_stunden == 1
+    assert bilanz.einspeisung_stunden == 1
+    assert bilanz.pv_und_einspeisung_stunden == 0   # genau der Beleg
 
 
 def test_erfasste_pv_rechnet_unveraendert():
@@ -142,3 +167,104 @@ def test_erfasste_pv_rechnet_unveraendert():
     assert bilanz.einspeisung_kwh == 3.0
     assert bilanz.eigenverbrauch_kwh == 3.0
     assert bilanz.ev_quote_prozent == 50.0
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# N-92 (2026-08-22): eine Differenz erbt die Unvollständigkeit JEDES Summanden
+#
+# Die Regel darüber (`pv_erfasst`) schützt nur den Total-Fall „PV nirgends
+# erfasst". Zwischen ihm und der vollen Abdeckung liegen zwei Lagen, die bis
+# hierher still falsch gerechnet haben — beide am Layer gemessen, bevor der
+# Fix geschrieben wurde.
+# ───────────────────────────────────────────────────────────────────────────
+
+
+def test_teilabdeckung_unterdrueckt_die_differenz():
+    """PV über alle Stunden, Einspeisung nur über einen Teil ⇒ keine Aussage.
+
+    Gemessen am 2026-08-22 **vor** dem Fix: 24 h PV à 2 kW und 18 h Einspeisung
+    à 1 kW ergaben ``48 − 18 = 30 kWh`` Eigenverbrauch. Richtig wären 24 —
+    die Differenz war um genau die sechs **nicht gemessenen** Einspeisungs-
+    stunden zu hoch. Kein Alarm, kein unmöglicher Wert, nur eine zu gute Zahl.
+    """
+    rows = [_row(pv_kw=2.0, einspeisung_kw=1.0) for _ in range(18)]
+    rows += [_row(pv_kw=2.0) for _ in range(6)]
+
+    bilanz = bilanz_aus_stundenrows(rows)
+
+    # Die additiven Summen bleiben unberührt — sie sind richtungssicher.
+    assert bilanz.erzeugung_kwh == 48.0
+    assert bilanz.einspeisung_kwh == 18.0
+    # Die Differenz nicht: 30.0 wäre der Befund.
+    assert bilanz.eigenverbrauch_kwh is None
+    assert bilanz.ev_quote_prozent is None
+    assert (bilanz.pv_stunden, bilanz.einspeisung_stunden) == (24, 18)
+
+
+def test_einspeisung_nie_gemessen_unterdrueckt_die_differenz():
+    """Ohne Einspeisungs-Messung ist nicht die ganze Erzeugung Eigenverbrauch.
+
+    ``pv_sum - 0`` behauptete, jede erzeugte Kilowattstunde sei selbst genutzt
+    worden. Die Tageszeile schrieb in dieselbe Reihe bereits „—" in die
+    Einspeisungs-Spalte (die Anzeige liest ``einspeisung_erfasst``) — und
+    daneben eine EV-Zahl, die genau diese fehlende Spalte als 0 gelesen hat.
+    """
+    rows = [_row(pv_kw=2.0) for _ in range(24)]
+
+    bilanz = bilanz_aus_stundenrows(rows)
+
+    assert bilanz.pv_erfasst is True
+    assert bilanz.einspeisung_erfasst is False
+    assert bilanz.erzeugung_kwh == 48.0
+    assert bilanz.eigenverbrauch_kwh is None
+
+
+def test_autarkie_ohne_netzbezugs_messung_ist_keine_100_prozent():
+    """Strikers Januar, eine Kachel weiter (T89667 #162).
+
+    ``Verbrauch − Netzbezug`` ist ebenfalls eine Differenz, und sie war bis
+    2026-08-22 **gar nicht** geschützt — nicht einmal gegen den Total-Fall.
+    Gemessen: Verbrauch über 24 h erfasst, Netzbezug nirgends ⇒ ``netzbezug_sum``
+    bleibt 0.0 ⇒ **Autarkie 100,0 %**. Dieselbe Tageszeile zeigte in der
+    Netzbezug-Spalte längst „—". Eine 100 %, die niemand gemessen hat, ist
+    keine Bestleistung.
+    """
+    rows = [_row(verbrauch_kw=1.0, einspeisung_kw=2.0) for _ in range(24)]
+
+    bilanz = bilanz_aus_stundenrows(rows)
+
+    assert bilanz.verbrauch_erfasst is True
+    assert bilanz.netzbezug_erfasst is False
+    assert bilanz.gesamtverbrauch_kwh == 24.0        # die Summe bleibt
+    assert bilanz.autarkie_prozent is None           # 100.0 wäre der Befund
+
+
+def test_autarkie_teilabdeckung_unterdrueckt():
+    """Auch die Autarkie braucht deckungsgleiche Grundlagen, nicht nur ≥ 1 Stunde."""
+    rows = [_row(verbrauch_kw=1.0, netzbezug_kw=0.5) for _ in range(20)]
+    rows += [_row(verbrauch_kw=1.0) for _ in range(4)]
+
+    bilanz = bilanz_aus_stundenrows(rows)
+
+    assert bilanz.netzbezug_erfasst is True          # der alte Träger griffe
+    assert bilanz.autarkie_prozent is None           # der neue nicht
+
+
+def test_volle_abdeckung_rechnet_unveraendert_weiter():
+    """Gegenprobe: der Normalfall darf sich durch die Regel NICHT verschieben.
+
+    Ohne diese Probe misst die Regel oben nur, dass sie unterdrückt — nicht,
+    dass sie das Richtige stehen lässt. Enthält bewusst auch eine **gemessene
+    Null** auf beiden Achsen.
+    """
+    rows = [_row(pv_kw=2.0, verbrauch_kw=1.0, einspeisung_kw=1.0, netzbezug_kw=0.5)
+            for _ in range(23)]
+    rows += [_row(pv_kw=0.0, verbrauch_kw=1.0, einspeisung_kw=0.0, netzbezug_kw=1.0)]
+
+    bilanz = bilanz_aus_stundenrows(rows)
+
+    assert bilanz.eigenverbrauch_kwh == 46.0 - 23.0
+    assert bilanz.autarkie_prozent is not None
+    assert bilanz.ev_quote_prozent is not None
+    assert bilanz.pv_stunden == bilanz.einspeisung_stunden == 24
+    assert bilanz.pv_und_einspeisung_stunden == 24
