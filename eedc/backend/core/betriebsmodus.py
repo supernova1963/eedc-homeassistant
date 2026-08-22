@@ -144,6 +144,25 @@ BETRIEBSART_NUTZENERGIE_FELD: Final[dict[str, str]] = {
     ENTFEUCHTEN: "betriebsart_nutzenergie_entfeuchten_kwh",
 }
 
+def ist_betriebsart_strom_feld(feld: str) -> bool:
+    """Ist dieser Feld-Key ein **gemessener** Betriebsart-Stromzähler? (F-60)
+
+    Die Frage, die eine **Zuordnung** beantwortet — im Gegensatz zu
+    ``berechnungen.hat_gemessene_betriebsart``, das eine **Zeile** befragt.
+    Beide werden gebraucht und beantworten Verschiedenes: ob ein Weg
+    eingerichtet ist, und ob auf ihm schon etwas angekommen ist.
+
+    ⚠ **Suffix-tolerant**, denn es gibt diese Zähler je Innengerät
+    (``betriebsart_strom_kuehlen_kwh-3``). Bauform wie ``ist_stand_feld`` und
+    ``ist_zustand_feld``: *Eigenschaft am Feld, ein Leser* — statt an jeder
+    Prüfstelle eine Namensliste samt Suffix-Wissen nachzubauen. Lokaler Import,
+    weil ``field_definitions`` diese Datei bereits liest.
+    """
+    from backend.core.field_definitions import basis_feld_key
+
+    return basis_feld_key(feld) in frozenset(BETRIEBSART_STROM_FELD.values())
+
+
 #: Deutsche Bezeichnung der Betriebsart für Feld-Labels. Getrennt von
 #: `BETRIEBSMODUS_LABEL`, weil das dort ein **Zustand** ist („Kühlen") und hier
 #: eine **Betriebsphase** benannt wird („Kühlbetrieb") — dieselbe Trennung, die

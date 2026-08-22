@@ -232,7 +232,7 @@ class SensorChecks:
         Forum simon42 #89667/44.
         """
         from backend.core.field_definitions import (
-            FELD_EINHEITEN, FELD_LABELS, einheit_klasse,
+            FELD_EINHEITEN, FELD_LABELS, basis_feld_key, einheit_klasse,
         )
         from backend.services.ha_statistics_service import get_ha_statistics_service
         from backend.services.sensor_snapshot_service import KUMULATIVE_COUNTER_FELDER
@@ -297,13 +297,23 @@ class SensorChecks:
                 sid = m.get("sensor_id")
                 if not sid:
                     continue
+                # N-310 — **der Feld-Key kann eine Innengeräte-Adresse tragen**
+                # (`betriebsart_strom_kuehlen_kwh-3`, #263). Jede Namens-Tabelle
+                # hier führt ihn nur unter dem Basis-Namen; ohne Auflösung
+                # liefert `FELD_EINHEITEN` `None`, der Sensor fällt aus dem
+                # Energie-Filter und wird **nie** auf `has_sum` geprüft — still,
+                # mit einem Label, das den Rohschlüssel zeigt. Wortgleiche
+                # Warnung steht seit #263 an `snapshot/keys._is_kumulativ_feld`;
+                # `field_definitions` nennt `FELD_EINHEITEN` dort namentlich als
+                # Leser, der auflösen muss. Dieser hier tat es als einziger nicht.
+                basis = basis_feld_key(feld)
                 lbl = (
                     f"{inv_label.get(str(inv_id), f'Inv. {inv_id}')}: "
-                    f"{FELD_LABELS.get(feld, feld)}"
+                    f"{FELD_LABELS.get(basis, feld)}"
                 )
-                if feld in counter_fields:
+                if basis in counter_fields:
                     counter_sensors.append((sid, lbl))
-                elif einheit_klasse(FELD_EINHEITEN.get(feld)) == "energie":
+                elif einheit_klasse(FELD_EINHEITEN.get(basis)) == "energie":
                     kwh_sensors.append((sid, lbl))
                 # sonst: kein Energie-Feld — dieser Check ist nicht zuständig.
                 # Die Basis-Ebene zieht diese Grenze seit 2026-05-04 per Whitelist
@@ -506,7 +516,7 @@ class SensorChecks:
         Live-Werte).
         """
         from backend.core.field_definitions import (
-            FELD_EINHEITEN, FELD_LABELS, einheit_klasse as _klasse,
+            FELD_EINHEITEN, FELD_LABELS, basis_feld_key, einheit_klasse as _klasse,
         )
         from backend.services.live_sensor_config import extract_live_config
 
@@ -520,18 +530,30 @@ class SensorChecks:
         slots: list[tuple[str, str, str]] = []
 
         def _add(eid: Optional[str], schluessel: str, label: str) -> None:
-            erwartet = _klasse(FELD_EINHEITEN.get(schluessel))
+            # N-310 — Basis-Key-Auflösung, siehe die ausführliche Begründung in
+            # `_check_sensor_mapping_lts`. Hier wiegt sie schwerer als dort: zu
+            # den acht kWh-Feldern je Innengerät kommt `leistung_w`, und damit
+            # fiel der **#674-ERROR** (kWh-Zähler im Leistungs-Slot ⇒ der live
+            # als Residual gerechnete Hausverbrauch klemmt auf 0) für jedes
+            # Innengerät aus der Prüfung.
+            #
+            # ⚠ Gegengeprüft, dass das keinen Fehlalarm baut: `betriebsmodus-3`
+            # löst zu `betriebsmodus` auf, dessen Einheit `''` ist ⇒ `_klasse`
+            # liefert `None` ⇒ der Zustands-Slot bleibt draußen. Das war vorher
+            # nur ZUFÄLLIG richtig (der rohe Key stand gar nicht in der Tabelle);
+            # jetzt ist es die Regel aus `ZUSTAND_LIVE_FELDER`, die es trägt.
+            erwartet = _klasse(FELD_EINHEITEN.get(basis_feld_key(schluessel)))
             if eid and erwartet:
                 slots.append((eid, label, erwartet))
 
         # Live-Slots (basis + investitionen)
         basis_live, inv_live_map, _, _ = extract_live_config(anlage)
         for key, eid in basis_live.items():
-            _add(eid, key, f"{FELD_LABELS.get(key, key)} (Live)")
+            _add(eid, key, f"{FELD_LABELS.get(basis_feld_key(key), key)} (Live)")
         for inv_id, live in inv_live_map.items():
             name = inv_label.get(str(inv_id), f"Inv. {inv_id}")
             for key, eid in live.items():
-                _add(eid, key, f"{name}: {FELD_LABELS.get(key, key)} (Live)")
+                _add(eid, key, f"{name}: {FELD_LABELS.get(basis_feld_key(key), key)} (Live)")
 
         # Basis-Zähler (mapping["basis"][mapping_key] = {strategie, sensor_id})
         for mk, m in (mapping.get("basis") or {}).items():
@@ -545,7 +567,8 @@ class SensorChecks:
             name = inv_label.get(str(inv_id), f"Inv. {inv_id}")
             for feld, m in (inv_data.get("felder") or {}).items():
                 if isinstance(m, dict) and m.get("strategie") == "sensor" and m.get("sensor_id"):
-                    _add(m["sensor_id"], feld, f"{name}: {FELD_LABELS.get(feld, feld)}")
+                    _add(m["sensor_id"], feld,
+                         f"{name}: {FELD_LABELS.get(basis_feld_key(feld), feld)}")
 
         if not slots:
             return []

@@ -15,11 +15,14 @@ import httpx
 
 from sqlalchemy import select
 
+from backend.core.betriebsmodus import ist_betriebsart_strom_feld
 from backend.core.field_definitions import basis_feld_key
 from backend.models.anlage import Anlage
 from backend.models.data_provenance_log import DataProvenanceLog
+from backend.models.investition import InvestitionMonatsdaten
 from backend.core.berechnungen import (
     PV_KOMPONENTEN_PREFIXE,
+    hat_gemessene_betriebsart,
     summe_pv_bkw_kwh as _summe_pv_bkw_kwh,
 )
 
@@ -1109,7 +1112,8 @@ class DatenquelleChecks:
         if not klimas:
             return []
 
-        mapping = (anlage.sensor_mapping or {}).get("investitionen", {}) or {}
+        sensor_mapping = anlage.sensor_mapping or {}
+        mapping = sensor_mapping.get("investitionen", {}) or {}
 
         def _hat_modus(inv_id: int) -> bool:
             """Hat dieses Gerät IRGENDEINE Modus-Zuordnung?
@@ -1128,18 +1132,99 @@ class DatenquelleChecks:
                 for k, v in live.items()
             )
 
-        ohne = [i for i in klimas if not _hat_modus(i.id)]
+        # ── F-60: der ZWEITE Weg zu derselben Aufteilung ─────────────────────
+        #
+        # Seit v4.0.24 kann der Verbrauch je Betriebsart **gemessen** ankommen
+        # (vier Zähler, am Gerät oder je Innengerät). Wo er das tut, gilt
+        # `betriebsart_gemessen.modus_strom_zeile`: **gemessen schlägt
+        # abgeleitet, ganz oder gar nicht je Zeile** — der aus dem Betriebsmodus
+        # gerechnete Split wird dann gar nicht erst angewandt.
+        #
+        # ⛔ Ohne diese Weiche log der Hinweis doppelt: „Heiz- und Kühlstrom
+        # bleiben zusammen" war falsch, UND er riet zu einer Zuordnung, deren
+        # Ergebnis eedc anschließend verwirft — ein Weg ohne Wirkung. Betroffen
+        # war genau die Zielgruppe, für die v4.0.24 gebaut wurde.
+        quellen = sensor_mapping.get("quellen") or {}
+
+        def _hat_gemessene_zuordnung(inv_id: int) -> bool:
+            """Ist für dieses Gerät ein Betriebsart-Zähler EINGERICHTET?
+
+            Zwei Ablagen, beide zählen: `felder` trägt die HA-Sensor-Zuordnung,
+            `quellen` die feld-zentrische Zuordnung der Datenquellen-Fläche
+            (MQTT, Connector). Nur `felder` zu prüfen hieße, die Falschmeldung
+            für jeden MQTT-Nutzer stehen zu lassen.
+            """
+            eintrag = mapping.get(str(inv_id))
+            if isinstance(eintrag, dict):
+                for feld, m in (eintrag.get("felder") or {}).items():
+                    if not ist_betriebsart_strom_feld(feld):
+                        continue
+                    if isinstance(m, dict) and m.get("strategie") == "sensor" and m.get("sensor_id"):
+                        return True
+            praefix = f"inv_energy_{inv_id}_"
+            for feld_id, eintrag_q in quellen.items():
+                if not isinstance(feld_id, str) or not feld_id.startswith(praefix):
+                    continue
+                if not ist_betriebsart_strom_feld(feld_id[len(praefix):]):
+                    continue
+                # „keine" ist eine ausdrückliche Absage, keine Zuordnung.
+                quelle = (eintrag_q or {}).get("quelle") if isinstance(eintrag_q, dict) else None
+                if quelle and quelle != "keine":
+                    return True
+            return False
+
+        # Und die Gegenrichtung: eingerichtet ist nicht dasselbe wie angekommen.
+        # Wer die vier Werte im Monatsabschluss von Hand pflegt, hat gar keine
+        # Zuordnung — und trotzdem die Aufteilung. Deshalb zusätzlich am Datum
+        # gemessen, über denselben SoT-Helfer, den auch die Rechnung befragt.
+        klima_ids = [i.id for i in klimas]
+        imd_result = await self.db.execute(
+            select(InvestitionMonatsdaten).where(
+                InvestitionMonatsdaten.investition_id.in_(klima_ids)
+            )
+        )
+        mit_gemessenen_daten = {
+            imd.investition_id
+            for imd in imd_result.scalars().all()
+            if hat_gemessene_betriebsart(imd.verbrauch_daten or {})
+        }
+
+        def _hat_aufteilung(inv) -> tuple[bool, bool]:
+            """(hat Aufteilung, ist sie gemessen?) — die Herkunft gehört dazu."""
+            if _hat_gemessene_zuordnung(inv.id) or inv.id in mit_gemessenen_daten:
+                return True, True
+            return _hat_modus(inv.id), False
+
+        zustand = {i.id: _hat_aufteilung(i) for i in klimas}
+        ohne = [i for i in klimas if not zustand[i.id][0]]
         if not ohne:
+            gemessen = sum(1 for i in klimas if zustand[i.id][1])
+            if gemessen == len(klimas):
+                herkunft = (
+                    "Der Verbrauch je Betriebsart kommt gemessen aus deinen Zählern — "
+                    "eedc rechnet ihn nicht aus dem Betriebsmodus, sondern liest ihn ab."
+                )
+                titel = "Betriebsart wird gemessen"
+            elif gemessen:
+                herkunft = (
+                    "Bei einem Teil der Geräte kommt der Verbrauch je Betriebsart "
+                    "gemessen aus Zählern, beim Rest leitet eedc ihn stündlich aus "
+                    "dem Betriebsmodus ab."
+                )
+                titel = "Heiz- und Kühlstrom werden getrennt"
+            else:
+                herkunft = (
+                    "eedc schreibt damit stündlich mit, ob das Gerät geheizt oder "
+                    "gekühlt hat, und kann den Stromverbrauch entsprechend aufteilen."
+                )
+                titel = "Betriebsmodus ist zugeordnet"
             return [CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.OK.value,
                 meldung=(
-                    f"Betriebsmodus ist bei {'allen ' if len(klimas) > 1 else ''}"
-                    f"{len(klimas)} Klimaanlage(n) zugeordnet"
+                    f"{titel} bei {'allen ' if len(klimas) > 1 else ''}"
+                    f"{len(klimas)} Klimaanlage(n)"
                 ),
-                details=(
-                    "eedc schreibt damit stündlich mit, ob das Gerät geheizt oder "
-                    "gekühlt hat, und kann den Stromverbrauch entsprechend aufteilen."
-                ),
+                details=herkunft,
             )]
 
         return [CheckErgebnis(

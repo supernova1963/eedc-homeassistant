@@ -1783,6 +1783,17 @@ P10_SCHREIBEN_IMPORT_CHECKER: frozenset[str] = frozenset({
     "backend/services/monat_loeschen.py::_geraetewerte_des_monats",
     # Daten-Checker / Vorschläge: lesen EINEN Feldwert, um ihn zu prüfen.
     "backend/services/vorschlag_service.py::_get_feld_wert",
+    # F-60: fragt, OB überhaupt irgendeine Zeile der Klimaanlagen einen
+    # gemessenen Betriebsart-Strom mitbringt — eine Ja/Nein-Auskunft über die
+    # Datenlage, keine Monatsgröße. Es wird nichts summiert, nichts über die
+    # Zeit gefaltet und nichts angezeigt; das Ergebnis entscheidet allein, ob
+    # ein Hinweis erscheint. Ein Weg über die Schicht wäre hier sogar falsch:
+    # sie filtert (aktiv · Anschaffung · Stilllegung) und rechnet die Zeile in
+    # `MonatsFakt`-Mengen um — die Frage lautet aber „hat jemand je einen
+    # solchen Zähler gepflegt?", und dafür zählt auch ein Monat vor der
+    # Anschaffung oder nach der Stilllegung. Gelesen wird über den SoT-Helfer
+    # `hat_gemessene_betriebsart`, nicht über eine eigene Feldliste.
+    "backend/services/daten_checker/datenquelle.py::_check_klima_modus_sensor",
     # Zählt Zeilen für die DB-Statistik.
     "backend/main.py::get_database_stats",
     # Reicht die Zeilen EINES Monats unverändert an das Frontend durch.
