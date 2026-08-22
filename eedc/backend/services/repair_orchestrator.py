@@ -822,7 +822,10 @@ _CLOUD_PREFIX = "external:cloud_import:"
 #: (`routes/data_import.py`) — ausdrücklich, „weil das Frontend den konkreten
 #: Cloud-Provider-Slug nicht durchreicht". `external:cloud_import:*` steht zwar
 #: in `SOURCE_LABELS`, wird aber von **keinem** Produktivpfad je vergeben
-#: (baumweit geprüft, #349).
+#: (baumweit geprüft, #349; am 22.08.2026 erneut gemessen — unverändert).
+#: `core/source_priority.py` sagt seither dasselbe an der Definition; bis dahin
+#: behauptete es dort das Gegenteil, und beide Sätze standen drei Monate
+#: nebeneinander. Wer eine Seite ändert, ändert die andere mit.
 #:
 #: Dieser Scan suchte nur nach dem Prefix — und fand damit strukturell **nie**
 #: etwas, in keiner Konstellation. Genau darauf verweist aber die Meldung des

@@ -62,10 +62,32 @@ SOURCE_LABELS: dict[str, SourcePriority] = {
     "manual:json_backup": SourcePriority.MANUAL,
     "manual:csv_backup":  SourcePriority.MANUAL,
 
-    # External Authoritative — 11 Cloud-Provider aus services/cloud_import/
-    # Apply-Pfad: routes/data_import.py → routes/import_export/helpers.py
-    # _upsert_investition_monatsdaten. P2 stellt diesen Helper auf
-    # write_with_provenance() um.
+    # External Authoritative — 11 Cloud-Provider aus services/cloud_import/.
+    #
+    # ⛔ VOKABULAR OHNE SCHREIBER: keiner dieser elf Werte wird von einem
+    # Produktivpfad je vergeben (baumweit gemessen, #349 — die einzigen
+    # Treffer außerhalb dieser Datei sind Leser, Kommentare und Test-Fixtures).
+    # Der Apply-Pfad routes/data_import.py → routes/import_export/helpers.py
+    # ::_upsert_investition_monatsdaten existiert, stempelt aber
+    # `external:portal_import` (data_import.py:415) — ausdrücklich, „weil das
+    # Frontend den konkreten Cloud-Provider-Slug nicht durchreicht". Ein
+    # Cloud-Import ist damit nicht vom CSV-Upload aus dem Hersteller-Portal
+    # zu unterscheiden. Wer das ändern will, fängt dort an, nicht hier.
+    #
+    # ⚠ Hier stand bis zum 22.08.2026: „Apply-Pfad: … P2 stellt diesen Helper
+    # auf write_with_provenance() um." Beides war überholt — der Pfad schreibt
+    # ein anderes Label, und die Umstellung ist mit Etappe 3d Päckchen 2 längst
+    # erfolgt (helpers.py ist seither ein Pure Re-Export auf
+    # upsert_investition_monatsdaten_with_provenance). Der Satz stammte vom
+    # 09.05.2026 und stand drei Monate neben seiner eigenen Widerlegung in
+    # services/repair_orchestrator.py:820-830.
+    #
+    # ⛔ NICHT LÖSCHEN, obwohl ungenutzt: provenance.py:436 und :478 werfen bei
+    # einem Label außerhalb dieses Dicts ausdrücklich KeyError („kein silent
+    # fallback"), und :127 liest damit die BESTEHENDE Quelle eines Feldes aus
+    # data_provenance_log — einer historischen Tabelle, deren Altbestand von
+    # hier aus nicht einsehbar ist. Dazu zerlegt repair_orchestrator.py:850-854
+    # das Prefix, um „nur Provider X zurücksetzen" zu ermöglichen.
     "external:cloud_import:anker_solix":         SourcePriority.EXTERNAL_AUTHORITATIVE,
     "external:cloud_import:deye_solarman":       SourcePriority.EXTERNAL_AUTHORITATIVE,
     "external:cloud_import:ecoflow_powerocean":  SourcePriority.EXTERNAL_AUTHORITATIVE,
@@ -136,7 +158,14 @@ SOURCE_LABELS: dict[str, SourcePriority] = {
     # die Demo-Werte sauber schlägt.
     "auto:demo_data": SourcePriority.AUTO_AGGREGATION,
 
-    # Fallback — Sensor-Snapshot-Aggregator + MQTT-Inbound-Pfad
+    # Fallback — gedacht für Sensor-Snapshot-Aggregator + MQTT-Inbound-Pfad.
+    #
+    # ⛔ DIESELBE LAGE WIE external:cloud_import:* oben — Vokabular ohne
+    # Schreiber: auch diese beiden vergibt kein Produktivpfad (baumweit
+    # gemessen 22.08.2026; `fallback:sensor_snapshot` kommt nur in fünf
+    # Test-Fixtures vor, `fallback:mqtt_inbound` nirgends). Der Kommentar
+    # nannte bis dahin zwei Pfade, als schrieben sie diese Labels.
+    # Gleiche Begründung fürs Behalten: KeyError-Schutz in provenance.py.
     "fallback:sensor_snapshot": SourcePriority.FALLBACK,
     "fallback:mqtt_inbound":    SourcePriority.FALLBACK,
 
