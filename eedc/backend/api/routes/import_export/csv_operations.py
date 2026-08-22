@@ -736,7 +736,13 @@ async def export_csv(
             fmt(md.netzbezug_kwh),
         ]
         if hat_dynamisch_export:
-            row.append(fmt(md.netzbezug_durchschnittspreis_cent) if md.netzbezug_durchschnittspreis_cent else "")
+            # `is not None`, nicht truthy — ein Monats-Ø von 0,0 ct ist bei
+            # dynamischem Tarif real (Negativpreis-Stunden) und ging beim
+            # Export sonst als Leerfeld verloren (0-Werte-Regel, CLAUDE.md).
+            row.append(
+                fmt(md.netzbezug_durchschnittspreis_cent)
+                if md.netzbezug_durchschnittspreis_cent is not None else ""
+            )
         if hat_variable_einspeisung_export:
             # `is not None`, nicht truthy — 0 ct ist ein gepflegter Wert und
             # muss den Rundlauf überleben (dieselbe Regel wie der Resolver).
