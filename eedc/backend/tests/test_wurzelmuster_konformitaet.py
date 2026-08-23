@@ -527,6 +527,18 @@ P3A_SOT_MODUL = "backend/core/investition_kennwerte.py"
 # Vorfrage (default-freie Helper-Variante?).
 P3A_KENNWERT_ATTRIBUTE: frozenset[str] = frozenset({"leistung_kwp"})
 
+# Dieselben Kennwerte als SCHLÜSSEL im `parameter`-JSON. Zwei Namen, weil die
+# #229-Datenlage historisch zwei Konventionen kennt und der SoT-Helper deshalb
+# BEIDE liest (`core/investition_kennwerte.py::KWP_PARAM_KEYS`): `kwp` ist der
+# Legacy-Schlüssel der Bestandsdaten, `leistung_kwp` der kanonische (namensgleich
+# mit der Spalte). Wer nur einen von beiden selbst liest, baut genau den halben
+# Lesepfad nach, an dem N59 entstanden ist.
+#
+# ⚠ Die Liste ist die SCHLÜSSEL-Seite, `P3A_KENNWERT_ATTRIBUTE` die Spalten-Seite.
+# Sie sind bewusst getrennt: eine Erweiterung auf `neigung_grad` beträfe nur die
+# JSON-Seite (es gibt keine Spalte dafür).
+P3A_KENNWERT_JSON_SCHLUESSEL: frozenset[str] = frozenset({"kwp", "leistung_kwp"})
+
 # Empfänger-Namen, die außerhalb der Regel stehen. Keine Typinferenz — dieselbe
 # bewusste Grenze, die der P5-Wächter mit seiner Modellnamen-Liste zieht.
 #
@@ -603,18 +615,127 @@ def _p3a_empfaengername(knoten: ast.AST) -> str:
     return knoten.id if isinstance(knoten, ast.Name) else f"<{type(knoten).__name__}>"
 
 
+def _p3a_liest_parameter(knoten: ast.AST) -> bool:
+    """Greift dieser Ausdruck irgendwo auf `…parameter` zu?
+
+    Beide Schreibweisen, weil der Bestand beide kennt: `inv.parameter` als
+    Attribut und `getattr(inv, "parameter", None)` als Aufruf — genau die
+    Doppelform, die den Attribut-Wächter oben schon einmal unterlaufen hat
+    (`co2_amortisation.py`, s. `test_p3a_..._nicht_per_getattr_umgehen`).
+    """
+    for k in ast.walk(knoten):
+        if isinstance(k, ast.Attribute) and k.attr == "parameter":
+            return True
+        if (
+            isinstance(k, ast.Call)
+            and isinstance(k.func, ast.Name)
+            and k.func.id == "getattr"
+            and len(k.args) >= 2
+            and isinstance(k.args[1], ast.Constant)
+            and k.args[1].value == "parameter"
+        ):
+            return True
+    return False
+
+
+def _p3a_parameter_namen(baum: ast.Module) -> set[str]:
+    """Namen, die im Modul aus einem `parameter`-Zugriff belegt werden.
+
+    `params = inv.parameter or {}` und danach `params.get("kwp")` ist die Form,
+    die der SoT-Helper selbst benutzt — und damit die naheliegendste Art, einen
+    Wächter zu unterlaufen, der nur `inv.parameter.get(...)` in EINEM Ausdruck
+    sucht. Modulweit statt funktionsweit: gröber, aber es gibt keine zweite
+    Bedeutung von `params` im Baum, und die Gegenrichtung (ein Treffer zu viel)
+    ist hier die harmlose.
+    """
+    namen: set[str] = set()
+    for k in ast.walk(baum):
+        if isinstance(k, ast.Assign) and _p3a_liest_parameter(k.value):
+            namen.update(z.id for z in k.targets if isinstance(z, ast.Name))
+        elif (
+            isinstance(k, ast.AnnAssign)
+            and k.value is not None
+            and isinstance(k.target, ast.Name)
+            and _p3a_liest_parameter(k.value)
+        ):
+            namen.add(k.target.id)
+    return namen
+
+
+def _p3a_wurzelname(knoten: ast.AST) -> str:
+    """Der Name ganz links im Zugriffsausdruck — `inv` aus `inv.parameter`.
+
+    Für die Allowlist ist der Empfänger des JSON-Zugriffs (`inv.parameter`)
+    nutzlos, weil er immer `<Attribute>` hieße; gebraucht wird das Objekt, dem
+    das JSON gehört. Fällt kein Name an (`lade_inv().parameter`), bleibt die
+    Typmarke aus `_p3a_empfaengername` — fail-loud, wie bei der Attributform.
+    """
+    while isinstance(knoten, (ast.Attribute, ast.Subscript)):
+        knoten = knoten.value
+    if isinstance(knoten, ast.Call):
+        if (
+            isinstance(knoten.func, ast.Name)
+            and knoten.func.id == "getattr"
+            and knoten.args
+        ):
+            return _p3a_wurzelname(knoten.args[0])
+        return _p3a_empfaengername(knoten)
+    if isinstance(knoten, ast.BoolOp) and knoten.values:
+        return _p3a_wurzelname(knoten.values[0])
+    return _p3a_empfaengername(knoten)
+
+
 def _p3a_fundstellen() -> list[tuple[str, str, str, str]]:
     """Alle Kennwert-Lesezugriffe als `(ort, form, modul, empfänger)`.
 
-    Zwei Formen, weil eine allein den Wächter still grün ließe:
+    Drei Formen, weil jede einzelne allein den Wächter still grün ließe:
       - `inv.leistung_kwp`               → `ast.Attribute` mit `ast.Load`
       - `getattr(inv, "leistung_kwp")`   → `ast.Call`; der Attributname steht als
         STRING da, ein Attribut-Wächter sieht ihn gar nicht.
+      - `inv.parameter.get("leistung_kwp")` → `ast.Call` auf dem Attribut **`get`**;
+        auch hier steht der Kennwert als String da. Das war N-177: der Wächter
+        prüfte `knoten.attr` gegen `{"leistung_kwp"}`, und dieser Knoten heißt
+        `get`. Die #229-Klasse hat aber genau ZWEI Hälften — Spalte und JSON —,
+        und nur die eine war bewacht. Die Subscript-Form (`inv.parameter["kwp"]`)
+        zählt mit, sonst wäre die Lücke nur verschoben.
     """
     treffer: list[tuple[str, str, str, str]] = []
     for pfad, baum in _quelldateien():
         modul = f"backend/{pfad.relative_to(_BACKEND).as_posix()}"
+        param_namen = _p3a_parameter_namen(baum)
+
+        def _ist_parameter_quelle(knoten: ast.AST) -> bool:
+            return _p3a_liest_parameter(knoten) or (
+                isinstance(knoten, ast.Name) and knoten.id in param_namen
+            )
+
         for knoten in ast.walk(baum):
+            json_ziel: ast.AST | None = None
+            if (
+                isinstance(knoten, ast.Call)
+                and isinstance(knoten.func, ast.Attribute)
+                and knoten.func.attr == "get"
+                and knoten.args
+                and isinstance(knoten.args[0], ast.Constant)
+                and knoten.args[0].value in P3A_KENNWERT_JSON_SCHLUESSEL
+            ):
+                json_ziel = knoten.func.value
+            elif (
+                isinstance(knoten, ast.Subscript)
+                and isinstance(knoten.slice, ast.Constant)
+                and knoten.slice.value in P3A_KENNWERT_JSON_SCHLUESSEL
+            ):
+                json_ziel = knoten.value
+            if json_ziel is not None and _ist_parameter_quelle(json_ziel):
+                treffer.append(
+                    (
+                        _ort(pfad, knoten),
+                        "parameter-JSON",
+                        modul,
+                        _p3a_wurzelname(json_ziel),
+                    )
+                )
+                continue
             if isinstance(knoten, ast.Attribute):
                 # Schreibzugriffe (`ast.Store`) sind legitim — der Schreibpfad
                 # läuft über `model_dump`/`setattr` in `crud.py`. Heute existiert
@@ -722,6 +843,39 @@ def test_p3a_investitions_kwp_nicht_per_getattr_umgehen():
     assert not verstoesse, (
         "Investitions-Kennwert per getattr gelesen — das umgeht den "
         "Attribut-Wächter (P3-a):\n" + "\n".join(verstoesse) + _P3A_HINWEIS
+    )
+
+
+def test_p3a_investitions_kwp_nicht_aus_dem_parameter_json_lesen():
+    """Die zweite Hälfte der #229-Klasse: der Kennwert als JSON-Schlüssel.
+
+    **N-177.** Der Attribut-Wächter oben prüft `knoten.attr` gegen
+    `P3A_KENNWERT_ATTRIBUTE` — bei `inv.parameter.get("leistung_kwp")` heißt
+    dieser Knoten aber `get`, der Kennwert steht als String im Argument. Der
+    Wächter meldete also grün für genau die Form, die der SoT-Helper
+    kapselt: die Nennleistung liegt je nach Herkunft in der **Spalte** ODER im
+    **`parameter`-JSON**, und wer eine der beiden Seiten selbst liest, sieht bei
+    der anderen still 0. Die Spalten-Seite war bewacht, die JSON-Seite nicht.
+
+    Baseline **0** (gemessen 2026-08-23, ganzer Backend-Baum ohne `tests/`).
+    Der SoT-Helper selbst fällt nicht darunter, weil er über
+    `KWP_PARAM_KEYS` iteriert statt einen Schlüssel zu literalisieren — er
+    bräuchte also nicht einmal seinen Allowlist-Eintrag (er hat ihn wegen der
+    Spalten-Form).
+
+    ⚠ **Grenze, wie bei den zwei Formen darüber:** ein Schlüssel, der als
+    Variable oder Konstante hereinkommt (`params.get(schluessel)`), ist
+    strukturell nicht von jedem anderen Dict-Zugriff zu unterscheiden. Der
+    Wächter sieht Literale — dieselbe bewusste Grenze, die der Empfängername
+    zieht.
+    """
+    verstoesse = _p3a_verstoesse("parameter-JSON")
+
+    assert not verstoesse, (
+        "Investitions-Kennwert direkt aus dem `parameter`-JSON gelesen — das ist "
+        "die JSON-Hälfte der #229-Klasse (P3-a):\n"
+        + "\n".join(verstoesse)
+        + _P3A_HINWEIS
     )
 
 
