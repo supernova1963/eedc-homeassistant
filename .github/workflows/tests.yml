@@ -54,19 +54,17 @@ jobs:
         working-directory: eedc
         run: pip install -r backend/requirements-dev.txt
 
-      - name: App-Boot + Routen-Check (spiegelt smoke.sh Schritt 2)
-        working-directory: eedc
-        run: |
-          python -c "
-          import sys
-          from backend.main import app
-          EXPECTED_ROUTES = 217
-          n = len(app.routes)
-          print(f'Routes: {n}')
-          if n < EXPECTED_ROUTES:
-              print(f'FEHLER: erwartet >= {EXPECTED_ROUTES}, gefunden {n}', file=sys.stderr)
-              sys.exit(1)
-          "
+      # Der Routen-Check stand hier bis zum 23.08.2026 als Inline-Skript mit
+      # EXPECTED_ROUTES = 217 und der Pruefung n < EXPECTED_ROUTES. Beides war defekt:
+      # die App hat 271 Routen, der Puffer betrug also 54 Endpunkte -- ein nicht mehr
+      # eingebundener Router waere unbemerkt durchgelaufen. Und den Pruefer kannte NUR
+      # CI, er lief in keinem lokalen Gate (dieselbe Klasse wie der lint-Befund vom
+      # 12.08.). Er ist jetzt backend/tests/test_routen_baseline.py: laeuft damit in
+      # beiden pytest-Schritten unten UND lokal, vergleicht gegen eine eingecheckte
+      # Routen-Liste und nennt die fehlende Route beim Namen statt eine Zahl zu melden.
+      # Der App-Boot wird dabei mitgeprueft -- der Test importiert backend.main.
+      # (Der alte Schrittname verwies auf smoke.sh Schritt 2; dieses Skript existiert
+      # im Repo nicht mehr.)
 
       - name: Akzeptanz-Tests (pytest)
         working-directory: eedc
