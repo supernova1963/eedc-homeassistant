@@ -156,7 +156,7 @@ export default function ZaehlerstaendeBlock({
 
       {hatVerlauf && !verlaufGeparkt && (
         <Parkbar id="el:zaehlerstaende-verlauf" titel="Zählerstände — Verlauf">
-          <ZaehlerVerlaufChart staende={staende} />
+          <ZaehlerVerlaufChart staende={staende} zeitraum={zeitraum} />
         </Parkbar>
       )}
 

@@ -131,3 +131,35 @@ export function monatsersterVon(iso: string | null | undefined): string | undefi
   const m = /^(\d{4})-(\d{2})/.exec(iso)
   return m ? `${m[1]}-${m[2]}-01` : undefined
 }
+
+/**
+ * Voller Zeitstempel (de-DE): `'23.08.2026, 14:00'`.
+ *
+ * **Warum das hier steht und nicht in der Chart-Komponente** (Regel 0a, Fall 2 —
+ * kein SoT vorhanden, aber sinnvoll): Bis 2026-08-23 hatte diese Datei nur
+ * Datums-Formatierer, und wer eine Uhrzeit anzeigen wollte, schrieb sich eine
+ * eigene. Genau das ist passiert — `ZaehlerVerlaufChart` und
+ * `RepairWorkbench` trugen je eine private Zeitformatierung, und die eine davon
+ * warf die Uhrzeit weg (die Achse eines *Tages*verlaufs trug 24-mal dasselbe
+ * Datum, gemeldet von dietmar1968 am 23.08.).
+ *
+ * Dieselbe `parseIso`-Regel wie {@link formatDatum} — eine reine Datums-ISO
+ * ohne Zeitanteil landet auf Mittag und kippt den Tag nicht.
+ */
+export function formatDatumZeit(iso: string | null | undefined): string {
+  if (!iso) return FALLBACK
+  const d = parseIso(iso)
+  if (Number.isNaN(d.getTime())) return String(iso)
+  return d.toLocaleString('de-DE', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  })
+}
+
+/** Nur die Uhrzeit (de-DE): `'14:00'`. Für Achsen und Marken *innerhalb* eines Tages. */
+export function formatUhrzeit(iso: string | null | undefined): string {
+  if (!iso) return FALLBACK
+  const d = parseIso(iso)
+  if (Number.isNaN(d.getTime())) return String(iso)
+  return d.toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit' })
+}
