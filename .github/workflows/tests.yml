@@ -72,6 +72,20 @@ jobs:
         working-directory: eedc
         run: python -m pytest -q --no-header
 
+      # N-167: Der Runner steht in UTC, die Entwickler-Box in Europe/Berlin — zwei Zonen,
+      # die sich nur um 2 Stunden unterscheiden und (auesserst selten) um einen Tag. Eine
+      # Probe, die einen Erwartungswert aus der ECHTEN Uhrzeit ableitet, faellt darin
+      # womoeglich nie auf: Der Ursprungsfall war in 4 von 24 Stunden rot (5, 11, 17, 23) und
+      # wurde nur entdeckt, weil derselbe Baum um 16:5x gruen und um 17:12 rot war.
+      # Auckland liegt 10-12 Stunden entfernt und trifft damit verlaesslich eine ganz andere
+      # Stunde und regelmaessig einen anderen Tag. Am 23.08.2026 ueber sieben Zonen gemessen:
+      # kein Fehlschlag, aber es hielt bis dahin auch nichts.
+      - name: Akzeptanz-Tests in einer fernen Zeitzone (N-167 — Uhr-Hermetik)
+        working-directory: eedc
+        env:
+          TZ: Pacific/Auckland
+        run: python -m pytest -q --no-header
+
   frontend-tests:
     runs-on: ubuntu-latest
     steps:
