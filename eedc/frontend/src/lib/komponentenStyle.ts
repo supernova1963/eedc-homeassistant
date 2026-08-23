@@ -201,6 +201,12 @@ export const BOERSENPREIS_KPI = {
   hoechst:      { title: 'Höchstpreis heute', icon: ArrowUpDown, color: 'purple' as const },
   tiefst:       { title: 'Tiefstpreis heute', icon: ArrowUpDown, color: 'purple' as const },
   monat:        { title: 'Ø Monat',          icon: Gauge, color: 'purple' as const },
+  // rapahl-PN 2026-08-23: der schlichte Tages-Ø. Er stand nirgends, obwohl
+  // gleich DREI Kacheln daneben auf den Ø *ohne* die Peaks zeigen — „Nicht
+  // jeder will ja seinen Akku mit Netzstrom laden". Bewusst VOR den
+  // Optimierer-Werten: allgemein lesbare Zahlen zuerst, dieselbe Ordnung wie
+  // bei Höchst/Tiefst/Monat.
+  tagesMittel:  { title: 'Ø heute',          icon: Gauge, color: 'purple' as const },
   durchschnitt: { title: 'Ø ohne 3 Peaks',   icon: Gauge, color: 'purple' as const },
   schwelle:     { title: 'Günstig-Schwelle', icon: Hash,  color: 'purple' as const },
   // N-173: der Abstand als Betrag. Bewusst dieselbe Farbrolle wie die drei

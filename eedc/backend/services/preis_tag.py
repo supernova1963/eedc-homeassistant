@@ -69,6 +69,10 @@ class PreisTag:
     stunden: list[PreisStunde]
     schwelle_cent: Optional[float]
     optimierter_durchschnitt_cent: Optional[float]
+    #: Schlichter Ø aller Stunden — die Größe, nach der ein Leser zuerst fragt
+    #: (rapahl-PN 2026-08-23). NICHT die Bezugsgröße der Schwelle, das bleibt
+    #: `optimierter_durchschnitt_cent`.
+    tages_durchschnitt_cent: Optional[float]
     markt: str
 
 
@@ -163,6 +167,7 @@ async def bewerte_preistag(db, anlage, datum: date, aktuelle_stunde: int):
         stunden=stunden,
         schwelle_cent=ergebnis.schwelle_cent,
         optimierter_durchschnitt_cent=ergebnis.optimierter_durchschnitt_cent,
+        tages_durchschnitt_cent=ergebnis.tages_durchschnitt_cent,
         markt=markt,
     )
     return tag, ergebnis

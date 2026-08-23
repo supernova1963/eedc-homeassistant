@@ -123,11 +123,22 @@ auf einer durchgehenden Zeitachse:
   `eedc_preis_rang` meldet. ⚠ **Rang und „günstig" sind zwei Aussagen:** die Fläche zeigt
   *alle* Stunden unter der Schwelle (das können mehr als fünf sein — die Zahl dient in
   Automationen als Teiler und ist deshalb nicht gedeckelt), die Ziffer zeigt die besten fünf.
-- Darüber vier Kennzahlen für **heute**: aktueller Preis, der **Ø ohne die 3 teuersten Stunden**
-  (die Bezugsgröße), die **Günstig-Schwelle** samt Anzahl der Stunden darunter und der
-  **Abstand zum Ø in ct/kWh**. Es sind dieselben Zahlen, die auch die HA-Sensoren
+- Darüber die Kennzahlen für **heute**, in dieser Reihenfolge: **aktueller Preis**,
+  **Höchst-** und **Tiefstpreis** des Tages, das **Monatsmittel** der bisher aufgezeichneten
+  Stunden, der **Ø heute** (das Mittel *aller* Stunden dieses Tages), der **Ø ohne die 3
+  teuersten Stunden**, die **Günstig-Schwelle** samt Anzahl der Stunden darunter und der
+  **Abstand zum Ø in ct/kWh**.
+
+  > **Warum zwei Durchschnitte nebeneinander stehen.** Sie beantworten verschiedene Fragen.
+  > *Ø heute* sagt, was der Strom an diesem Tag im Mittel kostet — die Zahl, nach der man
+  > zuerst fragt. *Ø ohne die 3 teuersten Stunden* ist die **Bezugsgröße der Günstig-Schwelle**:
+  > Ohne den Ausschluss der Spitzen zöge ein einzelner teurer Abend die Grenze nach oben und
+  > machte Stunden „günstig", die es nicht sind. Auch der **Abstand zum Ø** bezieht sich auf
+  > diesen zweiten Wert, nicht auf den Tagesschnitt.
+
+  Bis auf den *Ø heute* melden dieselben Zahlen auch HA-Sensoren:
   `eedc_preis_aktuell_cent`, `eedc_preis_optimierter_durchschnitt_cent`,
-  `eedc_preis_guenstige_stunden_anzahl` und `eedc_preis_abstand_cent` melden.
+  `eedc_preis_guenstige_stunden_anzahl` und `eedc_preis_abstand_cent`.
 - **Warum der Abstand in Cent und nicht in Prozent?** Weil du nicht den Börsenpreis zahlst,
   sondern Börsenpreis **plus** feste Bestandteile. Dieser Aufschlag verschiebt den Stundenpreis
   und das Tagesmittel um denselben Betrag — der **ct-Abstand bleibt deshalb gleich**, der

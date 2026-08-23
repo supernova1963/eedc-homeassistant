@@ -35,6 +35,7 @@ function tag(datum: string, preise: number[], guenstig: number[] = []): Boersenp
     stunden: preise.map((p, h) => stunde(h, p, guenstig.includes(h))),
     schwelle_cent: 9,
     optimierter_durchschnitt_cent: 10,
+    tages_durchschnitt_cent: 15.75,
   }
 }
 
@@ -87,6 +88,7 @@ describe('baueAchse', () => {
       stunden: FLACH.map((p, h) => stunde(h, p)).filter((s) => s.stunde !== 2),
       schwelle_cent: 9,
       optimierter_durchschnitt_cent: 10,
+    tages_durchschnitt_cent: 15.75,
     }
     const punkte = baueAchse([kurz])
 
@@ -102,6 +104,7 @@ describe('baueAchse', () => {
       datum: '2027-03-28',
       stunden: FLACH.map((p, h) => stunde(h, p)).filter((s) => s.stunde !== 2),
       schwelle_cent: 9, optimierter_durchschnitt_cent: 10,
+    tages_durchschnitt_cent: 15.75,
     }
     const punkte = baueAchse([kurz, tag('2027-03-29', FLACH)])
 
@@ -186,6 +189,7 @@ describe('guenstigeBereiche', () => {
     )
     const punkte = baueAchse([{
       datum: '2026-08-06', stunden, schwelle_cent: 9, optimierter_durchschnitt_cent: 10,
+    tages_durchschnitt_cent: 15.75,
     }])
 
     const bereiche = guenstigeBereiche(punkte)
@@ -209,6 +213,7 @@ describe('zeitumstellungHinweis', () => {
       datum: '2027-03-28',
       stunden: FLACH.map((p, h) => stunde(h, p)).filter((s) => s.stunde !== 2),
       schwelle_cent: 9, optimierter_durchschnitt_cent: 10,
+    tages_durchschnitt_cent: 15.75,
     }
     const hinweis = zeitumstellungHinweis([kurz])
     expect(hinweis).toContain('23')

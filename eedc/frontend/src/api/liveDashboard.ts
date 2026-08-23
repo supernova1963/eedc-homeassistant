@@ -318,6 +318,7 @@ export interface BoersenpreisTag {
   /** Günstig-Schwelle **dieses** Tages (Day-Ahead ist ein Tagesprodukt). */
   schwelle_cent: number | null
   optimierter_durchschnitt_cent: number | null     // Ø ohne die 3 Peaks
+  tages_durchschnitt_cent: number | null           // schlichter Ø ALLER Stunden
 }
 
 export interface BoersenpreisResponse {

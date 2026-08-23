@@ -140,6 +140,7 @@ class BoersenpreisTag(BaseModel):
     stunden: list[BoersenpreisStunde] = []
     schwelle_cent: Optional[float] = None             # Günstig-Schwelle DIESES Tages
     optimierter_durchschnitt_cent: Optional[float] = None  # Ø ohne die 3 Peaks
+    tages_durchschnitt_cent: Optional[float] = None   # schlichter Ø ALLER Stunden (rapahl-PN 23.08.)
 
 
 class BoersenpreisResponse(BaseModel):
@@ -498,6 +499,7 @@ async def get_boersenpreise(
             ],
             "schwelle_cent": tag.schwelle_cent,
             "optimierter_durchschnitt_cent": tag.optimierter_durchschnitt_cent,
+            "tages_durchschnitt_cent": tag.tages_durchschnitt_cent,
         })
 
     geladene = {t["datum"] for t in tage}

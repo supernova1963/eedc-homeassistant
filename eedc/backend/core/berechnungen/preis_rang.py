@@ -57,8 +57,34 @@ class PreisRangErgebnis:
     unter_schwelle_profil: dict[int, bool] = field(default_factory=dict)  # {stunde: günstig?} — UNGEKAPPT
     preis_aktuell_cent: Optional[float] = None          # Preis der aktuellen Stunde
     optimierter_durchschnitt_cent: Optional[float] = None  # Ø ohne die 3 Peaks (Bezugsgröße der Schwelle)
+    tages_durchschnitt_cent: Optional[float] = None     # schlichter Ø ALLER Stunden (rapahl-PN 23.08.)
     abstand_prozent: Optional[float] = None             # Abstand des aktuellen Preises zum Ø, negativ = billiger
     abstand_cent: Optional[float] = None                # derselbe Abstand in ct/kWh — aufschlags-invariant (N-173)
+
+
+def tages_durchschnitt(
+    preise_nach_stunde: Mapping[int, Optional[float]],
+) -> Optional[float]:
+    """Schlichter Ø **aller** Tagespreise — ohne jeden Ausschluss.
+
+    **Warum es das braucht, obwohl direkt darunter schon ein Ø steht**
+    (rapahl-PN 2026-08-23): Der Kennzahlenblock trug bis dahin drei Größen, die
+    alle auf ``optimierter_durchschnitt`` zeigen — „Ø ohne 3 Peaks", die
+    „Günstig-Schwelle" und den „Abstand zum Ø". Der **gewöhnliche**
+    Tagesdurchschnitt, nach dem jeder zuerst fragt, existierte im Code gar
+    nicht. Rainers Punkt dazu, wörtlich: *„Nicht jeder will ja seinen Akku mit
+    Netzstrom laden."*
+
+    ⚠ **Das ist kein Widerspruch zum optimierten Ø und ersetzt ihn nicht.**
+    Jener ist die Bezugsgröße der Günstig-Schwelle und stammt aus Rainers
+    eigener Definition (#335) — er bleibt, wo er ist. Die beiden beantworten
+    verschiedene Fragen: *„Was kostet der Strom heute im Mittel?"* gegen
+    *„Ab wann lohnt das Laden?"*
+
+    Returns ``None``, wenn kein einziger Preis vorliegt.
+    """
+    werte = [p for p in preise_nach_stunde.values() if p is not None]
+    return sum(werte) / len(werte) if werte else None
 
 
 def optimierter_durchschnitt(
@@ -204,6 +230,7 @@ def berechne_preis_rang(
         aktuelle Preis, der optimierte Ø und ihr Abstand zueinander).
     """
     durchschnitt = optimierter_durchschnitt(preise_nach_stunde)
+    tages_mittel = tages_durchschnitt(preise_nach_stunde)
     schwelle = None if durchschnitt is None else durchschnitt * schwelle_faktor
 
     tag_raenge, tag_guenstig = _bewerte_fenster(preise_nach_stunde, tag_stunden, schwelle)
@@ -226,6 +253,8 @@ def berechne_preis_rang(
         # der Wert reist zugleich als Attribut mit. Die Ausgabe-Rundung macht
         # `runde_exportwert` an der Serialisierungsgrenze (2 Stellen je ct/kWh).
         optimierter_durchschnitt_cent=round(durchschnitt, 3) if durchschnitt is not None else None,
+        # Dieselbe Drei-Stellen-Rundung wie jede andere ct/kWh-Größe hier.
+        tages_durchschnitt_cent=round(tages_mittel, 3) if tages_mittel is not None else None,
         abstand_prozent=abstand_zum_durchschnitt_prozent(preis_aktuell, durchschnitt),
         # Aus dem UNGERUNDETEN Ø gebildet wie `abstand_prozent` (sonst driften
         # die beiden Größen gegeneinander), erst danach auf drei Stellen wie

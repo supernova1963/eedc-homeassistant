@@ -39,6 +39,10 @@ function tag(datum: string, opts: Partial<BoersenpreisTag> = {}): BoersenpreisTa
     })),
     schwelle_cent: 13.5,
     optimierter_durchschnitt_cent: 15.0,
+    // Ø ALLER 24 Stunden der Fixture-Reihe (10,0 … 21,5) = 15,75 — bewusst
+    // ungleich dem optimierten Ø (15,0), damit ein Test die beiden Kacheln
+    // nicht zufällig verwechseln kann.
+    tages_durchschnitt_cent: 15.75,
     ...opts,
   }
 }
@@ -66,7 +70,7 @@ describe('baueKennzahlen', () => {
     // dann steht dort keine Kachel statt einer 0.
     expect(kpis.map((k) => k.title)).toEqual([
       'Aktueller Preis', 'Höchstpreis heute', 'Tiefstpreis heute',
-      'Ø ohne 3 Peaks', 'Günstig-Schwelle', 'Abstand zum Ø',
+      'Ø heute', 'Ø ohne 3 Peaks', 'Günstig-Schwelle', 'Abstand zum Ø',
     ])
     expect(kpis[0].value).toBe('11,50')          // Stunde 3 → 10 + 1,5
     expect(kpis[0].subtitle).toContain('unter der Günstig-Schwelle')
@@ -107,6 +111,28 @@ describe('baueKennzahlen', () => {
     expect(schwelle.subtitle).toContain('8 Stunden')
   })
 
+  it('zeigt den Tages-Ø getrennt vom optimierten Ø (rapahl-PN 23.08.)', () => {
+    // Der Melder-Punkt: drei Kacheln zeigten auf den Ø OHNE die Peaks, der
+    // gewöhnliche Tagesdurchschnitt fehlte ganz. Beide müssen nebeneinander
+    // stehen und VERSCHIEDENE Zahlen tragen — sonst prüft der Test nichts.
+    const kpis = baueKennzahlen(antwort())
+    const tagesMittel = kpis.find((k) => k.title === 'Ø heute')!
+    const optimiert = kpis.find((k) => k.title === 'Ø ohne 3 Peaks')!
+    expect(tagesMittel.value).toBe('15,75')
+    expect(optimiert.value).toBe('15,00')
+    expect(tagesMittel.subtitle).toContain('aller Stunden')
+    // Reihenfolge: der allgemein lesbare Wert steht VOR den Optimierer-Werten.
+    expect(kpis.indexOf(tagesMittel)).toBeLessThan(kpis.indexOf(optimiert))
+  })
+
+  it('lässt den Tages-Ø weg, wenn ihn die Route nicht liefert', () => {
+    const ohne = tag('2026-08-06', { tages_durchschnitt_cent: null })
+    const kpis = baueKennzahlen(antwort({ tage: [ohne] }))
+    expect(kpis.map((k) => k.title)).not.toContain('Ø heute')
+    // ... die übrigen Kacheln bleiben davon unberührt.
+    expect(kpis.map((k) => k.title)).toContain('Ø ohne 3 Peaks')
+  })
+
   it('sagt es, wenn der aktuelle Preis über der Schwelle liegt', () => {
     const kpis = baueKennzahlen(antwort({ aktuelle_stunde: 20 }))
     expect(kpis[0].subtitle).toContain('über der Günstig-Schwelle')
@@ -120,7 +146,7 @@ describe('baueKennzahlen', () => {
     const kpis = baueKennzahlen(antwort({ tage: [ohneStunde2], aktuelle_stunde: 2 }))
 
     expect(kpis.map((k) => k.title)).toEqual([
-      'Höchstpreis heute', 'Tiefstpreis heute', 'Ø ohne 3 Peaks', 'Günstig-Schwelle',
+      'Höchstpreis heute', 'Tiefstpreis heute', 'Ø heute', 'Ø ohne 3 Peaks', 'Günstig-Schwelle',
     ])
   })
 

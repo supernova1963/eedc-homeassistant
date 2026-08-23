@@ -132,6 +132,19 @@ async def test_jeder_tag_traegt_seine_eigene_schwelle(db, monkeypatch):
     assert tage[0]["schwelle_cent"] == pytest.approx(27.0)
     assert tage[1]["schwelle_cent"] == pytest.approx(2.7)
     assert tage[0]["optimierter_durchschnitt_cent"] == pytest.approx(30.0)
+    # rapahl-PN 2026-08-23: der schlichte Tages-Ø steht DANEBEN, nicht statt
+    # dessen — und er ist eine andere Zahl. 20…43 ct ⇒ Ø = 31,5; ohne die drei
+    # Peaks (41/42/43) ⇒ 30,0. Wären beide gleich, prüfte die Zeile nichts.
+    assert tage[0]["tages_durchschnitt_cent"] == pytest.approx(31.5)
+    assert tage[1]["tages_durchschnitt_cent"] == pytest.approx(3.15)
+    assert (
+        tage[0]["tages_durchschnitt_cent"] != tage[0]["optimierter_durchschnitt_cent"]
+    ), "Tages-Ø und optimierter Ø müssen unterscheidbar bleiben"
+    # ⚠ Die Schwelle hängt WEITERHIN am optimierten Ø, nicht am neuen Wert —
+    # sonst hätte die neue Kachel Rainers eigene Günstig-Definition verschoben.
+    assert tage[0]["schwelle_cent"] == pytest.approx(
+        tage[0]["optimierter_durchschnitt_cent"] * 0.9
+    )
     # N-173: der ct-Abstand jeder Stunde bezieht sich auf den Ø DIESES Tages —
     # sonst trüge der billige Tag die Abstände des teuren.
     for tag in tage:

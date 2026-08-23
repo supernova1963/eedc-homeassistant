@@ -81,6 +81,17 @@ export function baueKennzahlen(daten: BoersenpreisResponse): KpiStripItem[] {
     })
   }
 
+  // rapahl-PN 2026-08-23: der gewöhnliche Tagesdurchschnitt. Bis dahin zeigten
+  // drei der Kacheln hier dieselbe Bezugsgröße — den Ø **ohne** die drei
+  // Peaks —, und die Zahl, nach der man zuerst fragt, fehlte ganz.
+  if (heute.tages_durchschnitt_cent != null) {
+    kpis.push({
+      ...BOERSENPREIS_KPI.tagesMittel,
+      value: fmtZahl(heute.tages_durchschnitt_cent, 2),
+      unit: 'ct/kWh',
+      subtitle: 'Mittel aller Stunden dieses Tages',
+    })
+  }
   if (heute.optimierter_durchschnitt_cent != null) {
     kpis.push({
       ...BOERSENPREIS_KPI.durchschnitt,
