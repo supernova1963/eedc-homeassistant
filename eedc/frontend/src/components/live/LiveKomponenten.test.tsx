@@ -95,27 +95,89 @@ describe('SolarAussicht3Tage', () => {
   // Forum #22 (Algie, 2026-07-28): `?? 0` machte daraus „nichts erzeugt" und die
   // Zeile behauptete die volle Tagesprognose als ausstehend (60,4 kWh Prognose →
   // „~60,4 verbl."), obwohl die Anlage längst lieferte.
-  describe('„verbleibend" unterscheidet unbekannt von null', () => {
+  describe('„verbleibend" ist der gemessene Rest, nicht die Differenz', () => {
     const drei = [tag('2026-07-28', 60.4), tag('2026-07-29', 52.9), tag('2026-07-30', 40.6)]
     // sunset spät genug, damit der Nach-Sonnenuntergang-Zweig nicht greift.
-    const wetter = { pv_prognose_kwh: 60.4, sunset: '23:59', verbrauchsprofil: [] } as unknown as LiveWetterResponse
+    const basis = { pv_prognose_kwh: 60.4, sunset: '23:59', verbrauchsprofil: [] }
+    const wetter = basis as unknown as LiveWetterResponse
 
-    it('zeigt keine verbleibend-Zeile, wenn die heutige Erzeugung unbekannt ist', () => {
-      render(<SolarAussicht3Tage prognose3Tage={drei} wetter={wetter} heutePvKwh={null} />)
-      expect(screen.queryByText(/verbl\./)).not.toBeInTheDocument()
-      expect(screen.queryByText(/über Progn\./)).not.toBeInTheDocument()
-      // Die Tagesprognose selbst bleibt sichtbar — nur die Differenz-Aussage entfällt.
+    it('nimmt den Rest aus der Route — rapahls Fall (PN 2026-08-23)', () => {
+      // Seine Zahlen: Tagesprognose 35,7 · bereits erzeugt 29,8 · Restprognose
+      // 12,0. Die alte Rechnung (Prognose − IST) ergab 5,9 und behauptete
+      // damit, der Tag sei fast durch — während die Sonne noch 12 kWh lieferte.
+      const seins = {
+        ...basis,
+        pv_prognose_kwh: 35.7,
+        pv_prognose_rest_kwh: 12.0,
+        pv_prognose_heute_rollend_kwh: 41.8,
+      } as unknown as LiveWetterResponse
+      render(
+        <SolarAussicht3Tage
+          prognose3Tage={[tag('2026-08-23', 35.7), drei[1], drei[2]]}
+          wetter={seins}
+          heutePvKwh={29.8}
+        />,
+      )
+      expect(screen.getByText(/~12,0 verbl\./)).toBeInTheDocument()
+      expect(screen.queryByText(/~5,9 verbl\./)).not.toBeInTheDocument()
+    })
+
+    it('zeigt die Tagesabweichung, sobald sie über dem Rauschen liegt', () => {
+      // 41,8 gegen 35,7 sind +17 % — der Tag läuft besser als vorhergesagt.
+      const seins = {
+        ...basis,
+        pv_prognose_kwh: 35.7,
+        pv_prognose_rest_kwh: 12.0,
+        pv_prognose_heute_rollend_kwh: 41.8,
+      } as unknown as LiveWetterResponse
+      render(<SolarAussicht3Tage prognose3Tage={drei} wetter={seins} heutePvKwh={29.8} />)
+      expect(screen.getByText(/\(\+17 %\)/)).toBeInTheDocument()
+    })
+
+    it('schweigt bei kleiner Abweichung — 3 % sind kein Signal', () => {
+      const knapp = {
+        ...basis,
+        pv_prognose_kwh: 60.4,
+        pv_prognose_rest_kwh: 8.0,
+        pv_prognose_heute_rollend_kwh: 62.2,   // +3 %
+      } as unknown as LiveWetterResponse
+      render(<SolarAussicht3Tage prognose3Tage={drei} wetter={knapp} heutePvKwh={54.2} />)
+      expect(screen.getByText(/~8,0 verbl\./)).toBeInTheDocument()
+      expect(screen.queryByText(/%\)/)).not.toBeInTheDocument()
+    })
+
+    // Forum #22 (Algie, 2026-07-28) — die Lehre gilt weiter, nur an anderer
+    // Stelle: Damals machte `?? 0` aus „Erzeugung unbekannt" ein „nichts
+    // erzeugt", und die Zeile behauptete die volle Tagesprognose als
+    // ausstehend. Seit der Rest aus der Route kommt, ist er von der
+    // IST-Kenntnis unabhängig — die ABWEICHUNG ist es nicht: Ohne IST bestünde
+    // der nachgeführte Wert nur aus dem Rest und läse sich als Einbruch.
+    it('zeigt keine Abweichung, wenn die heutige Erzeugung unbekannt ist', () => {
+      const ohneIst = {
+        ...basis,
+        pv_prognose_rest_kwh: 20.0,
+        pv_prognose_heute_rollend_kwh: 20.0,   // = nur der Rest, IST fehlt
+      } as unknown as LiveWetterResponse
+      render(<SolarAussicht3Tage prognose3Tage={drei} wetter={ohneIst} heutePvKwh={null} />)
+      expect(screen.queryByText(/%\)/)).not.toBeInTheDocument()
+      // Der Rest selbst bleibt sichtbar — er ist reine Prognose.
+      expect(screen.getByText(/~20,0 verbl\./)).toBeInTheDocument()
       expect(screen.getByText('60,4')).toBeInTheDocument()
     })
 
-    it('behandelt 0 als Aussage: volle Restmenge steht aus', () => {
-      render(<SolarAussicht3Tage prognose3Tage={drei} wetter={wetter} heutePvKwh={0} />)
+    it('behandelt 0 als Aussage: die volle Restmenge steht aus', () => {
+      const frueh = {
+        ...basis,
+        pv_prognose_rest_kwh: 60.4,
+        pv_prognose_heute_rollend_kwh: 60.4,
+      } as unknown as LiveWetterResponse
+      render(<SolarAussicht3Tage prognose3Tage={drei} wetter={frueh} heutePvKwh={0} />)
       expect(screen.getByText('~60,4 verbl.')).toBeInTheDocument()
     })
 
-    it('zieht die bereits erzeugte Menge ab', () => {
+    it('sagt nichts, wenn die Route keinen Rest liefert', () => {
       render(<SolarAussicht3Tage prognose3Tage={drei} wetter={wetter} heutePvKwh={10} />)
-      expect(screen.getByText('~50,4 verbl.')).toBeInTheDocument()
+      expect(screen.queryByText(/verbl\./)).not.toBeInTheDocument()
     })
   })
 })

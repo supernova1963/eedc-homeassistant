@@ -518,6 +518,21 @@ PROGNOSE_SENSOREN = [
         device_class="energy",
         state_class="measurement",
     ),
+    # rapahl-PN 2026-08-23: der nachgeführte Tageswert. „PV-Prognose heute"
+    # summiert alle 24 VORHERGESAGTEN Stunden — auch die vergangenen, für die
+    # längst Messwerte vorliegen; er folgt damit OpenMeteo, nicht der Realität.
+    # Dieser hier folgt der Realität: was heute schon erzeugt wurde plus die
+    # Prognose der Reststunden. Beide bleiben nebeneinander stehen, weil sie
+    # verschiedene Fragen beantworten.
+    SensorDefinition(
+        key="eedc_prognose_heute_rollend_kwh",
+        name="PV-Prognose heute (nachgeführt)",
+        unit="kWh",
+        icon="mdi:sun-clock",
+        category=SensorCategory.PROGNOSE,
+        formel="Heute bereits erzeugt + eedc-Prognose der verbleibenden Stunden — folgt dem IST, anders als die reine Tagesprognose",
+        state_class="measurement",
+    ),
     SensorDefinition(
         key="eedc_prognose_rest_today_kwh",
         name="PV-Prognose Rest heute",
@@ -620,6 +635,19 @@ PREIS_SENSOREN = [
         icon="mdi:cash-clock",
         category=SensorCategory.PREIS,
         formel="Day-Ahead-Börsenpreis der laufenden Stunde",
+        state_class="measurement",
+    ),
+    # rapahl-PN 2026-08-23: der schlichte Tages-Ø. Er stand weder im
+    # Kennzahlenblock noch als Sensor, obwohl gleich drei Größen daneben auf den
+    # Ø *ohne* die Peaks zeigen. Bewusst VOR dem optimierten Ø — allgemein
+    # lesbare Zahl zuerst, dieselbe Ordnung wie in der Oberfläche.
+    SensorDefinition(
+        key="eedc_preis_tages_durchschnitt_cent",
+        name="Börsenpreis Ø heute",
+        unit="ct/kWh",
+        icon="mdi:chart-line-variant",
+        category=SensorCategory.PREIS,
+        formel="Ø ALLER heutigen Börsenpreis-Stunden — ohne jeden Ausschluss; NICHT die Bezugsgröße der Günstig-Schwelle",
         state_class="measurement",
     ),
     SensorDefinition(

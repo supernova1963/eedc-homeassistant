@@ -24,6 +24,7 @@ from backend.core.berechnungen.preis_rang import (
     berechne_preis_rang,
     guenstig_schwelle,
     optimierter_durchschnitt,
+    tages_durchschnitt,
 )
 from backend.services.solar_forecast_service import sonnenauf_unter_stunde
 from backend.models import Anlage, Investition, Monatsdaten
@@ -110,6 +111,39 @@ def test_optimierter_durchschnitt_ist_die_schwelle_ohne_faktor():
     assert guenstig_schwelle(preise) == pytest.approx(
         optimierter_durchschnitt(preise) * GUENSTIG_SCHWELLE_FAKTOR
     )
+
+
+def test_tages_durchschnitt_ist_nicht_der_optimierte():
+    """Der schlichte Ø aller Stunden — und er MUSS sich vom optimierten unterscheiden.
+
+    Der Melder-Punkt: Drei Kennzahlen zeigten auf den Ø ohne die drei teuersten
+    Stunden, die gewoehnliche Zahl gab es nicht. Waeren beide gleich, haette
+    die neue Groesse keinen Zweck — deshalb prueft der Test die Differenz mit,
+    nicht nur den Wert.
+    """
+    preise = {h: float(h + 1) for h in range(24)}   # 1..24
+    assert tages_durchschnitt(preise) == pytest.approx(12.5)
+    assert optimierter_durchschnitt(preise) == pytest.approx(11.0)
+    assert tages_durchschnitt(preise) != optimierter_durchschnitt(preise)
+
+
+def test_tages_durchschnitt_ohne_preise_ist_none():
+    """Kein Preis heisst keine Aussage — nicht 0."""
+    assert tages_durchschnitt({}) is None
+    assert tages_durchschnitt({0: None, 1: None}) is None
+
+
+def test_tages_durchschnitt_traegt_auch_wenige_stunden():
+    """Anders als der optimierte Ø braucht er keine vier Werte.
+
+    `optimierter_durchschnitt` gibt bei <= 3 Preisen None zurueck (es bliebe
+    nach Peak-Ausschluss nichts uebrig). Der Tages-Ø hat diese Schranke nicht —
+    an einem Tag mit drei bekannten Stunden ist ihr Mittel eine gueltige
+    Aussage.
+    """
+    drei = {0: 8.0, 1: 9.0, 2: 7.0}
+    assert optimierter_durchschnitt(drei) is None
+    assert tages_durchschnitt(drei) == pytest.approx(8.0)
 
 
 def test_optimierter_durchschnitt_zu_wenige_preise_ist_none():

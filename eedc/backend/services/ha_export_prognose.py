@@ -115,6 +115,14 @@ async def berechne_prognose_export(db, anlage) -> Optional[dict]:
         return {
             "heute_kwh": heute_kwh,
             "rest_today_kwh": rest_today,
+            # rapahl-PN 2026-08-23: IST bisher + Rest — die nachgeführte
+            # Tageszahl. Sie steht NEBEN `heute_kwh`, nicht an dessen Stelle:
+            # jener bleibt der kanonische Wert, der in App, MQTT und Persistenz
+            # dieselbe Zahl trägt (Prognose-Kanon-Fix V3). Wer die beiden
+            # verwechselt, hat wieder zwei Wahrheiten — deshalb heißt der Sensor
+            # ausdrücklich „(nachgeführt)".
+            "heute_rollend_kwh": prognose.heute_rollend_kwh,
+            "ist_bisher_kwh": prognose.ist_bisher_kwh,
             "day_plus_1_kwh": _tageswert(1),
             "day_plus_2_kwh": _tageswert(2),
             "day_plus_3_kwh": _tageswert(3),

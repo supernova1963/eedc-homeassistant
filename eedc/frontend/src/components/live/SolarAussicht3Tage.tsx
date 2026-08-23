@@ -57,28 +57,57 @@ export default function SolarAussicht3Tage({ prognose3Tage, wetter, heutePvKwh }
           const verbrTooltip = wetter?.profil_typ?.startsWith('individuell')
             ? `Individuelles Profil (${wetter.profil_typ === 'individuell_wochenende' ? 'Wochenende' : 'Werktag'}, ${wetter.profil_tage ?? '?'} Tage) — Haus + Batterie + WP + Wallbox + Sonstige`
             : 'BDEW H0 Standardlastprofil — Haus + Batterie + WP + Wallbox + Sonstige'
-          // „verbleibend" ist eine Differenz-Aussage: Tagesprognose minus dem,
-          // was heute schon erzeugt wurde. Ohne den Subtrahenden gibt es keine
-          // Aussage — `heutePvKwh == null` heißt „eedc kennt die heutige
-          // Erzeugung nicht" (keine kWh-/W-Zuordnung, keine HA-History) und
-          // darf NICHT als 0 gelesen werden: die Zeile behauptete dann die volle
-          // Tagesprognose als ausstehend (Forum #22, Algie 2026-07-28).
-          // 0 ≠ nicht vorhanden ([[feedback_sensor_ableitbar_nicht_weglassen]]):
-          // `heutePvKwh === 0` bleibt eine gültige Aussage („PV noch nicht
-          // gestartet") und zeigt weiterhin die volle Restmenge — genau der
-          // Zweck von `a0cb32cd`, nur ohne die Null-Substitution.
-          const verbleibenKwh = i === 0 && wetter?.pv_prognose_kwh != null && heutePvKwh != null ? (() => {
-            const diff = wetter.pv_prognose_kwh - heutePvKwh
-            const nachSU = wetter.sunset ? (() => {
-              const now = new Date()
-              const [h, m] = wetter.sunset!.split(':').map(Number)
-              return now.getHours() * 60 + now.getMinutes() >= h * 60 + m
-            })() : false
-            if (nachSU) return null
-            return diff
-          })() : null
-          const prozentUeber = verbleibenKwh != null && verbleibenKwh < 0 && wetter?.pv_prognose_kwh
-            ? Math.round(Math.abs(verbleibenKwh) / wetter.pv_prognose_kwh * 100)
+          // ⭐ „verbleibend" ist seit 2026-08-23 der GEMESSENE Rest, nicht mehr
+          // die Differenz (rapahl-PN). Vorher stand hier
+          // `pv_prognose_kwh − heutePvKwh` — eine Differenz, deren Minuend die
+          // vergangenen Stunden als *Vorhersage* enthält. Läuft der Tag besser
+          // als vorhergesagt, schrumpft die Restmenge dadurch, obwohl die Sonne
+          // unverändert weiterscheint: An Rainers Beispiel standen 5,9 kWh
+          // „verbleibend", während die Restprognose 12,0 kWh sagte.
+          // Der Prognosen-Vergleich hat genau dieses Verfahren mit #296 abgelegt
+          // („nicht mehr Tagesprognose − IST"); dieser Block hatte den Fix nie
+          // bekommen. Jetzt liefert die Route den Rest selbst
+          // (`pv_prognose_rest_kwh` = Σ Slots ab jetzt, laufende Stunde
+          // anteilig) — dieselbe Größe, die `sonnenstunden_rest` daneben schon
+          // immer war.
+          //
+          // Nach Sonnenuntergang gibt es keinen Rest mehr — dann steht dort
+          // nichts (nicht 0: „der Tag ist durch" ist keine Restmenge).
+          const nachSonnenuntergang = wetter?.sunset ? (() => {
+            const now = new Date()
+            const [h, m] = wetter.sunset!.split(':').map(Number)
+            return now.getHours() * 60 + now.getMinutes() >= h * 60 + m
+          })() : false
+          const verbleibenKwh = i === 0 && !nachSonnenuntergang
+            ? wetter?.pv_prognose_rest_kwh ?? null
+            : null
+          // Rainers zweiter Punkt: „Mit dem realen Restwert könnte auch gleich
+          // eine %-tuale Abweichung des Tages angezeigt werden." Genau das —
+          // der nachgeführte Tageswert (IST bisher + Rest) gegen die
+          // Tagesprognose. Erst ab 5 % sichtbar: darunter ist es Rauschen, und
+          // eine Prognose, die auf 2 % genau wäre, gibt es nicht.
+          //
+          // ⚠ `heutePvKwh` bleibt Bedingung — hier und NUR hier. Es ist kein
+          // Rechenwert mehr, sondern das Signal „eedc kennt die heutige
+          // Erzeugung". Ist sie unbekannt, liefert der Kanon `ist_bisher` als
+          // 0,0 (nicht als null), und der nachgeführte Tageswert bestünde allein
+          // aus dem Rest — die Abweichung läse sich dann als dramatischer
+          // Einbruch, obwohl nur die Messung fehlt. Das ist die Klasse aus
+          // Forum #22 (Algie, 2026-07-28), eine Ebene weiter: unbekannt ist
+          // nicht null. Der Rest oben braucht die Bedingung NICHT — er ist
+          // reine Prognose und von der IST-Kenntnis unabhängig.
+          const abweichungProzent = i === 0
+            && heutePvKwh != null
+            && wetter?.pv_prognose_heute_rollend_kwh != null
+            && wetter?.pv_prognose_kwh != null
+            && wetter.pv_prognose_kwh > 0
+            ? (() => {
+                const p = Math.round(
+                  (wetter.pv_prognose_heute_rollend_kwh! - wetter.pv_prognose_kwh!)
+                  / wetter.pv_prognose_kwh! * 100,
+                )
+                return Math.abs(p) >= 5 ? p : null
+              })()
             : null
           return (
             <div key={tag.datum}>
@@ -92,14 +121,21 @@ export default function SolarAussicht3Tage({ prognose3Tage, wetter, heutePvKwh }
                   {fmtZahl(i === 0 && wetter?.pv_prognose_kwh != null ? wetter.pv_prognose_kwh : pvErtragKwh(tag), 1)}
                   <span className="text-xs font-normal ml-0.5">kWh</span>
                 </span>
-                {verbleibenKwh != null && (
-                  <span className={`text-[10px] ${verbleibenKwh > 0 ? 'text-lime-600 dark:text-lime-400' : 'text-emerald-600 dark:text-emerald-400'}`}
-                        title={verbleibenKwh > 0
-                          ? `Noch ~${fmtZahl(verbleibenKwh, 1)} kWh ausstehend`
-                          : `Prognose um ${fmtZahl(Math.abs(verbleibenKwh), 1)} kWh übertroffen`}>
-                    {verbleibenKwh > 0 ? `~${fmtZahl(verbleibenKwh, 1)} verbl.` : `+${fmtZahl(Math.abs(verbleibenKwh), 1)} kWh über Progn.${prozentUeber != null ? ` (+${prozentUeber} %)` : ''}`}
+                {(verbleibenKwh != null && verbleibenKwh > 0) || abweichungProzent != null ? (
+                  <span className={`text-[10px] ${(abweichungProzent ?? 0) >= 0 ? 'text-lime-600 dark:text-lime-400' : 'text-amber-600 dark:text-amber-400'}`}
+                        title={[
+                          verbleibenKwh != null && verbleibenKwh > 0
+                            ? `Noch ~${fmtZahl(verbleibenKwh, 1)} kWh erwartet (Prognose der restlichen Stunden)`
+                            : null,
+                          wetter?.pv_prognose_heute_rollend_kwh != null
+                            ? `Tag läuft auf ~${fmtZahl(wetter.pv_prognose_heute_rollend_kwh, 1)} kWh hinaus (bisher erzeugt + Rest)`
+                            : null,
+                        ].filter(Boolean).join('\n')}>
+                    {verbleibenKwh != null && verbleibenKwh > 0 ? `~${fmtZahl(verbleibenKwh, 1)} verbl.` : ''}
+                    {verbleibenKwh != null && verbleibenKwh > 0 && abweichungProzent != null ? ' ' : ''}
+                    {abweichungProzent != null ? `(${abweichungProzent > 0 ? '+' : ''}${abweichungProzent} %)` : ''}
                   </span>
-                )}
+                ) : null}
               </div>
               <span className="text-right text-xs w-28">
                 {hasVmNm ? (

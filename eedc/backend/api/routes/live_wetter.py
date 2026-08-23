@@ -121,6 +121,15 @@ class LiveWetterResponse(BaseModel):
     sonnenstunden_bisher: Optional[float] = None  # Ist-Sonnenstunden bis aktuelle Stunde
     sonnenstunden_rest: Optional[float] = None    # Prognostizierte Sonnenstunden ab aktueller Stunde
     pv_prognose_kwh: Optional[float] = None
+    #: Σ der Prognose-Slots ab jetzt (laufende Stunde anteilig) — der GEMESSENE
+    #: Rest, nicht die Differenz zur Tagesprognose. Pendant zu
+    #: `sonnenstunden_rest` (rapahl-PN 2026-08-23).
+    pv_prognose_rest_kwh: Optional[float] = None
+    #: IST bisher + Rest. Ergänzt `pv_prognose_kwh`, ersetzt ihn NICHT — jener
+    #: bleibt der kanonische Wert, der überall dieselbe Zahl trägt.
+    pv_prognose_heute_rollend_kwh: Optional[float] = None
+    #: Was heute bis jetzt tatsächlich erzeugt wurde (aus dem Tagesprofil).
+    pv_ist_bisher_kwh: Optional[float] = None
     grundlast_kw: Optional[float] = None
     verbrauchsprofil: list[VerbrauchsStunde] = []
     profil_typ: str = "bdew_h0"  # "individuell_werktag", "individuell_wochenende", "bdew_h0"
@@ -1254,6 +1263,13 @@ async def get_live_wetter(
             wp_profil=wp_stunden_profil, referenz_temp_c=referenz_temp_c,
         )
 
+        # Defaults, bevor der Kanon-Zweig sie setzt: fehlt der Kanon (kein
+        # Profil, kein Netz), bleibt die Antwort bei `None` statt bei 0 —
+        # „unbekannt" ist keine Null (ADR-002/P4).
+        pv_prognose_rest: Optional[float] = None
+        pv_prognose_rollend: Optional[float] = None
+        pv_ist_bisher: Optional[float] = None
+
         # ── Prognose-Kanon: EINE Wahrheit für PV-Tagesprognose + Chart-Slots ──
         # Anzeige-/Persistenz-Wert + die PV-Slots der Chart-Kurve kommen aus dem
         # kanonischen Service (Multi-String-Fan-out + eedc-Korrektur pro Slot),
@@ -1265,6 +1281,17 @@ async def get_live_wetter(
         # nur für Hintergrund-Abrufe gedacht (R18-13, KONZEPT-LADEZEIT-CACHE-SWR).
         kanon = await kanon_tagesprognose(db, anlage, days=4, skip_jitter=True)
         kanon_heute = kanon.tage[0] if (kanon and kanon.tage) else None
+        # rapahl-PN 2026-08-23: Der Rest des Tages wird hier ohnehin schon
+        # gerechnet (Σ der Prognose-Slots ab jetzt, laufende Stunde anteilig) —
+        # er hat den Weg nach draußen bisher nur nicht gefunden. Die Anzeige
+        # bildete deshalb „verbleibend" als Tagesprognose minus IST, also aus
+        # der Differenz zweier Größen, von denen die eine die Vergangenheit als
+        # *Vorhersage* enthält. Genau dieses Verfahren hat der Prognosen-
+        # Vergleich mit #296 abgelegt („nicht mehr Tagesprognose − IST").
+        if kanon is not None:
+            pv_prognose_rest = kanon.rest_heute_kwh
+            pv_prognose_rollend = kanon.heute_rollend_kwh
+            pv_ist_bisher = kanon.ist_bisher_kwh
         if kanon_heute is not None:
             if kanon_heute.eedc_kwh is not None:
                 pv_prognose = kanon_heute.eedc_kwh
@@ -1450,6 +1477,15 @@ async def get_live_wetter(
             "sonnenstunden_bisher": round(sunshine_bisher_s / 3600, 1) if sunshine_bisher_s is not None else None,
             "sonnenstunden_rest": round(sunshine_remaining_s / 3600, 1) if sunshine_remaining_s is not None else None,
             "pv_prognose_kwh": pv_prognose_aktiv,
+            # Der GEMESSENE Rest (Σ Prognose-Slots ab jetzt) — nicht die
+            # Differenz zur Tagesprognose. Analog zu `sonnenstunden_rest`, das
+            # es hier längst gibt.
+            "pv_prognose_rest_kwh": pv_prognose_rest,
+            # IST bisher + Rest: die nachgeführte Tageszahl. Sie ersetzt
+            # `pv_prognose_kwh` NICHT — jener bleibt der kanonische Wert, der
+            # überall dieselbe Zahl zeigt (Prognose-Kanon-Fix V3).
+            "pv_prognose_heute_rollend_kwh": pv_prognose_rollend,
+            "pv_ist_bisher_kwh": pv_ist_bisher,
             "grundlast_kw": grundlast,
             "verbrauchsprofil": profil,
             "profil_typ": profil_typ if ist_ind else "bdew_h0",

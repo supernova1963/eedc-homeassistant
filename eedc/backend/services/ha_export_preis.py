@@ -81,6 +81,7 @@ async def berechne_preis_export(db, anlage) -> Optional[dict]:
             "guenstige_stunden_nacht": ergebnis.guenstige_stunden_nacht,
             "guenstig_schwelle_cent": ergebnis.schwelle_cent,
             "preis_aktuell_cent": ergebnis.preis_aktuell_cent,
+            "tages_durchschnitt_cent": ergebnis.tages_durchschnitt_cent,
             "optimierter_durchschnitt_cent": ergebnis.optimierter_durchschnitt_cent,
             "abstand_prozent": ergebnis.abstand_prozent,
             "abstand_cent": ergebnis.abstand_cent,

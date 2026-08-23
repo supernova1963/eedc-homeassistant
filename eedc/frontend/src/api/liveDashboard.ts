@@ -98,6 +98,12 @@ export interface LiveWetterResponse {
   sonnenstunden_bisher: number | null
   sonnenstunden_rest: number | null
   pv_prognose_kwh: number | null
+  /** Σ der Prognose-Slots ab jetzt — der gemessene Rest, nicht die Differenz. */
+  pv_prognose_rest_kwh: number | null
+  /** IST bisher + Rest. Ergänzt `pv_prognose_kwh`, ersetzt ihn nicht. */
+  pv_prognose_heute_rollend_kwh: number | null
+  /** Was heute bis jetzt tatsächlich erzeugt wurde. */
+  pv_ist_bisher_kwh: number | null
   grundlast_kw: number | null
   verbrauchsprofil: VerbrauchsStunde[]
   profil_typ?: string  // "individuell_werktag", "individuell_wochenende", "bdew_h0"

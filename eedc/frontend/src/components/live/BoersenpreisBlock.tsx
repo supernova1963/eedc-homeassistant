@@ -134,8 +134,31 @@ export default function BoersenpreisBlock({ daten }: { daten: BoersenpreisRespon
 
   return (
     <div className="space-y-3">
-      {kpis.length > 0 && <KpiStrip kpis={kpis} />}
-      {daten.tage.length > 0 && <BoersenpreisChart daten={daten} />}
+      {/* rapahl-PN 2026-08-23: Kurve und Kennzahlen NEBENEINANDER statt
+          untereinander — sein Vorbild ist das Paar Energiefluss/Infoblock in
+          *Cockpit → Live*, und dasselbe Raster steht hier (`xl:grid-cols-3`,
+          `items-start`). Der zweite Grund ist der wichtigere: Über die volle
+          Seitenbreite gezogen wirkt die Preiskurve flach, die Tagesschwankung
+          verschwindet optisch. In zwei Dritteln der Breite bei gleicher Höhe
+          wird derselbe Verlauf sichtbar steiler — genau das, was er mit
+          „etwas gestauchter" meinte.
+          ⚠ Unterhalb `xl` bleibt es einspaltig und die Reihenfolge damit
+          unverändert (Kennzahlen zuerst, Kurve darunter) — auf dem Handy ist
+          Nebeneinander keine Option, und `KpiStrip` fällt über
+          `auto-fit/minmax` von selbst auf eine Spalte zurück. Keine zweite
+          Kachel-Komponente nötig (Regel 0a). */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-start">
+        {kpis.length > 0 && (
+          <div className="xl:order-2 xl:col-span-1">
+            <KpiStrip kpis={kpis} />
+          </div>
+        )}
+        {daten.tage.length > 0 && (
+          <div className={kpis.length > 0 ? 'xl:order-1 xl:col-span-2' : 'xl:col-span-3'}>
+            <BoersenpreisChart daten={daten} />
+          </div>
+        )}
+      </div>
       {/* Fehlt ein Tag, sagt der Block warum — statt die halbe Achse leer zu
           lassen und Vollständigkeit zu suggerieren (ADR-002/P4). */}
       {daten.hinweis && (

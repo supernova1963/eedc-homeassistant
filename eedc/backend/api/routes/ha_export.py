@@ -1178,6 +1178,8 @@ async def calculate_anlage_sensors(
                 value = prognose["heute_kwh"]
                 if prognose.get("stundenprofil_heute"):
                     zusatz = {"stundenprofil_kwh": prognose["stundenprofil_heute"]}
+            elif sensor.key == "eedc_prognose_heute_rollend_kwh":
+                value = prognose["heute_rollend_kwh"]
             elif sensor.key == "eedc_prognose_rest_today_kwh":
                 value = prognose["rest_today_kwh"]
             elif sensor.key == "eedc_prognose_day_plus_1_kwh":
@@ -1224,6 +1226,8 @@ async def calculate_anlage_sensors(
                 value = preis["guenstige_stunden_nacht"]
             elif sensor.key == "eedc_preis_aktuell_cent":
                 value = preis["preis_aktuell_cent"]
+            elif sensor.key == "eedc_preis_tages_durchschnitt_cent":
+                value = preis["tages_durchschnitt_cent"]
             elif sensor.key == "eedc_preis_optimierter_durchschnitt_cent":
                 value = preis["optimierter_durchschnitt_cent"]
             elif sensor.key == "eedc_preis_abstand_prozent":
