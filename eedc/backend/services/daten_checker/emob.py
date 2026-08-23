@@ -446,3 +446,97 @@ class EmobChecks:
             },
             action_label="Zeitraum neu aggregieren",
         )]
+
+    async def _check_vergleichspreis_fehlt(self, anlage: Anlage) -> list[CheckErgebnis]:
+        """Monatszeilen ohne Ø-Benzinpreis — der E-Auto-Vergleich rechnet dann still weiter.
+
+        **Der Melder-Fall (Discussion #394, gruaGit, 23.08.2026):** Er fragte
+        nach historischen Benzinpreisen für die Amortisation, bekam die Antwort
+        „eedc trägt jeden Monat ohne Preis automatisch nach" — und fand für
+        Juni 2026 ein leeres Feld. Die Automatik gab es, sie lief nur
+        **wöchentlich** und ohne Startlauf; eine Monatszeile, die zwischen zwei
+        Läufen entsteht (Monatsabschluss, Import, Erst-Einrichtung), blieb
+        solange leer. Der Takt ist mit demselben Paket täglich geworden, der
+        Startlauf ist dazugekommen — **diese Prüfung ist die zweite Hälfte**:
+        Sie sagt es, wenn es doch einmal fehlt, statt es den Anwender an einem
+        leeren Feld raten zu lassen.
+
+        **Warum das kein kosmetischer Befund ist:** Ohne Monatspreis fällt
+        ``resolve_eauto_benzinpreis`` auf den Investitions-Parameter bzw.
+        1,65 €/L zurück — ohne Kennzeichnung. Der Fortschritt behauptet dann
+        eine Messung und liefert ein Modell.
+
+        **Nur mit E-Auto** (``typ == "e-auto"``, auch dienstlich — der Vergleich
+        ist dort ebenso hinterlegt): ohne E-Auto ist das Feld bedeutungslos, und
+        eine Warnung, die niemanden betrifft, ist genau die Sorte, die man nie
+        wieder los wird.
+
+        **Erst ab dem Anschaffungsmonat des ältesten E-Autos.** Zwei
+        Datums-Ebenen, zwei Fragen: hier zählt „ab wann ist dieses Gerät
+        dabei?", also ``anschaffungsdatum`` der Investition — nicht
+        ``Anlage.installationsdatum``, das filtert keine Auswertung.
+
+        **Und erst ab 2005:** Weiter zurück reicht das Oil Bulletin nicht. Ein
+        Monat davor wäre eine wahre Warnung ohne Weg — die kennen wir aus #389.
+        """
+        from backend.models.monatsdaten import Monatsdaten
+
+        kat = CheckKategorie.VERGLEICHSPREIS_FEHLT.value
+
+        eautos = [i for i in anlage.investitionen if i.typ == "e-auto"]
+        if not eautos:
+            return []
+
+        anschaffungen = [
+            i.anschaffungsdatum for i in eautos if i.anschaffungsdatum is not None
+        ]
+        if not anschaffungen:
+            return []
+        aeltestes = min(anschaffungen)
+        ab_jahr, ab_monat = max((aeltestes.year, aeltestes.month), (2005, 1))
+
+        rows = (await self.db.execute(
+            select(Monatsdaten).where(
+                Monatsdaten.anlage_id == anlage.id,
+                Monatsdaten.kraftstoffpreis_euro.is_(None),
+            ).order_by(Monatsdaten.jahr, Monatsdaten.monat)
+        )).scalars().all()
+
+        offen = [
+            md for md in rows
+            if (md.jahr, md.monat) >= (ab_jahr, ab_monat)
+        ]
+
+        if not offen:
+            return [CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.OK.value,
+                meldung="Alle Monate mit E-Auto tragen einen Ø-Benzinpreis",
+            )]
+
+        def _mm(md) -> str:
+            return f"{md.monat:02d}/{md.jahr}"
+
+        beispiele = ", ".join(_mm(md) for md in offen[:3])
+        if len(offen) > 3:
+            beispiele += f" … {_mm(offen[-1])}"
+
+        return [CheckErgebnis(
+            kategorie=kat, schwere=CheckSeverity.WARNING.value,
+            meldung=(
+                f"{len(offen)} Monat(e) ohne Ø-Benzinpreis "
+                f"({_mm(offen[0])} … {_mm(offen[-1])})"
+            ),
+            details=(
+                "Der Monatsdurchschnitt aus dem EU Weekly Oil Bulletin ist die "
+                "Grundlage des E-Auto-Vergleichs. Wo er fehlt, rechnet eedc mit "
+                "dem Modellwert aus den Investitions-Parametern weiter — die "
+                "Ersparnis dieser Monate trägt dann den heutigen Preis statt "
+                "des damaligen. Nachpflegen holt die Wochenpreise für alle "
+                "offenen Monate; bestehende Werte bleiben unberührt. "
+                f"Betroffen: {beispiele}."
+            ),
+            link="/einstellungen/energieprofil",
+            action_kind="kraftstoffpreis_backfill",
+            action_params={"anlage_id": anlage.id},
+            action_label="Vergleichspreise nachpflegen",
+        )]

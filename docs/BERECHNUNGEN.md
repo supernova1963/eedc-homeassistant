@@ -847,7 +847,7 @@ Für Jahresprognose:
                        ∨ Investition.parameter.benzinpreis_euro  (Fallback)
 ```
 
-**Datenquelle:** EU Weekly Oil Bulletin (Euro-Super 95, inkl. Steuern, wöchentlich, History seit 2005). Befüllung via Backfill-Endpoint oder wöchentlichem Scheduler-Job (Dienstags 06:00).
+**Datenquelle:** EU Weekly Oil Bulletin (Euro-Super 95, inkl. Steuern, wöchentlich, History seit 2005). Befüllung durch den Scheduler-Job (**täglich 06:00 + Startlauf**), den Reparatur-Pfad „Kraftstoffpreise nachpflegen" oder den Backfill-Endpoint. Fehlt der Monatswert, rechnet die Kette mit dem Investitions-Parameter bzw. 1,65 €/L weiter — der Daten-Checker meldet offene Monate deshalb als eigene Kategorie.
 
 **Betroffen:** Aussichten (`aussichten.py`), HA-Sensor-Export (`ha_export.py`), PDF-Finanzbericht (`pdf_operations.py`).
 

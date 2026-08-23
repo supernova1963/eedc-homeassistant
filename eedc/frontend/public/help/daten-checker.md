@@ -37,6 +37,7 @@
    21. [Batterie-Vorzeichen in der Historie](#421-batterie-vorzeichen-historie)
    22. [Ladestand bei mehreren Speichern](#422-ladestand-mehrere-speicher)
    23. [Verbrauchszähler – Zählerstände](#423-verbrauchszaehler-zaehlerstaende)
+   24. [Vergleichspreise – Ø Benzinpreis](#424-vergleichspreise-benzinpreis)
 5. [Behebungs-Workflows](#5-behebungs-workflows)
 6. [Beziehung zu anderen Werkzeugen](#6-beziehung-zu-anderen-werkzeugen)
 
@@ -775,6 +776,31 @@ Erkannt wird das am **Datensignal**, nicht am Datum: Der gespeicherte Tageswert 
 3. **Der Umstieg auf eedc 4.0.25.** Bis dahin schrieb eedc für Verbrauchszähler die *Verbrauchssumme* von Home Assistant mit statt des *Zählerstands* (s. Changelog 4.0.25). Lag die Summe höher als der Stand, fällt die Reihe an genau einer Stelle — an der Umstellung, **einmalig**, und es ist nichts kaputt. Über *Einstellungen → Daten → „Tag neu berechnen"* zieht eedc die Historie nach, soweit Home Assistant sie noch hat.
 
 > **eedc heilt einen Bruch nicht von selbst** — dafür müsste es raten, welcher der beiden Stände gilt. Diese Entscheidung gehört dir, deshalb steht hier der Weg und kein Knopf.
+
+---
+
+### 4.24 Vergleichspreise – Ø Benzinpreis <a name="424-vergleichspreise-benzinpreis"></a>
+
+**Was wird geprüft:** Trägt jeder Monat, in dem du ein E-Auto hast, den Ø-Benzinpreis dieses Monats?
+
+**Warum das zählt:** Der Vergleich „was hätte dieselbe Strecke mit Benzin gekostet?" ist der Kern der E-Auto-Wirtschaftlichkeit. eedc rechnet ihn **Monat für Monat mit dem Preis des jeweiligen Monats** — ein Monat aus 2023 mit dem Preis von 2023. Die Werte holt eedc täglich selbst aus dem *EU Weekly Oil Bulletin* der Europäischen Kommission (nationale Durchschnittspreise für Super 95 inklusive Steuern, Datenbestand seit 2005); du musst dafür nichts eintragen.
+
+Fehlt der Wert für einen Monat, rechnet eedc trotzdem weiter — dann aber mit dem **Modellwert** aus den Angaben zur Komponente (ersatzweise 1,65 €/L). Das ist der eine Preis von heute statt des damaligen: Der *Fortschritt* behauptet dann eine Messung und liefert eine Schätzung. Genau deshalb steht diese Prüfung hier.
+
+> **Kein E-Auto angelegt ⇒ diese Kategorie erscheint gar nicht.** Und Monate **vor** der Anschaffung des Fahrzeugs zählen nicht mit — es gab dort nichts zu vergleichen.
+
+#### Befunde
+
+| Meldung | Severity | Bedeutung | Behebung |
+|---------|----------|-----------|----------|
+| **N Monat(e) ohne Ø-Benzinpreis (MM/JJJJ … MM/JJJJ)** | ⚠️ WARNING | Für diese Monate liegt kein Marktpreis vor. Typisch nach einem **Import** älterer Monate oder direkt nach der Einrichtung — der Nachlauf hat sie noch nicht gesehen. | Knopf **„Vergleichspreise nachpflegen"** direkt am Befund. Er holt die Wochenpreise für alle offenen Monate; **bestehende Werte bleiben unberührt**, mehrfaches Ausführen ist gefahrlos. Danach erneut prüfen. |
+| **Alle Monate mit E-Auto tragen einen Ø-Benzinpreis** | ✅ OK | Der Vergleich rechnet durchgehend mit den damaligen Preisen. | — |
+
+#### Wo du den Wert siehst
+
+*Einstellungen → Daten → Monatsdaten* → Monat öffnen → Abschnitt **Vergleichspreise** → **„Ø Benzinpreis"**. Dort kannst du auch einen eigenen Wert eintragen — ein von Hand gesetzter Preis wird **nie** überschrieben.
+
+> **Warum das jetzt seltener vorkommt:** Früher lief der Nachlauf **wöchentlich** (dienstags), und ein verpasster Lauf wurde nie nachgeholt. Ein Monat, der kurz nach einem Lauf entstand, wartete bis zu sieben Tage auf seinen Preis — ohne dass irgendetwas darauf hinwies. Seither läuft er **täglich** und zusätzlich kurz nach jedem Start von eedc. Aufgefallen ist das, weil ein Anwender nachgesehen hat, statt der Zusage zu glauben ([Discussion #394](https://github.com/supernova1963/eedc-homeassistant/discussions/394)).
 
 ---
 

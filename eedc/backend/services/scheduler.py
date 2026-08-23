@@ -284,10 +284,26 @@ class EEDCScheduler:
                 replace_existing=True,
             )
 
-            # Kraftstoffpreis: Wöchentlich Dienstag 06:00 (Oil Bulletin erscheint Montag)
+            # Kraftstoffpreis: TÄGLICH 06:00 (das Oil Bulletin selbst erscheint
+            # montags — der Takt hier richtet sich nicht nach der Quelle,
+            # sondern danach, wann eine Monatszeile ENTSTEHT).
+            #
+            # ⚠ Bis 2026-08-23 lief er ``day_of_week="tue"`` — als einziger
+            # Wochen-Takt im ganzen Scheduler, alle anderen Jobs laufen
+            # täglich oder öfter, die Tagesaggregation hat sogar einen eigenen
+            # Recovery-Lauf. Eine Monatszeile, die zwischen zwei Dienstagen
+            # entsteht (Monatsabschluss, Import, Erst-Einrichtung), blieb damit
+            # bis zu SIEBEN TAGE ohne Marktpreis, und der E-Auto-Vergleich
+            # rechnete solange still mit dem Modellwert (1,65 €/L) statt mit
+            # dem Preis des Monats. Gemeldet von gruaGit (Discussion #394,
+            # 23.08.): „Für Juni wird ein leeres Feld bei Vergleichspreise
+            # angezeigt" — auf die ausdrückliche Einladung hin nachzusehen.
+            #
+            # Täglich kostet nichts: beide Backfills steigen ohne offene Zeile
+            # aus, BEVOR die 4,25-MB-XLSX geladen wird.
             self._scheduler.add_job(
                 kraftstoffpreis_job,
-                CronTrigger(day_of_week="tue", hour=6, minute=0),
+                CronTrigger(hour=6, minute=0),
                 id="kraftstoffpreis",
                 name="Kraftstoffpreis (EU Oil Bulletin)",
                 replace_existing=True,
@@ -1167,6 +1183,32 @@ async def kraftstoffpreis_job() -> None:
                             gesamt_tage, gesamt_monate)
     except Exception as e:
         logger.warning("Kraftstoffpreis-Job fehlgeschlagen: %s: %s", type(e).__name__, e)
+
+
+async def kraftstoffpreis_startup_recovery() -> None:
+    """Holt beim Start einen verpassten Kraftstoffpreis-Lauf nach.
+
+    **Warum es das braucht (Discussion #394, gruaGit, 2026-08-23):** Der
+    Cron-Trigger hat keine Misfire-Recovery. Läuft die Box um 06:00 nicht —
+    Update, Neustart, abgeschaltete Nacht —, fällt der Lauf ersatzlos aus, und
+    eine Monatszeile ohne Marktpreis bleibt bis zum nächsten Morgen leer. Beim
+    Wochen-Takt davor war das eine Woche. Derselbe Grund wie bei
+    ``sensor_snapshot_startup_recovery``, nur eine Zeitebene höher.
+
+    **Bewusst NICHT im ``start_scheduler()``-Zweig aufgerufen** (main.py): ohne
+    APScheduler gibt es überhaupt keinen Cron, dann ist der Startlauf der
+    einzige Weg. Dieselbe Begründung wie beim Community-Nachsenden.
+
+    Kostet ohne offene Zeilen keinen einzigen Request — beide Backfills zählen
+    erst und laden dann.
+    """
+    import asyncio
+
+    try:
+        await asyncio.sleep(90)  # dem Start nicht in die Quere kommen
+        await kraftstoffpreis_job()
+    except Exception as e:
+        logger.debug("Kraftstoffpreis-Startlauf fehlgeschlagen: %s: %s", type(e).__name__, e)
 
 
 def start_scheduler() -> bool:

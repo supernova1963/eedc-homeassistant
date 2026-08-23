@@ -282,6 +282,19 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.debug(f"Community-Nachsendung nicht gestartet: {e}")
 
+    # Kraftstoffpreis-Startlauf (Discussion #394): holt einen verpassten
+    # 06:00-Lauf nach. Aus demselben Grund wie das Nachsenden darüber NICHT im
+    # `elif start_scheduler()`-Zweig — ohne APScheduler gibt es gar keinen
+    # Cron, dann ist dieser Lauf der einzige Weg, wie ein importierter oder
+    # frisch angelegter Monat je seinen Marktpreis bekommt.
+    if not _disable_scheduler:
+        try:
+            from backend.services.scheduler import kraftstoffpreis_startup_recovery
+
+            asyncio.create_task(kraftstoffpreis_startup_recovery())
+        except Exception as e:
+            logger.debug(f"Kraftstoffpreis-Startlauf nicht gestartet: {e}")
+
     # MQTT-Inbound starten (DB-Settings haben Vorrang vor Env-Vars)
     mqtt_inbound = None
     mqtt_cfg = await _load_mqtt_config()

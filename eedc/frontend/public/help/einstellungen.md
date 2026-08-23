@@ -464,7 +464,7 @@ Der Block zeigt die Tabelle aller erfassten Monate inline (sortierbar, mit Spalt
 
 **Wetter-Autofill:** „Wetter abrufen" füllt Globalstrahlung und Sonnenstunden (Open-Meteo historisch bzw. PVGIS TMY).
 
-**Kraftstoffpreis-Backfill (Monats):** Unten im Block, sichtbar nur bei offenen Monaten. Befüllt rückwirkend den Benzinpreis aus dem EU Weekly Oil Bulletin (History seit 2005). Service-Fehler (z. B. Bulletin-URL-Wechsel) erscheinen als roter Alert, nicht stillschweigend.
+**Ø Benzinpreis kommt von selbst.** eedc holt den Monatsdurchschnitt täglich aus dem EU Weekly Oil Bulletin und trägt ihn in jeden Monat ohne Preis nach — auch rückwirkend, auch für importierte Monate; du musst dafür nichts tun. Bleibt doch einmal ein Monat offen, meldet es der **Daten-Checker** unter *Vergleichspreise – Ø Benzinpreis* und stellt „Vergleichspreise nachpflegen" daneben. *(Bis v4.0.15 stand hier ein eigener Knopf unter dem Monatsdaten-Block; er ist mit der V4-Oberfläche entfallen — diese Zeile beschrieb ihn danach noch, obwohl es ihn nicht mehr gab.)*
 
 ### 5.2 Energieprofil-Pflege
 
@@ -800,7 +800,7 @@ Zur Deutung der Stunden-/Tageswerte:
 
 ### 9.7 Kraftstoffpreise (EU Weekly Oil Bulletin)
 
-Für die E-Auto-Ersparnis nutzt eedc echte monatliche Benzinpreise aus dem EU Weekly Oil Bulletin (History seit 2005). Der Backfill (Tages-/Monatsebene, siehe [§5.1](#51-monatsdaten--monatsabschluss)/[§5.2](#52-energieprofil-pflege)) setzt nur Werte, wo noch keiner vorhanden ist, und kann gefahrlos mehrfach laufen; ein Scheduler-Job (Dienstag 06:00) befüllt neue Tage automatisch.
+Für die E-Auto-Ersparnis nutzt eedc echte monatliche Benzinpreise aus dem EU Weekly Oil Bulletin (History seit 2005). Der Backfill (Tages-/Monatsebene, siehe [§5.1](#51-monatsdaten--monatsabschluss)/[§5.2](#52-energieprofil-pflege)) setzt nur Werte, wo noch keiner vorhanden ist, und kann gefahrlos mehrfach laufen; ein Scheduler-Job (**täglich 06:00**, dazu ein Lauf kurz nach jedem Start) befüllt neue Tage und Monate automatisch. Bleibt ein Monat trotzdem ohne Preis, meldet das der Daten-Checker mit dem Nachpflegen-Knopf daneben.
 
 ---
 

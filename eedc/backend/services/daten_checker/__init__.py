@@ -126,6 +126,7 @@ class DatenChecker(
         ergebnisse.extend(self._check_phev_anteil_unbestimmt(anlage))
         ergebnisse.extend(self._check_emob_sensor_doppelmapping(anlage))
         ergebnisse.extend(await self._check_emob_doppelzaehlung_tage(anlage))
+        ergebnisse.extend(await self._check_vergleichspreis_fehlt(anlage))
         ergebnisse.extend(self._check_erfassungsort_positionen(anlage))
         # #377/D3: Verbrauchszähler (Gas/Wasser/Öl) — Quelle, Reihenbruch,
         # Inaktiv-Falle. Eigene Fragen, kein zweiter Turm über die

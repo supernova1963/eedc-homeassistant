@@ -201,6 +201,19 @@ class CheckKategorie(str, Enum):
     # ([[feedback_kein_grosser_heiler_knopf]] ·
     # [[feedback_daten_checker_kein_akzeptiert]]).
     ZAEHLERSTAND_REIHE = "zaehlerstand_reihe"
+    # Discussion #394 (gruaGit, 23.08.2026): Der Monatsdurchschnitts-Benzinpreis
+    # aus dem EU Weekly Oil Bulletin fehlt in einer Monatszeile. Er ist die
+    # Grundlage des E-Auto-Alternativvergleichs (Fortschritt, kumulierte
+    # Ersparnis) — fehlt er, rechnet die Kette still mit dem Modellwert
+    # (Investitions-Parameter bzw. 1,65 €/L) weiter, und im Monatsabschluss
+    # steht ein leeres Feld ohne Erklärung.
+    #
+    # ⭐ **MIT Reparatur-Action, anders als ZAEHLERSTAND_REIHE darüber:** Hier muss
+    # nichts geraten werden — die Wochenpreise sind öffentlich, das
+    # Nachpflegen ist eindeutig, und der Pfad existiert seit Etappe 3d
+    # (RepairOperationType.KRAFTSTOFFPREIS_BACKFILL). Er war nur von nirgends
+    # aus erreichbar außer über die Reparatur-Werkbank.
+    VERGLEICHSPREIS_FEHLT = "vergleichspreis_fehlt"
 
 
 @dataclass

@@ -60,6 +60,10 @@ export const KATEGORIE_LABELS: Record<string, string> = {
   // Reihenbruch, Inaktiv-Falle. Label nennt das Gerät, nicht die Prüfung:
   // „Reihe" allein sagt dem Anwender nichts.
   zaehlerstand_reihe: 'Verbrauchszähler – Zählerstände',
+  // #394 (gruaGit): Monatszeilen ohne Ø-Benzinpreis. Label nennt die Sache aus
+  // Sicht des Anwenders — im Monatsabschluss heißt der Abschnitt
+  // „Vergleichspreise", und genau dort sieht er das leere Feld.
+  vergleichspreis_fehlt: 'Vergleichspreise – Ø Benzinpreis',
 }
 
 /** Anzeige-Reihenfolge der Kategorien (Vollständigkeit → Plausibilität → …). */
@@ -93,4 +97,5 @@ export const KATEGORIE_REIHENFOLGE: string[] = [
   'position_wiederkehrend',
   'position_doppelerfassung',
   'zaehlerstand_reihe',
+  'vergleichspreis_fehlt',
 ]

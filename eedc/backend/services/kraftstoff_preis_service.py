@@ -246,13 +246,13 @@ async def backfill_monatsdaten_kraftstoffpreise(
     from backend.models.monatsdaten import Monatsdaten
     from backend.services.provenance import write_with_provenance
 
-    preise = await get_kraftstoffpreise(land)
-    if not preise:
-        return {"aktualisiert": 0, "fehler": "Keine Kraftstoffpreise verfügbar"}
-
     oil_land = LAND_MAPPING.get(land, land)
 
-    # Alle Monatsdaten ohne Kraftstoffpreis laden
+    # ERST die offenen Zeilen, DANN erst der Download. Die Reihenfolge ist
+    # nicht Geschmack: die History-XLSX ist 4,25 MB, und seit der Job täglich
+    # läuft (statt wöchentlich) wäre sie an fast allen Tagen umsonst geladen.
+    # Ohne offene Zeile geht so kein einziger Request raus — dasselbe Prinzip,
+    # das ``pvgis_aktualitaet_job`` für seinen Neuabruf schon nennt.
     result = await db.execute(
         select(Monatsdaten).where(
             Monatsdaten.anlage_id == anlage_id,
@@ -263,6 +263,10 @@ async def backfill_monatsdaten_kraftstoffpreise(
 
     if not rows:
         return {"aktualisiert": 0, "land": oil_land, "hinweis": "Alle Monate haben bereits einen Preis"}
+
+    preise = await get_kraftstoffpreise(land)
+    if not preise:
+        return {"aktualisiert": 0, "fehler": "Keine Kraftstoffpreise verfügbar"}
 
     aktualisiert = 0
     for md in rows:
@@ -316,13 +320,10 @@ async def backfill_kraftstoffpreise(
     from backend.models.tages_energie_profil import TagesZusammenfassung
     from backend.services.provenance import write_with_provenance
 
-    preise = await get_kraftstoffpreise(land)
-    if not preise:
-        return {"aktualisiert": 0, "fehler": "Keine Kraftstoffpreise verfügbar"}
-
     oil_land = LAND_MAPPING.get(land, land)
 
-    # Alle TagesZusammenfassungen ohne Kraftstoffpreis laden
+    # Erst zählen, dann laden — Begründung siehe
+    # ``backfill_monatsdaten_kraftstoffpreise``.
     query = select(TagesZusammenfassung).where(
         TagesZusammenfassung.anlage_id == anlage_id,
         TagesZusammenfassung.kraftstoffpreis_euro.is_(None),
@@ -337,6 +338,10 @@ async def backfill_kraftstoffpreise(
 
     if not rows:
         return {"aktualisiert": 0, "land": oil_land, "hinweis": "Alle Tage haben bereits einen Preis"}
+
+    preise = await get_kraftstoffpreise(land)
+    if not preise:
+        return {"aktualisiert": 0, "fehler": "Keine Kraftstoffpreise verfügbar"}
 
     aktualisiert = 0
     for tz in rows:

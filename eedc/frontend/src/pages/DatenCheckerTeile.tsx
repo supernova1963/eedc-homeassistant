@@ -62,6 +62,7 @@ function KategorieSektion({
   onReaggregate,
   onReaggregateBereich,
   onGeraetewerteLoeschen,
+  onKraftstoffpreiseNachpflegen,
   reparaturBusy,
 }: {
   kategorie: string
@@ -70,6 +71,7 @@ function KategorieSektion({
   onReaggregate?: (anlageId: number, datum: string) => Promise<void>
   onReaggregateBereich?: (anlageId: number, von: string, bis: string) => Promise<void>
   onGeraetewerteLoeschen?: (anlageId: number, jahr: number, monat: number) => Promise<void>
+  onKraftstoffpreiseNachpflegen?: (anlageId: number) => Promise<void>
   reparaturBusy?: string | null  // key = `${anlage_id}:${datum}` (Einzeltag) bzw. `${anlage_id}:${von}:${bis}` (Bereich) bzw. `${anlage_id}:${jahr}-${monat}` (#349)
 }) {
   const [open, setOpen] = useState(defaultOpen)
@@ -148,6 +150,12 @@ function KategorieSektion({
               ? `${gwAnlageId}:${gwJahr}-${gwMonat}` : null
             const isGwBusy = gwKey && reparaturBusy === gwKey
 
+            // #394: Ø-Benzinpreise aus dem EU Oil Bulletin nachpflegen.
+            const kpAnlageId = e.action_kind === 'kraftstoffpreis_backfill'
+              ? Number(e.action_params?.anlage_id) : undefined
+            const kpKey = kpAnlageId ? `${kpAnlageId}:kraftstoffpreis` : null
+            const isKpBusy = kpKey && reparaturBusy === kpKey
+
             return (
               <div
                 key={i}
@@ -201,6 +209,21 @@ function KategorieSektion({
                   >
                     {!isGwBusy && <Wrench className="h-3 w-3 mr-1" />}
                     {e.action_label ?? 'Messwerte entfernen'}
+                  </Button>
+                )}
+                {e.action_kind === 'kraftstoffpreis_backfill' && onKraftstoffpreiseNachpflegen
+                  && kpAnlageId && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="flex-shrink-0"
+                    onClick={() => onKraftstoffpreiseNachpflegen(kpAnlageId)}
+                    disabled={!!reparaturBusy}
+                    loading={!!isKpBusy}
+                  >
+                    {!isKpBusy && <Wrench className="h-3 w-3 mr-1" />}
+                    {e.action_label ?? 'Vergleichspreise nachpflegen'}
                   </Button>
                 )}
                 {e.link && !e.action_kind && (
@@ -317,6 +340,31 @@ export function DatenCheckerVerwaltung({ anlageId, kopfZusatz }: { anlageId: num
       setReparaturMessage({
         art: 'fehler',
         text: e instanceof Error ? e.message : `${monatText} konnte nicht bereinigt werden`,
+      })
+    } finally {
+      setReparaturBusy(null)
+    }
+  }
+
+  const handleKraftstoffpreiseNachpflegen = async (anlageId: number) => {
+    const key = `${anlageId}:kraftstoffpreis` /* de-de-allow: interner State-Key (Busy-Kennung), keine Anzeige */
+    setReparaturBusy(key)
+    setReparaturMessage(null)
+    try {
+      const r = await energieProfilApi.kraftstoffpreisBackfillMonats(anlageId)
+      setReparaturMessage({
+        art: r.aktualisiert > 0 ? 'ok' : 'hinweis',
+        text: r.aktualisiert > 0
+          ? `${r.aktualisiert} Monat(e) haben jetzt einen Ø-Benzinpreis (Quelle: EU Weekly Oil Bulletin, ${r.land}).`
+          : (r.fehler
+              ? `Es konnten keine Preise geladen werden: ${r.fehler}`
+              : 'Es war nichts nachzupflegen.'),
+      })
+      setRefreshKey(k => k + 1)
+    } catch (e) {
+      setReparaturMessage({
+        art: 'fehler',
+        text: e instanceof Error ? e.message : 'Vergleichspreise konnten nicht nachgepflegt werden',
       })
     } finally {
       setReparaturBusy(null)
@@ -464,6 +512,7 @@ export function DatenCheckerVerwaltung({ anlageId, kopfZusatz }: { anlageId: num
                   onReaggregate={handleReaggregateDay}
                   onReaggregateBereich={handleReaggregateBereich}
                   onGeraetewerteLoeschen={handleGeraetewerteLoeschen}
+                  onKraftstoffpreiseNachpflegen={handleKraftstoffpreiseNachpflegen}
                   reparaturBusy={reparaturBusy}
                 />
               )

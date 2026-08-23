@@ -18,7 +18,10 @@ export interface CheckErgebnis {
   // Die einzige Aktion dieser Liste, die etwas **entfernt**; sie steht hier,
   // weil es für diesen Rest sonst keinen Weg gibt (die Zeile, über die man ihn
   // sonst aufräumt, ist ja gerade die gelöschte).
+  // #394: 'kraftstoffpreis_backfill' — Ø-Benzinpreise aus dem EU Oil Bulletin
+  // für Monatszeilen ohne Preis. Additiv: schreibt nur, wo NULL steht.
   action_kind?: 'reaggregate_day' | 'reaggregate_range' | 'geraetewerte_loeschen'
+    | 'kraftstoffpreis_backfill'
   action_params?: Record<string, unknown>
   action_label?: string
   // IA-V4 #243: Komponenten-Zuordnung (nur komponenten-bezogene Befunde) —

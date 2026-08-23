@@ -1221,7 +1221,7 @@ POST /api/ha-statistics/import/{anlage_id}                         # Import mit 
 | `prognose_prefetch` | alle 45 min | Wetter-/Prognosedaten vorhalten |
 | `connector_daily_poll` | täglich 03:30 | Geräte-Connectors im lokalen Netz abfragen |
 | `api_cache_cleanup` | täglich 04:00 | `api_cache` aufräumen |
-| `kraftstoffpreis` | Di 06:00 | EU Weekly Oil Bulletin → `TagesZusammenfassung.kraftstoffpreis_euro` + `Monatsdaten.kraftstoffpreis_euro` |
+| `kraftstoffpreis` | täglich 06:00 **+ Startlauf** | EU Weekly Oil Bulletin → `TagesZusammenfassung.kraftstoffpreis_euro` + `Monatsdaten.kraftstoffpreis_euro`. ⚠ Lief bis 23.08.2026 **wöchentlich** (Di) — eine Monatszeile, die zwischen zwei Läufen entsteht, blieb solange ohne Marktpreis (Discussion #394). Der Startlauf (`kraftstoffpreis_startup_recovery`, 90 s nach dem Hochlauf) holt einen verpassten Lauf nach; ohne offene Zeile geht **kein** Request raus |
 | `monthly_snapshot` | 1. des Monats 00:01 | ⚠ setzt **nur einen Log-Zeitstempel** — es gibt **keinen automatischen Monatsabschluss** |
 | `mqtt_auto_publish` | Intervall (konfigurierbar) | HA-Export per MQTT, mit Start-Publish beim Hochlauf |
 | `mqtt_energy_snapshot` · `mqtt_live_snapshot` | je alle 5 min | MQTT-Inbound: Energie-Zählerstände bzw. Live-Werte sichern |
@@ -1236,7 +1236,7 @@ Zählerzeile kennen (`meta.hat_zaehlerzeile`, Flag `inkl_ohne_zaehlerzeile`).
 
 **Datei:** `backend/services/kraftstoff_preis_service.py`
 
-**Funktion:** Wöchentliche nationale Benzindurchschnittspreise aus dem EU Weekly Oil Bulletin.
+**Funktion:** Nationale Benzindurchschnittspreise aus dem EU Weekly Oil Bulletin. Die **Quelle** erscheint wöchentlich (montags); der **Nachlauf** in eedc läuft täglich plus beim Start — wann eine Monatszeile entsteht, richtet sich nicht nach der Quelle.
 
 **Datenquelle:** EU-Kommission XLSX (stabile URL, History seit 2005, Euro-Super 95 inkl. Steuern).
 
