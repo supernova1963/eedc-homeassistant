@@ -75,22 +75,44 @@ const ERLAUBT = new Map([
   ['src/hooks/useSetupWizard.ts', 'Vorbelegung „gültig ab" — sichtbar und änderbar'],
 ])
 
-/** Zusätzlich erlaubt für Dateien, die BEIDES tun (Vorbelegung + Vergleich). */
-const ERLAUBT_ZEILEN = new Map([
-  // istGueltigHeute() darüber ist umgestellt; hier geht es um das Formular-Default.
-  // ⚠ Zeilennummer, nicht Inhalt: jede Einfügung darüber macht diesen Eintrag
-  // falsch-rot (zuletzt am 08.08.2026 durch vier Kommentarzeilen).
-  // 549 → 575 am 17.08.2026 (N-257: Kommentar + die benannte Regel
-  // `erstTarifVorbelegung` darüber). ⚑ **Dritte Nachführung dieser einen
-  // Pinnung** — die Zeilennummer ist als Anker das eigentliche Problem, und der
-  // Kasten darüber sagt es seit dem 08.08. selbst. Immerhin meldet der Prüfer
-  // die Verschiebung LAUT (rot), er verschluckt sie nicht; der Umbau auf einen
-  // Inhalts-Anker ist deshalb Komfort, nicht Sicherheit, und braucht einen
-  // Entscheid (ein Inhalts-Anker erlaubt dieselbe Zeile ungewollt mehrfach).
-  // 575 → 576 am 22.08.2026 (#392: SchalterZeile-Import darüber) — die VIERTE
-  // Nachführung; der Entscheid Inhalts-Anker vs. Zeilen-Pin steht weiter aus.
-  ['src/pages/StrompreiseTeile.tsx', new Set([576])],
+/**
+ * Zusätzlich erlaubt für Dateien, die BEIDES tun (Vorbelegung + Vergleich) —
+ * angeheftet an den **Inhalt** der Zeile, nicht an ihre Nummer.
+ *
+ * ⚑ **Warum der Umbau (N-195 · N-263, Entscheid Gernot 23.08.2026).** Bis dahin
+ * stand hier eine Zeilennummer, und sie musste **viermal** nachgeführt werden —
+ * 08.08. (vier Kommentarzeilen darüber), 17.08. (N-257: die benannte Regel
+ * `erstTarifVorbelegung`), 22.08. (#392: ein Import), zuletzt 549 → 575 → 576.
+ * Jede Einfügung *irgendwo darüber* macht den Eintrag falsch-rot; der Prüfer
+ * meldet das zwar laut, aber die Meldung ist jedes Mal ein Fehlalarm, und ein
+ * Prüfer, der regelmäßig grundlos rot wird, wird irgendwann weggeklickt.
+ *
+ * ⚠ **Der Einwand gegen den Inhalts-Anker war: er erlaubt dieselbe Zeile
+ * ungewollt MEHRFACH.** Deshalb steht neben jedem Anker eine **Anzahl**. Taucht
+ * der Ausschnitt öfter auf als freigegeben, wird der Prüfer rot — die neue
+ * Kopie ist dann eben nicht mitfreigegeben. Taucht er seltener auf, wird er
+ * **auch** rot: die Stelle ist umgebaut oder weg, und der Eintrag gehört
+ * angepasst statt vergessen. (Dieselbe Mechanik trägt seit dem 23.08. die
+ * Baseline von `backend/tests/test_konformitaet_echte_uhr_in_tests.py`.)
+ *
+ * Der Schlüssel ist der **Whitespace-normalisierte** Quelltext der Zeile
+ * (Kommentare sind zu diesem Zeitpunkt schon gestrippt). Prettier darf also
+ * umbrechen und einrücken; wird die Zeile inhaltlich geändert, fällt die
+ * Freigabe — und genau das soll sie.
+ */
+const ERLAUBT_STELLEN = new Map([
+  ['src/pages/StrompreiseTeile.tsx', new Map([
+    // istGueltigHeute() darüber ist umgestellt; hier geht es um das
+    // Formular-Default „gültig ab", das der Anwender sieht und ändern kann.
+    [
+      "gueltig_ab: strompreis?.gueltig_ab || gueltigAbVorbelegung || new Date().toISOString().split('T')[0],",
+      1,
+    ],
+  ])],
 ])
+
+/** Whitespace kollabieren — der Anker soll Umbrüche und Einrückung überleben. */
+const normalisiere = (s) => s.trim().replace(/\s+/g, ' ')
 
 function quellDateien(dir) {
   const out = []
@@ -125,6 +147,8 @@ const MUSTER = /toISOString\(\)\s*\.\s*(?:slice\(\s*0\s*,\s*10\s*\)|substring\(\
 let geprueft = 0
 let freigegeben = 0
 const verstoesse = []
+/** `datei → anker → wie oft tatsächlich getroffen` (gegen die Anzahl geprüft). */
+const ankerTreffer = new Map()
 
 for (const f of quellDateien(join(ROOT, 'src'))) {
   const datei = rel(f)
@@ -136,9 +160,47 @@ for (const f of quellDateien(join(ROOT, 'src'))) {
   while ((m = MUSTER.exec(src)) !== null) {
     geprueft++
     const zeile = src.slice(0, m.index).split('\n').length
-    if (ERLAUBT.has(datei) || ERLAUBT_ZEILEN.get(datei)?.has(zeile)) { freigegeben++; continue }
-    verstoesse.push({ datei, zeile, text: (zeilen[zeile - 1] ?? '').trim() })
+    const text = normalisiere(zeilen[zeile - 1] ?? '')
+    if (ERLAUBT.has(datei)) { freigegeben++; continue }
+    const anker = ERLAUBT_STELLEN.get(datei)
+    if (anker?.has(text)) {
+      const je = ankerTreffer.get(datei) ?? new Map()
+      je.set(text, (je.get(text) ?? 0) + 1)
+      ankerTreffer.set(datei, je)
+      continue // Zählung entscheidet unten, ob das eine Freigabe bleibt
+    }
+    verstoesse.push({ datei, zeile, text })
   }
+}
+
+// Anzahl gegen Freigabe — in BEIDE Richtungen. Zu viele Treffer heißt: eine
+// Kopie hat sich unter die Freigabe gestellt. Zu wenige heißt: die freigegebene
+// Stelle gibt es so nicht mehr, der Eintrag ist verwaist (dieselbe
+// Abschmelz-Regel wie bei den Backend-Baselines).
+const ankerFehler = []
+for (const [datei, anker] of ERLAUBT_STELLEN) {
+  for (const [text, erwartet] of anker) {
+    const ist = ankerTreffer.get(datei)?.get(text) ?? 0
+    if (ist === erwartet) { freigegeben += ist; continue }
+    ankerFehler.push(
+      ist > erwartet
+        ? `  ${datei}  ${ist}× statt ${erwartet}× freigegeben — eine KOPIE dieser Zeile ` +
+          `hat sich unter die Freigabe gestellt:\n      ${text}`
+        : `  ${datei}  nur ${ist}× statt ${erwartet}× gefunden — die freigegebene Stelle ` +
+          `gibt es so nicht mehr. Eintrag anpassen oder streichen:\n      ${text}`,
+    )
+  }
+}
+
+if (ankerFehler.length) {
+  console.error(ankerFehler.join('\n'))
+  console.error(
+    `\n✗ check:datum-utc — die Freigabe-Anker stimmen nicht mehr mit dem Code überein.\n` +
+    `  Der Anker ist der Zeileninhalt (Whitespace-normalisiert), die Zahl daneben sagt,\n` +
+    `  wie oft er vorkommen darf. Beide Richtungen sind Absicht: eine neue Kopie ist NICHT\n` +
+    `  mitfreigegeben, und eine verschwundene Stelle darf keinen toten Eintrag hinterlassen.`,
+  )
+  process.exit(1)
 }
 
 if (verstoesse.length) {
