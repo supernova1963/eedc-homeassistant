@@ -38,6 +38,7 @@ from backend.core.investition_kennwerte import (
     get_speicher_nutzbare_kapazitaet_kwh,
 )
 from backend.models import Anlage, Investition
+from backend.tests import factories
 
 HEUTE = date.today()
 MORGEN = HEUTE + timedelta(days=1)
@@ -47,7 +48,7 @@ _NETTO_KWH = 8.0
 
 
 def _speicher(**kwargs) -> Investition:
-    return Investition(typ="speicher", bezeichnung="Speicher", **kwargs)
+    return factories.mach_investition("speicher", bezeichnung="Speicher", **kwargs)
 
 
 # ============================================================================

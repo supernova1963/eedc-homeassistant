@@ -7,19 +7,18 @@ Respekt vor bestehenden expliziten Einträgen (additiv/idempotent), §2h-Gateway
 Deaktivierung.
 """
 
-from datetime import date
 
 import pytest
 from sqlalchemy import select
 
 from backend.models.anlage import Anlage
-from backend.models.investition import Investition
 from backend.models.mqtt_gateway_mapping import MqttGatewayMapping
 from backend.services.migrations.migrate_datenquellen_materialisieren import (
     _ha_entity_fuer_feld,
     _topic_suffix,
     materialisiere_datenquellen,
 )
+from backend.tests import factories
 
 
 # ─── _ha_entity_fuer_feld (pur) ──────────────────────────────────────────
@@ -70,16 +69,7 @@ def test_topic_suffix():
 # ─── End-to-End gegen echte Anlage/Investition ───────────────────────────
 
 async def _anlage_mit_pv(db, sensor_mapping: dict) -> Anlage:
-    a = Anlage(anlagenname="Test", leistung_kwp=10.0, sensor_mapping=sensor_mapping)
-    db.add(a)
-    await db.flush()
-    inv = Investition(
-        anlage_id=a.id, typ="pv-module", bezeichnung="PV",
-        anschaffungsdatum=date(2020, 1, 1),
-    )
-    db.add(inv)
-    await db.flush()
-    return a
+    return await factories.anlage_mit_pv(db, sensor_mapping)
 
 
 @pytest.mark.asyncio

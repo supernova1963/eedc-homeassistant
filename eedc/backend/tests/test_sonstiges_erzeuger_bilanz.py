@@ -27,6 +27,7 @@ from backend.core.berechnungen import (
 )
 from backend.models import Anlage, Investition, InvestitionMonatsdaten, Monatsdaten
 from backend.services.live_komponenten_builder import build_komponenten
+from backend.tests import factories
 
 
 async def _seed(db, *, mit_sonstiges: bool) -> int:
@@ -187,7 +188,7 @@ async def test_drei_read_sites_symmetrisch(db):
 
 
 def _live_anlage() -> Anlage:
-    return Anlage(anlagenname="Live", leistung_kwp=10.0, standort_land="DE")
+    return factories.mach_anlage(anlagenname="Live", standort_land="DE")
 
 
 def test_live_sonstiger_erzeuger_eigene_komponente_und_in_autarkie():

@@ -33,6 +33,7 @@ from backend.models.investition import Investition
 from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
 from backend.services.energie_profil.source import Source
 from backend.utils.investition_filter import aktiv_am_tag
+from backend.tests import factories
 
 
 # ───────────────────────── aktiv_am_tag (Baustein 3) ────────────────────────
@@ -113,23 +114,7 @@ _LTS_HOURLY = {
 
 
 def _anlage_mit_mapping() -> Anlage:
-    return Anlage(
-        anlagenname="SymTest",
-        leistung_kwp=10.0,
-        standort_plz="10115",
-        standort_land="DE",
-        wechselrichter_hersteller="generic",
-        sensor_mapping={
-            "basis": {
-                "einspeisung": {"strategie": "sensor", "sensor_id": "sensor.einsp"},
-                "netzbezug": {"strategie": "sensor", "sensor_id": "sensor.bezug"},
-            },
-            "investitionen": {
-                "3": {"felder": {"pv_erzeugung_kwh": {"strategie": "sensor", "sensor_id": "sensor.pv"}}},
-                "7": {"felder": {"stromverbrauch_kwh": {"strategie": "sensor", "sensor_id": "sensor.wp"}}},
-            },
-        },
-    )
+    return factories.mach_anlage_mit_mapping("SymTest")
 
 
 async def _mqtt_anchor(db, anlage_id: int, datum: date) -> None:

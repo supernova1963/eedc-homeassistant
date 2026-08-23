@@ -42,15 +42,13 @@ from backend.services.provenance import (
     ABGELEITET_EINSPEISE_DECKUNG,
     ABGELEITET_EINSPEISE_DECKUNG_TEILWEISE,
 )
+from backend.tests import factories
 
 ANSCHAFFUNG = date(2024, 1, 1)
 
 
 async def _anlage(db) -> Anlage:
-    anlage = Anlage(anlagenname="Ladeanteil", leistung_kwp=10.0)
-    db.add(anlage)
-    await db.flush()
-    return anlage
+    return await factories.anlage(db, anlagenname="Ladeanteil")
 
 
 async def _inv(db, anlage, typ, bezeichnung, **kwargs) -> Investition:
@@ -64,9 +62,7 @@ async def _inv(db, anlage, typ, bezeichnung, **kwargs) -> Investition:
 
 
 def _imd(inv, jahr, monat, daten) -> InvestitionMonatsdaten:
-    return InvestitionMonatsdaten(
-        investition_id=inv.id, jahr=jahr, monat=monat, verbrauch_daten=daten
-    )
+    return factories.mach_imd(inv.id, jahr, monat, daten)
 
 
 def _tag(anlage, tag: date, *, pv: float | None, netz: float | None):

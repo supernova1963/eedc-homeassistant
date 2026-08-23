@@ -34,6 +34,7 @@ from backend.core.investition_parameter import PARAM_E_AUTO, PARAM_SONSTIGES
 from backend.models import (  # noqa: F401
     Anlage, Investition, InvestitionMonatsdaten, Monatsdaten,
 )
+from backend.tests import factories
 
 
 async def _zeitreihe(db: AsyncSession, anlage_id: int, jahr: int | None = None):
@@ -42,10 +43,7 @@ async def _zeitreihe(db: AsyncSession, anlage_id: int, jahr: int | None = None):
 
 
 async def _anlage(db: AsyncSession, name: str) -> int:
-    anlage = Anlage(anlagenname=name, leistung_kwp=10.0)
-    db.add(anlage)
-    await db.flush()
-    return anlage.id
+    return (await factories.anlage(db, anlagenname=name)).id
 
 
 def _monat(antwort, monat: int, jahr: int | None = None):

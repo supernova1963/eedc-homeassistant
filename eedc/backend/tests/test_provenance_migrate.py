@@ -31,11 +31,11 @@ from backend.services.provenance import write_with_provenance
 from backend.services.provenance_migrate import (
     migrate_3d_p3_initial_provenance_legacy_unknown,
 )
+from backend.tests import factories
 
 
 async def _make_anlage(session: AsyncSession) -> Anlage:
-    anlage = Anlage(anlagenname="Test", leistung_kwp=10.0, standort_land="DE")
-    session.add(anlage)
+    anlage = await factories.anlage(session, standort_land="DE")
     await session.commit()
     return anlage
 

@@ -33,13 +33,11 @@ from backend.services.monats_fakten import (
     TAGESWERT_ZAEHLER,
     lade_monats_fakten,
 )
+from backend.tests import factories
 
 
 async def _anlage(db) -> Anlage:
-    anlage = Anlage(anlagenname="N-121", leistung_kwp=10.0, standort_land="DE")
-    db.add(anlage)
-    await db.flush()
-    return anlage
+    return await factories.anlage(db, anlagenname="N-121", standort_land="DE")
 
 
 async def _pv_modul(db, anlage_id: int) -> Investition:

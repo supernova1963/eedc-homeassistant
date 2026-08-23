@@ -32,13 +32,13 @@ Geprüft:
 
 from __future__ import annotations
 
-from datetime import date
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import (  # noqa: F401
     Anlage, Investition, InvestitionMonatsdaten,
 )
+from backend.tests import factories
 # Hinweis: Die Helfer-Unit-Tests der Quellen-Wahl leben in
 # `test_emob_heimladung_canonical.py` (strukturelle Regel) bzw.
 # `test_emob_readsite_symmetrie.py` (Helfer-Kontrakt). Hier bleibt die
@@ -49,26 +49,15 @@ from backend.models import (  # noqa: F401
 
 
 async def _seed_anlage(db: AsyncSession) -> int:
-    anlage = Anlage(anlagenname="Test", leistung_kwp=10.0)
-    db.add(anlage)
-    await db.flush()
-    return anlage.id
+    return (await factories.anlage(db)).id
 
 
 async def _add_inv(db, anlage_id, typ, bezeichnung):
-    inv = Investition(
-        anlage_id=anlage_id, typ=typ, bezeichnung=bezeichnung,
-        anschaffungsdatum=date(2024, 1, 1),
-    )
-    db.add(inv)
-    await db.flush()
-    return inv
+    return await factories.investition(db, anlage_id, typ, bezeichnung=bezeichnung)
 
 
 async def _add_imd(db, inv_id, jahr, monat, daten):
-    db.add(InvestitionMonatsdaten(
-        investition_id=inv_id, jahr=jahr, monat=monat, verbrauch_daten=daten,
-    ))
+    await factories.imd(db, inv_id, jahr, monat, daten)
 
 
 # ── Regression: Komponenten-PV-Anteil kann nie > 100 % werden ───────────────

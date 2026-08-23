@@ -34,6 +34,7 @@ import pytest
 from backend.models.anlage import Anlage
 from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
 from backend.services.energie_profil.source import Source
+from backend.tests import factories
 
 
 _LTS_HOURLY = {
@@ -77,23 +78,7 @@ _LTS_KOMP_TEILTAG = {
 
 
 def _anlage_mit_lts_mapping() -> Anlage:
-    return Anlage(
-        anlagenname="S0-Test",
-        leistung_kwp=10.0,
-        standort_plz="10115",
-        standort_land="DE",
-        wechselrichter_hersteller="generic",
-        sensor_mapping={
-            "basis": {
-                "einspeisung": {"strategie": "sensor", "sensor_id": "sensor.einsp"},
-                "netzbezug": {"strategie": "sensor", "sensor_id": "sensor.bezug"},
-            },
-            "investitionen": {
-                "3": {"felder": {"pv_erzeugung_kwh": {"strategie": "sensor", "sensor_id": "sensor.pv"}}},
-                "7": {"felder": {"stromverbrauch_kwh": {"strategie": "sensor", "sensor_id": "sensor.wp"}}},
-            },
-        },
-    )
+    return factories.mach_anlage_mit_mapping("S0-Test")
 
 
 async def _mqtt_anchor(db, anlage_id: int, datum: date) -> None:

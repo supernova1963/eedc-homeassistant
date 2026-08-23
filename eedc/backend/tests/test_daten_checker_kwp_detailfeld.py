@@ -21,34 +21,22 @@ die kWp nur im `parameter`-JSON, muss sie in der Summe auftauchen.
 
 from __future__ import annotations
 
-from datetime import date
 
-from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 
-from backend.models import Anlage, Investition
+from backend.models import Anlage
 from backend.services.daten_checker import DatenChecker
 from backend.services.daten_checker.kategorien import CheckSeverity
+from backend.tests import factories
 
 _ABWEICHUNG = "PV-Module kWp stimmt nicht mit Anlagenleistung überein"
 _FEHLT = "Leistung (kWp) fehlt"
 
 
 async def _anlage_mit_modul(db, *, anlagen_kwp: float, spalte, parameter: dict) -> Anlage:
-    anlage = Anlage(anlagenname="Test", leistung_kwp=anlagen_kwp)
-    db.add(anlage)
-    await db.flush()
-    db.add(Investition(
-        anlage_id=anlage.id, typ="pv-module", bezeichnung="Dach Süd",
-        anschaffungsdatum=date(2022, 5, 1), leistung_kwp=spalte,
-        ausrichtung="Süd", neigung_grad=30, parameter=parameter,
-    ))
-    await db.commit()
-    return (await db.execute(
-        select(Anlage)
-        .options(selectinload(Anlage.investitionen).selectinload(Investition.monatsdaten))
-        .where(Anlage.id == anlage.id)
-    )).scalar_one()
+    return await factories.anlage_mit_modul(
+        db, anlagen_kwp=anlagen_kwp, spalte=spalte, parameter=parameter,
+        bezeichnung="Dach Süd", ausrichtung="Süd",
+    )
 
 
 async def test_kwp_nur_im_detailfeld_ist_keine_abweichung(db):

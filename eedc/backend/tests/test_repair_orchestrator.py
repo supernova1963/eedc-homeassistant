@@ -43,6 +43,7 @@ from backend.services.repair_orchestrator import (
     list_plans,
     plan,
 )
+from backend.tests import factories
 
 
 @pytest.fixture(autouse=True)
@@ -53,8 +54,7 @@ def _reset_repair_singleton():
 
 
 async def _make_anlage(session: AsyncSession) -> Anlage:
-    a = Anlage(anlagenname="Test", leistung_kwp=10.0, standort_land="DE")
-    session.add(a)
+    a = await factories.anlage(session, standort_land="DE")
     await session.commit()
     return a
 

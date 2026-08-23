@@ -30,15 +30,13 @@ from backend.services.daten_checker import (
     CheckSeverity,
     DatenChecker,
 )
+from backend.tests import factories
 
 
 # ── Helper ──────────────────────────────────────────────────────────────────
 
 async def _seed_anlage(db) -> Anlage:
-    anlage = Anlage(anlagenname="Test", leistung_kwp=10.0, standort_land="DE")
-    db.add(anlage)
-    await db.flush()
-    return anlage
+    return await factories.anlage(db, standort_land="DE")
 
 
 async def _add_inv(

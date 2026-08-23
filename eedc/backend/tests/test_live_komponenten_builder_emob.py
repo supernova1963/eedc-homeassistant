@@ -17,10 +17,11 @@ from __future__ import annotations
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.services.live_komponenten_builder import build_komponenten
+from backend.tests import factories
 
 
 def _anlage() -> Anlage:
-    return Anlage(anlagenname="Test", leistung_kwp=5.0, standort_land="DE")
+    return factories.mach_anlage(leistung_kwp=5.0, standort_land="DE")
 
 
 def _inv(typ: str, bez: str) -> Investition:

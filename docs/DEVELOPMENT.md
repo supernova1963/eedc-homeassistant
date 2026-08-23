@@ -465,7 +465,9 @@ eedc-homeassistant/                  ← Source of Truth (alle Änderungen hier)
     │   │   ├── scheduler.py          # APScheduler (Snapshot-, Prognose-, Korrektur-Jobs)
     │   │   └── …                     # vollständige Liste: ls eedc/backend/services/
     │   │
-    │   ├── tests/                   # ~300 pytest-Dateien, darunter die Wächter:
+    │   ├── tests/                   # ~400 pytest-Dateien, darunter die Wächter:
+    │   │   ├── conftest.py           # die `db`-Fixture (In-Memory je Test) + Netzsperre
+    │   │   ├── factories.py          # Modell-Factories + Szenarien (s. unten)
     │   │   ├── test_wurzelmuster_konformitaet.py      # ADR-002 P1–P10, baumweit
     │   │   ├── test_berechnungs_layer_konformitaet.py # ADR-001
     │   │   └── test_netto_ertrag_vier_wege_symmetrie.py  # Symmetrie über vier Finanz-Sichten
@@ -475,7 +477,7 @@ eedc-homeassistant/                  ← Source of Truth (alle Änderungen hier)
         ├── package.json             # Skripte: dev · build · test · lint · check:* (Wächter)
         ├── vite.config.ts · vitest.config.ts   # vitest pinnt die Zeitzone Europe/Berlin
         ├── scripts/check-*.mjs      # die Darstellungs-Wächter (Regel 0/0a)
-        ├── dist/                    # versioniert! (Add-on liefert den Build aus)
+        ├── dist/                    # NICHT versioniert (.gitignore) — beide Dockerfiles bauen selbst
         └── src/
             ├── v4/                  # die ausgelieferte Oberfläche (IA-V4)
             │   ├── LayoutV4.tsx · ViewShell.tsx · AnlagenSelektor.tsx · ReloadButton.tsx
@@ -615,6 +617,31 @@ Browser), mit drei Ausnahmen und einer Baseline:
 | `check:park-leertest` | **Playwright-Livetest** gegen eine laufende Box, verlangt ein `VITE_DEMO_DEFAULT=true`-Build. **Läuft am Auslöser, nicht am Takt** (Entscheid 23.08.): nur wenn eine im **Paket** geänderte Datei unter `eedc/frontend/src` `Parkbar`, `data-park-id` oder `FokusKachel` enthält (Basis `HEAD`, nicht `origin/main`) — und vor jedem Release. Mit 188 s der teuerste Einzelprüfer; was er als Einziger fängt, steht in `CLAUDE.md` §Gates. ⛔ Hier stand bis 23.08. die Anweisung, danach zwingend `git checkout -- eedc/frontend/dist/` zu fahren, weil `dist/` versioniert sei — **das gilt seit N-246 / v4.0.15 nicht mehr**: `eedc/frontend/dist` ist nicht versioniert (beide Dockerfiles bauen das Frontend in einer eigenen Stage), der Schutz sitzt in `release.sh::pruefe_nichts_uebrig`. CLAUDE.md trug den Widerruf, diese Tabelle nicht |
 | `check:form-controls` | meldet „1 offen (WelcomeStep.tsx)" als **dokumentierte Baseline** (rc=0) |
 | `check:de-de` | **Scope über einen Import-Graph**, nicht über Verzeichnisse: `src/v4/` + `src/components/` als Startknoten, dazu die transitive Hülle der von dort erreichten `pages/`- und `config/`-Dateien. ⚠ **Wer den Graph anfasst, prüft beide Kanten-Formen**: `from '…'` **und** `lazy(() => import('…'))`. Bis 13.08. fehlte die dynamische Form — die sieben Einstellungs-Wizards hingen genau daran und lagen samt 15 roher Anzeigen außerhalb; die zehn `pages/*Teile.tsx` fielen an der `config/`-Kante heraus. **Ein Wächter, dessen Reichweite an der Import-Form hängt statt an der Sichtbarkeit, prüft die falsche Menge.** Der Rest-Zähler („N Treffer außerhalb") ist **keine Schuldenzahl** — er enthält auch Nicht-Anzeigen wie URL-Parameter in `src/api/` |
+
+### Einen Backend-Test schreiben: die Factories benutzen
+
+`backend/tests/factories.py` baut die Modelle, `conftest.py` liefert die `db`-Fixture. **Neue Tests
+nutzen die Factories, alte werden bei Berührung umgehängt** — nicht in einem Zug.
+
+```python
+from backend.tests import factories
+
+async def test_etwas(db):
+    a = await factories.anlage(db, standort_land="DE")     # + flush, `a.id` steht bereit
+    inv = await factories.investition(db, a.id, "pv-module", leistung_kwp=5.0)
+    await factories.imd(db, inv.id, 2025, 7, {"pv_erzeugung_kwh": 420.0})
+    await db.flush()
+```
+
+**Zwei Formen:** `mach_*` konstruiert nur (ohne Session), die kurzen Namen legen an und flushen.
+`commit` ruft der Test selbst, damit er sichtbar bleibt. Wiederkehrende Aufbauten aus mehr als
+einem Modell stehen als **Szenarien** daneben (`anlage_mit_pv` · `anlage_mit_tarif` ·
+`anlage_mit_modul` · `zwei_wechselrichter` · `mach_anlage_mit_mapping`).
+
+⚠ **Defaults nur für das technisch Nötige, nie für fachliche Werte.** `anlage()` setzt Namen und
+kWp (98 % bzw. 96 % aller Konstruktionen tun das, kein Test behauptet sie) — aber **kein**
+`standort_land` und **keine** Tarifpreise: eine Factory, die einen Tarif erfindet, hält genau den
+Test still grün, der den Tarif behaupten wollte. `test_factories.py` hält das fest.
 
 **Backend-Regeln haben pytest als Wächter, keine `check:*`-Skripte** (die sind alle Frontend-Node):
 `test_berechnungs_layer_konformitaet.py` ([ADR-001](ADR-001-BERECHNUNGS-LAYER.md)) ·

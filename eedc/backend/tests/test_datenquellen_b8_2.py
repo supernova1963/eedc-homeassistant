@@ -13,7 +13,6 @@ stummes Inbound-Topic wird NUR als „keine" ANGEZEIGT, NIE auto-persistiert
 bewusstes „keine") bleiben unberührt; wiederholter Aufruf ist idempotent.
 """
 
-from datetime import date
 
 import pytest
 from sqlalchemy import select
@@ -21,9 +20,9 @@ from sqlalchemy import select
 from backend.api.routes import datenquellen as dq
 from backend.api.routes.datenquellen import get_datenquellen_felder
 from backend.models.anlage import Anlage
-from backend.models.investition import Investition
 from backend.models.mqtt_gateway_mapping import MqttGatewayMapping
 from backend.services.datenquellen_resolver import resolve_effektive_quelle
+from backend.tests import factories
 
 
 # ─── resolve_effektive_quelle (pur — Entscheidungstabelle) ───────────────
@@ -106,16 +105,7 @@ def test_stufe3_inbound_stumm_keine_nicht_persistiert():
 # ─── End-to-End über den /felder-Handler ─────────────────────────────────
 
 async def _anlage_mit_pv(db, sensor_mapping: dict) -> Anlage:
-    a = Anlage(anlagenname="Test", leistung_kwp=10.0, sensor_mapping=sensor_mapping)
-    db.add(a)
-    await db.flush()
-    inv = Investition(
-        anlage_id=a.id, typ="pv-module", bezeichnung="PV",
-        anschaffungsdatum=date(2020, 1, 1),
-    )
-    db.add(inv)
-    await db.flush()
-    return a
+    return await factories.anlage_mit_pv(db, sensor_mapping)
 
 
 class _FakeCache:

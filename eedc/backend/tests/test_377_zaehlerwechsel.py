@@ -22,13 +22,11 @@ from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.models.sensor_snapshot import SensorSnapshot
 from backend.services.zaehlerstaende import lade_zaehlerstaende, sensor_key_fuer
+from backend.tests import factories
 
 
 async def _anlage(db) -> Anlage:
-    a = Anlage(anlagenname="Testanlage", leistung_kwp=10.0)
-    db.add(a)
-    await db.flush()
-    return a
+    return await factories.anlage(db, anlagenname="Testanlage")
 
 
 async def _zaehler(db, anlage, name, *, angeschafft, stillgelegt=None, aktiv=True):

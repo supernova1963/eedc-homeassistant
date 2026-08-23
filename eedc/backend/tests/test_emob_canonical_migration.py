@@ -12,19 +12,17 @@ from datetime import date
 import pytest
 from sqlalchemy import select
 
-from backend.models import Anlage, Investition, InvestitionMonatsdaten
+from backend.models import Investition, InvestitionMonatsdaten
 from backend.services.migrations.migrate_emob_canonical_source import (
     migrate_emob_canonical_source,
 )
+from backend.tests import factories
 
 pytestmark = pytest.mark.asyncio
 
 
 async def _anlage(db) -> int:
-    a = Anlage(anlagenname="T", leistung_kwp=10.0)
-    db.add(a)
-    await db.flush()
-    return a.id
+    return (await factories.anlage(db, anlagenname="T")).id
 
 
 async def _inv(db, anlage_id, typ, *, anschaffung=date(2024, 1, 1), parameter=None) -> Investition:
@@ -38,9 +36,7 @@ async def _inv(db, anlage_id, typ, *, anschaffung=date(2024, 1, 1), parameter=No
 
 
 async def _imd(db, inv_id, jahr, monat, vd):
-    db.add(InvestitionMonatsdaten(
-        investition_id=inv_id, jahr=jahr, monat=monat, verbrauch_daten=vd,
-    ))
+    await factories.imd(db, inv_id, jahr, monat, vd)
 
 
 async def _vd(db, inv_id, jahr, monat) -> dict:

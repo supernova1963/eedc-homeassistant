@@ -26,14 +26,15 @@ from backend.core.investition_kennwerte import (
 from backend.core.investition_parameter import PARAM_BALKONKRAFTWERK_DEFAULTS
 from backend.models import Investition
 from backend.utils.investition_value import get_inv_value
+from backend.tests import factories
 
 
 def _pv(**kwargs) -> Investition:
-    return Investition(typ="pv-module", bezeichnung="Modul", **kwargs)
+    return factories.mach_investition("pv-module", bezeichnung="Modul", **kwargs)
 
 
 def _bkw(**kwargs) -> Investition:
-    return Investition(typ="balkonkraftwerk", bezeichnung="Balkon", **kwargs)
+    return factories.mach_investition("balkonkraftwerk", bezeichnung="Balkon", **kwargs)
 
 
 # ---------------------------------------------------------------- get_pv_kwp

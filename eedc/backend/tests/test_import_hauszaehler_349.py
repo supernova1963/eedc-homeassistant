@@ -18,7 +18,6 @@ Die Datei deckt beide Ebenen ab: die **Entscheidungsregel** als reine Funktion
 
 from __future__ import annotations
 
-from datetime import date
 
 import pytest
 from sqlalchemy import select
@@ -28,7 +27,6 @@ from backend.api.routes.data_import import (
     ApplyRequest,
     apply_import,
 )
-from backend.models import Anlage, Investition
 from backend.models.investition import InvestitionMonatsdaten
 from backend.models.monatsdaten import Monatsdaten
 from backend.services.import_hauszaehler import (
@@ -36,6 +34,7 @@ from backend.services.import_hauszaehler import (
     entscheide_hauszaehler,
     waehle_hauszaehler_quelle,
 )
+from backend.tests import factories
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -238,38 +237,7 @@ def test_wahl_summiert_niemals():
 
 async def _zwei_wechselrichter(db, *, mit_speicher: bool = False) -> dict:
     """Ollis Aufbau: ein Haus, zwei WR, je ein PV-String (optional je Speicher)."""
-    anlage = Anlage(anlagenname="Zwei Sofar", leistung_kwp=8.0)
-    db.add(anlage)
-    await db.flush()
-
-    ids: dict = {"anlage": anlage.id}
-    for name, kwp in (("Sofar 2200", 5.0), ("Sofar 1100", 3.0)):
-        wr = Investition(
-            anlage_id=anlage.id, typ="wechselrichter", bezeichnung=name,
-            anschaffungsdatum=date(2023, 1, 1),
-        )
-        db.add(wr)
-        await db.flush()
-        modul = Investition(
-            anlage_id=anlage.id, typ="pv-module", bezeichnung=f"String {name}",
-            anschaffungsdatum=date(2023, 1, 1), leistung_kwp=kwp,
-            parent_investition_id=wr.id,
-        )
-        db.add(modul)
-        await db.flush()
-        ids[name] = {"wr": wr.id, "modul": modul.id}
-        if mit_speicher:
-            sp = Investition(
-                anlage_id=anlage.id, typ="speicher", bezeichnung=f"Akku {name}",
-                anschaffungsdatum=date(2023, 1, 1), parent_investition_id=wr.id,
-                parameter={"kapazitaet_kwh": 5.0},
-            )
-            db.add(sp)
-            await db.flush()
-            ids[name]["speicher"] = sp.id
-
-    await db.commit()
-    return ids
+    return await factories.zwei_wechselrichter(db, mit_speicher=mit_speicher)
 
 
 def _monat(**werte) -> ApplyMonthInput:

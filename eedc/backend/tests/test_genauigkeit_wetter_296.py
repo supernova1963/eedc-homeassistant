@@ -16,13 +16,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import Anlage  # noqa: F401
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
+from backend.tests import factories
 
 
 async def _make_anlage(db: AsyncSession) -> int:
-    anlage = Anlage(anlagenname="Test", leistung_kwp=10.0)
-    db.add(anlage)
-    await db.flush()
-    return anlage.id
+    return (await factories.anlage(db)).id
 
 
 async def _call(anlage_id: int, db: AsyncSession):

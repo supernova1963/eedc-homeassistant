@@ -43,8 +43,9 @@ import pytest
 
 from backend.api.routes.cockpit.uebersicht import get_cockpit_uebersicht
 from backend.api.routes.ha_export import calculate_anlage_sensors
-from backend.models import Anlage, Investition, Monatsdaten, Strompreis
+from backend.models import Anlage, Investition, Monatsdaten
 from backend.models.investition import InvestitionMonatsdaten
+from backend.tests import factories
 
 ANSCHAFFUNG = date(2024, 1, 1)
 
@@ -59,15 +60,7 @@ def _sensor(werte, key: str):
 
 
 async def _basis_anlage(db, name: str) -> Anlage:
-    anlage = Anlage(anlagenname=name, leistung_kwp=10.0)
-    db.add(anlage)
-    await db.flush()
-    db.add(Strompreis(
-        anlage_id=anlage.id, gueltig_ab=date(2023, 1, 1),
-        netzbezug_arbeitspreis_cent_kwh=30.0, einspeiseverguetung_cent_kwh=8.0,
-        grundpreis_euro_monat=0.0,
-    ))
-    return anlage
+    return await factories.anlage_mit_tarif(db, name)
 
 
 # ═══════════════════════════════════════════════════════════════════════

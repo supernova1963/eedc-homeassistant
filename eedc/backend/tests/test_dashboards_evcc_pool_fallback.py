@@ -16,7 +16,6 @@ Fix:
 
 from __future__ import annotations
 
-from datetime import date
 
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,30 +23,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models import (  # noqa: F401
     Anlage, Investition, InvestitionMonatsdaten,
 )
+from backend.tests import factories
 
 
 async def _seed_anlage(db: AsyncSession) -> int:
-    anlage = Anlage(anlagenname="Test", leistung_kwp=10.0)
-    db.add(anlage)
-    await db.flush()
-    return anlage.id
+    return (await factories.anlage(db)).id
 
 
 async def _add_inv(db, anlage_id, typ, bezeichnung):
-    inv = Investition(
-        anlage_id=anlage_id, typ=typ, bezeichnung=bezeichnung,
-        anschaffungsdatum=date(2024, 1, 1),
-    )
-    db.add(inv)
-    await db.flush()
-    return inv
+    return await factories.investition(db, anlage_id, typ, bezeichnung=bezeichnung)
 
 
 async def _add_imd(db, inv_id, jahr, monat, daten):
-    db.add(InvestitionMonatsdaten(
-        investition_id=inv_id, jahr=jahr, monat=monat,
-        verbrauch_daten=daten,
-    ))
+    await factories.imd(db, inv_id, jahr, monat, daten)
 
 
 async def test_wallbox_dashboard_evcc_setup_zeigt_ladedaten(db):

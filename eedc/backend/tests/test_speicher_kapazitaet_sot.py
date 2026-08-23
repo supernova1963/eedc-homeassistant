@@ -51,10 +51,11 @@ from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
 from backend.models import Anlage, Investition, InvestitionMonatsdaten, Monatsdaten
 from backend.services.community_service import prepare_community_data
 from backend.services.daten_checker import DatenChecker
+from backend.tests import factories
 
 
 def _speicher(**kwargs) -> Investition:
-    return Investition(typ="speicher", bezeichnung="Speicher", **kwargs)
+    return factories.mach_investition("speicher", bezeichnung="Speicher", **kwargs)
 
 
 # ============================================================================

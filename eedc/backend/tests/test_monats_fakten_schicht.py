@@ -34,6 +34,7 @@ from backend.services.monats_fakten import (
     kennzahlen_aus_fakten,
     lade_monats_fakten,
 )
+from backend.tests import factories
 
 ANSCHAFFUNG = date(2024, 1, 1)
 
@@ -57,9 +58,7 @@ async def _inv(db, anlage, typ, bezeichnung="X", **kwargs) -> Investition:
 
 
 def _imd(inv, jahr, monat, daten) -> InvestitionMonatsdaten:
-    return InvestitionMonatsdaten(
-        investition_id=inv.id, jahr=jahr, monat=monat, verbrauch_daten=daten
-    )
+    return factories.mach_imd(inv.id, jahr, monat, daten)
 
 
 async def _tarif(db, anlage, *, ab=date(2024, 1, 1), bis=None, netz=30.0,

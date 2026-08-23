@@ -11,13 +11,11 @@ Vorzeichen-Umkehr ist eine QUELLEN-UNABHÄNGIGE Wert-Eigenschaft im Store
 Legacy-`live_invert` und liefert `basis_invert`/`inv_invert_map` an alle Consumer.
 """
 
-from datetime import date
 
 import pytest
 from sqlalchemy import select
 
 from backend.models.anlage import Anlage
-from backend.models.investition import Investition
 from backend.models.mqtt_gateway_mapping import MqttGatewayMapping
 from backend.services.live_sensor_config import extract_live_config
 from backend.services.live_power_service import LivePowerService
@@ -26,6 +24,7 @@ from backend.services.mqtt_gateway_service import transform_payload
 from backend.services.migrations.migrate_invert_vereinheitlichen import (
     migrate_invert_vereinheitlichen,
 )
+from backend.tests import factories
 
 
 def _anlage(sensor_mapping: dict) -> Anlage:
@@ -157,16 +156,7 @@ def test_transform_payload_kein_invert_default():
 # ─── Migration: Legacy + quellen + Gateway → EIN Store ────────────────────
 
 async def _anlage_mit_pv(db, sensor_mapping: dict) -> Anlage:
-    a = Anlage(anlagenname="Test", leistung_kwp=10.0, sensor_mapping=sensor_mapping)
-    db.add(a)
-    await db.flush()
-    inv = Investition(
-        anlage_id=a.id, typ="pv-module", bezeichnung="PV",
-        anschaffungsdatum=date(2020, 1, 1),
-    )
-    db.add(inv)
-    await db.flush()
-    return a
+    return await factories.anlage_mit_pv(db, sensor_mapping)
 
 
 @pytest.mark.asyncio
