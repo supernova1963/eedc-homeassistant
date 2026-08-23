@@ -55,10 +55,12 @@ async function alleAufklappen(page) {
 function auditDom() {
   return page => page.evaluate((tol) => {
     const treffer = []
+    let geprueft = 0
     const wraps = [...document.querySelectorAll('.recharts-wrapper')]
     wraps.forEach((w, idx) => {
       const box = w.getBoundingClientRect()
       if (box.width < 4 || box.height < 4) return // nicht sichtbar gerendert
+      geprueft++
       const kennung = `chart#${idx}`
 
       // L1 — Overflow von Tick-/Legenden-Text über den Container.
@@ -104,7 +106,9 @@ function auditDom() {
         }
       }
     })
-    return treffer
+    // N-318: Die Zahl der geprueften Charts wandert mit nach draussen. Ohne sie sieht ein
+    // Lauf gegen eine datenlose Box exakt so aus wie ein Lauf ohne Befund.
+    return { treffer, geprueft }
   }, TOLERANZ)
 }
 
@@ -113,6 +117,7 @@ async function main() {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
   const audit = auditDom()
   const probleme = []
+  let geprueftGesamt = 0
 
   for (const route of ROUTES) {
     try {
@@ -120,9 +125,10 @@ async function main() {
     } catch { /* networkidle kann bei Live-Polling ausbleiben */ }
     await page.waitForTimeout(700)
     await alleAufklappen(page)
-    const treffer = await audit(page)
+    const { treffer, geprueft } = await audit(page)
+    geprueftGesamt += geprueft
     for (const t of treffer) probleme.push(`  ${route} — ${t}`)
-    process.stdout.write(`· ${route}: ${treffer.length ? treffer.length + ' Befund(e)' : 'ok'}\n`)
+    process.stdout.write(`· ${route}: ${geprueft} Chart(s) · ${treffer.length ? treffer.length + ' Befund(e)' : 'ok'}\n`)
   }
 
   await browser.close()
@@ -132,7 +138,19 @@ async function main() {
     console.error(probleme.join('\n'))
     process.exit(1)
   }
-  console.log('\n✅ chart-audit — kein Label-Overflow, jede Multi-Serie trägt eine klickbare Legende (Toggle).')
+  // N-318: „keine Befunde" und „nichts angesehen" sahen bis 23.08. identisch aus. Ein Lauf
+  // ohne ein einziges Chart hat nichts geprueft und darf nicht gruen melden. Bewusst eine
+  // Schwelle ueber den GESAMTLAUF und keine Sollzahl je Sicht — Charts sind nicht auf jeder
+  // Sicht Pflicht, und eine gepflegte Zahl je Sicht wuerde selbst driften.
+  if (geprueftGesamt === 0) {
+    console.error('\nchart-audit — NICHTS GEMESSEN: kein einziges Chart auf keiner der '
+      + `${ROUTES.length} Sichten.`)
+    console.error('  Haeufigste Ursache: die Dev-Box laeuft ohne die Demo-Datenbank')
+    console.error('  (DATABASE_URL, siehe Runbook) — dann prueft dieser Lauf nichts.')
+    process.exit(1)
+  }
+  console.log(`\n✅ chart-audit — ${geprueftGesamt} Chart(s) auf ${ROUTES.length} Sichten geprueft: `
+    + 'kein Label-Overflow, jede Multi-Serie trägt eine klickbare Legende (Toggle).')
 }
 
 main().catch((e) => { console.error(e); process.exit(1) })

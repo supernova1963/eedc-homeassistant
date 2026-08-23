@@ -51,10 +51,13 @@ async function alleAufklappen(page) {
 }
 
 // Alle im DOM gerenderten Park-IDs + die aktiven `eedc-park:*`-Persist-Keys.
+// `erklaert`: die Sicht rendert einen EmptyState (Doktrin „Leere Sichten erklären sich",
+// v4.0.4) — sie ist dann legitim leer, statt ungemessen. Siehe `nichtGemessen` unten.
 async function entdecke(page) {
   return page.evaluate(() => ({
     ids: [...document.querySelectorAll('[data-park-id]')].map((e) => e.getAttribute('data-park-id')),
     keys: Object.keys(localStorage).filter((k) => k.startsWith('eedc-park:')),
+    erklaert: !!document.querySelector('[data-leer-erklaert]'),
   }))
 }
 
@@ -83,7 +86,42 @@ function leerDetektor() {
 const findeLeer = leerDetektor()
 
 const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] })
+
+// Vorflug (N-318): Der Lauf prüft ZUERST seine eigene Voraussetzung. Merkmal ist der
+// Demo-Schalter der Statusfußzeile; er rendert nur unter `isDebug` (= `VITE_DEMO_DEFAULT`,
+// oder `?debug`, das dieser Lauf nicht setzt). An allen vier Kombinationen gemessen (23.08.):
+// er ist genau dann da, wenn die Box eine v4-Sicht MIT Daten zeigt.
+//   • `dist` ohne das Flag        → Schalter fehlt  (gemessen)
+//   • Box ohne Demo-Datenbank     → Einrichtungs-Assistent statt v4-Sicht, Schalter fehlt (gemessen)
+//   • beides in Ordnung           → Schalter da und aktiv (gemessen)
+// ⚠ Er unterscheidet die beiden Ursachen NICHT — die Meldung nennt deshalb beide, statt eine
+// zu behaupten. Eine erste Fassung behauptete „dist ohne Flag" und lag bei der leeren Box
+// daneben; die Gegenprobe hat es gezeigt. Dieselbe Bauform wie die `aria-label`-Griffe oben
+// im Skript — kein zusätzliches Produkt-Markup nötig.
+{
+  const vorflug = await browser.newContext({ viewport: { width: 1400, height: 900 } })
+  const p0 = await vorflug.newPage()
+  await p0.goto(BASE + '/', { waitUntil: 'networkidle' })
+  await p0.waitForTimeout(2000)
+  const demo = await p0.evaluate(() => {
+    const b = document.querySelector('button[title="Demo-Daten (Dev-Affordance) global ein/aus"]')
+    return { da: !!b, an: b?.getAttribute('aria-pressed') === 'true' }
+  })
+  await vorflug.close()
+  if (!demo.da || !demo.an) {
+    await browser.close()
+    console.error('park-leertest — VORAUSSETZUNG VERLETZT: diese Box zeigt keine v4-Sicht mit')
+    console.error('Daten. Dieser Lauf würde weniger messen, als er zu messen meint, und darf')
+    console.error('deshalb nicht grün melden. Zwei mögliche Ursachen, beide sind zu prüfen:')
+    console.error('  1. `dist` ohne Demo-Flag →  VITE_DEMO_DEFAULT=true npm run build')
+    console.error('  2. Box ohne Demo-Datenbank → DATABASE_URL=…/devbox-r27-demo.db (Runbook)')
+    console.error(`  Gemessen: Demo-Schalter vorhanden=${demo.da}, aktiv=${demo.an}`)
+    process.exit(1)
+  }
+}
+
 let fehlerGesamt = 0
+let gemessenGesamt = 0
 const bericht = []
 
 for (const route of ROUTES) {
@@ -96,7 +134,7 @@ for (const route of ROUTES) {
   await pA.goto(BASE + '/' + route, { waitUntil: 'networkidle' })
   await pA.waitForTimeout(2500)
   await alleAufklappen(pA)
-  let { ids, keys } = await entdecke(pA)
+  let { ids, keys, erklaert } = await entdecke(pA)
   await pA.close()
 
   // Phase B: alles parken (unter allen aktiven Keys — over-park ist harmlos), neu laden.
@@ -142,11 +180,19 @@ for (const route of ROUTES) {
   }
   await ctx.close()
 
-  const problem = leer.length > 0 || konsolenFehler.length > 0 || offeneIds.length > 0
+  // N-318: Eine Sicht ohne ein einziges parkbares Element hat NICHTS geprüft — der Lauf
+  // meldete das bis 23.08. als `✓`. Legitim leer ist sie nur, wenn sie selbst sagt warum
+  // (EmptyState = Doktrin „Leere Sichten erklären sich", v4.0.4). Bewusst KEINE Sichten-
+  // Allowlist: `community/uebersicht` ist grün, weil sie erklärt, nicht weil sie im Code steht.
+  const nichtGemessen = ids.length === 0 && !erklaert
+  const problem = leer.length > 0 || konsolenFehler.length > 0 || offeneIds.length > 0 || nichtGemessen
   if (problem) fehlerGesamt++
-  bericht.push({ route, geparkt: ids.length, leerBloecke: leer, ungeparktUebrig: offeneIds, fehler: konsolenFehler })
+  gemessenGesamt += ids.length
+  bericht.push({ route, geparkt: ids.length, erklaert, leerBloecke: leer, ungeparktUebrig: offeneIds, fehler: konsolenFehler })
   const tag = problem ? '✗' : '✓'
   console.log(`${tag} ${route.padEnd(34)} geparkt=${ids.length}` +
+    (nichtGemessen ? ' · NICHTS GEMESSEN (leer ohne Erklärung)' : '') +
+    (ids.length === 0 && erklaert ? ' · leer, aber erklärt' : '') +
     (leer.length ? ` · LEER=[${leer.join(', ')}]` : '') +
     (offeneIds.length ? ` · ungeparkt-übrig=${offeneIds.length}` : '') +
     (konsolenFehler.length ? ` · Fehler=${konsolenFehler.length}` : ''))
@@ -161,6 +207,14 @@ if (fehlerGesamt > 0) {
   console.error('  • Statische Park-ID-Liste driftet von real gerenderten IDs (→ datenabhängig ableiten).')
   console.error('  • Container-Hülle (FokusKachel) versteckt sich nicht bei Voll-Park (→ return null).')
   console.error('  • „ungeparkt-übrig" = ein Element ohne <Parkbar> (nicht parkbar gemacht).')
+  console.error('  • „NICHTS GEMESSEN" = die Sicht rendert nichts Parkbares und erklärt es nicht.')
+  console.error('    Häufigste Ursache: die Dev-Box läuft ohne die Demo-Datenbank (DATABASE_URL,')
+  console.error('    siehe Runbook) — dann prüft dieser Lauf nichts und darf nicht grün melden.')
   process.exit(1)
 }
-console.log(`\n✅ park-leertest — ${ROUTES.length} Sichten: alles parkbar, kein Leer-Block, keine Fehler.`)
+// Die Deckung wird BEZIFFERT, nicht behauptet (N-318): eine Zahl, die jemand lesen kann,
+// statt eines Hakens, der bei 0 gemessenen Elementen genauso aussieht wie bei 330.
+const erklaerteLeere = bericht.filter((b) => b.geparkt === 0 && b.erklaert).map((b) => b.route)
+console.log(`\n✅ park-leertest — ${ROUTES.length} Sichten · ${gemessenGesamt} parkbare Elemente gemessen: `
+  + 'alles parkbar, kein Leer-Block, keine Fehler.')
+if (erklaerteLeere.length) console.log(`   Leer, aber erklärt (kein Befund): ${erklaerteLeere.join(', ')}`)
