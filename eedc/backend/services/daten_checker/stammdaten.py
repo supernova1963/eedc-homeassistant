@@ -15,7 +15,9 @@ from backend.core.berechnungen.spez_ertrag import PV_ERZEUGER_TYPEN
 from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
 from backend.core.investition_parameter import (
     BKW_EINSPEISEGRENZE_W_TYPISCH,
+    PARAM_E_AUTO,
     PARAM_PV_MODULE,
+    PARAM_SPEICHER,
     PARAM_WAERMEPUMPE,
     ist_dienstlich,
 )
@@ -920,7 +922,12 @@ class StammdatenChecks:
                         inv, name, kap, anlage.investitionen
                     )
                 )
-                if param.get("nutzt_arbitrage"):
+                # Kanon seit v3.25.0: `arbitrage_faehig`. Bis 2026-08-23 stand
+                # hier `nutzt_arbitrage` — der Name VOR der Umbenennung. Damit
+                # war die Bedingung dauerhaft falsch und dieser Prüfer hat nie
+                # gemeldet; ein Speicher mit aktivierter Arbitrage und fehlendem
+                # Ø Ladepreis blieb unbeanstandet.
+                if param.get(PARAM_SPEICHER["ARBITRAGE_FAEHIG"]):
                     if not param.get("lade_durchschnittspreis_cent"):
                         ergebnisse.append(CheckErgebnis(
                             kategorie=kat, schwere=CheckSeverity.WARNING,
@@ -1015,7 +1022,15 @@ class StammdatenChecks:
                 # Dienstwagen: keine PV-Ladungs-/ROI-Checks (kein PV-Bezug, kein Invest)
                 if ist_dienstlich(param):
                     continue
-                if not param.get("km_jahr") and not param.get("verbrauch_kwh_100km"):
+                # Kanon seit v3.25.0: `jahresfahrleistung_km`. Bis 2026-08-23
+                # stand hier `km_jahr` — der Vor-Umbenennungs-Name. Die linke
+                # Hälfte der Bedingung war damit immer wahr, der Prüfer hing
+                # allein am Verbrauch: Wer den Verbrauch gepflegt hatte, aber
+                # keine Fahrleistung, bekam nie einen Hinweis.
+                if (
+                    not param.get(PARAM_E_AUTO["JAHRESFAHRLEISTUNG_KM"])
+                    and not param.get(PARAM_E_AUTO["VERBRAUCH_KWH_100KM"])
+                ):
                     ergebnisse.append(CheckErgebnis(
                         kategorie=kat, schwere=CheckSeverity.INFO,
                         meldung=f"{name}: Fahrleistung/Verbrauch fehlt",
@@ -1029,7 +1044,14 @@ class StammdatenChecks:
                         details="Werden für ROI-Berechnung benötigt (Vergleich mit Verbrenner-Alternative)",
                         link="/einstellungen/investitionen",
                     ))
-                if param.get("nutzt_v2h") and not param.get("v2h_entlade_preis_cent"):
+                # Kanon seit v3.25.0: `v2h_faehig` (im Code selbst als „Bug #1
+                # v3.25.0" vermerkt, s. `live_komponenten_builder.py`). Bis
+                # 2026-08-23 stand hier `nutzt_v2h` — dieser Prüfer hat damit
+                # nie gemeldet.
+                if (
+                    param.get(PARAM_E_AUTO["V2H_FAEHIG"])
+                    and not param.get(PARAM_E_AUTO["V2H_ENTLADE_PREIS_CENT"])
+                ):
                     ergebnisse.append(CheckErgebnis(
                         kategorie=kat, schwere=CheckSeverity.INFO,
                         meldung=f"{name}: V2H aktiv, aber Entladepreis fehlt",

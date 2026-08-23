@@ -226,15 +226,23 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
         anschaffungsdatum=date(2023, 12, 1),
         anschaffungskosten_gesamt=52000,
         anschaffungskosten_alternativ=35000,
+        # Kanon aus `core/investition_parameter.py` (PARAM_E_AUTO). Bis
+        # 2026-08-23 standen hier fünf Vor-v3.25.0-Namen (`km_jahr`,
+        # `pv_anteil_prozent`, `nutzt_v2h`, `batterie_kapazitaet_kwh`, bei der
+        # Wallbox `ladeleistung_kw`). Die Start-Migration heilt Bestandsdaten,
+        # läuft aber NICHT nach einem Demo-Import — die Demo erzeugte damit ein
+        # E-Auto ohne wirksame Fahrleistung, ohne PV-Ladeanteil, ohne V2H und
+        # ohne Batteriekapazität, also genau in den Sichten leer, für die sie
+        # gebaut ist.
         parameter={
-            "km_jahr": 12000,
+            "jahresfahrleistung_km": 12000,
             "verbrauch_kwh_100km": 18,
-            "pv_anteil_prozent": 60,
+            "pv_ladeanteil_prozent": 60,
             "benzinpreis_euro": 1.65,
             "vergleich_verbrauch_l_100km": 7.5,
-            "nutzt_v2h": True,
+            "v2h_faehig": True,
             "v2h_entlade_preis_cent": 25,
-            "batterie_kapazitaet_kwh": 75,
+            "batteriekapazitaet_kwh": 75,
         },
         aktiv=True,
     )
@@ -274,7 +282,7 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
         anschaffungsdatum=date(2023, 12, 1),
         anschaffungskosten_gesamt=800,
         parameter={
-            "ladeleistung_kw": 11,
+            "max_ladeleistung_kw": 11,   # Kanon; `ladeleistung_kw` war der Vor-v3.25.0-Name
             "phasen": 3,
             "v2h_faehig": True,
         },

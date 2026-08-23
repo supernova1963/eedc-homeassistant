@@ -119,13 +119,23 @@ class Investition(Base):
 
     Die typ-spezifischen Parameter werden als JSON gespeichert.
 
-    Beispiel E-Auto Parameter:
+    ⚠ **Die Schlüsselnamen stehen NICHT hier, sondern in
+    `core/investition_parameter.py`** (`PARAM_E_AUTO`, `PARAM_SPEICHER`, …) —
+    das ist der SoT, den Formular, Wizard und Auswertung lesen. Die Beispiele
+    unten sind Anschauung, keine Referenz: Bis 2026-08-23 nannten sie drei
+    Namen, die es seit der v3.25.0-Konsolidierung nicht mehr gibt (`km_jahr`,
+    `pv_anteil_prozent`, `nutzt_v2h`), dazu einen Benzinpreis-Default, den es
+    so nie gab. Wer aus diesem Docstring abschreibt, baut die Drift nach, die
+    `_migrate_investitionen_parameter_keys_v325` gerade repariert hat — genau
+    das ist mehrfach passiert (Demo-Daten, Daten-Checker, Dokumentations-PDF).
+
+    Beispiel E-Auto Parameter (Namen aus `PARAM_E_AUTO`):
         {
-            "km_jahr": 15000,
+            "jahresfahrleistung_km": 15000,
             "verbrauch_kwh_100km": 18,
-            "pv_anteil_prozent": 60,
-            "benzinpreis_euro": 1.85,
-            "nutzt_v2h": true,
+            "pv_ladeanteil_prozent": 60,
+            "benzinpreis_euro": 1.65,
+            "v2h_faehig": true,
             "v2h_entlade_preis_cent": 30
         }
 

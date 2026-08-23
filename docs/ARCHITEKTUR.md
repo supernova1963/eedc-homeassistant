@@ -342,7 +342,7 @@ Widerruf seit dem 14.08., diese Zeile und `DEVELOPMENT.md` nicht.*
 | `wechselrichter` | - |
 | `pv-module` | anzahl_module, modul_leistung_wp, ausrichtung, neigung_grad |
 | `speicher` | kapazitaet_kwh, arbitrage_faehig |
-| `e-auto` | v2h_faehig, nutzt_v2h, ist_dienstlich |
+| `e-auto` | jahresfahrleistung_km, verbrauch_kwh_100km, pv_ladeanteil_prozent, v2h_faehig, ist_dienstlich |
 | `waermepumpe` | effizienz_modus, jaz, cop_heizung, cop_warmwasser, heizwaermebedarf_kwh, warmwasserbedarf_kwh, leistung_kw, pv_anteil_prozent, alter_energietraeger, alter_preis_cent_kwh, sg_ready |
 | `wallbox` | ist_dienstlich |
 | `balkonkraftwerk` | leistung_wp, anzahl, hat_speicher, speicher_kapazitaet_wh |

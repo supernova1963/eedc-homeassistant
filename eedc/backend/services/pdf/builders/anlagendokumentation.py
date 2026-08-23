@@ -140,22 +140,42 @@ def _build_investition_tech_grid(inv: Investition) -> list[tuple[str, str]]:
     elif inv.neigung_grad is not None:
         grid.append(("Neigung", f"{inv.neigung_grad:.0f}°"))
 
-    # Generische interessante Parameter
+    # Generische interessante Parameter.
+    #
+    # ⚠ **Die Schlüssel sind der Kanon aus `core/investition_parameter.py`, und
+    # das ist keine Kosmetik.** Vier der Zeilen hier lasen bis 2026-08-23 Namen,
+    # die es seit der v3.25.0-Konsolidierung nicht mehr gibt — `km_jahr`
+    # (heute `jahresfahrleistung_km`), `wallbox_leistung_kw` (heute
+    # `max_ladeleistung_kw`), `batterie_kapazitaet_kwh` (heute
+    # `batteriekapazitaet_kwh`, ohne Unterstrich) und `heizleistung_kw` (heute
+    # `leistung_kw`). Die Start-Migration `_migrate_investitionen_parameter_keys_v325`
+    # benennt Bestandsdaten um, das Formular schreibt ohnehin nur den Kanon —
+    # diese vier Zeilen konnten also **nie** etwas anzeigen. Fahrleistung,
+    # Ladeleistung, Batteriekapazität und Heizleistung fehlten im
+    # Dokumentations-PDF vollständig.
+    #
+    # ⚠ **Der vierte Eintrag im Tupel ist der Typ-Filter, und er ist Pflicht,
+    # wo ein Schlüssel typabhängig etwas anderes bedeutet:** `leistung_kw` ist
+    # bei der Wärmepumpe die Heizleistung, war bei der Wallbox aber der *alte*
+    # Name der Ladeleistung. Ohne Filter stünde bei einem Altbestand-Gerät
+    # „Heizleistung" über einer Ladeleistung. `None` = für jeden Typ.
     params = inv.parameter or {}
     interessant = [
-        ("leistung_wp", "Modulleistung", "{} Wp"),
-        ("anzahl", "Anzahl", "{}"),
-        ("hat_speicher", "Mit Speicher", None),
-        ("speicher_kapazitaet_wh", "Speicherkapazität", "{} Wh"),
-        ("kapazitaet_kwh", "Speicherkapazität", "{} kWh"),
-        ("batterie_kapazitaet_kwh", "Batteriekapazität", "{} kWh"),
-        ("heizleistung_kw", "Heizleistung", "{} kW"),
-        ("jaz", "JAZ", "{}"),
-        ("km_jahr", "Fahrleistung", "{} km/Jahr"),
-        ("verbrauch_kwh_100km", "Verbrauch", "{} kWh/100 km"),
-        ("wallbox_leistung_kw", "Ladeleistung", "{} kW"),
+        ("leistung_wp", "Modulleistung", "{} Wp", None),
+        ("anzahl", "Anzahl", "{}", None),
+        ("hat_speicher", "Mit Speicher", None, None),
+        ("speicher_kapazitaet_wh", "Speicherkapazität", "{} Wh", None),
+        ("kapazitaet_kwh", "Speicherkapazität", "{} kWh", None),
+        ("batteriekapazitaet_kwh", "Batteriekapazität", "{} kWh", ("e-auto",)),
+        ("leistung_kw", "Heizleistung", "{} kW", ("waermepumpe",)),
+        ("jaz", "JAZ", "{}", None),
+        ("jahresfahrleistung_km", "Fahrleistung", "{} km/Jahr", ("e-auto",)),
+        ("verbrauch_kwh_100km", "Verbrauch", "{} kWh/100 km", ("e-auto",)),
+        ("max_ladeleistung_kw", "Ladeleistung", "{} kW", ("wallbox",)),
     ]
-    for key, label, fmt in interessant:
+    for key, label, fmt, typen in interessant:
+        if typen is not None and inv.typ not in typen:
+            continue
         if key not in params:
             continue
         val = params[key]

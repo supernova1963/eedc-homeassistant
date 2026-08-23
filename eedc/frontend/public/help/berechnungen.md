@@ -486,7 +486,7 @@ Investition_gesamt   = PV-System + WP-Mehrkosten + E-Auto-Mehrkosten + Sonstige
 |------|--------|
 | `kapazitaet_kwh` | `get_speicher_nutzbare_kapazitaet_kwh(inv)` — **netto**, still auf brutto zurückfallend (A31-2/E17, s. u.). Greift nur im Prognose-Modus; mit gemessener Entladung übernimmt der Spread-Service und liest gar keine Kapazität. |
 | `wirkungsgrad_prozent` | `Investition.parameter["wirkungsgrad_prozent"]` (Default: 95) |
-| `nutzt_arbitrage` | `Investition.parameter["nutzt_arbitrage"]` (Default: false) |
+| `arbitrage_faehig` | `Investition.parameter["arbitrage_faehig"]` (Default: false) — der Kanon; `nutzt_arbitrage` war der Name vor v3.25.0 |
 | `lade_preis_cent` | `Investition.parameter["lade_durchschnittspreis_cent"]` (Default: 12) |
 | `entlade_preis_cent` | `Investition.parameter["entlade_vermiedener_preis_cent"]` (Default: 35) |
 
@@ -777,16 +777,16 @@ Zwei Pfade, in dieser Reihenfolge:
 #### Formeln
 
 ```
-km_elektrisch        = km_jahr                        (BEV — Normalfall)
-                     = km_jahr * Fahranteil / 100     (Plug-in-Hybrid, s. u.)
-km_verbrenner        = km_jahr - km_elektrisch
+km_elektrisch        = jahresfahrleistung_km                    (BEV — Normalfall)
+                     = jahresfahrleistung_km * Fahranteil / 100 (Plug-in-Hybrid, s. u.)
+km_verbrenner        = jahresfahrleistung_km - km_elektrisch
 
 Strom_Bedarf         = km_elektrisch * Verbrauch_kWh_100km / 100
 PV_Anteil            = pv_ladeanteil_prozent / 100
 Netz_Anteil          = 1 - PV_Anteil
 
 Strom_Kosten         = Strom_Bedarf * Netz_Anteil * Strompreis / 100
-Benzin_Verbrauch     = km_jahr * Vergleich_L_100km / 100      ← ALLE Kilometer
+Benzin_Verbrauch     = jahresfahrleistung_km * Vergleich_L_100km / 100   ← ALLE Kilometer
 Benzin_Kosten        = Benzin_Verbrauch * Benzinpreis_EUR
 Fossile_Kosten       = km_verbrenner / 100 * Eigener_L_100km * Benzinpreis_EUR
 

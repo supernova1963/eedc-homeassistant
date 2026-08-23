@@ -232,7 +232,7 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 |---------|----------|-----------|----------|
 | **\[Name\]: Kapazität (kWh) fehlt** | ⚠️ WARNING | `kapazitaet_kwh` ist Bezugsgröße für Vollzyklen, Wirkungsgrad-Berechnung und Live-SoC-Skalierung. | Komponente öffnen, Brutto-Kapazität in kWh eintragen. |
 | **\[Name\]: Kapazität vermutlich in Wh statt kWh eingetragen** | ⚠️ WARNING | Das Balkonkraftwerk darüber nennt seine Akku-Kapazität in **Wh**, dieser Speicher seine in **kWh** — und beide tragen **denselben Zahlenwert**. Dann ist die Kapazität tausendfach zu groß, und Vollzyklen, Auslastung und Wirtschaftlichkeit rechnen gegen einen Nenner, den es nicht gibt. Geprüft wird der Widerspruch der beiden Felder, **keine Obergrenze** — ein großer Speicher wird nicht angemeckert. | Komponente öffnen, die Kapazität in kWh eintragen (5.376 Wh sind 5,376 kWh). Die Meldung nennt die Zahl. |
-| **\[Name\]: Arbitrage aktiv, aber Ø Ladepreis fehlt** | ⚠️ WARNING | `nutzt_arbitrage` ist gesetzt, aber `lade_durchschnittspreis_cent` fehlt. Arbitrage-Einsparung kann nicht berechnet werden. | Komponente öffnen, durchschnittlichen Ladepreis (z. B. negative Börsenpreise) eintragen. |
+| **\[Name\]: Arbitrage aktiv, aber Ø Ladepreis fehlt** | ⚠️ WARNING | `arbitrage_faehig` ist gesetzt, aber `lade_durchschnittspreis_cent` fehlt. Arbitrage-Einsparung kann nicht berechnet werden. | Komponente öffnen, durchschnittlichen Ladepreis (z. B. negative Börsenpreise) eintragen. |
 | **\[Name\]: Arbitrage aktiv, aber Ø Entladepreis fehlt** | ⚠️ WARNING | Analog zum Ladepreis: ohne `entlade_vermiedener_preis_cent` kein Arbitrage-Erlös berechenbar. | Vermiedenen Entladepreis (z. B. Endkundentarif zur Spitzenlastzeit) eintragen. |
 | **\[Name\]: Speicher-Ladung fehlt in N Monat(en)** | ⚠️ WARNING | `ladung_kwh` fehlt in den genannten Monaten — Vollzyklen und Wirkungsgrad lassen sich für diese Monate nicht berechnen. | Monatsdaten nachtragen. |
 
@@ -242,9 +242,9 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 
 | Meldung | Severity | Bedeutung | Behebung |
 |---------|----------|-----------|----------|
-| **\[Name\]: Fahrleistung/Verbrauch fehlt** | ℹ️ INFO | Weder `km_jahr` noch `verbrauch_kwh_100km` gesetzt. Einsparungs-Berechnung gegenüber Verbrenner ist nicht möglich. | Komponente öffnen, Jahres-Fahrleistung und/oder Verbrauch eintragen. |
+| **\[Name\]: Fahrleistung/Verbrauch fehlt** | ℹ️ INFO | Weder `jahresfahrleistung_km` noch `verbrauch_kwh_100km` gesetzt. Einsparungs-Berechnung gegenüber Verbrenner ist nicht möglich. | Komponente öffnen, Jahres-Fahrleistung und/oder Verbrauch eintragen. |
 | **\[Name\]: Alternativkosten (Verbrenner) fehlen** | ⚠️ WARNING | `anschaffungskosten_alternativ` fehlt. ROI gegenüber Verbrenner-Alternative wird ohne diesen Wert nicht berechnet. | Komponente öffnen, geschätzte Anschaffungskosten eines vergleichbaren Verbrenners eintragen. |
-| **\[Name\]: V2H aktiv, aber Entladepreis fehlt** | ℹ️ INFO | `nutzt_v2h` ist gesetzt, aber `v2h_entlade_preis_cent` fehlt. V2H-Einsparung wird nicht berechnet. | Vermiedenen Entladepreis eintragen (analog Speicher-Arbitrage). |
+| **\[Name\]: V2H aktiv, aber Entladepreis fehlt** | ℹ️ INFO | `v2h_faehig` ist gesetzt, aber `v2h_entlade_preis_cent` fehlt. V2H-Einsparung wird nicht berechnet. | Vermiedenen Entladepreis eintragen (analog Speicher-Arbitrage). |
 | **\[Name\]: Ladung PV fehlt in N Monat(en)** | ℹ️ INFO | `ladung_pv_kwh` fehlt — Anteil PV-Ladung am Gesamt-Ladestrom unbekannt. Geringere Severity als andere Pflichtfelder, weil V2H/Wallbox-Aufschlüsselung optional ist. **Hinweis:** Bei vorhandener Wallbox liegt die Heimladung kanonisch dort — die Heim-Felder am E-Auto sind dann erwartungsgemäß leer und kein Mangel. | Ohne Wallbox: Monatsdaten nachtragen. Mit Wallbox: an der Wallbox erfassen (Loadpoint-Sensor), nicht am E-Auto. |
 
 #### 4.3.5 Wallbox
