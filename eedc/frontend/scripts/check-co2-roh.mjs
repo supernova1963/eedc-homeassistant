@@ -70,7 +70,23 @@ function quellDateien(dir) {
 }
 
 const rel = (f) => relative(ROOT, f).replaceAll('\\', '/')
-const stripComments = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+/**
+ * Kommentare neutralisieren, **ohne eine einzige Zeile zu verlieren** — sonst
+ * zeigt die Fundmeldung auf die falsche Stelle.
+ *
+ * Zwei Fallen, beide gemessen (N-165, korrigiert 2026-08-23 aus
+ * `check-datum-utc.mjs`, wo diese Fassung seit dem 06.08. richtig steht):
+ * ein Block-Kommentar darf **nicht ersatzlos gelöscht** werden — seine
+ * Umbrüche fehlen dann und alles darunter rutscht nach oben; und die
+ * Zeilen-Kommentar-Regex darf **nicht** mit `\s*` beginnen, weil `\s` das
+ * `\n` einschließt und den Umbruch der Vorzeile verschluckt. Diese Datei tat
+ * bis zum 23.08. beides: ein Sprengsatz in Zeile 50 wurde als Zeile 10
+ * gemeldet.
+ */
+const stripComments = (src) =>
+  src
+    .replace(/\/\*[\s\S]*?\*\//g, (t) => t.replace(/[^\n]/g, ' '))
+    .replace(/^[ \t]*\/\/.*$/gm, '')
 
 /**
  * Import-Anweisungen entfernen — sie nennen den Faktor, verwenden ihn aber nicht.

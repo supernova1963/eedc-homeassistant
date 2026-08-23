@@ -26,6 +26,14 @@
  * Bekanntes Restrisiko (Verdict): ein neuer Hand-Spinner ohne animate-spin
  * (CSS-Keyframe, Loader2-Direktimport) entginge Z1+Z2 — akzeptiert wie bei
  * check-buttons.
+ *
+ * **Restrisiko Z4** (nachgetragen 2026-08-23 mit N-158): Erkannt wird eine
+ * Card, deren **erstes Kind** ein Absatz ist. Eine Leer-Card mit einer Hülle
+ * dazwischen (`<Card><div><p>…`) oder mit einem anderen Textelement
+ * (`<span>`, `<Text>`) läuft weiterhin vorbei. Das ist bewusst eng: Z4 ist ein
+ * Freeze-Gate mit exakten Zahlen je Datei, und ein weiteres Muster würde
+ * normale Karten mitzählen, ohne dass die Zahl noch etwas aussagt. Wer die
+ * Grenze verschieben will, misst vorher (`<Card[^>]*>\s*<` über src/v4).
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
@@ -67,8 +75,16 @@ const ZAEHLER = [
   },
   {
     name: 'Z4 nackte Leer-Card',
-    zaehle: (src) => src.split('\n').filter((z) =>
-      /<Card><p [^>]*>(Noch keine|Keine )/.test(z)).length,
+    // N-158 (23.08.2026): Bis dahin **zeilenweise** gegen `<Card><p …>(Noch
+    // keine|Keine )` gefiltert — zwei Annahmen, die beide nicht halten. Erstens
+    // bricht Prettier `<Card>` und `<p>` auf getrennte Zeilen, sobald der Text
+    // lang genug ist; das Muster fand dann nichts. Zweitens hing es am
+    // **Textanfang**, so dass ein Leer-Text aus einem Slot (`<Card><p …>{text}`)
+    // durchlief — genau so liefern `KomponentenTypV4.tsx::Hinweis` drei
+    // Leerzustände („Noch keine Anlage gewählt." u. a.), die der Prüfer nie sah.
+    // Jetzt auf **Struktur** statt Textanfang: eine Card, deren erstes Kind ein
+    // Absatz ist, über den ganzen Quelltext und mit Umbruch-Toleranz.
+    zaehle: (src) => (src.match(/<Card[^>]*>\s*<p\b/g) ?? []).length,
     allow: new Map([
       // Klasse (c) — bewusst kleine Cards (Verdicts VERIFIKATION-S15):
       // Blätter-Lücke Tag (T2/D12-1: großes Panel = Layout-Sprung) · Aussicht
@@ -82,6 +98,15 @@ const ZAEHLER = [
       ['src/v4/CommunityRegionalV4.tsx', 1],
       ['src/v4/CommunityPVErtragV4.tsx', 1],
       ['src/v4/CommunityKomponentenV4.tsx', 1],
+      // ⚑ Erst durch die N-158-Korrektur sichtbar geworden (23.08.2026) — hier
+      // eingefroren, damit der Prüfer wieder misst, NICHT als B8-Freigabe. Ihre
+      // Bewertung steht aus und liegt beim Maintainer:
+      //   · CockpitV4.tsx      — Entwicklungs-Platzhalter („wird in einem
+      //     späteren IA-v4-Slice verdrahtet"), kein Leerzustand im B8-Sinn.
+      //   · KomponentenTypV4.tsx — der generische `Hinweis`-Helfer; über ihn
+      //     laufen drei echte Leerzustände an OnboardingLeer vorbei.
+      ['src/v4/CockpitV4.tsx', 1],
+      ['src/v4/KomponentenTypV4.tsx', 1],
     ]),
     hinweis: 'B8: Onboarding-Leerzustand über v4/OnboardingLeer (EmptyState + CTA); kleine Card nur Klasse (c) per Allowlist',
   },

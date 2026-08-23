@@ -9,7 +9,14 @@ personenbezogene Daten in git wandern.
 
 ## Verwendung
 
-Speichere deine Backup-Datei als `backup.json` in diesem Ordner. `test_H8_optional_aus_lokalem_backup`
-in [test_emob_km_uebersicht_bug.py](../../test_emob_km_uebersicht_bug.py)
-lädt sie automatisch und prüft das Cockpit-Übersicht-Verhalten gegen die
-ungefilterte IMD-Summe. Ohne Datei → Test wird übersprungen.
+Lege eine Backup-Datei hier ab und schreibe den Test, der sie liest, **in der
+Sitzung, in der du sie brauchst** — als Diagnose-Werkzeug, nicht als Bestandteil
+der Suite.
+
+> ⚠ **Kein Dauertest gegen diesen Ordner.** Bis zum 2026-08-23 stand hier
+> `test_H8_optional_aus_lokalem_backup` (in `test_emob_km_uebersicht_bug.py`)
+> und las `backup.json`. Da der Ordner git-ignoriert ist, existierte die Datei
+> auf keinem anderen Rechner und in keinem CI-Lauf — der Test kehrte still
+> zurück und wurde als *passed* gezählt, ohne etwas zu messen. Ein Test, dessen
+> Eingabe per Konstruktion nirgends vorhanden sein kann, ist kein Test, sondern
+> eine grüne Zeile. Er ist deshalb entfallen (M4, Etappe E1).

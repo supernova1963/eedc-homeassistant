@@ -20,16 +20,21 @@ Hypothesen, die wir hier durchspielen:
   H6: Wallbox nicht-dienstlich + E-Auto nicht-dienstlich mit km → emob_km > 0
       (Reproduktion des Screenshot-Szenarios)
 
-Standalone-Runner, analog test_emob_pool_komponenten.py:
+Lauf über pytest (der im Docstring genannte Standalone-Runner existierte in
+dieser Datei nicht — der `# ── Runner ──`-Block darunter war leer):
 
-    eedc/backend/venv/bin/python eedc/backend/tests/test_emob_km_uebersicht_bug.py
+    cd eedc && python -m pytest backend/tests/test_emob_km_uebersicht_bug.py -q
+
+H8 („optional aus lokalem Backup") ist am 2026-08-23 entfallen (M4, Etappe E1):
+Er kehrte bei fehlender Fixture **still** zurück, die Suite meldete ihn damit
+als *passed*, obwohl er nichts gemessen hat — und die Fixture konnte nie
+existieren, weil `fixtures/local/` bewusst git-ignoriert ist (echte
+Nutzer-Backups gehören nicht ins Repo). Entscheid Gernots: löschen.
 """
 
 from __future__ import annotations
 
-import traceback
 from datetime import date
-from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -173,120 +178,6 @@ async def test_H7_dienstwagen_plus_nichtdienstliche_wallbox(db):
     )
 
 
-async def test_H8_optional_aus_lokalem_backup(db):
-    """Optional: liest ein eedc-Backup-JSON aus einem nicht-versionierten
-    Pfad ein und prüft, dass die Cockpit-Übersicht für die enthaltenen
-    Anlagen zumindest *konsistent* mit dem reinen IMD-Aggregat
-    übereinstimmt. Wenn keine Backup-Datei vorhanden ist: SKIP.
-
-    Pfad: eedc/backend/tests/fixtures/local/backup.json
-    (per .gitignore ausgeschlossen)
-    """
-    fixture = Path(__file__).parent / "fixtures" / "local" / "backup.json"
-    if not fixture.exists():
-        print(f"     (skip: {fixture.relative_to(Path(__file__).parents[2])} nicht vorhanden)")
-        return
-
-    import json
-    payload = json.loads(fixture.read_text(encoding="utf-8"))
-
-    anlage_id = await _load_backup_anlage(db, payload)
-    result = await _call_uebersicht(anlage_id, db)
-
-    # Vergleichswert: dieselbe Aggregation, aber direkt aus IMD ohne
-    # Dienstlich-Filter (so wie der E-Auto-Detail-Tab es macht).
-    from sqlalchemy import select
-    from backend.models import Investition, InvestitionMonatsdaten
-    e_autos = (await db.execute(
-        select(Investition).where(
-            Investition.anlage_id == anlage_id,
-            Investition.typ == "e-auto",
-        )
-    )).scalars().all()
-    ea_ids = [e.id for e in e_autos]
-    imds = (await db.execute(
-        select(InvestitionMonatsdaten).where(
-            InvestitionMonatsdaten.investition_id.in_(ea_ids)
-        )
-    )).scalars().all() if ea_ids else []
-    km_ungefiltert = sum(
-        (imd.verbrauch_daten or {}).get("km_gefahren", 0) or 0
-        for imd in imds
-    )
-
-    # Falls min. ein E-Auto dienstlich ist: Übersicht zeigt 0 km, aber
-    # ungefilterte Summe > 0 → das ist genau der Screenshot-Effekt.
-    dienstlich_vorhanden = any(
-        (e.parameter or {}).get("ist_dienstlich") is True for e in e_autos
-    )
-    if dienstlich_vorhanden and km_ungefiltert > 0:
-        assert result.emob_km < km_ungefiltert, (
-            f"Erwartung Screenshot-Szenario: Übersicht-km ({result.emob_km}) "
-            f"< Detail-Tab-km ({km_ungefiltert}), Dienstwagen wird gefiltert"
-        )
-        print(f"     (Backup-Anlage: Übersicht={result.emob_km} km, "
-              f"Detail-Tab-Summe={km_ungefiltert:.0f} km → Dienstwagen-Filter aktiv)")
-    else:
-        assert result.emob_km == km_ungefiltert, (
-            f"Ohne Dienstwagen-Filter müssen Übersicht und Detail-Tab "
-            f"übereinstimmen — war {result.emob_km} vs. {km_ungefiltert}"
-        )
-
-
-async def _load_backup_anlage(db: AsyncSession, payload: dict) -> int:
-    """Lädt nur die Felder, die der Test braucht — bewusst minimal, damit
-    keine Side-Effects (Tarife, PVGIS etc.) das Verhalten verändern."""
-    a = payload.get("anlage") or {}
-    anlage = Anlage(
-        anlagenname=a.get("anlagenname") or "Imported",
-        leistung_kwp=a.get("leistung_kwp") or 0.0,
-    )
-    db.add(anlage)
-    await db.flush()
-
-    def _parse_date(s):
-        return date.fromisoformat(s) if s else None
-
-    def _add_inv(inv_data, parent_id=None):
-        inv = Investition(
-            anlage_id=anlage.id,
-            typ=inv_data["typ"],
-            bezeichnung=inv_data.get("bezeichnung") or inv_data["typ"],
-            anschaffungsdatum=_parse_date(inv_data.get("anschaffungsdatum")),
-            stilllegungsdatum=_parse_date(inv_data.get("stilllegungsdatum")),
-            parameter=inv_data.get("parameter"),
-        )
-        db.add(inv)
-        return inv
-
-    invs_to_persist: list[tuple[Investition, list[dict]]] = []
-    for inv_data in payload.get("investitionen") or []:
-        inv = _add_inv(inv_data)
-        invs_to_persist.append((inv, inv_data.get("monatsdaten") or []))
-        for child in inv_data.get("children") or []:
-            child_inv = _add_inv(child)
-            invs_to_persist.append((child_inv, child.get("monatsdaten") or []))
-
-    await db.flush()
-    for inv, md_list in invs_to_persist:
-        for md in md_list:
-            db.add(InvestitionMonatsdaten(
-                investition_id=inv.id,
-                jahr=md["jahr"], monat=md["monat"],
-                verbrauch_daten=md.get("verbrauch_daten") or {},
-            ))
-    # Basis-Monatsdaten (für Anlagen-Energiebilanz, sonst null-Felder)
-    for md in payload.get("monatsdaten") or []:
-        db.add(Monatsdaten(
-            anlage_id=anlage.id,
-            jahr=md["jahr"], monat=md["monat"],
-            einspeisung_kwh=md.get("einspeisung_kwh") or 0.0,
-            netzbezug_kwh=md.get("netzbezug_kwh") or 0.0,
-        ))
-    await db.commit()
-    return anlage.id
-
-
 async def test_H6_szenario_screenshot_eauto_plus_wallbox(db):
     """Screenshot-Reproduktion: E-Auto + Wallbox, beide nicht dienstlich.
     E-Auto trägt km, Wallbox trägt ladung_kwh (Loadpoint-Sicht).
@@ -325,5 +216,3 @@ async def test_H6_szenario_screenshot_eauto_plus_wallbox(db):
         f"Ladung max-Pool > 360, war {result.emob_ladung_kwh}"
     )
 
-
-# ── Runner ──
