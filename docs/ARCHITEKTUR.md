@@ -212,8 +212,11 @@ Drei Stellen sind dabei die tragenden **Single Sources of Truth**:
 | **Zustand** | `hooks/`, `context/` | `useApiData` (inkl. SWR-Sicht-Cache), Auswahl, Theme, Status |
 | **Wege** | `routes/`, `config/` | Route-Manifest + Redirects, Einstellungs-Katalog, Version |
 
-⚠ **`eedc/frontend/dist/` ist versioniert** — das Add-on liefert diesen Build aus. Wer lokal mit
-Demo-Flags baut, stellt `dist/` danach wieder her, sonst landet ein Demo-Build im Release.
+⚠ **`eedc/frontend/dist/` ist NICHT versioniert** (seit N-246 / v4.0.15) — beide Dockerfiles bauen
+das Frontend in einer eigenen Stage. Wer lokal mit Demo-Flags baut, muss `dist/` deshalb nicht mehr
+wiederherstellen; gegen einen versehentlich ausgelieferten Demo-Build schützt
+`release.sh::pruefe_nichts_uebrig`. *Hier stand bis 2026-08-23 das Gegenteil — CLAUDE.md trug den
+Widerruf seit dem 14.08., diese Zeile und `DEVELOPMENT.md` nicht.*
 
 ---
 
