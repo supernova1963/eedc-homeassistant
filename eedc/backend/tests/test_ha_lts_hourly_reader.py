@@ -4,10 +4,6 @@ Akzeptanztest für Etappe 4 Schritt 3:
 kWh-Deltas direkt aus HA-LTS-Statistics — die neue Single-Source-of-Truth
 für Aggregat-Tabellen (siehe `docs/archive/KONZEPT-ETAPPE-4-HA-LTS-SOT.md`).
 
-Self-contained Standalone-Script:
-
-    eedc/backend/venv/bin/python eedc/backend/tests/test_ha_lts_hourly_reader.py
-
 Testet:
   1. Glatter Tag mit kontinuierlich steigendem Counter → 24 Slots mit
      korrekten Stunden-Deltas
@@ -23,18 +19,12 @@ Periode (H+1) = Zähler(H+1). Backward-Slots (#144/#297): Slot h = Energie
 
 from __future__ import annotations
 
-import sys
-import traceback
 import time as time_module
 from datetime import date, datetime, timedelta
-from pathlib import Path
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]  # eedc/
-sys.path.insert(0, str(_BACKEND_ROOT))
+from sqlalchemy import create_engine, text
 
-from sqlalchemy import create_engine, text  # noqa: E402
-
-from backend.services.ha_statistics_service import HAStatisticsService  # noqa: E402
+from backend.services.ha_statistics_service import HAStatisticsService
 
 
 def _make_service_with_mock_db() -> HAStatisticsService:

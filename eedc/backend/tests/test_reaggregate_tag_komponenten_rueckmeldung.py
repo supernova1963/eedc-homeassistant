@@ -14,10 +14,6 @@ Der Kanon steht schon im Baum: der Bereichs-Pfad wertet `erfolgreich` /
 Linie je Komponente — Erwartung aus `erwartete_komponenten_keys` (dieselbe Menge
 wie im Daten-Checker), Ergebnis aus der `komponenten_kwh` des Laufs selbst.
 
-Self-contained:
-
-    eedc/backend/venv/bin/python eedc/backend/tests/test_reaggregate_tag_komponenten_rueckmeldung.py
-
 Testet:
   1. Alles geschrieben → nichts zu beklagen
   2. Wärmepumpe ohne Wert → sie wird namentlich genannt
@@ -28,19 +24,12 @@ Testet:
 
 from __future__ import annotations
 
-import asyncio
-import sys
-import traceback
 from datetime import date, timedelta
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(_BACKEND_ROOT))
-
-from backend.models.investition import Investition  # noqa: E402
-from backend.services.repair_orchestrator import _komponenten_rueckmeldung  # noqa: E402
+from backend.models.investition import Investition
+from backend.services.repair_orchestrator import _komponenten_rueckmeldung
 
 _SENSOR = {"strategie": "sensor", "sensor_id": "sensor.x"}
 _TAG = date.today() - timedelta(days=3)

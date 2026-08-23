@@ -12,12 +12,7 @@ Fix: letzten Sensor-Wert vor Slot-Ende als Carry-Forward nehmen
 
 from __future__ import annotations
 
-import sys
 from datetime import datetime, timedelta
-from pathlib import Path
-
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(_BACKEND_ROOT))
 
 
 def _simulate_strompreis_slot(

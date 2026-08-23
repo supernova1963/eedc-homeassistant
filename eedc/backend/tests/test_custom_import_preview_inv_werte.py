@@ -2,10 +2,6 @@
 Akzeptanztest für #222 NongJoWo — Vorschau zeigt Investitions-Spalten als
 zusätzliche Tabellen-Spalten (inv_werte pro Monat, inv_spalten in Response).
 
-Self-contained Standalone-Script:
-
-    eedc/backend/venv/bin/python eedc/backend/tests/test_custom_import_preview_inv_werte.py
-
 Hintergrund: Vor dem Fix zeigte die Custom-Import-Vorschau für reine
 E-Auto-/Wallbox-Imports eine leere Tabelle (alle "—"), obwohl der Apply
 die Daten sauber landete. Banner sagte "Werte in der Vorschau-Tabelle
@@ -22,15 +18,8 @@ Geprüft:
 
 from __future__ import annotations
 
-import sys
-import traceback
-from pathlib import Path
-
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]  # eedc/
-sys.path.insert(0, str(_BACKEND_ROOT))
-
-from backend.api.routes.custom_import._shared import FieldMapping, MappingConfig  # noqa: E402
-from backend.api.routes.custom_import.preview import _apply_mapping  # noqa: E402
+from backend.api.routes.custom_import._shared import FieldMapping, MappingConfig
+from backend.api.routes.custom_import.preview import _apply_mapping
 
 
 def _mapping(spalten: dict[str, str]) -> MappingConfig:
@@ -150,30 +139,3 @@ def test_globale_und_inv_spalten_gemischt():
     assert monate[0].pv_erzeugung_kwh == 500.0
     assert abs(monate[0].inv_werte["Wollis_Ladung"] - 120.5) < 1e-6
     assert inv_spalten == ["Wollis_Ladung"]
-
-
-def _run_all():
-    tests = [
-        test_auto_erkannte_spalten_landen_in_inv_werte,
-        test_manuell_inv_gemappte_spalten_landen_in_inv_werte,
-        test_leere_inv_spalten_landen_nicht_in_response,
-        test_mischung_manuell_und_auto_keine_doppelung,
-        test_globale_und_inv_spalten_gemischt,
-    ]
-    failed = 0
-    for t in tests:
-        try:
-            t()
-            print(f"  PASS  {t.__name__}")
-        except Exception as e:
-            failed += 1
-            print(f"  FAIL  {t.__name__}: {e}")
-            traceback.print_exc()
-    if failed:
-        print(f"\n{failed}/{len(tests)} Tests fehlgeschlagen")
-        sys.exit(1)
-    print(f"\n{len(tests)}/{len(tests)} Tests grün")
-
-
-if __name__ == "__main__":
-    _run_all()

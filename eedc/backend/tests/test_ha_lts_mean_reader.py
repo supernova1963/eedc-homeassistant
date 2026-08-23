@@ -6,26 +6,16 @@ und `_get_strompreis_stunden` (Sensor-Endpreis EUR/kWh, cent/kWh, …).
 
 Im Gegensatz zu `get_hourly_sensor_data()` werden Rohwerte zurückgegeben —
 ohne Einheitenumrechnung. Der Aufrufer kennt seinen Kontext besser.
-
-Self-contained Standalone-Script:
-
-    eedc/backend/venv/bin/python eedc/backend/tests/test_ha_lts_mean_reader.py
 """
 
 from __future__ import annotations
 
-import sys
-import traceback
 import time as time_module
 from datetime import date, datetime
-from pathlib import Path
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]  # eedc/
-sys.path.insert(0, str(_BACKEND_ROOT))
+from sqlalchemy import create_engine, text
 
-from sqlalchemy import create_engine, text  # noqa: E402
-
-from backend.services.ha_statistics_service import HAStatisticsService  # noqa: E402
+from backend.services.ha_statistics_service import HAStatisticsService
 
 
 def _make_service_with_mock_db() -> HAStatisticsService:

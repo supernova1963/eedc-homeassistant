@@ -28,18 +28,13 @@ Positivkontrolle (3 bleibt unverändert, wenn kein Zähler da ist).
 
 from __future__ import annotations
 
-import sys
 from datetime import datetime, timedelta
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]  # eedc/
-sys.path.insert(0, str(_BACKEND_ROOT))
-
-from backend.services.live_history_service import get_tages_kwh  # noqa: E402
+from backend.services.live_history_service import get_tages_kwh
 
 PV_ZAEHLER = "sensor.energy_solar_generation"
 PV_LEISTUNG = "sensor.power_solar_generation"

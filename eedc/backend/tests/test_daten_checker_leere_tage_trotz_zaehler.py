@@ -6,10 +6,6 @@ gespeicherte `TagesZusammenfassung` aber leer/0 ist. Aktion: Bereichs-Knopf
 (`reaggregate_range`, max. 31 Tage/Lauf) plus Einzeltag-Knöpfe
 (`reaggregate_day`) — user-getriggert, nie als Start-Migration.
 
-Self-contained:
-
-    eedc/backend/venv/bin/python eedc/backend/tests/test_daten_checker_leere_tage_trotz_zaehler.py
-
 Testet:
   1. Basis-Zähler zugeordnet, Tageszeile 0, HA hat Werte → Befund + beide Aktionen
   2. Tageszeile fehlt ganz → Befund (dort zählt auch PV, der Drift-Check ist blind)
@@ -36,19 +32,12 @@ N-57 (Forum simon42 #89667/83, dietmar1968) — der Check darf nur anbieten, was
 
 from __future__ import annotations
 
-import asyncio
-import sys
-import traceback
 from datetime import date, timedelta
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(_BACKEND_ROOT))
-
-from backend.models.investition import Investition  # noqa: E402
-from backend.services.daten_checker import DatenChecker, CheckKategorie  # noqa: E402
+from backend.models.investition import Investition
+from backend.services.daten_checker import DatenChecker, CheckKategorie
 
 _KAT = CheckKategorie.TAGESWERTE_FEHLEN.value
 

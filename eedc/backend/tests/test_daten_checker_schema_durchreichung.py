@@ -7,24 +7,14 @@ Hintergrund: v3.31.1 hat die Felder `action_kind`/`action_params`/`action_label`
 zur Dataclass hinzugefügt, aber im API-Response-Schema vergessen — Frontend
 bekam dadurch leere Action-Felder, Reparatur-Knopf fiel auf den alten
 'Beheben'-Link zurück.
-
-Self-contained:
-
-    eedc/backend/venv/bin/python eedc/backend/tests/test_daten_checker_schema_durchreichung.py
 """
 
 from __future__ import annotations
 
-import sys
-import traceback
 from dataclasses import fields
-from pathlib import Path
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(_BACKEND_ROOT))
-
-from backend.services.daten_checker import CheckErgebnis  # noqa: E402
-from backend.api.routes.daten_checker import CheckErgebnisResponse  # noqa: E402
+from backend.services.daten_checker import CheckErgebnis
+from backend.api.routes.daten_checker import CheckErgebnisResponse
 
 
 def test_alle_dataclass_felder_im_response_schema():

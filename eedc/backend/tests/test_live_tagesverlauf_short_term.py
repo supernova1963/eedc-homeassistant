@@ -5,10 +5,6 @@ Butterfly-Kurve ihre Slots aus derselben SoT-Familie wie die Heute-kWh-Kacheln
 (`safe_get_tages_kwh`). Für einen kWh-Zähler gilt dann **exakt**
 ``Σ Kurven-Slot-Energie == Tages-Zähler-Delta`` (gleiche Quelle).
 
-Self-contained Standalone-Script:
-
-    eedc/backend/venv/bin/python eedc/backend/tests/test_live_tagesverlauf_short_term.py
-
 Testet:
   1. Pure Helfer: counter_deltas_zu_leistung (P = ΔkWh*12000), Skip
      negativer/None-Deltas; means_zu_leistung (Einheit-Faktor).
@@ -21,22 +17,16 @@ Testet:
 
 from __future__ import annotations
 
-import sys
-import traceback
 import time as time_module
 from datetime import date, datetime, timedelta
-from pathlib import Path
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]  # eedc/
-sys.path.insert(0, str(_BACKEND_ROOT))
+from sqlalchemy import create_engine, text
 
-from sqlalchemy import create_engine, text  # noqa: E402
-
-from backend.services.ha_statistics_service import (  # noqa: E402
+from backend.services.ha_statistics_service import (
     HAStatisticsService,
     SHORT_TERM_SLOT,
 )
-from backend.core.berechnungen.live_tagesverlauf_5min import (  # noqa: E402
+from backend.core.berechnungen.live_tagesverlauf_5min import (
     counter_deltas_zu_leistung,
     means_zu_leistung,
 )

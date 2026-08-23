@@ -10,26 +10,16 @@ dem HA-Server, WebSocket von außen, identische Zeitzone): 27 Monatswerte
 (Start · Ende · Differenz je Sensor über drei Monate) und 26 Monatsanfangswerte
 — **0 Abweichungen**; verfügbare Monate identisch bis auf den Tag
 (2024-10-31 … 2026-07-01, 22 Monate). Diese Datei hält das gegen Regressionen.
-
-Standalone:
-    eedc/backend/venv/bin/python eedc/backend/tests/test_ha_statistics_websocket_transport.py
 """
 
 from __future__ import annotations
 
-import sys
-import time as time_module
-import traceback
 from datetime import date, datetime, timedelta
-from pathlib import Path
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]  # eedc/
-sys.path.insert(0, str(_BACKEND_ROOT))
+from sqlalchemy import create_engine, text
 
-from sqlalchemy import create_engine, text  # noqa: E402
-
-from backend.services.ha_statistics_service import HAStatisticsService  # noqa: E402
-from backend.services.ha_statistics_ws import (  # noqa: E402
+from backend.services.ha_statistics_service import HAStatisticsService
+from backend.services.ha_statistics_ws import (
     HAStatisticsWebsocket,
     WsSensorMeta,
 )

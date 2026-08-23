@@ -20,15 +20,9 @@ Standalone:
 from __future__ import annotations
 
 import asyncio
-import sys
-import traceback
-from pathlib import Path
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]  # eedc/
-sys.path.insert(0, str(_BACKEND_ROOT))
-
-from backend.services.ha_state_service import HAStateService  # noqa: E402
-from backend.services.ha_statistics_service import HAStatisticsService  # noqa: E402
+from backend.services.ha_state_service import HAStateService
+from backend.services.ha_statistics_service import HAStatisticsService
 
 
 def test_1_remote_verbindung_macht_den_state_service_verfuegbar():

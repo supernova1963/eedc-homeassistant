@@ -15,15 +15,10 @@ anschließend auf `fehlt`. [[project_kwp_verteilung_aggregator]].
 from __future__ import annotations
 
 import json
-import sys
-from pathlib import Path
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]  # eedc/
-sys.path.insert(0, str(_BACKEND_ROOT))
+from sqlalchemy import create_engine, text
 
-from sqlalchemy import create_engine, text  # noqa: E402
-
-from backend.core.database import _migrate_pv_erzeugung_aggregat_clear  # noqa: E402
+from backend.core.database import _migrate_pv_erzeugung_aggregat_clear
 
 
 def _engine():

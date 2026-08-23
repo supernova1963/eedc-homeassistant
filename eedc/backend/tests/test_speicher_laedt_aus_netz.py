@@ -9,26 +9,16 @@ Deckt zwei Schichten ab:
      setzt `laedt_aus_netz=true` für Bestands-Speicher mit
      `arbitrage_faehig=true`. Idempotent. Speicher ohne Arbitrage und
      andere Typen bleiben unangetastet.
-
-Self-contained:
-
-    eedc/backend/venv/bin/python eedc/backend/tests/test_speicher_laedt_aus_netz.py
 """
 
 from __future__ import annotations
 
 import json
-import sys
-import traceback
-from pathlib import Path
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]  # eedc/
-sys.path.insert(0, str(_BACKEND_ROOT))
+from sqlalchemy import create_engine, text
 
-from sqlalchemy import create_engine, text  # noqa: E402
-
-from backend.core.database import _migrate_speicher_laedt_aus_netz_backfill  # noqa: E402
-from backend.core.field_definitions import get_felder_fuer_investition  # noqa: E402
+from backend.core.database import _migrate_speicher_laedt_aus_netz_backfill
+from backend.core.field_definitions import get_felder_fuer_investition
 
 
 # ----------------------------------------------------------------------------
@@ -151,40 +141,3 @@ def test_migration_ignoriert_null_parameter_und_andere_typen() -> None:
     assert _load_params(engine, 4) is None  # NULL bleibt NULL
     eauto = _load_params(engine, 5)
     assert eauto == {"arbitrage_faehig": True}  # e-auto bleibt unverändert
-
-
-# ----------------------------------------------------------------------------
-# Runner
-# ----------------------------------------------------------------------------
-
-ALLE_TESTS = [
-    test_resolver_ohne_flag_blendet_netzladung_aus,
-    test_resolver_laedt_aus_netz_zeigt_nur_netzladung,
-    test_resolver_arbitrage_impliziert_netzladung,
-    test_resolver_arbitrage_und_laedt_aus_netz,
-    test_migration_setzt_flag_bei_arbitrage,
-    test_migration_laesst_nicht_arbitrage_speicher_in_ruhe,
-    test_migration_ist_idempotent,
-    test_migration_ignoriert_null_parameter_und_andere_typen,
-]
-
-
-def main() -> int:
-    fehler = 0
-    for fn in ALLE_TESTS:
-        try:
-            fn()
-            print(f"PASS  {fn.__name__}")
-        except Exception:  # noqa: BLE001
-            fehler += 1
-            print(f"FAIL  {fn.__name__}")
-            traceback.print_exc()
-    if fehler:
-        print(f"\n{fehler} Tests fehlgeschlagen.")
-        return 1
-    print(f"\nAlle {len(ALLE_TESTS)} Tests grün.")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

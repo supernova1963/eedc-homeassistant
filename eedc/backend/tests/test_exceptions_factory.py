@@ -14,18 +14,11 @@ Zwei Ebenen:
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import pytest
 from fastapi import HTTPException
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]  # eedc/
-if str(_BACKEND_ROOT) not in sys.path:
-    sys.path.insert(0, str(_BACKEND_ROOT))
-
-from backend.api.routes import anlagen  # noqa: E402
-from backend.core.exceptions import (  # noqa: E402
+from backend.api.routes import anlagen
+from backend.core.exceptions import (
     bad_request,
     ha_db_unavailable,
     ha_supervisor_unavailable,

@@ -4,10 +4,6 @@ Akzeptanztest für Etappe 5 (v3.31.0):
 und Einspeisung aus HA-LTS-Stunden-Min/Max — Caller (aggregator.py) ersetzt
 damit die aus 10-Min-Mittelwerten geschätzten Peaks.
 
-Self-contained:
-
-    eedc/backend/venv/bin/python eedc/backend/tests/test_etappe_5_peaks.py
-
 Testet:
   1. Einzelner PV-Sensor: peak_pv = max der Stunden-max über 24 Stunden
   2. Mehrere PV-Sensoren: peak_pv = max über Stunden von Σ max
@@ -19,18 +15,11 @@ Testet:
 
 from __future__ import annotations
 
-import asyncio
-import sys
-import traceback
 from datetime import date
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(_BACKEND_ROOT))
-
-from backend.services.energie_profil._helpers import _get_tagespeaks_aus_ha_lts  # noqa: E402
+from backend.services.energie_profil._helpers import _get_tagespeaks_aus_ha_lts
 
 
 def _mock_db_with_invs(invs: list[tuple[int, str]]):

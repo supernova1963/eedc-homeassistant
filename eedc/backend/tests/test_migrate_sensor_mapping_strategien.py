@@ -9,16 +9,11 @@ vor der `StrategieTyp`-Enum-Reduktion (Pydantic-validiert). Idempotent.
 from __future__ import annotations
 
 import json
-import sys
-from pathlib import Path
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]  # eedc/
-sys.path.insert(0, str(_BACKEND_ROOT))
+from sqlalchemy import create_engine, text
 
-from sqlalchemy import create_engine, text  # noqa: E402
-
-from backend.core.database import _migrate_sensor_mapping_strategien_clear  # noqa: E402
-from backend.api.routes.sensor_mapping import StrategieTyp  # noqa: E402
+from backend.core.database import _migrate_sensor_mapping_strategien_clear
+from backend.api.routes.sensor_mapping import StrategieTyp
 
 
 def _seed_db(mapping: dict | None):

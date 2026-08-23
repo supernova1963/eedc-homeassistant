@@ -1,10 +1,6 @@
 """
 Akzeptanztest für `_energy_delta`-Einheiten-Skalierung (#232 NongJoWo).
 
-Self-contained Standalone-Script:
-
-    eedc/backend/venv/bin/python eedc/backend/tests/test_live_history_kwh_scale.py
-
 Hintergrund (#232 NongJoWo): Live-Heute zeigte PV/Eigenverbrauch/Hausverbrauch
 mit Faktor 1000. Ursache: `_energy_delta_via_statistics` liefert Rohwerte
 aus der HA-Statistics-`sum`-Spalte, **in der vom Sensor angegebenen Einheit**.
@@ -21,15 +17,9 @@ Geprüft:
 
 from __future__ import annotations
 
-import sys
-import traceback
-from pathlib import Path
 from unittest.mock import patch
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]  # eedc/
-sys.path.insert(0, str(_BACKEND_ROOT))
-
-from backend.services.live_history_service import _energy_delta  # noqa: E402
+from backend.services.live_history_service import _energy_delta
 
 
 def test_wh_sensor_statistics_pfad_durchreicht_kwh():

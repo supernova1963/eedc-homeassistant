@@ -10,15 +10,10 @@ automatische Energy-Poll (`e4471ca2`) publisht PV dann nur aufs Fallback-Topic
 from __future__ import annotations
 
 import json
-import sys
-from pathlib import Path
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]  # eedc/
-sys.path.insert(0, str(_BACKEND_ROOT))
+from sqlalchemy import create_engine, text
 
-from sqlalchemy import create_engine, text  # noqa: E402
-
-from backend.core.database import _migrate_connector_field_inv_map_backfill  # noqa: E402
+from backend.core.database import _migrate_connector_field_inv_map_backfill
 
 
 def _seed_db(connector_config: dict | None, investitionen: list[tuple] | None = None):

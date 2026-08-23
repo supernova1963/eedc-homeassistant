@@ -11,27 +11,17 @@ Deckt drei Schichten ab:
      - alte Signatur (Prognose) verhält sich identisch wie vor Etappe B
      - neue Signatur (`ist_entladung_kwh` gepflegt) delegiert an den
        Spread-Service und liefert identische Zahlen.
-
-Self-contained:
-
-    eedc/backend/venv/bin/python eedc/backend/tests/test_speicher_wirtschaftlichkeit_netzanteil.py
 """
 
 from __future__ import annotations
 
 import math
-import sys
-import traceback
-from pathlib import Path
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]  # eedc/
-sys.path.insert(0, str(_BACKEND_ROOT))
-
-from backend.core.calculations import (  # noqa: E402
+from backend.core.calculations import (
     SPEICHER_ZYKLEN_PRO_JAHR,
     berechne_speicher_einsparung,
 )
-from backend.services.speicher_wirtschaftlichkeit import (  # noqa: E402
+from backend.services.speicher_wirtschaftlichkeit import (
     SPEICHER_IST_MIN_MONATE,
     aggregiere_speicher_ist,
     berechne_speicher_ersparnis,
@@ -351,50 +341,3 @@ def test_wrapper_ist_modus_co2_basiert_auf_pv_anteil() -> None:
         ist_ladung_netz_kwh=500,  # × 0.95 = 475 → 525 PV-Anteil
     )
     assert _approx(wrapper_mit_netz.co2_einsparung_kg, round(525 * 0.38, 1))
-
-
-# ----------------------------------------------------------------------------
-# Runner
-# ----------------------------------------------------------------------------
-
-ALLE_TESTS = [
-    test_services_reexport_ist_identisch_mit_core_sot,
-    test_reiner_pv_speicher_ohne_netzladung_regression,
-    test_netzladung_ohne_ladepreis_kostet_keinen_pv_vorteil,
-    test_netzladung_mit_guenstigem_ladepreis_bringt_arbitrage,
-    test_netzladung_groesser_als_entladung_geclamped,
-    test_bezug_unter_einspeisung_clampt_spread_auf_null,
-    test_keine_entladung_keine_ersparnis,
-    test_v2h_ersparnis_entspricht_pv_speicher_spread,
-    test_v2h_ersparnis_ohne_entladung_ist_null,
-    test_aggregiere_speicher_ist_hochrechnung_auf_jahr,
-    test_aggregiere_speicher_ist_zu_wenig_monate_gibt_none,
-    test_aggregiere_speicher_ist_ohne_entladung_gibt_none,
-    test_aggregiere_speicher_ist_legacy_key_fallback,
-    test_wrapper_prognose_modus_unveraendert_ohne_arbitrage,
-    test_wrapper_prognose_modus_unveraendert_mit_arbitrage_70_30,
-    test_wrapper_ist_modus_delegiert_an_spread_service,
-    test_wrapper_ist_modus_mit_arbitrage_nimmt_lade_preis_mit,
-    test_wrapper_ist_modus_co2_basiert_auf_pv_anteil,
-]
-
-
-def main() -> int:
-    fehler = 0
-    for fn in ALLE_TESTS:
-        try:
-            fn()
-            print(f"PASS  {fn.__name__}")
-        except Exception:  # noqa: BLE001
-            fehler += 1
-            print(f"FAIL  {fn.__name__}")
-            traceback.print_exc()
-    if fehler:
-        print(f"\n{fehler} Tests fehlgeschlagen.")
-        return 1
-    print(f"\nAlle {len(ALLE_TESTS)} Tests grün.")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

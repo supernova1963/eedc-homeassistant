@@ -15,31 +15,21 @@ Deckt drei Helper ab:
 Reproduziert insbesondere den Mai-110%-Bug aus #264: Speicher startet
 voll (SoC 100 %), endet leer (SoC 5 %), naiver Monats-η > 200 % — die
 SoC-Korrektur liefert einen plausiblen Wert.
-
-Self-contained:
-
-    eedc/backend/venv/bin/python eedc/backend/tests/test_speicher_dyn_tarif_und_soc.py
 """
 
 from __future__ import annotations
 
-import asyncio
 import math
-import sys
 import traceback
 from contextlib import asynccontextmanager
 from datetime import date, datetime
-from pathlib import Path
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]  # eedc/
-sys.path.insert(0, str(_BACKEND_ROOT))
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine  # noqa: E402
-
-from backend.core.database import Base  # noqa: E402
-from backend.models import Anlage  # noqa: E402
-from backend.models.tages_energie_profil import TagesEnergieProfil  # noqa: E402
-from backend.services.speicher_wirtschaftlichkeit import (  # noqa: E402
+from backend.core.database import Base
+from backend.models import Anlage
+from backend.models.tages_energie_profil import TagesEnergieProfil
+from backend.services.speicher_wirtschaftlichkeit import (
     ETA_DEGRADATION_SCHWELLE_PROZENTPUNKTE,
     LADEPREIS_STUNDEN_ABDECKUNG_MIN,
     SOC_DRIFT_SCHWELLE_PROZENTPUNKTE,
@@ -500,70 +490,3 @@ def test_degradation_alarm_realistischer_byd_fall() -> None:
         ist_wirkungsgrad_prozent=81.0,
         param_wirkungsgrad_prozent=95.0,
     )
-
-
-# ----------------------------------------------------------------------------
-# Runner
-# ----------------------------------------------------------------------------
-
-ASYNC_TESTS = [
-    test_effektiver_ladepreis_nacht_billig_tag_teuer,
-    test_effektiver_ladepreis_pv_ladung_zaehlt_nicht,
-    test_effektiver_ladepreis_fallback_auf_boersenpreis,
-    test_effektiver_ladepreis_abdeckung_unter_schwelle_quelle_datenbasis,
-    test_effektiver_ladepreis_keine_ladung_quelle_keine_netzladung,
-    test_effektiver_ladepreis_leeres_fenster_quelle_keine_tep_daten,
-    test_eta_langes_fenster_nutzt_reinen_quotient,
-    test_eta_kurzes_fenster_mit_soc_korrektur_loest_110_prozent_bug,
-    test_eta_realistisch_korrektur_mit_groeserer_kapazitaet,
-    test_eta_kein_soc_und_kurzes_fenster_fenster_zu_kurz_quelle,
-    test_eta_keine_ladung_quelle_keine_ladung,
-]
-
-SYNC_TESTS = [
-    test_drift_neue_signatur_unter_schwelle,
-    test_drift_neue_signatur_ueber_schwelle,
-    test_drift_neue_signatur_voll_zu_leer_ist_signifikant,
-    test_drift_neue_signatur_negative_richtung_zaehlt_genauso,
-    test_drift_legacy_signatur_bleibt_unterstuetzt,
-    test_drift_keine_args_kein_drift,
-    test_degradation_alarm_unter_param_5pp_ist_alarm,
-    test_degradation_alarm_genau_5pp_kein_alarm,
-    test_degradation_alarm_ist_ueber_param_kein_alarm,
-    test_degradation_alarm_realistischer_byd_fall,
-]
-
-
-async def main_async() -> int:
-    fehler = 0
-    for fn in ASYNC_TESTS:
-        try:
-            await fn()
-            print(f"PASS  {fn.__name__}")
-        except Exception:  # noqa: BLE001
-            fehler += 1
-            print(f"FAIL  {fn.__name__}")
-            traceback.print_exc()
-    for fn in SYNC_TESTS:
-        try:
-            fn()
-            print(f"PASS  {fn.__name__}")
-        except Exception:  # noqa: BLE001
-            fehler += 1
-            print(f"FAIL  {fn.__name__}")
-            traceback.print_exc()
-    return fehler
-
-
-def main() -> int:
-    fehler = asyncio.run(main_async())
-    total = len(ASYNC_TESTS) + len(SYNC_TESTS)
-    if fehler:
-        print(f"\n{fehler}/{total} Tests fehlgeschlagen.")
-        return 1
-    print(f"\nAlle {total} Tests grün.")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

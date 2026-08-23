@@ -2,10 +2,6 @@
 Akzeptanztests für `get_inv_value` und seine Anwendung in den
 Verteilungs-Helpern (#229 JanKgh).
 
-Self-contained Standalone-Script:
-
-    eedc/backend/venv/bin/python eedc/backend/tests/test_inv_value_spalten_fallback.py
-
 Geprüft:
   1. Helper liest Spalte vor parameter-JSON (#229 Hauptbefund)
   2. Helper fällt auf parameter zurück, wenn Spalte None
@@ -16,15 +12,8 @@ Geprüft:
 
 from __future__ import annotations
 
-import sys
-import traceback
-from pathlib import Path
-
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]  # eedc/
-sys.path.insert(0, str(_BACKEND_ROOT))
-
-from backend.models import Investition  # noqa: E402
-from backend.utils.investition_value import get_inv_value  # noqa: E402
+from backend.models import Investition
+from backend.utils.investition_value import get_inv_value
 
 
 def test_get_inv_value_spalte_vor_parameter():
@@ -86,13 +75,3 @@ def test_distribute_by_param_parameter_fallback():
 
     assert anteil_by_id[1] == 8.0
     assert anteil_by_id[2] == 2.0
-
-
-_SYNC_TESTS = [
-    test_get_inv_value_spalte_vor_parameter,
-    test_get_inv_value_fallback_parameter,
-    test_get_inv_value_parameter_only_key,
-    test_get_inv_value_default_wenn_nichts_da,
-    test_distribute_by_param_solaredge_multi_string,
-    test_distribute_by_param_parameter_fallback,
-]

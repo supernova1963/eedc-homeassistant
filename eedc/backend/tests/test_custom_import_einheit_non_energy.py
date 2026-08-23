@@ -16,16 +16,10 @@ Self-contained:
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(_BACKEND_ROOT))
-
-from backend.api.routes.custom_import._shared import (  # noqa: E402
+from backend.api.routes.custom_import._shared import (
     FieldMapping, MappingConfig, _is_energy_target, _maybe_convert,
 )
-from backend.api.routes.custom_import.preview import _apply_mapping  # noqa: E402
+from backend.api.routes.custom_import.preview import _apply_mapping
 
 
 # ─── Helper-Logik ─────────────────────────────────────────────────────────

@@ -7,10 +7,6 @@ spiegelt. `kurven_leistung_mit_live_fallback` erkennt grobe Stunden (Phantom-
 Null-Slots) und legt die Stunden-Energie (= Σ Zähler-Delta, LTS-treu) auf die
 Live-Form (bzw. Plateau) statt sie zu vernadeln.
 
-Self-contained Standalone-Script:
-
-    eedc/backend/venv/bin/python eedc/backend/tests/test_grober_zaehler_live_fallback.py
-
 Testet:
   1. Feiner Zähler (Update jeden Slot) → Output identisch zu
      counter_deltas_zu_leistung, keine grobe Stunde.
@@ -22,15 +18,9 @@ Testet:
 
 from __future__ import annotations
 
-import sys
-import traceback
 from datetime import datetime, timedelta
-from pathlib import Path
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]  # eedc/
-sys.path.insert(0, str(_BACKEND_ROOT))
-
-from backend.core.berechnungen.live_tagesverlauf_5min import (  # noqa: E402
+from backend.core.berechnungen.live_tagesverlauf_5min import (
     kurven_leistung_mit_live_fallback,
     counter_deltas_zu_leistung,
     SLOT_MINUTEN,
@@ -153,29 +143,3 @@ def test_nacht_keine_fehlausloesung():
     _assert(all(w == 0.0 for _, w in punkte),
             "Nacht-Output muss 0 sein")
     print("✓ Test 4: Nacht — keine Fehlauslösung")
-
-
-def main() -> int:
-    tests = [
-        test_feiner_zaehler_unveraendert,
-        test_grober_zaehler_mit_live,
-        test_grober_zaehler_ohne_live,
-        test_nacht_keine_fehlausloesung,
-    ]
-    fehler = 0
-    for t in tests:
-        try:
-            t()
-        except Exception:
-            fehler += 1
-            print(f"✗ {t.__name__}")
-            traceback.print_exc()
-    if fehler:
-        print(f"\n{fehler}/{len(tests)} Tests fehlgeschlagen")
-        return 1
-    print(f"\nAlle {len(tests)} Tests grün")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

@@ -14,18 +14,13 @@ Self-contained:
 
 from __future__ import annotations
 
-import sys
 from datetime import date, timedelta
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(_BACKEND_ROOT))
-
-from backend.services.daten_checker import (  # noqa: E402
+from backend.services.daten_checker import (
     CheckKategorie,
     DatenChecker,
 )

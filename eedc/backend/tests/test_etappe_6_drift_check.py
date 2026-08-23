@@ -4,10 +4,6 @@ Akzeptanztest für Etappe 6 (v3.31.1):
 TagesZusammenfassung mit HA-LTS-Daily-Read der letzten 90 Tage und
 liefert pro Drift-Tag einen CheckErgebnis-Eintrag mit Inline-Reparatur-Action.
 
-Self-contained:
-
-    eedc/backend/venv/bin/python eedc/backend/tests/test_etappe_6_drift_check.py
-
 Testet:
   1. Keine Drift → ein OK-CheckErgebnis ohne Tag-Einträge
   2. Drift unter Schwelle (1 kWh / 3 %) → kein Eintrag
@@ -21,20 +17,13 @@ Testet:
 
 from __future__ import annotations
 
-import asyncio
-import sys
-import traceback
 from datetime import date, timedelta
-from pathlib import Path
 from types import SimpleNamespace
 
 from backend.models.investition import Investition
 from unittest.mock import patch, MagicMock, AsyncMock
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(_BACKEND_ROOT))
-
-from backend.services.daten_checker import DatenChecker, CheckKategorie  # noqa: E402
+from backend.services.daten_checker import DatenChecker, CheckKategorie
 
 
 def _make_tz(datum: date, pv_kwh: float):

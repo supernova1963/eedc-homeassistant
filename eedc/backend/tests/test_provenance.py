@@ -15,10 +15,6 @@ Bonus-Tests: initial_write, KeyError bei unbekanntem Source-Label.
 
 from __future__ import annotations
 
-import sys
-import traceback
-
-# Projekt-Root in sys.path, damit `from backend...` funktioniert.
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 

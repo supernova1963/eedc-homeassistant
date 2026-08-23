@@ -24,10 +24,6 @@ Diese Datei ergänzt die andere Hälfte:
   - get_value_at  (Off-by-one-Periodenlogik v3.25.9, has_sum/state/short_term)
   - get_hourly_sensor_data  (W→kW, kWh-Skip)
 
-Self-contained Standalone-Script:
-
-    eedc/backend/venv/bin/python eedc/backend/tests/test_ha_lts_monatswerte_lookup.py
-
 Tricky: Seeding via time.mktime(naive_local) und Query via
 datetime(start_ts,'unixepoch','localtime') interpretieren die Wanduhrzeit
 konsistent — die Tests sind damit TZ-unabhängig (gleiches Muster wie die
@@ -36,18 +32,12 @@ bestehenden test_ha_lts_*-Fixtures).
 
 from __future__ import annotations
 
-import sys
-import traceback
 import time as time_module
 from datetime import date, datetime, timedelta
-from pathlib import Path
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]  # eedc/
-sys.path.insert(0, str(_BACKEND_ROOT))
+from sqlalchemy import create_engine, text
 
-from sqlalchemy import create_engine, text  # noqa: E402
-
-from backend.services.ha_statistics_service import HAStatisticsService  # noqa: E402
+from backend.services.ha_statistics_service import HAStatisticsService
 
 
 # ---------------------------------------------------------------------------
@@ -434,22 +424,3 @@ def test_hourly_sensor_data_kwh_counter_uebersprungen():
     _seed_row(svc, mid, datetime(2026, 5, 15, 9, 0), mean=5.0)
     result = svc.get_hourly_sensor_data(["sensor.pv_kwh"], date(2026, 5, 15), date(2026, 5, 15))
     assert result == {}  # Energie-Zähler ist kein Leistungssensor
-
-
-# ---------------------------------------------------------------------------
-# Standalone-Runner (Haus-Stil der test_ha_lts_*-Dateien)
-# ---------------------------------------------------------------------------
-
-if __name__ == "__main__":
-    tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
-    fehler = 0
-    for t in tests:
-        try:
-            t()
-            print(f"  ✓ {t.__name__}")
-        except Exception:
-            fehler += 1
-            print(f"  ✗ {t.__name__}")
-            traceback.print_exc()
-    print(f"\n{len(tests) - fehler}/{len(tests)} grün")
-    sys.exit(1 if fehler else 0)

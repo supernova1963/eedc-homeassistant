@@ -6,26 +6,16 @@ HA-Recorder gespeicherten Stunden-Min/Max für `has_mean=True`-Sensoren.
 Quelle für Tages-Peak-Werte (peak_pv_kw, peak_netzbezug_kw, peak_einspeisung_kw)
 — eedc muss sie nicht aus 10-Min-Mittelwerten rekonstruieren, was Peaks
 systematisch unterschätzt.
-
-Self-contained Standalone-Script:
-
-    eedc/backend/venv/bin/python eedc/backend/tests/test_ha_lts_minmax_reader.py
 """
 
 from __future__ import annotations
 
-import sys
-import traceback
 import time as time_module
 from datetime import date, datetime
-from pathlib import Path
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]  # eedc/
-sys.path.insert(0, str(_BACKEND_ROOT))
+from sqlalchemy import create_engine, text
 
-from sqlalchemy import create_engine, text  # noqa: E402
-
-from backend.services.ha_statistics_service import HAStatisticsService  # noqa: E402
+from backend.services.ha_statistics_service import HAStatisticsService
 
 
 def _make_service() -> HAStatisticsService:

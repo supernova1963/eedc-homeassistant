@@ -6,10 +6,6 @@ vertauschtem Batterie-Vorzeichen per Daten-Signal — gespeichertes Tages-Netto
 frischen HA-LTS-Read mit aktueller Konvention (ENTLADUNG positiv). Bietet
 Bereichs- (reaggregate_range) + Einzeltag-Knöpfe (reaggregate_day).
 
-Self-contained:
-
-    eedc/backend/venv/bin/python eedc/backend/tests/test_batterie_vorzeichen_historie_check.py
-
 Testet:
   1. Entgegengesetzte Vorzeichen → Summen-Eintrag (reaggregate_range) + Einzeltag-Einträge
   2. Gleiche Richtung trotz Magnitude-Drift → kein Konflikt (nur OK; isoliert Achse-2)
@@ -20,18 +16,11 @@ Testet:
 
 from __future__ import annotations
 
-import asyncio
-import sys
-import traceback
 from datetime import date, timedelta
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(_BACKEND_ROOT))
-
-from backend.services.daten_checker import DatenChecker, CheckKategorie  # noqa: E402
+from backend.services.daten_checker import DatenChecker, CheckKategorie
 
 _KAT = CheckKategorie.BATTERIE_VORZEICHEN_HISTORIE.value
 

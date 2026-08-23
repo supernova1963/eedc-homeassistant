@@ -25,13 +25,11 @@ der Weg dorthin.
 from __future__ import annotations
 
 import ast
-import sys
 from pathlib import Path
 
 import pytest
 
 _EEDC_ROOT = Path(__file__).resolve().parents[2]  # eedc/
-sys.path.insert(0, str(_EEDC_ROOT))
 
 from backend.services import ha_state_service  # noqa: E402
 from backend.services.ha_state_service import (  # noqa: E402

@@ -14,20 +14,15 @@ Lehren: [[feedback_aggregator_symmetrie]], [[feedback_aggregations_drift]].
 from __future__ import annotations
 
 import json
-import sys
 from datetime import date
-from pathlib import Path
 from types import SimpleNamespace
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]  # eedc/
-sys.path.insert(0, str(_BACKEND_ROOT))
+from sqlalchemy import create_engine, text
 
-from sqlalchemy import create_engine, text  # noqa: E402
-
-from backend.core.database import _migrate_monatsdaten_sonderkosten_zu_positionen  # noqa: E402
-from backend.models import Anlage, Investition, InvestitionMonatsdaten  # noqa: E402
-from backend.models.monatsdaten import Monatsdaten  # noqa: E402
-from backend.utils.sonstige_positionen import (  # noqa: E402
+from backend.core.database import _migrate_monatsdaten_sonderkosten_zu_positionen
+from backend.models import Anlage, Investition, InvestitionMonatsdaten
+from backend.models.monatsdaten import Monatsdaten
+from backend.utils.sonstige_positionen import (
     berechne_md_sonstige_summen,
     get_md_sonstige_positionen,
 )

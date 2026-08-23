@@ -9,25 +9,15 @@ Cloud-Metadata-Services oder den HA-Supervisor pivotieren.
 Geblockt: Loopback, Link-local, Multicast, Unspecified, Reserved.
 Erlaubt: Public-IPs + LAN-Bereiche (10/8, 172.16/12, 192.168/16) + DNS-Namen,
 die auf solche Adressen auflösen.
-
-Self-contained:
-
-    eedc/backend/venv/bin/python eedc/backend/tests/test_connector_ssrf_block.py
 """
 
 from __future__ import annotations
 
-import sys
-import traceback
-from pathlib import Path
 from unittest.mock import patch
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]  # eedc/
-sys.path.insert(0, str(_BACKEND_ROOT))
+from fastapi import HTTPException
 
-from fastapi import HTTPException  # noqa: E402
-
-from backend.api.routes.connector import (  # noqa: E402
+from backend.api.routes.connector import (
     _extract_hostname,
     _validate_connector_host,
 )
@@ -168,53 +158,3 @@ def test_unresolvable_host_wirft() -> None:
             assert e.status_code == 400
             return
         raise AssertionError("Unresolvable Host sollte HTTPException werfen")
-
-
-# ----------------------------------------------------------------------------
-# Runner
-# ----------------------------------------------------------------------------
-
-ALLE_TESTS = [
-    test_extract_hostname_bare_ip,
-    test_extract_hostname_url,
-    test_extract_hostname_port_only,
-    test_extract_hostname_dns_name,
-    test_loopback_127_geblockt,
-    test_loopback_alle_127_subnet_geblockt,
-    test_aws_metadata_geblockt,
-    test_link_local_169_254_geblockt,
-    test_ipv6_loopback_geblockt,
-    test_multicast_geblockt,
-    test_unspecified_geblockt,
-    test_dns_rebinding_geblockt,
-    test_dns_rebinding_alle_aufloesungen_geprueft,
-    test_private_lan_10er_erlaubt,
-    test_private_lan_192_168_erlaubt,
-    test_private_lan_172_16_erlaubt,
-    test_public_ip_erlaubt,
-    test_dns_name_auf_lan_erlaubt,
-    test_url_form_erlaubt,
-    test_leerer_host_wirft,
-    test_unresolvable_host_wirft,
-]
-
-
-def main() -> int:
-    fehler = 0
-    for fn in ALLE_TESTS:
-        try:
-            fn()
-            print(f"PASS  {fn.__name__}")
-        except Exception:  # noqa: BLE001
-            fehler += 1
-            print(f"FAIL  {fn.__name__}")
-            traceback.print_exc()
-    if fehler:
-        print(f"\n{fehler} Tests fehlgeschlagen.")
-        return 1
-    print(f"\nAlle {len(ALLE_TESTS)} Tests grün.")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

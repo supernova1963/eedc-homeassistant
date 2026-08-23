@@ -20,16 +20,11 @@ Self-contained:
 
 from __future__ import annotations
 
-import sys
 from datetime import date
-from pathlib import Path
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(_BACKEND_ROOT))
-
-from backend.models import Anlage, Investition, Monatsdaten  # noqa: E402
-from backend.models.investition import InvestitionMonatsdaten  # noqa: E402
-from backend.services.daten_checker import (  # noqa: E402
+from backend.models import Anlage, Investition, Monatsdaten
+from backend.models.investition import InvestitionMonatsdaten
+from backend.services.daten_checker import (
     CheckSeverity,
     DatenChecker,
 )

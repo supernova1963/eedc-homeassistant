@@ -14,22 +14,11 @@ Der Fix nutzt zwei Mechanismen:
      `private_key`, `app_secret`, `client_secret`, `system_code`.
 
 Identifier (`username`, `email`, `site_id`, `region`, ...) bleiben lesbar.
-
-Self-contained:
-
-    eedc/backend/venv/bin/python eedc/backend/tests/test_cloud_credentials_maskierung.py
 """
 
 from __future__ import annotations
 
-import sys
-import traceback
-from pathlib import Path
-
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]  # eedc/
-sys.path.insert(0, str(_BACKEND_ROOT))
-
-from backend.api.routes.cloud_import import _maskiere_credentials  # noqa: E402
+from backend.api.routes.cloud_import import _maskiere_credentials
 
 
 # ----------------------------------------------------------------------------
@@ -141,41 +130,3 @@ def test_leere_werte_werden_weggelassen() -> None:
 def test_leere_credentials_dict_liefert_leeres_dict() -> None:
     result = _maskiere_credentials({}, provider_id="solaredge")
     assert result == {}
-
-
-# ----------------------------------------------------------------------------
-# Runner
-# ----------------------------------------------------------------------------
-
-ALLE_TESTS = [
-    test_solaredge_api_key_wird_maskiert,
-    test_deye_app_secret_wird_maskiert,
-    test_fronius_access_key_value_wird_maskiert,
-    test_huawei_system_code_wird_maskiert,
-    test_unbekannter_provider_maskiert_sensible_keys_per_heuristik,
-    test_kein_provider_id_immer_noch_heuristik,
-    test_identifier_bleiben_klartext,
-    test_leere_werte_werden_weggelassen,
-    test_leere_credentials_dict_liefert_leeres_dict,
-]
-
-
-def main() -> int:
-    fehler = 0
-    for fn in ALLE_TESTS:
-        try:
-            fn()
-            print(f"PASS  {fn.__name__}")
-        except Exception:  # noqa: BLE001
-            fehler += 1
-            print(f"FAIL  {fn.__name__}")
-            traceback.print_exc()
-    if fehler:
-        print(f"\n{fehler} Tests fehlgeschlagen.")
-        return 1
-    print(f"\nAlle {len(ALLE_TESTS)} Tests grün.")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
