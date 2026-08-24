@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Removed
+
+- **Ein Endpunkt und eine Namens-Heuristik, die niemand benutzt hat.** `GET /api/anlagen/prognose-quellen/discover` hatte keinen einzigen Aufrufer, und der daraus gelieferte Anzeigename der Prognose-Integration wurde per Zeichenketten-Vergleich aus dem HA-`friendly_name` erraten. Die Erkennung der Prognose-Sensoren selbst bleibt unberührt — sie läuft über die Entity-IDs und wird an anderer Stelle produktiv genutzt.
+
+---
+
 ## [4.0.26] - 2026-08-22 — Ein weiterer Benutzerwunsch
 
 ### Added

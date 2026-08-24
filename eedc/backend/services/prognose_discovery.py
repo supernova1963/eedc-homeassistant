@@ -43,7 +43,6 @@ class PrognoseDiscoveryResult:
     """Ergebnis der Auto-Erkennung einer Prognose-Integration."""
     integration: str  # "sfml" | "solcast"
     gefunden: bool = False
-    device_name: Optional[str] = None
     sensoren: dict[str, DiscoveredSensor] = field(default_factory=dict)
     fehler: Optional[str] = None
 
@@ -229,21 +228,9 @@ async def discover_prognose_sensoren(integration: str) -> PrognoseDiscoveryResul
                     )
                     break  # Nur erstes Pattern matchen
 
-        # Device-Name aus friendly_name ableiten
-        device_name = None
-        if integration_entities:
-            fn = (integration_entities[0].get("attributes") or {}).get("friendly_name", "")
-            # "Solar Forecast ML Prognose (heute)" → "Solar Forecast ML"
-            # "Solcast PV Forecast Prognose heute" → "Solcast PV Forecast"
-            for known_prefix in ["Solar Forecast ML", "Solcast PV Forecast"]:
-                if fn.startswith(known_prefix):
-                    device_name = known_prefix
-                    break
-
         result = PrognoseDiscoveryResult(
             integration=integration,
             gefunden=len(sensoren) > 0,
-            device_name=device_name,
             sensoren=sensoren,
         )
         _discovery_cache[integration] = (now, result)

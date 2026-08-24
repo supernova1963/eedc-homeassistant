@@ -510,38 +510,3 @@ async def delete_anlagenfoto(anlage_id: int, db: AsyncSession = Depends(get_db))
         raise HTTPException(status_code=404, detail="Kein Anlagenfoto hinterlegt")
     await db.delete(foto)
     await db.commit()
-
-
-@router.get("/prognose-quellen/discover")
-async def discover_prognose_quellen():
-    """
-    Erkennt verfügbare Prognose-Integrationen in HA (SFML, Solcast).
-
-    Liefert pro Integration: ob gefunden, Device-Name, erkannte Sensoren.
-    Nur im HA-Add-on aktiv — im Standalone liefert es leere Ergebnisse.
-    """
-    from backend.services.prognose_discovery import discover_prognose_sensoren
-
-    sfml = await discover_prognose_sensoren("sfml")
-    solcast = await discover_prognose_sensoren("solcast")
-
-    return {
-        "sfml": {
-            "gefunden": sfml.gefunden,
-            "device_name": sfml.device_name,
-            "sensoren": {
-                rolle: {"entity_id": s.entity_id, "wert": s.wert, "einheit": s.einheit}
-                for rolle, s in sfml.sensoren.items()
-            },
-            "fehler": sfml.fehler,
-        },
-        "solcast": {
-            "gefunden": solcast.gefunden,
-            "device_name": solcast.device_name,
-            "sensoren": {
-                rolle: {"entity_id": s.entity_id, "wert": s.wert, "einheit": s.einheit}
-                for rolle, s in solcast.sensoren.items()
-            },
-            "fehler": solcast.fehler,
-        },
-    }

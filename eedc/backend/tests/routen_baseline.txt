@@ -25,7 +25,6 @@ DELETE /api/strompreise/{strompreis_id}
 GET /api/aktueller-monat/{anlage_id}
 GET /api/anlagen/
 GET /api/anlagen/geocode/lookup
-GET /api/anlagen/prognose-quellen/discover
 GET /api/anlagen/{anlage_id}
 GET /api/anlagen/{anlage_id}/foto
 GET /api/anlagen/{anlage_id}/foto/thumb

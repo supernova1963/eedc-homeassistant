@@ -23,9 +23,17 @@ absichtlich aendert.
 **Wenn dieser Test rot wird:** Endpoint bewusst hinzugefuegt oder entfernt? Dann die
 Baseline neu erzeugen und den Diff im Commit mitschicken:
 
-    cd eedc && python -c "from backend.main import app; \
-      print('\\n'.join(sorted({(','.join(sorted(r.methods)) if getattr(r,'methods',None) else '-')+' '+r.path for r in app.routes})))" \
-      > backend/tests/routen_baseline.txt
+    cd eedc && python -c "
+    from backend.main import app
+    zeilen = sorted({(','.join(sorted(r.methods)) if getattr(r,'methods',None) else '-')+' '+r.path for r in app.routes})
+    open('backend/tests/routen_baseline.txt','w').write('\\n'.join(zeilen)+'\\n')
+    "
+
+⚠ **Nicht per `> routen_baseline.txt` umleiten.** Der App-Boot schreibt selbst auf
+stdout (`HA-Integration: nicht verfuegbar (Standalone-Modus)`) — diese Zeile landete
+am 24.08. beim Nachziehen von N-170 mitten in der Baseline und machte den Pruefer
+beim naechsten Lauf aus dem falschen Grund rot. Deshalb schreibt das Rezept die
+Datei selbst, statt die Ausgabe umzuleiten.
 """
 from pathlib import Path
 
