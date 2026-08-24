@@ -11,6 +11,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Fixed
 
+- **Ein PV-Zähler am Wechselrichter wurde von niemandem gelesen — und blockierte dabei die Stelle, die funktioniert hätte.** Gemeldet von **Mathek** ([#388](https://github.com/supernova1963/eedc-homeassistant/issues/388)): Die Live-Kachel *PV-Erzeugung heute* zeigte rund 31 % zu viel, und auch nach der Korrektur in 4.0.22 änderte sich bei ihm nichts.
+
+  eedc führt die PV-Erzeugung an den **PV-Modulen** und — für die ganze Anlage — unter *Einstellungen → Datenquellen* in der Gruppe *Anlage (Basis)* als **PV-Erzeugung Zählerstand**. Am **Wechselrichter** gab es trotzdem ein gleichnamiges Feld. Ein Wert dort zählte nirgends mit; das Gerät ist für eedc ein Durchleiter, keine Messstelle. Schlimmer war die Nebenwirkung: Das Feld galt als vollwertige PV-Quelle, und sobald dort ein Zähler hing, meldete eedc die PV als **abgedeckt** — der Anlagen-Zähler *und* das Modul-Feld standen auf „bereits an anderer Stelle zugeordnet". Alle drei Wege inaktiv, keiner wirksam. Für die Kachel blieb nur die Hochrechnung aus der Momentanleistung, und die schätzt zwischen zwei Messpunkten nach oben.
+
+  **Ab jetzt:** Das Feld wird nicht mehr angeboten. Wer dort noch eine Zuordnung hat, sieht sie weiterhin — sie lässt sich also entfernen — und der **Daten-Checker** sagt, wohin der Sensor gehört. Danach wird der Anlagen-Zähler wieder eingefordert, und die Kachel liest ihn. **Wer je String misst, ordnet wie bisher am PV-Modul zu; wer einen Zähler für die ganze Anlage hat, unter Anlage (Basis)** — eedc verteilt die Menge dann nach kWp auf die Module.
+
+  **Wen es betrifft:** nur Anlagen mit einem Wechselrichter-Gerät, an dem ein PV-Zähler oder ein PV-Monatswert hängt. **Deine Daten werden nicht angefasst.** Nach dem Umziehen des Sensors steht in der Live-Kachel ein gemessener Wert statt einer Schätzung — die Zahl ändert sich also sichtbar, und zwar nach unten auf den Wert deines Zählers.
+
+  **Danke an Mathek**, der ein zweites Mal geschrieben hat, als die erste Korrektur bei ihm nicht wirkte. Ohne diesen zweiten Bericht wäre die eigentliche Ursache nicht gefunden worden.
+
 - **Der PV-Anteil der Heimladung stand bei manchen Anlagen auf 0 %, obwohl eedc ihn kannte.** Wer eine **Wallbox** hat, dessen Heimladung führt eedc seit v3.36.0 dort — die Aufteilung in Sonne und Netz am *Fahrzeug* wird seither nicht mehr angeboten und nicht mehr verwendet. Ein **alter** Wert, der aus der Zeit davor am Fahrzeug stehengeblieben ist, hat trotzdem weitergewirkt: Er galt als „der Anwender hat die Aufteilung erfasst" und hat damit verhindert, dass eedc sie für die Wallbox aus den eigenen Stundenwerten ableitet. Ergebnis war keine falsche Zahl, sondern **gar keine** — die Heimladung stand vollständig auf der Netz-Seite.
 
   Ab jetzt entscheidet allein die Quelle, die eedc auch wirklich verwendet: Trägt die **Wallbox** eine eigene Aufteilung, gilt sie unverändert. Trägt sie keine, leitet eedc den Anteil aus dem gemessenen Tagesverlauf ab — so wie bei jeder Anlage ohne solchen Altbestand.

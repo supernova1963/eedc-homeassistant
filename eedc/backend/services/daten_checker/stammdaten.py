@@ -753,6 +753,81 @@ class StammdatenChecks:
         ))
         return ergebnisse
 
+    def _check_wechselrichter_pv_altbestand(
+        self, inv, name: str, sensor_mapping: dict,
+    ) -> list[CheckErgebnis]:
+        """Eine alte PV-Zuordnung am Wechselrichter — und wohin sie gehoert.
+
+        Der Wechselrichter ist **kein PV-Erzeuger** (Entscheid 24.08.2026,
+        Begruendung in `core/field_definitions.py`). Sein `pv_erzeugung_kwh`
+        traegt seither `nur_bestand`: nicht mehr pflegbar, nur noch sichtbar,
+        solange eine Zuordnung daran haengt.
+
+        ⚠ **Warum WARNING und nicht INFO** — anders als beim BKW-Akku
+        (`_check_bkw_akku_erfassungsweg`, dort INFO): Dort liegen die Werte
+        vor und werden angezeigt, nur eben monatlich. Hier wird der Sensor
+        **von niemandem gelesen**, und schlimmer: solange er hing, meldete die
+        Zuordnungs-Flaeche die PV als abgedeckt (er besetzte die Gruppe
+        `pv_energie`). Die Live-Kachel fiel dadurch auf die Hochrechnung aus der
+        Leistung zurueck — beim Melder von #388 rund 31 % zu hoch. Das ist ein
+        Defekt in seinen Zahlen, keine Auskunft.
+
+        Gemeldet wird beides, was es geben kann: eine **Sensor-Zuordnung** und
+        ein von Hand gepflegter **Monatswert**. Nichts wird angefasst
+        ([[feedback_kein_grosser_heiler_knopf]]); der Text nennt die Handlung.
+        """
+        ergebnisse: list[CheckErgebnis] = []
+        kat = CheckKategorie.INVESTITIONEN
+
+        inv_map = ((sensor_mapping or {}).get("investitionen") or {})
+        eintrag = inv_map.get(str(inv.id)) or inv_map.get(inv.id) or {}
+        felder = (eintrag.get("felder") or {}) if isinstance(eintrag, dict) else {}
+        zuordnung = felder.get("pv_erzeugung_kwh")
+        hat_zuordnung = bool(
+            zuordnung.get("entity_id") if isinstance(zuordnung, dict) else zuordnung
+        )
+
+        monate = sorted(
+            (imd.jahr, imd.monat)
+            for imd in (inv.monatsdaten or [])
+            if (imd.verbrauch_daten or {}).get("pv_erzeugung_kwh") is not None
+        )
+        if not hat_zuordnung and not monate:
+            return ergebnisse
+
+        teile: list[str] = []
+        if hat_zuordnung:
+            teile.append(
+                "Am Wechselrichter haengt ein PV-Zaehler. Er wird nicht "
+                "ausgewertet: eedc fuehrt die PV-Erzeugung an den PV-Modulen "
+                "und -- fuer die ganze Anlage -- unter Anlage (Basis) als "
+                "PV-Erzeugung Zaehlerstand."
+            )
+        if monate:
+            von = f"{monate[0][1]:02d}/{monate[0][0]}"
+            bis = f"{monate[-1][1]:02d}/{monate[-1][0]}"
+            zeitraum = von if len(monate) == 1 else f"{von} bis {bis}"
+            teile.append(
+                f"Fuer {len(monate)} Monate ({zeitraum}) ist hier ausserdem ein "
+                "PV-Monatswert von Hand gepflegt. Auch er zaehlt nirgends mit."
+            )
+        teile.append(
+            "So gehoert es zugeordnet: Misst du je String, dann am jeweiligen "
+            "PV-Modul. Hast du nur einen Zaehler fuer die ganze Anlage, dann "
+            "unter Einstellungen -> Datenquellen in der Gruppe Anlage (Basis) "
+            "bei PV-Erzeugung Zaehlerstand -- eedc verteilt die Menge dann "
+            "nach kWp auf deine Module. "
+            "Die alte Zuordnung kannst du danach entfernen; sie bleibt so "
+            "lange sichtbar, bis du sie loeschst."
+        )
+        ergebnisse.append(CheckErgebnis(
+            kategorie=kat, schwere=CheckSeverity.WARNING,
+            meldung=f"{name}: PV-Zuordnung am Wechselrichter wird nicht ausgewertet",
+            details=" ".join(teile),
+            link="/einstellungen/datenquellen",
+        ))
+        return ergebnisse
+
     def _check_bkw_akku_erfassungsweg(self, inv, name: str, alle_invs) -> list[CheckErgebnis]:
         """Weist Weg-B-Altbestand auf den Kanon hin — mit benannter Handlung.
 
@@ -1080,6 +1155,9 @@ class StammdatenChecks:
                         meldung=f"{name}: Leistung (kW) fehlt",
                         link="/einstellungen/investitionen",
                     ))
+                ergebnisse.extend(self._check_wechselrichter_pv_altbestand(
+                    inv, name, anlage.sensor_mapping or {},
+                ))
 
             elif inv.typ == "waermepumpe":
                 # F-41 (#383 azywietz-web, 18.08.): Bis v4.0.20 hingen DREI

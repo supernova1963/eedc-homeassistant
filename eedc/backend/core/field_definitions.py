@@ -35,6 +35,16 @@ Feld-Attribute:
                   Sensor-Zuordnungs-Wizard, im MQTT-Inbound-Wizard und in der
                   manuellen Monatsdaten-Eingabe. Sensor-Felder konsistent zu
                   docs/SENSOR-REFERENZ.md halten.
+  nur_bestand   — True: das Feld ist **gar nicht mehr pflegbar** und faellt aus
+                  `get_felder_fuer_investition` (Monatsabschluss). Es bleibt nur
+                  in der Registry, damit eine BESTEHENDE Zuordnung sichtbar und
+                  entfernbar ist — dafuer traegt es zusaetzlich `nur_manuell`,
+                  das `routes/datenquellen.py::ohne_nicht_zuordenbare` auswertet
+                  (Feld weg, ausser es traegt heute eine Quelle). Unterschied zu
+                  `nur_manuell` allein: dort ist das Feld weiterhin ERFASSBAR,
+                  nur nicht mehr zuordenbar. Erster Fall:
+                  `wechselrichter/pv_erzeugung_kwh` (Gernot 24.08.2026 — der
+                  Wechselrichter ist kein PV-Erzeuger, Begruendung dort).
   nur_manuell   — True: das Feld bleibt in Monatsabschluss, CSV-Import und
                   Export **erfassbar**, verschwindet aber als **zuordenbare
                   Quelle**. Markiert statt gefiltert: `build_expected_topics`
@@ -258,15 +268,57 @@ INVESTITION_FELDER: dict = {
         },
     ],
 
+    # ⛔ **Der Wechselrichter ist KEIN PV-Erzeuger** (Entscheid Gernot 24.08.2026).
+    # Das Feld bleibt nur noch stehen, damit eine BESTEHENDE Zuordnung sichtbar
+    # und entfernbar ist — `nur_manuell` nimmt es sonst von der Flaeche
+    # (`routes/datenquellen.py::ohne_nicht_zuordenbare`), und im Monatsabschluss
+    # erscheint es gar nicht mehr.
+    #
+    # **Warum es weg musste, gemessen 24.08.:**
+    # 1. Ein Wert hier wird von NIEMANDEM gelesen. Baumweit gilt
+    #    `PV_ERZEUGER_TYPEN = ("pv-module", "balkonkraftwerk")`; der
+    #    Wechselrichter steht in `live_sensor_config.SKIP_TYPEN` und fehlt in
+    #    `snapshot/komponenten_beitraege._TYP_KEY_PREFIX`. Gemessen an der
+    #    Fakten-Schicht: 900 kWh am Wechselrichter ⇒ `erzeugung.pv_kwh = 0.0`,
+    #    dieselben 900 an einem PV-Modul ⇒ 900.0.
+    # 2. Schlimmer als folgenlos: Das Feld war `("pflicht", "pv_energie")` und
+    #    hat damit die Alternativ-Gruppe BESETZT. Wer seinen Zaehler hier
+    #    zuordnete — auf der Zuordnungs-Flaeche ging das, obwohl der
+    #    Monatsabschluss das Feld bei vorhandenen Modulen laengst ausblendete —,
+    #    bekam eine Sackgasse: `basis:pv_gesamt` **und** das Modul-Feld meldeten
+    #    „bereits an anderer Stelle zugeordnet", waehrend die einzige belegte
+    #    Quelle nirgends gelesen wurde. Die Live-Kachel fiel auf die
+    #    Trapez-Hochrechnung zurueck (+31 %, #388/F-57).
+    # 3. Der Hinweistext sagte „Nur noetig, wenn keine separaten
+    #    PV-Modul-Investitionen erfasst werden" — genau diese Lage ergibt aber
+    #    **0 kWh PV** (gemessen: Anlagen-Aggregat 1000 ohne Modul-Komponente ⇒
+    #    0.0) und wird vom Daten-Checker bereits als ERROR gemeldet
+    #    („keine PV-Module angelegt"). Das Feld beschrieb ein Modell, das die
+    #    Rechnung nicht kennt.
+    #
+    # **Der Weg ohne dieses Feld** ist gemessen und offen: der anlagenweite
+    # Zaehler `basis:pv_gesamt` speist seit 2026-08-07 den Monatswert
+    # (`snapshot/keys.py`: `basis["pv_gesamt"]` -> `Monatsdaten.pv_erzeugung_kwh`),
+    # und von dort verteilt `resolve_pv_je_modul` kWp-gewichtet auf die Module.
+    #
+    # ⚠ `bedingung_anlage: keine_pv_module` ist bewusst ENTFALLEN: es blendete
+    # das Feld genau dann aus, wenn Module existierten — also im Regelfall — und
+    # liess es stehen, wenn es nichts bewirken konnte. Genau verkehrt herum.
     "wechselrichter": [
         {
             "feld": "pv_erzeugung_kwh", "label": "PV-Erzeugung", "einheit": "kWh",
             "csv_suffix": "kWh",
             "aggregiert_in": "pv_erzeugung_sum",
-            # Nur anzeigen wenn keine separaten PV-Modul-Investments existieren.
-            # Sonst wird die Erzeugung bei den einzelnen PV-Modul-Segmenten erfasst.
-            "bedingung_anlage": "keine_pv_module",
-            "hinweis": "Kumulativer kWh-Zähler (oder Tagessensor) der gesamten PV-Erzeugung am Wechselrichter. Nur nötig, wenn keine separaten PV-Modul-Investitionen erfasst werden.",
+            "nur_manuell": True,
+            "nur_bestand": True,
+            "hinweis": (
+                "\u26a0 Nicht mehr verwenden. Die PV-Erzeugung geh\u00f6rt an die "
+                "PV-Module (oder an das Balkonkraftwerk); der anlagenweite Z\u00e4hler "
+                "steht unter Anlage (Basis) als \u201ePV-Erzeugung Z\u00e4hlerstand\u201c. "
+                "Ein Wert an dieser Stelle wird nicht ausgewertet. Das Feld erscheint "
+                "nur noch, solange hier eine alte Zuordnung h\u00e4ngt \u2014 entferne "
+                "sie und ordne den Z\u00e4hler neu zu."
+            ),
         },
     ],
 
@@ -856,7 +908,14 @@ FELD_BEDARF: dict[tuple[str, str], tuple[str, Optional[str]]] = {
     # ── PV ──────────────────────────────────────────────────────────────────
     ("pv-module", "pv_erzeugung_kwh"): ("pflicht", "pv_energie"),
     ("pv-module", "leistung_w"): ("optional", "pv_live"),
-    ("wechselrichter", "pv_erzeugung_kwh"): ("pflicht", "pv_energie"),
+    # ⛔ Kein PV-Erzeuger mehr (Gernot 24.08.2026) — und DIESE Zeile war der
+    # eigentliche Schaden: als Mitglied der Gruppe `pv_energie` hat ein hier
+    # belegtes Feld `basis:pv_gesamt` UND das Modul-Feld auf „bereits an
+    # anderer Stelle zugeordnet" gesetzt, waehrend es selbst nirgends gelesen
+    # wurde. Drei Quellen inaktiv, keine wirksam (#388/F-57). `("optional",
+    # None)` statt Streichung: der Eintrag traegt die Begruendung, und ein
+    # fehlender Schluessel faellt still auf FELD_BEDARF_DEFAULT zurueck.
+    ("wechselrichter", "pv_erzeugung_kwh"): ("optional", None),
     ("wechselrichter", "leistung_w"): ("optional", "pv_live"),
     ("balkonkraftwerk", "pv_erzeugung_kwh"): ("pflicht", "pv_energie"),
     ("balkonkraftwerk", "leistung_w"): ("optional", "pv_live"),
@@ -1320,9 +1379,15 @@ def get_felder_fuer_investition(
     # Steuer-Schlüssel — hier ausgewertet bzw. nur für die Zuordnungs-Fläche
     # relevant, gehören nicht in die Eingabe-Antwort.
     SKIP_KEYS = {"bedingung", "bedingung_anlage", "label_wenn", "nur_manuell",
-                 "je_innengeraet", "label_je_innengeraet"}
+                 "nur_bestand", "je_innengeraet", "label_je_innengeraet"}
 
     for feld in alle_felder:
+        # ⛔ `nur_bestand`: gar nicht mehr pflegbar — siehe Kopf dieser Datei.
+        # Es bleibt allein in der Registry, damit eine BESTEHENDE Zuordnung auf
+        # der Zuordnungs-Flaeche sichtbar und entfernbar ist; dort entscheidet
+        # `ohne_nicht_zuordenbare` ueber `nur_manuell`. Hier faellt es immer.
+        if feld.get("nur_bestand"):
+            continue
         bedingung = feld.get("bedingung")
         bedingung_anlage = feld.get("bedingung_anlage")
 
