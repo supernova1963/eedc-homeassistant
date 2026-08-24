@@ -1,4 +1,3 @@
-- /assets
 DELETE /api/anlagen/{anlage_id}
 DELETE /api/anlagen/{anlage_id}/foto
 DELETE /api/cloud-import/credentials/{anlage_id}
@@ -187,7 +186,6 @@ GET /api/wetter/provider/{anlage_id}
 GET /api/wetter/vergleich/{anlage_id}/{jahr}/{monat}
 GET /api/zaehlerstaende/{anlage_id}
 GET /api/zaehlerstaende/{anlage_id}/heute
-GET /{full_path:path}
 GET,HEAD /api/openapi.json
 PATCH /api/anlagen/{anlage_id}/sensors
 POST /api/anlagen/

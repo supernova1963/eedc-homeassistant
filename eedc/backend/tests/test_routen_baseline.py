@@ -29,6 +29,16 @@ Baseline neu erzeugen und den Diff im Commit mitschicken:
     open('backend/tests/routen_baseline.txt','w').write('\\n'.join(zeilen)+'\\n')
     "
 
+⚠ **Die Baseline traegt NUR den API-Vertrag, nicht die Auslieferung.** Die drei
+Routen, mit denen die App das gebaute Frontend ausliefert, haengen daran, ob
+`frontend/dist` im Arbeitsbaum liegt (`main.py:1019`) -- und `dist/` ist seit N-246
+nicht mehr versioniert. Eine Baseline, die auf einer Box MIT Build erhoben wurde,
+misst deshalb den Build-Zustand des Arbeitsbaums mit: lokal gruen, in CI rot. Genau
+das ist am 24.08. passiert (F-62, erster CI-Lauf dieses Pruefers, zwei Faelle rot).
+Sie stehen darum in `AUSLIEFERUNG` und werden aus Ist UND Soll herausgerechnet.
+Was dadurch nicht ungeprueft bleibt, haelt `test_auslieferungspfad_existiert_in_einer_form`
+weiter unten fest.
+
 ⚠ **Nicht per `> routen_baseline.txt` umleiten.** Der App-Boot schreibt selbst auf
 stdout (`HA-Integration: nicht verfuegbar (Standalone-Modus)`) — diese Zeile landete
 am 24.08. beim Nachziehen von N-170 mitten in der Baseline und machte den Pruefer
@@ -39,17 +49,25 @@ from pathlib import Path
 
 BASELINE = Path(__file__).parent / "routen_baseline.txt"
 
+# Umgebungsabhaengig, deshalb kein Teil des Vertrags (Begruendung im Modul-Docstring):
+# mit gebautem Frontend registriert main.py den Mount und den SPA-Catchall, ohne
+# Frontend stattdessen den Fallback auf "/". Welche der beiden Formen gilt, sagt
+# nichts ueber die App aus -- nur darueber, ob jemand `npm run build` gefahren hat.
+AUSLIEFERUNG = frozenset({"- /assets", "GET /{full_path:path}", "GET /"})
+
 
 def _ist_routen():
     from backend.main import app  # Import hier: der App-Boot ist Teil der Pruefung
     return {
         f"{','.join(sorted(r.methods)) if getattr(r, 'methods', None) else '-'} {r.path}"
         for r in app.routes
-    }
+    } - AUSLIEFERUNG
 
 
 def _soll_routen():
-    return {z.strip() for z in BASELINE.read_text(encoding="utf-8").splitlines() if z.strip()}
+    return {
+        z.strip() for z in BASELINE.read_text(encoding="utf-8").splitlines() if z.strip()
+    } - AUSLIEFERUNG
 
 
 def test_baseline_datei_ist_nicht_leer():
@@ -84,4 +102,31 @@ def test_keine_route_ist_unangekuendigt_dazugekommen():
         + "\n  ".join(neu)
         + "\n\nNeu gebaut? Dann routen_baseline.txt neu erzeugen "
           "(Anleitung im Modul-Docstring) und den Diff im Commit mitschicken."
+    )
+
+
+def test_auslieferungspfad_existiert_in_einer_form():
+    """Der Ersatz fuer das, was `AUSLIEFERUNG` aus dem Vergleich herausnimmt.
+
+    Ohne ihn waeren die drei Routen ungeprueft -- und ein SPA-Catchall, der beim
+    Umbau still verschwindet, faellt niemandem auf: die API antwortet weiter, nur
+    die Oberflaeche kommt nicht mehr. Der Test schaut deshalb nicht, WELCHE Form
+    aktiv ist (das entscheidet der Build-Zustand), sondern dass es GENAU EINE gibt.
+    """
+    from backend.main import app
+
+    ist = {
+        f"{','.join(sorted(r.methods)) if getattr(r, 'methods', None) else '-'} {r.path}"
+        for r in app.routes
+    }
+    mit_build = {"- /assets", "GET /{full_path:path}"} <= ist
+    ohne_build = "GET /" in ist
+
+    assert mit_build != ohne_build, (
+        "Der Auslieferungspfad ist weder als SPA-Zweig noch als Fallback vorhanden "
+        "-- oder beides gleichzeitig.\n"
+        f"  SPA-Zweig (dist vorhanden): {mit_build}\n"
+        f"  Fallback 'GET /':           {ohne_build}\n"
+        "main.py:1019 entscheidet das an frontend/dist. Beides zugleich oder keines "
+        "von beidem heisst: der Zweig wurde umgebaut und die Oberflaeche haengt."
     )
