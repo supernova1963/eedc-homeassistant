@@ -39,12 +39,38 @@ async def berechne_preis_export(db, anlage) -> Optional[dict]:
         ``guenstige_stunden_tag``, ``guenstige_stunden_nacht`` (int),
         ``guenstig_schwelle_cent``, ``preis_aktuell_cent``,
         ``optimierter_durchschnitt_cent``, ``abstand_prozent``, ``abstand_cent``
-        (float | None) und ``rang_profil``
-        (Liste ``{stunde, rang, preis_cent, unter_schwelle}``) — oder ``None``.
+        (float | None), ``rang_profil``
+        (Liste ``{stunde, rang, preis_cent, unter_schwelle, abstand_cent}``),
+        ``datum`` (ISO) sowie — sobald die Auktion sie veröffentlicht hat — den
+        Satz für **morgen** (``morgen_verfuegbar``, ``datum_morgen``,
+        ``rang_profil_morgen``, ``guenstig_schwelle_cent_morgen``,
+        ``optimierter_durchschnitt_cent_morgen``) — oder ``None``.
+
+    **Warum morgen mitreist (N-104, Melder rapahl).** Bis v4.0.26 endete der
+    Export am laufenden Tag, während ``preis_tag.bewerte_preistag`` jedes Datum
+    annimmt und der Preis-Chart auf *Cockpit → Live* längst beide Tage zeigt.
+    Wer in HA die Nachtladung für den Folgetag planen wollte, musste sich die
+    Kurve selbst holen — rapahl tat das mit einem eigenen Template-Sensor
+    (``ladepreis akku morgen``). Die Zahlen dafür hatte eedc, es lieferte sie nur
+    nicht aus.
+
+    **Je Tag eine eigene Schwelle.** Day-Ahead ist ein Tagesprodukt; der
+    optimierte Ø wird je Kalendertag gebildet (s. Klassen-Docstring von
+    ``PreisTag``). Deshalb reist für morgen **auch** die Schwelle und ihre
+    Bezugsgröße mit — ohne sie ist im Morgen-Profil keine eigene Regel rechenbar,
+    dasselbe Argument wie bei #335/N-105 für heute.
+
+    **Der Kalendertag steht dabei, für beide Tage.** Ein Rang-Profil ohne sein
+    Datum ist nach Mitternacht nicht von einem stehengebliebenen zu
+    unterscheiden — eine Automation, die dann auf „morgen" plant, plant auf
+    gestern.
     """
     try:
+        from datetime import timedelta
+
         from backend.services.preis_tag import (
-            bewerte_preistag, jetzt_im_markt, markt_der_anlage,
+            DAY_AHEAD_VEROEFFENTLICHUNG_STUNDE, bewerte_preistag,
+            jetzt_im_markt, markt_der_anlage,
         )
 
         markt = markt_der_anlage(anlage)
@@ -55,26 +81,7 @@ async def berechne_preis_export(db, anlage) -> Optional[dict]:
             return None
         tag, ergebnis = bewertet
 
-        # Das Profil trägt seit v4.0.10 (#335/N-105) das Rohmaterial mit: den
-        # Stundenpreis und die ungekappte Günstig-Markierung. Vorher stand je
-        # Stunde nur `1–5` oder `99` — damit ließ sich in HA weder eine eigene
-        # Schwelle noch ein eigenes Zeitfenster auswerten, obwohl die
-        # Sensor-Referenz genau das anbot. Muster: `stundenprofil_kwh` der
-        # Prognose-Sensoren.
-        rang_profil = [
-            {
-                "stunde": s.stunde,
-                "rang": s.rang,
-                "preis_cent": s.preis_cent,
-                "unter_schwelle": s.unter_schwelle,
-                # N-173: je Stunde der ct-Abstand zum Ø — damit sich in HA eine
-                # eigene Schwelle („5 ct unter dem Schnitt") über den ganzen Tag
-                # auswerten lässt, nicht nur für die laufende Stunde.
-                "abstand_cent": s.abstand_cent,
-            }
-            for s in tag.stunden
-        ]
-        return {
+        werte = {
             "preis_rang": ergebnis.rang_aktuell,
             "guenstige_stunden_anzahl": ergebnis.guenstige_stunden_anzahl,
             "guenstige_stunden_tag": ergebnis.guenstige_stunden_tag,
@@ -85,11 +92,62 @@ async def berechne_preis_export(db, anlage) -> Optional[dict]:
             "optimierter_durchschnitt_cent": ergebnis.optimierter_durchschnitt_cent,
             "abstand_prozent": ergebnis.abstand_prozent,
             "abstand_cent": ergebnis.abstand_cent,
-            "rang_profil": rang_profil,
+            "rang_profil": _profil(tag),
+            "datum": tag.datum.isoformat(),
         }
+
+        # Vor der Auktion gibt es morgen nicht — dann wird auch nicht gefragt.
+        # `fetch_marktpreise` cacht ein LEERES Ergebnis nicht, ein Abruf vor der
+        # Veröffentlichung würde also bei jedem Publish-Takt erneut an die
+        # Markt-API gehen (Takt-Default 60 min, konfigurierbar bis 5).
+        werte["morgen_verfuegbar"] = False
+        if now.hour >= DAY_AHEAD_VEROEFFENTLICHUNG_STUNDE:
+            morgen = now.date() + timedelta(days=1)
+            # Die Stunde ist für morgen bedeutungslos (es gibt dort keine
+            # „laufende"); 0 hält `rang_aktuell` deterministisch, benutzt wird
+            # aus dem Morgen-Ergebnis nur das Profil und die Tageswerte.
+            bewertet_morgen = await bewerte_preistag(db, anlage, morgen, 0)
+            if bewertet_morgen is not None:
+                tag_m, ergebnis_m = bewertet_morgen
+                if tag_m.stunden:
+                    werte.update({
+                        "morgen_verfuegbar": True,
+                        "datum_morgen": tag_m.datum.isoformat(),
+                        "rang_profil_morgen": _profil(tag_m),
+                        "guenstig_schwelle_cent_morgen": ergebnis_m.schwelle_cent,
+                        "optimierter_durchschnitt_cent_morgen":
+                            ergebnis_m.optimierter_durchschnitt_cent,
+                    })
+
+        return werte
     except Exception as e:  # Export bleibt für die übrigen Sensoren grün
         logger.warning(
             "HA-Export Börsenpreis-Rang fehlgeschlagen (Anlage %s): %s: %s",
             getattr(anlage, "id", "?"), type(e).__name__, e,
         )
         return None
+
+
+def _profil(tag) -> list[dict]:
+    """Ein Tagesprofil in Attribut-Form — dieselbe Gestalt für heute und morgen.
+
+    Das Profil trägt seit v4.0.10 (#335/N-105) das Rohmaterial mit: den
+    Stundenpreis und die ungekappte Günstig-Markierung. Vorher stand je Stunde
+    nur ``1–5`` oder ``99`` — damit ließ sich in HA weder eine eigene Schwelle
+    noch ein eigenes Zeitfenster auswerten, obwohl die Sensor-Referenz genau das
+    anbot. Muster: ``stundenprofil_kwh`` der Prognose-Sensoren.
+
+    ``abstand_cent`` je Stunde kam mit N-173 dazu — damit sich eine ct-Schwelle
+    („5 ct unter dem Schnitt") über den ganzen Tag auswerten lässt, nicht nur für
+    die laufende Stunde.
+    """
+    return [
+        {
+            "stunde": s.stunde,
+            "rang": s.rang,
+            "preis_cent": s.preis_cent,
+            "unter_schwelle": s.unter_schwelle,
+            "abstand_cent": s.abstand_cent,
+        }
+        for s in tag.stunden
+    ]

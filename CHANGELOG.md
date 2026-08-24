@@ -9,6 +9,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Added
+
+- **Die Börsenpreise von morgen stehen jetzt auch in Home Assistant.** Der Sensor `eedc_preis_rang` trug bisher nur den laufenden Tag, während der Preis-Chart unter *Cockpit → Live* längst beide Tage zeigt. Wer die Nachtladung für den Folgetag planen wollte, musste sich die Kurve selbst besorgen — **rapahl** hat sich dafür einen eigenen Template-Sensor gebaut. Ab jetzt tragen die Attribute des Sensors einen zweiten Satz: `rang_profil_morgen` mit allen 24 Stunden, dazu `guenstig_schwelle_cent_morgen` und `optimierter_durchschnitt_cent_morgen`, damit sich auch für morgen eine **eigene** Regel rechnen lässt. `morgen_verfuegbar` ist immer vorhanden und sagt, ob die Zahlen schon da sind — die Day-Ahead-Auktion veröffentlicht sie gegen 13 Uhr, vorher fragt eedc gar nicht an.
+
+  **Jeder Tag behält seine eigene Schwelle**, und das ist Absicht: Day-Ahead ist ein Tagesprodukt. Ein gemeinsamer Durchschnitt über 48 Stunden würde an einem teuren Tag keine einzige günstige Stunde ausweisen und am billigen fast alle. Neu ist außerdem `datum` — der Kalendertag, für den ein Profil gilt. Ohne ihn ist ein stehengebliebenes Profil nach Mitternacht nicht von einem aktuellen zu unterscheiden, und eine Automation, die dann auf „morgen" plant, plant auf gestern. **Kein bestehender Wert und kein bestehendes Attribut ändert sich** — es kommt nur hinzu.
+
 ### Removed
 
 - **Ein Endpunkt und eine Namens-Heuristik, die niemand benutzt hat.** `GET /api/anlagen/prognose-quellen/discover` hatte keinen einzigen Aufrufer, und der daraus gelieferte Anzeigename der Prognose-Integration wurde per Zeichenketten-Vergleich aus dem HA-`friendly_name` erraten. Die Erkennung der Prognose-Sensoren selbst bleibt unberührt — sie läuft über die Entity-IDs und wird an anderer Stelle produktiv genutzt.

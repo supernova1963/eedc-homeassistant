@@ -34,6 +34,18 @@ from backend.models.tages_energie_profil import TagesEnergieProfil
 
 logger = logging.getLogger(__name__)
 
+# Die Day-Ahead-Auktion veröffentlicht die Preise des Folgetages gegen 13 Uhr
+# (EPEX Spot, Marktzeit). Vor diesem Zeitpunkt gibt es sie nicht — das ist keine
+# Störung, sondern der Marktrhythmus.
+#
+# ⚠ **Warum die Zahl hier steht und nicht in der Route.** Bis zum 24.08. lag sie
+# in `api/routes/live_dashboard.py`; der HA-Export braucht sie seit N-104
+# ebenfalls, und ein Service, der eine Konstante aus einem Route-Modul importiert,
+# dreht die Schichtung um. Diese Datei ist laut ihrem eigenen Docstring „die
+# gemeinsame Quelle von HA-Export und Live-Chart" — also gehört sie hierher, und
+# beide lesen sie von hier.
+DAY_AHEAD_VEROEFFENTLICHUNG_STUNDE = 13
+
 # Fallback-Günstig-Faktor, wenn die Anlage keinen (oder einen aus dem Rahmen
 # gefallenen) Prozentwert trägt — deckungsgleich mit dem Default in
 # `core/berechnungen/preis_rang.py`.

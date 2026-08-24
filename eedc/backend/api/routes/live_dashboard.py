@@ -427,10 +427,12 @@ async def get_tagesverlauf(
 
 # ── Börsenpreis-Endpoint (#335) ──────────────────────────────────────────────
 
-# Die Day-Ahead-Auktion veröffentlicht die Preise des Folgetages gegen 13 Uhr
-# (EPEX Spot, Marktzeit). Vor diesem Zeitpunkt gibt es sie nicht — das ist keine
-# Störung, sondern der Marktrhythmus, und der Block sagt es entsprechend.
-DAY_AHEAD_VEROEFFENTLICHUNG_STUNDE = 13
+# Die Veröffentlichungsstunde der Day-Ahead-Auktion steht im SoT der Preis-Schicht
+# (`services/preis_tag.py`) — der HA-Export braucht sie seit N-104 ebenso, und eine
+# Konstante in zwei Modulen ist genau die Drift, gegen die diese Schicht gebaut ist.
+from backend.services.preis_tag import (  # noqa: E402
+    DAY_AHEAD_VEROEFFENTLICHUNG_STUNDE,
+)
 
 
 @router.get("/{anlage_id}/boersenpreise", response_model=BoersenpreisResponse)

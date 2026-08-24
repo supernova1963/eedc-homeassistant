@@ -1218,6 +1218,24 @@ async def calculate_anlage_sensors(
                 # Rang-Profil keine eigene Schwelle rechenbar (#335/N-105).
                 if preis.get("optimierter_durchschnitt_cent") is not None:
                     zusatz["optimierter_durchschnitt_cent"] = preis["optimierter_durchschnitt_cent"]
+                # Der Kalendertag des Profils (N-104). Ohne ihn ist ein
+                # stehengebliebenes Profil nach Mitternacht nicht von einem
+                # aktuellen zu unterscheiden.
+                if preis.get("datum"):
+                    zusatz["datum"] = preis["datum"]
+                # Morgen — sobald die Day-Ahead-Auktion veröffentlicht hat
+                # (N-104, Melder rapahl). `morgen_verfuegbar` ist immer gesetzt,
+                # damit eine Automation „noch nicht da" von „gibt es nicht"
+                # unterscheiden kann, statt auf ein fehlendes Attribut zu prüfen.
+                zusatz["morgen_verfuegbar"] = bool(preis.get("morgen_verfuegbar"))
+                for schluessel in (
+                    "datum_morgen",
+                    "rang_profil_morgen",
+                    "guenstig_schwelle_cent_morgen",
+                    "optimierter_durchschnitt_cent_morgen",
+                ):
+                    if preis.get(schluessel) is not None:
+                        zusatz[schluessel] = preis[schluessel]
             elif sensor.key == "eedc_preis_guenstige_stunden_anzahl":
                 value = preis["guenstige_stunden_anzahl"]
             elif sensor.key == "eedc_preis_guenstige_stunden_tag":
