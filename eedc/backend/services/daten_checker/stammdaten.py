@@ -55,6 +55,21 @@ DC_AC_MELDESCHWELLE = 2.0
 # Geld kostet: 50 kWh sind bei üblichen 8 ct rund 4 € im Jahr.
 EINSPEISUNG_MELDESCHWELLE_KWH_JAHR = 50.0
 
+# Ab dieser Abweichung meldet der Checker, dass die gepflegte Anlagenleistung
+# nicht zur Summe der Erzeuger-Investitionen passt (F-58, NoahPaulick T89667
+# #188). 0,1 kWp ist dieselbe Toleranz, die die Modul-Detail-Rechenprobe
+# darunter benutzt — sie fängt Rundung, nicht Pflege.
+#
+# ⚠ Verglichen wird gegen ZWEI Summen: mit und ohne Balkonkraftwerk. Passt der
+# gepflegte Wert zu einer von beiden, schweigt der Checker. Grund: fachlich ist
+# ein BKW eine eigene Anlage und gehört nicht in die kWp der Hauptanlage
+# (N-76 Stufe 1, Entscheid Gernot 2026-08-04) — wer es trotzdem eingerechnet
+# hat, hat aber nichts Falsches gemessen, sondern eine andere Konvention
+# gewählt. Nur eine Zahl, die zu KEINER der beiden passt, ist ein Pflegefehler.
+# Ohne diese Zweiseitigkeit bekäme jeder BKW-Anwender wieder die Meldung, die
+# Stufe 1 gerade abgeschafft hat ([[feedback_daten_checker_kein_akzeptiert]]).
+ANLAGENLEISTUNG_TOLERANZ_KWP = 0.1
+
 
 def _ist_zaehler(inv) -> bool:
     """Ist das ein *Sonstiges*-Gerät der Kategorie ``zaehler`` (#377)?
@@ -277,14 +292,19 @@ class StammdatenChecks:
                 ),
             ))
 
+            ergebnisse.extend(
+                self._check_anlagenleistung_gegen_module(anlage, summe_kwp, heute)
+            )
+
             ergebnisse.extend(self._check_dc_ac_verhaeltnis(anlage, pv_module, heute))
 
             # Ursache benennen statt nur die Summe (R22-2b, PN 89782 Rainer):
-            # die Regel oben sagt „Summe passt nicht zur Anlage" und lässt den
-            # Nutzer alle Strings durchsuchen. Wo Modul-Details gepflegt sind,
-            # ist die Rechenprobe eindeutig — sie zeigt den verursachenden
-            # String. Ergänzung, kein Ersatz: ohne Modul-Details (optionale
-            # Felder) bleibt die Summenregel die einzige Prüfung.
+            # die Summenregel oben sagt „Anlagenleistung passt nicht zu den
+            # Modulen" und lässt den Nutzer alle Strings durchsuchen. Wo
+            # Modul-Details gepflegt sind, ist die Rechenprobe eindeutig — sie
+            # zeigt den verursachenden String. Ergänzung, kein Ersatz: ohne
+            # Modul-Details (optionale Felder) bleibt die Summenregel die
+            # einzige Prüfung.
             for modul in pv_module:
                 params = modul.parameter or {}
                 anzahl = params.get(PARAM_PV_MODULE["ANZAHL_MODULE"])
@@ -336,6 +356,75 @@ class StammdatenChecks:
 
         return ergebnisse
 
+    def _check_anlagenleistung_gegen_module(
+        self, anlage: Anlage, summe_pv_kwp: float, heute: date,
+    ) -> list[CheckErgebnis]:
+        """Passt die gepflegte Anlagenleistung zur Summe der Erzeuger? (F-58)
+
+        **Warum es diese Prüfung wieder gibt.** `Anlage.leistung_kwp` ist der
+        Nenner jeder spezifischen Kennzahl — spezifischer Ertrag, Performance
+        Ratio, Auslastung, Doppelerfassungs-Verdacht. Bis zum 04.08. hielt ein
+        Summenvergleich ihn gegen die Investitionen; mit N-76 Stufe 1 ist er
+        entfallen, und danach hielt ihn **nichts** mehr. Der Setup-Wizard
+        erzeugt die PV-Module *aus* diesem Feld — sie stimmen also anfangs
+        überein und laufen erst auseinander, wenn jemand die Investitionen
+        korrigiert.
+
+        Genau das ist NoahPaulick passiert (T89667 #188, v4.0.26): Er hat eine
+        ursprünglich gemeinsam erfasste Anlage getrennt und die PV-Module
+        korrigiert. Der Referenzwert blieb stehen, und der Daten-Checker meldete
+        ihm vier Tage „PV-Doppelerfassung" bei einem spezifischen Ertrag, der um
+        den Faktor 2 danebenlag — während derselbe Checker die abweichende
+        Anlagenleistung eine Zeile darüber als „OK" bestätigte.
+
+        **Der Anwender behält seine Eingabe** (Entscheid Gernot 2026-08-24):
+        eedc leitet den Wert nicht ab und überschreibt ihn nicht, es sagt nur,
+        dass zwei seiner Angaben nicht zusammenpassen — und welche.
+
+        Zur Zweiseitigkeit des Vergleichs siehe `ANLAGENLEISTUNG_TOLERANZ_KWP`.
+        """
+        from backend.core.berechnungen.anlagen_kwp import summe_erzeuger_kwp
+
+        gepflegt = anlage.leistung_kwp or 0
+        if gepflegt <= 0:
+            return []  # der ERROR eine Prüfung darüber deckt das schon ab
+
+        # Beide zulässigen Konventionen. `summe_pv_kwp` kommt vom Aufrufer und
+        # ist bereits ohne BKW gerechnet — die zweite Summe holt es dazu.
+        mit_bkw = summe_erzeuger_kwp(anlage.investitionen, heute, mit_bkw=True)
+        if summe_pv_kwp <= 0 and mit_bkw <= 0:
+            return []  # keine gepflegten Erzeuger — nichts zu vergleichen
+
+        for summe in (summe_pv_kwp, mit_bkw):
+            if summe > 0 and abs(gepflegt - summe) <= ANLAGENLEISTUNG_TOLERANZ_KWP:
+                return []
+
+        bkw_zusatz = (
+            f" (mit Balkonkraftwerk {mit_bkw:.2f} kWp)"
+            if mit_bkw > summe_pv_kwp + ANLAGENLEISTUNG_TOLERANZ_KWP else ""
+        )
+        return [CheckErgebnis(
+            kategorie=CheckKategorie.STAMMDATEN.value,
+            schwere=CheckSeverity.WARNING,
+            meldung=(
+                f"Anlagenleistung {gepflegt:.2f} kWp passt nicht zu den "
+                f"Modulen ({summe_pv_kwp:.2f} kWp)"
+            ),
+            details=(
+                f"Unter „Anlage“ stehen {gepflegt:.2f} kWp, die Summe der "
+                f"angelegten PV-Module ergibt {summe_pv_kwp:.2f} kWp"
+                f"{bkw_zusatz}. eedc rechnet den spezifischen Ertrag, die "
+                "Performance Ratio und die Plausibilitätsprüfungen mit der "
+                "Modulsumme — die Anlagenleistung geht dagegen an den "
+                "Community-Vergleich. Solange beide auseinanderlaufen, "
+                "vergleichst du dich dort mit einer anderen Anlagengröße als "
+                "der, die du auswertest. Korrigiere den Wert, der nicht stimmt: "
+                "die Anlagenleistung unter „Einstellungen → Anlage“ oder die "
+                "Leistung der einzelnen Module unter „Investitionen“."
+            ),
+            link="/einstellungen/anlage",
+        )]
+
     def _check_dc_ac_verhaeltnis(
         self, anlage: Anlage, pv_module: list, heute: date,
     ) -> list[CheckErgebnis]:
@@ -353,9 +442,16 @@ class StammdatenChecks:
         Pflegefehler: die Wechselrichter-Leistung steht im kWp-Feld des Strings
         (genau der Fall aus #354) oder umgekehrt.
 
-        Die Prüfung ersetzt den früheren Abgleich „Σ Module ≠ Anlagenleistung",
-        der Überbelegung gar nicht kannte und beim Balkonkraftwerk zusätzlich
-        falsch-positiv meldete (N-76).
+        Die Prüfung trat 2026-08-04 an die Stelle des früheren Abgleichs
+        „Σ Module ≠ Anlagenleistung", der Überbelegung gar nicht kannte und beim
+        Balkonkraftwerk zusätzlich falsch-positiv meldete (N-76).
+
+        ⚠ Sie ersetzt ihn **nicht** — das war der Fehler. DC/AC misst Module
+        gegen Wechselrichter; niemand hielt danach die Anlagenleistung noch
+        gegen irgendetwas, obwohl sie der Nenner jeder spezifischen Kennzahl
+        ist. Den Abgleich selbst führt seit F-58 wieder
+        {@link _check_anlagenleistung_gegen_module}, jetzt beidseitig (mit und
+        ohne BKW) statt einseitig.
         """
         ergebnisse: list[CheckErgebnis] = []
         kat = CheckKategorie.STAMMDATEN

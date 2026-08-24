@@ -5,6 +5,7 @@ CRUD Endpoints für monatliche Energiedaten.
 """
 
 import logging
+from calendar import monthrange
 from datetime import date, datetime
 from typing import Annotated, Optional, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -22,6 +23,8 @@ from backend.core.calculations import (
     berechne_monatskennzahlen,
     MonatsKennzahlen,
 )
+# Alias: das Response-Feld unten heißt genauso wie die Funktion.
+from backend.core.berechnungen.anlagen_kwp import anlagen_kwp as berechne_anlagen_kwp
 from backend.core.berechnungen import (
     berechne_finanz_aggregat,
     berechne_netzbezug_kosten,
@@ -210,6 +213,18 @@ class AggregierteMonatsdatenResponse(BaseModel):
     netzbezug_durchschnittspreis_cent: Optional[float]
     # #392: Monatssatz der variablen Einspeisevergütung (None = Stammwert gilt)
     einspeise_durchschnittspreis_cent: Optional[float]
+    # F-58: Nenner des spezifischen Ertrags DIESES Monats — Σ der im Monat
+    # aktiven PV-Module (ohne BKW, wie `pv_erzeugung_kwh` daneben). Er steht
+    # hier, weil der Client ihn sonst selbst bilden müsste und dafür nur den
+    # gepflegten `Anlage.leistung_kwp` zur Hand hat: einen zeitlosen Skalar, der
+    # Zubau und Stilllegung nicht kennt. `None` = keine Erzeuger gepflegt.
+    #
+    # Heißt bewusst NICHT `leistung_kwp`: das ist der Name der
+    # Investitions-Rohspalte, und dieses Feld ist eine Anlagen-Summe. Der
+    # Client-Wächter `check:kennwert-roh` (ADR-002/P3-a) las den alten Namen
+    # korrekt als Kennwert-Zugriff — ein Name, der einen Wächter auslöst, ist
+    # ein Hinweis auf einen unklaren Namen, keine Allowlist-Frage.
+    anlagen_kwp: Optional[float]
     # Aggregiert aus InvestitionMonatsdaten - PV
     #
     # ⚠️ ZWEI BEDEUTUNGEN, EIN NAME — bewusst so (A17, Namens-Schritt 1):
@@ -610,6 +625,15 @@ async def list_monatsdaten_aggregiert(
             } or None,
             einspeisung_kwh=round(einspeisung, 1),
             netzbezug_kwh=round(netzbezug, 1),
+            # F-58: Nenner des spez. Ertrags je Monat. `mit_bkw=False`, weil
+            # `pv_erzeugung_kwh` dieser Zeile die Modul-PV ist.
+            anlagen_kwp=(
+                berechne_anlagen_kwp(
+                    inv_rows,
+                    date(f.jahr, f.monat, monthrange(f.jahr, f.monat)[1]),
+                    mit_bkw=False,
+                ) or None
+            ),
             globalstrahlung_kwh_m2=md.globalstrahlung_kwh_m2 if md is not None else None,
             sonnenstunden=md.sonnenstunden if md is not None else None,
             netzbezug_durchschnittspreis_cent=(
@@ -793,7 +817,17 @@ async def get_monatsdaten(monatsdaten_id: int, db: AsyncSession = Depends(get_db
             strompreis.netzbezug_arbeitspreis_cent_kwh if strompreis else NETZBEZUG_DEFAULT_CENT,
         ),
         grundpreis_euro_monat=strompreis.grundpreis_euro_monat or 0 if strompreis else 0,
-        leistung_kwp=anlage.leistung_kwp,
+        # F-58: Nenner des spezifischen Ertrags in den Monatskennzahlen —
+        # Σ der im Monat aktiven Module statt des gepflegten Referenzwerts.
+        # `mit_bkw=False`, weil der Zähler `pv_kwh` oben aus `pv_module` kommt
+        # und das Balkonkraftwerk dort NICHT enthalten ist — Zähler und Nenner
+        # müssen dieselbe Grundgesamtheit haben.
+        leistung_kwp=berechne_anlagen_kwp(
+            pv_module,
+            date(md.jahr, md.monat, monthrange(md.jahr, md.monat)[1]),
+            mit_bkw=False,
+            referenzwert=anlage.leistung_kwp,
+        ),
     )
 
     response = MonatsdatenMitKennzahlen.model_validate(md)

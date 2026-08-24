@@ -20,6 +20,7 @@ from typing import Optional
 from sqlalchemy import and_, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.core.berechnungen.speicher import anlagen_soc_prozent
 from backend.core.investition_kennwerte import get_speicher_nutzbare_kapazitaet_kwh
 from backend.core.source_priority import SOURCE_LABELS
@@ -659,8 +660,16 @@ async def aggregate_day(
     # Zähler dieses Bruchs kein Ertrag, sondern eine Lücke — die PR liefe sonst
     # auf 0,0 und der Daten-Checker meldete „auffällig niedrig" für eine Anlage,
     # die schlicht keinen PV-Zähler je Erzeuger hat (Forum kaba-kakao 2026-08-07).
+    # F-58: Nenner ist die Σ der an DIESEM Tag aktiven Erzeuger. Der gepflegte
+    # `Anlage.leistung_kwp` ist ein zeitloser Skalar — er kennt weder Zubau noch
+    # Stilllegung, und seit dem Wegfall des Summenvergleichs (N-76 Stufe 1) hielt
+    # ihn nichts mehr gegen die Investitionen. Eine zu kleine kWp macht den
+    # Nenner zu klein und die PR zu groß; genau das meldet der Daten-Checker
+    # dann als Doppelerfassungs-Verdacht.
     performance_ratio = None
-    kwp = anlage.leistung_kwp
+    kwp = anlagen_kwp(
+        invs, datum, mit_bkw=True, referenzwert=anlage.leistung_kwp,
+    )
     if kwp and kwp > 0 and gti_summe > 0 and pv_ertrag_erfasst:
         theoretisch_kwh = gti_summe * kwp / 1000  # Wh/m² × kWp / 1000
         if theoretisch_kwh > 0:

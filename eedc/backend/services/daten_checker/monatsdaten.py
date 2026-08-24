@@ -7,6 +7,7 @@ Reiner Move aus dem früheren Modul `daten_checker.py` (Tier-4 Achse C).
 from datetime import date
 from typing import Optional
 
+from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.core.berechnungen.spez_ertrag import PV_ERZEUGER_TYPEN
 from backend.core.betriebsmodus import MODUS_STROM_FELD
 from backend.core.field_definitions import get_speicher_netzladung_kwh, get_wp_strom_kwh
@@ -414,7 +415,15 @@ class MonatsdatenChecks:
 
         # Vorjahres-Lookup erstellen
         md_map = {(md.jahr, md.monat): md for md in monatsdaten}
-        gesamt_kwp = anlage.leistung_kwp or 0
+        # F-58: Obergrenze der Monatserzeugung gegen die Σ der Erzeuger, nicht
+        # gegen den gepflegten Referenzwert. Ist der zu klein, meldet der
+        # Checker eine „unplausible" Erzeugung, die schlicht der Anlage
+        # entspricht. `mit_bkw=True`, weil `pv_erzeugung` unten die anlagenweite
+        # Erzeugung ist.
+        gesamt_kwp = anlagen_kwp(
+            anlage.investitionen, date.today(),
+            mit_bkw=True, referenzwert=anlage.leistung_kwp,
+        )
 
         # Kontext: aktive Investitionstypen (für feldabhängige Checks). Stilllegung
         # respektieren — wenn der einzige Speicher stillgelegt ist, sollen

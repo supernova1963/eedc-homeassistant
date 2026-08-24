@@ -10,6 +10,7 @@ Reine Datenschicht — keine HTTP-, keine Render-Aufrufe.
 from __future__ import annotations
 
 from collections import defaultdict
+from calendar import monthrange
 from datetime import date, datetime
 from typing import Optional
 
@@ -48,6 +49,7 @@ from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionTyp
 from backend.models.monatsdaten import Monatsdaten
 from backend.services.prognose_auswahl import lade_aktive_prognose
+from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
 from backend.core.investition_kennwerte import get_erzeuger_kwp
 from backend.models.strompreis import Strompreis
@@ -115,6 +117,23 @@ async def build_jahresbericht_context(
     res = await db.execute(inv_stmt)
     investitionen = res.scalars().all()
     inv_by_id = {i.id: i for i in investitionen}
+
+    def _kwp_im_monat(j: Optional[int], m: int) -> float:
+        """Nenner der spezifischen Erträge — Σ der am Monatsende aktiven Erzeuger.
+
+        F-58: Bis 2026-08-24 stand hier der gepflegte `anlage.leistung_kwp`.
+        Der ist ein zeitloser Skalar und kannte weder Zubau noch Stilllegung;
+        seit dem Wegfall des Summenvergleichs (N-76 Stufe 1) hielt ihn zudem
+        nichts mehr gegen die Investitionen. Der Referenzwert bleibt Fallback
+        für Bestände ganz ohne gepflegte Erzeuger.
+        """
+        # `j is None` = Gesamtzeitraum-Bericht (kein Jahr gewählt) — dann
+        # gilt der heutige Bestand, wie beim `stichtag` der Speicher-Kapazität
+        # weiter unten.
+        tag = date(j, m, monthrange(j, m)[1]) if j is not None else date.today()
+        return anlagen_kwp(
+            investitionen, tag, mit_bkw=True, referenzwert=anlage.leistung_kwp,
+        )
 
     hat_speicher = any(i.typ == "speicher" for i in investitionen)
     hat_waermepumpe = any(i.typ == "waermepumpe" for i in investitionen)
@@ -324,7 +343,10 @@ async def build_jahresbericht_context(
         ev = fakt.kennzahlen.eigenverbrauch_kwh
         gesamt = ev + netz
         autarkie = autarkie_prozent(ev, gesamt)
-        spez = spezifischer_ertrag_kwh_kwp(pv, anlage.leistung_kwp or 0) or 0.0
+        # F-58: Nenner ist die Σ der im Monat aktiven Erzeuger. `mit_bkw=True`,
+        # weil `pv` hier `fakt.erzeugung.pv_kwh` ist — Module PLUS
+        # Balkonkraftwerk (die PV-Achse laut `monats_fakten`).
+        spez = spezifischer_ertrag_kwh_kwp(pv, _kwp_im_monat(fakt.jahr, fakt.monat)) or 0.0
         zeile = await baue_finanz_zeile(
             db, anlage_id, finanz_zeile_eingabe(fakt), tarif_cache=_tarif_cache
         )
@@ -381,7 +403,12 @@ async def build_jahresbericht_context(
     # als Nenner stünde bei einem BHKW ein zu großer Zähler über einem zu
     # kleinen Nenner (Quote > 100 %, gedeckelt = still falsch).
     ev_quote = eigenverbrauchsquote_prozent(ev_gesamt, erz_bilanz_gesamt)  # cappt 100 %
-    spez_ertrag_jahr = spezifischer_ertrag_kwh_kwp(pv_gesamt, anlage.leistung_kwp or 0) or 0.0
+    # F-58: wie die Monatszeilen — Σ der Erzeuger statt des gepflegten
+    # Referenzwerts. Stichtag Jahresende, damit ein im Jahr zugebauter String
+    # zählt und ein stillgelegter nicht mehr.
+    spez_ertrag_jahr = spezifischer_ertrag_kwh_kwp(
+        pv_gesamt, _kwp_im_monat(jahr, 12),
+    ) or 0.0
 
     # #326: Sonstige Erträge/Ausgaben (manuell gepflegt) gehören in den
     # Netto-Ertrag — exakt wie Cockpit/Auswertungen. Die Monats-Fakten sind

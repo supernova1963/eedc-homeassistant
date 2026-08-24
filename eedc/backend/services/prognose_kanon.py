@@ -66,6 +66,7 @@ from backend.services.pv_orientation import (
     resolve_system_losses,
 )
 from backend.core.investition_kennwerte import get_erzeuger_kwp
+from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
 from backend.core.berechnungen.wr_kappung import (
     Mitglied,
@@ -294,10 +295,17 @@ async def kanon_tagesprognose(
     gewichte = _tages_gewichte(invs, gruppen, tagesdaten)
 
     if not gruppen:
-        # Keine Modul-Orientierung gepflegt → eine Default-Gruppe aus der
-        # Anlage-Gesamtleistung (Süd/35°), damit Bestandsanlagen ohne
-        # Orientierungs-Pflege weiter eine Prognose erhalten.
-        kwp = anlage.leistung_kwp or 0.0
+        # Keine Modul-Orientierung gepflegt → eine Default-Gruppe (Süd/35°),
+        # damit Bestandsanlagen ohne Orientierungs-Pflege weiter eine Prognose
+        # erhalten.
+        # F-58: deren kWp ist die Σ der Erzeuger im Horizont — der gepflegte
+        # `anlage.leistung_kwp` bleibt Fallback für Bestände ganz ohne
+        # Erzeuger-Investitionen. Er ist hier der Multiplikator des gesamten
+        # Prognose-Ertrags; eine veraltete Zahl zieht die ganze Prognosen-Seite
+        # mit (dieselbe Wirkung wie N-J, nur mit anderer Ursache).
+        kwp = anlagen_kwp(
+            invs, heute, mit_bkw=True, referenzwert=anlage.leistung_kwp,
+        )
         if kwp <= 0:
             return None
         gruppen = [Orientierungsgruppe(neigung=35, ausrichtung=0, kwp=kwp)]

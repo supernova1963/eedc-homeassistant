@@ -541,14 +541,21 @@ async def _anlage_pv_und_bkw(db, *, bkw_spalte, bkw_param) -> Anlage:
 
 
 # ⚠ Bis 2026-08-04 standen hier drei Tests, die N66 auf der BKW-Seite über die
-# Meldung „Σ Module ≠ Anlagenleistung" belegten. Diese Meldung gibt es nicht
-# mehr (N-76/#354, Entscheid Gernot): Ein Balkonkraftwerk ist fachlich eine
-# EIGENE Anlage mit eigener MaStR-Registrierung und zählt nicht in die kWp der
+# Meldung „Σ Module ≠ Anlagenleistung" belegten. Die Meldung entfiel damals
+# (N-76/#354, Entscheid Gernot): Ein Balkonkraftwerk ist fachlich eine EIGENE
+# Anlage mit eigener MaStR-Registrierung und zählt nicht in die kWp der
 # Hauptanlage — solange es mitgezählt wurde, meldete der Check am eigenen
 # Demo-Bestand eine Abweichung von 0,80 kWp, ohne dass etwas falsch gepflegt
 # war. Die Auflösung der BKW-kWp selbst ist unverändert gewächtert, aber an
 # ihrem eigenen Ort (`test_investition_kennwerte.py::get_bkw_kwp`) statt über
 # eine Checker-Meldung, die sie nur mittelbar sichtbar machte.
+#
+# ⚑ **Seit 2026-08-24 gibt es die Meldung wieder** (F-58, Entscheid Gernot) —
+# aber BEIDSEITIG: sie schweigt, wenn der gepflegte Wert zu der Summe MIT oder
+# OHNE Balkonkraftwerk passt. Damit bleibt der Befund von oben geheilt (kein
+# BKW-Anwender bekommt eine Meldung, ohne falsch gepflegt zu haben), und der
+# Nenner jeder spezifischen Kennzahl wird wieder gegen etwas gehalten. Was
+# damals mit der einseitigen Prüfung zusammen wegfiel, war genau das.
 
 async def test_daten_checker_zaehlt_das_bkw_nicht_in_die_anlagen_kwp(db):
     """Der neue Vertrag: die ausgewiesene Σ ist die der PV-Module.
@@ -566,19 +573,38 @@ async def test_daten_checker_zaehlt_das_bkw_nicht_in_die_anlagen_kwp(db):
     assert "inkl. BKW" not in summe[0].meldung
 
 
-async def test_daten_checker_meldet_keine_kwp_abweichung_mehr(db):
-    """Auch eine „echte" Abweichung ist keine mehr — Überbelegung ist normal.
+async def test_daten_checker_meldet_die_kwp_abweichung_wieder(db):
+    """Eine echte Abweichung wird wieder gemeldet — aber mit anderem Gegenstand.
 
-    6,0 kWp Module gegen 6,8 kWp gepflegte Anlagenleistung: früher WARNING,
-    heute stumm. Wer die Anlagenleistung prüfen will, hat dafür die
-    DC/AC-Prüfung und die Rechenprobe je String.
+    ⚠ **Diese Probe hat ihr Vorzeichen gewechselt** (F-58, Entscheid Gernot
+    2026-08-24). Sie hieß bis dahin `..._meldet_keine_kwp_abweichung_mehr` und
+    hielt fest, dass der Checker bei 6,0 kWp Modulen gegen 6,8 kWp gepflegter
+    Anlagenleistung **schweigt** — begründet mit „Überbelegung ist der
+    Normalfall" (N-76 Stufe 1, 2026-08-04).
+
+    **Die Begründung passte nicht auf ihren eigenen Fall.** Überbelegung heißt
+    Modulleistung (DC) > Wechselrichter-Leistung (AC); die prüft seit demselben
+    Paket `_check_dc_ac_verhaeltnis`, und dabei bleibt es. Hier stehen dagegen
+    Modulsumme und **Anlagenleistung** nebeneinander — das ist keine
+    Auslegungsentscheidung, sondern eine Pflegefrage. Mit dem Wegfall der
+    Prüfung hielt anderthalb Monate lang nichts mehr den Nenner jeder
+    spezifischen Kennzahl gegen die Investitionen; NoahPaulick bekam daraufhin
+    einen Doppelerfassungs-Verdacht auf korrekte Daten gemeldet
+    (simon42 T89667 #188).
+
+    6,0 kWp Module + 0,2 kWp BKW gegen 6,8 kWp gepflegt: passt zu **keiner**
+    der beiden zulässigen Konventionen ⇒ WARNING. Die BKW-Toleranz selbst
+    prüft `test_daten_checker_anlagenleistung_vs_module.py`.
     """
     anlage = await _anlage_pv_und_bkw(db, bkw_spalte=None, bkw_param={"kwp": 0.2})
 
     ergebnisse = DatenChecker(db)._check_stammdaten(anlage)
 
-    assert not [r for r in ergebnisse if "Anlagenleistung überein" in r.meldung]
-    assert not [
+    warnungen = [
         r for r in ergebnisse
         if r.schwere == CheckSeverity.WARNING and "kWp" in r.meldung
-    ], f"keine kWp-Warnung erwartet: {[r.meldung for r in ergebnisse]}"
+    ]
+    assert len(warnungen) == 1, f"eine kWp-Warnung erwartet: {[r.meldung for r in ergebnisse]}"
+    assert "6.80" in warnungen[0].meldung and "6.00" in warnungen[0].meldung
+    # Die Summenzeile selbst bleibt BKW-frei — der Nachbartest darüber hält das.
+    assert "Anlagenleistung überein" not in warnungen[0].meldung

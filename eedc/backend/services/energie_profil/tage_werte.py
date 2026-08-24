@@ -43,6 +43,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.energie_profil._shared import TagWerteResponse
+from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.core.berechnungen import (
     aggregiere_tep_komponenten,
     berechne_finanz_aggregat,
@@ -84,7 +85,6 @@ async def baue_tage_werte(
     Tageszusammenfassung.
     """
     anlage_id = anlage.id
-    kwp = anlage.leistung_kwp or 0.0
 
     # Stündliche Rohdaten je Tag gruppieren
     tep_result = await db.execute(
@@ -135,6 +135,20 @@ async def baue_tage_werte(
     )
     sonstiges_invs = list(sonstiges_result.scalars().all())
 
+    # Erzeuger für den Nenner des spezifischen Tagesertrags (F-58). Wie Speicher
+    # und Sonstiges pro Tag ausgewertet: ein String, der mitten im Zeitraum
+    # dazukommt oder stillgelegt wird, gehört nur an seinen eigenen Tagen in den
+    # Nenner ([[feedback_anschaffungsdatum_grenze]]). Der frühere Nenner war der
+    # gepflegte `Anlage.leistung_kwp` — ein zeitloser Skalar, den seit dem
+    # Wegfall des Summenvergleichs nichts mehr gegen die Investitionen hielt.
+    erzeuger_result = await db.execute(
+        select(Investition).where(and_(
+            Investition.anlage_id == anlage_id,
+            Investition.typ.in_(("pv-module", "balkonkraftwerk")),
+        ))
+    )
+    erzeuger_invs = list(erzeuger_result.scalars().all())
+
     # Monatsdaten des Zeitraums für den Flex-Ø-Override. Bei dynamischem Tarif
     # trägt `netzbezug_durchschnittspreis_cent` den ABGERECHNETEN Monats-Ø und
     # schlägt den Stammdaten-Arbeitspreis (`resolve_netzbezug_preis_cent`).
@@ -180,6 +194,13 @@ async def baue_tage_werte(
         stunden_rows = tep_pro_tag.get(tag, [])
         bilanz = bilanz_aus_stundenrows(stunden_rows)
         tz = tz_pro_tag.get(tag)
+
+        # Nenner des spezifischen Tagesertrags (F-58). `mit_bkw=True`, weil der
+        # Zähler `bilanz.erzeugung_kwh` die Kategorie `pv` ist und ein
+        # Balkonkraftwerk dort mitläuft (`live_sensor_config.py`).
+        kwp_tag = anlagen_kwp(
+            erzeuger_invs, tag, mit_bkw=True, referenzwert=anlage.leistung_kwp,
+        )
 
         # Erträge je Erzeuger (#350, Rainer): erst der Boundary-Rollup, sonst die
         # Σ der Stunden-Komponenten. Der Rollup fehlt im Standalone-Betrieb und an
@@ -308,8 +329,8 @@ async def baue_tage_werte(
             autarkie=_r(bilanz.autarkie_prozent, 1),
             evQuote=_r(bilanz.ev_quote_prozent, 1),
             spezErtrag=(
-                round(bilanz.erzeugung_kwh / kwp, 2)
-                if kwp > 0 and bilanz.pv_erfasst else None
+                round(bilanz.erzeugung_kwh / kwp_tag, 2)
+                if kwp_tag > 0 and bilanz.pv_erfasst else None
             ),
             # Speicher (None wenn kein Lade-/Entlade-Geschehen)
             speicher_ladung=_nz(bilanz.speicher_ladung_kwh),

@@ -79,6 +79,17 @@ export interface AggregierteMonatsdaten {
   // Dynamischer Monats-Ø-Netzbezugspreis (Flex-Tarif). null = kein Flex-Wert
   // → Fallback auf statischen Tarif, gleiche Quelle wie Cockpit (#326).
   netzbezug_durchschnittspreis_cent?: number | null
+  /**
+   * F-58 — Nenner des spezifischen Ertrags DIESES Monats: Σ der im Monat
+   * aktiven PV-Module (ohne Balkonkraftwerk, passend zu `pv_erzeugung_kwh`).
+   * null = keine Erzeuger-Investitionen gepflegt.
+   *
+   * Kommt vom Backend, weil der Client sonst `Anlage.leistung_kwp` nähme —
+   * einen zeitlosen Skalar, der Zubau und Stilllegung nicht kennt und den
+   * seit dem Wegfall des Summenvergleichs nichts mehr gegen die
+   * Investitionen hielt.
+   */
+  anlagen_kwp?: number | null
   // Komponenten-Aggregate: null = "in dem Monat keine aktive Komponente
   // dieses Typs" (vor Anschaffung / nach Stilllegung / Anlage hat den Typ
   // nicht). 0 = "Komponente aktiv, IMD vorhanden, Wert echt 0" (z.B.

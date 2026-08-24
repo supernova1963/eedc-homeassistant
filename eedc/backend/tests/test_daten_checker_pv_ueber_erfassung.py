@@ -43,10 +43,20 @@ async def _add_tag(
 
 
 async def _run_check(db, anlage_id: int):
-    """Direkt die neue Methode aufrufen, ohne den ganzen check_anlage-Pfad."""
+    """Direkt die neue Methode aufrufen, ohne den ganzen check_anlage-Pfad.
+
+    ⚠ Die Investitionen werden mitgeladen — genau wie `check_anlage` es tut
+    (`daten_checker/__init__.py`, `selectinload(Anlage.investitionen)`). Ohne
+    sie stünde hier eine Ladeform, die es produktiv nicht gibt: der Check
+    liest seit F-58 die Σ der Erzeuger als Nenner, und ein Lazy-Load bricht in
+    der Async-Session ([[feedback_probe_unerreichbarer_zustand]]).
+    """
     from sqlalchemy import select as _select
+    from sqlalchemy.orm import selectinload as _selectinload
     anlage = (await db.execute(
-        _select(Anlage).where(Anlage.id == anlage_id)
+        _select(Anlage)
+        .options(_selectinload(Anlage.investitionen))
+        .where(Anlage.id == anlage_id)
     )).scalar_one()
     checker = DatenChecker(db)
     return await checker._check_pv_ueber_erfassung(anlage)

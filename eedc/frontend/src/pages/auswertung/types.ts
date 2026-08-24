@@ -160,7 +160,10 @@ export function createMonatsZeitreihe(
     // Quoten berechnen - direkt aus aggregierten Daten oder berechnet
     const autarkie = md.autarkie_prozent ?? calcAutarkie(eigenverbrauch, gesamtverbrauch)
     const evQuote = md.eigenverbrauchsquote_prozent ?? calcEigenverbrauchsquote(eigenverbrauch, erzeugung)
-    const spezErtrag = calcSpezifischerErtrag(erzeugung, anlage?.leistung_kwp)
+    // F-58: der Monats-Nenner kommt vom Backend (Σ der im Monat aktiven
+    // Module). `anlage?.leistung_kwp` bleibt Fallback für Antworten ohne
+    // das Feld — Bestandsverhalten, kein zweiter Rechenweg.
+    const spezErtrag = calcSpezifischerErtrag(erzeugung, md.anlagen_kwp ?? anlage?.leistung_kwp)
 
     // Speicher: null = keine Speicher-Komponente aktiv (Backend liefert null).
     // Der η kommt aus dem Spiegel des Layer-SoT (N-252) — hier steht er je

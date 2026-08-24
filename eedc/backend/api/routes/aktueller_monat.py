@@ -28,6 +28,7 @@ from backend.api.routes.strompreise import (
     resolve_netzbezug_preis_cent,
 )
 from backend.api.routes.connector import _calc_month_delta
+from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.core.berechnungen import (
     sonstiges_richtung,
     Monatsfenster,
@@ -2191,9 +2192,27 @@ async def get_aktueller_monat(
         get_val("emob_km") or 0,
     )
 
-    # Spez. Ertrag auf Community-Basis (anlage.leistung_kwp), für die Abweichung
-    # zum Community-Median in der Cockpit/Monat-Summary.
-    spez_ertrag = spezifischer_ertrag_kwh_kwp(pv or 0, anlage.leistung_kwp)
+    # Spez. Ertrag über den Nenner-SoT (F-58). Hier stand bis 2026-08-24 der
+    # gepflegte `anlage.leistung_kwp` mit der Begründung „gleiche Basis wie der
+    # Community-Vergleich". Das machte Cockpit/Monat zur einzigen Sicht mit
+    # einem anderen Nenner als Cockpit/Jahr (`cockpit/uebersicht.py` rechnet
+    # seit jeher die Σ der Erzeuger) — zwei Zahlen für dieselbe Kennzahl.
+    # Der Community-Vergleich selbst ist unberührt: er läuft über die Payload
+    # in `community_service.py`, die weiterhin den gepflegten Wert meldet
+    # (der Anlagen-Hash des Servers wird daraus gebildet).
+    from calendar import monthrange as _monthrange_spez
+
+    spez_ertrag = spezifischer_ertrag_kwh_kwp(
+        pv or 0,
+        anlagen_kwp(
+            investitionen,
+            # Stichtag Monatsende: ein im Monat zugebauter String gehört in den
+            # Nenner dieses Monats, ein stillgelegter nicht mehr.
+            date(jahr, monat, _monthrange_spez(jahr, monat)[1]),
+            mit_bkw=True,
+            referenzwert=anlage.leistung_kwp,
+        ),
+    )
 
     return AktuellerMonatResponse(
         anlage_id=anlage.id,

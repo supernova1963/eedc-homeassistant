@@ -20,6 +20,7 @@ from backend.core.investition_parameter import (
     ist_luft_luft_waermepumpe,
 )
 from backend.core.field_definitions import sonstiges_feld_reihenfolge
+from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.core.berechnungen.erzeuger_traeger import (
     traegt_erzeugungsgroessen_selbst,
 )
@@ -545,7 +546,14 @@ class EnergieprofilChecks:
         ergebnisse: list[CheckErgebnis] = []
         kat = CheckKategorie.ENERGIEPROFIL_PLAUSIBILITAET
 
-        kwp = anlage.leistung_kwp or 0
+        # F-58: Nenner ist die Σ der aktiven Erzeuger, nicht der gepflegte
+        # Referenzwert `Anlage.leistung_kwp` — die Spike-Schwelle gilt für die
+        # Einspeisung, die tatsächlich installierte Module erzeugen können.
+        # `mit_bkw=True`, weil die geprüfte Größe die Gesamteinspeisung ist.
+        kwp = anlagen_kwp(
+            anlage.investitionen, date.today(),
+            mit_bkw=True, referenzwert=anlage.leistung_kwp,
+        )
         schwelle_kw = schwelle_pv_einspeisung_stunde_kwh(kwp)
         if schwelle_kw is None:
             # Ohne kWp keine sinnvolle Schwelle — Stammdaten-Check meldet das schon
@@ -750,7 +758,18 @@ class EnergieprofilChecks:
         kat = CheckKategorie.PV_UEBER_ERFASSUNG.value
         ergebnisse: list[CheckErgebnis] = []
 
-        kwp = anlage.leistung_kwp or 0
+        # F-58 (NoahPaulick, T89667 #188): Der Nenner ist die Σ der aktiven
+        # Erzeuger, nicht der gepflegte Referenzwert. Wer seine PV-Module
+        # korrigiert, ohne `Anlage.leistung_kwp` nachzuziehen, bekam hier sonst
+        # einen Doppelerfassungs-Verdacht auf Daten, die stimmen — bei ihm mit
+        # exakt dem Faktor 2. `mit_bkw=True`, weil der Zähler unten
+        # `_summe_pv_bkw_kwh` ist: Zähler und Nenner müssen dieselbe
+        # Grundgesamtheit haben, sonst ist ein Balkonkraftwerk allein schon der
+        # Grund für die Falschmeldung.
+        kwp = anlagen_kwp(
+            anlage.investitionen, date.today(),
+            mit_bkw=True, referenzwert=anlage.leistung_kwp,
+        )
         if kwp <= 0:
             return ergebnisse  # Stammdaten-Check meldet das schon
 

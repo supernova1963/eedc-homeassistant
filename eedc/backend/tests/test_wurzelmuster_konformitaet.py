@@ -2294,6 +2294,14 @@ P11_AUSNAHMEN: frozenset[str] = frozenset({
     # das seine kWp erst später abtritt, dürfte für die früheren Monate nicht
     # fehlen (#387/F-45, `services/pvgis_soll.py`).
     "backend/services/pvgis_soll.py::lade_erzeuger",
+    # Derselbe Fall, dieselbe Begründung (F-58): LADEPFAD. `baue_tage_werte`
+    # holt die Erzeuger-Zeilen und reicht sie an
+    # `core/berechnungen/anlagen_kwp.py::anlagen_kwp` weiter — DORT läuft der
+    # Selektor, und zwar je Tag nach dem Zeitfilter. Den Selektor schon beim
+    # Laden anzuwenden wäre auch hier falsch: ein BKW, das seine kWp erst
+    # später an Modul-Kinder abtritt, dürfte an den früheren Tagen des
+    # Zeitraums nicht fehlen.
+    "backend/services/energie_profil/tage_werte.py::baue_tage_werte",
     # ⚠ Der ANSCHAFFUNGS-Anker: `get_naechster_monat` und `monats_luecken`
     # fragen, ab wann ein Monat erfasst sein SOLL. Ein abtretendes BKW gehört
     # dort dazu — es ist am Netz, seit es angeschafft wurde, unabhängig davon,

@@ -11,6 +11,9 @@ from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.core.investition_kennwerte import get_erzeuger_kwp
 from backend.core.investition_parameter import PARAM_E_AUTO
+from datetime import date
+
+from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.core.berechnungen.energie import PV_KOMPONENTEN_PREFIXE
 from backend.services.live_sensor_config import (
     TYP_ICON,
@@ -346,7 +349,15 @@ def build_komponenten(
         })
 
     # PV-Leistung in % von kWp
-    kwp = anlage.leistung_kwp
+    # F-58: Σ der heute aktiven Erzeuger statt des gepflegten Referenzwerts.
+    # `mit_bkw=True`, weil `pv_total_w` alle PV-Komponenten summiert und ein
+    # Balkonkraftwerk im Live-Keyspace zur Kategorie `pv` gehört
+    # (`live_sensor_config.py`). Bei zu kleinem Nenner stand die Auslastung
+    # dauerhaft am 120-%-Anschlag.
+    kwp = anlagen_kwp(
+        list(investitionen.values()), date.today(),
+        mit_bkw=True, referenzwert=anlage.leistung_kwp,
+    )
     if pv_total_w > 0 and kwp and kwp > 0:
         pv_pct = pv_total_w / 1000 / kwp * 100
         gauges.append({
