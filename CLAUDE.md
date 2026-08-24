@@ -93,14 +93,17 @@ echo "Zonen-Gate: $([ $ROT -eq 0 ] && echo GRUEN || echo ROT)"; tail -qn1 /tmp/z
 # Frontend — lint ZUERST (CI ruft ESLint mit --max-warnings 0), tsc OHNE Pipe
 cd eedc/frontend && npm run lint
 cd eedc/frontend && npx tsc --noEmit          # nie durch `| tail` — $? misst sonst tail
-cd eedc/frontend && npm run test
+cd eedc/frontend && npm run test              # faehrt seit E8/M14 ALLE 25 Quelltext-check:* mit
 
-# ALLE check:* über den EXIT-CODE, nicht über die Bildschirmausgabe (25 Stück, zusammen 4 s).
-# `park-leertest` und `chart-audit` sind hier BEWUSST ausgenommen — sie brauchen eine laufende
-# Box und stehen im eigenen Kasten unter der Liste.
-cd eedc/frontend && for s in $(node -e "console.log(Object.keys(require('./package.json').scripts).filter(x=>x.startsWith('check:')&&!['check:park-leertest','check:chart-audit'].includes(x)).join(' '))"); do
-  npm run $s >/dev/null 2>&1 || echo "ROT: $s"
-done
+# ⛔ Die frueher hier stehende `for s in check:*`-Schleife ist mit E8/M14 ENTFALLEN (24.08.).
+# Sie lief 25 Pruefer ein zweites Mal, die `npm run test` darueber schon gefahren hat — genau
+# der Doppellauf, den dasselbe Paket aus `tests.yml` entfernt hat, nur lokal. Seit M14 hat
+# JEDER check:* aus package.json einen Vitest-Wrapper unter `src/test/`; dass das so bleibt,
+# haelt `src/test/check-einhaengung.test.ts` fest (er meldet rot, sobald einer von `npm test`
+# aus nicht mehr erreichbar ist). Ein rot gemeldeter Pruefer wird im Vitest-Protokoll beim
+# Namen genannt — die Schleife lieferte nichts, was dort fehlt.
+# Ausgenommen bleiben `park-leertest` und `chart-audit`: sie brauchen eine laufende Box und
+# stehen im eigenen Kasten unter der Liste.
 
 # Braucht dieses Paket den Park-Livetest? (Auslöser statt Takt — s. Kasten unten)
 # ⚠ Basis ist HEAD, NICHT origin/main: Gates laufen VOR dem Commit, und `origin/main` würde
@@ -116,7 +119,7 @@ done
 ./scripts/sync-help.sh && cd website && npm run build
 ```
 
-> ⚠ **Die Schleife zählt sich nicht selbst — eine Gegenprobe gehört dazu.** Ein grüner Lauf
+> ⚠ **Ein Prüfer zählt sich nicht selbst — eine Gegenprobe gehört dazu.** Ein grüner Lauf
 > beweist nur dann etwas, wenn der Prüfer rot melden *kann*: für `check:design` muss der
 > Sprengsatz **außerhalb** `lib/colors.ts` sitzen (dort ist die Hex-Farbe erlaubt, die Gegenprobe
 > greift sonst nicht — gemessen 11.08.). Rückbau per **Dateikopie**, nie `git checkout --`, wenn

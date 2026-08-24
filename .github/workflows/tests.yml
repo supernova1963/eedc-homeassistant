@@ -113,35 +113,25 @@ jobs:
         working-directory: eedc/frontend
         run: npm run lint
 
-      - name: Design-Konformität (Inline-Hex-Wächter)
-        working-directory: eedc/frontend
-        run: npm run check:design
+      # ── Die fuenf einzelnen check:*-Schritte sind mit E8/M14 entfallen ───────
+      # (2026-08-24). Sie liefen auf ZWEI Einhaengungsebenen gleichzeitig, und
+      # beide Richtungen waren schaedlich:
+      #   * check:design / check:achsen / check:de-de hatten laengst einen
+      #     Vitest-Wrapper und liefen deshalb DOPPELT — derselbe Pruefer,
+      #     zweimal bezahlt, und bei einer Aenderung zwei Stellen zu pflegen.
+      #   * check:roh-controls / check:kennwert-roh liefen NUR hier und in
+      #     keinem lokalen Lauf. Ein Pruefer, den nur CI kennt, meldet erst nach
+      #     dem Push und ordnet den Fehler keinem einzelnen Commit mehr zu —
+      #     die Gegenrichtung des lint-Befunds vom 12.08.
+      # Beide haben jetzt einen Wrapper unter src/test/, `npm test` unten faehrt
+      # sie mit. Dass das so BLEIBT, haelt src/test/check-einhaengung.test.ts
+      # fest: er meldet rot, sobald ein check:* aus package.json von `npm test`
+      # aus nicht mehr erreichbar ist. Wer hier wieder einen Einzelschritt
+      # eintraegt, baut die zweite Ebene neu auf.
+      #
+      # Ausgenommen bleiben check:park-leertest und check:chart-audit — beides
+      # Playwright-Livetests gegen eine laufende Box, in CI nicht lauffaehig.
 
-      - name: Achsen-Konformität (Einheit + de-DE tickFormatter)
-        working-directory: eedc/frontend
-        run: npm run check:achsen
-
-      - name: de-DE-Anzeige-Konformität (Tausenderpunkt/Komma/Datum)
-        working-directory: eedc/frontend
-        run: npm run check:de-de
-
-      # Roh-Control-Freeze repo-weit (Regel 0a) — Nachfolger des mit dem
-      # v4.0.0-Flip retired check:v4-migration (Teil 3). Ohne dieses Gate ist
-      # die Invariante „rohe Controls nur als freigegebene SoT-/Infra-Impl"
-      # außerhalb von check:buttons/check:form-controls ungewächtert.
-      - name: Roh-Control-Freeze (SoT-Komponenten-Pflicht)
-        working-directory: eedc/frontend
-        run: npm run check:roh-controls
-
-      # Client-Hälfte von ADR-002/P3-a (A26/N106). Der Backend-Wächter
-      # (test_wurzelmuster_konformitaet.py) endet an der API-Grenze — im
-      # Frontend rechnete die kWp-Verteilung ein zweites Mal auf der ROHSPALTE.
-      # Regel: Anzeige/Rechnung lesen `leistung_kwp_effektiv`, nur Eingabefelder
-      # lesen `leistung_kwp`.
-      - name: Kennwert-Rohzugriffe (Investitions-kWp nur effektiv anzeigen)
-        working-directory: eedc/frontend
-        run: npm run check:kennwert-roh
-
-      - name: Vitest (Routing/Redirects + Komponenten + Wächter)
+      - name: Vitest (Routing/Redirects + Komponenten + Waechter, inkl. aller check:*)
         working-directory: eedc/frontend
         run: npm test
