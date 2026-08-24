@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.0.27] - 2026-08-24 — Gemessen statt geschätzt
 
 ### Fixed
 
@@ -39,11 +39,41 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
   **Wen es betrifft und was sich sichtbar ändert:** nur Anlagen mit Wallbox *und* einem alten Aufteilungswert am Fahrzeug, und dort nur Monate, für die eedc Stundenwerte hat. In diesen Monaten steigt der ausgewiesene PV-Anteil der Heimladung — im Cockpit, im Komponenten-Hub, in den Auswertungen und in den Home-Assistant-Sensoren. **Es wird nichts an deinen Daten geändert:** Der Wert am Fahrzeug bleibt stehen, er zählt nur nicht mehr gegen eine Quelle, die er nicht ist. Monate ohne Stundenwerte bleiben unverändert.
 
+- **Der Ø-Benzinpreis fehlte in frisch entstandenen Monaten bis zu eine Woche lang.** Gemeldet von **gruaGit** ([Discussion #394](https://github.com/supernova1963/eedc-homeassistant/discussions/394)): Ihm war geantwortet worden, eedc trage jeden Monat ohne Benzinpreis von selbst nach — er sah nach, und Juni 2026 war leer. Die Automatik gab es tatsächlich, sie lief aber nur **wöchentlich**, als einziger Wochen-Takt unter sechzehn Hintergrund-Aufgaben. Eine Monatszeile, die zwischen zwei Läufen entsteht — beim Monatsabschluss, beim Import, bei der Ersteinrichtung —, blieb deshalb bis zu sieben Tage ohne Marktpreis, und der Kostenvergleich des E-Autos rechnete solange still mit dem hinterlegten Modellwert statt mit dem Preis des Monats. Der Fortschritt behauptete eine Messung und lieferte ein Modell.
+
+  **Ab jetzt läuft der Abgleich täglich um 06:00, dazu einmal kurz nach jedem Start von eedc** — ein Neustart genau zur Laufzeit hat bisher eine ganze Woche gekostet. Zusätzlich fragt eedc erst nach, wenn es überhaupt eine offene Monatszeile gibt; ohne Lücke geht keine einzige Anfrage hinaus, der tägliche Takt kostet also nichts. **Und wenn doch einmal ein Monat ohne Preis bleibt, sagt der Daten-Checker es dir** — neue Kategorie *Vergleichspreise → Ø Benzinpreis*, mit dem Nachtrag-Knopf daneben. Sie erscheint nur, wenn du ein E-Auto hast, und erst ab dessen Anschaffungsmonat.
+
+  **Danke an gruaGit**, der eine Zusage nicht geglaubt, sondern nachgeprüft hat.
+
+- **Die verbleibende PV-Menge des Tages schrumpfte, wenn die Sonne besser lief als vorhergesagt.** Gemeldet von **rapahl**: Das Live-Board rechnete „verbleibend" als Tagesprognose minus bisherigem IST. In der Tagesprognose stecken für die vergangenen Stunden aber die *vorhergesagten* Werte, nicht die gemessenen — lief der Vormittag über Plan, fiel die ausgewiesene Restmenge, obwohl die Sonne unverändert weiterschien. An seinen Zahlen: 35,7 kWh Prognose minus 29,8 kWh IST ergaben „~5,9 verbl.", während die reine Restprognose 12,0 kWh sagte.
+
+  **Ab jetzt zeigt das Live-Board die Restprognose der noch kommenden Stunden** — dasselbe Verfahren, das der Prognosen-Vergleich seit 4.0.x verwendet. Die beiden Sichten beantworten dieselbe Frage jetzt auf dieselbe Weise. **Neu daneben:** die prozentuale Tagesabweichung des nachgeführten Werts von der Tagesprognose, sichtbar ab 5 % — darunter ist es Rauschen. Sie erscheint nur, wenn eedc den IST-Wert des Tages kennt; die Restmenge erscheint immer, sie ist reine Vorhersage.
+
+- **Fünf Stellen lasen Parameter-Namen, die es seit v3.25.0 nicht mehr gibt.** Damals wurden die Kennwerte der Investitionen auf einheitliche Namen gezogen und der Bestand beim Start umbenannt — fünf Stellen wurden dabei übersehen, und weil ein fehlender Name in der Programmiersprache still nichts liefert statt zu klagen, ist es niemandem aufgefallen. Sichtbar war es an drei Stellen: Die **Demo-Daten** erzeugten ein E-Auto ohne wirksame Jahresfahrleistung, ohne PV-Ladeanteil, ohne V2H und ohne Batteriekapazität sowie eine Wallbox ohne Ladeleistung — leer ausgerechnet in den Sichten, für die die Demo gebaut ist. Im **Daten-Checker** haben zwei Prüfungen (*V2H aktiv, Entladepreis fehlt* und *Arbitrage aktiv, Ladepreis fehlt*) nie gemeldet, eine dritte meldete eine fehlende Fahrleistung nie. Im **Anlagendokumentations-PDF** blieben vier Zeilen leer, die nicht erscheinen konnten.
+
+  **Wen es betrifft:** Deine gespeicherten Daten sind unberührt — die Umbenennung des Bestands lief 2026 korrekt, betroffen waren nur diese fünf lesenden bzw. schreibenden Stellen. Nach dem Update meldet der Daten-Checker fehlende Vergleichspreise wieder, das Dokumentations-PDF ist vollständig, und ein neu erzeugter Demo-Bestand rechnet.
+
+- **Der Zählerstands-Verlauf beschriftete in der Tagesansicht jeden Punkt mit demselben Datum.** Gemeldet von **dietmar1968** (simon42-Forum) als Wunsch nach der Uhrzeit — gemessen war es ein Fehler: Unter *Cockpit → Tag* trug die Achse des Zählerstands-Verlaufs an jedem stündlichen Punkt das Datum dieses einen Tages, und der Tooltip zeigte dasselbe Label. Die Achse trug damit keine Information, und die Uhrzeit war die ganze Zeit vorhanden, wurde beim Beschriften aber weggeworfen.
+
+  **Ab jetzt zeigt die Achse, was im gewählten Fenster variiert:** in der Tagesansicht die Uhrzeit, im Jahr den Monatsnamen, über den Gesamtzeitraum Monat und Jahr. Der Tooltip nennt immer Datum **und** Uhrzeit — damit ist ein einzelner Messwert auch dort eindeutig, wo mehrere Punkte auf denselben Achsenpunkt fallen (im Monatsfenster liegen bei stündlicher Messung 24 Punkte auf einem Tag). **Die Monatsansicht sieht unverändert aus**, sie war bereits richtig beschriftet.
+
+  **Danke an dietmar1968**, dessen Bildschirmfoto den Fehler gleich mitbewiesen hat.
+
 ### Added
 
 - **Die Börsenpreise von morgen stehen jetzt auch in Home Assistant.** Der Sensor `eedc_preis_rang` trug bisher nur den laufenden Tag, während der Preis-Chart unter *Cockpit → Live* längst beide Tage zeigt. Wer die Nachtladung für den Folgetag planen wollte, musste sich die Kurve selbst besorgen — **rapahl** hat sich dafür einen eigenen Template-Sensor gebaut. Ab jetzt tragen die Attribute des Sensors einen zweiten Satz: `rang_profil_morgen` mit allen 24 Stunden, dazu `guenstig_schwelle_cent_morgen` und `optimierter_durchschnitt_cent_morgen`, damit sich auch für morgen eine **eigene** Regel rechnen lässt. `morgen_verfuegbar` ist immer vorhanden und sagt, ob die Zahlen schon da sind — die Day-Ahead-Auktion veröffentlicht sie gegen 13 Uhr, vorher fragt eedc gar nicht an.
 
   **Jeder Tag behält seine eigene Schwelle**, und das ist Absicht: Day-Ahead ist ein Tagesprodukt. Ein gemeinsamer Durchschnitt über 48 Stunden würde an einem teuren Tag keine einzige günstige Stunde ausweisen und am billigen fast alle. Neu ist außerdem `datum` — der Kalendertag, für den ein Profil gilt. Ohne ihn ist ein stehengebliebenes Profil nach Mitternacht nicht von einem aktuellen zu unterscheiden, und eine Automation, die dann auf „morgen" plant, plant auf gestern. **Kein bestehender Wert und kein bestehendes Attribut ändert sich** — es kommt nur hinzu.
+
+- **Der gewöhnliche Tagesdurchschnitt des Börsenpreises steht jetzt im Kennzahlenblock.** Angeregt von **rapahl**: „Nicht jeder will ja seinen Akku mit Netzstrom laden." Nachgemessen war der Punkt schärfer als die Anregung — von sieben Kacheln bezogen sich **drei** auf dieselbe Größe, nämlich den Durchschnitt **ohne** die teuersten Stunden (*Ø ohne 3 Peaks*, *Günstig-Schwelle*, *Abstand zum Ø*). Der schlichte Tagesmittelwert, nach dem man zuerst fragt, kam im Kennzahlenblock gar nicht vor.
+
+  Neu ist die Kachel **„Ø heute"**, bewusst **vor** den Optimierer-Werten. Dazu gibt es den Home-Assistant-Sensor `eedc_preis_tages_durchschnitt_cent`. **Der optimierte Durchschnitt bleibt unverändert** — er ist die Bezugsgröße der Günstig-Schwelle, und die verschiebt sich durch die neue Kachel nicht.
+
+- **Ein zweiter Prognose-Sensor für den nachgeführten Tageswert.** Auf Wunsch von **rapahl** (ausdrücklich für MQTT): `eedc_prognose_heute_rollend_kwh` — „PV-Prognose heute (nachgeführt)" — trägt den bisher gemessenen Ertrag plus die Prognose der noch kommenden Stunden. Er steht **neben** `eedc_prognose_heute_kwh` und ersetzt ihn nicht: Jener bleibt der kanonische Wert, den App, MQTT und Speicherung gemeinsam tragen. Die Differenz der beiden ist keine sinnvolle Größe, und die Sensor-Referenz sagt das jetzt auch.
+
+### Changed
+
+- **Preiskurve und Kennzahlen stehen unter *Cockpit → Live* nebeneinander statt untereinander.** Ebenfalls von **rapahl** angeregt: Über die volle Seitenbreite wirkte die Preiskurve flach; in zwei Dritteln der Breite wird derselbe Verlauf sichtbar steiler. Auf schmalen Bildschirmen bleibt es einspaltig wie bisher.
 
 ### Removed
 

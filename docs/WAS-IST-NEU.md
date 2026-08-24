@@ -1,11 +1,99 @@
 # Was ist neu
 
-> **Stand:** August 2026 (v4.0.26)
+> **Stand:** August 2026 (v4.0.27)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.27 — Gemessen statt geschätzt
+
+**Deine PV-Kennzahlen rechnen jetzt überall mit derselben Anlagengröße**
+
+eedc kennt deine Anlagengröße an zwei Orten: als Feld *Anlagenleistung* unter
+*Einstellungen → Anlage* und als Summe deiner angelegten **PV-Module**. Beim
+Einrichten sind beide gleich — wer danach seine Module korrigiert, verändert nur
+eine der beiden Zahlen. Spezifischer Ertrag, Performance Ratio, PV-Auslastung im
+Live-Dashboard, der Jahresbericht und alle Plausibilitätsprüfungen rechneten
+weiterhin mit dem Feld.
+
+Ab jetzt ist die **Summe deiner PV-Module** die Grundlage — und zwar die der
+Module, die im jeweiligen Monat in Betrieb waren. Ein im Sommer erweitertes Dach
+zählt ab dem Erweiterungsmonat, ein stillgelegter String danach nicht mehr.
+
+**Das Feld bleibt und wird nicht überschrieben.** Es geht weiter an den
+Community-Vergleich und dient als Rückfallwert, solange keine Module angelegt
+sind. Neu ist: Passt es weder zur Summe deiner Module noch zu dieser Summe plus
+Balkonkraftwerk, sagt der **Daten-Checker** es dir und nennt beide Zahlen.
+
+Wenn beide Zahlen bei dir übereinstimmen, ändert sich nichts. Weichen sie ab,
+verschieben sich spezifischer Ertrag und Performance Ratio auf den richtigen
+Wert. **An deinen Daten wird nichts geändert.**
+
+**Ein PV-Zähler gehört nicht an den Wechselrichter**
+
+Am Wechselrichter gab es ein Feld *PV-Erzeugung Zählerstand*. Ein Wert dort
+zählte nirgends mit — und blockierte dabei die beiden Wege, die funktionieren:
+eedc meldete die PV als „bereits zugeordnet" und forderte weder den
+Anlagen-Zähler noch das Modul-Feld ein. Für die Live-Kachel *PV-Erzeugung heute*
+blieb dann nur die Hochrechnung aus der Momentanleistung, und die schätzt nach
+oben.
+
+Das Feld wird nicht mehr angeboten. Wer dort noch eine Zuordnung hat, sieht sie
+weiterhin und kann sie entfernen; der **Daten-Checker** sagt, wohin der Sensor
+gehört. **Wer je String misst, ordnet am PV-Modul zu; wer einen Zähler für die
+ganze Anlage hat, unter *Anlage (Basis)*.**
+
+**Der PV-Anteil deiner Heimladung wird wieder abgeleitet**
+
+Wer eine **Wallbox** hat, dessen Heimladung führt eedc dort. Ein alter
+Aufteilungswert, der aus der Zeit davor am *Fahrzeug* stehengeblieben ist, hat
+trotzdem weitergewirkt und verhindert, dass eedc den Sonnen-Anteil aus den
+eigenen Stundenwerten ableitet — die Heimladung stand dann vollständig auf der
+Netz-Seite. Ab jetzt zählt allein die Quelle, die eedc auch verwendet.
+
+**Der Ø-Benzinpreis wird täglich nachgetragen — und du merkst es, wenn er fehlt**
+
+Der Abgleich mit dem europäischen Marktpreis lief bisher nur einmal pro Woche.
+Eine Monatszeile, die dazwischen entsteht, blieb bis zu sieben Tage ohne Preis,
+und der Kostenvergleich deines E-Autos rechnete solange mit dem hinterlegten
+Modellwert. Jetzt läuft er täglich und einmal nach jedem Start, und wenn doch
+ein Monat leer bleibt, meldet der **Daten-Checker** es mit einem Nachtrag-Knopf
+daneben.
+
+**Neues rund um den Börsenpreis**
+
+- Der **Kennzahlenblock** zeigt jetzt „**Ø heute**" — den gewöhnlichen
+  Tagesdurchschnitt. Drei der bisherigen Kacheln beziehen sich auf den
+  Durchschnitt *ohne* die teuersten Stunden; die schlichte Zahl fehlte.
+- Die **Preise von morgen** stehen jetzt auch in Home Assistant: Der Sensor
+  `eedc_preis_rang` trägt ein zweites Stundenprofil samt eigener
+  Günstig-Schwelle. Jeder Tag behält seine eigene Schwelle — Day-Ahead ist ein
+  Tagesprodukt.
+- Preiskurve und Kennzahlen stehen unter *Cockpit → Live* **nebeneinander**; über
+  die volle Breite wirkte die Kurve flach.
+
+**Die verbleibende PV-Menge des Tages stimmt wieder**
+
+Sie wurde bisher als Tagesprognose minus bisherigem Ertrag gerechnet — lief der
+Vormittag besser als vorhergesagt, schrumpfte die Restmenge, obwohl die Sonne
+unverändert schien. Jetzt steht dort die Prognose der noch kommenden Stunden.
+Daneben siehst du neu, um wie viel Prozent der Tag von seiner Prognose abweicht
+(ab 5 %). Für Home Assistant gibt es dazu den Sensor
+`eedc_prognose_heute_rollend_kwh`.
+
+**Kleinigkeiten**
+
+- Der **Zählerstands-Verlauf** unter *Cockpit → Tag* zeigt an der Achse die
+  **Uhrzeit** statt 14-mal dasselbe Datum; der Tooltip nennt Datum und Uhrzeit.
+- **Demo-Daten, Dokumentations-PDF und drei Daten-Checker-Prüfungen** lasen
+  Kennwerte unter Namen, die es seit v3.25.0 nicht mehr gibt — das E-Auto der
+  Demo hatte keine wirksame Fahrleistung, vier PDF-Zeilen blieben leer, und zwei
+  Prüfungen zu V2H und Arbitrage haben nie gemeldet. Deine gespeicherten Daten
+  waren davon nicht betroffen.
 
 ---
 
