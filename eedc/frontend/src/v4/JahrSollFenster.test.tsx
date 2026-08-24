@@ -15,12 +15,10 @@ import { baueJahrAlsMonat } from './JahrAggregat'
 import { baueJahrKpis } from './JahrBilanz'
 import { baueMonatKpis } from './MonatBilanz'
 import { sollErfuellungProzent, sollFensterText } from '../lib/sollErfuellung'
+import { aktuellerMonat } from '../test/factories'
 
-const monat = (m: number, felder: Partial<AktuellerMonatResponse>): AktuellerMonatResponse => ({
-  anlage_id: 1, anlage_name: 'Winterborn', jahr: 2026, monat: m, monat_name: String(m),
-  aktualisiert_um: '', quellen: {},
-  ...felder,
-} as unknown as AktuellerMonatResponse)
+const monat = (m: number, felder: Partial<AktuellerMonatResponse>) =>
+  aktuellerMonat(2026, m, { anlage_name: 'Winterborn', monat_name: String(m), ...felder })
 
 const SOLL_JAN_JUL = [396.1, 615.7, 1052.7, 1411.8, 1466.2, 1477.2, 1509.0]
 const IST_JAN_JUL = [330.11, 545.41, 1439.9, 1786.5, 1751.3, 1753.8, 1843.25]

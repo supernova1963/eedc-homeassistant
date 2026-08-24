@@ -1,18 +1,17 @@
 import { describe, it, expect } from 'vitest'
 import { baueJahrChartDaten } from './JahrVerlaufChart'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
+import { monatsZeile } from '../test/factories'
 
-function md(jahr: number, monat: number, over: Partial<AggregierteMonatsdaten> = {}): AggregierteMonatsdaten {
-  return {
-    jahr, monat,
+const md = (jahr: number, monat: number, over: Partial<AggregierteMonatsdaten> = {}) =>
+  monatsZeile(jahr, monat, {
     eigenverbrauch_kwh: 180, einspeisung_kwh: 120, netzbezug_kwh: 90,
     direktverbrauch_kwh: 140, speicher_entladung_kwh: 40, autarkie_prozent: 66,
     pv_module_kwh: 300, bkw_kwh: 20, einspeisung_neg_preis_kwh: 5,
     speicher_ladung_kwh: 50, speicher_netzladung_kwh: 8,
     eauto_ladung_kwh: 60, eauto_km: 400,
     ...over,
-  } as unknown as AggregierteMonatsdaten
-}
+  })
 
 describe('baueJahrChartDaten', () => {
   it('eine Zeile je Monat, aufsteigend nach Monat sortiert', () => {

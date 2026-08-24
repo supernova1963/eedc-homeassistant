@@ -10,11 +10,12 @@
  * Gerendert wird über die geteilte `HerkunftZeile` (Regel 0a — dieselbe Zeile,
  * die im Komponenten-Hub „nach kWp gerechnet" trägt), keine neue Komponente.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { PrognoseChartKarte, PrognoseTabelle } from './EnergieprofilPrognose'
 import { ThemeProvider } from '../../context/ThemeContext'
 import type { TagesPrognose } from '../../api/energie_profil'
+import { stubMatchMedia } from '../../test/render'
 
 const HINWEIS = 'Für diesen Tag liegt keine PV-Prognose vor — der Wetterabruf ist '
   + 'ausgefallen. Die PV-Werte im Verlauf sind deshalb 0 und bedeuten NICHT, dass '
@@ -47,11 +48,7 @@ function daten(hinweise: string[]): TagesPrognose {
 describe('Tagesprognose — Unvollständigkeit steht in der Sicht', () => {
   beforeEach(() => {
     // `useChartTheme` fragt das System-Theme ab; jsdom kennt matchMedia nicht.
-    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
-      matches: false, media: '', onchange: null,
-      addEventListener: vi.fn(), removeEventListener: vi.fn(),
-      addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
-    }))
+    stubMatchMedia()
   })
 
   it('Chart-Karte zeigt Badge und Erklärsatz über den Kennzahlen', () => {

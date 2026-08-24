@@ -8,15 +8,14 @@ import { describe, it, expect } from 'vitest'
 import { baueErzeugerSpalten, pvRestKw } from './erzeugerSpalten'
 import { getTagWert, ERZEUGER_METRIK_PREFIX } from './werte'
 import type { Investition } from '../types'
-import type { TagWerte } from '../api/energie_profil'
+import { tagWerte } from '../test/factories'
 
 const inv = (id: number, typ: string, bezeichnung: string, extra: Partial<Investition> = {}) => ({
   id, anlage_id: 1, typ, bezeichnung, aktiv: true, ...extra,
 } as Investition)
 
-const tag = (datum: string, erzeuger?: Record<string, number> | null) => ({
-  datum, erzeuger_kwh: erzeuger,
-} as TagWerte)
+const tag = (datum: string, erzeuger?: Record<string, number> | null) =>
+  tagWerte(datum, { erzeuger_kwh: erzeuger })
 
 const DACH = inv(7, 'pv-module', 'Dach Süd')
 const BKW = inv(9, 'balkonkraftwerk', 'BKW Vorgarten')
@@ -88,7 +87,7 @@ describe('getTagWert für Erzeuger-Spalten', () => {
   })
 
   it('lässt die regulären Registry-Keys unberührt', () => {
-    const zeile = { datum: '2026-05-10', erzeugung: 12.5 } as TagWerte
+    const zeile = tagWerte('2026-05-10', { erzeugung: 12.5 })
     expect(getTagWert(zeile, 'erzeugung')).toBe(12.5)
   })
 })

@@ -7,19 +7,15 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { TKonto } from './TKonto'
-import type { AktuellerMonatResponse } from '../../api/aktuellerMonat'
+import { aktuellerMonat } from '../../test/factories'
 
-const basis = {
-  anlage_id: 1, anlage_name: 'Demo', jahr: 2025, monat: 5, monat_name: 'Mai',
-  aktualisiert_um: '', quellen: {},
+const basis = aktuellerMonat(2025, 5, {
+  anlage_name: 'Demo',
   einspeisung_kwh: 100, einspeise_preis_cent: 8, einspeise_erloes_euro: 8,
   eigenverbrauch_kwh: 120, ev_ersparnis_euro: 36,
   netzbezug_kwh: 50, netzbezug_preis_cent: 30, netzbezug_kosten_euro: 15,
   netto_ertrag_euro: 29, gesamtnettoertrag_euro: 29,
-  betriebskosten_anteilig_euro: 0, sonstige_ertraege_euro: 0, sonstige_ausgaben_euro: 0, sonstige_netto_euro: 0,
-  investitionen_financials: [],
-  komponenten_geraete: {}, feld_quellen: {}, vorjahr: null,
-} as unknown as AktuellerMonatResponse
+})
 
 describe('TKonto', () => {
   it('rendert SOLL/HABEN-Struktur + Summen + Gewinn (Haben 44 > Soll 15)', () => {
@@ -39,18 +35,18 @@ describe('TKonto', () => {
     const mit51 = {
       ...basis, einspeise_erloes_euro: 6.4,
       einspeisung_neg_preis_kwh: 20, nicht_vergueteter_erloes_euro: 1.6,
-    } as AktuellerMonatResponse
+    }
     render(<TKonto d={mit51} />)
     expect(screen.getAllByText(/§51-Verlust: 20,0 kWh ohne Vergütung — 1,60 € entgangen/).length).toBeGreaterThan(0)
   })
 
   it('ohne Negativpreis-Einspeisung bleibt der §51-Hinweis weg', () => {
-    render(<TKonto d={{ ...basis, einspeisung_neg_preis_kwh: 0, nicht_vergueteter_erloes_euro: 0 } as AktuellerMonatResponse} />)
+    render(<TKonto d={{ ...basis, einspeisung_neg_preis_kwh: 0, nicht_vergueteter_erloes_euro: 0 }} />)
     expect(screen.queryByText(/§51-Verlust/)).toBeNull()
   })
 
   it('zeigt Verlust, wenn Kosten die Erlöse übersteigen', () => {
-    const verlust = { ...basis, einspeise_erloes_euro: 2, ev_ersparnis_euro: 3, netzbezug_kosten_euro: 40 } as AktuellerMonatResponse
+    const verlust = { ...basis, einspeise_erloes_euro: 2, ev_ersparnis_euro: 3, netzbezug_kosten_euro: 40 }
     render(<TKonto d={verlust} />)
     expect(screen.getAllByText(/Verlust/).length).toBeGreaterThan(0)
   })
@@ -68,7 +64,7 @@ describe('TKonto', () => {
       }],
       sonstige_ertraege_euro: 120, sonstige_ausgaben_euro: 30, sonstige_netto_euro: 90,
       anlage_sonstige_ertraege_euro: 120, anlage_sonstige_ausgaben_euro: 30,
-    } as unknown as AktuellerMonatResponse
+    }
     render(<TKonto d={d} />)
     expect(screen.getAllByText(/Anlage — Sonstige Erträge/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Anlage — Sonstige Ausgaben/).length).toBeGreaterThan(0)
@@ -80,7 +76,7 @@ describe('TKonto', () => {
       investitionen_financials: [],
       sonstige_ertraege_euro: 120, sonstige_ausgaben_euro: 0, sonstige_netto_euro: 120,
       anlage_sonstige_ertraege_euro: 120, anlage_sonstige_ausgaben_euro: 0,
-    } as unknown as AktuellerMonatResponse
+    }
     render(<TKonto d={d} />)
     expect(screen.queryByText(/Anlage — Sonstige Erträge/)).toBeNull()
     // Aggregat-Fallback-Zeile trägt den Wert stattdessen.

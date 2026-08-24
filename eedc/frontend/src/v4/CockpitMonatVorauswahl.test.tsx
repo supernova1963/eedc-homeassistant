@@ -19,22 +19,18 @@
  * Systemzeit deshalb ebenfalls.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
-import { ThemeProvider } from '../context/ThemeContext'
+import { screen, waitFor } from '@testing-library/react'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
-import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 
 /** Systemzeit: 5. August 2026 — laufender Monat August, Vormonat Juli. */
 const HEUTE = new Date(2026, 7, 5, 12, 0, 0)
 
-const zeile = (jahr: number, monat: number, pv = 100): AggregierteMonatsdaten => ({
-  id: jahr * 100 + monat,
-  anlage_id: 1, jahr, monat,
-  pv_erzeugung_kwh: pv, eigenverbrauch_kwh: pv / 2, direktverbrauch_kwh: pv / 4,
-  einspeisung_kwh: pv / 2, netzbezug_kwh: 50, gesamtverbrauch_kwh: pv / 2 + 50,
-  autarkie_prozent: 80, netzbezug_preis_cent: 40,
-} as unknown as AggregierteMonatsdaten)
+const zeile = (jahr: number, monat: number, pv = 100) =>
+  monatsZeile(jahr, monat, {
+    pv_erzeugung_kwh: pv, eigenverbrauch_kwh: pv / 2, direktverbrauch_kwh: pv / 4,
+    einspeisung_kwh: pv / 2, netzbezug_kwh: 50, gesamtverbrauch_kwh: pv / 2 + 50,
+    autarkie_prozent: 80, netzbezug_preis_cent: 40,
+  })
 
 /** Strenge Liste (Monatsdaten) und volle Liste (inkl. laufendem Monat). */
 const STRENG_ABGESCHLOSSEN = [zeile(2026, 7), zeile(2026, 6)]
@@ -69,20 +65,22 @@ vi.mock('../api/energie_profil', () => ({
 }))
 vi.mock('../api/aktuellerMonat', () => ({
   aktuellerMonatApi: {
-    getData: (_id: number, jahr: number, monat: number) => Promise.resolve({
-      anlage_id: 1, anlage_name: 'Demo', jahr, monat, monat_name: String(monat),
-      aktualisiert_um: '', quellen: {}, feld_quellen: {},
-      soll_pv_kwh: null, netzbezug_preis_cent: 40, einspeise_preis_cent: 8.2,
-      pv_erzeugung_kwh: 100, einspeisung_kwh: 50, netzbezug_kwh: 50,
-      eigenverbrauch_kwh: 50, direktverbrauch_kwh: 25,
-      gesamtverbrauch_kwh: 100, autarkie_prozent: 80, eigenverbrauch_quote_prozent: 50,
-      investitionen_financials: [], komponenten_geraete: {}, vorjahr: null,
-    } as unknown as AktuellerMonatResponse),
+    getData: (_id: number, jahr: number, monat: number) => Promise.resolve(
+      aktuellerMonat(jahr, monat, {
+        anlage_name: 'Demo', monat_name: String(monat),
+        netzbezug_preis_cent: 40, einspeise_preis_cent: 8.2,
+        pv_erzeugung_kwh: 100, einspeisung_kwh: 50, netzbezug_kwh: 50,
+        eigenverbrauch_kwh: 50, direktverbrauch_kwh: 25,
+        gesamtverbrauch_kwh: 100, autarkie_prozent: 80, eigenverbrauch_quote_prozent: 50,
+      }),
+    ),
   },
 }))
 
 import CockpitMonatV4, { hatOffeneAbschluesse, waehleDefaultMonat } from './CockpitMonatV4'
 import { _clearSwrCacheForTests } from '../hooks/useApiData'
+import { renderMitProvidern, stubMatchMedia } from '../test/render'
+import { aktuellerMonat, monatsZeile } from '../test/factories'
 
 describe('waehleDefaultMonat — die Regel selbst', () => {
   it('ohne offene Abschlüsse fällt die Wahl auf den laufenden Monat', () => {
@@ -157,13 +155,7 @@ describe('hatOffeneAbschluesse — die Auflage', () => {
 })
 
 function renderView() {
-  return render(
-    <MemoryRouter initialEntries={['/v4/cockpit/monat']}>
-      <ThemeProvider>
-        <CockpitMonatV4 anlageId={1} />
-      </ThemeProvider>
-    </MemoryRouter>,
-  )
+  return renderMitProvidern(<CockpitMonatV4 anlageId={1} />, { route: '/v4/cockpit/monat' })
 }
 
 describe('Cockpit/Monat — die Sicht geht auf dem richtigen Monat auf (#353)', () => {
@@ -178,11 +170,7 @@ describe('Cockpit/Monat — die Sicht geht auf dem richtigen Monat auf (#353)', 
     getTageWerte.mockClear()
     vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.setSystemTime(HEUTE)
-    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
-      matches: false, media: '', onchange: null,
-      addEventListener: vi.fn(), removeEventListener: vi.fn(),
-      addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
-    }))
+    stubMatchMedia()
   })
   afterEach(() => { vi.useRealTimers() })
 
@@ -206,13 +194,9 @@ describe('Cockpit/Monat — die Sicht geht auf dem richtigen Monat auf (#353)', 
   })
 
   it('ein Drill-in mit ?jahr=&monat= schlägt die Vorauswahl weiterhin', async () => {
-    render(
-      <MemoryRouter initialEntries={['/v4/cockpit/monat?jahr=2026&monat=6']}>
-        <ThemeProvider>
-          <CockpitMonatV4 anlageId={1} />
-        </ThemeProvider>
-      </MemoryRouter>,
-    )
+    renderMitProvidern(<CockpitMonatV4 anlageId={1} />, {
+      route: '/v4/cockpit/monat?jahr=2026&monat=6',
+    })
     await screen.findAllByTitle('Aug 2026 — laufender Monat')
     await waitFor(() => expect(getTageWerte).toHaveBeenCalledWith(1, '2026-06-01', '2026-06-30'))
     expect(getTageWerte).not.toHaveBeenCalledWith(1, '2026-08-01', '2026-08-31')

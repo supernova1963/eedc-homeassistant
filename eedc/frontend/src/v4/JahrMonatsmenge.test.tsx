@@ -18,10 +18,10 @@ import { describe, it, expect } from 'vitest'
 import {
   zuLadendeMonate, monatHatDaten, abgeschlosseneMonate, kennzahlenFensterAus, monatsFensterAus,
 } from './JahrAggregat'
-import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
+import { aktuellerMonat, monatsZeile } from '../test/factories'
 
-const zeile = (jahr: number, monat: number) => ({ jahr, monat } as unknown as AggregierteMonatsdaten)
+const zeile = (jahr: number, monat: number) => monatsZeile(jahr, monat)
 const jahresZeilen = (jahr: number, monate: number[]) => monate.map((m) => zeile(jahr, m))
 const bis = (n: number) => Array.from({ length: n }, (_, i) => i + 1)
 
@@ -88,9 +88,8 @@ describe('zuLadendeMonate — die Monatsmenge eines Jahres', () => {
 })
 
 describe('monatHatDaten — Messung oder nur Stammdaten?', () => {
-  const antwort = (felder: Partial<AktuellerMonatResponse>) => ({
-    anlage_id: 1, jahr: 2023, monat: 1, ...felder,
-  } as unknown as AktuellerMonatResponse)
+  const antwort = (felder: Partial<AktuellerMonatResponse>) =>
+    aktuellerMonat(2023, 1, felder)
 
   it('Monat vor der Inbetriebnahme: SOLL + Preise + Kapazität sind KEINE Daten', () => {
     // 1:1 die Box-Antwort für Januar 2023 (Anlage lief ab Juni).

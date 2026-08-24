@@ -4,17 +4,15 @@
  * dem Tages-SoT, Stundenverlauf / Stundenwerte aus den Stunden).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
-import { ThemeProvider } from '../context/ThemeContext'
-import type { TagWerte, StundenAntwort } from '../api/energie_profil'
+import { screen } from '@testing-library/react'
+import type { StundenAntwort } from '../api/energie_profil'
 
 // Default-Datum der Sicht = gestern (TZ-stabil über toISOString).
 const iso = (d: Date) => d.toISOString().slice(0, 10)
 const gestern = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return iso(d) })()
 
-const tag = {
-  datum: gestern, stunden_verfuegbar: 24, datenquelle: 'HA',
+const tag = tagWerte(gestern, {
+  stunden_verfuegbar: 24, datenquelle: 'HA',
   erzeugung: 20, eigenverbrauch: 8, einspeisung: 12, netzbezug: 5,
   gesamtverbrauch: 13, direktverbrauch: 6,
   autarkie: 62, evQuote: 40, spezErtrag: 2,
@@ -22,11 +20,9 @@ const tag = {
   einspeise_erloes: 1.2, ev_ersparnis: 2.3, netzbezug_kosten: 1.6, netto_ertrag: 3.5, netto_bilanz: 1.9,
   co2_einsparung: 4, ueberschuss_kwh: 7, defizit_kwh: 2,
   peak_pv_kw: 4, peak_netzbezug_kw: 1, peak_einspeisung_kw: 3,
-  performance_ratio: 0.8, batterie_vollzyklen: null,
+  performance_ratio: 0.8,
   temperatur_min_c: 10, temperatur_max_c: 22, strahlung_summe_wh_m2: 4200,
-  boersenpreis_avg_cent: null, boersenpreis_min_cent: null,
-  negative_preis_stunden: null, einspeisung_neg_preis_kwh: null,
-} as unknown as TagWerte
+})
 
 const stundenAntwort = {
   stunden: Array.from({ length: 24 }, (_, h) => ({
@@ -55,26 +51,18 @@ vi.mock('../api/energie_profil', () => ({
 }))
 
 import CockpitTagV4 from './CockpitTagV4'
+import { renderMitProvidern, stubMatchMedia } from '../test/render'
+import { tagWerte } from '../test/factories'
 
 // CockpitTagV4 liest seit B3 `?datum=` via useSearchParams → Router-Context nötig.
 function renderView(initialEntry = '/v4/cockpit/tag') {
-  return render(
-    <MemoryRouter initialEntries={[initialEntry]}>
-      <ThemeProvider>
-        <CockpitTagV4 anlageId={1} />
-      </ThemeProvider>
-    </MemoryRouter>,
-  )
+  return renderMitProvidern(<CockpitTagV4 anlageId={1} />, { route: initialEntry })
 }
 
 describe('CockpitTagV4 — Einzeltag', () => {
   beforeEach(() => {
     localStorage.clear()
-    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
-      matches: false, media: '', onchange: null,
-      addEventListener: vi.fn(), removeEventListener: vi.fn(),
-      addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
-    }))
+    stubMatchMedia()
   })
 
   it('zeigt Header (Status-Badge) + Auswahl (Rail/Stepper) + Aktualisieren', async () => {

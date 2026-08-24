@@ -11,9 +11,7 @@
  * Card dort darf nicht „keine Daten" behaupten.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
-import { ThemeProvider } from '../context/ThemeContext'
+import { screen, waitFor, fireEvent } from '@testing-library/react'
 import type { TagStatus } from '../api/energie_profil'
 
 const iso = (d: Date) => d.toISOString().slice(0, 10)
@@ -37,11 +35,11 @@ const VOR_INBETRIEBNAHME: TagStatus = {
 }
 
 /** Minimaler Tag MIT Werten — für den zweiten Zustand (alles geparkt). */
-const TAG_MIT_WERTEN = {
-  datum: gestern, stunden_verfuegbar: 24, datenquelle: 'HA',
+const TAG_MIT_WERTEN = tagWerte(gestern, {
+  stunden_verfuegbar: 24, datenquelle: 'HA',
   erzeugung: 20, eigenverbrauch: 8, einspeisung: 12, netzbezug: 5,
   gesamtverbrauch: 13, direktverbrauch: 6, autarkie: 62,
-} as unknown as import('../api/energie_profil').TagWerte
+})
 
 const getTagStatus = vi.fn()
 const reaggregateTag = vi.fn()
@@ -60,15 +58,11 @@ vi.mock('../api/energie_profil', () => ({
 
 import CockpitTagV4 from './CockpitTagV4'
 import { _clearSwrCacheForTests } from '../hooks/useApiData'
+import { renderMitProvidern, stubMatchMedia } from '../test/render'
+import { tagWerte } from '../test/factories'
 
 function renderView() {
-  return render(
-    <MemoryRouter initialEntries={['/v4/cockpit/tag']}>
-      <ThemeProvider>
-        <CockpitTagV4 anlageId={1} />
-      </ThemeProvider>
-    </MemoryRouter>,
-  )
+  return renderMitProvidern(<CockpitTagV4 anlageId={1} />, { route: '/v4/cockpit/tag' })
 }
 
 describe('Cockpit/Tag — leere Sicht erklärt sich', () => {
@@ -76,11 +70,7 @@ describe('Cockpit/Tag — leere Sicht erklärt sich', () => {
     vi.clearAllMocks()
     _clearSwrCacheForTests()
     localStorage.clear()
-    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
-      matches: false, media: '', onchange: null,
-      addEventListener: vi.fn(), removeEventListener: vi.fn(),
-      addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
-    }))
+    stubMatchMedia()
   })
 
   it('nennt den Grund aus dem Backend statt nur „keine Daten"', async () => {
@@ -136,11 +126,7 @@ describe('Cockpit/Tag — vollständig geparkte Sicht', () => {
     vi.clearAllMocks()
     _clearSwrCacheForTests()
     localStorage.clear()
-    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
-      matches: false, media: '', onchange: null,
-      addEventListener: vi.fn(), removeEventListener: vi.fn(),
-      addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
-    }))
+    stubMatchMedia()
   })
 
   it('sagt, dass alles geparkt ist — nicht, dass Daten fehlen', async () => {

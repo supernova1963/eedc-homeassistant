@@ -16,23 +16,23 @@
  * der Inbetriebnahme" unterscheidet.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, within } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
-import { ThemeProvider } from '../context/ThemeContext'
+import { screen, fireEvent, within } from '@testing-library/react'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 import type { Nachhaltigkeit } from '../api/cockpit'
+import { aktuellerMonat, monatsZeile } from '../test/factories'
+import { renderMitProvidern, stubMatchMedia } from '../test/render'
 
 const bis = (n: number) => Array.from({ length: n }, (_, i) => i + 1)
 
 // 2026 kWh je Monat = 300, 2025 = 200 → die Summen sind auseinanderzuhalten.
 const KWH = { 2026: 300, 2025: 200 } as Record<number, number>
 
-const zeile = (jahr: number, monat: number): AggregierteMonatsdaten => ({
-  jahr, monat,
-  pv_erzeugung_kwh: KWH[jahr], eigenverbrauch_kwh: KWH[jahr] / 2, direktverbrauch_kwh: KWH[jahr] / 4,
-  einspeisung_kwh: KWH[jahr] / 2, netzbezug_kwh: 50, gesamtverbrauch_kwh: KWH[jahr] / 2 + 50,
-} as unknown as AggregierteMonatsdaten)
+const zeile = (jahr: number, monat: number) =>
+  monatsZeile(jahr, monat, {
+    pv_erzeugung_kwh: KWH[jahr], eigenverbrauch_kwh: KWH[jahr] / 2, direktverbrauch_kwh: KWH[jahr] / 4,
+    einspeisung_kwh: KWH[jahr] / 2, netzbezug_kwh: 50, gesamtverbrauch_kwh: KWH[jahr] / 2 + 50,
+  })
 
 // Aggregat-Liste: 2026 nur Jan–Jun (Juli ist nicht abgeschlossen), 2025 voll.
 const aggregiert: AggregierteMonatsdaten[] = [
@@ -49,12 +49,11 @@ const HAT_DATEN_STANDARD = [
 ]
 
 /** Antwort für einen Monat vor der Inbetriebnahme: nur Stammdaten-Ableitungen. */
-const ohneDaten = (jahr: number, monat: number): AktuellerMonatResponse => ({
-  anlage_id: 1, anlage_name: 'Demo', jahr, monat, monat_name: String(monat),
-  aktualisiert_um: '', quellen: {},
-  soll_pv_kwh: 400, netzbezug_preis_cent: 40, einspeise_preis_cent: 8.2,
-  investitionen_financials: [], komponenten_geraete: {}, feld_quellen: {}, vorjahr: null,
-} as unknown as AktuellerMonatResponse)
+const ohneDaten = (jahr: number, monat: number): AktuellerMonatResponse =>
+  aktuellerMonat(jahr, monat, {
+    anlage_name: 'Demo', monat_name: String(monat),
+    soll_pv_kwh: 400, netzbezug_preis_cent: 40, einspeise_preis_cent: 8.2,
+  })
 
 /** SOLL ist standardmäßig aus: sonst belegt die SOLL-Annotation die PV-Zweitzeile
  *  und die Vorjahres-Angabe wäre dort nicht ablesbar. Ein Test schaltet es an. */
@@ -67,7 +66,7 @@ const mitDaten = (jahr: number, monat: number): AktuellerMonatResponse => ({
   eigenverbrauch_kwh: KWH[jahr] / 2, direktverbrauch_kwh: KWH[jahr] / 4,
   gesamtverbrauch_kwh: KWH[jahr] / 2 + 50,
   autarkie_prozent: 75, eigenverbrauch_quote_prozent: 50,
-} as unknown as AktuellerMonatResponse)
+})
 
 const getData = vi.fn((_id: number, j: number, m: number) =>
   Promise.resolve(hatDaten.has(`${j}-${m}`) ? mitDaten(j, m) : ohneDaten(j, m)))
@@ -90,13 +89,7 @@ vi.mock('../api/cockpit', () => ({
 import CockpitJahrV4 from './CockpitJahrV4'
 
 function renderView() {
-  return render(
-    <MemoryRouter>
-      <ThemeProvider>
-        <CockpitJahrV4 anlageId={1} />
-      </ThemeProvider>
-    </MemoryRouter>,
-  )
+  return renderMitProvidern(<CockpitJahrV4 anlageId={1} />)
 }
 
 async function oeffneBilanz() {
@@ -112,11 +105,7 @@ describe('Cockpit/Jahr — laufendes Jahr mit unabgeschlossenem Monat (N-65)', (
     sollAktiv = false
     vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.setSystemTime(new Date(2026, 7, 2, 12, 0, 0))
-    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
-      matches: false, media: '', onchange: null,
-      addEventListener: vi.fn(), removeEventListener: vi.fn(),
-      addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
-    }))
+    stubMatchMedia()
   })
   afterEach(() => { vi.useRealTimers() })
 
@@ -200,11 +189,7 @@ describe('Cockpit/Jahr — REGRESSION: abgeschlossenes Jahr unverändert', () =>
     sollAktiv = false
     vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.setSystemTime(new Date(2026, 7, 2, 12, 0, 0))
-    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
-      matches: false, media: '', onchange: null,
-      addEventListener: vi.fn(), removeEventListener: vi.fn(),
-      addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
-    }))
+    stubMatchMedia()
   })
   afterEach(() => { vi.useRealTimers() })
 

@@ -6,11 +6,12 @@
  * nicht wieder auf die fünf Ränge zurückfallen, aus denen sie bis v4.0 kam.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import type { BoersenpreisResponse, BoersenpreisTag } from '../../api/liveDashboard'
 import { ThemeProvider } from '../../context/ThemeContext'
 import BoersenpreisBlock, { baueKennzahlen } from './BoersenpreisBlock'
+import { stubMatchMedia } from '../../test/render'
 
 /** Der Chart zieht seine Achsenfarben aus dem Theme — ohne Provider wirft er. */
 function zeige(daten: BoersenpreisResponse) {
@@ -19,11 +20,7 @@ function zeige(daten: BoersenpreisResponse) {
 
 beforeEach(() => {
   // Der ThemeProvider fragt die Systemeinstellung ab; jsdom kennt matchMedia nicht.
-  vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
-    matches: false, media: '', onchange: null,
-    addEventListener: vi.fn(), removeEventListener: vi.fn(),
-    addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
-  }))
+  stubMatchMedia()
 })
 
 function tag(datum: string, opts: Partial<BoersenpreisTag> = {}): BoersenpreisTag {

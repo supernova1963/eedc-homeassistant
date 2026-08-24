@@ -11,21 +11,22 @@
  * sein MUSS. Eine Vergleichsspalte hat diese Bindung nicht — sie darf beschneiden,
  * solange sie es sagt.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { ThemeProvider } from '../context/ThemeContext'
 import { jahrVergleichAus, mittelJahre, monatsFenster } from './JahrAggregat'
 import { baueJahrKpis, JahrBilanz } from './JahrBilanz'
+import { aktuellerMonat, monatsZeile } from '../test/factories'
+import { stubMatchMedia } from '../test/render'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
-import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 
 /** Eine aggregierte Monatszeile mit gleichmäßigen Werten — Summen sind so
  *  ablesbar (n × 100 kWh PV), ohne dass der Test rechnet. */
-const zeile = (jahr: number, monat: number): AggregierteMonatsdaten => ({
-  jahr, monat,
-  pv_erzeugung_kwh: 100, eigenverbrauch_kwh: 60, direktverbrauch_kwh: 40,
-  einspeisung_kwh: 40, netzbezug_kwh: 30, gesamtverbrauch_kwh: 90,
-} as unknown as AggregierteMonatsdaten)
+const zeile = (jahr: number, monat: number) =>
+  monatsZeile(jahr, monat, {
+    pv_erzeugung_kwh: 100, eigenverbrauch_kwh: 60, direktverbrauch_kwh: 40,
+    einspeisung_kwh: 40, netzbezug_kwh: 30, gesamtverbrauch_kwh: 90,
+  })
 
 const jahresZeilen = (jahr: number, monate: number[]) => monate.map((m) => zeile(jahr, m))
 const bis = (n: number) => Array.from({ length: n }, (_, i) => i + 1)
@@ -150,16 +151,14 @@ describe('monatsFenster — Beschriftung', () => {
 
 // ─── Anzeige: das Fenster steht dran ─────────────────────────────────────────
 
-const jahresAggregat = (): AktuellerMonatResponse => ({
-  anlage_id: 1, anlage_name: 'Demo', jahr: 2026, monat: 0, monat_name: '2026',
-  aktualisiert_um: '', quellen: {},
-  pv_erzeugung_kwh: 4200, einspeisung_kwh: 1800, netzbezug_kwh: 900,
-  eigenverbrauch_kwh: 2400, direktverbrauch_kwh: 1500, gesamtverbrauch_kwh: 3300,
-  autarkie_prozent: 72.7, eigenverbrauch_quote_prozent: 57.1,
-  soll_pv_kwh: null,
-  investitionen_financials: [], komponenten_geraete: {}, feld_quellen: {},
-  vorjahr: null,
-} as unknown as AktuellerMonatResponse)
+// `monat: 0` + der Name des Jahres: so kommt das Jahres-Aggregat aus der Route.
+const jahresAggregat = () =>
+  aktuellerMonat(2026, 0, {
+    monat_name: '2026',
+    pv_erzeugung_kwh: 4200, einspeisung_kwh: 1800, netzbezug_kwh: 900,
+    eigenverbrauch_kwh: 2400, direktverbrauch_kwh: 1500, gesamtverbrauch_kwh: 3300,
+    autarkie_prozent: 72.7, eigenverbrauch_quote_prozent: 57.1,
+  })
 
 const vergleich2025 = { jahr: 2025, pv: 3890, ev: 2200, direkt: 1400, einsp: 1690, netz: 850, gesamt: 3050, autarkie: 72.1, monate: bis(7) }
 
@@ -184,12 +183,7 @@ describe('baueJahrKpis — Kachel nennt das Fenster', () => {
 
 describe('JahrBilanz — Spaltenkopf und Fußnote', () => {
   beforeEach(() => {
-    // ThemeProvider fragt `prefers-color-scheme` ab — jsdom kennt matchMedia nicht.
-    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
-      matches: false, media: '', onchange: null,
-      addEventListener: vi.fn(), removeEventListener: vi.fn(),
-      addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
-    }))
+    stubMatchMedia()
   })
 
   const rendere = (vjFenster: string | null, ojFenster: string | null) => render(

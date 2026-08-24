@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { baueJahrAlsMonat } from './JahrAggregat'
-import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
+import { aktuellerMonat } from '../test/factories'
 
 /**
  * N-252 — *Cockpit → Jahr* darf keinen unmöglichen Wirkungsgrad zeigen.
@@ -16,15 +16,12 @@ import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
  * Satz „über das ganze Fenster gerechnet" — eine Falschmessung mit Gütesiegel.
  */
 
-function monat(jahr: number, m: number, ladung: number, entladung: number): AktuellerMonatResponse {
-  return {
-    jahr,
-    monat: m,
+const monat = (jahr: number, m: number, ladung: number, entladung: number) =>
+  aktuellerMonat(jahr, m, {
     speicher_ladung_kwh: ladung,
     speicher_entladung_kwh: entladung,
     hat_speicher: true,
-  } as unknown as AktuellerMonatResponse
-}
+  })
 
 describe('Cockpit → Jahr: Speicher-Wirkungsgrad', () => {
   it('zeigt den plausiblen Jahreswert und nennt das lange Fenster', () => {

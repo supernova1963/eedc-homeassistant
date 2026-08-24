@@ -3,6 +3,7 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { usePrognoseVsIst } from './PrognoseVsIstTeile'
 import { monatsdatenApi, pvgisApi } from '../../api'
 import type { AggregierteMonatsdaten } from '../../api/monatsdaten'
+import { monatsZeile } from '../../test/factories'
 
 // Paket Q (Doppel-Fetch-Bereinigung): der V4-Dispatcher hält die aggregierten
 // Monatsdaten in useAuswertungBasis und reicht sie als 3. Argument herein —
@@ -11,9 +12,7 @@ import type { AggregierteMonatsdaten } from '../../api/monatsdaten'
 // Bewusst vi.spyOn statt vi.mock aufs api-Barrel: das Modul-Mocking des
 // Barrels ließ den jsdom-Worker im Import-Graph dieses Files OOM-sterben.
 
-const MD = [
-  { jahr: 2026, monat: 5 }, { jahr: 2025, monat: 5 },
-] as unknown as AggregierteMonatsdaten[]
+const MD = [monatsZeile(2026, 5), monatsZeile(2025, 5)]
 // ⚠️ Identitäts-Vertrag des 3. Arguments (wie jede Effekt-Dependency): Aufrufer
 // müssen eine RENDER-STABILE Referenz übergeben (State/useMemo) — ein Inline-
 // Literal erzeugt eine Refetch-Schleife. Genau das passierte hier im ersten

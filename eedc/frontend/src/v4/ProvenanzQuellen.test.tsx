@@ -9,12 +9,17 @@ import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { provenanzQuellen } from './ProvenanzQuellen'
 import { JahrHeader } from './JahrRahmen'
-import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
+import type { AktuellerMonatResponse, DatenquelleInfo } from '../api/aktuellerMonat'
+import { aktuellerMonat } from '../test/factories'
 
 const JULI = { start: new Date(2025, 6, 1), tage: 31 }
 
-const quellen = (feld_quellen: Record<string, unknown>) =>
-  feld_quellen as unknown as AktuellerMonatResponse['feld_quellen']
+/** Typgebunden statt `as unknown as`: `zeitpunkt` ist im Vertrag Pflicht, für
+ *  diese Tests aber ohne Aussage — der Helfer ergänzt die Nullstellung. */
+const quellen = (
+  feld_quellen: Record<string, Omit<DatenquelleInfo, 'zeitpunkt'> & { zeitpunkt?: string | null }>,
+): AktuellerMonatResponse['feld_quellen'] =>
+  Object.fromEntries(Object.entries(feld_quellen).map(([k, v]) => [k, { zeitpunkt: null, ...v }]))
 
 describe('provenanzQuellen', () => {
   it('Roh-Enum → Label aus der SoT-Map, je Quelle genau ein Eintrag', () => {
@@ -59,14 +64,14 @@ describe('provenanzQuellen', () => {
 
 describe('JahrHeader — E3: kein Zeitraum in der Jahres-Sicht', () => {
   it('Connector-Badge bleibt ohne Zeitraum, auch bei Teilabdeckung', () => {
-    const d = {
-      feld_quellen: {
+    const d = aktuellerMonat(2025, 7, {
+      feld_quellen: quellen({
         pv_erzeugung_kwh: {
           quelle: 'local_connector', konfidenz: 90,
           abdeckung_von: '2025-07-28T14:03:00', abdeckung_bis: '2025-07-30T09:12:00',
         },
-      },
-    } as unknown as AktuellerMonatResponse
+      }),
+    })
     render(<JahrHeader jahr={2025} laufend d={d} />)
     expect(screen.getByText('Connector')).toBeInTheDocument()
     expect(screen.queryByText(/Connector \(/)).not.toBeInTheDocument()

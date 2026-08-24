@@ -12,29 +12,22 @@
 import { describe, it, expect } from 'vitest'
 import { createMonatsZeitreihe } from './types'
 import type { AggregierteMonatsdaten } from '../../api/monatsdaten'
+import { monatsZeile } from '../../test/factories'
 
-const md = (over: Partial<AggregierteMonatsdaten> = {}): AggregierteMonatsdaten => ({
-  id: 1, anlage_id: 1, jahr: 2026, monat: 5,
-  einspeisung_kwh: 1000, netzbezug_kwh: 200,
-  globalstrahlung_kwh_m2: null, sonnenstunden: null,
-  pv_erzeugung_kwh: 1500, pv_module_kwh: 1500, bkw_kwh: null, sonstige_erzeugung_kwh: null, sonstige_verbrauch_kwh: null,
-  erzeugung_hinter_zaehler_kwh: 1500,
-  speicher_ladung_kwh: null, speicher_entladung_kwh: null, speicher_netzladung_kwh: null,
-  wp_strom_kwh: null, wp_strom_heizen_kwh: null, wp_strom_warmwasser_kwh: null,
-  wp_heizung_kwh: null, wp_warmwasser_kwh: null,
-  eauto_ladung_kwh: null, eauto_km: null,
-  wallbox_ladung_kwh: null, wallbox_ladung_pv_kwh: null,
-  direktverbrauch_kwh: 500, eigenverbrauch_kwh: 500, gesamtverbrauch_kwh: 700,
-  autarkie_prozent: 71.4, eigenverbrauchsquote_prozent: 33.3,
-  einspeisung_neg_preis_kwh: null,
-  einspeise_erloes_euro: 82, einspeise_nicht_verguetet_euro: 0,
-  ev_ersparnis_euro: 150, bkw_ersparnis_euro: 0, ust_eigenverbrauch_euro: 0,
-  netzbezug_kosten_euro: 60, netto_ertrag_euro: 232, netto_bilanz_euro: 172,
-  netzbezug_preis_cent: 30,
-  hat_legacy_daten: false,
-  ...over,
-})
-
+const md = (over: Partial<AggregierteMonatsdaten> = {}) =>
+  monatsZeile(2026, 5, {
+    id: 1,
+    einspeisung_kwh: 1000, netzbezug_kwh: 200,
+    pv_erzeugung_kwh: 1500, pv_module_kwh: 1500,
+    erzeugung_hinter_zaehler_kwh: 1500,
+    direktverbrauch_kwh: 500, eigenverbrauch_kwh: 500, gesamtverbrauch_kwh: 700,
+    autarkie_prozent: 71.4, eigenverbrauchsquote_prozent: 33.3,
+    einspeise_erloes_euro: 82, einspeise_nicht_verguetet_euro: 0,
+    ev_ersparnis_euro: 150, bkw_ersparnis_euro: 0, ust_eigenverbrauch_euro: 0,
+    netzbezug_kosten_euro: 60, netto_ertrag_euro: 232, netto_bilanz_euro: 172,
+    netzbezug_preis_cent: 30,
+    ...over,
+  })
 describe('createMonatsZeitreihe — Finanzen kommen aus dem Backend (N-22)', () => {
   it('reicht Erlös, Ersparnis, Kosten und Netto durch, ohne sie neu zu rechnen', () => {
     // Die gelieferten Zahlen sind absichtlich NICHT die, die die alte

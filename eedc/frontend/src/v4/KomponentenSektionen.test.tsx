@@ -6,8 +6,9 @@ import { KOMPONENTEN_IDENTITAET } from '../lib'
 import type { Block } from '../components/blocks'
 import type { ParkApi } from '../components/park'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
-import type { StundenWert, TagWerte } from '../api/energie_profil'
+import type { StundenWert } from '../api/energie_profil'
 import { socTagWerte, baueTagKomponentenUndFinanz } from './TagKomponenten'
+import { aktuellerMonat, tagWerte } from '../test/factories'
 
 /** Park-Stub: nichts geparkt — für die Bauer-Aufrufe mit expliziter Periode. */
 const NOOP_PARK_STUB: ParkApi = {
@@ -21,18 +22,9 @@ const ALLES_GEPARKT: ParkApi = {
   registriere: () => () => {}, parkbareAnzahl: 0,
 }
 
-function d(over: Partial<AktuellerMonatResponse> = {}): AktuellerMonatResponse {
-  // Basis = nichts aktiv; Tests aktivieren gezielt einzelne Komponenten.
-  return {
-    speicher_ladung_kwh: null, speicher_entladung_kwh: null, speicher_kapazitaet_kwh: null,
-    speicher_wirkungsgrad_prozent: null, speicher_vollzyklen: null,
-    wp_strom_kwh: null, wp_waerme_kwh: null, wp_heizung_kwh: null, wp_warmwasser_kwh: null, wp_ersparnis_euro: null,
-    emob_ladung_kwh: null, emob_km: null, emob_ladung_pv_kwh: null, emob_verbrauch_100km: null, emob_ersparnis_euro: null,
-    bkw_erzeugung_kwh: null, bkw_eigenverbrauch_kwh: null,
-    sonstiges_erzeugung_kwh: null, sonstiges_verbrauch_kwh: null,
-    ...over,
-  } as AktuellerMonatResponse
-}
+// Basis = nichts aktiv; Tests aktivieren gezielt einzelne Komponenten. Genau
+// das ist die Nullstellung der Factory — die Aufzählung von Hand entfällt.
+const d = (over: Partial<AktuellerMonatResponse> = {}) => aktuellerMonat(2026, 8, over)
 
 describe('baueKomponentenBloecke — Aktiv-Gating', () => {
   it('keine Komponente aktiv → keine Blöcke', () => {
@@ -270,11 +262,11 @@ describe('Speicher-η: der Wert trägt seine Herkunft (T89667 #163)', () => {
   })
 
   it('und der Tag reicht die Quelle auch wirklich durch — hier saß der Befund', () => {
-    const tagWerte = {
-      datum: '2026-08-14', speicher_ladung: 6.1, speicher_entladung: 5.4,
+    const werte = tagWerte('2026-08-14', {
+      speicher_ladung: 6.1, speicher_entladung: 5.4,
       speicher_effizienz: 88.5, speicher_effizienz_quelle: 'roh-unkorrigiert',
-    } as unknown as TagWerte
-    const bloecke = baueTagKomponentenUndFinanz(tagWerte, [], [], NOOP_PARK_STUB)
+    })
+    const bloecke = baueTagKomponentenUndFinanz(werte, [], [], NOOP_PARK_STUB)
     renderBlock(bloecke, 'k-speicher')
     expect(screen.getByText(/ohne Ladestand gerechnet — ungenau/)).toBeInTheDocument()
   })

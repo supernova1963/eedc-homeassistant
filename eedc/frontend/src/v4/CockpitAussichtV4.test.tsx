@@ -6,9 +6,7 @@
  * zieht die Langfrist-Blöcke (Saison/Degradation) nach.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
-import { ThemeProvider } from '../context/ThemeContext'
+import { screen, fireEvent, waitFor } from '@testing-library/react'
 
 vi.mock('../hooks', async (importOriginal) => ({
   // R18-2: useApiData (SWR-Sicht-Cache) läuft ECHT — nur Anlage/Achse gemockt.
@@ -89,15 +87,12 @@ vi.mock('../api/aussichten', () => ({
 
 import CockpitAussichtV4 from './CockpitAussichtV4'
 import { _clearSwrCacheForTests } from '../hooks/useApiData'
+import { renderMitProvidern, stubMatchMedia } from '../test/render'
 
+// ⚠ Der Bestand hatte den Turm vertauscht (ThemeProvider außen). Der Tausch auf
+// die gemeinsame Reihenfolge ist an der Fallzahl gemessen: 5 → 5, grün.
 function renderView() {
-  return render(
-    <ThemeProvider>
-      <MemoryRouter initialEntries={['/v4/cockpit/aussicht']}>
-        <CockpitAussichtV4 anlageId={1} />
-      </MemoryRouter>
-    </ThemeProvider>,
-  )
+  return renderMitProvidern(<CockpitAussichtV4 anlageId={1} />, { route: '/v4/cockpit/aussicht' })
 }
 
 describe('CockpitAussichtV4 — Vorwärts-Teleskop', () => {
@@ -105,11 +100,7 @@ describe('CockpitAussichtV4 — Vorwärts-Teleskop', () => {
     localStorage.clear()
     _clearSwrCacheForTests() // SWR-Modul-Cache je Test frisch (R18-2)
     // ThemeProvider liest window.matchMedia (in jsdom nicht implementiert).
-    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
-      matches: false, media: '', onchange: null,
-      addEventListener: vi.fn(), removeEventListener: vi.fn(),
-      addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
-    }))
+    stubMatchMedia()
   })
 
   it('zeigt Titel + 2-stufigen Horizont-Selektor', async () => {

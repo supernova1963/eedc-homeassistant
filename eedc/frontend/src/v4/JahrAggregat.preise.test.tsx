@@ -11,12 +11,10 @@
 import { describe, it, expect } from 'vitest'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 import { baueJahrAlsMonat } from './JahrAggregat'
+import { aktuellerMonat } from '../test/factories'
 
-const monat = (m: number, felder: Partial<AktuellerMonatResponse>): AktuellerMonatResponse => ({
-  anlage_id: 1, anlage_name: 'Demo', jahr: 2025, monat: m, monat_name: String(m),
-  aktualisiert_um: '', quellen: {},
-  ...felder,
-} as unknown as AktuellerMonatResponse)
+const monat = (m: number, felder: Partial<AktuellerMonatResponse>) =>
+  aktuellerMonat(2025, m, { anlage_name: 'Demo', monat_name: String(m), ...felder })
 
 describe('baueJahrAlsMonat — Tarif-Zeile', () => {
   it('gewichtet den Netzbezugspreis mit der bezogenen Menge', () => {

@@ -3,14 +3,13 @@ import { render, screen } from '@testing-library/react'
 import { isValidElement } from 'react'
 import { finanzTeaserBlock, communityBlock, MonatHeader } from './MonatRahmen'
 import type { ParkApi } from '../components/park'
-import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 import type { MonatsVergleich } from '../api/community'
+import { aktuellerMonat } from '../test/factories'
 
-const d = {
+const d = aktuellerMonat(2025, 7, {
   netto_ertrag_euro: 128, einspeise_erloes_euro: 15, ev_ersparnis_euro: 120, netzbezug_kosten_euro: 7,
   autarkie_prozent: 61, eigenverbrauch_quote_prozent: 54, einspeisung_kwh: 189, netzbezug_kwh: 143,
-  feld_quellen: {},
-} as unknown as AktuellerMonatResponse
+})
 
 describe('finanzTeaserBlock', () => {
   it('G20-1: Kopf-Kennzahl = Tabellen-Saldo (Kopf == sichtbare Summe)', () => {
@@ -34,7 +33,7 @@ describe('finanzTeaserBlock', () => {
           erloes_euro: null, ersparnis_euro: 65.37, ersparnis_label: 'Ersparnis vs. Verbrenner',
           formel: '(km × …) − …', berechnung: '651 km × 7,5 L/100km × 1,65 €', sonstige_ertraege_euro: 185, sonstige_ausgaben_euro: 35 },
       ],
-    } as unknown as AktuellerMonatResponse
+    }
     const b = finanzTeaserBlock(dd)!
     expect(b.summary).toMatch(/\+365,37 € Saldo/)
     const node = b.render(false)
@@ -65,7 +64,7 @@ describe('finanzTeaserBlock', () => {
   })
 
   it('G20-4: keine Haushaltsperspektive ohne Netzbezug-Kosten', () => {
-    const dd = { ...d, netzbezug_kosten_euro: null } as unknown as AktuellerMonatResponse
+    const dd = { ...d, netzbezug_kosten_euro: null }
     const node = finanzTeaserBlock(dd)!.render(false)
     if (!isValidElement(node)) throw new Error('render() ergab kein Element')
     render(node)
@@ -73,7 +72,7 @@ describe('finanzTeaserBlock', () => {
   })
 
   it('C3: Tarif-Info-Zeile zeigt flexiblen Netzbezug-Ø + Einspeisepreis', () => {
-    const dd = { ...d, netzbezug_durchschnittspreis_cent: 32.5, einspeise_preis_cent: 8.2 } as AktuellerMonatResponse
+    const dd = { ...d, netzbezug_durchschnittspreis_cent: 32.5, einspeise_preis_cent: 8.2 }
     const block = finanzTeaserBlock(dd)!
     const node = block.render(false)
     if (!isValidElement(node)) throw new Error('render() ergab kein Element')
@@ -124,12 +123,10 @@ describe('MonatHeader — C1/C2 Sicht-Aktionen', () => {
 describe('MonatHeader — Connector nennt seinen Zeitraum (#360)', () => {
   const mitConnector = (abdeckung: { abdeckung_von?: string | null; abdeckung_bis?: string | null }) => ({
     ...d,
-    jahr: 2025,
-    monat: 7,
     feld_quellen: {
       pv_erzeugung_kwh: { quelle: 'local_connector', konfidenz: 90, zeitpunkt: null, ...abdeckung },
     },
-  }) as unknown as AktuellerMonatResponse
+  })
 
   it('Teilabdeckung: Zeitraum am Badge + Tage-Satz im Tooltip', () => {
     // coolxmad #353: fünf Snapshots vom 28.–30.07., geliefert als Juli-Wert.
@@ -181,7 +178,7 @@ describe('communityBlock — data-gated (O4)', () => {
 
   it('spez.-Ertrag-Abweichung zum Median in der Summary (abs + rel)', () => {
     const v = { anzahl_anlagen: 5, spez_ertrag: { median: 131 } } as unknown as MonatsVergleich
-    const dd = { ...d, spez_ertrag: 142 } as AktuellerMonatResponse
+    const dd = { ...d, spez_ertrag: 142 }
     // 142 − 131 = +11 ; 11 / 131 = +8 %
     expect(communityBlock(v, dd, 'Mai', 2026)!.summary).toMatch(/spez\. Ertrag 142 kWh\/kWp \(\+11 \/ \+8 % vs\. Median\)/)
   })

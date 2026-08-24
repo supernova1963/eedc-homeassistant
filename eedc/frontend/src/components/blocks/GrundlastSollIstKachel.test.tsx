@@ -3,14 +3,13 @@ import { render, screen } from '@testing-library/react'
 import { GrundlastSollIstKachel, MonatsprognoseKachel } from './GrundlastSollIstKachel'
 import { baueJahrAlsMonat } from '../../v4/JahrAggregat'
 import type { AktuellerMonatResponse } from '../../api/aktuellerMonat'
+import { aktuellerMonat } from '../../test/factories'
 
-function d(over: Partial<AktuellerMonatResponse> = {}): AktuellerMonatResponse {
-  return {
+const d = (over: Partial<AktuellerMonatResponse> = {}) =>
+  aktuellerMonat(2026, 8, {
     pv_erzeugung_kwh: 400, gesamtverbrauch_kwh: 1460, soll_pv_kwh: 450,
-    grundlast_kw: null, grundlast_kwh: null, grundlast_anteil_prozent: null,
     ...over,
-  } as AktuellerMonatResponse
-}
+  })
 
 describe('GrundlastSollIstKachel', () => {
   it('zeigt Grundlast absolut (W, wie Live) + Anteil, wenn Stundendaten da sind', () => {

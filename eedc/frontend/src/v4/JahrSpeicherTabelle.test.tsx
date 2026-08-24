@@ -10,17 +10,11 @@ import {
   baueSpeicherZeilen, summiereSpeicher, auslastungAus, solarAnteil, jahrSpeicherParkIds,
 } from './JahrSpeicherTabelle'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
+import { aktuellerMonat } from '../test/factories'
 
-function monat(m: number, werte: Partial<AktuellerMonatResponse> = {}): AktuellerMonatResponse {
-  return {
-    jahr: 2026, monat: m,
-    speicher_ladung_kwh: null, speicher_entladung_kwh: null,
-    speicher_ladung_netz_kwh: null, speicher_vollzyklen: null,
-    speicher_auslastungs_basis_kwh: null, speicher_auslastung_prozent: null,
-    speicher_ersparnis_euro: null,
-    ...werte,
-  } as unknown as AktuellerMonatResponse
-}
+// Die Speicher-Felder stehen ohnehin auf Nullstellung — hier bleibt nur der Monat.
+const monat = (m: number, werte: Partial<AktuellerMonatResponse> = {}) =>
+  aktuellerMonat(2026, m, werte)
 
 describe('baueSpeicherZeilen', () => {
   it('lässt Monate ohne Speicher-Bewegung weg', () => {

@@ -22,11 +22,7 @@
  * — genau deshalb konnte der Fehler so lange leben.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
-import { ThemeProvider } from '../context/ThemeContext'
-import type { AggregierteMonatsdaten } from '../api/monatsdaten'
-import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
+import { screen } from '@testing-library/react'
 
 /** Systemzeit: 5. August 2026 — der laufende Monat ist August. */
 const HEUTE = new Date(2026, 7, 5, 12, 0, 0)
@@ -38,13 +34,12 @@ const IMPORTIERT: Array<[number, number, number]> = [
   [2025, 12, 310],
 ]
 
-const zeile = (jahr: number, monat: number, pv: number): AggregierteMonatsdaten => ({
-  id: jahr * 100 + monat,
-  anlage_id: 1, jahr, monat,
-  pv_erzeugung_kwh: pv, eigenverbrauch_kwh: pv / 2, direktverbrauch_kwh: pv / 4,
-  einspeisung_kwh: pv / 2, netzbezug_kwh: 50, gesamtverbrauch_kwh: pv / 2 + 50,
-  autarkie_prozent: 80, netzbezug_preis_cent: 40,
-} as unknown as AggregierteMonatsdaten)
+const zeile = (jahr: number, monat: number, pv: number) =>
+  monatsZeile(jahr, monat, {
+    pv_erzeugung_kwh: pv, eigenverbrauch_kwh: pv / 2, direktverbrauch_kwh: pv / 4,
+    einspeisung_kwh: pv / 2, netzbezug_kwh: 50, gesamtverbrauch_kwh: pv / 2 + 50,
+    autarkie_prozent: 80, netzbezug_preis_cent: 40,
+  })
 
 const ALLE = IMPORTIERT.map(([j, m, pv]) => zeile(j, m, pv))
 
@@ -75,28 +70,24 @@ vi.mock('../api/energie_profil', () => ({
 }))
 vi.mock('../api/aktuellerMonat', () => ({
   aktuellerMonatApi: {
-    getData: (_id: number, jahr: number, monat: number) => Promise.resolve({
-      anlage_id: 1, anlage_name: 'Demo', jahr, monat, monat_name: String(monat),
-      aktualisiert_um: '', quellen: {}, feld_quellen: {},
-      soll_pv_kwh: null, netzbezug_preis_cent: 40, einspeise_preis_cent: 8.2,
-      pv_erzeugung_kwh: 1097, einspeisung_kwh: 500, netzbezug_kwh: 50,
-      eigenverbrauch_kwh: 550, direktverbrauch_kwh: 250,
-      gesamtverbrauch_kwh: 600, autarkie_prozent: 80, eigenverbrauch_quote_prozent: 50,
-      investitionen_financials: [], komponenten_geraete: {}, vorjahr: null,
-    } as unknown as AktuellerMonatResponse),
+    getData: (_id: number, jahr: number, monat: number) => Promise.resolve(
+      aktuellerMonat(jahr, monat, {
+        anlage_name: 'Demo', monat_name: String(monat),
+        netzbezug_preis_cent: 40, einspeise_preis_cent: 8.2,
+        pv_erzeugung_kwh: 1097, einspeisung_kwh: 500, netzbezug_kwh: 50,
+        eigenverbrauch_kwh: 550, direktverbrauch_kwh: 250,
+        gesamtverbrauch_kwh: 600, autarkie_prozent: 80, eigenverbrauch_quote_prozent: 50,
+      }),
+    ),
   },
 }))
 
 import CockpitMonatV4 from './CockpitMonatV4'
+import { renderMitProvidern, stubMatchMedia } from '../test/render'
+import { aktuellerMonat, monatsZeile } from '../test/factories'
 
 function renderView() {
-  return render(
-    <MemoryRouter initialEntries={['/v4/cockpit/monat']}>
-      <ThemeProvider>
-        <CockpitMonatV4 anlageId={1} />
-      </ThemeProvider>
-    </MemoryRouter>,
-  )
+  return renderMitProvidern(<CockpitMonatV4 anlageId={1} />, { route: '/v4/cockpit/monat' })
 }
 
 describe('Cockpit/Monat — Rail und Sicht teilen die Grundgesamtheit (T89667/98)', () => {
@@ -106,11 +97,7 @@ describe('Cockpit/Monat — Rail und Sicht teilen die Grundgesamtheit (T89667/98
     getVerfuegbareMonate.mockClear()
     vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.setSystemTime(HEUTE)
-    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
-      matches: false, media: '', onchange: null,
-      addEventListener: vi.fn(), removeEventListener: vi.fn(),
-      addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
-    }))
+    stubMatchMedia()
   })
   afterEach(() => { vi.useRealTimers() })
 

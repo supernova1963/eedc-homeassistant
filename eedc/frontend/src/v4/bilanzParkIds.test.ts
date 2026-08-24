@@ -12,13 +12,16 @@
 import { describe, it, expect } from 'vitest'
 import { monatBilanzParkIds } from './bilanzParkIds'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
+import { aktuellerMonat } from '../test/factories'
 
-const d = (over: Partial<AktuellerMonatResponse> = {}): AktuellerMonatResponse => ({
-  pv_erzeugung_kwh: 264.75, eigenverbrauch_kwh: null, einspeisung_kwh: null,
-  soll_pv_kwh: 179.1, soll_pv_kwh_monat: 1387.9,
-  soll_pv_tage: 4, soll_pv_tage_gesamt: 31,
-  ...over,
-} as AktuellerMonatResponse)
+// Der Monat ist beliebig — `monatBilanzParkIds` liest nur die SOLL-Felder.
+const d = (over: Partial<AktuellerMonatResponse> = {}) =>
+  aktuellerMonat(2026, 7, {
+    pv_erzeugung_kwh: 264.75, eigenverbrauch_kwh: null, einspeisung_kwh: null,
+    soll_pv_kwh: 179.1, soll_pv_kwh_monat: 1387.9,
+    soll_pv_tage: 4, soll_pv_tage_gesamt: 31,
+    ...over,
+  })
 
 describe('monatBilanzParkIds', () => {
   it('führt die Monatsprognose im Monat, aber nicht im Jahr', () => {

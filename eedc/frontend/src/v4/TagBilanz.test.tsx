@@ -8,21 +8,22 @@
 import { describe, it, expect } from 'vitest'
 import { baueTagKpis } from './TagBilanz'
 import type { TagWerte } from '../api/energie_profil'
+import { tagWerte } from '../test/factories'
 
-const tag = (over: Partial<TagWerte> = {}): TagWerte => ({
-  datum: '2026-07-25',
-  stunden_verfuegbar: 24,
-  datenquelle: 'ha',
-  erzeugung: 7, pv_anlage: 6, bkw: 1,
-  eigenverbrauch: 2, einspeisung: 5, netzbezug: 0,
-  gesamtverbrauch: 4, direktverbrauch: 2,
-  autarkie: 98.9, evQuote: 30, spezErtrag: 0.5,
-  speicher_ladung: 1, speicher_entladung: 0.9, speicher_effizienz: 90,
-  wp_strom: null,
-  einspeise_erloes: 0.4, ev_ersparnis: 0.45, netzbezug_kosten: 0,
-  netto_ertrag: 0.85, netto_bilanz: 0.85,
-  ...over,
-} as TagWerte)
+const tag = (over: Partial<TagWerte> = {}) =>
+  tagWerte('2026-07-25', {
+    stunden_verfuegbar: 24,
+    datenquelle: 'ha',
+    erzeugung: 7, pv_anlage: 6, bkw: 1,
+    eigenverbrauch: 2, einspeisung: 5, netzbezug: 0,
+    gesamtverbrauch: 4, direktverbrauch: 2,
+    autarkie: 98.9, evQuote: 30, spezErtrag: 0.5,
+    speicher_ladung: 1, speicher_entladung: 0.9, speicher_effizienz: 90,
+    wp_strom: null,
+    einspeise_erloes: 0.4, ev_ersparnis: 0.45, netzbezug_kosten: 0,
+    netto_ertrag: 0.85, netto_bilanz: 0.85,
+    ...over,
+  })
 
 const kachel = (kpis: ReturnType<typeof baueTagKpis>, titel: string) =>
   kpis.find((k) => k.title === titel)

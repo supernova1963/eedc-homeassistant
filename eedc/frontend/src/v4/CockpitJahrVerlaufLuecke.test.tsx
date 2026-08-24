@@ -14,10 +14,7 @@
  * Nachbardatei (12 × 200 in jeder Vergleichsspalte) umschreiben.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, within } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
-import { ThemeProvider } from '../context/ThemeContext'
-import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
+import { screen, fireEvent, within } from '@testing-library/react'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 import type { Nachhaltigkeit } from '../api/cockpit'
 
@@ -29,16 +26,16 @@ const OHNE_ZEILE_2026 = [7, 8]
  *  der die Rail eine sichtbar zu kleine Zahl anzeigt. */
 const OHNE_ZEILE_2025 = [5]
 
-const zeile = (jahr: number, monat: number, mitZaehlerzeile: boolean): AggregierteMonatsdaten => ({
-  // `id: null` ist die ganze Kennzeichnung eines Monats ohne Abschluss.
-  id: mitZaehlerzeile ? jahr * 100 + monat : null,
-  jahr, monat,
-  pv_erzeugung_kwh: KWH[jahr], eigenverbrauch_kwh: KWH[jahr] / 2, direktverbrauch_kwh: KWH[jahr] / 4,
-  // Ohne Zählerzeile gibt es keine Zählerwerte — genau das liefert die Route.
-  einspeisung_kwh: mitZaehlerzeile ? KWH[jahr] / 2 : 0,
-  netzbezug_kwh: mitZaehlerzeile ? 50 : 0,
-  gesamtverbrauch_kwh: KWH[jahr] / 2 + 50,
-} as unknown as AggregierteMonatsdaten)
+const zeile = (jahr: number, monat: number, mitZaehlerzeile: boolean) =>
+  monatsZeile(jahr, monat, {
+    // `id: null` ist die ganze Kennzeichnung eines Monats ohne Abschluss.
+    id: mitZaehlerzeile ? jahr * 100 + monat : null,
+    pv_erzeugung_kwh: KWH[jahr], eigenverbrauch_kwh: KWH[jahr] / 2, direktverbrauch_kwh: KWH[jahr] / 4,
+    // Ohne Zählerzeile gibt es keine Zählerwerte — genau das liefert die Route.
+    einspeisung_kwh: mitZaehlerzeile ? KWH[jahr] / 2 : 0,
+    netzbezug_kwh: mitZaehlerzeile ? 50 : 0,
+    gesamtverbrauch_kwh: KWH[jahr] / 2 + 50,
+  })
 
 const jahresZeilen = (jahr: number, ohneZeile: number[], bisMonat: number) =>
   Array.from({ length: bisMonat }, (_, i) => i + 1)
@@ -56,16 +53,15 @@ const listAggregiert = vi.fn(
     Promise.resolve(opts?.inklOhneZaehlerzeile ? ALLE : ALLE.filter((r) => r.id != null)),
 )
 
-const monatsAntwort = (jahr: number, monat: number): AktuellerMonatResponse => ({
-  anlage_id: 1, anlage_name: 'Demo', jahr, monat, monat_name: String(monat),
-  aktualisiert_um: '', quellen: {},
-  soll_pv_kwh: null, netzbezug_preis_cent: 40, einspeise_preis_cent: 8.2,
-  pv_erzeugung_kwh: KWH[jahr], einspeisung_kwh: KWH[jahr] / 2, netzbezug_kwh: 50,
-  eigenverbrauch_kwh: KWH[jahr] / 2, direktverbrauch_kwh: KWH[jahr] / 4,
-  gesamtverbrauch_kwh: KWH[jahr] / 2 + 50,
-  autarkie_prozent: 75, eigenverbrauch_quote_prozent: 50,
-  investitionen_financials: [], komponenten_geraete: {}, feld_quellen: {}, vorjahr: null,
-} as unknown as AktuellerMonatResponse)
+const monatsAntwort = (jahr: number, monat: number) =>
+  aktuellerMonat(jahr, monat, {
+    anlage_name: 'Demo', monat_name: String(monat),
+    netzbezug_preis_cent: 40, einspeise_preis_cent: 8.2,
+    pv_erzeugung_kwh: KWH[jahr], einspeisung_kwh: KWH[jahr] / 2, netzbezug_kwh: 50,
+    eigenverbrauch_kwh: KWH[jahr] / 2, direktverbrauch_kwh: KWH[jahr] / 4,
+    gesamtverbrauch_kwh: KWH[jahr] / 2 + 50,
+    autarkie_prozent: 75, eigenverbrauch_quote_prozent: 50,
+  })
 
 vi.mock('../api/monatsdaten', () => ({
   monatsdatenApi: { listAggregiert: (...a: [number, number?, { inklOhneZaehlerzeile?: boolean }?]) => listAggregiert(...a) },
@@ -83,15 +79,11 @@ vi.mock('../api/cockpit', () => ({
 }))
 
 import CockpitJahrV4 from './CockpitJahrV4'
+import { renderMitProvidern, stubMatchMedia } from '../test/render'
+import { aktuellerMonat, monatsZeile } from '../test/factories'
 
 function renderView() {
-  return render(
-    <MemoryRouter>
-      <ThemeProvider>
-        <CockpitJahrV4 anlageId={1} />
-      </ThemeProvider>
-    </MemoryRouter>,
-  )
+  return renderMitProvidern(<CockpitJahrV4 anlageId={1} />)
 }
 
 /** Verlauf fokussieren und auf die Tabellen-Ablesung umschalten — im jsdom ist
@@ -110,11 +102,7 @@ describe('Cockpit/Jahr — Verlauf und Rail kennen den Monat ohne Abschluss (N-6
     listAggregiert.mockClear()
     vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.setSystemTime(new Date(2026, 7, 2, 12, 0, 0))
-    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
-      matches: false, media: '', onchange: null,
-      addEventListener: vi.fn(), removeEventListener: vi.fn(),
-      addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
-    }))
+    stubMatchMedia()
   })
   afterEach(() => { vi.useRealTimers() })
 

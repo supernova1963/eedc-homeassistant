@@ -11,45 +11,40 @@
  * Tabellen-Spalten) — keine Pixel.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
-import { ThemeProvider } from '../context/ThemeContext'
-import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
+import { screen, fireEvent } from '@testing-library/react'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 import type { Nachhaltigkeit, NachhaltigkeitMonat } from '../api/cockpit'
+import { aktuellerMonat, monatsZeile } from '../test/factories'
+import { renderMitProvidern, stubMatchMedia } from '../test/render'
 
 // Zwei vergangene Jahre (2024/2025) → Default = neuestes mit Daten = 2025
 // (≠ aktuelles Jahr → „abgeschlossen", kein Reload-Button — wie Monat).
-const monatsZeile = (jahr: number, monat: number): AggregierteMonatsdaten => ({
-  jahr, monat,
-  pv_erzeugung_kwh: 300, eigenverbrauch_kwh: 180, einspeisung_kwh: 120,
-  netzbezug_kwh: 90, direktverbrauch_kwh: 140, gesamtverbrauch_kwh: 270,
-  autarkie_prozent: 66, speicher_entladung_kwh: 40,
-} as unknown as AggregierteMonatsdaten)
+const zeile = (jahr: number, monat: number) =>
+  monatsZeile(jahr, monat, {
+    pv_erzeugung_kwh: 300, eigenverbrauch_kwh: 180, einspeisung_kwh: 120,
+    netzbezug_kwh: 90, direktverbrauch_kwh: 140, gesamtverbrauch_kwh: 270,
+    autarkie_prozent: 66, speicher_entladung_kwh: 40,
+  })
 
 const aggregiert: AggregierteMonatsdaten[] = [
-  ...[1, 2, 3].map((m) => monatsZeile(2025, m)),
-  ...[1, 2].map((m) => monatsZeile(2024, m)),
+  ...[1, 2, 3].map((m) => zeile(2025, m)),
+  ...[1, 2].map((m) => zeile(2024, m)),
 ]
 
-const monatsAntwort = (jahr: number, monat: number): AktuellerMonatResponse => ({
-  anlage_id: 1, anlage_name: 'Demo', jahr, monat, monat_name: String(monat),
-  aktualisiert_um: '', quellen: {},
-  pv_erzeugung_kwh: 300, einspeisung_kwh: 120, netzbezug_kwh: 90,
-  eigenverbrauch_kwh: 180, direktverbrauch_kwh: 140, gesamtverbrauch_kwh: 270,
-  autarkie_prozent: 66, eigenverbrauch_quote_prozent: 60,
-  speicher_ladung_kwh: 50, speicher_entladung_kwh: 43, speicher_wirkungsgrad_prozent: 86,
-  speicher_vollzyklen: 4, speicher_kapazitaet_kwh: 10, hat_speicher: true,
-  speicher_soc_drift_signifikant: false,
-  wp_strom_kwh: 60, wp_waerme_kwh: 180, wp_heizung_kwh: 140, wp_warmwasser_kwh: 40,
-  hat_waermepumpe: true,
-  einspeise_erloes_euro: 12, netzbezug_kosten_euro: 27, ev_ersparnis_euro: 50,
-  netto_ertrag_euro: 35, gesamtnettoertrag_euro: 35, betriebskosten_anteilig_euro: 5,
-  sonstige_netto_euro: 0, sonstige_ertraege_euro: 0, sonstige_ausgaben_euro: 0,
-  soll_pv_kwh: 320,
-  investitionen_financials: [], komponenten_geraete: {}, feld_quellen: {},
-  vorjahr: null,
-} as unknown as AktuellerMonatResponse)
+const monatsAntwort = (jahr: number, monat: number) =>
+  aktuellerMonat(jahr, monat, {
+    anlage_name: 'Demo', monat_name: String(monat),
+    pv_erzeugung_kwh: 300, einspeisung_kwh: 120, netzbezug_kwh: 90,
+    eigenverbrauch_kwh: 180, direktverbrauch_kwh: 140, gesamtverbrauch_kwh: 270,
+    autarkie_prozent: 66, eigenverbrauch_quote_prozent: 60,
+    speicher_ladung_kwh: 50, speicher_entladung_kwh: 43, speicher_wirkungsgrad_prozent: 86,
+    speicher_vollzyklen: 4, speicher_kapazitaet_kwh: 10, hat_speicher: true,
+    wp_strom_kwh: 60, wp_waerme_kwh: 180, wp_heizung_kwh: 140, wp_warmwasser_kwh: 40,
+    hat_waermepumpe: true,
+    einspeise_erloes_euro: 12, netzbezug_kosten_euro: 27, ev_ersparnis_euro: 50,
+    netto_ertrag_euro: 35, gesamtnettoertrag_euro: 35, betriebskosten_anteilig_euro: 5,
+    soll_pv_kwh: 320,
+  })
 
 vi.mock('../api/monatsdaten', () => ({
   monatsdatenApi: { listAggregiert: vi.fn(() => Promise.resolve(aggregiert)) },
@@ -60,11 +55,10 @@ vi.mock('../api/monatsdaten', () => ({
 // über `monatHatDaten` — eine Fixture, die für JEDEN Monat Werte liefert, würde die
 // Jahres-Summen still vervierfachen.
 const MIT_DATEN = new Set(aggregiert.map((m) => `${m.jahr}-${m.monat}`))
-const ohneDaten = (jahr: number, monat: number): AktuellerMonatResponse => ({
-  anlage_id: 1, anlage_name: 'Demo', jahr, monat, monat_name: String(monat),
-  aktualisiert_um: '', quellen: {}, soll_pv_kwh: 320,
-  investitionen_financials: [], komponenten_geraete: {}, feld_quellen: {}, vorjahr: null,
-} as unknown as AktuellerMonatResponse)
+const ohneDaten = (jahr: number, monat: number) =>
+  aktuellerMonat(jahr, monat, {
+    anlage_name: 'Demo', monat_name: String(monat), soll_pv_kwh: 320,
+  })
 
 vi.mock('../api/aktuellerMonat', () => ({
   aktuellerMonatApi: {
@@ -105,23 +99,13 @@ import { baueJahrCo2ChartDaten, co2JahresSumme, CO2_TABELLEN_SPALTEN } from './J
 
 // CockpitJahrV4 rendert JahrVerlaufChart, das seit B3 useNavigate nutzt → Router nötig.
 function renderView() {
-  return render(
-    <MemoryRouter>
-      <ThemeProvider>
-        <CockpitJahrV4 anlageId={1} />
-      </ThemeProvider>
-    </MemoryRouter>,
-  )
+  return renderMitProvidern(<CockpitJahrV4 anlageId={1} />)
 }
 
 describe('CockpitJahrV4 — Jahr', () => {
   beforeEach(() => {
     localStorage.clear()
-    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
-      matches: false, media: '', onchange: null,
-      addEventListener: vi.fn(), removeEventListener: vi.fn(),
-      addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
-    }))
+    stubMatchMedia()
   })
 
   it('zeigt Jahres-Kopf (Status-Badge) + Auswahl (Rail/Stepper)', async () => {
@@ -206,11 +190,7 @@ describe('CockpitJahrV4 — CO₂-Zeitreihe: Datenaufbereitung', () => {
 describe('CockpitJahrV4 — CO₂-Block', () => {
   beforeEach(() => {
     localStorage.clear()
-    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
-      matches: false, media: '', onchange: null,
-      addEventListener: vi.fn(), removeEventListener: vi.fn(),
-      addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
-    }))
+    stubMatchMedia()
   })
 
   it('nennt in der Kopfzeile Jahres-Summe UND kumulierte Lebensdauer-Zahl', async () => {

@@ -548,6 +548,8 @@ eedc-homeassistant/                  ← Source of Truth (alle Änderungen hier)
             ├── context/             # ThemeContext (Light/Dark)
             ├── types/ · utils/ · assets/
             └── test/                # Wächter-Selbsttests + setup.ts
+                ├── factories.ts     # typgebundene API-Fixtures (s. unten)
+                └── render.tsx       # renderMitProvidern + stubMatchMedia
 ```
 
 ---
@@ -642,6 +644,48 @@ einem Modell stehen als **Szenarien** daneben (`anlage_mit_pv` · `anlage_mit_ta
 kWp (98 % bzw. 96 % aller Konstruktionen tun das, kein Test behauptet sie) — aber **kein**
 `standort_land` und **keine** Tarifpreise: eine Factory, die einen Tarif erfindet, hält genau den
 Test still grün, der den Tarif behaupten wollte. `test_factories.py` hält das fest.
+
+### Einen Frontend-Test schreiben: die Factories und `renderMitProvidern`
+
+`src/test/factories.ts` baut die drei großen API-Antworten, `src/test/render.tsx` den
+Provider-Turm. **Neue Tests nutzen sie, alte werden bei Berührung umgehängt** — nicht in
+einem Zug, wie im Backend.
+
+```tsx
+import { aktuellerMonat, monatsZeile, tagWerte } from '../test/factories'
+import { renderMitProvidern, stubMatchMedia } from '../test/render'
+
+const d = (over: Partial<AktuellerMonatResponse> = {}) =>
+  aktuellerMonat(2026, 8, { pv_erzeugung_kwh: 412, ...over })   // Rest = Nullstellung
+
+beforeEach(() => { stubMatchMedia() })            // jsdom kennt matchMedia nicht
+renderMitProvidern(<CockpitJahrV4 anlageId={1} />, { route: '/cockpit/jahr' })
+```
+
+⭐ **Warum typgebunden statt `as unknown as`.** `AktuellerMonatResponse` hat 88 Pflichtfelder,
+`AggregierteMonatsdaten` und `TagWerte` je 42 — von Hand schreibt das niemand aus, also stand in
+38 Testdateien ein `as unknown as X`. **Ein solcher Cast entkoppelt die Fixture vom Typsystem:**
+ein umbenanntes Feld im API-Client bricht dort keinen Test. Am realen Sprengsatz gemessen
+(2026-08-24, je ein umbenanntes Pflichtfeld): `AggregierteMonatsdaten.netzbezug_kwh` meldeten
+**vorher 2 Testdateien, nachher 9**; `AktuellerMonatResponse.netzbezug_kwh` **vorher 3,
+nachher 11.** ⚠ Wer diese Messung wiederholt, ersetzt **innerhalb des Interface-Blocks** —
+`netzbezug_kwh: number` steht in `monatsdaten.ts` dreimal, und ein globales Replace traf beim
+ersten Versuch `MonatsdatenCreate` und meldete folgerichtig **0** betroffene Dateien. Das Basisobjekt der Factory erfüllt den Typ per `satisfies`, der
+Aufrufer übergibt `Partial<T>` — ein Tippfehler darin ist ein Compile-Fehler statt eines stillen
+`undefined`.
+
+⚠ **Die Defaults behaupten nichts** — dieselbe Regel wie im Backend. Jede Menge steht auf ihrer
+Nullstellung (`null` wo der Typ es zulässt, sonst `0`/`false`/`{}`/`[]`), Identität ist
+**Parameter**, nicht Default. `factories.test.ts` hält das mit einem Wächter fest, der jedes
+Feld auf erfundene Zahlen und Texte absucht.
+
+⚠ **Nullstellung ist nicht `undefined`.** Der handgebaute Cast ließ ungenannte Felder
+`undefined`; die Factory setzt sie auf `null`/`0`. Für `??` ist das gleich, für `!== undefined`
+und `Object.keys` nicht — wer eine Bestandsdatei umhängt, misst ihre Vitest-Fallzahl vor und
+nach dem Eingriff. ⛔ **`tsc` ist dabei der einzige Prüfer, der zählt:** Vitest strippt die
+Typen, ESLint kennt den fehlenden Typ-Import nicht — ein bei der Umstellung mitentfernter
+`import type` fiel am 24.08. nur `tsc --noEmit` auf, nachdem `lint` und Vitest grün gemeldet
+hatten.
 
 **Backend-Regeln haben pytest als Wächter, keine `check:*`-Skripte** (die sind alle Frontend-Node):
 `test_berechnungs_layer_konformitaet.py` ([ADR-001](ADR-001-BERECHNUNGS-LAYER.md)) ·
