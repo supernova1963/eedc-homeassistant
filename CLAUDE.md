@@ -79,16 +79,13 @@ cd eedc/frontend && npm run dev
 ### Gates (vor jedem Commit-Paket vollständig laufen lassen)
 
 ```bash
-# Backend — DREI Zonen PARALLEL (siehe TZ-Kasten unten). Nacheinander 460 s, parallel 169 s
-# (gemessen 23.08.); die Test-DB ist in-memory je Test, die Läufe stören sich nicht.
-# ⚠ Die Sammel-Auswertung MUSS jeden Prozess einzeln abfragen — ein blankes `wait` liefert
-#   nur den Status des letzten und verschluckt den Fehlschlag der anderen zwei.
+# Backend — EINE Zone (Europe/Berlin), parallelisiert. Diese Box IST die Berlin-Abdeckung;
+# UTC und Pacific/Auckland fährt `tests.yml` bei jedem Push selbst (Zeile 71 und 84f.).
+# ⛔ `-n 3` ist an die EINE Zone gekoppelt und nur dann ein Gewinn: drei Zonen sättigen die
+#   vier Kerne bereits, mit je `-n 3` würde es langsamer und nacheinander (3 × 62 s) schlechter
+#   als die 156 s von heute. Entweder drei Zonen ODER xdist — nicht beides.
 cd eedc && source backend/venv/bin/activate
-PIDS=(); for tz in Europe/Berlin UTC Pacific/Auckland; do
-  TZ=$tz python -m pytest backend/tests -q > /tmp/zone-$(echo $tz | tr / -).log 2>&1 & PIDS+=($!)
-done
-ROT=0; for p in "${PIDS[@]}"; do wait $p || ROT=1; done
-echo "Zonen-Gate: $([ $ROT -eq 0 ] && echo GRUEN || echo ROT)"; tail -qn1 /tmp/zone-*.log
+python -m pytest backend/tests -q -n 3
 
 # Frontend — lint ZUERST (CI ruft ESLint mit --max-warnings 0), tsc OHNE Pipe
 cd eedc/frontend && npm run lint
@@ -106,14 +103,18 @@ cd eedc/frontend && npm run test              # faehrt seit E8/M14 ALLE 25 Quell
 # stehen im eigenen Kasten unter der Liste.
 
 # Braucht dieses Paket den Park-Livetest? (Auslöser statt Takt — s. Kasten unten)
+# ⛔ Seit 24.08. (Gernot) zählt das HINZUFÜGEN eines Park-Elements, nicht mehr das blosse
+#   VORKOMMEN eines Park-Bezeichners in einer geänderten Datei. Testdateien und Kommentare
+#   zählen nicht. Begründung + Messung stehen im Kasten unter der Liste.
 # ⚠ Basis ist HEAD, NICHT origin/main: Gates laufen VOR dem Commit, und `origin/main` würde
 #   alle bereits geprüften ungepushten Commits mitschleppen (am 23.08. beim Bau der Regel selbst
 #   passiert — sie meldete eine Park-Berührung aus `566635a2` für ein reines Doku-Paket).
 #   Umfasst das Paket schon Commits, entsprechend `HEAD~n` einsetzen.
 cd /home/gernot/claude/eedc-homeassistant
-for f in $(git diff --name-only --diff-filter=d HEAD -- 'eedc/frontend/src'); do
-  command grep -q 'Parkbar\|data-park-id\|FokusKachel' "$f" 2>/dev/null && echo "Park berührt: $f"
-done
+git diff --diff-filter=d HEAD -- 'eedc/frontend/src' \
+  ':(exclude)eedc/frontend/src/test' ':(exclude)*.test.tsx' ':(exclude)*.test.ts' \
+  | command grep -E '^\+' | command grep -vE '^\+\s*(//|\*|/\*)' \
+  | command grep -E 'data-park-id=|<FokusKachel|<Parkbar'   # Treffer ⇒ Park-Leertest fahren
 
 # Doku-Spiegel ans ENDE, danach inhaltlich per diff prüfen (nicht nur Exit-Code)
 ./scripts/sync-help.sh && cd website && npm run build
@@ -127,15 +128,47 @@ done
 
 > ⚠ **`npm run lint` gehört dazu, seit der CI-Lauf zu v4.0.13 daran gescheitert ist** (12.08.): Der Workflow ruft ESLint mit `--max-warnings 0` auf, die Liste hier kannte ihn nicht — eine `react-hooks/exhaustive-deps`-**Warnung** aus `62c680b9` lief damit durch alle lokalen Gates und machte den Tests-Lauf **nach** dem Push rot. Ein Prüfer, den nur CI kennt, fällt zwangsläufig zu spät auf.
 >
-> ⚠ **Bei allem Zeitbezogenen zusätzlich `TZ=UTC python -m pytest backend/tests -q` fahren** — seit dem CI-Lauf zu v4.0.14 (13.08.): **Diese Box steht in `Europe/Berlin`, der GitHub-Runner in UTC.** Zwei Fälle aus `test_scheduler_publish_takt.py` waren lokal grün und in CI rot, ohne dass am Produktcode etwas fehlte: `CronTrigger` ohne `timezone`-Argument rechnet in der Zone des **Prozesses**, derselbe korrekte Feuerzeitpunkt heißt dort 10:00:05 und hier 08:00:05. **Ein grüner lokaler Lauf ist auf dieser Box kein grüner CI-Lauf.** Dieselbe Klasse wie der `lint`-Befund darüber — ein Prüfer, den nur CI kennt. ⚑ **Seit 23.08. steht eine DRITTE Zone daneben, und das ist die Antwort auf N-167** — Proben, die die echte **Uhr** statt einer gestellten lesen (vier von 24 Stunden rot ohne Code-Änderung). Berlin und UTC trennen nur **zwei** Stunden; eine stundenabhängige Wette kann darin dauerhaft unentdeckt bleiben. `Pacific/Auckland` liegt 10–12 Stunden entfernt, trifft verlässlich eine andere Stunde und regelmäßig einen anderen **Tag**. ⚠ **Sie läuft auch in CI** (`tests.yml`, zweiter pytest-Schritt) — eine Zeile, die nur in dieser Liste steht, ist eine Gedächtnisstütze und kein Wächter; genau der `lint`-Befund von oben, nur in der Gegenrichtung. ⭐ **Die Arbeitsteilung, am 23.08. erstmals gemessen:** CI fährt **UTC** (Runner-Default) **und Auckland** bei jedem Push, der `eedc/backend/**` oder `eedc/frontend/**` berührt — **`Europe/Berlin` läuft NUR hier**, diese Box *ist* die Berlin-Abdeckung. ⛔ **Trotzdem alle drei lokal, und zwar parallel:** nacheinander kosten sie 460 s, parallel **169 s** — gegenüber einer einzigen Zone (168 s) also **eine Sekunde**. Damit erübrigt sich die Frage, ob man die „extremen" Zonen lokal weglässt: sie kosten nichts, und der Fehler bleibt einem einzelnen Commit zuordenbar statt erst nach mehreren ungepushten in CI aufzufallen. **Gegenprobe gefahren** (23.08.): ein Test, der nur in Auckland fällt, macht das Sammel-Ergebnis rot — die Auswertung fragt jeden Prozess einzeln ab. **Am 23.08. über sieben Zonen gemessen** (Berlin · UTC · Bogotá 00:11 · Kolkata · Auckland · Honolulu · Marquesas): kein Fehlschlag, sechs verschiedene lokale Stunden, beide Seiten eines Datumswechsels — die Stichprobe enthält mit **05:00 und 17:00** zwei der vier Stunden des Ursprungsfalls, hätte ihn also gefangen. ⚠ **Was sie NICHT erreicht:** die Kalenderkanten (Monatsende, Jahreswechsel, Schaltjahr, Zeitumstellung) — dafür bräuchte es eine gestellte Uhr (`freezegun`). ⛔ **Am 23.08. entschieden (Gernot): `freezegun` wird NICHT aufgenommen** — auch nicht als reine Dev-Abhängigkeit. Die Kalenderkanten bleiben damit ungemessen, und das ist die getroffene Wahl, **keine offene Frage und keine Vertagung**. Hier stand bis dahin „bewusst nicht entschieden" — genau diese Formulierung hat die Frage in jeder neuen Sitzung erneut aufgemacht. **Nicht neu aufrollen**; wer es doch will, bringt eine neue Messung mit, nicht das alte Argument.
+> ⚠ **Bei allem Zeitbezogenen zusätzlich `TZ=UTC python -m pytest backend/tests -q` fahren** — seit dem CI-Lauf zu v4.0.14 (13.08.): **Diese Box steht in `Europe/Berlin`, der GitHub-Runner in UTC.** Zwei Fälle aus `test_scheduler_publish_takt.py` waren lokal grün und in CI rot, ohne dass am Produktcode etwas fehlte: `CronTrigger` ohne `timezone`-Argument rechnet in der Zone des **Prozesses**, derselbe korrekte Feuerzeitpunkt heißt dort 10:00:05 und hier 08:00:05. **Ein grüner lokaler Lauf ist auf dieser Box kein grüner CI-Lauf.** Dieselbe Klasse wie der `lint`-Befund darüber — ein Prüfer, den nur CI kennt. ⚑ **Seit 23.08. steht eine DRITTE Zone daneben, und das ist die Antwort auf N-167** — Proben, die die echte **Uhr** statt einer gestellten lesen (vier von 24 Stunden rot ohne Code-Änderung). Berlin und UTC trennen nur **zwei** Stunden; eine stundenabhängige Wette kann darin dauerhaft unentdeckt bleiben. `Pacific/Auckland` liegt 10–12 Stunden entfernt, trifft verlässlich eine andere Stunde und regelmäßig einen anderen **Tag**. ⚠ **Sie läuft auch in CI** (`tests.yml`, zweiter pytest-Schritt) — eine Zeile, die nur in dieser Liste steht, ist eine Gedächtnisstütze und kein Wächter; genau der `lint`-Befund von oben, nur in der Gegenrichtung. ⭐ **Die Arbeitsteilung, am 23.08. erstmals gemessen:** CI fährt **UTC** (Runner-Default) **und Auckland** bei jedem Push, der `eedc/backend/**` oder `eedc/frontend/**` berührt — **`Europe/Berlin` läuft NUR hier**, diese Box *ist* die Berlin-Abdeckung. ⛔ **Hier stand bis 2026-08-24: „Trotzdem alle drei lokal, und zwar parallel — nacheinander 460 s, parallel 169 s, gegenüber einer einzigen Zone (168 s) also eine Sekunde."** **Diese Zahl war falsch, und sie hat achtzehn Tage lang eine Entscheidung getragen, die sie nicht tragen konnte.** Am 24.08. neu gemessen, kalt und warm identisch: drei Zonen parallel **156 s**, eine Zone **126 s** — die Differenz ist **31 s, nicht 1 s**. Der Parallelwert von damals stimmt fast auf die Sekunde; auseinander läuft nur die **Grundlinie** (168 gegen 126), sie wurde offenbar unter Last erhoben. *Eine Vergleichszahl ist nur so gut wie ihre Grundlinie — wer eine Differenz notiert, notiert beide Messungen und die Bedingungen.* ⭐ **Die Folge (Entscheid Gernot, 24.08.): lokal nur noch `Europe/Berlin`, dafür mit `-n 3` (126 s → 62 s).** UTC und Auckland laufen ohnehin in CI, lokal geht also **keine Abdeckung** verloren — nur die Zuordenbarkeit eines zonenspezifischen Fehlschlags zu einem einzelnen ungepushten Commit. ⛔ **Die Kopplung gehört dazu:** `-n 3` zahlt sich **nur** bei einer Zone aus. Drei Zonen sättigen die vier Kerne bereits; mit je `-n 3` wird es langsamer, nacheinander mit `-n 3` sind es 3 × 62 = 186 s und damit schlechter als heute. **Gegenprobe gefahren** (23.08.): ein Test, der nur in Auckland fällt, macht das Sammel-Ergebnis rot — die Auswertung fragt jeden Prozess einzeln ab. **Am 23.08. über sieben Zonen gemessen** (Berlin · UTC · Bogotá 00:11 · Kolkata · Auckland · Honolulu · Marquesas): kein Fehlschlag, sechs verschiedene lokale Stunden, beide Seiten eines Datumswechsels — die Stichprobe enthält mit **05:00 und 17:00** zwei der vier Stunden des Ursprungsfalls, hätte ihn also gefangen. ⚠ **Was sie NICHT erreicht:** die Kalenderkanten (Monatsende, Jahreswechsel, Schaltjahr, Zeitumstellung) — dafür bräuchte es eine gestellte Uhr (`freezegun`). ⛔ **Am 23.08. entschieden (Gernot): `freezegun` wird NICHT aufgenommen** — auch nicht als reine Dev-Abhängigkeit. Die Kalenderkanten bleiben damit ungemessen, und das ist die getroffene Wahl, **keine offene Frage und keine Vertagung**. Hier stand bis dahin „bewusst nicht entschieden" — genau diese Formulierung hat die Frage in jeder neuen Sitzung erneut aufgemacht. **Nicht neu aufrollen**; wer es doch will, bringt eine neue Messung mit, nicht das alte Argument.
+
+> ### ⛔ Die Zeitzone der App wird NICHT festgenagelt (Entscheid Gernot, 2026-08-24)
+>
+> **Frage war:** eedc ist ein DACH-Produkt und wird nie international — warum nicht beim Start
+> alles hart auf `Europe/Berlin` heben und die Zonenfrage damit erledigen?
+>
+> **Antwort: weil beide Auslieferungswege die Zone bereits setzen und ein Checker den Rest
+> abfängt. Es gäbe niemanden zu retten.** Gemessen am 24.08.:
+>
+> * **Standalone** — `docker-compose.yml:11` setzt `TZ=Europe/Berlin`.
+> * **HA-Add-on** — der Supervisor reicht die in HA eingestellte Zone durch. Das steht nicht nur
+>   in der HA-Doku, sondern im eigenen Produkt: der Daten-Checker sagt es dem Anwender wörtlich
+>   („Das Add-on übernimmt die Zeitzone beim Start von Home Assistant").
+> * **Abweichung** — `daten_checker/datenquelle.py` (Kategorie `ZEITZONE_ABWEICHUNG`) holt
+>   `/config` von HA, vergleicht `time_zone` mit der eigenen und warnt samt Reparaturweg.
+>
+> **Was die Prozesszone überhaupt entscheidet, und was nicht.** HA liefert absolute
+> Unix-Zeitstempel (`start_ts` aus der recorder-DB) — die sind zonenfrei. Ein Messwert
+> verschiebt sich **nie**. Die Zone entscheidet allein, in welchen Tages- und Stundentopf er
+> fällt (`datetime.fromtimestamp(start_ts)`, `ha_statistics_service.py:946`; 177 solcher
+> prozesslokalen Zugriffe in 77 Produktivdateien, **0** davon auf Modulebene).
+>
+> **Der geltende Vertrag lautet „eedc folgt HA", und das ist Absicht.** Ein harter Pin würde ihn
+> umkehren: Wer HA bewusst auf eine Nicht-CET-Zone stellt, sähe eedc und das HA-Energiedashboard
+> dann mit **verschiedenen Tagesgrenzen** — heute stimmen sie überein —, und der Checker oben
+> würde dauerhaft mit einem Ratschlag warnen, der nichts mehr bewirkt.
+>
+> **Nicht neu aufrollen.** Weder als harter Pin noch als `setdefault`. Wer es doch will, bringt
+> einen **Anwender** mit, den es trifft — nicht das Argument „dann wäre die Zonenfrage weg".
+> Dieselbe Bauform wie der `freezegun`-Entscheid darüber: entschieden, begründet, geschlossen.
 
 Die Soll-Zahlen (pytest/Vitest) stehen **nicht hier**, sondern im laufenden Master-Register unter `~/.claude/plans/` — sie ändern sich mit jedem Paket. `check:form-controls` meldet „1 offen (WelcomeStep.tsx)" als dokumentierte Baseline.
 
 **`check:park-leertest` läuft am AUSLÖSER, nicht am Takt** (Entscheid Gernot 23.08.). Er ist ein Playwright-Livetest gegen eine laufende Box und verlangt ein `VITE_DEMO_DEFAULT=true`-Build (Runbook: `~/.claude/plans/runbook-dev-box.md`); seit dem 14.08. grün und keine Baseline mehr.
 
-**Die Regel:** Er läuft, wenn das Paket eine **Park-Fläche** berührt — eine im **Paket** geänderte Datei unter `eedc/frontend/src` enthält `Parkbar`, `data-park-id` oder `FokusKachel` (Einzeiler oben im Gate-Block; Basis ist `HEAD`, nicht `origin/main`) — **und vor jedem Release**. Sonst nicht, und das braucht dann auch keine Begründung mehr.
+**Die Regel (verschärft am 24.08., Entscheid Gernot):** Er läuft, wenn das Paket ein **Park-Element hinzufügt** — eine **hinzugefügte** Zeile unter `eedc/frontend/src`, die `data-park-id=`, `<FokusKachel` oder `<Parkbar` enthält, **ohne** Testdateien und **ohne** Kommentarzeilen (Einzeiler oben im Gate-Block; Basis ist `HEAD`, nicht `origin/main`) — **und vor jedem Release**. Sonst nicht, und das braucht dann auch keine Begründung mehr.
 
-> **Warum die alte Fassung fiel:** Sie machte ihn zur Pflicht mit Begründungszwang („wer ihn nicht fährt, sagt das ausdrücklich"). Das ist bei **jedem** Commit eine Ermessensfrage — und mit **188 s der teuerste Einzelprüfer** überhaupt, teurer als ein kompletter pytest-Lauf (gemessen 23.08.). Sein eigener Docstring nennt ihn ausdrücklich „**Kein CI-Pflichtlauf — Dev-Box-Kommando**"; die Regel war strenger als der Prüfer sich selbst versteht. Der Auslöser ist mechanisch entscheidbar statt Ermessen — **beidseitig geprüft:** das E1-Paket vom 23.08. (Prüfer + Tests) meldet „nicht nötig", `ef19173d` meldet „fahren".
+> **Warum die zweite Fassung fiel — gemessen 24.08.** Die alte Regel fragte, ob eine geänderte Datei einen Park-Bezeichner **enthält**. Über die letzten **40 Commits** hätte sie **fünfmal** ausgelöst: **zweimal auf reine Testdateien** (`src/test/check-parkbar*.test.ts`, `CockpitJahrV4.test.tsx` — eine Testdatei kann das Laufzeitverhalten des Parks nicht brechen), dreimal auf Produktivdateien, die eine Park-ID nur *enthalten*. **In keinem einzigen der fünf Fälle kam ein Park-Element dazu.** Der teuerste Einzelprüfer des Projekts lief also fünfmal für nichts. Die neue Regel feuert über **150 Commits fünfmal**, alle zwischen dem 15. und 20.08. und alle auf echter Park-Arbeit. Gernots Begründung, die das trägt: *„wenn sie einmal eine entsprechende ID haben und einmal geprüft wurde, ob der Block nicht mehr angezeigt wird, wenn alle der ihm zugeordneten Elemente geparkt sind"* — eine bestehende, unveränderte Park-ID ist bereits geprüft.
+
+> **Warum die alte Fassung fiel:** Sie machte ihn zur Pflicht mit Begründungszwang („wer ihn nicht fährt, sagt das ausdrücklich"). Das ist bei **jedem** Commit eine Ermessensfrage — und mit **188 s der teuerste Einzelprüfer** überhaupt, teurer als ein kompletter pytest-Lauf (gemessen 23.08.). Sein eigener Docstring nennt ihn ausdrücklich „**Kein CI-Pflichtlauf — Dev-Box-Kommando**"; die Regel war strenger als der Prüfer sich selbst versteht. Der Auslöser ist mechanisch entscheidbar statt Ermessen. ⚠ **Die damalige Gegenprobe war halb falsch, gemessen 24.08.:** sie nannte `ef19173d` als Positivbeispiel („meldet fahren"). Dieser Commit fügt **null** Park-Zeilen hinzu, nicht einmal eine im Kommentar — er berührt nur eine Datei, die eine Park-ID *enthält*. **Ein Positivbeispiel, das selbst eine Falschauslösung war**, hat die Regel achtzehn Tage lang bestätigt. Beidseitige Gegenprobe zur heutigen Fassung: `0327416c` (Park-Fix) meldet **5** hinzugefügte Park-Zeilen ⇒ fahren, `e53af679` (nur Testdateien) und `ef19173d` melden **0** ⇒ nicht nötig.
 >
 > ⚠ **Was er als EINZIGER fängt, bleibt damit gedeckt:** `check:parkbar` (Atomarität) und `check:parkbar-vollstaendig` (Vollständigkeit) sehen nur den **Quelltext**. Drei Klassen entstehen erst zur Laufzeit — Block ohne Auto-Hide-Gate · statische Park-ID-Liste driftet von den real gerenderten IDs · leere Container-Hülle (`FokusKachel`), die sich nicht selbst versteckt. **Dafür gibt es keinen Ersatz.** Wer die Auslöser-Liste kürzt, streicht diese Deckung mit.
 

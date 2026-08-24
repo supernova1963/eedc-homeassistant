@@ -13,3 +13,17 @@
 # geschrieben und werden via `asyncio_mode = "auto"` automatisch geladen.
 pytest>=7.4.0
 pytest-asyncio>=0.23.0
+
+# Parallelisierung — der Gate-Befehl in CLAUDE.md ruft `-n 3` auf, damit MUSS das
+# Plugin hier stehen: ein Werkzeug, das im dokumentierten Gate vorkommt, gehört in
+# die Datei, auf die das Gate zum Installieren verweist (sonst bricht es auf einem
+# frischen Klon). Messung 24.08. auf 4 Kernen: 126 s → 47–62 s, vier Läufe grün.
+# Die Test-DB ist in-memory je Test, die Worker stören sich nicht.
+pytest-xdist>=3.8.0
+
+# ⛔ `pytest-cov` steht bewusst NICHT hier (Entscheid 24.08.). Kein Gate benutzt es;
+# in dieser Datei würde es nur die Install-Zeit jedes CI-Laufs verlängern, und eine
+# Abhängigkeit, auf die nichts zeigt, driftet unbemerkt mit. Für einen einmaligen
+# Messlauf: `VIRTUAL_ENV=eedc/backend/venv uv pip install pytest-cov`
+# (die venv hat weder `pip` noch `ensurepip`), dann
+# `python -m pytest backend/tests -q --cov=backend --cov-report=term-missing`.
