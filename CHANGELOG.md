@@ -9,6 +9,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Der PV-Anteil der Heimladung stand bei manchen Anlagen auf 0 %, obwohl eedc ihn kannte.** Wer eine **Wallbox** hat, dessen Heimladung führt eedc seit v3.36.0 dort — die Aufteilung in Sonne und Netz am *Fahrzeug* wird seither nicht mehr angeboten und nicht mehr verwendet. Ein **alter** Wert, der aus der Zeit davor am Fahrzeug stehengeblieben ist, hat trotzdem weitergewirkt: Er galt als „der Anwender hat die Aufteilung erfasst" und hat damit verhindert, dass eedc sie für die Wallbox aus den eigenen Stundenwerten ableitet. Ergebnis war keine falsche Zahl, sondern **gar keine** — die Heimladung stand vollständig auf der Netz-Seite.
+
+  Ab jetzt entscheidet allein die Quelle, die eedc auch wirklich verwendet: Trägt die **Wallbox** eine eigene Aufteilung, gilt sie unverändert. Trägt sie keine, leitet eedc den Anteil aus dem gemessenen Tagesverlauf ab — so wie bei jeder Anlage ohne solchen Altbestand.
+
+  **Wen es betrifft und was sich sichtbar ändert:** nur Anlagen mit Wallbox *und* einem alten Aufteilungswert am Fahrzeug, und dort nur Monate, für die eedc Stundenwerte hat. In diesen Monaten steigt der ausgewiesene PV-Anteil der Heimladung — im Cockpit, im Komponenten-Hub, in den Auswertungen und in den Home-Assistant-Sensoren. **Es wird nichts an deinen Daten geändert:** Der Wert am Fahrzeug bleibt stehen, er zählt nur nicht mehr gegen eine Quelle, die er nicht ist. Monate ohne Stundenwerte bleiben unverändert.
+
 ### Added
 
 - **Die Börsenpreise von morgen stehen jetzt auch in Home Assistant.** Der Sensor `eedc_preis_rang` trug bisher nur den laufenden Tag, während der Preis-Chart unter *Cockpit → Live* längst beide Tage zeigt. Wer die Nachtladung für den Folgetag planen wollte, musste sich die Kurve selbst besorgen — **rapahl** hat sich dafür einen eigenen Template-Sensor gebaut. Ab jetzt tragen die Attribute des Sensors einen zweiten Satz: `rang_profil_morgen` mit allen 24 Stunden, dazu `guenstig_schwelle_cent_morgen` und `optimierter_durchschnitt_cent_morgen`, damit sich auch für morgen eine **eigene** Regel rechnen lässt. `morgen_verfuegbar` ist immer vorhanden und sagt, ob die Zahlen schon da sind — die Day-Ahead-Auktion veröffentlicht sie gegen 13 Uhr, vorher fragt eedc gar nicht an.

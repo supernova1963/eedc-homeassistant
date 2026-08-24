@@ -46,6 +46,7 @@ from typing import Iterable, Optional, Sequence
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.field_definitions import get_eauto_ladung_kwh, get_emob_pv_netz_kwh
+from backend.services.eauto_wirtschaftlichkeit import wallbox_ist_heimlade_quelle
 from backend.services.energie_profil.monats_aus_tagen import (
     MonatsSchluessel,
     lade_monats_summen_aus_tagen,
@@ -64,27 +65,52 @@ __all__ = [
 LadeZeile = tuple[MonatsSchluessel, bool, dict]
 
 
-def hat_gepflegten_pv_anteil(*quellen: Iterable[dict]) -> bool:
-    """Trägt irgendeine Quellzeile einen erfassten ``ladung_pv_kwh``-Wert?
+def hat_gepflegten_pv_anteil(
+    eauto_daten: Iterable[dict],
+    wallbox_daten: Iterable[dict] = (),
+) -> bool:
+    """Traegt die **kanonische Quelle** einen erfassten ``ladung_pv_kwh``-Wert?
 
-    Der Torwächter vor der Ableitung (N-141 Weg c, Rahmenbedingung 1: *ein
+    Der Torwaechter vor der Ableitung (N-141 Weg c, Rahmenbedingung 1: *ein
     gepflegter echter Wert gewinnt immer*).
 
-    ⚠ **Geprüft wird die Anwesenheit des Schlüssels, nicht seine Größe.** Eine
-    gepflegte ``0`` heißt „diesen Monat kam nichts aus der Sonne" und ist eine
-    Aussage — sie mit einer Schätzung zu überschreiben wäre schlimmer als die
-    Lücke, die dieser Fund schließt. Die Unterscheidung ist dieselbe wie bei
+    ⚠ **Geprueft wird die Anwesenheit des Schluessels, nicht seine Groesse.** Eine
+    gepflegte ``0`` heisst „diesen Monat kam nichts aus der Sonne" und ist eine
+    Aussage — sie mit einer Schaetzung zu ueberschreiben waere schlimmer als die
+    Luecke, die dieser Fund schliesst. Die Unterscheidung ist dieselbe wie bei
     F-15 (``wert or DEFAULT`` verschluckte eine gepflegte 0), nur eine Ebene
     weiter: dort ein Tarif, hier eine Energiemenge.
 
-    ⚠ Bewusst **über beide Quellen**, nicht nur über die vom Pool gewählte: hat
-    die Wallbox keinen PV-Wert, das Fahrzeug aber schon, dann hat der Anwender
-    den Anteil erfasst — die Quellenwahl des Pools ist eine Frage der *Menge*,
-    nicht der *Pflege*.
+    ⛔ **Gefragt wird NUR die Quelle — bis 2026-08-24 waren es beide Seiten.**
+    Der alte Wortlaut hier lautete *„die Quellenwahl des Pools ist eine Frage
+    der Menge, nicht der Pflege"*. Das traf die Regel nicht: ``get_emob_
+    heimladung_canonical`` waehlt **strukturell** (Wallbox mit Heimladung ⇒ sie
+    ist die Wahrheit, der E-Auto-Wert wird ignoriert), nicht nach Menge. Ein
+    ignorierter Wert bekam damit ein Vetorecht gegen die Ableitung fuer die
+    Quelle, die ihn gerade verworfen hatte.
+
+    **Was das kostete, Ende zu Ende gemessen** (Wallbox ``ladung_kwh`` 200 ohne
+    PV-Split, E-Auto mit einem Altwert 130/50, Tagesebene 62 %):
+
+    ===========================  =========================================
+    mit dem E-Auto-Altwert       Quelle=wallbox, PV=0, Netz=200  ⇒   **0 %**
+    ohne ihn, sonst gleich       Quelle=wallbox, PV=124, Netz=76 ⇒  **62 %**
+    ===========================  =========================================
+
+    Nicht eine falsche Zahl, sondern **gar keine** — und zwar genau in den
+    Monaten, die ``migrate_emob_canonical_source`` (v3.36.0) bewusst als
+    „unaufloesbar" stehen liess (``winner_pv == 0 and loser_pv > 0``).
+
+    ⚠ **Kein Bestand wird angefasst.** Der E-Auto-Wert bleibt stehen, wo er
+    steht; er zaehlt nur nicht mehr gegen eine Quelle, die er nicht ist.
     """
+    quelle = (
+        wallbox_daten
+        if wallbox_ist_heimlade_quelle(wallbox_daten)
+        else eauto_daten
+    )
     return any(
         zeile.get("ladung_pv_kwh") is not None
-        for quelle in quellen
         for zeile in quelle
         if zeile
     )
@@ -141,6 +167,16 @@ def reichere_ladezeilen_an(
         ergebnis: list[dict] = []
         for zeile in zeilen:
             zeile = zeile or {}
+            # ⛔ Ein gepflegter Wert wird NIE ueberschrieben — jetzt auch auf
+            # Zeilenebene. Solange das Tor ueber beide Seiten lief, war das
+            # zwangslaeufig erfuellt: war irgendwo ein Wert, blieb das Tor zu.
+            # Seit das Tor nur die Quelle fragt, kann es offen sein, waehrend
+            # die ANDERE Seite einen Altwert traegt — ohne diese Zeile wuerde
+            # er hier durch eine Schaetzung ersetzt. Unter dem alten Verhalten
+            # aendert die Pruefung nichts (sie war dort leer erfuellt).
+            if zeile.get("ladung_pv_kwh") is not None:
+                ergebnis.append(zeile)
+                continue
             pv, netz = get_emob_pv_netz_kwh(
                 zeile, total_kwh=get_eauto_ladung_kwh(zeile)
             )

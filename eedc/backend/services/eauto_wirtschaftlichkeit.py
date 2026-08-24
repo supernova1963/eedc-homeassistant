@@ -872,6 +872,36 @@ def summiere_emob_quelle(imd_data: Iterable[dict]) -> EmobLadungPool:
                           ladevorgaenge, "")
 
 
+def _traegt_heimladung(pool: "EmobLadungPool") -> bool:
+    """Die Schwelle der Phase-2a-Quellenwahl — **genau einmal** ausgeschrieben.
+
+    Beide Einstiege (``wallbox_ist_heimlade_quelle`` und
+    ``get_emob_heimladung_canonical``) lesen sie von hier, damit die Regel nicht
+    an zwei Stellen driften kann.
+    """
+    return pool.ladung_kwh > 0
+
+
+def wallbox_ist_heimlade_quelle(wallbox_imd_data: Iterable[dict]) -> bool:
+    """Ist die **Wallbox** die kanonische Heimlade-Quelle dieses Monats?
+
+    Die Phase-2a-Regel als eigener Name, damit sie **einmal** existiert.
+    ``get_emob_heimladung_canonical`` wendet sie auf die gepoolte Trias an;
+    ``services/emob_ladeanteil`` braucht sie **vor** dem Poolen, um zu
+    entscheiden, wessen ``ladung_pv_kwh`` uberhaupt zaehlt.
+
+    ⚑ **Warum sie herausgezogen ist.** Bis 2026-08-24 stand die Quellenwahl nur
+    hier, der Torwaechter der PV-Ableitung fragte dagegen **beide** Seiten. Zwei
+    unserer eigenen Regeln widersprachen sich damit: diese hier erklaerte den
+    E-Auto-Wert bei vorhandener Wallbox fuer unbeachtlich, jene gab genau ihm
+    ein Vetorecht gegen die Ableitung. Ende zu Ende gemessen hiess das
+    **PV-Anteil 0 %** statt der abgeleiteten 62 % — nicht eine falsche Zahl,
+    sondern gar keine. Eine Regel, die an zwei Stellen verschieden gelesen wird,
+    ist keine Regel; deshalb steht sie jetzt an einer.
+    """
+    return _traegt_heimladung(summiere_emob_quelle(wallbox_imd_data))
+
+
 def get_emob_heimladung_canonical(
     *,
     eauto_imd_data: Iterable[dict],
@@ -907,9 +937,9 @@ def get_emob_heimladung_canonical(
     wb = summiere_emob_quelle(wallbox_imd_data)
     ea = summiere_emob_quelle(eauto_imd_data)
 
-    if wb.ladung_kwh > 0:
+    if _traegt_heimladung(wb):
         heim, name = wb, "wallbox"
-    elif ea.ladung_kwh > 0:
+    elif _traegt_heimladung(ea):
         heim, name = ea, "e-auto"
     else:
         heim, name = wb, "leer"
