@@ -6,68 +6,32 @@ HA-Recorder gespeicherten Stunden-Min/Max für `has_mean=True`-Sensoren.
 Quelle für Tages-Peak-Werte (peak_pv_kw, peak_netzbezug_kw, peak_einspeisung_kw)
 — eedc muss sie nicht aus 10-Min-Mittelwerten rekonstruieren, was Peaks
 systematisch unterschätzt.
+
+Schwesterdateien der `ha_lts`-Familie (SoT des HA-Schemas: `ha_lts_helfer.py`):
+`test_ha_lts_hourly_reader.py` (Stunden-Summen) - `test_ha_lts_mean_reader.py`
+(Stunden-Mean) - `test_ha_lts_monatswerte_lookup.py` (Monatswerte + get_value_at).
 """
 
 from __future__ import annotations
 
-import time as time_module
 from datetime import date, datetime
 
-from sqlalchemy import create_engine, text
 
 from backend.services.ha_statistics_service import HAStatisticsService
+from backend.tests import ha_lts_helfer
 
 
 def _make_service() -> HAStatisticsService:
-    svc = HAStatisticsService()  # regulärer Konstruktor: setzt alle Felder (u. a.
-    # den Metadaten-Cache) und macht kein I/O — `_init_engine` wird erst
-    # beim ersten Zugriff gerufen und hier durch `_initialized` übersprungen.
-    svc._engine = create_engine("sqlite:///:memory:")
-    svc._is_mysql = False
-    svc._initialized = True
-    with svc._engine.begin() as conn:
-        conn.execute(text("""
-            CREATE TABLE statistics_meta (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                statistic_id TEXT,
-                unit_of_measurement TEXT,
-                has_sum INTEGER,
-                has_mean INTEGER
-            )
-        """))
-        conn.execute(text("""
-            CREATE TABLE statistics (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                metadata_id INTEGER,
-                start_ts REAL,
-                state REAL,
-                sum REAL,
-                mean REAL,
-                min REAL,
-                max REAL
-            )
-        """))
-    return svc
+    """Service auf In-Memory-SQLite mit HA-Schema — SoT: `ha_lts_helfer`."""
+    return ha_lts_helfer.mach_service()
 
 
 def _seed_sensor(svc: HAStatisticsService, entity_id: str, unit: str) -> int:
-    with svc._engine.begin() as conn:
-        result = conn.execute(
-            text("INSERT INTO statistics_meta (statistic_id, unit_of_measurement, has_sum, has_mean) "
-                 "VALUES (:sid, :unit, 0, 1)"),
-            {"sid": entity_id, "unit": unit},
-        )
-        return result.lastrowid
+    return ha_lts_helfer.sensor(svc, entity_id, unit, has_sum=False)
 
 
 def _seed_minmax(svc: HAStatisticsService, mid: int, when: datetime, mn: float, mx: float) -> None:
-    ts = time_module.mktime(when.timetuple())
-    with svc._engine.begin() as conn:
-        conn.execute(
-            text("INSERT INTO statistics (metadata_id, start_ts, state, sum, mean, min, max) "
-                 "VALUES (:mid, :ts, NULL, NULL, NULL, :mn, :mx)"),
-            {"mid": mid, "ts": ts, "mn": mn, "mx": mx},
-        )
+    ha_lts_helfer.zeile(svc, mid, when, min_wert=mn, max_wert=mx)
 
 
 def test_kw_sensor_minmax_durchgereicht():

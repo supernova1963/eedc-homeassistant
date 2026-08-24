@@ -15,70 +15,34 @@ Testet:
 Tricky: HA-Statistics-Konvention `start_ts=H` enthält Counter am Ende der
 Periode (H+1) = Zähler(H+1). Backward-Slots (#144/#297): Slot h = Energie
 [h-1, h) = Zähler(h) − Zähler(h-1). Boundary-Index via lts_boundary_index.
+
+Schwesterdateien der `ha_lts`-Familie (SoT des HA-Schemas: `ha_lts_helfer.py`):
+`test_ha_lts_mean_reader.py` (Stunden-Mean) - `test_ha_lts_minmax_reader.py`
+(Stunden-Min/Max) - `test_ha_lts_monatswerte_lookup.py` (Monatswerte + get_value_at).
 """
 
 from __future__ import annotations
 
-import time as time_module
 from datetime import date, datetime, timedelta
 
-from sqlalchemy import create_engine, text
 
 from backend.services.ha_statistics_service import HAStatisticsService
+from backend.tests import ha_lts_helfer
 
 
 def _make_service_with_mock_db() -> HAStatisticsService:
-    """Baut einen HAStatisticsService mit In-Memory-SQLite, gefüllt mit
-    HA-Statistics-konformem Schema. Umgeht den File-Path-Init-Pfad."""
-    svc = HAStatisticsService()  # regulärer Konstruktor: setzt alle Felder (u. a.
-    # den Metadaten-Cache) und macht kein I/O — `_init_engine` wird erst
-    # beim ersten Zugriff gerufen und hier durch `_initialized` übersprungen.
-    svc._engine = create_engine("sqlite:///:memory:")
-    svc._is_mysql = False
-    svc._initialized = True  # is_available muss True liefern ohne erneutes _init_engine
-    with svc._engine.begin() as conn:
-        conn.execute(text("""
-            CREATE TABLE statistics_meta (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                statistic_id TEXT,
-                unit_of_measurement TEXT,
-                has_sum INTEGER,
-                has_mean INTEGER
-            )
-        """))
-        conn.execute(text("""
-            CREATE TABLE statistics (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                metadata_id INTEGER,
-                start_ts REAL,
-                state REAL,
-                sum REAL,
-                mean REAL
-            )
-        """))
-    return svc
+    """Service auf In-Memory-SQLite mit HA-Schema — SoT: `ha_lts_helfer`."""
+    return ha_lts_helfer.mach_service()
 
 
 def _seed_sensor(svc: HAStatisticsService, entity_id: str, unit: str, has_sum: bool = True) -> int:
-    with svc._engine.begin() as conn:
-        result = conn.execute(
-            text("INSERT INTO statistics_meta (statistic_id, unit_of_measurement, has_sum, has_mean) "
-                 "VALUES (:sid, :unit, :hs, 0)"),
-            {"sid": entity_id, "unit": unit, "hs": 1 if has_sum else 0},
-        )
-        return result.lastrowid
+    return ha_lts_helfer.sensor(svc, entity_id, unit, has_sum=has_sum, has_mean=False)
 
 
 def _seed_hourly_value(svc: HAStatisticsService, metadata_id: int, when: datetime, sum_val: float) -> None:
     """Schreibt eine statistics-Zeile. `when` ist start_ts; HA-Konvention:
     Wert ist Counter AM ENDE der Periode = when+1h."""
-    ts = time_module.mktime(when.timetuple())
-    with svc._engine.begin() as conn:
-        conn.execute(
-            text("INSERT INTO statistics (metadata_id, start_ts, state, sum) "
-                 "VALUES (:mid, :ts, NULL, :sum)"),
-            {"mid": metadata_id, "ts": ts, "sum": sum_val},
-        )
+    ha_lts_helfer.zeile(svc, metadata_id, when, sum_wert=sum_val)
 
 
 def test_glatter_tag_24_slots():

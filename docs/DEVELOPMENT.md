@@ -469,8 +469,10 @@ eedc-homeassistant/                  ← Source of Truth (alle Änderungen hier)
     │   │   ├── conftest.py           # die `db`-Fixture (In-Memory je Test) + Netzsperre
     │   │   ├── factories.py          # Modell-Factories + Szenarien (s. unten)
     │   │   ├── quellbaum.py          # EINE Dateiquelle für alle baumweiten Prüfer (s. unten)
+    │   │   ├── ha_lts_helfer.py      # EINE Fassung des HA-Recorder-Schemas (s. unten)
     │   │   ├── test_wurzelmuster_konformitaet.py      # ADR-002 P1–P10, baumweit
     │   │   ├── test_berechnungs_layer_konformitaet.py # ADR-001
+    │   │   ├── test_konformitaet_schwesterdateien.py  # Präfix-Cluster + Schwesterverweis
     │   │   └── test_netto_ertrag_vier_wege_symmetrie.py  # Symmetrie über vier Finanz-Sichten
     │   └── utils/
     │
@@ -695,6 +697,66 @@ fakt = mach_monats_fakt(kennzahlen=mach_kennzahlen(eigenverbrauch_kwh=1000.0))
 
 Alles Übrige steht auf 0 bzw. leer — dieselbe Regel wie oben: was ein Test behauptet, setzt er
 selbst.
+
+### Eine Testdatei benennen: Präfix-Cluster und Schwesterverweis
+
+Der Backend-Testbaum ist **flach** — 409 Dateien in `backend/tests/`, ohne Themen-Ordner.
+**Das ist eine Entscheidung, keine offene Baustelle** (Gernot, 2026-08-24): am Baum gemessen
+tragen **135 der 409 Dateien (33 %) mehr als ein Thema im Namen** —
+`test_ha_export_wp_spezialtarif.py` gehörte gleichzeitig nach `ha/`, `waerme/`, `finanzen/` und
+`import_export/`. Ein Themen-Ordner wäre eine dritte Konvention über den Feature-Namen und
+träfe für jede dieser Dateien eine Wahl, die der nächste Sucher nicht nachvollziehen kann.
+
+Stattdessen gilt die Regel, die ohnehin schon galt — jetzt gewächtert:
+
+1. **Neue Datei in den bestehenden Präfix-Cluster einordnen**, keine dritte Namensvariante für
+   dasselbe Modul schaffen (`HAStatisticsService` → einheitlich `test_ha_lts_*`).
+2. **Im Modul-Docstring mindestens eine Schwesterdatei nennen.**
+
+```python
+"""`HAStatisticsService.get_hourly_mean_for_day()` — Stunden-Mean roh + Einheit.
+
+Schwesterdateien der `ha_lts`-Familie (SoT des HA-Schemas: `ha_lts_helfer.py`):
+`test_ha_lts_hourly_reader.py` (Stunden-Summen) · `test_ha_lts_minmax_reader.py`
+(Stunden-Min/Max) · `test_ha_lts_monatswerte_lookup.py` (Monatswerte + get_value_at).
+"""
+```
+
+**Warum das mehr ist als Kosmetik.** Namens-Drift erzeugt Lücken aus **beiden** Suchrichtungen:
+`ha_statistics_service.py` galt einmal als „0 Tests", weil die Suche `test_ha_statistics*`
+lautete und die Familie `test_ha_lts_*` heißt. Der Fehlbefund floss in einen Refactoring-Plan
+ein. Ein Docstring, der eine Schwester nennt, macht das Set von jedem Einstiegspunkt aus
+begehbar. Deshalb misst man Testabdeckung auch **per Symbol**, nie per geratenem Dateinamen.
+
+Der Wächter ist `test_konformitaet_schwesterdateien.py`. Er verlangt den Verweis nur von Dateien,
+deren Präfix-Cluster mindestens zwei Dateien umfasst — ein Einzelgänger hat keine Schwester. Der
+genannte Name muss **existieren** und darf **nicht die Datei selbst** sein (16 Bestandsdateien
+nannten im Docstring ausschließlich sich; das ist eine Überschrift, kein Querverweis). Die
+Schwester darf **über den Cluster hinausgehen** — ein Symmetriepartner ist oft der nützlichere
+Hinweis. Die Baseline (272 Dateien) ist **abschmelzend**: sie heilt nichts, sie verhindert die
+273., und ein erledigter Eintrag ist selbst ein Fehler.
+
+### Eine HA-LTS-Probe schreiben: `ha_lts_helfer`
+
+Das Recorder-Schema von Home Assistant (`statistics_meta` · `statistics` ·
+`statistics_short_term`) steht **einmal** — in `backend/tests/ha_lts_helfer.py`. Es ist ein
+fremdes Schema; vier handgeschriebene Kopien driften, sobald HA eine Spalte anfasst.
+
+```python
+from backend.tests import ha_lts_helfer
+
+svc = ha_lts_helfer.mach_service()                                   # In-Memory-SQLite + Schema
+mid = ha_lts_helfer.sensor(svc, "sensor.pv", "kWh", has_sum=True)    # statistics_meta
+ha_lts_helfer.zeile(svc, mid, datetime(2026, 5, 15, 12), sum_wert=42.0)
+```
+
+`has_mean` folgt standardmäßig aus `has_sum` — ein Zähler trägt keinen Mittelwert, ein Messwert
+umgekehrt. `zeile()` schreibt wahlweise nach `statistics` oder `statistics_short_term`
+(`tabelle=`).
+
+⚠ **Kein Export eines Helfer-Moduls darf mit `test` beginnen** — `python_functions = test*`
+greift auf jeden Namen im Modul-Namensraum des **Importeurs**; pytest sammelte so schon einmal
+eine Quell-Funktion als Testfunktion ein und zählte sie grün.
 
 ### Einen Frontend-Test schreiben: die Factories und `renderMitProvidern`
 
