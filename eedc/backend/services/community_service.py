@@ -4,7 +4,6 @@ EEDC Community Service
 Bereitet Anlagendaten für die anonyme Übertragung an den Community-Server vor.
 """
 
-import hashlib
 from datetime import date, datetime
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -55,14 +54,6 @@ def get_region_from_plz(plz: str | None, land: str | None = None) -> str | None:
 
     # Exakte PLZ-Zuordnung aus vollständiger PLZ-Tabelle
     return PLZ_TO_STATE.get(plz)
-
-
-def generate_anlage_hash(anlage: Anlage, secret: str) -> str:
-    """
-    Generiert einen eindeutigen aber anonymen Hash für eine Anlage.
-    """
-    raw = f"{anlage.leistung_kwp:.1f}:{anlage.installationsdatum}:{anlage.standort_plz[:2] if anlage.standort_plz else 'XX'}:{secret}"
-    return hashlib.sha256(raw.encode()).hexdigest()
 
 
 # Mapping: Ausrichtungs-Text → Kompass-Azimut (0=Nord, 90=Ost, 180=Süd, 270=West)

@@ -2,7 +2,7 @@
 Wetter-Utilities: Einheiten-Konvertierung und WMO-Symbol-Mapping.
 """
 
-from typing import Iterable, Literal, Optional
+from typing import Literal, Optional
 
 # Konvertierungsfaktoren
 MJ_TO_KWH = 1 / 3.6  # 1 MJ = 0.2778 kWh
@@ -149,48 +149,5 @@ def klassifiziere_stunde(
     if bewoelkung_prozent < 30:
         return "klar"
     if bewoelkung_prozent > 70:
-        return "diffus"
-    return "wechselhaft"
-
-
-def klassifiziere_tag(
-    stunden: Iterable[tuple[Optional[float], Optional[float], Optional[int]]],
-) -> Optional[Wetterklasse]:
-    """
-    Aggregiert Stunden-Klassifikationen zu einer Tages-Klasse.
-
-    Argument: iterable von Tupeln `(bewoelkung_prozent, niederschlag_mm,
-    wetter_code)` — typischerweise nur die Tageslicht-Stunden eines Tages
-    (z.B. GHI > 50 W/m²). Caller filtert vor.
-
-    Regeln:
-
-    - Mindestens 30 % der Stunden mit `niederschlag/wechselhaftem WMO-Code`
-      → Tag ist `wechselhaft`.
-    - Sonst dominante Klasse (höchster Anteil) — bei Gleichstand zwischen
-      klar und diffus → `wechselhaft` (sicheres Mittelfeld).
-
-    Returns None wenn keine klassifizierbaren Stunden.
-    """
-    counts: dict[Wetterklasse, int] = {"klar": 0, "diffus": 0, "wechselhaft": 0}
-    total = 0
-    for cc, ns, wc in stunden:
-        klasse = klassifiziere_stunde(cc, ns, wc)
-        if klasse is None:
-            continue
-        counts[klasse] += 1
-        total += 1
-
-    if total == 0:
-        return None
-
-    # Schwellenregel: >= 30% wechselhaft → ganzer Tag wechselhaft
-    if counts["wechselhaft"] / total >= 0.3:
-        return "wechselhaft"
-
-    # Sonst dominante Klasse, bei Gleichstand wechselhaft
-    if counts["klar"] > counts["diffus"]:
-        return "klar"
-    if counts["diffus"] > counts["klar"]:
         return "diffus"
     return "wechselhaft"

@@ -826,22 +826,6 @@ def emob_month_share(
     return ms if (ms.pv_kwh + ms.netz_kwh) > 0 else None
 
 
-def pick_emob_ref_parameter(investitionen: Iterable) -> Optional[dict]:
-    """Wählt das `parameter`-Dict für emob-Hauptberechnungen (Vergleichsverbrauch,
-    Benzinpreis).
-
-    E-Auto bevorzugt, weil die Felder E-Auto-spezifisch sind. Bei evcc-Setups
-    steht die Wallbox häufig als erste emob-Investition vorne und hat diese
-    Params naturgemäß nicht — Default 7,5 L/100km statt User-Wert war eine
-    Drift-Quelle zwischen Hauptwert und Komponenten-Sicht.
-    """
-    eauto = next((i for i in investitionen if i.typ == "e-auto"), None)
-    if eauto is not None:
-        return eauto.parameter
-    wb = next((i for i in investitionen if i.typ == "wallbox"), None)
-    return wb.parameter if wb is not None else None
-
-
 @dataclass
 class EmobLadungPool:
     """Konsistentes E-Mobilitäts-Ladungs-Aggregat aus genau EINER Quelle.

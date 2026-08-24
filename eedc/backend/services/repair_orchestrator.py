@@ -1246,13 +1246,6 @@ async def discard_plan(plan_id: UUID) -> None:
 # ── Maintenance ─────────────────────────────────────────────────────────────
 
 
-async def get_plan(plan_id: UUID) -> Optional[RepairPlan]:
-    """Lookup-Helper für Routes-Layer (z. B. Plan-Detail-Endpoint)."""
-    async with _lock:
-        _purge_expired_unlocked()
-        return _plans.get(plan_id)
-
-
 def _reset_state_for_tests() -> None:
     """Test-Hilfe — leert Cache zwischen Tests."""
     _plans.clear()
