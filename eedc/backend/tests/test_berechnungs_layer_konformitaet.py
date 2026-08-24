@@ -17,6 +17,8 @@ from pathlib import Path
 
 import pytest
 
+from backend.tests.quellbaum import produktivbaum
+
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[1]  # eedc/backend/
 
@@ -47,14 +49,13 @@ INLINE_PATTERN_GRANDFATHERED: dict[str, str] = {
 
 
 def _iter_py_files():
-    """Alle .py-Dateien unter eedc/backend/, ohne tests/, venv/, __pycache__/."""
-    for path in _BACKEND_ROOT.rglob("*.py"):
-        rel = path.relative_to(_BACKEND_ROOT).as_posix()
-        if rel.startswith(("tests/", "venv/")):
-            continue
-        if "__pycache__" in rel:
-            continue
-        yield path, rel
+    """Alle .py-Dateien unter eedc/backend/, ohne tests/, venv/, __pycache__/.
+
+    Quelle: `quellbaum.produktivbaum()` — die Regel steht dort einmal statt
+    hier in einer neunten eigenen Schreibweise.
+    """
+    for datei in produktivbaum():
+        yield datei.pfad, datei.rel
 
 
 # Pattern: `("pv_", "bkw_")`-Tuple (mit/ohne Spaces)

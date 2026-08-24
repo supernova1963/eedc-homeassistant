@@ -25,6 +25,8 @@ from pathlib import Path
 
 import pytest
 
+from backend.tests.quellbaum import produktivbaum
+
 BACKEND = Path(__file__).resolve().parents[1]
 
 #: Module, die den Speicher-η für eine Anzeige, einen Sensor oder eine
@@ -80,14 +82,20 @@ _ROH = re.compile(
 
 
 def _py_dateien():
-    for pfad in BACKEND.rglob("*.py"):
-        rel = pfad.relative_to(BACKEND).as_posix()
-        if rel.startswith("tests/") or "/venv/" in rel:
-            continue
-        yield rel, pfad
+    """Der Produktivbaum — aus `quellbaum`, nicht mehr selbst gefiltert.
+
+    ⚠ **Hier stand bis 2026-08-24 ein Filter, der nie griff:**
+    `"/venv/" in rel` — `rel` ist **relativ** und beginnt mit `venv/` ohne
+    führenden Schrägstrich. Der Prüfer nahm deshalb **3828 Dateien statt
+    337**, davon 3491 aus dem virtualenv, und brauchte **14,27 s** statt
+    1,32 s. Er meldete die ganze Zeit grün — ein Abwesenheitsbeweis, der
+    fremde Pakete mitmisst, behauptet mehr, als er weiß.
+    """
+    for datei in produktivbaum():
+        yield datei.rel, datei
 
 
-def _ohne_prosa(quelle: str) -> list[str]:
+def _ohne_prosa(quelle: str, baum: ast.Module | None = None) -> list[str]:
     """Die Quelle zeilenweise, aber mit **ausgeblendeten String-Inhalten**.
 
     Ohne das misst der Prüfer die **Erklärung** der Regel statt ihrer
@@ -110,13 +118,18 @@ def _ohne_prosa(quelle: str) -> list[str]:
     daneben bleibt sichtbar.
     """
     zeilen = quelle.splitlines()
-    try:
-        baum = ast.parse(quelle)
-    except SyntaxError:
-        # Mindestens eine Datei im Baum trägt ein BOM. Sie soll den baumweiten
-        # Prüfer nicht anhalten — ohne Filter prüft er dort strenger, nie
-        # schwächer.
-        return zeilen
+    if baum is None:
+        # Nur noch die drei Selbstproben unten parsen hier; der baumweite Lauf
+        # reicht den Baum aus `quellbaum` durch.
+        #
+        # ⚠ Hier stand: „Mindestens eine Datei im Baum trägt ein BOM." Das war
+        # eine Folge des defekten venv-Filters — die BOM-Datei lag in
+        # `site-packages`. Der Produktivbaum parst heute vollständig, und
+        # `test_quellbaum.py::test_nichts_wird_still_uebersprungen` hält das fest.
+        try:
+            baum = ast.parse(quelle)
+        except SyntaxError:  # pragma: no cover — Selbstproben sind gültiger Code
+            return zeilen
 
     # `col_offset` zählt UTF-8-**Bytes**, nicht Zeichen — bei Umlauten in
     # Docstrings läge ein Zeichen-Slice daneben.
@@ -154,12 +167,11 @@ def _ohne_prosa(quelle: str) -> list[str]:
 def test_p252_kein_roher_eta_quotient_ausserhalb_der_ausnahmen():
     """Baumweit: niemand bildet den η-Quotienten mehr selbst."""
     treffer: list[str] = []
-    for rel, pfad in _py_dateien():
+    for rel, datei in _py_dateien():
         if rel in BEWUSST_ROH:
             continue
-        quelle = pfad.read_text(encoding="utf-8")
-        original = quelle.splitlines()
-        for nr, zeile in enumerate(_ohne_prosa(quelle), 1):
+        original = datei.quelle.splitlines()
+        for nr, zeile in enumerate(_ohne_prosa(datei.quelle, datei.baum), 1):
             nackt = zeile.split("#", 1)[0]
             if _ROH.search(nackt):
                 treffer.append(f"{rel}:{nr}: {original[nr - 1].strip()}")

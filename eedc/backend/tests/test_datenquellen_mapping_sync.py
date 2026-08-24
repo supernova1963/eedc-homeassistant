@@ -42,6 +42,8 @@ from backend.services.migrations.migrate_quellen_ins_mapping import (
 )
 from backend.services.snapshot.komponenten_beitraege import basis_beitraege
 
+from backend.tests.quellbaum import produktivbaum
+
 
 # ─── Schreib-Schicht (pur) ──────────────────────────────────────────────────
 
@@ -312,19 +314,20 @@ def _schreibt_quellen_store(baum: ast.AST) -> bool:
 def test_waechter_quellen_schreiber_nutzen_die_schreib_schicht():
     """Wer `sensor_mapping["quellen"]` schreibt, muss die klassische Struktur
     mitschreiben — sonst entsteht der Forum-Befund erneut an neuer Stelle."""
-    backend = _backend_dir()
     verstoesse: list[str] = []
-    for pfad in backend.rglob("*.py"):
-        rel = pfad.relative_to(backend).as_posix()
-        if rel.startswith("tests/") or rel in _WAECHTER_AUSNAHMEN:
+    # ⚠ Hier stand bis 2026-08-24 ein Filter, der nur `tests/` ausnahm — das
+    # virtualenv lief mit. Folgenlos geblieben, weil ein `"quellen" not in
+    # quelle` vorher abkürzte; falsch war es trotzdem, und die nächste
+    # Erweiterung des Prüfers hätte den Kurzschluss verlieren können.
+    for datei in produktivbaum():
+        if datei.rel in _WAECHTER_AUSNAHMEN:
             continue
-        quelle = pfad.read_text(encoding="utf-8")
-        if "quellen" not in quelle:
+        if "quellen" not in datei.quelle:
             continue
-        if not _schreibt_quellen_store(ast.parse(quelle)):
+        if not _schreibt_quellen_store(datei.baum):
             continue
-        if _SCHICHT not in quelle:
-            verstoesse.append(rel)
+        if _SCHICHT not in datei.quelle:
+            verstoesse.append(datei.rel)
     assert not verstoesse, (
         "Schreibt den quellen-Store ohne Schreib-Schicht "
         f"`services/{_SCHICHT}.py`: {verstoesse}"

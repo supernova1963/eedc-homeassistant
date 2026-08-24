@@ -37,6 +37,7 @@ from backend.core.wirtschaftlichkeit_defaults import (
     WP_WIRKUNGSGRAD_OEL_DEFAULT,
     WP_WIRKUNGSGRAD_STROM_DEFAULT,
 )
+from backend.tests.quellbaum import produktivbaum
 
 BACKEND = Path(__file__).resolve().parents[1]
 
@@ -156,11 +157,15 @@ _ETA_ERLAUBT = {
 
 
 def _py_dateien():
-    for path in BACKEND.rglob("*.py"):
-        rel = path.relative_to(BACKEND).as_posix()
-        if rel.startswith(("tests/", "venv/", "alembic/")) or "__pycache__" in rel:
-            continue
-        yield path, rel
+    """Quelle: `quellbaum.produktivbaum()`.
+
+    ⚠ Der bisherige Zusatzausschluss `alembic/` ist ersatzlos entfallen — ein
+    solches Verzeichnis existiert unter `backend/` nicht (gemessen 2026-08-24).
+    Er hat nie etwas gefiltert und war genau die Sorte Drift, gegen die es die
+    geteilte Quelle gibt.
+    """
+    for datei in produktivbaum():
+        yield datei.pfad, datei.rel
 
 
 def test_oel_und_strom_konstante_nur_im_resolver():

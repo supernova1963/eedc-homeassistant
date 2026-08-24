@@ -32,6 +32,8 @@ from backend.services.wetter import open_meteo
 from backend.services.wetter.cache import SNAPSHOT_HORIZONT_TAGE, snapshot_days
 from backend.services.wetter.models import WETTER_MODELLE
 
+from backend.tests.quellbaum import produktivbaum
+
 
 # ── Test-Doubles ────────────────────────────────────────────────────────────
 
@@ -435,10 +437,8 @@ def test_kein_cache_key_traegt_den_angefragten_horizont():
     liegt außerhalb — dann ist der Wächter mitzuziehen.
     """
     verstoesse = []
-    for pfad in sorted(_BACKEND.rglob("*.py")):
-        if "tests" in pfad.parts or "venv" in pfad.parts:
-            continue
-        baum = ast.parse(pfad.read_text(encoding="utf-8"), filename=str(pfad))
+    for datei in produktivbaum():
+        pfad, baum = datei.pfad, datei.baum
         for joined in _cache_key_ausdruecke(baum):
             for teil in joined.values:
                 if not isinstance(teil, ast.FormattedValue):

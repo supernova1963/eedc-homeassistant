@@ -47,6 +47,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from backend.tests.quellbaum import probenbaum
+
 _TESTS = Path(__file__).resolve().parent
 
 # Die drei Aufrufe, die die Prozessuhr lesen — aufgelöst auf ihre
@@ -161,15 +163,13 @@ def _aufgeloester_pfad(
 def _uhr_fundstellen() -> dict[str, list[str]]:
     """`{Datei: [Datei:Zeile, …]}` aller Lesezugriffe auf die Prozessuhr."""
     treffer: dict[str, list[str]] = {}
-    for pfad in sorted(_TESTS.rglob("*.py")):
-        if "__pycache__" in pfad.parts:
-            continue
-        try:
-            baum = ast.parse(pfad.read_text(encoding="utf-8", errors="ignore"))
-        except SyntaxError:  # pragma: no cover — defekte Datei bricht schon anders
-            continue
+    # Quelle: `quellbaum.probenbaum()` — der einzige Prüfer, der den TESTbaum
+    # liest statt des Produktivbaums. `rel` dort ist `tests/…`; die Baseline
+    # hier führt die Namen ohne dieses Präfix.
+    for datei in probenbaum():
+        baum = datei.baum
         karte = _alias_karte(baum)
-        rel = pfad.relative_to(_TESTS).as_posix()
+        rel = datei.rel.removeprefix("tests/")
         for knoten in ast.walk(baum):
             if not (isinstance(knoten, ast.Call) and isinstance(knoten.func, ast.Attribute)):
                 continue

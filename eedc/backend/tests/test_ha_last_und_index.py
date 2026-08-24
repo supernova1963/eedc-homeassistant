@@ -36,6 +36,7 @@ from backend.services.ha_state_service import (  # noqa: E402
     HAStateService,
     fetch_selected_states,
 )
+from backend.tests.quellbaum import produktivbaum  # noqa: E402
 
 _BACKEND = _EEDC_ROOT / "backend"
 
@@ -333,11 +334,8 @@ def _blockierende_aufrufe() -> list[tuple[str, int, str, str]]:
     kein `Call` und taucht hier korrekt nicht auf.
     """
     treffer: list[tuple[str, int, str, str]] = []
-    for pfad in sorted(_BACKEND.rglob("*.py")):
-        if "tests" in pfad.parts or "venv" in pfad.parts:
-            continue
-        rel = str(pfad.relative_to(_BACKEND))
-        baum = ast.parse(pfad.read_text())
+    for datei in produktivbaum():
+        rel, baum = datei.rel, datei.baum
         for fn in ast.walk(baum):
             if not isinstance(fn, ast.AsyncFunctionDef):
                 continue

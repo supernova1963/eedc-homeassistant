@@ -78,6 +78,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from backend.tests.quellbaum import produktivbaum
+
 import pytest
 
 from backend.core.investition_parameter import LEGACY_PARAM_KEYS
@@ -153,10 +155,13 @@ def _kanon_namen() -> set[str]:
 
 
 def _python_dateien() -> list[Path]:
-    return [
-        p for p in _BACKEND_ROOT.rglob("*.py")
-        if "/tests/" not in str(p) and "/venv/" not in str(p)
-    ]
+    """Quelle: `quellbaum.produktivbaum()`.
+
+    Der bisherige Filter arbeitete auf dem **absoluten** Pfad und war damit
+    zufällig richtig — derselbe Ausdruck auf einem relativen Pfad ist der
+    Defekt, der `test_n252_…` 3491 Fremddateien mitmessen ließ.
+    """
+    return [datei.pfad for datei in produktivbaum()]
 
 
 def _ist_string(knoten: ast.AST) -> bool:

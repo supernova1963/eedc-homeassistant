@@ -468,6 +468,7 @@ eedc-homeassistant/                  ← Source of Truth (alle Änderungen hier)
     │   ├── tests/                   # ~400 pytest-Dateien, darunter die Wächter:
     │   │   ├── conftest.py           # die `db`-Fixture (In-Memory je Test) + Netzsperre
     │   │   ├── factories.py          # Modell-Factories + Szenarien (s. unten)
+    │   │   ├── quellbaum.py          # EINE Dateiquelle für alle baumweiten Prüfer (s. unten)
     │   │   ├── test_wurzelmuster_konformitaet.py      # ADR-002 P1–P10, baumweit
     │   │   ├── test_berechnungs_layer_konformitaet.py # ADR-001
     │   │   └── test_netto_ertrag_vier_wege_symmetrie.py  # Symmetrie über vier Finanz-Sichten
@@ -619,6 +620,42 @@ Browser), mit drei Ausnahmen und einer Baseline:
 | `check:park-leertest` | **Playwright-Livetest** gegen eine laufende Box, verlangt ein `VITE_DEMO_DEFAULT=true`-Build. **Läuft am Auslöser, nicht am Takt** (Entscheid 23.08.): nur wenn eine im **Paket** geänderte Datei unter `eedc/frontend/src` `Parkbar`, `data-park-id` oder `FokusKachel` enthält (Basis `HEAD`, nicht `origin/main`) — und vor jedem Release. Mit 188 s der teuerste Einzelprüfer; was er als Einziger fängt, steht in `CLAUDE.md` §Gates. ⛔ Hier stand bis 23.08. die Anweisung, danach zwingend `git checkout -- eedc/frontend/dist/` zu fahren, weil `dist/` versioniert sei — **das gilt seit N-246 / v4.0.15 nicht mehr**: `eedc/frontend/dist` ist nicht versioniert (beide Dockerfiles bauen das Frontend in einer eigenen Stage), der Schutz sitzt in `release.sh::pruefe_nichts_uebrig`. CLAUDE.md trug den Widerruf, diese Tabelle nicht |
 | `check:form-controls` | meldet „1 offen (WelcomeStep.tsx)" als **dokumentierte Baseline** (rc=0) |
 | `check:de-de` | **Scope über einen Import-Graph**, nicht über Verzeichnisse: `src/v4/` + `src/components/` als Startknoten, dazu die transitive Hülle der von dort erreichten `pages/`- und `config/`-Dateien. ⚠ **Wer den Graph anfasst, prüft beide Kanten-Formen**: `from '…'` **und** `lazy(() => import('…'))`. Bis 13.08. fehlte die dynamische Form — die sieben Einstellungs-Wizards hingen genau daran und lagen samt 15 roher Anzeigen außerhalb; die zehn `pages/*Teile.tsx` fielen an der `config/`-Kante heraus. **Ein Wächter, dessen Reichweite an der Import-Form hängt statt an der Sichtbarkeit, prüft die falsche Menge.** Der Rest-Zähler („N Treffer außerhalb") ist **keine Schuldenzahl** — er enthält auch Nicht-Anzeigen wie URL-Parameter in `src/api/` |
+
+### Einen baumweiten Wächter schreiben: `quellbaum` statt eigener `rglob`
+
+Zehn Prüfer laufen über den Backend-Quelltext. Die Frage „welche Dateien gehören dazu" steht
+**einmal** — in `backend/tests/quellbaum.py`:
+
+```python
+from backend.tests.quellbaum import produktivbaum   # alles ohne tests/, venv/, __pycache__
+from backend.tests.quellbaum import probenbaum      # der Testbaum
+
+for datei in produktivbaum():
+    datei.rel      # "services/monats_fakten.py" — der Name, den der Prüfer meldet
+    datei.quelle   # Quelltext
+    datei.baum     # fertiger ast.Module — NICHT selbst parsen
+```
+
+⚠ **Nicht selbst `rglob` + `ast.parse` schreiben.** Bis zum 2026-08-24 tat das jeder Prüfer für
+sich — neun handgeschriebene Kopien derselben Regel in vier Schreibweisen, und **zwei davon waren
+falsch**: `test_n252_speicher_wirkungsgrad_deckung.py` filterte mit `"/venv/" in rel` auf einem
+**relativen** Pfad und nahm deshalb **3828 Dateien statt 337** (3491 aus dem virtualenv, 14,27 s
+statt 1,32 s); `test_datenquellen_mapping_sync.py` hatte gar keinen venv-Filter. Beide meldeten
+grün — ein Abwesenheitsbeweis über fremden `site-packages`-Code behauptet mehr, als er weiß.
+
+**Der Cache ist der Nebeneffekt, nicht der Zweck.** `test_wurzelmuster_konformitaet.py` ruft seine
+Dateiquelle sechzehnmal auf: **27,36 s → 8,93 s**. Über alle Prüfer zusammen **51,96 s → 18,01 s**,
+bei unveränderter Fallzahl.
+
+⚠ **Kein Export dieser Datei heißt `test…`** — unter dem Namen `testbaum` hat pytest die Funktion
+beim Importeur als **Testfunktion eingesammelt** (`python_functions = test*` greift auf jeden Namen
+im Modul-Namensraum) und als „grün" gezählt, ohne dass sie etwas prüfte. Sie heißt deshalb
+`probenbaum`; `test_quellbaum.py::test_kein_export_heisst_wie_eine_probe` hält es fest.
+
+**Wer einen neuen Wächter baut, prüft auch seine Prüfmenge.** `quellbaum` liefert
+`nicht_parsebar()` — Dateien, die `ast.parse` nicht annimmt. Ein Prüfer, der sie still überspringt,
+verliert Deckung, ohne es zu melden (die N-318-Klasse). Heute ist die Liste leer, und ein
+Selbsttest hält sie leer.
 
 ### Einen Backend-Test schreiben: die Factories benutzen
 
