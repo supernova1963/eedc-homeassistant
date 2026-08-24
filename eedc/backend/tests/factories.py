@@ -29,12 +29,26 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from backend.core.berechnungen.verbrauch import VerbrauchsKennzahlen
 from backend.models import (
     Anlage,
     Investition,
     InvestitionMonatsdaten,
     Monatsdaten,
     Strompreis,
+)
+from backend.services.monats_fakten import (
+    BkwFakten,
+    EegFakten,
+    EmobFakten,
+    ErzeugungFakten,
+    MetaFakten,
+    MonatsFakt,
+    SonstigesFakten,
+    SpeicherFakten,
+    TarifFakten,
+    WpFakten,
+    ZaehlerFakten,
 )
 
 __all__ = [
@@ -47,6 +61,8 @@ __all__ = [
     # §2 Szenarien
     "anlage_mit_pv", "mach_anlage_mit_mapping", "anlage_mit_tarif",
     "anlage_mit_modul", "zwei_wechselrichter",
+    # §3 Werte-Fakten (kein DB-Modell)
+    "mach_kennzahlen", "mach_monats_fakt",
 ]
 
 
@@ -243,3 +259,54 @@ async def zwei_wechselrichter(db: AsyncSession, *, mit_speicher: bool = False) -
 
     await db.commit()
     return ids
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# §3 Werte-Fakten — kein DB-Modell, aber dieselbe Pflichtfeld-Falle
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# `MonatsFakt` (ADR-002/P10) verlangt **acht** Teil-Fakten als Pflichtargumente.
+# Wer nur den Eigenverbrauch behaupten will, baut sonst sieben Null-Objekte von
+# Hand — und muss jedes davon anfassen, sobald ein Teil-Fakt dazukommt. Genau
+# der Grund, aus dem §1 existiert (E4/M6), nur eine Ebene über den Modellen.
+#
+# ⚠ Dieselbe Regel wie oben: **keine fachlichen Werte**. Alles ist 0 bzw. leer;
+# was ein Test behauptet, setzt er selbst.
+
+def mach_kennzahlen(**felder: Any) -> VerbrauchsKennzahlen:
+    """`VerbrauchsKennzahlen` mit allen sieben Pflichtfeldern auf 0.0."""
+    return VerbrauchsKennzahlen(**{
+        "pv_erzeugung_kwh": 0.0,
+        "direktverbrauch_kwh": 0.0,
+        "eigenverbrauch_kwh": 0.0,
+        "gesamtverbrauch_kwh": 0.0,
+        "autarkie_prozent": 0.0,
+        "eigenverbrauchsquote_prozent": 0.0,
+        "direktverbrauchsquote_prozent": 0.0,
+        **felder,
+    })
+
+
+def mach_monats_fakt(jahr: int = 2026, monat: int = 6, **teile: Any) -> MonatsFakt:
+    """Ein `MonatsFakt`, in dem nur die übergebenen Teil-Fakten etwas tragen.
+
+    Beispiel::
+
+        fakt = mach_monats_fakt(kennzahlen=mach_kennzahlen(eigenverbrauch_kwh=1000.0))
+    """
+    return MonatsFakt(**{
+        "jahr": jahr,
+        "monat": monat,
+        "zaehler": ZaehlerFakten(),
+        "erzeugung": ErzeugungFakten(),
+        "bkw": BkwFakten(),
+        "speicher": SpeicherFakten(),
+        "emob": EmobFakten(),
+        "wp": WpFakten(),
+        "sonstiges": SonstigesFakten(),
+        "tarif": TarifFakten(),
+        "eeg": EegFakten(),
+        "kennzahlen": mach_kennzahlen(),
+        "meta": MetaFakten(),
+        **teile,
+    })

@@ -26,6 +26,8 @@ from backend.tests.factories import (
     mach_anlage_mit_mapping,
     mach_imd,
     mach_investition,
+    mach_kennzahlen,
+    mach_monats_fakt,
     mach_monatsdaten,
     monatsdaten,
     strompreis,
@@ -199,3 +201,49 @@ async def test_zwei_wechselrichter_mit_speicher(db):
         )).scalar_one()
         assert sp.typ == "speicher"
         assert sp.parent_investition_id == ids[name]["wr"]
+
+
+# ── §3 Werte-Fakten ──────────────────────────────────────────────────────────
+
+def test_mach_kennzahlen_setzt_alle_sieben_pflichtfelder_auf_null():
+    k = mach_kennzahlen()
+    assert k.eigenverbrauch_kwh == 0.0
+    assert k.autarkie_prozent == 0.0
+    assert k.direktverbrauchsquote_prozent == 0.0
+
+
+def test_mach_kennzahlen_erfindet_keinen_wert():
+    """Ein Default > 0 hielte jede CO₂-Probe still gruen."""
+    k = mach_kennzahlen()
+    for feld in k.__dataclass_fields__:
+        assert getattr(k, feld) == 0.0, feld
+
+
+def test_der_aufrufer_schlaegt_den_kennzahlen_default():
+    assert mach_kennzahlen(eigenverbrauch_kwh=1234.5).eigenverbrauch_kwh == 1234.5
+
+
+def test_mach_monats_fakt_fuellt_alle_acht_teil_fakten():
+    f = mach_monats_fakt()
+    assert (f.jahr, f.monat) == (2026, 6)
+    for teil in ("zaehler", "erzeugung", "bkw", "speicher", "emob", "wp",
+                 "sonstiges", "tarif", "eeg", "kennzahlen", "meta"):
+        assert getattr(f, teil) is not None, teil
+
+
+def test_mach_monats_fakt_traegt_ueberall_nullen():
+    f = mach_monats_fakt()
+    assert f.erzeugung.pv_kwh == 0.0
+    assert f.wp.waerme_kwh == 0.0
+    assert f.emob.km == 0.0
+    assert f.kennzahlen.eigenverbrauch_kwh == 0.0
+
+
+def test_der_aufrufer_schlaegt_jeden_teil_fakt():
+    f = mach_monats_fakt(
+        jahr=2024, monat=1,
+        kennzahlen=mach_kennzahlen(eigenverbrauch_kwh=500.0),
+    )
+    assert (f.jahr, f.monat) == (2024, 1)
+    assert f.kennzahlen.eigenverbrauch_kwh == 500.0
+    assert f.wp.waerme_kwh == 0.0        # unberuehrte Teile bleiben leer

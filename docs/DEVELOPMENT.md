@@ -645,6 +645,20 @@ kWp (98 % bzw. 96 % aller Konstruktionen tun das, kein Test behauptet sie) — a
 `standort_land` und **keine** Tarifpreise: eine Factory, die einen Tarif erfindet, hält genau den
 Test still grün, der den Tarif behaupten wollte. `test_factories.py` hält das fest.
 
+**Werte-Fakten (§3, seit E6):** `mach_monats_fakt()` und `mach_kennzahlen()` bauen einen
+`MonatsFakt` (ADR-002/P10) bzw. `VerbrauchsKennzahlen`. Beide verlangen alle Felder als
+Pflichtargumente — acht Teil-Fakten bzw. sieben Kennzahlen. Wer nur eine Größe behaupten will,
+baut sonst den Rest von Hand und muss ihn anfassen, sobald ein Teil-Fakt dazukommt:
+
+```python
+from backend.tests.factories import mach_kennzahlen, mach_monats_fakt
+
+fakt = mach_monats_fakt(kennzahlen=mach_kennzahlen(eigenverbrauch_kwh=1000.0))
+```
+
+Alles Übrige steht auf 0 bzw. leer — dieselbe Regel wie oben: was ein Test behauptet, setzt er
+selbst.
+
 ### Einen Frontend-Test schreiben: die Factories und `renderMitProvidern`
 
 `src/test/factories.ts` baut die drei großen API-Antworten, `src/test/render.tsx` den
