@@ -235,3 +235,90 @@ async def test_der_klassischen_wp_bleibt_das_alte_label(db):
     strom = [e for e in ergebnisse if "Strom" in e.meldung and "fehlt" in e.meldung]
     assert len(strom) == 1, [e.meldung for e in ergebnisse]
     assert "Strom Heizen/Warmwasser fehlt" in strom[0].meldung
+
+
+# ── Dritte Fläche derselben Regel: die kWh-Zähler-ABDECKUNG ──────────────
+#
+# Gemeldet von **OB73-gif** (#263, 25.08.2026): *„1 von 4 Komponenten ohne
+# vollständige kWh-Zähler-Abdeckung … Midea Portasplit (waermepumpe):
+# strom_heizen_kwh, strom_warmwasser_kwh"*.
+#
+# `_check_energieprofil_abdeckung` forderte bei `getrennte_strommessung` beide
+# Seiten der Achse — **ohne** die `luft_luft`-Ausnahme, die oben im
+# Monatsdaten-Check und 150 Zeilen tiefer bei den Zusatz-Zählern längst steht.
+# Für ihn war der Hinweis **unauflösbar**: den Warmwasser-Strom gibt es an
+# seinem Gerät nicht, und der Monatsabschluss bietet das Feld gar nicht mehr an
+# (N-304). Die Folgewellen-Klasse aus #236 — ein Filter auf einer Schicht
+# reicht nicht, wenn mehrere Pfade dieselbe Frage stellen.
+
+
+async def _abdeckungs_befunde(db, *, parameter: dict, gemappte_felder: dict) -> list:
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+
+    from backend.services.daten_checker import DatenChecker
+
+    anlage = Anlage(anlagenname="B5-Abdeckung", leistung_kwp=10.0,
+                    installationsdatum=date(2025, 1, 1))
+    db.add(anlage)
+    await db.flush()
+    inv = Investition(
+        anlage_id=anlage.id, typ="waermepumpe", bezeichnung="Midea Portasplit",
+        anschaffungsdatum=date(2025, 1, 1), anschaffungskosten_gesamt=3000.0,
+        parameter=parameter,
+    )
+    db.add(inv)
+    await db.flush()
+    anlage.sensor_mapping = {"investitionen": {str(inv.id): {"felder": {
+        f: {"strategie": "sensor", "sensor_id": f"sensor.{f}"}
+        for f in gemappte_felder
+    }}}}
+    await db.commit()
+
+    geladen = (await db.execute(
+        select(Anlage)
+        .options(selectinload(Anlage.investitionen))
+        .where(Anlage.id == anlage.id)
+    )).scalar_one()
+    return DatenChecker(db)._check_energieprofil_abdeckung(geladen)
+
+
+def _details(ergebnisse) -> str:
+    return " ".join(
+        (e.details or "") + " " + (e.meldung or "") for e in ergebnisse
+    )
+
+
+async def test_abdeckung_verlangt_von_der_klimaanlage_keinen_warmwasser_strom(db):
+    """Der Melder-Fall: nur `strom_heizen_kwh` gemappt ⇒ vollständig."""
+    ergebnisse = await _abdeckungs_befunde(
+        db, parameter=KLIMA_GETRENNT, gemappte_felder=["strom_heizen_kwh"],
+    )
+    assert "strom_warmwasser_kwh" not in _details(ergebnisse)
+
+
+async def test_abdeckung_haelt_der_klassischen_wp_beide_seiten_vor(db):
+    """Gegenprobe: eine Luft-Wasser-WP hat den Warmwasserkreis sehr wohl.
+
+    Ohne sie wäre der Fix oben eine Nullprüfung — die Beinahe-Falle aus F-33.
+    """
+    ergebnisse = await _abdeckungs_befunde(
+        db, parameter=WP_GETRENNT, gemappte_felder=["strom_heizen_kwh"],
+    )
+    assert "strom_warmwasser_kwh" in _details(ergebnisse)
+
+
+async def test_abdeckung_meldet_der_klimaanlage_weiterhin_fehlenden_heizstrom(db):
+    """`strom_heizen_kwh` bleibt gefordert — bewusst nicht Teil des Fixes.
+
+    Ob ein zugeordneter Betriebsmodus-Sensor ihn ersetzen kann, hängt davon
+    ab, ob `getrennte_strommessung` an diesem Gerät überhaupt richtig gesetzt
+    ist (der Aggregator ignoriert dann `stromverbrauch_kwh`, #183). Offener
+    Punkt — diese Probe hält fest, dass er offen IST und nicht versehentlich
+    mitgelöst wurde.
+    """
+    ergebnisse = await _abdeckungs_befunde(
+        db, parameter=KLIMA_GETRENNT, gemappte_felder=[],
+    )
+    assert "strom_heizen_kwh" in _details(ergebnisse)
+

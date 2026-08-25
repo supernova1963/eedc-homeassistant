@@ -317,6 +317,33 @@ class EnergieprofilChecks:
             # Abdeckung trotz vollständig gemappten getrennten Sensoren.
             if inv.typ == "waermepumpe" and (inv.parameter or {}).get("getrennte_strommessung", False):
                 erwartet = [["strom_heizen_kwh"], ["strom_warmwasser_kwh"]]
+                # ⚠ **Die Warmwasser-Seite gibt es an einer Split-Klimaanlage
+                # nicht** (B5/N-304, gemeldet von OB73-gif am 25.08.2026):
+                # *„Midea Portasplit (waermepumpe): strom_heizen_kwh,
+                # strom_warmwasser_kwh"* — ein Hinweis, den er **nicht
+                # auflösen konnte**, weil der Monatsabschluss dieses Feld bei
+                # `luft_luft` gar nicht mehr anbietet. Er hätte den Wert von
+                # Hand beschaffen müssen für einen Kreis, den das Gerät nicht
+                # hat.
+                #
+                # Dieselbe Unterscheidung steht bereits **zweimal** im
+                # Daten-Checker — in `monatsdaten.py` (B5, dort trägt das
+                # Label deshalb „Strom Heizen" statt „Strom Heizen/
+                # Warmwasser") und 150 Zeilen tiefer bei den Zusatz-Zählern
+                # (seit 02.08., dietmar1968 #89667/87). **Nur diese Schicht
+                # kannte sie nicht** — die Folgewellen-Klasse aus #236: ein
+                # Filter auf einer Schicht reicht nicht, wenn mehrere Pfade
+                # dieselbe Frage stellen.
+                #
+                # ⛔ **`strom_heizen_kwh` bleibt gefordert** und ist bewusst
+                # nicht Teil dieses Fixes: Ob ein zugeordneter
+                # Betriebsmodus-Sensor die Aufteilung ersetzen kann, hängt
+                # davon ab, ob `getrennte_strommessung` an diesem Gerät
+                # überhaupt richtig gesetzt ist — der Aggregator ignoriert
+                # dann `stromverbrauch_kwh` (#183). Offener Punkt, nicht hier
+                # mitentschieden.
+                if ist_luft_luft_waermepumpe(inv):
+                    erwartet = [["strom_heizen_kwh"]]
 
             inv_data = inv_map.get(str(inv.id), {}) or {}
             felder = inv_data.get("felder", {}) or {}

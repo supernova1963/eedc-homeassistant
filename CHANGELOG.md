@@ -17,6 +17,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
   Aus derselben Meldung stammt die **etwas größere Legende** unter der Kurve. Sie lag als einzige Chart-Legende der App auf der kleinsten Schriftstufe, während alle anderen eine Stufe darüber stehen — das ist damit angeglichen, nicht ausgeschert.
 
+- **Der Daten-Check verlangte von einer Split-Klimaanlage einen Warmwasser-Zähler.** Gemeldet von **OB73-gif** ([#263](https://github.com/supernova1963/eedc-homeassistant/issues/263)): Sein Daten-Check meldete „1 von 4 Komponenten ohne vollständige kWh-Zähler-Abdeckung — Midea Portasplit: strom_heizen_kwh, strom_warmwasser_kwh".
+
+  **Die Meldung war nicht abstellbar.** Eine Split-Klimaanlage hat keinen Warmwasserkreis, und eedc bietet das Feld für so ein Gerät im Monatsabschluss längst nicht mehr an. Wer den Hinweis auflösen wollte, hätte einen Wert für einen Kreis beschaffen müssen, den das Gerät nicht besitzt.
+
+  Die Regel selbst gab es bereits an **zwei** Stellen im Daten-Check — bei den Monatsdaten und bei den Zusatz-Zählern. Nur die Prüfung der kWh-Abdeckung kannte sie nicht.
+
+  **Ab jetzt** erwartet sie von einer Klimaanlage mit getrennter Strommessung nur noch die Heiz-Seite. Für Luft-Wasser- und Sole-Wasser-Wärmepumpen ändert sich nichts — dort bleiben beide Seiten gefordert.
+
+  **Danke an Oskar**, der die Meldung nicht weggeklickt, sondern hergezeigt hat.
+
 - **Wer Heizen und Kühlen getrennt misst, sieht die Aufteilung jetzt auch unter *Tag*.** Bei einer Split-Klimaanlage kann der Verbrauch je Betriebsart **gemessen** vorliegen — über eigene Zähler für Heizen, Kühlen, Lüften und Entfeuchten, statt ihn aus der Betriebsart ableiten zu lassen. Diese Geräte sahen ihre Aufteilung in *Cockpit → Monat* und *→ Jahr*, unter *Cockpit → Tag* dagegen **nie**: Der Tag hat die Zähler gar nicht erst abgefragt.
 
   Sichtbar wurde es nicht als Fehlermeldung, sondern als **fehlender Block** — dieselbe Kachel *Wärme/Klima*, in der Monatsansicht mit Aufteilung, in der Tagesansicht ohne. Wer nur abgeleitete Betriebsarten nutzt, war nie betroffen; für ihn war der Block immer da.
