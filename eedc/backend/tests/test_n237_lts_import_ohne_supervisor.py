@@ -53,9 +53,16 @@ def test_supervisor_routen_bleiben_gesperrt():
 
     Ohne diese Probe wäre „Route ist da" auch dann grün, wenn jemand den ganzen
     Block aufgemacht hätte.
+
+    ⛔ Hier stand bis 2026-08-25 eine zweite Zusicherung auf ``/api/ha-import``.
+    Sie ist mit der Route selbst gefallen — ``api/routes/ha_import.py`` war seit
+    dem 2026-02-11 clientlos und seine Feld-Tabelle vom Feld-SoT abgehängt: eine
+    Zusicherung „Pfad X ist nicht gemountet" über einen Pfad, den es nirgends
+    mehr gibt, ist trivial wahr und behauptet nichts. **Der Gegenstand der Probe
+    bleibt gedeckt** — ``/api/sensor-mapping`` hängt weiter am selben
+    ``HA_INTEGRATION_AVAILABLE``-Block und trägt die Aussage allein.
     """
     pfade = {r.path for r in app.routes if hasattr(r, "path")}
-    assert not [p for p in pfade if p.startswith("/api/ha-import")]
     assert not [p for p in pfade if p.startswith("/api/sensor-mapping")]
 
 

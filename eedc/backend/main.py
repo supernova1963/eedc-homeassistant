@@ -118,7 +118,6 @@ from backend.api.routes import ha_statistics
 if HA_INTEGRATION_AVAILABLE:
     from backend.api.routes import (
         ha_integration,
-        ha_import,
         sensor_mapping,
     )
 
@@ -635,7 +634,6 @@ app.include_router(
 
 if HA_INTEGRATION_AVAILABLE:
     app.include_router(ha_integration.router, prefix="/api/ha", tags=["Home Assistant"])
-    app.include_router(ha_import.router, prefix="/api/ha-import", tags=["HA Import"])
     app.include_router(
         sensor_mapping.router, prefix="/api/sensor-mapping", tags=["Sensor Mapping"]
     )

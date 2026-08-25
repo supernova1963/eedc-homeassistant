@@ -394,7 +394,7 @@ eedc-homeassistant/                  ← Source of Truth (alle Änderungen hier)
     │   │   ├── mqtt_gateway.py · mqtt_presets.py   # beide unter /api/live eingehängt
     │   │   ├── datenquellen.py          # Datenquellen-Fläche (ein Feld = eine Quelle)
     │   │   ├── sensor_mapping.py        # HA-Sensor-Zuordnung (nur HA_MODE)
-    │   │   ├── ha_integration.py · ha_import.py · ha_statistics.py · ha_export.py · ha_remote.py
+    │   │   ├── ha_integration.py · ha_statistics.py · ha_export.py · ha_remote.py
     │   │   ├── connector.py             # Geräte-Connectors (lokales Netz)
     │   │   ├── cloud_import.py          # Cloud-API-Import
     │   │   ├── custom_import/ · data_import.py · import_export/   # CSV/JSON/Demo/PDF
@@ -875,7 +875,6 @@ Nach dem Start des Backends verfügbar unter:
 | `/api/dokumentation` | `dokumentation` | PDF-Dokumente (Anlagendoku, Finanzbericht) |
 | `/api/infothek` | `infothek` | Komponenten-Akten, Verträge, Datei-Upload (N:M) |
 | `/api/ha` | `ha_remote`, *(HA_MODE)* `ha_integration` | HA-Verbindung/Token · HA-Status |
-| `/api/ha-import` | *(HA_MODE)* `ha_import` | Datenimport aus HA |
 | `/api/sensor-mapping` | *(HA_MODE)* `sensor_mapping` | **nur noch `/{id}/suggest`** (HA-Energy-Vorschläge, #197). Die fünf Zuordnungs-Endpunkte sind seit 2026-08-13 stillgelegt (N-241) — Zuordnung läuft über `/api/datenquellen` |
 | `/api/ha-statistics` | *(HA_MODE)* `ha_statistics` | HA-Langzeitstatistik — **drei Transporte**: externe Recorder-DB (`HA_RECORDER_DB_URL`), eingehängte Recorder-Datei, **WebSocket** `recorder/statistics_during_period` (ohne DB-Zugang) |
 

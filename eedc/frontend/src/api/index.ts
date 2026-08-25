@@ -13,7 +13,6 @@ export { pvgisApi } from './pvgis'
 export { haApi } from './ha'
 export { cockpitApi } from './cockpit'
 export { wetterApi } from './wetter'
-export { haImportApi } from './haImport'
 export { sensorMappingApi } from './sensorMapping'
 export { monatsabschlussApi } from './monatsabschluss'
 export { haStatisticsApi } from './haStatistics'
@@ -32,7 +31,6 @@ export type { PVGISPrognose, GespeichertePrognose, AktivePrognoseResponse, PVGIS
 export type { HAStatus } from './ha'
 export type { CockpitUebersicht } from './cockpit'
 export type { WetterDaten, StandortInfo } from './wetter'
-export type { InvestitionMitFeldern, SensorFeld } from './haImport'
 export type { HAEnergySuggestResponse } from './sensorMapping'
 export type {
   Vorschlag,

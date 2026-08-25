@@ -600,7 +600,7 @@ deckungsgleich.
 - **Ein Modulname sagt nichts über sein Prefix.** Mehrere Module teilen sich eines (`/api/live`
   trägt fünf, `/api/system` zwei, `/api/aussichten` zwei), und drei Module hängen direkt unter
   `/api` (Monatsabschluss, Community, HA-Export). SoT sind die `include_router`-Aufrufe.
-- **HA-only-Router werden bedingt eingehängt** (`HA_MODE`): `ha_integration`, `ha_import`,
+- **HA-only-Router werden bedingt eingehängt** (`HA_MODE`): `ha_integration`,
   `sensor_mapping`, `ha_statistics`. `ha_remote` **nicht** — die Verbindung per Token gehört zum
   Standalone-Betrieb.
 - **Einige System-Endpunkte liegen inline in `main.py`**, nicht in einem Router:
