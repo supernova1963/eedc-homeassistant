@@ -150,6 +150,37 @@ describe('Komponenten-Detail (E-Gegencheck)', () => {
     expect(screen.getByText('Stromverbrauch · davon Warmwasser')).toBeInTheDocument()
   })
 
+  // N-327 (Klausnn #263 + dietmar1968 T89667, beide 24.08.2026): Die Aufteilung
+  // stand im Cockpit als nackter Balken, während der Komponenten-Hub dieselben
+  // drei Größen mit Erklärung und Abdeckungs-Zeile zeigt. Beide Melder haben am
+  // selben Tag dasselbe gefragt — der Grund fehlte neben der Zahl.
+  it('Modus-Aufteilung: nennt Abdeckung und erklärt „Nicht aufgeteilt"', () => {
+    const bloecke = baueKomponentenBloecke(d({
+      wp_strom_kwh: 1,
+      // Klausnns Bild: alles nicht aufgeteilt, Modus-Signal war trotzdem da.
+      wp_modus_strom_heizen_kwh: 0, wp_modus_strom_kuehlen_kwh: 0,
+      wp_modus_nicht_aufgeteilt_kwh: 1, wp_modus_abdeckung_h: 17,
+    }))
+    renderBlock(bloecke, 'k-waermepumpe')
+    expect(screen.getByText('Modus erfasst')).toBeInTheDocument()
+    expect(screen.getByText('17 Stunden')).toBeInTheDocument()
+    expect(screen.getByText(/ist Standby und alles, was weder Heizen noch Kühlen war/)).toBeInTheDocument()
+  })
+
+  it('Modus-Aufteilung gemessen: Herkunft statt Stundenzahl', () => {
+    // Ein Betriebsart-Zähler hat keine „Stunden mit Signal" — „0 Stunden" sähe
+    // dort aus wie ein Sensor-Ausfall (dieselbe Unterscheidung wie im Hub).
+    const bloecke = baueKomponentenBloecke(d({
+      wp_strom_kwh: 300, wp_modus_gemessen: true,
+      wp_modus_strom_heizen_kwh: 200, wp_modus_strom_kuehlen_kwh: 100,
+      wp_modus_nicht_aufgeteilt_kwh: 0,
+    }))
+    renderBlock(bloecke, 'k-waermepumpe')
+    expect(screen.getByText('Herkunft')).toBeInTheDocument()
+    expect(screen.getByText('gemessen')).toBeInTheDocument()
+    expect(screen.queryByText('Modus erfasst')).not.toBeInTheDocument()
+  })
+
   it('WP ohne Counter-Daten: keine #238-Kacheln', () => {
     const bloecke = baueKomponentenBloecke(d({ wp_strom_kwh: 330, wp_waerme_kwh: 1254 }))
     renderBlock(bloecke, 'k-waermepumpe')

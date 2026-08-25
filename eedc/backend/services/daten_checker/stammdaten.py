@@ -997,6 +997,11 @@ class StammdatenChecks:
         # kWp, Anschaffungskosten sind dann historisch fixiert oder irrelevant.
         heute = date.today()
         aktive = sort_investitionen_nach_typ(i for i in anlage.investitionen if i.ist_aktiv_an(heute))
+        # F-64: verdrängt eine Wallbox die Heimladungs-Felder am Fahrzeug?
+        # Gleiche Erhebung wie `energieprofil.py::_check_tages_zusatzfelder`.
+        hat_wallbox = any(
+            i.typ == "wallbox" and i.ist_aktiv_an(heute) for i in anlage.investitionen
+        )
         if not aktive:
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.INFO,
@@ -1229,9 +1234,21 @@ class StammdatenChecks:
                         details="Wird für V2H-Einsparungsberechnung benötigt",
                         link="/einstellungen/investitionen",
                     ))
-                ergebnisse.extend(self._check_investition_monatsdaten(
-                    inv, name, "ladung_pv_kwh", "Ladung PV", CheckSeverity.INFO, monatsdaten,
-                ))
+                # F-64 (gruaGit, Discussion #396): NUR ohne Wallbox einfordern.
+                # `core/field_definitions.py` gibt dem E-Auto-Feld
+                # `ladung_pv_kwh` die Bedingung `bedingung_anlage:
+                # "keine_wallbox"` — mit Wallbox ist SIE die kanonische Quelle
+                # der Heimladung, und das Formular blendet das Feld am Fahrzeug
+                # aus. Der Hinweis war damit unauflösbar: sein „Beheben"-Knopf
+                # führt in ein Formular ohne dieses Feld, und wer den Wert
+                # trotzdem einträgt, erzeugt die Doppelzählung, die die
+                # Bedingung verhindern soll.
+                # Dieselbe Regel steht ausformuliert in `energieprofil.py`
+                # (`_check_tages_zusatzfelder`) — hier fehlte sie, dort nicht.
+                if not hat_wallbox:
+                    ergebnisse.extend(self._check_investition_monatsdaten(
+                        inv, name, "ladung_pv_kwh", "Ladung PV", CheckSeverity.INFO, monatsdaten,
+                    ))
 
             elif inv.typ == "wallbox":
                 if not param.get("max_ladeleistung_kw") and not param.get("leistung_kw"):

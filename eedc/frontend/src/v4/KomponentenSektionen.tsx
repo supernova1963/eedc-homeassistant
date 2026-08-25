@@ -18,6 +18,9 @@ import FormelTooltip from '../components/ui/FormelTooltip'
 import QuelleBadge from '../components/ui/QuelleBadge'
 import { KpiStrip, VerteilungsBalken, GeraeteHinweis, type Block, type KpiStripItem } from '../components/blocks'
 import { Parkbar, NOOP_PARK, type ParkApi } from '../components/park'
+// N-327: der Wortlaut zu „Nicht aufgeteilt" steht genau einmal — in der
+// SoT-Komponente des Komponenten-Hubs, nicht als Kopie hier.
+import { ModusSplitErklaerung } from '../components/waermepumpe'
 import {
   KOMPONENTEN_IDENTITAET, INVESTITION_TYP_ORDER, SONSTIGES_ERZEUGER_FARBE, ROLLEN_BG,
   SPEICHER_KPI, WP_KPI, EAUTO_KPI, BKW_KPI,
@@ -357,13 +360,33 @@ export function baueKomponentenBloecke(
     // #263 K-2 (S4): Aufteilung Heizen/Kühlen — nur mit erfasstem Modus.
     // Der Balken zeigt dieselben drei Größen wie der Komponenten-Hub; ohne
     // Modus-Signal fehlt der Block ganz, statt drei Nullen zu zeigen.
+    //
+    // ⚠ **N-327 — der Grund gehört neben die Zahl.** Bis 25.08.2026 stand hier
+    // der nackte Balken, während der Komponenten-Hub dieselben drei Größen mit
+    // Erklärung und Abdeckungs-Zeile zeigt. Am 24.08. haben zwei Melder am
+    // selben Tag dasselbe gefragt — Klausnn (#263) sah „Nicht aufgeteilt
+    // 1 kWh · 100 %" und meldete die Aufteilung als kaputt, dietmar1968
+    // (T89667 #194) sah 74 %. Beide Zahlen waren richtig: Bei einem Gerät, das
+    // überwiegend aus war, ist Standby-Strom weder Heizen noch Kühlen. Der
+    // Wortlaut kommt aus der SoT-Komponente, nicht als Kopie daneben.
     if (d.wp_modus_gemessen || (hat(d.wp_modus_abdeckung_h) && d.wp_modus_abdeckung_h! > 0)) wpEls.push({
       id: 'el:wp-modus-split', titel: 'Aufteilung Heizen/Kühlen',
-      node: <VerteilungsBalken segmente={[
-        { label: 'Heizen', wert: d.wp_modus_strom_heizen_kwh ?? 0, farbe: ROLLEN_BG.heizung },
-        { label: 'Kühlen', wert: d.wp_modus_strom_kuehlen_kwh ?? 0, farbe: ROLLEN_BG.kuehlung },
-        { label: 'Nicht aufgeteilt', wert: d.wp_modus_nicht_aufgeteilt_kwh ?? 0, farbe: ROLLEN_BG.nicht_aufgeteilt },
-      ]} />,
+      node: (
+        <div className="space-y-3">
+          <VerteilungsBalken segmente={[
+            { label: 'Heizen', wert: d.wp_modus_strom_heizen_kwh ?? 0, farbe: ROLLEN_BG.heizung },
+            { label: 'Kühlen', wert: d.wp_modus_strom_kuehlen_kwh ?? 0, farbe: ROLLEN_BG.kuehlung },
+            { label: 'Nicht aufgeteilt', wert: d.wp_modus_nicht_aufgeteilt_kwh ?? 0, farbe: ROLLEN_BG.nicht_aufgeteilt },
+          ]} />
+          {/* Woher die Aufteilung kommt — dieselbe Unterscheidung wie im Hub:
+              ein Betriebsart-Zähler hat keine „Stunden mit Signal", dort „0
+              Stunden" zu zeigen sähe aus wie ein Sensor-Ausfall. */}
+          <DetailListe rows={[d.wp_modus_gemessen
+            ? { label: 'Herkunft', wert: 'gemessen' }
+            : { label: 'Modus erfasst', wert: `${fmtCalc(d.wp_modus_abdeckung_h, 0, '—')} Stunden` }]} />
+          <ModusSplitErklaerung />
+        </div>
+      ),
     })
     const wpGeraete = geraeteNamen(d, 'waermepumpe')
     if (wpGeraete.length >= 2) wpEls.push({ id: 'el:wp-geraete', titel: 'Geräte-Hinweis', node: <GeraeteHinweis namen={wpGeraete} /> })

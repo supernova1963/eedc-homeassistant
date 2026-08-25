@@ -110,12 +110,36 @@ export function WaermepumpeModusSplit({ zusammenfassung: z }: { zusammenfassung:
         </p>
       )}
 
-      <p className="text-xs text-gray-500 dark:text-gray-400">
-        „Nicht aufgeteilt" ist Standby und alles, was weder Heizen noch Kühlen war
-        (Lüften, Entfeuchten, Automatik ohne Rückmeldung) — dazu die Zeit, in der
-        eedc keinen Modus mitlesen konnte. Die Aufteilung entsteht nur für Zeiten
-        mit laufender Datenanbindung; rückwirkend gibt es sie nicht.
-      </p>
+      <ModusSplitErklaerung />
     </div>
+  )
+}
+
+
+
+/**
+ * Was „Nicht aufgeteilt" bedeutet — der EINE Wortlaut für alle Sichten.
+ *
+ * ⚠ **Warum das eine eigene Komponente ist (N-327):** Denselben Balken zeigt
+ * auch das Cockpit (Tag/Monat, `v4/KomponentenSektionen.tsx`), dort aber bis
+ * zum 25.08.2026 **ohne** jede Erklärung. Zwei Melder haben am selben Tag
+ * dasselbe gefragt — Klausnn (GitHub #263) sah „Nicht aufgeteilt 1 kWh · 100 %"
+ * und hielt die Aufteilung für kaputt, dietmar1968 (Forum T89667 #194) sah
+ * 74 % und wartete ab. Beide hatten recht mit dem, was sie sahen: Bei einem
+ * Gerät, das überwiegend aus war, IST der Standby-Strom weder Heizen noch
+ * Kühlen. Was fehlte, war der Grund neben der Zahl.
+ *
+ * Der Text steht deshalb genau einmal und wird von beiden Sichten gerendert —
+ * ein zweiter Wortlaut daneben würde driften (Regel 0a: eine Komponenten-Klasse,
+ * eine SoT-Komponente).
+ */
+export function ModusSplitErklaerung() {
+  return (
+    <p className="text-xs text-gray-500 dark:text-gray-400">
+      „Nicht aufgeteilt" ist Standby und alles, was weder Heizen noch Kühlen war
+      (Lüften, Entfeuchten, Automatik ohne Rückmeldung) — dazu die Zeit, in der
+      eedc keinen Modus mitlesen konnte. Die Aufteilung entsteht nur für Zeiten
+      mit laufender Datenanbindung; rückwirkend gibt es sie nicht.
+    </p>
   )
 }

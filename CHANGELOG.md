@@ -11,6 +11,28 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Fixed
 
+- **Der Daten-Check verlangte einen Wert, den eedc an dieser Stelle gar nicht haben will.** Gemeldet von **gruaGit** ([Discussion #396](https://github.com/supernova1963/eedc-homeassistant/discussions/396)): Sein Daten-Check meldete „VW ID.3: Ladung PV fehlt in 8 Monaten", während dieselbe App für genau diese Monate PV-Anteile seiner Ladung auswies. Beides stimmte — sie sprachen nur über verschiedene Stellen.
+
+  Wer eine **Wallbox** hat, dessen Heimladung führt eedc dort. Die Aufteilung in Sonne und Netz **am Fahrzeug** wird deshalb im Monatsabschluss gar nicht mehr angeboten: Sie stünde sonst zweimal in den Daten. Der Daten-Check kannte diese Regel als einziger nicht und forderte den Wert weiter ein.
+
+  **Die Meldung war damit nicht abstellbar.** Ihr „Beheben"-Knopf führte in ein Formular, in dem es dieses Feld nicht gibt. Und wer den Wert von Hand beschafft und eingetragen hätte, hätte genau die Doppelzählung erzeugt, die die Regel verhindern soll.
+
+  **Ab jetzt** fragt der Daten-Check das Feld nur noch bei Fahrzeugen **ohne** Wallbox — dort, wo es das Formular auch anbietet. Für Dienstwagen galt diese Ausnahme bereits.
+
+  **Wen es betrifft:** alle Anlagen mit Wallbox **und** E-Auto. Dort verschwindet die Meldung. **An deinen Daten ändert sich nichts**, und die PV-Anteile deiner Ladung werden weiterhin so ausgewiesen wie bisher.
+
+  **Danke an gruaGit**, der zwei Aussagen derselben App nebeneinandergelegt hat, statt einer davon zu glauben.
+
+- **Die Aufteilung Heizen/Kühlen sagt jetzt, warum ein Teil nicht aufgeteilt ist.** Gemeldet von **Klausnn** ([#263](https://github.com/supernova1963/eedc-homeassistant/issues/263)) und, am selben Tag, von **dietmar1968** (simon42-Forum): Beide sahen unter *Cockpit → Tag* im Block *Wärme/Klima* einen großen Anteil unter „Nicht aufgeteilt" — bei Klausnn 100 %, bei dietmar 74 % — und hielten die Aufteilung für kaputt, obwohl die Betriebsart in den Datenquellen korrekt anlag.
+
+  **Die Zahlen waren richtig.** „Nicht aufgeteilt" ist Standby und alles, was weder Heizen noch Kühlen war — Lüften, Entfeuchten, Automatik ohne Rückmeldung — dazu die Zeit ohne Modus-Signal. Bei einem Gerät, das an diesem Tag überwiegend aus war, gehört der Strom genau dorthin. Was fehlte, war dieser Satz neben der Zahl: Im Komponenten-Hub steht er seit jeher, im Cockpit stand nur der nackte Balken.
+
+  **Ab jetzt** zeigt das Cockpit dieselbe Erklärung wie der Komponenten-Hub und nennt zusätzlich, in **wie vielen Stunden** eedc eine Betriebsart mitlesen konnte. Stammt die Aufteilung aus zugeordneten Betriebsart-Zählern, steht dort „gemessen" statt einer Stundenzahl.
+
+  **Wen es betrifft:** alle mit einer Klimaanlage oder Wärmepumpe, für die eedc den Betriebsmodus mitschreibt. **Es ändert sich keine Zahl** — nur ihre Erklärung kommt dazu.
+
+  **Danke an Klausnn und dietmar1968.** Zwei Meldungen am selben Tag zur selben Anzeige sind das deutlichste Zeichen, dass nicht die Rechnung das Problem war, sondern das Schweigen daneben.
+
 - **Sechs Home-Assistant-Sensoren zeigten einen Wert und merkten sich nichts.** Gemeldet von **rapahl**: In seinem Home-Assistant-Protokoll standen fünf Warnungen zu den PV-Prognose-Sensoren — Home Assistant lehnte eine Kombination aus zwei technischen Angaben ab, die eedc beim Anmelden der Sensoren mitschickt.
 
   Die Warnung war nicht der eigentliche Schaden. Home Assistant nimmt Sensoren mit einer solchen Kombination **von der Langzeitstatistik aus**: Der Sensor zeigt in der Übersicht seinen aktuellen Wert, aber Home Assistant schreibt ihn nirgends mit. Verlaufsdiagramme bleiben leer, und eine Auswertung über Tage oder Monate gibt es für ihn nicht — dauerhaft, auch rückwirkend nicht.
