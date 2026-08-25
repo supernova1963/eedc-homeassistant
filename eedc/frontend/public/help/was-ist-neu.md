@@ -79,6 +79,16 @@ sich der Anteil selbst einordnen, statt ihn schätzen zu müssen.
 für die eedc den Betriebsmodus mitschreibt.
 **Was du tun musst:** nichts.
 
+**Die Börsenpreis-Kurve ist höher**
+
+Der Block *Börsenpreis heute & morgen* unter *Cockpit → Live* ist durch die
+Kennzahlen daneben ohnehin höher, als die Kurve genutzt hat — darunter blieb Platz
+leer, während der Verlauf flach gedrückt wirkte. Die Kurve nutzt diesen Platz jetzt.
+Es kommt nichts hinzu und es verschwindet nichts; derselbe Verlauf ist nur besser
+abzulesen. Die **Legende darunter** ist eine Spur größer — sie war die einzige in
+der App, die auf der kleinsten Schriftgröße stand. Danke an **rapahl**, der auch
+nach der letzten Änderung noch einmal hingeschaut hat.
+
 ---
 
 ## v4.0.27 — Gemessen statt geschätzt

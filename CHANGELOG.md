@@ -11,6 +11,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Fixed
 
+- **Die Börsenpreis-Kurve nutzt die Höhe, die der Block ohnehin hat.** Gemeldet von **rapahl**: Die Kurve unter *Cockpit → Live* wirke flach. Nachgemessen an einer laufenden Instanz: Der Chart war 300 px hoch, die Kennzahlen-Spalte direkt daneben 434 px — unter der Kurve blieb Platz ungenutzt, den der Block bereits belegt. Die Kurve steht jetzt auf 400 px und damit nahezu bündig mit den Kennzahlen.
+
+  Das ist die zweite Rückmeldung desselben Melders zu dieser Grafik: Mit 4.0.27 waren Kurve und Kennzahlen **nebeneinander** gerückt (sein eigener Vorschlag), was die Kurve schmaler gemacht hat — aber nicht höher. **Es ändert sich keine Zahl**, nur die Ablesbarkeit.
+
+  Aus derselben Meldung stammt die **etwas größere Legende** unter der Kurve. Sie lag als einzige Chart-Legende der App auf der kleinsten Schriftstufe, während alle anderen eine Stufe darüber stehen — das ist damit angeglichen, nicht ausgeschert.
+
 - **Der Daten-Check verlangte einen Wert, den eedc an dieser Stelle gar nicht haben will.** Gemeldet von **gruaGit** ([Discussion #396](https://github.com/supernova1963/eedc-homeassistant/discussions/396)): Sein Daten-Check meldete „VW ID.3: Ladung PV fehlt in 8 Monaten", während dieselbe App für genau diese Monate PV-Anteile seiner Ladung auswies. Beides stimmte — sie sprachen nur über verschiedene Stellen.
 
   Wer eine **Wallbox** hat, dessen Heimladung führt eedc dort. Die Aufteilung in Sonne und Netz **am Fahrzeug** wird deshalb im Monatsabschluss gar nicht mehr angeboten: Sie stünde sonst zweimal in den Daten. Der Daten-Check kannte diese Regel als einziger nicht und forderte den Wert weiter ein.

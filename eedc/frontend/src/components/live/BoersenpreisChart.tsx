@@ -302,7 +302,12 @@ export default function BoersenpreisChart({ daten }: Props) {
 
   return (
     <div>
-      <ResponsiveContainer width="100%" height={300}>
+      {/* 400 statt 300 (rapahl, 24.08.): Der Block ist durch die Kennzahlen-Spalte
+          daneben ohnehin ~434 px hoch — die Kurve nutzte davon nur 300 und wirkte
+          dadurch flach. Gemessen an der laufenden Box, nicht geschätzt. Die
+          ⅔-Breite aus v4.0.27 war seine erste Rückmeldung und hat geholfen; sie
+          macht die Kurve aber schmaler, nicht höher. */}
+      <ResponsiveContainer width="100%" height={400}>
         <ComposedChart data={punkte} margin={{ top: ACHSEN_MARGIN_TOP, right: 10, left: 0, bottom: 5 }}>
           <defs>
             {stopsJeTag.map((stops, idx) => (
@@ -388,7 +393,13 @@ export default function BoersenpreisChart({ daten }: Props) {
         </ComposedChart>
       </ResponsiveContainer>
 
-      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-gray-500 dark:text-gray-400">
+      {/* caption (11px) statt micro (10px) — rapahl, 24.08.: die Legende war zu klein.
+          Das ist keine Abweichung von der Typografie-Skala, sondern die Angleichung an
+          den Rest: alle anderen Chart-Legenden laufen über `ChartLegende` mit
+          fontSize 11/12; dieser Block ist der einzige mit handgebauter Legende und lag
+          als einziger auf der kleinsten Stufe. Der Zeitumstellungs-Hinweis unten bleibt
+          auf micro — er ist Fußnote, nicht Legende. */}
+      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-500 dark:text-gray-400">
         <span className="flex items-center gap-1">
           <span className="inline-block h-2 w-3 rounded-sm" style={{ backgroundColor: stufen.guenstig }} />
           unter der Günstig-Schwelle
