@@ -51,6 +51,35 @@ zuschlägt.
 | **D9** | **Kein Backfill.** `get_sensor_history` liest den **recorder** (Default-Purge 10 Tage); LTS gibt es nur für numerische Sensoren mit `state_class`, ein `climate`-Zustand hat keine | 2026-08-18 |
 | **D10** | **Der Split entsteht nur auf dem Snapshot-Pfad.** `InvestitionMonatsdaten.verbrauch_daten` hat **sieben** Schreiber daneben: `monatsabschluss/wizard.py` · `monatsabschluss/views.py` · `ha_statistics.py` · `custom_import/apply.py` · `import_export/csv_operations.py` · `services/import_writer.py` · `import_export/json_operations.py` | 2026-08-18 |
 | **D11** | **In der Praxis werden nur Heizen und Kühlen gefahren.** Entfeuchten/Nur-Lüften nutzt keiner der drei Melder; der Modus wird saisonal manuell gestellt | kingcap1, dietmar1968 |
+| **D12** | **Vier fremde Anbindungen am Quellcode vermessen — der laufende Betrieb ist die Ausnahme, nicht die Regel.** Übersicht unter der Tabelle; sie trägt den Messstand, weil fremde Integrationen weiterentwickelt werden | HA-Core `dev` · HACS `serbanb11/bosch-homecom-hass` · Codeberg Faikout, 2026-08-17 |
+
+### 2.1 Die vermessenen Anbindungen (D12) — Stand 2026-08-17
+
+⚠ **Ein Messstand, keine dauerhafte Eigenschaft.** Alle vier sind fremde, aktiv entwickelte
+Integrationen; was hier steht, gilt für den geprüften Codestand und ist vor einer Entscheidung
+erneut zu messen. Aus demselben Grund steht diese Tabelle **nicht** im Gedächtnis, sondern hier.
+
+| Anbindung | eingestellter Modus | laufender Betrieb (`hvac_action`) | eigener kWh-Zähler |
+| --- | --- | --- | --- |
+| **MELCloud** (Luft-Luft, `AtaDeviceClimate`) | ja | **nein** — die Property definiert nur `AtwDeviceZoneClimate` (Luft-**Wasser**), nicht die Luft-Luft-Klasse und nicht die Basisklasse | nur die Innengeräte-Werte, und die sind nach **D5** unverwertbar |
+| **Bosch HomeCom Easy** (Climate 3000i/5000i/6000i) | ja — `off · auto · heat · cool · dry · fan_only` | **nein** — `BoschComRacClimate` hat keine; `hvac_action` trägt nur die K40-Kesselklasse | **keiner.** `sensor.py` legt für `rac` genau **eine** Entität an (`notifications`) ⇒ ohne Messsteckdose gibt es keine Energie |
+| **Daikin** (Original-WLAN-Modul) | ja | **ja** — `IDLE`, sobald `compressor_frequency == 0` | modellabhängig |
+| **Faikout** (ESP32 am S21-Bus, ehem. Faikin) | ja | nicht belegt | **ja**, MQTT-Feld `Wh`, kumulativ, Auflösung **100 Wh** |
+
+⚠ **Die Faikout-Zeile ist eine Maintainer-Aussage** (RevK, Codeberg), **kein Code-Beleg** — anders
+als die drei darüber. Sie nennt zusätzlich: **keine** Momentanleistung über S21.
+
+**Was daraus folgt, und warum es D2 trägt:** Von vier Anbindungen liefert **eine** den laufenden
+Betrieb. Wer `hvac_action` zur Vorbedingung macht, baut für Daikin und sperrt MELCloud und Bosch
+aus — das ist der gemessene Grund hinter D2, nicht eine Vorsichtsannahme. Und Bosch zeigt die
+zweite Grenze: Ein Gerät kann seinen Modus sauber melden und trotzdem **keine einzige
+Kilowattstunde** beisteuern; dort führt kein Lesepfad hin, sondern nur eine Messsteckdose.
+
+> ⚑ **Diese Übersicht stand bis 2026-08-25 nur in Entwurfstexten und im geposteten
+> #263-Kommentar.** Sie ist am 17.08. entstanden und war damit für jede spätere Einwertung
+> unsichtbar — am 25.08. hat das zum zweiten Mal zu einer falschen Aussage geführt („Bosch stand
+> nicht in der Erhebung"; er stand in zwei Entwürfen). *Eine Erhebung, die nur in einem
+> Entwurfstext liegt, ist für die nächste Sitzung nicht vorhanden.*
 
 ---
 
