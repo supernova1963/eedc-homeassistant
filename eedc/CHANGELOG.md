@@ -7,6 +7,82 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.0.28] - 2026-08-25 — Anzeigen ist nicht mitschreiben
+
+### Fixed
+
+- **Die Börsenpreis-Kurve nutzt die Höhe, die der Block ohnehin hat.** Gemeldet von **rapahl**: Die Kurve unter *Cockpit → Live* wirke flach. Nachgemessen an einer laufenden Instanz: Der Chart war 300 px hoch, die Kennzahlen-Spalte direkt daneben 434 px — unter der Kurve blieb Platz ungenutzt, den der Block bereits belegt. Die Kurve steht jetzt auf 400 px und damit nahezu bündig mit den Kennzahlen.
+
+  Das ist die zweite Rückmeldung desselben Melders zu dieser Grafik: Mit 4.0.27 waren Kurve und Kennzahlen **nebeneinander** gerückt (sein eigener Vorschlag), was die Kurve schmaler gemacht hat — aber nicht höher. **Es ändert sich keine Zahl**, nur die Ablesbarkeit.
+
+  Aus derselben Meldung stammt die **etwas größere Legende** unter der Kurve. Sie lag als einzige Chart-Legende der App auf der kleinsten Schriftstufe, während alle anderen eine Stufe darüber stehen — das ist damit angeglichen, nicht ausgeschert.
+
+- **Der Daten-Check verlangte von einer Split-Klimaanlage einen Warmwasser-Zähler.** Gemeldet von **OB73-gif** ([#263](https://github.com/supernova1963/eedc-homeassistant/issues/263)): Sein Daten-Check meldete „1 von 4 Komponenten ohne vollständige kWh-Zähler-Abdeckung — Midea Portasplit: strom_heizen_kwh, strom_warmwasser_kwh".
+
+  **Die Meldung war nicht abstellbar.** Eine Split-Klimaanlage hat keinen Warmwasserkreis, und eedc bietet das Feld für so ein Gerät im Monatsabschluss längst nicht mehr an. Wer den Hinweis auflösen wollte, hätte einen Wert für einen Kreis beschaffen müssen, den das Gerät nicht besitzt.
+
+  Die Regel selbst gab es bereits an **zwei** Stellen im Daten-Check — bei den Monatsdaten und bei den Zusatz-Zählern. Nur die Prüfung der kWh-Abdeckung kannte sie nicht.
+
+  **Ab jetzt** erwartet sie von einer Klimaanlage mit getrennter Strommessung nur noch die Heiz-Seite. Für Luft-Wasser- und Sole-Wasser-Wärmepumpen ändert sich nichts — dort bleiben beide Seiten gefordert.
+
+  **Danke an Oskar**, der die Meldung nicht weggeklickt, sondern hergezeigt hat.
+
+- **Wer Heizen und Kühlen getrennt misst, sieht die Aufteilung jetzt auch unter *Tag*.** Bei einer Split-Klimaanlage kann der Verbrauch je Betriebsart **gemessen** vorliegen — über eigene Zähler für Heizen, Kühlen, Lüften und Entfeuchten, statt ihn aus der Betriebsart ableiten zu lassen. Diese Geräte sahen ihre Aufteilung in *Cockpit → Monat* und *→ Jahr*, unter *Cockpit → Tag* dagegen **nie**: Der Tag hat die Zähler gar nicht erst abgefragt.
+
+  Sichtbar wurde es nicht als Fehlermeldung, sondern als **fehlender Block** — dieselbe Kachel *Wärme/Klima*, in der Monatsansicht mit Aufteilung, in der Tagesansicht ohne. Wer nur abgeleitete Betriebsarten nutzt, war nie betroffen; für ihn war der Block immer da.
+
+  **Ab jetzt** gilt im Tag dieselbe Regel wie im Monat: **Gemessen schlägt abgeleitet, und zwar ganz oder gar nicht je Gerät.** Eine Anlage darf eine Klimaanlage mit Zählern und eine Wärmepumpe ohne haben — jedes Gerät wird auf seinem eigenen Weg aufgeteilt, und keines zählt doppelt. Steht in der Aufteilung „Herkunft: gemessen", stammt sie aus deinen Zählern; sonst nennt sie weiterhin die Zahl der erfassten Stunden.
+
+  **Lüften und Entfeuchten** haben eigene Zähler, aber kein eigenes Segment — sie zählen wie bisher unter „nicht aufgeteilt", genau wie in der Monatsansicht.
+
+  **An deinen Daten ändert sich nichts**, und die Monats- und Jahreswerte bleiben, wie sie waren.
+
+### Added
+
+- **Der Börsenpreis-Block zeigt jetzt auch, was du wirklich zahlst.** Wunsch von **rapahl**: Alle Kacheln dort trugen den **Börsenpreis** — die richtige Größe für die Frage „wann laden", aber nicht die, die auf der Rechnung steht. Dazwischen liegen Netzentgelte, Steuern und Abgaben, und wer das nachsehen wollte, brauchte einen zweiten Blick in Home Assistant.
+
+  Neu ist die Kachel **„Endpreis jetzt"** direkt neben dem aktuellen Börsenpreis. Sie zeigt den Preis der laufenden Stunde inklusive aller Bestandteile; beide nebeneinander machen den Aufschlag ohne Rechnen sichtbar. Der Börsenpreis und alle anderen Kennzahlen bleiben unverändert an ihrem Platz.
+
+  **Voraussetzung ist ein zugeordneter Strompreis-Sensor** (Tibber, aWATTar, EPEX-Endpreis) unter *Einstellungen → Datenquellen*. **Fehlt er, fehlt die Kachel** — und das ist Absicht: eedc setzt dann *nicht* ersatzweise den Arbeitspreis aus dem Tarif ein. Bei einem dynamischen Tarif ist das ein Mittel- oder Schätzwert, der als „Preis dieser Stunde" eine Genauigkeit behaupten würde, die es nicht gibt.
+
+- **Der Daten-Check verlangte einen Wert, den eedc an dieser Stelle gar nicht haben will.** Gemeldet von **gruaGit** ([Discussion #396](https://github.com/supernova1963/eedc-homeassistant/discussions/396)): Sein Daten-Check meldete „VW ID.3: Ladung PV fehlt in 8 Monaten", während dieselbe App für genau diese Monate PV-Anteile seiner Ladung auswies. Beides stimmte — sie sprachen nur über verschiedene Stellen.
+
+  Wer eine **Wallbox** hat, dessen Heimladung führt eedc dort. Die Aufteilung in Sonne und Netz **am Fahrzeug** wird deshalb im Monatsabschluss gar nicht mehr angeboten: Sie stünde sonst zweimal in den Daten. Der Daten-Check kannte diese Regel als einziger nicht und forderte den Wert weiter ein.
+
+  **Die Meldung war damit nicht abstellbar.** Ihr „Beheben"-Knopf führte in ein Formular, in dem es dieses Feld nicht gibt. Und wer den Wert von Hand beschafft und eingetragen hätte, hätte genau die Doppelzählung erzeugt, die die Regel verhindern soll.
+
+  **Ab jetzt** fragt der Daten-Check das Feld nur noch bei Fahrzeugen **ohne** Wallbox — dort, wo es das Formular auch anbietet. Für Dienstwagen galt diese Ausnahme bereits.
+
+  **Wen es betrifft:** alle Anlagen mit Wallbox **und** E-Auto. Dort verschwindet die Meldung. **An deinen Daten ändert sich nichts**, und die PV-Anteile deiner Ladung werden weiterhin so ausgewiesen wie bisher.
+
+  **Danke an gruaGit**, der zwei Aussagen derselben App nebeneinandergelegt hat, statt einer davon zu glauben.
+
+- **Die Aufteilung Heizen/Kühlen sagt jetzt, warum ein Teil nicht aufgeteilt ist.** Gemeldet von **Klausnn** ([#263](https://github.com/supernova1963/eedc-homeassistant/issues/263)) und, am selben Tag, von **dietmar1968** (simon42-Forum): Beide sahen unter *Cockpit → Tag* im Block *Wärme/Klima* einen großen Anteil unter „Nicht aufgeteilt" — bei Klausnn 100 %, bei dietmar 74 % — und hielten die Aufteilung für kaputt, obwohl die Betriebsart in den Datenquellen korrekt anlag.
+
+  **Die Zahlen waren richtig.** „Nicht aufgeteilt" ist Standby und alles, was weder Heizen noch Kühlen war — Lüften, Entfeuchten, Automatik ohne Rückmeldung — dazu die Zeit ohne Modus-Signal. Bei einem Gerät, das an diesem Tag überwiegend aus war, gehört der Strom genau dorthin. Was fehlte, war dieser Satz neben der Zahl: Im Komponenten-Hub steht er seit jeher, im Cockpit stand nur der nackte Balken.
+
+  **Ab jetzt** zeigt das Cockpit dieselbe Erklärung wie der Komponenten-Hub und nennt zusätzlich, in **wie vielen Stunden** eedc eine Betriebsart mitlesen konnte. Stammt die Aufteilung aus zugeordneten Betriebsart-Zählern, steht dort „gemessen" statt einer Stundenzahl.
+
+  **Wen es betrifft:** alle mit einer Klimaanlage oder Wärmepumpe, für die eedc den Betriebsmodus mitschreibt. **Es ändert sich keine Zahl** — nur ihre Erklärung kommt dazu.
+
+  **Danke an Klausnn und dietmar1968.** Zwei Meldungen am selben Tag zur selben Anzeige sind das deutlichste Zeichen, dass nicht die Rechnung das Problem war, sondern das Schweigen daneben.
+
+- **Sechs Home-Assistant-Sensoren zeigten einen Wert und merkten sich nichts.** Gemeldet von **rapahl**: In seinem Home-Assistant-Protokoll standen fünf Warnungen zu den PV-Prognose-Sensoren — Home Assistant lehnte eine Kombination aus zwei technischen Angaben ab, die eedc beim Anmelden der Sensoren mitschickt.
+
+  Die Warnung war nicht der eigentliche Schaden. Home Assistant nimmt Sensoren mit einer solchen Kombination **von der Langzeitstatistik aus**: Der Sensor zeigt in der Übersicht seinen aktuellen Wert, aber Home Assistant schreibt ihn nirgends mit. Verlaufsdiagramme bleiben leer, und eine Auswertung über Tage oder Monate gibt es für ihn nicht — dauerhaft, auch rückwirkend nicht.
+
+  Die Ursache war ein naheliegender Fehlschluss: Die Prognose-Sensoren tragen Kilowattstunden, also lag `device_class: energy` nahe. Home Assistant meint mit dieser Angabe aber einen **Zähler**, der nur steigt oder sich sauber aufsummieren lässt. Eine Tagesprognose ist das nicht — sie springt jeden Tag zurück, und die Summe zweier Prognosen ergibt keine sinnvolle Zahl.
+
+  **Ab jetzt** melden diese Sensoren ihre Einheit weiterhin in kWh, aber ohne die Zähler-Zuordnung. Damit akzeptiert Home Assistant sie und schreibt für sie wieder Statistik — Minimum, Mittelwert und Maximum je Stunde. Es kommt also etwas dazu, es fällt nichts weg.
+
+  **Betroffen sind sechs Sensoren.** Fünf hatte rapahls Protokoll genannt: `eedc_prognose_heute_kwh`, `eedc_prognose_rest_today_kwh` sowie die drei Tagesprognosen `eedc_prognose_day_plus_1/2/3_kwh`. Beim Nachzählen über alle Sensoren kam ein sechster dazu, den das Protokoll nicht zeigte, weil er unter einer anderen Meldung lief: **`jahres_ersparnis_euro`**. Er trug `device_class: monetary` — dafür verlangt Home Assistant ebenfalls einen aufsummierbaren Betrag, und eine Jahresersparnis in €/Jahr ist keiner, sondern eine Rate.
+
+  **Wen es betrifft und was sich sichtbar ändert:** alle Anwender mit aktiviertem Home-Assistant-Export. In Home Assistant verschwinden die Warnungen aus dem Protokoll, und für die sechs Sensoren entstehen ab dem Update Verläufe, wo vorher keine waren. **Rückwirkend gibt es keine Werte** — Home Assistant legt Statistik erst ab dem Zeitpunkt an, ab dem ein Sensor sie führen darf. **An deinen Daten in eedc ändert sich nichts.**
+
+  **Danke an rapahl**, der ein Protokoll gelesen hat, das die meisten überblättern. Die Meldung sah nach einer Randnotiz aus und war der Hinweis auf sechs Sensoren ohne Gedächtnis.
+
+---
+
 ## [4.0.27] - 2026-08-24 — Gemessen statt geschätzt
 
 ### Fixed
