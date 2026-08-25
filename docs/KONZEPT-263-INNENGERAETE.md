@@ -136,8 +136,35 @@ sich alles **bitgleich** zu heute. Keine Migration, kein Altdaten-Bruch.
 | **T1** | Die Geräte-Spalten der Tagesansicht kennen beide Pfade (§7) | ✅ 2026-08-21 |
 | **T2** | Die Aufteilung Heizen/Kühlen gibt es auch je Tag (§8) | ✅ 2026-08-21 |
 | **I** | Innengeräte-Liste + gemessene Betriebsart-Felder (§10) | ✅ 2026-08-21 |
+| **T3** | Der **gemessene** Betriebsart-Zweig gilt auch je Tag (§8a) | ✅ 2026-08-25 |
 | ~~I3~~ | ~~Faltung mehrerer Modus-Signale~~ | ⛔ **gestrichen**, s. §3.2 |
 | ~~I5~~ | ~~„nicht aufteilbar (gegenläufig)" ausweisen~~ | ⛔ **entfällt mit I3** |
+
+### 8a. Der gemessene Zweig im Tag (T3, 2026-08-25)
+
+**Der Befund.** `wp_modus_gemessen` gab es in der Monatssicht
+(`aktueller_monat.py`) und in der Jahressicht (`JahrAggregat.tsx`), im
+**Tagespfad gar nicht** — weder im Schema (`energie_profil/_shared.py`) noch im
+Frontend-Typ noch in der Erhebung: `get_tagesdetail_kwh` führte die vier
+`betriebsart_strom_*`-Zähler nicht in seiner `AUSGABE`-Map.
+
+**Warum es unsichtbar blieb, statt zu scheitern.** Die Blockfabrik
+`KomponentenSektionen.tsx` ist für Monat und Tag dieselbe und gattert auf
+``wp_modus_gemessen || wp_modus_abdeckung_h > 0``. Ein Betriebsart-Zähler hat
+keine „Stunden mit Signal" — die Abdeckung ist 0. Wer die Zähler zuordnete, sah
+die Aufteilung in Monat und Jahr und unter *Tag* **nie**, ohne Fehlermeldung.
+
+**Der Bau.** `get_betriebsart_strom_tageswerte` erhebt die Zähler je Gerät per
+Boundary-Diff (Feldnamen **unverändert**, samt Innengerät-Suffix), `views.py`
+ruft damit den SoT `modus_strom_zeile` auf. Die Weiche *gemessen schlägt
+abgeleitet* wird **nicht** nachgebaut — genau das war F-56. Ein Gerät, das den
+gemessenen Zweig nimmt, wird im abgeleiteten übersprungen; beide Arten dürfen
+in derselben Tagessumme stehen. Die Teilmengen-Invariante gilt wie dort: passt
+`Σ Teilmengen ≤ Bezug` nicht, wird das Gerät **ganz** ausgelassen.
+
+**Grenze, bewusst** (Entscheid Gernot 2026-08-25): **Lüften und Entfeuchten**
+haben eigene Zähler, aber kein eigenes Segment — sie fallen wie im Monat unter
+„nicht aufgeteilt". Nachziehen, wenn Anwender die Differenzierung verlangen.
 
 ## 5. Grenzen — sie gehören in den Anwender-Text
 

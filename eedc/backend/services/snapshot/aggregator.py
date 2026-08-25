@@ -542,6 +542,114 @@ async def get_komponenten_tageskwh(
     return result
 
 
+async def _tagesdetail_boundary_diff(
+    db: AsyncSession,
+    anlage,
+    quellen_energy,
+    sensor_key: str,
+    sensor_id: Optional[str],
+    ts_start: datetime,
+    ts_ende: datetime,
+    datum: date,
+) -> Optional[float]:
+    """Boundary-Diff eines kumulativen kWh-Zählers über das HA-Tagesfenster.
+
+    **Warum als Modul-Funktion und nicht als Closure** (#263): Sie hat zwei
+    Aufrufer — `get_tagesdetail_kwh` und `get_betriebsart_strom_tageswerte`.
+    Beide brauchen dieselbe Tagesreset-Behandlung; sie ein zweites Mal
+    hinzuschreiben wäre die F-56-Klasse (*„eine Regel, die an zwei Stellen
+    nachgebaut wird, driftet"*), und ausgerechnet an diesem Feld ist sie schon
+    einmal gedriftet.
+    """
+    s0 = await get_snapshot(
+        db, anlage.id, sensor_key, sensor_id, ts_start,
+        quellen_energy=quellen_energy,
+    )
+    s1 = await get_snapshot(
+        db, anlage.id, sensor_key, sensor_id, ts_ende,
+        quellen_energy=quellen_energy,
+    )
+    if s0 is None or s1 is None:
+        return None
+    d = s1 - s0
+    if d < -0.01:
+        if s1 < 0.5 and s0 > 0.5:  # Tagesreset-Zähler (HA utility_meter daily)
+            return max(0.0, s1)
+        logger.warning(
+            f"Negatives Tagesdetail-Delta für anlage={anlage.id} "
+            f"key={sensor_key} ({datum}): {d:.3f} → ignoriert"
+        )
+        return None
+    return max(0.0, d)
+
+
+async def get_betriebsart_strom_tageswerte(
+    db: AsyncSession,
+    anlage,
+    investitionen_by_id: dict,
+    datum: date,
+) -> dict[str, dict[str, float]]:
+    """Tages-kWh der **gemessenen** Betriebsart-Zähler, je Wärmepumpe (#263).
+
+    **Warum je Investition und nicht als anlagenweite Σ** — anders als jedes
+    andere Feld in `get_tagesdetail_kwh`: Die Regel *gemessen schlägt
+    abgeleitet* gilt **ganz oder gar nicht je Zeile**
+    (`core/berechnungen/betriebsart_gemessen.py`). Eine Anlage darf eine
+    Klimaanlage mit Betriebsart-Zählern und eine Wärmepumpe ohne haben; erst
+    die Auflösung je Gerät entscheidet, welcher der beiden Wege für dieses
+    Gerät gilt. Eine vorab gebildete Summe hätte diese Entscheidung schon
+    verloren.
+
+    ⚠ **Die Feldnamen bleiben unangetastet — samt Innengerät-Suffix**
+    (`betriebsart_strom_kuehlen_kwh-3`). Das Ergebnis-Dict geht unverändert in
+    `modus_strom_zeile()`, und dort löst `_aufgeloest` die Regel *Gerätefeld
+    gewinnt, sonst Σ Innengeräte* auf. Sie hier vorab zu summieren würde genau
+    diese Regel ein zweites Mal implementieren — und „Gerätefeld + Innengeräte"
+    wäre die Doppelzählungs-Klasse, die der Modul-Kopf dort ausdrücklich
+    ausschließt.
+
+    Returns:
+        ``{inv_id_str: {feldname: kwh}}`` — nur Wärmepumpen mit mindestens
+        einem gemappten Betriebsart-Zähler **und** vorhandenen Snapshots.
+        Fehlt beides, fehlt der Eintrag (P4: keine Aussage statt einer 0).
+    """
+    from backend.core.betriebsmodus import ist_betriebsart_strom_feld
+
+    sensor_mapping = anlage.sensor_mapping or {}
+    investitionen_map = sensor_mapping.get("investitionen", {}) or {}
+    quellen_energy = extract_quellen_energy(anlage)  # C2b-Read-Through
+    rng = BoundaryRange.for_day_total(datum)
+    start_off, end_off = rng.boundary_offsets  # (0, 24)
+    ts_start = rng.boundary_at(start_off)
+    ts_ende = rng.boundary_at(end_off)
+
+    ergebnis: dict[str, dict[str, float]] = {}
+    for inv_id_str, inv_data in investitionen_map.items():
+        if not isinstance(inv_data, dict):
+            continue
+        inv = investitionen_by_id.get(inv_id_str) or investitionen_by_id.get(str(inv_id_str))
+        if inv is None or getattr(inv, "typ", None) != "waermepumpe":
+            continue
+        felder = inv_data.get("felder", {}) or {}
+        je_inv: dict[str, float] = {}
+        for feld, cfg in felder.items():
+            if not ist_betriebsart_strom_feld(feld):
+                continue
+            if not isinstance(cfg, dict) or cfg.get("strategie") != "sensor":
+                continue
+            d = await _tagesdetail_boundary_diff(
+                db, anlage, quellen_energy,
+                f"inv:{inv_id_str}:{feld}", cfg.get("sensor_id"),
+                ts_start, ts_ende, datum,
+            )
+            if d is None:
+                continue
+            je_inv[feld] = d
+        if je_inv:
+            ergebnis[str(inv_id_str)] = je_inv
+    return ergebnis
+
+
 async def get_tagesdetail_kwh(
     db: AsyncSession,
     anlage,
@@ -572,26 +680,10 @@ async def get_tagesdetail_kwh(
     ts_ende = rng.boundary_at(end_off)
 
     async def _diff(sensor_key: str, sensor_id: Optional[str]) -> Optional[float]:
-        s0 = await get_snapshot(
-            db, anlage.id, sensor_key, sensor_id, ts_start,
-            quellen_energy=quellen_energy,
+        return await _tagesdetail_boundary_diff(
+            db, anlage, quellen_energy, sensor_key, sensor_id,
+            ts_start, ts_ende, datum,
         )
-        s1 = await get_snapshot(
-            db, anlage.id, sensor_key, sensor_id, ts_ende,
-            quellen_energy=quellen_energy,
-        )
-        if s0 is None or s1 is None:
-            return None
-        d = s1 - s0
-        if d < -0.01:
-            if s1 < 0.5 and s0 > 0.5:  # Tagesreset-Zähler (HA utility_meter daily)
-                return max(0.0, s1)
-            logger.warning(
-                f"Negatives Tagesdetail-Delta für anlage={anlage.id} "
-                f"key={sensor_key} ({datum}): {d:.3f} → ignoriert"
-            )
-            return None
-        return max(0.0, d)
 
     # (typ, mapping-feld) → semantischer Ausgabe-Key. Alle Felder sind in
     # KUMULATIVE_ZAEHLER_FELDER, also per Boundary-Diff erhebbar. Wichtig: speicher-

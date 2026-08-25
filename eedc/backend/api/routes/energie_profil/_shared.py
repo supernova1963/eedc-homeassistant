@@ -481,6 +481,14 @@ class TagDetailResponse(BaseModel):
     wp_modus_strom_kuehlen_kwh: Optional[float] = None
     wp_modus_nicht_aufgeteilt_kwh: Optional[float] = None
     wp_modus_abdeckung_h: Optional[float] = None
+    #: Herkunft der Aufteilung: `True` = aus **gemessenen** Betriebsart-Zählern,
+    #: `False` = aus dem Betriebsmodus abgeleitet. Spiegelt `wp_modus_gemessen`
+    #: der Monatssicht (`aktueller_monat.py`) — dieselbe Blockfabrik im Frontend
+    #: liest beide Felder, und ohne dieses hier blieb der Block für gemessene
+    #: Geräte im Tag **unsichtbar**, während Monat und Jahr ihn zeigten.
+    #: Bei einem Betriebsart-Zähler gibt es keine „Stunden mit Signal";
+    #: `wp_modus_abdeckung_h` ist dann 0, ohne dass etwas fehlt.
+    wp_modus_gemessen: Optional[bool] = None
     # PV Tages-SOLL = OM-Tagesprognose × eedc-Lernfaktor (wie Genauigkeits-Tracking).
     soll_pv_kwh: Optional[float] = None
     # Tages-Tarif (Monatstarif je Tag) — für Wirkungsverluste € + Tarif-Zeile.

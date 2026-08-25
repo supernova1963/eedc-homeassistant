@@ -17,6 +17,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
   Aus derselben Meldung stammt die **etwas größere Legende** unter der Kurve. Sie lag als einzige Chart-Legende der App auf der kleinsten Schriftstufe, während alle anderen eine Stufe darüber stehen — das ist damit angeglichen, nicht ausgeschert.
 
+- **Wer Heizen und Kühlen getrennt misst, sieht die Aufteilung jetzt auch unter *Tag*.** Bei einer Split-Klimaanlage kann der Verbrauch je Betriebsart **gemessen** vorliegen — über eigene Zähler für Heizen, Kühlen, Lüften und Entfeuchten, statt ihn aus der Betriebsart ableiten zu lassen. Diese Geräte sahen ihre Aufteilung in *Cockpit → Monat* und *→ Jahr*, unter *Cockpit → Tag* dagegen **nie**: Der Tag hat die Zähler gar nicht erst abgefragt.
+
+  Sichtbar wurde es nicht als Fehlermeldung, sondern als **fehlender Block** — dieselbe Kachel *Wärme/Klima*, in der Monatsansicht mit Aufteilung, in der Tagesansicht ohne. Wer nur abgeleitete Betriebsarten nutzt, war nie betroffen; für ihn war der Block immer da.
+
+  **Ab jetzt** gilt im Tag dieselbe Regel wie im Monat: **Gemessen schlägt abgeleitet, und zwar ganz oder gar nicht je Gerät.** Eine Anlage darf eine Klimaanlage mit Zählern und eine Wärmepumpe ohne haben — jedes Gerät wird auf seinem eigenen Weg aufgeteilt, und keines zählt doppelt. Steht in der Aufteilung „Herkunft: gemessen", stammt sie aus deinen Zählern; sonst nennt sie weiterhin die Zahl der erfassten Stunden.
+
+  **Lüften und Entfeuchten** haben eigene Zähler, aber kein eigenes Segment — sie zählen wie bisher unter „nicht aufgeteilt", genau wie in der Monatsansicht.
+
+  **An deinen Daten ändert sich nichts**, und die Monats- und Jahreswerte bleiben, wie sie waren.
+
 ### Added
 
 - **Der Börsenpreis-Block zeigt jetzt auch, was du wirklich zahlst.** Wunsch von **rapahl**: Alle Kacheln dort trugen den **Börsenpreis** — die richtige Größe für die Frage „wann laden", aber nicht die, die auf der Rechnung steht. Dazwischen liegen Netzentgelte, Steuern und Abgaben, und wer das nachsehen wollte, brauchte einen zweiten Blick in Home Assistant.

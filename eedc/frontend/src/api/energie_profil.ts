@@ -219,6 +219,11 @@ export interface TagDetail {
   wp_modus_strom_kuehlen_kwh: number | null
   wp_modus_nicht_aufgeteilt_kwh: number | null
   wp_modus_abdeckung_h: number | null
+  /** Herkunft der Aufteilung: `true` = aus gemessenen Betriebsart-Zählern,
+   *  `false` = aus dem Betriebsmodus abgeleitet. Spiegelt das gleichnamige
+   *  Feld der Monatssicht — die Blockfabrik liest beide, und ohne dieses
+   *  hier blieb der Block für gemessene Geräte im Tag unsichtbar. */
+  wp_modus_gemessen: boolean | null
   soll_pv_kwh: number | null
   einspeise_preis_cent: number | null
   netzbezug_preis_cent: number | null

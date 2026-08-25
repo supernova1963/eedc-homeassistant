@@ -236,13 +236,81 @@ async def get_tag_detail(
     # ⚠ **Die Teilmengen-Invariante gilt hier genauso** (`teilmengen_passen`):
     # passt ein Gerät nicht, wird es **ganz** ausgelassen statt gekappt — eine
     # stille Kappung machte aus einem Widerspruch eine plausible Zahl.
-    from backend.core.berechnungen import teilmengen_passen
+    from backend.core.berechnungen import (
+        teilmengen_passen, waermepumpe_kwh_je_investition,
+    )
+    from backend.core.berechnungen.betriebsart_gemessen import modus_strom_zeile
     from backend.core.betriebsmodus import HEIZEN, KUEHLEN
     from backend.services.energie_profil import lade_modus_split_tag
+    from backend.services.snapshot.aggregator import get_betriebsart_strom_tageswerte
 
     heizen_tag = kuehlen_tag = rest_tag = abdeckung_tag = 0.0
     hat_split = False
+    hat_gemessen = False
+
+    # ── Zweig 1: gemessene Betriebsart-Zähler (#263, Vorrang) ─────────────
+    #
+    # **Warum dieser Zweig hier überhaupt steht.** Er fehlte, und das war eine
+    # Lücke, keine Grenze: `wp_modus_gemessen` gab es in der Monats- und der
+    # Jahressicht, im Tag **gar nicht** — weder im Schema noch in der
+    # Erhebung. Wer die mit v4.0.24 eingeführten Betriebsart-Zähler zuordnete,
+    # sah die Aufteilung in Monat und Jahr und unter *Tag* nie. Dieselbe
+    # Blockfabrik im Frontend liest beide Felder (`KomponentenSektionen.tsx`);
+    # ohne das Flag blieb der Block dort unsichtbar.
+    #
+    # **Gemessen schlägt abgeleitet — ganz oder gar nicht je Gerät**
+    # (ADR-002/P8, SoT `core/berechnungen/betriebsart_gemessen.py`). Die Weiche
+    # wird **nicht** hier nachgebaut: `modus_strom_zeile` bekommt das
+    # Tages-Dict mit den **unveränderten** Feldnamen (samt Innengerät-Suffix)
+    # und löst *Gerätefeld gewinnt, sonst Σ Innengeräte* selbst auf. Genau
+    # diese Regel ein zweites Mal zu schreiben war F-56.
+    gemessen_je_inv = await get_betriebsart_strom_tageswerte(
+        db, anlage, investitionen_by_id, datum,
+    )
+    wp_kwh_je_inv: dict[str, float] = {}
+    if gemessen_je_inv:
+        tz_komp = (await db.execute(
+            select(TagesZusammenfassung.komponenten_kwh).where(
+                TagesZusammenfassung.anlage_id == anlage_id,
+                TagesZusammenfassung.datum == datum,
+            )
+        )).scalar_one_or_none()
+        wp_kwh_je_inv = waermepumpe_kwh_je_investition(tz_komp or {})
+
+    gemessene_geraete: set[str] = set()
+    for inv_id_str, felder in gemessen_je_inv.items():
+        inv = investitionen_by_id.get(inv_id_str)
+        if inv is None or not inv.ist_aktiv_an(datum):
+            continue
+        zeile = modus_strom_zeile(felder)
+        if not zeile.gemessen:
+            continue
+        # ⚠ **Dieselbe Teilmengen-Invariante wie im abgeleiteten Zweig**
+        # (`teilmengen_passen`, Toleranz 0.5 kWh): Ohne Tages-Bezug gibt es
+        # nichts, wovon die Teilmenge eine Teilmenge wäre — und passt sie
+        # nicht, wird das Gerät **ganz** ausgelassen statt gekappt. Eine
+        # stille Kappung machte aus einem Widerspruch eine plausible Zahl.
+        bezug = wp_kwh_je_inv.get(inv_id_str)
+        if bezug is None:
+            continue
+        if zeile.heizen_kwh + zeile.kuehlen_kwh > float(bezug) + 0.5:
+            continue
+        hat_split = True
+        hat_gemessen = True
+        gemessene_geraete.add(inv_id_str)
+        heizen_tag += zeile.heizen_kwh
+        kuehlen_tag += zeile.kuehlen_kwh
+        # Lüften/Entfeuchten haben eigene Zähler, aber kein eigenes Segment —
+        # sie fallen wie im Monat unter „nicht aufgeteilt" (Entscheid Gernot
+        # 2026-08-25: erst differenzieren, wenn Anwender es verlangen).
+        rest_tag += max(0.0, float(bezug) - zeile.heizen_kwh - zeile.kuehlen_kwh)
+
+    # ── Zweig 2: aus dem Betriebsmodus abgeleitet ─────────────────────────
     for inv_id_str, split in (await lade_modus_split_tag(db, anlage_id, datum)).items():
+        # Gemessen schlägt abgeleitet: ein Gerät, das oben schon gezählt hat,
+        # darf hier nicht ein zweites Mal beitragen.
+        if inv_id_str in gemessene_geraete:
+            continue
         inv = investitionen_by_id.get(inv_id_str)
         if inv is None or not inv.ist_aktiv_an(datum):
             continue
@@ -264,6 +332,12 @@ async def get_tag_detail(
         wp_modus_strom_kuehlen_kwh=round(kuehlen_tag, 2) if hat_split else None,
         wp_modus_nicht_aufgeteilt_kwh=round(rest_tag, 2) if hat_split else None,
         wp_modus_abdeckung_h=round(abdeckung_tag, 1) if hat_split else None,
+        # Wie in der Monatssicht: „gemessen" gilt für die Zeile, sobald ein
+        # Gerät des Tages seine Aufteilung aus Zählern hat. Ein
+        # Betriebsart-Zähler hat keine „Stunden mit Signal" — die Abdeckung
+        # bleibt dann 0, ohne dass etwas fehlt (das Frontend zeigt deshalb
+        # „Herkunft: gemessen" statt „Modus erfasst: 0 Stunden").
+        wp_modus_gemessen=hat_gemessen if hat_split else None,
         wp_strom_heizen_kwh=detail.get("wp_strom_heizen_kwh"),
         wp_strom_warmwasser_kwh=detail.get("wp_strom_warmwasser_kwh"),
         wp_heizung_kwh=detail.get("wp_heizung_kwh"),

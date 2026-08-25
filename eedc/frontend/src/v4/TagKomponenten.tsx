@@ -97,6 +97,11 @@ export function baueTagAlsMonat(
     wp_modus_strom_kuehlen_kwh: tagDetail?.wp_modus_strom_kuehlen_kwh ?? null,
     wp_modus_nicht_aufgeteilt_kwh: tagDetail?.wp_modus_nicht_aufgeteilt_kwh ?? null,
     wp_modus_abdeckung_h: tagDetail?.wp_modus_abdeckung_h ?? null,
+    // Ohne dieses Feld zeigte der Tag die Aufteilung nur für ABGELEITETE
+    // Geräte: die Blockfabrik gattert auf `wp_modus_gemessen ||
+    // wp_modus_abdeckung_h > 0`, und ein Betriebsart-Zähler hat keine
+    // Abdeckungs-Stunden. Monat und Jahr zeigten den Block, der Tag nie.
+    wp_modus_gemessen: tagDetail?.wp_modus_gemessen ?? null,
     wp_starts_summe_monat: wpStartsTag > 0 ? wpStartsTag : null,
     wp_betriebsstunden_summe_monat: wpBetriebsstundenTag > 0 ? wpBetriebsstundenTag : null,
     // E-Mobilität / BKW / Sonstiges — Tagessumme aus Stunden; PV-/Netz-Anteil der
