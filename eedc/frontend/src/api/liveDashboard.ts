@@ -338,6 +338,12 @@ export interface BoersenpreisResponse {
   aktuelle_stunde: number | null
   heute: string | null
   hinweis: string | null
+  /** Endpreis der laufenden Stunde in ct/kWh — Börsenanteil **plus**
+   *  Netzentgelte, Steuern und Abgaben, also der Preis auf der Rechnung.
+   *  Quelle ist ausschließlich der zugeordnete Strompreis-Sensor; ohne ihn
+   *  `null`, und die Kachel fehlt (kein Rückfall auf den Tarif-Arbeitspreis,
+   *  der bei dynamischem Tarif nur ein Mittelwert wäre). N-173/R2. */
+  endpreis_jetzt_cent: number | null
 }
 
 export const liveDashboardApi = {

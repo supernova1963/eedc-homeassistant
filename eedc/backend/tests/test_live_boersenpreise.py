@@ -363,3 +363,88 @@ async def test_kurz_nach_mitternacht_ist_heute_der_tag_der_marktzone(db, monkeyp
 
     assert antwort["heute"] == "2026-08-07"
     assert gefragt == [BILLIGER_TAG, BILLIGER_TAG + timedelta(days=1)]
+
+
+# ── Endpreis der laufenden Stunde (N-173/R2, Melder rapahl) ─────────────────
+#
+# Alle Kacheln dieses Blocks zeigen den BÖRSENpreis. Der ist die Steuergröße
+# für „wann laden", aber nicht der Preis auf der Rechnung — dazwischen liegen
+# Netzentgelte, Steuern und Abgaben. Sein Wunsch: den echten Endpreis daneben,
+# Börsenpreis bleibt.
+#
+# Die Probe sitzt bewusst auf der ROUTE und nicht auf dem Helper allein: Was
+# zählt, ist das Feld in der Antwort — ein Layer-Test hätte nicht gemerkt, wenn
+# es dort nie ankommt.
+
+async def _schreibe_stundenpreis(db, anlage_id: int, datum: date, stunde: int, cent: float):
+    """Eine Stunde der eigenen Mitschrift mit Endpreis füllen."""
+    from backend.models.tages_energie_profil import TagesEnergieProfil
+    db.add(TagesEnergieProfil(
+        anlage_id=anlage_id, datum=datum, stunde=stunde, strompreis_cent=cent,
+    ))
+    await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_endpreis_fehlt_ohne_strompreis_sensor(db, monkeypatch):
+    """Ohne zugeordneten Strompreis-Sensor bleibt das Feld leer.
+
+    ⚠ Das ist die eigentliche Aussage der Änderung: KEIN Rückfall auf
+    ``Strompreis.netzbezug_arbeitspreis_cent_kwh``. Das Tarif-Feld ist bei
+    dynamischem Tarif ein Mittelwert — ihn als „Preis dieser Stunde"
+    auszugeben wäre erfundene Genauigkeit (ADR-002/P4).
+    """
+    anlage = await _anlage(db)
+    fetch, _ = _mock_fetch({TEURER_TAG: _preise_teuer()})
+    monkeypatch.setattr(smp, "fetch_marktpreise", fetch)
+    _stelle_uhr(monkeypatch, datetime(2026, 8, 6, 16, 0, tzinfo=BERLIN))
+
+    antwort = await get_boersenpreise(anlage.id, db)
+
+    assert antwort["endpreis_jetzt_cent"] is None
+
+
+@pytest.mark.asyncio
+async def test_endpreis_kommt_aus_der_laufenden_stunde(db, monkeypatch):
+    """Der Endpreis der Antwort ist der der LAUFENDEN Stunde, nicht der davor.
+
+    ⚠ Die Stundenkonvention ist hier die Falle, und sie hat einen Melder schon
+    einmal beschäftigt: ``strompreis_cent`` wird je Stunde als Mittel über
+    ``[h:00, h+1:00)`` geschrieben — **forward**, wie der Börsenpreis. Das ist
+    NICHT die Backward-Konvention der Energiewerte (#144, Slot N = ``[N-1, N)``).
+    Beide stehen in derselben Tabelle. Deshalb bekommen hier zwei benachbarte
+    Stunden verschiedene Preise: griffe der Code eine daneben, wäre es sichtbar.
+    """
+    anlage = await _anlage(db)
+    await _schreibe_stundenpreis(db, anlage.id, TEURER_TAG, 15, 28.0)
+    await _schreibe_stundenpreis(db, anlage.id, TEURER_TAG, 16, 34.7)
+    await _schreibe_stundenpreis(db, anlage.id, TEURER_TAG, 17, 41.0)
+    fetch, _ = _mock_fetch({TEURER_TAG: _preise_teuer()})
+    monkeypatch.setattr(smp, "fetch_marktpreise", fetch)
+    _stelle_uhr(monkeypatch, datetime(2026, 8, 6, 16, 30, tzinfo=BERLIN))
+
+    antwort = await get_boersenpreise(anlage.id, db)
+
+    assert antwort["aktuelle_stunde"] == 16
+    assert antwort["endpreis_jetzt_cent"] == 34.7
+
+
+@pytest.mark.asyncio
+async def test_endpreis_liegt_ueber_dem_boersenpreis_derselben_stunde(db, monkeypatch):
+    """Beide Preise stehen nebeneinander — und meinen verschiedene Größen.
+
+    Der Melder soll den Aufschlag ohne Rechnen ablesen können. Die Probe hält
+    fest, dass die Antwort beide trägt und sie nicht verwechselt.
+    """
+    anlage = await _anlage(db)
+    await _schreibe_stundenpreis(db, anlage.id, TEURER_TAG, 16, 34.7)
+    fetch, _ = _mock_fetch({TEURER_TAG: _preise_teuer()})
+    monkeypatch.setattr(smp, "fetch_marktpreise", fetch)
+    _stelle_uhr(monkeypatch, datetime(2026, 8, 6, 16, 0, tzinfo=BERLIN))
+
+    antwort = await get_boersenpreise(anlage.id, db)
+
+    heute = next(t for t in antwort["tage"] if t["datum"] == "2026-08-06")
+    boerse_16 = next(s["preis_cent"] for s in heute["stunden"] if s["stunde"] == 16)
+    assert antwort["endpreis_jetzt_cent"] == 34.7
+    assert antwort["endpreis_jetzt_cent"] != boerse_16

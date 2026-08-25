@@ -53,6 +53,7 @@ function antwort(over: Partial<BoersenpreisResponse> = {}): BoersenpreisResponse
     aktuelle_stunde: 3,
     heute: '2026-08-06',
     hinweis: null,
+    endpreis_jetzt_cent: null,
     ...over,
   }
 }
@@ -170,6 +171,25 @@ describe('baueKennzahlen', () => {
     // …und zwar VOR den Optimierer-Werten.
     const titel = mit.map((k) => k.title)
     expect(titel.indexOf('Ø Monat')).toBeLessThan(titel.indexOf('Ø ohne 3 Peaks'))
+  })
+
+  // N-173/R2 (rapahl): der Endpreis der laufenden Stunde. Er kommt aus dem
+  // zugeordneten Strompreis-Sensor — ohne ihn darf KEINE Kachel erscheinen,
+  // denn ein Rückfall auf den Tarif-Arbeitspreis wäre bei dynamischem Tarif
+  // ein Mittelwert im Gewand eines Stundenpreises.
+  it('zeigt den Endpreis nur, wenn ein Strompreis-Sensor Werte liefert', () => {
+    const ohne = baueKennzahlen(antwort())
+    expect(ohne.find((k) => k.title === 'Endpreis jetzt')).toBeUndefined()
+
+    const mit = baueKennzahlen(antwort({ endpreis_jetzt_cent: 34.7 }))
+    const endpreis = mit.find((k) => k.title === 'Endpreis jetzt')!
+    expect(endpreis.value).toBe('34,70')
+    expect(endpreis.subtitle).toContain('Netzentgelte')
+
+    // Er steht DIREKT hinter dem aktuellen Börsenpreis — beide beantworten
+    // „was kostet jetzt", und der Aufschlag ist so ohne Rechnen ablesbar.
+    const titel = mit.map((k) => k.title)
+    expect(titel.indexOf('Endpreis jetzt')).toBe(titel.indexOf('Aktueller Preis') + 1)
   })
 
   it('zeigt keine Kennzahlen, wenn nur morgen vorliegt', () => {

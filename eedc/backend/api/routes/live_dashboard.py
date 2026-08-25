@@ -160,6 +160,18 @@ class BoersenpreisResponse(BaseModel):
     aktuelle_stunde: Optional[int] = None        # lokale Stunde in der Gebotszone
     heute: Optional[str] = None                  # Datum von „heute" in derselben Zone
     hinweis: Optional[str] = None                # gesetzt, wenn ein Tag fehlt
+    #: Endpreis der laufenden Stunde in ct/kWh — das, was der Anwender
+    #: tatsächlich zahlt (Börsenanteil **plus** Netzentgelte, Steuern, Abgaben).
+    #: Quelle ist ausschließlich der zugeordnete Strompreis-Sensor
+    #: (``TagesEnergieProfil.strompreis_cent``, Tibber/aWATTar/EPEX-Endpreis).
+    #:
+    #: ⚠ **Bewusst KEIN Rückfall auf den Tarif-Arbeitspreis** (N-173/R2, rapahl):
+    #: Wer einen dynamischen Tarif fährt, hat dort einen gemittelten oder
+    #: geschätzten Wert stehen — ihn als „Endpreis der laufenden Stunde"
+    #: auszugeben wäre eine erfundene Genauigkeit. Ohne Sensor bleibt das Feld
+    #: ``None`` und die Kachel fehlt, wie bei allen anderen Kennzahlen dieses
+    #: Blocks auch.
+    endpreis_jetzt_cent: Optional[float] = None
 
 
 # ── Demo-Daten ───────────────────────────────────────────────────────────────
@@ -532,7 +544,56 @@ async def get_boersenpreise(
         "aktuelle_stunde": now.hour,
         "heute": heute.isoformat(),
         "hinweis": hinweis,
+        "endpreis_jetzt_cent": await _endpreis_jetzt_cent(
+            db, anlage_id, heute, now.hour,
+        ),
     }
+
+
+async def _endpreis_jetzt_cent(
+    db, anlage_id: int, heute: date, stunde: int,
+) -> Optional[float]:
+    """Endpreis der laufenden Stunde — was der Anwender wirklich zahlt.
+
+    **Wunsch von rapahl** (N-173/R2): Der Block zeigte bisher ausschließlich den
+    **Börsenpreis**. Der ist die Steuergröße für „wann laden", aber er ist nicht
+    der Preis auf der Rechnung — dazwischen liegen Netzentgelte, Steuern und
+    Abgaben. Wer prüfen will, was eine Stunde kostet, brauchte bisher einen
+    zweiten Blick in Home Assistant.
+
+    Quelle ist ``TagesEnergieProfil.strompreis_cent``, also der **zugeordnete
+    Strompreis-Sensor** (Tibber/aWATTar/EPEX). Damit ist es kein zweiter
+    Preis-Kanal, sondern dieselbe stündliche Mitschrift, aus der auch die
+    Monats- und Tagesauswertungen lesen — Muster wie
+    {@link _monats_durchschnitt_cent}.
+
+    ⚠ **Kein Rückfall auf ``Strompreis.netzbezug_arbeitspreis_cent_kwh``.** Das
+    Tarif-Feld ist ein **Endpreis inklusive Börsenanteil** und bei dynamischem
+    Tarif ein Mittel- oder Schätzwert; ihn als „Preis dieser Stunde" auszugeben
+    wäre erfundene Genauigkeit — dieselbe Vokabular-Drift, die schon bei N-173
+    gegen dieses Feld entschieden hat. Ohne Sensor bleibt es ``None``, und die
+    Kachel fehlt (ADR-002/P4: lieber keine Zahl als eine, die etwas anderes
+    behauptet).
+
+    ⚠ **Stundenkonvention:** ``strompreis_cent`` wird je Stunde als Mittel über
+    ``[h:00, h+1:00)`` geschrieben (HA-LTS-Hourly bzw. History-Fallback), also
+    **forward** — dieselbe Richtung wie der Börsenpreis, der aus dem
+    ``start_timestamp`` der Marktdaten kommt. ``stunde`` ist damit direkt die
+    laufende Stunde und braucht keinen Versatz. Das ist **nicht** die
+    Backward-Konvention der Energiewerte (#144, Slot N = ``[N-1, N)``) — in
+    dieser Tabelle stehen beide nebeneinander, jede in ihrer sachlich richtigen
+    Richtung.
+    """
+    res = await db.execute(
+        select(TagesEnergieProfil.strompreis_cent).where(
+            TagesEnergieProfil.anlage_id == anlage_id,
+            TagesEnergieProfil.datum == heute,
+            TagesEnergieProfil.stunde == stunde,
+            TagesEnergieProfil.strompreis_cent.isnot(None),
+        )
+    )
+    wert = res.scalar_one_or_none()
+    return round(wert, 2) if wert is not None else None
 
 
 async def _monats_durchschnitt_cent(db, anlage_id: int, heute: date) -> Optional[float]:

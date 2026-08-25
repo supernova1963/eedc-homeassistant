@@ -17,6 +17,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
   Aus derselben Meldung stammt die **etwas größere Legende** unter der Kurve. Sie lag als einzige Chart-Legende der App auf der kleinsten Schriftstufe, während alle anderen eine Stufe darüber stehen — das ist damit angeglichen, nicht ausgeschert.
 
+### Added
+
+- **Der Börsenpreis-Block zeigt jetzt auch, was du wirklich zahlst.** Wunsch von **rapahl**: Alle Kacheln dort trugen den **Börsenpreis** — die richtige Größe für die Frage „wann laden", aber nicht die, die auf der Rechnung steht. Dazwischen liegen Netzentgelte, Steuern und Abgaben, und wer das nachsehen wollte, brauchte einen zweiten Blick in Home Assistant.
+
+  Neu ist die Kachel **„Endpreis jetzt"** direkt neben dem aktuellen Börsenpreis. Sie zeigt den Preis der laufenden Stunde inklusive aller Bestandteile; beide nebeneinander machen den Aufschlag ohne Rechnen sichtbar. Der Börsenpreis und alle anderen Kennzahlen bleiben unverändert an ihrem Platz.
+
+  **Voraussetzung ist ein zugeordneter Strompreis-Sensor** (Tibber, aWATTar, EPEX-Endpreis) unter *Einstellungen → Datenquellen*. **Fehlt er, fehlt die Kachel** — und das ist Absicht: eedc setzt dann *nicht* ersatzweise den Arbeitspreis aus dem Tarif ein. Bei einem dynamischen Tarif ist das ein Mittel- oder Schätzwert, der als „Preis dieser Stunde" eine Genauigkeit behaupten würde, die es nicht gibt.
+
 - **Der Daten-Check verlangte einen Wert, den eedc an dieser Stelle gar nicht haben will.** Gemeldet von **gruaGit** ([Discussion #396](https://github.com/supernova1963/eedc-homeassistant/discussions/396)): Sein Daten-Check meldete „VW ID.3: Ladung PV fehlt in 8 Monaten", während dieselbe App für genau diese Monate PV-Anteile seiner Ladung auswies. Beides stimmte — sie sprachen nur über verschiedene Stellen.
 
   Wer eine **Wallbox** hat, dessen Heimladung führt eedc dort. Die Aufteilung in Sonne und Netz **am Fahrzeug** wird deshalb im Monatsabschluss gar nicht mehr angeboten: Sie stünde sonst zweimal in den Daten. Der Daten-Check kannte diese Regel als einziger nicht und forderte den Wert weiter ein.

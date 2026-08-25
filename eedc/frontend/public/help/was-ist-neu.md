@@ -89,6 +89,23 @@ abzulesen. Die **Legende darunter** ist eine Spur größer — sie war die einzi
 der App, die auf der kleinsten Schriftgröße stand. Danke an **rapahl**, der auch
 nach der letzten Änderung noch einmal hingeschaut hat.
 
+**Was du wirklich zahlst, steht jetzt neben dem Börsenpreis**
+
+Der Block *Börsenpreis heute & morgen* zeigte bisher nur Börsenpreise — netto, ohne
+Netzentgelte, Steuern und Abgaben. Das ist die richtige Größe, um zu entscheiden,
+*wann* geladen wird, aber nicht die, die auf deiner Rechnung steht.
+
+Neu ist die Kachel **„Endpreis jetzt"** direkt daneben: der Preis der laufenden
+Stunde mit allem, was dazugehört. Beide nebeneinander zeigen dir den Aufschlag,
+ohne dass du rechnen musst.
+
+**Betrifft dich das?** Ja, wenn du unter *Einstellungen → Datenquellen* einen
+**Strompreis-Sensor** zugeordnet hast (Tibber, aWATTar oder einen anderen
+Endpreis-Sensor). **Ohne ihn erscheint die Kachel nicht** — eedc setzt bewusst nicht
+ersatzweise den Arbeitspreis aus deinem Tarif ein, weil das bei einem dynamischen
+Tarif nur ein Mittelwert wäre und keine Aussage über diese eine Stunde.
+**Was du tun musst:** nichts, außer den Sensor zuzuordnen, falls du ihn hast.
+
 ---
 
 ## v4.0.27 — Gemessen statt geschätzt

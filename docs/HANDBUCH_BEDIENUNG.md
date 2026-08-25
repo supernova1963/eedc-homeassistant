@@ -124,6 +124,7 @@ auf einer durchgehenden Zeitachse:
   *alle* Stunden unter der Schwelle (das können mehr als fünf sein — die Zahl dient in
   Automationen als Teiler und ist deshalb nicht gedeckelt), die Ziffer zeigt die besten fünf.
 - Darüber die Kennzahlen für **heute**, in dieser Reihenfolge: **aktueller Preis**,
+  der **Endpreis jetzt** (nur mit zugeordnetem Strompreis-Sensor, s. u.),
   **Höchst-** und **Tiefstpreis** des Tages, das **Monatsmittel** der bisher aufgezeichneten
   Stunden, der **Ø heute** (das Mittel *aller* Stunden dieses Tages), der **Ø ohne die 3
   teuersten Stunden**, die **Günstig-Schwelle** samt Anzahl der Stunden darunter und der
@@ -151,6 +152,16 @@ auf einer durchgehenden Zeitachse:
   nur heute und sagt, warum die zweite Hälfte fehlt.
 - Es sind **Börsenpreise, netto** — ohne Steuern, Abgaben und Netzentgelte. Dein Lieferant
   rechnet andere Beträge ab; für die Frage, *welche* Stunde die günstige ist, zählt der Verlauf.
+- **Was du wirklich zahlst, steht daneben — wenn eedc es wissen kann.** Hast du unter
+  [Datenquellen](HANDBUCH_EINSTELLUNGEN.md#7-datenquellen--feld-zentrische-zuordnung) einen
+  **Strompreis-Sensor** zugeordnet (Tibber, aWATTar, EPEX-Endpreis), zeigt die Kachel
+  **„Endpreis jetzt"** den Preis der laufenden Stunde **inklusive** Netzentgelten, Steuern
+  und Abgaben. Der Börsenpreis bleibt unverändert daneben stehen — so ist der Aufschlag
+  ohne Rechnen ablesbar.
+  > ⚠ **Ohne diesen Sensor fehlt die Kachel, und das ist Absicht.** eedc setzt dann *nicht*
+  > ersatzweise den Arbeitspreis aus deinem Tarif ein: Bei einem dynamischen Tarif ist das
+  > ein Mittel- oder Schätzwert, und als „Preis dieser Stunde" ausgegeben wäre er eine
+  > Genauigkeit, die es nicht gibt. Lieber keine Zahl als eine, die etwas anderes behauptet.
 - Die **Günstig-Schwelle stellst du selbst ein** (Standard: 10 % unter dem Ø ohne Peaks) —
   siehe [Teil III](HANDBUCH_EINSTELLUNGEN.md). ⚠ **0 % schaltet die Schwelle nicht ab**, sondern
   legt sie genau auf den Durchschnitt.

@@ -213,6 +213,11 @@ export const BOERSENPREIS_KPI = {
   // anderen Preis-Kennzahlen — es ist dieselbe Datenrolle, nur eine andere
   // Größenart.
   abstand:      { title: 'Abstand zum Ø',    icon: ArrowUpDown, color: 'purple' as const },
+  // N-173/R2 (rapahl): der Endpreis der laufenden Stunde — das, was auf der
+  // Rechnung steht, nicht die Steuergröße. Dieselbe Farbrolle wie alle anderen
+  // hier: es ist dieselbe Datenrolle (Preis), nur eine andere Preisart.
+  // Erscheint nur, wenn ein Strompreis-Sensor zugeordnet ist.
+  endpreis:     { title: 'Endpreis jetzt',   icon: Coins, color: 'purple' as const },
 } as const satisfies Record<string, KpiStyle>
 
 // ─── Komponenten-Identität (#3b') — Icon + Farbe + Label je Investitionstyp ───

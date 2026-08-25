@@ -40,6 +40,26 @@ export function baueKennzahlen(daten: BoersenpreisResponse): KpiStripItem[] {
     })
   }
 
+  // N-173/R2 (rapahl): der Endpreis dieser Stunde — was auf der Rechnung steht.
+  // Alle Kacheln dieses Blocks zeigen den **Börsenpreis**; der ist die richtige
+  // Größe für „wann laden", aber nicht die, die man zahlt. Dazwischen liegen
+  // Netzentgelte, Steuern und Abgaben.
+  //
+  // Bewusst DIREKT hinter dem aktuellen Börsenpreis und nicht ans Ende: beide
+  // beantworten „was kostet jetzt", und nebeneinander ist der Aufschlag ohne
+  // Rechnen ablesbar. Sie verdrängt keine Kachel, sie kommt dazu — und nur
+  // dann, wenn ein Strompreis-Sensor zugeordnet ist. Ohne ihn bleibt der Wert
+  // `null`; ein Rückfall auf den Tarif-Arbeitspreis wäre bei dynamischem Tarif
+  // ein Mittelwert im Gewand eines Stundenpreises.
+  if (daten.endpreis_jetzt_cent != null) {
+    kpis.push({
+      ...BOERSENPREIS_KPI.endpreis,
+      value: fmtZahl(daten.endpreis_jetzt_cent, 2),
+      unit: 'ct/kWh',
+      subtitle: 'inkl. Netzentgelte, Steuern und Abgaben',
+    })
+  }
+
   // ── Allgemein lesbare Zahlen zuerst (Zusage an Rainer, PN 2026-08-20) ──
   //
   // Höchst und Tiefst beantworten „lohnt sich Warten heute überhaupt?", das
