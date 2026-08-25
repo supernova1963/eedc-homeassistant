@@ -290,6 +290,15 @@ INVESTITION_SENSOREN = [
         device_class="monetary",
         state_class="total",
     ),
+    # ⛔ KEIN `device_class="monetary"` (F-63, sechster Fall — im Melder-Protokoll
+    # nicht sichtbar, bei der Erhebung ueber alle Definitionen gefunden). HA laesst
+    # fuer `monetary` ausschliesslich `state_class="total"` zu, also einen
+    # aufsummierbaren Betrag. Dies hier ist keiner: `€/Jahr` ist eine RATE, und
+    # `monetary` erwartet ueberdies eine ISO-Waehrung als Einheit. Der Sensor war
+    # damit von HAs Langzeitstatistik ausgeschlossen — dieselbe Folge wie bei den
+    # fuenf Prognose-Sensoren oben, nur mit anderer device_class und deshalb in
+    # einer anderen Log-Zeile. Ohne `device_class` ist `measurement` richtig: ein
+    # Momentanwert einer Jahresrate, den HA als min/mean/max fuehren darf.
     SensorDefinition(
         key="jahres_ersparnis_euro",
         name="Jahresersparnis",
@@ -297,7 +306,6 @@ INVESTITION_SENSOREN = [
         icon="mdi:cash-refund",
         category=SensorCategory.INVESTITION,
         formel="Σ Jährliche Einsparungen",
-        device_class="monetary",
         state_class="measurement",
     ),
     SensorDefinition(
@@ -507,6 +515,20 @@ LETZTER_IMPORT_SENSOREN = [
 # Anlage-weite Werte (kein investition_id) → gruppieren automatisch unter dem
 # Anlage-Device. Stundenprofile reisen als Sensor-Attribut mit (HA historisiert
 # Attribute nicht — kein 24-Topic-Spam).
+#
+# ⛔ KEIN `device_class` bei den Prognose-Sensoren (F-63, rapahl-PN 24.08.2026).
+# Sie tragen kWh und sahen deshalb nach `device_class="energy"` aus — aber HA
+# erlaubt fuer `energy` nur `state_class` `total`/`total_increasing`, weil es
+# einen ZAEHLER erwartet. Eine Tagesprognose ist keiner: sie springt jeden Tag
+# zurueck und darf nicht aufsummiert werden. Die Kombination `energy` +
+# `measurement` hat HA nicht nur protokolliert, sondern die fuenf Sensoren von
+# der Langzeitstatistik AUSGESCHLOSSEN — sie zeigten einen Wert und merkten sich
+# nichts. Ohne `device_class` ist `measurement` zulaessig, HA schreibt min/mean/max,
+# und die Einheit steht ohnehin in `unit`. `state_class="total"` waere die falsche
+# Alternative gewesen: im Energie-Dashboard ergaebe die Summe von Prognosen Unsinn.
+# Der Kanon stand schon im eigenen Code — `eedc_prognose_heute_rollend_kwh` (unten,
+# neu mit v4.0.27) hat nie ein `device_class` getragen und wurde als einziger der
+# sechs nie beanstandet. Gewaechtert: `tests/test_ha_export_sensor_klassen_vertrag.py`.
 PROGNOSE_SENSOREN = [
     SensorDefinition(
         key="eedc_prognose_heute_kwh",
@@ -515,7 +537,6 @@ PROGNOSE_SENSOREN = [
         icon="mdi:solar-power",
         category=SensorCategory.PROGNOSE,
         formel="Kanonische eedc-Tagesprognose (OpenMeteo × Korrekturprofil-Kaskade), == App-Anzeige; Stundenprofil als Attribut",
-        device_class="energy",
         state_class="measurement",
     ),
     # rapahl-PN 2026-08-23: der nachgeführte Tageswert. „PV-Prognose heute"
@@ -540,7 +561,6 @@ PROGNOSE_SENSOREN = [
         icon="mdi:solar-power",
         category=SensorCategory.PROGNOSE,
         formel="eedc-Prognose der verbleibenden Stunden heute, laufende Stunde anteilig nach Restminuten (OpenMeteo × Korrekturprofil-Kaskade)",
-        device_class="energy",
         state_class="measurement",
     ),
     SensorDefinition(
@@ -550,7 +570,6 @@ PROGNOSE_SENSOREN = [
         icon="mdi:solar-power",
         category=SensorCategory.PROGNOSE,
         formel="eedc-Tagesprognose morgen = Σ korrigierte Stunden-Slots (OpenMeteo × Korrekturprofil-Kaskade); Stundenprofil als Attribut",
-        device_class="energy",
         state_class="measurement",
     ),
     SensorDefinition(
@@ -560,7 +579,6 @@ PROGNOSE_SENSOREN = [
         icon="mdi:solar-power",
         category=SensorCategory.PROGNOSE,
         formel="eedc-Tagesprognose übermorgen = Σ korrigierte Stunden-Slots (OpenMeteo × Korrekturprofil-Kaskade); Stundenprofil als Attribut",
-        device_class="energy",
         state_class="measurement",
     ),
     SensorDefinition(
@@ -570,7 +588,6 @@ PROGNOSE_SENSOREN = [
         icon="mdi:solar-power",
         category=SensorCategory.PROGNOSE,
         formel="eedc-Tagesprognose Tag+3 = Σ korrigierte Stunden-Slots (OpenMeteo × Korrekturprofil-Kaskade); Stundenprofil als Attribut",
-        device_class="energy",
         state_class="measurement",
     ),
     SensorDefinition(

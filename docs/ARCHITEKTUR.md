@@ -1113,6 +1113,14 @@ SensorDefinition(
 )
 ```
 
+> ⚠ **`device_class` nur setzen, wenn HAs Vertrag es hergibt.** Das Beispiel oben ist ein echter
+> Zähler, deshalb `energy` + `total_increasing`. Für `energy` lässt HA **ausschließlich**
+> `total`/`total_increasing` zu, für `monetary` **nur** `total`; jede andere Kombination
+> schließt den Sensor von der Langzeitstatistik aus, ohne dass es an der Anzeige auffällt
+> (F-63). Ein Wert, der kein Zähler ist — Prognose, Rate, Momentanwert —, bekommt **kein**
+> `device_class` und `state_class="measurement"`. Gewächtert:
+> `backend/tests/test_ha_export_sensor_klassen_vertrag.py`.
+
 ### MQTT Client
 
 **Datei:** `backend/services/mqtt_client.py`

@@ -7,6 +7,26 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Sechs Home-Assistant-Sensoren zeigten einen Wert und merkten sich nichts.** Gemeldet von **rapahl**: In seinem Home-Assistant-Protokoll standen fünf Warnungen zu den PV-Prognose-Sensoren — Home Assistant lehnte eine Kombination aus zwei technischen Angaben ab, die eedc beim Anmelden der Sensoren mitschickt.
+
+  Die Warnung war nicht der eigentliche Schaden. Home Assistant nimmt Sensoren mit einer solchen Kombination **von der Langzeitstatistik aus**: Der Sensor zeigt in der Übersicht seinen aktuellen Wert, aber Home Assistant schreibt ihn nirgends mit. Verlaufsdiagramme bleiben leer, und eine Auswertung über Tage oder Monate gibt es für ihn nicht — dauerhaft, auch rückwirkend nicht.
+
+  Die Ursache war ein naheliegender Fehlschluss: Die Prognose-Sensoren tragen Kilowattstunden, also lag `device_class: energy` nahe. Home Assistant meint mit dieser Angabe aber einen **Zähler**, der nur steigt oder sich sauber aufsummieren lässt. Eine Tagesprognose ist das nicht — sie springt jeden Tag zurück, und die Summe zweier Prognosen ergibt keine sinnvolle Zahl.
+
+  **Ab jetzt** melden diese Sensoren ihre Einheit weiterhin in kWh, aber ohne die Zähler-Zuordnung. Damit akzeptiert Home Assistant sie und schreibt für sie wieder Statistik — Minimum, Mittelwert und Maximum je Stunde. Es kommt also etwas dazu, es fällt nichts weg.
+
+  **Betroffen sind sechs Sensoren.** Fünf hatte rapahls Protokoll genannt: `eedc_prognose_heute_kwh`, `eedc_prognose_rest_today_kwh` sowie die drei Tagesprognosen `eedc_prognose_day_plus_1/2/3_kwh`. Beim Nachzählen über alle Sensoren kam ein sechster dazu, den das Protokoll nicht zeigte, weil er unter einer anderen Meldung lief: **`jahres_ersparnis_euro`**. Er trug `device_class: monetary` — dafür verlangt Home Assistant ebenfalls einen aufsummierbaren Betrag, und eine Jahresersparnis in €/Jahr ist keiner, sondern eine Rate.
+
+  **Wen es betrifft und was sich sichtbar ändert:** alle Anwender mit aktiviertem Home-Assistant-Export. In Home Assistant verschwinden die Warnungen aus dem Protokoll, und für die sechs Sensoren entstehen ab dem Update Verläufe, wo vorher keine waren. **Rückwirkend gibt es keine Werte** — Home Assistant legt Statistik erst ab dem Zeitpunkt an, ab dem ein Sensor sie führen darf. **An deinen Daten in eedc ändert sich nichts.**
+
+  **Danke an rapahl**, der ein Protokoll gelesen hat, das die meisten überblättern. Die Meldung sah nach einer Randnotiz aus und war der Hinweis auf sechs Sensoren ohne Gedächtnis.
+
+---
+
 ## [4.0.27] - 2026-08-24 — Gemessen statt geschätzt
 
 ### Fixed

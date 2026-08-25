@@ -416,6 +416,15 @@ eedc **exportiert** zusätzlich die eigene PV-Prognose als Sensoren (immer die *
 > `…_rest_today_kwh` ist der reine Rest. **Ihre Differenz ist keine sinnvolle Größe:**
 > `…_heute_kwh` enthält für die vergangenen Stunden die *Vorhersage*, nicht die Messung.
 >
+> **Warum diese Sensoren kein `device_class` tragen.** Sie liefern kWh, sind aber **keine
+> Zähler**: eine Tagesprognose springt jeden Tag zurück, und die Summe zweier Prognosen ergibt
+> keine sinnvolle Zahl. Home Assistant verlangt für `device_class: energy` genau einen Zähler
+> (`state_class` `total`/`total_increasing`) und nimmt Sensoren mit einer anderen Kombination
+> **von der Langzeitstatistik aus** — sie zeigen dann einen Wert, ohne dass HA ihn mitschreibt.
+> Ohne `device_class` ist `state_class: measurement` zulässig, und HA führt min/mean/max je
+> Stunde. Bis v4.0.27 war das falsch gesetzt (gemeldet von rapahl); die Einheit kWh stand und
+> steht unverändert am Sensor.
+
 > **Hinweis:** Bis v3.45.5 war `eedc_prognose_heute_kwh` „IST bisher + Rest" und wich damit von der App-Anzeige ab. Seit dem Prognose-Kanon trägt der Sensor den **vollen kanonischen Tageswert** (== Anzeige); „Rest heute" ist der reine Rest. Automationen, die auf den alten „IST+Rest"-Wert gebaut haben, sollten auf `…_rest_today_kwh` umgestellt werden, wenn sie den Rest brauchen.
 
 ---
