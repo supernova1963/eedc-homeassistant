@@ -124,9 +124,11 @@ from backend.core.berechnungen.imd_monatsaggregat import (
     imd_typ_beitrag,
 )
 from backend.core.berechnungen.betriebsart_gemessen import (
+    ModusStromZeile,
     betriebsart_nutzenergie_kwh,
     betriebsart_strom_kwh,
     hat_gemessene_betriebsart,
+    modus_strom_zeile,
 )
 from backend.core.berechnungen.modus_split import (
     ModusSplit,
@@ -357,6 +359,8 @@ __all__ = [
     "betriebsart_nutzenergie_kwh",
     "betriebsart_strom_kwh",
     "hat_gemessene_betriebsart",
+    "ModusStromZeile",
+    "modus_strom_zeile",
     "REGEL_JAZ_MODUS_SPLIT",
     "abgeleitete_heizwaerme_kwh",
     "heizwaerme_ist_abgeleitet",

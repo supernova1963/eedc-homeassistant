@@ -33,8 +33,10 @@ from typing import Optional
 from backend.core.betriebsmodus import (
     BETRIEBSART_NUTZENERGIE_FELD,
     BETRIEBSART_STROM_FELD,
+    ENTFEUCHTEN,
     HEIZEN,
     KUEHLEN,
+    LUEFTEN,
     MESSBARE_MODI,
     MODUS_ABDECKUNG_FELD,
     MODUS_STROM_FELD,
@@ -107,13 +109,26 @@ def hat_gemessene_betriebsart(daten: Optional[dict]) -> bool:
 
 @dataclass(frozen=True)
 class ModusStromZeile:
-    """Die Heizen/Kühlen-Aufteilung **einer** IMD-Zeile — mit ihrer Herkunft.
+    """Die Betriebsart-Aufteilung **einer** IMD-Zeile — mit ihrer Herkunft.
 
     ``gemessen`` sagt, welcher der beiden Wege gegriffen hat. Er ist nicht
     Kosmetik: Wo er ``True`` ist, darf der aus dem Betriebsmodus *gerechnete*
     Split (``lade_modus_split_ohne_abschluss``) für dieses Gerät **nicht**
     zusätzlich angewandt werden — sonst stünde dieselbe Menge zweimal in
     derselben Zeile.
+
+    ⭐ **Warum vier Felder und nicht zwei (Konzept §2.3, Entscheid E4).** Die
+    Zeile bildet ab, was ein **Zähler** hergibt — und das sind vier
+    Betriebsarten (``MESSBARE_MODI``). Der aus dem Modus-Signal *abgeleitete*
+    Split kann dagegen nur Heizen und Kühlen (``AUFGETEILTE_MODI``, D11); dort
+    bleiben ``lueften_kwh``/``entfeuchten_kwh`` deshalb 0. **Das ist keine
+    Lücke, sondern die Aussage:** ein Modus-Signal gibt nicht mehr her.
+
+    Bis zum 26.08.2026 las auch der **gemessene** Zweig nur zwei der vier
+    Felder. Wer einen Lüftungs- oder Entfeuchtungs-Zähler zuordnete, sah seine
+    Kilowattstunden **nirgends** — sie fielen stumm unter „nicht aufgeteilt",
+    obwohl die Registry das Feld anbietet und der Anwender es gepflegt hat.
+    Das ist die P-6-Falle: ein Angebot, das niemand einlösen kann.
     """
 
     heizen_kwh: float
@@ -125,8 +140,35 @@ class ModusStromZeile:
         """Trägt die Zeile überhaupt eine Aufteilung — gemessen oder abgeleitet?"""
         return self.gemessen or self.abdeckung_h > 0
 
+    @property
+    def funktionsfremd_kwh(self) -> float:
+        """Strom in Funktionen **ohne bewertete Nutzenergie** — der JAZ-Nenner-Abzug.
+
+        ⭐ **Die eine Stelle, die sagt, was „funktionsfremd" heißt** (ADR-001:
+        eine Auflösung ist eine Formel, kein Routen-Detail). Bis zum 26.08.2026
+        stand dafür an vier Aufrufern der Kühlstrom **direkt** — der Docstring
+        von ``arbeitszahl`` nannte ihn ausdrücklich *„heute der Kühlbetrieb"*,
+        und genau dieses „heute" tritt hier ein.
+
+        **Warum Lüften und Entfeuchten dazugehören:** Sie sind nach Konzept
+        §2.3/**E4** *erfassbar, aber keine bewertete Funktion* — sie erzeugen
+        keine Wärme, die in einem Wärmemengenzähler landet. Stünde ihr Strom im
+        Nenner, drückte er die Arbeitszahl aus demselben Grund wie der
+        Kühlstrom vor W-14: **ein Kategorienfehler, kein Messfehler.**
+
+        ⚠ **Abgezogen, nicht gesperrt.** Die Mengen bleiben unverändert in
+        allen Bilanzen und Kosten; es ändert sich allein der Nenner der
+        Kennzahl.
+        """
+        return self.kuehlen_kwh + self.lueften_kwh + self.entfeuchten_kwh
+
     #: Stunden mit gültigem Modus-Signal, aus der Zeile übernommen.
     abdeckung_h: float = 0.0
+
+    #: Nur im **gemessenen** Zweig belegt — der abgeleitete Split kennt sie
+    #: nicht (s. Klassen-Docstring).
+    lueften_kwh: float = 0.0
+    entfeuchten_kwh: float = 0.0
 
 
 def modus_strom_zeile(daten: Optional[dict]) -> ModusStromZeile:
@@ -155,9 +197,15 @@ def modus_strom_zeile(daten: Optional[dict]) -> ModusStromZeile:
     daten = daten if isinstance(daten, dict) else {}
     abdeckung = _zahl(daten.get(MODUS_ABDECKUNG_FELD))
     if hat_gemessene_betriebsart(daten):
+        # E4 (Konzept §2.3): **alle vier** messbaren Betriebsarten, nicht nur
+        # die zwei, die der abgeleitete Split hergibt. Ein zugeordneter
+        # Lüftungs-Zähler ist eine Messung wie jede andere — sie hier zu
+        # übergehen hieße, ein Feld anzubieten und seinen Wert wegzuwerfen.
         return ModusStromZeile(
             heizen_kwh=betriebsart_strom_kwh(daten, HEIZEN) or 0.0,
             kuehlen_kwh=betriebsart_strom_kwh(daten, KUEHLEN) or 0.0,
+            lueften_kwh=betriebsart_strom_kwh(daten, LUEFTEN) or 0.0,
+            entfeuchten_kwh=betriebsart_strom_kwh(daten, ENTFEUCHTEN) or 0.0,
             gemessen=True,
             abdeckung_h=abdeckung,
         )

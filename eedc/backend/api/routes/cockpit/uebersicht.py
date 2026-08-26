@@ -474,10 +474,10 @@ async def get_cockpit_uebersicht(
     )
     wp_cop = arbeitszahl(
         wp_waerme, wp_strom, waerme_abgeleitet_kwh=wp_waerme_abgeleitet,
-        # W-14: wie bei der Ersparnis darunter (`strom_kuehlen_kwh`) — Kühlen
-        # ersetzt keine Heizung und gehört deshalb in keine Wärme-Kennzahl.
+        # W-14 + E4: wie bei der Ersparnis darunter — Kühlen, Lüften und
+        # Entfeuchten ersetzen keine Heizung und gehören in keine Wärme-Kennzahl.
         strom_funktionsfremd_kwh=sum(
-            f.wp.modus_strom_kuehlen_kwh for f in fakten
+            f.wp.modus_strom_funktionsfremd_kwh for f in fakten
         ),
         abgrenzung_verletzt=wp_abgrenzung,
     ).wert

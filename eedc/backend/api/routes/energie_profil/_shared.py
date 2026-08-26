@@ -496,6 +496,11 @@ class TagDetailResponse(BaseModel):
     # Leistungspfads). Zwei Stellen, die denselben Rest rechnen, driften.
     wp_modus_strom_heizen_kwh: Optional[float] = None
     wp_modus_strom_kuehlen_kwh: Optional[float] = None
+    #: E4 (Konzept §2.3): nur aus **gemessenen** Betriebsart-Zählern — der
+    #: abgeleitete Split kann sie nicht. Dieselben Felder wie in der
+    #: Monatssicht, damit dieselbe Blockfabrik beide Sichten bedienen kann.
+    wp_modus_strom_lueften_kwh: Optional[float] = None
+    wp_modus_strom_entfeuchten_kwh: Optional[float] = None
     wp_modus_nicht_aufgeteilt_kwh: Optional[float] = None
     wp_modus_abdeckung_h: Optional[float] = None
     #: Herkunft der Aufteilung: `True` = aus **gemessenen** Betriebsart-Zählern,

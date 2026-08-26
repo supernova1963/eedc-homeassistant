@@ -353,6 +353,14 @@ class WpFakten:
     #: (Präzedenz: ``ladung_pv_kwh`` bei der Wallbox, Konzept §3.1).
     modus_strom_heizen_kwh: float = 0.0
     modus_strom_kuehlen_kwh: float = 0.0
+    #: E4 (Konzept §2.3, gebaut 26.08.): *erfassbar, aber keine bewertete
+    #: Funktion.* Nur aus **gemessenen** Betriebsart-Zählern — der aus dem
+    #: Modus-Signal abgeleitete Split kann sie nicht (``AUFGETEILTE_MODI``,
+    #: D11) und lässt sie bei 0. **Das ist die Aussage, keine Lücke.**
+    #: Vorher fielen sie stumm unter „nicht aufgeteilt", obwohl die Registry
+    #: die Felder anbietet.
+    modus_strom_lueften_kwh: float = 0.0
+    modus_strom_entfeuchten_kwh: float = 0.0
     #: Stunden mit gültigem Modus-Signal — das Qualitätsmaß neben den Mengen.
     modus_abdeckung_h: float = 0.0
     #: #263 — die Aufteilung ist **gemessen** (Betriebsart-Zähler) statt aus
@@ -425,7 +433,7 @@ class WpFakten:
 
     @property
     def modus_nicht_aufgeteilt_kwh(self) -> float:
-        """``Gesamt − Σ Teilmengen`` — Standby, Lüften, Entfeuchten, Unbestimmt.
+        """``Gesamt − Σ Teilmengen`` — Standby, Unbestimmt, und was nicht gemessen ist.
 
         **Wird nie gespeichert** (Konzept §3.1, Folge 2) und ist deshalb immer
         vollständig: für Altmonate, Ausfälle, Importe und manuelle Pflege
@@ -437,12 +445,45 @@ class WpFakten:
         anlagenweit trägt letzteres auch Wärmepumpen ohne Modus-Sensor, deren
         Verbrauch dann als „nicht aufgeteilt" der Klimaanlage erschiene
         (an einer Instanz gemessen: 96,4 statt 6,4 kWh).
+
+        ⭐ **E4 (26.08.): Lüften und Entfeuchten werden abgezogen, sobald sie
+        GEMESSEN sind.** Bis dahin nannte dieser Docstring sie ausdrücklich als
+        Inhalt der Restmenge — richtig, solange es für sie keine eigene Zeile
+        gab. Jetzt gilt beides nebeneinander, und genau das ist die Aussage:
+        **Wer einen Lüftungs-Zähler zugeordnet hat, sieht seine Kilowattstunden
+        als eigene Zeile; wer keinen hat, findet sie weiterhin hier.** Ohne den
+        Abzug stünde dieselbe Menge zweimal — die Doppelzählungs-Klasse.
         """
         return max(
             0.0,
             self.modus_strom_bezug_kwh
             - self.modus_strom_heizen_kwh
-            - self.modus_strom_kuehlen_kwh,
+            - self.modus_strom_kuehlen_kwh
+            - self.modus_strom_lueften_kwh
+            - self.modus_strom_entfeuchten_kwh,
+        )
+
+    @property
+    def modus_strom_funktionsfremd_kwh(self) -> float:
+        """Strom in Funktionen **ohne bewertete Nutzenergie** — der JAZ-Nenner-Abzug.
+
+        Kühlen (**W-14**) plus Lüften und Entfeuchten (**E4**). Alle drei
+        erzeugen keine Wärme, die in einem Wärmemengenzähler landet; stünde ihr
+        Strom im Nenner, drückte er die Arbeitszahl aus demselben Grund.
+
+        ⭐ **Die anlagenweite Entsprechung zu**
+        {@link ModusStromZeile.funktionsfremd_kwh} — dieselbe Definition, eine
+        Ebene höher. Sie steht hier, damit die vier ``arbeitszahl``-Aufrufer
+        **eine** Größe lesen statt drei zu addieren: Genau so ist W-14
+        entstanden, als der Kühlstrom an einer von drei Größen nicht nachgezogen
+        wurde.
+
+        ⚠ **Abgezogen, nicht gesperrt** — die Mengen bleiben in jeder Bilanz.
+        """
+        return (
+            self.modus_strom_kuehlen_kwh
+            + self.modus_strom_lueften_kwh
+            + self.modus_strom_entfeuchten_kwh
         )
 
     @property
@@ -1034,6 +1075,9 @@ class _RohMonat:
         self.wp_hat_split = False
         self.wp_modus_strom_heizen = 0.0
         self.wp_modus_strom_kuehlen = 0.0
+        #: E4 — nur aus gemessenen Zaehlern; der abgeleitete Split kann sie nicht.
+        self.wp_modus_strom_lueften = 0.0
+        self.wp_modus_strom_entfeuchten = 0.0
         self.wp_modus_abdeckung_h = 0.0
         #: #263 — mindestens ein Gerät bringt die Aufteilung GEMESSEN mit.
         self.wp_modus_gemessen = False
@@ -1198,6 +1242,8 @@ class _RohMonat:
             self.wp_hat_split = self.wp_hat_split or b.wp_hat_split
             self.wp_modus_strom_heizen += b.wp_modus_strom_heizen
             self.wp_modus_strom_kuehlen += b.wp_modus_strom_kuehlen
+            self.wp_modus_strom_lueften += b.wp_modus_strom_lueften
+            self.wp_modus_strom_entfeuchten += b.wp_modus_strom_entfeuchten
             self.wp_modus_abdeckung_h += b.wp_modus_abdeckung_h
             self.wp_modus_gemessen = self.wp_modus_gemessen or b.wp_modus_gemessen
             self.wp_modus_strom_bezug += b.wp_modus_strom_bezug
@@ -1455,6 +1501,8 @@ async def _baue_fakt(
             hat_split=roh.wp_hat_split,
             modus_strom_heizen_kwh=roh.wp_modus_strom_heizen,
             modus_strom_kuehlen_kwh=roh.wp_modus_strom_kuehlen,
+            modus_strom_lueften_kwh=roh.wp_modus_strom_lueften,
+            modus_strom_entfeuchten_kwh=roh.wp_modus_strom_entfeuchten,
             modus_abdeckung_h=roh.wp_modus_abdeckung_h,
             modus_gemessen=roh.wp_modus_gemessen,
             modus_strom_bezug_kwh=roh.wp_modus_strom_bezug,

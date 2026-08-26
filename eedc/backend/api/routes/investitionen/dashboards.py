@@ -92,13 +92,8 @@ from backend.core.field_definitions import (
     ist_gepflegte_sonstiges_kategorie,
     ist_zaehler_kategorie,
 )
-from backend.core.berechnungen import (
-    betriebsart_strom_kwh,
-    hat_gemessene_betriebsart,
-)
-from backend.core.betriebsmodus import HEIZEN as BM_HEIZEN
-from backend.core.betriebsmodus import KUEHLEN as BM_KUEHLEN
-from backend.core.betriebsmodus import MODUS_ABDECKUNG_FELD, MODUS_STROM_FELD
+from backend.core.berechnungen import modus_strom_zeile
+from backend.core.betriebsmodus import MODUS_ABDECKUNG_FELD
 from backend.core.berechnungen import (
     heiz_effizienz_gepflegt,
     heizwaerme_ist_abgeleitet,
@@ -835,6 +830,10 @@ async def get_waermepumpe_dashboard(
         # werden ausgewiesen, nie addiert (Konzept §3.1).
         gesamt_modus_heizen = 0.0
         gesamt_modus_kuehlen = 0.0
+        # E4 (Konzept §2.3): nur aus gemessenen Zählern — der abgeleitete Split
+        # kann sie nicht und lässt sie bei 0.
+        gesamt_modus_lueften = 0.0
+        gesamt_modus_entfeuchten = 0.0
         gesamt_modus_abdeckung_h = 0.0
         gesamt_modus_bezug = 0.0
         # #263 — mindestens ein Monat bringt die Aufteilung GEMESSEN mit.
@@ -844,22 +843,21 @@ async def get_waermepumpe_dashboard(
             # **Gemessen schlägt abgeleitet** (ADR-002/P8), je Monatszeile.
             # `None` heißt „kein Zähler" und lässt die Ableitung stehen; eine
             # gemessene 0 ist dagegen eine echte Null.
-            _gem_h = betriebsart_strom_kwh(d, BM_HEIZEN)
-            _gem_k = betriebsart_strom_kwh(d, BM_KUEHLEN)
-            _zeile_gemessen = hat_gemessene_betriebsart(d)
+            # ⭐ **Der SoT statt einer nachgebauten Weiche** (F-56). Hier stand
+            # bis zum 26.08.2026 dieselbe Regel ein zweites Mal ausgeschrieben —
+            # genau die Bauform, vor der der Docstring von `modus_strom_zeile`
+            # warnt: *„eine Regel, die an zwei Stellen nachgebaut wird,
+            # driftet."* Sie ist prompt gedriftet: Als E4 die Betriebsarten
+            # Lüften und Entfeuchten in die Aufteilung holte, zog diese Kopie
+            # nicht mit und hätte für dieselbe Anlage eine andere Restmenge
+            # ausgewiesen als Cockpit und Komponenten-Hub.
+            _zeile = modus_strom_zeile(d)
+            _zeile_gemessen = _zeile.gemessen
             modus_gemessen = modus_gemessen or _zeile_gemessen
-            # Ganz oder gar nicht je Zeile — Begründung in
-            # `core/berechnungen/imd_monatsaggregat.py`: ein Balken, dessen
-            # eine Hälfte gemessen und die andere gerechnet ist, trüge ein
-            # halbwahres Etikett.
-            gesamt_modus_heizen += (
-                (_gem_h or 0.0) if _zeile_gemessen
-                else (d.get(MODUS_STROM_FELD[BM_HEIZEN], 0) or 0)
-            )
-            gesamt_modus_kuehlen += (
-                (_gem_k or 0.0) if _zeile_gemessen
-                else (d.get(MODUS_STROM_FELD[BM_KUEHLEN], 0) or 0)
-            )
+            gesamt_modus_heizen += _zeile.heizen_kwh
+            gesamt_modus_kuehlen += _zeile.kuehlen_kwh
+            gesamt_modus_lueften += _zeile.lueften_kwh
+            gesamt_modus_entfeuchten += _zeile.entfeuchten_kwh
             _m_abdeckung = d.get(MODUS_ABDECKUNG_FELD, 0) or 0
             gesamt_modus_abdeckung_h += _m_abdeckung
             if _m_abdeckung > 0 or _zeile_gemessen:
@@ -941,7 +939,15 @@ async def get_waermepumpe_dashboard(
                 ),
                 # E-B: Kühlen ersetzt keine Heizung — sein Strom gehört nicht
                 # in den Vergleich (sonst: gemessene −45,04 € Ersparnis).
-                strom_kuehlen_kwh=d.get(MODUS_STROM_FELD[BM_KUEHLEN], 0) or 0,
+                #
+                # ⛔ **Hier stand bis zum 26.08.2026 `d.get(MODUS_STROM_FELD[…])`**
+                # — also **nur der abgeleitete** Wert. Bei einer Zeile mit
+                # gemessenen Betriebsart-Zählern steht dieses Feld gar nicht in
+                # den Daten: E-B griff dort auf 0 und der Kühlstrom blieb im
+                # Vergleich. Getroffen war ausgerechnet, wer am genauesten misst.
+                # Dieselbe Klasse wie die Schleife darüber (F-56) — die Weiche
+                # gehört in den SoT, nicht in eine dritte Kopie.
+                strom_kuehlen_kwh=modus_strom_zeile(d).kuehlen_kwh,
             )
             wp_kosten += m_ergebnis.wp_kosten_euro
             alte_heizung_kosten += m_ergebnis.alte_heizung_kosten_euro
@@ -1073,6 +1079,8 @@ async def get_waermepumpe_dashboard(
         if gesamt_modus_abdeckung_h > 0 or modus_gemessen:
             zusammenfassung['modus_strom_heizen_kwh'] = round(gesamt_modus_heizen, 1)
             zusammenfassung['modus_strom_kuehlen_kwh'] = round(gesamt_modus_kuehlen, 1)
+            zusammenfassung['modus_strom_lueften_kwh'] = round(gesamt_modus_lueften, 1)
+            zusammenfassung['modus_strom_entfeuchten_kwh'] = round(gesamt_modus_entfeuchten, 1)
             # „nicht aufgeteilt" wird NIE gespeichert, sondern immer gerechnet
             # (Konzept §3.1, Folge 2) — damit ist es für Altmonate, Ausfälle
             # und Handpflege gleichermaßen vollständig. Auf 0 geklemmt: die
@@ -1083,7 +1091,8 @@ async def get_waermepumpe_dashboard(
             # Sensor-Zuordnung als „nicht aufgeteilt" (dieselbe Klasse wie der
             # anlagenweite Bezug in `WpFakten.modus_nicht_aufgeteilt_kwh`).
             zusammenfassung['modus_nicht_aufgeteilt_kwh'] = round(
-                max(0.0, gesamt_modus_bezug - gesamt_modus_heizen - gesamt_modus_kuehlen), 1
+                max(0.0, gesamt_modus_bezug - gesamt_modus_heizen - gesamt_modus_kuehlen
+                    - gesamt_modus_lueften - gesamt_modus_entfeuchten), 1
             )
             zusammenfassung['modus_abdeckung_h'] = round(gesamt_modus_abdeckung_h, 1)
             zusammenfassung['modus_gemessen'] = modus_gemessen

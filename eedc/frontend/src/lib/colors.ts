@@ -427,9 +427,20 @@ export const ROLLEN_BG = {
   // zwei Bedeutungen ist genau das, was Regel „eine Datenrolle = eine Farbe"
   // verhindert.
   kuehlung: 'bg-sky-500',
-  // „Weder das eine noch das andere" — Standby, Lüften, Entfeuchten, und die
-  // Zeit ohne Modus-Signal. Neutrales Grau wie `extern`: es ist keine eigene
-  // Betriebsart, sondern der Rest.
+  // E4 (Konzept §2.3, 26.08.): Lüften und Entfeuchten sind **erfassbar, aber
+  // keine bewertete Funktion**. Eine Familie, zwei Töne — das sagt „diese
+  // beiden gehören zusammen", ohne ihnen die Identität einer bewerteten Rolle
+  // zu geben. `indigo` war als einzige Familie unbelegt (erhoben 26.08.);
+  // bewusst nicht `sky` (Kühlung), nicht `violet` (Eigenverbrauch), nicht
+  // `teal` (E-Auto) und nicht `gray` (das ist der Rest, s. u.).
+  lueftung: 'bg-indigo-400',
+  entfeuchtung: 'bg-indigo-600',
+  // „Weder das eine noch das andere" — Standby und die Zeit ohne Modus-Signal.
+  // Neutrales Grau wie `extern`: es ist keine eigene Betriebsart, sondern der
+  // Rest. ⚠ **Bis zum 26.08.2026 nannte dieser Kommentar auch Lüften und
+  // Entfeuchten** — richtig, solange es für sie keine eigene Zeile gab. Seit
+  // E4 gilt beides nebeneinander: **gemessen** bekommen sie ihr Segment,
+  // **ungemessen** bleiben sie hier.
   nicht_aufgeteilt: 'bg-gray-400',
   ladung: DATENROLLE.speicherLadung.bg,
   entladung: DATENROLLE.speicherEntladung.bg,

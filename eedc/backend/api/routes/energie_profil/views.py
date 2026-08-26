@@ -249,6 +249,8 @@ async def get_tag_detail(
     from backend.services.snapshot.aggregator import get_betriebsart_strom_tageswerte
 
     heizen_tag = kuehlen_tag = rest_tag = abdeckung_tag = 0.0
+    # E4 (Konzept §2.3, 26.08.): eigene Segmente statt stummer Restmenge.
+    lueften_tag = entfeuchten_tag = 0.0
     hat_split = False
     hat_gemessen = False
 
@@ -304,10 +306,25 @@ async def get_tag_detail(
         gemessene_geraete.add(inv_id_str)
         heizen_tag += zeile.heizen_kwh
         kuehlen_tag += zeile.kuehlen_kwh
-        # Lüften/Entfeuchten haben eigene Zähler, aber kein eigenes Segment —
-        # sie fallen wie im Monat unter „nicht aufgeteilt" (Entscheid Gernot
-        # 2026-08-25: erst differenzieren, wenn Anwender es verlangen).
-        rest_tag += max(0.0, float(bezug) - zeile.heizen_kwh - zeile.kuehlen_kwh)
+        # ⛔ **Hier stand bis zum 26.08.2026:** „Lüften/Entfeuchten haben eigene
+        # Zähler, aber kein eigenes Segment — sie fallen wie im Monat unter
+        # ‚nicht aufgeteilt' (Entscheid Gernot 2026-08-25: erst differenzieren,
+        # wenn Anwender es verlangen)."
+        #
+        # **Abgelöst durch E4** (Konzept §2.3, Entscheid Gernot 26.08.): *„Lüften
+        # und Entfeuchten sind erfassbar, aber keine bewertete Funktion — sie
+        # **erscheinen in der Aufteilung**, bekommen aber keine Kennzahl."* Der
+        # frühere Entscheid war eine Umfangs-Abwägung ohne Konzept; jetzt gibt es
+        # eines, und es sagt zur selben Frage etwas anderes. Der Zustand davor
+        # war die P-6-Falle: ein Feld anbieten, den Wert entgegennehmen und ihn
+        # nirgends zeigen.
+        lueften_tag += zeile.lueften_kwh
+        entfeuchten_tag += zeile.entfeuchten_kwh
+        rest_tag += max(
+            0.0,
+            float(bezug) - zeile.heizen_kwh - zeile.kuehlen_kwh
+            - zeile.lueften_kwh - zeile.entfeuchten_kwh,
+        )
 
     # ── Zweig 2: aus dem Betriebsmodus abgeleitet ─────────────────────────
     for inv_id_str, split in (await lade_modus_split_tag(db, anlage_id, datum)).items():
@@ -374,10 +391,12 @@ async def get_tag_detail(
     )
     wp_jaz_tag = arbeitszahl(
         wp_waerme_tag, wp_strom_tag,
-        # W-14: `kuehlen_tag` ist oben aus beiden Zweigen gefüllt — gemessene
-        # Betriebsart-Zähler und abgeleiteter Modus-Split. Am Tag wiegt der
-        # Effekt am schwersten: ein Sommertag kann fast reiner Kühlbetrieb sein.
-        strom_funktionsfremd_kwh=kuehlen_tag,
+        # W-14 + E4: Strom in Funktionen ohne bewertete Nutzenergie. `kuehlen_tag`
+        # ist oben aus beiden Zweigen gefüllt (gemessene Zähler und abgeleiteter
+        # Modus-Split), Lüften/Entfeuchten nur aus dem gemessenen — der
+        # abgeleitete Split kann sie nicht. Am Tag wiegt der Effekt am
+        # schwersten: ein Sommertag kann fast reiner Kühlbetrieb sein.
+        strom_funktionsfremd_kwh=kuehlen_tag + lueften_tag + entfeuchten_tag,
         abgrenzung_verletzt=wp_abgrenzung_tag,
     )
 
@@ -385,6 +404,8 @@ async def get_tag_detail(
         datum=datum,
         wp_modus_strom_heizen_kwh=round(heizen_tag, 2) if hat_split else None,
         wp_modus_strom_kuehlen_kwh=round(kuehlen_tag, 2) if hat_split else None,
+        wp_modus_strom_lueften_kwh=round(lueften_tag, 2) if hat_split else None,
+        wp_modus_strom_entfeuchten_kwh=round(entfeuchten_tag, 2) if hat_split else None,
         wp_modus_nicht_aufgeteilt_kwh=round(rest_tag, 2) if hat_split else None,
         wp_modus_abdeckung_h=round(abdeckung_tag, 1) if hat_split else None,
         # Wie in der Monatssicht: „gemessen" gilt für die Zeile, sobald ein

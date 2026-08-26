@@ -124,6 +124,11 @@ export interface AktuellerMonatResponse {
   // nie Summanden. Alle vier fehlen gemeinsam ohne erfassten Modus.
   wp_modus_strom_heizen_kwh?: number | null
   wp_modus_strom_kuehlen_kwh?: number | null
+  /** E4 (Konzept §2.3): nur aus **gemessenen** Betriebsart-Zählern — der aus
+   *  dem Modus-Signal abgeleitete Split kann sie nicht. Ohne Zähler 0, dann
+   *  stecken sie weiterhin in `wp_modus_nicht_aufgeteilt_kwh`. */
+  wp_modus_strom_lueften_kwh?: number | null
+  wp_modus_strom_entfeuchten_kwh?: number | null
   wp_modus_nicht_aufgeteilt_kwh?: number | null
   wp_modus_abdeckung_h?: number | null
   /** #263: Aufteilung GEMESSEN statt aus dem Betriebsmodus abgeleitet. */

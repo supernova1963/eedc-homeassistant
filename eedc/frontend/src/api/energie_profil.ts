@@ -226,6 +226,9 @@ export interface TagDetail {
    *  entscheidet die Faltung. */
   wp_modus_strom_heizen_kwh: number | null
   wp_modus_strom_kuehlen_kwh: number | null
+  /** E4 (Konzept §2.3): nur aus **gemessenen** Betriebsart-Zählern. */
+  wp_modus_strom_lueften_kwh?: number | null
+  wp_modus_strom_entfeuchten_kwh?: number | null
   wp_modus_nicht_aufgeteilt_kwh: number | null
   wp_modus_abdeckung_h: number | null
   /** Herkunft der Aufteilung: `true` = aus gemessenen Betriebsart-Zählern,

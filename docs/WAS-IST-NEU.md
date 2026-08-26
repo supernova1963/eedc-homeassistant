@@ -55,6 +55,23 @@ schreibt den Grund daneben — statt einer Zahl, die es so nicht gibt.
 gekühlte Anlagen (nur Umwälzpumpen) erreichen ein Vielfaches der Effizienz. Ihre
 eigenen Zahlen bleiben, sie werden nur nicht mehr gegen aktiv gekühlte gestellt.
 
+**Lüften und Entfeuchten sind nicht mehr unsichtbar**
+
+Wer für diese beiden Betriebsarten einen eigenen Zähler zugeordnet hatte, sah
+seine Kilowattstunden bisher **nirgends**. eedc bot die Felder an, nahm den Wert
+entgegen — und zeigte ihn dann als Teil von „nicht aufgeteilt".
+
+Jetzt bekommen beide ein eigenes Segment im Balken und eine eigene Zeile
+darunter, in *Cockpit → Tag*, *Monat*, *Jahr* und im Komponenten-Hub. **Hast du
+keinen solchen Zähler, ändert sich für dich nichts** — ohne Messung stecken sie
+weiterhin in der Restmenge. Zwei leere Zeilen an jeder Wärmepumpe wären keine
+Auskunft, sondern nur mehr Text.
+
+Eine Arbeitszahl bekommen sie bewusst **nicht**: Lüften erzeugt keine Wärme, die
+sich messen ließe. Aus demselben Grund fällt ihr Strom jetzt auch aus dem Nenner
+der Arbeitszahl — genauso wie der Kühlstrom. **Deine Arbeitszahl kann dadurch
+steigen**, wenn du getrennt misst. An deinen Mengen ändert sich nichts.
+
 **Ein Hinweis, den man nicht abstellen konnte — und einer, den es nicht hätte
 geben dürfen**
 

@@ -247,6 +247,12 @@ class AktuellerMonatResponse(BaseModel):
     # Modus erfasst ist (eine 0 hieße „hat nicht geheizt", ADR-002/P4).
     wp_modus_strom_heizen_kwh: Optional[float] = None
     wp_modus_strom_kuehlen_kwh: Optional[float] = None
+    #: E4 (Konzept §2.3): eigene Segmente statt stummer Restmenge. Nur aus
+    #: **gemessenen** Betriebsart-Zählern — der abgeleitete Split kann sie
+    #: nicht und lässt sie bei 0. Sie bekommen keine Kennzahl (*erfassen ja,
+    #: bewerten nein*) und fallen aus dem Nenner der Arbeitszahl.
+    wp_modus_strom_lueften_kwh: Optional[float] = None
+    wp_modus_strom_entfeuchten_kwh: Optional[float] = None
     wp_modus_nicht_aufgeteilt_kwh: Optional[float] = None
     wp_modus_abdeckung_h: Optional[float] = None
     #: #263 — die Aufteilung ist GEMESSEN (Betriebsart-Zähler) statt aus dem
@@ -1601,17 +1607,19 @@ async def get_aktueller_monat(
         ),
         zeitraum_versetzt=_wp_seiten_teilzeitraum == 1,
     )
-    # W-14: Der Kühlstrom kommt — wie der abgeleitete Anteil darüber — IMMER aus
-    # den Monats-Fakten. Er beschreibt die Aufteilung der IMD-Zeilen dieses
-    # Monats, und die ändert sich nicht dadurch, dass eine Menge über
-    # HA-Statistik statt aus der Datenbank kam.
-    wp_strom_kuehlen_kwh = (
-        monats_fakt.wp.modus_strom_kuehlen_kwh if monats_fakt is not None else 0.0
+    # W-14 + E4: Der funktionsfremde Strom (Kühlen · Lüften · Entfeuchten) kommt
+    # — wie der abgeleitete Anteil darüber — IMMER aus den Monats-Fakten. Er
+    # beschreibt die Aufteilung der IMD-Zeilen dieses Monats, und die ändert sich
+    # nicht dadurch, dass eine Menge über HA-Statistik statt aus der Datenbank
+    # kam. Eine Größe statt drei Summanden: die Aufzählung an vier Aufrufern war
+    # die Bauform, an der W-14 entstanden ist.
+    wp_strom_funktionsfremd_kwh = (
+        monats_fakt.wp.modus_strom_funktionsfremd_kwh if monats_fakt is not None else 0.0
     )
     wp_arbeitszahl = arbeitszahl(
         wp_waerme, wp_strom,
         waerme_abgeleitet_kwh=wp_waerme_abgeleitet_kwh,
-        strom_funktionsfremd_kwh=wp_strom_kuehlen_kwh,
+        strom_funktionsfremd_kwh=wp_strom_funktionsfremd_kwh,
         abgrenzung_verletzt=wp_abgrenzung_verletzt,
     )
 
@@ -1905,6 +1913,8 @@ async def get_aktueller_monat(
     wp_strom_warmwasser = None
     wp_modus_heizen = None
     wp_modus_kuehlen = None
+    wp_modus_lueften = None
+    wp_modus_entfeuchten = None
     wp_modus_rest = None
     wp_modus_abdeckung = None
     wp_modus_gemessen = None
@@ -1923,6 +1933,8 @@ async def get_aktueller_monat(
         if mf_wp.hat_modus_split:
             wp_modus_heizen = round(mf_wp.modus_strom_heizen_kwh, 2)
             wp_modus_kuehlen = round(mf_wp.modus_strom_kuehlen_kwh, 2)
+            wp_modus_lueften = round(mf_wp.modus_strom_lueften_kwh, 2)
+            wp_modus_entfeuchten = round(mf_wp.modus_strom_entfeuchten_kwh, 2)
             wp_modus_rest = round(mf_wp.modus_nicht_aufgeteilt_kwh, 2)
             wp_modus_abdeckung = round(mf_wp.modus_abdeckung_h, 1)
             wp_modus_gemessen = mf_wp.modus_gemessen
@@ -2348,6 +2360,8 @@ async def get_aktueller_monat(
         wp_strom_warmwasser_kwh=wp_strom_warmwasser,
         wp_modus_strom_heizen_kwh=wp_modus_heizen,
         wp_modus_strom_kuehlen_kwh=wp_modus_kuehlen,
+        wp_modus_strom_lueften_kwh=wp_modus_lueften,
+        wp_modus_strom_entfeuchten_kwh=wp_modus_entfeuchten,
         wp_modus_nicht_aufgeteilt_kwh=wp_modus_rest,
         wp_modus_abdeckung_h=wp_modus_abdeckung,
         wp_modus_gemessen=wp_modus_gemessen,

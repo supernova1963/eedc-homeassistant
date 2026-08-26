@@ -25,6 +25,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
   **„Kühlung: aktiv oder passiv"** — passiv gekühlte Anlagen (nur Umwälzpumpen) erreichen ein Vielfaches der Effizienz aktiv gekühlter. Ihre eigenen Zahlen bleiben unverändert; sie werden im Community-Vergleich nicht mehr gegen aktiv gekühlte Anlagen gestellt.
 
+- **Lüften und Entfeuchten erscheinen jetzt in der Aufteilung.** Wer für diese Betriebsarten einen eigenen Zähler zugeordnet hat, sah seine Kilowattstunden bisher **nirgends** — sie fielen stumm unter „nicht aufgeteilt", obwohl eedc die Felder anbietet und den Wert entgegennimmt.
+
+  **Ab jetzt bekommen beide ein eigenes Segment im Balken und eine eigene Zeile darunter** — in *Cockpit → Tag*, *Monat*, *Jahr* und im Komponenten-Hub. Wer keinen solchen Zähler hat, sieht keine Veränderung: Ohne Messung stecken sie weiterhin in der Restmenge, und zwei leere Zeilen an jeder Wärmepumpe wären keine Auskunft.
+
+  **Bewertet werden sie bewusst nicht** — sie erzeugen keine Wärme, die sich messen ließe. Genau deshalb fällt ihr Strom jetzt auch **aus dem Nenner der Arbeitszahl**, wie der Kühlstrom seit dem Fix darunter. **Deine Arbeitszahl kann dadurch steigen**, wenn du lüftest oder entfeuchtest und das getrennt misst; die Mengen selbst ändern sich nicht.
+
 ### Fixed
 
 - **Zwei Preisfelder, die der Daten-Checker verlangte und die es in keinem Formular gab.** Gemeldet von **MeinerB** (Issue #397): *„ich bekomme einen Hinweis dass ich die Felder bearbeiten soll, kann sie aber nicht finden."* Wer bei einem Speicher „Arbitrage-fähig" einschaltet, wurde nach Ø Lade- und Ø Entladepreis gefragt — beide gab es weder im Formular noch in einem Wizard. Der „Beheben"-Knopf führte in genau das Formular, in dem sie fehlten.

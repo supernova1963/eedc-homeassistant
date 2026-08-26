@@ -425,16 +425,33 @@ export function baueKomponentenBloecke(
     // (T89667 #194) sah 74 %. Beide Zahlen waren richtig: Bei einem Gerät, das
     // überwiegend aus war, ist Standby-Strom weder Heizen noch Kühlen. Der
     // Wortlaut kommt aus der SoT-Komponente, nicht als Kopie daneben.
+    // E4: Lüften/Entfeuchten nur, wenn dafür ein Zähler zugeordnet ist —
+    // sonst stecken sie weiterhin in „nicht aufgeteilt" (SOLL §2.3: *„Wer sie
+    // nicht erfasst, sieht sie nicht."*).
+    const wpLueften = d.wp_modus_strom_lueften_kwh ?? 0
+    const wpEntfeuchten = d.wp_modus_strom_entfeuchten_kwh ?? 0
     if (d.wp_modus_gemessen || (hat(d.wp_modus_abdeckung_h) && d.wp_modus_abdeckung_h! > 0)) wpEls.push({
-      // W-8: Der Titel nennt jetzt die **Größe**. „Aufteilung Heizen/Kühlen"
-      // allein sagte nicht, dass hier **Strom** steht — direkt darüber kann
-      // die Wärme-Aufteilung liegen, mit denselben Balken und anderer Einheit.
-      id: 'el:wp-modus-split', titel: 'Strom-Aufteilung Heizen/Kühlen',
+      // W-8: Der Titel nennt die **Größe**. „Aufteilung Heizen/Kühlen" allein
+      // sagte nicht, dass hier **Strom** steht — direkt darüber kann die
+      // Wärme-Aufteilung liegen, mit denselben Balken und anderer Einheit.
+      //
+      // ⚠ **E4: Er nennt auch, was wirklich drinsteht.** Sind Lüften oder
+      // Entfeuchten gemessen, wäre „Heizen/Kühlen" ein Titel, der zwei
+      // Segmente verschweigt — dieselbe Halbwahrheit, gegen die W-8 gebaut
+      // wurde. Ohne diese Zähler bleibt der eingeführte Wortlaut unverändert.
+      id: 'el:wp-modus-split',
+      titel: (wpLueften || wpEntfeuchten)
+        ? 'Strom-Aufteilung nach Betriebsart'
+        : 'Strom-Aufteilung Heizen/Kühlen',
       node: (
         <div className="space-y-3">
           <VerteilungsBalken segmente={[
             { label: 'Heizen', wert: d.wp_modus_strom_heizen_kwh ?? 0, farbe: ROLLEN_BG.heizung },
             { label: 'Kühlen', wert: d.wp_modus_strom_kuehlen_kwh ?? 0, farbe: ROLLEN_BG.kuehlung },
+            ...(wpLueften ? [{ label: 'Lüften', wert: wpLueften, farbe: ROLLEN_BG.lueftung }] : []),
+            ...(wpEntfeuchten
+              ? [{ label: 'Entfeuchten', wert: wpEntfeuchten, farbe: ROLLEN_BG.entfeuchtung }]
+              : []),
             { label: 'Nicht aufgeteilt', wert: d.wp_modus_nicht_aufgeteilt_kwh ?? 0, farbe: ROLLEN_BG.nicht_aufgeteilt },
           ]} />
           {/* Woher die Aufteilung kommt — dieselbe Unterscheidung wie im Hub:

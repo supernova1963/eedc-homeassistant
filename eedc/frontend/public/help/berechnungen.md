@@ -1133,6 +1133,24 @@ sieben Formeln).
 > `wp_kosten_euro` und werden als `kuehl_kosten_euro` eigens ausgewiesen. Ohne diese Trennung
 > gemessen: **−45,04 €** Ersparnis und **−52 kg** CO₂ für eine Klimaanlage, die im Winter geheizt
 > und im Sommer gekühlt hat (nachher +2,48 € / +8,2 kg). Default 0.0 ⇒ ohne Split unverändert.
+>
+> ⭐ **Dieselbe Abgrenzung gilt für die Arbeitszahl — seit W-14 (26.08.2026).** Bis dahin nannte
+> dieser Kasten nur Ersparnis und CO₂, und das war keine Unvollständigkeit im Text, sondern im
+> Code: **Die Arbeitszahl war die einzige der drei Größen, an der niemand nachgezogen hatte.** Ein
+> Gerät, das im Sommer kühlt, sah dadurch aus wie eine schlechte Heizung.
+>
+> ⭐ **Und sie gilt für alle Funktionen ohne bewertete Nutzenergie — seit E4 (26.08.2026).**
+> `arbeitszahl(..., strom_funktionsfremd_kwh=…)` bekommt heute **Kühlen + Lüften + Entfeuchten**
+> aus einer einzigen Größe: `WpFakten.modus_strom_funktionsfremd_kwh` bzw.
+> `ModusStromZeile.funktionsfremd_kwh`. *Eine Größe statt drei Summanden an vier Aufrufern — die
+> Aufzählung war die Bauform, an der W-14 entstanden ist.* **Abgezogen, nicht gesperrt:** die
+> Mengen bleiben in jeder Bilanz, es ändert sich allein der Nenner.
+>
+> ⬜ **Offen und bewusst nicht mitgebaut:** Der **Community-Server** kennt nur den Kühlstrom
+> (Feld `wp_strom_kuehlen_kwh`). Wer Lüften oder Entfeuchten getrennt misst *und* am Vergleich
+> teilnimmt, sieht dort eine etwas niedrigere Arbeitszahl als im eigenen Cockpit. Es braucht ein
+> neues Feld samt Migration im zweiten Repo; der Vermerk steht an der Stelle in
+> `services/community_service.py`.
 
 
 ### 3.6 ROI & Amortisation

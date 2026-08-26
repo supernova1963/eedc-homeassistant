@@ -105,6 +105,9 @@ export function baueTagAlsMonat(
     // einer Client-Subtraktion.
     wp_modus_strom_heizen_kwh: tagDetail?.wp_modus_strom_heizen_kwh ?? null,
     wp_modus_strom_kuehlen_kwh: tagDetail?.wp_modus_strom_kuehlen_kwh ?? null,
+    // E4: dieselben Segmente wie im Monat — die Blockfabrik ist geteilt.
+    wp_modus_strom_lueften_kwh: tagDetail?.wp_modus_strom_lueften_kwh ?? null,
+    wp_modus_strom_entfeuchten_kwh: tagDetail?.wp_modus_strom_entfeuchten_kwh ?? null,
     wp_modus_nicht_aufgeteilt_kwh: tagDetail?.wp_modus_nicht_aufgeteilt_kwh ?? null,
     wp_modus_abdeckung_h: tagDetail?.wp_modus_abdeckung_h ?? null,
     // Ohne dieses Feld zeigte der Tag die Aufteilung nur für ABGELEITETE

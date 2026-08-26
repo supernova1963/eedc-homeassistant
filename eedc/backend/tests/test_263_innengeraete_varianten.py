@@ -143,9 +143,21 @@ VARIANTEN: dict[str, tuple[dict, dict, dict]] = {
          BETRIEBSART_STROM_FELD[LUEFTEN]: 5.0,
          BETRIEBSART_STROM_FELD[ENTFEUCHTEN]: 7.0},
         # Heizen/Kühlen bleiben 0 — der Block erscheint trotzdem, weil gemessen
-        # wurde. „Nicht aufgeteilt" trägt Lüften und Entfeuchten mit.
+        # wurde.
+        #
+        # ⛔ **Hier stand bis zum 26.08.2026 `"rest": 100.0`** mit der Begründung
+        # „‚Nicht aufgeteilt' trägt Lüften und Entfeuchten mit". Das hielt den
+        # Entscheid vom 25.08. fest (*erst differenzieren, wenn Anwender es
+        # verlangen*) — und der ist durch **E4** abgelöst (Konzept §2.3, 26.08.:
+        # *sie erscheinen in der Aufteilung, bekommen aber keine Kennzahl*).
+        # Die Probe hatte recht, solange die Regel galt; sie wird umgestellt,
+        # nicht gelöscht.
+        #
+        # 100 − 5 − 7 = 88: die beiden gemessenen Betriebsarten haben jetzt
+        # eigene Segmente und verlassen die Restmenge. Ohne den Abzug stünde
+        # dieselbe Menge zweimal.
         {"split": True, "gemessen": True, "heizen": 0.0, "kuehlen": 0.0,
-         "rest": 100.0, "abdeckung": 0.0},
+         "lueften": 5.0, "entfeuchten": 7.0, "rest": 88.0, "abdeckung": 0.0},
     ),
 }
 
@@ -190,6 +202,11 @@ async def test_komponenten_hub(db, name):
     assert z.get("modus_gemessen", False) is erwartet["gemessen"], name
     assert z["modus_strom_heizen_kwh"] == pytest.approx(erwartet["heizen"]), name
     assert z["modus_strom_kuehlen_kwh"] == pytest.approx(erwartet["kuehlen"]), name
+    # E4: Lüften/Entfeuchten haben eigene Segmente. Die Varianten ohne eigene
+    # Erwartung tragen 0 — dort gibt es keine solchen Zähler.
+    assert z["modus_strom_lueften_kwh"] == pytest.approx(erwartet.get("lueften", 0.0)), name
+    assert z["modus_strom_entfeuchten_kwh"] == pytest.approx(
+        erwartet.get("entfeuchten", 0.0)), name
     assert z["modus_nicht_aufgeteilt_kwh"] == pytest.approx(erwartet["rest"]), name
     assert z["modus_abdeckung_h"] == pytest.approx(erwartet["abdeckung"]), name
 
@@ -213,6 +230,12 @@ async def test_cockpit_monat(db, name):
     assert bool(antwort.wp_modus_gemessen) is erwartet["gemessen"], name
     assert antwort.wp_modus_strom_heizen_kwh == pytest.approx(erwartet["heizen"]), name
     assert antwort.wp_modus_strom_kuehlen_kwh == pytest.approx(erwartet["kuehlen"]), name
+    # E4: dieselben vier Segmente wie im Hub — die beiden Flächen dürfen für
+    # dieselbe Anlage keine verschiedenen Restmengen ausweisen.
+    assert antwort.wp_modus_strom_lueften_kwh == pytest.approx(
+        erwartet.get("lueften", 0.0)), name
+    assert antwort.wp_modus_strom_entfeuchten_kwh == pytest.approx(
+        erwartet.get("entfeuchten", 0.0)), name
     assert antwort.wp_modus_nicht_aufgeteilt_kwh == pytest.approx(erwartet["rest"]), name
 
 
@@ -237,10 +260,16 @@ async def test_teilmengen_ueberschreiten_nie_den_gesamtwert(db, name):
         return
     heizen = z["modus_strom_heizen_kwh"]
     kuehlen = z["modus_strom_kuehlen_kwh"]
+    # E4: seit dem 26.08. sind es vier Teilmengen, nicht zwei. Ohne die beiden
+    # neuen hier wäre die Invariante blind für genau den Fehler, den sie fangen
+    # soll — eine Menge, die ihr Segment verlässt, ohne aus dem Rest zu gehen.
+    lueften = z["modus_strom_lueften_kwh"]
+    entfeuchten = z["modus_strom_entfeuchten_kwh"]
     rest = z["modus_nicht_aufgeteilt_kwh"]
-    assert heizen + kuehlen <= GESAMT + 1e-6, f"{name}: Teilmengen > Gesamt"
+    teilmengen = heizen + kuehlen + lueften + entfeuchten
+    assert teilmengen <= GESAMT + 1e-6, f"{name}: Teilmengen > Gesamt"
     assert rest >= 0, f"{name}: negativer Rest ⇒ irgendwo wurde addiert"
-    assert heizen + kuehlen + rest == pytest.approx(GESAMT), name
+    assert teilmengen + rest == pytest.approx(GESAMT), name
 
 
 # ─── Fläche 3: Monatsabschluss + Fläche 4: Datenquellen ─────────────────────

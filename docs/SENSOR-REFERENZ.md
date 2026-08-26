@@ -217,11 +217,17 @@ Ein Gerät, das heizt, kühlt, lüftet und entfeuchtet, tut das oft über
 **denselben** Zähler. Wer die Anteile getrennt messen kann, trägt sie hier ein —
 sie sind **Teilmengen** des Gesamtverbrauchs und werden nie dazuaddiert.
 
-⚠️ **Der Kühlanteil zählt nicht in die Arbeitszahl.** Kühlen erzeugt keine Wärme;
-läge sein Strom im Nenner, sähe eine Anlage, die im Sommer kühlt, wie eine
-schlechte Heizung aus. Für Wirtschaftlichkeit und CO₂ gilt dasselbe schon
-länger. Ist der ganze Verbrauch eines Zeitraums Kühlbetrieb, steht statt der
-Arbeitszahl der Grund dafür.
+⚠️ **Kühlen, Lüften und Entfeuchten zählen nicht in die Arbeitszahl.** Sie
+erzeugen keine Wärme, die sich messen ließe; läge ihr Strom im Nenner, sähe eine
+Anlage, die im Sommer kühlt oder viel lüftet, wie eine schlechte Heizung aus.
+Für Wirtschaftlichkeit und CO₂ gilt beim Kühlen dasselbe schon länger. Ist der
+ganze Verbrauch eines Zeitraums Kühlbetrieb, steht statt der Arbeitszahl der
+Grund dafür.
+
+**Lüften und Entfeuchten bekommen eine eigene Zeile in der Aufteilung, sobald du
+einen Zähler dafür zugeordnet hast** — vorher stecken sie in „nicht aufgeteilt".
+Eine Kennzahl bekommen sie bewusst nicht: Es gibt keine Nutzenergie, gegen die
+man sie rechnen könnte.
 
 | Feld | Label | Einheit | Sensortyp |
 |------|-------|---------|-----------|

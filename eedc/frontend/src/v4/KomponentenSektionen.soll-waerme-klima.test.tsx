@@ -189,4 +189,38 @@ describe('Achse III-3 — ein Balken sagt, was er zeigt', () => {
     expect(cAug.textContent).toContain('Strom-Aufteilung Heizen/Kühlen')
     expect(cJuli.textContent).not.toContain('Strom-Aufteilung')
   })
+
+  // ── E4 (Konzept §2.3): erfassen ja, bewerten nein ────────────────────────
+
+  it('ERFÜLLT (E4): gemessenes Lüften/Entfeuchten bekommt eigene Segmente', () => {
+    rendereWpBlock({
+      wp_strom_kwh: 100,
+      wp_modus_gemessen: true,
+      wp_modus_strom_heizen_kwh: 60, wp_modus_strom_kuehlen_kwh: 20,
+      wp_modus_strom_lueften_kwh: 5, wp_modus_strom_entfeuchten_kwh: 7,
+      wp_modus_nicht_aufgeteilt_kwh: 8,
+    })
+
+    expect(screen.getByText('Lüften')).toBeTruthy()
+    expect(screen.getByText('Entfeuchten')).toBeTruthy()
+    // ⚠ Der Titel nennt, was drinsteht: „Heizen/Kühlen" verschwiege zwei
+    // Segmente — dieselbe Halbwahrheit, gegen die W-8 gebaut wurde.
+    expect(screen.getByText('Strom-Aufteilung nach Betriebsart')).toBeTruthy()
+  })
+
+  it('ERFÜLLT (E4): ohne Zähler bleiben die Segmente weg — und der alte Titel steht', () => {
+    // **Die Gegenprobe, und sie trägt die zweite Hälfte des SOLL-Satzes:**
+    // *„Wer sie nicht erfasst, sieht sie nicht."* Zwei leere Zeilen an jeder
+    // Wärmepumpe wären eine Anzeige, die für fast jeden Anwender nichts sagt.
+    rendereWpBlock({
+      wp_strom_kwh: 100,
+      wp_modus_gemessen: true,
+      wp_modus_strom_heizen_kwh: 60, wp_modus_strom_kuehlen_kwh: 20,
+      wp_modus_nicht_aufgeteilt_kwh: 20,
+    })
+
+    expect(screen.queryByText('Lüften')).toBeNull()
+    expect(screen.queryByText('Entfeuchten')).toBeNull()
+    expect(screen.getByText('Strom-Aufteilung Heizen/Kühlen')).toBeTruthy()
+  })
 })

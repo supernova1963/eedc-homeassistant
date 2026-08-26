@@ -187,7 +187,15 @@ describe('Komponenten-Detail (E-Gegencheck)', () => {
     renderBlock(bloecke, 'k-waermepumpe')
     expect(screen.getByText('Modus erfasst')).toBeInTheDocument()
     expect(screen.getByText('17 Stunden')).toBeInTheDocument()
-    expect(screen.getByText(/ist Standby und alles, was weder Heizen noch Kühlen war/)).toBeInTheDocument()
+    // ⚠ **Auf die Aussage geprüft, nicht auf den Satzbau** (E4, 26.08.): Der
+    // Wortlaut hat sich geändert, weil Lüften und Entfeuchten seither eigene
+    // Segmente bekommen können und nicht mehr pauschal als Inhalt der
+    // Restmenge genannt werden dürfen. Was N-327 verlangt, ist unverändert —
+    // dass neben der Zahl ein Grund steht. Ein Matcher auf den ganzen Satz
+    // hätte den Bau blockiert, ohne dass die Regel verletzt war
+    // ([[feedback_wortlaut_filter_macht_tests_stumm]]).
+    expect(screen.getByText(/ist Standby und alles/)).toBeInTheDocument()
+    expect(screen.getByText(/rückwirkend gibt es sie nicht/)).toBeInTheDocument()
   })
 
   it('Modus-Aufteilung gemessen: Herkunft statt Stundenzahl', () => {

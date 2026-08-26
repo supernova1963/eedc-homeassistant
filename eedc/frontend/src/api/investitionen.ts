@@ -246,6 +246,9 @@ export interface WaermepumpeDashboardResponse {
     // eine 0 hieße „hat nicht geheizt", und das weiß eedc ohne Sensor nicht.
     modus_strom_heizen_kwh?: number
     modus_strom_kuehlen_kwh?: number
+    /** E4 (Konzept §2.3): nur aus **gemessenen** Betriebsart-Zählern. */
+    modus_strom_lueften_kwh?: number
+    modus_strom_entfeuchten_kwh?: number
     modus_nicht_aufgeteilt_kwh?: number
     modus_abdeckung_h?: number
     modus_gemessen?: boolean

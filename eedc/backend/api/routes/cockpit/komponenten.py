@@ -219,9 +219,12 @@ async def get_komponenten_zeitreihe(
         wp_cop = arbeitszahl(
             wp.waerme_kwh, wp.strom_kwh,
             waerme_abgeleitet_kwh=wp.waerme_abgeleitet_kwh,
-            # W-14: Kühlstrom gehört nicht in den Nenner einer Wärme-Kennzahl —
-            # dieselbe Abgrenzung, die Ersparnis und CO₂ seit v4.0.5 ziehen (E-B).
-            strom_funktionsfremd_kwh=wp.modus_strom_kuehlen_kwh,
+            # W-14 + E4: Strom in Funktionen ohne bewertete Nutzenergie gehört
+            # nicht in den Nenner einer Wärme-Kennzahl — dieselbe Abgrenzung, die
+            # Ersparnis und CO₂ seit v4.0.5 ziehen (E-B). Kühlen, Lüften und
+            # Entfeuchten stehen dafür in EINER Größe: die Aufzählung an vier
+            # Aufrufern war die Bauform, an der W-14 entstanden ist.
+            strom_funktionsfremd_kwh=wp.modus_strom_funktionsfremd_kwh,
             # R2: alle erkennbaren Lagen über die eine Layer-Stelle. Der
             # Zeitraum-Versatz gehört nicht dazu — der Hub liest EINE Quelle
             # (die Monats-Fakten), die Vier-Quellen-Auflösung gibt es nur in

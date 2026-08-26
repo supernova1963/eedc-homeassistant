@@ -474,6 +474,21 @@ def _monatswert(
         # Server „alter Client, unbekannt"; eine 0 heißt „gemessen, es gab
         # keinen Kühlbetrieb". Das ist derselbe Unterschied, den P4 überall
         # sonst verlangt — und der Server darf ihn nicht raten.
+        #
+        # ⬜ **OFFEN seit E4 (26.08.2026) — bewusst nicht mitgebaut.** Lokal
+        # zieht die Arbeitszahl seit E4 **Kühlen · Lüften · Entfeuchten** ab
+        # (`WpFakten.modus_strom_funktionsfremd_kwh`); der Server kennt nur den
+        # Kühlstrom. Wer Lüftungs- oder Entfeuchtungs-Zähler zugeordnet hat und
+        # zugleich am Community-Vergleich teilnimmt, sieht dort deshalb eine
+        # etwas niedrigere Arbeitszahl als in seinem eigenen Cockpit.
+        #
+        # **Warum trotzdem nicht jetzt:** Es braucht ein neues Feld samt
+        # Migration im **zweiten** Repo (`eedc-community`), und die
+        # Schnittmenge „misst Lüften getrennt" × „teilt mit der Community" ist
+        # sehr klein. **Wer das Feld dort anlegt, füllt es hier mit
+        # `wp.modus_strom_funktionsfremd_kwh` und nimmt diesen Vermerk weg** —
+        # der Name `wp_strom_kuehlen_kwh` darf NICHT umgedeutet werden, sein
+        # Vertrag steht im Docstring von `MonatswertInput` (Community-Repo).
         monatswert_data["wp_strom_kuehlen_kwh"] = round(
             wp.modus_strom_kuehlen_kwh, 1
         )
