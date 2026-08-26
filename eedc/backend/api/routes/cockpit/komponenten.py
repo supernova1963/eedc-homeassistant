@@ -17,6 +17,9 @@ from backend.core.berechnungen import (
     einspeise_erloes_euro,
     speicher_wirkungsgrad,
 )
+from backend.core.berechnungen.waermepumpe_kennzahl import (
+    GRUND_GERAETE_OHNE_WAERME, arbeitszahl,
+)
 from backend.api.routes.cockpit._shared import MONATSNAMEN
 from backend.services.monats_fakten import MonatsFakt, lade_monats_fakten
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
@@ -210,12 +213,17 @@ async def get_komponenten_zeitreihe(
         # Mengengewichteter Ø Ladepreis (nur Zeilen mit gepflegtem Preis).
         speicher_arbitrage_preis = speicher.netzladung_preis_cent
 
-        # JAZ/COP nur wenn beide Seiten **gemessen** sind (siehe uebersicht.py
-        # für die Erklärung — kein Wärmemengenzähler, oder die Wärme ist aus
-        # `Strom × JAZ` abgeleitet; #263 K-2, Konzept §3.5).
-        wp_cop = (
-            wp.waerme_kwh / wp.strom_kwh
-        ) if wp.strom_kwh > 0 and wp.waerme_kwh > 0 and wp.jaz_belastbar else None
+        # JAZ/COP nur wenn beide Seiten **gemessen** sind — die Sperre (R2)
+        # steht seit 2026-08-26 im Layer (`berechnungen.waermepumpe_kennzahl`),
+        # nicht mehr an drei Stellen nebeneinander.
+        wp_cop = arbeitszahl(
+            wp.waerme_kwh, wp.strom_kwh,
+            waerme_abgeleitet_kwh=wp.waerme_abgeleitet_kwh,
+            abgrenzung_verletzt=(
+                GRUND_GERAETE_OHNE_WAERME
+                if wp.waerme_deckt_nicht_alle_geraete else None
+            ),
+        ).wert
 
         emob_pv_anteil = (
             emob.ladung_pv_kwh / emob.ladung_kwh * 100

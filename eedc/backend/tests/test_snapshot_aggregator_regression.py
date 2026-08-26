@@ -15,6 +15,8 @@ from datetime import date
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from backend.tests.snapshot_doubles import DbOhneZwischenstaende
+
 import pytest
 
 from backend.services.snapshot.aggregator import get_komponenten_tageskwh
@@ -61,7 +63,7 @@ async def test_speicher_nur_ladung_gemappt_liefert_signed_negativ():
     with patch("backend.services.snapshot.aggregator.get_snapshot",
                side_effect=_snap_for_sums(snaps, datum)):
         result = await get_komponenten_tageskwh(
-            db=MagicMock(), anlage=_make_anlage(sm),
+            db=DbOhneZwischenstaende(), anlage=_make_anlage(sm),
             investitionen_by_id={"5": _make_inv(5, "speicher")},
             datum=datum,
         )
@@ -80,7 +82,7 @@ async def test_speicher_nur_entladung_gemappt_liefert_signed_positiv():
     with patch("backend.services.snapshot.aggregator.get_snapshot",
                side_effect=_snap_for_sums(snaps, datum)):
         result = await get_komponenten_tageskwh(
-            db=MagicMock(), anlage=_make_anlage(sm),
+            db=DbOhneZwischenstaende(), anlage=_make_anlage(sm),
             investitionen_by_id={"5": _make_inv(5, "speicher")},
             datum=datum,
         )
@@ -107,7 +109,7 @@ async def test_wallbox_ladung_pv_netz_im_mapping_werden_ignoriert():
     with patch("backend.services.snapshot.aggregator.get_snapshot",
                side_effect=_snap_for_sums(snaps, datum)):
         result = await get_komponenten_tageskwh(
-            db=MagicMock(), anlage=_make_anlage(sm),
+            db=DbOhneZwischenstaende(), anlage=_make_anlage(sm),
             investitionen_by_id={"2": _make_inv(2, "wallbox")},
             datum=datum,
         )
@@ -127,7 +129,7 @@ async def test_eauto_ohne_ladung_kwh_fallback_auf_verbrauch():
     with patch("backend.services.snapshot.aggregator.get_snapshot",
                side_effect=_snap_for_sums(snaps, datum)):
         result = await get_komponenten_tageskwh(
-            db=MagicMock(), anlage=_make_anlage(sm),
+            db=DbOhneZwischenstaende(), anlage=_make_anlage(sm),
             investitionen_by_id={"1": _make_inv(1, "e-auto")},
             datum=datum,
         )
@@ -149,7 +151,7 @@ async def test_eauto_ladung_kwh_gewinnt_ueber_verbrauch():
     with patch("backend.services.snapshot.aggregator.get_snapshot",
                side_effect=_snap_for_sums(snaps, datum)):
         result = await get_komponenten_tageskwh(
-            db=MagicMock(), anlage=_make_anlage(sm),
+            db=DbOhneZwischenstaende(), anlage=_make_anlage(sm),
             investitionen_by_id={"1": _make_inv(1, "e-auto")},
             datum=datum,
         )
@@ -167,7 +169,7 @@ async def test_eauto_mit_parent_wallbox_skipped():
     with patch("backend.services.snapshot.aggregator.get_snapshot",
                side_effect=_snap_for_sums(snaps, datum)):
         result = await get_komponenten_tageskwh(
-            db=MagicMock(), anlage=_make_anlage(sm),
+            db=DbOhneZwischenstaende(), anlage=_make_anlage(sm),
             investitionen_by_id={
                 "1": _make_inv(1, "e-auto", parent_investition_id=2),
             },
@@ -194,7 +196,7 @@ async def test_wp_getrennte_strommessung_summiert_heiz_plus_ww():
     with patch("backend.services.snapshot.aggregator.get_snapshot",
                side_effect=_snap_for_sums(snaps, datum)):
         result = await get_komponenten_tageskwh(
-            db=MagicMock(), anlage=_make_anlage(sm),
+            db=DbOhneZwischenstaende(), anlage=_make_anlage(sm),
             investitionen_by_id={
                 "7": _make_inv(7, "waermepumpe",
                                parameter={"getrennte_strommessung": True}),
@@ -223,7 +225,7 @@ async def test_wp_thermisch_gemappt_aber_nicht_summiert():
     with patch("backend.services.snapshot.aggregator.get_snapshot",
                side_effect=_snap_for_sums(snaps, datum)):
         result = await get_komponenten_tageskwh(
-            db=MagicMock(), anlage=_make_anlage(sm),
+            db=DbOhneZwischenstaende(), anlage=_make_anlage(sm),
             investitionen_by_id={"7": _make_inv(7, "waermepumpe")},
             datum=datum,
         )
@@ -241,7 +243,7 @@ async def test_sonstiges_immer_positiv_unabhaengig_von_kategorie():
     with patch("backend.services.snapshot.aggregator.get_snapshot",
                side_effect=_snap_for_sums(snaps, datum)):
         result = await get_komponenten_tageskwh(
-            db=MagicMock(), anlage=_make_anlage(sm),
+            db=DbOhneZwischenstaende(), anlage=_make_anlage(sm),
             investitionen_by_id={
                 "13": _make_inv(13, "sonstiges",
                                 parameter={"kategorie": "verbraucher"}),
@@ -263,7 +265,7 @@ async def test_basis_einspeisung_und_netzbezug():
     with patch("backend.services.snapshot.aggregator.get_snapshot",
                side_effect=_snap_for_sums(snaps, datum)):
         result = await get_komponenten_tageskwh(
-            db=MagicMock(), anlage=_make_anlage(sm),
+            db=DbOhneZwischenstaende(), anlage=_make_anlage(sm),
             investitionen_by_id={}, datum=datum,
         )
     assert abs(result["einspeisung"] - 36.0) < 0.001
@@ -281,7 +283,7 @@ async def test_kein_eintrag_wenn_delta_none():
     with patch("backend.services.snapshot.aggregator.get_snapshot",
                side_effect=_snap_for_sums({}, datum)):
         result = await get_komponenten_tageskwh(
-            db=MagicMock(), anlage=_make_anlage(sm),
+            db=DbOhneZwischenstaende(), anlage=_make_anlage(sm),
             investitionen_by_id={"3": _make_inv(3, "pv-module")},
             datum=datum,
         )

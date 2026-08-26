@@ -86,7 +86,17 @@ export function baueTagAlsMonat(
     wp_strom_warmwasser_kwh: tagDetail?.wp_strom_warmwasser_kwh ?? null,
     wp_heizung_kwh: tagDetail?.wp_heizung_kwh ?? null,
     wp_warmwasser_kwh: tagDetail?.wp_warmwasser_kwh ?? null,
-    wp_waerme_kwh: ((tagDetail?.wp_heizung_kwh ?? 0) + (tagDetail?.wp_warmwasser_kwh ?? 0)) || null,
+    // ⛔ **Hier stand bis 26.08.2026 `(wp_heizung ?? 0) + (wp_warmwasser ?? 0)`**
+    // — seit der ersten Fassung dieser Datei, und damit die zweite Stelle für
+    // den Wärme-Kanon des Layers (Befund W-9, ADR-001/S1). Die Summe war
+    // *richtig*; falsch war, dass sie hier stand: Der Client kannte damit die
+    // eine Hälfte der Regel („sonst Heizung + Warmwasser") und nicht die
+    // andere („Gesamtwert hat Vorrang"), und die Belastbarkeits-Sperre der
+    // Arbeitszahl konnte er gar nicht kennen.
+    wp_waerme_kwh: tagDetail?.wp_waerme_kwh ?? null,
+    wp_jaz: tagDetail?.wp_jaz ?? null,
+    wp_jaz_grund: tagDetail?.wp_jaz_grund ?? null,
+    wp_jaz_hinweis: tagDetail?.wp_jaz_hinweis ?? null,
     // #263/T2 — Aufteilung Heizen/Kühlen des Tages (gemeldet von OB73-gif).
     // Die Blockfabrik zeigt den Balken bereits, sobald `wp_modus_abdeckung_h`
     // gesetzt ist — sie ist für Monat UND Tag dieselbe. Hier ist deshalb nur

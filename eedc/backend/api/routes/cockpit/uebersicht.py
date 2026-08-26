@@ -37,6 +37,7 @@ from backend.core.berechnungen.ust_eigenverbrauch import (
     UstJahresanteil,
     ust_eigenverbrauch_fuer_anlage,
 )
+from backend.core.berechnungen.waermepumpe_kennzahl import arbeitszahl
 from backend.core.calculations import berechne_co2_bilanz
 from backend.services.finanz_zeilen import baue_finanz_zeile
 from backend.services.monats_fakten import finanz_zeile_eingabe, lade_monats_fakten
@@ -453,11 +454,10 @@ async def get_cockpit_uebersicht(
     #     lieferte früher 0.0, also eine irreführende JAZ);
     # (b) #263 K-2: die Wärme ist aus `Strom × JAZ` abgeleitet — dann wäre das
     #     Ergebnis die gepflegte JAZ selbst (Konzept §3.5, zirkulär).
-    wp_cop = (
-        (wp_waerme / wp_strom)
-        if wp_strom > 0 and wp_waerme > 0 and wp_waerme_abgeleitet <= 0
-        else None
-    )
+    # Beide Fälle liegen seit 2026-08-26 im Layer (R2, Befund W-3).
+    wp_cop = arbeitszahl(
+        wp_waerme, wp_strom, waerme_abgeleitet_kwh=wp_waerme_abgeleitet,
+    ).wert
     # Multi-WP: erste WP als Parameter-Referenz (Wirkungsgrad/Gas-Default).
     # Drift-Audit Domäne A1 / Issue #178: vorher 10ct hartcodiert + ignorierte
     # User-Param `alter_preis_cent_kwh`.

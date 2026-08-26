@@ -35,6 +35,87 @@ from backend.services.snapshot.writer import _upsert_snapshot
 logger = logging.getLogger(__name__)
 
 
+#: Toleranz, unterhalb derer ein Rücksprung als Messrauschen gilt (kWh).
+TAGESRESET_TOLERANZ_KWH = 0.01
+
+
+async def zaehler_faellt_im_fenster(
+    db: AsyncSession,
+    anlage_id: int,
+    sensor_key: str,
+    von: datetime,
+    bis: datetime,
+    startstand: float,
+    endstand: float,
+    toleranz_kwh: float = TAGESRESET_TOLERANZ_KWH,
+) -> bool:
+    """Ist der Zählerstand innerhalb des Fensters **gefallen**? (SOLL §3.1)
+
+    Ein kumulativer Zähler kann nicht fallen. Seine Reihe ist monoton steigend,
+    also gilt für **jeden** Zwischenstand ``s0 ≤ v ≤ s1``. Wird eine der beiden
+    Schranken verletzt, ist der Zähler im Fenster zurückgesetzt worden — dann
+    ist die Randdifferenz ``s1 − s0`` keine Menge, sondern die Differenz zweier
+    unzusammenhängender Zählerläufe.
+
+    ⭐ **Beide Schranken werden geprüft, und die erste allein hätte nicht
+    gereicht.** Der Entwurf fragte nur ``max > s1`` — „der Zähler ist vor dem
+    Fensterende gefallen". Beim Bau der Fixture fiel der dritte Fall auf: Werden
+    **beide Ränder vor** dem Reset abgetastet (s0 = gestriger Tagesstand,
+    s1 = heutiger), ist die Differenz **positiv und plausibel** und kein
+    Zwischenstand liegt über s1. Sichtbar wird der Reset dort nur an der
+    **unteren** Schranke — direkt nach ``von`` fällt der Zähler unter s0.
+    *Eine Monotonie-Prüfung, die nur ein Ende prüft, prüft keine Monotonie.*
+
+    ⭐ **Warum diese Prüfung überhaupt nötig ist, obwohl HA sie schon macht.**
+    Über HA kommt der Wert aus der Spalte ``sum`` — HAs **reset-bereinigter**
+    Lebenszeit-Stand. Ein ``utility_meter`` mit ``daily``-Zyklus erreicht eedc
+    deshalb längst monoton (gemessen 26.08.; die Regel steht seit #131/v3.23.8
+    und F-58 fest). **Der MQTT-/Standalone-Pfad hat diese Spalte nicht:**
+    ``MqttEnergySnapshot.value_kwh`` speichert den rohen publizierten Wert.
+    Publiziert eine App einen „…heute"-Zähler, landet er ungefiltert hier.
+
+    Die Prüfung ist deshalb bewusst **quellen-agnostisch** formuliert — sie
+    fragt die Zählerreihe selbst, nicht ihre Herkunft. Eine Prüfung, die nur den
+    MQTT-Pfad kennt, wäre die nächste Drift-Quelle (F-56-Klasse).
+
+    ⚠ **Was sie NICHT kann:** Liegt im Fenster außer den beiden Rändern kein
+    Snapshot, gibt es nichts zu vergleichen — sie meldet dann ``False``. Das ist
+    kein Freibrief, sondern die ehrliche Auskunft „nicht feststellbar"; ohne
+    Zwischenstände ist ein Tagesreset-Zähler von einem ruhenden Gerät nicht
+    unterscheidbar.
+
+    Args:
+        von: Fensteranfang — **beide Ränder sind exklusiv**, geprüft werden nur
+            die Zwischenstände. Die Ränder selbst sind ``startstand``/
+            ``endstand`` und würden die Schranken definitionsgemäß erfüllen.
+        bis: Fensterende (exklusiv, s. ``von``).
+        startstand: der Stand am Fensteranfang (``s0``) — untere Schranke.
+        endstand: der Stand am Fensterende (``s1``) — obere Schranke.
+    """
+    zeile = (await db.execute(
+        select(
+            func.min(SensorSnapshot.wert_kwh),
+            func.max(SensorSnapshot.wert_kwh),
+        ).where(
+            and_(
+                SensorSnapshot.anlage_id == anlage_id,
+                SensorSnapshot.sensor_key == sensor_key,
+                SensorSnapshot.zeitpunkt > von,
+                SensorSnapshot.zeitpunkt < bis,
+            )
+        )
+    )).first()
+    if zeile is None:
+        return False
+    tiefststand, hoechststand = zeile
+    if tiefststand is None or hoechststand is None:
+        return False
+    return (
+        hoechststand > endstand + toleranz_kwh
+        or tiefststand < startstand - toleranz_kwh
+    )
+
+
 async def _get_mqtt_snapshot_at(
     db: AsyncSession,
     anlage_id: int,

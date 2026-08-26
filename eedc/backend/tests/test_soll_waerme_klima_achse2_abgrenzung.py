@@ -46,12 +46,6 @@ REGELN_OFFEN: dict[str, str] = {
         "Arbeitszahl zu hoch. Dieselbe Verletzung wie W-7 mit umgekehrtem "
         "Vorzeichen. KEIN Melder, stand in keiner Fallliste."
     ),
-    "R2/W-3": (
-        "Die Sperre `jaz_belastbar` existiert im Layer, erreicht aber die "
-        "Cockpit-Sichten nicht: `AktuellerMonatResponse` liefert "
-        "`wp_waerme_kwh` und `wp_strom_kwh` ohne Belastbarkeits-Flag, und der "
-        "Client rechnet die JAZ daraus selbst (ADR-001-Verstoß)."
-    ),
     "R2/Zeitraum": (
         "Q aus dem Monatsabschluss gegen E aus laufenden Sensoren ergibt einen "
         "Quotienten aus zwei Wirklichkeiten (SOLL §4.2 Fall 3). Keine Prüfung."
@@ -134,6 +128,69 @@ def test_ii2_bivalent_fremde_waerme_im_nutzen():
     assert not [f for f in WpFakten.__dataclass_fields__ if "bivalent" in f]
 
 
+# ══ II-2b · ERFÜLLT — R2/Gerät: die Lage, die eedc SELBST erkennt ══════════
+
+def test_ii2b_zwei_geraete_ein_zaehler_nur_eines_meldet_waerme():
+    """**ERFÜLLT (R2, SOLL §4.2 Fall 1 — gebaut 2026-08-26).**
+
+    Lage: Der Block *Wärme/Klima* aggregiert **alle** Wärmepumpen der Anlage.
+    Trägt eines der Geräte Strom, aber keine Wärme, steht im Nenner der Strom
+    von zwei Geräten und im Zähler die Wärme von einem — die Arbeitszahl ist
+    systematisch zu niedrig.
+
+    ⭐ **Von den vier Lagen des §4.2 ist das die einzige, für die eedc keine
+    Angabe des Anwenders braucht.** Sie steht in den Daten: Wie viele Geräte
+    haben Strom beigetragen, wie viele davon auch Wärme? Heizstab am Zähler
+    (II-1), bivalenter Zweiterzeuger (II-2) und Zeitraum-Versatz (II-5) sind
+    von außen unsichtbar — deshalb sind die drei weiter offen und diese hier
+    ist gebaut.
+
+    **Melder dietmar1968**, sein Screenshot nennt die Konstellation selbst:
+    *„Aggregiert aus: Wärmepumpe · Klimaanlage"* bei einer JAZ von 0,92.
+    ⚠ Dass genau diese Vermischung **seine** Zahl erzeugt, bleibt **ungemessen**
+    (SOLL §7/A2) — der Heizstab ist die sparsamere Erklärung. Die Regel gilt
+    unabhängig davon, welche Erklärung im Einzelfall zutrifft.
+    """
+    from backend.core.berechnungen.waermepumpe_kennzahl import (
+        GRUND_GERAETE_OHNE_WAERME, arbeitszahl,
+    )
+
+    # Zwei Geräte tragen Strom, nur eines meldet Wärme.
+    wp = _wp(strom_kwh=337.0, waerme_kwh=309.0,
+             geraete_mit_strom=2, geraete_mit_waerme=1)
+    assert wp.waerme_deckt_nicht_alle_geraete is True
+
+    gesperrt = arbeitszahl(
+        wp.waerme_kwh, wp.strom_kwh,
+        abgrenzung_verletzt=GRUND_GERAETE_OHNE_WAERME,
+    )
+    assert gesperrt.wert is None
+    assert gesperrt.grund == GRUND_GERAETE_OHNE_WAERME
+
+
+def test_ii2c_jedes_geraet_meldet_waerme_die_kennzahl_bleibt():
+    """**ERFÜLLT.** Melden alle Geräte Wärme, gibt es die Kennzahl.
+
+    ⚠ **Die Gegenprobe ist hier besonders wichtig**, weil die Sperre auf einer
+    *anlagenweiten* Größe sitzt: Eine zu scharfe Regel hätte jede Anlage mit
+    mehreren Wärmepumpen um ihre Arbeitszahl gebracht. Verglichen wird deshalb
+    **Wärme-Melder gegen Strom-Melder**, nicht gegen die Zahl der Geräte —
+    ein im Monat stillstehendes Gerät trägt weder das eine noch das andere und
+    verändert das Ergebnis nicht.
+    """
+    from backend.core.berechnungen.waermepumpe_kennzahl import arbeitszahl
+
+    beide = _wp(strom_kwh=500.0, waerme_kwh=2000.0,
+                geraete_mit_strom=2, geraete_mit_waerme=2)
+    assert beide.waerme_deckt_nicht_alle_geraete is False
+    assert arbeitszahl(beide.waerme_kwh, beide.strom_kwh).wert == 4.0
+
+    # Ein drittes Gerät stand still — es trägt zu keiner der beiden Seiten bei.
+    stillstand = _wp(strom_kwh=500.0, waerme_kwh=2000.0,
+                     geraete_mit_strom=2, geraete_mit_waerme=2)
+    assert stillstand.waerme_deckt_nicht_alle_geraete is False
+
+
 # ══ II-3 · ERFÜLLT — die eine Sperre, die es gibt, hält ═════════════════════
 
 def test_ii3_abgeleitete_waerme_sperrt_die_kennzahl():
@@ -155,8 +212,8 @@ def test_ii3_abgeleitete_waerme_sperrt_die_kennzahl():
 
 # ══ II-4 · OFFEN — R2/S1: die Sperre erreicht die Cockpit-Sichten nicht ═════
 
-def test_ii4_monatssicht_liefert_kein_belastbarkeits_flag():
-    """**OFFEN (R2/W-3).**
+def test_ii4_monatssicht_liefert_die_fertige_kennzahl():
+    """**ERFÜLLT (R2/W-3 — gebaut 2026-08-26).**
 
     ``jaz_belastbar`` wird im Komponenten-Hub und in der Cockpit-Übersicht
     ausgewertet. Die Sicht, die die Melder tatsächlich ansehen — *Cockpit →
@@ -168,21 +225,94 @@ def test_ii4_monatssicht_liefert_kein_belastbarkeits_flag():
     (``v4/KomponentenSektionen.tsx:311``). Er **kann** die Sperre nicht kennen.
 
     SOLL §3.3/S1 und ADR-001: *„Wo zwei Sichten dieselbe Frage beantworten,
-    rechnet EINE Stelle — der Layer, nicht der Client."* Erwartung nach dem Bau:
-    Die Response trägt das Flag (oder gleich die fertige Kennzahl).
+    rechnet EINE Stelle — der Layer, nicht der Client."*
 
-    **Folge heute:** Dieselbe Anlage kann im Hub „—" zeigen und im Cockpit eine
+    **Gebaut wurde die stärkere der beiden Möglichkeiten:** nicht das Flag,
+    sondern die **fertige Kennzahl samt Begründung**. Ein Flag hätte den Client
+    weiterhin rechnen lassen und ihm nur eine zweite Bedingung mitgegeben — die
+    Formel wäre an zwei Stellen geblieben. Jetzt liefert der Layer
+    (`core/berechnungen/waermepumpe_kennzahl.arbeitszahl`) `wp_jaz`,
+    `wp_jaz_grund` und `wp_jaz_hinweis`; Hub, Übersicht, Monat und Tag lesen
+    dieselbe Funktion.
+
+    **Vorher:** Dieselbe Anlage konnte im Hub „—" zeigen und im Cockpit eine
     Zahl. Zwei Sichten, zwei Antworten auf dieselbe Frage.
+
+    ⭐ **Der Grund gehört zur Zahl, nicht daneben.** ``wp_jaz_grund`` ist der
+    Unterschied zwischen „—" und „kein Wärmemengenzähler zugeordnet" — genau
+    die Beschwerde, die S3 adressiert.
     """
-    assert "R2/W-3" in REGELN_OFFEN
+    assert "R2/W-3" not in REGELN_OFFEN
     from backend.api.routes.aktueller_monat import AktuellerMonatResponse
 
     felder = set(AktuellerMonatResponse.model_fields)
 
     assert "wp_waerme_kwh" in felder
     assert "wp_strom_kwh" in felder
-    assert "wp_jaz_belastbar" not in felder
-    assert "wp_waerme_abgeleitet" not in felder
+    assert "wp_jaz" in felder
+    assert "wp_jaz_grund" in felder
+    assert "wp_waerme_abgeleitet" in felder
+
+
+def test_ii4c_der_layer_nennt_zu_jeder_sperre_ihren_grund():
+    """**ERFÜLLT (R2 + S3).** Jede Sperre liefert einen **kurzen, sichtbaren**
+    Grund — der Unterschied zwischen „—" und einer Auskunft.
+
+    ⚠ **Kurz ist eine Anforderung, keine Kosmetik.** Der Text steht als sichtbare
+    Zeile unter dem „—", nicht in einem Hover-Tooltip: S3 verlangt *„nicht ‚—',
+    sondern der Grund"*, und ein Tooltip ist auf dem Telefon keine Auskunft.
+    Die erste Fassung schrieb ganze Sätze und passte damit nirgends hin.
+    """
+    from backend.core.berechnungen.waermepumpe_kennzahl import arbeitszahl
+
+    ohne_strom = arbeitszahl(2000.0, 0.0)
+    ohne_waerme = arbeitszahl(0.0, 500.0)
+    abgeleitet = arbeitszahl(2000.0, 500.0, waerme_abgeleitet_kwh=1.0)
+
+    for fall in (ohne_strom, ohne_waerme, abgeleitet):
+        assert fall.wert is None
+        assert fall.belastbar is False
+        assert fall.grund
+        assert len(fall.grund) <= 40, f"zu lang für die Kachel: {fall.grund!r}"
+
+    # Die drei Gründe sind verschieden — sonst wäre die Auskunft wertlos.
+    assert len({ohne_strom.grund, ohne_waerme.grund, abgeleitet.grund}) == 3
+
+
+def test_ii4d_heizstab_schwelle(monkeypatch):
+    """**ERFÜLLT (§2.2.1/W-6, Fall H-B).** Eine Arbeitszahl unter 2 trägt ihren
+    erklärenden Satz, eine darüber nicht.
+
+    ⭐ **Diese Probe steht im Backend, weil die Schwelle dorthin gewandert ist.**
+    Sie lag beim Bau kurz im Client — dort hätte sie neben der JAZ-Formel
+    gestanden, die mit W-3 gerade aus dem Client verschwunden ist. *Eine Regel
+    zieht ihre Prüfung mit.* Die Frontend-Schwester
+    (`KomponentenSektionen.soll-waerme-klima.test.tsx`) prüft nur noch, dass der
+    Client den gelieferten Satz auch **anzeigt**.
+
+    ⚠ **Der Satz erklärt die Zahl, er bewertet den Anwender nicht.** Eine
+    Anlage, die ihr Warmwasser über den Heizstab macht, *hat* eine Arbeitszahl
+    nahe 1 — das ist die Wahrheit über sie, kein Fehler
+    ([[feedback_eedc_ist_nicht_die_strom_polizei]]).
+    """
+    from backend.core.berechnungen.waermepumpe_kennzahl import (
+        JAZ_HEIZSTAB_SCHWELLE, arbeitszahl,
+    )
+
+    # dietmars Juli: 309 kWh Wärme ÷ 337 kWh Strom = 0,92.
+    dietmar = arbeitszahl(309.0, 337.0)
+    assert round(dietmar.wert, 2) == 0.92
+    assert dietmar.hinweis and "Heizstab" in dietmar.hinweis
+    # Die Zahl bleibt unverändert — erklärt wird sie, nicht korrigiert.
+    assert dietmar.belastbar is True
+
+    unauffaellig = arbeitszahl(2000.0, 500.0)
+    assert unauffaellig.wert == 4.0
+    assert unauffaellig.hinweis is None
+
+    # Genau an der Schwelle noch kein Hinweis (sie ist „unter 2", nicht „bis 2").
+    assert arbeitszahl(JAZ_HEIZSTAB_SCHWELLE, 1.0).hinweis is None
+    assert arbeitszahl(JAZ_HEIZSTAB_SCHWELLE - 0.01, 1.0).hinweis is not None
 
 
 def test_ii4b_komponenten_hub_wertet_die_sperre_aus():

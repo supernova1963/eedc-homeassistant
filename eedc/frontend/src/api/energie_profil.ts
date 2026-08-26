@@ -205,6 +205,15 @@ export interface TagDetail {
   wp_strom_warmwasser_kwh: number | null
   wp_heizung_kwh: number | null
   wp_warmwasser_kwh: number | null
+  /** Wärme gesamt des Tages — **aus dem Backend**, nicht als Client-Summe.
+   *  Der Kanon „Gesamtwert vor Summanden" steht im Layer
+   *  (`waermepumpe_kennzahl.waerme_gesamt_kwh`); hier stand bis 26.08.2026
+   *  seine zweite Hälfte als eigene Rechnung (W-9, ADR-001/S1). */
+  wp_waerme_kwh: number | null
+  /** Tages-Arbeitszahl samt Begründung — identisch zur Monatssicht (S1). */
+  wp_jaz: number | null
+  wp_jaz_grund: string | null
+  wp_jaz_hinweis: string | null
   speicher_ladung_netz_kwh: number | null
   speicher_effektiver_ladepreis_cent: number | null
   speicher_effektiver_ladepreis_quelle: string | null

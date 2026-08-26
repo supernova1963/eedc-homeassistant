@@ -29,32 +29,27 @@ from backend.models.tages_energie_profil import (  # noqa: F401
 
 #: SOLL-Regeln, die noch **nicht** gebaut sind (siehe Achse I für das Muster).
 REGELN_OFFEN: dict[str, str] = {
-    "P4/W-11": (
-        "Ein Zähler mit Tages-Reset liefert im Tagespfad strukturell 0, und die "
-        "0 wird als Aussage geschrieben statt als Lücke. `_tagesdetail_boundary_"
-        "diff` bildet den Tageswert als Differenz zweier Randstände über "
-        "[Tag 00:00, Folgetag 00:00) — bei täglichem Reset stehen an BEIDEN "
-        "Rändern Werte am Reset. Der Feld-Hinweis verspricht den Tagessensor "
-        "ausdrücklich (`field_definitions.py:179`)."
-    ),
-    "S3/W-9": (
-        "Der Tagespfad trägt `wp_heizung_kwh` und `wp_warmwasser_kwh`, aber "
-        "keine Wärme GESAMT — obwohl deren Summe sie wäre. Folge: JAZ, Wärme "
-        "und Ersparnis bleiben im Tag „—\", während der Monat sie zeigt. "
-        "Melder rapahl (T89667 #202)."
-    ),
+    # Leer — beide Regeln dieser Achse sind gebaut (26.08.2026).
 }
 
 DATUM = date(2025, 6, 15)
 
 
-async def _anlage_mit_tagesreset_zaehler(db, *, randwerte, feld):
+async def _anlage_mit_tagesreset_zaehler(db, *, randwerte, feld, zwischenstaende=()):
     """Anlage + Klimaanlage mit EINEM Betriebsart-Zähler.
 
-    `randwerte`: ``(wert_00_00, wert_folgetag_00_00)`` — genau die beiden Stände,
-    aus denen `_tagesdetail_boundary_diff` den Tageswert bildet. Damit lässt sich
-    die Bauform *Tages-Reset-Zähler* exakt nachstellen, ohne einen echten
-    ``utility_meter`` zu brauchen.
+    `randwerte`: ``(wert_00_00, wert_folgetag_00_00)`` — die beiden Stände, aus
+    denen der Tageswert als Differenz gebildet wird.
+
+    `zwischenstaende`: ``[(stunde, wert), …]`` — die stündlichen Snapshots
+    **innerhalb** des Tages, wie sie der :05-Scheduler schreibt.
+
+    ⭐ **Die Zwischenstände sind nicht Beiwerk, sie sind der Gegenstand.** Ein
+    Tagesreset-Zähler ist an seinen zwei Randständen **nicht** von einem ruhenden
+    Gerät unterscheidbar — beide zeigen dieselbe Differenz. Unterscheidbar wird
+    er allein an der **Monotonie**: ein kumulativer Zähler kann nicht fallen. Die
+    erste Fassung dieser Fixture schrieb nur die Ränder und stellte damit gar
+    keinen Tagesreset-Zähler nach, sondern ein ruhendes Gerät.
     """
     anlage = Anlage(anlagenname="III", leistung_kwp=10.0,
                     installationsdatum=date(2025, 1, 1))
@@ -76,6 +71,10 @@ async def _anlage_mit_tagesreset_zaehler(db, *, randwerte, feld):
     db.add(SensorSnapshot(anlage_id=anlage.id, sensor_key=key,
                           zeitpunkt=t0 + timedelta(days=1), wert_kwh=s1,
                           quelle="ha_statistics"))
+    for stunde, wert in zwischenstaende:
+        db.add(SensorSnapshot(anlage_id=anlage.id, sensor_key=key,
+                              zeitpunkt=t0 + timedelta(hours=stunde),
+                              wert_kwh=wert, quelle="ha_statistics"))
 
     anlage.sensor_mapping = {"investitionen": {str(inv.id): {"felder": {
         feld: {"strategie": "sensor", "sensor_id": f"sensor.klima_{feld}_heute"},
@@ -88,63 +87,97 @@ async def _anlage_mit_tagesreset_zaehler(db, *, randwerte, feld):
     return anlage, inv
 
 
-# ══ III-1a · OFFEN — Tagesreset, Stand NACH dem Reset gelesen ═══════════════
+# ══ III-1a · ERFÜLLT — Tagesreset, Stand NACH dem Reset gelesen ════════════
 
 async def test_iii1a_tagesreset_stand_nach_reset(db):
-    """**OFFEN (P4/W-11), Variante (a).**
+    """**ERFÜLLT (P4/W-11, Variante (a) — gebaut 2026-08-26).**
 
     Der Zähler wird um Mitternacht auf 0 gesetzt; beide Randstände werden
-    **nach** dem Reset gelesen. Am Tag selbst sind real 4,5 kWh geflossen.
+    **nach** dem Reset gelesen. Am Tag selbst sind real 4,5 kWh geflossen — an
+    den Zwischenständen ablesbar, an den Rändern nicht.
 
     SOLL §3.1: *„Ein Zähler mit Tages-Reset wird erkannt und abgelehnt, statt
-    still falsche Werte zu erzeugen."* Erwartung nach dem Bau: **kein Eintrag**
-    für dieses Gerät (P4 — keine Aussage statt einer 0).
+    still falsche Werte zu erzeugen."* ⇒ **kein Eintrag** für dieses Gerät
+    (P4 — keine Aussage statt einer 0).
 
-    Heute: ``5.0 − 5.0 = 0.0`` … hier ``0.0 − 0.0`` — der Wert **0,0 wird
-    geschrieben**, obwohl die Funktion im eigenen Docstring „keine Aussage statt
-    einer 0" für sich reklamiert. Übersprungen wird nur ``None``.
+    Vorher: ``0.0 − 0.0 = 0.0``, und die **0 wurde geschrieben**, obwohl die
+    Funktion im eigenen Docstring „keine Aussage statt einer 0" für sich
+    reklamierte. Übersprungen wurde nur ``None``.
     """
-    assert "P4/W-11" in REGELN_OFFEN
+    assert "P4/W-11" not in REGELN_OFFEN
     from backend.services.snapshot.aggregator import get_betriebsart_strom_tageswerte
 
     anlage, inv = await _anlage_mit_tagesreset_zaehler(
         db, randwerte=(0.0, 0.0), feld="betriebsart_strom_kuehlen_kwh",
+        zwischenstaende=[(6, 1.5), (12, 3.0), (18, 4.5)],
     )
     werte = await get_betriebsart_strom_tageswerte(
         db, anlage, {str(inv.id): inv}, DATUM,
     )
 
-    assert werte == {str(inv.id): {"betriebsart_strom_kuehlen_kwh": 0.0}}
+    assert werte == {}
 
 
-# ══ III-1b · OFFEN — Tagesreset, Stand VOR dem Reset gelesen ════════════════
+# ══ III-1b · ERFÜLLT — Tagesreset, Stand VOR dem Reset gelesen ═════════════
 
 async def test_iii1b_tagesreset_stand_vor_reset(db):
-    """**OFFEN (P4/W-11), Variante (b).**
+    """**ERFÜLLT (P4/W-11, Variante (b) — gebaut 2026-08-26).**
 
     Derselbe Zähler, andere Auslegung des Mitternachts-Snapshots: Der Stand um
     00:00 ist der **Tagesendwert** des Vortags (5,0), der Folgetag beginnt wieder
     bei ~0.
 
-    Das Delta ist negativ, und die vorhandene Tagesreset-Heuristik greift:
-    ``s1 < 0.5 and s0 > 0.5 ⇒ return max(0.0, s1)`` — also wieder **0**.
+    Vorher griff die Tagesreset-Heuristik ``s1 < 0.5 and s0 > 0.5 ⇒
+    return max(0.0, s1)`` — also **0**, geschrieben als Aussage.
 
-    ⭐ **Beide Auslegungen führen zu 0, und das ist der Kern des Befundes.** Die
-    Heuristik ist für den **Stunden**-Slot über Mitternacht gebaut und dort
-    richtig; am **Tagesrand** kann sie nichts retten, weil der ganze Tag zwischen
-    zwei Resets liegt. Erwartung nach dem Bau: kein Eintrag (P4).
+    ⭐ **Die Heuristik ist für den Stunden-Slot über Mitternacht gebaut und dort
+    richtig** (`get_hourly_kwh_by_category`, unverändert). Am **Tagesrand** kann
+    sie nichts retten, weil das ganze Fenster zwischen zwei Resets liegt.
+    Gleiche Formel, verschiedenes Fenster, verschiedene Wahrheit.
     """
-    assert "P4/W-11" in REGELN_OFFEN
+    assert "P4/W-11" not in REGELN_OFFEN
     from backend.services.snapshot.aggregator import get_betriebsart_strom_tageswerte
 
     anlage, inv = await _anlage_mit_tagesreset_zaehler(
         db, randwerte=(5.0, 0.0), feld="betriebsart_strom_kuehlen_kwh",
+        zwischenstaende=[(6, 1.2), (18, 3.8)],
     )
     werte = await get_betriebsart_strom_tageswerte(
         db, anlage, {str(inv.id): inv}, DATUM,
     )
 
-    assert werte == {str(inv.id): {"betriebsart_strom_kuehlen_kwh": 0.0}}
+    assert werte == {}
+
+
+# ══ III-1b2 · ERFÜLLT — Tagesreset, BEIDE Ränder vor dem Reset ═════════════
+
+async def test_iii1b2_tagesreset_beide_raender_vor_dem_reset(db):
+    """**ERFÜLLT (P4/W-11, Variante (c) — der Fall, den die Ränder verstecken).**
+
+    Beide Mitternachts-Snapshots treffen den **Tagesendwert** vor dem Reset:
+    00:00 = 5,0 (gestriger Tagesstand), Folgetag 00:00 = 7,0 (heutiger). Die
+    Randdifferenz ist **+2,0** — positiv, plausibel, und **die Differenz zweier
+    Tagessummen statt einer Tagesmenge**.
+
+    ⭐ **Diese Variante stand in keiner Fassung des Befundes.** Sie ist beim Bau
+    der Fixture aufgefallen und hat die Erkennung geändert: Ein Entwurf, der nur
+    ``max > Endstand`` prüfte, hätte sie durchgelassen — hier liegt kein
+    Zwischenstand über 7,0. Sichtbar ist der Reset allein an der **unteren**
+    Schranke: direkt nach 00:00 fällt der Zähler auf 0,4 und damit unter s0.
+    *Eine Monotonie-Prüfung, die nur ein Ende prüft, prüft keine Monotonie.*
+    """
+    assert "P4/W-11" not in REGELN_OFFEN
+    from backend.services.snapshot.aggregator import get_betriebsart_strom_tageswerte
+
+    anlage, inv = await _anlage_mit_tagesreset_zaehler(
+        db, randwerte=(5.0, 7.0), feld="betriebsart_strom_kuehlen_kwh",
+        zwischenstaende=[(1, 0.4), (12, 3.5), (23, 6.8)],
+    )
+    werte = await get_betriebsart_strom_tageswerte(
+        db, anlage, {str(inv.id): inv}, DATUM,
+    )
+
+    assert werte == {}
 
 
 # ══ III-1c · ERFÜLLT — der kumulative Zähler bleibt unberührt ═══════════════
@@ -156,11 +189,15 @@ async def test_iii1c_kumulativer_zaehler_traegt_weiter(db):
     von III-1a/b **nicht** kaputt machen darf: Wer einen echten kumulativen
     Zähler hat, bekommt weiterhin seine Differenz. Eine Reset-Erkennung, die
     diesen Fall mitnimmt, wäre teurer als der Befund.
+
+    Die Zwischenstände sind hier **monoton** — genau die Eigenschaft, an der die
+    Erkennung den Unterschied festmacht.
     """
     from backend.services.snapshot.aggregator import get_betriebsart_strom_tageswerte
 
     anlage, inv = await _anlage_mit_tagesreset_zaehler(
         db, randwerte=(100.0, 104.5), feld="betriebsart_strom_kuehlen_kwh",
+        zwischenstaende=[(6, 101.2), (12, 102.8), (18, 103.9)],
     )
     werte = await get_betriebsart_strom_tageswerte(
         db, anlage, {str(inv.id): inv}, DATUM,
@@ -169,67 +206,106 @@ async def test_iii1c_kumulativer_zaehler_traegt_weiter(db):
     assert werte == {str(inv.id): {"betriebsart_strom_kuehlen_kwh": 4.5}}
 
 
+# ══ III-1c2 · ERFÜLLT — eine gemessene 0 bleibt eine Messung ═══════════════
+
+async def test_iii1c2_ruhendes_geraet_behaelt_seine_null(db):
+    """**ERFÜLLT.** Ein Gerät, das an diesem Tag nicht lief, meldet **0,0** — und
+    das ist eine Aussage, keine Lücke.
+
+    ⚠ **Die schärfste Gegenprobe des ganzen Pakets.** Der bequeme Weg zu III-1a
+    wäre gewesen, jede 0 zu verwerfen („keine Aussage statt einer 0"). Das wäre
+    falsch: Eine 0 aus zwei gelesenen Rändern **ist** gemessen. Verworfen wird
+    nicht der Wert, sondern der **Zähler**, dessen Reihe die Monotonie verletzt.
+
+    Genau hier verläuft die Grenze zu dietmars Bild vom 25.08. (*Heizen 0 ·
+    Kühlen 0 · Nicht aufgeteilt 3 kWh*): Seine eigene Erklärung — *„die Anlage
+    war heute nicht in Betrieb"* — beschreibt diesen Fall, und dann ist die
+    Anzeige **richtig**.
+    """
+    from backend.services.snapshot.aggregator import get_betriebsart_strom_tageswerte
+
+    anlage, inv = await _anlage_mit_tagesreset_zaehler(
+        db, randwerte=(100.0, 100.0), feld="betriebsart_strom_kuehlen_kwh",
+        zwischenstaende=[(6, 100.0), (12, 100.0), (18, 100.0)],
+    )
+    werte = await get_betriebsart_strom_tageswerte(
+        db, anlage, {str(inv.id): inv}, DATUM,
+    )
+
+    assert werte == {str(inv.id): {"betriebsart_strom_kuehlen_kwh": 0.0}}
+
+
 # ══ III-1d · OFFEN — die 0 erreicht die Anzeige als Aufteilung ══════════════
 
-async def test_iii1d_tagesreset_erzeugt_alles_nicht_aufgeteilt(db):
-    """**OFFEN (P4/W-11).** Was der Anwender von der 0 aus III-1a sieht.
+async def test_iii1d_tagesreset_erzeugt_keine_aufteilung(db):
+    """**ERFÜLLT (P4/W-11 — gebaut 2026-08-26).** Was der Anwender jetzt sieht.
 
-    Die Route stuft die Zeile als **gemessen** ein (ein Betriebsart-Zähler ist
-    zugeordnet) und rechnet die Aufteilung: 8 kWh Bezug − 0 gemessen ⇒ **alles
-    unter „nicht aufgeteilt"**.
+    Vorher stufte die Route die Zeile als **gemessen** ein (ein Betriebsart-
+    Zähler war zugeordnet und lieferte 0,0) und rechnete die Aufteilung:
+    8 kWh Bezug − 0 gemessen ⇒ **alles unter „nicht aufgeteilt", 100 %**.
 
-    Erwartung nach dem Bau: Ohne verwertbaren Zähler ist die Zeile **nicht
-    gemessen** — es gibt keine Aufteilung und keinen 100-%-Balken, sondern den
-    Grund.
+    Jetzt: Ohne verwertbaren Zähler ist die Zeile **nicht gemessen** — es gibt
+    weder Aufteilung noch 100-%-Balken. Der Block erscheint gar nicht erst,
+    statt eine Aufteilung zu behaupten, die es nicht gibt.
 
-    ⭐ **Genau dieses Bild hat dietmar1968 am 25.08. gezeigt** (Tagesansicht:
-    *Heizen 0 · Kühlen 0 · Nicht aufgeteilt 3 kWh · 100 %*). Er erklärte es mit
-    *„die Anlage war heute nicht in Betrieb"* — der Pfad hätte bei vollem Betrieb
-    dasselbe geliefert. **Ein Melder kann eine stille 0 nicht von einer echten
-    unterscheiden; deshalb darf sie gar nicht erst entstehen.**
+    ⚠ **Die Abgrenzung zu III-1c2 ist der eigentliche Gegenstand:** Dort meldet
+    ein ruhendes Gerät seine echte 0 und die Zeile **bleibt** gemessen. Der
+    Unterschied ist nie der Wert, sondern die Monotonie der Zählerreihe.
     """
-    assert "P4/W-11" in REGELN_OFFEN
+    assert "P4/W-11" not in REGELN_OFFEN
     from backend.api.routes.energie_profil.views import get_tag_detail
 
     anlage, inv = await _anlage_mit_tagesreset_zaehler(
         db, randwerte=(0.0, 0.0), feld="betriebsart_strom_kuehlen_kwh",
+        zwischenstaende=[(6, 1.5), (12, 3.0), (18, 4.5)],
     )
     resp = await get_tag_detail(anlage.id, DATUM, db)
 
-    assert resp.wp_modus_gemessen is True
-    assert resp.wp_modus_strom_kuehlen_kwh == 0.0
-    assert resp.wp_modus_nicht_aufgeteilt_kwh == 8.0
+    assert resp.wp_modus_gemessen is None
+    assert resp.wp_modus_strom_kuehlen_kwh is None
+    assert resp.wp_modus_nicht_aufgeteilt_kwh is None
 
 
 # ══ III-2 · OFFEN — S3: der Tag kennt seine eigene Wärme-Summe nicht ════════
 
-def test_iii2_tag_hat_kein_feld_fuer_waerme_gesamt():
-    """**OFFEN (S3/W-9).**
+def test_iii2_tag_liefert_waerme_gesamt_und_arbeitszahl():
+    """**ERFÜLLT (S3/W-9 — gebaut 2026-08-26).**
 
-    Der Tagespfad liefert die **Summanden** ``wp_heizung_kwh`` und
-    ``wp_warmwasser_kwh``, aber kein Feld für die Wärme **gesamt** — obwohl deren
-    Summe genau das wäre. Die Monatssicht hat ``wp_waerme_kwh``.
+    Der Tagespfad liefert jetzt die Wärme **gesamt** und die Arbeitszahl fertig,
+    beide aus dem Layer (`waermepumpe_kennzahl`). Vorher gab es hier nur die
+    beiden Summanden, und der Client bildete Summe **und** Quotient selbst.
 
-    SOLL §3.3/S3: *„Eine Sicht, die weniger zeigt als die Nachbarsicht, sagt
-    warum."* Erwartung nach dem Bau: entweder die Größe (sie ist ableitbar) oder
-    der Grund — **nie ein „—" ohne Begründung**.
+    ⛔ **Der Befund war zur Hälfte falsch, und das gehört hierher.** Er lautete:
+    *„Im Tag bleiben JAZ, Wärme und Ersparnis ‚—', obwohl Heizung und Warmwasser
+    einzeln vorliegen und ihre Summe die Wärme wäre."* Gemessen am 26.08.:
+    `v4/TagKomponenten.tsx` **hat** diese Summe gebildet, seit der ersten Fassung
+    der Datei (`6cea9f1e`) — liegen die Summanden vor, entsteht die Wärme und
+    daraus die Tages-JAZ. Und das „—" trug bereits einen Grund im
+    Voraussetzungs-Hinweis (`KpiStrip.tsx:30`, Entscheid Gernot 24.06.).
 
-    **Melder rapahl (#202):** Monat *JAZ 4,07 · 110 kWh Wärme · +9 €*, am selben
-    Tag im Tagesblock dreimal „—": *„Keine Wärmewertangaben und keine
-    Verbrauchsbalken."* Die Zahlen sind beide richtig; unerklärt ist der
-    Unterschied.
+    ⭐ **Was wirklich fehlte, ist deshalb kein Datenverlust, sondern eine zweite
+    Definitionsstelle:** derselbe Kanon im Layer *und* im Client — und der
+    Client-Zweig kannte die Belastbarkeits-Sperre nicht (ADR-001/S1, gleiche
+    Klasse wie W-3). *Ein Befund, der die Aufrufkette nicht aufgelöst hat,
+    beschreibt das Symptom des Melders, nicht die Ursache.*
 
-    ⚠ **Diese Probe prüft das Schema, nicht einen Wert** — der Befund ist ein
-    fehlendes **Feld**, und ein Wert kann nicht fehlen, wo es kein Feld gibt.
+    **Warum rapahl trotzdem dreimal „—" sah:** Ihm fehlt der **kumulative**
+    Wärmemengenzähler; sein Monatswert stammt aus dem Monatsabschluss, den der
+    Tag nicht haben kann. Das ist die Auflösungsfrage aus SOLL §3.1 — richtig
+    gerechnet und begründet.
     """
-    assert "S3/W-9" in REGELN_OFFEN
+    assert "S3/W-9" not in REGELN_OFFEN
     from backend.api.routes.energie_profil._shared import TagDetailResponse
 
     felder = set(TagDetailResponse.model_fields)
 
     assert "wp_heizung_kwh" in felder
     assert "wp_warmwasser_kwh" in felder
-    assert "wp_waerme_kwh" not in felder
+    assert "wp_waerme_kwh" in felder
+    # Die Zahl UND ihre Begründung — ein „—" ohne Grund ist die häufigste
+    # Beschwerde dieser Fläche (S3).
+    assert "wp_jaz" in felder
+    assert "wp_jaz_grund" in felder
 
 
 def test_iii2b_monat_hat_das_feld():

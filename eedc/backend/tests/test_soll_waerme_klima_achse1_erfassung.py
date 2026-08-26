@@ -35,17 +35,6 @@ from backend.services.snapshot.komponenten_beitraege import investition_beitraeg
 #: SOLL-Regeln, die noch **nicht** gebaut sind. Wird eine gebaut, fliegt ihr
 #: Eintrag hier raus **und** die zugehörige OFFEN-Probe wird umgestellt.
 REGELN_OFFEN: dict[str, str] = {
-    "K3/W-1": (
-        "Ein gesetztes Kennzeichen entwertet den vorhandenen Gesamtzähler: "
-        "`getrennte_strommessung=True` + nur `stromverbrauch_kwh` zugeordnet "
-        "⇒ die Investition trägt GAR NICHTS bei. Melder OB73-gif (#263)."
-    ),
-    "K3/W-1b": (
-        "Derselbe Schalter verliert auch die HÄLFTE: Gesamt + nur "
-        "`strom_heizen_kwh` ⇒ der Warmwasser-Anteil fehlt still. Schwerer als "
-        "W-1, weil die Zahl richtig aussieht. Kein Melder — beim Ausführen "
-        "der Fundstelle gefunden (26.08.)."
-    ),
     "R1/W-2": (
         "Die Betriebsart-Achsen hängen an der Geräteklasse (`bedingung: "
         "luft_luft`) statt am zugeordneten Zähler. Eine kühlfähige "
@@ -80,51 +69,107 @@ def _zuordenbar(parameter: dict) -> set[str]:
     return {f["feld"] for f in get_felder_fuer_investition("waermepumpe", parameter)}
 
 
-# ══ I-1 · OFFEN — K3: nur der Gesamtzähler ist zugeordnet ═══════════════════
+# ══ I-1 · ERFÜLLT — K3: nur der Gesamtzähler ist zugeordnet ════════════════
 
 def test_i1_kennzeichen_an_nur_gesamtzaehler():
-    """**OFFEN (K3/W-1).**
+    """**ERFÜLLT (K3/W-1, gebaut 2026-08-26).**
 
     SOLL §6/K3: *„Ein Erfassungsweg, den es nicht gibt, entwertet keinen, den es
-    gibt."* Erwartung nach dem Bau: ``{"stromverbrauch_kwh"}`` — der
-    Gesamtzähler bleibt die Bilanzgröße, weil die feinen Zähler fehlen.
+    gibt."* Der Gesamtzähler bleibt die Bilanzgröße, weil die feinen Zähler
+    fehlen — das Kennzeichen allein entwertet ihn nicht mehr.
 
-    Heute: **leer**. Der Block *Wärme/Klima* verschwindet vollständig; genau das
-    hat OB73-gif gemeldet und selbst aufgelöst, indem er das Kennzeichen wieder
-    ausschaltete.
+    Vorher: **leer**. Der Block *Wärme/Klima* verschwand vollständig; genau das
+    hat OB73-gif gemeldet (#263) und selbst aufgelöst, indem er das Kennzeichen
+    wieder ausschaltete.
     """
-    assert "K3/W-1" in REGELN_OFFEN
+    assert "K3/W-1" not in REGELN_OFFEN
     inv = _inv(parameter={"getrennte_strommessung": True})
     sm = {"felder": {"stromverbrauch_kwh": _sensor("sensor.wp_gesamt")}}
 
-    assert _felder(investition_beitraege(inv, sm)) == set()
+    assert _felder(investition_beitraege(inv, sm)) == {"stromverbrauch_kwh"}
 
 
-# ══ I-2 · OFFEN — K3: die Aufteilung ist erst halb gepflegt ═════════════════
+# ══ I-2 · ERFÜLLT — K3: die Aufteilung ist erst halb gepflegt ══════════════
 
 def test_i2_kennzeichen_an_gesamt_plus_nur_heizen():
-    """**OFFEN (K3/W-1b).**
+    """**ERFÜLLT (K3/W-1b, gebaut 2026-08-26).**
 
     SOLL §3.2/K1: *„Die Gesamtmenge ist immer die Wahrheit. Jede Aufteilung steht
-    daneben, nie an ihrer Stelle."* Erwartung nach dem Bau: Der Gesamtzähler
-    trägt die Bilanz, ``strom_heizen_kwh`` ist die Aufteilung daneben.
+    daneben, nie an ihrer Stelle."* Die Aufteilung ist unvollständig, also trägt
+    der Gesamtzähler die Bilanz. ``strom_heizen_kwh`` geht dadurch nicht
+    verloren — es steht als eigener Ausgabe-Key im Detail-Pfad
+    (`aggregator.get_tagesdetail_kwh`), also **daneben** statt an der Stelle der
+    Gesamtmenge.
 
-    Heute: **nur Heizen**. Der Warmwasser-Anteil fehlt still — in der WP-Zahl, in
-    den Kosten, im Anteil am Haushalt und in jeder daraus gerechneten Kennzahl.
+    Vorher: **nur Heizen**. Der Warmwasser-Anteil fehlte still — in der WP-Zahl,
+    in den Kosten, im Anteil am Haushalt und in jeder daraus gerechneten
+    Kennzahl.
 
-    ⭐ **Das ist der teurere der beiden Fälle.** I-1 lässt den Block
-    verschwinden — das fällt auf und wurde gemeldet. Hier erscheint eine **zu
-    niedrige Zahl, die wie eine richtige aussieht**, und getroffen ist der
+    ⭐ **Das war der teurere der beiden Fälle.** I-1 ließ den Block
+    verschwinden — das fällt auf und wurde gemeldet. Hier erschien eine **zu
+    niedrige Zahl, die wie eine richtige aussah**, und getroffen war der
     normale Einrichtungsweg: erst Heizen zuordnen, dann Warmwasser.
     """
-    assert "K3/W-1b" in REGELN_OFFEN
+    assert "K3/W-1b" not in REGELN_OFFEN
     inv = _inv(parameter={"getrennte_strommessung": True})
     sm = {"felder": {
         "stromverbrauch_kwh": _sensor("sensor.wp_gesamt"),
         "strom_heizen_kwh": _sensor("sensor.wp_heizen"),
     }}
 
+    assert _felder(investition_beitraege(inv, sm)) == {"stromverbrauch_kwh"}
+
+
+# ══ I-2b · ERFÜLLT — K3 in der Gegenrichtung: Kennzeichen AUS ══════════════
+
+def test_i2b_kennzeichen_aus_feiner_zaehler_traegt():
+    """**ERFÜLLT (K3, dritte Stufe — gebaut 2026-08-26).**
+
+    K3 gilt ausdrücklich **in beide Richtungen**: *„Wer feine Zähler hat, bekommt
+    die feine Aufteilung; wer sie nicht hat, behält die grobe Wahrheit."* Also
+    auch: Kennzeichen **aus**, kein Gesamtzähler, aber ein feiner Zähler
+    zugeordnet ⇒ er trägt.
+
+    Vorher trug er **nicht** — dieselbe Klasse wie W-1, nur mit umgekehrtem
+    Kennzeichen-Zustand. Sie hatte keinen Melder und stand in keiner Fallliste;
+    sichtbar wurde sie erst, als die Regel „der Zähler entscheidet" ausformuliert
+    war (Entscheid Gernot 26.08.: Vollständigkeit vor Auftragsrand).
+
+    ⚠ **Eine unvollständige Aufteilung ist die einzige Messung, die es hier
+    gibt.** Sie zu verwerfen hieße, den Block verschwinden zu lassen — genau der
+    Befund, der mit W-1 repariert wurde.
+    """
+    inv = _inv(parameter={"getrennte_strommessung": False})
+    sm = {"felder": {"strom_heizen_kwh": _sensor("sensor.wp_heizen")}}
+
     assert _felder(investition_beitraege(inv, sm)) == {"strom_heizen_kwh"}
+
+
+# ══ I-2c · ERFÜLLT — die Klimaanlage fällt nicht auf eine halbe Achse ══════
+
+def test_i2c_luft_luft_kann_nie_vollstaendig_aufgeteilt_sein():
+    """**ERFÜLLT (K3, Registry statt Bauart).**
+
+    Eine Split-Klimaanlage hat **keinen Warmwasserkreis** (N-304/B5:
+    ``strom_warmwasser_kwh`` trägt ``!luft_luft``). Ihre feine Aufteilung kann
+    deshalb nie vollständig sein — folglich greift Stufe 1 dort nie und der
+    Gesamtzähler trägt.
+
+    ⭐ **Und das ist keine Ausnahme, sondern der Beleg, dass die Regel am
+    richtigen Objekt fragt.** ``strom_heizen_kwh`` ist an einem Luft-Luft-Gerät
+    kein Summand einer zweiteiligen Achse, sondern ein Ausschnitt neben Kühlen,
+    Lüften und Standby. Ihn als Bilanzgröße zu buchen wäre W-1b in neuer Form.
+
+    ⚠ Genau diese Konstellation hatte OB73-gif: Midea Portasplit, Kennzeichen
+    gesetzt, Gesamtzähler vorhanden.
+    """
+    inv = _inv(parameter={"wp_art": "luft_luft", "getrennte_strommessung": True})
+    sm = {"felder": {
+        "stromverbrauch_kwh": _sensor("sensor.klima_gesamt"),
+        "strom_heizen_kwh": _sensor("sensor.klima_heizen"),
+    }}
+
+    assert _felder(investition_beitraege(inv, sm)) == {"stromverbrauch_kwh"}
 
 
 # ══ I-3 · ERFÜLLT — die Abgrenzung, die heute schon richtig ist ═════════════

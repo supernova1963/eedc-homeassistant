@@ -25,6 +25,8 @@ from datetime import date, datetime
 from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
 
+from backend.tests.snapshot_doubles import DbOhneZwischenstaende
+
 import pytest
 
 from backend.services.snapshot.aggregator import get_komponenten_tageskwh
@@ -452,7 +454,7 @@ async def test_snapshot_und_lts_liefern_identische_komponenten_kwh(setup_name):
         side_effect=fake_snap,
     ):
         snap_result = await get_komponenten_tageskwh(
-            db=MagicMock(), anlage=anlage, investitionen_by_id=invs, datum=datum,
+            db=DbOhneZwischenstaende(), anlage=anlage, investitionen_by_id=invs, datum=datum,
         )
 
     # Vergleich: gleiche Keys, gleiche Werte (1 mWh Toleranz für Float-Rundung)

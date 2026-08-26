@@ -33,6 +33,7 @@ from dataclasses import dataclass
 
 from backend.core.berechnungen.betriebsart_gemessen import modus_strom_zeile
 from backend.core.berechnungen.modus_split import heizwaerme_ist_abgeleitet
+from backend.core.berechnungen.waermepumpe_kennzahl import waerme_gesamt_kwh
 from backend.core.betriebsmodus import MODUS_ABDECKUNG_FELD, MODUS_STROM_FELD
 from backend.core.betriebsmodus import HEIZEN as _HEIZEN
 from backend.core.betriebsmodus import KUEHLEN as _KUEHLEN
@@ -189,7 +190,9 @@ def imd_typ_beitrag(
         heizung = get_wp_heizenergie_kwh(data)
         warmwasser = _f(data, "warmwasser_kwh")
         # D1: waerme_kwh hat Vorrang, sonst Heizung + Warmwasser (kanonisch).
-        waerme = _f(data, "waerme_kwh") or (heizung + warmwasser)
+        # Seit 2026-08-26 im Layer-SoT `waermepumpe_kennzahl.waerme_gesamt_kwh`
+        # — der Client hatte dieselbe Regel als zweite Stelle (Befund W-9).
+        waerme = waerme_gesamt_kwh(_f(data, "waerme_kwh"), heizung, warmwasser)
         # F-56: die Weiche liegt im Layer-SoT `modus_strom_zeile` — sie stand
         # bis dahin hier inline und war im HA-Export daneben nachgebaut, ohne
         # den Gemessen-Zweig. Eine Regel, zwei Codestellen, eine Drift.

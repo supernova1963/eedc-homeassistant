@@ -28,6 +28,8 @@ from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
 
+from backend.tests.snapshot_doubles import DbOhneZwischenstaende
+
 import pytest
 
 from backend.models.sensor_snapshot import SensorSnapshot
@@ -170,14 +172,15 @@ def _build_hourly_snapshot_lookup(deltas, sk_map, datum):
 
 
 async def _empty_mqtt_db():
-    """MagicMock-db, dessen mqtt_energy_snapshots-Query leer ist."""
-    db = MagicMock()
-    result = MagicMock()
-    result.all.return_value = []
-    async def _execute(*a, **k):
-        return result
-    db.execute = _execute
-    return db
+    """Session-Doppel ohne MQTT-Snapshots und ohne Zwischenstände.
+
+    ⛔ **War bis 2026-08-26 ein `MagicMock`,** dessen `execute` nur `.all()`
+    bediente. Mit der Tagesreset-Erkennung fragt der Tagespfad zusätzlich
+    MIN/MAX der Zählerreihe — und `MagicMock.first()` liefert ein leeres Tupel
+    statt `(None, None)`. Das Doppel steht jetzt an EINER Stelle
+    (`snapshot_doubles.py`) und trifft die Form der echten Antwort.
+    """
+    return DbOhneZwischenstaende()
 
 
 @pytest.mark.parametrize("setup_name", ["eauto_verbrauch_und_ladung"])

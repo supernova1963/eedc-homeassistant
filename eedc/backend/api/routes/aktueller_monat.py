@@ -29,6 +29,9 @@ from backend.api.routes.strompreise import (
 )
 from backend.api.routes.connector import _calc_month_delta
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
+from backend.core.berechnungen.waermepumpe_kennzahl import (
+    GRUND_GERAETE_OHNE_WAERME, arbeitszahl,
+)
 from backend.core.berechnungen import (
     sonstiges_richtung,
     Monatsfenster,
@@ -214,6 +217,26 @@ class AktuellerMonatResponse(BaseModel):
     wp_waerme_kwh: Optional[float] = None
     wp_heizung_kwh: Optional[float] = None
     wp_warmwasser_kwh: Optional[float] = None
+    # ── Arbeitszahl: die Zahl UND ihre Begründung (R2, Befund W-3) ──────────
+    #
+    # ⛔ **Bis 2026-08-26 lieferte diese Response nur `wp_waerme_kwh` und
+    # `wp_strom_kwh`, und der Client bildete den Quotienten selbst.** Er
+    # **konnte** die Sperre nicht kennen, die der Komponenten-Hub und die
+    # Cockpit-Übersicht anwenden — Folge: dieselbe Anlage zeigte im Hub „—"
+    # und im Cockpit eine Zahl. Zwei Sichten, zwei Antworten auf dieselbe
+    # Frage (ADR-001, SOLL §3.3/S1).
+    #
+    # SoT ist `core/berechnungen/waermepumpe_kennzahl.arbeitszahl`.
+    wp_jaz: Optional[float] = None
+    #: Warum es **keine** Arbeitszahl gibt — nie ein „—" ohne Grund (S3).
+    wp_jaz_grund: Optional[str] = None
+    #: Die Zahl existiert, ist aber erklärungsbedürftig (Fall H-B: ein großer
+    #: Teil der Wärme kam direkt elektrisch). **Kein Fehler, keine Bewertung.**
+    wp_jaz_hinweis: Optional[str] = None
+    #: Ist ein Teil der Wärme aus `Strom × JAZ` gerechnet statt gemessen?
+    #: Gleicher Name wie im Komponenten-Hub (`KomponentenMonat`), damit dieselbe
+    #: Größe in beiden Sichten gleich heißt (S1).
+    wp_waerme_abgeleitet: bool = False
     # #191: Strom-Aufteilung Heizung/Warmwasser. Nur gesetzt wenn mindestens
     # eine WP-Investition `getrennte_strommessung=true` hat. Sonst None →
     # Frontend zeigt nur den Gesamtstromverbrauch.
@@ -1530,6 +1553,31 @@ async def get_aktueller_monat(
 
     wp_waerme = get_val("wp_waerme_kwh")
     wp_strom = get_val("wp_strom_kwh")
+
+    # ── Arbeitszahl aus dem Layer, nicht aus dem Client (R2/W-3) ────────────
+    #
+    # ⚠ **Der abgeleitete Anteil kommt IMMER aus den Monats-Fakten**, auch wenn
+    # die Mengen oben aus einer anderen Quelle gewonnen wurden. Er beschreibt
+    # die **Herkunft der IMD-Zeilen** dieses Monats, und die ändert sich nicht
+    # dadurch, dass eine Menge über HA-Statistik statt aus der Datenbank kam.
+    # Im Zweifel sperrt er — „unbekannt" ist besser als „falsch" (P4).
+    wp_waerme_abgeleitet_kwh = (
+        monats_fakt.wp.waerme_abgeleitet_kwh if monats_fakt is not None else 0.0
+    )
+    # R2/Gerät: Trägt der Block Strom von Geräten, deren Wärme fehlt? Der
+    # Block *Wärme/Klima* aggregiert alle Wärmepumpen der Anlage — bei
+    # dietmar1968 „Wärmepumpe · Klimaanlage" — und nur eines meldete Wärme.
+    wp_abgrenzung_verletzt = (
+        GRUND_GERAETE_OHNE_WAERME
+        if monats_fakt is not None and monats_fakt.wp.waerme_deckt_nicht_alle_geraete
+        else None
+    )
+    wp_arbeitszahl = arbeitszahl(
+        wp_waerme, wp_strom,
+        waerme_abgeleitet_kwh=wp_waerme_abgeleitet_kwh,
+        abgrenzung_verletzt=wp_abgrenzung_verletzt,
+    )
+
     if wp_waerme is not None and wp_strom is not None and allgemein_tarif:
         wp_tarif = tarife.get("waermepumpe")
         wp_preis_cent = (
@@ -2255,6 +2303,10 @@ async def get_aktueller_monat(
         wp_waerme_kwh=get_val("wp_waerme_kwh"),
         wp_heizung_kwh=wp_heizung,
         wp_warmwasser_kwh=wp_warmwasser,
+        wp_jaz=wp_arbeitszahl.wert,
+        wp_jaz_grund=wp_arbeitszahl.grund,
+        wp_jaz_hinweis=wp_arbeitszahl.hinweis,
+        wp_waerme_abgeleitet=wp_waerme_abgeleitet_kwh > 0,
         wp_strom_heizen_kwh=wp_strom_heizen,
         wp_strom_warmwasser_kwh=wp_strom_warmwasser,
         wp_modus_strom_heizen_kwh=wp_modus_heizen,

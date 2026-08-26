@@ -45,9 +45,72 @@ from backend.services.snapshot.plausibility import (
     cap_pv_einspeisung_stunde,
     schwelle_pv_einspeisung_stunde_kwh,
 )
-from backend.services.snapshot.reader import get_snapshot
+from backend.services.snapshot.reader import get_snapshot, zaehler_faellt_im_fenster
 
 logger = logging.getLogger(__name__)
+
+
+async def _tageswert_aus_raendern(
+    db: AsyncSession,
+    anlage_id: int,
+    sensor_key: str,
+    s0: float,
+    s1: float,
+    ts_start: datetime,
+    ts_ende: datetime,
+    datum: date,
+) -> Optional[float]:
+    """Tageswert eines kumulativen Zählers aus seinen zwei Randständen — oder
+    ``None``, wenn der Zähler im Fenster **zurückgesetzt** wurde (SOLL §3.1).
+
+    **Der eine Ort für die Tagesfenster-Regel.** Es gibt zwei Aufrufer, und sie
+    hatten die Regel bis 2026-08-26 doppelt: `get_komponenten_tageskwh` (Bilanz)
+    und `_tagesdetail_boundary_diff` (Detailzeilen). Genau die F-56-Klasse — und
+    an diesem Feld ist sie schon einmal gedriftet.
+
+    ⛔ **Hier stand bis 2026-08-26 `return max(0.0, s1)` für den erkannten
+    Reset.** Das war eine **Behauptung ohne Wissen**: Springt der Zähler über
+    das Tagesfenster zurück, ist der Tageswert **unbekannt** — nicht der
+    Reststand danach. Die Funktion reklamierte im eigenen Docstring „P4: keine
+    Aussage statt einer 0" und schrieb dann eine.
+
+    ⚠ **Die Stunden-Variante (`get_hourly_kwh_by_category`) bleibt unberührt und
+    hat recht.** Dort geht es um den **Slot über Mitternacht**: s0 ist der
+    Tagesendwert, s1 die Energie seit dem Reset — eine sinnvolle Zahl für
+    *diese Stunde*. Über den **ganzen Tag** kann dieselbe Rechnung nichts
+    retten, weil das Fenster zwischen zwei Resets liegt. Gleiche Formel,
+    verschiedene Fenster, verschiedene Wahrheit.
+
+    ⭐ **Zwei Erkennungswege, weil ein Reset drei verschiedene Spuren
+    hinterlässt:**
+
+    1. **Randdifferenz negativ** — der Rücksprung liegt zwischen den Rändern und
+       ist an ihnen selbst ablesbar.
+    2. **Monotonie der Zwischenstände verletzt** (`zaehler_faellt_im_fenster`) —
+       ein Zwischenstand liegt über dem End- oder unter dem Startstand.
+
+    Weg 2 läuft **immer**, nicht nur bei verdächtig kleinem Delta. Der Grund ist
+    der dritte Fall: Werden **beide** Ränder eines Tagesreset-Zählers vor dem
+    Reset abgetastet, ist ``d = heutiger Tagesstand − gestriger Tagesstand`` —
+    **positiv, plausibel und still falsch**. Weg 1 sieht davon nichts, und ein
+    „nur bei d ≈ 0 nachsehen" hätte ihn ebenfalls durchgelassen.
+    """
+    d = s1 - s0
+    if d < -0.01:
+        logger.info(
+            f"Zähler-Rücksprung über das Tagesfenster für anlage={anlage_id} "
+            f"key={sensor_key} ({datum}): {d:.3f} → keine Tagesaussage"
+        )
+        return None
+    if await zaehler_faellt_im_fenster(
+        db, anlage_id, sensor_key, ts_start, ts_ende, s0, s1
+    ):
+        logger.info(
+            f"Zähler fällt innerhalb des Tages für anlage={anlage_id} "
+            f"key={sensor_key} ({datum}) → Tagesreset-Zähler, keine Tagesaussage"
+        )
+        return None
+    return max(0.0, d)
 
 
 def _fill_gaps_linear(snaps_per_hour: dict[int, Optional[float]]) -> None:
@@ -468,19 +531,9 @@ async def get_komponenten_tageskwh(
         )
         if s0 is None or s1 is None:
             return None
-        d = s1 - s0
-        if d < -0.01:
-            # Tagesreset-Zähler (HA utility_meter daily): s0 ≈ Tagesendwert,
-            # s1 ≈ 0 nach Mitternachts-Reset → s1 ist die Energie seit Reset
-            # (analog zum Hourly-Pfad in get_hourly_kwh_by_category).
-            if s1 < 0.5 and s0 > 0.5:
-                return max(0.0, s1)
-            logger.warning(
-                f"Negatives Tagesgesamt-Delta für anlage={anlage.id} "
-                f"key={sensor_key} ({datum}): {d:.3f} → ignoriert"
-            )
-            return None
-        return max(0.0, d)
+        return await _tageswert_aus_raendern(
+            db, anlage.id, sensor_key, s0, s1, ts_start, ts_ende, datum,
+        )
 
     def _sensor_id_for(beitrag, mapping_quelle: dict) -> Optional[str]:
         cfg = (mapping_quelle.get("felder", {}) or {}).get(beitrag.feld) \
@@ -571,16 +624,9 @@ async def _tagesdetail_boundary_diff(
     )
     if s0 is None or s1 is None:
         return None
-    d = s1 - s0
-    if d < -0.01:
-        if s1 < 0.5 and s0 > 0.5:  # Tagesreset-Zähler (HA utility_meter daily)
-            return max(0.0, s1)
-        logger.warning(
-            f"Negatives Tagesdetail-Delta für anlage={anlage.id} "
-            f"key={sensor_key} ({datum}): {d:.3f} → ignoriert"
-        )
-        return None
-    return max(0.0, d)
+    return await _tageswert_aus_raendern(
+        db, anlage.id, sensor_key, s0, s1, ts_start, ts_ende, datum,
+    )
 
 
 async def get_betriebsart_strom_tageswerte(

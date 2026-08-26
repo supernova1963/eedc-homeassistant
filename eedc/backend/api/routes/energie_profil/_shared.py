@@ -460,6 +460,23 @@ class TagDetailResponse(BaseModel):
     # Ermöglicht Tages-JAZ (= Wärme ÷ Strom) und Wärme-Aufteilung.
     wp_heizung_kwh: Optional[float] = None
     wp_warmwasser_kwh: Optional[float] = None
+    # ── Wärme gesamt + Arbeitszahl, beide aus dem Layer (W-9 · W-3) ─────────
+    #
+    # ⛔ **Beides rechnete bis 2026-08-26 der Client.** `wp_waerme_kwh` als
+    # `heizung + warmwasser` (`v4/TagKomponenten.tsx`, seit der ersten Fassung
+    # der Datei) und die JAZ als Quotient **ohne** die Belastbarkeits-Sperre.
+    # Zwei Regeln des Layers, im Client nachgebaut — ADR-001/S1.
+    #
+    # Der Tag hat keine gepflegte Gesamtwärme, also ist die Summe hier der
+    # einzige Zweig des Kanons. Er wird trotzdem über den SoT gebildet
+    # (`waermepumpe_kennzahl.waerme_gesamt_kwh`): Eine Regel, die an zwei
+    # Stellen steht, driftet — auch wenn eine davon nur die halbe Regel kennt.
+    wp_waerme_kwh: Optional[float] = None
+    wp_jaz: Optional[float] = None
+    #: Warum es keine Arbeitszahl gibt — nie ein „—" ohne Grund (S3).
+    wp_jaz_grund: Optional[str] = None
+    #: Fall H-B: die Zahl ist richtig und erklärungsbedürftig (Heizstab).
+    wp_jaz_hinweis: Optional[str] = None
     # Speicher-Netzladung (Arbitrage) — Tages-Boundary-Diff.
     speicher_ladung_netz_kwh: Optional[float] = None
     # Speicher effektiver Netz-Ladepreis (stundengewichtet, Tagesspanne).

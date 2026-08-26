@@ -368,6 +368,36 @@ class WpFakten:
     #: siehe {@link jaz_belastbar}.
     waerme_abgeleitet_kwh: float = 0.0
 
+    # ── R2/Gerät: dieselbe Abgrenzung im Zähler wie im Nenner? ──────────────
+    #: Wie viele Wärmepumpen des Monats haben **Strom** beigetragen …
+    geraete_mit_strom: int = 0
+    #: … und wie viele davon auch **Wärme**? Sind das weniger, mischt der Block
+    #: den Strom mehrerer Geräte mit der Wärme von weniger Geräten.
+    geraete_mit_waerme: int = 0
+
+    @property
+    def waerme_deckt_nicht_alle_geraete(self) -> bool:
+        """Trägt der Block Strom von Geräten, deren Wärme fehlt? (**R2**)
+
+        SOLL §4.2 Fall 1: *„Wenn der Zähler mehr enthält als das Gerät."* Die
+        anlagenweite Arbeitszahl ist dann systematisch zu niedrig — im Nenner
+        steht der Strom von n Geräten, im Zähler die Wärme von weniger.
+
+        **Melder dietmar1968**, sein eigener Screenshot nennt die Ursache:
+        *„Aggregiert aus: Wärmepumpe · Klimaanlage"* bei einer JAZ von 0,92.
+        ⚠ Ob genau diese Vermischung **seine** Zahl erzeugt, ist damit **nicht**
+        bewiesen — der Heizstab ist die sparsamere Erklärung (SOLL §2.2.1/H-B,
+        beides ungemessen, §7/A2). Die Regel steht unabhängig davon: Ein
+        Quotient aus zwei verschieden abgegrenzten Mengen ist keine Kennzahl,
+        egal welche Erklärung im Einzelfall zutrifft.
+
+        ⭐ **Von den vier Lagen des §4.2 ist das die einzige, die eedc aus den
+        Daten selbst erkennt.** Heizstab am Zähler, bivalenter Zweiterzeuger und
+        Zeitraum-Versatz sind von außen unsichtbar und brauchen eine Angabe des
+        Anwenders — die es noch nicht gibt.
+        """
+        return self.geraete_mit_waerme < self.geraete_mit_strom
+
     @property
     def jaz_belastbar(self) -> bool:
         """Darf aus diesen Zahlen eine JAZ/COP gebildet werden? (Konzept §3.5)
@@ -995,6 +1025,21 @@ class _RohMonat:
         self.wp_modus_gemessen = False
         self.wp_modus_strom_bezug = 0.0
         self.wp_waerme_abgeleitet = 0.0
+        # ── R2/Gerät: Zählt der Block Geräte, die keine Wärme melden? ───────
+        #
+        # SOLL §4.2 Fall 1: *„Wenn der Zähler mehr enthält als das Gerät."*
+        # Der Block *Wärme/Klima* aggregiert **alle** Wärmepumpen der Anlage —
+        # bei dietmar1968 ausweislich seines eigenen Screenshots „Aggregiert
+        # aus: Wärmepumpe · Klimaanlage". Meldet nur eines der beiden Geräte
+        # Wärme, steht im Nenner der Strom von zwei Geräten und im Zähler die
+        # Wärme von einem. Die Arbeitszahl ist dann systematisch zu niedrig.
+        #
+        # ⭐ **Das ist die einzige der vier §4.2-Lagen, die eedc aus den Daten
+        # SELBST erkennen kann** — sie braucht keine Angabe des Anwenders. Die
+        # übrigen drei (Heizstab am Zähler, bivalenter Zweiterzeuger,
+        # Zeitraum-Versatz) sind von außen nicht sichtbar.
+        self.wp_geraete_mit_strom = 0
+        self.wp_geraete_mit_waerme = 0
         self.eauto_ladedaten: list[dict] = []
         self.wallbox_ladedaten: list[dict] = []
         self.eauto_km = 0.0
@@ -1137,6 +1182,10 @@ class _RohMonat:
             self.wp_modus_gemessen = self.wp_modus_gemessen or b.wp_modus_gemessen
             self.wp_modus_strom_bezug += b.wp_modus_strom_bezug
             self.wp_waerme_abgeleitet += b.wp_waerme_abgeleitet
+            if b.wp_strom > 0:
+                self.wp_geraete_mit_strom += 1
+            if b.wp_waerme > 0:
+                self.wp_geraete_mit_waerme += 1
 
         elif inv.typ in ("e-auto", "wallbox"):
             if ist_dienstlich(inv):
@@ -1385,6 +1434,8 @@ async def _baue_fakt(
             modus_gemessen=roh.wp_modus_gemessen,
             modus_strom_bezug_kwh=roh.wp_modus_strom_bezug,
             waerme_abgeleitet_kwh=roh.wp_waerme_abgeleitet,
+            geraete_mit_strom=roh.wp_geraete_mit_strom,
+            geraete_mit_waerme=roh.wp_geraete_mit_waerme,
         ),
         sonstiges=SonstigesFakten(
             erzeugung_kwh=roh.sonstiges_erzeugung,

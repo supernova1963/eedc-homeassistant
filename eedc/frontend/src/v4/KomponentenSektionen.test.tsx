@@ -51,9 +51,32 @@ describe('baueKomponentenBloecke — Aktiv-Gating', () => {
     expect(b.summary).toMatch(/73 % η/)
   })
 
-  it('WP-Summary trägt JAZ (Wärme ÷ Strom)', () => {
-    const b = baueKomponentenBloecke(d({ wp_strom_kwh: 330, wp_waerme_kwh: 1254 }))[0]
-    expect(b.summary).toMatch(/JAZ 3,80/) // 1254/330 = 3,8
+  it('WP-Summary trägt die JAZ — aus dem Backend, nicht selbst gerechnet', () => {
+    // ⚠ **Diese Probe hieß bis 26.08.2026 „JAZ (Wärme ÷ Strom)" und setzte nur
+    // die beiden Mengen.** Damit hat sie genau die Client-Formel verteidigt,
+    // die Befund W-3 ausmacht: Der Quotient entstand hier, **ohne** die
+    // Belastbarkeits-Sperre, die Komponenten-Hub und Cockpit-Übersicht
+    // anwenden — dieselbe Anlage zeigte im Hub „—" und im Cockpit eine Zahl.
+    //
+    // **Ihr Gegenstand bleibt gültig und sie bleibt stehen:** Die Summary soll
+    // die JAZ tragen. Geändert hat sich nur, **woher** die Zahl kommt — der
+    // Layer liefert sie fertig (`core/berechnungen/waermepumpe_kennzahl`).
+    // [[feedback_keine_folge_aenderung_zurueckdrehen]]
+    const b = baueKomponentenBloecke(d({
+      wp_strom_kwh: 330, wp_waerme_kwh: 1254, wp_jaz: 3.8,
+    }))[0]
+    expect(b.summary).toMatch(/JAZ 3,80/)
+  })
+
+  it('WP-Summary zeigt KEINE JAZ, wenn der Layer sie sperrt', () => {
+    // Die Gegenprobe, die vorher unmöglich war: Bei abgeleiteter Wärme liefert
+    // das Backend `wp_jaz: null` — und die Summary nennt dann auch keine.
+    // Vorher rechnete der Client 1254/330 trotzdem aus.
+    const b = baueKomponentenBloecke(d({
+      wp_strom_kwh: 330, wp_waerme_kwh: 1254, wp_jaz: null,
+    }))[0]
+    expect(b.summary).not.toMatch(/JAZ/)
+    expect(b.summary).toMatch(/1\.254 kWh Wärme/)
   })
 
   it('alle fünf Komponenten aktiv → fünf Blöcke (Sonstiges = Erzeuger-Variante)', () => {

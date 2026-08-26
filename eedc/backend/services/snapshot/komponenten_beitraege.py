@@ -75,6 +75,41 @@ def _is_sensor_mapping(cfg) -> bool:
     )
 
 
+#: Die zwei **Summanden**-Achsen des WP-Stroms (Gegenstück zu den Betriebsart-
+#: Teilmengen). Nur die Namen — welche davon ein konkretes Gerät hat, beantwortet
+#: `_feine_strom_achsen` an der Registry.
+_FEINE_STROM_FELDER: tuple[str, ...] = ("strom_heizen_kwh", "strom_warmwasser_kwh")
+
+
+def _feine_strom_achsen(parameter: dict) -> list[str]:
+    """Welche feinen Strom-Achsen **hat** dieses Gerät? (K3, SOLL §3.2)
+
+    Die Frage ist eine Eigenschaft des **Geräts**, nicht der Erfassung: Eine
+    Luft-Wasser-Wärmepumpe hat Heizen und Warmwasser, eine Split-Klimaanlage
+    nur Heizen (kein Warmwasserkreis — `strom_warmwasser_kwh` trägt
+    `!luft_luft`, N-304/B5).
+
+    ⚠ **Deshalb wird die Registry mit gesetztem Kennzeichen befragt**, auch wenn
+    es an der Investition aus ist: `getrennte_strommessung` sagt, ob die Achsen
+    *getrennt erfasst werden*, nicht ob es sie *gibt*. Ohne diese Normalisierung
+    meldete ein Gerät mit ausgeschaltetem Kennzeichen „gar keine Achsen" — und
+    K3 könnte in dieser Richtung (Kennzeichen aus, feiner Zähler zugeordnet)
+    nicht greifen.
+
+    ⭐ **Registry statt Bauart-Abfrage** (R1): `ist_luft_luft_waermepumpe` hier
+    aufzurufen wäre die zweite Stelle, die dieselbe Frage beantwortet — genau
+    die Drift-Klasse, an der F-56 entstanden ist.
+    """
+    from backend.core.field_definitions import get_felder_fuer_investition
+
+    angeboten = {
+        f["feld"] for f in get_felder_fuer_investition(
+            "waermepumpe", {**parameter, "getrennte_strommessung": True},
+        )
+    }
+    return [f for f in _FEINE_STROM_FELDER if f in angeboten]
+
+
 def pv_je_investition_belegt_in_map(
     investitionen_map: dict,
     mqtt_felder_je_investition: Optional[dict[str, set[str]]] = None,
@@ -313,12 +348,67 @@ def investition_beitraege(
         # *thermische* Werte (~ Strom × COP) und gehören nicht in die
         # Bilanz. wp_starts_anzahl/wp_betriebsstunden sind reine Counter
         # (eigener Pfad in `get_daily_counter_deltas_by_inv`).
+        #
+        # ⭐ **K3 — ein Erfassungsweg, den es nicht gibt, entwertet keinen, den
+        # es gibt** (SOLL Wärme/Klima §3.2, Befunde W-1 + W-1b).
+        #
+        # Bis 2026-08-26 entschied allein das Kennzeichen
+        # `getrennte_strommessung`: war es gesetzt, wurde `stromverbrauch_kwh`
+        # **nie** gelesen. Zwei Folgen, und die zweite ist die teurere:
+        #
+        #   * Nur der Gesamtzähler zugeordnet ⇒ die Investition trug **gar
+        #     nichts** bei, der Block *Wärme/Klima* verschwand. Gemeldet von
+        #     OB73-gif (#263), von ihm selbst aufgelöst, indem er das
+        #     Kennzeichen wieder ausschaltete.
+        #   * Gesamt **+ nur Heizen** zugeordnet ⇒ nur Heizen zählte. Der
+        #     Warmwasser-Anteil fehlte **still** — in der WP-Zahl, in den
+        #     Kosten, im Anteil am Haushalt. Kein Melder; getroffen ist der
+        #     normale Einrichtungsweg (erst Heizen zuordnen, dann Warmwasser).
+        #
+        # **Die Regel entscheidet jetzt am Zähler, nicht am Kennzeichen:**
+        #
+        #   1. Die feine Aufteilung ist **vollständig** (jede Achse, die das
+        #      Gerät überhaupt hat, ist belegt) ⇒ sie IST die Gesamtmenge, der
+        #      Gesamtzähler wird verworfen. Sonst zählte derselbe Strom
+        #      doppelt — alle Beiträge laufen auf EINEN Ziel-Key.
+        #   2. Sonst gilt K1: *„Die Gesamtmenge ist immer die Wahrheit."*
+        #   3. Sonst trägt, was gemessen ist — eine unvollständige Aufteilung
+        #      ohne Gesamtzähler ist die einzige Messung, die es gibt.
+        #      Sie zu verwerfen hieße den Block verschwinden zu lassen, und
+        #      das ist genau der Befund, der hier repariert wird.
+        #
+        # ⚠ **Warum die Achsen aus der Registry kommen und nicht aus der
+        # Bauart:** Eine Split-Klimaanlage hat keinen Warmwasserkreis
+        # (`strom_warmwasser_kwh` trägt `!luft_luft`, N-304/B5). Ihre feine
+        # Aufteilung kann deshalb **nie** vollständig sein — sie fällt auf
+        # Stufe 2, und das ist richtig: `strom_heizen_kwh` ist dort kein
+        # Summand einer zweiteiligen Achse, sondern ein Ausschnitt neben
+        # Kühlen, Lüften und Standby. Die Frage *„welche Achsen hat dieses
+        # Gerät?"* wird an genau einer Stelle beantwortet (R1) — hier sie ein
+        # zweites Mal zu beantworten wäre die F-56-Klasse.
+        #
+        # ⚠ **Die Aufteilung geht nicht verloren, sie steht nur woanders:**
+        # `aggregator.get_tagesdetail_kwh` trägt `strom_heizen_kwh`/
+        # `strom_warmwasser_kwh` als eigene Ausgabe-Keys. „Aufteilung daneben,
+        # nie an ihrer Stelle" (K1) heißt Detail-Pfad, nicht Bilanz-Pfad.
         params = getattr(inv, "parameter", None) or {}
-        if isinstance(params, dict) and params.get("getrennte_strommessung"):
-            _add("strom_heizen_kwh")
-            _add("strom_warmwasser_kwh")
-        else:
+        if not isinstance(params, dict):
+            params = {}
+        fein_moeglich = _feine_strom_achsen(params)
+        fein_belegt = [f for f in fein_moeglich if ist_verfuegbar(f)]
+        aufteilung_vollstaendig = (
+            bool(params.get("getrennte_strommessung"))
+            and len(fein_moeglich) >= 2
+            and len(fein_belegt) == len(fein_moeglich)
+        )
+        if aufteilung_vollstaendig:
+            for feld in fein_belegt:
+                _add(feld)
+        elif ist_verfuegbar("stromverbrauch_kwh"):
             _add("stromverbrauch_kwh")
+        else:
+            for feld in fein_belegt:
+                _add(feld)
 
     elif typ == "wallbox":
         # ladung_pv_kwh / ladung_netz_kwh sind Teilmengen von ladung_kwh —

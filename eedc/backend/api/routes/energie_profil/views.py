@@ -240,6 +240,9 @@ async def get_tag_detail(
         teilmengen_passen, waermepumpe_kwh_je_investition,
     )
     from backend.core.berechnungen.betriebsart_gemessen import modus_strom_zeile
+    from backend.core.berechnungen.waermepumpe_kennzahl import (
+        arbeitszahl, waerme_gesamt_kwh,
+    )
     from backend.core.betriebsmodus import HEIZEN, KUEHLEN
     from backend.services.energie_profil import lade_modus_split_tag
     from backend.services.snapshot.aggregator import get_betriebsart_strom_tageswerte
@@ -326,6 +329,28 @@ async def get_tag_detail(
         )
         abdeckung_tag += split.abdeckung_h
 
+    # ── Wärme gesamt + Arbeitszahl des Tages, beide aus dem Layer ──────────
+    #
+    # Der Tages-Strom ist die Σ der `waermepumpe_*`-Keys der Tageszusammen-
+    # fassung — dieselbe Quelle, aus der der Modus-Split oben seinen Bezug
+    # nimmt. Die Wärme ist im Tag **immer gemessen** (nur ein zugeordneter
+    # Wärmemengenzähler kommt hier an), deshalb gibt es keinen abgeleiteten
+    # Anteil und die Sperre greift nur über die beiden Mengen selbst.
+    _wp_waerme_tag = waerme_gesamt_kwh(
+        None, detail.get("wp_heizung_kwh"), detail.get("wp_warmwasser_kwh"),
+    )
+    wp_waerme_tag = round(_wp_waerme_tag, 2) if _wp_waerme_tag > 0 else None
+    _tz_alle = (await db.execute(
+        select(TagesZusammenfassung.komponenten_kwh).where(
+            TagesZusammenfassung.anlage_id == anlage_id,
+            TagesZusammenfassung.datum == datum,
+        )
+    )).scalar_one_or_none()
+    wp_strom_tag = sum(
+        waermepumpe_kwh_je_investition(_tz_alle or {}).values()
+    ) or None
+    wp_jaz_tag = arbeitszahl(wp_waerme_tag, wp_strom_tag)
+
     return TagDetailResponse(
         datum=datum,
         wp_modus_strom_heizen_kwh=round(heizen_tag, 2) if hat_split else None,
@@ -342,6 +367,10 @@ async def get_tag_detail(
         wp_strom_warmwasser_kwh=detail.get("wp_strom_warmwasser_kwh"),
         wp_heizung_kwh=detail.get("wp_heizung_kwh"),
         wp_warmwasser_kwh=detail.get("wp_warmwasser_kwh"),
+        wp_waerme_kwh=wp_waerme_tag,
+        wp_jaz=wp_jaz_tag.wert,
+        wp_jaz_grund=wp_jaz_tag.grund,
+        wp_jaz_hinweis=wp_jaz_tag.hinweis,
         speicher_ladung_netz_kwh=detail.get("speicher_ladung_netz_kwh"),
         speicher_effektiver_ladepreis_cent=(
             round(eff.effektiver_ladepreis_cent, 2)

@@ -104,6 +104,19 @@ export interface AktuellerMonatResponse {
   wp_waerme_kwh: number | null
   wp_heizung_kwh: number | null
   wp_warmwasser_kwh: number | null
+  /** Arbeitszahl — **fertig aus dem Layer**, nicht hier gerechnet (R2/W-3).
+   *  `null` heißt: es gibt sie nicht, und `wp_jaz_grund` sagt warum. Der
+   *  Client bildete den Quotienten bis 26.08.2026 selbst und **konnte** die
+   *  Belastbarkeits-Sperre nicht kennen — dieselbe Anlage zeigte im
+   *  Komponenten-Hub „—" und im Cockpit eine Zahl (ADR-001). */
+  wp_jaz?: number | null
+  /** Warum es keine Arbeitszahl gibt — nie ein „—" ohne Grund (SOLL S3). */
+  wp_jaz_grund?: string | null
+  /** Fall H-B: die Zahl ist richtig und erklärungsbedürftig (Heizstab).
+   *  Der Wortlaut kommt aus dem Layer, damit er nicht je Sicht abweicht. */
+  wp_jaz_hinweis?: string | null
+  /** Ist ein Teil der Wärme aus `Strom × JAZ` gerechnet statt gemessen? */
+  wp_waerme_abgeleitet?: boolean | null
   // #191: Strom-Aufteilung Heizung/Warmwasser. Nur befüllt wenn mindestens
   // eine WP-Investition `getrennte_strommessung=true` hat.
   wp_strom_heizen_kwh: number | null
