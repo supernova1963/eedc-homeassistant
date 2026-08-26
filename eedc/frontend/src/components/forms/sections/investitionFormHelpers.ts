@@ -200,6 +200,13 @@ export function getInitialParamData(
         wirkungsgrad_prozent: paramStr(params.wirkungsgrad_prozent, PARAM_SPEICHER_DEFAULTS.wirkungsgrad_prozent),
         laedt_aus_netz: arbitrage ? true : laedtAusNetzGespeichert,
         arbitrage_faehig: arbitrage,
+        // #397: bewusst OHNE Default-Argument — dieselbe Begründung wie bei
+        // `kopplung` darunter und `eigener_verbrauch_l_100km` beim E-Auto.
+        // Der Richtwert (12/35 ct) steht im Hint des Feldes; vorbelegt würde
+        // er beim ersten Speichern zur gepflegten Zahl und brächte den
+        // Daten-Checker zum Schweigen, ohne dass jemand sie bestätigt hat.
+        lade_durchschnittspreis_cent: paramStr(params.lade_durchschnittspreis_cent),
+        entlade_vermiedener_preis_cent: paramStr(params.entlade_vermiedener_preis_cent),
         // #351: leer = „Automatisch (aus der Zuordnung)". Bewusst OHNE Default —
         // eine Vorbelegung hier würde beim ersten Speichern die Ableitung als
         // gepflegten Wert festschreiben, und wer den Wechselrichter später

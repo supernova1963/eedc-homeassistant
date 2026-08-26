@@ -55,6 +55,33 @@ schreibt den Grund daneben — statt einer Zahl, die es so nicht gibt.
 gekühlte Anlagen (nur Umwälzpumpen) erreichen ein Vielfaches der Effizienz. Ihre
 eigenen Zahlen bleiben, sie werden nur nicht mehr gegen aktiv gekühlte gestellt.
 
+**Ein Hinweis, den man nicht abstellen konnte — und einer, den es nicht hätte
+geben dürfen**
+
+Wer bei einem Speicher „Arbitrage-fähig" eingeschaltet hatte, wurde vom
+Daten-Checker nach Ø Lade- und Ø Entladepreis gefragt. Diese beiden Felder gab
+es aber in **keinem** Formular. Der „Beheben"-Knopf führte genau dorthin, wo sie
+fehlten — gemeldet von einem Tester, der sie gesucht und nicht gefunden hat.
+
+Beide stehen jetzt unter *Netzladung & Arbitrage*, sobald der Schalter an ist.
+Sie sind absichtlich leer und nicht vorbelegt: Ein hineingeschriebener Richtwert
+würde beim ersten Speichern zu einer Zahl, die aussieht, als hättest du sie
+bestätigt. Womit eedc ohne deine Angabe rechnet, steht als Hinweis unter dem
+Feld.
+
+Warum eedc hier überhaupt fragt: Arbitrage lebt davon, dass dieselbe
+Kilowattstunde zu verschiedenen **Uhrzeiten** verschieden viel kostet — und ein
+eedc-Tarif kennt keine Uhrzeit. Wer einen dynamischen Tarif angebunden hat
+(Tibber, aWATTar, EPEX), braucht die Felder nicht: Dort nimmt eedc den
+stundengenauen Preis.
+
+**Beim E-Auto ist der ganz ähnlich aussehende Hinweis dagegen verschwunden**
+(„V2H aktiv, aber Entladepreis fehlt"). Er war schlicht falsch: eedc braucht den
+Wert nicht. Ohne ihn rechnet es mit dem Abstand zwischen deinem Bezugspreis und
+deiner Einspeisevergütung — also mit deinen echten Zahlen. Wer dem Hinweis
+gefolgt ist und etwas eingetragen hat, hat seine Rechnung ungewollt
+verschlechtert.
+
 ---
 
 ## v4.0.28 — Anzeigen ist nicht mitschreiben

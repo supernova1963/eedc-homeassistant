@@ -1220,20 +1220,30 @@ class StammdatenChecks:
                         details="Werden für ROI-Berechnung benötigt (Vergleich mit Verbrenner-Alternative)",
                         link="/einstellungen/investitionen",
                     ))
-                # Kanon seit v3.25.0: `v2h_faehig` (im Code selbst als „Bug #1
-                # v3.25.0" vermerkt, s. `live_komponenten_builder.py`). Bis
-                # 2026-08-23 stand hier `nutzt_v2h` — dieser Prüfer hat damit
-                # nie gemeldet.
-                if (
-                    param.get(PARAM_E_AUTO["V2H_FAEHIG"])
-                    and not param.get(PARAM_E_AUTO["V2H_ENTLADE_PREIS_CENT"])
-                ):
-                    ergebnisse.append(CheckErgebnis(
-                        kategorie=kat, schwere=CheckSeverity.INFO,
-                        meldung=f"{name}: V2H aktiv, aber Entladepreis fehlt",
-                        details="Wird für V2H-Einsparungsberechnung benötigt",
-                        link="/einstellungen/investitionen",
-                    ))
+                # ⛔ HIER STAND EIN PRÜFER „V2H aktiv, aber Entladepreis fehlt"
+                # — er ist mit #397 ERSATZLOS ENTFALLEN, und zwar bewusst.
+                #
+                # Seine Aussage war sachlich falsch: `v2h_entlade_preis_cent`
+                # ist ein OVERRIDE, kein benötigter Wert. Ohne ihn rechnet
+                # `dashboards.py` über `berechne_v2h_ersparnis` mit dem Spread
+                # aus den GEPFLEGTEN Tarifen (Bezug − Einspeisevergütung) —
+                # der belastbareren Grundlage. Wer dem Hinweis folgte,
+                # ersetzte eine Messung durch eine Schätzung.
+                #
+                # Bis 2026-08-23 stand die Bedingung auf dem Vor-Kanon-Namen
+                # `nutzt_v2h` und hat deshalb nie gemeldet; erst `4e97cc56`
+                # machte sie scharf — und damit den Hinweis sichtbar, den es
+                # nie hätte geben dürfen. Die Abwesenheit ist gewächtert
+                # (`test_v2h_entladepreis_ist_kein_mangel_397`), sonst wäre
+                # eine versehentliche Streichung von dieser hier
+                # ununterscheidbar.
+                #
+                # ⚠ Abgrenzung zum Speicher (derselbe Fix, andere Antwort):
+                # Dort sind Ø Lade-/Entladepreis KEIN Override, sondern die
+                # einzige Quelle — Arbitrage lebt von zwei Preisen zu
+                # verschiedenen UHRZEITEN, und ein eedc-Tarif kennt keine
+                # Uhrzeit. Deshalb wurden die beiden Speicher-Felder pflegbar
+                # gemacht, statt ihre Prüfer zu streichen.
                 # F-64 (gruaGit, Discussion #396): NUR ohne Wallbox einfordern.
                 # `core/field_definitions.py` gibt dem E-Auto-Feld
                 # `ladung_pv_kwh` die Bedingung `bedingung_anlage:

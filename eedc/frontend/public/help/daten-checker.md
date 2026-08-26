@@ -233,9 +233,18 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 |---------|----------|-----------|----------|
 | **\[Name\]: Kapazität (kWh) fehlt** | ⚠️ WARNING | `kapazitaet_kwh` ist Bezugsgröße für Vollzyklen, Wirkungsgrad-Berechnung und Live-SoC-Skalierung. | Komponente öffnen, Brutto-Kapazität in kWh eintragen. |
 | **\[Name\]: Kapazität vermutlich in Wh statt kWh eingetragen** | ⚠️ WARNING | Das Balkonkraftwerk darüber nennt seine Akku-Kapazität in **Wh**, dieser Speicher seine in **kWh** — und beide tragen **denselben Zahlenwert**. Dann ist die Kapazität tausendfach zu groß, und Vollzyklen, Auslastung und Wirtschaftlichkeit rechnen gegen einen Nenner, den es nicht gibt. Geprüft wird der Widerspruch der beiden Felder, **keine Obergrenze** — ein großer Speicher wird nicht angemeckert. | Komponente öffnen, die Kapazität in kWh eintragen (5.376 Wh sind 5,376 kWh). Die Meldung nennt die Zahl. |
-| **\[Name\]: Arbitrage aktiv, aber Ø Ladepreis fehlt** | ⚠️ WARNING | `arbitrage_faehig` ist gesetzt, aber `lade_durchschnittspreis_cent` fehlt. Arbitrage-Einsparung kann nicht berechnet werden. | Komponente öffnen, durchschnittlichen Ladepreis (z. B. negative Börsenpreise) eintragen. |
-| **\[Name\]: Arbitrage aktiv, aber Ø Entladepreis fehlt** | ⚠️ WARNING | Analog zum Ladepreis: ohne `entlade_vermiedener_preis_cent` kein Arbitrage-Erlös berechenbar. | Vermiedenen Entladepreis (z. B. Endkundentarif zur Spitzenlastzeit) eintragen. |
+| **\[Name\]: Arbitrage aktiv, aber Ø Ladepreis fehlt** | ⚠️ WARNING | `arbitrage_faehig` ist gesetzt, aber `lade_durchschnittspreis_cent` fehlt. Arbitrage-Einsparung kann nicht berechnet werden. | Komponente öffnen → **Netzladung & Arbitrage** aufklappen → Ø Ladepreis eintragen (der Preis im Niedrigtarif-Fenster, z. B. bei negativen Börsenpreisen). Ohne Angabe rechnet eedc mit 12 ct/kWh. |
+| **\[Name\]: Arbitrage aktiv, aber Ø Entladepreis fehlt** | ⚠️ WARNING | Analog zum Ladepreis: ohne `entlade_vermiedener_preis_cent` kein Arbitrage-Erlös berechenbar. | Komponente öffnen → **Netzladung & Arbitrage** → Ø Entladepreis eintragen (der vermiedene Preis zur Spitzenlastzeit). Ohne Angabe rechnet eedc mit 35 ct/kWh. |
 | **\[Name\]: Speicher-Ladung fehlt in N Monat(en)** | ⚠️ WARNING | `ladung_kwh` fehlt in den genannten Monaten — Vollzyklen und Wirkungsgrad lassen sich für diese Monate nicht berechnen. | Monatsdaten nachtragen. |
+
+> ⚠ **Die beiden Arbitrage-Preisfelder gab es lange in keinem Formular** — der Hinweis war damit
+> nicht abstellbar (Issue #397, MeinerB). Sie stehen jetzt beim Speicher unter *Netzladung &
+> Arbitrage*, sobald der Schalter an ist.
+>
+> **Warum eedc hier überhaupt eine Anwender-Angabe braucht:** Arbitrage lebt davon, dass dieselbe
+> Kilowattstunde zu **verschiedenen Uhrzeiten** verschieden viel kostet — und ein eedc-Tarif kennt
+> keine Uhrzeit. Wer einen dynamischen Tarif (Tibber/aWATTar/EPEX) angebunden hat, braucht die
+> Felder nicht: dort zieht eedc den stundengenauen Preis vor.
 
 #### 4.3.4 E-Auto (privat)
 
@@ -245,7 +254,6 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 |---------|----------|-----------|----------|
 | **\[Name\]: Fahrleistung/Verbrauch fehlt** | ℹ️ INFO | Weder `jahresfahrleistung_km` noch `verbrauch_kwh_100km` gesetzt. Einsparungs-Berechnung gegenüber Verbrenner ist nicht möglich. | Komponente öffnen, Jahres-Fahrleistung und/oder Verbrauch eintragen. |
 | **\[Name\]: Alternativkosten (Verbrenner) fehlen** | ⚠️ WARNING | `anschaffungskosten_alternativ` fehlt. ROI gegenüber Verbrenner-Alternative wird ohne diesen Wert nicht berechnet. | Komponente öffnen, geschätzte Anschaffungskosten eines vergleichbaren Verbrenners eintragen. |
-| **\[Name\]: V2H aktiv, aber Entladepreis fehlt** | ℹ️ INFO | `v2h_faehig` ist gesetzt, aber `v2h_entlade_preis_cent` fehlt. V2H-Einsparung wird nicht berechnet. | Vermiedenen Entladepreis eintragen (analog Speicher-Arbitrage). |
 | **\[Name\]: Ladung PV fehlt in N Monat(en)** | ℹ️ INFO | `ladung_pv_kwh` fehlt — Anteil PV-Ladung am Gesamt-Ladestrom unbekannt. Geringere Severity als andere Pflichtfelder, weil V2H/Wallbox-Aufschlüsselung optional ist. **Nur bei Fahrzeugen ohne Wallbox:** Mit Wallbox liegt die Heimladung kanonisch dort, das Feld am E-Auto wird gar nicht erst angeboten — dieser Hinweis erscheint dann nicht (bis v4.0.27 erschien er trotzdem und war nicht abstellbar). Dienstwagen sind ebenfalls ausgenommen. | Monatsdaten nachtragen. Wer eine Wallbox hat, erfasst dort (Loadpoint-Sensor), nicht am E-Auto. |
 
 #### 4.3.5 Wallbox

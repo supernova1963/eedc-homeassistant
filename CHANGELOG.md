@@ -27,6 +27,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Fixed
 
+- **Zwei Preisfelder, die der Daten-Checker verlangte und die es in keinem Formular gab.** Gemeldet von **MeinerB** (Issue #397): *„ich bekomme einen Hinweis dass ich die Felder bearbeiten soll, kann sie aber nicht finden."* Wer bei einem Speicher „Arbitrage-fähig" einschaltet, wurde nach Ø Lade- und Ø Entladepreis gefragt — beide gab es weder im Formular noch in einem Wizard. Der „Beheben"-Knopf führte in genau das Formular, in dem sie fehlten.
+
+  **Beide Felder stehen jetzt unter *Netzladung & Arbitrage*,** sobald der Schalter an ist. Sie bleiben bewusst leer statt vorbelegt: Ein eingetragener Richtwert würde beim ersten Speichern zu einer gepflegten Zahl, die niemand bestätigt hat. Womit eedc ohne deine Angabe rechnet (12 bzw. 35 ct/kWh), steht als Hinweis unter dem Feld.
+
+  **Der gleich aussehende Hinweis beim E-Auto ist dagegen ersatzlos entfallen** („V2H aktiv, aber Entladepreis fehlt"). Er war sachlich falsch: `v2h_entlade_preis_cent` ist ein Override, kein benötigter Wert — ohne ihn rechnet eedc mit dem Abstand zwischen deinem Bezugspreis und deiner Einspeisevergütung, also mit gepflegten Zahlen statt einer Schätzung. Wer dem Hinweis folgte, verschlechterte seine Datengrundlage.
+
 - **Der Kühlstrom drückte die Arbeitszahl.** Wer mit derselben Anlage heizt und kühlt, hatte den Kühlstrom im Nenner seiner Arbeitszahl — die abgeführte Wärme steht dort aber in keinem Zähler. Eine Anlage, die im Sommer kühlt, sah dadurch aus wie eine schlechte Heizung, und zwar in *Cockpit → Tag*, *Monat*, *Jahr*, im Komponenten-Hub **und** im Community-Vergleich.
 
   Für **Wirtschaftlichkeit und CO₂** rechnet eedc den Kühlstrom seit 4.0.5 heraus — bei der Arbeitszahl fehlte derselbe Schritt. **Deine Arbeitszahl kann dadurch steigen**, wenn du kühlst; das ist gewollt. Ist ein ganzer Zeitraum reiner Kühlbetrieb, steht statt der Zahl der Grund dafür.

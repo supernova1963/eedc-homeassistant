@@ -83,6 +83,34 @@ export function SpeicherFelder({ paramData, onInputChange, setParam, hatZuordnun
             onChange={(an) => setParam('arbitrage_faehig', an)}
             label="Arbitrage-fähig (Netzladen bei Niedrigtarif)"
           />
+          {/* #397 (MeinerB): Der Daten-Checker fordert beide Preise, sobald
+              Arbitrage an ist — pflegbar waren sie bis dahin nirgends, sein
+              Beheben-Link führte in dieses Formular ohne die Felder. Bewusst
+              OHNE Vorbelegung (Bauform von `kopplung` darüber und #331): leer
+              heißt „nicht gepflegt", und genau das meldet der Checker zu
+              Recht. Der Richtwert steht im Hint statt im Feld — vorbelegt
+              würde er beim ersten Speichern zur gepflegten Zahl, die niemand
+              bestätigt hat. */}
+          {arbitrage && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+              <Input
+                label="Ø Ladepreis (ct/kWh)"
+                name="param_lade_durchschnittspreis_cent"
+                type="number" step="any" min="0"
+                value={paramData.lade_durchschnittspreis_cent as string}
+                onChange={onInputChange}
+                hint="Was die Kilowattstunde beim Netzladen im Niedrigtarif kostet. Ohne Angabe rechnet eedc mit 12 ct/kWh."
+              />
+              <Input
+                label="Ø Entladepreis (ct/kWh)"
+                name="param_entlade_vermiedener_preis_cent"
+                type="number" step="any" min="0"
+                value={paramData.entlade_vermiedener_preis_cent as string}
+                onChange={onInputChange}
+                hint="Der Preis, den das Entladen dir erspart. Ohne Angabe rechnet eedc mit 35 ct/kWh."
+              />
+            </div>
+          )}
         </div>
       </FormSection>
     </>

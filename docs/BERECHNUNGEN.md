@@ -793,6 +793,8 @@ Benzin_Kosten        = Benzin_Verbrauch * Benzinpreis_EUR
 Fossile_Kosten       = km_verbrenner / 100 * Eigener_L_100km * Benzinpreis_EUR
 
 V2H_Einsparung       = V2H_Entladung_kWh * V2H_Preis / 100    (wenn V2H aktiv)
+    V2H_Preis        = v2h_entlade_preis_cent                 (Override, optional)
+                     = Bezugspreis - Einspeisevergütung       (Normalfall, aus den gepflegten Tarifen)
 
 Jahres-Einsparung    = Benzin_Kosten - Strom_Kosten - Fossile_Kosten + V2H_Einsparung
 
