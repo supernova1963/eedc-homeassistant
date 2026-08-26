@@ -24,6 +24,7 @@ from backend.core.database import get_db
 from backend.core.field_definitions import (
     OPTIONALE_FELDER,
     ZAEHLERSTAND_FELD,
+    basis_feld_key,
     einheit_fuer,
     get_basis_felder,
     get_felder_fuer_investition,
@@ -500,11 +501,6 @@ async def get_monatsabschluss(
     # Investitionen aufbereiten
     investitionen_status: list[InvestitionStatus] = []
     for inv in anlage.investitionen:
-        # Felder für diese Investition auflösen (Bedingungen berücksichtigen)
-        felder_config = get_felder_fuer_investition(inv.typ, inv.parameter, anlage_investitionen=anlage.investitionen)
-        if not felder_config:
-            continue
-
         # InvestitionMonatsdaten laden
         imd_result = await db.execute(
             select(InvestitionMonatsdaten)
@@ -522,6 +518,33 @@ async def get_monatsabschluss(
         # Mapping für diese Investition - beachte die verschachtelte Struktur {"felder": {...}}
         inv_mapping_raw = inv_mappings.get(str(inv.id), {})
         inv_mapping = inv_mapping_raw.get("felder", inv_mapping_raw) if isinstance(inv_mapping_raw, dict) else {}
+
+        # R1 (SOLL Wärme/Klima §3.2a): **erweiterte** Felder erscheinen hier nur,
+        # wenn es sie an diesem Gerät belegbar gibt — *„was ein Gerät liefern
+        # kann, sagt der zugeordnete Zähler, nicht seine Bauart."* Belegt heißt:
+        # ein gepflegter Wert in diesem Monat **oder** eine Zuordnung.
+        #
+        # ⚠ **Beides, nicht nur eines.** Nur die Zuordnung zu prüfen verlöre den
+        # Anwender, der seinen Kühlwert von Hand einträgt; nur den Wert zu prüfen
+        # verlöre den ersten Monat einer frischen Zuordnung — dann stünde das
+        # Feld genau in dem Moment nicht da, in dem es gebraucht wird.
+        #
+        # ⚠ **Die IMD-Zeile wird deshalb VOR der Feldliste geladen.** Bis zum
+        # 26.08.2026 stand die Feldliste oben und die Zeile darunter; die
+        # Reihenfolge trug keine Absicht, nur Gewohnheit.
+        belegte_felder = {
+            basis_feld_key(k) for k, v in (verbrauch_daten or {}).items()
+            if v is not None
+        } | {basis_feld_key(k) for k in inv_mapping}
+
+        # Felder für diese Investition auflösen (Bedingungen berücksichtigen)
+        felder_config = get_felder_fuer_investition(
+            inv.typ, inv.parameter,
+            anlage_investitionen=anlage.investitionen,
+            belegte_felder=belegte_felder,
+        )
+        if not felder_config:
+            continue
 
         felder: list[FeldStatus] = []
         for feld_config in felder_config:

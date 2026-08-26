@@ -97,12 +97,87 @@ def waerme_gesamt_kwh(
 #: deren Wärme fehlt (SOLL §4.2 Fall 1). Kurz — er steht sichtbar auf der Kachel.
 GRUND_GERAETE_OHNE_WAERME = "nicht alle Geräte melden Wärme"
 
+#: **R2/W-7 — Fall H-C:** Der Strom eines fremden Erzeugers (typisch ein
+#: Heizstab) liegt auf dem WP-Zähler, seine Wärme läuft nicht über den
+#: Wärmemengenzähler. ⇒ **E ist zu groß**, die Arbeitszahl systematisch zu
+#: niedrig. Von außen unsichtbar — es ist eine Anwender-Angabe
+#: (`PARAM_WAERMEPUMPE["ABGRENZUNG"] = "fremdstrom"`).
+GRUND_FREMDSTROM = "Heizstab-Strom auf dem WP-Zähler"
+
+#: **R2/F12 — bivalent:** Ein zweiter Wärmeerzeuger speist denselben Kreis, sein
+#: Aufwand liegt nicht auf dem WP-Zähler. ⇒ **Q ist zu groß**, die Arbeitszahl
+#: zu hoch.
+#:
+#: ⭐ **Dieselbe Verletzung wie `GRUND_FREMDSTROM`, nur mit umgekehrtem
+#: Vorzeichen** — und der Prüfstein dafür, dass R2 die richtige Abstraktionshöhe
+#: hat: Der Fall hat **keinen Melder** und stand in **keiner** der vier Lagen des
+#: SOLL §4.2. Sichtbar wurde er erst, als die Fallsammlung zu einer Regel
+#: verallgemeinert wurde. Eine Aufzählung hätte ihn nie hervorgebracht.
+GRUND_FREMDWAERME = "zweiter Erzeuger am Wärmezähler"
+
+#: **R2/Zeitraum — SOLL §4.2 Fall 3:** Q und E stammen aus verschieden langen
+#: Messzeiträumen (etwa: Wärme aus dem Monatsabschluss, Strom aus einem
+#: Connector-Delta, das erst mitten im Monat zu messen begann). Der Quotient
+#: wäre einer aus zwei Wirklichkeiten.
+GRUND_ZEITRAUM = "Zähler messen verschiedene Zeiträume"
+
+#: Die Anwender-Angabe → ihr Grund. **Der Layer übersetzt, nicht die Route** —
+#: sonst stünde derselbe Text an vier Aufrufstellen.
+GRUND_JE_ABGRENZUNG: dict[str, str] = {
+    "fremdstrom": GRUND_FREMDSTROM,
+    "fremdwaerme": GRUND_FREMDWAERME,
+}
+
+
+def abgrenzungs_grund(
+    *,
+    abgrenzung_stoerung: Optional[str] = None,
+    geraete_ohne_waerme: bool = False,
+    zeitraum_versetzt: bool = False,
+) -> Optional[str]:
+    """Der Grund, warum Q und E **nicht dieselbe Abgrenzung** tragen — oder ``None``.
+
+    **Die eine Stelle, an der R2 aus den drei erkennbaren Lagen einen Grund
+    macht.** Ohne sie stünde die Reihenfolge an vier Aufrufstellen nebeneinander
+    und würde beim nächsten Fall zum fünften Mal getippt — genau die Bauform, die
+    Befund W-3 erzeugt hat (dieselbe Frage an drei Stellen, eine davon im
+    Client).
+
+    ⭐ **Die Reihenfolge ist eine Entscheidung, keine Willkür** (Entscheid
+    Gernot, 26.08.2026): **Die Anwender-Angabe schlägt die Selbsterkennung.**
+    Wer eingetragen hat, dass sein Heizstab auf dem WP-Zähler liegt, bekommt
+    genau diesen Satz zu lesen — nicht den allgemeineren „nicht alle Geräte
+    melden Wärme", der auf dieselbe Anlage ebenfalls zutreffen kann. Der
+    konkretere Grund ist die bessere Auskunft (SOLL §3.3/**S3**).
+
+    Args:
+        abgrenzung_stoerung: `WpFakten.abgrenzung_stoerung` — die Anwender-Angabe.
+        geraete_ohne_waerme: `WpFakten.waerme_deckt_nicht_alle_geraete` — die
+            einzige Lage, die eedc aus den Daten selbst erkennt.
+        zeitraum_versetzt: Q und E stammen aus verschieden langen Messzeiträumen
+            (SOLL §4.2 Fall 3). Wird nur dort gesetzt, wo die Herkunft je Größe
+            überhaupt bekannt ist — das ist die Vier-Quellen-Auflösung in
+            `api/routes/aktueller_monat.py`. Hub und Tagesansicht lesen jeweils
+            **eine** Quelle; dort gibt es den Fall nicht, und `False` ist deshalb
+            keine Lücke, sondern die Wahrheit.
+    """
+    if abgrenzung_stoerung:
+        grund = GRUND_JE_ABGRENZUNG.get(abgrenzung_stoerung)
+        if grund:
+            return grund
+    if geraete_ohne_waerme:
+        return GRUND_GERAETE_OHNE_WAERME
+    if zeitraum_versetzt:
+        return GRUND_ZEITRAUM
+    return None
+
 
 def arbeitszahl(
     waerme_kwh: Optional[float],
     strom_kwh: Optional[float],
     *,
     waerme_abgeleitet_kwh: float = 0.0,
+    strom_funktionsfremd_kwh: float = 0.0,
     abgrenzung_verletzt: Optional[str] = None,
 ) -> Arbeitszahl:
     """Q ÷ E — oder der Grund, warum es diese Zahl nicht gibt (**R2**).
@@ -112,6 +187,36 @@ def arbeitszahl(
         strom_kwh: elektrische Energie im selben Zeitraum, am selben Gerät.
         waerme_abgeleitet_kwh: der Anteil von ``waerme_kwh``, der aus
             ``Strom × JAZ`` gerechnet statt gemessen wurde.
+        strom_funktionsfremd_kwh: der Anteil von ``strom_kwh``, der in eine
+            Funktion **ohne bewertete Nutzenergie** ging — heute der
+            Kühlbetrieb (**W-14**). Er wird **abgezogen**, nicht gesperrt.
+
+            ⭐ **Das ist keine neue Entscheidung, sondern die dritte Anwendung
+            einer bereits getroffenen** (#263 K-2, Entscheid **E-B**):
+            `berechne_wp_ersparnis` und `berechne_co2_bilanz` rechnen den
+            Kühlstrom seit v4.0.5 heraus, mit gemessener Begründung — an einer
+            realen Anlage standen 26,4 kWh Heizen gegen 158,4 kWh Kühlen und
+            ergaben **−45,04 €** Ersparnis und **−52 kg** CO₂. Die Arbeitszahl
+            war die einzige der drei Größen, die den Kategorienfehler behielt:
+            Kühlstrom im Nenner, Kältemenge nicht im Zähler. Eine Anlage, die
+            kühlt, stand damit systematisch schlechter da als eine, die es
+            nicht tut — im Community-Benchmark ebenso wie in eedc selbst
+            (SOLL §4.2 Fall 4: *„eine JAZ gesamt über ein Gerät, dessen
+            Kühlbetrieb nicht erfasst ist, ist keine Gesamtzahl"*).
+
+            ⚠ **Warum hier abgezogen und bei `waerme_abgeleitet_kwh` gesperrt
+            wird — das ist kein Widerspruch, sondern derselbe Grundsatz.** Dort
+            enthält der **Zähler** einen Anteil, der aus dem Nenner gerechnet
+            wurde; ihn abzuziehen ergäbe gemessene Wärme durch Gesamtstrom, also
+            **falsch statt unbekannt**. Hier enthält der **Nenner** einen Anteil,
+            der zu einer anderen Funktion gehört und **separat bekannt** ist —
+            ihn abzuziehen stellt die Abgrenzung von Q und E überhaupt erst her.
+            Beide Male gewinnt dieselbe Regel: Q und E müssen dasselbe meinen.
+
+            ⛔ **Nicht abgezogen wird die Restmenge** (`modus_nicht_aufgeteilt_kwh`
+            — Standby, Lüften, Entfeuchten, Unbestimmt). Sie ist keine gemessene
+            Funktion, sondern das, was übrig bleibt; der Bereitschaftsverbrauch
+            einer Heizung gehört legitim in ihre Arbeitszahl.
         abgrenzung_verletzt: kurzer Grund, wenn Q und E **nicht dieselbe
             Abgrenzung** tragen — anderes Gerät, andere Funktion, anderer
             Zeitraum. ``None`` heißt „keine bekannte Abweichung".
@@ -129,10 +234,19 @@ def arbeitszahl(
     Begründung steht ausführlich bei ``WpFakten.jaz_belastbar``, das dieselbe
     Regel für die Monats-Fakten trägt und unverändert bleibt.
     """
-    e = float(strom_kwh or 0.0)
+    e_gesamt = float(strom_kwh or 0.0)
     q = float(waerme_kwh or 0.0)
-    if e <= 0:
+    # Der funktionsfremde Anteil wird nie negativ und nie größer als der
+    # Gesamtstrom — dieselbe Zusicherung wie in `berechne_wp_ersparnis`, für
+    # Aufrufer, die ihre Zahlen aus einer anderen Quelle ziehen.
+    e = e_gesamt - min(max(strom_funktionsfremd_kwh, 0.0), max(e_gesamt, 0.0))
+    if e_gesamt <= 0:
         return Arbeitszahl(None, "kein Stromverbrauch erfasst")
+    if e <= 0:
+        # Der ganze Strom ging ins Kühlen: es gibt Verbrauch, aber keinen, der
+        # zu einer Wärmemenge gehört. „Kein Stromverbrauch" wäre hier die
+        # falsche Auskunft — der Zähler lief, nur nicht fürs Heizen.
+        return Arbeitszahl(None, "nur Kühlbetrieb in diesem Zeitraum")
     if q <= 0:
         return Arbeitszahl(None, "kein Wärmemengenzähler zugeordnet")
     if waerme_abgeleitet_kwh > 0:

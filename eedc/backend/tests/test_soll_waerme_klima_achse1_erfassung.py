@@ -29,24 +29,20 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from backend.core.field_definitions import get_felder_fuer_investition
+from backend.core.field_definitions import (
+    get_alle_felder_fuer_investition,
+    get_felder_fuer_investition,
+)
 from backend.services.snapshot.komponenten_beitraege import investition_beitraege
 
 #: SOLL-Regeln, die noch **nicht** gebaut sind. Wird eine gebaut, fliegt ihr
 #: Eintrag hier raus **und** die zugehörige OFFEN-Probe wird umgestellt.
-REGELN_OFFEN: dict[str, str] = {
-    "R1/W-2": (
-        "Die Betriebsart-Achsen hängen an der Geräteklasse (`bedingung: "
-        "luft_luft`) statt am zugeordneten Zähler. Eine kühlfähige "
-        "Luft-Wasser- oder Sole-Wasser-WP kann ihren Kühlzähler nirgends "
-        "zuordnen. Melder MartyBr, pipp086 (T89667 #199/#200)."
-    ),
-    "R1/Brauchwasser": (
-        "Ein Gerät mit ausschließlich Warmwasser-Achse (Brauchwasser-WP) hat "
-        "keine Bauart-Zeile. Kein bekannter Anwender — steht trotzdem hier, "
-        "weil das MODELL es tragen muss (SOLL §7, Korrektur 26.08.)."
-    ),
-}
+REGELN_OFFEN: dict[str, str] = {}
+#: ⭐ **Leer seit dem 26.08.2026 — Achse I ist gebaut.** Die Liste bleibt stehen,
+#: weil sie der Ort ist, an dem eine künftige Regel dieser Achse notiert wird,
+#: und weil die Proben unten sie namentlich abfragen: `assert "…" not in
+#: REGELN_OFFEN` ist die Quittung dafür, dass eine ERFÜLLT-Probe wirklich zu
+#: einem gebauten Schritt gehört und nicht bloß grün gerechnet wurde.
 
 
 def _inv(inv_id=7, parameter=None):
@@ -64,9 +60,47 @@ def _felder(beitraege) -> set[str]:
     return {b.feld for b in beitraege}
 
 
-def _zuordenbar(parameter: dict) -> set[str]:
-    """Die Feldnamen, die die Zuordnungs-Fläche für diese Investition anbietet."""
-    return {f["feld"] for f in get_felder_fuer_investition("waermepumpe", parameter)}
+def _pflegbar(parameter: dict, belegt: set[str] | None = None) -> set[str]:
+    """Die Feldnamen, die der **Monatsabschluss** zur Eingabe anbietet.
+
+    ⚠ **Nicht dasselbe wie {@link _zuordenbar}, und der Unterschied ist der
+    Testgegenstand.** Bis zum 26.08.2026 hieß dieser Helfer `_zuordenbar` und
+    rief trotzdem `get_felder_fuer_investition` — den Monatsabschluss-Weg. Die
+    **Zuordnungs-Fläche** liest eine andere Funktion, und genau dort saß Befund
+    **W-12**: Sie bot einer Split-Klimaanlage `warmwasser_kwh` und
+    `strom_warmwasser_kwh` an, während die Probe I-6 daneben grün meldete, es
+    gebe sie dort nicht. *Ein Prüfer, der aufs falsche Objekt zeigt, belegt eine
+    Aussage über eine Fläche, die er nie gesehen hat.*
+    """
+    return {
+        f["feld"] for f in get_felder_fuer_investition(
+            "waermepumpe", parameter, belegte_felder=belegt,
+        )
+    }
+
+
+def _zuordenbar(parameter: dict, quellen: dict | None = None) -> dict[str, bool]:
+    """Die **Zuordnungs-Fläche**: Feldname → steht es unter „Weitere Größen"?
+
+    Registry **plus** der Filter, den die Route darüberlegt — beides zusammen
+    ist, was der Anwender sieht.
+
+    ⚠ **Die Registry allein zu messen wäre die halbe Wahrheit.** Sie *markiert*
+    nur; entfernt wird in `ohne_nicht_zuordenbare`, und zwar mit der Ausnahme,
+    die N-304 verlangt: Ein Feld MIT Quelle bleibt stehen, damit eine bestehende
+    Zuordnung löschbar ist. Wer nur die Registry prüft, hält eine Fläche für
+    aufgeräumt, die es nicht ist — und umgekehrt.
+    """
+    from backend.api.routes.datenquellen import ohne_nicht_zuordenbare
+
+    roh = [
+        {**f, "match_key": ("inv_energy", "7", f["feld"])}
+        for f in get_alle_felder_fuer_investition("waermepumpe", parameter)
+    ]
+    return {
+        f["feld"]: bool(f.get("erweitert"))
+        for f in ohne_nicht_zuordenbare(roh, quellen or {})
+    }
 
 
 # ══ I-1 · ERFÜLLT — K3: nur der Gesamtzähler ist zugeordnet ════════════════
@@ -213,32 +247,81 @@ def test_i3b_kennzeichen_aus_gesamtzaehler_traegt():
 
 # ══ I-4 · OFFEN — R1: die Kühl-Achse hängt an der Geräteklasse ══════════════
 
-def test_i4_kuehl_achse_nur_an_luft_luft():
-    """**OFFEN (R1/W-2).**
+def test_i4_kuehl_achse_an_jeder_bauart_zuordenbar():
+    """**ERFÜLLT (R1/W-2, gebaut 2026-08-26).**
 
     SOLL §3.2a/R1: *„Angeboten wird jede Größe, die das Gerät liefern kann — und
     was es liefern kann, sagt der zugeordnete Zähler, nicht seine Bauart."*
-    Erwartung nach dem Bau: Auch eine Sole-Wasser-WP kann
-    ``betriebsart_strom_kuehlen_kwh`` zugeordnet bekommen.
 
-    Heute: Die acht Betriebsart-Felder tragen ``bedingung: luft_luft`` und werden
-    für jede andere Bauart vollständig aus der Zuordnungs-Fläche entfernt.
-    MartyBr hat einen getrennten Kühlzähler an einer Sole-Wasser-WP und kann ihn
-    nirgends hinterlegen; pipp086 fragt nach derselben Größe.
+    **Melder MartyBr** (T89667 #200, 25.08.): *„Ich habe getrennte Zähler für
+    Heizung, Warmwassererwärmung … und seit dem Sommer auch für den
+    Kühlbetrieb."* **pipp086** (#199) fragt nach derselben Größe. Vorher trugen
+    alle acht Betriebsart-Felder `bedingung: luft_luft` **hart** und wurden für
+    jede andere Bauart vollständig entfernt — sein Kühlzähler hatte nirgends
+    einen Platz.
 
-    ⭐ **Der berechtigte Kern der alten Begründung bleibt und ist keine Ausrede:**
-    Heizen/Warmwasser sind **Summanden**, Betriebsarten **Teilmengen** — beide
-    Familien unbeschriftet nebeneinander hat schon einmal einen Tester zum
-    Addieren verleitet. Das spricht gegen *acht* Felder an jeder WP, **nicht**
-    gegen die Kühl-Achse dort, wo ein Zähler sie belegt.
+    ⭐ **Der berechtigte Kern der alten Begründung ist NICHT gestrichen, sondern
+    eingelöst:** Heizen/Warmwasser sind **Summanden**, Betriebsarten
+    **Teilmengen**; acht unbeschriftete Felder daneben haben schon einmal einen
+    Tester zum Addieren verleitet (#89667/62). Das spricht gegen acht Felder in
+    der **ersten Reihe** — nicht gegen die Kühl-Achse dort, wo ein Zähler sie
+    belegt. Beides zusammen ist die weiche Bedingung: zuordenbar, aber unter
+    „Weitere Größen erfassen".
     """
-    assert "R1/W-2" in REGELN_OFFEN
-    betriebsart = {
-        f for f in _zuordenbar({"wp_art": "sole_wasser", "getrennte_strommessung": True})
-        if f.startswith("betriebsart_")
-    }
+    assert "R1/W-2" not in REGELN_OFFEN
+    flaeche = _zuordenbar({"wp_art": "sole_wasser", "getrennte_strommessung": True})
 
-    assert betriebsart == set()
+    assert flaeche["betriebsart_strom_kuehlen_kwh"] is True, (
+        "zuordenbar, aber als erweiterte Größe"
+    )
+    # Alle acht, nicht nur die Kühl-Achse: die Regel fragt nach dem Zähler,
+    # nicht nach einer neuen, kürzeren Liste erlaubter Betriebsarten.
+    betriebsart = {f for f in flaeche if f.startswith("betriebsart_")}
+    assert len(betriebsart) == 8
+    assert all(flaeche[f] for f in betriebsart)
+
+
+def test_i4c_erweitertes_feld_erreicht_den_monatsabschluss_nur_wenn_belegt():
+    """**ERFÜLLT (R1/W-2).** Der Zähler entscheidet — und zwar wörtlich.
+
+    Der Monatsabschluss ist eine **Eingabe**-Fläche: ein leeres Feld dort ist
+    eine Aufforderung. Ohne Beleg bleibt die Kühl-Achse deshalb weg; sobald ein
+    Wert oder eine Zuordnung existiert, steht sie da.
+
+    ⚠ **Das ist die Gegenprobe zu I-4** und der Grund, warum die beiden Flächen
+    verschiedene Helfer haben: dieselbe Bauart, dieselbe Regel, zwei richtige
+    und verschiedene Antworten.
+    """
+    p = {"wp_art": "sole_wasser", "getrennte_strommessung": True}
+
+    assert "betriebsart_strom_kuehlen_kwh" not in _pflegbar(p)
+    assert "betriebsart_strom_kuehlen_kwh" in _pflegbar(
+        p, {"betriebsart_strom_kuehlen_kwh"},
+    )
+
+
+def test_i4d_die_kuehlleistung_hat_ein_feld():
+    """**ERFÜLLT (W-13, gebaut 2026-08-26).**
+
+    MartyBr nennt in #200 **beide** Größen: *„sowohl die Live-Werte (Power in W)
+    als auch die kumulierten Werte (Energy in kWh)."* `leistung_heizen_w` und
+    `leistung_warmwasser_w` gab es an jeder Wärmepumpe — für den Kühlbetrieb
+    **an keiner**.
+
+    ⛔ **Ohne dieses Feld hätte R1 seinen Fall nur zur Hälfte erreicht.** Der
+    Befund stand in keiner Fassung des Auftrags; gefunden wurde er beim
+    vollständigen Lesen seines Beitrags ([[feedback_webfetch_forum_bilder]] —
+    dieselbe Regel, ein Kanal weiter).
+    """
+    from backend.core.field_definitions import get_live_felder_fuer_investition
+
+    for art in ("luft_wasser", "sole_wasser", "luft_luft", "brauchwasser"):
+        keys = {f["key"] for f in get_live_felder_fuer_investition(
+            "waermepumpe", {"wp_art": art},
+        )}
+        assert "leistung_kuehlen_w" in keys, art
+        # Symmetrie zu den beiden Nachbarn — sie tragen ebenfalls keine Bedingung.
+        assert {"leistung_heizen_w", "leistung_warmwasser_w"} <= keys, art
 
 
 def test_i4b_luft_luft_hat_die_betriebsart_achsen():
@@ -247,10 +330,8 @@ def test_i4b_luft_luft_hat_die_betriebsart_achsen():
     Gegenprobe zu I-4: Der Unterschied ist heute **allein die Bauart**, nicht die
     Frage, ob ein Zähler vorliegt.
     """
-    betriebsart = {
-        f for f in _zuordenbar({"wp_art": "luft_luft"})
-        if f.startswith("betriebsart_strom_")
-    }
+    flaeche = _zuordenbar({"wp_art": "luft_luft"})
+    betriebsart = {f for f in flaeche if f.startswith("betriebsart_strom_")}
 
     assert betriebsart == {
         "betriebsart_strom_heizen_kwh",
@@ -258,32 +339,77 @@ def test_i4b_luft_luft_hat_die_betriebsart_achsen():
         "betriebsart_strom_lueften_kwh",
         "betriebsart_strom_entfeuchten_kwh",
     }
+    # ⭐ **Der Unterschied ist jetzt die Reihe, nicht das Vorhandensein:** am
+    # Klimagerät stehen sie vorn (nicht erweitert), an jeder anderen Bauart
+    # hinter „Weitere Größen erfassen". Genau das war der Sinn der weichen
+    # Bedingung — kurze Fläche, kein ausgeschlossener Fall.
+    assert not any(flaeche[f] for f in betriebsart)
 
 
 # ══ I-5 · OFFEN — R1: ein Gerät mit ausschließlich Warmwasser-Achse ═════════
 
-def test_i5_brauchwasser_waermepumpe_hat_keine_bauart():
-    """**OFFEN (R1/Brauchwasser).**
+def test_i5_brauchwasser_waermepumpe_traegt_nur_die_warmwasser_achse():
+    """**ERFÜLLT (R1/Brauchwasser, gebaut 2026-08-26).**
 
     SOLL §2.1: Eine **Brauchwasser-WP** heizt nicht und kühlt nicht — sie macht
-    ausschließlich Warmwasser. Erwartung nach dem Bau (R1): Das Gerät trägt genau
-    die Achsen, für die Zähler zugeordnet sind — hier **nur** Warmwasser.
+    ausschließlich Warmwasser. Vorher gab es für sie keine Bauart; eine
+    unbekannte `wp_art` fiel in den Nicht-Luft-Luft-Zweig und bekam **Heizen und
+    Warmwasser** angeboten — eine Heiz-Achse, die das Gerät nicht hat.
 
-    Heute: Es gibt für sie keine Bauart. Setzt man eine unbekannte ``wp_art``,
-    fällt sie in den Nicht-Luft-Luft-Zweig und bekommt **Heizen und Warmwasser**
-    angeboten — eine Heiz-Achse, die das Gerät nicht hat.
+    ⛔ **Für diesen Fall gibt es keinen einzigen bekannten Anwender, und er
+    steht trotzdem hier** (Entscheid Gernot, 26.08.). Ein Modell, das einen
+    realen Gerätetyp nicht ausdrücken kann, ist später nicht nachrüstbar: Die
+    bis dahin gespeicherten Daten wären falsch, nicht bloß eine Ansicht
+    unvollständig.
 
-    ⛔ **Für diesen Fall gibt es keinen einzigen bekannten Anwender, und er steht
-    trotzdem hier** (Entscheid Gernot, 26.08.). Ein Modell, das einen realen
-    Gerätetyp nicht ausdrücken kann, ist später nicht nachrüstbar: Die bis dahin
-    gespeicherten Daten wären falsch, nicht bloß eine Ansicht unvollständig.
+    ⚠ **Die Heiz-Achse ist herabgestuft, nicht entfernt** — weich, nicht hart.
+    `wp_art` ist eine Anwender-Angabe; ein Gerät, das doch beides kann, behält
+    seinen Zähler. Genau darin unterscheidet sich R1 von der Schubladen-Logik,
+    die es ablöst: Die Bauart **schlägt vor**, der Zähler **entscheidet**.
     """
-    assert "R1/Brauchwasser" in REGELN_OFFEN
-    felder = _zuordenbar({"wp_art": "brauchwasser", "getrennte_strommessung": True})
+    assert "R1/Brauchwasser" not in REGELN_OFFEN
+    p = {"wp_art": "brauchwasser", "getrennte_strommessung": True}
 
-    # Heute wird eine Heiz-Achse angeboten, die es an diesem Gerät nicht gibt.
-    assert "strom_heizen_kwh" in felder
-    assert "strom_warmwasser_kwh" in felder
+    # Der Monatsabschluss fragt nur nach dem, was das Gerät tut.
+    assert _pflegbar(p) == {"strom_warmwasser_kwh", "warmwasser_kwh"}
+
+    # Zuordenbar bleibt beides — die Heiz-Achse als erweiterte Größe.
+    flaeche = _zuordenbar(p)
+    assert flaeche["strom_warmwasser_kwh"] is False
+    assert flaeche["warmwasser_kwh"] is False
+    assert flaeche["strom_heizen_kwh"] is True
+    assert flaeche["heizenergie_kwh"] is True
+
+
+def test_i5b_heiz_achse_kehrt_mit_ihrem_zaehler_zurueck():
+    """**ERFÜLLT (R1/Brauchwasser).** Gegenprobe zu I-5 — die weiche Grenze hält
+    in **beide** Richtungen.
+
+    Wer an seiner Brauchwasser-WP doch einen Heizzähler hinterlegt hat, bekommt
+    die Achse im Monatsabschluss zurück. Ohne diese Probe bliebe offen, ob
+    „weich" in der Praxis nicht doch „hart" ist — ein Feld, das man zuordnen,
+    aber nie pflegen kann, wäre die P-6-Falle in neuer Form.
+    """
+    p = {"wp_art": "brauchwasser", "getrennte_strommessung": True}
+
+    assert "strom_heizen_kwh" in _pflegbar(p, {"strom_heizen_kwh"})
+
+
+def test_i5c_die_bauart_bleibt_eine_geraeteklasse_keine_pflicht():
+    """**ERFÜLLT.** Eine klassische Wärmepumpe ist von `brauchwasser` unberührt.
+
+    ⚠ **Die Gegenprobe zum Bedingungs-Schlüssel selbst.** Ein neuer Schlüssel in
+    `_bedingungs_werte` wirkt auf **jedes** Feld, das ihn nennt — und
+    `bedingung_erfuellt` ist fail-open. Ein Tippfehler (`brauchwaser`) fiele
+    stillschweigend durch und ließe die Heiz-Achse überall weich werden. Hier
+    steht der Beleg, dass er es nicht tut.
+    """
+    p = {"wp_art": "luft_wasser", "getrennte_strommessung": True}
+    flaeche = _zuordenbar(p)
+
+    assert flaeche["strom_heizen_kwh"] is False
+    assert flaeche["heizenergie_kwh"] is False
+    assert {"strom_heizen_kwh", "heizenergie_kwh"} <= _pflegbar(p)
 
 
 # ══ I-6 · ERFÜLLT — kein Warmwasser am Luft-Luft-Gerät ══════════════════════
@@ -302,7 +428,52 @@ def test_i6_luft_luft_fordert_kein_warmwasser():
     belegbar liefert. Das Ergebnis ist hier zufällig dasselbe — unter R1, weil
     kein Warmwasser-Zähler zuordenbar ist.
     """
-    felder = _zuordenbar({"wp_art": "luft_luft", "getrennte_strommessung": True})
+    p = {"wp_art": "luft_luft", "getrennte_strommessung": True}
 
-    assert "strom_warmwasser_kwh" not in felder
-    assert "strom_heizen_kwh" in felder
+    assert "strom_warmwasser_kwh" not in _pflegbar(p)
+    assert "strom_heizen_kwh" in _pflegbar(p)
+
+
+def test_i6b_auch_die_zuordnungs_flaeche_kennt_die_harte_grenze():
+    """**ERFÜLLT (W-12, gebaut 2026-08-26).** Dieselbe Anlage, zweite Fläche.
+
+    ⛔ **Bis zum 26.08.2026 sagten die beiden Flächen Gegenteiliges.** Der Filter
+    in `get_alle_felder_fuer_investition` war ein **exakter String-Vergleich**
+    (`f.get("bedingung") != "luft_luft"`) und kannte weder die Negation
+    `"!luft_luft"` (`warmwasser_kwh`) noch die Listenform
+    `["getrennte_strommessung", "!luft_luft"]` (`strom_warmwasser_kwh`). Beide
+    liefen daran vorbei — *Einstellungen → Datenquellen* bot einer
+    Split-Klimaanlage also genau die zwei Warmwasser-Felder an, deren Fehlen der
+    Daten-Checker bei **OB73-gif** zu Unrecht angemahnt hatte (#263). Repariert
+    wurde damals der Checker (v4.0.28, `c82d8138`), nicht die Fläche.
+
+    ⭐ **Dritte Runde der #236-Folgewellen-Klasse:** eine Regel auf einer Schicht
+    reicht nicht, solange parallele Pfade dieselbe Frage eigenständig
+    beantworten. Der Auswerter (`bedingungs_urteil`) ist jetzt der eine.
+
+    ⚠ **Und die Probe I-6 daneben hat es nicht gefangen**, obwohl sie exakt diese
+    Aussage trägt: Ihr Helfer hieß `_zuordenbar` und rief den
+    Monatsabschluss-Weg. *Ein Prüfer, der aufs falsche Objekt zeigt, belegt eine
+    Aussage über eine Fläche, die er nie gesehen hat.*
+    """
+    flaeche = _zuordenbar({"wp_art": "luft_luft", "getrennte_strommessung": True})
+
+    assert "warmwasser_kwh" not in flaeche
+    assert "strom_warmwasser_kwh" not in flaeche
+
+    # ⭐ **Und die Gegenrichtung, die der erste Fix am 26.08. gebrochen hätte:**
+    # Ein bereits ZUGEORDNETER Warmwasser-Sensor bleibt sichtbar — sonst wäre
+    # die Zuordnung unsichtbar und damit unlöschbar. Der Fall ist real:
+    # azywietz-web führt zwei Klimaanlagen als `luft_wasser` (#383); stellt er
+    # die Bauart um, braucht sein Sensor einen Weg heraus.
+    # `test_klima_ohne_warmwasser_n304.py` hält denselben Vertrag und hat den
+    # zu groben Fix gefangen ([[feedback_keine_folge_aenderung_zurueckdrehen]]).
+    mit_zuordnung = _zuordenbar(
+        {"wp_art": "luft_luft", "getrennte_strommessung": True},
+        {"inv_energy_7_warmwasser_kwh": {"quelle": "ha_app"}},
+    )
+    assert "warmwasser_kwh" in mit_zuordnung
+    # Gegenprobe: die Heiz-Achse gibt es an einer Klimaanlage sehr wohl — die
+    # Trennlinie ist der Warmwasserkreis, nicht die Bauart als solche (N-304).
+    assert flaeche["strom_heizen_kwh"] is False
+    assert flaeche["heizenergie_kwh"] is False

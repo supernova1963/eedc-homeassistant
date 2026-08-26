@@ -375,6 +375,20 @@ class WpFakten:
     #: den Strom mehrerer Geräte mit der Wärme von weniger Geräten.
     geraete_mit_waerme: int = 0
 
+    #: **R2/W-7 + R2/F12** — die vom Anwender gemeldete Abgrenzungs-Störung:
+    #: ``"fremdstrom"`` (Heizstab-Strom auf dem WP-Zähler, seine Wärme fehlt),
+    #: ``"fremdwaerme"`` (bivalent: zweiter Erzeuger am selben Kreis) oder
+    #: ``None``.
+    #:
+    #: ⭐ **Warum eine Anwender-Angabe und keine Erkennung.** Von den vier Lagen
+    #: des SOLL §4.2 erkennt eedc genau eine aus den Daten selbst
+    #: ({@link waerme_deckt_nicht_alle_geraete}). Ob ein Heizstab auf demselben
+    #: Zähler liegt oder ein Gaskessel denselben Kreis speist, steht in **keiner**
+    #: Messreihe — es gibt keinen Wert, aus dem es folgen könnte.
+    #:
+    #: ⛔ **`None` heißt „keine bekannte Abweichung", nicht „geprüft".**
+    abgrenzung_stoerung: Optional[str] = None
+
     @property
     def waerme_deckt_nicht_alle_geraete(self) -> bool:
         """Trägt der Block Strom von Geräten, deren Wärme fehlt? (**R2**)
@@ -1040,6 +1054,12 @@ class _RohMonat:
         # Zeitraum-Versatz) sind von außen nicht sichtbar.
         self.wp_geraete_mit_strom = 0
         self.wp_geraete_mit_waerme = 0
+        #: R2/W-7 + R2/F12: die Abgrenzungs-Störung des Blocks. **Sobald EIN
+        #: Gerät gestört ist, ist der Block gestört** — dieselbe Faltung wie
+        #: `wp_hat_split`. Ein Block, der Strom eines Geräts mit Heizstab am
+        #: Zähler trägt, hat keine belastbare Gesamt-Arbeitszahl, auch wenn das
+        #: zweite Gerät sauber misst.
+        self.wp_abgrenzung: Optional[str] = None
         self.eauto_ladedaten: list[dict] = []
         self.wallbox_ladedaten: list[dict] = []
         self.eauto_km = 0.0
@@ -1186,6 +1206,11 @@ class _RohMonat:
                 self.wp_geraete_mit_strom += 1
             if b.wp_waerme > 0:
                 self.wp_geraete_mit_waerme += 1
+            # Erste gemeldete Störung gewinnt. Zwei verschiedene Störungen an
+            # zwei Geräten wären beide richtig — die Kachel trägt aber nur einen
+            # Grund, und beide führen zu derselben Folge (keine Kennzahl).
+            if self.wp_abgrenzung is None and b.wp_abgrenzung:
+                self.wp_abgrenzung = b.wp_abgrenzung
 
         elif inv.typ in ("e-auto", "wallbox"):
             if ist_dienstlich(inv):
@@ -1436,6 +1461,7 @@ async def _baue_fakt(
             waerme_abgeleitet_kwh=roh.wp_waerme_abgeleitet,
             geraete_mit_strom=roh.wp_geraete_mit_strom,
             geraete_mit_waerme=roh.wp_geraete_mit_waerme,
+            abgrenzung_stoerung=roh.wp_abgrenzung,
         ),
         sonstiges=SonstigesFakten(
             erzeugung_kwh=roh.sonstiges_erzeugung,

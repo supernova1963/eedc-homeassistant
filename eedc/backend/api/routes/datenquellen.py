@@ -624,7 +624,7 @@ async def _basis_preis_eintraege(db: AsyncSession, anlage_id: int) -> list[dict]
 
 
 def ohne_nicht_zuordenbare(eintraege: list[dict], quellen: dict) -> list[dict]:
-    """Entfernt `nur_manuell`-Felder aus der Zuordnungs-Fläche.
+    """Entfernt `nur_manuell`- und bauartfremde Felder aus der Zuordnungs-Fläche.
 
     Solche Felder sind **erfassbar** (Monatsabschluss, CSV-Import), aber nicht
     mehr **zuordenbar** — der automatische Erfassungsweg ist zurückgebaut, das
@@ -632,10 +632,25 @@ def ohne_nicht_zuordenbare(eintraege: list[dict], quellen: dict) -> list[dict]:
     (Attribut `nur_manuell`); erster Fall sind die BKW-eigenen Akku-Felder,
     seit der Akku als eigene Speicher-Investition erfasst wird.
 
-    AUSNAHME — hat das Feld heute eine Quelle, bleibt es stehen. Sonst
-    verschwände eine bestehende Zuordnung unsichtbar und ließe sich nicht mehr
-    entfernen; dieselbe Falle hat `bedingung_anlage` schon einmal gestellt
-    (s. `get_felder_fuer_investition`).
+    **Zweiter Fall seit dem 26.08.2026: `nicht_an_dieser_bauart`** (W-12). Die
+    Größe existiert an diesem Gerätetyp nicht — eine Split-Klimaanlage hat
+    keinen Warmwasserkreis (N-304/B5). Bis dahin bot die Fläche einer
+    Klimaanlage `warmwasser_kwh` und `strom_warmwasser_kwh` trotzdem an: Der
+    Filter in `get_alle_felder_fuer_investition` war ein exakter
+    String-Vergleich auf `"luft_luft"` und kannte weder die Negation noch die
+    Listenform. Genau die zwei Felder, deren Fehlen der Daten-Checker bei
+    OB73-gif zu Unrecht angemahnt hatte (#263, im Checker repariert mit
+    v4.0.28) — dritte Runde der #236-Folgewellen-Klasse.
+
+    ⭐ **AUSNAHME — hat das Feld heute eine Quelle, bleibt es stehen. Für BEIDE
+    Fälle, und das ist der Grund, warum hier gefiltert wird und nicht in der
+    Registry.** Sonst verschwände eine bestehende Zuordnung unsichtbar und ließe
+    sich nicht mehr entfernen. Der Fall ist real: azywietz-web führt zwei
+    Klimaanlagen als `luft_wasser` (#383). Stellt er die Bauart um, muss ein
+    zugeordneter Warmwasser-Sensor einen Weg heraus behalten. Dieselbe Falle hat
+    `bedingung_anlage` schon einmal gestellt (s. `get_felder_fuer_investition`),
+    und `test_klima_ohne_warmwasser_n304.py::test_zuordnungsflaeche_zeigt_das_feld_weiter`
+    hält sie fest.
     """
     def _hat_quelle(fid: str) -> bool:
         eintrag = quellen.get(fid)
@@ -645,7 +660,8 @@ def ohne_nicht_zuordenbare(eintraege: list[dict], quellen: dict) -> list[dict]:
 
     return [
         e for e in eintraege
-        if not e.get("nur_manuell") or _hat_quelle(_feld_id(e["match_key"]))
+        if not (e.get("nur_manuell") or e.get("nicht_an_dieser_bauart"))
+        or _hat_quelle(_feld_id(e["match_key"]))
     ]
 
 
@@ -1059,6 +1075,19 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
             # UNABHÄNGIG, aus dem vereinheitlichten Store gelesen (nicht aus dem
             # quellen-Eintrag), am Read-Endwert angewendet.
             "invertieren": bool(invert_store.get(fid)),
+            # R1/W-2 (SOLL Wärme/Klima §3.2a): Die Größe ist an dieser Bauart
+            # untypisch, aber möglich — etwa die Kühl-Achse an einer
+            # Luft-Wasser-Wärmepumpe. Sie steht hinter dem Schritt „Weitere
+            # Größen erfassen", **solange sie keine Quelle hat**; mit Quelle
+            # rückt sie in ihren Einheiten-Abschnitt vor.
+            #
+            # ⭐ **Das ist R1 wörtlich** — *„was ein Gerät liefern kann, sagt
+            # der zugeordnete Zähler, nicht seine Bauart"* — und zugleich die
+            # Auflösung der P-6-Falle: nicht durch Wegnehmen nach Bauart,
+            # sondern durch Sichtbarkeit nach Beleglage. Die Fläche bleibt kurz,
+            # ohne einen Fall auszuschließen (MartyBr, T89667 #200: getrennter
+            # Kühlzähler, nirgends hinterlegbar).
+            "erweitert": bool(e.get("erweitert")) and q == QUELLE_KEINE,
             "wert": wert,
             # F-53: roher State (nur Zustandsfelder) + seine Deutung im Kanon.
             # **Beide**, weil die Fläche zwei Fragen beantworten muss: kommt

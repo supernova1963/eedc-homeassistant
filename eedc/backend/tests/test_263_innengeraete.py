@@ -133,21 +133,46 @@ def test_der_betriebsmodus_bleibt_ein_signal_je_geraet():
     assert feld_je_innengeraet("betriebsmodus", 1) not in keys
 
 
-def test_luft_wasser_bleibt_bitgleich():
-    """Eine klassische Wärmepumpe sieht nichts von alldem — **auch auf der
-    Zuordnungs-Fläche**, die sonst alle Felder ungefiltert zeigt.
+def test_luft_wasser_stellt_die_betriebsarten_hintan():
+    """Eine klassische Wärmepumpe sieht die Betriebsart-Felder **in der zweiten
+    Reihe** — nicht mehr gar nicht.
 
-    Das ist der Grund, warum `luft_luft` dort als Geräteklasse gefiltert wird
-    und nicht wie ein Schalter nur markiert: acht Betriebsart-Felder an einer
-    Luft-Wasser-Wärmepumpe wären acht Angebote, die niemand einlösen kann.
+    ⛔ **Diese Probe hieß bis zum 26.08.2026 `test_luft_wasser_bleibt_bitgleich`
+    und forderte das Gegenteil:** *„acht Betriebsart-Felder an einer
+    Luft-Wasser-Wärmepumpe wären acht Angebote, die niemand einlösen kann."*
+    Der Satz stimmt weiter — er trifft nur nicht mehr die richtige Antwort.
+
+    **Melder MartyBr** (T89667 #200, 25.08.): *„Ich habe getrennte Zähler für
+    Heizung, Warmwassererwärmung … und seit dem Sommer auch für den
+    Kühlbetrieb."* **pipp086** (#199) fragt nach derselben Größe. Seine Anlage
+    ist keine Klimaanlage — sein Kühlzähler hatte nirgends einen Platz.
+
+    ⭐ **R1 (SOLL §3.2a) löst die P-6-Falle anders ein:** nicht durch Wegnehmen
+    nach Bauart, sondern durch Sichtbarkeit nach Beleglage. Die Felder sind
+    `erweitert` markiert und stehen hinter „Weitere Größen erfassen"; die Fläche
+    bleibt kurz, **und kein Fall ist ausgeschlossen**.
+
+    ⚠ **Die Raumtemperatur-Felder bleiben hart** — sie sind keine Größe des
+    Geräts, sondern die eines Innengeräts. Die Trennlinie verläuft nicht
+    zwischen „Bauart" und „kein Filter", sondern zwischen *untypisch* und
+    *existiert nicht*.
     """
-    energie = {f["feld"] for f in get_alle_felder_fuer_investition(
-        "waermepumpe", {"wp_art": "luft_wasser"})}
+    energie = {f["feld"]: bool(f.get("erweitert"))
+               for f in get_alle_felder_fuer_investition(
+                   "waermepumpe", {"wp_art": "luft_wasser"})}
     live = {f["key"] for f in get_live_felder_fuer_investition(
         "waermepumpe", {"wp_art": "luft_wasser"})}
-    assert energie == {"stromverbrauch_kwh", "strom_heizen_kwh",
-                       "strom_warmwasser_kwh", "heizenergie_kwh", "warmwasser_kwh"}
-    assert not any(k.startswith("betriebsart_") for k in energie)
+
+    # In der ersten Reihe steht unverändert genau das, was vorher die ganze
+    # Liste war — bis auf `stromverbrauch_kwh`, das ohne Kennzeichen gilt.
+    erste_reihe = {f for f, erw in energie.items() if not erw}
+    assert erste_reihe == {"stromverbrauch_kwh", "strom_heizen_kwh",
+                           "strom_warmwasser_kwh", "heizenergie_kwh",
+                           "warmwasser_kwh"}
+    # Und alle acht Betriebsart-Felder liegen dahinter, keines davor.
+    betriebsart = {f for f in energie if f.startswith("betriebsart_")}
+    assert len(betriebsart) == 8
+    assert all(energie[f] for f in betriebsart)
     assert "soll_temperatur_c" not in live and "ist_temperatur_c" not in live
 
 

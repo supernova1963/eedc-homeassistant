@@ -30,33 +30,24 @@ from __future__ import annotations
 
 import inspect
 
+from backend.core.berechnungen.waermepumpe_kennzahl import (
+    GRUND_FREMDSTROM,
+    GRUND_FREMDWAERME,
+    GRUND_GERAETE_OHNE_WAERME,
+    GRUND_ZEITRAUM,
+    abgrenzungs_grund,
+    arbeitszahl,
+)
+from backend.core.investition_parameter import abgrenzung_stoerung
 from backend.services.monats_fakten import WpFakten
 
 #: SOLL-Regeln, die noch **nicht** gebaut sind.
-REGELN_OFFEN: dict[str, str] = {
-    "R2/W-7": (
-        "Fremder Strom auf dem Zähler (Fall H-C: Heizstab-Strom auf dem "
-        "WP-Zähler, seine Wärme nicht mitgemessen) ⇒ E ist zu groß, die "
-        "Arbeitszahl systematisch zu niedrig. Es gibt keine Prüfung darauf — "
-        "weder eine Größe, die den Fall ausdrückt, noch einen Hinweis."
-    ),
-    "R2/F12": (
-        "Bivalent: ein zweiter Wärmeerzeuger speist denselben Kreis, sein "
-        "Aufwand liegt nicht auf dem WP-Zähler ⇒ Q ist zu groß, die "
-        "Arbeitszahl zu hoch. Dieselbe Verletzung wie W-7 mit umgekehrtem "
-        "Vorzeichen. KEIN Melder, stand in keiner Fallliste."
-    ),
-    "R2/Zeitraum": (
-        "Q aus dem Monatsabschluss gegen E aus laufenden Sensoren ergibt einen "
-        "Quotienten aus zwei Wirklichkeiten (SOLL §4.2 Fall 3). Keine Prüfung."
-    ),
-    "R2/PassivKuehlung": (
-        "Passive Kühlung (nur Umwälzpumpen) hat einen um ein Vielfaches "
-        "höheren EER als aktive. Die Kennzahl ist korrekt, ein VERGLEICH "
-        "wäre eine Falschaussage — auch im Community-Benchmark. Es gibt keine "
-        "Markierung. KEIN Melder (SOLL §7/A5)."
-    ),
-}
+REGELN_OFFEN: dict[str, str] = {}
+#: ⭐ **Leer seit dem 26.08.2026 — Achse II ist gebaut.** Die vier Lagen des
+#: SOLL §4.2 tragen jetzt alle ihren Grund: `waerme_deckt_nicht_alle_geraete`
+#: (aus den Daten erkannt), `abgrenzung_stoerung` (Anwender-Angabe, zwei
+#: Vorzeichen), der Zeitraum-Versatz (aus `teilzeitraum` in der Route) und die
+#: abgeleitete Wärme (`jaz_belastbar`, unverändert).
 
 
 def _wp(**kw) -> WpFakten:
@@ -67,19 +58,15 @@ def _wp(**kw) -> WpFakten:
 # ══ II-1 · OFFEN — R2: fremder Strom auf dem Zähler (Fall H-C) ══════════════
 
 def test_ii1_heizstab_strom_auf_dem_wp_zaehler():
-    """**OFFEN (R2/W-7).** Fall H-C aus SOLL §2.2.1 — der einzige echte Fehlerfall.
+    """**ERFÜLLT (R2/W-7, gebaut 2026-08-26).** Fall H-C aus SOLL §2.2.1 — der
+    einzige echte Fehlerfall unter den drei Heizstab-Lagen.
 
     Lage: Der Heizstab hängt am WP-Zähler, seine Wärme läuft **nicht** über den
     Wärmemengenzähler. E ist damit zu groß für das Q, zu dem es gehört.
 
     SOLL §4.2/R2: *„eedc zeigt die Mengen und lässt die Kennzahl weg — mit dem
-    Grund daneben. Nicht ‚—', sondern ‚keine Arbeitszahl: auf diesem Zähler liegt
-    auch der Heizstab.'"*
-
-    Heute: ``jaz_belastbar`` ist **True**, weil die Wärme gemessen (nicht
-    abgeleitet) ist — die einzige vorhandene Sperre prüft die falsche Achse. Es
-    gibt außerdem **keine Größe**, mit der der Anwender den Fall überhaupt
-    ausdrücken könnte.
+    Grund daneben. Nicht ‚—', sondern ‚keine Arbeitszahl: auf diesem Zähler
+    liegt auch der Heizstab.'"*
 
     ⛔ **Dieser Befund stand in Fassung 1 des Etappe-2-Plans NICHT auf der
     Bauliste** — gestrichen mit der Begründung „kein bestätigter Betroffener".
@@ -88,44 +75,110 @@ def test_ii1_heizstab_strom_auf_dem_wp_zaehler():
     definiert, und ein Modell, das ihn nicht ausdrücken kann, ist später nicht
     nachrüstbar.
     """
-    assert "R2/W-7" in REGELN_OFFEN
+    assert "R2/W-7" not in REGELN_OFFEN
     # 900 kWh Strom (WP + Heizstab), 2000 kWh gemessene Wärme (nur WP-Kreis).
-    wp = _wp(strom_kwh=900.0, waerme_kwh=2000.0, waerme_abgeleitet_kwh=0.0)
+    wp = _wp(strom_kwh=900.0, waerme_kwh=2000.0, waerme_abgeleitet_kwh=0.0,
+             abgrenzung_stoerung="fremdstrom")
 
-    # Die vorhandene Sperre greift nicht — sie prüft nur die Herkunft der Wärme.
+    # ⚠ `jaz_belastbar` bleibt UNVERÄNDERT True — es prüft die Herkunft der
+    # Wärme, und die ist hier gemessen. Die R2-Prüfung tritt DANEBEN, nicht an
+    # seine Stelle (Auftragsvorgabe, s. II-3).
     assert wp.jaz_belastbar is True
 
-    # Und es gibt keine Größe, die „fremder Strom auf diesem Zähler" ausdrückt.
-    assert not [f for f in WpFakten.__dataclass_fields__ if "fremd" in f]
+    gesperrt = arbeitszahl(
+        wp.waerme_kwh, wp.strom_kwh,
+        abgrenzung_verletzt=abgrenzungs_grund(
+            abgrenzung_stoerung=wp.abgrenzung_stoerung,
+        ),
+    )
+    assert gesperrt.wert is None
+    assert gesperrt.grund == GRUND_FREMDSTROM
+    # Die Mengen bleiben — gesperrt ist der Quotient, nicht die Messung.
+    assert (wp.strom_kwh, wp.waerme_kwh) == (900.0, 2000.0)
 
 
-# ══ II-2 · OFFEN — R2: fremde Wärme im Nutzen (bivalent) ════════════════════
+# ══ II-2 · ERFÜLLT — R2: fremde Wärme im Nutzen (bivalent) ═════════════════
 
 def test_ii2_bivalent_fremde_waerme_im_nutzen():
-    """**OFFEN (R2/F12).** Die Gegenrichtung von II-1 — und der Prüfstein der Regel.
+    """**ERFÜLLT (R2/F12, gebaut 2026-08-26).** Die Gegenrichtung von II-1 — und
+    der Prüfstein der Regel.
 
     Lage: Ein Gaskessel speist unter dem Bivalenzpunkt denselben Heizkreis. Der
-    Wärmemengenzähler sitzt am Kreis und misst **beide** Erzeuger; der Stromzähler
-    kennt nur die Wärmepumpe. **Q ist zu groß**, die Arbeitszahl zu hoch.
-
-    SOLL §3.2b: dieselbe Sperre wie II-1, *„nur ist hier Q zu groß statt E"*.
-
-    Heute: ``jaz_belastbar`` ist **True**, und die Anlage weist eine Arbeitszahl
-    von 5,0 aus, die es nicht gibt.
+    Wärmemengenzähler sitzt am Kreis und misst **beide** Erzeuger; der
+    Stromzähler kennt nur die Wärmepumpe. **Q ist zu groß**, die Arbeitszahl zu
+    hoch — vorher wies die Anlage 5,0 aus, eine Zahl, die es nicht gibt.
 
     ⭐ **Dieser Fall ist der Beleg, dass R2 die richtige Abstraktionshöhe hat.**
     Er hat **keinen Melder** und stand in **keiner** der vier Lagen von §4.2. Er
     ist erst sichtbar geworden, als die Fallsammlung zu einer Regel
     verallgemeinert wurde — eine Aufzählung hätte ihn nie hervorgebracht.
+
+    ⚠ **Und deshalb trägt er dieselbe Größe wie II-1, nicht eine eigene.** Ein
+    Flag je Beispiel hätte die Fallsammlung in den Code geholt; ein Feld mit zwei
+    Werten hält die eine Regel zusammen.
     """
-    assert "R2/F12" in REGELN_OFFEN
+    assert "R2/F12" not in REGELN_OFFEN
     # 400 kWh WP-Strom, 2000 kWh Wärme am Kreis — davon ein Teil vom Gaskessel.
-    wp = _wp(strom_kwh=400.0, waerme_kwh=2000.0, waerme_abgeleitet_kwh=0.0)
+    wp = _wp(strom_kwh=400.0, waerme_kwh=2000.0, waerme_abgeleitet_kwh=0.0,
+             abgrenzung_stoerung="fremdwaerme")
 
     assert wp.jaz_belastbar is True
-    assert wp.waerme_kwh / wp.strom_kwh == 5.0  # eine Zahl, die es nicht gibt
+    gesperrt = arbeitszahl(
+        wp.waerme_kwh, wp.strom_kwh,
+        abgrenzung_verletzt=abgrenzungs_grund(
+            abgrenzung_stoerung=wp.abgrenzung_stoerung,
+        ),
+    )
+    assert gesperrt.wert is None
+    assert gesperrt.grund == GRUND_FREMDWAERME
 
-    assert not [f for f in WpFakten.__dataclass_fields__ if "bivalent" in f]
+
+def test_ii2a_ohne_angabe_bleibt_die_kennzahl():
+    """**ERFÜLLT.** Gegenprobe zu II-1/II-2: Ohne Angabe ändert sich nichts.
+
+    ⚠ **Die wichtigste der drei Proben dieses Blocks.** Die neue Größe ist eine
+    **Anwender-Angabe**, und der Default gilt für jede bestehende Anlage im Feld.
+    Eine Sperre, die schon bei `None` oder bei einem unbekannten Wert griffe,
+    hätte jeder Anlage still ihre Arbeitszahl genommen — ohne dass jemand etwas
+    geändert hätte.
+
+    `None` heißt **„keine bekannte Abweichung"**, nicht „geprüft und in Ordnung":
+    Was eedc nicht sehen kann, behauptet es auch nicht.
+    """
+    ohne = _wp(strom_kwh=500.0, waerme_kwh=2000.0)
+    assert ohne.abgrenzung_stoerung is None
+    assert arbeitszahl(
+        ohne.waerme_kwh, ohne.strom_kwh,
+        abgrenzung_verletzt=abgrenzungs_grund(
+            abgrenzung_stoerung=ohne.abgrenzung_stoerung,
+        ),
+    ).wert == 4.0
+
+    # Ein unbekannter Wert (Altbestand, Import-Tippfehler) sperrt ebenfalls
+    # nicht — eine Sperre auf einen Wert zu stützen, den niemand gesetzt haben
+    # kann, wäre eine erfundene Auskunft.
+    assert abgrenzung_stoerung({"abgrenzung": "haus"}) is None
+
+
+def test_ii2d_die_anwender_angabe_schlaegt_die_selbsterkennung():
+    """**ERFÜLLT (Entscheid Gernot, 26.08.2026).** Wenn zwei Gründe zutreffen,
+    gewinnt der konkretere.
+
+    Eine Anlage kann beides sein: zwei Geräte auf einem Block, von denen nur
+    eines Wärme meldet (erkennt eedc selbst) **und** ein Heizstab auf dem
+    WP-Zähler (weiß nur der Anwender). Beide Gründe wären richtig; die Kachel
+    trägt aber einen.
+
+    ⭐ **Wer etwas eingetragen hat, soll seinen Satz wiederfinden.** „Nicht alle
+    Geräte melden Wärme" wäre auf dieselbe Anlage anwendbar und trotzdem die
+    schlechtere Auskunft — sie erklärt nicht, was er selbst gemeldet hat
+    (SOLL §3.3/**S3**).
+    """
+    assert abgrenzungs_grund(
+        abgrenzung_stoerung="fremdstrom", geraete_ohne_waerme=True,
+    ) == GRUND_FREMDSTROM
+    # Ohne Angabe greift die Selbsterkennung unverändert.
+    assert abgrenzungs_grund(geraete_ohne_waerme=True) == GRUND_GERAETE_OHNE_WAERME
 
 
 # ══ II-2b · ERFÜLLT — R2/Gerät: die Lage, die eedc SELBST erkennt ══════════
@@ -331,35 +384,87 @@ def test_ii4b_komponenten_hub_wertet_die_sperre_aus():
     assert "wp_waerme_abgeleitet" in quelle
 
 
-# ══ II-5 · OFFEN — R2: Q und E aus verschiedenen Zeiträumen ═════════════════
+# ══ II-5 · ERFÜLLT — R2: Q und E aus verschiedenen Zeiträumen ═════════════
 
-def test_ii5_zeitraum_mismatch_wird_nicht_erkannt():
-    """**OFFEN (R2/Zeitraum).** SOLL §4.2 Fall 3.
+def test_ii5_zeitraum_versatz_sperrt_die_kennzahl():
+    """**ERFÜLLT (R2/Zeitraum, gebaut 2026-08-26).** SOLL §4.2 Fall 3.
 
     Lage: Die Wärme ist im Monatsabschluss gepflegt (ein Wert für den ganzen
-    Monat), der Strom kommt aus laufenden Sensoren. Fehlen dem Monat Sensortage —
-    Ausfall, Nachrüstung mitten im Monat —, stehen Zähler und Nutzen für
-    **verschiedene Zeiträume**.
+    Monat), der Strom kommt aus einem Connector-Delta, das erst mitten im Monat
+    zu zählen begann. Zähler und Nutzen stehen für **verschiedene Zeiträume**.
 
-    Erwartung nach dem Bau: Die Kennzahl entfällt mit Begründung.
+    ⭐ **Die Größe dafür musste nicht erfunden werden — sie war schon da.**
+    `teilzeitraum_felder` (`core/berechnungen/datenquellen.py`) weist genau die
+    Felder aus, deren Endwert nur einen Ausschnitt des Monats misst; gebaut für
+    #361/coolxmad #353, wo ein frisch eingerichteter Connector mit 0 kWh eine
+    vollständige HA-Summe verdrängte. Steht **genau eine** der beiden Seiten
+    darin, ist die Abgrenzung verletzt.
 
-    Heute: ``WpFakten`` führt keine Angabe darüber, **über welchen Zeitraum** Q
-    und E jeweils entstanden sind — der Mismatch ist aus den Daten gar nicht
-    ableitbar. Das ist der Grund, warum hier eine **Größe fehlt** und nicht nur
-    eine Prüfung.
+    ⛔ **Der naheliegende Weg wäre falsch gewesen, und das ist der Kern.** Der
+    ursprüngliche Entwurf sah eine Abdeckungs-Größe in `WpFakten` vor — „an wie
+    vielen Tagen des Monats gab es einen Wert?". Zwei Gründe sprechen dagegen:
+
+    1. `WpFakten` faltet **IMD-Monatszeilen** und kennt die Herkunft der Werte
+       gar nicht; die Vier-Quellen-Auflösung passiert eine Ebene höher.
+    2. Eine Tages-Zählung kann *„kein Wert, weil das Gerät stand"* nicht von
+       *„kein Wert, weil der Sensor fehlte"* unterscheiden. Bei einer
+       Wärmepumpe im Juli ist Ersteres der Normalfall — der Wächter meldete
+       jeden Sommer bei jeder Anlage. Genau die Fehlalarm-Klasse, die §2i-6
+       schon einmal eingefangen hat (dort 3 von 3 Meldungen).
     """
-    assert "R2/Zeitraum" in REGELN_OFFEN
-    felder = set(WpFakten.__dataclass_fields__)
+    assert "R2/Zeitraum" not in REGELN_OFFEN
+    from backend.core.berechnungen.datenquellen import teilzeitraum_felder
 
-    assert not [f for f in felder if "abdeckung_tage" in f or "zeitraum" in f]
-    # Die einzige Abdeckungs-Größe misst Modus-Stunden, nicht Mengen-Zeiträume.
-    assert "modus_abdeckung_h" in felder
+    def _versatz(teilzeitraum: set[str]) -> bool:
+        return sum(
+            1 for f in ("wp_waerme_kwh", "wp_strom_kwh") if f in teilzeitraum
+        ) == 1
+
+    assert _versatz({"wp_strom_kwh"}) is True
+    assert _versatz({"wp_waerme_kwh"}) is True
+    # ⚠ **Beide Seiten unvollständig ist KEIN Versatz.** Im laufenden Monat
+    # misst jede Sensor-Größe naturgemäß „bis heute" — solange das für Q und E
+    # gleichermaßen gilt, tragen sie denselben Zeitraum und der Quotient steht.
+    assert _versatz({"wp_waerme_kwh", "wp_strom_kwh"}) is False
+    assert _versatz(set()) is False
+
+    gesperrt = arbeitszahl(
+        2000.0, 500.0,
+        abgrenzung_verletzt=abgrenzungs_grund(zeitraum_versetzt=True),
+    )
+    assert gesperrt.wert is None
+    assert gesperrt.grund == GRUND_ZEITRAUM
+
+    # Die Quelle der Wahrheit existiert und liefert die erwartete Form.
+    leer = teilzeitraum_felder(
+        saved={}, connector={}, mqtt_energy={}, ha_stats={},
+        ist_aktueller_monat=True,
+    )
+    assert leer == set()
 
 
-# ══ II-6 · OFFEN — R2: passive Kühlung darf nicht verglichen werden ═════════
+def test_ii5b_die_zeitraum_pruefung_sitzt_wo_die_quellen_bekannt_sind():
+    """**ERFÜLLT.** Nur `aktueller_monat` kann den Versatz überhaupt sehen.
 
-def test_ii6_passive_kuehlung_ist_nicht_markierbar():
-    """**OFFEN (R2/PassivKuehlung).** SOLL §3.2b und §4.1.
+    ⚠ **Das ist keine Lücke, sondern die Wahrheit über die drei Sichten.** Hub
+    und Tagesansicht lesen jeweils **eine** Quelle; ein Versatz zwischen zwei
+    Quellen kann dort nicht entstehen. Ihn dort zu „prüfen" hieße, eine
+    Bedingung zu behaupten, die nie zutreffen kann — der Prüfer wäre grün und
+    wertlos ([[feedback_probe_unerreichbarer_zustand]]).
+    """
+    import inspect as _inspect
+
+    from backend.api.routes import aktueller_monat
+
+    quelle = _inspect.getsource(aktueller_monat)
+    assert "teilzeitraum" in quelle
+    assert "zeitraum_versetzt" in quelle
+
+
+# ══ II-6 · ERFÜLLT — R2: passive Kühlung wird nicht verglichen ═════════════
+
+def test_ii6_passive_kuehlung_ist_markierbar():
+    """**ERFÜLLT (R2/PassivKühlung, gebaut 2026-08-26).** SOLL §3.2b und §4.1.
 
     Eine Sole-Wasser-Anlage kühlt oft **passiv** — nur Umwälzpumpen, kein
     Kompressor. Der EER liegt dann um ein Vielfaches über dem einer aktiv
@@ -367,22 +472,128 @@ def test_ii6_passive_kuehlung_ist_nicht_markierbar():
     Falschaussage wäre, ist ein **Vergleich** oder ein Rang gegen aktiv gekühlte
     Anlagen — insbesondere im Community-Benchmark.
 
-    Erwartung nach dem Bau: eine Markierung an der Kennzahl, kein neues Feld für
-    eine Menge.
-
-    Heute: Es gibt keine Möglichkeit, passive von aktiver Kühlung zu
-    unterscheiden.
-
     ⛔ **Kein bekannter Anwender** (SOLL §7/A5) — die Probe steht trotzdem hier.
     Sie prüft, ob das **Modell** die Unterscheidung tragen kann; eine Ansicht
     darf warten, ein Modell nicht.
+
+    ⚠ **Eine Markierung, keine Menge.** `kuehlung_art` sperrt nichts und
+    korrigiert nichts — es nimmt die Anlage aus dem Ranking.
     """
-    assert "R2/PassivKuehlung" in REGELN_OFFEN
-    from backend.core.investition_parameter import PARAM_WAERMEPUMPE
+    assert "R2/PassivKuehlung" not in REGELN_OFFEN
+    from backend.core.investition_parameter import (
+        KUEHLUNG_AKTIV, KUEHLUNG_KEINE, KUEHLUNG_PASSIV, PARAM_WAERMEPUMPE,
+        kuehlt_passiv,
+    )
 
-    # Der Parameter-SoT der Wärmepumpe kennt keine Kühlart.
-    assert not [k for k in PARAM_WAERMEPUMPE.values() if "passiv" in k or "kuehl" in k]
+    assert PARAM_WAERMEPUMPE["KUEHLUNG_ART"] == "kuehlung_art"
+    assert kuehlt_passiv({"kuehlung_art": KUEHLUNG_PASSIV}) is True
+    assert kuehlt_passiv({"kuehlung_art": KUEHLUNG_AKTIV}) is False
+    assert kuehlt_passiv({"kuehlung_art": KUEHLUNG_KEINE}) is False
+    # Altbestand ohne Angabe ist NICHT passiv — unbekannt heißt unbekannt.
+    assert kuehlt_passiv({}) is False
+    assert kuehlt_passiv(None) is False
 
-    # Und `wp_art` unterscheidet nur die Bauart, nicht die Art der Kühlung —
-    # dieselbe Schubladen-Logik, die R1 an anderer Stelle ablöst.
-    assert PARAM_WAERMEPUMPE["WP_ART"] == "wp_art"
+
+def test_ii6b_die_markierung_erreicht_den_community_payload():
+    """**ERFÜLLT (R2/PassivKühlung).** Die Markierung nützt nur, wenn sie ankommt.
+
+    ⭐ **Der Server rechnet nichts nach** — er hat die Rohdaten nie gesehen
+    (CLAUDE.md, Community-Datenfluss). Eine Unterscheidung, die eedc trifft und
+    nicht überträgt, existiert für den Benchmark nicht. Die Auswertung selbst
+    liegt im Schwester-Repo (`eedc-community`: `berechne_community_avg_jaz`
+    nimmt passiv gekühlte Anlagen aus dem Durchschnitt, und wer passiv kühlt,
+    bekommt keinen `community_avg` gegen einen Schnitt, in dem er nicht
+    vorkommt).
+    """
+    import inspect as _inspect
+
+    from backend.services import community_service
+
+    quelle = _inspect.getsource(community_service)
+    assert '"kuehlung_art": kuehlung_art' in quelle
+    # W-14 fährt auf demselben Weg mit: der Kühlstrom als Teilmenge.
+    assert "wp_strom_kuehlen_kwh" in quelle
+
+
+# ══ II-7 · ERFÜLLT — R2/W-14: Kühlstrom gehört nicht in den Nenner ═════════
+
+def test_ii7_kuehlstrom_faellt_aus_der_arbeitszahl():
+    """**ERFÜLLT (W-14, gebaut 2026-08-26).** SOLL §4.2 **Fall 4** — *„wenn eine
+    Funktion fehlt"*.
+
+    Lage: Eine Anlage heizt **und** kühlt über denselben Zähler. Ihr Kühlstrom
+    steht im Nenner der Arbeitszahl, die zugehörige **Kältemenge** in keinem
+    Zähler — eedc führt sie nicht als Wärme, und die wenigsten Anlagen haben
+    einen Kältemengenzähler. Wer kühlt, stand damit systematisch schlechter da
+    als wer es nicht tut.
+
+    ⭐ **Das ist keine neue Entscheidung, sondern die dritte Anwendung einer
+    bereits getroffenen** (#263 K-2, Entscheid **E-B**): `berechne_wp_ersparnis`
+    und `berechne_co2_bilanz` rechnen den Kühlstrom seit v4.0.5 heraus, mit
+    gemessener Begründung — an einer realen Anlage standen 26,4 kWh Heizen gegen
+    158,4 kWh Kühlen und ergaben **−45,04 €** Ersparnis und **−52 kg** CO₂. Die
+    Arbeitszahl war die einzige der drei Größen, die den Kategorienfehler
+    behielt.
+
+    ⚠ **Abziehen hier, sperren bei `waerme_abgeleitet_kwh` — kein Widerspruch.**
+    Dort enthält der **Zähler** einen aus dem Nenner gerechneten Anteil; ihn
+    abzuziehen ergäbe *falsch statt unbekannt*. Hier enthält der **Nenner** einen
+    separat bekannten Anteil einer anderen Funktion; ihn abzuziehen stellt die
+    Abgrenzung überhaupt erst her. Beide Male gewinnt dieselbe Regel: Q und E
+    müssen dasselbe meinen.
+    """
+    # dietmars Juli-Größenordnung, um 200 kWh Kühlbetrieb ergänzt.
+    mit_kuehlung = arbeitszahl(2000.0, 700.0, strom_funktionsfremd_kwh=200.0)
+    ohne_kuehlung = arbeitszahl(2000.0, 500.0)
+
+    assert mit_kuehlung.wert == ohne_kuehlung.wert == 4.0, (
+        "derselbe Heizbetrieb, dieselbe Arbeitszahl — Kühlen darf sie nicht drücken"
+    )
+    # Ohne den Abzug wären es 2,86 gewesen: eine kühlende Anlage sähe aus wie
+    # eine schlechte Heizung.
+    assert round(2000.0 / 700.0, 2) == 2.86
+
+
+def test_ii7b_reiner_kuehlbetrieb_sagt_was_er_ist():
+    """**ERFÜLLT (W-14).** Ein Sommermonat ohne Heizbetrieb ist kein Datenausfall.
+
+    ⚠ **Der Grund musste ein eigener sein.** Zieht man den ganzen Strom ab,
+    bliebe ein Nenner von 0 — und der bestehende Zweig hätte „kein
+    Stromverbrauch erfasst" gemeldet. Das wäre die falsche Auskunft: Der Zähler
+    lief, nur nicht fürs Heizen. Am **Tag** wiegt das am schwersten, dort kann
+    ein Sommertag fast reiner Kühlbetrieb sein.
+    """
+    nur_kuehlen = arbeitszahl(0.0, 158.4, strom_funktionsfremd_kwh=158.4)
+
+    assert nur_kuehlen.wert is None
+    assert nur_kuehlen.grund == "nur Kühlbetrieb in diesem Zeitraum"
+    assert len(nur_kuehlen.grund) <= 40
+    # Gegenprobe: OHNE Verbrauch gilt weiterhin der andere Satz.
+    assert arbeitszahl(2000.0, 0.0).grund == "kein Stromverbrauch erfasst"
+
+
+def test_ii7c_die_restmenge_bleibt_im_nenner():
+    """**ERFÜLLT (W-14).** Abgezogen wird nur, was als andere **Funktion**
+    gemessen ist — nicht die Restmenge.
+
+    `modus_nicht_aufgeteilt_kwh` (Standby, Lüften, Entfeuchten, Unbestimmt) ist
+    keine gemessene Funktion, sondern das, was übrig bleibt. Der
+    Bereitschaftsverbrauch einer Heizung gehört legitim in ihre Arbeitszahl —
+    ihn herauszurechnen würde die Anlage besser aussehen lassen, als sie ist.
+
+    ⚠ **Damit ist auch die Grenze dieses Baus benannt:** Lüften und Entfeuchten
+    sind zwar über eigene Betriebsart-Zähler **erfassbar**, werden aber in keine
+    Fakten-Größe gefaltet (`ImdTypBeitrag` führt nur Heizen und Kühlen) und
+    landen stumm in der Restmenge. Das ist die unfertige Ausführung von SOLL
+    **E4**, nicht Teil von W-14.
+    """
+    wp = _wp(strom_kwh=1000.0, waerme_kwh=3000.0,
+             modus_strom_bezug_kwh=1000.0,
+             modus_strom_heizen_kwh=700.0, modus_strom_kuehlen_kwh=200.0)
+
+    assert wp.modus_nicht_aufgeteilt_kwh == 100.0
+    # Nenner = 1000 − 200 (Kühlen), NICHT 1000 − 200 − 100 (Restmenge).
+    assert arbeitszahl(
+        wp.waerme_kwh, wp.strom_kwh,
+        strom_funktionsfremd_kwh=wp.modus_strom_kuehlen_kwh,
+    ).wert == 3000.0 / 800.0

@@ -30,6 +30,7 @@ D1-Entscheid (2026-06-14): WP-Heizung/Wärme werden hier **kanonisch** gelesen
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Optional
 
 from backend.core.berechnungen.betriebsart_gemessen import modus_strom_zeile
 from backend.core.berechnungen.modus_split import heizwaerme_ist_abgeleitet
@@ -46,6 +47,7 @@ from backend.core.field_definitions import (
     get_wp_heizenergie_kwh,
     get_wp_strom_kwh,
 )
+from backend.core.investition_parameter import abgrenzung_stoerung
 
 
 @dataclass(frozen=True)
@@ -112,6 +114,15 @@ class ImdTypBeitrag:
     # lesen, und die erste, die es vergisst, zeigt die gepflegte JAZ als
     # gemessene an.
     wp_waerme_abgeleitet: float = 0.0
+    # R2/W-7 + R2/F12 (SOLL Wärme/Klima §3.2b): Die vom Anwender gemeldete
+    # Abgrenzungs-Störung dieses Geräts — `"fremdstrom"`, `"fremdwaerme"` oder
+    # `None`. Sie hängt am **Gerät**, nicht an der Monatszeile: ein Heizstab am
+    # WP-Zähler bleibt es auch im nächsten Monat.
+    #
+    # ⚠ Sie ändert **keine Menge**. Sie sagt nur, dass Zähler und Nutzen dieses
+    # Geräts für verschiedene Dinge stehen — die Mengen bleiben, die Kennzahl
+    # entfällt (SOLL §4.2: „die Mengen und den Grund, nie den Quotienten").
+    wp_abgrenzung: Optional[str] = None
 
     # E-Mobilität (Skalar-Summen; Heimladungs-Pool bleibt separat)
     eauto_km: float = 0.0
@@ -237,6 +248,7 @@ def imd_typ_beitrag(
             wp_waerme_abgeleitet=(
                 heizung if heizwaerme_ist_abgeleitet(source_provenance) else 0.0
             ),
+            wp_abgrenzung=abgrenzung_stoerung(params),
         )
 
     if typ == "e-auto":

@@ -9,6 +9,54 @@
 
 ---
 
+## In Arbeit — Der Zähler entscheidet, nicht die Bauart
+
+**Wer einen Kühlzähler hat, kann ihn jetzt zuordnen**
+
+Bisher gab es die Kühl-Achse nur an Geräten mit der Wärmepumpenart
+„Luft-Luft (Klimaanlage)". Wer an einer Luft-Wasser- oder Sole-Wasser-Wärmepumpe
+einen getrennten Zähler für den Kühlbetrieb hatte, konnte ihn **nirgends**
+eintragen — gemeldet von zwei Testern im Forum.
+
+Ab jetzt entscheidet der Zähler, nicht die Bauart. Unter *Einstellungen →
+Datenquellen* steht bei jedem Gerät ein neuer, zugeklappter Abschnitt
+**„Weitere Größen erfassen"**. Darin liegen die Größen, die es an diesem
+Gerätetyp selten gibt. Ordnest du dort einen Sensor zu, rückt das Feld nach oben
+zu den anderen. Die Liste bleibt also so kurz wie bisher — und trotzdem ist kein
+Fall mehr ausgeschlossen.
+
+Neu dazu: **Leistung Kühlen (W)** als Live-Wert und die **Brauchwasser-Wärmepumpe**
+als eigene Bauart, die nur noch nach Warmwasser fragt.
+
+**Deine Arbeitszahl kann steigen, wenn du kühlst**
+
+Wer mit derselben Anlage heizt und kühlt, hatte den Kühlstrom im Nenner seiner
+Arbeitszahl — die abgeführte Wärme steht dort aber in keinem Zähler. Eine Anlage,
+die im Sommer kühlt, sah dadurch aus wie eine schlechte Heizung. Für
+Wirtschaftlichkeit und CO₂ rechnet eedc das seit v4.0.5 heraus; bei der
+Arbeitszahl fehlte derselbe Schritt.
+
+**Das ist eine Korrektur, keine Schönung** — die Zahl beschreibt jetzt das, was
+sie behauptet: wie viel Wärme aus wie viel Strom wurde. Ist ein ganzer Zeitraum
+reiner Kühlbetrieb, steht statt der Zahl der Grund dafür.
+
+**Zwei Angaben, die eedc nicht sehen kann**
+
+Beim Gerät stehen zwei neue Felder. **„Fremdanteil auf den Zählern"** ist für
+zwei Lagen, die man den Zahlen nicht ansieht: Der Heizstab hängt am Stromzähler
+der Wärmepumpe, seine Wärme läuft aber nicht über den Wärmemengenzähler — oder
+umgekehrt speist ein Gaskessel denselben Heizkreis, den der Wärmemengenzähler
+misst. In beiden Fällen passen Zähler und Nutzen nicht zusammen.
+
+**Beides ändert keine deiner Mengen.** eedc lässt nur die Arbeitszahl weg und
+schreibt den Grund daneben — statt einer Zahl, die es so nicht gibt.
+
+**„Kühlung: aktiv oder passiv"** betrifft den Community-Vergleich: Passiv
+gekühlte Anlagen (nur Umwälzpumpen) erreichen ein Vielfaches der Effizienz. Ihre
+eigenen Zahlen bleiben, sie werden nur nicht mehr gegen aktiv gekühlte gestellt.
+
+---
+
 ## v4.0.28 — Anzeigen ist nicht mitschreiben
 
 **Sechs Home-Assistant-Sensoren schreiben wieder mit**

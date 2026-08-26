@@ -13,6 +13,7 @@ import {
   PARAM_SONSTIGES_DEFAULTS,
 } from '../../../lib'
 import type { Innengeraet } from '../../../lib/investitionParameter'
+import { istLuftLuft } from '../../../lib/investitionParameter'
 import type { ParamWert } from './InvestitionTypFelder/types'
 import type { SelectItem } from '../../ui/Select'
 
@@ -211,6 +212,11 @@ export function getInitialParamData(
         leistung_kw: paramStr(params.leistung_kw),
         // Wärmepumpenart für fairen Community-Vergleich
         wp_art: paramStr(params.wp_art, PARAM_WAERMEPUMPE_DEFAULTS.wp_art),
+        // R2 (SOLL §3.2b) — Abgrenzungs-Störung und Kühlart. Beide sind reine
+        // Anwender-Angaben: eedc kann weder sehen, dass ein Heizstab auf dem
+        // WP-Zähler liegt, noch ob eine Anlage aktiv oder passiv kühlt.
+        abgrenzung: paramStr(params.abgrenzung, PARAM_WAERMEPUMPE_DEFAULTS.abgrenzung),
+        kuehlung_art: paramStr(params.kuehlung_art, PARAM_WAERMEPUMPE_DEFAULTS.kuehlung_art),
         // #263 — die Innengeräte-Liste wandert unverändert durch das Formular.
         // Sie ist selbst der Schalter: „Multisplit" wird aus ihrer Länge
         // abgeleitet und nirgends gespeichert.
@@ -237,10 +243,10 @@ export function getInitialParamData(
         // daraus eine Ersparnis gegen eine nie ersetzte Gasheizung. Ein bereits
         // gespeicherter Wert bleibt erhalten (`params.…` gewinnt), es wird nur
         // nichts mehr erfunden.
-        heizwaermebedarf_kwh: params.wp_art === 'luft_luft'
+        heizwaermebedarf_kwh: istLuftLuft(params)
           ? paramStr(params.heizwaermebedarf_kwh)
           : paramStr(params.heizwaermebedarf_kwh, PARAM_WAERMEPUMPE_DEFAULTS.heizwaermebedarf_kwh),
-        warmwasserbedarf_kwh: params.wp_art === 'luft_luft'
+        warmwasserbedarf_kwh: istLuftLuft(params)
           ? paramStr(params.warmwasserbedarf_kwh)
           : paramStr(params.warmwasserbedarf_kwh, PARAM_WAERMEPUMPE_DEFAULTS.warmwasserbedarf_kwh),
         // Vergleich mit alter Heizung

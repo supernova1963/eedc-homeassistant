@@ -23,7 +23,7 @@
  */
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import { Gauge, Home, Waypoints, Rss, Info, Ban, ArrowUpDown, AlertTriangle } from 'lucide-react'
+import { Gauge, Home, Waypoints, Rss, Info, Ban, ArrowUpDown, AlertTriangle, ChevronRight, ChevronDown } from 'lucide-react'
 import { Alert, Button } from '../ui'
 import FormSection from '../ui/FormSection'
 import { BlockShell } from '../blocks/BlockShell'
@@ -63,6 +63,27 @@ const ABSCHNITT_TITEL: Record<Abschnitt, string> = {
   sonstige: 'Sonstige Sensoren',
 }
 const ABSCHNITT_ORDER: Abschnitt[] = ['kwh', 'w', 'sonstige']
+
+// R1 (SOLL Wärme/Klima §3.2a) — die vierte Stufe unter den drei Einheiten-
+// Abschnitten. Hier stehen Größen, die es an dieser Bauart **geben kann, aber
+// typischerweise nicht gibt**: die Kühl-Achse an einer Luft-Wasser-Wärmepumpe,
+// die Heiz-Achse an einer Brauchwasser-Wärmepumpe, der Gesamtzähler neben einer
+// getrennten Messung.
+//
+// ⭐ **Sie lösen die P-6-Falle auf, ohne einen Fall auszuschließen.** Die alte
+// Antwort auf „biete nichts an, was niemand einlösen kann" war, Felder nach
+// Bauart wegzunehmen — und genau daran scheiterte MartyBr, der seit dem Sommer
+// 2026 einen getrennten Kühlzähler hat und ihn nirgends hinterlegen konnte
+// (T89667 #200). Die richtige Antwort ist Sichtbarkeit nach Beleglage: die
+// Fläche bleibt kurz, der Weg bleibt offen.
+//
+// ⚠ Ein erweitertes Feld MIT Quelle steht nicht hier, sondern in seinem
+// Einheiten-Abschnitt — das entscheidet das Backend, nicht diese Datei.
+const ERWEITERT_TITEL = 'Weitere Größen erfassen'
+const ERWEITERT_HINWEIS =
+  'Diese Größen gibt es an diesem Gerätetyp selten — eedc erwartet sie nicht. '
+  + 'Wer einen passenden Zähler hat, ordnet ihn hier zu; ab dann steht die Größe '
+  + 'oben bei den anderen.'
 function abschnittVon(einheit: string): Abschnitt {
   if (einheit === 'kWh') return 'kwh'
   if (einheit === 'W') return 'w'
@@ -101,6 +122,19 @@ export default function DatenquellenZuordnung() {
   // Server (Vermerk in `sensor_mapping`) und überlebt damit einen Reload — der
   // Anwender ändert eine Zuordnung und kommt Tage später wieder.
   const [historieHinweis, setHistorieHinweis] = useState<HistorieHinweis | null>(null)
+  // Aufgeklappte „Weitere Größen erfassen"-Abschnitte, je Gerät (R1).
+  // **Zugeklappt als Default:** die Fläche soll kurz bleiben — der Sinn der
+  // vierten Stufe ist, dass ein untypisches Feld erreichbar ist, nicht dass es
+  // dauernd im Weg steht.
+  const [offeneErweiterung, setOffeneErweiterung] = useState<Set<string>>(new Set())
+  const toggleErweiterung = useCallback((id: string) => {
+    setOffeneErweiterung((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
   // Aufgeklappte Feld-Hinweise (Hilfetexte aus der Registry, Q3).
   const [offeneHinweise, setOffeneHinweise] = useState<Set<string>>(new Set())
   const toggleHinweis = useCallback((id: string) => {
@@ -428,18 +462,49 @@ export default function DatenquellenZuordnung() {
     )
   }
 
-  // Feld-Abschnitte (kWh/W/Sonstige) — leere Abschnitte weglassen.
-  const abschnitte = (felder: DatenquelleFeld[]) => {
+  // Feld-Abschnitte (kWh/W/Sonstige) — leere Abschnitte weglassen. Danach die
+  // vierte Stufe: „Weitere Größen erfassen" (R1, s. ERWEITERT_TITEL).
+  const abschnitte = (gruppeId: string, felder: DatenquelleFeld[]) => {
     const buckets: Record<Abschnitt, DatenquelleFeld[]> = { kwh: [], w: [], sonstige: [] }
-    for (const f of felder) buckets[abschnittVon(f.einheit)].push(f)
-    return ABSCHNITT_ORDER.filter((k) => buckets[k].length > 0).map((k) => (
-      <div key={k}>
-        <div className="pt-2 pb-0.5 text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-          {ABSCHNITT_TITEL[k]}
-        </div>
-        <div className="divide-y divide-gray-100 dark:divide-gray-800">{buckets[k].map(feldZeile)}</div>
-      </div>
-    ))
+    const erweitert: DatenquelleFeld[] = []
+    for (const f of felder) {
+      if (f.erweitert) erweitert.push(f)
+      else buckets[abschnittVon(f.einheit)].push(f)
+    }
+    const offen = offeneErweiterung.has(gruppeId)
+    return (
+      <>
+        {ABSCHNITT_ORDER.filter((k) => buckets[k].length > 0).map((k) => (
+          <div key={k}>
+            <div className="pt-2 pb-0.5 text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+              {ABSCHNITT_TITEL[k]}
+            </div>
+            <div className="divide-y divide-gray-100 dark:divide-gray-800">{buckets[k].map(feldZeile)}</div>
+          </div>
+        ))}
+        {erweitert.length > 0 && (
+          <div>
+            <Button
+              type="button" variant="ghost" size="sm"
+              className="!mt-2 !min-h-0 !px-0 !py-1 !text-xs"
+              onClick={() => toggleErweiterung(gruppeId)}
+              aria-expanded={offen}
+            >
+              {offen ? <ChevronDown className="mr-1 h-3.5 w-3.5" /> : <ChevronRight className="mr-1 h-3.5 w-3.5" />}
+              {ERWEITERT_TITEL} ({erweitert.length})
+            </Button>
+            {offen && (
+              <>
+                <p className="max-w-prose pb-1 text-xs text-gray-500 dark:text-gray-400">
+                  {ERWEITERT_HINWEIS}
+                </p>
+                <div className="divide-y divide-gray-100 dark:divide-gray-800">{erweitert.map(feldZeile)}</div>
+              </>
+            )}
+          </div>
+        )}
+      </>
+    )
   }
 
   // Rollup: NUR offene Pflichtfelder je Gerät/Block (§2i-6).
@@ -488,7 +553,7 @@ export default function DatenquellenZuordnung() {
       defaultOpen: istBasis,
       render: () => (
         istBasis
-          ? <div>{abschnitte(tc.geraete[0].felder)}</div>
+          ? <div>{abschnitte(tc.geraete[0].id, tc.geraete[0].felder)}</div>
           : (
             <div className="space-y-2">
               {tc.geraete.map((g) => (
@@ -500,7 +565,7 @@ export default function DatenquellenZuordnung() {
                   defaultOpen={tc.geraete.length === 1}
                   statusSlot={geraetBadge(g)}
                 >
-                  {abschnitte(g.felder)}
+                  {abschnitte(g.id, g.felder)}
                 </FormSection>
               ))}
             </div>

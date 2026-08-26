@@ -30,7 +30,7 @@ from backend.api.routes.strompreise import (
 from backend.api.routes.connector import _calc_month_delta
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.core.berechnungen.waermepumpe_kennzahl import (
-    GRUND_GERAETE_OHNE_WAERME, arbeitszahl,
+    abgrenzungs_grund, arbeitszahl,
 )
 from backend.core.berechnungen import (
     sonstiges_richtung,
@@ -1564,17 +1564,54 @@ async def get_aktueller_monat(
     wp_waerme_abgeleitet_kwh = (
         monats_fakt.wp.waerme_abgeleitet_kwh if monats_fakt is not None else 0.0
     )
-    # R2/Gerät: Trägt der Block Strom von Geräten, deren Wärme fehlt? Der
-    # Block *Wärme/Klima* aggregiert alle Wärmepumpen der Anlage — bei
-    # dietmar1968 „Wärmepumpe · Klimaanlage" — und nur eines meldete Wärme.
-    wp_abgrenzung_verletzt = (
-        GRUND_GERAETE_OHNE_WAERME
-        if monats_fakt is not None and monats_fakt.wp.waerme_deckt_nicht_alle_geraete
-        else None
+    # ── R2: alle drei erkennbaren Lagen, über die eine Layer-Stelle ─────────
+    #
+    # **Gerät:** Trägt der Block Strom von Geräten, deren Wärme fehlt? Der Block
+    # *Wärme/Klima* aggregiert alle Wärmepumpen der Anlage — bei dietmar1968
+    # „Wärmepumpe · Klimaanlage" — und nur eines meldete Wärme.
+    #
+    # **Anwender-Angabe:** Heizstab-Strom auf dem WP-Zähler (Fall H-C) oder ein
+    # bivalenter Zweiterzeuger am selben Kreis. Beides ist aus keiner Messreihe
+    # ableitbar; die Reihenfolge (Angabe schlägt Erkennung) steht im Layer.
+    #
+    # **Zeitraum (SOLL §4.2 Fall 3):** ⭐ Diese Sicht ist die **einzige** mit
+    # Vier-Quellen-Auflösung — und `teilzeitraum` weist genau die Felder aus,
+    # deren Endwert nur einen Ausschnitt des Monats misst (#361, coolxmad #353:
+    # ein frisch eingerichteter Connector, der erst mitten im Monat zu zählen
+    # begann). Steht **genau eine** der beiden Seiten darin, tragen Q und E
+    # verschieden lange Zeiträume und der Quotient wäre einer aus zwei
+    # Wirklichkeiten.
+    #
+    # ⛔ **Bewusst kein Zählen von Tagen mit Wert.** Der naheliegende Weg —
+    # „an wie vielen Tagen des Monats gab es überhaupt eine Zahl?" — kann
+    # *„kein Wert, weil das Gerät stand"* nicht von *„kein Wert, weil der Sensor
+    # fehlte"* unterscheiden. Bei einer Wärmepumpe im Juli ist Ersteres der
+    # Normalfall; ein Wächter darauf meldete jeden Sommer bei jeder Anlage.
+    # Genau die Fehlalarm-Klasse, die §2i-6 schon einmal eingefangen hat.
+    _wp_seiten_teilzeitraum = sum(
+        1 for f in ("wp_waerme_kwh", "wp_strom_kwh") if f in teilzeitraum
+    )
+    wp_abgrenzung_verletzt = abgrenzungs_grund(
+        abgrenzung_stoerung=(
+            monats_fakt.wp.abgrenzung_stoerung if monats_fakt is not None else None
+        ),
+        geraete_ohne_waerme=(
+            monats_fakt is not None
+            and monats_fakt.wp.waerme_deckt_nicht_alle_geraete
+        ),
+        zeitraum_versetzt=_wp_seiten_teilzeitraum == 1,
+    )
+    # W-14: Der Kühlstrom kommt — wie der abgeleitete Anteil darüber — IMMER aus
+    # den Monats-Fakten. Er beschreibt die Aufteilung der IMD-Zeilen dieses
+    # Monats, und die ändert sich nicht dadurch, dass eine Menge über
+    # HA-Statistik statt aus der Datenbank kam.
+    wp_strom_kuehlen_kwh = (
+        monats_fakt.wp.modus_strom_kuehlen_kwh if monats_fakt is not None else 0.0
     )
     wp_arbeitszahl = arbeitszahl(
         wp_waerme, wp_strom,
         waerme_abgeleitet_kwh=wp_waerme_abgeleitet_kwh,
+        strom_funktionsfremd_kwh=wp_strom_kuehlen_kwh,
         abgrenzung_verletzt=wp_abgrenzung_verletzt,
     )
 

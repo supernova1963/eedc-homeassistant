@@ -37,7 +37,10 @@ from backend.core.berechnungen.ust_eigenverbrauch import (
     UstJahresanteil,
     ust_eigenverbrauch_fuer_anlage,
 )
-from backend.core.berechnungen.waermepumpe_kennzahl import arbeitszahl
+from backend.core.berechnungen.waermepumpe_kennzahl import (
+    abgrenzungs_grund,
+    arbeitszahl,
+)
 from backend.core.calculations import berechne_co2_bilanz
 from backend.services.finanz_zeilen import baue_finanz_zeile
 from backend.services.monats_fakten import finanz_zeile_eingabe, lade_monats_fakten
@@ -455,8 +458,28 @@ async def get_cockpit_uebersicht(
     # (b) #263 K-2: die Wärme ist aus `Strom × JAZ` abgeleitet — dann wäre das
     #     Ergebnis die gepflegte JAZ selbst (Konzept §3.5, zirkulär).
     # Beide Fälle liegen seit 2026-08-26 im Layer (R2, Befund W-3).
+    # R2 (26.08.2026): Diese Stelle kannte bisher **nur** die abgeleitete Wärme.
+    # Die Abgrenzungs-Lagen — Heizstab am Zähler, bivalenter Zweiterzeuger,
+    # mehrere Geräte mit nur einer Wärmequelle — fehlten hier vollständig; die
+    # Jahressicht zeigte deshalb eine Zahl, die der Hub daneben schon
+    # verweigerte. Dieselbe Klasse wie W-3, eine Sicht weiter.
+    wp_abgrenzung = abgrenzungs_grund(
+        abgrenzung_stoerung=next(
+            (f.wp.abgrenzung_stoerung for f in fakten if f.wp.abgrenzung_stoerung),
+            None,
+        ),
+        geraete_ohne_waerme=any(
+            f.wp.waerme_deckt_nicht_alle_geraete for f in fakten
+        ),
+    )
     wp_cop = arbeitszahl(
         wp_waerme, wp_strom, waerme_abgeleitet_kwh=wp_waerme_abgeleitet,
+        # W-14: wie bei der Ersparnis darunter (`strom_kuehlen_kwh`) — Kühlen
+        # ersetzt keine Heizung und gehört deshalb in keine Wärme-Kennzahl.
+        strom_funktionsfremd_kwh=sum(
+            f.wp.modus_strom_kuehlen_kwh for f in fakten
+        ),
+        abgrenzung_verletzt=wp_abgrenzung,
     ).wert
     # Multi-WP: erste WP als Parameter-Referenz (Wirkungsgrad/Gas-Default).
     # Drift-Audit Domäne A1 / Issue #178: vorher 10ct hartcodiert + ignorierte

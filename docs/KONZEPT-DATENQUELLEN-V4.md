@@ -163,12 +163,36 @@ Gruppierung in einklappbaren `FormSection` (Anlage-Basis, dann je Investitionsty
 - **Zusatz-Block „Anlage / Zähler" ganz oben** für die Basis-Felder (Einspeisung/Netzbezug/Wetter) — nötig, weil Komponenten diese Ebene nicht kennt, die Felder aber zuordenbar sind.
 - **Geräte-Ebene = einklappbare Sub-Sektion** (`FormSection ebene="geraet"`, Gernot-Wahl) mit Geräte-Kopf im `InvestitionCard`-Stil (Bezeichnung + Detail-Badges) + Rollup-Badge (Felder mit/ohne Quelle). Weicht bewusst minimal von Komponenten ab (dort Geräte-Zeile), weil die Feld-Tabellen groß sind.
 
-**Feld-Tabelle je Gerät, 3 Abschnitte nach `einheit`** (SoT `field_definitions.py`, nicht `kategorie`):
+**Feld-Tabelle je Gerät, 3 Abschnitte nach `einheit` + eine vierte Stufe** (SoT `field_definitions.py`, nicht `kategorie`):
 | Abschnitt | Regel | Beispiele |
 |---|---|---|
 | Energie-Sensoren (kWh) | `einheit == 'kWh'` | Einspeisung, Ladung, Heizwärme |
 | Leistung-Sensoren (W) | `einheit == 'W'` | leistung_w, pv_gesamt_w |
 | Sonstige Sensoren | Rest | soc (%), Temp (°C), km, €, Ladevorgänge |
+| **Weitere Größen erfassen** | `erweitert === true` **und** keine Quelle — zugeklappt, am Ende des Geräts | Kühl-Achse an einer Luft-Wasser-WP, Heiz-Achse an einer Brauchwasser-WP, Gesamtzähler neben getrennter Messung |
+
+> ⭐ **Die vierte Stufe (2026-08-26, SOLL Wärme/Klima §3.2a/R1) löst die P-6-Falle anders ein.**
+> Sie lautet *„biete nichts an, was niemand einlösen kann"* — die bisherige Antwort war, Felder
+> **nach Bauart wegzunehmen**. Daran scheiterte MartyBr, der seit dem Sommer 2026 einen getrennten
+> Kühlzähler an einer Nicht-Klimaanlage hat und ihn nirgends hinterlegen konnte (Forum T89667
+> #200; pipp086 #199 fragt nach derselben Größe). Die richtige Antwort ist **Sichtbarkeit nach
+> Beleglage**: Die Fläche bleibt kurz, und **kein Fall ist ausgeschlossen**.
+>
+> **Drei Marken, drei Folgen** — die Registry markiert, die Fläche entscheidet:
+>
+> | Marke | Bedeutung | Fläche |
+> | --- | --- | --- |
+> | *(keine)* | gilt an diesem Gerät | erste Reihe |
+> | `erweitert` | untypisch, aber möglich (weiche Bedingung) | „Weitere Größen erfassen"; **mit** Quelle rückt es vor |
+> | `nicht_an_dieser_bauart` | die Größe existiert hier nicht (harte Geräteklasse) | ausgeblendet — **außer** es hat eine Quelle |
+>
+> ⛔ **Die Ausnahme „außer es hat eine Quelle" ist keine Kür.** Verschwände ein zugeordnetes Feld,
+> bliebe die Zuordnung stehen und wäre **nicht mehr löschbar**. Der Fall ist real: azywietz-web
+> führt zwei Klimaanlagen als `luft_wasser` (#383, weil das Feld „Wärmepumpenart" wie eine
+> Community-Einstellung beschriftet war). Stellt er die Bauart um, braucht ein zugeordneter
+> Warmwasser-Sensor einen Weg heraus. Gewächtert von
+> `test_klima_ohne_warmwasser_n304.py::test_zuordnungsflaeche_zeigt_das_feld_weiter` — der einen
+> ersten, zu groben Fix dieser Stelle am 26.08. gefangen hat.
 
 **Zeilen-Spalten:** `Feld (Einheit) │ IST-Zuordnung │ Wert* │ [HA-Sensor][MQTT Gateway][MQTT Inbound]`
 - **3 Quellen-Buttons ersetzen das Select.** Aktive Quelle = gefüllter Button; Klick öffnet das jeweilige Modal (Gateway = vorhandener Picker; Inbound = direkt setzen; HA-Sensor = neu, Entity-Auswahl). „Keine Quelle" = kein Button aktiv.

@@ -20,6 +20,9 @@ Feld-Attribute:
   label         — Anzeigename (Wizard, Dropdown)
   einheit       — Einheit für Anzeige (kWh, km, €, ct/kWh, "")
   bedingung     — optionale Bedingung (Parameter-Key), z.B. "arbitrage_faehig"
+  weich         — Tupel der Bedingungs-Schlüssel, deren Nicht-Erfüllung das Feld
+                  NICHT entfernt, sondern als **erweitert** markiert (R1, SOLL
+                  Wärme/Klima §3.2a). Siehe `bedingungs_urteil`.
   label_wenn    — optionales konditionelles Label: {Bedingungs-Key: Alt-Label}.
                   Trifft eine Bedingung zu, ersetzt sie das Default-`label`
                   (#281 — z.B. "Ladung" → "Ladung (gesamt, inkl. Netz)").
@@ -63,6 +66,7 @@ Feld-Attribute:
 from typing import Final, Optional
 
 from backend.core.investition_parameter import (
+    ist_brauchwasser_waermepumpe,
     ist_luft_luft_waermepumpe,
     lade_innengeraete,
 )
@@ -169,13 +173,21 @@ OPTIONALE_FELDER = [
 # und Einheit nicht achtmal auseinanderdriften können (dieselbe Bauform wie
 # `_sonstiges_felder_*`, N-259).
 #
-# **Warum `bedingung: luft_luft`.** Eine Betriebsart im Sinne von Heizen ·
-# Kühlen · Lüften · Entfeuchten hat nur ein Klimagerät. Eine Luft-Wasser-WP hat
-# Heizen und Warmwasser — dafür gibt es `strom_heizen_kwh`/
-# `strom_warmwasser_kwh`, und die bedeuten etwas anderes (Summanden, nicht
-# Teilmengen). Die zwei Familien nebeneinander anzubieten wäre genau die
-# Zweideutigkeit, an der ein Tester schon einmal zwei Felder addiert hat
-# (Forum simon42 #89667/62).
+# **Warum `bedingung: luft_luft` — und warum sie seit dem 26.08.2026 WEICH ist.**
+# Eine Betriebsart im Sinne von Heizen · Kühlen · Lüften · Entfeuchten hat
+# typischerweise ein Klimagerät. Eine Luft-Wasser-WP hat Heizen und Warmwasser —
+# dafür gibt es `strom_heizen_kwh`/`strom_warmwasser_kwh`, und die bedeuten
+# etwas anderes (Summanden, nicht Teilmengen). Die zwei Familien unbeschriftet
+# nebeneinander anzubieten wäre genau die Zweideutigkeit, an der ein Tester
+# schon einmal zwei Felder addiert hat (Forum simon42 #89667/62).
+#
+# ⛔ **Das spricht gegen ACHT Felder in der ersten Reihe jeder Wärmepumpe —
+# nicht gegen die Kühl-Achse dort, wo ein Zähler sie belegt** (Befund W-2,
+# SOLL §3.2a/R1). MartyBr hat seit dem Sommer 2026 einen getrennten Kühlzähler
+# an einer Wärmepumpe und konnte ihn nirgends hinterlegen; pipp086 fragt nach
+# derselben Größe (T89667 #199/#200). `weich` löst beides: hart entfernt das
+# Feld, weich stellt es hinter „Weitere Größen erfassen" (s.
+# `bedingungs_urteil`).
 _BETRIEBSART_HINWEIS_STROM = (
     "Elektrische Energie, die dieses Gerät im {label} verbraucht hat (kWh, "
     "kumulativer Zähler oder Tagessensor). **Teilmenge** des Gesamtverbrauchs — "
@@ -226,6 +238,7 @@ def _betriebsart_felder() -> list[dict]:
             "label": f"Strom {label}",
             "einheit": "kWh",
             "bedingung": "luft_luft",
+            "weich": ("luft_luft",),
             "je_innengeraet": True,
             "csv_suffix": f"Strom_{_BETRIEBSART_CSV[modus]}_kWh",
             "hinweis": _BETRIEBSART_HINWEIS_STROM.format(label=label),
@@ -237,6 +250,7 @@ def _betriebsart_felder() -> list[dict]:
             "label": f"Nutzenergie {label}",
             "einheit": "kWh",
             "bedingung": "luft_luft",
+            "weich": ("luft_luft",),
             "je_innengeraet": True,
             "csv_suffix": f"Nutzenergie_{_BETRIEBSART_CSV[modus]}_kWh",
             "hinweis": _BETRIEBSART_HINWEIS_NUTZ.format(label=label),
@@ -375,14 +389,31 @@ INVESTITION_FELDER: dict = {
         # Default-Modus (getrennte_strommessung=false):
         {
             "feld": "stromverbrauch_kwh", "label": "Stromverbrauch", "einheit": "kWh",
+            # **Weich seit dem 26.08.2026 (K3).** Ein gesetztes Kennzeichen darf
+            # einen vorhandenen Gesamtzähler niemals entwerten — genau daran
+            # verschwand bei OB73-gif der ganze Block *Wärme/Klima* (#263). Die
+            # Auswertung hat das seit `530996f5` gelernt; die **Pflege** nicht:
+            # im Monatsabschluss war das Feld hart weg, wer seine Aufteilung erst
+            # halb eingerichtet hatte, konnte die Gesamtmenge nicht mehr
+            # nachtragen. Auf der Zuordnungs-Fläche war es ohnehin schon sichtbar
+            # (dort filtert nur die Geräteklasse) — die beiden Flächen sagten
+            # also Gegenteiliges.
             "bedingung": "!getrennte_strommessung",
+            "weich": ("getrennte_strommessung",),
             "csv_suffix": "Strom_kWh",
             "hinweis": "Gesamter elektrischer Energieverbrauch der WP (kWh, kumulativ oder Tagessensor). Bei getrennter Messung: Summe aus Heizen + Warmwasser.",
         },
         # Getrennte-Strommessung-Modus (getrennte_strommessung=true):
         {
             "feld": "strom_heizen_kwh", "label": "Strom Heizen", "einheit": "kWh",
-            "bedingung": "getrennte_strommessung",
+            # ⚠ **Zwei Bedingungen verschiedener Härte** — der Fall, für den
+            # `weich` die Schlüssel nennt statt ein Bool zu sein:
+            # `getrennte_strommessung` ist **hart** (ohne Kennzeichen gibt es
+            # die getrennte Achse nicht), `!brauchwasser` ist **weich** (eine
+            # Brauchwasser-WP heizt typischerweise nicht — wer doch einen
+            # Heizzähler hat, ordnet ihn unter „Weitere Größen erfassen" zu).
+            "bedingung": ["getrennte_strommessung", "!brauchwasser"],
+            "weich": ("brauchwasser",),
             "csv_suffix": "Strom_Heizen_kWh",
             "hinweis": "Elektrische Energie für den Heizbetrieb (kWh, kumulativ oder Tagessensor). Nur bei getrennter Strommessung.",
         },
@@ -415,6 +446,12 @@ INVESTITION_FELDER: dict = {
         # CSV-Suffix bleibt fuer Backwards-Kompat unveraendert.
         {
             "feld": "heizenergie_kwh", "label": "Heizwärme", "einheit": "kWh",
+            # Eine Brauchwasser-WP gibt keine Heizwärme ab (SOLL §2.1/A6).
+            # **Weich, nicht hart:** die Bauart ist eine Anwender-Angabe, und
+            # ein Gerät, das doch beides kann, soll seinen Zähler behalten
+            # dürfen. Die Warmwasser-Achse daneben bleibt hart erwartet.
+            "bedingung": "!brauchwasser",
+            "weich": ("brauchwasser",),
             "csv_suffix": "Heizung_kWh",
             "hinweis": "Abgegebene Heizwärme (thermisch, NICHT Strom!) in kWh, kumulativ oder Tagessensor. Ohne Wärmemengenzähler aus Stromverbrauch × JAZ berechnet.",
         },
@@ -765,6 +802,28 @@ LIVE_FELDER_INV: dict = {
         {"key": "leistung_warmwasser_w",   "label": "Leistung Warmwasser",  "einheit": "W",
          "hinweis": "Elektrische Leistungsaufnahme der Warmwasserbereitung in W. Nur "
                     "sinnvoll bei getrennter Messung."},
+        # ⭐ **W-13 (26.08.2026) — die dritte Leistung, die es bis dahin nicht gab.**
+        # `leistung_heizen_w` und `leistung_warmwasser_w` stehen hier seit Langem
+        # und an JEDER Wärmepumpe; für den Kühlbetrieb gab es kein Gegenstück —
+        # an keiner Bauart. MartyBr schreibt am 25.08. (T89667 #200): „getrennte
+        # Zähler für Heizung, Warmwassererwärmung … und seit dem Sommer auch für
+        # den **Kühlbetrieb**. Es werden sowohl die **Live-Werte (Power in W)**
+        # als auch die kumulierten Werte (Energy in kWh) [erfasst]."
+        #
+        # ⚠ **Ohne diese Zeile erreicht R1 seinen Fall nur zur Hälfte:** die
+        # Energie-Achse wird mit `betriebsart_strom_kuehlen_kwh` zuordenbar, seine
+        # Live-Leistung bliebe heimatlos.
+        #
+        # ⛔ **Bewusst KEINE vier `betriebsart_leistung_*_w`.** An einem
+        # Luft-Luft-Gerät stünden dann `leistung_heizen_w` und
+        # `betriebsart_leistung_heizen_w` nebeneinander — dieselbe Zweideutigkeit
+        # zweier Familien, an der ein Tester schon einmal zwei Felder addiert hat
+        # (#89667/62). Eine Zeile in der bestehenden Familie, ohne Bedingung wie
+        # ihre beiden Nachbarn.
+        {"key": "leistung_kuehlen_w",      "label": "Leistung Kühlen",      "einheit": "W",
+         "hinweis": "Elektrische Leistungsaufnahme im Kühlbetrieb in W. Nur sinnvoll, "
+                    "wenn der Kühlbetrieb getrennt gemessen wird — reine Anzeige, die "
+                    "Mengen kommen aus dem kWh-Zähler."},
         {"key": "warmwasser_temperatur_c", "label": "Warmwasser-Temperatur","einheit": "°C",
          "hinweis": "Temperatur im Warmwasserspeicher in °C — reine Anzeige, geht in keine "
                     "Berechnung ein."},
@@ -945,6 +1004,7 @@ FELD_BEDARF: dict[tuple[str, str], tuple[str, Optional[str]]] = {
     ("waermepumpe", "leistung_w"): ("optional", None),
     ("waermepumpe", "leistung_heizen_w"): ("optional", None),
     ("waermepumpe", "leistung_warmwasser_w"): ("optional", None),
+    ("waermepumpe", "leistung_kuehlen_w"): ("optional", None),
     ("waermepumpe", "warmwasser_temperatur_c"): ("optional", None),
     # #263 K-2 (Konzept §7 E-E): JEDER Wärmepumpe angeboten, nicht nur
     # `wp_art = luft_luft`. Der Grund ist gemessen, nicht vorsorglich:
@@ -1274,6 +1334,25 @@ def _mit_innengeraeten(
     return out
 
 
+#: Bedingungs-Schlüssel, die eine **Geräteklasse** beschreiben statt eines
+#: Schalters. Der Unterschied entscheidet auf der Zuordnungs-Fläche
+#: (`get_alle_felder_fuer_investition`): Ein Schalter ist umlegbar, sein Feld
+#: bleibt deshalb zuordenbar; eine Geräteklasse schließt die Größe aus, ihr Feld
+#: verschwindet. Weiche Bedingungen sind von beidem unberührt — sie entfernen
+#: nie, sie markieren (`bedingungs_urteil`).
+GERAETEKLASSEN_SCHLUESSEL: Final[frozenset[str]] = frozenset(
+    {"luft_luft", "brauchwasser"}
+)
+
+
+def _ist_geraeteklasse(bedingung) -> bool:
+    """Trägt `bedingung` einen Geräteklassen-Schlüssel? (auch negiert, auch in Liste)"""
+    if not bedingung:
+        return False
+    tokens = (bedingung,) if isinstance(bedingung, str) else tuple(bedingung)
+    return any(t.lstrip("!") in GERAETEKLASSEN_SCHLUESSEL for t in tokens)
+
+
 def _bedingungs_werte(parameter: Optional[dict]) -> dict[str, bool]:
     """Die Bedingungs-Keys einer Investition — eine Auswertung für alle Feld-Wege.
 
@@ -1287,6 +1366,9 @@ def _bedingungs_werte(parameter: Optional[dict]) -> dict[str, bool]:
         # #263: eine Betriebsart (Heizen/Kühlen/Lüften/Entfeuchten) hat nur ein
         # Klimagerät — bei der Luft-Wasser-WP heißt die Achse Heizen/Warmwasser.
         "luft_luft": ist_luft_luft_waermepumpe(params),
+        # R1/A6: ein Gerät mit ausschließlich Warmwasser-Achse. Steuert die
+        # WEICHE Herabstufung von Heizen — nie deren Entfernung.
+        "brauchwasser": ist_brauchwasser_waermepumpe(params),
         "getrennte_strommessung": bool(params.get("getrennte_strommessung")),
         "arbitrage_faehig": arbitrage_faehig,
         # Arbitrage impliziert Netzladung — das Flag ist nur ein Erfassungs-Schalter,
@@ -1297,8 +1379,74 @@ def _bedingungs_werte(parameter: Optional[dict]) -> dict[str, bool]:
     }
 
 
+#: Die drei Ausgänge von `bedingungs_urteil`.
+URTEIL_GILT: Final[str] = "gilt"
+URTEIL_ERWEITERT: Final[str] = "erweitert"
+URTEIL_NEIN: Final[str] = "nein"
+
+
+def bedingungs_urteil(
+    bedingung, weich, bedingungs_werte: dict[str, bool],
+) -> str:
+    """Gilt das Feld, ist es **erweitert**, oder gibt es die Größe hier nicht?
+
+    ⭐ **Es gibt zwei Sorten Bauart-Abhängigkeit, und bis zum 26.08.2026 waren
+    sie derselbe Mechanismus** — das ist die Ursache hinter Befund W-2:
+
+    ======  ====================================  ==========================
+    Sorte   Beispiel                              Folge
+    ======  ====================================  ==========================
+    hart    Luft-Luft hat keinen Warmwasserkreis  Feld verschwindet
+    weich   Sole-Wasser-WP **mit** Kühlung        Feld ist „erweitert"
+    ======  ====================================  ==========================
+
+    MartyBr hat seit dem Sommer 2026 einen getrennten Kühlzähler an einer
+    Wärmepumpe und konnte ihn **nirgends** hinterlegen; pipp086 fragt nach
+    derselben Größe (Forum T89667 #199/#200). Die alte Begründung — „acht
+    Betriebsart-Felder an jeder Wärmepumpe sind acht Angebote, die niemand
+    einlösen kann" — bleibt richtig und wird hier eingelöst, **ohne** einen
+    Fall auszuschließen: erweiterte Felder stehen auf der Zuordnungs-Fläche
+    hinter einem Schritt „Weitere Größen erfassen".
+
+    ⚠ **Hart schlägt weich.** Ein Feld kann beides tragen — `strom_heizen_kwh`
+    braucht `getrennte_strommessung` **hart** (ohne Kennzeichen gibt es die
+    getrennte Achse nicht) und `!brauchwasser` **weich** (an einer
+    Brauchwasser-WP untypisch, aber möglich). Genau diese Kombination ist der
+    Grund, warum `weich` die **Schlüssel** nennt und kein Wahrheitswert am Feld
+    ist: mit einem Bool ließe sich nicht sagen, *welche* der beiden Bedingungen
+    weich gemeint war.
+
+    ⚠ **Ein unbekannter Schlüssel gilt** (fail-open) — wie in
+    `bedingung_erfuellt`, und aus demselben Grund: ein Tippfehler ließe sonst
+    ein **zugeordnetes** Feld unsichtbar verschwinden und damit unlöschbar
+    zurückbleiben. Gewächtert wird der Tippfehler, nicht abgefangen
+    (`test_263_betriebsart_felder.py::test_jede_bedingung_ist_ein_bekannter_schluessel`).
+    """
+    if not bedingung:
+        return URTEIL_GILT
+    weiche_schluessel = frozenset(weich or ())
+    tokens = (bedingung,) if isinstance(bedingung, str) else tuple(bedingung)
+    urteil = URTEIL_GILT
+    for token in tokens:
+        negiert = token.startswith("!")
+        schluessel = token[1:] if negiert else token
+        if schluessel not in bedingungs_werte:
+            continue  # unbekannt → nicht filtern, s. Kasten oben
+        if bedingungs_werte[schluessel] == negiert:
+            if schluessel not in weiche_schluessel:
+                return URTEIL_NEIN  # hart schlägt weich, sofort
+            urteil = URTEIL_ERWEITERT
+    return urteil
+
+
 def bedingung_erfuellt(bedingung, bedingungs_werte: dict[str, bool]) -> bool:
     """Ist die `bedingung` eines Feldes erfüllt? — **der eine Auswerter**.
+
+    ⚠ **Kennt die weiche Sorte NICHT** und beantwortet deshalb nur die harte
+    Frage. Wer wissen muss, ob ein Feld „erweitert" ist, ruft
+    `bedingungs_urteil`; die Aufrufer hier brauchen die Unterscheidung nicht
+    (sie fragen „ist diese eine Bedingung erfüllt?", nicht „zeige ich das
+    Feld?").
 
     Eine Bedingung ist ein Schlüssel aus `_bedingungs_werte`, optional mit `!`
     negiert. **Mehrere Bedingungen stehen als Liste und gelten alle zusammen
@@ -1341,6 +1489,7 @@ def get_felder_fuer_investition(
     typ: str,
     parameter: Optional[dict],
     anlage_investitionen: Optional[list] = None,
+    belegte_felder: Optional[set[str]] = None,
 ) -> list[dict]:
     """
     Gibt die relevanten Felder für eine Investition zurück (Bedingungen aufgelöst).
@@ -1356,6 +1505,16 @@ def get_felder_fuer_investition(
         parameter: Investitions-Parameter-Dict (inv.parameter)
         anlage_investitionen: Alle Investitionen der Anlage (für bedingung_anlage).
                               None → bedingung_anlage wird nicht ausgewertet.
+        belegte_felder: Feldnamen, für die es an diesem Gerät bereits einen Wert
+                        oder eine Zuordnung gibt. Sie entscheiden über die
+                        **erweiterten** Felder (R1, `weich` — s.
+                        `bedingungs_urteil`): ein erweitertes Feld erscheint hier
+                        nur, wenn es belegt ist.
+
+                        ⭐ **Das ist R1 wörtlich:** *„was ein Gerät liefern kann,
+                        sagt der zugeordnete Zähler, nicht seine Bauart."* Ohne
+                        das Argument (Import, Checker) bleibt es beim harten
+                        Bild — dort ändert sich nichts.
 
     Returns:
         Liste von Feld-Dicts ohne "bedingung"-Keys (bereits aufgelöst)
@@ -1378,8 +1537,10 @@ def get_felder_fuer_investition(
 
     # Steuer-Schlüssel — hier ausgewertet bzw. nur für die Zuordnungs-Fläche
     # relevant, gehören nicht in die Eingabe-Antwort.
-    SKIP_KEYS = {"bedingung", "bedingung_anlage", "label_wenn", "nur_manuell",
-                 "nur_bestand", "je_innengeraet", "label_je_innengeraet"}
+    SKIP_KEYS = {"bedingung", "weich", "bedingung_anlage", "label_wenn",
+                 "nur_manuell", "nur_bestand", "je_innengeraet",
+                 "label_je_innengeraet"}
+    belegt = belegte_felder or set()
 
     for feld in alle_felder:
         # ⛔ `nur_bestand`: gar nicht mehr pflegbar — siehe Kopf dieser Datei.
@@ -1404,10 +1565,19 @@ def get_felder_fuer_investition(
                 continue  # Feld ausblenden: Wallbox ist kanonische Heimladungs-Quelle
 
         # ── Investment-Parameter-Bedingung ───────────────────────────────────
-        if not bedingung_erfuellt(bedingung, bedingungs_werte):
+        urteil = bedingungs_urteil(bedingung, feld.get("weich"), bedingungs_werte)
+        if urteil == URTEIL_NEIN:
+            continue
+        if urteil == URTEIL_ERWEITERT and basis_feld_key(feld["feld"]) not in belegt:
+            # Erweitert und unbelegt: die Größe ist an diesem Gerät untypisch und
+            # nichts deutet darauf hin, dass es sie gibt. Sie bleibt erreichbar —
+            # über die Zuordnungs-Fläche, die erweiterte Felder ausdrücklich
+            # zeigt. Hier stünde sie als leeres Eingabefeld in der ersten Reihe.
             continue
 
         aufgeloest = dict(feld)
+        if urteil == URTEIL_ERWEITERT:
+            aufgeloest["erweitert"] = True
         aufgeloest["label"] = _label_aufgeloest(feld, bedingungs_werte)
         result.append(aufgeloest)
 
@@ -1454,27 +1624,55 @@ def get_alle_felder_fuer_investition(typ: str, parameter: Optional[dict] = None)
     # Kopie je Feld: die Dicts sind Modul-Konstanten, ein direktes Setzen des
     # Labels würde die Definition für alle folgenden Aufrufe umschreiben.
     bedingungs_werte = _bedingungs_werte(parameter)
-    # ⚠ **Eine einzige Bedingung wird hier doch gefiltert: `luft_luft`.**
+    # ⚠ **Diese Funktion filtert NICHTS — sie markiert.** Drei Stufen, drei
+    # Marken, und die Entscheidung fällt die Fläche
+    # (`routes/datenquellen.py::ohne_nicht_zuordenbare`).
     #
-    # Die übrigen (`getrennte_strommessung`, `arbitrage_faehig`, …) sind
-    # **Schalter am selben Gerät** — ein Anwender kann sie morgen umlegen, und
-    # bis dahin soll das Feld zuordenbar bleiben. `luft_luft` ist dagegen eine
-    # **Geräteklasse**: eine Luft-Wasser-Wärmepumpe hat keinen Kühl-, Lüft- oder
-    # Entfeuchtungsbetrieb, und acht Felder dafür auf ihrer Zuordnungs-Fläche
-    # wären acht Angebote, die niemand einlösen kann (die P-6-Falle).
+    # Die Schalter (`getrennte_strommessung`, `arbitrage_faehig`, …) sind
+    # umlegbar; bis dahin soll das Feld zuordenbar bleiben. Eine **harte**
+    # Geräteklassen-Bedingung schließt die Größe dagegen aus: eine
+    # Split-Klimaanlage hat keinen Warmwasserkreis, und das Feld dort anzubieten
+    # wäre ein Angebot, das niemand einlösen kann (die P-6-Falle). Dazwischen
+    # steht seit dem 26.08.2026 die **weiche** Bedingung: die Größe ist an
+    # dieser Bauart untypisch, aber möglich — sie wird mit `erweitert` markiert,
+    # die Fläche stellt sie hinter „Weitere Größen erfassen" (R1/W-2).
     #
-    # Genau so verfährt diese Funktion bei *Sonstiges* schon lange: dort löst
-    # sie die `kategorie` auf, statt Erzeuger- und Verbraucher-Felder
-    # nebeneinander zu zeigen. Geräteklasse filtern, Schalter markieren.
-    if not bedingungs_werte["luft_luft"]:
-        alle_felder = [f for f in alle_felder if f.get("bedingung") != "luft_luft"]
+    # ⛔ **Warum auch die harte Verletzung nur MARKIERT und nicht entfernt wird
+    # — das ist der teuerste Teil dieser Funktion.** Ein Feld hier verschwinden
+    # zu lassen, hieße: eine **bestehende Zuordnung** wird unsichtbar und damit
+    # **unlöschbar**. Der Fall ist real und belegt: azywietz-web führt zwei
+    # Klimaanlagen als `luft_wasser` (#383, weil das Feld „Wärmepumpenart" wie
+    # eine Community-Einstellung beschriftet war). Stellt er sie um, hätte ein
+    # zugeordneter `warmwasser_kwh`-Sensor keinen Weg mehr heraus.
+    # `test_klima_ohne_warmwasser_n304.py::test_zuordnungsflaeche_zeigt_das_feld_weiter`
+    # hält genau das fest — und hat am 26.08. einen ersten, zu groben Fix dieser
+    # Stelle gefangen, der die Marke gegen ein `return None` getauscht hatte.
+    #
+    # ⛔ **Hier stand bis dahin ein exakter String-Vergleich**
+    # (`f.get("bedingung") != "luft_luft"`), und der war die Ursache von **W-12**:
+    # Er kannte weder die Negation `"!luft_luft"` (`warmwasser_kwh`) noch die
+    # Listenform `["getrennte_strommessung", "!luft_luft"]`
+    # (`strom_warmwasser_kwh`). Beide liefen daran vorbei — die Zuordnungs-Fläche
+    # bot einer Split-Klimaanlage also **genau die zwei Warmwasser-Felder** an,
+    # deren Fehlen der Daten-Checker bei OB73-gif zu Unrecht angemahnt hatte
+    # (#263, repariert mit v4.0.28 — im Checker, nicht hier). Dritte Runde der
+    # #236-Klasse: eine Regel auf einer Schicht reicht nicht bei parallelen
+    # Pfaden. Der Auswerter (`bedingungs_urteil`) kennt beide Formen, und die
+    # Fläche nimmt das markierte Feld heraus — **außer** es hat eine Quelle.
+    # Dieselbe Bauform wie `nur_manuell`: Registry markiert, Fläche entscheidet.
+    def _mit_urteil(feld: dict) -> dict:
+        urteil = bedingungs_urteil(
+            feld.get("bedingung"), feld.get("weich"), bedingungs_werte,
+        )
+        aufgeloest = {**feld, "label": _label_aufgeloest(feld, bedingungs_werte)}
+        if urteil == URTEIL_ERWEITERT:
+            aufgeloest["erweitert"] = True
+        elif urteil == URTEIL_NEIN and _ist_geraeteklasse(feld.get("bedingung")):
+            aufgeloest["nicht_an_dieser_bauart"] = True
+        return aufgeloest
+
     return _mit_innengeraeten(
-        [
-            {**feld, "label": _label_aufgeloest(feld, bedingungs_werte)}
-            for feld in alle_felder
-        ],
-        parameter,
-        "feld",
+        [_mit_urteil(f) for f in alle_felder], parameter, "feld",
     )
 
 
@@ -1687,22 +1885,25 @@ def get_live_felder_fuer_investition(typ: str, parameter: Optional[dict] = None)
     """
     params = parameter or {}
     alle = LIVE_FELDER_INV.get(typ, [])
-    result = []
-    getrennte_strommessung = bool(params.get("getrennte_strommessung"))
-    luft_luft = ist_luft_luft_waermepumpe(params)
+    bedingungs_werte = _bedingungs_werte(params)
 
+    # ⛔ **Hier stand bis zum 26.08.2026 eine eigene `elif`-Kette** — der dritte
+    # Nachbau derselben Frage, neben `bedingung_erfuellt` und dem
+    # String-Vergleich in `get_alle_felder_fuer_investition` (W-12). Sie konnte
+    # weder Listen noch neue Schlüssel: `brauchwasser` hätte sie stillschweigend
+    # ignoriert, und zwar fail-open in die falsche Richtung. Jetzt liest auch sie
+    # `bedingungs_urteil`.
+    result = []
     for feld in alle:
-        bedingung = feld.get("bedingung")
-        if bedingung is None:
-            result.append({k: v for k, v in feld.items() if k != "bedingung"})
-        elif bedingung == "getrennte_strommessung" and getrennte_strommessung:
-            result.append({k: v for k, v in feld.items() if k != "bedingung"})
-        elif bedingung == "!getrennte_strommessung" and not getrennte_strommessung:
-            result.append({k: v for k, v in feld.items() if k != "bedingung"})
-        elif bedingung == "luft_luft" and luft_luft:
-            result.append({k: v for k, v in feld.items() if k != "bedingung"})
-        elif bedingung == "!luft_luft" and not luft_luft:
-            result.append({k: v for k, v in feld.items() if k != "bedingung"})
+        urteil = bedingungs_urteil(
+            feld.get("bedingung"), feld.get("weich"), bedingungs_werte,
+        )
+        if urteil == URTEIL_NEIN:
+            continue
+        eintrag = {k: v for k, v in feld.items() if k not in ("bedingung", "weich")}
+        if urteil == URTEIL_ERWEITERT:
+            eintrag["erweitert"] = True
+        result.append(eintrag)
 
     return _mit_innengeraeten(result, params, "key")
 

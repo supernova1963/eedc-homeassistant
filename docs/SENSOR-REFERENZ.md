@@ -190,6 +190,7 @@ eigene Speicher-Investition erfasst und publiziert unter deren ID auf
 | `leistung_w` | Leistung | W | Momentan | Aktuelle elektrische Leistungsaufnahme der WP. Muss ≥ 0 sein. Alternativ: getrennte Sensoren (s.u.). |
 | `leistung_heizen_w` | Leistung Heizen | W | Momentan | Nur bei getrennter Messung: Leistungsaufnahme Heizbetrieb. Optional. |
 | `leistung_warmwasser_w` | Leistung Warmwasser | W | Momentan | Nur bei getrennter Messung: Leistungsaufnahme Warmwasser. Optional. |
+| `leistung_kuehlen_w` | Leistung Kühlen | W | Momentan | Nur bei getrennter Messung: Leistungsaufnahme Kühlbetrieb. Optional, reine Anzeige — die Mengen kommen aus dem kWh-Zähler. |
 | `warmwasser_temperatur_c` | Warmwassertemperatur | °C | Momentan | Aktuelle Warmwassertemperatur. Optional, wird als Gauge angezeigt. |
 
 ### MQTT Energy Topics
@@ -201,14 +202,26 @@ eigene Speicher-Investition erfasst und publiziert unter deren ID auf
 | `eedc/.../energy/inv/{inv_id}_{name}/warmwasser_kwh` | `warmwasser_kwh` | |
 | ⚠️ `strom_heizen_kwh` / `strom_warmwasser_kwh` | — | **Kein MQTT-Topic** — nur via HA-Sensor |
 
-### 4a. Split-Klimaanlage: Verbrauch je Betriebsart und je Innengerät
+### 4a. Verbrauch je Betriebsart und je Innengerät
 
-> Gilt nur für Wärmepumpen mit **Wärmepumpenart „Luft-Luft (Klimaanlage)"**.
+> **Bei einer Klimaanlage stehen diese Felder gleich mit da.** An jeder anderen
+> Wärmepumpenart findest du sie unter *Einstellungen → Datenquellen* beim Gerät
+> hinter **„Weitere Größen erfassen"** — sie sind dort seltener, aber genauso
+> zuordenbar. Wer einen getrennten Kühlzähler an seiner
+> Luft-Wasser- oder Sole-Wasser-Wärmepumpe hat, trägt ihn dort ein; sobald ein
+> Sensor zugeordnet ist, steht das Feld oben bei den anderen.
+>
 > Alle Felder sind **optional**: kein Sensor, keine Anzeige.
 
-Eine Klimaanlage heizt, kühlt, lüftet und entfeuchtet über **denselben** Zähler.
-Wer die vier Anteile getrennt messen kann, trägt sie hier ein — sie sind
-**Teilmengen** des Gesamtverbrauchs und werden nie dazuaddiert.
+Ein Gerät, das heizt, kühlt, lüftet und entfeuchtet, tut das oft über
+**denselben** Zähler. Wer die Anteile getrennt messen kann, trägt sie hier ein —
+sie sind **Teilmengen** des Gesamtverbrauchs und werden nie dazuaddiert.
+
+⚠️ **Der Kühlanteil zählt nicht in die Arbeitszahl.** Kühlen erzeugt keine Wärme;
+läge sein Strom im Nenner, sähe eine Anlage, die im Sommer kühlt, wie eine
+schlechte Heizung aus. Für Wirtschaftlichkeit und CO₂ gilt dasselbe schon
+länger. Ist der ganze Verbrauch eines Zeitraums Kühlbetrieb, steht statt der
+Arbeitszahl der Grund dafür.
 
 | Feld | Label | Einheit | Sensortyp |
 |------|-------|---------|-----------|

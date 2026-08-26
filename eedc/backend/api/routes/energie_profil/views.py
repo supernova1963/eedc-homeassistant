@@ -241,9 +241,10 @@ async def get_tag_detail(
     )
     from backend.core.berechnungen.betriebsart_gemessen import modus_strom_zeile
     from backend.core.berechnungen.waermepumpe_kennzahl import (
-        arbeitszahl, waerme_gesamt_kwh,
+        abgrenzungs_grund, arbeitszahl, waerme_gesamt_kwh,
     )
     from backend.core.betriebsmodus import HEIZEN, KUEHLEN
+    from backend.core.investition_parameter import abgrenzung_stoerung
     from backend.services.energie_profil import lade_modus_split_tag
     from backend.services.snapshot.aggregator import get_betriebsart_strom_tageswerte
 
@@ -346,10 +347,39 @@ async def get_tag_detail(
             TagesZusammenfassung.datum == datum,
         )
     )).scalar_one_or_none()
-    wp_strom_tag = sum(
-        waermepumpe_kwh_je_investition(_tz_alle or {}).values()
-    ) or None
-    wp_jaz_tag = arbeitszahl(wp_waerme_tag, wp_strom_tag)
+    wp_strom_je_inv = waermepumpe_kwh_je_investition(_tz_alle or {})
+    wp_strom_tag = sum(wp_strom_je_inv.values()) or None
+    # R2 (26.08.2026): Auch der Tag kannte bisher **keine** Abgrenzungs-Sperre.
+    # Die Anwender-Angabe hängt am **Gerät**, nicht am Zeitraum — ein Heizstab
+    # auf dem WP-Zähler ist am Dienstag derselbe wie im Monatsbericht. Genau
+    # deshalb galt hier sonst der Fall, den ADR-001 beschreibt: dieselbe Frage,
+    # zwei Antworten, je nachdem welche Sicht der Anwender öffnet.
+    #
+    # ⚠ Gefragt werden nur die Geräte, die **an diesem Tag** Strom beigetragen
+    # haben. Ein stillgelegtes oder stillstehendes Gerät mit gemeldeter Störung
+    # darf die Zahl eines Tages nicht sperren, an dem es gar nicht lief.
+    wp_abgrenzung_tag = abgrenzungs_grund(
+        abgrenzung_stoerung=next(
+            (
+                stoerung
+                for inv_id_str, kwh in wp_strom_je_inv.items()
+                if kwh
+                for stoerung in (
+                    abgrenzung_stoerung(investitionen_by_id.get(inv_id_str)),
+                )
+                if stoerung
+            ),
+            None,
+        ),
+    )
+    wp_jaz_tag = arbeitszahl(
+        wp_waerme_tag, wp_strom_tag,
+        # W-14: `kuehlen_tag` ist oben aus beiden Zweigen gefüllt — gemessene
+        # Betriebsart-Zähler und abgeleiteter Modus-Split. Am Tag wiegt der
+        # Effekt am schwersten: ein Sommertag kann fast reiner Kühlbetrieb sein.
+        strom_funktionsfremd_kwh=kuehlen_tag,
+        abgrenzung_verletzt=wp_abgrenzung_tag,
+    )
 
     return TagDetailResponse(
         datum=datum,

@@ -7,6 +7,40 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased] — Der Zähler entscheidet, nicht die Bauart
+
+### Added
+
+- **Wer einen Kühlzähler hat, kann ihn jetzt zuordnen — an jeder Wärmepumpe.** Gemeldet von **MartyBr** und **pipp086** (Forum simon42 #89667): *„Ich habe getrennte Zähler für Heizung, Warmwassererwärmung … und seit dem Sommer auch für den Kühlbetrieb."* Bisher gab es die Kühl-Achse ausschließlich an Geräten mit der Wärmepumpenart „Luft-Luft (Klimaanlage)" — an einer Luft-Wasser- oder Sole-Wasser-Wärmepumpe war sein Zähler nirgends hinterlegbar.
+
+  **Ab jetzt entscheidet der Zähler, nicht die Bauart.** Unter *Einstellungen → Datenquellen* steht bei jedem Gerät ein neuer, zugeklappter Abschnitt **„Weitere Größen erfassen"**. Darin liegen die Größen, die es an diesem Gerätetyp selten gibt — die Kühl-, Lüft- und Entfeuchtungs-Achse an einer Heizungs-Wärmepumpe zum Beispiel. Ordnest du dort einen Sensor zu, rückt das Feld nach oben zu den anderen.
+
+  Die Fläche bleibt damit so kurz wie bisher, und trotzdem ist kein Fall mehr ausgeschlossen. Dazu neu: **Leistung Kühlen (W)** als Live-Wert, passend zu „Leistung Heizen" und „Leistung Warmwasser" — MartyBr misst beides.
+
+- **Brauchwasser-Wärmepumpe als eigene Bauart.** Ein Gerät, das ausschließlich Warmwasser macht, ließ sich bisher nicht sauber erfassen: Es bekam eine Heiz-Achse angeboten, die es nicht hat. Die neue Wärmepumpenart fragt nur noch nach dem, was das Gerät tut — die Heiz-Achse bleibt über „Weitere Größen erfassen" erreichbar, falls doch ein Zähler existiert.
+
+- **Zwei Angaben, die eedc nicht sehen kann — und die es bisher auch nicht erfragt hat.** Beim Gerät stehen jetzt zwei neue Felder:
+
+  **„Fremdanteil auf den Zählern"** — für zwei Lagen, die eine Arbeitszahl unbrauchbar machen, ohne dass man es den Zahlen ansieht: Der Heizstab hängt am Stromzähler der Wärmepumpe, seine Wärme läuft aber nicht über den Wärmemengenzähler (dann ist der Stromwert zu groß). Oder umgekehrt: Ein Gas- oder Ölkessel speist denselben Heizkreis, der Wärmemengenzähler misst beide, der Stromzähler nur die Wärmepumpe (dann ist der Wärmewert zu groß). **Beides ändert keine Menge** — eedc lässt nur die Arbeitszahl weg und schreibt den Grund daneben.
+
+  **„Kühlung: aktiv oder passiv"** — passiv gekühlte Anlagen (nur Umwälzpumpen) erreichen ein Vielfaches der Effizienz aktiv gekühlter. Ihre eigenen Zahlen bleiben unverändert; sie werden im Community-Vergleich nicht mehr gegen aktiv gekühlte Anlagen gestellt.
+
+### Fixed
+
+- **Der Kühlstrom drückte die Arbeitszahl.** Wer mit derselben Anlage heizt und kühlt, hatte den Kühlstrom im Nenner seiner Arbeitszahl — die abgeführte Wärme steht dort aber in keinem Zähler. Eine Anlage, die im Sommer kühlt, sah dadurch aus wie eine schlechte Heizung, und zwar in *Cockpit → Tag*, *Monat*, *Jahr*, im Komponenten-Hub **und** im Community-Vergleich.
+
+  Für **Wirtschaftlichkeit und CO₂** rechnet eedc den Kühlstrom seit 4.0.5 heraus — bei der Arbeitszahl fehlte derselbe Schritt. **Deine Arbeitszahl kann dadurch steigen**, wenn du kühlst; das ist gewollt. Ist ein ganzer Zeitraum reiner Kühlbetrieb, steht statt der Zahl der Grund dafür.
+
+- **Die Abgrenzungs-Prüfung erreicht alle Sichten.** Ob eine Arbeitszahl überhaupt gebildet werden darf, wurde bisher unterschiedlich streng geprüft: Der Komponenten-Hub kannte die Sperren, *Cockpit → Jahr* und *Cockpit → Tag* gar nicht. Dieselbe Anlage konnte an einer Stelle „—" zeigen und an der anderen eine Zahl. Jetzt entscheidet eine Stelle für alle.
+
+  Neu erkannt wird dabei auch der Fall, dass Wärme und Strom aus **verschieden langen Messzeiträumen** stammen — etwa wenn ein Connector erst mitten im Monat zu zählen begann. Der Quotient wäre einer aus zwei Wirklichkeiten; die Mengen bleiben, die Kennzahl entfällt mit Begründung.
+
+- **Die Zuordnungs-Fläche bot einer Split-Klimaanlage Warmwasser-Felder an.** Ein Klimagerät hat keinen Warmwasserkreis — im Monatsabschluss fragte eedc längst nicht mehr danach, unter *Einstellungen → Datenquellen* standen die beiden Felder trotzdem. Dieselbe Anlage, zwei Flächen, gegenteilige Aussage. Hast du dort bereits einen Sensor zugeordnet, bleibt das Feld sichtbar, damit du die Zuordnung auch wieder entfernen kannst.
+
+- **Der Gesamt-Stromzähler bleibt pflegbar, auch bei getrennter Messung.** Wer „Heizen und Warmwasser getrennt gemessen" eingeschaltet hat, konnte den Gesamtzähler im Monatsabschluss nicht mehr nachtragen — obwohl eedc ihn mit diesem Release wieder auswertet, solange die Aufteilung unvollständig ist.
+
+---
+
 ## [4.0.28] - 2026-08-25 — Anzeigen ist nicht mitschreiben
 
 ### Fixed

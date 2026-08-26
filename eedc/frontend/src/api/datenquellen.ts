@@ -64,6 +64,18 @@ export interface DatenquelleFeld {
   bedarf_grund: string | null
   /** Erklärsatz bei `inaktiv` — ersetzt „keine Quelle" in der Zeile. */
   bedarf_text: string | null
+  /**
+   * R1 (SOLL Wärme/Klima §3.2a): Die Größe ist an dieser Bauart **untypisch,
+   * aber möglich** — etwa die Kühl-Achse an einer Luft-Wasser-Wärmepumpe. Solche
+   * Felder stehen im eigenen Abschnitt „Weitere Größen erfassen" statt in der
+   * ersten Reihe.
+   *
+   * ⚠ **Das Backend setzt es nur, solange keine Quelle zugeordnet ist** — mit
+   * Quelle rückt das Feld in seinen Einheiten-Abschnitt vor. Der Client muss
+   * die Bedingung also nicht nachbauen; täte er es, wäre es die zweite Stelle
+   * für dieselbe Regel.
+   */
+  erweitert?: boolean
 }
 
 /** Diagnostisches Zuordnungs-Problem (§2i) — rein informativ, keine Sperre. */

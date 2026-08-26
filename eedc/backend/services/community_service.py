@@ -278,10 +278,21 @@ async def prepare_community_data(
 
     # Wärmepumpenart ermitteln (für fairen Community-JAZ-Vergleich)
     wp_art = None
+    # SOLL §4.1/§7 A5: Passive Kühlung erreicht ein Vielfaches der Effizienz
+    # aktiver — die eigene Kennzahl ist korrekt, ein **Vergleich** gegen aktiv
+    # gekühlte Anlagen wäre die Falschaussage. Der Server braucht die Markierung,
+    # um sie aus dem Ranking zu nehmen; **rechnen** tut er damit nichts.
+    #
+    # ⚠ Wie `wp_art`: die erste Wärmepumpe steht für die Anlage. Das ist eine
+    # bekannte Vereinfachung des Anlagen-Datensatzes, keine neue.
+    kuehlung_art = None
     if hat_waermepumpe:
         wps = [inv for inv in investitionen if inv.typ == "waermepumpe"]
         if wps:
             wp_art = (wps[0].parameter or {}).get(PARAM_WAERMEPUMPE["WP_ART"])
+            kuehlung_art = (wps[0].parameter or {}).get(
+                PARAM_WAERMEPUMPE["KUEHLUNG_ART"]
+            )
 
     # Basis-Daten
     data = {
@@ -297,6 +308,7 @@ async def prepare_community_data(
         "hat_balkonkraftwerk": hat_balkonkraftwerk,
         "hat_sonstiges": hat_sonstiges,
         "wp_art": wp_art,
+        "kuehlung_art": kuehlung_art,
         "wallbox_kw": wallbox_kw,
         "bkw_wp": bkw_wp,
         "sonstiges_bezeichnung": sonstiges_bezeichnung,
@@ -451,6 +463,20 @@ def _monatswert(
             monatswert_data["wp_heizwaerme_kwh"] = round(wp.heizung_kwh, 1)
         if wp.warmwasser_kwh > 0:
             monatswert_data["wp_warmwasser_kwh"] = round(wp.warmwasser_kwh, 1)
+        # **W-14 — der Server rechnet nichts nach, also bekommt er die Größe.**
+        # Sein JAZ ist `(Heizwärme + Warmwasser) / Stromverbrauch`; ohne diesen
+        # Wert stünde der Kühlstrom im Nenner und die Kältemenge nirgends. Eine
+        # kühlende Anlage stand damit systematisch schlechter da als eine, die
+        # es nicht tut — und zwar unabhängig davon, ob aktiv oder passiv
+        # gekühlt wird (SOLL §4.2 Fall 4).
+        #
+        # ⚠ **Immer mitgeschickt, auch als 0.** Ein fehlendes Feld heißt beim
+        # Server „alter Client, unbekannt"; eine 0 heißt „gemessen, es gab
+        # keinen Kühlbetrieb". Das ist derselbe Unterschied, den P4 überall
+        # sonst verlangt — und der Server darf ihn nicht raten.
+        monatswert_data["wp_strom_kuehlen_kwh"] = round(
+            wp.modus_strom_kuehlen_kwh, 1
+        )
 
     # E-Auto und Wallbox bleiben GETRENNT (der Server führt beide Felder) —
     # deshalb die Quellen-Summen der Schicht statt des Heimladungs-Pools, der

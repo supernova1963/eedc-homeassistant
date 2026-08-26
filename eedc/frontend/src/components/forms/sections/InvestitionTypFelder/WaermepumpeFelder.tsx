@@ -2,6 +2,7 @@ import { X } from 'lucide-react'
 import { FormSection, Input, Select, Alert, RadioGroup, Button } from '../../../ui'
 import { SchalterZeile } from '../SchalterZeile'
 import type { Innengeraet } from '../../../../lib/investitionParameter'
+import { istLuftLuft } from '../../../../lib/investitionParameter'
 import type { TypFelderProps } from './types'
 
 /**
@@ -81,6 +82,44 @@ const WP_ART_OPTIONEN = [
   { value: 'sole_wasser', label: 'Sole-Wasser (Erdwärme → Wasser)' },
   { value: 'grundwasser', label: 'Grundwasser-Wärmepumpe' },
   { value: 'luft_luft', label: 'Luft-Luft (Klimaanlage)' },
+  // SOLL Wärme/Klima §2.1/A6 — ein Gerät, das nur Warmwasser macht. Es steht
+  // hier, obwohl es dafür KEINEN bekannten Anwender gibt (Entscheid Gernot,
+  // 26.08.2026): Ein Modell, das einen realen Gerätetyp nicht ausdrücken kann,
+  // ist später nicht nachrüstbar — die bis dahin gespeicherten Daten wären dann
+  // falsch, nicht bloß unvollständig.
+  { value: 'brauchwasser', label: 'Brauchwasser-Wärmepumpe (nur Warmwasser)' },
+]
+
+// R2 (SOLL §3.2b) — **eine** Regel, zwei Vorzeichen. Die Texte beschreiben die
+// Lage und bewerten den Anwender nicht: Wer seinen Heizstab am WP-Zähler hat,
+// macht nichts falsch — eedc kann daraus nur keine Arbeitszahl bilden.
+const ABGRENZUNG_OPTIONEN = [
+  {
+    value: '',
+    label: 'Kein Fremdanteil',
+    description: 'Der Stromzähler und der Wärmemengenzähler gehören beide allein zu diesem Gerät.',
+  },
+  {
+    value: 'fremdstrom',
+    label: 'Heizstab-Strom liegt mit auf dem Stromzähler',
+    description: 'Seine Wärme läuft NICHT über den Wärmemengenzähler. Der Stromwert enthält dann '
+      + 'mehr, als die gemessene Wärme abdeckt — die Mengen bleiben richtig, die Arbeitszahl entfällt.',
+  },
+  {
+    value: 'fremdwaerme',
+    label: 'Ein zweiter Erzeuger speist denselben Heizkreis',
+    description: 'Gas- oder Ölkessel im bivalenten Betrieb: Der Wärmemengenzähler misst beide, '
+      + 'der Stromzähler kennt nur die Wärmepumpe. Umgekehrter Fall, gleiche Folge.',
+  },
+] as const
+
+// SOLL §4.1/§7 A5 — passive Kühlung läuft nur über Umwälzpumpen. Ihre Kennzahl
+// ist KORREKT, nur um ein Vielfaches höher; gesperrt wird deshalb nie die Zahl,
+// sondern immer nur ihr Vergleich (Community-Benchmark).
+const KUEHLUNG_OPTIONEN = [
+  { value: 'keine', label: 'Kühlt nicht' },
+  { value: 'aktiv', label: 'Aktiv (Kompressor / Umkehrbetrieb)' },
+  { value: 'passiv', label: 'Passiv (nur Umwälzpumpen, „natural cooling")' },
 ]
 
 const VORLAUF_OPTIONEN = [
@@ -133,7 +172,7 @@ export function WaermepumpeFelder({ paramData, onInputChange, setParam, zeige, m
                das Feld wie eine Statistik-Einstellung aussehen. */
             hint="Legt fest, welche Messwerte eedc von diesem Gerät erwartet — eine Klimaanlage wird nicht nach Heizwärme gefragt. Zusätzlich für den fairen JAZ-Vergleich in der Community."
           />
-          {paramData.wp_art === 'luft_luft' && (
+          {istLuftLuft(paramData) && (
             <Alert type="info" title="Split-Klimaanlage">
               Es genügt der Stromverbrauchs-Sensor. Heizenergie und Warmwasser sind bei Klimas meist
               nicht gemessen — die JAZ-Kachel bleibt dann leer („—"), die Stromauswertung funktioniert
@@ -152,7 +191,39 @@ export function WaermepumpeFelder({ paramData, onInputChange, setParam, zeige, m
             </Alert>
           )}
 
-          {paramData.wp_art === 'luft_luft' && (
+          {/* R2 (SOLL Wärme/Klima §3.2b) — die beiden Angaben, die eedc NICHT
+              sehen kann. Ob ein Heizstab auf dem WP-Zähler liegt oder ein
+              Gaskessel denselben Kreis speist, steht in keinen Daten; die
+              Verletzung „mehrere Geräte, nur eines meldet Wärme" erkennt eedc
+              dagegen selbst (`WpFakten.waerme_deckt_nicht_alle_geraete`).
+
+              ⚠ Beide Angaben ändern KEINE Menge — sie nehmen nur die
+              Arbeitszahl weg, weil Zähler und Nutzen dann für verschiedene
+              Dinge stehen. Das steht so auch im Hinweis unter dem Feld: eedc
+              ist nicht die Strom-Polizei. */}
+          <Select
+            label="Fremdanteil auf den Zählern"
+            name="param_abgrenzung"
+            value={(paramData.abgrenzung as string) ?? ''}
+            onChange={(e) => setParam('abgrenzung', e.target.value)}
+            options={ABGRENZUNG_OPTIONEN.map((o) => ({ value: o.value, label: o.label }))}
+            hint={
+              ABGRENZUNG_OPTIONEN.find(
+                (o) => o.value === ((paramData.abgrenzung as string) ?? ''),
+              )?.description
+            }
+          />
+
+          <Select
+            label="Kühlung"
+            name="param_kuehlung_art"
+            value={(paramData.kuehlung_art as string) ?? 'keine'}
+            onChange={(e) => setParam('kuehlung_art', e.target.value)}
+            options={KUEHLUNG_OPTIONEN}
+            hint="Passiv gekühlte Anlagen erreichen ein Vielfaches der Effizienz aktiv gekühlter — eedc vergleicht sie deshalb nicht miteinander. Die eigenen Zahlen bleiben davon unberührt."
+          />
+
+          {istLuftLuft(paramData) && (
             <InnengeraeteListe
               geraete={(paramData.innengeraete as Innengeraet[]) ?? []}
               onChange={(next) => setParam('innengeraete', next)}
@@ -285,7 +356,7 @@ export function WaermepumpeFelder({ paramData, onInputChange, setParam, zeige, m
               type="number" step="any" min="0"
               value={paramData.heizwaermebedarf_kwh as string}
               onChange={onInputChange}
-              hint={paramData.wp_art === 'luft_luft'
+              hint={istLuftLuft(paramData)
                 ? 'Nur wenn du mit dem Gerät heizt — sonst leer lassen'
                 : 'Aus Energieausweis oder Schätzung'}
             />
@@ -295,7 +366,7 @@ export function WaermepumpeFelder({ paramData, onInputChange, setParam, zeige, m
               type="number" step="any" min="0"
               value={paramData.warmwasserbedarf_kwh as string}
               onChange={onInputChange}
-              hint={paramData.wp_art === 'luft_luft'
+              hint={istLuftLuft(paramData)
                 ? 'Split-Geräte haben keinen Warmwasserkreis — meist leer'
                 : '~500 kWh/Person/Jahr typisch'}
             />

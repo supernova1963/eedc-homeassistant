@@ -191,6 +191,7 @@ async def build_expected_topics(
                 "hinweis": live_feld.get("hinweis", ""),
                 "bedarf": get_feld_bedarf(inv.typ, live_feld["key"], inv.parameter)[0],
                 "bedarf_gruppe": get_feld_bedarf(inv.typ, live_feld["key"], inv.parameter)[1],
+                "erweitert": bool(live_feld.get("erweitert")),
                 "gruppe_id": gruppe_id,
                 "gruppe_titel": gruppe_titel,
             })
@@ -217,6 +218,16 @@ async def build_expected_topics(
                 # Erwartung einer Split-Klimaanlage nicht auflösen kann (N-86).
                 "bedarf": get_feld_bedarf(inv.typ, feld["feld"], inv.parameter)[0],
                 "bedarf_gruppe": get_feld_bedarf(inv.typ, feld["feld"], inv.parameter)[1],
+                # R1: an dieser Bauart untypisch, aber möglich (`weich`). Roh
+                # durchgereicht wie `bedingung`/`nur_manuell` — die Fläche
+                # entscheidet, ob das Feld in der ersten Reihe steht oder hinter
+                # „Weitere Größen erfassen".
+                "erweitert": bool(feld.get("erweitert")),
+                # Geräteklassen-Verletzung: die Größe gibt es an dieser Bauart
+                # NICHT. Die Fläche nimmt sie heraus, solange keine Quelle
+                # zugeordnet ist — mit Quelle bleibt sie sichtbar und damit
+                # löschbar (N-304).
+                "nicht_an_dieser_bauart": bool(feld.get("nicht_an_dieser_bauart")),
                 # Roh durchgereicht — die Zuordnungs-Fläche wertet selbst aus
                 # (markieren statt filtern, s. get_felder_fuer_investition).
                 # Auch `nur_manuell` wird hier NICHT gefiltert: die Registry ist

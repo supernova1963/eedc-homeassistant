@@ -279,8 +279,17 @@ async def test_datenquellen_flaeche_zeigt_dieselben_felder(db, name):
     felder = {f["feld"] for f in gruppe["felder"]}
 
     if parameter["wp_art"] != "luft_luft":
-        assert not any(f.startswith("betriebsart_") for f in felder), (
-            f"{name}: Betriebsart-Felder auf der Fläche einer Luft-Wasser-WP")
+        # ⛔ Hier stand bis zum 26.08.2026 `assert not any(...)` — die Fläche
+        # durfte an einer Luft-Wasser-WP **kein** Betriebsart-Feld zeigen.
+        # R1/W-2 hat das abgelöst (MartyBr, T89667 #200: getrennter Kühlzähler
+        # an genau so einer Anlage). Sie stehen jetzt hinter „Weitere Größen
+        # erfassen" — die Fläche bleibt kurz, der Weg ist offen.
+        erweitert = {f["feld"] for f in gruppe["felder"] if f.get("erweitert")}
+        vorn = {f["feld"] for f in gruppe["felder"] if not f.get("erweitert")}
+        assert not any(f.startswith("betriebsart_") for f in vorn), (
+            f"{name}: Betriebsart-Felder in der ERSTEN REIHE einer Luft-Wasser-WP")
+        assert {f for f in felder if f.startswith("betriebsart_")} <= erweitert, (
+            f"{name}: Betriebsart-Feld ohne Erweitert-Marke")
         assert "soll_temperatur_c" not in felder, name
         return
 

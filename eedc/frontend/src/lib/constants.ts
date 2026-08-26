@@ -58,6 +58,7 @@ export const WP_ART_LABELS: Record<string, string> = {
   sole_wasser: 'Sole/Wasser',
   grundwasser: 'Grundwasser',
   luft_luft: 'Luft/Luft',
+  brauchwasser: 'Brauchwasser',
 }
 
 /**

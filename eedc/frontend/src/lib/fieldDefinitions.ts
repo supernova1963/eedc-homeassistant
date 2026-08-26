@@ -9,7 +9,7 @@
  *   entladung_v2h_kwh        → v2h_entladung_kwh  (E-Auto V2H)
  */
 
-import { PARAM_SONSTIGES_DEFAULTS } from './investitionParameter'
+import { PARAM_SONSTIGES_DEFAULTS, istLuftLuft } from './investitionParameter'
 
 export interface FeldDefinition {
   feld: string
@@ -198,7 +198,8 @@ export function getFelderFuerInvestition(
   // N-304: eine Split-Klimaanlage hat keinen Warmwasserkreis. Spiegel der
   // Backend-Regel (`field_definitions.py`, `ist_luft_luft_waermepumpe`) —
   // Altbestand ohne `wp_art` gilt NICHT als Klimaanlage und behält das Feld.
-  const luftLuft = params.wp_art === 'luft_luft'
+  // N-306 (26.08.2026): über den EINEN Client-Leser statt inline.
+  const luftLuft = istLuftLuft(params)
 
   // #281: konditionelles Label — dieselben Bedingungs-Keys wie `bedingung`.
   const bedingungsWerte: Record<string, boolean> = {

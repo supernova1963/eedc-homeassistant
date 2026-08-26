@@ -30,7 +30,7 @@ Verwendung im Backend:
     )
 """
 
-from typing import Final
+from typing import Final, Optional
 
 
 # ============================================================================
@@ -149,10 +149,32 @@ PARAM_WAERMEPUMPE: Final[dict[str, str]] = {
     "ALTERNATIV_KOSTEN_EURO": "alternativ_kosten_euro",
     "SG_READY": "sg_ready",
     "INNENGERAETE": "innengeraete",
+    # ── R2 (SOLL Wärme/Klima §3.2b) — was der Anwender über die ABGRENZUNG sagt ──
+    #
+    # Zwei Lagen, ein Feld, zwei Vorzeichen: Auf dem Stromzähler liegt ein
+    # fremder Erzeuger, dessen Wärme fehlt (Fall H-C ⇒ E zu groß), oder am
+    # Wärmemengenzähler hängt ein fremder Erzeuger, dessen Aufwand fehlt
+    # (bivalent, F12 ⇒ Q zu groß). Beides ist von außen **unsichtbar** — anders
+    # als „mehrere Geräte, nur eines meldet Wärme", das eedc aus den Daten selbst
+    # erkennt (`WpFakten.waerme_deckt_nicht_alle_geraete`).
+    #
+    # ⚠ **Ein Feld und nicht zwei Kennzeichen**, weil R2 EINE Regel ist. Ein Flag
+    # je Beispiel hätte die Fallsammlung in den Code geholt — genau die Bauform,
+    # die den bivalenten Fall bis zum 26.08.2026 unsichtbar gelassen hat.
+    "ABGRENZUNG": "abgrenzung",
+    # Aktiv oder passiv gekühlt (SOLL §4.1/§7 A5). **Keine Menge, eine
+    # Markierung:** Passive Kühlung läuft nur über Umwälzpumpen, ihr EER liegt
+    # um ein Vielfaches über dem einer aktiv gekühlten Anlage. Die Kennzahl ist
+    # dort korrekt — ein VERGLEICH gegen aktiv gekühlte Anlagen wäre die
+    # Falschaussage, im Community-Benchmark ebenso wie in eedc selbst.
+    "KUEHLUNG_ART": "kuehlung_art",
 }
 
 PARAM_WAERMEPUMPE_DEFAULTS: Final[dict[str, object]] = {
     "wp_art": "luft_wasser",
+    # Leer heißt „keine bekannte Abweichung" — nicht „geprüft und in Ordnung".
+    "abgrenzung": "",
+    "kuehlung_art": "keine",
     "effizienz_modus": "gesamt_jaz",
     "jaz": 3.5,
     "scop_heizung": 4.5,
@@ -406,6 +428,82 @@ def ist_luft_luft_waermepumpe(inv_or_parameter) -> bool:
     ) or {}
     val = params.get(PARAM_WAERMEPUMPE["WP_ART"])
     return isinstance(val, str) and val.strip().lower() == "luft_luft"
+
+
+def _wp_param_text(inv_or_parameter, key: str) -> str:
+    """Ein Text-Parameter der Wärmepumpe, normalisiert — oder ``""``.
+
+    Dieselbe Aufrufer-Toleranz wie `ist_luft_luft_waermepumpe` (Objekt, Dict
+    oder None). Ausgelagert, weil inzwischen **drei** Wärmepumpen-Parameter
+    dieselbe Auflösung brauchen und die Kopie sonst dreimal danebenstünde.
+    """
+    if inv_or_parameter is None:
+        return ""
+    params = (
+        getattr(inv_or_parameter, "parameter", None)
+        if hasattr(inv_or_parameter, "parameter")
+        else inv_or_parameter
+    ) or {}
+    val = params.get(key)
+    return val.strip().lower() if isinstance(val, str) else ""
+
+
+def ist_brauchwasser_waermepumpe(inv_or_parameter) -> bool:
+    """Macht dieses Gerät **ausschließlich** Warmwasser (`wp_art="brauchwasser"`)?
+
+    Eine Brauchwasser-Wärmepumpe heizt nicht und kühlt nicht. Sie steht im
+    Modell, obwohl es dafür **keinen einzigen bekannten Anwender** gibt
+    (SOLL §7/A6, Entscheid Gernot 26.08.2026): Ein Modell, das einen realen
+    Gerätetyp nicht ausdrücken kann, ist später nicht nachrüstbar — die bis
+    dahin gespeicherten Daten wären dann falsch, nicht bloß unvollständig.
+
+    ⚠ **Sie nimmt die Heiz-Achse nicht weg, sie stuft sie herab.** Wer an
+    seinem Gerät doch einen Heizzähler hat, ordnet ihn weiter zu; das Feld
+    steht dann unter „Weitere Größen erfassen" statt in der ersten Reihe
+    (R1: *was ein Gerät liefern kann, sagt der Zähler, nicht die Bauart*).
+    Die Warmwasser-Achse bleibt hart erwartet.
+    """
+    return _wp_param_text(inv_or_parameter, PARAM_WAERMEPUMPE["WP_ART"]) == "brauchwasser"
+
+
+#: Die Werte von `PARAM_WAERMEPUMPE["ABGRENZUNG"]` — SoT für Formular, Registry
+#: und Layer. Leer ist kein Wert, sondern die Abwesenheit einer Angabe.
+ABGRENZUNG_FREMDSTROM: Final[str] = "fremdstrom"
+ABGRENZUNG_FREMDWAERME: Final[str] = "fremdwaerme"
+ABGRENZUNG_WERTE: Final[frozenset[str]] = frozenset(
+    {ABGRENZUNG_FREMDSTROM, ABGRENZUNG_FREMDWAERME}
+)
+
+
+def abgrenzung_stoerung(inv_or_parameter) -> Optional[str]:
+    """Die vom Anwender gemeldete Abgrenzungs-Störung — oder ``None``.
+
+    ``None`` heißt **„keine bekannte Abweichung"**, nicht „geprüft und in
+    Ordnung". Unbekannte Werte (Altbestand, Tippfehler im Import) ergeben
+    ebenfalls ``None``: eine Sperre auf einen Wert zu stützen, den niemand
+    gesetzt haben kann, wäre eine erfundene Auskunft.
+    """
+    wert = _wp_param_text(inv_or_parameter, PARAM_WAERMEPUMPE["ABGRENZUNG"])
+    return wert if wert in ABGRENZUNG_WERTE else None
+
+
+#: Die Werte von `PARAM_WAERMEPUMPE["KUEHLUNG_ART"]`.
+KUEHLUNG_PASSIV: Final[str] = "passiv"
+KUEHLUNG_AKTIV: Final[str] = "aktiv"
+KUEHLUNG_KEINE: Final[str] = "keine"
+
+
+def kuehlt_passiv(inv_or_parameter) -> bool:
+    """Kühlt dieses Gerät **passiv** (nur Umwälzpumpen, kein Kompressor)?
+
+    Die Kennzahl einer passiv gekühlten Anlage ist **korrekt** — sie liegt nur
+    um ein Vielfaches über der einer aktiv gekühlten. Was hier gesperrt wird,
+    ist deshalb nie die Zahl, sondern immer nur ihr **Vergleich** (SOLL §3.2b:
+    *„eine Markierung an der Kennzahl, kein Feld für eine Menge"*).
+    """
+    return _wp_param_text(
+        inv_or_parameter, PARAM_WAERMEPUMPE["KUEHLUNG_ART"]
+    ) == KUEHLUNG_PASSIV
 
 
 # ── Innengeräte einer Split-Klimaanlage (#263) ───────────────────────────────

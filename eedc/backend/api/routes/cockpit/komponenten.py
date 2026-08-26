@@ -18,7 +18,7 @@ from backend.core.berechnungen import (
     speicher_wirkungsgrad,
 )
 from backend.core.berechnungen.waermepumpe_kennzahl import (
-    GRUND_GERAETE_OHNE_WAERME, arbeitszahl,
+    abgrenzungs_grund, arbeitszahl,
 )
 from backend.api.routes.cockpit._shared import MONATSNAMEN
 from backend.services.monats_fakten import MonatsFakt, lade_monats_fakten
@@ -219,9 +219,16 @@ async def get_komponenten_zeitreihe(
         wp_cop = arbeitszahl(
             wp.waerme_kwh, wp.strom_kwh,
             waerme_abgeleitet_kwh=wp.waerme_abgeleitet_kwh,
-            abgrenzung_verletzt=(
-                GRUND_GERAETE_OHNE_WAERME
-                if wp.waerme_deckt_nicht_alle_geraete else None
+            # W-14: Kühlstrom gehört nicht in den Nenner einer Wärme-Kennzahl —
+            # dieselbe Abgrenzung, die Ersparnis und CO₂ seit v4.0.5 ziehen (E-B).
+            strom_funktionsfremd_kwh=wp.modus_strom_kuehlen_kwh,
+            # R2: alle erkennbaren Lagen über die eine Layer-Stelle. Der
+            # Zeitraum-Versatz gehört nicht dazu — der Hub liest EINE Quelle
+            # (die Monats-Fakten), die Vier-Quellen-Auflösung gibt es nur in
+            # `aktueller_monat`.
+            abgrenzung_verletzt=abgrenzungs_grund(
+                abgrenzung_stoerung=wp.abgrenzung_stoerung,
+                geraete_ohne_waerme=wp.waerme_deckt_nicht_alle_geraete,
             ),
         ).wert
 

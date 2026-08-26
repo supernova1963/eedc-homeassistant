@@ -148,10 +148,14 @@ export const PARAM_WAERMEPUMPE = {
   ALTERNATIV_KOSTEN_EURO: 'alternativ_kosten_euro',
   SG_READY: 'sg_ready',
   INNENGERAETE: 'innengeraete',
+  ABGRENZUNG: 'abgrenzung',
+  KUEHLUNG_ART: 'kuehlung_art',
 } as const
 
 export const PARAM_WAERMEPUMPE_DEFAULTS = {
   wp_art: 'luft_wasser' as const,
+  abgrenzung: '' as const,
+  kuehlung_art: 'keine' as const,
   effizienz_modus: 'gesamt_jaz' as const,
   jaz: 3.5,
   scop_heizung: 4.5,
@@ -186,7 +190,41 @@ export interface Innengeraet {
 }
 
 export type WPEffizienzModus = 'gesamt_jaz' | 'scop' | 'getrennte_cops'
-export type WPArt = 'luft_wasser' | 'sole_wasser' | 'grundwasser' | 'luft_luft'
+export type WPArt = 'luft_wasser' | 'sole_wasser' | 'grundwasser' | 'luft_luft' | 'brauchwasser'
+
+/**
+ * R2 (SOLL Wärme/Klima §3.2b) — was der Anwender über die **Abgrenzung** sagt.
+ * `''` heißt „keine bekannte Abweichung", nicht „geprüft und in Ordnung".
+ * Backend-SoT: `core/investition_parameter.py::abgrenzung_stoerung`.
+ */
+export type WPAbgrenzung = '' | 'fremdstrom' | 'fremdwaerme'
+
+/** Aktiv oder passiv gekühlt (SOLL §4.1/§7 A5) — eine Markierung, keine Menge. */
+export type WPKuehlungArt = 'keine' | 'aktiv' | 'passiv'
+
+/**
+ * Ist diese Wärmepumpe eine Split-Klimaanlage? — **der eine Client-Leser**
+ * (Spiegel von `core/investition_parameter.py::ist_luft_luft_waermepumpe`).
+ *
+ * ⛔ **Bis zum 26.08.2026 stand der Vergleich 7× inline** im Client
+ * (`investitionFormHelpers.ts` 2× · `WaermepumpeFelder.tsx` 4× ·
+ * `lib/fieldDefinitions.ts` 1×), während das Backend seinen Helfer samt
+ * Begründung längst hatte (Fund **N-306**). Mit `brauchwasser` wäre daraus die
+ * achte bis zehnte Stelle geworden — eine Klasse wächst genau dann, wenn man
+ * neben ihr baut.
+ *
+ * Altbestand **ohne** `wp_art` gilt bewusst als klassische Wärmepumpe: die
+ * Vorbelegung ist `luft_wasser`, und eine fehlende Angabe darf die
+ * Wärmemengen-Erwartung nicht stillschweigend abschalten.
+ */
+export function istLuftLuft(params: Record<string, unknown> | null | undefined): boolean {
+  return (params?.[PARAM_WAERMEPUMPE.WP_ART] ?? '') === 'luft_luft'
+}
+
+/** Macht dieses Gerät ausschließlich Warmwasser? (SOLL §2.1/A6) */
+export function istBrauchwasser(params: Record<string, unknown> | null | undefined): boolean {
+  return (params?.[PARAM_WAERMEPUMPE.WP_ART] ?? '') === 'brauchwasser'
+}
 export type WPVorlauftemperatur = '35' | '55'
 // 'nichts' = es gab keine Vorgängerheizung (Neubau, oder ein Gerät, das nur
 // kühlt). Ohne diesen Wert unterstellte eedc jeder Wärmepumpe einen Gaskessel
@@ -197,6 +235,8 @@ export type WPAlterEnergietraeger = 'gas' | 'oel' | 'strom' | 'nichts'
 export interface WaermepumpeParameter {
   leistung_kw?: number
   wp_art?: WPArt
+  abgrenzung?: WPAbgrenzung
+  kuehlung_art?: WPKuehlungArt
   effizienz_modus?: WPEffizienzModus
   jaz?: number
   scop_heizung?: number
