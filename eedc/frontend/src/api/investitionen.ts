@@ -271,6 +271,12 @@ export interface WaermepumpeDashboardResponse {
     modus_strom_entfeuchten_kwh?: number
     modus_nicht_aufgeteilt_kwh?: number
     modus_abdeckung_h?: number
+    /** **W-17b** — die Grundmenge, auf die sich die Aufteilung bezieht.
+     *  Bewusst **nicht** der WP-Gesamtstrom: dort steckt auch der Strom von
+     *  Geräten ohne Modus-Signal. Ohne dieses Feld stand der Balken stumm unter
+     *  einer Kachel mit größerer Zahl (dietmar1968, T89667 #210: 30 kWh unter
+     *  284 kWh). Nicht nachrechnen — der Bezug entscheidet die Faltung. */
+    modus_strom_bezug_kwh?: number
     modus_gemessen?: boolean
     /** Ist `gesamt_heizenergie_kwh` aus `Strom × JAZ` gerechnet statt gemessen?
      *  Dann bleibt `durchschnitt_cop` null (Konzept §3.5) und die Anzeige

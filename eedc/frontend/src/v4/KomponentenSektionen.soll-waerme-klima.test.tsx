@@ -224,3 +224,112 @@ describe('Achse III-3 — ein Balken sagt, was er zeigt', () => {
     expect(screen.getByText('Strom-Aufteilung Heizen/Kühlen')).toBeTruthy()
   })
 })
+
+// ══ III-W17b · Der Balken nennt seine Grundmenge ════════════════════════════
+
+describe('Achse III — eine Aufteilung nennt ihre Grundmenge (W-17b)', () => {
+  it('ERFÜLLT: weicht die Grundmenge vom Gesamtstrom ab, steht sie da', () => {
+    // dietmar1968 (T89667 #210): Balkensumme 30 kWh unter einer Kachel mit
+    // 284 kWh. Die Zahlen waren beide richtig — der Balken beschreibt nur die
+    // Geräte, die eine Aufteilung beigesteuert haben. Gesagt hat das niemand.
+    rendereWpBlock({
+      wp_strom_kwh: 284, wp_modus_strom_heizen_kwh: 1, wp_modus_strom_kuehlen_kwh: 6,
+      wp_modus_nicht_aufgeteilt_kwh: 23, wp_modus_strom_bezug_kwh: 30,
+      wp_modus_abdeckung_h: 18,
+    })
+
+    expect(screen.getByText('Aufgeteilte Menge')).toBeTruthy()
+    expect(screen.getByText(/30 von 284 kWh/)).toBeTruthy()
+  })
+
+  it('ERFÜLLT: stimmen beide überein, schweigt die Zeile', () => {
+    // ⭐ Eine Zeile, die immer dasteht, wird zur Tapete. Sie erscheint genau
+    // dann, wenn sie etwas zu sagen hat — sonst wäre „30 von 30 kWh" eine
+    // Erklärung für einen Unterschied, den es nicht gibt.
+    rendereWpBlock({
+      wp_strom_kwh: 30, wp_modus_strom_heizen_kwh: 10, wp_modus_strom_kuehlen_kwh: 5,
+      wp_modus_nicht_aufgeteilt_kwh: 15, wp_modus_strom_bezug_kwh: 30,
+      wp_modus_abdeckung_h: 18,
+    })
+
+    expect(screen.queryByText('Aufgeteilte Menge')).toBeNull()
+  })
+
+  it('ERFÜLLT: die Kachel „Strom verbraucht" bleibt unangetastet', () => {
+    // ⛔ **Die verworfene Alternative.** Sie zu relativieren („davon 30 kWh
+    // aufgeteilt") hätte eine vollständige und richtige Aussage über die
+    // Anlage geschwächt, um einen Nachbarblock zu erklären — und sie stünde
+    // auch dort, wo gar kein Balken ist.
+    rendereWpBlock({
+      wp_strom_kwh: 284, wp_modus_strom_heizen_kwh: 1, wp_modus_strom_kuehlen_kwh: 6,
+      wp_modus_nicht_aufgeteilt_kwh: 23, wp_modus_strom_bezug_kwh: 30,
+      wp_modus_abdeckung_h: 18,
+    })
+
+    expect(screen.getByText('284')).toBeTruthy()
+  })
+})
+
+// ══ III-W18 · Der Grund steht sichtbar, nicht im Tooltip ════════════════════
+
+describe('Achse III — der Tag sagt, warum die Wärme fehlt (W-18)', () => {
+  /** Den Block in der **Tages**-Periode bauen — nur dort gibt es den Grund. */
+  function rendereTag(over: Partial<AktuellerMonatResponse>) {
+    const block = baueKomponentenBloecke(d(over), NOOP, 'tag')
+      .find((b) => b.id === 'k-waermepumpe')
+    expect(block, 'Wärme/Klima-Block muss entstehen').toBeDefined()
+    render(<>{block!.render(false)}</>)
+    return block!
+  }
+
+  const GRUND = 'Zähler zugeordnet, aber für diesen Tag liegen keine Zählerstände vor.'
+
+  it('ERFÜLLT: der Grund steht SICHTBAR unter der WÄRME-Zahl', () => {
+    // S3 verlangt *„nicht ‚—', sondern der Grund"*, und die JAZ-Kachel befolgt
+    // das seit dem 26.08. Wärme und Ersparnis hatten ihn nur im Tooltip — auf
+    // dem Telefon keine Auskunft.
+    //
+    // ⛔ **Der erste Entwurf dieser Probe war zu lose und die Gegenprobe hat es
+    // gezeigt:** Er suchte den Grund per Teilstring irgendwo im Block und blieb
+    // deshalb grün, als der Untertitel der **Wärme**-Kachel zurückgebaut wurde
+    // — gefunden hatte er ihn in der **Ersparnis**-Kachel nebenan.
+    // ⭐ *Ein Prüfer muss aufs richtige Objekt zeigen; ein Teilstring über einen
+    // ganzen Block tut das nicht.* Deshalb hier der **exakte** Text: Die
+    // Ersparnis trägt ihn mit Präfix und wird davon nicht mehr getroffen.
+    rendereTag({ wp_strom_kwh: 5, wp_waerme_kwh: null, wp_waerme_grund: GRUND })
+
+    expect(screen.getByText(GRUND)).toBeTruthy()
+  })
+
+  it('ERFÜLLT: die Ersparnis verweist auf die Wärme, statt den Grund zu wiederholen', () => {
+    // Zwei Formulierungen derselben Ursache nebeneinander lesen sich wie zwei
+    // Ursachen. Der Verweis hält beide zusammen.
+    rendereTag({ wp_strom_kwh: 5, wp_waerme_kwh: null, wp_waerme_grund: GRUND })
+
+    expect(screen.getByText(`Folgt aus der Tages-Wärme — ${GRUND}`)).toBeTruthy()
+  })
+
+  it('ERFÜLLT: der falsche fest verdrahtete Satz erscheint nicht mehr', () => {
+    // ⛔ **Der Melder-Fall selbst.** dietmar1968 hatte beide Wärmemengenzähler
+    // zugeordnet und las trotzdem „Sensor zuordnen".
+    rendereTag({ wp_strom_kwh: 5, wp_waerme_kwh: null, wp_waerme_grund: GRUND })
+
+    expect(screen.queryByText(/braucht einen Wärmemengenzähler am Gerät/)).toBeNull()
+  })
+
+  it('ERFÜLLT: ohne Backend-Grund bleibt der bisherige Hinweis stehen', () => {
+    // ⚠ **Kein Rückschritt für Altbestand.** Liefert eine ältere Antwort den
+    // Grund nicht, ist der bisherige Tooltip die einzige Auskunft, die es gibt
+    // — ihn dann auch noch zu entfernen wäre ein Verlust.
+    rendereTag({ wp_strom_kwh: 5, wp_waerme_kwh: null, wp_waerme_grund: null })
+
+    expect(screen.queryByText(/für diesen Tag liegen keine Zählerstände vor/)).toBeNull()
+  })
+
+  it('ERFÜLLT: wo ein Wert steht, steht kein Grund', () => {
+    rendereTag({ wp_strom_kwh: 5, wp_waerme_kwh: 20, wp_waerme_grund: null })
+
+    expect(screen.getByText('20')).toBeTruthy()
+    expect(screen.queryByText(/keine Zählerstände/)).toBeNull()
+  })
+})

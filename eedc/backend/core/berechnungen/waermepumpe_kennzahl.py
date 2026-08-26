@@ -179,6 +179,7 @@ def arbeitszahl(
     waerme_abgeleitet_kwh: float = 0.0,
     strom_funktionsfremd_kwh: float = 0.0,
     abgrenzung_verletzt: Optional[str] = None,
+    waerme_fehlt_grund: Optional[str] = None,
 ) -> Arbeitszahl:
     """Q ÷ E — oder der Grund, warum es diese Zahl nicht gibt (**R2**).
 
@@ -227,6 +228,18 @@ def arbeitszahl(
             Betriebsart:** Gemessenes Lüften wird abgezogen, ungemessenes bleibt
             als Teil der Restmenge im Nenner — denn dort ist es von Standby
             nicht unterscheidbar.
+        waerme_fehlt_grund: **kurzer** Grund, warum ``waerme_kwh`` fehlt, wenn
+            der Aufrufer ihn genauer kennt als diese Funktion. Nur im Fall
+            ``q <= 0`` ausgewertet; ``None`` lässt den bisherigen Wortlaut
+            stehen (**W-18**).
+
+            ⭐ **Warum das ein Parameter ist und keine Fallunterscheidung hier
+            drin.** Ob ein Wärmemengenzähler *fehlt*, ob er *zugeordnet, aber
+            für diesen Tag leer* ist oder ob er *zurückgesprungen* ist, weiß
+            allein der Erhebungspfad (``snapshot/aggregator``). Diese Funktion
+            sieht nur eine Zahl, die nicht da ist — sie kann den Unterschied
+            nicht kennen und darf ihn deshalb nicht behaupten. Genau das hat sie
+            bis zum 26.08.2026 getan. Kurzformen: ``core/tageswert_grund.py``.
         abgrenzung_verletzt: kurzer Grund, wenn Q und E **nicht dieselbe
             Abgrenzung** tragen — anderes Gerät, andere Funktion, anderer
             Zeitraum. ``None`` heißt „keine bekannte Abweichung".
@@ -258,7 +271,16 @@ def arbeitszahl(
         # falsche Auskunft — der Zähler lief, nur nicht fürs Heizen.
         return Arbeitszahl(None, "nur Kühlbetrieb in diesem Zeitraum")
     if q <= 0:
-        return Arbeitszahl(None, "kein Wärmemengenzähler zugeordnet")
+        # W-18: Die Sperre stimmt, ihre Begründung war geraten. „Kein
+        # Wärmemengenzähler zugeordnet" ist nur EINER von drei Gründen, aus
+        # denen keine Wärme vorliegt — und ausgerechnet der falsche für
+        # dietmar1968, der beide Zähler zugeordnet hatte (T89667 #210). Wer den
+        # wahren Grund kennt, reicht ihn herein; wer ihn nicht kennt, bekommt
+        # unverändert den bisherigen Satz. **Der Default ist bitgleich zu
+        # vorher** — kein Aufrufer ändert sein Verhalten, ohne es zu wollen.
+        return Arbeitszahl(
+            None, waerme_fehlt_grund or "kein Wärmemengenzähler zugeordnet",
+        )
     if waerme_abgeleitet_kwh > 0:
         return Arbeitszahl(None, "Wärme ist gerechnet, nicht gemessen")
     if abgrenzung_verletzt:

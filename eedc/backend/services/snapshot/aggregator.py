@@ -16,12 +16,19 @@ Slot-Konvention seit Etappe 3c P2 (KONZEPT-ENERGIEPROFIL-3C.md):
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Optional
 
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.tageswert_grund import (
+    GRUND_KEINE_ZAEHLERSTAENDE,
+    GRUND_NICHT_ZUGEORDNET,
+    GRUND_RANG,
+    GRUND_ZAEHLER_RUECKSPRUNG,
+)
 from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
 
 from backend.services.snapshot.boundary_range import BoundaryRange
@@ -595,7 +602,7 @@ async def get_komponenten_tageskwh(
     return result
 
 
-async def _tagesdetail_boundary_diff(
+async def _tagesdetail_boundary_diff_mit_grund(
     db: AsyncSession,
     anlage,
     quellen_energy,
@@ -604,7 +611,7 @@ async def _tagesdetail_boundary_diff(
     ts_start: datetime,
     ts_ende: datetime,
     datum: date,
-) -> Optional[float]:
+) -> tuple[Optional[float], Optional[str]]:
     """Boundary-Diff eines kumulativen kWh-Zählers über das HA-Tagesfenster.
 
     **Warum als Modul-Funktion und nicht als Closure** (#263): Sie hat zwei
@@ -623,10 +630,39 @@ async def _tagesdetail_boundary_diff(
         quellen_energy=quellen_energy,
     )
     if s0 is None or s1 is None:
-        return None
-    return await _tageswert_aus_raendern(
+        return None, GRUND_KEINE_ZAEHLERSTAENDE
+    wert = await _tageswert_aus_raendern(
         db, anlage.id, sensor_key, s0, s1, ts_start, ts_ende, datum,
     )
+    # W-18: `_tageswert_aus_raendern` gibt bei einem Rücksprung bewusst `None`
+    # zurück und schreibt eine Logzeile — die kein Anwender sieht. Hier bekommt
+    # derselbe Zustand einen Namen, damit die Oberfläche ihn aussprechen kann.
+    if wert is None:
+        return None, GRUND_ZAEHLER_RUECKSPRUNG
+    return wert, None
+
+
+async def _tagesdetail_boundary_diff(
+    db: AsyncSession,
+    anlage,
+    quellen_energy,
+    sensor_key: str,
+    sensor_id: Optional[str],
+    ts_start: datetime,
+    ts_ende: datetime,
+    datum: date,
+) -> Optional[float]:
+    """Nur der Wert — für Aufrufer, die den Grund nicht brauchen.
+
+    ⚠ **Kein zweiter Rechenweg**: ein Durchreicher auf
+    {@link _tagesdetail_boundary_diff_mit_grund}. Die Tagesreset-Behandlung
+    steht weiterhin genau einmal im Baum (F-56).
+    """
+    wert, _grund = await _tagesdetail_boundary_diff_mit_grund(
+        db, anlage, quellen_energy, sensor_key, sensor_id,
+        ts_start, ts_ende, datum,
+    )
+    return wert
 
 
 async def get_betriebsart_strom_tageswerte(
@@ -696,12 +732,29 @@ async def get_betriebsart_strom_tageswerte(
     return ergebnis
 
 
+@dataclass(frozen=True)
+class TagesDetail:
+    """Die Tages-Detailwerte **und warum die fehlenden fehlen** (W-18).
+
+    ⛔ **Warum das ein Rückgabetyp ist und kein zweiter Aufruf.** Der Grund
+    entsteht aus derselben Zuordnung, denselben Snapshots und derselben
+    Tagesreset-Behandlung wie der Wert. Eine zweite Funktion, die dieselben
+    Regeln noch einmal abläuft, wäre die F-56-Klasse — und sie würde
+    zuverlässig genau dann driften, wenn eine der drei Regeln sich ändert.
+    """
+
+    #: ``{ausgabe_key: Σ_kwh}`` — wie bisher, nur Felder mit Wert.
+    werte: dict[str, float]
+    #: ``{ausgabe_key: grund}`` für Keys **ohne** Wert. Nie beides zugleich.
+    grund_je_feld: dict[str, str]
+
+
 async def get_tagesdetail_kwh(
     db: AsyncSession,
     anlage,
     investitionen_by_id: dict,
     datum: date,
-) -> dict[str, float]:
+) -> "TagesDetail":
     """Tages-kWh für Felder, die `get_komponenten_tageskwh` bewusst NICHT separat
     ausweist, die aber Cockpit/Tag für die Detailzeilen braucht (D1 „maximal
     erheben", SPEC-COCKPIT-TAG-JAHR Abschnitt F):
@@ -716,6 +769,13 @@ async def get_tagesdetail_kwh(
     über alle aktiven Investitionen des Typs. Liefert `{feld: Σ_kwh}` nur für
     tatsächlich als Sensor gemappte Felder mit Snapshot-Daten — fehlt das
     Mapping/der Snapshot, fehlt das Feld (Aufrufer lässt es weg, kein „—"-Clutter).
+
+    ⛔ **Seit W-18 liefert sie zusätzlich den GRUND** ({@link TagesDetail}).
+    „Fehlt das Feld, fehlt es eben" war die Bauform, die dietmar1968 einen
+    falschen Ratschlag gezeigt hat: Der Client hängte an jedes „—" denselben
+    fest verdrahteten Satz *„Sensor zuordnen"* — auch dem Anwender, der
+    zugeordnet hatte. Die Erhebung **weiß**, welcher der drei Zustände vorliegt;
+    sie hat es bisher nur nicht gesagt.
     """
     sensor_mapping = anlage.sensor_mapping or {}
     investitionen_map = sensor_mapping.get("investitionen", {}) or {}
@@ -725,8 +785,10 @@ async def get_tagesdetail_kwh(
     ts_start = rng.boundary_at(start_off)
     ts_ende = rng.boundary_at(end_off)
 
-    async def _diff(sensor_key: str, sensor_id: Optional[str]) -> Optional[float]:
-        return await _tagesdetail_boundary_diff(
+    async def _diff(
+        sensor_key: str, sensor_id: Optional[str],
+    ) -> tuple[Optional[float], Optional[str]]:
+        return await _tagesdetail_boundary_diff_mit_grund(
             db, anlage, quellen_energy, sensor_key, sensor_id,
             ts_start, ts_ende, datum,
         )
@@ -749,6 +811,23 @@ async def get_tagesdetail_kwh(
         ("e-auto", "ladung_netz_kwh"): "emob_ladung_netz_kwh",
     }
     summen: dict[str, float] = {}
+    # W-18: Warum ein Ausgabe-Key FEHLT — je Key der Zustand, der ihn verhindert
+    # hat. Er entsteht in **derselben** Schleife wie der Wert; eine zweite
+    # Schleife mit denselben Regeln wäre die F-56-Klasse.
+    #
+    # ⚠ **Der schwächste Grund gewinnt, und das ist Absicht.** Ein Ausgabe-Key
+    # kann mehrere Geräte tragen (`emob_ladung_pv_kwh` = Wallbox + E-Auto).
+    # Liefert eines davon einen Wert, ist die Zahl da und es gibt nichts zu
+    # erklären; nur wenn KEIN Gerät geliefert hat, wird ein Grund genannt — und
+    # dann der aussagekräftigste: „zugeordnet, aber leer" schlägt „nicht
+    # zugeordnet", denn das ist der Fall, den der Anwender nicht selbst sieht.
+    grund_kandidat: dict[str, str] = {}
+
+    def _merke_grund(out_key: str, grund: str) -> None:
+        vorher = grund_kandidat.get(out_key)
+        if vorher is None or GRUND_RANG[grund] > GRUND_RANG[vorher]:
+            grund_kandidat[out_key] = grund
+
     for inv_id_str, inv_data in investitionen_map.items():
         if not isinstance(inv_data, dict):
             continue
@@ -766,13 +845,20 @@ async def get_tagesdetail_kwh(
                 continue
             cfg = felder.get(feld)
             if not isinstance(cfg, dict) or cfg.get("strategie") != "sensor":
+                _merke_grund(out_key, GRUND_NICHT_ZUGEORDNET)
                 continue
-            d = await _diff(f"inv:{inv_id_str}:{feld}", cfg.get("sensor_id"))
+            d, grund = await _diff(f"inv:{inv_id_str}:{feld}", cfg.get("sensor_id"))
             if d is None:
+                _merke_grund(out_key, grund or GRUND_KEINE_ZAEHLERSTAENDE)
                 continue
             summen[out_key] = summen.get(out_key, 0.0) + d
 
-    return summen
+    return TagesDetail(
+        werte=summen,
+        # Ein Key mit Wert braucht keine Erklärung — und ein Grund neben einer
+        # vorhandenen Zahl wäre ein Widerspruch auf der Fläche.
+        grund_je_feld={k: g for k, g in grund_kandidat.items() if k not in summen},
+    )
 
 
 async def get_hourly_counter_sum_by_feld(

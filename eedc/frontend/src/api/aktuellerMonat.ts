@@ -142,8 +142,20 @@ export interface AktuellerMonatResponse {
   wp_modus_strom_entfeuchten_kwh?: number | null
   wp_modus_nicht_aufgeteilt_kwh?: number | null
   wp_modus_abdeckung_h?: number | null
+  /** **W-17b** — die Grundmenge, auf die sich die Aufteilung bezieht.
+   *  Bewusst **nicht** der WP-Gesamtstrom: dort steckt auch der Strom von
+   *  Geräten ohne Modus-Signal. Ohne dieses Feld stand der Balken stumm unter
+   *  einer Kachel mit größerer Zahl (dietmar1968, T89667 #210: 30 kWh unter
+   *  284 kWh). Nicht nachrechnen — der Bezug entscheidet die Faltung. */
+  wp_modus_strom_bezug_kwh?: number | null
   /** #263: Aufteilung GEMESSEN statt aus dem Betriebsmodus abgeleitet. */
   wp_modus_gemessen?: boolean | null
+  /** **W-18** — warum die **Tages**-Wärme fehlt, als fertiger Satz aus dem
+   *  Backend. Auf Monat/Jahr immer `null`: dort heisst „—" fehlende
+   *  Monatsdaten, ein anderer Sachverhalt mit eigenem Pfad. */
+  wp_waerme_grund?: string | null
+  /** **W-18**, dieselbe Klasse am PV-Anteil der Ladung (nur Tag). */
+  emob_ladung_pv_grund?: string | null
   wp_strom_warmwasser_kwh: number | null
   // Issue #169: Kompressor-Starts (aus TagesZusammenfassung über die Tage des Monats)
   wp_starts_max_tag: number | null

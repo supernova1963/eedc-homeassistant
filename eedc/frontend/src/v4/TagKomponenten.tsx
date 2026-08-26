@@ -97,6 +97,11 @@ export function baueTagAlsMonat(
     wp_jaz: tagDetail?.wp_jaz ?? null,
     wp_jaz_grund: tagDetail?.wp_jaz_grund ?? null,
     wp_jaz_hinweis: tagDetail?.wp_jaz_hinweis ?? null,
+    // W-18: Der Grund kommt fertig formuliert aus dem Backend — er weiss als
+    // einziger, ob der Zaehler fehlt, ob er zugeordnet aber fuer diesen Tag
+    // leer ist, oder ob er zurueckgesprungen ist.
+    wp_waerme_grund: tagDetail?.wp_waerme_grund ?? null,
+    emob_ladung_pv_grund: tagDetail?.emob_ladung_pv_grund ?? null,
     // #263/T2 — Aufteilung Heizen/Kühlen des Tages (gemeldet von OB73-gif).
     // Die Blockfabrik zeigt den Balken bereits, sobald `wp_modus_abdeckung_h`
     // gesetzt ist — sie ist für Monat UND Tag dieselbe. Hier ist deshalb nur
@@ -110,6 +115,8 @@ export function baueTagAlsMonat(
     wp_modus_strom_entfeuchten_kwh: tagDetail?.wp_modus_strom_entfeuchten_kwh ?? null,
     wp_modus_nicht_aufgeteilt_kwh: tagDetail?.wp_modus_nicht_aufgeteilt_kwh ?? null,
     wp_modus_abdeckung_h: tagDetail?.wp_modus_abdeckung_h ?? null,
+    // W-17b: die Grundmenge des Balkens.
+    wp_modus_strom_bezug_kwh: tagDetail?.wp_modus_strom_bezug_kwh ?? null,
     // Ohne dieses Feld zeigte der Tag die Aufteilung nur für ABGELEITETE
     // Geräte: die Blockfabrik gattert auf `wp_modus_gemessen ||
     // wp_modus_abdeckung_h > 0`, und ein Betriebsart-Zähler hat keine

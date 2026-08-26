@@ -359,8 +359,20 @@ export function baueKomponentenBloecke(
     const kpis: KpiStripItem[] = [
       { ...WP_KPI.jaz, value: fmtCalc(jaz, 2, '—'), formel: jaz != null ? 'JAZ = Wärme ÷ Strom' : undefined,
         subtitle: jazUntertitel,
-        hinweis: tagHinweis(jaz != null, 'Tages-JAZ = Wärme ÷ Strom — ' + wmz) },
-      { ...WP_KPI.waerme, value: fmt(d.wp_waerme_kwh), unit: 'kWh', hinweis: tagHinweis(hat(d.wp_waerme_kwh), wmz) },
+        hinweis: (jaz == null && d.wp_waerme_grund)
+          ? undefined
+          : tagHinweis(jaz != null, 'Tages-JAZ = Wärme ÷ Strom — ' + wmz) },
+      // W-18: Der Grund steht SICHTBAR unter der Zahl — dieselbe Regel, die
+      // die JAZ-Kachel darüber seit S3 befolgt. Er kommt **fertig formuliert**
+      // aus dem Backend, weil nur dort bekannt ist, welcher der drei Zustände
+      // vorliegt: kein Zähler · zugeordnet, aber für diesen Tag leer ·
+      // Zählerrücksprung. Der alte Client-Satz kannte nur den ersten und hat
+      // dietmar1968 aufgefordert, einen Sensor zuzuordnen, den er zugeordnet
+      // hatte (T89667 #210). Ohne Backend-Grund bleibt der bisherige Tooltip
+      // stehen — er ist dann die einzige Auskunft, die es gibt.
+      { ...WP_KPI.waerme, value: fmt(d.wp_waerme_kwh), unit: 'kWh',
+        subtitle: hat(d.wp_waerme_kwh) ? undefined : (d.wp_waerme_grund ?? undefined),
+        hinweis: d.wp_waerme_grund ? undefined : tagHinweis(hat(d.wp_waerme_kwh), wmz) },
       { ...WP_KPI.strom, value: fmt(d.wp_strom_kwh), unit: 'kWh' },
       // W-10: Ein negativer Betrag ist keine Ersparnis, und „+-49,53 €" ist
       // keine Zahl. Zwei Melder-Screenshots (dietmar1968, 25.08.). Das Plus
@@ -374,7 +386,14 @@ export function baueKomponentenBloecke(
           : {}),
         value: wpErsparnis?.betrag ?? '—',
         unit: '€',
-        hinweis: tagHinweis(wpErsparnis != null, 'Ersparnis folgt aus der Tages-Wärme — ' + wmz),
+        // W-18: Die Ersparnis folgt aus der Wärme — fehlt die, fehlt sie aus
+        // demselben Grund. Ihn hier zu wiederholen wäre eine zweite
+        // Formulierung derselben Ursache; der Verweis hält beide zusammen.
+        subtitle: (wpErsparnis == null && d.wp_waerme_grund)
+          ? `Folgt aus der Tages-Wärme — ${d.wp_waerme_grund}` : undefined,
+        hinweis: d.wp_waerme_grund
+          ? undefined
+          : tagHinweis(wpErsparnis != null, 'Ersparnis folgt aus der Tages-Wärme — ' + wmz),
       },
     ]
     // #238 Counter (Verschleiß-/Auslegungs-Indikatoren). Monat: Σ Monat prominent,
@@ -475,9 +494,25 @@ export function baueKomponentenBloecke(
           {/* Woher die Aufteilung kommt — dieselbe Unterscheidung wie im Hub:
               ein Betriebsart-Zähler hat keine „Stunden mit Signal", dort „0
               Stunden" zu zeigen sähe aus wie ein Sensor-Ausfall. */}
-          <DetailListe rows={[d.wp_modus_gemessen
-            ? { label: 'Herkunft', wert: 'gemessen' }
-            : { label: 'Modus erfasst', wert: `${fmtCalc(d.wp_modus_abdeckung_h, 0, '—')} Stunden` }]} />
+          <DetailListe rows={[
+            d.wp_modus_gemessen
+              ? { label: 'Herkunft', wert: 'gemessen' }
+              : { label: 'Modus erfasst', wert: `${fmtCalc(d.wp_modus_abdeckung_h, 0, '—')} Stunden` },
+            // W-17b: **Der Balken nennt seine Grundmenge.** Er beschreibt nur
+            // die Geräte, die eine Aufteilung beigesteuert haben; die Kachel
+            // „Strom verbraucht" darüber summiert ALLE. dietmar1968 sah 30 kWh
+            // Balken unter 284 kWh Kachel, ohne dass die Differenz irgendwo
+            // stand (T89667 #210).
+            //
+            // ⚠ Die Kachel bleibt unangetastet — sie ist eine vollständige und
+            // richtige Aussage über die Anlage. Wer eine Teilaussage macht,
+            // nennt ihren Umfang; nicht umgekehrt.
+            ...(hat(d.wp_modus_strom_bezug_kwh) && hat(d.wp_strom_kwh)
+              && Math.abs(d.wp_modus_strom_bezug_kwh! - d.wp_strom_kwh!) > 0.05
+              ? [{ label: 'Aufgeteilte Menge',
+                   wert: `${fmt(d.wp_modus_strom_bezug_kwh)} von ${fmt(d.wp_strom_kwh)} kWh` }]
+              : []),
+          ]} />
           <ModusSplitErklaerung />
         </div>
       ),
@@ -507,8 +542,18 @@ export function baueKomponentenBloecke(
     const kpis: KpiStripItem[] = [
       { title: 'Ladung gesamt', value: fmt(d.emob_ladung_kwh), unit: 'kWh', color: 'purple', icon: Plug },
       { ...EAUTO_KPI.pvAnteil, value: fmtCalc(pvAnteil, 0, '—'), unit: '%',
-        subtitle: hat(d.emob_ladung_pv_kwh) ? `${fmt(d.emob_ladung_pv_kwh)} kWh PV` : undefined,
-        hinweis: tagHinweis(pvAnteil != null, 'PV-Ladesensor (ladung_pv) der Wallbox/dem Auto zuordnen.') },
+        // W-18, dieselbe Klasse: Auch hier stand „Sensor zuordnen" bei jedem
+        // „—", auch bei zugeordnetem Zähler. Der Grund kommt jetzt aus dem
+        // Backend, sichtbar statt im Tooltip.
+        //
+        // ⚠ Die kWh-Zeile behält Vorrang, wenn es sie gibt — sie ist die
+        // bessere Auskunft, und wo ein Wert steht, gibt es nichts zu erklären.
+        subtitle: hat(d.emob_ladung_pv_kwh)
+          ? `${fmt(d.emob_ladung_pv_kwh)} kWh PV`
+          : (d.emob_ladung_pv_grund ?? undefined),
+        hinweis: d.emob_ladung_pv_grund
+          ? undefined
+          : tagHinweis(pvAnteil != null, 'PV-Ladesensor (ladung_pv) der Wallbox/dem Auto zuordnen.') },
       { ...EAUTO_KPI.gefahren, value: fmt(d.emob_km), unit: 'km',
         hinweis: tagHinweis(hat(d.emob_km), 'Kein Tages-Kilometersensor — Strecke nur im Monatsabschluss erfassbar.') },
       { ...EAUTO_KPI.verbrauch, value: fmtCalc(d.emob_verbrauch_100km, 1, '—'), unit: 'kWh/100km',

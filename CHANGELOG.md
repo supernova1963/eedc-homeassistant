@@ -49,6 +49,28 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Fixed
 
+- **Ein Tag mit 36 Stunden.** Gemeldet von **dietmar1968** (Forum simon42 #89667): *„Ich verstehe beim Vorhandensein folgender Sensoren jene Anzeige nicht."* Unter *Cockpit → Tag* stand bei ihm **„Modus erfasst: 36 Stunden"**. Ein Tag hat 24.
+
+  **Ursache:** Wer mehrere Wärmepumpen oder Klimaanlagen hat, deren Betriebsart eedc mitliest, bekam die erfassten Stunden **aller Geräte zusammengezählt**. Zwei Geräte, die dieselben 18 Stunden liefen, ergaben 36. **Kilowattstunden darf man über Geräte addieren, Stunden nicht** — sie beschreiben denselben Zeitraum. Im Monat fiel es nicht auf: Dort standen 372 von 624 möglichen Stunden, plausibel genug, um lange unbemerkt zu bleiben.
+
+  **Die Mengen sind davon nicht betroffen** und ändern sich nicht — nur die Stunden-Angabe darunter zeigt jetzt, wie lange eedc tatsächlich mitgelesen hat.
+
+- **Der Aufteilungs-Balken beschrieb weniger als die Kachel darüber, ohne es zu sagen.** Ebenfalls aus dietmars Bildern: Über dem Balken stand *„Strom verbraucht: 284 kWh"*, der Balken selbst summierte sich auf 30. Beide Zahlen waren richtig.
+
+  **Der Grund:** Die Aufteilung nach Betriebsart entsteht nur für Geräte und Monate, in denen eedc die Betriebsart auch mitlesen konnte. Die Kachel darüber zählt **alle** Geräte. Gesagt hat das bisher niemand.
+
+  **Jetzt steht unter dem Balken eine Zeile „Aufgeteilte Menge: 30 von 284 kWh"** — im Cockpit (Tag, Monat, Jahr) und im Komponenten-Hub. Sie erscheint nur, wenn beide Zahlen auseinandergehen. **Im Komponenten-Hub korrigiert das zugleich die Prozente:** Sie wurden dort gegen den Gesamtstrom gerechnet und summierten sich deshalb auf weniger als 100 %.
+
+- **eedc forderte, einen Sensor zuzuordnen, der längst zugeordnet war.** Der dritte Punkt aus dietmars Meldung, und der ärgerlichste: Unter *Cockpit → Tag* stand bei *Wärme erzeugt* ein „—", und die Erklärung dazu lautete *„Tageswert braucht einen Wärmemengenzähler am Gerät (Sensor zuordnen)"*. Er hatte **zwei** zugeordnet.
+
+  **Der Satz war fest verdrahtet** und beschrieb nur einen von drei möglichen Gründen. eedc unterscheidet sie jetzt und nennt den zutreffenden:
+
+  - *Kein Zähler zugeordnet* — dazu der Weg, wo er einzutragen ist.
+  - *Zähler zugeordnet, aber für diesen Tag liegen keine Zählerstände vor.* **Das ist der Regelfall nach einer frischen Zuordnung:** Der Monatswert steht da, weil er aus der Langzeitstatistik von Home Assistant kommt; Tageswerte entstehen erst ab der Zuordnung. Frühere Tage lassen sich in der Reparatur-Werkbank nachrechnen.
+  - *Der Zähler ist an diesem Tag zurückgesprungen.* Diesen Fall hat eedc schon immer erkannt und die Tagesaussage bewusst weggelassen — geschrieben hat er es bisher nur ins Protokoll.
+
+  **Der Grund steht jetzt sichtbar unter der Zahl statt im Tooltip** — ein Tooltip ist auf dem Telefon keine Auskunft. Betroffen sind *Wärme erzeugt*, *Ersparnis vs. Gas*, die Arbeitszahl und der PV-Anteil der Ladung. **Eine falsche Ursache ist schlimmer als keine:** Ohne Hinweis sucht man selbst, mit einem falschen sucht man an der falschen Stelle.
+
 - **Der Komponenten-Hub zeigte eine andere Arbeitszahl als das Cockpit — für dieselbe Anlage im selben Monat.** Gefunden beim Aufbau der neuen Simulationstests, nicht gemeldet. Wer heizt **und** kühlt, sah unter *Komponenten → Wärmepumpe* eine zu niedrige Zahl (an einer Beispielanlage 2,31 statt 3,00), während *Cockpit → Monat* richtig rechnete.
 
   **Ursache:** Der Hub bildete den Quotienten selbst, statt die gemeinsame Rechenstelle zu nutzen. Damit fehlten ihm sämtliche Regeln, die dort gelten — der Kühlstrom blieb im Nenner, ein gemeldeter Fremdanteil auf den Zählern wurde ignoriert.

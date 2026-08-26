@@ -319,3 +319,94 @@ def test_iii2b_monat_hat_das_feld():
     from backend.api.routes.aktueller_monat import AktuellerMonatResponse
 
     assert "wp_waerme_kwh" in set(AktuellerMonatResponse.model_fields)
+
+
+# ═══ III-W18 — der Grund für einen fehlenden Tageswert ══════════════════════
+#
+# SOLL §3.3/**S3**: *„Eine Sicht, die weniger zeigt als die Nachbarsicht, sagt
+# warum."* Der Tag zeigte bei dietmar1968 weniger als der Monat — und sagte
+# einen Grund, den es bei ihm nicht gab (T89667 #210, W-18).
+
+def test_w18_kurz_und_langform_beschreiben_dieselben_zustaende():
+    """⛔ **Zwei Listen für dieselbe Sache müssen deckungsgleich sein.**
+
+    Es gibt sie zweimal, weil derselbe Zustand an zwei verschiedenen Orten
+    steht: als Absatz unter der Wärme-Kachel und als kurze Beschriftung neben
+    der gesperrten Arbeitszahl. Ein Zustand nur in einer der beiden Listen wäre
+    ein Fall, den die eine Fläche benennen kann und die andere nicht — und er
+    fiele erst dem Anwender auf.
+
+    ⭐ Dieselbe Bauform, die W-14 erzeugt hat: eine Größe, die an einer von drei
+    Stellen nicht nachgezogen wurde.
+    """
+    from backend.core.tageswert_grund import (
+        GRUND_RANG, TAGESWERT_GRUND_KURZ, TAGESWERT_GRUND_TEXT,
+    )
+
+    assert set(TAGESWERT_GRUND_KURZ) == set(TAGESWERT_GRUND_TEXT)
+    assert set(GRUND_RANG) == set(TAGESWERT_GRUND_TEXT), (
+        "ein Zustand ohne Rang verliert jeden Vergleich (`GRUND_RANG.get(..., -1)`)")
+    assert all(TAGESWERT_GRUND_KURZ.values()), "eine leere Kurzform ist keine Auskunft"
+    assert all(TAGESWERT_GRUND_TEXT.values())
+
+
+def test_w18_nur_die_fehlende_zuordnung_traegt_eine_handlungsanweisung():
+    """**Der Grund sagt, was IST — die Handlung hängt am Feld** (Regel 1 des Moduls).
+
+    ⛔ Genau diese Trennung war der Fehler: Der alte Client-Satz hängte
+    *„Sensor zuordnen"* an **jedes** „—", auch an das eines Anwenders, der
+    zugeordnet hatte. Eine Handlungsanweisung an den beiden anderen Zuständen
+    wäre derselbe Fehler in neuer Form.
+    """
+    from backend.core.tageswert_grund import (
+        GRUND_KEINE_ZAEHLERSTAENDE, GRUND_NICHT_ZUGEORDNET,
+        GRUND_ZAEHLER_RUECKSPRUNG, HANDLUNG_JE_FELD, tageswert_grund_text,
+    )
+
+    mit_handlung = tageswert_grund_text(GRUND_NICHT_ZUGEORDNET, "wp_heizung_kwh")
+    assert mit_handlung and "zuordnen" in mit_handlung
+
+    for grund in (GRUND_KEINE_ZAEHLERSTAENDE, GRUND_ZAEHLER_RUECKSPRUNG):
+        text = tageswert_grund_text(grund, "wp_heizung_kwh")
+        assert text and "zuordnen" not in text, (
+            f"{grund} fordert eine Zuordnung, die es schon gibt")
+
+    # Jedes Feld, das über eine Randdifferenz erhoben wird, braucht seinen
+    # Handlungssatz — sonst steht dort nur „Kein Zähler zugeordnet" ohne Weg.
+    from backend.services.snapshot.aggregator import get_tagesdetail_kwh  # noqa: F401
+    for feld in ("wp_heizung_kwh", "wp_warmwasser_kwh", "speicher_ladung_netz_kwh",
+                 "emob_ladung_pv_kwh", "emob_ladung_netz_kwh"):
+        assert feld in HANDLUNG_JE_FELD
+
+
+def test_w18_ein_unbekannter_zustand_liefert_keinen_bezeichner():
+    """Ein durchgereichtes ``"zaehler_ruecksprung"`` wäre schlechter als nichts."""
+    from backend.core.tageswert_grund import tageswert_grund_kurz, tageswert_grund_text
+
+    assert tageswert_grund_text("gibt_es_nicht") is None
+    assert tageswert_grund_kurz("gibt_es_nicht") is None
+    assert tageswert_grund_text(None) is None
+    assert tageswert_grund_kurz(None) is None
+
+
+def test_w18_arbeitszahl_behaelt_ihren_wortlaut_ohne_besseren_grund():
+    """⚠ **Der Default ist bitgleich zu vorher.**
+
+    Die Sperre bekommt einen optionalen Grund — kein Aufrufer, der ihn nicht
+    übergibt, darf sein Verhalten ändern. Sonst wäre W-18 ein stiller Umbau an
+    acht anderen Flächen.
+    """
+    from backend.core.berechnungen.waermepumpe_kennzahl import arbeitszahl
+
+    ohne = arbeitszahl(0.0, 100.0)
+    assert ohne.wert is None
+    assert ohne.grund == "kein Wärmemengenzähler zugeordnet"
+
+    mit = arbeitszahl(0.0, 100.0, waerme_fehlt_grund="für diesen Tag keine Zählerstände")
+    assert mit.wert is None
+    assert mit.grund == "für diesen Tag keine Zählerstände"
+
+    # Der bessere Grund gilt NUR für den fehlende-Wärme-Fall — er darf keine
+    # andere Sperre überschreiben.
+    kein_strom = arbeitszahl(500.0, 0.0, waerme_fehlt_grund="für diesen Tag keine Zählerstände")
+    assert kein_strom.grund == "kein Stromverbrauch erfasst"

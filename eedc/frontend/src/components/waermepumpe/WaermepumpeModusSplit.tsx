@@ -26,6 +26,10 @@ export interface ModusSplitDaten {
   modus_strom_entfeuchten_kwh?: number
   modus_nicht_aufgeteilt_kwh?: number
   modus_abdeckung_h?: number
+  /** **W-17b** — die Grundmenge der Aufteilung: der Strom der Monate MIT
+   *  Split, nicht der Gesamtstrom des Geräts. Fehlt sie (Altbestand), gilt
+   *  weiterhin `gesamt_stromverbrauch_kwh` als Bezug. */
+  modus_strom_bezug_kwh?: number
   /** #263: Aufteilung ist GEMESSEN (Betriebsart-Zähler) statt abgeleitet. */
   modus_gemessen?: boolean
   gesamt_heizenergie_kwh?: number
@@ -52,7 +56,17 @@ function anteil(teil: number | undefined, gesamt: number): string {
 }
 
 export function WaermepumpeModusSplit({ zusammenfassung: z }: { zusammenfassung: ModusSplitDaten }) {
-  const gesamt = z.gesamt_stromverbrauch_kwh || 0
+  // W-17b: **Der Nenner der Prozente ist die Grundmenge, nicht der
+  // Gesamtstrom.** Die Teilmengen entstehen nur aus Monaten mit Split; gegen
+  // den Gesamtstrom gerechnet summierten sich „Heizen + Kühlen + nicht
+  // aufgeteilt" deshalb auf weniger als 100 % — sichtbar falsch, ohne dass
+  // irgendwo stand, worauf sich die Zahlen beziehen.
+  //
+  // ⚠ Fallback auf den Gesamtstrom, wenn die Grundmenge fehlt: eine ältere
+  // Antwort ohne das Feld verhält sich damit wie bisher (bitgleich), statt
+  // durch 0 zu teilen.
+  const bezug = z.modus_strom_bezug_kwh
+  const gesamt = (bezug != null && bezug > 0 ? bezug : z.gesamt_stromverbrauch_kwh) || 0
   const heizen = z.modus_strom_heizen_kwh
   const kuehlen = z.modus_strom_kuehlen_kwh
   const lueften = z.modus_strom_lueften_kwh
@@ -115,6 +129,16 @@ export function WaermepumpeModusSplit({ zusammenfassung: z }: { zusammenfassung:
           </dt>
           <dd>{z.modus_gemessen ? 'gemessen' : `${fmt(z.modus_abdeckung_h, 0)} Stunden`}</dd>
         </div>
+        {/* W-17b: Die Aufteilung nennt ihre Grundmenge, sobald sie vom
+            Gesamtstrom abweicht — sonst stünde sie stumm unter einer größeren
+            Zahl. Stimmen beide überein, sagt die Zeile nichts Neues und
+            entfällt. */}
+        {bezug != null && Math.abs(bezug - (z.gesamt_stromverbrauch_kwh || 0)) > 0.05 ? (
+          <div className="flex justify-between">
+            <dt className="text-gray-600 dark:text-gray-400">aufgeteilte Menge</dt>
+            <dd>{fmt(bezug)} von {fmt(z.gesamt_stromverbrauch_kwh)} kWh</dd>
+          </div>
+        ) : null}
       </dl>
 
       {/* Die Wärme steht hier nur, wenn sie abgeleitet ist — als Wert MIT

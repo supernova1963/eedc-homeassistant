@@ -94,6 +94,57 @@ niedriger als Heizen, weil es auf eine höhere Temperatur gebracht werden muss.
 Wer viel Warmwasser macht, hat deshalb eine niedrigere Gesamtzahl — **ohne dass
 seine Anlage schlechter wäre**. Genau das zeigen erst die getrennten Zahlen.
 
+**Ein Tag hat wieder 24 Stunden**
+
+Unter *Cockpit → Tag* stand bei einem Tester **„Modus erfasst: 36 Stunden"**.
+Wer mehrere Wärmepumpen oder Klimaanlagen hat, deren Betriebsart eedc mitliest,
+bekam die erfassten Stunden **aller Geräte zusammengezählt** — zwei Geräte, die
+dieselben 18 Stunden liefen, ergaben 36.
+
+Kilowattstunden darf man über Geräte addieren, Stunden nicht: Sie beschreiben
+denselben Zeitraum. **Deine Mengen ändern sich dadurch nicht**, nur die
+Stunden-Angabe zeigt jetzt, wie lange eedc tatsächlich mitgelesen hat.
+
+**Der Aufteilungs-Balken sagt jetzt, worüber er spricht**
+
+Beim selben Tester stand über dem Balken *„Strom verbraucht: 284 kWh"*, der
+Balken selbst summierte sich auf 30. **Beide Zahlen waren richtig** — die
+Aufteilung nach Betriebsart entsteht nur für Geräte und Zeiträume, in denen eedc
+die Betriebsart mitlesen konnte, die Kachel darüber zählt alle Geräte. Gesagt hat
+das bisher niemand.
+
+Jetzt steht unter dem Balken **„Aufgeteilte Menge: 30 von 284 kWh"** — und nur
+dann, wenn beide Zahlen auseinandergehen. Im Komponenten-Hub stimmen damit auch
+die Prozente wieder: Sie wurden dort gegen den Gesamtstrom gerechnet und
+summierten sich deshalb auf weniger als 100 %.
+
+**eedc sagt jetzt, warum ein Tageswert fehlt — und nichts Falsches mehr**
+
+Der dritte Punkt aus derselben Meldung, und der ärgerlichste. Unter
+*Cockpit → Tag* stand bei *Wärme erzeugt* ein „—", und die Erklärung lautete
+*„Tageswert braucht einen Wärmemengenzähler am Gerät (Sensor zuordnen)"*.
+**Der Melder hatte zwei zugeordnet.**
+
+Der Satz war fest eingebaut und beschrieb nur einen von drei möglichen Gründen.
+eedc unterscheidet sie jetzt:
+
+- *Kein Zähler zugeordnet* — mit dem Weg, wo er einzutragen ist.
+- *Zähler zugeordnet, aber für diesen Tag liegen keine Zählerstände vor.*
+  **Das ist der Regelfall kurz nach einer Zuordnung:** Der Monatswert steht da,
+  weil er aus der Langzeitstatistik von Home Assistant kommt — Tageswerte
+  entstehen erst ab der Zuordnung. Frühere Tage kannst du in der
+  Reparatur-Werkbank nachrechnen lassen.
+- *Der Zähler ist an diesem Tag zurückgesprungen.* Diesen Fall hat eedc schon
+  immer erkannt und die Tagesaussage bewusst weggelassen — gesagt hat er es dir
+  nur nie.
+
+Der Grund steht jetzt **sichtbar unter der Zahl** statt in einem Tooltip: Auf dem
+Telefon ist ein Tooltip keine Auskunft. Das gilt für *Wärme erzeugt*,
+*Ersparnis vs. Gas*, die Arbeitszahl und den PV-Anteil der Ladung.
+
+**Eine falsche Ursache ist schlimmer als keine** — ohne Hinweis sucht man selbst,
+mit einem falschen sucht man an der falschen Stelle.
+
 **Lüften und Entfeuchten sind nicht mehr unsichtbar**
 
 Wer für diese beiden Betriebsarten einen eigenen Zähler zugeordnet hatte, sah

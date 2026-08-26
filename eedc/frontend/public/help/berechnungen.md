@@ -1068,11 +1068,15 @@ je Tag d, je Gerät i:
   faktor_d    = zaehler_kwh_d / Σ_h roh_h                 # nur wenn Zählersumme vorhanden
   kwh[modus] += roh_h × faktor_d                          # Stunden OHNE Modus: nur in den Nenner
 
-je Monat:
+je Monat (ein Gerät):
   modus_strom_heizen_kwh  = Σ_d kwh[heizen]
   modus_strom_kuehlen_kwh = Σ_d kwh[kuehlen]
   modus_abdeckung_h       = Σ_d Stunden mit Modus-Signal
   nicht_aufgeteilt        = Bezug − heizen − kuehlen      # NIE gespeichert
+
+anlagenweit (mehrere Geräte, gleicher Zeitraum):
+  modus_strom_*_kwh       = Σ_i  je Gerät                 # Mengen: addieren
+  modus_abdeckung_h       = max_i je Gerät                # Zeit: NICHT addieren
 ```
 
 SoT: `core/berechnungen/modus_split.py` (rein) · `services/energie_profil/modus_split_monat.py`
@@ -1096,6 +1100,21 @@ SoT: `core/berechnungen/modus_split.py` (rein) · `services/energie_profil/modus
 > **Der Bezug von „nicht aufgeteilt" ist nicht der Gesamtstrom.** Anlagenweit trägt `strom_kwh`
 > auch Wärmepumpen **ohne** Modus-Sensor; ihr Verbrauch erschiene sonst als unbeobachtete Zeit der
 > Klimaanlage. Bezug ist `WpFakten.modus_strom_bezug_kwh` — der Strom nur der Geräte mit Split.
+>
+> ⭐ **Und genau deshalb nennt die Anzeige diesen Bezug seit v4.0.29 (W-17b).** Die Kachel „Strom
+> verbraucht" zeigt `strom_kwh`, der Balken darunter beschreibt `modus_strom_bezug_kwh` — bei
+> einem Melder 30 gegen 284 kWh. Beide Zahlen waren richtig, nur stand nirgends, dass es zwei
+> verschiedene Grundmengen sind. Die Zeile „Aufgeteilte Menge" erscheint, sobald sie abweichen.
+
+> **Eine Menge ist additiv, ein Zeitraum nicht (W-17).** `modus_abdeckung_h` wird über **Tage**
+> summiert und über **Geräte** maximiert. Zwei Wärmepumpen, die dieselben 18 Stunden liefen,
+> ergeben 18 Stunden Beobachtung, nicht 36 — im Tag sofort sichtbar, im Monat jahrelang plausibel.
+> SoT der Regel: `core/berechnungen/modus_split.py::abdeckung_ueber_geraete`.
+>
+> ⚠ **Das Maximum ist eine Untergrenze der exakten Vereinigung**, die aus verdichteten Summen
+> nicht mehr rekonstruierbar ist (`abdeckung_h` ist eine Anzahl, keine Stundenliste). Zwischen
+> einer Zahl, die zu klein sein kann, und einer, die einen Tag mit 36 Stunden behauptet, ist die
+> Wahl keine Geschmacksfrage.
 
 #### 3.5c Abgeleitete Heizwärme und die JAZ-Sperre (#263 K-2, Konzept §3.4/§3.5)
 

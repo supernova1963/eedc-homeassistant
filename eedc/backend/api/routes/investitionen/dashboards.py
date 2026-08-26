@@ -1144,6 +1144,13 @@ async def get_waermepumpe_dashboard(
             )
             zusammenfassung['modus_abdeckung_h'] = round(gesamt_modus_abdeckung_h, 1)
             zusammenfassung['modus_gemessen'] = modus_gemessen
+            # W-17b: Der Hub zeigt EIN Geraet — hier faellt die Grundmenge mit
+            # dem Geraete-Strom fast zusammen. Fast, nicht ganz: Monate ohne
+            # Split zaehlen im Bezug NICHT mit (s. Kommentar oben), im
+            # Gesamtstrom schon. Der Balken nennt seine Grundmenge deshalb auch
+            # hier — sonst waere es dieselbe stumme Differenz wie anlagenweit,
+            # nur kleiner.
+            zusammenfassung['modus_strom_bezug_kwh'] = round(gesamt_modus_bezug, 1)
         # Die Kennzeichnung der Wärme steht unabhängig davon: sie gilt auch für
         # Monate, deren Split später verworfen wurde.
         zusammenfassung['waerme_abgeleitet'] = waerme_abgeleitet

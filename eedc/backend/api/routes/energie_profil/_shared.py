@@ -503,6 +503,12 @@ class TagDetailResponse(BaseModel):
     wp_modus_strom_entfeuchten_kwh: Optional[float] = None
     wp_modus_nicht_aufgeteilt_kwh: Optional[float] = None
     wp_modus_abdeckung_h: Optional[float] = None
+    #: **W-17b** — die Grundmenge, auf die sich die Aufteilung bezieht.
+    #: Bewusst **nicht** `wp_strom_kwh`: dort steckt auch der Strom von Geraeten
+    #: ohne Modus-Signal. Der Balken steht sonst unter einer Kachel mit einer
+    #: groesseren Zahl, ohne dass die Differenz irgendwo benannt waere
+    #: (dietmar1968, T89667 #210: Balken 30 kWh unter Kachel 284 kWh).
+    wp_modus_strom_bezug_kwh: Optional[float] = None
     #: Herkunft der Aufteilung: `True` = aus **gemessenen** Betriebsart-Zählern,
     #: `False` = aus dem Betriebsmodus abgeleitet. Spiegelt `wp_modus_gemessen`
     #: der Monatssicht (`aktueller_monat.py`) — dieselbe Blockfabrik im Frontend
@@ -511,6 +517,15 @@ class TagDetailResponse(BaseModel):
     #: Bei einem Betriebsart-Zähler gibt es keine „Stunden mit Signal";
     #: `wp_modus_abdeckung_h` ist dann 0, ohne dass etwas fehlt.
     wp_modus_gemessen: Optional[bool] = None
+    #: **W-18** — warum die Tages-Wärme fehlt, als fertiger Satz. Nur gesetzt,
+    #: wenn `wp_waerme_kwh` `None` ist; nie beides zugleich.
+    #:
+    #: ⛔ Er ersetzt einen fest verdrahteten Client-Satz, der **einen** von drei
+    #: Zuständen beschrieb und dietmar1968 aufforderte, einen Sensor zuzuordnen,
+    #: den er zugeordnet hatte (T89667 #210).
+    wp_waerme_grund: Optional[str] = None
+    #: **W-18**, dieselbe Klasse an der E-Mobilität.
+    emob_ladung_pv_grund: Optional[str] = None
     # PV Tages-SOLL = OM-Tagesprognose × eedc-Lernfaktor (wie Genauigkeits-Tracking).
     soll_pv_kwh: Optional[float] = None
     # Tages-Tarif (Monatstarif je Tag) — für Wirkungsverluste € + Tarif-Zeile.

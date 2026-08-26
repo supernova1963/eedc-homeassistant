@@ -344,3 +344,45 @@ def unbekannte_modi(split: ModusSplit) -> set[str]:
     durchgereicht, statt ihn über ``normalisiere_betriebsmodus`` zu schicken.
     """
     return set(split.kwh_je_modus) - set(BETRIEBSMODUS_KANON)
+
+
+def abdeckung_ueber_geraete(bisher_h: float, weiteres_geraet_h: float) -> float:
+    """Modus-Abdeckung **mehrerer Geräte** desselben Zeitraums zusammenführen (**W-17**).
+
+    ⛔ **Eine Menge ist additiv, ein Zeitraum nicht** (SOLL §2.3). Bis zum
+    26.08.2026 summierten drei Stellen ``abdeckung_h`` über die *Geräte* einer
+    Anlage — bei zwei Wärmepumpen mit je 18 erfassten Stunden stand dort **36
+    Stunden an einem Tag**. Gemeldet hat es dietmar1968 (T89667 #210) an seiner
+    Tagesansicht; im Monat hatte dieselbe Rechnung 372 von 624 möglichen
+    Stunden ausgewiesen und war damit plausibel genug, um monatelang
+    unbemerkt zu bleiben.
+
+    ⭐ *Eine Kennzahl ohne erkennbare Obergrenze verbirgt ihren eigenen
+    Kategorienfehler.* Der Tag hat den Fehler nur deshalb sichtbar gemacht,
+    weil jeder Leser seine Obergrenze kennt.
+
+    **Warum das Maximum und nicht die Vereinigung.** Exakt wäre die Vereinigung
+    der erfassten Stunden über alle Geräte — sie ist aus den je Gerät bereits
+    verdichteten Summen aber **nicht mehr rekonstruierbar**: In
+    ``abdeckung_h`` steht eine Anzahl, keine Stundenliste. Das Maximum ist die
+    **Untergrenze** dieser Vereinigung (mindestens so viele Stunden wurden
+    beobachtet) und überschreitet den Zeitraum nie. Zwischen einer Zahl, die zu
+    klein sein kann, und einer, die einen Tag mit 36 Stunden behauptet, ist die
+    Wahl keine Geschmacksfrage.
+
+    ⚠ **Über die ZEIT bleibt es eine Summe.** Diese Funktion gilt ausschließlich
+    für die Achse *Gerät*. ``summiere_modus_split`` (über Tage),
+    ``dashboards.py``/``ha_export.py`` (über Monate **eines** Geräts) und
+    ``JahrAggregat.tsx`` (über Monate) addieren weiterhin — und das ist richtig,
+    ein Jahr hat 8760 Stunden. Wer diese Funktion dorthin trägt, baut den
+    Fehler in der Gegenrichtung ein.
+
+    Args:
+        bisher_h: die bereits zusammengeführte Abdeckung des Zeitraums.
+        weiteres_geraet_h: die Abdeckung **eines weiteren Geräts** im **selben**
+            Zeitraum.
+
+    Returns:
+        Die Abdeckung des Zeitraums über beide.
+    """
+    return max(float(bisher_h or 0.0), float(weiteres_geraet_h or 0.0))

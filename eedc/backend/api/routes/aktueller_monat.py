@@ -267,6 +267,12 @@ class AktuellerMonatResponse(BaseModel):
     wp_modus_strom_entfeuchten_kwh: Optional[float] = None
     wp_modus_nicht_aufgeteilt_kwh: Optional[float] = None
     wp_modus_abdeckung_h: Optional[float] = None
+    #: **W-17b** — die Grundmenge, auf die sich die Aufteilung bezieht.
+    #: Bewusst **nicht** `wp_strom_kwh`: dort steckt auch der Strom von Geraeten
+    #: ohne Modus-Signal. Der Balken steht sonst unter einer Kachel mit einer
+    #: groesseren Zahl, ohne dass die Differenz irgendwo benannt waere
+    #: (dietmar1968, T89667 #210: Balken 30 kWh unter Kachel 284 kWh).
+    wp_modus_strom_bezug_kwh: Optional[float] = None
     #: #263 — die Aufteilung ist GEMESSEN (Betriebsart-Zähler) statt aus dem
     #: Betriebsmodus abgeleitet. Dann ist `wp_modus_abdeckung_h` 0, ohne dass
     #: etwas fehlt — ein Zähler zählt kWh, keine Stunden mit Signal.
@@ -1930,6 +1936,7 @@ async def get_aktueller_monat(
     wp_modus_rest = None
     wp_modus_abdeckung = None
     wp_modus_gemessen = None
+    wp_modus_bezug = None
     if mf_wp is not None:
         if mf_wp.heizung_kwh > 0:
             wp_heizung = round(mf_wp.heizung_kwh, 2)
@@ -1951,6 +1958,9 @@ async def get_aktueller_monat(
             wp_modus_rest = round(mf_wp.modus_nicht_aufgeteilt_kwh, 2)
             wp_modus_abdeckung = round(mf_wp.modus_abdeckung_h, 1)
             wp_modus_gemessen = mf_wp.modus_gemessen
+            # W-17b: die Grundmenge des Balkens, damit er nicht stumm unter
+            # einer groesseren Kachel steht.
+            wp_modus_bezug = round(mf_wp.modus_strom_bezug_kwh, 2)
 
     # W-4 (SOLL §4.1): je Funktion eine eigene Zahl. Sie beantwortet, was die
     # Gesamtzahl nicht kann — *warum* eine Anlage dasteht, wie sie dasteht.
@@ -2406,6 +2416,7 @@ async def get_aktueller_monat(
         wp_modus_strom_entfeuchten_kwh=wp_modus_entfeuchten,
         wp_modus_nicht_aufgeteilt_kwh=wp_modus_rest,
         wp_modus_abdeckung_h=wp_modus_abdeckung,
+        wp_modus_strom_bezug_kwh=wp_modus_bezug,
         wp_modus_gemessen=wp_modus_gemessen,
         wp_starts_max_tag=wp_starts_max_tag,
         wp_starts_summe_monat=wp_starts_summe_monat,

@@ -76,6 +76,7 @@ from backend.api.routes.strompreise import (
 from backend.core.berechnungen import (
     PvModulWert,
     VerbrauchsKennzahlen,
+    abdeckung_ueber_geraete,
     abgetretene_bkw_ids,
     berechne_verbrauchs_kennzahlen,
     bkw_finanz_beitrag,
@@ -916,7 +917,12 @@ async def _ergaenze_modus_split_ohne_abschluss(
             r = roh.setdefault(schluessel, _RohMonat())
             r.wp_modus_strom_heizen += split.heizen_kwh
             r.wp_modus_strom_kuehlen += split.kuehlen_kwh
-            r.wp_modus_abdeckung_h += split.abdeckung_h
+            # W-17: Stunden werden ueber GERAETE nicht addiert (SoT-Helfer).
+            # Die Schleife laeuft ueber `je_inv` — jeder Durchlauf ist ein
+            # weiteres Geraet DESSELBEN Monats. Mengen ja, Zeitraum nein.
+            r.wp_modus_abdeckung_h = abdeckung_ueber_geraete(
+                r.wp_modus_abdeckung_h, split.abdeckung_h,
+            )
             r.wp_modus_strom_bezug += split.bezug_kwh
 
 
@@ -1252,7 +1258,14 @@ class _RohMonat:
             self.wp_modus_strom_lueften += b.wp_modus_strom_lueften
             self.wp_modus_strom_entfeuchten += b.wp_modus_strom_entfeuchten
             self.wp_nutzenergie_kuehlen += b.wp_nutzenergie_kuehlen
-            self.wp_modus_abdeckung_h += b.wp_modus_abdeckung_h
+            # W-17: derselbe Grund wie im abgeleiteten Zweig oben — `b` ist der
+            # Beitrag EINES Geraets zu diesem Monat. Beide Zweige schreiben in
+            # dasselbe `_RohMonat`; das Maximum ueber beide ist deshalb das
+            # Maximum ueber alle Geraete des Monats, egal auf welchem Weg sie
+            # hereinkommen.
+            self.wp_modus_abdeckung_h = abdeckung_ueber_geraete(
+                self.wp_modus_abdeckung_h, b.wp_modus_abdeckung_h,
+            )
             self.wp_modus_gemessen = self.wp_modus_gemessen or b.wp_modus_gemessen
             self.wp_modus_strom_bezug += b.wp_modus_strom_bezug
             self.wp_waerme_abgeleitet += b.wp_waerme_abgeleitet
