@@ -138,6 +138,30 @@ deiner Einspeisevergütung — also mit deinen echten Zahlen. Wer dem Hinweis
 gefolgt ist und etwas eingetragen hat, hat seine Rechnung ungewollt
 verschlechtert.
 
+### Zwei Korrekturen an der Wärmepumpe, die deine Zahlen verschieben können
+
+**Die Arbeitszahl stand an zwei Stellen verschieden da.** Wer heizt *und* kühlt,
+sah unter *Komponenten → Wärmepumpe* eine zu niedrige Arbeitszahl, während
+*Cockpit → Monat* für denselben Monat richtig rechnete. Der Grund: Die eine
+Fläche rechnete auf eigene Faust und ließ dabei den Kühlstrom im Nenner stehen —
+also Strom für eine Aufgabe, bei der gar keine Wärme entsteht.
+
+**Beide Flächen nennen jetzt dieselbe Zahl.** Und zwei Dinge kommen dort neu
+hinzu: Wo eedc keine Arbeitszahl bilden darf, steht ab jetzt **der Grund** statt
+einer leeren Kachel. Liegt sie unter 2, steht der **Heizstab-Hinweis** daneben —
+den gab es bisher nur im Cockpit.
+
+**Und wenn du Heizung, Warmwasser und Kühlung getrennt misst:** Dein Kühlstrom
+fehlte bisher im Stromverbrauch der Wärmepumpe. eedc summierte nur „Strom
+Heizen" und „Strom Warmwasser" — eine Rechnung aus der Zeit, als eine
+Wärmepumpe nichts anderes tun konnte. An einer Beispielanlage fehlten dadurch
+100 von 1050 kWh, und das wirkte sich auf Kosten und CO₂ aus.
+
+⚠ **Was du nach dem Update siehst:** Der Stromverbrauch deiner Wärmepumpe steigt
+um den Kühlanteil, und die Arbeitszahl sinkt auf ihren richtigen Wert. Beides
+sind keine neuen Messwerte — es ist dieselbe Anlage, nur endlich vollständig
+gerechnet.
+
 ---
 
 ## v4.0.28 — Anzeigen ist nicht mitschreiben

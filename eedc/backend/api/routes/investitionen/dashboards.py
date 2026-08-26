@@ -95,6 +95,7 @@ from backend.core.field_definitions import (
 from backend.core.berechnungen import betriebsart_nutzenergie_kwh, modus_strom_zeile
 from backend.core.berechnungen.waermepumpe_kennzahl import (
     GRUND_JE_ABGRENZUNG,
+    arbeitszahl,
     arbeitszahl_je_funktion,
     arbeitszahl_kuehlen,
 )
@@ -871,7 +872,12 @@ async def get_waermepumpe_dashboard(
             gesamt_modus_abdeckung_h += _m_abdeckung
             if _m_abdeckung > 0 or _zeile_gemessen:
                 gesamt_modus_bezug += get_wp_strom_kwh(d, wp.parameter)
-            gesamt_strom += d.get('stromverbrauch_kwh', 0)
+            # W-15: **dieselbe** Strom-Definition wie in den Monats-Fakten.
+            # Vorher stand hier der Rohwert `stromverbrauch_kwh`, während
+            # `monats_fakten` über `get_wp_strom_kwh` geht — bei getrennter
+            # Strommessung sind das zwei verschiedene Mengen (#183), und der
+            # Hub wies damit einen anderen Verbrauch aus als das Cockpit.
+            gesamt_strom += get_wp_strom_kwh(d, wp.parameter)
             gesamt_heizung += d.get('heizenergie_kwh', 0)
             gesamt_warmwasser += d.get('warmwasser_kwh', 0)
             waerme_abgeleitet = waerme_abgeleitet or heizwaerme_ist_abgeleitet(
@@ -890,10 +896,37 @@ async def get_waermepumpe_dashboard(
                 gesamt_warmwasser_getrennt += d.get('warmwasser_kwh', 0)
 
         gesamt_waerme = gesamt_heizung + gesamt_warmwasser
-        durchschnitt_cop = (
-            gesamt_waerme / gesamt_strom
-            if gesamt_strom > 0 and not waerme_abgeleitet else 0
+        # ⛔ **W-15 (26.08.): Hier stand bis zum 26.08. eine eigene Division**
+        # (`gesamt_waerme / gesamt_strom`). Damit fehlten dem Hub **alle**
+        # R2-Sperren außer der abgeleiteten Wärme — kein Abzug des
+        # funktionsfremden Stroms (W-14/E4), keine Anwender-Angabe
+        # „Fremdanteil auf den Zählern" (W-7), und weder Grund noch
+        # Heizstab-Hinweis (W-6), weil beides nur aus dem Layer kommt.
+        #
+        # ⭐ **Gemessen an einer nachgestellten Anlage** (3000 kWh Wärme ·
+        # 1000 kWh Heizstrom · 300 kWh Kühlstrom): Der Hub sagte **2,31**,
+        # das Cockpit für denselben Monat **3,00**. *Dieselbe Anlage, zwei
+        # Aussagen* — wortgleich die Begründung, mit der W-4 am selben Tag
+        # `cop_heizen`/`cop_warmwasser` auf den Layer gehoben hat. Diese
+        # Kennzahl blieb daneben stehen.
+        #
+        # ⚠ Der Abzug greift in **beiden** Split-Zweigen richtig: Der
+        # abgeleitete verteilt den vorhandenen Gesamtstrom, der gemessene ist
+        # seit W-16 in `get_wp_strom_kwh` enthalten — die Menge steckt also so
+        # oder so im Nenner, bevor sie abgezogen wird.
+        _wp_abgrenzung_gesamt = GRUND_JE_ABGRENZUNG.get(
+            abgrenzung_stoerung(wp) or ""
         )
+        _az_gesamt = arbeitszahl(
+            gesamt_waerme, gesamt_strom,
+            waerme_abgeleitet_kwh=1.0 if waerme_abgeleitet else 0.0,
+            strom_funktionsfremd_kwh=(
+                gesamt_modus_kuehlen + gesamt_modus_lueften
+                + gesamt_modus_entfeuchten
+            ),
+            abgrenzung_verletzt=_wp_abgrenzung_gesamt,
+        )
+        durchschnitt_cop = _az_gesamt.wert
 
         # Drift-Audit Domäne A1 / Issue #178: vorher las dieser Endpoint
         # `gas_kwh_preis_cent` (toter Key, Form schreibt `alter_preis_cent_kwh`)
@@ -1052,10 +1085,16 @@ async def get_waermepumpe_dashboard(
             #
             # `wp_kosten_euro` bleibt eine Zahl: Strom × Preis ist immer
             # bestimmt und die einzige Aussage, die hier ohne Vergleich gilt.
+            # W-15: `None` **und** der Grund daneben — bisher gab es hier nur
+            # die Zahl oder gar nichts, und der Anwender stand ohne Auskunft da.
             'durchschnitt_cop': (
-                round(durchschnitt_cop, 2)
-                if gesamt_waerme > 0 and not waerme_abgeleitet else None
+                round(durchschnitt_cop, 2) if durchschnitt_cop is not None else None
             ),
+            'durchschnitt_cop_grund': _az_gesamt.grund,
+            # W-6: Der Heizstab-Satz gab es bis zum 26.08. **nur im Cockpit**
+            # (`aktueller_monat.py`). Genau ihn verspricht die Melder-Antwort an
+            # dietmar1968 aber für den Komponenten-Hub — dort war er nie.
+            'durchschnitt_cop_hinweis': _az_gesamt.hinweis,
             'wp_kosten_euro': round(wp_kosten, 2),
             'alte_heizung_kosten_euro': round(alte_heizung_kosten, 2) if bewertbar else None,
             'ersparnis_euro': round(ersparnis, 2) if bewertbar else None,

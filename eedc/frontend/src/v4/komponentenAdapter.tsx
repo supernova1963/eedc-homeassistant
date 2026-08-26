@@ -600,7 +600,19 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
         inv, label: inv.bezeichnung,
         monatswerte: md.length,
         status: [
-          kpi(WP_KPI.jaz, formatEffizienz(z.durchschnitt_cop).wert),
+          // W-15: Die Gesamt-Arbeitszahl trägt jetzt dieselben zwei Zusätze wie
+          // die getrennten daneben — den **Grund**, wenn es sie nicht gibt, und
+          // den **Heizstab-Satz**, wenn sie unter 2 liegt. Beides kommt seit dem
+          // 26.08. aus dem Layer; der Endpoint rechnete vorher selbst und konnte
+          // deshalb keines von beidem liefern. ⭐ Genau diesen Satz sagt die
+          // Melder-Antwort an dietmar1968 für **diese** Fläche zu.
+          z.durchschnitt_cop == null && z.durchschnitt_cop_grund
+            ? unbewertet(WP_KPI.jaz, z.durchschnitt_cop_grund)
+            : {
+                ...kpi(WP_KPI.jaz, formatEffizienz(z.durchschnitt_cop).wert),
+                ...(z.durchschnitt_cop_hinweis
+                  ? { subtitle: z.durchschnitt_cop_hinweis } : {}),
+              },
           // Wärme+Strom an EINER Referenz skaliert (kein kWh/MWh-Mix im Strip, C3).
           kpi(WP_KPI.waerme, energie(z.gesamt_waerme_kwh, wpEnergieRef).wert, energie(z.gesamt_waerme_kwh, wpEnergieRef).einheit),
           kpi(WP_KPI.strom, energie(z.gesamt_stromverbrauch_kwh, wpEnergieRef).wert, energie(z.gesamt_stromverbrauch_kwh, wpEnergieRef).einheit),

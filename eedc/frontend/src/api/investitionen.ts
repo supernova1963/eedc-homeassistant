@@ -244,6 +244,14 @@ export interface WaermepumpeDashboardResponse {
      *  `cop_warmwasser`; das Projekt führt Perioden-Kennzahlen durchgängig als
      *  **JAZ** und behält COP technischen Backend-Berechnungen vor (Glossar,
      *  v3.23.4/#167). Der Anzeigename war schon vorher „JAZ …". */
+    /** W-15: Warum es die Gesamt-Arbeitszahl nicht gibt — `null`, wenn es sie
+     *  gibt. Kommt seit dem 26.08.2026 aus dem Layer statt aus einer eigenen
+     *  Division im Endpoint; vorher lieferte der Hub weder Grund noch Hinweis. */
+    durchschnitt_cop_grund?: string | null
+    /** W-6/W-15: Der Heizstab-Satz unterhalb einer Arbeitszahl von 2 — er stand
+     *  bis zum 26.08.2026 nur im Cockpit, obwohl die Melder-Antwort ihn für den
+     *  Komponenten-Hub zusagt. */
+    durchschnitt_cop_hinweis?: string | null
     jaz_heizen?: number | null
     jaz_heizen_grund?: string | null
     jaz_warmwasser?: number | null

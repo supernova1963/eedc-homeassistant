@@ -49,6 +49,20 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Fixed
 
+- **Der Komponenten-Hub zeigte eine andere Arbeitszahl als das Cockpit — für dieselbe Anlage im selben Monat.** Gefunden beim Aufbau der neuen Simulationstests, nicht gemeldet. Wer heizt **und** kühlt, sah unter *Komponenten → Wärmepumpe* eine zu niedrige Zahl (an einer Beispielanlage 2,31 statt 3,00), während *Cockpit → Monat* richtig rechnete.
+
+  **Ursache:** Der Hub bildete den Quotienten selbst, statt die gemeinsame Rechenstelle zu nutzen. Damit fehlten ihm sämtliche Regeln, die dort gelten — der Kühlstrom blieb im Nenner, ein gemeldeter Fremdanteil auf den Zählern wurde ignoriert.
+
+  **Zwei Dinge kommen damit neu hinzu, die es dort nie gab:** Wo eedc keine Arbeitszahl bilden darf, steht jetzt **der Grund** statt einer leeren Kachel. Und liegt die Arbeitszahl unter 2, steht der **Heizstab-Hinweis** daneben — bisher gab es ihn nur im Cockpit.
+
+- **Wer Heizung, Warmwasser und Kühlung getrennt misst, dessen Kühlstrom fehlte im Stromverbrauch der Wärmepumpe.** Betroffen ist genau die Ausstattung, die mit diesem Release erst möglich wird: ein Kühlzähler an einer Luft-Wasser- oder Sole-Wasser-Wärmepumpe.
+
+  eedc summierte den Verbrauch aus „Strom Heizen" und „Strom Warmwasser" — eine Formel aus der Zeit, als eine Wärmepumpe nur diese beiden Dinge tun konnte. An einer Beispielanlage fehlten dadurch 100 von 1050 kWh, und das trug in Kosten, CO₂ und den Anteil an der Verbrauchsseite weiter.
+
+  **Zugleich wurde derselbe Kühlstrom ein zweites Mal abgezogen**, weil er im Nenner nie enthalten war — die Arbeitszahl fiel dadurch rund 12 % zu gut aus. Beides ist mit einer Korrektur behoben: Der Kühlstrom zählt im Verbrauch mit und wird genau einmal abgezogen.
+
+  ⚠ **Deine Zahlen können sich dadurch sichtbar ändern**, wenn du getrennte Zähler samt Kühlmessung führst: Der Stromverbrauch der Wärmepumpe steigt um den Kühlanteil, die Arbeitszahl sinkt entsprechend auf ihren richtigen Wert.
+
 - **Zwei Preisfelder, die der Daten-Checker verlangte und die es in keinem Formular gab.** Gemeldet von **MeinerB** (Issue #397): *„ich bekomme einen Hinweis dass ich die Felder bearbeiten soll, kann sie aber nicht finden."* Wer bei einem Speicher „Arbitrage-fähig" einschaltet, wurde nach Ø Lade- und Ø Entladepreis gefragt — beide gab es weder im Formular noch in einem Wizard. Der „Beheben"-Knopf führte in genau das Formular, in dem sie fehlten.
 
   **Beide Felder stehen jetzt unter *Netzladung & Arbitrage*,** sobald der Schalter an ist. Sie bleiben bewusst leer statt vorbelegt: Ein eingetragener Richtwert würde beim ersten Speichern zu einer gepflegten Zahl, die niemand bestätigt hat. Womit eedc ohne deine Angabe rechnet (12 bzw. 35 ct/kWh), steht als Hinweis unter dem Feld.

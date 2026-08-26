@@ -2461,14 +2461,49 @@ def get_wp_strom_kwh(data: dict, params: dict | None = None) -> float:
     aus der alten Quelle gerechnet wird, die getrennten JAZ aber aus den
     neuen Sensoren — Folge: Gesamt-JAZ kann mathematisch außerhalb der
     gewichteten Mitte der beiden Einzel-JAZ liegen.
+
+    ⭐ **W-16 (2026-08-26): Der getrennte Zweig kannte nur zwei Funktionen.**
+    ``strom_heizen_kwh + strom_warmwasser_kwh`` war der ganze Verbrauch,
+    solange eine Wärmepumpe nur heizen und Warmwasser machen konnte. Seit
+    **R1/W-2** ist ein **Kühlzähler an jeder Bauart** zuordenbar — und sein
+    Strom stand in **keinem** der beiden Felder. Folge an einer nachgestellten
+    Anlage gemessen (MartyBrs Bauform, T89667 #200): **950 statt 1050 kWh**,
+    also 100 kWh, die in Kosten, CO₂ und Verbrauchsseite fehlten.
+
+    ⭐ **Und die zweite Folge, W-16b:** Weil der Nenner den Kühlstrom nie
+    enthielt, zog ``arbeitszahl(...)`` ihn über ``strom_funktionsfremd_kwh``
+    ein **zweites** Mal ab — 3600 ÷ 850 statt 3600 ÷ 950, die Anlage sah 12 %
+    besser aus, als sie ist. Mit der Ergänzung hier wird jener Abzug wieder
+    richtig, **ohne dass ein Aufrufer sich ändert**.
+
+    ⚠ **Nur der GEMESSENE Split wird addiert, und das ist der Kern.** Ein
+    **abgeleiteter** Split (aus dem Stunden-Signal) verteilt den *vorhandenen*
+    Gesamtstrom auf Betriebsarten — sein Kühlanteil ist bereits Teil von
+    ``strom_heizen_kwh``. Ihn zu addieren wäre genau die Doppelzählung, die
+    W-16b beseitigt, nur andersherum. ``ModusStromZeile.gemessen`` trennt die
+    beiden Fälle; ``funktionsfremd_kwh`` ist die **eine Stelle**, die sagt,
+    welche Betriebsarten keine bewertete Nutzenergie haben (Kühlen · Lüften ·
+    Entfeuchten, **E4**) — sie hier aufzuzählen wäre die Bauform, an der W-14
+    entstanden ist.
+
+    ⚠ **Im Nicht-getrennt-Zweig wird NICHTS addiert:** ``stromverbrauch_kwh``
+    ist der Zählerstand des ganzen Geräts und enthält den Kühlbetrieb bereits.
     """
     if not data:
         return 0.0
     if params and params.get("getrennte_strommessung"):
-        return float(
+        basis = float(
             (data.get("strom_heizen_kwh") or 0) +
             (data.get("strom_warmwasser_kwh") or 0)
         )
+        # Lokaler Import: `betriebsart_gemessen` liest `basis_feld_key` aus
+        # diesem Modul — ein Import auf Modulebene wäre zirkulär.
+        from backend.core.berechnungen.betriebsart_gemessen import modus_strom_zeile
+
+        zeile = modus_strom_zeile(data)
+        if zeile.gemessen:
+            basis += zeile.funktionsfremd_kwh
+        return basis
     return float(
         data.get("stromverbrauch_kwh") or
         data.get("strom_kwh") or
