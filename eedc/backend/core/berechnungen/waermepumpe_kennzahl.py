@@ -353,3 +353,58 @@ def arbeitszahl_je_funktion(
         heizen=_je(heizung_kwh, strom_heizen_kwh),
         warmwasser=_je(warmwasser_kwh, strom_warmwasser_kwh),
     )
+
+
+#: Grund, wenn die Kältemenge fehlt — der Normalfall, denn Kältemengenzähler
+#: sind selten. **Er nennt den Ausweg**, statt nur das Fehlen zu melden.
+GRUND_KEINE_KAELTEMENGE = "kein Kältemengenzähler zugeordnet"
+
+
+def arbeitszahl_kuehlen(
+    kaelte_kwh: Optional[float],
+    strom_kuehlen_kwh: Optional[float],
+    *,
+    abgrenzung_verletzt: Optional[str] = None,
+) -> Arbeitszahl:
+    """Kältemenge ÷ Kühlstrom — **W-5**, SOLL §4.1.
+
+    ⛔ **Diese Zahl heißt NICHT „SEER", und das ist eine Entscheidung**
+    (Empfehlung 26.08., von Gernot angenommen). SEER ist eine **genormte**
+    Größe: saisonal gewichtet, unter definierten Prüfstandsbedingungen ermittelt.
+    Was hier entsteht, ist der schlichte Quotient zweier Zähler über einen
+    Zeitraum. Ihn „SEER" zu nennen behauptete eine Vergleichbarkeit mit
+    Datenblatt-Werten, die er nicht hat — dieselbe Klasse wie ein Feldname, der
+    etwas anderes trägt als er verspricht (**#120**, die Warnung steht wörtlich
+    an ``BETRIEBSART_NUTZENERGIE_FELD``).
+
+    **Sie heißt „Arbeitszahl Kühlen"** — parallel zu „Arbeitszahl Heizen" aus
+    W-4, und ehrlich über das, was sie ist: eine gemessene Verhältniszahl.
+
+    ⚠ **Nur aus zwei gemessenen Größen.** Die Kältemenge lässt sich nicht
+    ableiten — es gibt keinen „Kälte-Wirkungsgrad", aus dem man sie rechnen
+    könnte, ohne genau den Faktor zurückzubekommen, mit dem man gerechnet hat
+    (dieselbe Begründung wie bei der abgeleiteten Heizwärme, Konzept §3.5).
+    Fehlt sie, steht der Grund da, nicht eine Schätzung.
+
+    ⚠ **Kein Heizstab-Hinweis.** ``HEIZSTAB_HINWEIS`` erklärt eine Arbeitszahl
+    nahe 1 mit direkter Elektroheizung — im Kühlbetrieb gibt es dafür keine
+    Entsprechung, und eine niedrige Kälte-Arbeitszahl hat andere Ursachen
+    (hohe Außentemperatur, kleiner Temperaturhub). Einen Satz zu übernehmen,
+    weil die Bauform passt, wäre eine Erklärung, die nichts erklärt.
+
+    Args:
+        kaelte_kwh: gemessene abgegebene **Kälte**menge
+            (`betriebsart_nutzenergie_kuehlen_kwh`).
+        strom_kuehlen_kwh: der Strom, der in den Kühlbetrieb ging.
+        abgrenzung_verletzt: wie bei {@link arbeitszahl} — R2 gilt unverändert.
+            Ein Fremdanteil auf dem Zähler macht auch diese Zahl unbrauchbar.
+    """
+    e = float(strom_kuehlen_kwh or 0.0)
+    q = float(kaelte_kwh or 0.0)
+    if e <= 0:
+        return Arbeitszahl(None, "kein Kühlbetrieb in diesem Zeitraum")
+    if q <= 0:
+        return Arbeitszahl(None, GRUND_KEINE_KAELTEMENGE)
+    if abgrenzung_verletzt:
+        return Arbeitszahl(None, abgrenzung_verletzt)
+    return Arbeitszahl(q / e)

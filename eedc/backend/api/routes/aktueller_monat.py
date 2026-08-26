@@ -30,7 +30,7 @@ from backend.api.routes.strompreise import (
 from backend.api.routes.connector import _calc_month_delta
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.core.berechnungen.waermepumpe_kennzahl import (
-    abgrenzungs_grund, arbeitszahl, arbeitszahl_je_funktion,
+    abgrenzungs_grund, arbeitszahl, arbeitszahl_je_funktion, arbeitszahl_kuehlen,
 )
 from backend.core.berechnungen import (
     sonstiges_richtung,
@@ -258,6 +258,11 @@ class AktuellerMonatResponse(BaseModel):
     wp_jaz_heizen_grund: Optional[str] = None
     wp_jaz_warmwasser: Optional[float] = None
     wp_jaz_warmwasser_grund: Optional[str] = None
+    #: W-5: Arbeitszahl **Kühlen** (Kältemenge ÷ Kühlstrom). Bewusst nicht
+    #: „SEER" — das ist eine genormte Prüfstandsgröße, dies ein gemessener
+    #: Quotient über einen Zeitraum.
+    wp_jaz_kuehlen: Optional[float] = None
+    wp_jaz_kuehlen_grund: Optional[str] = None
     wp_modus_strom_lueften_kwh: Optional[float] = None
     wp_modus_strom_entfeuchten_kwh: Optional[float] = None
     wp_modus_nicht_aufgeteilt_kwh: Optional[float] = None
@@ -1952,6 +1957,14 @@ async def get_aktueller_monat(
     # Warmwasser liegt bauartbedingt niedriger (höhere Zieltemperatur); wer viel
     # Warmwasser macht, hat deshalb eine niedrigere Gesamtzahl, **ohne schlechter
     # zu sein**. Dieselben R2-Sperren, weil dieselbe Layer-Funktion gerufen wird.
+    # W-5 (SOLL §4.1): Kältemenge ÷ Kühlstrom. Beide Größen nur gemessen — es
+    # gibt keinen Weg, eine Kältemenge abzuleiten. Heißt bewusst NICHT „SEER"
+    # (genormte Prüfstandsgröße), sondern „Arbeitszahl Kühlen".
+    wp_az_kuehlen = arbeitszahl_kuehlen(
+        mf_wp.nutzenergie_kuehlen_kwh if mf_wp is not None else None,
+        mf_wp.modus_strom_kuehlen_kwh if mf_wp is not None else None,
+        abgrenzung_verletzt=wp_abgrenzung_verletzt,
+    )
     wp_az_funktion = arbeitszahl_je_funktion(
         heizung_kwh=wp_heizung,
         strom_heizen_kwh=wp_strom_heizen,
@@ -2387,6 +2400,8 @@ async def get_aktueller_monat(
         wp_jaz_heizen_grund=wp_az_funktion.heizen.grund,
         wp_jaz_warmwasser=wp_az_funktion.warmwasser.wert,
         wp_jaz_warmwasser_grund=wp_az_funktion.warmwasser.grund,
+        wp_jaz_kuehlen=wp_az_kuehlen.wert,
+        wp_jaz_kuehlen_grund=wp_az_kuehlen.grund,
         wp_modus_strom_lueften_kwh=wp_modus_lueften,
         wp_modus_strom_entfeuchten_kwh=wp_modus_entfeuchten,
         wp_modus_nicht_aufgeteilt_kwh=wp_modus_rest,

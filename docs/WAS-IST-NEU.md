@@ -55,6 +55,23 @@ schreibt den Grund daneben — statt einer Zahl, die es so nicht gibt.
 gekühlte Anlagen (nur Umwälzpumpen) erreichen ein Vielfaches der Effizienz. Ihre
 eigenen Zahlen bleiben, sie werden nur nicht mehr gegen aktiv gekühlte gestellt.
 
+**Der Kühlbetrieb bekommt eine eigene Kennzahl**
+
+Wenn du einen Kältemengenzähler hast, konntest du die gemessene Kältemenge schon
+länger eintragen — **zu sehen bekamst du sie nirgends.** Es gab keine Kennzahl,
+die sie benutzt hätte.
+
+Jetzt gibt es die **Arbeitszahl Kühlen**: Kältemenge geteilt durch Kühlstrom, im
+Komponenten-Hub und im Cockpit unter *Monat*, neben Heizen und Warmwasser.
+
+**Warum sie nicht „SEER" heißt:** SEER ist eine genormte Größe, die auf einem
+Prüfstand unter festgelegten Bedingungen ermittelt wird. Was eedc bilden kann,
+ist das Verhältnis deiner beiden Zähler über einen Zeitraum. Sie „SEER" zu nennen
+würde eine Vergleichbarkeit mit dem Datenblatt behaupten, die sie nicht hat.
+
+Hast du keinen Kältemengenzähler — das ist der Normalfall —, steht dort der Grund
+statt einer Zahl. **Geschätzt wird nichts.**
+
 **Arbeitszahl für Heizen und Warmwasser getrennt — jetzt auch im Cockpit**
 
 Wenn du den Strom für Heizung und Warmwasser getrennt misst, rechnet eedc für

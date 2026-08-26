@@ -25,6 +25,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
   **„Kühlung: aktiv oder passiv"** — passiv gekühlte Anlagen (nur Umwälzpumpen) erreichen ein Vielfaches der Effizienz aktiv gekühlter. Ihre eigenen Zahlen bleiben unverändert; sie werden im Community-Vergleich nicht mehr gegen aktiv gekühlte Anlagen gestellt.
 
+- **Eine Kennzahl für den Kühlbetrieb: die Arbeitszahl Kühlen.** Wer einen Kältemengenzähler hat, konnte seine Kältemenge seit v4.0.24 eintragen — und sah sie **an keiner einzigen Stelle**. Es gab keine Kennzahl, die sie benutzt hätte.
+
+  **Jetzt gibt es sie:** Kältemenge ÷ Kühlstrom, im Komponenten-Hub und im Cockpit (Monat), neben den Arbeitszahlen für Heizen und Warmwasser.
+
+  **Sie heißt bewusst nicht „SEER".** SEER ist eine genormte Größe, die unter definierten Prüfstandsbedingungen ermittelt wird — was eedc bilden kann, ist der Quotient deiner beiden Zähler über einen Zeitraum. Sie „SEER" zu nennen würde eine Vergleichbarkeit mit Datenblatt-Werten behaupten, die sie nicht hat.
+
+  Fehlt der Kältemengenzähler — der Normalfall —, steht der Grund dort statt einer Zahl. **Geschätzt wird nichts:** Aus einem angenommenen Wirkungsgrad käme genau der Faktor zurück, mit dem gerechnet wurde.
+
 - **Arbeitszahl getrennt für Heizen und Warmwasser — überall und mit Begründung.** Wer Strom je Funktion getrennt misst, sah die beiden Zahlen bisher nur im Komponenten-Hub. **Im Cockpit (Monat) gab es sie gar nicht**, obwohl dieselben Daten dort vorliegen.
 
   **Wichtiger als der neue Ort ist, was sich an den Zahlen ändert:** Sie wurden bisher an einer eigenen Stelle gerechnet und kannten deshalb die Sperren nicht, die für die Gesamt-Arbeitszahl längst gelten. Liegt ein Heizstab auf dem Wärmepumpen-Zähler, verschwand die Gesamtzahl mit Begründung — „JAZ Heizen" stand unbeeindruckt daneben. **Dieselbe Anlage, zwei Aussagen.** Jetzt rechnet eine Stelle für alle drei Zahlen.

@@ -32,7 +32,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from backend.core.berechnungen.betriebsart_gemessen import modus_strom_zeile
+from backend.core.berechnungen.betriebsart_gemessen import (
+    betriebsart_nutzenergie_kwh,
+    modus_strom_zeile,
+)
 from backend.core.berechnungen.modus_split import heizwaerme_ist_abgeleitet
 from backend.core.berechnungen.waermepumpe_kennzahl import waerme_gesamt_kwh
 from backend.core.betriebsmodus import MODUS_ABDECKUNG_FELD, MODUS_STROM_FELD
@@ -98,6 +101,17 @@ class ImdTypBeitrag:
     #: ``ModusStromZeile.funktionsfremd_kwh`` aus dem Nenner der Arbeitszahl.
     wp_modus_strom_lueften: float = 0.0
     wp_modus_strom_entfeuchten: float = 0.0
+    #: W-5 (SOLL §4.1): die **Kältemenge** — abgegebene Nutzenergie im
+    #: Kühlbetrieb. Bewusst nicht „waerme": im Kühlbetrieb ist die Nutzenergie
+    #: Kälte, und ein Feldname, der etwas anderes behauptet als er trägt, ist
+    #: die Klasse, an der `heizenergie_kwh` schon einmal missverstanden wurde
+    #: (#120). **Nur gemessen** — es gibt keinen Weg, sie abzuleiten.
+    #:
+    #: ⚠ **Nur Kühlen von den vier Betriebsarten.** Heizen wäre redundant zu
+    #: `heizenergie_kwh` (Wärmemengenzähler), Lüften und Entfeuchten sind nach
+    #: E4 ausdrücklich **nicht bewertet** — für sie gibt es keine Kennzahl, für
+    #: die man eine Nutzenergie bräuchte.
+    wp_nutzenergie_kuehlen: float = 0.0
     wp_modus_abdeckung_h: float = 0.0
     #: #263 — die Aufteilung dieser Zeile ist **gemessen**, nicht abgeleitet.
     #: Trägt zwei Folgen: der aus dem Betriebsmodus gerechnete Split darf hier
@@ -246,6 +260,9 @@ def imd_typ_beitrag(
             wp_modus_strom_kuehlen=_modus.kuehlen_kwh,
             wp_modus_strom_lueften=_modus.lueften_kwh,
             wp_modus_strom_entfeuchten=_modus.entfeuchten_kwh,
+            wp_nutzenergie_kuehlen=(
+                betriebsart_nutzenergie_kwh(data, _KUEHLEN) or 0.0
+            ),
             wp_modus_abdeckung_h=_f(data, MODUS_ABDECKUNG_FELD),
             wp_modus_gemessen=_gemessen,
             wp_modus_strom_bezug=(

@@ -19,7 +19,7 @@
  * → lebt in Cockpit/Aussicht. Typ-spezifische IST-Analysen (PV-SOLL/IST je String)
  * kommen aus `komponentenAnalyse.tsx`, nicht aus diesem Daten-Adapter.
  */
-import { Activity, Battery, Clock, Droplet, Euro, Flame, Fuel, Leaf, Power, TrendingUp, Zap } from 'lucide-react'
+import { Activity, Battery, Clock, Droplet, Euro, Flame, Fuel, Leaf, Power, Snowflake, TrendingUp, Zap } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { fmtCalc } from '../components/ui'
 import { formatEnergie, formatEffizienz } from '../lib/einheiten'
@@ -567,7 +567,7 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
       // daneben wäre die zweite Komponente für ein bestehendes Muster (Regel 0a).
       const jazJeFunktion = (
         wert: number | null | undefined, grund: string | null | undefined,
-        label: string, farbe: 'orange' | 'cyan', icon: typeof Flame, formel: string,
+        label: string, farbe: KomponentenColor, icon: typeof Flame, formel: string,
       ) => {
         if (wert != null) {
           sek.push(k(label, formatEffizienz(wert).wert, undefined, farbe, icon, { formel }))
@@ -579,6 +579,12 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
       }
       jazJeFunktion(z.jaz_heizen, z.jaz_heizen_grund, 'JAZ Heizen', 'orange', Flame, 'Heizwärme ÷ Strom Heizen')
       jazJeFunktion(z.jaz_warmwasser, z.jaz_warmwasser_grund, 'JAZ Warmwasser', 'cyan', Droplet, 'Warmwasser ÷ Strom Warmwasser')
+      // W-5: „JAZ Kühlen", nicht „SEER" — dieselbe Bauform, andere Größe.
+      // Farbe `blue`: Die KPI-Palette kennt kein `sky` (die Rollenfarbe der
+      // Kühlung in `ROLLEN_BG`), und `cyan` trägt hier schon das Warmwasser.
+      // `blue` ist von beiden Nachbarn unterscheidbar — keine neue Farbe für
+      // eine Achse, die es in der Palette nicht gibt.
+      jazJeFunktion(z.jaz_kuehlen, z.jaz_kuehlen_grund, 'JAZ Kühlen', 'blue', Snowflake, 'Kältemenge ÷ Strom Kühlen')
       if (z.kompressor_starts_summe_erfasst != null) sek.push(k('Kompressor-Starts', n0(z.kompressor_starts_summe_erfasst), undefined, 'purple', Power, {
         subtitle: z.kompressor_starts_max_tag != null ? `Max/Tag: ${n0(z.kompressor_starts_max_tag)}` : undefined,
         berechnung: z.kompressor_starts_gesamt != null ? `Zählerstand (Lebensdauer): ${n0(z.kompressor_starts_gesamt)}` : undefined,

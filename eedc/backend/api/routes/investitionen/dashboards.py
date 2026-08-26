@@ -92,11 +92,13 @@ from backend.core.field_definitions import (
     ist_gepflegte_sonstiges_kategorie,
     ist_zaehler_kategorie,
 )
-from backend.core.berechnungen import modus_strom_zeile
+from backend.core.berechnungen import betriebsart_nutzenergie_kwh, modus_strom_zeile
 from backend.core.berechnungen.waermepumpe_kennzahl import (
     GRUND_JE_ABGRENZUNG,
     arbeitszahl_je_funktion,
+    arbeitszahl_kuehlen,
 )
+from backend.core.betriebsmodus import KUEHLEN as BM_KUEHLEN_W5
 from backend.core.betriebsmodus import MODUS_ABDECKUNG_FELD
 from backend.core.berechnungen import (
     heiz_effizienz_gepflegt,
@@ -838,6 +840,7 @@ async def get_waermepumpe_dashboard(
         # kann sie nicht und lässt sie bei 0.
         gesamt_modus_lueften = 0.0
         gesamt_modus_entfeuchten = 0.0
+        gesamt_kaelte = 0.0
         gesamt_modus_abdeckung_h = 0.0
         gesamt_modus_bezug = 0.0
         # #263 — mindestens ein Monat bringt die Aufteilung GEMESSEN mit.
@@ -862,6 +865,8 @@ async def get_waermepumpe_dashboard(
             gesamt_modus_kuehlen += _zeile.kuehlen_kwh
             gesamt_modus_lueften += _zeile.lueften_kwh
             gesamt_modus_entfeuchten += _zeile.entfeuchten_kwh
+            # W-5: die Kältemenge — nur gemessen, nie abgeleitet.
+            gesamt_kaelte += betriebsart_nutzenergie_kwh(d, BM_KUEHLEN_W5) or 0.0
             _m_abdeckung = d.get(MODUS_ABDECKUNG_FELD, 0) or 0
             gesamt_modus_abdeckung_h += _m_abdeckung
             if _m_abdeckung > 0 or _zeile_gemessen:
@@ -1106,6 +1111,23 @@ async def get_waermepumpe_dashboard(
         zusammenfassung['waerme_abgeleitet_faktor'] = (
             heiz_effizienz_gepflegt(wp.parameter) if waerme_abgeleitet else None
         )
+
+        # W-5 (SOLL §4.1): Arbeitszahl Kühlen. ⚠ **Bewusst außerhalb des
+        # `hat_getrennte_strom`-Blocks darunter:** Sie hängt an den
+        # Betriebsart-Zählern, nicht an der Heizen/Warmwasser-Trennung. Eine
+        # Klimaanlage hat oft genau diese Zähler und nie eine getrennte
+        # Strommessung — sie hier mit einzusperren hieße, die Zahl genau dem
+        # Gerätetyp vorzuenthalten, für den sie gebaut ist.
+        _az_kuehlen = arbeitszahl_kuehlen(
+            gesamt_kaelte, gesamt_modus_kuehlen,
+            abgrenzung_verletzt=GRUND_JE_ABGRENZUNG.get(abgrenzung_stoerung(wp) or ""),
+        )
+        if _az_kuehlen.wert is not None or gesamt_modus_kuehlen > 0:
+            zusammenfassung['jaz_kuehlen'] = (
+                round(_az_kuehlen.wert, 2) if _az_kuehlen.wert is not None else None
+            )
+            zusammenfassung['jaz_kuehlen_grund'] = _az_kuehlen.grund
+            zusammenfassung['gesamt_kaelte_kwh'] = round(gesamt_kaelte, 1)
 
         # W-4 (SOLL §4.1): Arbeitszahl je Funktion, wenn separate Strommessung
         # vorliegt. Q und E stammen aus **denselben** Monaten

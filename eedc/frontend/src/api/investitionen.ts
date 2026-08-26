@@ -248,6 +248,11 @@ export interface WaermepumpeDashboardResponse {
     jaz_heizen_grund?: string | null
     jaz_warmwasser?: number | null
     jaz_warmwasser_grund?: string | null
+    /** W-5: Arbeitszahl Kühlen. Hängt an den Betriebsart-Zählern, NICHT an der
+     *  getrennten Strommessung — eine Klimaanlage hat oft genau diese Zähler. */
+    jaz_kuehlen?: number | null
+    jaz_kuehlen_grund?: string | null
+    gesamt_kaelte_kwh?: number
     // Modus-Split (#263 K-2) — **Teilmengen** von `gesamt_stromverbrauch_kwh`,
     // nie Summanden. Alle vier fehlen gemeinsam, wenn kein Modus erfasst ist:
     // eine 0 hieße „hat nicht geheizt", und das weiß eedc ohne Sensor nicht.

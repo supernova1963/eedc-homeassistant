@@ -418,6 +418,7 @@ export function baueKomponentenBloecke(
     }
     jazZeile(d.wp_jaz_heizen, d.wp_jaz_heizen_grund, 'Arbeitszahl · Heizen')
     jazZeile(d.wp_jaz_warmwasser, d.wp_jaz_warmwasser_grund, 'Arbeitszahl · Warmwasser')
+    jazZeile(d.wp_jaz_kuehlen, d.wp_jaz_kuehlen_grund, 'Arbeitszahl · Kühlen')
     const wpKpis = mitParkId('wp', kpis)
     // Wärme-Aufteilung Heizung/Warmwasser (VerteilungsBalken, B7) + Strom-Split (Detail)
     // + Geräte-Hinweis — je ein parkbares Element.

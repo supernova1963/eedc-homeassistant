@@ -133,6 +133,11 @@ export interface AktuellerMonatResponse {
   wp_jaz_heizen_grund?: string | null
   wp_jaz_warmwasser?: number | null
   wp_jaz_warmwasser_grund?: string | null
+  /** W-5: Arbeitszahl **Kühlen** (Kältemenge ÷ Kühlstrom). Bewusst nicht
+   *  „SEER" — das ist eine genormte Prüfstandsgröße, dies ein gemessener
+   *  Quotient über einen Zeitraum. */
+  wp_jaz_kuehlen?: number | null
+  wp_jaz_kuehlen_grund?: string | null
   wp_modus_strom_lueften_kwh?: number | null
   wp_modus_strom_entfeuchten_kwh?: number | null
   wp_modus_nicht_aufgeteilt_kwh?: number | null

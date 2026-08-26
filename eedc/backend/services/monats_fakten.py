@@ -361,6 +361,11 @@ class WpFakten:
     #: die Felder anbietet.
     modus_strom_lueften_kwh: float = 0.0
     modus_strom_entfeuchten_kwh: float = 0.0
+    #: W-5 (SOLL §4.1): abgegebene **Kälte**menge im Kühlbetrieb — der Zähler
+    #: der Arbeitszahl Kühlen. **Nur gemessen**: einen Weg, sie abzuleiten, gibt
+    #: es nicht, und eine geschätzte Kältemenge wäre eine Zahl, die genauer
+    #: aussieht als sie ist.
+    nutzenergie_kuehlen_kwh: float = 0.0
     #: Stunden mit gültigem Modus-Signal — das Qualitätsmaß neben den Mengen.
     modus_abdeckung_h: float = 0.0
     #: #263 — die Aufteilung ist **gemessen** (Betriebsart-Zähler) statt aus
@@ -1078,6 +1083,8 @@ class _RohMonat:
         #: E4 — nur aus gemessenen Zaehlern; der abgeleitete Split kann sie nicht.
         self.wp_modus_strom_lueften = 0.0
         self.wp_modus_strom_entfeuchten = 0.0
+        #: W-5 — die Kältemenge, nur gemessen.
+        self.wp_nutzenergie_kuehlen = 0.0
         self.wp_modus_abdeckung_h = 0.0
         #: #263 — mindestens ein Gerät bringt die Aufteilung GEMESSEN mit.
         self.wp_modus_gemessen = False
@@ -1244,6 +1251,7 @@ class _RohMonat:
             self.wp_modus_strom_kuehlen += b.wp_modus_strom_kuehlen
             self.wp_modus_strom_lueften += b.wp_modus_strom_lueften
             self.wp_modus_strom_entfeuchten += b.wp_modus_strom_entfeuchten
+            self.wp_nutzenergie_kuehlen += b.wp_nutzenergie_kuehlen
             self.wp_modus_abdeckung_h += b.wp_modus_abdeckung_h
             self.wp_modus_gemessen = self.wp_modus_gemessen or b.wp_modus_gemessen
             self.wp_modus_strom_bezug += b.wp_modus_strom_bezug
@@ -1503,6 +1511,7 @@ async def _baue_fakt(
             modus_strom_kuehlen_kwh=roh.wp_modus_strom_kuehlen,
             modus_strom_lueften_kwh=roh.wp_modus_strom_lueften,
             modus_strom_entfeuchten_kwh=roh.wp_modus_strom_entfeuchten,
+            nutzenergie_kuehlen_kwh=roh.wp_nutzenergie_kuehlen,
             modus_abdeckung_h=roh.wp_modus_abdeckung_h,
             modus_gemessen=roh.wp_modus_gemessen,
             modus_strom_bezug_kwh=roh.wp_modus_strom_bezug,
