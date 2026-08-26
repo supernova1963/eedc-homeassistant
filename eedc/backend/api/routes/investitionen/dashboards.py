@@ -66,7 +66,7 @@ from backend.core.wirtschaftlichkeit_defaults import (
     EXTERNE_LADUNG_DEFAULT_EURO_KWH,
     NETZBEZUG_DEFAULT_CENT,
 )
-from backend.core.investition_parameter import ist_dienstlich
+from backend.core.investition_parameter import abgrenzung_stoerung, ist_dienstlich
 from backend.services.emob_ladeanteil import reichere_monatszeilen_an
 from backend.services.monats_fakten import lade_monats_fakten
 from backend.core.berechnungen.speicher_wirtschaftlichkeit import (
@@ -93,6 +93,10 @@ from backend.core.field_definitions import (
     ist_zaehler_kategorie,
 )
 from backend.core.berechnungen import modus_strom_zeile
+from backend.core.berechnungen.waermepumpe_kennzahl import (
+    GRUND_JE_ABGRENZUNG,
+    arbeitszahl_je_funktion,
+)
 from backend.core.betriebsmodus import MODUS_ABDECKUNG_FELD
 from backend.core.berechnungen import (
     heiz_effizienz_gepflegt,
@@ -1103,20 +1107,67 @@ async def get_waermepumpe_dashboard(
             heiz_effizienz_gepflegt(wp.parameter) if waerme_abgeleitet else None
         )
 
-        # Getrennte COP-Werte wenn separate Strommessung vorhanden.
-        # ⚠ Auch hier gilt die JAZ-Sperre (#263 K-2, §3.5): ist die Heizwärme
-        # abgeleitet, ist `cop_heizen` die gepflegte JAZ und kein Messwert.
+        # W-4 (SOLL §4.1): Arbeitszahl je Funktion, wenn separate Strommessung
+        # vorliegt. Q und E stammen aus **denselben** Monaten
+        # (`*_getrennt`-Summen) — das ist die R2-Abgrenzung, und sie war hier
+        # schon richtig gebaut.
+        #
+        # ⛔ **Drei Mängel standen hier bis zum 26.08.2026, alle im selben
+        # Dreizeiler:**
+        #
+        #  1. **Der Quotient wurde SELBST gerechnet** statt über den Layer —
+        #     die W-3-Klasse (die JAZ stand einmal an drei Orten). Damit fehlten
+        #     hier **alle** R2-Sperren außer der abgeleiteten Wärme: ein
+        #     Heizstab auf dem Zähler oder ein versetzter Zeitraum sperrte die
+        #     Gesamtzahl, diese beiden aber nicht.
+        #  2. **`0` statt „keine Aussage"** bei gesperrter Lage. Eine 0 heißt
+        #     „Arbeitszahl null", nicht „unbekannt" (ADR-002/P4).
+        #  3. **`cop_*` als Name**, obwohl das Projekt Perioden-Kennzahlen
+        #     durchgängig als **JAZ** führt und COP ausdrücklich technischen
+        #     Backend-Berechnungen vorbehält (Glossar, v3.23.4/#167).
+        #
+        # ⚠ **Angezeigt wurden sie durchaus** — im Komponenten-Hub als „JAZ
+        # Heizen"/„JAZ Warmwasser" (`v4/komponentenAdapter.tsx`, Sekundär-Strip
+        # „Betrieb & getrennte JAZ"). Sie fehlten dagegen in der **Monatssicht**,
+        # und dort tragen sie seit dem 26.08. dieselben Werte aus derselben
+        # Quelle. Der Anzeigename war schon vorher „JAZ" — nur der Feldname
+        # hinkte hinterher, was Mangel 3 überhaupt erst erklärt.
         if hat_getrennte_strom:
+            # R2, so weit dieser Endpunkt sehen kann: Er liest **ein** Gerät aus
+            # seinen eigenen Monatszeilen. Die Anwender-Angabe „Fremdanteil auf
+            # den Zählern" gilt hier genauso wie überall (ein Heizstab auf dem
+            # WP-Zähler macht E zu groß, auch je Funktion). Die anlagenweite
+            # Lage „nicht alle Geräte melden Wärme" gibt es hier NICHT — bei
+            # einem einzelnen Gerät ist sie gegenstandslos —, und den
+            # Zeitraum-Versatz kennt nur die Vier-Quellen-Auflösung in
+            # `aktueller_monat`. Beides ist keine Lücke, sondern die Reichweite
+            # dieser Sicht (dieselbe Begründung wie in `cockpit/komponenten.py`).
+            _wp_abgrenzung = GRUND_JE_ABGRENZUNG.get(
+                abgrenzung_stoerung(wp) or ""
+            )
             zusammenfassung['gesamt_strom_heizen_kwh'] = round(gesamt_strom_heizen, 1)
             zusammenfassung['gesamt_strom_warmwasser_kwh'] = round(gesamt_strom_warmwasser, 1)
             zusammenfassung['gesamt_heizung_getrennt_kwh'] = round(gesamt_heizung_getrennt, 1)
             zusammenfassung['gesamt_warmwasser_getrennt_kwh'] = round(gesamt_warmwasser_getrennt, 1)
-            zusammenfassung['cop_heizen'] = round(
-                gesamt_heizung_getrennt / gesamt_strom_heizen, 2
-            ) if gesamt_strom_heizen > 0 and not waerme_abgeleitet else 0
-            zusammenfassung['cop_warmwasser'] = round(
-                gesamt_warmwasser_getrennt / gesamt_strom_warmwasser, 2
-            ) if gesamt_strom_warmwasser > 0 and not waerme_abgeleitet else 0
+            _az_funktion = arbeitszahl_je_funktion(
+                heizung_kwh=gesamt_heizung_getrennt,
+                strom_heizen_kwh=gesamt_strom_heizen,
+                warmwasser_kwh=gesamt_warmwasser_getrennt,
+                strom_warmwasser_kwh=gesamt_strom_warmwasser,
+                hat_split=True,
+                waerme_abgeleitet_kwh=1.0 if waerme_abgeleitet else 0.0,
+                abgrenzung_verletzt=_wp_abgrenzung,
+            )
+            zusammenfassung['jaz_heizen'] = (
+                round(_az_funktion.heizen.wert, 2)
+                if _az_funktion.heizen.wert is not None else None
+            )
+            zusammenfassung['jaz_heizen_grund'] = _az_funktion.heizen.grund
+            zusammenfassung['jaz_warmwasser'] = (
+                round(_az_funktion.warmwasser.wert, 2)
+                if _az_funktion.warmwasser.wert is not None else None
+            )
+            zusammenfassung['jaz_warmwasser_grund'] = _az_funktion.warmwasser.grund
 
         dashboards.append(WaermepumpeDashboardResponse(
             investition=wp,

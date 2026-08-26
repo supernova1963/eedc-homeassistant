@@ -127,6 +127,12 @@ export interface AktuellerMonatResponse {
   /** E4 (Konzept §2.3): nur aus **gemessenen** Betriebsart-Zählern — der aus
    *  dem Modus-Signal abgeleitete Split kann sie nicht. Ohne Zähler 0, dann
    *  stecken sie weiterhin in `wp_modus_nicht_aufgeteilt_kwh`. */
+  /** W-4 (SOLL §4.1): Arbeitszahl je Funktion. `null` heißt „gibt es nicht" —
+   *  dann sagt `*_grund` warum (S3: nie ein „—" ohne Grund). */
+  wp_jaz_heizen?: number | null
+  wp_jaz_heizen_grund?: string | null
+  wp_jaz_warmwasser?: number | null
+  wp_jaz_warmwasser_grund?: string | null
   wp_modus_strom_lueften_kwh?: number | null
   wp_modus_strom_entfeuchten_kwh?: number | null
   wp_modus_nicht_aufgeteilt_kwh?: number | null

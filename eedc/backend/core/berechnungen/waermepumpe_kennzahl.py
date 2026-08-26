@@ -213,10 +213,20 @@ def arbeitszahl(
             ihn abzuziehen stellt die Abgrenzung von Q und E überhaupt erst her.
             Beide Male gewinnt dieselbe Regel: Q und E müssen dasselbe meinen.
 
+            ⭐ **Seit E4 (26.08.) sind es drei Funktionen, nicht eine:** Kühlen,
+            **Lüften und Entfeuchten** — alle drei ohne bewertete Nutzenergie.
+            Die Aufrufer lesen sie als *eine* Größe
+            (`WpFakten.modus_strom_funktionsfremd_kwh`), statt drei Summanden
+            aufzuzählen; die Aufzählung war die Bauform, an der W-14 entstand.
+
             ⛔ **Nicht abgezogen wird die Restmenge** (`modus_nicht_aufgeteilt_kwh`
-            — Standby, Lüften, Entfeuchten, Unbestimmt). Sie ist keine gemessene
-            Funktion, sondern das, was übrig bleibt; der Bereitschaftsverbrauch
-            einer Heizung gehört legitim in ihre Arbeitszahl.
+            — Standby, Unbestimmt, und was mangels Zähler dort steckt). Sie ist
+            keine gemessene Funktion, sondern das, was übrig bleibt; der
+            Bereitschaftsverbrauch einer Heizung gehört legitim in ihre
+            Arbeitszahl. ⚠ **Der Unterschied ist die Messung, nicht die
+            Betriebsart:** Gemessenes Lüften wird abgezogen, ungemessenes bleibt
+            als Teil der Restmenge im Nenner — denn dort ist es von Standby
+            nicht unterscheidbar.
         abgrenzung_verletzt: kurzer Grund, wenn Q und E **nicht dieselbe
             Abgrenzung** tragen — anderes Gerät, andere Funktion, anderer
             Zeitraum. ``None`` heißt „keine bekannte Abweichung".
@@ -257,4 +267,89 @@ def arbeitszahl(
     return Arbeitszahl(
         wert,
         hinweis=HEIZSTAB_HINWEIS if wert < JAZ_HEIZSTAB_SCHWELLE else None,
+    )
+
+
+#: Grund, wenn der Strom nicht je Funktion vorliegt — die häufigste Lage.
+#: **Kurz und mit Ausweg**, wie jeder Sperrgrund (S3): Er sagt nicht nur, dass
+#: die Zahl fehlt, sondern woran es liegt.
+GRUND_STROM_NICHT_JE_FUNKTION = "Strom nicht getrennt je Funktion gemessen"
+
+
+@dataclass(frozen=True)
+class ArbeitszahlJeFunktion:
+    """Heizen und Warmwasser getrennt — **W-4**, SOLL §4.1.
+
+    ⚠ **Warum das keine „genauere JAZ" ist, sondern zwei andere Zahlen.** Die
+    Gesamt-Arbeitszahl teilt *alle* Wärme durch *allen* Strom. Diese beiden
+    teilen je Funktion — und beantworten damit eine Frage, die die Gesamtzahl
+    nicht beantworten kann: *warum* eine Anlage schlecht dasteht. Warmwasser
+    liegt bauartbedingt niedriger als Heizen (höhere Zieltemperatur); eine
+    Anlage mit viel Warmwasseranteil hat deshalb eine niedrigere Gesamtzahl,
+    **ohne schlechter zu sein**.
+
+    ⭐ **Diese Kennzahlen waren im Handbuch schon versprochen**
+    (`HANDBUCH_BEDIENUNG` §Wärme/Klima: *„Zusätzlich: JAZ-Heizen /
+    JAZ-Warmwasser getrennt"*) — und gab es im Code nie. `cop_heizung` /
+    `scop_heizung` sind **Anwender-Vorgaben** für die Ableitung, keine
+    gemessenen Werte. Eine Doku-Zusage ohne Deckung ist dieselbe Klasse wie ein
+    Feld, das angeboten und nirgends ausgewertet wird.
+    """
+
+    heizen: Arbeitszahl
+    warmwasser: Arbeitszahl
+
+
+def arbeitszahl_je_funktion(
+    *,
+    heizung_kwh: Optional[float],
+    strom_heizen_kwh: Optional[float],
+    warmwasser_kwh: Optional[float],
+    strom_warmwasser_kwh: Optional[float],
+    hat_split: bool,
+    waerme_abgeleitet_kwh: float = 0.0,
+    abgrenzung_verletzt: Optional[str] = None,
+) -> ArbeitszahlJeFunktion:
+    """Je Funktion eine eigene Arbeitszahl — oder je Funktion ihr Grund.
+
+    ⭐ **Rechnet nicht daneben, sondern ruft ``arbeitszahl`` zweimal.** Damit
+    gelten **alle** R2-Sperren unverändert und automatisch auch hier: abgeleitete
+    Wärme, Fremdanteil auf dem Zähler, Zeitraum-Versatz, fehlender Zähler. Eine
+    zweite Rechenstelle wäre die F-56-Klasse — *eine Regel, die an zwei Stellen
+    nachgebaut wird, driftet* —, und sie ist in dieser Datei bereits einmal
+    teuer geworden (W-3: die JAZ stand an drei Orten).
+
+    ⚠ **Kein ``strom_funktionsfremd_kwh``-Abzug, und das ist kein Vergessen.**
+    ``strom_heizen_kwh`` ist bereits nur der Heizbetrieb; Kühlen, Lüften und
+    Entfeuchten sind darin gar nicht enthalten. Ihn hier abzuziehen zöge
+    dieselbe Menge zweimal ab.
+
+    Args:
+        hat_split: liegt der Strom **getrennt je Funktion** vor
+            (`getrennte_strommessung`)? Ohne ihn gibt es E je Funktion nicht —
+            dann tragen **beide** Zahlen den Grund
+            {@link GRUND_STROM_NICHT_JE_FUNKTION}. ⚠ Die Wärme allein genügt
+            nicht: Q ohne E ist kein Quotient, und `strom_heizen_kwh` bedeutet
+            **ohne** das Kennzeichen etwas anderes (K3) — dort ist es kein
+            Summand einer zweiteiligen Achse.
+        waerme_abgeleitet_kwh: sperrt **beide** Zahlen. Eine aus dem Strom
+            gerechnete Wärme ergibt je Funktion genauso den Faktor zurück, mit
+            dem sie gerechnet wurde, wie in der Summe (Konzept §3.5).
+        abgrenzung_verletzt: gilt für **beide** — ein Heizstab auf dem Zähler
+            oder ein versetzter Zeitraum trifft nicht nur eine der Funktionen.
+    """
+    if not hat_split:
+        gesperrt = Arbeitszahl(None, GRUND_STROM_NICHT_JE_FUNKTION)
+        return ArbeitszahlJeFunktion(heizen=gesperrt, warmwasser=gesperrt)
+
+    def _je(q: Optional[float], e: Optional[float]) -> Arbeitszahl:
+        return arbeitszahl(
+            q, e,
+            waerme_abgeleitet_kwh=waerme_abgeleitet_kwh,
+            abgrenzung_verletzt=abgrenzung_verletzt,
+        )
+
+    return ArbeitszahlJeFunktion(
+        heizen=_je(heizung_kwh, strom_heizen_kwh),
+        warmwasser=_je(warmwasser_kwh, strom_warmwasser_kwh),
     )

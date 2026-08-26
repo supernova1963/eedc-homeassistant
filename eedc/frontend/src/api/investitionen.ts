@@ -239,8 +239,15 @@ export interface WaermepumpeDashboardResponse {
     gesamt_strom_warmwasser_kwh?: number
     gesamt_heizung_getrennt_kwh?: number
     gesamt_warmwasser_getrennt_kwh?: number
-    cop_heizen?: number
-    cop_warmwasser?: number
+    /** W-4 (SOLL §4.1): Arbeitszahl je Funktion — `null`, wo es sie nicht gibt,
+     *  dann sagt `*_grund` warum. ⚠ Hieß bis 26.08.2026 `cop_heizen` /
+     *  `cop_warmwasser`; das Projekt führt Perioden-Kennzahlen durchgängig als
+     *  **JAZ** und behält COP technischen Backend-Berechnungen vor (Glossar,
+     *  v3.23.4/#167). Der Anzeigename war schon vorher „JAZ …". */
+    jaz_heizen?: number | null
+    jaz_heizen_grund?: string | null
+    jaz_warmwasser?: number | null
+    jaz_warmwasser_grund?: string | null
     // Modus-Split (#263 K-2) — **Teilmengen** von `gesamt_stromverbrauch_kwh`,
     // nie Summanden. Alle vier fehlen gemeinsam, wenn kein Modus erfasst ist:
     // eine 0 hieße „hat nicht geheizt", und das weiß eedc ohne Sensor nicht.

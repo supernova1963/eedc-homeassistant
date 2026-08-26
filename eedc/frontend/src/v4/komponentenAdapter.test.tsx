@@ -464,7 +464,9 @@ describe('KOMPONENTEN_ADAPTER — spezifische Blöcke (Inc. 3b)', () => {
       investition: inv({ typ: 'waermepumpe' }),
       zusammenfassung: { durchschnitt_cop: 3.8, gesamt_waerme_kwh: 100, gesamt_stromverbrauch_kwh: 30,
         gesamt_heizenergie_kwh: 80, gesamt_warmwasser_kwh: 20, ersparnis_euro: 100,
-        cop_heizen: 4.1, cop_warmwasser: 2.9, kompressor_starts_summe_erfasst: 1234, kompressor_starts_gesamt: 5678,
+        // W-4 (26.08.): hieß bis dahin `cop_heizen`/`cop_warmwasser`. Der
+        // ANZEIGEname war schon vorher „JAZ …" — nur das Feld hinkte hinterher.
+        jaz_heizen: 4.1, jaz_warmwasser: 2.9, kompressor_starts_summe_erfasst: 1234, kompressor_starts_gesamt: 5678,
         betriebsstunden_summe_erfasst: 900, oe_laufzeit_pro_start_h: 0.73 },
       monatsdaten: [],
     }])
@@ -472,6 +474,24 @@ describe('KOMPONENTEN_ADAPTER — spezifische Blöcke (Inc. 3b)', () => {
     expect(titles(g.sekundaer!.kpis)).toEqual(['JAZ Heizen', 'JAZ Warmwasser', 'Kompressor-Starts', 'Betriebsstunden', 'Ø Laufzeit/Start'])
     // starts_pro_betriebsstunde fehlt → KPI nicht da
     expect(titles(g.sekundaer!.kpis)).not.toContain('Starts/Betriebsstunde')
+  })
+
+  it('WP ① W-4: gesperrte JAZ je Funktion zeigt „—" MIT Grund statt zu verschwinden', async () => {
+    // **S3.** Bis 26.08.2026 lieferte das Backend hier eine 0 — „Arbeitszahl
+    // null" statt „unbekannt" (ADR-002/P4). Jetzt kommt `null` plus Grund, und
+    // die Kachel bleibt: ein erklärtes „—" sagt mehr als eine fehlende Kachel.
+    getWaermepumpeDashboard.mockResolvedValue([{
+      investition: inv({ typ: 'waermepumpe' }),
+      zusammenfassung: { durchschnitt_cop: 3.8, gesamt_waerme_kwh: 100, gesamt_stromverbrauch_kwh: 30,
+        gesamt_heizenergie_kwh: 80, gesamt_warmwasser_kwh: 20, ersparnis_euro: 100,
+        jaz_heizen: null, jaz_heizen_grund: 'Heizstab-Strom auf dem WP-Zähler',
+        jaz_warmwasser: null, jaz_warmwasser_grund: 'Heizstab-Strom auf dem WP-Zähler' },
+      monatsdaten: [],
+    }])
+    const [g] = await KOMPONENTEN_ADAPTER.waermepumpe.fetch(1)
+    expect(titles(g.sekundaer!.kpis)).toEqual(['JAZ Heizen', 'JAZ Warmwasser'])
+    expect(g.sekundaer!.kpis[0].value).toBe('—')
+    expect(g.sekundaer!.kpis[0].subtitle).toBe('Heizstab-Strom auf dem WP-Zähler')
   })
 
   it('WP: keine Sekundär ohne getrennte/238-Daten', async () => {

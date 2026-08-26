@@ -401,6 +401,23 @@ export function baueKomponentenBloecke(
     const wpDetail: DetailZeile[] = []
     if (hat(d.wp_strom_heizen_kwh)) wpDetail.push({ label: 'Stromverbrauch · davon Heizung', wert: `${fmt(d.wp_strom_heizen_kwh)} kWh` })
     if (hat(d.wp_strom_warmwasser_kwh)) wpDetail.push({ label: 'Stromverbrauch · davon Warmwasser', wert: `${fmt(d.wp_strom_warmwasser_kwh)} kWh` })
+    // W-4 (SOLL §4.1): die Arbeitszahl je Funktion steht bei den getrennten
+    // Strommengen, aus denen sie entsteht — nicht als eigene KPI-Kachel oben.
+    // Dort steht die Gesamt-JAZ; drei Arbeitszahlen nebeneinander wären eine
+    // Zahlenwand, und die Detailzeile ist der Ort, an dem man ohnehin nachsieht,
+    // *warum* die Gesamtzahl so aussieht, wie sie aussieht.
+    //
+    // ⚠ **Auch das gesperrte „—" erscheint, mit seinem Grund** (S3). Eine
+    // fehlende Zeile wäre von „nicht getrennt gemessen" nicht zu unterscheiden.
+    const jazZeile = (wert: number | null | undefined, grund: string | null | undefined, label: string) => {
+      if (wert == null && !grund) return
+      wpDetail.push({
+        label,
+        wert: wert != null ? fmtCalc(wert, 2, '—') : `— (${grund})`,
+      })
+    }
+    jazZeile(d.wp_jaz_heizen, d.wp_jaz_heizen_grund, 'Arbeitszahl · Heizen')
+    jazZeile(d.wp_jaz_warmwasser, d.wp_jaz_warmwasser_grund, 'Arbeitszahl · Warmwasser')
     const wpKpis = mitParkId('wp', kpis)
     // Wärme-Aufteilung Heizung/Warmwasser (VerteilungsBalken, B7) + Strom-Split (Detail)
     // + Geräte-Hinweis — je ein parkbares Element.

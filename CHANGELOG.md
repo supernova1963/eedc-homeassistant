@@ -25,6 +25,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
   **„Kühlung: aktiv oder passiv"** — passiv gekühlte Anlagen (nur Umwälzpumpen) erreichen ein Vielfaches der Effizienz aktiv gekühlter. Ihre eigenen Zahlen bleiben unverändert; sie werden im Community-Vergleich nicht mehr gegen aktiv gekühlte Anlagen gestellt.
 
+- **Arbeitszahl getrennt für Heizen und Warmwasser — überall und mit Begründung.** Wer Strom je Funktion getrennt misst, sah die beiden Zahlen bisher nur im Komponenten-Hub. **Im Cockpit (Monat) gab es sie gar nicht**, obwohl dieselben Daten dort vorliegen.
+
+  **Wichtiger als der neue Ort ist, was sich an den Zahlen ändert:** Sie wurden bisher an einer eigenen Stelle gerechnet und kannten deshalb die Sperren nicht, die für die Gesamt-Arbeitszahl längst gelten. Liegt ein Heizstab auf dem Wärmepumpen-Zähler, verschwand die Gesamtzahl mit Begründung — „JAZ Heizen" stand unbeeindruckt daneben. **Dieselbe Anlage, zwei Aussagen.** Jetzt rechnet eine Stelle für alle drei Zahlen.
+
+  Und wo eine der beiden Zahlen nicht gebildet werden darf, stand bisher eine **0** — was „Arbeitszahl null" heißt und nicht „unbekannt". Jetzt steht dort ein „—" **mit dem Grund daneben**.
+
+  **Warum die getrennten Zahlen nützlich sind:** Warmwasser liegt bauartbedingt niedriger als Heizen (höhere Zieltemperatur). Wer viel Warmwasser macht, hat deshalb eine niedrigere Gesamt-Arbeitszahl, **ohne dass die Anlage schlechter wäre** — erst die getrennten Zahlen zeigen das.
+
 - **Lüften und Entfeuchten erscheinen jetzt in der Aufteilung.** Wer für diese Betriebsarten einen eigenen Zähler zugeordnet hat, sah seine Kilowattstunden bisher **nirgends** — sie fielen stumm unter „nicht aufgeteilt", obwohl eedc die Felder anbietet und den Wert entgegennimmt.
 
   **Ab jetzt bekommen beide ein eigenes Segment im Balken und eine eigene Zeile darunter** — in *Cockpit → Tag*, *Monat*, *Jahr* und im Komponenten-Hub. Wer keinen solchen Zähler hat, sieht keine Veränderung: Ohne Messung stecken sie weiterhin in der Restmenge, und zwei leere Zeilen an jeder Wärmepumpe wären keine Auskunft.

@@ -551,10 +551,34 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
     async fetch(anlageId) {
       const ds = await investitionenApi.getWaermepumpeDashboard(anlageId)
       return ds.map(({ investition: inv, zusammenfassung: z, monatsdaten: md }) => {
-      // ① Sekundär: getrennte JAZ (cop_*) + #238 Starts/Betriebsstunden — nur was gepflegt ist.
+      // ① Sekundär: getrennte JAZ (W-4) + #238 Starts/Betriebsstunden — nur was gepflegt ist.
+      //
+      // ⚠ **Der Grund steht jetzt neben dem „—", nicht nur die fehlende Zahl**
+      // (S3). Bis 26.08.2026 lieferte das Backend hier eine **0**, wo die Zahl
+      // gesperrt war — „Arbeitszahl null" statt „unbekannt", und die Kachel
+      // erschien mit einer Aussage, die niemand gemeint hatte. Jetzt kommt
+      // `null` plus Grund; die Kachel erscheint auch dann, weil ein erklärtes
+      // „—" mehr sagt als eine fehlende Kachel.
       const sek: KpiStripItem[] = []
-      if (z.cop_heizen != null) sek.push(k('JAZ Heizen', formatEffizienz(z.cop_heizen).wert, undefined, 'orange', Flame, { formel: 'Heizwärme ÷ Strom Heizen' }))
-      if (z.cop_warmwasser != null) sek.push(k('JAZ Warmwasser', formatEffizienz(z.cop_warmwasser).wert, undefined, 'cyan', Droplet, { formel: 'Warmwasser ÷ Strom Warmwasser' }))
+      // ⭐ Der gesperrte Fall nutzt `unbewertet` — die SoT-Bauform für
+      // „abgeleitete Kennzahl ohne Quelle" (Konzept Sonstiger Erzeuger,
+      // Gernot 2026-06-22). Sie existierte bereits und trägt genau diesen Fall:
+      // Wert „—", neutrale Farbe, Grund als Zweitzeile. Eine eigene Variante
+      // daneben wäre die zweite Komponente für ein bestehendes Muster (Regel 0a).
+      const jazJeFunktion = (
+        wert: number | null | undefined, grund: string | null | undefined,
+        label: string, farbe: 'orange' | 'cyan', icon: typeof Flame, formel: string,
+      ) => {
+        if (wert != null) {
+          sek.push(k(label, formatEffizienz(wert).wert, undefined, farbe, icon, { formel }))
+        } else if (grund) {
+          // `color` wird von `unbewertet` auf 'gray' überschrieben — die
+          // Farbrolle der Kennzahl gilt nur, wo es eine Zahl gibt.
+          sek.push(unbewertet({ title: label, icon, color: farbe }, grund))
+        }
+      }
+      jazJeFunktion(z.jaz_heizen, z.jaz_heizen_grund, 'JAZ Heizen', 'orange', Flame, 'Heizwärme ÷ Strom Heizen')
+      jazJeFunktion(z.jaz_warmwasser, z.jaz_warmwasser_grund, 'JAZ Warmwasser', 'cyan', Droplet, 'Warmwasser ÷ Strom Warmwasser')
       if (z.kompressor_starts_summe_erfasst != null) sek.push(k('Kompressor-Starts', n0(z.kompressor_starts_summe_erfasst), undefined, 'purple', Power, {
         subtitle: z.kompressor_starts_max_tag != null ? `Max/Tag: ${n0(z.kompressor_starts_max_tag)}` : undefined,
         berechnung: z.kompressor_starts_gesamt != null ? `Zählerstand (Lebensdauer): ${n0(z.kompressor_starts_gesamt)}` : undefined,

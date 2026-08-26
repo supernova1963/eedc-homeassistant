@@ -55,6 +55,28 @@ schreibt den Grund daneben — statt einer Zahl, die es so nicht gibt.
 gekühlte Anlagen (nur Umwälzpumpen) erreichen ein Vielfaches der Effizienz. Ihre
 eigenen Zahlen bleiben, sie werden nur nicht mehr gegen aktiv gekühlte gestellt.
 
+**Arbeitszahl für Heizen und Warmwasser getrennt — jetzt auch im Cockpit**
+
+Wenn du den Strom für Heizung und Warmwasser getrennt misst, rechnet eedc für
+beide eine eigene Arbeitszahl. Bisher standen sie nur im Komponenten-Hub; im
+Cockpit unter *Monat* gab es sie nicht, obwohl die Daten dort vorliegen.
+
+**An den Zahlen selbst ändert sich etwas Wichtigeres.** Sie wurden an einer
+eigenen Stelle gerechnet und kannten deshalb die Prüfungen nicht, die für die
+Gesamt-Arbeitszahl längst gelten. Hast du zum Beispiel angegeben, dass ein
+Heizstab auf dem Wärmepumpen-Zähler liegt, verschwand die Gesamtzahl mit
+Begründung — „JAZ Heizen" stand unbeeindruckt daneben. Jetzt rechnet **eine**
+Stelle für alle drei Zahlen, und was für die eine gilt, gilt für alle.
+
+Wo eine Zahl nicht gebildet werden darf, stand bisher eine **0**. Das heißt
+„Arbeitszahl null" und nicht „weiß ich nicht" — dort steht jetzt ein „—" mit dem
+Grund daneben.
+
+**Wozu die getrennten Zahlen gut sind:** Warmwasser liegt bauartbedingt
+niedriger als Heizen, weil es auf eine höhere Temperatur gebracht werden muss.
+Wer viel Warmwasser macht, hat deshalb eine niedrigere Gesamtzahl — **ohne dass
+seine Anlage schlechter wäre**. Genau das zeigen erst die getrennten Zahlen.
+
 **Lüften und Entfeuchten sind nicht mehr unsichtbar**
 
 Wer für diese beiden Betriebsarten einen eigenen Zähler zugeordnet hatte, sah

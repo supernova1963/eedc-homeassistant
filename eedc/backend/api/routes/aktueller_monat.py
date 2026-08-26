@@ -30,7 +30,7 @@ from backend.api.routes.strompreise import (
 from backend.api.routes.connector import _calc_month_delta
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.core.berechnungen.waermepumpe_kennzahl import (
-    abgrenzungs_grund, arbeitszahl,
+    abgrenzungs_grund, arbeitszahl, arbeitszahl_je_funktion,
 )
 from backend.core.berechnungen import (
     sonstiges_richtung,
@@ -251,6 +251,13 @@ class AktuellerMonatResponse(BaseModel):
     #: **gemessenen** Betriebsart-Zählern — der abgeleitete Split kann sie
     #: nicht und lässt sie bei 0. Sie bekommen keine Kennzahl (*erfassen ja,
     #: bewerten nein*) und fallen aus dem Nenner der Arbeitszahl.
+    #: W-4 (SOLL §4.1): Arbeitszahl je Funktion — mit ihrem Grund, wenn es sie
+    #: nicht gibt. Erscheint nur bei getrennter Strommessung; ohne sie liegt E
+    #: je Funktion nicht vor und beide tragen denselben Grund.
+    wp_jaz_heizen: Optional[float] = None
+    wp_jaz_heizen_grund: Optional[str] = None
+    wp_jaz_warmwasser: Optional[float] = None
+    wp_jaz_warmwasser_grund: Optional[str] = None
     wp_modus_strom_lueften_kwh: Optional[float] = None
     wp_modus_strom_entfeuchten_kwh: Optional[float] = None
     wp_modus_nicht_aufgeteilt_kwh: Optional[float] = None
@@ -1928,6 +1935,7 @@ async def get_aktueller_monat(
             # vs. "gar nicht getrennt erfasst" unterscheiden kann.
             wp_strom_heizen = round(mf_wp.strom_heizen_kwh, 2)
             wp_strom_warmwasser = round(mf_wp.strom_warmwasser_kwh, 2)
+
         # #263 K-2: derselbe Alles-oder-nichts-Grundsatz für den Modus-Split —
         # ohne erfasste Stunde gibt es keine Aufteilung statt einer 0.
         if mf_wp.hat_modus_split:
@@ -1938,6 +1946,21 @@ async def get_aktueller_monat(
             wp_modus_rest = round(mf_wp.modus_nicht_aufgeteilt_kwh, 2)
             wp_modus_abdeckung = round(mf_wp.modus_abdeckung_h, 1)
             wp_modus_gemessen = mf_wp.modus_gemessen
+
+    # W-4 (SOLL §4.1): je Funktion eine eigene Zahl. Sie beantwortet, was die
+    # Gesamtzahl nicht kann — *warum* eine Anlage dasteht, wie sie dasteht.
+    # Warmwasser liegt bauartbedingt niedriger (höhere Zieltemperatur); wer viel
+    # Warmwasser macht, hat deshalb eine niedrigere Gesamtzahl, **ohne schlechter
+    # zu sein**. Dieselben R2-Sperren, weil dieselbe Layer-Funktion gerufen wird.
+    wp_az_funktion = arbeitszahl_je_funktion(
+        heizung_kwh=wp_heizung,
+        strom_heizen_kwh=wp_strom_heizen,
+        warmwasser_kwh=wp_warmwasser,
+        strom_warmwasser_kwh=wp_strom_warmwasser,
+        hat_split=bool(mf_wp is not None and mf_wp.hat_split),
+        waerme_abgeleitet_kwh=wp_waerme_abgeleitet_kwh,
+        abgrenzung_verletzt=wp_abgrenzung_verletzt,
+    )
 
     # E-Mobilität: PV/Netz/Extern-Split + V2H
     emob_pv = get_val("emob_pv_ladung_kwh")
@@ -2360,6 +2383,10 @@ async def get_aktueller_monat(
         wp_strom_warmwasser_kwh=wp_strom_warmwasser,
         wp_modus_strom_heizen_kwh=wp_modus_heizen,
         wp_modus_strom_kuehlen_kwh=wp_modus_kuehlen,
+        wp_jaz_heizen=wp_az_funktion.heizen.wert,
+        wp_jaz_heizen_grund=wp_az_funktion.heizen.grund,
+        wp_jaz_warmwasser=wp_az_funktion.warmwasser.wert,
+        wp_jaz_warmwasser_grund=wp_az_funktion.warmwasser.grund,
         wp_modus_strom_lueften_kwh=wp_modus_lueften,
         wp_modus_strom_entfeuchten_kwh=wp_modus_entfeuchten,
         wp_modus_nicht_aufgeteilt_kwh=wp_modus_rest,
