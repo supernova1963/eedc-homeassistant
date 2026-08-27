@@ -299,13 +299,15 @@ async def get_tag_detail(
     from backend.core.berechnungen.waermepumpe_kennzahl import (
         abgrenzungs_grund, arbeitszahl, waerme_gesamt_kwh,
     )
-    from backend.core.betriebsmodus import HEIZEN, KUEHLEN
+    from backend.core.betriebsmodus import HEIZEN, KUEHLEN, WARMWASSER
     from backend.core.investition_parameter import abgrenzung_stoerung
     from backend.core.tageswert_grund import tageswert_grund_text
     from backend.services.energie_profil import lade_modus_split_tag
     from backend.services.snapshot.aggregator import get_betriebsart_strom_tageswerte
 
     heizen_tag = kuehlen_tag = rest_tag = abdeckung_tag = 0.0
+    # N-336: nur der abgeleitete Zweig fuellt sie — s. `ModusStromZeile`.
+    warmwasser_tag = 0.0
     # W-17b: die Grundmenge, auf die sich der Balken bezieht — die Σ der
     # Bezugsmengen der Geraete, die eine Aufteilung beigesteuert haben. Sie ist
     # bewusst NICHT `wp_strom_tag`: dort steckt auch der Strom von Geraeten
@@ -407,10 +409,12 @@ async def get_tag_detail(
         bezug_tag += float(split.bezug_kwh or 0.0)
         heizen_tag += split.teilmenge_kwh(HEIZEN)
         kuehlen_tag += split.teilmenge_kwh(KUEHLEN)
+        warmwasser_tag += split.teilmenge_kwh(WARMWASSER)
         rest_tag += max(
             0.0,
             float(split.bezug_kwh or 0.0)
-            - split.teilmenge_kwh(HEIZEN) - split.teilmenge_kwh(KUEHLEN),
+            - split.teilmenge_kwh(HEIZEN) - split.teilmenge_kwh(KUEHLEN)
+            - split.teilmenge_kwh(WARMWASSER),
         )
         # W-17: Die Schleife laeuft ueber die GERAETE des Tages. Zwei
         # Waermepumpen mit je 18 erfassten Stunden ergeben nicht 36 Stunden
@@ -484,6 +488,7 @@ async def get_tag_detail(
         datum=datum,
         wp_modus_strom_heizen_kwh=round(heizen_tag, 2) if hat_split else None,
         wp_modus_strom_kuehlen_kwh=round(kuehlen_tag, 2) if hat_split else None,
+        wp_modus_strom_warmwasser_kwh=round(warmwasser_tag, 2) if hat_split else None,
         wp_modus_strom_lueften_kwh=round(lueften_tag, 2) if hat_split else None,
         wp_modus_strom_entfeuchten_kwh=round(entfeuchten_tag, 2) if hat_split else None,
         wp_modus_nicht_aufgeteilt_kwh=round(rest_tag, 2) if hat_split else None,

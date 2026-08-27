@@ -408,7 +408,8 @@ WAERMEPUMPE_SENSOREN = [
         category=SensorCategory.WAERMEPUMPE,
         formel=(
             "Aktueller Betriebsmodus laut zugeordneter climate-Quelle, über den Kanon "
-            "normalisiert (Heizen · Kühlen · Entfeuchten · Lüften · Aus · Unbestimmt); "
+            "normalisiert (Heizen · Warmwasser · Kühlen · Entfeuchten · Lüften · "
+            "Aus · Unbestimmt); "
             "hvac_action schlägt den eingestellten Modus, wo das Gerät sie liefert. "
             "Ohne zugeordnete Quelle gibt es den Sensor nicht."
         ),
@@ -443,6 +444,21 @@ WAERMEPUMPE_SENSOREN = [
         icon="mdi:fire",
         category=SensorCategory.WAERMEPUMPE,
         formel="Σ Stunden im Heizbetrieb × Stromverbrauch (Teilmenge des Gesamtstroms)",
+        device_class="energy",
+        state_class="total",
+    ),
+    # N-336 (27.08.): Warmwasser ist die dritte Betriebsart, die eedc aus dem
+    # Modus ableiten kann. ⚠ **Nicht zu verwechseln mit `strom_warmwasser_kwh`**
+    # aus der getrennten Strommessung: das ist ein SUMMAND (Heizen + Warmwasser
+    # = Gesamt), dieser Sensor eine TEILMENGE. Wer beide addiert, zählt doppelt
+    # — der Satz gilt für die ganze Gruppe hier und steht deshalb oben.
+    SensorDefinition(
+        key="wp_strom_warmwasser_modus_kwh",
+        name="Strom Warmwasserbetrieb",
+        unit="kWh",
+        icon="mdi:water-boiler",
+        category=SensorCategory.WAERMEPUMPE,
+        formel="Σ Stunden im Warmwasserbetrieb × Stromverbrauch (Teilmenge des Gesamtstroms)",
         device_class="energy",
         state_class="total",
     ),

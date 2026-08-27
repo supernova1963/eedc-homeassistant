@@ -28,6 +28,10 @@ einen **gestellten HA-Zustandsdienst**; die Zuordnung entsteht über
    Bedingung, unter der der frühere Entscheid gegen das Live-Lesen aufgelöst
    wurde (`live_komponenten_builder`: „Dauerabruf gegen ein Symbol"). Ohne
    diese Probe ist der 60-s-Takt eine Absichtserklärung.
+
+Schwesterdateien: ``test_398_live_betriebsmodus_klartext.py`` (was das Live-Bild
+aus dem Modus macht — und wann es schweigt) ·
+``test_263_k2_betriebsmodus_lesen_mitschreiben.py`` (der Lesepfad davor).
 """
 
 from __future__ import annotations
@@ -244,13 +248,20 @@ def test_icon_kanon_deckt_die_messbaren_modi():
     Aussage, die eedc nicht hat.
     """
     from backend.core.betriebsmodus import (
-        AUS, BETRIEBSMODUS_ICON, ENTFEUCHTEN, UNBESTIMMT,
+        AUS, BETRIEBSMODUS_ICON, BETRIEBSMODUS_KANON, ENTFEUCHTEN, UNBESTIMMT,
+        WARMWASSER,
     )
 
-    assert set(BETRIEBSMODUS_ICON) == {HEIZEN, KUEHLEN, ENTFEUCHTEN, LUEFTEN}
+    # ⚠ Hier stand bis 2026-08-27 die ausgeschriebene Menge
+    # `{HEIZEN, KUEHLEN, ENTFEUCHTEN, LUEFTEN}`. Das war eine **Aufzählung des
+    # Bekannten**, keine Regel — sie wurde rot, als der Kanon um `warmwasser`
+    # wuchs (N-336), obwohl an der Regel nichts falsch war. Jetzt steht die
+    # Regel selbst da: **jede Betriebsart, die etwas tut, hat ein Symbol.**
+    assert set(BETRIEBSMODUS_ICON) == set(BETRIEBSMODUS_KANON) - {AUS, UNBESTIMMT}
     assert AUS not in BETRIEBSMODUS_ICON and UNBESTIMMT not in BETRIEBSMODUS_ICON
-    # Eine Datenrolle, ein Symbol (Regel 0a): `droplets` trägt im Live-Bild
-    # bereits das WARMWASSER.
+    # Eine Datenrolle, ein Symbol (Regel 0a): `droplets` gehört dem WARMWASSER —
+    # im Live-Bild trug es diese Rolle schon, bevor es den Kanon-Wert dazu gab.
+    assert BETRIEBSMODUS_ICON[WARMWASSER] == "droplets"
     assert BETRIEBSMODUS_ICON[ENTFEUCHTEN] != "droplets"
     assert len(set(BETRIEBSMODUS_ICON.values())) == len(BETRIEBSMODUS_ICON)
 

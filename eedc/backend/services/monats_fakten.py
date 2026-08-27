@@ -354,6 +354,12 @@ class WpFakten:
     #: (Präzedenz: ``ladung_pv_kwh`` bei der Wallbox, Konzept §3.1).
     modus_strom_heizen_kwh: float = 0.0
     modus_strom_kuehlen_kwh: float = 0.0
+    #: N-336 (27.08.): Nur aus dem **abgeleiteten** Split — für Warmwasser gibt
+    #: es keinen Betriebsart-Zähler (Begründung bei ``MESSBARE_MODI``). Die
+    #: Gegenrichtung zu ``modus_strom_lueften_kwh`` darunter.
+    #: ⛔ Zählt **nicht** in {@link modus_strom_funktionsfremd_kwh}: Warmwasser
+    #: hat eine bewertete Nutzenergie, die im Zähler desselben Quotienten steht.
+    modus_strom_warmwasser_kwh: float = 0.0
     #: E4 (Konzept §2.3, gebaut 26.08.): *erfassbar, aber keine bewertete
     #: Funktion.* Nur aus **gemessenen** Betriebsart-Zählern — der aus dem
     #: Modus-Signal abgeleitete Split kann sie nicht (``AUFGETEILTE_MODI``,
@@ -465,6 +471,7 @@ class WpFakten:
             self.modus_strom_bezug_kwh
             - self.modus_strom_heizen_kwh
             - self.modus_strom_kuehlen_kwh
+            - self.modus_strom_warmwasser_kwh
             - self.modus_strom_lueften_kwh
             - self.modus_strom_entfeuchten_kwh,
         )
@@ -917,6 +924,7 @@ async def _ergaenze_modus_split_ohne_abschluss(
             r = roh.setdefault(schluessel, _RohMonat())
             r.wp_modus_strom_heizen += split.heizen_kwh
             r.wp_modus_strom_kuehlen += split.kuehlen_kwh
+            r.wp_modus_strom_warmwasser += split.warmwasser_kwh
             # W-17: Stunden werden ueber GERAETE nicht addiert (SoT-Helfer).
             # Die Schleife laeuft ueber `je_inv` — jeder Durchlauf ist ein
             # weiteres Geraet DESSELBEN Monats. Mengen ja, Zeitraum nein.
@@ -1086,6 +1094,8 @@ class _RohMonat:
         self.wp_hat_split = False
         self.wp_modus_strom_heizen = 0.0
         self.wp_modus_strom_kuehlen = 0.0
+        #: N-336 — nur aus dem abgeleiteten Split; die Gegenrichtung zu E4.
+        self.wp_modus_strom_warmwasser = 0.0
         #: E4 — nur aus gemessenen Zaehlern; der abgeleitete Split kann sie nicht.
         self.wp_modus_strom_lueften = 0.0
         self.wp_modus_strom_entfeuchten = 0.0
@@ -1255,6 +1265,7 @@ class _RohMonat:
             self.wp_hat_split = self.wp_hat_split or b.wp_hat_split
             self.wp_modus_strom_heizen += b.wp_modus_strom_heizen
             self.wp_modus_strom_kuehlen += b.wp_modus_strom_kuehlen
+            self.wp_modus_strom_warmwasser += b.wp_modus_strom_warmwasser
             self.wp_modus_strom_lueften += b.wp_modus_strom_lueften
             self.wp_modus_strom_entfeuchten += b.wp_modus_strom_entfeuchten
             self.wp_nutzenergie_kuehlen += b.wp_nutzenergie_kuehlen
@@ -1522,6 +1533,7 @@ async def _baue_fakt(
             hat_split=roh.wp_hat_split,
             modus_strom_heizen_kwh=roh.wp_modus_strom_heizen,
             modus_strom_kuehlen_kwh=roh.wp_modus_strom_kuehlen,
+            modus_strom_warmwasser_kwh=roh.wp_modus_strom_warmwasser,
             modus_strom_lueften_kwh=roh.wp_modus_strom_lueften,
             modus_strom_entfeuchten_kwh=roh.wp_modus_strom_entfeuchten,
             nutzenergie_kuehlen_kwh=roh.wp_nutzenergie_kuehlen,

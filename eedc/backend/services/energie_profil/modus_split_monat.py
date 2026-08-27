@@ -42,7 +42,7 @@ from backend.core.berechnungen import (
     teilmengen_passen,
     waermepumpe_kwh_je_investition,
 )
-from backend.core.betriebsmodus import HEIZEN, KUEHLEN
+from backend.core.betriebsmodus import HEIZEN, KUEHLEN, WARMWASSER
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 
 #: ``(jahr, monat)`` — dieselbe Achse wie die Monats-Fakten-Schicht.
@@ -271,11 +271,21 @@ class AngewandterSplit:
     """Ein Modus-Split, der die Vorrang- und Invariantenprüfung bestanden hat.
 
     ``bezug_kwh`` ist der Gesamtwert, gegen den geprüft wurde — und aus dem die
-    Zeile „nicht aufgeteilt" entsteht (``bezug − heizen − kuehlen``).
+    Zeile „nicht aufgeteilt" entsteht (``bezug − Σ Teilmengen``).
+
+    ⚠ **Die Teilmengen sind ausgeschrieben, nicht generiert** — dieselbe
+    Grep-Barkeits-Entscheidung wie beim Kanon selbst. Dass keine fehlt, hält
+    ``test_263_k2_modus_split.py`` gegen ``AUFGETEILTE_MODI``.
     """
 
     heizen_kwh: float
     kuehlen_kwh: float
+    #: N-336 (27.08.): der abgeleitete Split kann Warmwasser — deshalb steht es
+    #: hier und **nicht** bei den gemessenen Betriebsart-Zählern.
+    #: ⚠ **Ohne Default, wie seine Nachbarn.** Ein `= 0.0` hier hieße: eine
+    #: Konstruktionsstelle darf die Menge vergessen, und niemand merkt es —
+    #: genau die Bauform, die eine fehlende Größe still zu 0 macht (P4).
+    warmwasser_kwh: float
     abdeckung_h: float
     bezug_kwh: float
 
@@ -340,6 +350,7 @@ async def lade_modus_split_ohne_abschluss(
             ergebnis.setdefault(schluessel, {})[inv_id_str] = AngewandterSplit(
                 heizen_kwh=split.teilmenge_kwh(HEIZEN),
                 kuehlen_kwh=split.teilmenge_kwh(KUEHLEN),
+                warmwasser_kwh=split.teilmenge_kwh(WARMWASSER),
                 abdeckung_h=split.abdeckung_h,
                 bezug_kwh=float(bezug or 0.0),
             )

@@ -723,3 +723,122 @@ async def test_a6_mit_zaehlerstaenden_steht_eine_zahl_und_kein_grund(db):
     assert antwort.wp_waerme_kwh == pytest.approx(80.0), "40 Heizwärme + 40 Warmwasser"
     assert antwort.wp_waerme_grund is None
     assert antwort.wp_jaz == pytest.approx(4.0), "80 ÷ 20"
+
+
+# ═══ A7 — MartyBr: die Wärmepumpe heizt, macht Warmwasser oder kühlt ════════
+#
+# Forum 89667 #230 (MartyBr, 27.08.2026): *„Wie @rapahl auch sagte, die WP
+# heizt, macht WW oder kühlt."* Einen Beitrag davor hat dietmar1968 es begründet
+# (#225): Eine konventionelle Wärmepumpe hat **einen** Kältekreis mit **einem**
+# Verdichter und ein Umschaltventil — die drei Betriebsformen schließen sich
+# gegenseitig aus.
+#
+# ⛔ **Bis N-336 kannte der Betriebsmodus-Kanon nur Heizen und Kühlen.** Sein
+# Warmwasser-Strom fiel in „nicht aufgeteilt" — denselben Topf wie Standby und
+# Sensorausfall.
+#
+# Zahlen (Vitocal-Bauform, ohne getrennte Strommessung): 1000 kWh Strom,
+# davon per Modus 600 Heizen · 250 Warmwasser · 100 Kühlen; 2400 kWh Heizwärme
+# und 600 kWh Warmwasser-Wärme.
+
+_A7_SPLIT = {
+    "modus_strom_heizen_kwh": 600.0,
+    "modus_strom_warmwasser_kwh": 250.0,
+    "modus_strom_kuehlen_kwh": 100.0,
+    "modus_abdeckung_h": 700.0,
+}
+
+_A7_BASIS = {
+    "stromverbrauch_kwh": 1000.0,
+    "heizenergie_kwh": 2400.0,
+    "warmwasser_kwh": 600.0,
+}
+
+
+async def _baue_a7(db, *, mit_warmwasser_split: bool = True):
+    a = await _anlage(db, "A7 MartyBr Modus")
+    split = dict(_A7_SPLIT)
+    if not mit_warmwasser_split:
+        # Der Zustand VOR N-336: dieselbe Anlage, dieselben Stunden — nur dass
+        # eedc die Warmwasser-Stunden nicht benennen konnte.
+        split.pop("modus_strom_warmwasser_kwh")
+    wp = await _geraet(db, a, "Vitocal 333-G",
+                       {"wp_art": "luft_wasser", "effizienz_modus": "gesamt_jaz"},
+                       {**_A7_BASIS, **split})
+    await db.commit()
+    return a, wp
+
+
+async def test_a7_warmwasser_bekommt_eine_eigene_zeile(db):
+    """N-336: der gemessene Warmwasser-Strom heißt Warmwasser, nicht „Rest"."""
+    a, _wp = await _baue_a7(db)
+    antwort = await _monat(db, a.id)
+
+    assert antwort.wp_modus_strom_heizen_kwh == pytest.approx(600.0)
+    assert antwort.wp_modus_strom_warmwasser_kwh == pytest.approx(250.0)
+    assert antwort.wp_modus_strom_kuehlen_kwh == pytest.approx(100.0)
+
+
+async def test_a7_die_restmenge_traegt_das_warmwasser_nicht_mehr(db):
+    """1000 − 600 − 250 − 100 = 50 — und **nicht** 300.
+
+    ⛔ Die 300 wären die Zahl vor N-336: 250 kWh gemessener Warmwasser-Strom,
+    ununterscheidbar von Standby und Sensorausfall. Genau das hat MartyBr
+    gesehen.
+    """
+    a, _wp = await _baue_a7(db)
+    antwort = await _monat(db, a.id)
+
+    assert antwort.wp_modus_nicht_aufgeteilt_kwh == pytest.approx(50.0)
+
+
+async def test_a7_die_arbeitszahl_aendert_sich_durch_den_split_NICHT(db):
+    """⭐ **Die Falle dieses Baus — und der Grund, warum es diese Probe gibt.**
+
+    Warmwasser sieht in der Aufteilung aus wie Kühlen, Lüften und Entfeuchten:
+    eine Betriebsart neben dem Heizen. Es ist aber die einzige davon, die eine
+    **bewertete Nutzenergie** erzeugt — 600 kWh Warmwasser-Wärme, die über
+    ``waerme_gesamt_kwh`` im **Zähler** desselben Quotienten stehen.
+
+    Zöge man den Warmwasser-Strom wie „funktionsfremd" aus dem Nenner, stünde
+    die Wärme oben und ihr Strom nirgends:
+
+    * richtig:  3000 ÷ (1000 − 100) = **3,333**
+    * falsch:   3000 ÷ (1000 − 100 − 250) = **4,615** — **+38 %** geschenkt
+
+    Diese Probe fährt **dieselbe Anlage zweimal**: einmal mit und einmal ohne
+    den Warmwasser-Split. Beide müssen dieselbe Arbeitszahl liefern — denn an
+    der gemessenen Energie hat sich nichts geändert, nur an ihrer Beschriftung.
+    """
+    a_neu, _ = await _baue_a7(db, mit_warmwasser_split=True)
+    a_alt, _ = await _baue_a7(db, mit_warmwasser_split=False)
+
+    jaz_neu = (await _monat(db, a_neu.id)).wp_jaz
+    jaz_alt = (await _monat(db, a_alt.id)).wp_jaz
+
+    assert jaz_neu == pytest.approx(3000.0 / 900.0), (
+        "Wärme 2400 + 600 = 3000; Nenner 1000 − 100 Kühlstrom. Der "
+        "Warmwasser-Strom gehört NICHT abgezogen."
+    )
+    assert jaz_neu == pytest.approx(jaz_alt), (
+        "Eine Beschriftung darf keine Kennzahl bewegen — sonst hätte jede "
+        "Brauchwasser-Wärmepumpe mit N-336 eine bessere JAZ bekommen, ohne "
+        "dass ein einziger Messwert anders wäre"
+    )
+
+
+async def test_a7_die_mengen_summieren_sich_auf_den_bezug(db):
+    """K1: die Gesamtmenge bleibt die Wahrheit, die Aufteilung steht daneben."""
+    a, _wp = await _baue_a7(db)
+    antwort = await _monat(db, a.id)
+
+    teilmengen = (
+        antwort.wp_modus_strom_heizen_kwh
+        + antwort.wp_modus_strom_warmwasser_kwh
+        + antwort.wp_modus_strom_kuehlen_kwh
+        + antwort.wp_modus_nicht_aufgeteilt_kwh
+    )
+    assert teilmengen == pytest.approx(antwort.wp_modus_strom_bezug_kwh)
+    assert antwort.wp_strom_kwh == pytest.approx(1000.0), (
+        "die Bilanzgröße ist von der Aufteilung unberührt"
+    )

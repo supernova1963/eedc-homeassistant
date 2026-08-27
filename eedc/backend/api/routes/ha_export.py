@@ -1515,6 +1515,7 @@ async def calculate_investition_sensors(
         # #263 K-2 (S4): Teilmengen nach Betriebsmodus — nie Summanden.
         gesamt_modus_heizen = 0.0
         gesamt_modus_kuehlen = 0.0
+        gesamt_modus_warmwasser = 0.0
         gesamt_modus_abdeckung_h = 0.0
         #: F-56 — trägt irgendeine Zeile GEMESSENE Betriebsart-Zähler? Dann
         #: dürfen die beiden Sensoren erscheinen, auch ohne Modus-Abdeckung:
@@ -1537,6 +1538,7 @@ async def calculate_investition_sensors(
             _zeile = modus_strom_zeile(d)
             gesamt_modus_heizen += _zeile.heizen_kwh
             gesamt_modus_kuehlen += _zeile.kuehlen_kwh
+            gesamt_modus_warmwasser += _zeile.warmwasser_kwh
             gesamt_modus_abdeckung_h += _zeile.abdeckung_h
             gesamt_modus_gemessen = gesamt_modus_gemessen or _zeile.gemessen
             gesamt_strom += get_wp_strom_kwh(d, investition.parameter)
@@ -1572,6 +1574,7 @@ async def calculate_investition_sensors(
             for _split in _je_inv.values():
                 gesamt_modus_heizen += _split.heizen_kwh
                 gesamt_modus_kuehlen += _split.kuehlen_kwh
+                gesamt_modus_warmwasser += _split.warmwasser_kwh
                 gesamt_modus_abdeckung_h += _split.abdeckung_h
 
         gesamt_waerme = gesamt_heizung + gesamt_warmwasser
@@ -1650,6 +1653,14 @@ async def calculate_investition_sensors(
                 if gesamt_modus_abdeckung_h > 0 or gesamt_modus_gemessen:
                     value = gesamt_modus_kuehlen
                     berechnung = f"{gesamt_modus_kuehlen:.1f} von {gesamt_strom:.1f} kWh gesamt"
+            elif sensor.key == "wp_strom_warmwasser_modus_kwh":
+                # N-336 — dieselbe Leer-Regel wie bei den zwei Nachbarn: ohne
+                # erfassten Modus fehlt der Sensor, statt 0 zu behaupten.
+                if gesamt_modus_abdeckung_h > 0 or gesamt_modus_gemessen:
+                    value = gesamt_modus_warmwasser
+                    berechnung = (
+                        f"{gesamt_modus_warmwasser:.1f} von {gesamt_strom:.1f} kWh gesamt"
+                    )
             elif sensor.key == "wp_betriebsmodus":
                 # #398: der EINZIGE Sensor dieser Liste, der KEINE Monatsgröße
                 # ist, sondern ein Zustand. Er kommt deshalb auch nicht aus den

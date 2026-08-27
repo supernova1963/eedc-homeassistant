@@ -76,6 +76,8 @@ class KomponentenMonat(BaseModel):
     # (ADR-002/P4).
     wp_modus_strom_heizen_kwh: Optional[float] = None
     wp_modus_strom_kuehlen_kwh: Optional[float] = None
+    #: N-336 — die dritte ableitbare Betriebsart (Teilmenge, kein Summand).
+    wp_modus_strom_warmwasser_kwh: Optional[float] = None
     wp_modus_nicht_aufgeteilt_kwh: Optional[float] = None
     wp_modus_abdeckung_h: Optional[float] = None
     #: **W-17b** — die Grundmenge, auf die sich die Aufteilung bezieht.
@@ -311,6 +313,9 @@ async def get_komponenten_zeitreihe(
             ),
             wp_modus_strom_kuehlen_kwh=(
                 round(wp.modus_strom_kuehlen_kwh, 1) if wp.hat_modus_split else None
+            ),
+            wp_modus_strom_warmwasser_kwh=(
+                round(wp.modus_strom_warmwasser_kwh, 1) if wp.hat_modus_split else None
             ),
             wp_modus_nicht_aufgeteilt_kwh=(
                 round(wp.modus_nicht_aufgeteilt_kwh, 1) if wp.hat_modus_split else None

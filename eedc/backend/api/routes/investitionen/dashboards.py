@@ -837,6 +837,8 @@ async def get_waermepumpe_dashboard(
         # werden ausgewiesen, nie addiert (Konzept §3.1).
         gesamt_modus_heizen = 0.0
         gesamt_modus_kuehlen = 0.0
+        # N-336: nur aus dem abgeleiteten Split — die Gegenrichtung zu E4.
+        gesamt_modus_warmwasser = 0.0
         # E4 (Konzept §2.3): nur aus gemessenen Zählern — der abgeleitete Split
         # kann sie nicht und lässt sie bei 0.
         gesamt_modus_lueften = 0.0
@@ -864,6 +866,7 @@ async def get_waermepumpe_dashboard(
             modus_gemessen = modus_gemessen or _zeile_gemessen
             gesamt_modus_heizen += _zeile.heizen_kwh
             gesamt_modus_kuehlen += _zeile.kuehlen_kwh
+            gesamt_modus_warmwasser += _zeile.warmwasser_kwh
             gesamt_modus_lueften += _zeile.lueften_kwh
             gesamt_modus_entfeuchten += _zeile.entfeuchten_kwh
             # W-5: die Kältemenge — nur gemessen, nie abgeleitet.
@@ -1127,6 +1130,7 @@ async def get_waermepumpe_dashboard(
         if gesamt_modus_abdeckung_h > 0 or modus_gemessen:
             zusammenfassung['modus_strom_heizen_kwh'] = round(gesamt_modus_heizen, 1)
             zusammenfassung['modus_strom_kuehlen_kwh'] = round(gesamt_modus_kuehlen, 1)
+            zusammenfassung['modus_strom_warmwasser_kwh'] = round(gesamt_modus_warmwasser, 1)
             zusammenfassung['modus_strom_lueften_kwh'] = round(gesamt_modus_lueften, 1)
             zusammenfassung['modus_strom_entfeuchten_kwh'] = round(gesamt_modus_entfeuchten, 1)
             # „nicht aufgeteilt" wird NIE gespeichert, sondern immer gerechnet
@@ -1140,6 +1144,7 @@ async def get_waermepumpe_dashboard(
             # anlagenweite Bezug in `WpFakten.modus_nicht_aufgeteilt_kwh`).
             zusammenfassung['modus_nicht_aufgeteilt_kwh'] = round(
                 max(0.0, gesamt_modus_bezug - gesamt_modus_heizen - gesamt_modus_kuehlen
+                    - gesamt_modus_warmwasser
                     - gesamt_modus_lueften - gesamt_modus_entfeuchten), 1
             )
             zusammenfassung['modus_abdeckung_h'] = round(gesamt_modus_abdeckung_h, 1)

@@ -40,6 +40,7 @@ from backend.core.betriebsmodus import (
     MESSBARE_MODI,
     MODUS_ABDECKUNG_FELD,
     MODUS_STROM_FELD,
+    WARMWASSER,
 )
 from backend.core.field_definitions import basis_feld_key
 
@@ -117,12 +118,21 @@ class ModusStromZeile:
     zusätzlich angewandt werden — sonst stünde dieselbe Menge zweimal in
     derselben Zeile.
 
-    ⭐ **Warum vier Felder und nicht zwei (Konzept §2.3, Entscheid E4).** Die
-    Zeile bildet ab, was ein **Zähler** hergibt — und das sind vier
-    Betriebsarten (``MESSBARE_MODI``). Der aus dem Modus-Signal *abgeleitete*
-    Split kann dagegen nur Heizen und Kühlen (``AUFGETEILTE_MODI``, D11); dort
-    bleiben ``lueften_kwh``/``entfeuchten_kwh`` deshalb 0. **Das ist keine
-    Lücke, sondern die Aussage:** ein Modus-Signal gibt nicht mehr her.
+    ⭐ **Die zwei Wege können verschieden viel — und zwar in BEIDE Richtungen.**
+    Die Zeile bildet ab, was ein **Zähler** hergibt: vier Betriebsarten
+    (``MESSBARE_MODI``). Der aus dem Modus-Signal *abgeleitete* Split kann
+    dagegen Heizen, **Warmwasser** und Kühlen (``AUFGETEILTE_MODI``).
+
+    * ``lueften_kwh``/``entfeuchten_kwh`` bleiben im abgeleiteten Zweig 0 — ein
+      Modus-Signal gibt sie nicht her.
+    * ``warmwasser_kwh`` bleibt im **gemessenen** Zweig 0 — dafür gibt es keinen
+      Betriebsart-Zähler, sondern ``strom_warmwasser_kwh`` aus der
+      Summanden-Familie (Begründung bei ``MESSBARE_MODI``).
+
+    **Beides ist keine Lücke, sondern die Aussage:** jeder Weg trägt, was er
+    wissen kann. ⚠ Bis zum 27.08.2026 stand hier *„nur Heizen und Kühlen …
+    belegt durch D11"* — richtig für die Split-Klimaanlage, für die #263
+    geschrieben ist, und unhaltbar als Satz über die ganze Fläche (N-336).
 
     Bis zum 26.08.2026 las auch der **gemessene** Zweig nur zwei der vier
     Felder. Wer einen Lüftungs- oder Entfeuchtungs-Zähler zuordnete, sah seine
@@ -156,6 +166,20 @@ class ModusStromZeile:
         Nenner, drückte er die Arbeitszahl aus demselben Grund wie der
         Kühlstrom vor W-14: **ein Kategorienfehler, kein Messfehler.**
 
+        ⛔ **`warmwasser_kwh` gehört NICHT dazu — das ist die Falle von N-336.**
+        Warmwasser sieht in dieser Zeile aus wie Kühlen, Lüften und Entfeuchten:
+        eine Betriebsart neben dem Heizen. Es ist aber die einzige davon, die
+        eine **bewertete Nutzenergie** erzeugt — sie steht in ``warmwasser_kwh``
+        und geht über ``waerme_gesamt_kwh`` in den **Zähler** desselben
+        Quotienten ein. Zöge man ihren Strom aus dem Nenner, stünde die
+        Warmwasser-Wärme oben und ihr Strom nirgends: **die Arbeitszahl jeder
+        Brauchwasser-Wärmepumpe stiege ohne einen einzigen neuen Messwert.**
+
+        ⭐ Die Trennlinie ist damit nicht *„Heizen gegen den Rest"*, sondern die
+        des SOLL §3.2a: **hat diese Funktion ein Q?** Heizen und Warmwasser
+        haben eins, Kühlen hat eins (Kälte, nur selten gemessen — s.
+        ``arbeitszahl_kuehlen``), Lüften und Entfeuchten haben keins.
+
         ⚠ **Abgezogen, nicht gesperrt.** Die Mengen bleiben unverändert in
         allen Bilanzen und Kosten; es ändert sich allein der Nenner der
         Kennzahl.
@@ -169,6 +193,13 @@ class ModusStromZeile:
     #: nicht (s. Klassen-Docstring).
     lueften_kwh: float = 0.0
     entfeuchten_kwh: float = 0.0
+
+    #: Nur im **abgeleiteten** Zweig belegt — die Gegenrichtung zu den zwei
+    #: Feldern darüber (N-336). Für Warmwasser gibt es keinen
+    #: Betriebsart-Zähler; wer seinen Warmwasser-Strom getrennt misst, pflegt
+    #: ``strom_warmwasser_kwh`` und bekommt daraus seine *Arbeitszahl
+    #: Warmwasser* — eine andere Familie, eine andere Frage.
+    warmwasser_kwh: float = 0.0
 
 
 def modus_strom_zeile(daten: Optional[dict]) -> ModusStromZeile:
@@ -212,6 +243,11 @@ def modus_strom_zeile(daten: Optional[dict]) -> ModusStromZeile:
     return ModusStromZeile(
         heizen_kwh=_zahl(daten.get(MODUS_STROM_FELD[HEIZEN])),
         kuehlen_kwh=_zahl(daten.get(MODUS_STROM_FELD[KUEHLEN])),
+        # N-336: der abgeleitete Zweig kann Warmwasser, der gemessene nicht.
+        # Altmonate tragen das Feld nicht — dort bleibt der Anteil in der
+        # Restmenge, und das ist die Wahrheit: eedc hat ihn damals nicht
+        # mitgeschrieben. **Kein Nachrechnen der Historie.**
+        warmwasser_kwh=_zahl(daten.get(MODUS_STROM_FELD[WARMWASSER])),
         gemessen=False,
         abdeckung_h=abdeckung,
     )

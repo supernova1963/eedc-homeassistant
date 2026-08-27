@@ -646,6 +646,15 @@ export default function EnergieFluss({
           const soc = getSoc(k.key, gauges)
           const hasSoc = soc !== null
 
+          // Trägt dieser Knoten zwischen kW-Wert und Gerätename eine ZWEITE
+          // Zeile? Heute sind das SoC (Speicher) und Betriebsmodus (Wärmepumpe)
+          // — nie beides am selben Gerät, deshalb teilen sie sich den Platz.
+          // ⭐ Die Frage steht hier EINMAL, weil ihre Antwort an ZWEI Stellen
+          // gebraucht wird: für die Zeile selbst und für die Verschiebung des
+          // Namens darunter. Genau diese zweite Stelle hat #398 Stufe 2
+          // vergessen (s. Kommentar am Label).
+          const zweiteZeile = hasSoc || !!k.betriebsmodus_label
+
           // PV-Auslastung: Ist-Leistung / installierte kWp
           const isPv = k.key.startsWith('pv_')
           const auslastungPct = isPv && k.leistung_kwp && k.leistung_kwp > 0 && (k.erzeugung_kw ?? 0) > 0
@@ -660,9 +669,13 @@ export default function EnergieFluss({
           if ((k.erzeugung_kw ?? 0) > 0) tipParts.push(`Aktuell: ${fmtZahl(k.erzeugung_kw!, 2)} kW (Erzeugung)`)
           if ((k.verbrauch_kw ?? 0) > 0) tipParts.push(`Aktuell: ${fmtZahl(k.verbrauch_kw!, 2)} kW (Verbrauch)`)
           if (hasSoc) tipParts.push(`SoC: ${soc} %`)
-          // #398 Stufe 2: der Modus im Klartext. Er steht im Tooltip und nicht
-          // als zweite Zeile im Knoten — der trägt schon kW, SoC und Label, und
-          // eine vierte Zeile macht ihn auf dem Handy unlesbar.
+          // #398 Stufe 2: der Modus im Klartext — im Tooltip UND als zweite
+          // Zeile im Knoten (s. dort). Der Tooltip trägt ihn zusätzlich, weil
+          // er den ungekürzten Gerätenamen daneben zeigt.
+          // ⚠ Hier stand bis 2026-08-27 „Er steht im Tooltip und NICHT als
+          // zweite Zeile im Knoten" — der Kommentar beschrieb einen früheren
+          // Entwurf und wurde beim Umbau nicht mitgezogen. Dieselbe Klasse wie
+          // der 13-Uhr-Kommentar in `prognosen.py` (N-331).
           if (k.betriebsmodus_label) tipParts.push(`Betrieb: ${k.betriebsmodus_label}`)
           if (auslastungPct !== null) tipParts.push(`Auslastung: ${fmtZahl(auslastungPct, 0)} % von ${k.leistung_kwp} kWp`)
           // Netz: Bezug + Einspeisung separat anzeigen + Farberklärung
@@ -784,9 +797,20 @@ export default function EnergieFluss({
                 </text>
               )}
 
-              {/* Label */}
+              {/* Label
+                  ⛔ **Die Bedingung ist `zweiteZeile`, nicht `hasSoc`** — und
+                  genau das war der Fehler, den MartyBr am Tag der Auslieferung
+                  von v4.0.30 fotografiert hat (T89667 #230): „Unbestimmt" lag
+                  quer über „Vitocal 33…". Der Modus-Text hat sich die
+                  **Position** des SoC geliehen (`kwFontSize + 2`), die
+                  zugehörige **Verschiebung des Namens** stand aber in einem
+                  Ternär, das nur den SoC kannte. Vier Pixel Abstand bei neun
+                  Pixel Schriftgröße.
+                  ⭐ Deshalb steht die Frage jetzt EINMAL oben (`zweiteZeile`)
+                  statt zweimal hier: Wer eine dritte Zeilenart ergänzt, ändert
+                  eine Stelle — nicht zwei, von denen er die zweite übersieht. */}
               <text
-                x={node.x} y={node.y + (hasSoc ? NODE_H / 2 - 4 : dims.kwFontSize + 6)}
+                x={node.x} y={node.y + (zweiteZeile ? NODE_H / 2 - 4 : dims.kwFontSize + 6)}
                 textAnchor="middle"
                 style={{ fontSize: `${dims.labelFontSize}px` }}
                 className="fill-gray-500 dark:fill-gray-400"

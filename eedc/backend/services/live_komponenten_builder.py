@@ -13,7 +13,12 @@ from backend.core.investition_kennwerte import get_erzeuger_kwp
 from backend.core.investition_parameter import PARAM_E_AUTO
 from datetime import date
 
-from backend.core.betriebsmodus import BETRIEBSMODUS_ICON, BETRIEBSMODUS_LABEL, HEIZEN
+from backend.core.betriebsmodus import (
+    BETRIEBSMODUS_ICON,
+    BETRIEBSMODUS_LABEL,
+    BETRIEBSMODUS_LIVE_OHNE_KLARTEXT,
+    HEIZEN,
+)
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.core.berechnungen.energie import PV_KOMPONENTEN_PREFIXE
 from backend.services.live_sensor_config import (
@@ -269,8 +274,19 @@ def build_komponenten(
                 # Klartext statt Kanon-Enum: die Deutung gehört in den Kanon,
                 # nicht in eine zweite Tabelle im Client ([[feedback_typ_labels_pattern]]).
                 # Ohne Modus steht hier `None` — kein „—", keine leere Zeile.
+                #
+                # ⚠ `unbestimmt` bekommt ebenfalls `None` (MartyBr, T89667 #230):
+                # Die Liste dazu steht im Kanon, samt Begründung — sie ist die
+                # des fehlenden Icons, eine Ebene lauter. Der ROHWERT
+                # `betriebsmodus` bleibt unangetastet: Wer den Zustand
+                # auswertet, soll `unbestimmt` sehen; nur die **Anzeige**
+                # schweigt.
                 "betriebsmodus": _modus,
-                "betriebsmodus_label": BETRIEBSMODUS_LABEL.get(_modus) if _modus else None,
+                "betriebsmodus_label": (
+                    BETRIEBSMODUS_LABEL.get(_modus)
+                    if _modus and _modus not in BETRIEBSMODUS_LIVE_OHNE_KLARTEXT
+                    else None
+                ),
             })
             if typ == "wallbox":
                 wallbox_keys.append(komp_key)

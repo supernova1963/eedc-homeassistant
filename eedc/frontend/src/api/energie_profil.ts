@@ -235,6 +235,8 @@ export interface TagDetail {
    *  entscheidet die Faltung. */
   wp_modus_strom_heizen_kwh: number | null
   wp_modus_strom_kuehlen_kwh: number | null
+  /** N-336: nur aus dem **abgeleiteten** Split. */
+  wp_modus_strom_warmwasser_kwh?: number | null
   /** E4 (Konzept §2.3): nur aus **gemessenen** Betriebsart-Zählern. */
   wp_modus_strom_lueften_kwh?: number | null
   wp_modus_strom_entfeuchten_kwh?: number | null

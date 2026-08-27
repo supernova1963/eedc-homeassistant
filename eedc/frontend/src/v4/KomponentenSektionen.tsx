@@ -467,6 +467,10 @@ export function baueKomponentenBloecke(
     // nicht erfasst, sieht sie nicht."*).
     const wpLueften = d.wp_modus_strom_lueften_kwh ?? 0
     const wpEntfeuchten = d.wp_modus_strom_entfeuchten_kwh ?? 0
+    // N-336: die dritte ableitbare Betriebsart. Sie kommt aus der ANDEREN
+    // Quelle als die zwei darüber (abgeleitet statt gemessen) und gehört
+    // trotzdem in dieselbe Titel- und Segment-Frage.
+    const wpWarmwasser = d.wp_modus_strom_warmwasser_kwh ?? 0
     if (d.wp_modus_gemessen || (hat(d.wp_modus_abdeckung_h) && d.wp_modus_abdeckung_h! > 0)) wpEls.push({
       // W-8: Der Titel nennt die **Größe**. „Aufteilung Heizen/Kühlen" allein
       // sagte nicht, dass hier **Strom** steht — direkt darüber kann die
@@ -477,13 +481,16 @@ export function baueKomponentenBloecke(
       // Segmente verschweigt — dieselbe Halbwahrheit, gegen die W-8 gebaut
       // wurde. Ohne diese Zähler bleibt der eingeführte Wortlaut unverändert.
       id: 'el:wp-modus-split',
-      titel: (wpLueften || wpEntfeuchten)
+      titel: (wpLueften || wpEntfeuchten || wpWarmwasser)
         ? 'Strom-Aufteilung nach Betriebsart'
         : 'Strom-Aufteilung Heizen/Kühlen',
       node: (
         <div className="space-y-3">
           <VerteilungsBalken segmente={[
             { label: 'Heizen', wert: d.wp_modus_strom_heizen_kwh ?? 0, farbe: ROLLEN_BG.heizung },
+            ...(wpWarmwasser
+              ? [{ label: 'Warmwasser', wert: wpWarmwasser, farbe: ROLLEN_BG.warmwasser }]
+              : []),
             { label: 'Kühlen', wert: d.wp_modus_strom_kuehlen_kwh ?? 0, farbe: ROLLEN_BG.kuehlung },
             ...(wpLueften ? [{ label: 'Lüften', wert: wpLueften, farbe: ROLLEN_BG.lueftung }] : []),
             ...(wpEntfeuchten

@@ -189,3 +189,52 @@ def test_e4_wer_nicht_misst_findet_sie_weiterhin_im_rest():
     )
 
     assert fakten.modus_nicht_aufgeteilt_kwh == pytest.approx(20.0)
+
+
+# ═══ N-336 — Warmwasser ist NICHT funktionsfremd ═══════════════════════════
+#
+# ⛔ **Die Falle beim Bau von N-336, und sie ist verführerisch.** In der
+# Aufteilung steht Warmwasser neben Kühlen, Lüften und Entfeuchten und sieht
+# aus wie sie: eine Betriebsart, die nicht Heizen ist. Der Unterschied ist
+# nicht die Betriebsart, sondern die **Nutzenergie** — Warmwasser hat eine,
+# und sie steht im Zähler desselben Quotienten (`waerme_gesamt_kwh`).
+#
+# ⚠ **Zwei Objekte tragen dieselbe Regel** und müssen beide geprüft werden:
+# `ModusStromZeile.funktionsfremd_kwh` (je Zeile, für den Tagespfad) und
+# `WpFakten.modus_strom_funktionsfremd_kwh` (anlagenweit). Beim ersten
+# Gegenprobe-Versuch wurde nur das erste entschärft — und der
+# Simulationstest blieb grün, weil die Route über das zweite geht. *Ein
+# Sprengsatz beweist nur etwas, wenn er am Objekt sitzt, das der Prüfer liest.*
+
+def test_n336_warmwasser_faellt_nicht_aus_dem_nenner_je_zeile():
+    """`ModusStromZeile` — die Zeilen-Ebene (Tagespfad)."""
+    from backend.core.berechnungen.betriebsart_gemessen import ModusStromZeile
+
+    zeile = ModusStromZeile(
+        heizen_kwh=600.0, kuehlen_kwh=100.0, gemessen=False,
+        abdeckung_h=700.0, warmwasser_kwh=250.0,
+    )
+
+    assert zeile.funktionsfremd_kwh == pytest.approx(100.0), (
+        "nur der Kühlstrom — Warmwasser erzeugt eine bewertete Nutzenergie "
+        "und gehört deshalb in den Nenner"
+    )
+
+
+def test_n336_warmwasser_faellt_nicht_aus_dem_nenner_anlagenweit():
+    """`WpFakten` — die anlagenweite Ebene, die die Routen lesen."""
+    from backend.services.monats_fakten import WpFakten
+
+    fakten = WpFakten(
+        strom_kwh=1000.0,
+        modus_strom_heizen_kwh=600.0,
+        modus_strom_warmwasser_kwh=250.0,
+        modus_strom_kuehlen_kwh=100.0,
+        modus_abdeckung_h=700.0,
+        modus_strom_bezug_kwh=1000.0,
+    )
+
+    assert fakten.modus_strom_funktionsfremd_kwh == pytest.approx(100.0)
+    # Und die Restmenge zieht es sehr wohl ab — sonst stünde dieselbe Menge
+    # zweimal im Balken.
+    assert fakten.modus_nicht_aufgeteilt_kwh == pytest.approx(50.0)

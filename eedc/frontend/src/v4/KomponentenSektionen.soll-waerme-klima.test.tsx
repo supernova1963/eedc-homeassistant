@@ -223,6 +223,41 @@ describe('Achse III-3 — ein Balken sagt, was er zeigt', () => {
     expect(screen.queryByText('Entfeuchten')).toBeNull()
     expect(screen.getByText('Strom-Aufteilung Heizen/Kühlen')).toBeTruthy()
   })
+
+  // ── N-336: Warmwasser ist eine Betriebsart, keine Restmenge ──────────────
+
+  it('ERFÜLLT (N-336): abgeleitetes Warmwasser bekommt ein eigenes Segment', () => {
+    // MartyBr (T89667 #230): „die WP heizt, macht WW oder kühlt." Vor N-336
+    // fielen seine Warmwasser-Stunden unter „nicht aufgeteilt" — denselben
+    // Topf wie Standby und Sensorausfall.
+    rendereWpBlock({
+      wp_strom_kwh: 1000,
+      wp_modus_abdeckung_h: 700,
+      wp_modus_strom_heizen_kwh: 600,
+      wp_modus_strom_warmwasser_kwh: 250,
+      wp_modus_strom_kuehlen_kwh: 100,
+      wp_modus_nicht_aufgeteilt_kwh: 50,
+    })
+
+    expect(screen.getByText('Warmwasser')).toBeTruthy()
+    // ⚠ Auch hier gilt W-8: „Heizen/Kühlen" verschwiege ein Segment.
+    expect(screen.getByText('Strom-Aufteilung nach Betriebsart')).toBeTruthy()
+  })
+
+  it('ERFÜLLT (N-336): ohne Warmwasser-Stunden bleibt das Segment weg', () => {
+    // Die Gegenprobe — dieselbe Regel wie bei Lüften/Entfeuchten: ein
+    // 0-Segment an jeder Wärmepumpe wäre eine Zeile, die nichts sagt. Und der
+    // eingeführte Titel bleibt unverändert stehen.
+    rendereWpBlock({
+      wp_strom_kwh: 100,
+      wp_modus_abdeckung_h: 700,
+      wp_modus_strom_heizen_kwh: 60, wp_modus_strom_kuehlen_kwh: 20,
+      wp_modus_nicht_aufgeteilt_kwh: 20,
+    })
+
+    expect(screen.queryByText('Warmwasser')).toBeNull()
+    expect(screen.getByText('Strom-Aufteilung Heizen/Kühlen')).toBeTruthy()
+  })
 })
 
 // ══ III-W17b · Der Balken nennt seine Grundmenge ════════════════════════════

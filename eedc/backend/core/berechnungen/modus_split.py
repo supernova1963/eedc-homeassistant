@@ -13,9 +13,9 @@ Aufteilung nicht.
 
 **Drei Eigenschaften, die keine Geschmacksfrage sind:**
 
-1. **Das volle Kanon-Dict, nicht zwei Skalare.** Gespeichert werden nur die
-   Teilmengen zu ``heizen`` und ``kuehlen`` (``AUFGETEILTE_MODI``), aber die
-   Faltung liefert **alle sechs** Klassen. K-1 (SEER) braucht die Kühl-kWh und
+1. **Das volle Kanon-Dict, nicht drei Skalare.** Gespeichert werden nur die
+   Teilmengen aus ``AUFGETEILTE_MODI`` (``heizen``, ``warmwasser``,
+   ``kuehlen``), aber die Faltung liefert **jede** Kanon-Klasse. K-1 (SEER) braucht die Kühl-kWh und
    ``abdeckung_h`` als Zeitbasis und ist damit ein *Lesevorgang* statt eines
    Umbaus an dieser Stelle. Der Unterschied kostet heute nichts.
 
@@ -111,8 +111,10 @@ class ModusStunde:
 class ModusSplit:
     """Das Ergebnis der Faltung für **ein** Gerät über einen Zeitraum."""
 
-    #: kWh je Kanon-Modus — **alle sechs Klassen**, auch die, die nie
+    #: kWh je Kanon-Modus — **alle Klassen des Kanons**, auch die, die nie
     #: gespeichert werden (s. Modul-Kopf, Punkt 1). Modi ohne Stunde fehlen.
+    #: ⚠ Hier stand „alle sechs Klassen"; seit N-336 sind es sieben. Eine Zahl
+    #: im Text altert mit jeder Kanon-Änderung — die Menge selbst nicht.
     kwh_je_modus: dict[str, float] = field(default_factory=dict)
 
     #: Stunden mit gültigem Modus-Signal (auch ``unbestimmt``/``aus`` zählen —

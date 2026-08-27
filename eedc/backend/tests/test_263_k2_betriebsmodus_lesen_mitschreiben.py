@@ -120,10 +120,22 @@ def test_s1_idle_ist_nicht_aus():
 
 
 def test_s1_jeder_kanonwert_ist_erreichbar():
-    """Negativprobe gegen eine Tabelle, die einen Kanonwert nie ausgibt."""
+    """Negativprobe gegen eine Tabelle, die einen Kanonwert nie ausgibt.
+
+    ⚠ **Die Eingabeliste ist NICHT mehr `HVACMode`** (N-336, 27.08.). Sie war
+    es, und genau daran ist der Kanon dreieinhalb Monate lang zu kurz geblieben:
+    Was HA nicht als `hvac_mode` führt, konnte eedc nicht ausdrücken — und die
+    Trinkwassererwärmung führt HA in einer **eigenen Domäne** (`water_heater`).
+
+    ⭐ **Die Aussage der Probe ist unverändert und war nie falsch:** Ein
+    Kanon-Wert, den keine Eingabe je erzeugt, ist toter Code. Falsch war die
+    stillschweigende Gleichsetzung *„Eingabe = HVACMode"*. Deshalb steht
+    `warmwasser` hier mit seiner echten Quelle daneben — dem Text, den eedcs
+    eigene Handbuch-Vorlage erzeugt.
+    """
     erreicht = {
         normalisiere_betriebsmodus(s)
-        for s in ("heat", "cool", "dry", "fan_only", "off", "auto")
+        for s in ("heat", "cool", "dry", "fan_only", "off", "auto", "warmwasser")
     }
     assert erreicht == set(BETRIEBSMODUS_KANON)
 

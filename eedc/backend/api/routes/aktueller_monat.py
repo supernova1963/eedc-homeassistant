@@ -247,6 +247,10 @@ class AktuellerMonatResponse(BaseModel):
     # Modus erfasst ist (eine 0 hieße „hat nicht geheizt", ADR-002/P4).
     wp_modus_strom_heizen_kwh: Optional[float] = None
     wp_modus_strom_kuehlen_kwh: Optional[float] = None
+    #: N-336: die dritte ableitbare Betriebsart. ⚠ **Nicht** dasselbe wie
+    #: `wp_strom_warmwasser_kwh` darüber — das ist ein Summand aus der
+    #: getrennten Strommessung, dies eine Teilmenge des Gesamtstroms.
+    wp_modus_strom_warmwasser_kwh: Optional[float] = None
     #: E4 (Konzept §2.3): eigene Segmente statt stummer Restmenge. Nur aus
     #: **gemessenen** Betriebsart-Zählern — der abgeleitete Split kann sie
     #: nicht und lässt sie bei 0. Sie bekommen keine Kennzahl (*erfassen ja,
@@ -1973,6 +1977,7 @@ async def get_aktueller_monat(
     wp_strom_warmwasser = None
     wp_modus_heizen = None
     wp_modus_kuehlen = None
+    wp_modus_warmwasser = None
     wp_modus_lueften = None
     wp_modus_entfeuchten = None
     wp_modus_rest = None
@@ -1995,6 +2000,7 @@ async def get_aktueller_monat(
         if mf_wp.hat_modus_split:
             wp_modus_heizen = round(mf_wp.modus_strom_heizen_kwh, 2)
             wp_modus_kuehlen = round(mf_wp.modus_strom_kuehlen_kwh, 2)
+            wp_modus_warmwasser = round(mf_wp.modus_strom_warmwasser_kwh, 2)
             wp_modus_lueften = round(mf_wp.modus_strom_lueften_kwh, 2)
             wp_modus_entfeuchten = round(mf_wp.modus_strom_entfeuchten_kwh, 2)
             wp_modus_rest = round(mf_wp.modus_nicht_aufgeteilt_kwh, 2)
@@ -2448,6 +2454,7 @@ async def get_aktueller_monat(
         wp_strom_warmwasser_kwh=wp_strom_warmwasser,
         wp_modus_strom_heizen_kwh=wp_modus_heizen,
         wp_modus_strom_kuehlen_kwh=wp_modus_kuehlen,
+        wp_modus_strom_warmwasser_kwh=wp_modus_warmwasser,
         wp_jaz_heizen=wp_az_funktion.heizen.wert,
         wp_jaz_heizen_grund=wp_az_funktion.heizen.grund,
         wp_jaz_warmwasser=wp_az_funktion.warmwasser.wert,

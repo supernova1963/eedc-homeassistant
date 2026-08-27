@@ -94,6 +94,8 @@ class ImdTypBeitrag:
     # Genau diese Zweideutigkeit war der Grund für eigene Feldnamen (E-G).
     wp_modus_strom_heizen: float = 0.0
     wp_modus_strom_kuehlen: float = 0.0
+    #: N-336: nur aus dem abgeleiteten Split — s. ``ModusStromZeile``.
+    wp_modus_strom_warmwasser: float = 0.0
     #: E4 (Konzept §2.3): **nur aus gemessenen Zählern.** Der abgeleitete Split
     #: kann sie nicht (``AUFGETEILTE_MODI``, D11) und lässt sie bei 0 — das ist
     #: die Aussage, keine Lücke. Sie sind *erfassbar, aber keine bewertete
@@ -258,6 +260,7 @@ def imd_typ_beitrag(
             # dasselbe, statt sich je nach Fläche zu unterscheiden.
             wp_modus_strom_heizen=_modus.heizen_kwh,
             wp_modus_strom_kuehlen=_modus.kuehlen_kwh,
+            wp_modus_strom_warmwasser=_modus.warmwasser_kwh,
             wp_modus_strom_lueften=_modus.lueften_kwh,
             wp_modus_strom_entfeuchten=_modus.entfeuchten_kwh,
             wp_nutzenergie_kuehlen=(

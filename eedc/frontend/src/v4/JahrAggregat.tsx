@@ -338,6 +338,7 @@ export function baueJahrAlsMonat(monate: AktuellerMonatResponse[], jahr: number)
     // neu gerechnet — sonst addierten sich die Monats-Rundungen auf.
     wp_modus_strom_heizen_kwh: summe(f('wp_modus_strom_heizen_kwh')),
     wp_modus_strom_kuehlen_kwh: summe(f('wp_modus_strom_kuehlen_kwh')),
+    wp_modus_strom_warmwasser_kwh: summe(f('wp_modus_strom_warmwasser_kwh')),
     wp_modus_abdeckung_h: summe(f('wp_modus_abdeckung_h')),
     // #263 — ein Flag summiert sich nicht, es wird ge-ODER-t: EIN Monat
     // mit gemessener Aufteilung genügt, damit das Jahr eine hat.
@@ -345,7 +346,10 @@ export function baueJahrAlsMonat(monate: AktuellerMonatResponse[], jahr: number)
     wp_modus_nicht_aufgeteilt_kwh: Math.max(
       0,
       (wpStrom ?? 0) - (summe(f('wp_modus_strom_heizen_kwh')) ?? 0)
-        - (summe(f('wp_modus_strom_kuehlen_kwh')) ?? 0),
+        - (summe(f('wp_modus_strom_kuehlen_kwh')) ?? 0)
+        // N-336 — sonst erschiene der Warmwasser-Strom im Jahr ZWEIMAL:
+        // einmal als eigenes Segment und einmal in der Restmenge.
+        - (summe(f('wp_modus_strom_warmwasser_kwh')) ?? 0),
     ),
     wp_strom_warmwasser_kwh: summe(f('wp_strom_warmwasser_kwh')),
     // Jahres-Counter im period-neutralen Σ-Slot; Max/Tag = höchster Einzeltag des Jahres.

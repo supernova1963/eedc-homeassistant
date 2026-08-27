@@ -20,6 +20,10 @@ export interface ModusSplitDaten {
   gesamt_stromverbrauch_kwh: number
   modus_strom_heizen_kwh?: number
   modus_strom_kuehlen_kwh?: number
+  /** N-336: die dritte **ableitbare** Betriebsart. Sie erscheint nur, wenn sie
+   *  vorkommt — wie Lüften/Entfeuchten darunter, nur aus der anderen Quelle:
+   *  Warmwasser kann nur der ABGELEITETE Split, jene nur der GEMESSENE. */
+  modus_strom_warmwasser_kwh?: number
   /** E4 (Konzept §2.3): nur aus **gemessenen** Betriebsart-Zählern. Ohne
    *  solchen Zähler 0 — dann stecken sie weiterhin in `nicht_aufgeteilt`. */
   modus_strom_lueften_kwh?: number
@@ -69,6 +73,7 @@ export function WaermepumpeModusSplit({ zusammenfassung: z }: { zusammenfassung:
   const gesamt = (bezug != null && bezug > 0 ? bezug : z.gesamt_stromverbrauch_kwh) || 0
   const heizen = z.modus_strom_heizen_kwh
   const kuehlen = z.modus_strom_kuehlen_kwh
+  const warmwasser = z.modus_strom_warmwasser_kwh
   const lueften = z.modus_strom_lueften_kwh
   const entfeuchten = z.modus_strom_entfeuchten_kwh
   const rest = z.modus_nicht_aufgeteilt_kwh
@@ -79,6 +84,13 @@ export function WaermepumpeModusSplit({ zusammenfassung: z }: { zusammenfassung:
   // erfasst, sieht sie nicht."
   const segmente = [
     { label: 'Heizen', wert: heizen ?? 0, farbe: ROLLEN_BG.heizung },
+    // N-336: Warmwasser steht direkt hinter Heizen — dieselbe Reihenfolge wie
+    // in der Wärme-Aufteilung darüber und in `arbeitszahl_je_funktion`.
+    // ⚠ Wie Lüften/Entfeuchten nur, WENN es vorkommt: ein 0-Segment an jeder
+    // Wärmepumpe wäre eine Zeile, die für fast jeden nichts sagt.
+    ...(warmwasser
+      ? [{ label: 'Warmwasser', wert: warmwasser, farbe: ROLLEN_BG.warmwasser }]
+      : []),
     { label: 'Kühlen', wert: kuehlen ?? 0, farbe: ROLLEN_BG.kuehlung },
     ...(lueften ? [{ label: 'Lüften', wert: lueften, farbe: ROLLEN_BG.lueftung }] : []),
     ...(entfeuchten
@@ -100,6 +112,12 @@ export function WaermepumpeModusSplit({ zusammenfassung: z }: { zusammenfassung:
           <dt className="text-gray-600 dark:text-gray-400">davon Heizen</dt>
           <dd>{fmt(heizen)} kWh{anteil(heizen, gesamt)}</dd>
         </div>
+        {warmwasser ? (
+          <div className="flex justify-between">
+            <dt className="text-gray-600 dark:text-gray-400">davon Warmwasser</dt>
+            <dd>{fmt(warmwasser)} kWh{anteil(warmwasser, gesamt)}</dd>
+          </div>
+        ) : null}
         <div className="flex justify-between">
           <dt className="text-gray-600 dark:text-gray-400">davon Kühlen</dt>
           <dd>{fmt(kuehlen)} kWh{anteil(kuehlen, gesamt)}</dd>

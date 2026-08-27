@@ -29,11 +29,37 @@ from typing import Final, Optional
 
 # ── Kanon ────────────────────────────────────────────────────────────────────
 #
-# Sechs Werte. Gespeichert und ausgewiesen werden später nur die Teilmengen zu
-# `heizen` und `kuehlen`; die vier übrigen Klassen fallen in „nicht aufgeteilt"
-# (Konzept §3.3, belegt durch D11: in der Praxis fahren die drei Melder nur
-# Heizen und Kühlen, der Modus wird saisonal manuell gestellt).
+# Sieben Werte. Gespeichert und ausgewiesen werden die Teilmengen zu `heizen`,
+# `warmwasser` und `kuehlen`; die vier übrigen Klassen fallen in „nicht
+# aufgeteilt".
+#
+# ⭐ **`warmwasser` kam am 27.08.2026 dazu (N-336) — es hätte von Anfang an hier
+# stehen müssen.** Der Kanon ist aus HA-`HVACMode` abgeleitet, und der kennt die
+# Trinkwassererwärmung nicht: Home Assistant führt sie in einer eigenen Domäne
+# (`water_heater`). Für HA ist das richtig. Übernommen wurde es, ohne es je
+# gegen **eedcs eigene** Funktionsliste zu halten — und die führt Warmwasser an
+# vier Stellen: `strom_warmwasser_kwh` · `warmwasser_kwh` · das Live-Feld
+# „Leistung Warmwasser" · `arbeitszahl_je_funktion`. Zwei Vokabulare für
+# dieselbe Sache, nie abgeglichen.
+#
+# ⛔ **Der Beleg für die alte Fassung war eine Aufzählung, kein Ausschluss.**
+# Hier stand: *„belegt durch D11: in der Praxis fahren die drei Melder nur
+# Heizen und Kühlen"*. Das war für eine **Split-Klimaanlage** richtig — dafür
+# ist KONZEPT-263 geschrieben, und die hat keinen Warmwasserkreis. Als Vokabular
+# der ganzen Wärme/Klima-Fläche trägt der Satz nicht: `soll-waerme-klima.md`
+# §7/A8 sagt zu D11 ausdrücklich *„belegt es für drei Melder — keine
+# Allgemeinaussage"*, und §3.2a führt Warmwasser als eigene Funktion mit `E_ww`
+# und `Q_ww`. Am 27.08. haben es zwei Melder unabhängig hingeschrieben:
+# dietmar1968 mit Begründung (T89667 #225 — ein Kältekreis, ein Umschaltventil,
+# darum schließen sich die drei Betriebsformen aus) und MartyBr (#230: *„die WP
+# heizt, macht WW oder kühlt"*).
+#
+# ⚠ **Und eedc hat es selbst verlangt, bevor es das Wort kannte:** Die
+# Template-Vorlage im Handbuch (`dd5bbe41`, 27.08.) weist Anwender an, einen
+# Sensor zu bauen, der `warmwasser` ausgibt — den `normalisiere_betriebsmodus`
+# dann zu `unbestimmt` machte. Eine Anleitung, deren Ergebnis wir wegwerfen.
 HEIZEN: Final[str] = "heizen"
+WARMWASSER: Final[str] = "warmwasser"
 KUEHLEN: Final[str] = "kuehlen"
 ENTFEUCHTEN: Final[str] = "entfeuchten"
 LUEFTEN: Final[str] = "lueften"
@@ -41,11 +67,19 @@ AUS: Final[str] = "aus"
 UNBESTIMMT: Final[str] = "unbestimmt"
 
 BETRIEBSMODUS_KANON: Final[tuple[str, ...]] = (
-    HEIZEN, KUEHLEN, ENTFEUCHTEN, LUEFTEN, AUS, UNBESTIMMT,
+    HEIZEN, WARMWASSER, KUEHLEN, ENTFEUCHTEN, LUEFTEN, AUS, UNBESTIMMT,
 )
 
-# Die beiden Klassen, für die es eine eigene Teilmenge gibt.
-AUFGETEILTE_MODI: Final[frozenset[str]] = frozenset({HEIZEN, KUEHLEN})
+#: Die Klassen, für die es eine eigene Teilmenge gibt.
+#:
+#: ⛔ **`AUFGETEILTE_MODI` ist KEINE Teilmenge von `MESSBARE_MODI`, und das ist
+#: Absicht** (N-336). Die beiden Mengen beantworten verschiedene Fragen:
+#: *„welche Betriebsart kann eedc aus einem Modus-Signal ABLEITEN?"* gegen
+#: *„für welche Betriebsart bietet eedc einen eigenen ZÄHLER an?"* Warmwasser
+#: kann eedc ableiten, bekommt aber **kein** `betriebsart_strom_warmwasser_kwh`
+#: — die Begründung steht bei `MESSBARE_MODI`. Wer die eine Menge aus der
+#: anderen ableiten will, macht aus zwei Fragen eine.
+AUFGETEILTE_MODI: Final[frozenset[str]] = frozenset({HEIZEN, WARMWASSER, KUEHLEN})
 
 #: Kanon → deutscher Klartext für die **Zuordnungs-Fläche** (F-52/F-53).
 #:
@@ -56,6 +90,7 @@ AUFGETEILTE_MODI: Final[frozenset[str]] = frozenset({HEIZEN, KUEHLEN})
 #: davon unberührt: sie beschriften eine **Menge**, nicht einen Zustand.
 BETRIEBSMODUS_LABEL: Final[dict[str, str]] = {
     HEIZEN: "Heizen",
+    WARMWASSER: "Warmwasser",
     KUEHLEN: "Kühlen",
     ENTFEUCHTEN: "Entfeuchten",
     LUEFTEN: "Lüften",
@@ -79,12 +114,40 @@ BETRIEBSMODUS_LABEL: Final[dict[str, str]] = {
 #: **Warmwasser**-Rolle (`live_komponenten_builder`). Zwei Bedeutungen auf einem
 #: Symbol sind genau die Drift, gegen die Regel 0a steht („eine Datenrolle, ein
 #: Symbol"), deshalb `waves`.
+#:
+#: ⭐ **Und genau deshalb ist `warmwasser` hier `droplets`** (N-336, 27.08.):
+#: Die Zeile darüber hat den Tropfen für diese Rolle freigehalten, bevor es den
+#: Kanon-Wert dazu gab. Regel 0a, andere Richtung — dieselbe Datenrolle, dasselbe
+#: Symbol, auch wenn sie über zwei Quellen ins Bild kommt (Leistungssensor oder
+#: Betriebsmodus).
 BETRIEBSMODUS_ICON: Final[dict[str, str]] = {
     HEIZEN: "flame",
+    WARMWASSER: "droplets",
     KUEHLEN: "snowflake",
     ENTFEUCHTEN: "waves",
     LUEFTEN: "fan",
 }
+
+
+#: Modi, die im **Live-Bild** keinen Klartext bekommen (MartyBr, T89667 #230).
+#:
+#: ⭐ **Dieselbe Regel wie bei `BETRIEBSMODUS_ICON` — und für Text wiegt sie
+#: schwerer.** Dort steht als Begründung: *„Ein Sondersymbol für ‚ich weiß es
+#: nicht' wäre eine Aussage, die eedc nicht hat."* Der Satz gilt für ein Wort
+#: erst recht: Ein Symbol kann man übersehen, „Unbestimmt" liest man. Auf
+#: MartyBrs Bildschirm stand es unter einer Wärmepumpe mit 0 W — eine Kachel,
+#: die nichts behaupten musste, behauptete Unwissen.
+#:
+#: ⚠ **`aus` steht bewusst NICHT hier.** „Aus" ist eine Aussage: das Gerät läuft
+#: nicht. Nur `unbestimmt` ist die Abwesenheit einer Aussage.
+#:
+#: ⛔ **`BETRIEBSMODUS_LABEL` bleibt vollständig.** Dort beschriftet der Text
+#: einen **Wert** auf der Zuordnungs-Fläche („eedc versteht das als:
+#: Unbestimmt") — eine richtige und nötige Auskunft. Hier behauptet er einen
+#: **Zustand jetzt**. Dieselbe Trennung wie zwischen `BETRIEBSMODUS_LABEL` und
+#: `BETRIEBSART_LABEL`: Zustand gegen Menge, und keiner der beiden Texte ist
+#: eine Formatierung des anderen.
+BETRIEBSMODUS_LIVE_OHNE_KLARTEXT: Final[frozenset[str]] = frozenset({UNBESTIMMT})
 
 
 # ── Feldnamen der Teilmengen (#263 K-2, S3) ──────────────────────────────────
@@ -114,6 +177,7 @@ BETRIEBSMODUS_ICON: Final[dict[str, str]] = {
 # Feld, keine Migration" (Konzept §3.1, Folge 4) eine Behauptung.
 MODUS_STROM_FELD: Final[dict[str, str]] = {
     HEIZEN: "modus_strom_heizen_kwh",
+    WARMWASSER: "modus_strom_warmwasser_kwh",
     KUEHLEN: "modus_strom_kuehlen_kwh",
 }
 
@@ -145,7 +209,32 @@ MODUS_STROM_FELD: Final[dict[str, str]] = {
 # Ausgeschrieben statt generiert, aus demselben Grund wie oben (Grep-Barkeit);
 # `test_263_betriebsart_felder.py` hält beide Tabellen gegen den Kanon.
 
-#: Betriebsarten, für die es einen **messbaren** Verbrauch geben kann.
+#: Betriebsarten, für die eedc einen eigenen **Betriebsart-Zähler** anbietet.
+#:
+#: ⛔ **`warmwasser` steht hier bewusst NICHT — obwohl es im Kanon steht und
+#: obwohl es messbar ist** (N-336, 27.08.). Die Größe gibt es, sie heißt
+#: `strom_warmwasser_kwh`, und sie gehört einer **anderen Familie** an:
+#:
+#: * `strom_heizen_kwh` / `strom_warmwasser_kwh` sind **Summanden** — bei
+#:   `getrennte_strommessung=True` ergeben sie zusammen den Gesamtverbrauch.
+#: * `betriebsart_strom_*_kwh` sind **Teilmengen** des Gesamtverbrauchs.
+#:
+#: Die zwei Familien unbeschriftet nebeneinander anzubieten ist die
+#: Zweideutigkeit, an der ein Tester schon einmal zwei Felder addiert hat
+#: (Forum simon42 #89667/62) — der Satz steht ausgeschrieben in
+#: `field_definitions.py` über `_betriebsart_felder`, und er gilt unverändert.
+#: Ein `betriebsart_strom_warmwasser_kwh` wäre der **zweite** Weg zu derselben
+#: Zahl, ohne einen einzigen Fall, den der erste nicht kann.
+#:
+#: ⚠ **Gegengeprüft an einer realen Zuordnungs-Fläche** (MartyBr, T89667 #230):
+#: Seine Wärmepumpe führt unter *„Weitere Größen erfassen"* bereits **acht**
+#: Einträge, die er nicht braucht. Zwei weitere wären die P-6-Falle — ein
+#: Angebot, das niemand einlöst.
+#:
+#: ⭐ **Nichts geht dabei verloren, und das ist prüfbar:** Es kann heute niemand
+#: einen Warmwasser-Betriebsart-Zähler pflegen, also gibt es keine Daten, die
+#: unter dem engeren Modell falsch gespeichert würden (`soll-waerme-klima.md`
+#: §7, Trennlinie Modell/Ansicht). Ein späteres Hinzufügen wäre rein additiv.
 MESSBARE_MODI: Final[tuple[str, ...]] = (HEIZEN, KUEHLEN, LUEFTEN, ENTFEUCHTEN)
 
 #: Gemessener **Strom**verbrauch je Betriebsart (Teilmenge des Gesamtverbrauchs).
@@ -241,6 +330,22 @@ _ZUSTAND_ZU_KANON: Final[dict[str, str]] = {
     "lüften": LUEFTEN,
     "aus": AUS,
     "automatik": UNBESTIMMT,
+    # Warmwasser (N-336). **In `HVACMode` gibt es dafür nichts** — HA führt die
+    # Trinkwassererwärmung in der Domäne `water_heater`. Die Werte hier kommen
+    # deshalb aus den zwei Quellen, die es real gibt:
+    #   • die deutschen Schreibweisen aus Template-Sensoren — `warmwasser` ist
+    #     der Wert, den **eedcs eigene Handbuch-Vorlage** erzeugt;
+    #   • die englischen Kurzformen, die Heizungs-Integrationen für
+    #     *domestic hot water* verwenden.
+    # ⚠ Bewusst NICHT dabei: `water_heater` als Wort und alles, was nur
+    # „irgendwas mit Wasser" heißt. eedc rät nicht — wer einen Wert braucht, der
+    # hier fehlt, bekommt `unbestimmt` und die Werte-Tabelle im Handbuch.
+    "warmwasser": WARMWASSER,
+    "brauchwasser": WARMWASSER,
+    "trinkwasser": WARMWASSER,
+    "dhw": WARMWASSER,
+    "hot_water": WARMWASSER,
+    "water_heating": WARMWASSER,
 }
 
 # `HVACAction` (HA-Core) — nur wo die Integration sie überhaupt liefert.
