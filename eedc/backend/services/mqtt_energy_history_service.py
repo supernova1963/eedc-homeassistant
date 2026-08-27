@@ -332,3 +332,109 @@ def _compute_deltas(
             result["pv"] = round(pv_summe, 1)
 
     return result
+
+
+# ─── Monatswerte aus den mitgeschriebenen Ständen (F-66) ────────────────────
+#
+# ⛔ **Ein MQTT-Energy-Topic trägt einen ZÄHLERSTAND, keine Monatsmenge.** Das
+# steht so in der Topic-Registry (`mqtt_topic_registry.BASIS_ENERGY_TOPICS`:
+# „Zählerstand der ins Netz eingespeisten Energie", „Kumulierter kWh-Zähler-
+# stand") und war schon einmal Gegenstand einer Korrektur: das Label hieß bis
+# zur Dirk-PN vom 2026-06-01 „… Monat (kWh)" und wurde als irreführend
+# berichtigt. **Berichtigt wurde damals der Wortlaut, nicht die Leser.**
+#
+# Die Folge, gemeldet von **gruaGit** (Discussion #396, 27.08.): Der Monats-
+# abschluss stellte den Lebenszählerstand neben den Monatswert und meldete elf
+# Felder als „weicht ab" — 6675,3 gegen 552,75 kWh —, und daneben stand
+# „Sensorwert übernehmen". Ein Klick hätte den Lebensstand als Monatsmenge
+# gespeichert. In `aktueller_monat.py` war es kein Vorschlag, sondern ein
+# `update`: im laufenden Monat gewann der Stand gegen den gespeicherten Wert.
+#
+# ⭐ **Der Stand wird deshalb hier zur Menge gemacht — an EINER Stelle, für
+# beide Leser.** Die Reihe dafür gibt es längst: `snapshot/writer.py` schreibt
+# die MQTT-Werte stündlich in `sensor_snapshots`, und deren Aufräumjob löscht
+# nur Sub-Stunden-Slots — die vollen Stunden bleiben dauerhaft. `reader.delta`
+# beantwortet damit „wie viel lief zwischen zwei Zeitpunkten", inklusive der
+# beiden Fälle, in denen es keine Antwort gibt (fehlender Stand, Zählerreset).
+#
+# ⚠ **Was hier bewusst NICHT herauskommt:** Keys ohne kumulative Zählerreihe —
+# `km_gefahren`, `ladevorgaenge`, Preisfelder. `_mqtt_key_to_sensor_key` gibt
+# für sie `None`, es existiert kein Snapshot und damit keine Differenz. Sie
+# fallen heraus statt roh durchgereicht zu werden: Genau ein solcher Rohwert
+# war gruaGits Tachostand (13272 km gegen 1001 km im Monat). **Ein Feld ohne
+# Vorschlag ist ehrlich; ein Feld mit einem Stand darin ist ein Datenverlust,
+# der wie eine Messung aussieht.**
+
+
+async def mqtt_monats_deltas(
+    db,
+    anlage_id: int,
+    jahr: int,
+    monat: int,
+    energy_keys: list[str],
+    quellen_energy: Optional[dict] = None,
+    bis: Optional[datetime] = None,
+) -> dict[str, float]:
+    """Monatsmengen je MQTT-Energy-Key aus den mitgeschriebenen Ständen.
+
+    Args:
+        db: Async-Session (der Aufrufer hält sie bereits).
+        anlage_id: Anlage.
+        jahr, monat: der Monat, dessen Menge gefragt ist.
+        energy_keys: Roh-Keys des Caches (``einspeisung_kwh``,
+            ``inv/7/ladung_kwh`` …).
+        quellen_energy: C2b-Read-Through (`extract_quellen_energy(anlage)`) —
+            durchgereicht, damit ein auf „HA" oder „keine" gestelltes Feld
+            nicht doch aus dem MQTT-Backup beantwortet wird (§2d).
+        bis: Endzeitpunkt; Standard ist der Monatsanfang des Folgemonats. Der
+            laufende Monat reicht ``datetime.now()`` durch — sonst stünde die
+            Frage nach einem Stand in der Zukunft.
+
+    Returns:
+        ``{energy_key: menge_kwh}`` — **nur** für Keys mit Zählerreihe UND
+        beidseitig vorhandenem Stand. Alles andere fehlt im Ergebnis; ein
+        fehlender Eintrag heißt „keine Aussage", nicht „null".
+    """
+    from backend.services.snapshot.keys import _mqtt_key_to_sensor_key
+    from backend.services.snapshot.reader import delta as snapshot_delta
+
+    von = datetime(jahr, monat, 1)
+    if bis is None:
+        bis = datetime(jahr + 1, 1, 1) if monat == 12 else datetime(jahr, monat + 1, 1)
+    # ⛔ Auf die volle Stunde abrunden — **die Reihe liegt auf Stundengrenzen**
+    # (`snapshot/writer.py` schreibt stündlich; der Aufräumjob behält genau die
+    # Slots mit `%M == "00"`). `get_snapshot` sucht in einem ±5-Minuten-Fenster.
+    # Ein Aufrufer, der `datetime.now()` durchreicht, träfe damit nur in fünf von
+    # sechzig Minuten einen Stand — der Vorschlag wäre zeitabhängig da oder weg.
+    # ⭐ Beim Bau selbst hineingelaufen und von der Probe gefangen (27.08.): der
+    # laufende Monat lieferte gar nichts, weil 09:26 keinen 09:00-Slot sieht.
+    bis = bis.replace(minute=0, second=0, microsecond=0)
+    if bis <= von:
+        # Monatsanfang, noch keine volle Stunde vergangen — es gibt nichts zu
+        # messen, und eine Null wäre eine Aussage.
+        return {}
+
+    ergebnis: dict[str, float] = {}
+    for mqtt_key in energy_keys:
+        sensor_key = _mqtt_key_to_sensor_key(mqtt_key)
+        if not sensor_key:
+            # Kein kumulativer Zähler (km, Ladevorgänge, Preise) — hier gibt es
+            # nichts zu differenzieren und deshalb auch nichts zu behaupten.
+            continue
+        try:
+            menge = await snapshot_delta(
+                db, anlage_id, sensor_key,
+                # MQTT-only: es gibt keine HA-Entity, und `get_snapshot`
+                # verlangt das ausdrücklich nicht („None bei MQTT-only").
+                None, von, bis,
+                quellen_energy=quellen_energy,
+            )
+        except Exception:  # pragma: no cover — ein Vorschlag kippt nie die Seite
+            logger.exception(
+                "MQTT-Monatsdelta nicht berechenbar (anlage=%s key=%s)",
+                anlage_id, mqtt_key,
+            )
+            continue
+        if menge is not None and menge > 0:
+            ergebnis[mqtt_key] = round(menge, 1)
+    return ergebnis

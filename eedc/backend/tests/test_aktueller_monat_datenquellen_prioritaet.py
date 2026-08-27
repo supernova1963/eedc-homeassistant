@@ -95,7 +95,7 @@ async def test_vergangener_monat_mqtt_wird_ignoriert(db, monkeypatch):
     async def _fake_ha_stats(anlage, j, m):
         return {}
 
-    async def _poison_mqtt(anlage, investitionen):
+    async def _poison_mqtt(db, anlage, investitionen, jahr, monat):
         return {"einspeisung_kwh": (9999.0, _info(am, "mqtt", 91))}
 
     monkeypatch.setattr(am, "_collect_connector_data", _fake_connector)
@@ -120,7 +120,7 @@ async def test_laufender_monat_ha_stats_ueberschreibt_gespeichert(db, monkeypatc
     async def _fake_connector(anlage, j, m):
         return {}
 
-    async def _fake_mqtt(anlage, investitionen):
+    async def _fake_mqtt(db, anlage, investitionen, jahr, monat):
         return {}
 
     async def _fake_ha_stats(anlage, j, m):
@@ -144,7 +144,7 @@ async def test_laufender_monat_ha_stats_gewinnt_ueber_connector_und_mqtt(db, mon
     async def _fake_connector(anlage, j, m):
         return {"einspeisung_kwh": (200.0, _info(am, "local_connector", 90))}
 
-    async def _fake_mqtt(anlage, investitionen):
+    async def _fake_mqtt(db, anlage, investitionen, jahr, monat):
         return {"einspeisung_kwh": (300.0, _info(am, "mqtt", 91))}
 
     async def _fake_ha_stats(anlage, j, m):
@@ -173,7 +173,7 @@ async def test_laufender_monat_connector_ueberschreibt_gespeichert(db, monkeypat
             )
         }
 
-    async def _fake_mqtt(anlage, investitionen):
+    async def _fake_mqtt(db, anlage, investitionen, jahr, monat):
         return {}
 
     async def _fake_ha_stats(anlage, j, m):
@@ -207,7 +207,7 @@ async def test_laufender_monat_connector_teilzeitraum_ueberschreibt_gespeichert_
             "netzbezug_kwh": (7.0, _info(am, "local_connector", 90, spaet)),
         }
 
-    async def _fake_mqtt(anlage, investitionen):
+    async def _fake_mqtt(db, anlage, investitionen, jahr, monat):
         return {}
 
     async def _fake_ha_stats(anlage, j, m):
@@ -259,7 +259,7 @@ async def test_laufender_monat_connector_teilzeitraum_sperrt_pv_aggregation_nich
     async def _fake_connector(anlage, j, m):
         return {"pv_erzeugung_kwh": (0.0, _info(am, "local_connector", 90, spaet))}
 
-    async def _fake_mqtt(anlage, investitionen):
+    async def _fake_mqtt(db, anlage, investitionen, jahr, monat):
         return {}
 
     async def _fake_ha_stats(anlage, j, m):
@@ -296,7 +296,7 @@ async def test_laufender_monat_connector_mit_abdeckung_sperrt_pv_aggregation_wei
             )
         }
 
-    async def _fake_mqtt(anlage, investitionen):
+    async def _fake_mqtt(db, anlage, investitionen, jahr, monat):
         return {}
 
     async def _fake_ha_stats(anlage, j, m):

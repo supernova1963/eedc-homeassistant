@@ -572,11 +572,23 @@ export default function DatenquellenZuordnung() {
           )
       ),
     }
-    // offeneHinweise + verfuegbarkeit müssen in den Deps stehen, sonst frieren die
-    // render-Closures Aufklapp-Zustand bzw. Button-Gating ein (BlockShell rendert
-    // die memoisierten Blöcke).
+    // ⛔ JEDER Zustand, den `render` liest, MUSS hier stehen — sonst friert die
+    // render-Closure ihn ein (BlockShell rendert die memoisierten Blöcke). Das
+    // sind heute drei: `verfuegbarkeit` (Button-Gating), `offeneHinweise` (Q3)
+    // und `offeneErweiterung` (R1, über `abschnitte`).
+    //
+    // ⚠ Die Liste kann sich NICHT selbst prüfen: `exhaustive-deps` verlangt hier
+    // `abschnitte` und `geraetBadge` — bei jedem Render neu gebaute Funktionen,
+    // deren Aufnahme das Memo wirkungslos machte. Deshalb steht das `disable`
+    // noch, und deshalb ist diese Zeile von Hand zu pflegen. **Genau daran ist
+    // sie am 27.08. gescheitert:** `offeneErweiterung` kam einen Tag zuvor dazu
+    // (`cf3b0a16`), die Liste blieb stehen — „Weitere Größen erfassen" ließ sich
+    // anklicken und klappte nicht auf (pipp086, Forum T89667 #224). Wer eine
+    // vierte Zustandsvariable in `render` liest, trägt sie hier ein; der
+    // Verhaltenstest `DatenquellenZuordnung.erweiterung.test.tsx` hält das Auf-
+    // klappen fest, wenn die Erinnerung wieder nicht reicht.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [cluster, verfuegbarkeit, offeneHinweise])
+  }), [cluster, verfuegbarkeit, offeneHinweise, offeneErweiterung])
 
   if (loading) return <p className="text-sm text-gray-500 dark:text-gray-400">wird geladen …</p>
   if (fehler) return <p className="text-sm text-red-600 dark:text-red-400">{fehler}</p>

@@ -268,25 +268,50 @@ async def get_monatsabschluss(
     if mqtt_svc:
         energy = mqtt_svc.cache.get_energy_data(anlage.id)
         if energy:
+            # ⛔ F-66 (gruaGit, Discussion #396): Der Cache trägt den zuletzt
+            # empfangenen **Zählerstand**, nicht die Monatsmenge — so sagt es die
+            # Topic-Registry, und so schreibt der Absender. Bis zum 27.08. wurde
+            # dieser Stand hier ungerechnet als „Monatswert" mit Konfidenz 91
+            # angeboten: elf Felder meldeten „weicht ab" (6675,3 gegen 552,75),
+            # und „Sensorwert übernehmen" daneben hätte den Lebensstand als
+            # Monatsmenge gespeichert. Jetzt wird die **Menge des angefragten
+            # Monats** aus den mitgeschriebenen Ständen gebildet.
+            #
+            # ⭐ Der Monatsbezug ist der zweite Teil des Fehlers und wiegt ebenso
+            # schwer: Der Cache kennt nur das Jetzt. Für einen Monat aus dem
+            # Frühjahr stand hier der heutige Stand — ein Vorschlag, der die
+            # Frage gar nicht gehört hat, die er beantwortet.
+            from backend.services.mqtt_energy_history_service import mqtt_monats_deltas
+            from backend.services.snapshot.keys import extract_quellen_energy
+
+            # Laufender Monat: bis jetzt, nicht bis zum Monatsende — ein Stand in
+            # der Zukunft existiert nicht, und `delta` lieferte sonst None.
+            _jetzt = datetime.now()
+            _bis = _jetzt if (jahr, monat) == (_jetzt.year, _jetzt.month) else None
+            monats_mengen = await mqtt_monats_deltas(
+                db, anlage.id, jahr, monat, list(energy.keys()),
+                quellen_energy=extract_quellen_energy(anlage), bis=_bis,
+            )
+
             # Basis-Felder
             basis_map = {
                 "einspeisung_kwh": "einspeisung_kwh",
                 "netzbezug_kwh": "netzbezug_kwh",
             }
             for mqtt_key, feld_name in basis_map.items():
-                val = energy.get(mqtt_key)
+                val = monats_mengen.get(mqtt_key)
                 if val is not None and val > 0:
-                    mqtt_energy[feld_name] = round(val, 1)
+                    mqtt_energy[feld_name] = val
 
             # Investitions-Felder: inv/{inv_id}/{key}
-            for mqtt_key, val in energy.items():
+            for mqtt_key, val in monats_mengen.items():
                 if not mqtt_key.startswith("inv/") or val is None or val <= 0:
                     continue
                 parts = mqtt_key.split("/", 2)  # ["inv", "3", "ladung_kwh"]
                 if len(parts) == 3:
                     try:
                         inv_id = int(parts[1])
-                        mqtt_inv_energy.setdefault(inv_id, {})[parts[2]] = round(val, 1)
+                        mqtt_inv_energy.setdefault(inv_id, {})[parts[2]] = val
                     except ValueError:
                         pass
 
@@ -414,7 +439,7 @@ async def get_monatsabschluss(
                 wert=mqtt_energy[feld],
                 quelle=VorschlagQuelle.MQTT_INBOUND,
                 konfidenz=91,
-                beschreibung="Aus MQTT Energy-Topics (Monatswerte)",
+                beschreibung="Aus MQTT-Zählerständen (Differenz über den Monat)",
             ))
 
         # ── Feld-spezifische Vorschläge (bedingte Felder) ──────────────────
@@ -626,7 +651,7 @@ async def get_monatsabschluss(
                     wert=mqtt_inv_values[feld],
                     quelle=VorschlagQuelle.MQTT_INBOUND,
                     konfidenz=91,
-                    beschreibung="Aus MQTT Energy-Topics (Monatswerte)",
+                    beschreibung="Aus MQTT-Zählerständen (Differenz über den Monat)",
                 ))
 
             # Warnungen prüfen

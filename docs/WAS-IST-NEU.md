@@ -63,6 +63,40 @@ verglich, musste eine für falsch halten.
 Die Live-Anzeige heißt jetzt **„Grundlast (Prognose)"**. **An den Zahlen ändert
 sich nichts** — sie dürfen verschieden sein, sie sollten nur nicht gleich heißen.
 
+**„Weitere Größen erfassen" ging nicht auf**
+
+Der zugeklappte Abschnitt unter *Einstellungen → Datenquellen*, mit dem seit
+v4.0.29 ein Kühl-, Lüftungs- oder Heizzähler an jedem Gerät hinterlegbar ist,
+reagierte nicht auf den Klick. pipp086 hat es am Tag der Auslieferung gemeldet.
+Er geht jetzt auf. Die Neuerung war bis dahin praktisch nicht erreichbar —
+falls du sie ausprobieren wolltest und nichts passiert ist: Es lag nicht an dir.
+
+**Wer per MQTT liefert: aus dem Zählerstand wird wieder eine Monatsmenge**
+
+Ein eedc-MQTT-Topic trägt einen **Zählerstand** — genau so steht es in der
+Topic-Liste. eedc hat ihn an zwei Stellen als *Monatswert* gelesen, und das
+hat August (gruaGit) bemerkt, der eedc ohne Home Assistant betreibt und alles
+per MQTT schickt.
+
+Im **Monatsabschluss** stand deshalb neben elf Feldern „weicht ab": der
+Lebenszählerstand neben dem Monatswert — 6675,3 gegen 552,75 kWh, beim Auto der
+Tachostand neben den Monatskilometern. Daneben der Knopf „Sensorwert
+übernehmen": **ein Klick hätte den Zählerstand als Monatswert gespeichert.**
+
+In *Cockpit → Monat* war es kein Vorschlag, sondern die angezeigte Zahl — im
+laufenden Monat verdrängte der Zählerstand deinen gespeicherten Monatswert.
+
+**eedc bildet jetzt die Differenz über den Monat**, aus den Ständen, die es
+ohnehin stündlich mitschreibt. Fehlt der Anfangsstand oder ist der Zähler
+zurückgesprungen, gibt es **keinen** Vorschlag — lieber keine Aussage als eine
+falsche —, und dein gespeicherter Wert bleibt stehen.
+
+> **Was du merkst:** Wo bisher ein Zählerstand stand, steht die Monatsmenge, und
+> die falschen „weicht ab"-Markierungen sind weg. Für *gefahrene Kilometer* und
+> *Ladevorgänge* gibt es über MQTT keinen Vorschlag mehr — für sie schreibt eedc
+> keine Zählerreihe mit, und ohne die lässt sich keine Monatsmenge bilden. Du
+> trägst sie wie bisher von Hand ein.
+
 ---
 
 ## v4.0.29 — Der Zähler entscheidet, nicht die Bauart

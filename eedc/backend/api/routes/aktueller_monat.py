@@ -594,13 +594,35 @@ def _collect_saved_data(
     return resolved
 
 
-async def _collect_mqtt_inbound_data(anlage: Anlage, investitionen: list[Investition]) -> dict[str, tuple[float, DatenquelleInfo]]:
-    """Sammelt Monatsdaten aus MQTT-Inbound Energy-Topics (Konfidenz 91%).
+async def _collect_mqtt_inbound_data(
+    db: AsyncSession,
+    anlage: Anlage,
+    investitionen: list[Investition],
+    jahr: int,
+    monat: int,
+    bis: Optional[datetime] = None,
+) -> dict[str, tuple[float, DatenquelleInfo]]:
+    """Sammelt Monatsmengen aus den MQTT-Zählerständen (Konfidenz 91%).
 
-    Liest kumulierte Monatswerte aus dem MQTT-Cache.
-    Topics: eedc/{id}/energy/einspeisung_kwh, .../inv/{inv_id}/ladung_kwh etc.
+    ⛔ **Hier stand bis zum 2026-08-27: „Liest kumulierte Monatswerte aus dem
+    MQTT-Cache."** Der Docstring war falsch, und weil `merge_datenquellen` das
+    Ergebnis per ``resolved.update(mqtt_energy)`` anwendet, war es kein
+    Anzeige-, sondern ein **Zahlenfehler**: Im laufenden Monat überschrieb der
+    Lebenszählerstand den gespeicherten Monatswert. Bei einer Anlage ohne HA —
+    also genau der Standalone-MQTT-Aufstellung, für die dieser Pfad gebaut ist
+    — gewann er gegen alles außer den HA-Statistiken, die es dort nicht gibt.
+
+    Der Cache trägt den zuletzt empfangenen **Stand**; so verlangt es die
+    Topic-Registry (*„Kumulierter kWh-Zählerstand"*). Gemeldet von **gruaGit**
+    (Discussion #396) an der Schwesterstelle im Monatsabschluss (F-66).
+
+    Die Menge kommt jetzt aus der mitgeschriebenen Standreihe. Fehlt ein Rand
+    oder sprang der Zähler zurück, fehlt das Feld im Ergebnis — dann bleibt der
+    **gespeicherte** Wert stehen, statt von einem Stand verdrängt zu werden.
     """
+    from backend.services.mqtt_energy_history_service import mqtt_monats_deltas
     from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
+    from backend.services.snapshot.keys import extract_quellen_energy
 
     svc = get_mqtt_inbound_service()
     if not svc:
@@ -608,6 +630,23 @@ async def _collect_mqtt_inbound_data(anlage: Anlage, investitionen: list[Investi
 
     energy = svc.cache.get_energy_data(anlage.id)
     if not energy:
+        return {}
+
+    # Der Aufrufer ruft diesen Pfad nur für den laufenden Monat — die obere
+    # Grenze ist deshalb das Jetzt und nicht das Monatsende (ein Stand in der
+    # Zukunft existiert nicht).
+    #
+    # ⚠ `bis` ist ein PARAMETER, kein `datetime.now()` mitten im Rumpf: Eine
+    # Probe, die die Prozessuhr liest, wettet auf die Stunde ihres Laufs (N-167)
+    # — und die Suite fährt in drei Zeitzonen. Der Wächter
+    # `test_konformitaet_echte_uhr_in_tests.py` hat genau das beim Bau dieser
+    # Zeile gemeldet; die Naht ist die Antwort darauf und gehört ohnehin hierher.
+    mengen = await mqtt_monats_deltas(
+        db, anlage.id, jahr, monat, list(energy.keys()),
+        quellen_energy=extract_quellen_energy(anlage),
+        bis=bis if bis is not None else datetime.now(),
+    )
+    if not mengen:
         return {}
 
     resolved: dict[str, tuple[float, DatenquelleInfo]] = {}
@@ -621,14 +660,14 @@ async def _collect_mqtt_inbound_data(anlage: Anlage, investitionen: list[Investi
         "netzbezug_kwh": "netzbezug_kwh",
     }
     for mqtt_key, feld_name in basis_map.items():
-        val = energy.get(mqtt_key)
+        val = mengen.get(mqtt_key)
         if val is not None and val > 0:
             resolved[feld_name] = (val, quelle)
 
     # Investitions-Felder: inv/{inv_id}/{key} → inv_{inv_id}_{key}
     # (passt zum Aggregations-Pattern in der Prioritätskette)
     inv_ids = {str(i.id) for i in investitionen}
-    for mqtt_key, val in energy.items():
+    for mqtt_key, val in mengen.items():
         if not mqtt_key.startswith("inv/") or val is None or val <= 0:
             continue
         parts = mqtt_key.split("/", 2)  # ["inv", "3", "ladung_kwh"]
@@ -1256,7 +1295,10 @@ async def get_aktueller_monat(
 
     saved = _collect_saved_data(monats_fakt)
     connector = await _collect_connector_data(anlage, jahr, monat)
-    mqtt_energy = await _collect_mqtt_inbound_data(anlage, investitionen) if ist_aktueller_monat else {}
+    mqtt_energy = (
+        await _collect_mqtt_inbound_data(db, anlage, investitionen, jahr, monat)
+        if ist_aktueller_monat else {}
+    )
     ha_stats = await _collect_ha_statistics_data(anlage, jahr, monat)
 
     # Abdeckung des Connector-Deltas — sie steht in jedem seiner
