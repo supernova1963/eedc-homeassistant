@@ -7,6 +7,119 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.0.29] - 2026-08-27 — Der Zähler entscheidet, nicht die Bauart
+
+### Added
+
+- **Neues Handbuch „Wärme & Klima".** Die ganze Fläche an einer Stelle beschrieben: was sie umfasst, **welcher Zähler welche Kennzahl möglich macht**, was eedc bewusst *nicht* sagt (kein SEER, keine geschätzte Kältemenge, keine Note für deine Anlage), warum eine Arbeitszahl verschwindet und was jeder Grund bedeutet — dazu die Sensor-Zuordnung Schritt für Schritt, sechs durchgerechnete Beispiel-Anlagen und die häufigsten Missverständnisse. Erreichbar über die In-App-Hilfe und auf der Website. Die Zitate der Sperr-Gründe hält ein Test am Code fest; ein Handbuch, das eine Auskunft nennt, die es nicht mehr gibt, wäre schlechter als keins.
+
+- **Wer einen Kühlzähler hat, kann ihn jetzt zuordnen — an jeder Wärmepumpe.** Gemeldet von **MartyBr** und **pipp086** (Forum simon42 #89667): *„Ich habe getrennte Zähler für Heizung, Warmwassererwärmung … und seit dem Sommer auch für den Kühlbetrieb."* Bisher gab es die Kühl-Achse ausschließlich an Geräten mit der Wärmepumpenart „Luft-Luft (Klimaanlage)" — an einer Luft-Wasser- oder Sole-Wasser-Wärmepumpe war sein Zähler nirgends hinterlegbar.
+
+  **Ab jetzt entscheidet der Zähler, nicht die Bauart.** Unter *Einstellungen → Datenquellen* steht bei jedem Gerät ein neuer, zugeklappter Abschnitt **„Weitere Größen erfassen"**. Darin liegen die Größen, die es an diesem Gerätetyp selten gibt — die Kühl-, Lüft- und Entfeuchtungs-Achse an einer Heizungs-Wärmepumpe zum Beispiel. Ordnest du dort einen Sensor zu, rückt das Feld nach oben zu den anderen.
+
+  Die Fläche bleibt damit so kurz wie bisher, und trotzdem ist kein Fall mehr ausgeschlossen. Dazu neu: **Leistung Kühlen (W)** als Live-Wert, passend zu „Leistung Heizen" und „Leistung Warmwasser" — MartyBr misst beides.
+
+- **Brauchwasser-Wärmepumpe als eigene Bauart.** Ein Gerät, das ausschließlich Warmwasser macht, ließ sich bisher nicht sauber erfassen: Es bekam eine Heiz-Achse angeboten, die es nicht hat. Die neue Wärmepumpenart fragt nur noch nach dem, was das Gerät tut — die Heiz-Achse bleibt über „Weitere Größen erfassen" erreichbar, falls doch ein Zähler existiert.
+
+- **Zwei Angaben, die eedc nicht sehen kann — und die es bisher auch nicht erfragt hat.** Beim Gerät stehen jetzt zwei neue Felder:
+
+  **„Fremdanteil auf den Zählern"** — für zwei Lagen, die eine Arbeitszahl unbrauchbar machen, ohne dass man es den Zahlen ansieht: Der Heizstab hängt am Stromzähler der Wärmepumpe, seine Wärme läuft aber nicht über den Wärmemengenzähler (dann ist der Stromwert zu groß). Oder umgekehrt: Ein Gas- oder Ölkessel speist denselben Heizkreis, der Wärmemengenzähler misst beide, der Stromzähler nur die Wärmepumpe (dann ist der Wärmewert zu groß). **Beides ändert keine Menge** — eedc lässt nur die Arbeitszahl weg und schreibt den Grund daneben.
+
+  **„Kühlung: aktiv oder passiv"** — passiv gekühlte Anlagen (nur Umwälzpumpen) erreichen ein Vielfaches der Effizienz aktiv gekühlter. Ihre eigenen Zahlen bleiben unverändert; sie werden im Community-Vergleich nicht mehr gegen aktiv gekühlte Anlagen gestellt.
+
+- **Eine Kennzahl für den Kühlbetrieb: die Arbeitszahl Kühlen.** Wer einen Kältemengenzähler hat, konnte seine Kältemenge seit v4.0.24 eintragen — und sah sie **an keiner einzigen Stelle**. Es gab keine Kennzahl, die sie benutzt hätte.
+
+  **Jetzt gibt es sie:** Kältemenge ÷ Kühlstrom, im Komponenten-Hub und im Cockpit (Monat), neben den Arbeitszahlen für Heizen und Warmwasser.
+
+  **Sie heißt bewusst nicht „SEER".** SEER ist eine genormte Größe, die unter definierten Prüfstandsbedingungen ermittelt wird — was eedc bilden kann, ist der Quotient deiner beiden Zähler über einen Zeitraum. Sie „SEER" zu nennen würde eine Vergleichbarkeit mit Datenblatt-Werten behaupten, die sie nicht hat.
+
+  Fehlt der Kältemengenzähler — der Normalfall —, steht der Grund dort statt einer Zahl. **Geschätzt wird nichts:** Aus einem angenommenen Wirkungsgrad käme genau der Faktor zurück, mit dem gerechnet wurde.
+
+- **Arbeitszahl getrennt für Heizen und Warmwasser — überall und mit Begründung.** Wer Strom je Funktion getrennt misst, sah die beiden Zahlen bisher nur im Komponenten-Hub. **Im Cockpit (Monat) gab es sie gar nicht**, obwohl dieselben Daten dort vorliegen.
+
+  **Wichtiger als der neue Ort ist, was sich an den Zahlen ändert:** Sie wurden bisher an einer eigenen Stelle gerechnet und kannten deshalb die Sperren nicht, die für die Gesamt-Arbeitszahl längst gelten. Liegt ein Heizstab auf dem Wärmepumpen-Zähler, verschwand die Gesamtzahl mit Begründung — „JAZ Heizen" stand unbeeindruckt daneben. **Dieselbe Anlage, zwei Aussagen.** Jetzt rechnet eine Stelle für alle drei Zahlen.
+
+  Und wo eine der beiden Zahlen nicht gebildet werden darf, stand bisher eine **0** — was „Arbeitszahl null" heißt und nicht „unbekannt". Jetzt steht dort ein „—" **mit dem Grund daneben**.
+
+  **Warum die getrennten Zahlen nützlich sind:** Warmwasser liegt bauartbedingt niedriger als Heizen (höhere Zieltemperatur). Wer viel Warmwasser macht, hat deshalb eine niedrigere Gesamt-Arbeitszahl, **ohne dass die Anlage schlechter wäre** — erst die getrennten Zahlen zeigen das.
+
+- **Lüften und Entfeuchten erscheinen jetzt in der Aufteilung.** Wer für diese Betriebsarten einen eigenen Zähler zugeordnet hat, sah seine Kilowattstunden bisher **nirgends** — sie fielen stumm unter „nicht aufgeteilt", obwohl eedc die Felder anbietet und den Wert entgegennimmt.
+
+  **Ab jetzt bekommen beide ein eigenes Segment im Balken und eine eigene Zeile darunter** — in *Cockpit → Tag*, *Monat*, *Jahr* und im Komponenten-Hub. Wer keinen solchen Zähler hat, sieht keine Veränderung: Ohne Messung stecken sie weiterhin in der Restmenge, und zwei leere Zeilen an jeder Wärmepumpe wären keine Auskunft.
+
+  **Bewertet werden sie bewusst nicht** — sie erzeugen keine Wärme, die sich messen ließe. Genau deshalb fällt ihr Strom jetzt auch **aus dem Nenner der Arbeitszahl**, wie der Kühlstrom seit dem Fix darunter. **Deine Arbeitszahl kann dadurch steigen**, wenn du lüftest oder entfeuchtest und das getrennt misst; die Mengen selbst ändern sich nicht.
+
+### Fixed
+
+- **„Kein Zähler zugeordnet" — obwohl 1.286 kWh über das Feld liefen.** Gemeldet von **gruaGit** (Discussion #396): *„Ist die Meldung hier ganz unten ‚Offen: go-e Charger, Ladung PV' evtl. auch noch fälschlicherweise vorhanden? Tatsächlich existiert dafür ja ein Wert."*
+
+  **Er hatte recht, und es war mehr als eine falsche Meldung.** Für eedc hieß „Zähler zugeordnet" bis jetzt „**Home-Assistant-Sensor** zugeordnet". Wer seine Werte per MQTT schickt — der Normalfall im Standalone-Betrieb ohne Home Assistant — hat gar keinen Sensor zuzuordnen, und genau das war die Lücke:
+
+  - Der **Daten-Check** vermisste Zähler, die längst liefern — bis hin zu *„Kein Basis-Zähler für: Einspeisung, Netzbezug"* bei Anlagen, die vollständig messen. Der Hinweis war nicht abstellbar: Der „Beheben"-Knopf führte in ein Formular, in dem es das Feld gar nicht gibt.
+  - **Schlimmer, und bisher nicht gemeldet:** In *Cockpit → Tag* blieben dieselben Werte **wirklich leer** — Wärmemenge, getrennter Heiz-/Warmwasserstrom, Netzladung des Speichers, PV-Anteil der Ladung, Kompressor-Starts. Die Zählerstände standen in der Datenbank und wurden nie gelesen. Auch die Tages-Summe je Komponente und die Lebensdauer-Kacheln im Wärmepumpen-Dashboard waren betroffen.
+
+  **Ab jetzt zählt der Messwert, nicht die Zuordnungsform.** Ein Feld trägt einen Zähler, wenn ihm ein Home-Assistant-Sensor zugeordnet ist **oder** wenn dafür Zählerstände per MQTT ankommen. Wer „Keine" gewählt hat, behält seine Absage.
+
+  **Was du siehst:** Die drei Hinweise verschwinden, wenn deine Werte ankommen — und *Cockpit → Tag* füllt sich mit Zahlen, die vorher auf „—" standen. Bleibt ein Hinweis stehen, ist er ab jetzt echt: Dann kommt auf diesem Topic seit über einer Woche nichts an.
+
+  **Und was der Grund unter einem „—" jetzt sagt:** Wer per MQTT misst, bekam bis jetzt den Rat *„Sensor zuordnen"* — für ihn ein Weg ins Leere. Jetzt steht dort, was wirklich fehlt: dass für diesen Tag keine Zählerstände vorliegen.
+
+- **Ein Tag mit 36 Stunden.** Gemeldet von **dietmar1968** (Forum simon42 #89667): *„Ich verstehe beim Vorhandensein folgender Sensoren jene Anzeige nicht."* Unter *Cockpit → Tag* stand bei ihm **„Modus erfasst: 36 Stunden"**. Ein Tag hat 24.
+
+  **Ursache:** Wer mehrere Wärmepumpen oder Klimaanlagen hat, deren Betriebsart eedc mitliest, bekam die erfassten Stunden **aller Geräte zusammengezählt**. Zwei Geräte, die dieselben 18 Stunden liefen, ergaben 36. **Kilowattstunden darf man über Geräte addieren, Stunden nicht** — sie beschreiben denselben Zeitraum. Im Monat fiel es nicht auf: Dort standen 372 von 624 möglichen Stunden, plausibel genug, um lange unbemerkt zu bleiben.
+
+  **Die Mengen sind davon nicht betroffen** und ändern sich nicht — nur die Stunden-Angabe darunter zeigt jetzt, wie lange eedc tatsächlich mitgelesen hat.
+
+- **Der Aufteilungs-Balken beschrieb weniger als die Kachel darüber, ohne es zu sagen.** Ebenfalls aus dietmars Bildern: Über dem Balken stand *„Strom verbraucht: 284 kWh"*, der Balken selbst summierte sich auf 30. Beide Zahlen waren richtig.
+
+  **Der Grund:** Die Aufteilung nach Betriebsart entsteht nur für Geräte und Monate, in denen eedc die Betriebsart auch mitlesen konnte. Die Kachel darüber zählt **alle** Geräte. Gesagt hat das bisher niemand.
+
+  **Jetzt steht unter dem Balken eine Zeile „Aufgeteilte Menge: 30 von 284 kWh"** — im Cockpit (Tag, Monat, Jahr) und im Komponenten-Hub. Sie erscheint nur, wenn beide Zahlen auseinandergehen. **Im Komponenten-Hub korrigiert das zugleich die Prozente:** Sie wurden dort gegen den Gesamtstrom gerechnet und summierten sich deshalb auf weniger als 100 %.
+
+- **eedc forderte, einen Sensor zuzuordnen, der längst zugeordnet war.** Der dritte Punkt aus dietmars Meldung, und der ärgerlichste: Unter *Cockpit → Tag* stand bei *Wärme erzeugt* ein „—", und die Erklärung dazu lautete *„Tageswert braucht einen Wärmemengenzähler am Gerät (Sensor zuordnen)"*. Er hatte **zwei** zugeordnet.
+
+  **Der Satz war fest verdrahtet** und beschrieb nur einen von drei möglichen Gründen. eedc unterscheidet sie jetzt und nennt den zutreffenden:
+
+  - *Kein Zähler zugeordnet* — dazu der Weg, wo er einzutragen ist.
+  - *Zähler zugeordnet, aber für diesen Tag liegen keine Zählerstände vor.* **Das ist der Regelfall nach einer frischen Zuordnung:** Der Monatswert steht da, weil er aus der Langzeitstatistik von Home Assistant kommt; Tageswerte entstehen erst ab der Zuordnung. Frühere Tage lassen sich in der Reparatur-Werkbank nachrechnen.
+  - *Der Zähler ist an diesem Tag zurückgesprungen.* Diesen Fall hat eedc schon immer erkannt und die Tagesaussage bewusst weggelassen — geschrieben hat er es bisher nur ins Protokoll.
+
+  **Der Grund steht jetzt sichtbar unter der Zahl statt im Tooltip** — ein Tooltip ist auf dem Telefon keine Auskunft. Betroffen sind *Wärme erzeugt*, *Ersparnis vs. Gas*, die Arbeitszahl und der PV-Anteil der Ladung. **Eine falsche Ursache ist schlimmer als keine:** Ohne Hinweis sucht man selbst, mit einem falschen sucht man an der falschen Stelle.
+
+- **Der Komponenten-Hub zeigte eine andere Arbeitszahl als das Cockpit — für dieselbe Anlage im selben Monat.** Gefunden beim Aufbau der neuen Simulationstests, nicht gemeldet. Wer heizt **und** kühlt, sah unter *Komponenten → Wärmepumpe* eine zu niedrige Zahl (an einer Beispielanlage 2,31 statt 3,00), während *Cockpit → Monat* richtig rechnete.
+
+  **Ursache:** Der Hub bildete den Quotienten selbst, statt die gemeinsame Rechenstelle zu nutzen. Damit fehlten ihm sämtliche Regeln, die dort gelten — der Kühlstrom blieb im Nenner, ein gemeldeter Fremdanteil auf den Zählern wurde ignoriert.
+
+  **Zwei Dinge kommen damit neu hinzu, die es dort nie gab:** Wo eedc keine Arbeitszahl bilden darf, steht jetzt **der Grund** statt einer leeren Kachel. Und liegt die Arbeitszahl unter 2, steht der **Heizstab-Hinweis** daneben — bisher gab es ihn nur im Cockpit.
+
+- **Wer Heizung, Warmwasser und Kühlung getrennt misst, dessen Kühlstrom fehlte im Stromverbrauch der Wärmepumpe.** Betroffen ist genau die Ausstattung, die mit diesem Release erst möglich wird: ein Kühlzähler an einer Luft-Wasser- oder Sole-Wasser-Wärmepumpe.
+
+  eedc summierte den Verbrauch aus „Strom Heizen" und „Strom Warmwasser" — eine Formel aus der Zeit, als eine Wärmepumpe nur diese beiden Dinge tun konnte. An einer Beispielanlage fehlten dadurch 100 von 1050 kWh, und das trug in Kosten, CO₂ und den Anteil an der Verbrauchsseite weiter.
+
+  **Zugleich wurde derselbe Kühlstrom ein zweites Mal abgezogen**, weil er im Nenner nie enthalten war — die Arbeitszahl fiel dadurch rund 12 % zu gut aus. Beides ist mit einer Korrektur behoben: Der Kühlstrom zählt im Verbrauch mit und wird genau einmal abgezogen.
+
+  ⚠ **Deine Zahlen können sich dadurch sichtbar ändern**, wenn du getrennte Zähler samt Kühlmessung führst: Der Stromverbrauch der Wärmepumpe steigt um den Kühlanteil, die Arbeitszahl sinkt entsprechend auf ihren richtigen Wert.
+
+- **Zwei Preisfelder, die der Daten-Checker verlangte und die es in keinem Formular gab.** Gemeldet von **MeinerB** (Issue #397): *„ich bekomme einen Hinweis dass ich die Felder bearbeiten soll, kann sie aber nicht finden."* Wer bei einem Speicher „Arbitrage-fähig" einschaltet, wurde nach Ø Lade- und Ø Entladepreis gefragt — beide gab es weder im Formular noch in einem Wizard. Der „Beheben"-Knopf führte in genau das Formular, in dem sie fehlten.
+
+  **Beide Felder stehen jetzt unter *Netzladung & Arbitrage*,** sobald der Schalter an ist. Sie bleiben bewusst leer statt vorbelegt: Ein eingetragener Richtwert würde beim ersten Speichern zu einer gepflegten Zahl, die niemand bestätigt hat. Womit eedc ohne deine Angabe rechnet (12 bzw. 35 ct/kWh), steht als Hinweis unter dem Feld.
+
+  **Der gleich aussehende Hinweis beim E-Auto ist dagegen ersatzlos entfallen** („V2H aktiv, aber Entladepreis fehlt"). Er war sachlich falsch: `v2h_entlade_preis_cent` ist ein Override, kein benötigter Wert — ohne ihn rechnet eedc mit dem Abstand zwischen deinem Bezugspreis und deiner Einspeisevergütung, also mit gepflegten Zahlen statt einer Schätzung. Wer dem Hinweis folgte, verschlechterte seine Datengrundlage.
+
+- **Der Kühlstrom drückte die Arbeitszahl.** Wer mit derselben Anlage heizt und kühlt, hatte den Kühlstrom im Nenner seiner Arbeitszahl — die abgeführte Wärme steht dort aber in keinem Zähler. Eine Anlage, die im Sommer kühlt, sah dadurch aus wie eine schlechte Heizung, und zwar in *Cockpit → Tag*, *Monat*, *Jahr*, im Komponenten-Hub **und** im Community-Vergleich.
+
+  Für **Wirtschaftlichkeit und CO₂** rechnet eedc den Kühlstrom seit 4.0.5 heraus — bei der Arbeitszahl fehlte derselbe Schritt. **Deine Arbeitszahl kann dadurch steigen**, wenn du kühlst; das ist gewollt. Ist ein ganzer Zeitraum reiner Kühlbetrieb, steht statt der Zahl der Grund dafür.
+
+- **Die Abgrenzungs-Prüfung erreicht alle Sichten.** Ob eine Arbeitszahl überhaupt gebildet werden darf, wurde bisher unterschiedlich streng geprüft: Der Komponenten-Hub kannte die Sperren, *Cockpit → Jahr* und *Cockpit → Tag* gar nicht. Dieselbe Anlage konnte an einer Stelle „—" zeigen und an der anderen eine Zahl. Jetzt entscheidet eine Stelle für alle.
+
+  Neu erkannt wird dabei auch der Fall, dass Wärme und Strom aus **verschieden langen Messzeiträumen** stammen — etwa wenn ein Connector erst mitten im Monat zu zählen begann. Der Quotient wäre einer aus zwei Wirklichkeiten; die Mengen bleiben, die Kennzahl entfällt mit Begründung.
+
+- **Die Zuordnungs-Fläche bot einer Split-Klimaanlage Warmwasser-Felder an.** Ein Klimagerät hat keinen Warmwasserkreis — im Monatsabschluss fragte eedc längst nicht mehr danach, unter *Einstellungen → Datenquellen* standen die beiden Felder trotzdem. Dieselbe Anlage, zwei Flächen, gegenteilige Aussage. Hast du dort bereits einen Sensor zugeordnet, bleibt das Feld sichtbar, damit du die Zuordnung auch wieder entfernen kannst.
+
+- **Der Gesamt-Stromzähler bleibt pflegbar, auch bei getrennter Messung.** Wer „Heizen und Warmwasser getrennt gemessen" eingeschaltet hat, konnte den Gesamtzähler im Monatsabschluss nicht mehr nachtragen — obwohl eedc ihn mit diesem Release wieder auswertet, solange die Aufteilung unvollständig ist.
+
+---
+
 ## [4.0.28] - 2026-08-25 — Anzeigen ist nicht mitschreiben
 
 ### Fixed
@@ -820,7 +933,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 - **Das PVGIS-SOLL kannte die Grenze des Wechselrichters nicht — überbelegte Anlagen liefen gegen ein Ziel, das ihr Gerät nie erreichen kann.** Mehr Modulleistung zu installieren, als der Wechselrichter abgeben kann, ist keine Fehlplanung, sondern die übliche Auslegung: man tauscht Ertrag in der Mittagsspitze gegen Ertrag im Schwachlicht. Die PVGIS-Prognose rechnet aber aus der **Modulleistung (DC)** und weiß von der AC-Grenze nichts. Was das Gerät mittags abriegelt, stand deshalb im SOLL — und tauchte im SOLL/IST-Vergleich als Minus auf, das der Betreiber nicht zu verantworten hat (#354, kingcap1: 22 × 440 Wp an einem 7-kW-Fronius; #367, azywietz-web: 4 × 500 Wp an einem 800-W-Mikrowechselrichter). Die stündliche Kappung an der AC-Grenze gibt es seit v4.0.4 — bisher nur für das Balkonkraftwerk, wo die Grenze in einem eigenen Feld steht, und nur in der **Tages**-Prognose. Bei PV-Strings liegt sie längst in den Daten: am Wechselrichter, dem der String zugeordnet ist, im Feld **„Max. Leistung (kW)"**. Sie wirkt jetzt in beiden Pfaden. **Der schwierige Teil war, dass die Grenze dem Gerät gehört und nicht der Himmelsrichtung:** hängen ein Ost- und ein West-String am selben 7-kW-Wechselrichter, gelten die 7 kW für ihre **Summe**. Die Prognose gruppiert intern aber nach Ausrichtung, die beiden Strings liegen also in verschiedenen Gruppen — eine Kappung je Gruppe hätte dasselbe Gerät zweimal bis an seine Grenze liefern lassen. Am Demo-Datenbestand (Süd 12 · Ost 5 · West 3 kWp an einem 10-kW-Gerät) ist das der ganze Effekt: **je String einzeln gekappt bliebe das SOLL unverändert**, weil kein einzelner String allein 10 kW erreicht; gemeinsam sind es **1.227 kWh im Jahr**, die das Gerät nie abgeben kann (20.812 → 19.585 kWh, −5,9 %; im April −10 %, im November und Dezember 0). Weil PVGIS für die Monatsprognose nur Monatssummen liefert und eine Monatssumme sich nicht nachträglich stundenweise kappen lässt, holt eedc dafür ein **stündliches Profil derselben Anlage** von PVGIS und leitet daraus einen Faktor je Monat ab — gemittelt über drei Jahre, damit nicht das Wetter eines Einzeljahres in einer Zahl steckt, die eine Anlagen-Eigenschaft beschreiben soll. **Wer keine Wechselrichter-Leistung gepflegt hat, sieht keinen Unterschied**: ohne Grenze wird nicht gekappt und PVGIS auch nicht zusätzlich gefragt. **Sichtbare Folge für überbelegte Anlagen:** das SOLL sinkt, die SOLL-Erfüllung und die Performance Ratio steigen entsprechend — die IST-Werte ändern sich nicht. **Wirksam wird das erst mit einem neuen Abruf**: die gespeicherte Prognose wird bewusst nicht nachträglich umgerechnet (*Einstellungen → Solarprognose → „Neue Prognose abrufen" → „Speichern & Aktivieren"*), die bisherige bleibt in der Historie. *(#354 · #367)*
 
-- **Eine reine Balkonkraftwerk-Anlage bekam überhaupt kein PVGIS-SOLL.** Beide PVGIS-Endpunkte filterten hart auf den Typ `pv-module` und antworteten sonst mit „Keine PV-Module für diese Anlage gefunden" — obwohl ein Balkonkraftwerk alles trägt, was PVGIS braucht: Leistung, Ausrichtung und Neigung stehen in seinen eigenen Formularfeldern, und zwei andere Prognose-Routen behandeln es seit v4.0.4 gleichberechtigt als String. Der Melder hatte sich mit einem fiktiven Wechselrichter als Eltern-Komponente beholfen und den Umweg zu Recht wieder zurückgenommen — er erzeugte doppelte kWp und ein Modul ohne Energiehistorie. Das Balkonkraftwerk erscheint jetzt als eigene Zeile in der Anlagen-Prognose (⚠ **Korrektur August 2026:** „SOLL/IST je String inklusive" traf **nicht** zu — die String-Sichten und der PDF-Abschnitt hängen an anderen Abfragen und blieben leer; s. Eintrag unter [Unreleased]); ein zweiter Erfassungsweg für dieselbe Erzeugung entsteht dabei ausdrücklich **nicht**. Zusammen mit der AC-Kappung oben ist das SOLL damit auch erreichbar: 2 kWp an einem 800-W-Gerät wären sonst ein Ziel, das die Anlage per Konstruktion verfehlt. *(#367, aus Discussion #366)*
+- **Eine reine Balkonkraftwerk-Anlage bekam überhaupt kein PVGIS-SOLL.** Beide PVGIS-Endpunkte filterten hart auf den Typ `pv-module` und antworteten sonst mit „Keine PV-Module für diese Anlage gefunden" — obwohl ein Balkonkraftwerk alles trägt, was PVGIS braucht: Leistung, Ausrichtung und Neigung stehen in seinen eigenen Formularfeldern, und zwei andere Prognose-Routen behandeln es seit v4.0.4 gleichberechtigt als String. Der Melder hatte sich mit einem fiktiven Wechselrichter als Eltern-Komponente beholfen und den Umweg zu Recht wieder zurückgenommen — er erzeugte doppelte kWp und ein Modul ohne Energiehistorie. Das Balkonkraftwerk erscheint jetzt als eigene Zeile in der Anlagen-Prognose (⚠ **Korrektur August 2026:** „SOLL/IST je String inklusive" traf **nicht** zu — die String-Sichten und der PDF-Abschnitt hängen an anderen Abfragen und blieben leer; s. Eintrag unter [4.0.11]); ein zweiter Erfassungsweg für dieselbe Erzeugung entsteht dabei ausdrücklich **nicht**. Zusammen mit der AC-Kappung oben ist das SOLL damit auch erreichbar: 2 kWp an einem 800-W-Gerät wären sonst ein Ziel, das die Anlage per Konstruktion verfehlt. *(#367, aus Discussion #366)*
 
 - **Der Daten-Checker meckerte Überbelegung an — und meldete bei jedem Balkonkraftwerk eine Abweichung, die keine war.** Die Prüfung „PV-Module kWp stimmt nicht mit Anlagenleistung überein" verglich die Summe aller Modul- **und BKW**-Komponenten mit dem Feld *Anlagenleistung*. Zwei Dinge stimmten daran nicht. Erstens gehört ein **Balkonkraftwerk fachlich nicht in die kWp der Hauptanlage** — es ist eine eigene Anlage mit eigener MaStR-Registrierung; solange es mitgezählt wurde, bekam **jeder** Anwender mit BKW diese Warnung, ohne dass etwas falsch gepflegt gewesen wäre (am eigenen Demo-Datenbestand 20,8 gegen 20,0 kWp). Zweitens war die Prüfung die einzige Stelle im Programm, die die kWp überhaupt gegen etwas hielt — und sie kannte Überbelegung nicht, konnte also nur zum Eintragen falscher Zahlen erziehen. An ihre Stelle tritt eine Prüfung, die das **DC/AC-Verhältnis** je Wechselrichter ansieht und erst oberhalb des **Zweifachen** meldet: bis dahin ist Überbelegung eine Entwurfsentscheidung (üblich 1,1–1,3, bei Ost/West bis etwa 1,5 — der Melder von #354 liegt bei 1,38), darüber ist ein Pflegefehler wahrscheinlicher, und die Meldung nennt ihn beim Namen: steht in einem „Leistung (kWp)"-Feld versehentlich die Wechselrichter-Leistung? Das Feld *Anlagenleistung* meint ab sofort unmissverständlich die installierte **Modulleistung (DC)**; die Summenzeile des Checkers weist sie so aus. **Wer weder BKW noch eine Überbelegung über 2,0 hat, sieht eine Meldung weniger und keine neue.** *(#354 · N-76 Stufe 1)*
 
