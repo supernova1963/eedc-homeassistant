@@ -961,7 +961,9 @@ baumweit gemessen: **16 Stellen im Produktionscode** zeigten dorthin, zwei davon
 | [KONZEPT-DATENQUELLEN-V4.md](KONZEPT-DATENQUELLEN-V4.md) | eine Quelle je Feld, HA-first (Invariante I16) |
 | [KONZEPT-LADEZEIT-CACHE-SWR.md](KONZEPT-LADEZEIT-CACHE-SWR.md) | SoT für `hooks/useApiData.ts` (SWR, Skeletons) |
 | [KONZEPT-HA-EXPORT-ARCHITEKTUR.md](KONZEPT-HA-EXPORT-ARCHITEKTUR.md) | was nach HA exportiert wird — und was nie |
-| [KONZEPT-FOKUS-DEEPLINK.md](KONZEPT-FOKUS-DEEPLINK.md) · [KONZEPT-CHART-TABELLEN.md](KONZEPT-CHART-TABELLEN.md) · [KONZEPT-263-klima-split.md](KONZEPT-263-klima-split.md) | geplante Pakete aus der Roadmap [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) |
+| [KONZEPT-FOKUS-DEEPLINK.md](KONZEPT-FOKUS-DEEPLINK.md) · [KONZEPT-CHART-TABELLEN.md](KONZEPT-CHART-TABELLEN.md) | geplante Pakete aus der Roadmap [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) |
+| [KONZEPT-263-klima-split.md](KONZEPT-263-klima-split.md) · [KONZEPT-263-INNENGERAETE.md](KONZEPT-263-INNENGERAETE.md) | **abgeschlossen und gebaut** — zwei **Bauform-Kapitel** (Split-Klimaanlage · Multisplit-Innengeräte). ⚠ **Nicht das Konzept der Fläche „Heizen · Warmwasser · Kühlen“** — das ist das Flächen-Konzept *SOLL Wärme/Klima* (**Maintainer-intern, noch nicht im Repo**). Beide Kapitel tragen im Kopf eine Korrekturliste. **Bis 27.08. standen sie hier unter „geplante Pakete“** |
+| [HANDBUCH_WAERME_KLIMA.md](HANDBUCH_WAERME_KLIMA.md) | Wärme/Klima aus Anwendersicht — Erfassungswege, Werte des Modus-Sensors, Kennzahlen, FAQ. **Auch für Entwickler die schnellste Antwort auf „was sieht der Melder?“** |
 | [RELEASE-WORKFLOW.md](RELEASE-WORKFLOW.md) | Release-Prozess beider Repos |
 | [SETUP_DEVMACHINE.md](SETUP_DEVMACHINE.md) | Entwicklungsrechner einrichten |
 | [SENSOR-REFERENZ.md](SENSOR-REFERENZ.md) · [MQTT_INBOUND.md](MQTT_INBOUND.md) | Sensor-Felder · Topic-Struktur |

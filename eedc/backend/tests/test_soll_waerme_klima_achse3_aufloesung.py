@@ -502,3 +502,53 @@ def test_handbuch_nennt_jeden_lesbaren_betriebsmodus_wert():
         "§Schritt 4 mit — sonst probiert der nächste Anwender einen Wert aus, "
         "den es gibt, und findet ihn nirgends beschrieben."
     )
+
+
+# ═══ Die zwei #263-Kapitel muessen sagen, dass sie Kapitel sind ═════════════
+
+def test_die_263_konzepte_verweisen_auf_den_geltenden_sot_und_das_handbuch():
+    """Ein Bauform-Kapitel, das sich fuer das Flaechen-Konzept haelt, wird falsch gelesen.
+
+    ⛔ **Genau das ist mehrfach passiert, und zwar mir selbst** (Gernot,
+    27.08.: *„Das ist nicht das erste Mal, dass du diese Dateien als erstes
+    gelesen hast"*). Die beiden ``KONZEPT-263-*`` beschreiben **Bauformen** —
+    Split-Klimaanlage und Multisplit-Innengeraete. Fuer die gilt darin alles.
+    Als Aussage ueber **jede** Waermepumpe gelesen, fuehren sie in die Irre:
+
+    * **N-336** — der Modus-Kanon kannte kein ``warmwasser``, belegt durch
+      ``D11``: einen Satz ueber *drei Melder mit Klimaanlagen*. Eine
+      Split-Klimaanlage hat keinen Warmwasserkreis; fuer sie war D11 richtig.
+    * **K-1/SEER** — im Massnahmen-Register jahrelang ``⬜ offen``, obwohl die
+      Groesse seit dem 26.08. als ``arbeitszahl_kuehlen`` gebaut ist und der
+      Name **bewusst verworfen** wurde.
+
+    ⭐ **Deshalb prueft diese Probe keinen Inhalt, sondern einen WEG:** Steht in
+    beiden Dokumenten, wo das geltende Flaechen-Konzept liegt und wo die
+    Anwendersicht? Wer den Zeiger entfernt, bekommt es hier gesagt.
+
+    ⚠ **Was sie NICHT kann:** pruefen, ob der Rest der Dokumente stimmt. Dafuer
+    gibt es keinen maschinellen Weg — die Korrekturliste im Kopf ist Lesearbeit.
+    """
+    from pathlib import Path
+
+    import pytest
+
+    wurzel = Path(__file__).resolve().parents[3] / "docs"
+    if not wurzel.exists():  # eedc-Standalone-Spiegel traegt `docs/` nicht mit
+        pytest.skip("docs/ liegt nur im Source-of-Truth-Repo")
+
+    pflicht = {
+        "soll-waerme-klima.md": "der geltende SoT der Flaeche",
+        "HANDBUCH_WAERME_KLIMA.md": "die Anwendersicht",
+    }
+    for name in ("KONZEPT-263-klima-split.md", "KONZEPT-263-INNENGERAETE.md"):
+        doc = wurzel / name
+        assert doc.exists(), f"{name} fehlt — wurde es verschoben? Dann diese Probe mit."
+        text = doc.read_text(encoding="utf-8")
+        fehlend = [f"{z} ({wozu})" for z, wozu in pflicht.items() if z not in text]
+        assert not fehlend, (
+            f"{name} nennt nicht, wo weiterzulesen ist: {fehlend}. "
+            "Dieses Dokument beschreibt EINE Bauform. Ohne den Zeiger auf das "
+            "Flaechen-Konzept liest es der Naechste als Regel ueber alle "
+            "Waermepumpen — so ist N-336 entstanden."
+        )

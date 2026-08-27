@@ -1,18 +1,61 @@
 # Konzept #263 — Split-Klimaanlagen: Heizen und Kühlen trennen
 
-> ## Status (2026-08-18): **S1 + S2 gebaut · S3 + S4 offen**
+> ## Status (2026-08-27): **abgeschlossen · Kapitel, nicht Konzept der Fläche**
 >
-> **Gernot, 2026-08-18:** den Empfehlungen E-A bis E-E gefolgt, **E-F abgelehnt** (der Schnitt
-> bleibt: F-41 und F-42 fahren mit K-2 in **einem** Paket, vor dem nächsten Release).
-> Bau-Auftrag: `~/.claude/plans/auftrag-263-k2-bau.md`.
+> ### Lies zuerst das hier, bevor du aus diesem Dokument etwas ableitest
 >
-> **Dies ist die geltende Fassung.** Sie ersetzt die Fassung vom 2026-08-08 vollständig — jene war
-> über zehn Nachträge gewachsen und an drei Stellen mit sich selbst im Widerspruch. Die
+> **Was dieses Dokument ist:** die Vermessung und der Bauplan für **eine Bauform** — die
+> **Split-Klimaanlage** (Luft-Luft), die über *denselben* Zähler heizt und kühlt. Für diese Bauform
+> ist alles darin gebaut und gilt unverändert: Teilmengen-Grundsatz, Modus-Kanon, Normalisierung,
+> `modus_abdeckung_h`, Persistenz beim Monatsabschluss, die Entscheide E-A…E-I.
+>
+> ⛔ **Was es NICHT ist: das Konzept der Fläche „Heizen · Warmwasser · Kühlen".** Wer es dafür
+> hält, zieht falsche Schlüsse — **und das ist mehrfach passiert.** Eine Split-Klimaanlage hat
+> keinen Warmwasserkreis; jede Aussage hier, die Warmwasser nicht erwähnt, ist deshalb **richtig
+> für dieses Gerät und unvollständig für die Fläche**. Genau so ist N-336 entstanden (27.08.):
+> Der Kanon kannte kein `warmwasser`, belegt durch **D11** — einen Satz über *drei Melder mit
+> Klimaanlagen*, der als Regel über alle Wärmepumpen gelesen wurde.
+>
+> ### Wo du stattdessen nachsiehst
+>
+> | Frage | Dokument |
+> | --- | --- |
+> | **Was gilt fachlich auf der ganzen Fläche?** (Größen-Matrix, Erfassungs-Kanon K1–K5, Abgrenzungsregel R2, Kennzahlen je Funktion) | **`soll-waerme-klima.md` — der geltende SoT.** ⚠ Er liegt **nicht im Repo**, sondern Maintainer-intern unter `~/.claude/plans/`. Das ist der offene Rest von E5 und der Grund, warum jedes `SOLL §…` in einem Docstring hier ins Leere zeigt |
+> | **Was ist heute gebaut, und wo weicht der Code ab?** | `ist-waerme-klima.md` (Befunde W-1…W-18) — ebenfalls Maintainer-intern |
+> | **Was sieht und tut der Anwender?** | [`HANDBUCH_WAERME_KLIMA.md`](HANDBUCH_WAERME_KLIMA.md) — Erfassungswege, Werte-Tabelle des Modus-Sensors, Template-Vorlage, FAQ. **Auch für Entwickler die schnellste Antwort auf „was sieht der Melder?"** |
+> | **Innengeräte einer Multisplit** | [`KONZEPT-263-INNENGERAETE.md`](KONZEPT-263-INNENGERAETE.md) — das Schwester-Kapitel |
+>
+> ⚑ **Entscheid E5 (Gernot, 2026-08-26): Die Fläche kommt unter EIN Konzept, mit #263 als
+> Kapitel.** Das ist **noch nicht ausgeführt** — solange es das nicht ist, gilt die Tabelle oben.
+> Wer die Zusammenführung baut: Es hängen **174 Code-Kommentare** an den Abschnittsnummern dieses
+> Dokuments (`§2.3`, `D11`, `§3.1` …); sie sind Teil der Arbeit, nicht ein Nachtrag.
+>
+> ### Korrekturen an diesem Dokument, gemessen am 2026-08-27
+>
+> Der Text darunter ist **nicht durchgängig nachgezogen**. Wo eine Aussage überholt ist, steht
+> ein Vermerk an Ort und Stelle. Die vier, die zu falschen Schlüssen führen:
+>
+> | Stelle | stand da | gilt |
+> | --- | --- | --- |
+> | **D11** (§2) | „In der Praxis werden nur Heizen und Kühlen gefahren" | Belegt für **drei Melder mit Klimaanlagen**. **Keine Allgemeinaussage** (`soll-waerme-klima.md` §7/A8). Am 27.08. widerlegt: dietmar1968 und MartyBr nennen **drei** Betriebsformen inkl. Warmwasser |
+> | **§3.3** | Kanon „sechs Werte", „zwei Mengen plus Rest" | **Sieben** Werte, **drei** Mengen plus Rest — `warmwasser` seit N-336 (27.08., zum Zeitpunkt dieses Vermerks noch nicht released) |
+> | **K-1 · SEER** (§8) | „⬜ offen" | **Erledigt am 26.08. — und der Name ist verworfen.** Es gibt `arbeitszahl_kuehlen` („JAZ Kühlen"), einen *gemessenen* Quotienten. **„SEER" kommt NICHT** und ist keine offene Aufgabe: es wäre eine genormte Prüfstandsgröße und behauptete eine Vergleichbarkeit, die eine Messung über einen Zeitraum nicht hat |
+> | **N-282** (§8) | „entschieden: **bleibt** — kein Live-Modus-Icon" | **Überholt.** Mit **#398** (v4.0.30) gibt es Klartext *und* wechselndes Symbol im Energiefluss. Beide Prämissen des damaligen Entscheids sind entfallen: der Wert hat jetzt **drei** Verbraucher, und er kommt aus `betriebsmodus_live.py` mit **eigenem 60-s-Takt** statt im 5-s-Live-Takt |
+>
+> **Und was hier weiterhin richtig ist, obwohl es nach „offen" aussieht: K-3** (Aufteilung je
+> Innengerät aus dem *Modus-Signal*) bleibt **zu** — Begründung D5, die Innengeräte-Zähler sind
+> Außengerätewerte. Der Bedarf dahinter ist auf dem **anderen** Weg gelöst: gemessene
+> Betriebsart-Zähler je Innengerät (`betriebsart_strom_kuehlen_kwh-3`), s. Schwester-Kapitel §10.
+>
+> ---
+>
+> **Zur Entstehung.** Diese Fassung ersetzte am 2026-08-18 die vom 2026-08-08 vollständig — jene
+> war über zehn Nachträge gewachsen und an drei Stellen mit sich selbst im Widerspruch. Die
 > Entstehungsgeschichte (Vermessung am Testgerät, verworfene Zwischenstände, Gegenproben) steht in
-> `~/.claude/plans/vorlage-263-k2-s0-bestandsaufnahme.md` und in der Git-Historie dieser Datei;
-> **hier steht nur, was gilt.**
+> `~/.claude/plans/vorlage-263-k2-s0-bestandsaufnahme.md` und in der Git-Historie dieser Datei.
+> **Gernot, 2026-08-18:** den Empfehlungen E-A bis E-E gefolgt, **E-F abgelehnt**.
 >
-> Es trägt bewusst **keine Versionsnummer, nur dieses Mess-Datum** — ein Status, der eine Version
+> Es trägt bewusst **keine Versionsnummer, nur ein Mess-Datum** — ein Status, der eine Version
 > nennt, altert garantiert.
 >
 > **Nicht auf der Website und nicht in der In-App-Hilfe:** `sync-docs.sh` und `sync-help.sh`
@@ -50,7 +93,7 @@ zuschlägt.
 | **D8** | **Der Sensor-Lesepfad ist durchgängig `float`-only.** `_state_wert_und_einheit → Optional[tuple[float,str]]`, `get_sensor_history → list[tuple[datetime,float]]`, `live_power_service` `float(...)` im `try/except`. Ein `climate`-Zustand wird an jeder Stelle still zu `None`. **Negativbeweis:** `hvac_mode`/`hvac_action`/`betriebsmodus`/`betriebsart` kommen baumweit **0-mal** vor | 2026-08-18 |
 | **D9** | **Kein Backfill.** `get_sensor_history` liest den **recorder** (Default-Purge 10 Tage); LTS gibt es nur für numerische Sensoren mit `state_class`, ein `climate`-Zustand hat keine | 2026-08-18 |
 | **D10** | **Der Split entsteht nur auf dem Snapshot-Pfad.** `InvestitionMonatsdaten.verbrauch_daten` hat **sieben** Schreiber daneben: `monatsabschluss/wizard.py` · `monatsabschluss/views.py` · `ha_statistics.py` · `custom_import/apply.py` · `import_export/csv_operations.py` · `services/import_writer.py` · `import_export/json_operations.py` | 2026-08-18 |
-| **D11** | **In der Praxis werden nur Heizen und Kühlen gefahren.** Entfeuchten/Nur-Lüften nutzt keiner der drei Melder; der Modus wird saisonal manuell gestellt | kingcap1, dietmar1968 |
+| **D11** | ⛔ **NUR FÜR SPLIT-KLIMAANLAGEN, keine Allgemeinaussage (Vermerk 27.08.).** Der Satz lautete: *„In der Praxis werden nur Heizen und Kühlen gefahren."* Er ist für die **drei Melder mit Klimaanlagen** belegt und war die Begründung dafür, dass der Kanon kein `warmwasser` kannte — **drei Monate lang, quer über alle Wärmepumpen** (N-336). Widerlegt am 27.08.: dietmar1968 (T89667 #225) nennt **drei** Betriebsformen und begründet sie physikalisch (ein Kältekreis, ein Umschaltventil), MartyBr (#230) bestätigt es an seiner Anlage. `soll-waerme-klima.md` §7/**A8** sagt zu D11 selbst: *„belegt es für drei Melder — keine Allgemeinaussage"*. **Was weiterhin gilt:** Entfeuchten/Nur-Lüften nutzt keiner der drei; der Modus wird saisonal manuell gestellt | kingcap1, dietmar1968 |
 | **D12** | **Vier fremde Anbindungen am Quellcode vermessen — der laufende Betrieb ist die Ausnahme, nicht die Regel.** Übersicht unter der Tabelle; sie trägt den Messstand, weil fremde Integrationen weiterentwickelt werden | HA-Core `dev` · HACS `serbanb11/bosch-homecom-hass` · Codeberg Faikout, 2026-08-17 |
 
 ### 2.1 Die vermessenen Anbindungen (D12) — Stand 2026-08-17
@@ -140,12 +183,12 @@ Modus-Signal wäre der WP-Strom sogar 0.
 
 ### 3.3 Der Betriebsmodus
 
-**Kanon (sechs Werte, für Klassifikation):**
+**Kanon (⚠ seit N-336 **sieben** Werte — `warmwasser` kam am 27.08. dazu, s. Statuskopf; die Liste hier ist der Stand von 08/2026):**
 `heizen` · `kuehlen` · `entfeuchten` · `lueften` · `aus` · `unbestimmt`.
 `unbestimmt` ist die Automatik-Stellung ohne Ist-Signal (D2) — sie einer Seite zuzuschlagen wäre
 eine erfundene Aufteilung.
 
-**Gespeichert werden zwei Mengen plus Rest** (§3.2). Die vier übrigen Klassen fallen bewusst in die
+**Gespeichert werden ⚠ seit N-336 DREI Mengen plus Rest** (Heizen · Warmwasser · Kühlen; hier stand „zwei Mengen", Stand 08/2026) **(§3.2).** Die übrigen Klassen fallen bewusst in die
 abgeleitete Zeile *„nicht aufgeteilt"* — belegt durch D11. `modus_abdeckung_h` trennt dort die zwei
 Fälle, die der Anwender unterscheiden können muss:
 
@@ -541,14 +584,14 @@ Stromkosten des *Kühlens* gegen die vermiedenen Gaskosten des *Heizens*.
 | **K-0c** | Die Bewertung hängt an der **Pflege**, nicht an der Bauart (`alter_energietraeger = "nichts"`) | ✅ **durchgezogen — Rechnung (7 Stellen) UND Daten-Checker (S5, 2026-08-18)** | Der Satz „Typ-Sonderweg entfällt" gilt weiterhin **nicht** uneingeschränkt: er bleibt in `crud.py:969` als **Altbestandsschutz** (begründet). An den drei **Messbarkeits**-Stellen (`field_definitions.py:722` · `energieprofil.py:419` · `monatsdaten.py:848`) bleibt die Bauart bewusst maßgeblich. Gemessen an einer Instanz mit zwei Varianten: vorher Klima 0 / Neubau-WP 3 Meldungen, nachher **beide nur die WARNING** (auflösbar) |
 | **F-41** | Die drei Daten-Checker-Hinweise dreiteilen (§7 E-C) | ✅ **gebaut (S5, 2026-08-18)** | Zwei INFO an `ersetzt_keine_heizung`, WARNING von beiden Achsen gelöst + Text nennt 0 als Antwort, Formular-Hint nachgezogen. Wächter `test_f41_f42_klima_bewertbarkeit.py` (12 Proben zu F-41, DB-Weg statt Stub) |
 | **F-42** | Die vier erfundenen Nullen im Komponenten-Hub (§7 E-D) | ✅ **gebaut (S6, 2026-08-18)** | Gelöst **im Backend** statt im Client: `WPErsparnisErgebnis.bewertbar` + `None` statt `0` in der Dashboard-Zusammenfassung. Der Auftrag nannte einen Frontend-Guard — gemessen waren **drei** Konsumenten derselben Null (Hub · *Cockpit → Aussicht* · Kostenvergleich), ein Client-Guard hätte einen davon geheilt. `wp_kosten_euro` wird echt (gemessen 1.340,50 €) |
-| **K-1** | **SEER** (Kühl-Effizienz) | ⬜ offen, **nach K-2** | Negativbeweis: `seer` kommt baumweit **0**-mal vor. Ohne getrennte Kühl-kWh ein Faktor ohne Bezugsgröße; `modus_abdeckung_h` liefert die Zeitbasis |
+| **K-1** | **Kühl-Effizienz** (hieß hier „SEER") | ✅ **erledigt 2026-08-26 — unter einem BEWUSST anderen Namen** | ⛔ **„SEER" kommt nicht, und das ist keine offene Aufgabe, sondern ein Entscheid** (Empfehlung 26.08., von Gernot angenommen). Gebaut ist `arbeitszahl_kuehlen` → Kachel **„JAZ Kühlen"**: Kältemenge ÷ Kühlstrom, ein *gemessener* Quotient über einen Zeitraum. SEER ist eine **genormte Prüfstandsgröße**; den eigenen Wert so zu nennen behauptete eine Vergleichbarkeit, die er nicht hat — dieselbe Trennung wie COP/JAZ. ⚠ **Der frühere „Negativbeweis" (`seer` kommt baumweit 0-mal vor) taugte nie als Statusmessung:** Er misst den *Namen*, nicht die *Größe*. Genau daran wurde die Maßnahme mehrfach fälschlich als offen gelesen |
 | **K-2** | **Heizen/Kühlen-Trennung** | ✅ **S1–S4 gebaut (2026-08-18/19)** | Vorbedingung „Testgerät mit Modus-Sensor“ seit 2026-08-16 erfüllt (kingcap1, MELCloud). Sitzung A (S5+S6), Sitzung B (S1+S2), Sitzung C (S3+S4). **Mit Fixtures und einer eigenen Instanz abgenommen, nicht an einem Gerät** — es gibt keins im Zugriff. Die drei Entscheide der Sitzung C stehen unter §7 als **E-G · E-H · E-I** |
-| **S1** | **Lesen** — Kanon, Zustands-Lesepfad, Feld, Daten-Checker-Zeile | ✅ **gebaut (2026-08-18)** | Neu `core/betriebsmodus.py` (sechs Kanon-Werte, Normalisierung HA→Kanon, `hvac_action` verfeinert wo vorhanden). `ha_state_service.get_zustand_history` steht **neben** dem float-Pfad — `get_sensor_history` unverändert (D8). Feld `betriebsmodus` in `LIVE_FELDER_INV`, `FELD_BEDARF` optional für **jede** WP-Art (E-E), SoT-Markierung `zustand: True` steuert **drei** Weichen statt drei verstreuter `if`. ⛔ **Ein Befund, der in keinem D-Punkt stand:** `datenquellen.py::_ha_sensor_relevant` verwarf jede Nicht-`sensor.`-Entity **unbedingt** (der Test steht vor `filter_energy`) — der Modus-Sensor war damit **gar nicht auswählbar**, egal wie gut der Lesepfad ist. Neue Kategorie `KLIMA_MODUS_SENSOR` (INFO, nur `luft_luft` — Gernots Entscheid 18.08.); N-280 mitgelöst |
+| **S1** | **Lesen** — Kanon, Zustands-Lesepfad, Feld, Daten-Checker-Zeile | ✅ **gebaut (2026-08-18)** | Neu `core/betriebsmodus.py` (sechs Kanon-Werte ⚠ heute **sieben**, s. Statuskopf; Normalisierung HA→Kanon, `hvac_action` verfeinert wo vorhanden). `ha_state_service.get_zustand_history` steht **neben** dem float-Pfad — `get_sensor_history` unverändert (D8). Feld `betriebsmodus` in `LIVE_FELDER_INV`, `FELD_BEDARF` optional für **jede** WP-Art (E-E), SoT-Markierung `zustand: True` steuert **drei** Weichen statt drei verstreuter `if`. ⛔ **Ein Befund, der in keinem D-Punkt stand:** `datenquellen.py::_ha_sensor_relevant` verwarf jede Nicht-`sensor.`-Entity **unbedingt** (der Test steht vor `filter_energy`) — der Modus-Sensor war damit **gar nicht auswählbar**, egal wie gut der Lesepfad ist. Neue Kategorie `KLIMA_MODUS_SENSOR` (INFO, nur `luft_luft` — Gernots Entscheid 18.08.); N-280 mitgelöst |
 | **S2** | **Mitschreiben** — Stundenzeile trägt den Modus | ✅ **gebaut (2026-08-18)** | Spalte `betriebsmodus_je_wp` (N-239-Muster, `none_as_null=True`), gefüllt von `_get_betriebsmodus_history` im **`energie_profil/aggregator`**. ⛔ **Nicht wie beauftragt:** Der Auftragssatz „5-Minuten-Snapshot hält den Modus, die :05/:55-Aggregation schreibt ihn" hält an **beiden** Enden nicht — der 5-Min-Job steht hinter `LIVE_SNAPSHOT_5MIN_ENABLED` (Default **aus**, `run.sh`) und liest HA short_term_statistics (kein `climate` darin); die :05/:55-Jobs schreiben `sensor_snapshots` (kWh-Zähler), nicht diese Tabelle. Wörtlich gebaut wäre der Split bei Default-Konfiguration **still leer** geblieben. ⚑ **Eine Regel, die eine SoC-Kopie falsch gemacht hätte:** ein Zustand hat eine **Dauer** — je Stunde gewinnt die längste Verweildauer, nicht der Mittelwert und nicht der letzte Wert; der letzte Punkt **davor** trägt fort (HA schreibt nur bei Änderung, D11) |
 | **S3** | **Summieren** — Teilmengen, Abdeckung, abgeleitete Wärme | ✅ **gebaut (2026-08-19)** | Neu `core/berechnungen/modus_split.py` (reine Faltung, volles Kanon-Dict ⇒ K-1 wird ein Lesevorgang) + `services/energie_profil/modus_split_monat.py` (**ein** Lader, zwei Aufrufer: Schreiben beim Abschluss, Lesen für den laufenden Monat — einen automatischen Monatsabschluss gibt es nicht) + `modus_split_schreiben.py` (Schritt 4 in `run_post_monatsabschluss_aggregation`). ⛔ **Der Auftrag nannte den falschen Ort:** `imd_monatsaggregat` ist ein reiner Per-Zeilen-Resolver über `verbrauch_daten` **ohne** Zugriff auf Stundenzeilen (zweite Auftrags-Korrektur nach S2). ⛔ **Und `get_wp_strom_kwh` brauchte gar keinen Eingriff** — sein `False`-Zweig addiert schon heute nichts |
-| **S4** | **Zeigen** — Aufteilungs-Block, HA-Export, JAZ-Sperre | ✅ **gebaut (2026-08-19)** | Komponenten-Hub (§4-Block, Wärme mit Herkunfts-Satz) · Cockpit → Monat/Jahr · zwei HA-Sensoren (`wp_strom_heizen_modus_kwh`/`…kuehlen…`; ohne Modus **abwesend** statt 0) · JAZ-Sperre an allen **sieben** §3.5-Stellen über `WpFakten.jaz_belastbar` bzw. `heizwaerme_ist_abgeleitet`. Farb-SoT um `kuehlung`/`nicht_aufgeteilt` erweitert (Regel 0a, Fall 2). **N-282 entschieden und NICHT gebaut** — s. eigene Zeile |
-| **N-282** | Live-Modus-Icon auf der Achse Heizen/**Warmwasser** | ✅ **entschieden: bleibt** (2026-08-19) | Bei einer Klimaanlage sind beide Leistungsfelder `None`, das Icon bleibt leer — **keine Falschaussage, sondern „keine Aussage“**. Den echten Modus zu zeigen hieße, ihn in den Live-Poller zu holen; S1 hat ihn dort **bewusst** ausgeschlossen (`normalize_to_w` ergibt für einen `climate`-State garantiert `None` ⇒ Dauerabruf alle 5 s ins Leere). Ein Symbol ist das nach der L-1-Entlastung nicht wert; die Begründung steht an der Fundstelle im Code |
-| **K-3** | Aufteilung **je Innengerät** | ⛔ **zu** | D5 — die Innengeräte-Zähler sind unverwertbar |
+| **S4** | **Zeigen** — Aufteilungs-Block, HA-Export, JAZ-Sperre | ✅ **gebaut (2026-08-19)** | Komponenten-Hub (§4-Block, Wärme mit Herkunfts-Satz) · Cockpit → Monat/Jahr · zwei HA-Sensoren (`wp_strom_heizen_modus_kwh`/`…kuehlen…`; ohne Modus **abwesend** statt 0) ⚠ heute **drei**, `…warmwasser…` seit N-336 · JAZ-Sperre an allen **sieben** §3.5-Stellen über `WpFakten.jaz_belastbar` bzw. `heizwaerme_ist_abgeleitet`. Farb-SoT um `kuehlung`/`nicht_aufgeteilt` erweitert (Regel 0a, Fall 2). **N-282 entschieden und NICHT gebaut** — s. eigene Zeile |
+| **N-282** | Live-Modus-Icon auf der Achse Heizen/**Warmwasser** | ⛔ **ÜBERHOLT durch #398 (v4.0.30) — Vermerk 27.08.** Der Entscheid unten galt bis dahin und ist nachvollziehbar; **beide seiner Prämissen sind entfallen**: der Betriebsmodus hat seit #398 **drei** Verbraucher (HA-Sensor · Klartext · Icon) statt nur ein Symbol, und er kommt aus `services/betriebsmodus_live.py` mit **eigenem 60-s-Takt** statt im 5-s-Live-Poll. Der Energiefluss zeigt heute Flamme/Tropfen/Schneeflocke und den Klartext darunter — **ausschließlich dort** (Entscheid Maintainer 27.08.: an Listen und Kacheln behauptete ein wechselndes Symbol eine Momentaktualität, die die Zahl daneben nicht hat). Der historische Entscheid: | Bei einer Klimaanlage sind beide Leistungsfelder `None`, das Icon bleibt leer — **keine Falschaussage, sondern „keine Aussage“**. Den echten Modus zu zeigen hieße, ihn in den Live-Poller zu holen; S1 hat ihn dort **bewusst** ausgeschlossen (`normalize_to_w` ergibt für einen `climate`-State garantiert `None` ⇒ Dauerabruf alle 5 s ins Leere). Ein Symbol ist das nach der L-1-Entlastung nicht wert; die Begründung steht an der Fundstelle im Code |
+| **K-3** | Aufteilung **je Innengerät** *(aus dem Modus-Signal)* | ⛔ **zu — und bleibt zu** | D5: die Innengeräte-Zähler sind Außengerätewerte, aus ihnen ist nichts abzuleiten. ⭐ **Der Bedarf dahinter ist trotzdem gedeckt, nur auf dem anderen Weg:** *gemessene* Betriebsart-Zähler je Innengerät (`betriebsart_strom_kuehlen_kwh-3`) — s. [`KONZEPT-263-INNENGERAETE.md`](KONZEPT-263-INNENGERAETE.md) §10, gebaut 2026-08-21. Wer hier „zu" liest, darf daraus **nicht** schließen, dass es je Innengerät nichts gibt |
 
 > ⚑ **Wer hier eine Maßnahme auf ✅ setzt, misst vorher — und zwar Rechnung *und* Prüfung getrennt.**
 > Das ist zweimal schiefgegangen: K-0 trug „Fundament steht" (⇒ N-86) und K-0c trug „Typ-Sonderweg

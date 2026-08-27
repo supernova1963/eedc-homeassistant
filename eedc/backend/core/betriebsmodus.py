@@ -290,7 +290,13 @@ BETRIEBSART_LABEL: Final[dict[str, str]] = {
 #: den zwei Mengen (Konzept §3.3). Es trennt die zwei Fälle, die der Anwender
 #: unterscheiden können muss: „lief in anderen Betriebsarten" (Abdeckung hoch,
 #: Rest > 0) gegen „eedc hat nicht hingesehen" (Abdeckung niedrig).
-#: Zugleich die Zeitbasis, die K-1 (SEER) ohnehin braucht.
+#: Zugleich die Zeitbasis der Kuehl-Kennzahl.
+#:
+#: ⚠ Hier stand „die Zeitbasis, die K-1 (SEER) ohnehin braucht“. K-1 ist
+#: seit dem 26.08.2026 beantwortet — als ``arbeitszahl_kuehlen`` und ausdruecklich
+#: **nicht** unter dem Namen SEER (der ist eine genormte Pruefstandsgroesse, dies
+#: ein gemessener Quotient ueber einen Zeitraum). Ein Verweis auf eine offene
+#: Massnahme, die keine mehr ist, laedt zum Nachbauen ein.
 MODUS_ABDECKUNG_FELD: Final[str] = "modus_abdeckung_h"
 
 #: Alle drei Felder, die der Modus-Split in `verbrauch_daten` schreibt — für

@@ -181,13 +181,16 @@ export function WaermepumpeFelder({ paramData, onInputChange, setParam, zeige, m
               anderen Wärmepumpe. <strong>Kühlst du nur</strong>, wähle beim alten Energieträger
               „Nichts ersetzt (Neubau)" — dann wird nichts verglichen.
               <br /><br />
-              <strong>Neu: eedc kann den Betriebsmodus mitschreiben.</strong> Ordne unter
-              Einstellungen → Datenquellen das Feld „Betriebsmodus" zu (die climate-Entität
-              deines Geräts), dann hält eedc ab sofort stündlich fest, ob geheizt oder gekühlt
-              wurde. <strong>Das lässt sich nicht nachtragen</strong> — Home Assistant bewahrt
-              solche Zustände nur wenige Tage auf. Wer die Aufteilung später sehen will, ordnet
-              den Sensor also besser jetzt zu als dann. Die Auswertung dazu (Heiz-/Kühlstrom
-              getrennt, Kühl-Effizienz SEER) ist noch in Arbeit (Thema #263).
+              <strong>eedc kann den Betriebsmodus mitschreiben.</strong> Ordne unter
+              Einstellungen → Datenquellen das Feld „Betriebsmodus" zu, dann hält eedc
+              stündlich fest, ob geheizt, Warmwasser gemacht oder gekühlt wurde — und teilt
+              den Stromverbrauch danach auf. Die Aufteilung steht unter Cockpit → Tag, Monat
+              und Jahr sowie im Komponenten-Hub; für den Kühlbetrieb gibt es zusätzlich eine
+              eigene Arbeitszahl, sobald ein Kältemengenzähler zugeordnet ist.
+              <strong>Das lässt sich nicht nachtragen</strong> — Home Assistant bewahrt solche
+              Zustände nur wenige Tage auf. Wer die Aufteilung später sehen will, ordnet den
+              Sensor also besser jetzt zu als dann. Welche Werte der Sensor liefern muss, steht
+              in der Hilfe unter <em>Modul: Wärme &amp; Klima</em>.
             </Alert>
           )}
 

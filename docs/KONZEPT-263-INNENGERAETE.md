@@ -1,14 +1,46 @@
 # Konzept #263 — Innengeräte einer Luft-Luft-Wärmepumpe
 
-> **Status:** ⚑ **Fassung 2026-08-21 (Gernot) — sie ersetzt §3.2 und §4 dieses
-> Dokuments.** Was hier über eine *Faltung mehrerer Modus-Signale* stand, ist
-> **gestrichen**: eedc leitet nichts mehr ab, wo es messen kann.
-> **Gebaut sind F (§6), T1 (§7), T2 (§8) und die Innengeräte-Fassung (§10).**
-> Basis ist der ausgelieferte Stand **v4.0.23**.
-> **Vorgänger:** [`KONZEPT-263-klima-split.md`](KONZEPT-263-klima-split.md) — gilt unverändert
-> weiter für alles, was dort steht und gebaut ist (Teilmengen-Grundsatz, Sechser-Kanon,
-> `modus_abdeckung_h`, Persistenz beim Monatsabschluss, E-G/E-H/E-I). **Eine** Zeile davon ist
-> widerlegt, und die trägt die Datenstruktur.
+> ## Status (2026-08-27): **abgeschlossen · Kapitel, nicht Konzept der Fläche**
+>
+> ### Was dieses Dokument ist
+>
+> Die Vermessung und der Bauplan für **Innengeräte einer Multisplit** — was an einem Innengerät
+> gerätespezifisch ist (nur der **Zustand**, E6) und was ein Außengerätewert bleibt (**jede**
+> Energiegröße, E5). **Alles darin ist gebaut:** F (§6), T1 (§7), T2 (§8), T3 (§8a) und die
+> Innengeräte-Fassung (§10). **Nichts steht mehr offen.**
+>
+> ⛔ **Was es NICHT ist: das Konzept der Fläche „Heizen · Warmwasser · Kühlen".** Es beschreibt
+> eine **Bauform** — die Luft-Luft-Multisplit. Jede Aussage hier gilt für dieses Gerät; sie als
+> Regel über alle Wärmepumpen zu lesen, führt in die Irre. Genau so ist N-336 entstanden.
+>
+> ### Wo du stattdessen nachsiehst
+>
+> | Frage | Dokument |
+> | --- | --- |
+> | **Was gilt fachlich auf der ganzen Fläche?** | **`soll-waerme-klima.md` — der geltende SoT** (Größen-Matrix §3.2a, Erfassungs-Kanon K1–K5, Abgrenzungsregel R2). ⚠ Liegt **nicht im Repo**, sondern Maintainer-intern unter `~/.claude/plans/` — der offene Rest von E5 |
+> | **Was ist heute gebaut, wo weicht der Code ab?** | `ist-waerme-klima.md` (ebenfalls Maintainer-intern) (W-1…W-18) |
+> | **Was sieht und tut der Anwender?** | [`HANDBUCH_WAERME_KLIMA.md`](HANDBUCH_WAERME_KLIMA.md) — auch für Entwickler die schnellste Antwort auf „was sieht der Melder?" |
+> | **Die Schwester-Bauform: Split-Klimaanlage** | [`KONZEPT-263-klima-split.md`](KONZEPT-263-klima-split.md) — dort steht auch die **Korrekturliste** zu #263 |
+>
+> ⚑ **Entscheid E5 (Gernot, 26.08.): Die Fläche kommt unter EIN Konzept, mit #263 als Kapitel.**
+> Noch nicht ausgeführt; bis dahin gilt die Tabelle oben.
+>
+> ### Korrektur an diesem Statuskopf (27.08.)
+>
+> ⚠ Hier stand, der Vorgänger gelte unverändert weiter — *„Teilmengen-Grundsatz, **Sechser-Kanon**,
+> `modus_abdeckung_h`, Persistenz beim Monatsabschluss, E-G/E-H/E-I"*. Der **Sechser-Kanon ist
+> überholt**: seit **N-336** (27.08.) trägt er **sieben** Werte, `warmwasser` kam dazu, und die
+> Aufteilung speichert **drei** Mengen statt zwei. Alles Übrige der Aufzählung gilt unverändert.
+>
+> ⭐ **Für dieses Dokument ändert das nichts an einer einzigen Aussage** — eine
+> Split-Klimaanlage hat keinen Warmwasserkreis. Der Vermerk steht hier, weil der Satz
+> *„gilt unverändert weiter"* sonst mehr behauptet, als er trägt.
+>
+> ---
+>
+> **Zur Entstehung.** Die Fassung vom **2026-08-21 (Gernot)** ersetzt §3.2 und §4 dieses Dokuments:
+> Was hier über eine *Faltung mehrerer Modus-Signale* stand, ist **gestrichen** — eedc leitet
+> nichts mehr ab, wo es messen kann. Basis war der ausgelieferte Stand **v4.0.23**.
 
 ---
 

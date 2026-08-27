@@ -15,9 +15,11 @@ Aufteilung nicht.
 
 1. **Das volle Kanon-Dict, nicht drei Skalare.** Gespeichert werden nur die
    Teilmengen aus ``AUFGETEILTE_MODI`` (``heizen``, ``warmwasser``,
-   ``kuehlen``), aber die Faltung liefert **jede** Kanon-Klasse. K-1 (SEER) braucht die Kühl-kWh und
+   ``kuehlen``), aber die Faltung liefert **jede** Kanon-Klasse. Die Kühl-Kennzahl braucht die Kühl-kWh und
    ``abdeckung_h`` als Zeitbasis und ist damit ein *Lesevorgang* statt eines
-   Umbaus an dieser Stelle. Der Unterschied kostet heute nichts.
+   Umbaus an dieser Stelle. Der Unterschied kostet heute nichts. ⚠ Hier stand
+   „K-1 (SEER)“; die Maßnahme ist seit dem 26.08.2026 erledigt — als
+   ``arbeitszahl_kuehlen`` und ausdrücklich **nicht** unter dem Namen SEER.
 
 2. **Zwei Vorzeichen-Welten, und sie sind gegenläufig.** Der Stunden-Wert aus
    ``TagesEnergieProfil.komponenten`` kommt aus dem **Leistungs**-Pfad und ist
