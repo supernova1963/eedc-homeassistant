@@ -191,8 +191,47 @@ Es gibt **zwei Wege**, und **gemessen schlägt abgeleitet**:
 
 **Weg A — Betriebsart-Zähler (genauer).** Du ordnest *Strom Heizbetrieb*, *Strom Kühlbetrieb*, *Strom Lüftbetrieb*, *Strom Entfeuchtungsbetrieb* zu, soweit vorhanden. eedc rechnet nichts, es liest ab.
 
-**Weg B — Betriebsmodus-Sensor (bequemer).** Du ordnest einen Sensor zu, der sagt, *was das Gerät gerade tut* (`heizen` / `kuehlen` / …). eedc schreibt ihn stündlich mit und teilt den Verbrauch danach auf.
+**Weg B — Betriebsmodus-Sensor (bequemer).** Du ordnest einen Sensor zu, der sagt, *was das Gerät gerade tut*. eedc schreibt ihn stündlich mit und teilt den Verbrauch danach auf.
 
+> ### Welchen Sensor eedc lesen kann
+>
+> Am besten die **`climate`-Entität** deines Geräts — die meldet den Modus von sich aus richtig.
+>
+> Ein gewöhnlicher `sensor.` geht genauso, er muss aber einen dieser **Texte** liefern:
+>
+> | Home-Assistant-Schreibweise | deutsch | eedc versteht es als |
+> |---|---|---|
+> | `heat` | `heizen` | Heizen |
+> | `cool` | `kuehlen` · `kühlen` | Kühlen |
+> | `dry` | `entfeuchten` | Entfeuchten |
+> | `fan_only` | `lueften` · `lüften` | Lüften |
+> | `off` | `aus` | Aus |
+> | `auto` · `heat_cool` | `automatik` | *unbestimmt* — das Gerät lief, die Seite ist nicht zuordenbar |
+>
+> Groß-/Kleinschreibung ist egal.
+>
+> ⛔ **Eine Zahl reicht nicht.** Manche Integrationen liefern den Modus als **Rohwert** — Viessmann zum Beispiel als `sensor.…_hk1_mode_raw` mit dem Wert `1`. Was `1` bedeutet, weiß nur dein Gerät; eedc rät es nicht und zeigt deshalb **„Unbestimmt"**. Dasselbe gilt für jeden anderen Text, den die Tabelle nicht kennt.
+>
+> **Der Ausweg ist ein Template-Sensor in Home Assistant**, der aus dem, was du hast, einen der Texte oben macht. Hast du **Leistungssensoren je Funktion**, brauchst du die Codierung deines Geräts gar nicht:
+>
+> ```yaml
+> template:
+>   - sensor:
+>       - name: "Wärmepumpe Betriebsmodus (eedc)"
+>         state: >
+>           {% set kuehl = states('sensor.DEIN_KUEHL_LEISTUNG')|float(0) %}
+>           {% set heiz  = states('sensor.DEIN_HEIZ_LEISTUNG')|float(0) %}
+>           {% set ww    = states('sensor.DEIN_WARMWASSER_LEISTUNG')|float(0) %}
+>           {% if kuehl > 20 %}kuehlen
+>           {% elif heiz > 20 %}heizen
+>           {% elif ww > 20 %}warmwasser
+>           {% else %}aus{% endif %}
+> ```
+>
+> Die 20 W sind eine Schwelle gegen Standby-Rauschen — nimm einen Wert, der zu deinem Gerät passt.
+>
+> ⚠ **`warmwasser` steht bewusst in der Vorlage, obwohl es die Tabelle oben nicht kennt.** eedc teilt heute nur **Heizen und Kühlen** auf; die Warmwasserbereitung fällt damit in *„nicht aufgeteilt"*. Das ist besser als sie zum Heizen zu zählen — dort wäre sie **falsch**, hier ist sie nur **unbenannt**. Deinen Warmwasser-**Verbrauch** siehst du davon unberührt in *Strom Warmwasser* und in der *Arbeitszahl · Warmwasser*.
+>
 > ⚠ **Weg B wirkt nur ab jetzt.** Die Aufteilung entsteht aus mitgeschriebenen Stunden — **rückwirkend gibt es sie nicht**. Deshalb steht unter dem Balken, wie viele Stunden eedc tatsächlich mitgelesen hat.
 
 **Beide Wege ganz oder gar nicht je Gerät.** Wer Betriebsart-Zähler hat, für den gelten sie; der abgeleitete Weg wird dort nicht zusätzlich angewendet. Eine Aufteilung, deren eine Hälfte aus einem Zähler und deren andere aus einer Rechnung stammt, trüge ein halbwahres Etikett.

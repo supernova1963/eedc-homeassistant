@@ -459,3 +459,46 @@ def test_handbuch_waerme_klima_zitiert_die_gruende_woertlich():
         "Das Handbuch zitiert diese Gründe nicht mehr wörtlich — im Code steht "
         f"jetzt etwas anderes: {fehlend}"
     )
+
+
+def test_handbuch_nennt_jeden_lesbaren_betriebsmodus_wert():
+    """Die Werte-Tabelle im Handbuch muss den Kanon-Eingang abdecken (F-65-Klasse).
+
+    **Anlass: MartyBr, Forum T89667 #230, am Tag der v4.0.30-Auslieferung.** Sein
+    Viessmann-Sensor liefert den Modus als **Rohwert** (`hk1_mode_raw` = ``1``);
+    eedc zeigte „Unbestimmt". Das Verhalten ist richtig — eedc rät nicht, was
+    ``1`` bedeutet. **Falsch war die Doku:** Das Handbuch sagte nur „ein Sensor,
+    der sagt, was das Gerät gerade tut (`heizen` / `kuehlen` / …)", und die drei
+    Punkte waren die ganze Auskunft. Die akzeptierten Werte standen in **keinem**
+    Anwenderdokument — nur im Code und in einem internen Konzept.
+
+    ⭐ **Die Lehre ist die des Nachbar-Tests darüber, eine Ebene tiefer:** Dort
+    zitiert das Handbuch Sperr-**Gründe**, hier eine **Eingabe-Erwartung**. Beide
+    Male ist der Text eine Behauptung über den Code, und beide Male merkt es
+    niemand, wenn er driftet — außer dem Anwender, der nachschlägt, weil er
+    nicht weiterweiß.
+
+    ⚠ **Geprüft wird nur die Richtung „Code → Handbuch"**: Jeder Wert, den
+    ``normalisiere_betriebsmodus`` versteht, muss in der Tabelle stehen. Ein
+    Wert **im** Handbuch, den der Code nicht kennt, fängt der Test nicht — dafür
+    steht die Gegenrichtung im Nachbar-Test, und beide zusammen sind hier nicht
+    nötig: Ein zu großzügiges Handbuch führt niemanden in die Irre, ein zu
+    knappes schon.
+    """
+    from pathlib import Path
+
+    from backend.core.betriebsmodus import _ZUSTAND_ZU_KANON
+
+    doc = Path(__file__).resolve().parents[3] / "docs" / "HANDBUCH_WAERME_KLIMA.md"
+    if not doc.exists():  # eedc-Standalone-Spiegel trägt `docs/` nicht mit
+        import pytest
+        pytest.skip("docs/ liegt nur im Source-of-Truth-Repo")
+    text = doc.read_text(encoding="utf-8")
+
+    fehlend = [wert for wert in _ZUSTAND_ZU_KANON if f"`{wert}`" not in text]
+    assert not fehlend, (
+        "Diese Betriebsmodus-Werte versteht eedc, das Handbuch nennt sie aber "
+        f"nicht: {fehlend}. Wer den Kanon erweitert, erweitert die Tabelle in "
+        "§Schritt 4 mit — sonst probiert der nächste Anwender einen Wert aus, "
+        "den es gibt, und findet ihn nirgends beschrieben."
+    )
