@@ -274,6 +274,31 @@ ANLAGE_SENSOREN = [
         formel="PV-Eigenverbrauch + Wärmepumpe + E-Mobilität (vermiedenes CO₂)",
         state_class="total_increasing",
     ),
+    # ── Grundlast (#395 Punkt 5, OB73-gif) ───────────────────────────────────
+    #
+    # ⛔ **„Grundlast" bezeichnet in eedc ZWEI verschiedene Zahlen** (Fund N-332,
+    # gemessen 27.08.): Cockpit → Live zeigt den Median über das VERBRAUCHS-
+    # PROFIL — ohne eigene Historie ist das ein BDEW-H0-Modellwert. Cockpit →
+    # Monat/Jahr zeigt den Median der GEMESSENEN Nachtstunden.
+    #
+    # ⭐ **Der Sensor nimmt die gemessene.** Ein Modellwert, der als Sensor in
+    # eine Automation läuft, ist die teuerste Sorte Zahl: er sieht aus wie eine
+    # Messung und ist eine Annahme. Wer nichts gemessen hat, bekommt hier
+    # nichts — nicht 0,3 kW aus dem Standardprofil.
+    SensorDefinition(
+        key="eedc_grundlast_kw",
+        name="Grundlast",
+        unit="kW",
+        icon="mdi:home-lightning-bolt",
+        category=SensorCategory.ENERGIE,
+        formel=(
+            "Median der GEMESSENEN Nacht-Stunden-Leistung (0–5 Uhr) des laufenden Monats "
+            "aus dem stündlichen Energieprofil — dieselbe Formel und dieselbe Quelle wie "
+            "die Kachel in Cockpit → Monat. Ohne gemessene Nachtstunden gibt es den Sensor nicht."
+        ),
+        device_class="power",
+        state_class="measurement",
+    ),
 ]
 
 # =============================================================================
@@ -375,6 +400,19 @@ E_AUTO_SENSOREN = [
 # SENSOR-DEFINITIONEN - Wärmepumpe
 # =============================================================================
 WAERMEPUMPE_SENSOREN = [
+    SensorDefinition(
+        key="wp_betriebsmodus",
+        name="Betriebsmodus",
+        unit="",
+        icon="mdi:hvac",
+        category=SensorCategory.WAERMEPUMPE,
+        formel=(
+            "Aktueller Betriebsmodus laut zugeordneter climate-Quelle, über den Kanon "
+            "normalisiert (Heizen · Kühlen · Entfeuchten · Lüften · Aus · Unbestimmt); "
+            "hvac_action schlägt den eingestellten Modus, wo das Gerät sie liefert. "
+            "Ohne zugeordnete Quelle gibt es den Sensor nicht."
+        ),
+    ),
     SensorDefinition(
         key="wp_cop_durchschnitt",
         name="COP Durchschnitt",
@@ -588,6 +626,52 @@ PROGNOSE_SENSOREN = [
         icon="mdi:solar-power",
         category=SensorCategory.PROGNOSE,
         formel="eedc-Tagesprognose Tag+3 = Σ korrigierte Stunden-Slots (OpenMeteo × Korrekturprofil-Kaskade); Stundenprofil als Attribut",
+        state_class="measurement",
+    ),
+    # ── Vormittag/Nachmittag (#395 Punkt 3, OB73-gif) ────────────────────────
+    #
+    # Für netzdienliches Laden: „warte ich auf den Nachmittags-Peak oder lade
+    # ich früher voll?" — und **abends** dieselbe Frage für morgen. Deshalb vier
+    # Sensoren statt zwei: die Abendentscheidung betrifft den Folgetag, und für
+    # die ist „heute Nachmittag" zu spät.
+    #
+    # ⚠ **Der Schnitt liegt am Solar Noon**, wie in jeder eedc-Anzeige — nicht
+    # bei 13:00 (Fund N-331). Die Grenze reist als Attribut `solar_noon` mit,
+    # damit eine Automation sie lesen statt raten kann.
+    SensorDefinition(
+        key="eedc_prognose_heute_vormittag_kwh",
+        name="PV-Prognose heute Vormittag",
+        unit="kWh",
+        icon="mdi:weather-sunset-up",
+        category=SensorCategory.PROGNOSE,
+        formel="eedc-Prognose heute bis Solar Noon (Σ korrigierte Slots vor der astronomischen Tagesmitte; Grenze im Attribut solar_noon)",
+        state_class="measurement",
+    ),
+    SensorDefinition(
+        key="eedc_prognose_heute_nachmittag_kwh",
+        name="PV-Prognose heute Nachmittag",
+        unit="kWh",
+        icon="mdi:weather-sunset-down",
+        category=SensorCategory.PROGNOSE,
+        formel="eedc-Prognose heute ab Solar Noon (Σ korrigierte Slots nach der astronomischen Tagesmitte; Grenze im Attribut solar_noon)",
+        state_class="measurement",
+    ),
+    SensorDefinition(
+        key="eedc_prognose_morgen_vormittag_kwh",
+        name="PV-Prognose morgen Vormittag",
+        unit="kWh",
+        icon="mdi:weather-sunset-up",
+        category=SensorCategory.PROGNOSE,
+        formel="eedc-Prognose morgen bis Solar Noon — die Zahl für die Abendentscheidung (Grenze im Attribut solar_noon)",
+        state_class="measurement",
+    ),
+    SensorDefinition(
+        key="eedc_prognose_morgen_nachmittag_kwh",
+        name="PV-Prognose morgen Nachmittag",
+        unit="kWh",
+        icon="mdi:weather-sunset-down",
+        category=SensorCategory.PROGNOSE,
+        formel="eedc-Prognose morgen ab Solar Noon — die Zahl für die Abendentscheidung (Grenze im Attribut solar_noon)",
         state_class="measurement",
     ),
     SensorDefinition(

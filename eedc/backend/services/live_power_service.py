@@ -288,10 +288,18 @@ class LivePowerService:
             quellen_basis, quellen_inv,
         )
 
+        # Der aktuelle Betriebsmodus je Wärmepumpe (#398). Eigener 60-s-Takt im
+        # Service — dieser Aufruf kostet nicht je Live-Poll einen HA-Abruf; die
+        # Begründung steht in `betriebsmodus_live.py`. Ohne Klimagerät bzw. ohne
+        # Zuordnung ist er ein DB-Zugriff und liefert {}.
+        from backend.services.betriebsmodus_live import lade_betriebsmodus_live
+        modus_map = await lade_betriebsmodus_live(db, anlage)
+
         # Komponenten + Gauges aufbauen
         from backend.services.live_komponenten_builder import build_komponenten
         build_result = build_komponenten(
             anlage, basis_values, inv_values, investitionen, inv_live_map,
+            modus_map=modus_map,
         )
         komponenten = build_result["komponenten"]
         gauges = build_result["gauges"]

@@ -72,6 +72,33 @@ async def berechne_prognose_export(db, anlage) -> Optional[dict]:
             tag = prognose.tage[offset] if offset < len(prognose.tage) else None
             return tag.eedc_kwh if tag else None
 
+        def _haelften(offset: int) -> tuple[Optional[float], Optional[float]]:
+            """Vormittag/Nachmittag desselben Tages — am **Solar Noon** (#395/3).
+
+            ⛔ **Die öffentliche Zusage in #395 nannte einen festen 13-Uhr-Schnitt
+            und behauptete, das sei „die Aufteilung, die auf deinem Bildschirm
+            steht". Beides ist am Code falsch** (Fund N-331, gemessen 27.08.):
+            eedc schneidet an **allen** drei rechnenden Stellen am Solar Noon —
+            `solar_forecast_service:829`, `prognose_kanon::_vm_nm_split` und
+            `prognosen.py::_berechne_tageshaelfte` (für alle vier Quellen).
+            Quelle des Irrtums war ein veralteter Feldkommentar
+            (`prognosen.py:95`, „0:00–12:59"), der drei Zeilen über der Funktion
+            steht, die es anders macht.
+
+            **Der Sensor folgt der Anzeige, nicht der Zusage** — sonst stünden
+            wieder zwei Zahlen für dieselbe Größe auf einer Seite, genau die
+            Klasse, die der Prognose-Kanon in v4.0.1 beseitigt hat.
+
+            ⭐ **Der Einwand aus der Zusage bleibt trotzdem beantwortet:** dass
+            eine bewegliche Grenze eine Automation an zwei Tagen verschieden
+            entscheiden lässt, stimmt — deshalb reist die Grenze als Attribut
+            `solar_noon` mit, statt geraten werden zu müssen.
+            """
+            tag = prognose.tage[offset] if offset < len(prognose.tage) else None
+            if tag is None:
+                return None, None
+            return tag.vm_kwh, tag.nm_kwh
+
         def _stundenprofil(offset: int) -> Optional[list]:
             tag = prognose.tage[offset] if offset < len(prognose.tage) else None
             if tag is None or tag.profil is None:
@@ -123,6 +150,15 @@ async def berechne_prognose_export(db, anlage) -> Optional[dict]:
             # ausdrücklich „(nachgeführt)".
             "heute_rollend_kwh": prognose.heute_rollend_kwh,
             "ist_bisher_kwh": prognose.ist_bisher_kwh,
+            "heute_vormittag_kwh": _haelften(0)[0],
+            "heute_nachmittag_kwh": _haelften(0)[1],
+            "morgen_vormittag_kwh": _haelften(1)[0],
+            "morgen_nachmittag_kwh": _haelften(1)[1],
+            # Die Schnittgrenze selbst — als „HH:MM" für heute. Sie ist die
+            # Antwort auf „wann genau teilt ihr?", und ohne sie müsste eine
+            # Automation sie schätzen.
+            "solar_noon_heute": _solar_noon_text(heute, anlage.longitude),
+            "solar_noon_morgen": _solar_noon_text(heute + timedelta(days=1), anlage.longitude),
             "day_plus_1_kwh": _tageswert(1),
             "day_plus_2_kwh": _tageswert(2),
             "day_plus_3_kwh": _tageswert(3),
@@ -138,6 +174,22 @@ async def berechne_prognose_export(db, anlage) -> Optional[dict]:
             getattr(anlage, "id", "?"), type(e).__name__, e,
         )
         return None
+
+
+def _solar_noon_text(tag: date, longitude: Optional[float]) -> Optional[str]:
+    """Solar Noon dieses Tages als „HH:MM" — dieselbe Quelle wie der Schnitt.
+
+    Bewusst über `_solar_noon_hour` und nicht über eine eigene Formel: die
+    Grenze im Attribut MUSS dieselbe sein, an der die beiden Zahlen daneben
+    getrennt wurden. Eine zweite Berechnung wäre die nächste zweite Wahrheit.
+    """
+    if longitude is None:
+        return None
+    from backend.services.solar_forecast_service import _solar_noon_hour
+
+    noon = _solar_noon_hour(tag.isoformat(), longitude)
+    h = int(noon)
+    return f"{h:02d}:{int((noon - h) * 60):02d}"
 
 
 async def _aktueller_speicher(

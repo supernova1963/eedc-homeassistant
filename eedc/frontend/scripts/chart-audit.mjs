@@ -17,12 +17,16 @@
  *        das `ChartLegende` nur bei gesetztem `onItemClick` rendert.
  *
  * Voraussetzung: mit `VITE_DEMO_DEFAULT=true` gebautes `dist` auf $EEDC_BASE (Default :8200) + Chromium unter
- * $PLAYWRIGHT_CHROMIUM. Kein CI-Pflichtlauf — Dev-Box-Kommando ([[reference_recharts_bars_jsdom]]):
+ * $PLAYWRIGHT_CHROMIUM. Sie wird seit 2026-08-27 GEPRUEFT statt vorausgesetzt (geteilter
+ * Vorflug mit `park-leertest`, `demo-box-vorflug.mjs`) — gegen ein Bundle ohne das Flag
+ * meldete dieser Lauf 37 statt 44 Charts und trotzdem gruen.
+ * Kein CI-Pflichtlauf — Dev-Box-Kommando ([[reference_recharts_bars_jsdom]]):
  *
  *   VITE_DEMO_DEFAULT=true npm run build
  *   npm run check:chart-audit
  */
 import { chromium } from 'playwright-core'
+import { pruefeDemoBox } from './demo-box-vorflug.mjs'
 
 const CHROME = process.env.PLAYWRIGHT_CHROMIUM
   || '/home/gernot/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome'
@@ -114,6 +118,10 @@ function auditDom() {
 
 async function main() {
   const browser = await chromium.launch({ executablePath: CHROME })
+  // Vorflug (27.08.): erst die eigene Voraussetzung, dann messen. Bis dahin hatte dieser
+  // Lauf nur die Schwelle „0 Charts" — gegen eine Box mit dem FALSCHEN Bundle meldete er
+  // 37 statt 44 Charts und Exit 0. Die Prüfung ist mit `park-leertest` geteilt.
+  await pruefeDemoBox(browser, BASE, 'chart-audit')
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
   const audit = auditDom()
   const probleme = []

@@ -13,6 +13,7 @@ from backend.core.investition_kennwerte import get_erzeuger_kwp
 from backend.core.investition_parameter import PARAM_E_AUTO
 from datetime import date
 
+from backend.core.betriebsmodus import BETRIEBSMODUS_ICON, BETRIEBSMODUS_LABEL, HEIZEN
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.core.berechnungen.energie import PV_KOMPONENTEN_PREFIXE
 from backend.services.live_sensor_config import (
@@ -34,6 +35,7 @@ def build_komponenten(
     inv_values: dict[str, dict[str, float]],
     investitionen: dict[str, Investition],
     inv_live_map: dict[str, dict[str, str]],
+    modus_map: Optional[dict[int, str]] = None,
 ) -> dict:
     """
     Baut Komponenten-Liste, Gauges und Summen aus Live-Werten.
@@ -94,29 +96,38 @@ def build_komponenten(
     # Per-Investition Komponenten
     for inv_id, values in inv_values.items():
         inv = investitionen.get(inv_id)
+        # Die Keys von `inv_values` sind Strings, `modus_map` ist nach
+        # Investitions-ID (int) geschlüsselt — einmal hier wandeln statt an
+        # jeder Lesestelle.
+        try:
+            inv_id_int = int(inv_id)
+        except (TypeError, ValueError):
+            inv_id_int = -1
         if not inv or inv.typ in SKIP_TYPEN:
             continue
 
         val_w = values.get("leistung_w")
 
-        # Wärmepumpe: getrennte Leistungswerte summieren + Icon je Betriebsmodus.
+        # Wärmepumpe: getrennte Leistungswerte summieren + Icon je Betriebsart.
         #
-        # ⚠ **Die Achse hier ist Heizen/WARMWASSER, nicht Heizen/KÜHLEN** (N-282).
-        # Bei einer Split-Klimaanlage sind beide Felder `None` und das Icon
-        # bleibt leer. Das ist **keine Falschaussage**, sondern „keine Aussage" —
-        # und es bleibt bewusst so:
+        # ⚠ **Zwei verschiedene Achsen, und sie schließen sich nicht aus** (N-282):
+        #   • die **Leistungssensoren** trennen Heizen/WARMWASSER,
+        #   • der **Betriebsmodus** (`climate`-Entität, #263 K-2) trennt
+        #     Heizen/Kühlen/Lüften/Entfeuchten.
+        # Warmwasser kennt der Modus-Kanon nicht, Kühlen kennen die
+        # Leistungssensoren nicht. Deshalb gewinnt je Frage die Quelle, die sie
+        # überhaupt beantworten kann (Reihenfolge unten).
         #
-        # Den echten Betriebsmodus gibt es seit #263 K-2 (S1), aber er ist aus
-        # dem Live-Pfad **ausgeschlossen** (`live_sensor_config` filtert
-        # `ist_zustand_feld`). Der Grund steht bei `ZUSTAND_LIVE_FELDER`:
-        # `normalize_to_w` ergibt für einen `climate`-State garantiert `None`,
-        # der Abruf liefe also alle 5 Sekunden über jede Live-Zuordnung ins
-        # Leere. Ihn nur für ein Icon wieder einzuschalten hieße, einen
-        # Dauerabruf gegen ein Symbol zu tauschen — nach der L-1-Entlastung der
-        # HA-Datenbank die falsche Richtung.
-        #
-        # Wo der Modus wirklich hingehört, steht er: in der Stundenzeile (S2)
-        # und in der Aufteilung Heizen/Kühlen im Komponenten-Hub (S4).
+        # ⛔ **Hier stand bis zum 27.08., der Modus bleibe aus dem Live-Pfad
+        # ausgeschlossen** — *„ihn nur für ein Icon wieder einzuschalten hieße,
+        # einen Dauerabruf gegen ein Symbol zu tauschen"*. **Der Einwand war
+        # richtig und ist nachgemessen** (State-Cache 3 s gegen Live-Poll 5 s).
+        # Aufgelöst wurde er nicht durch Übergehen, sondern weil sich beide
+        # Prämissen geändert haben: der Wert hat seit #398 **drei** Verbraucher
+        # (Sensor · Klartext · Icon), und er kommt aus
+        # `services/betriebsmodus_live.py` mit **eigenem 60-s-Takt** statt im
+        # Live-Takt. `live_sensor_config` schließt Zustandsfelder unverändert
+        # aus — der Modus läuft nie durch `normalize_to_w`.
         wp_icon = None
         if inv.typ == "waermepumpe":
             heizen_w = values.get("leistung_heizen_w")
@@ -128,6 +139,15 @@ def build_komponenten(
                 w = ww_w or 0
                 if h > 0 or w > 0:
                     wp_icon = "heater" if h >= w else "droplets"
+            # Der gemessene Modus schlägt die Leistungs-Heuristik — AUSSER beim
+            # Heizen: dort ist „Heizen oder Warmwasser?" die feinere Auskunft,
+            # und die hat nur die Heuristik. Fehlt der Modus (keine Zuordnung,
+            # `aus`, `unbestimmt`), bleibt alles wie vorher.
+            modus = (modus_map or {}).get(inv_id_int)
+            if modus and modus != HEIZEN:
+                wp_icon = BETRIEBSMODUS_ICON.get(modus) or wp_icon
+            elif modus == HEIZEN and wp_icon is None:
+                wp_icon = BETRIEBSMODUS_ICON[HEIZEN]
 
         if val_w is None:
             typ = inv.typ if inv else None
@@ -239,12 +259,18 @@ def build_komponenten(
             kw = abs(val_w) / 1000
             prefix = LIVE_KEY_PREFIX.get(typ, TAGESVERLAUF_KATEGORIE.get(typ, typ))
             komp_key = f"{prefix}_{inv_id}"
+            _modus = (modus_map or {}).get(inv_id_int) if typ == "waermepumpe" else None
             komponenten.append({
                 "key": komp_key,
                 "label": inv.bezeichnung,
                 "icon": wp_icon or TYP_ICON.get(typ, "wrench"),
                 "erzeugung_kw": None,
                 "verbrauch_kw": round(kw, 3),
+                # Klartext statt Kanon-Enum: die Deutung gehört in den Kanon,
+                # nicht in eine zweite Tabelle im Client ([[feedback_typ_labels_pattern]]).
+                # Ohne Modus steht hier `None` — kein „—", keine leere Zeile.
+                "betriebsmodus": _modus,
+                "betriebsmodus_label": BETRIEBSMODUS_LABEL.get(_modus) if _modus else None,
             })
             if typ == "wallbox":
                 wallbox_keys.append(komp_key)

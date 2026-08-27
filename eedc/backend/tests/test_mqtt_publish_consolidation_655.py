@@ -9,6 +9,7 @@ konsistent aufgelöst (Override → ENV → Default).
 
 import pytest
 
+from backend.models import Anlage  # noqa: F401 — registriert das Schema VOR der db-Fixture
 from backend.services import ha_mqtt_sync
 
 
@@ -19,7 +20,12 @@ class _FakeClient:
     def __init__(self, *args, **kwargs):
         pass
 
-    async def publish_all_sensors(self, sensor_values, anlage_id, anlage_name):
+    async def publish_all_sensors(self, sensor_values, anlage_id, anlage_name,
+                                  investition_id=None, investition_name=None):
+        # ⚠ Die zwei Geräte-Parameter kamen am 27.08. dazu: seither publiziert
+        # `publish_anlage_sensors` auch die per-Gerät-Sensoren (bis dahin gab es
+        # sie NUR im REST-Export, s. dort). Ein Fake ohne sie bricht mit
+        # TypeError — die Signatur gehört zur Zusicherung.
         return {"total": 3, "success": 2, "failed": 1, "errors": ["x: ConnectionRefusedError: nope"]}
 
 
@@ -28,7 +34,16 @@ class _Anlage:
     anlagenname = "Testanlage"
 
 
-async def test_publish_anlage_sensors_liefert_echte_zahlen(monkeypatch):
+async def test_publish_anlage_sensors_liefert_echte_zahlen(db, monkeypatch):
+    """⚠ **Diese Probe fuhr bis zum 27.08. mit `db=None`** — sie kam damit durch,
+    weil der Publisher die Datenbank nie anfasste. Seit die Geraete-Sensoren
+    mitpubliziert werden, tut er es; `None` ist dort ein Zustand, den es in der
+    Produktion nicht gibt (der Aufrufer haelt immer eine Session).
+
+    Deshalb die echte `db`-Fixture statt einer Sonderbehandlung im Produktcode:
+    eine Verzweigung fuer `db is None` waere Schutz vor einem unerreichbaren
+    Zustand — und der schuetzt am Ende die Falschaussage.
+    """
     monkeypatch.setattr(ha_mqtt_sync, "MQTTClient", _FakeClient)
     import backend.api.routes.ha_export as ha_export
 
@@ -37,7 +52,14 @@ async def test_publish_anlage_sensors_liefert_echte_zahlen(monkeypatch):
 
     monkeypatch.setattr(ha_export, "calculate_anlage_sensors", fake_calc)
 
-    r = await ha_mqtt_sync.publish_anlage_sensors(None, _Anlage())
+    # Anlage OHNE Investitionen: der Geraete-Zweig laeuft dann gar nicht, und
+    # die Zahlen bleiben die der Anlagen-Sensoren — genau das prueft #655.
+    anlage = Anlage(anlagenname="Testanlage", leistung_kwp=1.0)
+    db.add(anlage)
+    await db.flush()
+    await db.commit()
+
+    r = await ha_mqtt_sync.publish_anlage_sensors(db, anlage)
 
     assert r["available"] is True and r["no_data"] is False
     assert (r["total"], r["success"], r["failed"]) == (3, 2, 1)

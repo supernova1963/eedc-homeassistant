@@ -38,6 +38,12 @@ class LiveKomponente(BaseModel):
     verbrauch_kw: Optional[float] = None
     parent_key: Optional[str] = None
     leistung_kwp: Optional[float] = None  # PV-Strings: installierte Leistung für Auslastungs-Anzeige
+    # #398: der aktuelle Betriebsmodus einer Wärmepumpe/Klimaanlage. `None`
+    # heißt „keine Zuordnung, kein HA, kein verwertbarer Zustand" — NICHT „aus"
+    # (ADR-002/P4). Der Klartext kommt aus dem Kanon mit, damit der Client keine
+    # zweite Übersetzungstabelle führt.
+    betriebsmodus: Optional[str] = None
+    betriebsmodus_label: Optional[str] = None
 
 
 class LiveGauge(BaseModel):

@@ -12,6 +12,14 @@ export interface LiveKomponente {
   verbrauch_kw: number | null
   parent_key?: string | null
   leistung_kwp?: number | null  // PV-Strings: installierte Leistung für Auslastungs-Anzeige
+  /**
+   * #398: aktueller Betriebsmodus einer Wärmepumpe/Klimaanlage.
+   * `null`/fehlend heißt „keine Zuordnung, kein HA, kein verwertbarer Zustand" —
+   * NICHT „aus". Der Klartext kommt vom Backend mit (Kanon-SoT
+   * `core/betriebsmodus.py`); der Client führt bewusst KEINE zweite Tabelle.
+   */
+  betriebsmodus?: string | null
+  betriebsmodus_label?: string | null
 }
 
 export interface LiveGauge {

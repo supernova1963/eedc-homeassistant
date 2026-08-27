@@ -91,6 +91,7 @@ from backend.services.ha_sensors_export import (
     PROGNOSE_SENSOREN, PREIS_SENSOREN,
     get_all_sensor_definitions, runde_exportwert
 )
+from backend.core.betriebsmodus import BETRIEBSMODUS_LABEL
 from backend.services.ha_export_prognose import berechne_prognose_export
 from backend.services.ha_export_preis import berechne_preis_export
 from backend.services.mqtt_client import MQTTClient, MQTTConfig
@@ -298,6 +299,45 @@ async def _load_emob_pool_ctx(db: AsyncSession, investitionen) -> Optional[_Emob
         inv_daten,
         {i.id for i in emob if i.typ == "e-auto"},
         wallbox_ids,
+    )
+
+
+async def grundlast_sensorwert(
+    db: AsyncSession, anlage_id: int, heute: date
+) -> tuple[Optional[float], Optional[str]]:
+    """Die **gemessene** Grundlast des laufenden Monats für den HA-Sensor (#395/5).
+
+    ⛔ **Bewusst NICHT der Live-Wert.** „Grundlast" bezeichnet in eedc zwei
+    verschiedene Zahlen (Fund N-332): Cockpit → Live zeigt den Median über das
+    Verbrauchs-**Profil** — ohne eigene Historie ist das ein BDEW-H0-Modellwert
+    mit 0,3 kW Default. Hier zählt der Median der **gemessenen** Nachtstunden,
+    dieselbe Quelle und derselbe Layer-SoT wie die Kachel in Cockpit → Monat.
+    Ein Modellwert, der als Sensor in eine Automation läuft, ist die teuerste
+    Sorte Zahl: er sieht aus wie eine Messung.
+
+    ⭐ **`heute` ist ein Parameter und kein `date.today()` in dieser Funktion** —
+    dasselbe Muster wie `core/hub_leer_grund.py`. Sonst müsste jede Probe die
+    Prozessuhr lesen und damit auf die Stunde ihres Laufs wetten (N-167: vier
+    von 24 Stunden rot ohne Code-Änderung). Der Aufrufer setzt die Uhr ein, die
+    Funktion rechnet.
+
+    Returns:
+        ``(kW, Rechenweg)`` — ``(None, None)``, wenn keine Nachtstunde gemessen
+        ist. Dann entsteht **kein** Sensor.
+    """
+    from backend.api.routes.aktueller_monat import _load_grundlast_nacht_kw
+    from backend.core.berechnungen import berechne_grundlast
+
+    nacht = await _load_grundlast_nacht_kw(anlage_id, heute.year, heute.month, db)
+    if not nacht:
+        return None, None
+    kennzahlen = berechne_grundlast(
+        nacht_verbrauch_kw=nacht, gesamtverbrauch_kwh=None, tage=heute.day,
+    )
+    if kennzahlen.grundlast_kw is None:
+        return None, None
+    return kennzahlen.grundlast_kw, (
+        f"Median über {len(nacht)} gemessene Nachtstunden (0–5 Uhr) im laufenden Monat"
     )
 
 
@@ -1043,6 +1083,8 @@ async def calculate_anlage_sensors(
         elif sensor.key == "co2_ersparnis_kg":
             value = co2_ersparnis
             berechnung = "PV-Eigenverbrauch + Wärmepumpe + E-Mobilität (vermiedenes CO₂)"
+        elif sensor.key == "eedc_grundlast_kw":
+            value, berechnung = await grundlast_sensorwert(db, anlage.id, date.today())
 
         if value is not None:
             sensor_values.append(SensorValue(
@@ -1194,6 +1236,22 @@ async def calculate_anlage_sensors(
                 value = prognose["day_plus_3_kwh"]
                 if prognose.get("stundenprofil_day_plus_3"):
                     zusatz = {"stundenprofil_kwh": prognose["stundenprofil_day_plus_3"]}
+            elif sensor.key == "eedc_prognose_heute_vormittag_kwh":
+                value = prognose.get("heute_vormittag_kwh")
+                if prognose.get("solar_noon_heute"):
+                    zusatz = {"solar_noon": prognose["solar_noon_heute"]}
+            elif sensor.key == "eedc_prognose_heute_nachmittag_kwh":
+                value = prognose.get("heute_nachmittag_kwh")
+                if prognose.get("solar_noon_heute"):
+                    zusatz = {"solar_noon": prognose["solar_noon_heute"]}
+            elif sensor.key == "eedc_prognose_morgen_vormittag_kwh":
+                value = prognose.get("morgen_vormittag_kwh")
+                if prognose.get("solar_noon_morgen"):
+                    zusatz = {"solar_noon": prognose["solar_noon_morgen"]}
+            elif sensor.key == "eedc_prognose_morgen_nachmittag_kwh":
+                value = prognose.get("morgen_nachmittag_kwh")
+                if prognose.get("solar_noon_morgen"):
+                    zusatz = {"solar_noon": prognose["solar_noon_morgen"]}
             elif sensor.key == "eedc_speicher_voll_um":
                 value = prognose["speicher_voll_um"]
 
@@ -1266,6 +1324,7 @@ async def calculate_investition_sensors(
     investition: Investition,
     strompreis: Optional[Strompreis],
     emob_ctx: Optional[_EmobPoolCtx] = None,
+    modus_map: Optional[dict[int, str]] = None,
 ) -> list[SensorValue]:
     """Berechnet Sensor-Werte für eine Investition basierend auf Typ.
 
@@ -1591,6 +1650,16 @@ async def calculate_investition_sensors(
                 if gesamt_modus_abdeckung_h > 0 or gesamt_modus_gemessen:
                     value = gesamt_modus_kuehlen
                     berechnung = f"{gesamt_modus_kuehlen:.1f} von {gesamt_strom:.1f} kWh gesamt"
+            elif sensor.key == "wp_betriebsmodus":
+                # #398: der EINZIGE Sensor dieser Liste, der KEINE Monatsgröße
+                # ist, sondern ein Zustand. Er kommt deshalb auch nicht aus den
+                # Monatsdaten, sondern aus `betriebsmodus_live` — und fehlt
+                # ganz, wenn es keine Zuordnung gibt (kein „—", keine leere
+                # Entität, die in HA für immer weiterlebt).
+                _modus = (modus_map or {}).get(investition.id)
+                if _modus:
+                    value = BETRIEBSMODUS_LABEL[_modus]
+                    berechnung = f"Kanon-Wert „{_modus}\" der zugeordneten climate-Quelle"
             elif sensor.key == "wp_kompressor_starts":
                 if hat_starts:
                     value = wp_starts_total
@@ -1737,8 +1806,15 @@ async def get_all_sensors(db: AsyncSession = Depends(get_db)):
         # Wallbox-Pool sehen (statt leerer E-Auto-IMD).
         emob_ctx = await _load_emob_pool_ctx(db, investitionen)
 
+        # #398: der aktuelle Betriebsmodus je Wärmepumpe, einmal je Anlage
+        # erhoben (eigener 60-s-Takt im Service, s. `betriebsmodus_live.py`).
+        from backend.services.betriebsmodus_live import lade_betriebsmodus_live
+        modus_map = await lade_betriebsmodus_live(db, anlage)
+
         for inv in investitionen:
-            inv_sensors = await calculate_investition_sensors(db, inv, strompreis, emob_ctx)
+            inv_sensors = await calculate_investition_sensors(
+                db, inv, strompreis, emob_ctx, modus_map
+            )
             inv_sensor_items = [
                 SensorExportItem(
                     key=sv.definition.key,

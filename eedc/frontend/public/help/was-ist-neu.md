@@ -9,6 +9,62 @@
 
 ---
 
+## Noch nicht veröffentlicht
+
+**Deine Wärmepumpe sagt jetzt, was sie gerade tut**
+
+MartyBr hat im Forum gefragt, ob das Symbol umschaltet, wenn seine Wärmepumpe
+kühlt. Beim Nachsehen kam heraus: eedc **weiß** seit v4.0.21, ob dein Gerät
+heizt oder kühlt — es schreibt den Betriebsmodus jede Stunde mit und teilt den
+Stromverbrauch danach auf. Nur **gezeigt** hat es ihn nirgends.
+
+Das ist jetzt an drei Stellen anders:
+
+* **Im Energiefluss** (*Cockpit → Live*) wechselt das Symbol: Flamme beim
+  Heizen, **Schneeflocke beim Kühlen**, dazu Lüften und Entfeuchten.
+* **Darunter steht der Modus im Klartext** — auf dem Handy sichtbar, ohne dass
+  du irgendwo hovern musst.
+* **Als Sensor in Home Assistant**, damit du ihn in einer Automation abfragen
+  kannst. Diesen Zustand gibt es so nur von eedc: über die Stunde stabilisiert
+  und auf einheitliche Begriffe gebracht.
+
+Wenn du keine `climate`-Quelle zugeordnet hast, ändert sich nichts — eedc
+behauptet keinen Modus, den es nicht kennt. Die Zuordnung machst du unter
+*Einstellungen → Datenquellen* beim Feld **Betriebsmodus**.
+
+**Geräte-Sensoren erscheinen jetzt auch über MQTT**
+
+Dabei ist eine Lücke aufgefallen, die schon länger bestand: Sensoren, die zu
+einem **einzelnen Gerät** gehören — Arbeitszahl der Wärmepumpe, PV-Anteil des
+E-Autos, Betriebsstunden — wurden nie über MQTT verschickt. Wer sein Add-on über
+MQTT angebunden hat, hatte sie deshalb nicht.
+
+Sie kommen jetzt mit. **Das heißt: in Home Assistant tauchen neue Geräte und
+Entitäten auf.** Es geht nichts verloren und nichts wird umbenannt — es kommt
+etwas dazu, das schon immer dazugehören sollte.
+
+**Zwei neue Zahlen für Automationen** (Wunsch von OB73-gif)
+
+* **PV-Prognose Vormittag/Nachmittag** — je für heute und morgen. Damit lässt
+  sich abends entscheiden, ob du nachts nachlädst oder auf die Sonne wartest.
+  Getrennt wird am **Sonnenhöchststand**, genauso wie in der Anzeige; die genaue
+  Uhrzeit steht als Attribut am Sensor.
+* **Grundlast** — der gemessene Nacht-Sockel deines Hauses, dieselbe Zahl wie in
+  *Cockpit → Monat*.
+
+**Eine Klarstellung: „Grundlast" gab es zweimal**
+
+In *Cockpit → Live* stand bisher „Grundlast" für einen Wert aus dem
+Verbrauchsprofil — bei Anlagen ohne eigene Messhistorie ist das ein
+Standard-Lastprofil, also eine Schätzung. In *Cockpit → Monat* steht die
+**gemessene** Grundlast. Zwei verschiedene Zahlen unter einem Namen, und wer sie
+verglich, musste eine für falsch halten.
+
+Die Live-Anzeige heißt jetzt **„Grundlast (Prognose)"**. **An den Zahlen ändert
+sich nichts** — sie dürfen verschieden sein, sie sollten nur nicht gleich heißen.
+
+---
+
 ## v4.0.29 — Der Zähler entscheidet, nicht die Bauart
 
 **Ein neues Handbuch: „Wärme & Klima"**

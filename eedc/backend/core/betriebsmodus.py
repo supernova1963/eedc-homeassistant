@@ -64,6 +64,29 @@ BETRIEBSMODUS_LABEL: Final[dict[str, str]] = {
 }
 
 
+#: Kanon → Symbolname für die Sichten, die **jetzt** meinen (#398 Stufe 2/3).
+#:
+#: **Warum hier und nicht im Frontend:** dieselbe Begründung wie bei
+#: `BETRIEBSMODUS_LABEL` — es ist die Deutung eines Kanon-Werts, und der Kanon
+#: liegt in dieser Datei. Die Namen sind die des Client-Icon-Registers
+#: (`EnergieFluss.tsx::ICON_MAP`), das sie auf Lucide-Komponenten abbildet.
+#:
+#: ⛔ **`aus` und `unbestimmt` stehen bewusst NICHT drin.** Für sie gibt es kein
+#: eigenes Symbol: das Gerät zeigt dann sein **Typ-Icon** wie bisher. Ein
+#: Sondersymbol für „ich weiß es nicht" wäre eine Aussage, die eedc nicht hat.
+#:
+#: ⚠ **`entfeuchten` ist NICHT `droplets`** — das trägt im Live-Bild bereits die
+#: **Warmwasser**-Rolle (`live_komponenten_builder`). Zwei Bedeutungen auf einem
+#: Symbol sind genau die Drift, gegen die Regel 0a steht („eine Datenrolle, ein
+#: Symbol"), deshalb `waves`.
+BETRIEBSMODUS_ICON: Final[dict[str, str]] = {
+    HEIZEN: "flame",
+    KUEHLEN: "snowflake",
+    ENTFEUCHTEN: "waves",
+    LUEFTEN: "fan",
+}
+
+
 # ── Feldnamen der Teilmengen (#263 K-2, S3) ──────────────────────────────────
 #
 # **Warum eigene Namen und nicht `strom_heizen_kwh`** (Entscheid E-G, gemessen

@@ -91,9 +91,21 @@ class SolcastTagSchema(BaseModel):
 
 
 class TageshaelfteSchema(BaseModel):
-    """Vormittag/Nachmittag-Aufteilung."""
-    vormittag_kwh: float = 0  # 0:00–12:59
-    nachmittag_kwh: float = 0  # 13:00–23:59
+    """Vormittag/Nachmittag-Aufteilung — geschnitten am **Solar Noon**.
+
+    ⛔ **Hier stand bis zum 27.08.2026 „0:00–12:59" bzw. „13:00–23:59" (N-331).**
+    Das war schon beim Schreiben falsch: `_berechne_tageshaelfte` drei Zeilen
+    weiter unten teilt an der **astronomischen Tagesmitte** (Equation of Time,
+    je Tag und Längengrad), und zwar für alle vier Quellen. Der Kommentar hat
+    achtzehn Tage später eine öffentliche Zusage an einen Melder getragen
+    (#395 Punkt 3: „fester Schnitt um 13 Uhr … die Aufteilung, die auf deinem
+    Bildschirm steht") — beide Hälften der Zusage waren dadurch falsch.
+
+    *Ein Kommentar ist auch nur eine Behauptung; dieser stand direkt neben dem
+    Code, der ihn widerlegt.*
+    """
+    vormittag_kwh: float = 0   # bis Solar Noon (proportional in der Grenzstunde)
+    nachmittag_kwh: float = 0  # ab Solar Noon
 
 
 class PrognosenVergleichResponse(BaseModel):

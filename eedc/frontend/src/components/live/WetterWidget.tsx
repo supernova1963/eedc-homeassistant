@@ -411,9 +411,19 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
             </div>
           )}
           {wetter.grundlast_kw != null && wetter.grundlast_kw > 0 && (
-            <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
+            <div
+              className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400"
+              title={'Grundlast aus dem Verbrauchsprofil dieser Sicht — eine Prognose, kein Messwert.\n'
+                + 'Die gemessene Grundlast (Median der Nachtstunden 0–5 Uhr) steht in Cockpit → Monat und Jahr;\n'
+                + 'sie kann abweichen, weil sie einen anderen Zeitraum und eine andere Quelle hat.'}
+            >
               <Zap className="h-3.5 w-3.5" />
-              <span>Grundlast {fmtZahl(wetter.grundlast_kw * 1000, 0)} W</span>
+              {/* N-332: „Grundlast" bezeichnete in eedc ZWEI Zahlen — hier die
+                  aus dem (ggf. modellierten) Verbrauchsprofil, in Cockpit →
+                  Monat/Jahr die gemessene. Der Zusatz trennt sie, ohne eine der
+                  beiden zu entfernen: sie sollen nicht dieselbe Zahl sein, sie
+                  sollen nur nicht denselben Namen tragen. */}
+              <span>Grundlast (Prognose) {fmtZahl(wetter.grundlast_kw * 1000, 0)} W</span>
             </div>
           )}
           {stunden.some((s) => (s.niederschlag_mm || 0) > 0) && (

@@ -8,7 +8,7 @@
  */
 
 import { useState, useEffect, useRef, useMemo, type ReactNode } from 'react'
-import { Sun, Zap, Battery, Car, Flame, Wrench, Home, Plug, Heater, Droplets, Sparkles, Zap as ZapIcon } from 'lucide-react'
+import { Sun, Zap, Battery, Car, Flame, Wrench, Home, Plug, Heater, Droplets, Snowflake, Fan, Waves, Sparkles, Zap as ZapIcon } from 'lucide-react'
 import type { LiveKomponente, LiveGauge } from '../../api/liveDashboard'
 import { CHART_COLORS, COLORS, KATEGORIE_FARBEN, SOLAR_INTENSITAET, STATUS_COLORS, fmtZahl } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
@@ -96,6 +96,13 @@ function useBgVariant(): [BgVariant, (v: BgVariant) => void] {
 const ICON_MAP: Record<string, React.ElementType> = {
   sun: Sun, zap: Zap, battery: Battery, car: Car, plug: Plug,
   flame: Flame, wrench: Wrench, home: Home, heater: Heater, droplets: Droplets,
+  // #398 Stufe 3: das Symbol wechselt mit dem Betriebsmodus — und AUSSCHLIESSLICH
+  // hier. Der Energiefluss ist die einzige Fläche, die ohnehin „jetzt" meint;
+  // `lib/komponentenStyle.ts` bleibt unberührt (Entscheid Maintainer 27.08.:
+  // in Listen, Kacheln und Auswertungen behauptete ein wechselndes Symbol eine
+  // Momentaktualität, die die Zahl daneben nicht hat).
+  // Die Namen kommen aus dem Backend-Kanon `BETRIEBSMODUS_ICON`.
+  snowflake: Snowflake, fan: Fan, waves: Waves,
 }
 
 const COLOR_MAP = KATEGORIE_FARBEN
@@ -653,6 +660,10 @@ export default function EnergieFluss({
           if ((k.erzeugung_kw ?? 0) > 0) tipParts.push(`Aktuell: ${fmtZahl(k.erzeugung_kw!, 2)} kW (Erzeugung)`)
           if ((k.verbrauch_kw ?? 0) > 0) tipParts.push(`Aktuell: ${fmtZahl(k.verbrauch_kw!, 2)} kW (Verbrauch)`)
           if (hasSoc) tipParts.push(`SoC: ${soc} %`)
+          // #398 Stufe 2: der Modus im Klartext. Er steht im Tooltip und nicht
+          // als zweite Zeile im Knoten — der trägt schon kW, SoC und Label, und
+          // eine vierte Zeile macht ihn auf dem Handy unlesbar.
+          if (k.betriebsmodus_label) tipParts.push(`Betrieb: ${k.betriebsmodus_label}`)
           if (auslastungPct !== null) tipParts.push(`Auslastung: ${fmtZahl(auslastungPct, 0)} % von ${k.leistung_kwp} kWp`)
           // Netz: Bezug + Einspeisung separat anzeigen + Farberklärung
           if (k.key === 'netz') {
@@ -751,6 +762,25 @@ export default function EnergieFluss({
                   fill={socColor(soc)}
                 >
                   {soc} %
+                </text>
+              )}
+
+              {/* Betriebsmodus im Klartext (#398 Stufe 2).
+                  ⭐ Bewusst in DERSELBEN Zeile wie der SoC statt in einer vierten:
+                  ein Speicher hat einen SoC und keinen Betriebsmodus, eine
+                  Wärmepumpe umgekehrt — der Platz ist also frei, und der Knoten
+                  wächst nicht. Ein Tooltip allein wäre auf dem Handy unerreichbar
+                  gewesen; die Frage des Melders war „sieht man, was das Gerät
+                  gerade tut?", und Hovern ist dort keine Antwort. */}
+              {!hasSoc && k.betriebsmodus_label && (
+                <text
+                  x={node.x} y={node.y + dims.kwFontSize + 2}
+                  textAnchor="middle"
+                  style={{ fontSize: `${dims.socFontSize}px` }}
+                  className="font-semibold"
+                  fill={isActive ? color : achsen.referenz}
+                >
+                  {k.betriebsmodus_label}
                 </text>
               )}
 

@@ -61,6 +61,12 @@ HA_ERLAUBTE_STATE_CLASSES: dict[str, frozenset[str]] = {
     "energy": frozenset({"total", "total_increasing"}),
     "monetary": frozenset({"total"}),
     "duration": frozenset({"measurement", "total", "total_increasing"}),
+    # Dazugekommen am 2026-08-27 mit `eedc_grundlast_kw` (#395 Punkt 5). HA
+    # fuehrt `power` unter den **Momentangroessen**: `DEVICE_CLASS_STATE_CLASSES`
+    # erlaubt dort ausschliesslich `MEASUREMENT` — eine Leistung laesst sich
+    # nicht aufsummieren, dafuer gibt es `energy`. Der Waechter hat den neuen
+    # Fall gemeldet statt ihn durchzuwinken; genau dafuer ist er gebaut.
+    "power": frozenset({"measurement"}),
 }
 
 
@@ -158,7 +164,13 @@ def test_waechter_meldet_einen_verstoss_auch_wirklich():
     # der sechste Fall, den das Melder-Protokoll nicht zeigte
     assert _verstoesse([("probe", "monetary", "measurement")])
     # eine device_class, die in der Tabelle fehlt
-    assert _verstoesse([("probe", "power", "measurement")])
+    # ⚠ Bis zum 27.08. stand hier `power` — das ist seit `eedc_grundlast_kw`
+    # ein EINGETRAGENER Fall und taugt als Beispiel fuer „unbekannt" nicht mehr.
+    # Die Aussage der Probe ist unveraendert; nur ihr Beispiel musste eines
+    # werden, das noch unbekannt IST. Wer `temperature` eintraegt, zieht diese
+    # Zeile mit — das ist der Preis dafuer, dass die Tabelle nur fuehrt, was
+    # eedc wirklich benutzt.
+    assert _verstoesse([("probe", "temperature", "measurement")])
     # ... und die Gegenrichtung: Gueltiges wird nicht gemeldet
     assert not _verstoesse([("probe", "energy", "total_increasing")])
     assert not _verstoesse([("probe", "monetary", "total")])

@@ -62,9 +62,13 @@ async def publish_anlage_sensors(
           total/success/failed: int
           errors: list[str] — Stichprobe der Fehlergründe (für aussagekräftige Logs)
     """
-    # Lazy-Import: calculate_anlage_sensors liegt im Route-Modul; ein Top-Level-
+    # Lazy-Import: die beiden Rechner liegen im Route-Modul; ein Top-Level-
     # Import erzeugte einen Zyklus (die Route importiert diesen Service).
-    from backend.api.routes.ha_export import calculate_anlage_sensors
+    from backend.api.routes.ha_export import (
+        calculate_anlage_sensors,
+        calculate_investition_sensors,
+        _load_emob_pool_ctx,
+    )
 
     # B7-5: Broker aus der EINEN Wahrheit (DB-Broker-Block → ENV → Default) statt
     # nur ENV — Export und Inbound/Gateway teilen sich denselben Broker (§2g, #655).
@@ -77,13 +81,77 @@ async def publish_anlage_sensors(
         return {"available": True, "no_data": True, "total": 0, "success": 0, "failed": 0, "errors": []}
 
     result = await client.publish_all_sensors(sensor_values, anlage.id, anlage.anlagenname)
+    gesamt = dict(result)
+    gesamt.setdefault("total", len(sensor_values))
+
+    # ── Die Geräte-Sensoren, und warum sie hier bis 2026-08-27 fehlten ────────
+    #
+    # ⛔ **Gemessen am 27.08.:** Dieser Pfad ist der EINZIGE MQTT-Publisher, und
+    # er kannte nur `calculate_anlage_sensors` (39 Sensoren). Alles, was je
+    # GERÄT entsteht — 6 Wärmepumpen-, 4 E-Auto- und 4 Investitions-Sensoren je
+    # Komponente — existierte ausschließlich im REST-Export. Für eine Add-on-
+    # Installation, die über MQTT-Discovery angebunden ist, gab es sie nicht.
+    #
+    # ⭐ **Der Apparat dafür war vollständig gebaut und wurde nie gerufen:**
+    # `publish_all_sensors` nimmt seit jeher `investition_id`/`investition_name`
+    # und legt darunter ein eigenes HA-Gerät an (`mqtt_client.py:146-149`).
+    # Dieselbe Klasse wie N-333 (`get_zustand_states_batch`, null Aufrufer) —
+    # eine gebaute Hälfte ohne Anschluss.
+    #
+    # ⚠ **`docs/SENSOR-REFERENZ.md` sagt es dem Anwender seit v4.0 zu:**
+    # „Zusätzlich erscheinen **pro Komponente** … eigene Sensoren … jeweils
+    # unter einem eigenen HA-Gerät." Der Anschluss macht die Zusage wahr; er
+    # erfindet sie nicht.
+    #
+    # ⚠ **Sichtbare Folge:** In HA erscheinen bei bestehenden Installationen
+    # erstmals Geräte-Entitäten. Das ist ein Zuwachs, kein Umbau — bestehende
+    # Entitäten und ihre Langzeitstatistik bleiben unberührt.
+    from backend.models.investition import Investition
+    from backend.models.strompreis import Strompreis
+    from sqlalchemy import select
+
+    inv_result = await db.execute(
+        select(Investition).where(Investition.anlage_id == anlage.id)
+    )
+    investitionen = list(inv_result.scalars().all())
+    if investitionen:
+        preis_result = await db.execute(
+            select(Strompreis)
+            .where(Strompreis.anlage_id == anlage.id)
+            .order_by(Strompreis.gueltig_ab.desc())
+            .limit(1)
+        )
+        strompreis = preis_result.scalar_one_or_none()
+        emob_ctx = await _load_emob_pool_ctx(db, investitionen)
+
+        from backend.services.betriebsmodus_live import lade_betriebsmodus_live
+        modus_map = await lade_betriebsmodus_live(db, anlage)
+
+        for inv in investitionen:
+            inv_values = await calculate_investition_sensors(
+                db, inv, strompreis, emob_ctx, modus_map
+            )
+            if not inv_values:
+                continue
+            inv_result_pub = await client.publish_all_sensors(
+                inv_values, anlage.id, anlage.anlagenname, inv.id, inv.bezeichnung
+            )
+            for schluessel in ("total", "success", "failed"):
+                gesamt[schluessel] = gesamt.get(schluessel, 0) + inv_result_pub.get(schluessel, 0)
+            # Fehlergründe bleiben eine Stichprobe (wie im Anlagen-Zweig) —
+            # ein Log, das jeden Fehler einzeln nennt, ist bei 100 Sensoren
+            # keins mehr.
+            for fehler in inv_result_pub.get("errors", []):
+                if len(gesamt.setdefault("errors", [])) < 3:
+                    gesamt["errors"].append(fehler)
+
     return {
         "available": True,
         "no_data": False,
-        "total": result.get("total", len(sensor_values)),
-        "success": result.get("success", 0),
-        "failed": result.get("failed", 0),
-        "errors": result.get("errors", []),
+        "total": gesamt.get("total", len(sensor_values)),
+        "success": gesamt.get("success", 0),
+        "failed": gesamt.get("failed", 0),
+        "errors": gesamt.get("errors", []),
     }
 
 

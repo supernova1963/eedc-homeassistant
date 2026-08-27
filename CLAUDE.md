@@ -174,6 +174,8 @@ Die Soll-Zahlen (pytest/Vitest) stehen **nicht hier**, sondern im laufenden Mast
 
 **`check:chart-audit`** (35 s) braucht dieselbe Box. Er ist an kein Auslöser-Muster gebunden — wer ihn nicht fährt, sagt das ausdrücklich.
 
+> ✅ **Seit 27.08. verweigern BEIDE Laufzeit-Gates die falsche Box** (geteilter Vorflug, `scripts/demo-box-vorflug.mjs`): fehlt der Demo-Schalter oder ist die Box nicht erreichbar, brechen sie mit Exit 1 ab statt grün zu melden. Vorher meldete `chart-audit` gegen ein Bundle **ohne** `VITE_DEMO_DEFAULT` **37 statt 44 Charts — und Exit 0**. ⚠ **Exit-Codes nie durch eine Pipe messen**: `| tail` liefert den Exit-Code von `tail`, und genau so entstand die Fehlmessung, die diesen Bau ausgelöst hat.
+
 > ⚠ **Hier stand bis 2026-08-14: „danach zwingend `git checkout -- eedc/frontend/dist/` — `dist/` ist versioniert."** **Das gilt nicht mehr** (Fund **N-246**, ausgeliefert mit v4.0.15): `eedc/frontend/dist` ist **nicht mehr versioniert**, weil beide Dockerfiles das Frontend in einer eigenen Stage bauen. Der Schutz gegen einen eingecheckten Demo-Build sitzt jetzt in `release.sh::pruefe_nichts_uebrig`. Ein sauberer Baum heißt seither wirklich sauber — nicht „sauber bis auf `dist/`".
 
 ### Release-Workflow (ein Script für alles!)

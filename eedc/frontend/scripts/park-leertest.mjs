@@ -23,6 +23,7 @@
  *   npm run check:park-leertest                            # gegen :8200
  */
 import { chromium } from 'playwright-core'
+import { pruefeDemoBox } from './demo-box-vorflug.mjs'
 
 const CHROME = process.env.PLAYWRIGHT_CHROMIUM
   || '/home/gernot/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome'
@@ -87,38 +88,10 @@ const findeLeer = leerDetektor()
 
 const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] })
 
-// Vorflug (N-318): Der Lauf prüft ZUERST seine eigene Voraussetzung. Merkmal ist der
-// Demo-Schalter der Statusfußzeile; er rendert nur unter `isDebug` (= `VITE_DEMO_DEFAULT`,
-// oder `?debug`, das dieser Lauf nicht setzt). An allen vier Kombinationen gemessen (23.08.):
-// er ist genau dann da, wenn die Box eine v4-Sicht MIT Daten zeigt.
-//   • `dist` ohne das Flag        → Schalter fehlt  (gemessen)
-//   • Box ohne Demo-Datenbank     → Einrichtungs-Assistent statt v4-Sicht, Schalter fehlt (gemessen)
-//   • beides in Ordnung           → Schalter da und aktiv (gemessen)
-// ⚠ Er unterscheidet die beiden Ursachen NICHT — die Meldung nennt deshalb beide, statt eine
-// zu behaupten. Eine erste Fassung behauptete „dist ohne Flag" und lag bei der leeren Box
-// daneben; die Gegenprobe hat es gezeigt. Dieselbe Bauform wie die `aria-label`-Griffe oben
-// im Skript — kein zusätzliches Produkt-Markup nötig.
-{
-  const vorflug = await browser.newContext({ viewport: { width: 1400, height: 900 } })
-  const p0 = await vorflug.newPage()
-  await p0.goto(BASE + '/', { waitUntil: 'networkidle' })
-  await p0.waitForTimeout(2000)
-  const demo = await p0.evaluate(() => {
-    const b = document.querySelector('button[title="Demo-Daten (Dev-Affordance) global ein/aus"]')
-    return { da: !!b, an: b?.getAttribute('aria-pressed') === 'true' }
-  })
-  await vorflug.close()
-  if (!demo.da || !demo.an) {
-    await browser.close()
-    console.error('park-leertest — VORAUSSETZUNG VERLETZT: diese Box zeigt keine v4-Sicht mit')
-    console.error('Daten. Dieser Lauf würde weniger messen, als er zu messen meint, und darf')
-    console.error('deshalb nicht grün melden. Zwei mögliche Ursachen, beide sind zu prüfen:')
-    console.error('  1. `dist` ohne Demo-Flag →  VITE_DEMO_DEFAULT=true npm run build')
-    console.error('  2. Box ohne Demo-Datenbank → DATABASE_URL=…/devbox-r27-demo.db (Runbook)')
-    console.error(`  Gemessen: Demo-Schalter vorhanden=${demo.da}, aktiv=${demo.an}`)
-    process.exit(1)
-  }
-}
+// Vorflug: der Lauf prüft ZUERST seine eigene Voraussetzung (N-318). Die Prüfung selbst
+// steht seit dem 27.08. in `demo-box-vorflug.mjs` — sie ist mit `chart-audit` geteilt,
+// weil eine zweimal formulierte Zusicherung genau die Drift ist, die dort gefunden wurde.
+await pruefeDemoBox(browser, BASE, 'park-leertest')
 
 let fehlerGesamt = 0
 let gemessenGesamt = 0
