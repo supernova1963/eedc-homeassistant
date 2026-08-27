@@ -106,6 +106,36 @@ niedriger als Heizen, weil es auf eine höhere Temperatur gebracht werden muss.
 Wer viel Warmwasser macht, hat deshalb eine niedrigere Gesamtzahl — **ohne dass
 seine Anlage schlechter wäre**. Genau das zeigen erst die getrennten Zahlen.
 
+**Wer per MQTT misst, hat jetzt auch Zähler**
+
+Ein Tester meldete: Der Daten-Check verlangte einen Zähler für die PV-Ladung
+seiner Wallbox — obwohl über genau dieses Feld **1.286 kWh** gelaufen waren.
+
+**Für eedc hieß „Zähler zugeordnet" bis jetzt „Home-Assistant-Sensor
+zugeordnet".** Wer seine Werte per MQTT schickt — der Normalfall im
+Standalone-Betrieb ohne Home Assistant — hat gar keinen Sensor zuzuordnen. Genau
+das war die Lücke, und sie hatte zwei Seiten:
+
+Der **Daten-Check** vermisste Zähler, die längst lieferten — bis hin zu „Kein
+Basis-Zähler für: Einspeisung, Netzbezug" bei Anlagen, die vollständig messen.
+Abstellen ließ sich der Hinweis nicht: Der „Beheben"-Knopf führte in ein
+Formular, in dem es das Feld gar nicht gibt.
+
+Und was **niemand gemeldet hatte**: In *Cockpit → Tag* blieben dieselben Werte
+**wirklich leer** — Wärmemenge, getrennter Heiz- und Warmwasserstrom, Netzladung
+des Speichers, PV-Anteil der Ladung, Kompressor-Starts. Die Zählerstände standen
+in der Datenbank und wurden nie gelesen.
+
+**Ab jetzt zählt der Messwert, nicht die Zuordnungsform.** Ein Feld trägt einen
+Zähler, wenn ihm ein Home-Assistant-Sensor zugeordnet ist **oder** wenn dafür
+Werte per MQTT ankommen. Hast du irgendwo „Keine" gewählt, bleibt das deine
+Absage — daran ändert sich nichts.
+
+**Was du siehst:** Die Hinweise verschwinden, und *Cockpit → Tag* füllt sich mit
+Zahlen, die vorher auf „—" standen. **Bleibt ein Hinweis stehen, ist er ab jetzt
+echt** — dann kommt auf diesem Topic seit über einer Woche nichts mehr an, und
+das ist einen Blick wert.
+
 **Ein Tag hat wieder 24 Stunden**
 
 Unter *Cockpit → Tag* stand bei einem Tester **„Modus erfasst: 36 Stunden"**.

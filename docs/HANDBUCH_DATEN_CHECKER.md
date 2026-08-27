@@ -410,6 +410,34 @@ Ein Monat besteht in eedc aus zwei Teilen: der **Zählerzeile** der Anlage (Eins
 | **N von M Komponenten ohne vollständige kWh-Zähler-Abdeckung** | ⚠️ WARNING | Mindestens eine aktive Komponente hat nicht alle erwarteten kWh-Zähler zugeordnet. Details listen die betroffenen Komponenten und fehlenden Felder. Folgen für diese Komponenten: Prognose-IST, Lernfaktor und Monatsauswertungen bleiben leer. **Nicht gemeldet wird ein Balkonkraftwerk, an dem PV-Module hängen** — dann tragen die Module die Erzeugung, gemessen wird am Modul, und der Checker sagt das mit einer eigenen OK-Zeile („N Balkonkraftwerk(e) über die zugeordneten PV-Module gedeckt“). Ein BKW **ohne** Modul-Kinder braucht weiterhin seinen eigenen Zähler. | Einstellungen → Datenquellen öffnen, pro Komponente die fehlenden Zähler zuordnen. Bei Speichern: beide Felder (`ladung_kwh` + `entladung_kwh`) sind nötig. |
 | **N Komponente(n) ohne Zusatz-Zähler für Tageswerte** | ℹ️ INFO | Betrifft **zusätzliche** Messstellen, nicht die Abdeckung oben: Wärmepumpe `heizenergie_kwh` / `warmwasser_kwh` (Wärmemengenzähler) sowie `ladung_pv_kwh` an Wallbox bzw. E-Auto. Ohne sie bleiben genau diese Werte in *Cockpit → Tag* auf „—"; die **Monats**auswertungen sind nicht betroffen, dort lassen sich die Werte von Hand pflegen. Bewusst INFO — solche Zähler hat längst nicht jede Anlage. | Wenn vorhanden: Einstellungen → Datenquellen → das jeweilige kWh-Feld zuordnen. Sonst nichts zu tun. |
 
+> ### ⭐ Was hier „zugeordnet" heißt — seit v4.0.29 auch MQTT
+>
+> Alle drei Befunde oben stellen dieselbe Frage: *Trägt dieses Feld einen
+> kumulativen Zähler?* Bis v4.0.28 hieß die Antwort darauf **„gibt es dafür
+> einen Home-Assistant-Sensor?"** — und wer seine Werte per **MQTT** schickt,
+> hat gar keinen Sensor zuzuordnen. Er bekam alle drei Meldungen zu Unrecht,
+> ohne sie abstellen zu können: Der „Beheben"-Knopf führte in ein Formular, in
+> dem das Feld nicht vorkommt.
+>
+> **Seit v4.0.29 trägt ein Feld einen Zähler, wenn**
+>
+> 1. ihm ein **Home-Assistant-Sensor** zugeordnet ist, **oder**
+> 2. dafür **Zählerstände per MQTT ankommen**.
+>
+> Hast du für ein Feld ausdrücklich **„Keine"** gewählt, bleibt das deine
+> Absage — sie schlägt beides.
+>
+> ⚠ **Entscheidend ist der Messwert, nicht der Eintrag.** Ein Feld, das auf
+> *MQTT-Inbound* steht, weil eedc das beim Einrichten als Grundeinstellung
+> gesetzt hat, gilt **nicht** automatisch als versorgt — sonst würde diese
+> Prüfung bei jeder Anlage schweigen, auch bei der, die gar nichts misst. eedc
+> sieht nach, ob auf dem Topic tatsächlich etwas angekommen ist.
+>
+> ⚠ **Das Fenster ist eine Woche.** Bleibt einer der Befunde stehen, obwohl du
+> per MQTT publizierst, heißt das: **Auf diesem Topic kam seit über sieben
+> Tagen nichts an.** Dann ist die Meldung richtig und einen Blick wert — prüfe
+> deinen Publisher, nicht die Zuordnung.
+
 > **Ein „—" in *Cockpit → Tag* sagt seit v4.0.29 selbst, woran es liegt** — und das ist mehr als dieser Befund abdeckt. Drei Lagen führen dorthin, und nur die erste ist eine Aufgabe für dich: *Kein Zähler zugeordnet* · *Zähler zugeordnet, aber für diesen Tag liegen keine Zählerstände vor* · *Der Zähler ist an diesem Tag zurückgesprungen*. Der Grund steht sichtbar unter der Zahl.
 >
 > ⚠ **Der mittlere Fall ist der Regelfall kurz nach einer Zuordnung und keine Fehlfunktion:** Der **Monats**wert steht da, weil er aus der Langzeitstatistik von Home Assistant kommt — **Tages**werte entstehen erst ab dem Zeitpunkt der Zuordnung. Frühere Tage lassen sich über die Reparatur-Werkbank nachrechnen. Bis v4.0.28 stand an dieser Stelle unterschiedslos *„Sensor zuordnen"*, auch wenn er zugeordnet war; ein Melder hat daraufhin zu Recht gefragt, was die Anzeige ihm sagen will.

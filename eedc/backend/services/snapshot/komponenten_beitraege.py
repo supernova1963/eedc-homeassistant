@@ -179,6 +179,7 @@ def basis_beitraege(
     sensor_mapping: dict,
     *,
     pv_je_investition_extern: bool = False,
+    ist_verfuegbar: Optional[Callable[[str], bool]] = None,
 ) -> list[KomponentenBeitrag]:
     """Basis-Zähler aus dem `basis`-Mapping (`BASIS_ZAEHLER_FELDER`).
 
@@ -212,15 +213,23 @@ def basis_beitraege(
         pv_je_investition_extern: True, wenn der Aufrufer aus einer Quelle
             **außerhalb** des Mappings weiß, dass ein Erzeuger seinen eigenen
             PV-Zähler hat (MQTT-Topics). Siehe `pv_je_investition_belegt`.
+        ist_verfuegbar: optionales Verfügbarkeits-Prädikat `feld -> bool`,
+            symmetrisch zu `investition_beitraege`. Default (None) = HA-Sensor-
+            Mapping. Der Tagespfad reicht seit N-328b „HA-Sensor **oder**
+            MQTT-Zählerstände" durch (`keys.feld_hat_zaehler`) — ohne das blieb
+            die Basis einer reinen MQTT-Anlage in *Cockpit → Tag* leer,
+            während der Stundenpfad sie längst füllte.
     """
     beitraege: list[KomponentenBeitrag] = []
     basis = (sensor_mapping or {}).get("basis", {}) or {}
+    if ist_verfuegbar is None:
+        def ist_verfuegbar(feld: str) -> bool:
+            return _is_sensor_mapping(basis.get(feld))
     pv_verdraengt = pv_je_investition_extern or pv_je_investition_belegt(sensor_mapping)
     for feld in BASIS_ZAEHLER_FELDER:
         if feld == "pv_gesamt" and pv_verdraengt:
             continue
-        cfg = basis.get(feld)
-        if _is_sensor_mapping(cfg):
+        if ist_verfuegbar(feld):
             beitraege.append(KomponentenBeitrag(feld=feld, target_key=feld))
     return beitraege
 

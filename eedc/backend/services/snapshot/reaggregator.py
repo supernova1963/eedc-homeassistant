@@ -20,16 +20,16 @@ from sqlalchemy import and_, select, func as _sql_func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.sensor_snapshot import SensorSnapshot
-from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
 from backend.services.ha_statistics_service import get_ha_statistics_service
 
 from backend.services.snapshot.keys import (
     KUMULATIVE_COUNTER_FELDER,
-    _mqtt_key_to_sensor_key,
     extract_quellen_energy,
+    feld_hat_zaehler,
     ist_stand_sensor_key,
     resolve_energy_ha_eid,
 )
+from backend.services.snapshot.reader import MQTT_AKTIV_TAGE, mqtt_zaehler_keys
 from backend.services.snapshot.komponenten_beitraege import (
     basis_hourly_eintraege,
     investition_hourly_eintraege,
@@ -106,22 +106,10 @@ async def get_reaggregate_preview(
     # bevor der Basis-Eintrag entsteht — sonst zeigt die Vorschau bei gemischter
     # Installation Aggregat UND Einzelzähler. Nur geholt, nicht verarbeitet;
     # die `seen_keys`-Vorrangreihenfolge unten bleibt unverändert.
-    cutoff = datetime.now() - timedelta(days=7)
-    mqtt_keys_result = await db.execute(
-        select(MqttEnergySnapshot.energy_key)
-        .where(
-            and_(
-                MqttEnergySnapshot.anlage_id == anlage.id,
-                MqttEnergySnapshot.timestamp >= cutoff,
-            )
-        )
-        .distinct()
+    cutoff = datetime.now() - timedelta(days=MQTT_AKTIV_TAGE)
+    mqtt_sks_alle: list[str] = sorted(
+        await mqtt_zaehler_keys(db, anlage.id, seit=cutoff)
     )
-    mqtt_sks_alle: list[str] = []
-    for (mqtt_key,) in mqtt_keys_result.all():
-        sk = _mqtt_key_to_sensor_key(mqtt_key)
-        if sk:
-            mqtt_sks_alle.append(sk)
     pv_extern = pv_je_investition_in_sensor_keys(mqtt_sks_alle)
 
     basis = sensor_mapping.get("basis", {}) or {}
@@ -316,24 +304,28 @@ async def get_reaggregate_preview(
         )
         return r.scalar_one_or_none()
 
-    for inv_id_str, inv_data in investitionen_map.items():
-        if not isinstance(inv_data, dict):
-            continue
-        inv = investitionen_by_id.get(inv_id_str) or investitionen_by_id.get(str(inv_id_str))
+    # N-328b: auch hier zählte bis zum 27.08. nur ein HA-Sensor als Zähler. Die
+    # „alt"-Spalte liest den SensorSnapshot per `sensor_key` und ist damit
+    # quellen-agnostisch — sie blieb für einen MQTT-Anwender trotzdem leer, weil
+    # sein Feld gar nicht erst aufgezählt wurde. Die „neu"-Projektion bleibt
+    # HA-only und sagt das selbst (`resolve_energy_ha_eid` → `behalten=False`).
+    for inv_id_str, inv in investitionen_by_id.items():
         if inv is None:
             continue
+        inv_id_str = str(inv_id_str)
         counter_felder = KUMULATIVE_COUNTER_FELDER.get(inv.typ, ())
         if not counter_felder:
             continue
-        felder = inv_data.get("felder", {}) or {}
+        inv_data = investitionen_map.get(inv_id_str)
+        felder = (inv_data.get("felder", {}) or {}) if isinstance(inv_data, dict) else {}
         for feld in counter_felder:
             config = felder.get(feld)
-            if not isinstance(config, dict) or config.get("strategie") != "sensor":
-                continue
-            entity_id = config.get("sensor_id")
-            if not entity_id:
-                continue
             sensor_key = f"inv:{inv_id_str}:{feld}"
+            if not feld_hat_zaehler(
+                config, sensor_key, quellen_energy, set(mqtt_sks_alle)
+            ):
+                continue
+            entity_id = config.get("sensor_id") if isinstance(config, dict) else None
 
             alt_start = await _db_snap_at(sensor_key, tag_0)
             alt_ende = await _db_snap_at(sensor_key, tag_ende)

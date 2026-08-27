@@ -12,6 +12,7 @@ from sqlalchemy import select
 
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
+from backend.services.snapshot.keys import extract_quellen_energy, feld_hat_zaehler
 from backend.services.snapshot.komponenten_beitraege import pv_je_investition_belegt
 from backend.utils.investition_filter import sort_investitionen_nach_typ
 from backend.core.investition_parameter import (
@@ -85,7 +86,10 @@ class EnergieprofilChecks:
     # ─── Energieprofil-Abdeckung (Issue #135) ────────────────────────────
 
     def _check_energieprofil_abdeckung(
-        self, anlage: Anlage, monatsdaten: Optional[list[Monatsdaten]] = None
+        self,
+        anlage: Anlage,
+        monatsdaten: Optional[list[Monatsdaten]] = None,
+        mqtt_zaehler: Optional[set[str]] = None,
     ) -> list[CheckErgebnis]:
         """
         Prüft welche kumulativen kWh-Zähler im sensor_mapping gesetzt sind.
@@ -101,6 +105,32 @@ class EnergieprofilChecks:
         Abdeckung als erfüllt — OK mit Quellen-Hinweis statt WARNING. Logik pro
         Komponente: (1) Sensor-Mapping → OK(Sensor), (2) sonst manuelle
         Datenquelle → OK(Quelle), (3) sonst → WARNING.
+
+        **Achse MQTT (N-328, #396 gruaGit).** „Zähler zugeordnet" hieß hier bis
+        zum 27.08. ausschließlich „HA-Sensor zugeordnet". Wer per MQTT misst,
+        hat gar keinen `sensor_mapping`-Eintrag — `datenquellen.py:1332` räumt
+        ihn ausdrücklich weg („Inbound = Grundeinstellung → kein Eintrag
+        nötig") —, und alle drei Meldungen dieser Prüfung waren für ihn
+        **falsch**, ohne abstellbar zu sein: Der Beheben-Knopf führte in ein
+        Formular ohne dieses Feld.
+
+        ⭐ **Dieselbe Klasse war schon gelöst, und derselbe Melder hatte sie
+        gemeldet:** `datenquelle.py:1180` liest seit #389 beide Ablagen und sagt
+        wörtlich, warum. Dieses Modul hatte den Sweep verpasst.
+
+        Args:
+            mqtt_zaehler: `sensor_key`s mit **angekommenen** MQTT-Zählerständen
+                (`snapshot/reader.mqtt_zaehler_keys`, Fenster `MQTT_AKTIV_TAGE`).
+                Der Aufrufer erhebt sie mit **einer** Abfrage. ``None`` ⇒ nur
+                HA-Sensoren zählen (das Verhalten vor N-328).
+
+                ⛔ **Warum nicht der `quellen`-Eintrag selbst genügt:** Die
+                B8-1-Materialisierung stempelt `mqtt_inbound_standard` auf
+                **jedes** unzugeordnete Feld, ohne MQTT je zu prüfen. Am 27.08.
+                gemessen: 31 Felder, 31-mal Inbound, auf einer Anlage ohne eine
+                einzige MQTT-Nachricht. Der Eintrag allein hätte diese Prüfung
+                auf jeder Bestandsanlage verstummen lassen — s.
+                `snapshot/keys.feld_hat_zaehler`.
         """
         ergebnisse: list[CheckErgebnis] = []
         kat = CheckKategorie.ENERGIEPROFIL_ABDECKUNG
@@ -118,16 +148,26 @@ class EnergieprofilChecks:
                 manuelle_quelle = label
                 break
 
-        def _has_zaehler(config: Optional[dict]) -> bool:
-            if not isinstance(config, dict):
-                return False
-            return config.get("strategie") == "sensor" and bool(config.get("sensor_id"))
+        # N-328: EINE Antwort für alle Frager — HA-Sensor ODER angekommene
+        # MQTT-Zählerstände, „keine" schlägt beides.
+        quellen_energy = extract_quellen_energy(anlage)
+
+        def _basis_zaehler(feld: str) -> bool:
+            return feld_hat_zaehler(
+                basis.get(feld), f"basis:{feld}", quellen_energy, mqtt_zaehler,
+            )
+
+        def _inv_zaehler(inv_id, feld: str) -> bool:
+            felder = ((inv_map.get(str(inv_id), {}) or {}).get("felder", {}) or {})
+            return feld_hat_zaehler(
+                felder.get(feld), f"inv:{inv_id}:{feld}", quellen_energy, mqtt_zaehler,
+            )
 
         # Basis: Einspeisung + Netzbezug
         fehlende_basis: list[str] = []
-        if not _has_zaehler(basis.get("einspeisung")):
+        if not _basis_zaehler("einspeisung"):
             fehlende_basis.append("Einspeisung")
-        if not _has_zaehler(basis.get("netzbezug")):
+        if not _basis_zaehler("netzbezug"):
             fehlende_basis.append("Netzbezug")
 
         if fehlende_basis and manuelle_quelle:
@@ -234,7 +274,7 @@ class EnergieprofilChecks:
         # erneut: die Datenquellen-Fläche meldete „vollständig", der Checker
         # „Komponente ohne Abdeckung" — genau der F-7-Befund, nur seitenverkehrt.
         pv_aggregat_deckt = (
-            _has_zaehler(basis.get("pv_gesamt"))
+            _basis_zaehler("pv_gesamt")
             and not pv_je_investition_belegt(sensor_mapping)
         )
 
@@ -249,9 +289,7 @@ class EnergieprofilChecks:
         wallbox_deckt_eauto_ladung = any(
             w.typ == "wallbox"
             and w.ist_aktiv_an(heute)
-            and _has_zaehler(
-                ((inv_map.get(str(w.id), {}) or {}).get("felder", {}) or {}).get("ladung_kwh")
-            )
+            and _inv_zaehler(w.id, "ladung_kwh")
             for w in anlage.investitionen
         )
 
@@ -345,12 +383,10 @@ class EnergieprofilChecks:
                 if ist_luft_luft_waermepumpe(inv):
                     erwartet = [["strom_heizen_kwh"]]
 
-            inv_data = inv_map.get(str(inv.id), {}) or {}
-            felder = inv_data.get("felder", {}) or {}
             fehlend = [
                 " oder ".join(alts)
                 for alts in erwartet
-                if not any(_has_zaehler(felder.get(f)) for f in alts)
+                if not any(_inv_zaehler(inv.id, f) for f in alts)
             ]
 
             if not fehlend:
@@ -442,7 +478,7 @@ class EnergieprofilChecks:
             ))
 
         ergebnisse.extend(
-            self._check_tages_zusatzfelder(anlage, inv_map, _has_zaehler, heute)
+            self._check_tages_zusatzfelder(anlage, _inv_zaehler, heute)
         )
 
         return ergebnisse
@@ -463,9 +499,18 @@ class EnergieprofilChecks:
     }
 
     def _check_tages_zusatzfelder(
-        self, anlage: Anlage, inv_map: dict, has_zaehler, heute: date,
+        self, anlage: Anlage, inv_zaehler, heute: date,
     ) -> list[CheckErgebnis]:
-        """INFO über Zusatz-Zähler, deren Tageswerte sonst leer bleiben (DOK-9)."""
+        """INFO über Zusatz-Zähler, deren Tageswerte sonst leer bleiben (DOK-9).
+
+        Args:
+            inv_zaehler: `(inv_id, feld) -> bool` aus
+                `_check_energieprofil_abdeckung` — beantwortet die Zählerfrage
+                für **beide** Ablagen (N-328). Die Prüfung bekam bis zum 27.08.
+                `inv_map` und einen Prüfer, der nur HA-Sensoren kannte; genau
+                sie hat gruaGit „Offen: go-e Charger, Ladung PV" gemeldet,
+                während über das Feld 1286,62 kWh liefen.
+        """
         # Deckt eine Wallbox die Heimladung ab, ist die PV-Ladung am E-Auto
         # redundant — dieselbe Regel wie `bedingung_anlage: "keine_wallbox"`
         # in `core/field_definitions.py` und wie oben bei `ladung_kwh`.
@@ -489,8 +534,9 @@ class EnergieprofilChecks:
             # Monatsdaten-Prüfung die Klima längst aus.
             if inv.typ == "waermepumpe" and ist_luft_luft_waermepumpe(inv):
                 continue
-            felder = (inv_map.get(str(inv.id), {}) or {}).get("felder", {}) or {}
-            fehlend = [label for feld, label in zusatz if not has_zaehler(felder.get(feld))]
+            fehlend = [
+                label for feld, label in zusatz if not inv_zaehler(inv.id, feld)
+            ]
             if fehlend:
                 offen.append(f"{inv.bezeichnung}: {', '.join(fehlend)}")
 

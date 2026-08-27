@@ -51,6 +51,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Fixed
 
+- **„Kein Zähler zugeordnet" — obwohl 1.286 kWh über das Feld liefen.** Gemeldet von **gruaGit** (Discussion #396): *„Ist die Meldung hier ganz unten ‚Offen: go-e Charger, Ladung PV' evtl. auch noch fälschlicherweise vorhanden? Tatsächlich existiert dafür ja ein Wert."*
+
+  **Er hatte recht, und es war mehr als eine falsche Meldung.** Für eedc hieß „Zähler zugeordnet" bis jetzt „**Home-Assistant-Sensor** zugeordnet". Wer seine Werte per MQTT schickt — der Normalfall im Standalone-Betrieb ohne Home Assistant — hat gar keinen Sensor zuzuordnen, und genau das war die Lücke:
+
+  - Der **Daten-Check** vermisste Zähler, die längst liefern — bis hin zu *„Kein Basis-Zähler für: Einspeisung, Netzbezug"* bei Anlagen, die vollständig messen. Der Hinweis war nicht abstellbar: Der „Beheben"-Knopf führte in ein Formular, in dem es das Feld gar nicht gibt.
+  - **Schlimmer, und bisher nicht gemeldet:** In *Cockpit → Tag* blieben dieselben Werte **wirklich leer** — Wärmemenge, getrennter Heiz-/Warmwasserstrom, Netzladung des Speichers, PV-Anteil der Ladung, Kompressor-Starts. Die Zählerstände standen in der Datenbank und wurden nie gelesen. Auch die Tages-Summe je Komponente und die Lebensdauer-Kacheln im Wärmepumpen-Dashboard waren betroffen.
+
+  **Ab jetzt zählt der Messwert, nicht die Zuordnungsform.** Ein Feld trägt einen Zähler, wenn ihm ein Home-Assistant-Sensor zugeordnet ist **oder** wenn dafür Zählerstände per MQTT ankommen. Wer „Keine" gewählt hat, behält seine Absage.
+
+  **Was du siehst:** Die drei Hinweise verschwinden, wenn deine Werte ankommen — und *Cockpit → Tag* füllt sich mit Zahlen, die vorher auf „—" standen. Bleibt ein Hinweis stehen, ist er ab jetzt echt: Dann kommt auf diesem Topic seit über einer Woche nichts an.
+
+  **Und was der Grund unter einem „—" jetzt sagt:** Wer per MQTT misst, bekam bis jetzt den Rat *„Sensor zuordnen"* — für ihn ein Weg ins Leere. Jetzt steht dort, was wirklich fehlt: dass für diesen Tag keine Zählerstände vorliegen.
+
 - **Ein Tag mit 36 Stunden.** Gemeldet von **dietmar1968** (Forum simon42 #89667): *„Ich verstehe beim Vorhandensein folgender Sensoren jene Anzeige nicht."* Unter *Cockpit → Tag* stand bei ihm **„Modus erfasst: 36 Stunden"**. Ein Tag hat 24.
 
   **Ursache:** Wer mehrere Wärmepumpen oder Klimaanlagen hat, deren Betriebsart eedc mitliest, bekam die erfassten Stunden **aller Geräte zusammengezählt**. Zwei Geräte, die dieselben 18 Stunden liefen, ergaben 36. **Kilowattstunden darf man über Geräte addieren, Stunden nicht** — sie beschreiben denselben Zeitraum. Im Monat fiel es nicht auf: Dort standen 372 von 624 möglichen Stunden, plausibel genug, um lange unbemerkt zu bleiben.

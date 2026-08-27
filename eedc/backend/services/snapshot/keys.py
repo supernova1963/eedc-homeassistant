@@ -253,6 +253,72 @@ def extract_quellen_energy(anlage) -> dict[str, tuple[Optional[str], Optional[st
     return out
 
 
+def feld_hat_zaehler(
+    config: Optional[dict],
+    sensor_key: str,
+    quellen_energy: dict[str, tuple[Optional[str], Optional[str]]],
+    mqtt_keys: Optional[set[str]] = None,
+) -> bool:
+    """Trägt dieses Feld einen kumulativen Zähler — egal über welchen Weg?
+
+    **Die eine Antwort für alle Frager** (N-328/N-328b, #396 gruaGit): Der
+    Daten-Checker, der Tages-Aggregator, der Stunden-Aggregator, der
+    Live-Counter-Read und die Reload-Vorschau haben dieselbe Frage bis zum
+    26.08. jeweils selbst beantwortet — und alle fünf mit derselben zu engen
+    Annahme `strategie == "sensor"`, also „nur ein HA-Sensor ist ein Zähler".
+
+    **Die Regel, in zwei Tatsachen und einer Absage:**
+
+    1. Dem Feld ist ein **HA-Sensor** zugeordnet (klassische `felder`-Struktur)
+       → Zähler.
+    2. Für seinen `sensor_key` sind **MQTT-Zählerstände angekommen** → Zähler.
+    3. Die Quelle ist ausdrücklich ``"keine"`` → **kein** Zähler, egal was
+       sonst vorliegt. Eine Absage des Anwenders schlägt jede Evidenz (§2d).
+
+    ⛔ **Warum NICHT „ein `quellen`-Eintrag genügt".** Das war der erste
+    Entwurf, und er hätte den Checker auf **jeder Bestandsanlage** verstummen
+    lassen: `migrations/migrate_datenquellen_materialisieren.py:99` stempelt
+    beim einmaligen Start-Lauf ``{"quelle": "mqtt_inbound_standard"}`` auf
+    **jedes** Feld ohne HA-Sensor und ohne Gateway-Zeile — konservativ und
+    bewusst (Entscheid 2026-07-15), aber eben ohne MQTT je zu prüfen. Gemessen
+    am 27.08. an einer frisch angelegten Anlage, die nie MQTT gesehen hat:
+    31 Felder, 31-mal ``mqtt_inbound_standard``, darunter genau das Feld des
+    Melders. *Ein Stempel und eine Wahl sehen im Store bitgleich aus — deshalb
+    entscheidet hier der Messwert, nicht der Eintrag.*
+
+    ⭐ Damit folgt das Lesen derselben Unterscheidung, die das **Schreiben**
+    längst trifft: `datenquellen_resolver.resolve_effektive_quelle` schreibt
+    Inbound nur bei tatsächlichem Wert fest, stummes Inbound gar nicht.
+
+    **Gateway braucht keinen Sonderfall:** Der Gateway-Dienst re-publiziert auf
+    dasselbe Inbound-Topic, der Wert landet im selben Cache und damit in
+    `mqtt_keys`. Ein *stummes* Gateway-Mapping soll melden — so steht es
+    wörtlich in `datenquellen_resolver.erwartet_inbound_topic`.
+
+    Args:
+        config: Der `felder[feld]`- bzw. `basis[feld]`-Eintrag des klassischen
+            `sensor_mapping` — oder None, wenn es keinen gibt (der Regelfall
+            auf einer reinen MQTT-Anlage, s. `datenquellen_mapping_sync`).
+        sensor_key: `basis:<feld>` bzw. `inv:<id>:<feld>`.
+        quellen_energy: `extract_quellen_energy(anlage)`.
+        mqtt_keys: sensor_keys mit MQTT-Zählerständen
+            (`reader.mqtt_zaehler_keys`). None/leer ⇒ nur Weg 1 kann greifen.
+
+    Returns:
+        True, wenn das Feld einen kumulativen Zähler trägt.
+    """
+    quelle = (quellen_energy.get(sensor_key) or (None, None))[0]
+    if quelle == QUELLE_KEINE_ENERGY:
+        return False
+    if (
+        isinstance(config, dict)
+        and config.get("strategie") == "sensor"
+        and config.get("sensor_id")
+    ):
+        return True
+    return bool(mqtt_keys) and sensor_key in mqtt_keys
+
+
 def resolve_energy_snapshot_eid(
     quellen_energy: dict[str, tuple[Optional[str], Optional[str]]],
     sensor_key: str,

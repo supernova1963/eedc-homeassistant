@@ -13,6 +13,7 @@ Instanz-State — der Split erfolgt über Mixin-Klassen je Themenfeld. Dieses
 funktioniert (einziger Consumer: api/routes/daten_checker.py).
 """
 
+from datetime import datetime, timedelta
 from typing import Optional
 
 from sqlalchemy import select
@@ -22,6 +23,7 @@ from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition
 from backend.services.prognose_auswahl import lade_aktive_prognose
+from backend.services.snapshot.reader import MQTT_AKTIV_TAGE, mqtt_zaehler_keys
 
 from .kategorien import (
     CheckSeverity,
@@ -107,7 +109,16 @@ class DatenChecker(
         ergebnisse.extend(await self._check_monatsdaten_plausibilitaet(
             anlage, monatsdaten, pvgis_prognose, pv_erzeugung_map, pvgis_monat_map, pr, pr_count
         ))
-        ergebnisse.extend(self._check_energieprofil_abdeckung(anlage, monatsdaten))
+        # N-328: Welche Felder bekommen ihre Zählerstände per MQTT? EINE Abfrage
+        # für die ganze Abdeckungs-Prüfung. Fenster = aktive Topics: ein Topic,
+        # das seit Wochen schweigt, ist eine echte Lücke und soll gemeldet werden.
+        mqtt_zaehler = await mqtt_zaehler_keys(
+            self.db, anlage_id,
+            seit=datetime.now() - timedelta(days=MQTT_AKTIV_TAGE),
+        )
+        ergebnisse.extend(
+            self._check_energieprofil_abdeckung(anlage, monatsdaten, mqtt_zaehler)
+        )
         ergebnisse.extend(await self._check_energieprofil_plausibilitaet(anlage))
         ergebnisse.extend(await self._check_mqtt_topic_abdeckung(anlage))
         ergebnisse.extend(await self._check_sensor_mapping_lts(anlage))
