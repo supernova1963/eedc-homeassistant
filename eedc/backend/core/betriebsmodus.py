@@ -452,3 +452,57 @@ def betriebsmodus_klartext(zustand: Optional[str]) -> Optional[str]:
     # Wächter `test_jeder_kanon_wert_hat_ein_label` — hier knallt sie dann
     # sichtbar statt still ein falsches Wort anzuzeigen.
     return BETRIEBSMODUS_LABEL[kanon]
+
+
+#: Der Feld-Key der Modus-Zuordnung — mit Innengeräte-Liste heißt er
+#: `betriebsmodus-3`, deshalb wird überall über `basis_feld_key` verglichen.
+MODUS_FELD_KEY: Final[str] = "betriebsmodus"
+
+
+def modus_quelle(live: Optional[dict]) -> Optional[str]:
+    """Die **eine** Modus-Quelle eines Geräts — oder ``None``.
+
+    Args:
+        live: der ``live``-Block **einer** Investition aus dem
+            ``sensor_mapping`` (``{feld_key: entity_id}``).
+
+    Returns:
+        Die Entity-ID der Modus-Quelle, oder ``None``, wenn es **keine** oder
+        **mehr als eine verschiedene** gibt.
+
+    ⭐ **Warum es diese Funktion gibt und warum sie hier steht** (N-340). Der
+    Zähler dieses Geräts ist **einer** — bei externer Messung eine Steckdose
+    am Außengerät. Die Aufteilung schreibt ``modus_strom_*_kwh`` je
+    **Investition**. Zwischen N Signalen und einer Zahl muss also eine Regel
+    stehen; bis zum 27.08.2026 stand dort **keine**, sondern die
+    Einfüge-Reihenfolge des Mappings (``ergebnis[inv_id] = modus``, an
+    **beiden** Lesestellen — die letzte Entität gewann, still).
+
+    ⚠ **Mehrere Zuordnungen auf DIESELBE Entität sind eine Quelle**, und das
+    ist der Normalfall: Der Modus gehört dem Außengerät, nicht dem Innengerät
+    (Konzept D3 — in einer 2-Rohr-Anlage tut ein Innengerät auf „Heizen"
+    zwischen kühlenden nichts). Wer alle drei Innengeräte auf dieselbe
+    `climate`-Entität legt, bekommt seine Aufteilung wie bisher.
+
+    ⛔ **Verschiedene Entitäten ergeben KEINEN Anlagen-Modus, und eedc rät
+    keinen** (ADR-002/P4). Die Zusammenführung bräuchte ein physikalisches
+    Modell der fremden Maschine — ob ein lüftendes Innengerät neben einem
+    heizenden vorkommt, ob das Außengerät beim Enteisen etwas meldet, ob
+    `dry` kühlseitig läuft. Das weiß der Anlagenbesitzer, nicht eedc. Er baut
+    sich die Zusammenführung als Template-Sensor in Home Assistant und ordnet
+    **dessen** Ergebnis zu; das Handbuch führt die Vorlage. **Der
+    Daten-Checker nennt den Fall**, damit die Lücke nicht schweigt.
+    """
+    if not isinstance(live, dict):
+        return None
+    # Lokaler Import: `field_definitions` importiert seinerseits aus dieser
+    # Datei (der Kanon ist die Quelle der Feldnamen) — ein Top-Level-Import
+    # wäre ein Zyklus. Dasselbe Muster wie bei `_KANON_RANG`.
+    from backend.core.field_definitions import basis_feld_key
+
+    quellen = {
+        str(entity)
+        for feld, entity in live.items()
+        if entity and basis_feld_key(str(feld)) == MODUS_FELD_KEY
+    }
+    return quellen.pop() if len(quellen) == 1 else None

@@ -243,6 +243,94 @@ Es gibt **zwei Wege**, und **gemessen schlägt abgeleitet**:
 >
 > ⚠ **Weg B wirkt nur ab jetzt.** Die Aufteilung entsteht aus mitgeschriebenen Stunden — **rückwirkend gibt es sie nicht**. Deshalb steht unter dem Balken, wie viele Stunden eedc tatsächlich mitgelesen hat.
 
+> ### Mehrere Innengeräte — eedc braucht **eine** Aussage über die Anlage
+>
+> Dein Stromzähler ist **einer** (meist eine Messsteckdose am Außengerät). Für die Aufteilung
+> braucht eedc deshalb genau **eine** Aussage darüber, was die **Anlage** gerade tut — nicht drei
+> Aussagen über drei Innengeräte.
+>
+> **Der einfache Weg, und für die meisten der richtige:** Ordne bei **allen** Innengeräten
+> **dieselbe** `climate`-Entität zu. Bei einer Anlage mit einem Kältekreis gibt ohnehin das
+> Außengerät die Richtung vor — das zuerst eingeschaltete Innengerät bestimmt sie, die anderen
+> können dann nur dasselbe. Mehrere Zuordnungen auf dieselbe Entität zählt eedc als **eine**
+> Quelle; deine Aufteilung funktioniert wie gewohnt.
+>
+> ⛔ **Zeigen die Zuordnungen auf *verschiedene* Entitäten, teilt eedc nicht auf** und sagt es im
+> Daten-Checker. Der Grund ist nicht Bequemlichkeit: Aus mehreren Innengeräte-Zuständen einen
+> Anlagen-Zustand zu bilden, hängt an **deiner** Anlage — ob ein Innengerät lüften kann, während
+> ein anderes heizt; ob dein Außengerät beim Enteisen etwas meldet; ob „Entfeuchten" bei dir
+> kühlseitig läuft. **Das weißt du, eedc weiß es nicht — und eedc rät nicht.**
+>
+> **Der zweite Weg: du schreibst die Regel selbst.** Ein Template-Sensor fasst deine Innengeräte
+> zu einer Anlagen-Aussage zusammen; **dessen** Ergebnis ordnest du dann als Betriebsmodus zu:
+>
+> ```yaml
+> template:
+>   - sensor:
+>       - name: "Klimaanlage Betriebsmodus Anlage (eedc)"
+>         state: >
+>           {% set g = [states('climate.INNEN_1'),
+>                       states('climate.INNEN_2'),
+>                       states('climate.INNEN_3')] %}
+>           {% if 'heat' in g %}heizen
+>           {% elif 'cool' in g %}kuehlen
+>           {% elif 'dry'  in g %}entfeuchten
+>           {% elif 'fan_only' in g %}lueften
+>           {% elif g | reject('eq','off') | list | count == 0 %}aus
+>           {% else %}automatik{% endif %}
+> ```
+>
+> ⚠ **Die Reihenfolge ist auch hier nicht beliebig, und sie ist deine Entscheidung.** Sie sagt:
+> *ein Innengerät, das eine Richtung nennt, gewinnt gegen eines, das nur lüftet oder aus ist* —
+> denn den Löwenanteil verbraucht der Verdichter, und der arbeitet für die Richtung. Passt das
+> nicht zu deiner Anlage, dreh sie um.
+>
+> ⛔ **`aus` erst, wenn wirklich alle aus sind — und auch dann mit Vorsicht.** „Alle Innengeräte
+> aus" heißt **nicht** „die Anlage ist aus": Das Außengerät kann enteisen oder nachlaufen und
+> dabei kräftig Strom ziehen. Wenn du dafür eine eigene Quelle hast, nimm sie; wenn nicht, ist
+> `automatik` (⇒ *unbestimmt*) die ehrlichere Antwort als `aus`.
+
+> ### Wenn deine Anlage taktet: „Leerlauf" ist keine Richtung
+>
+> Meldet deine Integration zusätzlich den **Ist-Betrieb** (`Aktuelle Aktion` in Home Assistant),
+> liest eedc ihn mit — er sagt genauer als der eingestellte Modus, was gerade läuft. Steht dort
+> **Leerlauf**, weil die Solltemperatur erreicht ist, schlägt eedc diese Zeit **weder** dem
+> Heizen **noch** dem Kühlen zu; sie zählt unter *nicht aufgeteilt*.
+>
+> **Bei einem gut ausgelegten Inverter-Gerät ist das viel Zeit** — unter Umständen der größte
+> Teil. Das ist eine Grenze der Methode und kein Fehler bei dir: eedc behauptet lieber nichts,
+> als eine Stunde einer Seite zuzuschlagen, in der das Gerät nachweislich nicht dafür gearbeitet
+> hat.
+
+> ### Zähler schlagen den Betriebsmodus
+>
+> Hast du **Zähler je Betriebsart** (Schritt 4, Weg A), brauchst du den Betriebsmodus für die
+> Aufteilung **nicht** — er wird dann gar nicht dafür herangezogen. Der Modus ist der Weg für
+> alle, die **nur einen** Zähler haben. Beides zuzuordnen schadet nicht (der Modus trägt weiter
+> Icon und Klartext in der Live-Sicht), bringt für die Aufteilung aber nichts dazu.
+>
+> ⛔ **Und das gilt schon ab dem ersten Zähler.** Ordnest du auch nur **einen** Betriebsart-Zähler
+> zu, gilt für dieses Gerät **nur noch** der gemessene Weg — die übrigen Betriebsarten erscheinen
+> dann unter *nicht aufgeteilt*, statt aus dem Modus abgeleitet zu werden. Ordne deshalb entweder
+> alle zu, die du hast, oder verlass dich auf den Modus.
+
+> ### Was dein Anlagenzähler erfassen muss
+>
+> eedc setzt voraus, dass der Zähler dieses Geräts **den ganzen Verbrauch** erfasst — Außengerät
+> **und** Innengeräte. Alle Werte, die du je Innengerät pflegst, versteht eedc als
+> **Aufschlüsselung** dieses Gesamtwerts, nie als etwas, das dazukommt.
+>
+> ⛔ **Werden deine Innengeräte über eigene Steckdosen versorgt und dort gemessen, passt das
+> nicht** — dann fehlt ihr Verbrauch in deiner Bilanz, nicht nur in der Aufteilung. eedc kann
+> das heute nicht abbilden. Melde dich, wenn deine Anlage so gebaut ist; die Frage ist
+> beschrieben und wartet auf einen echten Fall.
+>
+> ⚑ **Übersteigen deine Betriebsart-Zähler den Anlagenzähler**, sagt eedc es und weist **keine**
+> Aufteilung aus. Zwei Ursachen sind möglich und von außen nicht unterscheidbar: der
+> Anlagenzähler erfasst nicht alles (siehe oben) — oder die Zähler sind herstellerseitig
+> **gerechnete Anteile** statt Messungen. **Falsche Eingangswerte erzeugen falsche Ergebnisse;
+> eedc korrigiert sie nicht, es nennt sie.**
+
 **Beide Wege ganz oder gar nicht je Gerät.** Wer Betriebsart-Zähler hat, für den gelten sie; der abgeleitete Weg wird dort nicht zusätzlich angewendet. Eine Aufteilung, deren eine Hälfte aus einem Zähler und deren andere aus einer Rechnung stammt, trüge ein halbwahres Etikett.
 
 ### Schritt 5 — Die Kältemenge (nur mit Kältemengenzähler)

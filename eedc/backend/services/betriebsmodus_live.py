@@ -45,15 +45,13 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.betriebsmodus import normalisiere_betriebsmodus
-from backend.core.field_definitions import basis_feld_key
+from backend.core.betriebsmodus import modus_quelle, normalisiere_betriebsmodus
 from backend.models.investition import Investition
 from backend.utils.investition_filter import aktiv_jetzt
 
 logger = logging.getLogger(__name__)
 
 #: Der Feld-Key der Modus-Quelle, ohne Innengeräte-Suffix.
-_MODUS_KEY = "betriebsmodus"
 
 # ── Eigener Takt, und das ist der Kern dieser Datei ──────────────────────────
 #
@@ -96,15 +94,16 @@ def _entity_zu_investitionen(
 ) -> dict[str, list[int]]:
     """`climate`-Entity → die Geräte, die daran hängen.
 
-    ⚠ **Nicht `live["betriebsmodus"]` allein** (#263): Mit einer
-    Innengeräte-Liste heißt der Key `betriebsmodus-3`. Wer nur den nackten Namen
-    prüft, hält eine Anlage für unzugeordnet, an der alle drei Innengeräte
-    zugeordnet sind — derselbe Fehler, den der Daten-Checker in
-    `datenquelle.py::_hat_modus` ausdrücklich benennt. Deshalb `basis_feld_key`.
+    ⚠ **Die Auswahl der Quelle liegt in `core.betriebsmodus.modus_quelle`**,
+    nicht hier — mitsamt ihrer Begründung. Sie löst den Innengeräte-Suffix auf
+    (`betriebsmodus-3`, #263), behandelt mehrere Zuordnungen auf **dieselbe**
+    Entität als **eine** Quelle (Konzept D3: der Modus gehört dem Außengerät)
+    und liefert `None`, sobald es **verschiedene** gibt (N-340).
 
-    ⚠ **Mehrere Innengeräte dürfen dieselbe Entität tragen** (Konzept D3): der
-    Modus gehört dem Außengerät. Dann steht derselbe Modus bei beiden, und das
-    ist richtig — kein Grund, den zweiten zu verwerfen.
+    ⛔ **Sie stand bis zum 27.08.2026 an zwei Stellen nebeneinander** — hier und
+    im Aggregationspfad —, und die zweite kannte den Suffix nicht. Genau davor
+    warnt `modus_split_monat.py` seit F-52 wörtlich: *„eine Regel, die an zwei
+    Stellen nachgebaut wird, driftet."*
     """
     ergebnis: dict[str, list[int]] = {}
     for key, eintrag in ((sensor_mapping or {}).get("investitionen") or {}).items():
@@ -114,10 +113,15 @@ def _entity_zu_investitionen(
             continue
         if inv_id not in inv_ids or not isinstance(eintrag, dict):
             continue
-        for feld, entity in (eintrag.get("live") or {}).items():
-            if entity and basis_feld_key(feld) == _MODUS_KEY:
-                if inv_id not in ergebnis.setdefault(entity, []):
-                    ergebnis[entity].append(inv_id)
+        # ⚠ **Genau EINE Quelle je Gerät** (N-340). Bis dahin landete ein
+        # Gerät mit zwei verschiedenen `climate`-Entitäten unter beiden — und
+        # `ergebnis[inv_id] = modus` unten liess die **letzte** gewinnen, nach
+        # Einfüge-Reihenfolge des Mappings. Ein Zustand, den eedc nicht
+        # bestimmen kann, wird nicht gewürfelt, sondern weggelassen: Das Gerät
+        # zeigt dann sein Typ-Icon und keinen Klartext, wie ohne Zuordnung.
+        quelle = modus_quelle(eintrag.get("live"))
+        if quelle and inv_id not in ergebnis.setdefault(quelle, []):
+            ergebnis[quelle].append(inv_id)
     return ergebnis
 
 

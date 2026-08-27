@@ -71,6 +71,11 @@ from backend.core.berechnungen.waermepumpe_kennzahl import (
 from backend.models import Anlage, Investition  # noqa: F401  (Base.metadata)
 from backend.models.investition import InvestitionMonatsdaten  # noqa: F401
 from backend.models.mqtt_gateway_mapping import MqttGatewayMapping  # noqa: F401
+# N-337: der Hub liest `sensor_snapshots` (wp_starts_anzahl). Ohne diesen Import
+# steht das Modell nicht in `Base.metadata`, wenn diese Datei ALLEIN laeuft — im
+# Gesamtlauf bringt es eine andere Datei mit. Wer hier baut, faehrt genau diese
+# Datei einzeln und saehe sonst Rot, das ihm nicht gehoert.
+from backend.models.sensor_snapshot import SensorSnapshot  # noqa: F401
 from backend.models.tages_energie_profil import (  # noqa: F401
     TagesEnergieProfil,
     TagesZusammenfassung,

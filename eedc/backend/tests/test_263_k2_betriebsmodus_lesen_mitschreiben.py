@@ -725,3 +725,75 @@ async def test_f_der_ist_betrieb_erreicht_die_stundenzeile(db, monkeypatch):
         }},
     )
     assert ohne_aktion[20][ids2[0]] == KUEHLEN
+
+
+# ─── N-340: die Aufteilung braucht EINE Modus-Quelle je Gerät ────────────────
+#
+# ⚠ Diese drei Proben sitzen bewusst **hier** und nicht nur in
+# `test_n340_modus_quelle.py`. Dort steht die Regel (`modus_quelle`) — hier
+# steht die Frage, ob der **Aggregationspfad sie auch benutzt**. Genau diese
+# Trennung hat am 27.08.2026 eine Gegenprobe stumm bleiben lassen: Ein
+# Sprengsatz beweist nur etwas, wenn er an dem Objekt sitzt, das der Prüfer
+# liest.
+
+async def test_n340_modus_je_innengeraet_erreicht_die_aufteilung(db, monkeypatch):
+    """`betriebsmodus-3` lieferte vorher NICHTS — der Pfad las den nackten Key.
+
+    **Der Sprengsatz:** Vor dem Fix war das Ergebnis leer, und zwar still. Der
+    Daten-Checker meldete dieselbe Anlage als „Betriebsmodus ist zugeordnet".
+    """
+    ergebnis, ids, _ = await _modus_je_stunde(
+        db, monkeypatch,
+        historie={"climate.k": [(_t(0, 0), "cool", "cooling")]},
+        mapping=lambda ids: {"investitionen": {
+            str(ids[0]): {"live": {"betriebsmodus-3": "climate.k"}}
+        }},
+    )
+    assert ergebnis[5][ids[0]] == KUEHLEN, \
+        "Ein je Innengerät zugeordneter Modus muss in der Aufteilung ankommen"
+
+
+async def test_n340_zwei_innengeraete_auf_derselben_entitaet_teilen_weiter_auf(db, monkeypatch):
+    """Konzept D3 — der ausdrücklich erlaubte Normalfall darf nicht wegfallen.
+
+    Die Gegenrichtung zur Probe darunter: Eindeutigkeit heißt **eine Entität**,
+    nicht **ein Feld**. Ohne diese Probe wäre „nur ein Eintrag erlaubt" eine
+    genauso bestandene Umsetzung — und sie nähme jedem mit Innengeräte-Liste
+    die Aufteilung weg.
+    """
+    ergebnis, ids, _ = await _modus_je_stunde(
+        db, monkeypatch,
+        historie={"climate.k": [(_t(0, 0), "cool", "cooling")]},
+        mapping=lambda ids: {"investitionen": {
+            str(ids[0]): {"live": {
+                "betriebsmodus-3": "climate.k",
+                "betriebsmodus-4": "climate.k",
+            }}
+        }},
+    )
+    assert ergebnis[5][ids[0]] == KUEHLEN, \
+        "Dieselbe Entität an zwei Innengeräten ist EINE Quelle (D3)"
+
+
+async def test_n340_verschiedene_entitaeten_ergeben_keine_aufteilung(db, monkeypatch):
+    """ADR-002/P4 — lieber nichts als ein Zufallsergebnis.
+
+    Vorher gewann hier die **letzte** Entität in der Mapping-Reihenfolge, ohne
+    dass irgendwo eine Regel stand. Dass es `heizen` und nicht `kuehlen` wurde,
+    hing an der Einfügereihenfolge eines Dicts.
+    """
+    ergebnis, ids, _ = await _modus_je_stunde(
+        db, monkeypatch,
+        historie={
+            "climate.a": [(_t(0, 0), "cool", "cooling")],
+            "climate.b": [(_t(0, 0), "heat", "heating")],
+        },
+        mapping=lambda ids: {"investitionen": {
+            str(ids[0]): {"live": {
+                "betriebsmodus-3": "climate.a",
+                "betriebsmodus-4": "climate.b",
+            }}
+        }},
+    )
+    assert ids[0] not in ergebnis.get(5, {}), \
+        "Zwei widersprechende Quellen dürfen KEINEN Anlagen-Modus ergeben"

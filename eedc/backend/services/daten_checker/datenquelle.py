@@ -15,7 +15,7 @@ import httpx
 
 from sqlalchemy import select
 
-from backend.core.betriebsmodus import ist_betriebsart_strom_feld
+from backend.core.betriebsmodus import ist_betriebsart_strom_feld, modus_quelle
 from backend.core.field_definitions import basis_feld_key
 from backend.models.anlage import Anlage
 from backend.models.data_provenance_log import DataProvenanceLog
@@ -1215,11 +1215,21 @@ class DatenquelleChecks:
             if hat_gemessene_betriebsart(imd.verbrauch_daten or {})
         }
 
+        def _quelle(inv_id: int) -> Optional[str]:
+            """Die EINE Modus-Quelle dieses Geräts — oder ``None`` (N-340)."""
+            eintrag = mapping.get(str(inv_id))
+            return modus_quelle(eintrag.get("live") if isinstance(eintrag, dict) else None)
+
         def _hat_aufteilung(inv) -> tuple[bool, bool]:
             """(hat Aufteilung, ist sie gemessen?) — die Herkunft gehört dazu."""
             if _hat_gemessene_zuordnung(inv.id) or inv.id in mit_gemessenen_daten:
                 return True, True
-            return _hat_modus(inv.id), False
+            # ⚠ **`_hat_modus` reicht hier NICHT** (N-340): Es sagt „irgendeine
+            # Zuordnung", die Aufteilung braucht aber **eine eindeutige Quelle**.
+            # Wer drei Innengeräte auf drei verschiedene `climate`-Entitäten
+            # legt, hatte bis zum 27.08.2026 eine grün gemeldete Zuordnung und
+            # trotzdem keine Aufteilung — die Meldung log den Anwender an.
+            return _quelle(inv.id) is not None, False
 
         zustand = {i.id: _hat_aufteilung(i) for i in klimas}
         ohne = [i for i in klimas if not zustand[i.id][0]]
@@ -1253,7 +1263,45 @@ class DatenquelleChecks:
                 details=herkunft,
             )]
 
-        return [CheckErgebnis(
+        # N-340: Wer zugeordnet hat, aber mehrdeutig, braucht eine ANDERE
+        # Auskunft als wer gar nicht zugeordnet hat. Ihm zu sagen „ordne den
+        # Betriebsmodus zu" wäre die Meldung, die in die Irre führt — er hat es
+        # getan. Ihm fehlt die **Eindeutigkeit**, und der Weg dorthin ist ein
+        # Template-Sensor, der seine Innengeräte zu einer Aussage über die
+        # ANLAGE zusammenfasst (Handbuch „Wärme & Klima").
+        # ⚠ Beide Listen werden gemeldet, nicht die eine STATT der anderen: Eine
+        # Anlage kann ein mehrdeutiges und ein gar nicht zugeordnetes Gerät haben.
+        mehrdeutig = [i for i in ohne if _hat_modus(i.id)]
+        gar_nicht = [i for i in ohne if not _hat_modus(i.id)]
+        meldungen_mehrdeutig = [CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.INFO.value,
+                meldung=(
+                    f"„{i.bezeichnung}“: mehrere verschiedene Modus-Quellen — "
+                    f"eedc teilt den Strom nicht auf"
+                ),
+                details=(
+                    "Du hast den Betriebsmodus an mehreren Innengeräten zugeordnet, "
+                    "und sie zeigen auf verschiedene Entitäten. Der Stromzähler "
+                    "dieses Geräts ist aber einer — für die Aufteilung braucht eedc "
+                    "deshalb genau eine Aussage darüber, was die ANLAGE gerade tut. "
+                    "Aus mehreren Innengeräte-Zuständen einen Anlagen-Zustand zu "
+                    "bilden, hängt an deiner Anlage: ob ein Innengerät lüften kann, "
+                    "während ein anderes heizt, ob das Außengerät beim Enteisen "
+                    "etwas meldet. Das weiß eedc nicht, und es rät nicht. "
+                    "Zwei Wege: Ordne dieselbe climate-Entität bei allen "
+                    "Innengeräten zu — dann ist es eine Quelle (bei einer "
+                    "Ein-Kreis-Anlage gibt ohnehin das Außengerät die Richtung vor). "
+                    "Oder baue in Home Assistant einen Template-Sensor, der deine "
+                    "Innengeräte zu einer Aussage zusammenfasst, und ordne dessen "
+                    "Ergebnis zu — die Vorlage steht im Handbuch unter „Wärme & Klima“. "
+                    "Bis dahin bleibt alles wie bisher, der Stromverbrauch zählt "
+                    "vollständig."
+                ),
+                link=LINK_DATENQUELLEN,
+                investition_id=i.id,
+            ) for i in mehrdeutig]
+
+        return meldungen_mehrdeutig + [CheckErgebnis(
             kategorie=kat, schwere=CheckSeverity.INFO.value,
             meldung=(
                 f"„{i.bezeichnung}“: Betriebsmodus nicht zugeordnet — "
@@ -1274,7 +1322,7 @@ class DatenquelleChecks:
             ),
             link=LINK_DATENQUELLEN,
             investition_id=i.id,
-        ) for i in ohne]
+        ) for i in gar_nicht]
 
     # Ein Connector, der lange nichts mehr geliefert hat, kann für den laufenden
     # Monat kein Delta bilden — nach diesen Tagen gilt das nicht mehr als
