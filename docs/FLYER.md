@@ -154,7 +154,7 @@ Ein optionales Modul für alles rund um die Anlage:
 - **Cloud-Import** – SolarEdge, Fronius, Huawei, Growatt, Deye/Solarman, EcoFlow PowerOcean
 - **Custom-Import** – Beliebige CSV/JSON-Dateien mit flexiblem Feld-Mapping
 - **9 Geräte-Connectors** – SMA, Fronius, go-eCharger, Shelly, OpenDTU, Kostal, sonnenBatterie, Tasmota
-- **MQTT Energy** – Monatswerte aus MQTT-Topics (91% Konfidenz)
+- **MQTT Energy** – Zählerstände aus MQTT-Topics, Monatsmenge als Differenz (91% Konfidenz)
 - **Portal-Import** – CSV-Upload von Herstellerportalen (SMA Sunny Portal, Fronius Solarweb, evcc)
 - **Manuell** – Geführter Monatsabschluss-Wizard
 

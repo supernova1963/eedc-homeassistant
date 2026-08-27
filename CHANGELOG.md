@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.0.30] - 2026-08-27 — Quick-Fix: der Schalter geht auf, der Zählerstand bleibt ein Stand
 
 ### Added
 

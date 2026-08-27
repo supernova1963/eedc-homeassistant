@@ -1,6 +1,6 @@
 # MQTT-Inbound: Universelle Datenbruecke
 
-MQTT-Inbound ermoeglicht es, Live-Leistungsdaten und Monatswerte von **jedem Smarthome-System** an EEDC zu senden. Es wird nur ein MQTT-Broker benoetigt (z.B. Mosquitto).
+MQTT-Inbound ermoeglicht es, Live-Leistungsdaten und Zaehlerstaende von **jedem Smarthome-System** an EEDC zu senden. Es wird nur ein MQTT-Broker benoetigt (z.B. Mosquitto).
 
 ## Unterstuetzte Systeme
 
@@ -33,14 +33,25 @@ eedc/{anlage_id}_{name}/
 │       ├── leistung_w                 → 4200
 │       └── soc                        → 72       (nur Speicher/E-Auto)
 │
-└── energy/                            # Monatswerte (kWh, kumuliert)
-    ├── einspeisung_kwh                → 397.2
-    ├── netzbezug_kwh                  → 182.5
+└── energy/                            # ZAEHLERSTAENDE (kWh, kumuliert)
+    ├── einspeisung_kwh                → 6675.3
+    ├── netzbezug_kwh                  → 6424.8
     └── inv/{inv_id}_{name}/
         └── {key}                      → Wert     (siehe Felder-Referenz)
 ```
 
 ### Energy-Felder Referenz (Investitions-Topics)
+
+> ⚠ **Unter `energy/` gehoert der ZAEHLERSTAND, nicht der Monatsverbrauch.** Also der
+> fortlaufende Stand, den dein Zaehler oder Wechselrichter anzeigt — eedc bildet die
+> Differenzen daraus selbst (Tag, Monat, Jahr). Ein taeglich oder monatlich zurueckgesetzter
+> Zaehler funktioniert ebenfalls; eedc erkennt den Ruecksprung.
+>
+> **Bis eedc 4.0.29 stand hier „Monatswerte", und das war missverstaendlich.** Wer korrekt
+> seinen Zaehlerstand schickte, bekam ihn im Monatsabschluss als Monatsmenge vorgehalten
+> („weicht ab": 6675,3 gegen 552,75 kWh) und in *Cockpit → Monat* sogar angezeigt. Seit
+> 4.0.30 rechnet eedc die Differenz ueber den Monat. **Du musst nichts umstellen** — der
+> Zaehlerstand war und ist das Richtige.
 
 Die Felder unter `energy/inv/{id}_{name}/` entsprechen den Monatsdaten-Feldern der jeweiligen Investition. EEDC erkennt alle Felder automatisch — es muss kein Mapping konfiguriert werden.
 
