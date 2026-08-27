@@ -11,6 +11,18 @@
 
 ## In Arbeit — Der Zähler entscheidet, nicht die Bauart
 
+**Ein neues Handbuch: „Wärme & Klima"**
+
+Diese Fläche hat in den letzten Wochen am meisten Rückfragen ausgelöst — fast
+alle liefen auf dieselbe Frage hinaus: **„Warum steht da ein Strich?"**
+
+Es gibt jetzt ein eigenes Handbuch dafür, erreichbar über *Hilfe* in der App und
+auf der Website. Es beantwortet der Reihe nach: was zur Fläche gehört, **welcher
+Zähler welche Kennzahl möglich macht**, was eedc bewusst **nicht** sagt, was
+jeder einzelne Grund bedeutet, wie du deine Sensoren zuordnest — und es rechnet
+**sechs Beispiel-Anlagen** vor, von der einfachen Wärmepumpe bis zur Kombination
+aus Wärmepumpe und Klimaanlage.
+
 **Wer einen Kühlzähler hat, kann ihn jetzt zuordnen**
 
 Bisher gab es die Kühl-Achse nur an Geräten mit der Wärmepumpenart

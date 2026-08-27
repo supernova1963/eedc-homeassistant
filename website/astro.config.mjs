@@ -48,6 +48,7 @@ export default defineConfig({
 						{ label: 'Modul: Daten-Checker', slug: 'handbuch-daten-checker' },
 						{ label: 'Modul: Energieprofil', slug: 'handbuch-energieprofil' },
 						{ label: 'Modul: Prognosen', slug: 'handbuch-prognosen' },
+						{ label: 'Modul: Wärme & Klima', slug: 'handbuch-waerme-klima' },
 						{ label: 'Glossar', slug: 'glossar' },
 					],
 				},

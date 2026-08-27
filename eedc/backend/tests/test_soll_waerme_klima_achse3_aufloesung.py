@@ -410,3 +410,52 @@ def test_w18_arbeitszahl_behaelt_ihren_wortlaut_ohne_besseren_grund():
     # andere Sperre überschreiben.
     kein_strom = arbeitszahl(500.0, 0.0, waerme_fehlt_grund="für diesen Tag keine Zählerstände")
     assert kein_strom.grund == "kein Stromverbrauch erfasst"
+
+
+# ═══ III-DOK — das Handbuch zitiert die Gründe, also muss es sie kennen ═════
+
+def test_handbuch_waerme_klima_zitiert_die_gruende_woertlich():
+    """⛔ **Ein Handbuch ist auch nur eine Behauptung über den Code.**
+
+    `docs/HANDBUCH_WAERME_KLIMA.md` §4 führt die Sperr-Gründe **wörtlich** auf,
+    damit ein Anwender den Satz, den er in der App liest, im Handbuch
+    wiederfindet. Ändert jemand einen Wortlaut im Code, lügt das Handbuch —
+    still, und ausgerechnet an der Stelle, an der jemand nachschlägt, weil er
+    nicht weiterweiß.
+
+    ⭐ Dieselbe Klasse wie der falsche Tooltip, der W-18 ausgelöst hat: eine
+    Auskunft, die einmal richtig war und es nicht geblieben ist.
+
+    ⚠ **Der Test prüft nur, was das Handbuch als Zitat AUSGIBT** — er verlangt
+    nicht, dass jeder neue Grund sofort dort steht. Ein Grund ohne Handbuch-Zeile
+    ist eine Lücke; ein Handbuch-Zitat ohne Grund im Code ist eine Falschaussage,
+    und nur die ist hier gefangen.
+    """
+    from pathlib import Path
+
+    from backend.core.berechnungen.waermepumpe_kennzahl import (
+        GRUND_FREMDSTROM, GRUND_FREMDWAERME, GRUND_GERAETE_OHNE_WAERME,
+        GRUND_KEINE_KAELTEMENGE, GRUND_STROM_NICHT_JE_FUNKTION, GRUND_ZEITRAUM,
+    )
+    from backend.core.tageswert_grund import TAGESWERT_GRUND_TEXT
+
+    doc = Path(__file__).resolve().parents[3] / "docs" / "HANDBUCH_WAERME_KLIMA.md"
+    if not doc.exists():  # eedc-Standalone-Spiegel trägt `docs/` nicht mit
+        import pytest
+        pytest.skip("docs/ liegt nur im Source-of-Truth-Repo")
+    text = doc.read_text(encoding="utf-8")
+
+    erwartet = [
+        GRUND_GERAETE_OHNE_WAERME, GRUND_FREMDSTROM, GRUND_FREMDWAERME,
+        GRUND_ZEITRAUM, GRUND_STROM_NICHT_JE_FUNKTION, GRUND_KEINE_KAELTEMENGE,
+        "kein Stromverbrauch erfasst",
+        "nur Kühlbetrieb in diesem Zeitraum",
+        "Wärme ist gerechnet, nicht gemessen",
+        "kein Wärmemengenzähler zugeordnet",
+        *TAGESWERT_GRUND_TEXT.values(),
+    ]
+    fehlend = [g for g in erwartet if g not in text]
+    assert not fehlend, (
+        "Das Handbuch zitiert diese Gründe nicht mehr wörtlich — im Code steht "
+        f"jetzt etwas anderes: {fehlend}"
+    )

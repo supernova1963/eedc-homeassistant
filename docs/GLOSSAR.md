@@ -4,7 +4,7 @@
 **Version 4.0** | Stand: 2026-07-25
 
 > Dieses Glossar ist Teil der eedc-Dokumentation.
-> Siehe auch: [Teil I: Installation](HANDBUCH_INSTALLATION.md) | [Teil II: Bedienung](HANDBUCH_BEDIENUNG.md) | [Teil III: Einstellungen](HANDBUCH_EINSTELLUNGEN.md) | [Berechnungen](BERECHNUNGEN.md) | [Prognosen](HANDBUCH_PROGNOSEN.md) | [Sensor-Referenz](SENSOR-REFERENZ.md)
+> Siehe auch: [Teil I: Installation](HANDBUCH_INSTALLATION.md) | [Teil II: Bedienung](HANDBUCH_BEDIENUNG.md) | [Teil III: Einstellungen](HANDBUCH_EINSTELLUNGEN.md) | [Berechnungen](BERECHNUNGEN.md) | [Prognosen](HANDBUCH_PROGNOSEN.md) | [Wärme & Klima](HANDBUCH_WAERME_KLIMA.md) | [Sensor-Referenz](SENSOR-REFERENZ.md)
 
 ---
 
@@ -72,6 +72,10 @@
 | **COP** | Coefficient of Performance — momentane Effizienz der Wärmepumpe (Wärme / Strom). In eedc reserviert für mathematisch-technische Berechnungs-Variablen. |
 | **SCOP** | Seasonal COP — saisonale Effizienz vom EU-Energielabel, standortunabhängig |
 | **JAZ** | Jahresarbeitszahl — gemessene Effizienz der Wärmepumpe am eigenen Standort über ein Jahr. eedc zeigt Periodenkennzahlen (Cockpit, Auswertungen, Monatsdaten) seit v3.23.4 konsistent als JAZ, nicht COP. |
+| **Arbeitszahl Kühlen** | Kältemenge ÷ Kühlstrom über einen Zeitraum — die Entsprechung der JAZ für den Kühlbetrieb (seit v4.0.29). Setzt **beides** voraus: einen Zähler für den Kühlstrom und einen **Kältemengenzähler** (`betriebsart_nutzenergie_kuehlen_kwh`). Fehlt einer, steht der Grund statt einer Zahl — geschätzt wird nichts. **Bewusst nicht „SEER" genannt:** SEER ist eine genormte Prüfstandsgröße, diese Zahl ist der Quotient zweier Zähler in deinem Haus. Siehe [Wärme & Klima](HANDBUCH_WAERME_KLIMA.md#3-was-eedc-bewusst-nicht-sagt). |
+| **Fremdanteil auf den Zählern** | Anwender-Angabe am Wärmepumpen-Gerät für zwei Lagen, die eedc nicht messen kann: Der Heizstab hängt am **Stromzähler**, seine Wärme aber nicht am Wärmemengenzähler (Strom zu groß) — oder ein Gas-/Ölkessel speist denselben Heizkreis, den der **Wärmemengenzähler** misst (Wärme zu groß). **Ändert keine Menge:** eedc lässt nur die Arbeitszahl weg und nennt den Grund. |
+| **Modus erfasst** | Wie viele Stunden eines Zeitraums eedc den Betriebsmodus tatsächlich mitgelesen hat — die Zeitbasis der abgeleiteten Betriebsart-Aufteilung. Über **Tage** wird summiert, über **Geräte** nicht: Zwei Geräte, die dieselben 18 Stunden liefen, ergeben 18 Stunden Beobachtung, nicht 36 (Korrektur v4.0.29). Bei **gemessenen** Betriebsart-Zählern steht dort „Herkunft: gemessen" — ein Zähler zählt kWh, keine Stunden mit Signal. |
+| **Aufgeteilte Menge** | Die Grundmenge, auf die sich der Betriebsart-Balken bezieht: der Strom **nur** der Geräte und Zeiträume mit Aufteilung. Sie kann kleiner sein als die Kachel „Strom verbraucht" darüber, die alle Geräte zählt — deshalb wird sie seit v4.0.29 benannt, sobald beide auseinandergehen. |
 | **Kompressor-Starts** | Wie oft der WP-Kompressor anläuft (optionaler Total-Increasing-Zähler pro Wärmepumpe). **Verschleiß-Indikator:** viele Starts = häufiges Takten, mechanisch belastend. Allein wenig aussagekräftig — erst im Verhältnis zu den Betriebsstunden (siehe dort). |
 | **Betriebsstunden** | Wie lange die Wärmepumpe tatsächlich läuft (optionaler Total-Increasing-Zähler pro WP, Stunden). **Auslegungs-Indikator:** 10 Starts bei 23 h Laufzeit/Tag sind harmloser als 10 Starts bei nur 4 h. Erst Starts ÷ Betriebsstunden („Takte pro Stunde") bzw. Betriebsstunden ÷ Starts („Ø Laufzeit pro Start") zeigen, ob die Heizkurve/Hysterese passt. Sichtbar in der Wärmepumpe-Komponentensicht, den Auswertungen und im PDF-Jahresbericht (#238). |
 | **Vollzyklen** | Batterie-Lade-/Entladezyklen, normiert: `Σ |ΔSoC| / 200` (0→100→0 = 200 % = 1 Vollzyklus). Werden seit v3.22.0 ausschließlich aus stationären Speicher-SoCs berechnet — E-Auto-SoC ist ausgeschlossen. |

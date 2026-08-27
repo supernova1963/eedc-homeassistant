@@ -68,6 +68,7 @@ Die Doku ist in vier Teile, zwei Referenzen und ein Glossar gegliedert:
 | **Daten-Checker** | Datenqualität prüfen: Kategorien, Befund-Tabellen, Reparatur-Werkbank und Behebungs-Workflows. | [HANDBUCH_DATEN_CHECKER.md](HANDBUCH_DATEN_CHECKER.md) |
 | **Energieprofil** | Was das Energieprofil (Stunden-/Tageswerte) ist und **wo es in v4 zu finden ist** — Anzeige über die Cockpit-Achsen, Pflege in den Einstellungen. | [HANDBUCH_ENERGIEPROFIL.md](HANDBUCH_ENERGIEPROFIL.md) |
 | **Prognosen** | Wetter- und Ertragsprognosen, Genauigkeits-Tracking (OpenMeteo / eedc kalibriert / Solcast / IST), Lernfaktor. | [HANDBUCH_PROGNOSEN.md](HANDBUCH_PROGNOSEN.md) |
+| **Wärme & Klima** | Wärmepumpe, Klimaanlage, Heizstab und Brauchwasser-WP: welcher Zähler welche Kennzahl möglich macht, warum eine Arbeitszahl verschwindet und was eedc bewusst nicht sagt. | [HANDBUCH_WAERME_KLIMA.md](HANDBUCH_WAERME_KLIMA.md) |
 
 ### Referenz
 

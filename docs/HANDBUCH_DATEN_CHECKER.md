@@ -4,7 +4,7 @@
 **Version 4.0** | Stand: 2026-08-22
 
 > Dieses Handbuch ist Teil der eedc-Dokumentation.
-> Siehe auch: [Teil I: Installation & Einrichtung](HANDBUCH_INSTALLATION.md) | [Teil II: Bedienung](HANDBUCH_BEDIENUNG.md) | [Teil III: Einstellungen](HANDBUCH_EINSTELLUNGEN.md) | [Infothek](HANDBUCH_INFOTHEK.md) | [Glossar](GLOSSAR.md)
+> Siehe auch: [Teil I: Installation & Einrichtung](HANDBUCH_INSTALLATION.md) | [Teil II: Bedienung](HANDBUCH_BEDIENUNG.md) | [Teil III: Einstellungen](HANDBUCH_EINSTELLUNGEN.md) | [Infothek](HANDBUCH_INFOTHEK.md) | [Wärme & Klima](HANDBUCH_WAERME_KLIMA.md) | [Glossar](GLOSSAR.md)
 
 ---
 

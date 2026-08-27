@@ -11,6 +11,8 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Added
 
+- **Neues Handbuch „Wärme & Klima".** Die ganze Fläche an einer Stelle beschrieben: was sie umfasst, **welcher Zähler welche Kennzahl möglich macht**, was eedc bewusst *nicht* sagt (kein SEER, keine geschätzte Kältemenge, keine Note für deine Anlage), warum eine Arbeitszahl verschwindet und was jeder Grund bedeutet — dazu die Sensor-Zuordnung Schritt für Schritt, sechs durchgerechnete Beispiel-Anlagen und die häufigsten Missverständnisse. Erreichbar über die In-App-Hilfe und auf der Website. Die Zitate der Sperr-Gründe hält ein Test am Code fest; ein Handbuch, das eine Auskunft nennt, die es nicht mehr gibt, wäre schlechter als keins.
+
 - **Wer einen Kühlzähler hat, kann ihn jetzt zuordnen — an jeder Wärmepumpe.** Gemeldet von **MartyBr** und **pipp086** (Forum simon42 #89667): *„Ich habe getrennte Zähler für Heizung, Warmwassererwärmung … und seit dem Sommer auch für den Kühlbetrieb."* Bisher gab es die Kühl-Achse ausschließlich an Geräten mit der Wärmepumpenart „Luft-Luft (Klimaanlage)" — an einer Luft-Wasser- oder Sole-Wasser-Wärmepumpe war sein Zähler nirgends hinterlegbar.
 
   **Ab jetzt entscheidet der Zähler, nicht die Bauart.** Unter *Einstellungen → Datenquellen* steht bei jedem Gerät ein neuer, zugeklappter Abschnitt **„Weitere Größen erfassen"**. Darin liegen die Größen, die es an diesem Gerätetyp selten gibt — die Kühl-, Lüft- und Entfeuchtungs-Achse an einer Heizungs-Wärmepumpe zum Beispiel. Ordnest du dort einen Sensor zu, rückt das Feld nach oben zu den anderen.

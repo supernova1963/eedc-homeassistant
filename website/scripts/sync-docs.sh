@@ -24,6 +24,7 @@ declare -A DOCS=(
   ["HANDBUCH_DATEN_CHECKER.md"]="handbuch-daten-checker.md|Modul: Daten-Checker|Datenqualität prüfen und Reparatur-Werkbank"
   ["HANDBUCH_ENERGIEPROFIL.md"]="handbuch-energieprofil.md|Modul: Energieprofil|Stundengenaues Energieprofil – wo es in v4 liegt"
   ["HANDBUCH_PROGNOSEN.md"]="handbuch-prognosen.md|Modul: Prognosen|Vorschau, Genauigkeit und Prognosequellen"
+  ["HANDBUCH_WAERME_KLIMA.md"]="handbuch-waerme-klima.md|Modul: Wärme & Klima|Wärmepumpe, Klimaanlage und Heizstab: welcher Zähler welche Kennzahl möglich macht"
   ["SENSOR-REFERENZ.md"]="sensor-referenz.md|Sensor-Referenz|HA-Export-Sensoren und MQTT-Topics im Überblick"
   ["BERECHNUNGEN.md"]="berechnungen.md|Berechnungsreferenz|Formeln und Berechnungsgrundlagen aller Kennzahlen"
   ["GLOSSAR.md"]="glossar.md|Glossar|Begriffserklärungen und Support-Informationen"

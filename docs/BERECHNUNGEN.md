@@ -6,6 +6,8 @@ Dieses Dokument beschreibt alle Berechnungsketten im eedc-System: von den Eingab
 über die Berechnungslogik bis zur Anzeige im Frontend. Es dient als Referenz zur Fehlersuche
 und zum Verständnis der Datenflüsse.
 
+> **Fachliche Fassung für Anwender:** Die Wärmepumpen-, Klimaanlagen- und Heizstab-Formeln aus §3.5 sind in [Wärme & Klima](HANDBUCH_WAERME_KLIMA.md) ohne Formelzeichen beschrieben — samt der Frage, warum eine Arbeitszahl verschwindet.
+
 ---
 
 ## Inhaltsverzeichnis
@@ -1171,6 +1173,55 @@ sieben Formeln).
 > neues Feld samt Migration im zweiten Repo; der Vermerk steht an der Stelle in
 > `services/community_service.py`.
 
+
+#### 3.5d Arbeitszahl je Funktion und die Arbeitszahl Kühlen (W-4 · W-5)
+
+⛔ **Dieser Abschnitt fehlte bis zum 27.08.2026 vollständig** — beide Größen waren gebaut und in
+keiner Referenz beschrieben. Aufgefallen beim Prüfauftrag „§3.5c gegen W-4/W-5 halten": Der
+Kasten darüber war richtig, aber er beschreibt eine *dritte* Regel. *Ein Dokument, das niemand
+gegen den Code hält, produziert beides — vergessene Arbeit und erfundene Arbeit.*
+
+**Alle vier Arbeitszahlen kommen aus derselben Funktion** (`core/berechnungen/waermepumpe_kennzahl.py`),
+und das ist der Punkt: Was für eine gilt, gilt für alle.
+
+```text
+Arbeitszahl gesamt     = waerme_kwh              ÷ (strom_kwh − funktionsfremd_kwh)
+Arbeitszahl Heizen     = heizenergie_kwh         ÷ strom_heizen_kwh
+Arbeitszahl Warmwasser = warmwasser_kwh          ÷ strom_warmwasser_kwh
+Arbeitszahl Kühlen     = nutzenergie_kuehlen_kwh ÷ betriebsart_strom_kuehlen_kwh
+```
+
+| | Voraussetzung | Grund, wenn sie fehlt |
+|---|---|---|
+| **je Funktion** (W-4) | `getrennte_strommessung` **und** die zugehörige Wärmemenge | `GRUND_STROM_NICHT_JE_FUNKTION` |
+| **Kühlen** (W-5) | Kühlstrom **und** Kältemengenzähler | `GRUND_KEINE_KAELTEMENGE` · `"kein Kühlbetrieb in diesem Zeitraum"` |
+
+⚠ **Die R2-Sperren gelten für alle vier** — Anwender-Angabe `abgrenzung`, abgeleitete Wärme,
+Geräte ohne Wärme, Zeitraum-Versatz. **Genau daran ist W-4 entstanden:** Die Funktions-Kennzahlen
+wurden an einer eigenen Stelle gerechnet und kannten die Sperren nicht. Ein Heizstab auf dem
+WP-Zähler ließ die Gesamtzahl mit Begründung verschwinden, während „JAZ Heizen" unbeeindruckt
+danebenstand — *dieselbe Anlage, zwei Aussagen*. Dazu stand dort eine **0**, wo „unbekannt"
+gemeint war (ADR-002/P4).
+
+> **Warum die Arbeitszahl Kühlen nicht „SEER" heißt** (Entscheid, 26.08.2026): SEER ist eine
+> genormte Größe aus definierten Prüfstandsbedingungen. Was eedc bildet, ist der Quotient zweier
+> Zähler über einen Zeitraum. Sie „SEER" zu nennen behauptete eine Vergleichbarkeit mit
+> Datenblatt-Werten, die sie nicht hat. Anwender-Fassung:
+> [Wärme & Klima §3](HANDBUCH_WAERME_KLIMA.md#3-was-eedc-bewusst-nicht-sagt).
+
+> **Warum keine geschätzte Kältemenge:** Aus einem angenommenen Wirkungsgrad käme genau der
+> Faktor zurück, mit dem gerechnet wurde — dieselbe Zirkularität, die §3.5c für die abgeleitete
+> Heizwärme beschreibt, nur auf der Kälte-Achse.
+
+#### 3.5e Anzeige-Regeln der Betriebsart-Aufteilung (W-17 · W-17b · W-18)
+
+Drei Regeln, die keine Formel sind und trotzdem in jede Sicht gehören:
+
+| Regel | Kurz |
+|---|---|
+| **Zeit ist nicht additiv** (W-17) | `modus_abdeckung_h` wird über **Tage** summiert, über **Geräte** maximiert (`abdeckung_ueber_geraete`). Zwei Geräte mit je 18 h ergeben 18, nicht 36. |
+| **Eine Aufteilung nennt ihre Grundmenge** (W-17b) | Der Balken bezieht sich auf `modus_strom_bezug_kwh`, die Kachel darüber auf `strom_kwh`. Weichen sie ab, steht die Zeile *„Aufgeteilte Menge"* darunter. |
+| **Ein fehlender Wert nennt seinen Grund** (W-18) | Drei unterscheidbare Zustände (`core/tageswert_grund.py`): kein Zähler · zugeordnet, aber für diesen Tag ohne Zählerstände · Zählerrücksprung. **Der Grund wird hergeleitet, nie behauptet** — `arbeitszahl(waerme_fehlt_grund=…)` nimmt ihn entgegen, weil der Layer ihn nicht kennen kann. |
 
 ### 3.6 ROI & Amortisation
 

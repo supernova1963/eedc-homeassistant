@@ -8,6 +8,7 @@
   {"slug": "daten-checker", "title": "Daten-Checker", "category": "Handbuch", "filename": "HANDBUCH_DATEN_CHECKER.md"},
   {"slug": "energieprofil", "title": "Energieprofil", "category": "Handbuch", "filename": "HANDBUCH_ENERGIEPROFIL.md"},
   {"slug": "prognosen", "title": "Prognosen", "category": "Handbuch", "filename": "HANDBUCH_PROGNOSEN.md"},
+  {"slug": "waerme-klima", "title": "Wärme & Klima", "category": "Handbuch", "filename": "HANDBUCH_WAERME_KLIMA.md"},
   {"slug": "berechnungen", "title": "Berechnungen & Kennzahlen", "category": "Referenz", "filename": "BERECHNUNGEN.md"},
   {"slug": "sensor-referenz", "title": "Sensor-Referenz", "category": "Referenz", "filename": "SENSOR-REFERENZ.md"},
   {"slug": "glossar", "title": "Glossar", "category": "Referenz", "filename": "GLOSSAR.md"}

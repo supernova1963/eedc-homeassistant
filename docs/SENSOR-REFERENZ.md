@@ -2,6 +2,8 @@
 
 **Version 4.0** | Stand: 2026-07-25 — Referenz für UI-Beschreibungen in der Datenquellen-Zuordnung und im MQTT-Setup
 
+> Siehe auch: [Wärme & Klima](HANDBUCH_WAERME_KLIMA.md) — welcher der Wärmepumpen-Zähler unten welche Kennzahl möglich macht, und was ohne ihn passiert.
+
 > **Single Source of Truth:** Die Feld-Hilfetexte (Spalte „Beschreibung") werden im Code als `hinweis`-Attribut in `backend/core/field_definitions.py` gepflegt und über `GET /api/monatsdaten/feld-hinweise` an die Datenquellen-Zuordnung ausgeliefert. Diese Referenz und die `hinweis`-Texte konsistent halten. Die Export-Sensoren (§8a, §11) spiegeln `backend/services/ha_sensors_export.py` bzw. `GET /api/ha/export/definitions`.
 
 ## Legende
@@ -237,6 +239,14 @@ man sie rechnen könnte.
 | `betriebsart_strom_entfeuchten_kwh` | Strom Entfeuchtungsbetrieb | kWh | Kumulativ oder Tagessensor |
 | `betriebsart_nutzenergie_*_kwh` | Nutzenergie je Betriebsart | kWh | Kumulativ, **thermisch** |
 | `soll_temperatur_c` / `ist_temperatur_c` | Soll-/Raumtemperatur | °C | Momentan, reine Anzeige |
+
+> **`betriebsart_nutzenergie_kuehlen_kwh` ist die Kältemenge — und der einzige
+> Zähler, der die *Arbeitszahl Kühlen* möglich macht** (Kältemenge ÷ Kühlstrom).
+> Ohne ihn steht dort der Grund statt einer Zahl; geschätzt wird nichts, weil aus
+> einem angenommenen Wirkungsgrad genau der Faktor zurückkäme, mit dem gerechnet
+> wurde. **Sie heißt bewusst nicht „SEER"** — das ist eine genormte
+> Prüfstandsgröße, dies hier ist der Quotient deiner beiden Zähler. Ausführlich:
+> [Wärme & Klima §3](HANDBUCH_WAERME_KLIMA.md#3-was-eedc-bewusst-nicht-sagt).
 
 **Mehrere Innengeräte (Multisplit):** Trag sie beim Gerät unter *Innengeräte*
 ein (Bezeichnung, z. B. „Büro"). Danach gibt es **jedes** der Felder oben
