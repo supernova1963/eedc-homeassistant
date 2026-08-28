@@ -227,7 +227,14 @@ export const monatsdatenApi = {
     jahr: number
     monat: number
     anzahl: number
-    komponenten: { investition_id: number; bezeichnung: string; typ: string | null; felder: string[] }[]
+    // `ist_zaehler`: Das Gerät führt einen STAND, keine Menge (N-312). Ein
+    // Stand ist der Anfangswert des Folgemonats — der Lösch-Dialog muss das
+    // sagen, weil es die einzige Datenart ist, bei der ein gelöschter Monat
+    // eine ANDERE Zahl still verfälscht.
+    komponenten: {
+      investition_id: number; bezeichnung: string; typ: string | null
+      ist_zaehler: boolean; felder: string[]
+    }[]
   }> {
     return api.get(`/monatsdaten/${id}/geraetewerte`)
   },

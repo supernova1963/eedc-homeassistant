@@ -197,6 +197,106 @@ class EmobChecks:
     #: kein Muster — ein einzelner nachzupflegender Monat wird nicht gemeldet.
     PHEV_MINDEST_MONATE_OHNE_VERBRAUCH = 2
 
+    # N-201: Ab welcher Abweichung ist `ladung_pv_kwh > ladung_kwh` ein
+    # Widerspruch und nicht Rundung? Beide Werte werden in kWh mit einer
+    # Nachkommastelle gepflegt bzw. importiert; 0,1 kWh deckt die Rundung ab,
+    # ohne einen echten Fall zu verschlucken (der gemessene Anlassfall liegt
+    # 14,5 kWh auseinander).
+    EMOB_PV_UEBERHANG_TOLERANZ_KWH = 0.1
+
+    def _check_emob_pv_ueber_gesamt(self, anlage: Anlage) -> list[CheckErgebnis]:
+        """Eine Monatszeile, in der die PV-Ladung größer ist als die Ladung (N-201).
+
+        **Was hier schiefsteht.** ``ladung_pv_kwh`` ist ein *Teil* von
+        ``ladung_kwh`` — es kann nicht mehr Strom aus PV geladen worden sein,
+        als insgesamt geladen wurde. An Anlage 1 stand für 06/2026 real
+        ``100,5 kWh PV`` bei ``86,0 kWh Gesamt``.
+
+        **Warum trotzdem nirgends eine falsche Zahl steht.** Die Rechenkette
+        fängt den Widerspruch strukturell ab: ``summiere_emob_quelle``
+        konstruiert ``ladung_kwh`` als ``pv + netz``, statt das Feld zu lesen,
+        und ``get_emob_pv_netz_kwh`` klemmt den abgeleiteten Netz-Anteil mit
+        ``max(0, total − pv)``. Damit gilt ``ladung_kwh ≥ pv`` immer (#262,
+        gewächtert in ``test_n314_pv_ladeanteil_spanne.py``).
+
+        ⭐ **Und genau das ist der Grund, warum es eine Meldung braucht.** Die
+        Garantie repariert die *Rechnung*, nicht die *Zeile*: Der gepflegte Wert
+        ``ladung_kwh = 86,0`` wird dabei stillschweigend verworfen und durch
+        ``pv + netz`` ersetzt. Der Anwender sieht eine Gesamtladung, die er nie
+        eingetragen hat, und erfährt nie, dass einer seiner beiden Werte falsch
+        ist. ``monats_fakten.pv_ladeanteil_prozent`` hält das im Docstring als
+        offene Lücke fest — diese Prüfung schließt sie.
+
+        **WARNING, nicht ERROR** und ohne Reparatur-Knopf: eedc kann nicht
+        wissen, welcher der beiden Werte der richtige ist — raten wäre hier
+        dasselbe wie beim Reihenbruch eines Zählerstands. Der Weg steht daneben
+        (``feedback_kein_grosser_heiler_knopf``).
+
+        ⚠ **Nur wenn BEIDE Felder gepflegt sind.** Fehlt ``ladung_kwh``, ist die
+        Zeile unvollständig, nicht widersprüchlich — das ist die Frage der
+        Vollständigkeits-Prüfungen, kein zweiter Turm darüber.
+        """
+        kat = CheckKategorie.MONATSDATEN_PLAUSIBILITAET.value
+        ergebnisse: list[CheckErgebnis] = []
+
+        # Checker-Pfad: liest die Rohzeile bewusst selbst (ADR-002/P10 nimmt
+        # Schreib-, Import- und Checker-Pfade aus). Der Sinn dieser Prüfung ist
+        # ja gerade, den Zustand VOR der SoT-Auflösung zu sehen — über die
+        # Fakten-Schicht gelesen wäre der Widerspruch bereits weggeklemmt.
+        treffer: list[tuple[int, str, int, int, float, float]] = []
+        for inv in anlage.investitionen:
+            if inv.typ not in ("wallbox", "e-auto"):
+                continue
+            name = inv.bezeichnung or f"#{inv.id}"
+            for imd in inv.monatsdaten:
+                daten = imd.verbrauch_daten or {}
+                gesamt = daten.get("ladung_kwh")
+                pv = daten.get("ladung_pv_kwh")
+                if gesamt is None or pv is None:
+                    continue
+                try:
+                    gesamt_f, pv_f = float(gesamt), float(pv)
+                except (TypeError, ValueError):
+                    continue
+                if pv_f > gesamt_f + self.EMOB_PV_UEBERHANG_TOLERANZ_KWH:
+                    treffer.append(
+                        (inv.id, name, imd.jahr, imd.monat, gesamt_f, pv_f)
+                    )
+
+        if not treffer:
+            return ergebnisse
+
+        # Datums-Listen absteigend (Regel 0a), Gerät als zweites Kriterium.
+        treffer.sort(key=lambda t: (-t[2], -t[3], t[1]))
+        MAX_EINZEL = 10
+        for inv_id, name, jahr, monat, gesamt_f, pv_f in treffer[:MAX_EINZEL]:
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.WARNING.value,
+                meldung=(
+                    f"{name}: PV-Ladung größer als Gesamtladung "
+                    f"({monat:02d}/{jahr}: {pv_f:.1f} kWh von {gesamt_f:.1f} kWh)"
+                ),
+                details=(
+                    "Die PV-Ladung ist ein Teil der Gesamtladung und kann nicht "
+                    "größer sein. eedc rechnet deshalb mit PV + Netz weiter und "
+                    f"legt die eingetragenen {gesamt_f:.1f} kWh beiseite — die "
+                    "Zahl, die du siehst, ist dann nicht die, die du erfasst "
+                    "hast. Welcher der beiden Werte stimmt, kann eedc nicht "
+                    "wissen: Trage den Monat noch einmal nach."
+                ),
+                link=f"/einstellungen/daten?erfassen={jahr}-{monat:02d}",
+                investition_id=inv_id,
+            ))
+
+        if len(treffer) > MAX_EINZEL:
+            rest = len(treffer) - MAX_EINZEL
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.INFO.value,
+                meldung=f"… plus {rest} weitere(r) Monat(e) mit demselben Widerspruch",
+            ))
+
+        return ergebnisse
+
     def _check_phev_anteil_unbestimmt(self, anlage: Anlage) -> list[CheckErgebnis]:
         """PHEV gepflegt, aber der elektrische Anteil ist nicht bestimmbar.
 

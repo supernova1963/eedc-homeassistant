@@ -19,6 +19,7 @@ from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition
 from backend.models.pvgis_prognose import PVGISPrognose
+from backend.services.zaehlerstaende import ist_zaehler_investition
 
 from .kategorien import (
     CheckErgebnis,
@@ -240,6 +241,22 @@ class MonatsdatenChecks:
         Bewusst **WARNING statt ERROR**: die Daten sind nicht falsch, sie sind
         nur unerreichbar geworden. Der Link führt direkt in das Formular
         **dieses** Monats — Nachtragen ist der Regelfall, Löschen die Ausnahme.
+
+        ⚠ **Ein Zählerstand ist die Ausnahme von „Löschen ist die Ausnahme"**
+        (N-312). Der Satz „Nur wenn sie gar nicht mehr gebraucht werden,
+        entferne sie" gilt für Mengen — für einen **Stand** sagt er das
+        Gegenteil: gebraucht wird er nicht von diesem Monat, sondern vom
+        **nächsten**. Die einzige Rechnung auf einem Zählerstand ist
+        Ende − Anfang, und den Anfang holt ``zaehlerstaende.lade_zaehlerstaende``
+        als letzten Stand **vor** dem Fenster. Fällt der Stand des Monats M weg,
+        greift M+1 auf M−1 zurück und weist zwei Monate als einen aus — mit
+        ``anfang_vollstaendig=True``, also ohne Hinweis. Deshalb nennt die
+        Meldung die betroffenen Zähler beim Namen, statt allen Datenarten
+        denselben Rat zu geben.
+
+        ⛔ **Gesagt, nicht verboten.** Der Knopf bleibt, und er bleibt an
+        derselben Stelle: eedc entscheidet nicht für den Anwender, wann ein
+        Stand entbehrlich ist ([[feedback_eedc_ist_nicht_die_strom_polizei]]).
         """
         ergebnisse: list[CheckErgebnis] = []
         kat = CheckKategorie.GERAETEWERTE_OHNE_MONATSZEILE
@@ -248,6 +265,8 @@ class MonatsdatenChecks:
 
         # Je verwaistem Monat: wie viele Komponenten hängen daran?
         verwaist: dict[tuple[int, int], list[str]] = {}
+        # ... und welche davon führen einen STAND statt einer Menge (N-312).
+        verwaiste_zaehler: dict[tuple[int, int], list[str]] = {}
         for inv in anlage.investitionen:
             for imd in inv.monatsdaten:
                 schluessel = (imd.jahr, imd.monat)
@@ -257,36 +276,61 @@ class MonatsdatenChecks:
                 # Import ab. Gemeldet wird nur, was wirklich einen Wert trägt.
                 if not any(v is not None for v in (imd.verbrauch_daten or {}).values()):
                     continue
-                verwaist.setdefault(schluessel, []).append(
-                    inv.bezeichnung or f"#{inv.id}"
-                )
+                name = inv.bezeichnung or f"#{inv.id}"
+                verwaist.setdefault(schluessel, []).append(name)
+                if ist_zaehler_investition(inv):
+                    verwaiste_zaehler.setdefault(schluessel, []).append(name)
 
         for (jahr, monat), komponenten in sorted(verwaist.items()):
             namen = ", ".join(sorted(komponenten)[:4])
             if len(komponenten) > 4:
                 namen += f" (+{len(komponenten) - 4} weitere)"
+            details = (
+                f"Für diesen Monat liegen Messwerte einzelner Geräte vor "
+                f"({namen}), aber keine Zählerzeile mit Einspeisung und "
+                "Netzbezug. Die Werte zählen in Cockpit und Auswertungen "
+                "mit, der Monat erscheint aber in keiner Liste und weist "
+                "einen erneuten Import ab. Trage den Monat nach — die "
+                "Gerätewerte gehören dann wieder dazu. Nur wenn sie gar "
+                "nicht mehr gebraucht werden, entferne sie."
+            )
+            zaehler = sorted(verwaiste_zaehler.get((jahr, monat), []))
+            if zaehler:
+                zaehler_namen = ", ".join(zaehler[:4])
+                if len(zaehler) > 4:
+                    zaehler_namen += f" (+{len(zaehler) - 4} weitere)"
+                details += (
+                    f" Achtung: Darunter sind Zählerstände ({zaehler_namen}). "
+                    "Ein Zählerstand ist kein Monatswert, sondern der "
+                    "Anfangsstand des Folgemonats — wird er entfernt, rechnet "
+                    "der nächste Monat gegen den vorletzten Stand und weist "
+                    "zwei Monate als einen aus, ohne dass es auffällt. Für "
+                    "diese Geräte trage den Monat nach, statt zu entfernen."
+                )
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.WARNING,
                 meldung=(
                     f"{monat:02d}/{jahr}: Messwerte von {len(komponenten)} "
                     "Komponente(n) ohne Monatszeile"
                 ),
-                details=(
-                    f"Für diesen Monat liegen Messwerte einzelner Geräte vor "
-                    f"({namen}), aber keine Zählerzeile mit Einspeisung und "
-                    "Netzbezug. Die Werte zählen in Cockpit und Auswertungen "
-                    "mit, der Monat erscheint aber in keiner Liste und weist "
-                    "einen erneuten Import ab. Trage den Monat nach — die "
-                    "Gerätewerte gehören dann wieder dazu. Nur wenn sie gar "
-                    "nicht mehr gebraucht werden, entferne sie."
-                ),
+                details=details,
                 # Deep-Link auf das Formular GENAU dieses Monats (Muster
                 # `?erfassen=YYYY-MM`, wie die Status-Fusszeile). Der bisherige
                 # Link zeigte auf die Liste — dort steht der Monat zwar als
                 # offene Zeile, der Anwender musste ihn aber selbst suchen.
                 link=f"/einstellungen/daten?erfassen={jahr}-{monat:02d}",
                 action_kind="geraetewerte_loeschen",
-                action_params={"anlage_id": anlage.id, "jahr": jahr, "monat": monat},
+                # `hat_zaehler` trägt die Datenart bis in die Rückfrage vor dem
+                # Löschen (N-312). Der Deep-Link-Weg kennt keine
+                # `Monatsdaten`-Zeile — genau die fehlt ja —, also gibt es für
+                # diesen Monat auch kein `GET /{id}/geraetewerte`, aus dem der
+                # Client die Auskunft holen könnte. Sie muss mitreisen.
+                action_params={
+                    "anlage_id": anlage.id,
+                    "jahr": jahr,
+                    "monat": monat,
+                    "hat_zaehler": bool(zaehler),
+                },
                 action_label="Messwerte entfernen",
             ))
 

@@ -70,7 +70,9 @@ function KategorieSektion({
   defaultOpen: boolean
   onReaggregate?: (anlageId: number, datum: string) => Promise<void>
   onReaggregateBereich?: (anlageId: number, von: string, bis: string) => Promise<void>
-  onGeraetewerteLoeschen?: (anlageId: number, jahr: number, monat: number) => Promise<void>
+  onGeraetewerteLoeschen?: (
+    anlageId: number, jahr: number, monat: number, hatZaehler?: boolean,
+  ) => Promise<void>
   onKraftstoffpreiseNachpflegen?: (anlageId: number) => Promise<void>
   reparaturBusy?: string | null  // key = `${anlage_id}:${datum}` (Einzeltag) bzw. `${anlage_id}:${von}:${bis}` (Bereich) bzw. `${anlage_id}:${jahr}-${monat}` (#349)
 }) {
@@ -146,6 +148,10 @@ function KategorieSektion({
               ? Number(e.action_params?.jahr) : undefined
             const gwMonat = e.action_kind === 'geraetewerte_loeschen'
               ? Number(e.action_params?.monat) : undefined
+            // N-312: Trägt der Monat einen Zählerstand? Der Stand ist der
+            // Anfangswert des Folgemonats — die Rückfrage muss das sagen.
+            const gwHatZaehler = e.action_kind === 'geraetewerte_loeschen'
+              ? e.action_params?.hat_zaehler === true : false
             const gwKey = gwAnlageId && gwJahr && gwMonat
               ? `${gwAnlageId}:${gwJahr}-${gwMonat}` : null
             const isGwBusy = gwKey && reparaturBusy === gwKey
@@ -203,7 +209,7 @@ function KategorieSektion({
                     variant="secondary"
                     size="sm"
                     className="flex-shrink-0"
-                    onClick={() => onGeraetewerteLoeschen(gwAnlageId, gwJahr, gwMonat)}
+                    onClick={() => onGeraetewerteLoeschen(gwAnlageId, gwJahr, gwMonat, gwHatZaehler)}
                     disabled={!!reparaturBusy}
                     loading={!!isGwBusy}
                   >
@@ -316,13 +322,26 @@ export function DatenCheckerVerwaltung({ anlageId, kopfZusatz }: { anlageId: num
   // #349: Messwerte eines Monats entfernen, dessen Zählerzeile gelöscht wurde.
   // Die einzige Aktion dieser Seite, die Daten **löscht** — deshalb mit
   // Rückfrage, und die Rückfrage nennt den Monat statt „diesen Eintrag".
-  const handleGeraetewerteLoeschen = async (anlageId: number, jahr: number, monat: number) => {
+  const handleGeraetewerteLoeschen = async (
+    anlageId: number, jahr: number, monat: number, hatZaehler = false,
+  ) => {
     const key = `${anlageId}:${jahr}-${monat}`
     const monatText = `${String(monat).padStart(2, '0')}/${jahr}`
+    // N-312: Bei einem Zählerstand trifft das Löschen nicht nur diesen Monat.
+    // Der Stand ist der Anfangswert des Folgemonats — fällt er weg, rechnet
+    // der nächste Monat gegen den vorletzten Stand und weist zwei Monate als
+    // einen aus, ohne Hinweis. Gesagt wird es, verboten nicht.
+    const zaehlerSatz = hatZaehler
+      ? '\n\nDarunter ist mindestens ein Zählerstand. Ein Stand ist kein ' +
+        'Monatswert, sondern der Anfangswert des Folgemonats: Entfernst du ihn, ' +
+        'rechnet der nächste Monat gegen den vorletzten Stand und zeigt zwei ' +
+        'Monate als einen. Für Zähler ist Nachtragen der richtige Weg.'
+      : ''
     if (!window.confirm(
       `Messwerte einzelner Komponenten für ${monatText} endgültig entfernen?\n\n` +
       'Der Monat hat keine Zählerzeile mehr. Wenn du die Werte behalten willst, ' +
-      'erfasse den Monat stattdessen neu — dann gehören sie wieder dazu.'
+      'erfasse den Monat stattdessen neu — dann gehören sie wieder dazu.' +
+      zaehlerSatz
     )) return
 
     setReparaturBusy(key)

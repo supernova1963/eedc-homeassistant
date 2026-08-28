@@ -304,10 +304,21 @@ async def test_311_lts_ohne_pv_key_kein_phantom_drift():
 
 async def test_311_lts_nur_nicht_pv_keys_kein_drift():
     """LTS-Read liefert nur Nicht-PV-Keys (z. B. netzbezug), aber keinen
-    pv_*-Key → kein Vergleich möglich → kein Phantom-Drift."""
+    pv_*-Key → auf der PV-Achse kein Vergleich möglich → kein Phantom-Drift.
+
+    ⚑ **Fixture präzisiert mit N-201.** Es stand hier `netzbezug: 5.0` gegen
+    einen gespeicherten `netzbezug: 2.0` — der Nicht-PV-Key driftete also
+    nebenbei um 60 %, und die Probe hielt fest, dass **niemand** das meldet.
+    Genau das ist seit N-201 ein eigener Befund (zweite Achse, je Komponente).
+    Der **Gegenstand** dieser Probe ist davon unberührt: Sie hält #311 fest —
+    ein fehlender PV-Key ist „nicht gelesen", nicht „= 0". Damit sie das und
+    nur das prüft, steht der Nicht-PV-Key jetzt auf beiden Seiten gleich.
+    Dass die zweite Achse bei echter Abweichung feuert, prüft
+    `test_n201_drift_zweite_achse.py`.
+    """
     today = date.today()
     tz_list = [_make_tz(today - timedelta(days=1), 90.0)]
-    ha_func = lambda d: {"netzbezug": 5.0}  # kein pv_*-Key
+    ha_func = lambda d: {"netzbezug": 2.0}  # kein pv_*-Key, und ohne Drift
     checker, patches = _build_checker(tz_list, [_make_inv()], ha_func)
 
     for p in patches:

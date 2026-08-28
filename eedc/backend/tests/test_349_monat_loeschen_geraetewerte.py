@@ -231,7 +231,11 @@ async def test_daten_checker_meldet_den_verwaisten_rest(db):
     assert "06/2024" in treffer[0].meldung
     # Ohne Reparatur-Weg wäre es ein Hinweis, den niemand auflösen kann (P-6).
     assert treffer[0].action_kind == "geraetewerte_loeschen"
-    assert treffer[0].action_params == {"anlage_id": anlage.id, "jahr": 2024, "monat": 6}
+    assert treffer[0].action_params == {
+        "anlage_id": anlage.id, "jahr": 2024, "monat": 6,
+        # N-312: die Datenart reist mit — dieser Monat trägt keinen Zähler.
+        "hat_zaehler": False,
+    }
 
     # Der Link führt in das Formular GENAU dieses Monats (12.08.). Vorher zeigte
     # er auf die Monatsdaten-Liste — dort steht der Monat zwar als offene Zeile,

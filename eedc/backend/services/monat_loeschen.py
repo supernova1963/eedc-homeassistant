@@ -41,6 +41,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.monatsdaten import Monatsdaten
 from backend.services.provenance import log_delete
+from backend.services.zaehlerstaende import ist_zaehler_investition
 
 logger = logging.getLogger(__name__)
 
@@ -54,9 +55,21 @@ async def beschreibe_geraetewerte_des_monats(
     Eine Lösch-Vorschau, die „1 Zeile" sagt und dann fünf löscht, ist keine
     Vorschau — und „3 weitere Datensätze" ohne Namen ist keine Entscheidung.
 
+    ⚠ **``ist_zaehler`` ist keine Kosmetik** (N-312). Ein Zählerstand ist eine
+    BESTANDSgröße: die einzige Rechnung darauf ist Ende − Anfang, und der
+    Anfangsstand eines Fensters ist der letzte Stand **davor**
+    (``zaehlerstaende.lade_zaehlerstaende``). Wer den Stand des Monats M
+    löscht, nimmt damit dem Monat M+1 seinen Anker — dessen Differenz greift
+    dann auf M−1 zurück und weist **zwei Monate als einen** aus, mit
+    ``anfang_vollstaendig=True``, also ohne jede Warnung. Bei jeder anderen
+    Größe ist ein gelöschter Monatswert genau das: dieser Monat fehlt.
+    Die Dialoge sagen das, sie verbieten es nicht — die Entscheidung bleibt
+    beim Anwender.
+
     Returns:
-        Je Gerätezeile ``{investition_id, bezeichnung, typ, felder}`` mit
-        ``felder`` = den belegten Sub-Keys (leere Zeilen tragen keine).
+        Je Gerätezeile ``{investition_id, bezeichnung, typ, ist_zaehler,
+        felder}`` mit ``felder`` = den belegten Sub-Keys (leere Zeilen tragen
+        keine).
     """
     zeilen = await _geraetewerte_des_monats(db, anlage_id, jahr, monat)
     if not zeilen:
@@ -76,6 +89,7 @@ async def beschreibe_geraetewerte_des_monats(
             "investition_id": z.investition_id,
             "bezeichnung": (inv.bezeichnung if inv else None) or f"#{z.investition_id}",
             "typ": inv.typ if inv else None,
+            "ist_zaehler": bool(inv is not None and ist_zaehler_investition(inv)),
             "felder": sorted(
                 k for k, v in (z.verbrauch_daten or {}).items() if v is not None
             ),

@@ -293,9 +293,26 @@ class DatenquelleChecks:
         Reparaturen aktiv gewählt werden müssen.
 
         Schwelle: |Δ| ≥ 2 kWh UND |Δ|/max ≥ 5 % gleichzeitig. Sortierung
-        nach |Δ| desc, Limit 20 Einträge. Vergleicht NUR PV-Tagessumme
-        (Σ pv_* + bkw_* Keys), nicht andere Kategorien — fokussierte
-        Liste, andere Größen koppeln meistens mit.
+        nach |Δ| desc, Limit 20 Einträge.
+
+        **Zwei Achsen, seit N-201.** Bis dahin verglich diese Prüfung
+        ausschließlich die PV-Tagessumme (Σ ``pv_*`` + ``bkw_*``) — die
+        Begründung dafür lautete „andere Größen koppeln meistens mit" und war
+        nie gemessen. Wallbox, E-Auto, Wärmepumpe und Sonstiges liefen damit
+        **nie** gegen HA, obwohl ihre Werte ROI, Ersparnis und CO₂ tragen.
+
+        * **PV/BKW als Summe.** Mehrere Strings messen dieselbe Sache; ihre
+          Summe ist die Größe, die der Anwender kennt.
+        * **Alles andere je Gerät.** Geräte sind keine gemeinsame Menge — in
+          einer Summe gliche ein Plus an der Wärmepumpe ein Minus an der
+          Wallbox aus, und übrig bliebe eine unauffällige Null. Ausgabe: ein
+          Eintrag je Komponente mit dem größten Tag als Beleg und
+          Reparatur-Ziel.
+
+        Nicht in der zweiten Achse: ``batterie_*`` (Netto darf 0 sein, das
+        Vorzeichen hat ``_check_batterie_vorzeichen_historie``) und jeder Key,
+        der auf einer der beiden Seiten fehlt oder 0 ist — das ist eine Lücke
+        und gehört ``_check_leere_tage_trotz_zaehler``, kein zweiter Turm.
 
         #311: Verglichen wird ausschließlich über PV-/BKW-Keys, die der
         LTS-Read für den Tag liefern konnte. Keys, die der LTS-Pfad nicht
@@ -348,6 +365,14 @@ class DatenquelleChecks:
         alle_invs = list(inv_result.scalars().all())
 
         drift_pro_tag: list[tuple[date, float, float]] = []  # (datum, eedc, ha)
+        # N-201, zweite Achse: dieselbe Frage je NICHT-PV-Komponente.
+        # `{key: [(datum, eedc, ha), …]}` — je Gerät gesammelt statt je Tag,
+        # weil eine Wallbox mit 30 Drift-Tagen sonst 30 Zeilen erzeugt, die
+        # alle dasselbe sagen.
+        drift_komponente: dict[str, list[tuple[date, float, float]]] = {}
+        # Der LTS-Read ist das Teure an dieser Prüfung. Er wird EINMAL gefahren
+        # und aufgehoben — die zweite Achse liest nicht noch einmal.
+        ha_komp_je_tag: dict[date, dict] = {}
         for tz in tz_list:
             # N-64 — **die Aktiv-Grenze gehört PRO TAG gezogen**, sonst entsteht
             # Phantom-Drift. `get_komponenten_tageskwh_lts` liest, was das
@@ -385,6 +410,7 @@ class DatenquelleChecks:
                     f"HA-LTS-Read fehlgeschlagen: {type(e).__name__}: {e}"
                 )
                 continue
+            ha_komp_je_tag[tz.datum] = ha_komp
 
             # #311 JanKgh: Nur PV-/BKW-Keys vergleichen, die der LTS-Read
             # tatsächlich liefern konnte. Fehlt ein Key im LTS-Read (Sensor
@@ -425,14 +451,66 @@ class DatenquelleChecks:
             if delta >= 2.0 and rel >= 0.05:
                 drift_pro_tag.append((tz.datum, eedc_kwh, ha_kwh))
 
-        if not drift_pro_tag:
+        # ── N-201: dieselbe Prüfung für alles, was keine PV ist ──────────────
+        #
+        # Bis hierher vergleicht dieser Check **nur** die PV-/BKW-Tagessumme;
+        # Wallbox, E-Auto, Wärmepumpe und Sonstiges liefen nie gegen HA. Das
+        # war keine Aussage, sondern eine Lücke: Diese Werte tragen ROI, CO₂
+        # und die Ersparnis-Rechnung, eine Drift dort ist genauso teuer.
+        #
+        # **Warum je Komponente und nicht als zweite Summe.** Eine Wallbox in
+        # dieselbe Summe zu werfen versteckt beide: ein Plus bei der Wärmepumpe
+        # gleicht ein Minus bei der Wallbox aus, und am Ende steht eine
+        # unauffällige Null. Geräte sind keine gemeinsame Menge — die PV-Summe
+        # ist eine, weil dort mehrere Strings *dasselbe* messen.
+        #
+        # **Drei Abgrenzungen, jede gegen einen bestehenden Turm:**
+        # * ``batterie_*`` bleibt draußen — das Netto darf legitim ~0 sein und
+        #   sein Vorzeichen hat mit ``_check_batterie_vorzeichen_historie``
+        #   seinen eigenen Punkt.
+        # * Beide Seiten müssen einen Wert **> 0** tragen. Ein Key, den HA
+        #   liefert und die gespeicherte Zeile nicht, ist eine *Lücke* und
+        #   gehört ``_check_leere_tage_trotz_zaehler`` (Kategorie
+        #   TAGESWERTE_FEHLEN) — kein zweiter Turm über denselben Sachverhalt.
+        # * Dieselben Schwellen wie oben (≥ 2 kWh UND ≥ 5 %). Eigene Zahlen je
+        #   Gerätetyp wären erfunden, solange sie niemand gemessen hat.
+        for tz in tz_list:
+            ha_komp = ha_komp_je_tag.get(tz.datum)
+            if not ha_komp:
+                continue
+            tz_komp = tz.komponenten_kwh or {}
+            for k, ha_v in ha_komp.items():
+                if not isinstance(ha_v, (int, float)):
+                    continue
+                if any(k.startswith(p) for p in PV_KOMPONENTEN_PREFIXE):
+                    continue  # oben als Summe geprüft
+                if k.startswith("batterie_"):
+                    continue
+                eedc_v = tz_komp.get(k)
+                if not isinstance(eedc_v, (int, float)):
+                    continue
+                if eedc_v <= 0 or ha_v <= 0:
+                    continue  # Lücke, nicht Abweichung → TAGESWERTE_FEHLEN
+                k_delta = abs(eedc_v - ha_v)
+                k_max = max(eedc_v, ha_v)
+                if k_delta >= 2.0 and (k_delta / k_max) >= 0.05:
+                    drift_komponente.setdefault(k, []).append(
+                        (tz.datum, float(eedc_v), float(ha_v))
+                    )
+
+        if not drift_pro_tag and not drift_komponente:
             return [CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.OK.value,
                 meldung="Keine signifikanten Abweichungen zu HA-Statistics (letzte 90 Tage)",
                 details=(
-                    "Geprüft wurde die PV-Tagessumme gegen die HA-Statistics-Tagessumme. "
-                    "Schwelle: ≥ 2 kWh UND ≥ 5 % Abweichung gleichzeitig — kleinere "
-                    "Boundary-Drift wird bewusst ignoriert."
+                    "Geprüft wurde die PV-Tagessumme gegen die HA-Statistics-"
+                    "Tagessumme — und zusätzlich jede andere zugeordnete "
+                    "Komponente einzeln (Wallbox, E-Auto, Wärmepumpe, "
+                    "Sonstiges). Schwelle je Vergleich: ≥ 2 kWh UND ≥ 5 % "
+                    "Abweichung gleichzeitig — kleinere Boundary-Drift wird "
+                    "bewusst ignoriert. Der Speicher steht nicht in dieser "
+                    "Liste: sein Tages-Netto darf 0 sein, und sein Vorzeichen "
+                    "hat eine eigene Prüfung."
                 ),
             )]
 
@@ -462,6 +540,50 @@ class DatenquelleChecks:
                 action_kind="reaggregate_day",
                 action_params={"anlage_id": anlage.id, "datum": datum_.isoformat()},
                 action_label="Tag reparieren",
+            ))
+
+        # N-201: je Komponente EIN Eintrag — mit dem schlimmsten Tag als
+        # Beleg und als Reparatur-Ziel. Dreißig gleichlautende Tageszeilen für
+        # eine Wallbox wären keine Auskunft, sondern Rauschen.
+        from backend.services.snapshot.komponenten_beitraege import komponenten_key_label
+
+        inv_je_id = {str(inv.id): inv for inv in alle_invs}
+        for key in sorted(
+            drift_komponente,
+            key=lambda k: max(abs(e - h) for _, e, h in drift_komponente[k]),
+            reverse=True,
+        ):
+            tage = drift_komponente[key]
+            _, _, rest_id = key.rpartition("_")
+            label = komponenten_key_label(key, inv_je_id.get(rest_id))
+            schlimmster = max(tage, key=lambda t: abs(t[1] - t[2]))
+            datum_, eedc, ha = schlimmster
+            delta_signed = ha - eedc
+            rel_signed = (delta_signed / max(eedc, ha)) * 100 if max(eedc, ha) > 0 else 0.0
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.INFO.value,
+                meldung=(
+                    f"{label}: {len(tage)} Tag(e) weichen von HA-Statistics ab "
+                    f"(größte Abweichung {datum_.isoformat()}: "
+                    f"{eedc:.1f} → {ha:.1f} kWh, Δ {delta_signed:+.1f} kWh, "
+                    f"{rel_signed:+.1f}%)"
+                ),
+                details=(
+                    f"Für diese Komponente steht in deiner Tages-Zusammenfassung "
+                    f"an {len(tage)} Tag(en) ein anderer Wert als in den "
+                    f"HA-Statistics. Diese Werte tragen die Wirtschaftlichkeits- "
+                    f"und CO₂-Rechnung mit. „Tag reparieren“ schreibt den Tag "
+                    f"{datum_.isoformat()} aus HA-Statistics neu; für alle Tage "
+                    f"auf einmal: Einstellungen → Daten → Energieprofil → "
+                    f"Reparatur-Werkbank."
+                ),
+                link=f"/einstellungen/energieprofil?datum={datum_.isoformat()}",
+                action_kind="reaggregate_day",
+                action_params={"anlage_id": anlage.id, "datum": datum_.isoformat()},
+                action_label="Tag reparieren",
+                investition_id=(
+                    int(rest_id) if rest_id.isdigit() else None
+                ),
             ))
 
         if rest > 0:
@@ -873,7 +995,7 @@ class DatenquelleChecks:
         inv_result = await self.db.execute(
             select(_Inv).where(_Inv.anlage_id == anlage.id)
         )
-        invs_by_id = {str(inv.id): inv for inv in inv_result.scalars().all()}
+        alle_invs = list(inv_result.scalars().all())
 
         # Beidseitige Mindest-Magnitude: Balance-/Rauschtage (Netto ~0 kWh)
         # raus, sonst kippt das Vorzeichen zufällig → Fehlalarm. 1 kWh ist
@@ -886,6 +1008,24 @@ class DatenquelleChecks:
             if abs(stored_netto) < SCHWELLE_KWH:
                 continue  # kein nennenswertes gespeichertes Batterie-Netto
             hat_batterie = True
+            # N-313 — **die Aktiv-Grenze gehört PRO TAG gezogen**, wortgleich
+            # zum Drift-Check darüber (N-64). `invs_by_id` entscheidet, welche
+            # Sensoren `get_komponenten_tageskwh_lts` überhaupt liest; die
+            # Gegenseite (`energie_profil.aggregator.aggregate_day`) lädt ihre
+            # Investitionen mit `aktiv_am_tag(datum)`. Ohne den Filter steht ein
+            # an diesem Tag stillgelegter, noch nicht angeschaffter oder auf
+            # `aktiv=False` gesetzter Speicher nur auf der HA-Seite — und wenn
+            # sein Beitrag das Netto-Vorzeichen kippt, meldet eedc einen
+            # „vertauschten" Tag samt Reparatur-Knopf, den die Neu-Aggregation
+            # nicht auflösen kann: sie schreibt für dieses Gerät nichts, die
+            # Meldung bleibt stehen. Genau die P-6-Falle aus N-57/#368.
+            #
+            # ⚠ Das braucht einen **zweiten, aktiven** Speicher: bei nur einem
+            # ist `stored_netto` unter der Schwelle und die Schleife bricht
+            # oben ab, bevor überhaupt gelesen wird.
+            invs_by_id = {
+                str(inv.id): inv for inv in alle_invs if inv.ist_aktiv_an(tz.datum)
+            }
             try:
                 ha_komp = await get_komponenten_tageskwh_lts(
                     anlage, invs_by_id, tz.datum,

@@ -20,6 +20,7 @@ from datetime import date, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
 
+from backend.models.investition import Investition
 from backend.services.daten_checker import DatenChecker, CheckKategorie
 
 _KAT = CheckKategorie.BATTERIE_VORZEICHEN_HISTORIE.value
@@ -41,8 +42,22 @@ def _make_anlage():
     })
 
 
-def _make_inv(inv_id=5, typ="speicher"):
-    return SimpleNamespace(id=inv_id, anlage_id=1, typ=typ, parameter={})
+def _make_inv(inv_id=5, typ="speicher", aktiv=True,
+              anschaffungsdatum=None, stilllegungsdatum=None):
+    """Echtes Model-Objekt (nicht persistiert) — der Check ruft `ist_aktiv_an`.
+
+    ⚑ **Seit N-313** zieht `_check_batterie_vorzeichen_historie` die
+    Aktiv-Grenze pro Tag, wie `_check_datenquelle_drift` seit N-64 und
+    `_check_leere_tage_trotz_zaehler` seit N-57. Ein `SimpleNamespace` kennt
+    die Methode nicht; ein Double mit **eigener** Aktiv-Logik wäre die zweite
+    Definition, gegen die der Fund antritt. Wortgleiche Begründung steht in
+    `test_etappe_6_drift_check.py`.
+    """
+    return Investition(
+        id=inv_id, anlage_id=1, typ=typ, parameter={},
+        aktiv=aktiv, anschaffungsdatum=anschaffungsdatum,
+        stilllegungsdatum=stilllegungsdatum,
+    )
 
 
 def _build_checker(tz_list, invs_list, ha_tageskwh_func, ha_available=True):

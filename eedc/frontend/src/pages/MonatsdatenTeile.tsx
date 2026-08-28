@@ -964,6 +964,25 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
                 danach in keiner Liste zu sehen und würde trotzdem jeden erneuten
                 Import abweisen.
               </div>
+              {/* N-312: Ein Zählerstand ist die eine Datenart, bei der das
+                  Löschen nicht nur diesen Monat trifft. Er ist eine
+                  Bestandsgröße; die einzige Rechnung darauf ist Ende − Anfang,
+                  und den Anfang holt sich der Folgemonat als letzten Stand
+                  davor. Fällt er weg, greift der nächste Monat auf den
+                  vorletzten zurück und weist zwei Monate als einen aus — ohne
+                  Hinweis, weil das Fenster formal vollständig bleibt. */}
+              {geraetewerte.komponenten.some(k => k.ist_zaehler) && (
+                <div className="mt-1 text-sm">
+                  Darunter {geraetewerte.komponenten.filter(k => k.ist_zaehler).length === 1
+                    ? 'ist ein Zählerstand' : 'sind Zählerstände'}{' '}
+                  ({geraetewerte.komponenten.filter(k => k.ist_zaehler)
+                    .map(k => k.bezeichnung).join(', ')}).
+                  Ein Stand ist kein Monatswert, sondern der{' '}
+                  <strong>Anfangswert des Folgemonats</strong>: Nach dem Löschen
+                  rechnet der nächste Monat gegen den vorletzten Stand und zeigt
+                  zwei Monate als einen.
+                </div>
+              )}
             </Alert>
           )}
 
