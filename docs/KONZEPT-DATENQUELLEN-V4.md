@@ -2,54 +2,54 @@
 
 > ## **Status (gemessen 2026-08-28): P1 + P2 + P3 ausgeliefert — der Bauplan ist abgearbeitet**
 >
-> **Aus `docs/drafts/` nach `docs/` gewandert (2026-08-08).** **`api/routes/datenquellen.py` und `api/routes/ha_remote.py` nennen dieses Dokument im Modul-Docstring wörtlich als SoT — ein versionierter Verweis darf nicht ins Gitignore zeigen** (dieselbe Begründung, aus der [`KONZEPT-MONATS-FAKTEN.md`](KONZEPT-MONATS-FAKTEN.md) gewandert ist). Auch [`KONZEPT-IA-V4.md`](KONZEPT-IA-V4.md) verweist in Invariante I16 hierher.
-> Es trägt bewusst **keine Versionsnummer, nur dieses Mess-Datum** (Muster aus #359) — ein Status,
-> der eine Version nennt, altert garantiert.
->
-> **Nicht auf der Website und nicht in der In-App-Hilfe:** `website/scripts/sync-docs.sh` und
-> `scripts/sync-help.sh` arbeiten beide mit einer **Allowlist**, in der Konzepte und ADRs bewusst
-> fehlen. Dieses Dokument ist im Repository lesbar — es ist kein Anwender-Handbuch.
->
 > ⚑ **Abgeschlossen 2026-08-28 (Entscheid Gernot, gegen den Code gemessen): P2 und P3 sind fertig — auch Remote-HA (LL-Token).** Der Weg ging über zwei Stufen: v4.0.13/v4.0.14 haben die **Verbraucher**-Seite umgehängt — Tagesverlauf, Prognosequellen (SFML/Solcast), kWh heute/gestern, Verbrauchsprofil, Langzeitstatistik und der Statistik-Import fragen nicht mehr nach der Betriebsart, sondern über `is_available` nach der **Verbindung**. Die Verbindung selbst löst seither `services/ha_connection.py::resolve_ha_connection` auf (**Supervisor oder Remote-LL-Token**) und reicht sie an `HAStatisticsService` **und** `HAStateService` weiter — beim Start *und* beim Speichern. Die Live-Engine liest zugeordnete HA-Entities auch ohne Supervisor (`live_power_service.py:277`, C2a), der `ha_statistics`-Router ist seit 11.08. immer gemountet, und die untertägige Recovery holt nach einem Neustart die letzten sechs Stunden nach (`scheduler.py::sensor_snapshot_startup_recovery`, dazu das 02:15-Self-Healing für den Vortag).
 >
 > ⛔ **Hier stand bis 2026-08-28: „P3 bleibt offen … heute 30 Stellen im Backend tragen `HA_INTEGRATION_AVAILABLE` (nicht rund 20)".** Die Zahl war **richtig gezählt und trotzdem irreführend** — sie hat fünfzehn Tage lang eine Restschuld behauptet, die es so nicht gab. Heute sind es **28** Vorkommen außerhalb der Tests, davon **neun echte Verzweigungen**, und die sind alle legitim supervisor-spezifisch: die Add-on-API-Router (`main.py:118`/`:635`), die Supervisor-Logs (`system_logs.py:154`), die Quellenart `ha_app` vs. `ha_connector` (`datenquellen.py:908`, `migrate_datenquellen_materialisieren.py:62`), zwei Diagnose-Felder und die beiden Zweige in `live_power_service.py`, die **gemeinsam** Supervisor *und* Remote bedienen. Der Rest sind Importe, die Definition und **Kommentare, die den Rückbau dokumentieren**. *Eine Vorkommens-Zählung misst keine Restschuld — wer eine Zahl als Umfang notiert, notiert dazu, was gezählt wurde.*
 >
 > **Offen: nichts.** Der Punkt *Datenquellen-Ausbau* steht in der Roadmap [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) seit dem 28.08. unter **Abgeschlossen**. ⚑ **Der „Takt-Check für Bestands-Zuordnungen" ist kein offener Rest, sondern anders gelöst** (Gernot 28.08.: „es läuft und wird genutzt"): Er sitzt als eine von **fünf** Prüfungen in `services/datenquellen_validierung.py` (`takt_problem`), **nicht** als Daten-Checker-Kategorie. Wer im `daten_checker/` nach einem Takt-Thema greppt, findet nichts und hält es für eine Lücke — es ist keine.
+
+---
+
+> **Was dieses Dokument ist:** die Beschreibung, **wie eedc Datenquellen heute auflöst** — welche
+> Quelle den Wert eines eedc-Feldes liefert, in welcher Reihenfolge, und was bei Ausfall passiert.
+> **Acht Produktivdateien** zitieren es mit Abschnittsnummer im Datei-Kopf als SoT; deshalb liegt es
+> in `docs/` und nicht in `drafts/` (die Regel dazu steht in [`DEVELOPMENT.md`](DEVELOPMENT.md)).
 >
-> **Historie:** alles, was unten mit ✅ steht, ist mit v4.0.0 ausgeliefert und wird nicht mehr fortgeschrieben.
+> **Was es nicht mehr ist: ein Bauplan.** Die Ausgangslage vor dem Umbau (§1) und die
+> Bau-Reihenfolge (§5) sind am 2026-08-28 nach
+> [`archive/KONZEPT-DATENQUELLEN-V4-BAUVERTRAG.md`](archive/KONZEPT-DATENQUELLEN-V4-BAUVERTRAG.md)
+> gewandert, als P1–P3 abgeschlossen waren — ein Dokument, das öffentlich stehen bleibt, soll den
+> **heutigen** Stand sagen und keine Checkliste sein (Entscheid Gernot, 28.08.). **Die
+> Abschnittsnummern bleiben trotzdem stehen** — `§2a`, `§2b`, `§2b1`, `§2d` und `§3a` werden aus dem
+> Code heraus zitiert; eine Umnummerierung bräche acht Datei-Köpfe.
+>
+> **Name:** „Datenquellen" statt „Livequellen" — „Live" ist in eedc ein Feld-*Typ* (Live-Felder
+> W/%/°C vs. Energie-Felder kWh); der Begriff wäre doppeldeutig.
+>
+> **Nicht auf der Website und nicht in der In-App-Hilfe:** `website/scripts/sync-docs.sh` und
+> `scripts/sync-help.sh` arbeiten beide mit einer **Allowlist**, in der Konzepte und ADRs bewusst
+> fehlen. Dieses Dokument ist im Repository lesbar — es ist kein Anwender-Handbuch.
+>
+> **Beobachtung aus dem Feld:** Datenquellen-Felder ohne Zuordnung brauchen nach dem Update einmal
+> manuell „keine"; bei Häufung eine Mini-Normalisierung erwägen.
 
+---
 
-## Maßnahmen-Register (fortschreibbar — Stand 2026-07-28)
+## Was wann geliefert wurde
 
 | Paket | Inhalt | Status | Beleg / Rest |
 | --- | --- | --- | --- |
 | **P1 — MQTT-Fundament** | B1 Broker-Block · B2 Feld-Fläche · B3 `#`-Discovery+Suche · B5 Feld→eine-Quelle · B7 Block-Layout · B8 Migration (MQTT-Seite) | ✅ **ausgeliefert mit v4.0.0** (`51c81f29`) | `components/live/{MqttBrokerForm,DatenquellenZuordnung,DatenquellenGatewayPicker}.tsx` — alle mit SoT-Kommentar auf dieses Doc |
-| **P2 — HA in die Fläche** | HA-Sensor als Quelle · B6 (#343-Assistenz) · Präferenz §2d · B8 HA-first | ✅ **ausgeliefert mit v4.0.0** (`d5c4d768`, Assistenz-Detail im archivierten [`KONZEPT-DATENQUELLEN-P2`](drafts/archive/flip-v4/KONZEPT-DATENQUELLEN-P2.md)) | `components/live/{DatenquellenHaPicker,HaVerbindungForm}.tsx` |
+| **P2 — HA in die Fläche** | HA-Sensor als Quelle · B6 (#343-Assistenz) · Präferenz §2d · B8 HA-first | ✅ **ausgeliefert mit v4.0.0** (`d5c4d768`; das Assistenz-Detail steht im Bau-Archiv des Maintainers — **bewusst ohne Link**, `docs/drafts/` ist gitignored) | `components/live/{DatenquellenHaPicker,HaVerbindungForm}.tsx` |
 | **P3 — Remote-HA (LL-Token)** | B4 HA-Verbindungs-Block · **Gate-Umbau `HA_INTEGRATION_AVAILABLE`** (Supervisor **oder** Remote) · Remote-Verfügbarkeit + FS-Degradation · untertägige Recovery | ✅ **abgeschlossen 2026-08-28** (Anwender-Hälfte mit v4.0.13/v4.0.14) | `services/ha_connection.py::resolve_ha_connection` · `api/routes/ha_remote.py` · `live_power_service.py:277` (C2a) · `scheduler.py::sensor_snapshot_startup_recovery`. Vom Gate bleiben **neun** echte Verzweigungen, alle legitim supervisor-spezifisch (s. Kopf) |
 | **Rest aus P2** | Wissensbasis über den Initial-Umfang hinaus (evcc + 4 Wallbox-Integrationen) · Takt-Check für **Bestands**-Zuordnungen | ✅ **erledigt** — Wissensbasis wird kuratiert fortgeschrieben (`core/ha_integrations_wissen.py`); der Takt-Check ist **anders gelöst als geplant** | `services/datenquellen_validierung.py::takt_problem` (eine von fünf Prüfungen) statt einer Daten-Checker-Kategorie — Gernot 28.08.: „es läuft und wird genutzt" |
 
-> **Warum dieses Dokument liegen bleibt:** vier Produktiv-Komponenten führen es als SoT im
-> Datei-Kopf. Es beschreibt seit dem 28.08. durchgehend den **gebauten** Zustand — der Bauplan
-> darunter bleibt als Begründung lesbar, nicht als Vorhaben.
->
-> **Beobachtung aus dem Feld (Backlog):** Datenquellen-Felder ohne Zuordnung brauchen nach dem
-> Update einmal manuell „keine"; bei Häufung eine Mini-Normalisierung erwägen.
-
 ---
 
-> **Status: ✅ ABGENOMMEN (Gernot 2026-07-13) v0.4 — Vorgabe für die Umsetzung.** Bau slice-/paketweise (§5); P1, P2 und P3 sind ausgeliefert (28.08.).
-> Auslöser: In Runde 18 wurden MQTT-Inbound/-Gateway auf einen Wizard umgestellt; die umgesetzte Form entsprach nicht Gernots Vorstellung. Konzept gemeinsam erarbeitet (v0.1→v0.4), inkl. Kritik-Runde.
-> **Name:** „Datenquellen" statt „Livequellen" — „Live" ist in eedc ein Feld-*Typ* (Live-Felder W/%/°C vs. Energie-Felder kWh); der Begriff wäre doppeldeutig. Das Konzept regelt, **welche Quelle den Wert eines eedc-Feldes liefert** (Live- wie Energie-Feld).
-> **Prinzip:** kein Redesign der Berechnung — Aggregation/Snapshots bleiben; **Konfigurations-Struktur + UX** vereinheitlichen, **Merge-Reihenfolge** anpassen (§2d) ([[feedback_ist_anzeigen_nur_aendern_wo_noetig]], [[feedback_bestehende_mechanik_nutzen_nicht_erfinden]], [[feedback_a5_analytische_sichten_konzept_zuerst]]).
-> **Heimat nach Abnahme:** offen — vermutlich eigener Abschnitt bei Forms→V4 ([[KONZEPT-FORMULARE-V4]]) + Style-Guide-Verweis. Gehört in die IA-V4-Linie (Einstellungen → Integration).
+## 0. Weichenstellungen (Gernot, 2026-07-13) — sie gelten unverändert
 
-**Änderungslog:** v0.1→v0.2 (2026-07-13): Rename; Quellen-Priorität kontextabhängig (§2d, Gernot); Fähigkeits-Matrix Quelle × Achse (§2c); untertägige Recovery vs. historischer Backfill getrennt (§2e); WebSocket/LTS aus dem Scope genommen.
-· v0.2→v0.3 (2026-07-13): **genau eine Quelle pro Feld** (F5, §2d) statt Runtime-Merge; **F2b strikt eine Quelle, kein Fallback**; F1/F3 (kein Flip-Gating, Bau jetzt — §5 Bau-Pakete); F4 eigener `#`-Scan + Presets; F6 #343 integrieren; **§2g Integration-Blöcke neu strukturiert** (B7). Alle offenen Punkte geklärt.
-· v0.3→v0.4 (2026-07-13): Kritik-Runde 1–8 eingearbeitet: **B8 Migration** HA-first (§2h); **Remote-HA-fähiges Design ab P1** (§2a, Punkt 2); **kein stiller Quellen-Wechsel + Ausfall sichtbar** (§2d, Punkt 3); Riemann/Stunden-Form als *Ableitung* geklärt (§2c, Punkt 4); **„keine Zuordnung" gültige Wahl** → Monatsabschluss manuell/Vorjahr/Durchschnitt (§2d/§2b, Punkt 5); **Wächter benannt** (§7, Punkt 6); Discovery-Symmetrie HA↔MQTT (§2b, Punkt 7); Gateway summiert nicht — verifiziert `mqtt_gateway_service.py:231` (Punkt 8).
-
----
-
-## 0. Getroffene Weichenstellungen (Gernot, 2026-07-13)
+Die vier Entscheidungen, auf denen die Fläche steht. Sie sind gebaut; die Formulierung
+stammt aus dem Entwurf und ist deshalb an zwei Stellen als Zustand von damals gekennzeichnet.
 
 Fundament dieses Entwurfs:
 
@@ -58,68 +58,23 @@ Fundament dieses Entwurfs:
    - **HA-App (Supervisor-Token):** besteht eine HA-Sensor-Zuordnung (aus beliebiger HA-Integration), hat **HA Vorrang** bei der Zuordnung; MQTT deckt Felder **ohne** HA-Sensor. **Kein** Laufzeit-Fallback pro Feld (F2b, §2d).
    - **Standalone + Remote-HA (LL-Token):** HA-Sensor **gleichberechtigt** zur MQTT-Topic-Zuordnung (pro Feld wählbar).
    - **Standalone ohne HA:** nur MQTT.
-   Präzisiert [[feedback_ha_mqtt_parallel]] („parallel" = Funktionsgleichheit, verfügbarkeits-/kontextgesteuert).
-3. **Neuer Baustein — Remote-HA per Long-Lived-Token:** eedc-Standalone soll sich an eine entfernte HA-Installation anbinden können. Analog MQTT-Broker braucht es einen **HA-Verbindungs-Block**. Damit wird HA im Standalone überhaupt erst wählbar.
-4. **Topic-Discovery (Broker-`#`-Scan mit Suche)** wird eigener Baustein (existiert heute nicht).
+   „Parallel" heißt dabei **Funktionsgleichheit**, gesteuert über Kontext und Verfügbarkeit — nicht „beide gleichzeitig".
+3. **Remote-HA per Long-Lived-Token** (damals neu, seit P3 gebaut): eedc-Standalone bindet sich an eine entfernte HA-Installation an. Analog MQTT-Broker braucht es einen **HA-Verbindungs-Block**. Damit wird HA im Standalone überhaupt erst wählbar.
+4. **Topic-Discovery (Broker-`#`-Scan mit Suche)** als eigener Baustein — bei der Entscheidung gab es ihn nicht, mit P1 ist er gebaut.
 
 ---
 
-## 1. Inventur (Ist-Stand)
+## 1. Ausgangslage — ausgelagert
 
-### 1a. MQTT — heute zwei getrennte Mechanismen
-
-| | Inbound | Gateway |
-|---|---|---|
-| **Modell** | *Du* publishst auf eedc-vorgegebene Topics (Push) | eedc abonniert *deine* Fremd-Topics + rechnet um (Translate) |
-| **Feld-Zuordnung** | **implizit** über Topic-Namensschema `eedc/{anlage}_{slug}/energy\|live/inv/{id}_{slug}/{feld}` — **keine** Topic→Feld-Tabelle | **explizit** persistente Mapping-Datensätze |
-| **Datenmodell** | Settings-Key `mqtt_inbound` (nur Broker-Config) | Tabelle `mqtt_gateway_mappings` (quell_topic, ziel_key, payload_typ, json_pfad, faktor/offset/invert, preset_id …) |
-| **Discovery** | — | **nur Einzel-Topic-Test** (`POST /mqtt/gateway/test-topic`) + statische Geräte-Presets. **Kein** Wildcard-`#`-Scan |
-
-- Wizard: `eedc/frontend/src/pages/MqttInboundSetup.tsx` · Gateway-UI: `eedc/frontend/src/components/live/MqttGateway.tsx`.
-- Broker-Config: `eedc/backend/api/routes/live_mqtt_inbound.py` (Key `mqtt_inbound`; Quelle `env`|`db`, DB-Vorrang, Passwort maskiert).
-- Presets: `eedc/backend/services/mqtt_presets.py` (Geräte-Templates, **nicht** aus dem Broker gelesen).
-- Topic-Registry (SoT erwarteter Inbound-Topics): `eedc/backend/services/mqtt_topic_registry.py::build_expected_topics()`.
-- Einbindung: Katalog `integration`, `id: 'mqtt-inbound'` (`einstellungenKatalog.tsx:545`).
-
-### 1b. HA — heute rein Supervisor-/Add-on-gebunden
-
-- **State/Live-Werte:** REST via `httpx` gegen `http://supervisor/core/api` (`config.py:74`, **hartkodiert**) mit `SUPERVISOR_TOKEN` (`config.py:60`). Service: `ha_state_service.py` (`is_available = bool(token)`), REST-generisch (`/states`, `/history/period`).
-- **Kurzzeit-History:** REST `/api/history/period` — Recorder-Fenster (Default `purge_keep_days: 10`).
-- **LTS/Statistik:** direkter SQLite-Zugriff `/config/home-assistant_v2.db` ODER remote via `ha_recorder_db_url` (`config.py:71`). REST kennt **keine** Statistik.
-- **HA-Energy-Vorschläge:** Dateisystem `/config/.storage/core.energy` — add-on-only.
-- **Untertägige Recovery:** Self-Healing der Snapshot-Jobs (Restart-Recovery verpasster :05/:55-Slots, v3.23.0) — holt heutige Stunden aus HA-History nach.
-- **Gate:** `HA_INTEGRATION_AVAILABLE = bool(SUPERVISOR_TOKEN)` (`config.py:24`). Im Standalone werden **alle 5 HA-Routen nicht registriert** (`main.py:100-107, 456-468`) + ~20 Guard-Stellen.
-- **sensor_mapping** (JSON-Spalte `anlage.sensor_mapping:95`): `{ basis:{…,live,live_invert}, investitionen:{<id>:{felder,live,live_invert}}, solcast_config }`, Strategie `sensor`|`keine`. **Verbindungs-unabhängig** — bleibt unverändert.
-- **Entity-Discovery:** `GET /api/sensor-mapping/{id}/available-sensors`. Wizard: `SensorMappingWizard.tsx`. Setup-Panel `HAConnectionStep.tsx` = reine Anzeige, **keine** URL/Token-Eingabe.
-  > ⚠ **IST-Aufnahme von vor dem Umbau.** Beides gibt es nicht mehr: der Wizard ist mit dem
-  > IA-V4-Flip gefallen, der Endpunkt am 2026-08-13 stillgelegt (N-241). Heutige
-  > Entity-Discovery: `GET /api/datenquellen/{id}/ha/sensoren`.
-
-### 1c. HA ↔ MQTT heute: Merge mit **MQTT**-Vorrang
-
-`live_power_service.py`: pro Feld gewinnt **MQTT**, wenn Wert da (`basis_values.update(mqtt_basis)`), sonst HA; beides auch je allein. Manche Felder haben bewusst **kein** MQTT-Topic (nur HA/manuell, z. B. `ladung_netz_kwh`). ⚠️ Diese Reihenfolge widerspricht Weichenstellung 0.2 (HA-App → HA-Vorrang) → Umbau nötig (§2d).
-
-### 1d. Feld-Registry (gemeinsamer SoT)
-
-`eedc/backend/core/field_definitions.py`: `BASIS_FELDER`, `INVESTITION_FELDER` (Energy je Typ), `LIVE_FELDER_INV` + `BASIS_LIVE_FELDER` (Live), je `label`/`einheit`/`hinweis`. Frontend: `lib/fieldDefinitions.ts`.
-
-### 1e. Vorbild-Muster: MonatsdatenForm (V4, seit 2026-07-12)
-
-- **Datengetriebene Feldliste** aus Registry + Backend-Status; Sichtbarkeit über Anschaffungs-/Stilllegungsfenster.
-- **Ein `FeldStatus` pro Feld** treibt Badge + Placeholder + Abweichungs-Zeile — ein Kanal.
-- **Gelesener Wert NICHT im Feldtitel**, sondern in der **Assistenz-Zone** (`AssistenzFeld.tsx`): Badge „gemessen/geschätzt (Quelle)" + Placeholder „Vorschlag: …" + „Sensor meldet X · gespeichert Y" mit InlineAktion. Vokabular-SoT: `ErfassungZustandBadge.tsx`.
-- **Verschachtelte einklappbare Sektionen** (`FormSection`, `ebene="typ"|"geraet"`) mit Rollup-Badge; Kopf-Ampel + Abschluss-Review als Rahmen.
-- SoT: `ui/{Input,Select,Textarea,Button,Alert,FormSection}`, `InlineAktion`, `ErfassungZustandBadge`; Logik `lib/erfassungZustand.ts`.
-
-### 1f. Einstellungen-V4-Struktur (Ziel-Umgebung)
-
-`v4/EinstellungenV4.tsx` + Registry `config/einstellungenKatalog.tsx`; Kategorien `stammdaten · komponenten · infothek · daten · integration · system`.
-- **Integration** enthält: `sensor-mapping`, `ha-statistik-import`, `ha-export`, `import-buendel`, `mqtt-inbound`.
-- Block-Anatomie: `BlockShell` (Kopf + Controls, lazy render) über `Block`-Objekt. Leichte Config = `FormBlock`; schwere Assistenz = Wizard-Overlay.
+Der Zustand **vor** dem Umbau (zwei getrennte MQTT-Mechanismen, HA rein Supervisor-gebunden,
+MQTT-Vorrang beim Merge) steht im archivierten Bau-Vertrag:
+[`archive/KONZEPT-DATENQUELLEN-V4-BAUVERTRAG.md`](archive/KONZEPT-DATENQUELLEN-V4-BAUVERTRAG.md).
+⚠ Er ist **Historie und heute in Teilen widerlegt** — er beschreibt, wogegen gebaut wurde, nicht
+was gilt. Was gilt, steht in §2 und §4.
 
 ---
 
-## 2. Zielbild
+## 2. So ist es gebaut
 
 ### 2a. Zwei Verbindungs-Blöcke (Integration) — „Verbindung" getrennt von „was darüber fließt"
 
@@ -128,7 +83,7 @@ Fundament dieses Entwurfs:
 | **MQTT-Broker-Verbindung** | Host/Port/User/Passwort/enabled + „Verbindung testen" + Status. **Ein** Broker für Inbound, Gateway UND Export. | `FormBlock`; Config existiert (`mqtt_inbound`) — nur UI herauslösen |
 | **HA-Verbindung** | HA-App: lokaler Supervisor (automatisch). **Standalone: Basis-URL + Long-Lived-Token** + „Testen" (`GET {url}/api/`) + Status. | **NEU** — B4 |
 
-**Design-Prinzip (Punkt 2 — „Remote-HA kommt!"):** Fläche + Quell-Picker werden **von Anfang an Remote-HA-fähig** entworfen. HA-Sensor ist eine Quell-Option, deren *Verfügbarkeit* der HA-Verbindungs-Block liefert (Supervisor **oder** Remote-Token) — **kein** „HA nur wenn Supervisor"-Kurzschluss in P1/P2. P3 schaltet später nur die Remote-*Verbindung* frei, ohne die Fläche umzubauen.
+**Design-Prinzip (Punkt 2 — „Remote-HA kommt!"):** Fläche + Quell-Picker sind **von Anfang an Remote-HA-fähig** entworfen worden. HA-Sensor ist eine Quell-Option, deren *Verfügbarkeit* der HA-Verbindungs-Block liefert (Supervisor **oder** Remote-Token) — **kein** „HA nur wenn Supervisor"-Kurzschluss in P1/P2. P3 schaltet später nur die Remote-*Verbindung* frei, ohne die Fläche umzubauen.
 
 ### 2b. Eine feld-zentrische Zuordnungs-Fläche (analog MonatsdatenForm)
 
@@ -218,7 +173,7 @@ Der Kern-Unterschied zwischen den Quellen — **drei Achsen**, nicht nur „lief
 | **Historischer Backfill** (vergangene Tage/Monate) | ✓ LTS (DB) via HA-Statistik-Import | ⚙️ nur via `ha_recorder_db_url` bzw. WS — **außerhalb dieses Konzepts** (§2e) | ✗ |
 | **Ableitung Leistung→Energie / Stunden-Form** (*innerhalb* der Quelle) | ✓ Zähler = Summe + Live-Sensor = Kurvenform (v3.45.5) | dito | Riemann aus Power nur ohne kWh-Zähler — verlustbehaftet (pre-v3.19, ±5–15 % #135), **nur schlimmsten Falls** |
 
-Kernaussage (Gernot): HA (beide) kann heutige Stunden **rückwirkend** liefern, MQTT nicht. Für den *Live-Wert* ist Remote-HA ≈ MQTT; auf der *Recovery-Achse* ist HA (beide) reicher als MQTT. Grenze: rückwirkend nur so weit, wie der Sensor Werte führt ([[feedback_ha_lts_keine_zeitmaschine]]).
+Kernaussage (Gernot): HA (beide) kann heutige Stunden **rückwirkend** liefern, MQTT nicht. Für den *Live-Wert* ist Remote-HA ≈ MQTT; auf der *Recovery-Achse* ist HA (beide) reicher als MQTT. Grenze: rückwirkend nur so weit, wie der Sensor Werte führt.
 
 **Klarstellung (Punkt 4):** Die letzte Zeile ist **Granularität/Ableitung innerhalb der *einen* zugeordneten Quelle** — die Stunden-*Form* aus dem Live-Leistungssensor holen, während *Menge/Summe* beim Energie-Zähler bleibt (LTS-treu, v3.45.5). Das ist **kein** Wechsel der Werte-Quelle und **kein** Widerspruch zur „eine Quelle pro Feld"-Regel (§2d). Riemann ist derselbe Fall (W→kWh innerhalb der Quelle), nicht ein Cross-Source-Fallback.
 
@@ -242,7 +197,7 @@ Kontext-Einfluss auf Verfügbarkeit/Default:
 
 **F2b entschieden (Gernot):** **strikt eine Quelle, kein Laufzeit-Fallback.** Fällt die zugeordnete Quelle aus → Feld-Lücke, die die untertägige Recovery (§2c) später schließt (bei HA-Quelle); keine Prioritätskette, kein „Notstopfen". Die Präferenz-Reihenfolge oben gilt nur für **Default/Vorschlag** bei der Zuordnung, nicht als Laufzeit-Kette.
 
-**Kein stiller Quellen-Wechsel + Ausfall sichtbar (Punkt 3):** Wählt der Nutzer HA (oder MQTT-Gateway), **bleibt** es dabei — bei Ausfall wird **nicht** stillschweigend auf MQTT umgeschaltet. Der **Ausfall der zugeordneten Quelle wird sichtbar dokumentiert** (Badge „Quelle liefert nicht" + Daten-Checker-Eintrag), nicht verschluckt ([[feedback_silent_except_logs]], [[feedback_daten_checker_kein_akzeptiert]]).
+**Kein stiller Quellen-Wechsel + Ausfall sichtbar (Punkt 3):** Wählt der Nutzer HA (oder MQTT-Gateway), **bleibt** es dabei — bei Ausfall wird **nicht** stillschweigend auf MQTT umgeschaltet. Der **Ausfall der zugeordneten Quelle wird sichtbar dokumentiert** (Badge „Quelle liefert nicht" + Daten-Checker-Eintrag), nicht verschluckt.
 
 **„Keine Zuordnung" ist eine gültige Wahl (Punkt 5):** Ein Feld darf bewusst *ohne* Sensor-/Topic-Quelle bleiben (`strategie: 'keine'`). Folge im **Monatsabschluss**: **keine Sensorwerte angeboten** → Feld wird **manuell** erfasst bzw. über die bestehenden Vorschläge **Durchschnitt / Vorjahresmonat** (`FeldStatus.vorschlaege`, MonatsdatenForm-Mechanik §1e) gefüllt. Das ist der heutige `strategie: 'keine'`-Pfad, in der Fläche jetzt explizit wählbar.
 
@@ -252,7 +207,7 @@ Dieses Konzept regelt **laufende/aktuelle Werte** (Live + aktueller Monat) **und
 
 ### 2f. Zuordnungs-Assistenz #343 in die Fläche integrieren (F6)
 
-Die Sensor-Zuordnungs-Assistenz aus [[project_sensor_zuordnungs_assistenz]] (#343) wird **Teil dieser Fläche**, nicht getrennt:
+Die Sensor-Zuordnungs-Assistenz aus der Zuordnungs-Assistenz (#343) wird **Teil dieser Fläche**, nicht getrennt:
 - **Integration-Dropdown pro Investitionstyp** (kuratierte Wissensbasis Integration × Typ × Feld → Entity-Muster + Hinweis) als **Vorschlag** beim HA-Sensor-Picker — installierte Integrationen nur „gefunden" markieren, Auswahl trifft immer der Nutzer, Eintrag „Manuell" bleibt.
 - **Takt-Check bei kWh-Zähler-Auswahl** (`statistics_short_term`, Treppenstufen-Muster) als Warnung im Assistenz-Zonen-Stil (analog Einheiten-Warnung).
 
@@ -278,16 +233,16 @@ Vorgeschlagene Blockreihenfolge: **Verbindungen zuerst** (MQTT-Broker · HA-Verb
 Bestehende Boxen haben `sensor_mapping` (HA), `mqtt_gateway_mappings`, `mqtt_inbound`. Überführung in „eine Quelle pro Feld" nach **HA-first** (Gernots gelebte Empfehlung; Doppelzuordnungen sind absolute Ausnahme):
 - Besteht für ein Feld eine **HA-Sensor-Zuordnung** → **HA** wird die Quelle; ein etwaiges paralleles MQTT-Mapping wird **deaktiviert (nicht gelöscht)** — verlustfrei rückholbar.
 - Feld ohne HA-Sensor: bestehendes **Gateway-Mapping** → Quelle „MQTT-Gateway"; sonst „MQTT-Inbound", falls Standard-Topic bespielt wird; sonst „keine".
-- Migration **additiv + einmalig** ([[feedback_vollbackfill_nur_additiv]]), **kein** blockierender Start-Job / HTTP ([[feedback_migration_startup_kein_http]]); Korrektheit per Transform-Test, nicht per Dauer-Wächter (§7).
+- Migration **additiv + einmalig**, **kein** blockierender Start-Job / HTTP; Korrektheit per Transform-Test, nicht per Dauer-Wächter (§7).
 
 ### 2i. Zuordnungs-Validierung (Slice C+D — ✅ Gernot-Weichen 2026-07-16)
 
-> **REFRAME (Gernot-Frage „weitere Daten-Checker-Probleme aus falscher Zuordnung?"):** Der Daten-Checker prüft **config-basierte Zuordnungsfehler bereits** — u. a. `SENSOR_MAPPING_EINHEIT` (= D!), `SENSOR_MAPPING_LTS`, `EmobChecks`-Doppelmapping (#314). Daher **wiederverwenden statt neu bauen** ([[feedback_bestehende_mechanik_nutzen_nicht_erfinden]], kein Drift): die **config-basierten** (zur Zuordnungszeit erkennbaren) Checks proaktiv **feld-bezogen** in der Fläche zeigen; **daten-basierte** (retrospektiv: `PV_UEBER_ERFASSUNG`-Plausibilität, `DATENQUELLE_DRIFT/STATUS`, `PROVENANCE_CONFLICT`, `BATTERIE_VORZEICHEN_HISTORIE`) bleiben im Daten-Checker.
+> **REFRAME (Gernot-Frage „weitere Daten-Checker-Probleme aus falscher Zuordnung?"):** Der Daten-Checker prüft **config-basierte Zuordnungsfehler bereits** — u. a. `SENSOR_MAPPING_EINHEIT` (= D!), `SENSOR_MAPPING_LTS`, `EmobChecks`-Doppelmapping (#314). Daher **wiederverwenden statt neu bauen** (`feedback_bestehende_mechanik_nutzen_nicht_erfinden`, kein Drift): die **config-basierten** (zur Zuordnungszeit erkennbaren) Checks proaktiv **feld-bezogen** in der Fläche zeigen; **daten-basierte** (retrospektiv: `PV_UEBER_ERFASSUNG`-Plausibilität, `DATENQUELLE_DRIFT/STATUS`, `PROVENANCE_CONFLICT`, `BATTERIE_VORZEICHEN_HISTORIE`) bleiben im Daten-Checker.
 
 **Umfang (Gernot 2026-07-16, alle 4):** je Feld in `/felder` eine Liste `probleme: [{art, schwere, text, aktion?}]`, im Frontend amber/rot + ggf. Inline-Aktion.
 1. **Einheiten-Mismatch (D)** — **Reuse** `SENSOR_MAPPING_EINHEIT`: Dimensions-Klassifikator `_klasse` (W/kW/MW=power, kWh…=energy) + `get_sensor_units`. Mismatch (kWh-Sensor in W-Feld, #200) = ERROR. Nur HA-Felder. **Klassifikator in gemeinsamen Helfer heben** (Checker + Fläche eine Quelle).
 2. **Aggregat-Redundanz (C)** — **NEU** (config, proaktiv; ergänzt das daten-basierte `PV_UEBER_ERFASSUNG`). Paare: `basis_*_pv_gesamt` ⊥ per-WR `inv_*_pv_erzeugung_kwh`/`inv_*_leistung_w`; `basis_live_netz_kombi_w` ⊥ `einspeisung_w`+`netzbezug_w`. Aggregat + ≥1 Komponente belegt → Aggregat wirkungslos (Engine-Vorrang, s. u.). Inline **„auf keine"**.
-3. **Kein `state_class` / LTS** — **Reuse** `SENSOR_MAPPING_LTS`: zugeordneter HA-Sensor ohne `state_class` → keine History/Zeitmaschine ([[feedback_ha_lts_keine_zeitmaschine]]). Braucht `state_class` je Entity (get_sensor_units liefert nur Unit → um `state_class` erweitern oder zweiter Batch).
+3. **Kein `state_class` / LTS** — **Reuse** `SENSOR_MAPPING_LTS`: zugeordneter HA-Sensor ohne `state_class` → keine History/Zeitmaschine. Braucht `state_class` je Entity (get_sensor_units liefert nur Unit → um `state_class` erweitern oder zweiter Batch).
 4. **Sensor-Doppelmapping** — dieselbe HA-`entity_id` in ≥2 Feldern der `quellen`-Map → Doppelzählung (#314). Config-Scan der Fläche-Zuordnungen; zeigt beide betroffenen Felder.
 
 Alle rein **diagnostisch** (nie blockierend, §2d), backend-berechnet (SoT/testbar), amber im Frontend; C zusätzlich Inline-„auf keine". HA-Picker warnt bei Einheit/`state_class` schon beim Wählen. **Engine-Vorrang-Befund für C** (kein Doppelzählungs-Bug, nur Sichtbarkeit):
@@ -295,10 +250,10 @@ Alle rein **diagnostisch** (nie blockierend, §2d), backend-berechnet (SoT/testb
 **C-Detail — Redundanz/Konflikt (Aggregat vs. Komponenten).** Befund aus der Engine-Inventur: „PV gesamt UND einzeln" ist **kein Doppelzählungs-Bug** — die Engine nutzt durchgängig **Vorrang/Fallback**: der Aggregat-Sensor wird bei vorhandenen Komponenten **still ignoriert** (`live_komponenten_builder:261` `not has_individual_pv`; `live_history:341`; `verbrauchsprofil:227`; Energie-Bilanz: `pv_gesamt_kwh` ohne Snapshot-Counterpart; `netz_kombi_w` nur wenn Split fehlt in `_collect_values`). Problem ist also **Sichtbarkeit**, nicht Rechnung: der Nutzer sieht nicht, dass seine gesamt-Zuordnung wirkungslos ist.
 - **Aggregat-Paare** (Backend-Konstante, erweiterbar): (1) `basis_*_pv_gesamt` (W+kWh) ⊥ per-WR `inv_*_pv_erzeugung_kwh`/`inv_*_leistung_w` (pv-module/balkonkraftwerk); (2) `basis_live_netz_kombi_w` ⊥ `basis_live_einspeisung_w`+`basis_live_netzbezug_w`.
 - **Regel:** Aggregat belegt **und** ≥1 Komponente belegt (Quelle ≠ keine) → Aggregat `redundant`. `/felder` liefert pro Feld `redundant: {grund, wirksame_felder}`.
-- **Frontend (Gernot-Weiche „Warnung + Inline-auf-keine"):** dezenter amber Redundanz-Hinweis an der Aggregat-Zeile + Inline-Aktion **„auf keine setzen"**. **KEIN** Auto-keine (stille Fremd-Änderung vermieden, [[feedback_reparatur_statt_loesch_features]]).
+- **Frontend (Gernot-Weiche „Warnung + Inline-auf-keine"):** dezenter amber Redundanz-Hinweis an der Aggregat-Zeile + Inline-Aktion **„auf keine setzen"**. **KEIN** Auto-keine (stille Fremd-Änderung vermieden, `feedback_reparatur_statt_loesch_features`).
 - **„optional erkennbar" ↔ frühere Weiche „keine optional/Pflicht-Kennzeichnung" (Schritt A/Q2):** bewusst als **kontextueller Redundanz-Marker** gelöst (nur im Konflikt-Zustand Aggregat+Komponente), NICHT als statisches optional/Pflicht-Flag je Feld → alte Entscheidung bleibt intakt.
 
-**D — Einheiten-Prüfung pro Zuordnung (HA-only).** [[feedback_sensor_einheit_check]] (kW≠kWh, #200). **Dimensions-basiert**, nicht String-genau (eedc normalisiert kW→W): W-Feld↔power (W/kW/MW), kWh-Feld↔energy (Wh/kWh/MWh), dazu %/°C/km … Mismatch = **andere Dimension** (kWh-Sensor in W-Feld).
+**D — Einheiten-Prüfung pro Zuordnung (HA-only)** (kW≠kWh, #200). **Dimensions-basiert**, nicht String-genau (eedc normalisiert kW→W): W-Feld↔power (W/kW/MW), kWh-Feld↔energy (Wh/kWh/MWh), dazu %/°C/km … Mismatch = **andere Dimension** (kWh-Sensor in W-Feld).
 - **Nur HA:** HA-Sensor trägt `unit_of_measurement` (im `/ha/sensoren` schon vorhanden). Inbound/Gateway = eedc-Topic/nackte Zahl ohne Einheit-Metadatum → nicht prüfbar.
 - **Zwei Stellen (Gernot-Weiche):** (1) **HA-Picker** — Warnung beim Wählen (Picker hat die Units); (2) **persistent `/felder`** `einheit_warnung: {sensor_einheit, feld_einheit}` an HA-Feldern → dafür muss der HA-Batch in `/felder` neben dem Wert auch die Unit holen.
 - **Warnung, keine Sperre:** ungewöhnliche-aber-gültige/fehlende Units nicht blockieren.
@@ -307,7 +262,10 @@ Beide per pytest-Regel-Tabellen abgesichert (Dimension-Klassifikator; Aggregat-R
 
 ---
 
-## 3. Bausteine (Was existiert / Was neu ist)
+## 3. Bausteine — was wo sitzt
+
+Alle acht Bausteine (B1–B8) sind gebaut; die Spalte „neu" sagt, was es bei der Konzeption
+noch nicht gab.
 
 | # | Baustein | Status | Umfang |
 |---|---|---|---|
@@ -320,23 +278,40 @@ Beide per pytest-Regel-Tabellen abgesichert (Dimension-Klassifikator; Aggregat-R
 | **B7** | Integration-Block-Layout neu (§2g): 2 Verbindungs-Blöcke + Datenquellen-Fläche, alte Wizards auflösen, Routen umbiegen | `einstellungenKatalog.tsx` + `v3ZuV4Route.ts` | mittel |
 | **B8** | Migration bestehender `sensor_mapping`/Gateway/Inbound → eine-Quelle-Modell (§2h), HA-first, additiv/einmalig, nicht-blockierend | einmalige Migration + Transform-Test | mittel |
 
-### 3a. B4 — was Remote-HA konkret braucht (aus Inventur)
+### 3a. Remote-HA — so ist es gebaut
 
-1. **Konfig-Quelle:** URL + Token als User-Eingabe → Settings-Key (à la `mqtt_inbound`).
-2. **`config.py` entkoppeln:** `ha_api_url` + Token dynamisch statt hartkodiert/Supervisor-Env; `HAStateService.__init__` nicht mehr fix.
-3. **Gate umbauen:** `HA_INTEGRATION_AVAILABLE` + Router-Registrierung (`main.py:100-107, 456-468`) + ~20 Guard-Stellen von „`SUPERVISOR_TOKEN` existiert" auf „HA konfiguriert (Supervisor **oder** Remote)". ⚠️ Größter/riskantester Teil.
-4. **Filesystem-Features degradieren:** HA-Energy-Vorschläge (`/config/.storage/core.energy`) remote nicht da → „nicht verfügbar". LTS-Backfill remote nur via `ha_recorder_db_url` (außerhalb Scope, §2e).
-5. **Sicherheit:** benutzerdefinierte URL → SSRF-Guards (vgl. `test_connector_ssrf_block.py`), SSL/CORS.
-6. **Wiederverwendbar:** `HAStateService` (REST `/states` + `/history/period`) trägt Live-Wert **und** untertägige Recovery gegen jede Base-URL+Bearer — kein WebSocket. `sensor_mapping`-Modell bleibt.
+Sechs Punkte standen im Bau-Vertrag, alle sind eingelöst (gemessen 2026-08-28):
+
+1. **Konfig-Quelle:** URL + Long-Lived-Token als Anwender-Eingabe im Settings-Key `ha_remote`
+   (`api/routes/ha_remote.py`, Fläche `components/live/HaVerbindungForm.tsx`) — Speichern und
+   Testen der Verbindung, analog zum MQTT-Broker-Block.
+2. **Verbindung entkoppelt:** `services/ha_connection.py::resolve_ha_connection` liefert
+   `(api_url, token, kind)` — **Supervisor bevorzugt, sonst Remote** — und
+   `aktualisiere_ha_verbindung` reicht sie an `HAStatisticsService` und `HAStateService` weiter,
+   beim Start *und* beim Speichern. Beide sind Singletons ohne DB-Session; sie können den Helper
+   nicht selbst rufen.
+3. **Gate:** Die Verbraucher fragen über `is_available` nach der **Verbindung** statt nach der
+   Betriebsart. `HA_INTEGRATION_AVAILABLE` trägt heute nur noch die echten Add-on-Pfade —
+   Supervisor-API-Router, Supervisor-Logs, Quellenart `ha_app` vs. `ha_connector`. ⚠ Das war der
+   riskanteste Teil und ist über v4.0.13/v4.0.14 bis zum P3-Abschluss gefahren worden; die
+   Zählung dazu steht im Kopf dieses Dokuments.
+4. **Dateisystem-Features degradieren:** Die HA-Energy-Vorschläge lesen
+   `/config/.storage/core.energy` und gibt es remote nicht — sie melden „nicht verfügbar" statt
+   zu raten. Der LTS-Backfill bleibt remote an `ha_recorder_db_url` gebunden (§2e).
+5. **Sicherheit:** Eine anwenderdefinierte URL heißt SSRF-Fläche — dieselben Guards wie beim
+   Connector (`backend/tests/test_connector_ssrf_block.py`).
+6. **Wiederverwendet statt neu gebaut:** `HAStateService` (REST `/states` + `/history/period`)
+   trägt Live-Wert **und** untertägige Recovery gegen jede Base-URL + Bearer — kein WebSocket.
+   Das `sensor_mapping`-Modell ist unverändert geblieben.
 
 ---
 
 ## 4. Entscheidungen (alle offenen Punkte geklärt)
 
-Keine offene Rückfrage mehr — Konzept bereit für Vorgabe-Abnahme ([[feedback_fundament_pakete_vollstaendig]]).
+Alle hier aufgeführten Punkte sind entschieden **und gebaut**; sie stehen als Begründung, nicht als Vorhaben.
 
 - ~~F2b (Fallback)~~ → **strikt eine Quelle, kein Laufzeit-Fallback** (§2d); Ausfall → Lücke, Recovery schließt sie.
-- ~~F1/F3 (Scope + Timing)~~ → **kein Flip-Gating, Bau jetzt**; Paket-Schnitt §5 (Gernot delegiert Schnitt an Claude). Guest-Rebuild erst „wenn alles rund" ([[feedback_ia_v4_deploy_kein_release]]).
+- ~~F1/F3 (Scope + Timing)~~ → **kein Flip-Gating, Bau jetzt**; Paket-Schnitt §5 (Gernot delegiert Schnitt an Claude). Guest-Rebuild erst „wenn alles rund".
 - ~~F4 (Discovery)~~ → **eigener `#`-Scan**, Presets ergänzend.
 - ~~F5 (Exklusivität)~~ → **genau eine Quelle pro Feld** (§2d), Präferenz HA-Sensor > MQTT-Gateway > MQTT-Inbound > manuell.
 - ~~F6 (#343)~~ → **integrieren** (§2f), B6.
@@ -355,40 +330,63 @@ Keine offene Rückfrage mehr — Konzept bereit für Vorgabe-Abnahme ([[feedback
 
 ---
 
-## 5. Bau-Pakete (Dev-Box-Reihenfolge; kein Flip-Gating)
+## 5. Bau-Reihenfolge — abgeschlossen
 
-Alles wird **jetzt** gebaut (nicht nach dem IA-V4-Flip). Reihenfolge nach Risiko/Eigenständigkeit; Deploy-Disziplin: Dev-Box iterativ → Freigabe/PN → Guest-Rebuild erst wenn rund.
-
-| Paket | Inhalt | Warum in dieser Reihe |
-|---|---|---|
-| **P1 — MQTT-Fundament** | B1 (Broker-Block) · B2 (Feld-Fläche, MQTT-Quellen) · B3 (`#`-Discovery+Suche) · B5 (Feld→eine-Quelle, MQTT-Seite) · B7 (Block-Layout §2g) · B8 (Migration MQTT-Seite) | eigenständig, kein HA-Gate-Risiko, liefert die neue Fläche früh; Fläche **Remote-HA-fähig** entworfen (§2a) |
-| **P2 — HA in die Fläche (HA-App)** | HA-Sensor als Quelle in P1-Fläche · B6 (#343-Assistenz) · Präferenz §2d (HA-App) · B8 (HA-first-Auflösung) | baut auf P1-Fläche auf; nutzt bestehendes Supervisor-Gate (kein Umbau) |
-| **P3 — Remote-HA (LL-Token)** | B4 (HA-Verbindungs-Block, URL+Token) · Gate-Umbau `HA_INTEGRATION_AVAILABLE` (Supervisor **oder** Remote) · Remote-Verfügbarkeit + FS-Degradation | riskantester Teil (Gate + ~20 Guards) zuletzt, wenn Fläche + HA-Quelle stehen |
-
-> B5 (F2b: strikt eine Quelle, kein Fallback) wird in P1 (MQTT-Seite) grundgelegt und in P2 um die HA-Quelle erweitert. B7 (Block-Layout §2g) läuft über P1+P2 mit (Verbindungs-Blöcke in P1/P3, Datenquellen-Fläche P1/P2).
+Gefahren wurde in drei Paketen: **P1** MQTT-Fundament (Broker-Block, Feld-Fläche, `#`-Discovery),
+**P2** HA in die Fläche, **P3** Remote-HA per Long-Lived-Token samt Gate-Entkopplung. Begründung
+der Reihenfolge und der ursprüngliche Zuschnitt stehen im
+[archivierten Bau-Vertrag](archive/KONZEPT-DATENQUELLEN-V4-BAUVERTRAG.md); wann was
+ausgeliefert wurde, steht oben unter *Was wann geliefert wurde*.
 
 ---
 
-## 6. Bezug zu Regeln / Memory
+## 6. Bezug zu den übrigen Regeln
 
-- [[feedback_ha_mqtt_parallel]] — hier **präzisiert**: parallel = Funktionsgleichheit, kontext-/verfügbarkeitsgesteuert (§2d).
-- [[feedback_ha_only_features_gate]] — B4 verändert genau dieses Gate; breit + sorgfältig.
-- [[feedback_ha_lts_keine_zeitmaschine]] — rückwirkend nur so weit wie Sensor-Historie.
-- [[feedback_ha_statistics_aggregation]] — LTS-Backfill (separater Pfad, §2e) = MAX(sum)-MIN(sum)/Tag.
-- [[feedback_neue_felder_pflicht]] — bei neuen Feldern: Migration + Response + field_definitions.
-- [[feedback_ia_v4_deploy_kein_release]] — Umsetzung: Dev-Box → Freigabe/PN → Guest-Deploy.
-- [[feedback_fundament_pakete_vollstaendig]] — dieser Entwurf = Inventur-Teil; Bau erst nach Vorgabe-Abnahme.
-- [[feedback_migration_startup_kein_http]] / [[feedback_vollbackfill_nur_additiv]] — B8-Migration additiv, nicht-blockierend.
-- SoT-Trennung: UI = Style-Guide + SoT-Komponenten · Merge/Aggregation = bestehende Engine (ADR-001).
+- **HA und MQTT sind funktionsgleich, nicht gleichzeitig** — welche Quelle ein Feld liefert,
+  entscheidet §2d nach Kontext und Verfügbarkeit; einen stillen Laufzeit-Fallback gibt es
+  bewusst nicht (F2b). Fällt die Quelle aus, entsteht eine sichtbare Feld-Lücke.
+- **Rückwirkend nur so weit wie die Sensor-Historie reicht** — Home Assistant ist keine
+  Zeitmaschine: Was vor der Zuordnung nicht aufgezeichnet wurde, lässt sich nicht nachträglich
+  erzeugen. Der Langzeitstatistik-Backfill ist ein eigener Pfad (§2e) und rechnet je Tag
+  `MAX(sum) − MIN(sum)`.
+- **Neue Felder ziehen drei Stellen nach:** Migration, Response und `core/field_definitions.py`.
+- **Migrationen laufen additiv und beim Start ohne HTTP** (§2h) — ein Datentransform darf den
+  Start nicht blockieren und nichts überschreiben, was der Anwender gepflegt hat.
+- **SoT-Trennung:** Darstellung = Style-Guide + SoT-Komponenten · Merge/Aggregation = die
+  bestehende Engine ([ADR-001](ADR-001-BERECHNUNGS-LAYER.md)) · Invarianten = 
+  [ADR-002](ADR-002-WURZELMUSTER.md). Dieses Dokument regelt allein die **Herkunft** eines Wertes.
+
+⛔ **Hier standen bis 2026-08-28 neunzehn `[[…]]`-Verweise in Maintainer-Notizen**, die außerhalb
+des Entwicklerrechners niemand öffnen kann — in einem öffentlichen Repository sind das tote
+Zeiger. Die tragenden Sätze stehen jetzt im Klartext da; wo eine Regel eine versionierte Heimat
+hat (ADR, Style-Guide), verweist die Zeile dorthin.
 
 ---
 
-## 7. Wächter (nach Umbau) — was prüfbar ist (Punkt 6)
+## 7. Wächter — was heute wirklich prüft
 
-Ehrlich abgegrenzt ([[feedback_verifiziert_nur_was_check_abdeckt]], [[feedback_keine_regel_behaupten_ohne_code_beleg]]): nicht alles ist statisch greppbar. Realistisch tragen:
+Gemessen am 2026-08-28, nicht aus dem Bauplan übernommen:
 
-- **`check:datenquellen-aufloesung` (statischer Grep-Wächter):** Die alten Wizards (`MqttInboundSetup`, `MqttGateway`, `SensorMappingWizard`) dürfen nach dem Umbau nur noch aus der neuen Fläche referenziert werden → Import-Sites außerhalb = **0** (Muster wie `check:parkbar` / `check:form-controls`). Greift gegen Wiederauftauchen der alten Flächen.
-- **Resolver-Unit-Test (Gate an der Summenzeile, [[feedback_gate_summenzeile_verifizieren]], [[feedback_aggregator_symmetrie]]):** Der Feld→Quelle-Resolver liefert **genau eine** aktive Quelle pro Feld; Symmetrie-Test über die drei Kontexte (HA-App / Remote / Standalone). Die Invariante „ein Feld liest nie aus zwei Quellen" ist **nur so** prüfbar, **nicht** per Grep — ehrlich benannt.
-- **`npm run check:design`** bleibt Pflicht für die neue Fläche (Regel 0a, keine Inline-Hex).
+- **Präzedenz „genau eine Quelle je Feld":** Die Auflösung sitzt in
+  `core/berechnungen/datenquellen.merge_datenquellen` (aus `get_aktueller_monat` herausgelöst,
+  ADR-001). Sie ist doppelt abgedeckt — `backend/tests/test_datenquellen_merge.py` prüft den
+  Helper isoliert, `backend/tests/test_aktueller_monat_datenquellen_prioritaet.py` die
+  End-to-End-Symmetrie.
+- **Zuordnungs-Validierung (§2i):** `services/datenquellen_validierung.py` mit **fünf** Prüfungen
+  (Einheit · `state_class` · Aggregat-Redundanz · Sensor-Doppelmapping · **Takt**), abgedeckt von
+  `backend/tests/test_datenquellen_validierung.py`. ⚑ Der Takt-Check ist **anders gelöst als
+  geplant** — er sitzt hier statt als Daten-Checker-Kategorie (Gernot 2026-08-28: „es läuft und
+  wird genutzt"). Wer im `daten_checker/` nach einem Takt-Thema sucht, findet nichts und hält es
+  für eine Lücke; es ist keine.
+- **Darstellung:** `npm run check:design` (keine Inline-Hex außerhalb `lib/colors.ts`) gilt für
+  die Fläche wie für jede andere.
 
-**Nicht als Dauer-Wächter verkleidet:** Die Migrations-Korrektheit (§2h) ist ein einmaliger Datentransform → per **Transform-Test** abgesichert, nicht per laufendem Check.
+⛔ **Hier stand bis 2026-08-28 ein Wächter, den es nie gab:** *„`check:datenquellen-aufloesung`
+(statischer Grep-Wächter)"* — er sollte verhindern, dass die alten Wizards wieder auftauchen. In
+`package.json` stehen **25** `check:*`-Skripte, dieses ist keines davon. **Der Zweck hat sich
+erledigt**: `MqttInboundSetup`, `MqttGateway` und `SensorMappingWizard` existieren nicht mehr als
+Komponenten — was noch auf sie zeigt, sind drei Kommentare, die ihre Ablösung dokumentieren. Eine
+behauptete Absicherung ist schlimmer als eine fehlende, weil niemand mehr nachsieht.
+
+**Nicht als Dauer-Wächter verkleidet:** Die Migrations-Korrektheit (§2h) ist ein einmaliger
+Datentransform — abgesichert per Transform-Test, nicht per laufendem Check.
