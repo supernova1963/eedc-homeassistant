@@ -76,43 +76,6 @@ def ersetzt_keine_heizung(energietraeger: Optional[str]) -> bool:
     return energietraeger == ERSETZT_NICHTS
 
 
-def alle_ersetzen_nichts(waermepumpen: Iterable) -> bool:
-    """Tragen **alle** übergebenen Wärmepumpen „nichts ersetzt"?
-
-    Für die **anlagenweit aggregierten** Sichten (Jahresbericht-CO₂,
-    Aussichten-Jahresprognose): Dort ist die Wärme bereits über alle Geräte
-    summiert, eine Zuordnung je Gerät gibt es an der Stelle nicht mehr. Die
-    einzige Aussage, die sich ohne Umbau sicher treffen lässt, ist deshalb die
-    strenge: **erst wenn keine einzige WP etwas ersetzt hat**, entfällt der
-    fossile Vergleich.
-
-    ⚠ **Die Umkehrung ist bewusst konservativ und bleibt ungenau:** Steht neben
-    einer Neubau-WP eine zweite, die eine Gasheizung ersetzt hat, wird weiterhin
-    die **gesamte** Wärme verglichen — auch der Anteil, der nichts ersetzt.
-    Sauber wäre eine Trennung je Gerät in der Aggregation selbst; die berührt
-    Cockpit, Komponenten-Zeitreihe, Aussichten, HA-Export und den Jahresbericht
-    und ist deshalb ein eigenes Paket. **So herum verschlechtert sich für
-    niemanden etwas**, während die häufige Lage (eine WP, oder alle gleich
-    gepflegt) korrekt wird — die per-Gerät-Pfade
-    (`berechne_wp_ersparnis`, `berechne_wp_alternativkosten_ersparnis`) sind
-    ohnehin exakt.
-
-    Leere Eingabe → ``False``: keine WP ist kein „nichts ersetzt", sondern kein
-    Gegenstand.
-    """
-    wps = list(waermepumpen)
-    if not wps:
-        return False
-    return all(
-        ersetzt_keine_heizung(
-            (getattr(wp, "parameter", None) or {}).get(
-                PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"]
-            )
-        )
-        for wp in wps
-    )
-
-
 def alter_wirkungsgrad(energietraeger: Optional[str]) -> float:
     """Erzeugungs-Wirkungsgrad der ersetzten Altanlage je Energieträger.
 

@@ -22,7 +22,6 @@ import pytest
 
 from backend.core.berechnungen import (
     ERSETZT_NICHTS,
-    alle_ersetzen_nichts,
     ersetzt_keine_heizung,
 )
 from backend.core.berechnungen.alternativkosten import (
@@ -66,13 +65,17 @@ def test_praedikat_trennt_nichts_von_ungepflegt():
     assert ersetzt_keine_heizung(None) is False
 
 
-def test_aggregat_praedikat_ist_streng():
-    """Anlagenweit gilt „alle oder keine" — eine gemischte Anlage rechnet weiter."""
-    assert alle_ersetzen_nichts([_WP(1, NICHTS), _WP(2, NICHTS)]) is True
-    assert alle_ersetzen_nichts([_WP(1, NICHTS), _WP(2, GAS)]) is False
-    assert alle_ersetzen_nichts([_WP(1, {})]) is False
-    # Keine WP ist kein „nichts ersetzt", sondern kein Gegenstand.
-    assert alle_ersetzen_nichts([]) is False
+# ⛔ Hier stand bis 2026-08-29 `test_aggregat_praedikat_ist_streng`: „Anlagenweit
+# gilt ‚alle oder keine' — eine gemischte Anlage rechnet weiter." Er hat das
+# Prädikat `alle_ersetzen_nichts` geprüft, und beide sind mit N-256 ENTFALLEN,
+# nicht zurückgedreht: Die Regel „alle oder keine" war die bewusste Näherung von
+# damals (ihr eigener Docstring nannte die saubere Trennung „ein eigenes Paket").
+# Dieses Paket ist gebaut — die anlagenweiten Sichten rechnen jetzt mit den
+# Teilmengen `WpFakten.waerme_mit_ersatz_kwh`/`strom_mit_ersatz_kwh`, und ein
+# Prädikat, das die gemischte Anlage durchwinkt, hat keinen Gegenstand mehr.
+# Was an seine Stelle tritt: `test_wp_ersparnis_grundmenge_n279.py` (Kosten) und
+# `test_co2_grundmenge_mit_ersatz_n256.py` (CO₂) — beide messen die WIRKUNG statt
+# des Prädikats.
 
 
 # ============================================================================
@@ -138,9 +141,9 @@ def test_historische_ersparnis_ueberspringt_die_wp_samt_zusatzkosten():
 def test_gemischte_anlage_verliert_die_andere_wp_nicht():
     """Zwei WPs, eine ersetzt Gas, eine nichts — die erste rechnet unverändert.
 
-    Der per-Gerät-Pfad ist hier exakt (anders als die anlagenweiten Aggregate,
-    s. `alle_ersetzen_nichts`). Ohne diesen Test wäre der `continue` nicht von
-    einem „bricht die Schleife ab" zu unterscheiden.
+    Der per-Gerät-Pfad war hier schon immer exakt; seit N-256 gilt dasselbe für
+    die anlagenweiten Aggregate (Teilmengen in `WpFakten`). Ohne diesen Test wäre
+    der `continue` nicht von einem „bricht die Schleife ab" zu unterscheiden.
     """
     nur_gas = berechne_wp_alternativkosten_ersparnis(
         [_WP(1, GAS)], _historie(1), {(2025, 1): 12.0}, {(2025, 1): 28.0}, 28.0,

@@ -1147,10 +1147,19 @@ async def get_finanz_prognose(
                 gesamt_eauto_pv += pv_ladung
                 eauto_pv_pro_inv[ea.id] = eauto_pv_pro_inv.get(ea.id, 0.0) + pv_ladung
 
+    # N-279: zusätzlich je Gerät gemerkt — die Anzeige-Felder (`wp_verbrauch_kwh`,
+    # PV-Nutzung) meinen ALLE Wärmepumpen, der Alternativkosten-Vergleich unten
+    # aber nur die, die überhaupt etwas ersetzt haben. Ohne die Aufteilung wurde
+    # der Strom einer Neubau-WP von der Ersparnis der ersetzenden abgezogen.
+    # Muster wie `eauto_pv_pro_inv` darüber; `wp_mit_ersatz` steht erst weiter
+    # unten, deshalb hier je Investition statt in zwei Summen.
+    wp_strom_pro_inv: dict[int, float] = {}
     for wp in waermepumpen:
         for (inv_id, jahr, monat), daten in historische_inv_daten.items():
             if inv_id == wp.id and wp.ist_aktiv_im_monat(jahr, monat):
-                gesamt_wp_strom += get_wp_strom_kwh(daten, wp.parameter)
+                strom = get_wp_strom_kwh(daten, wp.parameter)
+                gesamt_wp_strom += strom
+                wp_strom_pro_inv[wp.id] = wp_strom_pro_inv.get(wp.id, 0.0) + strom
 
     # =====================================================================
     # QUOTEN BERECHNEN (aus historischen Daten oder Defaults)
@@ -1297,6 +1306,19 @@ async def get_finanz_prognose(
         }
     wp_alternativ_zusatzkosten_jahr = sum(
         a["zusatzkosten_jahr"] for a in wp_aggregate.values()
+    )
+    # N-279: derselbe Monats-Ø wie `wp_strom_monat_avg`, aber nur über die
+    # Geräte, die etwas ersetzt haben. Er speist AUSSCHLIESSLICH den
+    # Alternativkosten-Vergleich; die Anzeige-Felder bleiben beim Gesamt-Ø,
+    # denn `wp_verbrauch_kwh` meint den Verbrauch der Anlage, nicht den des
+    # Vergleichs. Ohne die Trennung stand die Stromkostenseite auf einer
+    # größeren Menge als die Gaskostenseite — der Strom einer Neubau-WP
+    # schmälerte die Ersparnis der ersetzenden.
+    gesamt_wp_strom_mit_ersatz = sum(
+        wp_strom_pro_inv.get(wp.id, 0.0) for wp in wp_mit_ersatz
+    )
+    wp_strom_mit_ersatz_monat_avg = (
+        gesamt_wp_strom_mit_ersatz / anzahl_monate_hist if wp_mit_ersatz else 0
     )
 
     # E-Auto: Benzin-Vergleich.
@@ -1717,6 +1739,12 @@ async def get_finanz_prognose(
     jahres_speicher_beitrag = 0.0
     jahres_v2h_beitrag = 0.0
     jahres_wp_verbrauch = 0.0
+    #: N-279: dieselbe saisonale Hochrechnung, nur über `wp_mit_ersatz`.
+    #: Bewusst parallel mitgeführt statt aus `jahres_wp_verbrauch` skaliert —
+    #: eine abgeleitete Zahl wäre eine zweite Bildungsvorschrift für dieselbe
+    #: Größe (P4) und würde bei einer künftigen Änderung der Saisonfaktoren
+    #: stillschweigend auseinanderlaufen.
+    jahres_wp_verbrauch_mit_ersatz = 0.0
     jahres_eauto_pv = 0.0
 
     # Saisonale Faktoren für WP (Heizperiode)
@@ -1764,6 +1792,9 @@ async def get_finanz_prognose(
         eauto_pv = eauto_pv_monat * pv_faktor if e_autos else 0
         wp_saison = WP_SAISON_FAKTOREN.get(monat, 1.0)
         wp_verbrauch = wp_strom_monat_avg * wp_saison if waermepumpen else 0
+        wp_verbrauch_mit_ersatz = (
+            wp_strom_mit_ersatz_monat_avg * wp_saison if wp_mit_ersatz else 0
+        )
 
         # §51-Erlös über SoT (ADR-001, M3); neg_preis_kwh = None — Prognose-
         # Monate haben keine Negativpreis-Historie (der historische Pfad oben
@@ -1797,6 +1828,7 @@ async def get_finanz_prognose(
         jahres_speicher_beitrag += speicher_beitrag
         jahres_v2h_beitrag += v2h_beitrag
         jahres_wp_verbrauch += wp_verbrauch
+        jahres_wp_verbrauch_mit_ersatz += wp_verbrauch_mit_ersatz
         jahres_eauto_pv += eauto_pv
 
     # =====================================================================
@@ -1840,7 +1872,13 @@ async def get_finanz_prognose(
         )
         # WP-Stromkosten pro Jahr (nur Netzanteil) — konservative 50/50-Annahme
         wp_netz_anteil = 1.0 - WP_PV_ANTEIL_DEFAULT
-        wp_strom_jahr = jahres_wp_verbrauch
+        # N-279: dieselbe Grundmenge wie `gas_kosten_jahr` darüber — also NUR die
+        # Geräte mit Ersatz. `jahres_wp_verbrauch` (alle WPs) stand hier bis
+        # 2026-08-29 und machte die Differenz unsymmetrisch: der Zähler zählte
+        # die Wärme der ersetzenden Geräte, der Abzug den Strom ALLER. Eine
+        # Wärmepumpe im Neubau senkte damit die ausgewiesene Ersparnis der
+        # zweiten, die tatsächlich eine Gasheizung ersetzt hat.
+        wp_strom_jahr = jahres_wp_verbrauch_mit_ersatz
         wp_stromkosten_netz_jahr = wp_strom_jahr * wp_netz_anteil * wp_netzbezug_preis / 100
         # Netto-Ersparnis
         jahres_wp_ersparnis = gas_kosten_jahr - wp_stromkosten_netz_jahr

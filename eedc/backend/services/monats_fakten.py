@@ -81,11 +81,16 @@ from backend.core.berechnungen import (
     berechne_verbrauchs_kennzahlen,
     bkw_finanz_beitrag,
     erzeugung_hinter_zaehler_kwh,
+    ersetzt_keine_heizung,
     hat_gemessene_betriebsart,
     imd_typ_beitrag,
 )
 from backend.core.betriebsmodus import MODUS_ABDECKUNG_FELD
-from backend.core.investition_parameter import ist_dienstlich, ist_luft_luft_waermepumpe
+from backend.core.investition_parameter import (
+    PARAM_WAERMEPUMPE,
+    ist_dienstlich,
+    ist_luft_luft_waermepumpe,
+)
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
@@ -342,6 +347,25 @@ class WpFakten:
 
     strom_kwh: float = 0.0
     waerme_kwh: float = 0.0
+    #: **Teilmengen** von ``strom_kwh``/``waerme_kwh`` — nur die Geräte, die laut
+    #: Pflege eine Heizung **ersetzt** haben (N-256). Sie sind die Grundmenge
+    #: jedes **fossilen Vergleichs**: was hätte diese Wärme mit Gas/Öl gekostet,
+    #: und wieviel CO₂ hätte sie verursacht?
+    #:
+    #: ⭐ **Warum zwei Summen und keine Aufteilung je Gerät.** Eine Split-Klima\
+    #: anlage neben einer Wärmepumpe ist der Normalfall, nicht die Ausnahme —
+    #: und sie trägt typischerweise „nichts ersetzt". Ohne diese Trennung wurde
+    #: **ihre** Wärme als vermiedenes Gas gebucht: eine Ersparnis, die es nie
+    #: gab. Eine Zuordnung je Gerät wäre der falsche Weg dorthin (Entscheid
+    #: 27.08.: die gemeinsame Kennzahl wird nicht umgebaut) und auch gar nicht
+    #: nötig — für eine **Menge** genügt die Teilsumme. Kennzahlen trennen wir
+    #: je Bauart, Mengen summieren wir (Konzept Wärme/Klima, E1).
+    #:
+    #: ⚠ **Nie zu ``strom_kwh``/``waerme_kwh`` addieren** — dieselbe Zusicherung
+    #: wie bei ``modus_strom_*`` weiter unten. Die Anlage verbraucht und liefert
+    #: weiterhin die vollen Mengen; nur der Vergleich hat eine kleinere Basis.
+    strom_mit_ersatz_kwh: float = 0.0
+    waerme_mit_ersatz_kwh: float = 0.0
     heizung_kwh: float = 0.0
     warmwasser_kwh: float = 0.0
     strom_heizen_kwh: float = 0.0
@@ -1136,6 +1160,8 @@ class _RohMonat:
         self.speicher_preis_gewicht = 0.0
         self.wp_strom = 0.0
         self.wp_waerme = 0.0
+        self.wp_strom_mit_ersatz = 0.0
+        self.wp_waerme_mit_ersatz = 0.0
         self.wp_heizung = 0.0
         self.wp_warmwasser = 0.0
         self.wp_strom_heizen = 0.0
@@ -1312,6 +1338,16 @@ class _RohMonat:
         elif inv.typ == "waermepumpe":
             self.wp_strom += b.wp_strom
             self.wp_waerme += b.wp_waerme
+            # N-256: dieselben Mengen noch einmal, aber nur über die Geräte, die
+            # überhaupt eine Heizung ersetzt haben. KEINE Aufteilung je Gerät —
+            # zwei zusätzliche Summen, additiv neben den bestehenden. Sie sind
+            # die Grundmenge des **fossilen Vergleichs**; `wp_waerme`/`wp_strom`
+            # bleiben die Mengen der Anlage und werden von niemandem umgedeutet.
+            if not ersetzt_keine_heizung(
+                (inv.parameter or {}).get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"])
+            ):
+                self.wp_strom_mit_ersatz += b.wp_strom
+                self.wp_waerme_mit_ersatz += b.wp_waerme
             self.wp_heizung += b.wp_heizung
             self.wp_warmwasser += b.wp_warmwasser
             self.wp_strom_heizen += b.wp_strom_heizen
@@ -1587,6 +1623,8 @@ async def _baue_fakt(
         emob=emob,
         wp=WpFakten(
             strom_kwh=roh.wp_strom,
+            strom_mit_ersatz_kwh=roh.wp_strom_mit_ersatz,
+            waerme_mit_ersatz_kwh=roh.wp_waerme_mit_ersatz,
             waerme_kwh=roh.wp_waerme,
             heizung_kwh=roh.wp_heizung,
             warmwasser_kwh=roh.wp_warmwasser,

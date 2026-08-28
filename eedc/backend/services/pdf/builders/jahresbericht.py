@@ -20,7 +20,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.berechnungen import (
     PV_ERZEUGER_TYPEN,
     FinanzMonatsZeile,
-    alle_ersetzen_nichts,
     autarkie_prozent,
     berechne_finanz_aggregat,
     eigenverbrauchsquote_prozent,
@@ -137,12 +136,6 @@ async def build_jahresbericht_context(
 
     hat_speicher = any(i.typ == "speicher" for i in investitionen)
     hat_waermepumpe = any(i.typ == "waermepumpe" for i in investitionen)
-    # N-88/F2b: Ist die Waerme anlagenweit summiert, laesst sie sich hier nicht
-    # mehr je Geraet zuordnen — der fossile Vergleich entfaellt deshalb erst,
-    # wenn KEINE der Waermepumpen etwas ersetzt hat (Begruendung im Layer).
-    wp_ersetzt_nichts = alle_ersetzen_nichts(
-        [i for i in investitionen if i.typ == "waermepumpe"]
-    )
     # DI-3: Dienstwagen zählen nicht als (private) E-Mobilität — konsistent zum
     # Cockpit (`hat_emobilitaet` schließt dienstliche Fahrzeuge aus).
     hat_emobilitaet = any(
@@ -274,6 +267,9 @@ async def build_jahresbericht_context(
     wp_heizung = sum(f.wp.heizung_kwh for f in fakten)
     wp_warmwasser = sum(f.wp.warmwasser_kwh for f in fakten)
     wp_strom = sum(f.wp.strom_kwh for f in fakten)
+    # N-256: die Grundmenge des fossilen Vergleichs — nur Geräte mit Ersatz.
+    wp_waerme_mit_ersatz = sum(f.wp.waerme_mit_ersatz_kwh for f in fakten)
+    wp_strom_mit_ersatz = sum(f.wp.strom_mit_ersatz_kwh for f in fakten)
     # #263 K-2 (Konzept §3.5): abgeleitete Wärme trägt keine JAZ.
     wp_waerme_abgeleitet = sum(f.wp.waerme_abgeleitet_kwh for f in fakten)
     # DI-3: Dienstwagen zählen NICHT in km/CO₂/Heimladung/V2H des Berichts —
@@ -485,9 +481,16 @@ async def build_jahresbericht_context(
     # Komponente roh (kann bei schlechter JAZ negativ sein), Gesamt-Bilanz per
     # max(0, …) geklammert — exakt wie das Cockpit.
     co2_pv = ev_gesamt * CO2_FAKTOR_STROM_KG_KWH
+    # N-256: die Mengen der **ersetzenden** Geräte, nicht die der Anlage. Bis
+    # 2026-08-29 stand hier die anlagenweite Summe, gesperrt nur, wenn KEINE
+    # Wärmepumpe etwas ersetzt hatte (`alle_ersetzen_nichts`). Bei der häufigen
+    # Lage „Wärmepumpe ersetzt Gas + Split-Klimaanlage ersetzt nichts" wurde
+    # damit auch die Wärme der Klimaanlage als vermiedenes Gas gebucht — eine
+    # Ersparnis, die es nie gab. Die Teilsummen kommen aus der Schicht, hier
+    # wird nichts mehr gefiltert (P10).
     co2_wp = (
-        0 if (not hat_waermepumpe or wp_ersetzt_nichts)
-        else co2_wp_ersparnis_kg(wp_waerme, wp_strom)
+        0 if not hat_waermepumpe
+        else co2_wp_ersparnis_kg(wp_waerme_mit_ersatz, wp_strom_mit_ersatz)
     )
     co2_emob = emob_km * 0.12 if hat_emobilitaet else 0
     co2_gesamt = co2_pv + max(0, co2_wp) + max(0, co2_emob)
