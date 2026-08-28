@@ -41,6 +41,12 @@ vi.mock('../api', () => ({
     publishMqtt: (id: number) => publishMqtt(id),
     testMqttConnection: () => Promise.resolve({ connected: true, broker: 'core-mosquitto:1883' }),
     setAutoPublish: () => Promise.resolve({ gespeichert: true, enabled: true }),
+    // #400: ohne diesen Eintrag lief die Flaeche in „Fehler beim Laden" — die
+    // Proben blieben trotzdem gruen, weil das Fehlerbanner additiv ist.
+    getSensorAbwahl: () => Promise.resolve({ abgewaehlt: [], sensoren: [] }),
+    setSensorAbwahl: () => Promise.resolve({
+      gespeichert: true, abgewaehlt: [], neu_abgewaehlt: [], entfernte_topics: 0, fehler: null,
+    }),
   },
   anlagenApi: { update: () => Promise.resolve({}) },
 }))

@@ -11,7 +11,10 @@ import os
 from typing import Optional, Any
 
 from backend.services.mqtt_client import MQTTClient, MQTTConfig
-from backend.services.mqtt_broker_settings import resolve_broker_config
+from backend.services.mqtt_broker_settings import (
+    abgewaehlte_sensoren,
+    resolve_broker_config,
+)
 
 
 def resolve_mqtt_config(
@@ -41,6 +44,57 @@ def resolve_mqtt_config(
 def _get_mqtt_config_from_env() -> MQTTConfig:
     """Lädt MQTT-Konfiguration aus Umgebungsvariablen."""
     return resolve_mqtt_config()
+
+
+async def belegte_sensor_eintraege(
+    db,
+    anlage,
+    nur_schluessel: Optional[set[str]] = None,
+) -> list:
+    """Alle Sensor-Stellen, die diese Anlage auf dem Broker belegen KANN.
+
+    Liefert Tripel ``(definition, anlage_id, investition_id)`` fuer
+    ``MQTTClient.remove_sensors``. ``nur_schluessel`` schraenkt auf bestimmte
+    Sensor-Definitionen ein (Abwahl); ohne Angabe ist es die volle Belegung.
+
+    ⛔ **Warum das Kreuzprodukt und keine Typ-Fallunterscheidung (#400):** Der
+    Publisher entscheidet ueber ``calculate_investition_sensors``, welche
+    Definitionen ein Geraet traegt — Waermepumpen-Sensoren nur an Waermepumpen
+    usw. Baute das Entfernen dieselbe Zuordnung ein zweites Mal nach, waere sie
+    eine **Kopie**, die bei der naechsten Typ-Erweiterung still veraltet und
+    Topics stehen laesst. Ein leeres Retained-Payload auf ein nie benutztes Topic
+    ist folgenlos; eine vergessene Stelle nicht. **Wir raeumen lieber eine Adresse
+    zu viel als eine zu wenig.**
+
+    ⚠ Das ist genau die Klasse, an der die alte Entfernen-Route scheiterte: sie
+    zaehlte drei Sensorlisten von Hand auf (``ANLAGE + PROGNOSE + PREIS``) und
+    verlor damit 10 anlagenweite Definitionen sowie **saemtliche**
+    geraetebezogenen, die seit dem 27.08. publiziert werden.
+    """
+    from backend.models.investition import Investition
+    from backend.services.ha_sensors_export import get_all_sensor_definitions
+    from sqlalchemy import select
+
+    definitionen = [
+        d for d in get_all_sensor_definitions()
+        if nur_schluessel is None or d.key in nur_schluessel
+    ]
+    if not definitionen:
+        return []
+
+    eintraege = [(d, anlage.id, None) for d in definitionen]
+
+    inv_ids = list(
+        (
+            await db.execute(
+                select(Investition.id).where(Investition.anlage_id == anlage.id)
+            )
+        ).scalars().all()
+    )
+    for inv_id in inv_ids:
+        eintraege.extend((d, anlage.id, inv_id) for d in definitionen)
+
+    return eintraege
 
 
 async def publish_anlage_sensors(
@@ -76,7 +130,26 @@ async def publish_anlage_sensors(
     if not client.is_available:
         return {"available": False, "no_data": False, "total": 0, "success": 0, "failed": 0, "errors": []}
 
-    sensor_values = await calculate_anlage_sensors(db, anlage)
+    # ── Die Abwahl des Anwenders (#400) ──────────────────────────────────────
+    #
+    # ⛔ **Warum der Filter HIER sitzt und nirgends sonst:** Dies ist der einzige
+    # Outbound-Pfad (Auto-Publish UND manuelle Route), und er publiziert die
+    # Discovery bei **jedem** Lauf neu. Ein Filter irgendwo davor — in der
+    # Oberflaeche, in der Route, in der Berechnung — wuerde vom naechsten
+    # Auto-Publish-Takt ueberholt: der abgewaehlte Sensor waere binnen Minuten
+    # wieder in HA. *Wer einen Dauer-Publisher filtern will, filtert im
+    # Publisher.*
+    #
+    # Abgewaehlt wird je Sensor-**Definition** — derselbe Schluessel gilt
+    # anlagenweit und an jeder Investition, die ihn traegt.
+    abgewaehlt = await abgewaehlte_sensoren(db)
+
+    def _behalten(werte):
+        if not abgewaehlt:
+            return werte
+        return [sv for sv in werte if sv.definition.key not in abgewaehlt]
+
+    sensor_values = _behalten(await calculate_anlage_sensors(db, anlage))
     if not sensor_values:
         return {"available": True, "no_data": True, "total": 0, "success": 0, "failed": 0, "errors": []}
 
@@ -128,9 +201,9 @@ async def publish_anlage_sensors(
         modus_map = await lade_betriebsmodus_live(db, anlage)
 
         for inv in investitionen:
-            inv_values = await calculate_investition_sensors(
+            inv_values = _behalten(await calculate_investition_sensors(
                 db, inv, strompreis, emob_ctx, modus_map
-            )
+            ))
             if not inv_values:
                 continue
             inv_result_pub = await client.publish_all_sensors(

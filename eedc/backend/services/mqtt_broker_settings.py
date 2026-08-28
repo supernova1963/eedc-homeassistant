@@ -154,6 +154,68 @@ async def export_aktiviert(db: Optional[AsyncSession]) -> bool:
     return await _ha_vorhanden(db) and await broker_konfiguriert(db)
 
 
+# ── Abwahl einzelner Sensoren (#400) ─────────────────────────────────────────
+#
+# **Entscheid Gernot (28.08.):** Jeder Sensor wird weiterhin **aktiviert**
+# ausgeliefert — `enabled_by_default: false` faellt als Weg weg. Der Grund ist die
+# Zeitreihe: eine Voreinstellung waere eine Wette darauf, welchen Wert ein
+# Anwender spaeter braucht, und wer verliert, merkt es erst, wenn die Historie
+# fehlt. Die Abwahl ist deshalb ausschliesslich eine **bewusste** Wahl.
+#
+# ⭐ **Abgewaehlt wird je Sensor-DEFINITION, nicht je Geraet** (Entscheid Gernot
+# 28.08.). Wer „Ladezyklen" abwaehlt, waehlt sie an allen Speichern ab. Beide
+# Melder (rapahl per PN, Knallfrosch T89667 #236) richten sich gegen Sensor-
+# *Sorten* („ohne erkennbaren Nutzen"), nicht gegen einzelne Geraete.
+ABWAHL_FELD = "abgewaehlte_sensoren"
+
+
+async def abgewaehlte_sensoren(db: Optional[AsyncSession]) -> set[str]:
+    """Welche Sensor-Schluessel hat der Anwender vom Export ausgenommen?
+
+    Leere Menge = alles wird exportiert (der Default, s. Kasten oben). Ohne
+    DB-Kontext gibt es keine Wahrheit ueber die Abwahl — dann exportiert eedc
+    alles, statt still zu schweigen.
+    """
+    value = await _lade_settings(db, MQTT_EXPORT_SETTINGS_KEY) or {}
+    roh = value.get(ABWAHL_FELD)
+    if not isinstance(roh, list):
+        return set()
+    return {str(k) for k in roh if k}
+
+
+async def schreibe_export_settings(db: AsyncSession, **felder) -> dict:
+    """Schreibt Felder in ``mqtt_export`` — **mischend**, nicht ersetzend.
+
+    ⛔ **Warum mischend (gemessen 28.08.):** Der Auto-Publish-Toggle schrieb
+    ``setting.value = {"enabled": ...}`` und ersetzte damit den ganzen Dict. Ein
+    zweites Feld im selben Key — die Abwahlliste — waere beim naechsten Klick auf
+    den Toggle spurlos verschwunden, und zwar ohne Fehlermeldung: der Anwender
+    haette seine abgewaehlten Sensoren wortlos zurueckbekommen. *Ein Schreiber,
+    der den ganzen Datensatz ersetzt, ist erst dann ein Fehler, wenn ein zweites
+    Feld dazukommt — deshalb faellt er beim Bau des zweiten Feldes auf und nicht
+    beim Bau des ersten.*
+    """
+    from backend.models.settings import Settings as SettingsModel
+    from sqlalchemy.orm.attributes import flag_modified
+
+    setting = (
+        await db.execute(
+            select(SettingsModel).where(SettingsModel.key == MQTT_EXPORT_SETTINGS_KEY)
+        )
+    ).scalar_one_or_none()
+
+    if setting:
+        wert = dict(setting.value or {})
+        wert.update(felder)
+        setting.value = wert
+        flag_modified(setting, "value")
+    else:
+        wert = dict(felder)
+        db.add(SettingsModel(key=MQTT_EXPORT_SETTINGS_KEY, value=wert))
+    await db.commit()
+    return wert
+
+
 async def auto_publish_aktiv(db: AsyncSession) -> bool:
     """Darf der Auto-Publish-Job jetzt publizieren? = allein die Export-Richtung.
 

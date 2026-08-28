@@ -525,7 +525,23 @@ eedc exportiert berechnete Kennzahlen an einen Broker (HA-Discovery-Konvention).
 - **Günstig-Schwelle:** Eine Stunde gilt als „günstig", wenn ihr Börsenpreis mindestens den eingestellten Prozentsatz unter dem Tagesschnitt ohne die 3 teuersten Stunden liegt („optimierter Ø"). Der Prozentsatz ist je Anlage einstellbar (0–50 %, Standard 10 %); bei **0 %** liegt die Schwelle genau **auf** dem Ø — günstig ist dann alles darunter. Der **Rang** (`eedc_preis_rang`) ist davon getrennt: er nennt die fünf billigsten Stunden je Tag-/Nacht-Fenster und ist deshalb bei 5 gedeckelt, die **Anzahl** günstiger Stunden ist es seit v4.0.10 nicht mehr. eedc liefert nur diese Trigger-Werte — die Lade-/Entlade-Strategie baust du in deinen HA-Automationen.
 - **Alternative REST-API:** Statt MQTT kannst du die Sensoren auch per REST-Sensor aus `…/api/ha/export/sensors/{id}` in HA ziehen (YAML-Beispiel im Block). **Beide Wege liefern dieselbe Zahl** — wie viele Nachkommastellen sie trägt, hängt an der Größenart (kWh ganzzahlig, Geld auf Cent, Prozent auf eine Stelle); Einzelheiten in der [Sensor-Referenz §11](SENSOR-REFERENZ.md).
 
-> **Zu viele Entitäten?** Nicht benötigte Sensoren in HA deaktivieren — oder per `recorder:`-`exclude` nur von der Aufzeichnung ausnehmen (aktuelle Werte bleiben sichtbar, keine DB-Historie).
+> #### Zu viele Entitäten? Wähl sie in eedc ab
+>
+> In der Sensorliste hat jede Zeile ein Häkchen, jede Kategorie ein Sammel-Häkchen. Nimm das Häkchen weg, und dieser Sensor geht nicht mehr nach Home Assistant. **Voreingestellt sind alle an** — was du abwählst, ist deine Entscheidung, nicht unsere Voreinstellung.
+>
+> **Warum die Abwahl hier sitzt und nicht in Home Assistant:** HA kann eine Entität deaktivieren oder löschen, aber ihr Eintrag in der Registry bleibt bestehen — bei der nächsten Auto-Discovery ist sie wieder da. Abwählen lässt sie sich deshalb nur dort, wo sie herkommt.
+>
+> **Was beim Abwählen passiert:** eedc nimmt seine eigenen MQTT-Nachrichten zurück — den Auto-Discovery-Eintrag sowie den zuletzt gesendeten Wert und seine Attribute. Ohne diesen Schritt käme der Sensor beim nächsten Neustart von Home Assistant zurück, weil der Broker die Nachricht festhält und jedem neuen Abonnenten erneut zustellt. **Die bisherigen Daten dieses Sensors in Home Assistant und auf dem Broker sind damit verloren**; eedc fragt vorher nach und sagt es. Wählst du ihn später wieder an, wird er neu angelegt — ohne seine alte Historie.
+>
+> **In Home Assistant selbst ändert eedc nichts.** Mögliche Reste dort räumst du nach Bedarf selbst weg. Deine Daten **in eedc** bleiben in jedem Fall unberührt: es geht ausschließlich um die Weitergabe.
+>
+> **Sensoren ohne Wert** stehen mit „—" in der Liste. Sie sind heute nicht in Home Assistant, lassen sich aber vorab abwählen — dann erscheinen sie auch nicht, sobald sie einen Wert bekommen.
+>
+> Wer die Werte lieber behalten, aber nicht aufzeichnen will, kann sie in HA weiterhin per `recorder:`-`exclude` von der Aufzeichnung ausnehmen (aktuelle Werte bleiben sichtbar, keine DB-Historie).
+
+> **„Sensoren entfernen" nimmt alles zurück.** Der rote Knopf entfernt sämtliche eedc-Sensoren dieser Anlage von Home Assistant und vom Broker — die anlagenweiten **und** die je Komponente, jeweils mit Wert und Attributen. Auch hier wird vorher gefragt. Mit **Sensoren publizieren** oder beim nächsten automatischen Lauf kommen sie neu — ohne ihre alte Historie.
+>
+> ⚠ **Bis August 2026 räumte dieser Knopf unvollständig:** Er entfernte 34 der 44 anlagenweiten Sensoren und keinen einzigen der gerätebezogenen — meldete aber Erfolg. Wer aufgeräumt hatte, behielt den Rest und hielt ihn für gelöscht.
 
 **Startwerte:** Damit die Monatswert-Berechnung stimmt, müssen einmalig die Zählerstände vom Monatsanfang als Startwerte gesetzt sein — entweder aus der HA-Statistik geladen oder direkt an den `number.eedc_…_start`-Entities in Home Assistant. Erscheinen Entities doppelt (`_2`-Suffix), lösche die alten Discovery-Topics unter `homeassistant/number/eedc_…` bzw. `homeassistant/sensor/eedc_…` (z. B. per MQTT Explorer) und speichere den Export erneut.
 

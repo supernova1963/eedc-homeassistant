@@ -41,8 +41,15 @@ class SensorDefinition:
     formel: str                        # Berechnungsformel als Text
     device_class: Optional[str] = None # HA device_class (z.B. "energy", "monetary")
     state_class: Optional[str] = None  # HA state_class (z.B. "total", "measurement")
-    enabled_by_default: bool = True    # Standardmäßig aktiviert
     entity_category: Optional[str] = None  # HA entity_category (z.B. "diagnostic")
+    # ⛔ **Hier stand bis zum 28.08.2026 `enabled_by_default: bool = True`** — ein
+    # Feld, das nichts steuerte: es wurde ausschliesslich in einer API-Antwort
+    # durchgereicht und erreichte den Discovery-Payload nie. Mit dem Entscheid zu
+    # #400 (alle Sensoren bleiben per Default AN, die Abwahl ist eine bewusste
+    # Anwenderwahl) waere es dauerhaft irrefuehrend geblieben: ein Leser haette
+    # angenommen, hier lasse sich eine Voreinstellung setzen, die es bewusst nicht
+    # geben soll. Die Abwahl liegt in den Export-Settings
+    # (`mqtt_broker_settings.ABWAHL_FELD`), nicht an der Definition.
 
 
 @dataclass

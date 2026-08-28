@@ -184,17 +184,15 @@ class MQTTClient:
         # Integration; andernfalls sind sie einmalig von Hand loeschbar.
         device_id = f"eedc_anlage_{anlage_id}"
         device_name = f"eedc - {anlage_name}"
+        unique_id = self._get_unique_id(sensor, anlage_id, investition_id)
+        state_topic = self._get_state_topic(sensor, anlage_id, investition_id)
         if investition_id:
-            unique_id = f"eedc_{anlage_id}_{investition_id}_{sensor.key}"
-            state_topic = f"{self.config.state_prefix}/anlage/{anlage_id}/investition/{investition_id}/{sensor.key}"
             # Der Geraetename traegt jetzt der Sensor — sonst hiessen die
             # Kennzahlen zweier Waermepumpen unter derselben Anlage gleich.
             # `investition_name` kann fehlen (Altaufrufe); dann bleibt es beim
             # nackten Sensornamen statt bei einem „None"-Praefix.
             sensor_name = f"{investition_name} {sensor.name}" if investition_name else sensor.name
         else:
-            unique_id = f"eedc_{anlage_id}_{sensor.key}"
-            state_topic = f"{self.config.state_prefix}/anlage/{anlage_id}/{sensor.key}"
             sensor_name = sensor.name
 
         payload = {
@@ -226,6 +224,29 @@ class MQTTClient:
 
         return payload
 
+    # ── Die drei Topics eines Sensors — EINE Wahrheit ────────────────────────
+    #
+    # ⛔ **Warum das Helfer sind und keine Inline-Ausdrücke (#400, 28.08.):** Bis
+    # hierher baute jede Stelle ihr Topic selbst — `_build_discovery_payload` und
+    # `publish_sensor_value` je einmal den `state_topic`, `_get_config_topic` die
+    # `unique_id` ein zweites Mal. `remove_sensor` musste dieselbe Bildung ein
+    # drittes Mal treffen. **Weicht der Entfernen-Pfad auch nur in einem Zeichen
+    # ab, räumt er ein Topic, das niemand geschrieben hat — und lässt das
+    # geschriebene liegen, ohne dass irgendetwas rot wird.** Ein Publisher und
+    # ein Remover, die ihre Adressen getrennt bilden, sind dieselbe Klasse wie
+    # zwei Wahrheiten über denselben Broker (#655).
+
+    def _get_unique_id(
+        self,
+        sensor: SensorDefinition,
+        anlage_id: int,
+        investition_id: Optional[int] = None,
+    ) -> str:
+        """Die `unique_id`, an der HA die Entität wiedererkennt."""
+        if investition_id:
+            return f"eedc_{anlage_id}_{investition_id}_{sensor.key}"
+        return f"eedc_{anlage_id}_{sensor.key}"
+
     def _get_config_topic(
         self,
         sensor: SensorDefinition,
@@ -233,12 +254,42 @@ class MQTTClient:
         investition_id: Optional[int] = None,
     ) -> str:
         """Generiert das Discovery Config Topic."""
-        if investition_id:
-            unique_id = f"eedc_{anlage_id}_{investition_id}_{sensor.key}"
-        else:
-            unique_id = f"eedc_{anlage_id}_{sensor.key}"
-
+        unique_id = self._get_unique_id(sensor, anlage_id, investition_id)
         return f"{self.config.discovery_prefix}/sensor/{unique_id}/config"
+
+    def _get_state_topic(
+        self,
+        sensor: SensorDefinition,
+        anlage_id: int,
+        investition_id: Optional[int] = None,
+    ) -> str:
+        """Generiert das Werte-Topic."""
+        if investition_id:
+            return (
+                f"{self.config.state_prefix}/anlage/{anlage_id}"
+                f"/investition/{investition_id}/{sensor.key}"
+            )
+        return f"{self.config.state_prefix}/anlage/{anlage_id}/{sensor.key}"
+
+    def alle_topics(
+        self,
+        sensor: SensorDefinition,
+        anlage_id: int,
+        investition_id: Optional[int] = None,
+    ) -> list[str]:
+        """**Alle** Topics, die dieser Sensor auf dem Broker belegt.
+
+        Config, Wert und Attribute — alle drei werden mit ``retain=True``
+        publiziert und bleiben deshalb ohne aktives Zurücknehmen dauerhaft auf
+        dem Broker liegen. Wer entfernt, entfernt diese Liste; wer sie kürzt,
+        lässt Reste stehen, die eedc als entfernt meldet.
+        """
+        state_topic = self._get_state_topic(sensor, anlage_id, investition_id)
+        return [
+            self._get_config_topic(sensor, anlage_id, investition_id),
+            state_topic,
+            f"{state_topic}/attributes",
+        ]
 
     async def publish_sensor_discovery(
         self,
@@ -306,12 +357,8 @@ class MQTTClient:
 
         sensor = sensor_value.definition
 
-        # Topics bestimmen
-        if investition_id:
-            state_topic = f"{self.config.state_prefix}/anlage/{anlage_id}/investition/{investition_id}/{sensor.key}"
-        else:
-            state_topic = f"{self.config.state_prefix}/anlage/{anlage_id}/{sensor.key}"
-
+        # Topics bestimmen — dieselben Helfer, die auch `remove_sensor` benutzt.
+        state_topic = self._get_state_topic(sensor, anlage_id, investition_id)
         attributes_topic = f"{state_topic}/attributes"
 
         # Attribute zusammenstellen
@@ -362,11 +409,26 @@ class MQTTClient:
         anlage_id: int,
         investition_id: Optional[int] = None,
     ) -> bool:
-        """
-        Entfernt einen Sensor aus HA Discovery.
+        """Nimmt **alle drei** Topics eines Sensors vom Broker zurueck.
 
-        Durch Publizieren einer leeren Nachricht auf das Config-Topic
-        wird der Sensor aus HA entfernt.
+        Eine leere Nachricht auf ein retained Topic loescht die festgehaltene
+        Nachricht. Auf dem Config-Topic entfernt HA damit die Entitaet; auf dem
+        Werte- und Attribut-Topic verschwindet der zuletzt gehaltene Wert.
+
+        ⛔ **Warum alle drei und nicht nur die Discovery (#400, Entscheid Gernot
+        28.08.):** Alle drei werden mit ``retain=True`` publiziert
+        (``publish_sensor_discovery`` · ``publish_sensor_value``). Bis hierher
+        nahm das Entfernen nur das Config-Topic zurueck — die beiden anderen
+        blieben mit ihrem letzten Wert dauerhaft auf dem Broker liegen, sichtbar
+        in jedem MQTT-Client. Der Bestaetigen-Dialog sagt dem Anwender, dass
+        seine Daten aus HA **und MQTT** verloren sind; blieben zwei Drittel der
+        Nachrichten liegen, waere genau dieser Satz falsch. *Der Umfang des
+        Aufraeumens folgt der Zusage, die wir dem Anwender machen.*
+
+        ⚠ **Was eedc dabei NICHT anfasst: Home Assistant.** Kein Registry-Zugriff,
+        keine Statistik-Loeschung. Was HA nach dem Entfernen der Entitaet an
+        Langzeitstatistik behaelt, entscheidet HA. Der Dialog warnt bewusst nach
+        der sicheren Seite — lieber zu viel Verlust angekuendigt als zu wenig.
 
         Args:
             sensor: Sensor-Definition
@@ -374,12 +436,12 @@ class MQTTClient:
             investition_id: Optional - ID der Investition
 
         Returns:
-            True wenn erfolgreich
+            True wenn **alle** Topics zurueckgenommen wurden
         """
         if not MQTT_AVAILABLE:
             return False
 
-        config_topic = self._get_config_topic(sensor, anlage_id, investition_id)
+        topics = self.alle_topics(sensor, anlage_id, investition_id)
 
         try:
             async with aiomqtt.Client(
@@ -388,12 +450,52 @@ class MQTTClient:
                 username=self.config.username,
                 password=self.config.password,
             ) as client:
-                # Leere Nachricht = Sensor entfernen
-                await client.publish(config_topic, "", retain=True)
+                for topic in topics:
+                    # Leere Nachricht auf ein retained Topic = Nachricht loeschen
+                    await client.publish(topic, "", retain=True)
                 return True
         except Exception as e:
             logger.warning("[MQTT] Fehler beim Entfernen von %s: %s: %s", sensor.key, type(e).__name__, e)
             return False
+
+    async def remove_sensors(
+        self,
+        eintraege: list[tuple[SensorDefinition, int, Optional[int]]],
+    ) -> dict:
+        """Nimmt viele Sensoren ueber **eine** Verbindung zurueck.
+
+        ``eintraege`` sind Tripel ``(sensor, anlage_id, investition_id)``.
+
+        ⛔ **Warum sammelnd und nicht ``remove_sensor`` in einer Schleife:** Jeder
+        Einzelaufruf oeffnet seine eigene Broker-Verbindung. Beim vollstaendigen
+        Entfernen einer Anlage mit fuenf Komponenten sind das ueber dreihundert
+        Verbindungsaufbauten fuer gut tausend Topics — der Knopf haette minutenlang
+        gedreht. Hier ist es **eine** Verbindung.
+
+        Returns:
+            dict mit ``sensoren`` (zurueckgenommene Sensoren) und ``topics``
+        """
+        if not MQTT_AVAILABLE or not eintraege:
+            return {"sensoren": 0, "topics": 0, "fehler": None}
+
+        topics: list[str] = []
+        for sensor, anlage_id, investition_id in eintraege:
+            topics.extend(self.alle_topics(sensor, anlage_id, investition_id))
+
+        try:
+            async with aiomqtt.Client(
+                hostname=self.config.host,
+                port=self.config.port,
+                username=self.config.username,
+                password=self.config.password,
+            ) as client:
+                for topic in topics:
+                    await client.publish(topic, "", retain=True)
+            return {"sensoren": len(eintraege), "topics": len(topics), "fehler": None}
+        except Exception as e:
+            fehler = f"{type(e).__name__}: {e}"
+            logger.warning("[MQTT] Sammel-Entfernen fehlgeschlagen — %s", fehler)
+            return {"sensoren": 0, "topics": 0, "fehler": fehler}
 
     async def publish_all_sensors(
         self,

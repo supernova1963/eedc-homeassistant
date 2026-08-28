@@ -19,7 +19,7 @@
  * - Übersicht aller exportierbaren Sensoren mit Werten/Formeln
  */
 
-import { useState, useEffect, type ReactNode } from 'react'
+import { useState, useEffect, useMemo, type ReactNode } from 'react'
 import {
   RefreshCw,
   Loader2,
@@ -66,7 +66,7 @@ import {
   mdiHelpCircleOutline
 } from '@mdi/js'
 import { haApi, anlagenApi } from '../api'
-import { Button, Input, SegmentControl, Switch, EmptyState } from '../components/ui'
+import { Button, Input, SegmentControl, Switch, EmptyState, Checkbox, ConfirmDialog } from '../components/ui'
 import { VERBINDUNG_GEAENDERT_EVENT } from '../api/datenquellen'
 import { useCopyFeedback } from '../hooks'
 
@@ -105,6 +105,7 @@ function MdiIcon({ name }: { name: string }) {
   return <Icon path={path} size={0.9} className="text-gray-600 dark:text-gray-300" />
 }
 import type {
+  SensorAbwahlItem,
   FullExportResponse,
   AnlageExport,
   SensorExportItem,
@@ -154,6 +155,20 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
   const [guenstigSaving, setGuenstigSaving] = useState(false)
   const [guenstigSaved, setGuenstigSaved] = useState(false)
 
+  // ── Sensor-Abwahl (#400) ───────────────────────────────────────────────────
+  // `abwahlDefs` sind die DEFINITIONEN (alle exportierbaren Sensoren), nicht die
+  // berechneten Werte — sonst liesse sich ein heute leerer Sensor nicht abwaehlen,
+  // der morgen einen Wert liefert und dann unangekuendigt in HA auftaucht.
+  // `gespeicherteAbwahl` ist der Server-Zustand, `abwahlEntwurf` der der Haekchen.
+  const [abwahlDefs, setAbwahlDefs] = useState<SensorAbwahlItem[]>([])
+  const [gespeicherteAbwahl, setGespeicherteAbwahl] = useState<Set<string>>(new Set())
+  const [abwahlEntwurf, setAbwahlEntwurf] = useState<Set<string>>(new Set())
+  const [abwahlSpeichern, setAbwahlSpeichern] = useState(false)
+  const [abwahlDialogOffen, setAbwahlDialogOffen] = useState(false)
+  const [abwahlMeldung, setAbwahlMeldung] = useState<string | null>(null)
+  const [abwahlFehler, setAbwahlFehler] = useState<string | null>(null)
+  const [entfernenDialogOffen, setEntfernenDialogOffen] = useState(false)
+
   // UI State
   const [activeTab, setActiveTab] = useState<'rest' | 'mqtt'>('mqtt')
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['energie', 'finanzen']))
@@ -165,12 +180,30 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
       setLoading(true)
       setError(null)
 
-      const [exportDataResult, mqttConfigResult] = await Promise.all([
+      const [exportDataResult, mqttConfigResult, abwahlResult] = await Promise.all([
         haApi.getExportSensors(),
-        haApi.getMqttConfig().catch(() => null)  // Optional, falls Endpoint nicht erreichbar
+        haApi.getMqttConfig().catch(() => null),  // Optional, falls Endpoint nicht erreichbar
+        // ⚠ `Promise.resolve().then(...)` statt eines direkten Aufrufs: die
+        // Abwahl ist ein NEUER Endpunkt (#400). Faellt er aus — aelteres
+        // Backend, Proxy-Fehler — darf das nicht die ganze Flaeche in den
+        // Fehlerzustand kippen; sie funktioniert ohne ihn vollstaendig, nur
+        // ohne Haekchen. Ein direkter Aufruf wuerde ausserdem schon beim
+        // Aufbau des Arrays werfen, wenn die Methode gar nicht existiert —
+        // dann greift kein `.catch` mehr. Gemessen an der bestehenden Probe
+        // `HAExportMqttMeldung.test.tsx`, deren Attrappe die Methode nicht
+        // kannte: sie blieb gruen, legte aber ein rotes „Fehler beim Laden"
+        // ueber die Flaeche.
+        Promise.resolve().then(() => haApi.getSensorAbwahl()).catch(() => null)
       ])
 
       setExportData(exportDataResult)
+
+      if (abwahlResult) {
+        setAbwahlDefs(abwahlResult.sensoren)
+        const gesetzt = new Set(abwahlResult.abgewaehlt)
+        setGespeicherteAbwahl(gesetzt)
+        setAbwahlEntwurf(new Set(gesetzt))
+      }
 
       // Aufgelöste Broker-Config (DB-Broker-Block → ENV) — nur zur Anzeige.
       if (mqttConfigResult) setMqttConfig(mqttConfigResult)
@@ -349,6 +382,91 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
     })
   }
 
+  // ── Abwahl: Zusammenfuehrung, Umschalten, Speichern (#400) ────────────────
+  //
+  // Die Liste zeigt ALLE Definitionen; der aktuelle Wert wird dazugelegt, wo es
+  // einen gibt. Ein Sensor ohne Wert erscheint mit „—" — er steht heute nicht in
+  // HA, laesst sich aber vorab abwaehlen.
+  const anzeigeSensoren: SensorExportItem[] = useMemo(() => {
+    const werte = new Map((anlageExport?.sensors ?? []).map(s => [s.key, s]))
+    if (abwahlDefs.length === 0) return anlageExport?.sensors ?? []
+    return abwahlDefs.map(d => werte.get(d.key) ?? {
+      key: d.key,
+      name: d.name,
+      value: null,
+      unit: d.unit,
+      icon: d.icon,
+      category: d.category,
+      formel: d.formel,
+      berechnung: null,
+      device_class: null,
+      state_class: null,
+    })
+  }, [abwahlDefs, anlageExport])
+
+  const abwahlGeaendert =
+    abwahlEntwurf.size !== gespeicherteAbwahl.size ||
+    [...abwahlEntwurf].some(k => !gespeicherteAbwahl.has(k))
+
+  /** Neu abgewaehlt = das, was durch diese Aenderung aus HA verschwindet. */
+  const neuAbgewaehlt = useMemo(
+    () => [...abwahlEntwurf].filter(k => !gespeicherteAbwahl.has(k)),
+    [abwahlEntwurf, gespeicherteAbwahl]
+  )
+
+  const setzeAbwahl = (keys: string[], abwaehlen: boolean) => {
+    setAbwahlMeldung(null)
+    setAbwahlEntwurf(prev => {
+      const next = new Set(prev)
+      keys.forEach(k => (abwaehlen ? next.add(k) : next.delete(k)))
+      return next
+    })
+  }
+
+  const speichereAbwahl = async () => {
+    setAbwahlFehler(null)
+    setAbwahlSpeichern(true)
+    try {
+      const ergebnis = await haApi.setSensorAbwahl([...abwahlEntwurf])
+      const gesetzt = new Set(ergebnis.abgewaehlt)
+      setGespeicherteAbwahl(gesetzt)
+      setAbwahlEntwurf(new Set(gesetzt))
+      setAbwahlDialogOffen(false)
+      setAbwahlMeldung(
+        ergebnis.fehler
+          ? `Gespeichert — die Topics konnten aber nicht zurückgenommen werden: ${ergebnis.fehler}`
+          : `Gespeichert. ${ergebnis.abgewaehlt.length} Sensoren gehen nicht mehr nach Home Assistant` +
+            (ergebnis.entfernte_topics
+              ? `, ${ergebnis.entfernte_topics} MQTT-Topics zurückgenommen.`
+              : '.')
+      )
+      await loadData()
+    } catch (e) {
+      setAbwahlFehler(e instanceof Error ? e.message : 'Speichern fehlgeschlagen')
+      throw e
+    } finally {
+      setAbwahlSpeichern(false)
+    }
+  }
+
+  /** Ohne NEUE Abwahl geht nichts verloren — dann ist die Rueckfrage nur Reibung. */
+  const abwahlUebernehmen = () => {
+    if (neuAbgewaehlt.length === 0) {
+      void speichereAbwahl()
+      return
+    }
+    setAbwahlDialogOffen(true)
+  }
+
+  const abwahlVerwerfen = () => {
+    setAbwahlEntwurf(new Set(gespeicherteAbwahl))
+    setAbwahlMeldung(null)
+    setAbwahlFehler(null)
+  }
+
+  const nameZuSchluessel = (key: string) =>
+    abwahlDefs.find(d => d.key === key)?.name ?? key
+
   // Sensoren nach Kategorie gruppieren
   const groupSensorsByCategory = (sensors: SensorExportItem[]) => {
     const groups: Record<string, SensorExportItem[]> = {}
@@ -376,6 +494,12 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
     e_auto: 'E-Auto',
     wallbox: 'Wallbox',
     status: 'Status',
+    // #400: `prognose` und `preis` fehlten hier seit #150 und fielen als roher
+    // Enum-Wert mit Pin-Default-Icon durch — genau die Klasse, die #179 fuer die
+    // uebrigen Kategorien behoben hat. In der Abwahl-Liste stehen sie prominent
+    // (20 der 44 anlagenweiten Sensoren), deshalb faellt es jetzt auf.
+    prognose: 'Prognose',
+    preis: 'Börsenpreis',
     // Defensive Fallbacks fuer aelteren Backend-Stand
     autarkie: 'Autarkie & Eigenverbrauch',
     performance: 'Performance',
@@ -394,6 +518,8 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
     e_auto: '🚗',
     wallbox: '🔌',
     status: '⚙️',
+    prognose: '🔮',
+    preis: '💶',
     autarkie: '🏠',
     performance: '📊',
     sonstige: '📌',
@@ -407,6 +533,7 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
     'anlage', 'energie', 'speicher',
     'investition', 'wallbox', 'e_auto', 'waermepumpe',
     'finanzen', 'quote', 'umwelt',
+    'prognose', 'preis',
     'autarkie', 'performance', 'sonstige',
     'status',
   ]
@@ -694,7 +821,7 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
               <Button
                 type="button"
                 variant="danger"
-                onClick={removeMqttSensors}
+                onClick={() => setEntfernenDialogOffen(true)}
                 disabled={!anlageId}
                 loading={mqttRemoving}
               >
@@ -735,6 +862,79 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
           </div>
         </div>
       )}
+
+      {/* ── Bestätigungen (#400, Entscheid Gernot 28.08.) ────────────────────
+          Beides sind bewusste, wirksame Anwenderaktionen. Der Text nennt den
+          Verlust ausdrücklich — und er warnt bewusst nach der sicheren Seite:
+          was Home Assistant nach dem Entfernen der Entität an Langzeitstatistik
+          behält, entscheidet HA, nicht eedc. Lieber zu viel Verlust angekündigt
+          als zu wenig. In HA selbst greift eedc nicht ein. */}
+      <ConfirmDialog
+        isOpen={abwahlDialogOffen}
+        onClose={() => setAbwahlDialogOffen(false)}
+        onConfirm={speichereAbwahl}
+        title="Sensoren abwählen?"
+        variant="danger"
+        confirmLabel="Abwählen und entfernen"
+        message={
+          <div className="space-y-3">
+            <p>
+              {neuAbgewaehlt.length === 1
+                ? 'Dieser Sensor wird nicht mehr nach Home Assistant exportiert:'
+                : `Diese ${neuAbgewaehlt.length} Sensoren werden nicht mehr nach Home Assistant exportiert:`}
+            </p>
+            <ul className="list-disc pl-5 text-sm max-h-40 overflow-y-auto">
+              {neuAbgewaehlt.map(k => <li key={k}>{nameZuSchluessel(k)}</li>)}
+            </ul>
+            <p className="font-medium">
+              Ihre bisherigen Daten in Home Assistant und auf dem MQTT-Broker sind
+              damit verloren.
+            </p>
+            <p className="text-sm">
+              eedc nimmt seine eigenen MQTT-Nachrichten zurück — die Auto-Discovery-
+              Einträge sowie die gespeicherten Werte und Attribute. Ohne das käme der
+              Sensor beim nächsten Neustart von Home Assistant zurück. In Home
+              Assistant selbst ändert eedc nichts; mögliche Reste dort räumst du
+              nach Bedarf selbst weg.
+            </p>
+            <p className="text-sm">
+              Wählst du einen Sensor später wieder an, wird er neu angelegt — aber
+              ohne seine alte Historie.
+            </p>
+          </div>
+        }
+      />
+
+      <ConfirmDialog
+        isOpen={entfernenDialogOffen}
+        onClose={() => setEntfernenDialogOffen(false)}
+        onConfirm={async () => {
+          setEntfernenDialogOffen(false)
+          await removeMqttSensors()
+        }}
+        title="Alle Sensoren entfernen?"
+        variant="danger"
+        confirmLabel="Alle entfernen"
+        message={
+          <div className="space-y-3">
+            <p>
+              Sämtliche eedc-Sensoren dieser Anlage werden von Home Assistant und vom
+              MQTT-Broker zurückgenommen — anlagenweite <strong>und</strong> die je
+              Komponente.
+            </p>
+            <p className="font-medium">
+              Ihre bisherigen Daten in Home Assistant und auf dem MQTT-Broker sind
+              damit verloren.
+            </p>
+            <p className="text-sm">
+              Deine Daten in eedc bleiben unberührt — es geht ausschließlich um die
+              Weitergabe nach Home Assistant. Mit <strong>Sensoren publizieren</strong>
+              {' '}oder beim nächsten automatischen Lauf werden sie neu angelegt, dann
+              ohne ihre alte Historie.
+            </p>
+          </div>
+        }
+      />
 
       {/* REST Tab */}
       {activeTab === 'rest' && yamlSnippet && (
@@ -791,9 +991,56 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
       {/* Sensor Übersicht */}
       {anlageExport && (
         <div className="card p-6">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
             Verfügbare Sensoren ({anlageExport.sensors.length})
           </h2>
+
+          {/* ── Abwahl (#400) ────────────────────────────────────────────────
+              Zwei Melder in 24 Stunden (rapahl per PN, Knallfrosch T89667 #236):
+              eedc liefert alles, und in Home Assistant lässt es sich nicht
+              dauerhaft loswerden — der Registry-Eintrag bleibt. Die Abwahl muss
+              deshalb auf der SENDENDEN Seite sitzen. */}
+          {abwahlDefs.length > 0 && anlageExport.sensors.length > 0 && (
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              Häkchen ab = dieser Sensor geht nicht nach Home Assistant. Alle sind
+              voreingestellt an; was du abwählst, ist deine bewusste Entscheidung.
+              Sensoren ohne Wert stehen mit „—" da — sie sind heute nicht in Home
+              Assistant, lassen sich aber vorab abwählen.
+            </p>
+          )}
+
+          {abwahlMeldung && (
+            <div className="mb-4 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-sm text-green-700 dark:text-green-300">
+              {abwahlMeldung}
+            </div>
+          )}
+          {abwahlFehler && (
+            <div className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300">
+              {abwahlFehler}
+            </div>
+          )}
+
+          {abwahlGeaendert && (
+            <div className="mb-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 flex flex-wrap items-center gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
+              <span className="text-sm text-amber-700 dark:text-amber-300 flex-1 min-w-[12rem]">
+                {abwahlEntwurf.size} Sensoren abgewählt
+                {neuAbgewaehlt.length > 0 && <> — davon {neuAbgewaehlt.length} neu</>}
+                . Noch nicht gespeichert.
+              </span>
+              {/* Eigener Name statt „Speichern": auf derselben Fläche sitzt
+                  bereits der Speichern-Knopf der Günstig-Schwelle. Zwei gleich
+                  beschriftete Knöpfe nebeneinander sind für den Anwender
+                  mehrdeutig — aufgefallen ist es der Probe, die sie nicht
+                  auseinanderhalten konnte. */}
+              <Button type="button" variant="secondary" size="sm" onClick={abwahlVerwerfen}>
+                Änderungen verwerfen
+              </Button>
+              <Button type="button" size="sm" onClick={abwahlUebernehmen} loading={abwahlSpeichern}>
+                Auswahl speichern
+              </Button>
+            </div>
+          )}
 
           {/* Eine leere Liste nennt ihren Grund (T89667 #112, Phir0n).
               Sämtliche Export-Sensoren werden aus abgeschlossenen Monatsdaten
@@ -814,22 +1061,37 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
           )}
 
           <div className="space-y-4">
-            {sortCategories(Object.entries(groupSensorsByCategory(anlageExport.sensors))).map(([category, sensors]) => (
+            {anlageExport.sensors.length > 0 &&
+             sortCategories(Object.entries(groupSensorsByCategory(anzeigeSensoren))).map(([category, sensors]) => {
+              const katKeys = sensors.map(x => x.key)
+              const katExportiert = katKeys.filter(k => !abwahlEntwurf.has(k)).length
+              return (
               <div key={category} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                <div className="bg-gray-50 dark:bg-gray-800">
+                <div className="bg-gray-50 dark:bg-gray-800 flex items-center gap-2 pl-3">
+                {abwahlDefs.length > 0 && (
+                  <Checkbox
+                    id={`abwahl-kat-${category}`}
+                    checked={katExportiert === katKeys.length}
+                    ref={(el) => { if (el) el.indeterminate = katExportiert > 0 && katExportiert < katKeys.length }}
+                    onChange={(e) => setzeAbwahl(katKeys, !e.target.checked)}
+                    label={<span className="sr-only">Alle Sensoren der Kategorie {categoryLabels[category] || category} exportieren</span>}
+                  />
+                )}
                 <Button
                   type="button"
                   variant="ghost"
                   onClick={() => toggleCategory(category)}
                   aria-expanded={expandedCategories.has(category)}
-                  className="w-full justify-between text-left"
+                  className="flex-1 justify-between text-left"
                 >
                   <span className="flex items-center gap-2">
                     <span>{categoryIcons[category] || '📌'}</span>
                     <span className="font-medium text-gray-900 dark:text-white">
                       {categoryLabels[category] || category}
                     </span>
-                    <span className="text-sm text-gray-500">({sensors.length})</span>
+                    <span className="text-sm text-gray-500">
+                      ({abwahlDefs.length > 0 ? `${katExportiert}/${katKeys.length}` : sensors.length})
+                    </span>
                   </span>
                   {expandedCategories.has(category) ? (
                     <ChevronDown className="w-5 h-5 text-gray-400 dark:text-gray-500" />
@@ -842,14 +1104,32 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
                 {expandedCategories.has(category) && (
                   <div className="divide-y divide-gray-200 dark:divide-gray-700">
                     {sensors.map((sensor) => (
-                      <div key={sensor.key} className="p-3 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                      <div
+                        key={sensor.key}
+                        className={`p-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 ${
+                          abwahlEntwurf.has(sensor.key) ? 'opacity-60' : ''
+                        }`}
+                      >
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
+                              {abwahlDefs.length > 0 && (
+                                <Checkbox
+                                  id={`abwahl-${sensor.key}`}
+                                  checked={!abwahlEntwurf.has(sensor.key)}
+                                  onChange={(e) => setzeAbwahl([sensor.key], !e.target.checked)}
+                                  label={<span className="sr-only">{sensor.name} nach Home Assistant exportieren</span>}
+                                />
+                              )}
                               <MdiIcon name={sensor.icon} />
                               <span className="font-medium text-gray-900 dark:text-white">
                                 {sensor.name}
                               </span>
+                              {abwahlEntwurf.has(sensor.key) && (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                                  abgewählt
+                                </span>
+                              )}
                             </div>
                             <code className="text-xs text-gray-500 dark:text-gray-400 font-mono">
                               {sensor.key}
@@ -879,7 +1159,8 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
                   </div>
                 )}
               </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}

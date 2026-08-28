@@ -95,6 +95,7 @@ GET /api/ha-statistics/monatswerte/{anlage_id}/{jahr}/{monat}
 GET /api/ha-statistics/status
 GET /api/ha-statistics/verfuegbare-monate/{anlage_id}
 GET /api/ha/export/definitions
+GET /api/ha/export/mqtt/abwahl
 GET /api/ha/export/mqtt/config
 GET /api/ha/export/sensors
 GET /api/ha/export/sensors/{anlage_id}
@@ -217,6 +218,7 @@ POST /api/energie-profil/{anlage_id}/reaggregate-bereich
 POST /api/energie-profil/{anlage_id}/reaggregate-tag
 POST /api/energie-profil/{anlage_id}/vollbackfill
 POST /api/ha-statistics/import/{anlage_id}
+POST /api/ha/export/mqtt/abwahl
 POST /api/ha/export/mqtt/auto-publish
 POST /api/ha/export/mqtt/publish/{anlage_id}
 POST /api/ha/export/mqtt/test

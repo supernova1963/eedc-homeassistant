@@ -37,6 +37,37 @@ export interface SensorExportItem {
   state_class: string | null
 }
 
+/**
+ * Eine exportierbare Sensor-DEFINITION samt Abwahl-Zustand (#400).
+ *
+ * Bewusst getrennt von `SensorExportItem`: das ist ein berechneter *Wert* und
+ * existiert nur, wenn gerade einer vorliegt. Die Abwahl arbeitet auf den
+ * Definitionen — sonst liesse sich ein Sensor nicht abwaehlen, der heute leer
+ * ist und morgen in Home Assistant auftaucht.
+ */
+export interface SensorAbwahlItem {
+  key: string
+  name: string
+  unit: string
+  icon: string
+  category: string
+  formel: string
+  exportiert: boolean
+}
+
+export interface SensorAbwahlResponse {
+  abgewaehlt: string[]
+  sensoren: SensorAbwahlItem[]
+}
+
+export interface SensorAbwahlErgebnis {
+  gespeichert: boolean
+  abgewaehlt: string[]
+  neu_abgewaehlt: string[]
+  entfernte_topics: number
+  fehler: string | null
+}
+
 export interface AnlageExport {
   anlage_id: number
   anlage_name: string
@@ -187,5 +218,21 @@ export const haApi = {
   async removeMqtt(anlageId: number, _config?: MQTTConfig): Promise<void> {
     // Note: Config wird derzeit nicht verwendet, da DELETE keinen Body unterstützt
     return api.delete(`/ha/export/mqtt/remove/${anlageId}`)
+  },
+
+  /**
+   * Alle exportierbaren Sensor-Definitionen samt Abwahl-Zustand (#400)
+   */
+  async getSensorAbwahl(): Promise<SensorAbwahlResponse> {
+    return api.get<SensorAbwahlResponse>('/ha/export/mqtt/abwahl')
+  },
+
+  /**
+   * Abwahl speichern. Uebergeben wird der VOLLSTAENDIGE Zustand, kein Delta —
+   * die Oberflaeche kennt ihn, und ein Delta waere gegenueber einer zweiten
+   * offenen Sitzung nicht entscheidbar.
+   */
+  async setSensorAbwahl(abgewaehlt: string[]): Promise<SensorAbwahlErgebnis> {
+    return api.post<SensorAbwahlErgebnis>('/ha/export/mqtt/abwahl', { abgewaehlt })
   },
 }

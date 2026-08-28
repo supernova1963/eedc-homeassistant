@@ -101,6 +101,9 @@ from backend.services.mqtt_broker_settings import (
     broker_aktiviert,
     broker_konfiguriert,
     export_aktiviert,
+    abgewaehlte_sensoren,
+    schreibe_export_settings,
+    ABWAHL_FELD,
     MQTT_EXPORT_SETTINGS_KEY,
 )
 from backend.core.investition_parameter import (
@@ -221,6 +224,17 @@ class MQTTConfigResponse(BaseModel):
 class AutoPublishRequest(BaseModel):
     """Body für den Export-Toggle (B7-5b)."""
     enabled: bool
+
+
+class AbwahlRequest(BaseModel):
+    """Body für die Sensor-Abwahl (#400).
+
+    Die **vollständige** Liste der abgewählten Schlüssel, nicht ein Delta — die
+    Oberfläche kennt den Gesamtzustand ihrer Häkchen und schickt ihn. Ein Delta
+    („diesen einen dazu") wäre gegenüber einer zweiten offenen Sitzung nicht
+    entscheidbar.
+    """
+    abgewaehlt: list[str]
 
 
 # =============================================================================
@@ -1734,23 +1748,118 @@ async def set_auto_publish(payload: AutoPublishRequest, db: AsyncSession = Depen
     Bestandsinstallationen ohne Eintrag. Wirkt sofort — der Scheduler-Job prüft
     die Einstellung bei jedem Lauf, ein Neustart ist nicht nötig.
     """
-    from backend.models.settings import Settings as SettingsModel
-    from sqlalchemy.orm.attributes import flag_modified
-
-    setting = (
-        await db.execute(
-            select(SettingsModel).where(SettingsModel.key == MQTT_EXPORT_SETTINGS_KEY)
-        )
-    ).scalar_one_or_none()
-
-    if setting:
-        setting.value = {"enabled": payload.enabled}
-        flag_modified(setting, "value")
-    else:
-        db.add(SettingsModel(key=MQTT_EXPORT_SETTINGS_KEY, value={"enabled": payload.enabled}))
-    await db.commit()
+    # ⛔ Mischend schreiben, nicht ersetzend: seit #400 liegt die Abwahlliste im
+    # selben Settings-Key. Das frühere `value = {"enabled": ...}` hätte sie bei
+    # jedem Klick auf diesen Toggle wortlos gelöscht.
+    await schreibe_export_settings(db, enabled=payload.enabled)
 
     return {"gespeichert": True, "enabled": payload.enabled}
+
+
+# =============================================================================
+# Sensor-Abwahl (#400) — welche Sensoren gehen ueberhaupt nach HA?
+# =============================================================================
+
+@router.get("/mqtt/abwahl")
+async def get_sensor_abwahl(db: AsyncSession = Depends(get_db)):
+    """Alle exportierbaren Sensor-Definitionen samt Abwahl-Zustand.
+
+    ⭐ **Warum DEFINITIONEN und nicht die berechneten Werte:** Die Sensorliste im
+    Export-Block zeigt nur Sensoren, die gerade einen Wert haben
+    (`calculate_anlage_sensors` haengt jeden Eintrag an ein `value is not None`).
+    Baute die Abwahl darauf auf, koennte man einen Sensor nicht abwaehlen, der
+    heute leer ist und morgen einen Wert liefert — er erschiene dann
+    unangekuendigt in HA, obwohl der Anwender die Fläche durchgesehen hat.
+    """
+    abgewaehlt = await abgewaehlte_sensoren(db)
+    definitionen = get_all_sensor_definitions()
+
+    return {
+        "abgewaehlt": sorted(abgewaehlt),
+        "sensoren": [
+            {
+                "key": d.key,
+                "name": d.name,
+                "unit": d.unit,
+                "icon": d.icon,
+                "category": d.category.value,
+                "formel": d.formel,
+                "exportiert": d.key not in abgewaehlt,
+            }
+            for d in definitionen
+        ],
+    }
+
+
+@router.post("/mqtt/abwahl")
+async def set_sensor_abwahl(payload: AbwahlRequest, db: AsyncSession = Depends(get_db)):
+    """Speichert die Abwahl und nimmt die neu abgewaehlten Topics zurueck.
+
+    **Der Entscheid dahinter (Gernot, 28.08.):** Alle Sensoren bleiben per Default
+    **an**; die Abwahl ist ausschliesslich eine bewusste Wahl des Anwenders. Weil
+    sie bewusst ist, darf sie auch wirken — die Oberflaeche fragt vorher nach und
+    sagt, dass die Daten in HA und auf dem Broker verloren sind.
+
+    ⛔ **Abwaehlen heisst zuruecknehmen, nicht schweigen.** Wuerde eedc nur
+    aufhoeren zu publizieren, bliebe das retained Discovery-Topic auf dem Broker
+    liegen — und der Broker spielt es jedem neuen Abonnenten erneut zu. Die
+    Entitaet waere nach dem naechsten HA-Neustart zurueck, und der Anwender kaeme
+    nur mit einem MQTT-Client wieder heraus. Deshalb nimmt eedc **seine eigenen**
+    Topics zurueck (`eedc/…` und `homeassistant/…/config`).
+    """
+    neu = {k for k in payload.abgewaehlt if k}
+    bekannt = {d.key for d in get_all_sensor_definitions()}
+    unbekannt = sorted(neu - bekannt)
+    if unbekannt:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unbekannte Sensor-Schlüssel: {', '.join(unbekannt)}",
+        )
+
+    vorher = await abgewaehlte_sensoren(db)
+    await schreibe_export_settings(db, **{ABWAHL_FELD: sorted(neu)})
+
+    # Nur das NEU Abgewaehlte muss vom Broker; was schon abgewaehlt war, ist
+    # laengst weg, und was wieder angewaehlt wurde, legt der naechste Publish an.
+    dazugekommen = neu - vorher
+    entfernt = {"sensoren": 0, "topics": 0, "fehler": None}
+
+    if dazugekommen:
+        from backend.services.ha_mqtt_sync import belegte_sensor_eintraege
+
+        client = MQTTClient(await resolve_broker_config(db))
+        if client.is_available:
+            # ⚠ Die Abwahl gilt anlagenuebergreifend (sie liegt in den globalen
+            # Export-Settings) — also muss auch ueber ALLE Anlagen aufgeraeumt
+            # werden. Nur die gerade gewaehlte Anlage zu raeumen liesse den
+            # Sensor bei jeder weiteren Anlage stehen, obwohl er dort ebenso
+            # abgewaehlt ist.
+            alle_anlagen = list((await db.execute(select(Anlage))).scalars().all())
+            eintraege: list = []
+            for a in alle_anlagen:
+                eintraege.extend(
+                    await belegte_sensor_eintraege(db, a, nur_schluessel=dazugekommen)
+                )
+            entfernt = await client.remove_sensors(eintraege)
+
+    await log_activity(
+        kategorie="ha_export",
+        aktion="MQTT-Sensor-Abwahl geändert",
+        erfolg=entfernt["fehler"] is None,
+        details=(
+            f"{len(neu)} abgewählt ({len(dazugekommen)} neu), "
+            f"{entfernt['topics']} Topics zurückgenommen"
+            + (f" — {entfernt['fehler']}" if entfernt["fehler"] else "")
+        ),
+    )
+
+    return {
+        "gespeichert": True,
+        "abgewaehlt": sorted(neu),
+        "neu_abgewaehlt": sorted(dazugekommen),
+        "entfernte_topics": entfernt["topics"],
+        "fehler": entfernt["fehler"],
+    }
 
 
 @router.get("/sensors", response_model=FullExportResponse)
@@ -2012,7 +2121,6 @@ async def get_sensor_definitions():
                 "formel": s.formel,
                 "device_class": s.device_class,
                 "state_class": s.state_class,
-                "enabled_by_default": s.enabled_by_default,
             }
             for s in definitions
         ]
@@ -2149,22 +2257,45 @@ async def remove_sensors_mqtt(
             detail="MQTT nicht verfügbar"
         )
 
-    # Alle Anlage-Sensoren entfernen (inkl. #150-Prognose-/Preis-Sensoren)
-    removed = 0
-    for sensor in ANLAGE_SENSOREN + PROGNOSE_SENSOREN + PREIS_SENSOREN:
-        if await client.remove_sensor(sensor, anlage.id):
-            removed += 1
+    # ── Vollstaendig entfernen (#400) ────────────────────────────────────────
+    #
+    # ⛔ **Hier stand bis zum 28.08.2026 eine Liste aus drei Sensorgruppen**
+    # (`ANLAGE_SENSOREN + PROGNOSE_SENSOREN + PREIS_SENSOREN`) — 34 von 44
+    # anlagenweiten Definitionen und **kein einziger** geraetebezogener. Der Knopf
+    # meldete dabei „erfolgreich, 34 entfernt". Wer aufraeumen wollte, behielt die
+    # Investitions-, Speicher- und Status-Sensoren sowie alles, was seit dem
+    # 27.08. je Geraet publiziert wird — und hielt es fuer geloescht.
+    #
+    # *Eine handgepflegte Liste neben einem wachsenden Publisher veraltet
+    # zwangslaeufig; sie sagt nur nie, dass sie es getan hat.* Jetzt zaehlt
+    # `belegte_sensor_eintraege` dieselbe Belegung auf, die der Publisher
+    # beschreibt, und `remove_sensors` nimmt je Sensor **alle drei** retained
+    # Topics zurueck (Config, Wert, Attribute).
+    from backend.services.ha_mqtt_sync import belegte_sensor_eintraege
+
+    eintraege = await belegte_sensor_eintraege(db, anlage)
+    ergebnis = await client.remove_sensors(eintraege)
+
+    if ergebnis["fehler"]:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Entfernen fehlgeschlagen: {ergebnis['fehler']}",
+        )
 
     await log_activity(
         kategorie="ha_export",
         aktion="MQTT-Sensoren entfernt",
         erfolg=True,
-        details=f"{removed} Sensoren für {anlage.anlagenname}",
+        details=(
+            f"{ergebnis['sensoren']} Sensorstellen / {ergebnis['topics']} Topics "
+            f"für {anlage.anlagenname}"
+        ),
         anlage_id=anlage.id,
     )
 
     return {
         "message": f"Sensoren für {anlage.anlagenname} entfernt",
         "anlage_id": anlage.id,
-        "removed": removed
+        "removed": ergebnis["sensoren"],
+        "topics": ergebnis["topics"],
     }
