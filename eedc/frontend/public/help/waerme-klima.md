@@ -234,7 +234,9 @@ Es gibt **zwei Wege**, und **gemessen schlägt abgeleitet**:
 >           {% else %}aus{% endif %}
 > ```
 >
-> Die 20 W sind eine Schwelle gegen Standby-Rauschen — nimm einen Wert, der zu deinem Gerät passt.
+> ⚠ **Die 20 stehen für 20 Watt — prüf zuerst die Einheit deiner Sensoren.** Die Schwelle soll nur das Standby-Rauschen abfangen. Meldet deine Wärmepumpe ihre Leistung in **kW** (also `0,8` statt `800`), wird sie **nie** über 20 kommen: der Sensor steht dann dauerhaft auf **„aus"**, obwohl das Gerät läuft — und es sieht so aus, als hätte alles funktioniert. Bei kW-Sensoren nimm einen Wert wie `0.02`, bei W-Sensoren einen, der zum Standby-Verbrauch deines Geräts passt.
+>
+> **So prüfst du es:** In Home Assistant unter *Entwicklerwerkzeuge → Zustände* den Sensor suchen — dort steht der aktuelle Wert. Läuft die Wärmepumpe gerade, ist eine dreistellige Zahl Watt und eine Zahl mit Komma kW.
 >
 > ⚠ **Die Reihenfolge im Template ist nicht beliebig.** Läuft die Wärmepumpe für Warmwasser, kann dabei auch der Heiz-Leistungssensor Werte zeigen; deshalb wird Warmwasser **vor** Heizen geprüft. Wer es umdreht, bucht seine Warmwasserstunden aufs Heizen.
 >
