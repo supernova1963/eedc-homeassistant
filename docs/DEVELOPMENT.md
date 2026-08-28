@@ -358,7 +358,7 @@ eedc-homeassistant/                  ← Source of Truth (alle Änderungen hier)
 │   ├── KONZEPT-IA-V4.md             # IA + Oberflächen-Invarianten I1–I16 + Redirect-Tabelle
 │   ├── KONZEPT-STYLE-GUIDE.md       # Darstellungs-SoT (Regel 0/0a)
 │   ├── KONZEPT-MONATS-FAKTEN.md     # Monatszeilen-Schicht (ADR-002/P10)
-│   ├── KONZEPT-BERECHNUNGS-LAYER.md · KONZEPT-COMMUNITY.md · KONZEPT-MOBILE.md
+│   ├── KONZEPT-BERECHNUNGS-LAYER.md · KONZEPT-MOBILE.md
 │   ├── KONZEPT-UNVOLLSTAENDIGE-WERTE.md
 │   ├── KONZEPT-WALLBOX-EAUTO.md
 │   ├── SENSOR-REFERENZ.md · MQTT_INBOUND.md · GLOSSAR.md · FLYER.md
@@ -934,9 +934,15 @@ baumweit gemessen: **16 Stellen im Produktionscode** zeigten dorthin, zwei davon
 **Die Regel, die daraus folgt:**
 
 1. **Ein Dokument, das im Code als SoT zitiert wird, gehört nach `docs/`** — nicht in `drafts/`.
-   Deshalb sind `KONZEPT-DATENQUELLEN-V4.md`, `KONZEPT-LADEZEIT-CACHE-SWR.md` und
-   `IA-V4-SOT-INVENTAR.md` dorthin gewandert, so wie vorher schon
-   [KONZEPT-MONATS-FAKTEN.md](KONZEPT-MONATS-FAKTEN.md).
+   Deshalb sind `KONZEPT-DATENQUELLEN-V4.md` und `KONZEPT-LADEZEIT-CACHE-SWR.md` dorthin
+   gewandert, so wie vorher schon [KONZEPT-MONATS-FAKTEN.md](KONZEPT-MONATS-FAKTEN.md).
+   ⚑ **Die Umkehrung gilt seit 2026-08-28 genauso** (Entscheid Gernot): Ein Dokument, das **nur
+   noch einen Bauplan** enthält — Maßnahmen-Register, Pakete, offene Punkte —, gehört **nicht**
+   ins öffentliche Repository. `docs/` ist die Beschreibung des **gebauten** Systems; Baupläne
+   und Vorhaben leben in `docs/drafts/` (lokal). Wer ein solches Dokument hinausschiebt, löst
+   **vorher** jeden Verweis darauf auf: Die Regel wandert in den Docstring, das Dokument bleibt
+   höchstens Herkunftsangabe. So sind am 28.08. `KONZEPT-FOKUS-DEEPLINK`, `KONZEPT-CHART-TABELLEN`,
+   `KONZEPT-COMMUNITY` und `IA-V4-SOT-INVENTAR` gegangen — mit null verbliebenen Zeigern.
 2. **Bestehende Verweise auf `docs/drafts/archive/…` sind Herkunftsbelege, keine Voraussetzung.**
    Sie sagen, aus welchem Bau-Vertrag eine Regel stammt; die Regel selbst steht immer im
    versionierten Baum (ADR, Konzept, Docstring). ADR-002 formuliert das für sich selbst
@@ -957,11 +963,9 @@ baumweit gemessen: **16 Stellen im Produktionscode** zeigten dorthin, zwei davon
 | [KONZEPT-IA-V4.md](KONZEPT-IA-V4.md) | Informationsarchitektur + Invarianten I1–I16 + Redirects |
 | [KONZEPT-STYLE-GUIDE.md](KONZEPT-STYLE-GUIDE.md) | Darstellungs-SoT (Regel 0/0a) |
 | [KONZEPT-MONATS-FAKTEN.md](KONZEPT-MONATS-FAKTEN.md) | die Monatszeile als eine Schicht (P10) |
-| [IA-V4-SOT-INVENTAR.md](IA-V4-SOT-INVENTAR.md) | Register der UI-SoT-Patterns (Invariante I12) |
 | [KONZEPT-DATENQUELLEN-V4.md](KONZEPT-DATENQUELLEN-V4.md) | eine Quelle je Feld, HA-first (Invariante I16) |
 | [KONZEPT-LADEZEIT-CACHE-SWR.md](KONZEPT-LADEZEIT-CACHE-SWR.md) | SoT für `hooks/useApiData.ts` (SWR, Skeletons) |
 | [KONZEPT-HA-EXPORT-ARCHITEKTUR.md](KONZEPT-HA-EXPORT-ARCHITEKTUR.md) | was nach HA exportiert wird — und was nie |
-| [KONZEPT-FOKUS-DEEPLINK.md](KONZEPT-FOKUS-DEEPLINK.md) · [KONZEPT-CHART-TABELLEN.md](KONZEPT-CHART-TABELLEN.md) | geplante Pakete aus der Roadmap [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) |
 | [KONZEPT-263-klima-split.md](KONZEPT-263-klima-split.md) · [KONZEPT-263-INNENGERAETE.md](KONZEPT-263-INNENGERAETE.md) | **abgeschlossen und gebaut** — zwei **Bauform-Kapitel** (Split-Klimaanlage · Multisplit-Innengeräte). ⚠ **Nicht das Konzept der Fläche „Heizen · Warmwasser · Kühlen“** — das ist das Flächen-Konzept *SOLL Wärme/Klima* (**Maintainer-intern, noch nicht im Repo**). Beide Kapitel tragen im Kopf eine Korrekturliste. **Bis 27.08. standen sie hier unter „geplante Pakete“** |
 | [HANDBUCH_WAERME_KLIMA.md](HANDBUCH_WAERME_KLIMA.md) | Wärme/Klima aus Anwendersicht — Erfassungswege, Werte des Modus-Sensors, Kennzahlen, FAQ. **Auch für Entwickler die schnellste Antwort auf „was sieht der Melder?“** |
 | [RELEASE-WORKFLOW.md](RELEASE-WORKFLOW.md) | Release-Prozess beider Repos |

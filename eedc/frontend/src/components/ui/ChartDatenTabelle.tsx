@@ -1,6 +1,10 @@
 /**
- * ChartDatenTabelle — die EINE Tabellen-Ablesung eines Charts (Regel T + B7,
- * Paket CT `docs/KONZEPT-CHART-TABELLEN.md`, abgenommen 2026-07-18).
+ * ChartDatenTabelle — die EINE Tabellen-Ablesung eines Charts (Regel T + B7).
+ *
+ * **Die Regel dazu, damit sie hier steht und nicht anderswo:** Ein Chart bekommt
+ * KEINE handgeschriebene Zweit-Tabelle. Wer die Zahlen hinter einem Diagramm
+ * zeigen will, reicht dieselbe Serien-Meta hier herein; die Umschaltung sitzt im
+ * Fokus-Overlay, nicht als zweites Icon im Kartenkopf.
  *
  * Bekommt die ohnehin vorhandene Chart-Datenreihe (`daten` + Spalten-Defs mit
  * Label/Einheit — dieselbe Struktur, die Legende/Tooltip speisen) und rendert
