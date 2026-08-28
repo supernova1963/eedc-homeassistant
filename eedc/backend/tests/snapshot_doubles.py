@@ -20,6 +20,14 @@ Stelle und sagt im Namen, was es kann.
 from __future__ import annotations
 
 
+class _LeereSpalte:
+    """Die Spalten-Sicht einer leeren Treffermenge (``.scalars()``)."""
+
+    @staticmethod
+    def all():
+        return []
+
+
 class _LeeresErgebnis:
     @staticmethod
     def first():
@@ -29,6 +37,12 @@ class _LeeresErgebnis:
         ließ das Entpacken mit ``ValueError`` auflaufen — dieselbe Stelle, an der
         `test_hourly_kategorie_symmetrie.py` hängen blieb. Ein Doppel muss die
         **Form** der echten Antwort treffen, nicht nur ihre Leere.
+
+        ⚑ **Seit N-341 fragt `zaehler_faellt_im_fenster` nicht mehr MIN/MAX,
+        sondern die Reihe selbst** — es kommt über ``scalars()``. Diese Methode
+        bleibt trotzdem stehen: sie ist die Form für jede andere
+        Aggregat-Abfrage, die das Doppel treffen könnte, und ihr Wegfall wäre
+        eine stille Verengung.
         """
         return (None, None)
 
@@ -36,6 +50,19 @@ class _LeeresErgebnis:
     def all():
         """Für die `mqtt_energy_snapshots`-Abfrage des Snapshot-Readers."""
         return []
+
+    @staticmethod
+    def scalars():
+        """Die Zeilen-Abfrage von `reader._staende_im_fenster` (N-341).
+
+        ⭐ **Die Auskunft ist unverändert dieselbe** — *„keine Zwischenstände"*.
+        Geändert hat sich nur, wie der Reader danach fragt: früher ``MIN``/``MAX``
+        über die Menge, seit dem 28.08.2026 die Folge selbst, weil eine
+        Extremwert-Prüfung keine Monotonie-Prüfung ist. Ein Doppel bildet die
+        **Form** der Antwort nach; die Absicht dieser Klasse steht unberührt in
+        ihrem Namen.
+        """
+        return _LeereSpalte()
 
     @staticmethod
     def scalar_one_or_none():

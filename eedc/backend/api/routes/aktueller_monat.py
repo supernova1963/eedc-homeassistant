@@ -627,6 +627,7 @@ async def _collect_mqtt_inbound_data(
     from backend.services.mqtt_energy_history_service import mqtt_monats_deltas
     from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
     from backend.services.snapshot.keys import extract_quellen_energy
+    from backend.services.snapshot.reader import WEG_REIHENSUMME
 
     svc = get_mqtt_inbound_service()
     if not svc:
@@ -655,7 +656,21 @@ async def _collect_mqtt_inbound_data(
 
     resolved: dict[str, tuple[float, DatenquelleInfo]] = {}
     now_str = datetime.now().isoformat()
-    quelle = DatenquelleInfo(quelle="mqtt_inbound", konfidenz=91, zeitpunkt=now_str)
+
+    def _quelle(menge) -> DatenquelleInfo:
+        """Konfidenz nach dem Weg, auf dem die Menge entstanden ist (N-341).
+
+        Eine aus der Standreihe summierte Menge trägt einen systematischen
+        Abschlag von rund 3 % (Verbrauch zwischen letzter Abtastung und
+        Rücksprung). Sie ist damit weiterhin die beste verfügbare Auskunft —
+        aber sie ist nicht so sicher wie zwei abgelesene Zählerstände, und
+        die Konfidenz ist genau das Feld, in dem das steht.
+        """
+        return DatenquelleInfo(
+            quelle="mqtt_inbound",
+            konfidenz=85 if menge.weg == WEG_REIHENSUMME else 91,
+            zeitpunkt=now_str,
+        )
 
     # Basis-Felder
     basis_map = {
@@ -664,19 +679,19 @@ async def _collect_mqtt_inbound_data(
         "netzbezug_kwh": "netzbezug_kwh",
     }
     for mqtt_key, feld_name in basis_map.items():
-        val = mengen.get(mqtt_key)
-        if val is not None and val > 0:
-            resolved[feld_name] = (val, quelle)
+        menge = mengen.get(mqtt_key)
+        if menge is not None and menge.wert > 0:
+            resolved[feld_name] = (menge.wert, _quelle(menge))
 
     # Investitions-Felder: inv/{inv_id}/{key} → inv_{inv_id}_{key}
     # (passt zum Aggregations-Pattern in der Prioritätskette)
     inv_ids = {str(i.id) for i in investitionen}
-    for mqtt_key, val in mengen.items():
-        if not mqtt_key.startswith("inv/") or val is None or val <= 0:
+    for mqtt_key, menge in mengen.items():
+        if not mqtt_key.startswith("inv/") or menge is None or menge.wert <= 0:
             continue
         parts = mqtt_key.split("/", 2)  # ["inv", "3", "ladung_kwh"]
         if len(parts) == 3 and parts[1] in inv_ids:
-            resolved[f"inv_{parts[1]}_{parts[2]}"] = (val, quelle)
+            resolved[f"inv_{parts[1]}_{parts[2]}"] = (menge.wert, _quelle(menge))
 
     return resolved
 

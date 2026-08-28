@@ -12,7 +12,7 @@
 |--------|-----------|
 | **Momentan** | Aktueller Messwert zum Zeitpunkt der Abfrage (z.B. aktuelle Leistung in W) |
 | **Kumulativ** | Zählerstand der stetig steigt (z.B. Stromzähler in kWh). Delta wird berechnet. |
-| **Tagessensor** | Kumulativer Sensor der täglich um 0:00 auf 0 zurückgesetzt wird (HA Utility Meter). Wird unterstützt — Monatswechsel-Reset wird automatisch erkannt. |
+| **Tagessensor** | Kumulativer Sensor der täglich um 0:00 auf 0 zurückgesetzt wird (HA Utility Meter). Wird unterstützt: Der Rücksprung wird erkannt, und die **Monatsmenge** wird aus den mitgeschriebenen Ständen summiert statt aus zwei Rändern gebildet. ⚠ Was zwischen dem letzten Stand und dem Rücksprung verbraucht wird, fehlt dabei (rund 3 % bei stündlicher Abtastung, immer nach unten) — im Monatsabschluss steht das am Vorschlag. ⛔ Einen **Tageswert** gibt es für so einen Zähler bewusst nicht: Ein Tagesfenster liegt ganz zwischen zwei Rücksprüngen, und eine Aufteilung daraus wäre nicht mehr nachprüfbar. Über HA ist all das folgenlos — dort kommt der reset-bereinigte `sum`-Wert; es betrifft **rohe MQTT-Stände**. |
 | **Counter** | Kumulativer Anzahl-Zähler (Total-Increasing, kein kWh). Wird strikt von kWh-Feldern getrennt — siehe „Counter vs. kWh" unten. |
 | **Bidirektional** | Positiv/negativ kodiert die Richtung (z.B. +Ladung/−Entladung) |
 | **`state_class`** | HA-Attribut. `total_increasing`/`total` markieren kumulative Sensoren — von HA in Long-Term Statistics persistiert. Sensoren ohne `state_class` haben **keine** LTS-Einträge → für kWh-Felder ungeeignet (siehe „LTS-Verfügbarkeit"). |

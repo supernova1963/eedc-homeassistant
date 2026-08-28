@@ -10,6 +10,7 @@ Retention: 31 Tage.
 """
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -375,6 +376,27 @@ def _compute_deltas(
 # Vorschlag die **Differenz** (1001 km), nie der Stand (13272 km).
 
 
+@dataclass(frozen=True)
+class MonatsMenge:
+    """Eine Monatsmenge **und der Weg, auf dem sie entstanden ist** (N-341).
+
+    ⭐ **Warum die Zahl allein nicht reicht.** Beide Wege liefern kWh, aber sie
+    sind nicht gleich genau: Die Randdifferenz liest zwei Zählerstände und ist
+    exakt. Die Reihensumme entsteht, wenn der Zähler im Monat zurückgesprungen
+    ist — sie trägt einen **systematischen Abschlag** von rund 3 %, weil der
+    Verbrauch zwischen der letzten Abtastung und dem Rücksprung in keinem Stand
+    mehr auftaucht.
+
+    Wer die Zahl nur **anzeigt**, darf ``weg`` ignorieren. Wer sie dem Anwender
+    zum **Übernehmen** anbietet, nennt sie — sonst sieht eine Zahl mit
+    bekanntem Abschlag aus wie eine exakte Messung.
+    """
+
+    wert: float
+    #: ``reader.WEG_RANDDIFFERENZ`` oder ``reader.WEG_REIHENSUMME``.
+    weg: str
+
+
 async def mqtt_monats_deltas(
     db,
     anlage_id: int,
@@ -383,7 +405,7 @@ async def mqtt_monats_deltas(
     energy_keys: list[str],
     quellen_energy: Optional[dict] = None,
     bis: Optional[datetime] = None,
-) -> dict[str, float]:
+) -> dict[str, MonatsMenge]:
     """Monatsmengen je MQTT-Energy-Key aus den mitgeschriebenen Ständen.
 
     Args:
@@ -400,12 +422,17 @@ async def mqtt_monats_deltas(
             Frage nach einem Stand in der Zukunft.
 
     Returns:
-        ``{energy_key: menge_kwh}`` — **nur** für Keys mit Zählerreihe UND
+        ``{energy_key: MonatsMenge}`` — **nur** für Keys mit Zählerreihe UND
         beidseitig vorhandenem Stand. Alles andere fehlt im Ergebnis; ein
         fehlender Eintrag heißt „keine Aussage", nicht „null".
+
+        ⭐ **Seit N-341 trägt jeder Eintrag seinen Weg** ({@link MonatsMenge}):
+        Ein im Monat zurückgesetzter Zähler liefert seine Menge aus der
+        summierten Standreihe statt gar nichts — mit einem Abschlag, den der
+        Aufrufer aussprechen muss, wenn er die Zahl zum Übernehmen anbietet.
     """
     from backend.services.snapshot.keys import _mqtt_key_to_sensor_key
-    from backend.services.snapshot.reader import delta as snapshot_delta
+    from backend.services.snapshot.reader import delta_mit_weg
 
     von = datetime(jahr, monat, 1)
     if bis is None:
@@ -423,7 +450,7 @@ async def mqtt_monats_deltas(
         # messen, und eine Null wäre eine Aussage.
         return {}
 
-    ergebnis: dict[str, float] = {}
+    ergebnis: dict[str, MonatsMenge] = {}
     for mqtt_key in energy_keys:
         sensor_key = _mqtt_key_to_sensor_key(mqtt_key)
         if not sensor_key:
@@ -431,7 +458,7 @@ async def mqtt_monats_deltas(
             # es nichts zu differenzieren und deshalb auch nichts zu behaupten.
             continue
         try:
-            menge = await snapshot_delta(
+            menge, weg = await delta_mit_weg(
                 db, anlage_id, sensor_key,
                 # MQTT-only: es gibt keine HA-Entity, und `get_snapshot`
                 # verlangt das ausdrücklich nicht („None bei MQTT-only").
@@ -444,6 +471,6 @@ async def mqtt_monats_deltas(
                 anlage_id, mqtt_key,
             )
             continue
-        if menge is not None and menge > 0:
-            ergebnis[mqtt_key] = round(menge, 1)
+        if menge is not None and weg is not None and menge > 0:
+            ergebnis[mqtt_key] = MonatsMenge(wert=round(menge, 1), weg=weg)
     return ergebnis

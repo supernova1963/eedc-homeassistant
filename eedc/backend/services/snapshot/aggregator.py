@@ -101,8 +101,8 @@ async def _tageswert_aus_raendern(
     ts_ende: datetime,
     datum: date,
 ) -> Optional[float]:
-    """Tageswert eines kumulativen Zählers aus seinen zwei Randständen — oder
-    ``None``, wenn der Zähler im Fenster **zurückgesetzt** wurde (SOLL §3.1).
+    """Tageswert eines kumulativen Zählers — aus seinen zwei Randständen, und
+    bei einem **Rücksprung** aus seiner ganzen Standreihe (SOLL §3.1).
 
     **Der eine Ort für die Tagesfenster-Regel.** Es gibt zwei Aufrufer, und sie
     hatten die Regel bis 2026-08-26 doppelt: `get_komponenten_tageskwh` (Bilanz)
@@ -111,9 +111,27 @@ async def _tageswert_aus_raendern(
 
     ⛔ **Hier stand bis 2026-08-26 `return max(0.0, s1)` für den erkannten
     Reset.** Das war eine **Behauptung ohne Wissen**: Springt der Zähler über
-    das Tagesfenster zurück, ist der Tageswert **unbekannt** — nicht der
-    Reststand danach. Die Funktion reklamierte im eigenen Docstring „P4: keine
-    Aussage statt einer 0" und schrieb dann eine.
+    das Tagesfenster zurück, ist der Tageswert **nicht** der Reststand danach.
+    Die Funktion reklamierte im eigenen Docstring „P4: keine Aussage statt
+    einer 0" und schrieb dann eine.
+
+    ⛔ **Und der Tag summiert die Reihe NICHT, obwohl der Monat es seit dem
+    28.08.2026 tut** (`reader.delta_mit_weg`, N-341). Das ist kein Versehen und
+    keine Restschuld:
+
+    * Die **Monatsschicht** las bei einem zurückgesetzten Zähler eine *falsche*
+      Zahl (5,6 statt 140 kWh) und zeigte sie an. Dort ist die Summe aus der
+      Reihe die Reparatur.
+    * Der **Tag** lehnt bereits ab, und diese Ablehnung ist eine abgenommene
+      Entscheidung: `soll-waerme-klima.md` §3.1 — *„Ein Zähler mit Tages-Reset
+      wird erkannt und abgelehnt, statt still falsche Werte zu erzeugen"* —,
+      festgehalten in vier Proben
+      (`test_soll_waerme_klima_achse3_aufloesung.py::test_iii1*`).
+
+    Der Weg hierher führt über diese Datei zu `get_betriebsart_strom_tageswerte`
+    und damit auf die **Wärme/Klima-Fläche**, wo eine Betriebsart-Teilmenge mit
+    3 % Abschlag gegen eine exakte Gesamtmenge stünde (Kanon-Regel K1). Wer den
+    Tag umstellen will, entscheidet **zuerst** §3.1 um — nicht diese Zeile.
 
     ⚠ **Die Stunden-Variante (`get_hourly_kwh_by_category`) bleibt unberührt und
     hat recht.** Dort geht es um den **Slot über Mitternacht**: s0 ist der
