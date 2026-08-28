@@ -1,49 +1,36 @@
-# Konzept: Wallbox / E-Auto — Datenarchitektur
+# Regel — Wallbox & E-Auto: wer misst was
 
-> ## Stand 2026-08-08 — neu erhoben
+> ## **Status (gemessen 2026-08-28): gebaut. Die Domäne hat keinen offenen Bau-Strang mehr.**
 >
-> **Dieses Dokument stand bis heute auf dem Stand vom 29.06.2026** — also vor dem
-> Oberflächen-Umbau v4.0.0 (25.07.). Erhoben wurde gegen den Code, nicht gegen die Historie;
-> die Abschnitte darunter bleiben inhaltlich gültig, wo nichts anderes vermerkt ist.
-> **Es trägt bewusst keine Versionsnummer, nur dieses Mess-Datum** (Muster aus #359).
+> **Was hier steht:** wie eedc Ladeenergie zwischen **Wallbox** (Infrastruktur, misst den
+> Stromfluss) und **E-Auto** (Fahrzeug, misst Nutzung) aufteilt, welche Quelle bei beidem gewinnt
+> und was daraus in Geld und CO₂ wird. **22 Stellen im Code zitieren dieses Dokument**, meist nach
+> Entscheidungsnummer — die Nummerierung bleibt deshalb stehen.
 >
-> **Was sich seit dem 29.06. geändert hat und hier eingearbeitet ist:**
+> **Gebaut und in Betrieb:** kanonische Heimladungs-Quelle samt Migration (Phase 2a) · PHEV-Anteil
+> elektrisch/fossil ([#331](https://github.com/supernova1963/eedc-homeassistant/issues/331),
+> v4.0.11) · abgeleiteter PV-Anteil der Heimladung statt Abfrage (Phase 5, v4.0.11) ·
+> Achse-2-Magnitude-Drift geschlossen ([#356](https://github.com/supernova1963/eedc-homeassistant/issues/356)) ·
+> die beiden Daten-Checker-Fehlalarme A + B.
 >
-> - **Die Sichten heißen anders.** Seit v4.0.0 gibt es keine „Dashboards" mehr, sondern den
->   **Komponenten-Hub** je Gerätetyp (`frontend/src/v4/WallboxHubBloecke.tsx`,
->   `v4/EAutoHubBloecke.tsx`) und das **Cockpit** nach Zeitraum. Wo unten noch
->   „Wallbox-Dashboard" steht, ist die Wallbox-Fläche des Hubs gemeint; die Backend-Route
->   heißt weiterhin `api/routes/investitionen/dashboards.py`.
-> - **Die Monatszeile wird einmal aufbereitet (ADR-002/P10).** Der kanonische Helfer wird
->   heute auch aus `services/monats_fakten.py:882` gerufen; die Read-Sites lesen die Zeile
->   von dort, statt `InvestitionMonatsdaten` selbst zu falten. Die Zeilenangaben in Etappe 2
->   sind entsprechend nachgezogen.
-> - **Der Dienstwagen kostet, statt zu verdienen** (v4.0.5). `core/berechnungen/dienstliche_ladekosten.py`
->   ist eine eigene Layer-Formel und die vierte Stelle, an der E-Auto-Ladung in Geld
->   umgerechnet wird — sie war in diesem Konzept nicht vorgesehen. Aufrufer:
->   `cockpit/uebersicht.py:282` · `aussichten.py:1366` · `ha_export.py`.
-> - **Die Achse-2-Lücke hat ein Issue:** **#356**. Ihr Trigger („gebündelt mit der nächsten
->   echten Wallbox/E-Auto-Arbeit") **tritt mit Phase 4 ein** — siehe dort.
-> - **Neu aufgenommen: Phase 4 — PHEV-Anteile (#331)**, ausspezifiziert mit getroffenen
->   Entscheidungen. Das ist der erste Punkt dieser Domäne mit einem **wartenden Melder**
->   (Safi105, Discussion #330 vom 09.06.).
-> - **Offen und ohne anderen Ort: N-141** — welcher der drei Wege den Wallbox-PV-Anteil
->   bestimmt. Wartet auf Maintainer-Entscheid, blockiert seither.
-> - **Erledigt:** die im Kopf als „UNRELEASED" markierten Schwächen-Fixes A+B (`fa89255c`)
->   sind längst ausgeliefert; `aggregiere_emob_ladung` ist tatsächlich gelöscht (baumweit
->   ungekappt geprüft, 0 Treffer).
+> ⛔ **Verworfen am 2026-08-28 (Entscheid Gernot): die Aufschlüsselung je Fahrzeug** — weder
+> eigene `ladung_heim_*`-Felder mit evcc-Vehicle-Topics (vormals „Phase 2b") noch die Zerlegung
+> der Wallbox-Summe auf einzelne Autos (vormals „Phase 3"). Der Trigger dafür ist seit Mai 2026
+> nicht eingetreten, und die Pool-Aggregation deckt jedes gemeldete Setup. **Kein Rückstand,
+> sondern eine Entscheidung** — Einzelheiten und die damit gegenstandslosen offenen Fragen im
+> [archivierten Bau-Vertrag](archive/KONZEPT-WALLBOX-EAUTO-BAUVERTRAG.md).
+>
+> **Zwei Dinge, die neben diesem Dokument entstanden sind und hier hingehören:** Der Dienstwagen
+> **kostet**, statt zu verdienen (v4.0.5, `core/berechnungen/dienstliche_ladekosten.py`) — die
+> vierte Stelle, an der E-Auto-Ladung in Geld umgerechnet wird, im ursprünglichen Entwurf nicht
+> vorgesehen. Und die Monatszeile wird genau einmal aufbereitet (ADR-002/P10): Read-Sites lesen
+> sie aus `services/monats_fakten.py`, statt `InvestitionMonatsdaten` selbst zu falten.
+>
+> ⚠ **Sprachliche Altlast:** Wo unten „Wallbox-Dashboard" steht, ist die Wallbox-Fläche des
+> **Komponenten-Hubs** gemeint (`frontend/src/v4/WallboxHubBloecke.tsx`); die Backend-Route heißt
+> weiterhin `api/routes/investitionen/dashboards.py`.
 
-> **✅ Update 2026-06-06 (Koordinator-Abgleich):** Phase 1 + **Phase 2a komplett RELEASED in v3.36.0** (kanonische Heimladungs-Quelle, Migration, Read-/Write-Kanonisierung). Phase 2b/3 (Vehicle-Sensor-Mapping, Multi-Fahrzeug) Trigger weiter **nicht** erfüllt → geparkt. **Schwächen A+B ✅ behoben** (Tier-1-Bündel, Commit `fa89255c`; damals UNRELEASED, **inzwischen ausgeliefert**): A) `_check_emob_pool_pflege` bildet die E-Auto-Heimladung nur noch aus explizitem `ladung_kwh` (kein `verbrauch_kwh`-Fahrverbrauch-Fallback; `get_eauto_ladung_kwh` selbst unverändert für echte Legacy-Daten); B) E-Auto-kWh-Zähler-Bedarf wird übersprungen, wenn eine aktive Wallbox mit `ladung_kwh`-Sensor deckt. Damit ist dieses Konzept inhaltlich abgeschlossen (nur Phase 2b/3 trigger-gebunden offen). Memory [[project_wallbox_eauto_konzept]].
-
-> **Status (2026-05-20): Phase 1 (Pool-Konsolidierung) vollständig.** Der ursprüngliche Quick-Fix (v3.25.11: getrennte Akkumulatoren EAuto/WB + **Max-pro-Feld**, siehe Memory `project_pool_fix_emob.md`) hat sich selbst als Drift-Quelle erwiesen: feldweises `max()` über `gesamt`/`pv`/`netz` als drei unabhängige Aufrufe konnte die Felder aus verschiedenen Quellen mischen und einen PV-Anteil > 100 % erzeugen (#262 junky84: Komponenten zeigte 48 % PV + 85 % Netz = 133 %). v3.31.6 ersetzt das Max-pro-Feld durch den SoT-Helper `aggregiere_emob_ladung` (`eedc/backend/services/eauto_wirtschaftlichkeit.py`): die Quelle mit der größeren Heimladung gewinnt die **komplette, in sich konsistente Trias** (`pv + netz == ladung` garantiert). **Alle fünf Read-Sites sprechen jetzt dieselbe Pool-Logik:** Wallbox-Dashboard, Komponenten-Zeitreihe, Cockpit-Übersicht und AktuellerMonat über `aggregiere_emob_ladung`, das E-Auto-Dashboard über `compute_emob_pool_attribution` + `attribute_emob_pool_by_km` (km-anteilige Verteilung, selbe use-wb-pool-Entscheidung). **Phase 2 (Vehicle-Sensor-Mapping) und Phase 3 (Multi-Fahrzeug-Dashboard) noch nicht angefangen** — in Roadmap [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) als „Ideen / Konzeptphase"-Item; Trigger-Stand siehe Abschnitt »Phase-2-Trigger«.
->
-> **Update 2026-06-02:** **Phase 2a (kanonische Quelle) ist jetzt mit getroffenen Entscheidungen ausspezifiziert** — siehe Abschnitt »Phase 2a — Umsetzungsplan«. Das ist der beschlossene strukturelle Ausweg aus dem Read-seitigen Heuristik-Flickwerk (zuletzt #262 als 5. Read-Site). Die zwei Daten-Checker-Warnungen, die das Konzept als Brücke vorsah, sind **bereits live** (`_check_emob_pool_pflege` + `_check_sensor_mapping_lts`, `services/daten_checker.py`). **Single Source of Truth für dieses Thema ist dieses Dokument** — keine verstreuten Folgenotizen mehr.
->
-> **Update 2026-06-03 (Trigger-Signal für Phase 2a):** Eine #314-Untersuchung (Energiefluss-Mitte) deckte zwei vorbestehende Asymmetrien derselben Pool-Klasse auf, beide jetzt als Brücke entschärft — **aber sie ersetzen Phase 2a nicht**:
-> - **Live-Dedup gehärtet** (`live_komponenten_builder.py`, Commit `38ebcc4e`): geteilte `leistung_w`-Entity (Wallbox+E-Auto) wird jetzt deterministisch nach Wallbox-Priorität dedupliziert (vorher dict-reihenfolge-abhängig, analog Tagesverlauf #318); `summe_verbrauch` schließt E-Autos nur noch aus, wenn eine Wallbox existiert (E-Auto ohne Wallbox/Schuko zählt sonst korrekt mit — 086cf70f-Prinzip wiederhergestellt).
-> - **Dritte Daten-Checker-Warnung live** (`_check_emob_sensor_doppelmapping`, Commit `688efef2`): gleiche Sensor-Entity (live ODER kWh-Zähler) an Wallbox **und** E-Auto gemappt → WARNING. Deterministisch aus `sensor_mapping`, deckt alle Aggregations-Konsumenten inkl. Reparatur-Werkbank ab (gemeinsamer `investition_hourly_eintraege`-Pfad seit #298).
->
-> **Verbleibende Lücke, die NUR Phase 2a schließt:** Wallbox + E-Auto mit **getrennten** Sensoren, **unverlinkt** (`parent_investition_id` nicht gesetzt) → die Aggregation zählt die Ladung doppelt (der Live-Pfad poolt heuristisch per Round-Robin-`parent_key`, die Aggregation nur per Link — divergente Heuristiken). Das ist genau der strukturelle Fall, den die kanonische-Quelle-Regel (Entscheidung 1) deterministisch auflöst. **→ Diese Untersuchung + der wiederkehrende evcc-Pool-Churn erfüllen den dokumentierten Re-Evaluierungs-Trigger; Phase 2a als eigene Session terminieren (Maintainer-Go).**
+---
 
 ## Motivation
 
@@ -124,7 +111,7 @@ evcc/loadpoints/1/pvCharged → 732 kWh   evcc/vehicles/BMW/pvCharged   → 520 
 
 `≥` statt `=` weil Gast-Ladungen keinem E-Auto zugeordnet sein können.
 
-## Dashboard-Darstellung (Ziel)
+## Was die Flächen zeigen
 
 > ⚠ **2026-08-08: Die Sichten heißen seit v4.0.0 anders.** „Wallbox-Dashboard" ist heute die
 > **Wallbox-Fläche des Komponenten-Hubs** (`frontend/src/v4/WallboxHubBloecke.tsx`),
@@ -162,54 +149,37 @@ BMW i4
 - **Session-Level-Tracking** — EEDC bleibt bei Monatsaggregaten
 - **Wallbox↔E-Auto Zuordnungs-UI** — nicht nötig, Sensor-Mapping reicht
 
-## Migrationspfad
+## Was gebaut ist — und was bewusst nicht
 
-### Phase 1: Bug-Fix (jetzt)
-- Ladevorgänge aus Wallbox-Monatsdaten lesen (nicht nur E-Auto)
-- Kein Datenmodell-Umbau nötig
+**Gebaut und in Betrieb:** Die Heimladungs-Trias (`ladung_kwh` / `ladung_pv_kwh` /
+`ladung_netz_kwh`) hat eine kanonische Quelle — die **Wallbox**, wo es eine gibt, sonst das
+E-Auto (Steckerlader-Fall). Aufgelöst wird sie an genau einer Stelle
+(`services/eauto_wirtschaftlichkeit.py::get_emob_heimladung_canonical`), die Bestandsdaten hat
+eine Migration geradegezogen (`services/migrations/migrate_emob_canonical_source.py`). Dazu:
+**PHEV-Anteile** (#331, `core/berechnungen/phev_anteil.py`), der **abgeleitete PV-Anteil** der
+Heimladung (`services/emob_ladeanteil.py`, `core/berechnungen/pv_anteil_ladung.py`) und der
+geschlossene **Achse-2-Drift** (#356).
 
-### Phase 2a: Feldzuordnung geradeziehen (Schulden-getrieben)
-> **Ausspezifiziert 2026-06-02 mit getroffenen Entscheidungen → siehe Abschnitt »Phase 2a — Umsetzungsplan« weiter unten.**
-- Eindeutige Feld-Rollen: die Heimladungs-Trias (`ladung_kwh`/`pv`/`netz`) gehört kanonisch an die **Wallbox** (Infrastruktur misst den Stromfluss), das E-Auto trägt Nutzung + km. Read-Sites lesen die kanonische Quelle statt eines Pools.
-- Migration des bestehenden `verbrauch_daten`-JSON nötig — Daten-Reconnaissance vorher (siehe Daten-Checker-Warnung unten).
-- **Trigger: bereits gefeuert.** Der wiederkehrende evcc-Pool-Patch-Bedarf (#260, #262, ~8 Fix-Commits seit v3.31.0) ist das Symptom der Mehrdeutigkeit; jeder Read-seitige Heuristik-Fix (zuletzt `aggregiere_emob_ladung`) ist nur ein Aufschub. Profitiert auch das 1+1-Setup.
+⛔ **Bewusst nicht gebaut — verworfen am 2026-08-28 (Entscheid Gernot):** die Aufschlüsselung der
+Heimladung **je Fahrzeug**. Weder eigene `ladung_heim_*`-Felder am E-Auto mit evcc-Vehicle-Topics
+(vormals „Phase 2b") noch die Zerlegung der Wallbox-Summe auf einzelne Autos (vormals „Phase 3").
+Ihr Trigger — „wenn Vehicle-Sensoren nachgefragt werden" — ist seit Mai 2026 nicht eingetreten,
+und die Pool-Aggregation deckt jedes gemeldete Setup: Wer zwei Autos an einer Wallbox lädt, sieht
+die Summe, nicht die Aufteilung. **Das ist eine Entscheidung, kein Rückstand.** Der Bauplan dazu
+liegt im [archivierten Bau-Vertrag](archive/KONZEPT-WALLBOX-EAUTO-BAUVERTRAG.md).
 
-### Phase 2b: Vehicle-Sensor-Mapping (Feature-getrieben)
-- `ladung_heim_kwh` und `ladung_heim_pv_kwh` als neue E-Auto-Felder
-- Sensor-Mapping erweitern für evcc Vehicle-Topics
-- Wallbox-Dashboard liest eigene Daten, E-Auto die Vehicle-Sicht
-- Bestehende `ladung_pv_kwh`/`ladung_netz_kwh` am E-Auto bleiben als Fallback
-- **Trigger: „wenn Vehicle-Sensoren nachgefragt werden"** — hier stimmt die ursprünglich notierte Bedingung (Power-User mit Per-Vehicle-Aufschlüsselung). Bislang nicht erfüllt.
+**Kein Breaking Change, unverändert gültig:** Wer ohne evcc/RFID arbeitet, merkt von alledem
+nichts — die manuelle Eingabe funktioniert wie am ersten Tag, und ein 1:1-Setup (eine Wallbox,
+ein Auto) rechnet identisch.
 
-**Daten-Checker-Warnung bei Pool-Pflege-Mismatch (✅ implementiert + live, `_check_emob_pool_pflege`):** wenn EAuto + WB beide gepflegt sind und die Werte erkennbar ähnlich (≈ derselbe Stromfluss aus zwei Perspektiven) bzw. beide Felder voll sind aber `WB.ladung_pv_kwh > Σ EAuto.ladung_heim_pv_kwh` ist, INFO/WARNING ausgeben — lenkt den User auf eine bewusste Entscheidung, welche Quelle die Wahrheit liefert. Hintergrund: 2026-05-02 fielen bei Joachim und Gernot inkonsistente Pool-Werte auf (PV-Anteil > 100 %, doppelter `kWh/100km`); der Quick-Fix in v3.25.x machte Max-pro-Feld-Auswahl, was sich selbst als Drift-Quelle erwies und in v3.31.6 durch den Gewinner-Pool `aggregiere_emob_ladung` ersetzt wurde. Die Phase-2-Trennung beseitigt die Doppelzählung strukturell, der Daten-Checker bleibt für Altbestand und Pool-Mode. **Diese Warnung braucht kein neues Datenmodell und ist als eigenständiges Stück vor Phase 2 ziehbar** (siehe »Phase-2-Trigger«: junky84 #262 hatte ~3.300 kWh Streudaten auf der E-Auto-Investition, die der Daten-Checker proaktiv sichtbar gemacht hätte).
+---
 
-### Phase 3: Aufschlüsselung im Wallbox-Dashboard (optional)
-- Wenn E-Autos Vehicle-Sensoren haben, kann das Wallbox-Dashboard
-  die Gesamt-kWh pro Fahrzeug aufschlüsseln
-- Konsistenzprüfung WB-Gesamt vs. Σ E-Autos
+## Phase 2a — die Entscheidungen dahinter (2026-06-02, gebaut)
 
-### Kein Breaking Change
-- Nutzer ohne evcc/RFID merken nichts — manuelle Eingabe funktioniert weiter
-- 1:1-Setups (eine WB, ein Auto) bleiben identisch
-- Pool-Aggregation bleibt Fallback wenn keine Vehicle-Sensoren gemappt sind
-
-## Phase-2-Trigger — Stand 2026-05-20
-
-Der dokumentierte Phase-2-Trigger lautet »wenn Vehicle-Sensoren nachgefragt werden«. Per-Vehicle-/Multi-Fahrzeug-Bedarf ist bislang **nicht** aufgetreten — junky84 (#262) und NongJoWo (#260) fahren beide 1 Wallbox + 1 E-Auto.
-
-Ein *anderes* Signal wird aber deutlich: der **evcc-Portal-Import erzeugt seit v3.31.0 anhaltenden Patch-Bedarf** — #262 (vier Fix-Runden), #260 (zwei Runden), EVCC-Parser DE/EN, insgesamt ~8 emob-Fix-Commits in zwei Wochen. Ursache ist strukturell: evcc schreibt die Heimladung architektonisch an die **Wallbox** (`data_import.py`), während Read-Seite und Datenmodell historisch E-Auto-zentriert sind (siehe »Motivation«). Jeder Fix legt eine weitere Heuristik auf den Pool. Der `aggregiere_emob_ladung`-Gewinner-Pool aus v3.31.6 ist die bestmögliche Heuristik, bleibt aber eine Heuristik — er wählt die falsche Quelle, wenn verirrte Streudaten die echte Quelle übertreffen (bei junky84 lagen ~3.300 kWh Streudaten auf der E-Auto-Investition; die Wallbox gewann nur, weil ihre Heimladung noch größer war).
-
-**Bewertung:**
-
-- **Phase 2 (neue Felder `ladung_heim_*` + Vehicle-Sensor-Mapping)** — der dokumentierte Trigger ist noch nicht erfüllt (kein Multi-Vehicle-Bedarf), aber das evcc-Import-Churn-Signal nähert sich dem Punkt, an dem die strukturelle Lösung günstiger ist als die nächste Heuristik-Runde. Maintainer-Entscheidung; bei der nächsten evcc-Pool-Meldung neu bewerten.
-- **Ohne Phase 2 vorziehbar:** die oben verortete »Daten-Checker-Warnung bei Pool-Pflege-Mismatch« braucht kein geändertes Datenmodell. Sie hätte junky84s Streudaten proaktiv sichtbar gemacht und ist ein kleines, eigenständiges Stück.
-
-## Phase 2a — Umsetzungsplan (Entscheidungen 2026-06-02)
-
-> Beschlossener struktureller Ausweg aus dem Read-seitigen Heuristik-Flickwerk. **Eigene Umsetzungs-Session** — echtes Release mit Daten-Migration, kein Read-Pfad-Hotfix (Tester-Zyklus, Pre-Release-Daten-Checker-Scan, DB-Backup-Hinweis).
+> Der strukturelle Ausweg aus dem Read-seitigen Heuristik-Flickwerk — gebaut in einer eigenen Session — echtes Release mit Daten-Migration, kein Read-Pfad-Hotfix (Tester-Zyklus, Pre-Release-Daten-Checker-Scan, DB-Backup-Hinweis).
 
 ### Leitprinzip
-Die **datenabhängige** Laufzeit-Heuristik (`use_wb_pool` = „größere Heimladung gewinnt", kippt bei Streudaten) wird durch eine **strukturelle, deterministische** Quellen-Regel ersetzt. Die km-anteilige *Attribution* (`attribute_emob_pool_by_km`, `attribute_month_share`) bleibt unverändert — nur das *Raten der Quelle* fällt weg.
+An die Stelle der **datenabhängigen** Laufzeit-Heuristik (`use_wb_pool` hieß einmal „größere Heimladung gewinnt" und kippte bei Streudaten) ist eine **strukturelle, deterministische** Quellen-Regel ersetzt. Die km-anteilige *Attribution* (`attribute_emob_pool_by_km`, `attribute_month_share`) bleibt unverändert — nur das *Raten der Quelle* fällt weg.
 
 ### Getroffene Entscheidungen
 1. **Fallback ja.** Nutzer **ohne** Wallbox-Investition (inkl. **Steckerlader**/Schuko — sehr häufig!) behalten die E-Auto-Trias als kanonische Quelle. Kein Breaking Change. Regel: *Wallbox-Investition vorhanden + hat Heimladung → Wallbox ist Quelle; sonst → E-Auto.* Strukturell (existiert eine Wallbox?), nicht magnitudenabhängig → kippt nicht.
@@ -217,53 +187,9 @@ Die **datenabhängige** Laufzeit-Heuristik (`use_wb_pool` = „größere Heimlad
 3. **Nur aktive Monate.** Migration und Auflösung respektieren Anschaffungs-/Stilllegungsdatum (konsistent mit der Aktiv-Filter-Invariante).
 4. **Multi-Wallbox:** Liegen mehrere Wallboxen vor, ist jede ein eigener Ladepunkt (Garage + Carport); die Heimladung gesamt = **Summe aller Wallbox-IMD** (entschieden 2026-06-04, physikalisch korrekt, keine Unterzählung). „Größtes Ladevolumen" greift damit nur als Wallbox-vs-E-Auto-Quellenwahl, nicht als Auswahl *einer* Wallbox; für den 0/1-Wallbox-Fall ist das identisch.
 
-### Etappen (Reihenfolge wichtig)
-1. ✅ **Kanonischer Read-Helper** `get_emob_heimladung_canonical(...)` in `services/eauto_wirtschaftlichkeit.py` (additiv, strukturelle Regel aus Entscheidung 1; intern via `_summiere_emob_quelle` → `get_emob_pv_netz_kwh`, Trias-Garantie `pv+netz==ladung`). **Erledigt 2026-06-04** (UNRELEASED) + Unit-Test `tests/test_emob_heimladung_canonical.py` (8 Fälle, inkl. Kern-Divergenz zur Magnitude-Heuristik und Steckerlader-Fallback). Noch nicht an Read-Sites verdrahtet (= Etappe 2).
-2. ✅ **7 Read-Sites umgestellt** mit **Pflicht-Symmetrie-Test**. **Erledigt 2026-06-04 (UNRELEASED).** Umsetzung:
-   - **Klasse A** (`aggregiere_emob_ladung` → `get_emob_heimladung_canonical`): Wallbox-Dashboard (`dashboards.py:1032`), `cockpit/uebersicht.py`, `cockpit/komponenten.py`, `aktueller_monat.py` (Anlage-KPI).
-   - **Klasse B** (`compute_emob_pool_attribution.use_wb_pool` von Magnitude → **strukturell** `wb-Heimladung > 0`, km-Attribution unverändert): E-Auto-Dashboard (`dashboards.py:194`), `aktueller_monat.py` (T-Konto `:1364`).
-   - **Klasse C** (rohe Summe → kanonisch): `jahresbericht.py` (Doppelzählung E-Auto+Wallbox behoben); `ha_export.py` (Aggregat-Ersparnis + per-Device-E-Auto-Sensoren ziehen jetzt den km-anteiligen Wallbox-Pool via neuem `_EmobPoolCtx`).
-   - **Tests:** `test_emob_readsite_symmetrie.py` (Helfer-Kontrakt-Matrix + Cross-Endpoint Wallbox/E-Auto/aktueller_monat = 500/300/200); evcc-Tests in `test_ha_export_multi_eauto.py`; 4 „Premium-Setup"-Tests an Phase-2a-Semantik angepasst (1× roh-dual→strukturell dokumentiert, 3× Post-Migration-Fixtures). **729 Backend-Tests grün.**
-   - ⚠ **Nachtrag 2026-08-08 — die Read-Site-Liste oben ist historisch, die Zeilennummern sind es
-     auch.** Seit ADR-002/**P10** liest eine Read-Site die Monatszeile nicht mehr selbst; die
-     Auflösung ist einmal in `services/monats_fakten.py` passiert. Baumweit gemessen (ungekappt,
-     ohne `tests/`) rufen den kanonischen Helfer heute **vier** Stellen:
-     `services/monats_fakten.py:882` (die Schicht) · `services/pdf/builders/jahresbericht.py:250` ·
-     `api/routes/investitionen/dashboards.py:1311` · `api/routes/cockpit/uebersicht.py:244`.
-     Die km-Attribution (`compute_emob_pool_attribution`) rufen `api/routes/aktueller_monat.py:740`
-     (Vorjahr) und `:1893` sowie `api/routes/investitionen/dashboards.py:316`.
-     **`cockpit/komponenten.py` steht nicht mehr darunter** — es liest `EmobFakten` (`:204`, `:206`,
-     `:269`) statt selbst zu falten. Die Regel selbst ist unverändert; nur der Ort, an dem sie
-     einmal angewandt wird, ist ein anderer.
-   - ⚠️ **Release-Kopplung:** Die strukturelle Read-Regel unterzählt *un-migrierte* Dual-Daten-Setups (nimmt den kleineren Wallbox-Wert). Korrekt erst nach Etappe-4-Migration (höherer Wert → Wallbox-Slot). **Etappe 2+3+4 müssen zusammen released werden** — Etappe 2 ist NICHT allein auslieferbar.
-3. ✅ **Write-Side kanonisiert.** **Erledigt 2026-06-04 (UNRELEASED).**
-   - **Manuelle Erfassung (monatsabschluss-Form):** neue `bedingung_anlage: "keine_wallbox"` an den E-Auto-Heim-Lade-Feldern `ladung_pv_kwh`/`ladung_netz_kwh` (`core/field_definitions.py`) — existiert eine Wallbox-Investition, blendet `get_felder_fuer_investition` diese Felder am E-Auto aus (analog `keine_pv_module`). Km/Verbrauch/Extern/V2H bleiben am E-Auto. Test `test_emob_write_canonical_felder.py`.
-   - **Import-Pfade (geprüft — schon kanonisch):** `data_import.py` schreibt `wallbox_ladung_*` auf die Wallbox-Investition (`wb.id`), E-Auto bekommt nur `km_gefahren`; evcc-Parser schreibt ebenfalls an die Wallbox. Keine Änderung nötig.
-   - **Bewusst unangetastet:** generischer CSV-/„alle Felder"-Import (`get_alle_felder_fuer_investition`) akzeptiert weiter alle E-Auto-Felder (Design: „Import nie stillschweigend ignorieren") — Konsolidierung übernimmt die Migration + Read-Layer.
-   - Hinweis: `keine_wallbox` ist präsenz-basiert (nicht aktiv-monat-basiert), konsistent mit `keine_pv_module`. Stillgelegte Wallbox = Edge-Case, durch Migration/Read-Layer abgedeckt.
-4. ✅ **Einmalige Daten-Migration** `services/migrations/migrate_emob_canonical_source.py`, registriert in `core/database.py:_run_data_migrations()` via `_apply_once` (Key `phase_2a_emob_canonical_source`, idempotent, Rollback bei Fehler). **Erledigt 2026-06-04 (UNRELEASED).** Pro Anlage mit genau 1 (nicht-dienstl.) Wallbox + ≥1 E-Auto, pro aktivem Monat mit E-Auto-Heimladung **und aktiver Wallbox**: höherer Heimladungs-Wert gewinnt → Trias in den Wallbox-Slot (IMD ggf. angelegt), E-Auto-Heim-Keys geräumt (km/Verbrauch/Extern/V2H bleiben). Unauflösbar (Gewinner ohne PV-Split, Verlierer mit PV → „Total vs. PV-Split") → stehenlassen (Daten-Checker). Multi-Wallbox → Anlage übersprungen. Vor-Wallbox-Monate (Schuko) bleiben beim E-Auto. Natürlich idempotent (nach 1. Lauf keine E-Auto-Heimladung mehr). Test `test_emob_canonical_migration.py` (9 Fälle). **742 Backend-Tests grün.**
-   - **Release-Pflicht (Risiken-Sektion):** DB-Backup-Hinweis in den Release-Notes; Live-Gegencheck via ha-mcp an Gernots Anlage (hat den Pflege-Konflikt real).
-5. ✅ **Laufzeit-Heuristik entfernt.** **Erledigt 2026-06-04 (UNRELEASED).** `aggregiere_emob_ladung` (Magnituden-Quellenwahl) ganz gelöscht — hatte nach Etappe 2 keine Produktiv-Aufrufer mehr. `compute_emob_pool_attribution.use_wb_pool` war bereits in Etappe 2 auf strukturell umgestellt; Pool-Helper (`build_wb_pool_by_month`, `attribute_*`) bleiben nur noch für die km-Attribution. Redundante Magnitude-Unit-Tests entfernt (Coverage liegt jetzt in `test_emob_heimladung_canonical.py` + `test_emob_readsite_symmetrie.py`), #262-Cross-View-Integrationstests behalten. Stale Kommentare/Docstrings in aktueller_monat/komponenten/uebersicht/daten_checker auf den kanonischen Helfer umgestellt. **736 Backend-Tests grün.**
-
----
-
-**Phase 2a Etappen 1–5 alle ✅ — RELEASED in v3.36.0 (2026-06-04).** Live-Gegencheck an Gernots Anlage erfolgreich: Migration sauber gelaufen (13 Monate Trias→Wallbox, 2 nur geräumt, 15 unauflösbar→Daten-Checker, keine Fehler im Add-on-Log). Der Daten-Checker zeigt korrekt den neuen Pflege-Konflikt-Text + per `_check_emob_sensor_doppelmapping` die Wurzel: derselbe `evcc_pv_charged`-Sensor war an Wallbox **und** E-Auto gemappt. Nach Sensor-Mapping-Korrektur (Heimladung nur an der Wallbox) sind künftige Monate sauber.
-
-### Risiken
-DB-Backup-Hinweis vor der Migration; additiv + idempotent; Teil-Umstellung in Schritt 2 nur mit dem Symmetrie-Test absichern (sonst stille Drift); Steckerlader-/Manuell-Nutzer ohne Wallbox müssen unangetastet bleiben. Live-Gegencheck via ha-mcp an Gernots Anlage (hat den Pflege-Konflikt real).
-
-### Phase 2b/3 bleiben getrennt
-Vehicle-Sensor-Mapping (`ladung_heim_*`) + Multi-Fahrzeug-Aufschlüsselung — Trigger „Multi-Vehicle-Bedarf" weiter **nicht** erfüllt. Nicht Teil von 2a.
-
-## Offene Fragen
-
-1. Liefern SMA eCharger und Wattpilot ähnliche Per-Vehicle-Topics wie evcc?
-2. Gibt es EEDC-Nutzer mit Multi-WB/Multi-E-Auto-Setup? (Joachim-xo prüfen)
-3. Braucht das Monatsabschluss-Formular ein geändertes Layout für die neuen Felder?
-
 ## Bekannte Schwächen — Phase-2a-Fehlalarme bei Wallbox+E-Auto (Live-Check 2026-06-04)
 
-> **✅ Behoben (Tier-1-Quick-Win, im Bündel, noch nicht released):** Beide Fehlalarme A+B sind gefixt.
+> **✅ Behoben und ausgeliefert:** Beide Fehlalarme A+B sind gefixt.
 > A — `_check_emob_pool_pflege` liest die E-Auto-Heimladung jetzt nur aus dem
 > expliziten `ladung_kwh` (kein `verbrauch_kwh`-Fahrverbrauch-Fallback mehr).
 > B — `_check_energieprofil_abdeckung` überspringt den E-Auto-kWh-Zähler-Bedarf,
@@ -291,7 +217,7 @@ deshalb steht „Verbrauch" dort jetzt bewusst auf Manuell/leer (kWh/100 km
 entfällt). Real auch: evcc liefert für viele Fahrzeuge ohnehin keinen echten
 kumulativen Fahr-Verbrauchszähler (nur Lade-Energie + Momentan-Durchschnitt in W).
 
-**Kandidat-Fix (Variante offen → eher eigenes Issue, [[feedback_issue_vs_memory]]):**
+**Kandidat-Fix (Variante offen → eher ein eigenes Issue):**
 Den `verbrauch_kwh`→Heimladung-Fallback nur greifen lassen, wenn **keine
 Wallbox** als kanonische Quelle existiert (bzw. im Pflege-Check die Heimladung
 des E-Autos nur aus den expliziten `ladung_*`-Feldern bilden, nicht aus
@@ -320,9 +246,9 @@ zählung + Pflege-Konflikt zurückbringen.
 E-Autos **überspringen, wenn eine Wallbox mit kWh-Zähler** in derselben Anlage
 existiert (analog zur strukturellen Quellen-Regel). Gleiche Issue-Familie wie A.
 
-## Offene Lücke 2026-06-29: Tages-Energieprofil-Leistungspfad nicht von Phase 2a erfasst (Achse-2-Magnitude-Drift)
+## Achse-2-Magnitude-Drift — vermessen und gebaut ([#356](https://github.com/supernova1963/eedc-homeassistant/issues/356), geschlossen 2026-08-08)
 
-> **Status (2026-08-08): VERMESSEN + BEIDE FIX-RICHTUNGEN GEBAUT — Restarbeit: Alt-Tage-Erkennung.** Siehe den Abschnitt „✅ Vermessen und gebaut" am Ende. Der Text darunter beschreibt den Stand vom 2026-06-29 und bleibt als Herkunftsbeleg wörtlich stehen; zwei seiner drei Hypothesen sind widerlegt. Aufgetaucht beim Live-Gegencheck der v3.45.9-Achse-2-Diagnose (`GET /api/energie-profil/{id}/achse2-drift`) an Gernots Anlage. SoT für die Weiterarbeit ist dieser Abschnitt + Memory [[project_achse2_magnitude_drift]].
+> **Status (2026-08-28): vermessen, beide Fix-Richtungen gebaut, Alt-Tage-Erkennung gebaut — nichts offen.** Siehe den Abschnitt „✅ Vermessen und gebaut" am Ende. Der Text darunter beschreibt den Stand vom 2026-06-29 und bleibt als Herkunftsbeleg wörtlich stehen; zwei seiner drei Hypothesen sind widerlegt. Aufgetaucht beim Live-Gegencheck der v3.45.9-Achse-2-Diagnose (`GET /api/energie-profil/{id}/achse2-drift`) an Gernots Anlage. SoT für die Weiterarbeit ist dieser Abschnitt + Memory `project_achse2_magnitude_drift`.
 >
 > ⚠ **Nachtrag 2026-08-08: Dieser Abschnitt hat ein Issue — [#356](https://github.com/supernova1963/eedc-homeassistant/issues/356)** (seit 30.07., offen). Bis dahin stand die Lücke nur hier und im Memory; wer nur die Issue-Liste las, hat sie nicht gesehen. Die Linie dort ist dieselbe wie hier: **Diagnose zuerst, Korrektur alter Tage nur über den Reparatur-Knopf, nie als Start-Migration.**
 
@@ -347,32 +273,6 @@ Setup: Wallbox (SMA eCharger, inv 2, `parent=None`) + E-Auto (Smart #1, inv 1, `
 ### Diagnose-only — keine falschen Anzeige-Werte
 
 Die **angezeigten** Werte (Kacheln, Bilanz, Charts, Tages-/Monats-Auswertung) stammen aus dem **Zählerpfad** (`*_kw`-Spalten / `komponenten_kwh` Boundary) und sind **korrekt** (+7). Nur das interne `komponenten`-JSON (Leistungspfad, butterfly-signiert) driftet. Symptom ist die dauerhafte Achse-2-Log-Warnung, jetzt auch im Diagnose-Endpoint sichtbar. Kein Anwender-sichtbarer Wert ist falsch.
-
-### Noch zu klären vor einem Fix-Konzept (per-Key-Mechanismus)
-
-Der Diagnose-Endpoint summiert die Kategorie (`summe_wallbox_eauto_kwh` = Σ `wallbox_*` + `eauto_*`), zeigt also **nicht**, welcher Key die −14 trägt. Zwei Hypothesen, verschiedene Fixes:
-
-1. **Wallbox-Selbst-Verdopplung:** der Leistungspfad baut die Wallbox-Kurve aus **mehreren** Zählern (`ladung_kwh` **+** `ladung_pv_kwh`), obwohl `ladung_pv_kwh` eine **Teilmenge** ist (der Zählerpfad addiert in `komponenten_beitraege.py` bewusst nur `ladung_kwh`). Spräche für genau −2× bei Voll-PV-Ladung.
-2. **Phantom-`eauto_1`-Serie:** der Leistungspfad erzeugt eine eigene E-Auto-Serie (Quelle noch unklar, da E-Auto keinen Lade-Sensor mehr hat) → echter Querschluss `wallbox_2` + `eauto_1`. Der Faktor **2,14×** am 06-24 (> 2×) passt eher hierzu als zur reinen PV-Teilmengen-Verdopplung.
-
-**Auflösung (Scoping-Schritt, kein Fix):** entweder (a) gezielter Code-Read des Tages-Leistungspfads (`extract_live_config` / `baue_investitions_serien` / `live_komponenten_builder.py`: Serien-Quellen + Entity-Dedup) oder (b) den Diagnose-Endpoint um eine **Per-Key-Aufschlüsselung** erweitern und on-box messen.
-
-### Vorgeschlagene Fix-Richtung (im Konzept-Rahmen, NICHT entschieden)
-
-- **Strukturelle Quellen-Regel auf den Tages-Leistungspfad ausdehnen:** die in Phase 2a beschlossene Regel („Wallbox vorhanden + hat Heimladung → Wallbox ist Quelle; E-Auto trägt nur Nutzung") gilt bisher nur monatlich/read-seitig. Der Tages-Leistungspfad muss dieselbe Regel anwenden, statt heuristisch zu poolen — und `ladung_pv_kwh`/`ladung_netz_kwh` als **Teilmengen** behandeln (nie zusätzlich als Kurve aufaddieren), konsistent zu `komponenten_beitraege`.
-- **Achse-2-Invariante für Senken-Vorzeichen normalisieren:** `summe_wallbox_eauto_kwh` (und die anderen Senken-Kategorien) vergleichen die **positive** `*_kw`-Spalte gegen das **negativ** butterfly-signierte JSON → systematischer Vorzeichen-Fehlalarm unabhängig vom Magnituden-Bug. Die Invariante sollte die Senken-Konvention kennen (Betrag/Seite normalisieren), sonst flaggt sie auch nach dem Magnitude-Fix weiter.
-- **Leitplanke:** im abgenommenen Wallbox/E-Auto-Rahmen reparieren, Konzept nicht umwerfen ([[feedback_korrektur_nicht_konzept_umwerfen]]); strukturelle Regel statt neuer Heuristik ([[feedback_sonderfaelle_nicht_reflexhaft_codieren]]); falls ein Fix die Aggregation ändert, Alt-Tage **nur** über manuellen Daten-Checker-Knopf nachziehen, nie als Start-Migration ([[feedback_migration_startup_kein_http]]).
-
-### Trigger / Priorität
-
-Diagnose-only, niedrig-prioritär (keine falschen Anzeige-Werte). Sinnvoll **gebündelt** mit der nächsten echten Wallbox/E-Auto-Arbeit (gemeinsamer Test-/Migrations-Zyklus), nicht als isolierter Hotfix. Re-Evaluierung beim nächsten emob-Pool-Signal.
-
-> ⚠ **2026-08-08: Dieser Trigger ist eingetreten.** **Phase 4 (#331)** *ist* die nächste echte
-> Wallbox/E-Auto-Arbeit. Das heißt **nicht**, dass #356 mitgebaut werden muss — es heißt, dass der
-> Scoping-Schritt (Per-Key-Aufschlüsselung des Diagnose-Endpunkts) im selben Zug **billig** ist,
-> weil der Tages-Leistungspfad dann ohnehin aufgeschlagen ist. **Entscheid des Maintainers**, nicht
-> automatisch Teil von Phase 4; ein stillschweigend mitgebautes zweites Thema wäre eine
-> Auftragsausweitung.
 
 ### ✅ Vermessen und gebaut 2026-08-08 — beide Fix-Richtungen umgesetzt
 
@@ -429,10 +329,11 @@ Kacheln, Bilanz und Monats-Auswertung (Zählerpfad) — **nicht** für den Tages
 
 ⚠ **Alt-Tage heilen nicht von selbst.** Bereits gespeicherte `TagesEnergieProfil.komponenten`
 tragen ihre `eauto_*`-Keys weiter, der Chart zeigt sie weiter doppelt. Der Weg dorthin ist der
-**bestehende** Reparatur-Knopf (`reaggregate_range`, Cap 31 Tage) — **keine Start-Migration**
-([[feedback_migration_startup_kein_http]]). Ein Daten-Checker-Punkt, der betroffene Alt-Tage
-*findet* und den Knopf danebenstellt, ist **noch nicht gebaut** und die verbliebene Restarbeit
-dieses Abschnitts.
+**bestehende** Reparatur-Knopf (`reaggregate_range`, Cap 31 Tage) — **keine Start-Migration**.
+✅ **Der Daten-Checker findet die betroffenen Tage inzwischen selbst** und stellt den Knopf
+daneben: Kategorie `EMOB_DOPPELZAEHLUNG_TAGE` (`services/daten_checker/emob.py`,
+`action_kind="reaggregate_range"`). Damit ist auch die letzte Restarbeit dieses Abschnitts
+erledigt — hier stand bis 2026-08-28 „noch nicht gebaut".
 
 ---
 
@@ -473,7 +374,7 @@ zwar zweimal: er wird weder als Kosten noch als Emission gezählt, obwohl er rea
 Der Issue-Text nennt `core/calculations.py` — das ist richtig, aber **nur die halbe Fläche**.
 Gemessen am Code gibt es zwei voneinander unabhängige Pfade, und ein Anteil, der nur in einem
 von beiden wirkt, erzeugt genau die Drift-Klasse, die dieses Projekt wiederholt getroffen hat
-([[feedback_aggregations_drift]]):
+(Aggregations-Drift):
 
 | Achse | Ort | Rechnet mit | Wer liest sie |
 | --- | --- | --- | --- |
@@ -553,54 +454,6 @@ Benzinkosten des PHEV als Kosten danebenstehen. Analog CO₂: die vermiedene Emi
 > Energie ohnehin — sie ist nicht aus der Fahrleistung abgeleitet. Ein PHEV lädt weniger, also
 > steht dort schon die kleinere Zahl. Wer die Ladung zusätzlich mit dem Anteil skalierte, zöge sie
 > **zweimal** ab.
-
-### Etappen (Reihenfolge wichtig)
-
-1. **Parameter + die drei Pflicht-Stellen.** `eigener_verbrauch_l_100km` und
-   `elektrischer_fahranteil_prozent` in `core/investition_parameter.py` (`PARAM_E_AUTO` +
-   `PARAM_E_AUTO_DEFAULTS` + Alias-Map), Response-Model, `core/field_definitions.py`.
-   ⚠ **Kein DB-Default für `eigener_verbrauch_l_100km`** — „nicht gesetzt" ist die tragende
-   Aussage aus Entscheidung 3 und darf nicht durch einen Default zerstört werden.
-2. **`EmobFakten.fahrverbrauch_je_fahrzeug`** — additiv, exakt parallel zum vorhandenen
-   `km_je_fahrzeug` (`services/monats_fakten.py:274`), dessen Docstring die Begründung schon
-   trägt: *„Voraussetzung dafür, dass eine Ersparnis je Fahrzeug mit DESSEN Verbrauchs-Parameter
-   gerechnet wird"*. Der anlagenweite `fahrverbrauch_kwh` (vier Leser) **bleibt unverändert**.
-   Muster: `BkwFakten.erzeugung_je_investition` aus F-10 — additiv statt eine bestehende Summe
-   umzudeuten.
-3. **Layer-Formel `core/berechnungen/phev_anteil.py`** (ADR-001: eine Aggregat-Formel wird in
-   `core/berechnungen/` definiert, nicht in einer Route). Eine reine Funktion
-   `teile_fahrleistung(km, fahrverbrauch_kwh, verbrauch_kwh_100km, anteil_prozent) -> (km_e, km_v)`
-   mit der Deckelung aus Entscheidung 1 und der Fallback-Kette aus Entscheidung 4.
-   **Beide Achsen rufen dieselbe Funktion** — das ist der Punkt, an dem die Drift verhindert wird.
-4. **IST-Achse:** `services/eauto_wirtschaftlichkeit.py` (`berechne_eauto_ersparnis` +
-   `berechne_eauto_ersparnis_periode`) um die fossile Kostenposition erweitern; `EAutoErsparnisErgebnis`
-   bekommt sie als eigenes Feld, damit die Anzeige sie **benennen** kann statt sie zu verstecken.
-5. **CO₂:** ausschließlich über `berechne_co2_bilanz` — ADR-001/**DI-2** sagt, das ist die einzige
-   Konstruktions-Stelle einer CO₂-Menge, und `npm run check:co2-roh` hält die Client-Hälfte.
-   Fundstelle der km-gewichteten Vergleichsrechnung: `api/routes/cockpit/nachhaltigkeit.py:95 ff.`
-6. **Prognose-Achse:** `core/calculations.py::berechne_eauto_einsparung` + der einzige Aufrufer
-   `api/routes/investitionen/crud.py:1508`.
-7. **Anzeige:** E-Auto-Fläche des Komponenten-Hubs (`frontend/src/v4/EAutoHubBloecke.tsx`) und das
-   Investitions-Formular. Regel 0a — Farben/Komponenten aus der SoT, keine zweite Kachel-Klasse.
-8. **Daten-Checker:** ist `eigener_verbrauch_l_100km` gesetzt, aber weder `verbrauch_kwh` gepflegt
-   noch `elektrischer_fahranteil_prozent` angegeben, dann rechnet eedc still 100 % elektrisch —
-   **das muss es sagen.** Linie unverändert: melden und erklären, kein „Akzeptiert"-Knopf, keine
-   stille Datenänderung.
-9. **Symmetrie-Test über beide Achsen** — Pflicht, nicht optional. Vorbild
-   `test_emob_readsite_symmetrie.py` aus Phase 2a und `test_netto_ertrag_vier_wege_symmetrie.py`.
-   ⚠ Ein Symmetrie-Test deckt nur die Achsen ab, die **die Fixture variiert**
-   ([[feedback_aggregator_symmetrie]]): die Fixture muss BEV **und** PHEV führen, mit und ohne
-   gepflegten Fahrverbrauch.
-
-### Wechselwirkungen — vor dem Bau je einzeln entscheiden
-
-| Fläche | Frage | Vorschlag |
-| --- | --- | --- |
-| `pv_ladeanteil_prozent` | Gilt der PV-Anteil auf die ganze Ladung oder nur auf den E-Teil? | **Auf die ganze Ladung** — die Ladung *ist* schon vollständig elektrisch. Hier ist nichts zu teilen; die Frage aus dem Issue-Body beruht auf der Annahme, die Ladung würde aus der Fahrleistung abgeleitet. Das tut sie im IST nicht. |
-| Dienstwagen (`ist_dienstlich`) | Wirkt der fossile Anteil in `dienstliche_ladekosten.py`? | **Nein — am Code gemessen, nicht angenommen.** `berechne_dienstliche_ladekosten` liest ausschließlich `ladung_pv_kwh` und `ladung_netz_kwh` und bewertet **geladene Energie**; die Fahrleistung kommt in der Formel nicht vor. Der fossile Anteil eines Dienstwagens ist Sache des Arbeitgebers und war nie in eedcs Bilanz. **Phase 4 lässt diese Formel unberührt.** |
-| CO₂-Amortisation **#284** | Graue Last vs. reduzierte Betriebs-Einsparung | **Nicht Teil von Phase 4.** #284 ist ein eigenes Issue; hier nur sicherstellen, dass die Betriebs-Einsparung, die #284 konsumiert, den fossilen Anteil bereits abzieht. |
-| **N-141** | Wallbox-PV-Anteil, drei Wege, wartet auf Maintainer-Entscheid | **Blockiert und getrennt halten.** Berührt die Ladung, nicht die Fahrleistung — keine Abhängigkeit in beide Richtungen. |
-| **#356** | Achse-2-Drift, Trigger tritt hiermit ein | Siehe Nachtrag oben — **eigener Entscheid**, nicht automatisch mitgebaut. |
 
 ### Bekannte Schwäche, die Phase 4 erbt
 
