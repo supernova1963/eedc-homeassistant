@@ -11,20 +11,17 @@
 > | **Invarianten I1–I12** (Flip-Gate, abgenommen 2026-07-21) | **lebend als Regel**; einzige Ausnahme: die „Bau-Invariante bis zum Flip" (Z. 300, `VITE_IA_V4`) ist mit R6 gestorben — das Flag existiert in `frontend/src/**` nicht mehr |
 > | **URL-Redirect-Tabelle** | **lebend als Vertrag** — die Redirects laufen (`App.tsx`), Foren-/Issue-Links hängen daran |
 > | **Migrations-Plan Phase 0/1** · Vorab-Sichtung | **Historie** — abgearbeitet, Ablauf im CHANGELOG + `docs/drafts/archive/flip-v4/` |
-> | **Phase 2 „Folge-Wellen"** | **offen** — s. Register unten |
+> | **Phase 2 „Folge-Wellen"** | **kein offener Punkt dieses Dokuments** — einer abgelöst, drei ohne Nutzer-Trigger im Fund-Register (s. unten) |
 > | Risiken + Gegenmaßnahmen | Historie (Flip ist ohne die genannten Risiken durchgelaufen) |
 >
-> **Offene Folge-Wellen (Phase 2, am Code geprüft 2026-07-28):**
->
-> | # | Punkt | Stand |
-> | --- | --- | --- |
-> | **B10** | PageHeader-Konsolidierung | ⬜ offen — keine PageHeader-SoT; 17 `.tsx` mit hartem `<h1`. Zugleich SoT-Inventar-Zeile „Sicht-Rahmen". Kein Issue (kein Nutzer-Trigger) — dieses Register ist die Heimat |
-> | **B14** | Globale Cmd+K-Suchpalette | ⬜ offen — 0 Treffer im Code. Kein Nutzer-Trigger bisher |
-> | **B5** | Mobile-Reduce (Reduce-Wrapper · Sticky-Header auto-hide · Tabellen-Swipe) | ⛔ **abgelöst, kein offener Punkt mehr** (Entscheid Gernot 2026-08-28): Die V4-Flächen sind von Grund auf über Breakpoints und zweite Render-Pfade gebaut; ein Reduce-Wrapper würde Inhalt wegblenden, was die Mobile-Regel im [Style-Guide](KONZEPT-STYLE-GUIDE.md) ausschließt |
-> | **B12** | Single-Anlage-Selektor-Audit | 🟡 Kern erledigt (Selektor blendet bei < 2 Anlagen aus); der Audit **über alle Sichten** ist nie gelaufen |
->
-> Diese vier haben keinen Nutzer-Trigger und kein Issue — sie bleiben offene Punkte dieses
-> Dokuments. Vorher standen sie als DOK-13 im Post-Flip-Backlog, der am 2026-07-30 außer Dienst ist.
+> **Folge-Wellen (Phase 2):** Drei Punkte aus dem Flip haben nie einen Nutzer-Trigger bekommen —
+> PageHeader-Konsolidierung, globale Suchpalette, der Audit des Anlagen-Selektors über alle
+> Sichten. Sie stehen seit 2026-08-28 **nicht mehr hier**, sondern im Fund-Register des
+> Maintainers; ein Dokument, das die ausgelieferte Oberfläche beschreibt, ist kein Arbeitsvorrat.
+> Ein vierter Punkt — **Mobile-Reduce** (Reduce-Wrapper, Sticky-Header auto-hide, Tabellen-Swipe)
+> — ist **abgelöst statt offen**: Die V4-Flächen sind über Breakpoints und zweite Render-Pfade
+> gebaut, und ein Wrapper, der Inhalt wegblendet, verstößt gegen die Mobile-Regel im
+> [Style-Guide](KONZEPT-STYLE-GUIDE.md).
 >
 > **Verwandte Dokumente:** [KONZEPT-STYLE-GUIDE.md](KONZEPT-STYLE-GUIDE.md) (visuelle Sprache) · [ADR-001](ADR-001-BERECHNUNGS-LAYER.md)/[ADR-002](ADR-002-WURZELMUSTER.md) (Berechnung — nie mit der IA vermischen, I11) · [#243](https://github.com/supernova1963/eedc-homeassistant/issues/243) (operativer Bausteine-Tracker, mit v4.0.0 abgeschlossen).
 
@@ -393,15 +390,14 @@ Cross-Links visuell dezent (Pfeil-Icon rechts neben KPI-Wert oder Sektion-Header
 6. URL-Redirects für alle Bestandspfade (siehe Tabelle unten).
 7. Release-Notes mit Migrations-Hinweisen, in-App-Hilfe-Eintrag „Wo ist X hin?".
 
-### Phase 2 — Folge-Wellen (post-v4.0.0) — **die einzigen offenen Punkte dieses Dokuments**
+### Phase 2 — Folge-Wellen (post-v4.0.0)
 
-> Stand 2026-07-28 am Code geprüft; Details + Belege im Status-Kopf oben, Nachverfolgung als
-> Offen, bewusst ohne Issue (kein Nutzer-Trigger).
-
-- ⬜ **B10** PageHeader-Konsolidierung — noch 17 `.tsx` mit hartem `<h1`, keine SoT-Komponente
-- ⬜ **B14** Globale Cmd+K-Suchpalette — nicht gebaut, kein Nutzer-Trigger
-- ⬜ **B5** Mobile-Reduce-Etappen (M1 Reduce-Logik, M2 Sticky-Header auto-hide, M3 Tabellen-Swipe)
-- 🟡 **B12** Single-Anlage-Selektor-Audit — Kern erledigt (Ausblenden bei < 2 Anlagen), Audit über alle Sichten offen
+Der Flip hat vier Punkte in eine zweite Welle geschoben. **Keiner davon ist ein offener Punkt
+dieses Dokuments**, und das ist seit 2026-08-28 auch die Ablage: Mobile-Reduce ist **abgelöst**
+(s. Status-Kopf), die drei übrigen — PageHeader-Konsolidierung, globale Suchpalette,
+Selektor-Audit über alle Sichten — sind ohne Nutzer-Trigger geblieben und werden im
+Fund-Register des Maintainers nachgehalten statt hier. Dieses Dokument beschreibt die
+**ausgelieferte** Oberfläche.
 
 ### Vorab-Sichtung — klickbare Vorschau (statt Design-Tool)
 
