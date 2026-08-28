@@ -7,6 +7,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.0.31] - 2026-08-28 — Taktende Anlagen behalten ihre Betriebsart; zwei Bauarten sind zwei Geräte
+
+### Fixed
+
+- **„Leerlauf" hat die Betriebsart weggeworfen — taktende Geräte verloren ihre Aufteilung** ([#399](https://github.com/supernova1963/eedc-homeassistant/issues/399), gemeldet und selbst analysiert von **Klausnn**). Meldet eine Klimaanlage oder Wärmepumpe zusätzlich den Ist-Betrieb (`Aktuelle Aktion` in Home Assistant), las eedc ihn mit — und behandelte **Leerlauf** wie „keine Aussage": Die Stunde fiel unter *nicht aufgeteilt*, obwohl das Gerät nachweislich auf *Kühlen* oder *Heizen* stand. ⚠ **Bei einem Inverter-Gerät, das die Solltemperatur hält, ist das der größte Teil der Zeit** — die Aufteilung Heizen/Kühlen war damit für genau die Geräte praktisch wirkungslos, für die sie gebaut wurde. Home Assistant selbst macht es richtig und beschriftet die Kachel mit „Leerlauf (Kühlbetrieb)". **Ab jetzt behält Leerlauf den eingestellten Modus**; eine Aktion mit *Richtung* (Heizen/Kühlen/Entfeuchten/Lüften) hat weiterhin Vorrang. ⚠ **Sichtbare Folge:** Bei taktenden Geräten wandert Strom aus *nicht aufgeteilt* nach *Heizen* bzw. *Kühlen* — die Aufteilung ändert sich deutlich, die Gesamtmenge nicht. **Nicht** betroffen: Geräte auf *Automatik* (`heat_cool`) und Geräte ohne gemeldeten Modus — dort gibt es keine Richtung, auf die zurückzufallen wäre, und geraten wird nicht.
+- **Wärmepumpe und Klimaanlage standen in einer Arbeitszahl** (gemeldet von **dietmar1968** im simon42-Forum: *„Er vermengt vermutlich die Anlagen miteinander"*). Wer beides betreibt, hat in eedc zwei Geräte desselben Typs — und ihre Kennzahl wurde über beide gebildet. Das darf sie nicht: Eine Luft-Wasser-Wärmepumpe und eine Split-Klimaanlage haben verschiedene Nutzenergie und verschiedene Vergleichsmaßstäbe, ein gemeinsamer Quotient ist einer aus zwei Welten. eedc zeigt dort jetzt **den Grund statt einer Zahl** — *„Wärmepumpe und Klimaanlage in einer Zahl"* —, und im Komponenten-Hub behält **jedes Gerät seine eigene Arbeitszahl**. ⚠ **Sichtbare Folge:** Wo bisher schon „—" stand, steht jetzt ein anderer, zutreffender Grund; der alte („nicht alle Geräte melden Wärme") riet zu einem Wärmemengenzähler, den eine Split-Klimaanlage bauartbedingt nicht haben kann. **Neu gesperrt wird nur der Fall, in dem beide Geräte Wärme melden** — dort stand bisher eine vermischte Zahl.
+- **Die Tagessicht sagt jetzt, aus welchen Geräten sie summiert** (derselbe Melder, derselbe Faden). Unter *Cockpit → Monat* und *→ Jahr* stand längst „Aggregiert aus: …" mit den Gerätenamen; **im Tag fehlte die Zeile** — als einzige der drei Sichten. Wer dort einen Balken über zwei Geräte mit dem Zähler **einer** seiner Anlagen verglich, fand eine Differenz, für die nirgends eine Erklärung stand. Betrifft nicht nur Wärme/Klima: Speicher und E-Mobilität lesen dieselbe Zeile. ⚠ **Die Mengen bleiben zusammengefasst** — Kilowattstunden über Geräte zu addieren ist richtig; was fehlte, war die Auskunft darüber.
+
+---
+
 ## [4.0.30] - 2026-08-27 — Quick-Fix: der Schalter geht auf, der Zählerstand bleibt ein Stand
 
 ### Added
