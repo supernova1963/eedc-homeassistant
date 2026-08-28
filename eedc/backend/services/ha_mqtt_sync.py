@@ -68,8 +68,16 @@ async def belegte_sensor_eintraege(
 
     ⚠ Das ist genau die Klasse, an der die alte Entfernen-Route scheiterte: sie
     zaehlte drei Sensorlisten von Hand auf (``ANLAGE + PROGNOSE + PREIS``) und
-    verlor damit 10 anlagenweite Definitionen sowie **saemtliche**
-    geraetebezogenen, die seit dem 27.08. publiziert werden.
+    erfasste damit 34 der 38 anlagenweiten Definitionen — vier blieben liegen,
+    dazu **saemtliche 18** geraetebezogenen, die seit dem 27.08. publiziert
+    werden.
+    ⛔ Hier stand bis zum 28.08.2026 „verlor damit 10 anlagenweite
+    Definitionen". Die Zahl war falsch und stammte aus einer Schaetzung
+    anlagenweiter Definitionen (44 statt 38); am lebenden Code nachgezaehlt
+    (``get_all_sensor_definitions()``: 56 = 38 anlagenweit + 18
+    geraetebezogen) sind es vier. Aufgefallen beim Schreiben des
+    CHANGELOG-Eintrags zu v4.0.33, weil die Zahl dort in einen Anwendertext
+    gewandert waere.
     """
     from backend.models.investition import Investition
     from backend.services.ha_sensors_export import get_all_sensor_definitions

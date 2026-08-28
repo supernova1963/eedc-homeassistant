@@ -1,11 +1,102 @@
 # Was ist neu
 
-> **Stand:** August 2026 (v4.0.32)
+> **Stand:** August 2026 (v4.0.33)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.33 — 28. August 2026
+
+**Du entscheidest, welche Sensoren nach Home Assistant gehen**
+
+Seit v4.0.30 schickt eedc auch die Werte einzelner Komponenten nach Home
+Assistant. Bei manchem kommt damit mehr an, als er braucht — und **Aufräumen in
+Home Assistant hilft nicht**: rapahl hat es auf den Punkt gebracht, *„die kann
+man zwar bereinigen, aber in der Registry bleiben die drin"*. Beim nächsten
+Erkennungslauf ist der Sensor wieder da. Knallfrosch hat am selben Tag dasselbe
+gemeldet.
+
+**Deshalb sitzt die Abwahl jetzt dort, wo sie wirken kann: bei eedc.** Unter
+*Einstellungen → Home-Assistant-Export* kannst du **jeden Sensor einzeln
+abwählen**. eedc nimmt ihn dann wirklich zurück — er kommt nicht beim nächsten
+Neustart wieder.
+
+**Voreingestellt bleibt alles an, und das mit Absicht.** Ein abgeschalteter
+Sensor zeichnet nichts auf, und diese Lücke lässt sich später nicht nachholen:
+Wer einen Wert einschaltet, weil er ihn heute braucht, bekommt ihn ab heute —
+für die Vergangenheit gar nicht. Eine Voreinstellung wäre also eine Wette
+darauf, was du später einmal brauchst. Abwählen kostet dagegen nur Platz, und
+den bekommst du zurück.
+
+⚠ **In Home Assistant räumt eedc nicht auf.** Die Entität verschwindet, deine
+dort schon aufgezeichnete Historie bleibt liegen — eedc fasst weder die
+Registry noch die Statistik an. Die Rückfrage vor dem Speichern sagt dir das.
+
+**Kilometer und Ladevorgänge zählen jetzt auch über MQTT**
+
+Das Feld für gefahrene Kilometer bot dir ausdrücklich den *kumulativen
+km-Zähler* deiner Auto-Integration an — eingelöst war das aber nur, wenn du
+eedc mit Home Assistant betreibst. August (gruaGit) hat nachgehakt, warum sein
+Zählerstand nicht mitgeschrieben wird, und er hatte recht: **Der Widerspruch
+war unserer.**
+
+Wer per MQTT liefert, bekommt den Vorschlag jetzt genauso. Vorgeschlagen wird
+dabei immer die **Differenz** — die 1001 Kilometer des Monats, nie der
+Tachostand von 13272. Die Ladevorgänge fahren mit.
+
+**Ein Zähler, der jede Nacht auf null springt, bekommt keine Monatsmenge mehr**
+
+Schickst du per MQTT einen *„…heute"*-Zähler, stand unter *Cockpit → Monat*
+bisher eine Zahl, die aus dem ersten und letzten Stand des Monats gerechnet
+war. Bei einem täglich zurückgesetzten Zähler ist das der Wert **eines einzigen
+Tages** — im Versuch **5,6 statt 140 Kilowattstunden**. Sie sah nicht falsch
+aus, und sie kam ungefragt.
+
+**Ab jetzt sagt eedc dort lieber nichts, als etwas Falsches.**
+
+**Hochgerechnet wird sie auch nicht**, obwohl es ginge — eedc schreibt die
+Stände ja stündlich mit und käme damit auf etwa 3 % zu wenig.
+
+**Der Grund liegt aber tiefer als diese 3 %.** Ein Zähler, der jede Nacht auf
+null springt, legt seinen Rücksprung genau auf den **Tageswechsel** — und daran
+hängt fast alles, was eedc daraus macht: Tageswerte, Monatswerte, der Verlauf.
+Läuft so ein Tageswechsel einmal nicht sauber durch, ist nicht eine Zahl etwas
+zu klein, sondern eine ganze Reihe von Auswertungen betroffen. Deshalb rät eedc
+dir seit jeher zu einem Zähler **ohne Zurücksetzen**. Eine Hochrechnung würde
+diesen Rat unterlaufen, statt ihn einzulösen.
+
+**Und der Daten-Check sagt dir jetzt, woran es liegt**
+
+Ein abgelehnter Zähler sah bisher genauso aus wie ein Sensor, der gar nichts
+liefert: leeres Feld, keine Erklärung. Der Daten-Check nennt dir jetzt die
+Stelle — mit Zeitpunkt und beiden Zählerständen — und den Weg dahin zurück:
+**den fortlaufenden Stand schicken**, oder beim Home-Assistant-Helfer
+*Zurücksetzen* auf **„nie"** stellen.
+
+Diesen Rat gab eedc bisher nur, während du einen Helfer **anlegst**. Wer seinen
+Sensor längst zugeordnet hatte, hat ihn nie zu sehen bekommen.
+
+⚠ **Einen Knopf zum Reparieren gibt es bewusst nicht.** eedc kann den Verlust
+nicht heilen — die fehlende Energie steht in keiner Quelle. Der Hinweis
+verschwindet von allein, sobald dein Zähler wieder durchläuft.
+
+**Das Vollbild schließt mit ESC**
+
+Hast du eine Anzeige über das ⤢-Symbol vergrößert, kamst du bisher nur über den
+*Zurück*-Knopf wieder heraus — die Escape-Taste tat nichts. Das betraf jede
+Stelle, an der dieses Symbol steht. **Jetzt schließt ESC das Vollbild.**
+
+⚠ Liegt ein Kalender darüber (*Cockpit → Tag* und *→ Monat*), schließt das
+erste ESC nur den Kalender, das zweite dann das Vollbild — jede Ebene für sich.
+
+Dazu, unsichtbar aber spürbar für alle, die mit Tastatur oder Screenreader
+arbeiten: **Dialoge melden sich jetzt als Dialog**, tragen ihren Titel als Namen
+und geben den Fokus beim Schließen dorthin zurück, wo du ihn geöffnet hast. Das
+gilt für jeden Dialog der App.
 
 ---
 
@@ -5747,7 +5838,7 @@ Bei v3.32.2 wurde diese Seite versehentlich noch mit dem v3.32.1-Stand ausgelief
 ### Konzept zur Diskussion — neue Menüstruktur für v4.0.0
 
 - **eedc bekommt mit der nächsten großen Version eine grundlegend neue Menüstruktur und ein modernes Designsystem.** Drei klare Achsen statt der heutigen Vermischung: Cockpit (Zeit — Live, Heute, Monatsbericht, Jahr, Aussicht), Komponenten (eine eigene Seite pro Speicher / Wärmepumpe / E-Auto / …), Auswertungen (Finanzen, CO₂, ROI, Tabelle, Prognose-vs-IST). Plus Hell/Dunkel-Mode und ein eigenes Mobile-Konzept für die HA-Companion-App.
-- **Die Konzept-Dokumente sind öffentlich** — [Menüstruktur](https://github.com/supernova1963/eedc-homeassistant/blob/main/docs/KONZEPT-IA-V4.md), [Designsystem](https://github.com/supernova1963/eedc-homeassistant/blob/main/docs/KONZEPT-STYLE-GUIDE.md), [Mobile-Konzept](https://github.com/supernova1963/eedc-homeassistant/blob/main/docs/KONZEPT-MOBILE.md) — und Feedback ist ausdrücklich willkommen, **bevor** die Umsetzung startet. Zentrale Anlaufstelle: [Issue #243](https://github.com/supernova1963/eedc-homeassistant/issues/243). Bekanntmachungen laufen parallel in den Foren ([simon42](https://community.simon42.com/t/eedc-energie-effizienz-data-center/77723/618), [community-smarthome.com](https://community-smarthome.com/t/eedc-energie-effizienz-data-center/10057/72)).
+- **Die Konzept-Dokumente sind öffentlich** — [Menüstruktur](https://github.com/supernova1963/eedc-homeassistant/blob/main/docs/KONZEPT-IA-V4.md), [Designsystem](https://github.com/supernova1963/eedc-homeassistant/blob/main/docs/KONZEPT-STYLE-GUIDE.md), und Feedback ist ausdrücklich willkommen, **bevor** die Umsetzung startet. Zentrale Anlaufstelle: [Issue #243](https://github.com/supernova1963/eedc-homeassistant/issues/243). Bekanntmachungen laufen parallel in den Foren ([simon42](https://community.simon42.com/t/eedc-energie-effizienz-data-center/77723/618), [community-smarthome.com](https://community-smarthome.com/t/eedc-energie-effizienz-data-center/10057/72)).
 
 ---
 
@@ -6037,7 +6128,7 @@ Im Daten-Checker (Einstellungen → Daten-Checker) gibt es eine neue Kategorie *
 
 #### Hintergrund
 
-Detaillierte Architektur-Beschreibung (für technisch Interessierte): das Aggregat-System ist ab v3.31.0 ein Cache von HA-Statistics-Long-Term, nicht mehr eine eigenständige Berechnung parallel dazu. Damit gilt automatisch: was im HA-Energy-Dashboard steht, steht auch in eedc. Vollständiges Konzept in `docs/KONZEPT-ETAPPE-4-HA-LTS-SOT.md` im Repo.
+Detaillierte Architektur-Beschreibung (für technisch Interessierte): das Aggregat-System ist ab v3.31.0 ein Cache von HA-Statistics-Long-Term, nicht mehr eine eigenständige Berechnung parallel dazu. Damit gilt automatisch: was im HA-Energy-Dashboard steht, steht auch in eedc. Vollständiges Konzept in `docs/archive/KONZEPT-ETAPPE-4-HA-LTS-SOT.md` im Repo.
 
 *(Aus dem Forum + PNs als Anwender-Beobachtung über mehrere Wochen — Konsistenz-Drift war eine echte Vertrauenslücke.)*
 
