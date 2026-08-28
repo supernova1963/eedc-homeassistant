@@ -124,6 +124,7 @@ Das ist die unangenehmste Eigenschaft dieser Fläche und zugleich ihre wichtigst
 | **kein Wärmemengenzähler zugeordnet** | Es gibt keine gemessene Wärme. | Zähler zuordnen — oder die gepflegte Arbeitszahl nutzen (dann ist die Wärme *abgeleitet*) |
 | **Wärme ist gerechnet, nicht gemessen** | Die Wärme kam aus *Strom × Arbeitszahl*. Sie durch denselben Strom zu teilen gäbe genau die Arbeitszahl zurück, mit der gerechnet wurde. | nichts — die Zahl wäre zirkulär |
 | **nur Kühlbetrieb in diesem Zeitraum** | Der Zähler lief, aber nicht fürs Heizen. „Kein Stromverbrauch" wäre hier die falsche Auskunft. | nichts, das ist die Wahrheit über einen Sommermonat |
+| **Wärmepumpe und Klimaanlage in einer Zahl** | Der Block fasst eine klassische Wärmepumpe und eine Split-Klimaanlage zusammen. Beide heizen, aber sie sind nicht vergleichbar: andere Nutzenergie, anderer Maßstab. Eine gemeinsame Arbeitszahl wäre ein Quotient aus zwei Welten. | jedes Gerät einzeln im Komponenten-Hub ansehen — dort hat jedes seine eigene Zahl |
 | **nicht alle Geräte melden Wärme** | Der Block fasst mehrere Geräte zusammen; im Nenner steht der Strom von allen, im Zähler die Wärme von einem. | einzelnes Gerät im Komponenten-Hub ansehen |
 | **Heizstab-Strom auf dem WP-Zähler** | Deine eigene Angabe im Feld *Fremdanteil auf den Zählern*. Der Stromwert ist zu groß. | Angabe korrigieren, wenn sie nicht mehr stimmt |
 | **zweiter Erzeuger am Wärmezähler** | Dieselbe Angabe, andere Richtung: Ein Gas- oder Ölkessel speist denselben Heizkreis. Der Wärmewert ist zu groß. | dito |
@@ -290,17 +291,25 @@ Es gibt **zwei Wege**, und **gemessen schlägt abgeleitet**:
 > dabei kräftig Strom ziehen. Wenn du dafür eine eigene Quelle hast, nimm sie; wenn nicht, ist
 > `automatik` (⇒ *unbestimmt*) die ehrlichere Antwort als `aus`.
 
-> ### Wenn deine Anlage taktet: „Leerlauf" ist keine Richtung
+> ### Wenn deine Anlage taktet: „Leerlauf" behält deinen Modus
 >
 > Meldet deine Integration zusätzlich den **Ist-Betrieb** (`Aktuelle Aktion` in Home Assistant),
-> liest eedc ihn mit — er sagt genauer als der eingestellte Modus, was gerade läuft. Steht dort
-> **Leerlauf**, weil die Solltemperatur erreicht ist, schlägt eedc diese Zeit **weder** dem
-> Heizen **noch** dem Kühlen zu; sie zählt unter *nicht aufgeteilt*.
+> liest eedc ihn mit — er sagt genauer als der eingestellte Modus, was gerade läuft. Nennt er
+> eine **Richtung** (Heizen, Kühlen, Entfeuchten, Lüften), gilt sie.
 >
-> **Bei einem gut ausgelegten Inverter-Gerät ist das viel Zeit** — unter Umständen der größte
-> Teil. Das ist eine Grenze der Methode und kein Fehler bei dir: eedc behauptet lieber nichts,
-> als eine Stunde einer Seite zuzuschlagen, in der das Gerät nachweislich nicht dafür gearbeitet
-> hat.
+> Steht dort **Leerlauf**, weil die Solltemperatur erreicht ist, **bleibt dein eingestellter
+> Modus stehen.** Eine Anlage, die auf *Kühlen* steht und gerade pausiert, kühlt weiterhin —
+> Home Assistant schreibt es genauso auf die Kachel: „Leerlauf (Kühlbetrieb)". Die Stunde zählt
+> deshalb zum Kühlen.
+>
+> ⛔ **Bis v4.0.30 war das anders**, und das war ein Fehler: Leerlauf verwarf den Modus, die
+> Stunde fiel unter *nicht aufgeteilt*. **Bei einem gut ausgelegten Inverter-Gerät ist das der
+> größte Teil der Zeit** — die Aufteilung war damit praktisch wirkungslos. Gemeldet von einem
+> Anwender mit einer taktenden Multisplit-Anlage.
+>
+> **Was weiterhin *nicht aufgeteilt* bleibt:** Leerlauf, während **keine** Richtung eingestellt
+> ist — also bei *Automatik* (`heat_cool`) oder wenn dein Gerät gar keinen Modus meldet. Dann
+> gibt es nichts, worauf eedc zurückfallen könnte, und geraten wird nicht.
 
 > ### Zähler schlagen den Betriebsmodus
 >
@@ -361,7 +370,7 @@ WP: 3000 kWh Wärme auf 800 kWh Strom. Klimaanlage: 200 kWh Strom, keine Wärme.
 
 | Sicht | Ergebnis |
 |-------|----------|
-| **Cockpit** (beide zusammen) | Arbeitszahl **„—"**, Grund: *nicht alle Geräte melden Wärme* |
+| **Cockpit** (beide zusammen) | Arbeitszahl **„—"**, Grund: *Wärmepumpe und Klimaanlage in einer Zahl* |
 | **Komponenten → Wärmepumpe** | **3,75** (3000 ÷ 800) — sauber abgegrenzt |
 
 ⭐ **Die Mengen bleiben in beiden Sichten vollständig.** Weg ist nur die Zahl, die 3000 ÷ 1000 gerechnet hätte — Wärme von einem Gerät, Strom von zweien.
@@ -402,9 +411,14 @@ Wärmepumpe mit getrennter Strommessung (800 + 400 kWh) und Wärmemengenzählern
 | Strom verbraucht | **1400 kWh** (alle drei Zähler) |
 | Modus erfasst | **18 Stunden** — nicht 36 |
 | Aufgeteilte Menge | wird genannt, sobald sie vom Gesamtstrom abweicht |
-| Arbeitszahl | „—", *nicht alle Geräte melden Wärme* |
+| Aggregiert aus | **Wärmepumpe · Klimaanlage** — die Namen stehen unter dem Block |
+| Arbeitszahl | „—", *Wärmepumpe und Klimaanlage in einer Zahl* |
 
 ⭐ **Kilowattstunden darf man über Geräte addieren, Stunden nicht.** Zwei Geräte, die dieselben 18 Stunden liefen, ergeben 18 Stunden Beobachtung. Bis v4.0.28 stand dort 36 — an einem Tag.
+
+⭐ **Der Block nennt seine Geräte — und seit v4.0.31 auch unter *Cockpit → Tag*.** Solange dort niemand sagte, dass zwei Geräte in einer Summe stecken, war die Zahl nicht nachvollziehbar: Wer den Balken mit dem Zähler **einer** seiner Anlagen verglich, fand eine Differenz, für die es keine Erklärung gab. Monat und Jahr nannten die Namen längst, der Tag als einzige Sicht nicht.
+
+**Die Mengen bleiben zusammen, und das ist Absicht.** Kilowattstunden über Geräte zu addieren ist richtig — was fehlte, war die Auskunft darüber. Wer die Geräte einzeln sehen will, öffnet *Komponenten → Wärmepumpe*; dort steht jedes für sich, mit eigener Arbeitszahl.
 
 ### F — Brauchwasser-Wärmepumpe
 

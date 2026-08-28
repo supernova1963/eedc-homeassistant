@@ -1064,6 +1064,15 @@ Eine Split-Klimaanlage heizt und kühlt über **denselben** Zähler. Die Aufteil
 gespeicherten Wert rekonstruierbar — sie entsteht nur, wenn eedc den Betriebsmodus **zur Messzeit**
 mitschreibt (`TagesEnergieProfil.betriebsmodus_je_wp`, seit S2).
 
+> **Welcher Wert die Stunde bestimmt** (`core/betriebsmodus.py::normalisiere_betriebsmodus`):
+> der eingestellte Modus (`hvac_mode`), **verfeinert** durch den Ist-Betrieb (`hvac_action`),
+> wo die Integration ihn liefert (D2). ⚠ **Verfeinern heißt nicht verwerfen** — der Ist-Betrieb
+> schlägt den Modus nur, wo er eine **Richtung** nennt (`heating`/`cooling`/`drying`/`fan`) oder
+> `off`. **`idle` (Leerlauf) nennt keine und fällt deshalb auf den eingestellten Modus zurück**
+> (#399, 28.08.2026; davor ergab es `unbestimmt`, und bei einem taktenden Inverter-Gerät fiel
+> damit der Großteil des Stroms in *nicht aufgeteilt*). Ohne Richtung im Modus — Automatik
+> (`heat_cool`/`auto`) oder gar kein Modus — bleibt es `unbestimmt`; geraten wird nicht.
+
 ```text
 je Tag d, je Gerät i:
   roh_h       = |komponenten["waermepumpe_<i>"]|          # Leistungspfad, NEGATIV gespeichert
@@ -1197,7 +1206,17 @@ Arbeitszahl Kühlen     = nutzenergie_kuehlen_kwh ÷ betriebsart_strom_kuehlen_k
 | **Kühlen** (W-5) | Kühlstrom **und** Kältemengenzähler | `GRUND_KEINE_KAELTEMENGE` · `"kein Kühlbetrieb in diesem Zeitraum"` |
 
 ⚠ **Die R2-Sperren gelten für alle vier** — Anwender-Angabe `abgrenzung`, abgeleitete Wärme,
-Geräte ohne Wärme, Zeitraum-Versatz. **Genau daran ist W-4 entstanden:** Die Funktions-Kennzahlen
+**gemischte Bauarten**, Geräte ohne Wärme, Zeitraum-Versatz.
+
+> **R2/Bauart — neu am 28.08.2026** (`GRUND_BAUARTEN_GEMISCHT`, SOLL §5): Trägt ein Block eine
+> Luft-Wasser-Wärmepumpe **und** eine Luft-Luft-Split-Klimaanlage, gibt es **keine gemeinsame
+> Kennzahl** — verschiedene Nutzenergie, verschiedene Vergleichsmaßstäbe. Die **Mengen** bleiben
+> summiert (§5: *„Mengen dürfen nebeneinander stehen, eine gemeinsame JAZ nicht"*), und im
+> Komponenten-Hub behält jedes Gerät seine eigene Zahl. ⭐ Erkannt aus den **Stammdaten**
+> (`ist_luft_luft_waermepumpe`), nicht aus einer Messreihe — damit ist es nach
+> `waerme_deckt_nicht_alle_geraete` die **zweite** Lage, die eedc selbst erkennt. Sie steht
+> **vor** ihr in der Reihenfolge: Der allgemeinere Grund riete zu einem Wärmemengenzähler, den
+> eine Split-Klimaanlage bauartbedingt nicht haben kann. **Genau daran ist W-4 entstanden:** Die Funktions-Kennzahlen
 wurden an einer eigenen Stelle gerechnet und kannten die Sperren nicht. Ein Heizstab auf dem
 WP-Zähler ließ die Gesamtzahl mit Begründung verschwinden, während „JAZ Heizen" unbeeindruckt
 danebenstand — *dieselbe Anlage, zwei Aussagen*. Dazu stand dort eine **0**, wo „unbekannt"

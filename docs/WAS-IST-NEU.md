@@ -9,6 +9,61 @@
 
 ---
 
+## Noch nicht veröffentlicht
+
+**Taktet deine Anlage? Dann stimmt die Aufteilung jetzt**
+
+Klausnn hat es im Detail nachgemessen und aufgeschrieben: Seine Panasonic-Anlage
+steht auf *Kühlen*. Sobald die Solltemperatur erreicht ist, meldet sie
+**Leerlauf** — und eedc warf damit den Modus weg. Die Stunde landete unter
+*nicht aufgeteilt*.
+
+**Bei einem gut geregelten Gerät ist das der größte Teil der Zeit.** Die
+Aufteilung Heizen/Kühlen war damit ausgerechnet für die Geräte wirkungslos, für
+die sie gedacht ist.
+
+Home Assistant macht es richtig — dort steht „Leerlauf (**Kühlbetrieb**)". eedc
+macht es jetzt genauso: **Leerlauf behält deinen eingestellten Modus.** Meldet
+deine Anlage dagegen eine echte Richtung (Heizen, Kühlen, Entfeuchten, Lüften),
+gilt weiterhin die.
+
+**Was du siehst:** Bei taktenden Geräten wandert Strom aus *nicht aufgeteilt*
+nach *Heizen* bzw. *Kühlen*. Deine Gesamtmenge ändert sich nicht — nur ihre
+Aufteilung, und die stimmt jetzt.
+
+**Unverändert bleibt es bei *Automatik*:** Steht dein Gerät auf `heat_cool`,
+nennt es keine Richtung — dann gibt es nichts, worauf eedc zurückfallen könnte,
+und geraten wird nicht.
+
+**Wärmepumpe und Klimaanlage sind zwei Geräte — auch für die Arbeitszahl**
+
+dietmar1968 betreibt beides: eine Bosch-Wärmepumpe und eine Bosch-Klimaanlage
+mit drei Innengeräten. Im Forum schrieb er: *„Er vermengt vermutlich die
+Anlagen miteinander. Anders kann ich es mir nicht erklären."*
+
+Er hatte recht. In eedc sind beide vom Typ *Wärmepumpe*, und ihre Arbeitszahl
+wurde über beide zusammen gebildet. Das darf sie nicht: Die beiden Bauarten
+liefern verschiedene Nutzenergie und werden an verschiedenen Maßstäben
+gemessen — eine gemeinsame Zahl wäre ein Quotient aus zwei Welten.
+
+**Was du siehst:** Wo eedc beides zusammenfasst, steht jetzt der Grund
+*„Wärmepumpe und Klimaanlage in einer Zahl"* statt einer Zahl. Und unter
+**Komponenten → Wärmepumpe** hat weiterhin **jedes Gerät seine eigene
+Arbeitszahl** — dort ist die Abgrenzung sauber, dort steht deine echte Zahl.
+
+**Und die Tagesansicht sagt jetzt, welche Geräte sie zusammenzählt**
+
+Unter *Cockpit → Monat* und *→ Jahr* stand schon immer eine Zeile
+„Aggregiert aus: …" mit den Namen deiner Geräte. Im **Tag** fehlte sie — als
+einzige der drei Sichten. Wer dort einen Balken mit dem Zähler **einer**
+seiner Anlagen verglich, fand eine Differenz und keine Erklärung.
+
+Die Mengen bleiben zusammengefasst, das ist richtig so — Kilowattstunden darf
+man über Geräte addieren. Gefehlt hat nur die Auskunft darüber. Das gilt auch
+für Speicher und E-Mobilität.
+
+---
+
 ## v4.0.30 — 27. August 2026
 
 **Deine Wärmepumpe sagt jetzt, was sie gerade tut**
