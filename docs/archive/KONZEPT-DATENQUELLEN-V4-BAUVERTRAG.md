@@ -103,3 +103,33 @@ Alles wird **jetzt** gebaut (nicht nach dem IA-V4-Flip). Reihenfolge nach Risiko
 > B5 (F2b: strikt eine Quelle, kein Fallback) wird in P1 (MQTT-Seite) grundgelegt und in P2 um die HA-Quelle erweitert. B7 (Block-Layout §2g) läuft über P1+P2 mit (Verbindungs-Blöcke in P1/P3, Datenquellen-Fläche P1/P2).
 
 ---
+
+---
+
+## Entscheidungs-Log (Kritik-Runden v0.3/v0.4, Juli 2026)
+
+Die Liste der Streitpunkte und wie sie ausgingen. Die **Ergebnisse** stehen im
+[Lebend-Dokument](../KONZEPT-DATENQUELLEN-V4.md) als geltende Regeln — hier steht, dass
+darüber verhandelt wurde und mit welchem Ausgang.
+
+Alle hier aufgeführten Punkte sind entschieden **und gebaut**; sie stehen als Begründung, nicht als Vorhaben.
+
+- ~~F2b (Fallback)~~ → **strikt eine Quelle, kein Laufzeit-Fallback** (§2d); Ausfall → Lücke, Recovery schließt sie.
+- ~~F1/F3 (Scope + Timing)~~ → **kein Flip-Gating, Bau jetzt**; Paket-Schnitt §5 (Gernot delegiert Schnitt an Claude). Guest-Rebuild erst „wenn alles rund".
+- ~~F4 (Discovery)~~ → **eigener `#`-Scan**, Presets ergänzend.
+- ~~F5 (Exklusivität)~~ → **genau eine Quelle pro Feld** (§2d), Präferenz HA-Sensor > MQTT-Gateway > MQTT-Inbound > manuell.
+- ~~F6 (#343)~~ → **integrieren** (§2f), B6.
+- ~~Blöcke Einstellungen→Integration~~ → **neu strukturiert** (§2g), B7.
+- ~~F2 (Priorität)~~ → §2d. ~~Name~~ → „Datenquellen". ~~WS/LTS remote~~ → aus Scope (§2e).
+
+**Kritik-Runde (v0.4):**
+- ~~Migration fehlt~~ → **B8 HA-first** (§2h).
+- ~~Remote-HA berücksichtigen~~ → **Fläche ab P1 Remote-HA-fähig** (§2a), P3 nur Verbindung.
+- ~~Stiller Wechsel~~ → **kein stiller Wechsel; Ausfall sichtbar** (§2d).
+- ~~Riemann-Widerspruch~~ → **Ableitung ≠ Fallback** geklärt (§2c).
+- ~~„keine Zuordnung"~~ → **gültige Wahl** → Monatsabschluss manuell/Vorjahr/Durchschnitt (§2d/§2b).
+- ~~Wächter unklar~~ → **benannt** (§7): Auflösungs-Grep + Resolver-Unit-Test.
+- ~~Discovery-Firehose~~ → **Filter+Suche+#343 wie HA-Sensoren** (§2b).
+- ~~Gateway summiert?~~ → **nein, last-write-wins** verifiziert (§2b).
+
+---

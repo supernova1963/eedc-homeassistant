@@ -46,16 +46,16 @@
 
 ---
 
-## 0. Weichenstellungen (Gernot, 2026-07-13) — sie gelten unverändert
+## 0. Die vier Grundentscheidungen
 
-Die vier Entscheidungen, auf denen die Fläche steht. Sie sind gebaut; die Formulierung
-stammt aus dem Entwurf und ist deshalb an zwei Stellen als Zustand von damals gekennzeichnet.
+Worauf die Fläche steht (Gernot, 2026-07-13) — alle vier sind gebaut. Zwei Formulierungen
+tragen ausdrücklich den Zusatz „damals", weil sie sich auf den Zustand vor dem Umbau beziehen.
 
 Fundament dieses Entwurfs:
 
 1. **Voll vereinheitlichen:** heutige Trennung Inbound-Wizard ↔ Gateway-Wizard auflösen → **eine feld-zentrische Zuordnungs-Fläche**, Quelle pro eedc-Feld wählbar.
 2. **Quellen-Priorität ist kontextabhängig** (nicht „immer beide erzwingen", nicht „hart sperren"):
-   - **HA-App (Supervisor-Token):** besteht eine HA-Sensor-Zuordnung (aus beliebiger HA-Integration), hat **HA Vorrang** bei der Zuordnung; MQTT deckt Felder **ohne** HA-Sensor. **Kein** Laufzeit-Fallback pro Feld (F2b, §2d).
+   - **HA-App (Supervisor-Token):** besteht eine HA-Sensor-Zuordnung (aus beliebiger HA-Integration), hat **HA Vorrang** bei der Zuordnung; MQTT deckt Felder **ohne** HA-Sensor. **Kein** Laufzeit-Fallback pro Feld (§2d).
    - **Standalone + Remote-HA (LL-Token):** HA-Sensor **gleichberechtigt** zur MQTT-Topic-Zuordnung (pro Feld wählbar).
    - **Standalone ohne HA:** nur MQTT.
    „Parallel" heißt dabei **Funktionsgleichheit**, gesteuert über Kontext und Verfügbarkeit — nicht „beide gleichzeitig".
@@ -64,13 +64,14 @@ Fundament dieses Entwurfs:
 
 ---
 
-## 1. Ausgangslage — ausgelagert
+## 1. Was die Fläche leistet
 
-Der Zustand **vor** dem Umbau (zwei getrennte MQTT-Mechanismen, HA rein Supervisor-gebunden,
-MQTT-Vorrang beim Merge) steht im archivierten Bau-Vertrag:
-[`archive/KONZEPT-DATENQUELLEN-V4-BAUVERTRAG.md`](archive/KONZEPT-DATENQUELLEN-V4-BAUVERTRAG.md).
-⚠ Er ist **Historie und heute in Teilen widerlegt** — er beschreibt, wogegen gebaut wurde, nicht
-was gilt. Was gilt, steht in §2 und §4.
+Zwei Verbindungen und eine Zuordnung: Unter *Einstellungen → Integration* stehen der
+**MQTT-Broker** und die **Home-Assistant-Verbindung** als eigene Blöcke — „Verbindung" getrennt
+von „was darüber fließt" (§2a). Darunter liegt **eine feld-zentrische Fläche** (§2b): Für jedes
+eedc-Feld wählt der Anwender **genau eine** Quelle — HA-Sensor, MQTT-Topic oder bewusst keine —
+und sieht den gelesenen Wert daneben. Fällt sie aus, entsteht eine sichtbare Lücke statt eines
+stillen Quellenwechsels (§2d).
 
 ---
 
@@ -83,7 +84,7 @@ was gilt. Was gilt, steht in §2 und §4.
 | **MQTT-Broker-Verbindung** | Host/Port/User/Passwort/enabled + „Verbindung testen" + Status. **Ein** Broker für Inbound, Gateway UND Export. | `FormBlock`; Config existiert (`mqtt_inbound`) — nur UI herauslösen |
 | **HA-Verbindung** | HA-App: lokaler Supervisor (automatisch). **Standalone: Basis-URL + Long-Lived-Token** + „Testen" (`GET {url}/api/`) + Status. | **NEU** — B4 |
 
-**Design-Prinzip (Punkt 2 — „Remote-HA kommt!"):** Fläche + Quell-Picker sind **von Anfang an Remote-HA-fähig** entworfen worden. HA-Sensor ist eine Quell-Option, deren *Verfügbarkeit* der HA-Verbindungs-Block liefert (Supervisor **oder** Remote-Token) — **kein** „HA nur wenn Supervisor"-Kurzschluss in P1/P2. P3 schaltet später nur die Remote-*Verbindung* frei, ohne die Fläche umzubauen.
+**Design-Prinzip „Remote-HA kommt!":** Fläche + Quell-Picker sind **von Anfang an Remote-HA-fähig** entworfen worden. HA-Sensor ist eine Quell-Option, deren *Verfügbarkeit* der HA-Verbindungs-Block liefert (Supervisor **oder** Remote-Token) — **kein** „HA nur wenn Supervisor"-Kurzschluss in P1/P2. P3 schaltet später nur die Remote-*Verbindung* frei, ohne die Fläche umzubauen.
 
 ### 2b. Eine feld-zentrische Zuordnungs-Fläche (analog MonatsdatenForm)
 
@@ -95,11 +96,11 @@ Pro eedc-Feld (Energie + ggf. Live) eine Zeile: neutrales Label, gelesener Wert 
 
 Gruppierung in einklappbaren `FormSection` (Anlage-Basis, dann je Investitionstyp/Gerät) mit Rollup-Badge.
 
-**Bändigung „unendlich vieler" Quellen (Punkt 7):** HA-Sensoren **und** MQTT-Topics werden gleich behandelt — **Relevanz-Filter** (HA: device_class/unit/state_class; MQTT: retained/energie-nahe Topics) + **Suche** + **#343-Vorschläge** pro Investitionstyp zum Eingrenzen. Der `#`-Scan zusätzlich zeit-/größenbegrenzt (B3). Symmetrie zu HA, kein Sonderweg.
+**Bändigung „unendlich vieler" Quellen:** HA-Sensoren **und** MQTT-Topics werden gleich behandelt — **Relevanz-Filter** (HA: device_class/unit/state_class; MQTT: retained/energie-nahe Topics) + **Suche** + **#343-Vorschläge** pro Investitionstyp zum Eingrenzen. Der `#`-Scan zusätzlich zeit-/größenbegrenzt (B3). Symmetrie zu HA, kein Sonderweg.
 
-**Kein Mehr-Quellen-auf-ein-Feld (Punkt 8, verifiziert):** Das Gateway re-published pro Mapping nach `eedc/{anlage}/{ziel_key}` und **überschreibt** (last-write-wins, `mqtt_gateway_service.py:231`) — es summiert nicht. Mehrere Geräte auf ein eedc-Feld gibt es also nicht; das ist über mehrere Investitionen zu modellieren. „Eine Quelle pro Feld" kollidiert mit nichts Bestehendem.
+**Kein Mehr-Quellen-auf-ein-Feld:** Das Gateway re-published pro Mapping nach `eedc/{anlage}/{ziel_key}` und **überschreibt** (last-write-wins, `mqtt_gateway_service.py:231`) — es summiert nicht. Mehrere Geräte auf ein eedc-Feld gibt es also nicht; das ist über mehrere Investitionen zu modellieren. „Eine Quelle pro Feld" kollidiert mit nichts Bestehendem.
 
-### 2b1. Seitengestaltung der Zuordnungs-Fläche (Detail — ✅ Gernot-Weichen 2026-07-14)
+### 2b1. Seitengestaltung der Zuordnungs-Fläche
 
 > Verfeinert §2b nach Gernot-Kritik „kein Neubau, sondern die Komponenten-Struktur spiegeln". Die heutige `DatenquellenZuordnung` (FormSection Typ▸Gerät▸Feld + Select-Dropdown) wird durch die **gespiegelte Komponenten-Struktur + Quellen-Button-Tabelle** ersetzt. Bau erst nach dieser Detail-Abnahme.
 
@@ -175,9 +176,9 @@ Der Kern-Unterschied zwischen den Quellen — **drei Achsen**, nicht nur „lief
 
 Kernaussage (Gernot): HA (beide) kann heutige Stunden **rückwirkend** liefern, MQTT nicht. Für den *Live-Wert* ist Remote-HA ≈ MQTT; auf der *Recovery-Achse* ist HA (beide) reicher als MQTT. Grenze: rückwirkend nur so weit, wie der Sensor Werte führt.
 
-**Klarstellung (Punkt 4):** Die letzte Zeile ist **Granularität/Ableitung innerhalb der *einen* zugeordneten Quelle** — die Stunden-*Form* aus dem Live-Leistungssensor holen, während *Menge/Summe* beim Energie-Zähler bleibt (LTS-treu, v3.45.5). Das ist **kein** Wechsel der Werte-Quelle und **kein** Widerspruch zur „eine Quelle pro Feld"-Regel (§2d). Riemann ist derselbe Fall (W→kWh innerhalb der Quelle), nicht ein Cross-Source-Fallback.
+**Klarstellung:** Die letzte Zeile ist **Granularität/Ableitung innerhalb der *einen* zugeordneten Quelle** — die Stunden-*Form* aus dem Live-Leistungssensor holen, während *Menge/Summe* beim Energie-Zähler bleibt (LTS-treu, v3.45.5). Das ist **kein** Wechsel der Werte-Quelle und **kein** Widerspruch zur „eine Quelle pro Feld"-Regel (§2d). Riemann ist derselbe Fall (W→kWh innerhalb der Quelle), nicht ein Cross-Source-Fallback.
 
-### 2d. Genau **eine** aktive Quelle pro Feld (F5) — mit Präferenz-Reihenfolge
+### 2d. Genau **eine** aktive Quelle pro Feld — mit Präferenz-Reihenfolge
 
 Grundregel (Gernot): **pro eedc-Feld genau eine Quelle**, kein Laufzeit-Merge mehrerer Quellen. Präferenz-/Default-Reihenfolge:
 
@@ -195,23 +196,23 @@ Kontext-Einfluss auf Verfügbarkeit/Default:
 
 ⚠️ **Engine-Umbau:** heute Merge mit MQTT-Vorrang (`basis_values.update(mqtt_basis)`, `live_power_service.py`) → ersetzen durch **direkte Auflösung auf die eine zugeordnete Quelle** je Feld.
 
-**F2b entschieden (Gernot):** **strikt eine Quelle, kein Laufzeit-Fallback.** Fällt die zugeordnete Quelle aus → Feld-Lücke, die die untertägige Recovery (§2c) später schließt (bei HA-Quelle); keine Prioritätskette, kein „Notstopfen". Die Präferenz-Reihenfolge oben gilt nur für **Default/Vorschlag** bei der Zuordnung, nicht als Laufzeit-Kette.
+**Strikt eine Quelle, kein Laufzeit-Fallback** (Entscheid Gernot). Fällt die zugeordnete Quelle aus → Feld-Lücke, die die untertägige Recovery (§2c) später schließt (bei HA-Quelle); keine Prioritätskette, kein „Notstopfen". Die Präferenz-Reihenfolge oben gilt nur für **Default/Vorschlag** bei der Zuordnung, nicht als Laufzeit-Kette.
 
-**Kein stiller Quellen-Wechsel + Ausfall sichtbar (Punkt 3):** Wählt der Nutzer HA (oder MQTT-Gateway), **bleibt** es dabei — bei Ausfall wird **nicht** stillschweigend auf MQTT umgeschaltet. Der **Ausfall der zugeordneten Quelle wird sichtbar dokumentiert** (Badge „Quelle liefert nicht" + Daten-Checker-Eintrag), nicht verschluckt.
+**Kein stiller Quellen-Wechsel + Ausfall sichtbar:** Wählt der Nutzer HA (oder MQTT-Gateway), **bleibt** es dabei — bei Ausfall wird **nicht** stillschweigend auf MQTT umgeschaltet. Der **Ausfall der zugeordneten Quelle wird sichtbar dokumentiert** (Badge „Quelle liefert nicht" + Daten-Checker-Eintrag), nicht verschluckt.
 
-**„Keine Zuordnung" ist eine gültige Wahl (Punkt 5):** Ein Feld darf bewusst *ohne* Sensor-/Topic-Quelle bleiben (`strategie: 'keine'`). Folge im **Monatsabschluss**: **keine Sensorwerte angeboten** → Feld wird **manuell** erfasst bzw. über die bestehenden Vorschläge **Durchschnitt / Vorjahresmonat** (`FeldStatus.vorschlaege`, MonatsdatenForm-Mechanik §1e) gefüllt. Das ist der heutige `strategie: 'keine'`-Pfad, in der Fläche jetzt explizit wählbar.
+**„Keine Zuordnung" ist eine gültige Wahl:** Ein Feld darf bewusst *ohne* Sensor-/Topic-Quelle bleiben (`strategie: 'keine'`). Folge im **Monatsabschluss**: **keine Sensorwerte angeboten** → Feld wird **manuell** erfasst bzw. über die bestehenden Vorschläge **Durchschnitt / Vorjahresmonat** (`FeldStatus.vorschlaege`, MonatsdatenForm-Mechanik §1e) gefüllt. Das ist der heutige `strategie: 'keine'`-Pfad, in der Fläche jetzt explizit wählbar.
 
 ### 2e. Abgrenzung: laufende Werte vs. historischer Backfill
 
 Dieses Konzept regelt **laufende/aktuelle Werte** (Live + aktueller Monat) **und untertägige Recovery** (heutiger Tag). **Echter historischer Backfill** (vergangene Tage/Monate) bleibt die **bestehende** Reparatur-Werkbank / HA-Statistik-Import — nicht Teil der Feld-Quellen-Zuordnung. Damit fällt die HA-LTS-/WebSocket-Frage aus dem Scope (relevant nur dort, remote via `ha_recorder_db_url`).
 
-### 2f. Zuordnungs-Assistenz #343 in die Fläche integrieren (F6)
+### 2f. Zuordnungs-Assistenz (#343) in der Fläche
 
 Die Sensor-Zuordnungs-Assistenz aus der Zuordnungs-Assistenz (#343) wird **Teil dieser Fläche**, nicht getrennt:
 - **Integration-Dropdown pro Investitionstyp** (kuratierte Wissensbasis Integration × Typ × Feld → Entity-Muster + Hinweis) als **Vorschlag** beim HA-Sensor-Picker — installierte Integrationen nur „gefunden" markieren, Auswahl trifft immer der Nutzer, Eintrag „Manuell" bleibt.
 - **Takt-Check bei kWh-Zähler-Auswahl** (`statistics_short_term`, Treppenstufen-Muster) als Warnung im Assistenz-Zonen-Stil (analog Einheiten-Warnung).
 
-Beides greift genau beim Quell-Picker (§2b, Punkt 1) — deshalb hier integriert statt separat. Timing #343 („nach IA-V4-Rollout") wird damit an dieses Konzept gekoppelt.
+Beides greift genau beim Quell-Picker (§2b) — deshalb hier integriert statt separat. Timing #343 („nach IA-V4-Rollout") wird damit an dieses Konzept gekoppelt.
 
 ### 2g. Neustrukturierung der Blöcke unter Einstellungen → Integration
 
@@ -228,14 +229,14 @@ Die Vereinheitlichung ändert das Block-Layout der Kategorie **Integration** (`e
 
 Vorgeschlagene Blockreihenfolge: **Verbindungen zuerst** (MQTT-Broker · HA-Verbindung) → **Datenquellen-Zuordnung** → **Export** → **Import / Statistik-Import**. Pro neuem Block Deep-Link-Öffner (`oeffneBeimMount`) + `useEinstellungenStatus`-Ampel nachziehen; V3→V4-Routen (`v3ZuV4Route.ts`) für die entfallenden `sensor-mapping`/`mqtt-inbound`-Einstiege auf die neue Fläche umbiegen.
 
-### 2h. Migration bestehender Zuordnungen (B8, Punkt 1)
+### 2h. Migration bestehender Zuordnungen
 
 Bestehende Boxen haben `sensor_mapping` (HA), `mqtt_gateway_mappings`, `mqtt_inbound`. Überführung in „eine Quelle pro Feld" nach **HA-first** (Gernots gelebte Empfehlung; Doppelzuordnungen sind absolute Ausnahme):
 - Besteht für ein Feld eine **HA-Sensor-Zuordnung** → **HA** wird die Quelle; ein etwaiges paralleles MQTT-Mapping wird **deaktiviert (nicht gelöscht)** — verlustfrei rückholbar.
 - Feld ohne HA-Sensor: bestehendes **Gateway-Mapping** → Quelle „MQTT-Gateway"; sonst „MQTT-Inbound", falls Standard-Topic bespielt wird; sonst „keine".
 - Migration **additiv + einmalig**, **kein** blockierender Start-Job / HTTP; Korrektheit per Transform-Test, nicht per Dauer-Wächter (§7).
 
-### 2i. Zuordnungs-Validierung (Slice C+D — ✅ Gernot-Weichen 2026-07-16)
+### 2i. Zuordnungs-Validierung
 
 > **REFRAME (Gernot-Frage „weitere Daten-Checker-Probleme aus falscher Zuordnung?"):** Der Daten-Checker prüft **config-basierte Zuordnungsfehler bereits** — u. a. `SENSOR_MAPPING_EINHEIT` (= D!), `SENSOR_MAPPING_LTS`, `EmobChecks`-Doppelmapping (#314). Daher **wiederverwenden statt neu bauen** (`feedback_bestehende_mechanik_nutzen_nicht_erfinden`, kein Drift): die **config-basierten** (zur Zuordnungszeit erkennbaren) Checks proaktiv **feld-bezogen** in der Fläche zeigen; **daten-basierte** (retrospektiv: `PV_UEBER_ERFASSUNG`-Plausibilität, `DATENQUELLE_DRIFT/STATUS`, `PROVENANCE_CONFLICT`, `BATTERIE_VORZEICHEN_HISTORIE`) bleiben im Daten-Checker.
 
@@ -306,45 +307,11 @@ Sechs Punkte standen im Bau-Vertrag, alle sind eingelöst (gemessen 2026-08-28):
 
 ---
 
-## 4. Entscheidungen (alle offenen Punkte geklärt)
-
-Alle hier aufgeführten Punkte sind entschieden **und gebaut**; sie stehen als Begründung, nicht als Vorhaben.
-
-- ~~F2b (Fallback)~~ → **strikt eine Quelle, kein Laufzeit-Fallback** (§2d); Ausfall → Lücke, Recovery schließt sie.
-- ~~F1/F3 (Scope + Timing)~~ → **kein Flip-Gating, Bau jetzt**; Paket-Schnitt §5 (Gernot delegiert Schnitt an Claude). Guest-Rebuild erst „wenn alles rund".
-- ~~F4 (Discovery)~~ → **eigener `#`-Scan**, Presets ergänzend.
-- ~~F5 (Exklusivität)~~ → **genau eine Quelle pro Feld** (§2d), Präferenz HA-Sensor > MQTT-Gateway > MQTT-Inbound > manuell.
-- ~~F6 (#343)~~ → **integrieren** (§2f), B6.
-- ~~Blöcke Einstellungen→Integration~~ → **neu strukturiert** (§2g), B7.
-- ~~F2 (Priorität)~~ → §2d. ~~Name~~ → „Datenquellen". ~~WS/LTS remote~~ → aus Scope (§2e).
-
-**Kritik-Runde (v0.4):**
-- ~~Migration fehlt~~ → **B8 HA-first** (§2h).
-- ~~Remote-HA berücksichtigen~~ → **Fläche ab P1 Remote-HA-fähig** (§2a), P3 nur Verbindung.
-- ~~Stiller Wechsel~~ → **kein stiller Wechsel; Ausfall sichtbar** (§2d).
-- ~~Riemann-Widerspruch~~ → **Ableitung ≠ Fallback** geklärt (§2c).
-- ~~„keine Zuordnung"~~ → **gültige Wahl** → Monatsabschluss manuell/Vorjahr/Durchschnitt (§2d/§2b).
-- ~~Wächter unklar~~ → **benannt** (§7): Auflösungs-Grep + Resolver-Unit-Test.
-- ~~Discovery-Firehose~~ → **Filter+Suche+#343 wie HA-Sensoren** (§2b).
-- ~~Gateway summiert?~~ → **nein, last-write-wins** verifiziert (§2b).
-
----
-
-## 5. Bau-Reihenfolge — abgeschlossen
-
-Gefahren wurde in drei Paketen: **P1** MQTT-Fundament (Broker-Block, Feld-Fläche, `#`-Discovery),
-**P2** HA in die Fläche, **P3** Remote-HA per Long-Lived-Token samt Gate-Entkopplung. Begründung
-der Reihenfolge und der ursprüngliche Zuschnitt stehen im
-[archivierten Bau-Vertrag](archive/KONZEPT-DATENQUELLEN-V4-BAUVERTRAG.md); wann was
-ausgeliefert wurde, steht oben unter *Was wann geliefert wurde*.
-
----
-
-## 6. Bezug zu den übrigen Regeln
+## 4. Bezug zu den übrigen Regeln
 
 - **HA und MQTT sind funktionsgleich, nicht gleichzeitig** — welche Quelle ein Feld liefert,
   entscheidet §2d nach Kontext und Verfügbarkeit; einen stillen Laufzeit-Fallback gibt es
-  bewusst nicht (F2b). Fällt die Quelle aus, entsteht eine sichtbare Feld-Lücke.
+  bewusst nicht. Fällt die Quelle aus, entsteht eine sichtbare Feld-Lücke.
 - **Rückwirkend nur so weit wie die Sensor-Historie reicht** — Home Assistant ist keine
   Zeitmaschine: Was vor der Zuordnung nicht aufgezeichnet wurde, lässt sich nicht nachträglich
   erzeugen. Der Langzeitstatistik-Backfill ist ein eigener Pfad (§2e) und rechnet je Tag
@@ -363,7 +330,7 @@ hat (ADR, Style-Guide), verweist die Zeile dorthin.
 
 ---
 
-## 7. Wächter — was heute wirklich prüft
+## 5. Wächter — was heute wirklich prüft
 
 Gemessen am 2026-08-28, nicht aus dem Bauplan übernommen:
 
