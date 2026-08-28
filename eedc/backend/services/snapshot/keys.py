@@ -117,12 +117,56 @@ _MQTT_BASIS_KEYS: dict[str, str] = {
 _BASIS_SENSOR_KEYS: dict[str, str] = {v: k for k, v in _MQTT_BASIS_KEYS.items()}
 
 
+#: Felder, deren MQTT-Wert ein kumulativer **Stand ohne kWh-Semantik** ist —
+#: der Monatswert ist seine Differenz (Discussion #396, gruaGit, 28.08.2026).
+#:
+#: **Warum es diese dritte Liste gibt und sie nicht in die beiden darüber
+#: gehört.** `ist_zaehler_differenz_feld` (`core/field_definitions.py`) führt
+#: `km_gefahren` und `ladevorgaenge` längst als Zählerdifferenz-Felder, und der
+#: Feld-Hinweis wirbt wörtlich mit dem „kumulativen km-Zähler
+#: (Auto-Integration/OBD)". Eingelöst wurde das aber nur über HA: Dort rechnet
+#: die Statistik `MAX − MIN` direkt aus der Recorder-DB, ganz ohne Reihe. Ein
+#: MQTT-Anwender hat keine Recorder-DB — bei ihm entsteht die Menge nur, wenn
+#: eedc die Stände selbst mitschreibt. gruaGit fährt Standalone und bekam
+#: deshalb gar keinen Vorschlag, während derselbe Hinweis ihm den Weg versprach.
+#:
+#: ⛔ **NICHT über `KUMULATIVE_COUNTER_FELDER`, und das ist der Kern.** Diese
+#: Liste steuert auch den HA-Pfad, `aggregate_day` und einen Zweig des
+#: Daten-Checkers. Sie behandelt ihre Felder als Summen-Counter — ein
+#: Tachostand ist aber eine **Bestandsgröße** und wird aus `state` gelesen, nie
+#: aus `sum` (F-58). Sie dort einzutragen hieße, die Stand-vs-Summe-Frage für
+#: HA-Sensoren mitzuentscheiden, für die heute niemand ein Problem gemeldet
+#: hat. Diese Liste wirkt ausschließlich am MQTT-Eingang: Der Schreibpfad hängt
+#: allein an `_mqtt_key_to_sensor_key` (`snapshot/writer.py`, `fallback.py`),
+#: und die Aggregatoren fragen nur nach Feldern aus den beiden Listen darüber —
+#: für sie bleibt ein Eintrag hier wirkungslos.
+#:
+#: ⚠ **Was NICHT hineingehört: Preisfelder.** Ein Preis ist kein Zähler; seine
+#: Differenz wäre die Monats-Spreizung, nicht eine Menge. Genau dieser Fehler
+#: schrieb einmal die Preis-Spanne als Ø Ladepreis in die Datenbank
+#: (Forum simon42 #89667/54).
+#:
+#: Die Vollständigkeit gegen `ist_zaehler_differenz_feld` hält
+#: `test_396_mqtt_stand_zaehler_reihe.py` fest — sie ist eine **Behauptung
+#: über zwei Listen** und darf nicht auf Erinnerung laufen.
+MQTT_STAND_ZAEHLER_FELDER: frozenset[str] = frozenset({
+    "km_gefahren",     # Tachostand (Auto-Integration/OBD) → gefahrene km
+    "ladevorgaenge",   # Anzahl-Zähler der Wallbox → Ladevorgänge im Monat
+})
+
+
 def _mqtt_key_to_sensor_key(mqtt_key: str) -> Optional[str]:
     """
     Konvertiert MQTT-Energy-Topic-Key ins SensorSnapshot.sensor_key-Schema.
 
-    Gibt None zurück für Keys die keine kumulative kWh-Energie sind
-    (ladevorgaenge, km_gefahren, speicher_ladepreis_cent etc.).
+    Gibt None zurück für Keys ohne kumulative Zählerreihe — Preisfelder,
+    Temperaturen, SoC. Für die gibt es nichts zu differenzieren und deshalb
+    auch nichts zu behaupten.
+
+    ⚠ **Drei Quellen, eine Antwort:** kumulative kWh-Zähler, reine Counter
+    (Starts, Betriebsstunden, Zählerstand) und seit dem 28.08.2026 die
+    Stand-Zähler ohne kWh-Semantik (`MQTT_STAND_ZAEHLER_FELDER` — km,
+    Ladevorgänge). Die Begründung für die dritte Liste steht an ihr.
     """
     if mqtt_key in _MQTT_BASIS_KEYS:
         return _MQTT_BASIS_KEYS[mqtt_key]
@@ -130,10 +174,10 @@ def _mqtt_key_to_sensor_key(mqtt_key: str) -> Optional[str]:
         parts = mqtt_key.split("/", 2)
         if len(parts) == 3:
             _, inv_id, feld = parts
-            # Kumulative Energie-Felder + reine Counter (keine km_gefahren, Preise, etc.)
             alle_felder = (
                 {f for felder in KUMULATIVE_ZAEHLER_FELDER.values() for f in felder}
                 | {f for felder in KUMULATIVE_COUNTER_FELDER.values() for f in felder}
+                | MQTT_STAND_ZAEHLER_FELDER
             )
             if basis_feld_key(feld) in alle_felder:
                 return f"inv:{inv_id}:{feld}"

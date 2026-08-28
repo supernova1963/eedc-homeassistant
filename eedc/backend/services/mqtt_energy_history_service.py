@@ -358,12 +358,21 @@ def _compute_deltas(
 # beiden Fälle, in denen es keine Antwort gibt (fehlender Stand, Zählerreset).
 #
 # ⚠ **Was hier bewusst NICHT herauskommt:** Keys ohne kumulative Zählerreihe —
-# `km_gefahren`, `ladevorgaenge`, Preisfelder. `_mqtt_key_to_sensor_key` gibt
-# für sie `None`, es existiert kein Snapshot und damit keine Differenz. Sie
-# fallen heraus statt roh durchgereicht zu werden: Genau ein solcher Rohwert
-# war gruaGits Tachostand (13272 km gegen 1001 km im Monat). **Ein Feld ohne
-# Vorschlag ist ehrlich; ein Feld mit einem Stand darin ist ein Datenverlust,
-# der wie eine Messung aussieht.**
+# Preisfelder, Temperaturen, SoC. `_mqtt_key_to_sensor_key` gibt für sie `None`,
+# es existiert kein Snapshot und damit keine Differenz. Sie fallen heraus statt
+# roh durchgereicht zu werden: Genau ein solcher Rohwert war gruaGits Tachostand
+# (13272 km gegen 1001 km im Monat). **Ein Feld ohne Vorschlag ist ehrlich; ein
+# Feld mit einem Stand darin ist ein Datenverlust, der wie eine Messung
+# aussieht.**
+#
+# ⭐ **`km_gefahren` und `ladevorgaenge` standen bis zum 28.08.2026 in dieser
+# Aufzählung — sie sind seither KEINE Ausnahme mehr, sondern haben ihre Reihe**
+# (`MQTT_STAND_ZAEHLER_FELDER` in `snapshot/keys.py`). Der Satz darüber bleibt
+# richtig und war nie das Argument gegen sie: Verboten ist das **rohe
+# Durchreichen** eines Standes, nicht die Reihe. Derselbe Melder hat in #396
+# nachgefragt, warum eedc den km-Zähler nicht mitschreibt, obwohl der
+# Feld-Hinweis ihn als Quelle anbietet — und er hatte recht. Seither ist der
+# Vorschlag die **Differenz** (1001 km), nie der Stand (13272 km).
 
 
 async def mqtt_monats_deltas(
@@ -418,8 +427,8 @@ async def mqtt_monats_deltas(
     for mqtt_key in energy_keys:
         sensor_key = _mqtt_key_to_sensor_key(mqtt_key)
         if not sensor_key:
-            # Kein kumulativer Zähler (km, Ladevorgänge, Preise) — hier gibt es
-            # nichts zu differenzieren und deshalb auch nichts zu behaupten.
+            # Kein kumulativer Zähler (Preise, Temperaturen, SoC) — hier gibt
+            # es nichts zu differenzieren und deshalb auch nichts zu behaupten.
             continue
         try:
             menge = await snapshot_delta(

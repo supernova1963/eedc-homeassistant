@@ -52,6 +52,14 @@ eedc/{anlage_id}_{name}/
 > („weicht ab": 6675,3 gegen 552,75 kWh) und in *Cockpit → Monat* sogar angezeigt. Seit
 > 4.0.30 rechnet eedc die Differenz ueber den Monat. **Du musst nichts umstellen** — der
 > Zaehlerstand war und ist das Richtige.
+>
+> ⭐ **`km_gefahren` und `ladevorgaenge` folgen derselben Regel — seit sie eine eigene
+> Zaehlerreihe haben.** Sie tragen keine kWh, und deshalb schrieb eedc fuer sie lange
+> gar keine Reihe mit: Ein HA-Anwender bekam seine Monatswerte trotzdem, weil die
+> HA-Statistik die Differenz direkt rechnet, ein Standalone-Anwender bekam **nichts** und
+> trug von Hand ein — obwohl derselbe Feld-Hinweis ihm den „kumulativen km-Zaehler
+> (Auto-Integration/OBD)" als Quelle anbot (Discussion #396). Jetzt schreibt eedc auch
+> diese beiden Staende mit. **Schick den Tachostand, nicht die gefahrenen Kilometer.**
 
 Die Felder unter `energy/inv/{id}_{name}/` entsprechen den Monatsdaten-Feldern der jeweiligen Investition. EEDC erkennt alle Felder automatisch — es muss kein Mapping konfiguriert werden.
 
@@ -63,10 +71,10 @@ Die Felder unter `energy/inv/{id}_{name}/` entsprechen den Monatsdaten-Feldern d
 | **Waermepumpe** | `stromverbrauch_kwh` | kWh | Stromverbrauch |
 | **Waermepumpe** | `heizenergie_kwh` | kWh | Erzeugte Heizenergie |
 | **Waermepumpe** | `warmwasser_kwh` | kWh | Warmwasser-Erzeugung |
-| **E-Auto** | `km_gefahren` | km | Gefahrene Kilometer (Odometer-Differenz) |
+| **E-Auto** | `km_gefahren` | km | **Tachostand** (Odometer) — eedc bildet die gefahrenen Kilometer daraus |
 | **E-Auto** | `v2h_entladung_kwh` | kWh | Vehicle-to-Home Entladung |
 | **Wallbox** | `ladung_kwh` | kWh | Ladung gesamt |
-| **Wallbox** | `ladevorgaenge` | Anzahl | Anzahl Ladevorgaenge |
+| **Wallbox** | `ladevorgaenge` | Anzahl | **Fortlaufender Zaehler** der Ladevorgaenge — eedc bildet die Anzahl im Monat daraus |
 | **BKW** | `pv_erzeugung_kwh` | kWh | BKW-Erzeugung |
 | **BKW** | `eigenverbrauch_kwh` | kWh | Eigenverbrauch |
 | **BKW** | `speicher_ladung_kwh` | kWh | BKW-Speicher Ladung |
