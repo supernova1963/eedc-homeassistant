@@ -33,16 +33,39 @@ export default function DateiLightbox({
   const hasPrev = currentIndex > 0
   const hasNext = currentIndex < dateien.length - 1
 
+  // Style-Guide B16, ESC-Nachrang (2026-08-28): Wer eine Taste VERBRAUCHT, meldet
+  // das mit `preventDefault()` — ein darunter liegendes Overlay (`FokusVollbild`)
+  // entscheidet einen Makrotask später und lässt eine gemeldete Taste liegen.
+  //
+  // ⚑ Die Regel entstand an Modal/DatumPicker; die Lightbox war der vierte
+  // ESC-Verbraucher und meldete als einzige nichts. Heute trifft das niemanden —
+  // sie lebt allein in `pages/InfothekTeile.tsx`, wo es weder `BlockShell` noch
+  // `FokusKachel` gibt, und mit dem Formular-Modal derselben Seite kann sie nicht
+  // gleichzeitig offen sein (beide sind bildschirmfüllend). Trotzdem angeglichen,
+  // statt es an „beim nächsten Anfassen der Infothek" zu hängen (Gernot, 28.08.):
+  // ein Trigger, der ein Ereignis braucht, das niemand plant, feuert nie —
+  // rapahls Wünsche sind umgesetzt, die Fläche kann Jahre unberührt bleiben.
+  //
+  // ⚠ Gilt für ALLE drei Tasten, nicht nur ESC: die Pfeile sind dieselbe Klasse.
+  // Gemeldet wird nur, was auch WIRKT — am ersten Bild verbraucht ArrowLeft nichts
+  // und darf die Taste nicht für andere sperren.
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     switch (e.key) {
       case 'Escape':
+        e.preventDefault()
         onClose()
         break
       case 'ArrowLeft':
-        if (hasPrev) onNavigate(currentIndex - 1)
+        if (hasPrev) {
+          e.preventDefault()
+          onNavigate(currentIndex - 1)
+        }
         break
       case 'ArrowRight':
-        if (hasNext) onNavigate(currentIndex + 1)
+        if (hasNext) {
+          e.preventDefault()
+          onNavigate(currentIndex + 1)
+        }
         break
     }
   }, [onClose, onNavigate, currentIndex, hasPrev, hasNext])
