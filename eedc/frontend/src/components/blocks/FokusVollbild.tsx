@@ -5,7 +5,7 @@
  * {@link BlockShell} (⤢ je Block) UND der {@link FokusKachel} (⤢ je Karte ohne
  * Block-Stack). Ein Verhalten + ein Look app-weit — keine zweite Kopie.
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Minimize2 } from 'lucide-react'
@@ -28,6 +28,33 @@ export function FokusVollbild({ titel, icon: Icon, farbe, onClose, kopf, tabelle
 }) {
   // Flüchtig wie der Fokus selbst: jedes Öffnen startet beim Chart.
   const [ansicht, setAnsicht] = useState<'chart' | 'tabelle'>('chart')
+
+  // Schließen-Konvention (Style-Guide B16, Gernot 2026-07-17): ESC schließt. Einen
+  // Backdrop-Klick gibt es hier bewusst NICHT — das Overlay ist deckend, es gibt kein
+  // Daneben. Der Zuhörer hängt am Mount, nicht an einem `isOpen`: die Komponente ist
+  // entweder gerendert oder gar nicht da (Muster wie `infothek/DateiLightbox`).
+  //
+  // ⚠ Warum aufgeschoben und nicht sofort geschlossen wird: Zuhörer auf `document`
+  // laufen in Registrierungs-Reihenfolge. Das Vollbild steht zuerst, ein SPÄTER
+  // geöffnetes Overlay darin (der `DatumPicker` im `kopf`-Slot von Cockpit/Tag und
+  // /Monat, ein `ui/Modal`) läuft also NACH uns. Würden wir sofort schließen, nähme
+  // ESC dem Nutzer beides auf einmal: Picker UND Vollbild. Wer die Taste verbraucht,
+  // ruft `preventDefault()`; wir entscheiden erst, wenn alle Zuhörer dran waren.
+  //
+  // ⛔ `setTimeout`, NICHT `queueMicrotask` — am 2026-08-28 an der Box gemessen: Chrome
+  // fährt nach JEDEM Zuhörer einen Microtask-Checkpoint, ein Microtask läuft dort also
+  // VOR dem nächsten Zuhörer und sieht dessen `preventDefault` nicht. jsdom tut das
+  // nicht: die Vitest-Probe war grün, während die Anwendung Picker und Vollbild
+  // gemeinsam schloss. Ein Makrotask läuft in beiden erst nach der ganzen Zustellung.
+  useEffect(() => {
+    const beiTaste = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      setTimeout(() => { if (!e.defaultPrevented) onClose() }, 0)
+    }
+    document.addEventListener('keydown', beiTaste)
+    return () => document.removeEventListener('keydown', beiTaste)
+  }, [onClose])
+
   // D10-1 (detLAN R10): Portal an `document.body`. Ein Ancestor der Block-Zone
   // erzeugt einen Containing-Block (transform/filter/backdrop-blur/contain) → ein
   // `fixed inset-0` klemmt sonst relativ dazu statt zum Viewport (Sliver oben).

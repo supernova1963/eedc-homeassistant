@@ -39,3 +39,19 @@ describe('DatumPicker — Tages-Modus', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 })
+
+describe('DatumPicker — ESC (Nachrang-Konvention)', () => {
+  it('ESC schließt nur das Popover und meldet die Taste als verbraucht', () => {
+    render(<DatumPicker modus="monat" value="2026-06" onChange={vi.fn()} ariaLabel="Monat" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Monat' }))
+    expect(screen.getByRole('button', { name: 'Aug' })).toBeInTheDocument()
+
+    // `fireEvent` liefert false, wenn ein Zuhörer preventDefault gerufen hat.
+    const verbraucht = !fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByRole('button', { name: 'Aug' })).not.toBeInTheDocument()
+    // Ohne diese Meldung nähme ESC in Cockpit/Tag und /Monat zusätzlich das
+    // umgebende `blocks/FokusVollbild` mit.
+    expect(verbraucht).toBe(true)
+  })
+})

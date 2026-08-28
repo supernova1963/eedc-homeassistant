@@ -109,7 +109,13 @@ export function DatumPicker({ modus, value, onChange, min, max, ariaLabel, class
       if (wrapRef.current?.contains(t) || popRef.current?.contains(t)) return
       setOffen(false)
     }
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOffen(false) }
+    // ESC schließt nur das Popover. `preventDefault` meldet das einem darunter
+    // liegenden Overlay (`blocks/FokusVollbild`), damit nicht beides zugeht.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      setOffen(false)
+    }
     const onMove = () => platziere()
     document.addEventListener('mousedown', onDoc)
     document.addEventListener('keydown', onKey)
