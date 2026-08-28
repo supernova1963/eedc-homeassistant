@@ -355,11 +355,32 @@ _ZUSTAND_ZU_KANON: Final[dict[str, str]] = {
 }
 
 # `HVACAction` (HA-Core) — nur wo die Integration sie überhaupt liefert.
-# Sie beschreibt den **Ist**-Betrieb und schlägt deshalb den eingestellten
-# Modus, wenn beide da sind. `idle` ist ausdrücklich KEIN `aus`: das Gerät ist
-# an und wartet (Standby-Verbrauch, D6 — 10 W, weil das Außengerät drei
-# Innengeräte samt WLAN versorgt). Es einer Heiz- oder Kühlseite zuzuschlagen
-# wäre falsch, „aus" zu nennen ebenfalls ⇒ `unbestimmt`.
+# Sie beschreibt den **Ist**-Betrieb und **verfeinert** damit den eingestellten
+# Modus (D2). Jeder Wert hier nennt eine **Richtung**: Wo eine steht, schlägt
+# sie den eingestellten Modus, denn sie sagt, was das Gerät wirklich tut.
+#
+# ⛔ **`idle` steht bewusst NICHT in dieser Tabelle — bis zum 28.08.2026 stand
+# es hier auf `UNBESTIMMT`, und das war der Fehler aus Issue #399.** `idle`
+# nennt keine Richtung; es sagt *„gerade läuft der Verdichter nicht"*. Damit
+# **verfeinerte** es nichts, es **verwarf** — und zwar den einzigen Wert, der
+# die Richtung kannte.
+#
+# ⭐ **Der Melder hat es fotografiert** (Klausnn, #399/#263, Panasonic
+# Multisplit): *Zustand Roh* = `cool`, *Aktuelle Aktion* = `Leerlauf` — und
+# Home Assistant selbst beschriftet die Kachel mit **„Leerlauf (Kühlbetrieb)"**.
+# HA behält den Modus, wenn das Gerät taktet; eedc warf ihn weg. Bei einem
+# taktenden Gerät ist das nicht eine Stunde, sondern der **Großteil** — der
+# Strom fiel in „nicht aufgeteilt".
+#
+# ⚠ **Der Konzepttext stand die ganze Zeit auf der Seite des Melders:**
+# *„`hvac_action` wird nicht verlangt (D2); wo es vorhanden ist, **verfeinert**
+# es"* (`KONZEPT-263-klima-split.md`). Der Code machte daraus ein Überschreiben.
+# Dieser Fix stellt die Regel her, er ändert sie nicht.
+#
+# ⛔ **`off` bleibt drin, `idle` nicht — der Unterschied ist keine Feinheit:**
+# `off` ist eine vollständige Aussage über das Gerät („es läuft nicht"), `idle`
+# eine über den Augenblick („es läuft gerade nicht"). D6 bleibt gedeckt, weil
+# die Rückfallebene ihrerseits `unbestimmt` liefert, wo kein Modus dasteht.
 _AKTION_ZU_KANON: Final[dict[str, str]] = {
     "heating": HEIZEN,
     "preheating": HEIZEN,
@@ -368,8 +389,16 @@ _AKTION_ZU_KANON: Final[dict[str, str]] = {
     "drying": ENTFEUCHTEN,
     "fan": LUEFTEN,
     "off": AUS,
-    "idle": UNBESTIMMT,
 }
+
+#: Ist-Betriebsarten, die **keine Richtung** nennen und deshalb auf den
+#: eingestellten Modus zurückfallen, statt ihn zu verwerfen (#399).
+#:
+#: ⚠ **Eine eigene Menge und kein `if aktion == "idle"`.** HA-Integrationen
+#: melden denselben Zustand unter mehreren Namen; wer hier einen zweiten Fall
+#: findet, trägt ihn ein, statt eine zweite Bedingung danebenzustellen — das
+#: ist dieselbe Bauform wie `_KEIN_ZUSTAND` darunter.
+_AKTION_OHNE_RICHTUNG: Final[frozenset[str]] = frozenset({"idle"})
 
 # States, die HA für „gerade nichts zu sagen" benutzt. Sie sind **kein**
 # Betriebsmodus und dürfen nicht zu `unbestimmt` werden: `unbestimmt` heißt
@@ -388,10 +417,13 @@ def normalisiere_betriebsmodus(
     Args:
         zustand: der State der `climate`-Entität (bzw. eines Template-Sensors),
             z. B. ``"heat"``. Groß-/Kleinschreibung und Randleerzeichen sind egal.
-        hvac_action: optional der Ist-Betrieb (Attribut ``hvac_action``). Wo
-            vorhanden, **schlägt er** den eingestellten Modus — aber er wird nie
-            verlangt (D2). Ein `hvac_action`, das eedc nicht kennt, wird
-            ignoriert statt den vorhandenen Modus zu verwerfen.
+        hvac_action: optional der Ist-Betrieb (Attribut ``hvac_action``). Er
+            wird nie verlangt (D2) und **verfeinert**, wo er da ist: Nennt er
+            eine **Richtung** (heating/cooling/drying/fan) oder ``off``,
+            schlägt er den eingestellten Modus. Nennt er **keine** — heute
+            ``idle`` —, fällt die Auswertung auf den eingestellten Modus
+            zurück, statt ihn zu verwerfen (**#399**). Ein `hvac_action`, das
+            eedc gar nicht kennt, wird ignoriert.
 
     Returns:
         Einen Wert aus {@link BETRIEBSMODUS_KANON}, oder ``None`` für
@@ -402,16 +434,30 @@ def normalisiere_betriebsmodus(
         ``unbestimmt`` heißt „hingesehen, Seite nicht zuordenbar". Genau diese
         zwei Fälle muss der Anwender später unterscheiden können.
     """
+    # Nennt der Ist-Betrieb eine RICHTUNG, gewinnt er — er sagt, was das Gerät
+    # wirklich tut (D2).
+    ohne_richtung = False
     if hvac_action is not None:
         aktion = str(hvac_action).strip().lower()
         if aktion in _AKTION_ZU_KANON:
             return _AKTION_ZU_KANON[aktion]
+        # #399: `idle` nennt keine Richtung. Es darf den eingestellten Modus
+        # nicht verwerfen — es fällt auf ihn zurück. Steht dort eine Richtung
+        # (`cool` bei Klausnn), gehört die Stunde dorthin, auch wenn der
+        # Verdichter gerade pausiert.
+        ohne_richtung = aktion in _AKTION_OHNE_RICHTUNG
 
     if zustand is None:
-        return None
+        # ⚠ **Der Unterschied, der D6 trägt.** Ohne `idle` heißt „kein
+        # Zustand" weiterhin `None` = *„nicht hingesehen"*. Mit `idle` haben
+        # wir sehr wohl hingesehen — das Gerät hat sich gemeldet, es lief und
+        # wartete (kingcap1s 10 W Standby). Das ist `unbestimmt`, nicht `None`;
+        # sonst verlöre die Abdeckungs-Kennzahl genau die Stunden, die sie
+        # zählen soll.
+        return UNBESTIMMT if ohne_richtung else None
     roh = str(zustand).strip().lower()
     if roh in _KEIN_ZUSTAND:
-        return None
+        return UNBESTIMMT if ohne_richtung else None
 
     # Unbekannter, aber vorhandener Wert: das Gerät hat etwas gemeldet, eedc
     # kann es nur nicht einordnen. Das ist `unbestimmt`, nicht `None` — sonst

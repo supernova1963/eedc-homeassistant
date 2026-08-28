@@ -112,11 +112,71 @@ def test_s1_unbekannte_hvac_action_verwirft_den_modus_nicht():
 def test_s1_idle_ist_nicht_aus():
     """Standby ist kein Aus — bei kingcap1 sind das 10 W Dauerverbrauch (D6).
 
-    Das Außengerät versorgt drei Innengeräte samt WLAN. Diese Zeit einer
-    Heiz- oder Kühlseite zuzuschlagen wäre falsch, sie „aus" zu nennen
-    ebenfalls.
+    Das Außengerät versorgt drei Innengeräte samt WLAN. Diese Zeit „aus" zu
+    nennen wäre falsch: `aus` hieße, das Gerät verbraucht nichts.
+
+    ⛔ **Hier stand bis zum 28.08.2026 zusätzlich `("heat", "idle") ==
+    UNBESTIMMT` — mit der Begründung, die Zeit „einer Heiz- oder Kühlseite
+    zuzuschlagen wäre falsch". Das war eine Herleitung, keine Messung, und
+    Issue #399 hat sie widerlegt.**
+
+    ⭐ **D6 selbst bleibt unangetastet** und wird eine Probe weiter unten
+    geprüft (`test_s1_idle_ohne_modus_bleibt_unbestimmt`): kingcap1s Fall ist
+    *Gerät läuft, **kein** Modus gewählt*. Klausnns Fall ist *Gerät auf `cool`
+    gestellt, taktet gerade*. **Im Code sahen beide gleich aus** — im
+    Anlagenraum sind sie es nicht.
     """
-    assert normalisiere_betriebsmodus("heat", "idle") == UNBESTIMMT
+    assert normalisiere_betriebsmodus("heat", "idle") != AUS
+
+
+def test_s1_idle_faellt_auf_den_eingestellten_modus_zurueck():
+    """**#399** — `idle` verwirft den Modus nicht mehr, es fällt auf ihn zurück.
+
+    Klausnn (Panasonic Multisplit) hat beide Hälften fotografiert: *Zustand
+    Roh* = `cool`, *Aktuelle Aktion* = `Leerlauf`. **Home Assistant selbst**
+    beschriftet die Kachel mit „Leerlauf (Kühlbetrieb)" — HA behält den Modus,
+    wenn das Gerät taktet.
+
+    Vorher wurde daraus `unbestimmt`, und bei einem taktenden Gerät ist das
+    nicht eine Stunde, sondern der Großteil: Der Strom fiel in „nicht
+    aufgeteilt", die Aufteilung war praktisch wirkungslos.
+
+    ⚠ **Der Konzepttext stand die ganze Zeit auf dieser Seite:** *„wo
+    `hvac_action` vorhanden ist, **verfeinert** es"* (D2). Verfeinern ist
+    nicht verwerfen.
+    """
+    assert normalisiere_betriebsmodus("cool", "idle") == KUEHLEN
+    assert normalisiere_betriebsmodus("heat", "idle") == HEIZEN
+
+
+def test_s1_idle_ohne_modus_bleibt_unbestimmt():
+    """**D6 unverändert** — der Fall, für den `unbestimmt` erhoben wurde.
+
+    kingcap1: Das Gerät läuft und verbraucht 10 W, aber es ist **keine
+    Richtung gewählt**. Dann gibt es nichts, worauf zurückzufallen wäre.
+
+    ⛔ **`unbestimmt`, nicht `None` — und das ist der Kern der Sache.** `None`
+    hieße „eedc hat nicht hingesehen"; hier hat es hingesehen, und das Gerät
+    hat geantwortet. Fiele es auf `None`, verlöre die Abdeckungs-Kennzahl
+    genau die Stunden, die sie zählen soll.
+    """
+    assert normalisiere_betriebsmodus(None, "idle") == UNBESTIMMT
+    assert normalisiere_betriebsmodus("unknown", "idle") == UNBESTIMMT
+
+
+def test_s1_idle_bei_automatik_bleibt_unbestimmt():
+    """**Grenze 3 des Konzepts** — Automatik nennt keine Richtung.
+
+    *„Nur der eingestellte Modus (D1/D2). Steht das Gerät auf Automatik, ist
+    die Zeit `unbestimmt` und landet in *nicht aufgeteilt* — sie wird **nicht**
+    geraten."*
+
+    ⚠ **Diese Probe ist die Grenze des #399-Fixes.** Der Rückfall greift nur,
+    wo der eingestellte Modus selbst eine Richtung nennt. `heat_cool` und
+    `auto` tun das nicht — dort bliebe es Raten, und geraten wird nicht.
+    """
+    assert normalisiere_betriebsmodus("heat_cool", "idle") == UNBESTIMMT
+    assert normalisiere_betriebsmodus("auto", "idle") == UNBESTIMMT
 
 
 def test_s1_jeder_kanonwert_ist_erreichbar():
@@ -712,19 +772,31 @@ async def test_f_der_ist_betrieb_erreicht_die_stundenzeile(db, monkeypatch):
     )
 
     assert ergebnis[5][ids[0]] == KUEHLEN, "Ist-Betrieb `cooling` muss Kühlen ergeben"
-    assert ergebnis[20][ids[0]] == UNBESTIMMT, "`idle` ist weder Kühlen noch Aus"
+    # ⛔ **Hier stand bis zum 28.08.2026 `== UNBESTIMMT` („`idle` ist weder
+    # Kühlen noch Aus"), und diese Zeile war Klausnns Fehlerbild in Reinform:
+    # Das Gerät steht auf `cool` und taktet — die Stunde gehört zum Kühlen.**
+    # #399: `idle` nennt keine Richtung und verwirft deshalb keine.
+    assert ergebnis[20][ids[0]] == KUEHLEN, (
+        "`idle` bei eingestelltem `cool` muss auf den Modus zurückfallen (#399)"
+    )
 
-    # Und die Gegenprobe, die den Unterschied trägt: DIESELBE Historie ohne
-    # Ist-Signal ist eine reine Kühlstunde — auch nach 10:00. Wer die Aktion
-    # ignoriert, bekommt genau das und merkt nichts.
-    ohne_aktion, ids2, _ = await _modus_je_stunde(
+    # Und die Gegenprobe, die den Unterschied weiterhin trägt — sie musste
+    # umgebaut werden: „mit `idle`" gegen „ohne Ist-Signal" ergibt seit #399
+    # beide Male Kühlen und würde nichts mehr unterscheiden. Der Unterschied,
+    # auf den es ankommt, ist ein anderer: **eine Aktion MIT Richtung schlägt
+    # den Modus weiterhin.** Wer die Aktion ganz ignoriert (Klausnns
+    # Vorschlag), bekommt hier `cool` statt `lueften` und merkt nichts.
+    mit_richtung, ids2, _ = await _modus_je_stunde(
         db, monkeypatch,
-        historie={"climate.k": [(_t(0, 0), "cool")]},
+        historie={"climate.k": [(_t(0, 0), "cool"), (_t(10, 0), "cool", "fan")]},
         mapping=lambda ids: {"investitionen": {
             str(ids[0]): {"live": {"betriebsmodus": "climate.k"}}
         }},
     )
-    assert ohne_aktion[20][ids2[0]] == KUEHLEN
+    assert mit_richtung[20][ids2[0]] == LUEFTEN, (
+        "D2 gilt unverändert: eine Aktion MIT Richtung schlägt den "
+        "eingestellten Modus — genau das darf der #399-Fix nicht mitnehmen"
+    )
 
 
 # ─── N-340: die Aufteilung braucht EINE Modus-Quelle je Gerät ────────────────

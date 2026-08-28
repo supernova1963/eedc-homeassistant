@@ -388,8 +388,10 @@ class HAStateService:
                     if state in (None, "unknown", "unavailable", ""):
                         continue
 
-                    # `hvac_action` schlägt den eingestellten Modus, wo sie da
-                    # ist — dieselbe Vorrangregel wie im Live-Zweig. Sie wird
+                    # `hvac_action` verfeinert den eingestellten Modus, wo sie
+                    # da ist — sie schlägt ihn nur, wo sie eine RICHTUNG nennt
+                    # (`idle` tut das nicht, #399). Dieselbe Regel wie im
+                    # Live-Zweig. Sie wird
                     # hier NUR mitgeführt; angewendet wird sie erst in
                     # `normalisiere_betriebsmodus(state, aktion)`. Wer sie hier
                     # in den State schreibt, hebelt die Vorrangregel aus (s.

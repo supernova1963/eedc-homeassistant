@@ -411,9 +411,10 @@ async def _get_betriebsmodus_history(
 
                 # Zustand zu Beginn der Stunde = letzter Punkt davor.
                 # ⚠ Zustand UND Aktion wandern als Paar mit: `hvac_action` ist
-                # der Ist-Betrieb und schlägt den eingestellten Modus — aber
-                # nur, wenn sie `normalisiere_betriebsmodus` als **zweites**
-                # Argument erreicht. Wer sie vorher in den Zustand faltet,
+                # der Ist-Betrieb und verfeinert den eingestellten Modus (sie
+                # schlägt ihn, wo sie eine Richtung nennt; `idle` nicht, #399)
+                # — aber nur, wenn sie `normalisiere_betriebsmodus` als
+                # **zweites** Argument erreicht. Wer sie vorher in den Zustand faltet,
                 # verliert sie (s. `get_zustand_history`).
                 laufend: Optional[tuple[str, Optional[str]]] = None
                 for ts, roh, akt in punkte:

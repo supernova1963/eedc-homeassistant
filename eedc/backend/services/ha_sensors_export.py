@@ -410,7 +410,10 @@ WAERMEPUMPE_SENSOREN = [
             "Aktueller Betriebsmodus laut zugeordneter climate-Quelle, über den Kanon "
             "normalisiert (Heizen · Warmwasser · Kühlen · Entfeuchten · Lüften · "
             "Aus · Unbestimmt); "
-            "hvac_action schlägt den eingestellten Modus, wo das Gerät sie liefert. "
+            "hvac_action verfeinert ihn, wo das Gerät sie liefert: Nennt sie eine "
+            "Richtung (Heizen/Kühlen/Entfeuchten/Lüften) oder Aus, gilt sie; "
+            "Leerlauf (idle) behält den eingestellten Modus, weil ein taktendes "
+            "Gerät seine Betriebsart nicht verliert. "
             "Ohne zugeordnete Quelle gibt es den Sensor nicht."
         ),
     ),

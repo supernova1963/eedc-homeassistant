@@ -29,8 +29,10 @@ es ihn nicht (`mqtt_topic_registry.py`: ein Zustandsfeld bekommt bewusst **kein*
 Topic, weil der Inbound-Parser `float(payload)` ist). Wer MQTT-only fährt, hat
 keinen Modus — und bekommt dann auch keinen Sensor statt einer erfundenen Null.
 
-⚠ **`hvac_action` schlägt den eingestellten Modus, wo sie da ist** — dieselbe
-Vorrangregel wie im Historien-Zweig. Sie wird hier nur **mitgeführt**; angewendet
+⚠ **`hvac_action` VERFEINERT den eingestellten Modus, wo sie da ist** — dieselbe
+Vorrangregel wie im Historien-Zweig. Sie schlägt ihn, wo sie eine **Richtung**
+nennt; `idle` nennt keine und lässt ihn deshalb stehen (#399, 28.08.2026 — davor
+verwarf es ihn, und taktende Geräte verloren ihre Aufteilung). Sie wird hier nur **mitgeführt**; angewendet
 wird sie in `normalisiere_betriebsmodus(state, aktion)`. Wer sie vorher in den
 State schreibt, hebelt die Regel aus (der Fehler, der am 20.08. jedem Gerät mit
 Ist-Signal die gesamte Aufteilung gekostet hat).
