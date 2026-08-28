@@ -38,6 +38,10 @@ export const KATEGORIE_LABELS: Record<string, string> = {
   tageswerte_fehlen: 'Energieprofil – fehlende Tageswerte',
   energieprofil_plausibilitaet: 'Energieprofil – Plausibilität',
   mqtt_topic_abdeckung: 'MQTT – Topic-Abdeckung',
+  // N-341: Zähler, die zwischendurch auf null zurückspringen („…heute"-Felder).
+  // Label nennt die Sache aus Sicht des Anwenders — er sieht ein leeres Feld,
+  // nicht eine verletzte Monotonie.
+  zaehler_ruecksprung: 'Zählerstände – Rücksprung',
   sensor_mapping_lts: 'Sensor-Mapping – HA-Statistics',
   sensor_mapping_einheit: 'Sensor-Mapping – Einheiten (Leistung/Energie)',
   provenance_conflict: 'Daten-Quellen – Konflikte',
@@ -78,6 +82,7 @@ export const KATEGORIE_REIHENFOLGE: string[] = [
   'tageswerte_fehlen',
   'energieprofil_plausibilitaet',
   'mqtt_topic_abdeckung',
+  'zaehler_ruecksprung',
   'sensor_mapping_lts',
   'sensor_mapping_einheit',
   'provenance_conflict',

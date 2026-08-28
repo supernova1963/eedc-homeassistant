@@ -27,6 +27,12 @@ Daten-Checker empfiehlt an vier Stellen ausdruecklich *Zuruecksetzen „nie"
 Tages-Pfad fest. **Diese Proben halten den Entscheid fest, nicht eine
 Implementierung** — wer hochrechnen will, entscheidet zuerst ihn um.
 
+**Schwesterdatei:** `test_n341_checker_zaehler_ruecksprung.py` — dort steht die
+andere Haelfte desselben Falls: Diese Datei prueft, dass eedc **keine Zahl**
+liefert; jene, dass der Anwender **erfaehrt, warum**. Getrennt, weil die eine
+den Rechenpfad misst und die andere den Daten-Checker; zusammen ergeben sie
+erst die vollstaendige Antwort auf N-341.
+
 ⚠ **Feste Daten, kein gleitendes Fenster** (Lehre vom 28.08.2026): `bis` ist
 ein Parameter, die Proben ruehren die Prozessuhr nicht an — sonst waeren sie in
 drei Zeitzonen drei verschiedene Proben.

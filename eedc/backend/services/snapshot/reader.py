@@ -198,23 +198,76 @@ async def zaehler_faellt_im_fenster(
         startstand: der Stand am Fensteranfang (``s0``).
         endstand: der Stand am Fensterende (``s1``).
     """
-    zwischenstaende = await _staende_im_fenster(db, anlage_id, sensor_key, von, bis)
+    zwischenstaende = [w for _ts, w in await _reihe_im_fenster(
+        db, anlage_id, sensor_key, von, bis
+    )]
     if not zwischenstaende:
         return False
     folge = [startstand, *zwischenstaende, endstand]
     return any(
-        b < a - toleranz_kwh for a, b in zip(folge, folge[1:])
+        _ist_ruecksprung(a, b, toleranz_kwh) for a, b in zip(folge, folge[1:])
     )
 
 
-async def _staende_im_fenster(
+def _ist_ruecksprung(vorher: float, nachher: float, toleranz_kwh: float) -> bool:
+    """Ist der Zähler von ``vorher`` auf ``nachher`` gefallen?
+
+    **Die Regel selbst, an einer Stelle** — sie beantwortet zwei verschiedene
+    Fragen ({@link zaehler_faellt_im_fenster}: *„irgendwo im Fenster?"*,
+    {@link finde_zaehler_ruecksprunge}: *„wo genau, und wie oft?"*), und die
+    dürfen nie auseinanderlaufen.
+
+    Gleichstand ist kein Rücksprung: ein Zähler, der still steht, steht still.
+    Die Toleranz deckt Messrauschen ab.
+
+    ⚑ **Das kWh-Gegenstück zu `zaehlerstaende.finde_reihen_brueche`**, das
+    dieselbe Frage für Gas-, Wasser- und Ölzähler beantwortet. Getrennt, weil
+    die Reihen in verschiedenen Tabellen mit verschiedenen Punkt-Typen liegen —
+    wer eine der beiden ändert, sieht hier, dass es die andere gibt.
+    """
+    return nachher < vorher - toleranz_kwh
+
+
+async def finde_zaehler_ruecksprunge(
     db: AsyncSession,
     anlage_id: int,
     sensor_key: str,
     von: datetime,
     bis: datetime,
-) -> list[float]:
-    """Die Zwischenstände eines Zählers im Fenster, in zeitlicher Reihenfolge.
+    toleranz_kwh: float = TAGESRESET_TOLERANZ_KWH,
+) -> list[tuple[datetime, float, float]]:
+    """**Wo** die Standreihe fällt — paarweise, mit Zeitpunkt und beiden Ständen.
+
+    {@link zaehler_faellt_im_fenster} beantwortet *„ist hier überhaupt etwas
+    passiert?"* und genügt der Aggregation, die danach ohnehin nichts liefert.
+    Der Daten-Checker muss es dem **Anwender erzählen** — dafür braucht er den
+    Zeitpunkt und die beiden Stände, sonst steht dort eine Behauptung ohne
+    Beleg.
+
+    ⚠ **Ohne Randstände.** Diese Frage stellt niemand über ein Auswertungs-
+    fenster, sondern über die aufgezeichnete Reihe selbst; die Ränder kämen aus
+    der Self-Healing-Kaskade und gehören einer anderen Frage an.
+
+    Returns:
+        ``[(zeitpunkt_des_falls, stand_vorher, stand_nachher), …]`` in
+        zeitlicher Reihenfolge; leer, wenn die Reihe monoton ist.
+    """
+    reihe = await _reihe_im_fenster(db, anlage_id, sensor_key, von, bis)
+    return [
+        (ts_b, a, b)
+        for (_ts_a, a), (ts_b, b) in zip(reihe, reihe[1:])
+        if _ist_ruecksprung(a, b, toleranz_kwh)
+    ]
+
+
+async def _reihe_im_fenster(
+    db: AsyncSession,
+    anlage_id: int,
+    sensor_key: str,
+    von: datetime,
+    bis: datetime,
+) -> list[tuple[datetime, float]]:
+    """Die Standreihe eines Zählers im Fenster, in zeitlicher Reihenfolge.
 
     **Warum die Folge und nicht ``MIN``/``MAX``:** {@link
     zaehler_faellt_im_fenster} hieß Monotonie-Prüfung und verglich bis zum
@@ -225,19 +278,21 @@ async def _staende_im_fenster(
     Beide Ränder sind **exklusiv** — sie kommen als Zählerstände vom Aufrufer,
     aus der Self-Healing-Kaskade und nicht aus dieser Tabelle.
     """
-    return list((await db.execute(
-        select(SensorSnapshot.wert_kwh)
-        .where(
-            and_(
-                SensorSnapshot.anlage_id == anlage_id,
-                SensorSnapshot.sensor_key == sensor_key,
-                SensorSnapshot.zeitpunkt > von,
-                SensorSnapshot.zeitpunkt < bis,
-                SensorSnapshot.wert_kwh.isnot(None),
+    return [
+        (ts, wert) for ts, wert in (await db.execute(
+            select(SensorSnapshot.zeitpunkt, SensorSnapshot.wert_kwh)
+            .where(
+                and_(
+                    SensorSnapshot.anlage_id == anlage_id,
+                    SensorSnapshot.sensor_key == sensor_key,
+                    SensorSnapshot.zeitpunkt > von,
+                    SensorSnapshot.zeitpunkt < bis,
+                    SensorSnapshot.wert_kwh.isnot(None),
+                )
             )
-        )
-        .order_by(SensorSnapshot.zeitpunkt)
-    )).scalars().all())
+            .order_by(SensorSnapshot.zeitpunkt)
+        )).all()
+    ]
 
 
 async def _get_mqtt_snapshot_at(

@@ -22,6 +22,7 @@
    6. [Energieprofil – Zähler-Abdeckung](#46-energieprofil--zaehler-abdeckung)
    7. [Energieprofil – Plausibilität](#47-energieprofil--plausibilitaet)
    8. [MQTT-Topic-Abdeckung](#48-mqtt-topic-abdeckung)
+   8a. [Zählerstände – Rücksprung](#48a-zaehlerstaende--ruecksprung)
    9. [Sensor-Mapping – HA-Statistics](#49-sensor-mapping--ha-statistics)
    10. [Energieprofil – fehlende Tageswerte](#410-energieprofil--fehlende-tageswerte)
    11. [Geräte-Connector ohne Monatswert](#411-geraete-connector-ohne-monatswert)
@@ -114,6 +115,7 @@ eedc prüft **26 Kategorien**. Die meisten greifen in jeder Installation identis
 | 7 | Energieprofil – Zähler-Abdeckung (§4.6) | greift (Zuordnung zu HA-Entitäten `sensor.…`) | greift (Zuordnung zu MQTT-Topics) |
 | 8 | Energieprofil – Plausibilität (§4.7) | greift | greift |
 | 9 | **MQTT-Topic-Abdeckung** (§4.8) | nur wenn MQTT-Import aktiv | nur wenn MQTT-Import aktiv |
+| 9a | **Zählerstände – Rücksprung** (§4.8a) | nur wenn MQTT-Import aktiv | nur wenn MQTT-Import aktiv |
 | 10 | **Sensor-Mapping – HA-Statistics** (§4.9) | greift | **wird übersprungen** (keine HA-LTS verfügbar) |
 | 11 | Energieprofil – fehlende Tageswerte (§4.10) | greift | greift |
 | 12 | Geräte-Connector ohne Monatswert (§4.11) | greift | greift |
@@ -492,6 +494,28 @@ Ein Monat besteht in eedc aus zwei Teilen: der **Zählerzeile** der Anlage (Eins
 | **Alle N erwarteten MQTT-Topics aktuell empfangen** | ✅ OK | Subscriber läuft, alle erwarteten Topics liefern frische Daten innerhalb der Toleranz. | – |
 
 > **Wichtig zur Skip-Logik:** Wenn der MQTT-Import nicht aktiviert ist, erscheint diese Kategorie gar nicht — nicht „OK", nicht „leer". So bleibt die Daten-Checker-Übersicht für Nutzer ohne MQTT übersichtlich.
+
+---
+
+### 4.8a Zählerstände – Rücksprung <a name="48a-zaehlerstaende--ruecksprung"></a>
+
+> **Variantenhinweis:** Diese Kategorie greift, sobald Zählerstände über MQTT ankommen. Über Home Assistant ist sie gegenstandslos — dort liefert die Langzeitstatistik einen bereits bereinigten Stand, ein Verbrauchszähler mit Tageszyklus ist also unschädlich.
+
+**Was wird geprüft:** Steigt jeder per MQTT gelieferte Zählerstand fortlaufend, oder fällt er zwischendurch auf einen niedrigeren Wert zurück? Geprüft werden die letzten **30 Tage** der mitgeschriebenen Stände.
+
+**Warum das zählt.** eedc bildet aus zwei Ständen eine Menge — Anfang und Ende des Zeitraums, die Differenz dazwischen. Springt der Zähler dazwischen auf null zurück, gehören die beiden Stände zu **verschiedenen Zählerläufen**, und ihre Differenz ist keine Menge. Typisch ist das bei einem Feld, das „heute" oder „diesen Monat" meint statt des Gesamtstandes.
+
+**Was eedc dann tut:** Es liefert für dieses Feld **keinen Wert** — im Monatsabschluss steht kein Vorschlag, in *Cockpit → Monat* bleibt der gespeicherte Wert stehen. Das ist Absicht: Eine Zahl, die aus zwei unzusammenhängenden Zählerläufen entsteht, sähe aus wie eine Messung und wäre keine.
+
+> ⚠ **eedc rechnet den fehlenden Teil auch nicht hoch**, obwohl es die Stundenstände hätte. Was zwischen dem letzten mitgeschriebenen Stand und dem Rücksprung verbraucht wird, taucht in keinem Stand mehr auf — eine hochgerechnete Zahl wäre systematisch zu niedrig und im Monatsabschluss per Knopfdruck ein gespeicherter Wert. Diese Entscheidung ist bewusst gefallen.
+
+#### Befunde
+
+| Meldung | Severity | Bedeutung | Behebung |
+|---------|----------|-----------|----------|
+| **N Zähler-Feld(er) werden zwischendurch zurückgesetzt** | ⚠️ WARNING | Die Standreihe dieser Felder fällt innerhalb der letzten 30 Tage mindestens einmal. Die Meldung nennt die betroffenen Felder, wie oft es passiert ist, und belegt den jüngsten Fall mit beiden Ständen. | Schicke den **fortlaufenden** Stand statt des Tageswerts. Kommt der Wert aus einem Home-Assistant-Helfer: *Einstellungen → Geräte & Dienste → Helfer*, Verbrauchszähler öffnen, Zurücksetzen auf **„nie" (ohne Zyklus)** stellen. Kommt er aus einer eigenen App oder einem Skript, sende den Lebenszählerstand. eedc bildet Tag, Monat und Jahr daraus selbst — und exakt. |
+
+> **Kein Reparatur-Knopf, und das ist kein Versehen.** eedc kann einen Rücksprung nicht heilen: Die fehlende Energie steht in keiner Quelle. Die Reparatur liegt beim Absender. Sobald die Reihe wieder fortlaufend ist, verschwindet der Befund von selbst — es gibt nichts zu quittieren.
 
 ---
 

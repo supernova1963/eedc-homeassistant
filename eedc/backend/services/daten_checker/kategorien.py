@@ -37,6 +37,14 @@ class CheckKategorie(str, Enum):
     ENERGIEPROFIL_ABDECKUNG = "energieprofil_abdeckung"
     # Issue #134: Drift-Schutz Publisher (HA-Automation) ↔ Konsument (field_definitions.py)
     MQTT_TOPIC_ABDECKUNG = "mqtt_topic_abdeckung"
+    # N-341 (28.08.2026): Ein zugeordneter Zähler springt zurück — ein
+    # „…heute"-Feld statt eines fortlaufenden Standes. eedc liefert für so einen
+    # Zähler bewusst KEINEN Wert (`reader.delta`), und ohne diesen Hinweis sieht
+    # der Anwender nur ein leeres Feld. Der Daten-Checker rät beim **Anlegen**
+    # längst zum richtigen Sensor (`sensoren.py`, „Zurücksetzen nie") — wer den
+    # falschen bereits zugeordnet hat, erfuhr es nie. Dieselbe Klasse wie W-18:
+    # ein erkannter Zustand, der nur als Logzeile existierte.
+    ZAEHLER_RUECKSPRUNG = "zaehler_ruecksprung"
     # v3.24.1: Sensoren im Mapping, die nicht in HA-Long-Term-Statistics landen
     # (kein state_class) — Korrektur-Werkzeuge in der Datenverwaltung wirken
     # auf solche Sensoren nicht (Vollbackfill, Verlauf nachrechnen,
