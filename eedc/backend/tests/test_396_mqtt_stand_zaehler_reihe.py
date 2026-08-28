@@ -47,10 +47,7 @@ from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
 from backend.services.migrations.migrate_datenquellen_materialisieren import (
     materialisiere_datenquellen,
 )
-from backend.services.mqtt_energy_history_service import (
-    MonatsMenge,
-    mqtt_monats_deltas,
-)
+from backend.services.mqtt_energy_history_service import mqtt_monats_deltas
 from backend.services.snapshot.keys import (
     MQTT_STAND_ZAEHLER_FELDER,
     _mqtt_key_to_sensor_key,
@@ -103,12 +100,7 @@ async def _mqtt_anlage(db, staende: dict[str, tuple[float, float]]):
     return anlage, auto, wb, list(aufgeloest.keys())
 
 
-async def _monatsmengen(db, anlage, keys: list[str]) -> dict[str, MonatsMenge]:
-    """⚠ Seit N-341 traegt jeder Eintrag `wert` UND `weg` — die Proben lesen
-    deshalb `.wert`. **Nicht in der Huelle auspacken:** Zeile fuer Zeile
-    sichtbar zu lassen, was verglichen wird, hat unten die stille Falle
-    gefunden (`13272.0 not in mengen.values()` waere gegen Objekte dauerhaft
-    gruen gewesen, ohne noch irgendetwas zu pruefen)."""
+async def _monatsmengen(db, anlage, keys: list[str]) -> dict[str, float]:
     return await mqtt_monats_deltas(
         db, anlage.id, JAHR, MONAT, keys,
         quellen_energy=extract_quellen_energy(anlage),
@@ -132,9 +124,8 @@ async def test_km_stand_wird_zur_monatsmenge(db):
 
     mengen = await _monatsmengen(db, anlage, keys)
 
-    assert mengen[f"inv/{auto.id}/km_gefahren"].wert == 1001.0
-    assert 13272.0 not in [m.wert for m in mengen.values()], \
-        "der STAND darf nie als Menge erscheinen"
+    assert mengen[f"inv/{auto.id}/km_gefahren"] == 1001.0
+    assert 13272.0 not in mengen.values(), "der STAND darf nie als Menge erscheinen"
 
 
 @pytest.mark.asyncio
@@ -151,7 +142,7 @@ async def test_ladevorgaenge_bekommen_dieselbe_reihe(db):
 
     mengen = await _monatsmengen(db, anlage, keys)
 
-    assert mengen[f"inv/{wb.id}/ladevorgaenge"].wert == 12.0
+    assert mengen[f"inv/{wb.id}/ladevorgaenge"] == 12.0
 
 
 @pytest.mark.asyncio

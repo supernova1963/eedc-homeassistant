@@ -42,23 +42,32 @@ logger = logging.getLogger(__name__)
 TAGESRESET_TOLERANZ_KWH = 0.01
 
 
-# ── Auf welchem Weg eine Menge entstanden ist ────────────────────────────────
+# ── ⛔ Ein Zähler mit Tages-Reset wird abgelehnt, nicht hochgerechnet ────────
 #
-# ⭐ **Warum eine Menge ihren Weg mitführt (N-341).** Beide Wege liefern eine
-# Zahl in kWh, aber sie sind nicht gleich genau: Die Randdifferenz ist exakt —
-# sie liest zwei Zählerstände. Die Reihensumme trägt einen **systematischen
-# Abschlag**, weil zwischen der letzten Abtastung vor dem Rücksprung und dem
-# Rücksprung selbst noch verbraucht wird und dieser Rest in keinem Stand mehr
-# auftaucht. **Gemessen am 28.08.2026** an einer stündlich abgetasteten Reihe
-# über 14 Tage mit realistischem Haushaltsprofil: **−3,1 %**, und der Abschlag
-# geht *immer* in dieselbe Richtung.
+# **Entscheid Gernot, 28.08.2026 — nicht neu aufrollen.** Beim Bau von N-341
+# stand hier zwischenzeitlich eine Reihensumme: Der Rücksprung wurde erkannt und
+# die Menge aus allen mitgeschriebenen Ständen aufaddiert statt aus zwei Rändern
+# gebildet. **Sie hat funktioniert** — gemessen 140,2 kWh gegen 144,8 wahre,
+# also 3,1 % Abschlag, gegenüber 5,6 kWh vorher. Sie ist trotzdem wieder
+# entfernt worden, und der Grund ist kein technischer:
 #
-# Ein Verbraucher, der die Zahl nur anzeigt, darf den Weg ignorieren. Wer sie
-# dem Anwender zum **Übernehmen** anbietet, muss ihn nennen — sonst sieht eine
-# Zahl mit bekanntem Abschlag aus wie eine exakte Messung, und das ist die
-# Klasse, gegen die dieser ganze Pfad gebaut ist (ADR-002/P4).
-WEG_RANDDIFFERENZ: str = "randdifferenz"
-WEG_REIHENSUMME: str = "reihensumme"
+# > *„Es geht weniger um die Unterstützung des Zählers mit Tages-Reset, als um
+# > Datenqualitätssicherung. Ich möchte die Einschränkung bestehen lassen —
+# > auch wenn sie mit diesem Bau theoretisch aufhebbar wäre."*
+#
+# **Das Produkt sagt dasselbe an vier Stellen**, bevor überhaupt ein Wert
+# entsteht: Der Daten-Checker rät beim Anlegen eines Helfers ausdrücklich zu
+# *Zurücksetzen „nie" (ohne Zyklus)* (`daten_checker/sensoren.py`). Ein
+# Monatswert mit systematischem Abschlag, den der Anwender per Knopfdruck in
+# seinen Abschluss übernimmt und der dort dauerhaft wie eine Messung aussieht,
+# widerspricht dieser Empfehlung — und `soll-waerme-klima.md` §3.1 hält
+# denselben Satz für den Tages-Pfad fest: *„Ein Zähler mit Tages-Reset wird
+# erkannt und abgelehnt, statt still falsche Werte zu erzeugen."*
+#
+# ⭐ **Was aus dem Bau bleibt, ist die Erkennung** — und die ist der eigentliche
+# Gewinn: Vorher lieferte ein zurückgesetzter Zähler im laufenden Monat eine
+# *falsche* Zahl (5,6 statt 140 kWh), und `aktueller_monat.py` zeigte sie an.
+# Jetzt liefert er **keine**, und das ist die richtige Auskunft.
 
 
 #: Fenster, in dem ein MQTT-Topic als „aktiv" gilt (Daten-Checker, Stundenpfad).
@@ -207,15 +216,14 @@ async def _staende_im_fenster(
 ) -> list[float]:
     """Die Zwischenstände eines Zählers im Fenster, in zeitlicher Reihenfolge.
 
-    **Die eine Abfrage für beide Fragen an die Reihe** — *ist der Zähler
-    gefallen?* ({@link zaehler_faellt_im_fenster}) und *wie viel ist
-    zusammengekommen?* ({@link menge_aus_reihe}). Sie zweimal hinzuschreiben
-    wäre die F-56-Klasse; und die beiden Antworten dürfen nie
-    auseinanderlaufen, sonst summiert die eine Funktion über eine Reihe, in der
-    die andere keinen Rücksprung gesehen hat.
+    **Warum die Folge und nicht ``MIN``/``MAX``:** {@link
+    zaehler_faellt_im_fenster} hieß Monotonie-Prüfung und verglich bis zum
+    28.08.2026 nur die Extrema gegen die Ränder — das ist blind, sobald der
+    Startstand zufällig das Minimum und der Endstand das Maximum ist. Die
+    Begründung samt Messung steht dort.
 
-    Beide Ränder sind **exklusiv** — sie kommen als Zählerstände von den
-    Aufrufern, aus der Self-Healing-Kaskade und nicht aus dieser Tabelle.
+    Beide Ränder sind **exklusiv** — sie kommen als Zählerstände vom Aufrufer,
+    aus der Self-Healing-Kaskade und nicht aus dieser Tabelle.
     """
     return list((await db.execute(
         select(SensorSnapshot.wert_kwh)
@@ -230,77 +238,6 @@ async def _staende_im_fenster(
         )
         .order_by(SensorSnapshot.zeitpunkt)
     )).scalars().all())
-
-
-async def menge_aus_reihe(
-    db: AsyncSession,
-    anlage_id: int,
-    sensor_key: str,
-    von: datetime,
-    bis: datetime,
-    startstand: float,
-    endstand: float,
-) -> Optional[float]:
-    """Menge eines **zurückgesetzten** Zählers aus seiner ganzen Standreihe.
-
-    **Wofür sie da ist (N-341).** Ist ein Zähler im Fenster zurückgesprungen,
-    ist die Randdifferenz ``s1 − s0`` keine Menge — das stellt
-    {@link zaehler_faellt_im_fenster} fest. Bis zum 28.08.2026 endete die
-    Auskunft dort: **keine Zahl**. Für einen „…heute"-Zähler heißt das über
-    einen ganzen Monat, dass eedc gar nichts sagen kann, obwohl jede einzelne
-    Stunde mitgeschrieben wurde. `MQTT_INBOUND.md` verspricht dem Anwender das
-    Gegenteil (*„Ein täglich oder monatlich zurückgesetzter Zähler funktioniert
-    ebenfalls"*), und die Reihe trägt die Antwort tatsächlich.
-
-    **Die Rechnung.** Über die Reihe laufen und die Zuwächse addieren. Fällt der
-    Stand, ist das der Rücksprung: Dann ist der **neue Stand selbst** der
-    Zuwachs seit dem Rücksprung — der Zähler hat bei 0 neu begonnen und steht
-    schon wieder dort.
-
-    ⚠ **Die Grenze gehört zur Auskunft, nicht ins Kleingedruckte.** Was zwischen
-    der letzten Abtastung vor dem Rücksprung und dem Rücksprung selbst
-    verbraucht wird, steht in keinem Stand und fehlt deshalb. Bei stündlicher
-    Abtastung sind das **rund 3 %**, gemessen am 28.08.2026 über 14 Tage mit
-    realistischem Haushaltsprofil (140,2 gegen 144,8 kWh), und der Abschlag geht
-    **immer** in dieselbe Richtung. Deshalb trägt das Ergebnis
-    {@link WEG_REIHENSUMME}: Wer die Zahl zum Übernehmen anbietet, sagt es dazu.
-
-    ⛔ **Sie ersetzt die Randdifferenz NICHT.** Ohne Rücksprung ist die
-    Randdifferenz exakt und obendrein unempfindlich gegen Lücken in der Reihe —
-    ein fehlender Stundenstand kostet sie nichts, die Summe dagegen läuft dann
-    über die Lücke hinweg. Diese Funktion wird nur gerufen, **wenn** ein
-    Rücksprung festgestellt wurde.
-
-    Args:
-        von: Fensteranfang — **exklusiv**, wie bei
-            {@link zaehler_faellt_im_fenster}. Der Rand selbst ist
-            ``startstand``.
-        bis: Fensterende (exklusiv, s. ``von``); der Rand ist ``endstand``.
-        startstand: Stand am Fensteranfang, aus der Self-Healing-Kaskade.
-        endstand: Stand am Fensterende, ebendaher.
-
-    Returns:
-        Die Menge in kWh, oder ``None``, wenn zwischen den Rändern **kein**
-        Stand liegt. Dann gibt es nichts zu summieren, was die Randdifferenz
-        nicht schon wüsste — und eine Zahl aus zwei Ständen, von denen einer
-        hinter einem Rücksprung liegt, wäre genau die falsche Auskunft.
-    """
-    zwischenstaende = await _staende_im_fenster(db, anlage_id, sensor_key, von, bis)
-    if not zwischenstaende:
-        return None
-
-    summe = 0.0
-    vorher = startstand
-    for stand in list(zwischenstaende) + [endstand]:
-        d = stand - vorher
-        if d >= -TAGESRESET_TOLERANZ_KWH:
-            summe += max(0.0, d)
-        else:
-            # Rücksprung: der Zähler hat neu begonnen, sein jetziger Stand ist
-            # der Zuwachs seither.
-            summe += max(0.0, stand)
-        vorher = stand
-    return round(summe, 3)
 
 
 async def _get_mqtt_snapshot_at(
@@ -452,83 +389,6 @@ async def get_snapshot(
     return wert
 
 
-async def delta_mit_weg(
-    db: AsyncSession,
-    anlage_id: int,
-    sensor_key: str,
-    sensor_id: str,
-    von: datetime,
-    bis: datetime,
-    quellen_energy: Optional[dict] = None,
-) -> tuple[Optional[float], Optional[str]]:
-    """Menge eines kumulativen Zählers über ein Zeitfenster — **plus ihr Weg**.
-
-    **Der eine Ort für die Fenster-Regel.** Ein Rücksprung hinterlässt zwei
-    Spuren, und beide werden hier geprüft — dieselben zwei wie im Tagesfenster
-    (`snapshot/aggregator._tageswert_aus_raendern`):
-
-    1. **Randdifferenz negativ** — der Rücksprung liegt zwischen den Rändern
-       und ist an ihnen selbst ablesbar.
-    2. **Monotonie der Zwischenstände verletzt**
-       ({@link zaehler_faellt_im_fenster}) — ein Zwischenstand liegt über dem
-       End- oder unter dem Startstand.
-
-    ⛔ **Weg 2 fehlte hier bis zum 28.08.2026, und das war N-341 (P0).** Der
-    Tages-Pfad hatte ihn seit dem 26.08. und begründete in seinem Docstring
-    wörtlich, warum er nötig ist: *„Werden beide Ränder eines
-    Tagesreset-Zählers vor dem Reset abgetastet, ist d positiv, plausibel und
-    still falsch."* **Über einen Monat ist genau das der Normalfall** — der
-    Monatspfad wurde einen Tag später ohne Weg 2 geschrieben. Nachgestellt und
-    gemessen: ein „…heute"-Zähler ergab **5,6 kWh statt 140,0**, und
-    `aktueller_monat.py` zeigte diese Zahl in *Cockpit → Monat* an.
-
-    ⭐ **Ein erkannter Rücksprung endet nicht in „keine Zahl".** Die Reihe ist
-    mitgeschrieben, also wird sie summiert ({@link menge_aus_reihe}). Nur wenn
-    zwischen den Rändern gar kein Stand liegt, gibt es keine Auskunft.
-
-    Returns:
-        ``(menge_kwh, weg)`` mit ``weg`` aus {@link WEG_RANDDIFFERENZ} /
-        {@link WEG_REIHENSUMME}, oder ``(None, None)``, wenn keine Aussage
-        möglich ist. **Der Weg ist keine Zierde:** die Reihensumme trägt einen
-        systematischen Abschlag von rund 3 %, die Randdifferenz nicht.
-    """
-    snap_von = await get_snapshot(
-        db, anlage_id, sensor_key, sensor_id, von, quellen_energy=quellen_energy
-    )
-    snap_bis = await get_snapshot(
-        db, anlage_id, sensor_key, sensor_id, bis, quellen_energy=quellen_energy
-    )
-    if snap_von is None or snap_bis is None:
-        return None, None
-
-    async def _aus_der_reihe(grund: str) -> tuple[Optional[float], Optional[str]]:
-        menge = await menge_aus_reihe(
-            db, anlage_id, sensor_key, von, bis, snap_von, snap_bis
-        )
-        if menge is None:
-            logger.info(
-                f"Zähler-Rücksprung ({grund}) für anlage={anlage_id} "
-                f"key={sensor_key} ({von} → {bis}) und keine Zwischenstände "
-                f"— keine Aussage"
-            )
-            return None, None
-        logger.info(
-            f"Zähler-Rücksprung ({grund}) für anlage={anlage_id} "
-            f"key={sensor_key} ({von} → {bis}) → aus der Standreihe summiert: "
-            f"{menge:.3f} kWh"
-        )
-        return menge, WEG_REIHENSUMME
-
-    d = snap_bis - snap_von
-    if d < -TAGESRESET_TOLERANZ_KWH:
-        return await _aus_der_reihe("negative Randdifferenz")
-    if await zaehler_faellt_im_fenster(
-        db, anlage_id, sensor_key, von, bis, snap_von, snap_bis
-    ):
-        return await _aus_der_reihe("Monotonie verletzt")
-    return max(0.0, round(d, 3)), WEG_RANDDIFFERENZ
-
-
 async def delta(
     db: AsyncSession,
     anlage_id: int,
@@ -538,18 +398,64 @@ async def delta(
     bis: datetime,
     quellen_energy: Optional[dict] = None,
 ) -> Optional[float]:
-    """Nur die Menge — für Aufrufer, die den Weg nicht brauchen.
+    """Menge eines kumulativen Zählers über ein Zeitfenster, oder ``None``.
 
-    ⚠ **Kein zweiter Rechenweg**: ein Durchreicher auf
-    {@link delta_mit_weg}. Dieselbe Bauform wie
-    `aggregator._tagesdetail_boundary_diff`, und aus demselben Grund — eine
-    Regel, die an zwei Stellen nachgebaut wird, driftet (F-56).
+    **Der eine Ort für die Fenster-Regel.** Ein Rücksprung hinterlässt zwei
+    Spuren, und beide werden hier geprüft — dieselben zwei wie im Tagesfenster
+    (`snapshot/aggregator._tageswert_aus_raendern`):
+
+    1. **Randdifferenz negativ** — der Rücksprung liegt zwischen den Rändern
+       und ist an ihnen selbst ablesbar.
+    2. **Monotonie der Folge verletzt**
+       ({@link zaehler_faellt_im_fenster}) — irgendwo in der Reihe fällt der
+       Stand.
+
+    ⛔ **Weg 2 fehlte hier bis zum 28.08.2026, und das war N-341 (P0).** Der
+    Tages-Pfad hatte ihn seit dem 26.08. und begründete in seinem Docstring
+    wörtlich, warum er nötig ist: *„Werden beide Ränder eines
+    Tagesreset-Zählers vor dem Reset abgetastet, ist d positiv, plausibel und
+    still falsch."* **Über einen Monat ist genau das der Normalfall** — der
+    Monatspfad wurde einen Tag später ohne Weg 2 geschrieben. Nachgestellt und
+    gemessen: ein „…heute"-Zähler ergab **5,6 kWh statt 140,0**, und
+    `aktueller_monat.py` zeigte diese Zahl in *Cockpit → Monat* an, ohne dass
+    der Anwender etwas anklicken musste.
+
+    ⛔ **Ein erkannter Rücksprung endet in ``None``, nicht in einer
+    hochgerechneten Menge.** Die Reihe ließe sich summieren — das war gebaut
+    und ist am 28.08.2026 bewusst wieder entfernt worden. Die Begründung steht
+    oben beim Kanon-Kasten; sie ist eine Entscheidung über **Datenqualität**,
+    keine über Machbarkeit, und sie ist nicht neu aufzurollen.
+
+    Returns:
+        Menge in kWh (≥ 0), oder ``None``, wenn ein Rand fehlt oder der Zähler
+        im Fenster zurückgesprungen ist. ``None`` heißt „keine Aussage" — nie
+        „null" (ADR-002/P4).
     """
-    menge, _weg = await delta_mit_weg(
-        db, anlage_id, sensor_key, sensor_id, von, bis,
-        quellen_energy=quellen_energy,
+    snap_von = await get_snapshot(
+        db, anlage_id, sensor_key, sensor_id, von, quellen_energy=quellen_energy
     )
-    return menge
+    snap_bis = await get_snapshot(
+        db, anlage_id, sensor_key, sensor_id, bis, quellen_energy=quellen_energy
+    )
+    if snap_von is None or snap_bis is None:
+        return None
+
+    d = snap_bis - snap_von
+    if d < -TAGESRESET_TOLERANZ_KWH:
+        logger.info(
+            f"Zähler-Rücksprung (negative Randdifferenz) für anlage={anlage_id} "
+            f"key={sensor_key} ({von} → {bis}): {d:.3f} kWh — keine Aussage"
+        )
+        return None
+    if await zaehler_faellt_im_fenster(
+        db, anlage_id, sensor_key, von, bis, snap_von, snap_bis
+    ):
+        logger.info(
+            f"Zähler fällt innerhalb des Fensters für anlage={anlage_id} "
+            f"key={sensor_key} ({von} → {bis}) → Reset-Zähler, keine Aussage"
+        )
+        return None
+    return max(0.0, round(d, 3))
 
 
 async def get_counter_lifetime(

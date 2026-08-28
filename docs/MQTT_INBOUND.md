@@ -46,29 +46,29 @@ eedc/{anlage_id}_{name}/
 > fortlaufende Stand, den dein Zaehler oder Wechselrichter anzeigt — eedc bildet die
 > Differenzen daraus selbst (Tag, Monat, Jahr).
 >
-> ⭐ **Ein taeglich oder monatlich zurueckgesetzter Zaehler funktioniert ebenfalls** — also
-> auch ein Feld, das „heute" oder „diesen Monat" meint und dann wieder bei null anfaengt.
-> eedc erkennt den Ruecksprung und **summiert** die Monatsmenge aus den mitgeschriebenen
-> Staenden, statt zwei Staende voneinander abzuziehen, die zu verschiedenen Zaehlerlaeufen
-> gehoeren.
+> ⛔ **Ein taeglich oder monatlich zurueckgesetzter Zaehler ist dafuer NICHT geeignet** — also
+> ein Feld, das „heute" oder „diesen Monat" meint und dann wieder bei null anfaengt. eedc
+> erkennt den Ruecksprung und liefert fuer diesen Zeitraum **keinen Wert**, statt zwei Staende
+> voneinander abzuziehen, die zu verschiedenen Zaehlerlaeufen gehoeren.
 >
-> ⛔ **Einen Tageswert gibt es fuer so einen Zaehler bewusst nicht.** Ein Tagesfenster liegt
-> ganz zwischen zwei Ruecksprüngen — dort steht dann kein Strich aus Versehen, sondern weil
-> eedc die Zahl nicht belegen kann. Der Monat kann es, weil viele Tage darin liegen.
+> **Warum nicht einfach hochrechnen?** Technisch ginge es: Die Staende sind stuendlich
+> mitgeschrieben, eine Summe daraus traefe auf rund 3 % genau. eedc tut es trotzdem nicht.
+> Was zwischen dem letzten Stand und dem Ruecksprung verbraucht wird, taucht in keinem Stand
+> mehr auf — der Fehlbetrag geht **immer** in dieselbe Richtung, und im Monatsabschluss wuerde
+> aus so einer Zahl per Knopfdruck ein gespeicherter Wert, der aussieht wie eine Messung.
+> Genau davor warnt der Daten-Checker schon beim Anlegen: *Zuruecksetzen „nie" (ohne Zyklus)*.
 >
-> ⚠ **Was dabei fehlt, und warum wir es sagen:** Was du zwischen dem letzten mitgeschriebenen
-> Stand und dem Ruecksprung verbrauchst, steht in keinem Stand mehr — es fehlt in der Summe.
-> Bei einem Publisher, der stuendlich sendet, sind das **rund 3 %**, und der Fehlbetrag geht
-> immer in dieselbe Richtung: die Zahl ist eher zu klein als zu gross. Im Monatsabschluss steht
-> das am Vorschlag; wer es genauer will, publiziert einen **fortlaufenden** Zaehler — der wird
-> aus zwei Staenden gerechnet und ist exakt.
+> ⭐ **Was du stattdessen tust:** Publiziere den **fortlaufenden** Stand. Bei einem
+> `utility_meter` in Home Assistant heisst das Zuruecksetzen auf *„nie"*; kommt der Wert aus
+> einer eigenen App, sende den Lebenszaehler statt des Tageswerts. eedc bildet Tag, Monat und
+> Jahr daraus selbst — und exakt.
 >
-> ⛔ **Bis eedc 4.0.32 stimmte dieser Absatz nur zur Haelfte.** eedc erkannte den Ruecksprung
-> im **Tagesfenster**, im **Monatsfenster** aber nur dann, wenn er zufaellig an den Raendern
-> ablesbar war. Ein „…heute"-Zaehler ergab im laufenden Monat einen Wert, der aussah wie eine
-> Messung und den Verbrauch **eines** Tages nannte (gemessen: 5,6 statt 140 kWh) —
-> *Cockpit → Monat* zeigte ihn an. **Du musst nichts umstellen** — der Zaehlerstand war und ist
-> das Richtige; korrigiert wurde die Rechnung darauf.
+> ⛔ **Bis eedc 4.0.32 stimmte dieser Absatz nicht.** Hier stand *„Ein taeglich oder monatlich
+> zurueckgesetzter Zaehler funktioniert ebenfalls; eedc erkennt den Ruecksprung"*. Im
+> **Tagesfenster** stimmte das, im **Monatsfenster** nur dann, wenn der Ruecksprung zufaellig an
+> den Raendern ablesbar war. Ein „…heute"-Zaehler ergab im laufenden Monat einen Wert, der
+> aussah wie eine Messung und den Verbrauch **eines** Tages nannte (gemessen: 5,6 statt
+> 140 kWh) — *Cockpit → Monat* zeigte ihn an.
 >
 > **Bis eedc 4.0.29 stand hier „Monatswerte", und das war missverstaendlich.** Wer korrekt
 > seinen Zaehlerstand schickte, bekam ihn im Monatsabschluss als Monatsmenge vorgehalten

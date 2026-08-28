@@ -138,9 +138,9 @@ async def test_monatsmenge_ist_die_differenz_nicht_der_stand(db: AsyncSession):
         db, anlage_id, jahr, monat, ["einspeisung_kwh"], bis=jetzt,
     )
 
-    assert mengen["einspeisung_kwh"].wert == MENGE_IM_MONAT
+    assert mengen["einspeisung_kwh"] == MENGE_IM_MONAT
     # Die eigentliche Behauptung — der Lebensstand darf nie herauskommen.
-    assert mengen["einspeisung_kwh"].wert != STAND_JETZT
+    assert mengen["einspeisung_kwh"] != STAND_JETZT
 
 
 async def test_ohne_standreihe_gibt_es_KEINE_aussage(db: AsyncSession):
@@ -329,7 +329,7 @@ async def test_ein_vergangener_monat_bekommt_seine_eigene_menge(db: AsyncSession
 
     mengen = await mqtt_monats_deltas(db, anlage_id, jahr, monat, ["einspeisung_kwh"])
 
-    assert mengen["einspeisung_kwh"].wert == 120.0
+    assert mengen["einspeisung_kwh"] == 120.0
 
 
 async def test_grenze_liegt_auf_dem_monatswechsel(db: AsyncSession):
@@ -344,7 +344,7 @@ async def test_grenze_liegt_auf_dem_monatswechsel(db: AsyncSession):
 
     mengen = await mqtt_monats_deltas(db, anlage_id, jahr, monat, ["netzbezug_kwh"])
 
-    assert mengen["netzbezug_kwh"].wert == 45.5
+    assert mengen["netzbezug_kwh"] == 45.5
 
 
 async def test_investitionsfeld_wird_ebenso_differenziert(db: AsyncSession):
@@ -357,4 +357,4 @@ async def test_investitionsfeld_wird_ebenso_differenziert(db: AsyncSession):
 
     mengen = await mqtt_monats_deltas(db, anlage_id, jahr, monat, ["inv/7/ladung_kwh"])
 
-    assert mengen["inv/7/ladung_kwh"].wert == 226.4  # der Wert aus seinem Screenshot
+    assert mengen["inv/7/ladung_kwh"] == 226.4  # der Wert aus seinem Screenshot

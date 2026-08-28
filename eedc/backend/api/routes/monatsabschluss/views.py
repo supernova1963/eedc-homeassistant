@@ -35,9 +35,7 @@ from backend.models.investition import InvestitionMonatsdaten
 from backend.models.monatsdaten import Monatsdaten
 from backend.services.cloud_import.quellen import lade_quellen
 from backend.services.ha_state_service import get_ha_state_service
-from backend.services.mqtt_energy_history_service import MonatsMenge
 from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
-from backend.services.snapshot.reader import WEG_REIHENSUMME
 from backend.services.provenance import (
     ABGELEITET_KAPAZITAET_ANTEIL,
     ABGELEITET_KWP_ANTEIL,
@@ -77,65 +75,6 @@ router = APIRouter()
 # Verteilungsschlüssel ist gerechnet.
 KONFIDENZ_CONNECTOR_GEMESSEN = 90
 KONFIDENZ_CONNECTOR_VERTEILT = 85
-
-# =============================================================================
-# Konfidenz der MQTT-Vorschläge — zwei Wege, zwei Zahlen (N-341)
-# =============================================================================
-# Ein MQTT-Monatswert entsteht auf einem von zwei Wegen, und sie sind nicht
-# gleich genau:
-#
-#   • **Randdifferenz** — zwei abgelesene Zählerstände, exakt. Konfidenz 91,
-#     unverändert seit v4.0.30.
-#   • **Reihensumme** — der Zähler ist im Monat zurückgesprungen („…heute"-
-#     Zähler), die Menge wird aus der ganzen Standreihe summiert. Alle Stände
-#     sind gemessen, aber was zwischen der letzten Abtastung und dem Rücksprung
-#     verbraucht wird, taucht in keinem mehr auf: **rund 3 % zu wenig**,
-#     gemessen 28.08.2026 über 14 Tage mit realistischem Haushaltsprofil
-#     (140,2 gegen 144,8 kWh), und der Abschlag geht immer in dieselbe Richtung.
-#
-# Deshalb 85: dieselbe Stufe wie der verteilte Connector-Wert darüber, und aus
-# demselben Grund — **gemessen, aber mit einem gerechneten Anteil darin**. Über
-# „Wert vom Vormonat" (80) liegt sie klar, unter jeder ungestörten Messung
-# (90/91/92) ebenso klar.
-#
-# ⛔ **Warum überhaupt eine Zahl und nicht „keine Aussage":** Bis zum
-# 28.08.2026 lieferte dieser Pfad bei einem zurückgesetzten Zähler einen
-# *falschen* Wert (5,6 statt 140,0 kWh) — die Randdifferenz zweier
-# unzusammenhängender Zählerläufe. Der erste Entwurf des Fixes hätte daraus
-# „gar nichts" gemacht; das hätte den Anwender mit einem leeren Feld
-# zurückgelassen, obwohl jede Stunde mitgeschrieben ist. Eine Zahl mit
-# benanntem Abschlag ist beides nicht.
-KONFIDENZ_MQTT_RANDDIFFERENZ = 91
-KONFIDENZ_MQTT_REIHENSUMME = 85
-
-
-def _mqtt_vorschlag(menge: MonatsMenge) -> Vorschlag:
-    """MQTT-Vorschlag, der seinen Entstehungsweg ausspricht (N-341).
-
-    **Warum die Beschreibung nicht mehr fest verdrahtet ist.** Sie lautete
-    unverändert *„Aus MQTT-Zählerständen (Differenz über den Monat)"* — bei
-    einem zurückgesetzten Zähler ist das seit dem Fix schlicht nicht mehr wahr;
-    dort wird nicht differenziert, sondern summiert. Ein Anwender übernimmt
-    diese Zahl per Knopfdruck in seinen Monatsabschluss; er muss lesen können,
-    woher sie kommt.
-    """
-    if menge.weg == WEG_REIHENSUMME:
-        return Vorschlag(
-            wert=menge.wert,
-            quelle=VorschlagQuelle.MQTT_INBOUND,
-            konfidenz=KONFIDENZ_MQTT_REIHENSUMME,
-            beschreibung=(
-                "Aus MQTT-Zählerständen summiert — dein Zähler wird "
-                "zwischendurch zurückgesetzt. Der Wert kann etwas zu niedrig "
-                "sein (rund 3 %)."
-            ),
-        )
-    return Vorschlag(
-        wert=menge.wert,
-        quelle=VorschlagQuelle.MQTT_INBOUND,
-        konfidenz=KONFIDENZ_MQTT_RANDDIFFERENZ,
-        beschreibung="Aus MQTT-Zählerständen (Differenz über den Monat)",
-    )
 
 # Welche Ableitungs-Marke ein zerlegter Vorschlag trägt — die Zerlegung folgt
 # dem Kennwert des Geräts (#352): PV nach kWp, Speicher nach Kapazität, wie
@@ -323,12 +262,8 @@ async def get_monatsabschluss(
                                     )
 
     # MQTT Inbound Energy-Daten sammeln
-    # ⭐ N-341: Der Wert allein reicht hier nicht — ein Vorschlag wird
-    # ÜBERNOMMEN, und eine aus der Standreihe summierte Menge trägt einen
-    # systematischen Abschlag. Deshalb wandert die ganze `MonatsMenge` mit,
-    # nicht nur ihre Zahl.
-    mqtt_energy: dict[str, MonatsMenge] = {}
-    mqtt_inv_energy: dict[int, dict[str, MonatsMenge]] = {}  # inv_id → {feld: menge}
+    mqtt_energy: dict[str, float] = {}
+    mqtt_inv_energy: dict[int, dict[str, float]] = {}  # inv_id → {feld: wert}
     mqtt_svc = get_mqtt_inbound_service()
     if mqtt_svc:
         energy = mqtt_svc.cache.get_energy_data(anlage.id)
@@ -364,19 +299,19 @@ async def get_monatsabschluss(
                 "netzbezug_kwh": "netzbezug_kwh",
             }
             for mqtt_key, feld_name in basis_map.items():
-                menge = monats_mengen.get(mqtt_key)
-                if menge is not None and menge.wert > 0:
-                    mqtt_energy[feld_name] = menge
+                val = monats_mengen.get(mqtt_key)
+                if val is not None and val > 0:
+                    mqtt_energy[feld_name] = val
 
             # Investitions-Felder: inv/{inv_id}/{key}
-            for mqtt_key, menge in monats_mengen.items():
-                if not mqtt_key.startswith("inv/") or menge is None or menge.wert <= 0:
+            for mqtt_key, val in monats_mengen.items():
+                if not mqtt_key.startswith("inv/") or val is None or val <= 0:
                     continue
                 parts = mqtt_key.split("/", 2)  # ["inv", "3", "ladung_kwh"]
                 if len(parts) == 3:
                     try:
                         inv_id = int(parts[1])
-                        mqtt_inv_energy.setdefault(inv_id, {})[parts[2]] = menge
+                        mqtt_inv_energy.setdefault(inv_id, {})[parts[2]] = val
                     except ValueError:
                         pass
 
@@ -498,9 +433,14 @@ async def get_monatsabschluss(
                     beschreibung="Vom Wechselrichter (Zählerstand-Differenz)",
                 ))
 
-        # MQTT Inbound-Vorschlag einfügen (Konfidenz 91 bzw. 85, s. _mqtt_vorschlag)
+        # MQTT Inbound-Vorschlag einfügen (Konfidenz 91)
         if feld in mqtt_energy:
-            vorschlaege.insert(0, _mqtt_vorschlag(mqtt_energy[feld]))
+            vorschlaege.insert(0, Vorschlag(
+                wert=mqtt_energy[feld],
+                quelle=VorschlagQuelle.MQTT_INBOUND,
+                konfidenz=91,
+                beschreibung="Aus MQTT-Zählerständen (Differenz über den Monat)",
+            ))
 
         # ── Feld-spezifische Vorschläge (bedingte Felder) ──────────────────
         if feld == "netzbezug_durchschnittspreis_cent":
@@ -704,10 +644,15 @@ async def get_monatsabschluss(
                         ),
                     ))
 
-            # MQTT Inbound-Vorschlag einfügen (Konfidenz 91 bzw. 85)
+            # MQTT Inbound-Vorschlag einfügen (Konfidenz 91)
             mqtt_inv_values = mqtt_inv_energy.get(inv.id, {})
             if feld in mqtt_inv_values:
-                vorschlaege.insert(0, _mqtt_vorschlag(mqtt_inv_values[feld]))
+                vorschlaege.insert(0, Vorschlag(
+                    wert=mqtt_inv_values[feld],
+                    quelle=VorschlagQuelle.MQTT_INBOUND,
+                    konfidenz=91,
+                    beschreibung="Aus MQTT-Zählerständen (Differenz über den Monat)",
+                ))
 
             # Warnungen prüfen
             warnungen = []
