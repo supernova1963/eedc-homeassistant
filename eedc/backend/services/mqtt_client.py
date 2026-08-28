@@ -142,20 +142,63 @@ class MQTTClient:
         Returns:
             Dict für MQTT Discovery Config
         """
-        # Unique ID erstellen
+        # ── EIN Geraet je Anlage — der Geraetename wandert in den Sensornamen ──
+        #
+        # ⛔ **Hier stand bis zum 28.08.2026 `device_id = f"eedc_inv_{id}"`, und
+        # das hat zwei Melder in 24 Stunden gekostet.** Mit v4.0.30 erreichten
+        # die geraetebezogenen Sensoren erstmals MQTT — und legten dabei je
+        # Investition ein EIGENES HA-Geraet an. Bei rapahl entstanden acht
+        # eedc-Geraete, **sechs davon mit genau einer Entitaet**; bei Knallfrosch
+        # sechs neue auf einmal (T89667 #236).
+        #
+        # ⭐ **Der Satz, der die Entscheidung getragen hat** (rapahl, PN 27.08.):
+        # *„Bisher gab es ein uebergeordnetes Geraet mit den darunterliegenden
+        # Entitaeten. Der Anlagenname wurde Teil des Sensornamens. Eine
+        # einheitliche Struktur waere mir am liebsten."* — Dazu der Punkt, der
+        # ein Aufraeumen in HA ausschliesst: *„Die kann man zwar bereinigen,
+        # aber in der Registry bleiben die drin."*
+        #
+        # **Entscheid Gernot (28.08.):** Alle eedc-Sensoren gehoeren unter die
+        # **Anlage**, „da die Benutzer sonst ein zusaetzliches Geraet zu dem
+        # Geraet der Integration bekommen".
+        #
+        # ⭐ **Warum das keine Entitaet und keine Historie kostet:** `unique_id`
+        # und `state_topic` haengen an der **Investition**, nicht am Geraet —
+        # beide bleiben Zeichen fuer Zeichen gleich. HA erkennt dieselbe Entitaet
+        # wieder und haengt sie lediglich unter ein anderes Geraet um;
+        # Langzeitstatistik, Automationen und `entity_id` bleiben unberuehrt.
+        # Das war die Bedingung, unter der die Umstellung ueberhaupt vertretbar
+        # ist (die Alternative — Werte als Attribute — scheiterte genau daran:
+        # Attribute kennen keine Langzeitstatistik).
+        #
+        # ⚠ **Der sichtbare Name aendert sich NICHT.** HA setzt ihn aus
+        # Geraetename + Sensorname zusammen; heute „eedc - Smart #1" + „Gefahrene
+        # km", kuenftig „eedc - <Anlage>" + „Smart #1 Gefahrene km". Beides ergibt
+        # denselben Text — die Gruppierung aendert sich, die Beschriftung nicht.
+        #
+        # ⚠ **Was zurueckbleibt:** Die alten `eedc_inv_*`-Geraete verlieren ihre
+        # Entitaeten und stehen dann leer da. Ein leeres Discovery-Payload wuerde
+        # hier nicht helfen — das Config-Topic haengt an der `unique_id`, es zu
+        # leeren loeschte die ENTITAET samt Historie. Home Assistant entfernt
+        # entitaetenlose MQTT-Geraete beim naechsten Neustart bzw. Reload der
+        # Integration; andernfalls sind sie einmalig von Hand loeschbar.
+        device_id = f"eedc_anlage_{anlage_id}"
+        device_name = f"eedc - {anlage_name}"
         if investition_id:
             unique_id = f"eedc_{anlage_id}_{investition_id}_{sensor.key}"
             state_topic = f"{self.config.state_prefix}/anlage/{anlage_id}/investition/{investition_id}/{sensor.key}"
-            device_id = f"eedc_inv_{investition_id}"
-            device_name = f"eedc - {investition_name}"
+            # Der Geraetename traegt jetzt der Sensor — sonst hiessen die
+            # Kennzahlen zweier Waermepumpen unter derselben Anlage gleich.
+            # `investition_name` kann fehlen (Altaufrufe); dann bleibt es beim
+            # nackten Sensornamen statt bei einem „None"-Praefix.
+            sensor_name = f"{investition_name} {sensor.name}" if investition_name else sensor.name
         else:
             unique_id = f"eedc_{anlage_id}_{sensor.key}"
             state_topic = f"{self.config.state_prefix}/anlage/{anlage_id}/{sensor.key}"
-            device_id = f"eedc_anlage_{anlage_id}"
-            device_name = f"eedc - {anlage_name}"
+            sensor_name = sensor.name
 
         payload = {
-            "name": sensor.name,
+            "name": sensor_name,
             "unique_id": unique_id,
             "state_topic": state_topic,
             "icon": sensor.icon,
