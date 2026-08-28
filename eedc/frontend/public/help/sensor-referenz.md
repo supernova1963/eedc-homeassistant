@@ -555,9 +555,23 @@ Die bisherigen Abschnitte beschreiben Sensoren, die eedc **aus HA liest**. Diese
 | `eedc_grundlast_kw` | kW | **Gemessener** Nacht-Sockel des laufenden Monats (Median der Stunden 0–5 Uhr aus dem Energieprofil) — dieselbe Zahl wie die Kachel in *Cockpit → Monat*. ⚠ **Nicht zu verwechseln mit „Grundlast (Prognose)"** in *Cockpit → Live*: die stammt aus dem Verbrauchsprofil und ist ohne eigene Historie ein Standard-Lastprofil. Ohne gemessene Nachtstunden entsteht **kein** Sensor. |
 | `eedc_prognose_heute_vormittag_kwh` / `…_heute_nachmittag_kwh` / `…_morgen_vormittag_kwh` / `…_morgen_nachmittag_kwh` | kWh | PV-Prognose je Tageshälfte, für **heute und morgen** (die Abendentscheidung braucht den Folgetag). ⭐ **Die Grenze ist der Sonnenhöchststand**, nicht 13:00 — dieselbe Aufteilung wie in *Cockpit → Aussicht*. Sie reist als Attribut **`solar_noon`** („13:28") mit, damit eine Automation sie lesen kann statt sie zu raten. |
 
-Zusätzlich erscheinen **pro Komponente** (E-Auto, Wärmepumpe, Speicher, Wallbox …) eigene Sensoren (z. B. `e_auto_pv_anteil_prozent`, `wp_cop_durchschnitt`, `wp_betriebsstunden`) — jeweils unter einem eigenen HA-Gerät.
+Zusätzlich erscheinen **pro Komponente** (E-Auto, Wärmepumpe, Speicher, Wallbox …) eigene Sensoren (z. B. `e_auto_pv_anteil_prozent`, `wp_cop_durchschnitt`, `wp_betriebsstunden`). Sie hängen — wie alle eedc-Sensoren — **unter dem einen Gerät deiner Anlage**; der Gerätename steht im Sensornamen (*„Daikin3 ECH₂O COP Durchschnitt"*).
 
-> ⚠ **Bis August 2026 galt der Satz darüber nur für den REST-Export.** Über **MQTT-Discovery** wurden ausschließlich die *anlagenweiten* Sensoren verschickt; die Geräte-Sensoren erreichten Home Assistant nie. Seither publiziert eedc sie mit — in HA erscheinen dadurch **neue Geräte und Entitäten**. Bestehende Entitäten und ihre Langzeitstatistik sind unberührt.
+> ⛔ **Hier stand bis August 2026 „jeweils unter einem eigenen HA-Gerät", und genau so war es mit v4.0.30 auch gebaut.** Zwei Anwender haben innerhalb von 24 Stunden gemeldet, dass das Ergebnis schlechter ist: Bei einer PV-Anlage mit mehreren Modulflächen, Wechselrichter und Speicher entstehen so **etliche HA-Geräte mit je einer einzigen Entität** — zusätzlich zum Gerät der Integration. Seit **v4.0.32** gibt es wieder **ein** Gerät je Anlage.
+>
+> ⭐ **Für bestehende Installationen ändert sich nichts an den Daten:** `unique_id` und Topic hängen an der Komponente, nicht am Gerät. Home Assistant erkennt dieselben Entitäten wieder und hängt sie lediglich um — `entity_id`, Langzeitstatistik und Automationen bleiben erhalten, der angezeigte Name ebenfalls (HA setzt ihn aus Gerät + Sensor zusammen). ⚠ Die alten, jetzt leeren Geräte entfernt HA beim nächsten Neustart; sonst lassen sie sich einmalig von Hand löschen.
+
+### Wann ein Sensor `entity_category: diagnostic` trägt
+
+Home Assistant meint damit *„schreibgeschützte Systemausgaben über den Zustand der Hardware"* (Batteriestand, Signalstärke, Laufzeit, Firmware). eedc hat keine Hardware — das Gegenstück ist der **Zustand der eedc-Instanz und ihrer Datenlage**, nicht der Zustand deiner Anlage:
+
+| Kategorie | Was sie in eedc trägt |
+| --- | --- |
+| **ohne Kategorie** (Standard) | Alles, was eine Aussage über **die Anlage** macht: Mengen, Geld, CO₂, Kennzahlen, Prognosen, Preise — und auch Stammdaten wie die Investitionssumme. Diese Sensoren gehören aufs Dashboard. |
+| **`diagnostic`** | Aussagen über **eedc selbst**: *Letzter Import* (Jahr/Monat/Monatsname) und *Erfasste Monate*. Sie beantworten „hat eedc aktuelle Daten?", nicht „wie läuft die Anlage?". |
+| `config` / `system` | eedc exportiert nichts Steuerbares — beide bleiben ungenutzt. |
+
+⚠ **Die Testfrage vor jeder neuen Definition:** *Beschreibt der Wert die Anlage oder eedc?* Die Investitionssumme etwa ist ein Stammdatum der Anlage und deshalb **kein** Diagnose-Wert — auch wenn sie sich nie ändert.
 
 **Neu je Wärmepumpe/Klimaanlage:** `wp_betriebsmodus` — der **aktuelle** Betrieb im Klartext (*Heizen · Kühlen · Entfeuchten · Lüften · Aus · Unbestimmt*), aus der zugeordneten `climate`-Quelle über den eedc-Kanon normalisiert. Liefert dein Gerät zusätzlich `hvac_action` (den Ist-Betrieb), verfeinert der den eingestellten Modus: Nennt er eine Richtung, hat er Vorrang — steht dort **Leerlauf** (`idle`), bleibt dein eingestellter Modus stehen, denn ein taktendes Gerät verliert seine Betriebsart nicht. **Ohne zugeordnete Quelle gibt es den Sensor nicht** — eedc behauptet keinen Modus, den es nicht kennt.
 >

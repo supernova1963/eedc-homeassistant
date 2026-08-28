@@ -1,11 +1,37 @@
 # Was ist neu
 
-> **Stand:** August 2026 (v4.0.31)
+> **Stand:** August 2026 (v4.0.32)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.32 — 28. August 2026
+
+**Deine eedc-Sensoren stehen wieder unter einem Dach**
+
+Mit v4.0.30 hat eedc angefangen, auch die Werte einzelner Komponenten nach
+Home Assistant zu schicken — und dabei für **jede** Komponente ein eigenes
+HA-Gerät angelegt. Wer mehrere Modulflächen, einen Wechselrichter und einen
+Speicher hat, bekam so eine Handvoll Geräte mit je einem einzigen Sensor,
+zusätzlich zum Gerät der Integration.
+
+Zwei Anwender haben das am selben Tag gemeldet, und sie hatten recht.
+
+**Ab jetzt hängen wieder alle eedc-Sensoren unter dem einen Gerät deiner
+Anlage.** Der Name der Komponente steht dabei im Sensornamen — „Daikin3 ECH₂O
+COP Durchschnitt" statt eines eigenen Geräts „Daikin3 ECH₂O".
+
+**Was du dafür tun musst: nichts.** Kennung und Topic hängen an der Komponente
+und nicht am Gerät — Home Assistant erkennt deine Sensoren wieder und ordnet
+sie nur neu ein. Entity-IDs, Verlaufsdaten und Automationen bleiben erhalten,
+der angezeigte Name auch. Es entfällt **kein einziger Sensor**.
+
+⚠ Die alten, jetzt leeren Geräte räumt Home Assistant beim nächsten Neustart
+selbst weg. Bleiben sie stehen, kannst du sie einmalig von Hand löschen.
 
 ---
 
