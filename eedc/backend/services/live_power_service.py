@@ -273,8 +273,10 @@ class LivePowerService:
                     sensor_values[entity_id] = None
 
         # C2a: explizit zugeordnete HA-Entities auch OHNE Supervisor lesen
-        # (Remote-HA per LL-Token) — additiv, das Supervisor-Gate für den alten
-        # sensor_mapping-Pfad bleibt unberührt (Remote dafür = P3).
+        # (Remote-HA per LL-Token) — additiv. ⛔ Hier stand bis 2026-08-28
+        # „Remote dafür = P3": P3 ist abgeschlossen. Der alte sensor_mapping-Pfad
+        # bleibt bewusst supervisor-gebunden; für Remote-HA führt der Weg über die
+        # Datenquellen-Fläche (`services/ha_connection.resolve_ha_connection`).
         if quellen_ha and not HA_INTEGRATION_AVAILABLE:
             remote = await self._fetch_ha_states(db, quellen_ha)
             for entity_id, val in remote.items():

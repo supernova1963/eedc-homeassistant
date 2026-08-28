@@ -5,8 +5,9 @@
  * zweiter Verbindungs-Block neben dem MQTT-Broker. HA-App (Supervisor) → nur
  * Status; Standalone → Basis-URL + Long-Lived-Token eingeben/testen/speichern.
  *
- * **Nur Basis:** einrichten + testen. HA-Sensoren tatsächlich als Datenquelle
- * nutzen (im Standalone) verlangt den Gate-Umbau und folgt später (P3).
+ * **Diese Fläche:** einrichten + testen. HA-Sensoren tatsächlich als Datenquelle
+ * zu nutzen ist mit P3 gebaut (abgeschlossen 2026-08-28) und geschieht in der
+ * Datenquellen-Fläche — hier stand bis dahin „folgt später (P3)".
  */
 import { useState, useEffect } from 'react'
 import { Radio } from 'lucide-react'

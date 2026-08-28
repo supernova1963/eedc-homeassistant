@@ -1,6 +1,6 @@
 # Konzept — Datenquellen V4 (MQTT + HA, feld-zentrisch)
 
-> ## **Status (gemessen 2026-08-08): P1 + P2 ausgeliefert · P3 offen**
+> ## **Status (gemessen 2026-08-28): P1 + P2 + P3 ausgeliefert — der Bauplan ist abgearbeitet**
 >
 > **Aus `docs/drafts/` nach `docs/` gewandert (2026-08-08).** **`api/routes/datenquellen.py` und `api/routes/ha_remote.py` nennen dieses Dokument im Modul-Docstring wörtlich als SoT — ein versionierter Verweis darf nicht ins Gitignore zeigen** (dieselbe Begründung, aus der [`KONZEPT-MONATS-FAKTEN.md`](KONZEPT-MONATS-FAKTEN.md) gewandert ist). Auch [`KONZEPT-IA-V4.md`](KONZEPT-IA-V4.md) verweist in Invariante I16 hierher.
 > Es trägt bewusst **keine Versionsnummer, nur dieses Mess-Datum** (Muster aus #359) — ein Status,
@@ -10,9 +10,11 @@
 > `scripts/sync-help.sh` arbeiten beide mit einer **Allowlist**, in der Konzepte und ADRs bewusst
 > fehlen. Dieses Dokument ist im Repository lesbar — es ist kein Anwender-Handbuch.
 >
-> ⚑ **Präzisiert 2026-08-13 (gegen den Code gemessen): P3 bleibt offen, aber die Hälfte, die dem Anwender wehtat, ist gebaut.** v4.0.13/v4.0.14 haben die **Verbraucher**-Seite umgehängt — Tagesverlauf, Prognosequellen (SFML/Solcast), kWh heute/gestern, Verbrauchsprofil, Langzeitstatistik und der Statistik-Import fragen nicht mehr nach der Betriebsart, sondern über `is_available` nach der **Verbindung** (die Kommentare in `live_tagesverlauf_service.py:204`, `live_history_service.py:517`, `prognose_discovery.py:127`, `solcast_service.py:135` schreiben den Umbau ausdrücklich fest). **Das zentrale Gate steht weiterhin** — heute **30** Stellen im Backend tragen `HA_INTEGRATION_AVAILABLE` (nicht „rund 20"), und `ha_connection.py:24` sagt selbst „das bleibt P3". ⇒ Der Status stimmt, die Umfangs-Angabe stimmte nicht.
+> ⚑ **Abgeschlossen 2026-08-28 (Entscheid Gernot, gegen den Code gemessen): P2 und P3 sind fertig — auch Remote-HA (LL-Token).** Der Weg ging über zwei Stufen: v4.0.13/v4.0.14 haben die **Verbraucher**-Seite umgehängt — Tagesverlauf, Prognosequellen (SFML/Solcast), kWh heute/gestern, Verbrauchsprofil, Langzeitstatistik und der Statistik-Import fragen nicht mehr nach der Betriebsart, sondern über `is_available` nach der **Verbindung**. Die Verbindung selbst löst seither `services/ha_connection.py::resolve_ha_connection` auf (**Supervisor oder Remote-LL-Token**) und reicht sie an `HAStatisticsService` **und** `HAStateService` weiter — beim Start *und* beim Speichern. Die Live-Engine liest zugeordnete HA-Entities auch ohne Supervisor (`live_power_service.py:277`, C2a), der `ha_statistics`-Router ist seit 11.08. immer gemountet, und die untertägige Recovery holt nach einem Neustart die letzten sechs Stunden nach (`scheduler.py::sensor_snapshot_startup_recovery`, dazu das 02:15-Self-Healing für den Vortag).
 >
-> **Offen:** **P3 — Remote-HA (LL-Token)** samt Gate-Umbau `HA_INTEGRATION_AVAILABLE` (der riskanteste Teil, 30 Guard-Stellen — Stand 2026-08-13) und der Rest aus P2 (Wissensbasis über den Initial-Umfang hinaus, Takt-Check für Bestands-Zuordnungen). In der Roadmap [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) als **Datenquellen-Ausbau** geführt.
+> ⛔ **Hier stand bis 2026-08-28: „P3 bleibt offen … heute 30 Stellen im Backend tragen `HA_INTEGRATION_AVAILABLE` (nicht rund 20)".** Die Zahl war **richtig gezählt und trotzdem irreführend** — sie hat fünfzehn Tage lang eine Restschuld behauptet, die es so nicht gab. Heute sind es **28** Vorkommen außerhalb der Tests, davon **neun echte Verzweigungen**, und die sind alle legitim supervisor-spezifisch: die Add-on-API-Router (`main.py:118`/`:635`), die Supervisor-Logs (`system_logs.py:154`), die Quellenart `ha_app` vs. `ha_connector` (`datenquellen.py:908`, `migrate_datenquellen_materialisieren.py:62`), zwei Diagnose-Felder und die beiden Zweige in `live_power_service.py`, die **gemeinsam** Supervisor *und* Remote bedienen. Der Rest sind Importe, die Definition und **Kommentare, die den Rückbau dokumentieren**. *Eine Vorkommens-Zählung misst keine Restschuld — wer eine Zahl als Umfang notiert, notiert dazu, was gezählt wurde.*
+>
+> **Offen: nichts.** Der Punkt *Datenquellen-Ausbau* steht in der Roadmap [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) seit dem 28.08. unter **Abgeschlossen**. ⚑ **Der „Takt-Check für Bestands-Zuordnungen" ist kein offener Rest, sondern anders gelöst** (Gernot 28.08.: „es läuft und wird genutzt"): Er sitzt als eine von **fünf** Prüfungen in `services/datenquellen_validierung.py` (`takt_problem`), **nicht** als Daten-Checker-Kategorie. Wer im `daten_checker/` nach einem Takt-Thema greppt, findet nichts und hält es für eine Lücke — es ist keine.
 >
 > **Historie:** alles, was unten mit ✅ steht, ist mit v4.0.0 ausgeliefert und wird nicht mehr fortgeschrieben.
 
@@ -23,19 +25,19 @@
 | --- | --- | --- | --- |
 | **P1 — MQTT-Fundament** | B1 Broker-Block · B2 Feld-Fläche · B3 `#`-Discovery+Suche · B5 Feld→eine-Quelle · B7 Block-Layout · B8 Migration (MQTT-Seite) | ✅ **ausgeliefert mit v4.0.0** (`51c81f29`) | `components/live/{MqttBrokerForm,DatenquellenZuordnung,DatenquellenGatewayPicker}.tsx` — alle mit SoT-Kommentar auf dieses Doc |
 | **P2 — HA in die Fläche** | HA-Sensor als Quelle · B6 (#343-Assistenz) · Präferenz §2d · B8 HA-first | ✅ **ausgeliefert mit v4.0.0** (`d5c4d768`, Assistenz-Detail im archivierten [`KONZEPT-DATENQUELLEN-P2`](drafts/archive/flip-v4/KONZEPT-DATENQUELLEN-P2.md)) | `components/live/{DatenquellenHaPicker,HaVerbindungForm}.tsx` |
-| **P3 — Remote-HA (LL-Token)** | B4 HA-Verbindungs-Block · **Gate-Umbau `HA_INTEGRATION_AVAILABLE`** (Supervisor **oder** Remote) · Remote-Verfügbarkeit + FS-Degradation · untertägige Recovery | ⬜ **offen — der riskanteste Teil** | Roadmap [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) („Datenquellen-Ausbau"). Betrifft das Gate + ~20 Guard-Stellen (`config.py:24`, `main.py:100-107,456-468`) |
-| **Rest aus P2** | Wissensbasis über den Initial-Umfang hinaus (evcc + 4 Wallbox-Integrationen) · Takt-Check für **Bestands**-Zuordnungen als Daten-Checker-Kategorie | ⬜ offen | kuratiert/laufend bzw. P3-Kandidat |
+| **P3 — Remote-HA (LL-Token)** | B4 HA-Verbindungs-Block · **Gate-Umbau `HA_INTEGRATION_AVAILABLE`** (Supervisor **oder** Remote) · Remote-Verfügbarkeit + FS-Degradation · untertägige Recovery | ✅ **abgeschlossen 2026-08-28** (Anwender-Hälfte mit v4.0.13/v4.0.14) | `services/ha_connection.py::resolve_ha_connection` · `api/routes/ha_remote.py` · `live_power_service.py:277` (C2a) · `scheduler.py::sensor_snapshot_startup_recovery`. Vom Gate bleiben **neun** echte Verzweigungen, alle legitim supervisor-spezifisch (s. Kopf) |
+| **Rest aus P2** | Wissensbasis über den Initial-Umfang hinaus (evcc + 4 Wallbox-Integrationen) · Takt-Check für **Bestands**-Zuordnungen | ✅ **erledigt** — Wissensbasis wird kuratiert fortgeschrieben (`core/ha_integrations_wissen.py`); der Takt-Check ist **anders gelöst als geplant** | `services/datenquellen_validierung.py::takt_problem` (eine von fünf Prüfungen) statt einer Daten-Checker-Kategorie — Gernot 28.08.: „es läuft und wird genutzt" |
 
 > **Warum dieses Dokument liegen bleibt:** vier Produktiv-Komponenten führen es als SoT im
-> Datei-Kopf. Es beschreibt für P1/P2 den **gebauten** Zustand und für P3 den **beschlossenen,
-> noch nicht gebauten** — beides muss lesbar bleiben.
+> Datei-Kopf. Es beschreibt seit dem 28.08. durchgehend den **gebauten** Zustand — der Bauplan
+> darunter bleibt als Begründung lesbar, nicht als Vorhaben.
 >
 > **Beobachtung aus dem Feld (Backlog):** Datenquellen-Felder ohne Zuordnung brauchen nach dem
 > Update einmal manuell „keine"; bei Häufung eine Mini-Normalisierung erwägen.
 
 ---
 
-> **Status: ✅ ABGENOMMEN (Gernot 2026-07-13) v0.4 — Vorgabe für die Umsetzung.** Bau slice-/paketweise (§5), P1+P2 ausgeliefert, P3 offen.
+> **Status: ✅ ABGENOMMEN (Gernot 2026-07-13) v0.4 — Vorgabe für die Umsetzung.** Bau slice-/paketweise (§5); P1, P2 und P3 sind ausgeliefert (28.08.).
 > Auslöser: In Runde 18 wurden MQTT-Inbound/-Gateway auf einen Wizard umgestellt; die umgesetzte Form entsprach nicht Gernots Vorstellung. Konzept gemeinsam erarbeitet (v0.1→v0.4), inkl. Kritik-Runde.
 > **Name:** „Datenquellen" statt „Livequellen" — „Live" ist in eedc ein Feld-*Typ* (Live-Felder W/%/°C vs. Energie-Felder kWh); der Begriff wäre doppeldeutig. Das Konzept regelt, **welche Quelle den Wert eines eedc-Feldes liefert** (Live- wie Energie-Feld).
 > **Prinzip:** kein Redesign der Berechnung — Aggregation/Snapshots bleiben; **Konfigurations-Struktur + UX** vereinheitlichen, **Merge-Reihenfolge** anpassen (§2d) ([[feedback_ist_anzeigen_nur_aendern_wo_noetig]], [[feedback_bestehende_mechanik_nutzen_nicht_erfinden]], [[feedback_a5_analytische_sichten_konzept_zuerst]]).

@@ -585,8 +585,9 @@ app.include_router(live_mqtt_inbound.router, prefix="/api/live", tags=["MQTT Inb
 app.include_router(live_wetter.router, prefix="/api/live", tags=["Live Wetter"])
 app.include_router(live_dashboard.router, prefix="/api/live", tags=["Live Dashboard"])
 app.include_router(mqtt_gateway.router, prefix="/api/live", tags=["MQTT Gateway"])
-# HA-Remote-Verbindung (Basis) — IMMER gemountet (Standalone-Pfad), unabhängig vom
-# HA-Supervisor-Gate. Datenquellen-V4 / B4a (§2a). Gate-Nutzbarmachung = P3.
+# HA-Remote-Verbindung — IMMER gemountet (Standalone-Pfad), unabhängig vom
+# HA-Supervisor-Gate. Datenquellen-V4 / B4a (§2a). Die Nutzbarmachung ist mit
+# P3 gebaut (abgeschlossen 2026-08-28) — hier stand bis dahin „= P3".
 app.include_router(ha_remote.router, prefix="/api/ha", tags=["HA Remote"])
 # Datenquellen-Zuordnung (feld-zentrische Fläche) — Datenquellen-V4 / B2.
 app.include_router(datenquellen.router, prefix="/api/datenquellen", tags=["Datenquellen"])

@@ -21,7 +21,13 @@ async def resolve_ha_connection(db: AsyncSession) -> tuple:
 
     kind ∈ {"ha_app", "ha_connector"}. Supervisor bevorzugt (mit LTS-Zugriff),
     sonst Remote-HA per LL-Token (nur REST). Unabhängig vom Supervisor-gebundenen
-    `HA_INTEGRATION_AVAILABLE`-Gate (das bleibt P3).
+    `HA_INTEGRATION_AVAILABLE`-Gate.
+
+    ⛔ Hier stand bis 2026-08-28 „(das bleibt P3)". **P3 ist abgeschlossen** (Entscheid
+    Gernot, s. KONZEPT-DATENQUELLEN-V4.md): Das Gate trägt nur noch die echten
+    Add-on-Pfade (Supervisor-API-Router, Supervisor-Logs, Quellenart `ha_app` vs.
+    `ha_connector`) — es ist keine offene Restschuld mehr, sondern die Antwort auf
+    eine andere Frage: „läuft eedc als Add-on?" statt „steht eine HA-Verbindung?".
     """
     from backend.core.config import settings
     if settings.supervisor_token:

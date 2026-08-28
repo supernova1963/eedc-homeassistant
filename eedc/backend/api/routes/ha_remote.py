@@ -8,11 +8,15 @@ Basis-URL + Long-Lived-Token zu hinterlegen und die Verbindung zu **testen**.
 Analog zum MQTT-Broker-Block ist das der Verbindungs-Baustein — „Verbindung"
 getrennt von „was darüber fließt".
 
-**Bewusst NUR Basis (Gernot 2026-07-13):** Speichern + Testen der Verbindung.
-Die eigentliche Nutzbarmachung (HA-Sensoren als Quelle im Standalone) verlangt
-den Gate-Umbau (`HA_INTEGRATION_AVAILABLE` entkoppeln, Router-Registrierung,
-~20 Guard-Stellen) und bleibt P3. Dieser Router ist deshalb **immer** gemountet
-(Standalone-tauglich), verändert aber weder das Gate noch die HA-Routen.
+**Speichern + Testen der Verbindung** (Gernot 2026-07-13). Dieser Router ist
+**immer** gemountet (Standalone-tauglich) und verändert weder das Gate noch die
+HA-Routen.
+
+⛔ Hier stand bis 2026-08-28: „Die eigentliche Nutzbarmachung … bleibt P3
+(~20 Guard-Stellen)." **P3 ist abgeschlossen.** HA-Sensoren sind im Standalone
+nutzbar; die aktive Verbindung liefert `services/ha_connection.resolve_ha_connection`
+(Supervisor **oder** die hier hinterlegte Remote-Verbindung), und
+`aktualisiere_ha_verbindung` reicht sie an beide HA-Singletons weiter.
 """
 
 import logging

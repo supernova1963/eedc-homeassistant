@@ -2,8 +2,9 @@
  * HA-Remote-Verbindung API (Basis) — Datenquellen-V4 / B4a.
  *
  * Verbindungs-Baustein für eedc-Standalone → entfernte Home-Assistant-Installation
- * (Basis-URL + Long-Lived-Token). Nur Einrichten + Testen; die Nutzbarmachung
- * (HA-Sensoren als Quelle) folgt mit dem Gate-Umbau (P3).
+ * (Basis-URL + Long-Lived-Token). Dieses Modul deckt Einrichten + Testen ab;
+ * die Nutzbarmachung (HA-Sensoren als Quelle) ist mit P3 gebaut (abgeschlossen
+ * 2026-08-28) und sitzt backendseitig in `services/ha_connection.py`.
  */
 import { api } from './client'
 
