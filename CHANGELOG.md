@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.0.31] - 2026-08-28 — Taktende Anlagen behalten ihre Betriebsart; zwei Bauarten sind zwei Geräte
 
 ### Fixed
 
