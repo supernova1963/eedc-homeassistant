@@ -47,6 +47,41 @@ from backend.services.snapshot.source import SnapshotSource
 from backend.services.snapshot.writer import snapshot_anlage
 from backend.tests import factories as f
 
+
+@pytest.fixture(autouse=True)
+def _mqtt_fenster_offen(monkeypatch):
+    """Das **gleitende** Fenster des Checkers gegen den **festen** Messtag.
+
+    ⛔ **Warum es diese Fixture gibt — der Fehler, den sie behebt, ist am
+    28.08.2026 eingetreten.** `DatenChecker.check_anlage` fragt nach
+    MQTT-Zaehlerstaenden der letzten `MQTT_AKTIV_TAGE` = 7 Tage und bildet das
+    Fenster selbst aus `datetime.now()`; ein Datum nimmt er nicht entgegen (und
+    soll es auch nicht — die Proben rufen ihn bewusst wie die Produktion).
+
+    Am Bau-Tag (27.08.) war `TAG` genau sieben Tage alt und lag knapp im
+    Fenster: alles gruen. Einen Tag spaeter war er acht Tage alt, und drei
+    Proben meldeten rot, **ohne dass sich eine Zeile Produktcode geaendert
+    hatte.** Ein fester Messtag gegen ein gleitendes Fenster ist eine Wette auf
+    den Tag der Entstehung — sie ist nach 24 Stunden verloren gegangen.
+
+    ⭐ **Der Ausweg ist nicht `date.today()` in der Fixture** (das verbietet der
+    Uhr-Waechter zu Recht: es macht die Probe von Uhr UND Zone abhaengig), und
+    auch keine gestellte Uhr (`freezegun` ist verworfen, Entscheid 23.08.).
+    Stattdessen wird die **Groesse geweitet, die den Konflikt erzeugt**: Das
+    Fenster deckt jeden Kalendertag ab, der feste Messtag bleibt fest.
+
+    ⚠ **Was dadurch NICHT mehr geprueft wird:** dass es das Fenster ueberhaupt
+    gibt (ein Topic, das seit Wochen schweigt, soll gemeldet werden). Das ist
+    auch nicht Gegenstand dieser Datei — sie prueft, ob eine MQTT-Quelle als
+    Zaehler **erkannt** wird. Wer das Fenster selbst pruefen will, braucht eine
+    eigene Probe mit zwei Staenden verschiedenen Alters.
+    """
+    import backend.services.daten_checker as dc
+    monkeypatch.setattr(dc, "MQTT_AKTIV_TAGE", 36_500, raising=True)
+
+#: Der Messtag der nachgestellten Anlage — **fest**, wie der Uhr-Waechter es
+#: verlangt (`test_konformitaet_echte_uhr_in_tests.py`): die Suite laeuft in
+#: drei Zeitzonen, und ein fester Wert ist in allen dreien derselbe.
 TAG = date(2026, 8, 20)
 
 
