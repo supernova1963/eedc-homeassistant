@@ -1457,7 +1457,7 @@ async def _pv_stunden_aus_kanon(db, anlage, datum: date) -> Optional[list[float]
             db, anlage,
             days=kanon_days(tage_bis_ziel + 1),
             # Interaktiver User-Request: der 1-30s-Random-Jitter gilt nur für
-            # Hintergrund-Abrufe (R18-13, KONZEPT-LADEZEIT-CACHE-SWR).
+            # Hintergrund-Abrufe (R18-13).
             skip_jitter=True,
         )
     except Exception as e:
@@ -1664,7 +1664,7 @@ async def get_tagesprognose(
                         system_losses=system_losses,
                         # Interaktiver User-Request (Stunden-/Tagesprognose der
                         # Aussicht): der 1-30s-Random-Jitter gilt nur für
-                        # Hintergrund-Abrufe (R18-13, KONZEPT-LADEZEIT-CACHE-SWR).
+                        # Hintergrund-Abrufe (R18-13).
                         skip_jitter=True,
                     )
                     for g in gruppen

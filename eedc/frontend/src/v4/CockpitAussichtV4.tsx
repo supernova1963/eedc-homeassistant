@@ -225,7 +225,7 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
   const finanz = finanzQ.data ?? null
   const aktivQ = istKurz ? kurzQ : langQ
   // Fehler nur ohne Daten als Sicht-Fehler zeigen; mit Cache-Stand bleiben die
-  // alten Daten stehen (SWR-Semantik, KONZEPT-LADEZEIT-CACHE-SWR §3).
+  // alten Daten stehen (SWR-Semantik: beim Remount stehen die alten Daten, still revalidiert wird trotzdem).
   const loading = hatKoordinaten && aktivQ.loading
   const reloading = aktivQ.reloading || finanzQ.reloading
   const error = aktivQ.data == null ? aktivQ.error : null

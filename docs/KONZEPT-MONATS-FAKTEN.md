@@ -225,7 +225,7 @@ Als neue **ADR-002/P10** eintragen, mit „gesichert durch"-Spalte.
    Jahresbericht. Braucht eine eigene WAS-IST-NEU-Passage.
 2. **Ladezeit.** Heute lädt jede Sicht gezielt; die Schicht lädt den ganzen Monat.
    Gegenmaßnahme: ein Query-Satz je Anfrage + Request-Cache, und die
-   Ladezeit-Messung aus `KONZEPT-LADEZEIT-CACHE-SWR.md` vor/nach vergleichen.
+   Ladezeit vor/nach vergleichen.
    **Abbruchkriterium:** wird Cockpit/Übersicht messbar langsamer, wird Schritt 4
    zurückgestellt.
 3. **Cross-Repo.** Schritt 6 berührt das Community-Datenmodell — beide Repos

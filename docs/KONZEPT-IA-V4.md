@@ -20,13 +20,13 @@
 > | --- | --- | --- |
 > | **B10** | PageHeader-Konsolidierung | ⬜ offen — keine PageHeader-SoT; 17 `.tsx` mit hartem `<h1`. Zugleich SoT-Inventar-Zeile „Sicht-Rahmen". Kein Issue (kein Nutzer-Trigger) — dieses Register ist die Heimat |
 > | **B14** | Globale Cmd+K-Suchpalette | ⬜ offen — 0 Treffer im Code. Kein Nutzer-Trigger bisher |
-> | **B5** | Mobile-Reduce (M1 Reduce-Logik · M2 Sticky-Header auto-hide · M3 Tabellen-Swipe) | ⬜ offen — 0 Treffer. Stakeholder-Lage dünn, s. [KONZEPT-MOBILE.md](KONZEPT-MOBILE.md) |
+> | **B5** | Mobile-Reduce (Reduce-Wrapper · Sticky-Header auto-hide · Tabellen-Swipe) | ⛔ **abgelöst, kein offener Punkt mehr** (Entscheid Gernot 2026-08-28): Die V4-Flächen sind von Grund auf über Breakpoints und zweite Render-Pfade gebaut; ein Reduce-Wrapper würde Inhalt wegblenden, was die Mobile-Regel im [Style-Guide](KONZEPT-STYLE-GUIDE.md) ausschließt |
 > | **B12** | Single-Anlage-Selektor-Audit | 🟡 Kern erledigt (Selektor blendet bei < 2 Anlagen aus); der Audit **über alle Sichten** ist nie gelaufen |
 >
 > Diese vier haben keinen Nutzer-Trigger und kein Issue — sie bleiben offene Punkte dieses
 > Dokuments. Vorher standen sie als DOK-13 im Post-Flip-Backlog, der am 2026-07-30 außer Dienst ist.
 >
-> **Verwandte Dokumente:** [KONZEPT-STYLE-GUIDE.md](KONZEPT-STYLE-GUIDE.md) (visuelle Sprache) · [KONZEPT-MOBILE.md](KONZEPT-MOBILE.md) (Mobile-Verhalten) · [ADR-001](ADR-001-BERECHNUNGS-LAYER.md)/[ADR-002](ADR-002-WURZELMUSTER.md) (Berechnung — nie mit der IA vermischen, I11) · [#243](https://github.com/supernova1963/eedc-homeassistant/issues/243) (operativer Bausteine-Tracker, mit v4.0.0 abgeschlossen).
+> **Verwandte Dokumente:** [KONZEPT-STYLE-GUIDE.md](KONZEPT-STYLE-GUIDE.md) (visuelle Sprache) · [ADR-001](ADR-001-BERECHNUNGS-LAYER.md)/[ADR-002](ADR-002-WURZELMUSTER.md) (Berechnung — nie mit der IA vermischen, I11) · [#243](https://github.com/supernova1963/eedc-homeassistant/issues/243) (operativer Bausteine-Tracker, mit v4.0.0 abgeschlossen).
 
 ---
 
@@ -472,7 +472,6 @@ Konventions-Regel: jede Bestandsroute kriegt einen `Navigate replace` in `App.ts
 ## Querverweise
 
 - **Visuelle Sprache (Tokens, Komponenten, Layout)** → [`KONZEPT-STYLE-GUIDE.md`](KONZEPT-STYLE-GUIDE.md)
-- **Mobile-Verhalten** → [`KONZEPT-MOBILE.md`](KONZEPT-MOBILE.md)
 - **Operativer Bausteine-Tracker** → [#243](https://github.com/supernova1963/eedc-homeassistant/issues/243)
 - **Speicher-Auswertungs-Inhalte (B11 alt → Komponenten-Hub-Inhalt)** → [#142](https://github.com/supernova1963/eedc-homeassistant/issues/142) · [`archive/KONZEPT-SPEICHER-AUSWERTUNG.md`](archive/KONZEPT-SPEICHER-AUSWERTUNG.md) (archiviert 2026-08-13, #358 geschlossen)
 - **CO₂-Amortisation** → [#284](https://github.com/supernova1963/eedc-homeassistant/issues/284)

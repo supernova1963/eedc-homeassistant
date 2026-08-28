@@ -5,7 +5,7 @@
  * ein `DatendichtFallback`: unter `sm` ersetzte er die Tabelle durch einen
  * Hinweiskasten („bitte Gerät ins Querformat drehen oder Desktop verwenden"),
  * im Querformat durch „Auflösung zu gering". Der Inhalt war mobil **nicht**
- * erreichbar — was `KONZEPT-MOBILE.md` M1 ausschließt (Gernot, 2026-05-31:
+ * erreichbar — was die Mobile-Regel ausschließt (Gernot, 2026-05-31:
  * „nichts wird auf Mobile unerreichbar, nur de-priorisiert").
  *
  * jsdom hat keine Media-Queries: geprüft wird deshalb, dass **beide**

@@ -3,7 +3,8 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { useApiData, _clearSwrCacheForTests } from './useApiData'
 
 // R18-2 (SWR-Sicht-Cache): Invarianten des erweiterten useApiData.
-// SoT: docs/KONZEPT-LADEZEIT-CACHE-SWR.md §3.
+// Regel: Ein Remount mit `swrKey` zeigt sofort die alten Daten (loading bleibt
+// false) und revalidiert still; ein Skeleton gibt es nur beim echten Erst-Load.
 
 function deferred<T>() {
   let resolve!: (v: T) => void

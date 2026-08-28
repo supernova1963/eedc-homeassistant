@@ -6,7 +6,7 @@
 >
 > **Ziel:** Konsistente, dokumentierte UI-Sprache für eedc. Marken-Wert für v4.0.0: „strukturell sauber + konsistent".
 >
-> **Mobile-Verhalten** wird in einem **eigenen Konzept-Dokument** behandelt: [`KONZEPT-MOBILE.md`](KONZEPT-MOBILE.md). Bei Bereichen mit Mobile-Bezug Querverweis statt Inline-Lösung. **Pflicht-Querschnittsregeln** (Touch-Targets, Companion-App-Quirks) gelten generell — siehe Methodik unten.
+> **Mobile-Verhalten gehört hierher** — es gibt kein zweites Dokument dafür. Die tragende Regel (Gernot, 2026-05-31): **Auf Mobile wird nichts unerreichbar, nur de-priorisiert.** Kein Wrapper, der Inhalt wegblendet; wo eine Tabelle zu breit ist, gibt es einen zweiten Render-Pfad (Kartenliste) statt eines Hinweiskastens. **Pflicht-Querschnittsregeln** (Touch-Targets, Companion-App-Quirks) gelten generell — siehe Methodik unten.
 >
 > **Informationsarchitektur v4.0.0** → [`KONZEPT-IA-V4.md`](KONZEPT-IA-V4.md) (Top-Nav, Achsen, Cross-Linking, Migration). Der Style-Guide regelt das **Wie es aussieht**, die IA das **Wo es liegt**.
 
@@ -374,7 +374,7 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 
 > **Schwebend** auf langen Scroll-Seiten (Sticky `top: 0` mit Backdrop-Blur). Reusable `<FloatingSelector>` (#243 B3) — **existiert noch nicht (zu bauen, 2026-05-31)**, Phase-Zuordnung (Phase-0-Vorarbeit vs. Teil des v4.0.0-Schnitts) offen. **Namensraum-Hinweis:** dieses B5 (Selektoren) ist nicht der Mobile-Tracker B5a–B5e (#243-Sub-Tracker für M1/M2/M3).
 > **Single-Anlage-Selektor:** ausblenden wenn ohne Auswahl-Sinn (#243 B12 — Audit).
-> Mobile-Sticky-Verhalten in [KONZEPT-MOBILE.md M2](KONZEPT-MOBILE.md).
+> Auf schmalen Schirmen gilt dasselbe Sticky-Verhalten — ein Selektor, der oben klebt, darf den Inhalt nicht verdecken.
 
 **Betroffene Issues:** #243 B3+B12, #206 P3, #208 P2+P6.
 
@@ -385,7 +385,7 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 > **Persistenz:** Aufklapp-Status **und Reihenfolge** pro Sektion in LocalStorage (etabliert für Monatsberichte/Energieprofil-Monat — Vorbild laut detLAN #258 P5; Reorder kam gut an). Konsistente Implementierung über alle Verwender. **Drift-Befund (2026-05-31):** `CollapsibleSection` (Key `eedc-collapse-${storageKey}`) und `SortableSection` (Key `${prefix}_section_${title}`) führen je eigene State-Logik — die geforderte Konsistenz ist intern bereits gebrochen.
 > **✅ Entschieden (2026-05-31, korrigiert 2026-06-01): EIN Sektions-Persistenz-SoT.** Statt `SortableSection` ersatzlos zu streichen (das war die ältere, mit dem Cap verwechselte Fassung — siehe Korrektur oben), werden Auf/Zu **und** Reihenfolge in **einem** Mechanismus zusammengeführt (`CollapsibleSection` um die Reorder-Fähigkeit erweitert, `SortableSection` darin aufgelöst). Reorder bleibt also als Funktion erhalten, nur ohne Doppel-Logik. **Geltungsbereich:** Cockpit-Zeitsichten ja; Komponenten-Hub fix (IA-V4 Variante C). detLAN (#175) bleibt bedient.
 > **Default-Open** pro Sektion definieren (datenreich → standardmäßig offen; sekundär → standardmäßig zu).
-> **Mobile-Default** abweichend siehe [KONZEPT-MOBILE.md M1](KONZEPT-MOBILE.md).
+> **Auf Mobile** darf eine datenreiche Sektion zugeklappt starten — zugeklappt heißt aufklappbar, nicht abwesend.
 > **IA-V4-Block-Modell (SoT):** Im v4-Routenbaum tragen Inhalts-Blöcke das universelle Modell `components/blocks/BlockShell` (einklappen + optional ↑↓-Reihenfolge + Persistenz je Sicht). **Fokus/Vollbild ist EIN geteilter Baustein:** `components/blocks/FokusVollbild` (bildschirmfüllendes Overlay) — konsumiert von `BlockShell` (⤢ je Block) **und** `FokusKachel` (⤢ je Karte für IST-treue Layouts ohne Block-Stack, z. B. Cockpit/Live). **Keine zweite Fokus-Implementierung** (Regel 0a); Komponenten mit eigener Kopfzeile reichen den ⤢ über einen `kopfAktion`-Slot ein (Vorbild `live/EnergieFluss`). Stand 2026-06-22 (A.3). **Schließen: ESC, kein Backdrop** — Regel und Begründung stehen in **B16**.
 > **Sub-Block-Disclosure per nativem `<details>` (R3b S9, Gernot 2026-07-05):** die leichtgewichtige dritte Aufklapp-Ebene UNTERHALB eines Blocks (z. B. „Monatsdaten anzeigen (N)" unter einem Chart) — bewusst **ohne Persistenz** (Abgrenzung: `CollapsibleSection` = Sektion-Ebene mit LocalStorage · `BlockShell` = Block-Ebene · `<details>` = Wegwerf-Disclosure im Block). **EIN Stil-Kanon:** `<details className="border-t border-gray-100 dark:border-gray-800 pt-3">` + `<summary className="cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">` + Summary-Formel **„… anzeigen ({N})"** (Varianten „({N} Jahre)"/„({N} Felder)" konform) + Inhalt mit `mt-3`. Wächter: `check:details`.
 
@@ -610,7 +610,6 @@ Formular = EIN Screen (D1–D4). **Wizard** = mehrstufiger Ablauf; D1–D4 gelte
 ## Querverweise
 
 - **Informationsarchitektur v4.0.0** → [`KONZEPT-IA-V4.md`](KONZEPT-IA-V4.md)
-- **Mobile-Konzept** → [`KONZEPT-MOBILE.md`](KONZEPT-MOBILE.md)
 - **Aggregations- und Berechnungs-Themen** → [`BERECHNUNGEN.md`](BERECHNUNGEN.md)
 - **Sensor-Themen** → [`SENSOR-REFERENZ.md`](SENSOR-REFERENZ.md)
 - **Architektur-Überblick** → [`ARCHITEKTUR.md`](ARCHITEKTUR.md)

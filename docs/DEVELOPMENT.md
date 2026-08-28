@@ -358,7 +358,7 @@ eedc-homeassistant/                  ← Source of Truth (alle Änderungen hier)
 │   ├── KONZEPT-IA-V4.md             # IA + Oberflächen-Invarianten I1–I16 + Redirect-Tabelle
 │   ├── KONZEPT-STYLE-GUIDE.md       # Darstellungs-SoT (Regel 0/0a)
 │   ├── KONZEPT-MONATS-FAKTEN.md     # Monatszeilen-Schicht (ADR-002/P10)
-│   ├── KONZEPT-BERECHNUNGS-LAYER.md · KONZEPT-MOBILE.md
+│   ├── KONZEPT-BERECHNUNGS-LAYER.md
 │   ├── KONZEPT-UNVOLLSTAENDIGE-WERTE.md
 │   ├── KONZEPT-WALLBOX-EAUTO.md
 │   ├── SENSOR-REFERENZ.md · MQTT_INBOUND.md · GLOSSAR.md · FLYER.md
@@ -934,8 +934,8 @@ baumweit gemessen: **16 Stellen im Produktionscode** zeigten dorthin, zwei davon
 **Die Regel, die daraus folgt:**
 
 1. **Ein Dokument, das im Code als SoT zitiert wird, gehört nach `docs/`** — nicht in `drafts/`.
-   Deshalb sind `KONZEPT-DATENQUELLEN-V4.md` und `KONZEPT-LADEZEIT-CACHE-SWR.md` dorthin
-   gewandert, so wie vorher schon [KONZEPT-MONATS-FAKTEN.md](KONZEPT-MONATS-FAKTEN.md).
+   Deshalb ist `KONZEPT-DATENQUELLEN-V4.md` dorthin gewandert, so wie vorher schon
+   [KONZEPT-MONATS-FAKTEN.md](KONZEPT-MONATS-FAKTEN.md).
    ⚑ **Die Umkehrung gilt seit 2026-08-28 genauso** (Entscheid Gernot): Ein Dokument, das **nur
    noch einen Bauplan** enthält — Maßnahmen-Register, Pakete, offene Punkte —, gehört **nicht**
    ins öffentliche Repository. `docs/` ist die Beschreibung des **gebauten** Systems; Baupläne
@@ -964,8 +964,6 @@ baumweit gemessen: **16 Stellen im Produktionscode** zeigten dorthin, zwei davon
 | [KONZEPT-STYLE-GUIDE.md](KONZEPT-STYLE-GUIDE.md) | Darstellungs-SoT (Regel 0/0a) |
 | [KONZEPT-MONATS-FAKTEN.md](KONZEPT-MONATS-FAKTEN.md) | die Monatszeile als eine Schicht (P10) |
 | [KONZEPT-DATENQUELLEN-V4.md](KONZEPT-DATENQUELLEN-V4.md) | eine Quelle je Feld, HA-first (Invariante I16) |
-| [KONZEPT-LADEZEIT-CACHE-SWR.md](KONZEPT-LADEZEIT-CACHE-SWR.md) | SoT für `hooks/useApiData.ts` (SWR, Skeletons) |
-| [KONZEPT-HA-EXPORT-ARCHITEKTUR.md](KONZEPT-HA-EXPORT-ARCHITEKTUR.md) | was nach HA exportiert wird — und was nie |
 | [KONZEPT-263-klima-split.md](KONZEPT-263-klima-split.md) · [KONZEPT-263-INNENGERAETE.md](KONZEPT-263-INNENGERAETE.md) | **abgeschlossen und gebaut** — zwei **Bauform-Kapitel** (Split-Klimaanlage · Multisplit-Innengeräte). ⚠ **Nicht das Konzept der Fläche „Heizen · Warmwasser · Kühlen“** — das ist das Flächen-Konzept *SOLL Wärme/Klima* (**Maintainer-intern, noch nicht im Repo**). Beide Kapitel tragen im Kopf eine Korrekturliste. **Bis 27.08. standen sie hier unter „geplante Pakete“** |
 | [HANDBUCH_WAERME_KLIMA.md](HANDBUCH_WAERME_KLIMA.md) | Wärme/Klima aus Anwendersicht — Erfassungswege, Werte des Modus-Sensors, Kennzahlen, FAQ. **Auch für Entwickler die schnellste Antwort auf „was sieht der Melder?“** |
 | [RELEASE-WORKFLOW.md](RELEASE-WORKFLOW.md) | Release-Prozess beider Repos |

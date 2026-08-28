@@ -1278,7 +1278,7 @@ async def get_live_wetter(
         # lokalen GTI-Pfad; nur der PV-Anteil wird kanonisch ersetzt.
         from backend.services.prognose_kanon import kanon_tagesprognose
         # skip_jitter: interaktiver User-Request — der 1-30s-Random-Jitter ist
-        # nur für Hintergrund-Abrufe gedacht (R18-13, KONZEPT-LADEZEIT-CACHE-SWR).
+        # nur für Hintergrund-Abrufe gedacht (R18-13).
         kanon = await kanon_tagesprognose(db, anlage, days=4, skip_jitter=True)
         kanon_heute = kanon.tage[0] if (kanon and kanon.tage) else None
         # rapahl-PN 2026-08-23: Der Rest des Tages wird hier ohnehin schon

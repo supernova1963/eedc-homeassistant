@@ -5747,7 +5747,7 @@ Bei v3.32.2 wurde diese Seite versehentlich noch mit dem v3.32.1-Stand ausgelief
 ### Konzept zur Diskussion — neue Menüstruktur für v4.0.0
 
 - **eedc bekommt mit der nächsten großen Version eine grundlegend neue Menüstruktur und ein modernes Designsystem.** Drei klare Achsen statt der heutigen Vermischung: Cockpit (Zeit — Live, Heute, Monatsbericht, Jahr, Aussicht), Komponenten (eine eigene Seite pro Speicher / Wärmepumpe / E-Auto / …), Auswertungen (Finanzen, CO₂, ROI, Tabelle, Prognose-vs-IST). Plus Hell/Dunkel-Mode und ein eigenes Mobile-Konzept für die HA-Companion-App.
-- **Die Konzept-Dokumente sind öffentlich** — [Menüstruktur](https://github.com/supernova1963/eedc-homeassistant/blob/main/docs/KONZEPT-IA-V4.md), [Designsystem](https://github.com/supernova1963/eedc-homeassistant/blob/main/docs/KONZEPT-STYLE-GUIDE.md), [Mobile-Konzept](https://github.com/supernova1963/eedc-homeassistant/blob/main/docs/KONZEPT-MOBILE.md) — und Feedback ist ausdrücklich willkommen, **bevor** die Umsetzung startet. Zentrale Anlaufstelle: [Issue #243](https://github.com/supernova1963/eedc-homeassistant/issues/243). Bekanntmachungen laufen parallel in den Foren ([simon42](https://community.simon42.com/t/eedc-energie-effizienz-data-center/77723/618), [community-smarthome.com](https://community-smarthome.com/t/eedc-energie-effizienz-data-center/10057/72)).
+- **Die Konzept-Dokumente sind öffentlich** — [Menüstruktur](https://github.com/supernova1963/eedc-homeassistant/blob/main/docs/KONZEPT-IA-V4.md), [Designsystem](https://github.com/supernova1963/eedc-homeassistant/blob/main/docs/KONZEPT-STYLE-GUIDE.md), und Feedback ist ausdrücklich willkommen, **bevor** die Umsetzung startet. Zentrale Anlaufstelle: [Issue #243](https://github.com/supernova1963/eedc-homeassistant/issues/243). Bekanntmachungen laufen parallel in den Foren ([simon42](https://community.simon42.com/t/eedc-energie-effizienz-data-center/77723/618), [community-smarthome.com](https://community-smarthome.com/t/eedc-energie-effizienz-data-center/10057/72)).
 
 ---
 
@@ -6037,7 +6037,7 @@ Im Daten-Checker (Einstellungen → Daten-Checker) gibt es eine neue Kategorie *
 
 #### Hintergrund
 
-Detaillierte Architektur-Beschreibung (für technisch Interessierte): das Aggregat-System ist ab v3.31.0 ein Cache von HA-Statistics-Long-Term, nicht mehr eine eigenständige Berechnung parallel dazu. Damit gilt automatisch: was im HA-Energy-Dashboard steht, steht auch in eedc. Vollständiges Konzept in `docs/KONZEPT-ETAPPE-4-HA-LTS-SOT.md` im Repo.
+Detaillierte Architektur-Beschreibung (für technisch Interessierte): das Aggregat-System ist ab v3.31.0 ein Cache von HA-Statistics-Long-Term, nicht mehr eine eigenständige Berechnung parallel dazu. Damit gilt automatisch: was im HA-Energy-Dashboard steht, steht auch in eedc. Vollständiges Konzept in `docs/archive/KONZEPT-ETAPPE-4-HA-LTS-SOT.md` im Repo.
 
 *(Aus dem Forum + PNs als Anwender-Beobachtung über mehrere Wochen — Konsistenz-Drift war eine echte Vertrauenslücke.)*
 

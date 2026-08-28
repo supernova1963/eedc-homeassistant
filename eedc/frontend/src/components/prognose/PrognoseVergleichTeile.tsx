@@ -400,9 +400,9 @@ function formatDatum(datum: string): string {
  * Vorher stand hier `DatendichtFallback`: unter `sm` ersetzte er die Tabelle
  * durch einen Hinweiskasten („bitte Gerät ins Querformat drehen oder Desktop
  * verwenden"), und im Querformat durch „Auflösung zu gering". Der Inhalt war
- * auf dem Handy also **gar nicht** erreichbar — genau das schließt
- * `KONZEPT-MOBILE.md` M1 aus (Gernot, 2026-05-31: „der `<HideOnMobile>`-Wrapper
- * entfällt … nichts wird auf Mobile unerreichbar, nur de-priorisiert").
+ * auf dem Handy also **gar nicht** erreichbar — und genau das ist die Regel
+ * (Gernot, 2026-05-31): **nichts wird auf Mobile unerreichbar, nur
+ * de-priorisiert.** Kein Wrapper, der Inhalt wegblendet.
  * Das Muster dafür gab es im Baum längst — eine Datenliste, zwei Render-Pfade
  * (`PVStringVergleich`, `KomponentenFinanzTabelle`, `TKonto`).
  */
