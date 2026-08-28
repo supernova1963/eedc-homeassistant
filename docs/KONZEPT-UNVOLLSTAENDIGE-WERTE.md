@@ -1,24 +1,28 @@
-# Konzept — was eedc sagt, wenn ein Messwert fehlt
+# Regel — was eedc sagt, wenn ein Messwert fehlt
 
-> **Status (gemessen 2026-08-08): B0 + B0b gebaut · B1–B5 offen.** ⚠ Bis heute stand hier „VORSCHLAG (2026-08-02) — kein Code", obwohl die ersten beiden Bausteine noch am selben Tag gebaut wurden (Fund N-183, dieselbe Klasse wie N-182). Für die **offenen** Bausteine gilt weiter: keine ADR-Zeile vor dem Bau —
-> die kommt erst mit dem Bau, sonst behauptet ADR-002 eine Invariante, die nichts
-> absichert ([[feedback_keine_regel_behaupten_ohne_code_beleg]]).
+> ## **Status (gemessen 2026-08-28): die Regel gilt und ist gewächtert**
 >
-> **Auslöser:** Rainer (PN 89905), gefunden an coolxmads Screenshot, nicht an der
-> eigenen Anlage: fällt ein Sensor aus, verschwindet der **abgeleitete** Wert
-> (Hausverbrauch) ganz, obwohl Netz und Batterie weiter messen.
+> **Was hier steht:** wie eedc mit einem fehlenden Messwert umgeht — und warum es ihn **nicht**
+> durch 0 ersetzt. §3 ist die tragende Regel; **23 Stellen im Code zitieren sie**, dazu
+> [BERECHNUNGEN.md](BERECHNUNGEN.md). §6 nennt die Regressionen, die sie halten.
 >
-> **Sein Lösungsvorschlag „fehlend → 0" wird nicht gebaut.** Er verstößt gegen die
-> 0-Werte-Regel (`is not None`, nicht `if val`) und gegen „HA-Werte sind SoT, kein
-> stiller Fallback". Eine 0 macht aus *unbekannt* ein *war nichts* — der
-> Hausverbrauch würde dadurch zu hoch ausgewiesen, ohne dass es jemand sieht. Das
-> ist schlimmer als eine Lücke. Was dieses Papier stattdessen zeigt: **die 0 steht
-> an zwölf Stellen bereits im Code** (§2.1), nur nicht dort, wo er sie gesucht hat.
+> **Auslöser:** Rainer (PN 89905), gefunden an coolxmads Screenshot, nicht an der eigenen Anlage:
+> fällt ein Sensor aus, verschwindet der **abgeleitete** Wert (Hausverbrauch) ganz, obwohl Netz
+> und Batterie weiter messen.
 >
-> **Verhältnis zu ADR-002/P4:** P4 gilt heute für die **Wetter-/Prognose-Abrufe**
-> (zwei Response-Verträge, `tests/test_wurzelmuster_p4_teilsumme.py`). Dieses
-> Papier dehnt dieselbe Regel auf **abgeleitete Energiegrößen** aus. Die ADR-Zeile
-> wird beim Bau ergänzt, nicht jetzt.
+> **Sein Lösungsvorschlag „fehlend → 0" wird nicht gebaut.** Er verstößt gegen die 0-Werte-Regel
+> (`is not None`, nicht `if val`) und gegen „HA-Werte sind SoT, kein stiller Fallback". Eine 0
+> macht aus *unbekannt* ein *war nichts* — der Hausverbrauch stünde dadurch zu hoch, ohne dass es
+> jemand sieht. Das ist schlimmer als eine Lücke.
+>
+> **Verhältnis zu ADR-002/P4:** P4 gilt für die Wetter-/Prognose-Abrufe (zwei Response-Verträge,
+> `tests/test_wurzelmuster_p4_teilsumme.py`). Dieses Dokument dehnt dieselbe Regel auf
+> **abgeleitete Energiegrößen** aus.
+>
+> ⚑ **Der Bauplan steht nicht mehr hier.** Paket-Schnitt und Wächter-Vorschlag sind am 2026-08-28
+> herausgelöst worden — ein öffentliches Dokument beschreibt den gebauten Zustand, keinen
+> Arbeitsvorrat. §2 nennt weiterhin die Stellen, an denen die 0 im Code steht; das ist die
+> **Begründung** der Regel und keine Aufgabenliste.
 
 ---
 
@@ -60,7 +64,7 @@ Fehlerrichtungen, eine Funktion, keine davon dokumentiert.
 ## §2 Inventur
 
 Erhoben per baumweitem Grep über `.py`/`.ts`/`.tsx` ohne Glob-Einschränkung
-([[feedback_luecken_funde_brauchen_negativbeweis]]); Tests, Seed-Skripte und
+(ein Fund über eine Lücke braucht den Negativbeweis); Tests, Seed-Skripte und
 Doku-Treffer ausgenommen. **Die Startmenge des Auftrags war unvollständig** — vier
 Stellen unten (`live_komponenten_builder`, `live_dashboard`, `crud`, `types.ts`)
 standen in keinem Register.
@@ -241,106 +245,27 @@ wenn die Rohdaten die Lücke tatsächlich schließen können (Snapshots/LTS
 vorhanden, nur die Aggregation fehlt). Fehlt der Messwert selbst, gibt es
 **keinen** Knopf, sondern den Link zur Eingabe.
 
-[[feedback_kein_grosser_heiler_knopf]] gilt unverändert: kein globaler
+Die Regel gilt unverändert: kein globaler
 Heiler-Lauf, der über alle Monate „repariert". Und die HA-LTS-Grenze bleibt —
-[[feedback_ha_lts_keine_zeitmaschine]]: was HA nie gespeichert hat, kann eedc
+Home Assistant ist keine Zeitmaschine: was HA nie gespeichert hat, kann eedc
 nicht rekonstruieren, und ein Reparatur-Knopf, der das suggeriert, wäre eine
 Lüge in Knopfform.
 
 ---
+## §6 Wächter — was heute prüft
 
-## §6 Wächter-Vorschlag
+Für die allgemeine Form gibt es bewusst **keinen** Grep-Wächter: `except → return 0` ist im
+Connector-/Wetter-Layer die **richtige** Form (rund 40 Stellen) und im Wert-Pfad die falsche —
+der Unterschied liegt nicht im Ausdruck. Das steht so schon in ADR-002.
 
-**Warum es für die allgemeine Form keinen Grep-Wächter gibt,** steht bereits in
-ADR-002 §„Warum für P1 und P4 kein Grep-Wächter existiert": `except → return 0`
-ist im Connector-/Wetter-Layer die **richtige** Form (~40 Stellen) und im
-Wert-Pfad die falsche; der Unterschied liegt nicht im Ausdruck. Das bleibt so.
-**Drei enger geschnittene Wächter sind aber möglich** — jeder deckt genau eine
-der Fehlerklassen aus §2:
+Geprüft wird deshalb am Ergebnis, und dafür stehen fünf Regressionen (gemessen 2026-08-28):
 
-| | Wächter | Deckt | Form |
-| --- | --- | --- | --- |
-| **W1** | **Kein totes Provenance-Flag.** Jedes Feld, dessen Name auf `_vollstaendig`/`_unvollstaendig` endet, braucht mindestens einen Leser außerhalb seiner Definitionsdatei und außerhalb von `tests/` | §2.4 | AST/Grep, baumweit |
-| **W2** | **Fakten-Konstruktion ohne `or 0.0`.** In `monats_fakten.py::_baue_fakt` darf kein Feld aus einer nullable `Monatsdaten`-Spalte per `or 0.0` gefüllt werden | §2.1 (Kern) | AST, **eine** Datei/Funktion — dadurch überhaupt entscheidbar |
-| **W3** | **Response-Vertrag**, wie die bestehenden P4-Tests: am HTTP-Ergebnis, nicht im Log | §3 | Regression, je Endpoint |
-
-**W1 startet rot** — heute genau ein Treffer (`pv_vollstaendig`). Das ist
-beabsichtigt und wird **gemessen, nicht fortgeschrieben**: er wird mit dem
-Bau-Schritt scharf gestellt, der das Flag ausliefert, nicht vorher. Die Lehre aus
-P3-a/P10 gilt (A24-1/2/3): erst migrieren, dann wächtern — eine Baseline in der
-Größe des Problems ist kein Wächter, sondern ein Aufräum-Paket mit einem grünen
-Test obendrauf.
-
-**Was keiner der drei sieht** — und das gehört hierher, nicht in eine Fußnote:
-eine **neue** Differenz aus zwei Teilsummen (§2.5) innerhalb einer bereits
-korrekten Funktion. Dagegen steht nur W3 für den jeweiligen Endpoint. Diese Lücke
-schrumpft nicht von selbst.
-
----
-
-## §7 Bau-Schnitt
-
-Fünf Pakete. **B0 ist das kleinste, das Rainers Fall löst** — es braucht weder
-die Schicht noch ein neues Response-Feld.
-
-| | Paket | Umfang | Löst |
-| --- | --- | --- | --- |
-| **B0** | **Live-Tageswerte: eine Regel statt drei** — `_calc_tages_ev_hv` (`live_power_service.py:388-401`) nach §3: Differenz unterdrücken, wenn ein Summand fehlt; Batterie-Lücke nicht mehr als 0; Netzbezug-Lücke nicht mehr still ergänzen | **eine** Funktion, eine Response | **89905** (Rainer), §1 |
-| **B1** | **Zähler-Provenance in die Monats-Fakten** — `ZaehlerFakten` auf `Optional`, Flag je Feldgruppe, `pv_vollstaendig` **ausliefern**; W1 + W2 scharf | Schicht + Schema | §2.4, §2.1-Kern |
-| **B2** | **Die Anzeige** — Beschriftung an additiven Werten, „—" an unterdrückten; Client-Nachrechnung in `types.ts:140-147` entfernen | Frontend + W3 | §2.1 (Client), §4 |
-| **B3** | **Gegenrichtung** — `is not None` statt `> 0` in `prognosen.py:763`; `ist_unvollstaendig` benutzen | zwei Stellen | **N-52** |
-| **B4** | **Verbrauchsprofil** — bereits als Paket **P-3** geschnitten | Fallback-Pfad | **N-47 · N-48 · N-49** |
-| **B5** | **Die verstreuten Rechenstellen** — `live_komponenten_builder.py:356`, `live_dashboard.py:133` und der **Schreibpfad** `monatsdaten.py:749-751` | drei Stellen, keine gemeinsame Schicht | §2.1-Rest |
-
-**Reihenfolge und Abhängigkeit:** B0 steht allein und kann sofort. B1 ist der
-Gate für B2 (ohne Provenance in der Antwort kann die Anzeige nichts
-beschriften). B3, B4 und B5 sind unabhängig von beiden. **B4 wartet nicht auf
-dieses Papier**, sondern nur noch auf die Entscheidung in §3, die es jetzt hat:
-N-48s Schwelle zählt Abdeckung, nicht Tage.
-
-**Warum B5 ein eigenes Paket ist und nicht Teil von B0/B1:** die drei Stellen
-teilen keine Schicht — zwei im Live-Pfad, eine im Schreibpfad. Sie an B0 zu
-hängen hieße, eine Funktion zu fixen und drei weitere „weil man schon dabei ist"
-— genau die Ausweitung, an der die Kette 4 → 4b → 4c kein Ende fand.
-`monatsdaten.py:749-751` ist der ernsteste der drei, weil er als **einziger** die
-0 in die Datenbank schreibt: dort ist sie später nicht mehr von einer gemessenen
-Null zu unterscheiden.
-
-**Ausdrücklich nicht in B5 — geprüft und abgegrenzt:**
-`investitionen/crud.py:873/918` sieht im Grep wie ein Treffer aus
-(`max(0, erzeugung_jahr - einspeisung_jahr)`), ist aber keiner: die Operanden
-sind **bereits gemittelte Hochrechnungen** (`avg_… * faktor`), der Pfad führt ein
-eigenes `hinweis`-Feld („Jahresdurchschnitt (Ø aus N Jahren)", „hochgerechnet auf
-12 Monate") und kehrt bei fehlenden Daten mit „Keine Monatsdaten vorhanden"
-zurück, statt zu rechnen. Das ist P4 bereits erfüllt, nur in anderer Sprache.
-
-**Nicht enthalten und bewusst offen:** die Differenz-Klasse §2.5
-(`tagesbilanz.py:117`, `views.py:590/1400`) braucht eine Abdeckungs-Zählung **je
-Feld** statt `stunden: int`. Das ist ein eigener Schnitt in der Stunden-Ebene und
-gehört nicht in B1 — dort würde er die Monats-Schicht mit einer Frage belasten,
-die auf der Stunden-Ebene entschieden werden muss.
-
-> ⚑ **Nachtrag 15.08.2026 — die Hälfte davon steht, und die andere bleibt offen.**
-> `TagesBilanz` trägt seit T89667 #162 je Achse ein `*_erfasst`-Flag (`pv` ·
-> `verbrauch` · `einspeisung` · `netzbezug`), und `tage_werte.py` liefert `None`
-> statt 0.0, wo eine Achse an **keiner** Stunde des Tages einen Wert trug — samt
-> der beiden Geldbeträge, die auf genau diesen Mengen stehen.
->
-> **Das ist die Total-Lücke, nicht die Teil-Abdeckung.** Ein Boolean beantwortet
-> „gibt es überhaupt Messwerte?", nicht „über wie viele Stunden?". Fehlen der
-> Einspeisung sechs Stunden und der PV keine, ist der Eigenverbrauch weiterhin
-> stillschweigend zu hoch — der ursprüngliche §2.5-Befund. Dafür braucht es
-> weiterhin einen **Zähler je Feld**, und die Beschriftung dazu ist B2.
-> `views.py:590/1400` ist unberührt.
-
----
-
-## §8 Was dieses Papier nicht entscheidet
-
-- **Den Wortlaut der Beschriftung.** §4 sagt, dass die vorhandenen
-  Checker-Detailtexte die Quelle sind — die konkrete Formulierung je Sicht ist
-  eine Style-Guide-Frage und gehört in B2.
-- **Ob `MonatsFakt` eine per-Investition-Sicht bekommt** (N-2). Unabhängig.
-- **Die Perioden-Semantik** von `kennzahlen_aus_fakten` (monatsweise geklemmt vs.
-  aus Perioden-Summen) — eine bereits getroffene, dokumentierte Entscheidung
-  (KONZEPT-MONATS-FAKTEN), von diesem Papier unberührt.
+- `backend/tests/test_tagesbilanz_pv_nicht_erfasst.py` — eine additive Größe ohne Messung wird
+  unterdrückt statt als 0 geführt.
+- `backend/tests/test_live_tageswerte_luecken.py` — der Auslöserfall (Rainer): fällt ein Summand
+  aus, verschwindet die Differenz, statt zu hoch zu stehen.
+- `backend/tests/test_monatsauswertung_abdeckung_n92.py` — eine Summe darf 0 bleiben, eine
+  Differenz nicht.
+- `backend/tests/test_n121_monate_ohne_db_spur.py` — was aus Tageswerten stammt, sagt es.
+- Im Frontend `TagWerteTabelle.test.tsx` und `JahrVerlaufChart.test.tsx` — unterdrückte Werte
+  tragen „—" und der Tooltip nennt den Grund.
