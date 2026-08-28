@@ -130,9 +130,14 @@ async def build_expected_topics(
 
     # Basis-Energy
     for key, feld_label, einheit, beschreibung in BASIS_ENERGY_TOPICS:
+        # Wie oben und wie unten: die Klammer haengt an der Einheit, nicht am
+        # Label. Heute traegt jedes dieser drei Felder eine Einheit — die Zeile
+        # steht hier trotzdem, weil sie sonst die eine Stelle waere, an der ein
+        # neues einheitenloses Feld wieder „Name ()" schriebe (N-299).
+        einheit_str = f" ({einheit})" if einheit else ""
         topics.append({
             "topic": f"{energy_prefix}/{key}",
-            "label": f"{feld_label} ({einheit})",
+            "label": f"{feld_label}{einheit_str}",
             "beschreibung": beschreibung,
             "kategorie": "energy",
             "typ": "basis",
@@ -178,10 +183,18 @@ async def build_expected_topics(
             # meldete sie dauerhaft. Das Feld selbst bleibt in der Liste —
             # die Zuordnungs-Fläche liest sie und bietet HA an.
             ist_zustand = bool(live_feld.get("zustand"))
+            # N-299: Ein Zustandsfeld hat KEINE Einheit, und das ist Absicht
+            # (`betriebsmodus`: Heizen/Kuehlen/Aus ist kein Messwert). Die
+            # Klammer unbedingt zu setzen schrieb „Betriebsmodus ()" — sichtbar
+            # im Historie-Vermerk der Datenquellen-Flaeche, der dieses Label
+            # ueber `_feld_label` liest. Dieselbe Bildung wie 20 Zeilen tiefer.
+            einheit_str = (
+                f" ({live_feld['einheit']})" if live_feld.get("einheit") else ""
+            )
             topics.append({
                 "topic": "" if ist_zustand else f"{inv_live_prefix}/{live_feld['key']}",
                 "zustand": ist_zustand,
-                "label": f"{inv.bezeichnung} – {live_feld['label']} ({live_feld['einheit']})",
+                "label": f"{inv.bezeichnung} – {live_feld['label']}{einheit_str}",
                 "kategorie": "live",
                 "typ": inv.typ,
                 "match_key": ("inv_live", str(inv.id), live_feld["key"]),

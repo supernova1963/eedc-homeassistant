@@ -685,6 +685,86 @@ Grundlage ist der **Day-Ahead-Börsenpreis** (nicht der Anbieter-Endpreis — de
 
 > **Eigene Kriterien:** Wer eine andere Schwelle bevorzugt, stellt den Prozentsatz auf der Export-Seite um — oder rechnet in HA per Template direkt auf den Attributen (`rang_profil` mit den Stundenpreisen, `optimierter_durchschnitt_cent`). eedc liefert bewusst nur die **Trigger-Werte**; die Lade-/Entlade-Strategie baut jeder selbst in seinen Automationen.
 
+### Drei Vorlagen für den HA-Template-Editor
+
+Der Absatz darüber sagt, dass sich mit `rang_profil` eigene Kriterien rechnen lassen — er sagte
+bisher nicht, **wie**. Das hat gefehlt: Wer nur die Sensorliste durchsieht, findet neun
+`eedc_preis_*`-Sensoren und darunter **keinen Höchstpreis** und **keine Rang-Preise**, und
+schließt daraus, dass eedc sie nicht liefert. Sie sind da — als Attribut, nicht als Sensor.
+
+Die drei Vorlagen lassen sich unverändert in *Entwicklerwerkzeuge → Vorlage* kopieren. Wer eine
+davon als Sensor haben will, setzt sie in `configuration.yaml` unter `template: - sensor:` mit
+`state: >`.
+
+**1) Der Tageshöchstpreis**
+
+```jinja
+{%- set p = state_attr('sensor.eedc_preis_rang','rang_profil') or [] -%}
+{{ (p | map(attribute='preis_cent') | max | round(2)) if p else 'unbekannt' }}
+```
+
+Für morgen dasselbe mit `rang_profil_morgen` — aber erst, wenn `morgen_verfuegbar` `true` ist.
+
+**2) Die Ränge mit ihren Preisen**
+
+```jinja
+{%- set p = state_attr('sensor.eedc_preis_rang','rang_profil') or [] -%}
+{%- for s in p | rejectattr('rang','eq',99) | sort(attribute='stunde') %}
+{{ '%02d'|format(s.stunde) }}:00 Uhr | Rang {{ s.rang }} | {{ s.preis_cent | round(2) }} ct
+{%- endfor -%}
+```
+
+> ⚠ **Es kommen bis zu ZEHN Zeilen, nicht fünf — und „Rang 1" kann zweimal vorkommen.**
+> Tag- und Nachtfenster werden **getrennt** bewertet (Grenze: Sonnenauf-/-untergang), jedes
+> vergibt seine eigenen Ränge 1–5. An einem Tag, an dem die PV-Mittagsdelle die Nachtstunden
+> aus der Rangliste drängt, kommen dagegen nur fünf. **Wer auf `rang <= 5` filtert, filtert
+> nicht die fünf billigsten Stunden des Tages** — dafür sortiert man nach `preis_cent`.
+
+**3) Die beste Lade-/Entladespanne, über die Tagesgrenze hinweg**
+
+```jinja
+{%- set eta = 0.90 -%}
+{%- set heute  = state_attr('sensor.eedc_preis_rang','rang_profil') or [] -%}
+{%- set morgen = state_attr('sensor.eedc_preis_rang','rang_profil_morgen') or [] -%}
+{%- set r = namespace(reihe=[]) -%}
+{%- for s in heute if s.stunde >= now().hour -%}
+  {%- set r.reihe = r.reihe + [{'t': s.stunde, 'p': s.preis_cent}] -%}
+{%- endfor -%}
+{%- for s in morgen -%}
+  {%- set r.reihe = r.reihe + [{'t': s.stunde + 24, 'p': s.preis_cent}] -%}
+{%- endfor -%}
+{%- set b = namespace(spread=0, lade=none, ent=none) -%}
+{%- for a in r.reihe -%}
+  {%- for z in r.reihe if z.t > a.t -%}
+    {%- if (z.p * eta - a.p) > b.spread -%}
+      {%- set b.spread = z.p * eta - a.p -%}
+      {%- set b.lade = a -%}{%- set b.ent = z -%}
+    {%- endif -%}
+  {%- endfor -%}
+{%- endfor -%}
+{%- if b.lade is none -%}
+keine lohnende Spanne
+{%- else -%}
+Laden {{ '%02d'|format(b.lade.t % 24) }}:00{{ ' (morgen)' if b.lade.t >= 24 else '' }} zu {{ b.lade.p | round(2) }} ct | Entladen {{ '%02d'|format(b.ent.t % 24) }}:00{{ ' (morgen)' if b.ent.t >= 24 else '' }} zu {{ b.ent.p | round(2) }} ct | Spanne {{ b.spread | round(2) }} ct/kWh
+{%- endif -%}
+```
+
+Sie gibt **eine** Zeile aus (rund 90 Zeichen) und ist damit ohne Nacharbeit als Template-Sensor
+verwendbar. `eta` ist dein Speicher-Wirkungsgrad — trag deinen eigenen Wert ein.
+
+> **Warum die Spanne *gerichtet* ist:** Entladen kann man nur, was vorher geladen wurde. Ein
+> ungerichtetes Tages-Min/Max nennt bei „billig 13 Uhr, teuer 08 Uhr" eine Spanne, die es an
+> diesem Tag nicht mehr gibt. Die Vorlage sucht deshalb nur Paare, bei denen die teure Stunde
+> **nach** der billigen liegt — und über die Tagesgrenze hinweg, sobald das Morgen-Profil da ist.
+>
+> **`keine lohnende Spanne`** heißt: Es gibt im bekannten Horizont kein Paar, das nach Abzug der
+> Speicherverluste noch etwas übrig lässt. Das ist eine Aussage, kein Fehler — spät am Abend ohne
+> Morgen-Profil ist es der Normalfall.
+
+> ⚠ **Der Tag hat nicht immer 24 Stunden.** Am Ende der Sommerzeit fehlt die zweite Zwei-Uhr-
+> Stunde, im Frühjahr die Stunde 2 ganz; `rang_profil` hat dann 23 Einträge. Alle drei Vorlagen
+> laufen darüber, weil keine auf eine feste Länge prüft — wer eigene baut, prüft es auch nicht.
+
 ---
 
 ## Allgemeine Regeln für Sensoren

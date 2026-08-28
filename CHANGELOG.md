@@ -7,6 +7,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Der Vermerk nach einer Zuordnungsänderung schrieb „Betriebsmodus ()".** Wer bei einer Wärmepumpe oder Klimaanlage die Quelle für den *Betriebsmodus* ändert, bekommt darunter einen Hinweis, dass die bereits berechnete Historie unberührt bleibt — und in dem stand ein leeres Klammerpaar hinter dem Feldnamen. Grund: Die Beschriftung setzte die Einheit **immer** in Klammern, und ein Betriebsmodus hat keine. Das ist kein Versäumnis am Feld, sondern seine Natur: *Heizen*, *Kühlen*, *Aus* ist ein Zustand, kein Messwert. **Jetzt hängt die Klammer an der Einheit** — ist keine da, steht auch keine da.
+
+### Documentation
+
+- **Die Sensor-Referenz zeigt jetzt, wie man an die Stundenpreise kommt** (Auslöser: Rückmeldung von **rapahl** per PN). Wer die eedc-Sensorliste in Home Assistant durchsieht, findet neun Preis-Sensoren und darunter **keinen Höchstpreis** und **keinen Preis zu den fünf Rängen** — und schließt daraus, dass eedc sie nicht liefert. **Er liefert sie**, nur als Attribut statt als Sensor: Am `eedc_preis_rang` hängt `rang_profil` mit dem Preis **jeder** Stunde, seit v4.0.27 auch für morgen. Die Referenz nennt jetzt drei fertige Vorlagen für den Template-Editor: Tageshöchstpreis, Ränge mit ihren Preisen und die beste **gerichtete** Lade-/Entladespanne über die Tagesgrenze hinweg. ⚠ **Mit dem Hinweis, der am meisten Zeit spart:** Die Ränge werden für Tag und Nacht **getrennt** vergeben — es kommen bis zu zehn Zeilen, und „Rang 1" kann zweimal vorkommen. Wer auf `rang <= 5` filtert, bekommt nicht die fünf billigsten Stunden des Tages.
+
+---
+
 ## [4.0.33] - 2026-08-28 — Keine erfundene Zahl, kein ungefragter Sensor
 
 ### Added

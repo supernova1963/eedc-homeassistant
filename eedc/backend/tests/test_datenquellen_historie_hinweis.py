@@ -15,6 +15,7 @@ from datetime import date
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy import select
 
 from backend.api.routes.datenquellen import (
     InvertSetRequest,
@@ -210,3 +211,69 @@ async def test_quittung_unbekannte_anlage(db):
     with pytest.raises(HTTPException) as exc:
         await quittiere_historie_hinweis(9999, db)
     assert exc.value.status_code == 404
+
+
+# ─── N-299: ein Zustandsfeld hat keine Einheit — und keine leere Klammer ──
+#
+# Die Label-Bildung der Topic-Registry setzte die Klammer unbedingt. Bei
+# `betriebsmodus` ist die Einheit leer und das ist Absicht (`zustand: True` —
+# Heizen/Kuehlen/Aus ist ein Zustand, kein Messwert), also stand dort
+# „Vitocal – Betriebsmodus ()".
+#
+# Geprueft wird auf ZWEI Ebenen, weil eine allein die Stelle verfehlt, an der
+# es jemand sieht: die Registry ist die URSACHE, der Historie-Vermerk die
+# einzige Flaeche, die dieses Label einem Menschen zeigt (`_feld_label`).
+# `/mqtt/topics` filtert Zustandsfelder heraus, die Zuordnungs-Flaeche selbst
+# serviert `feld_label` ohne Einheit — beide waren nie betroffen.
+
+@pytest.mark.asyncio
+async def test_zustandsfeld_label_hat_keine_leere_klammer(db):
+    """Ursache: die Registry baut das Label ohne Einheit ohne Klammer."""
+    from backend.services.mqtt_topic_registry import build_expected_topics
+
+    a = Anlage(anlagenname="Test", leistung_kwp=10.0, sensor_mapping={})
+    db.add(a)
+    await db.flush()
+    db.add(Investition(
+        anlage_id=a.id, typ="waermepumpe", bezeichnung="Vitocal",
+        anschaffungsdatum=date(2020, 1, 1),
+    ))
+    await db.flush()
+
+    eintraege = await build_expected_topics(db, a)
+    modus = [e for e in eintraege if e["feld"] == "betriebsmodus"]
+    assert modus, "Zustandsfeld fehlt in der Registry — Probe zeigt aufs falsche Objekt"
+    assert modus[0]["label"] == "Vitocal – Betriebsmodus"
+
+    # Gegenrichtung: ein Feld MIT Einheit behaelt seine Klammer. Ohne diese
+    # Haelfte wuerde ein Fix „Klammer ueberall weg" gruen durchlaufen.
+    mit_einheit = [e for e in eintraege if e["feld"] == "leistung_w"]
+    assert mit_einheit[0]["label"] == "Vitocal – Leistung gesamt (W)"
+
+
+@pytest.mark.asyncio
+async def test_historie_vermerk_zeigt_kein_leeres_klammerpaar(db):
+    """Wirkung: die eine Flaeche, die dieses Label einem Menschen zeigt."""
+    a = Anlage(anlagenname="Test", leistung_kwp=10.0, sensor_mapping={})
+    db.add(a)
+    await db.flush()
+    db.add(Investition(
+        anlage_id=a.id, typ="waermepumpe", bezeichnung="Vitocal",
+        anschaffungsdatum=date(2020, 1, 1),
+    ))
+    db.add(TagesZusammenfassung(anlage_id=a.id, datum=date(2026, 8, 1)))
+    await db.flush()
+
+    inv = (await db.execute(
+        select(Investition).where(Investition.anlage_id == a.id)
+    )).scalars().first()
+    await set_feld_quelle(
+        a.id, f"inv_live_{inv.id}_betriebsmodus",
+        QuelleSetRequest(quelle="ha_app", entity_id="climate.wohnzimmer"), db,
+    )
+
+    vermerk = vermerk_lesen(a.sensor_mapping)
+    assert vermerk is not None
+    label = vermerk["felder"][0]["label"]
+    assert "()" not in label, f"leeres Klammerpaar im Historie-Vermerk: {label!r}"
+    assert label == "Vitocal – Betriebsmodus"

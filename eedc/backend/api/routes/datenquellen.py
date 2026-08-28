@@ -604,9 +604,13 @@ async def _basis_preis_eintraege(db: AsyncSession, anlage_id: int) -> list[dict]
     eintraege: list[dict] = []
     for feld in BASIS_PREIS_FELDER:
         bedarf, bedarf_gruppe = get_feld_bedarf("basis", feld["key"])
+        # Dieselbe Bildung wie in `mqtt_topic_registry` (N-299): die Klammer
+        # haengt an der Einheit. Heute traegt das eine Preis-Feld eine, die
+        # Zeile haelt die Bildung ueber alle vier Erzeuger der Flaeche gleich.
+        einheit_str = f" ({feld['einheit']})" if feld.get("einheit") else ""
         eintraege.append({
             "topic": "",
-            "label": f"{feld['label']} ({feld['einheit']})",
+            "label": f"{feld['label']}{einheit_str}",
             "kategorie": "preis",
             "typ": "basis",
             "match_key": ("basis_preis", feld["key"]),
