@@ -1665,6 +1665,10 @@ async def get_aktueller_monat(
         abgrenzung_stoerung=(
             monats_fakt.wp.abgrenzung_stoerung if monats_fakt is not None else None
         ),
+        # R2/Bauart (SOLL §5): Wärmepumpe und Split-Klimaanlage in einer Zahl.
+        bauarten_gemischt=(
+            monats_fakt is not None and monats_fakt.wp.bauarten_gemischt
+        ),
         geraete_ohne_waerme=(
             monats_fakt is not None
             and monats_fakt.wp.waerme_deckt_nicht_alle_geraete

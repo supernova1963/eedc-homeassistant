@@ -145,6 +145,23 @@ export function baueTagAlsMonat(
     netzbezug_kosten_euro: tag.netzbezug_kosten,
     einspeise_preis_cent: tagDetail?.einspeise_preis_cent ?? null,
     netzbezug_preis_cent: tagDetail?.netzbezug_preis_cent ?? null,
+    // ⭐ Die Geräte hinter den Tagessummen — Futter für den `GeraeteHinweis`
+    // („Aggregiert aus: …"), den die geteilte Blockfabrik ab zwei Geräten
+    // zeigt. **Kein neues Element und keine zweite Komponente:** das Element
+    // gibt es für Wärmepumpe, Speicher und E-Mobilität längst, es bekam im Tag
+    // nur nie etwas zu lesen.
+    //
+    // ⛔ **Warum das kein Schönheitsfehler war.** Monat und Jahr füllten das
+    // Feld, der Tag als einzige Sicht nicht — und ein fehlender Hinweis sieht
+    // nicht aus wie eine Lücke, sondern wie „hier steckt ein Gerät drin".
+    // dietmar1968 betreibt eine Luft-Wasser-Wärmepumpe und eine Split-
+    // Klimaanlage; beide sind `typ="waermepumpe"` und stehen deshalb in
+    // denselben Balken. Er verglich diesen Balken (11 kWh) mit dem Zähler
+    // seiner Klimaanlage (8,71 kWh) und schrieb: *„er vermengt die Anlagen"*
+    // (T89667 #221/#226/#237). Er hatte recht — nur war die Vermengung
+    // gewollt (SOLL §5: Mengen dürfen nebeneinander stehen) und nirgends
+    // gesagt. Genau das sagt der Hinweis jetzt auch im Tag.
+    komponenten_geraete: tagDetail?.komponenten_geraete ?? {},
   } as unknown as AktuellerMonatResponse
 }
 

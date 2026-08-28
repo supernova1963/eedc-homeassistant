@@ -121,6 +121,29 @@ GRUND_FREMDWAERME = "zweiter Erzeuger am Wärmezähler"
 #: wäre einer aus zwei Wirklichkeiten.
 GRUND_ZEITRAUM = "Zähler messen verschiedene Zeiträume"
 
+#: **R2/Bauart — SOLL §5:** Der Block trägt Geräte **verschiedener Bauart**
+#: (Luft-Wasser-Wärmepumpe und Luft-Luft-Split-Klimaanlage). Ihre Mengen dürfen
+#: nebeneinander stehen, eine **gemeinsame Kennzahl** nicht: Sie haben
+#: verschiedene Funktionen, verschiedene Nutzenergie und verschiedene
+#: Vergleichsmaßstäbe. So steht es wörtlich im Konzept — *„Mengen dürfen
+#: nebeneinander stehen, eine gemeinsame JAZ nicht."*
+#:
+#: ⭐ **Die Frage stammt vom Melder selbst** (dietmar1968, T89667 #201):
+#: *„Ist es nicht sinnvoller, die Luft-Wasser-Wärmepumpe von der
+#: Luft-Luft-Klimaanlage komplett zu trennen?"* — für die Kennzahl ist die
+#: Antwort zwingend ja, und bis zum 28.08.2026 tat eedc genau das nicht.
+#:
+#: ⚠ **Warum das mehr ist als ein Sonderfall von `GRUND_GERAETE_OHNE_WAERME`.**
+#: Eine Split-Klimaanlage hat bauartbedingt keinen Wärmemengenzähler
+#: (`ist_luft_luft_waermepumpe` — das Formular sagt es dem Anwender zu). Ihr
+#: Strom landete damit im Nenner, ohne dass ihre Nutzenergie je in den Zähler
+#: kommen kann: **die Arbeitszahl konnte nur zu klein sein, dauerhaft und ohne
+#: Aussicht auf Besserung.** Der allgemeinere Grund hätte zwar auch gesperrt,
+#: aber zu einer Zuordnung geraten, die es beim Anwender nicht geben kann —
+#: dieselbe Klasse wie der Daten-Checker-Hinweis, der dietmar1968 zu einem
+#: unmöglichen Sensor schickte (Forum #89667/87).
+GRUND_BAUARTEN_GEMISCHT = "Wärmepumpe und Klimaanlage in einer Zahl"
+
 #: Die Anwender-Angabe → ihr Grund. **Der Layer übersetzt, nicht die Route** —
 #: sonst stünde derselbe Text an vier Aufrufstellen.
 GRUND_JE_ABGRENZUNG: dict[str, str] = {
@@ -132,6 +155,7 @@ GRUND_JE_ABGRENZUNG: dict[str, str] = {
 def abgrenzungs_grund(
     *,
     abgrenzung_stoerung: Optional[str] = None,
+    bauarten_gemischt: bool = False,
     geraete_ohne_waerme: bool = False,
     zeitraum_versetzt: bool = False,
 ) -> Optional[str]:
@@ -152,8 +176,16 @@ def abgrenzungs_grund(
 
     Args:
         abgrenzung_stoerung: `WpFakten.abgrenzung_stoerung` — die Anwender-Angabe.
+        bauarten_gemischt: Der Block trägt Luft-Wasser **und** Luft-Luft
+            (SOLL §5). ⭐ **Steht bewusst VOR `geraete_ohne_waerme`**, obwohl
+            beide zutreffen: Die Klimaanlage ist genau eines der Geräte, die
+            keine Wärme melden — aber sie kann es bauartbedingt **nie**. Der
+            allgemeinere Satz riete zu einer Zuordnung, die es beim Anwender
+            nicht geben kann; der konkretere ist die bessere Auskunft (S3),
+            und es ist dieselbe Reihenfolge-Entscheidung wie eine Zeile höher.
         geraete_ohne_waerme: `WpFakten.waerme_deckt_nicht_alle_geraete` — die
-            einzige Lage, die eedc aus den Daten selbst erkennt.
+            Lage, die eedc aus den **Daten** erkennt (ein Gerät könnte einen
+            Zähler haben und hat ihn nicht).
         zeitraum_versetzt: Q und E stammen aus verschieden langen Messzeiträumen
             (SOLL §4.2 Fall 3). Wird nur dort gesetzt, wo die Herkunft je Größe
             überhaupt bekannt ist — das ist die Vier-Quellen-Auflösung in
@@ -165,6 +197,8 @@ def abgrenzungs_grund(
         grund = GRUND_JE_ABGRENZUNG.get(abgrenzung_stoerung)
         if grund:
             return grund
+    if bauarten_gemischt:
+        return GRUND_BAUARTEN_GEMISCHT
     if geraete_ohne_waerme:
         return GRUND_GERAETE_OHNE_WAERME
     if zeitraum_versetzt:

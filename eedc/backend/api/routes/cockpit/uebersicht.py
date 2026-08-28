@@ -468,6 +468,10 @@ async def get_cockpit_uebersicht(
             (f.wp.abgrenzung_stoerung for f in fakten if f.wp.abgrenzung_stoerung),
             None,
         ),
+        # R2/Bauart (SOLL §5): Sobald EIN Monat des Jahres beide Bauarten
+        # trägt, ist die Jahreszahl derselbe Mischquotient — dieselbe Faltung
+        # wie bei der Störung darüber und bei `geraete_ohne_waerme` darunter.
+        bauarten_gemischt=any(f.wp.bauarten_gemischt for f in fakten),
         geraete_ohne_waerme=any(
             f.wp.waerme_deckt_nicht_alle_geraete for f in fakten
         ),

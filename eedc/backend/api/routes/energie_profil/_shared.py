@@ -534,6 +534,29 @@ class TagDetailResponse(BaseModel):
     # Tages-Tarif (Monatstarif je Tag) — für Wirkungsverluste € + Tarif-Zeile.
     einspeise_preis_cent: Optional[float] = None
     netzbezug_preis_cent: Optional[float] = None
+    #: Welche **Geräte** hinter den anlagenweiten Summen dieses Tages stecken,
+    #: je Typ und beim Namen genannt — dieselbe Form wie in der Monatssicht
+    #: (`aktueller_monat.py`), damit die geteilte Blockfabrik im Frontend sie
+    #: ohne Sonderweg liest.
+    #:
+    #: ⛔ **Warum sie hier bis zum 28.08.2026 fehlten — und was das anrichtete.**
+    #: Der `GeraeteHinweis` („Aggregiert aus: …") hängt an diesem Feld und
+    #: erscheint ab **zwei** Geräten. Monat und Jahr füllten es, der Tag **gar
+    #: nicht** — also blieb der Hinweis dort stumm, obwohl derselbe Balken
+    #: dieselben Geräte summierte. Betroffen ist nicht nur die Wärmepumpe:
+    #: Speicher und E-Mobilität lesen dasselbe Feld.
+    #:
+    #: ⭐ **Real gemeldet** (dietmar1968, T89667 #221/#226/#237): Er betreibt
+    #: eine Luft-Wasser-Wärmepumpe **und** eine Split-Klimaanlage. Beide sind
+    #: `typ="waermepumpe"`, beide zählen in denselben Tagesbalken. Sein Satz
+    #: dazu lautete *„er vermengt die Anlagen"* — und in der Tagessicht stand
+    #: nirgends, dass zwei Geräte darin stecken. Er verglich einen Balken über
+    #: **beide** Geräte (11 kWh) mit dem Zähler **einer** Anlage (8,71 kWh).
+    #:
+    #: ⚠ **Der Balken wird dadurch nicht getrennt, und das ist Absicht**
+    #: (SOLL §5): Mengen verschiedener Bauart dürfen nebeneinander stehen, nur
+    #: eine gemeinsame *Kennzahl* darf es nicht geben — die sperrt R2.
+    komponenten_geraete: dict[str, list[str]] = {}
 
 
 class ReaggregatePreviewBoundary(BaseModel):

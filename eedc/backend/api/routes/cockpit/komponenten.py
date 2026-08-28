@@ -239,6 +239,11 @@ async def get_komponenten_zeitreihe(
             # `aktueller_monat`.
             abgrenzung_verletzt=abgrenzungs_grund(
                 abgrenzung_stoerung=wp.abgrenzung_stoerung,
+                # R2/Bauart (SOLL §5). ⚠ Der Hub braucht sie genauso wie das
+                # Cockpit: `lade_monats_fakten` kennt **keinen** Geräte-Filter,
+                # `wp` ist also auch hier die anlagenweite Summe. Der Kommentar
+                # oben („EINE Quelle") meint die Daten-Herkunft, nicht ein Gerät.
+                bauarten_gemischt=wp.bauarten_gemischt,
                 geraete_ohne_waerme=wp.waerme_deckt_nicht_alle_geraete,
             ),
         ).wert
