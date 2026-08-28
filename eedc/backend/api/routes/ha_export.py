@@ -375,14 +375,21 @@ async def calculate_anlage_sensors(
     if not monatsdaten:
         return []
 
-    # Strompreis laden (aktuellster)
-    result = await db.execute(
-        select(Strompreis)
-        .where(Strompreis.anlage_id == anlage.id)
-        .order_by(Strompreis.gueltig_ab.desc())
-        .limit(1)
-    )
-    strompreis = result.scalar_one_or_none()
+    # N-200: Der Tarif kommt aus dem SoT, nicht aus einer Handquery. Die alte
+    # Form (`order_by(gueltig_ab.desc()).limit(1)`) verlor ZWEI Filter, die
+    # `lade_tarife_fuer_anlage` mitbringt:
+    #
+    #   * `gueltig_bis` — ein ausgelaufener Tarif galt weiter als „aktuellster";
+    #   * `verwendung`  — ist der zuletzt angelegte Tarif ein WP- oder
+    #     Wallbox-Spezialtarif, wurde er hier als ALLGEMEINER Netzbezugspreis
+    #     gelesen. Genau die Fallunterscheidung, die der SoT trifft.
+    #
+    # Dazu faellt ein `gueltig_ab` in der Zukunft nicht mehr auf heute durch.
+    # Dieselbe Umstellung, die D5 fuer den Daten-Checker gefahren hat.
+    # Das Ergebnis wird unten als `_tarife` weiterbenutzt (WP-/Wallbox-Zweig) —
+    # der zweite Ladevorgang von damals entfaellt damit.
+    _tarife = await lade_tarife_fuer_anlage(db, anlage.id)
+    strompreis = _tarife["allgemein"]
 
     # Investitionen laden für ROI-Berechnung
     result = await db.execute(
@@ -741,8 +748,8 @@ async def calculate_anlage_sensors(
         )
 
     # Heutiger WP-Tarif: Fallback für Monate ohne Auflösung und Grundlage der
-    # nach vorn gerichteten Sensor-Werte weiter unten.
-    _tarife = await lade_tarife_fuer_anlage(db, anlage.id)
+    # nach vorn gerichteten Sensor-Werte weiter unten. `_tarife` steht seit
+    # N-200 schon oben (dieselbe Abfrage, ein Ladevorgang).
     wp_netzbezug_preis_cent = resolve_strompreis_for_komponente(
         _tarife, "waermepumpe", fallback=netzbezug_preis_cent
     )
@@ -1912,14 +1919,12 @@ async def get_all_sensors(db: AsyncSession = Depends(get_db)):
         )
         investitionen = result.scalars().all()
 
-        # Strompreis für Investitions-Berechnungen
-        result = await db.execute(
-            select(Strompreis)
-            .where(Strompreis.anlage_id == anlage.id)
-            .order_by(Strompreis.gueltig_ab.desc())
-            .limit(1)
-        )
-        strompreis = result.scalar_one_or_none()
+        # Strompreis für Investitions-Berechnungen — SoT statt Handquery
+        # (N-200, dieselbe Begründung wie in `calculate_anlage_sensors`:
+        # die Handquery verlor `gueltig_bis` und den `verwendung`-Filter und
+        # las damit einen ausgelaufenen oder einen WP-/Wallbox-Spezialtarif
+        # als allgemeinen Netzbezugspreis).
+        strompreis = (await lade_tarife_fuer_anlage(db, anlage.id))["allgemein"]
 
         # Phase 2a: Emob-Pool-Kontext der Anlage einmalig bauen, damit die
         # per-Device-E-Auto-Sensoren bei evcc-Setups den km-anteiligen

@@ -1558,6 +1558,23 @@ def test_p7_baseline_ausnahmen_sind_noch_belegt():
 # aussagt. Ein Wert, der in einer Monats- oder Historien-Summe landet, gehört
 # nicht hierher, sondern auf den Stichtag.
 #
+# ⭐ **Seit N-116 `modul.py::funktion` statt `modul.py`** — dieselbe Granularität,
+# die P10 seit S5 fährt, und aus demselben Grund. Eine Datei-Ausnahme stellt
+# alles frei, was in dieser Datei je dazukommt: `ha_export.py` ist 2200 Zeilen
+# lang und hatte drei berechtigte Stellen — eine vierte, die den Stichtag
+# gebraucht hätte, wäre stillschweigend durchgelaufen. Genau das ist an
+# `dashboards.py` schon einmal passiert und steht unten in der Begründung
+# („Diese Datei-Ausnahme hat das gedeckt, weil sie den LADER zählt und nicht,
+# was mit dem geladenen Tarif geschieht"). Die Funktions-Granularität nimmt der
+# Ausnahme ihre Reichweite, ohne ihr die Berechtigung zu nehmen.
+#
+# ⚠ **Was sie NICHT leistet, und das gehört dazu:** Der Wächter zählt Aufrufe
+# von `lade_tarife_fuer_anlage`. Eine von Hand gebaute `select(Strompreis)`
+# sieht er nicht — so standen die beiden N-200-Stellen jahrelang IN dieser
+# Datei und wären auch ohne Datei-Ausnahme unsichtbar geblieben. Sie sind mit
+# N-116 auf den SoT umgestellt und tauchen deshalb jetzt hier auf; der blinde
+# Fleck des Wächters bleibt aber bestehen.
+#
 #   strompreise.py            — Endpoint `/aktuell/{anlage_id}`: „aktuell" IST
 #                               die Frage; ein Stichtag wäre sinnlos.
 #   datenquellen.py           — entscheidet, ob die Preis-Felder angeboten
@@ -1613,43 +1630,95 @@ def test_p7_baseline_ausnahmen_sind_noch_belegt():
 #                               unverändert in Cockpit → Jahr und läuft dort
 #                               über den Monats-Stichtag.
 P8_BASELINE_AUSNAHMEN: frozenset[str] = frozenset({
-    "backend/api/routes/strompreise.py",
-    "backend/api/routes/datenquellen.py",
-    "backend/api/routes/import_export/csv_operations.py",
-    "backend/api/routes/investitionen/crud.py",
-    "backend/api/routes/investitionen/dashboards.py",
-    "backend/api/routes/ha_export.py",
-    "backend/api/routes/cockpit/uebersicht.py",
-    "backend/api/routes/aussichten.py",
-    "backend/services/speicher_sizing_service.py",
+    # Endpoint `/aktuell/{anlage_id}` — „aktuell" IST die Frage.
+    "backend/api/routes/strompreise.py::get_aktueller_strompreis_fuer",
+    # Entscheidet, ob die Preis-Felder angeboten werden (Vertragsart heute).
+    "backend/api/routes/datenquellen.py::_basis_preis_eintraege",
+    # Spaltenstruktur von Vorlage und Export nach heutiger Vertragsart.
+    "backend/api/routes/import_export/csv_operations.py::get_csv_template_info",
+    "backend/api/routes/import_export/csv_operations.py::export_csv",
+    # ROI-/Wirtschaftlichkeits-Prognose NACH VORN (Ø-Jahreswert).
+    "backend/api/routes/investitionen/crud.py::get_roi_dashboard",
+    # Query-Param-Default + Fallback der `_gewichtete_monatspreise`-Mittelung.
+    "backend/api/routes/investitionen/dashboards.py::get_eauto_dashboard",
+    "backend/api/routes/investitionen/dashboards.py::get_sonstiges_dashboard",
+    "backend/api/routes/investitionen/dashboards.py::get_speicher_dashboard",
+    "backend/api/routes/investitionen/dashboards.py::get_waermepumpe_dashboard",
+    "backend/api/routes/investitionen/dashboards.py::get_wallbox_dashboard",
+    # Heutiger Tarif als Fallback des Perioden-Mappings und für die nach vorn
+    # gerichteten Sensor-Werte. Die Historien-Summen daneben lösen je Monat auf
+    # (`wp_preis_by_periode` / `wallbox_preis_by_periode`, beide mit Stichtag).
+    "backend/api/routes/ha_export.py::calculate_anlage_sensors",
+    "backend/api/routes/ha_export.py::calculate_investition_sensors",
+    # N-200: seit dem SoT-Umbau sichtbar. Die Route reicht den Tarif nur an
+    # `calculate_investition_sensors` durch — dieselbe Rolle wie die Zeile
+    # darüber, eine Ebene höher.
+    "backend/api/routes/ha_export.py::get_all_sensors",
+    # Anzeige des aktuellen Tarifs + Komponenten-Kennwerte.
+    "backend/api/routes/cockpit/uebersicht.py::get_cockpit_uebersicht",
+    # Hochrechnung + ausgewiesener Tarif der Response.
+    "backend/api/routes/aussichten.py::get_finanz_prognose",
+    # Sizing-Simulator (#358 Phase 3): bewertet einen ZUKAUF, keinen Altmonat.
+    "backend/services/speicher_sizing_service.py::lade_sizing_auswertung",
 })
 
 _P8_TARIF_LADER = "lade_tarife_fuer_anlage"
 _P8_EINGABE = "FinanzZeileEingabe"
 
 
-def _p8_lader_ohne_stichtag() -> list[str]:
-    """Alle `lade_tarife_fuer_anlage`-Aufrufe ohne Stichtag außerhalb der Baseline.
+def _p8_lader_stellen() -> list[tuple[str, str, int]]:
+    """Alle `lade_tarife_fuer_anlage`-Aufrufe als `(schluessel, ort, zeile)`.
 
-    Der Stichtag darf als Keyword (`target_date=`) oder als dritte Position
-    stehen — `speicher_wirtschaftlichkeit.py` nutzt die positionale Form.
+    `schluessel` ist `backend/…/modul.py::funktion` — dieselbe Form wie bei
+    P3-a/P7/P10, damit eine Ausnahme genau eine Funktion freistellt und nicht
+    die ganze Datei (N-116). Die Funktions-Auflösung läuft wie in
+    `_p10_imd_lader` über einen Namensstapel: `ast.walk` allein kennt den
+    umgebenden Knoten nicht.
+
+    Der dritte Wert ist `1`, wenn der Aufruf einen Stichtag trägt. Der Stichtag
+    darf als Keyword (`target_date=`) oder als dritte Position stehen —
+    `speicher_wirtschaftlichkeit.py` nutzt die positionale Form.
     """
-    treffer: list[str] = []
+    stellen: list[tuple[str, str, int]] = []
+
     for pfad, baum in _quelldateien():
         modul = f"backend/{pfad.relative_to(_BACKEND).as_posix()}"
-        if modul in P8_BASELINE_AUSNAHMEN:
-            continue
-        for knoten in ast.walk(baum):
-            if not isinstance(knoten, ast.Call):
-                continue
-            name = getattr(knoten.func, "id", None) or getattr(knoten.func, "attr", None)
-            if name != _P8_TARIF_LADER:
-                continue
-            hat_keyword = any(kw.arg == "target_date" for kw in knoten.keywords)
-            hat_positional = len(knoten.args) >= 3
-            if not (hat_keyword or hat_positional):
-                treffer.append(_ort(pfad, knoten))
-    return treffer
+        stapel: list[str] = []
+
+        def besuche(knoten: ast.AST) -> None:
+            if isinstance(knoten, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                stapel.append(knoten.name)
+                for kind in ast.iter_child_nodes(knoten):
+                    besuche(kind)
+                stapel.pop()
+                return
+            if isinstance(knoten, ast.Call) and (
+                getattr(knoten.func, "id", None)
+                or getattr(knoten.func, "attr", None)
+            ) == _P8_TARIF_LADER:
+                mit_stichtag = any(
+                    kw.arg == "target_date" for kw in knoten.keywords
+                ) or len(knoten.args) >= 3
+                stellen.append((
+                    f"{modul}::{stapel[-1] if stapel else '<modul>'}",
+                    _ort(pfad, knoten),
+                    1 if mit_stichtag else 0,
+                ))
+            for kind in ast.iter_child_nodes(knoten):
+                besuche(kind)
+
+        besuche(baum)
+
+    return stellen
+
+
+def _p8_lader_ohne_stichtag() -> list[str]:
+    """Die Aufrufe ohne Stichtag, die keine Funktions-Ausnahme deckt."""
+    return sorted(
+        f"{ort}  (Allowlist-Schlüssel: {schluessel})"
+        for schluessel, ort, mit_stichtag in _p8_lader_stellen()
+        if not mit_stichtag and schluessel not in P8_BASELINE_AUSNAHMEN
+    )
 
 
 def _p8_eingaben_ohne_monatsdaten() -> list[str]:
@@ -1749,20 +1818,24 @@ def test_p8_finanz_zeile_bekommt_die_monatsdaten_zeile():
 
 
 def test_p8_baseline_ausnahmen_sind_noch_belegt():
-    """Keine verwaiste Ausnahme — dieselbe Pflicht wie bei P3-a/P5/P6/P7."""
-    module_mit_lader: set[str] = set()
-    for pfad, baum in _quelldateien():
-        for knoten in ast.walk(baum):
-            if isinstance(knoten, ast.Call) and (
-                getattr(knoten.func, "id", None) or getattr(knoten.func, "attr", None)
-            ) == _P8_TARIF_LADER:
-                module_mit_lader.add(f"backend/{pfad.relative_to(_BACKEND).as_posix()}")
+    """Keine verwaiste Ausnahme — dieselbe Pflicht wie bei P3-a/P5/P6/P7.
 
-    verwaist = P8_BASELINE_AUSNAHMEN - module_mit_lader
+    Seit N-116 auf `modul::funktion` genau: eine Ausnahme verfällt jetzt auch
+    dann, wenn die **Funktion** umbenannt wird oder ihren Lader verliert,
+    während die Datei weiterhin irgendwo einen hat. Auf Datei-Granularität war
+    das unsichtbar.
+    """
+    belegt = {
+        schluessel
+        for schluessel, _ort, mit_stichtag in _p8_lader_stellen()
+        if not mit_stichtag
+    }
+    verwaist = P8_BASELINE_AUSNAHMEN - belegt
 
     assert not verwaist, (
-        f"P8-Ausnahmen ohne Fundstelle: {sorted(verwaist)} — die Stelle lädt "
-        "keine Tarife mehr; Eintrag streichen."
+        f"P8-Ausnahmen ohne Fundstelle: {sorted(verwaist)} — die Funktion lädt "
+        "keine Tarife mehr ohne Stichtag (umbenannt, umgestellt oder entfernt); "
+        "Eintrag streichen."
     )
 
 
