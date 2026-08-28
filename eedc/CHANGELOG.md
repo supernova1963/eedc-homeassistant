@@ -7,6 +7,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.0.32] - 2026-08-28 — Ein Gerät je Anlage: die eedc-Sensoren ziehen zurück unter ihr Dach
+
+### Fixed
+
+- **eedc legte für jede Komponente ein eigenes HA-Gerät an** (gemeldet von **rapahl** und **Knallfrosch**, unabhängig voneinander innerhalb von 24 Stunden). Mit v4.0.30 erreichten die gerätebezogenen Sensoren erstmals MQTT — und brachten dabei eine Gliederung mit, die niemand gewollt hatte: Bei einer Anlage mit mehreren Modulflächen, Wechselrichter und Speicher entstanden **etliche HA-Geräte mit je einer einzigen Entität**, zusätzlich zum Gerät der Integration. rapahls Einwand traf den Kern: *„Bisher gab es ein übergeordnetes Gerät mit den darunterliegenden Entitäten … eine einheitliche Struktur wäre mir am liebsten"* — und, entscheidend: *„Die kann man zwar bereinigen, aber in der Registry bleiben die drin."* Aufräumen in Home Assistant hilft also nicht, es muss auf der sendenden Seite passieren. **Ab jetzt hängen wieder alle eedc-Sensoren unter dem einen Gerät deiner Anlage**; der Gerätename steht im Sensornamen („Daikin3 ECH₂O COP Durchschnitt"). ⭐ **Deine Daten sind davon unberührt:** Kennung und Topic hängen an der Komponente, nicht am Gerät — Home Assistant erkennt dieselben Entitäten wieder und hängt sie nur um. **Entity-IDs, Langzeitstatistik und Automationen bleiben erhalten**, der angezeigte Name ebenfalls. ⚠ Die alten, nun leeren Geräte entfernt HA beim nächsten Neustart; sonst lassen sie sich einmalig von Hand löschen. **Kein Sensor entfällt** — die Werte je Komponente bleiben vollständig erhalten.
+
+### Documentation
+
+- **Die Sensor-Referenz sagt jetzt, wann ein Sensor als *Diagnose* gilt.** Home Assistant meint damit Systemausgaben über den Gerätezustand (Batterie, Signalstärke, Laufzeit). eedc hat keine Hardware — deshalb gilt: `diagnostic` trägt, was über **eedc selbst** aussagt (*Letzter Import*, *Erfasste Monate*), nicht über die Anlage. Alles Übrige — auch unveränderliche Stammdaten wie die Investitionssumme — bleibt ein normaler Sensor. Die vier bereits so gekennzeichneten Sensoren entsprechen der Regel; **es ändert sich kein einziger Sensor**, die Regel war nur nie aufgeschrieben.
+
+---
+
 ## [4.0.31] - 2026-08-28 — Taktende Anlagen behalten ihre Betriebsart; zwei Bauarten sind zwei Geräte
 
 ### Fixed
