@@ -205,17 +205,25 @@ async def aggregate_day(
     # Serien-Kategorien indexieren (vorzeichenbasiert, zukunftssicher)
     pv_keys = {s["key"] for s in serien if s["kategorie"] == "pv"}
     batterie_keys = {s["key"] for s in serien if s["kategorie"] == "batterie"}
-    # V2H: E-Auto mit V2H-Funktion → Schlüssel starten mit "v2h_", Kategorie "eauto"
-    v2h_keys = {s["key"] for s in serien if s["key"].startswith("v2h_")}
+    # ⛔ Hier stand bis 2026-08-29 ein `v2h_keys`-Set plus eine Ausnahme
+    # `and not s["key"].startswith("v2h_")` in `wallbox_keys` — beides ein
+    # TOTER ZWEIG (F-69): Der Präfix `v2h_` wird nirgends erzeugt und wurde es
+    # nie. Beide Zeilen waren wirkungslos, weil ein V2H-Auto die Kategorie
+    # `eauto` trägt und über `wallbox_keys` ohnehin schon in
+    # `_sonderschluessel` landet. Ersatzlos gestrichen, statt eine Konvention
+    # zu behaupten, die es nicht gibt.
+    #
+    # ⚠ Die Tages-Ebene kennt V2H damit weiterhin NICHT — das ist die in #110
+    # geführte, bewusst zurückgestellte Zeile „V2H-Lücken schließen" und wird
+    # hier nicht nebenbei gebaut.
     netz_keys = {s["key"] for s in serien if s["kategorie"] == "netz"}
     wp_keys = {s["key"] for s in serien if s["kategorie"] == "waermepumpe"}
     wallbox_keys = {s["key"] for s in serien
-                    if s["kategorie"] in ("wallbox", "eauto")
-                    and not s["key"].startswith("v2h_")}
+                    if s["kategorie"] in ("wallbox", "eauto")}
     sonstige_keys = {s["key"] for s in serien if s["kategorie"] == "sonstige"}
     # Alle Schlüssel die separat behandelt werden (nicht in generischer Summe)
     # "strompreis" und "haushalt" sind keine Energieflüsse und dürfen nicht in pv_kw/verbrauch_kw einfließen
-    _sonderschluessel = batterie_keys | v2h_keys | netz_keys | pv_keys | wp_keys | wallbox_keys | sonstige_keys | {"strompreis", "haushalt"}
+    _sonderschluessel = batterie_keys | netz_keys | pv_keys | wp_keys | wallbox_keys | sonstige_keys | {"strompreis", "haushalt"}
 
     # ── PV-Module für GTI-Gruppierung holen (Issue #139) ──────────────────
     # Nur am `datum` aktive Module — sonst verzerrt ein erst später
