@@ -17,28 +17,45 @@ derselben Lesart wie ``core/berechnungen/tagesbilanz.py`` eine Ebene höher:
 Differenz mit vier Eingängen — fehlt einer, ist er nicht *0*, sondern
 *unbekannt*.
 
-⛔ **Dieses Modul ist eine reine Entdopplung — es ändert kein Verhalten.** Der
-Wächter zählt hier weiterhin nur PV, Netzbezug und Einspeisung auf; ein
-fehlender Batterie-Beitrag wird über ``(batt_netto or 0.0)`` zur 0. **Das ist
-bekannt und offen, nicht übersehen:** Ein Speicher ohne (vollständigen) Zähler
-macht den Stundenverbrauch nachts zum reinen Netzbezug (Melder OB73-gif, #395;
-an einer echten Anlage gegengerechnet: 420 W gegen 0 W).
+⛔ **Ein fehlender Batterie-Beitrag zählt hier als 0, und das bleibt so.** Das
+ist entschieden (Gernot, 29.08.2026), nicht offen — wer es ändern will, liest
+zuerst die Begründung unten.
 
-Die Größe ist damit eine **Differenz mit einem fehlenden Subtrahenden** — der
-Fall von ``docs/KONZEPT-UNVOLLSTAENDIGE-WERTE.md``. Ob sie unterdrückt oder
-beschriftet wird, ist eine **Konzept-Entscheidung** und wird mit N-95/N-94
-(Paket B1/B2) für alle drei Fundstellen gemeinsam getroffen — nicht hier
-einzeln. ⚠ **Wer sie hier allein unterdrückt, macht es schlimmer:** Die
-Erwartung „hat diese Anlage einen Speicher?" kippt am Anschaffungs- bzw.
-Stilllegungsdatum, also **mitten im Monat**; ``tagesbilanz`` setzt seinen
-Träger ``verbrauch_erfasst`` aber schon bei der **ersten** Stunde mit Wert
-(gemessen: 12 von 24 Stunden unterdrückt ⇒ Summe 12 statt 24, Träger ``True``).
-Aus einem durchgehend zu niedrigen Monat würde dann ein **noch niedrigerer, als
-vollständig ausgewiesener**. Der Träger gehört zur selben Entscheidung.
+**Der Fall:** Ein Speicher ohne (vollständigen) Zähler macht den
+Stundenverbrauch nachts zum reinen Netzbezug (Melder OB73-gif, #395; an einer
+echten Anlage gegengerechnet: 420 W gegen 0 W). Die Größe ist dann eine
+**Differenz mit einem fehlenden Subtrahenden** — auf den ersten Blick der Fall
+von ``docs/KONZEPT-UNVOLLSTAENDIGE-WERTE.md`` §3 („Differenz ⇒ unterdrücken").
 
-Dass der Zähler fehlt, meldet der Daten-Checker bereits — Kategorie
-*Energieprofil – Zähler-Abdeckung* (``daten_checker/energieprofil.py``,
-``erwartete_felder["speicher"]`` verlangt **beide** Richtungen).
+⛔ **Trotzdem wird hier nicht unterdrückt, aus drei gemessenen Gründen:**
+
+1. **Es ist kein Ausfall, sondern eine fehlende Zuordnung** — und die meldet der
+   Daten-Checker bereits samt Reparaturweg (*Energieprofil – Zähler-Abdeckung*,
+   ``daten_checker/energieprofil.py``; ``erwartete_felder["speicher"]`` verlangt
+   **beide** Richtungen, beidseitig gegengeprüft). Eine Unterdrückung wäre ein
+   **zweiter Turm** über einem gemeldeten Sachverhalt — nur in der Anzeige statt
+   im Melder. Genau daran ist der Bau vom 29.08. gescheitert und wurde
+   zurückgenommen (``c1d57455``).
+2. **§3 gilt dem Total-Fall, nicht der Teilabdeckung.** Der Baum zieht die Grenze
+   längst so: ``tagesbilanz`` unterdrückt an ``*_erfasst`` — „wurde überhaupt je
+   gemessen?" — und nirgends an einer Teilabdeckung. Wer hier unterdrückt,
+   verschiebt diese Grenze, statt sie anzuwenden.
+3. **Teilweise unterdrücken macht es messbar schlimmer:** ``tagesbilanz`` setzt
+   seinen Träger ``verbrauch_erfasst`` schon bei der **ersten** Stunde mit Wert
+   (gemessen: 12 von 24 Stunden unterdrückt ⇒ Summe 12 statt 24, Träger
+   ``True``). Aus einem durchgehend zu niedrigen Monat würde ein **noch
+   niedrigerer, als vollständig ausgewiesener**. Probe:
+   ``test_stundenbilanz_sot.py::test_teilunterdrueckung_waere_schlimmer``.
+
+⚑ **Und die sporadische Lücke ist hier ohnehin kein Thema:** ein einzelner
+Sensor-Ausfall mitten am Tag wird eine Schicht vorher interpoliert
+(``snapshot/aggregator.py::_fill_gaps_linear``, #145), dazu Self-Healing 02:15
+und die idempotente Re-Aggregation. Insgesamt neun Schichten kümmern sich um
+Tageslücken.
+
+**Was offen bleibt, ist ein SATZ, keine Rechnung:** Die Abdeckungs-Meldung nennt
+als Folgen „Prognosen-IST, Heatmap, Lernfaktor, Monatsberichte" — nicht den zu
+niedrigen Hausverbrauch und die Grundlast. Das ist **N-346**, ein Fund am Text.
 """
 
 from __future__ import annotations
