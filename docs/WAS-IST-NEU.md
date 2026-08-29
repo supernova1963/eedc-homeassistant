@@ -1,11 +1,215 @@
 # Was ist neu
 
-> **Stand:** August 2026 (v4.0.33)
+> **Stand:** August 2026 (v4.0.34)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.34 — 29. August 2026
+
+**Der Tarif kennt jetzt die Uhrzeit**
+
+Wer zu bestimmten Zeiten einen anderen Arbeitspreis zahlt — „täglich 19 bis 20 Uhr
+nur die Hälfte", klassischer Nachtstrom von 22 bis 6 Uhr —, konnte das in eedc
+**nirgends hinterlegen**. Ein Tarif galt für einen Zeitraum in *Tagen* und kannte
+keine Uhrzeit.
+
+Unter *Einstellungen → Strompreise* trägst du am Tarif jetzt ein **Zeitfenster**
+ein: Von, Bis, Preis und Wochentage. Mehrere Fenster sind möglich, und ein Fenster
+darf über Mitternacht laufen.
+
+**Gerechnet wird mit deinen gemessenen Stundenwerten.** Jede Stunde bekommt den
+Preis, der zu ihr gehört, und daraus entsteht der Monatspreis. Er steht in
+*Cockpit → Monat* als **„Ø-Preis HT/NT"** — bewusst unter eigenem Namen, damit er
+sich nicht mit dem Arbeitspreis aus deinen Stammdaten verwechseln lässt.
+
+⚠ **Ohne Stundenwerte rechnet eedc mit dem Preis aus den Stammdaten**, also mit dem
+Hochtarif und damit zu hoch. Wie viele Kilowattstunden in dein Fenster gefallen
+sind, weiß eedc nur, wenn der Netzbezug über einen zugeordneten Sensor läuft. Der
+Daten-Check sagt es dir und nennt beide Wege — Sensor zuordnen, oder im
+Monatsabschluss unter *Ø Strompreis* den Wert aus deiner Abrechnung eintragen; der
+schlägt beides.
+
+⛔ **Feiertage kennt eedc bewusst nicht**, Wochentage schon. Ein Feiertagskalender
+gilt je Bundesland und Kanton — ein falscher erzeugt still einen falschen Preis.
+
+⚑ **An bestehenden Tarifen ändert sich keine Zahl.** Und die dynamischen
+Börsenpreis-Tarife (Tibber, aWATTar, EPEX) sind davon unberührt: Sie lesen
+Marktpreise und sind etwas anderes als ein fester Zweipreistarif.
+
+Gewünscht von **MeinerB**.
+
+**Der Nachrüstpreis für mehr Speicher ist jetzt deiner**
+
+Die Auswertung *„Wäre ein größerer Speicher besser?"* rechnete ausnahmslos mit
+einem Richtwert von **500 € je kWh** — für alle Anlagen gleich, ohne Möglichkeit,
+eine eigene Zahl einzusetzen. Daran hängt kein Zwischenwert, sondern ein **Urteil**:
+Unter 15 Jahren sagt eedc „amortisiert in gut X Jahren", darüber „das rechnet sich
+nicht".
+
+Wer günstiger nachrüstet, bekam eine entsprechend zu lange Dauer — bei 3,2 kWh für
+1.000 € statt der angenommenen 1.600 € ist das **Faktor 1,6**, und damit womöglich
+ein „rechnet sich nicht" für etwas, das sich zu deinem Preis rechnet.
+
+**Jetzt steht neben dem Regler ein Feld für den Preis je kWh.** Bleibt es leer, gilt
+weiter der Richtwert, und der steht als Vorgabe im Feld.
+
+⛔ **Der Wert wird bewusst nicht gespeichert** — er gehört zu dieser einen
+Überlegung, nicht zum Gerät. Ein abgelegter Preis würde sonst auch für einen zweiten
+Speicher gelten, für den er nie gemeint war. Ebenfalls von **MeinerB**.
+
+**Wärmepumpe: der Heizstab hat endlich einen Namen**
+
+Am Wärmepumpen-Gerät gibt es das Feld *„Fremdanteil auf den Zählern"*. Seine Lage
+*„Ein zweiter Erzeuger speist denselben Heizkreis"* nannte als Beispiel bisher
+ausschließlich einen **Gas- oder Ölkessel**.
+
+Bei **Daikin- und Nibe-Anlagen** ist der Regelfall aber ein anderer: Der Heizstab
+wird beim **Strom** getrennt gezählt, seine **Wärme** läuft durch denselben
+Wärmemengenzähler. Wer sich in der Beschreibung nicht wiederfand, ließ *„Kein
+Fremdanteil"* stehen — und bekam eine **systematisch zu hohe Arbeitszahl, ohne
+jeden Hinweis**. Die vorhandene Warnschwelle schlägt nur nach unten aus.
+
+**Der Heizstab steht jetzt in beiden Beschreibungen**, und im Handbuch *Wärme &
+Klima* stehen zwei Fragen daneben, mit denen du deine Lage in zehn Sekunden
+bestimmst.
+
+**Was du tun musst:** Nichts, wenn deine Wärmepumpe der einzige Erzeuger am
+Wärmezähler ist. Läuft ein Heizstab oder ein zweiter Kessel durch denselben Zähler,
+sieh einmal in das Feld — eedc lässt die Arbeitszahl dann weg und schreibt den Grund
+daneben, statt eine zu gute zu zeigen. **Keine deiner Mengen ändert sich dabei.**
+
+⛔ **Herausgerechnet wird der Fremdanteil nicht.** Dafür bräuchte es eine Annahme
+über sein Verhältnis von Strom zu Wärme, und die wäre geraten. Wer von Hand
+bereinigt, weiß, wo seine Annahme sitzt — eedc würde sie verstecken.
+
+Gemeldet von **rapahl**, und zwar als Widerspruch: *„So einfach ist das nicht."*
+
+**Der Tag beantwortet dieselben Fragen wie der Monat**
+
+Unter *Cockpit → Monat* steht die Arbeitszahl getrennt für **Heizen, Warmwasser und
+Kühlen** — immer, mit einer Zahl oder mit dem Grund, warum es keine gibt. Unter
+*Cockpit → Tag* fehlten dieselben drei Zeilen **ersatzlos**. Nicht als „—", sondern
+gar nicht, und damit war „nicht getrennt gemessen" von „gibt es hier nicht" nicht zu
+unterscheiden.
+
+Jetzt antwortet der Tag wie der Monat. **Geschätzt wird nichts:** Fehlt ein Zähler,
+steht der Grund da.
+
+⚠ **Kühlen bekommt bewusst keine Tages-Zahl.** Die Kältemenge wird nicht je Tag
+aufsummiert — eine erfundene Erklärung wäre teurer als die fehlende Zeile.
+
+Angeregt von **MartyBr**, der den Tageswert für den Vergleich mit der
+Außentemperatur nutzen will.
+
+**Wer sein Auto oder einen Speicher unter „Sonstiges" entlädt, sieht wieder die richtige Autarkie**
+
+Zwei Geräte fielen in *Cockpit → Live* aus der Bilanz, und beide auf dieselbe Weise:
+Ihre Rolle war eedc bekannt, wurde aber eine Zeile später aus dem **Namen** neu
+erraten.
+
+* **Ein bidirektionales E-Auto (V2H)**: Beim Entladen ins Haus stand die Autarkie zu
+  niedrig (67 % statt 86 %), beim Laden die Eigenverbrauchsquote zu hoch (100 %
+  statt 33 %).
+* **Ein Speicher, den du unter *Sonstiges* mit der Kategorie „Speicher" führst**:
+  Seine **Entladung** wurde als Hausverbrauch gebucht statt als Erzeugung —
+  dieselben rund 19 Prozentpunkte.
+
+**Deine erfassten Mengen waren immer richtig**, betroffen waren allein die beiden
+Live-Quoten.
+
+⚠ Ein gewöhnliches, nicht bidirektionales E-Auto ändert sich **nicht** — und ein
+Speicher, der als eigener Gerätetyp angelegt ist, war nie betroffen.
+
+**Eine Lücke bleibt eine Lücke**
+
+Der durchgehende Faden dieser Version: Wo eedc etwas **nicht** gemessen hat, steht
+das jetzt da — statt einer Null, die wie eine Messung aussieht.
+
+* **PV-Erzeugung**: Fehlt bei *einem* deiner Strings der Monatswert und ist auch
+  kein Gesamtwert hinterlegt, kann eedc die Anlagensumme nicht bilden. Sie sagt es
+  jetzt, statt zu wenig auszuweisen.
+* **Stundentabelle**: Der Hausverbrauch entsteht als Differenz. Fehlte einem Gerät
+  der Wert **einer einzelnen Stunde**, wurde es mit 0 abgezogen und der
+  Hausverbrauch stand um dessen Verbrauch zu hoch. Jetzt bleibt die Zelle leer.
+  ⚠ Anlagen ohne das jeweilige Gerät ändern sich nicht — unterschieden wird über
+  den **ganzen Tag**.
+* **Ein gemessener Null-Ertrag** ist wieder eine Null: Im Prognosen-Vergleich stand
+  für den heutigen IST-Ertrag ein „—", sobald er exakt 0 kWh betrug — also nachts,
+  bei Schnee und an dunklen Wintertagen.
+* **Verbrauchsprofil**: Wer seine Zählerstände per **MQTT** liefert und dessen
+  Zähler zurückspringt (Geräteneustart, Firmware-Update), bekam für diese Stunde
+  eine **0 kW** als vollwertige Messung ins Profil geschrieben. Weil das Profil ein
+  Mittelwert über sieben Tage ist, zog eine wiederkehrende Null denselben Slot
+  dauerhaft nach unten. Jetzt liefert eine solche Stunde gar keinen Wert.
+
+**Bei mehreren Wärmeerzeugern rechnet der Gas-Vergleich auf einer Menge**
+
+Hast du **mehr als einen Wärmeerzeuger** und trägt einer davon *„Nichts ersetzt
+(Neubau)"* — der Normalfall, sobald eine **Split-Klimaanlage** neben einer
+Wärmepumpe steht —, dann verglich eedc die eingesparten Gaskosten nur für die
+**ersetzenden** Geräte, zog aber den Stromverbrauch **aller** ab. Die ausgewiesene
+Ersparnis war dadurch zu klein: gemessen 704 € statt 1.058 €.
+
+Dieselbe Ungleichheit steckte in der **CO₂-Ersparnis des Jahresberichts**: Sie
+buchte die Wärme der ganzen Anlage als vermiedenes Gas und schwieg nur dann, wenn
+**kein einziges** Gerät etwas ersetzte.
+
+⚠ **Wer genau einen Wärmeerzeuger hat, sieht keine Änderung.** Die
+Verbrauchsanzeigen bleiben bewusst bei allen Geräten — sie beschreiben deine Anlage,
+nicht die Grundmenge eines Vergleichs. Aufgefallen an einer Rückmeldung von
+**dietmar1968**.
+
+**Der Daten-Check sieht mehr als die PV**
+
+Bisher verglich die Prüfung *Datenquellen-Drift* ausschließlich die **PV-Tagessumme**
+mit dem, was Home Assistant für denselben Tag ausweist. Für **Wallbox, E-Auto und
+Wärmepumpe** gab es diesen Abgleich überhaupt nicht — obwohl diese Werte nicht nur
+die Energiebilanz tragen, sondern auch Amortisation, Ersparnis und CO₂.
+
+Jetzt gibt es **einen Eintrag je Gerät** mit dem Tag der größten Abweichung als
+Beleg, bei denselben Schwellen wie bisher (mindestens 2 kWh **und** mindestens 5 %).
+
+⚠ **Je Gerät, nicht als zweite Summe** — in einer gemeinsamen Summe würde ein Plus
+an der Wärmepumpe ein Minus an der Wallbox ausgleichen, und übrig bliebe eine
+unauffällige Null.
+
+Neu meldet der Check außerdem eine **Ladung, die mehr PV enthält, als sie groß ist**.
+In deinen Auswertungen stand deshalb keine falsche Zahl — und genau das war das
+Problem: eedc rechnet in dieser Lage mit *PV + Netz* weiter und legt deinen
+Gesamtwert beiseite. Du siehst also eine Ladung, die du nie erfasst hast, und
+erfährst nie, dass einer der beiden Werte falsch ist. **Ohne Reparatur-Knopf:**
+Welcher der beiden stimmt, kann eedc nicht wissen.
+
+**Kleinere Korrekturen**
+
+* **Community-Vergleich der Jahresarbeitszahl**: *Übersicht* verglich mit Anlagen
+  **derselben Wärmepumpen-Art**, *Komponenten* mit dem Schnitt über **alle** — zwei
+  Zahlen für dieselbe Kennzahl. Jetzt gilt überall dieselbe Bezugsgruppe, und die
+  Art wird nur genannt, wenn auch gegen sie gerechnet wurde.
+* **14-Tage-Prognose**: Sie rechnete mit dem Anlagenbestand von **heute**, auch für
+  Tage, an denen er ein anderer ist. Wer ein **Stilllegungs- oder
+  Anschaffungsdatum** gepflegt hat, bekommt jetzt für jeden Tag den Bestand
+  *dieses* Tages.
+* **HA-Export**: Der Strompreis-Sensor nannte den falschen Wert, sobald ein
+  Spezialtarif (Wärmepumpe, Wallbox) der zuletzt gepflegte war.
+* **Vergleichs-Angaben** („▲ 0,8") widersprachen den Zahlen, zwischen denen sie
+  standen — sie wurden aus ungerundeten Werten gebildet und neben gerundete
+  gestellt.
+* **Ein stillgelegter Speicher** konnte eine Warnung auslösen, die sich nicht
+  wegräumen ließ.
+* **Vor dem Entfernen von Messwerten** sagt eedc jetzt, was ein Zählerstand ist —
+  der Hinweistext galt vorher für jede Datenart gleich.
+* **Der Vermerk nach einer Zuordnungsänderung** schrieb „Betriebsmodus ()" — bei
+  einem Zustandsfeld ist die Einheit leer, und das gehört nicht in die Klammer.
+* **Die Karten-Ansicht schmaler Bildschirme** hat wieder eine gemeinsame Vorlage.
+* **Die Sensor-Referenz** zeigt jetzt, wie du an die **Stundenpreise** kommst — sie
+  stecken als Attribut im Rang-Sensor, und das stand nirgends (Rückmeldung von
+  **rapahl**).
 
 ---
 
