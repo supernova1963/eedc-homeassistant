@@ -51,6 +51,8 @@ export interface AktuellerMonatResponse {
   aktualisiert_um: string
 
   quellen: Record<string, boolean>
+  /** P4-Beschriftung für Teilsummen — über `unvollstaendigHerkunft` rendern. */
+  hinweise?: string[]
 
   // Energie-Bilanz (kWh)
   pv_erzeugung_kwh: number | null

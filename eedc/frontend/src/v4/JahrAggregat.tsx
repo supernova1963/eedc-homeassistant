@@ -276,6 +276,12 @@ export function baueJahrAlsMonat(monate: AktuellerMonatResponse[], jahr: number)
     monat_name: String(jahr),
     aktualisiert_um: erster?.aktualisiert_um ?? '',
     quellen: erster?.quellen ?? {},
+    // P4: die Beschriftung der Teilsummen wandert mit ins Jahr. Vereinigung
+    // statt Neuformulierung — der Satz hat genau EINE Quelle, den Backend-SoT
+    // `monats_fakten.pv_unvollstaendig_hinweis`; ein zweiter Wortlaut im Client
+    // wäre die Drift, die Regel 0a verhindert. Dedupliziert, weil zwei Monate
+    // denselben Satz tragen können.
+    hinweise: [...new Set(monate.flatMap((m) => m.hinweise ?? []))],
 
     // Energie-Bilanz (Σ) + Quoten (neu berechnet)
     pv_erzeugung_kwh: pv,

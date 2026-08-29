@@ -12,7 +12,7 @@
  * (`docs/KONZEPT-UNVOLLSTAENDIGE-WERTE.md` §3).
  */
 import { describe, it, expect } from 'vitest'
-import { berechneHausverbrauch, alsAnzeigewert } from './TagWerteTabelle'
+import { berechneHausverbrauch, alsAnzeigewert, erfassteSenken } from './TagWerteTabelle'
 import type { StundenWert, SerieInfo } from '../../api/energie_profil'
 
 const stunde = (over: Partial<StundenWert> = {}): StundenWert => ({
@@ -112,5 +112,80 @@ describe('alsAnzeigewert (N-261: Butterfly-Vorzeichen abstreifen)', () => {
     // Sonstiges-Verbraucher zweimal ab (0,8 statt 1,3).
     const s = stunde({ verbrauch_kw: 2.0, komponenten: { pool_9: -0.5 } })
     expect(berechneHausverbrauch(s, POOL)).toBe(1.5)
+  })
+})
+
+/**
+ * N-95 — die Differenz erbt die Unvollständigkeit **jedes** Summanden.
+ *
+ * Bis 29.08.2026 prüfte `berechneHausverbrauch` nur seinen Ausgangswert. Fehlte
+ * einer Senke der Wert dieser Stunde, wurde sie per `?? 0` abgezogen — und der
+ * Hausverbrauch stand um genau diesen Betrag **zu hoch** da, ohne dass es jemand
+ * sah. Der Fund nannte das nicht trennbar („ein `null` heißt Komponente nicht
+ * vorhanden ODER Sensor hat nicht gemessen"). Trennbar wird es über den TAG:
+ * dieselbe Träger-Idee wie `TagesBilanz.*_erfasst` — hat irgendeine Stunde des
+ * Tages einen Wert getragen, ist das Gerät da und ein `null` ist eine Lücke.
+ */
+describe('erfassteSenken — was dieser Tag überhaupt gemessen hat', () => {
+  it('nennt nur Senken, die mindestens eine Stunde getragen haben', () => {
+    const tag = [
+      stunde({ stunde: 0, verbrauch_kw: 1, waermepumpe_kw: null, wallbox_kw: null }),
+      stunde({ stunde: 1, verbrauch_kw: 1, waermepumpe_kw: 0.4, wallbox_kw: null }),
+    ]
+    expect(erfassteSenken(tag, KEINE_EXTRA)).toEqual(new Set(['waermepumpe_kw']))
+  })
+
+  it('erkennt eine gemessene 0 als Messung — nicht als Abwesenheit', () => {
+    const tag = [stunde({ stunde: 0, verbrauch_kw: 1, wallbox_kw: 0 })]
+    expect(erfassteSenken(tag, KEINE_EXTRA).has('wallbox_kw')).toBe(true)
+  })
+
+  it('nimmt Extra-Senken über ihren Serien-Schlüssel auf', () => {
+    const tag = [
+      stunde({ stunde: 0, verbrauch_kw: 1, komponenten: {} }),
+      stunde({ stunde: 1, verbrauch_kw: 1, komponenten: { pool_9: -0.5 } }),
+    ]
+    expect(erfassteSenken(tag, POOL).has('pool_9')).toBe(true)
+  })
+
+  it('bleibt leer, wenn die Anlage die Komponente gar nicht hat', () => {
+    const tag = [stunde({ stunde: 0, verbrauch_kw: 1 })]
+    expect(erfassteSenken(tag, POOL).size).toBe(0)
+  })
+})
+
+describe('berechneHausverbrauch — fehlender Subtrahend (N-95)', () => {
+  it('unterdrückt die Stunde, in der eine erfasste Wärmepumpe nichts liefert', () => {
+    // Der Defekt: 3,0 − (null ?? 0) = 3,00 — obwohl die WP an diesem Tag misst
+    // und in dieser Stunde nur der Wert fehlt.
+    const s = stunde({ verbrauch_kw: 3.0, waermepumpe_kw: null })
+    expect(berechneHausverbrauch(s, KEINE_EXTRA, new Set(['waermepumpe_kw']))).toBeNull()
+  })
+
+  it('unterdrückt auch bei einer erfassten Extra-Senke ohne Stundenwert', () => {
+    const s = stunde({ verbrauch_kw: 3.0, komponenten: {} })
+    expect(berechneHausverbrauch(s, POOL, new Set(['pool_9']))).toBeNull()
+  })
+
+  it('rechnet normal weiter, wenn der erfasste Subtrahend seinen Wert hat', () => {
+    const s = stunde({ verbrauch_kw: 3.0, waermepumpe_kw: 0.5 })
+    expect(berechneHausverbrauch(s, KEINE_EXTRA, new Set(['waermepumpe_kw']))).toBe(2.5)
+  })
+
+  it('lässt die Anlage OHNE Wärmepumpe unberührt — die frühere Entscheidung bleibt', () => {
+    // Diese Zeile schützt den Test weiter oben („sonst verstummte jede Anlage
+    // ohne WP"). Er hatte recht; die Trennung kommt aus dem Tag, nicht aus dem
+    // Einzelwert — deshalb wird hier nichts zurückgedreht.
+    const tag = [stunde({ stunde: 0, verbrauch_kw: 2.0, waermepumpe_kw: null })]
+    const erfasst = erfassteSenken(tag, KEINE_EXTRA)
+    expect(berechneHausverbrauch(tag[0], KEINE_EXTRA, erfasst)).toBe(2.0)
+  })
+
+  it('ohne Abdeckungs-Wissen verhält es sich wie vorher', () => {
+    // Ein leeres Set heißt „keine Senke ist als erfasst bekannt" — dann ist eine
+    // Lücke von einer fehlenden Komponente nicht unterscheidbar, und Unterdrücken
+    // wäre geraten.
+    const s = stunde({ verbrauch_kw: 3.0, waermepumpe_kw: null })
+    expect(berechneHausverbrauch(s, KEINE_EXTRA)).toBe(3.0)
   })
 })

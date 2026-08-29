@@ -66,6 +66,22 @@ class StundenProfil:
     p90_kw: tuple[float | None, ...] | None = None
     unvollstaendig: bool = False  # IST: echtes Datenloch in abgelaufener Stunde
 
+    @property
+    def hat_messung(self) -> bool:
+        """Trägt **mindestens ein** Slot einen Wert? — der Träger für „0 oder —".
+
+        ``tageswert_kwh`` kann das nicht beantworten: ``ist_profil`` startet die
+        Summe bei ``0.0`` und liefert sie **nie** als ``None``. Ein Tag ohne
+        jeden Zähler und eine gemessene Null (Nacht, Schnee, Anlage aus) haben
+        dort denselben Wert. Genau derselbe Träger-Gedanke wie
+        ``TagesBilanz.pv_erfasst``: *True, sobald EINE Stunde einen Wert trug.*
+
+        ⛔ Deshalb ist ``tageswert_kwh is not None`` als Unterdrückungs-Regel
+        **falsch** — sie wäre immer wahr und machte aus „—" eine 0,0 für
+        Anlagen, die gar nichts messen (N-52/N-344 (1), gemessen 29.08.2026).
+        """
+        return any(v is not None for v in self.slots_kw)
+
 
 def openmeteo_gti_profil(
     gti_values: list,

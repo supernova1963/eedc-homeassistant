@@ -202,6 +202,17 @@ class AggregierteMonatsdatenResponse(BaseModel):
     anlage_id: int
     jahr: int
     monat: int
+    #: `False` = die PV-Achse dieses Monats ist eine **Teilsumme**: mindestens
+    #: ein aktives Modul ohne Wert und kein Gesamtwert zum Verteilen. Die Zahl
+    #: bleibt stehen (additive Summe ⇒ richtungssicher zu niedrig,
+    #: `docs/KONZEPT-UNVOLLSTAENDIGE-WERTE.md` §3), sie wird nur beschriftet.
+    #: Trägt `ErzeugungFakten.pv_vollstaendig` — bis 29.08.2026 hatte das Flag
+    #: **keinen einzigen Leser** und war damit selbst der Befund, den §2.4
+    #: beschreibt („ein Provenance-Flag ohne Leser ist kein Provenance").
+    #: Die Zeile trägt es, nicht die Antwort: `/aggregiert` liefert eine nackte
+    #: Liste, und die Zeile **ist** der Monat — ein Satz auf Seitenebene würde
+    #: gerade die Information verlieren, welcher Monat gemeint ist.
+    pv_vollstaendig: bool = True
     # Zählerwerte (aus Monatsdaten) — Anlage-weit, bleiben float
     einspeisung_kwh: float
     netzbezug_kwh: float
@@ -623,6 +634,7 @@ async def list_monatsdaten_aggregiert(
                 k: round(v, 3)
                 for k, v in zaehler_stand_je_monat.get((f.jahr, f.monat), {}).items()
             } or None,
+            pv_vollstaendig=f.erzeugung.pv_vollstaendig,
             einspeisung_kwh=round(einspeisung, 1),
             netzbezug_kwh=round(netzbezug, 1),
             # F-58: Nenner des spez. Ertrags je Monat. `mit_bkw=False`, weil

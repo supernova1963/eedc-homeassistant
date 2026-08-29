@@ -43,7 +43,11 @@ from backend.core.berechnungen.waermepumpe_kennzahl import (
 )
 from backend.core.calculations import berechne_co2_bilanz
 from backend.services.finanz_zeilen import baue_finanz_zeile
-from backend.services.monats_fakten import finanz_zeile_eingabe, lade_monats_fakten
+from backend.services.monats_fakten import (
+    finanz_zeile_eingabe,
+    lade_monats_fakten,
+    pv_unvollstaendig_hinweis,
+)
 from backend.core.investition_parameter import ist_dienstlich
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
@@ -150,6 +154,12 @@ class CockpitUebersichtResponse(BaseModel):
     anzahl_monate: int
     zeitraum_von: Optional[str]
     zeitraum_bis: Optional[str]
+    #: Beschriftung für Werte, die weniger enthalten als ihr Name sagt (P4-Form,
+    #: wie `SolarPrognoseResponse.hinweise` — der Client rendert sie über
+    #: `unvollstaendigHerkunft` + `HerkunftZeile`). Leer = vollständig.
+    #: Kein zweiter Melder: dass Werte fehlen, sagt der Daten-Checker; hier steht,
+    #: worauf **diese** Kopfzahlen beruhen (`KONZEPT-UNVOLLSTAENDIGE-WERTE` §4).
+    hinweise: list[str] = []
 
 
 @router.get("/uebersicht/{anlage_id}", response_model=CockpitUebersichtResponse)
@@ -782,6 +792,12 @@ async def get_cockpit_uebersicht(
     kumulative_ersparnis = netto_ertrag + wp_ersparnis + emob_ersparnis - betriebskosten_zeitraum
     roi_fortschritt = (kumulative_ersparnis / investition_gesamt * 100) if investition_gesamt > 0 else None
 
+    # P4/§3 Regel 2: das Flag wird im selben Schritt ausgeliefert, in dem es
+    # gesetzt wird. Grundgesamtheit ist `md_pv` — dieselbe Menge, aus der die
+    # PV-Kopfzahl oben gebildet wurde; ein Monat, der gar nicht in die Summe
+    # eingeht, darf sie auch nicht beschriften.
+    hinweise = [h for h in (pv_unvollstaendig_hinweis(md_pv),) if h]
+
     return CockpitUebersichtResponse(
         pv_erzeugung_kwh=round(pv_erzeugung, 1),
         gesamtverbrauch_kwh=round(gesamtverbrauch, 1),
@@ -848,4 +864,5 @@ async def get_cockpit_uebersicht(
         anzahl_monate=anzahl_monate,
         zeitraum_von=zeitraum_von,
         zeitraum_bis=zeitraum_bis,
+        hinweise=hinweise,
     )

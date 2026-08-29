@@ -789,7 +789,15 @@ async def get_prognosen_vergleich(
         sfml_uebermorgen_kwh=sfml_uebermorgen_kwh,
         sfml_stundenprofil=sfml_stundenprofil,
         sfml_tageshaelften=sfml_ths,
-        ist_heute_kwh=round(ist_heute_kwh, 1) if ist_heute_kwh > 0 else None,
+        # N-52: `> 0` machte aus einer **gemessenen Null** ein „—" — im Winter,
+        # bei Schnee und jede Nacht. Eine gemessene 0 ist eine Aussage
+        # (`docs/KONZEPT-UNVOLLSTAENDIGE-WERTE.md` §3, Richtung 2), keine Lücke.
+        # ⛔ NICHT `is not None`: `ist_profil` liefert `tageswert_kwh` nie als
+        # `None` (Summe startet bei 0.0) — die Regel wäre immer wahr und eine
+        # Anlage ganz ohne PV-Zähler bekäme „0,0 kWh IST" statt „—". Träger ist
+        # deshalb `hat_messung` (mindestens ein Slot mit Wert), analog
+        # `TagesBilanz.pv_erfasst`.
+        ist_heute_kwh=round(ist_heute_kwh, 1) if ist_p.hat_messung else None,
         ist_stundenprofil=ist_stundenprofil,
         ist_tageshaelfte=ist_th,
         ist_unvollstaendig=ist_unvollstaendig,

@@ -1,10 +1,16 @@
 # Regel — was eedc sagt, wenn ein Messwert fehlt
 
-> ## **Status (gemessen 2026-08-28): die Regel gilt und ist gewächtert**
+> ## **Status (gemessen 2026-08-29): die Regel gilt, ist gewächtert und liefert ihre Provenance aus**
 >
 > **Was hier steht:** wie eedc mit einem fehlenden Messwert umgeht — und warum es ihn **nicht**
 > durch 0 ersetzt. §3 ist die tragende Regel; **23 Stellen im Code zitieren sie**, dazu
-> [BERECHNUNGEN.md](BERECHNUNGEN.md). §6 nennt die Regressionen, die sie halten.
+> [BERECHNUNGEN.md](BERECHNUNGEN.md). §6 nennt die Regressionen und den Wächter, die sie halten.
+>
+> ⭐ **Am 2026-08-29 geschlossen: das Provenance-Flag hat seine Leser.** §2.4 nannte
+> `pv_vollstaendig` den schärfsten Einzelbefund der Inventur — gesetzt, getestet, von keiner
+> Route gelesen. Es erreicht jetzt die Monatstabelle (je Zeile), Cockpit → Monat und
+> Cockpit → Jahr (als `hinweise`, P4-Form), und **Wächter W1** hält den Zustand: ein
+> Domänen-Flag ohne Zugriff unter `backend/api/` macht die Suite rot.
 >
 > **Auslöser:** Rainer (PN 89905), gefunden an coolxmads Screenshot, nicht an der eigenen Anlage:
 > fällt ein Sensor aus, verschwindet der **abgeleitete** Wert (Hausverbrauch) ganz, obwohl Netz
@@ -74,7 +80,7 @@ standen in keinem Register.
 | Stelle | Ausprägung |
 | --- | --- |
 | `core/berechnungen/verbrauch.py:66-71` | **Der Kern.** `berechne_verbrauchs_kennzahlen` nimmt sechs `float` und macht aus jedem `None` per `or 0.0` eine 0. Die **Signatur hat keinen Platz für „unbekannt"** — ab hier ist die Information weg, für alle fünf Aufrufer |
-| `services/monats_fakten.py:654-655` | `einspeisung_kwh=(monatsdaten.einspeisung_kwh or 0.0) if monatsdaten else 0.0` — Ziel ist `ZaehlerFakten.einspeisung_kwh: float = 0.0` (`:108-112`). Die NULL-Spalte in `Monatsdaten` **weiß** es; die Schicht wirft es hier weg |
+| ~~`services/monats_fakten.py`: `einspeisung_kwh=(monatsdaten.einspeisung_kwh or 0.0) …`~~ | ⛔ **Am 2026-08-29 am Code widerlegt — die Begründung stimmte nicht.** Hier stand „Die NULL-Spalte in `Monatsdaten` **weiß** es; die Schicht wirft es hier weg". Gemessen: `einspeisung_kwh` und `netzbezug_kwh` sind `nullable=False, default=0` — im Modell **und** in drei echten Datenbanken (`NOT NULL`, 0 NULL-Zeilen). Das `or 0.0` kann dort nichts wegwerfen. Was tatsächlich Information verliert, ist der andere Zweig — `if monatsdaten else 0.0`, also ein Monat **ohne Zählerzeile** —, und **den führt die Schicht bereits**: `MetaFakten.hat_zaehlerzeile`, gelesen von acht Stellen unter `backend/api/`. *Eine Inventur-Zeile, die eine Spalte für nullable hält, ohne ins Modell zu sehen* |
 | `services/monats_fakten.py:658` | `pv_kwh = (pv_modul_summe or 0.0) + roh.bkw_erzeugung` — **die Schicht bricht ihre eigene, ausgeschriebene Regel** (s. §2.3) |
 | `services/monats_fakten.py:513-520` | `kennzahlen_aus_fakten` summiert über Monate; ein Monat ohne Zählerzeile geht als 0 ein |
 | `core/calculations.py:157-161` | Legacy-Pfad, gar keine Guards |
@@ -90,7 +96,7 @@ standen in keinem Register.
 
 | Stelle | Ausprägung |
 | --- | --- |
-| `api/routes/prognosen.py:763` | `ist_heute_kwh=round(…) if ist_heute_kwh > 0 else None` — exakt 0 wird `null`, und `fmtZahl(null)` zeigt „—". Die Ironie: **`ist_unvollstaendig` steht als eigenes Flag im selben Response** (`:766`), wird hier aber nicht benutzt (**N-52**) |
+| ~~`api/routes/prognosen.py`~~ | ✅ **gebaut 2026-08-29 (N-52).** War: `if ist_heute_kwh > 0 else None` — jede gemessene Null (Nacht, Winter, Schnee) wurde zu „—". Träger ist jetzt `StundenProfil.hat_messung`. ⛔ **Nicht** `is not None`, wie es hier zuerst vorgeschlagen war: `ist_profil` liefert `tageswert_kwh` **nie** als `None` (die Summe startet bei 0.0), die Regel wäre immer wahr gewesen und hätte eine Anlage ganz ohne PV-Zähler mit „0,0 kWh IST" beschriftet. *Aus einem zu strengen Prüfer wäre ein falscher Wert geworden* |
 | `services/live_verbrauchsprofil_service.py:491` | `max(0.0, v_end - v_start)` macht aus einem Counter-Reset eine gemessene Null (**N-47**) |
 | `services/live_verbrauchsprofil_service.py:615` | `tage >= 2` zählt **Tage statt Abdeckung** — ein „Tag" entsteht aus einer einzigen Stunde (**N-48**) |
 
@@ -122,12 +128,28 @@ eedc/backend/services/monats_fakten.py:752   pv_vollstaendig=…                
 eedc/backend/tests/test_monats_fakten_schicht.py:146,166,167                  ← geprüft
 ```
 
-**Kein einziger Konsument liest es** — keine Route, kein Schema, keine Zeile im
-Frontend. Das Flag ist vollständig implementiert, getestet und **erreicht die
-Antwort nie**. Wer die PV-Achse liest (`pv_kwh` — spezifischer Ertrag,
-Performance Ratio, SOLL/IST, Finanz-Zeile), bekommt bei fehlendem Modulwert eine
-Teilsumme ohne jeden Hinweis, obwohl die Schicht zwei Zeilen darüber genau weiß,
-dass sie unvollständig ist.
+**Kein einziger Konsument las es** — keine Route, kein Schema, keine Zeile im
+Frontend. Das Flag war vollständig implementiert, getestet und **erreichte die
+Antwort nie**.
+
+> ✅ **Behoben am 2026-08-29.** `pv_unvollstaendig_hinweis()` in
+> `services/monats_fakten.py` ist die eine Stelle, die aus dem Flag einen Satz
+> macht; ausgeliefert wird er als `hinweise` (P4-Form, wie
+> `SolarPrognoseResponse`) in **Cockpit → Monat** und **Cockpit → Jahr**, und als
+> Feld `pv_vollstaendig` **je Zeile** in `/monatsdaten/aggregiert` — dort ist die
+> Zeile der Monat, ein Satz auf Seitenebene verlöre die Zuordnung.
+> **Wächter W1** (`backend/tests/test_konformitaet_provenance_flag_hat_leser.py`)
+> hält es: ein boolesches `*_vollstaendig`-Feld der Domänen-Schicht ohne
+> Attributzugriff unter `backend/api/` macht die Suite rot.
+
+**Wo die Teilsumme wirklich sichtbar wurde — gemessen 2026-08-29, denn die
+Fundstellen unterscheiden sich:**
+
+| Sicht | Verhalten VOR dem Bau |
+| --- | --- |
+| Cockpit → **Jahr** (`cockpit/uebersicht.py`) | `sum(f.erzeugung.pv_kwh …)` **ohne Guard** — die Kopfzahl war still zu niedrig, und daran hängen spezifischer Ertrag und SOLL/IST |
+| Monatstabelle (`/monatsdaten/aggregiert`) | zeigte **schon** „—" (`hat_pv_imd` verlangt `pv_module_kwh is not None`) — das Flag ersetzt die Unterdrückung hier nicht, es **erklärt** sie |
+| Monatstabelle **mit Balkonkraftwerk** | ⛔ der schlimmste Fall: `hat_pv_imd` wird durch das BKW wahr, die Antwort liefert `pv_erzeugung_kwh` = **nur BKW** und `pv_module_kwh` = **0,0** — eine Zahl, die wie eine Messung aussieht. Gegengerechnet: 500 kWh gemessener String-Ertrag fehlen in beiden Zahlen |
 
 ### §2.5 Die Klasse, die keine Registerzeile hatte: Differenzen aus Teilsummen
 
@@ -148,6 +170,18 @@ nicht beantworten. Dieselbe Differenz steht in
 Das ist keine Nachlässigkeit einer Stelle, sondern eine **eigene Fehlerklasse**:
 richtige NULL-Behandlung je Summand schützt die Summen, aber nicht die aus ihnen
 gebildete Differenz.
+
+> ✅ **Seit 2026-08-22 gebaut (N-92) — dieser Abschnitt beschrieb bis zum
+> 29.08. einen Zustand, den es nicht mehr gab.** `TagesBilanz` führt die
+> **Abdeckung je Achse in Stunden** (`pv_stunden` · `verbrauch_stunden` ·
+> `einspeisung_stunden` · `netzbezug_stunden`) und dazu die beiden
+> Paar-Abdeckungen; `eigenverbrauch` und `autarkie` werden **unterdrückt**,
+> sobald die Grundlagen auseinanderlaufen. `energie_profil/views.py` trägt
+> dieselbe Regel (der frühere Befund `:590`, heute `:997`).
+>
+> ⚠ Die zweite genannte Stelle (`views.py:1400`, heute `:1830`) gehört **nicht**
+> zu dieser Klasse: sie summiert eine **Prognose**, kein Messfeld — dort gibt es
+> keine Abdeckungsfrage. Am 29.08. gemessen und abgegrenzt.
 
 ---
 
@@ -258,7 +292,31 @@ Für die allgemeine Form gibt es bewusst **keinen** Grep-Wächter: `except → r
 Connector-/Wetter-Layer die **richtige** Form (rund 40 Stellen) und im Wert-Pfad die falsche —
 der Unterschied liegt nicht im Ausdruck. Das steht so schon in ADR-002.
 
-Geprüft wird deshalb am Ergebnis, und dafür stehen fünf Regressionen (gemessen 2026-08-28):
+Geprüft wird am Ergebnis — **und seit 2026-08-29 zusätzlich strukturell**, dort wo es geht:
+
+> **W1 — kein Provenance-Flag ohne Weg in die Antwort**
+> (`backend/tests/test_konformitaet_provenance_flag_hat_leser.py`, Baseline 0).
+> Jedes **boolesche** `*_vollstaendig`/`*_unvollstaendig`-Feld unter `services/`
+> oder `core/` braucht einen **Attributzugriff** unter `backend/api/`.
+>
+> ⛔ **Attributzugriff, nicht Textsuche — am eigenen Prüfer gelernt.** Die erste
+> Fassung suchte den Namen als Text und blieb bei der Gegenprobe **grün**,
+> obwohl die Auslieferung testweise zurückgebaut war: eine Kommentarzeile nannte
+> den Namen, eine **gleichnamige Funktion** an anderer Stelle
+> (`pv_monatswerte.ist_vollstaendig`) zählte als Leser eines gleichnamigen
+> Response-Feldes, und die TypeScript-Typdeklaration des Clients zählte
+> ebenfalls. *Ein Prüfer, der bei zurückgebautem Fix grün bleibt, hat nichts
+> gemessen.* Die Gegenprobe steht seither als eigener Test in der Datei.
+>
+> **Schema-Felder unter `api/` sind nicht Gegenstand** — sie *sind* die Antwort;
+> ihr Konsument sitzt im Client. Dafür ist W3 zuständig (Regression je Endpoint).
+
+Dazu die Regressionen am Ergebnis (gemessen 2026-08-29):
+
+- `backend/tests/test_unvollstaendige_werte_b1_b3.py` — **beide Richtungen an einem Ort**:
+  eine PV-Teilsumme bleibt stehen und sagt es (Richtung 1), eine gemessene Null bleibt
+  eine 0 (Richtung 2). Enthält die Negativprobe gegen `is not None`, die den ursprünglich
+  vorgeschlagenen Fix als Regression entlarvt hätte.
 
 - `backend/tests/test_tagesbilanz_pv_nicht_erfasst.py` — eine additive Größe ohne Messung wird
   unterdrückt statt als 0 geführt.
@@ -268,4 +326,7 @@ Geprüft wird deshalb am Ergebnis, und dafür stehen fünf Regressionen (gemesse
   Differenz nicht.
 - `backend/tests/test_n121_monate_ohne_db_spur.py` — was aus Tageswerten stammt, sagt es.
 - Im Frontend `TagWerteTabelle.test.tsx` und `JahrVerlaufChart.test.tsx` — unterdrückte Werte
-  tragen „—" und der Tooltip nennt den Grund.
+  tragen „—" und der Tooltip nennt den Grund. **Seit 29.08. zusätzlich die Subtrahenden**
+  (N-95): `erfassteSenken` trennt „Gerät gibt es nicht" von „diese Stunde fehlt", indem es
+  den **Tag** fragt statt den Einzelwert — dieselbe Träger-Idee wie `TagesBilanz.*_erfasst`.
+  Die additive Schwester „Verfügbare Energie" wird **beschriftet** statt unterdrückt (N-94).

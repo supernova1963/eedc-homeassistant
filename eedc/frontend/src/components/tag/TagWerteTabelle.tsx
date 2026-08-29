@@ -12,9 +12,39 @@ import { Card, Button, CsvExportButton, Table, TableHead, TableBody, TableFoot }
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { exportToCSV } from '../../utils/export'
 import type { StundenWert, SerieInfo } from '../../api/energie_profil'
+import { HerkunftZeile } from '../blocks'
+import { unvollstaendigHerkunft } from '../../lib/prognoseHinweise'
 
 function round2(v: number): number {
   return Math.round(v * 100) / 100
+}
+
+/** Schlüssel der Senken, die `berechneHausverbrauch` abzieht. */
+export type SenkenKey = 'waermepumpe_kw' | 'wallbox_kw' | string
+
+/**
+ * Welche Senken hat dieser Tag **überhaupt** erfasst?
+ *
+ * Dieselbe Idee wie `TagesBilanz.*_erfasst` eine Ebene tiefer: *True, sobald EINE
+ * Stunde einen Wert trug.* Damit wird trennbar, was am Einzelwert nicht trennbar
+ * ist — ein `null` heißt „Gerät gibt es nicht" (nirgends am Tag ein Wert) **oder**
+ * „diese Stunde wurde nicht gemessen" (andere Stunden haben Werte). Nur der
+ * zweite Fall ist eine Lücke.
+ *
+ * ⭐ Für die Extra-Senken beantwortet es schon der Vertrag: `serien` wird vom
+ * Backend nur befüllt, wenn die Komponente am Tag etwas beigetragen hat
+ * (`live_tagesverlauf_service.py`, `if any("…" in p["werte"] …)`). Für die beiden
+ * **dedizierten** Felder `waermepumpe_kw`/`wallbox_kw` gibt es keine solche
+ * Deklaration — deshalb diese Erhebung über den Tag.
+ */
+export function erfassteSenken(daten: StundenWert[], extraVerbraucher: SerieInfo[]): Set<SenkenKey> {
+  const erfasst = new Set<SenkenKey>()
+  if (daten.some((s) => s.waermepumpe_kw != null)) erfasst.add('waermepumpe_kw')
+  if (daten.some((s) => s.wallbox_kw != null)) erfasst.add('wallbox_kw')
+  for (const es of extraVerbraucher) {
+    if (daten.some((s) => s.komponenten?.[es.key] != null)) erfasst.add(es.key)
+  }
+  return erfasst
 }
 
 /**
@@ -30,16 +60,33 @@ function round2(v: number): number {
  * `?? 0` eine **0,00** — direkt neben der Spalte „Gesamtverbrauch", die denselben
  * fehlenden Wert als „—" zeigt. Genau dieser Riss war der Befund (PN Rainer 89905).
  *
- * **Nicht** geprüft werden die Subtrahenden: ein `null` bei Wärmepumpe oder Wallbox
- * heißt im heutigen Vertrag „Komponente nicht vorhanden" **oder** „Sensor hat nicht
- * gemessen" — beides ist am Wert nicht zu unterscheiden. Wer das trennen will, braucht
- * die Herkunfts-Angabe aus der Antwort (Paket B1/B2 des Konzepts).
+ * ⭐ **N-95 (29.08.2026): jetzt gelten auch die SUBTRAHENDEN.** §3 Regel 1 wörtlich:
+ * *„Eine Differenz erbt die Unvollständigkeit jedes Summanden."* Fehlt einer Senke,
+ * die dieser Tag sonst erfasst, der Wert dieser Stunde, dann ist der Hausverbrauch
+ * um genau diesen Betrag **zu hoch** — und sah bisher gültig aus. Der Fund nannte
+ * das nicht trennbar; trennbar wird es über `erfassteSenken` (s. dort).
+ *
+ * `erfasst` leer = „keine Senke ist als erfasst bekannt" ⇒ keine Unterdrückung.
+ * Das ist die ehrliche Bedeutung eines leeren Sets, kein Rückfall: wer den Tag
+ * nicht kennt, kann eine Lücke nicht von einer fehlenden Komponente unterscheiden.
  */
-export function berechneHausverbrauch(s: StundenWert, extraVerbraucher: SerieInfo[]): number | null {
+export function berechneHausverbrauch(
+  s: StundenWert,
+  extraVerbraucher: SerieInfo[],
+  erfasst: Set<SenkenKey> = new Set(),
+): number | null {
   if (s.verbrauch_kw == null) return null
-  const vbrS = extraVerbraucher.reduce(
-    (a, es) => a + Math.abs(Math.min(0, s.komponenten?.[es.key] ?? 0)), 0,
-  )
+  if (erfasst.has('waermepumpe_kw') && s.waermepumpe_kw == null) return null
+  if (erfasst.has('wallbox_kw') && s.wallbox_kw == null) return null
+  let vbrS = 0
+  for (const es of extraVerbraucher) {
+    const roh = s.komponenten?.[es.key]
+    if (roh == null) {
+      if (erfasst.has(es.key)) return null
+      continue
+    }
+    vbrS += Math.abs(Math.min(0, roh))
+  }
   return round2(Math.max(0, s.verbrauch_kw - (s.waermepumpe_kw ?? 0) - (s.wallbox_kw ?? 0) - vbrS))
 }
 
@@ -145,10 +192,40 @@ export function TagWerteTabelle({ daten, extraSerien, erzeugerSerien = [], datum
     const erzS = extraErzeuger.reduce((a, es) => a + Math.max(0, s.komponenten?.[es.key] ?? 0), 0)
     return round2((s.pv_kw ?? 0) + Math.max(0, s.batterie_kw ?? 0) + erzS)
   }, [extraErzeuger])
-  const calcHausverbrauch = useCallback(
-    (s: StundenWert) => berechneHausverbrauch(s, extraVerbraucher),
-    [extraVerbraucher],
+  // N-95: die Abdeckung des TAGES, einmal erhoben — sie trennt „Gerät gibt es
+  // nicht" von „diese Stunde fehlt". Nur mit ihr ist die Differenz unten
+  // entscheidbar (`erfassteSenken`).
+  const senkenErfasst = useMemo(
+    () => erfassteSenken(daten, extraVerbraucher),
+    [daten, extraVerbraucher],
   )
+  const calcHausverbrauch = useCallback(
+    (s: StundenWert) => berechneHausverbrauch(s, extraVerbraucher, senkenErfasst),
+    [extraVerbraucher, senkenErfasst],
+  )
+  // N-94: „Verfügbare Energie" ist eine **additive Summe** — sie wird nach §3
+  // BESCHRIFTET, nicht unterdrückt. Fehlen einer erfassten Quelle Stunden, ist
+  // die Summe richtungssicher zu niedrig; der Nutzer weiß dann, in welche
+  // Richtung er korrigieren muss. Die Zeile ist dieselbe wie im Komponenten-Hub
+  // (`HerkunftZeile`, Regel 0a) — keine zweite Bauform für dieselbe Aussage.
+  const erzeugungHerkunft = useMemo(() => {
+    const luecken: string[] = []
+    if (daten.some((s) => s.pv_kw != null) && daten.some((s) => s.pv_kw == null)) luecken.push('PV')
+    for (const es of extraErzeuger) {
+      const hatWert = daten.some((s) => s.komponenten?.[es.key] != null)
+      const hatLuecke = daten.some((s) => s.komponenten?.[es.key] == null)
+      if (hatWert && hatLuecke) luecken.push(es.label)
+    }
+    if (luecken.length === 0) return undefined
+    return unvollstaendigHerkunft(
+      [
+        `Nicht jede Stunde dieses Tages hat einen Messwert (${luecken.join(', ')}). `
+        + 'Die Summe „Verfügbare Energie" zählt nur die gemessenen Stunden und ist '
+        + 'deshalb zu niedrig — nicht falsch, sondern unvollständig.',
+      ],
+      'Verfügbare Energie',
+    )
+  }, [daten, extraErzeuger])
 
   // Sichtbare Spalten aus localStorage
   const [visibleCols, setVisibleCols] = useState<Set<string>>(() => {
@@ -286,9 +363,13 @@ export function TagWerteTabelle({ daten, extraSerien, erzeugerSerien = [], datum
     <Card padding="none" className="overflow-hidden">
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex-wrap">
-        <span className="text-xs text-gray-500 dark:text-gray-400">
-          Stundenwerte in kW · Σ-Zeile = kWh/Tag
-        </span>
+        <div className="min-w-0">
+          <span className="text-xs text-gray-500 dark:text-gray-400">
+            Stundenwerte in kW · Σ-Zeile = kWh/Tag
+          </span>
+          {/* N-94: additive Summe mit Lücke ⇒ beschriften (§3). */}
+          {erzeugungHerkunft && <HerkunftZeile herkunft={erzeugungHerkunft} className="mt-1" />}
+        </div>
         <div className="flex items-center gap-2">
           {/* Spaltenauswahl */}
           <div className="relative" ref={pickerRef}>

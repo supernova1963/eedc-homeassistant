@@ -68,6 +68,7 @@ from backend.services.monats_fakten import (
     MonatsFakt,
     SonstigesFakten,
     lade_monats_fakten,
+    pv_unvollstaendig_hinweis,
 )
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
@@ -157,6 +158,12 @@ class AktuellerMonatResponse(BaseModel):
 
     # Verfügbare Quellen
     quellen: dict[str, bool]
+    #: Beschriftung für Werte, die weniger enthalten als ihr Name sagt (P4-Form,
+    #: gerendert über `unvollstaendigHerkunft` + `HerkunftZeile`). Leer =
+    #: vollständig. Wird **nur** gefüllt, wenn die PV-Zahl dieses Monats aus der
+    #: gespeicherten Zeile stammt — kommt sie aus Sensor, Connector oder MQTT,
+    #: sagt `pv_vollstaendig` der Monats-Fakten nichts über sie aus.
+    hinweise: list[str] = []
 
     # Energie-Bilanz (kWh)
     pv_erzeugung_kwh: Optional[float] = None
@@ -1464,6 +1471,22 @@ async def get_aktueller_monat(
         return round(entry[0], 2) if entry else None
 
     pv = get_val("pv_erzeugung_kwh")
+    # P4/§3 Regel 2: das Provenance-Flag der Schicht wird ausgeliefert, nicht
+    # nur gesetzt. ⚠ Diese Route mischt VIER Quellen und die Schicht kennt nur
+    # EINE (die DB, KONZEPT-MONATS-FAKTEN §4). `pv_vollstaendig` beschreibt
+    # deshalb ausschließlich den gespeicherten Wert — hat der Sensor- oder
+    # Connector-Zweig die Präzedenz gewonnen, wäre der Hinweis eine Aussage
+    # über eine Zahl, die gar nicht angezeigt wird.
+    _pv_entry = resolved.get("pv_erzeugung_kwh")
+    hinweise = [
+        h for h in (
+            pv_unvollstaendig_hinweis([monats_fakt])
+            if monats_fakt is not None
+            and _pv_entry is not None
+            and _pv_entry[1].quelle == "gespeichert"
+            else None,
+        ) if h
+    ]
     einspeisung = get_val("einspeisung_kwh")
     netzbezug = get_val("netzbezug_kwh")
     speicher_ladung = get_val("speicher_ladung_kwh")
@@ -2417,6 +2440,7 @@ async def get_aktueller_monat(
         monat_name=MONAT_NAMEN[monat],
         aktualisiert_um=now.isoformat(),
         quellen=quellen,
+        hinweise=hinweise,
         # Energie
         pv_erzeugung_kwh=pv,
         einspeisung_kwh=einspeisung,

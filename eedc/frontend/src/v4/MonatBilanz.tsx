@@ -20,7 +20,8 @@ import { fmtCalc } from '../components/ui'
 import { Table, TableHead, TableBody } from '../components/ui/Table'
 import { ZELLE, KOPF_ZELLE } from '../components/ui/tabelleMasse'
 import { SimpleTooltip } from '../components/ui/FormelTooltip'
-import { VerteilungsBalken, GeraeteHinweis, GrundlastSollIstKachel, MonatsprognoseKachel } from '../components/blocks'
+import { VerteilungsBalken, GeraeteHinweis, GrundlastSollIstKachel, MonatsprognoseKachel, HerkunftZeile } from '../components/blocks'
+import { unvollstaendigHerkunft } from '../lib/prognoseHinweise'
 import { zeigeMonatsprognose } from '../lib/sollErfuellung'
 import { Parkbar } from '../components/park'
 import { DATENROLLE, NETZLADUNG_PREIS_HERKUNFT, VERGLEICH_BADGE } from '../lib'
@@ -292,10 +293,17 @@ export function MonatBilanz({
     ...(d.komponenten_geraete?.['wechselrichter'] ?? []),
   ]
 
+  // P4/§3: eine PV-Teilsumme bleibt stehen und wird BESCHRIFTET (additive Summe
+  // ⇒ richtungssicher zu niedrig). Text kommt aus dem Backend-SoT
+  // (`monats_fakten.pv_unvollstaendig_hinweis`) — hier wird er nur gerendert,
+  // über dieselbe Zeile wie „nach kWp gerechnet" im Komponenten-Hub (Regel 0a).
+  const pvHerkunft = unvollstaendigHerkunft(d.hinweise, 'PV-Erzeugung')
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
       {/* IST/VM/VJ/Ø-Vergleich (B10) — eigene Parkbar (Doktrin: jede Anzeige einzeln). */}
       <Parkbar id="el:bilanz-vergleich" titel="Vergleich (IST/VM/VJ)" className="lg:col-span-2">
+        {pvHerkunft && <HerkunftZeile herkunft={pvHerkunft} className="mb-2" />}
         {/* Mobil (< sm): gestapelte Kennzahl-Karten statt Tabelle — keine Spalten/
             Header, die verrutschen können; Vergleiche als umbruch-sichere Chips,
             Absolutwerte im Tooltip. */}

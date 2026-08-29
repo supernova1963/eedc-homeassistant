@@ -1117,6 +1117,65 @@ def kennzahlen_aus_fakten(fakten: Iterable[MonatsFakt]) -> VerbrauchsKennzahlen:
     )
 
 
+def pv_unvollstaendig_monate(fakten: Iterable[MonatsFakt]) -> list[MonatsSchluessel]:
+    """Die Monate, deren PV-Achse eine **Teilsumme** ist — chronologisch.
+
+    ``pv_vollstaendig is False`` heißt: mindestens ein im Monat aktives Modul
+    hat keinen Wert und es gibt kein Anlagen-Aggregat, das die Lücke füllt
+    (``pv_summe_je_monat`` → ``None``). ``ErzeugungFakten.pv_kwh`` trägt dann
+    nur, was messbar war — bei einer Anlage mit Balkonkraftwerk also dessen
+    Erzeugung allein.
+    """
+    return [
+        (f.jahr, f.monat) for f in fakten if not f.erzeugung.pv_vollstaendig
+    ]
+
+
+def pv_unvollstaendig_hinweis(fakten: Iterable[MonatsFakt]) -> Optional[str]:
+    """**Der eine Satz**, mit dem eine Sicht eine PV-Teilsumme beschriftet.
+
+    ``None`` heißt „vollständig" — die Sicht rendert dann nichts.
+
+    Warum es diese Funktion gibt und nicht je Route einen eigenen Satz: Das
+    Flag ``ErzeugungFakten.pv_vollstaendig`` wurde gesetzt, getestet — und von
+    **keiner** Route gelesen (0 Treffer in ``backend/api``, gemessen 29.08.2026).
+    Genau das nennt ``docs/KONZEPT-UNVOLLSTAENDIGE-WERTE.md`` §2.4 den
+    schärfsten Einzelbefund der Inventur: *ein Provenance-Flag ohne Leser ist
+    kein Provenance.* §3 Regel 2 verlangt deshalb: wer eines einführt, liefert
+    es im selben Schritt aus.
+
+    **Beschriften, nicht unterdrücken** — ``pv_kwh`` ist eine **additive Summe**
+    und damit richtungssicher zu niedrig (§3). Der Nutzer weiß, in welche
+    Richtung er korrigieren muss; eine Unterdrückung nähme ihm eine brauchbare
+    Zahl. Die Gegenprobe steht eine Ebene tiefer: ``tagesbilanz`` unterdrückt
+    ``eigenverbrauch``, weil das eine **Differenz** ist.
+
+    ⛔ **Ausdrücklich KEIN zweiter Melder.** Dass PV-Werte fehlen, meldet der
+    Daten-Checker längst (``daten_checker/energieprofil.py::_check_pv_erzeugung``
+    → WARNING „PV-Erzeugung unvollständig in N Monat(en)", ERROR „PV-Erzeugung
+    fehlt"), samt Link auf den Monatsabschluss. Diese Funktion baut daneben
+    keine zweite Befundliste auf, sondern beantwortet die andere Frage: der
+    Checker sagt *„was musst du nachtragen?"* (anlagenweit, mit Reparaturweg),
+    die Beschriftung sagt *„worauf beruht **diese** Zahl?"* (genau der gezeigte
+    Zeitraum, am Wert). Das ist die Zuständigkeitsgrenze aus §4 des Konzepts —
+    und die Trennung, die beim Rückbau von N-346 gerissen war: dort stand eine
+    **zweite Kategorie** über einem schon gemeldeten Sachverhalt.
+    """
+    monate = pv_unvollstaendig_monate(fakten)
+    if not monate:
+        return None
+    namen = ", ".join(f"{m:02d}/{j}" for j, m in monate[:6])
+    if len(monate) > 6:
+        namen += f" (+{len(monate) - 6} weitere)"
+    return (
+        f"Die PV-Erzeugung ist in {len(monate)} Monat(en) unvollständig erfasst "
+        f"({namen}): dort fehlt mindestens einem Modul der Wert und es gibt "
+        "keinen Gesamtwert zum Verteilen. Erzeugung, spezifischer Ertrag und "
+        "der daraus gerechnete Ertrag sind deshalb eine Teilsumme und zu "
+        "niedrig — nicht falsch gemessen, sondern unvollständig."
+    )
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Interna
 # ═══════════════════════════════════════════════════════════════════════════

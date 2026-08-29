@@ -67,6 +67,14 @@ export interface AggregierteMonatsdaten {
   jahr: number
   monat: number
   /**
+   * `false` = die PV-Achse dieses Monats ist eine **Teilsumme**: mindestens ein
+   * aktives Modul ohne Wert und kein Gesamtwert zum Verteilen. Die Zahl bleibt
+   * stehen — eine additive Summe ist richtungssicher zu niedrig und wird
+   * **beschriftet**, nicht unterdrückt (`KONZEPT-UNVOLLSTAENDIGE-WERTE.md` §3).
+   * Fehlt das Feld (alter Server), gilt „vollständig".
+   */
+  pv_vollstaendig?: boolean
+  /**
    * #377 — Zählerstand je Verbrauchszähler (Investitions-ID → Stand) am
    * Monatsende. **Bestandsgröße**: nirgends mitsummiert, nicht Teil der Bilanz.
    */

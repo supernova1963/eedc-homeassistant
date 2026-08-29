@@ -90,6 +90,8 @@ export interface CockpitUebersicht {
   anzahl_monate: number
   zeitraum_von: string | null
   zeitraum_bis: string | null
+  /** P4-Beschriftung für Teilsummen — über `unvollstaendigHerkunft` rendern. */
+  hinweise?: string[]
 }
 
 // =============================================================================
