@@ -12,7 +12,7 @@ import { ChartLegende } from '../ui'
 import { Parkbar } from '../park'
 import {
   GELD_COLORS, GELD_TEXT_CLASS, KOMPONENTEN_FARBEN, CHART_HOVER_CURSOR, fmtZahl,
-  AMORTISATION_ANNAHME_MODELL_A, amortisationAnnahmeZeile,
+  amortisationAnnahmeZeile,
 } from '../../lib'
 import type { WallboxDashboardResponse } from '../../api/investitionen'
 import type { Investition } from '../../types'
@@ -28,9 +28,12 @@ export function WallboxWirtschaftlichkeit({ zusammenfassung: z, investition, mel
   ]
   const anschaffung = investition.anschaffungskosten_gesamt
   const zeigeAmort = anschaffung != null && anschaffung > 0
-  const jahresErsparnis = z.anzahl_monate && z.anzahl_monate > 0
-    ? ((z.ersparnis_vs_extern_euro || 0) / z.anzahl_monate * 12)
-    : 0
+  // N-230: beide Zahlen kommen aus dem Backend-SoT. Vorher entstand die
+  // Jahres-Ersparnis hier per `÷ Monate × 12` und die Dauer per
+  // `Anschaffung ÷ Ersparnis` — an der Kapitalrechnung vorbei, also ohne
+  // Alternativkosten, ohne Förderung und ohne gepflegte Betriebskosten.
+  const jahresErsparnis = z.jahres_ersparnis_euro || 0
+  const amortisationJahre = z.amortisation_jahre
   // v4-Hub-Auto-Hide: Kostenvergleich + ROI-Box immer, Amortisation nur mit Anschaffung.
   const ids = useMemo(() => [
     'chart:wallbox-kostenvergleich', 'info:wallbox-roi', ...(zeigeAmort ? ['kpi:wallbox-amortisation'] : []),
@@ -98,15 +101,16 @@ export function WallboxWirtschaftlichkeit({ zusammenfassung: z, investition, mel
           <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
             <p className="text-sm text-gray-500 dark:text-gray-400">Amortisation (ca.)</p>
             <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-              {jahresErsparnis <= 0 ? '∞' : `${fmtZahl(anschaffung! / jahresErsparnis, 1)} Jahre`}
+              {amortisationJahre == null ? '∞' : `${fmtZahl(amortisationJahre, 1)} Jahre`}
             </p>
-            {/* Konzept §5/§8-6: diese Dauer entsteht im Client aus
-                Anschaffung ÷ Ersparnis — ohne Betriebskosten-Abzug, also
-                immer Modell A. Deshalb der feste Text aus `lib`, nicht der
-                datenabhängige des ROI-Dashboards. */}
-            {jahresErsparnis > 0 && (
+            {/* Konzept §5/§8-6: eine Dauer ohne genannte Annahme gibt es
+                nicht — und der Text folgt den DATEN, nicht dem Modellnamen.
+                Er kommt deshalb aus derselben Antwort wie die Zahl; die
+                frühere feste Modell-A-Konstante hätte bei gepflegten
+                Betriebskosten die eigene Rechnung falsch beschrieben. */}
+            {amortisationJahre != null && (
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                {amortisationAnnahmeZeile(AMORTISATION_ANNAHME_MODELL_A)}
+                {amortisationAnnahmeZeile(z.amortisation_annahme)}
               </p>
             )}
           </div>

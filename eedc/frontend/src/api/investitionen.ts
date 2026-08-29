@@ -523,6 +523,13 @@ export interface WallboxDashboardResponse {
     heim_kosten_euro: number
     heim_als_extern_kosten_euro: number
     ersparnis_vs_extern_euro: number
+    // Amortisation — kommt aus dem Backend-SoT (Kapitalrechnung), NICHT aus
+    // Anschaffung ÷ Ersparnis im Client (N-230). `null` heißt „nicht
+    // bewertbar" und ist nicht 0.
+    kapitaleinsatz_euro: number
+    jahres_ersparnis_euro: number
+    amortisation_jahre: number | null
+    amortisation_annahme: string
     // Wallbox-Info
     leistung_kw: number
     gesamt_ladevorgaenge: number

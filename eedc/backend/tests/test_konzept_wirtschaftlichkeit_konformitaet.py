@@ -677,6 +677,17 @@ async def test_schritt6_jede_dauer_nennt_ihre_annahme(db):
     Bauliste nannte nur „die Dauer-Anzeige", tatsächlich sind es neun Stellen
     in fünf Dateien, gespeist aus diesen vieren. Fehlt eine, steht dort eine
     Zukunftsaussage ohne Voraussetzung.
+
+    ⚑ **Seit N-230 (2026-08-29) gibt es eine SECHSTE Quelle:** der
+    Wallbox-Komponenten-Hub (`dashboards.py::get_wallbox_dashboard`,
+    `zusammenfassung['amortisation_annahme']`). Er stand hier nie, weil er
+    seine Dauer bis dahin gar nicht auslieferte — der **Client** bildete sie
+    aus `Anschaffung ÷ Ersparnis` und hielt dafür eine feste Modell-A-
+    Konstante. Beides ist weg; gedeckt ist die neue Quelle in
+    `test_n230_wallbox_amortisation_sot.py`, weil sie eine eigene Anlage mit
+    Wallbox und Ladedaten braucht, die diese Fixture nicht stellt.
+    ⚠ Wer eine **siebte** Dauer baut, trägt sie hier ein — die Liste ist der
+    Ort, an dem sich das zählen lässt.
     """
     assert 6 not in BAUSCHRITTE_OFFEN, "Schritt 6 wieder offen? Dann diese Probe umstellen."
 

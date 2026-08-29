@@ -101,6 +101,16 @@ from backend.core.berechnungen.waermepumpe_kennzahl import (
 )
 from backend.core.betriebsmodus import KUEHLEN as BM_KUEHLEN_W5
 from backend.core.betriebsmodus import MODUS_ABDECKUNG_FELD
+from backend.core.berechnungen.kapitalrechnung import (
+    ErsparnisPosten,
+    annahme_dauer_text,
+    jahres_ersparnis_euro,
+    kapitaleinsatz_euro,
+)
+from backend.core.berechnungen.investitionskosten import (
+    relevante_kosten_aus_investitionen,
+)
+from backend.core.calculations import berechne_roi
 from backend.core.berechnungen import (
     heiz_effizienz_gepflegt,
     heizwaerme_ist_abgeleitet,
@@ -1443,7 +1453,16 @@ async def get_speicher_dashboard(
                 ist_agg = aggregiere_speicher_ist(
                     [md.verbrauch_daten or {} for md in monatsdaten]
                 )
-                if ist_agg.jahres_faktor > 0:
+                # N-140: `aggregiere_speicher_ist` ist dokumentiert `Optional`
+                # und liefert `None` im VÖLLIG NORMALEN Fall — weniger als
+                # `SPEICHER_IST_MIN_MONATE` Monate Historie oder gar keine
+                # erfasste Entladung. Der ungeprüfte Zugriff auf
+                # `.jahres_faktor` machte daraus einen `AttributeError`, den
+                # der breite `except` unten als „η-IST fehlgeschlagen" ins Log
+                # schrieb: eine frische Anlage erzeugte bei jedem Abruf eine
+                # Warnung über einen Fehler, den es nicht gab. Der Schwesterpfad
+                # `crud.py` prüft an derselben Stelle seit jeher auf `None`.
+                if ist_agg is not None and ist_agg.jahres_faktor > 0:
                     # A31-2: netto mit stillem Brutto-Fallback über den SoT-
                     # Helper (bisher inline). Identisches Verhalten.
                     nutzbar = get_speicher_nutzbare_kapazitaet_kwh(speicher) or 0
@@ -1778,6 +1797,49 @@ async def get_wallbox_dashboard(
         wb_dienstlich = ist_dienstlich(wallbox)
         wb_ersparnis = 0.0 if wb_dienstlich else ersparnis_vs_extern
 
+        # N-230: die Amortisationsdauer entsteht HIER, aus denselben zwei
+        # SoT-Hälften wie überall sonst — nicht im Client aus
+        # `Anschaffung ÷ Ersparnis`. Der Client teilte durch die **rohen
+        # Anschaffungskosten**; der Nenner ist aber der **Kapitaleinsatz**
+        # (`kapitalrechnung`): relevante Kosten (also abzüglich der
+        # Alternativkosten) plus kumulierte sonstige Ausgaben, minus die
+        # sonstigen Erträge. Eine geförderte Wallbox bekam damit eine zu
+        # lange Dauer — die Förderung ist Geld, das nie eingesetzt wurde.
+        #
+        # Der ZÄHLER bleibt bewusst die **gemessene** Heimlade-Ersparnis:
+        # `ErsparnisPosten` ist genau dafür gebaut („annualisiert jeden
+        # Posten mit SEINER eigenen Monatszahl", F-20) und bildet die
+        # bisherige Hochrechnung `Ersparnis ÷ Monate × 12` im SoT nach.
+        # ⚠ Die ROI-Zeile derselben Wallbox rechnet mit einem ANDEREN Zähler
+        # (`einsparung_prognose_jahr`, „Manuelle Prognose verwendet",
+        # `crud.py`-Sammelzweig) — das ist eine offene Frage und bewusst
+        # NICHT hier entschieden; sie stünde sonst als dritte Zahl daneben.
+        wb_betriebskosten = wallbox.betriebskosten_jahr or 0
+        wb_sonstige_ausgaben = 0.0
+        wb_sonstige_ertraege = 0.0
+        for md in monatsdaten:
+            _s = berechne_sonstige_summen(md.verbrauch_daten)
+            wb_sonstige_ausgaben += _s["ausgaben_euro"]
+            wb_sonstige_ertraege += _s["ertraege_euro"]
+        wb_kapitaleinsatz = kapitaleinsatz_euro(
+            relevante_kosten_euro=relevante_kosten_aus_investitionen([wallbox]),
+            sonstige_ausgaben_euro=wb_sonstige_ausgaben,
+            sonstige_ertraege_euro=wb_sonstige_ertraege,
+        )
+        # Brutto an `berechne_roi`, die Betriebskosten getrennt daneben —
+        # identisch zu `crud.py::_roi_dashboard`, damit beide Sichten
+        # dieselbe Rechnung fahren und nicht nur dieselben Zutaten.
+        wb_jahres_ersparnis = jahres_ersparnis_euro([
+            ErsparnisPosten(
+                bezeichnung="Heimladung statt extern",
+                summe_euro=wb_ersparnis,
+                monate=anzahl_monate,
+            )
+        ])
+        wb_roi = berechne_roi(
+            wb_kapitaleinsatz, wb_jahres_ersparnis, 0, wb_betriebskosten
+        )
+
         zusammenfassung = {
             # Heimladung (aus E-Auto-Daten)
             'gesamt_heim_ladung_kwh': round(gesamt_heim_ladung, 1),
@@ -1792,6 +1854,21 @@ async def get_wallbox_dashboard(
             'heim_kosten_euro': round(heim_kosten, 2),
             'heim_als_extern_kosten_euro': round(heim_als_extern_kosten, 2),
             'ersparnis_vs_extern_euro': round(wb_ersparnis, 2),
+            # Amortisation aus dem Kapitalrechnungs-SoT (N-230). `None` heißt
+            # „nicht bewertbar" und ist nicht 0 — `berechne_roi` liefert das
+            # bei Kapitaleinsatz ≤ 0 (vollständig gefördert) oder ohne
+            # Ersparnis, und geraten wird dort nicht.
+            'kapitaleinsatz_euro': round(wb_kapitaleinsatz, 2),
+            'jahres_ersparnis_euro': round(wb_jahres_ersparnis, 2),
+            'amortisation_jahre': wb_roi['amortisation_jahre'],
+            # Bauschritt 6 des Wirtschaftlichkeits-Konzepts: eine Dauer ohne
+            # genannte Annahme gibt es nicht — und der Text folgt den DATEN,
+            # nicht dem Modellnamen. Der Client hielt hier eine feste
+            # Konstante („Modell A"), die bei gepflegten Betriebskosten die
+            # eigene Rechnung falsch beschrieben hätte.
+            'amortisation_annahme': annahme_dauer_text(
+                betriebskosten_jahr_euro=wb_betriebskosten
+            ),
             # Wallbox-Info
             'dienstlich': wb_dienstlich,
             'leistung_kw': leistung_kw,
