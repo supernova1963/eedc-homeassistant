@@ -215,7 +215,27 @@ def build_komponenten(
         ist_v2h = (typ == "e-auto"
                    and isinstance(inv.parameter, dict)
                    and inv.parameter.get(PARAM_E_AUTO["V2H_FAEHIG"]))
-        ist_bidirektional = typ in BIDIREKTIONAL_TYPEN or ist_v2h
+        # Ein Gerät unter „Sonstiges" mit der Kategorie **Speicher** ist
+        # ebenfalls bidirektional — so sehen es die beiden Schwesterpfade seit
+        # jeher (`live_sensor_config.baue_investitions_serien` und
+        # `live_tagesverlauf_service`, je „elif kat == 'speicher'").
+        #
+        # ⚠ Hier fehlte er (F-70): Er fiel in den `else`-Zweig, und der kennt
+        # nur `verbrauch_kw`. Eine ENTLADUNG wurde damit als Verbrauch gebucht
+        # statt als Erzeugung — dieselbe 19-Punkte-Lücke wie F-69 (Autarkie
+        # 67 % statt 86 % bei 2 kW Entladung), nur mit dem anderen Gerät.
+        #
+        # ⭐ Der Schlüssel ändert sich dadurch NICHT: `TAGESVERLAUF_KATEGORIE`
+        # bildet `sonstiges` auf `"sonstige"` ab, die Komponente heißt weiter
+        # `sonstige_<id>`. Es wechselt allein die Seite der Bilanz.
+        ist_sonstiger_speicher = (
+            typ == "sonstiges"
+            and isinstance(inv.parameter, dict)
+            and inv.parameter.get("kategorie") == "speicher"
+        )
+        ist_bidirektional = (
+            typ in BIDIREKTIONAL_TYPEN or ist_v2h or ist_sonstiger_speicher
+        )
 
         ist_sonstiger_erzeuger = (
             typ == "sonstiges"
