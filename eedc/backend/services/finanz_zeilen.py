@@ -34,6 +34,7 @@ from backend.api.routes.strompreise import (
     resolve_einspeise_preis_cent,
     resolve_netzbezug_preis_cent,
 )
+from backend.services.strompreis_aggregator import wirksamer_arbeitspreis_cent
 from backend.core.berechnungen import FinanzMonatsZeile
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
@@ -81,8 +82,13 @@ async def baue_finanz_zeile(
             db, anlage_id, target_date=stichtag
         )
     allgemein = tarif_cache[stichtag].get("allgemein")
-    netz_cent = (
-        allgemein.netzbezug_arbeitspreis_cent_kwh if allgemein else NETZBEZUG_DEFAULT_CENT
+    # N-267: mit Zeitfenstern (HT/NT) ist der Preis des Monats der ueber den
+    # gemessenen Netzbezug gewichtete Arbeitspreis; ohne Fenster liefert der
+    # Helfer die Spalte unveraendert. Ohne eigenen Cache — diese Funktion baut
+    # EINE Zeile. Warum er auch nicht im `tarif_cache` mitreist, steht in
+    # `monats_fakten.py` im Block ueber `_komponenten_preis`.
+    netz_cent = await wirksamer_arbeitspreis_cent(
+        db, anlage_id, eingabe.jahr, eingabe.monat, allgemein
     )
     verg_cent = (
         allgemein.einspeiseverguetung_cent_kwh if allgemein else EINSPEISEVERGUETUNG_DEFAULT_CENT

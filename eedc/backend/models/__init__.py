@@ -2,7 +2,7 @@
 from backend.models.anlage import Anlage, AnlageFoto
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten, InvestitionTyp
-from backend.models.strompreis import Strompreis
+from backend.models.strompreis import Strompreis, StrompreisZeitfenster
 from backend.models.settings import Settings
 from backend.models.pvgis_prognose import PVGISPrognose, PVGISMonatsprognose
 from backend.models.activity_log import ActivityLog
@@ -20,6 +20,7 @@ __all__ = [
     "InvestitionMonatsdaten",
     "InvestitionTyp",
     "Strompreis",
+    "StrompreisZeitfenster",
     "Settings",
     "PVGISPrognose",
     "PVGISMonatsprognose",

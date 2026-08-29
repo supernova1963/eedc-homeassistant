@@ -8,18 +8,63 @@ from typing import Iterable, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 from datetime import date
 
 from backend.core.exceptions import not_found
 from backend.api.deps import get_db
-from backend.models.strompreis import Strompreis
+from backend.models.strompreis import Strompreis, StrompreisZeitfenster
 from backend.models.anlage import Anlage
 
 
 # =============================================================================
 # Pydantic Schemas
 # =============================================================================
+
+class ZeitfensterBase(BaseModel):
+    """Ein HT/NT-Zeitfenster am Tarif (N-267, Discussion #380).
+
+    ``von_stunde``/``bis_stunde`` sind **Uhrzeiten**, keine Slot-Indizes — die
+    Umrechnung auf die Backward-Slots (#144) macht
+    ``core/berechnungen/zeittarif.py``. ``bis_stunde = 24`` bedeutet Mitternacht;
+    ``von > bis`` läuft über Mitternacht (Nachtstrom 22–06).
+    """
+    von_stunde: int = Field(..., ge=0, le=23)
+    bis_stunde: int = Field(..., ge=1, le=24)
+    wochentage: str = Field(
+        "0123456",
+        pattern=r"^[0-6]{1,7}$",
+        description="Montag = 0 … Sonntag = 6; Vorbelegung: jeden Tag",
+    )
+    arbeitspreis_cent_kwh: float = Field(..., ge=0)
+
+    @field_validator("wochentage")
+    @classmethod
+    def _tage_eindeutig(cls, v: str) -> str:
+        if len(set(v)) != len(v):
+            raise ValueError("Ein Wochentag darf nur einmal vorkommen")
+        return "".join(sorted(set(v)))
+
+    @model_validator(mode="after")
+    def _spanne_ist_nicht_leer(self):
+        """``von == bis`` ist mehrdeutig — leerer Tag oder ganzer Tag?
+
+        Beides wäre vertretbar, und genau deshalb wird nichts geraten. Wer den
+        ganzen Tag meint, trägt 0–24 ein.
+        """
+        if self.von_stunde == self.bis_stunde:
+            raise ValueError(
+                "„Von\" und „Bis\" dürfen nicht gleich sein — für den ganzen Tag 0 bis 24 eintragen"
+            )
+        return self
+
+
+class ZeitfensterResponse(ZeitfensterBase):
+    id: int
+
+    class Config:
+        from_attributes = True
+
 
 class StrompreisBase(BaseModel):
     """Basis-Schema für Strompreis."""
@@ -37,6 +82,8 @@ class StrompreisBase(BaseModel):
     # #392: „Einspeisevergütung wechselt monatlich" — schaltet das Monatsfeld
     # `einspeise_durchschnittspreis_cent` im Monatsabschluss frei.
     einspeisung_variabel: bool = False
+    # N-267: HT/NT-Zeitfenster. Leere Liste = Einpreistarif wie bisher.
+    zeitfenster: list[ZeitfensterBase] = Field(default_factory=list)
 
 
 class StrompreisCreate(StrompreisBase):
@@ -57,12 +104,18 @@ class StrompreisUpdate(BaseModel):
     vertragsart: Optional[str] = Field(None, max_length=50)
     verwendung: Optional[str] = Field(None, description="Tarif-Verwendung: allgemein, waermepumpe, wallbox")
     einspeisung_variabel: Optional[bool] = None
+    # N-267: die Fenster werden als GANZE Liste ersetzt, nicht einzeln gepflegt —
+    # ein Tarif hat wenige, und Teil-Updates bräuchten eine zweite Route samt
+    # eigener Rechteprüfung für einen Nutzen, den niemand gemeldet hat.
+    # `None` = unverändert lassen, `[]` = alle Fenster entfernen.
+    zeitfenster: Optional[list[ZeitfensterBase]] = None
 
 
 class StrompreisResponse(StrompreisBase):
     """Schema für Strompreis-Response."""
     id: int
     anlage_id: int
+    zeitfenster: list[ZeitfensterResponse] = Field(default_factory=list)
 
     class Config:
         from_attributes = True
@@ -138,13 +191,26 @@ async def monats_strompreis_lookup(
     genaueren Wert — beide sind derselbe Stammtarif, nur einmal mit und
     einmal ohne den abgerechneten Durchschnitt.
     """
+    # N-267: Der Zeittarif faehrt hier mit, weil diese Funktion die DRITTE
+    # Bildungsstelle des Monatspreises ist (neben `monats_fakten::_lade_tarif`
+    # und `finanz_zeilen::baue_finanz_zeile`). Haette sie sie nicht, stuende in
+    # der E-Mob-Ersparnis der Hochtarif, waehrend Cockpit und PDF daneben den
+    # gewichteten Preis nennen — genau die „zwei Zahlen auf einer Seite",
+    # gegen die F-18 gebaut wurde.
+    from backend.services.strompreis_aggregator import wirksamer_arbeitspreis_cent
+
     lookup: dict[tuple[int, int], float] = {}
+    zeittarif_cache: dict = {}
     for jahr, monat in dict.fromkeys(monate):
         m_tarife = await lade_tarife_fuer_anlage(
             db, anlage_id, target_date=date(jahr, monat, 1)
         )
-        lookup[(jahr, monat)] = resolve_strompreis_for_komponente(
-            m_tarife, verwendung, fallback=fallback_bezug
+        m_tarif = resolve_tarif_for_komponente(m_tarife, verwendung)
+        if m_tarif is None:
+            lookup[(jahr, monat)] = fallback_bezug
+            continue
+        lookup[(jahr, monat)] = await wirksamer_arbeitspreis_cent(
+            db, anlage_id, jahr, monat, m_tarif, cache=zeittarif_cache
         )
     return lookup
 
@@ -160,6 +226,32 @@ def resolve_netzbezug_preis_cent(monatsdaten_obj, tarif_preis_cent: float) -> fl
     if monatsdaten_obj and getattr(monatsdaten_obj, 'netzbezug_durchschnittspreis_cent', None) is not None:
         return monatsdaten_obj.netzbezug_durchschnittspreis_cent
     return tarif_preis_cent
+
+
+def resolve_tarif_for_komponente(
+    tarife: dict,
+    komponente: str = "allgemein",
+) -> Optional[Strompreis]:
+    """Dieselbe Kaskade wie `resolve_strompreis_for_komponente` — aber die
+    **Tarifzeile** statt ihres Preises.
+
+    Es gibt sie seit N-267 (HT/NT-Zeitfenster): Der wirksame Arbeitspreis eines
+    Monats hängt nicht mehr nur an einer Spalte, sondern an den Fenstern der
+    Zeile. Wer sie braucht, braucht das Objekt.
+
+    ⚑ **Eine Kaskade, zwei Sichten** — `resolve_strompreis_for_komponente` ist
+    seither über diese Funktion ausgedrückt. Die Regel (Komponente → allgemein →
+    Default) steht damit weiterhin an **einer** Stelle; eine zweite Fassung wäre
+    genau die Drift, gegen die der Helfer im Drift-Audit E gebaut wurde.
+    """
+    if komponente != "allgemein":
+        komp_tarif = tarife.get(komponente)
+        if komp_tarif and komp_tarif.netzbezug_arbeitspreis_cent_kwh is not None:
+            return komp_tarif
+    allgemein = tarife.get("allgemein")
+    if allgemein and allgemein.netzbezug_arbeitspreis_cent_kwh is not None:
+        return allgemein
+    return None
 
 
 def resolve_strompreis_for_komponente(
@@ -185,16 +277,9 @@ def resolve_strompreis_for_komponente(
     """
     from backend.core.wirtschaftlichkeit_defaults import NETZBEZUG_DEFAULT_CENT
 
-    # Komponenten-Tarif zuerst probieren
-    if komponente != "allgemein":
-        komp_tarif = tarife.get(komponente)
-        if komp_tarif and komp_tarif.netzbezug_arbeitspreis_cent_kwh is not None:
-            return komp_tarif.netzbezug_arbeitspreis_cent_kwh
-
-    # Allgemeiner Tarif
-    allgemein = tarife.get("allgemein")
-    if allgemein and allgemein.netzbezug_arbeitspreis_cent_kwh is not None:
-        return allgemein.netzbezug_arbeitspreis_cent_kwh
+    tarif = resolve_tarif_for_komponente(tarife, komponente)
+    if tarif is not None:
+        return tarif.netzbezug_arbeitspreis_cent_kwh
 
     return fallback if fallback is not None else NETZBEZUG_DEFAULT_CENT
 
@@ -391,7 +476,10 @@ async def create_strompreis(data: StrompreisCreate, db: AsyncSession = Depends(g
     if not anlage_result.scalar_one_or_none():
         raise not_found("Anlage")
 
-    preis = Strompreis(**data.model_dump())
+    werte = data.model_dump()
+    fenster = werte.pop("zeitfenster", []) or []
+    preis = Strompreis(**werte)
+    preis.zeitfenster = [StrompreisZeitfenster(**f) for f in fenster]
     db.add(preis)
     await db.flush()
     await db.refresh(preis)
@@ -424,8 +512,14 @@ async def update_strompreis(
         raise not_found("Strompreis")
 
     update_data = data.model_dump(exclude_unset=True)
+    # N-267: Die Fenster sind eine Beziehung, keine Spalte — `setattr` mit den
+    # Dicts aus dem Schema wuerde SQLAlchemy eine Liste von dicts unterschieben.
+    # `delete-orphan` an der Beziehung raeumt die ersetzten Zeilen mit ab.
+    neue_fenster = update_data.pop("zeitfenster", None)
     for field, value in update_data.items():
         setattr(preis, field, value)
+    if neue_fenster is not None:
+        preis.zeitfenster = [StrompreisZeitfenster(**f) for f in neue_fenster]
 
     await db.flush()
     await db.refresh(preis)

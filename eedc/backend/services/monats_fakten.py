@@ -69,10 +69,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.strompreise import (
     lade_tarife_fuer_anlage,
+    resolve_tarif_for_komponente,
     resolve_einspeise_preis_cent,
     resolve_netzbezug_preis_cent,
     resolve_strompreis_for_komponente,
 )
+from backend.services.strompreis_aggregator import wirksamer_arbeitspreis_cent
 from backend.core.berechnungen import (
     PvModulWert,
     VerbrauchsKennzahlen,
@@ -946,6 +948,8 @@ async def lade_monats_fakten(
 
     if tarif_cache is None:
         tarif_cache = {}
+    # N-267: eigener Cache je Aufruf — begruendet im Block ueber `_komponenten_preis`.
+    zeittarif_cache: dict = {}
     fakten: list[MonatsFakt] = []
     for schluessel in sorted(k for k in kandidaten if _im_fenster(k, von, bis)):
         fakten.append(
@@ -960,6 +964,7 @@ async def lade_monats_fakten(
                 investitionen=investitionen,
                 neg_preis_kwh=(neg_preis_je_monat or {}).get(schluessel),
                 tarif_cache=tarif_cache,
+                zeittarif_cache=zeittarif_cache,
                 tages_summe=tages_summen.get(schluessel),
             )
         )
@@ -1527,6 +1532,7 @@ async def _baue_fakt(
     investitionen: list[Investition],
     neg_preis_kwh: Optional[float],
     tarif_cache: dict[date, dict],
+    zeittarif_cache: dict,
     tages_summe: Optional[TagesMonatsSumme] = None,
 ) -> MonatsFakt:
     jahr, monat = schluessel
@@ -1636,7 +1642,9 @@ async def _baue_fakt(
     ertraege = roh.ertraege_euro + (md_summen["ertraege_euro"] if md_summen else 0.0)
     ausgaben = roh.ausgaben_euro + (md_summen["ausgaben_euro"] if md_summen else 0.0)
 
-    tarif = await _lade_tarif(db, anlage_id, schluessel, monatsdaten, tarif_cache)
+    tarif = await _lade_tarif(
+        db, anlage_id, schluessel, monatsdaten, tarif_cache, zeittarif_cache
+    )
 
     speicher = SpeicherFakten(
         ladung_kwh=roh.speicher_ladung,
@@ -1758,12 +1766,61 @@ async def _baue_fakt(
     )
 
 
+# ⛔ Der Zeittarif-Cache reist NICHT im `tarif_cache` mit — erster Entwurf am
+# 2026-08-29, von `test_geteilter_tarif_cache_laedt_jeden_stichtag_einmal`
+# kassiert, und zu Recht: `tarif_cache` ist `dict[date, dict]`, ein
+# String-Schluessel darin macht ihn heterogen und schon ein `sorted()` bricht ab.
+#
+# Stattdessen haelt jede Bildungsstelle ihren EIGENEN Cache je Aufruf. Damit kann
+# derselbe Monat zweimal an der Stundentabelle landen — einmal aus
+# `lade_monats_fakten`, einmal aus `baue_finanz_zeile`. Das ist bewusst in Kauf
+# genommen:
+#   · Es ist eine **Performance**-Frage, keine Drift-Frage. Die Warnung der Probe
+#     („zwei Aufloesungen aus zwei Caches sind eine Drift-Gelegenheit") gilt der
+#     TARIF-Aufloesung — welche Zeile gilt —, und die bleibt geteilt. Der Preis
+#     entsteht daraus rein und deterministisch: dieselbe Tarifzeile und dieselben
+#     unveraenderlichen Stundenzeilen ergeben denselben Wert.
+#   · Und sie faellt nur bei Anlagen MIT Zeitfenstern an: ohne Fenster fragt
+#     `wirksamer_arbeitspreis_cent` die Datenbank gar nicht erst.
+# Wer das aendern will, gibt den Cache als eigenen Parameter durch — nicht als
+# Fremdschluessel in einem fremden Dict.
+
+
+async def _komponenten_preis(
+    db: AsyncSession,
+    anlage_id: int,
+    schluessel: MonatsSchluessel,
+    tarife: dict,
+    komponente: str,
+    stammpreis: float,
+    zeittarif_cache: dict,
+) -> float:
+    """Komponenten-Tarif ueber die SoT-Kaskade, mit Zeitfenstern (N-267).
+
+    ⚠ **Gewichtet wird mit dem Netzbezug des HAUSES, auch beim Waermepumpen-
+    oder Wallbox-Tarif** — und das ist eine Festlegung, keine Nachlaessigkeit:
+    eedc misst je Geraet den **Verbrauch**, nicht den **Netzbezug**. Wieviel
+    einer Geraetestunde aus dem Netz kam und wieviel aus der PV, ist ohne eine
+    Zuteilungsannahme nicht bekannt — eine zweite Gewichtungsbasis waere also
+    keine groessere Genauigkeit, sondern eine erfundene. Wer einen
+    Zeittarif-Waermepumpentarif genauer abrechnen will, traegt den Monats-Ø ein;
+    dieses Feld schlaegt den Wert hier ohnehin.
+    """
+    tarif = resolve_tarif_for_komponente(tarife, komponente)
+    if tarif is None:
+        return stammpreis
+    return await wirksamer_arbeitspreis_cent(
+        db, anlage_id, schluessel[0], schluessel[1], tarif, cache=zeittarif_cache
+    )
+
+
 async def _lade_tarif(
     db: AsyncSession,
     anlage_id: int,
     schluessel: MonatsSchluessel,
     monatsdaten: Optional[Monatsdaten],
     cache: dict[date, dict],
+    zeittarif_cache: dict,
 ) -> TarifFakten:
     """Tarif zum Monatsersten (P8) — ein Cache-Eintrag je Stichtag pro Anfrage."""
     stichtag = date(schluessel[0], schluessel[1], 1)
@@ -1772,13 +1829,20 @@ async def _lade_tarif(
     tarife = cache[stichtag]
 
     allgemein = tarife.get("allgemein")
-    stammpreis = (
-        allgemein.netzbezug_arbeitspreis_cent_kwh if allgemein else NETZBEZUG_DEFAULT_CENT
+    # N-267: Traegt der Tarif Zeitfenster (HT/NT), ist der Stammpreis des Monats
+    # der ueber den GEMESSENEN Netzbezug gewichtete Arbeitspreis statt der
+    # Spalte. Ohne Fenster liefert der Helfer die Spalte unveraendert zurueck —
+    # dieselbe Bauform wie `aufgeloester_strompreis_cent` auf der E-Mob-Achse
+    # (F-18): eine Anlage ohne den neuen Fall bewegt keine Zahl.
+    stammpreis = await wirksamer_arbeitspreis_cent(
+        db, anlage_id, schluessel[0], schluessel[1], allgemein, cache=zeittarif_cache
     )
     # Komponenten-Tarif über die SoT-Kaskade (Komponente → allgemein → Default)
     # statt handschriftlich: ein Spezialtarif-Datensatz OHNE Arbeitspreis fiel
     # in der Handschrift auf `None` durch, statt auf den allgemeinen Tarif.
-    wallbox_cent = resolve_strompreis_for_komponente(tarife, "wallbox", fallback=stammpreis)
+    wallbox_cent = await _komponenten_preis(
+        db, anlage_id, schluessel, tarife, "wallbox", stammpreis, cache
+    )
     return TarifFakten(
         # Flex-Ø des Monats vor dem Stammdaten-Arbeitspreis (P8, zweite Form).
         netzbezug_preis_cent=resolve_netzbezug_preis_cent(monatsdaten, stammpreis),
@@ -1792,8 +1856,8 @@ async def _lade_tarif(
             else EINSPEISEVERGUETUNG_DEFAULT_CENT,
         ),
         grundpreis_euro_monat=(allgemein.grundpreis_euro_monat or 0.0) if allgemein else 0.0,
-        wp_preis_cent=resolve_strompreis_for_komponente(
-            tarife, "waermepumpe", fallback=stammpreis
+        wp_preis_cent=await _komponenten_preis(
+            db, anlage_id, schluessel, tarife, "waermepumpe", stammpreis, cache
         ),
         wallbox_preis_cent=wallbox_cent,
         # Der Flex-Ø gilt für den ganzen Zähler — auch für die Wallbox.
