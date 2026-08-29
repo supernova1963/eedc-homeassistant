@@ -480,12 +480,41 @@ def _stunden_zuwaechse(
     """Zuwachs jedes Zählers über ``[h_start, h_end)`` — oder ``None``.
 
     ``None`` heißt: mindestens ein Zähler hat an einer der beiden
-    Intervallgrenzen keinen Stand. Die Stunde ist dann **unvollständig** und
-    liefert keine Stichprobe, statt zu niedrig zu zählen (N-45).
+    Intervallgrenzen keinen Stand — **oder** sein Zählerstand ist zwischen den
+    Grenzen zurückgesprungen. Die Stunde ist dann **unvollständig** und liefert
+    keine Stichprobe, statt zu niedrig zu zählen (N-45, N-47).
 
     Bis v4.0.5 wurde stattdessen der Zuwachs zwischen dem ersten und dem letzten
     Snapshot *innerhalb* der Stunde gebildet — das letzte Snapshot-Intervall fiel
     dabei jede Stunde heraus, bei 5-Minuten-Takt rund 8 % zu wenig.
+
+    ⛔ **Ein Zähler-Rücksprung ergibt KEINE 0, sondern keine Aussage (N-47).**
+    Bis zum 29.08.2026 stand hier ``max(0.0, v_end - v_start)`` mit dem Kommentar
+    „Counter-Reset → als 0 werten". Das machte aus *unbekannt* eine **gemessene
+    Null**: Die Stunde lieferte eine vollwertige Stichprobe von 0 kW, die in den
+    Slot-Mittelwert einging und das Profil dauerhaft nach unten zog — genau die
+    Klasse, gegen die dieses Modul mit N-45/N-46 gebaut wurde (siehe
+    Modul-Docstring: „Alle drei Quellen zählen eine unvollständige Stunde nicht
+    mit"). Ein ausgelassener Slot ist dagegen behandelt: ``_build_profil_result``
+    nimmt ihn nicht auf, und ``live_wetter.py::_berechne_verbrauchsprofil`` setzt
+    seine Standard-Grundlast ein (ADR-002/P4).
+
+    ⚠ **Nicht hochrechnen — das ist eine Entscheidung, keine Auslassung.** Der
+    naheliegende Nachbar ``mqtt_energy_history_service._compute_deltas`` behandelt
+    einen Rücksprung mit ``delta = end_val`` (der neue Stand *ist* der Zuwachs).
+    Das ist hier **bewusst nicht** übernommen: Gernots Entscheid vom 28.08.2026
+    lautet „ein Zähler mit Reset wird abgelehnt, nicht hochgerechnet" — der
+    ausformulierte Kasten steht in ``services/snapshot/reader.py``, die Begründung
+    ist Datenqualität und gilt dem Zählertyp, nicht nur der Hochrechnung.
+    ⭐ Für ein **Verbrauchsprofil** wiegt das doppelt: Es ist keine Tagesmenge,
+    die einmal danebenliegt, sondern ein Mittelwert über viele Tage — eine
+    hochgerechnete Stunde verzerrt jede künftige Prognose desselben Slots.
+
+    ⚑ **Die zwei Schwesterstellen bleiben, wie sie sind** (gemessen 29.08.):
+    ``live_history_service.py:92`` liest HAs ``sum``-Spalte, die bereits
+    reset-bereinigt ist, und ``:131`` bildet den Start über ``min(...)``, behandelt
+    den Rücksprung also schon. Beide liefern eine **Tages-kWh**, keine
+    Profil-Stichprobe — dort ist 0 eine plausible Antwort, hier nicht.
     """
     zuwaechse: dict[str, float] = {}
     for key, (zeiten, staende) in reihen.items():
@@ -493,8 +522,9 @@ def _stunden_zuwaechse(
         v_end = _rand_stand(zeiten, staende, h_end)
         if v_start is None or v_end is None:
             return None
-        # Negatives Delta = Counter-Reset → als 0 werten (unverändert seit v3)
-        zuwaechse[key] = max(0.0, v_end - v_start)
+        if v_end < v_start:
+            return None  # Zähler-Rücksprung ⇒ keine Aussage, keine 0 (N-47)
+        zuwaechse[key] = v_end - v_start
     return zuwaechse
 
 
