@@ -20,13 +20,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from backend.core.exceptions import bad_request, not_found
-from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
-from backend.core.investition_kennwerte import get_erzeuger_kwp
+from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.api.deps import get_db
 from backend.core.berechnungen import summe_pv_bkw_kwh
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
-from backend.utils.investition_filter import aktiv_jetzt
 from backend.services.prognose_auswahl import lade_aktive_prognose
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 from backend.services.wetter.open_meteo import fetch_open_meteo_forecast
@@ -35,7 +33,7 @@ from backend.services.wetter.models import WETTER_MODELLE
 from backend.services.prognose_service import berechne_pv_ertrag_tag
 from backend.services.solcast_service import get_solcast_forecast, get_solcast_status
 from backend.services.solar_forecast_service import _solar_noon_hour
-from backend.services.prognose_kanon import kanon_tagesprognose
+from backend.services.prognose_kanon import kanon_tagesprognose, pv_invs_im_horizont
 from backend.api.routes.live_wetter import _get_lernfaktor, _get_lernfaktor_detail
 from backend.services.pv_orientation import resolve_system_losses
 from backend.services.prognose_adapter import (
@@ -274,8 +272,34 @@ def _berechne_tageshaelfte(
     )
 
 
-async def _lade_anlage_mit_pv(db: AsyncSession, anlage_id: int):
-    """Lädt Anlage + aktive PV-Module/BKW und berechnet Gesamtleistung."""
+# Horizont dieses Vergleichs — EINE Zahl für den Wetterabruf, die
+# Bestandssperre und die kWp je Tag (N-317). Standen die getrennt, konnte die
+# Sperre einen anderen Zeitraum prüfen als der Abruf liefert.
+VERGLEICH_TAGE = 14
+
+
+async def _lade_anlage_mit_pv(
+    db: AsyncSession, anlage_id: int, von: date, bis: date,
+):
+    """Lädt Anlage + die PV-Erzeuger, die im Horizont [von, bis] aktiv sind.
+
+    Gibt die **Investitionen** zurück, nicht EINE kWp-Zahl (N-317). Welche kWp
+    gilt, hängt am Prognosetag und nicht am heutigen Bestand: ein am Tag +5
+    stillgelegtes Modul zählt ab Tag +5 nicht mehr, ein erst am Tag +7
+    angeschafftes vorher nicht. Genau diese Frage beantwortet
+    ``anlagen_kwp(invs, tag, …)`` je Tag — derselbe SoT, den der Kanon seit N31
+    fährt (``prognose_kanon._tages_gewichte``). Vorher stand hier eine Kopfzahl
+    aus ``aktiv_jetzt()`` für **alle** 14 Tage; da Tag 0–3 vom Kanon
+    überschrieben werden, trug dieselbe Antwort zwei verschiedene
+    Bestandsbasen. ⚠ ``aktiv_jetzt()`` prüft die Anschaffungs-Untergrenze
+    ohnehin nicht (``investition_filter.py``) — ein erst nächste Woche
+    angeschafftes Modul zählte damit ab heute mit.
+
+    Die Obermenge holt ``prognose_kanon.pv_invs_im_horizont`` — **derselbe**
+    Loader, den der Kanon benutzt, statt einer zweiten Query mit eigener
+    Handschrift daneben. Genau die Doppelung war der Fund; sie hier zu
+    wiederholen hieße, ihn eine Ebene tiefer neu zu bauen.
+    """
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = result.scalar_one_or_none()
     if not anlage:
@@ -283,27 +307,23 @@ async def _lade_anlage_mit_pv(db: AsyncSession, anlage_id: int):
     if not anlage.latitude or not anlage.longitude:
         raise bad_request("Anlage hat keine Koordinaten")
 
-    result = await db.execute(
-        select(Investition).where(
-            Investition.anlage_id == anlage_id,
-            Investition.typ.in_(["pv-module", "balkonkraftwerk"]),
-            aktiv_jetzt()
-        )
+    return anlage, await pv_invs_im_horizont(db, anlage, von, bis)
+
+
+def _kwp_am_tag(anlage: Anlage, pv_invs: list[Investition], tag: date) -> float:
+    """Σ kWp der an ``tag`` aktiven Erzeuger — der Multiplikator des Ertrags.
+
+    Über den SoT ``anlagen_kwp`` (ADR-001, ``core/berechnungen/``) statt über
+    eine eigene Summe: er trägt den Typ-Dispatcher (ADR-002/P3-a — die kWp kann
+    in der Spalte ODER im ``parameter``-JSON stehen, #229-Klasse), die
+    BKW-Abtretung an Modul-Kinder (N-266, sonst zählt dieselbe kWp zweimal) und
+    den Fallback auf den gepflegten ``Anlage.leistung_kwp`` für Bestände ganz
+    ohne Erzeuger-Investitionen. ``mit_bkw=True``, weil der Zähler dieser Seite
+    die Erzeugung der **ganzen** Anlage ist.
+    """
+    return anlagen_kwp(
+        pv_invs, tag, mit_bkw=True, referenzwert=anlage.leistung_kwp,
     )
-    alle_pv = result.scalars().all()
-    pv_module = [i for i in alle_pv if i.typ == "pv-module"]
-    balkonkraftwerke = [i for i in alle_pv if i.typ == "balkonkraftwerk"]
-    # kWp über den SoT-Dispatcher (ADR-002/P3-a): die frühere Summe las nur die
-    # Spalte — weder den `parameter`-Fallback der #229-Klasse noch, beim BKW,
-    # `leistung_wp × anzahl`. `kwp` ist hier der Multiplikator des Ertrags,
-    # eine zu kleine Summe zieht die ganze Prognosen-Seite mit nach unten (N-J).
-    # N-266: `erzeuger_traeger` — ein BKW mit Modul-Kindern hat seine kWp
-    # abgetreten. `kwp` ist hier der Multiplikator des Ertrags; doppelt gezählt
-    # stünde die ganze Prognosen-Seite auf dem doppelten Wert.
-    kwp = sum(get_erzeuger_kwp(i) for i in erzeuger_traeger(alle_pv))
-    if kwp <= 0:
-        kwp = anlage.leistung_kwp or 0
-    return anlage, pv_module, balkonkraftwerke, kwp
 
 
 # =============================================================================
@@ -373,9 +393,18 @@ async def get_prognosen_vergleich(
     Evaluierungs-Cockpit mit Vormittag/Nachmittag-Split.
     Ziel: Optimales Zusammenspiel beider Quellen erarbeiten.
     """
-    anlage, _, _, anlagenleistung_kwp = await _lade_anlage_mit_pv(db, anlage_id)
+    now = datetime.now(ZoneInfo("Europe/Berlin"))
+    heute = date.today()
+    horizont = [heute + timedelta(days=o) for o in range(VERGLEICH_TAGE)]
+    anlage, pv_invs = await _lade_anlage_mit_pv(
+        db, anlage_id, horizont[0], horizont[-1],
+    )
 
-    if anlagenleistung_kwp <= 0:
+    # N-317: Die Sperre fragt den ganzen Horizont ab, nicht nur heute. Eine
+    # Anlage, deren erstes Modul in drei Tagen anläuft, HAT eine Prognose — sie
+    # beginnt nur später. Mit der früheren Kopfzahl („heute") hätte sie hier
+    # HTTP 400 bekommen.
+    if max((_kwp_am_tag(anlage, pv_invs, t) for t in horizont), default=0.0) <= 0:
         raise bad_request("Keine PV-Leistung konfiguriert")
 
     # Systemverluste aus PVGIS
@@ -390,11 +419,8 @@ async def get_prognosen_vergleich(
     wetter_modell = anlage.wetter_modell or "auto"
     model_name, max_days = WETTER_MODELLE.get(wetter_modell, (None, 16))
 
-    now = datetime.now(ZoneInfo("Europe/Berlin"))
-    heute = date.today()
-
     # ── Wetter-Abruf: Kaskade bei Modellen mit kurzem Horizont (z.B. icon_d2 = 2 Tage) ──
-    needs_fallback = wetter_modell != "auto" and 14 > max_days
+    needs_fallback = wetter_modell != "auto" and VERGLEICH_TAGE > max_days
 
     async def _fetch_wetter_mit_fallback():
         """Primary-Modell + best_match Fallback parallel abrufen und mergen."""
@@ -405,7 +431,7 @@ async def get_prognosen_vergleich(
             ),
             fetch_open_meteo_forecast(
                 latitude=anlage.latitude, longitude=anlage.longitude,
-                days=14, skip_jitter=True, model=None,
+                days=VERGLEICH_TAGE, skip_jitter=True, model=None,
             ),
         )
         if not primary and not fallback:
@@ -425,7 +451,7 @@ async def get_prognosen_vergleich(
     wetter, solcast, ist_rows = await asyncio.gather(
         _fetch_wetter_mit_fallback() if needs_fallback else fetch_open_meteo_forecast(
             latitude=anlage.latitude, longitude=anlage.longitude,
-            days=14, skip_jitter=True, model=model_name,
+            days=VERGLEICH_TAGE, skip_jitter=True, model=model_name,
         ),
         get_solcast_forecast(anlage),
         db.execute(
@@ -452,9 +478,15 @@ async def get_prognosen_vergleich(
     openmeteo_tage = []
     if wetter:
         for tag in wetter["tage"]:
+            # N-317: die kWp DIESES Tages, nicht die von heute. Tag 0–3 werden
+            # weiter unten ohnehin vom Kanon überschrieben, der seit N31 genau
+            # so rechnet — vorher trug dieselbe Antwort ab Tag 4 eine andere
+            # Bestandsbasis als davor.
             pv_kwh = berechne_pv_ertrag_tag(
                 globalstrahlung_kwh_m2=tag["globalstrahlung_kwh_m2"],
-                anlagenleistung_kwp=anlagenleistung_kwp,
+                anlagenleistung_kwp=_kwp_am_tag(
+                    anlage, pv_invs, date.fromisoformat(tag["datum"]),
+                ),
                 temperatur_max_c=tag["temperatur_max_c"],
                 system_losses=system_losses,
             )

@@ -132,13 +132,21 @@ def kanon_days(horizont_tage: int) -> int:
     return max(int(horizont_tage), KANON_MIN_DAYS)
 
 
-async def _pv_invs_im_horizont(db, anlage, von: date, bis: date) -> list[Investition]:
+async def pv_invs_im_horizont(db, anlage, von: date, bis: date) -> list[Investition]:
     """PV-/BKW-Investitionen, die im Horizont [von, bis] **irgendwann** aktiv sind.
 
     Obermenge für den Fan-out; die tagesgenaue Gewichtung passiert danach über
     ``ist_aktiv_an`` je Prognosetag (N31). Vorher filterte der Kanon gegen HEUTE
     und ignorierte das Anschaffungsdatum — ein am Zieltag bereits stillgelegter
     (oder erst später angeschaffter) String zählte im ganzen Horizont mit.
+
+    **Öffentlich seit N-317**, weil der Prognosen-Vergleich
+    (``api/routes/prognosen.py``) dieselbe Obermenge braucht: er rechnete seine
+    14 Tage mit einer ``aktiv_jetzt()``-Kopfzahl, während der Kanon daneben
+    tagesgenau lief — zwei Bestandsbasen in einer Antwort. Die Bestandsfrage
+    hat jetzt EINEN Beantworter; die Gewichtung machen beide Seiten je Tag,
+    der Kanon je Orientierungsgruppe (``_tages_gewichte``), der Vergleich über
+    ``anlagen_kwp``.
     """
     res = await db.execute(
         select(Investition).where(
@@ -288,7 +296,7 @@ async def kanon_tagesprognose(
 
     heute = date.today()
     tagesdaten = [heute + timedelta(days=o) for o in range(days)]
-    invs = await _pv_invs_im_horizont(db, anlage, tagesdaten[0], tagesdaten[-1])
+    invs = await pv_invs_im_horizont(db, anlage, tagesdaten[0], tagesdaten[-1])
     gruppen = orientierungs_gruppen(invs)
     # N31: kWp-Gewicht je (Tag, Gruppe); None = Bestand ändert sich im Horizont
     # nicht (Normalfall → Rechnung bleibt bitgleich zu vorher).

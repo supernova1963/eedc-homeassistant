@@ -104,6 +104,16 @@ _BASELINE: dict[str, int] = {
     "test_monats_luecken_symmetrie.py": 1,
     "test_multi_string_forecast_robustness_306.py": 4,
     "test_prognose_kanon.py": 11,
+    # N-317 (29.08.), NEU in dieser Liste — die einzige erlaubte Richtung ist
+    # sonst das Streichen, deshalb steht der Grund hier und im Docstring der
+    # Probe: Der Pruefling verankert seinen Horizont SELBST an `date.today()`
+    # (`get_prognosen_vergleich`), und `pv_invs_im_horizont` filtert die
+    # Obermenge gegen genau dieses Fenster. Ein festes Datum in der Fixture
+    # leerte die geladene Menge, statt die Probe unabhaengig zu machen — sie
+    # prueft dann nichts mehr. Der andere Weg waere ein gestellter Kalender;
+    # `freezegun` ist am 23.08.2026 verworfen. Deshalb GENAU EINE Ablesung, in
+    # einer Fixture, die alle drei Proben teilen.
+    "test_prognose_vergleich_bestand_je_tag.py": 1,
     "test_prognose_kanon_wettermodell_a30.py": 1,
     "test_prognose_modellrand_f36.py": 1,
     "test_pv_anteil_ladung_anschluss.py": 3,

@@ -2443,7 +2443,7 @@ P11_AUSNAHMEN: frozenset[str] = frozenset({
     # Balkonkraftwerks nicht mehr (s. dortiger Docstring).
     "backend/api/routes/live_wetter.py::get_live_wetter",
     "backend/api/routes/energie_profil/views.py::get_tagesprognose",
-    "backend/services/prognose_kanon.py::_pv_invs_im_horizont",
+    "backend/services/prognose_kanon.py::pv_invs_im_horizont",
 })
 
 
