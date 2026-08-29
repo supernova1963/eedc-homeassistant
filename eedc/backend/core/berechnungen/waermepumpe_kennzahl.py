@@ -108,6 +108,25 @@ GRUND_FREMDSTROM = "Heizstab-Strom auf dem WP-Zähler"
 #: Aufwand liegt nicht auf dem WP-Zähler. ⇒ **Q ist zu groß**, die Arbeitszahl
 #: zu hoch.
 #:
+#: ⛔ **Der zweite Erzeuger ist nicht zwingend ein Kessel (N-349, 29.08.2026).**
+#: Ein **elektrischer Heizstab**, dessen Wärme durch denselben
+#: Wärmemengenzähler läuft, während sein Strom getrennt gezählt wird, ist
+#: derselbe Fall — und bei Daikin und Nibe der Regelfall. Bis zum 29.08. nannten
+#: alle vier Anwendertexte nur „Gas- oder Ölkessel"; das Wort *Heizstab* stand
+#: baumweit **ausschließlich** bei ``GRUND_FREMDSTROM``, also auf der
+#: Gegenseite, die die Lage sogar ausdrücklich ausschließt. Wer sich nicht
+#: wiedererkennt, lässt „Kein Fremdanteil" stehen — und bekommt eine
+#: systematisch **zu hohe** Arbeitszahl ohne Hinweis, weil
+#: {@link JAZ_HEIZSTAB_SCHWELLE} nur nach unten feuert.
+#:
+#: ⚠ **Das war kein Rechenfehler, sondern eine Fallsammlung im Anwendertext** —
+#: und damit dieselbe Bauform, gegen die ``abgrenzung_verletzt`` weiter unten
+#: ausdrücklich gebaut ist (*„Ein Kennzeichen je Beispiel hätte eine
+#: Fallsammlung daraus gemacht"*). Die **Regel** war verallgemeinert, ihre
+#: **Beschreibung** nicht. Gemeldet hat es rapahl (T89667 #249) — nicht als
+#: Fehlerbericht, sondern als Widerspruch gegen einen Rat, der genau in diese
+#: Lage führte.
+#:
 #: ⭐ **Dieselbe Verletzung wie `GRUND_FREMDSTROM`, nur mit umgekehrtem
 #: Vorzeichen** — und der Prüfstein dafür, dass R2 die richtige Abstraktionshöhe
 #: hat: Der Fall hat **keinen Melder** und stand in **keiner** der vier Lagen des

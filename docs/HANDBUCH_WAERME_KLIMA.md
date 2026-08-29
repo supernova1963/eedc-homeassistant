@@ -127,7 +127,7 @@ Das ist die unangenehmste Eigenschaft dieser Fläche und zugleich ihre wichtigst
 | **Wärmepumpe und Klimaanlage in einer Zahl** | Der Block fasst eine klassische Wärmepumpe und eine Split-Klimaanlage zusammen. Beide heizen, aber sie sind nicht vergleichbar: andere Nutzenergie, anderer Maßstab. Eine gemeinsame Arbeitszahl wäre ein Quotient aus zwei Welten. | jedes Gerät einzeln im Komponenten-Hub ansehen — dort hat jedes seine eigene Zahl |
 | **nicht alle Geräte melden Wärme** | Der Block fasst mehrere Geräte zusammen; im Nenner steht der Strom von allen, im Zähler die Wärme von einem. | einzelnes Gerät im Komponenten-Hub ansehen |
 | **Heizstab-Strom auf dem WP-Zähler** | Deine eigene Angabe im Feld *Fremdanteil auf den Zählern*. Der Stromwert ist zu groß. | Angabe korrigieren, wenn sie nicht mehr stimmt |
-| **zweiter Erzeuger am Wärmezähler** | Dieselbe Angabe, andere Richtung: Ein Gas- oder Ölkessel speist denselben Heizkreis. Der Wärmewert ist zu groß. | dito |
+| **zweiter Erzeuger am Wärmezähler** | Dieselbe Angabe, andere Richtung: Ein zweiter Erzeuger speist denselben Heizkreis — ein Gas- oder Ölkessel, oder ein **elektrischer Heizstab, dessen Strom getrennt gezählt wird**. Der Wärmewert ist zu groß. | dito |
 | **Zähler messen verschiedene Zeiträume** | Strom und Wärme stammen aus verschieden langen Messzeiträumen. | Lücken im Monatsabschluss schließen |
 | **Strom nicht getrennt je Funktion gemessen** | Betrifft nur die Arbeitszahlen *Heizen* und *Warmwasser*. | getrennte Strommessung einschalten und zuordnen |
 | **kein Kältemengenzähler zugeordnet** | Betrifft nur die Arbeitszahl *Kühlen*. | Kältemengenzähler zuordnen — oder es bleibt so |
@@ -147,7 +147,15 @@ Sie beantworten die Frage „Warum ist der Tag leer, obwohl der Monat gefüllt i
 Zwei Lagen machen jede Arbeitszahl unbrauchbar, **ohne dass man es den Zahlen ansieht**:
 
 1. Der **Heizstab hängt am Stromzähler** der Wärmepumpe, seine Wärme läuft aber nicht über den Wärmemengenzähler. ⇒ Der Stromwert ist zu groß, die Arbeitszahl zu klein.
-2. Ein **Gas- oder Ölkessel speist denselben Heizkreis**, den der Wärmemengenzähler misst; der Stromzähler erfasst nur die Wärmepumpe. ⇒ Der Wärmewert ist zu groß, die Arbeitszahl zu gut.
+2. Ein **zweiter Erzeuger speist denselben Heizkreis**, den der Wärmemengenzähler misst; der Stromzähler erfasst nur die Wärmepumpe. ⇒ Der Wärmewert ist zu groß, die Arbeitszahl zu gut.
+   Das ist der Gas- oder Ölkessel im bivalenten Betrieb — **und ebenso ein elektrischer Heizstab, dessen Wärme durch denselben Wärmemengenzähler läuft, während sein Strom getrennt gezählt wird.** Bei vielen Geräten (Daikin, Nibe) ist genau das die Werkseinstellung.
+
+> ⚑ **Der Heizstab steht in beiden Lagen, und das ist kein Fehler.** Nicht das Gerät entscheidet, welcher Fall bei dir vorliegt, sondern **wo deine Zähler sitzen**. Zwei Fragen genügen:
+>
+> 1. *Zählt der Stromzähler der Wärmepumpe den Heizstab mit?* → Ja: **Lage 1**.
+> 2. *Läuft die Wärme des Heizstabs durch denselben Wärmemengenzähler?* → Ja, aber sein Strom wird getrennt gezählt: **Lage 2**.
+>
+> Trennst du den Heizstab auf der **Strom**seite ab — etwa, indem du ihn als eigenen Verbraucher unter *Sonstiges* führst —, seine **Wärme** aber weiter im gemeinsamen Zähler steht, dann bist du in Lage 2. Die Arbeitszahl wird dadurch nicht sauber, sondern **zu gut**: Im Zähler steht Wärme, die dein Kompressor nie erzeugt hat.
 
 Beide trägst du am Gerät unter **„Fremdanteil auf den Zählern"** ein. **Sie ändern keine einzige deiner Mengen** — Strom, Wärme, Kosten und CO₂ bleiben, wie sie sind. eedc lässt nur die Arbeitszahl weg und schreibt den Grund daneben.
 

@@ -19,6 +19,7 @@ ist der stärkere Beleg als die Rückfrage** — sie stellt die Bauform selbst h
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
+from pathlib import Path
 
 from backend.models import Anlage, Investition  # noqa: F401  (Base.metadata)
 from backend.models.sensor_snapshot import SensorSnapshot
@@ -552,3 +553,179 @@ def test_die_263_konzepte_verweisen_auf_den_geltenden_sot_und_das_handbuch():
             "Flaechen-Konzept liest es der Naechste als Regel ueber alle "
             "Waermepumpen — so ist N-336 entstanden."
         )
+
+
+# ═══ N-349 — der bivalente Fall muss den Heizstab NENNEN ════════════════════
+
+#: Wurzel des Source-of-Truth-Repos — diese Datei liegt in `eedc/backend/tests/`.
+_N349_WURZEL = Path(__file__).resolve().parents[3]
+
+#: Die vier Anwenderstellen, an denen der bivalente Fall (``GRUND_FREMDWAERME``)
+#: beschrieben wird — je als **Abschnitt**, mit einem Gegenanker, der beweist,
+#: dass der Abschnitt nicht in die Nachbarlage hineinreicht.
+#:
+#: ⛔ **Die Abschnitts-Grenze ist der ganze Prüfer, nicht Kosmetik — und sie war
+#: beim ersten Anlauf an zwei von vier Stellen falsch gesetzt.** Das Wort
+#: „Heizstab" steht in allen drei Dateien ohnehin: dort beschreibt es den
+#: **Gegenfall** ``fremdstrom``. Gemessen am Stand vor dem Fix — 3 Treffer in der
+#: TSX, 3 im Handbuch, 1 im Glossar, **alle auf der Gegenseite**. Ein
+#: dateiweiter Substring-Test wäre also **grün** gewesen und hätte genau den
+#: Befund verfehlt, für den er gebaut ist.
+#:
+#: ⚠ **Zwei Anker waren trotzdem zu weit, und nur die Gegenprobe hat es
+#: gezeigt** (29.08.2026): Der Handbuch-§4-Anker las über das Listenelement
+#: hinaus in den *nachfolgenden* Merksatz — der voller „Heizstab" steht —, und
+#: der Glossar-Anker umfasste die **ganze Tabellenzeile**, in der beide Lagen
+#: nebeneinander stehen. Beide meldeten grün, während der Heizstab aus dem
+#: bivalenten Fall entfernt war. **Ein Prüfer, der neben der Fundstelle misst,
+#: misst nichts.** Deshalb trägt jede Zeile jetzt einen **Gegenanker**, den
+#: ``test_n349_die_abschnitte_trennen_die_beiden_lagen`` scharf hält.
+#:
+#: Aufbau je Zeile: (Datei, Anfangsanker, Endanker, *darf nicht enthalten*).
+_N349_STELLEN: tuple[tuple[str, str, str, str], ...] = (
+    (
+        "eedc/frontend/src/components/forms/sections/InvestitionTypFelder/WaermepumpeFelder.tsx",
+        "value: 'fremdwaerme',",
+        "] as const",
+        "Heizstab-Strom liegt mit auf dem Stromzähler",
+    ),
+    (
+        "docs/HANDBUCH_WAERME_KLIMA.md",
+        "| **zweiter Erzeuger am Wärmezähler** |",
+        "\n",
+        "Heizstab-Strom auf dem WP-Zähler",
+    ),
+    (
+        "docs/HANDBUCH_WAERME_KLIMA.md",
+        "2. Ein **zweiter Erzeuger speist denselben Heizkreis**",
+        "\n\n",
+        "hängt am Stromzähler",
+    ),
+    (
+        "docs/GLOSSAR.md",
+        "oder ein zweiter Erzeuger speist denselben Heizkreis",
+        "**Ändert keine Menge:**",
+        "hängt am **Stromzähler**",
+    ),
+)
+
+
+def _n349_abschnitt(rel: str, start: str, ende: str) -> str:
+    """Der gelesene Abschnitt — oder eine Meldung, die sagt, was fehlt."""
+    text = (_N349_WURZEL / rel).read_text(encoding="utf-8")
+    i = text.find(start)
+    assert i >= 0, (
+        f"{rel}: der Ankertext „{start}“ steht nicht mehr da. Wurde die Stelle "
+        "umgebaut? Dann diesen Prüfer mitziehen — nicht löschen."
+    )
+    j = text.find(ende, i + len(start))
+    assert j > 0, f"{rel}: der Endanker {ende!r} fehlt hinter dem Anfang."
+    return text[i:j]
+
+
+def _n349_vorhanden() -> bool:
+    """`docs/` und `frontend/` liegen nur im Source-of-Truth-Repo."""
+    return all((_N349_WURZEL / rel).exists() for rel, *_ in _N349_STELLEN)
+
+
+def test_der_bivalente_fall_nennt_den_elektrischen_heizstab():
+    """**N-349** — ein Sperrgrund, der nur ein Beispiel nennt, wird nicht gefunden.
+
+    ``GRUND_FREMDWAERME`` rechnet richtig und sperrt richtig. Bis zum 29.08.2026
+    beschrieben ihn aber **alle vier** Anwenderstellen als „Gas- oder Ölkessel im
+    bivalenten Betrieb" — und ein **elektrischer Heizstab**, dessen Wärme durch
+    denselben Wärmemengenzähler läuft, während sein Strom getrennt gezählt wird,
+    ist derselbe Fall. Bei Daikin und Nibe ist er der Regelfall.
+
+    **Die Folge war eine stille falsche Zahl.** Wer sich in der Optionsliste
+    nicht wiederfindet — die eine Option nennt einen Kessel, die andere schließt
+    seine Lage ausdrücklich aus (*„Seine Wärme läuft NICHT über den
+    Wärmemengenzähler"*) —, lässt „Kein Fremdanteil" stehen und bekommt eine
+    systematisch **zu hohe** Arbeitszahl. Ein Hinweis existiert dafür nicht:
+    ``JAZ_HEIZSTAB_SCHWELLE`` feuert nur nach unten, und die einzige Obergrenze
+    im Baum (``daten_checker/stammdaten.py``) prüft den *eingetragenen
+    Schätzparameter*, nicht die gemessene Zahl.
+
+    ⭐ **Warum das kein Rechenfehler war und trotzdem zählt.** Dieselbe Datei
+    begründet bei ``abgrenzung_verletzt`` ausdrücklich, warum es **einen**
+    Eingang gibt und keine Flag-Liste: *„Ein Kennzeichen je Beispiel hätte eine
+    Fallsammlung daraus gemacht, und der bivalente Fall blieb genau deshalb
+    jahrelang unsichtbar."* Die **Regel** war verallgemeinert — der
+    **Anwendertext** blieb Fallsammlung. Dieselbe Bauform, eine Ebene höher.
+
+    Gemeldet von rapahl (simon42 T89667 #249) — nicht als Fehlerbericht, sondern
+    als Widerspruch (*„So einfach ist das nicht"*) gegen einen Rat, der genau in
+    diese Lage führte.
+    """
+    import pytest
+
+    if not _n349_vorhanden():
+        pytest.skip("docs/ und frontend/ liegen nur im Source-of-Truth-Repo")
+
+    for rel, start, ende, _ in _N349_STELLEN:
+        abschnitt = _n349_abschnitt(rel, start, ende)
+        assert "Heizstab" in abschnitt, (
+            f"{rel}: Der bivalente Fall nennt den elektrischen Heizstab nicht "
+            "mehr. Er ist bei Daikin und Nibe der Regelfall — wer ihn hier "
+            "streicht, nimmt genau diesen Anwendern die Wiedererkennung und "
+            "lässt sie mit einer zu hohen Arbeitszahl zurück (N-349).\n"
+            f"Gelesener Abschnitt:\n{abschnitt[:400]}"
+        )
+
+
+def test_n349_die_abschnitte_trennen_die_beiden_lagen():
+    """**Die Gegenprobe zum Prüfer darüber — und sie hat ihn zweimal berichtigt.**
+
+    Der Prüfer oben sucht ein Wort, das in denselben Dateien auch für die
+    **Gegenlage** steht. Er ist deshalb nur so viel wert wie seine
+    Abschnitts-Grenzen: Reicht ein Abschnitt in die Nachbarlage — oder auch nur
+    in einen Merksatz, der beide nennt —, bleibt er grün, während die geprüfte
+    Aussage längst verschwunden ist.
+
+    **Genau das war beim ersten Anlauf an zwei von vier Stellen der Fall**
+    (29.08.2026, gefunden nur an der beidseitigen Gegenprobe). Diese Probe hält
+    fest, dass jeder Abschnitt **ausschließlich** den bivalenten Fall enthält:
+    Der Gegenanker je Zeile ist ein Textstück, das nur in der ``fremdstrom``-Lage
+    vorkommt — steht es im gelesenen Abschnitt, ist die Grenze zu weit.
+
+    ⚠ **Ohne diese Probe könnte jemand die Anker so weit fassen, dass der
+    Prüfer wieder die ganze Datei liest** — und er bliebe grün, während er
+    nichts mehr misst.
+    """
+    import pytest
+
+    if not _n349_vorhanden():
+        pytest.skip("docs/ und frontend/ liegen nur im Source-of-Truth-Repo")
+
+    for rel, start, ende, gegenanker in _N349_STELLEN:
+        abschnitt = _n349_abschnitt(rel, start, ende)
+        assert gegenanker not in abschnitt, (
+            f"{rel}: Der Abschnitt für den bivalenten Fall reicht bis in die "
+            f"Gegenlage hinein — er enthält {gegenanker!r}. Dann prüft der "
+            "Prüfer darüber nicht mehr, was er zu prüfen behauptet: das Wort "
+            "stünde auch dann darin, wenn der bivalente Fall den Heizstab gar "
+            "nicht mehr nennt. Anker enger fassen, nicht den Gegenanker "
+            f"streichen.\nGelesener Abschnitt:\n{abschnitt[:400]}"
+        )
+
+
+def test_n349_beide_lagen_nennen_den_heizstab_und_das_ist_die_aussage():
+    """Nicht das **Gerät** entscheidet den Fall, sondern **wo die Zähler sitzen**.
+
+    Genau diese Symmetrie ist die Antwort auf rapahls Einwand: Derselbe Heizstab
+    erzeugt je nach Zählerlage einen **zu kleinen** (``fremdstrom``) oder einen
+    **zu großen** Quotienten (``fremdwaerme``). Steht er nur auf einer Seite,
+    liest sich die Liste wieder als Geräte-Aufzählung — und dann sucht sich der
+    Anwender die Option nach seinem Gerät aus statt nach seinen Zählern.
+    """
+    import pytest
+
+    if not _n349_vorhanden():
+        pytest.skip("Frontend-Quelltext liegt nicht im Spiegel")
+
+    text = (_N349_WURZEL / _N349_STELLEN[0][0]).read_text(encoding="utf-8")
+    i_fs = text.find("value: 'fremdstrom',")
+    i_fw = text.find("value: 'fremdwaerme',")
+    assert 0 < i_fs < i_fw, "Die Reihenfolge der beiden Optionen hat sich geändert."
+    assert "Heizstab" in text[i_fs:i_fw], "Die fremdstrom-Option nennt den Heizstab nicht mehr."
+    assert "Heizstab" in text[i_fw : text.find("] as const", i_fw)]

@@ -93,6 +93,20 @@ const WP_ART_OPTIONEN = [
 // R2 (SOLL §3.2b) — **eine** Regel, zwei Vorzeichen. Die Texte beschreiben die
 // Lage und bewerten den Anwender nicht: Wer seinen Heizstab am WP-Zähler hat,
 // macht nichts falsch — eedc kann daraus nur keine Arbeitszahl bilden.
+//
+// ⛔ **Der Heizstab steht in BEIDEN Beschreibungen, und das ist Absicht (N-349).**
+// Nicht das Gerät entscheidet, welcher Fall vorliegt, sondern **wo die Zähler
+// sitzen**: Liegt sein Strom auf dem WP-Zähler und seine Wärme daneben, ist der
+// Nenner zu groß (`fremdstrom`). Läuft seine Wärme durch den gemeinsamen
+// Wärmemengenzähler, während sein Strom getrennt gezählt wird, ist der Zähler
+// zu groß (`fremdwaerme`) — die zweite Lage ist bei Daikin und Nibe der
+// Regelfall. Bis zum 29.08.2026 nannte `fremdwaerme` nur „Gas- oder Ölkessel";
+// wer sie las, fand seinen Fall nicht und ließ „Kein Fremdanteil" stehen —
+// **mit einer systematisch zu hohen Arbeitszahl und ohne jeden Hinweis**, denn
+// `JAZ_HEIZSTAB_SCHWELLE` feuert nur nach unten. Gemeldet von rapahl
+// (T89667 #249), gegen eine Auskunft, die genau in diese Lage riet.
+// ⚠ Wer hier „aufräumt", nimmt einem Anwender die Wiedererkennung:
+// `test_soll_waerme_klima_achse3_aufloesung.py` meldet es.
 const ABGRENZUNG_OPTIONEN = [
   {
     value: '',
@@ -108,8 +122,10 @@ const ABGRENZUNG_OPTIONEN = [
   {
     value: 'fremdwaerme',
     label: 'Ein zweiter Erzeuger speist denselben Heizkreis',
-    description: 'Gas- oder Ölkessel im bivalenten Betrieb: Der Wärmemengenzähler misst beide, '
-      + 'der Stromzähler kennt nur die Wärmepumpe. Umgekehrter Fall, gleiche Folge.',
+    description: 'Der Wärmemengenzähler misst beide, der Stromzähler kennt nur die '
+      + 'Wärmepumpe — ein Gas- oder Ölkessel im bivalenten Betrieb, oder ein '
+      + 'elektrischer Heizstab, dessen Strom getrennt gezählt wird. Umgekehrter '
+      + 'Fall, gleiche Folge.',
   },
 ] as const
 
