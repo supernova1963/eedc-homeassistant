@@ -68,10 +68,6 @@ export const KATEGORIE_LABELS: Record<string, string> = {
   // Sicht des Anwenders — im Monatsabschluss heißt der Abschnitt
   // „Vergleichspreise", und genau dort sieht er das leere Feld.
   vergleichspreis_fehlt: 'Vergleichspreise – Ø Benzinpreis',
-  // N-346 (#395, OB73-gif): Aktiver Speicher ohne beide kWh-Zähler. Label
-  // nennt das Gerät und die Sache, nicht die Prüfung — der Anwender sucht
-  // seinen Speicher, nicht eine „Bilanz-Vollständigkeit".
-  speicher_zaehler_richtungen: 'Speicher – Zählerstände unvollständig',
 }
 
 /** Anzeige-Reihenfolge der Kategorien (Vollständigkeit → Plausibilität → …). */
@@ -107,5 +103,4 @@ export const KATEGORIE_REIHENFOLGE: string[] = [
   'position_doppelerfassung',
   'zaehlerstand_reihe',
   'vergleichspreis_fehlt',
-  'speicher_zaehler_richtungen',
 ]

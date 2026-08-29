@@ -222,31 +222,6 @@ class CheckKategorie(str, Enum):
     # (RepairOperationType.KRAFTSTOFFPREIS_BACKFILL). Er war nur von nirgends
     # aus erreichbar außer über die Reparatur-Werkbank.
     VERGLEICHSPREIS_FEHLT = "vergleichspreis_fehlt"
-    # N-346 (Melder OB73-gif, #395, 29.08.2026): Die Anlage führt einen aktiven
-    # Speicher, aber der Lade- oder der Entladezähler ist nirgends zugeordnet.
-    # Der **stündliche Hausverbrauch** ist eine Differenz aus vier Größen
-    # (`PV + Netzbezug − Einspeisung − Batterie-Netto`) — fehlt die Batterie,
-    # ist er nachts der reine Netzbezug. Trägt der Speicher die Nacht, steht
-    # dort fast nichts; je weniger er trägt, desto höher wird die Zahl. Der
-    # Melder sah seine Grundlast über den August von 0 W auf 300 W steigen,
-    # während die Live-Prognose daneben 340 W nannte.
-    #
-    # ⚠ **Beide Richtungen zählen, eine allein genügt nicht.** Nachts entlädt
-    # der Speicher, ohne zu laden — wer nur den Ladezähler zuordnet, rechnet die
-    # Entladung dauerhaft als 0 und bekommt eine *plausible*, aber falsche
-    # Bilanz. Genau deshalb meldet dieser Check auch die halbe Zuordnung.
-    #
-    # WARNING, nicht INFO: Seit dem Fix zu N-346 bleibt der Stundenverbrauch
-    # ohne die Zähler **leer** statt falsch — die Tages- und Monatsbilanz, die
-    # Grundlast-Kachel und der Sensor `eedc_grundlast_kw` zeigen dann „—". Das
-    # ist die ehrliche Anzeige, aber sie braucht ihre Erklärung; ohne diesen
-    # Hinweis stünde der Anwender vor einem Strich ohne Grund (P-6-Falle).
-    #
-    # ⛔ **Ohne Reparatur-Action.** eedc kann den fehlenden Zähler nicht
-    # erfinden, und die Vergangenheit nicht nachrechnen — die Zuordnung ist
-    # eine Entscheidung des Anwenders. Erklären und den Weg danebenstellen,
-    # nicht heilen ([[feedback_kein_grosser_heiler_knopf]]).
-    SPEICHER_ZAEHLER_RICHTUNGEN = "speicher_zaehler_richtungen"
 
 
 @dataclass

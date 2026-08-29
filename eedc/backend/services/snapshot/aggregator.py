@@ -24,7 +24,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.berechnungen.stundenbilanz import (
     berechne_batterie_netto_kwh,
-    erwartet_batterie_beitrag,
     stunden_verbrauch_kwh,
 )
 from backend.core.tageswert_grund import (
@@ -230,10 +229,7 @@ async def get_hourly_kwh_by_category(
         "verbrauch" wird bilanziell berechnet (SoT:
         `core/berechnungen/stundenbilanz.py`):
             verbrauch = pv + netzbezug - einspeisung - (ladung - entladung)
-        nur wenn pv, einspeisung und netzbezug verfügbar sind — und, sobald die
-        Anlage an diesem Tag einen aktiven Speicher führt, zusätzlich BEIDE
-        Batterie-Richtungen. Eine Richtung allein ergibt keine Netto-Ladung
-        (N-346).
+        nur wenn pv, einspeisung und netzbezug verfügbar sind.
     """
     sensor_mapping = anlage.sensor_mapping or {}
     quellen_energy = extract_quellen_energy(anlage)  # C2b-Read-Through
@@ -391,11 +387,6 @@ async def get_hourly_kwh_by_category(
 
     # 4. Aggregierte Kategorien zu Bilanz-Feldern:
     #    pv, einspeisung, netzbezug, batterie_lade_netto, wp, wallbox, verbrauch
-    # Einmal je Tag: Muss in dieser Bilanz ein Speicher stehen? Maßstab ist
-    # `ist_aktiv_an(datum)` und nicht das `aktiv`-Flag allein (N-64/N-313-Klasse).
-    batterie_erwartet = erwartet_batterie_beitrag(
-        investitionen_by_id.values(), datum
-    )
     schwelle_spike = schwelle_pv_einspeisung_stunde_kwh(
         getattr(anlage, "leistung_kwp", None)
     )
@@ -433,22 +424,19 @@ async def get_hourly_kwh_by_category(
         )
 
         # Batterie netto (positiv = Ladung, negativ = Entladung) und der
-        # Bilanz-Verbrauch kommen aus dem Layer-SoT (N-346, ADR-001) — die
-        # Formel stand bis dahin hier UND im LTS-Pfad wortgleich. Der Wächter
-        # dort zählt alle VIER Größen: fehlt bei einer Anlage mit aktivem
-        # Speicher der Lade- oder Entladezähler, ist die Stunde unbekannt und
-        # nicht etwa „Netzbezug".
+        # Bilanz-Verbrauch kommen aus dem Layer-SoT (ADR-001) — die Formel stand
+        # bis 29.08.2026 hier UND im LTS-Pfad wortgleich. Verhaltensneutral;
+        # dass ein fehlender Batterie-Beitrag als 0 zählt, ist dort als offener
+        # Punkt beschrieben.
         batt_netto = berechne_batterie_netto_kwh(
             ladung_kwh=ladung_batt,
             entladung_kwh=entladung_batt,
-            erwartet=batterie_erwartet,
         )
         verbrauch = stunden_verbrauch_kwh(
             pv_kwh=pv_total,
             netzbezug_kwh=bez,
             einspeisung_kwh=einsp,
             batterie_netto_kwh=batt_netto,
-            batterie_erwartet=batterie_erwartet,
         )
 
         final[h] = {
