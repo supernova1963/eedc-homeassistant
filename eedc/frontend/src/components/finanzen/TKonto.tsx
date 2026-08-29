@@ -13,6 +13,7 @@ import React from 'react'
 import { FormelTooltip, fmtCalc } from '../ui'
 import { TYP_TEXT_CLASS } from '../../lib'
 import type { AktuellerMonatResponse } from '../../api/aktuellerMonat'
+import { angezeigtesDelta } from '../../lib/werte'
 
 const fmt = (v: number | null | undefined, d = 1) => fmtCalc(v, d, '—')
 
@@ -24,17 +25,36 @@ const ERGEBNIS_FORMEL =
 const ERGEBNIS_ABGRENZUNG =
   'Andere Abgrenzung als „Netto-Ertrag (PV)" oben: hier zählen Netzbezug-Kosten und Wärmepumpe/E-Mobilität mit.'
 
-function Δ({ a, b, inv = false }: { a: number | null | undefined; b: number | null | undefined; inv?: boolean }) {
-  if (a == null || b == null || b === 0) return null
-  const pct = ((a - b) / Math.abs(b)) * 100
-  const positive = inv ? pct <= 0 : pct >= 0
+/**
+ * Vergleichs-Badge des T-Kontos.
+ *
+ * `dec = 2`, weil jeder Aufrufer seinen Wert und den VJ-Wert eine Zeile höher
+ * mit `fmtCalc(…, 2)` als Euro-Betrag setzt — der Prozentwert kommt aus genau
+ * diesen angezeigten Zahlen (`angezeigtesDelta`, W1-SoT). Vorher rechnete er aus
+ * den Rohwerten und widersprach seinen Nachbarn: gemessen 29.08.2026 stand bei
+ * 250,00 € gegen 249,50 € ein „▲ 0 %" — eine behauptete Nulländerung neben zwei
+ * sichtbar verschiedenen Beträgen.
+ *
+ * ⚠ Die Farbklassen bleiben hier absichtlich lokal statt auf `VERGLEICH_BADGE`
+ * umgestellt: `TKonto.tsx` ist eine V3-geteilte Datei und liegt bewusst außerhalb
+ * des `check:badges`-Scopes (R3b-Plan). Der Rechenweg ist der Befund, die Tönung
+ * gehört ins V3-Umstellungspaket.
+ */
+function Δ({ a, b, inv = false, dec = 2 }: { a: number | null | undefined; b: number | null | undefined; inv?: boolean; dec?: number }) {
+  if (a == null || b == null) return null
+  const delta = angezeigtesDelta(a, b, dec)
+  if (delta == null) return null
+  const positive = inv ? delta.pct <= 0 : delta.pct >= 0
+  // Sehen beide Beträge gleich aus, gibt es keine Richtung — „=" statt ▲/▼ und
+  // ein neutraler Ton (dieselbe Regel wie in der Werte-Tabelle).
+  const ton = delta.pfeil === '='
+    ? 'bg-gray-100 text-gray-500 dark:bg-gray-700/50 dark:text-gray-400'
+    : positive
+      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+      : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
   return (
-    <span className={`text-xs font-medium px-1 py-0.5 rounded ${
-      positive
-        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-        : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-    }`}>
-      {pct >= 0 ? '▲' : '▼'} {fmt(Math.abs(pct), 0)} %
+    <span className={`text-xs font-medium px-1 py-0.5 rounded ${ton}`}>
+      {delta.pfeil} {fmt(Math.abs(delta.pct), 0)} %
     </span>
   )
 }

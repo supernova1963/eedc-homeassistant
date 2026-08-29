@@ -83,3 +83,49 @@ describe('TKonto', () => {
     expect(screen.getAllByText(/Sonstige Erträge/).length).toBeGreaterThan(0)
   })
 })
+
+/**
+ * Das Vergleichs-Badge rechnet mit den ANGEZEIGTEN Beträgen (N-253).
+ *
+ * ⛔ Diese Hälfte des Funds galt im Register bis zum 29.08.2026 als „erledigt".
+ *    Gemessen war sie es nicht: `Δ` bildete den Prozentwert unverändert aus den
+ *    Rohwerten, während Wert und VJ-Wert eine Zeile höher mit `fmtCalc(…, 2)`
+ *    als Euro-Betrag stehen. 250,00 € gegen 249,50 € ergab „▲ 0 %" — eine
+ *    behauptete Nulländerung neben zwei sichtbar verschiedenen Beträgen.
+ *
+ * ⚑ Die letzte Probe ist die Gegenprobe zum zurückgebauten Rechenweg.
+ */
+describe('TKonto — Vergleichs-Badge gegen die angezeigten Beträge', () => {
+  // Der Netto-Wert des T-Kontos entsteht aus den ZEILEN: Haben (8 + 36) − Soll (15)
+  // = 29,00 €. Verglichen wird er gegen `vorjahr.gesamtnettoertrag_euro`; beide
+  // stehen mit zwei Nachkommastellen als Euro-Betrag nebeneinander.
+  const gegenVj = (vjNetto: number) =>
+    aktuellerMonat(2025, 5, {
+      anlage_name: 'Demo',
+      einspeisung_kwh: 100, einspeise_preis_cent: 8, einspeise_erloes_euro: 8,
+      eigenverbrauch_kwh: 120, ev_ersparnis_euro: 36,
+      netzbezug_kwh: 50, netzbezug_preis_cent: 30, netzbezug_kosten_euro: 15,
+      netto_ertrag_euro: 29, gesamtnettoertrag_euro: 29,
+      vorjahr: { gesamtnettoertrag_euro: vjNetto },
+    })
+
+  it('sichtbar verschiedene Beträge behalten ihre Richtung', () => {
+    // 29,00 € gegen 28,94 € — 0,2 %, gerundet „0 %", aber die Richtung steht.
+    render(<TKonto d={gegenVj(28.94)} />)
+    expect(screen.getAllByText(/▲ 0 %/).length).toBeGreaterThan(0)
+  })
+
+  it('gleich aussehende Beträge bekommen „=" statt einer erfundenen Richtung', () => {
+    // 29,00 € und 28,998 € stehen beide als „29,00 €" da.
+    render(<TKonto d={gegenVj(28.998)} />)
+    expect(screen.getAllByText(/= 0 %/).length).toBeGreaterThan(0)
+    expect(screen.queryAllByText(/▲/).length).toBe(0)
+  })
+
+  it('GEGENPROBE — der Rohwert-Weg hätte hier eine Richtung behauptet', () => {
+    const roh = ((29 - 28.998) / Math.abs(28.998)) * 100
+    expect(roh).toBeGreaterThan(0)   // der alte Code zeigte „▲ 0 %"
+    render(<TKonto d={gegenVj(28.998)} />)
+    expect(screen.queryAllByText(/▲/).length).toBe(0)
+  })
+})

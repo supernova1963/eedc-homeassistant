@@ -631,6 +631,12 @@ export const CHART_LABELS: Record<string, string> = {
 export const VERGLEICH_BADGE = {
   besser: 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400',
   schlechter: 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400',
+  /** Keine Richtungsaussage — teilt sich den Ton mit „kein Vergleich moeglich",
+   *  weil beide dasselbe sagen: hier steht kein Besser/Schlechter. Gebraucht,
+   *  seit die Badges aus den ANGEZEIGTEN Zahlen rechnen (2026-08-29): sehen
+   *  beide gleich aus, ist der Abstand 0 und ein gruenes „besser" waere eine
+   *  Behauptung. Grau-Schablone der B17-Regel (nicht die /20 der Farbtoene). */
+  unveraendert: 'bg-gray-50 text-gray-400 dark:bg-gray-700/50 dark:text-gray-500',
 } as const
 
 /** Chart-Flächen-/Dimm-Opazitäten als benannte Tokens statt roher Magic-Numbers

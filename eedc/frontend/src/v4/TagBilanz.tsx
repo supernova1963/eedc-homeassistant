@@ -199,7 +199,7 @@ export function TagBilanz({
         {val != null ? fmt(val, dec(row)) : dash}
       </td>
       <td className={`${ZELLE} text-right tabular-nums`}>
-        {val != null ? <Delta a={row.ist} b={val} inv={row.inv} besser={besser} /> : dash}
+        {val != null ? <Delta a={row.ist} b={val} dec={dec(row)} inv={row.inv} besser={besser} /> : dash}
       </td>
     </>
   )

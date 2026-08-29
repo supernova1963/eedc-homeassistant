@@ -5,7 +5,7 @@ import {
   WERTE_METRIKEN, WERTE_GRUPPEN, METRIK_BY_KEY, getMonatWert, getTagWert,
   metrikenFuer, monatsZeile, tagesZeile, richteMonateAus,
   vergleichLookup, gepaarteVergleichsZeilen, vergleichsAggregatBasis,
-  aggregiere, bewerteDelta, exportWerteCsv, fmtWert, alsAngezeigt,
+  aggregiere, bewerteDelta, exportWerteCsv, fmtWert, alsAngezeigt, angezeigtesDelta,
 } from './index'
 
 // exportToCSV löst im echten Code einen Download aus — fürs Schema-Testen mocken.
@@ -318,5 +318,47 @@ describe('Sonstiges-Spalten (Melder rapahl, 2026-08-14)', () => {
     expect(getTagWert(tw('2026-05-10', { sonstiges_erzeugung: 1.94 }), 'sonstiges_erzeugung')).toBe(1.94)
     // Kein Gerät ⇒ kein Wert, keine 0.
     expect(getTagWert(tw('2026-05-10'), 'sonstiges_verbrauch')).toBeNull()
+  })
+})
+
+describe('angezeigtesDelta — der Prozentwert kommt aus den ANGEZEIGTEN Zahlen (N-253)', () => {
+  it('sieht die Gleichheit, die auf dem Schirm steht: 151,4 gegen 150,6 bei 0 Stellen', () => {
+    // Beide Zahlen stehen als „151" da. Aus den Rohwerten gerechnet stand daneben
+    // „▲ 1 %" — ein Badge, das seinen zwei Nachbarn widerspricht.
+    const d = angezeigtesDelta(151.4, 150.6, 0)
+    expect(d).not.toBeNull()
+    expect(d!.pfeil).toBe('=')
+    expect(d!.pct).toBe(0)
+    expect(d!.diff).toBe(0)
+  })
+
+  it('meldet die Änderung, die auf dem Schirm steht: 250,00 gegen 249,50 bei 2 Stellen', () => {
+    // Die Gegenrichtung: sichtbar verschiedene Beträge, aber der Rohwert-Prozentsatz
+    // rundete auf „0 %" — eine behauptete Nulländerung.
+    const d = angezeigtesDelta(250.0, 249.5, 2)
+    expect(d!.pfeil).toBe('▲')
+    expect(d!.diff).toBeCloseTo(0.5, 10)
+    expect(d!.pct).toBeCloseTo(0.2004, 3)
+  })
+
+  it('rechnet nicht gegen eine angezeigte Null', () => {
+    // 0,4 kWh steht bei 0 Stellen als „0" da — ein Prozentwert relativ dazu
+    // hätte keine sichtbare Grundlage.
+    expect(angezeigtesDelta(0.6, 0.4, 0)).toBeNull()
+    // Mit einer Stelle trägt dieselbe Bezugsgröße sehr wohl.
+    expect(angezeigtesDelta(0.6, 0.4, 1)!.pfeil).toBe('▲')
+  })
+
+  it('rundet über den Betrag — negative Bezugsgrößen kippen nicht um eine Einheit', () => {
+    // Dieselbe Begründung wie bei `alsAngezeigt`: toLocaleString rundet
+    // „halfExpand", Math.round zur +∞ hin.
+    const d = angezeigtesDelta(-12.5, -12.5, 0)
+    expect(d!.pfeil).toBe('=')
+  })
+
+  it('unterscheidet die Richtung erst, wenn die Anzeige sie hergibt', () => {
+    expect(angezeigtesDelta(100.4, 100.0, 0)!.pfeil).toBe('=')
+    expect(angezeigtesDelta(100.6, 100.0, 0)!.pfeil).toBe('▲')
+    expect(angezeigtesDelta(99.4, 100.0, 0)!.pfeil).toBe('▼')
   })
 })

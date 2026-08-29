@@ -17,6 +17,13 @@
  *     einen Sprache: vorher sagte das Genauigkeits-Tracking „+19 %", während
  *     Stundenvergleich und 7-Tage-Vergleich „▲ 0,8" sagten — über dieselben
  *     Tage, die beide Tabellen aus `genauigkeit.tage` ziehen.
+ *     ⚑ **Seit dem 29.08.2026 wird die Aussage verglichen, nicht die
+ *     Zeichenkette** (N-253, Entscheid Gernot): Die Annotation spricht in der
+ *     Genauigkeit der Zahlen, die sie erklärt — der Stundenvergleich setzt
+ *     seine Werte zweistellig („5,00 · 4,20"), die beiden Tagestabellen
+ *     einstellig. Pfeil, Zahl und Prozentwert sind dieselben, die Auflösung
+ *     folgt der Zeile. Die frühere Zeichenketten-Gleichheit war nur wahr,
+ *     weil die Annotation ihre eigenen Nachbarn ignorierte.
  *
  * (d) **Der Zeilenfilter der 24h-Tabelle kennt die eedc-Spalte** (P-5 / N-51).
  *
@@ -105,11 +112,13 @@ describe('Stundenvergleich — Abweichung je Prognosespalte', () => {
 
     expect(z[SP24.ist]).toBe('2,69')
     expect(z[SP24.om]).toBe('2,69')
-    expect(z[SP24.omD]).toBe('± 0,0 (0 %)')
+    // Zwei Nachkommastellen, weil die Zahlen links davon zweistellig stehen
+    // (2,69 · 2,39) — die Annotation spricht deren Genauigkeit (N-253).
+    expect(z[SP24.omD]).toBe('± 0,00 (0 %)')
     expect(z[SP24.eedc]).toBe('2,69')
-    expect(z[SP24.eedcD]).toBe('± 0,0 (0 %)')
+    expect(z[SP24.eedcD]).toBe('± 0,00 (0 %)')
     expect(z[SP24.sc]).toBe('2,39')
-    expect(z[SP24.scD]).toBe('▼ 0,3 (11 %)')
+    expect(z[SP24.scD]).toBe('▼ 0,30 (11 %)')
   })
 
   it('lässt die Annotation weg, wo kein IST vorliegt', () => {
@@ -129,7 +138,10 @@ describe('Stundenvergleich — Abweichung je Prognosespalte', () => {
     const z = zeige({ solcast_stundenprofil: profil({ ...TAGESGANG, 7: 0.14 }) }).stunde('7:00')
 
     expect(z[SP24.ist]).toBe('0,30')
-    expect(z[SP24.scD]).toBe('▼ 0,2 (53 %)')
+    // ⛔ Hier stand bis zum 29.08.2026 „▼ 0,2" — neben 0,30 und 0,14. Der
+    //    Abstand dieser beiden Zahlen ist 0,16; die Annotation erklärte ihn
+    //    als 0,2, weil sie fest auf einer Stelle stand (N-253).
+    expect(z[SP24.scD]).toBe('▼ 0,16 (53 %)')
   })
 
   it('lässt die Prozentangabe weg, wo die Referenz sie nicht trägt', () => {
@@ -137,7 +149,7 @@ describe('Stundenvergleich — Abweichung je Prognosespalte', () => {
     const z = zeige({ ist_stundenprofil: profil({ 6: 0.04 }), aktuelle_stunde: 6 }).stunde('6:00')
 
     expect(z[SP24.ist]).toBe('0,04')
-    expect(z[SP24.omD]).toBe('± 0,0')
+    expect(z[SP24.omD]).toBe('± 0,00')
   })
 })
 
@@ -346,6 +358,22 @@ describe('Eine Abweichungs-Sprache in allen drei Tabellen (N-50)', () => {
   /** Dieselbe Paarung: Prognose 5,0 gegen IST 4,2 ⇒ Δ 0,8 kWh = 19 %. */
   const ERWARTET = '▲ 0,8 (19 %)'
 
+  /**
+   * Zerlegt eine Annotation in ihre AUSSAGE — Pfeil, Zahl, Prozentwert.
+   *
+   * N-50 verlangt, dass dieselbe Paarung überall dasselbe sagt. Verglichen wurde
+   * dafür bis zum 29.08.2026 die Zeichenkette; das ging nur, solange die
+   * Annotation fest auf einer Nachkommastelle stand und damit die Genauigkeit
+   * ihrer eigenen Nachbarn ignorierte (N-253). Jetzt wird die Aussage geprüft:
+   * „▲ 0,80 (19 %)" und „▲ 0,8 (19 %)" sind dieselbe, „+19 %" wäre eine andere —
+   * und genau das war der Defekt, den N-50 beseitigt hat.
+   */
+  const aussage = (text: string) => {
+    const m = text.match(/^(.) (\d+,\d+)(?: \((\d+) %\))?$/)
+    if (!m) throw new Error(`unerwartete Annotation: ${text}`)
+    return { pfeil: m[1], wert: Number(m[2].replace(',', '.')), pct: m[3] ?? null }
+  }
+
   it('Genauigkeits-Tracking annotiert absolut mit Prozent in Klammern', () => {
     const vm = { data: daten(), genauigkeit: genauigkeit(), ausreisserAusblenden: false } as PrognoseVergleichVM
     const { container } = render(<PvgGenauigkeitsTracking vm={vm} />)
@@ -375,9 +403,66 @@ describe('Eine Abweichungs-Sprache in allen drei Tabellen (N-50)', () => {
       aktuelle_stunde: 9,
     }).stunde('9:00')
 
-    expect(z[SP24.omD]).toBe(ERWARTET)
-    expect(z[SP24.eedcD]).toBe(ERWARTET)
-    expect(z[SP24.scD]).toBe(ERWARTET)
+    // Dieselbe Aussage wie in den beiden Tagestabellen — eine Stelle feiner,
+    // weil die Stundenwerte daneben zweistellig stehen.
+    for (const spalte of [SP24.omD, SP24.eedcD, SP24.scD]) {
+      expect(aussage(z[spalte])).toEqual(aussage(ERWARTET))
+    }
+    // Und die Auflösung folgt wirklich der Zeile, statt fest zu sein.
+    expect(z[SP24.omD]).toBe('▲ 0,80 (19 %)')
+  })
+
+  it('die drei Tabellen unterscheiden sich in der Auflösung, nicht in der Sprache', () => {
+    // Der eigentliche N-50-Beweis, unabhängig von Nachkommastellen: hätte eine
+    // Tabelle wieder eine eigene Sprache (etwa „+19 %" ohne Pfeil und ohne
+    // absoluten Wert), schlüge `aussage` beim Zerlegen fehl.
+    const vm = { data: daten(), genauigkeit: genauigkeit() } as PrognoseVergleichVM
+    const { container } = render(<PvgGenauigkeitsTracking vm={vm} />)
+    const tracking = zellen(container.querySelector('tbody tr') as Element)[SPTR.omD]
+
+    const std = zeige({
+      openmeteo_stundenprofil: profil({ 9: 5.0 }), eedc_stundenprofil: profil({ 9: 5.0 }),
+      solcast_stundenprofil: profil({ 9: 5.0 }), ist_stundenprofil: profil({ 9: 4.2 }),
+      aktuelle_stunde: 9,
+    }).stunde('9:00')[SP24.omD]
+
+    expect(aussage(tracking)).toEqual(aussage(std))
+    expect(tracking).not.toBe(std)          // verschiedene Auflösung …
+    expect(aussage(tracking).wert).toBe(0.8) // … gleiche Zahl
+  })
+
+  it('zwei gleich aussehende Tageswerte bekommen kein „▲ 0,1" (N-253)', () => {
+    // ⭐ Der scharfe Fall der einstelligen Tabellen: Prognose 5,04 gegen IST 4,98
+    //    steht als „5,0" gegen „5,0" da. Aus den Rohwerten war der Abstand 0,06 —
+    //    über der alten Schwelle `ABW_NULL_KWH = 0.05` — und die Annotation
+    //    behauptete daneben „▲ 0,1". Jetzt sagt sie „± 0,0": die beiden Zahlen
+    //    auf dem Schirm sind gleich.
+    const vm = {
+      data: daten(),
+      genauigkeit: {
+        ...genauigkeit(),
+        tage: [{
+          datum: TAG, openmeteo_kwh: 5.04, eedc_kwh: 5.04, solcast_kwh: 5.04, ist_kwh: 4.98,
+          wetter_symbol: 'cloudy', temperatur_max_c: 18, ist_ausreisser: false,
+        }],
+      },
+    } as unknown as PrognoseVergleichVM
+    const { container } = render(<PvgGenauigkeitsTracking vm={vm} />)
+    const z = zellen(container.querySelector('tbody tr') as Element)
+
+    expect(z[SPTR.om]).toBe('5,0')
+    expect(z[SPTR.ist]).toBe('5,0')
+    expect(aussage(z[SPTR.omD]).pfeil).toBe('±')
+    expect(aussage(z[SPTR.omD]).wert).toBe(0)
+  })
+
+  it('GEGENPROBE — der Rohwert-Weg hätte hier „▲ 0,1" behauptet', () => {
+    // Der zurückgebaute Rechenweg, wörtlich: Differenz der ROHwerte, Pfeil an
+    // der Schwelle 0,05, Anzeige auf einer Stelle.
+    const rohDiff = 5.04 - 4.98
+    expect(Math.abs(rohDiff)).toBeGreaterThan(0.05)        // ⇒ alter Pfeil war „▲"
+    expect(rohDiff.toFixed(1)).toBe('0.1')                 // ⇒ alte Anzeige war „0,1"
+    // Neben zwei Zellen, die beide „5,0" zeigen — genau der Widerspruch.
   })
 
   it('7-Tage-Vergleich: ohne gemessenes IST bleibt die Unterdrückung', () => {

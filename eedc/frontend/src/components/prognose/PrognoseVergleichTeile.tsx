@@ -21,6 +21,7 @@ import { Button, Card, ChartLegende, Checkbox, SegmentControl, buttonClasses, Ta
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { SimpleTooltip } from '../ui/FormelTooltip'
 import { useLegendenToggle } from '../../hooks'
+import { alsAngezeigt } from '../../lib/werte'
 import { Parkbar } from '../park'
 import {
   aussichtenApi, PrognosenVergleich, GenauigkeitsResponse, AsymmetrieEintrag, Tageshaelfte,
@@ -585,8 +586,12 @@ const ABW_GELB_AB_PROZENT = 10
 const ABW_ROT_AB_PROZENT = 30
 /** Unter dieser Referenz ist jede Prozentzahl erfunden — dann nur der absolute Wert. */
 const ABW_REF_MIN_KWH = 0.05
-/** Was betragsmäßig darunter liegt, rundet auf 0,0 und bekommt kein Richtungs-Symbol. */
-const ABW_NULL_KWH = 0.05
+// ⛔ `ABW_NULL_KWH = 0.05` stand hier bis 2026-08-29 mit der Begründung „was
+//   betragsmäßig darunter liegt, rundet auf 0,0 und bekommt kein Richtungs-Symbol".
+//   Die Absicht war richtig, die Schwelle hat sie nur GESCHÄTZT: bei 12,34 gegen
+//   12,25 kWh sind es 0,09 — über der Schwelle, also „▲ 0,1" neben zweimal „12,3".
+//   Seit `Abweichung` mit den angezeigten Zahlen rechnet, ist die Bedingung exakt
+//   („Differenz der angezeigten Zahlen ist 0") und braucht keine Konstante mehr.
 /** Ohne gemessene Referenz gilt ein Δ darunter als Rauschen und wird unterdrückt. */
 const ABW_RAUSCHEN_KWH = 0.03
 
@@ -616,20 +621,35 @@ function abweichungsStufe(pct: number): keyof typeof STATUS_TEXT_CLASS {
  * Mittel der Prognosen — bleibt die Unterdrückung: dort ist ein „0,0" keine
  * Aussage über die Wirklichkeit.
  */
-function Abweichung({ prognose, ist, gemessen = false }: { prognose: number; ist: number; gemessen?: boolean }) {
-  const diff = prognose - ist
+function Abweichung({ prognose, ist, gemessen = false, stellen = 1 }: { prognose: number; ist: number; gemessen?: boolean; stellen?: number }) {
+  // ── Ob überhaupt etwas dasteht, entscheiden die ROHwerte ───────────────────
+  // Das sind Aussagen über die Messung („gibt es eine tragfähige Referenz?",
+  // „ist das nur Rauschen?") und keine Aussagen über die Anzeige — deshalb
+  // unverändert auf `prognose`/`ist`.
   if (!gemessen) {
     if (ist < ABW_REF_MIN_KWH && prognose < ABW_REF_MIN_KWH) return null
-    if (Math.abs(diff) < ABW_RAUSCHEN_KWH) return null
+    if (Math.abs(prognose - ist) < ABW_RAUSCHEN_KWH) return null
   }
-  const refTraegt = ist > ABW_REF_MIN_KWH
-  const pct = refTraegt ? Math.abs(diff / ist) * 100 : (prognose > ABW_REF_MIN_KWH ? 100 : 0)
-  // Was auf 0,0 rundet, bekommt kein Richtungs-Symbol — ein „▼ 0,0" behauptet
+  // ── WAS dasteht, kommt aus den ANGEZEIGTEN Zahlen ──────────────────────────
+  // Die Annotation erklärt die Prognose-Zahl links von ihr und das IST darüber;
+  // beide stehen mit `stellen` Nachkommastellen da. Aus den Rohwerten gerechnet
+  // widersprach sie ihnen: 12,34 gegen 12,25 kWh ergab „▲ 0,1" neben zweimal
+  // „12,3" (gemessen 29.08.2026, dieselbe Klasse wie Strikers Δ-Spalte in
+  // T89667 #162). `alsAngezeigt` ist dafür der SoT.
+  const gezeigtPrognose = alsAngezeigt(prognose, stellen)
+  const gezeigtIst = alsAngezeigt(ist, stellen)
+  const diff = gezeigtPrognose - gezeigtIst
+  // `gezeigtIst !== 0` gehört dazu: sonst teilte eine gröbere Stellenzahl durch
+  // eine angezeigte Null. Bei `stellen = 1` ändert es nichts (ist > 0,05 zeigt
+  // mindestens 0,1) — es hält die Regel für jede andere Stellenzahl.
+  const refTraegt = ist > ABW_REF_MIN_KWH && gezeigtIst !== 0
+  const pct = refTraegt ? Math.abs(diff / gezeigtIst) * 100 : (prognose > ABW_REF_MIN_KWH ? 100 : 0)
+  // Sehen beide Zahlen gleich aus, gibt es keine Richtung — ein „▼ 0,0" behauptet
   // eine Unterschreitung, die die angezeigte Zahl gar nicht hergibt.
-  const arrow = Math.abs(diff) < ABW_NULL_KWH ? '±' : diff > 0 ? '▲' : '▼'
+  const arrow = diff === 0 ? '±' : diff > 0 ? '▲' : '▼'
   return (
     <span className={`text-[10px] ${STATUS_TEXT_CLASS[abweichungsStufe(pct)]}`}>
-      {arrow} {fmtZahl(Math.abs(diff), 1)}{refTraegt && ` (${prozentText(pct)})`}
+      {arrow} {fmtZahl(Math.abs(diff), stellen)}{refTraegt && ` (${prozentText(pct)})`}
     </span>
   )
 }
@@ -1119,7 +1139,7 @@ export function PvgGenauigkeitsTracking({ vm }: { vm: PrognoseVergleichVM }) {
                 klasse: q.klasse,
                 wert: q.wert !== null ? fmtZahl(q.wert, 1) : '—',
                 zusatz: q.wert !== null && tag.ist_kwh !== null
-                  ? <Abweichung prognose={q.wert} ist={tag.ist_kwh} gemessen />
+                  ? <Abweichung prognose={q.wert} ist={tag.ist_kwh} gemessen stellen={1} />
                   : null,
               }))}
             />
@@ -1237,7 +1257,7 @@ function PvgPrognoseZelle({ wert, ist, klasse = '', stellen = 2, leerGedimmt = f
         {wert !== null && extra}
       </td>
       <td className={`${ZELLE} text-right font-mono ${klasse}`}>
-        {wert !== null && ist !== null && <Abweichung prognose={wert} ist={ist} gemessen={gemessen} />}
+        {wert !== null && ist !== null && <Abweichung prognose={wert} ist={ist} gemessen={gemessen} stellen={stellen} />}
       </td>
     </>
   )
@@ -1405,7 +1425,7 @@ export function Pvg7TageTabelle({ vm }: { vm: PrognoseVergleichVM }) {
                 klasse: q.klasse,
                 wert: <>{q.wert !== null ? fmtZahl(q.wert, 1) : '—'}{q.extra}</>,
                 zusatz: q.bewertet && q.wert !== null && devRef !== null
-                  ? <Abweichung prognose={q.wert} ist={devRef} gemessen={devGemessen} />
+                  ? <Abweichung prognose={q.wert} ist={devRef} gemessen={devGemessen} stellen={1} />
                   : null,
               }))}
             />
