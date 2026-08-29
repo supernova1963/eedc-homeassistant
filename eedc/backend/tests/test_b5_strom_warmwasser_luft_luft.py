@@ -100,9 +100,13 @@ def test_jede_bedingung_der_registry_ist_ein_bekannter_schluessel():
     bekannt = set(_bedingungs_werte({}))
     unbekannt = []
     for typ, felder in INVESTITION_FELDER.items():
-        if not isinstance(felder, list):
-            continue
-        for feld in felder:
+        # N-79-Nebenbefund (29.08.): hier stand `if not isinstance(felder, list):
+        # continue` — das übersprang `sonstiges`, dessen Registry-Eintrag ein
+        # **Dict von Listen** ist. Heute trägt dort kein Feld eine `bedingung`,
+        # der Wächter hatte also eine blinde Stelle ohne Schaden. Sie bleibt
+        # nicht stehen: `get_stand_felder` löst dieselbe Form seit je auf.
+        listen = felder.values() if isinstance(felder, dict) else [felder]
+        for feld in [f for liste in listen for f in liste]:
             bedingung = feld.get("bedingung")
             if not bedingung:
                 continue

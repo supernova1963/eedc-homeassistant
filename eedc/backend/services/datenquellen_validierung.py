@@ -23,7 +23,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Optional
 
-from backend.core.field_definitions import einheit_klasse
+from backend.core.field_definitions import einheit_klasse, verdraengender_typ
 
 # ─── Aggregat ⊥ Komponenten (Engine-Vorrang, C) ─────────────────────────────
 # Aggregat-Sensor wird bei vorhandenen Komponenten still ignoriert — ABER die
@@ -311,7 +311,14 @@ _VERDRAENGT_TEXT = {
     "keine_pv_module": "Die PV-Module sind einzeln erfasst — dort zuordnen, "
                        "nicht hier.",
 }
-_VERDRAENGT_TYP = {"keine_wallbox": "wallbox", "keine_pv_module": "pv-module"}
+# N-79: die Zuordnung Wert → verdrängender Typ ist KEIN lokales Wissen mehr.
+# Sie stand hier wertgleich neben einer `if`-Kette in `field_definitions.py`;
+# ein dritter Wert nur an einer der beiden Stellen hätte still verschieden
+# gewirkt. SoT ist `BEDINGUNG_ANLAGE_VERDRAENGT`, gelesen über
+# `verdraengender_typ` (unbekannter Wert ⇒ None ⇒ verdrängt nicht).
+# ⚠ `_VERDRAENGT_TEXT` darüber bleibt hier: das ist der Anwendertext DIESER
+#   Fläche, keine Semantik. Dass beide dasselbe Vokabular führen, hält der
+#   Wächter in `test_bedingung_anlage_sot_n79.py` — er prüft beide Seiten.
 
 # Sonderfall der Gruppe `pv_energie`, wenn sie AUSSCHLIESSLICH durch den
 # Anlagen-Zählerstand belegt ist: „bereits an anderer Stelle zugeordnet" sagt
@@ -374,7 +381,7 @@ def stufe_bedarf_ein(
         #    PV-Module schlagen den Wechselrichter-Sammelzähler). Ein BELEGTES Feld
         #    bleibt trotzdem sichtbar — sonst verschwände die Zuordnung unsichtbar
         #    und ließe sich nicht mehr entfernen; die Redundanz-Warnung greift dort.
-        if bedingung_anlage and _VERDRAENGT_TYP.get(bedingung_anlage) in vorhandene_typen:
+        if bedingung_anlage and verdraengender_typ(bedingung_anlage) in vorhandene_typen:
             out[fid] = {
                 "bedarf": "inaktiv", "grund": bedingung_anlage,
                 "text": _VERDRAENGT_TEXT.get(bedingung_anlage),

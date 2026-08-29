@@ -207,7 +207,12 @@ MODUS_STROM_FELD: Final[dict[str, str]] = {
 # die abgeleitete Aufteilung ändert sich nicht.
 #
 # Ausgeschrieben statt generiert, aus demselben Grund wie oben (Grep-Barkeit);
-# `test_263_betriebsart_felder.py` hält beide Tabellen gegen den Kanon.
+# ⛔ **Hier stand bis 2026-08-29: „`test_263_betriebsart_felder.py` hält beide
+# Tabellen gegen den Kanon." Die Datei existiert nicht, und gemessen hält
+# KEINE Probe diese beiden Tabellen gegen `BETRIEBSMODUS_KANON`** — anders als
+# `MODUS_STROM_FELD`, für das `test_263_k2_modus_split.py::
+# test_feldnamen_folgen_dem_kanon` genau das leistet. Eine fünfte Betriebsart
+# im Kanon bekäme hier still kein Feld. Als Fund geführt, nicht als Auslassung.
 
 #: Betriebsarten, für die eedc einen eigenen **Betriebsart-Zähler** anbietet.
 #:

@@ -1389,6 +1389,48 @@ URTEIL_ERWEITERT: Final[str] = "erweitert"
 URTEIL_NEIN: Final[str] = "nein"
 
 
+#: `bedingung_anlage` → der Investitionstyp, dessen Vorhandensein das Feld
+#: verdrängt. **Der eine Ort dieser Zuordnung** (N-79).
+#:
+#: ⚠ Bis 2026-08-29 stand dieselbe Abbildung **zweimal** fest verdrahtet: hier
+#: als `if`-Kette in `get_felder_fuer_investition` und als `_VERDRAENGT_TYP` in
+#: `services/datenquellen_validierung.py`. Beide Kopien waren wertgleich — und
+#: genau das ist die Falle: Ein dritter Wert, nur in eine der beiden Kopien
+#: eingetragen, verdrängt das Feld auf der Datenquellen-Fläche, aber nicht im
+#: Monatsabschluss (oder umgekehrt), und zwar **still**.
+#:
+#: ⚑ `bedingung` und `weich` hatten ihren Auswerter längst (`bedingungs_urteil`),
+#: `label_wenn` wird an genau einer Stelle gelesen — `bedingung_anlage` war der
+#: einzige Schlüssel der Registry ohne SoT.
+BEDINGUNG_ANLAGE_VERDRAENGT: Final[dict[str, str]] = {
+    "keine_wallbox": "wallbox",
+    # Von keinem Feld mehr benutzt (s. Kasten bei `ladung_pv_kwh`: die Bedingung
+    # ist 2026 bewusst entfallen) — der Wert bleibt im Vokabular, damit die
+    # Regel wieder gesetzt werden kann, ohne sie neu herzuleiten.
+    "keine_pv_module": "pv-module",
+}
+
+
+def verdraengender_typ(bedingung_anlage) -> Optional[str]:
+    """Welcher Investitionstyp verdrängt ein Feld mit dieser `bedingung_anlage`?
+
+    Gibt den Typ zurück (`"wallbox"`), oder `None`, wenn das Feld keine solche
+    Bedingung trägt **oder der Wert unbekannt ist**.
+
+    ⚠ **Ein unbekannter Wert verdrängt nicht** (fail-open) — dieselbe Wahl wie
+    in `bedingung_erfuellt` und `bedingungs_urteil`, und aus demselben Grund:
+    Die Gegenrichtung ließe ein bereits **zugeordnetes** Feld unsichtbar
+    verschwinden und damit unlöschbar zurückbleiben. Ein Auswerter, der wirft,
+    wäre die F-59-Klasse (latenter 500er im Lesepfad).
+
+    Gegen den Tippfehler steht deshalb ein Wächter, kein Laufzeitfehler:
+    ``test_bedingung_anlage_sot_n79.py::test_jeder_bedingung_anlage_wert_ist_bekannt``.
+    """
+    if not bedingung_anlage:
+        return None
+    return BEDINGUNG_ANLAGE_VERDRAENGT.get(bedingung_anlage)
+
+
 def bedingungs_urteil(
     bedingung, weich, bedingungs_werte: dict[str, bool],
 ) -> str:
@@ -1424,7 +1466,8 @@ def bedingungs_urteil(
     `bedingung_erfuellt`, und aus demselben Grund: ein Tippfehler ließe sonst
     ein **zugeordnetes** Feld unsichtbar verschwinden und damit unlöschbar
     zurückbleiben. Gewächtert wird der Tippfehler, nicht abgefangen
-    (`test_263_betriebsart_felder.py::test_jede_bedingung_ist_ein_bekannter_schluessel`).
+    (`test_b5_strom_warmwasser_luft_luft.py::
+    test_jede_bedingung_der_registry_ist_ein_bekannter_schluessel`).
     """
     if not bedingung:
         return URTEIL_GILT
@@ -1466,7 +1509,8 @@ def bedingung_erfuellt(bedingung, bedingungs_werte: dict[str, bool]) -> bool:
     Falle, vor der `get_alle_felder_fuer_investition` warnt). Ein Auswerter, der
     stattdessen wirft, wäre die F-59-Klasse: ein latenter 500er im Lesepfad.
     Gegen den Tippfehler steht deshalb ein Wächter, kein Laufzeitfehler —
-    `test_263_betriebsart_felder.py::test_jede_bedingung_ist_ein_bekannter_schluessel`.
+    `test_b5_strom_warmwasser_luft_luft.py::
+    test_jede_bedingung_der_registry_ist_ein_bekannter_schluessel`.
     """
     if not bedingung:
         return True
@@ -1563,10 +1607,11 @@ def get_felder_fuer_investition(
         # weiter zeigen, sonst verschwindet die Zuordnung unsichtbar und lässt
         # sich nicht mehr entfernen (`_bedarf_einstufung` in routes/datenquellen.py).
         if bedingung_anlage and anlage_investitionen is not None:
-            if bedingung_anlage == "keine_pv_module" and "pv-module" in anlage_typen:
-                continue  # Feld ausblenden: PV-Module separat erfasst
-            if bedingung_anlage == "keine_wallbox" and "wallbox" in anlage_typen:
-                continue  # Feld ausblenden: Wallbox ist kanonische Heimladungs-Quelle
+            # N-79: die Zuordnung Wert → verdrängender Typ steht im SoT
+            # `BEDINGUNG_ANLAGE_VERDRAENGT`, nicht als `if`-Kette hier.
+            # Unbekannter Wert ⇒ `None` ⇒ verdrängt nichts (fail-open).
+            if verdraengender_typ(bedingung_anlage) in anlage_typen:
+                continue  # Feld ausblenden: der verdrängende Typ ist da
 
         # ── Investment-Parameter-Bedingung ───────────────────────────────────
         urteil = bedingungs_urteil(bedingung, feld.get("weich"), bedingungs_werte)
