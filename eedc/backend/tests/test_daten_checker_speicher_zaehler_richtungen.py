@@ -59,8 +59,10 @@ async def _anlage_mit_speicher(db, *, felder=None, quellen=None, **inv_kw):
     return anlage, inv
 
 
-async def _meldungen(db, anlage):
-    return await DatenChecker(db)._check_speicher_zaehler_richtungen(anlage)
+async def _meldungen(db, anlage, mqtt_zaehler=None):
+    return await DatenChecker(db)._check_speicher_zaehler_richtungen(
+        anlage, mqtt_zaehler,
+    )
 
 
 async def test_gar_kein_zaehler_wird_gemeldet(db):
@@ -90,29 +92,57 @@ async def test_beide_zaehler_melden_nichts(db):
     assert await _meldungen(db, anlage) == []
 
 
-async def test_mqtt_zuordnung_zaehlt_ebenso(db):
-    """Zwei Ablagen, beide gelten — nur `felder` zu prüfen hieße, jeden
-    MQTT-Nutzer falsch zu melden (derselbe Fehler wie einmal beim Klima-Check)."""
+async def test_angekommene_mqtt_zaehlerstaende_zaehlen_ebenso(db):
+    """Ein MQTT-Nutzer hat keine `felder`-Einträge und trotzdem beide Zähler.
+    Nur `felder` zu prüfen hieße, ihn falsch zu melden."""
+    anlage, inv = await _anlage_mit_speicher(
+        db,
+        felder={},
+        quellen={
+            "ladung_kwh": {"quelle": "mqtt_inbound_standard"},
+            "entladung_kwh": {"quelle": "mqtt_inbound_standard"},
+        },
+    )
+    angekommen = {f"inv:{inv.id}:ladung_kwh", f"inv:{inv.id}:entladung_kwh"}
+    assert await _meldungen(db, anlage, angekommen) == []
+
+
+async def test_stempel_ohne_angekommene_werte_macht_nicht_stumm(db):
+    """⛔ Der Fall, an dem der erste Entwurf dieses Checks gescheitert wäre.
+
+    Die B8-1-Materialisierung stempelt `mqtt_inbound_standard` auf **jedes**
+    unzugeordnete Feld, ohne MQTT je zu prüfen — auf einer Bestandsanlage steht
+    der Eintrag also überall. Wer ihn als Zuordnung liest, verstummt genau dort,
+    wo der Hinweis gebraucht wird. Maßgeblich ist der **Messwert**, nicht der
+    Eintrag (N-328, `snapshot/keys.feld_hat_zaehler`).
+    """
     anlage, _ = await _anlage_mit_speicher(
         db,
         felder={},
         quellen={
-            "ladung_kwh": {"quelle": "mqtt"},
-            "entladung_kwh": {"quelle": "mqtt"},
+            "ladung_kwh": {"quelle": "mqtt_inbound_standard"},
+            "entladung_kwh": {"quelle": "mqtt_inbound_standard"},
         },
     )
-    assert await _meldungen(db, anlage) == []
+    meldungen = await _meldungen(db, anlage, set())   # nichts angekommen
+    assert len(meldungen) == 1
+    assert "Weder Ladung noch Entladung" in meldungen[0].details
 
 
-async def test_ausdrueckliches_keine_ist_keine_zuordnung(db):
-    """„keine" ist eine Absage, kein Zähler — sonst schweigt der Hinweis
-    ausgerechnet dort, wo die Bilanz sicher nicht bildbar ist."""
+async def test_ausdrueckliches_keine_schlaegt_jede_evidenz(db):
+    """„keine" ist eine Absage des Anwenders und schlägt selbst einen
+    zugeordneten HA-Sensor (`feld_hat_zaehler` Regel 3)."""
     anlage, _ = await _anlage_mit_speicher(
         db,
-        felder={"ladung_kwh": _sensor("sensor.lade")},
+        felder={
+            "ladung_kwh": _sensor("sensor.lade"),
+            "entladung_kwh": _sensor("sensor.entlade"),
+        },
         quellen={"entladung_kwh": {"quelle": "keine"}},
     )
-    assert len(await _meldungen(db, anlage)) == 1
+    meldungen = await _meldungen(db, anlage)
+    assert len(meldungen) == 1
+    assert "die nachts läuft" in meldungen[0].details
 
 
 async def test_stillgelegter_speicher_fordert_nichts_ein(db):

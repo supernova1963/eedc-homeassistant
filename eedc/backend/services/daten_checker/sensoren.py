@@ -716,7 +716,7 @@ class SensorChecks:
     # ─── Speicher-Zählerrichtungen (N-346, Melder OB73-gif #395) ──────────
 
     async def _check_speicher_zaehler_richtungen(
-        self, anlage: Anlage,
+        self, anlage: Anlage, mqtt_zaehler: Optional[set[str]] = None,
     ) -> list[CheckErgebnis]:
         """Aktiver Speicher, dessen Lade- oder Entladezähler nirgends steht.
 
@@ -742,8 +742,25 @@ class SensorChecks:
         ⛔ **Ohne Reparatur-Action.** eedc kann den Zähler nicht erfinden und die
         Vergangenheit nicht nachrechnen; die Zuordnung ist eine Entscheidung des
         Anwenders ([[feedback_kein_grosser_heiler_knopf]]).
+
+        ⛔ **„Hat das Feld einen Zähler?" beantwortet `keys.feld_hat_zaehler`,
+        nicht diese Funktion** (N-328: dieselbe Frage stand einmal fünfmal im
+        Baum). Der erste Entwurf dieses Checks nahm jeden `quellen`-Eintrag
+        außer ``"keine"`` als Zuordnung — **und wäre damit auf jeder
+        Bestandsanlage verstummt:** Die B8-1-Materialisierung stempelt
+        ``mqtt_inbound_standard`` auf jedes unzugeordnete Feld, ohne MQTT je zu
+        prüfen (am 27.08. gemessen: 31 Felder, 31-mal Inbound, auf einer Anlage
+        ohne eine einzige MQTT-Nachricht). Ein Prüfer, der ausgerechnet dort
+        schweigt, wo er gebraucht wird, ist schlimmer als keiner.
+
+        Args:
+            mqtt_zaehler: `sensor_key`s mit **angekommenen** MQTT-Zählerständen.
+                Der Aufrufer erhebt sie mit einer Abfrage für alle Prüfungen.
         """
         from backend.models.investition import Investition as _Inv
+        from backend.services.snapshot.keys import (
+            extract_quellen_energy, feld_hat_zaehler,
+        )
 
         kat = CheckKategorie.SPEICHER_ZAEHLER_RICHTUNGEN.value
         heute = date.today()
@@ -757,29 +774,15 @@ class SensorChecks:
 
         sensor_mapping = anlage.sensor_mapping or {}
         mapping = sensor_mapping.get("investitionen", {}) or {}
-        quellen = sensor_mapping.get("quellen") or {}
+        quellen_energy = extract_quellen_energy(anlage)
 
         def _hat_quelle(inv_id: int, feld: str) -> bool:
-            """Ist für dieses Feld IRGENDEINE Quelle eingerichtet?
-
-            Zwei Ablagen, beide zählen: ``felder`` trägt die HA-Sensor-
-            Zuordnung, ``quellen`` die feld-zentrische Zuordnung der
-            Datenquellen-Fläche (MQTT, Connector). Nur ``felder`` zu prüfen
-            hieße, jeden MQTT-Nutzer falsch zu melden — derselbe Fehler, den der
-            Klima-Modus-Check schon einmal gemacht hat.
-            """
-            eintrag = mapping.get(str(inv_id))
-            if isinstance(eintrag, dict):
-                m = (eintrag.get("felder") or {}).get(feld)
-                if isinstance(m, dict) and m.get("strategie") == "sensor" and m.get("sensor_id"):
-                    return True
-            eintrag_q = quellen.get(f"inv_energy_{inv_id}_{feld}")
-            if isinstance(eintrag_q, dict):
-                quelle = eintrag_q.get("quelle")
-                # „keine" ist eine ausdrückliche Absage, keine Zuordnung.
-                if quelle and quelle != "keine":
-                    return True
-            return False
+            """Trägt dieses Feld einen kumulativen Zähler — über welchen Weg auch
+            immer? EINE Antwort für alle Frager: `keys.feld_hat_zaehler`."""
+            felder = ((mapping.get(str(inv_id), {}) or {}).get("felder", {}) or {})
+            return feld_hat_zaehler(
+                felder.get(feld), f"inv:{inv_id}:{feld}", quellen_energy, mqtt_zaehler,
+            )
 
         ergebnisse: list[CheckErgebnis] = []
         for inv in speicher:
