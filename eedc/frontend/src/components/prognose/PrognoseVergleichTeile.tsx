@@ -17,7 +17,7 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Sun, CloudSun, Cloud, CloudRain, CloudSnow, CloudLightning, BarChart3 } from 'lucide-react'
-import { Button, Card, ChartLegende, Checkbox, SegmentControl, buttonClasses, Table, TableHead, TableBody, TableFoot } from '../ui'
+import { Button, Card, ChartLegende, Checkbox, SegmentControl, buttonClasses, Table, TableHead, TableBody, TableFoot, MobilKarte, MobilKarten, TabelleAbSm } from '../ui'
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { SimpleTooltip } from '../ui/FormelTooltip'
 import { useLegendenToggle } from '../../hooks'
@@ -395,63 +395,20 @@ function WetterIcon({ symbol, className = 'h-5 w-5' }: { symbol: string; classNa
 function formatDatum(datum: string): string {
   return new Date(datum).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })
 }
-/**
- * Tabelle ab `sm` — darunter übernimmt die Kartenliste daneben (N-127).
+/*
+ * ⭐ N-149: `TabelleAbSm` / `MobilKarten` / `MobilKarte` standen bis zum
+ * 2026-08-29 HIER als lokale Komponenten — und waren damit der einzige Ort im
+ * Baum, an dem das Muster überhaupt eine Komponente war; drei weitere Stellen
+ * bauten es von Hand nach. Sie sind jetzt der SoT `components/ui/MobilKarte`
+ * (Regel 0a Fall 2) und werden oben importiert.
  *
- * Vorher stand hier `DatendichtFallback`: unter `sm` ersetzte er die Tabelle
- * durch einen Hinweiskasten („bitte Gerät ins Querformat drehen oder Desktop
- * verwenden"), und im Querformat durch „Auflösung zu gering". Der Inhalt war
- * auf dem Handy also **gar nicht** erreichbar — und genau das ist die Regel
- * (Gernot, 2026-05-31): **nichts wird auf Mobile unerreichbar, nur
- * de-priorisiert.** Kein Wrapper, der Inhalt wegblendet.
- * Das Muster dafür gab es im Baum längst — eine Datenliste, zwei Render-Pfade
- * (`PVStringVergleich`, `KomponentenFinanzTabelle`, `TKonto`).
+ * Die Regel dahinter bleibt unverändert: Vorher stand an dieser Stelle
+ * `DatendichtFallback` — unter `sm` ersetzte er die Tabelle durch einen
+ * Hinweiskasten („bitte Gerät ins Querformat drehen oder Desktop verwenden"),
+ * im Querformat durch „Auflösung zu gering". Der Inhalt war auf dem Handy also
+ * **gar nicht** erreichbar — und genau das schließt M1 aus (Gernot,
+ * 2026-05-31): **nichts wird auf Mobile unerreichbar, nur de-priorisiert.**
  */
-function TabelleAbSm({ children }: { children: React.ReactNode }) {
-  return <div className="hidden sm:block">{children}</div>
-}
-
-/** Kartenliste unter `sm` — die mobile Hälfte derselben Datenliste. */
-function MobilKarten({ children }: { children: React.ReactNode }) {
-  return <div className="sm:hidden space-y-2">{children}</div>
-}
-
-interface KartenZeile {
-  label: React.ReactNode
-  wert: React.ReactNode
-  /** Farbklasse der Quelle — dieselbe wie ihre Tabellenspalte. */
-  klasse?: string
-  /** Zusatz unter dem Wert (Δ, VM/NM, Band) — klein und grau. */
-  zusatz?: React.ReactNode
-}
-
-/** Eine Karte = eine Tabellenzeile der Breitansicht, hochkant gelesen. */
-function MobilKarte({ titel, kopfWert, zeilen, rahmenKlasse = '' }: {
-  titel: React.ReactNode
-  kopfWert?: React.ReactNode
-  zeilen: KartenZeile[]
-  rahmenKlasse?: string
-}) {
-  return (
-    <div className={`rounded-lg border border-gray-200 dark:border-gray-700 p-3 ${rahmenKlasse}`}>
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-medium text-gray-900 dark:text-white">{titel}</span>
-        {kopfWert}
-      </div>
-      <dl className="mt-2 space-y-1 text-sm">
-        {zeilen.map((z, i) => (
-          <div key={i} className="flex items-baseline justify-between gap-3">
-            <dt className={`shrink-0 ${z.klasse || 'text-gray-500 dark:text-gray-400'}`}>{z.label}</dt>
-            <dd className="text-right tabular-nums text-gray-700 dark:text-gray-300">
-              {z.wert}
-              {z.zusatz && <span className="ml-1.5">{z.zusatz}</span>}
-            </dd>
-          </div>
-        ))}
-      </dl>
-    </div>
-  )
-}
 function IstUnvollstaendigPopover({ fehlendeStunden, anlageId, onReloaded }: { fehlendeStunden: number[]; anlageId: number; onReloaded: () => void }) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)

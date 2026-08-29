@@ -36,7 +36,8 @@
     "check:park-leertest": "node scripts/park-leertest.mjs",
     "check:charts": "node scripts/check-charts.mjs",
     "check:chart-audit": "node scripts/chart-audit.mjs",
-    "check:sperre-fetch": "node scripts/check-sperre-fetch.mjs"
+    "check:sperre-fetch": "node scripts/check-sperre-fetch.mjs",
+    "check:mobilkarte": "node scripts/check-mobilkarte.mjs"
   },
   "dependencies": {
     "@mdi/js": "^7.4.47",

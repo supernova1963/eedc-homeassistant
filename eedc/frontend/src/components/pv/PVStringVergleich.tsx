@@ -13,7 +13,7 @@ import {
   ComposedChart, Line, Area, LabelList
 } from 'recharts'
 import { Sun, TrendingUp, TrendingDown, AlertTriangle, Calendar, BarChart3 } from 'lucide-react'
-import { Card, LoadingSpinner, Alert, KPICard, ChartLegende, Table, TableHead, TableBody, TableFoot, Select } from '../ui'
+import { Card, LoadingSpinner, Alert, KPICard, ChartLegende, Table, TableHead, TableBody, TableFoot, Select, MobilKarte, MobilKarten } from '../ui'
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import ChartTooltip from '../ui/ChartTooltip'
 import { useLegendenToggle } from '../../hooks'
@@ -492,42 +492,95 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
       <Parkbar id="tabelle:pv-strings" titel="Einzelne Strings / Module">
       <Sektion embed={embed} icon={BarChart3} farbe="text-gray-500" titel="Einzelne Strings / Module (Gesamtlaufzeit)"
         hinweis={hatPrognose ? PERFORMANCE_ERKLAERUNG : 'Für den Vergleich der Dächer untereinander zählt kWh/kWp, für das Gewicht am Gesamtertrag die Spalte „Anteil".'}>
-        {/* Mobil (< sm): Karten je String/Modul statt Tabelle — Muster wie
-            Cockpit-Energiebilanz (eine Datenliste, zwei Render-Pfade). */}
-        <div className="sm:hidden space-y-2">
+        {/* Mobil (< sm): Karten je String/Modul statt Tabelle — Kanon „eine
+            Datenliste, zwei Render-Pfade" (KONZEPT-MOBILE §M3).
+            ⭐ N-149: bis 2026-08-29 hier von Hand nachgebaut; jetzt über den SoT
+            `components/ui/MobilKarte`. Zwei Spalten, Werte wie zuvor. */}
+        <MobilKarten>
           {data.strings.map((s, idx) => (
-            <div key={s.investition_id} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: STRING_COLORS[idx % STRING_COLORS.length] }} />
-                <span className="font-medium text-gray-900 dark:text-white truncate">{s.bezeichnung}</span>
-                {hatPrognose && <span className="ml-auto shrink-0"><PerformanceBadge ratio={s.performance_ratio_gesamt} /></span>}
-              </div>
-              {s.wechselrichter_name && <p className="text-xs text-gray-500 ml-5">→ {s.wechselrichter_name}</p>}
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-sm">
-                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">kWp</dt><dd className="text-gray-700 dark:text-gray-300 tabular-nums">{fmtZahl(s.leistung_kwp, 1)}</dd></div>
-                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">Ausrichtung</dt><dd className="text-gray-700 dark:text-gray-300">{s.ausrichtung || '-'}{s.neigung_grad != null && ` / ${s.neigung_grad}°`}</dd></div>
-                {hatPrognose && <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">SOLL</dt><dd className="text-blue-600 dark:text-blue-400 tabular-nums">{fmtZahl(s.prognose_gesamt_kwh / 1000, 1)} MWh</dd></div>}
-                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">IST</dt><dd className="font-medium tabular-nums" style={{ color: STRING_COLORS[idx % STRING_COLORS.length] }}>{fmtZahl(s.ist_gesamt_kwh / 1000, 1)} MWh</dd></div>
-                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">Anteil</dt><dd className="text-gray-700 dark:text-gray-300 tabular-nums">{anteilText(s.ist_gesamt_kwh, data.ist_gesamt_kwh)}</dd></div>
-                {hatPrognose && <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">Abw.</dt><dd className={`tabular-nums ${(s.abweichung_gesamt_prozent ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>{(s.abweichung_gesamt_prozent ?? 0) >= 0 ? '+' : ''}{s.abweichung_gesamt_prozent != null ? fmtZahl(s.abweichung_gesamt_prozent, 1) : '0'} %</dd></div>}
-                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">kWh/kWp</dt><dd className="text-gray-700 dark:text-gray-300 tabular-nums">{s.spezifischer_ertrag_kwh_kwp != null ? fmtZahl(s.spezifischer_ertrag_kwh_kwp, 0) : '-'}</dd></div>
-              </dl>
-            </div>
+            <MobilKarte
+              key={s.investition_id}
+              spalten={2}
+              titel={
+                <span className="flex items-center gap-2 min-w-0">
+                  <span
+                    className="w-3 h-3 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: STRING_COLORS[idx % STRING_COLORS.length] }}
+                  />
+                  <span className="truncate">{s.bezeichnung}</span>
+                </span>
+              }
+              kopfWert={hatPrognose ? <PerformanceBadge ratio={s.performance_ratio_gesamt} /> : undefined}
+              unterzeile={s.wechselrichter_name ? `→ ${s.wechselrichter_name}` : undefined}
+              zeilen={[
+                { label: 'kWp', wert: fmtZahl(s.leistung_kwp, 1) },
+                {
+                  label: 'Ausrichtung',
+                  wert: `${s.ausrichtung || '-'}${s.neigung_grad != null ? ` / ${s.neigung_grad}°` : ''}`,
+                },
+                ...(hatPrognose
+                  ? [{
+                      label: 'SOLL',
+                      wert: `${fmtZahl(s.prognose_gesamt_kwh / 1000, 1)} MWh`,
+                      wertKlasse: 'text-blue-600 dark:text-blue-400',
+                    }]
+                  : []),
+                {
+                  label: 'IST',
+                  wert: `${fmtZahl(s.ist_gesamt_kwh / 1000, 1)} MWh`,
+                  wertKlasse: 'font-medium',
+                  wertStil: { color: STRING_COLORS[idx % STRING_COLORS.length] },
+                },
+                { label: 'Anteil', wert: anteilText(s.ist_gesamt_kwh, data.ist_gesamt_kwh) },
+                ...(hatPrognose
+                  ? [{
+                      label: 'Abw.',
+                      wert: `${(s.abweichung_gesamt_prozent ?? 0) >= 0 ? '+' : ''}${s.abweichung_gesamt_prozent != null ? fmtZahl(s.abweichung_gesamt_prozent, 1) : '0'} %`,
+                      wertKlasse: (s.abweichung_gesamt_prozent ?? 0) >= 0 ? 'text-green-600' : 'text-red-600',
+                    }]
+                  : []),
+                {
+                  label: 'kWh/kWp',
+                  wert: s.spezifischer_ertrag_kwh_kwp != null ? fmtZahl(s.spezifischer_ertrag_kwh_kwp, 0) : '-',
+                },
+              ]}
+            />
           ))}
           {/* Summenkarte — dasselbe Datenpaar wie der Tabellenfuß (R22-3). */}
           {data.strings.length > 1 && (
-            <div className="rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/60 p-3">
-              <span className="font-medium text-gray-900 dark:text-white">Gesamt</span>
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-sm">
-                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">kWp</dt><dd className="text-gray-700 dark:text-gray-300 tabular-nums">{fmtZahl(data.anlagen_leistung_kwp, 1)}</dd></div>
-                {hatPrognose && <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">SOLL</dt><dd className="text-blue-600 dark:text-blue-400 tabular-nums">{fmtZahl(data.prognose_gesamt_kwh / 1000, 1)} MWh</dd></div>}
-                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">IST</dt><dd className="font-medium text-gray-900 dark:text-white tabular-nums">{fmtZahl(data.ist_gesamt_kwh / 1000, 1)} MWh</dd></div>
-                {hatPrognose && <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">Abw.</dt><dd className={`tabular-nums ${(data.abweichung_gesamt_prozent ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>{(data.abweichung_gesamt_prozent ?? 0) >= 0 ? '+' : ''}{data.abweichung_gesamt_prozent != null ? fmtZahl(data.abweichung_gesamt_prozent, 1) : '0'} %</dd></div>}
-                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">kWh/kWp</dt><dd className="text-gray-700 dark:text-gray-300 tabular-nums">{data.anlagen_leistung_kwp > 0 ? fmtZahl(data.ist_gesamt_kwh / data.anlagen_leistung_kwp, 0) : '—'}</dd></div>
-              </dl>
-            </div>
+            <MobilKarte
+              spalten={2}
+              rahmenKlasse="border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/60"
+              titel="Gesamt"
+              zeilen={[
+                { label: 'kWp', wert: fmtZahl(data.anlagen_leistung_kwp, 1) },
+                ...(hatPrognose
+                  ? [{
+                      label: 'SOLL',
+                      wert: `${fmtZahl(data.prognose_gesamt_kwh / 1000, 1)} MWh`,
+                      wertKlasse: 'text-blue-600 dark:text-blue-400',
+                    }]
+                  : []),
+                {
+                  label: 'IST',
+                  wert: `${fmtZahl(data.ist_gesamt_kwh / 1000, 1)} MWh`,
+                  wertKlasse: 'font-medium text-gray-900 dark:text-white',
+                },
+                ...(hatPrognose
+                  ? [{
+                      label: 'Abw.',
+                      wert: `${(data.abweichung_gesamt_prozent ?? 0) >= 0 ? '+' : ''}${data.abweichung_gesamt_prozent != null ? fmtZahl(data.abweichung_gesamt_prozent, 1) : '0'} %`,
+                      wertKlasse: (data.abweichung_gesamt_prozent ?? 0) >= 0 ? 'text-green-600' : 'text-red-600',
+                    }]
+                  : []),
+                {
+                  label: 'kWh/kWp',
+                  wert: data.anlagen_leistung_kwp > 0 ? fmtZahl(data.ist_gesamt_kwh / data.anlagen_leistung_kwp, 0) : '—',
+                },
+              ]}
+            />
           )}
-        </div>
+        </MobilKarten>
 
         {/* Desktop (≥ sm): Tabelle */}
         <Table aussenClassName="hidden sm:block">

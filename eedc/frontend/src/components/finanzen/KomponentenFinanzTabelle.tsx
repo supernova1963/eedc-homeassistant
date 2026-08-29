@@ -26,7 +26,7 @@
  * an den Spaltenköpfen die Spalten-Semantik, an den Zeilen die Herleitung
  * (`ersparnis_label` + `formel` + `berechnung`).
  */
-import { fmtCalc } from '../ui'
+import { fmtCalc, MobilKarte, MobilKarten } from '../ui'
 import { Table, TableHead, TableBody, TableFoot } from '../ui/Table'
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { GELD_TEXT_CLASS, compareTyp } from '../../lib'
@@ -220,30 +220,42 @@ export function KomponentenFinanzTabelle({ d, zeitraum = 'monat' }: {
         </TableFoot>
       </Table>
 
-      {/* ── Mobil: Regel-T-Stapelmuster (wie TKonto) — je Komponente eine Karte ── */}
-      <div className="sm:hidden space-y-2">
+      {/* ── Mobil: je Komponente eine Karte — Kanon „eine Datenliste, zwei
+             Render-Pfade" (KONZEPT-MOBILE §M3).
+             ⭐ N-149: bis 2026-08-29 hier von Hand nachgebaut; jetzt über den SoT
+             `components/ui/MobilKarte`, drei Spalten und dicht wie zuvor.
+             ⚠ Der frühere Kommentar nannte das „Regel-T-Stapelmuster (wie
+             TKonto)" — das war schon damals falsch: `TKonto` rendert mobil drei
+             Tabellen, keine Karten (am Code gemessen 2026-08-29). ── */}
+      <MobilKarten>
         {zeilen.map((z) => {
           const saldo = saldoVon(z)
           return (
-            <div key={z.key} className="rounded-lg border border-gray-200 dark:border-gray-700 p-2.5" title={z.tooltip}>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{z.label}</span>
-                <span className={`text-sm font-semibold tabular-nums ${saldoFarbe(saldo)}`}>{num(saldo)} €</span>
-              </div>
-              {z.hinweis && <span className="block text-xs text-gray-400 dark:text-gray-500">{z.hinweis}</span>}
-              <dl className="mt-1.5 grid grid-cols-3 gap-1 text-xs">
-                <div><dt className="text-gray-400 dark:text-gray-500">Erträge</dt><dd className="tabular-nums text-gray-700 dark:text-gray-300">{z.ertraege ? num(z.ertraege) : '—'}</dd></div>
-                <div><dt className="text-gray-400 dark:text-gray-500">Einsparung</dt><dd className="tabular-nums text-gray-700 dark:text-gray-300">{z.einsparungen ? num(z.einsparungen) : '—'}</dd></div>
-                <div><dt className="text-gray-400 dark:text-gray-500">Aufwand</dt><dd className="tabular-nums text-gray-700 dark:text-gray-300">{z.aufwand ? num(z.aufwand) : '—'}</dd></div>
-              </dl>
-            </div>
+            <MobilKarte
+              key={z.key}
+              spalten={3}
+              dicht
+              tooltip={z.tooltip}
+              titel={<span className="text-sm text-gray-800 dark:text-gray-200">{z.label}</span>}
+              kopfWert={
+                <span className={`text-sm font-semibold tabular-nums ${saldoFarbe(saldo)}`}>
+                  {num(saldo)} €
+                </span>
+              }
+              unterzeile={z.hinweis}
+              zeilen={[
+                { label: 'Erträge', wert: z.ertraege ? num(z.ertraege) : '—', klasse: 'text-gray-400 dark:text-gray-500' },
+                { label: 'Einsparung', wert: z.einsparungen ? num(z.einsparungen) : '—', klasse: 'text-gray-400 dark:text-gray-500' },
+                { label: 'Aufwand', wert: z.aufwand ? num(z.aufwand) : '—', klasse: 'text-gray-400 dark:text-gray-500' },
+              ]}
+            />
           )
         })}
         <div className="rounded-lg border-2 border-gray-300 dark:border-gray-600 p-2.5 flex items-center justify-between">
           <span className="text-xs font-bold uppercase tracking-wide text-gray-600 dark:text-gray-300">Summe (Saldo)</span>
           <span className={`text-sm font-bold tabular-nums ${saldoFarbe(gesamtSaldo)}`}>{num(gesamtSaldo)} €</span>
         </div>
-      </div>
+      </MobilKarten>
 
       {/* ── G20-4: Haushaltsperspektive (zweite Sicht, NICHT Teil des Komponenten-Saldos) ──
           Transparente Zusatz-Rechnung: Komponenten-Saldo − Stromrechnung (Netzbezug-Kosten)
