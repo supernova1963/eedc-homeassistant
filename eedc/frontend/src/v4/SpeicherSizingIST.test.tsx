@@ -185,4 +185,68 @@ describe('SpeicherSizingIST', () => {
     await waitFor(() => expect(melde).toHaveBeenCalled())
     expect(melde).toHaveBeenLastCalledWith([])
   })
+
+  // ── N-274 (MeinerB, Discussion #380) ──────────────────────────────────────
+  // Bernds Fall: 3,2 kWh Nachrüstung für 1.000 € (312 €/kWh) statt der
+  // angenommenen 1.600 €. An der Zahl hängt das Urteil „rechnet sich nicht".
+
+  it('bietet ein Preisfeld an und nennt den Richtwert als Vorgabe', async () => {
+    vi.spyOn(investitionenApi, 'getSpeicherSizing').mockResolvedValue(ANTWORT())
+
+    render(<SpeicherSizingIST anlageId={1} />)
+
+    const feld = await screen.findByLabelText(/Preis je kWh/i)
+    expect(feld).toHaveValue(null)
+    expect(screen.getByText(/Leer = Richtwert 500 €\/kWh/i)).toBeInTheDocument()
+  })
+
+  it('⚑ GEGENPROBE: der eingegebene Preis erreicht die Route', async () => {
+    // Der eigentliche Wächter. Ein Test, der nur prüft, dass das Feld den Wert
+    // ANZEIGT, bliebe grün, wenn der Preis nie abgeschickt wird — dieselbe
+    // Bauform wie beim ersten W1-Wächter (29.08.): ein Prüfer, der bei
+    // zurückgebautem Fix grün bleibt, hat nichts gemessen.
+    const spy = vi.spyOn(investitionenApi, 'getSpeicherSizing').mockResolvedValue(ANTWORT())
+
+    render(<SpeicherSizingIST anlageId={1} />)
+    const feld = await screen.findByLabelText(/Preis je kWh/i)
+
+    // Erster Abruf: ohne Preis — die Vorgabe darf sich nicht verschieben.
+    expect(spy).toHaveBeenLastCalledWith(1, undefined, undefined, undefined)
+
+    fireEvent.change(feld, { target: { value: '312' } })
+
+    await waitFor(() =>
+      expect(spy).toHaveBeenLastCalledWith(1, undefined, undefined, 312),
+    )
+  })
+
+  it('leert der Anwender das Feld, gilt wieder der Richtwert', async () => {
+    const spy = vi.spyOn(investitionenApi, 'getSpeicherSizing').mockResolvedValue(ANTWORT())
+
+    render(<SpeicherSizingIST anlageId={1} />)
+    const feld = await screen.findByLabelText(/Preis je kWh/i)
+
+    fireEvent.change(feld, { target: { value: '312' } })
+    await waitFor(() => expect(spy).toHaveBeenLastCalledWith(1, undefined, undefined, 312))
+
+    fireEvent.change(feld, { target: { value: '' } })
+    await waitFor(() => expect(spy).toHaveBeenLastCalledWith(1, undefined, undefined, undefined))
+  })
+
+  it('schickt keinen Preis los, den die Route ablehnen würde', async () => {
+    // 0 und negative Werte weist die Route mit 422 ab (gt=0). Eine Zwischen-
+    // eingabe darf keinen Fehlversuch auslösen — und „0" darf nicht als
+    // „kein Wert" durchrutschen (die 0-Werte-Falle in der Gegenrichtung).
+    const spy = vi.spyOn(investitionenApi, 'getSpeicherSizing').mockResolvedValue(ANTWORT())
+
+    render(<SpeicherSizingIST anlageId={1} />)
+    const feld = await screen.findByLabelText(/Preis je kWh/i)
+    spy.mockClear()
+
+    fireEvent.change(feld, { target: { value: '0' } })
+    fireEvent.change(feld, { target: { value: '-5' } })
+    fireEvent.change(feld, { target: { value: '99999' } })
+
+    expect(spy).not.toHaveBeenCalled()
+  })
 })

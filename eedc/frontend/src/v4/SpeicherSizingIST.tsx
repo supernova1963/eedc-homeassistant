@@ -26,7 +26,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { CartesianGrid, Line, LineChart, ReferenceLine, Tooltip, XAxis, YAxis } from 'recharts'
 import { BatteryFull, Euro, PiggyBank } from 'lucide-react'
 import { Parkbar } from '../components/park'
-import { Alert, KPICard, Slider } from '../components/ui'
+import { Alert, Input, KPICard, Slider } from '../components/ui'
 import { eedcTooltipProps } from '../components/ui/eedcTooltip'
 import { ChartContainer } from '../components/charts'
 import { investitionenApi, type SizingPunkt, type SpeicherSizingResponse } from '../api/investitionen'
@@ -35,21 +35,90 @@ import { useSchmaleAchse } from '../hooks'
 import type { MeldeFn } from './komponentenAnalyse'
 import type { Investition } from '../types'
 
-function useSpeicherSizing(anlageId: number) {
+function useSpeicherSizing(anlageId: number, preis?: number) {
   const [daten, setDaten] = useState<SpeicherSizingResponse | null>(null)
-  const [laedt, setLaedt] = useState(true)
+  // ⛔ NUR die ERSTE Ladung blendet den Block aus — ein Nachladen NICHT.
+  //
+  // Der erste Entwurf setzte `laedt` bei jedem Abruf auf true. Damit ersetzte
+  // die Sicht sich bei JEDEM Tastendruck im Preisfeld durch „Lade…", das
+  // Eingabefeld wurde ausgehängt und der Anwender verlor nach dem ersten
+  // Zeichen den Fokus. Gefunden am 2026-08-29 von der Probe „leert der
+  // Anwender das Feld, gilt wieder der Richtwert" — sie schlug fehl, weil ihr
+  // DOM-Knoten zwischendurch verschwand. Ein Bedienfehler, den kein
+  // Typ-Check und kein Backend-Test sieht.
+  //
+  // Stattdessen: die vorherige Antwort bleibt stehen, bis die neue da ist. Die
+  // Zahlen sind dann für einen Wimpernschlag die zum vorigen Preis — das ist
+  // sichtbar (der Regler und die Kurve bewegen sich), und es ist allemal besser
+  // als ein Feld, in das sich nicht tippen lässt.
+  const [erstLadung, setErstLadung] = useState(true)
 
   useEffect(() => {
     let ab = false
-    setLaedt(true)
-    investitionenApi.getSpeicherSizing(anlageId)
+    investitionenApi.getSpeicherSizing(anlageId, undefined, undefined, preis)
       .then((d) => { if (!ab) setDaten(d) })
       .catch(() => { if (!ab) setDaten(null) })
-      .finally(() => { if (!ab) setLaedt(false) })
+      .finally(() => { if (!ab) setErstLadung(false) })
     return () => { ab = true }
-  }, [anlageId])
+  }, [anlageId, preis])
 
-  return { daten, laedt }
+  return { daten, laedt: erstLadung }
+}
+
+/**
+ * Eigener Nachrüstpreis neben dem Regler (N-274, MeinerB #380).
+ *
+ * ⚑ **Warum das Feld hier steht und nicht in den Einstellungen der Komponente:**
+ * An der Amortisation hängt ein **Urteil** — unter 15 Jahren „amortisiert in gut
+ * X Jahren", darüber „das rechnet sich nicht". Bis 2026-08-29 rechnete sie
+ * ausnahmslos mit dem Richtwert von 500 €/kWh; wer zu 312 €/kWh nachrüstet, sah
+ * eine 1,6-fach zu lange Amortisation und damit womöglich „rechnet sich nicht"
+ * für etwas, das sich zu seinem Preis rechnet.
+ *
+ * ⛔ **Der Wert wird bewusst NICHT gespeichert** (Entscheid Gernot 2026-08-18:
+ * „flüchtiger Wert neben dem Slider"). Es ist eine Was-wäre-wenn-Annahme zur
+ * *Frage*, keine *Eigenschaft* des Geräts — anders als die graue CO₂-Last, die
+ * zu Recht ein Override-Feld an der Investition hat.
+ *
+ * ⛔ **Und der Client rechnet nicht damit** (ADR-001): der Preis geht als
+ * Parameter zurück an die Route, die Zahlen kommen aus `core/berechnungen/`.
+ * Eine Nachrechnung hier wäre eine zweite Rechenstelle — genau die Bauform, aus
+ * der die Zahlenpaare entstehen, die auf einer Seite nicht zusammenpassen.
+ */
+function PreisFeld({ wert, richtwert, onChange }: {
+  wert: number | null
+  richtwert: number
+  onChange: (v: number | null) => void
+}) {
+  const [roh, setRoh] = useState(wert == null ? '' : String(wert))
+
+  return (
+    <Input
+      id="sizing-preis"
+      type="number"
+      inputMode="decimal"
+      min={1}
+      max={5000}
+      step={10}
+      label="Preis je kWh Nachrüstung"
+      value={roh}
+      placeholder={fmtZahl(richtwert, 0)}
+      hint={
+        roh === ''
+          ? `Leer = Richtwert ${fmtZahl(richtwert, 0)} €/kWh. Kennen Sie Ihren Preis, tragen Sie ihn ein — er wird nicht gespeichert.`
+          : 'Nur für diese Überlegung — der Wert wird nicht gespeichert.'
+      }
+      onChange={(ev) => {
+        const s = ev.target.value
+        setRoh(s)
+        if (s === '') { onChange(null); return }
+        const n = Number(s)
+        // Nur uebernehmen, was die Route auch annimmt (> 0, ≤ 5000) — sonst
+        // schickt jede Zwischeneingabe eine 422 los.
+        if (Number.isFinite(n) && n > 0 && n <= 5000) onChange(n)
+      }}
+    />
+  )
 }
 
 /** Der Satz, der die Kurve beantwortet — ohne ihn ist „49 €" nur eine Zahl. */
@@ -269,7 +338,9 @@ function SizingKurve({ d }: { d: SpeicherSizingResponse }) {
 
 /** Block „Größerer Speicher?" des Speicher-Hubs: die Sizing-Frage in Euro. */
 export function SpeicherSizingIST({ anlageId, melde }: { anlageId: number; inv?: Investition; melde?: MeldeFn }) {
-  const { daten, laedt } = useSpeicherSizing(anlageId)
+  // N-274: eigener Nachrüstpreis, flüchtig — nur in diesem Zustand, nirgends abgelegt.
+  const [preis, setPreis] = useState<number | null>(null)
+  const { daten, laedt } = useSpeicherSizing(anlageId, preis ?? undefined)
   // Index in die gelieferte Kurve — der Regler fragt nie nach, er liest.
   const [index, setIndex] = useState<number | null>(null)
   const leer = laedt || !daten || daten.kurve.length === 0
@@ -323,6 +394,14 @@ export function SpeicherSizingIST({ anlageId, melde }: { anlageId: number; inv?:
               onChange={setIndex}
               ariaLabel="Speicher-Kapazität in Prozent der heutigen"
             />
+          </div>
+
+          {/* Zweites Stellrad derselben Frage: der Regler setzt die MENGE, das
+              Feld den PREIS. Beide gehören zur Was-wäre-wenn-Überlegung, keines
+              davon zum Gerät — deshalb stehen sie nebeneinander und nicht in den
+              Einstellungen (N-274). */}
+          <div className="sm:max-w-xs">
+            <PreisFeld wert={preis} richtwert={daten.richtpreis_eur_je_kwh} onChange={setPreis} />
           </div>
 
           <Befund d={daten} punkt={gewaehlt} />

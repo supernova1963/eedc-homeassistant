@@ -159,6 +159,7 @@ async def lade_sizing_auswertung(
     anlage_id: int,
     von: Optional[date] = None,
     bis: Optional[date] = None,
+    richtpreis_eur_je_kwh: Optional[float] = None,
 ) -> SizingAuswertung:
     """Baut die Sizing-Kurve für eine Anlage.
 
@@ -168,7 +169,17 @@ async def lade_sizing_auswertung(
     wird mit den gepflegten Parametern gerechnet — und die Antwort sagt es über
     `basis_kalibriert`, damit die Sicht die Unsicherheit ausweisen kann, statt
     stillschweigend eine andere Grundlage zu verwenden.
+
+    ``richtpreis_eur_je_kwh`` ist der Nachrüstpreis, mit dem die Amortisation
+    einer gedachten Erweiterung bewertet wird. ``None`` heißt „nimm den
+    Richtwert" (:data:`RICHTPREIS_EUR_JE_KWH`); ein übergebener Wert ist die
+    **eigene Zahl des Anwenders** und wird nirgends gespeichert — er gehört zur
+    Frage, nicht zum Gerät (Entscheid Gernot 2026-08-18, N-274: „flüchtiger Wert
+    neben dem Slider"). Deshalb ist er ein Parameter und kein Feld an der
+    Investition: die graue CO₂-Last ist eine **Eigenschaft** des Geräts und hat
+    zu Recht ein Override-Feld, ein Was-wäre-wenn-Preis ist es nicht.
     """
+    preis = RICHTPREIS_EUR_JE_KWH if richtpreis_eur_je_kwh is None else richtpreis_eur_je_kwh
     query = (
         select(TagesEnergieProfil)
         .where(TagesEnergieProfil.anlage_id == anlage_id)
@@ -205,7 +216,7 @@ async def lade_sizing_auswertung(
         tage_mit_daten=0, tage_simuliert=0, von=None, bis=None,
         anzahl_speicher=len(speicher),
         bezug_preis_cent=bezug_cent, einspeise_verg_cent=einspeise_cent,
-        richtpreis_eur_je_kwh=RICHTPREIS_EUR_JE_KWH,
+        richtpreis_eur_je_kwh=preis,
     )
     if not zeilen:
         return leer
@@ -244,7 +255,7 @@ async def lade_sizing_auswertung(
         bezug_preis_cent=bezug_cent,
         einspeise_verg_cent=einspeise_cent,
         tage_im_zeitraum=tage_simuliert,
-        richtpreis_eur_je_kwh=RICHTPREIS_EUR_JE_KWH,
+        richtpreis_eur_je_kwh=preis,
     )
     kurve = (
         sizing_kurve(simulierbar, basis, SIZING_FAKTOREN, bewertung=bewertung)
@@ -267,7 +278,7 @@ async def lade_sizing_auswertung(
         anzahl_speicher=len(speicher),
         bezug_preis_cent=bezug_cent,
         einspeise_verg_cent=einspeise_cent,
-        richtpreis_eur_je_kwh=RICHTPREIS_EUR_JE_KWH,
+        richtpreis_eur_je_kwh=preis,
     )
 
 

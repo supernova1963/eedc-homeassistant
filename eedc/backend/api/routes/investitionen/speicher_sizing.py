@@ -120,14 +120,44 @@ async def get_speicher_sizing(
     anlage_id: int,
     von: Optional[date] = Query(None, description="Erster Tag (Vorgabe: gesamte Historie)"),
     bis: Optional[date] = Query(None, description="Letzter Tag"),
+    richtpreis_eur_je_kwh: Optional[float] = Query(
+        None, gt=0, le=5000,
+        description=(
+            "Eigener Nachrüstpreis je kWh nutzbarer Kapazität. Leer = Richtwert. "
+            "Wird NICHT gespeichert."
+        ),
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     """Simuliert die reale Stundenreihe mit 50 % bis 200 % der heutigen Kapazität.
 
     Die Kurve kommt vollständig in **einer** Antwort: der Slider in der Sicht
     liest daraus und fragt nicht bei jedem Schritt nach.
+
+    ⚑ **N-274 (MeinerB, #380).** An der Amortisation hängt ein **Urteil** — unter
+    15 Jahren „amortisiert in gut X Jahren", darüber „das rechnet sich nicht".
+    Bis 2026-08-29 rechnete sie ausnahmslos mit dem Richtwert von 500 €/kWh, und
+    es gab **keinen** Weg, eine eigene Zahl einzusetzen: kein Feld, keine Spalte,
+    kein Parameter. Wer zu 312 €/kWh nachrüstet, bekam eine 1,6-fach zu lange
+    Amortisation angezeigt — und damit unter Umständen das Urteil „rechnet sich
+    nicht" für etwas, das sich zu seinem Preis rechnet.
+
+    ⛔ **Bewusst ein Query-Parameter und kein gespeichertes Feld** (Entscheid
+    Gernot 2026-08-18: „flüchtiger Wert neben dem Slider"): Das ist eine
+    Was-wäre-wenn-Annahme zur *Frage*, keine *Eigenschaft* des Geräts. Ein
+    DB-Feld würde eine Zahl dauerhaft festschreiben, die nur zu dieser einen
+    Überlegung gehört — und ein zweiter Speicher hätte sie geerbt.
+
+    ⛔ **Und bewusst hier gerechnet, nicht im Client**, obwohl die Antwort alles
+    dafür enthielte (`kapazitaet_kwh`, `basis_kapazitaet_kwh`,
+    `nutzen_euro_jahr`): eine zweite Rechenstelle neben `core/berechnungen/`
+    wäre gegen ADR-001, und genau daraus entstehen die Zahlenpaare, die auf
+    einer Seite nicht zusammenpassen.
     """
-    a = await lade_sizing_auswertung(db, anlage_id, von=von, bis=bis)
+    a = await lade_sizing_auswertung(
+        db, anlage_id, von=von, bis=bis,
+        richtpreis_eur_je_kwh=richtpreis_eur_je_kwh,
+    )
 
     return SpeicherSizingResponse(
         kurve=[
