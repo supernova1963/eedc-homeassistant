@@ -79,7 +79,12 @@ const ROH_INFRA = new Map([
   ['src/components/ui/KPICard.tsx', 1],
   ['src/components/ui/Modal.tsx', 1],
   ['src/components/ui/RadioGroup.tsx', 1],
-  ['src/components/ui/SegmentControl.tsx', 1],
+  // 2 statt 1 seit N-267 (2026-08-29): die Datei traegt jetzt ZWEI SoTs —
+  // `SegmentControl` (Einfachauswahl) und `SegmentMehrfach` (Mehrfach,
+  // Wochentage eines Zeitfensters). Beide sind SoT-Implementierungen und
+  // duerfen ihr Control bauen; der Freeze zaehlt sie, statt die Datei
+  // freizustellen. Ein DRITTER Button hier waere wieder ein Befund.
+  ['src/components/ui/SegmentControl.tsx', 2],
   ['src/components/ui/Select.tsx', 1],
   ['src/components/ui/Slider.tsx', 1], // Schieberegler-SoT (2026-08-12, #358 Phase 3)
   ['src/components/ui/Stepper.tsx', 1],

@@ -229,6 +229,9 @@ export interface AktuellerMonatResponse {
 
   // Tarif-Info
   netzbezug_preis_cent: number | null
+  /** N-267: Ist der Preis daneben ein über die Stunden GEWICHTETER Wert
+   *  (Zeittarif HT/NT) statt des Arbeitspreises aus den Stammdaten? */
+  netzbezug_preis_zeittarif?: boolean
   einspeise_preis_cent: number | null
   netzbezug_durchschnittspreis_cent: number | null
   // G19-1 K3: Grundgebühr des Monats (steckt bereits in netzbezug_kosten_euro,

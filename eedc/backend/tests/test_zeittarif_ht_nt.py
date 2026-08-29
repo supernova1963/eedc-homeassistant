@@ -337,6 +337,37 @@ async def test_wz1c_die_emob_preisachse_ist_ebenfalls_eingehaengt(db):
 
 
 @pytest.mark.asyncio
+async def test_wz1d_cockpit_monat_ist_ebenfalls_eingehaengt(db):
+    """⭐ Die VIERTE Bildungsstelle — vom Konzept übersehen, beim Bau gefunden.
+
+    Das Konzept nannte drei Bildungsstellen; ``aktueller_monat.py`` bildet den
+    Preis eine Ebene darüber (``netzbezug_preis_effektiv_cent``) und war deshalb
+    in keiner Grep-Zählung. Aus ihm entstehen die **Netzbezugskosten**, die
+    **EV-Ersparnis** und das ausgelieferte Feld ``netzbezug_preis_cent``, das
+    das T-Konto anzeigt.
+
+    ⚑ Ohne diese Einhängung nennte Cockpit → **Monat** den Hochtarif, während
+    Cockpit → **Jahr** daneben den gewichteten Preis zeigt — zwei Zahlen auf
+    einer Seite, die v4.0.1-Klasse. *Eine Zählung aus einem Grep ist eine
+    Behauptung, kein Befund.*
+    """
+    from backend.api.routes.aktueller_monat import get_aktueller_monat
+
+    a, _ = await _anlage_mit_tarif(db, ht=30.0, fenster=[_fenster(19, 20, 15.0)])
+    await _stunden(db, a.id, [date(2026, 7, d) for d in range(1, 4)],
+                   {20: 1.0, 8: 1.0, 12: 1.0, 18: 1.0})
+    await factories.monatsdaten(db, a.id, 2026, 7, netzbezug_kwh=12.0, einspeisung_kwh=0.0)
+    await db.commit()
+
+    antwort = await get_aktueller_monat(a.id, jahr=2026, monat=7, db=db)
+
+    assert antwort.netzbezug_preis_cent == pytest.approx(26.25), (
+        "Cockpit → Monat muss denselben gewichteten Preis nennen wie Cockpit → Jahr"
+    )
+    assert antwort.netzbezug_kosten_euro == pytest.approx(12.0 * 26.25 / 100, abs=0.01)
+
+
+@pytest.mark.asyncio
 async def test_wz3_eine_anlage_ohne_fenster_bewegt_keine_zahl(db):
     """Der Nicht-Regressions-Beweis für den gesamten Bestand.
 

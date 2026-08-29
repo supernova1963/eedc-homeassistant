@@ -96,7 +96,11 @@ BASIS_FELDER = [
 # angezeigt wenn eine Anlage-Bedingung erfüllt ist.
 #
 # bedingung_basis:
-#   "dynamischer_tarif"    — Anlage hat einen dynamischen Stromtarif
+#   "dynamischer_tarif"    — Anlage hat einen dynamischen Stromtarif ODER einen
+#                            Zeittarif mit Fenstern (N-267). Beides stellt
+#                            dieselbe Frage: „welcher EINE Preis beschreibt
+#                            diesen Monat?" — deshalb dasselbe Feld und keine
+#                            zweite Bedingung. Der Name ist historisch.
 #   "variable_einspeisung" — der Tarif trägt „Einspeisevergütung wechselt
 #                            monatlich" (#392) — bewusst eine EIGENE Bedingung,
 #                            nicht `dynamischer_tarif`: gruaGits Fall ist fixer
@@ -113,7 +117,7 @@ BEDINGTE_BASIS_FELDER = [
         "bedingung_basis": "dynamischer_tarif",
         "mapping_key": "strompreis",
         "gruppe": "preise",
-        "hinweis": "Verbrauchsgewichteter Ø-Arbeitspreis des Monats (ct/kWh). Bei dynamischem Tarif sonst automatisch aus dem Strompreis-Sensor (Tibber/aWATTar/EPEX) berechnet.",
+        "hinweis": "Verbrauchsgewichteter Ø-Arbeitspreis des Monats (ct/kWh). Bei dynamischem Tarif sonst automatisch aus dem Strompreis-Sensor (Tibber/aWATTar/EPEX) berechnet; bei einem Zeittarif (HT/NT) aus deinen gemessenen Stundenwerten. Ohne Stundenwerte — etwa bei handgetragenen Monatswerten — rechnet eedc mit dem Preis aus den Stammdaten; dann ist dieses Feld der Weg zum tatsächlichen Ø.",
     },
     {
         "feld": "einspeise_durchschnittspreis_cent",

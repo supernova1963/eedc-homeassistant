@@ -495,8 +495,19 @@ class StammdatenChecks:
     # ─── Strompreise ─────────────────────────────────────────────────────
 
     def _check_strompreise(
-        self, anlage: Anlage, monatsdaten: list | None = None
+        self,
+        anlage: Anlage,
+        monatsdaten: list | None = None,
+        *,
+        hat_stundenwerte: bool = True,
     ) -> list[CheckErgebnis]:
+        """Prüfungen rund um die Tarifliste.
+
+        ``hat_stundenwerte`` (N-267) wird vom **async** Aufrufer erhoben und
+        hereingereicht — diese Methode bleibt bewusst synchron. Vorbelegung
+        ``True`` heißt „keine Meldung": ein unbekannter Zustand darf keinen
+        Hinweis erzeugen, den der Anwender nicht auflösen kann.
+        """
         ergebnisse: list[CheckErgebnis] = []
         kat = CheckKategorie.STROMPREISE
 
@@ -657,6 +668,37 @@ class StammdatenChecks:
                     start = tarif.gueltig_bis + timedelta(days=1)
                 else:
                     start = date.today()  # Offenes Ende = aktuell gültig
+
+        # ── Zeittarif ohne Stundenwerte (N-267) ─────────────────────────────
+        # Ein Zeitfenster wird über die GEMESSENEN Stundenwerte gewichtet. Wo es
+        # keine gibt — handgetragene Monate, kein zugeordneter Netzbezugs-Sensor
+        # —, rechnet eedc mit dem Hochtarif. Das ist die richtige Rechnung (nie
+        # erfunden), aber es ist zu viel, und ohne diesen Satz merkt es niemand:
+        # der Tarif ist gepflegt, die Fenster stehen da, und die Zahl sieht
+        # plausibel aus.
+        #
+        # ⛔ KEINE eigene Kategorie und KEIN zweiter Melder: der Hinweis haengt
+        # an der bestehenden Strompreis-Prüfung. Die fehlende Stundenabdeckung
+        # als solche meldet `_check_energieprofil_abdeckung` bereits — hier geht
+        # es um die FOLGE für den Preis, die dort nicht vorkommt (Tor 3, zweiter
+        # Ausgang: „meldet es, aber nennt die Folge nicht" ⇒ Fund am Text).
+        mit_fenstern = [t for t in tarife if getattr(t, "zeitfenster", None)]
+        if mit_fenstern and monatsdaten and not hat_stundenwerte:
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.WARNING,
+                meldung="Zeittarif hinterlegt, aber keine Stundenwerte vorhanden",
+                details=(
+                    "Ein Zeitfenster (HT/NT) wird über die gemessenen Stundenwerte "
+                    "gewichtet — die gibt es nur, wo der Netzbezug über einen "
+                    "zugeordneten Sensor läuft. Ohne sie rechnet eedc mit dem "
+                    "Arbeitspreis aus den Stammdaten, also mit dem Hochtarif: deine "
+                    "Stromkosten stehen damit zu hoch, und Ersparnis und "
+                    "Amortisation entsprechend zu niedrig. Zwei Wege: den Netzbezug "
+                    "als Sensor zuordnen, oder im Monatsabschluss unter „Ø Strompreis\" "
+                    "den Wert aus deiner Abrechnung eintragen — der schlägt beides."
+                ),
+                link="/einstellungen/datenquellen",
+            ))
 
         # ── Zwei Tarife derselben Verwendung mit IDENTISCHEM Gültig-ab ───────
         # B6 (#392-Rest, Prüfbericht 2026-08-22): `lade_tarife_fuer_anlage`

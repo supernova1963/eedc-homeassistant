@@ -242,6 +242,23 @@ export interface Strompreis {
   // #392: „Einspeisevergütung wechselt monatlich"
   einspeisung_variabel?: boolean
   verwendung: StrompreisVerwendung
+  // N-267: HT/NT-Zeitfenster (Discussion #380, MeinerB). Leer = Einpreistarif.
+  zeitfenster?: StrompreisZeitfenster[]
+}
+
+/** Ein Zeitfenster mit abweichendem Arbeitspreis (N-267).
+ *
+ * `von_stunde`/`bis_stunde` sind **Uhrzeiten** (0–23 bzw. 1–24), keine
+ * Slot-Indizes — die Umrechnung auf die Backward-Slots macht das Backend.
+ * `von > bis` läuft über Mitternacht (Nachtstrom 22–06).
+ */
+export interface StrompreisZeitfenster {
+  id?: number
+  von_stunde: number
+  bis_stunde: number
+  /** Montag = „0" … Sonntag = „6"; Vorbelegung „0123456" = jeden Tag. */
+  wochentage: string
+  arbeitspreis_cent_kwh: number
 }
 
 // Import

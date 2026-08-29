@@ -22,6 +22,8 @@ from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.monatsdaten import Monatsdaten
 from backend.services.prognose_auswahl import lade_aktive_monatsprognosen
+from backend.core.berechnungen.zeittarif import hat_zeitfenster
+from backend.services.strompreis_aggregator import wirksamer_arbeitspreis_cent
 from backend.api.routes.strompreise import (
     lade_tarife_fuer_anlage,
     resolve_einspeise_preis_cent,
@@ -88,6 +90,41 @@ from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
 from backend.core.investition_parameter import ist_dienstlich
 
 logger = logging.getLogger(__name__)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# N-267: Zeittarif (HT/NT) in Cockpit → Monat
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# ⛔ Diese Route ist die VIERTE Bildungsstelle des Monatspreises, und das
+# Konzept zu N-267 hat sie zunaechst uebersehen — es nannte drei
+# (`monats_fakten::_lade_tarif`, `finanz_zeilen::baue_finanz_zeile`,
+# `strompreise::monats_strompreis_lookup`). Gefunden erst beim Bau von Z2, an
+# `netzbezug_preis_effektiv_cent`: aus ihm entstehen hier die
+# Netzbezugskosten (`berechne_netzbezug_kosten`), die EV-Ersparnis und das
+# ausgelieferte Feld `netzbezug_preis_cent`. Ohne die Einhaengung haette
+# Cockpit → Monat den Hochtarif genannt, waehrend Cockpit → Jahr daneben den
+# gewichteten Preis zeigt — „zwei Zahlen auf einer Seite", die v4.0.1-Klasse.
+#
+# ⭐ Die Lehre steht schon in `test_zeittarif_ht_nt.py::test_wz1b_*`: JEDE
+# Bildungsstelle braucht ihre eigene Gegenprobe. Die Zaehlung „drei" war eine
+# Behauptung, kein Befund — sie kam aus einem Grep ueber Aufrufer des
+# Resolvers, und diese Route bildet den Preis eine Ebene darueber.
+
+async def _zeittarif_preis(
+    db, anlage_id: int, jahr: int, monat: int, tarif, fallback: float, cache: dict
+) -> float:
+    """Der wirksame Arbeitspreis (ct/kWh) — mit Zeitfenstern gewichtet.
+
+    ``fallback`` gilt, wenn es die Tarifzeile nicht gibt; ohne Fenster liefert
+    der Helfer die Spalte unveraendert zurueck, ohne die Datenbank zu fragen.
+    """
+    if tarif is None or tarif.netzbezug_arbeitspreis_cent_kwh is None:
+        return fallback
+    return await wirksamer_arbeitspreis_cent(
+        db, anlage_id, jahr, monat, tarif, cache=cache
+    )
+
 
 router = APIRouter()
 
@@ -363,6 +400,12 @@ class AktuellerMonatResponse(BaseModel):
 
     # Tarif-Info
     netzbezug_preis_cent: Optional[float] = None      # Verwendeter Tarif
+    # N-267: sagt der Anzeige, dass der Preis daneben ein ueber die Stunden
+    # GEWICHTETER Wert ist und nicht der Arbeitspreis aus den Stammdaten. Ohne
+    # ihn stuende „Netzbezugspreis 26,25" neben einem Tarif, der 30,00 nennt —
+    # und niemand koennte die Differenz erklaeren. Dieselbe Rolle, die
+    # `netzbezug_durchschnittspreis_cent` beim dynamischen Tarif hat.
+    netzbezug_preis_zeittarif: bool = False
     einspeise_preis_cent: Optional[float] = None
     netzbezug_durchschnittspreis_cent: Optional[float] = None  # Flexibler Tarif (Monatsdurchschnitt)
     # G19-1 K3 (R19-3): Grundgebühr des Monats — steckt bereits in
@@ -719,6 +762,9 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
     # auf, der Finanzblock unten liest denselben Eintrag statt ein zweites Mal
     # zu laden.
     tarif_cache: dict[date, dict] = {}
+    # N-267: eigener Cache je Aufruf — begruendet im Block ueber `_zeittarif_preis`
+    # bzw. ausfuehrlich in `monats_fakten.py` ueber `_komponenten_preis`.
+    _zt_cache: dict = {}
     fakten_vj = await lade_monats_fakten(
         db, anlage_id, von=(vj, monat), bis=(vj, monat), tarif_cache=tarif_cache
     )
@@ -815,7 +861,9 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
         )
         tarif_vj = tarife_vj.get("allgemein")
         if tarif_vj:
-            netz_preis = tarif_vj.netzbezug_arbeitspreis_cent_kwh or NETZBEZUG_DEFAULT_CENT
+            netz_preis = await _zeittarif_preis(
+                db, anlage_id, vj, monat, tarif_vj, NETZBEZUG_DEFAULT_CENT, _zt_cache,
+            )
             # `is not None` statt truthy — dieselbe Regel wie beim Flex-Tarif
             # vier Zeilen tiefer: seit 08.08.2026 ist **0** die Vorbelegung
             # eines neuen Tarifs (eedc rät keinen EEG-Satz mehr). Mit `or`
@@ -882,11 +930,9 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
 
             wp_ersparnis_vj = 0.0
             if wp_waerme_fin > 0 and wp_strom_fin > 0:
-                wp_tarif_vj = tarife_vj.get("waermepumpe")
-                wp_p_vj = (
-                    wp_tarif_vj.netzbezug_arbeitspreis_cent_kwh
-                    if wp_tarif_vj and wp_tarif_vj.netzbezug_arbeitspreis_cent_kwh is not None
-                    else netz_preis
+                wp_p_vj = await _zeittarif_preis(
+                    db, anlage_id, vj, monat, tarife_vj.get("waermepumpe"),
+                    netz_preis, _zt_cache,
                 )
                 wp_invs_vj = [
                     i for i in investitionen
@@ -902,11 +948,9 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
                 wp_ersparnis_vj = round(wp_r_vj.ersparnis_euro, 2)
 
             emob_ersparnis_vj = 0.0
-            wb_tarif_vj = tarife_vj.get("wallbox")
-            wb_p_vj = (
-                wb_tarif_vj.netzbezug_arbeitspreis_cent_kwh
-                if wb_tarif_vj and wb_tarif_vj.netzbezug_arbeitspreis_cent_kwh is not None
-                else netz_preis
+            wb_p_vj = await _zeittarif_preis(
+                db, anlage_id, vj, monat, tarife_vj.get("wallbox"),
+                netz_preis, _zt_cache,
             )
             _emob_aktiv = [
                 i for i in investitionen
@@ -1266,6 +1310,9 @@ async def get_aktueller_monat(
     Die Regeln selbst stehen in `core/berechnungen/datenquellen.py`
     (ADR-001) — hier steht nur, was diese Route hineinreicht.
     """
+    # N-267: Zeittarif-Cache dieser Anfrage (SIEBEN Bildungsstellen in dieser
+    # Route lesen ihn) — Begruendung im Block ueber `_zeittarif_preis`.
+    _zt_cache: dict = {}
     # Anlage mit Investitionen laden
     result = await db.execute(
         select(Anlage)
@@ -1569,7 +1616,11 @@ async def get_aktueller_monat(
         # NICHT verrechnet) — Frontend zeigt sie nur im Jahres-Finanzblock.
         zaehlergebuehr_jahr = allgemein_tarif.zaehlergebuehr_euro_jahr
     if allgemein_tarif:
-        netzbezug_preis_cent = allgemein_tarif.netzbezug_arbeitspreis_cent_kwh if allgemein_tarif.netzbezug_arbeitspreis_cent_kwh is not None else NETZBEZUG_DEFAULT_CENT
+        # N-267: mit Zeitfenstern der gewichtete Preis, sonst die Spalte.
+        netzbezug_preis_cent = await _zeittarif_preis(
+            db, anlage_id, jahr, monat, allgemein_tarif,
+            NETZBEZUG_DEFAULT_CENT, _zt_cache,
+        )
         einspeise_cent = allgemein_tarif.einspeiseverguetung_cent_kwh if allgemein_tarif.einspeiseverguetung_cent_kwh is not None else EINSPEISEVERGUETUNG_DEFAULT_CENT
         # #392: variable Einspeisevergütung — der gepflegte Satz des Monats
         # schlägt den Stammwert. Anders als beim Netzbezug (der „Verwendeter
@@ -1715,14 +1766,13 @@ async def get_aktueller_monat(
     )
 
     if wp_waerme is not None and wp_strom is not None and allgemein_tarif:
-        wp_tarif = tarife.get("waermepumpe")
-        wp_preis_cent = (
-            wp_tarif.netzbezug_arbeitspreis_cent_kwh
-            if wp_tarif and wp_tarif.netzbezug_arbeitspreis_cent_kwh is not None
-            # Ohne eigenen WP-Tarif gilt der allgemeine Bezugspreis — bei
-            # flexiblem Tarif also der Monatsdurchschnitt, wie im
-            # per-Investition-Block (`wp_p`) schon immer.
-            else netzbezug_preis_effektiv_cent
+        # Ohne eigenen WP-Tarif gilt der allgemeine Bezugspreis — bei flexiblem
+        # Tarif also der Monatsdurchschnitt, wie im per-Investition-Block
+        # (`wp_p`) schon immer. N-267: ein eigener WP-Tarif kann eigene Fenster
+        # tragen (§14a-Nachttarife), deshalb ueber denselben Helfer.
+        wp_preis_cent = await _zeittarif_preis(
+            db, anlage_id, jahr, monat, tarife.get("waermepumpe"),
+            netzbezug_preis_effektiv_cent, _zt_cache,
         )
         wp_invs = [i for i in investitionen if i.typ == "waermepumpe"]
         wp_ref_parameter = wp_invs[0].parameter if wp_invs else None
@@ -2290,14 +2340,12 @@ async def get_aktueller_monat(
         # `or` hätte hier nur noch den gepflegten Wert **0** überschrieben und
         # dem T-Konto eine andere Vergütung gegeben als der Zeile darüber.
         einsp_p = einspeise_cent if einspeise_cent is not None else EINSPEISEVERGUETUNG_DEFAULT_CENT
-        wp_tarif_obj = tarife.get("waermepumpe")
-        wp_p = (wp_tarif_obj.netzbezug_arbeitspreis_cent_kwh
-                if wp_tarif_obj and wp_tarif_obj.netzbezug_arbeitspreis_cent_kwh is not None
-                else netz_p)
-        wb_tarif_obj = tarife.get("wallbox")
-        wb_p = (wb_tarif_obj.netzbezug_arbeitspreis_cent_kwh
-                if wb_tarif_obj and wb_tarif_obj.netzbezug_arbeitspreis_cent_kwh is not None
-                else netz_p)
+        wp_p = await _zeittarif_preis(
+            db, anlage_id, jahr, monat, tarife.get("waermepumpe"), netz_p, _zt_cache,
+        )
+        wb_p = await _zeittarif_preis(
+            db, anlage_id, jahr, monat, tarife.get("wallbox"), netz_p, _zt_cache,
+        )
         # WP-Ersparnis pro Investition siehe wp_wirtschaftlichkeit.berechne_wp_ersparnis()
         # — nicht mehr lokal mit hartcodiertem Gaspreis berechnet (Drift-Audit A1).
         # Der monatliche Gaspreis-Override wird oben (md_for_gas) bereits geladen.
@@ -2542,6 +2590,8 @@ async def get_aktueller_monat(
         betriebskosten_anteilig_euro=betriebskosten_anteilig,
         # Tarif-Info
         netzbezug_preis_cent=netzbezug_preis_cent if allgemein_tarif else None,
+        # N-267: sagt der Anzeige, dass der Preis daneben gewichtet ist.
+        netzbezug_preis_zeittarif=hat_zeitfenster(allgemein_tarif),
         einspeise_preis_cent=einspeise_cent if allgemein_tarif else None,
         netzbezug_durchschnittspreis_cent=netzbezug_durchschnittspreis,
         grundgebuehr_euro=grundgebuehr,

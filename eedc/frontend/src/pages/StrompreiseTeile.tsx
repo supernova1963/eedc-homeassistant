@@ -9,12 +9,12 @@
  */
 import { useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Plus, Edit, Trash2, Zap, Calendar, Check } from 'lucide-react'
-import { Button, Card, Modal, EmptyState, Alert, Input, DatumFeld, Select, RadioGroup, FormSection } from '../components/ui'
+import { Button, Card, Modal, EmptyState, Alert, Input, DatumFeld, Select, RadioGroup, FormSection, SegmentMehrfach } from '../components/ui'
 import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from '../components/ui'
 import { SchalterZeile } from '../components/forms/sections/SchalterZeile'
 import { useAnlage, useStrompreise } from '../hooks'
 import { GELD_TEXT_CLASS, fmtZahl, heuteIso, monatsersterVon, EINSPEISEVERGUETUNG_FLAT_HINWEIS } from '../lib'
-import type { Strompreis, StrompreisVerwendung } from '../types'
+import type { Strompreis, StrompreisVerwendung, StrompreisZeitfenster } from '../types'
 import type { StrompreisCreate, StrompreisUpdate } from '../api'
 
 // ─── Helfer ──────────────────────────────────────────────────────────────────
@@ -558,6 +558,143 @@ const EINSPEISUNG_MAX = 30
 
 type PflichtFeld = 'netzbezug_arbeitspreis_cent_kwh' | 'einspeiseverguetung_cent_kwh' | 'gueltig_ab'
 
+/** Wochentage in der Reihenfolge, in der man sie liest — Montag zuerst. */
+const WOCHENTAGE: ReadonlyArray<readonly [string, string]> = [
+  ['0', 'Mo'], ['1', 'Di'], ['2', 'Mi'], ['3', 'Do'],
+  ['4', 'Fr'], ['5', 'Sa'], ['6', 'So'],
+] as const
+
+const ALLE_TAGE = '0123456'
+
+/** Ein Fenster in Worten — dieselbe Aussage wie die Felder, nur lesbar. */
+function fensterText(f: StrompreisZeitfenster, hochtarifCent: number): string {
+  const tage = f.wochentage === ALLE_TAGE
+    ? 'täglich'
+    : WOCHENTAGE.filter(([k]) => f.wochentage.includes(k)).map(([, l]) => l).join(', ')
+  const spanne = `${f.von_stunde}–${f.bis_stunde} Uhr`
+  const ueberMitternacht = f.von_stunde > f.bis_stunde ? ' (über Mitternacht)' : ''
+  const vergleich = hochtarifCent > 0 && f.arbeitspreis_cent_kwh < hochtarifCent
+    ? ` statt ${fmtZahl(hochtarifCent, 2)}`
+    : ''
+  return `${tage} ${spanne}${ueberMitternacht}: ${fmtZahl(f.arbeitspreis_cent_kwh, 2)} ct/kWh${vergleich}`
+}
+
+/** Der Fenster-Editor (N-267, MeinerB in Discussion #380).
+ *
+ * ⚠ **Die Felder sind Uhrzeiten, keine Slot-Indizes.** Die Umrechnung auf die
+ * Backward-Slots des Energieprofils (#144) macht ausschließlich das Backend
+ * (`core/berechnungen/zeittarif.py`); der Client rechnet hier nichts — er
+ * sammelt Eingaben. Das ist nicht Kosmetik: Bernds Fenster 19–20 Uhr ist dort
+ * Slot 20, und wer das im Client nachbaut, baut die zweite Wahrheit.
+ */
+function ZeitfensterFelder({ fenster, onChange, hochtarifCent }: {
+  fenster: StrompreisZeitfenster[]
+  onChange: (f: StrompreisZeitfenster[]) => void
+  hochtarifCent: number
+}) {
+  const setzeFeld = (idx: number, teil: Partial<StrompreisZeitfenster>) =>
+    onChange(fenster.map((f, i) => (i === idx ? { ...f, ...teil } : f)))
+
+  const tagUmschalten = (idx: number, tag: string) => {
+    const aktuell = fenster[idx].wochentage
+    const neu = aktuell.includes(tag)
+      ? aktuell.split('').filter(t => t !== tag).join('')
+      : [...aktuell.split(''), tag].sort().join('')
+    // Die „mindestens eine"-Regel haelt der SoT (`SegmentMehrfach`); diese
+    // Zeile ist der Gurt dazu, falls der Umschalter je woanders sitzt.
+    if (neu.length > 0) setzeFeld(idx, { wochentage: neu })
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-gray-500 dark:text-gray-400">
+        Zahlst du zu bestimmten Uhrzeiten einen anderen Arbeitspreis? Dann trag das Fenster
+        hier ein. Ohne Eintrag gilt der Preis oben rund um die Uhr.
+      </p>
+
+      {fenster.map((f, idx) => (
+        <div
+          key={idx}
+          className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-3"
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Input
+              label="Von (Uhr)" name={`zeitfenster-${idx}-von`}
+              type="number" min="0" max="23" step="1"
+              value={String(f.von_stunde)}
+              onChange={(e) => setzeFeld(idx, { von_stunde: Number(e.target.value) })}
+            />
+            <Input
+              label="Bis (Uhr)" name={`zeitfenster-${idx}-bis`}
+              type="number" min="1" max="24" step="1"
+              value={String(f.bis_stunde)}
+              onChange={(e) => setzeFeld(idx, { bis_stunde: Number(e.target.value) })}
+              hint="24 = Mitternacht"
+            />
+            <Input
+              label="Arbeitspreis" name={`zeitfenster-${idx}-preis`}
+              type="number" min="0" step="0.01"
+              value={String(f.arbeitspreis_cent_kwh)}
+              onChange={(e) => setzeFeld(idx, { arbeitspreis_cent_kwh: Number(e.target.value) })}
+              hint="ct/kWh in diesem Fenster"
+            />
+          </div>
+
+          <div>
+            <span className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+              An diesen Tagen
+            </span>
+            {/* Regel 0a Fall 2: der erste Entwurf baute die Pillen hier von
+                Hand — `check:roh-controls` hat es gemeldet, und zu Recht. Die
+                Mehrfach-Variante wohnt jetzt als SoT neben `SegmentControl`. */}
+            <SegmentMehrfach
+              ariaLabel="Wochentage des Zeitfensters"
+              optionen={WOCHENTAGE.map(([key, label]) => ({ key, label }))}
+              werte={f.wochentage.split('')}
+              onToggle={(tag) => tagUmschalten(idx, tag)}
+              size="sm"
+            />
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {fensterText(f, hochtarifCent)}
+            </p>
+            <Button
+              type="button" variant="ghost" size="sm"
+              onClick={() => onChange(fenster.filter((_, i) => i !== idx))}
+            >
+              Entfernen
+            </Button>
+          </div>
+        </div>
+      ))}
+
+      <Button
+        type="button" variant="secondary" size="sm"
+        onClick={() => onChange([
+          ...fenster,
+          // Vorbelegung ist der gemeldete Fall: täglich, ein Abendfenster.
+          { von_stunde: 19, bis_stunde: 20, wochentage: ALLE_TAGE, arbeitspreis_cent_kwh: 0 },
+        ])}
+      >
+        <Plus className="w-4 h-4" />
+        {fenster.length === 0 ? 'Zeitfenster hinzufügen' : 'Weiteres Fenster'}
+      </Button>
+
+      {fenster.length > 0 && (
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Der gewichtete Monatspreis entsteht aus deinen <strong>gemessenen</strong> Stundenwerten.
+          Trägst du Monatswerte von Hand ein, gibt es die Stundenaufteilung nicht — dann rechnet
+          eedc mit dem Preis oben. Deinen tatsächlichen Ø-Preis kannst du im Monatsabschluss
+          unter „Ø Strompreis" eintragen; er schlägt beides.
+        </p>
+      )}
+    </div>
+  )
+}
+
+
 export function StrompreisForm({
   strompreis, anlageId, onCreate, onUpdate, onCancel, error, gueltigAbVorbelegung,
 }: StrompreisFormProps) {
@@ -580,6 +717,11 @@ export function StrompreisForm({
     // #392: „Einspeisevergütung wechselt monatlich" (z. B. OeMAG-Marktpreis)
     einspeisung_variabel: strompreis?.einspeisung_variabel || false,
   })
+
+  // N-267: Zeitfenster als eigener Zustand — sie sind eine Liste, kein Feld.
+  const [fenster, setFenster] = useState<StrompreisZeitfenster[]>(
+    () => strompreis?.zeitfenster?.map(f => ({ ...f })) ?? [],
+  )
 
   // V1/V2: Inline-Fehler erst nach Berührung (touched) bzw. nach Absende-Versuch.
   const [touched, setTouched] = useState<Set<string>>(new Set())
@@ -661,6 +803,10 @@ export function StrompreisForm({
         vertragsart: formData.vertragsart || undefined,
         verwendung: formData.verwendung,
         einspeisung_variabel: formData.einspeisung_variabel,
+        // N-267: die Fenster werden als GANZE Liste geschickt — `[]` entfernt sie.
+        zeitfenster: fenster.map(({ von_stunde, bis_stunde, wochentage, arbeitspreis_cent_kwh }) => ({
+          von_stunde, bis_stunde, wochentage, arbeitspreis_cent_kwh,
+        })),
       }
 
       if (strompreis && onUpdate) {
@@ -782,6 +928,19 @@ export function StrompreisForm({
             hint={'Z. B. OeMAG-Marktpreis: der Monatsabschluss bietet dann das Feld „Einspeisevergütung (Monat)“ an. Der gepflegte Monatssatz schlägt den Stammwert oben; Monate ohne Eintrag rechnen mit dem Stammwert.'}
           />
         )}
+      </FormSection>
+
+      {/* N-267 (MeinerB, Discussion #380): HT/NT-Zeitfenster.
+          Die Fläche startet leer und schmal — ein Fenster genügt für den
+          gemeldeten Fall („täglich 19–20 Uhr"). Das MODELL trägt mehr
+          (Wochentage, mehrere Fenster, über Mitternacht), die ANSICHT bietet
+          es an, sobald ein Fenster da ist. */}
+      <FormSection title="Zeitfenster (HT/NT)">
+        <ZeitfensterFelder
+          fenster={fenster}
+          onChange={setFenster}
+          hochtarifCent={parseFloat(formData.netzbezug_arbeitspreis_cent_kwh) || 0}
+        />
       </FormSection>
 
       <FormSection title="Gültigkeit">

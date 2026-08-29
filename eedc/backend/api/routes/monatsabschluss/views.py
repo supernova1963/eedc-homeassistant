@@ -373,7 +373,17 @@ async def get_monatsabschluss(
     # an den abgerechneten Ø eines Altmonats nicht mehr heran.
     tarife = await lade_tarife_fuer_anlage(db, anlage_id, target_date=date(jahr, monat, 1))
     allgemein_tarif = tarife.get("allgemein")
-    hat_dynamischen_tarif = bool(allgemein_tarif and allgemein_tarif.vertragsart == "dynamisch")
+    # N-267: Ein Zeittarif (HT/NT) schaltet dasselbe Feld frei — er ist der
+    # zweite Fall derselben Frage („welcher EINE Preis beschreibt den Monat?").
+    # Ohne Stundenwerte rechnet eedc sonst mit dem Hochtarif, und genau dann
+    # braucht der Anwender den Weg, seinen abgerechneten Ø einzutragen.
+    # ⛔ KEIN eigenes Feld und KEIN geschaetzter NT-Anteil: ein Feld, das zum
+    # Falschausfuellen einlaedt, ist schlechter als kein Feld (#392-Lehre).
+    from backend.core.berechnungen.zeittarif import hat_zeitfenster
+    hat_dynamischen_tarif = bool(
+        allgemein_tarif
+        and (allgemein_tarif.vertragsart == "dynamisch" or hat_zeitfenster(allgemein_tarif))
+    )
     # #392: dieselbe Stichtags-Logik für die variable Einspeisevergütung —
     # entscheidend ist der Tarif des abzuschließenden Monats, nicht der heutige.
     hat_variable_einspeisung = bool(

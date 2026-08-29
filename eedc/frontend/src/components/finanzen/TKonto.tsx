@@ -100,7 +100,16 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
     : 0
   const pvEvResidual = Math.max(0, (d.ev_ersparnis_euro ?? 0) - evInErsparnis)
 
-  const preisBez = d.netzbezug_durchschnittspreis_cent != null ? 'Ø-Preis flex' : 'Netzbezugspreis'
+  // N-267: dritte Beschriftung. Die Mechanik gab es schon (#392/Flex-Tarif) —
+  // sie kannte nur zwei Fälle. Ein Zeittarif liefert ebenfalls einen
+  // gewichteten Preis, und ohne eigenes Wort stünde hier „Netzbezugspreis
+  // 26,25" neben einem Tarif, der 30,00 nennt.
+  // Reihenfolge = Vorrang: der eingetragene Monats-Ø schlägt den gerechneten.
+  const preisBez = d.netzbezug_durchschnittspreis_cent != null
+    ? 'Ø-Preis flex'
+    : d.netzbezug_preis_zeittarif
+      ? 'Ø-Preis HT/NT'
+      : 'Netzbezugspreis'
   // §51 EEG greift nur, wenn tatsächlich zu Negativpreisen eingespeist wurde —
   // bei 0 kWh gäbe es sonst einen „§51-Verlust: 0,00 €"-Hinweis ohne Inhalt.
   const hatNeg51 = (d.einspeisung_neg_preis_kwh ?? 0) > 0
@@ -239,7 +248,11 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
       formel: 'Netzbezug × Arbeitspreis + Grundpreis',
       berechnung: d.netzbezug_kwh != null && netzPreis != null ? [
         `${fmt(d.netzbezug_kwh, 1)} kWh × ${fmtCalc(netzPreis, 2)} ct/kWh + Grundpreis`,
-        d.netzbezug_durchschnittspreis_cent != null ? '(flex. Tarif, Monatsdurchschnitt)' : null,
+        d.netzbezug_durchschnittspreis_cent != null
+          ? '(flex. Tarif, Monatsdurchschnitt)'
+          : d.netzbezug_preis_zeittarif
+            ? '(Zeittarif, über die Stunden gewichtet)'
+            : null,
       ].filter(Boolean).join('\n') : undefined,
       ergebnis: `= ${fmtCalc(d.netzbezug_kosten_euro, 2)} €`,
       // R15-5b: nachrichtlicher Ausweis — die Netzladung des Speichers steckt
@@ -560,7 +573,11 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
             Ausnahmen-Liste); Zwilling in v4/MonatRahmen.tsx. */}
         {d.netzbezug_durchschnittspreis_cent != null
           ? <span>Netzbezug Ø <span className="text-blue-500 font-medium">{fmtCalc(d.netzbezug_durchschnittspreis_cent, 2)} ct/kWh</span> (flex)</span>
-          : d.netzbezug_preis_cent != null && <span>Netzbezug {fmtCalc(d.netzbezug_preis_cent, 2)} ct/kWh</span>
+          : d.netzbezug_preis_cent != null && (
+            d.netzbezug_preis_zeittarif
+              ? <span>Netzbezug Ø <span className="text-blue-500 font-medium">{fmtCalc(d.netzbezug_preis_cent, 2)} ct/kWh</span> (HT/NT)</span>
+              : <span>Netzbezug {fmtCalc(d.netzbezug_preis_cent, 2)} ct/kWh</span>
+          )
         }
         {d.einspeise_preis_cent != null && <span>Einspeisung {fmtCalc(d.einspeise_preis_cent, 2)} ct/kWh</span>}
       </div>

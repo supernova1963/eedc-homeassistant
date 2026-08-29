@@ -130,10 +130,38 @@ Verwalte deine Stromtarife als Tabelle mit Gültigkeitszeiträumen — die Basis
 
 - Mehrere Tarife mit **Gültigkeitszeitraum** möglich.
 - **Spezialtarife:** Jeder Tarif kann einer Verwendung zugeordnet werden — Standard, Wärmepumpe oder Wallbox. Ohne Spezialtarif nutzt eedc automatisch den Standard-Tarif für die Komponente. Aktive Spezialtarife stehen in der Info-Box oben.
+- **Zeitfenster (HT/NT):** Jeder Tarif kann Fenster mit abweichendem Arbeitspreis tragen (Uhrzeit, Wochentage, Preis) — siehe den Kasten unten.
 - **Zählergebühr-Tarif:** Neben Grundgebühr lässt sich eine separate Zählergebühr erfassen; Grund- und Zählergebühren werden im Cockpit (Monat/Jahr) getrennt ausgewiesen.
 - **Das Badge „Aktuell"** markiert den Tarif, mit dem eedc **heute** rechnet: gültig am heutigen Tag und — je Verwendung — der jüngste „Gültig ab". Standard- und Spezialtarif können damit gleichzeitig aktuell sein, zwei aufeinander folgende Standardtarife nicht. (Bis v4.0.5 trug es jeder Tarif ohne Enddatum, also auch abgelöste.)
 
 > **Dynamischer Strompreis (Tibber/aWATTar/EPEX):** Den zugehörigen Sensor ordnest du nicht mehr hier, sondern unter **Einstellungen → Datenquellen** dem Feld „Strompreis" zu (siehe [§7](#7-datenquellen--feld-zentrische-zuordnung)). Ohne eigenen Sensor blendet eedc automatisch den EPEX-Börsenpreis (DE/AT via aWATTar) als Overlay im Live-Tagesverlauf ein.
+
+> **Zeittarif (HT/NT) — ein anderer Preis zu bestimmten Uhrzeiten.** Zahlst du z. B. täglich von
+> 19 bis 20 Uhr nur die Hälfte, trägst du das im Tarif unter **„Zeitfenster (HT/NT)"** ein: Von,
+> Bis, der Preis in diesem Fenster und die Wochentage. Ein Fenster darf über Mitternacht laufen
+> (Nachtstrom 22–6), und du kannst mehrere anlegen. Ohne Eintrag gilt der Arbeitspreis oben rund
+> um die Uhr — an bestehenden Tarifen ändert sich nichts.
+>
+> **Wie eedc damit rechnet:** Der Monatspreis wird über deinen **gemessenen** Netzbezug
+> gewichtet — jede Stunde bekommt den Preis, der zu ihr gehört, und daraus entsteht ein
+> Durchschnitt für den Monat. Fielen 3 von 12 kWh ins Fenster, liegt er entsprechend näher am
+> Niedertarif. In Cockpit → Monat steht dieser Wert als **„Ø-Preis HT/NT"**, damit er sich nicht
+> mit dem Arbeitspreis aus deinen Stammdaten verwechseln lässt.
+>
+> ⚠ **Dafür braucht eedc Stundenwerte** — die entstehen, wenn der Netzbezug über einen
+> zugeordneten Sensor läuft. Trägst du Monatswerte von Hand ein, gibt es die Stundenaufteilung
+> nicht: dann rechnet eedc mit dem Arbeitspreis oben, also mit dem **Hochtarif**. Das ist zu
+> hoch, aber nachvollziehbar — geschätzt wird nichts. Der Daten-Check sagt dir das, und der Weg
+> daraus ist derselbe wie beim dynamischen Tarif: im Monatsabschluss unter **„Ø Strompreis"** den
+> Wert aus deiner Abrechnung eintragen; er schlägt beides.
+>
+> **Feiertage kennt eedc nicht.** Wochentage ja, Feiertage nein — ein Feiertagskalender gilt je
+> Bundesland bzw. Kanton, und ein falscher würde still einen falschen Preis erzeugen. Behandelt
+> dein Vertrag Feiertage wie Sonntage, ist der Ø-Preis im Monatsabschluss der genaue Weg.
+>
+> **Die Wochentage gelten für die Uhrzeit selbst.** „Mo–Fr, 22–6 Uhr" deckt Freitag 22 bis 24 Uhr,
+> aber **nicht** Samstag 0 bis 6 Uhr. Willst du die Nacht von Freitag auf Samstag ganz drin haben,
+> leg ein zweites Fenster an (Sa, 0–6).
 
 > **Einspeisevergütung: eedc rechnet flat mit dem eingetragenen Satz.** Der Einspeise-Erlös ist schlicht *eingespeiste Menge × dein Satz* ([Berechnungsreferenz 3.2](BERECHNUNGEN.md#32-finanzen-cockpit)) — es wird nichts im Hintergrund umgerechnet und nichts aus der Anlagengröße abgeleitet.
 >
