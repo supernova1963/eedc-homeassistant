@@ -124,6 +124,7 @@ class DatenChecker(
         ergebnisse.extend(await self._check_zaehler_ruecksprung(anlage))
         ergebnisse.extend(await self._check_sensor_mapping_lts(anlage))
         ergebnisse.extend(await self._check_sensor_mapping_einheit(anlage))
+        ergebnisse.extend(await self._check_speicher_zaehler_richtungen(anlage))
         ergebnisse.extend(await self._check_provenance_conflicts(anlage))
         ergebnisse.extend(await self._check_datenquelle_status(anlage))
         ergebnisse.extend(await self._check_zeitzone_ha(anlage))

@@ -26,6 +26,11 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.berechnungen.stundenbilanz import (
+    berechne_batterie_netto_kwh,
+    erwartet_batterie_beitrag,
+    stunden_verbrauch_kwh,
+)
 from backend.services.ha_statistics_service import get_ha_statistics_service
 from backend.services.snapshot.keys import (
     extract_quellen_energy,
@@ -168,6 +173,13 @@ async def get_hourly_kwh_by_category_lts(
         result_kat[h] = per_kat
 
     # Kategorien zu Bilanz-Feldern aggregieren — analog Snapshot-Variante.
+    # Einmal je Tag: Muss in dieser Bilanz ein Speicher stehen? Maßstab ist
+    # `ist_aktiv_an(datum)` und nicht das `aktiv`-Flag allein — ein erst später
+    # angeschaffter oder längst stillgelegter Speicher darf für diesen Tag
+    # keinen Zähler einfordern (N-64/N-313-Klasse).
+    batterie_erwartet = erwartet_batterie_beitrag(
+        investitionen_by_id.values(), datum
+    )
     schwelle_spike = schwelle_pv_einspeisung_stunde_kwh(
         getattr(anlage, "leistung_kwp", None),
     )
@@ -198,14 +210,22 @@ async def get_hourly_kwh_by_category_lts(
             anlage_id=anlage.id, datum=datum, stunde=h, kategorie="einspeisung",
         )
 
-        batt_netto = None
-        if ladung_batt is not None or entladung_batt is not None:
-            batt_netto = (ladung_batt or 0.0) - (entladung_batt or 0.0)
-
-        verbrauch = None
-        if pv_total is not None and einsp is not None and bez is not None:
-            v = pv_total + bez - einsp - (batt_netto or 0.0)
-            verbrauch = max(0.0, v)
+        # N-346: Netto und Verbrauch kommen aus dem Layer-SoT, nicht aus einer
+        # zweiten Kopie der Formel. Der Wächter zählt dort alle VIER Größen —
+        # ein Speicher ohne (vollständigen) Zähler macht die Stunde unbekannt
+        # statt sie still auf den reinen Netzbezug zu setzen.
+        batt_netto = berechne_batterie_netto_kwh(
+            ladung_kwh=ladung_batt,
+            entladung_kwh=entladung_batt,
+            erwartet=batterie_erwartet,
+        )
+        verbrauch = stunden_verbrauch_kwh(
+            pv_kwh=pv_total,
+            netzbezug_kwh=bez,
+            einspeisung_kwh=einsp,
+            batterie_netto_kwh=batt_netto,
+            batterie_erwartet=batterie_erwartet,
+        )
 
         final[h] = {
             "pv": pv_total,

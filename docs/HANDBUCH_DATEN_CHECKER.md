@@ -39,6 +39,7 @@
    22. [Ladestand bei mehreren Speichern](#422-ladestand-mehrere-speicher)
    23. [Verbrauchszähler – Zählerstände](#423-verbrauchszaehler-zaehlerstaende)
    24. [Vergleichspreise – Ø Benzinpreis](#424-vergleichspreise-benzinpreis)
+   25. [Speicher – Zählerstände unvollständig](#425-speicher-zaehlerstaende-unvollstaendig)
 5. [Behebungs-Workflows](#5-behebungs-workflows)
 6. [Beziehung zu anderen Werkzeugen](#6-beziehung-zu-anderen-werkzeugen)
 
@@ -133,6 +134,7 @@ eedc prüft **26 Kategorien**. Die meisten greifen in jeder Installation identis
 | 24 | Batterie-Vorzeichen in der Historie (§4.21) | greift | greift |
 | 25 | Ladestand bei mehreren Speichern (§4.22) | greift | greift |
 | 26 | Verbrauchszähler – Zählerstände (§4.23) | greift | greift |
+| 27 | Speicher – Zählerstände unvollständig (§4.25) | greift | greift |
 
 ### Was bedeutet „wird übersprungen"?
 
@@ -873,6 +875,38 @@ Fehlt der Wert für einen Monat, rechnet eedc trotzdem weiter — dann aber mit 
 *Einstellungen → Daten → Monatsdaten* → Monat öffnen → Abschnitt **Vergleichspreise** → **„Ø Benzinpreis"**. Dort kannst du auch einen eigenen Wert eintragen — ein von Hand gesetzter Preis wird **nie** überschrieben.
 
 > **Warum das jetzt seltener vorkommt:** Früher lief der Nachlauf **wöchentlich** (dienstags), und ein verpasster Lauf wurde nie nachgeholt. Ein Monat, der kurz nach einem Lauf entstand, wartete bis zu sieben Tage auf seinen Preis — ohne dass irgendetwas darauf hinwies. Seither läuft er **täglich** und zusätzlich kurz nach jedem Start von eedc. Aufgefallen ist das, weil ein Anwender nachgesehen hat, statt der Zusage zu glauben ([Discussion #394](https://github.com/supernova1963/eedc-homeassistant/discussions/394)).
+
+---
+
+### 4.25 Speicher – Zählerstände unvollständig <a name="425-speicher-zaehlerstaende-unvollstaendig"></a>
+
+**Was wird geprüft:** Hat jeder aktive Speicher **beide** kWh-Zähler zugeordnet — Ladung *und* Entladung?
+
+**Warum das zählt — und warum es mehr betrifft als den Speicher.** eedc misst deinen Hausverbrauch nicht direkt; es rechnet ihn aus, Stunde für Stunde:
+
+> Hausverbrauch = PV + Netzbezug − Einspeisung − Batterie
+
+Vier Größen, und alle vier werden gebraucht. Fehlt die Batterie, bleibt nachts nur der Netzbezug übrig — und **genau nachts liefert der Speicher**. Der Strom aus deinem Akku sähe dann aus, als würde er gar nicht verbraucht.
+
+Das Tückische daran ist, dass die Zahl nicht offensichtlich falsch aussieht, sondern **plausibel** falsch. Sie ist zu niedrig, wenn der Speicher die Nacht trägt, und sie steigt über den Monat, je weniger er sie trägt. Wer seine Grundlast beobachtet, sieht sie langsam klettern, ohne dass sich im Haus etwas geändert hätte — so ist dieser Befund gefunden worden ([Issue #395](https://github.com/supernova1963/eedc-homeassistant/issues/395)).
+
+> ⚠ **Eine Richtung allein genügt nicht.** Nachts entlädt der Speicher, ohne zu laden. Wer nur den Ladezähler zuordnet, rechnet die Entladung dauerhaft als null — die Rechnung geht scheinbar auf und ist trotzdem falsch. Deshalb meldet eedc auch die halbe Zuordnung.
+
+**Was eedc tut, solange ein Zähler fehlt:** Der Stundenverbrauch bleibt **leer** statt eine zu niedrige Zahl zu zeigen. Das betrifft die Tages- und Monatsbilanz, die Kachel *Grundlast (Nacht-Sockel)* und den Sensor `eedc_grundlast_kw`. Ein Strich ist unbequem — aber er ist ehrlich, und er ist der Grund, warum du diesen Hinweis hier liest.
+
+#### Befunde
+
+| Meldung | Severity | Bedeutung | Behebung |
+|---------|----------|-----------|----------|
+| **„&lt;Speicher&gt;": Zählerstände des Speichers unvollständig zugeordnet** | ⚠️ WARNING | Für diesen Speicher fehlt mindestens eine der beiden Richtungen. Die Meldung sagt dir, welche. | *Einstellungen → Datenquellen* → Speicher → **„Ladung"** und **„Entladung"** je einem kumulativen kWh-Zähler zuordnen. |
+
+#### Wo du die Zähler einträgst
+
+*Einstellungen → Datenquellen* → dein Speicher → Felder **Ladung (kWh)** und **Entladung (kWh)**. Beide erwarten einen **kumulativen** Zähler, keinen Leistungswert (W/kW) — dazu §4.15.
+
+> **Rückwirkend rechnet eedc nichts neu.** Ab der Zuordnung stimmt die Bilanz; für vergangene Tage bleibt sie, wie sie war. Wer die Historie mitnehmen will, findet den Weg unter *Einstellungen → Daten → Energieprofil-Pflege* in der **Reparatur-Werkbank** (Tage neu aggregieren, siehe [Handbuch Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)) — vorausgesetzt, Home Assistant hat für diese Zeit Statistikdaten des Zählers.
+
+> **Kein Speicher angelegt ⇒ diese Kategorie erscheint gar nicht.** Und ein **stillgelegter** Speicher fordert nichts mehr ein: Maßgeblich ist, ob das Gerät heute noch aktiv ist, nicht ob es je existiert hat.
 
 ---
 

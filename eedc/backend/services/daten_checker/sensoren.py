@@ -712,3 +712,113 @@ class SensorChecks:
                 ))
 
         return ergebnisse
+
+    # ─── Speicher-Zählerrichtungen (N-346, Melder OB73-gif #395) ──────────
+
+    async def _check_speicher_zaehler_richtungen(
+        self, anlage: Anlage,
+    ) -> list[CheckErgebnis]:
+        """Aktiver Speicher, dessen Lade- oder Entladezähler nirgends steht.
+
+        **Warum das mehr ist als eine fehlende Komponenten-Zahl.** Der
+        stündliche Hausverbrauch ist eine Differenz aus vier Größen —
+        ``PV + Netzbezug − Einspeisung − Batterie-Netto`` (SoT
+        ``core/berechnungen/stundenbilanz.py``). Fehlt die Batterie, ist er
+        nachts der **reine Netzbezug**. Trägt der Speicher die Nacht, steht dort
+        fast nichts; je weniger er trägt, desto höher wird die Zahl. Genau so
+        sah der Melder seine Grundlast über den August von 0 W auf 300 W
+        steigen, während die Live-Prognose daneben 340 W nannte.
+
+        ⚠ **Beide Richtungen zählen.** Nachts entlädt der Speicher, ohne zu
+        laden — wer nur den Ladezähler zuordnet, rechnet die Entladung dauerhaft
+        als 0. Das Ergebnis ist nicht offensichtlich falsch, sondern *plausibel*
+        falsch, und deshalb meldet dieser Check auch die halbe Zuordnung.
+
+        ⚠ **`ist_aktiv_an(heute)` statt `aktiv` allein** — ein erst später
+        angeschaffter oder längst stillgelegter Speicher fordert keinen Zähler
+        ein (dieselbe Trennlinie wie N-64/N-313 und
+        [[feedback_anschaffungsdatum_grenze]]).
+
+        ⛔ **Ohne Reparatur-Action.** eedc kann den Zähler nicht erfinden und die
+        Vergangenheit nicht nachrechnen; die Zuordnung ist eine Entscheidung des
+        Anwenders ([[feedback_kein_grosser_heiler_knopf]]).
+        """
+        from backend.models.investition import Investition as _Inv
+
+        kat = CheckKategorie.SPEICHER_ZAEHLER_RICHTUNGEN.value
+        heute = date.today()
+
+        result = await self.db.execute(
+            select(_Inv).where(_Inv.anlage_id == anlage.id, _Inv.typ == "speicher")
+        )
+        speicher = [i for i in result.scalars().all() if i.ist_aktiv_an(heute)]
+        if not speicher:
+            return []
+
+        sensor_mapping = anlage.sensor_mapping or {}
+        mapping = sensor_mapping.get("investitionen", {}) or {}
+        quellen = sensor_mapping.get("quellen") or {}
+
+        def _hat_quelle(inv_id: int, feld: str) -> bool:
+            """Ist für dieses Feld IRGENDEINE Quelle eingerichtet?
+
+            Zwei Ablagen, beide zählen: ``felder`` trägt die HA-Sensor-
+            Zuordnung, ``quellen`` die feld-zentrische Zuordnung der
+            Datenquellen-Fläche (MQTT, Connector). Nur ``felder`` zu prüfen
+            hieße, jeden MQTT-Nutzer falsch zu melden — derselbe Fehler, den der
+            Klima-Modus-Check schon einmal gemacht hat.
+            """
+            eintrag = mapping.get(str(inv_id))
+            if isinstance(eintrag, dict):
+                m = (eintrag.get("felder") or {}).get(feld)
+                if isinstance(m, dict) and m.get("strategie") == "sensor" and m.get("sensor_id"):
+                    return True
+            eintrag_q = quellen.get(f"inv_energy_{inv_id}_{feld}")
+            if isinstance(eintrag_q, dict):
+                quelle = eintrag_q.get("quelle")
+                # „keine" ist eine ausdrückliche Absage, keine Zuordnung.
+                if quelle and quelle != "keine":
+                    return True
+            return False
+
+        ergebnisse: list[CheckErgebnis] = []
+        for inv in speicher:
+            hat_ladung = _hat_quelle(inv.id, "ladung_kwh")
+            hat_entladung = _hat_quelle(inv.id, "entladung_kwh")
+            if hat_ladung and hat_entladung:
+                continue
+
+            name = inv.bezeichnung or f"Speicher {inv.id}"
+            if not hat_ladung and not hat_entladung:
+                fehlt = "Weder Ladung noch Entladung sind zugeordnet."
+            elif not hat_entladung:
+                fehlt = (
+                    "Die Ladung ist zugeordnet, die Entladung nicht — damit "
+                    "fehlt genau die Richtung, die nachts läuft."
+                )
+            else:
+                fehlt = (
+                    "Die Entladung ist zugeordnet, die Ladung nicht — damit "
+                    "fehlt die Richtung, die tagsüber läuft."
+                )
+
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.WARNING,
+                meldung=f"„{name}\": Zählerstände des Speichers unvollständig zugeordnet",
+                details=(
+                    f"{fehlt} eedc rechnet den Hausverbrauch je Stunde aus vier "
+                    "Größen: PV + Netzbezug − Einspeisung − Batterie. Solange eine "
+                    "Batterie-Richtung fehlt, lässt sich diese Rechnung nicht "
+                    "bilden — der Stundenverbrauch bleibt leer statt eine zu "
+                    "niedrige Zahl zu zeigen. Sichtbar wird das vor allem nachts: "
+                    "Was der Speicher liefert, sähe sonst aus, als würde es gar "
+                    "nicht verbraucht, und die Grundlast fiele entsprechend zu "
+                    "niedrig aus. Ordne dem Speicher unter Datenquellen beide "
+                    "kWh-Zähler zu — „Ladung\" und „Entladung\". Bereits "
+                    "aggregierte Tage rechnet eedc dabei nicht rückwirkend neu."
+                ),
+                link=LINK_DATENQUELLEN,
+                investition_id=inv.id,
+            ))
+
+        return ergebnisse

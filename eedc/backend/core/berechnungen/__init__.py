@@ -285,6 +285,11 @@ from backend.core.berechnungen.grundlast import (
     GrundlastKennzahlen,
     berechne_grundlast,
 )
+from backend.core.berechnungen.stundenbilanz import (
+    berechne_batterie_netto_kwh,
+    erwartet_batterie_beitrag,
+    stunden_verbrauch_kwh,
+)
 from backend.core.berechnungen.monatsfenster import (
     Monatsfenster,
     anteilig,
@@ -295,6 +300,9 @@ from backend.core.berechnungen.monatsfenster import (
 __all__ = [
     "GrundlastKennzahlen",
     "berechne_grundlast",
+    "berechne_batterie_netto_kwh",
+    "erwartet_batterie_beitrag",
+    "stunden_verbrauch_kwh",
     "Monatsfenster",
     "anteilig",
     "monatsfenster",
