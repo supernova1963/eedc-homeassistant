@@ -477,6 +477,37 @@ class TagDetailResponse(BaseModel):
     wp_jaz_grund: Optional[str] = None
     #: Fall H-B: die Zahl ist richtig und erklärungsbedürftig (Heizstab).
     wp_jaz_hinweis: Optional[str] = None
+    # ── Arbeitszahl JE FUNKTION (N-348) ────────────────────────────────────
+    #
+    # ⛔ **Der Tag hat diese drei Zeilen bis 2026-08-29 ERSATZLOS weggelassen.**
+    # Nicht als „—", sondern gar nicht: die geteilte Blockfabrik rendert eine
+    # Zeile erst, wenn Wert **oder** Grund gesetzt ist, und der Tag setzte
+    # keines von beidem. Der Monat ruft `arbeitszahl_je_funktion` dagegen
+    # **unbedingt** (`aktueller_monat.py:2103`) und liefert immer beide Hälften
+    # — dieselbe Anlage, dieselbe Datenlage, zwei Auskünfte. Genau das verbietet
+    # S3 (SOLL §3.3): *„Eine Sicht, die weniger zeigt als die Nachbarsicht, sagt
+    # warum."*
+    #
+    # ⚠ **Ein Begründungssatz allein wäre KEIN Fix gewesen.** „Liegt nur
+    # monatlich vor" ist für Heizen/Warmwasser unwahr — §3.3 stellt den Tag auf
+    # *„alles, was aus stündlichen Zählern entsteht"*, und alle vier Eingänge
+    # stehen unten in dieser Antwort. Die ehrliche Auskunft ist die Rechnung,
+    # und sie kostet einen dritten Aufruf eines vorhandenen SoT.
+    wp_jaz_heizen: Optional[float] = None
+    wp_jaz_heizen_grund: Optional[str] = None
+    wp_jaz_warmwasser: Optional[float] = None
+    wp_jaz_warmwasser_grund: Optional[str] = None
+    #: ⛔ **Im Tag gibt es hier NIE einen Wert, und das ist gemessen, nicht
+    #: vergessen:** Die Kältemenge (`betriebsart_nutzenergie_kuehlen_kwh`) ist
+    #: zwar ein stündlicher Zähler, aber der Tages-Aggregator holt ausschließlich
+    #: `betriebsart_strom_*` (`snapshot/aggregator.py::get_betriebsart_strom_
+    #: tageswerte`, Filter `ist_betriebsart_strom_feld`) — der Zähler des
+    #: Quotienten hat also keinen Tagespfad. `GRUND_KEINE_KAELTEMENGE` („kein
+    #: Kältemengenzähler zugeordnet") wäre hier deshalb eine **Falschaussage**
+    #: für jeden, der einen zugeordnet hat. Stattdessen der Grund unten, der
+    #: sagt, was zutrifft und wo die Zahl steht.
+    wp_jaz_kuehlen: Optional[float] = None
+    wp_jaz_kuehlen_grund: Optional[str] = None
     # Speicher-Netzladung (Arbitrage) — Tages-Boundary-Diff.
     speicher_ladung_netz_kwh: Optional[float] = None
     # Speicher effektiver Netz-Ladepreis (stundengewichtet, Tagesspanne).

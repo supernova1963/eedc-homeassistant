@@ -297,7 +297,8 @@ async def get_tag_detail(
     )
     from backend.core.berechnungen.betriebsart_gemessen import modus_strom_zeile
     from backend.core.berechnungen.waermepumpe_kennzahl import (
-        abgrenzungs_grund, arbeitszahl, waerme_gesamt_kwh,
+        GRUND_KEIN_KUEHLBETRIEB, GRUND_KUEHLZAHL_NUR_MONAT, abgrenzungs_grund,
+        arbeitszahl, arbeitszahl_je_funktion, waerme_gesamt_kwh,
     )
     from backend.core.betriebsmodus import HEIZEN, KUEHLEN, WARMWASSER
     from backend.core.investition_parameter import (
@@ -500,6 +501,45 @@ async def get_tag_detail(
         ),
     )
 
+    # ── Arbeitszahl JE FUNKTION — der dritte Aufrufer desselben SoT (N-348) ─
+    #
+    # ⛔ **Bis 2026-08-29 gab es diesen Block nicht, und der Tag hat die drei
+    # Zeilen deshalb ERSATZLOS weggelassen** — nicht als „—", sondern gar nicht.
+    # Der Monat ruft `arbeitszahl_je_funktion` unbedingt und liefert immer Wert
+    # **oder** Grund; der Tag lieferte keines von beidem, und die geteilte
+    # Blockfabrik rendert dann keine Zeile. Dieselbe Anlage, dieselbe Datenlage,
+    # zwei Auskünfte — genau der S3-Verstoß aus SOLL §3.3.
+    #
+    # ⚠ **`hat_split` heißt hier etwas ANDERES als die gleichnamige lokale
+    # Variable oben** — die trägt „der Modus-Split hat Daten". Gemeint ist das
+    # Investitions-Kennzeichen `getrennte_strommessung`, dieselbe Quelle wie im
+    # Monat (`imd_monatsaggregat.py:223`). Die Namensgleichheit ist genau die
+    # Falle, an der ein Fix „im Vorbeigehen" eine falsche Zahl erzeugt hätte,
+    # deshalb der ausgeschriebene Name.
+    #
+    # ⚠ Gefragt werden — wie bei der Abgrenzung darüber — **nur die Geräte, die
+    # an diesem Tag Strom beigetragen haben.** Ein stillgelegtes Gerät mit
+    # getrennter Messung darf einen Tag nicht freischalten, an dem es nicht lief.
+    _wp_getrennte_strommessung_tag = any(
+        bool(((investitionen_by_id.get(inv_id_str).parameter or {})
+              .get("getrennte_strommessung")))
+        for inv_id_str, kwh in wp_strom_je_inv.items()
+        if kwh and investitionen_by_id.get(inv_id_str) is not None
+    )
+    # `waerme_abgeleitet_kwh` bleibt 0: Im Tag kommt nur eine **gemessene**
+    # Wärme an (nur ein zugeordneter Wärmemengenzähler erreicht `detail`) — der
+    # abgeleitete Zweig existiert hier nicht, siehe die Begründung an
+    # `_wp_waerme_tag` oben. `abgrenzung_verletzt` ist dieselbe Sperre wie bei
+    # der Gesamtzahl: ein Heizstab auf dem Zähler trifft beide Funktionen.
+    wp_az_funktion_tag = arbeitszahl_je_funktion(
+        heizung_kwh=detail.get("wp_heizung_kwh"),
+        strom_heizen_kwh=detail.get("wp_strom_heizen_kwh"),
+        warmwasser_kwh=detail.get("wp_warmwasser_kwh"),
+        strom_warmwasser_kwh=detail.get("wp_strom_warmwasser_kwh"),
+        hat_split=_wp_getrennte_strommessung_tag,
+        abgrenzung_verletzt=wp_abgrenzung_tag,
+    )
+
     # ── Aktive Geräte je Typ (Namen) für die „aggregiert aus …"-Hinweise ──
     #
     # Wortgleich zur Monatssicht (`aktueller_monat.py`), nur mit der feineren
@@ -548,6 +588,25 @@ async def get_tag_detail(
         wp_jaz=wp_jaz_tag.wert,
         wp_jaz_grund=wp_jaz_tag.grund,
         wp_jaz_hinweis=wp_jaz_tag.hinweis,
+        # N-348 — je Funktion, wie der Monat. Wert ODER Grund, nie beides leer.
+        wp_jaz_heizen=wp_az_funktion_tag.heizen.wert,
+        wp_jaz_heizen_grund=wp_az_funktion_tag.heizen.grund,
+        wp_jaz_warmwasser=wp_az_funktion_tag.warmwasser.wert,
+        wp_jaz_warmwasser_grund=wp_az_funktion_tag.warmwasser.grund,
+        # ⛔ NICHT `arbeitszahl_kuehlen(None, kuehlen_tag)` — das ergäbe bei
+        # geflossenem Kühlstrom „kein Kältemengenzähler zugeordnet" und wäre für
+        # jeden, der einen zugeordnet hat, falsch. Der Zähler des Quotienten hat
+        # schlicht keinen Tagespfad (Begründung an `GRUND_KUEHLZAHL_NUR_MONAT`).
+        # ⭐ Die erste Fassung setzte diesen Grund UNBEDINGT — dann hätte eine
+        # Luft-Wasser-Wärmepumpe, die nie kühlt, einen Hinweis auf eine
+        # Aggregationslücke gelesen, die sie nichts angeht. Der Tag kennt den
+        # Kühlstrom, also kann er die aussagekräftigere Antwort geben; die
+        # Reihenfolge ist dieselbe wie in `arbeitszahl_kuehlen` selbst.
+        wp_jaz_kuehlen=None,
+        wp_jaz_kuehlen_grund=(
+            GRUND_KUEHLZAHL_NUR_MONAT if kuehlen_tag > 0
+            else GRUND_KEIN_KUEHLBETRIEB
+        ),
         speicher_ladung_netz_kwh=detail.get("speicher_ladung_netz_kwh"),
         speicher_effektiver_ladepreis_cent=(
             round(eff.effektiver_ladepreis_cent, 2)

@@ -415,6 +415,40 @@ def arbeitszahl_je_funktion(
 #: sind selten. **Er nennt den Ausweg**, statt nur das Fehlen zu melden.
 GRUND_KEINE_KAELTEMENGE = "kein Kältemengenzähler zugeordnet"
 
+#: Grund für die **Tagessicht** — und ausdrücklich ein anderer als der darüber
+#: (N-348, 2026-08-29).
+#:
+#: ⛔ **Warum `GRUND_KEINE_KAELTEMENGE` hier eine Falschaussage wäre.** Die
+#: Kältemenge ist ein stündlicher Zähler (`betriebsart_nutzenergie_kuehlen_kwh`
+#: steht in ``KUMULATIVE_ZAEHLER_FELDER``) — sie *könnte* je Tag entstehen. Was
+#: fehlt, ist der Aggregationspfad: ``snapshot/aggregator.py::
+#: get_betriebsart_strom_tageswerte`` filtert über ``ist_betriebsart_strom_feld``
+#: und holt deshalb nur den **Nenner** (Kühlstrom), nie den Zähler. Wer einen
+#: Kältemengenzähler zugeordnet hat, bekäme also „kein Kältemengenzähler
+#: zugeordnet" zu lesen — ein Satz, der ihn an der falschen Stelle suchen lässt.
+#:
+#: ⚑ **Der Weg, falls die Tages-Kühlzahl je gewünscht wird**, damit ihn niemand
+#: neu suchen muss: die ``AUSGABE``-Tabelle in ``get_tagesdetail_kwh``
+#: (`aggregator.py:880`) um ``("waermepumpe", "betriebsart_nutzenergie_kuehlen_kwh")``
+#: erweitern. ⚠ **Vorher zu messen, sonst entsteht eine falsche Zahl statt einer
+#: fehlenden:** ob dieser Pfad den Innengerät-Suffix auflöst
+#: (``betriebsart_nutzenergie_kuehlen_kwh-3``). ``get_betriebsart_strom_tageswerte``
+#: reicht ihn bewusst ungelöst weiter; eine Multisplit-Anlage würde sonst zu
+#: wenig Kälte zählen und eine **zu hohe** Arbeitszahl ausweisen.
+GRUND_KUEHLZAHL_NUR_MONAT = "Kältemenge wird nicht je Tag gezählt — Kühl-Arbeitszahl im Monat"
+
+#: „Es wurde nicht gekühlt" — und das **schlägt** den Grund darüber.
+#:
+#: ⚑ Die Reihenfolge ist die Aussagekraft, nicht die Bequemlichkeit: Wer an
+#: diesem Tag gar nicht gekühlt hat, soll das lesen und nicht einen Hinweis auf
+#: eine Aggregationslücke, die ihn nichts angeht. Erst **wenn** Kühlstrom
+#: geflossen ist, fehlt wirklich nur der Zähler des Quotienten.
+#:
+#: ⚠ Der Text stand bis 2026-08-29 als Literal in ``arbeitszahl_kuehlen`` und
+#: wurde hier herausgezogen, damit der Tagespfad ihn **benutzt** statt ihn
+#: danebenzuschreiben (ADR-001/S1 — eine Regel, zwei Formulierungen, eine Drift).
+GRUND_KEIN_KUEHLBETRIEB = "kein Kühlbetrieb in diesem Zeitraum"
+
 
 def arbeitszahl_kuehlen(
     kaelte_kwh: Optional[float],
@@ -458,7 +492,7 @@ def arbeitszahl_kuehlen(
     e = float(strom_kuehlen_kwh or 0.0)
     q = float(kaelte_kwh or 0.0)
     if e <= 0:
-        return Arbeitszahl(None, "kein Kühlbetrieb in diesem Zeitraum")
+        return Arbeitszahl(None, GRUND_KEIN_KUEHLBETRIEB)
     if q <= 0:
         return Arbeitszahl(None, GRUND_KEINE_KAELTEMENGE)
     if abgrenzung_verletzt:

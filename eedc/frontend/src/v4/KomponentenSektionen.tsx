@@ -542,9 +542,21 @@ export function baueKomponentenBloecke(
   if (hat(d.emob_ladung_kwh) || hat(d.emob_km)) {
     const pvAnteil = hat(d.emob_ladung_pv_kwh) && d.emob_ladung_kwh
       ? (d.emob_ladung_pv_kwh! / d.emob_ladung_kwh) * 100 : null
-    // Dieselben Felder wie Monat. PV-Anteil/Netz-Anteil sind auf Tag mit Sensor
-    // erhebbar (tagDetail), km/Verbrauch/extern/V2H/Ersparnis haben keinen Tages-
-    // Sensor → „—" wo nicht vorhanden, kein Weglassen ([[feedback_sensor_ableitbar_nicht_weglassen]]).
+    // PV-Anteil/Netz-Anteil sind auf Tag mit Sensor erhebbar (tagDetail);
+    // km und Verbrauch/100km haben keinen Tages-Sensor und stehen deshalb als
+    // „—" mit Grund in den Kacheln unten, statt wegzufallen
+    // ([[feedback_sensor_ableitbar_nicht_weglassen]]).
+    //
+    // ⛔ **Hier standen bis 29.08.2026 zusätzlich `extern`, `V2H` und
+    // `Ersparnis` — alle drei falsch** (N-348, beim Messen des WP-Befunds
+    // gefunden). `extern` und `V2H` werden sehr wohl weggelassen, und zwar in
+    // BEIDEN Sichten: sie sind Detailzeilen hinter `hat(…)` und kommen aus
+    // einem Monats-Handeintrag; ohne Eintrag fehlt die Zeile auch im Monat.
+    // Das ist kein Verstoß gegen die Regel oben, sondern ein anderer Fall —
+    // sie greift, wo eine Sicht in DERSELBEN Datenlage weniger sagt als ihre
+    // Nachbarsicht. Und eine `Ersparnis`-Kachel gibt es in diesem Block
+    // überhaupt nicht (nur den Zusammenfassungs-Satz weiter unten); die
+    // Wärmepumpe hat eine, die E-Mobilität nicht.
     const emobErsparnis = ersparnisAnzeige(d.emob_ersparnis_euro, 2)
     const kpis: KpiStripItem[] = [
       { title: 'Ladung gesamt', value: fmt(d.emob_ladung_kwh), unit: 'kWh', color: 'purple', icon: Plug },
@@ -567,7 +579,11 @@ export function baueKomponentenBloecke(
         hinweis: tagHinweis(d.emob_verbrauch_100km != null, 'Folgt aus der Tages-Strecke — kein Tages-Sensor.') },
     ]
     // Lade-Herkunft + V2H als Detailzeilen — Netz-Anteil tagesgenau (tagDetail),
-    // extern/V2H nur monatlich (→ nur zeigen wenn vorhanden).
+    // extern/V2H aus dem Monats-Handeintrag (→ nur zeigen wenn vorhanden).
+    //
+    // ⚑ Das gilt **period-unabhängig** und ist deshalb kein S3-Fall: Ohne
+    // Eintrag fehlt die Zeile im Monat genauso. Der Kommentar oben behauptete
+    // bis 29.08.2026 das Gegenteil (N-348).
     const emobDetail: DetailZeile[] = []
     if (hat(d.emob_ladung_netz_kwh)) emobDetail.push({ label: 'Ladung · Netz-Anteil', wert: `${fmt(d.emob_ladung_netz_kwh)} kWh` })
     if (hat(d.emob_ladung_extern_kwh)) emobDetail.push({ label: 'Ladung · extern', wert: `${fmt(d.emob_ladung_extern_kwh)} kWh` })

@@ -214,6 +214,17 @@ export interface TagDetail {
   wp_jaz: number | null
   wp_jaz_grund: string | null
   wp_jaz_hinweis: string | null
+  // N-348 — je Funktion, wie im Monat. Wert ODER Grund, nie beides null:
+  // die geteilte Blockfabrik rendert die Zeile sonst gar nicht, und genau das
+  // war der Befund (der Monat antwortete, der Tag schwieg).
+  wp_jaz_heizen: number | null
+  wp_jaz_heizen_grund: string | null
+  wp_jaz_warmwasser: number | null
+  wp_jaz_warmwasser_grund: string | null
+  //  Im Tag immer `null` — die Kältemenge hat keinen Tages-Aggregationspfad;
+  //  der Grund daneben sagt, welcher der beiden Fälle vorliegt.
+  wp_jaz_kuehlen: number | null
+  wp_jaz_kuehlen_grund: string | null
   /** **W-18** — warum die Tages-Wärme fehlt, als fertiger Satz aus dem Backend.
    *  Nur gesetzt, wenn `wp_waerme_kwh` `null` ist. **Nicht im Client
    *  formulieren**: Der frühere fest verdrahtete Satz beschrieb einen von drei

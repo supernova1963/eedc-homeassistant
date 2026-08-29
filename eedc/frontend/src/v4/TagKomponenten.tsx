@@ -20,9 +20,23 @@
  * Heizung/Warmwasser, Speicher-Netzladung (Arbitrage), Speicher effektiver
  * Ladepreis.
  *
- * Echt MONATLICHE KPIs (WP-Wärme/JAZ/€ thermisch, E-Auto-km/Verbrauch/€/V2H
- * kein Tages-Sensor) existieren pro Tag NICHT → auf Tag bewusst weggelassen
- * (kein „—"-Clutter) + Cross-Link „→ Monat" (period='tag' in den Bauern).
+ * ⛔ **Hier stand bis 29.08.2026: „Echt MONATLICHE KPIs (WP-Wärme/JAZ/€
+ * thermisch, E-Auto-km/Verbrauch/€/V2H kein Tages-Sensor) existieren pro Tag
+ * NICHT → auf Tag bewusst weggelassen (kein ‚—'-Clutter)."** Der Satz war
+ * zweifach überholt und hat die Auslassung überlebt, die er begründete:
+ *
+ *  - **WP-Wärme und JAZ gibt es pro Tag** — seit dem 26.08. liefert der
+ *    Tages-Endpunkt beides fertig aus dem Layer (W-9/W-3).
+ *  - **„Weglassen statt ‚—'" ist die abgelöste Linie.** Gültig ist seit dem
+ *    24.06.2026 die Gegenregel: was sensor-ableitbar, aber nicht vorhanden ist,
+ *    steht als „—" **mit Grund** da; ein „—" ist Information, kein Clutter
+ *    ([[feedback_sensor_ableitbar_nicht_weglassen]]). Genau danach verfahren
+ *    die km- und Verbrauchs-Kacheln unten seit Langem.
+ *
+ * ⭐ Der Satz ist nicht nur veraltet, er war **wirksam**: Die drei Arbeitszahlen
+ * je Funktion fielen im Tag ersatzlos weg, weil ihre Durchreichung fehlte — und
+ * dieser Absatz las sich wie die Begründung dafür (**N-348**, 29.08.2026).
+ * Was der Tag wirklich nicht kann, steht jetzt beim jeweiligen Feld.
  */
 import { baueKomponentenBloecke } from './KomponentenSektionen'
 import { finanzTeaserBlock } from './MonatRahmen'
@@ -97,6 +111,17 @@ export function baueTagAlsMonat(
     wp_jaz: tagDetail?.wp_jaz ?? null,
     wp_jaz_grund: tagDetail?.wp_jaz_grund ?? null,
     wp_jaz_hinweis: tagDetail?.wp_jaz_hinweis ?? null,
+    // N-348: Bis 29.08.2026 endete die Durchreichung hier, und die drei
+    // je-Funktion-Zeilen fielen im Tag ERSATZLOS weg — nicht als „—", sondern
+    // gar nicht, weil `jazZeile` in der geteilten Blockfabrik ohne Wert UND
+    // ohne Grund nichts rendert. Der Monat lieferte beides immer. Die Zeilen
+    // kommen jetzt fertig aus dem Backend, wie die Gesamtzahl darüber.
+    wp_jaz_heizen: tagDetail?.wp_jaz_heizen ?? null,
+    wp_jaz_heizen_grund: tagDetail?.wp_jaz_heizen_grund ?? null,
+    wp_jaz_warmwasser: tagDetail?.wp_jaz_warmwasser ?? null,
+    wp_jaz_warmwasser_grund: tagDetail?.wp_jaz_warmwasser_grund ?? null,
+    wp_jaz_kuehlen: tagDetail?.wp_jaz_kuehlen ?? null,
+    wp_jaz_kuehlen_grund: tagDetail?.wp_jaz_kuehlen_grund ?? null,
     // W-18: Der Grund kommt fertig formuliert aus dem Backend — er weiss als
     // einziger, ob der Zaehler fehlt, ob er zugeordnet aber fuer diesen Tag
     // leer ist, oder ob er zurueckgesprungen ist.
