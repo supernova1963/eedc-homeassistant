@@ -26,6 +26,15 @@ const MUSTER = [
   [/\[\s*'Sonntag'\s*,\s*'Montag'/, 'Wochentags-Array (lang) — WT_LANG aus lib/constants nutzen'],
   [/erzeuger:\s*'Erzeuger'/, 'Sonstiges-Kategorie-Map — SONSTIGES_KATEGORIE_LABELS nutzen'],
   [/ha_sensor:\s*'HA'/, 'Provenance-Map — DATENQUELLE_LABELS nutzen'],
+  // N-350 (2026-08-29): Zwei handgeschriebene wp_art→Label-Ketten in
+  // `CommunityUebersichtTeile.tsx` fuehrten VIER Arten, `WP_ART_LABELS` fuehrt FUENF —
+  // `brauchwasser` fiel durch und bekam kein Label, obwohl der Community-Server ihn
+  // als gueltigen `wp_art` annimmt. Exakt die Drift, gegen die dieser Waechter gebaut
+  // ist, nur an einem Vokabular, das seine Musterliste noch nicht kannte.
+  // ⚠ Anker ist `luft_wasser`, weil beide gefundenen Ketten damit begannen; eine Kette,
+  //   die mit einer anderen Art oeffnet, faengt er nicht — das ist die bekannte Grenze
+  //   aller Muster hier, keine Luecke dieses Eintrags.
+  [/===\s*'luft_wasser'\s*\?/, 'WP-Art-Label-Kette — WP_ART_LABELS aus lib/constants nutzen'],
 ]
 
 /** Dokumentierte Ausnahmen: Pfad → erlaubte Treffer-Zahl (Bestand, mit Grund). */

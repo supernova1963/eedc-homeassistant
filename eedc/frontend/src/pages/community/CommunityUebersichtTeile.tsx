@@ -20,7 +20,7 @@ import type { CommunityBenchmarkResponse, KPIVergleich } from '../../api/communi
 import {
   ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Legend,
 } from 'recharts'
-import { REGION_NAMEN, EIGENE_SERIE_FARBEN, SERIEN_PALETTE, ACHSEN_TICK, fmtZahl } from '../../lib'
+import { REGION_NAMEN, EIGENE_SERIE_FARBEN, SERIEN_PALETTE, ACHSEN_TICK, fmtZahl, jazVergleichAnzeige } from '../../lib'
 import { hatJahresfenster, jahresfensterHinweis, jahresfensterKennzeichnung, jahresfensterStand } from '../../lib/communityFenster'
 
 // Element-Park (IA-V4, Element-Park-Doktrin Gernot 2026-06-27): JEDE Anzeige
@@ -247,11 +247,12 @@ export function useUebersichtDaten(benchmark: CommunityBenchmarkResponse | null)
 
     {
       const wp = benchmark.benchmark_erweitert?.waermepumpe
-      const vergleich = wp?.jaz_typ?.community_avg ? wp.jaz_typ : wp?.jaz?.community_avg ? wp.jaz : null
-      if (wp && vergleich?.community_avg) {
-        const abw = ((vergleich.wert - vergleich.community_avg) / vergleich.community_avg) * 100
-        const wpArt = wp.wp_art ?? benchmark.anlage.wp_art
-        const wpArtLabel = wpArt === 'luft_wasser' ? ' (Luft/Wasser)' : wpArt === 'sole_wasser' ? ' (Sole/Wasser)' : wpArt === 'grundwasser' ? ' (Grundwasser)' : wpArt === 'luft_luft' ? ' (Luft/Luft)' : ''
+      // SoT: `lib/jazVergleich` entscheidet art-spezifisch vs. Gesamtschnitt UND
+      // ob die Art genannt werden darf (N-350) — nicht mehr inline hier.
+      const jaz = jazVergleichAnzeige(wp, benchmark.anlage.wp_art)
+      if (jaz.kpi?.community_avg != null) {
+        const abw = ((jaz.kpi.wert - jaz.kpi.community_avg) / jaz.kpi.community_avg) * 100
+        const wpArtLabel = jaz.artLabel ? ` (${jaz.artLabel})` : ''
         metriken.push({ label: `WP JAZ${wpArtLabel}`, abweichungProzent: abw, einheit: '%', icon: <Home className="h-4 w-4" />, kategorie: 'waermepumpe' })
       }
     }
@@ -289,10 +290,16 @@ export function useUebersichtDaten(benchmark: CommunityBenchmarkResponse | null)
       const sp = benchmark.benchmark_erweitert.speicher
       data.push({ kategorie: 'Speicher', du: sp.wirkungsgrad!.wert, community: sp.wirkungsgrad!.community_avg!, fullMark: 100 })
     }
-    if (benchmark.benchmark_erweitert?.waermepumpe?.jaz?.community_avg) {
-      const wp = benchmark.benchmark_erweitert.waermepumpe
-      const jazMax = Math.max(wp.jaz!.wert, wp.jaz!.community_avg!) * 1.2
-      data.push({ kategorie: 'WP-Effizienz', du: (wp.jaz!.wert / jazMax) * 100, community: (wp.jaz!.community_avg! / jazMax) * 100, fullMark: 100 })
+    {
+      // Dieselbe Bezugsgruppe wie die JAZ-Zeile und die Abweichungs-Liste (N-350):
+      // der Radar verglich bis zum 29.08.2026 gegen den Schnitt ueber ALLE Arten,
+      // waehrend zwei Zeilen weiter oben `jaz_typ` galt.
+      const jazRadar = jazVergleichAnzeige(benchmark.benchmark_erweitert?.waermepumpe, benchmark.anlage.wp_art)
+      if (jazRadar.kpi?.community_avg != null) {
+        const { wert, community_avg } = jazRadar.kpi
+        const jazMax = Math.max(wert, community_avg) * 1.2
+        data.push({ kategorie: 'WP-Effizienz', du: (wert / jazMax) * 100, community: (community_avg / jazMax) * 100, fullMark: 100 })
+      }
     }
     if (benchmark.benchmark_erweitert?.eauto?.pv_anteil?.community_avg) {
       const ea = benchmark.benchmark_erweitert.eauto
@@ -463,13 +470,12 @@ export function KomponentenBenchmarks({ benchmark }: { benchmark: CommunityBench
       )}
       {e.waermepumpe && benchmark.anlage.hat_waermepumpe && (() => {
         const wp = e.waermepumpe
-        const jazVergleich = wp.jaz_typ?.community_avg ? wp.jaz_typ : wp.jaz
-        const wpArt = wp.wp_art ?? benchmark.anlage.wp_art
-        const wpArtLabel = wpArt === 'luft_wasser' ? ' · Luft/Wasser' : wpArt === 'sole_wasser' ? ' · Sole/Wasser' : wpArt === 'grundwasser' ? ' · Grundwasser' : wpArt === 'luft_luft' ? ' · Luft/Luft' : ''
+        const jaz = jazVergleichAnzeige(wp, benchmark.anlage.wp_art)   // SoT, s. N-350
+        const wpArtLabel = jaz.artLabel ? ` · ${jaz.artLabel}` : ''
         return (
           <Parkbar id={`ueb-komp-${KOMP_SLUG.waermepumpe}`} titel="Wärmepumpe">
             <KomponentenCard title="Wärmepumpe" icon={<Home className="h-6 w-6 text-blue-500" />}>
-              <KPIRow label={`JAZ${wpArtLabel}`} kpi={jazVergleich} einheit="" />
+              <KPIRow label={`JAZ${wpArtLabel}`} kpi={jaz.kpi} einheit="" />
               <KPIRow label="Stromverbrauch" kpi={wp.stromverbrauch} einheit="kWh" hideComparison />
               <KPIRow label="Wärmeerzeugung" kpi={wp.waermeerzeugung} einheit="kWh" hideComparison />
             </KomponentenCard>

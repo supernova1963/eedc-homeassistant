@@ -32,7 +32,7 @@ import { ZELLE, KOPF_ZELLE } from '../../components/ui/tabelleMasse'
 import { Parkbar } from '../../components/park'
 import { useChartTheme } from '../../context/ThemeContext'
 import { useLegendenToggle } from '../../hooks'
-import { SERIEN_PALETTE, EIGENE_SERIE_FARBEN, LADEQUELLEN_FARBEN, ACHSEN_TICK, fmtZahl } from '../../lib'
+import { SERIEN_PALETTE, EIGENE_SERIE_FARBEN, LADEQUELLEN_FARBEN, ACHSEN_TICK, fmtZahl, jazVergleichAnzeige } from '../../lib'
 import { communityApi } from '../../api'
 import type {
   CommunityBenchmarkResponse,
@@ -173,7 +173,9 @@ export function waermepumpeParkIds(
   const wp = benchmark.benchmark_erweitert?.waermepumpe
   if (!wp) return []
   const ids: string[] = []
-  if (wp.jaz) ids.push('komp-wp-kpi-jaz')
+  // Dieselbe Bedingung wie die Kachel selbst (N-350): sie rendert bei
+  // `jazVergleichAnzeige(...).kpi`, nicht mehr bei `wp.jaz` allein.
+  if (jazVergleichAnzeige(wp, benchmark.anlage.wp_art).kpi) ids.push('komp-wp-kpi-jaz')
   if (wp.stromverbrauch) ids.push('komp-wp-kpi-stromverbrauch')
   if (wp.waermeerzeugung) ids.push('komp-wp-kpi-waermeerzeugung')
   // JAZ-nach-Region-Block (Chart bzw. Hinweis-Box): nur wenn ≥1 Region mit JAZ.
@@ -465,6 +467,14 @@ export function WaermepumpeDeepDive({
   const schmal = useSchmaleAchse()
   const wp = benchmark.benchmark_erweitert?.waermepumpe
   const eigeneRegion = benchmark.anlage.region
+  // SoT fuer den JAZ-Vergleich (N-350): art-spezifisch, wo der Server ihn liefert.
+  // Bis zum 29.08.2026 las diese Seite `wp.jaz` — den Schnitt ueber ALLE Arten —
+  // waehrend *Community → Uebersicht* laengst `jaz_typ` bevorzugte; dieselbe Anlage
+  // bekam damit auf zwei Seiten zwei verschiedene Abweichungen.
+  const jaz = useMemo(
+    () => jazVergleichAnzeige(wp, benchmark.anlage.wp_art),
+    [wp, benchmark.anlage.wp_art],
+  )
 
   // Community-Daten nach Region
   const regionData = useMemo(() => {
@@ -496,9 +506,16 @@ export function WaermepumpeDeepDive({
       tips.push('JAZ unter 3.0: Prüfe Vorlauftemperaturen und Wärmedämmung. Höhere Temperaturen senken die Effizienz.')
     }
 
-    // Nur Community-Vergleich wenn genug Anlagen vorhanden
-    if (gesamtAnzahlWP >= 3 && wp.jaz && wp.jaz.community_avg && wp.jaz.wert < wp.jaz.community_avg * 0.9) {
-      tips.push('Deine JAZ liegt deutlich unter dem Community-Durchschnitt. Eine Optimierung der Heizkurve könnte helfen.')
+    // Nur Community-Vergleich wenn genug Anlagen vorhanden.
+    // ⚠ Gegen DIESELBE Bezugsgruppe wie die Kachel darueber (N-350) — ein Tipp, der
+    // eine andere Vergleichsgruppe nimmt als die Zahl, die er kommentiert, waere der
+    // Fund eine Ebene tiefer.
+    if (gesamtAnzahlWP >= 3 && jaz.kpi?.community_avg && jaz.kpi.wert < jaz.kpi.community_avg * 0.9) {
+      tips.push(
+        jaz.artSpezifisch
+          ? 'Deine JAZ liegt deutlich unter dem Schnitt vergleichbarer Anlagen. Eine Optimierung der Heizkurve könnte helfen.'
+          : 'Deine JAZ liegt deutlich unter dem Community-Durchschnitt. Eine Optimierung der Heizkurve könnte helfen.',
+      )
     }
 
     if (tips.length === 0 && wp.jaz && wp.jaz.wert >= 3.5) {
@@ -509,7 +526,7 @@ export function WaermepumpeDeepDive({
     }
 
     return tips
-  }, [wp, gesamtAnzahlWP])
+  }, [wp, jaz, gesamtAnzahlWP])
 
   if (!wp) return null
 
@@ -517,11 +534,15 @@ export function WaermepumpeDeepDive({
     <>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <CommunityVergleichsKPI
-          label="Jahresarbeitszahl (JAZ)"
+          label={`Jahresarbeitszahl (JAZ)${jaz.artLabel ? ` · ${jaz.artLabel}` : ''}`}
           icon={<Thermometer className="h-5 w-5 text-blue-500" />}
-          kpi={wp.jaz}
+          kpi={jaz.kpi}
           einheit=""
-          beschreibung="Wärmeenergie / Stromverbrauch"
+          beschreibung={
+            jaz.artSpezifisch
+              ? 'Wärmeenergie / Stromverbrauch · Vergleich mit gleicher Bauart'
+              : 'Wärmeenergie / Stromverbrauch'
+          }
           large
           parkId="komp-wp-kpi-jaz"
           parkTitel="Wärmepumpe · JAZ"
