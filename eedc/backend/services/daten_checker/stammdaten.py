@@ -1146,18 +1146,46 @@ class StammdatenChecks:
                 # gemeldet; ein Speicher mit aktivierter Arbitrage und fehlendem
                 # Ø Ladepreis blieb unbeanstandet.
                 if param.get(PARAM_SPEICHER["ARBITRAGE_FAEHIG"]):
+                    # ⭐ Der Text nennt seit 2026-08-30 die GEMEINTE Größe
+                    # — die Präzisierung steht HINTER „fehlt", nicht davor:
+                    # die Kernaussage bleibt so als Satzteil zusammen, und
+                    # eine bestehende Gegenprobe sucht genau danach
+                    # (test_daten_checker_arbitrage_v2h_preise_397).
+                    # (rapahl, PN 91806). Es gibt zwei mit fast gleichem Namen,
+                    # und beide zu Recht:
+                    #   • `lade_durchschnittspreis_cent` — Stammdaten-Annahme,
+                    #     aus der Prognose und ROI rechnen (`aussichten.py`,
+                    #     `investitionen/crud.py`). DAS prüft diese Zeile.
+                    #   • `speicher_ladepreis_cent` — der gemessene Monatswert,
+                    #     im Monatsabschluss erfassbar und per Sensor füllbar
+                    #     (`monats_fakten.py`).
+                    # Er hatte den Sensor zugeordnet, sah daneben 24,79 ct
+                    # stehen und las die Meldung als Widerspruch. Sie war
+                    # richtig — sie sagte nur nicht, welchen Preis sie meint.
                     if not param.get("lade_durchschnittspreis_cent"):
                         ergebnisse.append(CheckErgebnis(
                             kategorie=kat, schwere=CheckSeverity.WARNING,
-                            meldung=f"{name}: Arbitrage aktiv, aber Ø Ladepreis fehlt",
-                            details="Wird für Arbitrage-Einsparungsberechnung benötigt",
+                            meldung=f"{name}: Arbitrage aktiv, aber Ø Ladepreis fehlt (Stammdaten-Wert)",
+                            details=(
+                                "Gemeint ist der Erwartungswert in den Stammdaten des "
+                                "Speichers — aus ihm rechnen Prognose und ROI in die "
+                                "Zukunft. Ein zugeordneter Preis-Sensor oder ein "
+                                "gepflegter Monatswert ersetzt ihn nicht: der misst, "
+                                "was war, dieser schätzt, was kommt."
+                            ),
                             link="/einstellungen/investitionen",
                         ))
                     if not param.get("entlade_vermiedener_preis_cent"):
                         ergebnisse.append(CheckErgebnis(
                             kategorie=kat, schwere=CheckSeverity.WARNING,
-                            meldung=f"{name}: Arbitrage aktiv, aber Ø Entladepreis fehlt",
-                            details="Wird für Arbitrage-Einsparungsberechnung benötigt",
+                            meldung=f"{name}: Arbitrage aktiv, aber Ø Entladepreis fehlt (Stammdaten-Wert)",
+                            details=(
+                                "Gemeint ist der Erwartungswert in den Stammdaten des "
+                                "Speichers — der Preis, den eine entladene "
+                                "Kilowattstunde vermeidet. Aus ihm rechnen Prognose "
+                                "und ROI in die Zukunft; gemessene Monatswerte "
+                                "ersetzen ihn nicht."
+                            ),
                             link="/einstellungen/investitionen",
                         ))
                 ergebnisse.extend(self._check_investition_monatsdaten(

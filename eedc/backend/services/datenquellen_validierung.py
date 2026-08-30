@@ -104,13 +104,18 @@ def finde_aggregat_teilweise_verdraengt(felder: list[dict]) -> dict[str, dict]:
         f for f in felder
         if f.get("typ") in _PV_KOMPONENTEN_TYPEN
         and f.get("feld") == _PV_KOMPONENTEN_FELD_MONAT
+        # ⛔ Hier bleibt es bei `belegt`, NICHT `_liefert`: Die Frage ist die
+        # umgekehrte („welcher Erzeuger hat KEINEN eigenen Zähler?"), und ein
+        # zugeordneter Zähler, der gerade nichts meldet, ist kein fehlender
+        # Zähler. Mit `_liefert` würde ein vorübergehender Sensorausfall als
+        # dauerhafte Lücke gemeldet — die Gegenrichtung desselben Fehlers.
         and not f.get("belegt")
     ]
     if not ohne_zaehler:
         return {}  # keine Lücke ⇒ `finde_redundante_aggregate` ist zuständig
     mit_zaehler = [
         f for f in felder
-        if f.get("belegt") and f.get("typ") in _PV_KOMPONENTEN_TYPEN
+        if _liefert(f) and f.get("typ") in _PV_KOMPONENTEN_TYPEN
         and f.get("feld") == _PV_KOMPONENTEN_FELD_MONAT
     ]
     if not mit_zaehler:
@@ -119,7 +124,7 @@ def finde_aggregat_teilweise_verdraengt(felder: list[dict]) -> dict[str, dict]:
         return {}
     out: dict[str, dict] = {}
     for f in felder:
-        if (f.get("belegt") and f.get("typ") == "basis"
+        if (_liefert(f) and f.get("typ") == "basis"
                 and f.get("feld") == _PV_AGGREGAT_FELD_MONAT):
             out[f["id"]] = {
                 "art": "teilweise_verdraengt", "schwere": "warning",
@@ -175,10 +180,41 @@ def state_class_problem(feld_einheit: Optional[str], state_class: Optional[str])
     }
 
 
+def _liefert(feld: dict) -> bool:
+    """Belegt UND es kommt etwas an — die Bedingung fürs Verdrängen.
+
+    ⚠ **Ist Home Assistant nicht erreichbar**, hat kein HA-Feld einen Wert, und
+    die Verdrängungs-Hinweise verstummen sämtlich. Das ist gewollt und
+    dasselbe Muster wie eine Zeile darüber in der Route (*„Nicht erreichbar →
+    leeres Dict, keine Validierungs-Fehlalarme"*): Ohne Messwerte lässt sich
+    nicht sagen, was wen verdrängt — „nicht prüfbar" bleibt still, nie
+    Pseudo-Grün und nie eine geratene Warnung.
+
+    ⚠ Fehlt `hat_wert` im Eintrag (älterer Aufrufer), gilt die alte, schwächere
+    Bedingung. Ein `.get("hat_wert", True)` wäre hier die stillere Variante
+    gewesen; sie ist bewusst gewählt, damit ein nicht umgestellter Aufrufer
+    nicht schlagartig ALLE Verdrängungs-Hinweise verliert — das wäre die
+    Gegenrichtung desselben Fehlers.
+    """
+    return bool(feld.get("belegt")) and bool(feld.get("hat_wert", True))
+
+
 def finde_redundante_aggregate(felder: list[dict]) -> dict[str, dict]:
     """Belegte Aggregat-Felder, die durch belegte Komponenten wirkungslos sind (C).
 
-    `felder`: [{"id", "feld", "typ", "belegt": bool}]. `belegt` = Quelle ≠ keine.
+    `felder`: [{"id", "feld", "typ", "belegt": bool, "hat_wert": bool}].
+    `belegt` = Quelle ≠ keine · `hat_wert` = dort kommt tatsächlich etwas an.
+
+    ⭐ **Verdrängen kann nur, was liefert** (rapahl PN 91806, 2026-08-30).
+    Bis dahin genügte hier der EINTRAG. Das traf einen realen Fall: Die
+    B8-Materialisierung stempelt `mqtt_inbound_standard` auf jedes Feld ohne
+    HA-Sensor und ohne Gateway-Zeile — bei ihm auf *Einspeisung (W)* und
+    *Netzbezug (W)*, wo nie eine Nachricht ankam. Beide galten als „belegt" und
+    erklärten damit seinen bidirektionalen Netzsensor für wirkungslos, der als
+    einziger einen Wert lieferte. Die Live-Engine sah das anders und benutzte
+    ihn — sie verwirft wertlose Felder
+    (`live_power_service._apply_quellen_overrides`). Zwei Definitionen von
+    „belegt" auf derselben Fläche; die Meldung hatte die schwächere.
     Erwartet die Felder ALLER aktiven Investitionen — auch die unbelegten: die
     kWh-Bedingung („keine Lücke mehr") ist sonst nicht entscheidbar.
     Returns {aggregat_field_id: {"art":"redundant","schwere":"warning","grund","wirksame_felder":[…],"text"}}.
@@ -186,7 +222,7 @@ def finde_redundante_aggregate(felder: list[dict]) -> dict[str, dict]:
     # Live: ein einziges belegtes `leistung_w` genügt (Engine-Vorrang).
     pv_komp_live = [
         f for f in felder
-        if f.get("belegt") and f.get("typ") in _PV_KOMPONENTEN_TYPEN
+        if _liefert(f) and f.get("typ") in _PV_KOMPONENTEN_TYPEN
         and f.get("feld") == _PV_KOMPONENTEN_FELD_LIVE
     ]
     # Monat: erst wenn JEDE aktive PV-Quelle ihren eigenen kWh-Wert hat, ist
@@ -198,14 +234,14 @@ def finde_redundante_aggregate(felder: list[dict]) -> dict[str, dict]:
         if f.get("typ") in _PV_KOMPONENTEN_TYPEN
         and f.get("feld") == _PV_KOMPONENTEN_FELD_MONAT
     ]
-    pv_komp_monat_belegt = [f for f in pv_komp_monat if f.get("belegt")]
+    pv_komp_monat_belegt = [f for f in pv_komp_monat if _liefert(f)]
     pv_monat_vollstaendig = (
         bool(pv_komp_monat_belegt)
         and len(pv_komp_monat_belegt) == len(pv_komp_monat)
     )
     netz_split = [
         f for f in felder
-        if f.get("belegt") and f.get("typ") == "basis"
+        if _liefert(f) and f.get("typ") == "basis"
         and f.get("feld") in _NETZ_KOMPONENTEN_FELDER
     ]
     out: dict[str, dict] = {}
@@ -239,23 +275,51 @@ def finde_redundante_aggregate(felder: list[dict]) -> dict[str, dict]:
     return out
 
 
-def finde_doppelmappings(ha_zuordnungen: dict[str, str]) -> dict[str, dict]:
-    """Dieselbe HA-Entity in ≥2 Feldern → Doppelzählung (#314).
+#: Einheiten, deren Werte NICHT summiert werden. Ein Preis, der an zwei Stellen
+#: gelesen wird, wird nicht doppelt gezählt — er gilt zweimal.
+_NICHT_ADDITIVE_EINHEITEN = {"ct/kwh", "€/kwh", "eur/kwh", "€", "eur", "%", "°c", "ct"}
+
+
+def finde_doppelmappings(
+    ha_zuordnungen: dict[str, str],
+    feld_einheit: Optional[dict[str, str]] = None,
+) -> dict[str, dict]:
+    """Dieselbe HA-Entity in ≥2 MENGEN-Feldern → Doppelzählung (#314).
 
     `ha_zuordnungen`: {field_id: entity_id} nur der HA-zugeordneten Felder.
-    Returns {field_id: {"art":"doppelmapping","schwere":"warning","entity_id","andere_felder":[…],"text"}}.
+    `feld_einheit`: {field_id: Einheit} — ohne sie gilt das alte Verhalten.
+
+    ⭐ **Preise werden nicht doppelt gezählt** (rapahl, PN 91806, 2026-08-30).
+    Bei ihm hängt derselbe Sensor am *Strompreis (dynamischer Tarif)* und am
+    *Ø Ladepreis* des Speichers — beides richtig und beides wirksam: Sein
+    Octopus-Heat-Tarif hat drei Tagespreise, der Monatsabschluss bildet daraus
+    korrekt Ø 28,67 ct/kWh. Trotzdem stand an beiden Feldern „→ Doppelzählung.
+    Nur einem Feld zuordnen" — ein Rat, der eine korrekte Zuordnung entfernt
+    hätte.
+
+    ⚠ **Der Hinweis bleibt für Mengen** (kWh, km, Stück): Dort ist er richtig,
+    dort war er auch gemeint (#314). Die Trennlinie ist die Einheit, nicht das
+    Feld — additiv oder nicht.
     """
     per_eid: dict[str, list[str]] = defaultdict(list)
     for fid, eid in ha_zuordnungen.items():
         if eid:
             per_eid[eid].append(fid)
+    einheiten = feld_einheit or {}
+
+    def _additiv(fid: str) -> bool:
+        return (einheiten.get(fid) or "").strip().lower() not in _NICHT_ADDITIVE_EINHEITEN
+
     out: dict[str, dict] = {}
     for eid, fids in per_eid.items():
-        if len(fids) >= 2:
-            for fid in fids:
+        # Nur Felder, deren Werte überhaupt summiert werden, können doppelt
+        # zählen. Bleiben davon weniger als zwei, gibt es nichts zu melden.
+        additive = [f for f in fids if _additiv(f)]
+        if len(additive) >= 2:
+            for fid in additive:
                 out[fid] = {
                     "art": "doppelmapping", "schwere": "warning", "entity_id": eid,
-                    "andere_felder": [x for x in fids if x != fid],
+                    "andere_felder": [x for x in additive if x != fid],
                     "text": f"Dieselbe HA-Entity ({eid}) ist mehreren Feldern "
                             f"zugeordnet → Doppelzählung. Nur einem Feld zuordnen.",
                 }
@@ -344,11 +408,20 @@ _PV_AGGREGAT_NUR_ANLAGENSUMME_TEXT = (
     "gemessen ist."
 )
 
+# ⭐ Diese Texte sagen seit 2026-08-30, was sie BEDEUTEN — nicht nur, was der
+# Fall ist (rapahl, PN 91806). Vorher stand hier ein reiner Zustandssatz an
+# einer Stelle, an der rechts ein Schalter sitzt; er hat sich die Handlung
+# dazugedacht („hier stand immer: bitte keine auswählen") und geklickt. Sein
+# eigener Vorschlag war der bessere: sagen, dass nichts zu tun ist.
 _GRUPPEN_TEXT = {
-    "pv_energie": "Die PV-Erzeugung ist bereits an anderer Stelle zugeordnet.",
-    "pv_live": "Die PV-Leistung ist bereits an anderer Stelle zugeordnet.",
-    "netz_live": "Netz-Leistung ist bereits zugeordnet (kombiniert oder getrennt).",
-    "wp_strom": "Der WP-Stromverbrauch ist bereits zugeordnet.",
+    "pv_energie": "Die PV-Erzeugung ist bereits an anderer Stelle zugeordnet — "
+                  "hier ist nichts einzutragen.",
+    "pv_live": "Die PV-Leistung ist bereits an anderer Stelle zugeordnet — "
+               "hier ist nichts einzutragen.",
+    "netz_live": "Netz-Leistung ist bereits zugeordnet (kombiniert oder "
+                 "getrennt) — hier ist nichts einzutragen.",
+    "wp_strom": "Der WP-Stromverbrauch ist bereits zugeordnet — hier ist "
+                "nichts einzutragen.",
 }
 
 

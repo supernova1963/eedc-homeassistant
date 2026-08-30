@@ -156,4 +156,13 @@ def test_basis_zeile_behaelt_den_allgemeinen_satz():
     ergebnis = stufe_bedarf_ein(felder, {"pv-module"})
 
     assert ergebnis[AGG]["bedarf"] == "inaktiv"
-    assert ergebnis[AGG]["text"] == "Die PV-Erzeugung ist bereits an anderer Stelle zugeordnet."
+    # ⚑ Bis 2026-08-30 stand hier ein Zeichenvergleich auf den ganzen Satz. Der
+    # Text hat seither einen Zusatz („— hier ist nichts einzutragen"), weil ein
+    # reiner Zustandssatz neben einem Schalter als Aufforderung gelesen wurde
+    # (rapahl, PN 91806). Die Zusicherung ist deshalb auf ihre AUSSAGE
+    # umgestellt, nicht gestrichen: die Basis-Zeile bekommt den ALLGEMEINEN
+    # Satz — und ausdrücklich nicht den Komponenten-Text aus dem Nachbartest.
+    text = ergebnis[AGG]["text"]
+    assert "bereits an anderer Stelle zugeordnet" in text
+    assert "je Erzeuger" not in text
+    assert "sobald einer gemessen wird" not in text

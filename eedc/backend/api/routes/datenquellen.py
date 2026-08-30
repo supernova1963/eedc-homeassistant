@@ -984,9 +984,41 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
             if d:  # nur wenn HA erreichbar (sonst keine Einheit → kein Fehlalarm)
                 _add_problem(fid, einheit_problem(feld_einheit.get(fid), d.get("einheit")))
                 _add_problem(fid, state_class_problem(feld_einheit.get(fid), d.get("state_class")))
+    def _hat_wert(fid: str) -> bool:
+        """Kommt bei diesem Feld tatsächlich etwas an?
+
+        ⭐ **Die Unterscheidung, die dieses Modul an anderer Stelle längst
+        trifft** (`snapshot/keys.py`, 27.08.): *„Ein Stempel und eine Wahl sehen
+        im Store bitgleich aus — deshalb entscheidet hier der Messwert, nicht
+        der Eintrag."* Die B8-Materialisierung stempelt beim einmaligen
+        Start-Lauf `mqtt_inbound_standard` auf **jedes** Feld ohne HA-Sensor und
+        ohne Gateway-Zeile — gemessen an einer frisch angelegten Anlage: 31
+        Felder, 31-mal. Ein solcher Stempel ist keine Zuordnung des Anwenders.
+
+        Anlass (rapahl, PN 91806, 2026-08-30): Bei ihm trugen *Einspeisung (W)*
+        und *Netzbezug (W)* solche Stempel ohne je empfangenen Wert (beide „–",
+        beide amber) — und verdrängten damit rechnerisch seinen bidirektionalen
+        Netzsensor, der als einziger lieferte (−1250 W). Die Meldung sagte
+        „Wirkungslos … der Kombi-Sensor wird ignoriert"; die Live-Engine benutzt
+        ihn aber, weil sie wertlose Felder verwirft
+        (`live_power_service._apply_quellen_overrides`). Der Hinweis begründete
+        sich also mit einer Wirkung, die nicht eintritt.
+
+        ⚠ Dieselbe Kaskade wie die Wert-Anzeige weiter unten (§2d) — HA aus dem
+        REST-Batch, Inbound/Gateway aus dem Cache, „keine" hat keinen Wert.
+        """
+        eintrag = effektiv.get(fid) or {}
+        q = eintrag.get("quelle", QUELLE_KEINE)
+        if q in QUELLEN_HA:
+            return ha_werte.get(eintrag.get("entity_id")) is not None
+        if q in (QUELLE_STANDARD, QUELLE_GATEWAY):
+            return cache_wert.get(fid, (None, None))[0] is not None
+        return False
+
     felder_belegt = [
         {"id": fid, "feld": feld_feld[fid], "typ": feld_typ[fid],
-         "belegt": (effektiv.get(fid, {}).get("quelle", QUELLE_KEINE) != QUELLE_KEINE)}
+         "belegt": (effektiv.get(fid, {}).get("quelle", QUELLE_KEINE) != QUELLE_KEINE),
+         "hat_wert": _hat_wert(fid)}
         for fid in feld_feld
     ]
     for fid, p in finde_redundante_aggregate(felder_belegt).items():
@@ -996,7 +1028,7 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
     # niedrig (F-7 Stufe 1, Forum T89667 #109).
     for fid, p in finde_aggregat_teilweise_verdraengt(felder_belegt).items():
         _add_problem(fid, p)
-    for fid, p in finde_doppelmappings(ha_zuordnungen).items():
+    for fid, p in finde_doppelmappings(ha_zuordnungen, feld_einheit).items():
         _add_problem(fid, p)
 
     # §2i-6 — Bedarfs-Einstufung: ist ein LEERES Feld überhaupt eine Lücke?
