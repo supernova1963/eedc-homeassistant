@@ -79,6 +79,19 @@ function laden(key: string): GeparktesElement[] {
   }
 }
 
+/**
+ * Geparkte Elemente einer Sicht lesen, OHNE im Render-Baum zu hängen.
+ *
+ * Für Konsumenten außerhalb der Sicht — der Berichts-Dialog schickt den
+ * Park-Zustand von Cockpit → Monat beim Erzeugen des Monatsberichts mit
+ * (#395 Punkt 4). Bewusst derselbe Lader wie {@link ParkProvider}: eine zweite,
+ * eigene `JSON.parse`-Stelle wäre die schema-robuste Prüfung ein zweites Mal —
+ * und die zweite wäre die, die sie irgendwann nicht mehr hat.
+ */
+export function geparkteElemente(persistKey: string): GeparktesElement[] {
+  return laden(persistKey)
+}
+
 export function ParkProvider({
   persistKey,
   children,

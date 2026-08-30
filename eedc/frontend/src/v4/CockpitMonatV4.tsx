@@ -25,6 +25,7 @@ import { MONAT_KURZ, BLOCK_IDENTITAET } from '../lib'
 import { TagesverlaufChart, baueChartDaten } from './TagesverlaufChart'
 import { baueMonatKpis, MonatBilanz, type GleicheMonatStats } from './MonatBilanz'
 import { monatBilanzParkIds } from './bilanzParkIds'
+import { MONAT_PARK_KEY } from './monatParkScope'
 import { baueKomponentenBloecke } from './KomponentenSektionen'
 import { baueMonatAuswertungBloecke } from './MonatAuswertungBloecke'
 import { MonatsRail, type RailEintrag } from './MonatsRail'
@@ -66,7 +67,10 @@ function ladeMonatsdaten(anlageId: number, ref: MonatRef) {
 
 // persistKey-SoT der Sicht — geteilt von BlockShell (Block-Ebene) und ParkProvider
 // (Element-Ebene); eigene LS-Prefixe (`eedc-bloecke:` vs. `eedc-park:`).
-const SICHT_KEY = 'v4-cockpit-monat'
+// Seit dem Monatsbericht (#395 Punkt 4) hat der Park-Scope einen zweiten Leser
+// außerhalb dieses Baums (`components/DokumentationsDialog`) — deshalb steht die
+// Zeichenkette in `v4/monatParkScope.ts` und nicht mehr hier.
+const SICHT_KEY = MONAT_PARK_KEY
 
 /** Neueste Monatsreferenz zuerst. */
 function neuesteZuerst<T extends MonatRef>(xs: T[]): T[] {

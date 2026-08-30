@@ -1403,6 +1403,13 @@ P7_BASELINE_AUSNAHMEN: frozenset[str] = frozenset({
     # `lade_pv_je_monat` direkt — dieselbe Auflösung, eine Schicht weiter oben
     # (ADR-002/P10). Trägt den String-Vergleich SOLL/IST im Jahresbericht.
     "backend/services/pdf/builders/jahresbericht.py::w",
+    # Der Monatsbericht (#395 Punkt 4) liest die fertige `AktuellerMonatResponse`
+    # — das ERGEBNIS der Auflösung, nicht die Monatszeile. Die Route setzt
+    # `pv_erzeugung_kwh = fakt.erzeugung.pv_kwh` (`aktueller_monat.py:623/2493`),
+    # also aus `lade_monats_fakten`; der Bericht faltet nichts selbst
+    # (ADR-002/P10) und hat gar keinen Zugriff auf eine `Monatsdaten`-Zeile.
+    # Dieselbe Lage wie `pv_strings.py::w` — gleichnamiges Feld auf einem DTO.
+    "backend/services/pdf/builders/monatsbericht.py::d",
     # Dito — die Erzeugungs-Gewichte der Ertrags-Zerlegung (§8/5): der
     # Einspeise-Erlös wird nach GEMESSENER Erzeugung je ROI-Zeile verteilt,
     # und genau dafür ist `pv_je_modul` die vorgeschriebene Quelle.

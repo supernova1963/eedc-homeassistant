@@ -73,6 +73,7 @@ GET /api/docs
 GET /api/dokumentation/_selftest
 GET /api/dokumentation/anlagendokumentation/{anlage_id}
 GET /api/dokumentation/finanzbericht/{anlage_id}
+GET /api/dokumentation/monatsbericht/{anlage_id}
 GET /api/energie-profil/{anlage_id}/achse2-drift
 GET /api/energie-profil/{anlage_id}/debug-rohdaten
 GET /api/energie-profil/{anlage_id}/komponenten-serien

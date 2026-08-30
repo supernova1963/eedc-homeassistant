@@ -16,6 +16,17 @@
  * `CommunityShare` und `EnergieprofilTageTabelle` sind mit dem Flip gefallen, ihre
  * Bestands-Einträge hier entfernt. `CollapsibleSection`/`SortableSection` leben
  * weiter und bleiben mit ihrem Cap-Entscheid stehen.
+ *
+ * ⚑ **Kommentare zählen seit 2026-08-30 nicht mehr mit** (Monatsbericht, #395).
+ * Der Zähler lief über den ROHTEXT und meldete damit jede Datei, die das Wort
+ * `localStorage` nur ERKLÄRT — zwei neue Dateien, die den Park-Zustand
+ * ausdrücklich über den SoT (`park/ParkContext::geparkteElemente`) lesen und
+ * genau das im Kommentar begründen. Der Prüfer maß also das Gegenteil dessen,
+ * was er verlangt: Wer die Regel erklärt, verstößt gegen sie; wer schweigend
+ * zugreift und die Zeile `// eslint`-artig tarnt, nicht.
+ * ⚠ Die Bestandszahlen bleiben unverändert stehen: Ein Cap darf nur zu GROSS
+ * werden, nie zu klein — „weniger Treffer als eingefroren ist erlaubt" steht
+ * oben, und ein Nachziehen nach unten wäre eine Regeländerung im Vorbeigehen.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
@@ -74,7 +85,13 @@ let dateienMitZugriff = 0
 
 for (const file of srcFiles(SRC)) {
   const rel = relative(ROOT, file)
-  const treffer = (readFileSync(file, 'utf8').match(/localStorage/g) ?? []).length
+  // Blockkommentare (inkl. JSDoc) und Zeilenkommentare raus, BEVOR gezählt wird.
+  // Zeichenketten bleiben absichtlich drin: `window['localStorage']` ist ein
+  // Zugriff, kein Kommentar.
+  const code = readFileSync(file, 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1 ')
+  const treffer = (code.match(/localStorage/g) ?? []).length
   if (treffer === 0) continue
   dateienMitZugriff++
   if (SOT.has(rel)) continue

@@ -4,10 +4,13 @@ Router für die neue Dokumentations-Pipeline (Issue #121).
 - `/_selftest`  — WeasyPrint-Smoke-Test
 - `/anlagendokumentation/{anlage_id}` — Phase 4 Beta
 - `/finanzbericht/{anlage_id}`         — Phase 4 Beta
+- `/monatsbericht/{anlage_id}`         — #395 Punkt 4 (PDF **und** Markdown)
 """
 from datetime import datetime
+from typing import Optional
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -117,4 +120,107 @@ async def finanzbericht_pdf(
         content=pdf_bytes,
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
+
+
+def _dateiname(basis: str, endung: str) -> tuple[str, str]:
+    """``Content-Disposition``-Paar (ASCII-Fallback + RFC-5987).
+
+    Ein Anlagenname darf Umlaute tragen; ein rohes ``filename="Süd"`` ist im
+    Header nicht zulässig und wird von Browsern verschieden geraten. Die
+    bestehenden Berichte umgehen das, indem sie nur Leerzeichen ersetzen — hier
+    steht zusätzlich der Monat im Namen, und der Name kommt aus der Eingabe des
+    Anwenders.
+    """
+    sicher = "".join(c if c.isalnum() or c in "-_." else "_" for c in basis)
+    return f"{sicher}.{endung}", quote(f"{basis}.{endung}")
+
+
+@router.get("/monatsbericht/{anlage_id}", tags=["Dokumentation"])
+async def monatsbericht(
+    anlage_id: int,
+    jahr: int = Query(..., description="Berichtsjahr"),
+    monat: int = Query(..., ge=1, le=12, description="Berichtsmonat (1–12)"),
+    format: str = Query("pdf", pattern="^(pdf|md)$", description="pdf | md"),
+    themen: Optional[list[str]] = Query(
+        None,
+        description="Themenschalter: energie · komponenten · finanzen · co2. "
+                    "Weggelassen = alle.",
+    ),
+    ohne: Optional[list[str]] = Query(
+        None,
+        description="Park-IDs aus `eedc-park:v4-cockpit-monat`, die der Client "
+                    "beim Erzeugen mitschickt. Leer = vollständiger Bericht.",
+    ),
+    mit_identitaet: bool = Query(
+        True, description="Anlagenname und Standort ins Dokument"
+    ),
+    db: AsyncSession = Depends(get_db),
+):
+    """Monatsbericht eines **einzelnen** Monats — als PDF oder als Markdown.
+
+    **Eine Route, zwei Formate, ein Context.** Der Markdown-Weg ist kein
+    zweiter Bericht: er liest dieselben Abschnitte wie das PDF (Begründung
+    N-7, s. Builder-Kopf). Deshalb steht `format` als Parameter und nicht als
+    zweiter Endpunkt — zwei Endpunkte hätten zwei Aufbereitungen eingeladen.
+
+    `ohne` trägt die Park-IDs, die im Browser des Anwenders geparkt sind. Das
+    Backend führt **keine** Liste dieser IDs (Park-Doktrin: „IDs immer aus dem
+    Render-Pfad ableiten, nie hart daneben") — jeder Abschnitt nennt nur seinen
+    eigenen Anker. Ohne den Parameter ist der Bericht vollständig; das ist der
+    Fall „am Tablet geparkt, am PC erzeugt" und darf nichts weglassen.
+
+    **Genau ein Monat.** Eine Spanne ist der Jahresbericht mit anderem Filter,
+    und den gibt es (`/api/import-export/pdf`).
+    """
+    from backend.services.pdf import render_document
+    from backend.services.pdf.builders.monatsbericht import (
+        build_monatsbericht_context,
+    )
+    from backend.services.pdf.builders.monatsbericht_markdown import (
+        render_monatsbericht_markdown,
+    )
+
+    try:
+        context = await build_monatsbericht_context(
+            db, anlage_id, jahr, monat,
+            themen=themen,
+            geparkte_ids=ohne or (),
+            mit_identitaet=mit_identitaet,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    basis = f"monatsbericht_{jahr}-{monat:02d}"
+    if context["anlage"]["name"]:
+        basis += f"_{context['anlage']['name'].replace(' ', '_')}"
+
+    if format == "md":
+        text = render_monatsbericht_markdown(context)
+        ascii_name, utf8_name = _dateiname(basis, "md")
+        return Response(
+            content=text.encode("utf-8"),
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition":
+                    f'inline; filename="{ascii_name}"; filename*=UTF-8\'\'{utf8_name}',
+            },
+        )
+
+    try:
+        pdf_bytes = render_document("monatsbericht.html", context)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"PDF-Render-Fehler: {exc.__class__.__name__}: {exc}",
+        )
+
+    ascii_name, utf8_name = _dateiname(basis, "pdf")
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition":
+                f'inline; filename="{ascii_name}"; filename*=UTF-8\'\'{utf8_name}',
+        },
     )

@@ -453,8 +453,35 @@ Die Kachel **Berichte & Dokumente** öffnet den Dokumente-Dialog der Anlage. Er 
 - **Jahresbericht** (alle KPIs: Energie, Autarkie, Finanzen, CO₂; Diagramme; Monatstabellen; PV-String SOLL/IST).
 - **Anlagendokumentation** (Stammdaten, Versorger, Tarif, Komponenten mit Parametern + verknüpften Infothek-Einträgen).
 - **Finanzbericht** und **Infothek-Dossier**.
+- **Monatsbericht** — die Zahlen **eines** Monats im Stil der Cockpit-Monatsansicht.
 
 > **HA-Companion:** PDF-, CSV- und Backup-Downloads laufen über `fetch + Blob` — damit funktionieren sie in der iOS-HA-Companion-App ohne 401-/Ingress-Probleme.
+
+#### Der Monatsbericht
+
+Er ist der einzige Bericht mit eigenen Einstellungen — sie stehen direkt unter den Karten:
+
+| Einstellung | Was sie bewirkt |
+| --- | --- |
+| **Monat** | Genau ein Monat, voreingestellt der neueste erfasste. Eine Spanne über mehrere Monate ist der Jahresbericht darüber. |
+| **Themen** (Energie · Komponenten · Finanzen · CO₂) | Bestimmen, *was für ein* Bericht entsteht. Voreingestellt sind alle vier an. |
+| **Anlagenname und Standort nennen** | Voreingestellt **an** — der Regelfall ist die eigene Ablage. Wer den Bericht teilt, schaltet ab. |
+| **Wie in meiner Monatsansicht** | Lässt die Anzeigen weg, die du unter *Cockpit → Monat* geparkt hast. Erscheint nur, wenn dort überhaupt etwas geparkt ist; voreingestellt an. |
+
+Den Bericht gibt es in **zwei Formaten aus denselben Zahlen**: als **PDF** über die Karte (zum
+Ablegen) und als **Text** über die zwei Knöpfe darunter — herunterladen oder direkt in die
+Zwischenablage, zum Einfügen in ein Forum oder eine Nachricht.
+
+> **Es gibt bewusst kein „anonymisiert".** Ein PV-Monatsbericht ist über Ertragsprofil,
+> Standort und Tarif praktisch eindeutig; die Zusage wäre nicht zu halten. Stattdessen
+> entscheidest du beim Erzeugen, was drinsteht — und siehst das Ergebnis. Wer wirklich
+> anonym vergleichen will, nutzt den **Community-Vergleich**: der arbeitet mit einer
+> Kennung statt mit deinem Namen.
+
+> **Der Park-Zustand gehört zu diesem Browser.** Wer am Tablet Anzeigen parkt und am PC den
+> Bericht zieht, bekommt dort den vollständigen Bericht — die geparkte Auswahl liegt nicht
+> in der Anlage, sondern im Browser, in dem du geparkt hast. Was der Bericht weggelassen
+> hat, steht am Ende des Dokuments.
 
 ---
 
