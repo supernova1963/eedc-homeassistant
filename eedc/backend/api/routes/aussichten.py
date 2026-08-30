@@ -1753,6 +1753,70 @@ async def get_finanz_prognose(
         7: 0.2, 8: 0.2, 9: 0.4, 10: 0.8, 11: 1.3, 12: 1.7
     }
 
+    def _pv_kwh_im_kalendermonat(monat: int) -> float:
+        """PVGIS-Wert des Monats, sonst TMY-Schätzung — EINE Vorschrift.
+
+        N-277: Die Monatsschleife unten brauchte diese Zahl schon immer; seit
+        der Normierung braucht sie auch der Vorlauf. Als Funktion statt zweimal
+        ausgeschrieben, sonst laufen die beiden bei der nächsten Änderung
+        auseinander (P4).
+        """
+        pv = pvgis_monatswerte.get(monat, 0)
+        if pv <= 0:
+            tmy = get_pvgis_tmy_defaults(monat, anlage.latitude if anlage.latitude else 48.0)
+            pv = tmy["globalstrahlung_kwh_m2"] * anlagenleistung_kwp * 0.85
+        return pv
+
+    def _pv_faktor(monat: int) -> float:
+        """Saisonale Skalierung: Monatsertrag gegen den Monats-Ø des Jahres."""
+        if not pvgis_monatswerte:
+            return 1.0
+        return _pv_kwh_im_kalendermonat(monat) / (sum(pvgis_monatswerte.values()) / 12)
+
+    # ── N-277: der gepflegte PV-Anteil der Wärmepumpe(n) ────────────────────
+    #
+    # Hier stand bis 2026-08-30 eine feste `0.5`, und das Feld „PV-Anteil (%) —
+    # Anteil des WP-Stroms aus PV" wurde nirgends gelesen.
+    #
+    # ⚠ DIE ZAHL WIRD NICHT EINFACH ERSETZT, und das ist der Kern: Die `0.5` war
+    # **kein Jahresanteil**, sondern ein Basiswert VOR der Dämpfung
+    # `* (pv_faktor ** 0.5)`. Effektiv lieferte sie rund 38 % im Jahresmittel —
+    # die Winterdämpfung, die eine Wärmepumpe braucht, war also bereits da
+    # (Januar ~27 %, Juli ~65 %). Wer `0.5` stumpf durch den gepflegten Wert
+    # ersetzt, bekommt bei gepflegten 30 % effektiv 23 %: der Anwender pflegt
+    # 30 und sieht 23.
+    #
+    # ⇒ Die saisonale FORM bleibt, die JAHRESSUMME wird auf den gepflegten Wert
+    # normiert. Damit bedeutet das Formularfeld, was draufsteht.
+    #
+    # ⚠ Was das Modell weiterhin nicht kann: Es bildet das PV-ANGEBOT ab, nicht
+    # die GLEICHZEITIGKEIT (die WP läuft nachts und morgens, die PV mittags).
+    # Der reale Deckungsgrad liegt darunter. Ein Gleichzeitigkeitsmodell
+    # bräuchte ein Lastprofil — das es in genau diesem Fallback-Fall (keine
+    # historische EV-Quote) per Definition nicht gibt.
+    if waermepumpen:
+        # Mehrere Wärmepumpen: Mittelwert. `wp_strom_monat_avg` ist ohnehin
+        # anlagenweit, eine Gewichtung je Gerät hätte hier keinen Nenner.
+        _anteile = [
+            (wp.parameter or {}).get(
+                PARAM_WAERMEPUMPE["PV_ANTEIL_PROZENT"],
+                PARAM_WAERMEPUMPE_DEFAULTS["pv_anteil_prozent"],
+            )
+            for wp in waermepumpen
+        ]
+        _anteile = [float(a) for a in _anteile if a is not None]
+        wp_pv_anteil = (sum(_anteile) / len(_anteile) / 100.0) if _anteile else 0.0
+    else:
+        wp_pv_anteil = 0.0
+
+    # Normierung über die ZWÖLF KALENDERMONATE, nicht über den Prognosehorizont
+    # — sonst hinge der Jahresanteil an der Länge der Anfrage.
+    _saison_summe = sum(WP_SAISON_FAKTOREN.values())
+    _gewicht_summe = sum(
+        WP_SAISON_FAKTOREN[m] * (_pv_faktor(m) ** 0.5) for m in range(1, 13)
+    )
+    wp_pv_norm = (_saison_summe / _gewicht_summe) if _gewicht_summe > 0 else 1.0
+
     for i in range(monate):
         monat = ((start_monat - 1 + i) % 12) + 1
         jahr = start_jahr + ((start_monat - 1 + i) // 12)
@@ -1780,7 +1844,8 @@ async def get_finanz_prognose(
             v2h_fallback = v2h_beitrag_monat if e_autos else 0
             wp_saison_fb = WP_SAISON_FAKTOREN.get(monat, 1.0)
             wp_verbrauch_fb = wp_strom_monat_avg * wp_saison_fb if waermepumpen else 0
-            wp_pv_fb = wp_verbrauch_fb * 0.5 * (pv_faktor ** 0.5)
+            # N-277: gepflegter Anteil × Saisonform × Normierung (s. Vorlauf oben)
+            wp_pv_fb = wp_verbrauch_fb * wp_pv_anteil * (pv_faktor ** 0.5) * wp_pv_norm
             eigenverbrauch_kwh = basis_ev + speicher_fallback + v2h_fallback + wp_pv_fb
 
         eigenverbrauch_kwh = min(eigenverbrauch_kwh, pv_kwh)  # Kann nicht mehr als erzeugt
