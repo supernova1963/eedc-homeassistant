@@ -27,13 +27,21 @@ export default function SolarAussicht3Tage({ prognose3Tage, wetter, heutePvKwh }
   const heuteQuelle = wetter?.prognose_quelle === 'solcast' ? 'Solcast-Prognose (pur)'
     : wetter?.prognose_quelle === 'sfml' ? 'Solar Forecast ML (pur)'
     : 'eedc-Prognose (Open-Meteo + Korrektur)'
-  const folgetageQuelle = prognose3Tage.slice(1).some(t => t.eedc_kwh != null)
+  const folgetageKanon = prognose3Tage.slice(1).some(t => t.eedc_kwh != null)
     ? 'eedc-Prognose (Open-Meteo + Korrektur)'
     : 'Open-Meteo (ohne Korrektur)'
+  // ⭐ 2026-08-30: EINE Quelle für alle Zahlen dieses Blocks (Entscheid Gernot).
+  // Vorher folgte nur die Kopfzahl von „Heute" der gewählten Quelle; Rest,
+  // VM/NM und die Folgetage kamen immer aus dem eedc-Kanon. Drei Zahlen aus
+  // zwei Rechenwegen addierten sich nicht — gemeldet von Burkard (#401) und
+  // rapahl (PN 91821). `quelleTage[i]` trägt die Zahl der gewählten Quelle für
+  // Tag i, oder `rueckfall: 'eedc'`, wenn sie so weit nicht reicht.
+  const quelleTage = wetter?.prognose_quelle_tage ?? null
+  const qTag = (i: number) => quelleTage?.[i] ?? null
   return (
     <div>
       <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-        Solar-Aussicht{wetter?.prognose_quelle && wetter.prognose_quelle !== 'eedc' && ` (${wetter.prognose_quelle === 'solcast' ? 'Solcast' : 'SFML'})`} <SimpleTooltip text={`Heute: ${heuteQuelle}. Morgen/Übermorgen: ${folgetageQuelle}. VM/NM = Split an Solar Noon.`}><Info className="inline w-3 h-3 text-gray-400 dark:text-gray-500 opacity-50 cursor-help" /></SimpleTooltip>
+        Solar-Aussicht{wetter?.prognose_quelle && wetter.prognose_quelle !== 'eedc' && ` (${wetter.prognose_quelle === 'solcast' ? 'Solcast' : 'SFML'})`} <SimpleTooltip text={`Alle Zahlen aus derselben Quelle: ${heuteQuelle}. Wo sie einen Tag nicht abdeckt, steht „eedc" dabei (dann: ${folgetageKanon}). „Heute" zeigt den nachgeführten Wert — bisher gemessen plus erwarteter Rest; die ursprüngliche Tagesprognose steht klein darunter. VM/NM = Split an Solar Noon.`}><Info className="inline w-3 h-3 text-gray-400 dark:text-gray-500 opacity-50 cursor-help" /></SimpleTooltip>
       </h3>
       {prognose3Tage.some(t => pvVormittagKwh(t) != null) && (
         <div className="grid grid-cols-[auto_1fr_7rem] px-3 mb-0.5">
@@ -49,7 +57,33 @@ export default function SolarAussicht3Tage({ prognose3Tage, wetter, heutePvKwh }
       <div className="space-y-1.5">
         {prognose3Tage.map((tag, i) => {
           const label = i === 0 ? 'Heute' : i === 1 ? 'Morgen' : 'Übermorgen'
-          const hasVmNm = pvVormittagKwh(tag) != null
+          const q = qTag(i)
+          // Die ursprüngliche Tagesprognose der gewählten Quelle — sie bleibt
+          // erhalten, sie wandert nur aus der Kopfzeile nach unten.
+          const ursprungKwh = i === 0 ? (wetter?.pv_prognose_kwh ?? null) : null
+          // ⭐ Kopfzahl von „Heute" ist der NACHGEFÜHRTE Wert (IST bisher +
+          // Rest), nicht mehr die Tagesprognose. Damit addieren sich die drei
+          // Zahlen des Blocks wieder sichtbar: gemessen + erwartet = Kopfzahl.
+          // Vorher stand oben eine Zahl, die mit den beiden darunter nichts zu
+          // tun hatte — Rainers Tag stand auf „17,6", während 23,5 kWh erzeugt
+          // waren und 1,7 noch kommen sollten.
+          //
+          // ⚠ `heutePvKwh != null` ist Bedingung, aus demselben Grund wie unten
+          // bei `abweichungProzent`: ohne bekannte Erzeugung liefert der Kanon
+          // `ist_bisher` als 0,0 statt null, und die Kopfzahl bestünde allein
+          // aus dem Rest — sie sähe nach einem Einbruch aus, obwohl nur die
+          // Messung fehlt. Dann bleibt die Tagesprognose oben stehen.
+          const nachgefuehrtKwh = i === 0 && heutePvKwh != null
+            ? wetter?.pv_prognose_heute_rollend_kwh ?? null
+            : null
+          const kopfKwh = nachgefuehrtKwh
+            ?? (i === 0 ? (wetter?.pv_prognose_kwh ?? pvErtragKwh(tag))
+                        : (q && q.rueckfall == null ? q.kwh : pvErtragKwh(tag)))
+          // VM/NM aus derselben Quelle wie die Zahl darüber. Liefert die
+          // gewählte Quelle kein Stundenprofil für diesen Tag, gilt der Kanon.
+          const vmKwh = q?.vm_kwh ?? pvVormittagKwh(tag)
+          const nmKwh = q?.nm_kwh ?? pvNachmittagKwh(tag)
+          const hasVmNm = vmKwh != null
           const isProminent = i < 3
           const verbrPrognKwh = i === 0 && wetter?.verbrauchsprofil?.length
             ? wetter.verbrauchsprofil.reduce((s, v) => s + v.verbrauch_kw, 0)
@@ -115,12 +149,34 @@ export default function SolarAussicht3Tage({ prognose3Tage, wetter, heutePvKwh }
               i === 0 ? 'bg-yellow-50 dark:bg-yellow-900/20' :
               'bg-amber-50/60 dark:bg-amber-900/10'
             }`}>
-              <span className={`shrink-0 ${isProminent ? 'text-sm font-medium text-gray-600 dark:text-gray-300' : 'text-xs text-gray-400 dark:text-gray-500'}`}>{label}</span>
+              <span className={`shrink-0 ${isProminent ? 'text-sm font-medium text-gray-600 dark:text-gray-300' : 'text-xs text-gray-400 dark:text-gray-500'}`}>
+                {label}
+                {/* Wo die gewählte Quelle nicht so weit reicht, steht das dabei
+                    — statt still eine eedc-Zahl unter der Überschrift der
+                    Fremdquelle zu zeigen (Burkard #401: „Cockpit → Aussicht
+                    folgt der Einstellung gar nicht"). */}
+                {q?.rueckfall === 'eedc' && (
+                  <span className="ml-1 text-[9px] text-gray-400 dark:text-gray-500"
+                        title="Die gewählte Prognosequelle liefert für diesen Tag keinen Wert — hier steht die eedc-Prognose.">
+                    eedc
+                  </span>
+                )}
+              </span>
               <div className="flex flex-col items-end">
                 <span className={`font-bold ${DATENROLLE.pv.text} ${isProminent ? 'text-base' : 'text-xs'}`}>
-                  {fmtZahl(i === 0 && wetter?.pv_prognose_kwh != null ? wetter.pv_prognose_kwh : pvErtragKwh(tag), 1)}
+                  {fmtZahl(kopfKwh, 1)}
                   <span className="text-xs font-normal ml-0.5">kWh</span>
                 </span>
+                {/* Die ursprüngliche Tagesprognose bleibt sichtbar: an ihr wird
+                    morgens geplant und abends bewertet. Nur bei „Heute", und nur
+                    wenn die Nachführung sie tatsächlich verschoben hat. */}
+                {i === 0 && ursprungKwh != null && kopfKwh != null
+                  && Math.abs(ursprungKwh - kopfKwh) >= 0.1 && (
+                  <span className="text-[10px] text-gray-400 dark:text-gray-500"
+                        title="Die Tagesprognose von heute Morgen — unverändert. Oben steht, worauf der Tag nach dem bisher Gemessenen hinausläuft.">
+                    Prognose {fmtZahl(ursprungKwh, 1)} kWh
+                  </span>
+                )}
                 {(verbleibenKwh != null && verbleibenKwh > 0) || abweichungProzent != null ? (
                   <span className={`text-[10px] ${(abweichungProzent ?? 0) >= 0 ? 'text-lime-600 dark:text-lime-400' : 'text-amber-600 dark:text-amber-400'}`}
                         title={[
@@ -133,16 +189,24 @@ export default function SolarAussicht3Tage({ prognose3Tage, wetter, heutePvKwh }
                         ].filter(Boolean).join('\n')}>
                     {verbleibenKwh != null && verbleibenKwh > 0 ? `~${fmtZahl(verbleibenKwh, 1)} verbl.` : ''}
                     {verbleibenKwh != null && verbleibenKwh > 0 && abweichungProzent != null ? ' ' : ''}
-                    {abweichungProzent != null ? `(${abweichungProzent > 0 ? '+' : ''}${abweichungProzent} %)` : ''}
+                    {/* N-324 (rapahl, PN 91547): „+14 %" stand nackt neben der
+                        Prognose-Zahl und war in beide Richtungen lesbar — der
+                        Melder las es als Aussage über die PROGNOSE, gemeint war
+                        der TAG. Der Bezug steht jetzt sichtbar dabei, nicht nur
+                        im Tooltip. Seit die Kopfzahl der nachgeführte Wert ist,
+                        stehen beide Bezugsgrößen ohnehin direkt beieinander. */}
+                    {abweichungProzent != null
+                      ? `(${abweichungProzent > 0 ? '+' : ''}${abweichungProzent} % ggü. Prognose)`
+                      : ''}
                   </span>
                 ) : null}
               </div>
               <span className="text-right text-xs w-28">
                 {hasVmNm ? (
                   <>
-                    <span className="font-semibold text-amber-500">{fmtZahl(pvVormittagKwh(tag)!, 1)}</span>
+                    <span className="font-semibold text-amber-500">{fmtZahl(vmKwh!, 1)}</span>
                     <span className="text-gray-400 dark:text-gray-500 mx-0.5">/</span>
-                    <span className="font-semibold text-amber-400">{fmtZahl(pvNachmittagKwh(tag) ?? 0, 1)}</span>
+                    <span className="font-semibold text-amber-400">{fmtZahl(nmKwh ?? 0, 1)}</span>
                   </>
                 ) : null}
               </span>

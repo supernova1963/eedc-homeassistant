@@ -1325,6 +1325,10 @@ async def get_live_wetter(
         sfml_tomorrow = None
         sfml_accuracy = None
         sfml_stundenprofil_heute = None  # 24 Backward-Slots (kWh), für Persistenz
+        # Mehrtages-Profile der gewählten Quelle (evcc `forecast` liefert 3 Tage).
+        # Bis 2026-08-30 wurde nur tage[0] gelesen und der Rest verworfen — Morgen/
+        # Übermorgen fielen im Block still auf den eedc-Kanon zurück (Burkard #401).
+        quelle_tagesprofile: list[list[float]] | None = None
 
         if pq.ist_sfml:
             try:
@@ -1349,6 +1353,7 @@ async def get_live_wetter(
                         tage = sfml_stundenprofile_aus_forecast(forecast_attr, heute_d)
                         if tage and any(v for v in tage[0]):
                             sfml_stundenprofil_heute = tage[0]
+                            quelle_tagesprofile = tage
                     if sfml_stundenprofil_heute is None:
                         hours_attr = sfml_disc.attribut("heute_kwh")
                         if hours_attr:
@@ -1414,6 +1419,11 @@ async def get_live_wetter(
                 solcast_p90 = solcast.daily_p90_kwh
                 if solcast.hourly_kw and len(solcast.hourly_kw) == 24:
                     solcast_stundenprofil = list(solcast.hourly_kw)
+                    if pq.ist_solcast:
+                        # Solcast liefert im Live-Pfad nur HEUTE stündlich; die
+                        # Folgetage bleiben leer und fallen sichtbar auf den
+                        # Kanon zurück (s. `prognose_quelle_tage`).
+                        quelle_tagesprofile = [solcast_stundenprofil]
         except Exception as e:
             logger.debug(f"Solcast-Fetch für Persistenz fehlgeschlagen: {e}")
 
@@ -1429,6 +1439,69 @@ async def get_live_wetter(
             pv_prognose_aktiv = solcast_kwh
         elif pq.ist_sfml and sfml_kwh is not None:
             pv_prognose_aktiv = sfml_kwh
+
+        # ── EINE Quelle für alle Prognosezahlen dieses Blocks ────────────────
+        # Bis 2026-08-30 kamen Kopfzahl und Nachbarwerte aus VERSCHIEDENEN
+        # Rechenwegen: `pv_prognose_aktiv` folgte der gewählten Quelle, `rest`
+        # und `rollend` aber immer dem Kanon (der laut eigenem Docstring IMMER
+        # eedc rechnet). Auf einer Seite standen damit drei Zahlen, die sich
+        # nicht zueinander addieren — gemeldet von Burkard (#401: 6,9 + 9,0 ≠
+        # 28,7) und, aus der anderen Richtung, von rapahl (PN 91821: 23,5 kWh
+        # erzeugt bei 17,6 kWh „Heute").
+        #
+        # Entscheid Gernot 2026-08-30: nachgeführt UND konsequent aus der
+        # gewählten Quelle. Das IST bleibt Messung (quellenunabhängig), damit
+        # gilt wieder `ist_bisher + rest = rollend` — die Bilanz, an der ein
+        # Anwender die drei Zahlen nachrechnen kann.
+        #
+        # ⛔ Der Kanon wird dafür NICHT umgebaut: „Solcast/SFML sind eigene
+        # Pfade" ist seine dokumentierte Entwurfsentscheidung. Gerechnet wird
+        # mit SEINER Formel (`rest_aus_slots`, #339) auf FREMDEN Slots.
+        quelle_hat_profil = bool(quelle_tagesprofile and quelle_tagesprofile[0])
+        if quelle_hat_profil and not pq.ist_eedc:
+            from backend.services.prognose_kanon import rest_aus_slots
+            pv_prognose_rest = rest_aus_slots(quelle_tagesprofile[0], now)
+            if pv_prognose_rest is not None and pv_ist_bisher is not None:
+                pv_prognose_rollend = round(pv_ist_bisher + pv_prognose_rest, 1)
+            else:
+                pv_prognose_rollend = None
+        elif not pq.ist_eedc:
+            # Gewählte Quelle ohne Stundenprofil (z. B. SFML mit GTI-Schmier):
+            # KEIN Rest. Ihn aus der Kurvenform einer anderen Quelle zu bilden
+            # wäre genau die Vermischung, die dieser Block loswerden soll.
+            pv_prognose_rest = None
+            pv_prognose_rollend = None
+
+        # Tageszahlen der gewählten Quelle je Tag — mit VM/NM aus IHREM Profil
+        # und ausgewiesenem Rückfall, wo sie nicht so weit reicht.
+        prognose_quelle_tage: list[dict] | None = None
+        if not pq.ist_eedc:
+            from backend.services.prognose_kanon import vm_nm_split
+            prognose_quelle_tage = []
+            for i in range(3):
+                tag_datum = date.today() + timedelta(days=i)
+                slots = (quelle_tagesprofile[i]
+                         if quelle_tagesprofile and i < len(quelle_tagesprofile)
+                         else None)
+                kwh = None
+                if i == 0:
+                    kwh = pv_prognose_aktiv
+                elif i == 1 and pq.ist_sfml:
+                    kwh = sfml_tomorrow
+                if kwh is None and slots:
+                    kwh = round(sum(slots), 1)
+                vm = nm = None
+                if slots:
+                    vm, nm = vm_nm_split(slots, tag_datum.isoformat(), anlage.longitude)
+                prognose_quelle_tage.append({
+                    "datum": tag_datum.isoformat(),
+                    "kwh": kwh,
+                    "vm_kwh": vm,
+                    "nm_kwh": nm,
+                    # Was die gewählte Quelle nicht liefert, sagt es — statt
+                    # still eine eedc-Zahl unter ihrer Überschrift zu zeigen.
+                    "rueckfall": None if kwh is not None else "eedc",
+                })
 
         # Prognose für Lernfaktor-Berechnung + SFML + Solcast speichern (fire-and-forget).
         # #306: Den OpenMeteo-Tageswert NICHT einfrieren, wenn der Multi-String-
@@ -1479,11 +1552,14 @@ async def get_live_wetter(
             "pv_prognose_kwh": pv_prognose_aktiv,
             # Der GEMESSENE Rest (Σ Prognose-Slots ab jetzt) — nicht die
             # Differenz zur Tagesprognose. Analog zu `sonnenstunden_rest`, das
-            # es hier längst gibt.
+            # es hier längst gibt. Seit 2026-08-30 aus der GEWÄHLTEN Quelle
+            # (vorher immer aus dem eedc-Kanon, auch bei Solcast/SFML).
             "pv_prognose_rest_kwh": pv_prognose_rest,
-            # IST bisher + Rest: die nachgeführte Tageszahl. Sie ersetzt
-            # `pv_prognose_kwh` NICHT — jener bleibt der kanonische Wert, der
-            # überall dieselbe Zahl zeigt (Prognose-Kanon-Fix V3).
+            # IST bisher + Rest: die nachgeführte Tageszahl, seit 2026-08-30
+            # aus derselben Quelle wie der Rest. `pv_prognose_kwh` bleibt
+            # daneben stehen — es ist die ursprüngliche Tagesprognose, an der
+            # morgens geplant und abends bewertet wird. Der Block zeigt seither
+            # die nachgeführte Zahl oben und diese klein daneben.
             "pv_prognose_heute_rollend_kwh": pv_prognose_rollend,
             "pv_ist_bisher_kwh": pv_ist_bisher,
             "grundlast_kw": grundlast,
@@ -1493,6 +1569,15 @@ async def get_live_wetter(
             "profil_tage": profil_tage,
             "prognose_quelle": pq.quelle,
             "prognose_quelle_hinweis": pq.hinweis,
+            # Tageszahlen der GEWÄHLTEN Quelle (None bei eedc — dann gilt der
+            # Kanon, den `prognose3Tage` ohnehin liefert). Je Tag: kwh · vm_kwh
+            # · nm_kwh · rueckfall. `rueckfall="eedc"` heißt: so weit reicht die
+            # gewählte Quelle nicht, die Anzeige sagt es.
+            "prognose_quelle_tage": prognose_quelle_tage,
+            # Konnte für die gewählte Quelle ein Rest gebildet werden? False =
+            # sie hat kein Stundenprofil (dann steht KEIN Rest da, statt eines
+            # aus fremder Kurvenform geschätzten).
+            "prognose_quelle_hat_profil": quelle_hat_profil,
             "sfml_prognose_kwh": round(sfml_kwh, 1) if sfml_kwh is not None else None,
             "sfml_tomorrow_kwh": round(sfml_tomorrow, 1) if sfml_tomorrow is not None else None,
             "sfml_accuracy_pct": round(sfml_accuracy, 1) if sfml_accuracy is not None else None,

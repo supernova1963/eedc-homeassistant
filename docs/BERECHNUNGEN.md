@@ -91,7 +91,7 @@ Die API-Endpoints sind unverändert; die **Sicht** (Spalte „Wo in v4") folgt d
 | [Komponenten → PV-Anlage](HANDBUCH_BEDIENUNG.md#32-pv-anlage) | `GET /api/cockpit/pv-strings/{id}?jahr=` | SOLL vs IST pro String |
 | [Auswertungen → ROI](HANDBUCH_BEDIENUNG.md#42-roi) | `GET /api/investitionen/roi/{id}` | ROI%, Amortisation pro System |
 | [Auswertungen → Tabelle](HANDBUCH_BEDIENUNG.md#45-tabelle-werte-werkbank) | `GET /api/monatsdaten/aggregiert/{id}` | Spalten-Explorer, Vorjahres-Delta |
-| [Cockpit → Aussicht](HANDBUCH_BEDIENUNG.md#25-aussicht) | `GET /api/aussichten/kurzfristig/{id}` | 7-Tage PV-Prognose + SFML-Linie |
+| [Cockpit → Aussicht](HANDBUCH_BEDIENUNG.md#25-aussicht) | `GET /api/aussichten/kurzfristig/{id}` | 7-Tage PV-Prognose (**ohne** SFML — `aussichten.py` kennt die Quellenwahl nicht) |
 | [Cockpit → Aussicht](HANDBUCH_BEDIENUNG.md#25-aussicht) | `GET /api/aussichten/langfristig/{id}` | 12-Monats-Prognose |
 | [Cockpit → Aussicht](HANDBUCH_BEDIENUNG.md#25-aussicht) | `GET /api/aussichten/trend/{id}` | Degradation, Jahresvergleich |
 | [Auswertungen → Finanzen](HANDBUCH_BEDIENUNG.md#41-finanzen) | `GET /api/aussichten/finanzen/{id}` | Amortisations-Fortschritt, Prognose |
@@ -2091,11 +2091,14 @@ Fall nach, sonst wäre die Regel dort blind.
 
 ### 4.1b Solar Forecast ML (SFML)
 
-**Endpoint:** `GET /api/aussichten/kurzfristig/{anlage_id}` (SFML-Werte im gleichen Response)
+**Endpoint:** `GET /api/aussichten/prognosen/{anlage_id}` (Prognosen-Vergleich) und `GET /api/live-wetter/{anlage_id}` (Live-Cockpit).
+⛔ **NICHT** `/aussichten/kurzfristig/` — hier stand das bis 2026-08-30, und `aussichten.py` nennt SFML mit **0 Treffern** (gemessen, Melder Burkard #401).
 **Service:** `services/solar_forecast_service.py`
 **Externe API:** forecast.solar oder solcast.com (konfigurierbar)
 
-SFML ist eine optionale KI-basierte Prognose-Ergänzung. Sie liefert eine zweite Tages-Prognoselinie neben der eedc-Eigenprognose und den IST-Werten.
+SFML ist eine optionale KI-basierte Prognose-Ergänzung. Sie liefert eine zweite Tages-Prognoselinie neben der eedc-Eigenprognose und den IST-Werten — im **Prognosen-Vergleich** und im **Live-Cockpit**, nicht in der 7–14-Tage-Aussicht.
+
+Ist SFML als Quelle gewählt, kommen seit 2026-08-30 **alle** Prognosezahlen des Live-Blocks aus SFML: Tageswert, verbleibender Ertrag, nachgeführter Tageswert und der VM/NM-Split. Wo SFML einen Tag nicht abdeckt, steht „eedc" dabei. Ohne SFML-Stundenprofil gibt es **keinen** verbleibenden Ertrag — er würde sonst aus der Kurvenform einer anderen Quelle entstehen.
 
 #### Datenfluss
 

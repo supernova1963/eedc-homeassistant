@@ -347,7 +347,7 @@ Die **Aussicht** bündelt alle vorwärtsgerichteten Analysen auf einer Seite. Ü
 - Tägliche Erzeugungsschätzung auf Basis der Globalstrahlung, kalibriert mit dem **eedc-Lernfaktor**, sobald genug IST-Daten vorliegen
 - Wettersymbole und ein Datenquelle-Kürzel je Tag (MS = MeteoSwiss ICON-CH2, D2 = ICON-D2, EU = ICON-EU, EC = ECMWF IFS, BM = best_match)
 - Die Tagesbalken tragen den **erwarteten kWh-Ertrag direkt am Balken** (Balkenlänge = PV-Ertrag), sodass sich die Tage ohne Achsenablesen vergleichen lassen
-- Ist **Solar Forecast ML (SFML)** konfiguriert, erscheint eine zweite KI-basierte Ertragslinie
+- **Solar Forecast ML (SFML) erscheint hier nicht** — diese Sicht blickt 7–14 Tage voraus, SFML liefert drei. SFML wirkt im Live-Cockpit (Block *Solar-Aussicht*) und unter *Auswertungen → Prognose*
 - Das Wettermodell lässt sich pro Anlage fest wählen (Einstellungen → Stammdaten → Anlage → Wettermodell); ohne Auswahl entscheidet eedc automatisch.
 
 **Stundenwerte mit IST:** Steht der Tages-Picker auf **heute**, zeigt die Stundentabelle neben der Prognose eine Spalte **PV IST** mit den bereits gemessenen Stunden; die Summenzeile addiert nur das Gemessene, künftige Stunden bleiben leer. Für andere Tage entfällt die Spalte — dort gibt es kein IST.

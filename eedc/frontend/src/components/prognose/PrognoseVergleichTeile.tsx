@@ -788,7 +788,7 @@ export function PvgKpiMatrix({ vm }: { vm: PrognoseVergleichVM }) {
               <td className={ZELLE} aria-hidden="true" />
               {hasSolcast && <td className={`${ZELLE} text-right font-mono`}>{fmtKwhBand(data.solcast_heute_kwh, data.solcast_p10_kwh, data.solcast_p90_kwh)}</td>}
               {hasSolcast && <td className={ZELLE} aria-hidden="true" />}
-              {hasSfml && <td className={`${ZELLE} text-right font-mono text-gray-400 dark:text-gray-500`}>—</td>}
+              {hasSfml && <td className={`${ZELLE} text-right font-mono`}>{fmtKwh(data.sfml_heute_kwh)}</td>}
               <td className={`${ZELLE} text-right font-mono font-semibold text-green-600 dark:text-green-400`}>
                 {fmtKwh(data.ist_heute_kwh)}
                 {data.ist_unvollstaendig && (
@@ -807,7 +807,7 @@ export function PvgKpiMatrix({ vm }: { vm: PrognoseVergleichVM }) {
               <td className={ZELLE} aria-hidden="true" />
               {hasSolcast && <td className={`${ZELLE} text-right font-mono text-gray-500`}>{fmtKwh(data.verbleibend_solcast_kwh)}</td>}
               {hasSolcast && <td className={ZELLE} aria-hidden="true" />}
-              {hasSfml && <td className={`${ZELLE} text-right font-mono text-gray-400 dark:text-gray-500`}>—</td>}
+              {hasSfml && <td className={`${ZELLE} text-right font-mono text-gray-500`}>{fmtKwh(data.verbleibend_sfml_kwh)}</td>}
               <td className={`${ZELLE} text-right font-mono text-emerald-500`}>{fmtKwh(data.verbleibend_kwh)}</td>
             </tr>
             <tr className="border-b border-gray-100 dark:border-gray-800">
@@ -819,6 +819,9 @@ export function PvgKpiMatrix({ vm }: { vm: PrognoseVergleichVM }) {
               <td className={ZELLE} aria-hidden="true" />
               {hasSolcast && <td className={`${ZELLE} text-right font-mono text-gray-500`}>{fmtVmNm(data.solcast_tageshaelften?.[0])}</td>}
               {hasSolcast && <td className={ZELLE} aria-hidden="true" />}
+              {/* VM/NM bleibt für SFML leer, und das ist kein vergessener Fall:
+                  die Antwort trägt kein `sfml_tageshaelften`. Eine Hälfte aus
+                  fremder Kurvenform zu schätzen wäre eine erfundene Zahl. */}
               {hasSfml && <td className={`${ZELLE} text-right font-mono text-gray-400 dark:text-gray-500`}>—</td>}
               <td className={`${ZELLE} text-right font-mono text-green-500`}>{fmtVmNm(data.ist_tageshaelfte)}</td>
             </tr>
@@ -831,7 +834,7 @@ export function PvgKpiMatrix({ vm }: { vm: PrognoseVergleichVM }) {
               <td className={ZELLE} aria-hidden="true" />
               {hasSolcast && <td className={`${ZELLE} text-right font-mono`}>{fmtKwhBand(data.solcast_morgen_kwh, data.solcast_morgen_p10_kwh, data.solcast_morgen_p90_kwh)}</td>}
               {hasSolcast && <td className={ZELLE} aria-hidden="true" />}
-              {hasSfml && <td className={`${ZELLE} text-right font-mono text-gray-400 dark:text-gray-500`}>—</td>}
+              {hasSfml && <td className={`${ZELLE} text-right font-mono`}>{fmtKwh(data.sfml_morgen_kwh)}</td>}
               <td className={`${ZELLE} text-right text-gray-400 dark:text-gray-500`}>—</td>
             </tr>
             <tr className="border-b border-gray-100 dark:border-gray-800">
@@ -855,7 +858,7 @@ export function PvgKpiMatrix({ vm }: { vm: PrognoseVergleichVM }) {
               <td className={ZELLE} aria-hidden="true" />
               {hasSolcast && <td className={`${ZELLE} text-right font-mono`}>{fmtKwh(data.solcast_uebermorgen_kwh)}</td>}
               {hasSolcast && <td className={ZELLE} aria-hidden="true" />}
-              {hasSfml && <td className={`${ZELLE} text-right font-mono text-gray-400 dark:text-gray-500`}>—</td>}
+              {hasSfml && <td className={`${ZELLE} text-right font-mono`}>{fmtKwh(data.sfml_uebermorgen_kwh)}</td>}
               <td className={`${ZELLE} text-right text-gray-400 dark:text-gray-500`}>—</td>
             </tr>
             <tr>
@@ -1137,7 +1140,13 @@ export function PvgGenauigkeitsTracking({ vm }: { vm: PrognoseVergleichVM }) {
                   <PvgPrognoseZelle wert={tag.openmeteo_kwh} ist={tag.ist_kwh} stellen={1} />
                   <PvgPrognoseZelle wert={tag.eedc_kwh} ist={tag.ist_kwh} stellen={1} leerGedimmt />
                   {hasSolcast && <PvgPrognoseZelle wert={tag.solcast_kwh} ist={tag.ist_kwh} stellen={1} leerGedimmt />}
-                  {hasSfml && <td className={`${ZELLE} text-right font-mono text-gray-400 dark:text-gray-500`}>—</td>}
+                  {/* ⚠ NICHT `PvgPrognoseZelle`: die rendert ZWEI Zellen (Wert +
+                      Abweichung), und SFML hat im Spaltenplan nur EINE
+                      (`if (hasSfml) gewichte.push(G.wert)` — anders als eedc und
+                      Solcast, die je eine Abweichungsspalte tragen). Der erste
+                      Anlauf hat genau das übersehen; die Spaltenflucht-Probe hat
+                      es gefangen („11 Zellen statt 10"). */}
+                  {hasSfml && <PvgWertZelle wert={tag.sfml_kwh ?? null} klasse={Q.sfml} stellen={1} />}
                   <td className={`${ZELLE} text-right font-mono font-semibold text-green-600 dark:text-green-400`}>{tag.ist_kwh !== null ? fmtZahl(tag.ist_kwh, 1) : '—'}</td>
                 </tr>
               )

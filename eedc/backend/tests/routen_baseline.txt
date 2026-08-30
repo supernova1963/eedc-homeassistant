@@ -31,6 +31,7 @@ GET /api/anlagen/{anlage_id}/sensors
 GET /api/aussichten/finanzen/{anlage_id}
 GET /api/aussichten/kurzfristig/{anlage_id}
 GET /api/aussichten/langfristig/{anlage_id}
+GET /api/aussichten/prognose-quellen/status
 GET /api/aussichten/prognosen/{anlage_id}
 GET /api/aussichten/prognosen/{anlage_id}/genauigkeit
 GET /api/aussichten/trend/{anlage_id}

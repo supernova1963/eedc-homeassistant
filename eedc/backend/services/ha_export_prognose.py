@@ -79,7 +79,7 @@ async def berechne_prognose_export(db, anlage) -> Optional[dict]:
             und behauptete, das sei „die Aufteilung, die auf deinem Bildschirm
             steht". Beides ist am Code falsch** (Fund N-331, gemessen 27.08.):
             eedc schneidet an **allen** drei rechnenden Stellen am Solar Noon —
-            `solar_forecast_service:829`, `prognose_kanon::_vm_nm_split` und
+            `solar_forecast_service:829`, `prognose_kanon::vm_nm_split` und
             `prognosen.py::_berechne_tageshaelfte` (für alle vier Quellen).
             Quelle des Irrtums war ein veralteter Feldkommentar
             (`prognosen.py:95`, „0:00–12:59"), der drei Zeilen über der Funktion

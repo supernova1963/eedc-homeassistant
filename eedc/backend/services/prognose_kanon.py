@@ -485,7 +485,7 @@ async def kanon_tagesprognose(
             profil = korrigiere_tagesprofil(om_slots, faktoren, fallback_faktor=skalar)
             eedc_kwh = profil.tageswert_kwh
             om_kwh = round(sum(om_slots), 1)
-            vm_kwh, nm_kwh = _vm_nm_split(
+            vm_kwh, nm_kwh = vm_nm_split(
                 profil.stundenprofil_export_kwh, datum_iso, anlage.longitude
             )
         else:
@@ -521,11 +521,7 @@ async def kanon_tagesprognose(
         # bereits abgelaufen und slots[now.hour + 1] die laufende Stunde. Ohne den
         # frac-Term sinkt der Rest nur einmal je Stunde in EINEM Sprung (bei
         # kleinen Anlagen 5–8 kWh) statt gleichmäßig.
-        frac = 1.0 - now.minute / 60.0
-        laufend = frac * slots[now.hour + 1] if now.hour + 1 < len(slots) else 0.0
-        rest_heute = round(
-            laufend + sum(slots[h] for h in range(now.hour + 2, len(slots))), 1
-        )
+        rest_heute = rest_aus_slots(slots, now)
         ist_res = await db.execute(
             select(TagesEnergieProfil).where(
                 TagesEnergieProfil.anlage_id == anlage.id,
@@ -545,7 +541,33 @@ async def kanon_tagesprognose(
     )
 
 
-def _vm_nm_split(
+def rest_aus_slots(slots, jetzt) -> Optional[float]:
+    """Rest des Tages aus 24 Backward-Slots (kWh): laufende Stunde anteilig + Σ danach.
+
+    Die #339-Rechnung des Kanons, herausgezogen, damit **jede** Prognosequelle
+    denselben Rest bildet. Vorher hatte der Live-Pfad diese Größe nur für die
+    eedc-Quelle; Solcast/SFML liefen weiter über den Kanon, und in *Cockpit →
+    Live* standen dann Kopfzahl (gewählte Quelle) und Rest (eedc) nebeneinander,
+    ohne dass die Summe aufging (Burkard #401, rapahl PN 91821, 2026-08-30).
+
+    ⛔ NICHT durch ``_tagesprojektion`` (``routes/prognosen.py``) ersetzen: die
+    ignoriert die laufende Stunde ganz (``range(stunde + 1, 24)``). Für eine
+    Tabellenspalte reicht das, für einen Live-Wert nicht — ohne den frac-Term
+    sinkt der Rest einmal je Stunde in EINEM Sprung statt gleichmäßig.
+
+    Backward-Konvention (#144): Slot N = Energie [N-1, N), also ist
+    ``slots[jetzt.hour]`` bereits abgelaufen und ``slots[jetzt.hour + 1]`` die
+    laufende Stunde. ``None`` bei fehlendem Profil — eine Quelle ohne
+    Stundenwerte bekommt keinen geschätzten Rest.
+    """
+    if not slots:
+        return None
+    frac = 1.0 - jetzt.minute / 60.0
+    laufend = frac * slots[jetzt.hour + 1] if jetzt.hour + 1 < len(slots) else 0.0
+    return round(laufend + sum(slots[h] for h in range(jetzt.hour + 2, len(slots))), 1)
+
+
+def vm_nm_split(
     export_slots, datum_iso: str, longitude: Optional[float]
 ) -> tuple[Optional[float], Optional[float]]:
     """Splittet die korrigierten Export-Slots am Solar-Noon (Backward-Slots).

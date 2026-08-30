@@ -326,6 +326,7 @@ export interface PrognosenVergleich {
   verbleibend_om_kwh: number | null
   verbleibend_eedc_kwh: number | null
   verbleibend_solcast_kwh: number | null
+  verbleibend_sfml_kwh?: number | null
 
   // OpenMeteo Stundenprofil (GTI-basiert)
   openmeteo_stundenprofil: StundenProfilEintrag[]
@@ -336,11 +337,32 @@ export interface PrognosenVergleich {
   aktuelle_stunde: number | null
 }
 
+/** Ergebnis der Sensor-Auto-Erkennung je Rolle — damit sichtbar wird, WAS
+ *  gefunden wurde und was nicht. Bis 2026-08-30 gab es nur „gefunden" oder eine
+ *  Fehlermeldung; dass vier von sechs Rollen fehlten, stand nirgends. */
+export interface PrognoseQuellenStatus {
+  integration: string
+  gefunden: boolean
+  fehler: string | null
+  rollen: Array<{
+    rolle: string
+    label: string
+    gefunden: boolean
+    entity_id: string | null
+    wert: number | null
+    wesentlich: boolean
+  }>
+  anzahl_gefunden: number
+  anzahl_gesamt: number
+  fehlend_wesentlich: string[]
+}
+
 export interface GenauigkeitsEintrag {
   datum: string
   openmeteo_kwh: number | null
   eedc_kwh: number | null
   solcast_kwh: number | null
+  sfml_kwh?: number | null
   ist_kwh: number | null
   // Repräsentatives Tages-Wettersymbol (aus Stundenprofil aggregiert, #296 #2)
   wetter_symbol?: string | null
@@ -424,5 +446,13 @@ export const aussichtenApi = {
    */
   async getPrognosenGenauigkeit(anlageId: number, tage: number = 30, ausreisserAusblenden: boolean = false): Promise<GenauigkeitsResponse> {
     return api.get<GenauigkeitsResponse>(`/aussichten/prognosen/${anlageId}/genauigkeit?tage=${tage}&ausreisser_ausblenden=${ausreisserAusblenden}`)
+  },
+
+  /**
+   * Was die Auto-Erkennung für SFML/Solcast je Rolle findet.
+   * Anlagenunabhängig — die Erkennung fragt die HA-Instanz, nicht die Anlage.
+   */
+  async getPrognoseQuellenStatus(): Promise<Record<string, PrognoseQuellenStatus>> {
+    return api.get<Record<string, PrognoseQuellenStatus>>('/aussichten/prognose-quellen/status')
   },
 }

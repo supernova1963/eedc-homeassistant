@@ -6,6 +6,8 @@ import VersorgerSection from './VersorgerSection'
 import AnlagenfotoSection from './AnlagenfotoSection'
 import { wetterApi, type WetterProvider, type WetterProviderList } from '../../api/wetter'
 import { anlagenApi } from '../../api/anlagen'
+import { aussichtenApi, type PrognoseQuellenStatus } from '../../api/aussichten'
+import PrognoseQuellenBefund from './PrognoseQuellenBefund'
 import type { Anlage, AnlageCreate, VersorgerDaten } from '../../types'
 import { useHAVerbunden } from '../../hooks/useHAAvailable'
 
@@ -124,6 +126,25 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
 
   // V1/V2: Inline-Fehler erst nach Berührung (touched) bzw. nach Absende-Versuch (Muster Slice 1).
   const [touched, setTouched] = useState<Set<string>>(new Set())
+  // ⭐ Was die Auto-Erkennung tatsächlich gefunden hat (Burkard #401, 2026-08-30).
+  // Sie matcht Entity-IDs über Präfix und Suffix — beides Konventionen des
+  // Integrationsautors. Wessen Sensoren anders heißen, bekam bisher
+  // stillschweigend weniger Werte: bei ihm hießen sechs SFML-Entities
+  // `sensor.none_*`, weil eine frühe Fassung den Gerätenamen nicht setzte.
+  // Er musste in den Add-on-Container sehen, um das herauszufinden.
+  const [quellenStatus, setQuellenStatus] = useState<Record<string, PrognoseQuellenStatus> | null>(null)
+
+  // Nur laden, wenn eine Fremdquelle gewählt ist: die Erkennung fragt Home
+  // Assistant, und für die eedc-Eigenprognose gibt es nichts zu erkennen.
+  useEffect(() => {
+    const q = formData.prognose_quelle
+    if (!haVerbunden || (q !== 'sfml' && q !== 'solcast')) { setQuellenStatus(null); return }
+    let aktiv = true
+    aussichtenApi.getPrognoseQuellenStatus()
+      .then(r => { if (aktiv) setQuellenStatus(r) })
+      .catch(() => { if (aktiv) setQuellenStatus(null) })
+    return () => { aktiv = false }
+  }, [formData.prognose_quelle, haVerbunden])
   const [submitted, setSubmitted] = useState(false)
   const feldRefs = useRef<Record<PflichtFeld, HTMLDivElement | null>>({
     anlagenname: null,
@@ -631,6 +652,10 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
             onChange={handleChange}
             options={prognoseQuelleOptionen}
             hint={prognoseQuelleHinweis(formData.prognose_quelle, haVerbunden)}
+          />
+          <PrognoseQuellenBefund
+            quelle={formData.prognose_quelle}
+            status={quellenStatus}
           />
         </div>
       </FormSection>

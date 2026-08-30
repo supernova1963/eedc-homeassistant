@@ -131,7 +131,12 @@ describe('SolarAussicht3Tage', () => {
         pv_prognose_heute_rollend_kwh: 41.8,
       } as unknown as LiveWetterResponse
       render(<SolarAussicht3Tage prognose3Tage={drei} wetter={seins} heutePvKwh={29.8} />)
-      expect(screen.getByText(/\(\+17 %\)/)).toBeInTheDocument()
+      // ⚑ Diese Zusicherung stand bis 2026-08-30 auf dem Wortlaut `(+17 %)`.
+      // Sie ist NICHT gestrichen, sondern auf ihre AUSSAGE umgestellt: der
+      // Prozentwert wird weiterhin gezeigt — er nennt jetzt zusätzlich seinen
+      // Bezug (N-324, rapahl PN 91547: „+14 %" war in beide Richtungen lesbar).
+      expect(screen.getByText(/\+17 %/)).toBeInTheDocument()
+      expect(screen.getByText(/ggü\. Prognose/)).toBeInTheDocument()
     })
 
     it('schweigt bei kleiner Abweichung — 3 % sind kein Signal', () => {

@@ -103,6 +103,39 @@ SOLCAST_PATTERNS: list[tuple[str, str]] = [
 # Integration-Prefixe: Entity-IDs die mit diesen Prefixen beginnen
 # gehören zur jeweiligen Integration. Für SFML gibt es auch Entities
 # ohne Prefix (z.B. sensor.prognose_heute) — die matchen nur per Suffix.
+# Klartext-Namen der Rollen für die Status-Anzeige. Ohne sie stand in der
+# Oberfläche nur „gefunden" oder ein Fehler — DASS vier von sechs Rollen fehlen,
+# war nirgends sichtbar. Burkard (#401, 2026-08-30) musste dafür in den Add-on-
+# Container sehen; seine sechs SFML-Entities heißen `sensor.none_*`, weil eine
+# frühe SFML-Fassung den Gerätenamen nicht setzte, und fielen deshalb durch
+# Präfix- UND Suffix-Filter.
+ROLLEN_LABELS: dict[str, str] = {
+    "stundenprofil": "Stundenprofil (Mehrtages-Verlauf)",
+    "heute_kwh": "Prognose heute",
+    "heute_rest_kwh": "Prognose Rest heute",
+    "morgen_kwh": "Prognose morgen",
+    "uebermorgen_kwh": "Prognose übermorgen",
+    "naechste_stunde_kwh": "Prognose nächste Stunde",
+    "genauigkeit_30d": "Genauigkeit 30 Tage",
+    "p10_blend_kwh": "Planungsprognose P10",
+    "tag_3_kwh": "Prognose Tag 3", "tag_4_kwh": "Prognose Tag 4",
+    "tag_5_kwh": "Prognose Tag 5", "tag_6_kwh": "Prognose Tag 6",
+    "tag_7_kwh": "Prognose Tag 7",
+    "aktuelle_stunde_wh": "Prognose aktuelle Stunde",
+    "naechste_stunde_wh": "Prognose nächste Stunde (Wh)",
+    "verbleibende_leistung_heute": "Verbleibende Leistung heute",
+    "peak_heute_w": "Spitzenleistung heute", "peak_morgen_w": "Spitzenleistung morgen",
+    "aktuelle_leistung_w": "Aktuelle Leistung",
+}
+
+# Rollen, ohne die die Live-Anzeige einer Quelle unvollständig bleibt. Fehlt
+# eine davon, ist das kein Schönheitsfehler: ohne `stundenprofil`/`heute_kwh`
+# gibt es für diese Quelle keinen nachgeführten Rest.
+ROLLEN_WESENTLICH: dict[str, tuple[str, ...]] = {
+    "sfml": ("heute_kwh", "morgen_kwh", "stundenprofil"),
+    "solcast": ("heute_kwh", "morgen_kwh"),
+}
+
 SFML_PREFIXES = ["sensor.solar_forecast_ml_", "sensor.prognose_", "sensor.beste_stunde",
                  "sensor.produktionszeit_", "sensor.max_peak_"]
 SOLCAST_PREFIXES = ["sensor.solcast_pv_forecast_", "sensor.zuhause"]
@@ -256,3 +289,40 @@ def invalidate_cache(integration: Optional[str] = None):
         _discovery_cache.pop(integration, None)
     else:
         _discovery_cache.clear()
+
+
+async def discovery_status(integration: str) -> dict:
+    """Was die Auto-Erkennung je Rolle gefunden hat — für die Anzeige.
+
+    Die Erkennung matcht Entity-IDs über Präfix und Suffix. Beides sind
+    Konventionen des Integrationsautors, keine Garantien: Die Entity-ID entsteht
+    in Home Assistant beim ersten Anlegen und wandert später nicht mit, wenn die
+    Integration ihre Namen ändert. Wessen Sensoren anders heißen, bekommt heute
+    stillschweigend weniger Werte — diese Funktion macht das sichtbar, statt es
+    dem Anwender zu überlassen, es im Container nachzusehen.
+    """
+    res = await discover_prognose_sensoren(integration)
+    patterns = SFML_PATTERNS if integration == "sfml" else SOLCAST_PATTERNS
+    wesentlich = ROLLEN_WESENTLICH.get(integration, ())
+    rollen = []
+    for _suffix, rolle in patterns:
+        s = res.sensoren.get(rolle)
+        rollen.append({
+            "rolle": rolle,
+            "label": ROLLEN_LABELS.get(rolle, rolle),
+            "gefunden": s is not None,
+            "entity_id": s.entity_id if s else None,
+            "wert": s.wert if s else None,
+            "wesentlich": rolle in wesentlich,
+        })
+    fehlend_wesentlich = [r["label"] for r in rollen
+                          if r["wesentlich"] and not r["gefunden"]]
+    return {
+        "integration": integration,
+        "gefunden": res.gefunden,
+        "fehler": res.fehler,
+        "rollen": rollen,
+        "anzahl_gefunden": sum(1 for r in rollen if r["gefunden"]),
+        "anzahl_gesamt": len(rollen),
+        "fehlend_wesentlich": fehlend_wesentlich,
+    }

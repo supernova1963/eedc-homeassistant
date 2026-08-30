@@ -119,6 +119,20 @@ export interface LiveWetterResponse {
   profil_tage?: number | null  // Anzahl Tage im individuellen Profil
   prognose_quelle?: string | null  // Aktive Prognosequelle: "eedc", "solcast", "sfml"
   prognose_quelle_hinweis?: string | null  // Fallback-Hinweis
+  /** Tageszahlen der GEWÄHLTEN Quelle (null bei eedc — dann gilt der Kanon aus
+   *  `prognose3Tage`). `rueckfall: 'eedc'` heißt: so weit reicht die gewählte
+   *  Quelle nicht, und die Anzeige sagt es, statt still eine fremde Zahl unter
+   *  ihrer Überschrift zu zeigen. */
+  prognose_quelle_tage?: Array<{
+    datum: string
+    kwh: number | null
+    vm_kwh: number | null
+    nm_kwh: number | null
+    rueckfall: string | null
+  }> | null
+  /** Hat die gewählte Quelle ein Stundenprofil? false ⇒ es gibt KEINEN Rest
+   *  (statt eines aus fremder Kurvenform geschätzten). */
+  prognose_quelle_hat_profil?: boolean
   sfml_prognose_kwh?: number | null  // Solar Forecast ML Tagesprognose
   sfml_tomorrow_kwh?: number | null  // Solar Forecast ML Morgen-Prognose
   sfml_accuracy_pct?: number | null  // Solar Forecast ML Modellgenauigkeit

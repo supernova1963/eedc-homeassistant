@@ -168,6 +168,10 @@ class PrognosenVergleichResponse(BaseModel):
     verbleibend_om_kwh: Optional[float] = None
     verbleibend_eedc_kwh: Optional[float] = None
     verbleibend_solcast_kwh: Optional[float] = None
+    # Fehlte bis 2026-08-30, obwohl die Projektion darunter längst gerechnet
+    # wurde (nur eben ausschließlich für die Gesamtspalte). Die Matrix zeigte
+    # in der SFML-Spalte deshalb einen festen Gedankenstrich (Burkard #401).
+    verbleibend_sfml_kwh: Optional[float] = None
 
     # OpenMeteo Stundenprofil (GTI-basiert, roh)
     openmeteo_stundenprofil: List[StundenProfilEintrag] = []
@@ -183,6 +187,13 @@ class GenauigkeitsEintrag(BaseModel):
     openmeteo_kwh: Optional[float] = None
     eedc_kwh: Optional[float] = None
     solcast_kwh: Optional[float] = None
+    # Wurde längst mitgeschrieben (`TagesZusammenfassung.sfml_prognose_kwh`),
+    # aber nie ausgeliefert — die SFML-Spalte der Historie zeigte deshalb einen
+    # festen Gedankenstrich (Burkard #401). ⛔ Die Ausreißer-Markierung darunter
+    # bezieht SFML bewusst NICHT ein: das würde bestehende Markierungen
+    # rückwirkend verschieben, und das ist eine eigene Entscheidung, keine
+    # Nebenwirkung dieser Anzeige.
+    sfml_kwh: Optional[float] = None
     ist_kwh: Optional[float] = None
     # Repräsentatives Tages-Wettersymbol (aus Stundenprofil aggregiert, #296 #2)
     wetter_symbol: Optional[str] = None
@@ -380,6 +391,20 @@ def _profil_zu_eintraegen(p: StundenProfil) -> list[StundenProfilEintrag]:
         )
         for h in p.present_stunden
     ]
+
+
+@router.get("/prognose-quellen/status")
+async def get_prognose_quellen_status():
+    """Was die Auto-Erkennung für SFML und Solcast je Rolle findet.
+
+    ⚑ Der Pfad heißt bewusst NICHT ``/prognosen/…`` — darunter liegt
+    ``/prognosen/{anlage_id}``, und FastAPI würde ein Wort dahinter als
+    Anlagen-ID lesen. Ein eigener Zweig ist billiger als eine Reihenfolge-Wette.
+
+    Anlagenunabhängig: die Erkennung fragt die HA-Instanz, nicht die Anlage.
+    """
+    from backend.services.prognose_discovery import discovery_status
+    return {i: await discovery_status(i) for i in ("sfml", "solcast")}
 
 
 @router.get("/prognosen/{anlage_id}", response_model=PrognosenVergleichResponse)
@@ -683,6 +708,7 @@ async def get_prognosen_vergleich(
     verbleibend_om_kwh = _projektion(om_arr) if openmeteo_stundenprofil else None
     verbleibend_eedc_kwh = _projektion(eedc_arr) if eedc_stundenprofil else None
     verbleibend_solcast_kwh = _projektion(sc_arr)
+    verbleibend_sfml_kwh = _projektion(sfml_arr)
 
     # Gesamtspalte: gewählte Quelle (#3) mit Fallback-Kaskade.
     if pq.ist_sfml and sfml_arr:
@@ -837,6 +863,7 @@ async def get_prognosen_vergleich(
         verbleibend_om_kwh=verbleibend_om_kwh,
         verbleibend_eedc_kwh=verbleibend_eedc_kwh,
         verbleibend_solcast_kwh=verbleibend_solcast_kwh,
+        verbleibend_sfml_kwh=verbleibend_sfml_kwh,
         openmeteo_stundenprofil=openmeteo_stundenprofil,
         solcast_letzter_abruf=datetime.now().isoformat(),
         openmeteo_modell=wetter_modell,
@@ -966,6 +993,7 @@ async def get_prognosen_genauigkeit(
             openmeteo_kwh=round(forecast_kwh, 1) if forecast_kwh is not None else None,
             eedc_kwh=round(eedc_kwh, 1) if eedc_kwh is not None else None,
             solcast_kwh=round(tz.solcast_prognose_kwh, 1) if tz.solcast_prognose_kwh is not None else None,
+            sfml_kwh=round(tz.sfml_prognose_kwh, 1) if tz.sfml_prognose_kwh is not None else None,
             ist_kwh=round(ist_kwh, 1) if ist_kwh is not None else None,
             wetter_symbol=wetter_pro_tag.get(tz.datum),
             temperatur_max_c=round(tz.temperatur_max_c) if tz.temperatur_max_c is not None else None,
