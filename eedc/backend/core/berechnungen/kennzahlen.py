@@ -47,13 +47,29 @@ def eigenverbrauchsquote_prozent(eigenverbrauch_kwh: float, pv_erzeugung_kwh: fl
 
 
 def spezifischer_ertrag_kwh_kwp(
-    erzeugung_kwh: float, leistung_kwp: Optional[float]
+    erzeugung_kwh: Optional[float], leistung_kwp: Optional[float]
 ) -> Optional[float]:
     """Spezifischer Ertrag in kWh/kWp = Erzeugung / installierte Leistung.
 
-    `None` wenn keine Leistung bekannt (Division undefiniert) — Aufrufer mit
-    `float`-Feld nutzen `… or 0`. Ungerundet.
+    `None` wenn **einer der beiden Operanden fehlt** — Aufrufer mit `float`-Feld
+    nutzen `… or 0`. Ungerundet.
+
+    ⛔ **Der `None`-Zweig des ZÄHLERS ist seit N-355 da, und er ist keine
+    Symmetrie-Kosmetik.** Bis dahin deckte die Regel nur den Nenner ab; der
+    Docstring sagte „`None` wenn keine Leistung bekannt", und `aktueller_monat.py`
+    reichte `pv or 0` herein. Ein Monat **ohne gemessene PV-Zahl** bekam damit
+    `0,0 kWh/kWp` — eine Zahl, die wie eine Messung aussieht und die eigene
+    Anzeige-Doktrin verletzt (*nie gemessen ⇒ ausblenden, keine erfundene Null*).
+    Eine Division braucht **beide** Operanden; wer nur den Nenner prüft, hat die
+    halbe Frage gestellt.
+
+    ⚠ **Für die sechs Aufrufer mit `float`-Zähler ändert sich nichts** — sie
+    können gar kein `None` hereinreichen (gemessen 30.08.2026: `jahresbericht`
+    2×, `calculations`, `aussichten`, `dashboards` lesen Dataclass-Felder bzw.
+    Summen). Der Zweig greift genau dort, wo bisher ein `or 0` stand.
     """
+    if erzeugung_kwh is None:
+        return None
     if not leistung_kwp or leistung_kwp <= 0:
         return None
     return erzeugung_kwh / leistung_kwp

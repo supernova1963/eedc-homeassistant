@@ -177,9 +177,9 @@ def monatsergebnis_euro(d: Any) -> Optional[float]:
 #: **Bewusst eine ausgeschriebene Liste und kein „irgendein Wert ist gesetzt".**
 #: Stammdaten (Speicherkapazität, Gerätenamen, kWp) liegen unabhängig vom Monat
 #: vor; ein Bericht, der sie für einen Monat ohne jede Messung ausdruckt, sieht
-#: gefüllt aus und ist leer. Und `spez_ertrag` kommt als **0.0** statt `None`,
-#: wenn keine PV vorliegt — er stünde sonst als „0,0 kWh/kWp" neben einer
-#: PV-Erzeugung „–" (die F-43-Klasse, hier auf einer Seite sichtbar).
+#: gefüllt aus und ist leer. (`spez_ertrag` stand hier bis N-355 als zweites
+#: Beispiel: er kam als 0.0 statt `None`, wenn keine PV vorlag. Das ist an der
+#: Quelle behoben — der Fall gehört jetzt zur Liste, nicht zur Ausnahme.)
 MESSFELDER: tuple[str, ...] = (
     "pv_erzeugung_kwh", "eigenverbrauch_kwh", "einspeisung_kwh",
     "netzbezug_kwh", "gesamtverbrauch_kwh",
@@ -207,17 +207,12 @@ def _abschnitte_energie(d: Any) -> list[Abschnitt]:
         _z("Gesamtverbrauch", fmt_kwh(d.gesamtverbrauch_kwh)),
         _z("Autarkie", fmt_pct(d.autarkie_prozent)),
         _z("Eigenverbrauchsquote", fmt_pct(d.eigenverbrauch_quote_prozent)),
-        # ⛔ `spez_ertrag` kommt als **0.0** statt `None`, wenn der Monat gar
-        # keine PV-Zahl trägt: die Route rechnet `spezifischer_ertrag_kwh_kwp(pv
-        # or 0, …)` (`aktueller_monat.py:2471`) und macht aus „nicht gemessen"
-        # eine gemessene Null. Der Bericht schriebe sonst „0,0 kWh/kWp" direkt
-        # unter eine PV-Erzeugung „–" — zwei Zeilen, die einander widersprechen.
-        # Die Ursache sitzt in der Route und ist als Fund vermerkt (eine
-        # Wertänderung an einem ausgelieferten Feld ist ein eigener Entscheid);
-        # hier steht nur, dass der Bericht sie nicht weitergibt.
-        _z("Spezifischer Ertrag",
-           fmt_einheit(d.spez_ertrag if d.pv_erzeugung_kwh is not None else None,
-                       "kWh/kWp", decimals=1)),
+        # ⚑ Ohne gemessene PV-Zahl liefert die Route hier `None`, nicht 0.0 —
+        # seit **N-355**, der den Zähler-Zweig in `spezifischer_ertrag_kwh_kwp`
+        # nachgezogen hat. Bis dahin stand an dieser Stelle eine eigene Sperre
+        # im Bericht; sie ist mit dem Quell-Fix entfallen, statt als zweiter
+        # Turm über demselben Sachverhalt stehenzubleiben.
+        _z("Spezifischer Ertrag", fmt_einheit(d.spez_ertrag, "kWh/kWp", decimals=1)),
     ]
     if _hat(kennzahlen):
         aus.append(Abschnitt("kennzahlen", "Kennzahlen", "energie", kennzahlen))

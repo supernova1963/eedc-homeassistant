@@ -2468,8 +2468,12 @@ async def get_aktueller_monat(
     # (der Anlagen-Hash des Servers wird daraus gebildet).
     from calendar import monthrange as _monthrange_spez
 
+    # N-355: `pv` statt `pv or 0`. Das `or 0` machte aus „für diesen Monat liegt
+    # keine PV-Zahl vor" eine **gemessene Null** — der Anwender sah
+    # `0,0 kWh/kWp` neben einer PV-Erzeugung „—". Der Nenner-Zweig des SoT
+    # deckte nur die fehlende kWp ab; der Zähler-Zweig ist jetzt dort.
     spez_ertrag = spezifischer_ertrag_kwh_kwp(
-        pv or 0,
+        pv,
         anlagen_kwp(
             investitionen,
             # Stichtag Monatsende: ein im Monat zugebauter String gehört in den
