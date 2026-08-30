@@ -24,6 +24,7 @@ from backend.core.berechnungen import (
     berechne_finanz_aggregat,
     eigenverbrauchsquote_prozent,
     einspeise_erloes_euro,
+    relevante_kosten_aus_investitionen,
     spezifischer_ertrag_kwh_kwp,
     vollzyklen as berechne_vollzyklen,
 )
@@ -424,12 +425,18 @@ async def build_jahresbericht_context(
     netto_ertrag = _finanz.netto_ertrag_euro
 
     investition_gesamt = sum(i.anschaffungskosten_gesamt or 0 for i in investitionen)
-    investition_alternativ = sum(
-        i.anschaffungskosten_alternativ or 0
-        for i in investitionen
-        if i.anschaffungskosten_alternativ
-    )
-    investition_mehrkosten = investition_gesamt - investition_alternativ
+    # N-136: über den Layer-SoT, nicht als eigene Form daneben. Hier stand bis
+    # 2026-08-30 `Σ gesamt − Σ alternativ` — **ungeklemmt und über die ganze
+    # Anlage**. Der SoT klemmt **je Position** (`Σ max(0, gesamt − alternativ)`).
+    # Beide sind gleich, solange keine Alternative teurer ist als die Sache
+    # selbst; sobald **eine** Position eine teurere Alternative trägt (ein
+    # Verbrenner gegen ein E-Auto ist der Regelfall), zog die alte Form deren
+    # Überschuss von den Mehrkosten der **anderen** Positionen ab — Nenner zu
+    # klein, Rendite und Amortisation im PDF zu hoch, und die Zahl widersprach
+    # denselben vier Sichten, die sie längst über den SoT bilden (Cockpit →
+    # Übersicht `uebersicht.py:641` unter demselben Variablennamen, ROI
+    # `crud.py:1520`, Aussichten `aussichten.py:1242`, Wallbox-Hub).
+    investition_mehrkosten = relevante_kosten_aus_investitionen(investitionen)
     betriebskosten_jahr = sum(i.betriebskosten_jahr or 0 for i in investitionen)
 
     # #326-Inventur Dimension 2: USt auf Eigenverbrauch bei Regelbesteuerung.
@@ -445,8 +452,12 @@ async def build_jahresbericht_context(
     # Kalenderjahr; bei `jahr=<J>` bleibt genau ein Anteil übrig und die Zahl
     # ändert sich nur um die neue Bemessungsgrundlage und die Monats-Anteiligkeit.
     # N-129: Bemessungsgrundlage über den Layer-SoT statt `investition_gesamt`.
-    # `investition_mehrkosten` daneben bleibt unberührt — es trägt die
-    # Rendite/Amortisation und ist die ungeklemmte Form (Σ gesamt − Σ alternativ).
+    # ⛔ Hier stand bis 2026-08-30: „`investition_mehrkosten` daneben bleibt
+    # unberührt — es trägt die Rendite/Amortisation und ist die ungeklemmte
+    # Form". Das war die **Abgrenzung des N-129-Auftrags**, keine fachliche
+    # Entscheidung für die ungeklemmte Form — und sie hat den Befund N-136
+    # dreiundzwanzig Tage lang als gewollt gelesen aussehen lassen. Beide
+    # Größen kommen jetzt aus dem Layer (s. `investition_mehrkosten` oben).
     pv_je_jahr: dict[int, float] = defaultdict(float)
     for (_j, _m), _pv in pv_by_year_month.items():
         pv_je_jahr[_j] += _pv

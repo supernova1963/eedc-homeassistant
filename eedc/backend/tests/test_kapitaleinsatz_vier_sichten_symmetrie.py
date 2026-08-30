@@ -62,6 +62,7 @@ from backend.api.routes.investitionen.crud import get_roi_dashboard
 from backend.models import Anlage, Investition, Monatsdaten, Strompreis
 from backend.models.investition import InvestitionMonatsdaten
 from backend.services.pdf.builders.finanzbericht import build_finanzbericht_context
+from backend.services.pdf.formatierung import fmt_zahl
 
 #: PV 10.000 + Speicher 5.000 = 15.000 relevante Kosten …
 RELEVANTE_KOSTEN = 15000.0
@@ -185,7 +186,10 @@ async def test_pdf_finanzbericht_teilt_den_kapitaleinsatz(db):
     # `gesamt_amortisation_jahre` falsy, und diese Probe lief deshalb **grün
     # durch, ohne etwas zu prüfen** — sie hätte N-213 nicht gemeldet.
     assert roi.gesamt_amortisation_jahre is not None
-    assert ctx["amortisation_jahre"] == f"{roi.gesamt_amortisation_jahre:.1f} Jahre"
+    # N-234 (30.08.): Der Erwartungswert baute die Formatierung als englischen
+    # f-String NACH und hielt sie damit fest. Über den SoT gebildet prüft die
+    # Probe jetzt Zahl UND Schreibweise — die Symmetrie-Aussage ist unberührt.
+    assert ctx["amortisation_jahre"] == f"{fmt_zahl(roi.gesamt_amortisation_jahre, 1)} Jahre"
     assert "Kapitaleinsatz" in ctx["amortisation_berechnung"]
 
 

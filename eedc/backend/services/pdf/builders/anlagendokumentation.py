@@ -35,6 +35,7 @@ from backend.models.anlage import Anlage, AnlageFoto
 from backend.models.infothek import InfothekDatei, InfothekEintrag, InfothekInvestition
 from backend.models.investition import Investition
 from backend.core.investition_kennwerte import get_erzeuger_kwp, get_pv_kwp
+from backend.services.pdf.formatierung import fmt_einheit
 
 
 # SoT: backend.models.investition (stand hier bis 2026-07-31 als byte-gleiche
@@ -122,16 +123,16 @@ def _build_investition_tech_grid(inv: Investition) -> list[tuple[str, str]]:
     if inv.typ in ("pv-module", "balkonkraftwerk"):
         erzeuger_kwp = get_erzeuger_kwp(inv)
         if erzeuger_kwp:
-            grid.append(("Nennleistung", f"{erzeuger_kwp:.2f} kWp"))
+            grid.append(("Nennleistung", fmt_einheit(erzeuger_kwp, "kWp")))
     else:
         roh_leistung = inv.leistung_kwp  # bewusst die Rohspalte, s. Kommentar oben
         if roh_leistung:
             if inv.typ == "speicher":
-                grid.append(("Kapazität", f"{roh_leistung:.1f} kWh"))
+                grid.append(("Kapazität", fmt_einheit(roh_leistung, "kWh", decimals=1)))
             elif inv.typ == "wechselrichter":
-                grid.append(("Nennleistung", f"{roh_leistung:.1f} kW (AC)"))
+                grid.append(("Nennleistung", fmt_einheit(roh_leistung, "kW (AC)", decimals=1)))
             else:
-                grid.append(("Nennleistung", f"{roh_leistung:.2f} kWp"))
+                grid.append(("Nennleistung", fmt_einheit(roh_leistung, "kWp")))
     if inv.ausrichtung:
         if inv.neigung_grad is not None:
             grid.append(("Ausrichtung", f"{inv.ausrichtung} · {inv.neigung_grad:.0f}° Neigung"))
@@ -377,7 +378,7 @@ async def build_anlagendokumentation_context(
     anlagenarten: list[str] = []
     if pv_module:
         kwp_sum = sum(get_pv_kwp(i) for i in pv_module)
-        anlagenarten.append(f"Photovoltaik · {kwp_sum:.2f} kWp · {len(pv_module)} Modulfeld(er)")
+        anlagenarten.append(f"Photovoltaik · {fmt_einheit(kwp_sum, 'kWp')} · {len(pv_module)} Modulfeld(er)")
     typ_counts: dict[str, int] = {}
     for inv in einzel:
         typ_counts[inv.typ] = typ_counts.get(inv.typ, 0) + 1

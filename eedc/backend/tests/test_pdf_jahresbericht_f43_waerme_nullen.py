@@ -107,17 +107,17 @@ async def test_f43_template_rendert_strich_statt_null(db):
     ``fmt_kwh(None)``. Ein Fix, der ``None`` liefert, aber an einer Stelle
     landet, die ``0`` erzwingt, wäre hier rot.
     """
-    from jinja2 import Environment, FileSystemLoader, select_autoescape
-    from pathlib import Path
+    # N-234 (2026-08-30): Hier stand eine NACHGEBAUTE Jinja-Umgebung. Sie hat
+    # den Bericht gerendert, ohne die Umgebung zu benutzen, die ihn produktiv
+    # rendert — ein Formatierer-Fehler in `engine.py` wäre hier unsichtbar
+    # geblieben. Die Aussage dieser Probe („die Wirkung am Ausgabemedium")
+    # trägt unverändert; sie greift jetzt nur an der echten Kette an.
+    from backend.services.pdf.engine import render_html
 
     anlage_id = await _seed(db, mit_waerme=False)
     ctx = await build_jahresbericht_context(db, anlage_id=anlage_id, jahr=2025)
 
-    tpl_dir = Path(__file__).resolve().parents[1] / "services" / "pdf" / "templates"
-    env = Environment(loader=FileSystemLoader(str(tpl_dir)),
-                      autoescape=select_autoescape(["html"]),
-                      trim_blocks=True, lstrip_blocks=True)
-    html = env.get_template("jahresbericht.html").render(**ctx, static_dir="x")
+    html = render_html("jahresbericht.html", ctx)
 
     import re
     block = re.search(r"<h2>Wärmepumpe</h2>.*?</table>", html, re.S)

@@ -2,21 +2,11 @@
 {% block doc_title %}{{ zeitraum_label }} – {{ anlage.name }}{% endblock %}
 {% block heading %}{{ zeitraum_label }}{% endblock %}
 
-{% macro fmt_kwh(v, decimals=0) -%}
-  {%- if v is none -%}–{%- else -%}{{ "{:,.{p}f}".format(v, p=decimals).replace(",", "X").replace(".", ",").replace("X", ".") }} kWh{%- endif -%}
-{%- endmacro %}
-
-{% macro fmt_eur(v) -%}
-  {%- if v is none -%}–{%- else -%}{{ "{:,.2f}".format(v).replace(",", "X").replace(".", ",").replace("X", ".") }} €{%- endif -%}
-{%- endmacro %}
-
-{% macro fmt_pct(v, decimals=1) -%}
-  {%- if v is none -%}–{%- else -%}{{ "{:.{p}f}".format(v, p=decimals).replace(".", ",") }} %{%- endif -%}
-{%- endmacro %}
-
-{% macro fmt_num(v, decimals=0) -%}
-  {%- if v is none -%}–{%- else -%}{{ "{:,.{p}f}".format(v, p=decimals).replace(",", "X").replace(".", ",").replace("X", ".") }}{%- endif -%}
-{%- endmacro %}
+{# N-234: fmt_kwh / fmt_eur / fmt_pct / fmt_num standen bis 2026-08-30 HIER als
+   Makros — und nur hier. Jinja vererbt Makros nicht über `{% extends %}`, also
+   schrieben Finanzbericht und Anlagendokumentation ihre Zahlen englisch
+   („12.32 kWp"). Sie kommen jetzt aus `services/pdf/formatierung.py` und werden
+   in `engine.py` in die Umgebung gehängt; die Aufrufe unten sind unverändert. #}
 
 {% block subheading %}
   <p class="muted">

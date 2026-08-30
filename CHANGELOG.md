@@ -7,6 +7,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Rendite und Amortisation im Jahresbericht-PDF standen zu hoch.** Der Bericht bildete die Mehrkosten als *Summe aller Anschaffungen minus Summe aller Alternativen* — über die ganze Anlage und **ohne Untergrenze**. Hat auch nur **eine** Position eine teurere Alternative (der Verbrenner, den ein E-Auto ersetzt, ist der Regelfall), zog deren Überschuss die Mehrkosten der **anderen** Positionen mit herunter: Der Nenner wurde zu klein, Rendite und Amortisationsfortschritt fielen zu günstig aus. ⭐ **Cockpit → Übersicht, Auswertungen → ROI, die Aussichten und der Wallbox-Hub rechnen die Größe längst richtig** — sie klemmen je Position bei null. Der Jahresbericht war der einzige Ort mit einer eigenen Vorschrift; er nennt jetzt dieselbe Zahl wie der Bildschirm. **Deine Daten sind unberührt**, es ändert sich allein die Auswertung.
+- **Finanzbericht und Anlagendokumentation schrieben ihre Zahlen englisch** — „7.9 Jahre", „12.32 kWp", „10.0 kWh" in einem ausgelieferten PDF. Der Jahresbericht machte es von jeher deutsch; seine Formatierung lag aber in seiner eigenen Vorlage und war für die anderen Berichte technisch gar nicht erreichbar. Alle vier Berichte nehmen sie jetzt aus **einer** Quelle. ⚠ **Eine Ausnahme bleibt bewusst stehen:** Die Koordinaten in der Anlagendokumentation behalten den Dezimalpunkt — sie sind dort kein Messwert zum Lesen, sondern ein Wert zum Weitergeben, und mit Komma ließen sie sich weder in eine Karte noch in ein Formular übernehmen.
+
+---
+
 ## [4.0.35] - 2026-08-30 — Eine Auswahl, die sich zurücknehmen lässt
 
 ### Fixed

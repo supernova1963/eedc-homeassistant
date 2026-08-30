@@ -223,7 +223,7 @@
   </div>
 
   <div class="meta">
-    <strong>{{ "%.2f"|format(anlage.leistung_kwp) }} kWp</strong>
+    <strong>{{ fmt_einheit(anlage.leistung_kwp, "kWp") }}</strong>
     {% if anlage.installationsdatum %} · seit {{ anlage.installationsdatum.strftime("%m / %Y") }}{% endif %}
     {% if anlage.standort_ort %} · {{ anlage.standort_plz }} {{ anlage.standort_ort }}{% endif %}
     <br>

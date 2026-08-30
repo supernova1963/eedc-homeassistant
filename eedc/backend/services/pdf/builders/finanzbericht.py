@@ -22,6 +22,7 @@ from backend.models.anlage import Anlage
 from backend.models.infothek import InfothekEintrag
 from backend.models.investition import Investition
 from backend.utils.investition_filter import sort_investitionen_nach_typ
+from backend.services.pdf.formatierung import fmt_euro, fmt_zahl
 
 
 # SoT: backend.models.investition — hier nur re-exportiert, damit bestehende
@@ -30,10 +31,19 @@ from backend.models.investition import TYP_LABELS  # noqa: E402,F401
 
 
 def _format_euro(val: Optional[float]) -> str:
+    """N-234: nur noch ein Alias auf den SoT.
+
+    Hier stand ein eigener Nachbau der Euro-Formatierung. Er war zufaellig
+    richtig — aber er war die zweite Vorschrift fuer dieselbe Sache, und die
+    Nachbarzeile (`amortisation_jahre`) zeigt, wohin das fuehrt: dort wurde
+    englisch geschrieben, weil der Helfer nur Euro konnte.
+    ⚠ Der Leerwert weicht bewusst ab: dieser Bericht setzt den Display-Token
+    `—` (Style-Guide), nicht den Gedankenstrich der PDF-Makros. Deshalb der
+    eigene None-Zweig statt eines blanken Durchreichens.
+    """
     if val is None:
         return "—"
-    # DE-Format: 12.345,67 €
-    return f"{val:_.2f} €".replace(".", ",").replace("_", ".")
+    return fmt_euro(val)
 
 
 def _format_year_month(d) -> str:
@@ -181,7 +191,8 @@ async def build_finanzbericht_context(
             "differenz_alt": _format_euro(differenz_alt) if differenz_alt else "",
         },
         "amortisation_jahre": (
-            f"{amortisation_jahre:.1f} Jahre" if amortisation_jahre else "—"
+            # N-234: stand als `f"{...:.1f} Jahre"` da und schrieb „7.9 Jahre".
+            f"{fmt_zahl(amortisation_jahre, 1)} Jahre" if amortisation_jahre else "—"
         ),
         # Der Rechenweg dazu — ohne ihn stünde im PDF eine Zahl, die sich aus
         # keiner anderen Zahl derselben Seite ergibt (die Tabelle zeigt die

@@ -422,7 +422,7 @@
   <div class="meta-row">
     <div>
       <div class="label">Leistung</div>
-      <div class="value">{{ "%.2f"|format(anlage.leistung_kwp) }} kWp</div>
+      <div class="value">{{ fmt_einheit(anlage.leistung_kwp, "kWp") }}</div>
     </div>
     <div>
       <div class="label">In Betrieb seit</div>
@@ -430,6 +430,10 @@
     </div>
     <div>
       <div class="label">Koordinaten</div>
+      {# N-234 AUSNAHME, bewusst: Koordinaten behalten den DEZIMALPUNKT. Sie sind
+         hier kein Messwert zum Lesen, sondern ein Wert zum Weitergeben — mit
+         Komma lassen sie sich weder in eine Karte noch in ein Formular
+         übernehmen. Alles andere in diesem Dokument schreibt deutsch. #}
       <div class="value">{% if anlage.latitude and anlage.longitude %}{{ "%.4f"|format(anlage.latitude) }}°, {{ "%.4f"|format(anlage.longitude) }}°{% else %}—{% endif %}</div>
     </div>
   </div>
@@ -458,7 +462,7 @@
 
   {% if seite.kind == "pv-sammel" %}
     <div class="pv-summary">
-      <span class="lbl">Gesamt-Leistung</span><span class="val">{{ "%.2f"|format(seite.pv_gesamt_kwp) }} kWp</span>
+      <span class="lbl">Gesamt-Leistung</span><span class="val">{{ fmt_einheit(seite.pv_gesamt_kwp, "kWp") }}</span>
       <span class="lbl">Modulfelder</span><span class="val">{{ seite.pv_anzahl }}</span>
     </div>
 

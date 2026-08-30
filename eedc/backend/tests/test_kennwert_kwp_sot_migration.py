@@ -500,7 +500,10 @@ def test_pdf_nennleistung_aus_dem_detailfeld():
     grid = dict(_build_investition_tech_grid(
         _inv(typ="pv-module", leistung_kwp=None, parameter={"kwp": 6.0})))
 
-    assert grid["Nennleistung"] == "6.00 kWp"
+    # N-234 (30.08.): stand als "6.00 kWp" da. Gegenstand dieser Probe ist die
+    # QUELLE der kWp (Detailfeld statt Rohspalte), nicht die Schreibweise —
+    # die war nur mitgeschrieben und hielt den englischen Punkt fest.
+    assert grid["Nennleistung"] == "6,00 kWp"
 
 
 def test_pdf_speicher_bekommt_kwh_statt_kwp():
@@ -516,8 +519,9 @@ def test_pdf_speicher_bekommt_kwh_statt_kwp():
     wr = dict(_build_investition_tech_grid(
         _inv(typ="wechselrichter", leistung_kwp=8.0)))
 
-    assert speicher == {"Kapazität": "10.0 kWh"}
-    assert wr == {"Nennleistung": "8.0 kW (AC)"}
+    # N-234 (30.08.): war "10.0 kWh" — s. Begründung oben.
+    assert speicher == {"Kapazität": "10,0 kWh"}
+    assert wr == {"Nennleistung": "8,0 kW (AC)"}
 
 
 # ── Daten-Checker: BKW-Seite des N66-Vergleichs ────────────────────────────
