@@ -33,7 +33,7 @@ function AnlageAktionen({ anlage, onDokumente, onEdit, onDelete }: {
         variant="ghost"
         size="sm"
         onClick={() => onDokumente(anlage)}
-        title="Dokumente (Jahresbericht, Infothek, Anlagendokumentation, Finanzbericht)"
+        title="Dokumente (Jahresbericht, Infothek, Anlagendokumentation, Finanzbericht, Monatsbericht)"
       >
         <FolderOpen className="h-4 w-4 text-orange-500" />
       </Button>
