@@ -140,7 +140,8 @@ Die Monatsfläche trägt **elf** Park-Elemente, und es sind **Einzelanzeigen**, 
 `el:bilanz-verteilung` · `el:bilanz-geraete` · `el:kategorien-erzeugung` ·
 `el:kategorien-verbrauch` · `el:tagesprofil` · `el:peak-netzbezug` · `el:peak-einspeisung`
 (gemessen 30.08. in `CockpitMonatV4.tsx` · `MonatBilanz.tsx` · `MonatAuswertungBloecke.tsx`).
-Die vier Themenschalter bestimmen also **was für ein Bericht**, der Park-Zustand feilt **innerhalb**.
+Die Themenschalter bestimmen also **was für ein Bericht**, der Park-Zustand feilt **innerhalb**.
+*(Stand Stufe 1: vier. Mit Stufe 2 kam **Community** als fünfter dazu.)*
 Beides zusammen ist widerspruchsfrei — aber es sind zwei Ebenen, und der Bericht darf sie nicht
 vermischen.
 
@@ -239,19 +240,29 @@ ist es eine Zeile.
 
 ---
 
-# Stufe 2 — Der Bericht sieht aus wie eedc (Entwurf, 2026-08-30)
+# Stufe 2 — Grafische Aufbereitung + Community (2026-08-30)
 
-> **Status: ENTWURF.** Richtung freigegeben von Gernot am 30.08. (*„nein, gerne auch ein
-> Dokument, versuchen wir es"*). Der **Bau** wartet auf die Freigabe dieses Abschnitts.
+> **Status: FREIGEGEBEN, im Bau.** Gernots Auftrag am 30.08., wörtlich: *„Lass das Thema Teilen
+> komplett weg und erfülle nur den Benutzerwunsch nach einem Monatsbericht auf Basis der
+> Monatsdaten als PDF aber mit grafischer Aufbereitung und inklusive Community."*
+>
+> ⛔ **„Teilen" ist KEIN Gegenstand dieser Stufe** — und das ist eine Entscheidung, keine
+> Vertagung. Ein früherer Entwurf dieses Abschnitts führte eine Teilen-Voreinstellung, einen
+> Teilen-Knopf auf *Cockpit → Monat* und daraus abgeleitete Auflagen. **Alles davon ist
+> gestrichen.** Der Anlass war Gernots Bemerkung, dass künftig wohl viele Flächen etwas zu teilen
+> anbieten werden — ich hatte daraus ein eigenes Vorhaben gemacht, statt beim Melderwunsch zu
+> bleiben. *Aus einer Randbemerkung wird kein Arbeitspaket.*
+> ⚑ Der **bestehende** Markdown-/Zwischenablage-Weg aus Stufe 1 bleibt unberührt — er ist
+> gebaut, abgenommen und funktioniert; ihn zu entfernen war nie gefragt.
 
 ## Der Auslöser
 
 Gernot nach dem ersten Test an der Dev-Box, wörtlich: *„Die Berichte sehen überhaupt nicht wie
 die Seite Cockpit-Monat aus und enthält keine dort verwendet Aufbereitungen und Charts."*
 
-**Gemessen, nicht angenommen:** Das Template kennt **genau eine** Darstellungsform —
-`table.werte`, Label links, Wert rechts. Alle Abschnitte laufen durch dieselbe Schleife.
-Zum Vergleich die Geschwister im selben Verzeichnis:
+**Gemessen:** Das Template kennt **genau eine** Darstellungsform — `table.werte`, Label links,
+Wert rechts. Alle Abschnitte laufen durch dieselbe Schleife. Die Geschwister im selben
+Verzeichnis:
 
 | Template | `<table>` | Charts |
 | --- | --- | --- |
@@ -260,85 +271,39 @@ Zum Vergleich die Geschwister im selben Verzeichnis:
 | `anlagendokumentation.html` | 0 | 1 (Anlagenfoto) |
 | **`monatsbericht.html`** | **1** | **0** |
 
-⇒ Der Bericht ist nicht nur „nicht wie der Bildschirm", er ist auch **dünner als sein direktes
+⇒ Der Bericht ist nicht nur „nicht wie der Bildschirm", er ist **dünner als sein direktes
 Geschwister**. Bauschnitt-Zeile 2 der Stufe 1 („Template **im Stil der Cockpit-Monatsansicht**")
 ist nicht eingelöst worden — die Zahlen stimmen, die Aufmachung fehlt.
-
-## Die Entscheidung: EIN Dokument, zwei Voreinstellungen
-
-⛔ **Kein zweites Dokument, kein drittes Renderziel.** Der zuerst erwogene Schnitt (Archiv-PDF
-*und* separates Teilen-Blatt) ist verworfen — Begründung in dieser Reihenfolge:
-
-1. **Es ist die stärkste Form von „nicht umsonst".** Der gebaute Bericht wird nicht daneben
-   stehengelassen, er **wird** das Teilen-Artefakt.
-2. **Das N-7-Risiko fällt strukturell auf null.** Bei zwei Dokumenten müsste eine Regel samt
-   Probe verhindern, dass das zweite eigene Zahlen bildet — genau daran ist die
-   Social-Media-Vorlage gestorben (§1). Bei einem Dokument gibt es die zweite Bildungsstelle
-   nicht, die man bewachen müsste.
-3. **Es gibt dann genau einen eedc-Monatsbericht**, in zwei Längen — wiedererkennbarer als zwei
-   verschieden aussehende Dokumente über denselben Monat.
-
-| | **Archiv** (Voreinstellung) | **Teilen** |
-| --- | --- | --- |
-| Umfang | alle Abschnitte | kurze Auswahl |
-| Community-Vergleich | aus | **an**, mit Stand-Datum und Vergleichsgröße |
-| Identität | an | Wahl des Anwenders |
-| Aufmachung | KPI-Kacheln · Balken · Charts | dieselben |
-| Einstieg | Berichts-Hub an der Anlage | **Schaltfläche auf *Cockpit → Monat*** |
-
-⚑ **Der zweite Einstieg ist keine Bequemlichkeit, er ist die Lehre aus dem Rückbau.** Commit
-`07682e14` nennt als Grund für den Wegfall der Social-Vorlage wörtlich: *„Teilen-Symbol und
-`ShareTextModal` gibt es in v4 nicht mehr, `GET /api/cockpit/share-text/{id}` lief seither ohne
-Konsumenten weiter."* **Unerreichbarkeit war der Rückbaugrund, nicht das Teilen** — derselbe
-Commit hält ausdrücklich fest: *„Nicht betroffen: das Community-Teilen — eine andere Funktion,
-die bleibt."* Ein Teilen-Weg, der nur im Dokumenten-Hub liegt, baut die Sackgasse nach.
-
-### Was „erkennbar eedc" heute trägt — und was fehlt
-
-Gemessen: ein dreifarbiges Markenband in der linken Seitenmarge (`static/styles.css:105`,
-`position: fixed` ⇒ WeasyPrint repliziert es auf jeder Seite), der Titel und die Fußzeile.
-**Das Logo trägt bisher nur die Anlagendokumentation** — `builders/anlagendokumentation.py:248`
-base64-t `eedc/logo.png` in den Context. ⇒ **Regel 7: das Muster existiert**, der Kopfbereich
-des Monatsberichts ruft es auf, statt es nachzubauen.
-
-⛔ **Kein Bild-Export, und das ist eine Entscheidung.** Gemessen: WeasyPrint **68.1** hat kein
-`write_png` (seit 53 entfernt); im Backend-venv fehlen `cairosvg` und `playwright` (`PIL` ist da,
-rendert aber kein HTML); das Frontend hat 12 Abhängigkeiten, keine davon rastert. Ein Bild
-kostete also eine neue Laufzeit-Abhängigkeit. **Gernots Entscheid (30.08.):** Snapshots als PNG
-sind mit Bordmitteln des Anwenders ohnehin möglich und decken den gezielten Fall ab (ein
-einzelnes Diagramm in einen Markdown-Post heben, weil Markdown kein SVG trägt). **Das Artefakt
-ist der Bericht, nicht das Bild.** ⚠ *Hier lag mein eigener Denkfehler: Ich hatte „das Bild" zum
-Ziel erklärt und den Bericht daran gemessen, ob man ihn postet. Der Maßstab ist
-Wiedererkennbarkeit — und die leistet ein gebrandeter Bericht, während ein nackter Screenshot
-einer Webseite sie gerade nicht leistet.*
 
 ## Was dazukommt — und woher die Daten stammen
 
 **Die Monatsfläche trägt 14 parkbare Anzeigen** (gemessen über die `<Parkbar>`-Aufrufe in
 `CockpitMonatV4` · `MonatBilanz` · `MonatAuswertungBloecke` · `MonatRahmen`). Der Bericht deckt
-davon heute sieben ab, und die als Tabelle.
+heute sieben ab, und die als Tabelle. **Sechs fehlen ganz — das ist Inhalt, nicht Kosmetik:**
+ein Archivstück ohne Tagesverlauf, Tagesprofil und Spitzenstunden ist unvollständig, und
+„Ablage" ist der Zweck, den der Melder wörtlich genannt hat.
 
-| Anzeige | heute im Bericht | Quelle für den Bau |
+| Anzeige | heute | Quelle für den Bau |
 | --- | --- | --- |
 | KPI-Strip (7 Kacheln: PV · Eigenverbrauch · Direktverbrauch · Einspeisung · Netzbezug · Gesamtverbrauch · Autarkie) | – | `AktuellerMonatResponse` (da) |
-| `el:bilanz-vergleich` · `-grundlast` · `-monatsprognose` · `-verteilung` · `-geraete` · `el:finanzen-bilanz` | als Tabellenzeilen | dieselbe (da) |
+| `el:bilanz-vergleich` · `-grundlast` · `-monatsprognose` · `-verteilung` · `-geraete` · `el:finanzen-bilanz` | Tabellenzeilen | dieselbe (da) |
 | **`el:verlauf`** — Tagesbalken über den Monat | **fehlt** | `services/energie_profil/tage_werte.py::baue_tage_werte(db, anlage, von, bis)` |
 | **`el:kategorien-erzeugung`** · **`el:kategorien-verbrauch`** | **fehlen** | `get_monatsauswertung` → `kategorien` |
 | **`el:tagesprofil`** — 24-Stunden-Kurve | **fehlt** | `get_monatsauswertung` → `typisches_tagesprofil` |
 | **`el:peak-netzbezug`** · **`el:peak-einspeisung`** | **fehlen** | `get_monatsauswertung` → `peak_*` |
 | `el:finanzen-link` (Cross-Link) | – | **gehört nicht ins PDF** — ein Link ist auf Papier nichts |
-| `el:community-tabelle` | – | s. eigener Abschnitt unten |
+| `el:community-tabelle` | – | s. eigener Abschnitt |
 
 **Aufrufweg, gemessen:**
 * `get_monatsauswertung(anlage_id, jahr, monat, top_n, db)` — die Logik liegt **in der Route**,
-  es gibt keinen Service darunter. Direkt aufrufbar mit explizit gesetzten Argumenten; das ist
-  dasselbe Muster, mit dem der Builder heute schon `get_aktueller_monat(anlage_id, jahr, monat,
-  db)` ruft (`monatsbericht.py:542`, Lazy-Import gegen den Zyklus).
+  es gibt keinen Service darunter. Direkt aufrufbar mit explizit gesetzten Argumenten; dasselbe
+  Muster, mit dem der Builder heute schon `get_aktueller_monat(anlage_id, jahr, monat, db)` ruft
+  (`monatsbericht.py:542`, Lazy-Import gegen den Zyklus).
 * Für den Verlauf **nicht** die Route, sondern den Service `baue_tage_werte` — die Route
   `get_tage_werte` tut nichts weiter, als ihn nach einer Anlagenprüfung aufzurufen (Regel 7).
 
-⇒ **Weiterhin keine neue Datenschicht** — ADR-002/P10 bleibt gewahrt, der Builder ruft
-Aufbereitungen und faltet nichts selbst.
+⇒ **Keine neue Datenschicht** — ADR-002/P10 bleibt gewahrt, der Builder ruft Aufbereitungen und
+faltet nichts selbst.
 
 ## Die Charts — zwei neue, dasselbe Verfahren
 
@@ -348,60 +313,79 @@ numpy-frei (Kopf-Docstring: numpy 2.x ist mit X86-V2-Baseline gebaut, HA-als-Pro
 nativ. Die Helfer `_axis_and_grid` · `_legend` · `_wrap` · `_nice_step` sind **generisch**.
 
 ⇒ **Zwei neue Aufrufer, kein neues Verfahren:**
-1. `tagesverlauf_chart(tage)` — Balken je Tag des Monats (Gegenstück zum `pv_erzeugung_chart`
-   des Jahresberichts, dort 12 Monate statt ~30 Tage).
-2. `tagesprofil_chart(stunden)` — 24-Stunden-Linie.
+1. `tagesverlauf_chart(...)` — Balken je Tag des Monats (Gegenstück zum `pv_erzeugung_chart` des
+   Jahresberichts, dort 12 Monate statt ~30 Tage).
+2. `tagesprofil_chart(...)` — 24-Stunden-Linie.
 
 **Kategorien und PV-Verteilung brauchen kein Chart** — das sind Balken, also CSS. Dasselbe gilt
 für KPI-Kacheln und die Grundlast-/Prognose-Kachel.
 
 ### ⚠ Die Regel, die die N-7-Sicherung am Leben hält
 
-Markdown trägt kein SVG. ⇒ **Ein Chart darf ausschließlich Zahlen zeigen, die im selben Bericht
-auch als Tabellenzeile stehen.** Dann ist das PDF die reichere Darstellung derselben Zahlen, die
-Probe „beide Formate, jede Zahl gleich" (Stufe 1, §1) bleibt **wahr statt zur Ausnahme zu
-werden**, und der Markdown-Text bleibt vollständig. Ein Chart, das eine eigene Größe einführt,
-ist N-7 in Grün.
+Markdown trägt kein SVG. Die Regel dazu lautet in zwei Teilen:
+
+1. **Ein Chart entsteht ausschließlich im Builder aus dem Context — das Template rechnet nichts.**
+   Damit kann ein Chart eine Größe gar nicht anders bilden als die Tabelle daneben; genau das ist
+   die N-7-Sicherung, eine Ebene höher gezogen.
+2. **Jede Zahl, die der Bericht als *Aussage* trifft, steht als Zeile — in beiden Formaten.**
+   Ein Chart darf eine **Reihe zeigen**, über die der Bericht keine einzelne Zahl behauptet
+   (30 Tageswerte, 24 Stundenwerte); seine Aussagen — bester Tag, schwächster Tag, Ø — stehen als
+   Zeilen und werden **aus derselben Liste** gebildet, die auch das Chart zeichnet.
+
+> ⚠ **Hier stand zuerst: „Ein Chart darf ausschließlich Zahlen zeigen, die auch als Tabellenzeile
+> stehen."** Die Regel hätte die bestehende Probe
+> `test_monatsbericht.py::test_beide_formate_nennen_dieselben_zahlen` gebrochen: Sie vergleicht
+> die Zahlen des **gerenderten HTML-Textes** mit denen des Markdown, **der Reihe nach**. Ein
+> Chart, das die Tabelle **ersetzt**, hätte die Zahlen aus dem HTML-Text entfernt ⇒ rot; ein Chart
+> **neben** einer 30-Zeilen-Tagestabelle hätte beide Formate aufgebläht. *Eine Regel, die ich
+> schreibe, ist eine Behauptung über die Proben, die es schon gibt — gelesen, bevor sie gilt.*
 
 ### ⚠ Die Farbfrage ist ein Regel-0a-Fall, keine Kosmetik
 
 Zwei Farbwelten, gemessen: `charts.py` führt `_PRIMARY #1565c0` · `_ACCENT #43a047` ·
 `_NETZ #e53935`; die Fläche führt `lib/colors.ts::DATENROLLE` (Eigenverbrauch violett,
-Einspeisung smaragd, Netzbezug rot). **„Eine Datenrolle = eine Farbe"** ist Regel 0a. Solange
-beide Welten nebeneinander stehen, ist der Bericht auch farblich ein anderes Produkt als der
-Bildschirm. ⇒ Die Datenrollen-Farben werden **einmal** in die PDF-Seite gezogen; die generischen
-Tokens (`--color-primary` für Überschriften, das Markenband) bleiben unberührt.
+Einspeisung smaragd, Netzbezug rot). **„Eine Datenrolle = eine Farbe"** ist Regel 0a. ⇒ Die
+Datenrollen-Farben werden **einmal** in die PDF-Seite gezogen; die generischen Tokens
+(`--color-primary` für Überschriften, das Markenband) bleiben unberührt.
+
+### „Erkennbar eedc"
+
+Gemessen: ein dreifarbiges Markenband in der linken Seitenmarge (`static/styles.css:105`,
+`position: fixed` ⇒ WeasyPrint repliziert es auf jeder Seite), Titel, Fußzeile. **Das Logo trägt
+bisher nur die Anlagendokumentation** — `builders/anlagendokumentation.py:248` base64-t
+`eedc/logo.png` in den Context. ⇒ **Regel 7: das Muster existiert**, der Kopfbereich ruft es auf,
+statt es nachzubauen.
 
 ## Der Community-Vergleich — und ein Fund, der das Konzept fast falsch gemacht hätte
 
-Gernots Vorgabe (30.08.): *„Ich würde ihn zumindest für die Teilen-Funktion drin lassen auch wenn
-später aktuellere Monatsvergleiche dabei raus kommen."*
-
-⛔ **„Drin lassen" trifft den Zustand nicht — auf dem Bildschirm gibt es ihn nicht.**
-`MonatRahmen::communityBlock` hat **null** Aufrufer im Produktivcode (Gegenprobe: die
-Schwesterfunktion `finanzTeaserBlock` aus derselben Datei hat **vier** — der Grep
-diskriminiert). `el:community-tabelle` wird damit **nie gerendert**.
+⛔ **Auf dem Bildschirm gibt es ihn nicht.** `MonatRahmen::communityBlock` hat **null** Aufrufer
+im Produktivcode (Gegenprobe: die Schwesterfunktion `finanzTeaserBlock` aus derselben Datei hat
+**vier** — der Grep diskriminiert). `el:community-tabelle` wird nie gerendert.
 
 ⭐ **Und das ist kein Versehen, sondern Gernots eigener Entscheid.** `git log -S` führt auf
 Commit **`748849b2`** („Gernot-Feintuning 1–4"), Punkt 2 wörtlich: *„Community-Block entfernt →
 data-gated Cross-Link ‚Community: spez. Ertrag ±x % vs. Median →' zur Community-Achse. Volle
 Inhalte dort."* Übrig blieb die Funktion ohne Aufrufer.
 
-**Folge für dieses Konzept — die Begründung ändert sich, die Entscheidung nicht:**
-* Der Community-Abschnitt kann **nicht** mit „im Stil der Monatsansicht" begründet werden. Er
-  steht im Bericht, **weil Teilen ohne Vergleich seinen Zweck verfehlt** — und das ist eine
-  bewusste Abweichung vom Bildschirm, keine Übernahme.
+**Folge — die Begründung ändert sich, die Entscheidung nicht:**
+* Der Community-Abschnitt steht im Bericht, **weil Gernot ihn dort will** (30.08.), nicht weil
+  die Monatsansicht ihn hätte. Eine bewusste Abweichung vom Bildschirm, keine Übernahme.
 * ⛔ **Der Bildschirm wird nicht angefasst.** Den Block dort wiederzubeleben hieße, `748849b2`
   rückgängig zu machen.
 * **Quelle:** `api/routes/community.py::get_monatsbenchmark` (`:341`) — ein **httpx-Aufruf an den
-  externen Community-Server**. ⚠ Daraus folgt eine harte Auflage: **Der Bericht muss ohne ihn
-  vollständig rendern.** Server nicht erreichbar oder ohne Daten für den Monat ⇒ der Abschnitt
-  entfällt und sagt es (ADR-002/**P4**: unvollständige Antworten weisen sich aus); **kein**
-  Abschnitt mit Strichen, und kein Fehler, der den ganzen Bericht kostet.
-* **Stand-Datum und Vergleichsgröße gehören in den Abschnitt** („Stand 30.08.2026 · Vergleich
-  gegen N Anlagen"). Ein geteiltes Blatt lebt im Forenthread weiter; ohne die Zeile steht dort
-  in zwei Jahren ein Vergleich, den niemand zuordnen kann. Dass später aktuellere Vergleiche
-  herauskommen, ist das Argument **für** die Zeile, nicht dagegen.
+  externen Community-Server**. ⚠ Harte Auflage: **Der Bericht muss ohne ihn vollständig
+  rendern.** Server nicht erreichbar oder ohne Daten für den Monat ⇒ der Abschnitt entfällt und
+  sagt es (ADR-002/**P4**); **kein** Abschnitt mit Strichen, und kein Fehler, der den ganzen
+  Bericht kostet.
+* ⛔ **Kein Stand-Datum** — Entscheid Gernot (30.08.): *„der Vergleichsmonat bleibt der gleiche
+  und ob es wesentlich ist, wann der Vergleich gezogen wird, ist imo egal."* Er hat recht: Der
+  Vergleichsmonat **ist** der Berichtsmonat, damit ist der Vergleich definiert. Mitgenommen wird
+  allein die **Anzahl der verglichenen Anlagen** — sie steht schon in der Zusammenfassung des
+  (unerreichbaren) Bildschirm-Blocks, und ein Vergleich gegen 3 Anlagen ist etwas anderes als
+  gegen 300.
+* **Abgrenzung:** Der Bericht zitiert vier Kennzahlen plus die Anlagenzahl. Er wird **keine**
+  zweite Fläche zum Erkunden — wer mehr will, folgt dem Cross-Link, den `748849b2` dafür gebaut
+  hat.
 
 ## Der Bauschnitt (Stufe 2)
 
@@ -411,48 +395,31 @@ Inhalte dort."* Übrig blieb die Funktion ohne Aufrufer.
 | **2** | Zwei SVG-Funktionen über den bestehenden Helfern | `services/pdf/charts.py` |
 | **3** | Template: Kopf mit Logo · KPI-Kachelreihe · Verteilungsbalken · Charts · Peak-Tabellen · Community-Abschnitt; Datenrollen-Farben | `templates/monatsbericht.html` + `static/styles.css` |
 | **4** | Markdown-Renderer zieht die neuen Abschnitte als Tabellen mit (kein SVG) | `builders/monatsbericht_markdown.py` |
-| **5** | Fünfter Themenschalter **Community** (Voreinstellung **aus**) + Voreinstellung „Teilen" | `routes/dokumentation.py` · `DokumentationsDialog.tsx` |
-| **6** | Schaltfläche **Teilen** auf *Cockpit → Monat*, öffnet den Dialog mit der Teilen-Voreinstellung | `v4/CockpitMonatV4.tsx` |
-| **7** | Handbuch + Hilfe-Spiegel | `docs/HANDBUCH_EINSTELLUNGEN.md`, `sync-help.sh` |
+| **5** | Fünfter Themenschalter **Community** (Voreinstellung **an**) **+ Wächter für den THEMEN-Spiegel** | `routes/dokumentation.py` · `DokumentationsDialog.tsx` |
+| **6** | Handbuch + Hilfe-Spiegel | `docs/HANDBUCH_EINSTELLUNGEN.md`, `sync-help.sh` |
+
+⚠ **Zu Nr. 5 — `THEMEN` steht zweimal und ist ungedeckt.** Backend `builders/monatsbericht.py:68`
+und Client `DokumentationsDialog.tsx:44` führen dieselbe Liste, verbunden nur durch einen
+Kommentar („Spiegel von …"). Kein Test, und keiner der 27 `check:*` deckt einen
+Backend↔Frontend-Spiegel (`check-label-maps` guckt nur auf Frontend-interne SoT-Maps). Folge bei
+Drift: ein Schalter, der still nichts tut, oder ein Thema, das niemand wählen kann. **Wer eine
+doppelt geführte Liste erweitert, hinterlässt sie nicht wieder unbewacht.**
+
+⛔ **N-356 fährt NICHT mit.** Sein Trigger (*„der nächste Eingriff am Monatsbericht-Builder"*)
+tritt mit Nr. 1 ein und wird im Register vermerkt — gebaut wird er nicht: Er ist ein SoT-Bau über
+zwei Bildungsstellen mit einer bewusst zweiten Quote (N-69/dietmar1968); in ein
+Aufmachungs-Paket gefaltet, würden aus zwei überschaubaren Änderungen eine unübersichtliche.
 
 ## Proben, die diese Stufe tragen
 
 1. **Jede Chart-Zahl steht auch als Tabellenzeile** — die N-7-Sicherung für die neue Ebene.
 2. **Community-Server nicht erreichbar ⇒ Bericht vollständig, Abschnitt entfällt mit Grund**,
    und **kein** anderer Wert ändert sich (P4).
-3. **Community-Abschnitt trägt Stand-Datum und Anlagenzahl**, sobald er da ist.
-4. **Teilen-Voreinstellung ≠ Archiv-Voreinstellung** — messbar am erzeugten Abschnittssatz.
-5. **Ohne Themenschalter Community ist er in KEINEM der beiden Formate** (Regel aus Stufe 1,
-   Probe 2, auf den neuen Schalter gezogen).
-6. **Die bestehenden Proben bleiben unverändert grün** — insbesondere „beide Formate, jede Zahl
+3. **Community-Abschnitt trägt die Anlagenzahl**, sobald er da ist.
+4. **Ohne den Themenschalter Community ist er in KEINEM der beiden Formate** (Stufe-1-Probe 2,
+   auf den neuen Schalter gezogen).
+5. **Die bestehenden Proben bleiben unverändert grün** — insbesondere „beide Formate, jede Zahl
    gleich" und „ein Monat ohne Daten nennt den Grund".
-7. **Gegenrichtung:** Ein Monat **mit** Daten, aber ohne Stundenwerte (kein Tagesprofil, keine
+6. **Gegenrichtung:** Ein Monat **mit** Daten, aber ohne Stundenwerte (kein Tagesprofil, keine
    Peaks) lässt genau diese Abschnitte weg und rechnet die übrigen unverändert.
-
-## Offene Entscheidungen — sie gehören Gernot
-
-1. **N-356 ist mit diesem Paket fällig geworden.** Sein Trigger lautet *„der nächste Eingriff an
-   `lib/sollErfuellung.ts`, an `baueMonatKpis` oder am Monatsbericht-Builder"* — Nr. 1 des
-   Bauschnitts trifft ihn. Er steht in **P6** („gerät hinten an"). **Empfehlung: nicht
-   mitfahren.** Er ist ein SoT-Bau über zwei Bildungsstellen mit einer bekannten zweiten Quote
-   (N-69/dietmar1968); ihn in ein Aufmachungs-Paket zu falten, macht aus zwei überschaubaren
-   Änderungen eine unübersichtliche. Der Trigger wird im Register als *eingetreten* vermerkt.
-2. **Umfang der Teilen-Voreinstellung** — welche Abschnitte sind „die kurze Auswahl"?
-   **Empfehlung:** KPI-Kacheln · Verlauf · PV-Verteilung · Community · Finanzen-Kopfzahl.
-   Alles Weitere bleibt dem Archiv.
-
-## Gegenlese — was der Entwurf gegen sich selbst nicht halten konnte
-
-| Geprüft | Ergebnis |
-| --- | --- |
-| Melder-Wortlaut #395 (*„Hintergrund ist die **Ablage**"*) | **hält ein** — der Bericht bleibt zuerst ein Archivstück; „Teilen" ist die zweite Voreinstellung, nicht der neue Zweck |
-| Commit `07682e14` (Rückbau Social-Vorlage) + **N-7** | **angewandt** — Rückbaugrund war *Unerreichbarkeit*, daher der zweite Einstieg auf *Cockpit → Monat*; die eigene Zahlenbildung bleibt ausgeschlossen, jetzt auch für Charts |
-| Commit **`748849b2`** (Gernot-Feintuning, Community-Block entfernt) | ⭐ **weicht ab von der ersten Fassung dieses Entwurfs** — sie wollte den bestehenden Block „wiederverwenden". Er ist **bewusst entfernt**; der Bericht führt den Vergleich aus dem *Teilen*-Zweck, nicht aus „im Stil der Monatsansicht", und der Bildschirm bleibt unberührt |
-| ADR-002/**P4** | **angewandt** — der Community-Abschnitt hängt an einem externen Server; fällt er aus, entfällt der Abschnitt mit Grund, der Rest bleibt vollständig |
-| ADR-002/**P10** | **hält ein** — der Builder ruft Aufbereitungen (`get_aktueller_monat` · `get_monatsauswertung` · `baue_tage_werte`), er faltet nichts selbst |
-| Regel 7 (erst suchen, dann bauen) | **angewandt, dreimal** — Logo-Muster (`anlagendokumentation.py:248`), Chart-Helfer (`_axis_and_grid`/`_legend`/`_wrap`), Service statt Route (`baue_tage_werte` statt `get_tage_werte`) |
-| Regel 0a (eine Datenrolle = eine Farbe) | **weicht ab** — zwei Farbwelten (`charts.py::_PRIMARY/_ACCENT/_NETZ` gegen `lib/colors.ts::DATENROLLE`); die Zusammenführung ist Teil des Bauschnitts, nicht Kosmetik |
-| `scripts/sync-help.sh` (13 Einträge) · `website/scripts/sync-docs.sh` (16 Einträge) | **hält ein** — `KONZEPT-*` steht in **keiner** der beiden Listen, das Dokument bleibt intern |
-| Eigene Zahl „fünf Anzeigen aus fremden Quellen" | ⛔ **an der Gegenlese gescheitert — es sind sechs.** Berichtigt samt Vermerk |
-| **THEMEN-Spiegel Backend ↔ Client** | ⛔ **ungedeckt** — `builders/monatsbericht.py:68` und `DokumentationsDialog.tsx:44` führen dieselbe Liste zweimal, verbunden nur durch einen Kommentar („Spiegel von …"). Kein Test, kein `check:*` (die 27 Prüfer decken nur Frontend-interne SoT-Maps). **Stufe 2 fügt den fünften Schalter hinzu und zieht den Wächter mit** — wer eine Liste erweitert, die zweimal steht, hinterlässt sie nicht wieder unbewacht |
-| Zweiter Turm über der Community-Achse? | **abgegrenzt** — der Bericht zitiert vier Kennzahlen plus Stand-Datum; er wird **keine** zweite Fläche zum Erkunden. Wer mehr will, folgt dem Cross-Link, den `748849b2` genau dafür gebaut hat |
+7. **Der THEMEN-Spiegel ist gewächtert** — eine Abweichung zwischen Backend und Client meldet rot.

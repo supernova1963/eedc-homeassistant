@@ -144,8 +144,8 @@ async def monatsbericht(
     format: str = Query("pdf", pattern="^(pdf|md)$", description="pdf | md"),
     themen: Optional[list[str]] = Query(
         None,
-        description="Themenschalter: energie · komponenten · finanzen · co2. "
-                    "Weggelassen = alle.",
+        description="Themenschalter: energie · komponenten · finanzen · co2 · "
+                    "community. Weggelassen = alle.",
     ),
     ohne: Optional[list[str]] = Query(
         None,

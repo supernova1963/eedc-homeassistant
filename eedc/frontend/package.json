@@ -29,6 +29,7 @@
     "check:buttons": "node scripts/check-buttons.mjs",
     "check:tabellen": "node scripts/check-tabellen.mjs",
     "check:label-maps": "node scripts/check-label-maps.mjs",
+    "check:spiegel-backend": "node scripts/check-spiegel-backend.mjs",
     "check:details": "node scripts/check-details.mjs",
     "check:chart-tooltip": "node scripts/check-chart-tooltip.mjs",
     "check:b8": "node scripts/check-b8.mjs",

@@ -20,6 +20,7 @@ from __future__ import annotations
 import base64
 import math
 from html import escape
+from typing import Optional
 
 _PRIMARY = "#1565c0"
 _PRIMARY_DARK = "#0d47a1"
@@ -29,6 +30,17 @@ _GRID = "#cfd8dc"
 _AXIS = "#607d8b"
 _TEXT = "#37474f"
 _FONT = "font-family:'DejaVu Sans',Arial,Helvetica,sans-serif"
+
+# ── Datenrollen-Farben (Regel 0a: eine Datenrolle = eine Farbe) ──────────────
+# Spiegel von `frontend/src/lib/colors.ts::COLORS`. Bis 2026-08-30 führte dieses
+# Modul ausschließlich die generischen `_PRIMARY`/`_ACCENT`/`_NETZ` — damit war
+# ein PDF-Diagramm farblich ein anderes Produkt als dieselbe Größe auf dem
+# Bildschirm. Die drei Tokens oben bleiben für Berichte ohne Datenrollen-Bezug
+# (Jahresbericht-Bestand) unangetastet; NEUE Serien nehmen die Rolle.
+_ROLLE_PV = "#f59e0b"        # COLORS.solar   — Erzeugung/PV
+_ROLLE_VERBRAUCH = "#8b5cf6"  # COLORS.consumption
+_ROLLE_NETZBEZUG = "#b91c1c"  # COLORS.grid
+_ROLLE_EINSPEISUNG = "#10b981"  # COLORS.feedin
 
 _W = 800.0
 _PAD_L = 56.0   # Platz für y-Achsen-Beschriftung
@@ -282,5 +294,138 @@ def autarkie_chart(monats_labels: list[str], autarkie_prozent: list[float]) -> s
         parts.append(f'<polyline points="{poly}" fill="none" stroke="{_PRIMARY_DARK}" stroke-width="2"/>')
         for x, y in pts:
             parts.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="2.6" fill="{_PRIMARY_DARK}"/>')
+
+    return _svg_to_data_uri(_wrap("".join(parts), height))
+
+
+def tagesverlauf_chart(
+    tage: list[int],
+    erzeugung_kwh: list[Optional[float]],
+    verbrauch_kwh: list[Optional[float]] | None = None,
+) -> str:
+    """Balken je Tag des Monats — Erzeugung, optional Verbrauch als zweiter Balken.
+
+    Gegenstück zu :func:`pv_erzeugung_chart` (dort 12 Monate, hier ~30 Tage).
+
+    ⛔ **``None`` ist keine Null.** Ein Tag ohne gemessene Erzeugung
+    (``TagWerteResponse.erzeugung is None`` — kein kWh-Zähler je Erzeuger)
+    bekommt **keinen Balken**, keinen der Höhe 0. Eine Null-Säule neben echten
+    Werten liest sich als „an diesem Tag kam nichts", und genau diese
+    Verwechslung ist die Klasse, gegen die
+    ``docs/KONZEPT-UNVOLLSTAENDIGE-WERTE.md`` gebaut ist.
+    """
+    height = 280.0
+    labels = [str(t) for t in tage]
+    n = max(1, len(labels))
+    verbrauch = list(verbrauch_kwh or [])
+    hat_verbrauch = any(v is not None for v in verbrauch)
+
+    werte = [v for v in erzeugung_kwh if v is not None]
+    if hat_verbrauch:
+        werte += [v for v in verbrauch if v is not None]
+    rawmax = max(werte + [0.0]) or 1.0
+    ystep = _nice_step(rawmax)
+    ymax = (ystep * math.ceil(rawmax / ystep)) if ystep else 1.0
+    ymax = ymax or 1.0
+
+    legend_items = [(_ROLLE_PV, "Erzeugung")]
+    if hat_verbrauch:
+        legend_items.append((_ROLLE_VERBRAUCH, "Verbrauch"))
+
+    parts, pl, pb, pw, ph = _axis_and_grid(labels, ymax, ystep, "kWh", height)
+    parts.insert(0, _legend(legend_items))
+
+    # Zwei Balken nebeneinander, sonst einer mittig.
+    gruppe = (pw / n) * 0.72
+    bw = gruppe / 2 if hat_verbrauch else gruppe
+
+    for i, val in enumerate(erzeugung_kwh):
+        if val is None:
+            continue
+        cx = pl + pw * (i + 0.5) / n
+        x = (cx - gruppe / 2) if hat_verbrauch else (cx - bw / 2)
+        y = pb - ph * (float(val) / ymax)
+        parts.append(
+            f'<rect x="{x:.1f}" y="{y:.1f}" width="{bw:.1f}" '
+            f'height="{pb - y:.1f}" fill="{_ROLLE_PV}"/>'
+        )
+
+    if hat_verbrauch:
+        for i, val in enumerate(verbrauch):
+            if val is None:
+                continue
+            cx = pl + pw * (i + 0.5) / n
+            y = pb - ph * (float(val) / ymax)
+            parts.append(
+                f'<rect x="{cx:.1f}" y="{y:.1f}" width="{bw:.1f}" '
+                f'height="{pb - y:.1f}" fill="{_ROLLE_VERBRAUCH}"/>'
+            )
+
+    return _svg_to_data_uri(_wrap("".join(parts), height))
+
+
+def tagesprofil_chart(
+    stunden: list[int],
+    pv_kw: list[Optional[float]],
+    verbrauch_kw: list[Optional[float]] | None = None,
+) -> str:
+    """Typisches Tagesprofil — Ø-Leistung je Stunde über den Monat.
+
+    Zwei Linien (PV / Verbrauch). Wie oben gilt: ``None`` erzeugt **keinen
+    Punkt**; die Linie wird an dieser Stelle unterbrochen, statt auf 0 zu
+    fallen.
+    """
+    height = 260.0
+    labels = [f"{h}" for h in stunden]
+    n = max(1, len(labels))
+    verbrauch = list(verbrauch_kw or [])
+    hat_verbrauch = any(v is not None for v in verbrauch)
+
+    werte = [v for v in pv_kw if v is not None] + [v for v in verbrauch if v is not None]
+    rawmax = max(werte + [0.0]) or 1.0
+    ystep = _nice_step(rawmax)
+    ymax = (ystep * math.ceil(rawmax / ystep)) if ystep else 1.0
+    ymax = ymax or 1.0
+
+    legend_items = [(_ROLLE_PV, "PV")]
+    if hat_verbrauch:
+        legend_items.append((_ROLLE_VERBRAUCH, "Verbrauch"))
+
+    parts, pl, pb, pw, ph = _axis_and_grid(labels, ymax, ystep, "kW", height)
+    parts.insert(0, _legend(legend_items))
+
+    def _linie(werte_reihe: list[Optional[float]], farbe: str, flaeche: bool) -> None:
+        """Zeichnet eine Linie und bricht sie an jeder Lücke ab."""
+        segment: list[tuple[float, float]] = []
+
+        def _spuelen() -> None:
+            if len(segment) >= 2:
+                poly = " ".join(f"{x:.1f},{y:.1f}" for x, y in segment)
+                if flaeche:
+                    area = (
+                        f"{segment[0][0]:.1f},{pb:.1f} " + poly
+                        + f" {segment[-1][0]:.1f},{pb:.1f}"
+                    )
+                    parts.append(
+                        f'<polygon points="{area}" fill="{farbe}" fill-opacity="0.15"/>'
+                    )
+                parts.append(
+                    f'<polyline points="{poly}" fill="none" stroke="{farbe}" stroke-width="2"/>'
+                )
+            for x, y in segment:
+                parts.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="2.4" fill="{farbe}"/>')
+            segment.clear()
+
+        for i, val in enumerate(werte_reihe):
+            if val is None:
+                _spuelen()
+                continue
+            cx = pl + pw * (i + 0.5) / n
+            segment.append((cx, pb - ph * (float(val) / ymax)))
+        _spuelen()
+
+    _linie(list(pv_kw), _ROLLE_PV, flaeche=True)
+    if hat_verbrauch:
+        _linie(verbrauch, _ROLLE_VERBRAUCH, flaeche=False)
 
     return _svg_to_data_uri(_wrap("".join(parts), height))

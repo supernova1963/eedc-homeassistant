@@ -6,7 +6,7 @@
  * Beta-Dokumente wurden in v3.15.0 eingeführt (Issue #121).
  *
  * Der **Monatsbericht** (#395 Punkt 4, OB73-gif) ist der einzige mit eigenen
- * Erzeugungs-Optionen: genau ein Monat, vier Themenschalter, Identität und —
+ * Erzeugungs-Optionen: genau ein Monat, fünf Themenschalter, Identität und —
  * falls in der Monatsansicht etwas geparkt ist — der Schalter „wie in meiner
  * Monatsansicht". Er ist bewusst **nicht** ZIP-fähig: Ein Bündel „alle
  * Dokumente dieser Anlage" hat keinen Monat, und ein stiller Vorgabemonat wäre
@@ -39,13 +39,21 @@ interface DokumentationsDialogProps {
 
 type BerichtKey = 'jahresbericht' | 'infothek' | 'anlagendokumentation' | 'finanzbericht'
 
-/** Die vier Themenschalter des Monatsberichts — Reihenfolge = Reihenfolge im
- *  Dokument. Spiegel von `services/pdf/builders/monatsbericht.py::THEMEN`. */
+/** Die Themenschalter des Monatsberichts — Reihenfolge = Reihenfolge im
+ *  Dokument. Spiegel von `services/pdf/builders/monatsbericht.py::THEMEN`.
+ *
+ *  ⚠ Die Verbindung war bis 2026-08-30 **nur dieser Kommentar** — kein Test,
+ *  keiner der `check:*`. Wer einen Schalter nur auf einer Seite ergänzte, bekam
+ *  entweder einen Schalter, der still nichts tut (Backend filtert unbekannte
+ *  Schlüssel weg), oder ein Thema, das niemand wählen kann. Seit dem
+ *  Community-Schalter hält `npm run check:spiegel-backend` beide Listen
+ *  zusammen. */
 const MONATSBERICHT_THEMEN = [
   { key: 'energie', label: 'Energie' },
   { key: 'komponenten', label: 'Komponenten' },
   { key: 'finanzen', label: 'Finanzen' },
   { key: 'co2', label: 'CO₂' },
+  { key: 'community', label: 'Community' },
 ] as const
 type MonatsberichtThema = typeof MONATSBERICHT_THEMEN[number]['key']
 
@@ -430,7 +438,7 @@ export default function DokumentationsDialog({ anlage, onClose }: Dokumentations
               />
             </div>
 
-            {/* Vier Themenschalter — voreingestellt alle an. Sie bestimmen, WAS
+            {/* Fünf Themenschalter — voreingestellt alle an. Sie bestimmen, WAS
                 für ein Bericht entsteht; der Park-Schalter darunter feilt
                 INNERHALB. Zwei Ebenen, bewusst nicht vermischt. */}
             <div className="flex flex-wrap gap-x-4 gap-y-1">

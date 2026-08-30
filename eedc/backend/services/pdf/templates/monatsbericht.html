@@ -44,12 +44,49 @@
   section.abschnitt { break-inside: avoid; }
   p.abschnitt-hinweis { color: var(--color-muted); font-size: 8.5pt; margin-top: -1mm; }
   p.fuss { color: var(--color-muted); font-size: 8.5pt; margin-top: 8mm; }
+
+  /* Kopf: Logo links, Titel rechts daneben. */
+  .kopf { display: flex; align-items: flex-start; gap: 5mm; }
+  .kopf img { width: 16mm; height: auto; }
+  .kopf h1 { margin: 0; }
+
+  /* KPI-Kacheln — der Strip der Monatsansicht. `inline-block` statt Grid:
+     WeasyPrint bricht Flex-Zeilen nicht über Seiten, und die Reihe soll
+     umbrechen dürfen. */
+  ul.kacheln { list-style: none; margin: 0 0 4mm 0; padding: 0; }
+  ul.kacheln li {
+    display: inline-block;
+    width: 30%;
+    margin: 0 2% 3mm 0;
+    padding: 2mm 2.5mm;
+    background: var(--color-bg-soft);
+    border-left: 2px solid var(--color-primary);
+    vertical-align: top;
+  }
+  ul.kacheln .k-label { display: block; font-size: 8pt; color: var(--color-muted); }
+  ul.kacheln .k-wert  { display: block; font-size: 13pt; font-variant-numeric: tabular-nums; }
+  ul.kacheln .k-hinweis { display: block; font-size: 7.5pt; color: var(--color-muted); }
+
+  /* Anteils-Leiste — dieselbe Sprache wie `VerteilungsBalken` auf dem Schirm. */
+  .leiste { display: block; width: 100%; height: 5mm; margin: 1mm 0 2mm 0; }
+  .leiste span { display: inline-block; height: 5mm; vertical-align: top; }
+  ul.leiste-legende { list-style: none; margin: 0 0 3mm 0; padding: 0; font-size: 8.5pt; }
+  ul.leiste-legende li { display: inline-block; margin-right: 5mm; }
+  ul.leiste-legende i {
+    display: inline-block; width: 3mm; height: 3mm; margin-right: 1.2mm;
+    border-radius: 1px; vertical-align: -0.3mm;
+  }
+
+  img.chart { width: 100%; max-width: 170mm; margin: 1mm 0 2mm 0; }
 </style>
 </head>
 <body>
 <div class="page-stripe"></div>
 
-<h1 class="doc-title">Monatsbericht {{ zeitraum.label }}</h1>
+<div class="kopf">
+  {% if logo %}<img src="{{ logo }}" alt="eedc">{% endif %}
+  <h1 class="doc-title">Monatsbericht {{ zeitraum.label }}</h1>
+</div>
 <p class="kopf-meta">
   {% if anlage.name %}<span>{{ anlage.name }}</span>{% endif %}
   {% if anlage.standort %}<span>{{ anlage.standort }}</span>{% endif %}
@@ -73,6 +110,38 @@
 {% for abschnitt in abschnitte %}
 <section class="abschnitt">
   <h2>{{ abschnitt.titel }}</h2>
+
+  {# Kachelreihe statt Tabelle — der KPI-Strip der Monatsansicht. Die Werte sind
+     dieselben Zeilen; der Markdown-Zwilling schreibt sie als Tabelle. #}
+  {% if abschnitt.darstellung == 'kacheln' %}
+  <ul class="kacheln">
+    {% for zeile in abschnitt.zeilen %}
+    <li>
+      <span class="k-label">{{ zeile.label }}</span>
+      <span class="k-wert">{{ zeile.wert }}</span>
+      {% if zeile.hinweis %}<span class="k-hinweis">{{ zeile.hinweis }}</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+
+  {# Anteils-Leiste: zeichnet genau die Zeilen darunter, keine eigene Groesse. #}
+  {% if abschnitt.balken %}
+  <span class="leiste">
+    {% for b in abschnitt.balken %}<span style="width: {{ '%.2f'|format(b.anteil) }}%; background: {{ b.farbe }};"></span>{% endfor %}
+  </span>
+  <ul class="leiste-legende">
+    {#- Nur das Label: den Wert trägt die Tabelle darunter. Stünde er hier
+        ebenfalls, nennte das PDF jede dieser Zahlen ZWEIMAL und der
+        Markdown-Zwilling einmal — `test_beide_formate_nennen_dieselben_zahlen`
+        hat genau das gemeldet. Die Leiste ist ein Bild, keine zweite Tabelle. -#}
+    {% for b in abschnitt.balken %}<li><i style="background: {{ b.farbe }};"></i>{{ b.label }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+
+  {# Chart: fertiges SVG aus dem Builder. Das Template rechnet nichts (N-7). #}
+  {% if abschnitt.chart %}<img class="chart" src="{{ abschnitt.chart }}" alt="{{ abschnitt.titel }}">{% endif %}
+
   <table class="werte">
     <tbody>
       {% for zeile in abschnitt.zeilen %}
@@ -89,6 +158,8 @@
       {% endfor %}
     </tbody>
   </table>
+  {% endif %}
+
   {% if abschnitt.hinweis %}<p class="abschnitt-hinweis">{{ abschnitt.hinweis }}</p>{% endif %}
 </section>
 {% endfor %}

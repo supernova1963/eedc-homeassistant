@@ -47,7 +47,7 @@ Bildungsstelle**, und sie ist als solche im Fundregister vermerkt.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Iterable, Optional
 
 from sqlalchemy import select
@@ -63,15 +63,22 @@ from backend.services.pdf.formatierung import (
     fmt_zahl,
 )
 
-#: Die vier Themenschalter des Berichts (Konzept §2, Abnahme Punkt 1).
+#: Die Themenschalter des Berichts (Konzept §2, Abnahme Punkt 1).
 #: Reihenfolge = Reihenfolge im Dokument.
-THEMEN: tuple[str, ...] = ("energie", "komponenten", "finanzen", "co2")
+#:
+#: ⚠ **Spiegel von** ``frontend/src/components/DokumentationsDialog.tsx::MONATSBERICHT_THEMEN``.
+#: Die Verbindung war bis 2026-08-30 **nur ein Kommentar** — kein Test, keiner
+#: der `check:*`. Drift hieß: ein Schalter, der still nichts tut, oder ein
+#: Thema, das niemand wählen kann. Seither hält ``npm run check:spiegel-backend``
+#: beide Listen zusammen.
+THEMEN: tuple[str, ...] = ("energie", "komponenten", "finanzen", "co2", "community")
 
 THEMA_LABELS: dict[str, str] = {
     "energie": "Energie",
     "komponenten": "Komponenten",
     "finanzen": "Finanzen",
     "co2": "CO₂",
+    "community": "Community",
 }
 
 MONAT_NAMEN = [
@@ -87,6 +94,21 @@ class Zeile:
     label: str
     wert: str
     hinweis: Optional[str] = None
+
+
+@dataclass
+class Balken:
+    """Ein Segment einer Anteils-Leiste.
+
+    ``anteil`` ist der Breitenanteil in Prozent — **eine Darstellungsgröße**,
+    keine Aussage: Jede Zahl, die der Bericht behauptet, steht als
+    :class:`Zeile` daneben. Beide Renderer schreiben die Zeilen; nur das
+    PDF zeichnet zusätzlich die Leiste.
+    """
+    label: str
+    wert: str
+    anteil: float
+    farbe: str
 
 
 @dataclass
@@ -112,6 +134,22 @@ class Abschnitt:
     zeilen: list[Zeile]
     park_id: Optional[str] = None
     hinweis: Optional[str] = None
+    #: Wie das **PDF** diesen Abschnitt zeigt: ``"tabelle"`` (Vorgabe) oder
+    #: ``"kacheln"``. Der Markdown-Renderer kennt nur Tabellen und ignoriert
+    #: das Feld — die Zeilen sind in beiden Formaten dieselben, damit
+    #: ``test_beide_formate_nennen_dieselben_zahlen`` unberührt bleibt.
+    darstellung: str = "tabelle"
+    #: Anteils-Leiste, nur PDF. Ihre Werte sind die Zeilen des Abschnitts.
+    balken: Optional[list[Balken]] = None
+    #: Fertiges SVG als ``data:``-URI, nur PDF.
+    #:
+    #: ⛔ **Das Chart entsteht hier im Builder, nie im Template** — ein Template,
+    #: das rechnet, ist die zweite Bildungsstelle, gegen die dieses Modul gebaut
+    #: ist (N-7). Ein Chart darf eine **Reihe zeigen**, über die der Bericht
+    #: keine einzelne Zahl behauptet (30 Tage, 24 Stunden); seine **Aussagen**
+    #: (bester Tag, Ø …) stehen als Zeilen und werden aus **derselben Liste**
+    #: gebildet, die das Chart zeichnet.
+    chart: Optional[str] = None
 
 
 def _z(label: str, wert: str, hinweis: Optional[str] = None) -> Zeile:
@@ -215,7 +253,11 @@ def _abschnitte_energie(d: Any) -> list[Abschnitt]:
         _z("Spezifischer Ertrag", fmt_einheit(d.spez_ertrag, "kWh/kWp", decimals=1)),
     ]
     if _hat(kennzahlen):
-        aus.append(Abschnitt("kennzahlen", "Kennzahlen", "energie", kennzahlen))
+        # Der KPI-Strip der Monatsansicht — im PDF als Kachelreihe, im Markdown
+        # als Tabelle. Dieselben Zeilen, zwei Darstellungen: `darstellung` ist
+        # eine Anweisung ans Template, keine zweite Zahlenquelle.
+        aus.append(Abschnitt("kennzahlen", "Kennzahlen", "energie", kennzahlen,
+                             darstellung="kacheln"))
 
     # Vorjahresvergleich — die Anzeige dahinter ist „Vergleich (IST/VM/VJ)".
     vj = d.vorjahr or {}
@@ -266,9 +308,19 @@ def _abschnitte_energie(d: Any) -> list[Abschnitt]:
         _z("Einspeisung", fmt_kwh(d.einspeisung_kwh)),
     ]
     if _hat(verteilung):
+        # Die Leiste zeigt genau die drei Zeilen darüber — keine eigene Größe.
+        posten = [
+            ("Direktverbrauch", d.direktverbrauch_kwh, "#8b5cf6"),
+            ("Speicher-Entladung", d.speicher_entladung_kwh, "#3b82f6"),
+            ("Einspeisung", d.einspeisung_kwh, "#10b981"),
+        ]
+        gemessen = [(lab, float(v), farbe) for lab, v, farbe in posten if v]
+        summe = sum(v for _, v, _ in gemessen)
         aus.append(Abschnitt(
             "pv_verteilung", "PV-Verteilung", "energie", verteilung,
             park_id="el:bilanz-verteilung",
+            balken=([Balken(label=lab, wert=fmt_kwh(v), anteil=v / summe * 100, farbe=farbe)
+                     for lab, v, farbe in gemessen] if summe > 0 else None),
         ))
 
     pv_geraete = [
@@ -501,6 +553,279 @@ def _abschnitte_co2(monat: Any) -> list[Abschnitt]:
 # Der Context
 # ─────────────────────────────────────────────────────────────────────────────
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Die grafisch aufbereiteten Abschnitte (Stufe 2)
+#
+# Sie speisen sich aus zwei Quellen, die `AktuellerMonatResponse` NICHT trägt —
+# gemessen am 30.08. (`typisches_tagesprofil` · `peak_*` · `kategorien`: je 0
+# Treffer in `aktueller_monat.py`). Das Konzept behauptete das Gegenteil; der
+# erste Bau ist dem Satz gefolgt und hat sechs von vierzehn Anzeigen der
+# Monatsfläche ausgelassen.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _abschnitt_verlauf(tage: list[Any], tage_im_monat: int) -> Optional[Abschnitt]:
+    """Tagesverlauf des Monats — Aussagen als Zeilen, die Reihe als Chart.
+
+    ``TagWerteResponse.erzeugung`` ist ``Optional``: ``None`` heißt „an diesem
+    Tag hat kein Erzeuger einen kWh-Wert getragen". Ein solcher Tag geht
+    **weder in den Ø noch als Null-Balken** ins Chart — sonst behauptete der
+    Bericht einen Ertragseinbruch, wo nur die Messung fehlt.
+    """
+    from backend.services.pdf.charts import tagesverlauf_chart
+
+    tagnummern = [t.datum.day for t in tage]
+    erzeugung = [t.erzeugung for t in tage]
+    verbrauch = [t.gesamtverbrauch for t in tage]
+    gemessen = [(t.datum.day, t.erzeugung) for t in tage if t.erzeugung is not None]
+    if not gemessen:
+        return None
+
+    bester = max(gemessen, key=lambda x: x[1])
+    schwaechster = min(gemessen, key=lambda x: x[1])
+    schnitt = sum(v for _, v in gemessen) / len(gemessen)
+
+    zeilen = [
+        _z("Bester Tag", f"{bester[0]}. · {fmt_kwh(bester[1], 1)}"),
+        _z("Schwächster Tag", f"{schwaechster[0]}. · {fmt_kwh(schwaechster[1], 1)}"),
+        _z("Ø je Tag", fmt_kwh(schnitt, 1)),
+        # ⛔ Der Nenner ist die Länge des MONATS, nicht die Zahl der gelieferten
+        # Zeilen: `baue_tage_werte` gibt nur Tage zurück, die Daten tragen. Mit
+        # `len(tage)` stand hier an echten Daten „23 von 23" — eine Aussage, die
+        # per Konstruktion immer aufgeht und deshalb keine ist. `tage_im_monat`
+        # kommt aus `get_monatsauswertung` (dort der SoT), nicht aus einer
+        # eigenen Kalenderrechnung.
+        _z("Tage mit gemessener Erzeugung", f"{len(gemessen)} von {tage_im_monat}"),
+    ]
+    return Abschnitt(
+        "verlauf", "Verlauf", "energie", zeilen,
+        park_id="el:verlauf",
+        chart=tagesverlauf_chart(tagnummern, erzeugung, verbrauch),
+        hinweis=(
+            None if len(gemessen) >= tage_im_monat
+            else "Tage ohne gemessene Erzeugung sind ausgelassen, nicht als 0 gezählt."
+        ),
+    )
+
+
+def _abschnitte_kategorien(kategorien: list[Any]) -> list[Abschnitt]:
+    """Erzeugung und Verbrauch nach Kategorie — je eine Anteils-Leiste."""
+    from backend.api.routes.energie_profil.views import ENERGIE_KATEGORIEN
+
+    aus: list[Abschnitt] = []
+    gruppen = (
+        ("kategorien_erzeugung", "Erzeugung nach Kategorie", "erzeuger",
+         "el:kategorien-erzeugung"),
+        ("kategorien_verbrauch", "Verbrauch nach Kategorie", "verbraucher",
+         "el:kategorien-verbrauch"),
+    )
+    for schluessel, titel, gruppe, park_id in gruppen:
+        posten = [
+            k for k in kategorien
+            if k.kategorie in ENERGIE_KATEGORIEN
+            and ENERGIE_KATEGORIEN[k.kategorie][1] == gruppe
+            and abs(k.kwh) > 0
+        ]
+        if not posten:
+            continue
+        summe = sum(abs(k.kwh) for k in posten) or 1.0
+        zeilen = [
+            _z(ENERGIE_KATEGORIEN[k.kategorie][0], fmt_kwh(abs(k.kwh)),
+               hinweis=(fmt_pct(k.anteil_prozent) if k.anteil_prozent is not None else None))
+            for k in posten
+        ]
+        # ⛔ Die Farbe kommt aus der Kategorie, nicht aus der Reihenfolge: Ein
+        # Palettenindex hätte derselben Kategorie je nach Datenlage einen
+        # anderen Ton gegeben — Regel 0a verlangt das Gegenteil.
+        balken = [
+            Balken(
+                label=ENERGIE_KATEGORIEN[k.kategorie][0],
+                wert=fmt_kwh(abs(k.kwh)),
+                anteil=abs(k.kwh) / summe * 100,
+                farbe=ENERGIE_KATEGORIEN[k.kategorie][2],
+            )
+            for k in posten
+        ]
+        aus.append(Abschnitt(schluessel, titel, "energie", zeilen,
+                             park_id=park_id, balken=balken))
+    return aus
+
+
+def _abschnitt_tagesprofil(profil: list[Any]) -> Optional[Abschnitt]:
+    """Typisches Tagesprofil — Ø-Leistung je Stunde über den Monat."""
+    from backend.services.pdf.charts import tagesprofil_chart
+
+    if not profil:
+        return None
+    stunden = [p.stunde for p in profil]
+    pv = [p.pv_kw for p in profil]
+    verbrauch = [p.verbrauch_kw for p in profil]
+    pv_gemessen = [(p.stunde, p.pv_kw) for p in profil if p.pv_kw is not None]
+    verb_gemessen = [v for v in verbrauch if v is not None]
+    if not pv_gemessen and not verb_gemessen:
+        return None
+
+    zeilen: list[Zeile] = []
+    if pv_gemessen:
+        spitze = max(pv_gemessen, key=lambda x: x[1])
+        zeilen.append(_z("PV-Spitze (Ø)", f"{spitze[0]}:00 Uhr · "
+                                          f"{fmt_einheit(spitze[1], 'kW', decimals=2)}"))
+    if verb_gemessen:
+        zeilen.append(_z("Verbrauch Ø", fmt_einheit(
+            sum(verb_gemessen) / len(verb_gemessen), "kW", decimals=2)))
+        zeilen.append(_z("Verbrauchs-Spitze (Ø)", fmt_einheit(
+            max(verb_gemessen), "kW", decimals=2)))
+    return Abschnitt(
+        "tagesprofil", "Typisches Tagesprofil", "energie", zeilen,
+        park_id="el:tagesprofil",
+        chart=tagesprofil_chart(stunden, pv, verbrauch),
+        hinweis="Stundenmittel über alle Tage des Monats.",
+    )
+
+
+def _abschnitte_peaks(auswertung: Any) -> list[Abschnitt]:
+    """Spitzenstunden — je eine Zeile pro Stunde, in beiden Formaten."""
+    aus: list[Abschnitt] = []
+    paare = (
+        ("peak_netzbezug", "Top Netzbezug-Stunden", auswertung.peak_netzbezug,
+         "el:peak-netzbezug"),
+        ("peak_einspeisung", "Top Einspeise-Stunden", auswertung.peak_einspeisung,
+         "el:peak-einspeisung"),
+    )
+    for schluessel, titel, stunden, park_id in paare:
+        posten = list(stunden or [])[:5]
+        if not posten:
+            continue
+        zeilen = [
+            _z(f"{p.datum.strftime('%d.%m.')} · {p.stunde}:00 Uhr",
+               fmt_einheit(p.wert_kw, "kW", decimals=2))
+            for p in posten
+        ]
+        aus.append(Abschnitt(schluessel, titel, "energie", zeilen, park_id=park_id))
+    return aus
+
+
+def _abschnitt_community(vergleich: Optional[dict], d: Any) -> Optional[Abschnitt]:
+    """Community-Vergleich für den Berichtsmonat.
+
+    ⛔ **Kein Stand-Datum** (Entscheid Gernot, 30.08.): Der Vergleichsmonat *ist*
+    der Berichtsmonat, damit ist der Vergleich definiert — wann er gezogen wurde,
+    ändert die Aussage nicht. Mitgenommen wird die **Anzahl der verglichenen
+    Anlagen**: ein Vergleich gegen 3 Anlagen ist etwas anderes als gegen 300.
+
+    ⚠ Diese Anzeige gibt es auf *Cockpit → Monat* **nicht** — sie wurde dort mit
+    ``748849b2`` bewusst durch einen Cross-Link zur Community-Achse ersetzt. Der
+    Abschnitt steht hier auf Gernots Vorgabe (30.08.), nicht als Übernahme vom
+    Bildschirm; ``park_id`` bleibt deshalb ``None``, denn eine nie gerenderte
+    Anzeige kann niemand parken.
+    """
+    if not vergleich:
+        return None
+    anzahl = vergleich.get("anzahl_anlagen") or 0
+    if anzahl <= 0:
+        return None
+
+    def _median(feld: str) -> Optional[float]:
+        eintrag = vergleich.get(feld)
+        return eintrag.get("median") if isinstance(eintrag, dict) else None
+
+    posten = (
+        ("Spezifischer Ertrag", d.spez_ertrag, _median("spez_ertrag"),
+         lambda v: fmt_einheit(v, "kWh/kWp", decimals=1)),
+        ("Autarkie", d.autarkie_prozent, _median("autarkie"), fmt_pct),
+        ("Eigenverbrauchsquote", d.eigenverbrauch_quote_prozent,
+         _median("eigenverbrauch"), fmt_pct),
+        ("Einspeisung", d.einspeisung_kwh, _median("einspeisung"), fmt_kwh),
+        ("Netzbezug", d.netzbezug_kwh, _median("netzbezug"), fmt_kwh),
+    )
+    zeilen: list[Zeile] = []
+    for label, eigen, median, formatierer in posten:
+        if eigen is None and median is None:
+            continue
+        zeilen.append(_z(
+            label,
+            formatierer(eigen),
+            hinweis=(f"Community-Median {formatierer(median)}"
+                     if median is not None else "kein Community-Median"),
+        ))
+    if not _hat(zeilen):
+        return None
+
+    zeilen.append(_z("Verglichene Anlagen", fmt_zahl(anzahl, 0)))
+    return Abschnitt(
+        "community", "Community-Vergleich", "community", zeilen,
+        hinweis="Median aller Anlagen, die ihre Werte für diesen Monat geteilt haben.",
+    )
+
+
+def _logo_data_url() -> str:
+    """eedc-Logo als ``data:``-URI — **dasselbe Muster** wie
+    ``builders/anlagendokumentation.py:248``. Fehlt die Datei, bleibt der Kopf
+    ohne Logo; das Markenband trägt die Identität ohnehin auf jeder Seite."""
+    import base64
+    from pathlib import Path as _Path
+
+    pfad = _Path(__file__).resolve().parents[4] / "logo.png"
+    if not pfad.exists():
+        return ""
+    return "data:image/png;base64," + base64.b64encode(pfad.read_bytes()).decode("ascii")
+
+
+async def _energie_aufbereitet(
+    db: AsyncSession, anlage: Anlage, jahr: int, monat: int,
+) -> list[Abschnitt]:
+    """Verlauf · Kategorien · Tagesprofil · Spitzenstunden.
+
+    Zwei Quellen, beide bestehend — dieses Modul faltet nichts selbst
+    (ADR-002/**P10**):
+
+    * :func:`get_monatsauswertung` — die Logik liegt in der Route, es gibt
+      keinen Service darunter; direkt aufgerufen mit gesetzten Argumenten,
+      dasselbe Muster wie ``get_aktueller_monat`` oben.
+    * :func:`baue_tage_werte` — hier bewusst der **Service** statt der Route
+      ``get_tage_werte``: die tut nichts weiter, als ihn nach einer
+      Anlagenprüfung aufzurufen, die hier schon geschehen ist.
+    """
+    import calendar
+
+    from backend.api.routes.energie_profil.views import get_monatsauswertung
+    from backend.services.energie_profil.tage_werte import baue_tage_werte
+
+    aus: list[Abschnitt] = []
+
+    auswertung = await get_monatsauswertung(anlage.id, jahr, monat, 10, db)
+
+    letzter = calendar.monthrange(jahr, monat)[1]
+    tage = await baue_tage_werte(db, anlage, date(jahr, monat, 1), date(jahr, monat, letzter))
+    verlauf = _abschnitt_verlauf(list(tage or []), auswertung.tage_im_monat or letzter)
+    if verlauf is not None:
+        aus.append(verlauf)
+
+    aus += _abschnitte_kategorien(list(auswertung.kategorien or []))
+    profil = _abschnitt_tagesprofil(list(auswertung.typisches_tagesprofil or []))
+    if profil is not None:
+        aus.append(profil)
+    aus += _abschnitte_peaks(auswertung)
+    return aus
+
+
+async def _community_vergleich(jahr: int, monat: int) -> Optional[dict]:
+    """Monats-Benchmark vom Community-Server — oder ``None``.
+
+    ⛔ **Der Bericht darf daran nicht scheitern** (ADR-002/**P4**). Die Quelle
+    ist ``api/routes/community.py::get_monatsbenchmark``, und das ist ein
+    ``httpx``-Aufruf an einen **externen** Server: nicht erreichbar, langsam,
+    ohne Daten für den Monat, 5xx — jeder dieser Fälle ist normal und keiner
+    davon kostet die übrigen fünfzehn Abschnitte. Der Abschnitt entfällt dann,
+    statt mit Gedankenstrichen dazustehen.
+    """
+    from backend.api.routes.community import get_monatsbenchmark
+
+    try:
+        return await get_monatsbenchmark(jahr, monat)
+    except Exception:  # noqa: BLE001 — jeder Fehlschlag bedeutet dasselbe: kein Abschnitt
+        return None
+
+
 async def build_monatsbericht_context(
     db: AsyncSession,
     anlage_id: int,
@@ -551,6 +876,7 @@ async def build_monatsbericht_context(
     if hat_messwerte(d):
         if "energie" in aktive_themen:
             abschnitte += _abschnitte_energie(d)
+            abschnitte += await _energie_aufbereitet(db, anlage, jahr, monat)
         if "komponenten" in aktive_themen:
             abschnitte += _abschnitte_komponenten(d)
         if "finanzen" in aktive_themen:
@@ -564,6 +890,11 @@ async def build_monatsbericht_context(
                 None,
             )
             abschnitte += _abschnitte_co2(zeile)
+        if "community" in aktive_themen:
+            gemeinschaft = await _community_vergleich(jahr, monat)
+            abschnitt = _abschnitt_community(gemeinschaft, d)
+            if abschnitt is not None:
+                abschnitte.append(abschnitt)
 
     # ⚑ Erst bauen, dann filtern. Ein geparktes Element blendet aus, es rechnet
     # nicht um — die Zahlen der übrigen Abschnitte dürfen sich dadurch nicht
@@ -575,6 +906,7 @@ async def build_monatsbericht_context(
     standort = " ".join(t for t in standort_teile if t)
 
     return {
+        "logo": _logo_data_url(),
         "anlage": {
             "name": anlage.anlagenname if mit_identitaet else "",
             "standort": standort if mit_identitaet else "",

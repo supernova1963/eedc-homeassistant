@@ -450,3 +450,167 @@ async def test_kein_spezifischer_ertrag_ohne_gemessene_pv(db):
     assert "| PV-Erzeugung | – |" in md
     assert "| Spezifischer Ertrag | – |" in md
     assert "kWh/kWp" not in md
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Stufe 2 — grafische Aufbereitung + Community
+#
+# Die Proben hier decken das ab, was die Aufmachung NEU einführen kann: eine
+# externe Abhängigkeit, ein Chart, das eine Zahl behauptet, und eine Lücke, die
+# als Null durchgeht.
+# ═════════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+async def test_community_ausfall_kostet_den_bericht_nicht(db, monkeypatch):
+    """ADR-002/**P4**: Der Community-Server ist extern — sein Ausfall ist normal.
+
+    Nicht erreichbar, langsam, 5xx, keine Daten für den Monat: jeder dieser
+    Fälle darf **nur** den Community-Abschnitt kosten, nie die übrigen. Ohne
+    diese Zusicherung hinge ein Archivdokument an der Erreichbarkeit eines
+    fremden Servers.
+    """
+    import backend.api.routes.community as community_modul
+
+    anlage_id = await _seed(db)
+
+    async def _faellt_aus(jahr: int, monat: int):
+        raise RuntimeError("Community-Server nicht erreichbar")
+
+    monkeypatch.setattr(community_modul, "get_monatsbenchmark", _faellt_aus)
+
+    ctx = await build_monatsbericht_context(db, anlage_id, JAHR, MONAT)
+
+    assert not any(a.thema == "community" for a in ctx["abschnitte"]), \
+        "Bei Ausfall darf KEIN Community-Abschnitt entstehen — auch keiner mit Strichen"
+    # Und der Rest steht vollständig: beide Formate rendern durch.
+    assert len(ctx["abschnitte"]) >= 10
+    html = render_html("monatsbericht.html", ctx)
+    md = render_monatsbericht_markdown(ctx)
+    assert _zahlen(_als_text(html)) == _zahlen(md)
+
+
+@pytest.mark.asyncio
+async def test_community_abschnitt_nennt_die_anzahl_der_anlagen(db, monkeypatch):
+    """Ein Vergleich gegen 3 Anlagen ist etwas anderes als gegen 300.
+
+    ⛔ Ein **Stand-Datum** steht bewusst NICHT dabei (Entscheid Gernot,
+    30.08.): Der Vergleichsmonat *ist* der Berichtsmonat, damit ist der
+    Vergleich definiert — wann er gezogen wurde, ändert die Aussage nicht.
+    """
+    import backend.api.routes.community as community_modul
+
+    anlage_id = await _seed(db)
+
+    async def _antwortet(jahr: int, monat: int):
+        return {
+            "jahr": jahr, "monat": monat, "anzahl_anlagen": 42,
+            "autarkie": {"median": 55.0},
+            "einspeisung": {"median": 300.0},
+        }
+
+    monkeypatch.setattr(community_modul, "get_monatsbenchmark", _antwortet)
+
+    ctx = await build_monatsbericht_context(db, anlage_id, JAHR, MONAT)
+    abschnitt = next(a for a in ctx["abschnitte"] if a.thema == "community")
+
+    assert any(z.label == "Verglichene Anlagen" and "42" in z.wert for z in abschnitt.zeilen)
+    assert any("Community-Median" in (z.hinweis or "") for z in abschnitt.zeilen)
+    # Gegenrichtung: kein Datum im Abschnitt — sonst wäre der Entscheid gekippt.
+    text = " ".join(f"{z.label} {z.wert} {z.hinweis or ''}" for z in abschnitt.zeilen)
+    assert not re.search(r"\d{2}\.\d{2}\.\d{4}", text)
+
+    # In beiden Formaten, und ohne den Schalter in keinem.
+    md = render_monatsbericht_markdown(ctx)
+    assert "Community-Vergleich" in md
+    ohne = await build_monatsbericht_context(
+        db, anlage_id, JAHR, MONAT, themen=[t for t in THEMEN if t != "community"],
+    )
+    assert "Community-Vergleich" not in render_monatsbericht_markdown(ohne)
+    assert "Community-Vergleich" not in _als_text(render_html("monatsbericht.html", ohne))
+
+
+@pytest.mark.asyncio
+async def test_community_ohne_anlagen_erscheint_nicht(db, monkeypatch):
+    """Null verglichene Anlagen ist kein Vergleich, sondern eine leere Seite."""
+    import backend.api.routes.community as community_modul
+
+    anlage_id = await _seed(db)
+
+    async def _leer(jahr: int, monat: int):
+        return {"jahr": jahr, "monat": monat, "anzahl_anlagen": 0}
+
+    monkeypatch.setattr(community_modul, "get_monatsbenchmark", _leer)
+    ctx = await build_monatsbericht_context(db, anlage_id, JAHR, MONAT)
+    assert not any(a.thema == "community" for a in ctx["abschnitte"])
+
+
+def test_chart_zaehlt_einen_tag_ohne_messung_nicht_als_null():
+    """⛔ ``None`` ist keine Null — die Klasse aus KONZEPT-UNVOLLSTAENDIGE-WERTE.
+
+    Ein Tag ohne gemessene Erzeugung bekommt **keinen** Balken. Ein Balken der
+    Höhe 0 neben echten Werten liest sich als „an diesem Tag kam nichts", und
+    genau diese Verwechslung wäre eine erfundene Aussage.
+    """
+    import base64
+
+    from backend.services.pdf.charts import tagesverlauf_chart
+
+    def _balken(svg_uri: str, farbe: str) -> int:
+        svg = base64.b64decode(svg_uri.split(",", 1)[1]).decode("utf-8")
+        return len(re.findall(rf'<rect[^>]*fill="{farbe}"', svg))
+
+    PV = "#f59e0b"
+    # Drei gemessene Tage, einer ohne Messung. +1 = das Legenden-Kästchen.
+    mit_luecke = tagesverlauf_chart([1, 2, 3, 4], [10.0, None, 12.5, 8.0])
+    assert _balken(mit_luecke, PV) == 3 + 1
+
+    # Gegenrichtung: eine GEMESSENE Null bleibt ein Balken (der Höhe 0) und
+    # verschwindet nicht — sonst unterdrückte der Fix jede Null.
+    mit_null = tagesverlauf_chart([1, 2, 3, 4], [10.0, 0.0, 12.5, 8.0])
+    assert _balken(mit_null, PV) == 4 + 1
+
+
+def test_tagesprofil_bricht_die_linie_an_der_luecke():
+    """Eine Linie, die an einer Lücke auf 0 fällt, behauptet einen Einbruch."""
+    import base64
+
+    from backend.services.pdf.charts import tagesprofil_chart
+
+    svg = base64.b64decode(
+        tagesprofil_chart([0, 1, 2, 3, 4], [1.0, 2.0, None, 3.0, 4.0]).split(",", 1)[1]
+    ).decode("utf-8")
+    # Zwei Segmente statt einer durchgehenden Linie.
+    assert svg.count("<polyline") == 2
+
+    ohne_luecke = base64.b64decode(
+        tagesprofil_chart([0, 1, 2, 3, 4], [1.0, 2.0, 2.5, 3.0, 4.0]).split(",", 1)[1]
+    ).decode("utf-8")
+    assert ohne_luecke.count("<polyline") == 1
+
+
+@pytest.mark.asyncio
+async def test_die_aufmachung_fuegt_dem_markdown_keine_zahl_hinzu(db):
+    """Kacheln, Leisten und Charts sind Darstellung — keine zweite Zahlenquelle.
+
+    Die Anteils-Leiste trug im ersten Entwurf ihre Werte in der **Legende**;
+    damit nannte das PDF jede dieser Zahlen zweimal und der Markdown-Zwilling
+    einmal. Die Paritäts-Probe hat das gemeldet — diese hier hält fest, dass
+    die Darstellungsfelder überhaupt keine Zahl ins Dokument tragen.
+    """
+    anlage_id = await _seed(db)
+    ctx = await build_monatsbericht_context(db, anlage_id, JAHR, MONAT)
+
+    hat_darstellung = [
+        a for a in ctx["abschnitte"]
+        if a.darstellung != "tabelle" or a.balken or a.chart
+    ]
+    assert hat_darstellung, "Ohne einen einzigen aufbereiteten Abschnitt prüft diese Probe nichts"
+
+    for a in hat_darstellung:
+        for b in (a.balken or []):
+            assert any(z.label == b.label for z in a.zeilen), \
+                f"Leisten-Segment '{b.label}' hat keine Zeile — das wäre eine Zahl nur im PDF"
+
+    html = render_html("monatsbericht.html", ctx)
+    md = render_monatsbericht_markdown(ctx)
+    assert _zahlen(_als_text(html)) == _zahlen(md)

@@ -453,7 +453,7 @@ Die Kachel **Berichte & Dokumente** öffnet den Dokumente-Dialog der Anlage. Er 
 - **Jahresbericht** (alle KPIs: Energie, Autarkie, Finanzen, CO₂; Diagramme; Monatstabellen; PV-String SOLL/IST).
 - **Anlagendokumentation** (Stammdaten, Versorger, Tarif, Komponenten mit Parametern + verknüpften Infothek-Einträgen).
 - **Finanzbericht** und **Infothek-Dossier**.
-- **Monatsbericht** — die Zahlen **eines** Monats im Stil der Cockpit-Monatsansicht.
+- **Monatsbericht** — die Zahlen **eines** Monats im Stil der Cockpit-Monatsansicht, mit Kennzahl-Kacheln, Anteils-Leisten und Diagrammen.
 
 > **HA-Companion:** PDF-, CSV- und Backup-Downloads laufen über `fetch + Blob` — damit funktionieren sie in der iOS-HA-Companion-App ohne 401-/Ingress-Probleme.
 
@@ -464,13 +464,46 @@ Er ist der einzige Bericht mit eigenen Einstellungen — sie stehen direkt unter
 | Einstellung | Was sie bewirkt |
 | --- | --- |
 | **Monat** | Genau ein Monat, voreingestellt der neueste erfasste. Eine Spanne über mehrere Monate ist der Jahresbericht darüber. |
-| **Themen** (Energie · Komponenten · Finanzen · CO₂) | Bestimmen, *was für ein* Bericht entsteht. Voreingestellt sind alle vier an. |
+| **Themen** (Energie · Komponenten · Finanzen · CO₂ · Community) | Bestimmen, *was für ein* Bericht entsteht. Voreingestellt sind alle an. |
 | **Anlagenname und Standort nennen** | Voreingestellt **an** — der Regelfall ist die eigene Ablage. Wer den Bericht teilt, schaltet ab. |
 | **Wie in meiner Monatsansicht** | Lässt die Anzeigen weg, die du unter *Cockpit → Monat* geparkt hast. Erscheint nur, wenn dort überhaupt etwas geparkt ist; voreingestellt an. |
 
 Den Bericht gibt es in **zwei Formaten aus denselben Zahlen**: als **PDF** über die Karte (zum
 Ablegen) und als **Text** über die zwei Knöpfe darunter — herunterladen oder direkt in die
 Zwischenablage, zum Einfügen in ein Forum oder eine Nachricht.
+
+**Was im PDF grafisch aufbereitet ist:**
+
+- **Kennzahl-Kacheln** oben — PV-Erzeugung, Eigenverbrauch, Einspeisung, Netzbezug,
+  Gesamtverbrauch, Autarkie und die Quoten, wie im Kopf der Monatsansicht.
+- **Anteils-Leisten** für die PV-Verteilung und für Erzeugung bzw. Verbrauch nach Kategorie.
+- **Verlauf** — ein Balken je Tag des Monats. ⚠ **Tage ohne gemessene Erzeugung bekommen keinen
+  Balken**, auch keinen der Höhe null: Eine Null-Säule neben echten Werten würde behaupten, an
+  diesem Tag sei nichts erzeugt worden. Wie viele Tage gemessen wurden, steht als Zeile darunter.
+- **Typisches Tagesprofil** — die Ø-Leistung je Stunde über den Monat, PV und Verbrauch.
+- **Spitzenstunden** für Netzbezug und Einspeisung, je die fünf höchsten.
+
+> **Der Text enthält dieselben Zahlen, aber keine Diagramme.** Markdown kann keine Bilder
+> tragen; jede Aussage, die ein Diagramm im PDF macht, steht deshalb auch als Zeile — bester
+> Tag, schwächster Tag, Durchschnitt. Wer ein Diagramm in einen Forenbeitrag heben will, nimmt
+> einen Bildschirmausschnitt aus dem PDF.
+
+#### Der Community-Vergleich im Bericht
+
+Mit dem Thema **Community** stellt der Bericht deine Werte dem **Median** aller Anlagen
+gegenüber, die ihre Zahlen für **denselben Monat** geteilt haben — spezifischer Ertrag,
+Autarkie, Eigenverbrauchsquote, Einspeisung und Netzbezug. Dabei steht, gegen **wie viele
+Anlagen** verglichen wurde: Ein Median aus drei Anlagen sagt etwas anderes als einer aus
+dreihundert.
+
+> **Ist der Community-Server gerade nicht erreichbar, entfällt allein dieser Abschnitt** —
+> der übrige Bericht entsteht vollständig und unverändert. Es erscheinen dort keine
+> Gedankenstriche und keine Fehlermeldung: Ein Vergleich, den es nicht gibt, wird nicht
+> behauptet.
+
+> **Der Vergleich ist an *diesen* Monat gebunden, nicht an den Tag der Erstellung.** Der Median
+> kann sich später noch leicht verschieben, wenn weitere Anlagen ihre Werte für den Monat
+> nachreichen — die verglichene Größe bleibt dieselbe.
 
 > **Es gibt bewusst kein „anonymisiert".** Ein PV-Monatsbericht ist über Ertragsprofil,
 > Standort und Tarif praktisch eindeutig; die Zusage wäre nicht zu halten. Stattdessen

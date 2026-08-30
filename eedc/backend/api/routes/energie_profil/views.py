@@ -72,6 +72,40 @@ from ._shared import (
 router = APIRouter()
 
 
+#: Energie-Kategorien der Monatsauswertung: Schlüssel → (Label, Gruppe).
+#:
+#: **Spiegel von** ``frontend/src/lib/colors.ts::ENERGIE_KATEGORIE`` — dessen
+#: Docstring nennt diese Datei seit jeher als „Backend-Producer", die Schlüssel
+#: lagen hier aber als **funktionslokale Literale** in
+#: :func:`get_monatsauswertung`, und **Labels gab es backendseitig gar nicht**.
+#: Der Monatsbericht braucht sie (PDF/Markdown haben kein `lib/colors.ts`), und
+#: eine dritte Liste im Builder wäre die Drift, die ``check:label-maps`` im
+#: Frontend gerade verhindert. ⇒ Schlüssel und Label stehen hier zusammen,
+#: die lokalen Sets leiten sich daraus ab.
+#:
+#: Der dritte Eintrag ist die **Farbe als Hex** — der Client führt an dieser
+#: Stelle Tailwind-Klassen (``bg-amber-400``), ein PDF braucht den Ton selbst.
+#: ⛔ **Keine neuen Töne:** jeder Wert stammt aus der Komponenten-Identität in
+#: ``lib/colors.ts`` (``KOMPONENTEN_FARBEN`` bzw. ``SONSTIGES_ERZEUGER_FARBE``),
+#: auf die die Client-Map verweist. Beim ersten Bau standen hier drei
+#: **erfundene** Farben (Cyan fürs Balkonkraftwerk, Grau für sonstige Erzeuger,
+#: Blau für die Wallbox) — Regel 0a („eine Datenrolle = eine Farbe") war damit
+#: zwischen Bildschirm und PDF gebrochen, ohne dass ein Prüfer es sah.
+#:
+#: Der Abgleich mit der Client-Map hält ``npm run check:spiegel-backend`` fest —
+#: **einschließlich der Farbe**, aufgelöst über die Konstante, auf die die
+#: Client-Map zeigt.
+ENERGIE_KATEGORIEN: dict[str, tuple[str, str, str]] = {
+    "pv_module": ("PV-Module", "erzeuger", "#f59e0b"),
+    "bkw": ("Balkonkraftwerk", "erzeuger", "#fbbf24"),
+    "sonstige_erzeuger": ("Sonstige Erzeuger", "erzeuger", "#84cc16"),
+    "waermepumpe": ("Wärmepumpe", "verbraucher", "#ef4444"),
+    "wallbox_eauto": ("Wallbox / E-Auto", "verbraucher", "#06b6d4"),
+    "haushalt": ("Haushalt", "verbraucher", "#64748b"),
+    "sonstige_verbraucher": ("Sonstige Verbraucher", "verbraucher", "#6b7280"),
+}
+
+
 @router.get("/{anlage_id}/tage", response_model=list[TagesZusammenfassungResponse])
 async def get_tages_zusammenfassungen(
     anlage_id: int,
@@ -1171,8 +1205,8 @@ async def get_monatsauswertung(
     ))
 
     kategorien_liste: list[KategorieSumme] = []
-    ERZEUGER_KAT = {"pv_module", "bkw", "sonstige_erzeuger"}
-    VERBRAUCHER_KAT = {"waermepumpe", "wallbox_eauto", "haushalt", "sonstige_verbraucher"}
+    ERZEUGER_KAT = {k for k, (_, g, _f) in ENERGIE_KATEGORIEN.items() if g == "erzeuger"}
+    VERBRAUCHER_KAT = {k for k, (_, g, _f) in ENERGIE_KATEGORIEN.items() if g == "verbraucher"}
     # Bidirektionale Kategorien (speicher, netz) werden nicht als Erzeuger/Verbraucher-KPI ausgewiesen,
     # tauchen aber in der Geräteliste weiter unten auf.
     BIDI_KAT = {"speicher", "netz"}
