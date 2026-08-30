@@ -1,11 +1,41 @@
 # Was ist neu
 
-> **Stand:** August 2026 (v4.0.34)
+> **Stand:** August 2026 (v4.0.35)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.35 — 30. August 2026
+
+**Eine Auswahl, die sich zurücknehmen lässt**
+
+Wer am Wärmepumpen-Gerät den **„Fremdanteil auf den Zählern"** einmal gesetzt hatte,
+kam **nicht mehr auf „Kein Fremdanteil" zurück**. Die Auswahl wurde beim Speichern
+stillschweigend verworfen — während sich die beiden anderen Werte speichern ließen.
+
+**Betrifft dich das?** Nur, wenn du dieses Feld angefasst hast. Dann aber spürbar:
+Ein gesetzter Fremdanteil ist für eedc die Aussage „Zähler und Nutzen stehen für
+verschiedene Dinge" — es zeigt dann bewusst **keine Arbeitszahl** mehr, sondern den
+Grund. Wer die drei Lagen nur durchprobiert hat, um sie zu verstehen, blieb also ohne
+Arbeitszahl und ohne Weg zurück.
+
+**Dieselbe Ursache traf zwei weitere Felder**, die bisher niemandem aufgefallen sind:
+
+* Die **Kopplung** eines Speichers ließ sich nicht auf *„Automatisch (aus der
+  Zuordnung)"* zurückstellen.
+* Ein versehentlich eingetragener **Verbrenner-Verbrauch** an einem E-Auto machte aus
+  einem reinen Stromer dauerhaft einen Plug-in-Hybrid.
+
+**Was du tun musst:** Nichts weiter — stell das Feld einfach wieder auf den Wert, den
+du haben willst. **Deine Mengen waren nie betroffen**, weder hier noch bei den beiden
+anderen Feldern; es ging immer nur um die Angabe selbst und die Kennzahl, die daran
+hängt.
+
+Gemeldet von **rapahl**.
 
 ---
 
