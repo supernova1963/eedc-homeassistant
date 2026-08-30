@@ -102,3 +102,44 @@ def test_dienstwagen_schweigt():
                 _imd(2026, 6, km_gefahren=900)],
     )
     assert not _run(anlage)
+
+
+# ── Ein geleertes Feld ist kein gepflegter Wert (rapahl, T89667 #253) ──
+#
+# Seit dem Formular-Fix nimmt ein geleertes Feld den gespeicherten Wert zurück,
+# indem es `""` sendet — der Weg, auf dem eine einmal getroffene Auswahl
+# überhaupt erst zurücknehmbar wurde. Dieser Check las den Rohwert und fragte
+# `is not None`: ein `""` hätte ihn zum Schweigen gebracht, obwohl der Anteil
+# gerade NICHT gepflegt ist. Er las damit an `_fahranteil_prozent` vorbei, das
+# die drei rechnenden Stellen benutzen — der Check schwieg genau dann, wenn die
+# Rechnung „unbestimmt" ergibt.
+#
+# ⚠ Die Grenze zu `test_geschaetzter_fahranteil_entlastet_auch_bei_null`: `0`
+# ist ein gepflegter Wert und entlastet weiterhin. Nur das Nicht-Gepflegte
+# darf nicht entlasten.
+
+
+def test_geleerter_fahranteil_entlastet_nicht():
+    """`""` heißt „nicht gepflegt" — der Check muss weiter warnen."""
+    anlage = _anlage(
+        parameter={"eigener_verbrauch_l_100km": 6.5,
+                   "elektrischer_fahranteil_prozent": ""},
+        monate=[_imd(2026, 5, km_gefahren=800),
+                _imd(2026, 6, km_gefahren=900)],
+    )
+    assert _run(anlage), "geleertes Feld darf nicht entlasten"
+
+
+def test_unlesbarer_fahranteil_entlastet_nicht():
+    """Auch ein unbrauchbarer Wert entlastet nicht — die Rechnung sieht ihn nie.
+
+    Sonst schwiege der Check, während `teile_fahrleistung` mangels Zahl auf
+    „100 % elektrisch" fällt: Ersparnis und CO₂ zu gut, ohne jeden Hinweis.
+    """
+    anlage = _anlage(
+        parameter={"eigener_verbrauch_l_100km": 6.5,
+                   "elektrischer_fahranteil_prozent": "keine Ahnung"},
+        monate=[_imd(2026, 5, km_gefahren=800),
+                _imd(2026, 6, km_gefahren=900)],
+    )
+    assert _run(anlage), "unlesbarer Wert darf nicht entlasten"

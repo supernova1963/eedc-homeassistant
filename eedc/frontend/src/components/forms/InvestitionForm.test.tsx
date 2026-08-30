@@ -162,4 +162,77 @@ describe('InvestitionForm — Submit-Nutzlast', () => {
     const nutzlast = await submit(onSubmit)
     expect('einsparung_prognose_jahr' in nutzlast).toBe(false)
   })
+
+  // ── Die `parameter`-Hälfte desselben Vertrags (rapahl, T89667 #253) ──
+  //
+  // Der Datei-Kopf beschreibt den Vertrag für die **Spalten**; `55dd1d5e` hat ihn
+  // dort eingelöst und die `parameter`-Seite offen gelassen. Dort filterte
+  // `value !== ''` den geleerten Wert aus der Nutzlast, und der Merge mit
+  // `investition.parameter` holte den Altwert zurück — eine einmal gesetzte
+  // Auswahl liess sich nie wieder zurücknehmen. Fuer `abgrenzung` kostet das die
+  // Arbeitszahl: ein gesetzter Fremdanteil ersetzt sie dauerhaft durch einen Grund.
+  it('nimmt einen gesetzten Fremdanteil wieder zurück (rapahl #253)', async () => {
+    const onSubmit = vi.fn(() => Promise.resolve())
+    const wp: Investition = {
+      id: 11, anlage_id: 1, typ: 'waermepumpe', bezeichnung: 'Daikin',
+      anschaffungsdatum: '2023-07-01', aktiv: true,
+      parameter: { abgrenzung: 'fremdstrom' },
+    }
+    render(<InvestitionForm anlageId={1} typ="waermepumpe" investition={wp} onSubmit={onSubmit} onCancel={() => {}} />)
+
+    const select = await screen.findByLabelText(/Fremdanteil auf den Zählern/i)
+    expect((select as HTMLSelectElement).value).toBe('fremdstrom')
+    fireEvent.change(select, { target: { value: '' } })
+
+    const nutzlast = await submit(onSubmit)
+    // Der Schlüssel muss MITGEHEN — fehlt er, gewinnt der Altwert im Merge.
+    expect((nutzlast.parameter as Record<string, unknown>).abgrenzung).toBe('')
+  })
+
+  it('nimmt eine gesetzte Kopplung wieder auf „Automatisch" zurück', async () => {
+    const onSubmit = vi.fn(() => Promise.resolve())
+    const acSpeicher = { ...speicher, parameter: { kapazitaet_kwh: 10, kopplung: 'ac' } }
+    render(<InvestitionForm anlageId={1} typ="speicher" investition={acSpeicher} onSubmit={onSubmit} onCancel={() => {}} />)
+
+    const select = await screen.findByLabelText(/Kopplung/i)
+    fireEvent.change(select, { target: { value: '' } })
+
+    const nutzlast = await submit(onSubmit)
+    expect((nutzlast.parameter as Record<string, unknown>).kopplung).toBe('')
+  })
+
+  // Die Gegenrichtung, und sie ist der Grund fuer den Merge (#173, `d47f973c`):
+  // Schluessel, die NUR im gespeicherten `parameter` stehen (vom Wizard oder vom
+  // Sensor-Mapping geschrieben), kennt das Formular nicht — sie duerfen von einem
+  // Form-Save nicht geleert werden. Ohne diese Probe waere „alles Leere mitsenden"
+  // nicht von „alles Unbekannte leeren" zu unterscheiden.
+  it('lässt Wizard-Schlüssel unberührt, die das Formular gar nicht kennt', async () => {
+    const onSubmit = vi.fn(() => Promise.resolve())
+    const mitWizardKey = {
+      ...speicher,
+      parameter: { kapazitaet_kwh: 10, ha_sensor_soc: 'sensor.speicher_soc' },
+    }
+    render(<InvestitionForm anlageId={1} typ="speicher" investition={mitWizardKey} onSubmit={onSubmit} onCancel={() => {}} />)
+
+    const nutzlast = await submit(onSubmit)
+    const params = nutzlast.parameter as Record<string, unknown>
+    expect(params.ha_sensor_soc).toBe('sensor.speicher_soc')
+  })
+
+  // Beim ANLEGEN gibt es keinen Altwert zu ueberschreiben — dort bleibt Weglassen
+  // richtig, damit die Backend-Defaults greifen (dieselbe Grenze wie bei `leer`).
+  it('schreibt beim Anlegen keine leeren Parameter-Schlüssel', async () => {
+    const onSubmit = vi.fn(() => Promise.resolve())
+    render(<InvestitionForm anlageId={1} typ="waermepumpe" onSubmit={onSubmit} onCancel={() => {}} />)
+
+    fireEvent.change(screen.getByLabelText(/Bezeichnung/i), { target: { value: 'Neue WP' } })
+    // Anschaffungsdatum ist Pflicht (`57cb001c`) — ohne es kommt der Submit gar
+    // nicht durch, und die Probe waere aus dem falschen Grund rot.
+    fireEvent.click(screen.getByLabelText('Anschaffungsdatum'))
+    fireEvent.click(await screen.findByRole('button', { name: '15' }))
+
+    const nutzlast = await submit(onSubmit)
+    const params = (nutzlast.parameter ?? {}) as Record<string, unknown>
+    expect('abgrenzung' in params).toBe(false)
+  })
 })

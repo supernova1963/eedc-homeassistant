@@ -68,6 +68,8 @@ from backend.services.speicher_wirtschaftlichkeit import (
     berechne_ist_wirkungsgrad,
 )
 from backend.services.eauto_wirtschaftlichkeit import (
+    eigener_verbrauch_l_100km,
+    fahranteil_prozent,
     letzter_kraftstoffpreis_aus_lookup,
     resolve_eauto_benzinpreis,
 )
@@ -2169,12 +2171,15 @@ async def get_roi_dashboard(
                 v2h_preis_cent=v2h_preis,
                 # #331: PHEV. Beide ohne Default — fehlen sie, rechnet die
                 # Prognose exakt wie vorher (100 % elektrisch).
-                eigener_verbrauch_l_100km=params.get(
-                    PARAM_E_AUTO["EIGENER_VERBRAUCH_L_100KM"]
-                ),
-                elektrischer_fahranteil_prozent=params.get(
-                    PARAM_E_AUTO["ELEKTRISCHER_FAHRANTEIL_PROZENT"]
-                ),
+                #
+                # Über die SoT-Helper, nicht über den Rohwert: `teile_fahrleistung`
+                # nimmt `Optional[float]` und ruft auf allem, was `is not None`
+                # ist, `float()` — ein geleertes Feld (`""`, seit dem
+                # Formular-Fix der Rückweg aus einer gesetzten Angabe) hätte
+                # diese Route mit einem 500er beendet. Die Helper machen aus
+                # „nicht gepflegt" in allen seinen Gestalten `None`.
+                eigener_verbrauch_l_100km=eigener_verbrauch_l_100km(params),
+                elektrischer_fahranteil_prozent=fahranteil_prozent(params),
             )
             jahres_einsparung = result.jahres_einsparung_euro
             co2_einsparung = result.co2_einsparung_kg

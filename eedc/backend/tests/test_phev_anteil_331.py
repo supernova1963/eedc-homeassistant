@@ -28,6 +28,7 @@ from backend.core.investition_parameter import PARAM_E_AUTO
 from backend.core.wirtschaftlichkeit_defaults import BENZIN_VERBRAUCH_DEFAULT_L_100KM
 from backend.services.eauto_wirtschaftlichkeit import (
     berechne_eauto_ersparnis,
+    fahranteil_prozent,
     berechne_eauto_ersparnis_periode,
     eigener_verbrauch_l_100km,
     fossil_getankte_liter,
@@ -318,3 +319,64 @@ def test_signatur_default_ist_der_kanonische_wert():
         10000 / 100 * BENZIN_VERBRAUCH_DEFAULT_L_100KM
     )
     assert BENZIN_VERBRAUCH_DEFAULT_L_100KM == 7.5
+
+
+# ── D. Die Naht: wer die Formel füttert, schuldet ihr die Umwandlung ──
+#
+# `teile_fahrleistung` nimmt `Optional[float]` und ruft auf allem, was
+# `is not None` ist, `float()`. Das ist als Layer-Formel richtig — sie ist
+# strikt und rät nichts. Die Pflicht liegt damit beim Aufrufer: aus „nicht
+# gepflegt" in allen seinen Gestalten muss `None` werden, bevor die Formel
+# es sieht.
+#
+# Ausgelöst hat das rapahl (T89667 #253): Seit ein geleertes Feld den
+# gespeicherten Wert zurücknimmt, kann `""` in `parameter` stehen — vorher
+# konnte es das nicht. Die ROI-Route und der Daten-Checker lasen an dieser
+# Stelle roh und wären beide falsch gelaufen, jeder auf seine Art: die Route
+# mit einem 500er, der Checker mit Schweigen.
+
+
+def test_formel_ist_strikt_und_das_ist_der_vertrag():
+    """Ein `""` sprengt die Formel — deshalb darf es sie nie erreichen.
+
+    Diese Probe hält die STRIKTHEIT fest, nicht einen Defekt: Sie ist der
+    Grund, warum die Aufrufer den SoT-Helper benutzen müssen. Wer die Formel
+    hier duldsam macht, nimmt der Regel darunter ihre Grundlage.
+    """
+    with pytest.raises(ValueError):
+        teile_fahrleistung(km_gefahren=1000, anteil_prozent="")
+
+
+@pytest.mark.parametrize("roh", ["", "keine Ahnung", None])
+def test_helper_macht_aus_jedem_nicht_wert_ein_none(roh):
+    """Der Helper, den ROI-Route und Daten-Checker benutzen — alle Gestalten."""
+    assert fahranteil_prozent(
+        {PARAM_E_AUTO["ELEKTRISCHER_FAHRANTEIL_PROZENT"]: roh}
+    ) is None
+
+
+def test_helper_laesst_die_null_stehen():
+    """`0` ist ein gepflegter Wert und darf NICHT zu „nicht gepflegt" werden.
+
+    Die Gegenrichtung der Probe darüber: Wer `""` abfängt, indem er auf
+    Wahrheitswert prüft (`if wert:`), verliert die gepflegte 0 gleich mit —
+    die 0-Werte-Falle des Projekts, hier an einer neuen Stelle.
+    """
+    assert fahranteil_prozent(
+        {PARAM_E_AUTO["ELEKTRISCHER_FAHRANTEIL_PROZENT"]: 0}
+    ) == 0.0
+
+
+def test_die_kette_haelt_wie_die_roi_route_sie_baut():
+    """Auflösung wie in `crud.py::get_roi_dashboard` — Helper, dann Formel.
+
+    Das ist der Weg, den die Route seit dem Fix geht; ohne den Helper stünde
+    hier der ValueError von oben.
+    """
+    params = {PARAM_E_AUTO["ELEKTRISCHER_FAHRANTEIL_PROZENT"]: ""}
+    anteil = teile_fahrleistung(
+        km_gefahren=1000, anteil_prozent=fahranteil_prozent(params),
+    )
+    # Weg 3 — nichts gepflegt: heutiges Verhalten, 100 % elektrisch.
+    assert anteil.quelle == "unbestimmt"
+    assert anteil.km_elektrisch == 1000

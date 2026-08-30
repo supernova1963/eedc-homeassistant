@@ -208,6 +208,28 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
               convertedParams[key] = isNaN(num) ? value : num
             }
           }
+        } else if (investition && key in (investition.parameter ?? {})) {
+          // Die `parameter`-Hälfte des Vertrags von `55dd1d5e` (rapahl,
+          // T89667 #253). Ein geleertes Feld fiel hier aus `convertedParams`,
+          // und der Merge weiter unten holte den gespeicherten Wert zurück —
+          // eine einmal getroffene Auswahl ließ sich **nie wieder zurücknehmen**.
+          // Bei `abgrenzung` kostete das die Arbeitszahl dauerhaft, bei
+          // `kopplung` die Ableitung aus der Zuordnung, bei
+          // `eigener_verbrauch_l_100km` blieb ein BEV für immer ein Hybrid.
+          //
+          // `''` und nicht `null`: So steht es in `PARAM_*_DEFAULTS`, und alle
+          // Leser behandeln es wie „nicht gepflegt" (`get_inv_value` kappt es
+          // über `or default`). Die Bedingung auf einen **vorhandenen**
+          // Schlüssel hält das JSON frei von leeren Feldern, die nie gesetzt
+          // waren — ohne sie wäre die Wirkung dieselbe, nur mit Ballast.
+          //
+          // ⚠ Beim ANLEGEN gilt das NICHT (`investition` ist dort undefined):
+          // es gibt keinen Altwert zu überschreiben, und Weglassen lässt die
+          // Backend-Defaults greifen — dieselbe Grenze wie bei `leer` unten.
+          // ⚠ Wizard-Schlüssel (Sensor-Mapping & Co.) erreicht dieser Zweig
+          // nie: sie stehen gar nicht in `paramData`. Genau darauf beruht der
+          // Merge aus #173 (`d47f973c`), und beide Seiten sind geprüft.
+          convertedParams[key] = ''
         }
       })
 

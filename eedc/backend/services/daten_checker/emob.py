@@ -314,6 +314,7 @@ class EmobChecks:
         from backend.core.investition_parameter import ist_dienstlich
         from backend.services.eauto_wirtschaftlichkeit import (
             eigener_verbrauch_l_100km,
+            fahranteil_prozent,
         )
 
         kat = CheckKategorie.PHEV_ANTEIL_UNBESTIMMT.value
@@ -324,8 +325,13 @@ class EmobChecks:
                 continue
             if eigener_verbrauch_l_100km(inv.parameter) is None:
                 continue  # BEV — nichts aufzuteilen.
-            params = inv.parameter or {}
-            if params.get("elektrischer_fahranteil_prozent") is not None:
+            # Über den SoT-Helper, nicht über den Rohwert: „nicht gepflegt"
+            # heißt auch ein geleertes Feld (`""`) oder ein unbrauchbarer Wert.
+            # `is not None` auf dem Rohwert sah in beiden Fällen einen Wert und
+            # ließ den Check schweigen, während `teile_fahrleistung` mangels
+            # Zahl auf „100 % elektrisch" fiel — der Check verstummte genau in
+            # der Lage, für die er gebaut ist. `0` bleibt ein gepflegter Wert.
+            if fahranteil_prozent(inv.parameter) is not None:
                 continue  # geschätzter Weg ist gepflegt.
 
             # Monate MIT gefahrenen km, aber OHNE erfassten Fahrverbrauch —

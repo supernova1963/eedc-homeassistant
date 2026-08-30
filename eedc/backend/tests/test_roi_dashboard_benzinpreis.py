@@ -225,6 +225,7 @@ async def _seed_eauto(
     *,
     benzinpreis_param: float | None = None,
     kraftstoffpreise: list[tuple[int, int, float | None]] = (),
+    extra_params: dict | None = None,
 ) -> int:
     """Anlage + E-Auto. Optional per-Inv `benzinpreis_euro` und EU-OB-Preise."""
     anlage = Anlage(anlagenname="Test", leistung_kwp=10.0)
@@ -244,6 +245,7 @@ async def _seed_eauto(
     }
     if benzinpreis_param is not None:
         params["benzinpreis_euro"] = benzinpreis_param
+    params.update(extra_params or {})
     db.add(Investition(
         anlage_id=anlage.id, typ="e-auto",
         bezeichnung="Test-EV",
@@ -337,3 +339,38 @@ async def test_roi_response_benzinpreis_hinweis_default_ohne_monatsdaten(db):
         benzinpreis_euro=None, jahr=None, db=db,
     )
     assert result.benzinpreis_hinweis_euro == pytest.approx(1.65)
+
+
+# ── Ein geleertes PHEV-Feld darf die Route nicht sprengen (rapahl, T89667 #253) ──
+#
+# Seit ein geleertes Formularfeld den gespeicherten Wert zurücknimmt, kann in
+# `parameter` ein `""` stehen — vorher konnte es das nicht. Die Route reichte
+# beide PHEV-Werte roh an `berechne_eauto_einsparung` weiter, und
+# `teile_fahrleistung` ruft auf allem, was `is not None` ist, `float()`:
+# `float("")` beendet die Anfrage mit einem 500er. Die Route löst beide Werte
+# jetzt über die SoT-Helper auf.
+
+
+async def test_geleertes_phev_feld_sprengt_die_roi_route_nicht(db):
+    """`elektrischer_fahranteil_prozent: ""` → Route antwortet, statt zu werfen."""
+    anlage_id = await _seed_eauto(db, extra_params={
+        "eigener_verbrauch_l_100km": 6.5,
+        "elektrischer_fahranteil_prozent": "",
+    })
+    result = await get_roi_dashboard(
+        anlage_id=anlage_id, strompreis_cent=None, einspeiseverguetung_cent=None,
+        benzinpreis_euro=None, jahr=None, db=db,
+    )
+    assert _eauto_detail(result)
+
+
+async def test_geleerter_verbrenner_verbrauch_sprengt_die_roi_route_nicht(db):
+    """Dasselbe für `eigener_verbrauch_l_100km` — die zweite rohe Lesestelle."""
+    anlage_id = await _seed_eauto(db, extra_params={
+        "eigener_verbrauch_l_100km": "",
+    })
+    result = await get_roi_dashboard(
+        anlage_id=anlage_id, strompreis_cent=None, einspeiseverguetung_cent=None,
+        benzinpreis_euro=None, jahr=None, db=db,
+    )
+    assert _eauto_detail(result)

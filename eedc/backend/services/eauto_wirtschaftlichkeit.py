@@ -111,8 +111,21 @@ def eigener_verbrauch_l_100km(eauto_parameter: Optional[dict]) -> Optional[float
     return wert if wert and wert > 0 else None
 
 
-def _fahranteil_prozent(eauto_parameter: Optional[dict]) -> Optional[float]:
-    """Gepflegter elektrischer Fahranteil in % — ``None``, wenn nicht gepflegt."""
+def fahranteil_prozent(eauto_parameter: Optional[dict]) -> Optional[float]:
+    """Gepflegter elektrischer Fahranteil in % — ``None``, wenn nicht gepflegt.
+
+    ⚠ **Öffentlich seit rapahl (T89667 #253)**, und der Grund gehört zur
+    Funktion: „nicht gepflegt" hat mehrere Gestalten — der fehlende Schlüssel,
+    ein geleertes Feld (``""``, seit dem Formular-Fix der Rückweg aus einer
+    einmal getroffenen Auswahl) und ein unbrauchbarer Wert aus einem Import.
+    Diese Funktion macht aus allen dreien ``None``.
+
+    Wer stattdessen ``parameter.get(...) is not None`` schreibt, sieht bei den
+    letzten beiden einen *gepflegten* Wert, wo die Rechnung hier ``None``
+    bekommt — die beiden Seiten driften dann auseinander, ohne dass es auffällt.
+    Genau so schwieg der Daten-Checker in dem Fall, für den er gebaut wurde.
+    ``0`` bleibt ein gepflegter Wert und wird **nicht** zu ``None``.
+    """
     if not eauto_parameter:
         return None
     wert = eauto_parameter.get(PARAM_E_AUTO["ELEKTRISCHER_FAHRANTEIL_PROZENT"])
@@ -232,7 +245,7 @@ def fossil_getankte_liter(
             km_gefahren=km,
             fahrverbrauch_kwh=verbrauch.get(inv_id),
             verbrauch_kwh_100km=_verbrauch_kwh_100km(p),
-            anteil_prozent=_fahranteil_prozent(p),
+            anteil_prozent=fahranteil_prozent(p),
         )
         liter += anteil.km_verbrenner / 100 * eigener
     return liter
@@ -357,7 +370,7 @@ def berechne_eauto_ersparnis(
             km_gefahren=km_gefahren,
             fahrverbrauch_kwh=fahrverbrauch_kwh,
             verbrauch_kwh_100km=_verbrauch_kwh_100km(eauto_parameter),
-            anteil_prozent=_fahranteil_prozent(eauto_parameter),
+            anteil_prozent=fahranteil_prozent(eauto_parameter),
         )
         if eigener_l_100km is not None
         else teile_fahrleistung(km_gefahren=km_gefahren)
@@ -564,7 +577,7 @@ def berechne_eauto_ersparnis_periode(
             km_gefahren=gesamt_km,
             fahrverbrauch_kwh=fahrverbrauch_kwh_gesamt,
             verbrauch_kwh_100km=_verbrauch_kwh_100km(eauto_parameter),
-            anteil_prozent=_fahranteil_prozent(eauto_parameter),
+            anteil_prozent=fahranteil_prozent(eauto_parameter),
         )
         if eigener_l_100km is not None
         else teile_fahrleistung(km_gefahren=gesamt_km)
