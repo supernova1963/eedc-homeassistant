@@ -37,6 +37,7 @@ from backend.core.berechnungen import (
     erzeugung_hinter_zaehler_kwh,
     imd_typ_beitrag,
     monatsgewichte_aus_pvgis,
+    relevante_kosten_aus_investitionen,
     speicher_wirkungsgrad,
     vollzyklen as berechne_vollzyklen,
 )
@@ -588,8 +589,16 @@ async def calculate_anlage_sensors(
 
     # Investitions-KPIs berechnen
     investition_gesamt = sum(i.anschaffungskosten_gesamt or 0 for i in investitionen)
-    alternativ_gesamt = sum(i.anschaffungskosten_alternativ or 0 for i in investitionen)
-    relevante_kosten = investition_gesamt - alternativ_gesamt
+    # N-352: über den Layer-SoT, nicht als eigene Form daneben. Hier stand bis
+    # 2026-08-30 `Σ gesamt − Σ alternativ` — **ungeklemmt und anlagenweit**,
+    # wortgleich die Form, die N-136 im Jahresbericht-PDF behoben hat. Der SoT
+    # klemmt **je Position**; trägt eine Position eine teurere Alternative (ein
+    # Verbrenner gegen ein E-Auto ist der Regelfall), zog ihr Überschuss die
+    # Mehrkosten der **anderen** Positionen herunter.
+    # ⚑ DAS TRAF ZWEI AUSGELIEFERTE SENSOREN: `roi_prozent` zu hoch und
+    # `amortisation_jahre` zu kurz (an der Probe gemessen: 7,81 statt 10,42
+    # Jahre). Die Korrektur ist eine **Wertänderung** und als solche gemeldet.
+    relevante_kosten = relevante_kosten_aus_investitionen(investitionen)
     betriebskosten_ges = sum(i.betriebskosten_jahr or 0 for i in investitionen)
     # §8/2: das Gegenstück auf der Ertragsseite. `investitionen` ist bereits
     # `aktiv_jetzt()`-gefiltert (heutiger Zustand), es fehlt nur die Typ-Grenze
