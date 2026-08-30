@@ -7,6 +7,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.0.35] - 2026-08-30 — Eine Auswahl, die sich zurücknehmen lässt
+
+### Fixed
+
+- **Eine einmal getroffene Auswahl ließ sich nie wieder zurücknehmen.** Wer am Wärmepumpen-Gerät den *„Fremdanteil auf den Zählern"* gesetzt hatte, kam **nicht mehr auf „Kein Fremdanteil" zurück** — die Auswahl wurde beim Speichern stillschweigend verworfen, während sich die beiden anderen Werte speichern ließen. ⭐ **Das kostete die Arbeitszahl, und zwar dauerhaft:** Ein gesetzter Fremdanteil ist für eedc die Aussage „Zähler und Nutzen stehen für verschiedene Dinge", also zeigt es statt der Zahl den Grund an. Wer einmal danebengriff — oder die Lagen nur durchprobierte, um sie zu verstehen —, bekam seine Arbeitszahl ohne Eingriff in die Datenbank nicht zurück. **Deine Mengen waren nie betroffen**, nur diese eine Kennzahl. ⚠ **Dieselbe Ursache traf zwei weitere Felder**: die **Kopplung** eines Speichers ließ sich nicht auf *„Automatisch (aus der Zuordnung)"* zurückstellen, und ein versehentlich eingetragener **Verbrenner-Verbrauch** an einem E-Auto machte aus einem reinen Stromer dauerhaft einen Plug-in-Hybrid. Alle drei lassen sich jetzt wieder leeren. Gemeldet von **rapahl** ([simon42 T89667](https://community.simon42.com/t/89667)).
+- **Der Daten-Check schwieg bei einem Plug-in-Hybrid genau dann, wenn er reden müsste.** Stand am Fahrzeug ein **unbrauchbarer** elektrischer Fahranteil — leer geräumt oder aus einem Import als Text —, hielt der Check ihn für gepflegt und meldete nichts, während die Rechnung mangels Zahl auf **100 % elektrisch** fiel: Ersparnis und CO₂-Einsparung fielen zu gut aus, ohne Hinweis. Beide Seiten lesen den Wert jetzt gleich. ⚠ Ein gepflegter Anteil von **0 %** war und bleibt ein Wert und entlastet weiterhin.
+
+---
+
 ## [4.0.34] - 2026-08-29 — Der Tarif kennt die Uhrzeit, und eine Lücke bleibt eine Lücke
 
 ### Added
