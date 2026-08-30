@@ -201,13 +201,19 @@ export default function DokumentationsDialog({ anlage, onClose }: Dokumentations
       zipKey: 'jahresbericht',
       accent: 'text-orange-500',
       optionen: verfuegbareJahre.length > 0 ? (
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-          <label htmlFor="jahresbericht-jahr" className="text-sm text-gray-700 dark:text-gray-300">
+        // ⛔ KEIN `compact`: das rendert den Wrapper als `shrink-0` und den
+        // `<select>` als `w-auto` — er nimmt dann die Breite seiner längsten
+        // Option („Gesamtzeitraum (alle Jahre)") und **weigert sich zu
+        // schrumpfen**. In der Kopfleiste, für die `compact` gedacht ist, war
+        // das egal; in einer Rasterspalte sprengt es die Karte (Gernot,
+        // 30.08.). `min-w-0` am Container, damit die Flex-Zeile schrumpfen darf.
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0">
+          <label htmlFor="jahresbericht-jahr" className="text-sm text-gray-700 dark:text-gray-300 shrink-0">
             Zeitraum:
           </label>
           <Select
             id="jahresbericht-jahr"
-            compact
+            className="truncate"
             value={jahresberichtJahr ?? ''}
             onChange={(e) => setJahresberichtJahr(e.target.value ? parseInt(e.target.value, 10) : null)}
             options={[
@@ -261,13 +267,17 @@ export default function DokumentationsDialog({ anlage, onClose }: Dokumentations
       disabledHint: 'Noch kein Monat erfasst — es gäbe nichts zu berichten. Monatsabschluss unter Cockpit → Monat.',
       optionen: verfuegbareMonate.length > 0 ? (
         <div className="space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-            <label htmlFor="monatsbericht-monat" className="text-sm text-gray-700 dark:text-gray-300">
+          {/* Dieselbe Ursache wie beim Zeitraum darüber — hier fällt sie nur
+              nicht auf, weil die Karte über die volle Breite läuft und die
+              Monatsnamen kurz sind. Trotzdem gleich behandelt: ein Layout, das
+              nur wegen der Textlänge hält, hält beim nächsten Text nicht. */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0">
+            <label htmlFor="monatsbericht-monat" className="text-sm text-gray-700 dark:text-gray-300 shrink-0">
               Monat:
             </label>
             <Select
               id="monatsbericht-monat"
-              compact
+              className="truncate"
               value={monatsberichtRef}
               onChange={(e) => setMonatsberichtRef(e.target.value)}
               options={verfuegbareMonate.map(m => ({

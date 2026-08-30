@@ -214,3 +214,32 @@ describe('ZIP-Modus statt zweier Bedienelemente an derselben Ecke', () => {
     expect(monatsKarte!.textContent).toContain('Community')
   })
 })
+
+/**
+ * Die Optionen dürfen die Karte nicht sprengen (Gernot, 2026-08-30).
+ *
+ * Der Zeitraum-Wähler des Jahresberichts stand über den Kartenrand hinaus:
+ * `Select` mit `compact` rendert den Wrapper als `shrink-0` und das Feld als
+ * `w-auto` — es nimmt die Breite seiner längsten Option
+ * („Gesamtzeitraum (alle Jahre)") und **weigert sich zu schrumpfen**. In der
+ * Kopfleiste, für die `compact` gedacht ist, war das folgenlos; in einer
+ * Rasterspalte nicht.
+ *
+ * ⚠ Pixel misst diese Probe nicht — jsdom hat kein Layout. Sie hält die
+ * **Ursache** fest: In einer Karte steht kein `shrink-0`-Wrapper.
+ */
+describe('Optionen in der Karte sprengen den Rahmen nicht', () => {
+  it('kein Select in einer Karte weigert sich zu schrumpfen', async () => {
+    renderMitProvidern(<DokumentationsDialog anlage={ANLAGE} onClose={() => {}} />)
+    await screen.findByLabelText('Monat:')
+
+    for (const id of ['jahresbericht-jahr', 'monatsbericht-monat']) {
+      const feld = screen.getByLabelText(id === 'jahresbericht-jahr' ? 'Zeitraum:' : 'Monat:')
+      const wrapper = feld.parentElement!
+      expect(wrapper.className, `${id}: Wrapper darf nicht shrink-0 sein`)
+        .not.toContain('shrink-0')
+      // Gegenprobe: das Feld ist wirklich in einer Karte, nicht irgendwo.
+      expect(feld.closest('[data-dokument]')).not.toBeNull()
+    }
+  })
+})
