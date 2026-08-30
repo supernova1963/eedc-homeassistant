@@ -1,4 +1,4 @@
-"""Monatsbericht — EIN Context für zwei Formate (#395 Punkt 4, OB73-gif).
+"""Monatsbericht — der Context des PDF (#395 Punkt 4, OB73-gif).
 
 **Der Melderwunsch, wörtlich:** *„die Ablage der Monatsdaten als PDF im Stile
 der Cockpit Monats Ansicht"*. Konzept ``docs/KONZEPT-MONATSBERICHT.md``
@@ -13,12 +13,17 @@ Grundpreis. Der Fund wurde nie behoben, er ist mit dem zweiten Text weggefallen.
 **Genau das darf nicht wiederkommen**, und diesmal in einem Text, der öffentlich
 gepostet wird.
 
-Die Sicherung ist baulich, nicht disziplinarisch: Dieses Modul erzeugt **einen**
-Context aus fertig formatierten Zeichenketten. PDF-Template und Markdown-Renderer
-laufen beide über **dieselben** ``Abschnitt``/``Zeile``-Objekte und können eine
-Größe deshalb nicht verschieden bilden — sie lesen sie beide fertig.
-``test_monatsbericht.py::test_beide_formate_nennen_dieselben_zahlen`` hält das
-fest.
+Die Sicherung ist baulich, nicht disziplinarisch: Dieses Modul erzeugt den
+Context aus **fertig formatierten Zeichenketten**; das Template schreibt sie
+unverändert hin und rechnet nichts.
+
+⭐ **Seit 2026-08-30 gibt es nur noch EINEN Renderer**, und das ist die stärkere
+Fassung derselben Sicherung. Bis dahin stand daneben ein Markdown-Renderer für
+den Forumspost, gehalten von der Probe „beide Formate, jede Zahl gleich". Mit
+dem Entscheid, das Thema *Teilen* nicht zu verfolgen, ist sein Zweck entfallen
+— und mit ihm die zweite Bildungsstelle, die es zu bewachen galt. Übrig bleibt
+``test_das_template_schreibt_die_werte_unveraendert``: der Renderer darf eine
+Zahl auf dem Weg nicht anfassen.
 
 ## Woher die Werte kommen
 
@@ -834,9 +839,8 @@ async def build_monatsbericht_context(
     *,
     themen: Optional[Iterable[str]] = None,
     geparkte_ids: Iterable[str] = (),
-    mit_identitaet: bool = True,
 ) -> dict:
-    """Context für ``templates/monatsbericht.html`` **und** den Markdown-Renderer.
+    """Context für ``templates/monatsbericht.html``.
 
     Args:
         themen: Auswahl aus :data:`THEMEN`. ``None`` = alle.
@@ -844,11 +848,14 @@ async def build_monatsbericht_context(
             mitschickt (``eedc-park:v4-cockpit-monat``). Leer = vollständiger
             Bericht — das ist der Fall „anderer Browser" und darf **nichts**
             weglassen.
-        mit_identitaet: Anlagenname und Standort ins Dokument. Voreinstellung
-            **an**: der Regelfall ist die eigene Ablage, nicht der Forumspost.
-            ⛔ „Anonymisiert" wird bewusst **nicht** angeboten — ein
-            PV-Monatsbericht ist über Ertragsprofil, Standort und Tarif
-            praktisch eindeutig; der anonyme Weg ist der Community-Hash.
+
+    ⛔ **Anlagenname und Standort stehen immer drin.** Bis 2026-08-30 gab es
+    dafür einen Schalter; seine Begründung war der Forumspost („wer teilt,
+    schaltet ab"). Mit dem Entscheid, das Thema *Teilen* nicht zu verfolgen,
+    ist sie entfallen — der Bericht nennt die Anlage wie jeder andere Bericht
+    dieser Anlage auch. „Anonymisiert" war und bleibt **kein** Angebot: ein
+    PV-Monatsbericht ist über Ertragsprofil, Standort und Tarif praktisch
+    eindeutig; der anonyme Weg ist der Community-Hash.
 
     Raises:
         LookupError: Die Anlage gibt es nicht.
@@ -908,11 +915,10 @@ async def build_monatsbericht_context(
     return {
         "logo": _logo_data_url(),
         "anlage": {
-            "name": anlage.anlagenname if mit_identitaet else "",
-            "standort": standort if mit_identitaet else "",
+            "name": anlage.anlagenname,
+            "standort": standort,
             "leistung_kwp": fmt_einheit(anlage.leistung_kwp, "kWp"),
         },
-        "mit_identitaet": mit_identitaet,
         "zeitraum": {
             "jahr": jahr,
             "monat": monat,

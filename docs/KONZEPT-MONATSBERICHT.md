@@ -1,6 +1,13 @@
 # Konzept — Monatsbericht (#395 Punkt 4, OB73-gif)
 
-> **Status: Stufe 1 GEBAUT (2026-08-30) · Stufe 2 ENTWURF.** Stufe 1 abgenommen von Gernot am
+> **Status: GEBAUT (2026-08-30), Stufe 1 + Stufe 2.**
+>
+> ⛔ **Drei Entscheide vom 30.08. heben Teile der Stufe-1-Abnahme wieder auf** — sie stehen
+> unten in §Stufe 2 §„Was der Dialog-Durchgang zurückgenommen hat" und gelten:
+> **kein Markdown-Format** · **kein Identitäts-Schalter** · **die Optionen stehen in der Karte
+> des Dokuments**. Wer §Abgenommen (Stufe 1) liest, liest den Stand vom Vormittag.
+>
+> *(Alter Statustext:)* **Stufe 1 GEBAUT (2026-08-30) · Stufe 2 ENTWURF.** Stufe 1 abgenommen von Gernot am
 > 30.08. (Sitzung 152), gebaut in Sitzung 153 — sie liefert die **Zahlen**. **Stufe 2 (unten,
 > eigener Abschnitt) liefert die Aufmachung** und wartet auf Freigabe; ihre Richtung ist am
 > 30.08. freigegeben (*„gerne auch ein Dokument, versuchen wir es"*).
@@ -423,3 +430,37 @@ Aufmachungs-Paket gefaltet, würden aus zwei überschaubaren Änderungen eine un
 6. **Gegenrichtung:** Ein Monat **mit** Daten, aber ohne Stundenwerte (kein Tagesprofil, keine
    Peaks) lässt genau diese Abschnitte weg und rechnet die übrigen unverändert.
 7. **Der THEMEN-Spiegel ist gewächtert** — eine Abweichung zwischen Backend und Client meldet rot.
+
+
+## Was der Dialog-Durchgang zurückgenommen hat (Gernot, 30.08., nach dem Sichttest)
+
+Sein Befund am fertigen Dialog: *„Das gefällt mir gar nicht mehr."* Fünf Punkte, dazu ein
+sechster, den die Messung gefunden hat:
+
+| Punkt | Entscheid |
+| --- | --- |
+| **Beta-Kennzeichnung** | weg — und die Feedback-Links mit: **Issue #121 ist CLOSED**, sie führten ins Leere |
+| **Download-Symbol verdeckt** | Das ZIP-Kästchen lag `absolute top-2 right-2` **auf** dem Symbol. Gelöst durch einen **Modus** („Mehrere als ZIP"), nicht durch Verschieben: beide teilen sich die Ecke nie, weil es sie nie gleichzeitig gibt |
+| **Monatsbericht-Optionen nicht zuordenbar** | Sie standen in einem Kasten **unter** allen Karten. ⇒ **Optionen stehen in der Karte des Dokuments** |
+| ⭐ **Und derselbe Fehler am anderen Ende** (nicht gemeldet, gemessen) | Der **Jahresbericht-Zeitraum** stand in einem Kasten **über** allen Karten — dieselbe Fehlzuordnung, gespiegelt. Mit derselben Regel gelöst |
+| **Identitäts-Schalter** | weg. Seine Begründung war der Forumspost („wer teilt, schaltet ab"); mit dem Entscheid gegen das Thema *Teilen* ist sie entfallen. Anlagenname und Standort stehen jetzt **immer** im Bericht |
+| **Markdown-Knöpfe** | weg — **und der ganze Markdown-Weg**: Renderer, `?format=md`, Dateiname-Zweig. Sein Zweck war das Posten; ohne Knöpfe wäre er ohne Aufrufer weitergelaufen (die `communityBlock`-Lage). ⭐ **Mit einem Renderer gibt es die zweite Bildungsstelle nicht mehr, gegen die der Bericht gebaut war (N-7)** — das ist stärker als die Probe, die sie bewachte |
+
+### ⚑ Was mit dem Markdown-Weg NICHT verschwunden ist
+
+**Die Löschung hat eine Bilanz, keinen Sprengsatz:** `test_monatsbericht.py` trug **18 Proben
+vorher und 18 nachher**. Keine ist gestrichen — jede „beide Formate"-Probe ist auf ihre
+**Aussage** umgestellt worden:
+
+* `test_beide_formate_nennen_dieselben_zahlen` → **`test_das_template_schreibt_die_werte_unveraendert`**.
+  Der Renderer darf eine Zahl auf dem Weg nicht anfassen; das gilt für einen genauso wie für zwei.
+* `test_ohne_identitaet_stehen_name_und_standort_nirgends` → **umgedreht** zu
+  `test_der_bericht_nennt_immer_anlage_und_standort`. Ohne sie könnte der Kopf die Angaben
+  verlieren, ohne dass ein Lauf rot wird.
+* Die übrigen vergleichen jetzt das gerenderte Dokument statt zweier Ausgaben.
+
+⚠ **Eine dieser Umstellungen ist im ersten Anlauf misslungen:** Die Zusicherung, dass die
+Aufmachung keine Zahl hinzufügt, verglich die Zahlen des Dokuments **mit den Zahlen des
+Dokuments** — sie konnte per Konstruktion nicht rot werden. Sie liest jetzt die
+**Leisten-Legende** und verlangt, dass dort keine Ziffer steht (der konkrete Fehler des ersten
+Entwurfs). *Eine Probe, die man beim Umstellen nicht sprengt, ist keine Probe.*

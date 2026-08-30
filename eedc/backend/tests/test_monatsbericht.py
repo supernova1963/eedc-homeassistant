@@ -1,17 +1,24 @@
-"""Monatsbericht (#395 Punkt 4, OB73-gif) — die sieben Proben des Konzepts.
+"""Monatsbericht (#395 Punkt 4, OB73-gif) — die Proben des Konzepts.
 
-Konzept: ``docs/KONZEPT-MONATSBERICHT.md`` (abgenommen Gernot, 2026-08-30).
+Konzept: ``docs/KONZEPT-MONATSBERICHT.md``.
 
-Die tragende Probe ist die erste: **beide Formate nennen dieselben Zahlen.**
-Sie ist die Sicherung gegen die Wiederkehr von **N-7** — die zurückgebaute
-Social-Media-Textvorlage trug eine eigene Netto-Ertrag-Kurzformel und ist mit
-dem Text *verschwunden*, statt behoben zu werden. Ein zweiter Renderer mit
-eigener Rechnung wäre derselbe Fehler, diesmal in einem Text fürs Forum.
+Die tragende Probe ist die erste: **das Template schreibt die Werte
+unverändert**. Sie ist der Rest der Sicherung gegen **N-7** — die
+zurückgebaute Social-Media-Textvorlage trug eine eigene
+Netto-Ertrag-Kurzformel und ist mit dem Text *verschwunden*, statt behoben zu
+werden.
 
-Die übrigen sechs halten je eine Entscheidung des Konzepts fest: Themenschalter,
-Identität, deutsche Schreibweise, leerer Monat, Park-Filter und — die
-wichtigste der drei Park-Bedingungen — **ohne mitgeschickte Liste ist der
-Bericht vollständig** (Fall „am Tablet geparkt, am PC erzeugt").
+⭐ **Sie hieß bis 2026-08-30 „beide Formate nennen dieselben Zahlen"** und
+verglich PDF-HTML mit Markdown. Mit dem Entscheid, das Thema *Teilen* nicht zu
+verfolgen, ist der Markdown-Weg entfallen — und damit die zweite
+Bildungsstelle, die sie bewachte. **Die Probe ist nicht gestrichen, sondern auf
+ihre Aussage umgestellt:** Ein Renderer darf eine Zahl auf dem Weg nicht
+anfassen. Das ist die Hälfte, die auch mit einem Format wahr sein muss.
+
+Die übrigen halten je eine Entscheidung fest: Themenschalter, deutsche
+Schreibweise, leerer Monat, Park-Filter und — die wichtigste der drei
+Park-Bedingungen — **ohne mitgeschickte Liste ist der Bericht vollständig**
+(Fall „am Tablet geparkt, am PC erzeugt").
 """
 
 from __future__ import annotations
@@ -31,9 +38,6 @@ from backend.models import (
 from backend.services.pdf.builders.monatsbericht import (
     THEMEN,
     build_monatsbericht_context,
-)
-from backend.services.pdf.builders.monatsbericht_markdown import (
-    render_monatsbericht_markdown,
 )
 from backend.services.pdf.engine import render_html
 
@@ -153,27 +157,40 @@ def _als_text(html: str) -> str:
 # ── Probe 1: die N-7-Sicherung ────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_beide_formate_nennen_dieselben_zahlen(db):
-    """PDF-HTML und Markdown tragen dieselben Zahlen in derselben Reihenfolge.
+async def test_das_template_schreibt_die_werte_unveraendert(db):
+    """Jeder Wert des Contexts steht **zeichengleich** im gerenderten Dokument.
 
-    Rot, sobald ein Format eine Größe anders bildet oder auslässt — die
-    Bedingung, unter der das Konzept den zweiten Renderer überhaupt erlaubt.
+    Der Builder liefert fertig formatierte Zeichenketten; das Template rechnet
+    nichts und formatiert nichts. Rot, sobald jemand im Template ein
+    ``|fmt_…`` einsetzt, rundet oder eine Einheit anhängt — genau das wäre die
+    zweite Bildungsstelle, gegen die dieses Modul gebaut ist (**N-7**).
+
+    ⭐ Diese Probe ist der Rest von „beide Formate nennen dieselben Zahlen":
+    Mit dem Wegfall des Markdown-Renderers gibt es kein zweites Format mehr zu
+    vergleichen — **aber die Aussage, dass der Renderer nichts anfasst, gilt
+    für einen genauso.**
     """
     anlage_id = await _seed(db)
     ctx = await build_monatsbericht_context(db, anlage_id, JAHR, MONAT)
+    text = _als_text(render_html("monatsbericht.html", ctx))
 
-    html = render_html("monatsbericht.html", ctx)
-    md = render_monatsbericht_markdown(ctx)
+    werte = [
+        z.wert for a in ctx["abschnitte"] for z in a.zeilen
+        if z.wert and z.wert != "–"
+    ]
+    assert len(werte) >= 10, "Ohne Werte prüft die Probe nichts"
+    fehlend = [w for w in werte if w not in text]
+    assert not fehlend, f"vom Template verändert oder verschluckt: {fehlend[:5]}"
 
-    assert _zahlen(_als_text(html)) == _zahlen(md)
-    # Und die Probe darf nicht deshalb grün sein, weil beide leer sind.
-    assert len(_zahlen(md)) >= 10
+    # Gegenrichtung: die Zahlen des Dokuments sind GENAU die des Contexts —
+    # sonst wäre die Probe auch grün, wenn das Template eine erfände.
+    assert set(_zahlen(text)) >= set(z for w in werte for z in _zahlen(w))
 
 
 # ── Probe 2: Themenschalter ───────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_abgewaehltes_thema_fehlt_in_beiden_formaten(db):
+async def test_abgewaehltes_thema_fehlt_im_dokument(db):
     """Und die Zahlen der übrigen Abschnitte ändern sich dadurch nicht."""
     anlage_id = await _seed(db)
 
@@ -192,49 +209,43 @@ async def test_abgewaehltes_thema_fehlt_in_beiden_formaten(db):
            [(a.schluessel, [(z.label, z.wert) for z in a.zeilen])
             for a in ohne_finanzen["abschnitte"]]
 
-    md = render_monatsbericht_markdown(ohne_finanzen)
-    assert "Einspeise-Erlös" not in md
-    assert "Einspeise-Erlös" in render_monatsbericht_markdown(voll)
+    text_ohne = _als_text(render_html("monatsbericht.html", ohne_finanzen))
+    assert "Einspeise-Erlös" not in text_ohne
+    assert "Einspeise-Erlös" in _als_text(render_html("monatsbericht.html", voll))
 
 
 # ── Probe 3: Identität ────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_ohne_identitaet_stehen_name_und_standort_nirgends(db):
-    """`mit_identitaet=False` — in **beiden** Formaten, nicht nur im PDF."""
+async def test_der_bericht_nennt_immer_anlage_und_standort(db):
+    """⛔ Hier stand bis 2026-08-30 die Gegenrichtung: `mit_identitaet=False`.
+
+    Der Schalter „Anlagenname und Standort nennen" ist entfallen (Entscheid
+    Gernot) — seine Begründung war der Forumspost, und das Thema *Teilen* wird
+    nicht verfolgt. **Die Probe ist deshalb umgedreht, nicht gestrichen:** Sie
+    hält jetzt fest, dass die Angaben *immer* im Dokument stehen. Ohne sie
+    könnte der Kopf sie verlieren, ohne dass ein Lauf rot wird.
+    """
     anlage_id = await _seed(db)
-    ctx = await build_monatsbericht_context(
-        db, anlage_id, JAHR, MONAT, mit_identitaet=False
-    )
-    md = render_monatsbericht_markdown(ctx)
-    html = render_html("monatsbericht.html", ctx)
+    ctx = await build_monatsbericht_context(db, anlage_id, JAHR, MONAT)
+    text = _als_text(render_html("monatsbericht.html", ctx))
 
-    for text in (md, html):
-        assert "Haus Süd" not in text
-        assert "Berlin" not in text
-        assert "10115" not in text
-
-    # Gegenrichtung — sonst wäre die Probe auch bei einem Bericht grün,
-    # der den Namen generell verloren hat.
-    mit = render_monatsbericht_markdown(
-        await build_monatsbericht_context(db, anlage_id, JAHR, MONAT)
-    )
-    assert "Haus Süd" in mit and "Berlin" in mit
+    assert "Haus Süd" in text
+    assert "Berlin" in text
+    assert "10115" in text
 
 
 # ── Probe 4: deutsche Schreibweise ────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_deutsche_schreibweise_in_beiden_formaten(db):
+async def test_deutsche_schreibweise_im_dokument(db):
     """N-234 erbt sich nicht von selbst — ungeprüft ist ungeprüft.
 
-    Gesucht wird die **englische** Form: eine Dezimalzahl mit Punkt. Sie darf in
-    keinem der beiden Ausgabetexte stehen.
+    Gesucht wird die **englische** Form: eine Dezimalzahl mit Punkt.
     """
     anlage_id = await _seed(db)
     ctx = await build_monatsbericht_context(db, anlage_id, JAHR, MONAT)
 
-    md = render_monatsbericht_markdown(ctx)
     text = _als_text(render_html("monatsbericht.html", ctx))
 
     # `1.100` (Tausenderpunkt) ist deutsch, `1100.5` wäre englisch:
@@ -245,11 +256,10 @@ async def test_deutsche_schreibweise_in_beiden_formaten(db):
     # falsch geschrieben war.
     datum = re.compile(r"\d{2}\.\d{2}\.\d{4}")
     englisch = re.compile(r"\d\.\d{1,2}(?![\d.])|\d\.\d{4,}")
-    for ausgabe, name in ((md, "markdown"), (text, "html")):
-        treffer = englisch.findall(datum.sub(" ", ausgabe))
-        assert not treffer, f"{name}: englische Dezimalpunkte {treffer}"
+    treffer = englisch.findall(datum.sub(" ", text))
+    assert not treffer, f"englische Dezimalpunkte {treffer}"
     # Und mindestens ein Dezimalkomma muss vorkommen, sonst prüft die Probe nichts.
-    assert re.search(r"\d,\d", md)
+    assert re.search(r"\d,\d", text)
 
 
 # ── Probe 5: Monat ohne Daten ─────────────────────────────────────────────
@@ -260,18 +270,16 @@ async def test_monat_ohne_daten_nennt_den_grund_statt_nullen(db):
     anlage_id = await _seed(db, mit_werten=False)
     ctx = await build_monatsbericht_context(db, anlage_id, JAHR, MONAT)
 
-    md = render_monatsbericht_markdown(ctx)
-    html = render_html("monatsbericht.html", ctx)
+    text = _als_text(render_html("monatsbericht.html", ctx))
 
-    assert "liegen zu den gewählten Themen keine Werte vor" in md
-    assert "liegen zu den gewählten Themen keine Werte vor" in html
-    assert "0 kWh" not in md
+    assert "liegen zu den gewählten Themen keine Werte vor" in text
+    assert "0 kWh" not in text
 
 
 # ── Probe 6: Park-Filter ──────────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_geparkte_anzeige_fehlt_in_beiden_formaten(db):
+async def test_geparkte_anzeige_fehlt_im_dokument(db):
     """Ein Park-Zustand blendet aus — er rechnet nicht um.
 
     Deshalb wird nicht nur die Abwesenheit geprüft, sondern auch, dass **jede
@@ -292,9 +300,9 @@ async def test_geparkte_anzeige_fehlt_in_beiden_formaten(db):
            [(a.schluessel, [(z.label, z.wert) for z in a.zeilen])
             for a in geparkt["abschnitte"]]
 
-    for text in (render_monatsbericht_markdown(geparkt),
-                 _als_text(render_html("monatsbericht.html", geparkt))):
-        assert "PV-Erzeugung Vorjahr" not in text
+    assert "PV-Erzeugung Vorjahr" not in _als_text(
+        render_html("monatsbericht.html", geparkt)
+    )
 
 
 # ── Probe 7: der andere Browser ───────────────────────────────────────────
@@ -383,7 +391,7 @@ async def test_pdf_weg_rendert_wirklich(db):
 
 
 @pytest.mark.asyncio
-async def test_route_liefert_beide_formate_und_reicht_die_auswahl_durch(db):
+async def test_route_liefert_das_pdf_und_reicht_die_auswahl_durch(db):
     """Die Route ist der Ort, an dem die Auswahl des Anwenders ankommt.
 
     Sie wird direkt aufgerufen (kein HTTP-Client in dieser Suite) — geprüft
@@ -394,25 +402,25 @@ async def test_route_liefert_beide_formate_und_reicht_die_auswahl_durch(db):
 
     anlage_id = await _seed(db)
 
-    pdf = await monatsbericht(anlage_id, JAHR, MONAT, "pdf", None, None, True, db)
+    pdf = await monatsbericht(anlage_id, JAHR, MONAT, None, None, db)
     assert pdf.media_type == "application/pdf"
     assert pdf.body.startswith(b"%PDF")
+    assert b"monatsbericht_2026-04" in pdf.headers["content-disposition"].encode()
 
-    md = await monatsbericht(anlage_id, JAHR, MONAT, "md", None, None, True, db)
-    assert md.media_type.startswith("text/markdown")
-    text = md.body.decode("utf-8")
-    assert "# Monatsbericht April 2026 — Haus Süd" in text
-    assert "## Finanzen" in text
+    # Dass `themen` und `ohne` WIRKEN und nicht nur in der Signatur stehen,
+    # prüft der Context — im fertigen PDF wäre es nur über eine
+    # Textextraktion zu sehen, die WeasyPrint hier nicht anbietet.
+    from backend.services.pdf.builders.monatsbericht import build_monatsbericht_context
 
-    nur_energie = await monatsbericht(
-        anlage_id, JAHR, MONAT, "md", ["energie"], None, True, db
+    nur_energie = await build_monatsbericht_context(
+        db, anlage_id, JAHR, MONAT, themen=["energie"]
     )
-    assert "## Finanzen" not in nur_energie.body.decode("utf-8")
+    assert {a.thema for a in nur_energie["abschnitte"]} == {"energie"}
 
-    geparkt = await monatsbericht(
-        anlage_id, JAHR, MONAT, "md", None, ["el:bilanz-vergleich"], True, db
+    geparkt = await build_monatsbericht_context(
+        db, anlage_id, JAHR, MONAT, geparkte_ids=["el:bilanz-vergleich"]
     )
-    assert "PV-Erzeugung Vorjahr" not in geparkt.body.decode("utf-8")
+    assert geparkt["weggelassen"] == ["Vergleich mit dem Vorjahresmonat"]
 
 
 @pytest.mark.asyncio
@@ -422,7 +430,7 @@ async def test_route_meldet_unbekannte_anlage_als_404(db):
     from backend.api.routes.dokumentation import monatsbericht
 
     with pytest.raises(HTTPException) as exc:
-        await monatsbericht(999_999, JAHR, MONAT, "pdf", None, None, True, db)
+        await monatsbericht(999_999, JAHR, MONAT, None, None, db)
     assert exc.value.status_code == 404
 
 
@@ -443,13 +451,15 @@ async def test_kein_spezifischer_ertrag_ohne_gemessene_pv(db):
     await db.commit()
 
     ctx = await build_monatsbericht_context(db, anlage_id, JAHR, MONAT)
-    md = render_monatsbericht_markdown(ctx)
+    zeilen = {z.label: z.wert for a in ctx["abschnitte"] for z in a.zeilen}
 
     # Der Bericht ist NICHT leer — sonst prüfte diese Probe das Leer-Gate.
-    assert "Netzbezug | 180 kWh" in md
-    assert "| PV-Erzeugung | – |" in md
-    assert "| Spezifischer Ertrag | – |" in md
-    assert "kWh/kWp" not in md
+    assert zeilen.get("Netzbezug") == "180 kWh"
+    assert zeilen.get("PV-Erzeugung") == "–"
+    assert zeilen.get("Spezifischer Ertrag") == "–"
+    # Gegenrichtung: die Einheit steht nirgends allein da — sonst wäre die
+    # Probe auch grün, wenn der Wert nur anders formatiert wäre.
+    assert "kWh/kWp" not in _als_text(render_html("monatsbericht.html", ctx))
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -484,9 +494,10 @@ async def test_community_ausfall_kostet_den_bericht_nicht(db, monkeypatch):
         "Bei Ausfall darf KEIN Community-Abschnitt entstehen — auch keiner mit Strichen"
     # Und der Rest steht vollständig: beide Formate rendern durch.
     assert len(ctx["abschnitte"]) >= 10
-    html = render_html("monatsbericht.html", ctx)
-    md = render_monatsbericht_markdown(ctx)
-    assert _zahlen(_als_text(html)) == _zahlen(md)
+    text = _als_text(render_html("monatsbericht.html", ctx))
+    assert "Community" not in text
+    # Und der Rest ist wirklich da, nicht nur „nicht leer".
+    assert "Kennzahlen" in text and "Finanzen" in text
 
 
 @pytest.mark.asyncio
@@ -519,13 +530,11 @@ async def test_community_abschnitt_nennt_die_anzahl_der_anlagen(db, monkeypatch)
     text = " ".join(f"{z.label} {z.wert} {z.hinweis or ''}" for z in abschnitt.zeilen)
     assert not re.search(r"\d{2}\.\d{2}\.\d{4}", text)
 
-    # In beiden Formaten, und ohne den Schalter in keinem.
-    md = render_monatsbericht_markdown(ctx)
-    assert "Community-Vergleich" in md
+    # Im Dokument — und ohne den Schalter nicht.
+    assert "Community-Vergleich" in _als_text(render_html("monatsbericht.html", ctx))
     ohne = await build_monatsbericht_context(
         db, anlage_id, JAHR, MONAT, themen=[t for t in THEMEN if t != "community"],
     )
-    assert "Community-Vergleich" not in render_monatsbericht_markdown(ohne)
     assert "Community-Vergleich" not in _als_text(render_html("monatsbericht.html", ohne))
 
 
@@ -589,13 +598,12 @@ def test_tagesprofil_bricht_die_linie_an_der_luecke():
 
 
 @pytest.mark.asyncio
-async def test_die_aufmachung_fuegt_dem_markdown_keine_zahl_hinzu(db):
+async def test_die_aufmachung_fuegt_dem_dokument_keine_zahl_hinzu(db):
     """Kacheln, Leisten und Charts sind Darstellung — keine zweite Zahlenquelle.
 
-    Die Anteils-Leiste trug im ersten Entwurf ihre Werte in der **Legende**;
-    damit nannte das PDF jede dieser Zahlen zweimal und der Markdown-Zwilling
-    einmal. Die Paritäts-Probe hat das gemeldet — diese hier hält fest, dass
-    die Darstellungsfelder überhaupt keine Zahl ins Dokument tragen.
+    Zwei Zusicherungen: jedes Leisten-Segment hat eine **Zeile** (sonst stünde
+    seine Zahl nur im Bild), und die **Legende trägt keine Zahl** (sonst stünde
+    sie zweimal im Dokument — genau der Fehler des ersten Entwurfs).
     """
     anlage_id = await _seed(db)
     ctx = await build_monatsbericht_context(db, anlage_id, JAHR, MONAT)
@@ -611,6 +619,19 @@ async def test_die_aufmachung_fuegt_dem_markdown_keine_zahl_hinzu(db):
             assert any(z.label == b.label for z in a.zeilen), \
                 f"Leisten-Segment '{b.label}' hat keine Zeile — das wäre eine Zahl nur im PDF"
 
+    # ⛔ Und die Legende der Leiste trägt KEINE Zahl.
+    #
+    # Das ist der konkrete Fehler, den der erste Entwurf hatte: Sie druckte
+    # `{{ b.wert }}`, womit jede dieser Zahlen zweimal im Dokument stand.
+    # ⚠ Hier stand zuerst eine Zusicherung, die die Zahlen des Dokuments mit
+    # den Zahlen des Dokuments verglich — sie konnte per Konstruktion nicht rot
+    # werden. Jetzt wird die Legende selbst gelesen.
     html = render_html("monatsbericht.html", ctx)
-    md = render_monatsbericht_markdown(ctx)
-    assert _zahlen(_als_text(html)) == _zahlen(md)
+    legenden = re.findall(
+        r'<ul class="leiste-legende">(.*?)</ul>', html, flags=re.S,
+    )
+    assert legenden, "keine Leiste gerendert — die Probe misst nichts"
+    for legende in legenden:
+        sichtbar = re.sub(r"<[^>]+>", " ", legende)
+        assert not re.search(r"\d", sichtbar), \
+            f"Legende trägt eine Zahl: {sichtbar.strip()[:80]}"

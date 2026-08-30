@@ -141,7 +141,6 @@ async def monatsbericht(
     anlage_id: int,
     jahr: int = Query(..., description="Berichtsjahr"),
     monat: int = Query(..., ge=1, le=12, description="Berichtsmonat (1–12)"),
-    format: str = Query("pdf", pattern="^(pdf|md)$", description="pdf | md"),
     themen: Optional[list[str]] = Query(
         None,
         description="Themenschalter: energie · komponenten · finanzen · co2 · "
@@ -152,17 +151,17 @@ async def monatsbericht(
         description="Park-IDs aus `eedc-park:v4-cockpit-monat`, die der Client "
                     "beim Erzeugen mitschickt. Leer = vollständiger Bericht.",
     ),
-    mit_identitaet: bool = Query(
-        True, description="Anlagenname und Standort ins Dokument"
-    ),
     db: AsyncSession = Depends(get_db),
 ):
-    """Monatsbericht eines **einzelnen** Monats — als PDF oder als Markdown.
+    """Monatsbericht eines **einzelnen** Monats als PDF.
 
-    **Eine Route, zwei Formate, ein Context.** Der Markdown-Weg ist kein
-    zweiter Bericht: er liest dieselben Abschnitte wie das PDF (Begründung
-    N-7, s. Builder-Kopf). Deshalb steht `format` als Parameter und nicht als
-    zweiter Endpunkt — zwei Endpunkte hätten zwei Aufbereitungen eingeladen.
+    ⛔ **Es gibt bewusst nur EIN Format** (Entscheid Gernot, 2026-08-30). Bis
+    dahin lieferte diese Route zusätzlich Markdown, damit man den Bericht in ein
+    Forum posten kann — mit dem Entscheid, das Thema *Teilen* nicht zu
+    verfolgen, ist dieser Zweck entfallen. Der zweite Renderer wäre danach ohne
+    Aufrufer weitergelaufen; und mit **einem** Renderer gibt es die zweite
+    Bildungsstelle gar nicht mehr, gegen die der Bericht gebaut war (**N-7**) —
+    das ist stärker als die Probe, die sie bewachte.
 
     `ohne` trägt die Park-IDs, die im Browser des Anwenders geparkt sind. Das
     Backend führt **keine** Liste dieser IDs (Park-Doktrin: „IDs immer aus dem
@@ -177,16 +176,12 @@ async def monatsbericht(
     from backend.services.pdf.builders.monatsbericht import (
         build_monatsbericht_context,
     )
-    from backend.services.pdf.builders.monatsbericht_markdown import (
-        render_monatsbericht_markdown,
-    )
 
     try:
         context = await build_monatsbericht_context(
             db, anlage_id, jahr, monat,
             themen=themen,
             geparkte_ids=ohne or (),
-            mit_identitaet=mit_identitaet,
         )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
@@ -194,18 +189,6 @@ async def monatsbericht(
     basis = f"monatsbericht_{jahr}-{monat:02d}"
     if context["anlage"]["name"]:
         basis += f"_{context['anlage']['name'].replace(' ', '_')}"
-
-    if format == "md":
-        text = render_monatsbericht_markdown(context)
-        ascii_name, utf8_name = _dateiname(basis, "md")
-        return Response(
-            content=text.encode("utf-8"),
-            media_type="text/markdown; charset=utf-8",
-            headers={
-                "Content-Disposition":
-                    f'inline; filename="{ascii_name}"; filename*=UTF-8\'\'{utf8_name}',
-            },
-        )
 
     try:
         pdf_bytes = render_document("monatsbericht.html", context)

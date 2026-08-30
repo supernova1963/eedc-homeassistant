@@ -448,7 +448,7 @@ Die Infothek ist deine anlagengebundene Wissensbasis (Verträge, Datenblätter, 
 
 ### 4.2 Berichte & Dokumente
 
-Die Kachel **Berichte & Dokumente** öffnet den Dokumente-Dialog der Anlage. Er erzeugt anlagengebundene PDFs — einzeln oder als ZIP, mit Jahr-Auswahl:
+Die Kachel **Berichte & Dokumente** öffnet den Dokumente-Dialog der Anlage. Jede Karte lädt ihr PDF mit einem Klick; **die Einstellungen eines Dokuments stehen in seiner Karte** (Zeitraum beim Jahresbericht, Monat und Themen beim Monatsbericht). Für mehrere Berichte auf einmal gibt es oben rechts **„Mehrere als ZIP"** — dann wählen dieselben Karten aus, statt zu laden.
 
 - **Jahresbericht** (alle KPIs: Energie, Autarkie, Finanzen, CO₂; Diagramme; Monatstabellen; PV-String SOLL/IST).
 - **Anlagendokumentation** (Stammdaten, Versorger, Tarif, Komponenten mit Parametern + verknüpften Infothek-Einträgen).
@@ -465,14 +465,11 @@ Er ist der einzige Bericht mit eigenen Einstellungen — sie stehen direkt unter
 | --- | --- |
 | **Monat** | Genau ein Monat, voreingestellt der neueste erfasste. Eine Spanne über mehrere Monate ist der Jahresbericht darüber. |
 | **Themen** (Energie · Komponenten · Finanzen · CO₂ · Community) | Bestimmen, *was für ein* Bericht entsteht. Voreingestellt sind alle an. |
-| **Anlagenname und Standort nennen** | Voreingestellt **an** — der Regelfall ist die eigene Ablage. Wer den Bericht teilt, schaltet ab. |
 | **Wie in meiner Monatsansicht** | Lässt die Anzeigen weg, die du unter *Cockpit → Monat* geparkt hast. Erscheint nur, wenn dort überhaupt etwas geparkt ist; voreingestellt an. |
 
-Den Bericht gibt es in **zwei Formaten aus denselben Zahlen**: als **PDF** über die Karte (zum
-Ablegen) und als **Text** über die zwei Knöpfe darunter — herunterladen oder direkt in die
-Zwischenablage, zum Einfügen in ein Forum oder eine Nachricht.
+Anlagenname und Standort stehen immer im Dokument, wie in jedem anderen Bericht dieser Anlage.
 
-**Was im PDF grafisch aufbereitet ist:**
+**Was der Bericht grafisch aufbereitet:**
 
 - **Kennzahl-Kacheln** oben — PV-Erzeugung, Eigenverbrauch, Einspeisung, Netzbezug,
   Gesamtverbrauch, Autarkie und die Quoten, wie im Kopf der Monatsansicht.
@@ -483,10 +480,9 @@ Zwischenablage, zum Einfügen in ein Forum oder eine Nachricht.
 - **Typisches Tagesprofil** — die Ø-Leistung je Stunde über den Monat, PV und Verbrauch.
 - **Spitzenstunden** für Netzbezug und Einspeisung, je die fünf höchsten.
 
-> **Der Text enthält dieselben Zahlen, aber keine Diagramme.** Markdown kann keine Bilder
-> tragen; jede Aussage, die ein Diagramm im PDF macht, steht deshalb auch als Zeile — bester
-> Tag, schwächster Tag, Durchschnitt. Wer ein Diagramm in einen Forenbeitrag heben will, nimmt
-> einen Bildschirmausschnitt aus dem PDF.
+> **Jede Aussage steht auch als Zahl.** Was ein Diagramm zeigt — bester Tag, schwächster Tag,
+> Durchschnitt —, steht als Zeile daneben; das Bild ist die Veranschaulichung, nicht die einzige
+> Quelle.
 
 #### Der Community-Vergleich im Bericht
 
@@ -506,8 +502,8 @@ dreihundert.
 > nachreichen — die verglichene Größe bleibt dieselbe.
 
 > **Es gibt bewusst kein „anonymisiert".** Ein PV-Monatsbericht ist über Ertragsprofil,
-> Standort und Tarif praktisch eindeutig; die Zusage wäre nicht zu halten. Stattdessen
-> entscheidest du beim Erzeugen, was drinsteht — und siehst das Ergebnis. Wer wirklich
+> Standort und Tarif praktisch eindeutig; die Zusage wäre nicht zu halten. Über die
+> Themenschalter entscheidest du, was drinsteht — und siehst das Ergebnis. Wer wirklich
 > anonym vergleichen will, nutzt den **Community-Vergleich**: der arbeitet mit einer
 > Kennung statt mit deinem Namen.
 
