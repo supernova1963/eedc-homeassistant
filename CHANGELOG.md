@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Der Zähler-Hinweis nennt seine teuerste Folge** (aus [#395](https://github.com/supernova1963/eedc-homeassistant/issues/395), **OB73-gif**). Meldet der Daten-Check *„N von M Komponenten ohne vollständige kWh-Zähler-Abdeckung"*, zählte er als Folgen bisher „Prognosen-IST, Heatmap, Lernfaktor und Monatsberichte" auf — lauter Auswertungen, die **leer** bleiben. Das klingt entbehrlich, und genau deshalb bleibt der Zähler dann offen. ⭐ **Die teuerste Folge stand nicht dabei:** Der bilanzielle **Hausverbrauch** je Stunde entsteht als *PV + Netzbezug − Einspeisung − Speicher*, und ein fehlender Anteil wird darin als **0** gerechnet. Die Stunde bleibt also nicht leer, sie wird **zu niedrig** — und mit ihr die **Grundlast**, die als Median der Nachtstunden daraus gebildet wird (*Cockpit → Monat*, Monatsbericht, HA-Sensor `eedc_grundlast_kw`). Typisches Bild bei fehlendem Speicher-Zähler: Die Grundlast steht im Sommer nahe null und steigt scheinbar von selbst, je weniger der Akku die Nacht trägt. **Beide Meldungen sagen das jetzt**, ebenso das Handbuch. ⚑ **Nur Speicher und PV sind betroffen** — Wärmepumpe, Wallbox und E-Auto stehen gar nicht in dieser Formel, sie sind Teil des Hausverbrauchs. ⚠ **Es ändert sich keine Zahl**, nur der Text: Wer den Zähler zuordnet, bekommt die richtige Grundlast; wer es nicht tut, weiß ab jetzt, was ihn das kostet.
+
+---
+
 ## [4.0.36] - 2026-08-31 — Ein Monat als Bericht, und drei Zahlen, die wieder zusammenpassen
 
 ### Added

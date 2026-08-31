@@ -53,9 +53,14 @@ Sensor-Ausfall mitten am Tag wird eine Schicht vorher interpoliert
 und die idempotente Re-Aggregation. Insgesamt neun Schichten kümmern sich um
 Tageslücken.
 
-**Was offen bleibt, ist ein SATZ, keine Rechnung:** Die Abdeckungs-Meldung nennt
-als Folgen „Prognosen-IST, Heatmap, Lernfaktor, Monatsberichte" — nicht den zu
-niedrigen Hausverbrauch und die Grundlast. Das ist **N-346**, ein Fund am Text.
+✅ **Der SATZ ist gebaut (31.08.2026, N-346).** Beide Meldungen in
+``daten_checker/energieprofil.py`` nennen die Folge jetzt beim Namen: die
+Komponenten-Meldung den zu niedrigen Hausverbrauch samt Grundlast, die
+Basis-Zähler-Meldung die Grundlast neben dem leeren Verbrauch. **Was das NICHT
+ändert:** die Rechnung darüber. Ein fehlender Batterie-Beitrag zählt weiterhin
+als 0 — der Anwender wird jetzt gewarnt, statt die Zahl für richtig zu halten.
+Die Rechen-Entscheidung gehört zu N-95/N-94 und braucht sie für ALLE
+Fundstellen gemeinsam.
 """
 
 from __future__ import annotations
