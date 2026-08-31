@@ -1323,6 +1323,7 @@ async def get_live_wetter(
         # ── SFML per Auto-Discovery (wenn als aktive Quelle gewählt) ──
         sfml_kwh = None
         sfml_tomorrow = None
+        sfml_uebermorgen = None
         sfml_accuracy = None
         sfml_stundenprofil_heute = None  # 24 Backward-Slots (kWh), für Persistenz
         # Mehrtages-Profile der gewählten Quelle (evcc `forecast` liefert 3 Tage).
@@ -1341,6 +1342,14 @@ async def get_live_wetter(
                 if sfml_disc.gefunden:
                     sfml_kwh = sfml_disc.wert("heute_kwh")
                     sfml_tomorrow = sfml_disc.wert("morgen_kwh")
+                    # Burkard (T89667 #276, 2026-08-31): Ohne diese Zeile konnte
+                    # Übermorgen unter der SFML-Überschrift GAR NICHT aus SFML
+                    # kommen — der Tageswert wurde nie gelesen, der Block hing
+                    # für Tag 2 allein am Stundenprofil. Wer keins hat (oder
+                    # dessen Profil nicht so weit reicht), sah dort immer eedc,
+                    # obwohl der Sensor danebensteht. Der Vergleichs-Endpoint
+                    # liest alle drei Rollen seit jeher (`prognosen.py`).
+                    sfml_uebermorgen = sfml_disc.wert("uebermorgen_kwh")
                     sfml_accuracy = sfml_disc.wert("genauigkeit_30d")
 
                     # Echtes SFML-Stundenprofil bevorzugen (evcc `forecast`,
@@ -1410,6 +1419,12 @@ async def get_live_wetter(
         solcast_p10 = None
         solcast_p90 = None
         solcast_stundenprofil = None
+        # Tageswerte der Folgetage — dasselbe Objekt trägt sie längst mit, der
+        # Live-Pfad hat sie nur nie ausgelesen (der Vergleichs-Endpoint tut es
+        # über `solcast.tage_voraus`). Ohne sie fiel Solcast im Block für BEIDE
+        # Folgetage auf eedc zurück, weil Solcast hier nur HEUTE stündlich
+        # liefert. Gleiche Klasse wie `sfml_uebermorgen` oben.
+        solcast_tage_voraus: list[dict] | None = None
         try:
             from backend.services.solcast_service import get_solcast_forecast
             solcast = await get_solcast_forecast(anlage)
@@ -1417,6 +1432,7 @@ async def get_live_wetter(
                 solcast_kwh = solcast.daily_kwh
                 solcast_p10 = solcast.daily_p10_kwh
                 solcast_p90 = solcast.daily_p90_kwh
+                solcast_tage_voraus = getattr(solcast, "tage_voraus", None)
                 if solcast.hourly_kw and len(solcast.hourly_kw) == 24:
                     solcast_stundenprofil = list(solcast.hourly_kw)
                     if pq.ist_solcast:
@@ -1486,8 +1502,18 @@ async def get_live_wetter(
                 kwh = None
                 if i == 0:
                     kwh = pv_prognose_aktiv
-                elif i == 1 and pq.ist_sfml:
-                    kwh = sfml_tomorrow
+                elif pq.ist_sfml:
+                    # Tageswert der Quelle VOR dem Stundenprofil — er ist die
+                    # Aussage der Quelle selbst; die Profilsumme ist die
+                    # Ableitung daraus.
+                    kwh = sfml_tomorrow if i == 1 else sfml_uebermorgen
+                elif pq.ist_solcast and solcast_tage_voraus:
+                    tag_str = tag_datum.isoformat()
+                    kwh = next(
+                        (t.get("kwh") for t in solcast_tage_voraus
+                         if t.get("datum") == tag_str),
+                        None,
+                    )
                 if kwh is None and slots:
                     kwh = round(sum(slots), 1)
                 vm = nm = None
