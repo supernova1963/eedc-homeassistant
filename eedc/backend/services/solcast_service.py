@@ -370,11 +370,15 @@ async def _fetch_solcast_api(
 
 # ── HA-Sensor-Pfad (Auto-Discovery) ────────────────────────────────────────────
 
-# BJReplay Solcast HA-Integration: Auto-Discovery per Suffix-Pattern.
-# Die Entity-IDs werden je nach HA-Sprache anders generiert
-# (z.B. "prognose_heute" vs. "vorhersage_heute" vs. "forecast_today").
-# Die Suffixe (_heute/_today, _morgen/_tomorrow, _tag_N/_day_N) sind
-# über alle Sprachen stabil — darüber matchen wir.
+# BJReplay Solcast HA-Integration.
+#
+# ⛔ Diese Suffix-Liste war bis zum 31.08.2026 der EINZIGE Weg, und der Satz
+# darüber („über alle Sprachen stabil") war falsch: sie deckt Deutsch und
+# Englisch ab und sonst nichts, und sie bricht ohnehin, sobald HA der Entity-ID
+# etwas ANHÄNGT (Bereich/Gerät/Entität in wählbarer Reihenfolge). Sie ist heute
+# der **letzte Rückfall** der Kaskade in `services/ha_integration_aufloeser.py`;
+# davor stehen `integration_entities()` (Menge) und die `unique_id` (Rolle).
+# Nicht gelöscht — wessen Sensoren heute gefunden werden, merkt nichts.
 _SOLCAST_SUFFIX_MAP = {
     "_heute": "heute",
     "_today": "heute",
@@ -396,6 +400,32 @@ _SOLCAST_SUFFIX_MAP = {
 
 _SOLCAST_PREFIX = "sensor.solcast_pv_forecast_"
 
+# unique_id-Kern → derselbe logische Schlüssel. Am 31.08.2026 an einer echten
+# Solcast-Installation GEMESSEN: die Integration vergibt die unique_id **ohne**
+# Config-Entry-Präfix (`total_kwh_forecast_today`), anders als SFML. Sie ist
+# sprachunabhängig und übersteht jede Umbenennung.
+_SOLCAST_UNIQUE_KERNE: dict[str, str] = {
+    "total_kwh_forecast_today": "heute",
+    "total_kwh_forecast_tomorrow": "morgen",
+    "total_kwh_forecast_d3": "tag_3",
+    "total_kwh_forecast_d4": "tag_4",
+    "total_kwh_forecast_d5": "tag_5",
+    "total_kwh_forecast_d6": "tag_6",
+    "total_kwh_forecast_d7": "tag_7",
+}
+
+# Normalisierter Anzeigename → Schlüssel. Zweiter Rückfall, falls die
+# Entity-Registry nicht lesbar ist.
+_SOLCAST_NAMENS_KERNE: dict[str, str] = {
+    "prognose_heute": "heute", "forecast_today": "heute",
+    "prognose_morgen": "morgen", "forecast_tomorrow": "morgen",
+    "prognose_tag_3": "tag_3", "forecast_day_3": "tag_3",
+    "prognose_tag_4": "tag_4", "forecast_day_4": "tag_4",
+    "prognose_tag_5": "tag_5", "forecast_day_5": "tag_5",
+    "prognose_tag_6": "tag_6", "forecast_day_6": "tag_6",
+    "prognose_tag_7": "tag_7", "forecast_day_7": "tag_7",
+}
+
 # Cache für aufgelöste Entity-IDs (überlebt Server-Neustart nicht, aber das ist ok)
 _resolved_entities: dict[str, str] = {}
 _resolved_ts: float = 0.0
@@ -404,16 +434,24 @@ _RESOLVE_TTL = 3600  # 1 Stunde — Entity-IDs ändern sich quasi nie
 
 async def _resolve_solcast_entities() -> dict[str, str]:
     """
-    Findet Solcast-Entities über /api/states + Suffix-Pattern.
+    Findet die Solcast-Tages-Entities — über die Integration, nicht über Namen.
 
-    Sucht alle Entities mit Prefix 'sensor.solcast_pv_forecast_' und
-    matcht deren Suffix gegen bekannte Tages-Patterns (_heute/_today,
-    _morgen/_tomorrow, _tag_N/_day_N).
+    Kaskade (SoT: ``services/ha_integration_aufloeser.py``):
+    ``integration_entities('solcast_solar')`` für die **Menge**, die
+    ``unique_id`` aus der Entity-Registry für die **Rolle**, danach der
+    Anzeigename und zuletzt das alte Suffix-Muster.
 
-    Robust gegenüber:
-    - HA-Spracheinstellungen (deutsch/englisch/etc.)
-    - Umbenennungen durch BJReplay-Updates
-    - unique_id-Änderungen in HA
+    ⛔ **Der Docstring behauptete bis zum 31.08.2026 das Gegenteil** — er nannte
+    das Verfahren „robust gegenüber HA-Spracheinstellungen" und ausdrücklich
+    „robust gegenüber unique_id-Änderungen in HA", und beides trug nicht: Die
+    Suffix-Liste kennt genau zwei Sprachen, und die ``unique_id`` ist gerade die
+    Größe, die sich **nicht** ändert, wenn jemand seine Entität umbenennt oder
+    HA das ID-Format umstellt. Die Vermeidung war die teurere Wahl; sie ist
+    hiermit umgedreht und die alte Erkennung als Rückfall behalten.
+
+    ⚑ **Zweiter Turm aufgelöst:** Dies war die *zweite* eigene Solcast-Erkennung
+    neben ``services/prognose_discovery.py``. Beide laufen jetzt über denselben
+    Auflöser; unterschiedlich bleiben nur die logischen Schlüssel.
 
     Returns:
         Dict logischer_name → entity_id, z.B. {"heute": "sensor.solcast_pv_forecast_prognose_heute"}
@@ -441,32 +479,45 @@ async def _resolve_solcast_entities() -> dict[str, str]:
             if response.status_code != 200:
                 return {}
 
-            resolved: dict[str, str] = {}
+            # Vorfilter: nur Tages-Total-Kandidaten. Er bleibt stehen, weil die
+            # LETZTE Stufe der Kaskade weiterhin am Entity-ID-Suffix matcht —
+            # und dort endet `..._prognose_verbleibende_leistung_heute`
+            # ebenfalls auf `_heute`. Ohne den Filter würde der Rest-Sensor als
+            # Tages-Total durchgehen. Für die `unique_id`-Stufe ist er
+            # überflüssig, aber harmlos: alle sieben Tageswerte tragen kWh.
+            kandidaten = []
             for item in response.json():
                 eid = item.get("entity_id", "")
-                if not eid.startswith(_SOLCAST_PREFIX):
-                    continue
-                # Nur Tages-Total-Sensoren (kWh), keine Leistung/Zeitpunkte/Verbleibend
                 unit = (item.get("attributes") or {}).get("unit_of_measurement", "")
                 if unit != "kWh":
                     continue
-                # "verbleibend/remaining" ist Restleistung, nicht Tages-Total
                 if "verbleibend" in eid or "remaining" in eid:
                     continue
-                # Suffix matchen (längste zuerst um _tag_3 vor _3 zu priorisieren)
-                for suffix, key in sorted(
+                kandidaten.append(item)
+
+            from backend.services.ha_integration_aufloeser import loese_integration_auf
+
+            aufl = await loese_integration_auf(
+                domain="solcast_solar",
+                praefixe=[_SOLCAST_PREFIX],
+                unique_kerne=_SOLCAST_UNIQUE_KERNE,
+                namens_kerne=_SOLCAST_NAMENS_KERNE,
+                muster=sorted(
                     _SOLCAST_SUFFIX_MAP.items(), key=lambda x: -len(x[0])
-                ):
-                    if eid.endswith(suffix) and key not in resolved:
-                        resolved[key] = eid
-                        break
+                ),
+                states=kandidaten,
+            )
+            resolved: dict[str, str] = {
+                key: tr.entity_id for key, tr in aufl.treffer.items()
+            }
 
             if resolved:
                 _resolved_entities = resolved
                 _resolved_ts = now
                 logger.info(
                     f"Solcast Entity-IDs aufgelöst: {len(resolved)}/7 "
-                    f"(z.B. heute={resolved.get('heute', '?')})"
+                    f"(Menge: {aufl.menge_quelle}, Rolle: {aufl.rolle_quelle}, "
+                    f"z.B. heute={resolved.get('heute', '?')})"
                 )
 
             return resolved

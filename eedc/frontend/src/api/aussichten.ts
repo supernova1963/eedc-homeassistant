@@ -351,10 +351,21 @@ export interface PrognoseQuellenStatus {
     entity_id: string | null
     wert: number | null
     wesentlich: boolean
+    /** Welche Stufe der Kaskade die Rolle fand: unique_id · name · muster. */
+    stufe: 'unique_id' | 'name' | 'muster' | null
   }>
   anzahl_gefunden: number
   anzahl_gesamt: number
   fehlend_wesentlich: string[]
+  /**
+   * Woher die Entitäten der Integration stammen. `integration_entities` = HA hat
+   * sie selbst benannt; `praefix` = HA hat die Auskunft nicht gegeben, es gilt
+   * wieder die alte, sprachabhängige Namensliste. Der Unterschied entscheidet,
+   * welchen Rat ein Anwender bekommt.
+   */
+  menge_quelle: 'integration_entities' | 'praefix'
+  rolle_quelle: 'unique_id' | 'name' | 'muster'
+  anzahl_entities: number
 }
 
 export interface GenauigkeitsEintrag {
