@@ -1,11 +1,208 @@
 # Was ist neu
 
-> **Stand:** August 2026 (v4.0.35)
+> **Stand:** August 2026 (v4.0.35) — der Abschnitt ganz oben gilt der **kommenden** Version und trägt ihre Nummer, sobald sie feststeht.
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## Unveröffentlicht — kommt mit der nächsten Version
+
+**Ein Monat als Bericht**
+
+eedc kannte vier PDF-Berichte — Jahresbericht, Finanzbericht, Infothek-Übersicht,
+Anlagendokumentation — und **keiner ließ sich auf einen Monat stellen**. Wer die Zahlen
+eines einzelnen Monats ablegen oder weitergeben wollte, hatte dafür keinen Weg.
+
+Unter *Einstellungen → Berichte & Dokumente* steht jetzt der **Monatsbericht**, und er
+sieht aus wie deine Monatsansicht: Kennzahl-Kacheln, Anteils-Leisten für die
+PV-Verteilung und die Kategorien, ein **Verlaufs-Diagramm** mit einem Balken je Tag,
+das **typische Tagesprofil** über 24 Stunden und die **Spitzenstunden** für Netzbezug
+und Einspeisung. Dazu Vorjahresvergleich, Prognose, Grundlast, Speicher, Wärmepumpe,
+E-Mobilität, Balkonkraftwerk, Sonstiges, Finanzen und CO₂.
+
+⭐ **Mit Community-Vergleich:** Deine Werte stehen dem Median aller Anlagen gegenüber,
+die ihre Zahlen für **denselben Monat** geteilt haben — samt der Angabe, gegen wie viele
+Anlagen verglichen wurde.
+
+**Du entscheidest beim Erzeugen, was drinsteht:** genau ein Monat (voreingestellt der
+neueste erfasste) und fünf Themenschalter — Energie, Komponenten, Finanzen, CO₂ und
+Community.
+
+⭐ **Und er kann aussehen wie *deine* Monatsansicht.** Hast du dort Anzeigen geparkt,
+bietet der Dialog an, sie wegzulassen; der Schalter erscheint nur, wenn wirklich etwas
+geparkt ist, und was er weggelassen hat, steht am Ende des Dokuments.
+
+⚠ **Die geparkte Auswahl liegt in deinem Browser, nicht in der Anlage.** Wer am Tablet
+parkt und am PC den Bericht zieht, bekommt dort den vollständigen Bericht.
+
+⚠ **Tage ohne gemessene Erzeugung bekommen keinen Balken**, auch keinen der Höhe null —
+eine Null-Säule neben echten Werten würde behaupten, an diesem Tag sei nichts erzeugt
+worden. Wie viele Tage gemessen wurden, steht als Zeile daneben.
+
+⚑ **Ist der Community-Server nicht erreichbar, entfällt allein dieser Abschnitt.** Der
+übrige Bericht entsteht vollständig — ohne Gedankenstriche und ohne Fehlermeldung.
+
+⛔ **Es gibt bewusst kein „anonymisiert".** Ein PV-Monatsbericht ist über Ertragsprofil,
+Standort und Tarif praktisch eindeutig; diese Zusage wäre nicht zu halten. Wer anonym
+vergleichen will, nutzt weiterhin den Community-Vergleich mit seiner Kennung.
+
+Gewünscht von **OB73-gif**.
+
+**Drei Zahlen im Live-Cockpit, die sich nicht addierten**
+
+Im Block *Solar-Aussicht* standen „heute erwartet", „verbleibend" und der bereits
+gemessene Ertrag nebeneinander — und ergaben zusammen nicht die Kopfzahl. Bei einem
+Melder waren es 6,9 kWh gemessen plus 9,0 kWh verbleibend gegen 28,7 kWh erwartet, bei
+einem zweiten 23,5 kWh erzeugt gegen eine Kopfzahl von 17,6 kWh.
+
+**Betrifft dich das?** Nur, wenn du als Prognosequelle **Solcast oder SFML** eingestellt
+hast. Dort folgte der Tageswert deiner Wahl, während „verbleibend" und der nachgeführte
+Wert immer aus der eedc-eigenen Prognose kamen: drei Zahlen aus zwei Rechenwegen.
+
+**Jetzt stammen alle Zahlen des Blocks aus derselben Quelle** — auch Rest, nachgeführter
+Tageswert und die Vor-/Nachmittagsaufteilung. Damit gilt wieder *bisher gemessen + Rest
+= Tageswert*, eine Bilanz, die du nachrechnen kannst.
+
+⚑ **Die Kopfzahl „Heute" ist der nachgeführte Wert**; die ursprüngliche Tagesprognose
+steht klein daneben — an ihr wird morgens geplant und abends bewertet.
+
+⚠ **Deckt deine Quelle einen Tag nicht ab, steht „eedc" dabei**, statt still eine fremde
+Zahl unter ihrer Überschrift zu zeigen. **Liefert sie gar kein Stundenprofil, gibt es
+keinen Rest** — ihn aus der Kurvenform einer anderen Quelle zu bilden wäre genau die
+Vermischung, die hier verschwindet.
+
+⚑ **Was der Bildschirm zeigt, geht bei Solcast/SFML ab jetzt bewusst vom HA-Sensor ab.**
+Die MQTT-/HA-Prognosesensoren tragen weiterhin **immer** die eedc-eigene Prognose — Solcast
+und SFML liegen über ihre eigene Home-Assistant-Integration ohnehin nativ dort, ein zweiter
+Export wäre eine zweite Stelle, an der Zahlen auseinanderlaufen können. Die Sensor-Referenz
+sagt das jetzt ausdrücklich. **An den Sensorwerten selbst ändert sich nichts.**
+
+⚠ **Wer die eedc-Standardquelle nutzt, sieht keine einzige veränderte Zahl.**
+
+**Was du tun musst:** Nichts. Deine Daten sind unberührt, es ändert sich allein, welche
+Zahlen der Block nebeneinanderstellt.
+
+Gemeldet von **Burkard** und **rapahl**, am selben Tag und aus entgegengesetzter Richtung.
+
+**Deine Prognose-Sensoren werden gefunden — auch auf Englisch**
+
+Wer Home Assistant auf **Englisch** eingerichtet hat, dessen SFML- oder Solcast-Entitäten
+heißen nicht so, wie eedc sie suchte: Die Erkennung lief über eine Liste deutscher
+Namensteile. Ein Melder hatte sechs Entitäten namens `sensor.none_…` — eedc fand **null**
+davon und sagte es nicht einmal. Er half sich mit sechs Vorlagen-Sensoren, die seine
+eigenen Werte unter den gesuchten deutschen Namen spiegeln.
+
+**Jetzt fragt eedc Home Assistant, welche Entitäten zu der Integration gehören**, und
+erkennt ihre Rolle an der internen Kennung, die die Integration selbst vergibt. Beides ist
+unabhängig davon, in welcher Sprache du eingerichtet hast, wie deine Entitäten heißen und
+ob du sie später umbenannt hast.
+
+⚑ **Was eedc gefunden hat, steht unter *Einstellungen → Stammdaten* direkt unter der
+Quellenwahl** — Rolle für Rolle, samt der Angabe, auf welchem Weg gesucht wurde.
+
+**Was du tun musst:** Nichts, wenn bisher alles stimmte — es werden dieselben Sensoren
+gefunden wie zuvor, zusätzlich die, die anders heißen. Wer sich mit Vorlagen-Sensoren
+beholfen hat, kann sie nach dem Update abbauen; sieh vorher unter *Stammdaten* nach, dass
+dort die Rollen als gefunden stehen.
+
+Gemeldet von **Burkard**.
+
+**ROI und Amortisation: zwei Sensoren springen einmalig**
+
+Der Jahresbericht und zwei Home-Assistant-Sensoren rechneten die Mehrkosten deiner Anlage
+als *Summe aller Anschaffungen minus Summe aller Alternativen* — über die ganze Anlage und
+**ohne Untergrenze**.
+
+**Betrifft dich das?** Ja, wenn du mindestens eine Komponente mit einer **teureren**
+Alternative pflegst. Der häufigste Fall ist ein E-Auto, dem ein teurerer Verbrenner
+gegenübersteht. Dessen Überschuss zog die Mehrkosten **aller anderen** Positionen mit
+herunter: Der Nenner wurde zu klein, Rendite und Amortisationsfortschritt fielen zu
+günstig aus.
+
+⭐ *Cockpit → Übersicht*, *Auswertungen → ROI*, die Aussichten und der Wallbox-Hub rechnen
+diese Größe längst richtig — sie klemmen je Position bei null. Jahresbericht und Sensoren
+waren die einzigen Orte mit einer eigenen Vorschrift.
+
+⚠ **Die beiden Sensoren *ROI* und *Amortisation* springen deshalb einmalig:** Die
+Amortisation wird länger, der ROI kleiner. In einem gerechneten Beispiel 7,8 statt 10,4
+Jahre. **Die neue Zahl ist die richtige.** Weil Home Assistant seine Langzeitstatistik
+nicht rückwirkend neu rechnet, bekommt die Kurve an dieser Stelle einen einmaligen Knick.
+
+**Was du tun musst:** Nichts. Deine Daten ändern sich nicht, nur die Auswertung. Wer keine
+Alternativkosten pflegt oder überall günstigere, merkt gar nichts.
+
+**Der gepflegte PV-Anteil der Wärmepumpe wirkt jetzt auch in der Prognose**
+
+Unter *Cockpit → Aussicht* schätzt eedc den Eigenverbrauch aus einem Modell, solange keine
+eigene Historie vorliegt — und rechnete dabei mit einem festen Wert, statt das Feld
+*„PV-Anteil (%)"* an deiner Wärmepumpe zu lesen.
+
+**Betrifft dich das?** Nur, wenn du eine Wärmepumpe erfasst hast und dort einen eigenen
+Anteil gepflegt hast, aber noch keine vollständige PV-Bilanz vorliegt. Wer einen
+niedrigeren Anteil eingetragen hatte, sah trotzdem eine zu optimistische
+Eigenverbrauchs-Ersparnis und einen zu hohen Netto-Ertrag.
+
+⭐ **Der Wert bedeutet jetzt, was am Feld steht.** Trägst du 30 % ein, deckt die Prognose
+übers Jahr 30 % des Wärmepumpen-Stroms aus PV — vorher waren es rund 38 %.
+
+⚑ **Die jahreszeitliche Verteilung bleibt erhalten**, und das ist der Punkt: Im Januar
+zieht eine Wärmepumpe am meisten, während das Dach am wenigsten liefert — der Anteil liegt
+dort also deutlich unter dem Jahresmittel und im Sommer darüber.
+
+**Was du tun musst:** Nichts. Sobald eigene Monatswerte vorliegen, rechnet eedc ohnehin mit
+den gemessenen Quoten.
+
+**Vier Hinweise sagen jetzt die Wahrheit über sich selbst**
+
+Kein Rechenweg war falsch — aber zwei der vier rieten zu einer Änderung, die niemand
+braucht:
+
+* Ein zugeordneter Kombi-Sensor **„Netz (±)"** galt als *„wirkungslos, wird ignoriert"*,
+  sobald daneben die getrennten Felder für Einspeisung und Netzbezug einen Eintrag trugen
+  — auch wenn dort **nie eine Nachricht ankam**. Ignoriert wurde er nie. Jetzt entscheidet
+  auch der Hinweis den **Messwert**, nicht den Eintrag.
+* Derselbe Preis-Sensor am dynamischen Stromtarif **und** am Ø-Ladepreis des Speichers galt
+  als *„Doppelzählung, nur einem Feld zuordnen"* — ein Rat, der eine richtige Zuordnung
+  entfernt hätte. Ein Preis wird nicht summiert; die Warnung gilt jetzt nur noch für
+  **Mengen** wie Kilowattstunden und Kilometer.
+* *„Ø Ladepreis fehlt"* sagt jetzt, **welcher** gemeint ist. Es gibt zwei Größen mit fast
+  gleichem Namen: die Annahme aus den Stammdaten, aus der Prognose und ROI rechnen, und den
+  gemessenen Monatswert. Wer den Sensor zugeordnet hatte und den Wert danebenstehen sah,
+  las die Meldung als Widerspruch.
+* Ein Satz neben einer Auswahlliste nannte nur den Zustand („ist bereits zugeordnet").
+  Daneben liest sich das als Aufforderung, etwas zu tun — er sagt jetzt, dass nichts zu tun
+  ist.
+
+Gemeldet von **rapahl**.
+
+**Die PDF-Berichte rechnen und schreiben wie der Rest der App**
+
+Finanzbericht und Anlagendokumentation schrieben ihre Zahlen **englisch**: „7.9 Jahre",
+„12.32 kWp", „10.0 kWh" in einem ausgelieferten Dokument. Der Jahresbericht machte es von
+jeher deutsch, seine Formatierung lag aber in seiner eigenen Vorlage und war für die
+anderen Berichte gar nicht erreichbar. Alle vier nehmen sie jetzt aus **einer** Quelle.
+
+⚠ **Eine Ausnahme bleibt bewusst stehen:** Die Koordinaten in der Anlagendokumentation
+behalten den Dezimalpunkt. Sie sind dort kein Messwert zum Lesen, sondern ein Wert zum
+Weitergeben — mit Komma ließen sie sich weder in eine Karte noch in ein Formular
+übernehmen.
+
+**Der Dokumente-Dialog räumt auf**
+
+Die Einstellungen eines Dokuments standen bisher **außerhalb** seiner Karte: der
+Jahresbericht-Zeitraum in einem Kasten über allen Karten, die Monatsbericht-Optionen in
+einem Kasten darunter. Beide sahen aus, als gälten sie für alles. **Jetzt stehen sie in
+der Karte, die sie steuern.**
+
+Dazu: Das Auswahl-Kästchen fürs Sammel-ZIP lag genau auf dem Download-Symbol und verdeckte
+es. Es gibt jetzt oben rechts einen Schalter **„Mehrere als ZIP"**, und im Sammel-Modus
+wählen dieselben Karten aus, statt zu laden. Die Beta-Kennzeichnung an Anlagendokumentation
+und Finanzbericht ist entfallen, ebenso der Feedback-Link auf ein inzwischen geschlossenes
+Issue. Und der Zeitraum-Wähler passt wieder in seine Karte, statt über den Rand zu stehen.
 
 ---
 
@@ -5577,6 +5774,8 @@ Der Setup-Wizard beim ersten Start führt in neuer Optik durch Anlage, Tarif, PV
 ### Was sich für dich ändert
 
 - **Ein Wert überall:** Die PV-Tagesprognose (heute, Rest heute, morgen/übermorgen, Vor-/Nachmittag, Stundenprofil) kommt jetzt aus **einem** Rechenweg und ist auf allen Sichten identisch — Cockpit/Live, Aussicht, Kurzfrist-Karte, Auswertungen, die „eedc"-Spalte im Prognosen-Vergleich **und** die HA-/MQTT-Sensoren. Der Wert aktualisiert sich über den Tag (er „rollt" mit dem Wetter mit), aber überall gleich.
+
+  > ⚠ **Nachträglich richtiggestellt (August 2026):** Der Satz gilt für die **eedc-eigene** Prognose — das ist die Standardquelle, und dort stimmt er unverändert. Hast du **Solcast oder SFML** als Quelle eingestellt, gilt er nicht: Die HA-/MQTT-Sensoren trugen schon damals **immer** die eedc-Prognose, nie Solcast oder SFML. Das ist Absicht, denn beide liegen über ihre eigene Home-Assistant-Integration ohnehin nativ dort. Aufgefallen ist es lange nicht, weil bis vor Kurzem auch auf dem Bildschirm nur ein **Teil** der Zahlen der gewählten Quelle folgte. Seit der Live-Block vollständig ihr folgt, gehen Bildschirm und Sensor bei diesen beiden Quellen sichtbar auseinander — nachzulesen im Abschnitt „Drei Zahlen im Live-Cockpit, die sich nicht addierten".
 - **Mehrere Dachflächen genauer:** Bei Ost/West- oder Mehrfach-Ausrichtung wird jede Fläche getrennt gerechnet und dann summiert — der „heute"-Wert kann sich dadurch leicht von früher unterscheiden (genauer).
 - **MQTT „PV-Prognose heute":** trägt jetzt den vollen Tagesprognose-Wert (wie die App). Wer den verbleibenden Rest braucht, nutzt „PV-Prognose Rest heute".
 - **Genauigkeits-Tagesabschluss stabiler:** Der Vergleich Prognose↔IST nutzt den fertigen Tageswert (nach Sonnenuntergang festgeschrieben) statt eines Zwischenstands vom Nachmittag.
