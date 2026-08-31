@@ -11,6 +11,12 @@ Reihenfolge im Sensor-Mapping. Fünf Stellen im Baum behaupteten dabei
 **Die wichtigste Prüfung ist die erste:** bei genau einem Speicher — dem
 Normalfall — muss die Umstellung ein **No-op** sein. Ohne diese Zusicherung
 wäre sie vor einem Release nicht vertretbar.
+
+Schwesterdatei: ``test_soc_nur_ein_speicher_geraetetausch.py`` — sie prüft den
+**Migrations-Melder** zu genau dieser Umstellung (die Daten-Checker-Kategorie
+``SOC_NUR_EIN_SPEICHER``, die Tage aus der Zeit *vor* dem hier beschriebenen
+Bau findet) und die Grenze, an der er schweigen muss: Tage vor einem
+Geräte-Wechsel sind kein Alt-Bestand, an ihnen gab es nur einen Speicher.
 """
 
 from __future__ import annotations
