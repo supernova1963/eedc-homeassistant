@@ -427,7 +427,11 @@ Direkter API-Aufruf für Standalone-Nutzer ohne HA-Integration. Konfiguration in
 
 ## 8a. eedc-PV-Prognose nach HA exportieren (MQTT / HA-Sensoren)
 
-eedc **exportiert** zusätzlich die eigene PV-Prognose als Sensoren (immer die **eedc**-Quelle, nie Solcast/SFML — die liegen via eigene HA-Integration bereits in HA). Alle Werte stammen aus dem **Prognose-Kanon** und sind damit identisch mit der App-Anzeige und der „eedc"-Spalte im Vergleich. Einrichtung: [Einstellungen → Integration → MQTT-Export](HANDBUCH_EINSTELLUNGEN.md#63-mqtt-export).
+eedc **exportiert** zusätzlich die eigene PV-Prognose als Sensoren (immer die **eedc**-Quelle, nie Solcast/SFML — die liegen via eigene HA-Integration bereits in HA). Alle Werte stammen aus dem **Prognose-Kanon** und sind damit identisch mit der „eedc"-Spalte im Vergleich.
+
+> ⚠ **Hast du Solcast oder SFML als Prognosequelle gewählt, zeigt *Cockpit → Live* andere Zahlen als diese Sensoren — und das ist Absicht.** Der Block auf dem Bildschirm folgt durchgehend **deiner gewählten Quelle**, damit „bisher erzeugt + verbleibend = heute" wieder aufgeht. Diese Sensoren tragen dagegen weiterhin die **eedc-eigene** Prognose, denn die Solcast-/SFML-Werte liegen über deren eigene HA-Integration ohnehin schon in Home Assistant — ein zweiter Export derselben Zahl wäre nur eine zweite Stelle, an der sie driften kann. Mit der Standard-Quelle (eedc) zeigen beide dieselbe Zahl.
+
+Einrichtung: [Einstellungen → Integration → MQTT-Export](HANDBUCH_EINSTELLUNGEN.md#63-mqtt-export).
 
 | Sensor / Schlüssel | Bedeutung |
 |---|---|
