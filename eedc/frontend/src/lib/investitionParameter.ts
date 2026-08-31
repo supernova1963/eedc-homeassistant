@@ -461,6 +461,39 @@ export function aufgeloesteSpeicherKopplung(parameter: unknown, hatZuordnung: bo
   return hatZuordnung ? 'dc' : 'ac'
 }
 
+/**
+ * Ab welchem Ladestand gilt **dieser** Speicher als leer?
+ *
+ * Client-Spiegel von `core/berechnungen/speicher_potential.py::
+ * leer_schwelle_prozent` — dort steht die Herleitung samt ihrer Annahme. Er
+ * existiert aus demselben Grund wie {@link aufgeloesteSpeicherKopplung}
+ * darüber: Das Formular **zeigt** die Ableitung, bevor eine Antwort vorliegt.
+ * Rechnende Pfade lesen ihn nicht — die Zahl, die eine Kaufentscheidung trägt,
+ * kommt weiterhin aus `/investitionen/{id}/speicher-potential`.
+ *
+ * ⚠ **Die Annahme, und sie gehört an die Anzeige:** Die Ableitung unterstellt,
+ * die gesamte Reserve liege **unten**. `nutzbare_kapazitaet_kwh` meint aber
+ * laut Vertrag den ganzen fahrbaren SoC-Hub — wer zusätzlich eine obere
+ * Ladegrenze fährt (10/90), trägt sie dort mit ein, und die abgeleitete
+ * Untergrenze fällt dann zu hoch aus. Deshalb nennt das Formular die Annahme
+ * mit, statt die Zahl allein hinzuschreiben (cbrosius, #379, 30.08.2026).
+ */
+export const SOC_LEER_PROZENT = 5.0
+export const SOC_LEER_MAX_PROZENT = 50.0
+export const SOC_LEER_TOLERANZ_PP = 3.0
+
+export function leerSchwelleProzent(
+  kapazitaetBruttoKwh: number | null | undefined,
+  nutzbareKapazitaetKwh: number | null | undefined,
+): number {
+  if (!kapazitaetBruttoKwh || kapazitaetBruttoKwh <= 0) return SOC_LEER_PROZENT
+  if (!nutzbareKapazitaetKwh || nutzbareKapazitaetKwh <= 0) return SOC_LEER_PROZENT
+  if (nutzbareKapazitaetKwh >= kapazitaetBruttoKwh) return SOC_LEER_PROZENT
+  const abgeleitet = (1 - nutzbareKapazitaetKwh / kapazitaetBruttoKwh) * 100
+  if (abgeleitet <= SOC_LEER_PROZENT) return SOC_LEER_PROZENT
+  return Math.min(abgeleitet + SOC_LEER_TOLERANZ_PP, SOC_LEER_MAX_PROZENT)
+}
+
 export function waermepumpeParameter(parameter: unknown): WaermepumpeParameter {
   return (parameter || {}) as WaermepumpeParameter
 }

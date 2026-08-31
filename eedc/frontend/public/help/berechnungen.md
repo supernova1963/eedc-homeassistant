@@ -648,6 +648,17 @@ Ein Speicher trägt zwei Kapazitäten, beide im Formular. Die Trennlinie läuft 
 >   **hoch** aus, also in die Gegenrichtung der Deckelung.
 > * **Die Reserve sitzt unten.** Bei Heimspeichern der Normalfall; die Oberseite deckt
 >   `SOC_VOLL_PROZENT` ab, und eine gewollte *Lade*-Grenze erkennt `messe_soc_nutzung` an den Daten.
+>   ⛔ **Hier stand bis 2026-08-31 nur diese Annahme, ohne ihren Preis.** Trifft sie nicht zu,
+>   fällt die Schwelle zu hoch aus — und die Kennzahl damit zu **hoch**, nicht konservativ.
+>   Am Minimalfall gemessen (31.08.): 10 kWh brutto, Fahrweise 10/90 ⇒ Eintrag 8 kWh ⇒ Schwelle
+>   **23 % statt 13 %**; `berechne_zusatzpotential` zählt ab da mehr Netzbezug in die Fehlmenge,
+>   das nutzbare Zusatzpotential wuchs von **3,0 auf 5,0 kWh**. Das ist die Richtung, gegen die
+>   §3.3 gebaut ist. ⚠ **Und es ist kein Einzelfall:** `nutzbare_kapazitaet_kwh` meint vertraglich
+>   den **ganzen** fahrbaren SoC-Hub, das Handbuch weist das 10/90-Muster ausdrücklich an — wer
+>   eine obere Ladegrenze fährt, pflegt also korrekt und bekommt trotzdem die zu hohe Untergrenze.
+>   **Gebaut wurde kein zweites Feld** (Entscheid Gernot 15.08. steht), sondern die Annahme an
+>   beiden Anzeigen: im Speicher-Formular beim Eintippen und im Block *Größerer Speicher?*.
+>   Auslöser: cbrosius auf [#379](https://github.com/supernova1963/eedc-homeassistant/issues/379).
 >
 > ⚠ **Wer nichts pflegt, sieht keine geänderte Zahl** — Rückfall auf 5 %, Abnahmekriterium des Baus.
 > Umgekehrt heißt das: Die Korrektur erreicht nur Anlagen mit gepflegter nutzbarer Kapazität.

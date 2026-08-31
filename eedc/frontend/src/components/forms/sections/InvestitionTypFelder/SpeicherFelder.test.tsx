@@ -86,3 +86,50 @@ describe('SpeicherFelder — Arbitrage-Preise (#397)', () => {
     expect(text).not.toMatch(/Ø Entladepreis/)
   })
 })
+
+describe('SpeicherFelder — die abgeleitete Entladegrenze steht am Feld (#379)', () => {
+  // Anlass (cbrosius auf #379, 30.08.2026): *„Unter Wirtschaftlichkeit wird die
+  // resultierende Entladegrenze aktuell schon angezeigt, nicht aber wenn ich die
+  // nutzbare Kapazität des Speichers festlegen muss."* Der einzige Hinweis am
+  // Feld stammte aus der ersten Frontend-Fassung; die Ableitung kam erst mit
+  // v4.0.16 dazu. Bauform wie beim Kopplungs-Hinweis daneben — kein zweites Feld.
+
+  it('rechnet die Grenze vor, sobald beide Kapazitäten stehen', () => {
+    // Glens Speicher: 24 von 30 kWh ⇒ 20 % Reserve, leer ab 23 %.
+    const text = zeige({ kapazitaet_kwh: '30', nutzbare_kapazitaet_kwh: '24' })
+
+    expect(text).toMatch(/Entladegrenze 20 %/)
+    expect(text).toMatch(/ab 23 % Ladestand als leer/)
+  })
+
+  it('nennt die Annahme mit, weil nur der Anwender sie prüfen kann', () => {
+    // Wer 10/90 fährt, trägt die OBERE Grenze vertragsgemäß mit ein — die
+    // abgeleitete Untergrenze fällt dann zu hoch aus (20 % statt 10 %). Ohne
+    // diesen Satz sieht das niemand; ein zweites Feld ist verworfen (15.08.).
+    const text = zeige({ kapazitaet_kwh: '10', nutzbare_kapazitaet_kwh: '8' })
+
+    expect(text).toMatch(/Entladegrenze 20 %/)
+    expect(text).toMatch(/obere\s+Ladegrenze/)
+    expect(text).toMatch(/zu hoch/)
+  })
+
+  it('behauptet keine Grenze, wo keine abgeleitet werden kann', () => {
+    // Nur brutto gepflegt ⇒ Rückfall auf 5 %. Eine „Entladegrenze 0 %" wäre
+    // eine Aussage über eine Einstellung, die der Anwender nie gemacht hat —
+    // dieselbe Doktrin wie in der Wirtschaftlichkeits-Sicht (N-254).
+    const text = zeige({ kapazitaet_kwh: '30' })
+
+    // Nicht „das Wort kommt nicht vor": der Rueckfall-Hinweis NENNT die
+    // Ableitung bewusst — genau der Satz, der cbrosius gefehlt hat. Verboten
+    // ist der behauptete WERT, den das „⇒" markiert.
+    expect(text).not.toMatch(/⇒ Entladegrenze/)
+    expect(text).toMatch(/Typisch 90-95 %/)
+    expect(text).toMatch(/Daraus leitet eedc die Entladegrenze ab/)
+  })
+
+  it('behauptet keine Grenze, wenn nutzbar nicht kleiner als brutto ist', () => {
+    const text = zeige({ kapazitaet_kwh: '30', nutzbare_kapazitaet_kwh: '30' })
+
+    expect(text).not.toMatch(/⇒ Entladegrenze/)
+  })
+})

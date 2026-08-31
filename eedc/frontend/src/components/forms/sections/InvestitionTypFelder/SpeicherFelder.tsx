@@ -1,6 +1,12 @@
 import { FormSection, Input, Select } from '../../../ui'
 import { SchalterZeile } from '../SchalterZeile'
-import { SPEICHER_KOPPLUNG_LABELS, aufgeloesteSpeicherKopplung } from '../../../../lib/investitionParameter'
+import {
+  SPEICHER_KOPPLUNG_LABELS,
+  SOC_LEER_PROZENT,
+  aufgeloesteSpeicherKopplung,
+  leerSchwelleProzent,
+} from '../../../../lib/investitionParameter'
+import { fmtZahl } from '../../../../lib/einheiten'
 import type { TypFelderProps } from './types'
 
 // #351: Die Kopplung ist eine eigene Eigenschaft, keine Folgerung aus der
@@ -16,6 +22,17 @@ export function SpeicherFelder({ paramData, onInputChange, setParam, hatZuordnun
   const arbitrage = paramData.arbitrage_faehig as boolean
   const kopplung = (paramData.kopplung as string) || ''
   const abgeleitet = SPEICHER_KOPPLUNG_LABELS[aufgeloesteSpeicherKopplung({}, !!hatZuordnung)]
+  // #379 (cbrosius): Aus der nutzbaren Kapazitaet leitet eedc die Entladegrenze
+  // ab und faellt damit das Urteil unter „Groesserer Speicher?" — am Eingabefeld
+  // stand davon nichts, sein einziger Hinweis („Typisch 90-95 %") zeigte sogar
+  // in die Gegenrichtung jedes Anwenders mit eigener Untergrenze. Bauform wie
+  // bei `kopplung` weiter unten: die Ableitung steht im Hint, nicht in einem
+  // zweiten Feld (Entscheid Gernot 15.08.).
+  const brutto = Number(paramData.kapazitaet_kwh)
+  const nutzbar = Number(paramData.nutzbare_kapazitaet_kwh)
+  const leerSchwelle = leerSchwelleProzent(brutto || null, nutzbar || null)
+  const grenzeAbgeleitet = leerSchwelle > SOC_LEER_PROZENT
+  const reserveProzent = grenzeAbgeleitet ? (1 - nutzbar / brutto) * 100 : null
   return (
     <>
       <FormSection title="Speicher">
@@ -33,7 +50,12 @@ export function SpeicherFelder({ paramData, onInputChange, setParam, hatZuordnun
             type="number" step="any" min="0"
             value={paramData.nutzbare_kapazitaet_kwh as string}
             onChange={onInputChange}
-            hint="Typisch 90-95 % der Gesamtkapazität"
+            hint={grenzeAbgeleitet
+              ? `⇒ Entladegrenze ${fmtZahl(reserveProzent, 0)} % — eedc wertet den Speicher ab `
+                + `${fmtZahl(leerSchwelle, 0)} % Ladestand als leer (Wirtschaftlichkeit → „Größerer Speicher?“). `
+                + 'Dabei nimmt es an, dass die gesamte Reserve unten liegt — fährst du zusätzlich eine obere '
+                + 'Ladegrenze, ist diese Untergrenze zu hoch.'
+              : 'Typisch 90-95 % der Gesamtkapazität — der ganze Hub, der durch den Speicher geht. Daraus leitet eedc die Entladegrenze ab.'}
           />
           <Input
             label="Max. Ladeleistung (kW)"

@@ -108,9 +108,26 @@ def leer_schwelle_prozent(
     Heimspeichern ist das der Normalfall; die Oberseite deckt bereits
     `SOC_VOLL_PROZENT` ab (Balancing), und eine gewollte *Lade*-Grenze erkennt
     `speicher_sizing.SocNutzung.laedt_planmaessig_voll` an den Daten selbst.
-    Sitzt die Reserve im Einzelfall doch oben, fällt die Schwelle zu hoch aus —
-    die Kennzahl wird dann konservativer, nicht großzügiger, und bleibt damit auf
-    der Seite, auf der eine Kaufentscheidung sie verträgt.
+    ⛔ **Sitzt die Reserve auch oben, fällt die Schwelle zu hoch aus — und die
+    Kennzahl damit zu HOCH, nicht konservativ.** Hier stand bis 2026-08-31 das
+    Gegenteil („konservativer, nicht großzügiger … auf der Seite, auf der eine
+    Kaufentscheidung sie verträgt"). Am Minimalfall gemessen: 10 kWh brutto,
+    Fahrweise 10/90 ⇒ Eintrag 8 kWh ⇒ Schwelle 23 % statt der echten 13 %; der
+    Speicher gilt früher als leer, `berechne_zusatzpotential` zählt ab da mehr
+    Netzbezug in die Fehlmenge, und das nutzbare Zusatzpotential wuchs von 3,0
+    auf 5,0 kWh. Das ist genau die Richtung, gegen die diese Datei gebaut ist
+    (siehe den Kommentar zur Zyklus-Trennung in `berechne_zusatzpotential`).
+
+    ⚠ **Und es ist kein Einzelfall, sondern die vertragsgemäße Pflege.**
+    `nutzbare_kapazitaet_kwh` meint laut `investition_kennwerte` den **ganzen**
+    fahrbaren SoC-Hub, und `docs/HANDBUCH_EINSTELLUNGEN.md` §3.4 weist das
+    10/90-Muster ausdrücklich an. Wer zusätzlich eine obere Ladegrenze fährt,
+    trägt sie also korrekt mit ein — und bekommt hier eine zu hohe Untergrenze.
+    **Ein zweites Feld „Entladegrenze %" bleibt trotzdem verworfen** (Entscheid
+    Gernot 2026-08-15, oben begründet); stattdessen nennt das Speicher-Formular
+    die abgeleitete Grenze **samt dieser Annahme** beim Eintippen, sodass der
+    Anwender die Abweichung sieht — der Einzige, der sie beurteilen kann
+    (`SpeicherFelder.tsx`, cbrosius auf #379, 2026-08-30).
 
     Gibt den Rückfall `SOC_LEER_PROZENT` zurück, wenn nichts Genaueres bekannt
     ist: keine der beiden Kapazitäten gepflegt, unplausible Werte (≤ 0), oder

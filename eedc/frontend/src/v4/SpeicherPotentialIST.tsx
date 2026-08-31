@@ -318,7 +318,10 @@ function MonatsSpuren({ d }: { d: SpeicherPotentialResponse }) {
           <> „Leer" heißt hier <strong>deine</strong> Entladegrenze von{' '}
           {fmtZahl(d.soc_leer_prozent, 0)} %, nicht 0 % — sie ergibt sich aus der nutzbaren
           Kapazität, die du beim Speicher gepflegt hast. Darunter gibt das Gerät nichts mehr
-          ab, die Nacht ist damit aufgebraucht.</>
+          ab, die Nacht ist damit aufgebraucht. Dabei nimmt eedc an, dass deine ganze Reserve
+          unten liegt. Lädst du zusätzlich bewusst nicht bis 100 %, steckt dieser Teil in
+          derselben Zahl — dann ist die Grenze hier zu hoch angesetzt, und die Frage nach mehr
+          Kapazität fällt zu positiv aus.</>
         )}
         {hatNetzladung && (
           <> Wo Ladung aus dem Netz kam, füllt sich der Speicher ohne Sonne; solche Monate
