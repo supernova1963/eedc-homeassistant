@@ -261,10 +261,25 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
     if (jahr == null) return []
     const d = jahrData
     // P-12/N-65: die Kopfzeile eines Blocks trägt sein Zeitfenster, sobald das
-    // Jahr nicht deckungsgleich ist. Sie ist der einzige Ort über den Kacheln, der
-    // ungekürzt rendert — die Kachel-Zweitzeile ist `truncate` und schnitt ein
-    // Präfix genau dort ab, wo die Vorjahres-Angabe steht (an der Box gemessen).
+    // Jahr nicht deckungsgleich ist. Sie hat mehr Platz als die Kachel-Zweitzeile,
+    // die ein Präfix genau dort abschnitt, wo die Vorjahres-Angabe steht (an der
+    // Box gemessen). ⚠ „Ungekürzt" ist sie aber NICHT — `BlockShell` rendert die
+    // Summary mit `truncate` und starkem `flex-shrink`; mobil bleibt nur der Anfang
+    // stehen (31.08. an der Box gemessen: „5 Energie-Ken…"). Das Fenster steht
+    // deshalb VORN: es ist die Angabe, die auch auf einem schmalen Gerät überlebt.
     const mitFenster = (fenster: string | null, text: string) => (fenster ? `${fenster} · ${text}` : text)
+    // ⭐ Warum die beiden Fenster zusätzlich sagen, WAS sie unterscheidet (Burkard,
+    // T89667 #276): Er las „Kennzahlen Jan–Aug 9.860 kWh" direkt über „Energie-Bilanz
+    // Jan–Jul 8.428 kWh" und hielt es beim ersten Hinsehen für einen Widerspruch.
+    // Beide Zahlen stimmten, und beide Zeiträume standen bereits da — es fehlte der
+    // Grund für den Unterschied: Die Kacheln zählen jeden Monat mit Daten (also auch
+    // den laufenden), die Tabelle darunter nur die abgeschlossenen.
+    // Der Zusatz erscheint NUR, wenn die beiden Fenster wirklich auseinanderfallen —
+    // genau das sagt `kennzahlenFenster != null` (s. `kennzahlenFensterAus`). Bei
+    // einem abgeschlossenen Jahr decken sie sich, dort wäre er nur Rauschen.
+    const zeitraeumeFallenAuseinander = kennzahlenFenster != null
+    const mitGrund = (fenster: string | null, grund: string) =>
+      (fenster && zeitraeumeFallenAuseinander ? `${fenster} (${grund})` : fenster)
     // Der Bilanz-Block fasst die TABELLE zusammen — also die abgeschlossenen Monate,
     // nicht die Kopfzahl. Sonst nennte die eingeklappte Zeile eine andere PV-Zahl als
     // die Tabelle darin.
@@ -281,13 +296,13 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
     // tragen soll, ist eine Anzeige-Entscheidung und kein Rechenfehler mehr.
     // Bei abgeschlossenem Jahr fallen beide Fenster zusammen ⇒ Anzeige wie bisher.
     const bilanzSummary = b
-      ? mitFenster(istFenster, `${fmtCalc(b.pv_erzeugung_kwh, 0, '—')} kWh PV · ${fmtCalc(b.autarkie_prozent, 0, '—')} % Autarkie${
+      ? mitFenster(mitGrund(istFenster, 'abgeschlossen'), `${fmtCalc(b.pv_erzeugung_kwh, 0, '—')} kWh PV · ${fmtCalc(b.autarkie_prozent, 0, '—')} % Autarkie${
           istFenster == null && b.soll_pv_kwh != null && b.pv_erzeugung_kwh != null && b.soll_pv_kwh > 0
             ? ` · SOLL ${fmtCalc((b.pv_erzeugung_kwh / b.soll_pv_kwh) * 100, 0, '—')} %`
             : ''}`)
       : 'IST / Vorjahr / Ø-Jahr'
     const kennzahlenSummary = mitFenster(
-      kennzahlenFenster, '5 Energie-Kennzahlen + Netto-Ertrag + Jahresergebnis + Netz-Kosten',
+      mitGrund(kennzahlenFenster, 'bis heute'), '5 Energie-Kennzahlen + Netto-Ertrag + Jahresergebnis + Netz-Kosten',
     )
     // Kennzahlen-Kacheln parkbar (SLICE 1): stabile parkId je Titel; geparkte im Strip
     // ausgeblendet, sind ALLE geparkt → Block-Hülle weglassen (Monat-Referenz).

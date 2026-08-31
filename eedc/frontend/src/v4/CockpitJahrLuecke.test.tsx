@@ -119,15 +119,24 @@ describe('Cockpit/Jahr — laufendes Jahr mit unabgeschlossenem Monat (N-65)', (
     expect(getData.mock.calls.filter((c) => c[1] === 2026).map((c) => c[2])).toEqual(bis(8))
   })
 
-  it('die Block-Kopfzeile nennt das Fenster der Kacheln', async () => {
+  it('die Block-Kopfzeile nennt das Fenster der Kacheln — und warum es weiter reicht', async () => {
     // NICHT die Kachel-Zweitzeile: die ist `truncate` und fasst rund 22 Zeichen —
     // ein Präfix dort schnitt an der Box genau die Vorjahres-Angabe ab, die es
-    // einordnen sollte. Die Kopfzeile darüber rendert ungekürzt.
+    // einordnen sollte. Die Kopfzeile darüber hat mehr Platz.
+    // ⚠ Hier stand bis 31.08.2026 „Die Kopfzeile darüber rendert ungekürzt." Das ist
+    // falsch und an der Box widerlegt: `BlockShell` gibt der Summary `truncate` und
+    // ein starkes `flex-shrink`; bei 390 px Breite blieb „5 Energie-Ken…" übrig.
+    // Sie hat MEHR Platz, nicht unbegrenzten — deshalb steht das Fenster VORN.
     renderView()
     await screen.findByText('PV-Erzeugung')
+    // „(bis heute)" seit T89667 #276 (Burkard): Der Zeitraum allein reichte nicht —
+    // er las 9.860 kWh über 8.428 kWh, beide richtig, und hielt es für einen
+    // Widerspruch, weil nirgends stand, WARUM die Fenster verschieden weit reichen.
     expect(screen.getByText(
-      'Jan–Aug · 5 Energie-Kennzahlen + Netto-Ertrag + Jahresergebnis + Netz-Kosten',
+      'Jan–Aug (bis heute) · 5 Energie-Kennzahlen + Netto-Ertrag + Jahresergebnis + Netz-Kosten',
     )).toBeInTheDocument()
+    // Die Gegenrichtung am selben Bildschirm: der Bilanz-Kopf sagt „abgeschlossen".
+    expect(screen.getByText(/^Jan–Jul \(abgeschlossen\) · 2\.100 kWh PV/)).toBeInTheDocument()
     // Die Zweitzeile bleibt, was sie war — Vorjahr Jan–Jul × 200 kWh = 1.400.
     expect(screen.getByText('VJ (Jan–Jul): 1.400 kWh')).toBeInTheDocument()
   })
@@ -152,17 +161,29 @@ describe('Cockpit/Jahr — laufendes Jahr mit unabgeschlossenem Monat (N-65)', (
     sollAktiv = true
     renderView()
     await screen.findByText('PV-Erzeugung')
-    expect(screen.getByText(/^Jan–Jul · 2\.100 kWh PV/)).toBeInTheDocument()
-    expect(screen.queryByText(/Jan–Jul · .*SOLL/)).not.toBeInTheDocument()
+    expect(screen.getByText(/^Jan–Jul \(abgeschlossen\) · 2\.100 kWh PV/)).toBeInTheDocument()
+    // ⚠ Der Zusatz „(abgeschlossen)" MUSS auch hier stehen: Ohne ihn wäre die
+    // Negativ-Zusicherung darunter seit dem 31.08. leer erfüllt — sie suchte
+    // `Jan–Jul · …SOLL`, und diese Form gibt es im Kopf gar nicht mehr. Eine Probe,
+    // die nichts mehr treffen KANN, ist grün und wertlos.
+    expect(screen.queryByText(/Jan–Jul \(abgeschlossen\) · .*SOLL/)).not.toBeInTheDocument()
     // An der Kachel steht sie: 8 × 300 ÷ (8 × 250) = 120 %.
     expect(screen.getByText('SOLL 2.000 kWh · 120 %')).toBeInTheDocument()
   })
 
-  it('der Unterschied zwischen Kachel und Tabelle steht im Fuß', async () => {
+  it('der Unterschied zwischen Kachel und Tabelle steht im Fuß — samt Grund', async () => {
     renderView()
     await oeffneBilanz()
     expect(screen.getByText(
       /Vergleich beschnitten auf die gemeinsamen Monate: Jan–Jul · Kennzahlen oben: Jan–Aug/,
+    )).toBeInTheDocument()
+    // Die Kopfzeilen tragen die Kurzform, hier ist Platz für den ganzen Satz — und
+    // der ist es, der den Widerspruch auflöst statt ihn nur zu beschriften.
+    expect(screen.getByText(
+      /Kennzahlen oben: Jan–Aug — sie zählen jeden Monat mit Daten, also auch den laufenden\./,
+    )).toBeInTheDocument()
+    expect(screen.getByText(
+      /Diese Tabelle rechnet nur über die abgeschlossenen Monate/,
     )).toBeInTheDocument()
     // Und über der IST-Spalte selbst (Desktop-Kopfzeile): IST + Vorjahr + Ø Jahre.
     expect(screen.getAllByText('Jan–Jul').length).toBeGreaterThanOrEqual(2)
@@ -177,7 +198,7 @@ describe('Cockpit/Jahr — laufendes Jahr mit unabgeschlossenem Monat (N-65)', (
     const karte = (await screen.findByText('PV-Erzeugung')).closest('div')!
     // Jan–Jun + Aug = 7 × 300 = 2.100, und das Fenster hat die Lücke.
     expect(within(karte).getByText('2.100')).toBeInTheDocument()
-    expect(screen.getByText(/^Jan–Jun, Aug · 5 Energie-Kennzahlen/)).toBeInTheDocument()
+    expect(screen.getByText(/^Jan–Jun, Aug \(bis heute\) · 5 Energie-Kennzahlen/)).toBeInTheDocument()
   })
 })
 
@@ -210,5 +231,11 @@ describe('Cockpit/Jahr — REGRESSION: abgeschlossenes Jahr unverändert', () =>
     // Die Block-Kopfzeilen tragen kein Fenster — und der Bilanz-Kopf behält sein SOLL.
     expect(screen.getByText('5 Energie-Kennzahlen + Netto-Ertrag + Jahresergebnis + Netz-Kosten'))
       .toBeInTheDocument()
+    // Und die Gegenprobe zum Zusatz aus T89667 #276: Wo sich die beiden Zeiträume
+    // DECKEN, gibt es nichts zu unterscheiden — dann wäre „(bis heute)" bzw.
+    // „(abgeschlossen)" nur Rauschen. Der Zusatz hängt deshalb an
+    // `kennzahlenFenster != null`, nicht am Vorhandensein eines Fensters.
+    expect(screen.queryByText(/\(bis heute\)/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/\(abgeschlossen\)/)).not.toBeInTheDocument()
   })
 })

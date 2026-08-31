@@ -25,6 +25,13 @@
  * IST-Monate gegen sieben Vorjahres-Monate stellt. Ausgewiesen wird der Unterschied
  * in den beiden Block-Kopfzeilen (`CockpitJahrV4`), über der IST-Spalte
  * (`istFenster`) und im Tabellenfuß (`kennzahlenFenster`).
+ *
+ * Seit T89667 #276 (Burkard) nennen diese Stellen zusätzlich den GRUND. Die reine
+ * Zeitraum-Angabe reichte nicht: Zwei richtige Zahlen übereinander („Kennzahlen
+ * Jan–Aug: 9.860 kWh" über „Energie-Bilanz Jan–Jul: 8.428 kWh") lasen sich wie ein
+ * Widerspruch, solange nirgends stand, warum die Fenster verschieden weit reichen.
+ * Kurzform in den Kopfzeilen, ganzer Satz im Tabellenfuß, Erklärung im Handbuch
+ * (`HANDBUCH_BEDIENUNG` §2.4).
  */
 import { fmtCalc } from '../components/ui'
 import { Table, TableHead, TableBody } from '../components/ui/Table'
@@ -193,7 +200,17 @@ export function JahrBilanz({
     : null
   // P-12/N-65: die Kacheln über der Tabelle zählen „das Jahr bis heute", diese
   // Tabelle endet einen Monat früher. Der Unterschied wird benannt, nicht verschwiegen.
-  const kennzahlenNote = kennzahlenFenster ? `Kennzahlen oben: ${kennzahlenFenster}` : null
+  // ⭐ Seit T89667 #276 (Burkard) nennt die Notiz nicht nur die beiden Zeiträume,
+  // sondern den GRUND: Er hatte 9.860 kWh über 8.428 kWh stehen sehen, beide Zahlen
+  // richtig, beide Fenster bereits beschriftet — und hielt es trotzdem für einen
+  // Widerspruch, weil nirgends stand, warum sie verschieden weit reichen. Die
+  // Kopfzeilen tragen die Kurzform („bis heute"/„abgeschlossen", s. `CockpitJahrV4`),
+  // hier ist Platz für den ganzen Satz.
+  const kennzahlenNote = kennzahlenFenster
+    ? `Kennzahlen oben: ${kennzahlenFenster} — sie zählen jeden Monat mit Daten, also auch den laufenden. `
+      + 'Diese Tabelle rechnet nur über die abgeschlossenen Monate, damit das Delta nicht einen '
+      + 'angefangenen Monat gegen einen vollen stellt.'
+    : null
   const fussNoten = [
     oj ? `Ø aus ${ojCount} ${ojCount !== 1 ? 'Jahren' : 'Jahr'}` : null,
     fensterNote,

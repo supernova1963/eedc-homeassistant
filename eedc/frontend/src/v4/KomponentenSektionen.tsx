@@ -237,8 +237,14 @@ export function baueKomponentenBloecke(
       { title: 'Entladung', value: fmt(d.speicher_entladung_kwh), unit: 'kWh', color: 'green', icon: Battery },
       { ...SPEICHER_KPI.wirkungsgrad, value: fmtCalc(d.speicher_wirkungsgrad_prozent, 1, '—'), unit: '%',
         subtitle: wirkungsgradHinweis(d, periode) },
+      // Die Kapazität steht hier als BEZUGSGRÖSSE der Vollzyklen — sie muss deshalb
+      // dieselbe Zahl nennen, mit der gerechnet wurde. Mit dem Datei-Default (0 Stellen)
+      // wurde aus 7,5 kWh ein „8", während die Vollzyklen daneben aus 7,5 entstanden:
+      // 1.433 kWh Entladung ⇒ 191,05 Zyklen, mit 8 kWh wären es 179 (Burkard, T89667
+      // #276, an seiner Anlage nachgerechnet). Eine Nachkommastelle, wie überall sonst,
+      // wo eine Speicherkapazität angezeigt wird (`SpeicherSizingIST`, `EnergieprofilPrognose`).
       { ...SPEICHER_KPI.vollzyklen, value: fmtCalc(d.speicher_vollzyklen, 2, '—'),
-        subtitle: hat(d.speicher_kapazitaet_kwh) ? `Kapazität ${fmt(d.speicher_kapazitaet_kwh)} kWh` : undefined },
+        subtitle: hat(d.speicher_kapazitaet_kwh) ? `Kapazität ${fmt(d.speicher_kapazitaet_kwh, 1)} kWh` : undefined },
     ]
     // Ladezustand: nur auf Tagesebene, und nur wenn er gemessen ist. Der Wert ist
     // der Stand am ENDE des Tages (letzte gemessene Stunde), die Spanne sagt, wie
