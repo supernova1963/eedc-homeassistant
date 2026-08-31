@@ -10,7 +10,9 @@ from sqlalchemy import select
 
 from backend.models.anlage import Anlage
 
-from .kategorien import CheckErgebnis, CheckKategorie, CheckSeverity
+from .kategorien import (
+    CheckErgebnis, CheckKategorie, CheckSeverity, LINK_ENERGIEPROFIL,
+)
 
 
 class EmobChecks:
@@ -543,7 +545,7 @@ class EmobChecks:
                 f"({aeltester.isoformat()} … {neuester.isoformat()})"
             ),
             details=f"{details} Größte Fälle: {beispiele}.",
-            link="/einstellungen/energieprofil",
+            link=LINK_ENERGIEPROFIL,
             action_kind="reaggregate_range",
             action_params={
                 "anlage_id": anlage.id,
@@ -641,7 +643,7 @@ class EmobChecks:
                 "offenen Monate; bestehende Werte bleiben unberührt. "
                 f"Betroffen: {beispiele}."
             ),
-            link="/einstellungen/energieprofil",
+            link=LINK_ENERGIEPROFIL,
             action_kind="kraftstoffpreis_backfill",
             action_params={"anlage_id": anlage.id},
             action_label="Vergleichspreise nachpflegen",

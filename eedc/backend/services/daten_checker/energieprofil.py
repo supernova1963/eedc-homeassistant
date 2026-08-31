@@ -36,6 +36,7 @@ from backend.core.berechnungen import (
 
 from .kategorien import (
     CheckErgebnis, CheckKategorie, CheckSeverity, LINK_DATENQUELLEN,
+    LINK_ENERGIEPROFIL, LINK_MONATSDATEN, link_monat_erfassen,
 )
 
 
@@ -681,7 +682,7 @@ class EnergieprofilChecks:
                     f"Behebung: 'Tag neu aggregieren' für genau diesen Tag (Reload-Symbol "
                     f"in der Tagesliste) — repariert SensorSnapshots + Aggregate in einem Schritt."
                 ),
-                link=f"/einstellungen/energieprofil?datum={datum_spike.isoformat()}",
+                link=LINK_ENERGIEPROFIL,
             ))
 
         return ergebnisse
@@ -800,7 +801,7 @@ class EnergieprofilChecks:
                     "beide schreiben die Werte je Modul. Ohne zugeordneten "
                     "Sensor müssen die Werte von Hand nachgetragen werden."
                 ),
-                link="/einstellungen/monatsdaten",
+                link=link_monat_erfassen(fehlt[0]),
             ))
         if teil_luecke:
             ergebnisse.append(CheckErgebnis(
@@ -810,7 +811,7 @@ class EnergieprofilChecks:
                     "Nur ein Teil der Strings erfasst und kein Gesamtwert zum "
                     f"Verteilen hinterlegt: {_monate(teil_luecke)}"
                 ),
-                link="/einstellungen/monatsdaten",
+                link=link_monat_erfassen(teil_luecke[0]),
             ))
         if verteilt:
             ergebnisse.append(CheckErgebnis(
@@ -820,7 +821,10 @@ class EnergieprofilChecks:
                     "Gesamtwert wird anteilig nach kWp auf die Strings verteilt — "
                     f"Pro-String-Genauigkeit eingeschränkt: {_monate(verteilt)}"
                 ),
-                link="/einstellungen/monatsdaten",
+                # Kein `?erfassen=`: hier fehlt nichts, der Gesamtwert wird nur
+                # verteilt. Der Block genügt, ein geöffnetes Formular wäre eine
+                # Handlungsaufforderung, die die Meldung gar nicht stellt.
+                link=LINK_MONATSDATEN,
             ))
         if not fehlt and not teil_luecke and not verteilt and ok_count:
             ergebnisse.append(CheckErgebnis(

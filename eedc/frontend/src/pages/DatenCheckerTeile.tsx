@@ -78,8 +78,12 @@ function KategorieSektion({
 }) {
   const [open, setOpen] = useState(defaultOpen)
   const navigate = useNavigate()
-  // Geteilte Datei (V3-Seite + V4-Daten-Block): „Beheben"-Links unter /v4 auf den
-  // re-kategorisierten V4-Reiter umbiegen (Donor-Ziele bleiben V3 → R6).
+  // „Beheben"-Links auf den re-kategorisierten V4-Reiter umbiegen; Ziele ohne
+  // V4-Kategorie (z. B. /monatsabschluss/…) bleiben unveraendert.
+  // ⚠ Der Checker rendert AUF /einstellungen/daten. Ein Ziel, das dorthin
+  // umgeleitet wird, muss einen Query tragen, den die Seite liest — sonst
+  // navigiert der Knopf auf die aktuelle Seite und tut nichts (T89667 #268).
+  // Der Backend-Waechter dazu: test_daten_checker_beheben_links_wirken.py.
 
   const counts = useMemo(() => {
     const c = { error: 0, warning: 0, info: 0, ok: 0 }
@@ -256,9 +260,10 @@ function KategorieSektion({
 // ─── Verwaltung (Prüf-Lauf + KPI + Abdeckung + Kategorien + Reparatur) ─────────
 
 /**
- * Voller Daten-Checker. Wird von der IST-Seite (V3-Hülle) und dem V4-Daten-Block
- * geteilt. `anlageId` ist bereits aufgelöst; `kopfZusatz` (z. B. Anlage-Auswahl)
- * wandert links in die Kopfleiste.
+ * Voller Daten-Checker. Genau eine Einbettung: der Katalog-Block `datenchecker`
+ * der Kategorie *Daten* (`einstellungenKatalog.tsx`) — die fruehere V3-Seite ist
+ * mit dem V4-Flip entfallen. `anlageId` ist bereits aufgelöst; `kopfZusatz`
+ * (z. B. Anlage-Auswahl) wandert links in die Kopfleiste.
  */
 export function DatenCheckerVerwaltung({ anlageId, kopfZusatz }: { anlageId: number; kopfZusatz?: ReactNode }) {
   const [result, setResult] = useState<DatenCheckResponse | null>(null)

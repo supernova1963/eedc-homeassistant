@@ -278,6 +278,34 @@ LINK_DATENQUELLEN = "/einstellungen/datenquellen"
 # zeigte der Hinweis bis v4.0.22 und ließ den Melder ohne Weg stehen.
 LINK_INTEGRATION = "/einstellungen/integration"
 
+# Ziele auf der Daten-Fläche selbst (Radiocarbonat, simon42 T89667 #268).
+# ⚠ Der Daten-Checker läuft als Block IN `/einstellungen/daten`. Ein Link auf
+# eine Alt-Route, die dorthin umgeleitet wird (`einstellungen/monatsdaten`,
+# `einstellungen/energieprofil` → `daten`, s. `routeManifest.ts`), navigiert
+# also auf die Seite, auf der der Anwender bereits steht: der „Beheben"-Knopf
+# tut sichtbar NICHTS. Achtzehn Meldungen liefen so ins Leere.
+# Der Ausweg liegt seit dem V4-Flip bereit und wird hier benutzt: `?block=<id>`
+# klappt einen Katalog-Block auf, `?erfassen=YYYY-MM` klappt den Monatsdaten-
+# Block auf UND öffnet die Erfassung des Monats (`EinstellungenV4.tsx:186`,
+# `MonatsdatenTeile.tsx:344`). Beide tragen einen Query, den die Seite liest —
+# deshalb wirkt die Navigation auch von der Seite auf sich selbst.
+LINK_MONATSDATEN = "/einstellungen/daten?block=monatsdaten"
+LINK_ENERGIEPROFIL = "/einstellungen/daten?block=energieprofil"
+
+
+def link_monat_erfassen(label: str) -> str:
+    """`"MM/YYYY"` → Deep-Link, der die Erfassung genau dieses Monats öffnet.
+
+    Fällt auf den bloßen Block-Aufklapper zurück, wenn das Label nicht die
+    erwartete Form hat — ein Link, der die Fläche zeigt, ist immer noch besser
+    als einer, der nichts tut.
+    """
+    teile = (label or "").split("/")
+    if len(teile) == 2 and teile[0].isdigit() and teile[1].isdigit():
+        monat, jahr = teile
+        return f"/einstellungen/daten?erfassen={jahr}-{int(monat):02d}"
+    return LINK_MONATSDATEN
+
 # Sprechende Kurz-Labels für Provenance-Quellen (Daten-Checker Detail-Zeile,
 # Safi105 #301). Die technischen Source-Strings aus core/source_priority.py
 # (z. B. "manual:form", "external:cloud_import:fronius_solarweb") sollen dem

@@ -38,7 +38,9 @@ from backend.core.investition_kennwerte import (
     get_wr_grenze_kw,
 )
 
-from .kategorien import CheckErgebnis, CheckKategorie, CheckSeverity
+from .kategorien import (
+    CheckErgebnis, CheckKategorie, CheckSeverity, LINK_MONATSDATEN,
+)
 
 # Ab diesem DC/AC-Verhältnis meldet der Stammdaten-Check. Bewusst weit oberhalb
 # der üblichen Auslegung (1,1–1,3; Ost/West bis ~1,5, #354-Melder 1,38): bis
@@ -1214,7 +1216,9 @@ class StammdatenChecks:
                         kategorie=kat, schwere=CheckSeverity.WARNING,
                         meldung=f"{name}: Netzladung übersteigt Gesamtladung (kumulativ)",
                         details=bericht.details,
-                        link="/einstellungen/monatsdaten",
+                        # Kumulativ über die ganze Historie — es gibt keinen
+                        # einen Monat, der aufzuschlagen wäre.
+                        link=LINK_MONATSDATEN,
                     ))
 
                 # F-22 (rapahl-PN 2026-08-08, seine ZWEITE zu diesem Thema):
@@ -1261,7 +1265,7 @@ class StammdatenChecks:
                         kategorie=kat, schwere=CheckSeverity.WARNING,
                         meldung=f"{name}: Entladung übersteigt Ladung (kumulativ)",
                         details=_hinweis,
-                        link="/einstellungen/monatsdaten",
+                        link=LINK_MONATSDATEN,
                     ))
 
             elif inv.typ == "e-auto":

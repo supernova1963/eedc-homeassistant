@@ -25,7 +25,9 @@ from .kategorien import (
     CheckErgebnis,
     CheckKategorie,
     CheckSeverity,
+    LINK_MONATSDATEN,
     MonatsdatenAbdeckung,
+    link_monat_erfassen,
 )
 
 
@@ -346,7 +348,7 @@ class MonatsdatenChecks:
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.WARNING,
                 meldung="Keine Monatsdaten vorhanden",
-                link="/einstellungen/monatsdaten",
+                link=LINK_MONATSDATEN,
             ))
             self._abdeckung = MonatsdatenAbdeckung(vorhanden=0, erwartet=0, prozent=0)
             return ergebnisse
@@ -428,7 +430,9 @@ class MonatsdatenChecks:
                 ergebnisse.append(CheckErgebnis(
                     kategorie=kat, schwere=CheckSeverity.ERROR,
                     meldung=f"... und {len(fehlende) - 12} weitere Monate fehlen",
-                    link="/einstellungen/monatsdaten",
+                    # Sammelzeile über viele Monate — kein einzelner Monat, den
+                    # ein `?erfassen=` sinnvoll aufschlagen könnte.
+                    link=LINK_MONATSDATEN,
                 ))
 
         return ergebnisse
@@ -868,7 +872,7 @@ class MonatsdatenChecks:
                 kategorie=kat, schwere=schwere,
                 meldung=f"{name}: {feld_label} fehlt in {len(fehlend)} Monat(en)",
                 details=monate_str,
-                link="/einstellungen/monatsdaten",
+                link=link_monat_erfassen(fehlend[0]),
             ))
         else:
             ergebnisse.append(CheckErgebnis(
@@ -1020,7 +1024,7 @@ class MonatsdatenChecks:
                 kategorie=kat, schwere=CheckSeverity.WARNING,
                 meldung=f"{name}: {strom_label} fehlt in {len(fehlend_strom)} Monat(en)",
                 details=monate_str,
-                link="/einstellungen/monatsdaten",
+                link=link_monat_erfassen(fehlend_strom[0]),
             ))
 
         if fehlend_heiz:
@@ -1031,7 +1035,7 @@ class MonatsdatenChecks:
                 kategorie=kat, schwere=CheckSeverity.INFO,
                 meldung=f"{name}: Heizwärme fehlt in {len(fehlend_heiz)} Monat(en)",
                 details=monate_str,
-                link="/einstellungen/monatsdaten",
+                link=link_monat_erfassen(fehlend_heiz[0]),
             ))
 
         if not fehlend_strom and not fehlend_heiz:

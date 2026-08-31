@@ -28,7 +28,7 @@ from backend.core.berechnungen import (
 
 from .kategorien import (
     CheckErgebnis, CheckKategorie, CheckSeverity, LINK_DATENQUELLEN,
-    LINK_INTEGRATION, _quelle_label,
+    LINK_ENERGIEPROFIL, LINK_INTEGRATION, _quelle_label,
 )
 
 logger = logging.getLogger(__name__)
@@ -266,7 +266,7 @@ class DatenquelleChecks:
                     "werden (nächster Monatsabschluss oder Tag-Reparatur), "
                     "gilt HA-LTS als Source-of-Truth."
                 ),
-                link="/einstellungen/energieprofil",
+                link=LINK_ENERGIEPROFIL,
             )]
         # HA-LTS nicht verfügbar → Standalone-Modus (Docker ohne HA-Verbindung
         # oder fehlende HA-Recorder-URL)
@@ -536,7 +536,7 @@ class DatenquelleChecks:
                     f"(Δ {delta_signed:+.1f} kWh, {rel_signed:+.1f}%)"
                 ),
                 details=details,
-                link=f"/einstellungen/energieprofil?datum={datum_.isoformat()}",
+                link=LINK_ENERGIEPROFIL,
                 action_kind="reaggregate_day",
                 action_params={"anlage_id": anlage.id, "datum": datum_.isoformat()},
                 action_label="Tag reparieren",
@@ -577,7 +577,7 @@ class DatenquelleChecks:
                     f"auf einmal: Einstellungen → Daten → Energieprofil → "
                     f"Reparatur-Werkbank."
                 ),
-                link=f"/einstellungen/energieprofil?datum={datum_.isoformat()}",
+                link=LINK_ENERGIEPROFIL,
                 action_kind="reaggregate_day",
                 action_params={"anlage_id": anlage.id, "datum": datum_.isoformat()},
                 action_label="Tag reparieren",
@@ -888,7 +888,7 @@ class DatenquelleChecks:
             ),
             details=summen_details,
             link=(
-                "/einstellungen/energieprofil" if reparatur_moeglich
+                LINK_ENERGIEPROFIL if reparatur_moeglich
                 else LINK_DATENQUELLEN
             ),
             action_kind="reaggregate_range" if reparatur_moeglich else None,
@@ -917,7 +917,7 @@ class DatenquelleChecks:
                     "Einzelnen Tag aus HA-Statistics nachaggregieren — schreibt "
                     "Tages- und Stundenwerte, nicht die Monatswerte."
                 ),
-                link=f"/einstellungen/energieprofil?datum={datum_.isoformat()}",
+                link=LINK_ENERGIEPROFIL,
                 action_kind="reaggregate_day",
                 action_params={"anlage_id": anlage.id, "datum": datum_.isoformat()},
                 action_label="Tag reparieren",
