@@ -277,7 +277,9 @@ Die **Erfassung** eines Monats (Zählerstände, Monatsabschluss) läuft über da
 
 ### 2.4 Jahr/Gesamt
 
-Die **Jahr/Gesamt**-Sicht fasst die Anlage über ein ganzes Jahr bzw. über die gesamte Laufzeit zusammen (Summe der Monate). Über den Selektor wählst du ein Jahr oder „Gesamt".
+Die **Jahr/Gesamt**-Sicht fasst die Anlage über ein ganzes Jahr zusammen (Summe der Monate). Über den Selektor an der Seite — mobil über die Jahres-Leiste — wählst du das Jahr; die Kennzahlen tragen einen Trend-Pfeil zum Vorjahr.
+
+> **„Gesamt" ist heute kein eigener Zeitraum, sondern steckt in einzelnen Kennzahlen.** Wo eine Zahl über die volle Laufzeit gilt, sagt sie es selbst — die Kachel **CO₂ kumuliert** trägt den Vermerk „gesamte Historie — nicht jahresgebunden" und bleibt beim Jahreswechsel stehen. Eine Selektor-Stellung, die die **ganze Seite** auf die Gesamtlaufzeit umschaltet, gibt es nicht; sie steht auf der Roadmap.
 
 **Hero-Kennzahlen** — die drei wichtigsten Werte prominent, je mit Trend-Pfeil zum Vorjahr:
 
@@ -285,12 +287,9 @@ Die **Jahr/Gesamt**-Sicht fasst die Anlage über ein ganzes Jahr bzw. über die 
 
 > Der **Netto-Ertrag** hier ist die **PV-Anlagen-Größe** (Einspeise-Erlös + Eigenverbrauchs-Ersparnis) — nicht der komponenten-übergreifende **Finanz-Block-Saldo** (siehe [§2.3](#23-monat), „Zwei Netto-Größen nicht verwechseln"). Der Finanzen-Block als Komponenten-Finanz-Tabelle erscheint auch in Jahr/Gesamt, dann über alle Monate summiert.
 
-**Energiefluss (zwei Balken):**
+**PV-Verteilung** — ein Balken, der zeigt, wohin der erzeugte Strom geflossen ist (Direktverbrauch / Speicher / Einspeisung). Daneben stehen die Kachel **Grundlast SOLL/IST** und der Hinweis, aus welchen Geräten die PV-Erzeugung stammt.
 
-- **PV-Verteilung** — wohin fließt der erzeugte Strom? (Direktverbrauch / Speicher / Einspeisung)
-- **Haus-Versorgung** — woher kommt der Strom im Haus? (PV direkt / Speicher / Netzbezug)
-
-**Energiebilanz** — PV-Erzeugung, Direktverbrauch, Einspeisung, Netzbezug, plus eine **Sparkline** der Monatserträge über den Gesamtzeitraum.
+**Energiebilanz** — PV-Erzeugung, Direktverbrauch, Einspeisung, Netzbezug, dazu der Block **Vergleich (IST/VJ/Ø)**: jede Kennzahl neben ihrem Vorjahreswert und dem Mittel der übrigen Jahre, jeweils mit Differenz.
 
 > **Warum weicht der Gesamtverbrauch von meinem Herstellerportal ab?** eedc bilanziert den Verbrauch aus deinen Werten: `Erzeugung − Einspeisung − Speicher-Ladung + Speicher-Entladung + Netzbezug`. Viele Hybrid-Wechselrichter (z. B. E3DC) messen PV und Speicher **DC-seitig**, Einspeisung und Netzbezug aber **AC-seitig** — dann enthält der Gesamtverbrauch die Wandlungsverluste und liegt rund **3–5 % der Erzeugung** über dem „Hausverbrauch" im Portal, das seine Verluste herausrechnet. Beide Werte stimmen: eedc zeigt, was deine Anlage liefern musste (die richtige Basis für Autarkie und Wirtschaftlichkeit — bezahlt werden muss auch der Verlust), das Portal, was die Verbraucher gezogen haben. Details und ein Rechenrezept zum Nachprüfen stehen in der [Berechnungsreferenz 3.1](BERECHNUNGEN.md#31-energie-bilanz-monatskennzahlen).
 
