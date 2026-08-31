@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** August 2026 (v4.0.35) — der Abschnitt ganz oben gilt der **kommenden** Version und trägt ihre Nummer, sobald sie feststeht.
+> **Stand:** August 2026 (v4.0.36)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -9,9 +9,11 @@
 
 ---
 
-## Unveröffentlicht — kommt mit der nächsten Version
+## v4.0.36 — 31. August 2026
 
-**Ein Monat als Bericht**
+**Ein Monat als Bericht, und drei Zahlen, die wieder zusammenpassen**
+
+**Ein Monat, ein Dokument**
 
 eedc kannte vier PDF-Berichte — Jahresbericht, Finanzbericht, Infothek-Übersicht,
 Anlagendokumentation — und **keiner ließ sich auf einen Monat stellen**. Wer die Zahlen

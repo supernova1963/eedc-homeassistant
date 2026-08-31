@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.0.36] - 2026-08-31 — Ein Monat als Bericht, und drei Zahlen, die wieder zusammenpassen
 
 ### Added
 
