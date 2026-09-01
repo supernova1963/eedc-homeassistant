@@ -166,10 +166,23 @@ Spez. Ertrag        = PV_Erzeugung / Leistung_kWp              (kWh/kWp, NUR PV;
 Einspeise-Erlös (EUR)    = (Einspeisung - Einspeisung_neg_Preis) * Einspeisevergütung / 100
 Netzbezug-Kosten (EUR)   = Netzbezug * Netzbezug_Preis / 100 + Grundpreis
 Arbeitspreis-Kosten (EUR)= Netzbezug * Netzbezug_Preis / 100            (ohne Grundpreis, reiner Ausweis)
-EV-Ersparnis (EUR)       = Eigenverbrauch * Netzbezug_Preis / 100
+EV-Ersparnis (EUR)       = PV_Eigenverbrauch * Netzbezug_Preis / 100   (s. Hinweis)
 Netto-Ertrag (EUR)       = Einspeise-Erlös + EV-Ersparnis
 CO2-Einsparung (kg)      = PV_Erzeugung * 0.38               (VERALTET — s. Kasten)
 ```
+
+> **Hinweis „PV_Eigenverbrauch".** Der Eigenverbrauch, der zu **Geld** wird, ist der aus PV-Modulen
+> und Balkonkraftwerk. Ein Erzeuger unter *Sonstiges* — BHKW, Windrad, Wasserkraft — zählt in die
+> **Mengen**-Bilanz (Eigenverbrauch, Autarkie, EV-Quote), weil der Zähler am einen Netzanschluss die
+> Summe aller Erzeuger dahinter misst; seinen **finanziellen** Nutzen bewertet eedc dagegen nicht
+> selbst, sondern nimmt ihn aus dem gepflegten Feld `Investition.einsparung_prognose_jahr`
+> („Ertrag/Jahr"). Beide Größen liegen in **derselben** Summe (`aussichten.py::jahres_netto_ertrag`)
+> — würde die Menge zusätzlich monetarisiert, stünde derselbe Nutzen zweimal darin.
+>
+> ⚠ **Folge für die Anzeige:** Bei einer Anlage mit sonstigem Erzeuger geht
+> `Eigenverbrauch × Preis = EV-Ersparnis` **nicht** auf. Das T-Konto beschriftet die Zeile dann als
+> *PV-Eigenverbrauch-Ersparnis* und zeigt die Multiplikation nicht an, statt eine Herleitung zu
+> behaupten, die sich nicht nachrechnen lässt (N-131).
 
 > **⚠ Die CO₂-Zeile dieser Funktion ist NICHT der Kanon.** `berechne_monatskennzahlen`
 > trägt noch die vor DI-2 gültige Formel (Erzeugung statt Eigenverbrauch, ohne WP und
@@ -344,7 +357,7 @@ Die Cockpit-Übersicht aggregiert alle Monatsdaten für ein Jahr (oder alle Jahr
 
 ```
 Einspeise-Erlös     = Σ(Einspeisung) * Einspeisevergütung / 100
-EV-Ersparnis        = Σ(Eigenverbrauch) * Netzbezug_Preis / 100
+EV-Ersparnis        = Σ(PV_Eigenverbrauch) * Netzbezug_Preis / 100  (s. Hinweis)
 Netto-Ertrag        = Einspeise-Erlös + EV-Ersparnis [- USt_Eigenverbrauch]
 BKW-Ersparnis       = Σ(BKW_Eigenverbrauch) * Netzbezug_Preis / 100
 Sonstige-Netto      = Σ(sonstige_ertraege) - Σ(sonstige_ausgaben)

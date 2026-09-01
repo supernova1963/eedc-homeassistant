@@ -5,7 +5,7 @@
  * versteckt nicht) → getAllByText.
  */
 import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { TKonto } from './TKonto'
 import { aktuellerMonat } from '../../test/factories'
 
@@ -95,6 +95,55 @@ describe('TKonto', () => {
  *
  * ⚑ Die letzte Probe ist die Gegenprobe zum zurückgebauten Rechenweg.
  */
+describe('TKonto — sonstiger Erzeuger: die Beschriftung sagt, was bewertet ist (N-131)', () => {
+  // Ein Erzeuger unter *Sonstiges* — BHKW, Windrad, Wasserkraft — zählt in der
+  // Energiebilanz mit (der Zähler am EINEN Anschluss misst alles dahinter,
+  // v3.45.4), wird aber finanziell nicht von eedc bewertet: sein Ertrag wird am
+  // Gerät als „Ertrag/Jahr" gepflegt. Menge und Geldwert zählen hier also
+  // verschiedene Erzeuger, und das ist Absicht — beides zu rechnen wäre die
+  // Doppelzählung aus v4.0.20.
+  //
+  // Geprüft wird deshalb NICHT eine Zahl, sondern dass die Anzeige aufhört,
+  // eine Herleitung zu behaupten, die sich nicht nachrechnen lässt.
+
+  it('mit sonstigem Erzeuger: Label und Formel nennen PV, die Multiplikation entfällt', () => {
+    render(<TKonto d={{ ...basis, sonstiges_erzeugung_kwh: 400 }} />)
+
+    const label = screen.getAllByText(/PV-Eigenverbrauch-Ersparnis/)[0]
+    expect(label).toBeInTheDocument()
+
+    // Formel und Herleitung stehen im Tooltip — der erscheint erst beim Zeigen.
+    fireEvent.mouseEnter(label)
+    expect(screen.getAllByText(/Eigenverbrauch aus Sonstiges ist hier nicht bewertet/).length)
+      .toBeGreaterThan(0)
+    // ⛔ Der Kern: Sobald ein sonstiger Erzeuger dabei ist, deckt die Menge
+    // nicht mehr den Betrag — deshalb steht die Rechnung gar nicht erst da.
+    expect(screen.queryByText(/120,0 kWh × 30,00 ct\/kWh/)).toBeNull()
+  })
+
+  it('GEGENPROBE — ohne sonstigen Erzeuger bleibt alles wie bisher', () => {
+    render(<TKonto d={{ ...basis, sonstiges_erzeugung_kwh: 0 }} />)
+
+    const label = screen.getAllByText(/Eigenverbrauch-Ersparnis/)[0]
+    expect(screen.queryByText(/PV-Eigenverbrauch-Ersparnis/)).toBeNull()
+
+    fireEvent.mouseEnter(label)
+    expect(screen.queryByText(/nicht bewertet/)).toBeNull()
+    // Und die Herleitung steht da — sonst hätte der Fix sie überall genommen.
+    expect(screen.getAllByText(/120,0 kWh × 30,00 ct\/kWh/).length).toBeGreaterThan(0)
+  })
+
+  it('ein sonstiger VERBRAUCHER löst nichts aus — es geht um Erzeuger', () => {
+    // `sonstiges_erzeugung_kwh` trägt nur die Kategorie *erzeuger*; ein
+    // Heizstab oder ein Gaszähler steht in `sonstiges_verbrauch_kwh` und darf
+    // die Beschriftung nicht anfassen.
+    render(<TKonto d={{ ...basis, sonstiges_erzeugung_kwh: 0, sonstiges_verbrauch_kwh: 900 }} />)
+
+    expect(screen.queryByText(/PV-Eigenverbrauch-Ersparnis/)).toBeNull()
+    expect(screen.queryByText(/nicht bewertet/)).toBeNull()
+  })
+})
+
 describe('TKonto — Vergleichs-Badge gegen die angezeigten Beträge', () => {
   // Der Netto-Wert des T-Kontos entsteht aus den ZEILEN: Haben (8 + 36) − Soll (15)
   // = 29,00 €. Verglichen wird er gegen `vorjahr.gesamtnettoertrag_euro`; beide

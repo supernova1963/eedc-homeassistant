@@ -569,7 +569,15 @@ Zusätzlich: **JAZ Heizen / JAZ Warmwasser getrennt** (nur wenn du Strom je Funk
 
 ### 3.8 Sonstiges
 
-Für sonstige **Erzeuger** (z. B. BHKW) und sonstige **Verbraucher** mit komponentenspezifischen Kennzahlen. Ein sonstiger Erzeuger hinter dem Hauszähler zählt in die Eigenverbrauchs-/Autarkie-Bilanz; CO₂ und Wirtschaftlichkeit eines Brennstoff-Erzeugers werden bewusst als „nicht bewertet" ausgewiesen, solange kein belastbares Brennstoffmodell vorliegt.
+Für sonstige **Erzeuger** — ein BHKW, ein Windrad, eine kleine Wasserkraftanlage — und sonstige **Verbraucher** mit komponentenspezifischen Kennzahlen.
+
+**Energetisch zählt ein sonstiger Erzeuger voll mit:** Er speist hinter deinen Hauszähler, und der misst die Summe aller Erzeuger dahinter. Seine Kilowattstunden stehen deshalb in Eigenverbrauch, Autarkie und Eigenverbrauchsquote.
+
+**Finanziell bewertet eedc ihn nicht selbst — du sagst seinen Ertrag an.** Am Gerät gibt es dafür das Feld **„Ertrag/Jahr (€)"**, daneben die Betriebskosten; beides fließt in ROI und Amortisation. Solange du nichts einträgst, steht dort **„nicht bewertet"** statt einer Null. ⚑ Der Grund ist nicht, dass eedc zu wenig über dein Gerät wüsste, sondern dass es sonst **zweimal** zählen würde: der Ertrag, den du angibst, und eine zusätzlich gerechnete Eigenverbrauchs-Ersparnis wären derselbe Nutzen. Deshalb gibt es genau **eine** Stelle dafür.
+
+⚠ **Sichtbar wird das an der Eigenverbrauchs-Ersparnis:** Sobald ein sonstiger Erzeuger mitliefert, heißt sie **„PV-Eigenverbrauch-Ersparnis"**, und der Tooltip sagt dazu, dass der Anteil aus *Sonstiges* dort nicht bewertet ist. Die Kilowattstunden-Zahl daneben enthält ihn — die beiden lassen sich dann bewusst nicht ineinander umrechnen, und eedc zeigt deshalb auch keine Multiplikation an, die nicht aufginge.
+
+⚑ **CO₂** bleibt beim sonstigen Erzeuger ebenfalls ohne Bewertung: Ein Verbrenner emittiert, statt einzusparen, und für eine Anlage ohne Brennstoff fehlt der belastbare Vergleichswert.
 
 **Verbrauchszähler** (Gas, Wasser, Heizöl …) sind die dritte Art unter *Sonstiges*. Sie zeigen den aktuellen **Zählerstand**, den Stand zu Beginn der Aufzeichnung und den Verbrauch je Monat — und sonst nichts: Wirtschaftlichkeit steht dort ausdrücklich auf **„nicht bewertet"**, weil Gas- und Wasserkosten Haushaltskosten sind und nicht in die Rechnung der PV-Anlage gehören. Wo du sie außerdem findest:
 

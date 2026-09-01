@@ -100,6 +100,33 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
     : 0
   const pvEvResidual = Math.max(0, (d.ev_ersparnis_euro ?? 0) - evInErsparnis)
 
+  // N-131: Hat die Anlage einen Erzeuger unter *Sonstiges* — BHKW, Windrad,
+  // Wasserkraft, was auch immer —, dann zählen Menge und Geldwert hier NICHT
+  // dieselben Erzeuger, und das ist Absicht:
+  //
+  //   · `d.eigenverbrauch_kwh` ist der BILANZ-Eigenverbrauch. Er muss den
+  //     sonstigen Erzeuger enthalten, weil der Zähler am EINEN Netzanschluss
+  //     die Summe aller dahinterliegenden Erzeuger misst (v3.45.4).
+  //   · `d.ev_ersparnis_euro` bewertet nur PV und Balkonkraftwerk. Für einen
+  //     sonstigen Erzeuger rechnet eedc den Nutzen bewusst nicht selbst — er
+  //     wird am Gerät als „Ertrag/Jahr" gepflegt und läuft über die
+  //     Kapitalrechnung (`aussichten.py`: `jahres_ev_ersparnis` und
+  //     `ertrag_jahr_ges` liegen in DERSELBEN Summe). Beides zu rechnen wäre
+  //     dieselbe Doppelzählung wie in v4.0.20.
+  //
+  // ⛔ Die Folge fürs Tooltip: `Menge × Preis = Ergebnis` geht dann nicht auf.
+  // Deshalb steht die Multiplikation in diesem Fall NICHT da — eine Rechnung,
+  // die sich nicht nachrechnen lässt, ist schlechter als keine. Der Grund steht
+  // stattdessen in der Formel.
+  // ⚠ Bewusst KEIN Ersatzwert: Den bewerteten Anteil aus dem Ergebnis
+  // zurückzurechnen hiesse, ihn aus zwei gerundeten Zahlen zu erfinden.
+  // ⚠ Und bewusst ohne das Wort Brennstoff: ein Windrad hat keinen.
+  const sonstigeErzeugung = d.sonstiges_erzeugung_kwh ?? 0
+  const hatSonstigeErzeuger = sonstigeErzeugung > 0
+  const evHinweis = hatSonstigeErzeuger
+    ? ' — Eigenverbrauch aus Sonstiges ist hier nicht bewertet, sein Ertrag wird am Gerät gepflegt'
+    : ''
+
   // N-267: dritte Beschriftung. Die Mechanik gab es schon (#392/Flex-Tarif) —
   // sie kannte nur zwei Fälle. Ein Zeittarif liefert ebenfalls einen
   // gewichteten Preis, und ohne eigenes Wort stünde hier „Netzbezugspreis
@@ -145,18 +172,18 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
       wert: pvEvResidual,
       vjWert: undefined as number | null | undefined,
       color: 'text-blue-600 dark:text-blue-400',
-      formel: `PV-Eigenverbrauch × ${preisBez}`,
-      berechnung: d.eigenverbrauch_kwh != null && netzPreis != null
+      formel: `PV-Eigenverbrauch × ${preisBez}${evHinweis}`,
+      berechnung: d.eigenverbrauch_kwh != null && netzPreis != null && !hatSonstigeErzeuger
         ? `${fmt(d.eigenverbrauch_kwh - evInErsparnis / (netzPreis / 100), 1)} kWh × ${fmtCalc(netzPreis, 2)} ct/kWh`
         : undefined,
       ergebnis: `= ${fmtCalc(pvEvResidual, 2)} €`,
     } as TKontoPosten] : !hasPerInv ? [{
-      label: 'Eigenverbrauch-Ersparnis',
+      label: hatSonstigeErzeuger ? 'PV-Eigenverbrauch-Ersparnis' : 'Eigenverbrauch-Ersparnis',
       wert: d.ev_ersparnis_euro ?? 0,
       vjWert: vj?.ev_ersparnis_euro,
       color: 'text-blue-600 dark:text-blue-400',
-      formel: `Eigenverbrauch × ${preisBez}`,
-      berechnung: d.eigenverbrauch_kwh != null && netzPreis != null
+      formel: `${hatSonstigeErzeuger ? 'PV-Eigenverbrauch' : 'Eigenverbrauch'} × ${preisBez}${evHinweis}`,
+      berechnung: d.eigenverbrauch_kwh != null && netzPreis != null && !hatSonstigeErzeuger
         ? `${fmt(d.eigenverbrauch_kwh, 1)} kWh × ${fmtCalc(netzPreis, 2)} ct/kWh`
         : undefined,
       ergebnis: `= ${fmtCalc(d.ev_ersparnis_euro, 2)} €`,

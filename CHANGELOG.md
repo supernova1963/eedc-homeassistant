@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Die Eigenverbrauchs-Ersparnis sagt jetzt, was sie bewertet.** Wer einen Erzeuger unter *Sonstiges* betreibt — ein **BHKW**, ein **Windrad**, eine kleine Wasserkraftanlage —, sah im T-Konto eine Herleitung, die sich nicht nachrechnen ließ: Die Kilowattstunden-Zahl daneben enthält diesen Erzeuger (sie **muss** es, denn der Zähler am Hausanschluss misst die Summe aller Erzeuger dahinter), der Euro-Betrag bewertet aber nur PV und Balkonkraftwerk. *Menge × Preis = Betrag* ging damit nicht auf. ⭐ **Jetzt heißt die Zeile in diesem Fall „PV-Eigenverbrauch-Ersparnis"**, und der Tooltip nennt den Grund: Der Anteil aus *Sonstiges* ist dort nicht bewertet — sein Ertrag wird **am Gerät** gepflegt (Feld *Ertrag/Jahr*) und wirkt über ROI und Amortisation. ⚑ **Das ist Absicht, keine Lücke:** Beide Größen liegen in derselben Summe; würde eedc den Eigenverbrauch zusätzlich in Geld umrechnen, stünde derselbe Nutzen zweimal da. ⚠ **Die Multiplikation wird in diesem Fall nicht mehr angezeigt** — eine Rechnung, die man nicht nachrechnen kann, ist schlechter als keine; der bewertete Anteil wird bewusst **nicht** aus zwei gerundeten Zahlen zurückgerechnet. ⚑ **Wer keinen Erzeuger unter *Sonstiges* hat, sieht keine Änderung** — Beschriftung und Herleitung bleiben unverändert. **Es ändert sich keine Zahl.**
+
+---
+
 ## [4.0.37] - 2026-09-01 — Dieselbe Regel auf jedem Weg, und Zahlen, die sagen, was sie sind
 
 ### Added
