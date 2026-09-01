@@ -96,8 +96,29 @@ NACHKOMMASTELLEN_JE_EINHEIT: dict[str, int] = {
 NACHKOMMASTELLEN_DEFAULT = 2   # dimensionslose Kennwerte (COP, Zyklen, Rang …)
 NACHKOMMASTELLEN_MAX = 3       # Obergrenze für die Nullkipp-Ausweichung
 
+# ── Ausnahme: Prognose-Energie ist eine TAGESMENGE, kein Zählerstand ─────────
+# Burkard (T89667 #279, 31.08.2026) hat „Rest heute" über einen Nachmittag gegen
+# das Stundenprofil nachgerechnet und eine Nachkommastelle gewünscht. Die Regel
+# darüber hängt an der **Einheit** — und genau das ist die Ursache: „kWh" trägt
+# hier den Jahresertrag (12.345 kWh, wo zwei Nachkommastellen Scheingenauigkeit
+# sind — Rainer-PN 89905/2, Entscheid B7) UND die Tagesprognose (0–60 kWh, wo
+# eine ganze Zahl grob ist). Eine Einheit, zwei Größenordnungen.
+#
+# ⛔ Der ausschlaggebende Grund ist NICHT die Genauigkeit, sondern eine Summe:
+# `Rest heute` + `bisher erzeugt` = `heute (nachgeführt)`. Werden die Summanden
+# einzeln auf ganze Zahlen gerundet, geht sie sichtbar nicht mehr auf (gemessen:
+# 12,5 + 6,5 = 19,0 wird zu 12 + 6 = 18). Dass diese Addition aufgeht, ist genau
+# das, was v4.0.36 für #401 — denselben Melder — repariert hat.
+#
+# ⚑ REGEL statt Liste: es hängt an (Kategorie, Einheit), nicht an zehn Schlüsseln.
+# Ein künftiger Prognose-Sensor bekommt die Stelle damit von selbst, statt still
+# ganzzahlig zu bleiben, weil ihn niemand in eine Liste nachgetragen hat.
+NACHKOMMASTELLEN_JE_KATEGORIE: dict[tuple[str, str], int] = {
+    ("prognose", "kWh"): 1,
+}
 
-def runde_exportwert(value: Any, unit: str) -> Any:
+
+def runde_exportwert(value: Any, unit: str, category: Any = None) -> Any:
     """Rundet einen Sensorwert nach seiner Größenart (Einheit der Definition).
 
     **Jeder** Export-Weg benutzt diesen Helfer, und zwar erst an der
@@ -109,6 +130,11 @@ def runde_exportwert(value: Any, unit: str) -> Any:
     ~25 Sensorzeilen im Route-Modul vor, sodass REST eine Nachkommastelle
     zeigte, wo MQTT ganzzahlig publizierte, und der MQTT-Wert zweimal
     hintereinander gerundet wurde.
+
+    ``category`` ist optional und hebt die Einheiten-Regel nur dort auf, wo eine
+    Einheit zwei Größenordnungen trägt (s. ``NACHKOMMASTELLEN_JE_KATEGORIE``).
+    Wer sie nicht mitgibt, bekommt unverändert die Regel je Einheit — deshalb
+    bleibt ``runde_export_payload`` (Felder ohne Definition) unberührt.
 
     Nicht-numerische Werte (Monatsname, „Speicher voll um") und ganze Zahlen
     gehen unverändert durch. Ein Wert, der bei der vorgesehenen Stellenzahl auf
@@ -123,6 +149,14 @@ def runde_exportwert(value: Any, unit: str) -> Any:
         return value
 
     stellen = NACHKOMMASTELLEN_JE_EINHEIT.get(unit, NACHKOMMASTELLEN_DEFAULT)
+    if category is not None:
+        # `category` kommt je Weg anders an: MQTT reicht das Enum durch, REST den
+        # bereits serialisierten String. Beide auf denselben Schlüssel bringen,
+        # statt am Aufrufer zu normalisieren — sonst hätte der eine Weg die
+        # Ausnahme und der andere nicht, und das ist genau die Drift, gegen die
+        # dieser Helfer gebaut wurde.
+        kat = getattr(category, "value", category)
+        stellen = NACHKOMMASTELLEN_JE_KATEGORIE.get((str(kat), unit), stellen)
     gerundet = round(value, stellen)
     while gerundet == 0 and value != 0 and stellen < NACHKOMMASTELLEN_MAX:
         stellen += 1

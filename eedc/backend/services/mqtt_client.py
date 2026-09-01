@@ -386,7 +386,7 @@ class MQTTClient:
             if value is None:
                 value = "unknown"
             else:
-                value = runde_exportwert(value, sensor.unit)
+                value = runde_exportwert(value, sensor.unit, sensor.category)
 
             await client.publish(
                 state_topic,

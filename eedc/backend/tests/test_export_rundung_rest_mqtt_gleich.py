@@ -144,8 +144,16 @@ async def test_nullkipp_schutz_gilt_auch_im_rest_pfad(monkeypatch):
         key="test_leistung_kw", name="Leistung", unit="kW", icon="mdi:flash",
         category=SensorCategory.ANLAGE, formel="Testwert",
     )
+    # ⛔ Hier stand bis zum 01.09.2026 `eedc_prognose_rest_today_kwh` als
+    # Nullkipp-Fall — und seit die Prognose-kWh eine Nachkommastelle bekommen
+    # hat (Burkard, T89667 #279), belegt er nichts mehr: die Kategorie-Ausnahme
+    # liefert dieselbe 0,3, bevor die Nullkipp-Schleife überhaupt läuft. Der
+    # Fall wäre also auch dann grün geblieben, wenn man die Leitplanke ersatzlos
+    # löscht — gemessen, nicht vermutet. Die Probe braucht eine kWh-Größe OHNE
+    # eigene Stellenzahl; `pv_erzeugung_gesamt_kwh` ist `energie` und fällt
+    # deshalb wirklich durch den Nullkipp-Zweig.
     werte = [
-        _sv("eedc_prognose_rest_today_kwh", 0.35),   # kWh, würde auf 0 fallen
+        _sv("pv_erzeugung_gesamt_kwh", 0.35),        # kWh, würde auf 0 fallen
         _sv("netto_ertrag_euro", 0.004),             # Cent-Bruchteil
         SensorValue(definition=kw_definition, value=0.35),
         _sv("einspeisung_gesamt_kwh", 0.0),          # echte 0 bleibt 0
@@ -154,8 +162,8 @@ async def test_nullkipp_schutz_gilt_auch_im_rest_pfad(monkeypatch):
     rest = _rest_states(werte)
     mqtt = await _mqtt_states(monkeypatch, werte)
 
-    assert rest["eedc_prognose_rest_today_kwh"] not in ("0", "0.0")
-    assert float(rest["eedc_prognose_rest_today_kwh"]) == pytest.approx(0.3)
+    assert rest["pv_erzeugung_gesamt_kwh"] not in ("0", "0.0")
+    assert float(rest["pv_erzeugung_gesamt_kwh"]) == pytest.approx(0.3)
     assert float(rest["netto_ertrag_euro"]) == pytest.approx(0.004)
     assert rest["test_leistung_kw"] == "0.35"
     assert rest["einspeisung_gesamt_kwh"] == "0"
@@ -235,3 +243,85 @@ def test_produzent_liefert_ungerundet():
             f"{name} rundet wieder selbst — Rundung gehört an die "
             f"Serialisierungsgrenze (SensorExportItem / publish_sensor)."
         )
+
+
+# ---------------------------------------------------------------------------
+# Prognose-kWh trägt eine Nachkommastelle (Burkard, T89667 #279, 01.09.2026)
+# ---------------------------------------------------------------------------
+#
+# Warum das eine eigene Zusicherung braucht und nicht in den Nachbarn passt:
+# `test_payload_rundet_je_groessenart` misst die Regel JE EINHEIT — und genau
+# die trägt hier zwei Größenordnungen. „kWh" ist der Jahresertrag (12.345,
+# ganzzahlig richtig) UND die Tagesprognose (0–60, ganzzahlig grob).
+
+
+async def test_prognose_kwh_traegt_eine_nachkommastelle(monkeypatch):
+    """Die Ausnahme greift auf BEIDEN Wegen — und nur für Prognose-kWh."""
+    werte = [
+        _sv("eedc_prognose_rest_today_kwh", 7.53),
+        _sv("eedc_prognose_heute_kwh", 45.44),
+        _sv("pv_erzeugung_gesamt_kwh", 7.53),   # dieselbe Zahl, andere Kategorie
+    ]
+
+    rest = _rest_states(werte)
+    mqtt = await _mqtt_states(monkeypatch, werte)
+
+    assert rest["eedc_prognose_rest_today_kwh"] == "7.5"
+    assert rest["eedc_prognose_heute_kwh"] == "45.4"
+    # Die Diskriminierung: eine kWh-Größe ohne Prognose-Kategorie bleibt ganz.
+    assert rest["pv_erzeugung_gesamt_kwh"] == "8"
+
+    for key in rest:
+        assert rest[key] == mqtt[key], (
+            f"{key}: REST {rest[key]!r} != MQTT {mqtt[key]!r} — die Ausnahme "
+            f"darf nicht an EINER Serialisierungsgrenze hängen"
+        )
+
+
+async def test_die_regel_haengt_an_der_kategorie_nicht_an_zehn_namen(monkeypatch):
+    """Ein NEUER Prognose-Sensor bekommt die Stelle, ohne nachgetragen zu werden.
+
+    Das ist der Grund für die (Kategorie, Einheit)-Regel statt einer Liste von
+    Schlüsseln: eine Liste wäre beim nächsten Prognose-Sensor still veraltet,
+    und niemand hätte es gemerkt — er stünde ganzzahlig da wie vorher.
+    """
+    neu = SensorDefinition(
+        key="eedc_prognose_uebernaechste_woche_kwh", name="Irgendwann",
+        unit="kWh", icon="mdi:solar-power", category=SensorCategory.PROGNOSE,
+        formel="Testwert",
+    )
+    werte = [SensorValue(definition=neu, value=7.53)]
+
+    rest = _rest_states(werte)
+    mqtt = await _mqtt_states(monkeypatch, werte)
+
+    assert rest["eedc_prognose_uebernaechste_woche_kwh"] == "7.5"
+    assert mqtt["eedc_prognose_uebernaechste_woche_kwh"] == "7.5"
+
+
+async def test_rest_plus_bisher_ergibt_wieder_den_nachgefuehrten_tageswert(monkeypatch):
+    """Der eigentliche Grund für die Stelle — dieselbe Addition wie in #401.
+
+    `Rest heute` + bereits erzeugt = `heute (nachgeführt)`. Ganzzahlig gerundete
+    Summanden brechen sie sichtbar: 12,5 + 6,5 = 19,0 wird zu 12 + 6 = 18.
+    Dass diese Addition aufgeht, ist genau das, was v4.0.36 für denselben Melder
+    repariert hat — eine Anzeigerundung darf sie nicht wieder zerlegen.
+    """
+    ist_bisher, rest_kwh = 12.5, 6.5
+    rollend = round(ist_bisher + rest_kwh, 1)
+
+    werte = [
+        _sv("eedc_prognose_rest_today_kwh", rest_kwh),
+        _sv("eedc_prognose_heute_rollend_kwh", rollend),
+    ]
+    rest = _rest_states(werte)
+    mqtt = await _mqtt_states(monkeypatch, werte)
+
+    gezeigt_rest = float(rest["eedc_prognose_rest_today_kwh"])
+    gezeigt_roll = float(rest["eedc_prognose_heute_rollend_kwh"])
+    assert gezeigt_roll - gezeigt_rest == pytest.approx(ist_bisher), (
+        f"aus {gezeigt_roll} − {gezeigt_rest} liest der Anwender "
+        f"{gezeigt_roll - gezeigt_rest} statt {ist_bisher}"
+    )
+    for key in rest:
+        assert rest[key] == mqtt[key], key

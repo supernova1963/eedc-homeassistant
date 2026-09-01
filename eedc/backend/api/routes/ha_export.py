@@ -169,7 +169,7 @@ class SensorExportItem(BaseModel):
 
     @model_validator(mode="after")
     def _runde_wert(self):
-        gerundet = runde_exportwert(self.value, self.unit)
+        gerundet = runde_exportwert(self.value, self.unit, self.category)
         if gerundet is not self.value:
             # `model_construct`-freier Weg: Zuweisung im After-Validator läuft
             # nicht erneut durch die Validierung (Pydantic v2).
