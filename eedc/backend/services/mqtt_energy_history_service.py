@@ -318,18 +318,41 @@ def _compute_deltas(
 
         result[target_key] = round(delta, 2)
 
-    # Pro-Wechselrichter-PV (pv_<id>/bkw_<id>) auf die Kategorie `pv` aggregieren —
-    # analog HA-Pfad (live_history_service.py:372-383). Im MQTT-Modus liefert
-    # mancher Nutzer PV nur pro Wechselrichter (inv/<id>/pv_erzeugung_kwh); ohne
-    # diese Summierung blieb die „Heute"-PV-Kachel 0,0 kWh und der daraus
-    # abgeleitete Eigen-/Hausverbrauch leer (Dirk-PN 2026-05-31).
-    # Vorrang hat das anlagenweite Basis-Topic `pv_gesamt_kwh` (→ `pv` bereits
-    # gesetzt); dann NICHT zusätzlich aus Komponenten summieren (Doppelzählung).
-    # Whitelist via core/berechnungen statt Inline-Summe (ADR-001).
-    if result.get("pv") is None:
-        pv_summe = summe_pv_bkw_kwh(result)
-        if pv_summe > 0:
-            result["pv"] = round(pv_summe, 1)
+    # Pro-Wechselrichter-PV (pv_<id>/bkw_<id>) auf die Kategorie `pv` aggregieren.
+    # Im MQTT-Modus liefert mancher Nutzer PV nur pro Wechselrichter
+    # (inv/<id>/pv_erzeugung_kwh); ohne diese Summierung blieb die „Heute"-PV-
+    # Kachel 0,0 kWh und der daraus abgeleitete Eigen-/Hausverbrauch leer
+    # (Dirk-PN 2026-05-31). Whitelist via core/berechnungen statt Inline-Summe
+    # (ADR-001).
+    #
+    # ⛔ **Die Reihenfolge ist die Zusage, nicht der Geschmack** (N-172, 01.09.2026).
+    # Hier stand bis dahin `if result.get("pv") is None:` — das anlagenweite
+    # Basis-Topic gewann, und die je Erzeuger GEMESSENEN Werte zählten nur, wenn
+    # es fehlte. Das ist die Umkehrung dessen, was drei andere Stellen tun und
+    # was das Handbuch dem Anwender zusagt:
+    #
+    #   HANDBUCH_DATEN_CHECKER §„Entweder die Anlagensumme oder die Einzelwerte
+    #   — nie beides. Sobald EIN Erzeuger einen eigenen kWh-Zähler bekommt,
+    #   zählt für Tag und Stunde nur noch, was je Erzeuger gemessen ist; der
+    #   Anlagen-Zählerstand ist dort dann aus."
+    #
+    # Der HA-Zwilling baut genau diese Kaskade (`live_history_service`, F-49:
+    # Erzeuger-Einzelzähler → sonst Anlagenzähler → sonst Trapez), und der
+    # Snapshot-Layer stellt dieselbe Frage über den SoT
+    # `snapshot/komponenten_beitraege.pv_je_investition_belegt`. ⚠ Der Kommentar
+    # an dieser Stelle behauptete dabei „analog HA-Pfad" — und tat das Gegenteil.
+    #
+    # ⚠ Die Doppelzählung, gegen die die alte Fassung schützte, ist weiter
+    # ausgeschlossen: es gilt entweder die Komponentensumme ODER das Basis-Delta,
+    # nie beides addiert.
+    #
+    # ⚠ Die in Kauf genommene Folge steht im selben Handbuchsatz („und dann
+    # ALLE"): Wer das Aggregat schickt und nur einen von zwei Wechselrichtern,
+    # bekommt die kleinere Zahl. Genau diese Lücke meldet der Daten-Checker
+    # (Zähler-Abdeckung) — sie wird hier nicht still überdeckt.
+    pv_summe = summe_pv_bkw_kwh(result)
+    if pv_summe > 0:
+        result["pv"] = round(pv_summe, 1)
 
     return result
 

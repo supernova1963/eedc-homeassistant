@@ -1,11 +1,105 @@
 # Was ist neu
 
-> **Stand:** August 2026 (v4.0.36)
+> **Stand:** September 2026 (v4.0.37)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.37 — 1. September 2026
+
+**Dieselbe Regel auf jedem Weg — und Zahlen, die sagen, was sie sind**
+
+**Deine Prognosequelle gilt jetzt auch für Morgen und Übermorgen**
+
+In der Live-Kachel *Solar-Aussicht* stand unter der Überschrift deiner Quelle für die
+Folgetage trotzdem die eedc-Prognose — bei Solcast für beide Tage, bei Solar Forecast ML
+für Übermorgen. Der Grund war schlicht: eedc hat dort nur das **Stundenprofil** deiner
+Quelle ausgewertet und den **Tageswert**, den dieselbe Quelle danebenstellt, nicht
+gelesen.
+
+Jetzt gilt die Reihenfolge **Tageswert der Quelle → ihr Stundenprofil → eedc**. Deckt
+deine Quelle einen Tag wirklich nicht ab, steht klein „eedc" an genau diesem Tag — nur
+dann. Gemeldet von **Burkard** im simon42-Forum, mit gegengerechneten Zahlen.
+
+⚑ *Auswertungen → Prognose* hat schon immer alle Tage aus der Quelle gelesen; *Cockpit →
+Aussicht* und die Home-Assistant-Sensoren rechnen weiterhin bewusst mit der
+eedc-Prognose.
+
+**Die Prognose-Sensoren tragen eine Nachkommastelle**
+
+Die PV-Prognose-Sensoren in Home Assistant standen als ganze Zahlen da. Für einen
+Jahresertrag ist das richtig — bei 12.345 kWh sind Nachkommastellen Scheingenauigkeit.
+Eine Tagesprognose bewegt sich aber zwischen 0 und 60 kWh, und dort fällt *Rest heute*
+über den Nachmittag in Ein-Kilowattstunden-Stufen statt gleichmäßig.
+
+⭐ **Der eigentliche Grund ist eine Summe:** *Rest heute* plus das heute bereits Erzeugte
+ergibt *heute (nachgeführt)*. Auf ganze Zahlen gerundet ging diese Rechnung sichtbar
+nicht mehr auf. Ebenfalls **Burkard**, der den Wert über einen ganzen Nachmittag gegen
+das Stundenprofil nachgerechnet hat.
+
+⚠ Alle übrigen kWh-Sensoren bleiben ganzzahlig; Namen und Entitäten ändern sich nicht.
+
+**Wer per MQTT liefert, bekommt dieselbe Zähler-Regel wie alle anderen**
+
+eedc sagt zu: *Entweder die Anlagensumme oder die Einzelwerte — nie beides.* Sobald ein
+Erzeuger einen eigenen kWh-Zähler bekommt, zählt für Tag und Stunde nur noch, was je
+Erzeuger gemessen ist. Im MQTT-Betrieb galt das nicht: Dort gewann das anlagenweite
+Topic, und die je Wechselrichter gemessenen Werte zählten nur, wenn es fehlte.
+
+Jetzt gilt in beiden Betriebsarten dieselbe Reihenfolge: **gemessene Einzelwerte → sonst
+der Anlagen-Zähler → sonst die Leistungs-Integration.**
+
+⚠ **Wenn du das Anlagen-Topic schickst und nur einen von mehreren Wechselrichtern**, wird
+deine Heute-Zahl kleiner — eedc rechnet dann mit dem, was wirklich gemessen ist. Der
+Daten-Check nennt dir das Gerät, dem der Zähler fehlt. Wer nur das eine **oder** das
+andere schickt, merkt keine Änderung.
+
+**Die Grundlast, Nacht für Nacht**
+
+In *Auswertungen → Tabelle* führt der Spalten-Picker in der Tagesansicht die neue Spalte
+**„Grundlast"** — den Nacht-Sockel *dieser einen* Nacht. Damit lässt sich ein Versuch
+auswerten: Wer ein Gerät über Nacht abschaltet, sieht am nächsten Morgen, was es
+gekostet hat. Im Tagesverbrauch geht so etwas unter — 50 Watt über acht Stunden sind
+0,4 kWh neben vielleicht 20 kWh. Gewünscht von **OB73-gif**.
+
+⚠ Die Spalte hat bewusst keine Summen- oder Durchschnittszeile: Ein Median lässt sich
+nicht addieren, und der Durchschnitt mehrerer Nächte wäre nicht die Grundlast, die
+*Cockpit → Monat* nennt. Beide Zahlen stimmen und beantworten verschiedene Fragen.
+
+**Zahlen, die sagen, was sie sind**
+
+- **Wo eedc nichts bewertet, steht „—".** In *Auswertungen → ROI* rechnet eedc bei
+  **Wallbox** und **Sonstiges** keine Einsparung selbst — dort zählt allein das gepflegte
+  Feld *Ertrag/Jahr*. War es leer, stand trotzdem eine Zahl da, bei gepflegten
+  Betriebskosten sogar ein negativer Betrag. Jetzt bleiben Einsparung, ROI, Amortisation
+  und CO₂ dieser Zeile leer, und der Tooltip nennt den Grund. Die Anschaffungskosten
+  zählen weiter.
+- **Die Speicher-Kapazität steht so da, wie du sie gepflegt hast** — aus 7,5 kWh wurde in
+  der Zeile unter den Vollzyklen „8 kWh". Gerechnet wurde immer mit dem gepflegten Wert;
+  jetzt stimmt auch die Beschriftung (**Burkard**).
+- **Cockpit → Jahr/Gesamt sagt, warum zwei Zahlen verschieden weit reichen.** Die
+  Kennzahlen oben zählen jeden Monat mit Daten, die Energie-Bilanz darunter nur die
+  abgeschlossenen. Beide Zeiträume standen schon dabei — **warum** sie sich
+  unterscheiden, jetzt auch (**Burkard**).
+- **Beim Eintippen der nutzbaren Kapazität** steht daneben, was eedc daraus macht
+  (**cbrosius**).
+
+**Hinweise, die man auch auflösen kann**
+
+- **Nach einem Geräte-Tausch meldet der Daten-Check nicht mehr die Zeit davor.** Wer
+  seinen Speicher aufrüstet und dabei dem Handbuch folgt, bekam eine Warnung über die
+  gesamte Zeit *vor* dem Wechsel — an diesen Tagen gab es aber nur einen Speicher. Der
+  Check fragt jetzt für jeden Tag, wie viele Geräte an *diesem* Tag da waren
+  (**Radiocarbonat**).
+- **Die „Beheben"-Verweise führen direkt an die richtige Stelle** — und wo ein bestimmter
+  Monat fehlt, gleich in die Erfassung genau dieses Monats (**Radiocarbonat**).
+- **Der Zähler-Hinweis nennt seine teuerste Folge.** Fehlt ein kWh-Zähler, bleibt nicht
+  nur eine Auswertung leer: Der bilanzielle **Hausverbrauch** wird zu niedrig, und mit ihm
+  die **Grundlast**. Beide Meldungen sagen das jetzt (**OB73-gif**).
 
 ---
 
