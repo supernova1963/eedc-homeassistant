@@ -21,6 +21,28 @@ const INV_GROUP_LABELS: Record<string, string> = {
   inv_sonstiges: 'Sonstiges (einzeln)',
 }
 
+/**
+ * Erklärtext zum gewählten Zielfeld — oder `null`, wenn es keinen gibt.
+ *
+ * Er kommt aus dem Felddefinitions-SoT (`field_definitions.INVESTITION_FELDER`)
+ * und sagt bei den Energiefeldern, ob eine **elektrische** oder eine
+ * **thermische** Größe erwartet wird. Bis 01.09.2026 endete er am Backend: die
+ * Zuordnungs-Option wurde nur aus Label und Einheit gebaut, und die Fläche zeigte
+ * dem Anwender nirgends, welche Größe hinter dem Feld steht.
+ *
+ * Nur die **dynamischen Investitionsfelder** führen einen Hinweis; die statischen
+ * Anlagenfelder oben (Einspeisung, Netzbezug …) benennen ihre Größe im Label
+ * selbst und bekommen bewusst keinen erfundenen dazu.
+ */
+export function zielfeldHinweis(
+  analysis: AnalyzeResult,
+  zielfeld: string,
+): string | null {
+  if (!zielfeld) return null
+  const treffer = (analysis.investitions_felder ?? []).find((f) => f.id === zielfeld)
+  return treffer?.hinweis ?? null
+}
+
 export function mappingZielOptionen(
   analysis: AnalyzeResult,
   mappings: Record<string, string>,

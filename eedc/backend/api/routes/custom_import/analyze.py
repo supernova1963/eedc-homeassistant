@@ -132,6 +132,16 @@ def _build_investition_felder(investitionen: list) -> list[dict]:
                 "label": f"{prefix}: {bez} – {label_teil}{einheit_str}",
                 "required": False,
                 "group": group,
+                # Der Erklaertext des Feldes aus dem SoT. Bis 01.09.2026 baute
+                # diese Option NUR aus `label` + Einheit — der `hinweis`, der
+                # bei jedem Energiefeld sagt, ob eine elektrische oder eine
+                # thermische Groesse erwartet wird, erreichte die
+                # Zuordnungs-Flaeche nie. Genau dort ordnete ein Melder
+                # (dietmar1968, T89667 #283) eine Umgebungswaerme-Spalte auf ein
+                # Waermemengen-Feld zu; der Wert stand danach ueberall.
+                # `None`, wo der SoT keinen Hinweis fuehrt — der Client zeigt
+                # dann nichts, statt eine leere Zeile zu reservieren.
+                "hinweis": feld.get("hinweis"),
             })
 
     return felder

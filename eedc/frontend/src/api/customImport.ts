@@ -16,6 +16,13 @@ export interface EedcField {
   label: string
   required: boolean
   group: string
+  /**
+   * Erklärtext des Zielfelds aus dem Felddefinitions-SoT — sagt insbesondere,
+   * ob eine **elektrische** oder eine **thermische** Größe erwartet wird.
+   * Optional: nicht jedes Zielfeld führt einen Hinweis, und die statischen
+   * Anlagenfelder (Einspeisung, Netzbezug …) haben gar keinen.
+   */
+  hinweis?: string | null
 }
 
 export interface InvestitionSpalteInfo {

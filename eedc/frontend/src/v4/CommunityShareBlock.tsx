@@ -90,7 +90,9 @@ const MONATSWERT_FELDER: { key: keyof MonatswertPreview; label: string; einheit:
   { key: 'bkw_speicher_entladung_kwh', label: 'BKW-Speicher-Entladung', einheit: 'kWh' },
   { key: 'wp_stromverbrauch_kwh', label: 'Wärmepumpe Stromverbrauch', einheit: 'kWh' },
   { key: 'wp_heizwaerme_kwh', label: 'Wärmepumpe Heizwärme', einheit: 'kWh' },
-  { key: 'wp_warmwasser_kwh', label: 'Wärmepumpe Warmwasser', einheit: 'kWh' },
+  // „Heizwärme" darüber sagt die Größe, diese Zeile sagte sie nicht — dieselbe
+  // Klasse, halb gelöst. Beide Werte sind thermisch (01.09.2026).
+  { key: 'wp_warmwasser_kwh', label: 'Wärmepumpe Warmwasser-Wärme', einheit: 'kWh' },
   { key: 'wallbox_ladung_kwh', label: 'Wallbox-Ladung', einheit: 'kWh' },
   { key: 'wallbox_ladung_pv_kwh', label: 'Wallbox-Ladung aus PV', einheit: 'kWh' },
   { key: 'wallbox_ladevorgaenge', label: 'Wallbox-Ladevorgänge', einheit: '' },

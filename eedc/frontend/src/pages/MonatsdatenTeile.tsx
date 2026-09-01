@@ -56,7 +56,15 @@ const COLUMN_GROUPS = {
   berechnet: { label: 'Berechnungen', color: 'bg-green-500' },
 }
 
-const COLUMNS: ColumnConfig[] = [
+/**
+ * Spalten-SoT der Pflege-Tabelle unter *Einstellungen*.
+ *
+ * Exportiert seit dem 01.09.2026, damit der Wortlaut gegen den zweiten
+ * Spalten-SoT (`lib/werte/registry.ts`, *Auswertungen → Tabelle*) prüfbar ist —
+ * beide Tabellen zeigen teils dieselben Größen, und sie liefen im Namen
+ * auseinander (`registry.wp-wortlaut.test.ts`).
+ */
+export const COLUMNS: ColumnConfig[] = [
   // Zählerwerte (aus Monatsdaten - direkt gemessen)
   { key: 'einspeisung', label: 'Einspeisung', shortLabel: 'Einsp.', group: 'zaehler', getValue: (md) => md.einspeisung_kwh, format: 'kwh', defaultVisible: true },
   { key: 'netzbezug', label: 'Netzbezug', shortLabel: 'Netz', group: 'zaehler', getValue: (md) => md.netzbezug_kwh, format: 'kwh', defaultVisible: true },
@@ -64,9 +72,16 @@ const COLUMNS: ColumnConfig[] = [
   { key: 'pv_erzeugung', label: 'PV-Erzeugung', shortLabel: 'PV', group: 'komponenten', getValue: (md) => md.pv_erzeugung_kwh, format: 'kwh', defaultVisible: true },
   { key: 'speicher_ladung', label: 'Speicher Ladung', shortLabel: 'Sp.Lad', group: 'komponenten', getValue: (md) => md.speicher_ladung_kwh, format: 'kwh', defaultVisible: false },
   { key: 'speicher_entladung', label: 'Speicher Entladung', shortLabel: 'Sp.Entl', group: 'komponenten', getValue: (md) => md.speicher_entladung_kwh, format: 'kwh', defaultVisible: false },
+  // ⚠ Drei kWh-Spalten nebeneinander, aber ZWEI Größen: `WP Strom` ist
+  // elektrisch, die beiden anderen sind **thermisch**. Bis 01.09.2026 sagten
+  // die Labels das nicht — ein Melder (dietmar1968, T89667 #283) las die
+  // Wärmemenge als eingesetzten Strom und rechnete dagegen. Der Wortlaut kommt
+  // aus dem bestehenden Werte-SoT `lib/werte/registry.ts` („WP Wärme Heizen" ·
+  // „WP Wärme WW"), der dieselben Größen in *Auswertungen → Tabelle*
+  // beschriftet — keine zweite Schreibweise daneben erfinden.
   { key: 'wp_strom', label: 'WP Strom', shortLabel: 'WP', group: 'komponenten', getValue: (md) => md.wp_strom_kwh, format: 'kwh', defaultVisible: false },
-  { key: 'wp_heizung', label: 'WP Heizung', shortLabel: 'WP Hz', group: 'komponenten', getValue: (md) => md.wp_heizung_kwh, format: 'kwh', defaultVisible: false },
-  { key: 'wp_warmwasser', label: 'WP Warmwasser', shortLabel: 'WP WW', group: 'komponenten', getValue: (md) => md.wp_warmwasser_kwh, format: 'kwh', defaultVisible: false },
+  { key: 'wp_heizung', label: 'WP Wärme Heizen', shortLabel: 'WP Wä Hz', group: 'komponenten', getValue: (md) => md.wp_heizung_kwh, format: 'kwh', defaultVisible: false },
+  { key: 'wp_warmwasser', label: 'WP Wärme WW', shortLabel: 'WP Wä WW', group: 'komponenten', getValue: (md) => md.wp_warmwasser_kwh, format: 'kwh', defaultVisible: false },
   { key: 'eauto_ladung', label: 'E-Auto Ladung', shortLabel: 'E-Auto', group: 'komponenten', getValue: (md) => md.eauto_ladung_kwh, format: 'kwh', defaultVisible: false },
   { key: 'eauto_km', label: 'E-Auto km', shortLabel: 'km', group: 'komponenten', getValue: (md) => md.eauto_km, defaultVisible: false },
   { key: 'wallbox_ladung', label: 'Wallbox Ladung', shortLabel: 'WB', group: 'komponenten', getValue: (md) => md.wallbox_ladung_kwh, format: 'kwh', defaultVisible: false },

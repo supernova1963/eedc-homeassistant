@@ -1,7 +1,7 @@
 import { ArrowRight, ArrowUpDown } from 'lucide-react'
 import { Card, Select } from '../../ui'
 import type { AnalyzeResult } from '../../../api/customImport'
-import { mappingZielOptionen } from '../customFelder'
+import { mappingZielOptionen, zielfeldHinweis } from '../customFelder'
 
 /**
  * MappingTabelle — Spalten-zu-eedc-Feld-Zuordnung (CustomImportWizard, Schritt 2).
@@ -42,8 +42,10 @@ export default function MappingTabelle({
         <div className="space-y-2">
           {analysis.spalten.map((col) => {
             const currentMapping = mappings[col.name] || ''
+            const hinweis = zielfeldHinweis(analysis, currentMapping)
             return (
-              <div key={col.name} className="flex items-center gap-3 py-2 border-b border-gray-100 dark:border-gray-800 last:border-0">
+              <div key={col.name} className="py-2 border-b border-gray-100 dark:border-gray-800 last:border-0">
+              <div className="flex items-center gap-3">
                 {/* Quelltitel + Samples */}
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-sm text-gray-900 dark:text-white truncate">
@@ -83,6 +85,17 @@ export default function MappingTabelle({
                     className={currentMapping ? 'border-primary-400 dark:border-primary-600' : ''}
                   />
                 </div>
+              </div>
+              {/* Erklärtext des gewählten Zielfelds — sagt bei den Energiefeldern,
+                  ob eine elektrische oder eine thermische Größe erwartet wird.
+                  Er stand immer im Felddefinitions-SoT, erreichte diese Fläche
+                  aber nie; wer hier zuordnet, sah nur "… – Warmwasser (kWh)".
+                  Nur anzeigen, wo es einen gibt — keine leere Zeile reservieren. */}
+              {hinweis && (
+                <p className="mt-1 ml-0 text-xs text-gray-500 dark:text-gray-400">
+                  {hinweis}
+                </p>
+              )}
               </div>
             )
           })}

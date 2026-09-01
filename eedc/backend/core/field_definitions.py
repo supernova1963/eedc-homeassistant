@@ -460,7 +460,16 @@ INVESTITION_FELDER: dict = {
             "hinweis": "Abgegebene Heizwärme (thermisch, NICHT Strom!) in kWh, kumulativ oder Tagessensor. Ohne Wärmemengenzähler aus Stromverbrauch × JAZ berechnet.",
         },
         {
-            "feld": "warmwasser_kwh", "label": "Warmwasser", "einheit": "kWh",
+            # #120-Schaerfung, zweite Haelfte (01.09.2026, dietmar1968 T89667 #283).
+            # `heizenergie_kwh` bekam mit #120 ausdruecklich "abgegebene thermische
+            # Waerme, nicht Strom" ins LABEL — dieses Schwesterfeld blieb bei
+            # "Warmwasser" stehen. Das Label ist die einzige Beschriftung, die
+            # die Custom-Import-Zuordnung zeigt (`custom_import/analyze.py` baut
+            # die Option aus `label` + Einheit), und genau dort ordnete ein
+            # Melder eine Umgebungswaerme-Spalte auf dieses Feld zu. Bei
+            # "Heizwaerme" daneben ist ihm das nicht passiert.
+            # CSV-Suffix bleibt unveraendert — wie bei #120.
+            "feld": "warmwasser_kwh", "label": "Warmwasser-Wärme", "einheit": "kWh",
             "csv_suffix": "Warmwasser_kWh",
             # N-304: **eine Split-Klimaanlage hat keinen Warmwasserkreis.** Das
             # Feld war dort nicht nur überflüssig, sondern schädlich: es fließt

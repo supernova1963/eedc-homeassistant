@@ -85,7 +85,11 @@ const WAERMEPUMPE_FELDER: FeldDefinition[] = [
     hint: 'Stromaufnahme nur für Warmwasser (elektrisch)' },
   { feld: 'heizenergie_kwh',      label: 'Heizwärme',        einheit: 'kWh',
     hint: 'Abgegebene Heizwärme (thermisch) — COP = Heizwärme / Strom' },
-  { feld: 'warmwasser_kwh',       label: 'Warmwasser',       einheit: 'kWh', bedingung: '!luft_luft',
+  // #120-Schärfung, zweite Hälfte (01.09.2026) — Spiegel von
+  // `field_definitions.py::warmwasser_kwh`. Das Label muss die Größe selbst
+  // tragen: es ist die einzige Beschriftung, die die Custom-Import-Zuordnung
+  // zeigt. Beide SoTs bleiben wortgleich.
+  { feld: 'warmwasser_kwh',       label: 'Warmwasser-Wärme', einheit: 'kWh', bedingung: '!luft_luft',
     hint: 'Abgegebene Warmwasser-Wärme (thermisch)' },
 ]
 
