@@ -209,6 +209,7 @@ const TAG_BASIS = {
   peak_pv_kw: null,
   peak_netzbezug_kw: null,
   peak_einspeisung_kw: null,
+  grundlast_kw: null,
   performance_ratio: null,
   batterie_vollzyklen: null,
   temperatur_min_c: null,

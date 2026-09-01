@@ -44,7 +44,7 @@ function tw(datum: string, over: Partial<TagWerte> = {}): TagWerte {
     einspeise_erloes: 1, ev_ersparnis: 2, netzbezug_kosten: 1.5,
     netto_ertrag: 3, netto_bilanz: 1.5, co2_einsparung: 11.4,
     ueberschuss_kwh: 8, defizit_kwh: 2, peak_pv_kw: 6.2,
-    peak_netzbezug_kw: 1.1, peak_einspeisung_kw: 4.0,
+    peak_netzbezug_kw: 1.1, peak_einspeisung_kw: 4.0, grundlast_kw: 0.38,
     performance_ratio: 0.85, batterie_vollzyklen: 0.4,
     temperatur_min_c: 10, temperatur_max_c: 22,
     strahlung_summe_wh_m2: 5000, boersenpreis_avg_cent: 9.5,
@@ -148,6 +148,23 @@ describe('WerteTabelle', () => {
     // Picker zeigt keinen monat-only Eintrag „WP Wärme"
     fireEvent.click(screen.getByRole('button', { name: /Spalten/ }))
     expect(screen.queryByText('WP Wärme')).not.toBeInTheDocument()
+    // Grundlast je Nacht steht als WÄHLBARE Spalte im Picker (OB73-gif, #395) —
+    // nicht voreingestellt, wie alle Zusatzspalten seit rapahls Sonstiges-Wunsch.
+    expect(screen.getByText('Grundlast')).toBeInTheDocument()
+  })
+
+  it('Grundlast je Nacht wird gerendert — und ein „—" ist kein 0,00 kW', () => {
+    const tage = [
+      tw('2026-05-10', { grundlast_kw: 0.38 }),
+      tw('2026-05-11', { grundlast_kw: null }),   // keine Nachtstunde gemessen
+    ].map(tagesZeile)
+    render(
+      <WerteTabelle rows={tage} granularitaet="tag" defaultSpalten={['grundlast_kw']} />,
+    )
+    expect(screen.getByText(/Grundlast \(kW\)/)).toBeInTheDocument()
+    expect(screen.getByText('0,38')).toBeInTheDocument()
+    // Der Total-Fall trägt das Display-Token, keine erfundene Null.
+    expect(screen.queryByText('0,00')).not.toBeInTheDocument()
   })
 
   it('Tages-Vergleich matcht über den ausgerichteten Schlüssel (nicht über den Tag-im-Monat)', () => {

@@ -47,6 +47,7 @@ from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.core.berechnungen import (
     aggregiere_tep_komponenten,
     berechne_finanz_aggregat,
+    berechne_grundlast,
     bilanz_aus_stundenrows,
     delta_soc_kwh,
     erzeuger_kwh_je_investition,
@@ -194,6 +195,24 @@ async def baue_tage_werte(
         stunden_rows = tep_pro_tag.get(tag, [])
         bilanz = bilanz_aus_stundenrows(stunden_rows)
         tz = tz_pro_tag.get(tag)
+
+        # Grundlast dieser Nacht (ADR-001: Sourcing hier, Formel im Layer).
+        # Der Filter ist WOERTLICH der der Monats-/Jahres-Kachel
+        # (`aktueller_monat._load_grundlast_nacht_kw`): Stunden < 5, nur
+        # `verbrauch_kw` ueber 0. Wer ihn hier „verbessert", erzeugt zwei
+        # Grundlasten, die sich nicht mehr erklaeren lassen.
+        # ⚠ Keine Mindestzahl an Nachtstunden: fehlen sie ganz, liefert
+        # `berechne_grundlast` None und die Spalte zeigt „—" (Total-Fall);
+        # eine Teilabdeckung bleibt stehen, wie ueberall im Baum.
+        nacht_kw = [
+            float(r.verbrauch_kw) for r in stunden_rows
+            if r.stunde < 5 and r.verbrauch_kw is not None and r.verbrauch_kw > 0
+        ]
+        grundlast_kw = berechne_grundlast(
+            nacht_verbrauch_kw=nacht_kw,
+            gesamtverbrauch_kwh=None,   # der Anteil hat hier keinen Leser
+            tage=1,
+        ).grundlast_kw
 
         # Nenner des spezifischen Tagesertrags (F-58). `mit_bkw=True`, weil der
         # Zähler `bilanz.erzeugung_kwh` die Kategorie `pv` ist und ein
@@ -393,6 +412,7 @@ async def baue_tage_werte(
             ),
             peak_pv_kw=(tz.peak_pv_kw if tz else None),
             peak_netzbezug_kw=(tz.peak_netzbezug_kw if tz else None),
+            grundlast_kw=grundlast_kw,
             peak_einspeisung_kw=(tz.peak_einspeisung_kw if tz else None),
             # PR ohne erfasste PV ist keine 0, sondern keine Aussage. Der
             # Aggregator schreibt sie seit demselben Paket gar nicht mehr;

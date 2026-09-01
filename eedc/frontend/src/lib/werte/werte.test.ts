@@ -46,7 +46,7 @@ function tw(datum: string, over: Partial<TagWerte> = {}): TagWerte {
     einspeise_erloes: 1, ev_ersparnis: 2, netzbezug_kosten: 1.5,
     netto_ertrag: 3, netto_bilanz: 1.5, co2_einsparung: 11.4,
     ueberschuss_kwh: 8, defizit_kwh: 2, peak_pv_kw: 6.2,
-    peak_netzbezug_kw: 1.1, peak_einspeisung_kw: 4.0,
+    peak_netzbezug_kw: 1.1, peak_einspeisung_kw: 4.0, grundlast_kw: 0.38,
     performance_ratio: 0.85, batterie_vollzyklen: 0.4,
     temperatur_min_c: 10, temperatur_max_c: 22,
     strahlung_summe_wh_m2: 5000, boersenpreis_avg_cent: 9.5,
@@ -57,8 +57,8 @@ function tw(datum: string, over: Partial<TagWerte> = {}): TagWerte {
 }
 
 describe('W1-Registry', () => {
-  it('hat 47 Metriken (36 Monat + 11 Tag-native), jede mit gültiger Gruppe + granular', () => {
-    expect(WERTE_METRIKEN).toHaveLength(47)
+  it('hat 48 Metriken (36 Monat + 12 Tag-native), jede mit gültiger Gruppe + granular', () => {
+    expect(WERTE_METRIKEN).toHaveLength(48)
     for (const m of WERTE_METRIKEN) {
       expect(WERTE_GRUPPEN).toContain(m.gruppe)
       expect(m.granular.length).toBeGreaterThan(0)
@@ -97,6 +97,15 @@ describe('metrikenFuer (Granularität)', () => {
     expect(keys).toContain('peak_pv_kw')
     expect(keys).toContain('ueberschuss_kwh')
     expect(keys).toContain('erzeugung')
+    // Grundlast je Nacht (OB73-gif, #395) — tag-nativ, denn der Monat hat
+    // seinen eigenen Median über ALLE Nachtstunden und nicht den Durchschnitt
+    // der Tageswerte. Wäre sie versehentlich MONAT_TAG, stünde in der
+    // Monatstabelle eine Spalte ohne Wert.
+    expect(keys).toContain('grundlast_kw')
+    expect(metrikenFuer('monat').map((x) => x.key)).not.toContain('grundlast_kw')
+    // Ein Median lässt sich nicht summieren — sonst stünde unter der Spalte
+    // eine Zahl, die keine Grundlast ist.
+    expect(METRIK_BY_KEY['grundlast_kw'].aggregation).toBe('none')
     expect(keys).not.toContain('wp_waerme')
     expect(keys).not.toContain('eauto_km')
   })

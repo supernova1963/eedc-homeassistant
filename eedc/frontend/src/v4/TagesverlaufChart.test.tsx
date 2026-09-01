@@ -23,7 +23,7 @@ function tw(datum: string, over: Partial<TagWerte> = {}): TagWerte {
     einspeise_erloes: 1, ev_ersparnis: 2, netzbezug_kosten: 1.5,
     netto_ertrag: 3, netto_bilanz: 1.5, co2_einsparung: 11.4,
     ueberschuss_kwh: 8, defizit_kwh: 2, peak_pv_kw: 6.2,
-    peak_netzbezug_kw: 1.1, peak_einspeisung_kw: 4.0,
+    peak_netzbezug_kw: 1.1, peak_einspeisung_kw: 4.0, grundlast_kw: 0.38,
     performance_ratio: 0.85, batterie_vollzyklen: 0.4,
     temperatur_min_c: 10, temperatur_max_c: 22,
     strahlung_summe_wh_m2: 5000, boersenpreis_avg_cent: 9.5,

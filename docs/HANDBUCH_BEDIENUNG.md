@@ -770,6 +770,23 @@ Der interaktive Überblick über alle Monatswerte in einer sortierbaren Tabelle 
 >
 > *Bis Version 4.0.5 wurden über mehrjährige Zeiträume alle Jahrgänge desselben Monats verwechselt: jede Zeile verglich sich mit dem jüngsten davon, im Extremfall mit sich selbst (identische Zahlen, Δ 0,0 %). Wenn deine Vorjahresspalte vorher gespiegelte Werte zeigte, ist das die Korrektur.*
 
+> **Grundlast je Nacht (Tagesansicht).** Der Spalten-Picker führt unter den Tages-Spalten
+> **„Grundlast"** — den Nacht-Sockel *dieser einen* Nacht in kW: den **Median der
+> Nachtstunden 0–5 Uhr**, dieselbe Rechnung wie in *Cockpit → Monat*, nur über einen Tag. Damit lässt sich ablesen, was ein über Nacht abgeschaltetes Gerät wirklich
+> ausmacht: Im Tagesverbrauch geht so etwas unter (50 Watt über acht Stunden sind 0,4 kWh neben
+> vielleicht 20 kWh), im Nacht-Sockel steht es direkt nebeneinander. Die Spalte ist **nicht
+> voreingestellt** und lässt sich wie jede andere exportieren.
+>
+> ⚠ **Sie hat bewusst keine Summen- oder Durchschnittszeile.** Ein Median lässt sich nicht
+> addieren, und der Durchschnitt mehrerer Nächte wäre **nicht** die Grundlast, die
+> [Cockpit → Monat](#23-monat) nennt: die bildet ihren Median über *alle* Nachtstunden des Monats.
+> Beide Zahlen stimmen und beantworten verschiedene Fragen — deshalb steht die eine je Nacht und
+> die andere je Monat, statt dass eine dritte daneben entsteht.
+>
+> ⚠ **Wo für eine Nacht gar nichts gemessen wurde, steht „—"** und keine 0 — eine Null hieße
+> „gemessen, und es lief nichts". Wurde nur ein Teil der Nachtstunden erfasst, steht der Wert
+> aus dem erfassten Teil; er wird nicht unterdrückt.
+
 > **Erträge je PV-String und je Balkonkraftwerk (Tagesansicht).** Im Block **Energieprofile** führt
 > der Spalten-Picker die Gruppe **„Je Erzeuger"**: je Gerät eine Spalte mit seinem Tagesertrag —
 > mit Summenzeile, Vergleich und CSV wie jede andere Spalte. Sie erscheint ab **zwei** Erzeugern und

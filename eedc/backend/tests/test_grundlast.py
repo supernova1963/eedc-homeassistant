@@ -1,4 +1,13 @@
-"""Tests für `core/berechnungen/grundlast.py` (R12-1, Nacht-Sockel)."""
+"""Tests für `core/berechnungen/grundlast.py` (R12-1, Nacht-Sockel) — die FORMEL.
+
+Hier steht ausschließlich der Layer: Median, Hochrechnung, Anteil, die beiden
+Nicht-Fälle. Wer die Größe **einsammelt**, wird woanders geprüft.
+
+Schwesterdatei: `test_grundlast_spalte_je_nacht.py` — dort das Sourcing des
+Tages-Pfads (Nachtstunden-Filter, Spalte der Tagestabelle). Die Trennung ist
+Absicht: dieselbe Formel bedient inzwischen vier Zeiträume (Live, Tag, Monat,
+Jahr), und ein Fehler sitzt praktisch immer im Filter, nicht im Median.
+"""
 
 from __future__ import annotations
 

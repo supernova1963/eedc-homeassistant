@@ -399,6 +399,22 @@ class TagWerteResponse(BaseModel):
     peak_pv_kw: Optional[float] = None
     peak_netzbezug_kw: Optional[float] = None
     peak_einspeisung_kw: Optional[float] = None
+    # Grundlast DIESER Nacht — Median der Stunden 0–4 mit `verbrauch_kw > 0`,
+    # dieselbe Formel und derselbe Filter wie die Monats-/Jahres-Kachel
+    # (`core/berechnungen/grundlast.py`, `_load_grundlast_nacht_kw`), nur über
+    # einen Tag statt über einen Monat.
+    #
+    # ⚠ Es ist NICHT der Monatswert je Tag: der Monat bildet den Median über
+    # ALLE Nachtstunden des Monats, nicht den Durchschnitt der Tagesmediane.
+    # Beide sind richtig und beantworten verschiedene Fragen. Damit daraus keine
+    # zweite Wahrheit wird, trägt die Spalte `aggregation: 'none'` (wie die
+    # Peaks) — über einen Zeitraum wird sie gar nicht erst zusammengefasst.
+    #
+    # ⛔ Bewusst NUR die Leistung. `grundlast_kwh` und der Anteil, die
+    # `berechne_grundlast` daneben liefert, haetten hier keinen Leser — ein
+    # exportiertes Feld ohne Konsumenten ist genau das, was der
+    # Dead-Export-Waechter verhindern soll.
+    grundlast_kw: Optional[float] = None
     performance_ratio: Optional[float] = None
     batterie_vollzyklen: Optional[float] = None
     temperatur_min_c: Optional[float] = None

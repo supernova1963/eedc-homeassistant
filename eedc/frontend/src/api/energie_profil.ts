@@ -146,6 +146,9 @@ export interface TagWerte {
   peak_pv_kw: number | null
   peak_netzbezug_kw: number | null
   peak_einspeisung_kw: number | null
+  /** Grundlast DIESER Nacht (Median der Stunden 0–4). `null`, wenn für den Tag
+   *  keine einzige Nachtstunde gemessen wurde — der Total-Fall, kein 0-Wert. */
+  grundlast_kw: number | null
   performance_ratio: number | null
   batterie_vollzyklen: number | null
   temperatur_min_c: number | null

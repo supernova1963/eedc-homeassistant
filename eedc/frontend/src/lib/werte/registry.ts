@@ -128,6 +128,16 @@ export const WERTE_METRIKEN: WerteMetrik[] = [
   { key: 'peak_pv_kw',             label: 'Peak PV',        unit: 'kW',     gruppe: 'tagdetail',   decimals: 2, aggregation: 'none', defaultVisible: true, granular: NUR_TAG, higherIsBetter: undefined },
   { key: 'peak_netzbezug_kw',      label: 'Peak Bezug',     unit: 'kW',     gruppe: 'tagdetail',   decimals: 2, aggregation: 'none', defaultVisible: false, granular: NUR_TAG, higherIsBetter: false },
   { key: 'peak_einspeisung_kw',    label: 'Peak Einsp.',    unit: 'kW',     gruppe: 'tagdetail',   decimals: 2, aggregation: 'none', defaultVisible: false, granular: NUR_TAG, higherIsBetter: undefined },
+  // Grundlast je Nacht (OB73-gif, #395): der Nacht-Sockel EINES Tages, damit
+  // sich ablesen laesst, was ein ueber Nacht abgeschaltetes Geraet bringt. Im
+  // Tages-Gesamtverbrauch geht das unter — 50 W ueber acht Stunden sind 0,4 kWh.
+  //
+  // ⛔ `aggregation: 'none'` wie bei den Peaks, und das ist der Kern: Ein
+  // Median laesst sich nicht summieren, und der Durchschnitt der Tagesmediane
+  // waere NICHT die Grundlast, die Cockpit → Monat nennt (dort ist es der
+  // Median ueber alle Nachtstunden des Monats). Ohne Aggregat gibt es die
+  // zweite Zahl gar nicht erst.
+  { key: 'grundlast_kw',           label: 'Grundlast',      unit: 'kW',     gruppe: 'tagdetail',   decimals: 2, aggregation: 'none', defaultVisible: false, granular: NUR_TAG, higherIsBetter: false },
   { key: 'performance_ratio',      label: 'Performance Ratio', unit: '',    gruppe: 'tagdetail',   decimals: 2, aggregation: 'avg', defaultVisible: false, granular: NUR_TAG, higherIsBetter: true },
   { key: 'batterie_vollzyklen',    label: 'SoC-Hübe', unit: '',     gruppe: 'tagdetail',   decimals: 2, aggregation: 'sum', defaultVisible: false, granular: NUR_TAG, higherIsBetter: undefined },
   { key: 'boersenpreis_avg_cent',  label: 'Börsenpreis Ø',  unit: 'ct/kWh', gruppe: 'tagdetail',   decimals: 2, aggregation: 'avg', defaultVisible: false, granular: NUR_TAG, higherIsBetter: false },
