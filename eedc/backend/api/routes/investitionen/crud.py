@@ -2350,10 +2350,48 @@ async def get_roi_dashboard(
             }
 
         else:
-            # Wallbox, Sonstiges
+            # Wallbox, Sonstiges — die einzigen Typen, für die eedc **keine**
+            # Ersparnis konstruiert: sie hängt allein am gepflegten Feld
+            # „Ertrag/Jahr" (`ERTRAGSFELD_TYPEN`, Konzept §8/1).
+            #
+            # ⛔ **Bis 2026-09-01 setzte dieser Zweig als EINZIGER kein
+            # `nicht_bewertet`** — und zeigte damit genau die Fake-0, gegen die
+            # N-87 angetreten war und die N-258 am 16.08. für die Wärmepumpe
+            # abgestellt hat. An der Demo-Anlage gemessen (01.09., alle vier
+            # Zeilen ohne gepflegtes Feld):
+            #   Wallbox 800 €            → „0,00 €"
+            #   Mini-BHKW 8.000 €        → **„−300,00 €"**  (0 − betriebskosten_jahr)
+            #   Heizstab · Gaszähler     → „0,00 €"
+            # Die −300 € sind wörtlich der N-258-Fall („−200 € Einsparung für
+            # ein Gerät, dessen Hinweis mit *Nicht bewertet* beginnt"), nur an
+            # einem anderen Zweig; `_angezeigte_jahres_einsparung` fängt ihn
+            # ausschließlich über dieses Flag.
+            #
+            # ⚑ Und der Gaszähler zeigt, dass es nicht nur um die Optik geht:
+            # die *Zähler*-Kategorie unter Sonstiges ist seit v4.0.23
+            # ausdrücklich „nur erfassen und anzeigen, **ohne Bewertung**" —
+            # eine 0 in der Einsparungs-Spalte behauptete dort das Gegenteil.
+            #
+            # `is None` statt truthy (CLAUDE.md, 0-Werte): eine gepflegte **0**
+            # ist eine Aussage des Anwenders („bringt nichts") und bleibt eine
+            # bewertete Zeile. Nur das ungepflegte Feld ist unbewertet.
+            # ⚠ `co2_einsparung_prognose_kg` steht bewusst NICHT in der
+            # Bedingung: es hat keinen Schreiber (nur in `InvestitionResponse`,
+            # nicht in Base/Create/Update, kein Formularfeld, 0 Datensätze im
+            # Bestand) — es kann also keinen gepflegten CO₂-Wert verdecken.
             jahres_einsparung = inv.einsparung_prognose_jahr or 0
             co2_einsparung = inv.co2_einsparung_prognose_kg or 0
-            detail = {'hinweis': 'Manuelle Prognose verwendet'}
+            if inv.einsparung_prognose_jahr is None:
+                detail = {
+                    'hinweis': (
+                        'Kein Ertrag/Jahr gepflegt — ohne ihn bewertet eedc diese '
+                        'Zeile nicht. Der Wert lässt sich in der Investitionspflege '
+                        'als „Ertrag/Jahr (€)" nachtragen.'
+                    ),
+                    'nicht_bewertet': True,
+                }
+            else:
+                detail = {'hinweis': 'Manuelle Prognose verwendet'}
 
         # #310: manuell gepflegte sonstige Erträge/Ausgaben einrechnen — seit
         # F-19 die Ausgaben kumuliert im Nenner statt annualisiert im Zähler,

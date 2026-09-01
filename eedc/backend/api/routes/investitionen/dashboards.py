@@ -1810,10 +1810,30 @@ async def get_wallbox_dashboard(
         # `ErsparnisPosten` ist genau dafür gebaut („annualisiert jeden
         # Posten mit SEINER eigenen Monatszahl", F-20) und bildet die
         # bisherige Hochrechnung `Ersparnis ÷ Monate × 12` im SoT nach.
-        # ⚠ Die ROI-Zeile derselben Wallbox rechnet mit einem ANDEREN Zähler
-        # (`einsparung_prognose_jahr`, „Manuelle Prognose verwendet",
-        # `crud.py`-Sammelzweig) — das ist eine offene Frage und bewusst
-        # NICHT hier entschieden; sie stünde sonst als dritte Zahl daneben.
+        # ⭐ ENTSCHIEDEN AM 2026-09-01 (Gernot), N-351 — hier stand bis dahin
+        # „eine offene Frage und bewusst NICHT hier entschieden". Sie lautete:
+        # gehoert diese gemessene Ersparnis auch in die ROI-Zeile derselben
+        # Wallbox? ANTWORT: NEIN, und der Grund ist keine Bequemlichkeit.
+        #
+        # Diese Zahl beantwortet eine ISOLIERTE Frage — „was war diese Box
+        # gegenueber oeffentlichem Laden wert?" — und dafuer ist sie richtig.
+        # In die Kapitalrechnung der ANLAGE gehoert sie nicht: dort steckt die
+        # Heimladung bereits in der E-Auto-Zeile, deren Formel
+        # `Benzinkosten − E-Auto-Netzstromkosten` rechnet und damit schon
+        # unterstellt, dass zuhause geladen wurde (`aussichten.py`,
+        # `jahres_eauto_km_ersparnis`; Kommentar dort: „PV-Ladung ist in
+        # EV-Ersparnis"). Beides zu addieren rechnete dieselbe Kilowattstunde
+        # gegen ZWEI einander ausschliessende Alternativen — in der
+        # Benzin-Welt wird gar nicht geladen, in der Saeulen-Welt kein Benzin
+        # gekauft. Das ist die Klasse aus v4.0.20 (55,9 ct fuer dieselbe kWh).
+        #
+        # Gernots Begruendung im Wortlaut: „Es war mein Verstaendnisfehler,
+        # zwanghaft eine Ersparnis der Wallbox zu fordern, die sie nicht hat.
+        # Wir fassen es ja als E-Mobilitaet sowieso zusammen."
+        #
+        # Die ROI-Zeile der Wallbox traegt deshalb KEINEN eigenen Zaehler; sie
+        # steht seit demselben Tag ehrlich auf „nicht bewertet"
+        # (`crud.py`-Sammelzweig) statt auf 0. ⛔ NICHT NEU AUFROLLEN.
         wb_betriebskosten = wallbox.betriebskosten_jahr or 0
         wb_sonstige_ausgaben = 0.0
         wb_sonstige_ertraege = 0.0

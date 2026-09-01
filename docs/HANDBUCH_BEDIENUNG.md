@@ -705,6 +705,19 @@ Jeder Wert trägt einen **„Sicht"-Tooltip** (pro Investition vs. gesamt, Mehrk
 
 Tabelle je Komponente: **Investition** (Kaufpreis + Installation, bei WP/E-Auto der Mehrkosten-Ansatz) · **Jährliche Einsparung** · **ROI** (Jahres-%) · **Amortisation** (Jahre bis Break-Even).
 
+> **Wo eedc nichts bewertet, steht „—" statt einer Null.** Für *Wallbox* und *Sonstiges* rechnet
+> eedc keine Einsparung selbst — dort zählt allein das gepflegte Feld **„Ertrag/Jahr (€)"**. Ist es
+> leer, bleiben Einsparung, ROI, Amortisation und CO₂ dieser Zeile leer, und der Grund steht im
+> Tooltip. **Die Anschaffungskosten zählen weiter** — unbewertet heißt nicht unsichtbar, und die
+> Zeile senkt die Anlagensumme nicht. Eine gepflegte **0** ist dagegen deine Aussage („bringt
+> nichts") und wird als bewertete Zeile behandelt.
+>
+> **Die Wallbox bekommt bewusst keine eigene Einsparung.** Was das Laden zuhause gegenüber der
+> öffentlichen Säule spart, steht im **Komponenten-Hub** der Wallbox. In die Wirtschaftlichkeit der
+> Anlage geht es nicht zusätzlich ein: Dort ist der Vorteil bereits in der **E-Auto**-Zeile
+> enthalten, die Benzin gegen den zuhause geladenen Strom rechnet. Beides zu addieren würde
+> dieselbe Kilowattstunde zweimal gutschreiben.
+
 **Realisierungsquote** — historische Erträge vs. konfigurierte Prognose: ≥ 90 % (grün), ≥ 70 % (gelb), < 70 % (rot).
 
 **PV-System-Aggregation** — Wechselrichter + Module + DC-Speicher werden als ein „PV-System" gerechnet; Einzelkomponenten in aufklappbaren Unterzeilen, Einsparungen proportional nach kWp verteilt.
