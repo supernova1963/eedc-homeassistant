@@ -658,11 +658,26 @@ def _build_profil_result(
     def build_profil(sums: dict[int, list[float]]) -> dict[int, float]:
         return {h: avg(sums[h]) for h in range(24) if sums[h]}
 
+    profil_wt = build_profil(werktag_sums) if tage_wt >= 2 else None
+    profil_we = build_profil(wochenende_sums) if tage_we >= 2 else None
+
+    # N-48: Die Freigabe oben zaehlt TAGE, und ein Tag entsteht bereits aus einer
+    # EINZIGEN gemessenen Stunde — `werktage_set.add(tag_str)` laeuft je Slot.
+    # Zwei solcher Tage geben ein Profil frei, dessen uebrige Slots
+    # `live_wetter.py::_berechne_verbrauchsprofil` mit der BDEW-Standard-Grundlast
+    # fuellt. Das ist der VORGESEHENE Rueckfall (ADR-002/P4) und bleibt so: eine
+    # schaerfere Schwelle naehme Anlagen ihr individuelles Profil weg, und
+    # Teilabdeckung wird nicht unterdrueckt, nur der Total-Fall.
+    # Was fehlte, war die AUSKUNFT darueber — ohne sie liest sich „2 Tage" im
+    # Tooltip wie die Guete des Profils. `build_profil` nimmt genau die Stunden
+    # mit Stichprobe auf, seine Laenge IST damit die gemessene Abdeckung.
     result: dict = {
-        "werktag": build_profil(werktag_sums) if tage_wt >= 2 else None,
-        "wochenende": build_profil(wochenende_sums) if tage_we >= 2 else None,
+        "werktag": profil_wt,
+        "wochenende": profil_we,
         "tage_werktag": tage_wt,
         "tage_wochenende": tage_we,
+        "slots_werktag": len(profil_wt) if profil_wt is not None else None,
+        "slots_wochenende": len(profil_we) if profil_we is not None else None,
         "quelle": quelle,
     }
 

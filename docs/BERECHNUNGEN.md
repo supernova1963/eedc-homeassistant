@@ -2599,6 +2599,24 @@ Ein Slot ohne jede Stichprobe fehlt im Ergebnis-Dict. Der Konsument
 Standard-Grundlast ein, statt still 0 kW anzunehmen — die lokale Ausprägung von
 [ADR-002/P4](ADR-002-WURZELMUSTER.md).
 
+#### Wie viele Stunden das Profil wirklich trägt
+
+Das individuelle Profil wird ab **zwei Tagen** je Klasse (Werktag/Wochenende) verwendet — und ein
+„Tag" entsteht bereits durch eine **einzige** gemessene Stunde. Zwei solcher Tage ergeben deshalb ein
+Profil, dessen übrige Slots aus der Standard-Grundlast kommen. Das ist der oben beschriebene,
+vorgesehene Rückfall und **kein Fehler**: Ein dünnes eigenes Profil ist besser als gar keines, und
+eine schärfere Schwelle würde einer frisch eingerichteten Anlage ihr individuelles Profil wieder
+wegnehmen.
+
+Sichtbar war davon bis v4.0.37 nur die **Tageszahl** — „2 Tage" liest sich aber wie eine Aussage über
+die Güte des Profils. Deshalb liefert das Ergebnis je Klasse zusätzlich die **gemessene
+Slot-Abdeckung** (`slots_werktag` / `slots_wochenende`, die Route reicht sie als `profil_slots`
+durch), und beide Anzeigen — die Legende in *Cockpit → Live* und der Verbrauchs-Tooltip der
+3-Tage-Aussicht — nennen sie samt ihrer Folge, z. B. *„Werktag, 2 Tage, 1 von 24 Stunden gemessen —
+die übrigen 23 aus der Standard-Grundlast"*. Bei voller Abdeckung entfällt der Zusatz; liefert das
+Backend keine Abdeckung, bleibt es bei der Tageszahl, statt eine zu erfinden. Wortlaut-SoT beider
+Anzeigen ist `lib/verbrauchsprofilHerkunft.ts`.
+
 ### Stündliche Berechnung (aggregate_day)
 
 ```

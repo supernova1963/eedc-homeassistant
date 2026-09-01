@@ -17,7 +17,7 @@ import ChartTooltip from '../ui/ChartTooltip'
 import SegmentControl from '../ui/SegmentControl'
 import { Sun, Cloud, CloudRain, CloudSnow, CloudDrizzle, CloudFog, CloudLightning, Droplets, Thermometer, CloudSun, Zap, BatteryCharging } from 'lucide-react'
 import type { LiveWetterResponse, TagesverlaufResponse } from '../../api/liveDashboard'
-import { CHART_COLORS, COLORS, KATEGORIE_FARBEN, NICHT_ENERGIE_KATEGORIEN, xAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl, slotZeitspanne, slotAusIntervallStart, slotAusZeitpunkt } from '../../lib'
+import { CHART_COLORS, COLORS, KATEGORIE_FARBEN, NICHT_ENERGIE_KATEGORIEN, xAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl, slotZeitspanne, slotAusIntervallStart, slotAusZeitpunkt, verbrauchsprofilBasis } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 
 // Wetter-Symbol zu Lucide-Icon Mapping
@@ -241,6 +241,12 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
   }
   const showPv = chartView === 'pv' || chartView === 'beides'
   const showVerbrauch = chartView === 'verbrauch' || chartView === 'beides'
+  // Wortlaut-SoT `lib/verbrauchsprofilHerkunft` — denselben Satz trägt der
+  // Verbrauchs-Tooltip der 3-Tage-Aussicht. Seit N-48 nennt er auch die gemessene
+  // Abdeckung: die Tageszahl allein las sich wie die Güte des Profils.
+  const verbrProfilBasis = verbrauchsprofilBasis(
+    wetter?.profil_typ, wetter?.profil_tage, wetter?.profil_slots,
+  )
 
   // IST-Daten aus Tagesverlauf aggregieren — gestapelt nach Kategorie,
   // im selben Backward-Raster wie die Prognose (siehe `istStundenSlots`).
@@ -735,8 +741,8 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
             ))}
             {showVerbrauch && (
               <span className="flex items-center gap-1"
-                    title={wetter.profil_typ?.startsWith('individuell')
-                      ? `Basiert auf ${wetter.profil_tage ?? '?'} Tagen ${wetter.profil_typ === 'individuell_wochenende' ? 'Wochenende' : 'Werktag'}-History (${wetter.profil_quelle === 'mqtt' ? 'MQTT' : 'HA'})`
+                    title={verbrProfilBasis
+                      ? `Basiert auf ${verbrProfilBasis} — History aus ${wetter.profil_quelle === 'mqtt' ? 'MQTT' : 'HA'}`
                       : 'Standardlastprofil — wird durch individuelles Profil ersetzt sobald History verfügbar'
                     }>
                 <span className="w-3 h-0.5 bg-violet-500/40 rounded" style={{ borderTop: `1px dashed ${COLORS.consumption}` }} />

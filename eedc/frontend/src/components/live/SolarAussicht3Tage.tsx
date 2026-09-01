@@ -12,7 +12,7 @@ import { Info } from 'lucide-react'
 import type { LiveWetterResponse } from '../../api/liveDashboard'
 import type { SolarPrognoseTag } from '../../api/wetter'
 import { SimpleTooltip } from '../ui/FormelTooltip'
-import { fmtZahl, DATENROLLE, pvErtragKwh, pvVormittagKwh, pvNachmittagKwh } from '../../lib'
+import { fmtZahl, DATENROLLE, pvErtragKwh, pvVormittagKwh, pvNachmittagKwh, verbrauchsprofilBasis } from '../../lib'
 
 export default function SolarAussicht3Tage({ prognose3Tage, wetter, heutePvKwh }: {
   prognose3Tage: SolarPrognoseTag[]
@@ -88,8 +88,14 @@ export default function SolarAussicht3Tage({ prognose3Tage, wetter, heutePvKwh }
           const verbrPrognKwh = i === 0 && wetter?.verbrauchsprofil?.length
             ? wetter.verbrauchsprofil.reduce((s, v) => s + v.verbrauch_kw, 0)
             : null
-          const verbrTooltip = wetter?.profil_typ?.startsWith('individuell')
-            ? `Individuelles Profil (${wetter.profil_typ === 'individuell_wochenende' ? 'Wochenende' : 'Werktag'}, ${wetter.profil_tage ?? '?'} Tage) — Haus + Batterie + WP + Wallbox + Sonstige`
+          // Wortlaut-SoT `lib/verbrauchsprofilHerkunft` — dieselbe Grundlage steht in
+          // der Legende des Wetter-Widgets. Sie nennt seit N-48 auch die gemessene
+          // Abdeckung: „N Tage" allein las sich wie die Güte des Profils.
+          const verbrBasis = verbrauchsprofilBasis(
+            wetter?.profil_typ, wetter?.profil_tage, wetter?.profil_slots,
+          )
+          const verbrTooltip = verbrBasis
+            ? `Individuelles Profil (${verbrBasis}) — Haus + Batterie + WP + Wallbox + Sonstige`
             : 'BDEW H0 Standardlastprofil — Haus + Batterie + WP + Wallbox + Sonstige'
           // ⭐ „verbleibend" ist seit 2026-08-23 der GEMESSENE Rest, nicht mehr
           // die Differenz (rapahl-PN). Vorher stand hier

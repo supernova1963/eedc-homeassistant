@@ -36,6 +36,12 @@ waren. Sie variiert jetzt **beide** Achsen: Zuwachs am Stundenende
 Die Slot-Zuordnung wird hier bewusst **ausgeschrieben** (``slot = h + 1``) statt
 aus dem SoT geholt — ein Pinning-Test, der die Konvention aus derselben Funktion
 bezieht wie der Produktionscode, prüft nur noch sich selbst.
+
+Schwesterdatei zum selben Modul: ``test_verbrauchsprofil_abdeckung_n48.py`` — sie
+prüft, dass das Ergebnis seine gemessene **Abdeckung** ausweist. Beide hängen
+zusammen: weil eine unvollständige Stunde hier ausgelassen wird (N-45/N-46),
+entsteht ein „Tag" aus einer einzigen Stunde, und genau das musste der Anwender
+erfahren (N-48).
 """
 
 from __future__ import annotations

@@ -135,6 +135,11 @@ class LiveWetterResponse(BaseModel):
     profil_typ: str = "bdew_h0"  # "individuell_werktag", "individuell_wochenende", "bdew_h0"
     profil_quelle: Optional[str] = None  # "ha", "mqtt" — woher die History kam
     profil_tage: Optional[int] = None  # Anzahl Tage die ins individuelle Profil einflossen
+    #: Wie viele der 24 Stunden tragen eine echte Stichprobe (N-48). Die Freigabe des
+    #: Profils zaehlt TAGE, und ein Tag entsteht schon aus einer einzigen Stunde — die
+    #: uebrigen Slots kommen aus der BDEW-Standard-Grundlast. Ohne diese Zahl liest sich
+    #: `profil_tage` wie die Guete des Profils.
+    profil_slots: Optional[int] = None
     prognose_quelle: Optional[str] = None  # Aktive Prognosequelle: "eedc", "solcast", "sfml"
     prognose_quelle_hinweis: Optional[str] = None  # Fallback-Hinweis wenn gewünschte Quelle nicht verfügbar
     sfml_prognose_kwh: Optional[float] = None  # Solar Forecast ML Tagesprognose
@@ -450,6 +455,7 @@ def _generate_demo_wetter(kwp: float = 10.0) -> dict:
         "profil_typ": "individuell_wochenende" if ist_wochenende else "individuell_werktag",
         "profil_quelle": "demo",
         "profil_tage": 14,
+        "profil_slots": 24,
     }
 
 
@@ -1239,6 +1245,7 @@ async def get_live_wetter(
         ind_stunden_profil = None
         profil_typ = "bdew_h0"
         profil_tage = None
+        profil_slots = None
 
         if ind_profil_data:
             ist_wochenende = now.weekday() >= 5
@@ -1246,10 +1253,12 @@ async def get_live_wetter(
                 ind_stunden_profil = ind_profil_data["wochenende"]
                 profil_typ = "individuell_wochenende"
                 profil_tage = ind_profil_data["tage_wochenende"]
+                profil_slots = ind_profil_data.get("slots_wochenende")
             elif not ist_wochenende and ind_profil_data.get("werktag"):
                 ind_stunden_profil = ind_profil_data["werktag"]
                 profil_typ = "individuell_werktag"
                 profil_tage = ind_profil_data["tage_werktag"]
+                profil_slots = ind_profil_data.get("slots_werktag")
 
         wp_stunden_profil = None
         referenz_temp_c = None
@@ -1593,6 +1602,7 @@ async def get_live_wetter(
             "profil_typ": profil_typ if ist_ind else "bdew_h0",
             "profil_quelle": ind_profil_data.get("quelle") if ind_profil_data and ist_ind else None,
             "profil_tage": profil_tage,
+            "profil_slots": profil_slots,
             "prognose_quelle": pq.quelle,
             "prognose_quelle_hinweis": pq.hinweis,
             # Tageszahlen der GEWÄHLTEN Quelle (None bei eedc — dann gilt der

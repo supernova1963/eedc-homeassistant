@@ -117,6 +117,11 @@ export interface LiveWetterResponse {
   profil_typ?: string  // "individuell_werktag", "individuell_wochenende", "bdew_h0"
   profil_quelle?: string | null  // "ha", "mqtt"
   profil_tage?: number | null  // Anzahl Tage im individuellen Profil
+  /** Wie viele der 24 Stunden tragen eine echte Stichprobe (N-48). Die Freigabe des
+   *  Profils zählt TAGE, und ein Tag entsteht schon aus einer einzigen Stunde — die
+   *  übrigen Slots kommen aus der BDEW-Standard-Grundlast. Ohne diese Zahl liest sich
+   *  `profil_tage` wie die Güte des Profils. */
+  profil_slots?: number | null
   prognose_quelle?: string | null  // Aktive Prognosequelle: "eedc", "solcast", "sfml"
   prognose_quelle_hinweis?: string | null  // Fallback-Hinweis
   /** Tageszahlen der GEWÄHLTEN Quelle (null bei eedc — dann gilt der Kanon aus
