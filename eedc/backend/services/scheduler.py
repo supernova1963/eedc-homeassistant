@@ -108,6 +108,13 @@ class EEDCScheduler:
             )
 
             # Monatswechsel-Snapshot: Am 1. jeden Monats um 00:01
+            # N-123 (geprueft 2026-09-01): Der Job rechnet nichts — er schreibt
+            # einen Log- und einen Aktivitaets-Eintrag („Monatswechsel
+            # registriert"). Das war einmal mehr; die Monatsdaten kommen seit
+            # Langem aus der HA-Statistik. BEWUSST NICHT ENTFERNT: der
+            # Aktivitaets-Eintrag ist die einzige Stelle, an der ein Anwender im
+            # Protokoll sieht, dass eedc den Monatswechsel bemerkt hat. Er kostet
+            # nichts und ist ein Lebenszeichen — Entscheid Gernot.
             self._scheduler.add_job(
                 monthly_snapshot_job,
                 CronTrigger(day=1, hour=0, minute=1),

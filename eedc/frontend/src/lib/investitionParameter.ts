@@ -288,21 +288,16 @@ export interface WallboxParameter {
 // Wechselrichter
 // ============================================================================
 
+// N-175/N-231: `wirkungsgrad_prozent` und `hybrid` standen hier bis 2026-09-01,
+// ohne dass eine Zeile sie gelesen hätte — erfasst im Formular, leseseitig tot.
+// Ein Formularfeld ohne Wirkung ist ein Versprechen, deshalb sind beide entfernt.
+// Bestandsdaten im `parameter`-JSON bleiben unberührt (sie waren schon wirkungslos).
 export const PARAM_WECHSELRICHTER = {
   MAX_LEISTUNG_KW: 'max_leistung_kw',
-  WIRKUNGSGRAD_PROZENT: 'wirkungsgrad_prozent',
-  HYBRID: 'hybrid',
-} as const
-
-export const PARAM_WECHSELRICHTER_DEFAULTS = {
-  wirkungsgrad_prozent: 97,
-  hybrid: false,
 } as const
 
 export interface WechselrichterParameter {
   max_leistung_kw?: number
-  wirkungsgrad_prozent?: number
-  hybrid?: boolean
 }
 
 // ============================================================================

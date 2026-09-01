@@ -49,10 +49,7 @@ from backend.services.monats_fakten import (
     pv_unvollstaendig_hinweis,
 )
 from backend.core.investition_parameter import ist_dienstlich
-from backend.core.wirtschaftlichkeit_defaults import (
-    EINSPEISEVERGUETUNG_DEFAULT_CENT,
-    NETZBEZUG_DEFAULT_CENT,
-)
+from backend.core.wirtschaftlichkeit_defaults import NETZBEZUG_DEFAULT_CENT
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
 from backend.services.eauto_wirtschaftlichkeit import (
     berechne_eauto_ersparnis_periode,
@@ -203,7 +200,6 @@ async def get_cockpit_uebersicht(
     wallbox_tarif = tarife.get("wallbox")
 
     netzbezug_preis_cent = allgemein_tarif.netzbezug_arbeitspreis_cent_kwh if allgemein_tarif else NETZBEZUG_DEFAULT_CENT
-    einspeise_verguetung_cent = allgemein_tarif.einspeiseverguetung_cent_kwh if allgemein_tarif else EINSPEISEVERGUETUNG_DEFAULT_CENT
     wp_preis_cent = wp_tarif.netzbezug_arbeitspreis_cent_kwh if wp_tarif else netzbezug_preis_cent
     wallbox_preis_cent = wallbox_tarif.netzbezug_arbeitspreis_cent_kwh if wallbox_tarif else netzbezug_preis_cent
 

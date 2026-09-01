@@ -8,7 +8,6 @@ import {
   PARAM_SPEICHER_DEFAULTS,
   PARAM_WAERMEPUMPE_DEFAULTS,
   PARAM_WALLBOX_DEFAULTS,
-  PARAM_WECHSELRICHTER_DEFAULTS,
   PARAM_BALKONKRAFTWERK_DEFAULTS,
   PARAM_SONSTIGES_DEFAULTS,
 } from '../../../lib'
@@ -271,10 +270,10 @@ export function getInitialParamData(
         ist_dienstlich: (params.ist_dienstlich as boolean) ?? PARAM_WALLBOX_DEFAULTS.ist_dienstlich,
       }
     case 'wechselrichter':
+      // N-175/N-231: `wirkungsgrad_prozent` und `hybrid` sind entfallen — sie
+      // wurden erfasst und von keiner Zeile gelesen.
       return {
         max_leistung_kw: paramStr(params.max_leistung_kw),
-        wirkungsgrad_prozent: paramStr(params.wirkungsgrad_prozent, PARAM_WECHSELRICHTER_DEFAULTS.wirkungsgrad_prozent),
-        hybrid: (params.hybrid as boolean) ?? PARAM_WECHSELRICHTER_DEFAULTS.hybrid,
       }
     case 'pv-module':
       return {

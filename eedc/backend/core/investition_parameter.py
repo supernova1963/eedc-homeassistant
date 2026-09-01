@@ -218,15 +218,14 @@ PARAM_WALLBOX_DEFAULTS: Final[dict[str, object]] = {
 # Wechselrichter
 # ============================================================================
 
+# N-175/N-231: `wirkungsgrad_prozent` und `hybrid` sind hier bis 2026-09-01
+# mitgefuehrt worden, ohne dass eine einzige Zeile sie gelesen haette — erfasst
+# im Formular, leseseitig tot. Ein Formularfeld ohne Wirkung ist ein Versprechen,
+# deshalb sind beide entfernt statt weiter angeboten. Bestandsdaten im
+# `parameter`-JSON bleiben unberuehrt; sie waren schon vorher wirkungslos.
+# `MAX_LEISTUNG_KW` wird gelesen (`investition_kennwerte.py`, Setup-Wizard) und bleibt.
 PARAM_WECHSELRICHTER: Final[dict[str, str]] = {
     "MAX_LEISTUNG_KW": "max_leistung_kw",
-    "WIRKUNGSGRAD_PROZENT": "wirkungsgrad_prozent",
-    "HYBRID": "hybrid",
-}
-
-PARAM_WECHSELRICHTER_DEFAULTS: Final[dict[str, object]] = {
-    "wirkungsgrad_prozent": 97,
-    "hybrid": False,
 }
 
 
