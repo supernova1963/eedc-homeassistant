@@ -493,6 +493,17 @@ class TagDetailResponse(BaseModel):
     wp_jaz_grund: Optional[str] = None
     #: Fall H-B: die Zahl ist richtig und erklärungsbedürftig (Heizstab).
     wp_jaz_hinweis: Optional[str] = None
+    #: Die beiden Zahlen, aus denen die Arbeitszahl **tatsächlich** entstanden
+    #: ist (kWh) — für die Herleitung an der Kachel.
+    #:
+    #: ⚠ ``wp_jaz_nenner_kwh`` ist **nicht** ``wp_strom_kwh``: der funktions-
+    #: fremde Anteil (Kühlen, Lüften, Entfeuchten) ist abgezogen. Wer die
+    #: Herleitung im Client aus den Anzeigefeldern nachbaut, zeigt bei jeder
+    #: Anlage mit erfasstem Betriebsmodus eine Rechnung, die nicht auf die Zahl
+    #: daneben führt. Deshalb kommen beide aus dem Layer — wie ``grund`` und
+    #: ``hinweis`` (W-3: dieselbe Regel an drei Stellen war der teure Fall).
+    wp_jaz_zaehler_kwh: Optional[float] = None
+    wp_jaz_nenner_kwh: Optional[float] = None
     # ── Arbeitszahl JE FUNKTION (N-348) ────────────────────────────────────
     #
     # ⛔ **Der Tag hat diese drei Zeilen bis 2026-08-29 ERSATZLOS weggelassen.**

@@ -56,6 +56,27 @@ class Arbeitszahl:
     #: **Kein** Fehler und keine Bewertung — eine Anlage, die ihr Warmwasser
     #: über den Heizstab macht, *hat* eine Arbeitszahl nahe 1.
     hinweis: Optional[str] = None
+    #: Die beiden Zahlen, aus denen ``wert`` **tatsächlich** entstanden ist —
+    #: Q im Zähler, E im Nenner, beide in kWh. Nur gesetzt, wenn es einen
+    #: ``wert`` gibt.
+    #:
+    #: ⭐ **Warum sie aus dem Layer kommen müssen und nicht aus der Response.**
+    #: Der Nenner ist **nicht** ``wp_strom_kwh``: ``strom_funktionsfremd_kwh``
+    #: (Kühlen, Lüften, Entfeuchten) ist abgezogen. Wer die Herleitung aus den
+    #: beiden Anzeigefeldern nachbaut, zeigt bei jeder Anlage mit erfasstem
+    #: Betriebsmodus eine Rechnung, die **nicht** auf die Zahl daneben führt —
+    #: dieselbe Klasse wie eine Zahl, die aus zwei gerundeten zurückgerechnet
+    #: wird. Deshalb reicht diese Stelle die benutzten Werte heraus, so wie sie
+    #: ``grund`` und ``hinweis`` schon herausreicht.
+    #:
+    #: ⚑ Der Anlass: Ein Melder (dietmar1968, T89667 #283) hatte eine
+    #: Arbeitszahl von 0,7 vor sich — physikalisch unmöglich und damit ein
+    #: sicheres Zeichen für einen falsch zugeordneten Zähler. Die Kachel nannte
+    #: als Formel nur „JAZ = Wärme ÷ Strom"; mit den Zahlen daneben wäre die
+    #: Ursache sofort sichtbar gewesen. **eedc warnt deshalb nicht** — es zeigt,
+    #: womit es gerechnet hat, und überlässt den Schluss dem Anwender.
+    zaehler_kwh: Optional[float] = None
+    nenner_kwh: Optional[float] = None
 
     @property
     def belastbar(self) -> bool:
@@ -342,6 +363,10 @@ def arbeitszahl(
     return Arbeitszahl(
         wert,
         hinweis=HEIZSTAB_HINWEIS if wert < JAZ_HEIZSTAB_SCHWELLE else None,
+        # `e`, nicht `e_gesamt` — die Herleitung zeigt den Nenner, mit dem
+        # gerechnet wurde, sonst ginge die Division sichtbar nicht auf.
+        zaehler_kwh=q,
+        nenner_kwh=e,
     )
 
 
@@ -516,4 +541,7 @@ def arbeitszahl_kuehlen(
         return Arbeitszahl(None, GRUND_KEINE_KAELTEMENGE)
     if abgrenzung_verletzt:
         return Arbeitszahl(None, abgrenzung_verletzt)
-    return Arbeitszahl(q / e)
+    # Die Herleitung wie bei `arbeitszahl` — diese Funktion rechnet bewusst
+    # selbst (kein `strom_funktionsfremd_kwh`-Abzug, s. Docstring), muss die
+    # benutzten Zahlen deshalb auch selbst mitgeben. Sie erbt sie nicht.
+    return Arbeitszahl(q / e, zaehler_kwh=q, nenner_kwh=e)

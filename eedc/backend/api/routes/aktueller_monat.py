@@ -277,6 +277,17 @@ class AktuellerMonatResponse(BaseModel):
     #: Die Zahl existiert, ist aber erklärungsbedürftig (Fall H-B: ein großer
     #: Teil der Wärme kam direkt elektrisch). **Kein Fehler, keine Bewertung.**
     wp_jaz_hinweis: Optional[str] = None
+    #: Die beiden Zahlen, aus denen die Arbeitszahl **tatsächlich** entstanden
+    #: ist (kWh) — für die Herleitung an der Kachel.
+    #:
+    #: ⚠ ``wp_jaz_nenner_kwh`` ist **nicht** ``wp_strom_kwh``: der funktions-
+    #: fremde Anteil (Kühlen, Lüften, Entfeuchten) ist abgezogen. Wer die
+    #: Herleitung im Client aus den Anzeigefeldern nachbaut, zeigt bei jeder
+    #: Anlage mit erfasstem Betriebsmodus eine Rechnung, die nicht auf die Zahl
+    #: daneben führt. Deshalb kommen beide aus dem Layer — wie ``grund`` und
+    #: ``hinweis`` (W-3: dieselbe Regel an drei Stellen war der teure Fall).
+    wp_jaz_zaehler_kwh: Optional[float] = None
+    wp_jaz_nenner_kwh: Optional[float] = None
     #: Ist ein Teil der Wärme aus `Strom × JAZ` gerechnet statt gemessen?
     #: Gleicher Name wie im Komponenten-Hub (`KomponentenMonat`), damit dieselbe
     #: Größe in beiden Sichten gleich heißt (S1).
@@ -2529,6 +2540,8 @@ async def get_aktueller_monat(
         wp_jaz=wp_arbeitszahl.wert,
         wp_jaz_grund=wp_arbeitszahl.grund,
         wp_jaz_hinweis=wp_arbeitszahl.hinweis,
+        wp_jaz_zaehler_kwh=wp_arbeitszahl.zaehler_kwh,
+        wp_jaz_nenner_kwh=wp_arbeitszahl.nenner_kwh,
         wp_waerme_abgeleitet=wp_waerme_abgeleitet_kwh > 0,
         wp_strom_heizen_kwh=wp_strom_heizen,
         wp_strom_warmwasser_kwh=wp_strom_warmwasser,

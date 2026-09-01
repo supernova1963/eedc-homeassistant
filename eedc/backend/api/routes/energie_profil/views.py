@@ -622,6 +622,8 @@ async def get_tag_detail(
         wp_jaz=wp_jaz_tag.wert,
         wp_jaz_grund=wp_jaz_tag.grund,
         wp_jaz_hinweis=wp_jaz_tag.hinweis,
+        wp_jaz_zaehler_kwh=wp_jaz_tag.zaehler_kwh,
+        wp_jaz_nenner_kwh=wp_jaz_tag.nenner_kwh,
         # N-348 — je Funktion, wie der Monat. Wert ODER Grund, nie beides leer.
         wp_jaz_heizen=wp_az_funktion_tag.heizen.wert,
         wp_jaz_heizen_grund=wp_az_funktion_tag.heizen.grund,

@@ -100,6 +100,8 @@ Dieser Abschnitt ist so wichtig wie die Tabelle darüber. **Mehrere Dinge fehlen
 
 **Keine Bewertung von Lüften und Entfeuchten.** Beide Betriebsarten **erscheinen** in der Aufteilung, wenn du dafür Zähler hast. Eine Kennzahl bekommen sie nicht: Sie erzeugen keine Nutzenergie, die sich messen ließe. Ihr Strom fällt deshalb auch **aus dem Nenner der Arbeitszahl** — sonst drückte er eine Zahl, mit der er nichts zu tun hat.
 
+> ⚑ **Die Kachel zeigt, womit sie gerechnet hat.** Wer auf die Arbeitszahl zeigt (auf dem Telefon: antippen), sieht neben der Formel die beiden eingesetzten Zahlen — *„210,0 kWh Wärme ÷ 313,6 kWh Strom"*. Damit lässt sich eine unplausible Zahl sofort einordnen: Passt eine der beiden nicht zu dem, was dein Gerät meldet, liegt es an der Zuordnung, nicht an der Rechnung. ⚠ **Der Nenner ist nicht immer der volle Stromverbrauch** — Kühlen, Lüften und Entfeuchten sind abgezogen, wenn du den Betriebsmodus erfasst (sonst stünde Kühlstrom im Nenner, ohne dass die Kältemenge im Zähler steht).
+
 **Keine Note für deine Anlage.** eedc rechnet mit deinen Zahlen, es bewertet dich nicht. Eine Arbeitszahl von 1,8 ist kein Mangel, sondern die Beschreibung einer Anlage, die viel direkt elektrisch heizt. Steht sie unter 2, schreibt eedc genau das daneben:
 
 > *„Eine Arbeitszahl nahe 1 entsteht, wenn ein großer Teil der Wärme direkt elektrisch erzeugt wurde (Heizstab, Zusatz- oder Notheizung). Die Zahl beschreibt die Anlage in diesem Zeitraum, sie ist kein Fehler."*

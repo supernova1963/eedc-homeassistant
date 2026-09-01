@@ -117,6 +117,16 @@ export interface AktuellerMonatResponse {
   /** Fall H-B: die Zahl ist richtig und erklärungsbedürftig (Heizstab).
    *  Der Wortlaut kommt aus dem Layer, damit er nicht je Sicht abweicht. */
   wp_jaz_hinweis?: string | null
+  /**
+   * Die beiden Zahlen, aus denen die Arbeitszahl **tatsächlich** entstanden ist
+   * (kWh) — für die Herleitung an der Kachel.
+   *
+   * ⚠ Der Nenner ist **nicht** `wp_strom_kwh`: der funktionsfremde Anteil
+   * (Kühlen, Lüften, Entfeuchten) ist abgezogen. Deshalb kommen beide Zahlen
+   * aus dem Layer und werden hier **nicht** nachgerechnet.
+   */
+  wp_jaz_zaehler_kwh?: number | null
+  wp_jaz_nenner_kwh?: number | null
   /** Ist ein Teil der Wärme aus `Strom × JAZ` gerechnet statt gemessen? */
   wp_waerme_abgeleitet?: boolean | null
   // #191: Strom-Aufteilung Heizung/Warmwasser. Nur befüllt wenn mindestens

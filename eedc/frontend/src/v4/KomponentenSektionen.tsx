@@ -364,6 +364,32 @@ export function baueKomponentenBloecke(
     // Layer, damit er nicht je Sicht abweicht.
     const kpis: KpiStripItem[] = [
       { ...WP_KPI.jaz, value: fmtCalc(jaz, 2, '—'), formel: jaz != null ? 'JAZ = Wärme ÷ Strom' : undefined,
+        // ⭐ Die Herleitung mit den Zahlen, die der Layer BENUTZT hat.
+        //
+        // Die symbolische Formel darüber sagt, WAS gerechnet wird; erst die
+        // beiden Zahlen sagen, WOMIT. Der Anlass: Ein Melder (dietmar1968,
+        // T89667 #283) hatte eine Arbeitszahl von 0,7 vor sich — physikalisch
+        // unmöglich, also ein sicheres Zeichen für einen falsch zugeordneten
+        // Wärmemengenzähler. Mit „210 kWh Wärme ÷ 314 kWh Strom" daneben wäre
+        // die Ursache sofort sichtbar gewesen. eedc warnt deshalb NICHT — es
+        // zeigt seine Rechnung und überlässt den Schluss dem Anwender.
+        //
+        // ⛔ Die Zahlen kommen aus der Response und werden hier NICHT
+        // nachgerechnet: Der Nenner ist nicht `wp_strom_kwh`, sondern der
+        // Strom OHNE den funktionsfremden Anteil (Kühlen/Lüften/Entfeuchten,
+        // `waermepumpe_kennzahl.arbeitszahl`). `wp_waerme_kwh ÷ wp_strom_kwh`
+        // ergäbe bei jeder Anlage mit erfasstem Betriebsmodus eine Rechnung,
+        // die nicht auf die Zahl daneben führt — die W-3-Klasse, und diese
+        // Datei war dort schon einmal die dritte Stelle.
+        //
+        // Ohne Herleitung (gesperrte Zahl) bleibt das Feld leer, statt eine
+        // Rechnung aus „—" zu bauen — Präzedenz `MonatBilanz.tsx:156`.
+        berechnung: (d.wp_jaz_zaehler_kwh != null && d.wp_jaz_nenner_kwh != null)
+          ? `${fmt(d.wp_jaz_zaehler_kwh, 1)} kWh Wärme ÷ ${fmt(d.wp_jaz_nenner_kwh, 1)} kWh Strom`
+          : undefined,
+        ergebnis: jaz != null && d.wp_jaz_zaehler_kwh != null
+          ? `= ${fmtCalc(jaz, 2)}`
+          : undefined,
         subtitle: jazUntertitel,
         hinweis: (jaz == null && d.wp_waerme_grund)
           ? undefined

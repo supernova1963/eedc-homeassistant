@@ -217,6 +217,16 @@ export interface TagDetail {
   wp_jaz: number | null
   wp_jaz_grund: string | null
   wp_jaz_hinweis: string | null
+  /**
+   * Die beiden Zahlen, aus denen die Arbeitszahl **tatsächlich** entstanden ist
+   * (kWh) — für die Herleitung an der Kachel.
+   *
+   * ⚠ Der Nenner ist **nicht** `wp_strom_kwh`: der funktionsfremde Anteil
+   * (Kühlen, Lüften, Entfeuchten) ist abgezogen. Deshalb kommen beide Zahlen
+   * aus dem Layer und werden hier **nicht** nachgerechnet.
+   */
+  wp_jaz_zaehler_kwh: number | null
+  wp_jaz_nenner_kwh: number | null
   // N-348 — je Funktion, wie im Monat. Wert ODER Grund, nie beides null:
   // die geteilte Blockfabrik rendert die Zeile sonst gar nicht, und genau das
   // war der Befund (der Monat antwortete, der Tag schwieg).

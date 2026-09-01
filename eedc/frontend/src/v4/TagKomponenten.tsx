@@ -111,6 +111,8 @@ export function baueTagAlsMonat(
     wp_jaz: tagDetail?.wp_jaz ?? null,
     wp_jaz_grund: tagDetail?.wp_jaz_grund ?? null,
     wp_jaz_hinweis: tagDetail?.wp_jaz_hinweis ?? null,
+    wp_jaz_zaehler_kwh: tagDetail?.wp_jaz_zaehler_kwh ?? null,
+    wp_jaz_nenner_kwh: tagDetail?.wp_jaz_nenner_kwh ?? null,
     // N-348: Bis 29.08.2026 endete die Durchreichung hier, und die drei
     // je-Funktion-Zeilen fielen im Tag ERSATZLOS weg — nicht als „—", sondern
     // gar nicht, weil `jazZeile` in der geteilten Blockfabrik ohne Wert UND
