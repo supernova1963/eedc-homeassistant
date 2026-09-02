@@ -22,6 +22,8 @@ export interface InvestitionFinancialDetail {
   typ: string
   betriebskosten_monat_euro: number
   erloes_euro: number | null
+  /** Herleitung der Erlös-Zeile — je Typ verschieden (gerechnet vs. gepflegt). */
+  erloes_formel: string | null
   ersparnis_euro: number | null
   ersparnis_label: string
   formel: string | null

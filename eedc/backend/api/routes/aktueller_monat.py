@@ -158,6 +158,13 @@ class InvestitionFinancialDetail(BaseModel):
     typ: str
     betriebskosten_monat_euro: float = 0.0
     erloes_euro: Optional[float] = None      # z.B. BKW-Einspeisung
+    #: Herleitung der Erlös-Zeile. Sie ist NICHT für alle Typen dieselbe: beim
+    #: BKW rechnet eedc `Einspeisung × Vergütung`, bei einem sonstigen Erzeuger
+    #: steht dort ein **gepflegter** Betrag (Konzept §9 Weg 2). Der Client hat
+    #: den Satz bis 2026-09-02 fest verdrahtet und hätte damit für den zweiten
+    #: Fall eine Rechnung behauptet, die niemand angestellt hat (Regel A6:
+    #: Formel **+ eingesetzte Werte**). Wer den Wert bildet, beschreibt ihn.
+    erloes_formel: Optional[str] = None
     ersparnis_euro: Optional[float] = None   # Eigenverbrauch, WP, eMob, Speicher, ...
     ersparnis_label: str = ""                # "Eigenverbrauch-Ersparnis", "Ersparnis vs. Gas", ...
     formel: Optional[str] = None
@@ -1120,6 +1127,7 @@ def _baue_investition_financial(
     inv_sonstige_ertraege = round(inv_sonstige["ertraege_euro"], 2)
     inv_sonstige_ausgaben = round(inv_sonstige["ausgaben_euro"], 2)
     inv_erloes: Optional[float] = None
+    inv_erloes_formel: Optional[str] = None
     inv_ersparnis: Optional[float] = None
     inv_label = ""
     inv_formel: Optional[str] = None
@@ -1135,6 +1143,10 @@ def _baue_investition_financial(
             inv_berechnung = f"{ev_kwh:.1f} kWh × {netz_p:.2f} ct/kWh"
         if einsp_kwh and einsp_kwh > 0:
             inv_erloes = round(einsp_kwh * einsp_p / 100, 2)
+            inv_erloes_formel = (
+                f"Einspeisung × Einspeisevergütung — "
+                f"{einsp_kwh:.1f} kWh × {einsp_p:.2f} ct/kWh"
+            )
 
     elif inv.typ == "speicher":
         entl_kwh = data.get("entladung_kwh")
@@ -1245,15 +1257,38 @@ def _baue_investition_financial(
             inv_berechnung = f"{ladung_pv:.1f} kWh × {wb_p:.2f} ct/kWh"
 
     elif inv.typ == "sonstiges":
-        ev_kwh = data.get("eigenverbrauch_kwh")
-        einsp_kwh = data.get("einspeisung_kwh")
-        if ev_kwh and ev_kwh > 0:
-            inv_ersparnis = round(ev_kwh * netz_p / 100, 2)
-            inv_label = "Eigenverbrauch-Ersparnis"
-            inv_formel = "Eigenverbrauch × Netzbezugspreis"
-            inv_berechnung = f"{ev_kwh:.1f} kWh × {netz_p:.2f} ct/kWh"
-        if einsp_kwh and einsp_kwh > 0:
-            inv_erloes = round(einsp_kwh * einsp_p / 100, 2)
+        # ⛔ KEINE Eigenverbrauchs-Bewertung je Gerät (N-131, Entscheid Gernot
+        # 2026-09-01: „Für einen sonstigen Erzeuger rechnet eedc den Nutzen
+        # bewusst nicht selbst; er wird am Gerät als ‚Ertrag/Jahr' gepflegt").
+        #
+        # Bis 2026-09-02 stand hier `eigenverbrauch_kwh × netz_p` — und das war
+        # eine **gemessene Doppelzählung**, keine zweite Meinung: Die Bilanz
+        # führt den sonstigen Erzeuger über `erzeugung_hinter_zaehler_kwh` in
+        # `eigenverbrauch_kwh` (ein Netzanschluss, ein Zähler), und
+        # `ev_ersparnis_euro` bewertet **diese** Menge. Dieselben kWh standen
+        # damit zweimal im Σ HABEN. Gegen eine Probe-Anlage erhoben: 430 kWh
+        # Bilanz-Eigenverbrauch (129,00 €) enthielten die 50 kWh des BHKW, die
+        # daneben noch einmal mit 15,00 € auftraten.
+        #
+        # ⚠ Die PV-Zeile sagt das seit N-131 sogar selbst („Eigenverbrauch aus
+        # Sonstiges ist hier nicht bewertet") — der Satz war unwahr, solange
+        # diese Zeile daneben stand. Jetzt stimmt er.
+        #
+        # ⚑ Der Erlös bleibt, aber nur als **gepflegter** Betrag: Konzept §9
+        # Weg 2 (`einspeise_erloes_euro`, Layer-SoT
+        # `finanz_aggregat.erzeuger_erloes_euro` = „Σ der gepflegten Erlöse").
+        # Ein aus `einspeisung_kwh × Anlagen-Vergütung` gerechneter Betrag wäre
+        # die zweite Doppelzählung: diese kWh stehen im Hauszähler und sind in
+        # `einspeise_erloes_euro` eine Zeile höher bereits bewertet. Wer einen
+        # eigenen Vergütungssatz hat, hat einen eigenen Zähler — und pflegt
+        # deshalb den Betrag (Begründung Maintainer 2026-08-10, §9).
+        erloes_gepflegt = data.get("einspeise_erloes_euro")
+        if erloes_gepflegt:
+            inv_erloes = round(float(erloes_gepflegt), 2)
+            inv_erloes_formel = (
+                "Am Gerät gepflegter Einspeise-Erlös (eigener Vergütungssatz) "
+                "— von eedc nicht nachgerechnet"
+            )
 
     if (
         bk_monat > 0
@@ -1268,6 +1303,7 @@ def _baue_investition_financial(
             typ=inv.typ,
             betriebskosten_monat_euro=bk_monat,
             erloes_euro=inv_erloes,
+            erloes_formel=inv_erloes_formel,
             ersparnis_euro=inv_ersparnis,
             ersparnis_label=inv_label,
             formel=inv_formel,
@@ -2411,6 +2447,28 @@ async def get_aktueller_monat(
         )
 
         for inv in investitionen:
+            # Anschaffungs-/Stilllegungsdatum begrenzen die Zeile
+            # ([[feedback_anschaffungsdatum_grenze]]). Ohne diesen Filter trug
+            # das T-Konto die anteiligen **Betriebskosten** jeder aktiven
+            # Investition in JEDEN Monat — auch Jahre vor dem Kauf: gemeldet von
+            # rilmor-mhrs (#402, ein E-Auto seit 14.08.2026 stand mit 4,17 € im
+            # September 2025) und an einer Probe-Anlage nachgestellt.
+            #
+            # ⚠ Die Asymmetrie war im selben Modul sichtbar und ist der Beleg,
+            # dass hier ein Filter fehlte, statt einer zu viel zu sein: der
+            # **Vorjahres**-Aufruf desselben Helfers filtert seit jeher
+            # (`_emob_aktiv`, weiter oben), und `komponenten_geraete` zwölf
+            # Zeilen darüber nennt sich ausdrücklich „deckungsgleich mit der
+            # Aggregation (ist_aktiv_im_monat)". `aussichten.py` rechnet die
+            # historischen Betriebskosten ebenfalls über die tatsächliche
+            # Laufzeit — dort steht seit dem Bau „die vier Sichten waren
+            # darüber uneins". Dies war die vierte.
+            #
+            # Nur die Betriebskosten stammen aus einem Jahresparameter und
+            # konnten deshalb überhaupt vor dem Kauf entstehen; alle anderen
+            # Größen kommen aus den Monatsdaten und sind dort naturgemäß leer.
+            if not inv.ist_aktiv_im_monat(jahr, monat):
+                continue
             detail = _baue_investition_financial(
                 inv,
                 imd_by_inv.get(inv.id, {}),

@@ -59,7 +59,7 @@ describe('TKonto', () => {
       investitionen_financials: [{
         investition_id: 7, bezeichnung: 'Speicher', typ: 'speicher',
         betriebskosten_monat_euro: 0, erloes_euro: null, ersparnis_euro: 10,
-        ersparnis_label: 'Ersparnis', formel: null, berechnung: null,
+        ersparnis_label: 'Ersparnis', formel: null, berechnung: null, erloes_formel: null,
         sonstige_ertraege_euro: 0, sonstige_ausgaben_euro: 0,
       }],
       sonstige_ertraege_euro: 120, sonstige_ausgaben_euro: 30, sonstige_netto_euro: 90,
@@ -98,13 +98,21 @@ describe('TKonto', () => {
 describe('TKonto — sonstiger Erzeuger: die Beschriftung sagt, was bewertet ist (N-131)', () => {
   // Ein Erzeuger unter *Sonstiges* — BHKW, Windrad, Wasserkraft — zählt in der
   // Energiebilanz mit (der Zähler am EINEN Anschluss misst alles dahinter,
-  // v3.45.4), wird aber finanziell nicht von eedc bewertet: sein Ertrag wird am
-  // Gerät als „Ertrag/Jahr" gepflegt. Menge und Geldwert zählen hier also
-  // verschiedene Erzeuger, und das ist Absicht — beides zu rechnen wäre die
-  // Doppelzählung aus v4.0.20.
+  // v3.45.4). Sein Nutzen wird an genau EINER Stelle bewertet, nie an zweien —
+  // beides zu rechnen wäre die Doppelzählung aus v4.0.20.
   //
-  // Geprüft wird deshalb NICHT eine Zahl, sondern dass die Anzeige aufhört,
-  // eine Herleitung zu behaupten, die sich nicht nachrechnen lässt.
+  // ⛔ Der Hinweistext hieß bis 2026-09-02 „ist hier nicht bewertet" und war an
+  // dieser Route falsch: das T-Konto wird aus `aktueller_monat` gespeist, und
+  // dort entsteht `ev_ersparnis_euro` aus `erzeugung_hinter_zaehler_kwh` — der
+  // sonstige Erzeuger steckt drin. Der Satz stammte von der Kennwert-Seite
+  // (`finanz_aggregat`, dort `pv_kwh`), wo er zutrifft. Die EINE Stelle ist
+  // also diese Zeile; die zweite (`<Gerät> — Eigenverbrauch-Ersparnis`) ist mit
+  // #402 im Backend entfallen. **Die Substanz von N-131 ist damit nicht
+  // aufgegeben, sondern erstmals durchgesetzt.**
+  //
+  // Geprüft wird deshalb NICHT eine Zahl, sondern (a) dass die Anzeige keine
+  // Herleitung behauptet, die sich nicht nachrechnen lässt, und (b) dass der
+  // Hinweis sagt, was in der Zeile steckt.
 
   it('mit sonstigem Erzeuger: Label und Formel nennen PV, die Multiplikation entfällt', () => {
     render(<TKonto d={{ ...basis, sonstiges_erzeugung_kwh: 400 }} />)
@@ -114,7 +122,10 @@ describe('TKonto — sonstiger Erzeuger: die Beschriftung sagt, was bewertet ist
 
     // Formel und Herleitung stehen im Tooltip — der erscheint erst beim Zeigen.
     fireEvent.mouseEnter(label)
-    expect(screen.getAllByText(/Eigenverbrauch aus Sonstiges ist hier nicht bewertet/).length)
+    expect(screen.getAllByText(/enthält den Eigenverbrauch aus Sonstiges/).length)
+      .toBeGreaterThan(0)
+    // Und er sagt auch, warum daneben nichts mehr steht.
+    expect(screen.getAllByText(/nicht zusätzlich am Gerät bewertet/).length)
       .toBeGreaterThan(0)
     // ⛔ Der Kern: Sobald ein sonstiger Erzeuger dabei ist, deckt die Menge
     // nicht mehr den Betrag — deshalb steht die Rechnung gar nicht erst da.
@@ -128,7 +139,7 @@ describe('TKonto — sonstiger Erzeuger: die Beschriftung sagt, was bewertet ist
     expect(screen.queryByText(/PV-Eigenverbrauch-Ersparnis/)).toBeNull()
 
     fireEvent.mouseEnter(label)
-    expect(screen.queryByText(/nicht bewertet/)).toBeNull()
+    expect(screen.queryByText(/Eigenverbrauch aus Sonstiges/)).toBeNull()
     // Und die Herleitung steht da — sonst hätte der Fix sie überall genommen.
     expect(screen.getAllByText(/120,0 kWh × 30,00 ct\/kWh/).length).toBeGreaterThan(0)
   })
@@ -140,7 +151,7 @@ describe('TKonto — sonstiger Erzeuger: die Beschriftung sagt, was bewertet ist
     render(<TKonto d={{ ...basis, sonstiges_erzeugung_kwh: 0, sonstiges_verbrauch_kwh: 900 }} />)
 
     expect(screen.queryByText(/PV-Eigenverbrauch-Ersparnis/)).toBeNull()
-    expect(screen.queryByText(/nicht bewertet/)).toBeNull()
+    expect(screen.queryByText(/Eigenverbrauch aus Sonstiges/)).toBeNull()
   })
 })
 

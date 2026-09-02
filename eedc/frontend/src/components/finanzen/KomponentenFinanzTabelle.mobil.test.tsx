@@ -62,9 +62,17 @@ describe('Komponenten-Finanzen mobil — die Karten tragen dieselben Zahlen (N-1
   it('je Komponente eine Karte mit Kopf, Saldo und den drei Spalten', () => {
     const t = karten(zeige())!.textContent!
 
-    // Kopf + Saldo: 62,40 + 118,90 − 0 = 181,30 für die PV-Zeile
+    // Kopf + Saldo: 62,40 + 77,40 − 0 = 139,80 für die PV-Zeile.
+    //
+    // ⚠ Hier stand bis 2026-09-02 „62,40 + 118,90 = 181,30" — die Zahl war nur
+    // wahr, WEIL der Defekt aus #402 da war: die PV-Zeile trug die **volle**
+    // Eigenverbrauchs-Ersparnis, obwohl der Hausspeicher dieser Fixture 41,50 €
+    // davon als eigene Karte ausweist. Die Aussage dieser Datei ist „auf der
+    // Karte steht dasselbe wie in der Tabelle" — die bleibt, und sie wird unten
+    // zusätzlich gegen die Tabelle selbst geprüft, damit die Literale nicht
+    // wieder der einzige Wächter sind.
     expect(t).toContain('PV-Anlage')
-    expect(t).toContain('181,30 €')
+    expect(t).toContain('139,80 €')
 
     // Die drei Wertspalten stehen als Labels auf der Karte
     expect(t).toContain('Erträge')
@@ -73,7 +81,25 @@ describe('Komponenten-Finanzen mobil — die Karten tragen dieselben Zahlen (N-1
 
     // ... und tragen die Zahlen der Tabellenzeile
     expect(t).toContain('62,40')
-    expect(t).toContain('118,90')
+    expect(t).toContain('77,40')
+  })
+
+  it('die Karte zeigt genau die Zahlen der Tabelle — ohne feste Literale', () => {
+    // Der eigentliche Anspruch der Datei. Ein Literal altert mit jeder
+    // Rechenänderung (siehe oben); dieser Vergleich nicht.
+    const c = zeige()
+    const kartenText = karten(c)!.textContent!
+    // Nur der Zeilenkörper: die Karten spiegeln die ZEILEN. Die Fußzeile trägt
+    // Spaltensummen, die es auf der Karte bewusst nicht gibt (dort steht allein
+    // der Gesamt-Saldo) — sie mitzuprüfen hieße, dem Kartenpfad etwas
+    // vorzuwerfen, das er nie gezeigt hat.
+    const tabellenZellen = Array.from(c.querySelectorAll('table tbody td'))
+      .map(td => td.textContent!.trim())
+      .filter(x => /^\d{1,3}(\.\d{3})*,\d{2}$/.test(x))
+    expect(tabellenZellen.length).toBeGreaterThan(0)
+    for (const zahl of new Set(tabellenZellen)) {
+      expect(kartenText).toContain(zahl)
+    }
   })
 
   it('die zweite Karte trägt die Komponente samt anteiliger Betriebskosten', () => {
@@ -86,10 +112,10 @@ describe('Komponenten-Finanzen mobil — die Karten tragen dieselben Zahlen (N-1
   })
 
   it('die Summenkarte nennt den Gesamtsaldo', () => {
-    // 181,30 (PV) + 41,50 − 3,25 (Speicher) = 219,55
+    // 139,80 (PV) + 41,50 − 3,25 (Speicher) = 178,05
     const t = karten(zeige())!.textContent!
     expect(t).toContain('Summe (Saldo)')
-    expect(t).toContain('219,55 €')
+    expect(t).toContain('178,05 €')
   })
 
   it('ein fehlender Wert steht als Strich, nicht als 0,00', () => {

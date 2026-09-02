@@ -10,7 +10,7 @@ extrahiert wird.
 Aktuelles Verhalten (Stand v3.45.0), netz_p = 30 ct, einsp_p = 8 ct (allgemein-Tarif):
   - balkonkraftwerk: ersparnis = (eigenverbrauch|pv) × netz_p; erloes = einspeisung × einsp_p
   - speicher:        ersparnis = entladung × netz_p ("Entladung-Ersparnis")
-  - sonstiges:       ersparnis = eigenverbrauch × netz_p; erloes = einspeisung × einsp_p
+  - sonstiges:       KEINE Ersparnis je Gerät (N-131); erloes = **gepflegter** Betrag
   - waermepumpe:     ersparnis via berechne_wp_ersparnis (Label "Ersparnis vs. Gas")
   - e-auto dienstlich: Wirtschaftlichkeits-Zweig übersprungen, sonstige Erträge bleiben
   - betriebskosten_monat_euro = betriebskosten_jahr / 12
@@ -97,17 +97,55 @@ async def test_speicher_entladung_ersparnis_und_betriebskosten(db):
     assert d.betriebskosten_monat_euro == 10.0  # 120 / 12
 
 
-async def test_sonstiges_eigenverbrauch_und_erloes(db):
+async def test_sonstiger_erzeuger_bekommt_keine_gerechnete_zeile(db):
+    """Ein Erzeuger unter *Sonstiges* wird je Gerät NICHT bewertet (N-131, #402).
+
+    ⛔ Diese Probe stand bis 2026-09-02 auf dem Gegenteil (`ersparnis == 3,0`,
+    `erloes == 1,6`) und hat damit zwei Doppelzählungen festgeschrieben:
+
+    * Der Eigenverbrauch eines sonstigen Erzeugers steckt über
+      `erzeugung_hinter_zaehler_kwh` bereits in `eigenverbrauch_kwh` und ist in
+      `ev_ersparnis_euro` bewertet — ein Netzanschluss, ein Zähler.
+    * Seine Einspeisung steht aus demselben Grund im Hauszähler und ist in
+      `einspeise_erloes_euro` bewertet.
+
+    Sie war eine **Charakterisierungs**-Probe („fixiert das Verhalten, bevor ein
+    Builder extrahiert wird") — sie hielt einen Zustand fest, keinen Entscheid.
+    Der Entscheid sagt seit 2026-09-01 das Gegenteil.
+    """
     anlage = await _seed_anlage(db)
     so_id = await _add_inv(db, anlage, "sonstiges",
                            vd={"eigenverbrauch_kwh": 10.0, "einspeisung_kwh": 20.0})
     await db.commit()
 
     res = await get_aktueller_monat(anlage_id=anlage.id, jahr=JAHR, monat=MONAT, db=db)
+    # Ohne gepflegten Erlös und ohne Betriebskosten bleibt nichts, was diese
+    # Investition ins T-Konto brächte — der Inclusion-Guard lässt sie weg.
+    assert _detail_by_id(res, so_id) is None
+
+
+async def test_sonstiger_erzeuger_traegt_den_gepflegten_erloes(db):
+    """Konzept §9 Weg 2: eigener Vergütungssatz ⇒ eigener Zähler ⇒ gepflegter Betrag.
+
+    Gemeldet von rilmor-mhrs (#402): Er pflegt 35,50 € an einem Erzeuger unter
+    *Sonstiges*, seine Anlagen-Einspeisevergütung ist 0 ct. Gerechnet ergab das
+    0,00 € — die Zeile verschwand, sein Betrag mit ihr.
+    """
+    anlage = await _seed_anlage(db)
+    so_id = await _add_inv(db, anlage, "sonstiges",
+                           vd={"einspeisung_kwh": 20.0,
+                               "einspeise_erloes_euro": 35.5})
+    await db.commit()
+
+    res = await get_aktueller_monat(anlage_id=anlage.id, jahr=JAHR, monat=MONAT, db=db)
     d = _detail_by_id(res, so_id)
     assert d is not None
-    assert d.ersparnis_euro == 3.0     # 10 × 30 ct
-    assert d.erloes_euro == 1.6        # 20 × 8 ct
+    # NICHT 1,60 € (= 20 kWh × 8 ct): der gepflegte Betrag wird nicht nachgerechnet.
+    assert d.erloes_euro == 35.5
+    assert d.ersparnis_euro is None
+    # A6: die Zeile sagt, woher ihre Zahl kommt — und behauptet keine Rechnung.
+    assert d.erloes_formel is not None
+    assert "gepflegt" in d.erloes_formel
 
 
 async def test_dienstwagen_zweig_uebersprungen_aber_sonstige_ertraege_bleiben(db):

@@ -31,6 +31,7 @@ import { Table, TableHead, TableBody, TableFoot } from '../ui/Table'
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { GELD_TEXT_CLASS, compareTyp } from '../../lib'
 import type { AktuellerMonatResponse, InvestitionFinancialDetail } from '../../api/aktuellerMonat'
+import { pvEigenverbrauchRestEuro } from './evAufteilung'
 
 const num = (v: number) => fmtCalc(v, 2, '—')
 const saldoFarbe = (v: number) => (v >= 0 ? GELD_TEXT_CLASS.netto : GELD_TEXT_CLASS.kosten)
@@ -60,18 +61,43 @@ function zeilenAus(d: AktuellerMonatResponse): FinanzZeile[] {
   const zeilen: FinanzZeile[] = []
 
   // PV-Anlage (Anlage-Ebene): Einspeise-Erlös + Eigenverbrauch-Ersparnis.
+  //
+  // ⚑ Die Einsparung ist der **Rest** — der Anteil, den Balkonkraftwerk,
+  // Speicher und Wallbox-PV-Ladung schon als eigene Zeile tragen, ist
+  // abgezogen (`evAufteilung.ts`, dieselbe Regel wie im T-Konto).
+  //
+  // Bis 2026-09-02 stand hier die **volle** `ev_ersparnis_euro` neben den
+  // Komponentenzeilen — die Summenzeile zählte deren Anteil damit zweimal, und
+  // ihr „Ergebnis nach Stromrechnung" wich vom „Gewinn (Haushalt)" des
+  // T-Kontos um genau diesen Betrag ab. Gemeldet von rilmor-mhrs (#402): PV
+  // 267,87 € hier gegen 143,51 € dort, Differenz 124,36 € = BKW 16,53 +
+  // Speicher 10,92 + Victron 96,91 — auf den Cent.
+  //
+  // ⛔ Der Entscheid von G20-1 („die Tabellen-Summe ist bewusst eine dritte,
+  // komponenten-attribuierte Netto-Semantik", 2026-07-20) trägt das nicht mehr:
+  // eine Attribution verteilt einen Betrag, sie vervielfacht ihn nicht. Die
+  // Zuordnung bleibt vollständig erhalten — Speicher behält seinen Spread, das
+  // BKW seinen Anteil; die PV-Zeile hört nur auf, beides mitzubeanspruchen.
+  // Später entschieden und übergeordnet: v4.0.20 („Eine Kilowattstunde, ein
+  // Preis") und der Wallbox-Entscheid vom 2026-09-01.
   const einspeise = d.einspeise_erloes_euro
   const ev = d.ev_ersparnis_euro
   if (einspeise != null || ev != null) {
+    const evPv = ev != null ? pvEigenverbrauchRestEuro(d) : 0
+    const abgezogen = (ev ?? 0) - evPv
     zeilen.push({
       key: 'pv-anlage',
       label: 'PV-Anlage',
       typ: 'pv-module',
       ertraege: einspeise ?? 0,
-      einsparungen: ev ?? 0,
+      einsparungen: evPv,
       aufwand: 0,
       tooltip: 'Erträge: Einspeise-Erlös (Einspeisung × Vergütung). '
-        + 'Einsparungen: Eigenverbrauch × Netzbezugspreis (vermiedener Netzbezug).',
+        + 'Einsparungen: Eigenverbrauch × Netzbezugspreis (vermiedener Netzbezug)'
+        + (abgezogen > 0
+          ? ` — ohne ${fmtCalc(abgezogen, 2)} €, die unten als eigene Zeile stehen.`
+          : '.'),
+      hinweis: abgezogen > 0 ? 'ohne Anteil der Komponenten unten' : undefined,
     })
   }
 

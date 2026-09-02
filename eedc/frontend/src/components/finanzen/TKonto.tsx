@@ -14,6 +14,7 @@ import { FormelTooltip, fmtCalc } from '../ui'
 import { TYP_TEXT_CLASS } from '../../lib'
 import type { AktuellerMonatResponse } from '../../api/aktuellerMonat'
 import { angezeigtesDelta } from '../../lib/werte'
+import { evInKomponentenzeilen, pvEigenverbrauchRestEuro } from './evAufteilung'
 
 const fmt = (v: number | null | undefined, d = 1) => fmtCalc(v, d, '—')
 
@@ -86,19 +87,14 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
 
   // Welche Komponenten-Ersparnisse stecken in ev_ersparnis (BKW, Speicher, Wallbox-PV-Ladung).
   // Backend rechnet ev_ersparnis = eigenverbrauch_kwh × netzbezug_preis, wobei eigenverbrauch
-  // den Direktverbrauch (= PV − Einspeisung − Batterie-Ladung) inkl. Wallbox-PV-Ladung umfasst.
-  // Werden BKW/Speicher/Wallbox-PV-Ladung separat im T-Konto ausgewiesen, muss ihr Anteil
-  // hier abgezogen werden, sonst Doppelzählung im Σ Haben (Issue #223).
-  const evInErsparnis = hasPerInv
-    ? fins
-        .filter(inv =>
-          inv.typ === 'balkonkraftwerk'
-          || inv.typ === 'speicher'
-          || (inv.typ === 'wallbox' && inv.ersparnis_label === 'PV-Ladung-Ersparnis')
-        )
-        .reduce((s, inv) => s + (inv.ersparnis_euro ?? 0), 0)
-    : 0
-  const pvEvResidual = Math.max(0, (d.ev_ersparnis_euro ?? 0) - evInErsparnis)
+  // den Direktverbrauch (= Erzeugung − Einspeisung − Batterie-Ladung) inkl. Wallbox-PV-Ladung
+  // umfasst. Werden BKW/Speicher/Wallbox-PV-Ladung separat im T-Konto ausgewiesen, muss ihr
+  // Anteil abgezogen werden, sonst Doppelzählung im Σ Haben (Issue #223).
+  //
+  // ⚑ Die Regel steht seit #402 in `evAufteilung.ts` — die Komponenten-Finanztabelle
+  // hängt an derselben Antwort und muss dieselbe Aufteilung sehen (sie tat es nicht).
+  const evInErsparnis = hasPerInv ? evInKomponentenzeilen(fins) : 0
+  const pvEvResidual = pvEigenverbrauchRestEuro(d)
 
   // N-131: Hat die Anlage einen Erzeuger unter *Sonstiges* — BHKW, Windrad,
   // Wasserkraft, was auch immer —, dann zählen Menge und Geldwert hier NICHT
@@ -107,12 +103,18 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
   //   · `d.eigenverbrauch_kwh` ist der BILANZ-Eigenverbrauch. Er muss den
   //     sonstigen Erzeuger enthalten, weil der Zähler am EINEN Netzanschluss
   //     die Summe aller dahinterliegenden Erzeuger misst (v3.45.4).
-  //   · `d.ev_ersparnis_euro` bewertet nur PV und Balkonkraftwerk. Für einen
-  //     sonstigen Erzeuger rechnet eedc den Nutzen bewusst nicht selbst — er
-  //     wird am Gerät als „Ertrag/Jahr" gepflegt und läuft über die
+  //   · `d.ev_ersparnis_euro` bewertet **genau diese** Menge, den sonstigen
+  //     Erzeuger also mit. ⛔ Hier stand bis 2026-09-02 das Gegenteil („bewertet
+  //     nur PV und Balkonkraftwerk") — an einer Probe-Anlage widerlegt: 430 kWh
+  //     Bilanz-Eigenverbrauch = 129,00 € enthielten die 50 kWh des Mini-BHKW.
+  //     Daneben stand damals noch eine Gerätezeile mit 15,00 € für dieselben
+  //     kWh; **sie ist entfallen** (Backend, `_baue_investition_financial`).
+  //     Für einen sonstigen Erzeuger rechnet eedc den Nutzen bewusst nicht je
+  //     Gerät — er wird am Gerät als „Ertrag/Jahr" gepflegt und läuft über die
   //     Kapitalrechnung (`aussichten.py`: `jahres_ev_ersparnis` und
   //     `ertrag_jahr_ges` liegen in DERSELBEN Summe). Beides zu rechnen wäre
   //     dieselbe Doppelzählung wie in v4.0.20.
+  //     ⚑ Der Satz im `evHinweis` unten ist damit wahr statt bloß gemeint.
   //
   // ⛔ Die Folge fürs Tooltip: `Menge × Preis = Ergebnis` geht dann nicht auf.
   // Deshalb steht die Multiplikation in diesem Fall NICHT da — eine Rechnung,
@@ -123,8 +125,20 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
   // ⚠ Und bewusst ohne das Wort Brennstoff: ein Windrad hat keinen.
   const sonstigeErzeugung = d.sonstiges_erzeugung_kwh ?? 0
   const hatSonstigeErzeuger = sonstigeErzeugung > 0
+  // ⛔ Hier stand bis 2026-09-02 „Eigenverbrauch aus Sonstiges ist hier NICHT
+  // bewertet" — an dieser Route gemessen ist das Gegenteil wahr: `ev_ersparnis`
+  // entsteht aus `erzeugung_hinter_zaehler_kwh` und trägt den sonstigen Erzeuger
+  // mit (ein Netzanschluss, ein Zähler). Der Satz stammt aus N-131 und gilt für
+  // die Kennwert-Seite (`finanz_aggregat`, dort `pv_kwh`) — nicht für das
+  // T-Konto, das aus `aktueller_monat` gespeist wird. Genau **diese** Route-
+  // Differenz ist als eigener Fund erfasst; hier steht ab jetzt, was diese Zeile
+  // tatsächlich enthält.
+  //
+  // ⚑ Die Substanz von N-131 bleibt und wird dadurch erst durchgesetzt: EINE
+  // Stelle für den Nutzen, nicht zwei. Die zweite (`<Gerät> — Eigenverbrauch-
+  // Ersparnis`) ist im Backend entfallen.
   const evHinweis = hatSonstigeErzeuger
-    ? ' — Eigenverbrauch aus Sonstiges ist hier nicht bewertet, sein Ertrag wird am Gerät gepflegt'
+    ? ' — enthält den Eigenverbrauch aus Sonstiges; er wird deshalb nicht zusätzlich am Gerät bewertet'
     : ''
 
   // N-267: dritte Beschriftung. Die Mechanik gab es schon (#392/Flex-Tarif) —
@@ -196,7 +210,11 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
           label: `${inv.bezeichnung} — Einspeisung`,
           wert: inv.erloes_euro,
           color: 'text-green-600 dark:text-green-400',
-          formel: 'Einspeisung × Einspeisevergütung',
+          // Nicht fest verdrahtet: beim BKW rechnet eedc `Einspeisung ×
+          // Vergütung`, bei einem sonstigen Erzeuger steht dort ein gepflegter
+          // Betrag (Konzept §9 Weg 2). Der Satz kam von hier und behauptete für
+          // den zweiten Fall eine Rechnung, die niemand angestellt hat.
+          formel: inv.erloes_formel ?? 'Einspeisung × Einspeisevergütung',
           ergebnis: `= ${fmtCalc(inv.erloes_euro, 2)} €`,
         })
       }
