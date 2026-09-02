@@ -843,7 +843,19 @@ class EnergieprofilChecks:
         - Spez. Tagesertrag > 7 kWh/kWp an ≥ 3 Tagen
 
         Diagnose-Charakter, kein Cap und keine Reparatur-Action — der Anwender
-        muss am Sensor-Mapping entscheiden (Memory: feedback_kein_grosser_heiler_knopf).
+        muss am Sensor-Mapping entscheiden (kein großer Heiler-Knopf).
+
+        ⭐ **Die Ursachenliste nennt BEIDE Seiten des Bruchs (2026-09-02).** Die
+        PR ist ``Ertrag ÷ (Einstrahlung × kWp)``; bis dahin nannte der Text nur
+        Ursachen im Zähler (Doppelzählung) und bei ``kWp``. Wer die drei
+        genannten sauber ausschloss, hatte **keinen nächsten Schritt** und
+        landete in den Logs — genau so passiert (coolxmad, #353). Dass die
+        Einstrahlungsseite die PR über 1 treiben kann, ist im Baum belegt:
+        ``aggregator.py`` warnt bei der PR-Rechenstelle vor GTI-Fehlern
+        (#139, PR 1,5–2,8), und v4.0.21 hat einen Standort-Fall behoben, bei dem
+        gar keine Strahlung ankam (0,0 statt 206,5 kWh/m²). Eine Liste, die eine
+        von zwei Seiten verschweigt, liest sich trotz „weiß eedc nicht" als
+        abgeschlossen.
         """
         from datetime import date, timedelta
         from backend.models.tages_energie_profil import TagesZusammenfassung
@@ -988,7 +1000,14 @@ class EnergieprofilChecks:
                 "bereits enthalten, ein separates BKW-Mapping zählt sie nochmal.\n"
                 "• Ein Sensor ist zweimal zugeordnet (Anlage und Komponente).\n"
                 "• Die eingetragene kWp ist zu niedrig — dann ist nicht die "
-                "Erzeugung zu hoch, sondern der Vergleichsmaßstab zu klein.\n\n"
+                "Erzeugung zu hoch, sondern der Vergleichsmaßstab zu klein.\n"
+                "• Die Einstrahlung ist zu klein angesetzt — die Performance "
+                "Ratio teilt den Ertrag durch Einstrahlung × kWp, also kann "
+                "auch diese Seite den Wert über 1 treiben. Typisch bei "
+                "fehlender oder falscher Ausrichtung bzw. Neigung der Module, "
+                "oder an einem Standort, für den der Wetterdienst keine "
+                "brauchbaren Strahlungswerte liefert. Prüfen: Einstellungen → "
+                "Anlage, Ausrichtung und Neigung der PV-Module.\n\n"
                 "Tage mit bekanntem Counter-Spike sind hier bereits "
                 "herausgerechnet (#385).\n\n"
                 "Prüfen: Einstellungen → Datenquellen, Block des "

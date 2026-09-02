@@ -752,11 +752,13 @@ Hintergrund: [Issue #263](https://github.com/supernova1963/eedc-homeassistant/is
 
 **Warum das zählt:** Der häufigste Grund ist keine Wundertechnik, sondern **dieselbe Erzeugung zweimal gezählt** — etwa ein String-Sensor *und* der Anlagen-Summenzähler, beide zugeordnet. Alles, was auf der Erzeugung aufbaut, wird dadurch zu gut: Eigenverbrauch, Autarkie, Ersparnis, CO₂.
 
+> **Der Verdacht hat zwei Seiten, und die zweite wird leicht übersehen.** Die Performance Ratio ist `Ertrag ÷ (Einstrahlung × kWp)`. Sie steigt also nicht nur, wenn der **Ertrag** zu hoch ist, sondern auch, wenn der **Vergleichsmaßstab** zu klein angesetzt ist — und der hat zwei Faktoren: die eingetragene kWp *und* die Einstrahlung. Wer alle Zuordnungen geprüft hat und nichts Doppeltes findet, sieht deshalb als Nächstes bei **Ausrichtung und Neigung der Module** nach (*Einstellungen → Anlage*): Ohne sie rechnet eedc mit einer Einstrahlung, die nicht zu deinem Dach passt.
+
 #### Befunde
 
 | Meldung | Severity | Bedeutung | Behebung |
 |---------|----------|-----------|----------|
-| **Verdacht auf PV-Doppelerfassung (PR > 1 oder spez. Ertrag zu hoch)** | ⚠️ WARNING | An mindestens drei Tagen liegen die Kennzahlen über dem physikalisch Möglichen. | *Einstellungen → Datenquellen* öffnen und prüfen, ob dieselbe Erzeugung an zwei Stellen zugeordnet ist. **Regel:** Entweder je Erzeuger ein eigener Zähler **oder** ein Anlagen-Summenzähler — nicht beides. |
+| **Verdacht auf PV-Doppelerfassung (PR > 1 oder spez. Ertrag zu hoch)** | ⚠️ WARNING | An mindestens drei Tagen liegen die Kennzahlen über dem physikalisch Möglichen. | Zuerst *Einstellungen → Datenquellen* öffnen und prüfen, ob dieselbe Erzeugung an zwei Stellen zugeordnet ist. **Regel:** Entweder je Erzeuger ein eigener Zähler **oder** ein Anlagen-Summenzähler — nicht beides. **Findet sich dort nichts:** unter *Einstellungen → Anlage* die kWp sowie **Ausrichtung und Neigung** der Module prüfen — beide gehen in den Vergleichsmaßstab ein (siehe Kasten oben). |
 | **N auffällige(r) Tag(e) fallen mit einem Zähler-Sprung zusammen** | ℹ️ INFO | Die Auffälligkeit hat eine andere, bekannte Ursache: einen Ausreißer im Zählerstand. | Erst den Zähler-Sprung beheben (§5.6), danach erneut prüfen. |
 
 > **eedc kürzt hier nichts.** Es gibt keinen Knopf, der die Erzeugung „gerade zieht" — die Entscheidung, welche Zuordnung die richtige ist, kann nur der Anlagenbetreiber treffen.
