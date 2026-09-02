@@ -24,6 +24,7 @@ from backend.core.investition_parameter import (
 )
 from typing import Mapping, Sequence
 
+from backend.core.berechnungen.waermepumpe_kennzahl import abgrenzungs_grund
 from backend.services.monats_fakten import MonatsFakt, lade_monats_fakten
 from backend.services.monats_co2 import co2_bilanz_aus_fakt
 from backend.services.pvgis_soll import (
@@ -463,7 +464,35 @@ def _monatswert(
             monatswert_data["wp_heizwaerme_kwh"] = round(wp.heizung_kwh, 1)
         if wp.warmwasser_kwh > 0:
             monatswert_data["wp_warmwasser_kwh"] = round(wp.warmwasser_kwh, 1)
-        # **W-14 — der Server rechnet nichts nach, also bekommt er die Größe.**
+        # ⭐ **ADR-002/P12 (02.09.2026): Darf aus diesem Monat eine Arbeitszahl
+        # gebildet werden?** Lokal entscheidet das seit dem 26.08. der Layer;
+        # der Server bildet seinen JAZ aber selbst — an **fünf** Stellen
+        # (`stats.py` je Region, `benchmark.py` je Monatswert, `components.py`
+        # zweimal je Anlage, `statistics.py` fürs Ranking). Er hat die Geräte
+        # nie gesehen und kann die Abgrenzung nicht prüfen; ohne dieses Flag
+        # ginge eine Anlage mit Wärmepumpe **und** Split-Klimaanlage mit dem
+        # Strom zweier Geräte und der Wärme von einem in **fremde**
+        # Vergleichswerte ein.
+        #
+        # ⛔ Es sperrt die **Kennzahl**, nicht die **Mengen**: Strom, Heizwärme
+        # und Warmwasser bleiben additiv richtig und werden weiter gesendet und
+        # ausgewertet (E1 — Mengen summiert, Kennzahlen getrennt).
+        #
+        # ⚠ Dieselben drei Lagen wie in jeder lokalen Sicht, über **einen**
+        # SoT-Aufruf. `zeitraum_versetzt` gehört nicht dazu: Der Payload liest
+        # eine Quelle (die Monats-Fakten), Q und E stammen aus demselben
+        # Zeitraum.
+        monatswert_data["wp_jaz_belastbar"] = abgrenzungs_grund(
+            abgrenzung_stoerung=wp.abgrenzung_stoerung,
+            bauarten_gemischt=wp.bauarten_gemischt,
+            geraete_ohne_waerme=wp.waerme_deckt_nicht_alle_geraete,
+        ) is None
+        # **W-14 — der Server bekommt die Größe, weil er sie selbst nicht bilden kann.**
+        # ⛔ **Hier stand bis zum 02.09.2026 „Der Server rechnet nichts nach, also
+        # bekommt er die Größe."** Das ist falsch und war es immer: Er rechnet an
+        # fünf Stellen (s. den Block darüber) — er bekommt nur nicht die
+        # Information, ob er darf. Der Satz hat die Lücke elf Tage lang plausibel
+        # aussehen lassen.
         # Sein JAZ ist `(Heizwärme + Warmwasser) / Stromverbrauch`; ohne diesen
         # Wert stünde der Kühlstrom im Nenner und die Kältemenge nirgends. Eine
         # kühlende Anlage stand damit systematisch schlechter da als eine, die
