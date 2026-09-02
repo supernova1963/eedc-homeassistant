@@ -103,18 +103,21 @@ cd eedc/frontend && npm run test              # faehrt seit E8/M14 ALLE 25 Quell
 # stehen im eigenen Kasten unter der Liste.
 
 # Braucht dieses Paket den Park-Livetest? (Auslöser statt Takt — s. Kasten unten)
-# ⛔ Seit 24.08. (Gernot) zählt das HINZUFÜGEN eines Park-Elements, nicht mehr das blosse
-#   VORKOMMEN eines Park-Bezeichners in einer geänderten Datei. Testdateien und Kommentare
-#   zählen nicht. Begründung + Messung stehen im Kasten unter der Liste.
+# ⛔ Seit 24.08. (Gernot) zählt das HINZUFÜGEN eines Park-Elements, nicht das blosse
+#   VORKOMMEN eines Park-Bezeichners. Testdateien und Kommentare zählen nicht.
+# ⛔ Der frühere EINZEILER an dieser Stelle maß etwas anderes als die Regel sagt und ist
+#   am 02.09. durch das Skript ersetzt: Er zählte Park-Bezeichner in **hinzugefügten
+#   Diff-Zeilen** — und eine GEÄNDERTE Zeile ist im Diff eine hinzugefügte. Über die
+#   letzten 150 Commits gemessen: **3 Auslösungen, alle 3 falsch, null echte.** An den
+#   drei historischen Belegfällen liefert das Skript exakt dieselben Werte (5/0/0), es
+#   verliert also keine Deckung. **Dritte Runde derselben Klasse** — 1. Fassung Ermessen,
+#   2. „Datei enthält", 3. „Zeile enthält", jetzt: die MENGE der Park-Elemente wächst.
 # ⚠ Basis ist HEAD, NICHT origin/main: Gates laufen VOR dem Commit, und `origin/main` würde
 #   alle bereits geprüften ungepushten Commits mitschleppen (am 23.08. beim Bau der Regel selbst
 #   passiert — sie meldete eine Park-Berührung aus `566635a2` für ein reines Doku-Paket).
-#   Umfasst das Paket schon Commits, entsprechend `HEAD~n` einsetzen.
+#   Umfasst das Paket schon Commits, entsprechend `HEAD~n` als Argument übergeben.
 cd /home/gernot/claude/eedc-homeassistant
-git diff --diff-filter=d HEAD -- 'eedc/frontend/src' \
-  ':(exclude)eedc/frontend/src/test' ':(exclude)*.test.tsx' ':(exclude)*.test.ts' \
-  | command grep -E '^\+' | command grep -vE '^\+\s*(//|\*|/\*)' \
-  | command grep -E 'data-park-id=|<FokusKachel|<Parkbar'   # Treffer ⇒ Park-Leertest fahren
+./scripts/park-ausloeser.sh          # Exit 1 ⇒ Park-Leertest fahren; Exit 0 ⇒ nicht fällig
 
 # Doku-Spiegel ans ENDE, danach inhaltlich per diff prüfen (nicht nur Exit-Code)
 ./scripts/sync-help.sh && cd website && npm run build
@@ -173,6 +176,35 @@ Die Soll-Zahlen (pytest/Vitest) stehen **nicht hier**, sondern im laufenden Mast
 > ⚠ **Was er als EINZIGER fängt, bleibt damit gedeckt:** `check:parkbar` (Atomarität) und `check:parkbar-vollstaendig` (Vollständigkeit) sehen nur den **Quelltext**. Drei Klassen entstehen erst zur Laufzeit — Block ohne Auto-Hide-Gate · statische Park-ID-Liste driftet von den real gerenderten IDs · leere Container-Hülle (`FokusKachel`), die sich nicht selbst versteckt. **Dafür gibt es keinen Ersatz.** Wer die Auslöser-Liste kürzt, streicht diese Deckung mit.
 
 **`check:chart-audit`** (35 s) braucht dieselbe Box. Er ist an kein Auslöser-Muster gebunden — wer ihn nicht fährt, sagt das ausdrücklich.
+
+> **Warum die DRITTE Fassung fiel — gemessen 02.09., ausgelöst durch Gernots Frage.** Ich hatte
+> den Treffer des Einzeilers mit einer Begründung abgetan (*„die Park-ID ist unverändert"*) — also
+> per **Ermessen**, genau dem, was diese Regel seit der ersten Fassung abschaffen soll. Seine
+> Rückfrage: *„Willst du dem nicht nachgehen?"*
+>
+> **Der Befund lag am Prüfer, nicht am Paket.** Die Regel sagt seit dem 24.08. „das HINZUFÜGEN
+> zählt"; der Einzeiler zählte Park-Bezeichner in **hinzugefügten Diff-Zeilen** — und eine
+> *geänderte* Zeile ist im Diff eine hinzugefügte. Ein Paket, das an einer bestehenden
+> `<Parkbar id="chart:wp-vergleich">` nur ein Prop der Kind-Komponente ergänzt, meldete „fahren",
+> obwohl die Park-ID-Menge der Datei **bitgleich** blieb (fünf IDs vorher, dieselben fünf nachher).
+>
+> ⭐ **Dritte Runde derselben Klasse, jedes Mal eine Ebene tiefer:** 1. Fassung *Pflicht mit
+> Begründungszwang* (Ermessen bei jedem Commit) → 2. *„Datei **enthält** einen Bezeichner"* → 3.
+> *„geänderte **Zeile** enthält einen"* → jetzt *die **Menge** der Park-Elemente wächst*. Die
+> Gegenprobe der 3. Fassung hat es nicht gefangen, weil unter ihren drei Beispielen keine geänderte
+> Zeile mit bestehender Park-ID war — **eine Gegenprobe prüft nur die Fälle, die sie kennt.**
+>
+> **Gemessen, beidseitig:** Über die letzten **150 Commits** löst die alte Fassung **dreimal** aus —
+> **alle drei falsch, null echte** (`3efc19c5`, `f2c5b747`, `530996f5`; alle dieselbe Bauform, ein
+> Prop an einer bestehenden `<Parkbar>`). An den **drei historischen Belegfällen** liefert das neue
+> Skript **exakt dieselben** Werte wie die alte Regel — `0327416c` **5**, `e53af679` **0**,
+> `ef19173d` **0** —, es verliert also keine Deckung und diskriminiert nur schärfer.
+>
+> ⛔ **Und was es NICHT ist** (Gernots Rückfrage beim Bau): keine Regel „jedes Element muss parkbar
+> sein". Der Auslöser entscheidet, **wann geprüft** wird, nie was erlaubt ist. `<FokusKachel` ohne
+> Park-ID zählt mit, weil sie als Container-Hülle genau die Klasse trägt, die **nur** der Leertest
+> fängt — sieben davon stehen im Baum und sind alle richtig. Gegenüber der alten Fassung ist das
+> sogar **milder**: sie zählte jedes Vorkommen, das Skript verlangt einen **Zuwachs**.
 
 > ✅ **Seit 27.08. verweigern BEIDE Laufzeit-Gates die falsche Box** (geteilter Vorflug, `scripts/demo-box-vorflug.mjs`): fehlt der Demo-Schalter oder ist die Box nicht erreichbar, brechen sie mit Exit 1 ab statt grün zu melden. Vorher meldete `chart-audit` gegen ein Bundle **ohne** `VITE_DEMO_DEFAULT` **37 statt 44 Charts — und Exit 0**. ⚠ **Exit-Codes nie durch eine Pipe messen**: `| tail` liefert den Exit-Code von `tail`, und genau so entstand die Fehlmessung, die diesen Bau ausgelöst hat.
 
