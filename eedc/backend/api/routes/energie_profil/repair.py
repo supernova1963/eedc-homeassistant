@@ -293,10 +293,21 @@ async def achse2_drift_diagnose(
     Toleranz 0,5 kWh). **Kein Schreibzugriff, keine Re-Aggregation.**
 
     Maintainer-Werkzeug zum Vermessen der gegenläufigen Magnitude-Drift
-    (#315, Memory ``project_achse2_magnitude_drift``) über viele Tage, bevor an
-    der Rekonstruktions-Kette etwas geändert wird. Die angezeigten Werte
-    (Kacheln/Bilanz/Chart) stammen aus dem Zählerpfad und sind korrekt — diese
-    Drift ist rein diagnostisch (log-only im Aggregator, hier abfragbar).
+    (#315) über viele Tage, bevor an der Rekonstruktions-Kette etwas geändert
+    wird.
+
+    ⚠ **Der Satz „die angezeigten Werte stammen aus dem Zählerpfad" galt hier
+    bis 2026-09-02 ohne Einschränkung — er hat eine.** Die Tages-Hauptzahlen
+    kommen aus dem Zählerpfad; die **Erträge je Erzeuger** fallen seit #350 auf
+    die Σ des Leistungspfads zurück, wenn ein Tag keinen Boundary-Rollup hat
+    (``energie_profil/tage_werte.py``), und der Client summiert BKW,
+    E-Mobilität und Sonstiges direkt von den Stunden
+    (``v4/TagKomponenten.tsx``).
+
+    ⭐ Seit N-187 vergleicht die Invariante nur Geräte, die **beide** Pfade
+    führen — die Zuordnung dieses Tages nennt die Menge. Vorher meldete ein
+    Gerät mit Leistungs-, aber ohne Zählersensor täglich eine „Drift", die
+    exakt seine eigene Σ war.
     """
     result = await db.execute(
         select(TagesEnergieProfil)
@@ -313,8 +324,28 @@ async def achse2_drift_diagnose(
     for row in rows:
         nach_tag.setdefault(row.datum, []).append(row)
 
+    # Grundgesamtheit je Tag (N-187) — dieselbe Menge, die der Aggregator
+    # benutzt. Sie ist **tagesabhängig**: eine an diesem Tag noch nicht
+    # angeschaffte oder bereits stillgelegte Komponente verspricht nichts.
+    from backend.models.investition import Investition
+    from backend.services.snapshot.komponenten_beitraege import (
+        erwartete_komponenten_keys,
+    )
+
+    anlage_obj = (await db.execute(
+        select(Anlage).where(Anlage.id == anlage_id)
+    )).scalar_one_or_none()
+    invs = (await db.execute(
+        select(Investition).where(Investition.anlage_id == anlage_id)
+    )).scalars().all()
+    invs_by_id = {str(inv.id): inv for inv in invs}
+    sensor_mapping = (anlage_obj.sensor_mapping if anlage_obj else None) or {}
+
     tage_out: list[dict] = []
     for datum_, tep_rows in sorted(nach_tag.items()):
+        gedeckt = set(erwartete_komponenten_keys(
+            sensor_mapping, invs_by_id, datum_,
+        ))
         kategorien = [
             {
                 "name": bericht.name,
@@ -323,7 +354,9 @@ async def achse2_drift_diagnose(
                 "abweichung_kwh": round(bericht.abweichung_kwh, 3),
                 "toleranz_kwh": bericht.toleranz_kwh,
             }
-            for bericht in pruefe_tep_komponenten_intern_konsistenz(tep_rows)
+            for bericht in pruefe_tep_komponenten_intern_konsistenz(
+                tep_rows, gedeckt,
+            )
             if not bericht.konsistent
         ]
         if kategorien:

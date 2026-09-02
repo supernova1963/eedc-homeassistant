@@ -87,8 +87,7 @@ def pruefe_tep_tz_konsistenz(
         details = (
             "Drift zwischen Stunden-Pfad (TagesEnergieProfil.pv_kw) und "
             "Tages-Pfad (komponenten_kwh PV+BKW). Mögliche Ursache: "
-            "paralleler Schreibpfad mit Schema-Mismatch (siehe Memory "
-            "feedback_aggregations_drift)."
+            "paralleler Schreibpfad mit Schema-Mismatch."
         )
 
     return KonsistenzBericht(
@@ -187,8 +186,8 @@ def pruefe_tep_tz_komponenten_konsistenz(
                     ""
                     if konsistent
                     else "Drift zwischen Stunden- und Tages-Pfad. Mögliche Ursache: "
-                    "paralleler Schreibpfad mit Schema-Mismatch (siehe Memory "
-                    "feedback_aggregations_drift, #290 LTS-Aggregator-Drift)."
+                    "paralleler Schreibpfad mit Schema-Mismatch "
+                    "(#290 LTS-Aggregator-Drift)."
                 ),
             )
         )
@@ -299,6 +298,7 @@ def aggregiere_tep_komponenten(tep_rows: Iterable) -> dict[str, float]:
 
 def pruefe_tep_komponenten_intern_konsistenz(
     tep_rows: Iterable,
+    zaehler_gedeckte_keys: Optional[set[str]],
     toleranz_kwh: float = 0.5,
 ) -> list[KonsistenzBericht]:
     """Achse-2-Drift-Check (Issue #315): pro Tag werden in ``aggregate_day``
@@ -307,7 +307,16 @@ def pruefe_tep_komponenten_intern_konsistenz(
     - die typisierten ``*_kw``-Spalten aus den Zähler-Snapshots (Boundary-/
       Zählerpfad, in v3.35.0/#298 saniert),
     - das ``komponenten``-JSON aus der W-Integration des Tagesverlaufs
-      (Leistungspfad, nur für die „Sonstiges"-Serien gelesen).
+      (Leistungspfad).
+
+    ⛔ **Hier stand bis 2026-09-02 „nur für die ‚Sonstiges'-Serien gelesen".**
+    Das ist seit **#350** falsch: ``aggregiere_tep_komponenten`` ist auch
+    **Lesequelle** — die Tageswerte je Erzeuger fallen auf diese Σ zurück, wenn
+    ein Tag keinen Boundary-Rollup hat (``energie_profil/tage_werte.py``), und
+    der Client summiert sie für BKW/E-Mobilität/Sonstiges direkt
+    (``v4/TagKomponenten.tsx``). Der Satz stand zwölf Zeilen unter seinem
+    eigenen Gegenteil und hat die Einschätzung „latent, near-zero Effekt"
+    (#315) drei Monate lang getragen.
 
     Im Standalone-Modus deckt die bestehende TZ-Invariante
     (``pruefe_tep_tz_komponenten_konsistenz``) diese Achse implizit ab, weil
@@ -320,6 +329,29 @@ def pruefe_tep_komponenten_intern_konsistenz(
     einen Beitrag haben (``*_kw`` gesetzt UND mindestens ein passender
     ``komponenten``-Key vorhanden). Sonst gäbe eine nur per Zähler — aber nicht
     per Leistungs-Serie — gemappte Kategorie ein Falsch-Positiv „Drift gegen 0".
+
+    ⭐ **Dieselbe Absicht, eine Ebene tiefer — ``zaehler_gedeckte_keys`` (N-187).**
+    Die Skip-Semantik oben fragt je **Kategorie**; ein Gerät **innerhalb** einer
+    Kategorie kann trotzdem nur auf einer Seite stehen. Genau das war am
+    2026-09-02 an Anlage 1 gemessen (06.08.): ``wallbox_kw`` trägt 12,000 kWh,
+    das ``komponenten``-JSON 29,323 — und die gemeldete „Drift" von 17,323 ist
+    auf drei Nachkommastellen die Σ von ``eauto_1``, einem E-Auto **ohne**
+    kWh-Zähler. Die Wallbox selbst stimmt auf beiden Seiten exakt (12,00).
+
+    Der Parameter nennt die Keys, die die **Zuordnung für diesen Tag**
+    verspricht (``snapshot/komponenten_beitraege.erwartete_komponenten_keys``);
+    der Leistungspfad wird vor dem Vergleich darauf eingeschränkt. Damit
+    vergleichen beide Seiten dieselbe Grundgesamtheit — dieselbe Regel, die
+    **F-58** für den kWp-Nenner gezogen hat.
+
+    ⚠ **Warum die Zuordnung und nicht ``tz.komponenten_kwh``:** Letzteres nennt,
+    was der Zählerpfad an diesem Tag *geschrieben* hat. Ein Gerät mit Zähler,
+    das an einem Tag nichts geliefert hat, fehlt dort — es herauszufiltern
+    würde eine echte Lücke verstecken statt eine Ungleichheit aufzulösen.
+
+    ``None`` schaltet die Einschränkung ab und ist **ausdrücklich zu übergeben**
+    (kein Default): ein Aufrufer soll nicht versehentlich in das Verhalten
+    zurückfallen, das die Falschmeldung erzeugt hat.
 
     Vorzeichen-Angleichung (#356): Senken-Kategorien stehen im Leistungspfad
     **negativ** (``seite == "senke"`` ⇒ ``-abs(...)``), im Zählerpfad
@@ -334,6 +366,9 @@ def pruefe_tep_komponenten_intern_konsistenz(
     """
     tep_rows = list(tep_rows)
     agg = aggregiere_tep_komponenten(tep_rows)
+    if zaehler_gedeckte_keys is not None:
+        # Gleiche Grundgesamtheit auf beiden Seiten (N-187) — s. Docstring.
+        agg = {k: v for k, v in agg.items() if k in zaehler_gedeckte_keys}
     berichte: list[KonsistenzBericht] = []
 
     for label, tep_feld, prefixe, summe_fn, leistungspfad_negativ in (
@@ -369,7 +404,7 @@ def pruefe_tep_komponenten_intern_konsistenz(
                     else "Drift zwischen Zähler-Spalten und Leistungs-JSON "
                     "derselben Stunden (Achse 2, #315). Mögliche Ursache: "
                     "Step-Integrations-Spike im Leistungspfad oder Schema-"
-                    "Mismatch (siehe Memory feedback_aggregations_drift)."
+                    "Mismatch."
                 ),
             )
         )
@@ -379,11 +414,14 @@ def pruefe_tep_komponenten_intern_konsistenz(
 
 def assert_tep_komponenten_intern_konsistent(
     tep_rows: Iterable,
+    zaehler_gedeckte_keys: Optional[set[str]] = None,
     toleranz_kwh: float = 0.5,
 ) -> None:
     """Wirft AssertionError sobald eine Achse-2-Kategorie driftet (für Tests/CI)."""
     failed = [
-        b for b in pruefe_tep_komponenten_intern_konsistenz(tep_rows, toleranz_kwh)
+        b for b in pruefe_tep_komponenten_intern_konsistenz(
+            tep_rows, zaehler_gedeckte_keys, toleranz_kwh
+        )
         if not b.konsistent
     ]
     if failed:

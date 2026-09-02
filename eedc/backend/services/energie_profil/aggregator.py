@@ -981,7 +981,24 @@ async def aggregate_day(
     # (TEP.*_kw-Spalten) derselben Stunden. Im HA-LTS-Modus ist das die einzige
     # Prüfung des Leistungs-JSON; im Standalone redundant zur TZ-Prüfung oben.
     # Warning-level — Step-Integrations-Drift sichtbar machen, kein Tag-Verlust.
-    for bericht in pruefe_tep_komponenten_intern_konsistenz(tep_rows):
+    #
+    # ⭐ Beide Seiten müssen dieselbe Grundgesamtheit führen (N-187): der
+    # Leistungspfad kennt auch Geräte OHNE kWh-Zähler, der Zählerpfad nicht.
+    # Ohne diese Einschränkung meldete ein E-Auto mit Leistungs-, aber ohne
+    # Zählersensor Tag für Tag eine „Drift", die exakt seine eigene Σ war
+    # (an Anlage 1 gemessen, 06.08.: 17,323 von 17,323). Die Menge kommt aus
+    # der Zuordnung dieses Tages — demselben SoT, den Daten-Checker und
+    # Tages-Reparatur benutzen.
+    from backend.services.snapshot.komponenten_beitraege import (
+        erwartete_komponenten_keys,
+    )
+
+    zaehler_gedeckte_keys = set(erwartete_komponenten_keys(
+        anlage.sensor_mapping or {}, invs_by_id, datum,
+    ))
+    for bericht in pruefe_tep_komponenten_intern_konsistenz(
+        tep_rows, zaehler_gedeckte_keys,
+    ):
         if not bericht.konsistent:
             logger.warning(
                 f"Anlage {anlage.id}, {datum}: Achse-2-Komponenten-Drift — {bericht}"

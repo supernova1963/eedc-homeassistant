@@ -247,7 +247,6 @@ _BASELINE: frozenset[str] = frozenset({
     "test_import_writer.py",
     "test_import_ziel_investition_349.py",
     "test_import_zuordnung_kwp.py",
-    "test_invariante_komponenten_intern_achse2.py",
     "test_invariante_komponenten_konsistenz.py",
     "test_investition_aktiv_filter.py",
     "test_investition_felder_leeren.py",
