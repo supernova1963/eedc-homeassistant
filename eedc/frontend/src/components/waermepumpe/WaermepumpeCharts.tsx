@@ -108,7 +108,27 @@ export interface JazMonat {
   monat: number
   wert: number | null
   grund: string | null
+  /** Q und E, mit denen der Layer die Zahl **tatsächlich** gebildet hat (N-370).
+   *  `nenner_kwh` ist NICHT der Stromverbrauch der Zeile — der funktionsfremde
+   *  Anteil ist abgezogen. Beide `null`, wo es keine Kennzahl gibt. */
+  zaehler_kwh?: number | null
+  nenner_kwh?: number | null
 }
+
+/** kWh in dieser Tabelle: ganzzahlig, wie die drei Mengen-Spalten daneben.
+ *
+ * ⭐ **Und der Vergleich läuft auf DERSELBEN Ebene** (N-370): Ob die Herleitung
+ * gezeigt wird, entscheidet sich an den **gerundeten** Werten, nicht an den rohen.
+ * Sonst erschiene sie bei einem funktionsfremden Anteil von 0,4 kWh mit der
+ * Aussage „316 ÷ 316" — eine Rechnung, die sichtbar dasselbe sagt wie die Zeile
+ * und den Leser nur fragen lässt, was er übersehen hat.
+ *
+ * ⚠ Die Division geht dadurch nicht immer auf die zweite Stelle auf (210 ÷ 95
+ * ergibt 2,21 neben einer JAZ von 2,20). Das ist der bewusste Tausch: Die
+ * Herleitung soll sich gegen **die Zeile** lesen lassen, in der sie steht.
+ * `fa270c6f` wählte auf der Kachel eine Nachkommastelle — dort steht sie allein,
+ * hier neben drei ganzzahligen Spalten. */
+const rundKwh = (x: number) => Math.round(x)
 
 /** Monatsdaten-Tabelle: Strom · Heizung · Warmwasser · JAZ je Monat.
  *
@@ -137,7 +157,47 @@ export function WaermepumpeMonatsTabelle(
   // Nachschlagen je (Jahr, Monat) — die Listen sind unabhängig sortiert.
   const jazKey = (j: number, m: number) => j * 100 + m
   const jazMap = new Map((jazJeMonat ?? []).map((x) => [jazKey(x.jahr, x.monat), x]))
+
+  // N-370: Zeilen vorab bilden, damit die Fußnote weiß, ob überhaupt eine
+  // Herleitung vorkommt — sie soll nicht unter einer Tabelle stehen, in der
+  // jede Zeile ohne sie aufgeht.
+  const zeilen = monatsdaten.map((md) => {
+    const strom = md.verbrauch_daten.stromverbrauch_kwh || 0
+    const heiz = md.verbrauch_daten.heizenergie_kwh || 0
+    const ww = md.verbrauch_daten.warmwasser_kwh || 0
+    // N-369: gelesen, nicht gerechnet. Fehlt der Eintrag (älterer Monat
+    // ohne Layer-Antwort), steht „—" — nie eine erfundene Zahl.
+    const jaz = jazMap.get(jazKey(md.jahr, md.monat))
+    // ⭐ **A6/N-370 — die Herleitung steht nur da, wo die Zeile sonst nicht aufgeht.**
+    // Stimmen Q und E mit den Spalten daneben überein, SIND die Nachbarspalten die
+    // eingesetzten Werte; eine zweite Zeile mit denselben Zahlen wäre Rauschen.
+    // Weichen sie ab, kam bis zum 02.09.2026 eine richtige Zahl neben Rohwerten zu
+    // stehen, aus denen sie sich nicht nachrechnen ließ (Strom 316 · Wärme 210 ·
+    // JAZ 2,20 — und 210 ÷ 316 ergibt 0,66). Vorher war es konsistent und falsch,
+    // seit N-369 richtig und unerklärlich; genau das ist die schlechtere Lage.
+    //
+    // ⛔ Die Zahlen kommen aus dem Layer und werden hier NICHT nachgerechnet
+    // (W-3-Klasse, Präzedenz `fa270c6f`): Der Nenner ist der Strom OHNE den
+    // funktionsfremden Anteil (Kühlen · Lüften · Entfeuchten). `(heiz + ww) / strom`
+    // ergäbe bei jeder Anlage mit erfasstem Betriebsmodus eine Rechnung, die nicht
+    // auf die Zahl daneben führt — dieselbe Bauform, die diese Datei mit N-369
+    // gerade verlassen hat.
+    //
+    // Die bedingte Anzeige ist keine neue Erfindung, sondern **W-17b** auf
+    // derselben Fläche: `WaermepumpeModusSplit.tsx` nennt die Grundmenge der
+    // Aufteilung genau dann, wenn sie vom Gesamtstrom abweicht.
+    const herleitung =
+      jaz?.wert != null && jaz.zaehler_kwh != null && jaz.nenner_kwh != null
+      && (rundKwh(jaz.zaehler_kwh) !== rundKwh(heiz + ww)
+          || rundKwh(jaz.nenner_kwh) !== rundKwh(strom))
+        ? `${fmtZahl(jaz.zaehler_kwh, 0)} ÷ ${fmtZahl(jaz.nenner_kwh, 0)} kWh`
+        : null
+    return { md, strom, heiz, ww, jaz, herleitung }
+  })
+  const zeigtHerleitung = zeilen.some((z) => z.herleitung !== null)
+
   return (
+    <>
     <Table>
       <TableHead>
         <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -149,27 +209,39 @@ export function WaermepumpeMonatsTabelle(
         </tr>
       </TableHead>
       <TableBody>
-        {monatsdaten.map((md) => {
-          const strom = md.verbrauch_daten.stromverbrauch_kwh || 0
-          const heiz = md.verbrauch_daten.heizenergie_kwh || 0
-          const ww = md.verbrauch_daten.warmwasser_kwh || 0
-          // N-369: gelesen, nicht gerechnet. Fehlt der Eintrag (älterer Monat
-          // ohne Layer-Antwort), steht „—" — nie eine erfundene Zahl.
-          const jaz = jazMap.get(jazKey(md.jahr, md.monat))
-          return (
-            <tr key={md.id ?? `${md.jahr}-${md.monat}`} className="border-b border-gray-100 dark:border-gray-800">
-              <td className={ZELLE}>{MONAT_KURZ[md.monat]} {md.jahr}</td>
-              <td className={`${ZELLE} text-right`}>{fmtZahl(strom, 0)}</td>
-              {/* Heizung = WP-Rot, Warmwasser = blau (= CHART_COLORS.wpWaerme/wpWarmwasser; Gernot 2026-06-25 nach detLAN). */}
-              <td className={`${ZELLE} text-right text-red-600`}>{fmtZahl(heiz, 0)}</td>
-              <td className={`${ZELLE} text-right text-blue-600`}>{fmtZahl(ww, 0)}</td>
-              <td className={`${ZELLE} text-right text-orange-600`} title={jaz?.grund ?? undefined}>
-                {jaz?.wert != null ? fmtZahl(jaz.wert, 2) : '—'}
-              </td>
-            </tr>
-          )
-        })}
+        {zeilen.map(({ md, strom, heiz, ww, jaz, herleitung }) => (
+          <tr key={md.id ?? `${md.jahr}-${md.monat}`} className="border-b border-gray-100 dark:border-gray-800">
+            <td className={ZELLE}>{MONAT_KURZ[md.monat]} {md.jahr}</td>
+            <td className={`${ZELLE} text-right`}>{fmtZahl(strom, 0)}</td>
+            {/* Heizung = WP-Rot, Warmwasser = blau (= CHART_COLORS.wpWaerme/wpWarmwasser; Gernot 2026-06-25 nach detLAN). */}
+            <td className={`${ZELLE} text-right text-red-600`}>{fmtZahl(heiz, 0)}</td>
+            <td className={`${ZELLE} text-right text-blue-600`}>{fmtZahl(ww, 0)}</td>
+            <td className={`${ZELLE} text-right text-orange-600`} title={jaz?.grund ?? undefined}>
+              {jaz?.wert != null ? fmtZahl(jaz.wert, 2) : '—'}
+              {herleitung && (
+                <div className="text-xs font-normal text-gray-500 dark:text-gray-400">{herleitung}</div>
+              )}
+            </td>
+          </tr>
+        ))}
       </TableBody>
     </Table>
+    {/* Die Erklärung zur Herleitung — **sichtbar, nicht im Tooltip**: „ein Tooltip
+        ist auf dem Telefon keine Auskunft" (`waermepumpe_kennzahl.Arbeitszahl.grund`).
+        Sie steht einmal unter der Tabelle statt in jeder Zelle, damit sie nicht mit
+        der Fläche driftet — und nur, wenn oben überhaupt eine Herleitung vorkommt.
+        ⚠ Bewusst OHNE Zuschreibung der konkreten Differenz: Der funktionsfremde
+        Anteil ist der Regelfall, aber bei getrennter Strommessung liest die
+        Strom-Spalte ein anderes Feld als der Layer (`get_wp_strom_kwh`) — ein Satz,
+        der die Abweichung fest einer Ursache zuordnet, wäre dort eine Behauptung. */}
+    {zeigtHerleitung && (
+      <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+        Die Arbeitszahl wird mit dem Strom gebildet, der zur gemessenen Wärme gehört.
+        Strom fürs Kühlen, Lüften oder Entfeuchten zählt nicht mit — deshalb kann ihr
+        Nenner von dem Stromverbrauch abweichen, der in der Zeile steht. Wo beide
+        übereinstimmen, steht keine gesonderte Rechnung.
+      </p>
+    )}
+    </>
   )
 }
