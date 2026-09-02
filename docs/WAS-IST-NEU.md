@@ -1,11 +1,112 @@
 # Was ist neu
 
-> **Stand:** September 2026 (v4.0.37)
+> **Stand:** September 2026 (v4.0.38)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.38 — 2. September 2026
+
+**Eine Arbeitszahl, die überall dieselbe ist — und Zahlen, die sich nachrechnen lassen**
+
+**Deine Arbeitszahl kommt jetzt überall aus derselben Rechnung**
+
+Eine Arbeitszahl ist Wärme geteilt durch Strom, und sie ist nur dann eine Aussage, wenn
+beide dasselbe meinen: dieselbe Anlage, dieselbe Funktion, denselben Zeitraum. eedc kennt
+diese Regel seit v4.0.36 — aber es gab noch Sichten, die daneben ihre eigene Zahl bildeten:
+die Werte-Tabelle, der COP-Sensor in Home Assistant, der Jahresbericht als PDF, der Monats-
+und Saisonvergleich und der Effizienz-Trend.
+
+Jetzt entsteht die Zahl an **einer** Stelle. Wo Wärme und Strom nicht zusammenpassen, steht
+überall „—" mit dem Grund daneben — statt an fünf Orten fünf verschiedene Zahlen.
+
+⚠ **Zwei Rechenwege ändern sich dabei sichtbar.** Strom fürs Kühlen, Lüften und Entfeuchten
+zählt nicht mehr in den Nenner: Er gehört zu keiner Wärme, die im Zähler stünde. Und der
+Effizienz-Trend bildet seine Kurve neu aus Wärme und Strom, statt Arbeitszahlen zu mitteln —
+der Durchschnitt mehrerer Arbeitszahlen ist selbst keine.
+
+Gemeldet von **dietmar1968** im simon42-Forum, der eine Wärmepumpe und eine
+Split-Klimaanlage auf einem Zähler betreibt und die 0,7 vor sich hatte, die daraus entstand.
+
+**Und sie zeigt, womit sie gerechnet hat**
+
+Wer im Komponenten-Hub auf die **JAZ** zeigt (auf dem Telefon: antippen), sieht neben der
+Formel die beiden eingesetzten Zahlen — *„210,0 kWh Wärme ÷ 313,6 kWh Strom"*. In der
+Monatstabelle darunter steht die Rechnung klein unter dem Wert, sobald sie mit anderen
+Zahlen gebildet wurde als in der Zeile stehen: *„210 ÷ 96 kWh"*.
+
+Damit lässt sich eine Zahl, die auf den ersten Blick nicht passt, in einem Blick einordnen:
+Stimmt eine der beiden Größen nicht mit dem überein, was dein Gerät meldet, liegt es an der
+Zuordnung und nicht an der Rechnung. Wo Zähler und Nenner die Spalten daneben **sind**, geht
+die Zeile ohne Zusatz auf und es bleibt still.
+
+**Eine Kilowattstunde sagt jetzt, ob sie Strom oder Wärme ist**
+
+Eine Wärmepumpe führt zwei Sorten kWh nebeneinander — den Strom, den sie aufnimmt, und die
+Wärme, die sie abgibt. In den Tabellen stand beides als „kWh" nebeneinander, ohne dass man
+den Spalten ansah, welche Größe sie tragen. Das Feld heißt jetzt **„Warmwasser-Wärme"**, die
+Wärme-Spalten entsprechend, und beim Import aus einer eigenen Datei steht unter jeder
+zugeordneten Spalte, welche Größe erwartet wird.
+
+**Der Community-Vergleich rechnet nicht mehr mit Arbeitszahlen, die keine sind**
+
+Wer zwei Geräte auf einem Stromzähler hat, hat eine Arbeitszahl, die beide mischt. Bisher
+ging sie in die anonymen Vergleichswerte ein, die alle anderen sehen. eedc sagt dem
+Community-Server jetzt mit, ob aus den gemeldeten Mengen überhaupt eine Arbeitszahl gebildet
+werden darf.
+
+Spürbar ist das vor allem in kleinen Regionen: Dort tragen die Wärmepumpen-Kennwerte oft nur
+eine Handvoll Anlagen, und eine einzige gemischte Zahl verzieht den Schnitt sichtbar. **An
+deinen eigenen Zahlen ändert sich nichts** — nur an denen, die du von anderen siehst.
+
+**Die Tageswerte warten nicht mehr auf den Monatsabschluss**
+
+In *Auswertungen → Tabelle* stehen zwei Blöcke, und sie leben von verschiedenen Daten: Die
+**Monatswerte** gibt es erst, wenn ein Monat abgeschlossen ist. Die **Tageswerte** entstehen
+dagegen von selbst, sobald eedc läuft. Diesen Unterschied hat der Block bisher nicht gemacht
+— er holte sich seinen Zeitraum bei den Monatswerten, und deshalb stand die Tagesansicht
+mitunter Monate zurück, während längst gemessen wurde.
+
+Jetzt öffnen die Tageswerte auf dem neuesten Monat, für den Messwerte vorliegen, und die
+Datumsauswahl reicht über den ganzen gemessenen Zeitraum. **Der offene Abschluss geht dabei
+nicht verloren, im Gegenteil:** Über der Seite steht jetzt im Klartext, für welchen Monat er
+fehlt, mit dem Knopf „Abschluss starten" daneben — vorher deutete allein der schiefe
+Zeitraum darauf hin, und den hielt man zu Recht für einen Anzeigefehler.
+
+⚑ Der laufende Monat gilt dabei nie als versäumt: Ein Monat, der noch läuft, kann keinen
+Abschluss haben. Gemeldet von **OB73-gif**.
+
+**Die Eigenverbrauchs-Ersparnis sagt, was sie bewertet**
+
+Wer einen Erzeuger unter *Sonstiges* betreibt — ein BHKW, ein Windrad, eine kleine
+Wasserkraftanlage —, sieht bei der Ersparnis durch Eigenverbrauch jetzt dabeistehen, worauf
+sie sich bezieht. Der Wert bewertet den vermiedenen Netzbezug; was die Erzeugung selbst
+gekostet hat, weiß eedc bei einem Brennstoff-Erzeuger nicht.
+
+**Der Doppelerfassungs-Verdacht nennt beide Seiten der Rechnung**
+
+Meldet der Daten-Check *„Verdacht auf PV-Doppelerfassung"*, zählte er mögliche Ursachen auf.
+Jetzt nennt er die beiden Zahlen, die auseinanderlaufen, und aus welchen Quellen sie kommen
+— damit lässt sich zuordnen, welche Seite nicht stimmt. Aus der Rückmeldung von **coolxmad**.
+
+**Das Verbrauchsprofil sagt, auf wie vielen Stunden es steht**
+
+Für die Prognose baut eedc aus deinen Messwerten ein eigenes Tagesprofil. Der Hinweis nannte
+bisher nur die **Tage** — und ein „Tag" entsteht schon aus einer einzigen gemessenen Stunde.
+Jetzt steht die Zahl der Stunden dabei, aus denen das Profil tatsächlich gebildet ist. An
+der Prognose selbst ändert sich nichts.
+
+**Zwei Felder am Wechselrichter sind entfallen**
+
+*Wirkungsgrad (%)* und *Hybrid-Wechselrichter* wurden erfasst und von keiner Auswertung
+gelesen. Das Formular fragt jetzt nur noch, was eedc auch benutzt. Deine gespeicherten
+Angaben bleiben unangetastet; sie waren schon vorher ohne Wirkung. Die
+**Wechselrichter-Leistung (kW)** bleibt — sie wird gebraucht. Ob dein Speicher am selben
+Gerät hängt, sagst du eedc weiterhin über die Zuordnung des Speichers.
 
 ---
 
