@@ -7,6 +7,17 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Ein zweiter Erzeuger mit eigenem Vergütungssatz bringt sein Geld wieder mit** (gemeldet von **rilmor-mhrs** auf GitHub, [#402](https://github.com/supernova1963/eedc-homeassistant/issues/402)). Wer unter *Sonstiges/Erzeuger* das Feld **„Einspeise-Erlös (€)"** pflegt — für eine Erweiterung mit anderem EEG-Satz oder Strom, den er direkt weiterverkauft —, fand den Betrag im **SOLL/HABEN-T-Konto** nicht wieder: Dort stand statt seiner Zahl das Ergebnis einer eigenen Rechnung mit dem Vergütungssatz **der Anlage**. Wessen Anlagensatz 0 ct beträgt, sah dadurch **gar keine Zeile**. ⭐ **Jetzt steht dort der Betrag, wie er gepflegt ist** — eedc rechnet ihn nicht nach, denn der Satz ist ja ein anderer. Das Jahres-PDF, die Home-Assistant-Sensoren und *Cockpit → Jahr* tragen ihn seit v4.0.11; das T-Konto zieht damit nach.
+- **Zwei Finanz-Sichten nennen für dieselbe Anlage wieder dieselbe Zahl** (ebenfalls **rilmor-mhrs**, #402). *Cockpit → Monat → Finanzen* wies der Zeile **„PV-Anlage"** die **gesamte** Eigenverbrauchs-Ersparnis zu — obwohl Speicher und Balkonkraftwerk ihren Anteil daran eine Zeile tiefer noch einmal als eigene Zeile führen. Die Summe und die Zeile *„Ergebnis nach Stromrechnung"* zählten diesen Anteil damit **zweimal**, und das T-Konto unter *Auswertungen → Finanzen* kam für denselben Monat auf einen anderen Betrag. ⭐ **Die PV-Zeile trägt jetzt ihren eigenen Anteil**, und die Kachel sagt es auch dazu. **Die Zuordnung bleibt vollständig** — der Speicher behält seinen Beitrag, das Balkonkraftwerk seinen; nur beansprucht die PV-Zeile beides nicht mehr zusätzlich. ⚠ **Bei Anlagen mit Speicher oder Balkonkraftwerk fällt der Finanz-Saldo im Cockpit dadurch sichtbar niedriger aus** — er stimmt jetzt mit dem T-Konto überein. Anlagen ohne beides sehen keine Änderung.
+- **Betriebskosten laufen erst ab dem Anschaffungsdatum** (ebenfalls **rilmor-mhrs**, #402). Die anteiligen Jahres-Betriebskosten einer Komponente standen in **jedem** Monat im T-Konto — auch in Monaten, die vor ihrer Anschaffung lagen. Bei einem im August gekauften Fahrzeug tauchten sie so noch im September des Vorjahres auf, und zwar allein auf der Kostenseite: Die Ersparnis daneben entsteht aus Messwerten und war dort zu Recht leer. ⭐ **Jetzt gilt für die Kosten dieselbe Grenze wie für alles andere** — vom Anschaffungs- bis zum Stilllegungsdatum. **Vergangene Monate sehen dadurch günstiger aus, und das ist der richtige Wert.**
+- **Der Eigenverbrauch eines sonstigen Erzeugers wird an genau einer Stelle bewertet.** Ein BHKW, Windrad oder Wasserkraftwerk speist hinter denselben Hauszähler wie die PV-Anlage — seine selbst verbrauchten Kilowattstunden stecken deshalb bereits in der Eigenverbrauchs-Ersparnis der Anlage. Im T-Konto bekam das Gerät daneben **zusätzlich** eine eigene Ersparnis-Zeile: derselbe Nutzen, zweimal gezählt. ⭐ **Diese zweite Zeile entfällt**, und der Hinweis an der Eigenverbrauchs-Ersparnis sagt jetzt, dass der Anteil dort enthalten ist. ⚑ **Am Ertrag, den du am Gerät angibst (*„Ertrag/Jahr"*), ändert sich nichts** — er bleibt der Weg, einen sonstigen Erzeuger zu bewerten.
+
+---
+
 ## [4.0.38] - 2026-09-02 — Eine Arbeitszahl, die überall dieselbe ist
 
 ### Fixed

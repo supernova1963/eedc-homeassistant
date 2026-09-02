@@ -9,6 +9,57 @@
 
 ---
 
+## [Unreleased]
+
+**Dein zweiter Erzeuger bringt sein Geld wieder mit**
+
+Hast du unter *Sonstiges* einen Erzeuger mit **eigenem Vergütungssatz** — eine Erweiterung
+mit neuem EEG-Satz, oder Strom, den du direkt weitergibst —, trägst du seinen Erlös im
+Monatsabschluss als **„Einspeise-Erlös (€)"** ein. Im **SOLL/HABEN-T-Konto** stand statt
+deiner Zahl bisher das Ergebnis einer eigenen Rechnung mit dem Satz **deiner Anlage**. Ist
+der 0 ct, verschwand die Zeile ganz.
+
+Jetzt steht dort dein Betrag, so wie du ihn gepflegt hast. eedc rechnet ihn nicht nach —
+der Satz deiner Anlage ist ja ein anderer.
+
+**Cockpit und Auswertungen nennen wieder dieselbe Zahl**
+
+Der Finanzen-Block unter *Cockpit → Monat* schrieb der Zeile **„PV-Anlage"** die **ganze**
+Eigenverbrauchs-Ersparnis zu — obwohl Speicher und Balkonkraftwerk ihren Anteil daran eine
+Zeile tiefer noch einmal führen. Die Summe zählte ihn dadurch zweimal, und das T-Konto
+unter *Auswertungen → Finanzen* kam für denselben Monat auf einen anderen Betrag.
+
+Die PV-Zeile trägt jetzt ihren eigenen Anteil, und die Kachel sagt es dazu. Deine
+Zuordnung bleibt vollständig: Der Speicher behält seinen Beitrag, das Balkonkraftwerk
+seinen — die PV-Zeile beansprucht beides nur nicht mehr zusätzlich.
+
+⚠ **Hast du Speicher oder Balkonkraftwerk, fällt der Saldo im Cockpit sichtbar niedriger
+aus.** Er stimmt jetzt mit dem T-Konto überein.
+
+**Betriebskosten beginnen mit dem Kaufdatum**
+
+Die anteiligen Jahres-Betriebskosten einer Komponente standen in **jedem** Monat im
+T-Konto — auch lange bevor du sie gekauft hast. Ein im August angeschafftes Fahrzeug
+tauchte so noch im September des Vorjahres mit Kosten auf, während die Ersparnis daneben
+zu Recht leer blieb.
+
+Jetzt gilt für die Kosten dieselbe Grenze wie für alles andere: vom Anschaffungs- bis zum
+Stilllegungsdatum. Vergangene Monate sehen dadurch günstiger aus — und das ist der
+richtige Wert.
+
+**Ein BHKW wird einmal bewertet, nicht zweimal**
+
+Ein sonstiger Erzeuger speist hinter denselben Hauszähler wie deine PV-Anlage. Was er
+selbst verbraucht, steckt deshalb schon in der Eigenverbrauchs-Ersparnis deiner Anlage —
+im T-Konto stand daneben trotzdem noch eine eigene Zeile für dasselbe. Die entfällt, und
+der Hinweis an der Eigenverbrauchs-Ersparnis sagt jetzt, dass der Anteil dort enthalten
+ist. Am **„Ertrag/Jahr"**, den du am Gerät angibst, ändert sich nichts.
+
+Alle vier Punkte gehen auf einen Fehlerbericht von **rilmor-mhrs** zurück
+([#402](https://github.com/supernova1963/eedc-homeassistant/issues/402)).
+
+---
+
 ## v4.0.38 — 2. September 2026
 
 **Eine Arbeitszahl, die überall dieselbe ist — und Zahlen, die sich nachrechnen lassen**
