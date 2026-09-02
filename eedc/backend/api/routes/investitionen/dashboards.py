@@ -905,7 +905,7 @@ async def get_waermepumpe_dashboard(
             waerme_abgeleitet = waerme_abgeleitet or heizwaerme_ist_abgeleitet(
                 md.source_provenance
             )
-            # P11: dieselbe Rechnung wie die Jahreszahl unten, nur je Zeile.
+            # P12: dieselbe Rechnung wie die Jahreszahl unten, nur je Zeile.
             # `waerme_abgeleitet` wird **je Monat** gefragt (nicht die
             # kumulierte Marke): ein einzelner abgeleiteter Monat darf die
             # übrigen nicht entwerten, und ein gemessener nicht von einem
@@ -928,7 +928,7 @@ async def get_waermepumpe_dashboard(
             # **bereinigte** Größen voraus: `nenner_kwh` ist NICHT der
             # Stromverbrauch, der funktionsfremde Anteil ist schon abgezogen.
             # Ohne diese beiden Felder müsste der Client wieder mit den
-            # Rohwerten summieren — genau die Bauform, die P11 abschafft.
+            # Rohwerten summieren — genau die Bauform, die P12 abschafft.
             #
             # ⚠ Beide sind `None`, wo es keine Kennzahl gibt. Ein Monat ohne
             # Wert darf in keine Saisonsumme eingehen, sonst entsteht dort der
@@ -1168,7 +1168,7 @@ async def get_waermepumpe_dashboard(
                 round(durchschnitt_cop, 2) if durchschnitt_cop is not None else None
             ),
             'durchschnitt_cop_grund': _az_gesamt.grund,
-            # P11: je Monat — die Zeitreihe, aus der Vergleich und Trend lesen.
+            # P12: je Monat — die Zeitreihe, aus der Vergleich und Trend lesen.
             'jaz_je_monat': jaz_je_monat,
             # W-6: Der Heizstab-Satz gab es bis zum 26.08. **nur im Cockpit**
             # (`aktueller_monat.py`). Genau ihn verspricht die Melder-Antwort an

@@ -32,8 +32,22 @@
  *  (a) **Namensbasiert.** Wer die Größen erst in neutral benannte Variablen legt
  *      (`const a = ...; const b = ...; a / b`), läuft vorbei. Dieselbe Grenze
  *      wie bei `check:co2-roh` (d) und beim Dienstlast-Wächter in ADR-001.
- *  (b) **Nur der Client.** Die Backend-Hälfte hält
- *      `test_wurzelmuster_konformitaet.py::test_p11_*` baumweit.
+ *  (b) **Nur der Client** — und sie ist die **schwächere** der beiden Hälften.
+ *      Die Backend-Hälfte hält `test_wurzelmuster_konformitaet.py::
+ *      test_p12_arbeitszahl_nur_im_layer` baumweit, und zwar über den **AST**:
+ *      sie sammelt die Namen unterhalb von Zähler und Nenner rekursiv und ist
+ *      damit gegen Schreibweisen strukturell immun. Gemessen am 02.09.2026:
+ *      derselbe Sprengsatz `(heiz_kwh + ww_kwh) / wp_strom_kwh`, an dem dieser
+ *      Wächter bis N-369 vorbeilief, wird dort ohne Zutun gefangen
+ *      (`'heiz_kwh ww_kwh' / 'wp_strom_kwh'`).
+ *      ⚠ **Wer hier eine neue Schreibweise ergänzt, ergänzt sie nur hier** —
+ *      im Backend gibt es nichts nachzuziehen. Und umgekehrt: eine Form, die
+ *      der Backend-Wächter meldet, kann dieser hier trotzdem übersehen.
+ *      ⛔ **Hier stand bis 02.09. `test_p11_*`** — das ist ein **anderer,
+ *      existierender** Wächter (PV-Erzeuger-Selektor, N-266). Der Verweis zeigte
+ *      also nicht ins Leere, sondern auf die **falsche Invariante**; ein
+ *      Grep-Sweep beim Umbenennen P11 → P12 hat ihn übersehen, weil er auf
+ *      `ADR-002/P11` suchte und hier nur `test_p11_*` steht.
  *  (c) **Kommentare UND String-Literale** werden neutralisiert, beide
  *      zeilentreu. Ein Quotient in einem String ist keine Rechnung, sondern ein
  *      Anzeigetext — und davon gibt es drei im Baum, die alle richtig sind
