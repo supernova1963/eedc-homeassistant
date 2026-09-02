@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.0.38] - 2026-09-02 — Eine Arbeitszahl, die überall dieselbe ist
 
 ### Fixed
 
