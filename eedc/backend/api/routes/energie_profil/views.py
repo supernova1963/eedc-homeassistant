@@ -41,6 +41,7 @@ from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionTyp
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
+from backend.services.monats_fakten import lade_monats_fakten
 from backend.services.einspeise_erloes_service import neg_preis_einspeisung_tageswert
 
 from ._shared import (
@@ -501,6 +502,31 @@ async def get_tag_detail(
         for inv_id_str, kwh in wp_strom_je_inv.items()
         if kwh and investitionen_by_id.get(inv_id_str) is not None
     }
+    # R2/§4.2 Fall 1 (ADR-002/P12, 02.09.2026): Trägt der Tag Strom von Geräten,
+    # deren Wärme fehlt? **Bis dahin fehlte diese Lage hier — unbegründet.**
+    # Cockpit → Monat sperrte, die Tagesansicht daneben zeigte eine Zahl: zwei
+    # Sichten, zwei Antworten auf dieselbe Frage.
+    #
+    # ⭐ **Warum sie aus dem MONAT kommt und nicht vom Tag.** Die Tagesebene
+    # kennt den Strom je Gerät (`komponenten_kwh`), die Wärme aber nur als
+    # **Anlagensumme** — aus ihr ist nicht ableitbar, von wie vielen Geräten sie
+    # stammt. Die Frage ist damit auf Tagesdaten strukturell unbeantwortbar. Sie
+    # aus den Monats-Fakten zu holen ist **kein zweiter Rechenweg**, sondern
+    # derselbe SoT, den Cockpit → Monat liest (ADR-002/P10) — anders als
+    # `bauarten_gemischt` darunter, das aus **Stammdaten** kommt und deshalb
+    # ohne Fetch auskommt.
+    #
+    # ⚠ **Die Rest-Unschärfe gehört dazu:** Meldet ein Gerät im Monat Wärme,
+    # aber an genau diesem Tag nicht, bleibt der Tag ungesperrt. Genauer geht es
+    # erst, wenn die Tagesebene die Wärme je Gerät führt; die Aussage ist dann
+    # „im Monat dieses Tages", und der einzige Fehler, den sie machen kann, ist
+    # der mildere von beiden.
+    _wp_fakten_monat = await lade_monats_fakten(
+        db, anlage_id, von=(datum.year, datum.month), bis=(datum.year, datum.month),
+    )
+    _geraete_ohne_waerme_monat = any(
+        f.wp.waerme_deckt_nicht_alle_geraete for f in _wp_fakten_monat
+    )
     wp_abgrenzung_tag = abgrenzungs_grund(
         abgrenzung_stoerung=next(
             (
@@ -515,6 +541,7 @@ async def get_tag_detail(
             None,
         ),
         bauarten_gemischt=len(_bauarten_tag) > 1,
+        geraete_ohne_waerme=_geraete_ohne_waerme_monat,
     )
     wp_jaz_tag = arbeitszahl(
         wp_waerme_tag, wp_strom_tag,

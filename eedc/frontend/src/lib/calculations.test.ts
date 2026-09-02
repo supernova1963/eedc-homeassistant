@@ -13,7 +13,6 @@
 import { describe, it, expect } from 'vitest'
 import {
   calcAutarkie,
-  calcCOP,
   calcEigenverbrauchsquote,
   calcSpezifischerErtrag,
 } from './calculations'
@@ -65,22 +64,3 @@ describe('calcSpezifischerErtrag', () => {
   })
 })
 
-describe('calcCOP', () => {
-  it('ist Wärme je Strom', () => {
-    expect(calcCOP(4000, 1000)).toBe(4)
-  })
-
-  it('liefert NULL ohne Stromverbrauch — nicht 0', () => {
-    // Eine 0 stünde in der Anzeige neben echten COP-Werten und läse sich als
-    // „katastrophal schlechte Wärmepumpe" statt als „keine Messung".
-    expect(calcCOP(4000, 0)).toBeNull()
-  })
-
-  it('liefert null auch bei negativem Strom', () => {
-    expect(calcCOP(4000, -5)).toBeNull()
-  })
-
-  it('liefert 0 bei gemessener Null-Wärme — das ist eine Aussage', () => {
-    expect(calcCOP(0, 1000)).toBe(0)
-  })
-})

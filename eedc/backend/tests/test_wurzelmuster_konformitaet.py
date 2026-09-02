@@ -2629,3 +2629,118 @@ def test_p11_selektor_ist_ohne_lazy_zugriff_gebaut():
         "`children` ist ein Lazy-Backref — der Selektor arbeitet auf der "
         "übergebenen Menge über die Spalte `parent_investition_id`."
     )
+
+
+# ============================================================================
+# P12 — eine Arbeitszahl entsteht nur im Layer
+# ============================================================================
+#
+# **Die Regel:** Ein Quotient aus einer Wärme- und einer Stromgröße entsteht
+# ausschließlich in `core/berechnungen/waermepumpe_kennzahl.py::arbeitszahl`.
+# Jede andere Stelle liest das Ergebnis (`Arbeitszahl.wert`) samt Begründung
+# (`.grund`).
+#
+# **Warum ausgerechnet diese Kennzahl einen baumweiten Wächter braucht.** Sie
+# ist die einzige in eedc, die **nicht erscheinen darf**, wenn Zähler und Nenner
+# verschieden abgegrenzt sind — SOLL §1 („dasselbe Gerät, dieselbe Funktion,
+# denselben Zeitraum"), §4.2 (vier Lagen) und §5 (Bauartmischung). Eine rohe
+# Division kann von alldem nichts wissen: nicht von der Anwender-Angabe
+# „Heizstab auf dem Zähler", nicht vom funktionsfremden Strom (Kühlen, Lüften,
+# Entfeuchten), nicht von aus `Strom × JAZ` abgeleiteter Wärme — die durch
+# denselben Strom geteilt exakt die gepflegte JAZ zurückgibt und dabei aussieht
+# wie eine Messung.
+#
+# **Die Fläche ist an dieser Bauform dreimal gescheitert**, jedes Mal mit
+# demselben Muster „dieselbe Anlage, zwei Aussagen":
+#   • **W-3**  — dieselbe Frage an drei Stellen, eine davon im Client
+#   • **W-15** — der Hub sagte 2,31, das Cockpit 3,00 für denselben Monat
+#   • **P12**  — am 02.09.2026 rechneten HA-Sensor, Jahresbericht-PDF, die
+#                Werte-Tabelle, der Monats-/Saisonvergleich und der
+#                Effizienz-Trend noch selbst; der Community-Payload sendet die
+#                Mengen, aus denen der Server serverseitig dividiert.
+#
+# Der Melder-Fall: eine Anlage mit Wärmepumpe **und** Split-Klimaanlage. Beide
+# Ströme im Nenner, nur eine Wärme im Zähler ⇒ angezeigt **0,7**, während die
+# Wärmepumpe selbst bei **2,2** liegt. Die Zahl beschreibt kein Gerät der Anlage;
+# sie bewegt sich mit dem Betrieb des ungezählten Geräts statt mit Effizienz.
+#
+# **Grenze, gemessen und benannt:** Der Wächter ist namensbasiert. Wer beide
+# Größen erst in neutral benannte Variablen legt (`a / b`), läuft vorbei —
+# dieselbe Grenze wie bei P3-a (`getattr`-Zweig) und `check:co2-roh`. Die
+# Client-Hälfte hält `npm run check:cop-roh`.
+
+P12_SOT_MODUL = "backend/core/berechnungen/waermepumpe_kennzahl.py"
+
+#: Namensteile, die eine Wärme- bzw. Stromgröße kennzeichnen. `heiz` deckt
+#: `heizenergie_kwh`/`heizwaerme` mit ab — beide Schreibweisen kommen im Baum vor.
+P12_WAERME_TEILE: tuple[str, ...] = ("waerme", "wärme", "heiz", "kaelte", "kälte")
+P12_STROM_TEILE: tuple[str, ...] = ("strom",)
+
+#: Bewusst freigestellt — Form `modul.py` oder `modul.py::zeile`.
+#: **Leer, und das ist die Aussage:** Es gibt im Backend keine zweite Stelle,
+#: die eine Arbeitszahl bildet. Wer hier etwas einträgt, begründet im Klartext,
+#: warum sein Quotient KEINE Arbeitszahl ist.
+P12_BASELINE_AUSNAHMEN: frozenset[str] = frozenset()
+
+
+def _p12_namen(knoten: ast.AST) -> str:
+    """Alle Bezeichner unterhalb eines Knotens, kleingeschrieben verkettet.
+
+    Deckt Attributketten (`f.wp.waerme_kwh`), Indexzugriffe
+    (`d["heizenergie_kwh"]`) und einfache Namen in einem Durchgang ab — der
+    Nenner steht im Baum in allen drei Formen.
+    """
+    teile: list[str] = []
+    for k in ast.walk(knoten):
+        if isinstance(k, ast.Name):
+            teile.append(k.id)
+        elif isinstance(k, ast.Attribute):
+            teile.append(k.attr)
+        elif isinstance(k, ast.Constant) and isinstance(k.value, str):
+            teile.append(k.value)
+    return " ".join(teile).lower()
+
+
+def _p12_fundstellen() -> list[str]:
+    """Divisionen `Wärmegröße / Stromgröße` außerhalb des Layer-SoT."""
+    treffer: list[str] = []
+    for pfad, baum in _quelldateien():
+        modul = f"backend/{pfad.relative_to(_BACKEND).as_posix()}"
+        if modul == P12_SOT_MODUL or modul in P12_BASELINE_AUSNAHMEN:
+            continue
+        for knoten in ast.walk(baum):
+            if not (isinstance(knoten, ast.BinOp) and isinstance(knoten.op, ast.Div)):
+                continue
+            zaehler = _p12_namen(knoten.left)
+            nenner = _p12_namen(knoten.right)
+            if not any(t in zaehler for t in P12_WAERME_TEILE):
+                continue
+            if not any(t in nenner for t in P12_STROM_TEILE):
+                continue
+            # Der Nenner darf nicht selbst eine Wärmegröße sein — `waerme /
+            # waerme_mit_ersatz` ist ein Anteil, keine Arbeitszahl.
+            if any(t in nenner for t in P12_WAERME_TEILE):
+                continue
+            ort = _ort(pfad, knoten)
+            if f"{modul}::{knoten.lineno}" in P12_BASELINE_AUSNAHMEN:
+                continue
+            treffer.append(f"  {ort} — {zaehler.strip()[:40]!r} / {nenner.strip()[:40]!r}")
+    return sorted(treffer)
+
+
+def test_p12_arbeitszahl_nur_im_layer():
+    """Keine Datei außer dem SoT bildet `Wärme / Strom` (**ADR-002/P12**)."""
+    verstoesse = _p12_fundstellen()
+    assert not verstoesse, (
+        "Eine Arbeitszahl entsteht nur in "
+        f"{P12_SOT_MODUL}::arbeitszahl:\n" + "\n".join(verstoesse) + "\n\n"
+        "Sie darf NICHT erscheinen, wenn Zähler und Nenner verschieden "
+        "abgegrenzt sind (SOLL §1/§4.2/§5) — das weiß nur der Layer: "
+        "Bauartmischung, Geräte ohne Wärmemeldung, Heizstab am Zähler, "
+        "abgeleitete Wärme und funktionsfremder Strom im Nenner.\n"
+        "Richtig: `arbeitszahl(waerme, strom, waerme_abgeleitet_kwh=…, "
+        "strom_funktionsfremd_kwh=…, abgrenzung_verletzt=abgrenzungs_grund(…))` "
+        "und BEIDES ausliefern — `.wert` UND `.grund`.\n"
+        "Ein Quotient, der KEINE Arbeitszahl ist, gehört mit Klartext-"
+        "Begründung in P12_BASELINE_AUSNAHMEN."
+    )

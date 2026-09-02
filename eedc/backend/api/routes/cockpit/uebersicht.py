@@ -96,6 +96,11 @@ class CockpitUebersichtResponse(BaseModel):
     wp_heizung_kwh: float
     wp_warmwasser_kwh: float
     wp_cop: Optional[float]
+    #: Warum es die Zahl nicht gibt (**S3**: „nicht ‚—', sondern der Grund").
+    #: Bis 02.09.2026 nahm diese Sicht nur `.wert` — die Sperre wirkte, ihre
+    #: Begründung fiel unterwegs weg, und die Jahres-Kachel zeigte ein nacktes
+    #: „—". Genau das ist die häufigste Beschwerde dieser Fläche.
+    wp_cop_grund: Optional[str]
     wp_ersparnis_euro: float
     hat_waermepumpe: bool
 
@@ -482,7 +487,7 @@ async def get_cockpit_uebersicht(
             f.wp.waerme_deckt_nicht_alle_geraete for f in fakten
         ),
     )
-    wp_cop = arbeitszahl(
+    _wp_az = arbeitszahl(
         wp_waerme, wp_strom, waerme_abgeleitet_kwh=wp_waerme_abgeleitet,
         # W-14 + E4: wie bei der Ersparnis darunter — Kühlen, Lüften und
         # Entfeuchten ersetzen keine Heizung und gehören in keine Wärme-Kennzahl.
@@ -490,7 +495,8 @@ async def get_cockpit_uebersicht(
             f.wp.modus_strom_funktionsfremd_kwh for f in fakten
         ),
         abgrenzung_verletzt=wp_abgrenzung,
-    ).wert
+    )
+    wp_cop = _wp_az.wert
     # Multi-WP: erste WP als Parameter-Referenz (Wirkungsgrad/Gas-Default).
     # Drift-Audit Domäne A1 / Issue #178: vorher 10ct hartcodiert + ignorierte
     # User-Param `alter_preis_cent_kwh`.
@@ -820,6 +826,7 @@ async def get_cockpit_uebersicht(
         wp_heizung_kwh=round(wp_heizung, 1),
         wp_warmwasser_kwh=round(wp_warmwasser, 1),
         wp_cop=round(wp_cop, 2) if wp_cop else None,
+        wp_cop_grund=_wp_az.grund,
         wp_ersparnis_euro=round(wp_ersparnis, 2),
         hat_waermepumpe=hat_waermepumpe,
         emob_km=round(emob_km, 0),

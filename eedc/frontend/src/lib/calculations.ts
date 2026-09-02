@@ -28,10 +28,18 @@ export function calcSpezifischerErtrag(erzeugung: number, kwp: number | null | u
  * Rechnung mit Obergrenze UND der Herkunft der Aussage liefert (N-252).
  * Der Wächter `check:speicher-eta-roh` hält die Stelle frei. */
 
-/** Wärmepumpen-COP: Coefficient of Performance. */
-export function calcCOP(waerme: number, strom: number): number | null {
-  return strom > 0 ? waerme / strom : null
-}
+// ENTFERNT 2026-09-02 (ADR-002/P12): `calcCOP` war der Frontend-Spiegel von
+// `core/berechnungen/waermepumpe_kennzahl.py::arbeitszahl` — nur ohne dessen
+// R2-Sperren. Ihr einziger Aufrufer war die Werte-Tabelle
+// (`pages/auswertung/types.ts`), die damit als einzige Sicht eine Arbeitszahl
+// zeigte, die Cockpit und Komponenten-Hub daneben schon verweigerten.
+// Die Zahl kommt jetzt fertig aus `/monatsdaten/aggregiert`, gebildet mit
+// demselben SoT wie Cockpit, Hub, PDF und HA-Export. Gewaechtert von
+// `npm run check:cop-roh`.
+//
+// Dritte Streichung dieser Familie nach `calcCO2Einsparung` (N-21) und
+// `calcEinspeiseErloes` (N-22) — und aus demselben Grund: Ein Client-Spiegel
+// einer Layer-Formel altert still mit, bis ihn jemand wieder einsetzt.
 
 // `calcCO2Einsparung(erzeugung)` ist am 2026-07-31 mit N-21 entfallen: die
 // Funktion trug im Namen den Eigenverbrauch und rechnete auf der Erzeugung —

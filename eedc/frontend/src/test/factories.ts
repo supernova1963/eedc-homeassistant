@@ -153,6 +153,8 @@ const ZEILE_BASIS = {
   wp_strom_warmwasser_kwh: null,
   wp_heizung_kwh: null,
   wp_warmwasser_kwh: null,
+  wp_arbeitszahl: null,
+  wp_arbeitszahl_grund: null,
   eauto_ladung_kwh: null,
   eauto_km: null,
   wallbox_ladung_kwh: null,

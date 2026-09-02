@@ -28,6 +28,10 @@ from backend.core.berechnungen import (
     spezifischer_ertrag_kwh_kwp,
     vollzyklen as berechne_vollzyklen,
 )
+from backend.core.berechnungen.waermepumpe_kennzahl import (
+    abgrenzungs_grund,
+    arbeitszahl,
+)
 from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
 from backend.core.investition_parameter import ist_dienstlich
 from backend.services.eauto_wirtschaftlichkeit import get_emob_heimladung_canonical
@@ -509,12 +513,38 @@ async def build_jahresbericht_context(
     # Vollzyklen = ENTLADUNG ÷ Kapazität über den Layer-SoT (Kanon 2026-07-28).
     speicher_zyklen = berechne_vollzyklen(speicher_entladung, speicher_kapazitaet)
     speicher_eff = _safe_div(speicher_entladung, speicher_ladung) * 100 if speicher_ladung else None
-    # JAZ/COP nur wenn beide Seiten **gemessen** sind — kein Wärmemengenzähler
-    # (Klima) oder Wärme aus `Strom × JAZ` abgeleitet (#263 K-2, §3.5).
-    wp_cop = (
-        _safe_div(wp_waerme, wp_strom)
-        if (wp_strom and wp_waerme and wp_waerme_abgeleitet <= 0) else None
+    # ADR-002/P12 (02.09.2026): Die Arbeitszahl entsteht im Layer, nie hier.
+    # **Bis dahin stand hier `_safe_div(wp_waerme, wp_strom)`** — von allen
+    # R2-Sperren kannte der Bericht nur die abgeleitete Wärme.
+    #
+    # ⛔ **Was gefehlt hat, und warum es hier besonders wiegt:** Bauartmischung
+    # (SOLL §5), Geräte ohne Wärmemeldung (§4.2 Fall 1), die Anwender-Angabe
+    # zum Fremdanteil (W-7) und der funktionsfremde Strom (W-14/E4). Ein
+    # Jahresbericht ist ein **Dokument** — die Zahl darin wird weitergegeben,
+    # ausgedruckt und in einem Jahr wieder gelesen, wenn niemand mehr weiß,
+    # aus welchen Geräten sie entstanden ist.
+    #
+    # ⚠ Die Faltung über die Monate ist dieselbe wie in `cockpit/uebersicht.py`:
+    # **ein** Monat mit verletzter Abgrenzung macht die Jahreszahl zum
+    # Mischquotienten, deshalb `any(...)` statt „überwiegend".
+    wp_abgrenzung = abgrenzungs_grund(
+        abgrenzung_stoerung=next(
+            (f.wp.abgrenzung_stoerung for f in fakten if f.wp.abgrenzung_stoerung),
+            None,
+        ),
+        bauarten_gemischt=any(f.wp.bauarten_gemischt for f in fakten),
+        geraete_ohne_waerme=any(
+            f.wp.waerme_deckt_nicht_alle_geraete for f in fakten
+        ),
     )
+    wp_cop = arbeitszahl(
+        wp_waerme, wp_strom,
+        waerme_abgeleitet_kwh=wp_waerme_abgeleitet,
+        strom_funktionsfremd_kwh=sum(
+            f.wp.modus_strom_funktionsfremd_kwh for f in fakten
+        ),
+        abgrenzung_verletzt=wp_abgrenzung,
+    ).wert
     emob_pv_anteil = _safe_div(emob_pv, emob_ladung) * 100 if emob_ladung else None
 
     # ── WP-Counter (#238): Kompressor-Starts + Betriebsstunden über den

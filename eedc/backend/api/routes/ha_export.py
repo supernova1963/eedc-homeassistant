@@ -41,6 +41,10 @@ from backend.core.berechnungen import (
     speicher_wirkungsgrad,
     vollzyklen as berechne_vollzyklen,
 )
+from backend.core.berechnungen.waermepumpe_kennzahl import (
+    abgrenzungs_grund,
+    arbeitszahl,
+)
 from backend.services.prognose_auswahl import lade_aktive_prognose
 from datetime import date
 
@@ -112,6 +116,7 @@ from backend.core.investition_parameter import (
     PARAM_E_AUTO_DEFAULTS,
     PARAM_WAERMEPUMPE,
     PARAM_WAERMEPUMPE_DEFAULTS,
+    abgrenzung_stoerung,
     ist_dienstlich,
 )
 from backend.core.calculations import berechne_co2_bilanz
@@ -1546,6 +1551,7 @@ async def calculate_investition_sensors(
         gesamt_modus_heizen = 0.0
         gesamt_modus_kuehlen = 0.0
         gesamt_modus_warmwasser = 0.0
+        gesamt_modus_funktionsfremd = 0.0
         gesamt_modus_abdeckung_h = 0.0
         #: F-56 — trägt irgendeine Zeile GEMESSENE Betriebsart-Zähler? Dann
         #: dürfen die beiden Sensoren erscheinen, auch ohne Modus-Abdeckung:
@@ -1569,6 +1575,7 @@ async def calculate_investition_sensors(
             gesamt_modus_heizen += _zeile.heizen_kwh
             gesamt_modus_kuehlen += _zeile.kuehlen_kwh
             gesamt_modus_warmwasser += _zeile.warmwasser_kwh
+            gesamt_modus_funktionsfremd += _zeile.funktionsfremd_kwh
             gesamt_modus_abdeckung_h += _zeile.abdeckung_h
             gesamt_modus_gemessen = gesamt_modus_gemessen or _zeile.gemessen
             gesamt_strom += get_wp_strom_kwh(d, investition.parameter)
@@ -1605,6 +1612,15 @@ async def calculate_investition_sensors(
                 gesamt_modus_heizen += _split.heizen_kwh
                 gesamt_modus_kuehlen += _split.kuehlen_kwh
                 gesamt_modus_warmwasser += _split.warmwasser_kwh
+                # ⚠ Hier steht `kuehlen_kwh` und NICHT `funktionsfremd_kwh` —
+                # `AngewandterSplit` hat die Eigenschaft nicht, und das ist
+                # richtig so: Der **abgeleitete** Modus-Split kennt nur Heizen,
+                # Kühlen und Warmwasser (er leitet aus dem Betriebsmodus ab,
+                # und Lüften/Entfeuchten liefern dort keine eigene Menge).
+                # Die funktionsfremde Menge dieses Zweigs IST damit der
+                # Kühlstrom; der gemessene Zweig darüber nimmt die volle
+                # Definition aus `ModusStromZeile.funktionsfremd_kwh`.
+                gesamt_modus_funktionsfremd += _split.kuehlen_kwh
                 gesamt_modus_abdeckung_h += _split.abdeckung_h
 
         gesamt_waerme = gesamt_heizung + gesamt_warmwasser
@@ -1639,9 +1655,39 @@ async def calculate_investition_sensors(
             berechnung = None
 
             if sensor.key == "wp_cop_durchschnitt":
-                if gesamt_strom > 0 and gesamt_waerme > 0 and not waerme_abgeleitet:
-                    value = gesamt_waerme / gesamt_strom
-                    berechnung = f"{gesamt_waerme:.0f} / {gesamt_strom:.0f}"
+                # ADR-002/P12 (02.09.2026): Die Arbeitszahl entsteht im Layer,
+                # nie hier. **Bis dahin stand an dieser Stelle
+                # `gesamt_waerme / gesamt_strom`** — eine eigene Division, die
+                # von allen R2-Sperren nur die abgeleitete Wärme kannte.
+                #
+                # ⛔ **Zwei Größen fehlten, und beide bewegen die Zahl:**
+                # der funktionsfremde Strom (**W-14/E4** — Kühlen, Lüften,
+                # Entfeuchten standen im Nenner, obwohl ihre Nutzenergie in
+                # keinem Wärmemengenzähler landet) und die Anwender-Angabe
+                # „Fremdanteil auf dem Zähler" (**W-7**, Heizstab/bivalent).
+                # Der Hub rechnete beides seit dem 26.08. heraus; dieser Sensor
+                # nicht — **dieselbe Anlage, zwei Aussagen**, und diese hier
+                # verlässt eedc in fremde Dashboards und Automationen.
+                #
+                # ⚠ `bauarten_gemischt` und `geraete_ohne_waerme` gehören hier
+                # **nicht** hinein und ihr Fehlen ist keine Lücke: Der Block
+                # faltet **eine** Investition. Ein Gerät hat nur eine Bauart,
+                # und meldet es keine Wärme, ist `gesamt_waerme` bereits 0.
+                _az = arbeitszahl(
+                    gesamt_waerme, gesamt_strom,
+                    waerme_abgeleitet_kwh=1.0 if waerme_abgeleitet else 0.0,
+                    strom_funktionsfremd_kwh=gesamt_modus_funktionsfremd,
+                    abgrenzung_verletzt=abgrenzungs_grund(
+                        abgrenzung_stoerung=abgrenzung_stoerung(investition),
+                    ),
+                )
+                if _az.wert is not None:
+                    value = _az.wert
+                    berechnung = (
+                        f"{_az.zaehler_kwh:.0f} / {_az.nenner_kwh:.0f}"
+                        if _az.zaehler_kwh is not None and _az.nenner_kwh is not None
+                        else None
+                    )
             elif sensor.key == "wp_ersparnis_euro":
                 # N-88/F2b: ohne ersetzte Heizung kein fossiler Vergleich — der
                 # Sensor bleibt dann leer statt eine Ersparnis zu behaupten.

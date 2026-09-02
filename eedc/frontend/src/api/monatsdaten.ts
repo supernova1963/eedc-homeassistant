@@ -135,6 +135,12 @@ export interface AggregierteMonatsdaten {
   wp_strom_warmwasser_kwh: number | null  // #191: nur befüllt wenn getrennte_strommessung
   wp_heizung_kwh: number | null
   wp_warmwasser_kwh: number | null
+  /**
+   * Arbeitszahl des Monats — fertig aus dem Layer (ADR-002/P12).
+   * `null` heisst „keine Kennzahl"; `wp_arbeitszahl_grund` sagt warum.
+   */
+  wp_arbeitszahl: number | null
+  wp_arbeitszahl_grund: string | null
   eauto_ladung_kwh: number | null
   eauto_km: number | null
   wallbox_ladung_kwh: number | null

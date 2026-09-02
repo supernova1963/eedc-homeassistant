@@ -858,6 +858,15 @@ async def get_waermepumpe_dashboard(
         gesamt_modus_bezug = 0.0
         # #263 — mindestens ein Monat bringt die Aufteilung GEMESSEN mit.
         modus_gemessen = False
+        # ADR-002/P12 (02.09.2026): Die Arbeitszahl **je Monat**, aus dem Layer.
+        # Bis dahin rechnete der Client sie aus den Rohzeilen selbst — an drei
+        # Stellen (`WaermepumpeVergleich` 2×, `AussichtTeile::monatsCop`), und
+        # keine davon kannte den funktionsfremden Strom, die Anwender-Angabe
+        # oder die abgeleitete Wärme. Gerade die letzte wiegt hier: Eine aus
+        # `Strom × JAZ` gerechnete Wärme durch denselben Strom geteilt gibt die
+        # **gepflegte JAZ** zurück — eine Zahl, die nichts misst und in einem
+        # Jahresvergleich wie eine Messreihe aussieht.
+        jaz_je_monat: list[dict] = []
         for md in monatsdaten:
             d = md.verbrauch_daten or {}
             # **Gemessen schlägt abgeleitet** (ADR-002/P8), je Monatszeile.
@@ -896,6 +905,61 @@ async def get_waermepumpe_dashboard(
             waerme_abgeleitet = waerme_abgeleitet or heizwaerme_ist_abgeleitet(
                 md.source_provenance
             )
+            # P11: dieselbe Rechnung wie die Jahreszahl unten, nur je Zeile.
+            # `waerme_abgeleitet` wird **je Monat** gefragt (nicht die
+            # kumulierte Marke): ein einzelner abgeleiteter Monat darf die
+            # übrigen nicht entwerten, und ein gemessener nicht von einem
+            # abgeleiteten profitieren.
+            _md_waerme = d.get('heizenergie_kwh', 0) + d.get('warmwasser_kwh', 0)
+            _md_az = arbeitszahl(
+                _md_waerme, get_wp_strom_kwh(d, wp.parameter),
+                waerme_abgeleitet_kwh=(
+                    1.0 if heizwaerme_ist_abgeleitet(md.source_provenance) else 0.0
+                ),
+                strom_funktionsfremd_kwh=_zeile.funktionsfremd_kwh,
+                abgrenzung_verletzt=GRUND_JE_ABGRENZUNG.get(
+                    abgrenzung_stoerung(wp) or ""
+                ),
+            )
+            # ⭐ **Zähler und Nenner gehören dazu, nicht nur der Quotient.**
+            # Der Saison-Vergleich im Client bildet Σ Q / Σ E über die Monate
+            # eines Fensters — das ist nach SOLL §5 **richtig** (eine
+            # Arbeitszahl wird neu berechnet, nie gemittelt), setzt aber
+            # **bereinigte** Größen voraus: `nenner_kwh` ist NICHT der
+            # Stromverbrauch, der funktionsfremde Anteil ist schon abgezogen.
+            # Ohne diese beiden Felder müsste der Client wieder mit den
+            # Rohwerten summieren — genau die Bauform, die P11 abschafft.
+            #
+            # ⚠ Beide sind `None`, wo es keine Kennzahl gibt. Ein Monat ohne
+            # Wert darf in keine Saisonsumme eingehen, sonst entsteht dort der
+            # Mischquotient neu, den die Monatszeile gerade verweigert hat.
+            _md_az_funktion = arbeitszahl_je_funktion(
+                heizung_kwh=d.get('heizenergie_kwh'),
+                strom_heizen_kwh=d.get('strom_heizen_kwh'),
+                warmwasser_kwh=d.get('warmwasser_kwh'),
+                strom_warmwasser_kwh=d.get('strom_warmwasser_kwh'),
+                # Je Zeile gefragt, nicht am Gerät: Die getrennte Strommessung
+                # kann mitten in der Historie eingeschaltet worden sein, und
+                # ohne sie gibt es die Heiz-Arbeitszahl für diesen Monat nicht.
+                hat_split='strom_heizen_kwh' in d,
+                waerme_abgeleitet_kwh=(
+                    1.0 if heizwaerme_ist_abgeleitet(md.source_provenance) else 0.0
+                ),
+                abgrenzung_verletzt=GRUND_JE_ABGRENZUNG.get(
+                    abgrenzung_stoerung(wp) or ""
+                ),
+            )
+            jaz_je_monat.append({
+                'jahr': md.jahr, 'monat': md.monat,
+                'wert': round(_md_az.wert, 2) if _md_az.wert is not None else None,
+                'grund': _md_az.grund,
+                'zaehler_kwh': _md_az.zaehler_kwh,
+                'nenner_kwh': _md_az.nenner_kwh,
+                # Getrennte Strommessung (#191): der Saison-Zweig vergleicht dann
+                # die Heiz-Arbeitszahl, nicht die Gesamtzahl.
+                'heizen_zaehler_kwh': _md_az_funktion.heizen.zaehler_kwh,
+                'heizen_nenner_kwh': _md_az_funktion.heizen.nenner_kwh,
+            })
             # ⚠ `strom_heizen_kwh` heißt hier **getrennte Strommessung** (zwei
             # physische Zähler), NICHT der Modus-Split von #263 K-2. Der trägt
             # eigene Feldnamen (`modus_strom_*`, Entscheid E-G) — genau damit
@@ -1104,6 +1168,8 @@ async def get_waermepumpe_dashboard(
                 round(durchschnitt_cop, 2) if durchschnitt_cop is not None else None
             ),
             'durchschnitt_cop_grund': _az_gesamt.grund,
+            # P11: je Monat — die Zeitreihe, aus der Vergleich und Trend lesen.
+            'jaz_je_monat': jaz_je_monat,
             # W-6: Der Heizstab-Satz gab es bis zum 26.08. **nur im Cockpit**
             # (`aktueller_monat.py`). Genau ihn verspricht die Melder-Antwort an
             # dietmar1968 aber für den Komponenten-Hub — dort war er nie.

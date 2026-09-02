@@ -76,7 +76,7 @@ export function WaermepumpeVergleichIST({ anlageId, inv, melde }: { anlageId: nu
   useEffect(() => { melde?.(leer ? KEINE : VERGLEICH_IDS) }, [leer, melde])
   if (loading) return <Lade />
   if (!ds || ds.monatsdaten.length === 0) return <Leer text="Keine Vergleichsdaten erfasst." />
-  return <Parkbar id="chart:wp-vergleich" titel="Monats-/Saisonvergleich"><WaermepumpeVergleich monatsdaten={ds.monatsdaten} hatGetrennteStrom={ds.zusammenfassung.gesamt_strom_heizen_kwh !== undefined} /></Parkbar>
+  return <Parkbar id="chart:wp-vergleich" titel="Monats-/Saisonvergleich"><WaermepumpeVergleich monatsdaten={ds.monatsdaten} jazJeMonat={ds.zusammenfassung.jaz_je_monat} hatGetrennteStrom={ds.zusammenfassung.gesamt_strom_heizen_kwh !== undefined} /></Parkbar>
 }
 
 /** Wirtschaftlichkeit: Kostenvergleich WP vs. Gas/Öl + Ersparnis. */

@@ -65,6 +65,9 @@ class KomponentenMonat(BaseModel):
     wp_waerme_kwh: float
     wp_strom_kwh: float
     wp_cop: Optional[float]
+    #: Warum es die Zahl nicht gibt (**S3**). Bis 02.09.2026 nahm der Hub nur
+    #: `.wert`; der Grund entstand im Layer und wurde hier verworfen.
+    wp_cop_grund: Optional[str]
     wp_heizung_kwh: float
     wp_warmwasser_kwh: float
     wp_strom_heizen_kwh: float
@@ -224,7 +227,7 @@ async def get_komponenten_zeitreihe(
         # JAZ/COP nur wenn beide Seiten **gemessen** sind — die Sperre (R2)
         # steht seit 2026-08-26 im Layer (`berechnungen.waermepumpe_kennzahl`),
         # nicht mehr an drei Stellen nebeneinander.
-        wp_cop = arbeitszahl(
+        _wp_az = arbeitszahl(
             wp.waerme_kwh, wp.strom_kwh,
             waerme_abgeleitet_kwh=wp.waerme_abgeleitet_kwh,
             # W-14 + E4: Strom in Funktionen ohne bewertete Nutzenergie gehört
@@ -246,7 +249,8 @@ async def get_komponenten_zeitreihe(
                 bauarten_gemischt=wp.bauarten_gemischt,
                 geraete_ohne_waerme=wp.waerme_deckt_nicht_alle_geraete,
             ),
-        ).wert
+        )
+        wp_cop = _wp_az.wert
 
         emob_pv_anteil = (
             emob.ladung_pv_kwh / emob.ladung_kwh * 100
@@ -309,6 +313,7 @@ async def get_komponenten_zeitreihe(
             wp_waerme_kwh=round(wp.waerme_kwh, 1),
             wp_strom_kwh=round(wp.strom_kwh, 1),
             wp_cop=round(wp_cop, 2) if wp_cop else None,
+            wp_cop_grund=_wp_az.grund,
             wp_heizung_kwh=round(wp.heizung_kwh, 1),
             wp_warmwasser_kwh=round(wp.warmwasser_kwh, 1),
             wp_strom_heizen_kwh=round(wp.strom_heizen_kwh, 1),

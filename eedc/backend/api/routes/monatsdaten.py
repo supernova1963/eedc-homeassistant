@@ -25,6 +25,10 @@ from backend.core.calculations import (
 )
 # Alias: das Response-Feld unten heißt genauso wie die Funktion.
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp as berechne_anlagen_kwp
+from backend.core.berechnungen.waermepumpe_kennzahl import (
+    abgrenzungs_grund,
+    arbeitszahl,
+)
 from backend.core.berechnungen import (
     berechne_finanz_aggregat,
     berechne_netzbezug_kosten,
@@ -297,6 +301,18 @@ class AggregierteMonatsdatenResponse(BaseModel):
     wp_strom_warmwasser_kwh: Optional[float]  # Nur > 0 wenn getrennte_strommessung=True (#191)
     wp_heizung_kwh: Optional[float]
     wp_warmwasser_kwh: Optional[float]
+    # ── Arbeitszahl je Monat (ADR-002/P12, 02.09.2026) ───────────────────────
+    # Bis dahin rechnete der **Client** sie selbst
+    # (`pages/auswertung/types.ts`: `calcCOP(wp_waerme, wp_strom)`) — dieselbe
+    # Bauform wie die Finanzspalten vor N-22 und die CO₂-Spalte vor N-21, und
+    # mit derselben Folge: Von den R2-Sperren, die Cockpit und Hub seit dem
+    # 26.08. ziehen, kannte die Tabelle **keine einzige**.
+    #
+    # ⭐ **Beide Felder gehören zusammen.** Ein „—" ohne Grund ist die häufigste
+    # Beschwerde dieser Fläche (SOLL §3.3/S3); der Melder sieht sonst in einer
+    # Sicht 0,7, in der nächsten nichts und erfährt nirgends, warum.
+    wp_arbeitszahl: Optional[float]
+    wp_arbeitszahl_grund: Optional[str]
     # Aggregiert aus InvestitionMonatsdaten - E-Auto
     eauto_ladung_kwh: Optional[float]  # Summe PV + Netz
     eauto_km: Optional[float]
@@ -619,6 +635,25 @@ async def list_monatsdaten_aggregiert(
         # Komponenten (Sonstige = 0, die kommen aus der Komponenten-Zeitreihe).
         netto_ertrag = finanz.netto_ertrag_euro - ust_eigenverbrauch
 
+        # ADR-002/P12: Die Arbeitszahl dieses Monats — aus dem Layer, mit allen
+        # R2-Sperren, die Cockpit und Hub auch ziehen.
+        #
+        # ⚠ `zeitraum_versetzt` gehört hier **nicht** hinein, und das ist keine
+        # Lücke: Diese Route liest **eine** Quelle (die Monats-Fakten). Q und E
+        # stammen damit aus demselben Zeitraum; die Vier-Quellen-Auflösung, in
+        # der ein Versatz überhaupt entstehen kann, gibt es nur in
+        # `api/routes/aktueller_monat.py`.
+        _wp_az = arbeitszahl(
+            f.wp.waerme_kwh, f.wp.strom_kwh,
+            waerme_abgeleitet_kwh=f.wp.waerme_abgeleitet_kwh,
+            strom_funktionsfremd_kwh=f.wp.modus_strom_funktionsfremd_kwh,
+            abgrenzung_verletzt=abgrenzungs_grund(
+                abgrenzung_stoerung=f.wp.abgrenzung_stoerung,
+                bauarten_gemischt=f.wp.bauarten_gemischt,
+                geraete_ohne_waerme=f.wp.waerme_deckt_nicht_alle_geraete,
+            ),
+        )
+
         result.append(AggregierteMonatsdatenResponse(
             # `md is None` ⇒ Monat ohne Zählerzeile (nur mit
             # `inkl_ohne_zaehlerzeile=true` in der Antwort). Die Zählerwerte
@@ -690,6 +725,8 @@ async def list_monatsdaten_aggregiert(
             ),
             wp_heizung_kwh=round(f.wp.heizung_kwh, 1) if "waermepumpe" in typen else None,
             wp_warmwasser_kwh=round(f.wp.warmwasser_kwh, 1) if "waermepumpe" in typen else None,
+            wp_arbeitszahl=_wp_az.wert if "waermepumpe" in typen else None,
+            wp_arbeitszahl_grund=_wp_az.grund if "waermepumpe" in typen else None,
             eauto_ladung_kwh=round(eauto.ladung_kwh, 1) if "e-auto" in typen else None,
             eauto_km=round(f.emob.km, 1) if "e-auto" in typen else None,
             wallbox_ladung_kwh=round(wallbox.ladung_kwh, 1) if "wallbox" in typen else None,

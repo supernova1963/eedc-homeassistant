@@ -20,7 +20,7 @@ function mz(monat: number, jahr: number, over: Partial<MonatsZeitreihe> = {}): M
     autarkie: 70, evQuote: 60, spezErtrag: 80,
     globalstrahlung: null, sonnenstunden: null,
     speicher_ladung: null, speicher_entladung: null, speicher_effizienz: null,
-    wp_waerme: null, wp_strom: null, wp_cop: null,
+    wp_waerme: null, wp_strom: null, wp_cop: null, wp_cop_grund: null,
     wp_strom_heizen: null, wp_strom_warmwasser: null,
     wp_waerme_heizen: null, wp_waerme_warmwasser: null,
     eauto_km: null, eauto_ladung: null, eauto_pv_anteil: null,

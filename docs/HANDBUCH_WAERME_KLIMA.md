@@ -194,7 +194,16 @@ Am Gerät gibt es den Schalter **„Getrennte Strommessung"**.
 
 *Heizwärme* und *Warmwasser-Wärme* sind **thermische** Größen in kWh — die abgegebene Wärme, **nicht** der Strom. Das ist die häufigste Verwechslung überhaupt, und beide Felder tragen sie deshalb im Namen.
 
-> ⚠ **Besonders beim Import aus einer eigenen Datei.** Viele Hersteller-Exporte führen die abgegebene Wärme in **zwei** Spalten nebeneinander — einmal die vom Gerät erzeugte Wärme, einmal die aus der Umwelt entnommene *Umgebungswärme*. Für eedc zählt die **erzeugte** Wärme; wird die Umgebungswärme mit zugeordnet oder die bereits addierte Summe genommen, steht die Wärmemenge um ein Vielfaches zu hoch. Ein sicheres Erkennungszeichen dafür ist eine **Arbeitszahl unter 1** in *Auswertungen → Tabelle*: Eine Wärmepumpe kann nicht weniger Wärme abgeben, als sie Strom aufnimmt.
+> ⚠ **Besonders beim Import aus einer eigenen Datei.** Viele Hersteller-Exporte führen die abgegebene Wärme in **zwei** Spalten nebeneinander — einmal die vom Gerät erzeugte Wärme, einmal die aus der Umwelt entnommene *Umgebungswärme*. Für eedc zählt die **erzeugte** Wärme; wird die Umgebungswärme mit zugeordnet oder die bereits addierte Summe genommen, steht die Wärmemenge um ein Vielfaches zu hoch.
+>
+> **Woran du es merkst — und in welche Richtung:**
+>
+> | Was die Arbeitszahl zeigt | Was das heißt |
+> | --- | --- |
+> | **auffällig hoch** (deutlich über dem, was das Gerät leisten kann) | Der **Zähler** ist zu groß — typisch die mit zugeordnete Umgebungswärme |
+> | **unter 1** | Der **Nenner** ist zu groß oder der Zähler unvollständig: mehrere Geräte auf einem Stromzähler, ein Heizstab auf demselben Zähler, oder es meldet nicht jedes Gerät seine Wärme |
+>
+> Eine Wärmepumpe kann nicht weniger Wärme abgeben, als sie Strom aufnimmt — deshalb ist eine Zahl unter 1 immer ein Hinweis auf die **Strom**seite, nie auf zu viel Wärme.
 
 Ohne Wärmemengenzähler rechnet eedc die Heizwärme aus *Strom × gepflegter Arbeitszahl* und **kennzeichnet sie als abgeleitet**. Die Mengen sind dann eine Modellrechnung, die Arbeitszahl fällt weg (sie wäre zirkulär). Das ist ein legitimer Betriebszustand, kein Mangel.
 

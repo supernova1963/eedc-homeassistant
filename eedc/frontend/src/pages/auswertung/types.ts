@@ -7,7 +7,6 @@ import {
   MONAT_KURZ, TYP_LABELS,
   COLORS, CHART_COLORS, TYP_COLORS,
   calcAutarkie, calcEigenverbrauchsquote, calcSpezifischerErtrag,
-  calcCOP,
 } from '../../lib'
 import { speicherWirkungsgrad } from '../../lib/speicherWirkungsgrad'
 
@@ -57,6 +56,8 @@ export interface MonatsZeitreihe {
   wp_waerme: number | null
   wp_strom: number | null
   wp_cop: number | null
+  /** Warum es die Zahl nicht gibt (R2/S3) — als Tooltip an der Zelle. */
+  wp_cop_grund: string | null
   // WP-Split — Strom nur bei getrennter Strommessung (#191), Wärme aus IMD
   wp_strom_heizen: number | null
   wp_strom_warmwasser: number | null
@@ -184,9 +185,14 @@ export function createMonatsZeitreihe(
       ? wp_heizung + wp_warmwasser
       : null
     const wp_strom = md.wp_strom_kwh
-    const wp_cop = (wp_waerme != null && wp_strom != null)
-      ? calcCOP(wp_waerme, wp_strom)
-      : null
+    // ADR-002/P12 (02.09.2026): Die Arbeitszahl kommt fertig aus der Antwort.
+    // **Bis dahin stand hier `calcCOP(wp_waerme, wp_strom)`** — eine eigene
+    // Division, an der KEINE der R2-Sperren vorbeikam, die Cockpit und Hub seit
+    // dem 26.08. ziehen. Dieselbe Bauform wie die Finanzspalten vor N-22 und die
+    // CO₂-Spalte vor N-21, und mit derselben Folge: zwei Sichten, zwei Zahlen.
+    // Der Grund wandert als Tooltip an die Zelle (`wp_cop_grund`).
+    const wp_cop = md.wp_arbeitszahl ?? null
+    const wp_cop_grund = md.wp_arbeitszahl_grund ?? null
     // WP-Split: Strom-Heizen/WW nur bei getrennter Strommessung (#191), Wärme aus IMD.
     const wp_strom_heizen = md.wp_strom_heizen_kwh
     const wp_strom_warmwasser = md.wp_strom_warmwasser_kwh
@@ -233,6 +239,7 @@ export function createMonatsZeitreihe(
       wp_waerme,
       wp_strom,
       wp_cop,
+      wp_cop_grund,
       wp_strom_heizen,
       wp_strom_warmwasser,
       wp_waerme_heizen,

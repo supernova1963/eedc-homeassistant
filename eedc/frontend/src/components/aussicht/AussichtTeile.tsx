@@ -26,7 +26,7 @@ import { useChartTheme } from '../../context/ThemeContext'
 import { useLegendenToggle } from '../../hooks'
 import type { SolarPrognoseTag } from '../../api/wetter'
 import type { FinanzPrognose, LangfristPrognose, TrendAnalyseResponse } from '../../api/aussichten'
-import type { WaermepumpeDashboardResponse, InvestitionMonatsdaten } from '../../api/investitionen'
+import type { WaermepumpeDashboardResponse } from '../../api/investitionen'
 
 // ─── Helfer ──────────────────────────────────────────────────────────────────
 
@@ -430,19 +430,43 @@ export function DegradationsPrognose({ trend }: { trend: TrendAnalyseResponse })
 
 const HEIZ_MONATE = [10, 11, 12, 1, 2, 3]
 
-function monatsCop(m: InvestitionMonatsdaten): number | null {
-  const strom = m.verbrauch_daten.stromverbrauch_kwh || 0
-  const waerme = (m.verbrauch_daten.heizenergie_kwh || 0) + (m.verbrauch_daten.warmwasser_kwh || 0)
-  return strom > 0 ? waerme / strom : null
-}
 const mittel = (xs: number[]): number | null => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : null)
 
-function wpTrend(md: InvestitionMonatsdaten[]): { richtung: 'steigend' | 'stabil' | 'sinkend'; recent: number | null; prior: number | null } {
-  const cops = md.map(monatsCop).filter((c): c is number => c != null)
-  if (cops.length < 4) return { richtung: 'stabil', recent: mittel(cops), prior: null }
-  const half = Math.floor(cops.length / 2)
-  const prior = mittel(cops.slice(0, half))!
-  const recent = mittel(cops.slice(half))!
+/** Eine Monatszeile der Layer-Arbeitszahl (ADR-002/P12). */
+type JazMonat = NonNullable<WaermepumpeDashboardResponse['zusammenfassung']['jaz_je_monat']>[number]
+
+/**
+ * Sigma Q / Sigma E ueber eine Monatsmenge — nie der Durchschnitt der
+ * Monatswerte (SOLL Paragraph 5: eine Arbeitszahl wird neu berechnet, nicht
+ * gemittelt). Monate ohne gueltige Kennzahl gehen nicht ein.
+ */
+function jazUeber(zeilen: JazMonat[]): number | null {
+  let q = 0, e = 0
+  for (const z of zeilen) {
+    if (z.zaehler_kwh == null || z.nenner_kwh == null) continue
+    q += z.zaehler_kwh; e += z.nenner_kwh
+  }
+  return e > 0 ? q / e : null
+}
+
+/**
+ * Effizienz-Trend aus der Layer-Zeitreihe.
+ *
+ * **Bis zum 02.09.2026 rechnete diese Datei die Monats-COPs selbst**
+ * (`monatsCop`: Waerme durch Stromverbrauch) und bildete daraus zwei
+ * Mittelwerte. Zwei Fehler in einem: Die Einzelwerte kannten weder den
+ * funktionsfremden Strom noch die abgeleitete Waerme — eine aus `Strom x JAZ`
+ * gerechnete Waerme haette hier exakt die gepflegte JAZ als „Messung"
+ * ausgewiesen —, und ein **Mittelwert von Quotienten** ist keine Arbeitszahl.
+ * Beide Haelften kommen jetzt als Sigma Q / Sigma E aus bereinigten Groessen.
+ */
+function wpTrend(zeilen: JazMonat[]): { richtung: 'steigend' | 'stabil' | 'sinkend'; recent: number | null; prior: number | null } {
+  const gueltig = zeilen.filter((z) => z.zaehler_kwh != null && z.nenner_kwh != null)
+  if (gueltig.length < 4) return { richtung: 'stabil', recent: jazUeber(gueltig), prior: null }
+  const half = Math.floor(gueltig.length / 2)
+  const prior = jazUeber(gueltig.slice(0, half))
+  const recent = jazUeber(gueltig.slice(half))
+  if (prior == null || recent == null) return { richtung: 'stabil', recent, prior }
   const diff = recent - prior
   return { richtung: diff > 0.1 ? 'steigend' : diff < -0.1 ? 'sinkend' : 'stabil', recent, prior }
 }
@@ -453,7 +477,10 @@ export function WpAussicht({ wpDashboards }: { wpDashboards: WaermepumpeDashboar
       {wpDashboards.map((wp, i) => {
         const z = wp.zusammenfassung
         const md = [...wp.monatsdaten].sort((a, b) => (a.jahr !== b.jahr ? a.jahr - b.jahr : a.monat - b.monat))
-        const t = wpTrend(md)
+        const t = wpTrend(
+          [...(z.jaz_je_monat ?? [])]
+            .sort((a, b) => (a.jahr !== b.jahr ? a.jahr - b.jahr : a.monat - b.monat)),
+        )
         const heiz = md.filter((m) => HEIZ_MONATE.includes(m.monat))
         const avgStrom = mittel(heiz.map((m) => m.verbrauch_daten.stromverbrauch_kwh || 0))
         const avgWaerme = mittel(heiz.map((m) => (m.verbrauch_daten.heizenergie_kwh || 0) + (m.verbrauch_daten.warmwasser_kwh || 0)))

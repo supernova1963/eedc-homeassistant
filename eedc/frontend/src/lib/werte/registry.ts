@@ -75,7 +75,13 @@ export const WERTE_METRIKEN: WerteMetrik[] = [
   { key: 'wp_waerme',          label: 'WP Wärme',          unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
   { key: 'wp_waerme_heizen',   label: 'WP Wärme Heizen',   unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
   { key: 'wp_waerme_warmwasser',label: 'WP Wärme WW',      unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
-  { key: 'wp_cop',             label: 'WP COP',            unit: '',        gruppe: 'waermepumpe', decimals: 1, aggregation: 'avg', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
+  // ⚠ `aggregation: 'none'` — eine Arbeitszahl ist ein Quotient und wird NICHT
+  // gemittelt. Bis 02.09.2026 stand hier `'avg'`, und der Fuss zeigte den
+  // Durchschnitt der Monatswerte: an einer realen Anlage **Ø 2,5**, waehrend die
+  // Jahresarbeitszahl derselben Zeilen (Sigma Waerme / Sigma Strom) **2,66** ist —
+  // zwei Wahrheiten in einer Tabelle. Dieselbe Entscheidung wie bei der
+  // Grundlast-Spalte (01.09.), aus demselben Grund.
+  { key: 'wp_cop',             label: 'WP COP',            unit: '',        gruppe: 'waermepumpe', decimals: 1, aggregation: 'none', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
   // E-Auto — kein sauberer Tages-Wert (km/Lade-Split) → monat-only
   { key: 'eauto_km',           label: 'E-Auto',            unit: 'km',      gruppe: 'eauto',       decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
   { key: 'eauto_ladung',       label: 'E-Auto Ladung',     unit: 'kWh',     gruppe: 'eauto',       decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },

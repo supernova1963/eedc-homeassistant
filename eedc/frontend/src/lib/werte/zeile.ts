@@ -32,6 +32,16 @@ export interface WerteZeile {
   vergleichKey: number
   /** Metrik-Wert-Accessor (Registry-key → Wert). */
   wert: (key: string) => number | null
+  /**
+   * Warum eine Metrik **keinen** Wert hat (S3: „nicht ‚—', sondern der Grund").
+   *
+   * Optional und pro Metrik: Nur wo der Layer eine Kennzahl bewusst verweigert,
+   * steht hier ein Satz — heute die Arbeitszahl (R2/ADR-002/P12). Die Tabelle
+   * haengt ihn als Tooltip an die Zelle; eine sichtbare Zeile hat eine
+   * Tabellenzelle nicht, und ein leeres „—" ist die haeufigste Beschwerde
+   * dieser Flaeche.
+   */
+  grund?: (key: string) => string | null
 }
 
 /** Monats-Zeitreihe → normalisierte Zeile. */
@@ -44,6 +54,7 @@ export function monatsZeile(r: MonatsZeitreihe): WerteZeile {
     zeitRechts: String(r.jahr),
     vergleichKey: r.jahr * 100 + r.monat,
     wert: (key) => getMonatWert(r, key),
+    grund: (key) => (key === 'wp_cop' ? r.wp_cop_grund ?? null : null),
   }
 }
 

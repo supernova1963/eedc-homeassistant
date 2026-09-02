@@ -446,18 +446,21 @@ export function WerteTabelle({
                   </td>
                   {aktiveMetriken.map((m) => {
                     const v = r.wert(m.key)
+                    // S3: Wo der Layer eine Kennzahl verweigert, traegt die Zelle
+                    // den Grund als Tooltip statt eines nackten „—".
+                    const grund = v == null ? r.grund?.(m.key) ?? undefined : undefined
                     if (zeigeVergleich) {
                       const pv = prev ? prev.wert(m.key) : null
                       return (
                         <Fragment key={m.key}>
-                          <td className={`${ZELLE} text-right tabular-nums text-gray-700 dark:text-gray-300`}>{fmtWert(v, m.decimals)}</td>
+                          <td className={`${ZELLE} text-right tabular-nums text-gray-700 dark:text-gray-300`} title={grund}>{fmtWert(v, m.decimals)}</td>
                           <td className={`${ZELLE} text-right tabular-nums text-gray-500 dark:text-gray-400`}>{fmtWert(pv, m.decimals)}</td>
                           {/* R19-4b: Gruppen-Trennlinie im Zeilen-Ton (gray-100/800 war im Dark-Mode unsichtbar). */}
                           <td className={`${ZELLE} text-right tabular-nums text-xs border-r border-gray-200 dark:border-gray-700`}><DeltaZelle current={v} prev={pv} metrik={m} /></td>
                         </Fragment>
                       )
                     }
-                    return <td key={m.key} className={`${ZELLE} text-right tabular-nums text-gray-700 dark:text-gray-300`}>{fmtWert(v, m.decimals)}</td>
+                    return <td key={m.key} className={`${ZELLE} text-right tabular-nums text-gray-700 dark:text-gray-300`} title={grund}>{fmtWert(v, m.decimals)}</td>
                   })}
                 </tr>
               )

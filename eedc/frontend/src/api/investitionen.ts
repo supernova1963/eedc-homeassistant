@@ -248,6 +248,19 @@ export interface WaermepumpeDashboardResponse {
      *  gibt. Kommt seit dem 26.08.2026 aus dem Layer statt aus einer eigenen
      *  Division im Endpoint; vorher lieferte der Hub weder Grund noch Hinweis. */
     durchschnitt_cop_grund?: string | null
+    /**
+     * Arbeitszahl **je Monat**, aus dem Layer (ADR-002/P12). `wert: null` heisst
+     * „keine Kennzahl", `grund` sagt warum. Der Client rechnet sie nicht mehr
+     * selbst — er kennt weder funktionsfremden Strom noch abgeleitete Waerme.
+     */
+    jaz_je_monat?: {
+      jahr: number; monat: number; wert: number | null; grund: string | null
+      /** Bereinigtes Q und E — `nenner_kwh` OHNE funktionsfremden Strom. Fuer
+       *  Sigma Q / Sigma E ueber ein Saisonfenster (SOLL Paragraph 5: neu
+       *  berechnen, nie mitteln). `null`, wo es keine Kennzahl gibt. */
+      zaehler_kwh: number | null; nenner_kwh: number | null
+      heizen_zaehler_kwh: number | null; heizen_nenner_kwh: number | null
+    }[]
     /** W-6/W-15: Der Heizstab-Satz unterhalb einer Arbeitszahl von 2 — er stand
      *  bis zum 26.08.2026 nur im Cockpit, obwohl die Melder-Antwort ihn für den
      *  Komponenten-Hub zusagt. */

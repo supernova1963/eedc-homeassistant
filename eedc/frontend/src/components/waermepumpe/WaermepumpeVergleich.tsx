@@ -20,9 +20,26 @@ import type { InvestitionMonatsdaten } from '../../api/investitionen'
 import { useLegendenToggle } from '../../hooks'
 
 
-export function WaermepumpeVergleich({ monatsdaten, hatGetrennteStrom }: {
-  monatsdaten: InvestitionMonatsdaten[]; hatGetrennteStrom: boolean
+export function WaermepumpeVergleich({ monatsdaten, jazJeMonat, hatGetrennteStrom }: {
+  monatsdaten: InvestitionMonatsdaten[]
+  /**
+   * Arbeitszahl je Monat aus dem Layer (ADR-002/P12). **Bis zum 02.09.2026
+   * rechnete diese Komponente sie selbst** — an zwei Stellen, aus
+   * `heizenergie + warmwasser` durch `stromverbrauch`. Keine der beiden kannte
+   * den funktionsfremden Strom (Kuehlen/Lueften/Entfeuchten stand im Nenner)
+   * oder die abgeleitete Waerme; im Saison-Zweig wurde daraus zusaetzlich ein
+   * Sigma-Quotient ueber Monate mit gemischter Herkunft.
+   */
+  jazJeMonat?: {
+    jahr: number; monat: number; wert: number | null; grund: string | null
+    zaehler_kwh: number | null; nenner_kwh: number | null
+    heizen_zaehler_kwh: number | null; heizen_nenner_kwh: number | null
+  }[]
+  hatGetrennteStrom: boolean
 }) {
+  /** (jahr, monat) → Arbeitszahl aus dem Layer. */
+  const jazVon = (jahr: number, monat: number): number | null =>
+    jazJeMonat?.find((x) => x.jahr === jahr && x.monat === monat)?.wert ?? null
   const [modus, setModus] = useState<'jaz' | 'strom'>('strom')
   const [achse, setAchse] = useState<'monate' | 'saison'>('monate')
   const [fenster, setFenster] = useState<keyof typeof SAISON_FENSTER>('winter')
@@ -39,10 +56,9 @@ export function WaermepumpeVergleich({ monatsdaten, hatGetrennteStrom }: {
     for (const jahr of jahre) {
       const md = monatsdaten.find((m) => m.monat === monat && m.jahr === jahr)
       if (md) {
-        const waerme = (md.verbrauch_daten.heizenergie_kwh || 0) + (md.verbrauch_daten.warmwasser_kwh || 0)
         const strom = md.verbrauch_daten.stromverbrauch_kwh || 0
         entry[`val_${jahr}`] = modus === 'jaz'
-          ? (strom > 0 ? Math.round((waerme / strom) * 100) / 100 : null)
+          ? jazVon(jahr, monat)
           : (strom > 0 ? Math.round(strom) : null)
       } else {
         entry[`val_${jahr}`] = null
@@ -59,19 +75,29 @@ export function WaermepumpeVergleich({ monatsdaten, hatGetrennteStrom }: {
     const minJ = jahre[0], maxJ = jahre[jahre.length - 1]
     const rows: { name: string; value: number | null; label: string; vollstaendig: boolean; fill: string }[] = []
     for (let startJahr = minJ - 1; startJahr <= maxJ; startJahr++) {
-      let sumStrom = 0, sumWaerme = 0, monateMitDaten = 0
+      // Sigma Q / Sigma E ueber das Fenster — richtig nach SOLL Paragraph 5
+      // (neu berechnen, nie mitteln). **Beide Summen kommen aus dem Layer**
+      // (ADR-002/P12): `nenner_kwh` traegt den funktionsfremden Strom bereits
+      // abgezogen, und ein Monat ohne gueltige Kennzahl (`wert == null`) geht
+      // gar nicht erst ein — sonst entstuende hier der Mischquotient neu, den
+      // die Monatszeile gerade verweigert hat.
+      // ⚠ Die Namen sagen Q und E, nicht „Waerme" und „Strom": `sumE` ist NICHT
+      // der Stromverbrauch des Fensters — der funktionsfremde Anteil (Kuehlen,
+      // Lueften, Entfeuchten) ist darin bereits abgezogen. Die alten Namen
+      // (`sumWaerme`/`sumStrom`) haetten hier eine Menge behauptet, die so
+      // nirgends steht; `sumStromAnzeige` traegt sie weiter fuer den
+      // Strom-Modus, der genau das zeigen soll.
+      let sumE = 0, sumQ = 0, sumStromAnzeige = 0, monateMitDaten = 0
       for (const m of cfg.monate) {
         const kalenderJahr = m >= cfg.startMonat ? startJahr : startJahr + 1
         const md = monatsdaten.find((x) => x.monat === m && x.jahr === kalenderJahr)
         if (!md) continue
         monateMitDaten++
-        if (hatGetrennteStrom) {
-          sumStrom += md.verbrauch_daten.strom_heizen_kwh || 0
-          sumWaerme += md.verbrauch_daten.heizenergie_kwh || 0
-        } else {
-          sumStrom += md.verbrauch_daten.stromverbrauch_kwh || 0
-          sumWaerme += (md.verbrauch_daten.heizenergie_kwh || 0) + (md.verbrauch_daten.warmwasser_kwh || 0)
-        }
+        if (modus !== 'jaz') { sumStromAnzeige += md.verbrauch_daten.stromverbrauch_kwh || 0; continue }
+        const az = jazJeMonat?.find((x) => x.jahr === kalenderJahr && x.monat === m)
+        const q = hatGetrennteStrom ? az?.heizen_zaehler_kwh : az?.zaehler_kwh
+        const e = hatGetrennteStrom ? az?.heizen_nenner_kwh : az?.nenner_kwh
+        if (q != null && e != null) { sumQ += q; sumE += e }
       }
       if (monateMitDaten === 0) continue
       const vollstaendig = monateMitDaten === cfg.monate.length
@@ -79,8 +105,8 @@ export function WaermepumpeVergleich({ monatsdaten, hatGetrennteStrom }: {
         ? `${String(startJahr % 100).padStart(2, '0')}/${String((startJahr + 1) % 100).padStart(2, '0')}`
         : `${startJahr}`
       const wert = modus === 'jaz'
-        ? (sumStrom > 0 ? Math.round((sumWaerme / sumStrom) * 100) / 100 : null)
-        : Math.round(sumStrom)
+        ? (sumE > 0 ? Math.round((sumQ / sumE) * 100) / 100 : null)
+        : Math.round(sumStromAnzeige)
       rows.push({
         name: vollstaendig ? basisName : `${basisName} (${monateMitDaten}/${cfg.monate.length})`,
         value: wert,
