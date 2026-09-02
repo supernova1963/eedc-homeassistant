@@ -62,7 +62,7 @@ export function WaermepumpeVerlaufIST({ anlageId, inv, melde }: { anlageId: numb
           <summary className="cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
             Monatsdaten anzeigen ({ds.monatsdaten.length})
           </summary>
-          <div className="mt-3"><WaermepumpeMonatsTabelle monatsdaten={ds.monatsdaten} /></div>
+          <div className="mt-3"><WaermepumpeMonatsTabelle monatsdaten={ds.monatsdaten} jazJeMonat={ds.zusammenfassung.jaz_je_monat} /></div>
         </details>
       </Parkbar>
     </div>

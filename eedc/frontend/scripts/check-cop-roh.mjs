@@ -43,10 +43,18 @@
  *      Wer drei richtige Treffer wegdrücken muss, drückt beim vierten auch den
  *      falschen weg.
  *
- * **Beidseitig gesprengt (02.09.2026):** `wp_waerme / wp_strom` und
- * `gesamtWaerme/gesamtStrom` werden gefangen; `wp_waerme + wp_strom`,
- * `pv_kwh / strom_kwh` und `wp_waerme / flaeche` laufen durch. Ein Prüfer ist
- * erst nach seinem Sprengsatz ein Prüfer.
+ * **Beidseitig gesprengt — zehn Fälle, fünf je Seite (02.09.2026, erweitert mit N-369):**
+ *
+ *   GEFANGEN                                                       DURCH
+ *   `wp_waerme / wp_strom`                                         `wp_waerme + wp_strom`
+ *   `gesamtWaerme/gesamtStrom`                                     `pv_kwh / strom_kwh`
+ *   `(heiz + ww) / strom`                          ← N-369         `wp_waerme / flaeche`
+ *   `(md.heizenergie_kwh + md.warmwasser_kwh) / md.stromverbrauch_kwh`  `(a + b) / strom`  ← Grenze (a)
+ *   `(ww + heiz) / strom`  (Summanden vertauscht)                  `(ladung + entladung) / kapazitaet`
+ *
+ * Ein Prüfer ist erst nach seinem Sprengsatz ein Prüfer — und die rechte Spalte
+ * gehört genauso dazu: `(a + b) / strom` MUSS durchlaufen, sonst wäre Grenze (a)
+ * stillschweigend verschoben statt entschieden.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
@@ -58,10 +66,24 @@ const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
  * Zähler = Wärmegröße, Nenner = Stromgröße. `[\w.]*` deckt Präfixe und
  * Objektzugriffe (`md.wp_waerme_kwh`), `[_a-zA-Z]*` die Suffixe (`_kwh`).
  * Die Wärme-Seite kennt beide Schreibweisen der Fläche: `waerme` und `heiz`.
+ *
+ * ⭐ **Seit N-369 (02.09.2026) auch die KLAMMER-SUMME im Zähler.** Der Wächter
+ * fing `wp_waerme / wp_strom`, aber nicht `(heiz + ww) / strom` — und genau so
+ * stand es in `WaermepumpeCharts.tsx:123`, der JAZ-Spalte des Wärmepumpen-Hubs.
+ * ⛔ **Das war NICHT die dokumentierte Grenze (a) unten:** Die Namen sind
+ * sprechend (`heiz`, `strom`), nur die Klammer brach das Muster. Und *Heizung +
+ * Warmwasser* ist auf dieser Fläche die Standard-Schreibweise für „Wärme" — der
+ * Wächter war damit ausgerechnet für die wahrscheinlichste Bauform blind.
+ * Er verlangt weiterhin, dass **ein** Summand eine Wärmegröße benennt; eine
+ * Klammer aus lauter neutralen Namen bleibt Grenze (a).
  */
 const WAERME = String.raw`[\w.]*(?:[wW]aerme|[wW]ärme|[hH]eiz)[\w.]*`
 const STROM = String.raw`[\w.]*[sS]trom[\w.]*`
-const ROHE_DIVISION = new RegExp(String.raw`\b${WAERME}\s*/\s*${STROM}\b`, 'g')
+//: Eine Klammer-Summe, in der MINDESTENS ein Summand eine Wärmegröße benennt.
+//: `[^()]*` hält sie flach — verschachtelte Klammern fängt der Wächter bewusst
+//: nicht, sie wären ohne Parser nicht sicher abzugrenzen.
+const WAERME_SUMME = String.raw`\((?:[^()]*\b${WAERME}\b[^()]*)\)`
+const ROHE_DIVISION = new RegExp(String.raw`(?:${WAERME_SUMME}|\b${WAERME})\s*/\s*${STROM}\b`, 'g')
 
 const stripComments = (src) =>
   src

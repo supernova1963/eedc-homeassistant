@@ -102,8 +102,41 @@ export function WaermepumpeKostenvergleich({ zusammenfassung: z }: { zusammenfas
   )
 }
 
-/** Monatsdaten-Tabelle: Strom · Heizung · Warmwasser · JAZ je Monat. */
-export function WaermepumpeMonatsTabelle({ monatsdaten }: { monatsdaten: InvestitionMonatsdaten[] }) {
+/** Ein Eintrag aus `zusammenfassung.jaz_je_monat` — die Arbeitszahl je Monat aus dem Layer. */
+export interface JazMonat {
+  jahr: number
+  monat: number
+  wert: number | null
+  grund: string | null
+}
+
+/** Monatsdaten-Tabelle: Strom · Heizung · Warmwasser · JAZ je Monat.
+ *
+ * ⛔ **Die JAZ-Spalte rechnet NICHT selbst** (N-369, 02.09.2026). Bis dahin stand
+ * hier `(heiz + ww) / strom` — eine rohe Division auf den Rohfeldern, und damit
+ * genau das, was ADR-002/**P12** seit dem 02.09. verbietet. Sie wusste von nichts:
+ * kein Abzug des funktionsfremden Stroms (Kühlen · Lüften · Entfeuchten, W-14/E4),
+ * keine Sperre bei aus `Strom × JAZ` **gerechneter** Wärme (dort gäbe die Division
+ * die gepflegte JAZ zurück — eine Zahl, die nichts misst), keine Anwender-Angabe
+ * `abgrenzung`. Und ohne Strom stand dort **`0,00`** statt „—": eine Null behauptet
+ * „gemessen, und es kam nichts heraus". Bei einer Split-Klimaanlage — Strom ja,
+ * Wärme bauartbedingt nein — war das der Regelfall.
+ *
+ * ⚠ **Gefunden wurde es NICHT vom Wächter.** `check:cop-roh` sucht
+ * `<waerme> / <strom>` über Namen; hier steht im Zähler eine **Klammer-Summe**
+ * (`heiz + ww`), und die ist auf dieser Fläche die Standard-Schreibweise für Wärme.
+ * Der Wächter kennt das Muster seit N-369.
+ *
+ * Die Werte kommen jetzt aus `zusammenfassung.jaz_je_monat` — dieselbe Quelle, die
+ * der Status-Strip und der Monatsvergleich desselben Geräts lesen. Damit nennt der
+ * Hub für einen Monat nicht mehr zwei verschiedene Arbeitszahlen (die **W-15**-Klasse).
+ */
+export function WaermepumpeMonatsTabelle(
+  { monatsdaten, jazJeMonat }: { monatsdaten: InvestitionMonatsdaten[]; jazJeMonat?: JazMonat[] },
+) {
+  // Nachschlagen je (Jahr, Monat) — die Listen sind unabhängig sortiert.
+  const jazKey = (j: number, m: number) => j * 100 + m
+  const jazMap = new Map((jazJeMonat ?? []).map((x) => [jazKey(x.jahr, x.monat), x]))
   return (
     <Table>
       <TableHead>
@@ -120,7 +153,9 @@ export function WaermepumpeMonatsTabelle({ monatsdaten }: { monatsdaten: Investi
           const strom = md.verbrauch_daten.stromverbrauch_kwh || 0
           const heiz = md.verbrauch_daten.heizenergie_kwh || 0
           const ww = md.verbrauch_daten.warmwasser_kwh || 0
-          const cop = strom > 0 ? (heiz + ww) / strom : 0
+          // N-369: gelesen, nicht gerechnet. Fehlt der Eintrag (älterer Monat
+          // ohne Layer-Antwort), steht „—" — nie eine erfundene Zahl.
+          const jaz = jazMap.get(jazKey(md.jahr, md.monat))
           return (
             <tr key={md.id ?? `${md.jahr}-${md.monat}`} className="border-b border-gray-100 dark:border-gray-800">
               <td className={ZELLE}>{MONAT_KURZ[md.monat]} {md.jahr}</td>
@@ -128,7 +163,9 @@ export function WaermepumpeMonatsTabelle({ monatsdaten }: { monatsdaten: Investi
               {/* Heizung = WP-Rot, Warmwasser = blau (= CHART_COLORS.wpWaerme/wpWarmwasser; Gernot 2026-06-25 nach detLAN). */}
               <td className={`${ZELLE} text-right text-red-600`}>{fmtZahl(heiz, 0)}</td>
               <td className={`${ZELLE} text-right text-blue-600`}>{fmtZahl(ww, 0)}</td>
-              <td className={`${ZELLE} text-right text-orange-600`}>{fmtZahl(cop, 2)}</td>
+              <td className={`${ZELLE} text-right text-orange-600`} title={jaz?.grund ?? undefined}>
+                {jaz?.wert != null ? fmtZahl(jaz.wert, 2) : '—'}
+              </td>
             </tr>
           )
         })}
