@@ -8,6 +8,10 @@ import { render, screen } from '@testing-library/react'
 
 vi.mock('../hooks', () => ({
   useSchmaleAchse: () => false,
+  // N-368: Der Tages-Block holt seinen eigenen Anker ueber `useApiData`
+  // (`getVerfuegbareMonate`). Ohne Daten faellt er auf den Abschluss-Anker zurueck —
+  // genau der Rueckfall-Zweig, und fuer diesen Kompositions-Test der richtige.
+  useApiData: () => ({ data: null, loading: false, error: null }),
   // #377: die Sicht liest die Investitionen für die Zähler-Spalten. Ohne
   // Zähler-Gerät entsteht keine Spalte — genau der Regelfall, den dieser Test
   // abbildet.
@@ -46,8 +50,15 @@ const basisMock = {
 describe('AuswertungenTabelleV4 (Werte-Werkbank)', () => {
   it('rendert beide Blöcke mit block-interner Zeitraum/Vergleich-Leiste', () => {
     render(<AuswertungenTabelleV4 basis={basisMock} />)
-    expect(screen.getByText('Monatswerte')).toBeInTheDocument()
-    expect(screen.getByText('Tageswerte')).toBeInTheDocument()
+    // `getAllBy…`, nicht `getBy…`: Seit N-368 steht ueber den Bloecken ein Hinweis auf
+    // den offenen Monatsabschluss, und der NENNT beide Bloecke beim Namen („die
+    // Tageswerte sind davon unberuehrt — die Monatswerte gibt es erst mit ihm").
+    // Das ist Absicht: Der Hinweis soll sagen, welcher Teil der Sicht betroffen ist.
+    // Dieser Test prueft die Komposition — dass es beide Bloecke gibt —, nicht die
+    // Eindeutigkeit der Zeichenkette im DOM. Der Anker selbst haengt an
+    // `AuswertungenTabelleAnker.test.tsx`.
+    expect(screen.getAllByText('Monatswerte').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Tageswerte').length).toBeGreaterThan(0)
     // Monats-Block ist default offen → seine Zeitraum-Leiste rendert.
     expect(screen.getAllByText('Zeitraum').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Vergleich').length).toBeGreaterThan(0)

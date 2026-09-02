@@ -36,7 +36,7 @@ import { aktuellerMonatApi } from '../api/aktuellerMonat'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
 import { monatRefAusQuery, verlaufTabellenSpalten } from './verlaufVergleich'
 import { sollErfuellungProzent, sollFensterText } from '../lib/sollErfuellung'
-import { naechsterOffenerMonat } from '../lib/monatsLuecken'
+import { offenerAbschlussMonat } from '../lib/monatsLuecken'
 
 interface MonatRef { jahr: number; monat: number }
 
@@ -100,12 +100,10 @@ function neuesteZuerst<T extends MonatRef>(xs: T[]): T[] {
  */
 export function hatOffeneAbschluesse(mitMonatsdaten: MonatRef[], heute: Date): boolean {
   if (mitMonatsdaten.length === 0) return true
-  const aeltester = neuesteZuerst(mitMonatsdaten).at(-1)!
-  return naechsterOffenerMonat({
-    vorhandene: mitMonatsdaten,
-    start: { jahr: aeltester.jahr, monat: aeltester.monat },
-    heute: { jahr: heute.getFullYear(), monat: heute.getMonth() + 1 },
-  }) !== null
+  // Seit N-368 liegt die Ableitung im SoT `lib/monatsLuecken`, weil eine ZWEITE
+  // Sicht dieselbe Frage stellt (Auswertungen → Tabelle, Hinweis über den
+  // Tageswerten). Das Verhalten ist unveraendert — nur der Ort ist jetzt einer.
+  return offenerAbschlussMonat(mitMonatsdaten, heute) !== null
 }
 
 /**

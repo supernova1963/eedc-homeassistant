@@ -109,3 +109,36 @@ export function naechsterOffenerMonat(p: LueckenParams): MonatRef | null {
   const fehlend = ermittleFehlendeMonate(p)
   return fehlend.length ? fehlend[0] : null
 }
+
+/**
+ * Der früheste offene Abschluss-Monat aus den Monaten MIT Monatsdaten — oder
+ * `null`, wenn nichts offen ist.
+ *
+ * **Warum diese Funktion hier steht und nicht bei ihren Aufrufern:** Sie kapselt
+ * die Start-Ableitung, die sonst an jeder Aufrufstelle danebenstünde — Start =
+ * ältester vorhandener Monat, weil Lücken *vor* der ersten Datenzeile ohne
+ * Anschaffungsdaten nicht erkennbar sind (dieselbe Grenze, die
+ * `CockpitMonatV4.hatOffeneAbschluesse` seit N-99 zieht). Zwei Sichten fragen
+ * inzwischen dasselbe: Cockpit → Monat (Knopf „Abschluss starten", Vorauswahl)
+ * und Auswertungen → Tabelle (Hinweis über den Tageswerten, N-368). Zwei
+ * Ableitungen wären eine zweite Wahrheit über „hast du etwas offen" — genau das,
+ * was §7 mit „eine Quelle" ausschließt.
+ *
+ * ⚠ **Der laufende Monat ist nie offen.** Das entscheidet
+ * {@link ermittleFehlendeMonate} (Ende = Vormonat von heute): Ein Monat, der noch
+ * läuft, *kann* keinen Abschluss haben. Im September ist der August offen (ein
+ * Versäumnis), der September dagegen laufend (keines) — zwei Zustände, die nicht
+ * zusammenfallen dürfen.
+ *
+ * `heute` wird hereingereicht statt gelesen: eine Probe, die die echte Uhr nimmt,
+ * ist nicht hermetisch (N-167).
+ */
+export function offenerAbschlussMonat(mitMonatsdaten: MonatRef[], heute: Date): MonatRef | null {
+  if (mitMonatsdaten.length === 0) return null
+  const aeltesterIdx = Math.min(...mitMonatsdaten.map((m) => monatIndex(m.jahr, m.monat)))
+  return naechsterOffenerMonat({
+    vorhandene: mitMonatsdaten,
+    start: ausMonatIndex(aeltesterIdx),
+    heute: { jahr: heute.getFullYear(), monat: heute.getMonth() + 1 },
+  })
+}

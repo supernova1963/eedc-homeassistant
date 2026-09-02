@@ -772,6 +772,23 @@ Der interaktive Überblick über alle Monatswerte in einer sortierbaren Tabelle 
 - **Spaltenauswahl** über „Spalten" (Auswahl bleibt im Browser gespeichert)
 - **CSV-Export** des sichtbaren Inhalts (alle Zeilen, eingeblendete Spalten)
 
+> **Die beiden Blöcke leben von verschiedenen Daten — und öffnen deshalb verschieden.**
+> **Monatswerte** entstehen erst mit einem **Monatsabschluss**; der Block öffnet auf dem
+> zuletzt abgeschlossenen Jahr. **Tageswerte** entstehen dagegen von selbst, sobald eedc
+> läuft und deine Zähler zugeordnet sind — sie brauchen keinen Abschluss. Dieser Block
+> öffnet deshalb auf dem **neuesten Monat, für den Tageswerte vorliegen**, in aller Regel
+> also dem laufenden. Fehlt dir ein Monatsabschluss, steht das **über der Seite** — mit dem
+> Monat, um den es geht, und dem Knopf **„Abschluss starten"**.
+>
+> ⚠ **Der laufende Monat gilt dabei nie als versäumt.** Ein Monat, der noch läuft, kann
+> keinen Abschluss haben: Im September ist der **August** offen, der September **läuft**.
+>
+> *Bis Version 4.0.37 richtete sich auch der Tages-Block nach dem letzten Monatsabschluss.
+> Wer den Vormonat noch nicht abgeschlossen hatte, landete dort auf einem älteren Monat,
+> und wer noch gar keinen Abschluss gemacht hatte, sah keine Tageswerte — obwohl sie
+> gemessen vorlagen. Wenn deine Tagesansicht früher auf dem falschen Monat stand, ist das
+> die Korrektur.*
+
 > **Womit sich eine Zeile vergleicht.** Jede Monatszeile steht ihrem **eigenen** Vorjahresmonat gegenüber — Dezember 2025 dem Dezember 2024, auch wenn der Zeitraum „Alle Jahre" umfasst. Gibt es diesen Vorjahresmonat nicht (weil deine Aufzeichnung später beginnt), bleibt die Vergleichsspalte **leer („—")**; es wird kein Ersatzwert eingesetzt und kein Δ von 0,0 % angezeigt. Dasselbe gilt für Tageszeilen.
 >
 > Die **Summenzeile** hält sich an dieselbe Regel: Sie vergleicht nur, wenn **jede** angezeigte Zeile ein Gegenstück hat. Bei „Alle Jahre" ist das nicht der Fall — die ersten Monate deiner Aufzeichnung haben kein Vorjahr —, dort bleibt die Vergleichs-Spalte des Fußes leer, während die Δ-Werte der einzelnen Zeilen vollständig darüber stehen. Andernfalls stünde dort z. B. die Summe aus 37 Monaten neben der aus 25: eine Prozentzahl, die sich wie eine Aussage über deine Anlage liest und keine ist. Die „aktuell"-Zelle bleibt immer die Summe der Spalte darüber. **Warum sie schweigt, steht unter der Tabelle** — mit der Anzahl der Monate bzw. Tage, die kein Gegenstück haben; derselbe Satz erscheint als Hinweis, wenn du auf die leere Zelle zeigst.

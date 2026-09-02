@@ -11,8 +11,8 @@
  * Tabelle je parkbar (R6); geparkt → Block-Hülle ausgeblendet.
  */
 import { useEffect, useMemo, useState } from 'react'
-import { Table, CalendarDays } from 'lucide-react'
-import { FehlerZustand, TabellenSkeleton } from '../components/ui'
+import { Table, CalendarDays, CalendarClock } from 'lucide-react'
+import { Alert, FehlerZustand, TabellenSkeleton } from '../components/ui'
 import { BlockShell, BlockStackSkeleton, GeraeteHinweis, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { WerteTabelle } from '../components/werte'
@@ -20,7 +20,10 @@ import { monatsZeile, tagesZeile, richteMonateAus, type WerteZeile } from '../li
 import {
   baueErzeugerSpalten, ERZEUGER_OHNE_SENSOR_LABEL, ERZEUGER_OHNE_SENSOR_HINWEIS,
 } from '../lib/erzeugerSpalten'
-import { useInvestitionen, useSelectedAnlage } from '../hooks'
+import { useApiData, useInvestitionen, useSelectedAnlage } from '../hooks'
+import { energieProfilApi, type VerfuegbarerMonat } from '../api/energie_profil'
+import { MONAT_KURZ, MONAT_NAMEN } from '../lib/constants'
+import { offenerAbschlussMonat, type MonatRef } from '../lib/monatsLuecken'
 import { baueZaehlerSpalten, zaehlerMitStand } from '../lib/zaehlerSpalten'
 import type { AuswertungBasis } from './useAuswertungBasis'
 import { useWerteZeitreihe } from './useWerteZeitreihe'
@@ -90,12 +93,57 @@ function TabelleInner({ basis }: { basis: AuswertungBasis }) {
   // (`react-hooks/rules-of-hooks`; der Lint-Lauf hat genau das gefangen).
   const { investitionen: alleInvestitionen } = useInvestitionen(selectedAnlageId ?? undefined)
 
-  // Neuestes (Jahr, Monat) als Default-Anker.
+  // Neuestes (Jahr, Monat) als Default-Anker des MONATS-Blocks. Er zaehlt Monate
+  // MIT ABSCHLUSS — dort ist das richtig: eine Monatszeile entsteht erst mit einem.
   const anker = useMemo(() => {
     if (rows.length === 0) return null
     const max = rows.reduce((acc, r) => (r.jahr * 100 + r.monat > acc.jahr * 100 + acc.monat ? r : acc), rows[0])
     return { jahr: max.jahr, monat: max.monat }
   }, [rows])
+
+  // ── N-368: Der TAGES-Block bekommt seinen EIGENEN Anker (OB73-gif, #395) ──
+  // Tageswerte entstehen ab Installation von selbst (Snapshot-/Aggregations-Jobs)
+  // und brauchen KEINEN Monatsabschluss. Bis N-368 hing der Tages-Block trotzdem am
+  // Abschluss-Anker daruber. Zwei Folgen, beide gemeldet bzw. am Code belegt:
+  //   * Ein offener Vormonat schob die Tagesansicht auf einen alten Monat zurueck
+  //     (Melder: August offen ⇒ Tagesansicht auf Juni, obwohl September gemessen war).
+  //   * OHNE JEDEN Abschluss war `anker` null ⇒ `tagVon` blieb leer ⇒ `useTagesWerte`
+  //     stand auf `enabled: false` und lud nichts, waehrend die Datumsauswahl auf
+  //     `min="0-01-01"` klemmte. Das trifft jede frische Installation.
+  // Quelle ist dieselbe, die Cockpit → Monat (:193) und Cockpit → Tag schon lesen:
+  // `getVerfuegbareMonate` = GROUP BY ueber `TagesZusammenfassung`, ein leichter Fetch.
+  const tagMonateQ = useApiData<VerfuegbarerMonat[]>(
+    () => energieProfilApi.getVerfuegbareMonate(selectedAnlageId!),
+    [selectedAnlageId],
+    { enabled: !!selectedAnlageId, swrKey: `v4-tabelle-tagmonate:${selectedAnlageId}` },
+  )
+  const tagMonate = useMemo(() => tagMonateQ.data ?? [], [tagMonateQ.data])
+  const tagAnker = useMemo<MonatRef | null>(() => {
+    // Gedeckelt auf den laufenden Monat — dieselbe Auflage wie `waehleDefaultMonat`
+    // (CockpitMonatV4): eine Snapshot-Streuzeile in der Zukunft darf keine leere
+    // Sicht oeffnen. ⚠ RUECKFALL auf den Abschluss-Anker, wenn es KEINE Tagesspur
+    // gibt (reine Handpflege): dann ist er die einzige Aussage, die es ueberhaupt
+    // gibt — ohne diesen Zweig wuerde der Handpfleger brechen, um den Sensor-
+    // Anwender zu heilen.
+    const heute = new Date()
+    const heuteIdx = heute.getFullYear() * 100 + (heute.getMonth() + 1)
+    const bisHeute = tagMonate.filter((m) => m.jahr * 100 + m.monat <= heuteIdx)
+    if (bisHeute.length === 0) return anker
+    const max = bisHeute.reduce((a, m) => (m.jahr * 100 + m.monat > a.jahr * 100 + a.monat ? m : a), bisHeute[0])
+    return { jahr: max.jahr, monat: max.monat }
+  }, [tagMonate, anker])
+
+  // N-368, zweite Haelfte (Gernot 2026-09-02): Der richtige Zeitraum darf das
+  // VERSAEUMNIS nicht verschlucken. Bis hierher war der schiefe Anker das Einzige,
+  // was in dieser Sicht auf einen offenen Abschluss deutete — und er hat es in einer
+  // Sprache getan, die niemand versteht: Der Melder hielt ihn fuer einen Update-
+  // Fehler und schrieb einen Fehlerbericht. Deshalb wird das Versaeumnis jetzt
+  // BENANNT statt angedeutet, mit derselben Ableitung, die Cockpit → Monat benutzt
+  // (`lib/monatsLuecken`) — keine zweite Wahrheit ueber „hast du etwas offen".
+  const offenerAbschluss = useMemo(
+    () => offenerAbschlussMonat(rows.map((r) => ({ jahr: r.jahr, monat: r.monat })), new Date()),
+    [rows],
+  )
 
   // ── Monats-Block: von/bis (YYYY-MM) + Vergleich ──
   const [monVon, setMonVon] = useState('')
@@ -112,14 +160,14 @@ function TabelleInner({ basis }: { basis: AuswertungBasis }) {
   const [vglModus, setVglModus] = useState<TagVergleichModus>('vorperiode')
   const [vglJahr, setVglJahr] = useState(0)  // 0 = noch nicht initialisiert (s. Effekt)
   useEffect(() => {
-    if (!anker || tagVon) return
-    setTagVon(`${anker.jahr}-${pad(anker.monat)}-01`)
-    setTagBis(`${anker.jahr}-${pad(anker.monat)}-${pad(letzterTag(anker.jahr, anker.monat))}`)
-  }, [anker, tagVon])
+    if (!tagAnker || tagVon) return   // N-368: Tages-Anker, nicht Abschluss-Anker
+    setTagVon(`${tagAnker.jahr}-${pad(tagAnker.monat)}-01`)
+    setTagBis(`${tagAnker.jahr}-${pad(tagAnker.monat)}-${pad(letzterTag(tagAnker.jahr, tagAnker.monat))}`)
+  }, [tagAnker, tagVon])
   useEffect(() => {
-    if (!anker || vglJahr) return
-    setVglJahr(anker.jahr - 1)  // Default-Vergleichsjahr = Primär-Jahr − 1
-  }, [anker, vglJahr])
+    if (!tagAnker || vglJahr) return
+    setVglJahr(tagAnker.jahr - 1)  // Default-Vergleichsjahr = Primär-Jahr − 1
+  }, [tagAnker, vglJahr])
 
   if (anlagenLoading || loading) {
     // B8 (S15): Sicht-Skeleton in BlockShell-Form (Monatswerte offen + Energieprofile zu).
@@ -149,6 +197,12 @@ function TabelleInner({ basis }: { basis: AuswertungBasis }) {
   // ── Monats-Block-Daten ──
   const minJahr = jahre.length ? Math.min(...jahre) : (anker?.jahr ?? 0)
   const maxJahr = jahre.length ? Math.max(...jahre) : (anker?.jahr ?? 0)
+  // N-368: Die Grenzen der TAGES-Datumsauswahl kommen aus der Tagesspur. Vorher
+  // waren es die Jahre der ABSCHLUSS-Zeilen — ohne einen einzigen Abschluss also
+  // `0`, und der Picker stand auf `min="0-01-01"` / `max="0-12-31"`.
+  const tagJahre = tagMonate.map((m) => m.jahr)
+  const tagMinJahr = tagJahre.length ? Math.min(...tagJahre) : minJahr
+  const tagMaxJahr = tagJahre.length ? Math.max(...tagJahre) : maxJahr
   const { prim: monRows, vergleich: monVorjahrRows } = monatsFenster(rows, monVon, monBis)
   // #377 — Spalten je Verbrauchszähler, aus den Ständen im geladenen Fenster:
   // Ein nie abgelesener Zähler bekommt keine Spalte, sonst bestünde sie aus
@@ -157,8 +211,14 @@ function TabelleInner({ basis }: { basis: AuswertungBasis }) {
 
   const monVorjahr = monVergleich ? monVorjahrRows : null
 
+  // N-368 (Mitnahme, Gernot 2026-09-02): Der Chip trug FEST „Aktuelles Jahr" und
+  // sprang auf `anker.jahr` — das Jahr des letzten ABSCHLUSSES. Fehlt im Januar der
+  // Dezember-Abschluss, ist das Vorjahr gemeint, und die Beschriftung behauptet
+  // etwas anderes. Sichtbar wird es nur am Jahreswechsel, falsch war es immer.
+  // ⚠ Im Regelfall aendert sich NICHTS: Solange der Anker im laufenden Jahr liegt,
+  // steht dieselbe vertraute Beschriftung da (feedback_ist_anzeigen_nur_aendern_wo_noetig).
   const monChips: ZeitChip[] = anker ? [
-    { label: 'Aktuelles Jahr', range: () => [`${anker.jahr}-01`, `${anker.jahr}-12`], aktiv: monVon === `${anker.jahr}-01` && monBis === `${anker.jahr}-12` },
+    { label: anker.jahr === new Date().getFullYear() ? 'Aktuelles Jahr' : String(anker.jahr), range: () => [`${anker.jahr}-01`, `${anker.jahr}-12`], aktiv: monVon === `${anker.jahr}-01` && monBis === `${anker.jahr}-12` },
     { label: 'Alle Jahre', range: () => [`${minJahr}-01`, `${maxJahr}-12`], aktiv: monVon === `${minJahr}-01` && monBis === `${maxJahr}-12` },
   ] : []
 
@@ -209,8 +269,8 @@ function TabelleInner({ basis }: { basis: AuswertungBasis }) {
           onRange={(v, b) => { setTagVon(v); setTagBis(b) }}
           vglModus={vglModus} onVglModus={setVglModus}
           vglJahr={vglJahr} onVglJahr={setVglJahr} jahre={jahre}
-          anker={anker} anlagenname={selectedAnlage?.anlagenname}
-          minJahr={minJahr} maxJahr={maxJahr}
+          anker={tagAnker} anlagenname={selectedAnlage?.anlagenname}
+          minJahr={tagMinJahr} maxJahr={tagMaxJahr}
         />
       ),
     })
@@ -220,6 +280,36 @@ function TabelleInner({ basis }: { basis: AuswertungBasis }) {
     <div className="p-3 sm:p-6 max-w-[1920px] mx-auto space-y-4">
       {/* R19-4c (Rainer, Gernot-Entscheid 2026-07-17): kein „Werkbank"-Jargon im Titel. */}
       <h1 className="text-lg font-bold text-gray-900 dark:text-white">Monats- &amp; Tageswerte</h1>
+      {/* N-368, zweite Haelfte (Gernot 2026-09-02): Die Tageswerte stehen seit N-368 auf
+          dem neuesten GEMESSENEN Monat — damit darf der offene Abschluss nicht stillschweigend
+          verschwinden. Er wird BENANNT samt Weg dorthin, statt sich als schiefer Zeitraum
+          anzudeuten; genau daran ist die stille Variante gescheitert (der Melder hielt sie
+          fuer einen Update-Fehler und schrieb einen Fehlerbericht). Der Knopf ist derselbe
+          wie in Cockpit → Monat (`MonatRahmen`), die Ableitung dieselbe (`lib/monatsLuecken`)
+          — kein zweiter Turm ueber „hast du etwas offen".
+          ⛔ Er steht auf SICHT-Ebene und NICHT im Tages-Block: der ist `defaultOpen: false`
+          und mountet lazy, ein Hinweis darin waere zugeklappt und damit unsichtbar gewesen.
+          Die erste Fassung hatte genau diesen Fehler; gefunden hat ihn die Probe.
+          ⚠ Der LAUFENDE Monat taucht hier nie auf: ein Monat, der noch laeuft, kann keinen
+          Abschluss haben (`ermittleFehlendeMonate` endet am Vormonat von heute). */}
+      {(offenerAbschluss || rows.length === 0) && (
+        <Alert type="info">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <span>
+              {offenerAbschluss
+                ? <>Für <strong>{MONAT_NAMEN[offenerAbschluss.monat]} {offenerAbschluss.jahr}</strong> fehlt noch der Monatsabschluss. Die <strong>Tageswerte</strong> sind davon unberührt — die <strong>Monatswerte</strong> gibt es erst mit ihm.</>
+                : <>Für diese Anlage ist noch kein Monat abgeschlossen. Die <strong>Tageswerte</strong> sind davon unberührt — die <strong>Monatswerte</strong> gibt es erst mit einem Abschluss.</>}
+            </span>
+            <a
+              href="#/einstellungen/daten"
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors whitespace-nowrap"
+            >
+              <CalendarClock className="h-3.5 w-3.5" />
+              Abschluss starten
+            </a>
+          </div>
+        </Alert>
+      )}
       <BlockShell key="werkbank" persistKey={SICHT_KEY} bloecke={bloecke} sortierbar />
       <ParkFuss />
     </div>
@@ -329,8 +419,14 @@ function EnergieprofilBlock({
   // Primär-Schnellwahl: füllt nur von–bis (Gernot 2026-06-27). Vormonat = Monat vor dem Anker.
   const vm = anker ? (anker.monat === 1 ? { jahr: anker.jahr - 1, monat: 12 } : { jahr: anker.jahr, monat: anker.monat - 1 }) : null
   const monatRange = (j: number, m: number): [string, string] => [`${j}-${pad(m)}-01`, `${j}-${pad(m)}-${pad(letzterTag(j, m))}`]
+  // N-368: Der Chip hiess FEST „Aktueller Monat" und lieferte den Anker-Monat — genau
+  // die Zusage, die der Melder eingefordert hat. Mit dem Tages-Anker ist er im Regelfall
+  // wirklich der laufende; war eedc ein paar Tage aus, ist er es nicht, und dann sagt
+  // die Beschriftung, welcher Monat gemeint ist, statt einen falschen zu behaupten.
+  const heuteJetzt = new Date()
+  const ankerIstLaufend = !!anker && anker.jahr === heuteJetzt.getFullYear() && anker.monat === heuteJetzt.getMonth() + 1
   const chips: ZeitChip[] = anker ? [
-    { label: 'Aktueller Monat', range: () => monatRange(anker.jahr, anker.monat), aktiv: von === `${anker.jahr}-${pad(anker.monat)}-01` },
+    { label: ankerIstLaufend ? 'Aktueller Monat' : `${MONAT_KURZ[anker.monat]} ${anker.jahr}`, range: () => monatRange(anker.jahr, anker.monat), aktiv: von === `${anker.jahr}-${pad(anker.monat)}-01` },
     ...(vm ? [{ label: 'Vormonat', range: (): [string, string] => monatRange(vm.jahr, vm.monat), aktiv: von === `${vm.jahr}-${pad(vm.monat)}-01` }] : []),
   ] : []
 
