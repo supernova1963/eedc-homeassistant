@@ -224,6 +224,35 @@ Das Script macht automatisch:
 4. Synchronisiert backend/ + frontend/ nach eedc-Standalone
 5. Committed + taggt + pusht eedc
 
+> ⚠ **Einmal beobachtet am 2026-09-02, KEIN Fund (Entscheid Gernot) — aber beim nächsten Lauf
+> gezielt nachsehen.** Bei v4.0.38 brach `release.sh` in Schritt 4 ab: `git push origin "vX"`
+> meldete `cannot lock ref … reference already exists`, obwohl der Tag im selben Lauf erst
+> angelegt worden war. Wegen `set -euo pipefail` endete das Script dort und übersprang damit
+> **Schritt 5–7** — den Standalone-Sync **und** `warte-auf-image.sh`, also ausgerechnet die
+> Prüfung, die den fehlenden Build gemeldet hätte. Folge: Code und Tag waren draußen, der
+> **Release-Workflow lief nie** (er hört auf `push: tags: 'v*'`, und ein Push-Event für den Tag
+> gab es nicht) ⇒ kein Image, kein GitHub-Release; die HA-App fand nichts.
+>
+> **Behoben durch:** Tag remote löschen und identisch neu pushen (`git push --delete origin vX`
+> dann `git push origin vX`) — das erzeugt das Event, der Workflow läuft. Schritt 5–6 lassen sich
+> aus `release.sh` (Zeilen 314–404) als Wiederaufnahme-Skript nachfahren.
+>
+> ⛔ **Ursache ungeklärt und NICHT geraten:** `push.followTags` ist nicht gesetzt, es gibt keine
+> Hooks und keine Push-Refspec, und im **eedc-Repo lief derselbe Scriptcode sauber**
+> (`* [new tag]`). Eine Parallel-Session scheidet aus — deren Tag-Push hätte den Workflow
+> ausgelöst. GitHub-Status am selben Tag geprüft: kein Incident.
+>
+> ⚑ **Deshalb ist es kein Fund:** ein Einzelfall ohne reproduzierbare Ursache. **Tritt es beim
+> nächsten Release WIEDER auf, ist es die zweite Runde und wird ein Fund** — dann trägt die
+> Beobachtung, und der Fix ist ohnehin ursachenunabhängig: ein abgebrochener Tag-Push darf nicht
+> dazu führen, dass die Image-Prüfung entfällt.
+>
+> ⚠ **Und ein Prüfer-Hinweis aus demselben Vorgang:** Ein `curl` gegen die GHCR-Manifest-API
+> **ohne `Accept`-Header antwortet 404**, auch wenn das Image existiert. Wer so misst, meldet
+> ein fehlendes Image, das da ist — am 02.09. genau so passiert. Immer mit
+> `Accept: application/vnd.oci.image.index.v1+json,…` und **immer mit Positivkontrolle gegen die
+> Vorgängerversion**.
+
 **Versionsdateien (5 Stück, alle in eedc/):**
 
 | Datei | Zweck |
