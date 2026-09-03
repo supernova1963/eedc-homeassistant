@@ -889,6 +889,12 @@ async def run_migrations(conn):
             existing_columns = {col['name'] for col in inspector.get_columns('tages_zusammenfassung')}
             if 'komponenten_kwh' not in existing_columns:
                 connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN komponenten_kwh JSON'))
+            # N-384: GTI-Tagessumme — der NENNER der Performance Ratio. Rein additiv,
+            # Bestandszeilen bleiben NULL („nicht erhoben", keine 0). Ohne diese Spalte
+            # war die Kennzahl für niemanden nachrechenbar; angezeigt wurde daneben die
+            # horizontale Globalstrahlung, die nicht in ihrer Formel steht.
+            if 'gti_summe_wh_m2' not in existing_columns:
+                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN gti_summe_wh_m2 FLOAT'))
             # v3.3.0: PV-Prognose für Lernfaktor
             if 'pv_prognose_kwh' not in existing_columns:
                 connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN pv_prognose_kwh FLOAT'))

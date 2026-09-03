@@ -425,6 +425,7 @@ async def baue_tage_werte(
             temperatur_min_c=(tz.temperatur_min_c if tz else None),
             temperatur_max_c=(tz.temperatur_max_c if tz else None),
             strahlung_summe_wh_m2=(tz.strahlung_summe_wh_m2 if tz else None),
+            gti_summe_wh_m2=(tz.gti_summe_wh_m2 if tz else None),
             boersenpreis_avg_cent=(tz.boersenpreis_avg_cent if tz else None),
             boersenpreis_min_cent=(tz.boersenpreis_min_cent if tz else None),
             negative_preis_stunden=(tz.negative_preis_stunden if tz else None),

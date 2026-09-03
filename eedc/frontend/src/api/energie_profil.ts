@@ -56,6 +56,11 @@ export interface TagesZusammenfassung {
   temperatur_min_c: number | null
   temperatur_max_c: number | null
   strahlung_summe_wh_m2: number | null
+  /** N-384: der NENNER der Performance Ratio (Einstrahlung auf die Modulfläche,
+   *  kWp-gewichtet). `null` bei Tagen von vor der Spalte — dann darf KEINE
+   *  Bezugsgröße angezeigt werden, insbesondere nicht `strahlung_summe_wh_m2`
+   *  (das ist die horizontale Strahlung und steht nicht in der PR-Formel). */
+  gti_summe_wh_m2: number | null
   performance_ratio: number | null
   stunden_verfuegbar: number
   datenquelle: string | null
@@ -154,6 +159,11 @@ export interface TagWerte {
   temperatur_min_c: number | null
   temperatur_max_c: number | null
   strahlung_summe_wh_m2: number | null
+  /** N-384: der NENNER der Performance Ratio (Einstrahlung auf die Modulfläche,
+   *  kWp-gewichtet). `null` bei Tagen von vor der Spalte — dann darf KEINE
+   *  Bezugsgröße angezeigt werden, insbesondere nicht `strahlung_summe_wh_m2`
+   *  (das ist die horizontale Strahlung und steht nicht in der PR-Formel). */
+  gti_summe_wh_m2: number | null
   boersenpreis_avg_cent: number | null
   boersenpreis_min_cent: number | null
   negative_preis_stunden: number | null

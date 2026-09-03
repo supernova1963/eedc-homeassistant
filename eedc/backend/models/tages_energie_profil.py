@@ -197,9 +197,26 @@ class TagesZusammenfassung(Base):
     temperatur_min_c: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     temperatur_max_c: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     strahlung_summe_wh_m2: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    # Summe Globalstrahlung über den Tag (Wh/m²)
+    # Summe Globalstrahlung über den Tag (Wh/m²) — HORIZONTAL (GHI, OpenMeteo
+    # `shortwave_radiation`). ⛔ NICHT der Nenner der Performance Ratio, s. unten.
 
-    # Performance Ratio: IST-Ertrag / (Strahlung × kWp × 1/1000)
+    # Summe der Modulebenen-Einstrahlung über den Tag (Wh/m², kWp-gewichtet über
+    # alle Orientierungsgruppen) — GTI, OpenMeteo `global_tilted_irradiance`.
+    #
+    # ⭐ N-384 (2026-09-03): DAS IST DER NENNER DER PERFORMANCE RATIO, und bis hierher
+    # wurde er nirgends gespeichert. `aggregator.py` hat ihn je Tag berechnet, durch ihn
+    # geteilt und wieder verworfen; angezeigt wurde daneben `strahlung_summe_wh_m2` —
+    # also die WAAGERECHTE Strahlung, die nicht in der Formel steht. Wer nachrechnete,
+    # bekam zwangsläufig eine andere Zahl, und der Widerspruch war für niemanden
+    # auflösbar, auch nicht für uns. Aufgefallen an coolxmad (#353), der seit dem 30.07.
+    # an genau dieser Zahl misst.
+    # ⛔ RÜCKWÄRTS LEER: Bestandszeilen bleiben NULL. NULL heißt „nicht erhoben" — dort
+    # darf KEINE Zahl stehen, insbesondere nicht wieder die GHI (derselbe Fehler mit
+    # neuem Etikett). Die Anzeige lässt die Bezugsgröße dann weg.
+    gti_summe_wh_m2: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # Performance Ratio: IST-Ertrag / (GTI × kWp / 1000) — Modulebene, nicht horizontal
+    # (#139: mit GHI liefen PR-Werte im Winter künstlich auf 1,5–2,8).
     performance_ratio: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # PV-Prognose (kWh): Vom Wetter-Endpoint berechnete Tagesprognose.

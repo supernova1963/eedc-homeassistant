@@ -41,6 +41,11 @@ _AGGREGATOR_SETTER_FELDER: frozenset[str] = frozenset({
     "temperatur_min_c",
     "temperatur_max_c",
     "strahlung_summe_wh_m2",
+    # N-384: der NENNER der Performance Ratio (Modulebene/GTI). Fall (a) —
+    # `aggregate_day` bildet ihn ohnehin fuer die PR und schreibt ihn seit
+    # 03.09.2026 auch. Er steht bewusst NEBEN `strahlung_summe_wh_m2` und
+    # ersetzt sie nicht: die horizontale Strahlung bleibt eine eigene Groesse.
+    "gti_summe_wh_m2",
     "performance_ratio",
     "stunden_verfuegbar",
     "datenquelle",

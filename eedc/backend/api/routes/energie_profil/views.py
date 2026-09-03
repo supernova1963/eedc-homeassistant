@@ -156,6 +156,7 @@ async def get_tages_zusammenfassungen(
             temperatur_min_c=t.temperatur_min_c,
             temperatur_max_c=t.temperatur_max_c,
             strahlung_summe_wh_m2=t.strahlung_summe_wh_m2,
+            gti_summe_wh_m2=t.gti_summe_wh_m2,
             performance_ratio=t.performance_ratio,
             stunden_verfuegbar=t.stunden_verfuegbar,
             datenquelle=t.datenquelle,

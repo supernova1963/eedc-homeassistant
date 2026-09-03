@@ -217,6 +217,11 @@ const TAG_BASIS = {
   temperatur_min_c: null,
   temperatur_max_c: null,
   strahlung_summe_wh_m2: null,
+  // N-384: der Nenner der Performance Ratio (Modulebene/GTI). `null` ist hier die
+  // richtige Nullstellung — das ist der Zustand eines Tages von VOR der Spalte, und
+  // die Anzeige muss ihn aushalten, ohne ersatzweise die horizontale Strahlung zu
+  // zeigen. Wer eine PR-Kachel prüft, setzt den Wert in seiner eigenen Fixture.
+  gti_summe_wh_m2: null,
   boersenpreis_avg_cent: null,
   boersenpreis_min_cent: null,
   negative_preis_stunden: null,

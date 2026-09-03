@@ -291,6 +291,11 @@ class TagesZusammenfassungResponse(BaseModel):
     temperatur_min_c: Optional[float] = None
     temperatur_max_c: Optional[float] = None
     strahlung_summe_wh_m2: Optional[float] = None
+    # N-384: der NENNER der Performance Ratio (Modulebene, kWp-gewichtet). Ohne ihn
+    # war die Kennzahl nicht nachrechenbar — angezeigt wurde `strahlung_summe_wh_m2`,
+    # also die HORIZONTALE Strahlung, die nicht in ihrer Formel steht. `None` bei
+    # Bestandszeilen von vor der Spalte: „nicht erhoben", keine 0.
+    gti_summe_wh_m2: Optional[float] = None
     performance_ratio: Optional[float] = None
     stunden_verfuegbar: int = 0
     datenquelle: Optional[str] = None
@@ -420,6 +425,11 @@ class TagWerteResponse(BaseModel):
     temperatur_min_c: Optional[float] = None
     temperatur_max_c: Optional[float] = None
     strahlung_summe_wh_m2: Optional[float] = None
+    # N-384: der NENNER der Performance Ratio (Modulebene, kWp-gewichtet). Ohne ihn
+    # war die Kennzahl nicht nachrechenbar — angezeigt wurde `strahlung_summe_wh_m2`,
+    # also die HORIZONTALE Strahlung, die nicht in ihrer Formel steht. `None` bei
+    # Bestandszeilen von vor der Spalte: „nicht erhoben", keine 0.
+    gti_summe_wh_m2: Optional[float] = None
     boersenpreis_avg_cent: Optional[float] = None
     boersenpreis_min_cent: Optional[float] = None
     negative_preis_stunden: Optional[int] = None

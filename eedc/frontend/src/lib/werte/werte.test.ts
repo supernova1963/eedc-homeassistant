@@ -49,7 +49,7 @@ function tw(datum: string, over: Partial<TagWerte> = {}): TagWerte {
     peak_netzbezug_kw: 1.1, peak_einspeisung_kw: 4.0, grundlast_kw: 0.38,
     performance_ratio: 0.85, batterie_vollzyklen: 0.4,
     temperatur_min_c: 10, temperatur_max_c: 22,
-    strahlung_summe_wh_m2: 5000, boersenpreis_avg_cent: 9.5,
+    strahlung_summe_wh_m2: 5000, gti_summe_wh_m2: null, boersenpreis_avg_cent: 9.5,
     boersenpreis_min_cent: -1, negative_preis_stunden: 1,
     einspeisung_neg_preis_kwh: 0,
     ...over,

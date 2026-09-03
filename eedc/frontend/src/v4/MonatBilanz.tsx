@@ -122,7 +122,11 @@ export function baueMonatKpis(
       ? [{
           title: 'Performance Ratio', value: fmtCalc(prAvg, 2, '—'), color: 'gray' as const, icon: Gauge,
           subtitle: 'Monats-Ø',
-          formel: 'Ø der täglichen Performance Ratio (Ertrag ÷ Einstrahlung × kWp)',
+          // N-384: „Einstrahlung" allein war mehrdeutig — gerechnet wird gegen die
+          // MODULEBENEN-Einstrahlung (GTI), nicht gegen die horizontale. Hier steht
+          // bewusst KEINE eigene Einstrahlungszahl: der Monats-Ø mittelt Tages-PRs,
+          // er teilt nicht selbst. Die Zahl steht in Cockpit → Tag.
+          formel: 'Ø der täglichen Performance Ratio (Ertrag ÷ Einstrahlung auf die Modulfläche × kWp)',
         }]
       : []),
     ...baueNetzKostenKpis(d),

@@ -817,6 +817,11 @@ async def aggregate_day(
         temperatur_min_c=round(min(temp_values), 1) if temp_values else None,
         temperatur_max_c=round(max(temp_values), 1) if temp_values else None,
         strahlung_summe_wh_m2=round(strahlung_summe, 0) if strahlung_summe > 0 else None,
+        # N-384: der NENNER der Performance Ratio, damit sie nachrechenbar wird. Er
+        # wurde hier schon immer gebildet (s. `gti_summe` oben) — nur nie gespeichert,
+        # während daneben die horizontale `strahlung_summe` angezeigt wurde. `None`
+        # statt 0, wenn es keine gab: 0 wäre eine Behauptung, NULL ist eine Lücke.
+        gti_summe_wh_m2=round(gti_summe, 0) if gti_summe > 0 else None,
         performance_ratio=performance_ratio,
         stunden_verfuegbar=stunden_count,
         datenquelle=source.to_db_string(),

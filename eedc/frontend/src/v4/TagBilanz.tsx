@@ -216,7 +216,15 @@ export function TagBilanz({
     : prPct >= 60 ? 'hoch' as const
     : 'kritisch' as const
   const PR_WORT = { gut: 'sehr gut', maessig: 'solide', hoch: 'mäßig', kritisch: 'auffällig niedrig' } as const
-  const strahlungKwh = t.strahlung_summe_wh_m2 != null ? t.strahlung_summe_wh_m2 / 1000 : null
+  // N-384: Die Performance Ratio wird gegen die MODULEBENEN-Einstrahlung gerechnet
+  // (GTI, `aggregator.py`) — hier stand bis zum 03.09.2026 `strahlung_summe_wh_m2`,
+  // also die HORIZONTALE Globalstrahlung. Die Kachel setzte damit in ihre eigene Formel
+  // („Ertrag ÷ (Einstrahlung × kWp)") eine Größe ein, die nicht in ihr vorkommt: wer
+  // nachrechnete, bekam zwangsläufig eine andere Zahl. Bei 38° Neigung im September
+  // liegt GTI grob 5–30 % über GHI. Aufgefallen an coolxmad (#353), der genau das tat.
+  // ⛔ `null` für Tage vor der Spalte: dann steht die Bezugsgröße GAR NICHT da. Wieder
+  // die GHI einzusetzen wäre derselbe Fehler mit neuem Etikett.
+  const gtiKwh = t.gti_summe_wh_m2 != null ? t.gti_summe_wh_m2 / 1000 : null
 
   // Tages-Spitzen (Tag-native) — Peak PV + Temperatur (PR steht prominent oben).
   const spitzen: { label: string; value: string }[] = []
@@ -290,18 +298,18 @@ export function TagBilanz({
           {prPct != null && prStufe != null ? (
             <BilanzKachel
               label="Performance Ratio"
-              formel="Ertrag ÷ (Einstrahlung × kWp)"
-              berechnung={strahlungKwh != null ? `bei ${fmt(strahlungKwh, 1)} kWh/m² Einstrahlung` : undefined}
+              formel="Ertrag ÷ (Einstrahlung auf die Modulfläche × kWp)"
+              berechnung={gtiKwh != null ? `bei ${fmt(gtiKwh, 1)} kWh/m² auf der Modulfläche` : undefined}
               ergebnis={`= ${fmt(prPct, 0)} %`}
               wert={`${fmt(prPct, 0)} %`}
               wertClass={AMPEL_TEXT_CLASS[prStufe]}
-              subtitle={<>{PR_WORT[prStufe]}{strahlungKwh != null ? ` · bei ${fmt(strahlungKwh, 1)} kWh/m²` : ''}</>}
+              subtitle={<>{PR_WORT[prStufe]}{gtiKwh != null ? ` · bei ${fmt(gtiKwh, 1)} kWh/m² auf der Modulfläche` : ''}</>}
               subtitleRechts
             />
           ) : (
             <>
               <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
-                <FormelTooltip formel="Ertrag ÷ (Einstrahlung × kWp)">Performance Ratio</FormelTooltip>
+                <FormelTooltip formel="Ertrag ÷ (Einstrahlung auf die Modulfläche × kWp)">Performance Ratio</FormelTooltip>
               </p>
               <p className="text-xs text-gray-400 dark:text-gray-500">Keine Einstrahlungsdaten für diesen Tag — PR nicht berechenbar.</p>
             </>
