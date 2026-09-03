@@ -171,11 +171,17 @@ Netto-Ertrag (EUR)       = Einspeise-Erlös + EV-Ersparnis
 CO2-Einsparung (kg)      = PV_Erzeugung * 0.38               (VERALTET — s. Kasten)
 ```
 
-> **Hinweis „PV_Eigenverbrauch".** Der Eigenverbrauch, der zu **Geld** wird, ist der aus PV-Modulen
-> und Balkonkraftwerk. Ein Erzeuger unter *Sonstiges* — BHKW, Windrad, Wasserkraft — zählt in die
-> **Mengen**-Bilanz (Eigenverbrauch, Autarkie, EV-Quote), weil der Zähler am einen Netzanschluss die
-> Summe aller Erzeuger dahinter misst; seinen **finanziellen** Nutzen bewertet eedc dagegen nicht
-> selbst, sondern nimmt ihn aus dem gepflegten Feld `Investition.einsparung_prognose_jahr`
+> **Hinweis „Eigenverbrauch".** Der Eigenverbrauch, der zu **Geld** wird, ist derselbe wie der in
+> der Mengen-Bilanz: die Erzeugung **hinter dem Zähler** — PV-Module, Balkonkraftwerk **und** ein
+> Erzeuger unter *Sonstiges* (BHKW, Windrad, Wasserkraft). Der Zähler am einen Netzanschluss misst
+> die Summe aller Erzeuger dahinter; was davon nicht eingespeist wurde, hat Netzbezug ersetzt.
+> Menge und Betrag meinen deshalb dieselbe Kilowattstunde.
+>
+> ⚑ **Nicht bewertet wird das GERÄT, nicht sein Strom.** Ein sonstiger Erzeuger bekommt keine eigene
+> Ertrags-Zeile und keine Wirtschaftlichkeit — sein Ertrag wird am Gerät als
+> `Investition.einsparung_prognose_jahr` („Ertrag/Jahr") gepflegt, weil eedc seinen Brennstoff nicht
+> kennt. **Geändert am 2026-09-03** (Maintainer-Entscheid, löst v3.45.4 ab); bis dahin nahm die
+> Finanz-Zeile die PV-Achse, und Menge und Betrag zählten verschiedene Erzeuger.
 > („Ertrag/Jahr"). Beide Größen liegen in **derselben** Summe (`aussichten.py::jahres_netto_ertrag`)
 > — würde die Menge zusätzlich monetarisiert, stünde derselbe Nutzen zweimal darin.
 >
@@ -309,10 +315,14 @@ aus, weil dieselbe Kennzahl im Community-Vergleich steht.
 **Achsen-Trennung (bewusst):** PV-**eigene** Kennzahlen (spez. Ertrag, Performance-
 Ratio, SOLL/IST, kWp) nutzen **nur** `PV_Erzeugung`, nicht `Erzeugung_gesamt` — ein
 sonstiger Erzeuger ist energetisch Erzeuger, aber kein PV-Modul. Ebenso bleibt
-**CO₂/Wirtschaftlichkeit quellenspezifisch**: ein brennstoffbasierter Erzeuger (BHKW)
-spart kein CO₂, sondern emittiert, und hat Brennstoffkosten — er bekommt daher keine
-PV-artige CO₂-Ersparnis (bewertet als „nicht bewertet", bis ein eigenes BHKW-Modell
-existiert). **Insel-Anlagen** (kein Netzanschluss, kein Bezug/keine Einspeisung)
+**CO₂ und Geräte-Wirtschaftlichkeit quellenspezifisch**: Ein Erzeuger unter *Sonstiges*
+bekommt **keine** PV-artige CO₂-Gutschrift und keine eigene Wirtschaftlichkeit. Der Grund
+gilt für die ganze Kategorie, nicht nur fürs BHKW: **eedc kennt den Vergleichswert nicht.**
+Ein verbrennender Erzeuger emittiert, statt einzusparen; bei einem Windrad oder einer
+Wasserkraftanlage fehlt umgekehrt jede belastbare Grundlage für Anschaffung, Wartung und
+Lebensdauer. Beides steht als „nicht bewertet" da, und der Ertrag wird am Gerät gepflegt.
+⚑ **Sein Strom ist davon unberührt** — er zählt in Menge *und* Geldwert der Anlage voll mit
+(seit 2026-09-03, s. §3.2). **Insel-Anlagen** (kein Netzanschluss, kein Bezug/keine Einspeisung)
 fallen nicht unter diese Bilanz — das ist ein Anlagen-Merkmal (eigenes KZ, geplant).
 
 **Messpunkt der Sensoren (DC vs. AC):** Die Bilanz rechnet mit den Werten, die die Geräte
@@ -1471,11 +1481,17 @@ Auswertungen bereits, während der Client dort ohne ihn rechnete.
 > gegen eine Ein-Jahres-Abschreibung, die USt fiel um den Faktor der Jahresanzahl zu
 > niedrig aus. Beides ist mit dem Layer-SoT aufgelöst.
 >
-> ⚠ **Was weiterhin auseinandergeht:** *welche Menge* als Eigenverbrauch eingeht.
-> Cockpit und HA-Export setzen den **Netzpunkt**-Eigenverbrauch ein (inklusive eines
-> Brennstoff-Erzeugers), Jahresbericht, Aussichten und die Monatszeile den
-> **Finanz**-Eigenverbrauch (PV allein). Bei einer Anlage mit Mini-BHKW nennen die
-> beiden Gruppen deshalb verschiedene USt-Beträge. Register **N-131**.
+> ✅ **Seit 2026-09-03 geht hier nichts mehr auseinander.** Bis dahin setzten Cockpit und
+> HA-Export den **Netzpunkt**-Eigenverbrauch ein (inklusive eines sonstigen Erzeugers),
+> Jahresbericht, Aussichten und die Monatszeile dagegen den **Finanz**-Eigenverbrauch
+> (PV allein) — bei einer Anlage mit Mini-BHKW nannten die beiden Gruppen deshalb
+> verschiedene USt-Beträge. Mit der Umstellung von `finanz_zeile_eingabe` auf
+> `erzeugung.hinter_zaehler_kwh` liegen **alle** auf dem Netzpunkt-Eigenverbrauch.
+> Register **N-131** / **N-375**.
+>
+> ⚠ **Was dagegen offen bleibt** (Register **N-376**): Die Selbstkosten je kWh teilen die
+> Kosten **aller** Investitionen durch die Erzeugung der **PV allein** — Zähler und Nenner
+> zählen verschiedene Grundgesamtheiten.
 
 ### 3.8 CO2-Bilanz
 
@@ -1548,8 +1564,10 @@ CO2_gesamt = CO2_PV + max(0, CO2_WP) + max(0, CO2_E-Mob)
 > „CO₂ Einsparung", WP-Dashboard und der PDF-Jahresbericht** rufen dieselben Helfer auf und zeigen daher
 > **denselben Wert** (vorher rechneten einzelne Pfade `pv_erzeugung × f_strom` bzw. eigene WP-Formeln →
 > Drift). Die WP- und E-Mob-Komponente werden für die Summe bei 0 geklammert (negative Einzelwerte
-> kürzen die Gesamtbilanz nicht). **Brennstoff-Erzeuger** (BHKW/„sonstiges") erzeugen bewusst **keine**
-> CO₂-Gutschrift — sie zählen zwar in EV/Autarkie (hinter dem Zähler), aber nicht als vermiedenes CO₂.
+> kürzen die Gesamtbilanz nicht). Erzeuger unter **„Sonstiges"** (BHKW, Windrad, Wasserkraft) erzeugen bewusst **keine**
+> CO₂-Gutschrift — sie zählen in EV/Autarkie und im Geldwert (hinter dem Zähler), aber nicht als
+> vermiedenes CO₂: eedc kennt weder die Emissionen eines verbrennenden Erzeugers noch den
+> Vergleichsmaßstab eines emissionsfreien.
 
 #### Äquivalente
 

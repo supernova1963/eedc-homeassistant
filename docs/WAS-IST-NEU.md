@@ -47,7 +47,29 @@ Jetzt gilt für die Kosten dieselbe Grenze wie für alles andere: vom Anschaffun
 Stilllegungsdatum. Vergangene Monate sehen dadurch günstiger aus — und das ist der
 richtige Wert.
 
-**Ein BHKW wird einmal bewertet, nicht zweimal**
+**Dein zweiter Erzeuger zählt jetzt überall gleich**
+
+Hast du unter *Sonstiges* einen Erzeuger — ein Blockheizkraftwerk, ein Windrad, eine kleine
+Wasserkraftanlage —, dann speist er hinter denselben Hauszähler wie deine PV-Anlage. In der
+**Energiebilanz** zählte sein Strom immer voll mit: Eigenverbrauch, Autarkie,
+Eigenverbrauchsquote. In der **Eigenverbrauchs-Ersparnis** dagegen nicht.
+
+Unter *Auswertungen → Finanzen* stand deshalb eine Kilowattstunden-Zahl neben einem Betrag,
+der zu einer ganz anderen Menge gehörte — und *Cockpit → Monat* nannte für denselben Monat
+noch einen dritten Wert. Jetzt liegt beides auf derselben Erzeugung, und *Menge × Preis*
+geht wieder auf.
+
+⚠ **Hast du einen solchen Erzeuger, steigen Eigenverbrauchs-Ersparnis, Netto-Ertrag und
+ROI-Fortschritt dadurch sichtbar.** Es ist die Zahl, die Cockpit und T-Konto längst gezeigt
+haben. Ohne einen Erzeuger unter *Sonstiges* ändert sich für dich nichts.
+
+Am **Gerät** ändert sich ebenfalls nichts: Seine Wirtschaftlichkeit steht weiter auf „nicht
+bewertet", und was er dir einbringt, sagst du wie bisher über *„Ertrag/Jahr"* an. Bei einem
+verbrennenden Erzeuger kennt eedc den Brennstoff nicht, bei einem emissionsfreien den
+Vergleichsmaßstab — beurteilen kann es das Gerät deshalb nicht. Sein **Strom** ist davon
+unberührt: Die Kilowattstunde hat Netzbezug ersetzt, unabhängig davon.
+
+**Ein zweiter Erzeuger wird einmal bewertet, nicht zweimal**
 
 Ein sonstiger Erzeuger speist hinter denselben Hauszähler wie deine PV-Anlage. Was er
 selbst verbraucht, steckt deshalb schon in der Eigenverbrauchs-Ersparnis deiner Anlage —
