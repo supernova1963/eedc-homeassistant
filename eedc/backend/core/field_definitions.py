@@ -1534,6 +1534,55 @@ def bedingung_erfuellt(bedingung, bedingungs_werte: dict[str, bool]) -> bool:
     return True
 
 
+def groesse_gibt_es_am_geraet(
+    typ: str, feld: str, parameter: Optional[dict],
+) -> bool:
+    """Kann dieses Gerät diese Größe überhaupt haben? — **für den LESEPFAD**.
+
+    ``False`` heißt: die Größe existiert an diesem Gerät nicht (``URTEIL_NEIN``,
+    die *harte* Sorte). Ein **erweitertes** Feld gilt hier als vorhanden — es
+    ist untypisch, nicht unmöglich, und wer es gepflegt hat, meint es so.
+
+    ⭐ **Warum es diese Funktion gibt: die Erfassung kannte die Regel, der
+    Lesepfad nicht.** N-304 hat ``warmwasser_kwh`` an einer Split-Klimaanlage
+    aus der Erfassung genommen, weil das Gerät keinen Warmwasserkreis hat —
+    der Docstring von ``test_klima_ohne_warmwasser_n304.py`` benennt den Schaden
+    wörtlich: *„Ein an einer Luft-Luft-Anlage gepflegter Warmwasser-Wert erzeugt
+    eine Ersparnis für Wärme, die das Gerät nie erzeugt hat."* Ein **bereits
+    gespeicherter** Wert erzeugte sie weiter: elf Faltstellen in sechs Dateien
+    lesen ``warmwasser_kwh`` direkt aus ``verbrauch_daten``, und
+    ``ist_luft_luft_waermepumpe`` kam in keiner davon vor. Gemeldet von
+    dietmar1968 (T89667 #295) mit 889 kWh „Warmwasser" an einer Klimaanlage,
+    daraus eine Gas-Ersparnis von 38 € und eine CO₂-Zahl von −112 kg.
+
+    ⚠ **Vierte Runde der #236-Folgewellen-Klasse** (``ist-waerme-klima.md``
+    §W-12 nennt N-304 selbst die dritte): *ein Filter auf einer Schicht reicht
+    nicht, wenn mehrere Pfade dieselbe Größe lesen.* Deshalb steht hier eine
+    Frage an die **bestehende** Registry und keine zweite Regel — wer morgen
+    eine Bedingung ergänzt, bekommt den Lesepfad umsonst mit.
+
+    ⚠ **Fail-open wie die beiden Auswerter darunter.** Ein unbekannter Typ oder
+    ein unbekanntes Feld liefert ``True``: Im Lesepfad wäre die Gegenrichtung
+    schlimmer als hier — ein Tippfehler ließe eine **gemessene** Menge still aus
+    jeder Summe fallen. Gegen den Tippfehler steht der Wächter der Registry
+    (``test_b5_strom_warmwasser_luft_luft.py``), nicht diese Funktion.
+
+    ⛔ **Sie entscheidet NICHT über Abdeckung.** „Kein Zähler zugeordnet" und
+    „das Gerät hat die Größe nicht" sind verschiedene Lagen — die erste gehört
+    dem Daten-Checker, die zweite hierher. Wer diese Funktion für eine fehlende
+    Messung benutzt, blendet gute Daten aus (Entscheid 29.08., Total-Fall).
+    """
+    for eintrag in INVESTITION_FELDER.get(typ) or ():
+        if not isinstance(eintrag, dict) or eintrag.get("feld") != feld:
+            continue
+        urteil = bedingungs_urteil(
+            eintrag.get("bedingung"), eintrag.get("weich"),
+            _bedingungs_werte(parameter),
+        )
+        return urteil != URTEIL_NEIN
+    return True
+
+
 def _label_aufgeloest(feld: dict, bedingungs_werte: dict[str, bool]) -> str:
     """#281: konditionelles Label — nutzt dieselben Bedingungs-Keys wie `bedingung`."""
     for cond_key, alt_label in (feld.get("label_wenn") or {}).items():
@@ -2405,6 +2454,48 @@ def get_wp_heizenergie_kwh(data: dict) -> float:
     if not data:
         return 0.0
     return float(data.get("heizenergie_kwh") or data.get("heizung_kwh") or 0)
+
+
+def get_wp_warmwasser_kwh(data: dict, params: Optional[dict] = None) -> float:
+    """Abgegebene Warmwasser-Wärme einer Wärmepumpe — **die eine Lesetür**.
+
+    Spiegelbild zu `get_wp_heizenergie_kwh`, mit einem Zusatz: Es fragt die
+    Registry, ob **dieses Gerät die Größe überhaupt hat**
+    (`groesse_gibt_es_am_geraet`). Eine Split-Klimaanlage hat keinen
+    Warmwasserkreis; ein dort gespeicherter Wert ist keine Wärme dieses Geräts
+    und darf in keiner Summe erscheinen, die eine Abgabe behauptet.
+
+    ⭐ **N-379 — warum es diese Funktion gibt.** N-304 hat das Feld am
+    22.08.2026 aus der **Erfassung** genommen und im Docstring seiner Probe den
+    Schaden wörtlich benannt: *„Ein an einer Luft-Luft-Anlage gepflegter
+    Warmwasser-Wert erzeugt eine Ersparnis für Wärme, die das Gerät nie erzeugt
+    hat."* Für **bereits gespeicherte** Werte galt das weiter, denn elf
+    Faltstellen in sechs Dateien lasen `warmwasser_kwh` roh aus
+    `verbrauch_daten` — Hub, Cockpit → Monat, Aussichten, HA-Export und der
+    Gas-/CO₂-Vergleich. Gemeldet von dietmar1968 (T89667 #295): 889 kWh
+    „Warmwasser" an seiner Klimaanlage, daraus „Ersparnis vs. Gas 38 €" und
+    „CO₂-Ersparnis −112 kg".
+
+    ⚠ **Vierte Runde der #236-Folgewellen-Klasse.** `ist-waerme-klima.md` §W-12
+    nennt N-304 selbst die dritte: *ein Filter auf einer Schicht reicht nicht,
+    wenn mehrere Pfade dieselbe Größe lesen.* Deshalb eine Tür statt fünf
+    Pflaster — wer eine sechste Read-Site baut, liest hier.
+
+    ⛔ **Der gespeicherte Wert bleibt** (keine Migration): eedc weiß nicht, was
+    er ist, nur dass er an diesem Gerät keine Warmwasser-Wärme sein kann. Der
+    Daten-Checker benennt ihn und nennt seinen Platz.
+
+    ⛔ **Ohne `params` verhält sie sich wie der Rohzugriff.** Das ist kein
+    Schlupfloch, sondern die Lage der Aufrufer, die keine Investition zur Hand
+    haben (Import-/Schreibpfade); sie sollen nichts filtern.
+    """
+    if not data:
+        return 0.0
+    if params is not None and not groesse_gibt_es_am_geraet(
+        "waermepumpe", "warmwasser_kwh", params
+    ):
+        return 0.0
+    return float(data.get("warmwasser_kwh") or 0)
 
 
 def get_eauto_ladung_kwh(data: dict) -> float:

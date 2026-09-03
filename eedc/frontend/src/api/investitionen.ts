@@ -224,6 +224,12 @@ export interface WaermepumpeDashboardResponse {
     gesamt_heizenergie_kwh: number
     gesamt_warmwasser_kwh: number
     gesamt_waerme_kwh: number
+    /** N-379 / SOLL §3.3/S2 — hat dieses Gerät die Warmwasser-Achse überhaupt?
+     *  Eine Split-Klimaanlage hat keinen Warmwasserkreis (N-304), und die
+     *  Aufteilung stand trotzdem als festes Paar Heizung/Warmwasser da.
+     *  ⛔ Sagt NICHT „hier fehlt ein Zähler" — das ist Sache des Daten-Checkers.
+     *  Optional, damit ältere Antworten (Cache) das Bisherige zeigen. */
+    hat_warmwasser_achse?: boolean
     /** F-42: `null` = nicht bewertet, nicht „0". `durchschnitt_cop` ohne
      *  gemessene Wärme, die drei Vergleichsgrößen ohne ersetzte Heizung —
      *  eine Klimaanlage im Neubau hat weder JAZ noch Gaskessel-Ersparnis.

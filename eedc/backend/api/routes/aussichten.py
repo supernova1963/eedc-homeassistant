@@ -60,7 +60,11 @@ from backend.core.berechnungen.ust_eigenverbrauch import (
     bemessungsgrundlage_aus_investitionen,
     ust_eigenverbrauch_fuer_anlage,
 )
-from backend.core.field_definitions import get_emob_pv_netz_kwh, get_wp_strom_kwh
+from backend.core.field_definitions import (
+    get_emob_pv_netz_kwh,
+    get_wp_strom_kwh,
+    get_wp_warmwasser_kwh,
+)
 from backend.services.eauto_wirtschaftlichkeit import (
     berechne_eauto_ersparnis_periode,
     build_emob_pool_ctx,
@@ -1514,8 +1518,10 @@ async def get_finanz_prognose(
         wp_agg = wp_aggregate[wp.id]
         for (inv_id, jahr, monat), daten in historische_inv_daten.items():
             if inv_id == wp.id and wp.ist_aktiv_im_monat(jahr, monat):
+                # N-379: dieselbe Lesetuer wie im Layer — sonst traegt die
+                # Aussicht eine Waermemenge weiter, die es am Geraet nicht gibt.
                 thermisch = (daten.get("heizenergie_kwh", 0) or 0) + (
-                    daten.get("warmwasser_kwh", 0) or 0
+                    get_wp_warmwasser_kwh(daten, wp.parameter)
                 )
                 gesamt_wp_thermisch += thermisch
                 wp_agg["thermisch_kwh"] += thermisch

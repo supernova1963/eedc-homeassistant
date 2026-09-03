@@ -96,3 +96,90 @@ def test_live_felder_kennen_die_negierte_bedingung():
     nur_klima = {f.get("key") for f in get_live_felder_fuer_investition("waermepumpe", KLIMA)}
     # Die luft_luft-Felder kommen hinzu, die anderen bleiben erhalten.
     assert vorher <= nur_klima
+
+
+# ============================================================================
+# N-379 — **die andere Hälfte: der LESEPFAD** (03.09.2026, dietmar1968 #295)
+# ============================================================================
+#
+# ⭐ **Der Docstring oben beschrieb den Schaden — und er trat weiter ein.**
+# N-304 hat das Feld aus der *Erfassung* genommen; ein VORHER gepflegter Wert
+# blieb in der Zeile stehen und wurde von elf Faltstellen in sechs Dateien roh
+# aus `verbrauch_daten` gelesen. `ist_luft_luft_waermepumpe` kam in keiner davon
+# vor. Gemeldet: 889 kWh „Warmwasser" an einer Split-Klimaanlage, daraus
+# „Wärme erzeugt 889 kWh", eine Arbeitszahl von 1,09, „Ersparnis vs. Gas 38 €"
+# und „CO₂-Ersparnis −112 kg" (T89667 #295).
+#
+# ⚠ **Vierte Runde der #236-Folgewellen-Klasse**: N-86 (nur `get_feld_bedarf`)
+# → N-304 (Monatsabschluss) → W-12 (Zuordnungs-Fläche) → hier der Lesepfad.
+# *Ein Filter auf einer Schicht reicht nicht, wenn mehrere Pfade dieselbe Größe
+# lesen.* Deshalb prüft der erste Test die **Registry-Frage** und der zweite die
+# **eine Lesetür** — nicht sechs Aufrufer einzeln.
+
+from backend.core.berechnungen.imd_monatsaggregat import imd_typ_beitrag
+from backend.core.field_definitions import (
+    get_wp_warmwasser_kwh,
+    groesse_gibt_es_am_geraet,
+)
+
+ZEILE = {"heizenergie_kwh": 800.0, "warmwasser_kwh": 889.0,
+         "stromverbrauch_kwh": 300.0}
+
+
+class _Inv:
+    """Nur so viel Investition, wie `imd_typ_beitrag` liest."""
+    def __init__(self, parameter):
+        self.typ = "waermepumpe"
+        self.parameter = parameter
+
+
+def test_registry_sagt_dem_lesepfad_dass_es_die_groesse_nicht_gibt():
+    """Die Frage, aus der alles Übrige folgt — an derselben Registry."""
+    assert groesse_gibt_es_am_geraet("waermepumpe", "warmwasser_kwh", KLIMA) is False
+    assert groesse_gibt_es_am_geraet("waermepumpe", "warmwasser_kwh", LUFT_WASSER) is True
+
+
+def test_lesetuer_gibt_an_der_klimaanlage_null_und_an_der_wp_den_wert():
+    """`get_wp_warmwasser_kwh` — die eine Tür für alle sechs Read-Sites."""
+    assert get_wp_warmwasser_kwh(ZEILE, KLIMA) == 0.0
+    assert get_wp_warmwasser_kwh(ZEILE, LUFT_WASSER) == 889.0
+
+
+def test_ohne_parameter_bleibt_die_tuer_ein_rohzugriff():
+    """Schreib-/Importpfade haben keine Investition zur Hand und filtern nichts.
+
+    ⛔ Kein Schlupfloch: Es ist die Lage der Aufrufer, die gar nicht wissen
+    können, um welches Gerät es geht — sie dürfen nichts wegnehmen.
+    """
+    assert get_wp_warmwasser_kwh(ZEILE) == 889.0
+
+
+def test_die_waermesumme_der_klimaanlage_traegt_kein_warmwasser():
+    """Die Wirkung dort, wo sie zählt: im Layer-SoT der Monatszeile.
+
+    ⭐ **Das ist der Test, der den gemeldeten Fall trifft.** `wp_waerme` speist
+    `gas_kosten_altanlage` und die CO₂-Bilanz — genau die zwei Zahlen, die auf
+    dietmars Bildschirm standen.
+    """
+    klima = imd_typ_beitrag(_Inv(KLIMA), ZEILE)
+    assert klima.wp_warmwasser == 0.0
+    assert klima.wp_waerme == 800.0, "nur die Heizwärme, die es am Gerät gibt"
+
+    wp = imd_typ_beitrag(_Inv(LUFT_WASSER), ZEILE)
+    assert wp.wp_warmwasser == 889.0
+    assert wp.wp_waerme == 1689.0
+
+
+def test_der_strom_der_klimaanlage_bleibt_unangetastet():
+    """⛔ **Die Gegenrichtung, und sie ist der eigentliche Schutz.**
+
+    `strom_warmwasser_kwh` trägt dieselbe Registry-Bedingung — und wird
+    ausdrücklich **nicht** gefiltert. Diese Kilowattstunden sind über den Zähler
+    geflossen; sie herauszurechnen machte das Gerät billiger und sauberer, als
+    es ist, und `get_wp_strom_kwh` zählt sie im getrennten Zweig weiter in die
+    Gesamtsumme. Ohne diese Probe wäre eine „konsequente" Ausweitung auf den
+    Strom grün — und die Aufteilung ginge auf ihr eigenes Gesamt nicht mehr auf.
+    """
+    zeile = dict(ZEILE, strom_heizen_kwh=200.0, strom_warmwasser_kwh=100.0)
+    klima = imd_typ_beitrag(_Inv(KLIMA), zeile)
+    assert klima.wp_strom_warmwasser == 100.0

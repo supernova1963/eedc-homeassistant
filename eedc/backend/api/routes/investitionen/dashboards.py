@@ -89,6 +89,8 @@ from backend.core.field_definitions import (
     get_sonstiges_verbrauch_kwh,
     get_speicher_netzladung_kwh,
     get_wp_strom_kwh,
+    get_wp_warmwasser_kwh,
+    groesse_gibt_es_am_geraet,
     ist_gepflegte_sonstiges_kategorie,
     ist_zaehler_kategorie,
 )
@@ -834,6 +836,12 @@ async def get_waermepumpe_dashboard(
         gesamt_heizung = 0
         gesamt_warmwasser = 0
         hat_getrennte_strom = False
+        # N-379: Haengt am GERAET, nicht an der Monatszeile — einmal fragen.
+        # Eine Split-Klimaanlage hat keinen Warmwasserkreis (N-304); die Achse
+        # verschwindet dort samt Spalte, Balken und Legende (SOLL §3.3/S2).
+        _hat_warmwasser = groesse_gibt_es_am_geraet(
+            "waermepumpe", "warmwasser_kwh", wp.parameter
+        )
 
         gesamt_heizung_getrennt = 0.0  # Heizung nur für Monate mit getrennter Strommessung
         gesamt_warmwasser_getrennt = 0.0  # Warmwasser nur für Monate mit getrennter Strommessung
@@ -901,7 +909,12 @@ async def get_waermepumpe_dashboard(
             # Hub wies damit einen anderen Verbrauch aus als das Cockpit.
             gesamt_strom += get_wp_strom_kwh(d, wp.parameter)
             gesamt_heizung += d.get('heizenergie_kwh', 0)
-            gesamt_warmwasser += d.get('warmwasser_kwh', 0)
+            # N-379: die eine Lesetuer statt des Rohzugriffs. An dietmars
+            # Klimaanlage standen hier 889 kWh, die das Geraet nicht abgeben
+            # kann — sie trugen "Waerme erzeugt", die JAZ, die Gas-Ersparnis
+            # und die CO2-Zahl (T89667 #295).
+            _ww = get_wp_warmwasser_kwh(d, wp.parameter)
+            gesamt_warmwasser += _ww
             waerme_abgeleitet = waerme_abgeleitet or heizwaerme_ist_abgeleitet(
                 md.source_provenance
             )
@@ -910,7 +923,7 @@ async def get_waermepumpe_dashboard(
             # kumulierte Marke): ein einzelner abgeleiteter Monat darf die
             # übrigen nicht entwerten, und ein gemessener nicht von einem
             # abgeleiteten profitieren.
-            _md_waerme = d.get('heizenergie_kwh', 0) + d.get('warmwasser_kwh', 0)
+            _md_waerme = d.get('heizenergie_kwh', 0) + _ww
             _md_az = arbeitszahl(
                 _md_waerme, get_wp_strom_kwh(d, wp.parameter),
                 waerme_abgeleitet_kwh=(
@@ -936,7 +949,12 @@ async def get_waermepumpe_dashboard(
             _md_az_funktion = arbeitszahl_je_funktion(
                 heizung_kwh=d.get('heizenergie_kwh'),
                 strom_heizen_kwh=d.get('strom_heizen_kwh'),
-                warmwasser_kwh=d.get('warmwasser_kwh'),
+                # N-379: `None` NUR, wenn das Geraet die Groesse nicht hat.
+                # ⛔ Nicht `_ww or None` — das machte aus einer gepflegten 0
+                #   an JEDER Waermepumpe ein "—".
+                warmwasser_kwh=(
+                    d.get('warmwasser_kwh') if _hat_warmwasser else None
+                ),
                 strom_warmwasser_kwh=d.get('strom_warmwasser_kwh'),
                 # Je Zeile gefragt, nicht am Gerät: Die getrennte Strommessung
                 # kann mitten in der Historie eingeschaltet worden sein, und
@@ -970,7 +988,7 @@ async def get_waermepumpe_dashboard(
                 gesamt_strom_heizen += d.get('strom_heizen_kwh', 0)
                 gesamt_strom_warmwasser += d.get('strom_warmwasser_kwh', 0)
                 gesamt_heizung_getrennt += d.get('heizenergie_kwh', 0)
-                gesamt_warmwasser_getrennt += d.get('warmwasser_kwh', 0)
+                gesamt_warmwasser_getrennt += _ww
 
         gesamt_waerme = gesamt_heizung + gesamt_warmwasser
         # ⛔ **W-15 (26.08.): Hier stand bis zum 26.08. eine eigene Division**
@@ -1037,7 +1055,9 @@ async def get_waermepumpe_dashboard(
         bewertbar = False
         for md in monatsdaten:
             d = md.verbrauch_daten or {}
-            m_waerme = (d.get('heizenergie_kwh', 0) or 0) + (d.get('warmwasser_kwh', 0) or 0)
+            m_waerme = (d.get('heizenergie_kwh', 0) or 0) + get_wp_warmwasser_kwh(
+                d, wp.parameter
+            )  # N-379
             m_strom = d.get('stromverbrauch_kwh', 0) or 0
             if m_waerme <= 0 and m_strom <= 0:
                 continue
@@ -1149,6 +1169,17 @@ async def get_waermepumpe_dashboard(
             'gesamt_stromverbrauch_kwh': round(gesamt_strom, 1),
             'gesamt_heizenergie_kwh': round(gesamt_heizung, 1),
             'gesamt_warmwasser_kwh': round(gesamt_warmwasser, 1),
+            # N-379 / SOLL §3.3/S2 — „Ein Balken sagt, was er zeigt."
+            # Der Client baute die Aufteilung bis hierher aus einem FESTEN Paar
+            # Heizung/Warmwasser, unabhaengig davon, ob es die Achse am Geraet
+            # gibt. An dietmars Klimaanlage stand deshalb „Warmwasser 889 kWh ·
+            # 100 %" (T89667 #295), an jeder Waermepumpe ohne
+            # Warmwasser-Zaehler eine Dauer-Null (8ear, #404).
+            #
+            # ⛔ **Es sagt NICHT „hier fehlt ein Zaehler".** Abdeckung ist Sache
+            # des Daten-Checkers; hier steht nur, ob es die Groesse am Geraet
+            # ueberhaupt gibt.
+            'hat_warmwasser_achse': _hat_warmwasser,
             'gesamt_waerme_kwh': round(gesamt_waerme, 1),
             # F-42: „nicht bewertet heißt keine Zahl" (N-258-Klasse). Ohne
             # gemessene Wärme ist die JAZ keine 0, sondern unbekannt; ohne

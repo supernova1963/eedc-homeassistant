@@ -45,6 +45,7 @@ from backend.core.field_definitions import (
     get_eauto_ladung_kwh,
     get_pv_erzeugung_kwh,
     get_sonstiges_verbrauch_kwh,
+    get_wp_warmwasser_kwh,
     ist_zaehler_kategorie,
     get_speicher_netzladung_kwh,
     get_wp_heizenergie_kwh,
@@ -222,7 +223,24 @@ def imd_typ_beitrag(
         params = getattr(inv, "parameter", None) or {}
         hat_split = bool(params.get("getrennte_strommessung"))
         heizung = get_wp_heizenergie_kwh(data)
-        warmwasser = _f(data, "warmwasser_kwh")
+        # N-379: **Der Lesepfad fragt dieselbe Registry wie die Erfassung.**
+        # An einer Split-Klimaanlage gibt es keinen Warmwasserkreis (N-304); ein
+        # dort noch gespeicherter Altwert floss trotzdem in `wp_waerme` und von
+        # dort in Gas-Ersparnis und CO2-Bilanz — genau der Schaden, den der
+        # Docstring der N-304-Probe beschreibt. Der Wert bleibt in der Zeile
+        # stehen (keine Migration); er wird nur nicht mehr als Waerme dieses
+        # Geraets gelesen. Der Daten-Checker benennt ihn und nennt seinen Platz.
+        #
+        # ⛔ **Der STROM bleibt ausdrücklich ungefiltert**, obwohl
+        # `strom_warmwasser_kwh` dieselbe Bedingung trägt. Er ist eine andere
+        # Kategorie: Diese Kilowattstunden sind über den Zähler **geflossen**,
+        # die Wärme daneben ist eine Behauptung über die Abgabe. Ihn
+        # herauszurechnen machte das Gerät billiger und sauberer, als es ist —
+        # und `get_wp_strom_kwh` zählt ihn im getrennten Zweig weiter in die
+        # Gesamtsumme, sodass die Aufteilung nicht mehr auf ihr eigenes Gesamt
+        # führte. Ohne Wärme daneben sperrt `arbeitszahl` die Kennzahl ohnehin
+        # mit Grund; eine falsche Zahl entsteht dort nicht.
+        warmwasser = get_wp_warmwasser_kwh(data, params)
         # D1: waerme_kwh hat Vorrang, sonst Heizung + Warmwasser (kanonisch).
         # Seit 2026-08-26 im Layer-SoT `waermepumpe_kennzahl.waerme_gesamt_kwh`
         # — der Client hatte dieselbe Regel als zweite Stelle (Befund W-9).

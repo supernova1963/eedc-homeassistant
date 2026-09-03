@@ -1038,6 +1038,58 @@ class MonatsdatenChecks:
                 link=link_monat_erfassen(fehlend_heiz[0]),
             ))
 
+        # N-379 — **ein gespeicherter Wert, den das Gerät nicht haben kann.**
+        # N-304 hat `warmwasser_kwh` an einer Split-Klimaanlage aus der Erfassung
+        # genommen (kein Warmwasserkreis). Wer den Wert VORHER gepflegt hat, hat
+        # ihn weiterhin in der Zeile — und bis heute floss er in „Wärme erzeugt",
+        # in die Arbeitszahl, in die Gas-Ersparnis und in die CO2-Bilanz.
+        # Gemeldet von dietmar1968 (T89667 #295): 889 kWh an einer Klimaanlage,
+        # daraus 38 € „Ersparnis vs. Gas" und −112 kg CO2.
+        #
+        # ⭐ **Der Lesepfad rechnet ihn nicht mehr mit** (`get_wp_warmwasser_kwh`).
+        # Diese Zeile ist die andere Hälfte davon: Ohne sie verschwände die Menge
+        # wortlos vom Bildschirm — und das wäre dieselbe Auskunftslosigkeit, nur
+        # in der Gegenrichtung (SOLL §3.3/**S3**: eine Sicht, die weniger zeigt
+        # als die Nachbarsicht, sagt warum).
+        #
+        # ⛔ **Kein zweiter Turm** (Tor 3): Geprüft wurde die vollständige
+        # Kategorien-Liste des Daten-Checkers — für „Wert in einem Feld, das es
+        # am Gerät nicht gibt" gab es keine Meldung. Die Bauform ist die bereits
+        # bestehende INFO über den obsoleten Gesamt-Strom-Sensor darüber.
+        #
+        # ⛔ **Der Wert wird NICHT gelöscht und NICHT migriert.** eedc weiß nicht,
+        # was er ist — nur, dass er hier keine Warmwasser-Wärme sein kann. Die
+        # wahrscheinlichste Herkunft steht als Angebot daneben, nicht als Urteil.
+        if ist_klima:
+            unmoeglich = sorted(
+                f"{m:02d}/{j}"
+                for (j, m), daten in imd_map.items()
+                if (daten.get("warmwasser_kwh") or 0) > 0
+            )
+            if unmoeglich:
+                monate_str = ", ".join(unmoeglich[:6])
+                if len(unmoeglich) > 6:
+                    monate_str += f" (+{len(unmoeglich) - 6} weitere)"
+                ergebnisse.append(CheckErgebnis(
+                    kategorie=kat, schwere=CheckSeverity.INFO,
+                    meldung=(
+                        f"{name}: Warmwasser-Wärme in {len(unmoeglich)} Monat(en) "
+                        f"gespeichert — eine Split-Klimaanlage hat keinen "
+                        f"Warmwasserkreis"
+                    ),
+                    details=(
+                        f"{monate_str}. Der Wert zählt nicht als Wärme dieses "
+                        "Geräts: er würde sonst eine Ersparnis gegenüber der "
+                        "Heizung ausweisen, die das Gerät nie erzeugt hat. "
+                        "Stammt er aus dem Kühlbetrieb, gehört er in "
+                        "„Nutzenergie Kuehlbetrieb“ — dann rechnet eedc daraus "
+                        "die Arbeitszahl Kühlen. Der gespeicherte Wert bleibt "
+                        "unverändert stehen, bis du ihn selbst umträgst."
+                    ),
+                    investition_id=inv.id,
+                    link=link_monat_erfassen(unmoeglich[0]),
+                ))
+
         if not fehlend_strom and not fehlend_heiz:
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.OK,

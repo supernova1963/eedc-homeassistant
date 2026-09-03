@@ -56,13 +56,16 @@ export function WaermepumpeVerlaufIST({ anlageId, inv, melde }: { anlageId: numb
           <WaermepumpeModusSplit zusammenfassung={ds.zusammenfassung} />
         </Parkbar>
       )}
-      <Parkbar id="chart:wp-waerme" titel="Wärmeerzeugung pro Monat"><WaermepumpeMonatsverlauf monatsdaten={ds.monatsdaten} /></Parkbar>
+      <Parkbar id="chart:wp-waerme" titel="Wärmeerzeugung pro Monat"><WaermepumpeMonatsverlauf monatsdaten={ds.monatsdaten}
+        hatWarmwasserAchse={ds.zusammenfassung.hat_warmwasser_achse !== false} /></Parkbar>
       <Parkbar id="tabelle:wp-monate" titel="Monatsdaten-Tabelle">
         <details className="border-t border-gray-100 dark:border-gray-800 pt-3">
           <summary className="cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
             Monatsdaten anzeigen ({ds.monatsdaten.length})
           </summary>
-          <div className="mt-3"><WaermepumpeMonatsTabelle monatsdaten={ds.monatsdaten} jazJeMonat={ds.zusammenfassung.jaz_je_monat} /></div>
+          <div className="mt-3"><WaermepumpeMonatsTabelle monatsdaten={ds.monatsdaten} jazJeMonat={ds.zusammenfassung.jaz_je_monat}
+            /* N-379: `!== false` — eine ältere Antwort ohne das Feld zeigt unverändert beide Spalten. */
+            hatWarmwasserAchse={ds.zusammenfassung.hat_warmwasser_achse !== false} /></div>
         </details>
       </Parkbar>
     </div>

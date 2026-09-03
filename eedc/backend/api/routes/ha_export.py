@@ -59,7 +59,11 @@ from backend.core.betriebsmodus import HEIZEN as BM_HEIZEN
 from backend.core.betriebsmodus import KUEHLEN as BM_KUEHLEN
 from backend.core.betriebsmodus import MODUS_ABDECKUNG_FELD, MODUS_STROM_FELD
 from backend.core.berechnungen.betriebsart_gemessen import modus_strom_zeile
-from backend.core.field_definitions import get_emob_pv_netz_kwh, get_wp_strom_kwh
+from backend.core.field_definitions import (
+    get_emob_pv_netz_kwh,
+    get_wp_strom_kwh,
+    get_wp_warmwasser_kwh,
+)
 from backend.core.berechnungen.phev_anteil import teile_fahrleistung
 from backend.core.berechnungen.kapitalrechnung import (
     ErsparnisPosten,
@@ -1590,7 +1594,9 @@ async def calculate_investition_sensors(
                 )
             }
             gesamt_heizung += d.get("heizenergie_kwh", 0) or 0
-            gesamt_warmwasser += d.get("warmwasser_kwh", 0) or 0
+            # N-379: die eine Lesetuer — sonst traegt der HA-Sensor eine
+            # Waermemenge, die es am Geraet nicht gibt.
+            gesamt_warmwasser += get_wp_warmwasser_kwh(d, investition.parameter)
             waerme_abgeleitet = waerme_abgeleitet or heizwaerme_ist_abgeleitet(
                 md.source_provenance
             )
@@ -1707,7 +1713,9 @@ async def calculate_investition_sensors(
                     alte_kosten = 0.0
                     for md in monatsdaten:
                         d = md.verbrauch_daten or {}
-                        waerme = (d.get("heizenergie_kwh", 0) or 0) + (d.get("warmwasser_kwh", 0) or 0)
+                        waerme = (d.get("heizenergie_kwh", 0) or 0) + (
+                            get_wp_warmwasser_kwh(d, investition.parameter)
+                        )  # N-379
                         amd = anlage_md_dict.get((md.jahr, md.monat))
                         gp = (amd.gaspreis_cent_kwh
                               if amd and amd.gaspreis_cent_kwh is not None

@@ -983,3 +983,121 @@ async def test_a8_gegenprobe_eine_bauart_bleibt_unberuehrt(db):
     assert antwort.wp_jaz_grund == GRUND_GERAETE_OHNE_WAERME, (
         "zwei Geräte DERSELBEN Bauart — hier gilt die alte, allgemeinere Lage"
     )
+
+
+# ═══ A9 — dietmar1968 (#295): der Altwert, den das Gerät nicht haben kann ═══
+#
+# **Die Anlage, die es wirklich gibt.** Bosch Luft-Luft-Klimaanlage mit drei
+# Innengeräten, 99 % Kühlbetrieb (T89667 #190/#221/#295). In ihrer Juni-Zeile
+# steht ein `warmwasser_kwh` aus der Zeit VOR N-304 (22.08.2026) — seither
+# bietet der Monatsabschluss das Feld an einer Split-Klimaanlage nicht mehr an,
+# aber der gespeicherte Wert blieb stehen.
+#
+# **Was er auf seinem Bildschirm anrichtete** (alle vier aus seinem Screenshot):
+# „Wärme erzeugt 889 kWh" · JAZ 1,09 · „Ersparnis vs. Gas 38 €" ·
+# „CO₂-Ersparnis −112 kg vs. fossile Heizung" — an einem Gerät, das zu 99 %
+# Kälte erzeugt hat.
+#
+# ⭐ **Warum die Probe hierher gehört und nicht zu den Layer-Wächtern.** Der
+# Layer ist mit `test_klima_ohne_warmwasser_n304.py` gedeckt. Hier steht die
+# andere Frage, für die es diese Datei gibt: *Kommt es auf der Fläche an?* Und
+# sie ist auf dieser Achse besonders teuer — der Maintainer hat weder
+# Wärmepumpe noch Klimaanlage und kann keine dieser Zahlen gegenprüfen.
+
+WW_ALTWERT_KWH = 889.0
+KLIMA_STROM_KWH = 817.0
+
+
+async def _baue_a9(db):
+    a = await _anlage(db, "A9 dietmar Klimaanlage")
+    klima = await _geraet(
+        db, a, "Klimaanlage",
+        # Der alte Energieträger ist gesetzt — genau deshalb stand bei ihm
+        # überhaupt eine Gas-Ersparnis da. Ohne ihn griffe schon `bewertbar`,
+        # und die Probe bewiese nichts.
+        {"wp_art": "luft_luft", "effizienz_modus": "gesamt_jaz",
+         "alter_energietraeger": "gas", "alter_preis_cent_kwh": 10.0},
+        {"stromverbrauch_kwh": KLIMA_STROM_KWH,
+         "warmwasser_kwh": WW_ALTWERT_KWH},
+    )
+    await db.commit()
+    return a, klima
+
+
+async def test_a9_der_altwert_ist_keine_waerme_dieses_geraets(db):
+    """Die Menge: 889 kWh „Warmwasser" an einer Klimaanlage zählen nicht.
+
+    ⛔ Und die Kennzahl steht deshalb NICHT auf 0, sondern auf „keine Aussage"
+    mit Grund (ADR-002/P4) — eine 0 hieße „gemessen, es kam nichts heraus".
+    """
+    a, _klima = await _baue_a9(db)
+    block = next(b for b in await _hub(db, a.id)
+                 if b.investition.bezeichnung == "Klimaanlage")
+    z = block.zusammenfassung
+
+    assert z["gesamt_warmwasser_kwh"] == 0.0
+    assert z["gesamt_waerme_kwh"] == 0.0, "„Wärme erzeugt 889 kWh“ war der Befund"
+    assert z["durchschnitt_cop"] is None, "1,09 war keine Arbeitszahl, sondern ein Bruch"
+    assert z["durchschnitt_cop_grund"], "ohne Zahl gehört der Grund daneben (S3)"
+
+
+async def test_a9_keine_gas_ersparnis_und_kein_co2_aus_kaelte(db):
+    """Die zwei Geldzahlen — genau die, die N-304s Docstring vorhergesagt hat.
+
+    *„Ein an einer Luft-Luft-Anlage gepflegter Warmwasser-Wert erzeugt eine
+    Ersparnis für Wärme, die das Gerät nie erzeugt hat."* Sie stand bei dietmar
+    mit 38 € und −112 kg auf dem Schirm.
+    """
+    a, _klima = await _baue_a9(db)
+    z = next(b for b in await _hub(db, a.id)
+             if b.investition.bezeichnung == "Klimaanlage").zusammenfassung
+
+    assert z["ersparnis_euro"] is None, "„Ersparnis vs. Gas 38 €“ stand da"
+    assert z["co2_ersparnis_kg"] is None, "„CO₂-Ersparnis −112 kg vs. fossile Heizung“"
+    assert z["wp_kosten_euro"] > 0, (
+        "⛔ Der Strom bleibt — er ist geflossen. Nur der Vergleich entfällt."
+    )
+
+
+async def test_a9_die_warmwasser_achse_verschwindet_aus_der_anzeige(db):
+    """SOLL §3.3/**S2** — „Ein Balken sagt, was er zeigt."
+
+    Ohne dieses Flag stünde die Aufteilung weiterhin als festes Paar
+    Heizung/Warmwasser da, nur mit zwei Nullen. Der Client hängt Spalte, Balken
+    und Legende daran.
+    """
+    a, _klima = await _baue_a9(db)
+    z = next(b for b in await _hub(db, a.id)
+             if b.investition.bezeichnung == "Klimaanlage").zusammenfassung
+
+    assert z["hat_warmwasser_achse"] is False
+
+
+async def test_a9_gegenprobe_die_luft_wasser_wp_behaelt_alles(db):
+    """⛔ **Die Gegenprobe, ohne die der Bau eine Löschung wäre.**
+
+    Dieselbe Zeile an einer Luft-Wasser-Wärmepumpe: Menge, Achse, Arbeitszahl
+    und Gas-Ersparnis bleiben unverändert. Ein Filter, der überall zuschlägt,
+    nähme jeder Wärmepumpe ihr Warmwasser.
+    """
+    a = await _anlage(db, "A9b Luft-Wasser")
+    await _geraet(
+        db, a, "Wärmepumpe",
+        {"wp_art": "luft_wasser", "effizienz_modus": "gesamt_jaz",
+         "alter_energietraeger": "gas", "alter_preis_cent_kwh": 10.0},
+        {"stromverbrauch_kwh": KLIMA_STROM_KWH,
+         "warmwasser_kwh": WW_ALTWERT_KWH},
+    )
+    await db.commit()
+    z = next(b for b in await _hub(db, a.id)
+             if b.investition.bezeichnung == "Wärmepumpe").zusammenfassung
+
+    assert z["gesamt_warmwasser_kwh"] == pytest.approx(WW_ALTWERT_KWH)
+    assert z["gesamt_waerme_kwh"] == pytest.approx(WW_ALTWERT_KWH)
+    assert z["hat_warmwasser_achse"] is True
+    # `abs=0.005`: der Endpoint rundet die Arbeitszahl auf zwei Stellen —
+    # eine relative Toleranz misst hier die Rundung, nicht die Rechnung.
+    assert z["durchschnitt_cop"] == pytest.approx(
+        WW_ALTWERT_KWH / KLIMA_STROM_KWH, abs=0.005
+    )
+    assert z["ersparnis_euro"] is not None

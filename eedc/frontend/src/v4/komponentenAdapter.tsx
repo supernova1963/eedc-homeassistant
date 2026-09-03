@@ -623,25 +623,52 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
         kennzahlen: z.co2_ersparnis_kg != null ? {
           titel: 'Umwelt', kpis: [k('CO₂-Ersparnis', n0(z.co2_ersparnis_kg), 'kg', 'green', Leaf, { subtitle: 'vs. fossile Heizung' })],
         } : undefined,
+        // N-379 / SOLL §3.3/S2 — „Ein Balken sagt, was er zeigt."
+        // Aufteilung, Verlauf-Legende und Jahresvergleich standen als FESTES
+        // Paar Heizung/Warmwasser da, unabhängig vom Gerät. An einer
+        // Split-Klimaanlage gibt es keinen Warmwasserkreis (N-304) — dietmar1968
+        // sah dort „Warmwasser 889 kWh · 100 %" (T89667 #295); an einer
+        // Wärmepumpe ohne Warmwasser-Zähler stand eine Dauer-Null (8ear, #404).
+        //
+        // ⚠ **Die Achse fällt weg, die Menge nicht.** Das Backend liest
+        // `warmwasser_kwh` an so einem Gerät gar nicht erst (`get_wp_warmwasser_kwh`),
+        // deshalb sind die Summen hier bereits ohne sie — hier fällt nur noch die
+        // leere Beschriftung. ⛔ Kein „fehlt"-Hinweis: Abdeckung ist Sache des
+        // Daten-Checkers, nicht dieses Blocks.
+        //
+        // `!== false` statt `=== true`: eine ältere Antwort ohne das Feld zeigt
+        // unverändert beide Achsen.
         aufteilung: (z.gesamt_heizenergie_kwh > 0 || z.gesamt_warmwasser_kwh > 0) ? {
           titel: 'Wärme nach Zweck', segmente: [
             { label: 'Heizung', wert: z.gesamt_heizenergie_kwh, farbe: SEG.heizung },
-            { label: 'Warmwasser', wert: z.gesamt_warmwasser_kwh, farbe: SEG.warmwasser },
+            ...(z.hat_warmwasser_achse !== false
+              ? [{ label: 'Warmwasser', wert: z.gesamt_warmwasser_kwh, farbe: SEG.warmwasser }]
+              : []),
           ],
         } : undefined,
         verlauf: md.length ? {
           bars: [
             { key: 'heizung', label: 'Heizung', farbe: CHART_COLORS.wpWaerme },
-            { key: 'warmwasser', label: 'Warmwasser', farbe: CHART_COLORS.wpWarmwasser },
+            ...(z.hat_warmwasser_achse !== false
+              ? [{ key: 'warmwasser', label: 'Warmwasser', farbe: CHART_COLORS.wpWarmwasser }]
+              : []),
           ],
+          // ⚠ `vd` ist hier ausgeschrieben: Ein Spread im Array-Literal nimmt
+          // dem zweiten Eintrag die kontextuelle Typisierung aus `rowsAusMd`
+          // (TS7006) — ohne die Annotation wäre er implizit `any`.
           rows: rowsAusMd(md, [
-            { key: 'heizung', wert: (vd) => vd.heizenergie_kwh },
-            { key: 'warmwasser', wert: (vd) => vd.warmwasser_kwh },
+            { key: 'heizung', wert: (vd: Record<string, number>) => vd.heizenergie_kwh },
+            ...(z.hat_warmwasser_achse !== false
+              ? [{ key: 'warmwasser', wert: (vd: Record<string, number>) => vd.warmwasser_kwh }]
+              : []),
           ]),
         } : undefined,
         vergleich: md.length ? {
           label: 'Wärme', einheit: 'kWh', farbe: CHART_COLORS.wpWaerme,
-          jahre: jahresSummen(md, (vd) => (vd.heizenergie_kwh ?? 0) + (vd.warmwasser_kwh ?? 0)),
+          jahre: jahresSummen(md, (vd) => (
+            (vd.heizenergie_kwh ?? 0)
+            + (z.hat_warmwasser_achse !== false ? (vd.warmwasser_kwh ?? 0) : 0)
+          )),
         } : undefined,
       }
       })

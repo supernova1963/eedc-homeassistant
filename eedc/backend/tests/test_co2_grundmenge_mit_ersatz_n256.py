@@ -80,11 +80,29 @@ async def _seed(db, *parametersaetze: dict) -> int:
     await db.flush()
     for monat in range(1, 13):
         for inv in geraete:
+            # ⛔ **N-379 (03.09.2026) — die Fixture stellte einen Zustand her, den
+            # es in der Produktion nicht gibt.** Sie gab JEDEM Gerät ein
+            # `warmwasser_kwh`, auch der Split-Klimaanlage — die hat seit N-304
+            # (22.08.) keinen Warmwasserkreis und bekommt das Feld im
+            # Monatsabschluss gar nicht mehr angeboten. Seit N-379 liest auch der
+            # Lesepfad es dort nicht mehr, und die Zusicherung „beide Geräte sind
+            # gleich groß" ging nicht mehr auf (9996 gegen 9798).
+            #
+            # ⭐ **Die Aussage der Probe bleibt unberührt** — sie prüft, dass
+            # `*_mit_ersatz_kwh` nur die ersetzenden Geräte trägt, und das tut sie
+            # unverändert: dieselbe Wärmemenge, nur auf der Achse, die es am Gerät
+            # gibt. **Keine Zusicherung wurde angefasst.** Eine Klimaanlage GIBT
+            # Wärme ab (Entscheid Gernot 21.08.), nur eben keine Warmwasser-Wärme.
+            ist_klima = (inv.parameter or {}).get("wp_art") == "luft_luft"
             db.add(InvestitionMonatsdaten(
                 investition_id=inv.id, jahr=2025, monat=monat,
                 verbrauch_daten={
-                    "heizenergie_kwh": WAERME_HEIZUNG_KWH,
-                    "warmwasser_kwh": WAERME_WARMWASSER_KWH,
+                    "heizenergie_kwh": (
+                        WAERME_HEIZUNG_KWH + WAERME_WARMWASSER_KWH if ist_klima
+                        else WAERME_HEIZUNG_KWH
+                    ),
+                    **({} if ist_klima
+                       else {"warmwasser_kwh": WAERME_WARMWASSER_KWH}),
                     "stromverbrauch_kwh": STROM_KWH,
                 },
             ))

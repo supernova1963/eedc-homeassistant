@@ -26,7 +26,10 @@ from __future__ import annotations
 
 from typing import Iterable, Optional
 
-from backend.core.field_definitions import get_wp_strom_kwh
+from backend.core.field_definitions import (
+    get_wp_strom_kwh,
+    get_wp_warmwasser_kwh,
+)
 from backend.core.investition_parameter import (
     PARAM_WAERMEPUMPE,
     PARAM_WAERMEPUMPE_DEFAULTS,
@@ -198,8 +201,12 @@ def berechne_wp_alternativkosten_ersparnis(
         for (inv_id, jahr, monat), daten in historische_inv_daten.items():
             if inv_id != wp.id:
                 continue
+            # N-379: `get_wp_warmwasser_kwh` statt Rohzugriff — an einer
+            # Split-Klimaanlage gibt es die Groesse nicht, und genau hier
+            # entstand aus einem Altwert die "Ersparnis vs. Gas" fuer Waerme,
+            # die das Geraet nie abgegeben hat (dietmar1968, T89667 #295).
             thermisch = (daten.get("heizenergie_kwh", 0) or 0) + (
-                daten.get("warmwasser_kwh", 0) or 0
+                get_wp_warmwasser_kwh(daten, wp.parameter)
             )
             strom = get_wp_strom_kwh(daten, wp.parameter)
             g = gaspreis_by_periode.get((jahr, monat))

@@ -326,3 +326,69 @@ async def test_abdeckung_meldet_der_klimaanlage_weiterhin_fehlenden_heizstrom(db
     )
     assert "strom_heizen_kwh" in _details(ergebnisse)
 
+
+
+# ─── N-379 — der Altwert wird benannt, nicht verschwiegen ───────────────────
+#
+# ⭐ **Die andere Hälfte des Lesepfad-Fixes vom 03.09.2026.** Seit N-379 zählt
+# ein an einer Split-Klimaanlage gespeichertes `warmwasser_kwh` nicht mehr als
+# Wärme des Geräts (`get_wp_warmwasser_kwh`). **Ohne eine Meldung wäre das eine
+# stille Löschung** — bei dietmar1968 verschwänden 889 kWh wortlos vom
+# Bildschirm (T89667 #295), und das ist dieselbe Auskunftslosigkeit wie vorher,
+# nur in der Gegenrichtung (SOLL §3.3/**S3**).
+#
+# ⛔ **Kein zweiter Turm** (Tor 3): Die 29 Kategorien des Daten-Checkers kennen
+# keine Meldung für „Wert in einem Feld, das es am Gerät nicht gibt". Die
+# Bauform ist die bereits bestehende INFO über den obsoleten Gesamt-Strom-Sensor
+# in derselben Funktion.
+#
+# Die Harness darüber (`_wp_befunde`) passt unverändert — dieselbe Fläche,
+# dieselbe Aufrufform.
+
+_WARMWASSER_MELDUNG = "Warmwasserkreis"
+
+
+async def test_der_checker_benennt_den_unmoeglichen_warmwasser_wert(db):
+    """Er sagt, wo der Wert steht, warum er nicht zählt und wohin er gehört."""
+    befunde = await _wp_befunde(
+        db,
+        parameter={"wp_art": "luft_luft"},
+        imd_daten={"stromverbrauch_kwh": 817.0, "warmwasser_kwh": 889.0},
+    )
+    treffer = [e for e in befunde if _WARMWASSER_MELDUNG in e.meldung]
+    assert len(treffer) == 1, "genau eine Meldung, nicht je Monat eine"
+    assert "Nutzenergie Kuehlbetrieb" in treffer[0].details, (
+        "P-6: der Weg gehört dazu, nicht nur der Vorwurf"
+    )
+    assert "bleibt unverändert stehen" in treffer[0].details, (
+        "⛔ Der gespeicherte Wert wird NICHT gelöscht und NICHT migriert — "
+        "das muss der Anwender lesen können, sonst sucht er ihn"
+    )
+
+
+async def test_der_checker_schweigt_wenn_die_klimaanlage_kein_warmwasser_hat(db):
+    """Die Meldung darf nicht bei jeder Klimaanlage stehen.
+
+    ⛔ Ohne diese Probe wäre eine Meldung, die auf `ist_klima` allein feuert,
+    grün — und jeder korrekt gepflegten Klimaanlage einen Hinweis anhängen.
+    """
+    befunde = await _wp_befunde(
+        db,
+        parameter={"wp_art": "luft_luft"},
+        imd_daten={"stromverbrauch_kwh": 817.0},
+    )
+    assert not [e for e in befunde if _WARMWASSER_MELDUNG in e.meldung]
+
+
+async def test_der_checker_schweigt_bei_der_luft_wasser_waermepumpe(db):
+    """Die zweite Gegenprobe — dieselbe Zeile an einem Gerät, das die Größe hat.
+
+    Sie trennt „Bauart" von „Wert vorhanden": Ohne sie wäre auch eine Meldung
+    grün, die jeden gepflegten Warmwasser-Wert anmahnt.
+    """
+    befunde = await _wp_befunde(
+        db,
+        parameter={"wp_art": "luft_wasser"},
+        imd_daten={"stromverbrauch_kwh": 817.0, "warmwasser_kwh": 889.0},
+    )
+    assert not [e for e in befunde if _WARMWASSER_MELDUNG in e.meldung]

@@ -84,6 +84,7 @@ from backend.core.field_definitions import (
     get_speicher_netzladung_kwh,
     get_wp_heizenergie_kwh,
     get_wp_strom_kwh,
+    get_wp_warmwasser_kwh,
 )
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
 from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
@@ -1190,7 +1191,8 @@ def _baue_investition_financial(
 
     elif inv.typ == "waermepumpe":
         waerme = get_wp_heizenergie_kwh(data)
-        ww = data.get("warmwasser_kwh", 0) or 0
+        # N-379: die eine Lesetuer — an einem Geraet ohne Warmwasserkreis ist 0.
+        ww = get_wp_warmwasser_kwh(data, inv.parameter)
         strom = get_wp_strom_kwh(data, inv.parameter) or None
         waerme_total = (waerme or 0) + (ww or 0)
         if waerme_total > 0 and strom is not None:
