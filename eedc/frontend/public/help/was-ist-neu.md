@@ -11,6 +11,30 @@
 
 ## [Unreleased]
 
+**Die Performance Ratio sagt jetzt, wogegen sie misst**
+
+Unter *Cockpit → Tag* teilt die **Performance Ratio** deinen Tagesertrag durch das, was bei der
+Sonne dieses Tages möglich gewesen wäre. Daneben stand bisher eine Einstrahlungszahl — und das
+war die **waagerechte** Globalstrahlung, also der Wert, wie ihn eine Wetterstation auf dem Boden
+misst. Gerechnet hat eedc aber schon immer mit der Einstrahlung **auf deine Modulfläche**, und
+die ist bei geneigten Modulen deutlich höher.
+
+Wer nachrechnete, kam damit zwangsläufig auf einen anderen Wert als den angezeigten — und konnte
+den Unterschied nicht aufklären, weil die richtige Zahl nirgends stand. **Jetzt steht sie dabei**,
+mit dem Zusatz *„auf der Modulfläche"*.
+
+Für Tage, die vor dieser Änderung liegen, bleibt die Stelle leer: Die Zahl wurde damals nicht
+mitgeschrieben, und stattdessen wieder die waagerechte zu zeigen wäre derselbe Fehler mit neuem
+Etikett. Über **Verlauf nachberechnen** unter *Einstellungen → Daten* holst du sie für einen
+Zeitraum nach. **An der Kennzahl selbst ändert sich nichts.**
+
+**Der Parkplatz blitzt beim Öffnen nicht mehr auf**
+
+Wer Anzeigen geparkt hat, sah den Streifen *„Parkplatz (n)"* beim Öffnen einer Cockpit-Ansicht
+kurz allein neben dem Ladezeichen stehen — dann rutschte er an seinen Platz. Der Grund ist
+harmlos: Was du geparkt hast, weiß eedc sofort, der Rest der Seite muss erst geladen werden.
+**Jetzt wartet der Streifen, bis die Ansicht steht.**
+
 **Deine Klimaanlage zeigt keine Wärme mehr, die sie nicht abgeben kann**
 
 Eine **Split-Klimaanlage** hat keinen Warmwasserkreis, und eedc fragt sie seit einiger Zeit

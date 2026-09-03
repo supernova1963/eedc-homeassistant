@@ -208,6 +208,19 @@ Die **Tag**-Sicht bringt den feingranularen Stunden-Tag ins Cockpit: ein ausgew�
 > Tages-Historie je Gerät über einen längeren Zeitraum liegt in
 > [Auswertungen → Tabelle](#45-tabelle-werte-werkbank).
 
+> **Performance Ratio — wogegen sie gemessen wird.** Die Kachel teilt deinen Tagesertrag durch das,
+> was bei der Sonne dieses Tages physikalisch möglich gewesen wäre. Die Bezugsgröße dafür ist die
+> Einstrahlung **auf deine Modulfläche** — nicht die waagerechte Globalstrahlung, die an einer
+> Wetterstation gemessen wird. Der Unterschied ist erheblich: Bei steilen Modulen und tiefer
+> Wintersonne trifft die schräge Fläche ein Mehrfaches dessen, was auf dem Boden ankommt. Deshalb
+> steht die Zahl seit v4.0.39 mit dem Zusatz **„auf der Modulfläche"** dabei — vorher stand dort
+> die waagerechte Strahlung, und wer nachrechnete, kam zwangsläufig auf einen anderen Wert.
+>
+> Bei mehreren Dachflächen ist es das nach Nennleistung gewichtete Mittel über alle Ausrichtungen,
+> passend zur Ertragssumme derselben Zeile. Für Tage, die vor dieser Änderung liegen, steht keine
+> Bezugsgröße dabei — sie wurde damals nicht mitgeschrieben; über **Verlauf nachberechnen** unter
+> [Einstellungen → Daten](HANDBUCH_EINSTELLUNGEN.md) holst du sie für einen Zeitraum nach.
+
 Die Datenbasis sind kumulative Zähler-Snapshots (stündlich); die Tages-Werte folgen der Backward-Slot-Konvention (Slot N = Energie aus dem Intervall [N−1, N), Industriestandard). Fehlen Snapshots (z. B. durch eine HA-Statistik-Latenz oder einen Add-on-Neustart), weist eedc darauf hin und bietet eine Nachberechnung an — die Pflege dazu liegt unter [Einstellungen → Daten → Energieprofil-Pflege](HANDBUCH_EINSTELLUNGEN.md).
 
 ### 2.3 Monat

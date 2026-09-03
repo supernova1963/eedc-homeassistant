@@ -2703,6 +2703,20 @@ Performance_Ratio = PV_Ertrag_kWh / Theoretisch_kWh
 
 Bei Multi-String-Anlagen werden GTI-Werte pro Orientierungsgruppe parallel abgerufen und kWp-gewichtet kombiniert (analog Live-Wetter-Pfad). Ohne gemappte PV-Module bleibt PR bewusst `None` statt einen verzerrten GHI-Wert zu melden.
 
+> ⭐ **Der Nenner steht seit v4.0.39 auch in der Zeile — vorher nur in der Rechnung.** Die Aufstellung
+> der Tages-Aggregate oben führt `GTI_Summe_Wh_m2` seit v3.20.0, **gespeichert wurde die Größe aber
+> nie**: `aggregate_day` bildete sie, teilte durch sie und verwarf sie wieder. Angezeigt wurde
+> daneben `Strahlung_Summe_Wh_m2`, also die **horizontale** Globalstrahlung — unter der Formel
+> „Ertrag ÷ (Einstrahlung × kWp)", in der sie nicht vorkommt. Wer die Kennzahl nachrechnete,
+> bekam damit zwangsläufig eine andere Zahl, und der Widerspruch war nicht auflösbar.
+> Seit v4.0.39 trägt `TagesZusammenfassung` die Spalte `gti_summe_wh_m2`, und *Cockpit → Tag*
+> nennt sie beim Namen („bei X kWh/m² auf der Modulfläche").
+>
+> ⚠ **Rückwärts bleibt sie leer.** Für Tage vor der Spalte steht dort `NULL` — „nicht erhoben",
+> nicht 0. Die Anzeige lässt die Bezugsgröße dann weg; die horizontale Summe ersatzweise
+> einzusetzen wäre derselbe Fehler mit neuem Etikett. Wer sie für ältere Tage haben will, löst
+> „Verlauf nachberechnen" für den Zeitraum aus.
+
 > **Validation Winterborn 2025-12-28:** GHI 1317 Wh/m² vs. GTI Süd35° 3358 Wh/m² (Faktor 2.55×). PR vorher 2.16 (physikalisch unmöglich), nachher 0.85 (plausibel für einen kalten Wintertag). Betrifft historische `TagesZusammenfassung.performance_ratio`, `MonatsAuswertungResponse.performance_ratio_avg` und die PR-Spalte im PDF-Jahresbericht — **nach Update einmalig „Verlauf nachberechnen + überschreiben" auslösen**. PV-kWh-Werte selbst bleiben unverändert.
 
 **§51 EEG (Negativpreis-Analyse):**
