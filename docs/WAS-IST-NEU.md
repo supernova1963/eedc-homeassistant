@@ -112,6 +112,39 @@ ist. Am **„Ertrag/Jahr"**, den du am Gerät angibst, ändert sich nichts.
 Alle vier Punkte gehen auf einen Fehlerbericht von **rilmor-mhrs** zurück
 ([#402](https://github.com/supernova1963/eedc-homeassistant/issues/402)).
 
+**Zwei Speicher, zwei Wirkungsgrade — und jeder trägt seinen Namen**
+
+Wer seinen Speicher **erweitert** und den alten dabei stillgelegt hat, hat zwei Speicher an
+einem PV-System. Die Zeile unter *Auswertungen → ROI* nennt auch beide. Klappst du sie auf,
+stand darunter trotzdem nur **ein** Wirkungsgrad — ohne dazuzusagen, zu welchem der beiden
+er gehört. Es war immer der des **ältesten** Geräts, nach einer Erweiterung also der des
+**stillgelegten**. Wer dort einen auffällig niedrigen Wert las, suchte den Fehler beim
+falschen Speicher.
+
+Jetzt steht jeder Speicher mit seinem eigenen Wirkungsgrad und seinem Namen da. Der
+**effektive Ladepreis** bleibt bewusst eine einzige Zeile: Er ist eine Größe deiner
+**Anlage** und nicht am einzelnen Gerät gemessen — bei mehreren Speichern steht das jetzt
+auch dran. **Wer einen Speicher hat, sieht unverändert das Gewohnte.**
+
+**Ein niedriger Wirkungsgrad heißt nicht automatisch, dass dein Speicher altert**
+
+Liegt der gemessene Wirkungsgrad deutlich unter dem Wert, den du gepflegt hast, sagt eedc
+das im Speicher-Block. Dort stand bisher nur *„möglicher Hinweis auf Speicher-Degradation"*.
+Bei einem **AC-gekoppelten** Speicher ist das oft die falsche Fährte: Zwischen deinen beiden
+Zählern liegt dann die Wandlung des Batterie-Wechselrichters, sofern hausseitig gezählt
+wird. Der Wert beschreibt dann die **Messstelle** und nicht den Speicher. eedc kennt die
+Kopplung deines Speichers und sagt es jetzt dazu — es ist derselbe eine Hinweis, nur ohne
+die falsche Ausschließlichkeit. Die ausführliche Erklärung steht wie bisher im
+[Handbuch](HANDBUCH_BEDIENUNG.md#33-speicher).
+
+Unter *Auswertungen → ROI* steht dieser Hinweis dafür **nicht mehr** — er gehört dorthin
+nicht. In dieser Sicht rechnet eedc mit dem **gemessenen** Wirkungsgrad, sobald es einen
+gibt; der gepflegte Wert, über den der Hinweis spricht, geht dort gar nicht ein. Er zählt
+für die Tages-Vorschau *„Speicher voll um"*, für *Größerer Speicher?* und für die
+Home-Assistant-Sensoren — und dort steht der Hinweis weiterhin.
+
+Beide Punkte gehen auf eine Beobachtung von **Radiocarbonat** im simon42-Forum zurück.
+
 ---
 
 ## v4.0.38 — 2. September 2026
