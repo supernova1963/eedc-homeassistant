@@ -13,6 +13,10 @@ einsortieren. Wer eine Quelle verschiebt (z.B. OpenMeteo „fixt"), bricht ihn.
 
 Plus die Tagessummen-Invariante: das Slot-Schema darf nur die Zuordnung ändern,
 nie die Tagessumme.
+
+Schwesterdatei: ``test_slot_konvention_leistungspfad.py`` — sie pinnt die FÜNFTE
+Bahn, den Leistungspfad hinter ``TagesEnergieProfil.komponenten``. Dieser Test
+hier deckt sie NICHT ab; genau darin lag N-382.
 """
 
 from __future__ import annotations

@@ -19,6 +19,26 @@ Alle vier (OpenMeteo, Solcast, IST-Snapshot, IST-LTS) müssen ein und dasselbe
 physische Intervall in denselben Slot legen — Symmetrie-Test
 ``tests/test_slot_konvention_quellen.py``.
 
+⛔ **Es gibt eine FÜNFTE Bahn, und sie liegt heute FORWARD — N-382 (2026-09-03).**
+Der **Leistungspfad** speist ``TagesEnergieProfil.komponenten``:
+``live_tagesverlauf_service`` beschriftet jeden Punkt mit dem **Slot-BEGINN**
+(``{h_start.hour}:{h_start.minute}``, Raster ``h_start <= p < h_end``), und
+``energie_profil/aggregator.py`` bucketet diese Punkte nach ihrem **Stundenlabel**.
+Zeile ``h`` trägt damit im JSON ``[h, h+1)`` — während die Spalte ``pv_kw``
+derselben Zeile aus dem Zählerpfad kommt und ``[h-1, h)`` meint. **Eine Zeile,
+zwei verschiedene Stunden.** Über 24 Slots hebt sich das auf (Tagessummen, Monat,
+ROI unauffällig), pro Stunde nicht.
+
+Gepinnt in ``tests/test_slot_konvention_leistungspfad.py`` — als **OFFEN**-Probe
+im Idiom der SOLL-Dateien: sie hält den heutigen Zustand fest und schlägt fehl,
+sobald gebaut wird. Kein ``xfail``.
+
+⚑ **Warum das hier steht und nicht nur im Fundregister:** Der Absatz darunter
+zieht aus demselben Vorfall die Lehre *„jeden Parallelpfad pinnen"* — und genau
+dieser Parallelpfad war beim Bau von ``c71b0f08`` nicht mitgenommen worden. Eine
+Lehre, die den nächsten Fall nicht fängt, gehört an die Stelle, an der er
+entsteht.
+
 ⚠️ Historie: der LTS-Pfad labelte bis v3.3x FORWARD (Slot ``h = [h, h+1)``),
 während alle anderen backward waren → IST erschien im Stundenvergleich
 1 h zu früh (Rainer/Gernot, 2026-06-04). Der Symmetrie-Test deckte damals nur
