@@ -626,31 +626,44 @@ async def anlage_mit_v2h_und_bhkw(
 
 
 @pytest.mark.asyncio
-async def test_v2h_zaehlt_das_bhkw_nicht_in_allen_vier_sichten(db):
-    """Beide Regeln in einer Zahl — und beide in die richtige Richtung.
+async def test_v2h_und_sonstiger_erzeuger_zaehlen_in_allen_vier_sichten_gleich(db):
+    """Beide Regeln in einer Zahl — und alle vier Sichten tragen sie gleich.
 
-    Die **Finanz**-Zeile rechnet mit der PV-Achse (Module + BKW), nicht mit der
-    Erzeugung hinter dem Zähler: ein Brennstoff-Erzeuger wird bewusst *nicht*
-    bewertet (v3.45.4). V2H dagegen ist eingesparter Netzbezug wie eine
-    Speicher-Entladung und zählt.
+    Die **Finanz**-Zeile rechnet seit 2026-09-03 mit der Erzeugung **hinter dem
+    Zähler** (Module + BKW + sonstige Erzeuger), also mit derselben Achse wie
+    Eigenverbrauch und Autarkie. V2H ist eingesparter Netzbezug wie eine
+    Speicher-Entladung und zählt ebenfalls.
 
-    PV (Finanz-Achse)                                      = 1.000 kWh
-    Direktverbrauch = 1.000 − 400                          =   600 kWh
-    Eigenverbrauch  = 600 + 100 (V2H)                      =   700 kWh
-    ev        = 700 × 0,30                                 = 210,00 €
+    Erzeugung hinter dem Zähler = 1.000 (PV) + 300 (BHKW)  = 1.300 kWh
+    Direktverbrauch = 1.300 − 400                          =   900 kWh
+    Eigenverbrauch  = 900 + 100 (V2H)                      = 1.000 kWh
+    ev        = 1.000 × 0,30                               = 300,00 €
     einspeise = 400 × 0,08                                 =  32,00 €
-    netto                                                  = 242,00 €
+    netto                                                  = 332,00 €
 
-    Die beiden Gegenproben sind der eigentliche Beweis: **212 €** wäre die Zahl
-    ohne V2H, **332 €** die Zahl, wenn eine Sicht das BHKW in die Bewertung
-    zöge. Genau diese Verwechslung von ``pv_kwh`` und ``hinter_zaehler_kwh``
-    IST Befund F-1.
+    ⭐ **332,00 € ist auf den Cent die Zahl, die die alte Fassung als
+    Gegenprobe führte** („die Zahl, wenn eine Sicht das BHKW in die Bewertung
+    zöge"). Sie ist jetzt der Sollwert — die Umstellung ist damit an derselben
+    Rechnung ablesbar, aus der sie kommt, und keine neu erfundene Größe.
+
+    **Der eigentliche Gegenstand dieser Probe ist die Symmetrie**, nicht die
+    Höhe: dieselbe Zahl in allen vier Sichten. Die Gegenproben halten beide
+    Richtungen fest — die Zahl ohne V2H und die Zahl der abgelösten PV-Achse.
+
+    ⛔ **Bis 2026-09-03 stand hier 242,00 €** und der Satz *„Genau diese
+    Verwechslung von ``pv_kwh`` und ``hinter_zaehler_kwh`` IST Befund F-1."*
+    F-1 war ein **Drift**-Befund: Sichten, die verschiedene Achsen nahmen. Die
+    Zuordnung „Finanz-Zeile ⇒ ``pv_kwh``" stammte aus v3.45.4 und ist vom
+    Maintainer abgelöst (*„deren produzierter Strom geht vollständig in der
+    EV-Ersparnis und Einspeisung auf"*). **Was F-1 wirklich schützt — dass alle
+    vier Sichten DIESELBE Achse nehmen — prüft diese Probe unverändert weiter,
+    nur auf dem neuen Niveau.**
     """
     anlage_id = await anlage_mit_v2h_und_bhkw(db)
 
     werte = await _vier_netto_ertraege(db, anlage_id)
 
-    _einig(werte, 242.0)
+    _einig(werte, 332.0)
     for sicht, wert in werte.items():
-        assert abs(wert - 212.0) > 5.0, f"{sicht} lässt die V2H-Entladung fallen"
-        assert abs(wert - 332.0) > 5.0, f"{sicht} bewertet das BHKW mit"
+        assert abs(wert - 302.0) > 5.0, f"{sicht} lässt die V2H-Entladung fallen"
+        assert abs(wert - 242.0) > 5.0, f"{sicht} rechnet noch auf der PV-Achse (v3.45.4)"

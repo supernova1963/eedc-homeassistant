@@ -29,6 +29,7 @@ from datetime import date
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.aktueller_monat import get_aktueller_monat
+from backend.api.routes.monatsdaten import list_monatsdaten_aggregiert
 from backend.models import Anlage, Investition, Monatsdaten, Strompreis
 from backend.models.investition import InvestitionMonatsdaten
 
@@ -120,7 +121,7 @@ async def test_sigma_haben_zaehlt_jede_kwh_genau_einmal(db):
     ) == 189.0
 
 
-async def test_bhkw_bekommt_keine_eigene_bewertung(db):
+async def test_sonstiger_erzeuger_bekommt_keine_eigene_bewertung(db):
     """N-131 (Entscheid 2026-09-01): den Nutzen eines sonstigen Erzeugers
     rechnet eedc nicht selbst — er wird am Gerät als „Ertrag/Jahr" gepflegt."""
     anlage = await _anlage_mit_allem(db)
@@ -178,3 +179,35 @@ async def test_stilllegung_beendet_die_betriebskosten(db):
 
     r = await get_aktueller_monat(anlage_id=anlage.id, jahr=JAHR, monat=MONAT, db=db)
     assert [f for f in r.investitionen_financials if f.bezeichnung == "Verkauft"] == []
+
+
+async def test_beide_routen_nennen_dieselbe_ev_ersparnis(db):
+    """N-375: *Cockpit/T-Konto* und *Auswertungen -> Finanzen* rechnen die
+    Eigenverbrauchs-Ersparnis aus derselben Erzeugung.
+
+    **Der Vertrag** (Maintainer, 2026-09-03): Ein Erzeuger unter *Sonstiges* wird
+    als **Komponente** nicht wirtschaftlich ausgewertet — sein Strom geht aber
+    **vollständig** in EV-Ersparnis und Einspeisung der **Anlage** auf.
+
+    ⛔ Bis 2026-09-03 nannten die beiden Sichten verschiedene Betraege, und der
+    Wert der zweiten entsprach keiner Lesart: `finanz_zeile_eingabe` uebergab die
+    **PV allein** als Erzeugung, aber die **Hauszaehler**-Einspeisung als Abzug.
+    Bei dieser Anlage: 250 kWh / 75,00 EUR gegen 450,0 kWh / 135,00 EUR — und die
+    Mengenspalte derselben Antwort wies 450,0 aus.
+
+    ⚠ Die Probe braucht den sonstigen Erzeuger. Ohne ihn sind `pv_kwh` und
+    `hinter_zaehler_kwh` identisch und beide Fassungen waeren gruen.
+    """
+    anlage = await _anlage_mit_allem(db)
+    a = await get_aktueller_monat(anlage_id=anlage.id, jahr=JAHR, monat=MONAT, db=db)
+    zeilen = await list_monatsdaten_aggregiert(anlage_id=anlage.id, jahr=JAHR, db=db)
+    b = [z for z in zeilen if z.monat == MONAT][0]
+
+    # Die Menge war nie strittig — sie traegt den sonstigen Erzeuger in beiden.
+    assert a.eigenverbrauch_kwh == b.eigenverbrauch_kwh == 430.0
+    # Und der Geldwert folgt ihr jetzt in beiden, mit demselben Preis.
+    assert a.ev_ersparnis_euro == b.ev_ersparnis_euro == 129.0
+    # Menge x Preis geht auf — das ist die eigentliche Aussage.
+    assert round(b.eigenverbrauch_kwh * 0.30, 2) == b.ev_ersparnis_euro
+    # Die Einspeise-Seite war schon vorher deckungsgleich (Hauszaehler).
+    assert a.einspeise_erloes_euro == b.einspeise_erloes_euro == 60.0

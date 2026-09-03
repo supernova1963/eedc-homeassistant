@@ -58,14 +58,32 @@ async def _pv_monat(db, anlage_id: int, *, monat: int, pv_kwh: float,
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-async def test_bhkw_hebt_eigenverbrauch_aber_nicht_die_ev_ersparnis(db):
-    """PV 1000 + BHKW 400, Einspeisung 300 ⇒ EV 1100 kWh, Ersparnis auf 700 kWh.
+async def test_sonstiger_erzeuger_hebt_menge_und_geld_gemeinsam(db):
+    """PV 1000 + BHKW 400, Einspeisung 300 ⇒ EV 1100 kWh, Ersparnis auf 1100 kWh.
 
-    Die Client-Formel rechnete `eigenverbrauch_kwh × Netzpreis`, also
-    1100 × 30 ct = **330 €**. Der SoT leitet den finanzwirksamen Eigenverbrauch
-    allein aus der **PV** ab: max(0, 1000 − 300) = 700 kWh ⇒ **210 €**.
-    Ein Erdgas-BHKW verdrängt zwar Netzbezug, aber nicht kostenlos — seine
-    Wirtschaftlichkeit gilt in eedc bewusst als „nicht bewertet" (v3.45.4).
+    **Der geltende Vertrag** (Maintainer, 2026-09-03): *Sonstige Erzeuger werden
+    nicht wirtschaftlich ausgewertet — deren produzierter Strom geht vollständig
+    in der EV-Ersparnis und der Einspeisung auf.* „Nicht wirtschaftlich
+    ausgewertet" meint die **Komponente**: keine eigene Zeile, Wirtschaftlichkeit
+    „nicht bewertet", Ertrag über das Feld „Ertrag/Jahr". In der **Anlagen**-
+    Bilanz zählt sein Strom voll — auf beiden Achsen.
+
+    ⛔ **Diese Probe stand bis 2026-09-03 auf dem Gegenteil** („hebt den
+    Eigenverbrauch, aber nicht die EV-Ersparnis", 210 € statt 330 €) und hielt
+    damit den Entscheid aus v3.45.4 fest: *„ein Erdgas-BHKW verdrängt zwar
+    Netzbezug, aber nicht kostenlos."* ⚑ **Diese Begründung deckte die Kategorie
+    nie ab:** Ein Windrad oder eine Wasserkraftanlage hat keinen Brennstoff — dort
+    schloss die Regel eine tatsächlich kostenlose Kilowattstunde ohne Grund aus
+    dem Geldwert aus. Das BHKW ist hier nur die **Fixture**, nicht die Regel. Der Entscheid ist abgelöst — die Probe
+    wird deshalb **umgestellt, nicht gelöscht**: ihr Gegenstand bleibt, dass
+    Menge und Geldwert dieselbe Erzeugung meinen. Sie prüft das jetzt in der
+    anderen Richtung, und die Gegenprobe unten nennt die alte Zahl beim Namen.
+
+    ⚠ **Warum die alte Fassung den Bruch nie sah:** ihr BHKW speist **nichts**
+    ein. `max(0, pv − Hauszähler-Einspeisung)` ergab hier zufällig den PV-reinen
+    Wert. Sobald ein sonstiger Erzeuger einspeist, zog dieselbe Formel seine
+    **ganze** Erzeugung von der PV ab — ein Wert, den auch der alte Entscheid
+    nicht wollte. Die Fixture bekommt deshalb unten eine einspeisende Schwester.
     """
     anlage = await _basis_anlage(db)
     await _pv_monat(db, anlage.id, monat=5, pv_kwh=1000.0, einspeisung=300.0, netzbezug=200.0)
@@ -86,9 +104,46 @@ async def test_bhkw_hebt_eigenverbrauch_aber_nicht_die_ev_ersparnis(db):
 
     # Die Menge trägt das BHKW (Energiebilanz, unverändert) …
     assert mai.eigenverbrauch_kwh == pytest.approx(1100.0)
-    # … der Euro-Wert nicht.
-    assert mai.ev_ersparnis_euro == pytest.approx(210.0)
-    assert mai.ev_ersparnis_euro != pytest.approx(330.0), "die alte Client-Zahl"
+    # … und der Euro-Wert jetzt ebenfalls: 1100 × 30 ct.
+    assert mai.ev_ersparnis_euro == pytest.approx(330.0)
+    # Menge × Preis geht auf — das ist die eigentliche Aussage der Probe.
+    assert mai.ev_ersparnis_euro == pytest.approx(mai.eigenverbrauch_kwh * 0.30)
+    # Gegenprobe: 210 € war die PV-reine Zahl des abgelösten Entscheids.
+    assert mai.ev_ersparnis_euro != pytest.approx(210.0), "der abgelöste v3.45.4-Wert"
+
+
+async def test_einspeisender_erzeuger_zieht_der_pv_nichts_ab(db):
+    """Derselbe Aufbau, aber das BHKW **speist ein** — der Fall, den die alte
+    Fassung nicht kannte und an dem sie auch ihren eigenen Entscheid verfehlte.
+
+    PV 1000, BHKW 400 (davon 250 eingespeist), Hauszähler-Einspeisung 550.
+    Erzeugung hinter dem Zähler 1400 − 550 = 850 kWh Eigenverbrauch ⇒ 255,00 €.
+
+    ⛔ Die alte Formel rechnete `max(0, 1000 − 550)` = **450 kWh / 135,00 €** —
+    weder die 850 des neuen Vertrags noch die 600, die „PV-rein" bedeutet hätte
+    (1000 − 300 eigene PV-Einspeisung). **Kein Entscheid ergibt 450.**
+    """
+    anlage = await _basis_anlage(db)
+    await _pv_monat(db, anlage.id, monat=6, pv_kwh=1000.0, einspeisung=550.0, netzbezug=200.0)
+    pv = Investition(anlage_id=anlage.id, typ="pv-module", bezeichnung="Dach",
+                     anschaffungsdatum=date(2024, 1, 1), leistung_kwp=10.0)
+    bhkw = Investition(anlage_id=anlage.id, typ="sonstiges", bezeichnung="Mini-BHKW",
+                       anschaffungsdatum=date(2024, 1, 1),
+                       parameter={"kategorie": "erzeuger"})
+    db.add_all([pv, bhkw])
+    await db.flush()
+    db.add(InvestitionMonatsdaten(investition_id=pv.id, jahr=2026, monat=6,
+                                  verbrauch_daten={"pv_erzeugung_kwh": 1000.0}))
+    db.add(InvestitionMonatsdaten(investition_id=bhkw.id, jahr=2026, monat=6,
+                                  verbrauch_daten={"erzeugung_kwh": 400.0,
+                                                   "einspeisung_kwh": 250.0}))
+    await db.commit()
+
+    juni = [m for m in await list_monatsdaten_aggregiert(anlage_id=anlage.id, jahr=2026, db=db)
+            if m.monat == 6][0]
+    assert juni.eigenverbrauch_kwh == pytest.approx(850.0)
+    assert juni.ev_ersparnis_euro == pytest.approx(255.0)
+    assert juni.ev_ersparnis_euro != pytest.approx(135.0), "die alte, entscheidlose Zahl"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
