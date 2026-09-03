@@ -577,9 +577,19 @@ Für sonstige **Erzeuger** — ein BHKW, ein Windrad, eine kleine Wasserkraftanl
 
 ⚠ **Sichtbar wird das an der Eigenverbrauchs-Ersparnis:** Sobald ein sonstiger Erzeuger mitliefert, heißt sie im T-Konto **„PV-Eigenverbrauch-Ersparnis"**, und der Tooltip sagt dazu, dass sein Eigenverbrauch **darin enthalten** ist — deshalb bekommt das Gerät daneben keine zweite Zeile. Die beiden Zahlen lassen sich dann bewusst nicht ineinander umrechnen (der Betrag ist um die Anteile von Speicher und Balkonkraftwerk gekürzt, die eigene Zeilen haben), und eedc zeigt deshalb auch keine Multiplikation an, die nicht aufginge.
 
+> ### ⛔ Was eedc bei Abgabe an Dritte nicht kann
+>
+> **Gibst du Strom an andere ab** — Mieterstrom, Allgemeinstrom, ein Nachbarhaus —, dann hat eedc dafür **kein Modell**, und wir wollen keines vortäuschen. Hinter deinem Hausanschluss kennt die Bilanz für eine Kilowattstunde genau **zwei** Wege: Du verbrauchst sie selbst, oder du speist sie ins Netz ein. Einen **dritten Empfänger** gibt es nicht.
+>
+> Trägst du bei einem solchen Gerät eine **Erzeugung** ein, rechnet eedc sie deshalb deinem Haus zu — was du abgegeben hast, erscheint als dein **Eigenverbrauch** und hebt Autarkie, Eigenverbrauchsquote und die Eigenverbrauchs-Ersparnis zu hoch an. Das Feld **„Einspeise-Erlös (€)"** ist davon nicht betroffen: Der Betrag ist deine Zahl, eedc rechnet ihn nicht nach.
+>
+> ⚑ **Eine zweite Anlage ist nur dann der richtige Weg, wenn der Erzeuger einen wirklich getrennten Zählpunkt hat** und deinen Haushalt gar nicht versorgt. Versorgt dieselbe Anlage beides — der Normalfall bei Mieterstrom —, lässt sich der **Anteil** so nicht abbilden; und welcher Anteil überhaupt wo zählt, entscheidet dein Messkonzept, nicht eedc.
+>
+> **Was helfen würde und heute fehlt:** eine gemessene Größe **„Abgabe an Dritte (kWh)"**, die eedc vom Eigenverbrauch abzieht. Wer einen Zähler an der Übergabestelle hat, könnte sie liefern. Ob wir sie bauen, ist offen — **es gibt dafür keine Zusage und keinen Termin.**
+
 > **Was „nicht bewertet" heißt und was nicht.** Nicht bewertet wird das **Gerät**: keine eigene Ertrags-Zeile, keine Wirtschaftlichkeit, kein CO₂-Urteil — dafür gibt es *„Ertrag/Jahr"*. Sein **Strom** dagegen zählt in der Bilanz deiner **Anlage** voll mit, und zwar auf beiden Seiten: als Menge (Eigenverbrauch, Autarkie, EV-Quote) **und** als Geld (Eigenverbrauchs-Ersparnis, Einspeise-Erlös). Das ist kein Widerspruch — die Kilowattstunde hat Netzbezug ersetzt oder wurde vergütet, unabhängig davon, ob eedc beurteilen kann, ob sich das Gerät gelohnt hat.
 
-> **Ein Erzeuger mit eigenem Vergütungssatz** — etwa eine Erweiterung mit neuem EEG-Satz oder Strom, den du direkt weiterverkaufst — trägt sein Geld über das Feld **„Einspeise-Erlös (€)"** bei *Sonstiges/Erzeuger* (siehe [Einstellungen](HANDBUCH_EINSTELLUNGEN.md#5-investitionen--komponenten)). Dieser Betrag steht so im T-Konto, wie du ihn gepflegt hast; eedc rechnet ihn **nicht** nach, denn der Satz deiner Anlage ist ein anderer. Ohne gepflegten Betrag erscheint keine eigene Zeile — die eingespeisten Kilowattstunden sind dann bereits im Einspeise-Erlös der Anlage bewertet.
+> **Ein Erzeuger mit eigenem Vergütungssatz** — etwa eine Erweiterung mit einem neuen EEG-Satz — trägt sein Geld über das Feld **„Einspeise-Erlös (€)"** bei *Sonstiges/Erzeuger* (siehe [Einstellungen](HANDBUCH_EINSTELLUNGEN.md#5-investitionen--komponenten)). Dieser Betrag steht so im T-Konto, wie du ihn gepflegt hast; eedc rechnet ihn **nicht** nach, denn der Satz deiner Anlage ist ein anderer. Ohne gepflegten Betrag erscheint keine eigene Zeile — die eingespeisten Kilowattstunden sind dann bereits im Einspeise-Erlös der Anlage bewertet.
 
 ⚑ **CO₂** bleibt beim sonstigen Erzeuger ebenfalls ohne Bewertung: Ein Verbrenner emittiert, statt einzusparen, und für eine Anlage ohne Brennstoff fehlt der belastbare Vergleichswert.
 
