@@ -432,8 +432,26 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
       if (z.eta_degradation_alarm) wirkungsgradKpi.color = 'red'
       // ① Alarme (IST-getreu): Degradation + Durchsatz-Invariante.
       const hinweise: NonNullable<KompGeraet['hinweise']> = []
+      // ⚠ Der Satz nennt NICHT mehr genau eine Ursache (Radiocarbonat, T89667 #294:
+      // „Das ich bei ca. 80 % liege, hat nach meiner Meinung mit der reinen
+      // AC-Kopplung zu tun ... Das könnte man zusätzlich im Hinweis aufnehmen").
+      // Er hatte recht, und eedc weiß es sogar: die Kopplung ist ein erhobenes Feld
+      // (#351), und ihr eigener Hint im Formular sagt, dass sie festlegt, WO Ladung
+      // und Entladung gemessen werden. Bei AC-Kopplung liegt zwischen beiden Zählern
+      // eine Wandlung mehr, sofern hausseitig gezählt wird — dann beschreibt ein
+      // niedriger Wert die Messstelle, nicht den Speicher (so auch
+      // HANDBUCH_EINSTELLUNGEN „Kopplung — AC oder DC?" und SENSOR-REFERENZ zu
+      // `entladung_kwh`). ⛔ Bewusst KEIN zusätzlicher Hinweis und kein Feld-Hint:
+      // derselbe eine Satz, nur ohne die falsche Ausschließlichkeit.
+      // ⛔ Und bewusst KEINE Ableitung „AC ⇒ Parameter senken": eedc weiß nicht, wo
+      // die Zähler des Anwenders sitzen (F-11 — „das kann kein Code beantworten").
       if (z.eta_degradation_alarm && z.ist_wirkungsgrad_prozent != null && z.param_wirkungsgrad_prozent != null) {
-        hinweise.push({ ton: 'warning', text: `Gemessener Wirkungsgrad (${n1(z.ist_wirkungsgrad_prozent)} %) liegt mehr als 5 Prozentpunkte unter dem Parameter-Wert (${n1(z.param_wirkungsgrad_prozent)} %) — möglicher Hinweis auf Speicher-Degradation. Wert prüfen, ggf. Parameter anpassen.` })
+        const acGekoppelt = aufgeloesteSpeicherKopplung(inv.parameter, inv.parent_investition_id != null) === 'ac'
+        const kopf = `Gemessener Wirkungsgrad (${n1(z.ist_wirkungsgrad_prozent)} %) liegt mehr als 5 Prozentpunkte unter dem gepflegten Wert (${n1(z.param_wirkungsgrad_prozent)} %).`
+        const ursachen = acGekoppelt
+          ? 'Bei AC-Kopplung enthält die Messung die Wandlung des Batterie-Wechselrichters, sofern Ladung und Entladung hausseitig gezählt werden; sonst kommt die Abweichung von Speicher-Alterung oder von den erfassten Mengen.'
+          : 'Möglich sind Speicher-Alterung, die erfassten Mengen oder eine Ladung und Entladung, die von verschiedenen Messstellen kommen.'
+        hinweise.push({ ton: 'warning', text: `${kopf} ${ursachen} Wert prüfen, ggf. Parameter anpassen.` })
       }
       if (z.durchsatz_inkonsistent) {
         hinweise.push({ ton: 'warning', text: 'Die kumulierte Entladung übersteigt die kumulierte Ladung — über die gesamte Historie physikalisch unmöglich. Bitte die erfassten Lade- und Entlade-Werte prüfen (beim Datenübertrag leicht vertauscht).' })

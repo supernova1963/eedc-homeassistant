@@ -59,7 +59,6 @@ from backend.core.investition_parameter import (
 from backend.core.wirtschaftlichkeit_defaults import EINSPEISEVERGUETUNG_DEFAULT_CENT
 from backend.core.berechnungen.speicher_wirtschaftlichkeit import (
     aggregiere_speicher_ist,
-    ist_eta_degradation_alarm,
 )
 from backend.services.speicher_wirtschaftlichkeit import (
     EffektiverLadepreisErgebnis,
@@ -1829,7 +1828,6 @@ async def get_roi_dashboard(
             eff_ladepreis = speicher_ladepreis_anlage
             eta_ist = speicher_eta_by_inv.get(inv.id)
             kapazitaet_fehlt = _roi.kapazitaet_fehlt
-            wirkungsgrad = _roi.param_wirkungsgrad   # für den Degradations-Alarm
             result = _roi.result
             inv_einsparung = result.jahres_einsparung_euro if result else None
             inv_co2 = result.co2_einsparung_kg if result else None
@@ -1867,13 +1865,16 @@ async def get_roi_dashboard(
                 # Etappe C1 Diagnose-Felder für UI-Badge bei dünner Datenbasis.
                 if eff_ladepreis is not None and eff_ladepreis.quelle == "datenbasis-zu-duenn":
                     komp_detail['ladepreis_abdeckung_prozent'] = round(eff_ladepreis.abdeckung_prozent, 0)
-                # Etappe C3 Degradations-Alarm an der η-KPI.
-                if eta_ist is not None and eta_ist.wirkungsgrad_prozent is not None:
-                    komp_detail['eta_degradation_alarm'] = ist_eta_degradation_alarm(
-                        ist_wirkungsgrad_prozent=eta_ist.wirkungsgrad_prozent,
-                        param_wirkungsgrad_prozent=wirkungsgrad,
-                    )
-                    komp_detail['param_wirkungsgrad_prozent'] = round(wirkungsgrad, 1)
+                # ⛔ Der Degradations-Alarm stand hier bis zum 03.09.2026 und ist
+                # ENTFALLEN (Entscheid Gernot: „ich sehe keinen Zusammenhang").
+                # Am Code belegt, warum er hier nie hingehörte: Gesetzt wurde er
+                # nur unter `eta_ist.wirkungsgrad_prozent is not None` — und
+                # GENAU unter dieser Bedingung gibt `_aufloesen_wirkungsgrad` die
+                # MESSUNG zurück (`:112`). Der Alarm konnte in dieser Sicht also
+                # ausschließlich dann erscheinen, wenn der Parameter, über den er
+                # sich beschwert, hier keine einzige Zahl beeinflusst. Er bleibt
+                # im Komponenten-Hub (`dashboards.py`), wo der gepflegte Wert
+                # zählt (Sizing, Tages-Vorschau, HA-Sensoren).
             else:
                 komp_detail['modus'] = 'prognose'
             komponenten.append(ROIKomponente(
@@ -2066,7 +2067,6 @@ async def get_roi_dashboard(
             eff_ladepreis = speicher_ladepreis_anlage
             eta_ist = speicher_eta_by_inv.get(inv.id)
             kapazitaet_fehlt = _roi.kapazitaet_fehlt
-            wirkungsgrad = _roi.param_wirkungsgrad   # für den Degradations-Alarm
             result = _roi.result
             if result is None:
                 # `jahres_einsparung`/`co2_einsparung` bleiben bei 0 — die
@@ -2118,12 +2118,8 @@ async def get_roi_dashboard(
                 })
                 if eff_ladepreis is not None and eff_ladepreis.quelle == "datenbasis-zu-duenn":
                     detail['ladepreis_abdeckung_prozent'] = round(eff_ladepreis.abdeckung_prozent, 0)
-                if eta_ist is not None and eta_ist.wirkungsgrad_prozent is not None:
-                    detail['eta_degradation_alarm'] = ist_eta_degradation_alarm(
-                        ist_wirkungsgrad_prozent=eta_ist.wirkungsgrad_prozent,
-                        param_wirkungsgrad_prozent=wirkungsgrad,
-                    )
-                    detail['param_wirkungsgrad_prozent'] = round(wirkungsgrad, 1)
+                # ⛔ Degradations-Alarm entfallen (03.09.2026) — Begründung im
+                # DC-Zweig oben, gleicher Sachverhalt.
 
         elif inv.typ == InvestitionTyp.E_AUTO.value:
             # Bugs #1, #2, #3, #4 v3.25.0: vorher las dieser Block aus toten Schema-Keys

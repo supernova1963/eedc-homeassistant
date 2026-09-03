@@ -133,23 +133,33 @@ export interface RoiAnalyseVM {
   fortschritt: AmortisationsFortschrittVM | null
 }
 
+/** Ein Speicher des Streifens: sein Name und sein C-Detail. */
+type SpeicherCDetail = { bezeichnung: string; detail: SpeicherRoiDetail }
+
 /**
- * Etappe C (#264): Speicher-spezifisches C-Detail aus einer ROI-Berechnung
+ * Etappe C (#264): Speicher-spezifische C-Details aus einer ROI-Berechnung
  * ziehen — egal ob AC-gekoppelt (eigene Berechnung) oder DC-gekoppelt
- * (Komponente eines PV-Systems). Liefert null, wenn keine belastbaren
+ * (Komponente eines PV-Systems). Leere Liste, wenn keine belastbaren
  * C-Felder vorliegen (z. B. Prognose-Modus ohne IST-Daten).
+ *
+ * ⛔ **Hier stand bis zum 03.09.2026 `.find(...)` und damit EIN Speicher**, während
+ * die Zeilenüberschrift darüber (`:598`) mit `filter` **alle** nennt. Sortiert wird
+ * nach Typ, Tiebreaker ID aufsteigend (`sort_investitionen_nach_typ`), und ohne
+ * `jahr`-Parameter fällt kein Aktiv-Filter (Absicht seit #123: ROI historisch) —
+ * gezeigt wurde also der ÄLTESTE, bei einem Speicher-Tausch der stillgelegte.
+ * Gemeldet von Radiocarbonat (T89667 #294): 79,1 % an einer Zeile, die zwei
+ * Speicher nennt. Präzedenz für den Bau ist der F4-Entscheid zum Mehrspeicher-Fall
+ * — „anlagenweiter SoC ist richtig, nur die Sichtbarkeit je Gerät muss stehen".
  */
-function getSpeicherCDetail(b: ROIBerechnung): SpeicherRoiDetail | null {
+function getSpeicherCDetails(b: ROIBerechnung): SpeicherCDetail[] {
   if (b.investition_typ === 'speicher') {
     const d = b.detail_berechnung as SpeicherRoiDetail
-    return d && d.wirkungsgrad_quelle ? d : null
+    return d && d.wirkungsgrad_quelle ? [{ bezeichnung: b.investition_bezeichnung, detail: d }] : []
   }
-  const sp = b.komponenten?.find((k) => k.typ === 'speicher')
-  if (sp) {
-    const d = sp.detail as SpeicherRoiDetail
-    return d && d.wirkungsgrad_quelle ? d : null
-  }
-  return null
+  return (b.komponenten ?? [])
+    .filter((k) => k.typ === 'speicher')
+    .map((k) => ({ bezeichnung: k.bezeichnung, detail: k.detail as SpeicherRoiDetail }))
+    .filter((e) => e.detail && e.detail.wirkungsgrad_quelle)
 }
 
 /** Lädt das ROI-Dashboard (ein `getROIDashboard`-Call) und leitet Amortisations-
@@ -479,45 +489,69 @@ export function RoiVergleichBar({ vm }: { vm: RoiAnalyseVM }) {
   )
 }
 
-/** Aufklappbares C-Detail einer Speicher-ROI-Zeile (Etappe C, #264). */
-function SpeicherDetailPanel({ detail }: { detail: SpeicherRoiDetail }) {
-  const lp = detail.effektiver_ladepreis_cent
-  const eta = detail.verwendetes_wirkungsgrad_prozent
+/** Aufklappbares C-Detail einer Speicher-ROI-Zeile (Etappe C, #264).
+ *
+ * ⚠ **Zwei Bezugsobjekte, und der Streifen sagt jetzt welches:** Der effektive
+ * Ladepreis ist **anlagenweit** (`speicher_ladepreis_anlage`, ein Aufruf je Anlage) —
+ * er steht deshalb EINMAL, auch wenn mehrere Speicher folgen. Ihn je Gerät zu
+ * wiederholen behauptete eine Messung am Gerät, die es nicht gibt; das wäre
+ * dieselbe Klasse gewesen, die dieser Bau behebt. Der Wirkungsgrad gehört
+ * **je Speicher** und trägt deshalb den Gerätenamen, sobald es mehr als einen gibt.
+ */
+function SpeicherDetailPanel({ eintraege }: { eintraege: SpeicherCDetail[] }) {
+  if (eintraege.length === 0) return null
+  // Der Ladepreis ist anlagenweit — irgendein Eintrag trägt denselben Wert.
+  const anlage = eintraege[0].detail
+  const lp = anlage.effektiver_ladepreis_cent
+  const mehrere = eintraege.length > 1
   return (
     <div className="px-4 py-3 bg-gray-50 dark:bg-gray-800/50 space-y-2">
       <div className="flex flex-wrap items-center gap-x-8 gap-y-2 text-sm">
         <span className="flex items-center gap-2">
-          <span className="text-gray-500 dark:text-gray-400">Effektiver Ladepreis:</span>
+          <span className="text-gray-500 dark:text-gray-400">
+            Effektiver Ladepreis{mehrere ? ' (Anlage)' : ''}:
+          </span>
           <span className="font-medium text-gray-900 dark:text-white">
             {lp != null ? `${fmtZahl(lp, 2)} ct/kWh` : '—'}
           </span>
-          {detail.ladepreis_quelle && (
-            <QuelleBadge quelle={detail.ladepreis_quelle} kind="ladepreis" />
+          {anlage.ladepreis_quelle && (
+            <QuelleBadge quelle={anlage.ladepreis_quelle} kind="ladepreis" />
           )}
-          {detail.ladepreis_abdeckung_prozent != null && (
+          {anlage.ladepreis_abdeckung_prozent != null && (
             <span className="text-xs text-gray-400 dark:text-gray-500">
-              {fmtZahl(detail.ladepreis_abdeckung_prozent, 0)} % Abdeckung
+              {fmtZahl(anlage.ladepreis_abdeckung_prozent, 0)} % Abdeckung
             </span>
           )}
         </span>
-        <span className="flex items-center gap-2">
-          <span className="text-gray-500 dark:text-gray-400">Verwendeter Wirkungsgrad:</span>
-          <span className="font-medium text-gray-900 dark:text-white">
-            {eta != null ? `${fmtZahl(eta, 1)} %` : '—'}
-          </span>
-          {detail.wirkungsgrad_quelle && (
-            <QuelleBadge quelle={detail.wirkungsgrad_quelle} kind="wirkungsgrad" />
-          )}
-        </span>
+        {!mehrere && <WirkungsgradZeile detail={eintraege[0].detail} />}
       </div>
-      {detail.eta_degradation_alarm && detail.param_wirkungsgrad_prozent != null && (
-        <p className="text-xs text-amber-700 dark:text-amber-300">
-          ⚠ Gemessener Wirkungsgrad liegt mehr als 5 Prozentpunkte unter dem
-          Parameter-Wert ({fmtZahl(detail.param_wirkungsgrad_prozent, 1)} %) —
-          möglicher Hinweis auf Speicher-Degradation.
-        </p>
+      {mehrere && (
+        <div className="space-y-1 text-sm">
+          {eintraege.map((e) => (
+            <div key={e.bezeichnung} className="flex flex-wrap items-center gap-2">
+              <span className="text-gray-500 dark:text-gray-400">{e.bezeichnung}:</span>
+              <WirkungsgradZeile detail={e.detail} />
+            </div>
+          ))}
+        </div>
       )}
     </div>
+  )
+}
+
+/** Der verwendete Wirkungsgrad EINES Speichers samt Herkunfts-Etikett. */
+function WirkungsgradZeile({ detail }: { detail: SpeicherRoiDetail }) {
+  const eta = detail.verwendetes_wirkungsgrad_prozent
+  return (
+    <span className="flex items-center gap-2">
+      <span className="text-gray-500 dark:text-gray-400">Verwendeter Wirkungsgrad:</span>
+      <span className="font-medium text-gray-900 dark:text-white">
+        {eta != null ? `${fmtZahl(eta, 1)} %` : '—'}
+      </span>
+      {detail.wirkungsgrad_quelle && (
+        <QuelleBadge quelle={detail.wirkungsgrad_quelle} kind="wirkungsgrad" />
+      )}
+    </span>
   )
 }
 
@@ -550,7 +584,8 @@ export function RoiDetailTabelle({ vm, zeigeCo2 = true }: { vm: RoiAnalyseVM; ze
           <TableBody>
             {roiData.berechnungen.map((b) => {
               const Icon = typIcons[b.investition_typ] || Settings2
-              const cDetail = getSpeicherCDetail(b)
+              const cDetails = getSpeicherCDetails(b)
+              const hatCDetail = cDetails.length > 0
               const isExpanded = expandedRows.has(b.investition_id)
               // N-87: Komponenten, für die eedc bewusst KEINE Wirtschaftlichkeit
               // konstruiert (heute: Split-Klimaanlage), zeigen den Leerwert `—`
@@ -569,7 +604,7 @@ export function RoiDetailTabelle({ vm, zeigeCo2 = true }: { vm: RoiAnalyseVM; ze
                   <tr className="hover:bg-gray-50 dark:hover:bg-gray-800">
                     <td className={ZELLE}>
                       <div className="flex items-center gap-2">
-                        {cDetail ? (
+                        {hatCDetail ? (
                           <button
                             type="button"
                             onClick={() => setExpandedRows((prev) => {
@@ -681,9 +716,9 @@ export function RoiDetailTabelle({ vm, zeigeCo2 = true }: { vm: RoiAnalyseVM; ze
                       </td>
                     )}
                   </tr>
-                  {cDetail && isExpanded && (
+                  {hatCDetail && isExpanded && (
                     <tr>
-                      <td colSpan={cols} className="p-0"><SpeicherDetailPanel detail={cDetail} /></td>
+                      <td colSpan={cols} className="p-0"><SpeicherDetailPanel eintraege={cDetails} /></td>
                     </tr>
                   )}
                 </Fragment>

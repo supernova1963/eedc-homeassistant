@@ -98,6 +98,57 @@ describe('KOMPONENTEN_ADAPTER', () => {
     expect(g.hinweise!.every((h) => h.ton === 'warning')).toBe(true)
   })
 
+  // ⚠ Radiocarbonat (T89667 #294): Der Satz nannte genau EINE Ursache
+  // („möglicher Hinweis auf Speicher-Degradation"), obwohl eedc die Kopplung als
+  // erhobenes Feld kennt (#351) und ihr Formular-Hint sagt, dass sie festlegt,
+  // WO Ladung und Entladung gemessen werden. Bei AC-Kopplung liegt zwischen
+  // beiden Zählern eine Wandlung mehr, sofern hausseitig gezählt wird — dann
+  // beschreibt ein niedriger Wert die Messstelle, nicht den Speicher.
+  // ⛔ Die Probe hält, dass es EIN Hinweis bleibt: kein zusätzlicher, kein
+  // Feld-Hint (Entscheid Gernot 03.09.2026 — Hinweise vermehren sich nicht,
+  // die Erklärung steht im Handbuch).
+  it('Der η-Hinweis nennt bei AC-Kopplung die Wandlung, nicht nur Degradation', async () => {
+    getSpeicherDashboard.mockResolvedValue([{
+      // Ohne gepflegte Kopplung und ohne Träger-Zuordnung löst eedc auf `ac` auf
+      // — Radiocarbonats Lage (Victron MultiPlus II, eigenständiger Speicher).
+      investition: inv({ typ: 'speicher', parameter: {}, parent_investition_id: null }),
+      zusammenfassung: { vollzyklen: 312, effizienz_prozent: 79.1, ist_wirkungsgrad_prozent: 79.1,
+        param_wirkungsgrad_prozent: 90, eta_degradation_alarm: true,
+        gesamt_entladung_kwh: 4100, gesamt_ladung_kwh: 4500, zyklen_pro_monat: 26,
+        arbitrage_kwh: 0, ersparnis_euro: 286 },
+      monatsdaten: [{ jahr: 2025, monat: 11, verbrauch_daten: { ladung_kwh: 100, entladung_kwh: 90 } }],
+    }])
+    const [g] = await KOMPONENTEN_ADAPTER.speicher.fetch(1)
+    expect(g.hinweise).toHaveLength(1)
+    const text = g.hinweise![0].text
+    // Die Zahlen bleiben, und der Handlungssatz bleibt.
+    expect(text).toContain('79,1 %')
+    expect(text).toContain('90,0 %')
+    expect(text).toContain('Wert prüfen')
+    // Neu: die Kopplung dieses Geräts wird genannt.
+    expect(text).toContain('AC-Kopplung')
+    // Und die Ausschließlichkeit ist weg — Degradation ist eine von mehreren
+    // Ursachen, nicht mehr die einzige genannte.
+    expect(text).not.toContain('möglicher Hinweis auf Speicher-Degradation')
+  })
+
+  it('Bei DC-Kopplung nennt derselbe Hinweis die Wandlung NICHT', async () => {
+    // Gegenprobe: ein DC-gekoppelter Speicher hängt am Träger, zwischen den
+    // Zählern liegt keine zusätzliche Wandlung — der AC-Satz wäre dort falsch.
+    getSpeicherDashboard.mockResolvedValue([{
+      investition: inv({ typ: 'speicher', parameter: { kopplung: 'dc' }, parent_investition_id: 7 }),
+      zusammenfassung: { vollzyklen: 312, effizienz_prozent: 79.1, ist_wirkungsgrad_prozent: 79.1,
+        param_wirkungsgrad_prozent: 90, eta_degradation_alarm: true,
+        gesamt_entladung_kwh: 4100, gesamt_ladung_kwh: 4500, zyklen_pro_monat: 26,
+        arbitrage_kwh: 0, ersparnis_euro: 286 },
+      monatsdaten: [{ jahr: 2025, monat: 11, verbrauch_daten: { ladung_kwh: 100, entladung_kwh: 90 } }],
+    }])
+    const [g] = await KOMPONENTEN_ADAPTER.speicher.fetch(1)
+    const text = g.hinweise![0].text
+    expect(text).not.toContain('AC-Kopplung')
+    expect(text).toContain('Speicher-Alterung')
+  })
+
   it('#358: die Wirtschaftlichkeits-Posten sind disjunkt (kein doppelter Netz-Anteil)', async () => {
     // Vorher stand im PV-Posten die GESAMT-Ersparnis, daneben zusätzlich der
     // Arbitrage-Gewinn — die netzgeladene kWh war damit zweimal gutgeschrieben

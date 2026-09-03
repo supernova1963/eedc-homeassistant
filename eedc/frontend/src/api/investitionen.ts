@@ -513,7 +513,19 @@ export interface SpeicherDashboardResponse {
   effizienz_verlauf: { jahr: number; monat: number; effizienz_prozent: number | null; fenster_monate: number }[]
 }
 
-/** Speicher-spezifische Felder im ROI-`detail`/`detail_berechnung`-Dict (Etappe C, #264). */
+/** Speicher-spezifische Felder im ROI-`detail`/`detail_berechnung`-Dict (Etappe C, #264).
+ *
+ * ⚠ **Zwei Bezugsobjekte in einem Dict, und das ist kein Versehen:**
+ * `effektiver_ladepreis_cent` kommt aus `speicher_ladepreis_anlage` und ist
+ * **anlagenweit** — für jeden Speicher derselbe Wert. `verwendetes_wirkungsgrad_prozent`
+ * kommt aus `speicher_eta_by_inv[inv.id]` und gehört **diesem einen Gerät**.
+ * Wer das nebeneinanderstellt, muss dazuschreiben, was wozu gehört.
+ *
+ * ⛔ `eta_degradation_alarm`/`param_wirkungsgrad_prozent` standen hier bis zum
+ * 03.09.2026 und sind entfallen (Entscheid Gernot) — der gepflegte Parameter
+ * geht in DIESE Sicht gar nicht ein, sobald gemessen wird. Die Warnung bleibt
+ * im Komponenten-Hub, wo der gepflegte Wert zählt.
+ */
 export interface SpeicherRoiDetail {
   modus?: string
   effektiver_ladepreis_cent?: number | null
@@ -521,8 +533,6 @@ export interface SpeicherRoiDetail {
   verwendetes_wirkungsgrad_prozent?: number
   wirkungsgrad_quelle?: string
   ladepreis_abdeckung_prozent?: number
-  eta_degradation_alarm?: boolean
-  param_wirkungsgrad_prozent?: number
 }
 
 export interface WallboxDashboardResponse {
