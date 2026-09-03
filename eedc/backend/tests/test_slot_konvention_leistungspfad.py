@@ -30,10 +30,11 @@ Hilfsfunktion.** Eine neue Funktion „gibt den Backward-Slot zurück" gegen sic
 selbst zu prüfen wäre eine Tautologie und könnte nie rot werden. Geprüft wird das
 Verhalten des echten Schreibpfads.
 
-⛔ **Und sie kommt ohne Anlagendaten aus.** Der Befund wurde zuerst an einer
-Instanz gemessen, deren Anlage **geseedet** ist (leeres ``sensor_mapping`` ⇒
-``aggregate_day`` kann dort nie gelaufen sein); alle Messzahlen von dort sind
-gestrichen. Das physische Test-Intervall wird hier konstruiert.
+⭐ **Und sie kommt trotzdem ohne Anlagendaten aus** — das physische Test-Intervall
+wird hier konstruiert. Das ist Absicht: Der Versatz wurde zuerst an einer echten
+Anlage gemessen (SMA, 14 Tage, alle Stundenpaare), aber eine Probe, die an einer
+Instanz hängt, prüft nur deren Konfiguration mit. Wer sie liest, soll den Befund
+am Code nachvollziehen können, nicht an fremden Daten.
 """
 
 from __future__ import annotations
