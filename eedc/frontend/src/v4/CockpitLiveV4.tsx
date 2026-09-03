@@ -423,7 +423,7 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
       )}
 
       {/* Element-Park-Fuß (SLICE 1): Hinweiszeile + „Geparkt (n)". Inert leer. */}
-      <ParkFuss />
+      <ParkFuss bereit={!loading} />
     </div>
   )
 }

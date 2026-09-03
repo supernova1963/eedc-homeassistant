@@ -342,7 +342,7 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
 
           {/* Element-Park-Fuß (SLICE 1): Hinweiszeile + „Geparkt (n)". Inert leer,
               bis etwas geparkt ist; rendert nichts ohne ParkProvider. */}
-          <ParkFuss />
+          <ParkFuss bereit={!loading} />
         </div>
       </div>
     </div>
