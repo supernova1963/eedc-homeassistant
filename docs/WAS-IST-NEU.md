@@ -11,6 +11,38 @@
 
 ## [Unreleased]
 
+**Deine Klimaanlage zeigt keine Wärme mehr, die sie nicht abgeben kann**
+
+Eine **Split-Klimaanlage** hat keinen Warmwasserkreis, und eedc fragt sie seit einiger Zeit
+auch nicht mehr danach. Wer den Wert früher einmal eingetragen hatte, hatte ihn aber
+weiterhin gespeichert — und **gelesen wurde er überall**: Unter *Komponenten → Wärme/Klima*
+stand er als **„Wärme erzeugt"**, füllte die Aufteilung *Wärme nach Zweck* zu 100 % mit
+**Warmwasser**, ging in die **Arbeitszahl** ein und erzeugte eine **Ersparnis gegenüber
+deiner alten Heizung** samt CO₂-Zahl — für Wärme, die das Gerät nie erzeugt hat.
+
+Jetzt zählt dieser Wert an einer Klimaanlage nirgends mehr als Wärme, und die
+Warmwasser-Achse verschwindet dort aus Balken, Spalte und Legende. Wo dadurch keine
+Arbeitszahl mehr übrig bleibt, steht „—" mit dem Grund daneben.
+
+**Dein Wert bleibt stehen** — eedc löscht und verschiebt nichts von allein. Der
+**Daten-Checker** nennt dir jeden betroffenen Monat. Stammt der Wert aus dem **Kühlbetrieb**,
+trag ihn unter *Nutzenergie Kuehlbetrieb* ein: Daraus rechnet eedc deine **Arbeitszahl
+Kühlen**.
+
+Bei betroffenen Geräten fallen „Wärme erzeugt", Arbeitszahl, Gas-Ersparnis und CO₂-Ersparnis
+sichtbar weg — sie standen dort zu Unrecht. **Dein Stromverbrauch und seine Kosten bleiben
+vollständig**, der Strom ist ja geflossen. Wärmepumpen mit Warmwasserkreis sehen keine
+Änderung.
+
+**Eine Wärmepumpe zeigt nur die Achsen, die es an ihr gibt**
+
+Macht dein Warmwasser ein zweites Gerät — eine Brauchwasser-Wärmepumpe zum Beispiel —, stand
+unter *Komponenten → Wärme/Klima* trotzdem überall eine Warmwasser-Spalte mit einer Dauer-Null
+darin. Die Anzeige richtet sich jetzt danach, was dein Gerät liefern kann.
+
+Ob dir irgendwo ein Zähler fehlt, sagt dir weiterhin der Daten-Checker — dieser Block trifft
+darüber keine Aussage.
+
 **Dein zweiter Erzeuger bringt sein Geld wieder mit**
 
 Hast du unter *Sonstiges* einen Erzeuger mit **eigenem Vergütungssatz** — eine Erweiterung

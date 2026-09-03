@@ -179,7 +179,9 @@ Alles läuft über **Einstellungen → Datenquellen**. Dort steht je Gerät eine
 | **Luft-Luft (Klimaanlage)** | Stromverbrauch, Betriebsart-Zähler | Warmwasser — den Kreis gibt es dort nicht |
 | **Brauchwasser (nur Warmwasser)** | Stromverbrauch, Warmwasser | Heizwärme, Strom Heizen |
 
-> **„Nicht angeboten" heißt nicht „gesperrt".** Alles Übrige liegt unter **„Weitere Größen erfassen"** und rückt nach oben, sobald du dort einen Sensor einträgst. Die einzige echte Ausnahme ist **Warmwasser an einer Luft-Luft-Klimaanlage**: Ein gefüllter Wert erzeugt dort eine Ersparnis, die es nicht gibt.
+> **„Nicht angeboten" heißt nicht „gesperrt".** Alles Übrige liegt unter **„Weitere Größen erfassen"** und rückt nach oben, sobald du dort einen Sensor einträgst. Die einzige echte Ausnahme ist **Warmwasser an einer Luft-Luft-Klimaanlage**: Den Kreis gibt es dort nicht.
+>
+> ⚑ **Hast du dort früher einmal einen Wert gepflegt, ist er nicht verloren — er zählt nur nicht mehr als Wärme des Geräts.** Bis 2026 floss ein solcher Altwert in *Wärme erzeugt*, in die Arbeitszahl und in die Ersparnis gegenüber der alten Heizung; das war eine Ersparnis für Wärme, die eine Klimaanlage nicht abgibt. Der **Daten-Checker** nennt dir jeden betroffenen Monat. Stammt der Wert aus dem **Kühlbetrieb**, gehört er unter *Nutzenergie Kuehlbetrieb* — daraus rechnet eedc deine **Arbeitszahl Kühlen**. **eedc verschiebt und löscht nichts von allein**, der gespeicherte Wert bleibt stehen, bis du ihn umträgst.
 
 ### Schritt 2 — Entscheiden: ein Zähler oder getrennte?
 
