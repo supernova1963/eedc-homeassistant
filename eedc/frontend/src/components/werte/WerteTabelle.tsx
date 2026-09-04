@@ -254,10 +254,14 @@ export function WerteTabelle({
   )
   const fussSchweigt = zeigeVergleich && vorjahrAggregat == null && ohneGegenstueck > 0
   // N-374: Warum eine Kennzahl-Spalte leer bleibt — SICHTBAR unter der Tabelle,
-  // nicht nur im `title=` der Zelle. Ein Tooltip ist auf dem Telefon keine
-  // Auskunft: das Info-Icon von `FormelTooltip` steht auf `hidden sm:` und ein
-  // natives `title=` hat dort gar keine Entsprechung — der Anwender sieht ein
-  // nacktes „—" ohne jeden Hinweis, dass etwas dahintersteckt (S3, ADR-002/P12).
+  // nicht nur im `title=` der Zelle. Der Anwender sieht sonst ein nacktes „—"
+  // ohne jeden Hinweis, dass etwas dahintersteckt (S3, ADR-002/P12) — er müsste
+  // erst auf den Gedanken kommen, die Zelle anzufassen.
+  // ⛔ Hier stand bis 2026-09-04 zusätzlich: „ein natives `title=` hat auf dem
+  // Telefon gar keine Entsprechung". **Das ist falsch** (N-390): `App.tsx` ruft
+  // `useTouchTitleTooltip` auf, einen app-globalen Touch-Ersatz für `title=`.
+  // Richtig ist der andere Grund, und er trägt allein: ein Tooltip verlangt, dass
+  // man ihn SUCHT. Ein Grund, der neben der Zahl steht, verlangt das nicht.
   // Einmal unter der Tabelle statt in jeder Zelle, wie `fussGrund` es schon tut:
   // die Gründe wiederholen sich über die Zeilen, die Fläche würde sonst unruhig.
   // Heute trägt nur `wp_cop` einen Grund (`lib/werte/zeile.ts`); die Sammlung ist

@@ -115,9 +115,13 @@ describe('N-370 — die Arbeitszahl je Monat ist nachrechenbar', () => {
  * warum der **Nenner** von der Strom-Spalte abweicht — sie setzt eine gebildete
  * Zahl voraus. Wo der Layer die Kennzahl **sperrt**, gibt es keine Herleitung,
  * und übrig blieb bis zum 2026-09-04 ein nacktes „—" mit dem Grund allein im
- * nativen `title=`. Auf dem Telefon hat `title=` keine Entsprechung; der Grund
- * war dort nicht erreichbar — genau das, was der Docstring des Layers
- * (`waermepumpe_kennzahl.Arbeitszahl.grund`) ausdrücklich verbietet.
+ * nativen `title=` — erreichbar nur für den, der auf den Gedanken kommt, die
+ * Zelle anzufassen. Genau das verbietet der Docstring des Layers
+ * (`waermepumpe_kennzahl.Arbeitszahl.grund`) ausdrücklich: der Grund gehört als
+ * sichtbare Zeile unter das „—".
+ * ⛔ **Berichtigung 2026-09-04 (N-390):** Hier stand „Auf dem Telefon hat `title=`
+ * keine Entsprechung." Falsch — `useTouchTitleTooltip` (App-global) rüstet genau
+ * das nach. Der Befund hält ohne den Satz.
  *
  * Die Zusicherung zielt auf die **Sichtbarkeit**, nicht auf die Anwesenheit:
  * `getByText` findet Attribute nicht, ein `title=` allein macht sie rot.

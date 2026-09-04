@@ -393,13 +393,18 @@ describe('WerteTabelle', () => {
  * ⚑ Was diese Probe misst, und warum die Zusicherung auf die HÖHE zielt statt auf
  * eine Symmetrie: Bis zum 2026-09-04 trug die Zelle den Grund allein in einem
  * nativen `title=`. Der Wert war damit korrekt beim Anwender „angekommen" — im
- * Sinne des DOM. Auf dem Telefon gibt es für `title=` keine Entsprechung, und das
- * Info-Icon der Haus-Tooltips steht auf `hidden sm:` (`ui/FormelTooltip.tsx:92`);
- * dort blieb ein nacktes „—" ohne jeden Hinweis stehen. Eine Probe, die nur
- * geprüft hätte, DASS der Grund irgendwo im Markup vorkommt, wäre über beide
- * Zustände grün gewesen — deshalb prüft diese hier ausdrücklich einen
- * **Textknoten** (`getByText` sieht Attribute nicht) und zusätzlich, dass die
- * Zelle selbst weiterhin nur das „—" trägt.
+ * Sinne des DOM. Erreichbar war er trotzdem nur, wenn man auf den Gedanken kam,
+ * die Zelle anzufassen: nichts wies darauf hin, dass hinter dem „—" etwas steht
+ * (das Info-Icon der Haus-Tooltips trägt `hidden sm:`, `ui/FormelTooltip.tsx:92`).
+ * Eine Probe, die nur geprüft hätte, DASS der Grund irgendwo im Markup vorkommt,
+ * wäre über beide Zustände grün gewesen — deshalb prüft diese hier ausdrücklich
+ * einen **Textknoten** (`getByText` sieht Attribute nicht) und zusätzlich, dass
+ * die Zelle selbst weiterhin nur das „—" trägt.
+ *
+ * ⛔ **Berichtigung 2026-09-04 (N-390):** Hier stand „Auf dem Telefon gibt es für
+ * `title=` keine Entsprechung." Das ist falsch — `App.tsx` ruft
+ * `useTouchTitleTooltip` auf, einen app-globalen Touch-Ersatz. Der Befund oben
+ * hält ohne diesen Satz; er beruhte nie auf ihm, sondern auf der Auffindbarkeit.
  *
  * Gegenprobe in derselben Datei: eine Zeile mit gebildeter Kennzahl darf den
  * Satz NICHT erzeugen, sonst erklärt die Tabelle etwas, das gar nicht eintritt.

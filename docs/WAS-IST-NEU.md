@@ -11,6 +11,18 @@
 
 ## [Unreleased]
 
+**Lesen und Parken kommen sich auf dem Telefon nicht mehr in die Quere**
+
+Im **Energiefluss** kannst du einen Knoten antippen und bekommst die Erklärung dazu — beim Haus
+sind das sieben Zeilen. Bisher verschwand sie in dem Moment, in dem du den Finger gehoben hast.
+Wer den Finger liegen ließ, um zu Ende zu lesen, bekam nach einer halben Sekunde die
+**Parkplatz-Auswahl** über die Fläche gelegt: Langes Drücken ist die Geste, mit der du eine Anzeige
+parkst. Man wollte lesen und musste einen Modus wegtippen, den man nie wollte.
+
+**Jetzt bleibt ein Hinweis stehen**, bis du woanders hintippst oder weiterscrollst. Und die
+Park-Geste greift auf dem Telefon nur noch **oben am Kopf** einer Anzeige. Am Rechner bleibt alles
+wie es war — dort parkst du per Rechtsklick, und der stört keinen Hinweis.
+
 **Wo eine Zahl fehlt, steht jetzt sichtbar warum — auch auf dem Telefon**
 
 Manche Kennzahlen bildet eedc bewusst nicht. Die **Arbeitszahl** zum Beispiel entfällt, wenn
@@ -18,9 +30,9 @@ Wärme und Strom nicht dasselbe Gerät und denselben Zweck beschreiben — eine 
 keine Auskunft, sondern eine Falschaussage. An ihrer Stelle stand ein „—", und der Grund dazu
 erschien nur, wenn du mit der Maus darauf gezeigt hast.
 
-**Auf einem Telefon gibt es das nicht.** Dort blieb ein nackter Strich stehen, der aussieht, als
-hättest du etwas zu pflegen vergessen. Jetzt steht der Grund als **sichtbarer Satz unter der
-Tabelle** — einmal je Grund, nicht in jeder Zeile: in *Auswertungen → Tabelle*, in der
+**Nur wies dich nichts darauf hin.** Ein nackter Strich sieht aus, als hättest du etwas zu pflegen
+vergessen — niemand tippt auf eine leere Zelle, um dort eine Erklärung zu vermuten. Jetzt steht der
+Grund als **sichtbarer Satz unter der Tabelle** — einmal je Grund, nicht in jeder Zeile: in *Auswertungen → Tabelle*, in der
 Monatstabelle unter *Komponenten → Wärme/Klima* und in der Detailübersicht unter
 *Auswertungen → ROI*, dort mit dem Namen des Geräts dazu.
 

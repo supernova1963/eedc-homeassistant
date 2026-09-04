@@ -567,9 +567,10 @@ export function RoiDetailTabelle({ vm, zeigeCo2 = true }: { vm: RoiAnalyseVM; ze
   // Sicht — dieselbe Arbeitsteilung wie bei der Kachel darüber.
   const ertragJeInv = vm.fortschritt?.ertragJeInvestition
   // N-374: warum eine Zeile vier leere Wert-Spalten hat — SICHTBAR unter der
-  // Tabelle statt nur im `title=` der „—". Ein natives `title=` hat auf dem
-  // Telefon keine Entsprechung; der Anwender liest das „—" sonst als fehlende
-  // Datenpflege. Einmal je Investition am Fuß und nicht in den vier Spalten:
+  // Tabelle statt nur im `title=` der „—"; der Anwender liest das „—" sonst als
+  // fehlende Datenpflege und hat keinen Anlass, die Zelle anzufassen.
+  // ⛔ Hier stand bis 2026-09-04 „ein natives `title=` hat auf dem Telefon keine
+  // Entsprechung" — falsch, s. `hooks/useTouchTitleTooltip` (N-390). Einmal je Investition am Fuß und nicht in den vier Spalten:
   // derselbe Satz viermal in einer Zeile wäre keine Auskunft, sondern Rauschen.
   // Der sichtbare Zusatz „· nicht bewertet" am Gerätenamen (N-87) bleibt, was er
   // ist — er sagt DASS, die Zeile hier sagt WARUM.

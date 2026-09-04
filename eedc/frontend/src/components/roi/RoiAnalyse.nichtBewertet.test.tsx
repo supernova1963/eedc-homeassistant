@@ -56,9 +56,12 @@ describe('RoiAnalyse — nicht bewertete Komponente', () => {
    * grün, während genau der Zustand herrschte, gegen den ihr Name gerichtet war.
    *
    * ⚑ Deshalb prüft diese hier die HÖHE der Aussage, nicht ihre Symmetrie: der
-   * Hinweistext muss als **Textknoten** im Dokument stehen. Auf dem Telefon hat
-   * ein `title=` keine Entsprechung — der Anwender läse das „—" sonst als
-   * fehlende Datenpflege statt als bewusste Nicht-Bewertung.
+   * Hinweistext muss als **Textknoten** im Dokument stehen. Sonst läse der
+   * Anwender das „—" als fehlende Datenpflege statt als bewusste Nicht-Bewertung
+   * — er hätte keinen Anlass, die Zelle überhaupt anzufassen.
+   * ⛔ **Berichtigung 2026-09-04 (N-390):** Hier stand „Auf dem Telefon hat ein
+   * `title=` keine Entsprechung." Falsch — `useTouchTitleTooltip` rüstet den
+   * Touch-Weg app-global nach. Der Befund beruhte nie auf diesem Satz.
    */
   it('N-374: der GRUND selbst steht als sichtbarer Text, nicht nur im title=', async () => {
     render(<RoiAnalyse anlageId={1} />)
