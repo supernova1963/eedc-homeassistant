@@ -1225,6 +1225,7 @@ POST /api/ha-statistics/import/{anlage_id}                         # Import mit 
 | `energie_profil_heute` | alle 15 min | den **laufenden** Tag fortschreiben |
 | `energie_profil_aggregation` | täglich 00:15 | Vortag aggregieren → `TagesEnergieProfil` + `TagesZusammenfassung` |
 | `energie_profil_aggregation_recovery` | täglich 02:15 | zweiter Anlauf für Tage, die 00:15 verpasst hat (Neustart, Ausfall) |
+| `energie_profil_archiv_nachzug` | täglich 02:20 | den **einen** Tag neu aggregieren, der die Wetter-Archiv-Grenze gerade passiert hat — damit ersetzt die endgültige Einstrahlung (ERA5) den vorläufigen Forecast-Wert. **Der einzige Job, der einen historischen Tag anfasst**; er überspringt ihn, wenn die HA-Historie inzwischen weniger Stunden deckt |
 | `korrekturprofil_aggregation` | täglich 02:30 | gelernte eedc-Prognose-Korrektur neu bilden |
 | `prognose_prefetch` | alle 45 min | Wetter-/Prognosedaten vorhalten |
 | `connector_daily_poll` | täglich 03:30 | Geräte-Connectors im lokalen Netz abfragen |
@@ -1361,6 +1362,7 @@ die Fassade, die die öffentlichen Namen re-exportiert), `backend/models/tages_e
    │  energie_profil_heute            alle 15 min  → aggregate_today_all()  │
    │  energie_profil_aggregation      täglich 00:15 → aggregate_yesterday_all() │
    │  energie_profil_aggregation_recovery 02:15    zweiter Anlauf (#136)    │
+   │  energie_profil_archiv_nachzug   täglich 02:20 Wetter-Grenztag (N-388)│
    │  Reparatur-Werkbank / Monatsabschluss / Vollbackfill  (manuell bzw.    │
    │                                                        ereignisbezogen) │
    └────────────────────────────────────────────────────────────────────────┘
@@ -1415,7 +1417,7 @@ neben Backward-Spalten derselben Zeile.
 
 #### Was einen Wert unterwegs absichert
 
-Neun Mechanismen, jeder mit seinem Anlass. Sie greifen **nacheinander**, nicht alternativ:
+Zehn Mechanismen, jeder mit seinem Anlass. Sie greifen **nacheinander**, nicht alternativ:
 
 | # | Mechanismus | Wo | Wogegen |
 | --- | --- | --- | --- |
@@ -1428,6 +1430,7 @@ Neun Mechanismen, jeder mit seinem Anlass. Sie greifen **nacheinander**, nicht a
 | 7 | **Rettung fremdbefüllter Felder** | `aggregator.py` (`_PROGNOSE_FELDER_RETTEN`, #190/#319) | `aggregate_day` löscht und schreibt neu; Prognose- und Kraftstoffpreis-Felder kommen von **anderen** Schreibern und würden sonst jedes Mal verschwinden |
 | 8 | **Drei Konsistenz-Invarianten** | `aggregator.py` am Ende des Laufs | Achse 1 Stunden- gegen Tagespfad · Achse 2 **Leistungs-JSON gegen Zähler-Spalten** (#315) · Counter-Daily-Drift. Alle drei melden per `warning` — sie **verwerfen keinen Tag** |
 | 9 | **Selbstheilung + Nachlauf** | `energie_profil_aggregation_recovery` (02:15, #136) · `sensor_snapshot_startup_recovery` (letzte 6 h nach Neustart) | Verspätete HA-Statistik und verpasste Läufe nach einem Neustart |
+| 10 | **Archiv-Nachzug der Wetterzeile** | `energie_profil/archiv_nachzug.py` (02:20, N-388) | Die Einstrahlung der letzten fünf Tage ist ein **vorläufiger** Modellwert — das ERA5-Archiv hinkt 2–5 Tage nach. Ohne Nachzug bleibt er für immer stehen; an bewölkten Tagen war er bis Faktor **8,7** zu klein und trieb die Performance Ratio über 1 |
 
 ⭐ **Warum das zusammen genügt und einzelne Ausfälle nichts unterdrücken müssen:** `aggregate_day`
 ist **idempotent** (Delete + Insert) — jeder spätere Lauf korrigiert den früheren. Ein Sensor, der
@@ -1439,10 +1442,17 @@ Teilabdeckung bleibt stehen und wird nicht wegretuschiert.
 
 - **Sie zieht die Vergangenheit nicht nach.** Eine geänderte Sensor-Zuordnung wirkt ab jetzt; die
   gespeicherten Zeilen tragen die Zuordnung ihres Aggregationslaufs. Der Weg zurück ist die
-  **Reparatur-Werkbank** („Zeitraum neu aggregieren", bis 31 Tage je Lauf) — bewusst vom Anwender
-  ausgelöst und in Blöcken, kein globaler Heiler-Knopf.
+  **Reparatur-Werkbank** (*Einstellungen → Daten*, „Mehrere Tage neu aggregieren", bis 31 Tage je
+  Lauf) — bewusst vom Anwender ausgelöst und in Blöcken, kein globaler Heiler-Knopf.
   ⚠ Für den **laufenden** Tag gilt das nicht: er wird alle 15 Minuten komplett neu gerechnet und
   übernimmt eine neue Zuordnung damit rückwirkend für diesen Tag.
+  ⚠ **Und seit N-388 gibt es eine zweite, eng begrenzte Ausnahme:** der Archiv-Nachzug (02:20)
+  aggregiert **genau einen** historischen Tag neu — den, der die Wetter-Archiv-Grenze gerade
+  passiert hat. Das ist keine Aufweichung der Regel, sondern ihr Preis: die Wetterzeile der letzten
+  fünf Tage ist vorläufig, und niemand sonst holt sie nach. Damit dabei nichts verlorengeht, prüft
+  der Job **vorher**, ob die HA-Historie den Tag noch so weit deckt wie beim ersten Lauf — deckt sie
+  weniger, bleibt der Tag stehen. Ältere Tage bleiben unangetastet; für sie ist der Weg wieder die
+  Reparatur-Werkbank.
 - **Sie schließt keinen Monat ab.** `monthly_snapshot` setzt nur einen Log-Zeitstempel.
 - **Sie überschreibt keine LTS-Lücken.** „Lücken aus HA-LTS nachfüllen" ist ausdrücklich additiv
   (#190); einen Overwrite-Modus gibt es bewusst nicht.
@@ -1454,6 +1464,7 @@ Teilabdeckung bleibt stehen und wird nicht wegretuschiert.
 | `aggregate_day()` | alle Anlässe | **Der einzige Schreiber.** Holt Tagesverlauf + Wetter + SoC + Betriebsmodus + Preise, schreibt 24 Stundenzeilen + Tageszusammenfassung. Idempotent (Delete + Insert) |
 | `aggregate_today_all()` | Scheduler alle 15 min | Der **laufende** Tag für alle Anlagen — er wird dabei jedes Mal vollständig neu gerechnet |
 | `aggregate_yesterday_all()` | Scheduler 00:15 + 02:15 | Vortag für alle Anlagen mit Sensor-Mapping; 02:15 ist der zweite Anlauf (#136) |
+| `archiv_nachzug_all()` | Scheduler 02:20 | Der Wetter-Grenztag (`heute − ARCHIVE_LAG_TAGE − 1`) für alle Anlagen. Ruft **denselben** `aggregate_day` — der Endpunkt-Wechsel Forecast→Archiv passiert in `_get_wetter_ist` von selbst, es gibt keinen zweiten Rechenweg für Einstrahlung, GTI oder PR |
 | `backfill_range()` | Monatsabschluss, Vollbackfill | Datumsbereich nachrechnen. Holt die Stunden-Leistungskurve **gebündelt** aus HA-LTS (`lade_tagesverlauf_aus_lts`) und reicht sie je Tag durch — nicht limitiert auf die ~10 Tage HA-History |
 | `rollup_month()` | Monatsabschluss | Aggregiert `TagesZusammenfassung` → `Monatsdaten`-Felder (Summe/Durchschnitt/Max) |
 

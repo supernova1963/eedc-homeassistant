@@ -2743,6 +2743,16 @@ Bei Multi-String-Anlagen werden GTI-Werte pro Orientierungsgruppe parallel abger
 > der Reparatur-Werkbank (*Einstellungen → Daten*) „Mehrere Tage neu aggregieren" für den
 > Zeitraum aus.
 
+> ⭐ **Der Nenner ist an den jüngsten Tagen vorläufig — und wird seit v4.0.39 nachgezogen.** Die
+> Einstrahlung der letzten fünf Tage kommt vom **Forecast**-Endpunkt: das Reanalyse-Archiv (ERA5)
+> hinkt der Echtzeit zwei bis fünf Tage nach. Der Forecast-Wert ist im Mittel gut (Median-Faktor
+> 1,00 über 91 Tage gemessen), an **bewölkten** Tagen aber deutlich zu klein — gemessen bis Faktor
+> **8,7**. Eine zu kleine Einstrahlung macht den Nenner zu klein und die PR zu groß; genau daraus
+> entstand ein „PV-Doppelerfassungs"-Verdacht ohne Doppelerfassung. Seit v4.0.39 aggregiert eedc
+> nachts den einen Tag neu, der die Archiv-Grenze gerade passiert hat, und ersetzt den vorläufigen
+> Wert dabei durch den endgültigen. **Für die letzten fünf Tage bleibt er vorläufig** — das lässt
+> sich nicht abkürzen, das Archiv hat diese Tage noch nicht.
+
 > **Validation Winterborn 2025-12-28:** GHI 1317 Wh/m² vs. GTI Süd35° 3358 Wh/m² (Faktor 2.55×). PR vorher 2.16 (physikalisch unmöglich), nachher 0.85 (plausibel für einen kalten Wintertag). Betrifft historische `TagesZusammenfassung.performance_ratio`, `MonatsAuswertungResponse.performance_ratio_avg` und die PR-Spalte im PDF-Jahresbericht — **nach Update einmalig „Verlauf nachberechnen + überschreiben" auslösen**. PV-kWh-Werte selbst bleiben unverändert.
 
 **§51 EEG (Negativpreis-Analyse):**

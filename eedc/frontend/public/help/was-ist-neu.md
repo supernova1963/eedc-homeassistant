@@ -11,6 +11,32 @@
 
 ## [Unreleased]
 
+**Die Einstrahlung der letzten Tage wird nachgezogen**
+
+Die **Performance Ratio** sagt, wie viel deine Anlage aus dem gemacht hat, was an Sonne da war.
+Wie viel da war, holt eedc beim Wetterdienst. Für Tage, die weiter als fünf Tage zurückliegen,
+kommt dieser Wert aus dem endgültigen Messarchiv — für die Tage davor gibt es das Archiv noch
+nicht, dort nimmt eedc den Modellwert. Bisher blieb dieser vorläufige Wert für immer stehen.
+
+Im Mittel ist er gut. An **bewölkten** Tagen kann er aber deutlich zu klein sein — an einer echten
+Anlage nachgemessen an einzelnen Tagen um ein Vielfaches. Und ein zu kleiner Sonnenwert lässt die
+Performance Ratio nach oben schießen, ohne dass an deiner Anlage etwas falsch wäre. Wer daraufhin
+die Meldung *„Verdacht auf PV-Doppelerfassung"* bekam, suchte den Fehler bei sich — und fand keinen.
+
+**Jetzt holt eedc den endgültigen Wert nach.** Nachts rechnet es den einen Tag neu, der gerade alt
+genug geworden ist, und ersetzt dabei Einstrahlung, Bewölkung und Wetterlage durch die gemessenen
+Werte.
+
+**Was du siehst:** Die Performance Ratio zurückliegender Tage kann sich ändern — sie steht dann auf
+gemessenen statt vorhergesagten Werten. Dasselbe gilt für die Spalte *Einstrahlung* unter
+*Auswertungen → Tabelle*. Ein Doppelerfassungs-Verdacht, der nur an solchen Tagen hing, verschwindet
+binnen weniger Tage von allein.
+
+**Für die letzten fünf Tage bleibt der Wert vorläufig** — das lässt sich nicht abkürzen, das
+Messarchiv des Wetterdienstes hat diese Tage noch nicht. Und **Tage, die vor dieser Änderung
+entstanden sind, behalten ihren Wert**; wer sie berichtigen möchte, nimmt *Einstellungen → Daten*
+und dort in der Reparatur-Werkbank **„Mehrere Tage neu aggregieren"**.
+
 **Der Anlagen-Zählerstand trägt den Tag wieder**
 
 Wenn dein Wechselrichter eine Gesamtsumme liefert und du **zusätzlich** einzelnen Strings eigene
