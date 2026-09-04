@@ -2,8 +2,11 @@
  * Parkbar — umhüllt EIN parkbares Element (KPICard, Chart, Tabelle …).
  *
  * Geste (kein sichtbares Icon, Affordanz = die Geste):
- *  • Desktop: Rechtsklick (contextmenu, preventDefault) → Park-Overlay
- *  • Mobil:   Long-Press (~500 ms, Bewegung < 10 px) → Park-Overlay
+ *  • Desktop: Rechtsklick (contextmenu, preventDefault) → Park-Overlay,
+ *             auf der **ganzen** Fläche
+ *  • Mobil:   Long-Press (~500 ms, Bewegung < 10 px) → Park-Overlay,
+ *             aber **nur in der Kopf-Zone** und nicht auf einem Bedienelement
+ *             (N-390, s. {@link KOPFZONE_PX})
  * Overlay (Parkplatz-Symbol + „Parken") erscheint nur während der Geste, schließt bei
  * Außen-Tap. Zurückholen läuft NICHT hier, sondern per Chip-Tap im {@link GeparktBlock}.
  *
@@ -18,6 +21,37 @@ import { usePark } from './ParkContext'
 
 const LONGPRESS_MS = 500
 const BEWEGUNG_PX = 10
+
+/**
+ * N-390: Die Touch-Geste greift nur im oberen Streifen des Elements — seiner
+ * **Kopf-Zone**. Das ist die zweite Stolperstein-Auflösung der SPEC
+ * (`SPEC-ELEMENT-LAYOUT-PAPIERKORB.md:65`), die bis zum 2026-09-04 fehlte:
+ * *„Geste an die Titel-/Kopf-Zone binden, nicht an den interaktiven Körper."*
+ *
+ * ⛔ **Warum die andere Auflösung derselben SPEC nicht reicht** (`:66`,
+ * „Long-Press ≠ Chart-Tooltip-Touch: Timer + Bewegungs-Schwelle"): Sie setzt
+ * voraus, dass ein Tooltip-Touch ein **Move/Pan** ist. Das gilt für
+ * *Chart*-Tooltips (über die Kurve fahren) — **nicht** für `useTouchTitleTooltip`,
+ * den app-globalen Touch-Ersatz für `title=`/`data-title`. Dort ist der
+ * Tooltip-Touch ein **Halten ohne Bewegung**, also exakt die Park-Geste. Wer im
+ * Energiefluss den Haus-Knoten antippte, um seine sieben Zeilen zu lesen, bekam
+ * nach 500 ms das Park-Overlay über die ganze Fläche gelegt.
+ *
+ * ⚑ **Nur Touch** (Entscheid Gernot, 04.09.). Der Desktop-Rechtsklick bleibt auf
+ * der **ganzen** Fläche — er kollidiert mit keinem Hover-Tooltip, eine
+ * Einschränkung wäre dort reiner Komfortverlust.
+ *
+ * ⚠ **Der Kantenfall ist bewusst nicht gedeckelt:** Bei einem Element, das
+ * flacher als diese Zone ist, greift die Geste weiterhin überall — also der
+ * Zustand von heute. Das ist kein neuer Schaden, nur keine Verbesserung dort;
+ * ein Deckel („höchstens die halbe Höhe") wäre eine Regel ohne gemessenen Anlass.
+ */
+const KOPFZONE_PX = 44
+
+/** Elemente, die ihren Touch selbst brauchen — ein Long-Press auf dem ⤢-Knopf
+ *  oder der Hintergrund-Auswahl des Energieflusses ist keine Park-Absicht.
+ *  Deckt denselben SPEC-Satz ab („nicht an den interaktiven Körper"). */
+const BEDIENELEMENTE = 'button, a, select, input, textarea, [role="button"]'
 
 export function Parkbar({
   id,
@@ -56,6 +90,12 @@ export function Parkbar({
   const onTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length !== 1) return abbrechen()
     const t = e.touches[0]
+    // N-390, beide Hälften der SPEC-Auflösung: nur in der Kopf-Zone, und nicht
+    // auf einem Bedienelement. `currentTarget` ist der Parkbar-Wrapper und wird
+    // synchron gelesen (React 18 poolt Events nicht mehr).
+    const oben = t.clientY - e.currentTarget.getBoundingClientRect().top
+    if (oben > KOPFZONE_PX) return abbrechen()
+    if ((e.target as Element | null)?.closest?.(BEDIENELEMENTE)) return abbrechen()
     start.current = { x: t.clientX, y: t.clientY }
     timer.current = setTimeout(() => setOverlay(true), LONGPRESS_MS)
   }

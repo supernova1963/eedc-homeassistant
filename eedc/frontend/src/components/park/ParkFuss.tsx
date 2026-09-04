@@ -52,7 +52,11 @@ export function ParkFuss(
         <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1.5 px-1">
           <MousePointerClick className="h-3 w-3 flex-shrink-0" />
           <span>
-            Tipp: eine Anzeige lange drücken (Rechtsklick) → auf den Parkplatz.
+            {/* N-390: „oben" gehört seit dem 04.09. dazu — auf dem Telefon greift
+                die Geste nur noch in der Kopf-Zone, damit sie den Tooltip im Körper
+                nicht mehr zudeckt. Der Klammerzusatz trägt bewusst KEINE Ortsangabe:
+                per Rechtsklick gilt weiterhin die ganze Fläche. */}
+            Tipp: eine Anzeige oben lange drücken (oder rechtsklicken) → auf den Parkplatz.
           </span>
         </p>
       )}
