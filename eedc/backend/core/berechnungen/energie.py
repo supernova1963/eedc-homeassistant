@@ -351,6 +351,13 @@ def geraete_spalte_kw(
     gefunden" wäre eine Aussage, und die haben wir hier nicht. Ein **vorhandener**
     Key mit Wert 0 ist dagegen eine echte 0 und bleibt es.
 
+    ⚑ **Beide Seiten meinen dasselbe physische Intervall — seit 2026-09-04.**
+    Diese Funktion stellt Zählerpfad und Leistungspfad *derselben Zeile*
+    nebeneinander; bis dahin trug die Spalte ``[h-1, h)`` und das JSON
+    ``[h, h+1)`` (N-382). Ein Gerät ohne kWh-Zähler stand damit über den
+    Fallback unten eine **Stunde versetzt** neben einem Gerät mit Zähler. SoT
+    der Konvention: ``core/berechnungen/slot_konvention.py``.
+
     Args:
         zaehler_wert: die Spalte aus dem Zählerpfad (``r.waermepumpe_kw`` …).
         komponenten: ``TagesEnergieProfil.komponenten`` derselben Stunde.

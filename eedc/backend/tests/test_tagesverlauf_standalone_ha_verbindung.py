@@ -61,9 +61,13 @@ class _Merker:
     def __init__(self):
         self.mqtt_gerufen = 0
 
-    async def mqtt(self, anlage, db, tage_zurueck=0):
+    async def mqtt(self, anlage, db, tage_zurueck=0, *, mit_vortagsrand=False):
+        # `mit_vortagsrand` gehört zum Vertrag von `_get_tagesverlauf_mqtt`
+        # (N-382, 2026-09-04) — die Attrappe muss ihn annehmen, sonst prüft sie
+        # eine Signatur, die es nicht mehr gibt. Gegenstand dieser Probe bleibt
+        # allein die WEGGABELUNG.
         self.mqtt_gerufen += 1
-        return {"serien": [], "punkte": []}
+        return {"serien": [], "punkte": [], "vortagsrand": []}
 
 
 @pytest.fixture

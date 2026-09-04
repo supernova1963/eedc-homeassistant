@@ -418,6 +418,22 @@ def _t(stunde: int, minute: int = 0) -> datetime:
     return datetime(2025, 6, 15, stunde, minute)
 
 
+def _slot(uhr_stunde: int) -> int:
+    """Der BACKWARD-Slot, der die Uhr-Stunde ``[uhr_stunde, uhr_stunde+1)`` trägt.
+
+    SoT: ``core/berechnungen/slot_konvention.py`` — **Slot h = [h-1, h)**. Die
+    Proben darunter beschreiben physische Uhr-Intervalle („um 07:58 wird
+    umgestellt"); in welchem Slot die Zeile dafür steht, ist eine Frage der
+    Konvention und gehört deshalb an **eine** Stelle.
+
+    ⛔ Bis 2026-09-04 stand hier implizit die Identität — der Betriebsmodus lag
+    forward und damit gegen alles andere in derselben Zeile versetzt (N-382).
+    Die Aussagen der Proben haben sich dabei NICHT geändert, nur ihre
+    Koordinate.
+    """
+    return uhr_stunde + 1
+
+
 async def test_s2_die_laengste_verweildauer_gewinnt_die_stunde(db, monkeypatch):
     """Der Kern von S2 — und der Grund, warum eine SoC-Kopie falsch wäre.
 
@@ -432,8 +448,10 @@ async def test_s2_die_laengste_verweildauer_gewinnt_die_stunde(db, monkeypatch):
         historie=historie,
         mapping=lambda i: {"investitionen": {str(i[0]): {"live": {"betriebsmodus": "climate.k"}}}},
     )
-    assert ergebnis[7][ids[0]] == HEIZEN     # 58 min heizen vs. 2 min aus
-    assert ergebnis[8][ids[0]] == AUS        # danach durchgehend aus
+    # [07:00, 08:00): 58 min heizen vs. 2 min aus ⇒ heizen.
+    assert ergebnis[_slot(7)][ids[0]] == HEIZEN
+    # [08:00, 09:00): danach durchgehend aus.
+    assert ergebnis[_slot(8)][ids[0]] == AUS
 
 
 @pytest.mark.parametrize("rand_liefern", [True, False], ids=["HA-Randeintrag", "nur-Vorlauf"])
@@ -534,10 +552,12 @@ async def test_s2_der_modus_landet_beim_richtigen_geraet(db, monkeypatch):
     )
     # Vor dem ersten Punkt gibt es kein Signal — auch das gehört geprüft,
     # sonst ließe sich die Zuordnung mit einer Fortschreibung „reparieren".
-    assert all(stunde not in ergebnis for stunde in range(5))
-    for stunde in range(5, 24):
-        assert ergebnis[stunde][ids[0]] == HEIZEN, f"Stunde {stunde}: Wohnzimmer"
-        assert ergebnis[stunde][ids[1]] == KUEHLEN, f"Stunde {stunde}: Schlafzimmer"
+    # Der erste Punkt liegt um 05:00 — alle Slots, die eine Uhr-Stunde DAVOR
+    # tragen, bleiben leer.
+    assert all(slot not in ergebnis for slot in range(_slot(5)))
+    for slot in range(_slot(5), 24):
+        assert ergebnis[slot][ids[0]] == HEIZEN, f"Slot {slot}: Wohnzimmer"
+        assert ergebnis[slot][ids[1]] == KUEHLEN, f"Slot {slot}: Schlafzimmer"
 
 
 async def test_s2_zwei_geraete_duerfen_dieselbe_entity_teilen(db, monkeypatch):

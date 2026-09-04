@@ -165,6 +165,7 @@ async def aggregate_day(
         try:
             tv_data = await service.get_tagesverlauf(
                 anlage, db, tage_zurueck=_tage_zurueck(datum),
+                mit_vortagsrand=True,
             )
         except Exception as e:
             logger.warning(f"Anlage {anlage.id}, {datum}: Tagesverlauf-Fehler: {type(e).__name__}: {e}")
@@ -172,6 +173,10 @@ async def aggregate_day(
 
     serien = tv_data.get("serien", [])
     punkte_raw = tv_data.get("punkte", [])
+    # [Vortag 23:00, 00:00) — das physische Intervall des Backward-Slots 0.
+    # Getrennte Liste, weil ein Punkt nur seine Uhrzeit trägt, nicht sein Datum
+    # (s. `get_tagesverlauf`). Der Vollbackfill reicht sie ebenso durch.
+    vortagsrand_raw = tv_data.get("vortagsrand", [])
 
     # Wenn keine leistung_w-Daten vorliegen aber MQTT-Energy da ist → synthetisches
     # punkte-Array mit leeren werte-Dicts, damit die Stunden-Schleife 24x läuft
@@ -181,15 +186,57 @@ async def aggregate_day(
     # `is None`-Prüfung short-circuited davor.)
     if not punkte_raw and prefetched_tagesverlauf is None and has_mqtt_energy:
         punkte_raw = [{"zeit": f"{h:02d}:00", "werte": {}} for h in range(24)]
+        vortagsrand_raw = []
+        synthetische_slots = True
     elif not punkte_raw:
         logger.debug(f"Anlage {anlage.id}, {datum}: Keine Tagesverlauf-Daten")
         return None
+    else:
+        synthetische_slots = False
 
-    # Sub-stündliche Punkte (z.B. 10-Min) auf Stundenmittelwerte aggregieren
+    # ── Sub-stündliche Punkte auf BACKWARD-Slots bucketen (N-382) ─────────
+    #
+    # SoT: `core/berechnungen/slot_konvention.py` — **Slot h = Energie
+    # [h-1, h)**, Slot 0 = [Vortag 23:00, 00:00). Der Leistungspfad
+    # beschriftet seine Punkte mit dem Slot-BEGINN (`live_tagesverlauf_service`
+    # nennt das Raster wörtlich `h_start <= p < h_end`), ein Punkt „05:00"
+    # deckt also [05:00, 06:00) und gehört damit in **Slot 6**.
+    #
+    # ⛔ Bis 2026-09-04 landete er in Slot 5 — dieselbe Zeile trug damit im
+    # JSON `[h, h+1)` und in ihren Spalten (Zählerpfad) `[h-1, h)`, also zwei
+    # verschiedene Stunden. Über 24 Slots hebt sich das auf, weshalb
+    # Tagessummen, Monat und ROI unauffällig blieben; pro Stunde nicht:
+    # `TagVerlaufChart` subtrahierte quer über den Versatz und zeichnete daraus
+    # ein Phantom-Band „PV (übrige)" bzw. — auf steigender Kurve — einen
+    # Quellenstapel ÜBER der Erzeugung (BMeyendriesch, #405). An einer echten
+    # Anlage mit EINEM PV-Erzeuger gemessen: 5,09 kWh Überhang an einem Tag.
+    #
+    # Zwei Kanten gehören dazu:
+    #  • Slot 0 kommt aus dem VORTAG (`vortagsrand_raw`). Fehlt er, bleibt der
+    #    Slot ohne `komponenten` — die Zeile wird trotzdem geschrieben, sonst
+    #    verlöre sie auch ihre Zähler- und Wetterwerte.
+    #  • Bucket 23 des Tages ([23:00, 24:00)) gehört in Slot 0 des FOLGETAGS
+    #    und fällt hier weg — er kommt dort über dessen `vortagsrand` an.
     stunden_buckets: dict[int, list[dict]] = {}
-    for p in punkte_raw:
-        h = int(p["zeit"].split(":")[0])
-        stunden_buckets.setdefault(h, []).append(p)
+    if synthetische_slots:
+        # MQTT-Energie ohne Leistungskurve: 24 leere Slots, damit die Schleife
+        # 24× läuft und die Zähler-Werte ihre Zeile bekommen. Hier wird nichts
+        # verschoben — es gibt keine Leistungspunkte, die eine Stunde meinen.
+        stunden_buckets = {h: [] for h in range(24)}
+    else:
+        for p in vortagsrand_raw:
+            stunden_buckets.setdefault(0, []).append(p)
+        for p in punkte_raw:
+            h = int(p["zeit"].split(":")[0])
+            if h >= 23:
+                continue          # gehört in Slot 0 des Folgetags
+            stunden_buckets.setdefault(h + 1, []).append(p)
+        # Slot 0 existiert auch ohne Vortagsrand — als leerer Bucket. Ohne ihn
+        # schriebe die Schleife die Zeile 0 gar nicht, und mit ihr fielen
+        # `pv_kw`, Wetter und Preis dieser Stunde aus (sie kommen NICHT aus dem
+        # Leistungspfad und wären unschuldig mitbetroffen).
+        if stunden_buckets and 0 not in stunden_buckets:
+            stunden_buckets[0] = []
 
     punkte = []
     for h in sorted(stunden_buckets):

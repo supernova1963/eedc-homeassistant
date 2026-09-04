@@ -406,7 +406,20 @@ async def _get_betriebsmodus_history(
                 continue
 
             for h in range(24):
-                h_start = start + timedelta(hours=h)
+                # BACKWARD-Slot (N-382): Slot h beschreibt [h-1, h), für h = 0
+                # also den Vortag 23:00–00:00. Der Tag Vorlauf im Abruf darüber
+                # deckt das bereits ab — es braucht keinen zweiten Request.
+                #
+                # ⛔ Bis 2026-09-04 stand hier `+ timedelta(hours=h)`, also
+                # [h, h+1). Das war mit dem Leistungspfad in derselben Zeile
+                # konsistent und mit allem anderen nicht. Beim Umstellen des
+                # Leistungspfads MUSS diese Zeile mitgehen: `modus_split_monat`
+                # paart `betriebsmodus_je_wp` mit `komponenten` DERSELBEN Zeile
+                # — bliebe der Modus forward, träfe ab dann der Modus der
+                # Stunde h auf den Strom der Stunde h-1, und die Aufteilung
+                # Heizen/Kühlen/Warmwasser (und mit ihr JAZ, Gas-Ersparnis und
+                # CO₂) wäre neu falsch statt alt richtig.
+                h_start = start + timedelta(hours=h - 1)
                 h_end = h_start + timedelta(hours=1)
 
                 # Zustand zu Beginn der Stunde = letzter Punkt davor.

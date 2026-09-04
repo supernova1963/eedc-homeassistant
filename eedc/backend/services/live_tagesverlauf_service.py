@@ -207,17 +207,33 @@ def _baue_short_term_overlays(
 
 async def get_tagesverlauf(
     anlage: Anlage, db: AsyncSession, tage_zurueck: int = 0,
+    *, mit_vortagsrand: bool = False,
 ) -> dict:
     """
     Holt stündlich aggregierte Leistungsdaten für einen Tag.
 
     Args:
         tage_zurueck: 0=heute, 1=gestern, etc.
+        mit_vortagsrand: zusätzlich die Punkte aus ``[Vortag 23:00, 00:00)``
+            holen und sie **getrennt** unter ``"vortagsrand"`` zurückgeben.
+            Nur ``aggregate_day`` braucht sie: der Backward-Slot 0 eines Tages
+            trägt genau dieses Intervall (SoT ``core/berechnungen/
+            slot_konvention.py``). Die Live-Ansicht ruft ohne das Flag und
+            bekommt bit-gleich, was sie vorher bekam.
 
     Returns:
         dict mit "serien" (Beschreibung der Kurven) und "punkte" (Stundenwerte).
         Butterfly-Chart: Quellen positiv, Senken negativ.
         Bidirektionale Serien (Speicher, Netz) wechseln je nach Richtung.
+        Bei ``mit_vortagsrand`` zusätzlich "vortagsrand" — dieselbe Punkt-Form,
+        aber die Punkte des Vortags.
+
+    ⚠ **Warum der Rand eine eigene Liste ist und nicht in "punkte" steht:**
+    Ein Punkt trägt als Label seine Uhrzeit (``"23:00"``), nicht sein Datum.
+    Ein Vortags-Punkt ``23:00`` und ein heutiger ``23:00`` wären im selben
+    Array nicht mehr unterscheidbar — der Bucketer im Aggregator würde sie
+    mitteln. Getrennte Listen machen die Verwechslung unmöglich, statt sie
+    per Konvention zu verbieten.
     """
     basis_live, inv_live_map, basis_invert, inv_invert_map = extract_live_config(anlage)
 
@@ -249,7 +265,9 @@ async def get_tagesverlauf(
     from backend.services.ha_state_service import get_ha_state_service
 
     if not get_ha_state_service().is_available:
-        return await _get_tagesverlauf_mqtt(anlage, db, tage_zurueck)
+        return await _get_tagesverlauf_mqtt(
+            anlage, db, tage_zurueck, mit_vortagsrand=mit_vortagsrand,
+        )
 
     # Investitionen aus DB laden (brauchen Bezeichnung + Typ + parent_id)
     inv_result = await db.execute(
@@ -268,6 +286,14 @@ async def get_tagesverlauf(
     else:
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         end = now
+
+    # Abruf-Fenster ≠ Tagesfenster: für den Backward-Slot 0 braucht der
+    # Aggregator die letzte Stunde des VORTAGS. Statt eines zweiten vollen
+    # Tagesabrufs (der Scheduler-Job „Energie-Profil Heute" läuft alle 15
+    # Minuten — das wäre 96× ein Extra-Tag pro Anlage und Tag) wird das
+    # bestehende Fenster um eine Stunde nach hinten aufgemacht. `start` bleibt
+    # die Tagesgrenze und entscheidet weiter, was „heute" ist.
+    abruf_start = start - timedelta(hours=1) if mit_vortagsrand else start
 
     # Investments ohne leistung_w-Konfiguration sammeln (für Hinweis im Frontend)
     uebersprungen: list[str] = []
@@ -386,7 +412,7 @@ async def get_tagesverlauf(
     if not all_ids:
         return {"serien": [], "punkte": []}
 
-    history, units = await get_history_normalized(all_ids, start, end)
+    history, units = await get_history_normalized(all_ids, abruf_start, end)
 
     # Strompreis-Einheit normalisieren → ct/kWh
     if strompreis_eid:
@@ -416,7 +442,7 @@ async def get_tagesverlauf(
     mean_overlay, counter_overlay = _baue_short_term_overlays(
         anlage, serien_core, serie_entities, investitionen,
         pv_gesamt_eid, netz_bezug_eid, netz_einspeisung_eid, netz_kombi_eid,
-        start, end, history,
+        abruf_start, end, history,
     )
 
     # Mean-Overlay VOR Invert (gleiche Roh-Sensor-Semantik → Invert gilt,
@@ -434,9 +460,12 @@ async def get_tagesverlauf(
     for eid, pts in counter_overlay.items():
         history[eid] = pts
 
-    # 10-Minuten-Mittelwerte berechnen
+    # 10-Minuten-Mittelwerte berechnen. Bei `mit_vortagsrand` laufen die sechs
+    # Intervalle VOR Mitternacht mit (m = -6 … -1); sie landen unten in einer
+    # eigenen Liste, nicht in `punkte`.
     punkte: list[dict] = []
-    for m in range(144):
+    vortagsrand: list[dict] = []
+    for m in range(-6 if mit_vortagsrand else 0, 144):
         h_start = start + timedelta(minutes=m * 10)
         h_end = h_start + timedelta(minutes=10)
         if h_start > end:
@@ -547,7 +576,8 @@ async def get_tagesverlauf(
             if bp is not None:
                 werte["strompreis"] = bp
 
-        punkte.append({"zeit": f"{h_start.hour:02d}:{h_start.minute:02d}", "werte": werte})
+        ziel = vortagsrand if h_start < start else punkte
+        ziel.append({"zeit": f"{h_start.hour:02d}:{h_start.minute:02d}", "werte": werte})
 
     # Haushalt-Serie hinzufügen wenn Daten vorhanden
     if any("haushalt" in p["werte"] for p in punkte):
@@ -583,15 +613,21 @@ async def get_tagesverlauf(
     # als vorher. Der MQTT-Zweig liefert selbst leer, wenn keine Snapshots da
     # sind — er kostet dann eine Query und ändert nichts.
     if not punkte:
-        mqtt = await _get_tagesverlauf_mqtt(anlage, db, tage_zurueck)
+        mqtt = await _get_tagesverlauf_mqtt(
+            anlage, db, tage_zurueck, mit_vortagsrand=mit_vortagsrand,
+        )
         if mqtt.get("punkte"):
             return mqtt
 
-    return {"serien": serien, "punkte": punkte, "uebersprungen": uebersprungen}
+    return {
+        "serien": serien, "punkte": punkte, "uebersprungen": uebersprungen,
+        "vortagsrand": vortagsrand,
+    }
 
 
 async def _get_tagesverlauf_mqtt(
     anlage: Anlage, db: AsyncSession, tage_zurueck: int = 0,
+    *, mit_vortagsrand: bool = False,
 ) -> dict:
     """
     MQTT-Fallback für Tagesverlauf: liest aus MqttLiveSnapshot statt HA-History.
@@ -602,6 +638,10 @@ async def _get_tagesverlauf_mqtt(
     schickte, obwohl er gar kein MQTT nutzt). Zusätzlich als **Rückfall**, wenn
     der HA-Weg nichts hergibt.
     Erwartet dass mqtt_live_history_service alle 5 Min Snapshots schreibt.
+
+    ``mit_vortagsrand`` verhält sich wie im HA-Zweig — beide Wege müssen den
+    Backward-Slot 0 füllen können, sonst hinge die Slot-Konvention davon ab,
+    ob eine Anlage HA oder MQTT nutzt.
     """
     from backend.services.mqtt_live_history_service import get_snapshots_for_range
 
@@ -614,6 +654,9 @@ async def _get_tagesverlauf_mqtt(
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         end = now
 
+    # s. `get_tagesverlauf`: Abruf-Fenster ≠ Tagesfenster.
+    abruf_start = start - timedelta(hours=1) if mit_vortagsrand else start
+
     # Börsenpreis-Fallback holen — per-Slot-Fallback bei Lücken im MQTT-Sensor
     _mqtt_boersenpreis: dict[int, float] = {}
     try:
@@ -623,7 +666,7 @@ async def _get_tagesverlauf_mqtt(
     except Exception:
         pass
 
-    rows = await get_snapshots_for_range(anlage.id, start, end, db)
+    rows = await get_snapshots_for_range(anlage.id, abruf_start, end, db)
     if not rows:
         return {"serien": [], "punkte": []}
 
@@ -763,9 +806,11 @@ async def _get_tagesverlauf_mqtt(
     if not serien:
         return {"serien": [], "punkte": []}
 
-    # 10-Minuten-Mittelwerte berechnen (144 Intervalle pro Tag)
+    # 10-Minuten-Mittelwerte berechnen (144 Intervalle pro Tag; bei
+    # `mit_vortagsrand` zusätzlich die sechs Intervalle vor Mitternacht)
     punkte: list[dict] = []
-    for m in range(144):
+    vortagsrand: list[dict] = []
+    for m in range(-6 if mit_vortagsrand else 0, 144):
         h_start = start + timedelta(minutes=m * 10)
         h_end = h_start + timedelta(minutes=10)
         if h_start >= end:
@@ -844,7 +889,8 @@ async def _get_tagesverlauf_mqtt(
             if bp is not None:
                 werte["strompreis"] = bp
 
-        punkte.append({"zeit": f"{h_start.hour:02d}:{h_start.minute:02d}", "werte": werte})
+        ziel = vortagsrand if h_start < start else punkte
+        ziel.append({"zeit": f"{h_start.hour:02d}:{h_start.minute:02d}", "werte": werte})
 
     # Haushalt-Serie ergänzen wenn Daten vorhanden
     if any("haushalt" in p["werte"] for p in punkte):
@@ -871,4 +917,7 @@ async def _get_tagesverlauf_mqtt(
             "einheit": "ct/kWh",
         })
 
-    return {"serien": serien, "punkte": punkte, "uebersprungen": uebersprungen}
+    return {
+        "serien": serien, "punkte": punkte, "uebersprungen": uebersprungen,
+        "vortagsrand": vortagsrand,
+    }

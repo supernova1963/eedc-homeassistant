@@ -77,6 +77,74 @@ class LtsTagesverlauf:
     grund: LtsGrund = "ok"
 
 
+def _stunden_werte(
+    hourly_data: dict,
+    serie_entities: dict,
+    tages_serien: list[dict],
+    datum_iso: str,
+    stunde: int,
+    netz_kombi_eid: Optional[str],
+    netz_bezug_eid: Optional[str],
+    netz_einspeisung_eid: Optional[str],
+) -> dict[str, float]:
+    """Das ``werte``-Dict EINER Stunde aus den gebuendelten LTS-Daten.
+
+    Herausgezogen, damit der **Vortagsrand** (die Stunde 23 des Vortags, die
+    den Backward-Slot 0 traegt — N-382) nach genau derselben Regel entsteht wie
+    jede andere Stunde. Zwei Aufbauten fuer dieselbe Groesse waeren zwei
+    Wahrheiten, sobald eine von beiden angefasst wird.
+
+    Leeres Dict = diese Stunde hat in keiner Serie einen Wert.
+    """
+    werte: dict[str, float] = {}
+
+    for serie in tages_serien:
+        skey = serie["key"]
+        if serie["kategorie"] == "netz":
+            continue  # Netz separat
+        entity_ids = serie_entities.get(skey, [])
+        serie_sum_kw = 0.0
+        has_data = False
+        for entity_id in entity_ids:
+            val = hourly_data.get(entity_id, {}).get(datum_iso, {}).get(stunde)
+            if val is not None:
+                serie_sum_kw += val
+                has_data = True
+        if has_data:
+            if serie["bidirektional"]:
+                raw_val = -serie_sum_kw
+            elif serie["seite"] == "senke":
+                raw_val = -abs(serie_sum_kw)
+            else:
+                raw_val = abs(serie_sum_kw)
+            werte[skey] = round(raw_val, 3)
+
+    # Netz (Kombi-Sensor oder getrennt Bezug/Einspeisung)
+    bezug_kw = 0.0
+    einsp_kw = 0.0
+    if netz_kombi_eid:
+        val = hourly_data.get(netz_kombi_eid, {}).get(datum_iso, {}).get(stunde)
+        if val is not None:
+            if val >= 0:
+                bezug_kw = val
+            else:
+                einsp_kw = abs(val)
+    else:
+        if netz_bezug_eid:
+            val = hourly_data.get(netz_bezug_eid, {}).get(datum_iso, {}).get(stunde)
+            if val is not None:
+                bezug_kw = max(0.0, val)
+        if netz_einspeisung_eid:
+            val = hourly_data.get(netz_einspeisung_eid, {}).get(datum_iso, {}).get(stunde)
+            if val is not None:
+                einsp_kw = max(0.0, val)
+    netto_kw = bezug_kw - einsp_kw
+    if bezug_kw > 0 or einsp_kw > 0 or abs(netto_kw) > 0.001:
+        werte["netz"] = round(netto_kw, 3)
+
+    return werte
+
+
 async def lade_tagesverlauf_aus_lts(
     db: AsyncSession,
     anlage: Anlage,
@@ -180,8 +248,13 @@ async def lade_tagesverlauf_aus_lts(
         logger.warning(f"Anlage {anlage.id}: HA Statistics nicht verfügbar, LTS-Tagesverlauf übersprungen")
         return LtsTagesverlauf(grund="ha_nicht_verfuegbar")
 
+    # Einen Tag frueher beginnen: der Backward-Slot 0 eines Tages traegt
+    # [Vortag 23:00, 00:00) (SoT `core/berechnungen/slot_konvention.py`). Der
+    # Read ist EIN gebuendelter Aufruf ueber die Range — ein Tag mehr kostet
+    # keine zusaetzliche Abfrage, nur eine geringfuegig groessere Antwort.
     hourly_data = await asyncio.to_thread(
-        ha_service.get_hourly_sensor_data, list(all_entity_ids), von, bis
+        ha_service.get_hourly_sensor_data, list(all_entity_ids),
+        von - timedelta(days=1), bis
     )
 
     if not hourly_data:
@@ -230,57 +303,33 @@ async def lade_tagesverlauf_aus_lts(
         # damit bleibt `stunden_verfuegbar` die Zahl der Stunden mit Daten.
         punkte: list[dict] = []
         for h in range(24):
-            werte: dict[str, float] = {}
-
-            for serie in tages_serien:
-                skey = serie["key"]
-                if serie["kategorie"] == "netz":
-                    continue  # Netz separat
-                entity_ids = serie_entities.get(skey, [])
-                serie_sum_kw = 0.0
-                has_data = False
-                for entity_id in entity_ids:
-                    val = hourly_data.get(entity_id, {}).get(datum_iso, {}).get(h)
-                    if val is not None:
-                        serie_sum_kw += val
-                        has_data = True
-                if has_data:
-                    if serie["bidirektional"]:
-                        raw_val = -serie_sum_kw
-                    elif serie["seite"] == "senke":
-                        raw_val = -abs(serie_sum_kw)
-                    else:
-                        raw_val = abs(serie_sum_kw)
-                    werte[skey] = round(raw_val, 3)
-
-            # Netz (Kombi-Sensor oder getrennt Bezug/Einspeisung)
-            bezug_kw = 0.0
-            einsp_kw = 0.0
-            if netz_kombi_eid:
-                val = hourly_data.get(netz_kombi_eid, {}).get(datum_iso, {}).get(h)
-                if val is not None:
-                    if val >= 0:
-                        bezug_kw = val
-                    else:
-                        einsp_kw = abs(val)
-            else:
-                if netz_bezug_eid:
-                    val = hourly_data.get(netz_bezug_eid, {}).get(datum_iso, {}).get(h)
-                    if val is not None:
-                        bezug_kw = max(0.0, val)
-                if netz_einspeisung_eid:
-                    val = hourly_data.get(netz_einspeisung_eid, {}).get(datum_iso, {}).get(h)
-                    if val is not None:
-                        einsp_kw = max(0.0, val)
-            netto_kw = bezug_kw - einsp_kw
-            if bezug_kw > 0 or einsp_kw > 0 or abs(netto_kw) > 0.001:
-                werte["netz"] = round(netto_kw, 3)
-
+            werte = _stunden_werte(
+                hourly_data, serie_entities, tages_serien, datum_iso, h,
+                netz_kombi_eid, netz_bezug_eid, netz_einspeisung_eid,
+            )
             if werte:
                 punkte.append({"zeit": f"{h:02d}:00", "werte": werte})
 
+        # Vortagsrand: [Vortag 23:00, 00:00) = das Intervall des Backward-
+        # Slots 0 (N-382). Dieselbe Bauform wie ein regulaerer Punkt, nur aus
+        # dem Datum davor — deshalb eine eigene Liste: ein Punkt traegt seine
+        # Uhrzeit, nicht sein Datum, und „23:00" von gestern waere neben
+        # „23:00" von heute nicht mehr unterscheidbar.
+        vortag_iso = (current - timedelta(days=1)).isoformat()
+        rand_werte = _stunden_werte(
+            hourly_data, serie_entities, tages_serien, vortag_iso, 23,
+            netz_kombi_eid, netz_bezug_eid, netz_einspeisung_eid,
+        )
+        vortagsrand = (
+            [{"zeit": "23:00", "werte": rand_werte}] if rand_werte else []
+        )
+
         if punkte:
-            ergebnis[current] = {"serien": tages_serien, "punkte": punkte}
+            ergebnis[current] = {
+                "serien": tages_serien,
+                "punkte": punkte,
+                "vortagsrand": vortagsrand,
+            }
 
         current += timedelta(days=1)
 
