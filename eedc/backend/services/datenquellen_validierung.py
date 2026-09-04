@@ -67,81 +67,28 @@ _NETZ_AGGREGAT_FELDER = {"netz_kombi_w"}
 _NETZ_KOMPONENTEN_FELDER = {"einspeisung_w", "netzbezug_w"}
 
 
-def finde_aggregat_teilweise_verdraengt(felder: list[dict]) -> dict[str, dict]:
-    """Anlagen-PV-Zählerstand, den ein **halber** Umbau auf Einzelzähler abschaltet.
-
-    Dritte Lage neben `finde_redundante_aggregate` (jede Komponente hat ihren
-    eigenen Wert ⇒ das Aggregat ist wirkungslos) und dem stillen Normalfall
-    (keine Komponente hat einen ⇒ das Aggregat trägt die ganze Anlage).
-
-    ⚠ **Diese Funktion hat am 2026-08-07 ihre Richtung umgedreht.** Sie hieß bis
-    dahin `finde_aggregat_ohne_tageszaehler` und meldete, dass der
-    Anlagen-Zählerstand die Tagesebene *gar nicht* erreicht — das war der
-    F-7-Befund (Forum kaba-kakao, T89667 #109). Mit Stufe 1 erreicht er sie:
-    `basis:pv_gesamt` ist ein Snapshot-Zähler der Kategorie `pv`
-    (`snapshot/keys.py::BASIS_ZAEHLER_FELDER`). Damit ist die alte Meldung für
-    die häufigste Lage falsch geworden — und die neue Lage ist die gefährlichere:
-
-    **Die Regel ist alles-oder-nichts** (`komponenten_beitraege.basis_beitraege`,
-    identisch zum Live-Pfad). Sobald EIN Erzeuger einen eigenen
-    `pv_erzeugung_kwh`-Zähler trägt, zählt das Aggregat für Tag und Stunde nicht
-    mehr mit — die Tagessumme fällt dann auf die gemessenen Erzeuger zurück und
-    ist still zu niedrig. Genau dahin führt der gut gemeinte halbe Umbau, den
-    die Fläche selbst empfiehlt.
-
-    Gemeldet wird also, wenn **beides** zutrifft: das Aggregat ist belegt UND
-    mindestens ein Erzeuger hat einen eigenen Zähler UND mindestens einer hat
-    keinen. Trägt keiner einen eigenen Zähler, ist die Anlage vollständig
-    versorgt und bekommt kein Warndreieck, sondern nur den Hinweistext an den
-    Komponenten-Zeilen (`_PV_AGGREGAT_NUR_ANLAGENSUMME_TEXT`) — warnen nur, wo
-    etwas kaputt ist ([[feedback_user_fehlermeldungen]]).
-
-    `felder`: wie `finde_redundante_aggregate` — ALLE Felder aller aktiven
-    Investitionen, auch die unbelegten.
-    Returns {aggregat_field_id: {"art":"teilweise_verdraengt","schwere":"warning",…}}.
-    """
-    ohne_zaehler = [
-        f for f in felder
-        if f.get("typ") in _PV_KOMPONENTEN_TYPEN
-        and f.get("feld") == _PV_KOMPONENTEN_FELD_MONAT
-        # ⛔ Hier bleibt es bei `belegt`, NICHT `_liefert`: Die Frage ist die
-        # umgekehrte („welcher Erzeuger hat KEINEN eigenen Zähler?"), und ein
-        # zugeordneter Zähler, der gerade nichts meldet, ist kein fehlender
-        # Zähler. Mit `_liefert` würde ein vorübergehender Sensorausfall als
-        # dauerhafte Lücke gemeldet — die Gegenrichtung desselben Fehlers.
-        and not f.get("belegt")
-    ]
-    if not ohne_zaehler:
-        return {}  # keine Lücke ⇒ `finde_redundante_aggregate` ist zuständig
-    mit_zaehler = [
-        f for f in felder
-        if _liefert(f) and f.get("typ") in _PV_KOMPONENTEN_TYPEN
-        and f.get("feld") == _PV_KOMPONENTEN_FELD_MONAT
-    ]
-    if not mit_zaehler:
-        # Kein Erzeuger misst selbst ⇒ das Aggregat trägt die Tagesebene
-        # vollständig. Nichts kaputt, kein Warndreieck.
-        return {}
-    out: dict[str, dict] = {}
-    for f in felder:
-        if (_liefert(f) and f.get("typ") == "basis"
-                and f.get("feld") == _PV_AGGREGAT_FELD_MONAT):
-            out[f["id"]] = {
-                "art": "teilweise_verdraengt", "schwere": "warning",
-                "grund": "pv_aggregat_tagesebene",
-                "wirksame_felder": [k["id"] for k in ohne_zaehler],
-                "text": "Für Tag und Stunde zählt der Anlagen-Zählerstand nicht "
-                        "mehr mit, weil einzelne Erzeuger einen eigenen Zähler "
-                        "haben — dort gilt entweder der Anlagenwert oder die "
-                        "Einzelwerte, nie beides. Die Tagessumme ist damit zu "
-                        "niedrig. Entweder allen Erzeugern einen eigenen Zähler "
-                        "zuordnen (Home Assistant baut aus einem Leistungssensor "
-                        "unter Helfer → „Integral-Sensor“ / Riemannsche Summe "
-                        "einen kWh-Zähler), oder die vorhandenen Einzelzähler "
-                        "entfernen. Die Monatswerte sind in beiden Fällen "
-                        "vollständig.",
-            }
-    return out
+# ⛔ HIER STAND `finde_aggregat_teilweise_verdraengt` — mit #406 ERSATZLOS
+# ENTFERNT (Entscheid Gernot 2026-09-04).
+#
+# Sie warnte: „Für Tag und Stunde zählt der Anlagen-Zählerstand nicht mehr mit,
+# weil einzelne Erzeuger einen eigenen Zähler haben … Die Tagessumme ist damit
+# zu niedrig." Das beschrieb den Zustand richtig — und war die Antwort, die am
+# 2026-08-07 anstelle einer Reparatur gewählt wurde (Stufe 1 zu F-7, Journal:
+# „Er macht es schlechter, indem er dem Rat folgt.").
+#
+# ⭐ Zwei Gründe, warum sie nicht reicht und deshalb geht:
+# 1. **Sie hat den gemeldeten Fall nicht erreicht.** Mathek (#406) hat ALLEN
+#    Strings einen Zähler zugeordnet — es gab keine Teilbelegung, die Warnung
+#    schwieg, und der Tag verlor trotzdem 21 Stunden PV.
+# 2. **Ihr Defekt existiert nicht mehr.** Seit der Präzedenz je Tag
+#    (`core/berechnungen/pv_tages_praezedenz.py`) trägt das Aggregat die Bilanz
+#    genau dann, wenn die Einzelzähler sie nicht vollständig tragen. Die
+#    Tagessumme ist nicht mehr zu niedrig — eine Warnung wäre eine
+#    Falschmeldung ([[feedback_user_fehlermeldungen]]: warnen nur, wo etwas
+#    kaputt ist).
+#
+# Was ein eigener Zähler zusätzlich bringt, steht weiter an der Komponenten-
+# Zeile (`_PV_AGGREGAT_NUR_ANLAGENSUMME_TEXT`) — informierend, nicht warnend.
 
 
 def einheit_problem(feld_einheit: Optional[str], sensor_einheit: Optional[str]) -> Optional[dict]:
@@ -400,12 +347,17 @@ _VERDRAENGT_TEXT = {
 # mehreren Erzeugern einen Zähler zuordnet, schaltet die Anlagensumme für Tag
 # und Stunde ab und sieht danach weniger als vorher. Ein Hinweis, der dazu rät
 # und das verschweigt, führt in genau diese Falle.
+# ⛔ Der letzte Satz lautete bis #406: „Dann brauchen ihn aber alle Erzeuger:
+# sobald einer gemessen wird, zählt für Tag und Stunde nur noch, was je Erzeuger
+# gemessen ist." Das war der **Preis** der alten Alles-oder-nichts-Regel — und
+# damit eine Anleitung in die Falle, in die Mathek gelaufen ist. Der Preis
+# existiert nicht mehr; geblieben ist der Gewinn.
 _PV_AGGREGAT_NUR_ANLAGENSUMME_TEXT = (
     "Über den Anlagen-Zählerstand abgedeckt — als Summe der ganzen Anlage, "
     "auch für Tag und Stunde. Ein eigener Zähler hier schlüsselt zusätzlich "
-    "je Erzeuger auf. Dann brauchen ihn aber alle Erzeuger: sobald einer "
-    "gemessen wird, zählt für Tag und Stunde nur noch, was je Erzeuger "
-    "gemessen ist."
+    "je Erzeuger auf und macht den Anteil dieses Erzeugers zu einem gemessenen "
+    "Wert. Ohne ihn wird der Tagesanteil nach kWp aus der Anlagensumme "
+    "abgeleitet; die Anlagensumme selbst stimmt in beiden Fällen."
 )
 
 # ⭐ Diese Texte sagen seit 2026-08-30, was sie BEDEUTEN — nicht nur, was der

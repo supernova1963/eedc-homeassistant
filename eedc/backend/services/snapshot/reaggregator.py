@@ -34,7 +34,6 @@ from backend.services.snapshot.komponenten_beitraege import (
     basis_hourly_eintraege,
     investition_hourly_eintraege,
     mqtt_hourly_eintraege,
-    pv_je_investition_in_sensor_keys,
     resolve_either_or_eintraege,
 )
 from backend.services.snapshot.writer import snapshot_anlage, snapshot_anlage_5min
@@ -101,21 +100,21 @@ async def get_reaggregate_preview(
     # sensor_key) bleibt quellen-agnostisch unverändert.
     quellen_energy = extract_quellen_energy(anlage)
 
-    # MQTT-Keys vorab (identisch zum Snapshot-Aggregator): die Alles-oder-nichts-
-    # Regel für `basis:pv_gesamt` (Stufe 1 zu F-7) muss BEIDE Quellen kennen,
-    # bevor der Basis-Eintrag entsteht — sonst zeigt die Vorschau bei gemischter
-    # Installation Aggregat UND Einzelzähler. Nur geholt, nicht verarbeitet;
-    # die `seen_keys`-Vorrangreihenfolge unten bleibt unverändert.
+    # MQTT-Keys vorab (identisch zum Snapshot-Aggregator).
+    # ⛔ Bis #406 stand hier zusätzlich die Alles-oder-nichts-Regel für
+    # `basis:pv_gesamt` (Stufe 1 zu F-7). Sie ist entfallen; die Vorschau zeigt
+    # jetzt beide Quellen als Zeilen und damit genau das, was der Lauf liest.
+    # ⚠ **Die Vorschau wählt bewusst NICHT selbst.** Sie ist eine
+    # Gegenüberstellung „alt gegen neu" JE ZÄHLER — welche Quelle den Tag
+    # trägt, entscheidet der Aggregator. Eine zweite Wahl hier wäre ein zweiter
+    # Rechenweg und könnte von seiner abweichen.
     cutoff = datetime.now() - timedelta(days=MQTT_AKTIV_TAGE)
     mqtt_sks_alle: list[str] = sorted(
         await mqtt_zaehler_keys(db, anlage.id, seit=cutoff)
     )
-    pv_extern = pv_je_investition_in_sensor_keys(mqtt_sks_alle)
 
     basis = sensor_mapping.get("basis", {}) or {}
-    for he in basis_hourly_eintraege(
-        sensor_mapping, pv_je_investition_extern=pv_extern
-    ):
+    for he in basis_hourly_eintraege(sensor_mapping):
         cfg = basis.get(he.feld)
         if isinstance(cfg, dict):
             eid = cfg.get("sensor_id")

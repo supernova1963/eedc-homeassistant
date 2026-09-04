@@ -36,8 +36,15 @@ from backend.services.snapshot.boundary_range import BoundaryRange
 from backend.services.snapshot.keys import (
     KUMULATIVE_COUNTER_FELDER,
     FLOAT_COUNTER_FELDER,
+    PV_AGGREGAT_BASIS_FELD,
     extract_quellen_energy,
     feld_hat_zaehler,
+)
+from backend.core.berechnungen.pv_tages_praezedenz import (
+    QUELLE_AGGREGAT,
+    QUELLE_EINZEL,
+    erwartete_erzeuger_ids,
+    waehle_pv_quelle,
 )
 from backend.services.snapshot.komponenten_beitraege import (
     basis_beitraege,
@@ -45,7 +52,7 @@ from backend.services.snapshot.komponenten_beitraege import (
     investition_beitraege,
     investition_hourly_eintraege,
     mqtt_hourly_eintraege,
-    pv_je_investition_in_sensor_keys,
+    loese_pv_tageswerte_auf,
     resolve_either_or_eintraege,
     wallbox_deckt_ladung_ab,
 )
@@ -240,18 +247,18 @@ async def get_hourly_kwh_by_category(
     eintraege: list[tuple[str, Optional[str], str, Optional[str]]] = []
     seen_keys: set[str] = set()
 
-    # 1a-vorab. Die MQTT-Keys werden schon HIER geholt, obwohl sie erst in 1b
-    # verarbeitet werden: die Alles-oder-nichts-Regel für `basis:pv_gesamt`
-    # (Stufe 1 zu F-7) muss BEIDE Quellen kennen, bevor der Basis-Beitrag
-    # entsteht. Eine gemischte Installation (Aggregat als HA-Sensor, Strings per
-    # MQTT) hätte sonst Aggregat UND Einzelzähler in derselben Bilanz — die
-    # #290/#298-Doppelzähl-Klasse. Nur geholt, nicht verarbeitet: die
-    # Vorrang-Reihenfolge (HA schlägt MQTT über `seen_keys`) bleibt unverändert.
+    # 1a-vorab. Die MQTT-Keys werden hier geholt und erst in 1b verarbeitet.
+    # ⛔ Bis #406 stand hier zusätzlich die Alles-oder-nichts-Regel für
+    # `basis:pv_gesamt` (Stufe 1 zu F-7) — sie musste BEIDE Quellen kennen,
+    # bevor der Basis-Beitrag entstand. Die Regel ist entfallen: sie fragte die
+    # Konfiguration statt die Daten. Beide Quellen sind jetzt Kandidaten, die
+    # Wahl fällt in Schritt 3b über `core/berechnungen/pv_tages_praezedenz.py`.
+    # Die Doppelzählung, gegen die die alte Regel gebaut war, verhindert die
+    # Präzedenz genauso — sie nimmt in JEDEM Slot genau eine Seite.
     cutoff = datetime.now() - timedelta(days=MQTT_AKTIV_TAGE)
     mqtt_sks_alle: list[str] = sorted(
         await mqtt_zaehler_keys(db, anlage.id, seit=cutoff)
     )
-    pv_extern = pv_je_investition_in_sensor_keys(mqtt_sks_alle)
 
     # 1a. HA-gemappte Zähler aus sensor_mapping — Feld-Auswahl (Whitelist +
     # Either-Or + parent-Skip) über DIESELBE Normalisierung wie der Daily-Pfad
@@ -261,9 +268,7 @@ async def get_hourly_kwh_by_category(
     # (`verbrauch_kwh` + `ladung_kwh`) wird in der Either-Or-Gruppe aufgelöst
     # statt doppelt summiert.
     basis = sensor_mapping.get("basis", {}) or {}
-    for he in basis_hourly_eintraege(
-        sensor_mapping, pv_je_investition_extern=pv_extern
-    ):
+    for he in basis_hourly_eintraege(sensor_mapping):
         cfg = basis.get(he.feld)
         if isinstance(cfg, dict):
             eid = cfg.get("sensor_id")
@@ -361,8 +366,18 @@ async def get_hourly_kwh_by_category(
 
     # 3. Deltas pro Stunde und Kategorie summieren (Backward-Konvention).
     # Slot h = snap[curr=h] - snap[prev=h-1] → Energie [h-1, h).
+    #
+    # ⚑ #406: Die Kategorie `pv` wird dabei NICHT sofort zusammengeworfen. Sie
+    # hat zwei Quellen — das Anlagen-Aggregat `basis:pv_gesamt` und die Zähler
+    # je Erzeuger —, und welche von beiden den Tag trägt, entscheidet Schritt 3b
+    # nach dem Lesen. Würden sie hier addiert, stünde die Anlagensumme neben
+    # ihren eigenen Summanden (#290/#298).
+    pv_aggregat_je_slot: dict[int, Optional[float]] = {}
+    pv_einzel_je_slot: dict[int, dict[str, float]] = {}
     for slot_idx, prev_off, curr_off in rng.slot_pairs:
         per_kat: dict[str, Optional[float]] = {}
+        pv_aggregat_je_slot[slot_idx] = None
+        pv_einzel_je_slot[slot_idx] = {}
         for sensor_key, _eid, kat, _grp in eintraege:
             s0 = snaps[sensor_key][prev_off]
             s1 = snaps[sensor_key][curr_off]
@@ -382,8 +397,45 @@ async def get_hourly_kwh_by_category(
                     )
                     continue
             d = max(0.0, d)
+            if kat == "pv":
+                # Getrennt halten statt summieren — die Wahl fällt in 3b.
+                if sensor_key == f"basis:{PV_AGGREGAT_BASIS_FELD}":
+                    pv_aggregat_je_slot[slot_idx] = (
+                        pv_aggregat_je_slot[slot_idx] or 0.0
+                    ) + d
+                else:
+                    # `inv:<id>:pv_erzeugung_kwh` — die ID trägt die Deckung.
+                    inv_id = sensor_key.split(":", 2)[1]
+                    pv_einzel_je_slot[slot_idx][inv_id] = (
+                        pv_einzel_je_slot[slot_idx].get(inv_id, 0.0) + d
+                    )
+                continue
             per_kat[kat] = (per_kat.get(kat) or 0.0) + d
         result[slot_idx] = per_kat
+
+    # 3b. Welche PV-Quelle trägt diesen Tag? (#406, Layer-SoT)
+    # Die Präzedenz ist die des Monats, auf den Tag übertragen: liefern alle
+    # erwarteten Erzeuger den ganzen Tag, gewinnen sie; sonst trägt das
+    # Aggregat. Die Wahl gilt für ALLE Slots — nur so bleibt die Quelle über
+    # den Tag einheitlich und Σ Hourly / Tages-Boundary behalten die
+    # Konsistenz, die sie heute haben.
+    pv_quelle = waehle_pv_quelle(
+        erwartete_ids=erwartete_erzeuger_ids(investitionen_by_id.values(), datum),
+        gedeckte_ids_je_slot={
+            h: set(ids.keys()) for h, ids in pv_einzel_je_slot.items()
+        },
+        aggregat_je_slot=pv_aggregat_je_slot,
+    )
+    for slot_idx in range(24):
+        if pv_quelle == QUELLE_AGGREGAT:
+            wert = pv_aggregat_je_slot.get(slot_idx)
+        elif pv_quelle == QUELLE_EINZEL:
+            einzel = pv_einzel_je_slot.get(slot_idx) or {}
+            wert = sum(einzel.values()) if einzel else None
+        else:
+            wert = None
+        if wert is not None:
+            result[slot_idx]["pv"] = wert
 
     # 4. Aggregierte Kategorien zu Bilanz-Feldern:
     #    pv, einspeisung, netzbezug, batterie_lade_netto, wp, wallbox, verbrauch
@@ -536,6 +588,8 @@ async def get_komponenten_tageskwh(
     anlage,
     investitionen_by_id: dict,
     datum: date,
+    *,
+    marken_out: Optional[dict[str, str]] = None,
 ) -> dict[str, float]:
     """
     Tagesgesamt pro Komponente aus Snapshot-Boundary-Diff (Etappe 3c P3, E2).
@@ -563,6 +617,12 @@ async def get_komponenten_tageskwh(
     Plus Basis-Schlüssel (ohne Investition):
         einspeisung → "einspeisung" (≥ 0)
         netzbezug   → "netzbezug" (≥ 0)
+
+    ⚑ `marken_out` (optional): nimmt die Herkunfts-Marken der PV-Auflösung auf
+    (`{komponenten_key: ABGELEITET_*}`). Nur `aggregate_day` braucht sie, um sie
+    in `source_provenance` zu schreiben — die übrigen Konsumenten lesen bloß
+    Zahlen. Als Out-Parameter statt als zweitem Rückgabewert, weil die Funktion
+    sieben Aufrufer hat und ein Tupel jeden davon anfassen müsste.
 
     Investitionen ohne gemappten Counter erscheinen NICHT im Dict — der Aufrufer
     behält seine eigene Live-Σ-Variante als Fallback für solche Keys (typisch:
@@ -625,23 +685,23 @@ async def get_komponenten_tageskwh(
 
     result: dict[str, float] = {}
 
-    # 1. Basis: einspeisung + netzbezug + PV gesamt (letzteres nur, wenn kein
-    #    Erzeuger einen eigenen Zähler trägt — s. `basis_beitraege`).
+    # 1. Basis: einspeisung + netzbezug + PV gesamt.
     #
-    # ⛔ **Hier stand bis 2026-08-27 das Gegenteil**: „Anders als der Hourly-Pfad
-    # braucht diese Funktion KEINE MQTT-Gegenprobe … ein rein per MQTT gespeister
-    # Zähler je Erzeuger existiert hier also gar nicht." Der Satz beschrieb den
-    # **Defekt** und begründete ihn: Weil MQTT hier nicht existierte, blieb die
-    # Tagesbilanz einer Standalone-Anlage leer, während der Stundenpfad daneben
-    # gefüllt war (N-328b/#396). Existiert MQTT aber, dann **muss** auch die
-    # Alles-oder-nichts-Regel für `pv_gesamt` beide Quellen kennen — sonst stünde
-    # das Anlagen-Aggregat neben seinen eigenen Summanden (#290/#298).
+    # ⛔ **Hier stand bis 2026-08-27**: „Anders als der Hourly-Pfad braucht diese
+    # Funktion KEINE MQTT-Gegenprobe … ein rein per MQTT gespeister Zähler je
+    # Erzeuger existiert hier also gar nicht." Der Satz beschrieb den **Defekt**
+    # und begründete ihn: Weil MQTT hier nicht existierte, blieb die Tagesbilanz
+    # einer Standalone-Anlage leer, während der Stundenpfad daneben gefüllt war
+    # (N-328b/#396).
+    # ⛔ **Und bis #406 stand hier die Alles-oder-nichts-Regel**: `pv_gesamt`
+    # fiel weg, sobald ein Erzeuger einen eigenen Zähler ZUGEORDNET hatte. Beide
+    # Quellen kommen jetzt herein; die Wahl fällt unten in `loese_pv_tageswerte_auf`
+    # — nach dem Lesen, an den Daten. Doppelt gezählt wird trotzdem nie: das
+    # Aggregat verlässt die Funktion entweder aufgelöst oder gar nicht.
     basis_map = sensor_mapping.get("basis", {}) or {}
-    pv_extern = pv_je_investition_in_sensor_keys(mqtt_keys)
     await _apply_beitraege(
         basis_beitraege(
             sensor_mapping,
-            pv_je_investition_extern=pv_extern,
             ist_verfuegbar=lambda feld: feld_hat_zaehler(
                 basis_map.get(feld), f"basis:{feld}", quellen_energy, mqtt_keys,
             ),
@@ -670,6 +730,13 @@ async def get_komponenten_tageskwh(
             inv_data,
             result,
         )
+
+    # 3. PV-Präzedenz je Tag (#406): Einzelzähler schlagen das Aggregat, sobald
+    # sie den Tag VOLLSTÄNDIG tragen — sonst löst das Aggregat sich in die
+    # Erzeuger auf. `pv_gesamt` steht danach in keinem Fall mehr im Ergebnis.
+    result, marken = loese_pv_tageswerte_auf(result, investitionen_by_id, datum)
+    if marken_out is not None:
+        marken_out.update(marken)
 
     return result
 

@@ -10,11 +10,18 @@ weiterhin „Komponente ohne vollständige kWh-Zähler-Abdeckung", während die
 Datenquellen-Fläche denselben Anwender als vollständig versorgt führt — genau
 der Selbstwiderspruch aus T89667 #109, nur seitenverkehrt.
 
-⚠ Die Bedingung ist an DIESELBE SoT gekoppelt wie der Aggregator
-(`komponenten_beitraege.pv_je_investition_belegt`, alles-oder-nichts). Der
-zweite Test ist deshalb der wichtigere: sobald ein Erzeuger selbst misst, ist
-das Aggregat für Tag und Stunde abgeschaltet — dann sind die übrigen Erzeuger
-wirklich ungedeckt und die Warnung muss bleiben.
+⛔ **Die Kopplung an die Alles-oder-nichts-Regel ist mit #406 gefallen.** Hier
+stand: „sobald ein Erzeuger selbst misst, ist das Aggregat für Tag und Stunde
+abgeschaltet — dann sind die übrigen Erzeuger wirklich ungedeckt und die
+Warnung muss bleiben." Das war **nur wahr, weil der Defekt da war**: die
+Verdrängung fragte die Zuordnung statt die Daten und machte die Anlagensumme zu
+klein. Mit der Präzedenz je Tag (`core/berechnungen/pv_tages_praezedenz.py`)
+trägt das Aggregat die Bilanz gerade dann, wenn die Einzelzähler sie nicht
+vollständig tragen — die Warnung wäre jetzt eine Falschmeldung.
+
+⚠ Die Frage des Checkers bleibt die von F-7: **ist die Bilanz gedeckt?**, nicht
+**ist sie aufgeschlüsselt?**. Was ein eigener Zähler zusätzlich brächte, steht
+an der Komponenten-Zeile der Datenquellen-Fläche.
 """
 
 from __future__ import annotations
@@ -85,9 +92,15 @@ async def test_anlagenzaehler_deckt_alle_erzeuger(db):
     assert "sobald einer gemessen wird" in (treffer[0].details or "")
 
 
-async def test_teilbelegung_bleibt_eine_warnung(db):
-    """Ein Erzeuger misst selbst ⇒ das Aggregat ist für Tag/Stunde aus ⇒ der
-    andere Erzeuger ist wirklich ungedeckt."""
+async def test_teilbelegung_ist_keine_luecke_mehr(db):
+    """⛔ Diese Probe hieß bis #406 `test_teilbelegung_bleibt_eine_warnung` und
+    forderte das Gegenteil.
+
+    Ihre Begründung — „die Tagessumme ist zu niedrig" — beschrieb den Defekt,
+    nicht die Regel: das Aggregat wurde an der ZUORDNUNG verdrängt. Seit der
+    Präzedenz je Tag trägt es die Bilanz genau in dieser Lage. Eine Warnung
+    hier wäre die Falschmeldung, die der Bau beseitigt hat.
+    """
     anlage = await _seed(db, mapping={"basis": _basis(), "investitionen": {}})
     west_id = (await db.execute(
         select(Investition.id).where(Investition.anlage_id == anlage.id)
@@ -108,14 +121,21 @@ async def test_teilbelegung_bleibt_eine_warnung(db):
         r for r in ergebnisse
         if r.schwere == CheckSeverity.WARNING and "Abdeckung" in r.meldung
     ]
-    assert warnings, (
-        "Bei Teilbelegung ist die Tagessumme zu niedrig — das muss gemeldet "
-        "werden, fand:\n"
+    assert not warnings, (
+        "Bei Teilbelegung trägt der Anlagen-Zählerstand die Bilanz (#406) — "
+        "eine Abdeckungs-Warnung ist hier eine Falschmeldung, fand:\n"
         + "\n".join(f"  {r.schwere.value}: {r.meldung}" for r in ergebnisse)
     )
-    assert warnings[0].meldung.startswith("1 von 2"), warnings[0].meldung
-    # Und der abgelöste Satz darf nicht zurückkehren.
-    assert "ersetzt das nicht" not in (warnings[0].details or "")
+    # Die OK-Meldung nennt weiterhin den Anlagen-Zählerstand als Deckung —
+    # sonst stünde die Anlage ohne Aussage da, und der F-7-Selbstwiderspruch
+    # (Fläche „vollständig", Checker schweigt) käme in dritter Fassung zurück.
+    treffer = [r for r in ergebnisse if "Anlagen-Zählerstand" in r.meldung]
+    assert treffer, (
+        "OK-Meldung mit Aggregat-Hinweis erwartet, fand:\n"
+        + "\n".join(f"  {r.schwere.value}: {r.meldung}" for r in ergebnisse)
+    )
+    # Und der mit Stufe 1 abgelöste Satz darf nicht zurückkehren.
+    assert "ersetzt das nicht" not in (treffer[0].details or "")
 
 
 async def test_ohne_aggregat_bleibt_alles_wie_bisher(db):

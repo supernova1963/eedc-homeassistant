@@ -50,6 +50,7 @@ def _seed_row(
     skip_columns: frozenset[str],
     json_subkey_columns: tuple[str, ...],
     abgeleitet_je_feld: dict[str, str] | None = None,
+    abgeleitet_je_subkey: dict[str, str] | None = None,
 ) -> None:
     """Setzt source_provenance auf eine fresh Aggregat-Row.
 
@@ -58,7 +59,9 @@ def _seed_row(
 
     `abgeleitet_je_feld` markiert einzelne Spalten als gerechnet statt
     gemessen — der Aggregator-Source-Tag beschreibt sonst den *Lauf*, nicht
-    die *Herkunft* der Zahl.
+    die *Herkunft* der Zahl. `abgeleitet_je_subkey` tut dasselbe für die
+    Sub-Keys der JSON-Spalten (#406: ein `pv_<id>` in `komponenten_kwh`, das
+    aus dem Anlagen-Aggregat zerlegt wurde, ist keine Messung).
     """
     fields: list[str] = []
     json_subkeys: dict[str, list[str]] = {}
@@ -83,6 +86,7 @@ def _seed_row(
         fields=fields or None,
         json_subkeys=json_subkeys or None,
         abgeleitet_je_feld=abgeleitet_je_feld or None,
+        abgeleitet_je_subkey=abgeleitet_je_subkey or None,
     )
 
 
@@ -92,6 +96,7 @@ def seed_tz_provenance(
     writer: str,
     source: str = "auto:monatsabschluss",
     abgeleitet_je_feld: dict[str, str] | None = None,
+    abgeleitet_je_subkey: dict[str, str] | None = None,
 ) -> None:
     """Setzt source_provenance auf eine fresh TagesZusammenfassung-Row."""
     _seed_row(
@@ -101,6 +106,7 @@ def seed_tz_provenance(
         skip_columns=_TZ_SKIP_COLUMNS,
         json_subkey_columns=_TZ_JSON_SUBKEY_COLUMNS,
         abgeleitet_je_feld=abgeleitet_je_feld,
+        abgeleitet_je_subkey=abgeleitet_je_subkey,
     )
 
 

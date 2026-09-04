@@ -178,7 +178,6 @@ def pv_je_investition_in_sensor_keys(sensor_keys: Iterable[str]) -> bool:
 def basis_beitraege(
     sensor_mapping: dict,
     *,
-    pv_je_investition_extern: bool = False,
     ist_verfuegbar: Optional[Callable[[str], bool]] = None,
 ) -> list[KomponentenBeitrag]:
     """Basis-Zähler aus dem `basis`-Mapping (`BASIS_ZAEHLER_FELDER`).
@@ -186,33 +185,38 @@ def basis_beitraege(
     Liefert für jeden konfigurierten Basis-Zähler einen `+1`-Beitrag mit
     Target-Key = Feldname (`einspeisung` / `netzbezug` / `pv_gesamt`).
 
-    **`pv_gesamt` gilt alles-oder-nichts** (Stufe 1 zu F-7, 2026-08-07): der
-    Anlagen-Zählerstand zählt nur mit, solange KEIN Erzeuger einen eigenen
-    `pv_erzeugung_kwh`-Zähler trägt. Genau so hält es der Live-Pfad seit jeher
-    (`live_tagesverlauf_service:267` / `live_history_service:341`,
-    `not has_individual_pv`) — dieselbe Regel, damit dieselbe Anlage in Live
-    und Tag nicht verschieden rechnet.
+    ⛔ **`pv_gesamt` wird hier NICHT MEHR verdrängt** (#406, 2026-09-04). Bis
+    dahin galt alles-oder-nichts (Stufe 1 zu F-7, 2026-08-07): der
+    Anlagen-Zählerstand fiel heraus, sobald irgendein Erzeuger einen eigenen
+    `pv_erzeugung_kwh`-Zähler **zugeordnet** hatte. Diese Bedingung fragte die
+    **Konfiguration**, nicht die **Daten** — und daran brachen zwei Lagen: der
+    Wechseltag (Zähler zugeordnet, liefert für die früheren Stunden nichts ⇒
+    21 Stunden gemessene PV weg) und der gemischte Fall (ein Erzeuger ohne
+    Zähler ⇒ Anlagensumme dauerhaft zu klein).
 
-    Warum nicht anteilig auffüllen wie im Monat? `resolve_pv_je_modul` (P7)
-    darf das, weil es einer Investition einen Wert **zuweist**. Hier gibt es
-    diesen Adressaten nicht: `komponenten_kwh` kennt nur einen flachen
-    Keyspace, und `summe_pv_bkw_kwh` summiert **alles** mit Präfix `pv_`.
-    Stünde `pv_gesamt` neben `pv_7`, wäre die Anlagensumme neben ihrem eigenen
-    Summanden gebucht — die Doppelzähl-Klasse aus #290/#298. Eine
-    kWp-Verteilung auf Tagesebene ist ausdrücklich verworfen (Entscheid Gernot
-    2026-08-07): sie erfände Messwerte, die niemand gemessen hat.
+    **Wer jetzt entscheidet:** `core/berechnungen/pv_tages_praezedenz.py`, und
+    zwar **nach** dem Lesen der Deltas, je Tag: liefern alle erwarteten
+    Erzeuger den ganzen Tag, gewinnen sie; sonst trägt das Aggregat. Diese
+    Funktion liefert nur noch die **Kandidaten** — beide Quellen —, die Wahl
+    fällt in den Aggregatoren.
 
-    ⚠ **Folge für die Oberfläche:** wer einem von mehreren Erzeugern einen
-    eigenen Zähler zuordnet, schaltet das Aggregat für Tag und Stunde ab und
-    sieht danach nur noch die gemessenen Erzeuger. Die Zuordnungs-Fläche muss
-    das sagen — `datenquellen_validierung.finde_aggregat_teilweise_verdraengt`
-    warnt genau in dieser Lage.
+    ⛔ **Was sich dabei NICHT ändert: beide zusammen zählen nie.** Das ist der
+    tragende Teil der alten Begründung und er gilt weiter: `komponenten_kwh`
+    kennt nur einen flachen Keyspace, `summe_pv_bkw_kwh` summiert **alles** mit
+    Präfix `pv_`. Stünde `pv_gesamt` neben `pv_7`, wäre die Anlagensumme neben
+    ihrem eigenen Summanden gebucht — die Doppelzähl-Klasse aus #290/#298. Der
+    Unterschied zu vorher ist *auflösen statt verdrängen*, nicht *addieren*:
+    auf der Tagesebene wird das Aggregat über `resolve_pv_je_modul` in seine
+    Bestandteile zerlegt und als `pv_<id>` gebucht, nie als `pv_gesamt` daneben.
+
+    ⚠ **Folge für die Oberfläche:** Die Warnung
+    `datenquellen_validierung.finde_aggregat_teilweise_verdraengt` beschrieb
+    genau die Lage, die dieser Bau behebt — sie ist mit #406 zurückgenommen.
+    `pv_je_investition_belegt` bleibt trotzdem: die Zuordnungs-Fläche und der
+    Daten-Checker fragen weiter, **ob** ein Erzeuger einen eigenen Zähler hat.
 
     Args:
         sensor_mapping: `anlage.sensor_mapping`.
-        pv_je_investition_extern: True, wenn der Aufrufer aus einer Quelle
-            **außerhalb** des Mappings weiß, dass ein Erzeuger seinen eigenen
-            PV-Zähler hat (MQTT-Topics). Siehe `pv_je_investition_belegt`.
         ist_verfuegbar: optionales Verfügbarkeits-Prädikat `feld -> bool`,
             symmetrisch zu `investition_beitraege`. Default (None) = HA-Sensor-
             Mapping. Der Tagespfad reicht seit N-328b „HA-Sensor **oder**
@@ -225,10 +229,7 @@ def basis_beitraege(
     if ist_verfuegbar is None:
         def ist_verfuegbar(feld: str) -> bool:
             return _is_sensor_mapping(basis.get(feld))
-    pv_verdraengt = pv_je_investition_extern or pv_je_investition_belegt(sensor_mapping)
     for feld in BASIS_ZAEHLER_FELDER:
-        if feld == "pv_gesamt" and pv_verdraengt:
-            continue
         if ist_verfuegbar(feld):
             beitraege.append(KomponentenBeitrag(feld=feld, target_key=feld))
     return beitraege
@@ -592,21 +593,16 @@ class HourlyEintrag:
     fallback_gruppe: Optional[str] = None
 
 
-def basis_hourly_eintraege(
-    sensor_mapping: dict,
-    *,
-    pv_je_investition_extern: bool = False,
-) -> list[HourlyEintrag]:
+def basis_hourly_eintraege(sensor_mapping: dict) -> list[HourlyEintrag]:
     """Hourly-Einträge der Basis-Zähler (Einspeisung/Netzbezug/PV gesamt).
 
-    Spiegelt `basis_beitraege` auf die Energiefluss-Kategorie-Ebene —
-    einschließlich der Alles-oder-nichts-Regel für `pv_gesamt`; das Flag wird
-    unverändert durchgereicht.
+    Spiegelt `basis_beitraege` auf die Energiefluss-Kategorie-Ebene. ⛔ Seit
+    #406 gibt es hier **keine** Verdrängung mehr durchzureichen: `pv_gesamt`
+    ist immer Kandidat, die Wahl zwischen Aggregat und Einzelzählern fällt im
+    Aggregator über `core/berechnungen/pv_tages_praezedenz.py`.
     """
     out: list[HourlyEintrag] = []
-    for b in basis_beitraege(
-        sensor_mapping, pv_je_investition_extern=pv_je_investition_extern
-    ):
+    for b in basis_beitraege(sensor_mapping):
         kat = _categorize_counter(b.feld, None, None)
         if kat:
             out.append(HourlyEintrag(feld=b.feld, kategorie=kat,
@@ -662,14 +658,15 @@ def mqtt_hourly_eintraege(
     Quelle → Whitelist + Either-Or + parent-Skip greifen identisch zum HA-Pfad.
 
     Basis-Keys haben keinen Either-Or-Partner und werden direkt kategorisiert
-    (`fallback_gruppe=None`). **Ausnahme `basis:pv_gesamt`** (Stufe 1 zu F-7):
-    der Anlagen-Zählerstand fällt weg, sobald ein Erzeuger seinen eigenen
-    PV-Zähler trägt — geprüft über BEIDE Quellen (`sensor_mapping` und die hier
-    gesehenen MQTT-Keys), s. `pv_je_investition_belegt`.
+    (`fallback_gruppe=None`). ⛔ **`basis:pv_gesamt` fällt hier seit #406 nicht
+    mehr heraus**: Bis 2026-09-04 verdrängte ein zugeordneter Erzeuger-Zähler
+    das Aggregat (Stufe 1 zu F-7) — eine **Konfigurations**frage an Daten, die
+    sie nicht beantworten kann. Die Wahl fällt jetzt im Aggregator, nach dem
+    Lesen der Deltas, je Tag: `core/berechnungen/pv_tages_praezedenz.py`.
 
-    ⚠ Die Verdrängung ist **keine** Either-Or-Gruppe: `resolve_either_or_eintraege`
+    ⚠ Sie ist auch weiterhin **keine** Either-Or-Gruppe: `resolve_either_or_eintraege`
     ist 1-aus-n und würde bei zwei Modulen plus Aggregat eines der beiden
-    Module verlieren. Hier ist die Regel n-schlägt-1.
+    Module verlieren. Die Präzedenz ist n-gegen-1 und kennt beide Seiten.
 
     Args:
         mqtt_sensor_keys: bereits via `_mqtt_key_to_sensor_key` aufgelöste,
@@ -691,12 +688,8 @@ def mqtt_hourly_eintraege(
             _, inv_id, feld = sk.split(":", 2)
             inv_felder.setdefault(inv_id, set()).add(feld)
 
-    pv_verdraengt = pv_je_investition_belegt_in_map(investitionen_map, inv_felder)
-
     out: list[tuple[str, str, Optional[str]]] = []
     for feld in basis_felder:
-        if feld == "pv_gesamt" and pv_verdraengt:
-            continue
         kat = _categorize_counter(feld, None, None)
         if kat:
             out.append((f"basis:{feld}", kat, None))
@@ -747,3 +740,106 @@ def resolve_either_or_eintraege(eintraege, gruppe_fn, hat_tagesdaten_fn):
             genommen.add(grp)
         out.append(e)
     return out
+
+
+def loese_pv_tageswerte_auf(
+    komponenten: dict[str, float],
+    investitionen_by_id: dict,
+    datum: date,
+) -> tuple[dict[str, float], dict[str, str]]:
+    """Präzedenz + Auflösung der PV-Tageswerte in `komponenten_kwh` (#406).
+
+    **Die zweite Hälfte zu `pv_tages_praezedenz`, auf der Tagesebene.** Der
+    Aufrufer hat beide Quellen eingesammelt — den Anlagen-Zähler unter
+    `pv_gesamt` und die Erzeuger unter `pv_<id>`/`bkw_<id>`. Hier fällt die
+    Wahl, und das Aggregat verschwindet in jedem Fall aus dem Ergebnis:
+
+    * **Einzel** (alle erwarteten Erzeuger haben einen Tageswert) → unverändert,
+      `pv_gesamt` fällt weg. Bitgleich zum Verhalten vor #406.
+    * **Aggregat** → `resolve_pv_je_modul` **löst es auf**: gemessene Erzeuger
+      behalten ihren Wert, die übrigen bekommen den kWp-gewichteten Anteil am
+      **Rest**. Σ der geschriebenen Keys == Aggregat.
+    * **Keine** → nichts.
+
+    ⛔ **Warum aufgelöst und nicht danebengestellt:** `komponenten_kwh` hat einen
+    flachen Keyspace, `summe_pv_bkw_kwh` summiert alles mit `pv_`/`bkw_`. Ein
+    `pv_gesamt` neben `pv_7` wäre die Anlagensumme neben ihrem eigenen
+    Summanden (#290/#298) — der tragende Teil der alten Regel von 2026-08-07,
+    und er gilt unverändert.
+
+    ⭐ **Es ist DIESELBE Funktion wie im Monat**, nicht eine nachgebaute Regel:
+    `resolve_pv_je_modul` ist der P7-SoT der Monatsebene. Der Tag ruft ihn mit
+    Tageswerten. Eine zweite Formel wäre die F-56-Klasse.
+
+    ⚠ **Der kWp-Schlüssel ist eine Tages-Aussage.** Über einen Tag mittelt sich
+    der Ost/West-Unterschied weitgehend aus, über eine Stunde nicht — deshalb
+    verteilt der **Stunden**pfad nichts, sondern wählt nur die Summe. Was dort
+    nicht zugeordnet werden kann, steht im Chart als „PV (übrige)".
+
+    Returns:
+        `(komponenten_neu, abgeleitet_je_subkey)` — die Marken sagen je Key,
+        dass der Wert eine **Zerlegung** ist und keine Messung
+        (`ABGELEITET_KWP_ANTEIL`, dieselbe Marke wie im Monatspfad, #352).
+    """
+    from backend.core.berechnungen.pv_verteilung import (
+        QUELLE_VERTEILT,
+        PvModul,
+        resolve_pv_je_modul,
+    )
+    from backend.core.berechnungen.pv_tages_praezedenz import (
+        QUELLE_AGGREGAT,
+        erwartete_erzeuger_ids,
+        waehle_pv_quelle,
+    )
+    from backend.core.investition_kennwerte import get_erzeuger_kwp
+    from backend.services.provenance import ABGELEITET_KWP_ANTEIL
+    from backend.services.snapshot.keys import PV_AGGREGAT_BASIS_FELD
+
+    out = dict(komponenten)
+    aggregat = out.pop(PV_AGGREGAT_BASIS_FELD, None)
+
+    erwartete = erwartete_erzeuger_ids(investitionen_by_id.values(), datum)
+
+    def _key(inv) -> Optional[str]:
+        praefix = _TYP_KEY_PREFIX.get(getattr(inv, "typ", None))
+        return f"{praefix}{inv.id}" if praefix else None
+
+    erzeuger = [
+        inv for inv in investitionen_by_id.values()
+        if str(inv.id) in erwartete
+    ]
+    gedeckte = {
+        str(inv.id) for inv in erzeuger
+        if (k := _key(inv)) is not None and k in out
+    }
+
+    quelle = waehle_pv_quelle(
+        erwartete_ids=erwartete,
+        gedeckte_ids_je_slot={0: gedeckte},
+        aggregat_je_slot={0: aggregat},
+    )
+    if quelle != QUELLE_AGGREGAT or aggregat is None:
+        return out, {}
+
+    aufgeloest = resolve_pv_je_modul(
+        aggregat_kwh=aggregat,
+        module=[
+            PvModul(
+                inv_id=inv.id,
+                leistung_kwp=get_erzeuger_kwp(inv),
+                eigen_kwh=out.get(_key(inv)),
+            )
+            for inv in erzeuger
+            if _key(inv) is not None
+        ],
+    )
+    marken: dict[str, str] = {}
+    for inv in erzeuger:
+        k = _key(inv)
+        wert = aufgeloest.get(inv.id)
+        if k is None or wert is None:
+            continue
+        out[k] = wert.pv_erzeugung_kwh
+        if wert.quelle == QUELLE_VERTEILT:
+            marken[k] = ABGELEITET_KWP_ANTEIL
+    return out, marken

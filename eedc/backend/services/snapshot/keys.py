@@ -95,12 +95,25 @@ FLOAT_COUNTER_FELDER: frozenset[str] = frozenset({"wp_betriebsstunden", "zaehler
 # PVGIS-SOLL. Deshalb bekommt das Aggregat einen eigenen Zählerpfad, statt die
 # Anlagenstruktur zu verbiegen.
 #
-# **Alles-oder-nichts, kein Split:** der Beitrag entsteht nur, wenn KEIN
-# Erzeuger einen eigenen `pv_erzeugung_kwh`-Zähler trägt — Regel und
-# Begründung in `komponenten_beitraege.pv_je_investition_belegt`. Eine
-# kWp-Verteilung auf Tagesebene ist ausdrücklich nicht vorgesehen (Entscheid
-# Gernot 2026-08-07, festgehalten in `docs/BERECHNUNGEN.md`).
+# ⛔ **Hier stand bis 2026-09-04 „Alles-oder-nichts, kein Split":** der Beitrag
+# entstehe nur, wenn KEIN Erzeuger einen eigenen `pv_erzeugung_kwh`-Zähler
+# trage, und eine kWp-Verteilung auf Tagesebene sei nicht vorgesehen (Entscheid
+# Gernot 2026-08-07). **Mit #406 abgelöst** (Entscheid Gernot 2026-09-04): Die
+# Bedingung fragte die **Zuordnung**, nicht die **Daten** — wer Zähler zuordnet,
+# die für die früheren Stunden nichts liefern, verlor die gemessene PV dieser
+# Stunden; wer nur einen Teil seiner Erzeuger bezählte, bekam eine dauerhaft zu
+# kleine Anlagensumme. Die Wahl fällt jetzt nach dem Lesen, je Tag:
+# `core/berechnungen/pv_tages_praezedenz.py`. Was bleibt: **beide Quellen
+# zusammen zählen nie** — die Anlagensumme steht nie neben ihren eigenen
+# Summanden (#290/#298).
 BASIS_ZAEHLER_FELDER: tuple[str, ...] = ("einspeisung", "netzbezug", "pv_gesamt")
+
+#: Der Basis-Feldname des Anlagen-PV-Zählers — Gegenspieler von
+#: `komponenten_beitraege._PV_JE_INVESTITION_FELD`. Als Konstante, weil die
+#: Aggregatoren den Sensor-Key `basis:pv_gesamt` seit #406 erkennen müssen, um
+#: die beiden PV-Quellen auseinanderzuhalten; ein Literal an drei Stellen wäre
+#: die F-56-Klasse.
+PV_AGGREGAT_BASIS_FELD: str = "pv_gesamt"
 
 
 # MQTT-Energy-Topic-Keys → sensor_snapshots.sensor_key Mapping.

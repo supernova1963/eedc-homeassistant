@@ -958,7 +958,6 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
     from backend.services.datenquellen_validierung import (
         einheit_problem, state_class_problem,
         finde_redundante_aggregate, finde_doppelmappings, stufe_bedarf_ein,
-        finde_aggregat_teilweise_verdraengt,
     )
     feld_einheit = {_feld_id(e["match_key"]): e.get("einheit", "") for e in eintraege}
     feld_feld = {_feld_id(e["match_key"]): e.get("feld", "") for e in eintraege}
@@ -1023,11 +1022,15 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
     ]
     for fid, p in finde_redundante_aggregate(felder_belegt).items():
         _add_problem(fid, p)
-    # Dritte Lage: das Aggregat ist belegt, aber für Tag und Stunde durch
-    # einzelne Erzeuger-Zähler verdrängt — die Tagessumme ist dann still zu
-    # niedrig (F-7 Stufe 1, Forum T89667 #109).
-    for fid, p in finde_aggregat_teilweise_verdraengt(felder_belegt).items():
-        _add_problem(fid, p)
+    # ⛔ Hier stand bis #406 eine dritte Lage: das Aggregat sei „für Tag und
+    # Stunde durch einzelne Erzeuger-Zähler verdrängt, die Tagessumme still zu
+    # niedrig" (F-7 Stufe 1, Forum T89667 #109). Diese Warnung ist ERSATZLOS
+    # entfallen, weil der Zustand, den sie meldete, nicht mehr eintritt: die
+    # Präzedenz je Tag lässt das Aggregat die Bilanz tragen, sobald die
+    # Einzelzähler sie nicht vollständig tragen. Eine Warnung ohne Defekt wäre
+    # die Falschmeldung, gegen die [[feedback_user_fehlermeldungen]] steht.
+    # Was ein eigener Zähler ZUSÄTZLICH bringt, sagt weiterhin der Hinweistext
+    # an den Komponenten-Zeilen (`_PV_AGGREGAT_NUR_ANLAGENSUMME_TEXT`).
     for fid, p in finde_doppelmappings(ha_zuordnungen, feld_einheit).items():
         _add_problem(fid, p)
 

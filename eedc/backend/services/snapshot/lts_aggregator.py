@@ -32,12 +32,20 @@ from backend.core.berechnungen.stundenbilanz import (
 )
 from backend.services.ha_statistics_service import get_ha_statistics_service
 from backend.services.snapshot.keys import (
+    PV_AGGREGAT_BASIS_FELD,
     extract_quellen_energy,
     resolve_energy_ha_eid,
+)
+from backend.core.berechnungen.pv_tages_praezedenz import (
+    QUELLE_AGGREGAT,
+    QUELLE_EINZEL,
+    erwartete_erzeuger_ids,
+    waehle_pv_quelle,
 )
 from backend.services.snapshot.komponenten_beitraege import (
     basis_beitraege,
     basis_hourly_eintraege,
+    loese_pv_tageswerte_auf,
     investition_beitraege,
     investition_hourly_eintraege,
     resolve_either_or_eintraege,
@@ -88,7 +96,10 @@ async def get_hourly_kwh_by_category_lts(
     # `basis:pv_gesamt` (Stufe 1 zu F-7) beim Mapping-Default: ein per MQTT
     # gespeister Zähler je Erzeuger hat keine HA-Entity und liefert diesem Pfad
     # ohnehin nichts, was das Aggregat verdrängen könnte.
-    eintraege: list[tuple[str, str, Optional[str]]] = []  # (entity_id, kategorie, gruppe)
+    # (entity_id, kategorie, gruppe, sensor_key) — der sensor_key ist seit #406
+    # nötig: die Kategorie `pv` hat zwei Quellen (Anlagen-Aggregat und Zähler je
+    # Erzeuger), und nur der Key sagt, welche vorliegt.
+    eintraege: list[tuple[str, str, Optional[str], str]] = []
     quellen_energy = extract_quellen_energy(anlage)  # C2b-Read-Through (HA-only-Pfad)
 
     basis = sensor_mapping.get("basis", {}) or {}
@@ -101,7 +112,9 @@ async def get_hourly_kwh_by_category_lts(
                     quellen_energy, f"basis:{he.feld}", eid
                 )
                 if behalten and eid:
-                    eintraege.append((eid, he.kategorie, he.fallback_gruppe))
+                    eintraege.append((
+                        eid, he.kategorie, he.fallback_gruppe, f"basis:{he.feld}",
+                    ))
 
     investitionen_map = sensor_mapping.get("investitionen", {}) or {}
     for inv_id_str, inv_data in investitionen_map.items():
@@ -120,7 +133,10 @@ async def get_hourly_kwh_by_category_lts(
                         quellen_energy, f"inv:{inv_id_str}:{he.feld}", eid
                     )
                     if behalten and eid:
-                        eintraege.append((eid, he.kategorie, he.fallback_gruppe))
+                        eintraege.append((
+                            eid, he.kategorie, he.fallback_gruppe,
+                            f"inv:{inv_id_str}:{he.feld}",
+                        ))
 
     if not eintraege:
         return {}
@@ -129,7 +145,7 @@ async def get_hourly_kwh_by_category_lts(
     # `ha_svc.get_hourly_kwh_deltas_for_day` ist synchron (SQL-Engine ist
     # connection-pool-basiert); im async-Kontext akzeptabel als Inline-Call,
     # weil es eine kurze Read-Operation ist.
-    sensor_ids = list({eid for eid, _kat, _grp in eintraege})
+    sensor_ids = list({eid for eid, _kat, _grp, _sk in eintraege})
     deltas = ha_svc.get_hourly_kwh_deltas_for_day(sensor_ids, datum)
 
     if not deltas:
@@ -151,10 +167,16 @@ async def get_hourly_kwh_by_category_lts(
     )
 
     # Per-Stunde-Kategorie-Aggregation
+    # ⚑ #406: `pv` wird nicht sofort zusammengeworfen — die Kategorie hat zwei
+    # Quellen, und welche den Tag trägt, entscheidet die Präzedenz unten.
     result_kat: dict[int, dict[str, Optional[float]]] = {h: {} for h in range(24)}
+    pv_aggregat_je_slot: dict[int, Optional[float]] = {}
+    pv_einzel_je_slot: dict[int, dict[str, float]] = {}
     for h in range(24):
         per_kat: dict[str, Optional[float]] = {}
-        for eid, kat, _grp in eintraege:
+        pv_aggregat_je_slot[h] = None
+        pv_einzel_je_slot[h] = {}
+        for eid, kat, _grp, sensor_key in eintraege:
             slot_delta = deltas.get(eid, {}).get(h)
             if slot_delta is None:
                 continue
@@ -168,8 +190,39 @@ async def get_hourly_kwh_by_category_lts(
                     f"negatives HA-LTS-Delta {slot_delta:.3f} — verwerfe"
                 )
                 continue
+            if kat == "pv":
+                if sensor_key == f"basis:{PV_AGGREGAT_BASIS_FELD}":
+                    pv_aggregat_je_slot[h] = (
+                        pv_aggregat_je_slot[h] or 0.0
+                    ) + slot_delta
+                else:
+                    inv_id = sensor_key.split(":", 2)[1]
+                    pv_einzel_je_slot[h][inv_id] = (
+                        pv_einzel_je_slot[h].get(inv_id, 0.0) + slot_delta
+                    )
+                continue
             per_kat[kat] = (per_kat.get(kat) or 0.0) + slot_delta
         result_kat[h] = per_kat
+
+    # PV-Präzedenz je Tag (#406) — dieselbe Wahl wie im Snapshot-Pfad und wie
+    # auf der Tagesebene; ein zweiter Rechenweg wäre die F-56-Klasse.
+    pv_quelle = waehle_pv_quelle(
+        erwartete_ids=erwartete_erzeuger_ids(investitionen_by_id.values(), datum),
+        gedeckte_ids_je_slot={
+            h: set(ids.keys()) for h, ids in pv_einzel_je_slot.items()
+        },
+        aggregat_je_slot=pv_aggregat_je_slot,
+    )
+    for h in range(24):
+        if pv_quelle == QUELLE_AGGREGAT:
+            wert = pv_aggregat_je_slot.get(h)
+        elif pv_quelle == QUELLE_EINZEL:
+            einzel = pv_einzel_je_slot.get(h) or {}
+            wert = sum(einzel.values()) if einzel else None
+        else:
+            wert = None
+        if wert is not None:
+            result_kat[h]["pv"] = wert
 
     # Kategorien zu Bilanz-Feldern aggregieren — analog Snapshot-Variante.
     schwelle_spike = schwelle_pv_einspeisung_stunde_kwh(
@@ -238,6 +291,8 @@ async def get_komponenten_tageskwh_lts(
     anlage,
     investitionen_by_id: dict,
     datum: date,
+    *,
+    marken_out: Optional[dict[str, str]] = None,
 ) -> dict[str, float]:
     """
     Etappe 4 (v3.31.0): Tages-kWh pro Komponente aus HA-LTS — direkter
@@ -347,6 +402,14 @@ async def get_komponenten_tageskwh_lts(
         if b.fallback_gruppe:
             gruppe_genommen.add(b.fallback_gruppe)
         result[b.target_key] = result.get(b.target_key, 0.0) + b.vorzeichen * s
+
+    # PV-Präzedenz je Tag (#406) — symmetrisch zum Snapshot-Pfad: Einzelzähler
+    # schlagen das Aggregat, sobald sie den Tag vollständig tragen; sonst löst
+    # sich das Aggregat in die Erzeuger auf. `pv_gesamt` verlässt die Funktion
+    # in keinem Fall.
+    result, marken = loese_pv_tageswerte_auf(result, investitionen_by_id, datum)
+    if marken_out is not None:
+        marken_out.update(marken)
 
     # Negative Tagessummen (z. B. Speicher netto entladen) bleiben negativ;
     # die Snapshot-Variante macht das gleichermaßen. Konsumenten können den

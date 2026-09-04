@@ -13,7 +13,6 @@ from sqlalchemy import select
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.services.snapshot.keys import extract_quellen_energy, feld_hat_zaehler
-from backend.services.snapshot.komponenten_beitraege import pv_je_investition_belegt
 from backend.utils.investition_filter import sort_investitionen_nach_typ
 from backend.core.investition_parameter import (
     PARAM_SONSTIGES,
@@ -273,22 +272,25 @@ class EnergieprofilChecks:
         kind_count = 0      # BKW, das seine Erzeugungsgrößen abgetreten hat (F-39)
 
         # Achse C (Stufe 1 zu F-7, 2026-08-07): der Anlagen-Zählerstand
-        # `basis["pv_gesamt"]` ist seit diesem Paket ein Snapshot-Zähler und
-        # trägt Tag und Stunde für die **ganze** Anlage. Eine PV-Komponente ohne
-        # eigenen Zähler ist damit nicht mehr ungedeckt — ihre Erzeugung steckt
-        # in der Anlagensumme, nur die Aufschlüsselung je Erzeuger fehlt.
+        # `basis["pv_gesamt"]` ist ein Snapshot-Zähler und trägt Tag und Stunde
+        # für die **ganze** Anlage. Eine PV-Komponente ohne eigenen Zähler ist
+        # damit nicht ungedeckt — ihre Erzeugung steckt in der Anlagensumme, nur
+        # die Aufschlüsselung je Erzeuger ist verteilt statt gemessen.
         #
-        # Die Bedingung ist DIESELBE wie im Aggregator (alles-oder-nichts, SoT
-        # `snapshot/komponenten_beitraege.pv_je_investition_belegt`): sobald ein
-        # Erzeuger selbst misst, ist das Aggregat für Tag/Stunde abgeschaltet —
-        # dann sind die übrigen Erzeuger wirklich ungedeckt und die Warnung
-        # bleibt richtig. Ohne diese Kopplung widerspräche sich die Anwendung
-        # erneut: die Datenquellen-Fläche meldete „vollständig", der Checker
-        # „Komponente ohne Abdeckung" — genau der F-7-Befund, nur seitenverkehrt.
-        pv_aggregat_deckt = (
-            _basis_zaehler("pv_gesamt")
-            and not pv_je_investition_belegt(sensor_mapping)
-        )
+        # ⛔ **Hier stand bis #406 zusätzlich `and not pv_je_investition_belegt(…)`**
+        # — die Kopplung an die Alles-oder-nichts-Regel des Aggregators: sobald
+        # ein Erzeuger selbst maß, galt das Aggregat als abgeschaltet und die
+        # übrigen Erzeuger als wirklich ungedeckt. Mit der Präzedenz je Tag
+        # (`core/berechnungen/pv_tages_praezedenz.py`) ist das **nicht mehr
+        # wahr**: das Aggregat trägt die Bilanz gerade dann, wenn die
+        # Einzelzähler sie nicht vollständig tragen. Die Kopplung stehenzulassen
+        # hieße, eine Lücke zu melden, die der Bau geschlossen hat.
+        #
+        # ⚠ Die Frage des Checkers bleibt die von F-7 — **ist die Bilanz
+        # gedeckt?**, nicht **ist sie aufgeschlüsselt?**. Was ein eigener Zähler
+        # zusätzlich brächte, sagt die Datenquellen-Fläche an der Komponenten-
+        # Zeile; hier wäre es ein zweiter Turm über demselben Sachverhalt.
+        pv_aggregat_deckt = _basis_zaehler("pv_gesamt")
 
         # Reihenfolge nach Typ (#214 detLAN: WP vor Wallbox), nicht DB-ID
         heute = date.today()

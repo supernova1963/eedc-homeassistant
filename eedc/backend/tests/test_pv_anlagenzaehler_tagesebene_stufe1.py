@@ -11,17 +11,22 @@ Warum nicht einfach alle Strings zu EINER Investition zusammenfassen? Weil
 sein Docstring nennt die Folge wörtlich: ein systematisch falscher Tagesgang für
 den ganzen Prognose-Kanon inkl. HA-Prognose-Sensoren und PVGIS-SOLL.
 
-Die tragende Regel ist **alles-oder-nichts**, nicht eine Verteilung: entweder
-zählt die Anlagensumme, oder die Erzeuger zählen einzeln — nie beides. Genau so
-hält es der Live-Pfad seit jeher (`live_tagesverlauf_service:267`,
-`not has_individual_pv`). Eine kWp-Verteilung auf Tagesebene ist verworfen
-(Entscheid Gernot 2026-08-07): sie erfände Messwerte.
+⛔ **Die tragende Regel hat mit #406 gewechselt** (Entscheid Gernot 2026-09-04).
+Bis dahin galt **alles-oder-nichts an der ZUORDNUNG**: das Aggregat fiel weg,
+sobald irgendein Erzeuger einen eigenen Zähler zugeordnet hatte. Das fragte die
+Konfiguration statt die Daten — und daran brach der Fall des Melders Mathek
+(Zähler zugeordnet, liefert für die früheren Stunden nichts ⇒ 21 Stunden PV weg)
+sowie der gemischte Fall (ein Erzeuger ohne Zähler ⇒ Anlagensumme dauerhaft zu
+klein). Jetzt gilt die **Präzedenz je Tag** (`core/berechnungen/
+pv_tages_praezedenz.py`): tragen alle erwarteten Erzeuger den ganzen Tag,
+gewinnen sie; sonst trägt das Aggregat.
 
-⚠ **Die schärfste Probe hier ist nicht der Fix, sondern die Abgrenzung**
-(`test_teilbelegung_verdraengt_das_aggregat`): stünde `pv_gesamt` neben `pv_7`
-im flachen Keyspace von `komponenten_kwh`, summierte `summe_pv_bkw_kwh` beides
-— die Anlagensumme neben ihrem eigenen Summanden, also die Doppelzähl-Klasse aus
-#290/#298.
+⭐ **Was sich NICHT geändert hat und was diese Datei weiter schützt: nie beides
+zusammen.** Stünde `pv_gesamt` neben `pv_7` im flachen Keyspace von
+`komponenten_kwh`, summierte `summe_pv_bkw_kwh` beides — die Anlagensumme neben
+ihrem eigenen Summanden, die Doppelzähl-Klasse aus #290/#298. Die Proben unten
+prüfen diese Aussage seit #406 an der **Bilanz** statt an der Eintragsliste:
+dass ein Kandidat gebaut wird, ist keine Aussage mehr, dass er GEZÄHLT wird.
 """
 
 from __future__ import annotations
@@ -53,6 +58,23 @@ from backend.services.snapshot.writer import _build_counter_map
 
 def _sensor(sid: str) -> dict:
     return {"strategie": "sensor", "sensor_id": sid}
+
+
+def _mit_lebenszyklus(ns):
+    """Die Attrappe bekommt die ECHTE `ist_aktiv_an` des Modells.
+
+    Seit #406 filtert `erwartete_erzeuger_ids` die Erzeuger am Stichtag — ein
+    stillgelegter String darf die Anlagensumme nicht dauerhaft auf das Aggregat
+    zwingen. Gebunden statt nachgebaut: ein `lambda: True` verdeckte genau die
+    Lücke, für die der Filter da ist.
+    """
+    from backend.models.investition import Investition
+
+    ns.aktiv = True
+    ns.anschaffungsdatum = None
+    ns.stilllegungsdatum = None
+    ns.ist_aktiv_an = Investition.ist_aktiv_an.__get__(ns)
+    return ns
 
 
 def _nur_aggregat() -> dict:
@@ -103,19 +125,22 @@ def test_aggregat_traegt_die_tagesebene_ohne_einzelzaehler():
     assert kategorien["pv_gesamt"] == "pv"
 
 
-def test_teilbelegung_verdraengt_das_aggregat():
-    """EIN Erzeuger mit eigenem Zähler schaltet die Anlagensumme ab — sonst
-    stünde sie neben ihrem eigenen Summanden (Doppelzählung).
+def test_teilbelegung_macht_beide_zu_kandidaten():
+    """⛔ Diese Probe hieß bis #406 `test_teilbelegung_verdraengt_das_aggregat`
+    und behauptete das Gegenteil: EIN zugeordneter Erzeuger-Zähler schalte die
+    Anlagensumme ab. Genau diese Regel hat Matheks Tag zerstört.
 
-    Bewusst mit ZWEI Modulen und nur EINEM Zähler geprüft: eine Either-Or-Gruppe
-    (`resolve_either_or_eintraege`) ist 1-aus-n und hätte hier eines der beiden
-    Module verloren. Die Regel ist n-schlägt-1, keine Gruppe."""
+    **Ihre Substanz war nie die Verdrängung, sondern die Doppelzählung** — und
+    die wird jetzt eine Ebene später verhindert (s.
+    `test_teilbelegung_nimmt_das_aggregat_statt_der_teilsumme`). Hier bleibt
+    die Aussage: die Eintragsliste liefert BEIDE Quellen als Kandidaten, und
+    `pv_je_investition_belegt` beantwortet die Zuordnungsfrage weiter — sie ist
+    jetzt Sache der Datenquellen-Fläche, nicht mehr der Bilanz."""
     mapping = _nur_aggregat()
     mapping["investitionen"]["1"]["felder"]["pv_erzeugung_kwh"] = _sensor("sensor.west_kwh")
 
     felder = {b.feld for b in basis_beitraege(mapping)}
-    assert "pv_gesamt" not in felder
-    assert felder == {"einspeisung", "netzbezug"}   # der Rest bleibt unberührt
+    assert felder == {"einspeisung", "netzbezug", "pv_gesamt"}
     assert pv_je_investition_belegt(mapping) is True
 
 
@@ -157,25 +182,29 @@ def test_mqtt_zaehler_je_erzeuger_verdraengt_das_aggregat():
         ["basis:pv_gesamt", "inv:1:ladung_kwh", "basis:einspeisung"]
     ) is False
 
-    # Und das Flag greift durch bis zum Basis-Beitrag:
-    felder = {b.feld for b in basis_beitraege(
-        _nur_aggregat(), pv_je_investition_extern=True
-    )}
-    assert "pv_gesamt" not in felder
+    # ⛔ Bis #406 folgte hier: „und das Flag greift durch bis zum Basis-Beitrag"
+    # (`pv_gesamt` fiel aus `basis_beitraege` heraus). Das Flag gibt es nicht
+    # mehr — die Quelle wird nicht mehr an der Zuordnung ausgeschlossen. Die
+    # Frage selbst bleibt: die Datenquellen-Fläche und der Daten-Checker lesen
+    # sie weiter.
 
 
 def test_mqtt_pfad_loest_dieselbe_regel_auf():
-    inv = type("I", (), {"id": 1, "typ": "pv-module", "parameter": {},
-                         "parent_investition_id": None})()
+    inv = _mit_lebenszyklus(type("I", (), {"id": 1, "typ": "pv-module",
+                                           "parameter": {},
+                                           "parent_investition_id": None})())
 
     nur_aggregat = mqtt_hourly_eintraege(["basis:pv_gesamt"], {"1": inv}, {})
     assert [(sk, kat) for sk, kat, _ in nur_aggregat] == [("basis:pv_gesamt", "pv")]
 
+    # ⛔ Bis #406 fiel `basis:pv_gesamt` hier heraus. Seither sind beide
+    # Kandidaten — die Wahl fällt im Aggregator an den Daten, und dass dabei
+    # nie beides zählt, prüft `test_aggregator_zaehlt_mqtt_string_und_aggregat_nicht_doppelt`.
     gemischt = mqtt_hourly_eintraege(
         ["basis:pv_gesamt", "inv:1:pv_erzeugung_kwh"], {"1": inv}, {},
     )
     keys = {sk for sk, _kat, _grp in gemischt}
-    assert "basis:pv_gesamt" not in keys
+    assert "basis:pv_gesamt" in keys
     assert "inv:1:pv_erzeugung_kwh" in keys
 
 
@@ -246,8 +275,9 @@ async def test_aggregator_zaehlt_mqtt_string_und_aggregat_nicht_doppelt():
     Stunden-Bilanz, obwohl die Anlage 24 erzeugt hat. Die Probe hängt an der
     Reihenfolge im Aggregator: die MQTT-Keys müssen VOR dem Basis-Beitrag
     bekannt sein."""
-    inv = SimpleNamespace(id=1, typ="pv-module", parameter={},
-                          parent_investition_id=None)
+    inv = _mit_lebenszyklus(SimpleNamespace(
+        id=1, typ="pv-module", parameter={}, parent_investition_id=None,
+    ))
     anlage = SimpleNamespace(id=1, sensor_mapping=_nur_aggregat())
     with patch(
         "backend.services.snapshot.aggregator.get_snapshot",

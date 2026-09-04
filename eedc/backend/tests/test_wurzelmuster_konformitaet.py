@@ -1399,6 +1399,13 @@ P7_BASELINE_AUSNAHMEN: frozenset[str] = frozenset({
     # `PvModulWert` — das ERGEBNIS der Auflösung. Genau der Weg, den die Regel
     # vorschreibt; die Summe daraus ist die Anlagen-PV.
     "backend/api/routes/cockpit/pv_strings.py::w",
+    # Dito auf der TAGESEBENE (#406): `loese_pv_tageswerte_auf` ruft denselben
+    # SoT `resolve_pv_je_modul` mit Tageswerten statt Monatswerten und liest sein
+    # Ergebnis (`PvModulWert`). Es gibt dort keine `Monatsdaten`-Zeile — das
+    # Aggregat ist der TAGES-Zählerstand `basis:pv_gesamt`, nicht
+    # `Monatsdaten.pv_erzeugung_kwh`. Die Regel wird also nicht umgangen,
+    # sondern auf einer zweiten Zeitachse angewandt.
+    "backend/services/snapshot/komponenten_beitraege.py::wert",
     # Dito, aus den Monats-Fakten (`erzeugung.pv_je_modul`) statt aus
     # `lade_pv_je_monat` direkt — dieselbe Auflösung, eine Schicht weiter oben
     # (ADR-002/P10). Trägt den String-Vergleich SOLL/IST im Jahresbericht.

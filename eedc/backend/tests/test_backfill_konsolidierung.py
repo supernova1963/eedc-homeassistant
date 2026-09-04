@@ -193,7 +193,7 @@ async def test_s1_scheduler_und_backfill_pfad_symmetrisch(db) -> None:
     await _mqtt_anchor(db, anlage.id, historisch)
     await db.commit()
 
-    async def fake_lts_komp(anlage_arg, investitionen_by_id, datum):
+    async def fake_lts_komp(anlage_arg, investitionen_by_id, datum, *, marken_out=None):
         # Komponenten-Tagessumme abhängig von den geladenen (aktiv_am_tag-)Invs:
         # so testet der Mock, dass beide Pfade dieselbe Inv-Menge laden.
         return {f"k_{iid}": float(iid) for iid in sorted(investitionen_by_id)}

@@ -44,12 +44,31 @@ def _make_anlage_dict(sensor_mapping: dict):
 
 
 def _make_inv(inv_id: int, typ: str, parameter: dict | None = None):
-    return SimpleNamespace(
+    return _mit_lebenszyklus(SimpleNamespace(
         id=inv_id,
         anlage_id=1,
         typ=typ,
         parameter=parameter or {},
-    )
+        parent_investition_id=None,
+    ))
+
+def _mit_lebenszyklus(ns):
+    """Gibt der Attrappe die Lebenszyklus-Felder + die ECHTE `ist_aktiv_an`.
+
+    Seit #406 filtert `pv_tages_praezedenz.erwartete_erzeuger_ids` die Erzeuger
+    am Stichtag — ein stillgelegter String darf die Anlagensumme nicht dauerhaft
+    auf das Aggregat zwingen. Die Methode wird vom Modell **gebunden** statt
+    nachgebaut: ein `lambda: True` hätte genau die Lücke verdeckt, für die der
+    Filter da ist, und eine Kopie der drei Regeln wäre die F-56-Klasse.
+    """
+    from backend.models.investition import Investition
+
+    ns.aktiv = True
+    ns.anschaffungsdatum = None
+    ns.stilllegungsdatum = None
+    ns.ist_aktiv_an = Investition.ist_aktiv_an.__get__(ns)
+    return ns
+
 
 
 def _build_mock_ha_svc(deltas_per_sensor: dict[str, dict[int, float]]) -> MagicMock:

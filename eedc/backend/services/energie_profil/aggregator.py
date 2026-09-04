@@ -786,6 +786,11 @@ async def aggregate_day(
     # Schutz für die seltene Konstellation "HA-LTS weg + Snapshots korrupt"
     # bleibt über die preserve-Logik unten (greift wenn boundary leer).
     boundary_kwh: dict[str, float] = {}
+    # #406: die Herkunfts-Marken der PV-Auflösung. Ein Erzeuger ohne eigenen
+    # Tageswert bekommt seinen kWp-Anteil am Aggregat — der Wert ist dann eine
+    # ZERLEGUNG, keine Messung, und muss das in `source_provenance` sagen
+    # (dieselbe Marke wie im Monatspfad, #352).
+    pv_marken: dict[str, str] = {}
     if datum > date.today():
         logger.debug(
             f"Anlage {anlage.id}, {datum}: Boundary-Diff übersprungen für "
@@ -795,7 +800,7 @@ async def aggregate_day(
         try:
             from backend.services.snapshot.lts_aggregator import get_komponenten_tageskwh_lts
             boundary_kwh = await get_komponenten_tageskwh_lts(
-                anlage, invs_by_id, datum,
+                anlage, invs_by_id, datum, marken_out=pv_marken,
             )
         except Exception as e:
             logger.warning(
@@ -806,7 +811,7 @@ async def aggregate_day(
         try:
             from backend.services.snapshot.aggregator import get_komponenten_tageskwh
             boundary_kwh = await get_komponenten_tageskwh(
-                db, anlage, invs_by_id, datum,
+                db, anlage, invs_by_id, datum, marken_out=pv_marken,
             )
         except Exception as e:
             logger.warning(
@@ -963,6 +968,9 @@ async def aggregate_day(
         writer=auto_writer,
         source=tz_source_label,
         abgeleitet_je_feld=abgeleitet_marken or None,
+        # #406: je `komponenten_kwh`-Sub-Key, wo der Wert aus dem Anlagen-
+        # Aggregat zerlegt wurde statt gemessen zu sein.
+        abgeleitet_je_subkey=pv_marken or None,
     )
 
     # Gerettete extern-befüllte Felder wiederherstellen (Prognose + Kraftstoffpreis).
