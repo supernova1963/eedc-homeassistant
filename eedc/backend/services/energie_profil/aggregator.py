@@ -21,6 +21,7 @@ from sqlalchemy import and_, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
+from backend.core.berechnungen.slot_konvention import leistungspfad_slot
 from backend.core.berechnungen.speicher import anlagen_soc_prozent
 from backend.core.investition_kennwerte import get_speicher_nutzbare_kapazitaet_kwh
 from backend.core.source_priority import SOURCE_LABELS
@@ -227,10 +228,10 @@ async def aggregate_day(
         for p in vortagsrand_raw:
             stunden_buckets.setdefault(0, []).append(p)
         for p in punkte_raw:
-            h = int(p["zeit"].split(":")[0])
-            if h >= 23:
+            slot = leistungspfad_slot(int(p["zeit"].split(":")[0]))
+            if slot is None:
                 continue          # gehört in Slot 0 des Folgetags
-            stunden_buckets.setdefault(h + 1, []).append(p)
+            stunden_buckets.setdefault(slot, []).append(p)
         # Slot 0 existiert auch ohne Vortagsrand — als leerer Bucket. Ohne ihn
         # schriebe die Schleife die Zeile 0 gar nicht, und mit ihr fielen
         # `pv_kw`, Wetter und Preis dieser Stunde aus (sie kommen NICHT aus dem
@@ -907,13 +908,25 @@ async def aggregate_day(
         # das v3.33.0-Snapshot-Self-Healing den Schutz überflüssig macht —
         # ERGEBNIS: nein. Die Self-Healing-Kaskade in `reader.get_snapshot`
         # (DB → HA-Statistics → MQTT) heilt Stufe 2 NUR bei `ha_svc.is_available`;
-        # in genau der geschützten Konstellation (HA unerreichbar) fällt sie aus,
-        # und für historische Tage läuft der Scheduler nie nach → ohne Preserve
-        # permanenter komponenten_kwh-Verlust eines Alttags. Bekannte Grenze:
-        # der Schutz ist partiell (nur komponenten_kwh/_starts, nicht
-        # ueberschuss/defizit/Peaks). Sauberere Lösung wäre, dass die Werkbank
-        # quellenlose Tage überspringt statt zu überschreiben — eigener Schnitt,
-        # bewusst nicht hier.
+        # in genau der geschützten Konstellation (HA unerreichbar) fällt sie aus
+        # → ohne Preserve permanenter komponenten_kwh-Verlust eines Alttags.
+        # Bekannte Grenze: der Schutz ist partiell (nur komponenten_kwh/_starts,
+        # nicht ueberschuss/defizit/Peaks). Sauberere Lösung wäre, dass die
+        # Werkbank quellenlose Tage überspringt statt zu überschreiben — eigener
+        # Schnitt, bewusst nicht hier.
+        #
+        # ⛔ Hier stand bis 2026-09-04 zusätzlich „und für historische Tage läuft
+        # der Scheduler nie nach". **Das gilt seit N-388 nicht mehr:**
+        # `services/energie_profil/archiv_nachzug.py` lässt den Scheduler
+        # nächtlich genau EINEN historischen Tag neu aggregieren — den, der die
+        # Wetter-Archiv-Grenze gerade passiert hat. Der Satz war die Begründung
+        # dafür, dass der Scheduler hier ungeschützt bleibt; er trägt sie nicht
+        # mehr. Ersetzt ist er **nicht** durch ein Preserve für den Scheduler
+        # (ein legitim leerer Tag soll weiterhin nicht ewig die alte Wahrheit
+        # weitertragen), sondern durch den **Vorflug** dort: der Nachzug
+        # überspringt einen Tag, dessen HA-Historie inzwischen weniger Stunden
+        # deckt als die gespeicherte `stunden_verfuegbar`. Wer diesen
+        # Preserve-Zweig ändert, liest den Vorflug mit.
         komponenten_kwh=(
             {k: round(v, 2) for k, v in komponenten_summen.items()}
             if komponenten_summen

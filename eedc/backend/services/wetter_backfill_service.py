@@ -19,6 +19,13 @@ unkritisch.
 Lag: Archive hängt 2-5 Tage hinter Echtzeit. Letzte Tage werden hier nicht
 angefasst — sie laufen normal über den Live-Forecast-Pfad in
 energie_profil_service.aggregate_day().
+
+⚑ Wer den vorläufigen Forecast-Wert später durch den endgültigen ersetzt, ist
+NICHT dieser Dienst (er ist strikt additiv und kennt `globalstrahlung_wm2`
+ohnehin nicht), sondern `services/energie_profil/archiv_nachzug.py` — er
+aggregiert nächtlich den einen Tag neu, der `archive_cutoff()` gerade passiert
+hat. Bis dahin (N-388, 2026-09-04) blieb ein vorläufiger Strahlungswert für
+immer stehen; an bewölkten Tagen war er bis Faktor 8,7 zu klein.
 """
 
 from datetime import date, timedelta

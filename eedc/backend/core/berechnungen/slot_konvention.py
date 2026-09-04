@@ -196,3 +196,26 @@ def backward_slot_aus_period_end(period_end: datetime) -> tuple[date, int]:
     else:
         marker = period_end.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
     return marker.date(), marker.hour
+
+
+def leistungspfad_slot(punkt_stunde: int) -> int | None:
+    """Punkt-Label des Leistungspfads (Slot-BEGINN) → Backward-Slot.
+
+    ``live_tagesverlauf_service`` beschriftet jeden Punkt mit dem **Beginn**
+    seines Rasters (``h_start <= p < h_end``); ein Punkt „05:00" deckt also
+    ``[05:00, 06:00)`` und gehört nach der Backward-Konvention in Slot **6**.
+
+    ``None`` für ``23`` und höher: Bucket 23 des Tages ist ``[23:00, 24:00)``
+    und damit Slot 0 des **Folgetags** — im eigenen Tag fällt er weg (er kommt
+    dort über ``vortagsrand`` an).
+
+    ⚑ **Warum das eine benannte Funktion ist:** Die Regel entstand mit N-382
+    inline in ``energie_profil/aggregator.py``. Seit dem Archiv-Nachzug (N-388)
+    hat sie einen **zweiten** Leser — dessen Vorflug muss die Stundenzahl einer
+    Kurve vorher genauso zählen, wie der Aggregator sie nachher schreibt
+    (``TagesZusammenfassung.stunden_verfuegbar``). Zwei Nachbauten derselben
+    Bucket-Regel wären genau die Klasse, die N-382 überhaupt erst erzeugt hat.
+    """
+    if punkt_stunde >= 23:
+        return None
+    return punkt_stunde + 1

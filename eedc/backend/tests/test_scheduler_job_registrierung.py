@@ -1,4 +1,4 @@
-"""Die 19 Scheduler-Jobs — neun standen in keinem Test namentlich (M11).
+"""Die Scheduler-Jobs — neun standen in keinem Test namentlich (M11).
 
 **Gemessen am 2026-08-24 per AST** über alle ``add_job(..., id=...)``-Aufrufe
 des Baums: 19 Job-IDs, davon **neun** in keiner Testdatei namentlich —
@@ -8,6 +8,10 @@ des Baums: 19 Job-IDs, davon **neun** in keiner Testdatei namentlich —
 ``sensor_snapshot_5min`` · ``sensor_snapshot_5min_cleanup`` ·
 ``sensor_snapshot_preview``. Der Plan zu E6 nannte **acht**; die Zahl ist hier
 erhoben, nicht abgeschrieben.
+
+⚑ Eine Zahl im Titel wäre hier eine Zusicherung mit Verfallsdatum — die
+Baseline unten IST die Zahl, und sie wächst mit jedem eingetragenen Job
+(zuletzt ``energie_profil_archiv_nachzug``, N-388, 2026-09-04).
 
 Zwei Achsen:
 
@@ -52,6 +56,13 @@ IMMER_REGISTRIERT = {
     "energie_profil_heute",
     "energie_profil_aggregation",
     "energie_profil_aggregation_recovery",
+    # N-388 (2026-09-04): der Wetter-Archiv-Nachzug läuft BEDINGUNGSLOS.
+    # #322 fragt an dieser Stelle „soll er das?" — hier ja: er hängt an keiner
+    # Betriebsart und an keinem Schalter, und er nimmt sich selbst zurück, wo
+    # nichts zu tun ist (keine Zusammenfassung für den Grenztag ⇒ `kein_tag`;
+    # geschrumpfte HA-Historie ⇒ `uebersprungen`). Ein Schalter davor hieße,
+    # dass eine falsche Einstrahlung je nach Konfiguration stehen bleibt.
+    "energie_profil_archiv_nachzug",
     "korrekturprofil_aggregation",
     "connector_daily_poll",
     "prognose_prefetch",
@@ -137,6 +148,7 @@ class TestTakteDerNeunUngedecktenJobs:
         [
             ("energie_profil_aggregation", "0", "15"),
             ("energie_profil_aggregation_recovery", "2", "15"),
+            ("energie_profil_archiv_nachzug", "2", "20"),
             ("korrekturprofil_aggregation", "2", "30"),
             ("api_cache_cleanup", "4", "0"),
         ],
@@ -165,6 +177,25 @@ class TestTakteDerNeunUngedecktenJobs:
         assert (int(korrektur["hour"]), int(korrektur["minute"])) > (
             int(heilung["hour"]), int(heilung["minute"])
         )
+
+    def test_der_archiv_nachzug_liegt_ZWISCHEN_heilung_und_korrekturprofil(
+        self, scheduler
+    ):
+        """Beide Nachbarschaften sind Absicht, nicht Zufall (N-388).
+
+        **Nach der Heilung (02:15):** beide schreiben mit `aggregate_day`, nur
+        auf verschiedene Tage — laufen sie gleichzeitig, konkurrieren sie um
+        denselben SQLite-Writer.
+        **Vor dem Korrekturprofil (02:30):** der Nachzug berichtigt mit der
+        Strahlung auch Bewölkung und Wettercode derselben Zeile, und genau die
+        liest die Korrekturprofil-Aggregation. Läge er danach, käme die
+        Berichtigung dort erst einen Tag später an.
+        """
+        heilung = self._cron(scheduler, "energie_profil_aggregation_recovery")
+        nachzug = self._cron(scheduler, "energie_profil_archiv_nachzug")
+        korrektur = self._cron(scheduler, "korrekturprofil_aggregation")
+        as_paar = lambda f: (int(f["hour"]), int(f["minute"]))  # noqa: E731
+        assert as_paar(heilung) < as_paar(nachzug) < as_paar(korrektur)
 
     async def test_energie_profil_heute_laeuft_viertelstuendlich(self, scheduler):
         assert self._intervall_minuten(scheduler, "energie_profil_heute") == 15

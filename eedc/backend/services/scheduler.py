@@ -236,6 +236,26 @@ class EEDCScheduler:
                 replace_existing=True,
             )
 
+            # Archiv-Nachzug Wetter: Täglich um 02:20 (N-388).
+            # Die Einstrahlung der letzten fünf Tage ist ein VORLÄUFIGER
+            # Forecast-Wert (Archiv/ERA5 hinkt 2-5 Tage nach) und wurde bisher
+            # nie ersetzt — an bewölkten Tagen bis Faktor 8,7 zu klein, mit
+            # Folgen für PR, Einstrahlungs-Spalte und den Doppelerfassungs-
+            # Verdacht des Daten-Checkers. Der Job aggregiert je Anlage den
+            # EINEN Tag neu, der die Cutoff-Grenze in dieser Nacht passiert hat;
+            # `_get_wetter_ist` zieht dann von selbst das Archiv.
+            # Lage im Takt ist Absicht: NACH dem Self-Healing (02:15), damit die
+            # beiden nicht denselben Tag gleichzeitig schreiben, und VOR der
+            # Korrekturprofil-Aggregation (02:30), damit die berichtigte
+            # Bewölkung noch in derselben Nacht dort ankommt.
+            self._scheduler.add_job(
+                energie_profil_archiv_nachzug_job,
+                CronTrigger(hour=2, minute=20),
+                id="energie_profil_archiv_nachzug",
+                name="Wetter-Archiv-Nachzug Grenztag (02:20)",
+                replace_existing=True,
+            )
+
             # Korrekturprofil-Aggregation: Täglich um 02:30 (nach Energie-Profil-Recovery 02:15).
             # Aggregator schreibt sonnenstand_wetter / sonnenstand / skalar-Profile pro Anlage,
             # invalidiert Live-Cache automatisch (siehe korrekturprofil_lookup.invalidate_cache).
@@ -843,6 +863,49 @@ async def _run_yesterday_aggregation(label: str) -> None:
         await log_activity(
             kategorie="scheduler",
             aktion=f"Energie-Profil {label} fehlgeschlagen",
+            erfolg=False,
+            details=f"{type(e).__name__}: {e}",
+        )
+
+
+async def energie_profil_archiv_nachzug_job() -> None:
+    """Zieht den Wetter-Grenztag aus dem Archiv nach (täglich um 02:20, N-388).
+
+    Details, Messung und der Grund für den Vorflug stehen im Modul-Docstring
+    von ``services/energie_profil/archiv_nachzug.py``.
+    """
+    try:
+        from backend.services.energie_profil.archiv_nachzug import (
+            archiv_grenztag,
+            archiv_nachzug_all,
+        )
+
+        datum = archiv_grenztag()
+        results = await archiv_nachzug_all()
+        ok = sum(1 for r in results.values() if r["status"] == "ok")
+        uebersprungen = sum(
+            1 for r in results.values() if r["status"] == "uebersprungen"
+        )
+        logger.info(
+            "Wetter-Archiv-Nachzug %s: %d/%d Anlagen nachgezogen, %d übersprungen",
+            datum, ok, len(results), uebersprungen,
+        )
+        await log_activity(
+            kategorie="scheduler",
+            aktion="Wetter-Archiv-Nachzug",
+            erfolg=True,
+            details=(
+                f"{datum}: {ok}/{len(results)} Anlagen nachgezogen"
+                + (f", {uebersprungen} übersprungen" if uebersprungen else "")
+            ),
+        )
+    except Exception as e:
+        logger.warning(
+            "Wetter-Archiv-Nachzug fehlgeschlagen: %s: %s", type(e).__name__, e
+        )
+        await log_activity(
+            kategorie="scheduler",
+            aktion="Wetter-Archiv-Nachzug fehlgeschlagen",
             erfolg=False,
             details=f"{type(e).__name__}: {e}",
         )
