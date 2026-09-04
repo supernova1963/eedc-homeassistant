@@ -11,6 +11,35 @@
 
 ## [Unreleased]
 
+**Modul-Zuordnung am Balkonkraftwerk kostet keine Vergangenheit mehr**
+
+Seit Version 4.0.18 kannst du deinem Balkonkraftwerk eigene PV-Module zuordnen — praktisch,
+wenn deine Module in zwei Richtungen hängen. Tatest du das an einem **bestehenden** Gerät,
+verschwand seine Erzeugung danach aus allen **früheren** Monaten: eedc rechnete sie ab dann den
+Modulen zu, und die gab es damals noch nicht.
+
+Das war schwer zu bemerken, weil jede Sicht dieselbe zu kleine Zahl zeigte. **Jetzt entscheidet
+eedc das für jeden Monat einzeln:** Solange die Module noch nicht da waren, gehört die Erzeugung
+dem Balkonkraftwerk. **Deine Werte kommen von selbst zurück** — sie waren nie weg, sie wurden
+nur falsch zugeordnet.
+
+**Das Balkonkraftwerk zählt überall mit**
+
+Wenn du ein **Balkonkraftwerk ohne zugeordnete PV-Module** führst — so wurde es bis Version
+4.0.18 erfasst —, ließen zwei Stellen seine Erzeugung weg: der **Daten-Check** und die
+Kennzahlen eines einzelnen Monats. *Auswertungen → Tabelle* und das Cockpit haben immer schon
+richtig gerechnet, und genau das war das Verwirrende: Der Daten-Check nannte eine
+PV-Erzeugung, die anderswo nirgends stand — und meldete daraufhin manchmal *„Einspeisung
+größer als PV-Erzeugung"* an einer Anlage, an der nichts falsch war.
+
+**Was du siehst:** Bei betroffenen Anlagen steigen **Direktverbrauch** und **Eigenverbrauch**
+des Monats, **Autarkie** und **Eigenverbrauchsquote** ziehen nach. Der **spezifische Ertrag**
+setzt jetzt die Erzeugung beider Erzeuger ins Verhältnis zur Leistung beider. Eine
+Fehlermeldung im Daten-Check, die nur daran hing, verschwindet.
+
+**Wer sein Balkonkraftwerk mit zugeordneten Modulen führt, sieht keine Änderung** — dort war
+alles von Anfang an richtig. Ebenso Anlagen ohne Balkonkraftwerk.
+
 **Die Einstrahlung der letzten Tage wird nachgezogen**
 
 Die **Performance Ratio** sagt, wie viel deine Anlage aus dem gemacht hat, was an Sonne da war.
