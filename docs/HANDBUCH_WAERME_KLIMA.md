@@ -106,7 +106,7 @@ Dieser Abschnitt ist so wichtig wie die Tabelle darüber. **Mehrere Dinge fehlen
 
 > *„Eine Arbeitszahl nahe 1 entsteht, wenn ein großer Teil der Wärme direkt elektrisch erzeugt wurde (Heizstab, Zusatz- oder Notheizung). Die Zahl beschreibt die Anlage in diesem Zeitraum, sie ist kein Fehler."*
 
-**Keine 0, wo „unbekannt" gemeint ist.** Eine 0 heißt „gemessen und es war null". Wo eedc etwas nicht weiß, steht „—" **mit dem Grund daneben** — nie eine Null, die wie eine Messung aussieht.
+**Keine 0, wo „unbekannt" gemeint ist.** Eine 0 heißt „gemessen und es war null". Wo eedc etwas nicht weiß, steht „—" **mit dem Grund daneben** — nie eine Null, die wie eine Messung aussieht. ⚑ **In den Tabellen steht dieser Grund sichtbar unter der Tabelle**, einmal je Grund statt in jeder Zeile — er folgt meist aus deiner Anlagenkonfiguration und wiederholt sich sonst über alle Monate. Das gilt bewusst auch für das Telefon: Ein Hinweis, den man nur mit der Maus erreicht, ist dort keine Auskunft.
 
 **Kein Vergleich von passiv gegen aktiv gekühlt.** Passive Kühlung läuft nur über Umwälzpumpen und erreicht ein Vielfaches der Effizienz einer aktiv gekühlten Anlage. Beide Zahlen sind für sich richtig; sie gegeneinander zu stellen wäre die Falschaussage. Deshalb gibt es am Gerät das Feld **„Kühlung: aktiv oder passiv"** — es ändert **keine** deiner Zahlen, es hält dich nur aus dem falschen Vergleich heraus.
 

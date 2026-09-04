@@ -11,6 +11,21 @@
 
 ## [Unreleased]
 
+**Wo eine Zahl fehlt, steht jetzt sichtbar warum — auch auf dem Telefon**
+
+Manche Kennzahlen bildet eedc bewusst nicht. Die **Arbeitszahl** zum Beispiel entfällt, wenn
+Wärme und Strom nicht dasselbe Gerät und denselben Zweck beschreiben — eine Zahl daraus wäre
+keine Auskunft, sondern eine Falschaussage. An ihrer Stelle stand ein „—", und der Grund dazu
+erschien nur, wenn du mit der Maus darauf gezeigt hast.
+
+**Auf einem Telefon gibt es das nicht.** Dort blieb ein nackter Strich stehen, der aussieht, als
+hättest du etwas zu pflegen vergessen. Jetzt steht der Grund als **sichtbarer Satz unter der
+Tabelle** — einmal je Grund, nicht in jeder Zeile: in *Auswertungen → Tabelle*, in der
+Monatstabelle unter *Komponenten → Wärme/Klima* und in der Detailübersicht unter
+*Auswertungen → ROI*, dort mit dem Namen des Geräts dazu.
+
+**Es ändert sich keine Zahl** — nur, ob du erfährst, warum eine fehlt.
+
 **Modul-Zuordnung am Balkonkraftwerk kostet keine Vergangenheit mehr**
 
 Seit Version 4.0.18 kannst du deinem Balkonkraftwerk eigene PV-Module zuordnen — praktisch,
