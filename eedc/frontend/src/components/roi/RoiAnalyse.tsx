@@ -566,6 +566,19 @@ export function RoiDetailTabelle({ vm, zeigeCo2 = true }: { vm: RoiAnalyseVM; ze
   // Aussichten (dort entsteht er, dort wird er zerlegt), Nenner aus dieser
   // Sicht — dieselbe Arbeitsteilung wie bei der Kachel darüber.
   const ertragJeInv = vm.fortschritt?.ertragJeInvestition
+  // N-374: warum eine Zeile vier leere Wert-Spalten hat — SICHTBAR unter der
+  // Tabelle statt nur im `title=` der „—". Ein natives `title=` hat auf dem
+  // Telefon keine Entsprechung; der Anwender liest das „—" sonst als fehlende
+  // Datenpflege. Einmal je Investition am Fuß und nicht in den vier Spalten:
+  // derselbe Satz viermal in einer Zeile wäre keine Auskunft, sondern Rauschen.
+  // Der sichtbare Zusatz „· nicht bewertet" am Gerätenamen (N-87) bleibt, was er
+  // ist — er sagt DASS, die Zeile hier sagt WARUM.
+  const nichtBewertet = roiData.berechnungen.flatMap((b) => {
+    const d = b.detail_berechnung as { nicht_bewertet?: boolean; hinweis?: unknown } | undefined
+    if (d?.nicht_bewertet !== true) return []
+    const grund = String(d.hinweis ?? '').trim()
+    return grund ? [`${b.investition_bezeichnung} — ${grund}`] : []
+  })
   return (
     <Card>
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Detailübersicht</h3>
@@ -758,6 +771,12 @@ export function RoiDetailTabelle({ vm, zeigeCo2 = true }: { vm: RoiAnalyseVM; ze
             </tr>
           </TableFoot>
         </Table>
+        {/* N-374: der Grund zu „nicht bewertet", sichtbar. */}
+        {nichtBewertet.length > 0 && (
+          <ul className="mt-2 text-xs text-gray-500 dark:text-gray-400 space-y-0.5">
+            {nichtBewertet.map((z) => <li key={z}>Nicht bewertet: {z}</li>)}
+          </ul>
+        )}
     </Card>
   )
 }

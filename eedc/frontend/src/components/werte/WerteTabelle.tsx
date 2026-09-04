@@ -253,6 +253,28 @@ export function WerteTabelle({
     [rows, vorjahrRows],
   )
   const fussSchweigt = zeigeVergleich && vorjahrAggregat == null && ohneGegenstueck > 0
+  // N-374: Warum eine Kennzahl-Spalte leer bleibt — SICHTBAR unter der Tabelle,
+  // nicht nur im `title=` der Zelle. Ein Tooltip ist auf dem Telefon keine
+  // Auskunft: das Info-Icon von `FormelTooltip` steht auf `hidden sm:` und ein
+  // natives `title=` hat dort gar keine Entsprechung — der Anwender sieht ein
+  // nacktes „—" ohne jeden Hinweis, dass etwas dahintersteckt (S3, ADR-002/P12).
+  // Einmal unter der Tabelle statt in jeder Zelle, wie `fussGrund` es schon tut:
+  // die Gründe wiederholen sich über die Zeilen, die Fläche würde sonst unruhig.
+  // Heute trägt nur `wp_cop` einen Grund (`lib/werte/zeile.ts`); die Sammlung ist
+  // trotzdem über alle Metriken gebaut, damit eine zweite Sperre sie umsonst
+  // mitbekommt.
+  const zellGruende = useMemo(() => {
+    const gesehen = new Set<string>()
+    for (const r of rows) {
+      if (!r.grund) continue
+      for (const m of aktiveMetriken) {
+        if (r.wert(m.key) != null) continue
+        const g = r.grund(m.key)
+        if (g) gesehen.add(`${m.label}: ${g}`)
+      }
+    }
+    return [...gesehen]
+  }, [rows, aktiveMetriken])
   const einheitDativ = granularitaet === 'tag' ? 'Tagen' : 'Monaten'
   const fussGrund = `Die Summenzeile zeigt keinen Vergleich: ${ohneGegenstueck} von ${rows.length} ${einheitDativ} `
     + `${ohneGegenstueck === 1 ? 'hat' : 'haben'} kein Gegenstück im Vergleichszeitraum. `
@@ -497,6 +519,12 @@ export function WerteTabelle({
 
       {sorted.length > 1 && fussSchweigt && (
         <p className="text-xs text-gray-500 dark:text-gray-400">{fussGrund}</p>
+      )}
+      {/* N-374: der Grund zu einer leeren Kennzahl-Spalte, sichtbar. */}
+      {zellGruende.length > 0 && (
+        <ul className="text-xs text-gray-500 dark:text-gray-400 space-y-0.5">
+          {zellGruende.map((g) => <li key={g}>{g}</li>)}
+        </ul>
       )}
     </div>
   )

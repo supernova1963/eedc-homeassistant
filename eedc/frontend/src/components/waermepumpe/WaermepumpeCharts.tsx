@@ -218,6 +218,14 @@ export function WaermepumpeMonatsTabelle(
     return { md, strom, heiz, ww, jaz, herleitung }
   })
   const zeigtHerleitung = zeilen.some((z) => z.herleitung !== null)
+  // N-374: die Gründe zu einem gesperrten „—", SICHTBAR statt nur im `title=`.
+  // Dieselbe Bauform wie die Herleitung darunter und aus demselben Grund — „ein
+  // Tooltip ist auf dem Telefon keine Auskunft" (`waermepumpe_kennzahl.
+  // Arbeitszahl.grund`). Einmal unter der Tabelle statt in jeder Zeile: über zwölf
+  // Monate steht meist derselbe Grund, weil er aus der Anlagenkonfiguration folgt.
+  const sperrGruende = [...new Set(
+    zeilen.map((z) => (z.jaz?.wert == null ? z.jaz?.grund : null)).filter((g): g is string => !!g),
+  )]
 
   return (
     <>
@@ -261,6 +269,11 @@ export function WaermepumpeMonatsTabelle(
         Anteil ist der Regelfall, aber bei getrennter Strommessung liest die
         Strom-Spalte ein anderes Feld als der Layer (`get_wp_strom_kwh`) — ein Satz,
         der die Abweichung fest einer Ursache zuordnet, wäre dort eine Behauptung. */}
+    {sperrGruende.length > 0 && (
+      <ul className="mt-2 text-xs text-gray-500 dark:text-gray-400 space-y-0.5">
+        {sperrGruende.map((g) => <li key={g}>Arbeitszahl nicht gebildet — {g}</li>)}
+      </ul>
+    )}
     {zeigtHerleitung && (
       <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
         Die Arbeitszahl wird mit dem Strom gebildet, der zur gemessenen Wärme gehört.

@@ -36,10 +36,18 @@ export interface WerteZeile {
    * Warum eine Metrik **keinen** Wert hat (S3: „nicht ‚—', sondern der Grund").
    *
    * Optional und pro Metrik: Nur wo der Layer eine Kennzahl bewusst verweigert,
-   * steht hier ein Satz — heute die Arbeitszahl (R2/ADR-002/P12). Die Tabelle
-   * haengt ihn als Tooltip an die Zelle; eine sichtbare Zeile hat eine
-   * Tabellenzelle nicht, und ein leeres „—" ist die haeufigste Beschwerde
-   * dieser Flaeche.
+   * steht hier ein Satz — heute die Arbeitszahl (R2/ADR-002/P12).
+   *
+   * ⛔ Hier stand bis 2026-09-04: „Die Tabelle haengt ihn als Tooltip an die
+   * Zelle; eine sichtbare Zeile hat eine Tabellenzelle nicht." Der zweite
+   * Halbsatz war eine Behauptung, kein Befund (**N-374**): Die Zelle hat keine
+   * sichtbare Zeile, die *Tabelle* sehr wohl — `WerteTabelle` traegt den
+   * Fuss-Grund seit jeher genau so darunter. Der Grund steht deshalb jetzt
+   * sichtbar unter der Tabelle; der Tooltip an der Zelle bleibt als Zugabe fuer
+   * den Desktop. Warum das noetig war: ein natives `title=` hat auf dem Telefon
+   * keine Entsprechung, und das Info-Icon von `FormelTooltip` steht auf
+   * `hidden sm:` — beide Wege lassen dort ein nacktes „—" stehen, und das ist
+   * die haeufigste Beschwerde dieser Flaeche (S3).
    */
   grund?: (key: string) => string | null
 }

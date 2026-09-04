@@ -39,10 +39,36 @@ vi.mock('../../api', async (importOriginal) => ({
 import { RoiAnalyse } from './RoiAnalyse'
 
 describe('RoiAnalyse — nicht bewertete Komponente', () => {
-  it('zeigt den Grund sichtbar an der Zeile, nicht nur im Tooltip', async () => {
+  it('zeigt den Zusatz „nicht bewertet" an der Zeile (N-87)', async () => {
     render(<RoiAnalyse anlageId={1} />)
     expect(await screen.findAllByText(/Daikin Split/)).not.toHaveLength(0)
     expect(screen.getAllByText(/nicht bewertet/).length).toBeGreaterThan(0)
+  })
+
+  /**
+   * N-374 — was diese Probe misst und was der Vorgänger NICHT gemessen hat.
+   *
+   * Der Test darüber hieß bis zum 2026-09-04 „zeigt den Grund sichtbar an der
+   * Zeile, nicht nur im Tooltip" und prüfte dabei allein die Zeichenkette
+   * „nicht bewertet" — den sichtbaren Zusatz aus N-87. Der GRUND selbst
+   * (`detail_berechnung.hinweis`) stand ausschließlich in einem nativen
+   * `title=`, und `getByText` sieht ein Attribut nicht. Die Probe war damit
+   * grün, während genau der Zustand herrschte, gegen den ihr Name gerichtet war.
+   *
+   * ⚑ Deshalb prüft diese hier die HÖHE der Aussage, nicht ihre Symmetrie: der
+   * Hinweistext muss als **Textknoten** im Dokument stehen. Auf dem Telefon hat
+   * ein `title=` keine Entsprechung — der Anwender läse das „—" sonst als
+   * fehlende Datenpflege statt als bewusste Nicht-Bewertung.
+   */
+  it('N-374: der GRUND selbst steht als sichtbarer Text, nicht nur im title=', async () => {
+    render(<RoiAnalyse anlageId={1} />)
+    await screen.findAllByText(/Daikin Split/)
+    // Der Hinweistext des Backends, sichtbar — nicht als Attribut.
+    const treffer = screen.getAllByText(/eine Wirtschaftlichkeit gegenüber Gas oder Öl wird hier nicht berechnet/)
+    expect(treffer.length).toBeGreaterThan(0)
+    // Und er nennt das Gerät, zu dem er gehört: bei mehreren Investitionen wäre
+    // ein Grund ohne Zuordnung keine Auskunft.
+    expect(treffer.some((el) => el.textContent?.includes('Daikin Split'))).toBe(true)
   })
 
   it('zeigt in der Komponenten-Zeile Leerwerte statt einer 0-€-Ersparnis', async () => {

@@ -107,3 +107,64 @@ describe('N-370 — die Arbeitszahl je Monat ist nachrechenbar', () => {
     expect(screen.queryByText(/÷/)).not.toBeInTheDocument()
   })
 })
+
+/**
+ * N-374 — eine gesperrte Arbeitszahl nennt ihren Grund SICHTBAR.
+ *
+ * ⚑ Abgrenzung zu N-370 darüber, und sie ist der Kern: Die Herleitung erklärt,
+ * warum der **Nenner** von der Strom-Spalte abweicht — sie setzt eine gebildete
+ * Zahl voraus. Wo der Layer die Kennzahl **sperrt**, gibt es keine Herleitung,
+ * und übrig blieb bis zum 2026-09-04 ein nacktes „—" mit dem Grund allein im
+ * nativen `title=`. Auf dem Telefon hat `title=` keine Entsprechung; der Grund
+ * war dort nicht erreichbar — genau das, was der Docstring des Layers
+ * (`waermepumpe_kennzahl.Arbeitszahl.grund`) ausdrücklich verbietet.
+ *
+ * Die Zusicherung zielt auf die **Sichtbarkeit**, nicht auf die Anwesenheit:
+ * `getByText` findet Attribute nicht, ein `title=` allein macht sie rot.
+ */
+describe('N-374 — die gesperrte Arbeitszahl nennt ihren Grund sichtbar', () => {
+  const GRUND = 'kein Wärmemengenzähler zugeordnet'
+
+  it('der Grund steht als sichtbarer Text unter der Tabelle', () => {
+    render(<WaermepumpeMonatsTabelle
+      monatsdaten={[md(2026, 8, 316, 0, 0)]}
+      jazJeMonat={[{ jahr: 2026, monat: 8, wert: null, grund: GRUND, zaehler_kwh: null, nenner_kwh: null }]}
+    />)
+    expect(screen.getByText(`Arbeitszahl nicht gebildet — ${GRUND}`)).toBeInTheDocument()
+  })
+
+  it('über mehrere Monate mit demselben Grund steht der Satz genau einmal', () => {
+    // Der Grund folgt aus der Anlagenkonfiguration und wiederholt sich damit über
+    // alle Zeilen; zwölfmal derselbe Satz wäre Rauschen statt Auskunft.
+    render(<WaermepumpeMonatsTabelle
+      monatsdaten={[md(2026, 7, 300, 0, 0), md(2026, 8, 316, 0, 0)]}
+      jazJeMonat={[
+        { jahr: 2026, monat: 7, wert: null, grund: GRUND, zaehler_kwh: null, nenner_kwh: null },
+        { jahr: 2026, monat: 8, wert: null, grund: GRUND, zaehler_kwh: null, nenner_kwh: null },
+      ]}
+    />)
+    expect(screen.getAllByText(`Arbeitszahl nicht gebildet — ${GRUND}`)).toHaveLength(1)
+    // Verschiedene Gründe bleiben dagegen unterscheidbar — s. nächste Probe.
+  })
+
+  it('zwei verschiedene Gründe stehen beide da', () => {
+    render(<WaermepumpeMonatsTabelle
+      monatsdaten={[md(2026, 7, 300, 0, 0), md(2026, 8, 316, 0, 0)]}
+      jazJeMonat={[
+        { jahr: 2026, monat: 7, wert: null, grund: GRUND, zaehler_kwh: null, nenner_kwh: null },
+        { jahr: 2026, monat: 8, wert: null, grund: 'nur Kühlbetrieb in diesem Zeitraum', zaehler_kwh: null, nenner_kwh: null },
+      ]}
+    />)
+    expect(screen.getByText(`Arbeitszahl nicht gebildet — ${GRUND}`)).toBeInTheDocument()
+    expect(screen.getByText(/nur Kühlbetrieb in diesem Zeitraum/)).toBeInTheDocument()
+  })
+
+  it('Gegenprobe: eine gebildete Arbeitszahl erzeugt keinen Sperr-Satz', () => {
+    render(<WaermepumpeMonatsTabelle
+      monatsdaten={[md(2026, 8, 316, 150, 60)]}
+      jazJeMonat={[{ jahr: 2026, monat: 8, wert: 2.2, grund: GRUND, zaehler_kwh: 210, nenner_kwh: 96 }]}
+    />)
+    expect(screen.getByText('2,20')).toBeInTheDocument()
+    expect(screen.queryByText(/Arbeitszahl nicht gebildet/)).not.toBeInTheDocument()
+  })
+})
