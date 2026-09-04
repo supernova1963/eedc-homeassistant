@@ -128,6 +128,15 @@ cd /home/gernot/claude/eedc-homeassistant
 > Sprengsatz **außerhalb** `lib/colors.ts` sitzen (dort ist die Hex-Farbe erlaubt, die Gegenprobe
 > greift sonst nicht — gemessen 11.08.). Rückbau per **Dateikopie**, nie `git checkout --`, wenn
 > ungecommittete Arbeit im Baum liegt.
+>
+> ⛔ **Und vor jedem Lauf nach einer Sprengsatz-Änderung UND nach jedem Rückbau:**
+> `find . -name __pycache__ -prune -exec rm -rf {} +` (gemessen 04.09., **N-389**). Python hält ein
+> `.pyc` für gültig, solange Quell-**mtime** (in **Sekunden**) und Quell-**Größe** stimmen — eine
+> gleichlange Änderung in derselben Sekunde (die typische Sprengsatz-Form `20`→`45`) wirkt daher
+> nicht, und `diff -q` sagt trotzdem „bitgleich". **`touch` genügt nicht** (setzt dieselbe Sekunde),
+> **`python -B` genügt nicht** (schreibt kein Bytecode, *liest* aber weiter). Die teure Richtung ist
+> nicht der stumme Rückbau, sondern der **scharfe Sprengsatz, der still bleibt** und als „nicht
+> diskriminierend" protokolliert wird.
 
 > ⚠ **`npm run lint` gehört dazu, seit der CI-Lauf zu v4.0.13 daran gescheitert ist** (12.08.): Der Workflow ruft ESLint mit `--max-warnings 0` auf, die Liste hier kannte ihn nicht — eine `react-hooks/exhaustive-deps`-**Warnung** aus `62c680b9` lief damit durch alle lokalen Gates und machte den Tests-Lauf **nach** dem Push rot. Ein Prüfer, den nur CI kennt, fällt zwangsläufig zu spät auf.
 >
