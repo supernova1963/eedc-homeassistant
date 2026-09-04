@@ -1881,13 +1881,17 @@ Der Zuordnungs-Schritt des Import-Wizards schlägt die Anteile ebenfalls **nach 
 
 #### IST je Erzeuger auf **Tagesebene** (ab v4.0.9, #350)
 
-Die Präzedenz oben gilt für **Monatswerte**. Auf der Tagesebene gibt es sie nicht — dort wird
-**nicht verteilt**:
+⛔ **Hier stand bis 2026-09-04: „Die Präzedenz oben gilt für Monatswerte. Auf der Tagesebene gibt
+es sie nicht — dort wird nicht verteilt."** Mit #406 gibt es sie auch dort (Abschnitt
+*Der Anlagen-Zählerstand* weiter unten). Der Unterschied liegt nicht mehr in der Regel, sondern
+in ihrer **Bedingung**: verteilt wird nur, wenn ein **Anlagen-Zählerstand** vorliegt und die
+Einzelzähler den Tag nicht vollständig tragen.
 
 ```
 erzeuger_kwh[inv_id] = Σ komponenten_kwh[pv_<id> | bkw_<id>]      (Boundary-Rollup)
                      ∨ Σ TagesEnergieProfil.komponenten je Stunde  (Fallback, kein Rollup)
-kein eigener Sensor  ⇒ kein Eintrag (kein 0, kein kWp-Anteil)
+kein eigener Sensor, kein Anlagen-Zählerstand ⇒ kein Eintrag (kein 0, kein kWp-Anteil)
+kein eigener Sensor, Anlagen-Zählerstand da    ⇒ kWp-Anteil am Rest, als abgeleitet markiert
 ```
 
 SoT der Formel: `core/berechnungen/energie.py::erzeuger_kwh_je_investition`, ausgeliefert als
@@ -1899,12 +1903,17 @@ sind dabei nicht optional:
   (`snapshot/komponenten_beitraege._TYP_PREFIX` gegen `live_komponenten_builder`). Je Roh-Key
   gruppiert bekäme ein Gerät zwei Spalten, deren Belegung vom Schreibpfad des jeweiligen Tages
   abhängt — dieselbe Mismatch-Klasse wie der BKW-Doppelzählungs-Bug vom 2026-05-19.
-- **Keine kWp-Verteilung.** Der Monatspfad füllt Lücken nach Nennleistung und **kennzeichnet** das;
-  eine so gefüllte Tageszahl unter der Überschrift „Dach Süd" wäre von einer Messung nicht mehr zu
-  unterscheiden (die Klasse aus #352). Fehlt der Sensor, nennt die Oberfläche das Gerät und den
-  Weg zur Zuordnung, statt eine Spalte zu zeigen.
+- **Eine kWp-Verteilung nur MIT Kennzeichnung — und nur je Tag.** Der Einwand dieses Absatzes
+  lautete bis #406 „keine kWp-Verteilung": eine so gefüllte Tageszahl unter der Überschrift
+  „Dach Süd" wäre von einer Messung nicht zu unterscheiden (die Klasse aus #352). Der Einwand galt
+  der **fehlenden Kennzeichnung**, nicht der Verteilung — der Monatspfad verteilt seit jeher und
+  kennzeichnet es. Genau das tut jetzt auch der Tagespfad: `source_provenance` trägt je
+  `komponenten_kwh`-Sub-Key die Marke `ABGELEITET_KWP_ANTEIL`. ⚠ **Auf der Stundenebene bleibt es
+  bei „keine Verteilung"** — dort trüge der kWp-Schlüssel eine Form, die die Stunde nicht hat
+  (Ost und West wären um 8 Uhr formgleich). Ohne Anlagen-Zählerstand bleibt es überall bei
+  „kein Eintrag": die Oberfläche nennt das Gerät und den Weg zur Zuordnung.
 
-##### Der Anlagen-Zählerstand: Summe ja, Aufschlüsselung nein (ab 2026-08-07)
+##### Der Anlagen-Zählerstand: Summe immer, Aufschlüsselung aufgelöst (ab 2026-09-04)
 
 Das Feld *Anlage (Basis) → PV-Erzeugung Zählerstand (kWh)* landet über `basis["pv_gesamt"]` in
 `Monatsdaten.pv_erzeugung_kwh` und ist damit **Eingang der Monats-Auflösung** (P7). Seit
@@ -1920,24 +1929,40 @@ ist allein die Aufschlüsselung je Erzeuger (obenstehende Formel liefert für ih
 > zusammengelegte Anlage bekäme einen systematisch falschen Tagesgang im gesamten
 > Prognose-Kanon inklusive HA-Prognose-Sensoren und PVGIS-SOLL.
 
-**Die Regel ist alles-oder-nichts, nicht anteilig.** Der Anlagen-Zählerstand zählt auf der
-Tagesebene nur mit, solange **kein** Erzeuger einen eigenen kWh-Zähler trägt — genau wie im
-Live-Pfad (`not has_individual_pv`). Sobald einer misst, gilt für Tag und Stunde nur noch, was je
-Erzeuger gemessen ist. Zwei Gründe:
+**Die Regel ist die Präzedenz je Tag (ab 2026-09-04, #406).** Sie ist die Entsprechung der
+Monatsregel `resolve_pv_je_modul`, auf den Tag übertragen — SoT
+`core/berechnungen/pv_tages_praezedenz.py`:
 
-- **Nebeneinander ginge nicht.** `komponenten_kwh` hat einen flachen Keyspace, und die Tages-PV
-  ist die Summe aller `pv_`/`bkw_`-Schlüssel (`summe_pv_bkw_kwh`). Stünde `pv_gesamt` neben
-  `pv_7`, wäre die Anlagensumme neben ihrem eigenen Summanden gebucht — Doppelzählung.
-- **Der Rest ließe sich nur raten.** Die Differenz „Anlagensumme minus gemessene Erzeuger" auf die
-  übrigen zu verteilen, wäre eine kWp-Schätzung mit dem Aussehen einer Messung — dieselbe Klasse,
-  die der Absatz „Keine kWp-Verteilung" oben ausschließt.
+1. Liefern **alle** am Tag aktiven Erzeuger über den ganzen Tag einen eigenen Zählerwert, gilt
+   ihre Summe. Der Anlagen-Zählerstand zählt dann nicht mit.
+2. Sonst trägt der **Anlagen-Zählerstand** den Tag — und auf der Tagesebene wird er über
+   `resolve_pv_je_modul` in die Erzeuger **aufgelöst**: gemessene behalten ihren Wert, die übrigen
+   bekommen den kWp-gewichteten Anteil am Rest und tragen in `source_provenance` die Marke
+   „abgeleitet".
+3. Gibt es keinen Anlagen-Zählerstand, bleibt es bei den gemessenen Erzeugern.
 
-**Folge für die Praxis:** ein *halber* Umbau macht die Tageswerte schlechter, nicht besser. Wer
-einem von drei Strings einen eigenen Zähler zuordnet, verliert die anderen beiden auf der
-Tagesebene. Die Zuordnungs-Fläche und der Daten-Checker sagen das an der Zeile
-(`datenquellen_validierung.finde_aggregat_teilweise_verdraengt`, WARNING nur in dieser
-Teilbelegung — nicht, wenn der Summenzähler die ganze Anlage trägt). **Die Monatswerte sind in
-allen drei Lagen vollständig.**
+⚠ **Auf der Stundenebene wird NICHT verteilt** — dort wählt die Präzedenz nur die Summe. Über
+einen Tag mittelt sich der Ost/West-Unterschied der kWp-Gewichtung weitgehend aus, über eine
+Stunde nicht: Ost und West bekämen um 8 Uhr formgleiche Kurven. Was sich stündlich nicht zuordnen
+lässt, steht im Tagesverlauf als **„PV (übrige)"**.
+
+⛔ **Was unverändert gilt: nie beides zusammen.** `komponenten_kwh` hat einen flachen Keyspace, und
+die Tages-PV ist die Summe aller `pv_`/`bkw_`-Schlüssel (`summe_pv_bkw_kwh`). Stünde `pv_gesamt`
+neben `pv_7`, wäre die Anlagensumme neben ihrem eigenen Summanden gebucht — Doppelzählung. Der
+Unterschied zur alten Regel ist *auflösen* statt *verdrängen*, nicht *addieren*.
+
+> ⛔ **Hier stand vom 2026-08-07 bis 2026-09-04 „alles-oder-nichts":** der Anlagen-Zählerstand
+> zähle nur mit, solange **kein** Erzeuger einen eigenen kWh-Zähler *trage*; ein halber Umbau
+> mache die Tageswerte schlechter, und die Zuordnungs-Fläche warne davor. **Die Bedingung fragte
+> die Zuordnung statt die Daten**, und daran brachen zwei Lagen: Wer Zähler zuordnet, die für die
+> früheren Stunden nichts liefern, verlor deren gemessene PV (der gemeldete Fall #406 — 21 Stunden
+> an einem Tag); und wer nur einen Teil seiner Erzeuger bezählte, bekam eine dauerhaft zu kleine
+> Anlagensumme. Die damalige Warnung
+> (`datenquellen_validierung.finde_aggregat_teilweise_verdraengt`) ist mit dem Fix **ersatzlos
+> entfallen** — sie meldete einen Zustand, den es nicht mehr gibt, und den gemeldeten Fall hat sie
+> ohnehin nicht erreicht (dort trugen **alle** Strings einen Zähler).
+
+**Die Monatswerte sind in allen Lagen vollständig** — dort galt die Auflösung schon immer.
 
 Bleibt gar kein kumulativer PV-Zähler übrig — weder je Erzeuger noch für die Anlage —, sagt die
 Tagessicht das, statt zu rechnen: `TagesBilanz.pv_erfasst` trennt

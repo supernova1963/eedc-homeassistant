@@ -803,6 +803,8 @@ Praktisch heißt das: Wer eine neue Komponente ergänzt (zweiter Wechselrichter,
 
 > **Es passiert nichts von allein.** eedc rechnet die Historie nicht selbsttätig neu — das kann Stunden dauern und ist selten gewollt. Und die Quittung heißt „zur Kenntnis genommen", nicht „erledigt": ob und wie weit du nachgezogen hast, weißt nur du.
 
+> ⚑ **Eine Ausnahme, und die ist gewollt: der laufende Tag.** Er wird alle 15 Minuten vollständig neu gerechnet — eine Zuordnung, die du um 22 Uhr anlegst, wirkt dort also binnen einer Viertelstunde für **den ganzen Tag** zurück, nicht erst ab 22 Uhr. Das ist der Grund, warum dieser Abschnitt „nicht rückwirkend" heißt und für heute trotzdem etwas anderes gilt.
+
 > **Für die Zeit vor eedc gilt das nicht.** Wo keine Sensordaten in Home Assistant liegen (etwa Monate, die du aus einer Hersteller-Cloud importiert hast), findet ein neuer Lauf nichts — dort sind die Monatswerte die Datenlage, und die genügen für Cockpit, Auswertungen und Jahresbericht.
 
 ### 7.8 Voraussetzung: die Verbindungen

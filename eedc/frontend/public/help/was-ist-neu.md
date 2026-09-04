@@ -11,6 +11,36 @@
 
 ## [Unreleased]
 
+**Der Anlagen-Zählerstand trägt den Tag wieder**
+
+Wenn dein Wechselrichter eine Gesamtsumme liefert und du **zusätzlich** einzelnen Strings eigene
+kWh-Zähler zuordnest, war der Anlagen-Zählerstand für Tag und Stunde bisher abgeschaltet — sobald
+**ein** Erzeuger selbst maß, galt nur noch das Gemessene. Zwei Dinge gingen dabei schief: Wer die
+Zuordnung am Abend anlegte, verlor die **gemessene Erzeugung der Stunden davor** (der Sensor
+liefert ja erst ab dem Anlegen). Und wer nur einen Teil seiner Strings bezählte, hatte eine
+**dauerhaft zu kleine Tagessumme**.
+
+Jetzt entscheidet nicht mehr die Zuordnung, sondern die Datenlage — und zwar für jeden Tag neu:
+Liefern **alle** deine Erzeuger den ganzen Tag über eigene Werte, gelten diese. Sonst trägt der
+**Anlagen-Zählerstand** den Tag, und eedc rechnet aus, wie viel auf die einzelnen Erzeuger
+entfällt: Wer selbst gemessen hat, behält seinen Wert; die übrigen bekommen den Rest im Verhältnis
+ihrer Nennleistung. Solche abgeleiteten Werte sind als abgeleitet gekennzeichnet. Genauso hält es
+eedc bei den Monatswerten schon immer.
+
+**Was du siehst:** Wenn dich das betrifft, steigen Tages- und Stundenwerte, Performance Ratio, CO₂
+und die Finanzen auf den Wert, den dein Anlagenzähler die ganze Zeit gemessen hat. Wenn deine
+Erzeuger vollständig messen, ändert sich nichts. **Zurückliegende Tage** holst du dir mit
+*Einstellungen → Daten → Reparatur-Werkbank* und **„Mehrere Tage neu aggregieren"** zurück — die
+stündlichen Zählerstände sind gespeichert. Der laufende Tag korrigiert sich von selbst.
+
+Der Hinweis an der Datenquellen-Zeile, dass dann *alle* Erzeuger einen eigenen Zähler brauchen,
+ist damit hinfällig und entfällt. Im Stundendiagramm bleibt es dabei, dass nicht verteilt wird:
+Was sich dort keinem einzelnen Erzeuger zuordnen lässt, steht als *„PV (übrige)"* — eine nach
+Nennleistung verteilte Stundenkurve gäbe einem Ost- und einem Westdach denselben Tagesverlauf, und
+den haben sie nicht.
+
+Gemeldet von **Mathek** auf GitHub ([#406](https://github.com/supernova1963/eedc-homeassistant/issues/406)).
+
 **Der Stundenverlauf im Tag geht wieder auf**
 
 Wer seine PV-Strings einzeln misst, sah unter *Cockpit → Tag* im Stundendiagramm manchmal mehr
