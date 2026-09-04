@@ -108,6 +108,32 @@ class _CheckHelpers:
         Der Lifecycle-Filter (#608/#236) steckt jetzt im Service
         (``ist_aktiv_im_monat`` je Monat) statt in einer eigenen Schleife.
 
+        ⛔ **Bis 2026-09-04 fehlte hier das Balkonkraftwerk** (N-386). Der
+        Typ-Filter stand auf ``pv-module`` allein — die Menge war damit eine
+        andere als der **Nenner** zwei Ebenen höher, der seit F-58 ausdrücklich
+        ``mit_bkw=True`` bildet, mit dem Kommentar „weil `pv_erzeugung` unten
+        die anlagenweite Erzeugung ist". Genau das war sie nicht. Folge: An
+        einer Anlage mit Balkonkraftwerk meldete Prüfung 3 „Einspeisung >
+        PV-Erzeugung" für eine Einspeisung, die die Anlage sehr wohl erzeugt
+        hatte — gemessen an einer nachgestellten Anlage (Modul 100 + BKW 50):
+        Einspeisung 120 schlug an, obwohl 150 erzeugt wurden. Und die genannte
+        PV-Zahl fand der Anwender in **keiner** Sicht wieder, weil die
+        Auswertungstabelle über die Monats-Fakten korrekt Module **plus** BKW
+        rechnet.
+
+        ⚑ **Betroffen war nur ein Balkonkraftwerk OHNE zugeordnete PV-Module** —
+        der historische Erfassungsweg. Wer seinem BKW seit v4.0.18 Module
+        zuordnet (N-266), war nie betroffen: dessen Kinder sind ``pv-module``
+        und lagen damit ohnehin in beiden Mengen. Vier Konstellationen
+        gemessen, drei davon waren immer richtig.
+
+        ⚠ **Der P11-Wächter konnte das nicht fangen**, und das ist kein
+        Versehen: Er erkennt Σ-Stellen daran, dass sie ``PV_ERZEUGER_TYPEN``
+        bilden, und sichert gegen **Doppelzählung**. Eine Stelle, die das BKW
+        gar nicht erst aufnimmt, bildet die Menge nie. Deshalb läuft der Filter
+        jetzt durch ``erzeuger_traeger`` — das macht die Abtretung richtig
+        **und** die Stelle für den Wächter sichtbar.
+
         Returns:
             ``{(jahr, monat): kwh}`` — **nur vollständig auflösbare Monate**.
             Bleibt ein aktives Modul ohne Wert und ohne Aggregat, fehlt der
@@ -116,8 +142,16 @@ class _CheckHelpers:
         """
         from backend.services.pv_monatswerte import lade_pv_je_monat, pv_summe_je_monat
 
-        pv_module = [i for i in anlage.investitionen if i.typ == "pv-module"]
+        # ⚑ Die Abtretung an Modul-Kinder (ADR-002/P11) entscheidet
+        # `lade_pv_je_monat` **je Monat** — hier wird deshalb NICHT vorgefiltert.
+        # Ein Selektor an dieser Stelle liefe vor dem Zeitfilter und nähme einem
+        # Balkonkraftwerk seine Erzeugung auch in Monaten, in denen es seine
+        # Kinder noch gar nicht gab (N-386).
+        pv_erzeuger = [
+            i for i in anlage.investitionen
+            if i.typ in ("pv-module", "balkonkraftwerk")
+        ]
         summen = pv_summe_je_monat(
-            await lade_pv_je_monat(self.db, anlage.id, pv_module)
+            await lade_pv_je_monat(self.db, anlage.id, pv_erzeuger)
         )
         return {key: wert for key, wert in summen.items() if wert is not None}

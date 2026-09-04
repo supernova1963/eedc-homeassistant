@@ -838,14 +838,27 @@ async def get_monatsdaten(monatsdaten_id: int, db: AsyncSession = Depends(get_db
     # PV des Monats über den Read-time-SoT statt aus dem Aggregat-Feld: wer je
     # String misst, hat dort NULL stehen — die Kennzahlen dieses Endpoints
     # (Autarkie, Eigenverbrauchsquote, Erträge) rechneten dann mit PV = 0.
-    pv_module = list((await db.execute(
+    #
+    # ⛔ Bis 2026-09-04 stand hier `typ == "pv-module"` allein (N-386). Ein
+    # Balkonkraftwerk OHNE zugeordnete PV-Module — der historische
+    # Erfassungsweg — fehlte damit in Autarkie, Eigenverbrauchsquote und den
+    # Erträgen dieses Monats, während *Auswertungen → Tabelle* über die
+    # Monats-Fakten korrekt Module **plus** BKW rechnet. Zwei Sichten
+    # desselben Monats nannten dadurch verschiedene Zahlen.
+    #
+    # ADR-002/P11: die Query holt beide Erzeuger-Typen. Die Abtretung an
+    # Modul-Kinder (N-266) entscheidet `lade_pv_je_monat` **je Monat** — hier
+    # wird deshalb nicht vorgefiltert; ein Selektor liefe sonst vor dem
+    # Zeitfilter (N-386). Die Kinder sind selbst `pv-module` und deshalb in
+    # derselben Query.
+    pv_erzeuger = list((await db.execute(
         select(Investition).where(
             Investition.anlage_id == md.anlage_id,
-            Investition.typ == "pv-module",
+            Investition.typ.in_(("pv-module", "balkonkraftwerk")),
         )
     )).scalars().all())
     pv_kwh = pv_summe_je_monat(
-        await lade_pv_je_monat(db, md.anlage_id, pv_module, md.jahr)
+        await lade_pv_je_monat(db, md.anlage_id, pv_erzeuger, md.jahr)
     ).get((md.jahr, md.monat))
 
     # Kennzahlen berechnen
@@ -867,14 +880,28 @@ async def get_monatsdaten(monatsdaten_id: int, db: AsyncSession = Depends(get_db
         ),
         grundpreis_euro_monat=strompreis.grundpreis_euro_monat or 0 if strompreis else 0,
         # F-58: Nenner des spezifischen Ertrags in den Monatskennzahlen —
-        # Σ der im Monat aktiven Module statt des gepflegten Referenzwerts.
-        # `mit_bkw=False`, weil der Zähler `pv_kwh` oben aus `pv_module` kommt
-        # und das Balkonkraftwerk dort NICHT enthalten ist — Zähler und Nenner
-        # müssen dieselbe Grundgesamtheit haben.
+        # Σ der im Monat aktiven Erzeuger statt des gepflegten Referenzwerts.
+        #
+        # ⭐ Die Regel „Zähler und Nenner dieselbe Grundgesamtheit" stammt aus
+        # F-58 und gilt unverändert. Bis 2026-09-04 war sie hier auf der
+        # SCHMALEN Seite erfüllt: `mit_bkw=False`, weil auch der Zähler ohne
+        # Balkonkraftwerk gebildet wurde. In sich stimmig — aber `pv_kwh` trägt
+        # in dieser Antwort **sechs** Größen, und nur eine davon ist der
+        # spezifische Ertrag. Die anderen fünf sind Bilanzgrößen
+        # (`direktverbrauch = PV − Einspeisung − Batterieladung`, daraus
+        # Eigenverbrauch, Gesamtverbrauch, EV-Quote, Autarkie), und für die ist
+        # „ohne BKW" schlicht falsch: ein Balkonkraftwerk speist ins Haus, sein
+        # Strom IST Eigenverbrauch. Bei Modulen 100 + BKW 50 und 120 kWh
+        # Einspeisung ergab die schmale Menge einen Direktverbrauch von
+        # `max(0, 100 − 120) = 0` statt 30 (N-386).
+        #
+        # Beide Seiten stehen deshalb jetzt auf der WEITEN Menge — die Regel
+        # bleibt gewahrt, und die Bilanz stimmt. `summe_erzeuger_kwp` zieht die
+        # abgetretenen Balkonkraftwerke selbst ab (N-266, nach dem Aktiv-Filter).
         leistung_kwp=berechne_anlagen_kwp(
-            pv_module,
+            pv_erzeuger,
             date(md.jahr, md.monat, monthrange(md.jahr, md.monat)[1]),
-            mit_bkw=False,
+            mit_bkw=True,
             referenzwert=anlage.leistung_kwp,
         ),
     )

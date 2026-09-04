@@ -2322,6 +2322,19 @@ def test_p10_finanz_zeile_eingabe_nur_aus_einem_monats_fakt():
 # Stelle, die die Menge über einen Alias bildet, den er nicht kennt, und eine
 # zweite Summe INNERHALB einer bereits durch den Selektor laufenden Funktion.
 # Dagegen stehen die Wert-Tests in `test_bkw_parent_pv_module_n266.py`.
+#
+# ⛔ **Und die dritte, am 2026-09-04 eingetreten (N-386): er sichert gegen
+# DOPPELZÄHLUNG, nicht gegen AUSLASSUNG.** Er erkennt eine Σ-Stelle daran, dass
+# sie die Menge bildet. Wer stattdessen `typ == "pv-module"` schreibt, bildet
+# sie nie — er kann nichts doppelt zählen, er lässt das Balkonkraftwerk weg.
+# Genau so lagen zwei Stellen: `daten_checker/_helpers.py::_get_pv_erzeugung_map`
+# und `api/routes/monatsdaten.py::get_monatsdaten`. Beide sind seither durch
+# `erzeuger_traeger` gezogen und damit auch für diesen Wächter sichtbar; die
+# Werte hält `test_bkw_ohne_module_zaehlt_ueberall_mit_n386.py`.
+# ⚠ Eine mechanische Erweiterung („melde jede Funktion, die auf `pv-module`
+# filtert") ist bewusst NICHT gebaut: von 25 solchen Filtern im Baum sind 23
+# richtig — Typ-Dispatcher, Kinder-Selektionen, Abdeckungsprüfungen. Ein
+# Wächter mit 23 Ausnahmen prüft die Ausnahmenliste, nicht den Code.
 
 _P11_SELEKTOR = "backend/core/berechnungen/erzeuger_traeger.py"
 
@@ -2458,6 +2471,16 @@ P11_AUSNAHMEN: frozenset[str] = frozenset({
     "backend/api/routes/live_wetter.py::get_live_wetter",
     "backend/api/routes/energie_profil/views.py::get_tagesprognose",
     "backend/services/prognose_kanon.py::pv_invs_im_horizont",
+    # ⭐ N-386 (2026-09-04): dieselbe Kategorie, aber aus dem ZEITGRUND, den
+    # die Fehlermeldung dieses Wächters selbst nennt („der Selektor läuft NACH
+    # dem Zeitfilter"). Beide Stellen geben ihre Menge an
+    # `pv_monatswerte.lade_pv_je_monat` weiter, und der Selektor sitzt dort in
+    # der MONATSSCHLEIFE — hinter `ist_aktiv_im_monat`. Ein Aufruf hier liefe
+    # davor und nähme einem Balkonkraftwerk seine Erzeugung auch in Monaten,
+    # in denen es seine Modul-Kinder noch gar nicht gab; genau dieser Zustand
+    # war bis zum 04.09. ausgeliefert (rückwirkender Verlust nach dem Zuordnen).
+    "backend/api/routes/monatsdaten.py::get_monatsdaten",
+    "backend/services/daten_checker/_helpers.py::_get_pv_erzeugung_map",
 })
 
 

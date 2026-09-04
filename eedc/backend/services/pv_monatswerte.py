@@ -28,6 +28,7 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
 from backend.core.berechnungen import (
     PvModul,
     PvModulWert,
@@ -137,6 +138,16 @@ async def lade_pv_je_monat(
         # #236: nur im Monat aktive Module — sonst verteilt das Aggregat auf
         # Module, die es damals noch nicht gab.
         aktive = [m for m in pv_module if m.ist_aktiv_im_monat(j, monat)]
+        # ADR-002/P11, Reihenfolge Zeitfilter → Selektor (N-386): Die Abtretung
+        # gilt **je Monat**, nicht für die Anlage. Ein Balkonkraftwerk, dessen
+        # Modul-Kinder in diesem Monat noch gar nicht angeschafft waren, trägt
+        # seine Erzeugung hier noch selbst — genau so macht es
+        # `summe_erzeuger_kwp` auf der kWp-Achse seit N-266.
+        # ⛔ Bis 2026-09-04 entschied das der Aufrufer, einmal für alle Monate.
+        # Wer seinem bestehenden BKW Module zuordnete, verlor dessen Erzeugung
+        # damit **rückwirkend** in jedem Vormonat — und weil alle Sichten
+        # denselben zu kleinen Wert nannten, gab es keinen Widerspruch zu sehen.
+        aktive = erzeuger_traeger(aktive)
         if not aktive:
             continue
         roh_monat = dict(roh.get((j, monat), {}))

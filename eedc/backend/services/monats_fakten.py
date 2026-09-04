@@ -846,7 +846,24 @@ async def lade_monats_fakten(
     # seiner Kinder) und darf deshalb nicht zusätzlich als `bkw_erzeugung`
     # gezählt werden. Ohne Modul-Kinder ist die Menge leer und alles bleibt
     # bitgleich zu vorher.
-    abgetretene_bkw = abgetretene_bkw_ids(investitionen)
+    #
+    # ⛔ **Je MONAT, nicht einmal für die Anlage** (N-386, ADR-002/P11 nennt die
+    # Reihenfolge Zeitfilter → Selektor ausdrücklich als Teil der Regel). Bis
+    # 2026-09-04 stand hier ein einziger Aufruf über die ganze Menge: Wer seinem
+    # bestehenden Balkonkraftwerk Module zuordnete, verlor dessen Erzeugung
+    # damit **rückwirkend** in jedem Monat davor — in dem das BKW der einzige
+    # Erzeuger war und die Module noch gar nicht existierten. Unauffällig, weil
+    # alle Sichten denselben zu kleinen Wert nannten.
+    _abgetretene_cache: dict[MonatsSchluessel, frozenset] = {}
+
+    def abgetretene_bkw_im_monat(jahr: int, monat: int) -> frozenset:
+        """Welche BKW haben in DIESEM Monat abgetreten? (Zeitfilter → Selektor)"""
+        schluessel = (jahr, monat)
+        if schluessel not in _abgetretene_cache:
+            _abgetretene_cache[schluessel] = abgetretene_bkw_ids([
+                i for i in investitionen if i.ist_aktiv_im_monat(jahr, monat)
+            ])
+        return _abgetretene_cache[schluessel]
 
     neg_preis_je_monat = await get_neg_preis_einspeisung_je_monat(db, anlage_id)
 
@@ -867,7 +884,7 @@ async def lade_monats_fakten(
         daten = imd.verbrauch_daten or {}
         roh.setdefault((imd.jahr, imd.monat), _RohMonat()).falte(
             inv, daten,
-            abgetretene_bkw=abgetretene_bkw,
+            abgetretene_bkw=abgetretene_bkw_im_monat(imd.jahr, imd.monat),
             source_provenance=imd.source_provenance,
         )
         if inv.typ == "waermepumpe":
