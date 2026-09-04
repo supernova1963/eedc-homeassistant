@@ -2714,8 +2714,9 @@ Bei Multi-String-Anlagen werden GTI-Werte pro Orientierungsgruppe parallel abger
 >
 > ⚠ **Rückwärts bleibt sie leer.** Für Tage vor der Spalte steht dort `NULL` — „nicht erhoben",
 > nicht 0. Die Anzeige lässt die Bezugsgröße dann weg; die horizontale Summe ersatzweise
-> einzusetzen wäre derselbe Fehler mit neuem Etikett. Wer sie für ältere Tage haben will, löst
-> „Verlauf nachberechnen" für den Zeitraum aus.
+> einzusetzen wäre derselbe Fehler mit neuem Etikett. Wer sie für ältere Tage haben will, löst in
+> der Reparatur-Werkbank (*Einstellungen → Daten*) „Mehrere Tage neu aggregieren" für den
+> Zeitraum aus.
 
 > **Validation Winterborn 2025-12-28:** GHI 1317 Wh/m² vs. GTI Süd35° 3358 Wh/m² (Faktor 2.55×). PR vorher 2.16 (physikalisch unmöglich), nachher 0.85 (plausibel für einen kalten Wintertag). Betrifft historische `TagesZusammenfassung.performance_ratio`, `MonatsAuswertungResponse.performance_ratio_avg` und die PR-Spalte im PDF-Jahresbericht — **nach Update einmalig „Verlauf nachberechnen + überschreiben" auslösen**. PV-kWh-Werte selbst bleiben unverändert.
 

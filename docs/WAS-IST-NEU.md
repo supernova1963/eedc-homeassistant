@@ -11,6 +11,30 @@
 
 ## [Unreleased]
 
+**Der Stundenverlauf im Tag geht wieder auf**
+
+Wer seine PV-Strings einzeln misst, sah unter *Cockpit → Tag* im Stundendiagramm manchmal mehr
+Erzeugung im Stapel stehen, als die Erzeugungslinie daneben auswies — oben lag also Strom, der
+unten nirgends ankam. In anderen Stunden erschien umgekehrt ein Band *„PV (übrige)"*, obwohl jedes
+Modul seinen eigenen Sensor hat.
+
+Beides hatte dieselbe Ursache: Eine Stundenzeile entsteht aus zwei Quellen — den **Zählerwerten**
+und der **Leistungskurve** —, und die beiden meinten verschiedene Stunden. Die Zeile „10 Uhr" trug
+den Zählerwert von 9 bis 10 Uhr und die Leistungswerte von 10 bis 11 Uhr. **Jetzt beschreiben
+beide Hälften dieselbe Stunde.**
+
+Sichtbar ist das im Stundenverlauf: Die Aufschlüsselung nach Modulen deckt sich wieder mit der
+Erzeugungslinie, und die Aufteilung *Heizen/Kühlen* einer Wärmepumpe steht in der Stunde, in der
+sie gemessen wurde. **Deine Tages-, Monats- und Jahreswerte sind unberührt** — über einen ganzen
+Tag hob sich der Versatz auf.
+
+**Zurückliegende Tage behalten ihre bisherige Zuordnung.** Wenn du sie mit der neuen Einteilung
+sehen willst, lässt du den Zeitraum in der **Reparatur-Werkbank** unter *Einstellungen → Daten*
+neu rechnen — Aktion **„Mehrere Tage neu aggregieren"**. eedc schreibt Vergangenes nicht von
+allein um.
+
+Gemeldet von **BMeyendriesch**.
+
 **Die Performance Ratio sagt jetzt, wogegen sie misst**
 
 Unter *Cockpit → Tag* teilt die **Performance Ratio** deinen Tagesertrag durch das, was bei der
@@ -25,7 +49,8 @@ mit dem Zusatz *„auf der Modulfläche"*.
 
 Für Tage, die vor dieser Änderung liegen, bleibt die Stelle leer: Die Zahl wurde damals nicht
 mitgeschrieben, und stattdessen wieder die waagerechte zu zeigen wäre derselbe Fehler mit neuem
-Etikett. Über **Verlauf nachberechnen** unter *Einstellungen → Daten* holst du sie für einen
+Etikett. Über **„Mehrere Tage neu aggregieren"** in der Reparatur-Werkbank unter
+*Einstellungen → Daten* holst du sie für einen
 Zeitraum nach. **An der Kennzahl selbst ändert sich nichts.**
 
 **Der Parkplatz blitzt beim Öffnen nicht mehr auf**

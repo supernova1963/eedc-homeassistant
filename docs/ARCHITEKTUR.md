@@ -1325,10 +1325,18 @@ eedc/{anlage_id}/energy/{key}  → Zählerstände (kWh, monoton steigend)
 
 ### Energieprofil Service (NEU v3.1.0)
 
-**Dateien:**
+**Dateien:** `backend/services/energie_profil/` (Paket — `energie_profil_service.py` ist nur noch
+die Fassade, die die öffentlichen Namen re-exportiert), `backend/models/tages_energie_profil.py`.
 
-- `backend/services/energie_profil_service.py` — Aggregationslogik
-- `backend/models/tages_energie_profil.py` — Datenmodelle
+| Modul | Rolle |
+| --- | --- |
+| `aggregator.py` | `aggregate_day()` — **der einzige Schreiber** von `TagesEnergieProfil` + `TagesZusammenfassung` |
+| `scheduler_jobs.py` | `aggregate_today_all()` (laufender Tag), `aggregate_yesterday_all()` (Vortag) |
+| `backfill.py` | `backfill_range()` — Vollbackfill aus HA-LTS, ruft `aggregate_day` je Tag |
+| `lts_tagesverlauf.py` | die Stunden-Leistungskurve aus HA-LTS (ein gebündelter Read je Bereich) |
+| `aggregations_quelle.py` | Vorbedingung: gibt es überhaupt eine Quelle für diesen Tag? |
+| `rollup.py` | `rollup_month()` — Tageszeilen → `Monatsdaten`-Felder |
+| `_helpers.py` | Wetter-IST, SoC, Betriebsmodus, Strompreis je Stunde |
 
 **Funktion:** Langfristige Persistierung stündlicher Energiedaten. HA-History hat nur ~10 Tage Retention — dieser Service sichert die Daten dauerhaft in SQLite.
 
@@ -1342,47 +1350,128 @@ eedc/{anlage_id}/energy/{key}  → Zählerstände (kWh, monoton steigend)
 **Datenfluss-Pipeline:**
 
 ```
-                           Scheduler (00:15 täglich)
+   ┌── Mitschrift (läuft dauernd, unabhängig von der Aggregation) ──────────┐
+   │  sensor_snapshot        stündlich :05   Zählerstände → sensor_snapshots │
+   │  sensor_snapshot_preview stündlich :55  Vorschau kurz vor dem Wechsel   │
+   │  sensor_snapshot_5min   alle 5 min      Live-Tagesverlauf               │
+   │  mqtt_energy_snapshot   alle 5 min      dasselbe für den MQTT-Betrieb   │
+   └────────────────────────────────────────────────────────────────────────┘
                                     │
-                    ┌───────────────┼──────────────────┐
-                    ▼               ▼                  ▼
-            HA Sensor History   MQTT Snapshots    Open-Meteo Archive
-            (via get_tagesverlauf)                (Wetter-IST)
-                    │               │                  │
-                    └───────┬───────┘                  │
-                            ▼                          │
-                   aggregate_day()  ◄──────────────────┘
-                     │          │
-                     ▼          ▼
-         TagesEnergieProfil   TagesZusammenfassung
-         (24 Stunden-Zeilen)  (1 Tages-Zeile)
-                                │
-                                ▼  (beim Monatsabschluss)
-                         rollup_month()
-                                │
-                                ▼
-                     Monatsdaten-Felder aktualisiert
-                     (ueberschuss_kwh, defizit_kwh,
-                      batterie_vollzyklen, performance_ratio,
-                      peak_netzbezug_kw)
+   ┌── Aggregation (drei Anlässe, EIN Schreiber) ───────────────────────────┐
+   │  energie_profil_heute            alle 15 min  → aggregate_today_all()  │
+   │  energie_profil_aggregation      täglich 00:15 → aggregate_yesterday_all() │
+   │  energie_profil_aggregation_recovery 02:15    zweiter Anlauf (#136)    │
+   │  Reparatur-Werkbank / Monatsabschluss / Vollbackfill  (manuell bzw.    │
+   │                                                        ereignisbezogen) │
+   └────────────────────────────────────────────────────────────────────────┘
+                                    │
+              ┌─────────────────────┼─────────────────────┐
+              ▼                     ▼                     ▼
+     ZÄHLERPFAD (kWh)        LEISTUNGSPFAD (kW)     KONTEXT je Stunde
+     HA-LTS-Deltas            get_tagesverlauf()     Wetter (Open-Meteo)
+       └ Fallback:            └ Fallback: MQTT       SoC · Betriebsmodus
+         sensor_snapshots       Live-Snapshots       Strom-/Börsenpreis
+              │                     │                     │
+              └─────────────────────┼─────────────────────┘
+                                    ▼
+                            aggregate_day()
+                     (idempotent: Delete + Insert)
+                              │          │
+                              ▼          ▼
+                  TagesEnergieProfil   TagesZusammenfassung
+                  (24 Stunden-Zeilen)  (1 Tages-Zeile)
+                                            │
+                                            ▼  (beim Monatsabschluss)
+                                     rollup_month()
+                                            ▼
+                                 Monatsdaten-Felder
 ```
+
+#### Die Slot-Konvention — welche Uhr-Stunde eine Zeile beschreibt
+
+**SoT: `backend/core/berechnungen/slot_konvention.py`.** Es gilt durchgängig **backward**:
+
+> **Slot `h` = Energie im Intervall `[h-1, h)`.**
+> Slot 0 = `[Vortag 23:00, 00:00)` · Slot 23 = `[22:00, 23:00)`.
+
+Das ist Industriestandard (HA-Energiedashboard, SolarEdge, SMA, Fronius, Tibber) und **keine
+Geschmacksfrage**: Alle Bahnen, die in **derselben Zeile** landen, müssen dasselbe physische
+Intervall meinen — sonst führt jede Auswertung, die zwei davon je Stunde zusammenrechnet, quer über
+einen Versatz. Genau das ist zweimal passiert (2026-06-04 der HA-LTS-Pfad, 2026-09-04 der
+Leistungspfad); die Tagessummen blieben dabei beide Male unauffällig, weil sich ein
+Ein-Stunden-Versatz über 24 Slots aufhebt.
+
+⚠ **Der Leistungspfad braucht dafür den Vortagsrand.** Seine Punkte tragen den Slot-**Beginn**
+(`"05:00"` deckt `[05:00, 06:00)`), landen also in Slot 6 — und Slot 0 kann folglich nicht aus dem
+eigenen Tag kommen. `get_tagesverlauf(mit_vortagsrand=True)` macht deshalb das **bestehende**
+Abruf-Fenster eine Stunde weiter auf, statt einen zweiten Tag zu holen: der 15-Minuten-Job würde
+sonst 96-mal täglich je Anlage einen kompletten Extra-Tag aus HA ziehen. Die Rand-Punkte kommen
+**getrennt** zurück (`"vortagsrand"`), weil ein Punkt nur seine Uhrzeit trägt und `"23:00"` von
+gestern sonst nicht von `"23:00"` von heute zu unterscheiden wäre.
+
+⛔ **Drei Größen liegen weiterhin forward** und sind im SoT namentlich geführt: `soc_prozent`,
+`strompreis_cent`, `boersenpreis_cent`. Wer sie anfasst, liest dort zuerst nach — sie stehen
+neben Backward-Spalten derselben Zeile.
+
+#### Was einen Wert unterwegs absichert
+
+Neun Mechanismen, jeder mit seinem Anlass. Sie greifen **nacheinander**, nicht alternativ:
+
+| # | Mechanismus | Wo | Wogegen |
+| --- | --- | --- | --- |
+| 1 | **Quellen-Vorprüfung** | `aggregations_quelle.py` | Ein Lauf ohne jede Quelle bricht *vor* dem Löschen ab, statt eine leere Zeile zu schreiben |
+| 2 | **Zwei Zählerpfade** | `lts_aggregator` → `sensor_snapshot_service` | HA-LTS ist SoT; fehlt sie (Standalone/MQTT), übernimmt der Snapshot-Pfad mit **demselben Ausgabe-Vertrag** |
+| 3 | **Lücken-Interpolation** | `snapshot/aggregator.py::_fill_gaps_linear` (#145) | Einzelne fehlende Zählerstände **vor** der Delta-Bildung. Ränder werden **nicht** extrapoliert — ohne Anker keine Schätzung |
+| 4 | **Either-Or je Fallback-Gruppe** | `snapshot/aggregator.py` (#298) | Zwei Sensoren für dieselbe Größe zählen nicht doppelt — Auflösung auf **Tages**-Ebene, nicht je Stunde |
+| 5 | **Plausibilitäts-Cap** | `snapshot/aggregator.py`, `snapshot/fallback.py` (#184) | Ein Zähler-Rücksprung oder ein Lifetime-großer Stunden-Spike wird gekappt statt eingebucht |
+| 6 | **Counter-Σ aus dem Tages-Diff** | `verteile_counter_auf_stunden` | Bei Lücken wird die Stunden-Σ so reskaliert, dass sie auf den Tages-Boundary-Diff führt — **eine** Quelle je Tag |
+| 7 | **Rettung fremdbefüllter Felder** | `aggregator.py` (`_PROGNOSE_FELDER_RETTEN`, #190/#319) | `aggregate_day` löscht und schreibt neu; Prognose- und Kraftstoffpreis-Felder kommen von **anderen** Schreibern und würden sonst jedes Mal verschwinden |
+| 8 | **Drei Konsistenz-Invarianten** | `aggregator.py` am Ende des Laufs | Achse 1 Stunden- gegen Tagespfad · Achse 2 **Leistungs-JSON gegen Zähler-Spalten** (#315) · Counter-Daily-Drift. Alle drei melden per `warning` — sie **verwerfen keinen Tag** |
+| 9 | **Selbstheilung + Nachlauf** | `energie_profil_aggregation_recovery` (02:15, #136) · `sensor_snapshot_startup_recovery` (letzte 6 h nach Neustart) | Verspätete HA-Statistik und verpasste Läufe nach einem Neustart |
+
+⭐ **Warum das zusammen genügt und einzelne Ausfälle nichts unterdrücken müssen:** `aggregate_day`
+ist **idempotent** (Delete + Insert) — jeder spätere Lauf korrigiert den früheren. Ein Sensor, der
+mitten am Tag ausfällt, ist deshalb in aller Regel schon geheilt, bevor eine Bilanz ihn sieht.
+Unterdrückt wird nur der **Total-Fall** (eine Größe wurde *nie* gemessen, `*_erfasst`); eine
+Teilabdeckung bleibt stehen und wird nicht wegretuschiert.
+
+⚠ **Was die Automatik NICHT tut, und das ist Absicht:**
+
+- **Sie zieht die Vergangenheit nicht nach.** Eine geänderte Sensor-Zuordnung wirkt ab jetzt; die
+  gespeicherten Zeilen tragen die Zuordnung ihres Aggregationslaufs. Der Weg zurück ist die
+  **Reparatur-Werkbank** („Zeitraum neu aggregieren", bis 31 Tage je Lauf) — bewusst vom Anwender
+  ausgelöst und in Blöcken, kein globaler Heiler-Knopf.
+  ⚠ Für den **laufenden** Tag gilt das nicht: er wird alle 15 Minuten komplett neu gerechnet und
+  übernimmt eine neue Zuordnung damit rückwirkend für diesen Tag.
+- **Sie schließt keinen Monat ab.** `monthly_snapshot` setzt nur einen Log-Zeitstempel.
+- **Sie überschreibt keine LTS-Lücken.** „Lücken aus HA-LTS nachfüllen" ist ausdrücklich additiv
+  (#190); einen Overwrite-Modus gibt es bewusst nicht.
 
 **Hauptfunktionen:**
 
 | Funktion | Trigger | Beschreibung |
 | --- | --- | --- |
-| `aggregate_day()` | Scheduler / Monatsabschluss | Holt Tagesverlauf + Wetter + SoC, berechnet 24 Stundenprofile + Tageszusammenfassung |
-| `aggregate_yesterday_all()` | Scheduler 00:15 | Ruft `aggregate_day()` für alle Anlagen mit Sensor-Mapping auf |
+| `aggregate_day()` | alle Anlässe | **Der einzige Schreiber.** Holt Tagesverlauf + Wetter + SoC + Betriebsmodus + Preise, schreibt 24 Stundenzeilen + Tageszusammenfassung. Idempotent (Delete + Insert) |
+| `aggregate_today_all()` | Scheduler alle 15 min | Der **laufende** Tag für alle Anlagen — er wird dabei jedes Mal vollständig neu gerechnet |
+| `aggregate_yesterday_all()` | Scheduler 00:15 + 02:15 | Vortag für alle Anlagen mit Sensor-Mapping; 02:15 ist der zweite Anlauf (#136) |
+| `backfill_range()` | Monatsabschluss, Vollbackfill | Datumsbereich nachrechnen. Holt die Stunden-Leistungskurve **gebündelt** aus HA-LTS (`lade_tagesverlauf_aus_lts`) und reicht sie je Tag durch — nicht limitiert auf die ~10 Tage HA-History |
 | `rollup_month()` | Monatsabschluss | Aggregiert `TagesZusammenfassung` → `Monatsdaten`-Felder (Summe/Durchschnitt/Max) |
-| `backfill_range()` | Monatsabschluss | Nachberechnung eines Datumsbereichs (limitiert durch HA-History ~10 Tage) |
 
 **Berechnungsdetails:**
 
 - **Überschuss/Defizit:** Pro Stunde `max(0, PV - Verbrauch)` bzw. umgekehrt, Summe = kWh (kW × 1h)
 - **Batterie-Vollzyklen:** `Σ |ΔSoC| / 200` (ein Vollzyklus = 0→100→0 = 200% ΔSoC)
-- **Performance Ratio:** `PV_Ertrag_kWh / (Strahlung_Wh/m² × kWp / 1000)`
-- **Wetter:** Open-Meteo Historical API (Archiv) oder Forecast API (heute)
-- **SoC:** Aus HA Sensor History (Stundenmittel)
+- **Performance Ratio:** `PV_Ertrag_kWh / (GTI_Wh/m² × kWp / 1000)` — Nenner ist die **GTI**
+  (Global Tilted Irradiance, auf die Modulfläche projiziert, bei mehreren Ausrichtungen
+  kWp-gewichtet), **nicht** die waagerechte Globalstrahlung. Mit GHI liefen die PR-Werte im Winter
+  künstlich auf 1,5–2,8 (#139); wer die PR gegen die angezeigte Globalstrahlung nachrechnet,
+  bekommt deshalb eine andere Zahl (N-384)
+- **Wetter:** Open-Meteo — Forecast-Endpoint für heute und die jüngsten Tage (das Archiv hängt 2–5
+  Tage hinterher), Archive-Endpoint für ältere. Die Stundenwerte sind **preceding-hour**-Mittel und
+  damit bereits Backward-Slots (s. Slot-Konvention oben)
+- **SoC:** HA-LTS-Stundenmittel, Fallback auf die State-History. Bei **mehreren** Speichern
+  kapazitätsgewichtet über alle Geräte (N-239), die Aufschlüsselung steht daneben in
+  `soc_je_speicher`
 
 **Integration mit Monatsabschluss:**
 

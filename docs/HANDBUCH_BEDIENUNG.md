@@ -218,7 +218,8 @@ Die **Tag**-Sicht bringt den feingranularen Stunden-Tag ins Cockpit: ein ausgew�
 >
 > Bei mehreren Dachflächen ist es das nach Nennleistung gewichtete Mittel über alle Ausrichtungen,
 > passend zur Ertragssumme derselben Zeile. Für Tage, die vor dieser Änderung liegen, steht keine
-> Bezugsgröße dabei — sie wurde damals nicht mitgeschrieben; über **Verlauf nachberechnen** unter
+> Bezugsgröße dabei — sie wurde damals nicht mitgeschrieben; über **„Mehrere Tage neu
+> aggregieren"** in der Reparatur-Werkbank unter
 > [Einstellungen → Daten](HANDBUCH_EINSTELLUNGEN.md) holst du sie für einen Zeitraum nach.
 
 Die Datenbasis sind kumulative Zähler-Snapshots (stündlich); die Tages-Werte folgen der Backward-Slot-Konvention (Slot N = Energie aus dem Intervall [N−1, N), Industriestandard). Fehlen Snapshots (z. B. durch eine HA-Statistik-Latenz oder einen Add-on-Neustart), weist eedc darauf hin und bietet eine Nachberechnung an — die Pflege dazu liegt unter [Einstellungen → Daten → Energieprofil-Pflege](HANDBUCH_EINSTELLUNGEN.md).
