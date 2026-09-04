@@ -256,6 +256,14 @@ Das Script macht automatisch:
 > Beobachtung, und der Fix ist ohnehin ursachenunabhängig: ein abgebrochener Tag-Push darf nicht
 > dazu führen, dass die Image-Prüfung entfällt.
 >
+> ✅ **Nachgesehen bei v4.0.39 (04.09.), wie hier verlangt: NICHT wieder aufgetreten.** Beide
+> Repos getaggt und gepusht (`* [new tag] v4.0.39` in beiden), Schritt 5–7 vollständig gelaufen,
+> `warte-auf-image.sh` samt Positivkontrolle gegen v4.0.38 grün, Image amd64 + aarch64 da,
+> GitHub-Release publiziert. **Damit bleibt es ein Einzelfall** — die Beobachtung steht weiter
+> hier, aber sie hat jetzt eine Gegenprobe. Beim übernächsten Release nicht erneut aufrollen:
+> zwei saubere Läufe hintereinander wären der Anlass, diesen Kasten zu kürzen, nicht ihn zu
+> erweitern.
+>
 > ⚠ **Und ein Prüfer-Hinweis aus demselben Vorgang:** Ein `curl` gegen die GHCR-Manifest-API
 > **ohne `Accept`-Header antwortet 404**, auch wenn das Image existiert. Wer so misst, meldet
 > ein fehlendes Image, das da ist — am 02.09. genau so passiert. Immer mit
