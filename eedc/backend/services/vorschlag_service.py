@@ -19,6 +19,7 @@ from sqlalchemy import select, and_
 
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
+from backend.core.field_definitions import ist_stand_feld
 
 
 class VorschlagQuelle(str, Enum):
@@ -99,41 +100,49 @@ class VorschlagService:
         """
         vorschlaege: list[Vorschlag] = []
 
-        # 1. Vormonat
-        vormonat = await self._get_vormonat_wert(
-            anlage_id, feld, jahr, monat, investition_id
-        )
-        if vormonat is not None:
-            vorschlaege.append(Vorschlag(
-                wert=vormonat,
-                quelle=VorschlagQuelle.VORMONAT,
-                konfidenz=80,
-                beschreibung=f"Wert vom Vormonat",
-            ))
+        # ⛔ Ein STAND hat keine Schätzung aus der Historie (#377 Zählerstand,
+        # #407 Tachostand): der Vormonat ist sein ANFANG, nicht sein Wert, ein
+        # Vorjahr sagt nichts, ein Mittelwert ist Unsinn. Bis 05.09.2026 stand
+        # der Vormonats-Stand hier als Vorschlag mit Konfidenz 80 — im Formular
+        # vorbelegt, hätte ein Klick eine Differenz von 0 gespeichert. Für einen
+        # Stand gibt es genau zwei Quellen: den mitgeschriebenen Sensorstand
+        # (`views.py`, Quelle ZAEHLERSTAND) und die Hand.
+        if not ist_stand_feld(feld):
+            # 1. Vormonat
+            vormonat = await self._get_vormonat_wert(
+                anlage_id, feld, jahr, monat, investition_id
+            )
+            if vormonat is not None:
+                vorschlaege.append(Vorschlag(
+                    wert=vormonat,
+                    quelle=VorschlagQuelle.VORMONAT,
+                    konfidenz=80,
+                    beschreibung=f"Wert vom Vormonat",
+                ))
 
-        # 2. Vorjahr gleicher Monat
-        vorjahr = await self._get_vorjahr_wert(
-            anlage_id, feld, jahr, monat, investition_id
-        )
-        if vorjahr is not None:
-            vorschlaege.append(Vorschlag(
-                wert=vorjahr,
-                quelle=VorschlagQuelle.VORJAHR,
-                konfidenz=70,
-                beschreibung=f"Wert vom {monat:02d}/{jahr-1}",
-            ))
+            # 2. Vorjahr gleicher Monat
+            vorjahr = await self._get_vorjahr_wert(
+                anlage_id, feld, jahr, monat, investition_id
+            )
+            if vorjahr is not None:
+                vorschlaege.append(Vorschlag(
+                    wert=vorjahr,
+                    quelle=VorschlagQuelle.VORJAHR,
+                    konfidenz=70,
+                    beschreibung=f"Wert vom {monat:02d}/{jahr-1}",
+                ))
 
-        # 3. Durchschnitt letzte 12 Monate
-        durchschnitt = await self._get_durchschnitt(
-            anlage_id, feld, jahr, monat, investition_id
-        )
-        if durchschnitt is not None:
-            vorschlaege.append(Vorschlag(
-                wert=durchschnitt,
-                quelle=VorschlagQuelle.DURCHSCHNITT,
-                konfidenz=50,
-                beschreibung="Ø letzte 12 Monate",
-            ))
+            # 3. Durchschnitt letzte 12 Monate
+            durchschnitt = await self._get_durchschnitt(
+                anlage_id, feld, jahr, monat, investition_id
+            )
+            if durchschnitt is not None:
+                vorschlaege.append(Vorschlag(
+                    wert=durchschnitt,
+                    quelle=VorschlagQuelle.DURCHSCHNITT,
+                    konfidenz=50,
+                    beschreibung="Ø letzte 12 Monate",
+                ))
 
         # 4. Berechnungen für spezielle Felder
         if investition_id:
@@ -146,6 +155,22 @@ class VorschlagService:
         vorschlaege.sort(key=lambda v: v.konfidenz, reverse=True)
 
         return vorschlaege
+
+    async def vormonat_wert(
+        self,
+        anlage_id: int,
+        feld: str,
+        jahr: int,
+        monat: int,
+        investition_id: Optional[int],
+    ) -> Optional[float]:
+        """Der gespeicherte Wert des Vormonats — für ein Stand-Feld sein ANFANG.
+
+        Öffentlich, weil der Monatsabschluss-Status ihn je Stand-Feld mitliefert
+        (`FeldStatus.stand_vormonat`, #407): der Client zeigt daraus die Differenz
+        live, während der Anwender den Stand tippt.
+        """
+        return await self._get_vormonat_wert(anlage_id, feld, jahr, monat, investition_id)
 
     async def _get_vormonat_wert(
         self,
@@ -359,6 +384,27 @@ class VorschlagService:
             except Exception:  # noqa: BLE001 — Vorschlag ist optional, Wizard darf nie daran sterben
                 pass
 
+        # #407 (8ear): gefahrene km aus dem TACHOSTAND — Ende − Anfang, das
+        # Zählerstand-Modell aus #377. Nur wenn beide Stände da sind und der
+        # Zähler nicht rückwärts lief: sonst KEIN Vorschlag statt eines falschen
+        # (dieselbe Regel wie die MQTT-Reihe, #396). Konfidenz 95 — der Wert ist
+        # eine Rechnung auf zwei abgelesenen Zahlen, keine Schätzung.
+        if inv.typ == "e-auto" and feld == "km_gefahren":
+            stand = await self._get_feld_wert(
+                anlage_id, "km_stand", jahr, monat, investition_id
+            )
+            anfang = await self._get_vormonat_wert(
+                anlage_id, "km_stand", jahr, monat, investition_id
+            )
+            if stand is not None and anfang is not None and stand >= anfang:
+                vorschlaege.append(Vorschlag(
+                    wert=round(stand - anfang, 0),
+                    quelle=VorschlagQuelle.BERECHNUNG,
+                    konfidenz=95,
+                    beschreibung=f"Aus Tachostand: {stand:.0f} − {anfang:.0f} km (Vormonat)",
+                    details={"km_stand": stand, "km_stand_vormonat": anfang},
+                ))
+
         # E-Auto: km aus Jahresfahrleistung
         if inv.typ == "e-auto" and feld == "km_gefahren":
             jahresfahrleistung = params.get("jahresfahrleistung_km")
@@ -398,6 +444,25 @@ class VorschlagService:
             Liste von Warnungen
         """
         warnungen: list[PlausibilitaetsWarnung] = []
+
+        # 0. Ein STAND (#377/#407) hat genau eine Plausibilität: er läuft nicht
+        # rückwärts. Die Mengen-Prüfungen darunter (Vorjahr ±, Null-Wert) sind
+        # für ihn sinnlos — ein Tachostand liegt IMMER über dem Vorjahr.
+        if ist_stand_feld(feld):
+            anfang = await self._get_vormonat_wert(
+                anlage_id, feld, jahr, monat, investition_id
+            )
+            if anfang is not None and wert < anfang:
+                warnungen.append(PlausibilitaetsWarnung(
+                    typ="zu_niedrig",
+                    schwere="warning",
+                    meldung=(
+                        f"Stand liegt unter dem des Vormonats ({anfang:.0f}) — ein Zähler "
+                        "läuft nicht rückwärts. Ist das Gerät gewechselt, beginnt die Reihe hier neu."
+                    ),
+                    details={"vormonat_wert": anfang},
+                ))
+            return warnungen
 
         # 1. Negativwert prüfen (für Energiezähler)
         if wert < 0 and feld.endswith("_kwh"):

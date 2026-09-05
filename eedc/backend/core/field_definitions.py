@@ -507,6 +507,36 @@ INVESTITION_FELDER: dict = {
             "csv_suffix": "km",
             "hinweis": "Gefahrene Kilometer im Monat — kumulativer km-Zähler (Auto-Integration/OBD) oder Tagessensor, sonst manuell.",
         },
+        # #407 (8ear): der TACHOSTAND als Handeingabe — das Zählerstand-Modell
+        # aus #377 auf das Auto übertragen: eedc führt den Stand, die einzige
+        # Rechnung darauf ist Ende − Anfang, und die landet als Vorschlag auf
+        # „Gefahrene km" (`vorschlag_service._get_berechnete_werte`). Das Feld
+        # darüber bleibt unverändert die MENGE — alle Leser (Effizienz, Benzin-
+        # Vergleich, HA-Export, Community) lesen weiter nur `km_gefahren`.
+        #
+        # `stand: True` — eine Bestandsgröße, keine Menge (kein Vormonats-/
+        # Durchschnitts-Vorschlag: ein Tachostand hat keinen Mittelwert, s.
+        # `ist_stand_feld`). `nur_manuell` — der SENSOR-Weg existiert schon:
+        # ein Kilometerstand-Sensor gehört auf `km_gefahren`, dort bildet die
+        # HA-Statistik bzw. die MQTT-Reihe (#396) die Differenz selbst. Ein
+        # zweiter Sensor-Slot für denselben Stand wäre Doppelerfassung.
+        # ⛔ Kein Parameter „Kilometerstand bei Anschaffung": der erste Monat
+        # hat keinen Anfang, und das Modell weist eine fehlende Anfangsmessung
+        # aus (`anfang_vollstaendig`), statt sie zu erfinden.
+        {
+            "feld": "km_stand", "label": "Tachostand", "einheit": "km",
+            "placeholder": "z.B. 45230",
+            "csv_suffix": "Tachostand",
+            "stand": True,
+            "nur_manuell": True,
+            "hinweis": (
+                "Kilometerstand am Monatsende, wie er im Auto steht. eedc rechnet "
+                "daraus die gefahrenen Kilometer (Stand dieses Monats minus Stand des "
+                "Vormonats) und schlägt sie oben vor. Nur für die Handeingabe — ein "
+                "Kilometerstand-Sensor gehört auf „Gefahrene km“, dort bildet eedc die "
+                "Differenz selbst."
+            ),
+        },
         {
             "feld": "verbrauch_kwh", "label": "Verbrauch", "einheit": "kWh",
             "placeholder": "z.B. 216",
@@ -1033,6 +1063,8 @@ FELD_BEDARF: dict[tuple[str, str], tuple[str, Optional[str]]] = {
     # Die Heimladungs-Felder sind bei vorhandener Wallbox verdrängt
     # (`bedingung_anlage: keine_wallbox`) — das wertet die Fläche selbst aus.
     ("e-auto", "km_gefahren"): ("pflicht", None),
+    # #407: der Stand ist Hilfe, nicht Pflicht — wer die Menge kennt, trägt sie ein.
+    ("e-auto", "km_stand"): ("optional", None),
     ("e-auto", "verbrauch_kwh"): ("optional", None),
     ("e-auto", "ladung_pv_kwh"): ("optional", None),
     ("e-auto", "ladung_netz_kwh"): ("optional", None),

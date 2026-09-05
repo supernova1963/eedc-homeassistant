@@ -5,6 +5,7 @@ import type { FeldStatus } from '../../../api/monatsabschluss'
 import type { SonstigePosition } from './types'
 import { SonstigePositionenFields } from '../SonstigePositionenFields'
 import { readFeldWert, type FeldDefinition } from '../../../lib/fieldDefinitions'
+import { fmtZahl } from '../../../lib/einheiten'
 import { ermittleZustand, rollupBadge } from '../../../lib/erfassungZustand'
 import { FormSection, ErfassungZustandBadge, InlineAktion } from '../../ui'
 import AssistenzFeld from '../AssistenzFeld'
@@ -121,6 +122,51 @@ export function InvestitionSection({
                   />
                 ))}
               </div>
+              {/* #407: Stand → Menge. Für jedes Stand-Feld mit `differenzZiel` die
+                  Rechnung live zeigen — Anfang = `stand_vormonat` aus dem Status. */}
+              {felderMitZustand.filter((x) => x.f.differenzZiel).map(({ f, wert, fs }) => {
+                const ziel = f.differenzZiel as string
+                const zielFeld = felderMitZustand.find((x) => x.f.feld === ziel)
+                if (!zielFeld || wert == null || String(wert).trim() === '') return null
+                const stand = parseFloat(String(wert).replace(',', '.'))
+                if (!Number.isFinite(stand)) return null
+                const anfang = fs?.stand_vormonat ?? null
+                const einheit = f.einheit
+                if (anfang == null) {
+                  return (
+                    <p key={`stand-${f.feld}`} className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                      Erster {f.label} — {zielFeld.f.label} trägst du diesen Monat noch selbst ein;
+                      ab dem nächsten rechnet eedc die Differenz.
+                    </p>
+                  )
+                }
+                const diff = Math.round(stand - anfang)
+                if (diff < 0) {
+                  return (
+                    <p key={`stand-${f.feld}`} className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                      {f.label} liegt unter dem des Vormonats ({fmtZahl(anfang, 0)} {einheit}) —
+                      ein Zähler läuft nicht rückwärts. Ist das Gerät gewechselt, beginnt die Reihe hier neu.
+                    </p>
+                  )
+                }
+                const zielWert = parseFloat(String(zielFeld.wert ?? '').replace(',', '.'))
+                const uebernommen = Number.isFinite(zielWert) && Math.round(zielWert) === diff
+                return (
+                  <p key={`stand-${f.feld}`} className="text-xs text-gray-600 dark:text-gray-300 mt-2 flex flex-wrap items-center gap-x-2">
+                    <span>
+                      Aus {f.label}: {fmtZahl(stand, 0)} − {fmtZahl(anfang, 0)} (Vormonat) ={' '}
+                      <span className="font-semibold">{fmtZahl(diff, 0)} {einheit}</span>
+                    </span>
+                    {uebernommen ? (
+                      <span className="text-gray-400">· übernommen</span>
+                    ) : (
+                      <InlineAktion ton="bestaetigen" onClick={() => onInvChange(inv.id, ziel, String(diff))}>
+                        <Check className="w-3 h-3" /> als {zielFeld.f.label} übernehmen
+                      </InlineAktion>
+                    )}
+                  </p>
+                )
+              })}
               <SonstigePositionenFields
                 invId={inv.id}
                 positionen={sonstigePositionen[String(inv.id)] || []}

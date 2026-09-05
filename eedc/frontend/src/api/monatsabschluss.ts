@@ -50,6 +50,10 @@ export interface FeldStatus {
    *  `sensor` = Vorschlagswert zum Zeitpunkt der Bestätigung, `wert` = der
    *  behaltene gespeicherte Wert. Gilt nur, solange beide noch stimmen. */
   geprueft_gegen?: BehalteneAbweichung | null
+  /** #407: bei einem Stand-Feld (Tachostand, Zählerstand) der gespeicherte Stand
+   *  des Vormonats — sein Anfang. Daraus zeigt das Formular die Differenz live.
+   *  Bei Mengen-Feldern null. */
+  stand_vormonat?: number | null
 }
 
 /** Bewusst behaltene Sensor-Abweichung (PN 90128) — Situation, nicht Häkchen. */

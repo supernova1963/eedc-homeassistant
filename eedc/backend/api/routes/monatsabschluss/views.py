@@ -28,6 +28,7 @@ from backend.core.field_definitions import (
     einheit_fuer,
     get_basis_felder,
     get_felder_fuer_investition,
+    ist_stand_feld,
     ist_zaehler_differenz_feld,
 )
 from backend.models.anlage import Anlage
@@ -114,6 +115,11 @@ class FeldStatus(BaseModel):
     # Der Client zeigt „weicht ab" nicht mehr als offenen Punkt, solange beide
     # Werte noch stimmen; die Abweichung bleibt sichtbar (kein Wegklicken).
     geprueft_gegen: Optional[dict] = None
+    # #407: bei einem STAND-Feld (`ist_stand_feld`) der gespeicherte Stand des
+    # Vormonats — sein Anfang. Der Client rechnet daraus die Differenz, während
+    # der Anwender tippt (Tachostand → gefahrene km), statt auf das nächste
+    # Laden zu warten. Bei Mengen-Feldern immer None.
+    stand_vormonat: Optional[float] = None
 
 
 class InvestitionStatus(BaseModel):
@@ -671,6 +677,13 @@ async def get_monatsabschluss(
                     anlage_id, feld, aktueller_wert, jahr, monat, inv.id
                 )
 
+            # #407: der Anfang eines Stand-Feldes reist mit (s. FeldStatus).
+            stand_vormonat = None
+            if ist_stand_feld(feld):
+                stand_vormonat = await vorschlag_service.vormonat_wert(
+                    anlage_id, feld, jahr, monat, inv.id
+                )
+
             felder.append(FeldStatus(
                 feld=feld,
                 label=feld_config["label"],
@@ -685,6 +698,7 @@ async def get_monatsabschluss(
                 strategie=strategie,
                 sensor_id=sensor_id,
                 geprueft_gegen=inv_geprueft.get(feld),
+                stand_vormonat=stand_vormonat,
             ))
 
         # sonstige_positionen aus verbrauch_daten lesen (für alle Typen)

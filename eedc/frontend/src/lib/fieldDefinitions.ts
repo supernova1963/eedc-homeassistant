@@ -40,6 +40,14 @@ export interface FeldDefinition {
    * Zählerstand nichts an. Spiegel von `field_definitions.py::FELD_EINHEIT_JE_GERAET`.
    */
   einheitJeGeraet?: string
+  /**
+   * #407: Dieses Feld ist ein **Stand** (Bestandsgröße), und seine Differenz zum
+   * Vormonat ist die **Menge** im hier genannten Feld — Tachostand → gefahrene km.
+   * `InvestitionSection` zeigt die Rechnung live und bietet die Übernahme an;
+   * der Anfang kommt als `FeldStatus.stand_vormonat` vom Backend. Spiegel des
+   * Backend-Vorschlags in `vorschlag_service._get_berechnete_werte`.
+   */
+  differenzZiel?: string
 }
 
 // =============================================================================
@@ -95,6 +103,10 @@ const WAERMEPUMPE_FELDER: FeldDefinition[] = [
 
 const EAUTO_FELDER: FeldDefinition[] = [
   { feld: 'km_gefahren',       label: 'Gefahrene km', einheit: 'km',  placeholder: 'z.B. 1200' },
+  // #407 (8ear): der Tachostand als Handeingabe — Zählerstand-Modell aus #377.
+  { feld: 'km_stand',          label: 'Tachostand',   einheit: 'km',  placeholder: 'z.B. 45230',
+    hint: 'Kilometerstand am Monatsende. eedc rechnet daraus die gefahrenen Kilometer (Stand minus Stand des Vormonats).',
+    differenzZiel: 'km_gefahren' },
   { feld: 'verbrauch_kwh',     label: 'Verbrauch',    einheit: 'kWh', placeholder: 'z.B. 216'  },
   { feld: 'ladung_pv_kwh',     label: 'Heim: PV',     einheit: 'kWh', placeholder: 'z.B. 130'  },
   { feld: 'ladung_netz_kwh',   label: 'Heim: Netz',   einheit: 'kWh', placeholder: 'z.B. 50'   },

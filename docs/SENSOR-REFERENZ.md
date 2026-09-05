@@ -303,7 +303,7 @@ Vorzeichenkorrekturen, oder das Zusammenfassen mehrerer Entitäten zu einer.
 | `ladung_extern_kwh` | Externe Ladung | kWh | — | Extern geladene Energie (Autobahn, Arbeit). Manuell erfassen. Optional. |
 | `ladung_extern_euro` | Externe Ladekosten | € | — | Kosten der externen Ladung. Manuell. Optional. |
 | `verbrauch_kwh` | Verbrauch gesamt | kWh | Kumulativ oder Tagessensor | Gefahrener Energieverbrauch des E-Autos (reiner Fahrverbrauch), für die kWh/100 km-Effizienz mit `km_gefahren` verrechnet. Optional — fehlt der Wert, nähert eedc die kWh/100 km aus der geladenen Energie an (inkl. Ladeverluste). |
-| `km_gefahren` | Gefahrene km | km | Kumulativ oder Tagessensor | Gefahrene Kilometer im Monat. Sensor (Auto-Integration, OBD) oder manuell. |
+| `km_gefahren` | Gefahrene km | km | Kumulativ oder Tagessensor | Gefahrene Kilometer im Monat. Sensor (Auto-Integration, OBD) oder manuell. Ohne Sensor: im Monatsabschluss den **Tachostand** eintragen — eedc rechnet die Differenz zum Vormonat und schlägt sie hier vor. |
 | `v2h_entladung_kwh` | V2H Entladung | kWh | Kumulativ oder Tagessensor | Vehicle-to-Home Entladung. Nur bei V2H-fähigem Fahrzeug. Optional. |
 
 ### Live-Dashboard
@@ -559,6 +559,7 @@ Die bisherigen Abschnitte beschreiben Sensoren, die eedc **aus HA liest**. Diese
 | `letzter_import_jahr/_monat/_monat_name`, `anzahl_monate_erfasst` | — | Status der Datenbasis (Diagnose-Kategorie — erscheint in HA im Diagnose-Bereich des Geräts) |
 
 | `eedc_grundlast_kw` | kW | **Gemessener** Nacht-Sockel des laufenden Monats (Median der Stunden 0–5 Uhr aus dem Energieprofil) — dieselbe Zahl wie die Kachel in *Cockpit → Monat*. ⚠ **Nicht zu verwechseln mit „Grundlast (Prognose)"** in *Cockpit → Live*: die stammt aus dem Verbrauchsprofil und ist ohne eigene Historie ein Standard-Lastprofil. Ohne gemessene Nachtstunden entsteht **kein** Sensor. |
+| `eedc_verbrauchsprognose_heute_kwh` | kWh | **Verbrauchsprognose für heute** — dieselbe Zahl wie die Kachel „Verbrauchsprognose" unter *Heute* in *Cockpit → Live*: die Summe des stündlichen Verbrauchsprofils (Werktag oder Wochenende aus der eigenen Historie, Wärmepumpen-Anteil nach Außentemperatur korrigiert). Es ist der **Gesamt**verbrauch (Haus + Batterie + Wärmepumpe + Wallbox + Sonstige), keine Haushalts-Prognose. Attribute `profil_typ`, `profil_tage`, `profil_slots` nennen die Grundlage. ⚠ **Nur aus einem eigenen Profil:** Solange eedc noch keine Historie hat und die Anzeige das Standard-Lastprofil zeigt, entsteht **kein** Sensor — ein Modellwert darf in keine Automation laufen. |
 | `eedc_prognose_heute_vormittag_kwh` / `…_heute_nachmittag_kwh` / `…_morgen_vormittag_kwh` / `…_morgen_nachmittag_kwh` | kWh | PV-Prognose je Tageshälfte, für **heute und morgen** (die Abendentscheidung braucht den Folgetag). ⭐ **Die Grenze ist der Sonnenhöchststand**, nicht 13:00 — dieselbe Aufteilung wie in *Cockpit → Aussicht*. Sie reist als Attribut **`solar_noon`** („13:28") mit, damit eine Automation sie lesen kann statt sie zu raten. |
 
 Zusätzlich erscheinen **pro Komponente** (E-Auto, Wärmepumpe, Speicher, Wallbox …) eigene Sensoren (z. B. `e_auto_pv_anteil_prozent`, `wp_cop_durchschnitt`, `wp_betriebsstunden`). Sie hängen — wie alle eedc-Sensoren — **unter dem einen Gerät deiner Anlage**; der Gerätename steht im Sensornamen (*„Daikin3 ECH₂O COP Durchschnitt"*).
