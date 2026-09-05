@@ -1293,6 +1293,16 @@ async def calculate_anlage_sensors(
                     zusatz = {"solar_noon": prognose["solar_noon_morgen"]}
             elif sensor.key == "eedc_speicher_voll_um":
                 value = prognose["speicher_voll_um"]
+            elif sensor.key == "eedc_verbrauchsprognose_heute_kwh":
+                value = prognose.get("verbrauch_heute_kwh")
+                if value is not None:
+                    # Die Grundlage reist mit — dieselben drei Angaben, die der
+                    # Tooltip der Kachel nennt (Profiltyp, Tage, belegte Slots).
+                    zusatz = {
+                        "profil_typ": prognose.get("verbrauch_profil_typ"),
+                        "profil_tage": prognose.get("verbrauch_profil_tage"),
+                        "profil_slots": prognose.get("verbrauch_profil_slots"),
+                    }
 
             if value is not None:
                 sensor_values.append(SensorValue(

@@ -17,6 +17,9 @@ Rechenfehler:**
 
 `test_keine_stelle_schneidet_an_13_uhr` ist der **Wächter** dieser Runde: er
 fängt auch eine Stelle, die es heute noch nicht gibt.
+
+Schwesterdatei: test_395_verbrauchsprognose_sensor.py (zweite Runde, 05.09.2026 —
+die Verbrauchsprognose als Sensor, nach derselben N-332-Regel).
 """
 
 from __future__ import annotations

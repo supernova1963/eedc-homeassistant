@@ -2469,6 +2469,12 @@ P11_AUSNAHMEN: frozenset[str] = frozenset({
     # UNGEFILTERTE Menge, sonst finden die Modul-Kinder die AC-Grenze ihres
     # Balkonkraftwerks nicht mehr (s. dortiger Docstring).
     "backend/api/routes/live_wetter.py::get_live_wetter",
+    # Dieselbe Bauform wie `get_live_wetter` (05.09.2026, #395 / N-388): laden
+    # die Menge und reichen sie an `_get_pv_orientierungsgruppen` weiter —
+    # der Export-Sensor für die Verbrauchsprognose und der Wetter-Nachzug des
+    # Altbestands. `orientierungs_gruppen` trägt den Selektor.
+    "backend/services/verbrauchsprognose_heute.py::verbrauchsprognose_heute",
+    "backend/services/energie_profil/archiv_nachzug.py::wetter_nachziehen_bereich",
     "backend/api/routes/energie_profil/views.py::get_tagesprognose",
     "backend/services/prognose_kanon.py::pv_invs_im_horizont",
     # ⭐ N-386 (2026-09-04): dieselbe Kategorie, aber aus dem ZEITGRUND, den

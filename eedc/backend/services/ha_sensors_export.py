@@ -734,6 +734,33 @@ PROGNOSE_SENSOREN = [
         formel="eedc-Prognose morgen ab Solar Noon — die Zahl für die Abendentscheidung (Grenze im Attribut solar_noon)",
         state_class="measurement",
     ),
+    # ── Verbrauchsprognose heute (#395 zweite Runde, OB73-gif) ──────────────
+    #
+    # Dieselbe Zahl wie die Kachel „Verbrauchsprognose" unter *Heute* in
+    # Cockpit → Live: Σ des stündlichen Verbrauchsprofils, bei Wärmepumpe mit
+    # der Temperaturkorrektur aus dem Forecast. **Gesamt**verbrauch (Haus +
+    # Batterie + WP + Wallbox + Sonstige) — eine Haushalts-Prognose gibt es in
+    # eedc nicht, und ein Sensor darf keine Zahl tragen, die nirgends angezeigt
+    # wird. SoT: `services/verbrauchsprognose_heute.py`.
+    #
+    # ⛔ Nur aus einem INDIVIDUELLEN Profil — dieselbe Regel wie beim
+    # Grundlast-Sensor (N-332): ein BDEW-Modellwert sähe in einer Automation
+    # aus wie eine Messung. Ohne eigene Historie entsteht kein Sensor.
+    # Kein `device_class` (F-63): eine Tagesprognose ist kein Zähler.
+    SensorDefinition(
+        key="eedc_verbrauchsprognose_heute_kwh",
+        name="Verbrauchsprognose heute",
+        unit="kWh",
+        icon="mdi:home-clock-outline",
+        category=SensorCategory.PROGNOSE,
+        formel=(
+            "Σ des individuellen Stunden-Verbrauchsprofils für heute (Werktag/Wochenende "
+            "aus der eigenen Historie, Wärmepumpen-Anteil temperaturkorrigiert) — "
+            "Gesamtverbrauch, dieselbe Zahl wie die Kachel in Cockpit → Live. "
+            "Ohne eigenes Profil gibt es den Sensor nicht."
+        ),
+        state_class="measurement",
+    ),
     SensorDefinition(
         key="eedc_speicher_voll_um",
         name="Speicher voll um",

@@ -54,7 +54,8 @@ async def berechne_prognose_export(db, anlage) -> Optional[dict]:
         ``rest_today_kwh`` (verbleibende Stunden ab jetzt, laufende Stunde
         anteilig nach verstrichenen Minuten, #339), ``day_plus_1_kwh``,
         ``day_plus_2_kwh``, ``day_plus_3_kwh``, ``speicher_voll_um``
-        (str "HH:00" | None), ``stundenprofil_heute`` und
+        (str "HH:00" | None), ``verbrauch_heute_kwh`` (Σ des Live-Verbrauchsprofils,
+        nur aus einem individuellen Profil — sonst None, #395), ``stundenprofil_heute`` und
         ``stundenprofil_day_plus_1/2/3`` (je 24 kWh-Slots) — oder ``None``.
     """
     try:
@@ -139,6 +140,12 @@ async def berechne_prognose_export(db, anlage) -> Optional[dict]:
             )
             speicher_voll_um = sim.speicher_voll_um
 
+        # #395 (OB73-gif): die Verbrauchsprognose des Tages — dieselbe Zahl wie
+        # die Kachel in Cockpit → Live, aus demselben Dienst. `None` ohne
+        # individuelles Profil (kein Sensor aus einem Standardprofil, N-332).
+        from backend.services.verbrauchsprognose_heute import verbrauchsprognose_heute
+        verbrauch = await verbrauchsprognose_heute(anlage, db)
+
         return {
             "heute_kwh": heute_kwh,
             "rest_today_kwh": rest_today,
@@ -163,6 +170,10 @@ async def berechne_prognose_export(db, anlage) -> Optional[dict]:
             "day_plus_2_kwh": _tageswert(2),
             "day_plus_3_kwh": _tageswert(3),
             "speicher_voll_um": speicher_voll_um,
+            "verbrauch_heute_kwh": verbrauch.summe_kwh if verbrauch else None,
+            "verbrauch_profil_typ": verbrauch.profil_typ if verbrauch else None,
+            "verbrauch_profil_tage": verbrauch.profil_tage if verbrauch else None,
+            "verbrauch_profil_slots": verbrauch.profil_slots if verbrauch else None,
             "stundenprofil_heute": [round(v, 2) for v in stunden_kwh_heute],
             "stundenprofil_day_plus_1": _stundenprofil(1),
             "stundenprofil_day_plus_2": _stundenprofil(2),

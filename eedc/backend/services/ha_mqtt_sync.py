@@ -74,7 +74,7 @@ async def belegte_sensor_eintraege(
     ⛔ Hier stand bis zum 28.08.2026 „verlor damit 10 anlagenweite
     Definitionen". Die Zahl war falsch und stammte aus einer Schaetzung
     anlagenweiter Definitionen (44 statt 38); am lebenden Code nachgezaehlt
-    (``get_all_sensor_definitions()``: 56 = 38 anlagenweit + 18
+    (``get_all_sensor_definitions()``: 57 = 39 anlagenweit + 18
     geraetebezogen) sind es vier. Aufgefallen beim Schreiben des
     CHANGELOG-Eintrags zu v4.0.33, weil die Zahl dort in einen Anwendertext
     gewandert waere.

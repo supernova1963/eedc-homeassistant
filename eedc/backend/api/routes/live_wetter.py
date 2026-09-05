@@ -1009,6 +1009,114 @@ async def _speichere_prognose(
         logger.warning(f"Prognose speichern fehlgeschlagen: {e}")
 
 
+async def _lade_forecast_gecached(
+    anlage: Anlage,
+    gruppen: list[dict],
+    cache_key: str,
+) -> Optional[tuple]:
+    """Der Open-Meteo-Tagesforecast der Anlage — aus dem Cache oder frisch.
+
+    Herausgezogen aus `get_live_wetter`, damit **eine** Stelle den Abruf, den
+    Cache und die Arität kennt: Der HA-/MQTT-Export braucht dieselben Stunden
+    (Temperatur für die Wärmepumpen-Korrektur des Verbrauchsprofils), und ein
+    zweiter Abruf mit eigenem Cache-Schlüssel hätte dem Sensor eine andere
+    Zahl gegeben als der Anzeige daneben (#395, OB73-gif — Verbrauchsprognose
+    über MQTT).
+
+    Returns:
+        ``(data, multi_gti, multi_vollstaendig)`` — oder ``None``, wenn der
+        Negativ-Cache einen kürzlich gescheiterten Abruf kennt. Ein frischer
+        Abruf, der scheitert, wirft; der Aufrufer entscheidet über den
+        Negativ-Cache (die Route setzt ihn, der Export schluckt still).
+    """
+    # Haupt-Wetter-Request (Wetterdaten + GHI)
+    # Bei nur einer Orientierungsgruppe: GTI direkt mit abfragen.
+    # P1: `gruppen[0]` geht als Tilt/Azimut NUR in den Ein-Gruppen-Zweig unten
+    # (`if not hat_multi_string`) — dort ist bewiesen, dass es genau eine
+    # Orientierung gibt, die Gruppe ist also repräsentativ. Im Multi-Fall liefert
+    # `_fetch_multi_string_gti` das kWp-gewichtete GTI über ALLE Gruppen.
+    hat_multi_string = len(gruppen) > 1
+    haupt_neigung = gruppen[0]["neigung"] if gruppen else 35
+    haupt_azimut = gruppen[0]["ausrichtung"] if gruppen else 0
+
+    cached_wetter = _cache_get(cache_key)
+
+    # Defensiv gegen Cache-Arität-Skew über Versions-Upgrades hinweg:
+    # Der persistente L2-Cache (api_cache, SQLite) kann ein Tupel falscher
+    # Länge aus einer Vorversion enthalten — bis v3.36.0 legte der Prefetch
+    # ein 2er-Tupel (data, None) ab. warmup_l1_from_l2 lädt es nach dem
+    # Neustart in L1 zurück, und der Prefetch-Skip-Guard ("nicht über-
+    # schreiben wenn vorhanden") ersetzt es nicht → das 3er-Unpack crashte
+    # mit `ValueError: expected 3, got 2` → Negativ-Cache → "Keine Wetter-
+    # daten verfügbar", bis der Eintrag (max. 60 Min TTL) ablief. Der reine
+    # Schreiber-Fix (v3.36.1) heilt einen schon persistierten Eintrag nicht.
+    # Darum: ein Nicht-3er-Tupel wie einen Cache-Miss behandeln — Neu-Abruf
+    # plus _cache_set überschreibt den Alt-Eintrag (selbstheilend).
+    if cached_wetter is not None and not (
+        isinstance(cached_wetter, tuple) and len(cached_wetter) == 3
+    ):
+        logger.info(
+            "Live-Wetter: Cache-Eintrag falscher Arität verworfen "
+            f"(Anlage {anlage.id}, Versions-Skew im L2-Cache) — Neu-Abruf"
+        )
+        cached_wetter = None
+
+    if cached_wetter is not None:
+        data, multi_gti, multi_vollstaendig = cached_wetter
+    elif _error_cache_check(cache_key):
+        return None
+    else:
+        hourly_vars = [
+            "temperature_2m", "weather_code", "cloud_cover",
+            "precipitation", "shortwave_radiation", "sunshine_duration",
+        ]
+        if not hat_multi_string:
+            hourly_vars.append("global_tilted_irradiance")
+
+        params = {
+            "latitude": anlage.latitude,
+            "longitude": anlage.longitude,
+            "hourly": ",".join(hourly_vars),
+            "daily": "sunshine_duration,temperature_2m_max,temperature_2m_min,sunrise,sunset",
+            "timezone": "Europe/Berlin",
+            "forecast_days": 1,
+        }
+        if not hat_multi_string:
+            params["tilt"] = haupt_neigung
+            params["azimuth"] = haupt_azimut
+
+        # Wettermodell der Anlage berücksichtigen
+        wetter_modell = getattr(anlage, "wetter_modell", "auto") or "auto"
+        model_name, _ = WETTER_MODELLE.get(wetter_modell, (None, 16))
+        if model_name:
+            params["models"] = model_name
+
+        # Bei Multi-String: paralleler GTI-Fetch + Haupt-Request gleichzeitig
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            if hat_multi_string:
+                haupt_task = client.get(
+                    f"{settings.open_meteo_api_url}/forecast", params=params
+                )
+                gti_task = _fetch_multi_string_gti(
+                    anlage.latitude, anlage.longitude, gruppen
+                )
+                haupt_resp, multi_result = await asyncio.gather(haupt_task, gti_task)
+                haupt_resp.raise_for_status()
+                data = haupt_resp.json()
+                multi_gti, multi_vollstaendig = multi_result
+            else:
+                resp = await client.get(
+                    f"{settings.open_meteo_api_url}/forecast", params=params
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                multi_gti = None
+                multi_vollstaendig = True  # Single-String: kein Fan-out, kein Kollaps-Risiko
+
+        _cache_set(cache_key, (data, multi_gti, multi_vollstaendig), LIVE_WETTER_CACHE_TTL)
+    return data, multi_gti, multi_vollstaendig
+
+
 # ── Wetter Endpoint ──────────────────────────────────────────────────────────
 
 @router.get("/{anlage_id}/wetter", response_model=LiveWetterResponse)
@@ -1043,99 +1151,18 @@ async def get_live_wetter(
     if not anlage.latitude or not anlage.longitude:
         return {"anlage_id": anlage.id, "verfuegbar": False, "grund": "keine_koordinaten", "stunden": []}
 
-    # Haupt-Wetter-Request (Wetterdaten + GHI)
-    # Bei nur einer Orientierungsgruppe: GTI direkt mit abfragen.
-    # P1: `gruppen[0]` geht als Tilt/Azimut NUR in den Ein-Gruppen-Zweig unten
-    # (`if not hat_multi_string`) — dort ist bewiesen, dass es genau eine
-    # Orientierung gibt, die Gruppe ist also repräsentativ. Im Multi-Fall liefert
-    # `_fetch_multi_string_gti` das kWp-gewichtete GTI über ALLE Gruppen.
-    hat_multi_string = len(gruppen) > 1
-    haupt_neigung = gruppen[0]["neigung"] if gruppen else 35
-    haupt_azimut = gruppen[0]["ausrichtung"] if gruppen else 0
-
-    # Cache prüfen — Key aus dem geteilten Bauer (gleiche Formel im Prefetch)
+    # Cache-Key aus dem geteilten Bauer (gleiche Formel im Prefetch)
     wetter_modell_key = getattr(anlage, "wetter_modell", "auto") or "auto"
     cache_key = live_wetter_cache_key(
         anlage.latitude, anlage.longitude, gruppen, wetter_modell_key
     )
 
     try:
-        cached_wetter = _cache_get(cache_key)
-
-        # Defensiv gegen Cache-Arität-Skew über Versions-Upgrades hinweg:
-        # Der persistente L2-Cache (api_cache, SQLite) kann ein Tupel falscher
-        # Länge aus einer Vorversion enthalten — bis v3.36.0 legte der Prefetch
-        # ein 2er-Tupel (data, None) ab. warmup_l1_from_l2 lädt es nach dem
-        # Neustart in L1 zurück, und der Prefetch-Skip-Guard ("nicht über-
-        # schreiben wenn vorhanden") ersetzt es nicht → das 3er-Unpack crashte
-        # mit `ValueError: expected 3, got 2` → Negativ-Cache → "Keine Wetter-
-        # daten verfügbar", bis der Eintrag (max. 60 Min TTL) ablief. Der reine
-        # Schreiber-Fix (v3.36.1) heilt einen schon persistierten Eintrag nicht.
-        # Darum: ein Nicht-3er-Tupel wie einen Cache-Miss behandeln — Neu-Abruf
-        # plus _cache_set überschreibt den Alt-Eintrag (selbstheilend).
-        if cached_wetter is not None and not (
-            isinstance(cached_wetter, tuple) and len(cached_wetter) == 3
-        ):
-            logger.info(
-                "Live-Wetter: Cache-Eintrag falscher Arität verworfen "
-                f"(Anlage {anlage_id}, Versions-Skew im L2-Cache) — Neu-Abruf"
-            )
-            cached_wetter = None
-
-        if cached_wetter is not None:
-            data, multi_gti, multi_vollstaendig = cached_wetter
-        elif _error_cache_check(cache_key):
+        geladen = await _lade_forecast_gecached(anlage, gruppen, cache_key)
+        if geladen is None:
             logger.debug(f"Live-Wetter: Negative-Cache-Hit für Anlage {anlage_id}")
             return {"anlage_id": anlage.id, "verfuegbar": False, "grund": "abruf_fehlgeschlagen", "stunden": []}
-        else:
-            hourly_vars = [
-                "temperature_2m", "weather_code", "cloud_cover",
-                "precipitation", "shortwave_radiation", "sunshine_duration",
-            ]
-            if not hat_multi_string:
-                hourly_vars.append("global_tilted_irradiance")
-
-            params = {
-                "latitude": anlage.latitude,
-                "longitude": anlage.longitude,
-                "hourly": ",".join(hourly_vars),
-                "daily": "sunshine_duration,temperature_2m_max,temperature_2m_min,sunrise,sunset",
-                "timezone": "Europe/Berlin",
-                "forecast_days": 1,
-            }
-            if not hat_multi_string:
-                params["tilt"] = haupt_neigung
-                params["azimuth"] = haupt_azimut
-
-            # Wettermodell der Anlage berücksichtigen
-            wetter_modell = getattr(anlage, "wetter_modell", "auto") or "auto"
-            model_name, _ = WETTER_MODELLE.get(wetter_modell, (None, 16))
-            if model_name:
-                params["models"] = model_name
-
-            # Bei Multi-String: paralleler GTI-Fetch + Haupt-Request gleichzeitig
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                if hat_multi_string:
-                    haupt_task = client.get(
-                        f"{settings.open_meteo_api_url}/forecast", params=params
-                    )
-                    gti_task = _fetch_multi_string_gti(
-                        anlage.latitude, anlage.longitude, gruppen
-                    )
-                    haupt_resp, multi_result = await asyncio.gather(haupt_task, gti_task)
-                    haupt_resp.raise_for_status()
-                    data = haupt_resp.json()
-                    multi_gti, multi_vollstaendig = multi_result
-                else:
-                    resp = await client.get(
-                        f"{settings.open_meteo_api_url}/forecast", params=params
-                    )
-                    resp.raise_for_status()
-                    data = resp.json()
-                    multi_gti = None
-                    multi_vollstaendig = True  # Single-String: kein Fan-out, kein Kollaps-Risiko
-
-            _cache_set(cache_key, (data, multi_gti, multi_vollstaendig), LIVE_WETTER_CACHE_TTL)
+        data, multi_gti, multi_vollstaendig = geladen
 
         hourly = data.get("hourly", {})
         times = hourly.get("time", [])
@@ -1238,34 +1265,17 @@ async def get_live_wetter(
                     if s is not None and i > current_h
                 )
 
-        # Individuelles Verbrauchsprofil laden (Werktag/Wochenende)
-        service = get_live_power_service()
-        ind_profil_data = await service.get_verbrauchsprofil(anlage, db)
-
-        ind_stunden_profil = None
-        profil_typ = "bdew_h0"
-        profil_tage = None
-        profil_slots = None
-
-        if ind_profil_data:
-            ist_wochenende = now.weekday() >= 5
-            if ist_wochenende and ind_profil_data.get("wochenende"):
-                ind_stunden_profil = ind_profil_data["wochenende"]
-                profil_typ = "individuell_wochenende"
-                profil_tage = ind_profil_data["tage_wochenende"]
-                profil_slots = ind_profil_data.get("slots_wochenende")
-            elif not ist_wochenende and ind_profil_data.get("werktag"):
-                ind_stunden_profil = ind_profil_data["werktag"]
-                profil_typ = "individuell_werktag"
-                profil_tage = ind_profil_data["tage_werktag"]
-                profil_slots = ind_profil_data.get("slots_werktag")
-
-        wp_stunden_profil = None
-        referenz_temp_c = None
-        if ind_profil_data:
-            wp_key = "wp_wochenende" if now.weekday() >= 5 else "wp_werktag"
-            wp_stunden_profil = ind_profil_data.get(wp_key)
-            referenz_temp_c = ind_profil_data.get("referenz_temp_c")
+        # Individuelles Verbrauchsprofil laden (Werktag/Wochenende) — SoT der
+        # Wahl ist `verbrauchsprognose_heute.waehle_verbrauchsprofil`, damit der
+        # Export-Sensor dieselbe Zahl trägt wie diese Anzeige (#395).
+        from backend.services.verbrauchsprognose_heute import waehle_verbrauchsprofil
+        wahl = await waehle_verbrauchsprofil(anlage, db, now)
+        ind_stunden_profil = wahl.ind_stunden_profil
+        profil_typ = wahl.profil_typ
+        profil_tage = wahl.profil_tage
+        profil_slots = wahl.profil_slots
+        wp_stunden_profil = wahl.wp_profil
+        referenz_temp_c = wahl.referenz_temp_c
 
         profil, pv_prognose, grundlast, ist_ind = _berechne_verbrauchsprofil(
             alle_stunden, kwp, individuelles_profil=ind_stunden_profil,
