@@ -11,6 +11,10 @@ aus `elif bedingung == "…"` und konnte genau **eine** Bedingung ausdrücken.
 `strom_warmwasser_kwh` braucht zwei (getrennte Strommessung **und** keine
 Klimaanlage). Der Nachzug hing also nicht am Vergessen, sondern an einer
 Struktur, die den Fall nicht formulieren konnte.
+
+Schwesterdateien: test_263_innengeraete.py, test_263_innengeraete_varianten.py (dieselbe Bedingungs-
+Registry). Die `test_b5_*`-Dateien daneben gehören zur Wärme/Klima-Matrix (Paket 5,
+HA-Export) — ein anderes B5.
 """
 
 from datetime import date

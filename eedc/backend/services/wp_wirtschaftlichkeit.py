@@ -88,6 +88,15 @@ def _wp_alter_wirkungsgrad(wp_parameter: Optional[dict]) -> float:
     )
 
 
+def _wp_zusatzkosten_jahr(wp_parameter: Optional[dict]) -> float:
+    """Fixe Zusatzkosten der Altheizung je Jahr (€), 0 ohne Pflege."""
+    if not wp_parameter:
+        return 0.0
+    return float(
+        wp_parameter.get(PARAM_WAERMEPUMPE["ALTERNATIV_ZUSATZKOSTEN_JAHR"], 0) or 0
+    )
+
+
 def _wp_alter_preis_cent(wp_parameter: Optional[dict]) -> float:
     """Liest Gaspreis-Default aus WP-Parametern, sonst kanon. Default."""
     if wp_parameter is None:
@@ -175,7 +184,21 @@ def berechne_wp_ersparnis(
     else:
         gaspreis_cent = _wp_alter_preis_cent(wp_parameter)
 
-    alte_heizung_kosten = gas_kosten_altanlage(wp_waerme_kwh, wirkungsgrad, gaspreis_cent)
+    # B5/X-4 (05.09.2026): die fixen Zusatzkosten der Altheizung
+    # (Schornsteinfeger, Wartung, Grundpreis — `alternativ_zusatzkosten_jahr`,
+    # #141) gehören zu den vermiedenen Kosten, anteilig 1/12 je Monat.
+    # ⛔ Bis hierher kannte diese Funktion sie nicht — die anlagenweite
+    # Alternativkosten-Formel (`core/berechnungen/alternativkosten.py`), der
+    # HA-Export-Sensor je Wärmepumpe und BERECHNUNGEN.md führten sie seit
+    # v3.21.0. Gemessen an einem Monat mit 120 €/Jahr: Hub und Cockpit
+    # 166,67 €, Export und Aussichten 176,67 € — dieselbe Wärmepumpe, zwei
+    # Ersparnisse (SOLL §3.3 S1). Der Anteil steht NACH den beiden Wächtern
+    # oben: ohne ersetzte Heizung gibt es auch keine Zusatzkosten einer
+    # Anlage, die es nie gab (N-88).
+    alte_heizung_kosten = (
+        gas_kosten_altanlage(wp_waerme_kwh, wirkungsgrad, gaspreis_cent)
+        + _wp_zusatzkosten_jahr(wp_parameter) / 12
+    )
     wp_kosten = wp_strom_kwh * wp_strompreis_cent / 100
     # E-B: Verglichen wird die **Heizhälfte** — der Kühlstrom hat auf der
     # anderen Seite der Gleichung kein Gegenstück.
