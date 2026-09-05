@@ -40,6 +40,33 @@ export interface CockpitUebersicht {
   wp_cop: number | null
   wp_ersparnis_euro: number
   hat_waermepumpe: boolean
+  /** B4 (05.09.2026, C-1): der ganze Kennzahl-Satz der Wärmepumpe für Cockpit → Jahr,
+   *  aus dem Layer (SOLL §3.3: im Jahr NEU gerechnet, nie gemittelt — und nie im Client).
+   *  `baueJahrAlsMonat` liest ihn; bis B4 fielen 16 WP-Felder im Client-Aggregat weg. */
+  wp_cop_grund?: string | null
+  wp_cop_hinweis?: string | null
+  wp_jaz_zaehler_kwh?: number | null
+  wp_jaz_nenner_kwh?: number | null
+  wp_waerme_abgeleitet?: boolean
+  wp_waerme_herkunft?: string | null
+  wp_ersparnis_vorbehalt?: string | null
+  wp_strom_heizen_kwh?: number | null
+  wp_strom_warmwasser_kwh?: number | null
+  wp_jaz_heizen?: number | null
+  wp_jaz_heizen_grund?: string | null
+  wp_jaz_warmwasser?: number | null
+  wp_jaz_warmwasser_grund?: string | null
+  wp_jaz_kuehlen?: number | null
+  wp_jaz_kuehlen_grund?: string | null
+  wp_modus_strom_heizen_kwh?: number | null
+  wp_modus_strom_kuehlen_kwh?: number | null
+  wp_modus_strom_warmwasser_kwh?: number | null
+  wp_modus_strom_lueften_kwh?: number | null
+  wp_modus_strom_entfeuchten_kwh?: number | null
+  wp_modus_nicht_aufgeteilt_kwh?: number | null
+  wp_modus_abdeckung_h?: number | null
+  wp_modus_strom_bezug_kwh?: number | null
+  wp_modus_gemessen?: boolean | null
 
   // E-Mobilität aggregiert
   emob_km: number

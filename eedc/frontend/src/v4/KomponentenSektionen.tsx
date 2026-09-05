@@ -402,8 +402,14 @@ export function baueKomponentenBloecke(
       // dietmar1968 aufgefordert, einen Sensor zuzuordnen, den er zugeordnet
       // hatte (T89667 #210). Ohne Backend-Grund bleibt der bisherige Tooltip
       // stehen — er ist dann die einzige Auskunft, die es gibt.
+      // B4 (C-2, SOLL §6 vom 05.09.2026): Eine aus Strom × JAZ GESCHÄTZTE Wärme
+      // stand hier wie eine Messung — nur die gesperrte JAZ verriet es. Jetzt
+      // steht die Herkunft aus dem Layer unter der Kachel (dieselben Worte wie
+      // im Hub seit B3); gemessene Wärme bleibt ohne Zusatz.
       { ...WP_KPI.waerme, value: fmt(d.wp_waerme_kwh), unit: 'kWh',
-        subtitle: hat(d.wp_waerme_kwh) ? undefined : (d.wp_waerme_grund ?? undefined),
+        subtitle: hat(d.wp_waerme_kwh)
+          ? (d.wp_waerme_abgeleitet && d.wp_waerme_herkunft ? d.wp_waerme_herkunft : undefined)
+          : (d.wp_waerme_grund ?? undefined),
         hinweis: d.wp_waerme_grund ? undefined : tagHinweis(hat(d.wp_waerme_kwh), wmz) },
       { ...WP_KPI.strom, value: fmt(d.wp_strom_kwh), unit: 'kWh' },
       // W-10: Ein negativer Betrag ist keine Ersparnis, und „+-49,53 €" ist
@@ -421,8 +427,13 @@ export function baueKomponentenBloecke(
         // W-18: Die Ersparnis folgt aus der Wärme — fehlt die, fehlt sie aus
         // demselben Grund. Ihn hier zu wiederholen wäre eine zweite
         // Formulierung derselben Ursache; der Verweis hält beide zusammen.
-        subtitle: (wpErsparnis == null && d.wp_waerme_grund)
-          ? `Folgt aus der Tages-Wärme — ${d.wp_waerme_grund}` : undefined,
+        // B4 (C-2): der Vorbehalt aus dem Layer — geschätzte Wärme oder ein
+        // zweiter Erzeuger am Wärmezähler (F12). Er geht dem Tages-Grund vor,
+        // weil er auch bei vorhandener Zahl gilt.
+        subtitle: (wpErsparnis != null && d.wp_ersparnis_vorbehalt)
+          ? d.wp_ersparnis_vorbehalt
+          : (wpErsparnis == null && d.wp_waerme_grund)
+            ? `Folgt aus der Tages-Wärme — ${d.wp_waerme_grund}` : undefined,
         hinweis: d.wp_waerme_grund
           ? undefined
           : tagHinweis(wpErsparnis != null, 'Ersparnis folgt aus der Tages-Wärme — ' + wmz),

@@ -91,7 +91,9 @@ const nachhaltigkeit: Nachhaltigkeit = {
 }
 
 vi.mock('../api/cockpit', () => ({
-  cockpitApi: { getNachhaltigkeit: vi.fn(() => Promise.resolve(nachhaltigkeit)) },
+  // B4 (05.09.2026): das Jahr ruft zusätzlich die Jahresroute (WP-Kennzahlen aus dem
+  // Layer); ohne Antwort bleiben die Kennzahlen weg — diese Proben messen Mengen.
+  cockpitApi: { getNachhaltigkeit: vi.fn(() => Promise.resolve(nachhaltigkeit)), getUebersicht: vi.fn(() => Promise.resolve(null)) },
 }))
 
 import CockpitJahrV4 from './CockpitJahrV4'

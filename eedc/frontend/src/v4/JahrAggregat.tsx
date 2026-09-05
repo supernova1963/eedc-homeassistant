@@ -20,6 +20,7 @@ import { MONAT_KURZ } from '../lib/constants'
 import { speicherWirkungsgrad } from '../lib/speicherWirkungsgrad'
 import type { AktuellerMonatResponse, InvestitionFinancialDetail, SonstigesGeraet } from '../api/aktuellerMonat'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
+import type { CockpitUebersicht } from '../api/cockpit'
 
 /** Summe null-bewusst: nur wenn KEIN Monat einen Wert liefert ⇒ null (sonst 0+…). */
 function summe(werte: (number | null | undefined)[]): number | null {
@@ -168,7 +169,18 @@ export function abgeschlosseneMonate(
  * `AktuellerMonatResponse`-Shape (Felder, die die Monat-Bauer lesen).
  * `jahr` setzt das Jahr im Ergebnis; `monat`=0 markiert „Jahres-Aggregat".
  */
-export function baueJahrAlsMonat(monate: AktuellerMonatResponse[], jahr: number): AktuellerMonatResponse {
+/**
+ * B4 (05.09.2026, C-1): `kennzahlen` ist die Jahresroute (`cockpitApi.getUebersicht(anlage, jahr)`).
+ * Sie rechnet Arbeitszahl, Gründe, Hinweis, je Funktion, Kühlen, Herkunft und Restmenge aus den
+ * Monats-Fakten (Layer, R2-Sperren). Bis B4 fehlten hier 16 von 33 WP-Feldern — die JAZ stand im
+ * Jahr als „—" ohne Grund, die je-Funktion-Zeilen fehlten ersatzlos (N-348-Klasse), und die
+ * Restmenge rechnete ohne Lüften/Entfeuchten. Ohne `kennzahlen` (ältere Antwort, Abruf gescheitert)
+ * bleibt der bisherige Zustand: Mengen ja, Kennzahlen nicht.
+ */
+export function baueJahrAlsMonat(
+  monate: AktuellerMonatResponse[], jahr: number, kennzahlen?: CockpitUebersicht | null,
+): AktuellerMonatResponse {
+  const k = kennzahlen ?? null
   const f = <K extends keyof AktuellerMonatResponse>(key: K) => monate.map((m) => m[key] as number | null | undefined)
 
   // Energie-Summen (für Quoten-Neuberechnung gebraucht).
@@ -349,7 +361,10 @@ export function baueJahrAlsMonat(monate: AktuellerMonatResponse[], jahr: number)
     // #263 — ein Flag summiert sich nicht, es wird ge-ODER-t: EIN Monat
     // mit gemessener Aufteilung genügt, damit das Jahr eine hat.
     wp_modus_gemessen: monate.some(m => !!m.wp_modus_gemessen),
-    wp_modus_nicht_aufgeteilt_kwh: Math.max(
+    // B4: die Restmenge kommt aus dem Layer (Σ der monatlichen Reste, mit
+    // Lüften/Entfeuchten — E4). Die Client-Formel hier zog die beiden nie ab
+    // (gemessen: 50 statt 35 kWh) und bleibt nur als Fallback ohne Route.
+    wp_modus_nicht_aufgeteilt_kwh: k?.wp_modus_nicht_aufgeteilt_kwh ?? Math.max(
       0,
       (wpStrom ?? 0) - (summe(f('wp_modus_strom_heizen_kwh')) ?? 0)
         - (summe(f('wp_modus_strom_kuehlen_kwh')) ?? 0)
@@ -357,6 +372,25 @@ export function baueJahrAlsMonat(monate: AktuellerMonatResponse[], jahr: number)
         // einmal als eigenes Segment und einmal in der Restmenge.
         - (summe(f('wp_modus_strom_warmwasser_kwh')) ?? 0),
     ),
+    wp_modus_strom_lueften_kwh: k?.wp_modus_strom_lueften_kwh ?? summe(f('wp_modus_strom_lueften_kwh')),
+    wp_modus_strom_entfeuchten_kwh: k?.wp_modus_strom_entfeuchten_kwh ?? summe(f('wp_modus_strom_entfeuchten_kwh')),
+    wp_modus_strom_bezug_kwh: k?.wp_modus_strom_bezug_kwh ?? summe(f('wp_modus_strom_bezug_kwh')),
+    // Kennzahlen NUR aus der Route (P12) — ohne sie bleibt „—", aber mit Grund,
+    // wo die Route einen liefert.
+    wp_jaz: k?.wp_cop ?? null,
+    wp_jaz_grund: k?.wp_cop_grund ?? null,
+    wp_jaz_hinweis: k?.wp_cop_hinweis ?? null,
+    wp_jaz_zaehler_kwh: k?.wp_jaz_zaehler_kwh ?? null,
+    wp_jaz_nenner_kwh: k?.wp_jaz_nenner_kwh ?? null,
+    wp_waerme_abgeleitet: k?.wp_waerme_abgeleitet ?? monate.some((m) => !!m.wp_waerme_abgeleitet),
+    wp_waerme_herkunft: k?.wp_waerme_herkunft ?? null,
+    wp_ersparnis_vorbehalt: k?.wp_ersparnis_vorbehalt ?? null,
+    wp_jaz_heizen: k?.wp_jaz_heizen ?? null,
+    wp_jaz_heizen_grund: k?.wp_jaz_heizen_grund ?? null,
+    wp_jaz_warmwasser: k?.wp_jaz_warmwasser ?? null,
+    wp_jaz_warmwasser_grund: k?.wp_jaz_warmwasser_grund ?? null,
+    wp_jaz_kuehlen: k?.wp_jaz_kuehlen ?? null,
+    wp_jaz_kuehlen_grund: k?.wp_jaz_kuehlen_grund ?? null,
     wp_strom_warmwasser_kwh: summe(f('wp_strom_warmwasser_kwh')),
     // Jahres-Counter im period-neutralen Σ-Slot; Max/Tag = höchster Einzeltag des Jahres.
     wp_starts_summe_monat: summe(f('wp_starts_summe_monat')),

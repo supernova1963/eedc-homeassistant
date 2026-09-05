@@ -300,6 +300,12 @@ class AktuellerMonatResponse(BaseModel):
     #: Gleicher Name wie im Komponenten-Hub (`KomponentenMonat`), damit dieselbe
     #: Größe in beiden Sichten gleich heißt (S1).
     wp_waerme_abgeleitet: bool = False
+    # B4 (05.09.2026, C-2): Herkunft der Wärme und Vorbehalt an Ersparnis/CO₂,
+    # fertig formuliert aus dem Layer (`waermepumpe_kennzahl.waerme_herkunft` /
+    # `ersparnis_vorbehalt`) — dieselben Worte wie im Komponenten-Hub (B3).
+    # SOLL §6 (05.09.): eine geschätzte Wärme erscheint als geschätzt.
+    wp_waerme_herkunft: Optional[str] = None
+    wp_ersparnis_vorbehalt: Optional[str] = None
     # #191: Strom-Aufteilung Heizung/Warmwasser. Nur gesetzt wenn mindestens
     # eine WP-Investition `getrennte_strommessung=true` hat. Sonst None →
     # Frontend zeigt nur den Gesamtstromverbrauch.
@@ -1813,6 +1819,24 @@ async def get_aktueller_monat(
         strom_funktionsfremd_kwh=wp_strom_funktionsfremd_kwh,
         abgrenzung_verletzt=wp_abgrenzung_verletzt,
     )
+    # B4 (C-2): Herkunft und Vorbehalt — der Faktor nur bei EINER Wärmepumpe
+    # (bei mehreren gibt es keinen einen Faktor, der Text nennt dann die Regel).
+    from backend.core.berechnungen.modus_split import heiz_effizienz_gepflegt
+    from backend.core.berechnungen.waermepumpe_kennzahl import (
+        ersparnis_vorbehalt as _ersparnis_vorbehalt,
+        waerme_herkunft as _waerme_herkunft,
+    )
+    _wp_invs_alle = [i for i in investitionen if i.typ == "waermepumpe"]
+    _wp_abgeleitet = wp_waerme_abgeleitet_kwh > 0
+    wp_waerme_herkunft = _waerme_herkunft(
+        _wp_abgeleitet,
+        heiz_effizienz_gepflegt(_wp_invs_alle[0].parameter)
+        if (_wp_abgeleitet and len(_wp_invs_alle) == 1) else None,
+    )
+    wp_ersparnis_vorbehalt = _ersparnis_vorbehalt(
+        waerme_abgeleitet=_wp_abgeleitet,
+        abgrenzung=monats_fakt.wp.abgrenzung_stoerung if monats_fakt is not None else None,
+    )
 
     if wp_waerme is not None and wp_strom is not None and allgemein_tarif:
         # Ohne eigenen WP-Tarif gilt der allgemeine Bezugspreis — bei flexiblem
@@ -2603,6 +2627,8 @@ async def get_aktueller_monat(
         wp_jaz_zaehler_kwh=wp_arbeitszahl.zaehler_kwh,
         wp_jaz_nenner_kwh=wp_arbeitszahl.nenner_kwh,
         wp_waerme_abgeleitet=wp_waerme_abgeleitet_kwh > 0,
+        wp_waerme_herkunft=wp_waerme_herkunft,
+        wp_ersparnis_vorbehalt=wp_ersparnis_vorbehalt,
         wp_strom_heizen_kwh=wp_strom_heizen,
         wp_strom_warmwasser_kwh=wp_strom_warmwasser,
         wp_modus_strom_heizen_kwh=wp_modus_heizen,

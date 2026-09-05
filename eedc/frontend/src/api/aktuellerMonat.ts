@@ -131,6 +131,10 @@ export interface AktuellerMonatResponse {
   wp_jaz_nenner_kwh?: number | null
   /** Ist ein Teil der Wärme aus `Strom × JAZ` gerechnet statt gemessen? */
   wp_waerme_abgeleitet?: boolean | null
+  /** B4 (C-2): Herkunft der Wärme („gemessen" | „geschätzt: Strom × JAZ 3,5") und der
+   *  Vorbehalt an Ersparnis/CO₂ — fertig aus dem Layer, dieselben Worte wie im Hub. */
+  wp_waerme_herkunft?: string | null
+  wp_ersparnis_vorbehalt?: string | null
   // #191: Strom-Aufteilung Heizung/Warmwasser. Nur befüllt wenn mindestens
   // eine WP-Investition `getrennte_strommessung=true` hat.
   wp_strom_heizen_kwh: number | null

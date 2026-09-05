@@ -137,12 +137,20 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
   // dann aber nur mit Stammdaten-Ableitungen wie SOLL und Tarif).
   const ladeJahr = useCallback(async (anlage: number, j: number): Promise<JahrLadung> => {
     const heute = new Date()
-    const antworten = (await Promise.all(
-      zuLadendeMonate(alleMonate, j, heute).map((m) => aktuellerMonatApi.getData(anlage, j, m).catch(() => null)),
-    )).filter((m): m is AktuellerMonatResponse => m != null && monatHatDaten(m))
+    // B4 (C-1): Die Jahresroute liefert die WP-Kennzahlen aus dem Layer; die
+    // Monatsantworten liefern weiter die Mengen. Ein gescheiterter Abruf lässt
+    // die Kennzahlen weg (der Zustand vor B4), nicht das Jahr.
+    const [antworten, kennzahlen] = await Promise.all([
+      Promise.all(
+        zuLadendeMonate(alleMonate, j, heute).map((m) => aktuellerMonatApi.getData(anlage, j, m).catch(() => null)),
+      ).then((ms) => ms.filter((m): m is AktuellerMonatResponse => m != null && monatHatDaten(m))),
+      cockpitApi.getUebersicht(anlage, j).catch(() => null),
+    ])
     const monate = antworten.map((m) => m.monat)
     const vergleichsMonate = abgeschlosseneMonate(monate, j, heute)
-    const d = baueJahrAlsMonat(antworten, j)
+    const d = baueJahrAlsMonat(antworten, j, kennzahlen)
+    // Der Vergleichs-Ausschnitt (nur abgeschlossene Monate) hat keine eigene
+    // Route — er trägt die Mengen, keine Kennzahlen.
     const dVgl = vergleichsMonate.length === monate.length
       ? d
       : baueJahrAlsMonat(antworten.filter((m) => vergleichsMonate.includes(m.monat)), j)

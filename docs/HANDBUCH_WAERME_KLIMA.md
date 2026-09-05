@@ -45,7 +45,7 @@ Das hat einen Preis, den du kennen solltest: **eedc kann nicht wissen, ob dein G
 | **Cockpit → Live** | Momentanleistung gesamt und je Funktion, Betriebsmodus, Warmwasser-Temperatur |
 | **Cockpit → Tag** | Block *Wärme/Klima*: Arbeitszahl, Wärme, Strom, Ersparnis, Kompressor-Starts, Betriebsart-Aufteilung — **alles tagesgenau** |
 | **Cockpit → Monat** | derselbe Block auf Monatsbasis, dazu die Arbeitszahlen je Funktion |
-| **Cockpit → Jahr** | Jahressummen, Block *CO₂-Bilanz* |
+| **Cockpit → Jahr** | Jahressummen, dieselben Kennzahlen wie im Monat — Arbeitszahl mit Grund und Heizstab-Satz, je Funktion, Kühlen, Aufteilung nach Betriebsart mit Restmenge — über das Jahr **neu gerechnet** (nicht gemittelt), Block *CO₂-Bilanz* |
 | **Komponenten → Wärmepumpe** | je Gerät einzeln: Status, Verlauf, Monats-/Saisonvergleich, Kostenvergleich gegen Gas/Öl |
 | **Auswertungen → CO₂** | Einsparung inkl. Wärmepumpen-Anteil |
 | **Einstellungen → Datenquellen** | die Zuordnung der Zähler ([§5](#5-sensoren-zuordnen-schritt-für-schritt)) |
@@ -61,7 +61,7 @@ Diese Tabelle ist der Kern dieses Handbuchs. Sie beantwortet die Frage, die fast
 | Was du sehen willst | Was du dafür brauchst | Ohne das … |
 |---------------------|------------------------|------------|
 | **Stromverbrauch** der Anlage | *Stromverbrauch* (kWh) — **oder** *Strom Heizen* + *Strom Warmwasser* bei getrennter Messung | keine Auswertung, das Gerät fehlt in der Verbrauchsseite |
-| **Wärme erzeugt** | Wärmemengenzähler: *Heizwärme* (kWh) und/oder *Warmwasser-Wärme* (kWh) | eedc **rechnet** sie aus Strom × gepflegter Arbeitszahl — und kennzeichnet sie als abgeleitet — im Komponenten-Hub steht die Herkunft unter der Wärme-Kachel („geschätzt: Strom × JAZ 3,5"), und Ersparnis wie CO₂ tragen den Vorbehalt „Wärme geschätzt" |
+| **Wärme erzeugt** | Wärmemengenzähler: *Heizwärme* (kWh) und/oder *Warmwasser-Wärme* (kWh) | eedc **rechnet** sie aus Strom × gepflegter Arbeitszahl — und kennzeichnet sie als abgeleitet — im Komponenten-Hub und unter *Cockpit → Monat/Jahr* steht die Herkunft unter der Wärme-Kachel („geschätzt: Strom × JAZ 3,5"), und Ersparnis wie CO₂ tragen den Vorbehalt „Wärme geschätzt" |
 | **Arbeitszahl (JAZ)** | beides: Strom **und** gemessene Wärme | „—" mit Grund |
 | **Arbeitszahl Heizen / Warmwasser getrennt** | getrennte Strommessung **und** getrennte Wärmemengen | „—" mit Grund *„Strom nicht getrennt je Funktion gemessen"* |
 | **Arbeitszahl Kühlen** | *Strom Kühlbetrieb* **und** *Nutzenergie Kühlbetrieb* (Kältemengenzähler) | „—" mit Grund *„kein Kältemengenzähler zugeordnet"* |
