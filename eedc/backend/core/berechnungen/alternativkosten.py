@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from typing import Iterable, Optional
 
+from backend.core.berechnungen.betriebsart_gemessen import modus_strom_zeile
 from backend.core.field_definitions import (
     get_wp_strom_kwh,
     get_wp_warmwasser_kwh,
@@ -209,6 +210,12 @@ def berechne_wp_alternativkosten_ersparnis(
                 get_wp_warmwasser_kwh(daten, wp.parameter)
             )
             strom = get_wp_strom_kwh(daten, wp.parameter)
+            # B5/X-5 (05.09.2026, Entscheid E-B 18.08.): Kühlen ersetzt keine
+            # Heizung — sein Strom gehört nicht in den Vergleich. Der Monats-
+            # Layer (`berechne_wp_ersparnis`) zog ihn seit dem 19.08. ab, diese
+            # Jahresformel (Aussichten, Export-Jahresersparnis, ROI) nicht:
+            # eine Klimaanlage senkte hier weiter ihre eigene Heiz-Ersparnis.
+            strom -= min(max(modus_strom_zeile(daten).kuehlen_kwh, 0.0), max(strom, 0.0))
             g = gaspreis_by_periode.get((jahr, monat))
             monats_gaspreis = g if g is not None else wp_agg["alter_preis_cent"]
             gas_kosten = gas_kosten_altanlage(

@@ -1662,8 +1662,13 @@ P8_BASELINE_AUSNAHMEN: frozenset[str] = frozenset({
     # Heutiger Tarif als Fallback des Perioden-Mappings und für die nach vorn
     # gerichteten Sensor-Werte. Die Historien-Summen daneben lösen je Monat auf
     # (`wp_preis_by_periode` / `wallbox_preis_by_periode`, beide mit Stichtag).
+    # ⛔ `calculate_investition_sensors` stand bis 05.09.2026 (B5/X-1) mit
+    # derselben Begründung hier — sie war für die Wärmepumpe falsch: der
+    # Ersparnis-Sensor je Gerät bewertete ALLE Monate mit dem heutigen WP-Tarif
+    # (gemessen: Juli mit dem Septemberpreis). Die Ausnahme zählte den Lader,
+    # nicht, was mit dem Tarif geschah — dieselbe Lücke wie bei P8/S4 oben.
+    # Seit X-1 lädt die Funktion je Monat mit Stichtag; der Eintrag ist weg.
     "backend/api/routes/ha_export.py::calculate_anlage_sensors",
-    "backend/api/routes/ha_export.py::calculate_investition_sensors",
     # N-200: seit dem SoT-Umbau sichtbar. Die Route reicht den Tarif nur an
     # `calculate_investition_sensors` durch — dieselbe Rolle wie die Zeile
     # darüber, eine Ebene höher.

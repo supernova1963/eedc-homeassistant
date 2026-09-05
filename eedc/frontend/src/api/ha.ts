@@ -33,6 +33,8 @@ export interface SensorExportItem {
   category: string
   formel: string
   berechnung: string | null
+  /** B5/X-2: Vorbehalt (Wärme geschätzt · zweiter Erzeuger) oder Grund einer Sperre — dieselben Worte wie Hub und Cockpit. */
+  hinweis?: string | null
   device_class: string | null
   state_class: string | null
 }

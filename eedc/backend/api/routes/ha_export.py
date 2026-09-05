@@ -44,7 +44,9 @@ from backend.core.berechnungen import (
 from backend.core.berechnungen.waermepumpe_kennzahl import (
     abgrenzungs_grund,
     arbeitszahl,
+    ersparnis_vorbehalt,
 )
+from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
 from backend.services.prognose_auswahl import lade_aktive_prognose
 from datetime import date
 
@@ -155,6 +157,13 @@ class MQTTConfigRequest(BaseModel):
     password: Optional[str] = None
 
 
+def _hinweis(sv: SensorValue) -> Optional[str]:
+    """B5/X-2: Vorbehalt oder Grund eines Sensorwerts für die REST-Antwort —
+    dieselben Attribute, die MQTT unter `vorbehalt`/`grund` publiziert."""
+    z = sv.zusatz_attribute or {}
+    return z.get("vorbehalt") or z.get("grund")
+
+
 class SensorExportItem(BaseModel):
     """Einzelner Sensor im Export.
 
@@ -175,6 +184,10 @@ class SensorExportItem(BaseModel):
     berechnung: Optional[str] = None
     device_class: Optional[str] = None
     state_class: Optional[str] = None
+    # B5/X-2 (05.09.2026): der Satz, der neben dem Wert steht — Vorbehalt
+    # (Wärme geschätzt · zweiter Erzeuger) oder Grund einer Sperre. Dieselben
+    # Worte wie Hub und Cockpit; MQTT trägt sie als Attribut.
+    hinweis: Optional[str] = None
 
     @model_validator(mode="after")
     def _runde_wert(self):
@@ -1549,10 +1562,6 @@ async def calculate_investition_sensors(
     elif investition.typ == "waermepumpe":
         # DI-4: WP-Strom mit dem WP-Spezialtarif bewerten (Fallback allgemein),
         # deckungsgleich mit aktueller_monat.py und der Anlage-Aggregation oben.
-        _wp_tarife = await lade_tarife_fuer_anlage(db, investition.anlage_id)
-        wp_netzbezug_preis = resolve_strompreis_for_komponente(
-            _wp_tarife, "waermepumpe", fallback=netzbezug_preis
-        )
         gesamt_strom = 0.0
         gesamt_heizung = 0.0
         gesamt_warmwasser = 0.0
@@ -1578,6 +1587,10 @@ async def calculate_investition_sensors(
         #: anwenden zu können. Entsteht in DIESEM Durchlauf, damit keine dritte
         #: Quelle für dieselben Werte aufgemacht wird.
         gespeichert_je_monat: dict[tuple[int, int], dict[str, tuple[bool, float]]] = {}
+        # B5/X-1: der Kühlstrom je Monat — für E-B in der Ersparnis unten.
+        kuehl_je_monat: dict[tuple[int, int], float] = {}
+        # B5/X-1: der Kühlstrom je Monat — für E-B in der Ersparnis unten.
+        kuehl_je_monat: dict[tuple[int, int], float] = {}
         for md in monatsdaten:
             d = md.verbrauch_daten or {}
             # F-56: **gemessen schlägt abgeleitet**, über den Layer-SoT —
@@ -1586,6 +1599,7 @@ async def calculate_investition_sensors(
             # Gemessen-Zweig) ließ die beiden Sensoren stumm, während Cockpit
             # und Komponenten-Hub die Aufteilung schon zeigten.
             _zeile = modus_strom_zeile(d)
+            kuehl_je_monat[(md.jahr, md.monat)] = _zeile.kuehlen_kwh
             gesamt_modus_heizen += _zeile.heizen_kwh
             gesamt_modus_kuehlen += _zeile.kuehlen_kwh
             gesamt_modus_warmwasser += _zeile.warmwasser_kwh
@@ -1623,8 +1637,11 @@ async def calculate_investition_sensors(
             inv_by_id={investition.id: investition},
             gespeichert=gespeichert_je_monat,
         )
-        for _je_inv in nachgetragen.values():
+        for _schluessel, _je_inv in nachgetragen.items():
             for _split in _je_inv.values():
+                kuehl_je_monat[_schluessel] = (
+                    kuehl_je_monat.get(_schluessel, 0.0) + _split.kuehlen_kwh
+                )
                 gesamt_modus_heizen += _split.heizen_kwh
                 gesamt_modus_kuehlen += _split.kuehlen_kwh
                 gesamt_modus_warmwasser += _split.warmwasser_kwh
@@ -1669,6 +1686,7 @@ async def calculate_investition_sensors(
         for sensor in WAERMEPUMPE_SENSOREN:
             value = None
             berechnung = None
+            zusatz_attribute: dict = {}
 
             if sensor.key == "wp_cop_durchschnitt":
                 # ADR-002/P12 (02.09.2026): Die Arbeitszahl entsteht im Layer,
@@ -1705,37 +1723,81 @@ async def calculate_investition_sensors(
                         else None
                     )
             elif sensor.key == "wp_ersparnis_euro":
-                # N-88/F2b: ohne ersetzte Heizung kein fossiler Vergleich — der
-                # Sensor bleibt dann leer statt eine Ersparnis zu behaupten.
-                if gesamt_waerme > 0 and not ersetzt_keine_heizung(
-                    params.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"])
-                ):
-                    fallback_alter_preis = params.get(PARAM_WAERMEPUMPE["ALTER_PREIS_CENT_KWH"], PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"])
-                    wirkungsgrad_alt = alter_wirkungsgrad(params.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"]))
-                    zusatzkosten_jahr = params.get(PARAM_WAERMEPUMPE["ALTERNATIV_ZUSATZKOSTEN_JAHR"], 0) or 0
-                    # Monatliche Gaspreise laden (Fallback: statischer Parameter)
-                    anlage_md_result = await db.execute(
-                        select(Monatsdaten).where(Monatsdaten.anlage_id == investition.anlage_id)
+                # B5/X-1 (05.09.2026): dieselbe Rechnung wie Hub und Cockpit —
+                # der Layer `berechne_wp_ersparnis`, je Monat mit dem Tarif
+                # seines Stichtags (ADR-002/P8) und ohne den Kühlstrom im
+                # Vergleich (Entscheid E-B, 18.08.).
+                #
+                # ⛔ **Bis hierher stand eine eigene Formel:** `alte Kosten −
+                # Σ Strom × heutiger WP-Tarif`. Gemessen an denselben Sprossen
+                # wie der Hub: F8 (Kühlstrom 300 kWh) 10 € statt 100 €; zwei
+                # Tarife (Juli 30 ct, ab September 40 ct) 66,67 € statt
+                # 166,67 € — der Juli wurde mit dem Septemberpreis bewertet.
+                # Dritte Kopie der Ersparnis-Formel (SOLL §3.3 S1); die
+                # Zusatzkosten der Altheizung, die hier schon standen, trägt
+                # seit X-4 der Layer selbst.
+                #
+                # N-88/F2b bleibt: ohne ersetzte Heizung ist kein Monat
+                # `bewertbar`, und der Sensor bleibt leer statt eine Ersparnis
+                # zu behaupten.
+                anlage_md_result = await db.execute(
+                    select(Monatsdaten).where(Monatsdaten.anlage_id == investition.anlage_id)
+                )
+                anlage_md_dict = {
+                    (m.jahr, m.monat): m for m in anlage_md_result.scalars().all()
+                }
+                alte_kosten = 0.0
+                wp_kosten = 0.0
+                kuehl_kosten = 0.0
+                bewertbar = False
+                for md in monatsdaten:
+                    d = md.verbrauch_daten or {}
+                    m_waerme = (d.get("heizenergie_kwh", 0) or 0) + (
+                        get_wp_warmwasser_kwh(d, investition.parameter)
+                    )  # N-379
+                    m_strom = get_wp_strom_kwh(d, investition.parameter)
+                    if m_waerme <= 0 and m_strom <= 0:
+                        continue
+                    m_tarife = await lade_tarife_fuer_anlage(
+                        db, investition.anlage_id, target_date=date(md.jahr, md.monat, 1)
                     )
-                    anlage_md_dict = {
-                        (m.jahr, m.monat): m for m in anlage_md_result.scalars().all()
-                    }
-                    alte_kosten = 0.0
-                    for md in monatsdaten:
-                        d = md.verbrauch_daten or {}
-                        waerme = (d.get("heizenergie_kwh", 0) or 0) + (
-                            get_wp_warmwasser_kwh(d, investition.parameter)
-                        )  # N-379
-                        amd = anlage_md_dict.get((md.jahr, md.monat))
-                        gp = (amd.gaspreis_cent_kwh
-                              if amd and amd.gaspreis_cent_kwh is not None
-                              else fallback_alter_preis)
-                        alte_kosten += gas_kosten_altanlage(waerme, wirkungsgrad_alt, gp)
-                    # Fixe Zusatzkosten anteilig
-                    alte_kosten += zusatzkosten_jahr * len(monatsdaten) / 12
-                    wp_kosten = gesamt_strom * wp_netzbezug_preis / 100
-                    value = alte_kosten - wp_kosten
-                    berechnung = f"{alte_kosten:.2f} (alt) - {wp_kosten:.2f} (WP)"
+                    m_preis = resolve_strompreis_for_komponente(
+                        m_tarife, "waermepumpe", fallback=netzbezug_preis
+                    )
+                    amd = anlage_md_dict.get((md.jahr, md.monat))
+                    m_erg = berechne_wp_ersparnis(
+                        wp_waerme_kwh=m_waerme,
+                        wp_strom_kwh=m_strom,
+                        wp_strompreis_cent=m_preis,
+                        wp_parameter=investition.parameter,
+                        monats_gaspreis_cent=(
+                            amd.gaspreis_cent_kwh if amd else None
+                        ),
+                        strom_kuehlen_kwh=kuehl_je_monat.get((md.jahr, md.monat), 0.0),
+                    )
+                    alte_kosten += m_erg.alte_heizung_kosten_euro
+                    wp_kosten += m_erg.wp_kosten_euro
+                    kuehl_kosten += m_erg.kuehl_kosten_euro
+                    bewertbar = bewertbar or m_erg.bewertbar
+                if bewertbar:
+                    value = alte_kosten - (wp_kosten - kuehl_kosten)
+                    berechnung = (
+                        f"{alte_kosten:.2f} (alt) - {wp_kosten - kuehl_kosten:.2f} (WP)"
+                    )
+                    if kuehl_kosten > 0:
+                        berechnung += (
+                            f" · Kühlstrom {kuehl_kosten:.2f} € nicht im Vergleich"
+                        )
+                    # B5/X-2: der Vorbehalt aus dem Layer — dieselben Worte
+                    # wie Hub (B3) und Cockpit (B4). Nur gesetzt, wenn es
+                    # einen gibt; MQTT trägt ihn als Attribut, REST als
+                    # `hinweis`.
+                    _vorbehalt = ersparnis_vorbehalt(
+                        waerme_abgeleitet=waerme_abgeleitet,
+                        abgrenzung=abgrenzung_stoerung(investition),
+                    )
+                    if _vorbehalt:
+                        zusatz_attribute = {"vorbehalt": _vorbehalt}
             elif sensor.key == "wp_strom_heizen_modus_kwh":  # noqa: E501
                 # Ohne erfassten Modus bleibt der Sensor leer — er behauptete
                 # sonst „0 kWh geheizt" für ein Gerät, das eedc nicht beobachtet
@@ -1778,7 +1840,8 @@ async def calculate_investition_sensors(
                 sensor_values.append(SensorValue(
                     definition=sensor,
                     value=value,
-                    berechnung=berechnung
+                    berechnung=berechnung,
+                    zusatz_attribute=zusatz_attribute,
                 ))
 
     return sensor_values
@@ -1972,6 +2035,7 @@ async def get_all_sensors(db: AsyncSession = Depends(get_db)):
                 category=sv.definition.category.value,
                 formel=sv.definition.formel,
                 berechnung=sv.berechnung,
+                hinweis=_hinweis(sv),
                 device_class=sv.definition.device_class,
                 state_class=sv.definition.state_class,
             )
@@ -2023,6 +2087,7 @@ async def get_all_sensors(db: AsyncSession = Depends(get_db)):
                     category=sv.definition.category.value,
                     formel=sv.definition.formel,
                     berechnung=sv.berechnung,
+                    hinweis=_hinweis(sv),
                     device_class=sv.definition.device_class,
                     state_class=sv.definition.state_class,
                 )
@@ -2075,6 +2140,7 @@ async def get_anlage_sensors(
             category=sv.definition.category.value,
             formel=sv.definition.formel,
             berechnung=sv.berechnung,
+            hinweis=_hinweis(sv),
             device_class=sv.definition.device_class,
             state_class=sv.definition.state_class,
         )

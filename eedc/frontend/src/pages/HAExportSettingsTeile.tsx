@@ -1152,6 +1152,9 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
                             {sensor.berechnung && (
                               <span className="ml-2 text-gray-500">= {sensor.berechnung}</span>
                             )}
+                            {sensor.hinweis && (
+                              <p className="mt-1 text-amber-600 dark:text-amber-400">{sensor.hinweis}</p>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1208,6 +1211,9 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
                           ) : '-'}
                         </span>
                         <span className="ml-1 text-sm text-gray-500">{sensor.unit}</span>
+                        {sensor.hinweis && (
+                          <p className="text-xs text-amber-600 dark:text-amber-400">{sensor.hinweis}</p>
+                        )}
                       </div>
                     </div>
                   ))}

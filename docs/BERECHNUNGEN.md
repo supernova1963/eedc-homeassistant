@@ -2393,6 +2393,8 @@ Für jeden Monat mit WP-Daten:
 ```
 
 > **Monats-Gaspreis (v3.21.0):** Wenn `Monatsdaten.gaspreis_cent_kwh` pro Monat gepflegt ist, wird er Monat für Monat verwendet — ein Tarifwechsel ändert dann nicht mehr rückwirkend die ganze Historie. Ohne Eintrag bleibt es beim statischen `alter_preis_cent_kwh` der Investition. Pflege in der assistierten `MonatsdatenForm` (über `BEDINGTE_BASIS_FELDER` mit `bedingung_basis: hat_waermepumpe`) — in V4 der EINE Erfassungsweg; der frühere Monatsabschluss-Wizard ist als V4-Fläche stillgelegt und läuft nur noch über die V3-Route (bis zum Flip).
+>
+> **Kühlstrom (Entscheid E-B, 18.08.2026; in dieser Jahresformel seit 05.09.2026):** Der Strom des Kühlbetriebs (`modus_strom_zeile`, gemessen vor abgeleitet) bleibt aus dem Vergleich — Kühlen ersetzt keine Heizung. Bis dahin kannte nur die Monatsformel (`berechne_wp_ersparnis`) die Regel; Aussichten, ROI, HA-Jahresersparnis und der Vorjahresvergleich im Cockpit rechneten den Kühlstrom weiter gegen die vermiedenen Gaskosten.
 
 #### E-Auto-Ersparnis (historisch, in Finanzen)
 

@@ -76,6 +76,7 @@ from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
 )
+from backend.core.berechnungen.betriebsart_gemessen import modus_strom_zeile
 from backend.core.betriebsmodus import KUEHLEN as BM_KUEHLEN
 from backend.core.betriebsmodus import MODUS_STROM_FELD
 from backend.core.field_definitions import (
@@ -969,6 +970,9 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
                     wp_strompreis_cent=wp_p_vj,
                     wp_parameter=wp_invs_vj[0].parameter if wp_invs_vj else None,
                     monats_gaspreis_cent=monats_gaspreis_vj,
+                    # B5/X-5: E-B auch im Vorjahr — der laufende Monat zog den
+                    # Kühlstrom ab, sein Vergleichswert ein Jahr davor nicht.
+                    strom_kuehlen_kwh=fakt.wp.modus_strom_kuehlen_kwh,
                 )
                 wp_ersparnis_vj = round(wp_r_vj.ersparnis_euro, 2)
 
@@ -1209,7 +1213,11 @@ def _baue_investition_financial(
                 wp_parameter=inv.parameter,
                 monats_gaspreis_cent=monats_gaspreis,
                 # E-B: Kühlen ersetzt keine Heizung (#263 K-2).
-                strom_kuehlen_kwh=data.get(MODUS_STROM_FELD[BM_KUEHLEN], 0) or 0,
+                # B5/X-5c: über den SoT der Betriebsart-Weiche (F-56) — das
+                # Rohfeld kennt nur den abgeleiteten Split; bei gemessenen
+                # Betriebsart-Zählern stand hier 0 und der Kühlstrom blieb im
+                # Vergleich (dieselbe Klasse wie im Hub am 26.08.).
+                strom_kuehlen_kwh=modus_strom_zeile(data).kuehlen_kwh,
             )
             inv_ersparnis = round(wp_result.ersparnis_euro, 2)
             inv_label = "Ersparnis vs. Gas"

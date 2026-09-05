@@ -84,3 +84,67 @@ async def test_x4_nichts_ersetzt_bekommt_auch_keine_zusatzkosten(db):
     )
     assert r.bewertbar is False
     assert r.alte_heizung_kosten_euro == 0.0
+
+
+@pytest.mark.asyncio
+async def test_x1_der_export_bewertet_jeden_monat_mit_dem_tarif_seines_stichtags(db):
+    """P8: Juli-Daten, Tarif 30 ct bis August und 40 ct ab September — der Export
+    rechnete den Juli mit 40 ct (66,67 € statt 166,67 €)."""
+    parameter, daten, prov = SPROSSEN["F6_wmz_gesamt"]
+    t1 = Strompreis(netzbezug_arbeitspreis_cent_kwh=30.0, einspeiseverguetung_cent_kwh=8.0,
+                    gueltig_ab=date(2025, 1, 1), gueltig_bis=date(2025, 8, 31))
+    t2 = Strompreis(netzbezug_arbeitspreis_cent_kwh=40.0, einspeiseverguetung_cent_kwh=8.0,
+                    gueltig_ab=date(2025, 9, 1))
+    a, inv = await _anlage(db, "tarif", parameter, daten, prov, [t1, t2])
+    export, hub, monat = await _drei_sichten(db, a, inv, t2, 40.0)
+    assert hub == pytest.approx(166.67, abs=0.01)
+    assert export == pytest.approx(166.67, abs=0.01)
+
+
+@pytest.mark.asyncio
+async def test_x5_die_jahresformel_und_der_vorjahresvergleich_kennen_e_b(db):
+    """F8 als Vorjahr (2024-07) und im Jahresaggregat: Kühlstrom 300 kWh × 30 ct
+    bleibt aus dem Vergleich — anlagenweite Alternativkosten wie Monats-Layer."""
+    from backend.core.berechnungen.alternativkosten import berechne_wp_alternativkosten_ersparnis
+    parameter, daten, prov = SPROSSEN["F8_kaeltemenge"]
+    a, inv = await _anlage(db, "x5", parameter, daten, prov, [
+        Strompreis(netzbezug_arbeitspreis_cent_kwh=30.0, einspeiseverguetung_cent_kwh=8.0,
+                   gueltig_ab=date(2024, 1, 1)),
+    ])
+    summe = berechne_wp_alternativkosten_ersparnis(
+        [inv], {(inv.id, JAHR, MONAT): daten}, {}, {(JAHR, MONAT): 30.0}, 30.0,
+    )
+    # 400 € (alt) − (1300 − 300) × 0,5 × 0,30 = 400 − 150 = 250 (mit dem
+    # PV-Anteil-Default der Jahresformel); vorher 400 − 195 = 205.
+    assert summe == pytest.approx(250.0, abs=0.01)
+
+
+@pytest.mark.asyncio
+async def test_x5_cockpit_monat_vorjahr_und_komponenten_detail_kennen_e_b(db):
+    """F8 in 2024-07 (Vorjahr) und 2025-07: der Vorjahresvergleich und der
+    Komponenten-Detailblock rechneten den Kühlstrom mit (10 € statt 100 €)."""
+    from backend.api.routes.aktueller_monat import get_aktueller_monat
+    from backend.models import Monatsdaten
+
+    parameter, daten, prov = SPROSSEN["F8_kaeltemenge"]
+    a = Anlage(anlagenname="x5-cockpit", leistung_kwp=10.0, installationsdatum=date(2024, 1, 1))
+    db.add(a)
+    await db.flush()
+    inv = Investition(anlage_id=a.id, typ="waermepumpe", bezeichnung="WP",
+                      anschaffungsdatum=date(2024, 1, 1), anschaffungskosten_gesamt=12000.0,
+                      parameter=parameter)
+    db.add(inv)
+    await db.flush()
+    for jahr in (2024, 2025):
+        db.add(Monatsdaten(anlage_id=a.id, jahr=jahr, monat=7, einspeisung_kwh=0.0, netzbezug_kwh=0.0))
+        db.add(InvestitionMonatsdaten(investition_id=inv.id, jahr=jahr, monat=7,
+                                      verbrauch_daten=daten, source_provenance={}))
+    db.add(Strompreis(anlage_id=a.id, netzbezug_arbeitspreis_cent_kwh=30.0,
+                      einspeiseverguetung_cent_kwh=8.0, gueltig_ab=date(2024, 1, 1)))
+    await db.commit()
+    r = await get_aktueller_monat(a.id, jahr=2025, monat=7, db=db)
+    assert r.wp_ersparnis_euro == pytest.approx(100.0, abs=0.01)
+    assert r.vorjahr is not None
+    assert r.vorjahr.get("wp_ersparnis_euro") == pytest.approx(100.0, abs=0.01)
+    detail = next(f for f in r.investitionen_financials if f.typ == "waermepumpe")
+    assert detail.ersparnis_euro == pytest.approx(100.0, abs=0.01)
