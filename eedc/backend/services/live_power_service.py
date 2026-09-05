@@ -439,12 +439,22 @@ class LivePowerService:
 
     async def get_tagesverlauf(
         self, anlage: Anlage, db: AsyncSession, tage_zurueck: int = 0,
+        *, mit_vortagsrand: bool = False,
     ) -> dict:
-        """Delegiert an live_tagesverlauf_service."""
+        """Delegiert an live_tagesverlauf_service.
+
+        Die Signatur ist eine Kopie der des Ziels und muss mit ihr wandern:
+        Mit N-382 bekam das Ziel ``mit_vortagsrand``, dieser Wrapper nicht —
+        der Aggregator lief seit v4.0.39 bei jeder Anlage mit Stundenkurve in
+        einen ``TypeError`` und schrieb keinen Tag mehr (#408, BMeyendriesch).
+        ``test_408_wrapper_signatur_folgt_dem_ziel.py`` hält beide zusammen.
+        """
         from backend.services.live_tagesverlauf_service import (
             get_tagesverlauf as _get_tv,
         )
-        return await _get_tv(anlage, db, tage_zurueck)
+        return await _get_tv(
+            anlage, db, tage_zurueck, mit_vortagsrand=mit_vortagsrand,
+        )
 
 
     # ── Individuelles Verbrauchsprofil (delegiert an live_verbrauchsprofil_service) ──
