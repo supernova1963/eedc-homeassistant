@@ -19,6 +19,7 @@
     "check:kennwert-roh": "node scripts/check-kennwert-roh.mjs",
     "check:co2-roh": "node scripts/check-co2-roh.mjs",
     "check:cop-roh": "node scripts/check-cop-roh.mjs",
+    "check:bauart-roh": "node scripts/check-bauart-roh.mjs",
     "check:finanz-roh": "node scripts/check-finanz-roh.mjs",
     "check:datum-utc": "node scripts/check-datum-utc.mjs",
     "check:scrollschatten": "node scripts/check-scrollschatten.mjs",
