@@ -2866,9 +2866,11 @@ P13_AUSNAHMEN: frozenset[str] = frozenset({
     "backend/api/routes/energie_profil/views.py::get_tag_detail", # dieselbe Frage je Tag
     "backend/api/routes/aktueller_monat.py::get_aktueller_monat",
     "backend/api/routes/cockpit/komponenten.py::get_komponenten_zeitreihe",
-    "backend/api/routes/cockpit/uebersicht.py::get_cockpit_uebersicht",
     "backend/api/routes/monatsdaten.py::list_monatsdaten_aggregiert",
-    "backend/services/pdf/builders/jahresbericht.py::build_jahresbericht_context",
+    # B6/Y-2 (05.09.2026): Jahresroute UND PDF-Jahresbericht lesen die Abgrenzung
+    # jetzt über EINE Service-Funktion — bis dahin standen beide einzeln hier,
+    # mit je eigener Faltung (der Bericht warf den Grund weg).
+    "backend/services/waermepumpe_jahreskennzahlen.py::waermepumpe_jahreskennzahlen",
     "backend/services/community_service.py::_monatswert",         # Flag im Payload (N-367)
 
     # ── 2. Vorschlag: Vorbelegung · Beschriftung · weiche Herabstufung ────────

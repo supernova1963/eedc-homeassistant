@@ -28,13 +28,10 @@ from backend.core.berechnungen import (
     spezifischer_ertrag_kwh_kwp,
     vollzyklen as berechne_vollzyklen,
 )
-from backend.core.berechnungen.waermepumpe_kennzahl import (
-    abgrenzungs_grund,
-    arbeitszahl,
-)
 from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
 from backend.core.investition_parameter import ist_dienstlich
 from backend.services.eauto_wirtschaftlichkeit import get_emob_heimladung_canonical
+from backend.services.waermepumpe_jahreskennzahlen import waermepumpe_jahreskennzahlen
 from backend.services.monats_fakten import finanz_zeile_eingabe, lade_monats_fakten
 from backend.core.calculations import (
     CO2_FAKTOR_STROM_KG_KWH,
@@ -527,24 +524,15 @@ async def build_jahresbericht_context(
     # ⚠ Die Faltung über die Monate ist dieselbe wie in `cockpit/uebersicht.py`:
     # **ein** Monat mit verletzter Abgrenzung macht die Jahreszahl zum
     # Mischquotienten, deshalb `any(...)` statt „überwiegend".
-    wp_abgrenzung = abgrenzungs_grund(
-        abgrenzung_stoerung=next(
-            (f.wp.abgrenzung_stoerung for f in fakten if f.wp.abgrenzung_stoerung),
-            None,
-        ),
-        bauarten_gemischt=any(f.wp.bauarten_gemischt for f in fakten),
-        geraete_ohne_waerme=any(
-            f.wp.waerme_deckt_nicht_alle_geraete for f in fakten
-        ),
+    # B6/Y-2 (05.09.2026): dieselbe Faltung wie Cockpit → Jahr — EINE
+    # Service-Funktion, kein zweiter Quotient. Bis hierher rechnete der Bericht
+    # eine eigene Arbeitszahl und warf ihren Grund weg: „–" ohne Grund im
+    # gedruckten Bericht (S3), keine Kennzahl je Funktion, keine Kühl-Arbeitszahl,
+    # keine Herkunft, kein Vorbehalt — während Cockpit → Jahr seit B4 alles trug.
+    _wpk = waermepumpe_jahreskennzahlen(
+        fakten, [i for i in investitionen if i.typ == "waermepumpe"],
     )
-    wp_cop = arbeitszahl(
-        wp_waerme, wp_strom,
-        waerme_abgeleitet_kwh=wp_waerme_abgeleitet,
-        strom_funktionsfremd_kwh=sum(
-            f.wp.modus_strom_funktionsfremd_kwh for f in fakten
-        ),
-        abgrenzung_verletzt=wp_abgrenzung,
-    ).wert
+    wp_cop = _wpk.arbeitszahl.wert
     emob_pv_anteil = _safe_div(emob_pv, emob_ladung) * 100 if emob_ladung else None
 
     # ── WP-Counter (#238): Kompressor-Starts + Betriebsstunden über den
@@ -777,6 +765,21 @@ async def build_jahresbericht_context(
             "warmwasser_kwh": wp_warmwasser if wp_warmwasser > 0 else None,
             "strom_kwh": wp_strom,
             "cop": wp_cop,
+            "cop_grund": _wpk.arbeitszahl.grund,
+            "cop_hinweis": _wpk.arbeitszahl.hinweis,
+            # Kennzahlen je Funktion nur, wo getrennt gemessen wurde (R2) — sonst
+            # trägt der Grund, warum nicht.
+            "hat_split": _wpk.hat_split,
+            "jaz_heizen": _wpk.je_funktion.heizen.wert,
+            "jaz_heizen_grund": _wpk.je_funktion.heizen.grund,
+            "jaz_warmwasser": _wpk.je_funktion.warmwasser.wert,
+            "jaz_warmwasser_grund": _wpk.je_funktion.warmwasser.grund,
+            # Kühlen wie Heizen/Warmwasser: Zeile mit Wert oder mit Grund (S3) —
+            # dieselbe Regel wie Monatsbericht und Cockpit → Jahr.
+            "jaz_kuehlen": _wpk.kuehlen.wert,
+            "jaz_kuehlen_grund": _wpk.kuehlen.grund,
+            "waerme_herkunft": _wpk.herkunft if _wpk.abgeleitet else None,
+            "ersparnis_vorbehalt": _wpk.vorbehalt,
             "starts_summe": wp_starts_summe,
             "betriebsstunden_summe": wp_betriebsstunden_summe,
             "laufzeit_pro_start_h": wp_laufzeit_pro_start,

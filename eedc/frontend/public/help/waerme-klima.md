@@ -46,6 +46,7 @@ Das hat einen Preis, den du kennen solltest: **eedc kann nicht wissen, ob dein G
 | **Cockpit → Tag** | Block *Wärme/Klima*: Arbeitszahl, Wärme, Strom, Ersparnis, Kompressor-Starts, Betriebsart-Aufteilung — **alles tagesgenau** |
 | **Cockpit → Monat** | derselbe Block auf Monatsbasis, dazu die Arbeitszahlen je Funktion |
 | **Cockpit → Jahr** | Jahressummen, dieselben Kennzahlen wie im Monat — Arbeitszahl mit Grund und Heizstab-Satz, je Funktion, Kühlen, Aufteilung nach Betriebsart mit Restmenge — über das Jahr **neu gerechnet** (nicht gemittelt), Block *CO₂-Bilanz* |
+| **PDF-Jahresbericht** | dieselben Kennzahlen wie *Cockpit → Jahr* aus derselben Rechnung — Arbeitszahl mit Grund, je Funktion, Kühlen, Herkunft einer geschätzten Wärme, Vorbehalt an der CO₂-Zeile (seit 05.09.2026; vorher stand dort eine Arbeitszahl ohne Grund und nichts je Funktion) |
 | **Komponenten → Wärmepumpe** | je Gerät einzeln: Status, Verlauf, Monats-/Saisonvergleich, Kostenvergleich gegen Gas/Öl |
 | **Auswertungen → CO₂** | Einsparung inkl. Wärmepumpen-Anteil |
 | **Einstellungen → Datenquellen** | die Zuordnung der Zähler ([§5](#5-sensoren-zuordnen-schritt-für-schritt)) |

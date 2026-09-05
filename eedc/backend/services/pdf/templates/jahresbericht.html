@@ -143,11 +143,14 @@
 <h2>Wärmepumpe</h2>
 <table>
   <tbody>
-    <tr><th style="width:35%">Wärmeenergie gesamt</th><td>{{ fmt_kwh(waermepumpe.waerme_kwh) }}</td></tr>
+    <tr><th style="width:35%">Wärmeenergie gesamt</th><td>{{ fmt_kwh(waermepumpe.waerme_kwh) }}{% if waermepumpe.waerme_herkunft %} <span class="muted">{{ waermepumpe.waerme_herkunft }}</span>{% endif %}</td></tr>
     <tr><th>davon Heizung</th><td>{{ fmt_kwh(waermepumpe.heizung_kwh) }}</td></tr>
     <tr><th>davon Warmwasser</th><td>{{ fmt_kwh(waermepumpe.warmwasser_kwh) }}</td></tr>
     <tr><th>Stromverbrauch</th><td>{{ fmt_kwh(waermepumpe.strom_kwh) }}</td></tr>
-    <tr><th>Jahresarbeitszahl (COP)</th><td>{{ fmt_num(waermepumpe.cop, 2) }}</td></tr>
+    <tr><th>Jahresarbeitszahl (COP)</th><td>{{ fmt_num(waermepumpe.cop, 2) }}{% if waermepumpe.cop_grund %} <span class="muted">{{ waermepumpe.cop_grund }}</span>{% elif waermepumpe.cop_hinweis %} <span class="muted">{{ waermepumpe.cop_hinweis }}</span>{% endif %}</td></tr>
+    {% if waermepumpe.hat_split or waermepumpe.jaz_heizen_grund %}<tr><th>Arbeitszahl Heizen</th><td>{{ fmt_num(waermepumpe.jaz_heizen, 2) }}{% if waermepumpe.jaz_heizen_grund %} <span class="muted">{{ waermepumpe.jaz_heizen_grund }}</span>{% endif %}</td></tr>
+    <tr><th>Arbeitszahl Warmwasser</th><td>{{ fmt_num(waermepumpe.jaz_warmwasser, 2) }}{% if waermepumpe.jaz_warmwasser_grund %} <span class="muted">{{ waermepumpe.jaz_warmwasser_grund }}</span>{% endif %}</td></tr>{% endif %}
+    {% if waermepumpe.jaz_kuehlen is not none or waermepumpe.jaz_kuehlen_grund %}<tr><th>Arbeitszahl Kühlen</th><td>{{ fmt_num(waermepumpe.jaz_kuehlen, 2) }}{% if waermepumpe.jaz_kuehlen_grund %} <span class="muted">{{ waermepumpe.jaz_kuehlen_grund }}</span>{% endif %}</td></tr>{% endif %}
     {% if waermepumpe.starts_summe is not none %}<tr><th>Kompressor-Starts</th><td>{{ fmt_num(waermepumpe.starts_summe, 0) }}</td></tr>{% endif %}
     {% if waermepumpe.betriebsstunden_summe is not none %}<tr><th>Betriebsstunden</th><td>{{ fmt_num(waermepumpe.betriebsstunden_summe, 1) }} h</td></tr>{% endif %}
     {% if waermepumpe.laufzeit_pro_start_h is not none %}<tr><th>Ø Laufzeit pro Start</th><td>{{ fmt_num(waermepumpe.laufzeit_pro_start_h, 2) }} h</td></tr>{% endif %}
@@ -246,7 +249,7 @@
 <table>
   <tbody>
     <tr><th style="width:45%">CO₂ aus PV-Eigenverbrauch</th><td>{{ fmt_num(co2.pv_kg) }} kg</td></tr>
-    {% if waermepumpe.vorhanden %}<tr><th>CO₂-Einsparung Wärmepumpe (vs. Gas)</th><td>{{ fmt_num(co2.wp_kg) }} kg</td></tr>{% endif %}
+    {% if waermepumpe.vorhanden %}<tr><th>CO₂-Einsparung Wärmepumpe (vs. Gas)</th><td>{{ fmt_num(co2.wp_kg) }} kg{% if waermepumpe.ersparnis_vorbehalt %} <span class="muted">{{ waermepumpe.ersparnis_vorbehalt }}</span>{% endif %}</td></tr>{% endif %}
     {% if emob.vorhanden %}<tr><th>CO₂-Einsparung E-Mobilität</th><td>{{ fmt_num(co2.emob_kg) }} kg</td></tr>{% endif %}
     <tr style="font-weight:bold;"><th>Gesamt</th><td>{{ fmt_num(co2.gesamt_kg) }} kg</td></tr>
   </tbody>

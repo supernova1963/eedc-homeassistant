@@ -37,12 +37,9 @@ from backend.core.berechnungen.ust_eigenverbrauch import (
     UstJahresanteil,
     ust_eigenverbrauch_fuer_anlage,
 )
-from backend.core.berechnungen.waermepumpe_kennzahl import (
-    abgrenzungs_grund,
-    arbeitszahl,
-)
 from backend.core.calculations import berechne_co2_bilanz
 from backend.services.finanz_zeilen import baue_finanz_zeile
+from backend.services.waermepumpe_jahreskennzahlen import waermepumpe_jahreskennzahlen
 from backend.services.monats_fakten import (
     finanz_zeile_eingabe,
     lade_monats_fakten,
@@ -503,82 +500,37 @@ async def get_cockpit_uebersicht(
     # mehrere Geräte mit nur einer Wärmequelle — fehlten hier vollständig; die
     # Jahressicht zeigte deshalb eine Zahl, die der Hub daneben schon
     # verweigerte. Dieselbe Klasse wie W-3, eine Sicht weiter.
-    wp_abgrenzung = abgrenzungs_grund(
-        abgrenzung_stoerung=next(
-            (f.wp.abgrenzung_stoerung for f in fakten if f.wp.abgrenzung_stoerung),
-            None,
-        ),
-        # R2/Bauart (SOLL §5): Sobald EIN Monat des Jahres beide Bauarten
-        # trägt, ist die Jahreszahl derselbe Mischquotient — dieselbe Faltung
-        # wie bei der Störung darüber und bei `geraete_ohne_waerme` darunter.
-        bauarten_gemischt=any(f.wp.bauarten_gemischt for f in fakten),
-        geraete_ohne_waerme=any(
-            f.wp.waerme_deckt_nicht_alle_geraete for f in fakten
-        ),
-    )
-    _wp_az = arbeitszahl(
-        wp_waerme, wp_strom, waerme_abgeleitet_kwh=wp_waerme_abgeleitet,
-        # W-14 + E4: wie bei der Ersparnis darunter — Kühlen, Lüften und
-        # Entfeuchten ersetzen keine Heizung und gehören in keine Wärme-Kennzahl.
-        strom_funktionsfremd_kwh=sum(
-            f.wp.modus_strom_funktionsfremd_kwh for f in fakten
-        ),
-        abgrenzung_verletzt=wp_abgrenzung,
-    )
+    # ── B4 (C-1) → B6/Y-2: der ganze Kennzahl-Satz für Cockpit → Jahr kommt aus
+    # EINER Service-Funktion, die auch der PDF-Jahresbericht liest
+    # (`services/waermepumpe_jahreskennzahlen.py`, dort die Regeln). Bis zum
+    # 05.09.2026 stand die Faltung hier, und der Bericht rechnete daneben eine
+    # eigene Arbeitszahl ohne Grund. Die Namen darunter bleiben, damit die
+    # Antwort-Zuordnung unten unverändert lesbar ist.
+    _wpk = waermepumpe_jahreskennzahlen(fakten, wp_invs)
+    wp_abgrenzung = _wpk.abgrenzung
+    _wp_az = _wpk.arbeitszahl
     wp_cop = _wp_az.wert
-
-    # ── B4 (C-1): der ganze Kennzahl-Satz für Cockpit → Jahr, aus dem Layer ──
-    # Dieselben Eingänge wie Hub (Jahr über `*_getrennt`-Summen) und Monat
-    # (`WpFakten`): getrennte Ströme/Wärmen nur aus Monaten MIT getrennter Messung
-    # (R2: Q und E derselben Abgrenzung), Kühlen aus Kältemenge/Kühlstrom,
-    # Modus-Split summiert, Restmenge als Σ der monatlichen Layer-Reste.
-    from backend.core.berechnungen.waermepumpe_kennzahl import (
-        arbeitszahl_je_funktion as _az_je_funktion,
-        arbeitszahl_kuehlen as _az_kuehlen,
-        ersparnis_vorbehalt as _ersparnis_vorbehalt,
-        waerme_herkunft as _waerme_herkunft,
-    )
-    from backend.core.berechnungen.modus_split import heiz_effizienz_gepflegt
-
-    _wp_stoerung = next(
-        (f.wp.abgrenzung_stoerung for f in fakten if f.wp.abgrenzung_stoerung), None,
-    )
-    _wp_hat_split = any(f.wp.hat_split for f in fakten)
-    _wp_strom_heizen = sum(f.wp.strom_heizen_kwh for f in fakten if f.wp.hat_split)
-    _wp_strom_ww = sum(f.wp.strom_warmwasser_kwh for f in fakten if f.wp.hat_split)
-    _wp_heizung_getrennt = sum(f.wp.heizung_kwh for f in fakten if f.wp.hat_split)
-    _wp_ww_getrennt = sum(f.wp.warmwasser_kwh for f in fakten if f.wp.hat_split)
-    _wp_az_funktion = _az_je_funktion(
-        heizung_kwh=_wp_heizung_getrennt,
-        strom_heizen_kwh=_wp_strom_heizen,
-        warmwasser_kwh=_wp_ww_getrennt,
-        strom_warmwasser_kwh=_wp_strom_ww,
-        hat_split=_wp_hat_split,
-        waerme_abgeleitet_kwh=wp_waerme_abgeleitet,
-        abgrenzung_verletzt=wp_abgrenzung,
-    )
-    _wp_kaelte = sum(f.wp.nutzenergie_kuehlen_kwh for f in fakten)
-    _wp_modus_kuehlen = sum(f.wp.modus_strom_kuehlen_kwh for f in fakten)
-    _wp_az_k = _az_kuehlen(_wp_kaelte, _wp_modus_kuehlen, abgrenzung_verletzt=wp_abgrenzung)
-    _wp_hat_modus = any(f.wp.hat_modus_split for f in fakten)
+    _wp_stoerung = _wpk.abgrenzung_stoerung
+    _wp_hat_split = _wpk.hat_split
+    _wp_strom_heizen = _wpk.strom_heizen_kwh
+    _wp_strom_ww = _wpk.strom_warmwasser_kwh
+    _wp_az_funktion = _wpk.je_funktion
+    _wp_az_k = _wpk.kuehlen
+    _wp_hat_modus = _wpk.hat_modus
     _wp_modus = {
-        "heizen": sum(f.wp.modus_strom_heizen_kwh for f in fakten),
-        "kuehlen": _wp_modus_kuehlen,
-        "warmwasser": sum(f.wp.modus_strom_warmwasser_kwh for f in fakten),
-        "lueften": sum(f.wp.modus_strom_lueften_kwh for f in fakten),
-        "entfeuchten": sum(f.wp.modus_strom_entfeuchten_kwh for f in fakten),
-        "rest": sum(f.wp.modus_nicht_aufgeteilt_kwh for f in fakten),
-        "abdeckung": sum(f.wp.modus_abdeckung_h for f in fakten),
-        "bezug": sum(f.wp.modus_strom_bezug_kwh for f in fakten),
-        "gemessen": any(f.wp.modus_gemessen for f in fakten),
+        "heizen": _wpk.betriebsarten.heizen_kwh,
+        "kuehlen": _wpk.betriebsarten.kuehlen_kwh,
+        "warmwasser": _wpk.betriebsarten.warmwasser_kwh,
+        "lueften": _wpk.betriebsarten.lueften_kwh,
+        "entfeuchten": _wpk.betriebsarten.entfeuchten_kwh,
+        "rest": _wpk.betriebsarten.nicht_aufgeteilt_kwh,
+        "abdeckung": _wpk.betriebsarten.abdeckung_h,
+        "bezug": _wpk.betriebsarten.bezug_kwh,
+        "gemessen": _wpk.betriebsarten.gemessen,
     }
-    _wp_ref_param_fuer_faktor = wp_invs[0].parameter if len(wp_invs) == 1 else None
-    _wp_abgeleitet = wp_waerme_abgeleitet > 0
-    _wp_herkunft = _waerme_herkunft(
-        _wp_abgeleitet,
-        heiz_effizienz_gepflegt(_wp_ref_param_fuer_faktor) if (_wp_abgeleitet and _wp_ref_param_fuer_faktor) else None,
-    )
-    _wp_vorbehalt = _ersparnis_vorbehalt(waerme_abgeleitet=_wp_abgeleitet, abgrenzung=_wp_stoerung)
+    _wp_abgeleitet = _wpk.abgeleitet
+    _wp_herkunft = _wpk.herkunft
+    _wp_vorbehalt = _wpk.vorbehalt
     # Multi-WP: erste WP als Parameter-Referenz (Wirkungsgrad/Gas-Default).
     # Drift-Audit Domäne A1 / Issue #178: vorher 10ct hartcodiert + ignorierte
     # User-Param `alter_preis_cent_kwh`.
