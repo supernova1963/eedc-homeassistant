@@ -61,121 +61,143 @@ async def _get_wetter_ist(
     if not anlage.latitude or not anlage.longitude:
         return {}
 
+    # Forecast-Endpoint für heute UND die letzten ARCHIVE_LAG_TAGE
+    # (Open-Meteo Archive hängt 2-5 Tage hinter Echtzeit; Forecast-Endpoint
+    # liefert für vergangene Tage stattdessen die Reanalyse-Approximation).
+    # Archive nur für ältere Tage. ⚠ Der Forecast-Wert ist VORLÄUFIG und wird
+    # nie von selbst ersetzt — das tut `archiv_nachzug.py` (N-388).
+    from backend.core.config import settings
+    from backend.services.wetter_backfill_service import ARCHIVE_URL, archive_cutoff
+    if datum == date.today():
+        url = f"{settings.open_meteo_api_url}/forecast"
+        base_params: dict = {"forecast_days": 1}
+    elif datum >= archive_cutoff():
+        url = f"{settings.open_meteo_api_url}/forecast"
+        base_params = {"start_date": datum.isoformat(), "end_date": datum.isoformat()}
+    else:
+        url = ARCHIVE_URL
+        base_params = {"start_date": datum.isoformat(), "end_date": datum.isoformat()}
+
     try:
-        import asyncio
-        import httpx
-        from backend.core.config import settings
-        from backend.api.routes.live_wetter import _get_pv_orientierungsgruppen
-
-        gruppen = _get_pv_orientierungsgruppen(pv_module) if pv_module else []
-
-        # Forecast-Endpoint für heute UND die letzten ARCHIVE_LAG_TAGE
-        # (Open-Meteo Archive hängt 2-5 Tage hinter Echtzeit; Forecast-Endpoint
-        # liefert für vergangene Tage stattdessen die Reanalyse-Approximation).
-        # Archive nur für ältere Tage.
-        from backend.services.wetter_backfill_service import archive_cutoff
-        if datum == date.today():
-            url = f"{settings.open_meteo_api_url}/forecast"
-            base_params: dict = {"forecast_days": 1}
-        elif datum >= archive_cutoff():
-            url = f"{settings.open_meteo_api_url}/forecast"
-            base_params = {
-                "start_date": datum.isoformat(),
-                "end_date": datum.isoformat(),
-            }
-        else:
-            url = "https://archive-api.open-meteo.com/v1/archive"
-            base_params = {
-                "start_date": datum.isoformat(),
-                "end_date": datum.isoformat(),
-            }
-
-        base_params.update({
-            "latitude": anlage.latitude,
-            "longitude": anlage.longitude,
-            "timezone": "Europe/Berlin",
-        })
-
-        # Haupt-Request: Temperatur + GHI + Wetter (Bewölkung, Niederschlag, WMO-Code),
-        # bei genau einer Gruppe auch GTI
-        haupt_params = dict(base_params)
-        hourly_vars = [
-            "temperature_2m", "shortwave_radiation",
-            "cloud_cover", "precipitation", "weather_code",
-        ]
-        if len(gruppen) == 1:
-            hourly_vars.append("global_tilted_irradiance")
-            haupt_params["tilt"] = gruppen[0]["neigung"]
-            haupt_params["azimuth"] = gruppen[0]["ausrichtung"]
-        haupt_params["hourly"] = ",".join(hourly_vars)
-
-        multi_gti: Optional[list[float]] = None
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            if len(gruppen) > 1:
-                # Separate GTI-Calls pro Gruppe, parallel
-                gti_tasks = [
-                    client.get(url, params={
-                        **base_params,
-                        "hourly": "global_tilted_irradiance",
-                        "tilt": g["neigung"],
-                        "azimuth": g["ausrichtung"],
-                    })
-                    for g in gruppen
-                ]
-                haupt_resp, *gti_resps = await asyncio.gather(
-                    client.get(url, params=haupt_params),
-                    *gti_tasks,
-                )
-                # kWp-gewichtete Kombination
-                kwp_gesamt = sum(g["kwp"] for g in gruppen)
-                multi_gti = [0.0] * 24
-                for gruppe, resp in zip(gruppen, gti_resps):
-                    try:
-                        resp.raise_for_status()
-                        gti_vals = resp.json().get("hourly", {}).get("global_tilted_irradiance", [])
-                    except Exception:
-                        continue
-                    if not gti_vals or kwp_gesamt <= 0:
-                        continue
-                    gewicht = gruppe["kwp"] / kwp_gesamt
-                    for i in range(min(24, len(gti_vals))):
-                        v = gti_vals[i]
-                        if v is not None:
-                            multi_gti[i] += v * gewicht
-            else:
-                haupt_resp = await client.get(url, params=haupt_params)
-
-        haupt_resp.raise_for_status()
-        data = haupt_resp.json()
-
-        hourly = data.get("hourly", {})
-        times = hourly.get("time", [])
-        temps = hourly.get("temperature_2m", [])
-        ghi = hourly.get("shortwave_radiation", [])
-        gti_single = hourly.get("global_tilted_irradiance", [])
-        cloud_cover = hourly.get("cloud_cover", [])
-        precip = hourly.get("precipitation", [])
-        wcode = hourly.get("weather_code", [])
-
-        gti_values = multi_gti if multi_gti is not None else gti_single
-
-        result = {}
-        for i, t in enumerate(times):
-            h = int(t[11:13])
-            result[h] = {
-                "temperatur_c": temps[i] if i < len(temps) else None,
-                "globalstrahlung_wm2": ghi[i] if i < len(ghi) else None,
-                "gti_wm2": gti_values[i] if i < len(gti_values) else None,
-                "bewoelkung_prozent": cloud_cover[i] if i < len(cloud_cover) else None,
-                "niederschlag_mm": precip[i] if i < len(precip) else None,
-                "wetter_code": wcode[i] if i < len(wcode) else None,
-            }
-
-        return result
-
+        je_tag = await _fetch_wetter(anlage, url, base_params, pv_module)
     except Exception as e:
         logger.debug(f"Wetter-IST für {datum}: {e}")
         return {}
+    return je_tag.get(datum, {})
+
+
+async def _fetch_wetter(
+    anlage: Anlage,
+    url: str,
+    base_params: dict,
+    pv_module: Optional[list] = None,
+    timeout: float = 15.0,
+) -> dict[date, dict[int, dict]]:
+    """Der eine Open-Meteo-Abruf — für einen Tag oder einen Bereich.
+
+    Herausgezogen aus `_get_wetter_ist` (N-388, 05.09.2026): der Wetter-Nachzug
+    für den Altbestand holt Monate am Stück, und die GTI-Gruppierung je
+    Orientierung (kWp-gewichtet, #139) darf dafür nicht ein zweites Mal gebaut
+    werden. Wirft bei HTTP-Fehlern; `_get_wetter_ist` fängt das und liefert `{}`.
+
+    Returns:
+        ``{datum: {stunde: {...}}}`` — dieselben sechs Schlüssel je Stunde wie
+        bisher (`temperatur_c`, `globalstrahlung_wm2`, `gti_wm2`,
+        `bewoelkung_prozent`, `niederschlag_mm`, `wetter_code`).
+    """
+    import asyncio
+    import httpx
+    from backend.api.routes.live_wetter import _get_pv_orientierungsgruppen
+
+    gruppen = _get_pv_orientierungsgruppen(pv_module) if pv_module else []
+
+    base_params = {
+        **base_params,
+        "latitude": anlage.latitude,
+        "longitude": anlage.longitude,
+        "timezone": "Europe/Berlin",
+    }
+
+    # Haupt-Request: Temperatur + GHI + Wetter (Bewölkung, Niederschlag, WMO-Code),
+    # bei genau einer Gruppe auch GTI
+    haupt_params = dict(base_params)
+    hourly_vars = [
+        "temperature_2m", "shortwave_radiation",
+        "cloud_cover", "precipitation", "weather_code",
+    ]
+    if len(gruppen) == 1:
+        hourly_vars.append("global_tilted_irradiance")
+        haupt_params["tilt"] = gruppen[0]["neigung"]
+        haupt_params["azimuth"] = gruppen[0]["ausrichtung"]
+    haupt_params["hourly"] = ",".join(hourly_vars)
+
+    multi_gti: Optional[list[float]] = None
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        if len(gruppen) > 1:
+            # Separate GTI-Calls pro Gruppe, parallel
+            gti_tasks = [
+                client.get(url, params={
+                    **base_params,
+                    "hourly": "global_tilted_irradiance",
+                    "tilt": g["neigung"],
+                    "azimuth": g["ausrichtung"],
+                })
+                for g in gruppen
+            ]
+            haupt_resp, *gti_resps = await asyncio.gather(
+                client.get(url, params=haupt_params),
+                *gti_tasks,
+            )
+            # kWp-gewichtete Kombination
+            kwp_gesamt = sum(g["kwp"] for g in gruppen)
+            multi_gti = None  # Länge folgt der Antwort (Bereich = n × 24)
+            for gruppe, resp in zip(gruppen, gti_resps):
+                try:
+                    resp.raise_for_status()
+                    gti_vals = resp.json().get("hourly", {}).get("global_tilted_irradiance", [])
+                except Exception:
+                    continue
+                if not gti_vals or kwp_gesamt <= 0:
+                    continue
+                gewicht = gruppe["kwp"] / kwp_gesamt
+                if multi_gti is None:
+                    multi_gti = [0.0] * len(gti_vals)
+                for i in range(min(len(multi_gti), len(gti_vals))):
+                    v = gti_vals[i]
+                    if v is not None:
+                        multi_gti[i] += v * gewicht
+        else:
+            haupt_resp = await client.get(url, params=haupt_params)
+
+    haupt_resp.raise_for_status()
+    data = haupt_resp.json()
+
+    hourly = data.get("hourly", {})
+    times = hourly.get("time", [])
+    temps = hourly.get("temperature_2m", [])
+    ghi = hourly.get("shortwave_radiation", [])
+    gti_single = hourly.get("global_tilted_irradiance", [])
+    cloud_cover = hourly.get("cloud_cover", [])
+    precip = hourly.get("precipitation", [])
+    wcode = hourly.get("weather_code", [])
+
+    gti_values = multi_gti if multi_gti is not None else gti_single
+
+    result: dict[date, dict[int, dict]] = {}
+    for i, t in enumerate(times):
+        tag = date.fromisoformat(t[:10])
+        h = int(t[11:13])
+        result.setdefault(tag, {})[h] = {
+            "temperatur_c": temps[i] if i < len(temps) else None,
+            "globalstrahlung_wm2": ghi[i] if i < len(ghi) else None,
+            "gti_wm2": gti_values[i] if i < len(gti_values) else None,
+            "bewoelkung_prozent": cloud_cover[i] if i < len(cloud_cover) else None,
+            "niederschlag_mm": precip[i] if i < len(precip) else None,
+            "wetter_code": wcode[i] if i < len(wcode) else None,
+        }
+
+    return result
+
 
 
 async def _get_soc_history(

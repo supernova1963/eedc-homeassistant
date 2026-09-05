@@ -886,9 +886,20 @@ async def energie_profil_archiv_nachzug_job() -> None:
         uebersprungen = sum(
             1 for r in results.values() if r["status"] == "uebersprungen"
         )
+        # Zweiter Schritt (N-388, Nachtrag 05.09.): Wetterzeile der über-
+        # sprungenen Grenztage und — einmal je Anlage — der Altbestand.
+        from backend.services.energie_profil.archiv_nachzug import wetter_nachzug_all
+        wetter = await wetter_nachzug_all(results)
+        altbestand = sum(
+            (e.get("altbestand") or {}).get("tage", 0) for e in wetter.values()
+        )
+        nachgeholt = sum(
+            1 for e in wetter.values() if (e.get("grenztag") or {}).get("status") == "ok"
+        )
         logger.info(
-            "Wetter-Archiv-Nachzug %s: %d/%d Anlagen nachgezogen, %d übersprungen",
-            datum, ok, len(results), uebersprungen,
+            "Wetter-Archiv-Nachzug %s: %d/%d Anlagen nachgezogen, %d übersprungen"
+            " (%d davon per Wetterzeile nachgeholt), Altbestand %d Tage",
+            datum, ok, len(results), uebersprungen, nachgeholt, altbestand,
         )
         await log_activity(
             kategorie="scheduler",
@@ -897,6 +908,8 @@ async def energie_profil_archiv_nachzug_job() -> None:
             details=(
                 f"{datum}: {ok}/{len(results)} Anlagen nachgezogen"
                 + (f", {uebersprungen} übersprungen" if uebersprungen else "")
+                + (f", {nachgeholt} per Wetterzeile nachgeholt" if nachgeholt else "")
+                + (f", Altbestand: {altbestand} Tage berichtigt" if altbestand else "")
             ),
         )
     except Exception as e:

@@ -2752,6 +2752,15 @@ Bei Multi-String-Anlagen werden GTI-Werte pro Orientierungsgruppe parallel abger
 > nachts den einen Tag neu, der die Archiv-Grenze gerade passiert hat, und ersetzt den vorläufigen
 > Wert dabei durch den endgültigen. **Für die letzten fünf Tage bleibt er vorläufig** — das lässt
 > sich nicht abkürzen, das Archiv hat diese Tage noch nicht.
+>
+> **Und der Bestand vor diesem Nachzug wird einmalig nachgeholt.** Tage, die vor dem ersten Lauf
+> aggregiert wurden, trugen ihren vorläufigen Wert dauerhaft — und die Reparatur-Werkbank kann sie
+> nicht heilen, weil ein Tag dort komplett neu aus der HA-Historie gebaut wird und die nur wenige
+> Tage zurückreicht. Deshalb schreibt eedc für diese Tage einmalig **nur die Wetterzeile** neu
+> (Temperatur, Einstrahlung, Bewölkung, Niederschlag, Wettercode und daraus die Performance Ratio);
+> die gemessene Energie bleibt unangetastet. Das passiert von selbst in der Nacht nach dem Update,
+> je Anlage genau einmal, bis zwei Jahre zurück. Ein Tag, den der nächtliche Nachzug wegen
+> geschrumpfter HA-Historie nicht neu bauen kann, bekommt auf demselben Weg seine Wetterzeile.
 
 > **Validation Winterborn 2025-12-28:** GHI 1317 Wh/m² vs. GTI Süd35° 3358 Wh/m² (Faktor 2.55×). PR vorher 2.16 (physikalisch unmöglich), nachher 0.85 (plausibel für einen kalten Wintertag). Betrifft historische `TagesZusammenfassung.performance_ratio`, `MonatsAuswertungResponse.performance_ratio_avg` und die PR-Spalte im PDF-Jahresbericht — **nach Update einmalig „Verlauf nachberechnen + überschreiben" auslösen**. PV-kWh-Werte selbst bleiben unverändert.
 

@@ -21,6 +21,7 @@ from sqlalchemy import and_, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
+from backend.core.berechnungen.performance_ratio import berechne_performance_ratio
 from backend.core.berechnungen.slot_konvention import leistungspfad_slot
 from backend.core.berechnungen.speicher import anlagen_soc_prozent
 from backend.core.investition_kennwerte import get_speicher_nutzbare_kapazitaet_kwh
@@ -722,14 +723,15 @@ async def aggregate_day(
     # ihn nichts mehr gegen die Investitionen. Eine zu kleine kWp macht den
     # Nenner zu klein und die PR zu groß; genau das meldet der Daten-Checker
     # dann als Doppelerfassungs-Verdacht.
-    performance_ratio = None
+    # Die Formel selbst lebt im Layer (`core/berechnungen/performance_ratio.py`),
+    # weil der Wetter-Nachzug für den Altbestand (N-388) sie ohne Neu-
+    # Aggregation braucht — dieselbe Rechnung an zwei Orten wäre Drift.
     kwp = anlagen_kwp(
         invs, datum, mit_bkw=True, referenzwert=anlage.leistung_kwp,
     )
-    if kwp and kwp > 0 and gti_summe > 0 and pv_ertrag_erfasst:
-        theoretisch_kwh = gti_summe * kwp / 1000  # Wh/m² × kWp / 1000
-        if theoretisch_kwh > 0:
-            performance_ratio = round(pv_ertrag_summe / theoretisch_kwh, 3)
+    performance_ratio = berechne_performance_ratio(
+        pv_ertrag_summe if pv_ertrag_erfasst else None, gti_summe, kwp,
+    )
 
     # Counter-Tagesdifferenzen (`komponenten_starts`) wurden bereits vor der
     # Stunden-Schleife geholt — die Stunden-Σ wird daraus abgeleitet (Counter-
