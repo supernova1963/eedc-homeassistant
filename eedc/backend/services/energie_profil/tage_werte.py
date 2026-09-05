@@ -43,6 +43,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.energie_profil._shared import TagWerteResponse
+from backend.core.berechnungen.kennzahlen import autarkie_prozent, eigenverbrauchsquote_prozent
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.core.berechnungen import (
     aggregiere_tep_komponenten,
@@ -246,7 +247,12 @@ async def baue_tage_werte(
         sonstiges = sonstiges_kwh_je_richtung(
             tz.komponenten_kwh if tz else None, sonstiges_kategorien
         )
-        if sonstiges.erzeugung_kwh is None and sonstiges.verbrauch_kwh is None:
+        # §9.2: die Abgabe zählt als dritte Richtung — sonst überschriebe der
+        # Leistungspfad-Fallback einen Tag, der NUR eine Abgabe gemessen hat.
+        if (
+            sonstiges.erzeugung_kwh is None and sonstiges.verbrauch_kwh is None
+            and sonstiges.abgabe_kwh is None
+        ):
             sonstiges = sonstiges_kwh_je_richtung(
                 aggregiere_tep_komponenten(stunden_rows), sonstiges_kategorien
             )
@@ -256,6 +262,22 @@ async def baue_tage_werte(
         # ergibt er über 100 %. `Cockpit → Monat` unterdrückt das seit F-22 und
         # nennt die Quelle; die Tagessicht tat beides nicht. ΔSoC kommt aus den
         # ohnehin geladenen Stunden-Rows, kostet also keine zusätzliche Abfrage.
+        # §9.2: die Abgabe an Dritte ist kein Eigenverbrauch — dieselbe Regel
+        # wie im Monats-Layer (`berechne_verbrauchs_kennzahlen`). Die Stunden-
+        # Bilanz kennt sie nicht (sie sieht nur den Netzpunkt); der Tag zieht
+        # die gemessene Tagesmenge ab und bildet Autarkie und Quote neu.
+        abgabe_tag = sonstiges.abgabe_kwh or 0.0
+        ev_tag = (
+            None if bilanz.eigenverbrauch_kwh is None
+            else max(0.0, bilanz.eigenverbrauch_kwh - abgabe_tag)
+        )
+        autarkie_tag = bilanz.autarkie_prozent
+        evq_tag = bilanz.ev_quote_prozent
+        if abgabe_tag > 0 and ev_tag is not None:
+            if bilanz.netzbezug_erfasst:
+                autarkie_tag = autarkie_prozent(ev_tag, ev_tag + bilanz.netzbezug_kwh)
+            if bilanz.pv_erfasst:
+                evq_tag = eigenverbrauchsquote_prozent(ev_tag, bilanz.erzeugung_kwh)
         soc_delta = delta_soc_kwh(
             [r.soc_prozent for r in stunden_rows],
             sum(
@@ -281,6 +303,7 @@ async def baue_tage_werte(
             einspeisung_kwh=bilanz.einspeisung_kwh,
             netzbezug_kwh=bilanz.netzbezug_kwh,
             pv_erzeugung_kwh=bilanz.erzeugung_kwh,
+            abgabe_dritte_kwh=abgabe_tag,
             neg_preis_kwh=neg_preis_kwh,
             # Speicher/V2H/BKW = 0: Netto-Flüsse bilden Speicher schon ab.
             monatsdaten=md_pro_monat.get((tag.year, tag.month)),
@@ -327,7 +350,7 @@ async def baue_tage_werte(
             # PV/BKW-Split (R17/Verlauf) aus dem Tages-komponenten_kwh-JSON.
             pv_anlage=round(summe_pv_anlage_kwh(tz.komponenten_kwh) if tz else 0.0, 3),
             bkw=round(summe_bkw_kwh(tz.komponenten_kwh) if tz else 0.0, 3),
-            eigenverbrauch=_r(bilanz.eigenverbrauch_kwh, 3),
+            eigenverbrauch=_r(ev_tag, 3),
             # Dieselbe Regel wie bei `erzeugung` darüber, jetzt auf allen vier
             # Achsen: eine Achse, die an KEINER Stunde des Tages einen Wert
             # trug, ist nicht 0, sondern nicht gemessen. Strikers Januar zeigte
@@ -345,8 +368,8 @@ async def baue_tage_werte(
                 if bilanz.pv_erfasst and bilanz.verbrauch_erfasst else None
             ),
             # Quoten
-            autarkie=_r(bilanz.autarkie_prozent, 1),
-            evQuote=_r(bilanz.ev_quote_prozent, 1),
+            autarkie=_r(autarkie_tag, 1),
+            evQuote=_r(evq_tag, 1),
             spezErtrag=(
                 round(bilanz.erzeugung_kwh / kwp_tag, 2)
                 if kwp_tag > 0 and bilanz.pv_erfasst else None
@@ -366,6 +389,7 @@ async def baue_tage_werte(
             wp_strom=_nz(bilanz.wp_strom_kwh),
             sonstiges_erzeugung=_r(sonstiges.erzeugung_kwh, 3),
             sonstiges_verbrauch=_r(sonstiges.verbrauch_kwh, 3),
+            sonstiges_abgabe=_r(sonstiges.abgabe_kwh, 3),
             # Finanzen — bewusst UNGERUNDET, wie der Monatspfad
             # (`aktueller_monat.py`) sie liefert. Bis 15.08.2026 stand hier je
             # ein `round(…, 2)`, und das erzeugte zwei sichtbare Widersprüche

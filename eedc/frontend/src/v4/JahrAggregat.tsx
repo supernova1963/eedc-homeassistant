@@ -94,7 +94,7 @@ const MENGEN_FELDER = [
   'speicher_ladung_kwh', 'speicher_entladung_kwh',
   'wp_strom_kwh', 'wp_waerme_kwh',
   'emob_ladung_kwh', 'emob_km',
-  'bkw_erzeugung_kwh', 'sonstiges_erzeugung_kwh', 'sonstiges_verbrauch_kwh',
+  'bkw_erzeugung_kwh', 'sonstiges_erzeugung_kwh', 'sonstiges_verbrauch_kwh', 'abgabe_dritte_kwh',
 ] as const satisfies readonly (keyof AktuellerMonatResponse)[]
 
 /** Trägt dieser Monat gemessene Daten — oder ist er nur eine Stammdaten-Antwort? */
@@ -248,6 +248,8 @@ export function baueJahrAlsMonat(
     const a = sgMap.get(key) ?? {
       bezeichnung: g.bezeichnung, kategorie: g.kategorie,
       erzeugung_kwh: 0, eigenverbrauch_kwh: 0, einspeisung_kwh: 0, verbrauch_kwh: 0, bezug_pv_kwh: 0, bezug_netz_kwh: 0,
+      // §9.2 — Abgabe an Dritte (kategorie 'abgabe').
+      abgabe_kwh: 0, erloes_euro: 0,
     }
     a.erzeugung_kwh = (a.erzeugung_kwh ?? 0) + (g.erzeugung_kwh ?? 0)
     a.eigenverbrauch_kwh = (a.eigenverbrauch_kwh ?? 0) + (g.eigenverbrauch_kwh ?? 0)
@@ -255,6 +257,8 @@ export function baueJahrAlsMonat(
     a.verbrauch_kwh = (a.verbrauch_kwh ?? 0) + (g.verbrauch_kwh ?? 0)
     a.bezug_pv_kwh = (a.bezug_pv_kwh ?? 0) + (g.bezug_pv_kwh ?? 0)
     a.bezug_netz_kwh = (a.bezug_netz_kwh ?? 0) + (g.bezug_netz_kwh ?? 0)
+    a.abgabe_kwh = (a.abgabe_kwh ?? 0) + (g.abgabe_kwh ?? 0)
+    a.erloes_euro = (a.erloes_euro ?? 0) + (g.erloes_euro ?? 0)
     sgMap.set(key, a)
   }
   const nz = (v: number) => (v > 0 ? Math.round(v * 100) / 100 : null)
@@ -263,6 +267,7 @@ export function baueJahrAlsMonat(
     erzeugung_kwh: nz(g.erzeugung_kwh ?? 0), eigenverbrauch_kwh: nz(g.eigenverbrauch_kwh ?? 0),
     einspeisung_kwh: nz(g.einspeisung_kwh ?? 0), verbrauch_kwh: nz(g.verbrauch_kwh ?? 0),
     bezug_pv_kwh: nz(g.bezug_pv_kwh ?? 0), bezug_netz_kwh: nz(g.bezug_netz_kwh ?? 0),
+    abgabe_kwh: nz(g.abgabe_kwh ?? 0), erloes_euro: nz(g.erloes_euro ?? 0),
   }))
 
   // Quellen-Union (Provenance-Badges im Header).
@@ -421,6 +426,8 @@ export function baueJahrAlsMonat(
     sonstiges_eigenverbrauch_kwh: summe(f('sonstiges_eigenverbrauch_kwh')),
     sonstiges_einspeisung_kwh: summe(f('sonstiges_einspeisung_kwh')),
     sonstiges_verbrauch_kwh: summe(f('sonstiges_verbrauch_kwh')),
+    // §9.2 — Σ der Monate; der dritte Weg der Verwendung.
+    abgabe_dritte_kwh: summe(f('abgabe_dritte_kwh')),
     sonstiges_bezug_pv_kwh: summe(f('sonstiges_bezug_pv_kwh')),
     sonstiges_bezug_netz_kwh: summe(f('sonstiges_bezug_netz_kwh')),
     sonstiges_geraete: sonstigesGeraete,

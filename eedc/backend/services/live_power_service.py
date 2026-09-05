@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.berechnungen.energie import SONSTIGES_KOMPONENTEN_PREFIX
 from backend.core.config import HA_INTEGRATION_AVAILABLE
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
@@ -311,18 +312,23 @@ class LivePowerService:
 
         # Tages-kWh berechnen (inv_types durchreichen um DB-Queries zu sparen)
         inv_types = {str(inv.id): inv.typ for inv in investitionen.values()}
+        abgabe_keys = frozenset(
+            f"{SONSTIGES_KOMPONENTEN_PREFIX}{inv.id}" for inv in investitionen.values()
+            if inv.typ == "sonstiges" and isinstance(inv.parameter, dict)
+            and inv.parameter.get("kategorie") == "abgabe"
+        )
         heute_kwh = await safe_get_tages_kwh(anlage, db, 0, self._kwh_cache, inv_types=inv_types)
         gestern_kwh = await safe_get_tages_kwh(anlage, db, 1, self._kwh_cache, inv_types=inv_types)
 
         heute_pv = heute_kwh.get("pv")
         heute_einsp = heute_kwh.get("einspeisung")
         heute_bezug = heute_kwh.get("netzbezug")
-        heute_ev, heute_hv = self._calc_tages_ev_hv(heute_kwh)
+        heute_ev, heute_hv = self._calc_tages_ev_hv(heute_kwh, abgabe_keys)
 
         gestern_pv = gestern_kwh.get("pv")
         gestern_einsp = gestern_kwh.get("einspeisung")
         gestern_bezug = gestern_kwh.get("netzbezug")
-        gestern_ev, gestern_hv = self._calc_tages_ev_hv(gestern_kwh)
+        gestern_ev, gestern_hv = self._calc_tages_ev_hv(gestern_kwh, abgabe_keys)
 
         # Per-Komponente Heute-kWh für Tooltips im Energiefluss
         heute_pro_komp: dict[str, float] = {}
@@ -394,6 +400,7 @@ class LivePowerService:
     @staticmethod
     def _calc_tages_ev_hv(
         kwh: dict[str, Optional[float]],
+        abgabe_keys: frozenset[str] = frozenset(),
     ) -> tuple[Optional[float], Optional[float]]:
         """Berechnet Eigenverbrauch und Hausverbrauch aus Tages-kWh inkl. Batterie.
 
@@ -428,7 +435,10 @@ class LivePowerService:
         eigenverbrauch: Optional[float] = None
         if pv is not None and einsp is not None:
             direktverbrauch = max(0, pv - einsp - bat_ladung)
-            eigenverbrauch = round(direktverbrauch + bat_entladung, 1)
+            # §9.2: die Tagesmenge der Abgabe-Geräte (Schlüssel `sonstige_<id>`)
+            # ist kein Eigenverbrauch — dieselbe Regel wie im Monats-Layer.
+            abgabe = sum(v for k, v in kwh.items() if k in abgabe_keys and v is not None)
+            eigenverbrauch = round(max(0.0, direktverbrauch + bat_entladung - abgabe), 1)
 
         # Hausverbrauch = Eigenverbrauch + Netzbezug — beide Summanden nötig.
         hausverbrauch: Optional[float] = None

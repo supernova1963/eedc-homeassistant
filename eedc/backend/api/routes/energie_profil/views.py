@@ -104,6 +104,9 @@ ENERGIE_KATEGORIEN: dict[str, tuple[str, str, str]] = {
     "wallbox_eauto": ("Wallbox / E-Auto", "verbraucher", "#06b6d4"),
     "haushalt": ("Haushalt", "verbraucher", "#64748b"),
     "sonstige_verbraucher": ("Sonstige Verbraucher", "verbraucher", "#6b7280"),
+    # §9.2 (05.09.2026) — Abgabe an Dritte: Verwendungsseite, aber kein
+    # Eigenverbrauch; dieselbe Farbe wie das Sonstiges-Gerät (Regel 0a).
+    "sonstige_abgabe": ("Abgabe an Dritte", "verbraucher", "#6b7280"),
 }
 
 

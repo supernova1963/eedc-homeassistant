@@ -577,6 +577,8 @@ export const ENERGIE_KATEGORIE: Record<string, { label: string; bg: string; grup
   wallbox_eauto:        { label: 'Wallbox / E-Auto',     bg: KOMPONENTEN_FARBEN['wallbox'].bg,          gruppe: 'verbraucher' },
   haushalt:             { label: 'Haushalt',             bg: 'bg-slate-500',                            gruppe: 'verbraucher' },
   sonstige_verbraucher: { label: 'Sonstige Verbraucher', bg: KOMPONENTEN_FARBEN['sonstiges'].bg,        gruppe: 'verbraucher' },
+  // §9.2 — Abgabe an Dritte: Verwendungsseite, aber kein Eigenverbrauch.
+  sonstige_abgabe:      { label: 'Abgabe an Dritte',     bg: KOMPONENTEN_FARBEN['sonstiges'].bg,        gruppe: 'verbraucher' },
 }
 
 /**

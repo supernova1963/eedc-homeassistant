@@ -128,6 +128,9 @@ class SonstigesTagesSummen(NamedTuple):
 
     erzeugung_kwh: Optional[float]
     verbrauch_kwh: Optional[float]
+    #: §9.2 — an Dritte abgegeben (Kategorie „abgabe"): weder Erzeugung noch
+    #: Verbrauch des Hauses; der Tag zieht sie vom Eigenverbrauch ab.
+    abgabe_kwh: Optional[float] = None
 
 
 def sonstiges_richtung(kategorie: Optional[str], hat_erzeugung: bool) -> str:
@@ -199,6 +202,7 @@ def sonstiges_kwh_je_richtung(
         return SonstigesTagesSummen(None, None)
     erzeugung: Optional[float] = None
     verbrauch: Optional[float] = None
+    abgabe: Optional[float] = None
     for key, wert in komponenten_kwh.items():
         if not isinstance(wert, (int, float)):
             continue
@@ -223,6 +227,9 @@ def sonstiges_kwh_je_richtung(
         betrag = abs(float(wert))
         if kategorie == "erzeuger":
             erzeugung = (erzeugung or 0.0) + betrag
+        elif kategorie == "abgabe":
+            # §9.2: die dritte Richtung — weder Erzeugung noch Verbrauch.
+            abgabe = (abgabe or 0.0) + betrag
         else:
             # Leere Kategorie zählt als Verbraucher — dieselbe Vorgabe, mit der
             # **beide** Tages-Schreibpfade den Wert überhaupt erst erzeugt haben
@@ -231,7 +238,7 @@ def sonstiges_kwh_je_richtung(
             # Kategorie beide Felder mit (`imd_typ_beitrag`) — dort stehen sie
             # auch beide da.
             verbrauch = (verbrauch or 0.0) + betrag
-    return SonstigesTagesSummen(erzeugung, verbrauch)
+    return SonstigesTagesSummen(erzeugung, verbrauch, abgabe)
 
 
 # ─── Netzpunkt-Bilanz: Gesamterzeugung hinter dem Hauszähler ────────────────

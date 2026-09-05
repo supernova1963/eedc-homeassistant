@@ -66,6 +66,8 @@ def build_komponenten(
     # Netzpunkt-Bilanz (Autarkie/EV), aber NICHT in pv_total_w (PV-Leistungs-%
     # bleibt rein). Konzept Sonstiger Erzeuger 2026-06-22.
     sonstige_erzeugung_w = 0.0
+    # §9.2: Leistung, die das Haus an Dritte abgibt — kein Eigenverbrauch.
+    abgabe_w = 0.0
     # Die Schlüssel der Komponenten, die eine Batterie-Rolle spielen: Speicher
     # UND das V2H-fähige E-Auto (`ist_bidirektional` unten). Nur sie dürfen in
     # `bat_ladung_kw`/`bat_entladung_kw` der Netzpunkt-Bilanz einfließen.
@@ -242,6 +244,11 @@ def build_komponenten(
             and isinstance(inv.parameter, dict)
             and inv.parameter.get("kategorie") == "erzeuger"
         )
+        ist_abgabe = (
+            typ == "sonstiges"
+            and isinstance(inv.parameter, dict)
+            and inv.parameter.get("kategorie") == "abgabe"
+        )
 
         if typ in ERZEUGER_TYPEN:
             kw = val_w / 1000
@@ -277,6 +284,21 @@ def build_komponenten(
             summe_erzeugung += kw
             sonstige_erzeugung_w += val_w
 
+        elif ist_abgabe:
+            # §9.2: Abgabe an Dritte — steht auf der Verbrauchsseite des
+            # Flusses (die Energie verlässt das Haus), zählt aber NICHT als
+            # Eigenverbrauch: die Bilanz unten zieht `abgabe_w` wieder ab.
+            kw = abs(val_w) / 1000
+            komponenten.append({
+                "key": f"sonstige_{inv_id}",
+                "label": inv.bezeichnung,
+                "icon": TYP_ICON.get(typ, "wrench"),
+                "erzeugung_kw": None,
+                "verbrauch_kw": round(kw, 3),
+                "abgabe": True,
+            })
+            summe_verbrauch += kw
+            abgabe_w += abs(val_w)
         elif ist_bidirektional:
             kw = abs(val_w) / 1000
             ist_ladung = val_w > 0
@@ -460,7 +482,8 @@ def build_komponenten(
             if k["key"] in bidirektionale_keys
         )
         direktverbrauch_kw = max(0, erzeugung_kw - (einspeisung_w or 0) / 1000 - bat_ladung_kw)
-        eigenverbrauch_kw = direktverbrauch_kw + bat_entladung_kw
+        # §9.2: abgegebene Leistung ist kein Eigenverbrauch.
+        eigenverbrauch_kw = max(0.0, direktverbrauch_kw + bat_entladung_kw - abgabe_w / 1000)
         gesamt_verbrauch_kw = eigenverbrauch_kw + (netzbezug_w or 0) / 1000
 
         if gesamt_verbrauch_kw > 0:

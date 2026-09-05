@@ -58,14 +58,14 @@ def test_leere_kategorie_zaehlt_als_verbraucher():
 def test_bidirektionales_geraet_bleibt_draussen():
     """Ein Netto-Wert lässt sich keiner Richtung zuschlagen — bewusste Lücke."""
     s = sonstiges_kwh_je_richtung({"sonstige_9": 5.0}, {"9": "speicher"})
-    assert s == (None, None)
+    assert s == (None, None, None)  # §9.2: dritte Richtung „abgabe" — ebenfalls leer
 
 
 def test_unbekanntes_geraet_zaehlt_nicht():
     """Wer nicht in der Kategorie-Map steht, war am Tag nicht aktiv."""
-    assert sonstiges_kwh_je_richtung({"sonstige_9": 5.0}, {}) == (None, None)
+    assert sonstiges_kwh_je_richtung({"sonstige_9": 5.0}, {}) == (None, None, None)  # §9.2: dritte Richtung „abgabe" — ebenfalls leer
     # Kein Schlüssel der Gruppe ⇒ keine Aussage, keine 0.
-    assert sonstiges_kwh_je_richtung({"pv_6": 3.0}, {"9": "erzeuger"}) == (None, None)
+    assert sonstiges_kwh_je_richtung({"pv_6": 3.0}, {"9": "erzeuger"}) == (None, None, None)  # §9.2: dritte Richtung „abgabe" — ebenfalls leer
 
 
 # ── Tagesebene ──────────────────────────────────────────────────────────────

@@ -55,7 +55,7 @@ export function baueTagAlsMonat(
   // WP-Counter pro Tag (Issue #136/#238): Tagessumme der Stundenwerte (anlagenweit).
   const wpStartsTag = stunden.reduce((a, s) => a + (s.wp_starts_anzahl ?? 0), 0)
   const wpBetriebsstundenTag = stunden.reduce((a, s) => a + (s.wp_betriebsstunden ?? 0), 0)
-  let bkw = 0, emob = 0, sonstErz = 0, sonstVerb = 0
+  let bkw = 0, emob = 0, sonstErz = 0, sonstVerb = 0, sonstAbg = 0
   // Pro-Gerät-Liste (Tag): je Serie ein Gerät — Tag kennt nur Erzeugung/Verbrauch
   // (kein Eigenverbrauch-/Bezug-Split auf Stundenebene).
   const sonstigesGeraete: SonstigesGeraet[] = []
@@ -67,6 +67,10 @@ export function baueTagAlsMonat(
       if (s.seite === 'quelle') {
         const e = Math.max(0, v); sonstErz += e
         if (e > 0) sonstigesGeraete.push({ bezeichnung: s.label, kategorie: 'erzeuger', erzeugung_kwh: e })
+      } else if (s.seite === 'abgabe') {
+        // §9.2: Abgabe an Dritte — weder Erzeugung noch Verbrauch des Hauses.
+        const a = Math.abs(v); sonstAbg += a
+        if (a > 0) sonstigesGeraete.push({ bezeichnung: s.label, kategorie: 'abgabe', abgabe_kwh: a })
       } else if (s.seite === 'senke') {
         const c = Math.abs(v); sonstVerb += c
         if (c > 0) sonstigesGeraete.push({ bezeichnung: s.label, kategorie: 'verbraucher', verbrauch_kwh: c })
@@ -161,6 +165,7 @@ export function baueTagAlsMonat(
     bkw_erzeugung_kwh: pos(bkw),
     sonstiges_erzeugung_kwh: pos(sonstErz),
     sonstiges_verbrauch_kwh: pos(sonstVerb),
+    abgabe_dritte_kwh: pos(sonstAbg),
     sonstiges_geraete: sonstigesGeraete,
     investitionen_financials: sonstigesGeraete.map((g) => ({ typ: 'sonstiges', bezeichnung: g.bezeichnung })),
     // PV Tages-SOLL (OM × Lernfaktor) — für SOLL-Annotation am PV-KPI.

@@ -79,6 +79,10 @@ def _key_to_serie_info(
             seite = "quelle"
         elif kat == "speicher":
             seite = "bidirektional"
+        elif kat == "abgabe":
+            # §9.2: Energie verlässt das Haus — eigene Seite, damit der Tag sie
+            # weder als Verbrauch noch als Erzeugung liest.
+            seite = "abgabe"
 
     return {
         "key": key,
@@ -121,6 +125,8 @@ def detail_kategorie(info: dict, inv: Optional["Investition"]) -> str:
             return "sonstige_erzeuger"
         if unterkat == "speicher":
             return "speicher"
+        if unterkat == "abgabe":
+            return "sonstige_abgabe"
         return "sonstige_verbraucher"
     if kat == "pv":
         return "pv_module"
@@ -379,6 +385,9 @@ class TagWerteResponse(BaseModel):
     # „für diesen Tag nicht gemessen", nicht 0.
     sonstiges_erzeugung: Optional[float] = None
     sonstiges_verbrauch: Optional[float] = None
+    #: §9.2 — Abgabe an Dritte des Tages (nur mit eigenem Zähler); vom
+    #: Eigenverbrauch des Tages abgezogen.
+    sonstiges_abgabe: Optional[float] = None
     # Finanzen (€) — einfaches lineares Modell wie createMonatsZeitreihe.
     # `None`, wenn die Menge fehlt, auf der der Betrag steht: `ev_ersparnis`
     # ohne erfassten Eigenverbrauch, `netzbezug_kosten` ohne erfassten

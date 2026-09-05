@@ -42,6 +42,9 @@ export interface SonstigesGeraet {
   verbrauch_kwh?: number | null
   bezug_pv_kwh?: number | null
   bezug_netz_kwh?: number | null
+  /** §9.2 — Abgabe an Dritte (kategorie 'abgabe'). */
+  abgabe_kwh?: number | null
+  erloes_euro?: number | null
 }
 
 export interface AktuellerMonatResponse {
@@ -207,6 +210,8 @@ export interface AktuellerMonatResponse {
 
   // Komponenten — Sonstiges
   sonstiges_erzeugung_kwh: number | null
+  /** §9.2 — an Dritte abgegebene kWh (dritter Weg der Verwendung). */
+  abgabe_dritte_kwh?: number | null
   sonstiges_eigenverbrauch_kwh: number | null
   sonstiges_einspeisung_kwh: number | null
   sonstiges_verbrauch_kwh: number | null
