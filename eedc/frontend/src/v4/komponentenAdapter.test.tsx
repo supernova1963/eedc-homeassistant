@@ -545,6 +545,54 @@ describe('KOMPONENTEN_ADAPTER — spezifische Blöcke (Inc. 3b)', () => {
     expect(g.sekundaer!.kpis[0].subtitle).toBe('Heizstab-Strom auf dem WP-Zähler')
   })
 
+  it('WP B3/H-2: geschätzte Wärme trägt ihre Herkunft, Ersparnis und CO₂ den Vorbehalt', async () => {
+    // F2b — der häufigste Fall: Gesamtstrom plus angenommener JAZ-Vorschlag. Bis
+    // B3 (05.09.2026) stand die Wärme als nackte Zahl neben gemessenen; nur die
+    // gesperrte JAZ verriet es (SOLL §3.3 Hub-Zeile, §6 Präzisierung).
+    getWaermepumpeDashboard.mockResolvedValue([{
+      investition: inv({ typ: 'waermepumpe' }),
+      zusammenfassung: { durchschnitt_cop: null, durchschnitt_cop_grund: 'Wärme ist gerechnet, nicht gemessen',
+        gesamt_waerme_kwh: 3500, gesamt_stromverbrauch_kwh: 1000, gesamt_heizenergie_kwh: 3500, gesamt_warmwasser_kwh: 0,
+        ersparnis_euro: 166.67, co2_ersparnis_kg: 401.7, waerme_abgeleitet: true, waerme_abgeleitet_faktor: 3.5,
+        waerme_herkunft: 'geschätzt: Strom × JAZ 3,5',
+        ersparnis_vorbehalt: 'Wärme geschätzt — Ersparnis und CO₂ folgen aus der Schätzung' },
+      monatsdaten: [],
+    }])
+    const [g] = await KOMPONENTEN_ADAPTER.waermepumpe.fetch(1)
+    const nach = (t: string) => g.status.find((k) => k.title === t)!
+    expect(nach('Wärme erzeugt').subtitle).toBe('geschätzt: Strom × JAZ 3,5')
+    expect(nach('Ersparnis vs. Gas').subtitle).toBe('Wärme geschätzt — Ersparnis und CO₂ folgen aus der Schätzung')
+    expect(nach('Strom verbraucht').subtitle).toBeUndefined()
+    expect(g.kennzahlen!.kpis[0].subtitle).toContain('Wärme geschätzt')
+  })
+
+  it('WP B3/H-2: gemessene Wärme bleibt ohne Zusatz (vertraute Anzeige)', async () => {
+    getWaermepumpeDashboard.mockResolvedValue([{
+      investition: inv({ typ: 'waermepumpe' }),
+      zusammenfassung: { durchschnitt_cop: 3.5, gesamt_waerme_kwh: 3500, gesamt_stromverbrauch_kwh: 1000,
+        gesamt_heizenergie_kwh: 3500, gesamt_warmwasser_kwh: 0, ersparnis_euro: 166.67, co2_ersparnis_kg: 401.7,
+        waerme_abgeleitet: false, waerme_herkunft: 'gemessen', ersparnis_vorbehalt: null, hat_warmwasser_achse: false },
+      monatsdaten: [],
+    }])
+    const [g] = await KOMPONENTEN_ADAPTER.waermepumpe.fetch(1)
+    expect(g.status.every((k) => k.subtitle === undefined)).toBe(true)
+    expect(g.kennzahlen!.kpis[0].subtitle).toBe('vs. fossile Heizung')
+  })
+
+  it('WP B3/N-391: ohne Warmwasser-Achse gibt es keine Ein-Segment-Aufteilung', async () => {
+    // F6 — ein Gesamt-Wärmemengenzähler: „Wärme nach Zweck: Heizung 100 %" wäre
+    // die Behauptung, alles sei Heizung — das weiß eedc nicht (N-391, Lage B).
+    getWaermepumpeDashboard.mockResolvedValue([{
+      investition: inv({ typ: 'waermepumpe' }),
+      zusammenfassung: { durchschnitt_cop: 3.5, gesamt_waerme_kwh: 3500, gesamt_stromverbrauch_kwh: 1000,
+        gesamt_heizenergie_kwh: 3500, gesamt_warmwasser_kwh: 0, ersparnis_euro: 166.67, hat_warmwasser_achse: false },
+      monatsdaten: [{ jahr: 2025, monat: 7, verbrauch_daten: { heizenergie_kwh: 3500 } }],
+    }])
+    const [g] = await KOMPONENTEN_ADAPTER.waermepumpe.fetch(1)
+    expect(g.aufteilung).toBeUndefined()
+    expect(g.verlauf?.bars.map((b) => b.label)).toEqual(['Wärme'])
+  })
+
   it('WP: keine Sekundär ohne getrennte/238-Daten', async () => {
     getWaermepumpeDashboard.mockResolvedValue([{
       investition: inv({ typ: 'waermepumpe' }),

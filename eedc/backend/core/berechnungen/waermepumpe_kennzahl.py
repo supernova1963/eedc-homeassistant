@@ -192,6 +192,60 @@ GRUND_JE_ABGRENZUNG: dict[str, str] = {
 }
 
 
+#: Herkunft der Wärme, wie der Komponenten-Hub sie nennt (SOLL §3.3: „zusätzlich
+#: die Herkunft jeder Zahl — gemessen · abgeleitet · gepflegt").
+HERKUNFT_GEMESSEN = "gemessen"
+
+
+def waerme_herkunft(waerme_abgeleitet: bool, faktor: Optional[float]) -> str:
+    """„gemessen" — oder „geschätzt: Strom × JAZ 3,5".
+
+    **B3 (05.09.2026, SOLL §6 Präzisierung):** Eine aus ``Strom × gepflegte JAZ``
+    abgeleitete Wärme ist zulässig, *erscheint aber als geschätzt*. Bis B3 stand
+    sie im Hub als nackte Zahl neben gemessenen — nur die gesperrte Arbeitszahl
+    verriet die Herkunft. Der Text entsteht hier, damit Hub, Cockpit und PDF
+    dieselben Worte tragen (die W-3-Klasse: eine Aussage, ein Ort).
+    """
+    if not waerme_abgeleitet:
+        return HERKUNFT_GEMESSEN
+    if faktor is not None:
+        return f"geschätzt: Strom × JAZ {faktor:.1f}".replace(".", ",")
+    return "geschätzt: Strom × gepflegte JAZ"
+
+
+#: Vorbehalt an Ersparnis und CO₂ bei abgeleiteter Wärme.
+VORBEHALT_ABGELEITET = "Wärme geschätzt — Ersparnis und CO₂ folgen aus der Schätzung"
+#: Vorbehalt an Ersparnis und CO₂ im bivalenten Fall (F12): der zweite Erzeuger
+#: liefert Wärme durch denselben Zähler, seine Kosten sieht eedc nicht.
+VORBEHALT_FREMDWAERME = (
+    "zweiter Erzeuger am Wärmezähler — Ersparnis und CO₂ enthalten dessen Wärme"
+)
+
+
+def ersparnis_vorbehalt(
+    *,
+    waerme_abgeleitet: bool,
+    abgrenzung: Optional[str],
+) -> Optional[str]:
+    """Der Satz, der neben Ersparnis und CO₂ steht — oder ``None``.
+
+    **Warum ein Vorbehalt und keine Sperre** (Entscheid Gernot 05.09.2026, B3):
+    Unterdrückt wird nur, was nie gemessen wurde. Die Ersparnis aus geschätzter
+    Wärme ist eine zulässige Schätzung (§6) — sie muss es nur sagen. Im
+    bivalenten Fall (``abgrenzung == "fremdwaerme"``, F12) zählt die Wärme des
+    Gaskessels als vermiedene Gaskosten mit; eedc kennt seinen Anteil nicht und
+    rechnet ihn nicht heraus — es sagt, dass er drin ist.
+
+    Beide Fälle zugleich: beide Sätze, durch „ · " getrennt.
+    """
+    teile: list[str] = []
+    if waerme_abgeleitet:
+        teile.append(VORBEHALT_ABGELEITET)
+    if abgrenzung == "fremdwaerme":
+        teile.append(VORBEHALT_FREMDWAERME)
+    return " · ".join(teile) if teile else None
+
+
 def abgrenzungs_grund(
     *,
     abgrenzung_stoerung: Optional[str] = None,

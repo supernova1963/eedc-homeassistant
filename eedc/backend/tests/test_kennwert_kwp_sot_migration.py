@@ -455,7 +455,7 @@ async def test_bkw_dashboard_ohne_anzahl_nicht_mehr_doppelte_leistung(db):
 
     resp = await get_balkonkraftwerk_dashboard(
         anlage_id=anlage_id, strompreis_cent=30.0,
-        einspeiseverguetung_cent=8.0, db=db)
+        db=db)
 
     zus = resp[0].zusammenfassung
     assert zus["leistung_wp"] == pytest.approx(400.0), "vorher 800 Wp"
@@ -472,7 +472,7 @@ async def test_bkw_dashboard_spalte_gewinnt_gegen_parameter(db):
 
     resp = await get_balkonkraftwerk_dashboard(
         anlage_id=anlage_id, strompreis_cent=30.0,
-        einspeiseverguetung_cent=8.0, db=db)
+        db=db)
 
     assert resp[0].zusammenfassung["leistung_wp"] == pytest.approx(800.0)
 

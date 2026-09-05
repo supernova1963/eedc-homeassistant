@@ -632,14 +632,31 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
                   ? { subtitle: z.durchschnitt_cop_hinweis } : {}),
               },
           // Wärme+Strom an EINER Referenz skaliert (kein kWh/MWh-Mix im Strip, C3).
-          kpi(WP_KPI.waerme, energie(z.gesamt_waerme_kwh, wpEnergieRef).wert, energie(z.gesamt_waerme_kwh, wpEnergieRef).einheit),
+          //
+          // B3/H-2 (SOLL §3.3 Hub-Zeile: „zusätzlich die Herkunft jeder Zahl";
+          // §6 Präzisierung 05.09.2026): Eine aus Strom × JAZ **geschätzte** Wärme
+          // stand hier als nackte Zahl neben gemessenen — nur die gesperrte
+          // Arbeitszahl verriet es. Jetzt trägt die Kachel die Herkunft, und
+          // Ersparnis wie CO₂ den Vorbehalt; beide Sätze kommen fertig aus dem
+          // Layer, gemessene Wärme bleibt ohne Zusatz (vertraute Anzeige).
+          {
+            ...kpi(WP_KPI.waerme, energie(z.gesamt_waerme_kwh, wpEnergieRef).wert, energie(z.gesamt_waerme_kwh, wpEnergieRef).einheit),
+            ...(z.waerme_abgeleitet && z.waerme_herkunft ? { subtitle: z.waerme_herkunft } : {}),
+          },
           kpi(WP_KPI.strom, energie(z.gesamt_stromverbrauch_kwh, wpEnergieRef).wert, energie(z.gesamt_stromverbrauch_kwh, wpEnergieRef).einheit),
-          kpi(WP_KPI.ersparnis, n0(z.ersparnis_euro), '€'),
+          {
+            ...kpi(WP_KPI.ersparnis, n0(z.ersparnis_euro), '€'),
+            ...(z.ersparnis_vorbehalt ? { subtitle: z.ersparnis_vorbehalt } : {}),
+          },
         ],
         sekundaer: sek.length ? { titel: 'Betrieb & getrennte JAZ', kpis: sek } : undefined,
         // ① CO₂-Ersparnis gegenüber fossiler Heizung (IST-getreu, eigene Kennzahl).
         kennzahlen: z.co2_ersparnis_kg != null ? {
-          titel: 'Umwelt', kpis: [k('CO₂-Ersparnis', n0(z.co2_ersparnis_kg), 'kg', 'green', Leaf, { subtitle: 'vs. fossile Heizung' })],
+          titel: 'Umwelt', kpis: [k('CO₂-Ersparnis', n0(z.co2_ersparnis_kg), 'kg', 'green', Leaf, {
+            // B3/H-2: derselbe Vorbehalt wie an der Ersparnis — das CO₂ folgt aus
+            // derselben Wärme.
+            subtitle: z.ersparnis_vorbehalt ? `vs. fossile Heizung — ${z.ersparnis_vorbehalt}` : 'vs. fossile Heizung',
+          })],
         } : undefined,
         // N-379 / SOLL §3.3/S2 — „Ein Balken sagt, was er zeigt."
         // Aufteilung, Verlauf-Legende und Jahresvergleich standen als FESTES
@@ -656,17 +673,24 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
         //
         // `!== false` statt `=== true`: eine ältere Antwort ohne das Feld zeigt
         // unverändert beide Achsen.
-        aufteilung: (z.gesamt_heizenergie_kwh > 0 || z.gesamt_warmwasser_kwh > 0) ? {
+        //
+        // B3/N-391 (05.09.2026): **Nur mit beiden Achsen.** Ohne Warmwasser-Achse
+        // hatte der Balken EIN Segment „Heizung · 100 %" — an einem Gerät mit einem
+        // Gesamt-Wärmemengenzähler (Lage B in N-391) ist das die Behauptung, alles
+        // sei Heizung, und die kann eedc nicht wissen. Ein Balken mit einem Segment
+        // teilt nichts auf; die Menge steht in der Kachel darüber. Die Modellfrage
+        // (Gesamtfeld oder Schalter) bleibt bei N-391 offen.
+        aufteilung: (z.hat_warmwasser_achse !== false
+            && (z.gesamt_heizenergie_kwh > 0 || z.gesamt_warmwasser_kwh > 0)) ? {
           titel: 'Wärme nach Zweck', segmente: [
             { label: 'Heizung', wert: z.gesamt_heizenergie_kwh, farbe: SEG.heizung },
-            ...(z.hat_warmwasser_achse !== false
-              ? [{ label: 'Warmwasser', wert: z.gesamt_warmwasser_kwh, farbe: SEG.warmwasser }]
-              : []),
+            { label: 'Warmwasser', wert: z.gesamt_warmwasser_kwh, farbe: SEG.warmwasser },
           ],
         } : undefined,
         verlauf: md.length ? {
           bars: [
-            { key: 'heizung', label: 'Heizung', farbe: CHART_COLORS.wpWaerme },
+            // B3/N-391: ohne Warmwasser-Achse ist die eine Serie die ganze Wärme (S2).
+            { key: 'heizung', label: z.hat_warmwasser_achse !== false ? 'Heizung' : 'Wärme', farbe: CHART_COLORS.wpWaerme },
             ...(z.hat_warmwasser_achse !== false
               ? [{ key: 'warmwasser', label: 'Warmwasser', farbe: CHART_COLORS.wpWarmwasser }]
               : []),

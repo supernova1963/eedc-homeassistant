@@ -98,6 +98,8 @@ from backend.core.field_definitions import (
 from backend.core.berechnungen import betriebsart_nutzenergie_kwh, modus_strom_zeile
 from backend.core.berechnungen.waermepumpe_kennzahl import (
     GRUND_JE_ABGRENZUNG,
+    ersparnis_vorbehalt,
+    waerme_herkunft,
     arbeitszahl,
     arbeitszahl_je_funktion,
     arbeitszahl_kuehlen,
@@ -1019,6 +1021,12 @@ async def get_waermepumpe_dashboard(
                 # die Heiz-Arbeitszahl, nicht die Gesamtzahl.
                 'heizen_zaehler_kwh': _md_az_funktion.heizen.zaehler_kwh,
                 'heizen_nenner_kwh': _md_az_funktion.heizen.nenner_kwh,
+                # B3/H-1b: der Stromverbrauch des Monats nach dem SoT — für
+                # Monatstabelle und Monats-/Saisonvergleich, die bis B3 die
+                # Rohspalte lasen und bei getrennter Strommessung leer blieben.
+                # Bewusst hier und nicht in `monatsdaten`: die Zeitreihe aus dem
+                # Layer ist die eine Quelle des Hubs (P12), die Rohzeile nicht.
+                'strom_kwh': round(get_wp_strom_kwh(d, wp.parameter), 1),
             })
             # ⚠ `strom_heizen_kwh` heißt hier **getrennte Strommessung** (zwei
             # physische Zähler), NICHT der Modus-Split von #263 K-2. Der trägt
@@ -1100,7 +1108,13 @@ async def get_waermepumpe_dashboard(
             m_waerme = (d.get('heizenergie_kwh', 0) or 0) + get_wp_warmwasser_kwh(
                 d, wp.parameter
             )  # N-379
-            m_strom = d.get('stromverbrauch_kwh', 0) or 0
+            # B3/H-1 (05.09.2026): **dieselbe** Strom-Definition wie Nenner (W-15)
+            # und Monats-Fakten. Hier stand die Rohspalte — bei getrennter
+            # Strommessung ist sie leer (Registry: `!getrennte_strommessung`),
+            # und der Hub nannte WP-Kosten 0 € und als Ersparnis die vollen
+            # Alt-Kosten (F7 gemessen: 480 € statt 180 €). Dritte Runde der
+            # W-15-Klasse in dieser Funktion.
+            m_strom = get_wp_strom_kwh(d, wp.parameter)
             if m_waerme <= 0 and m_strom <= 0:
                 continue
             m_tarife = await lade_tarife_fuer_anlage(
@@ -1312,6 +1326,16 @@ async def get_waermepumpe_dashboard(
         zusammenfassung['waerme_abgeleitet'] = waerme_abgeleitet
         zusammenfassung['waerme_abgeleitet_faktor'] = (
             heiz_effizienz_gepflegt(wp.parameter) if waerme_abgeleitet else None
+        )
+        # B3/H-2 (SOLL §3.3 Hub-Zeile, §6 Präzisierung 05.09.): die Herkunft der
+        # Wärme und der Vorbehalt an Ersparnis/CO₂ — fertig formuliert aus dem
+        # Layer, damit Cockpit (B4) und PDF dieselben Worte tragen.
+        zusammenfassung['waerme_herkunft'] = waerme_herkunft(
+            waerme_abgeleitet, zusammenfassung['waerme_abgeleitet_faktor'],
+        )
+        zusammenfassung['ersparnis_vorbehalt'] = ersparnis_vorbehalt(
+            waerme_abgeleitet=waerme_abgeleitet,
+            abgrenzung=abgrenzung_stoerung(wp),
         )
 
         # W-5 (SOLL §4.1): Arbeitszahl Kühlen. ⚠ **Bewusst außerhalb des
@@ -2053,11 +2077,16 @@ async def get_balkonkraftwerk_dashboard(
     strompreis_cent: Optional[float] = Query(
         None, description="Override: Strompreis (auto aus dem Monatstarif wenn leer)"
     ),
-    einspeiseverguetung_cent: float = Query(8.0),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Balkonkraftwerk Dashboard für eine Anlage.
+
+    ⛔ **N-114 (05.09.2026): kein Vergütungs-Query-Parameter mehr.** Er stand seit
+    F-4 in der Signatur und wurde nie gelesen — die Route rechnet ausdrücklich
+    mit `erloes_einspeisung = 0` (BKW-Einspeisung ist unvergütet). Eine API, die
+    einen Satz anbietet, den sie nicht verwendet, behauptet das Gegenteil dessen,
+    was sie tut. Ersatzlos entfernt, nicht verdrahtet.
 
     Zeigt Balkonkraftwerke mit Erzeugung, Eigenverbrauch, Ersparnis.
 

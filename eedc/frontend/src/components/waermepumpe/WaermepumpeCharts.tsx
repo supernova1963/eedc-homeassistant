@@ -46,7 +46,11 @@ export function WaermepumpeMonatsverlauf(
           <YAxis label={achsenEinheit('kWh')} tickFormatter={achsenTick} {...yAchse(schmal)} />
           <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="kWh" />} />
           <Legend content={<ChartLegende onItemClick={legende.onItemClick} />} />
-          <Area type="monotone" dataKey="heizung" stackId="1" fill={CHART_COLORS.wpWaerme} stroke={CHART_COLORS.wpWaerme} name="Heizung" hide={legende.istVersteckt('heizung')} />
+          {/* B3/N-391: Ohne Warmwasser-Achse trägt diese Fläche die GESAMTE Wärme
+              des Geräts — ob nur Heizung (8ear) oder Heizung und Warmwasser durch
+              einen Zähler (Lage B) weiß eedc nicht. „Wärme" ist in beiden Lagen
+              wahr, „Heizung" nur in einer (SOLL §3.3/S2). */}
+          <Area type="monotone" dataKey="heizung" stackId="1" fill={CHART_COLORS.wpWaerme} stroke={CHART_COLORS.wpWaerme} name={hatWarmwasserAchse ? 'Heizung' : 'Wärme'} hide={legende.istVersteckt('heizung')} />
           {hatWarmwasserAchse && (
             <Area type="monotone" dataKey="warmwasser" stackId="1" fill={CHART_COLORS.wpWarmwasser} stroke={CHART_COLORS.wpWarmwasser} name="Warmwasser" hide={legende.istVersteckt('warmwasser')} />
           )}
@@ -110,6 +114,14 @@ export function WaermepumpeKostenvergleich({ zusammenfassung: z }: { zusammenfas
         <span className={`text-lg font-semibold ${GELD_TEXT_CLASS.ersparnis}`}>
           Ersparnis: {fmtZahl(z.ersparnis_euro, 2)} €
         </span>
+        {/* B3/H-2 + F12 (SOLL §6, 05.09.2026): Der Vorbehalt steht SICHTBAR unter
+            der Zahl — eine Ersparnis aus geschätzter Wärme oder mit der Wärme eines
+            zweiten Erzeugers darf nicht aussehen wie eine gemessene. Der Satz kommt
+            fertig aus dem Layer (`ersparnis_vorbehalt`), damit Cockpit und PDF
+            dieselben Worte tragen. */}
+        {z.ersparnis_vorbehalt && (
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{z.ersparnis_vorbehalt}</p>
+        )}
       </div>
     </div>
   )
@@ -126,6 +138,9 @@ export interface JazMonat {
    *  Anteil ist abgezogen. Beide `null`, wo es keine Kennzahl gibt. */
   zaehler_kwh?: number | null
   nenner_kwh?: number | null
+  /** B3/H-1b: Stromverbrauch des Monats nach dem SoT — bei getrennter Strommessung
+   *  steht er nicht in der Rohspalte. Fehlt er (ältere Antwort), gilt die Rohspalte. */
+  strom_kwh?: number | null
 }
 
 /** kWh in dieser Tabelle: ganzzahlig, wie die drei Mengen-Spalten daneben.
@@ -183,7 +198,13 @@ export function WaermepumpeMonatsTabelle(
   // Herleitung vorkommt — sie soll nicht unter einer Tabelle stehen, in der
   // jede Zeile ohne sie aufgeht.
   const zeilen = monatsdaten.map((md) => {
-    const strom = md.verbrauch_daten.stromverbrauch_kwh || 0
+    // B3/H-1b: der Strom kommt aus derselben Layer-Zeitreihe wie die JAZ. Die
+    // Rohspalte ist bei getrennter Strommessung LEER (der Strom steht in
+    // `strom_heizen_kwh`/`strom_warmwasser_kwh`) — bis B3 stand hier 0 neben
+    // einer richtigen Arbeitszahl. Rohspalte nur als Fallback für eine ältere
+    // Antwort ohne das Feld.
+    const stromLayer = jazMap.get(jazKey(md.jahr, md.monat))?.strom_kwh
+    const strom = stromLayer ?? (md.verbrauch_daten.stromverbrauch_kwh || 0)
     const heiz = md.verbrauch_daten.heizenergie_kwh || 0
     // N-379: an einem Gerät ohne Warmwasserkreis liest auch die Zeile nichts —
     // sonst stünde die Zahl in der Herleitungsprobe darunter wieder im Zähler.
@@ -234,7 +255,8 @@ export function WaermepumpeMonatsTabelle(
         <tr className="border-b border-gray-200 dark:border-gray-700">
           <th className={`${KOPF_ZELLE} text-left`}>Monat</th>
           <th className={`${KOPF_ZELLE} text-right`}>Strom (kWh)</th>
-          <th className={`${KOPF_ZELLE} text-right`}>Heizung (kWh)</th>
+          {/* B3/N-391: ohne Warmwasser-Achse ist das die ganze Wärme, nicht „Heizung" (S2). */}
+          <th className={`${KOPF_ZELLE} text-right`}>{hatWarmwasserAchse ? 'Heizung' : 'Wärme'} (kWh)</th>
           {hatWarmwasserAchse && (
             <th className={`${KOPF_ZELLE} text-right`}>Warmwasser (kWh)</th>
           )}

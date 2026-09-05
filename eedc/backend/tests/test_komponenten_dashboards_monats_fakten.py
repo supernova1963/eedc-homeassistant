@@ -98,7 +98,7 @@ async def test_bkw_ohne_gemessenen_eigenverbrauch_wird_bewertet(db):
     await db.commit()
 
     (karte,) = await get_balkonkraftwerk_dashboard(
-        anlage_id=anlage.id, strompreis_cent=None, einspeiseverguetung_cent=8.0, db=db)
+        anlage_id=anlage.id, strompreis_cent=None, db=db)
     z = karte.zusammenfassung
 
     assert z["ersparnis_eigenverbrauch_euro"] == pytest.approx(180.0), (
@@ -146,7 +146,7 @@ async def test_bkw_anteil_bei_zusaetzlicher_dachanlage(db):
     await db.commit()
 
     (karte,) = await get_balkonkraftwerk_dashboard(
-        anlage_id=anlage.id, strompreis_cent=None, einspeiseverguetung_cent=8.0, db=db)
+        anlage_id=anlage.id, strompreis_cent=None, db=db)
 
     assert karte.zusammenfassung["gesamt_eigenverbrauch_kwh"] == pytest.approx(60.0)
     assert karte.zusammenfassung["ersparnis_eigenverbrauch_euro"] == pytest.approx(18.0)
@@ -176,7 +176,7 @@ async def test_bkw_ersparnis_nimmt_den_monatstarif_nicht_die_30_cent(db):
     await db.commit()
 
     (karte,) = await get_balkonkraftwerk_dashboard(
-        anlage_id=anlage.id, strompreis_cent=None, einspeiseverguetung_cent=8.0, db=db)
+        anlage_id=anlage.id, strompreis_cent=None, db=db)
 
     assert karte.zusammenfassung["ersparnis_eigenverbrauch_euro"] == pytest.approx(84.0), (
         "F-4 (a): 60,00 € wäre der Query-Default 30 ct — kein Frontend-Aufrufer "
@@ -204,7 +204,7 @@ async def test_bkw_ohne_zaehlerzeile_ist_nicht_bewertbar_statt_null(db):
     await db.commit()
 
     (karte,) = await get_balkonkraftwerk_dashboard(
-        anlage_id=anlage.id, strompreis_cent=None, einspeiseverguetung_cent=8.0, db=db)
+        anlage_id=anlage.id, strompreis_cent=None, db=db)
     z = karte.zusammenfassung
 
     assert z["monate_nicht_bewertbar"] == 1

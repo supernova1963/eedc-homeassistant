@@ -20,6 +20,22 @@ import type { InvestitionMonatsdaten } from '../../api/investitionen'
 import { useLegendenToggle } from '../../hooks'
 
 
+/** Stromverbrauch eines Monats — aus der Layer-Zeitreihe, Rohspalte nur als Fallback.
+ *
+ * B3/H-1b (05.09.2026): Bei getrennter Strommessung ist `stromverbrauch_kwh` LEER
+ * (der Strom steht in `strom_heizen_kwh`/`strom_warmwasser_kwh`, Registry-Bedingung
+ * `!getrennte_strommessung`). Der Strom-Modus zeigte dort keinen einzigen Balken,
+ * die Saison-Summe 0 — während die JAZ daneben aus dem Layer stimmte. Der Client
+ * kennt `get_wp_strom_kwh` nicht und soll es nicht nachbauen (ADR-002/P12-Richtung):
+ * er liest `jaz_je_monat[].strom_kwh`. Die Rohspalte bleibt nur für eine ältere
+ * Antwort ohne das Feld. */
+export const stromDesMonats = (
+  md: InvestitionMonatsdaten,
+  jazJeMonat?: { jahr: number; monat: number; strom_kwh?: number | null }[],
+): number =>
+  jazJeMonat?.find((x) => x.jahr === md.jahr && x.monat === md.monat)?.strom_kwh
+  ?? (md.verbrauch_daten.stromverbrauch_kwh || 0)
+
 export function WaermepumpeVergleich({ monatsdaten, jazJeMonat, hatGetrennteStrom }: {
   monatsdaten: InvestitionMonatsdaten[]
   /**
@@ -34,9 +50,12 @@ export function WaermepumpeVergleich({ monatsdaten, jazJeMonat, hatGetrennteStro
     jahr: number; monat: number; wert: number | null; grund: string | null
     zaehler_kwh: number | null; nenner_kwh: number | null
     heizen_zaehler_kwh: number | null; heizen_nenner_kwh: number | null
+    /** B3/H-1b: Stromverbrauch des Monats nach dem SoT — Rohspalte nur als Fallback. */
+    strom_kwh?: number | null
   }[]
   hatGetrennteStrom: boolean
 }) {
+  const stromVon = (md: InvestitionMonatsdaten): number => stromDesMonats(md, jazJeMonat)
   /** (jahr, monat) → Arbeitszahl aus dem Layer. */
   const jazVon = (jahr: number, monat: number): number | null =>
     jazJeMonat?.find((x) => x.jahr === jahr && x.monat === monat)?.wert ?? null
@@ -56,7 +75,7 @@ export function WaermepumpeVergleich({ monatsdaten, jazJeMonat, hatGetrennteStro
     for (const jahr of jahre) {
       const md = monatsdaten.find((m) => m.monat === monat && m.jahr === jahr)
       if (md) {
-        const strom = md.verbrauch_daten.stromverbrauch_kwh || 0
+        const strom = stromVon(md)
         entry[`val_${jahr}`] = modus === 'jaz'
           ? jazVon(jahr, monat)
           : (strom > 0 ? Math.round(strom) : null)
@@ -93,7 +112,7 @@ export function WaermepumpeVergleich({ monatsdaten, jazJeMonat, hatGetrennteStro
         const md = monatsdaten.find((x) => x.monat === m && x.jahr === kalenderJahr)
         if (!md) continue
         monateMitDaten++
-        if (modus !== 'jaz') { sumStromAnzeige += md.verbrauch_daten.stromverbrauch_kwh || 0; continue }
+        if (modus !== 'jaz') { sumStromAnzeige += stromVon(md); continue }
         const az = jazJeMonat?.find((x) => x.jahr === kalenderJahr && x.monat === m)
         const q = hatGetrennteStrom ? az?.heizen_zaehler_kwh : az?.zaehler_kwh
         const e = hatGetrennteStrom ? az?.heizen_nenner_kwh : az?.nenner_kwh

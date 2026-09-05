@@ -266,6 +266,10 @@ export interface WaermepumpeDashboardResponse {
        *  berechnen, nie mitteln). `null`, wo es keine Kennzahl gibt. */
       zaehler_kwh: number | null; nenner_kwh: number | null
       heizen_zaehler_kwh: number | null; heizen_nenner_kwh: number | null
+      /** B3/H-1b: der Stromverbrauch des Monats nach dem SoT (`get_wp_strom_kwh`) —
+       *  bei getrennter Strommessung steht er NICHT in `stromverbrauch_kwh`. Optional,
+       *  weil eine ältere Antwort ihn nicht trägt; dann liest der Client die Rohspalte. */
+      strom_kwh?: number
     }[]
     /** W-6/W-15: Der Heizstab-Satz unterhalb einer Arbeitszahl von 2 — er stand
      *  bis zum 26.08.2026 nur im Cockpit, obwohl die Melder-Antwort ihn für den
@@ -304,6 +308,12 @@ export interface WaermepumpeDashboardResponse {
      *  kennzeichnet die Wärme — wie „geschätzt (kWp-Anteil)" bei der PV. */
     waerme_abgeleitet?: boolean
     waerme_abgeleitet_faktor?: number | null
+    /** B3/H-2 (SOLL §3.3 Hub-Zeile): Herkunft der Wärme, fertig formuliert aus dem
+     *  Layer — „gemessen" oder „geschätzt: Strom × JAZ 3,5". */
+    waerme_herkunft?: string | null
+    /** B3/H-2 + F12: der Satz neben Ersparnis und CO₂ — bei geschätzter Wärme und/oder
+     *  einem zweiten Erzeuger am Wärmezähler; `null`, wenn nichts vorzubehalten ist. */
+    ersparnis_vorbehalt?: string | null
     // Kompressor-Starts (#238/#290): _summe_erfasst = seit Anschaffung von eedc
     // erfasst (Kachel-Hauptwert), _gesamt = roher Lebensdauer-Zählerstand aus
     // dem Hersteller-Sensor (Kachel-Tooltip/Info), Max/Tag aus Tagesinkrementen.
@@ -806,10 +816,11 @@ export const investitionenApi = {
   /**
    * Balkonkraftwerk Dashboard
    */
-  async getBalkonkraftwerkDashboard(anlageId: number, strompreisCent?: number, einspeiseverguetungCent?: number): Promise<BalkonkraftwerkDashboardResponse[]> {
+  // N-114 (05.09.2026): kein Vergütungs-Parameter mehr — die Route hat ihn nie
+  // gelesen, BKW-Einspeisung ist unvergütet.
+  async getBalkonkraftwerkDashboard(anlageId: number, strompreisCent?: number): Promise<BalkonkraftwerkDashboardResponse[]> {
     const params = new URLSearchParams()
     if (strompreisCent) params.append('strompreis_cent', strompreisCent.toString())
-    if (einspeiseverguetungCent) params.append('einspeiseverguetung_cent', einspeiseverguetungCent.toString())
     const query = params.toString()
     return api.get<BalkonkraftwerkDashboardResponse[]>(`/investitionen/dashboard/balkonkraftwerk/${anlageId}${query ? '?' + query : ''}`)
   },
