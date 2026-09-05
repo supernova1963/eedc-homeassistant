@@ -1101,3 +1101,113 @@ async def test_a9_gegenprobe_die_luft_wasser_wp_behaelt_alles(db):
         WW_ALTWERT_KWH / KLIMA_STROM_KWH, abs=0.005
     )
     assert z["ersparnis_euro"] is not None
+
+
+# ═══ A10 — 8ear (#404): die Achse, die es am Gerät gibt und in den Daten nie ═══
+#
+# **Die Anlage, die es wirklich gibt.** Zwei Geräte: eine Luft-Wasser-Wärmepumpe,
+# die **nur heizt**, und daneben eine eigene Brauchwasser-Wärmepumpe fürs
+# Warmwasser (#404, 03.09.2026). Sein Satz: *„Leider kann ich eedc nicht
+# beibringen, dass die Luft/Wasser Wärmepumpe nur heizt und kein cop und kein
+# Strom und kein heizwarme für Warmwasser hat."*
+#
+# ⭐ **Warum sein Wunsch — ein Schieber am Gerät — NICHT gebaut wurde.** SOLL
+# §3.2a **R1**: *„was ein Gerät liefern kann, sagt der zugeordnete Zähler, nicht
+# seine Bauart."* Ein Kennzeichen „macht kein Warmwasser" wäre eine zweite
+# Aussage neben dem Zähler, und bei einer späteren Zuordnung müsste eedc
+# entscheiden, welche gilt — im Zweifel gegen die Messung. Dieselbe Antwort gibt
+# R1 der Sole-Wasser-WP mit Kühlung (MartyBr) und der Luft-Luft ohne Warmwasser
+# (OB73-gif); die Zeilen stehen in derselben Tabelle des SOLL.
+#
+# ⛔ **Und warum es KEINE `wp_art` „Luft-Wasser, nur Heizen" gibt.** Eine
+# Luft-Wasser-Wärmepumpe macht im Regelfall **beides** — Heizung und Warmwasser
+# über denselben Kreis mit Umschaltventil auf den Speicher. 8ears Anlage ist die
+# Ausnahme, nicht die Bauart (Einwand Gernot, 05.09.2026). Eine solche Art wäre
+# genau die „Bauart-Schublade", die das SOLL in §3.2a verwirft: sie behauptete
+# einen Gerätetyp, wo eine Anlagen-Konfiguration vorliegt.
+#
+# ⚠ **Was diese Proben NICHT decken.** Wer EINEN Wärmemengenzähler über die
+# Gesamtwärme hat, trägt seine Zahl mangels Gesamtfeld unter `heizenergie_kwh`
+# ein — dort steht dann Heizung **und** Warmwasser unter dem Namen „Heizwärme".
+# Diese Lage ist von 8ears in den Daten nicht zu unterscheiden und bleibt hier
+# ungelöst; sie ist ein eigener Befund, kein Anbau an diese Achse.
+
+HEIZ_KWH_8EAR = 4200.0
+STROM_KWH_8EAR = 1200.0
+
+
+async def _baue_a10(db, ww_wert=None, mapping=None):
+    a = await _anlage(db, "A10 8ear nur Heizen")
+    if mapping is not None:
+        a.sensor_mapping = mapping
+    daten = {"stromverbrauch_kwh": STROM_KWH_8EAR,
+             "heizenergie_kwh": HEIZ_KWH_8EAR}
+    if ww_wert is not None:
+        daten["warmwasser_kwh"] = ww_wert
+    wp = await _geraet(
+        db, a, "Wärmepumpe",
+        {"wp_art": "luft_wasser", "effizienz_modus": "gesamt_jaz",
+         "alter_energietraeger": "gas", "alter_preis_cent_kwh": 10.0},
+        daten,
+    )
+    await db.commit()
+    return a, wp
+
+
+async def _z_a10(db, **kw):
+    a, _wp = await _baue_a10(db, **kw)
+    return next(b for b in await _hub(db, a.id)
+                if b.investition.bezeichnung == "Wärmepumpe").zusammenfassung
+
+
+async def test_a10_ohne_je_gemessenes_warmwasser_faellt_die_achse_weg(db):
+    """8ears Fall: die Achse gibt es am Gerät, in seinen Daten nie.
+
+    Vor diesem Bau hing `hat_warmwasser_achse` allein an der **Bauart** und
+    stand deshalb an jeder Luft-Wasser-WP auf True — Balken, Spalte und Legende
+    zeigten dauerhaft eine Null für eine Größe, die er nicht führt.
+    """
+    z = await _z_a10(db)
+
+    assert z["hat_warmwasser_achse"] is False
+    # ⛔ Die Heizseite bleibt vollständig — sonst wäre der Bau eine Löschung.
+    assert z["gesamt_heizenergie_kwh"] == pytest.approx(HEIZ_KWH_8EAR)
+    assert z["gesamt_waerme_kwh"] == pytest.approx(HEIZ_KWH_8EAR)
+    assert z["durchschnitt_cop"] == pytest.approx(
+        HEIZ_KWH_8EAR / STROM_KWH_8EAR, abs=0.005
+    )
+
+
+async def test_a10_eine_gepflegte_null_haelt_die_achse(db):
+    """⛔ **Die Grenze des Total-Fall-Entscheids (29.08.), als Probe.**
+
+    Unterdrückt wird nur, was **nie** gemessen wurde. Ein einziger gepflegter
+    Monat hält die Achse — auch mit dem Wert **0**: Dann ist die Null eine
+    Messung („diesen Monat kein Warmwasser") und keine Leerstelle, und sie
+    auszublenden verbürge eine gute Angabe.
+
+    ⚠ Genau hier scheitert der naheliegende Kurzschluss `if gesamt_warmwasser:`
+    — er macht aus der gepflegten 0 eine Leerstelle.
+    """
+    z = await _z_a10(db, ww_wert=0.0)
+
+    assert z["hat_warmwasser_achse"] is True
+    assert z["gesamt_warmwasser_kwh"] == 0.0
+
+
+async def test_a10_zugeordneter_zaehler_haelt_die_achse_ohne_jeden_wert(db):
+    """R1 wörtlich: *wer einen Zähler zuordnet, sieht die Achse* — sofort.
+
+    Die frisch eingerichtete Anlage: Sensor zugeordnet, noch kein Monat
+    geschrieben. Ohne diesen Zweig verschwände die Achse genau in dem Moment, in
+    dem der Anwender sie gerade eingerichtet hat, und käme erst Wochen später
+    zurück.
+    """
+    z = await _z_a10(db, mapping={
+        "investitionen": {"1": {"felder": {
+            "warmwasser_kwh": {"strategie": "sensor",
+                               "sensor_id": "sensor.wp_warmwasser"},
+        }}},
+    })
+
+    assert z["hat_warmwasser_achse"] is True

@@ -183,6 +183,10 @@ Alles läuft über **Einstellungen → Datenquellen**. Dort steht je Gerät eine
 >
 > ⚑ **Hast du dort früher einmal einen Wert gepflegt, ist er nicht verloren — er zählt nur nicht mehr als Wärme des Geräts.** Bis 2026 floss ein solcher Altwert in *Wärme erzeugt*, in die Arbeitszahl und in die Ersparnis gegenüber der alten Heizung; das war eine Ersparnis für Wärme, die eine Klimaanlage nicht abgibt. Der **Daten-Checker** nennt dir jeden betroffenen Monat. Stammt der Wert aus dem **Kühlbetrieb**, gehört er unter *Nutzenergie Kuehlbetrieb* — daraus rechnet eedc deine **Arbeitszahl Kühlen**. **eedc verschiebt und löscht nichts von allein**, der gespeicherte Wert bleibt stehen, bis du ihn umträgst.
 
+> ⚑ **Und was du gar nicht führst, verschwindet von selbst aus der Anzeige.** Hat eine Wärmepumpe **nie** einen Warmwasser-Wert getragen und ist auch kein Warmwasser-Zähler zugeordnet, zeigt der Block *Wärme nach Zweck* im Komponenten-Hub keine Warmwasser-Achse mehr — weder Balken noch Spalte noch Legendeneintrag. Das ist der Fall, wenn deine Heizungs-Wärmepumpe nur heizt und eine **eigene Brauchwasser-Wärmepumpe** daneben das Warmwasser macht. Du musst dafür nichts einstellen, und sobald du einen Zähler zuordnest oder einen Wert pflegst, ist die Achse wieder da. **Ein einziger gepflegter Monat genügt — auch mit dem Wert 0**: Dann ist die Null eine Messung und keine Leerstelle.
+>
+> ⚠ **Führst du Heizung und Warmwasser über *einen* Wärmemengenzähler**, trag die Summe unter *Heizwärme* ein. eedc kann die beiden dann nicht trennen — die Aufteilung *Wärme nach Zweck* zeigt in diesem Fall nur die Heizseite, und die getrennten Arbeitszahlen bleiben ohne Zahl.
+
 ### Schritt 2 — Entscheiden: ein Zähler oder getrennte?
 
 Am Gerät gibt es den Schalter **„Getrennte Strommessung"**.

@@ -87,6 +87,36 @@ def ha_entity_fuer_feld(
     return None
 
 
+def inv_feld_hat_quelle(mapping: Optional[dict], inv_id, feld: str) -> bool:
+    """Ist fuer dieses Investitions-Feld ueberhaupt eine Datenquelle zugeordnet?
+
+    Die Frage hinter SOLL Waerme/Klima §3.2a **R1** — *„was ein Geraet liefern
+    kann, sagt der zugeordnete Zaehler, nicht seine Bauart"*. Sie steht hier und
+    nicht beim Aufrufer, weil die Form des Mappings
+    (`investitionen -> <id> -> felder -> <feld>`) sonst an einer weiteren Stelle
+    im Baum nachgebaut wuerde; `_sensor_id_fuer` darueber liest dieselbe Struktur.
+
+    ⚠ **Sie fragt die ZUORDNUNG, nicht die Abdeckung.** Ein zugeordneter Sensor,
+    der noch nie einen Wert geliefert hat, zaehlt hier als vorhanden — genau
+    dafuer gibt es sie: Eine frisch eingerichtete Anlage soll ihre Achse
+    behalten, bevor der erste Monat geschrieben ist. Ob Werte ankommen, ist
+    Sache des Daten-Checkers.
+
+    ⛔ **MQTT und Connector haben hier KEINEN Eintrag** und liefern deshalb
+    `False`. Das ist richtig und keine Luecke: Wer per MQTT liefert, erzeugt
+    Werte, und die Anwesenheit eines Wertes ist der andere, staerkere Zweig
+    derselben Pruefung. Diese Funktion ist nur die Vorstufe fuer den Fall
+    „eingerichtet, aber noch nichts angekommen".
+    """
+    inv = ((mapping or {}).get("investitionen") or {}).get(str(inv_id)) or {}
+    cfg = (inv.get("felder") or {}).get(feld)
+    if not isinstance(cfg, dict):
+        return False
+    if cfg.get("strategie") in (None, QUELLE_KEINE):
+        return False
+    return bool(cfg.get("sensor_id"))
+
+
 def resolve_effektive_quelle(
     field_id: str,
     standard_topic: str,

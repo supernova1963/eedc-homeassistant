@@ -91,6 +91,7 @@ from backend.core.field_definitions import (
     get_wp_strom_kwh,
     get_wp_warmwasser_kwh,
     groesse_gibt_es_am_geraet,
+    hat_wp_warmwasser_wert,
     ist_gepflegte_sonstiges_kategorie,
     ist_zaehler_kategorie,
 )
@@ -750,6 +751,7 @@ async def get_waermepumpe_dashboard(
     if anlage is None:
         return []
 
+    from backend.services.datenquellen_resolver import inv_feld_hat_quelle
     from backend.services.sensor_snapshot_service import get_counter_lifetime
 
     # Batch-Query: Alle Monatsdaten für alle Wärmepumpen auf einmal laden
@@ -842,6 +844,42 @@ async def get_waermepumpe_dashboard(
         _hat_warmwasser = groesse_gibt_es_am_geraet(
             "waermepumpe", "warmwasser_kwh", wp.parameter
         )
+        # #404 (8ear) / SOLL §3.2a **R1** — die zweite Haelfte derselben Regel:
+        # *„was ein Geraet liefern kann, sagt der zugeordnete Zaehler, nicht
+        # seine Bauart — wer keinen zuordnet, sieht die Achse nicht."*
+        # `_hat_warmwasser` allein beantwortet nur die Bauart-Frage und stand
+        # deshalb an JEDER Luft-Wasser-WP auf True, auch an einer, die nie
+        # Warmwasser gemessen hat: Balken, Spalte und Legende zeigten dort
+        # dauerhaft eine Null. 8ear hat dafuer ein zweites Geraet (eine
+        # Brauchwasser-WP), sein Fall ist also echt und kein Erfassungsloch.
+        #
+        # ⚑ **Eine ZWEITE Groesse, und zwar aus Absicht — nicht aus Not.** Unten
+        # bei `arbeitszahl_je_funktion` (je Monatszeile) ist die Bauart-Frage
+        # die richtige: Ob ein ANDERER Monat Warmwasser trug, geht die Kennzahl
+        # dieses Monats nichts an.
+        #
+        # ⛔ **Hier stand: „wer `_hat_warmwasser` dort gegen dieses Flag
+        # tauscht, verschiebt eine Kennzahl statt einer Achse." Das ist
+        # GEMESSEN FALSCH** (Sprengsatz 05.09.2026, blieb stumm): An jener
+        # Stelle sind beide Ausdruecke **aequivalent**, weil `_ww_je_erfasst`
+        # drei Zeilen ueber ihr aus DEMSELBEN Wert gesetzt wird — ist der Wert
+        # da, ist das Flag True; fehlt er, liefert `d.get(...)` ohnehin `None`.
+        # Es gibt keine Belegung, in der sie auseinanderlaufen.
+        #
+        # Die Trennung bleibt trotzdem, aber mit dem ehrlichen Grund: Die beiden
+        # Stellen beantworten **verschiedene Fragen** (*darf diese Achse
+        # erscheinen?* gegen *hat dieses Geraet diese Groesse?*), und die
+        # heutige Aequivalenz ist ein Zufall der Reihenfolge, kein Vertrag. Wer
+        # `_ww_je_erfasst` einmal vor die Schleife zieht, bricht sie.
+        #
+        # ⚠ **Nur der Total-Fall** (Entscheid 29.08.): unterdrueckt wird, was
+        # NIE gemessen wurde. Ein einziger gepflegter Monat — auch mit 0 —
+        # laesst die Achse stehen, denn dann ist die 0 der uebrigen Monate eine
+        # Messung und keine Leerstelle.
+        _ww_je_erfasst = False
+        _ww_hat_quelle = inv_feld_hat_quelle(
+            anlage.sensor_mapping, wp.id, "warmwasser_kwh"
+        )
 
         gesamt_heizung_getrennt = 0.0  # Heizung nur für Monate mit getrennter Strommessung
         gesamt_warmwasser_getrennt = 0.0  # Warmwasser nur für Monate mit getrennter Strommessung
@@ -915,6 +953,10 @@ async def get_waermepumpe_dashboard(
             # und die CO2-Zahl (T89667 #295).
             _ww = get_wp_warmwasser_kwh(d, wp.parameter)
             gesamt_warmwasser += _ww
+            # Anwesenheit statt Menge — eine gepflegte 0 ist eine Messung.
+            _ww_je_erfasst = _ww_je_erfasst or hat_wp_warmwasser_wert(
+                d, wp.parameter
+            )
             waerme_abgeleitet = waerme_abgeleitet or heizwaerme_ist_abgeleitet(
                 md.source_provenance
             )
@@ -1179,7 +1221,9 @@ async def get_waermepumpe_dashboard(
             # ⛔ **Es sagt NICHT „hier fehlt ein Zaehler".** Abdeckung ist Sache
             # des Daten-Checkers; hier steht nur, ob es die Groesse am Geraet
             # ueberhaupt gibt.
-            'hat_warmwasser_achse': _hat_warmwasser,
+            'hat_warmwasser_achse': (
+                _hat_warmwasser and (_ww_je_erfasst or _ww_hat_quelle)
+            ),
             'gesamt_waerme_kwh': round(gesamt_waerme, 1),
             # F-42: „nicht bewertet heißt keine Zahl" (N-258-Klasse). Ohne
             # gemessene Wärme ist die JAZ keine 0, sondern unbekannt; ohne

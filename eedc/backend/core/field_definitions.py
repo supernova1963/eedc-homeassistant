@@ -2498,6 +2498,45 @@ def get_wp_warmwasser_kwh(data: dict, params: Optional[dict] = None) -> float:
     return float(data.get("warmwasser_kwh") or 0)
 
 
+def hat_wp_warmwasser_wert(data: dict, params: Optional[dict] = None) -> bool:
+    """Trägt diese Monatszeile überhaupt einen Warmwasser-Wert? — **Anwesenheit,
+    nicht Menge.**
+
+    Schwester von `get_wp_warmwasser_kwh` mit derselben Geräte-Bedingung, aber
+    der anderen Frage. Die Lesetür liefert `float` und macht aus einem fehlenden
+    Wert eine 0 (`data.get(...) or 0`) — für eine Summe ist das richtig, für die
+    Frage *„wurde hier je etwas gemessen?"* nicht: Eine **gepflegte** 0 ist eine
+    Messung, ein fehlender Eintrag ist eine Leerstelle, und beide kämen als
+    `0.0` zurück. Das ist die `is not None`-Regel aus `CLAUDE.md`, hier als
+    eigene Tür statt als Rohzugriff daneben.
+
+    ⭐ **Wofür sie gebraucht wird (8ear, #404):** SOLL Wärme/Klima §3.2a **R1**
+    sagt *„was ein Gerät liefern kann, sagt der zugeordnete Zähler, nicht seine
+    Bauart — wer keinen zuordnet, sieht die Achse nicht."* Die Warmwasser-Achse
+    im Komponenten-Hub hing bis dahin allein an der Bauart
+    (`groesse_gibt_es_am_geraet`) und stand deshalb an **jeder** Luft-Wasser-WP,
+    auch an einer, die nachweislich nie Warmwasser gemessen hat — dauerhaft auf
+    Null, samt Balken, Spalte und Legendeneintrag.
+
+    ⛔ **Sie ersetzt `groesse_gibt_es_am_geraet` NICHT, sie ergänzt es.** Die
+    Bauart-Frage bleibt die härtere: Eine Split-Klimaanlage hat keinen
+    Warmwasserkreis, dort zählt ein gespeicherter Wert auch dann nicht, wenn er
+    dasteht (N-379). Diese Funktion trägt die weichere Hälfte und darf nur
+    **zusätzlich** geprüft werden, nie an ihrer Stelle.
+
+    ⚠ **Und sie entscheidet nur über die ANZEIGE einer Achse, nie über eine
+    Kennzahl je Monatszeile.** Eine Arbeitszahl fragt, ob das Gerät die Größe
+    hat — nicht, ob ein anderer Monat sie trug.
+    """
+    if not data:
+        return False
+    if params is not None and not groesse_gibt_es_am_geraet(
+        "waermepumpe", "warmwasser_kwh", params
+    ):
+        return False
+    return data.get("warmwasser_kwh") is not None
+
+
 def get_eauto_ladung_kwh(data: dict) -> float:
     """E-Auto- oder Wallbox-Gesamtladung in kWh.
     Liest `ladung_kwh` (kanonisch), Legacy-Fallback `verbrauch_kwh`.
