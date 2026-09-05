@@ -19,6 +19,7 @@
 > | Der gemeinsame Nenner (Mehrkosten) | ADR-002-Umfeld, `investitionskosten.py`, N-137 |
 > | Anwender-Sicht | [`docs/HANDBUCH_BEDIENUNG.md`](HANDBUCH_BEDIENUNG.md) §Auswertungen → ROI |
 >
+> ⬜ **§9.2 (05.09.2026): „Abgabe an Dritte" ist entschieden und NICHT gebaut** — der einzige offene Bauschritt dieses Papiers.
 > **§8 — die Bauliste — ist am 10.08. abgearbeitet**, zuletzt Schritt 7. Sie war
 > Release-Bedingung (Entscheid Maintainer, 10.08.); ein GitHub-Issue gibt es
 > deshalb bewusst nicht. Der maschinelle Stand steht im Dict
@@ -332,6 +333,51 @@ heißt im Formular **„Ertrag/Jahr (€)"** und steht bei *Wallbox* und
 > `(K − E·n) ÷ Z`, die Zahl aus §6. **Reihenfolge ist hier keine Vorliebe,
 > sondern Datenschutz an bestehenden Beständen.** Vor Schritt 7 gehört deshalb
 > eine Kommunikation (§11) — und die Prüfung, ob eine Migration nötig ist.
+
+### 9.2 Abgabe an Dritte — der dritte Weg der Netzpunkt-Bilanz (Entscheid Maintainer, 2026-09-05)
+
+> **Status: ENTSCHIEDEN (Option A, 05.09.2026), ⬜ NICHT GEBAUT.** Eigenes Paket, Timing beim
+> Maintainer. Bis zum Bau gilt die Grenze aus dem Handbuch (*„Was eedc bei Abgabe an Dritte nicht
+> kann"*) unverändert — und dieses Papier ist damit wieder ein abgenommenes Konzept mit offenem
+> Bauschritt (Release-Sperre 3 prüft es).
+
+**Der Fall, an dem es aufging** (rilmor-mhrs, #402, N-378): Ein Vermieter betreibt PV und
+Speicher und gibt über zwei eigene Wechselrichter Strom an die Bewohner und den Allgemeinstrom
+ab — mit **eigenem Zähler an jeder Übergabestelle** und eigenem Erlös. In eedc stehen die beiden
+als *Sonstiges/Erzeuger*: ihr „Erzeugung"-Wert ist das Integral der Wechselrichter-Leistung, also
+die Energie, die das Haus **verlässt**, keine Erzeugung. eedc zählt sie hinter dem Hauszähler
+dazu und, weil sie den Zähler nie erreicht, als **Eigenverbrauch** (92 % statt der wahren Quote).
+
+**Der Fachraum, nicht der Melderfall:** Hinter dem Hausanschluss wird eine Kilowattstunde auf
+**drei** Wegen los — selbst verbraucht, ins öffentliche Netz gespeist, **an Dritte abgegeben**
+(Mieterstrom, Allgemeinstrom im Mehrfamilienhaus, Nachbarhaus, Ladepunkt für Dritte). Die
+Netzpunkt-Bilanz (`erzeugung_hinter_zaehler_kwh`, Konzept „Sonstiger Erzeuger" 22.06.) kennt nur
+die ersten zwei. Der dritte fehlt im **Modell**; er ist keine Sonderbehandlung einer Anlage.
+
+**Das Modell:**
+
+| | |
+| --- | --- |
+| **Kategorie** | *Sonstiges → Abgabe an Dritte* neben Erzeuger · Verbraucher · Speicher · Zähler |
+| **Größen** | `abgabe_kwh` (Pflicht, Zähler an der Übergabestelle — gemessen, nie geschätzt) · `leistung_w` (Live) · `einspeise_erloes_euro` als **„Erlös (€)"** (§9 Weg 2, unverändert) |
+| **Bilanz** | `eigenverbrauch = direktverbrauch + entladung + v2h − abgabe_dritte`; Abgabe ist **kein** Eigenverbrauch und **keine** Netz-Einspeisung. Ob die kWh aus PV-Überschuss oder Speicher kam, ist für die Bilanz gleichgültig (N-378) |
+| **Rechenstellen** | Layer-SoT `core/berechnungen/verbrauch.py` und die zwei Nachbauten (`aktueller_monat`, `live_power_service`) **plus** der strukturell andere Tagespfad (`TagesBilanz`, stundenweise `min(pv, verbrauch)`) — Vier-Sichten-Symmetrie ist die Probe |
+| **Konsumenten, die mitziehen** | Autarkie · EV-Quote · EV-Ersparnis/Netto-Ertrag/ROI (N-375: abgegebene kWh tragen keine Ersparnis) · CO₂ (sie sparen dem Anlagenbesitzer kein CO₂) · USt-Bemessung · Community-Payload · HA-Export |
+| **Anzeige** | eine eigene Zeile **„Abgabe an Dritte"** auf der **Verwendungsseite** (PV-Hub, Cockpit → Monat/Jahr, Energiebilanz) — nicht im Erzeugungs-Stapel |
+| **Geld** | bleibt das €-Feld des Anwenders; die Abrechnung an Dritte ist nicht eedcs Sache (wie §9) |
+| **Daten-Checker** | Either-Or-Gruppe der Kategorie (`abgabe_kwh`); dazu ein Hinweis an *Erzeugern* mit Einspeise-Zähler **und** Erlös, aber ohne Erzeugungs-Zähler: *„Gibt dieses Gerät Strom an Dritte ab? Dann Kategorie Abgabe."* |
+| **Migration** | keine automatische — der Anwender stellt die Kategorie um (eedc verschiebt nichts von allein); die Zuordnung `einspeisung_kwh` wird `abgabe_kwh` |
+
+**Was der dritte Weg NICHT löst, und das gehört ins Handbuch:** den **Anteil-Fall ohne
+Übergabe-Zähler** (Einwand Maintainer 03.09.: *„wie, was und wo gezählt und abgerechnet wird"*).
+Ohne gemessene Abgabe bleibt die bisherige Grenze stehen — eedc schätzt keinen Anteil. Ebenso
+verworfen bleiben (§7-Klasse, nicht neu aufrollen): ein binäres Kennzeichen „eigener
+Einspeisezähler" am Erzeuger (unterstellt eine Verkabelung) und die zweite Anlage (nur bei
+wirklich getrenntem Zählpunkt richtig).
+
+**Aufwand:** zwei Sitzungen — Registry-Kategorie, Bilanz an vier Stellen mit Symmetrie-Probe,
+Verwendungszeile, Daten-Checker, Handbuch. Bauschritt in ``BAUSCHRITTE_OFFEN`` eintragen, sobald
+das Paket beginnt.
 
 ## 10. Erweiterung einer Komponente (Speicher, PV)
 
