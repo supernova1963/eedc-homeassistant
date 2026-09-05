@@ -88,6 +88,43 @@ def _wp_alter_wirkungsgrad(wp_parameter: Optional[dict]) -> float:
     )
 
 
+#: B6/Y-3 (05.09.2026): der Formeltext, der die Rechnung von
+#: `berechne_wp_ersparnis` beschreibt — und nur die. Bis dahin stand an drei
+#: Stellen (Cockpit-Detailblock, T-Konto-Fallback im Client, PDF) ein Text ohne
+#: Zusatzkosten und ohne den Kühlstrom-Abzug: bei einer Klimaanlage ergab der
+#: gedruckte Rechenweg 10 €, während daneben 100 € standen (Style-Guide A6).
+WP_ERSPARNIS_FORMEL = (
+    "(Wärme ÷ Wirkungsgrad × Gaspreis + Zusatzkosten ÷ 12) "
+    "− (Strom − Kühlstrom) × WP-Strompreis"
+)
+
+
+def wp_ersparnis_berechnung(
+    ergebnis: "WPErsparnisErgebnis",
+    waerme_kwh: float,
+    strom_kwh: float,
+    strompreis_cent: float,
+    wp_parameter: Optional[dict],
+) -> str:
+    """Die Rechnung hinter einer Ersparnis-Zahl, mit den Zahlen dieses Monats.
+
+    Nennt Zusatzkosten und Kühlstrom nur, wenn sie größer 0 sind — sonst liest
+    sich die Zeile wie früher: ``3500 kWh / 0,90 × 12,0 ct − 1000 kWh × 30,00 ct``.
+    """
+    zusatz = _wp_zusatzkosten_jahr(wp_parameter) / 12
+    alt = f"{waerme_kwh:.1f} kWh / {ergebnis.verwendeter_wirkungsgrad:.2f} × {ergebnis.verwendeter_gaspreis_cent:.1f} ct"
+    if zusatz > 0:
+        alt += f" + {zusatz:.2f} € Zusatzkosten"
+    kuehl_kwh = (
+        ergebnis.kuehl_kosten_euro * 100 / strompreis_cent if strompreis_cent else 0.0
+    )
+    if kuehl_kwh > 0:
+        wp = f"({strom_kwh:.1f} − {kuehl_kwh:.1f} Kühlstrom) kWh × {strompreis_cent:.2f} ct"
+    else:
+        wp = f"{strom_kwh:.1f} kWh × {strompreis_cent:.2f} ct"
+    return f"{alt} − {wp}"
+
+
 def _wp_zusatzkosten_jahr(wp_parameter: Optional[dict]) -> float:
     """Fixe Zusatzkosten der Altheizung je Jahr (€), 0 ohne Pflege."""
     if not wp_parameter:

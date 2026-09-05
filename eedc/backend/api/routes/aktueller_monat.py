@@ -59,7 +59,11 @@ from backend.core.berechnungen import (
     vollzyklen as berechne_vollzyklen,
 )
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
-from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
+from backend.services.wp_wirtschaftlichkeit import (
+    WP_ERSPARNIS_FORMEL,
+    berechne_wp_ersparnis,
+    wp_ersparnis_berechnung,
+)
 from backend.services.eauto_wirtschaftlichkeit import (
     attribute_emob_pool_by_km,
     berechne_eauto_ersparnis,
@@ -307,6 +311,9 @@ class AktuellerMonatResponse(BaseModel):
     # SOLL §6 (05.09.): eine geschätzte Wärme erscheint als geschätzt.
     wp_waerme_herkunft: Optional[str] = None
     wp_ersparnis_vorbehalt: Optional[str] = None
+    # B6/Y-3: die Rechnung hinter der Zahl, aus dem Layer-Ergebnis — der Client
+    # baut keinen Formeltext mehr selbst (A6, ADR-002/P12).
+    wp_ersparnis_berechnung: Optional[str] = None
     # #191: Strom-Aufteilung Heizung/Warmwasser. Nur gesetzt wenn mindestens
     # eine WP-Investition `getrennte_strommessung=true` hat. Sonst None →
     # Frontend zeigt nur den Gesamtstromverbrauch.
@@ -1221,11 +1228,12 @@ def _baue_investition_financial(
             )
             inv_ersparnis = round(wp_result.ersparnis_euro, 2)
             inv_label = "Ersparnis vs. Gas"
-            inv_formel = "(Wärme ÷ Wirkungsgrad × Gaspreis) − Strom × WP-Strompreis"
-            inv_berechnung = (
-                f"{waerme_total:.1f} kWh / {wp_result.verwendeter_wirkungsgrad:.2f} "
-                f"× {wp_result.verwendeter_gaspreis_cent:.1f} ct − "
-                f"{strom:.1f} kWh × {wp_p:.2f} ct"
+            # B6/Y-3: Formel und Rechnung beschreiben, was der Layer rechnet —
+            # mit Zusatzkosten der Altheizung und ohne den Kühlstrom (E-B). Bis
+            # hierher stand ein Text, der bei F8 10 € ergab, neben dem Wert 100 €.
+            inv_formel = WP_ERSPARNIS_FORMEL
+            inv_berechnung = wp_ersparnis_berechnung(
+                wp_result, waerme_total, strom, wp_p, inv.parameter,
             )
 
     elif inv.typ in ("e-auto", "wallbox") and not ist_dienstlich(inv):
@@ -1752,6 +1760,7 @@ async def get_aktueller_monat(
 
     # ── Komponenten-Ersparnis ──
     wp_ersparnis = None
+    wp_ersparnis_berechnung_text: Optional[str] = None
     emob_ersparnis = None
 
     # Monats-Gaspreis (für WP-Ersparnis hier + Per-Investition-Block unten) wird
@@ -1868,6 +1877,9 @@ async def get_aktueller_monat(
             strom_kuehlen_kwh=get_val("wp_modus_kuehlen_kwh") or 0.0,
         )
         wp_ersparnis = round(wp_ersparnis_result.ersparnis_euro, 2)
+        wp_ersparnis_berechnung_text = wp_ersparnis_berechnung(
+            wp_ersparnis_result, wp_waerme, wp_strom, wp_preis_cent, wp_ref_parameter,
+        )
 
     # G20-2 (Gernot 2026-07-20): Die eMob-Ersparnis-Aggregation folgt weiter unten
     # als **Summe der Per-Fahrzeug-Ersparnisse** (dieselben Werte wie die
@@ -2637,6 +2649,7 @@ async def get_aktueller_monat(
         wp_waerme_abgeleitet=wp_waerme_abgeleitet_kwh > 0,
         wp_waerme_herkunft=wp_waerme_herkunft,
         wp_ersparnis_vorbehalt=wp_ersparnis_vorbehalt,
+        wp_ersparnis_berechnung=wp_ersparnis_berechnung_text,
         wp_strom_heizen_kwh=wp_strom_heizen,
         wp_strom_warmwasser_kwh=wp_strom_warmwasser,
         wp_modus_strom_heizen_kwh=wp_modus_heizen,

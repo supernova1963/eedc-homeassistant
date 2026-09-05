@@ -415,7 +415,7 @@ describe('WerteTabelle — gesperrte Kennzahl nennt ihren Grund sichtbar (N-374)
   function mitCopSpalte(rows: ReturnType<typeof monatsZeile>[]) {
     render(<WerteTabelle rows={rows} granularitaet="monat" />)
     fireEvent.click(screen.getByRole('button', { name: /Spalten/ }))
-    const label = screen.getByText('WP COP').closest('label')!
+    const label = screen.getByText('WP JAZ').closest('label')!
     fireEvent.click(within(label).getByRole('checkbox'))
   }
 
@@ -428,11 +428,11 @@ describe('WerteTabelle — gesperrte Kennzahl nennt ihren Grund sichtbar (N-374)
     ].map(monatsZeile))
 
     // Sichtbarer Textknoten — ein `title=` würde hier NICHT gefunden.
-    const zeile = screen.getByText(`WP COP: ${GRUND}`)
+    const zeile = screen.getByText(`WP JAZ: ${GRUND}`)
     expect(zeile).toBeInTheDocument()
     // Und er steht genau EINMAL, obwohl beide Monate ihn tragen: derselbe Satz
     // je Zeile wäre Rauschen statt Auskunft.
-    expect(screen.getAllByText(`WP COP: ${GRUND}`)).toHaveLength(1)
+    expect(screen.getAllByText(`WP JAZ: ${GRUND}`)).toHaveLength(1)
   })
 
   it('lässt die Zelle selbst beim „—" — der Grund ersetzt den Wert nicht', () => {

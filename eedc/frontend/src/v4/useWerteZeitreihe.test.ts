@@ -15,7 +15,7 @@ import { createMonatsZeitreihe } from '../pages/auswertung/types'
 
 const ANLAGE = { id: 1 } as Parameters<typeof useWerteZeitreihe>[1]
 
-const CO2_LEER = { monate: [], gesamtKg: 0, loading: false, error: null, refresh: vi.fn() }
+const CO2_LEER = { monate: [], gesamtKg: 0, wpVorbehalt: null, loading: false, error: null, refresh: vi.fn() }
 
 function basis(over: Partial<WerteZeitreiheBasis>): WerteZeitreiheBasis {
   return {

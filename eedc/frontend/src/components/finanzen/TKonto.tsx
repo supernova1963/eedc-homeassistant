@@ -262,10 +262,11 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
       label: 'WP-Ersparnis vs. Gas',
       wert: d.wp_ersparnis_euro,
       color: typColor('waermepumpe'),
-      formel: '(Wärme ÷ 0,9 × Gaspreis) − Strom × WP-Strompreis',
-      berechnung: d.wp_waerme_kwh != null && d.wp_strom_kwh != null
-        ? `${fmt(d.wp_waerme_kwh, 1)} kWh / 0,9 × 10 ct − ${fmt(d.wp_strom_kwh, 1)} kWh × ${fmtCalc(netzPreis, 2)} ct`
-        : undefined,
+      // B6/Y-3: Formel und Rechenweg kommen aus dem Backend (Layer-Ergebnis mit
+      // Zusatzkosten und ohne Kühlstrom). Hier stand ein selbst gebauter Text mit
+      // festem „÷ 0,9 × 10 ct" — ein Rechenweg, der nie der gerechnete war (A6, P12).
+      formel: '(Wärme ÷ Wirkungsgrad × Gaspreis + Zusatzkosten ÷ 12) − (Strom − Kühlstrom) × WP-Strompreis',
+      berechnung: d.wp_ersparnis_berechnung ?? undefined,
       ergebnis: `= ${fmtCalc(d.wp_ersparnis_euro, 2)} €`,
     } as TKontoPosten] : []),
     ...(!hasPerInv && d.emob_ersparnis_euro != null ? [{

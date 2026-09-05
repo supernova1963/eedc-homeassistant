@@ -135,6 +135,8 @@ export interface AktuellerMonatResponse {
    *  Vorbehalt an Ersparnis/CO₂ — fertig aus dem Layer, dieselben Worte wie im Hub. */
   wp_waerme_herkunft?: string | null
   wp_ersparnis_vorbehalt?: string | null
+  /** B6/Y-3: der Rechenweg hinter der Ersparnis, aus dem Layer-Ergebnis. */
+  wp_ersparnis_berechnung?: string | null
   // #191: Strom-Aufteilung Heizung/Warmwasser. Nur befüllt wenn mindestens
   // eine WP-Investition `getrennte_strommessung=true` hat.
   wp_strom_heizen_kwh: number | null

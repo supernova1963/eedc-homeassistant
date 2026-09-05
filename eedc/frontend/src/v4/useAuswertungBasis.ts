@@ -80,6 +80,8 @@ export function useAuswertungBasis(anlageId: number | undefined | null) {
     monate: co2Q.data?.monatswerte ?? [],
     /** Σ der gesamten Historie — die Zahl, die der Endpoint selbst ausweist. */
     gesamtKg: co2Q.data?.co2_gesamt_kg ?? 0,
+    /** B6/Y-4: Vorbehalt an der WP-CO₂ (Wärme geschätzt · zweiter Erzeuger), aus dem Layer. */
+    wpVorbehalt: co2Q.data?.co2_wp_vorbehalt ?? null,
     loading: co2Q.loading,
     error: co2Q.error,
     refresh: co2Q.refetch,

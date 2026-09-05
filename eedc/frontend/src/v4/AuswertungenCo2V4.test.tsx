@@ -178,3 +178,19 @@ describe('baueCo2Monatsreihe (Aufbereitungs-Wächter, kein Fix-Beweis)', () => {
     expect(baueCo2Monatsreihe(manipuliert).map((r) => r.kumuliert_co2)).toEqual([550, 9999])
   })
 })
+
+describe('AuswertungenCo2V4 — B6/Y-4: die WP-CO₂ aus geschätzter Wärme sagt es', () => {
+  const VORBEHALT = 'Wärme geschätzt — Ersparnis und CO₂ folgen aus der Schätzung'
+  const mitVorbehalt = () => ({ ...basisMock, co2: { ...CO2_BASIS, wpVorbehalt: VORBEHALT } }) as unknown as AuswertungBasis
+
+  it('zeigt den Vorbehalt aus dem Layer in der Berechnungsgrundlage', async () => {
+    render(<AuswertungenCo2V4 basis={mitVorbehalt()} />)
+    expect(await screen.findByText(VORBEHALT)).toBeInTheDocument()
+  })
+
+  it('ohne Vorbehalt kein Satz', async () => {
+    render(<AuswertungenCo2V4 basis={basis()} />)
+    await screen.findAllByText(/CO₂/)
+    expect(screen.queryByText(/geschätzt —/)).toBeNull()
+  })
+})

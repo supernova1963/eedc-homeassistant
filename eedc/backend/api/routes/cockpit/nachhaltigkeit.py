@@ -32,6 +32,9 @@ from backend.services.eauto_wirtschaftlichkeit import (
     fossil_getankte_liter,
     km_gewichtete_eauto_params,
 )
+from typing import Optional
+
+from backend.core.berechnungen.waermepumpe_kennzahl import ersparnis_vorbehalt
 from backend.services.monats_fakten import MonatsFakt, lade_monats_fakten
 from backend.api.routes.cockpit._shared import MONATSNAMEN
 
@@ -63,6 +66,11 @@ class NachhaltigkeitResponse(BaseModel):
     aequivalent_fluege_km: int
     monatswerte: list[NachhaltigkeitMonat]
     autarkie_durchschnitt_prozent: float
+    # B6/Y-4 (05.09.2026, SOLL §6 Präzisierung): die WP-CO₂ aus geschätzter Wärme
+    # oder mit einem zweiten Erzeuger am Wärmezähler trägt ihren Vorbehalt —
+    # dieselben Worte wie unter der Ersparnis in Hub und Cockpit. Bis dahin war
+    # die CO₂-Zahl die einzige, die ohne Kennzeichnung aus der Schätzung heraustrat.
+    co2_wp_vorbehalt: Optional[str] = None
 
 
 def _hat_substanz(fakt: MonatsFakt) -> bool:
@@ -179,6 +187,12 @@ async def get_nachhaltigkeit(
         co2_emob_total += co2_emob
 
     co2_gesamt = co2_pv_total + co2_wp_total + co2_emob_total
+    co2_wp_vorbehalt = ersparnis_vorbehalt(
+        waerme_abgeleitet=any(f.wp.waerme_abgeleitet_kwh > 0 for f in fakten),
+        abgrenzung=next(
+            (f.wp.abgrenzung_stoerung for f in fakten if f.wp.abgrenzung_stoerung), None,
+        ),
+    ) if co2_wp_total > 0 else None
     autarkie_avg = autarkie_summe / autarkie_count if autarkie_count > 0 else 0
 
     return NachhaltigkeitResponse(
@@ -192,4 +206,5 @@ async def get_nachhaltigkeit(
         aequivalent_fluege_km=int(co2_gesamt / 0.25),
         monatswerte=monatswerte,
         autarkie_durchschnitt_prozent=round(autarkie_avg, 1),
+        co2_wp_vorbehalt=co2_wp_vorbehalt,
     )

@@ -189,3 +189,28 @@ describe('TKonto — Vergleichs-Badge gegen die angezeigten Beträge', () => {
     expect(screen.queryAllByText(/▲/).length).toBe(0)
   })
 })
+
+describe('TKonto — B6/Y-3: der Rechenweg der WP-Ersparnis kommt aus dem Backend', () => {
+  // Bis 05.09.2026 baute der Fallback (ohne per-Investition-Daten) den Text selbst,
+  // mit festem „÷ 0,9 × 10 ct" — ein Rechenweg, der nie der gerechnete war (A6):
+  // ohne Zusatzkosten, ohne den Kühlstrom-Abzug, mit einem Gaspreis, der nicht
+  // der gepflegte war. Jetzt trägt die Antwort den Text aus dem Layer-Ergebnis.
+  const BERECHNUNG = '3000.0 kWh / 0.90 × 12.0 ct + 10.00 € Zusatzkosten − (1300.0 − 300.0 Kühlstrom) kWh × 30.00 ct'
+
+  it('zeigt die Backend-Herleitung und keinen selbst gebauten Text', () => {
+    render(<TKonto d={{ ...basis, wp_ersparnis_euro: 110, wp_waerme_kwh: 3000, wp_strom_kwh: 1300,
+      wp_ersparnis_berechnung: BERECHNUNG }} />)
+    const label = screen.getAllByText(/WP-Ersparnis vs\. Gas/)[0]
+    fireEvent.mouseEnter(label)
+    expect(screen.getAllByText(BERECHNUNG).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/0,9 × 10 ct/)).toBeNull()
+    expect(screen.getAllByText(/Kühlstrom\) × WP-Strompreis/).length).toBeGreaterThan(0)
+  })
+
+  it('ohne Backend-Text steht keine erfundene Herleitung', () => {
+    render(<TKonto d={{ ...basis, wp_ersparnis_euro: 100, wp_waerme_kwh: 3000, wp_strom_kwh: 1300 }} />)
+    const label = screen.getAllByText(/WP-Ersparnis vs\. Gas/)[0]
+    fireEvent.mouseEnter(label)
+    expect(screen.queryByText(/kWh \/ 0,9/)).toBeNull()
+  })
+})

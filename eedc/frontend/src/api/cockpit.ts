@@ -176,6 +176,8 @@ export interface Nachhaltigkeit {
   aequivalent_fluege_km: number
   monatswerte: NachhaltigkeitMonat[]
   autarkie_durchschnitt_prozent: number
+  /** B6/Y-4: Vorbehalt an der WP-CO₂ (Wärme geschätzt · zweiter Erzeuger) — dieselben Worte wie unter der Ersparnis. */
+  co2_wp_vorbehalt?: string | null
 }
 
 // =============================================================================

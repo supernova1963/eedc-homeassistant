@@ -81,7 +81,7 @@ export const WERTE_METRIKEN: WerteMetrik[] = [
   // Jahresarbeitszahl derselben Zeilen (Sigma Waerme / Sigma Strom) **2,66** ist —
   // zwei Wahrheiten in einer Tabelle. Dieselbe Entscheidung wie bei der
   // Grundlast-Spalte (01.09.), aus demselben Grund.
-  { key: 'wp_cop',             label: 'WP COP',            unit: '',        gruppe: 'waermepumpe', decimals: 1, aggregation: 'none', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
+  { key: 'wp_cop',             label: 'WP JAZ',            unit: '',        gruppe: 'waermepumpe', decimals: 1, aggregation: 'none', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
   // E-Auto — kein sauberer Tages-Wert (km/Lade-Split) → monat-only
   { key: 'eauto_km',           label: 'E-Auto',            unit: 'km',      gruppe: 'eauto',       decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
   { key: 'eauto_ladung',       label: 'E-Auto Ladung',     unit: 'kWh',     gruppe: 'eauto',       decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },

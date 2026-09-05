@@ -147,7 +147,7 @@
     <tr><th>davon Heizung</th><td>{{ fmt_kwh(waermepumpe.heizung_kwh) }}</td></tr>
     <tr><th>davon Warmwasser</th><td>{{ fmt_kwh(waermepumpe.warmwasser_kwh) }}</td></tr>
     <tr><th>Stromverbrauch</th><td>{{ fmt_kwh(waermepumpe.strom_kwh) }}</td></tr>
-    <tr><th>Jahresarbeitszahl (COP)</th><td>{{ fmt_num(waermepumpe.cop, 2) }}{% if waermepumpe.cop_grund %} <span class="muted">{{ waermepumpe.cop_grund }}</span>{% elif waermepumpe.cop_hinweis %} <span class="muted">{{ waermepumpe.cop_hinweis }}</span>{% endif %}</td></tr>
+    <tr><th>Jahresarbeitszahl (JAZ)</th><td>{{ fmt_num(waermepumpe.cop, 2) }}{% if waermepumpe.cop_grund %} <span class="muted">{{ waermepumpe.cop_grund }}</span>{% elif waermepumpe.cop_hinweis %} <span class="muted">{{ waermepumpe.cop_hinweis }}</span>{% endif %}</td></tr>
     {% if waermepumpe.hat_split or waermepumpe.jaz_heizen_grund %}<tr><th>Arbeitszahl Heizen</th><td>{{ fmt_num(waermepumpe.jaz_heizen, 2) }}{% if waermepumpe.jaz_heizen_grund %} <span class="muted">{{ waermepumpe.jaz_heizen_grund }}</span>{% endif %}</td></tr>
     <tr><th>Arbeitszahl Warmwasser</th><td>{{ fmt_num(waermepumpe.jaz_warmwasser, 2) }}{% if waermepumpe.jaz_warmwasser_grund %} <span class="muted">{{ waermepumpe.jaz_warmwasser_grund }}</span>{% endif %}</td></tr>{% endif %}
     {% if waermepumpe.jaz_kuehlen is not none or waermepumpe.jaz_kuehlen_grund %}<tr><th>Arbeitszahl Kühlen</th><td>{{ fmt_num(waermepumpe.jaz_kuehlen, 2) }}{% if waermepumpe.jaz_kuehlen_grund %} <span class="muted">{{ waermepumpe.jaz_kuehlen_grund }}</span>{% endif %}</td></tr>{% endif %}

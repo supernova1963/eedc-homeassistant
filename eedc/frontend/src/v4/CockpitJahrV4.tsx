@@ -387,6 +387,11 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
                 <KpiStrip kpis={co2Kpis} />
                 <Parkbar id="el:co2" titel="CO₂-Verlauf">
                   <JahrCo2Chart daten={co2Punkte} />
+                  {/* B6/Y-4 (SOLL §6): die WP-CO₂ aus geschätzter Wärme oder mit
+                      zweitem Erzeuger sagt es — dieselben Worte wie unter der Ersparnis. */}
+                  {co2Q.data?.co2_wp_vorbehalt && (
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{co2Q.data.co2_wp_vorbehalt}</p>
+                  )}
                 </Parkbar>
               </div>
             ),
@@ -467,7 +472,8 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
     ]
   }, [jahr, jahrData, jahrVglData, vorjahr, oeJahr, vjFenster, ojFenster, istFenster,
       kennzahlenFenster, monatsZeilen, park, jahrAntworten, speicherZeilen,
-      co2Punkte, co2Monate.length, co2Kumuliert, co2Fehler, co2Reload, zaehlerstaende])
+      co2Punkte, co2Monate.length, co2Kumuliert, co2Fehler, co2Reload, zaehlerstaende,
+      co2Q.data])
 
   if (!anlageId) {
     return (

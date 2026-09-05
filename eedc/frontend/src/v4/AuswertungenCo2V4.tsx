@@ -184,7 +184,9 @@ function Co2Inner({ basis }: { basis: AuswertungBasis }) {
     const bilanzKpis: KpiStripItem[] = [
       {
         title: 'CO₂ eingespart', value: fc.wert, unit: fc.einheit, color: 'green', icon: Leaf,
-        subtitle: `${anzahlMonate} Monate`, parkId: 'kpi:co2-eingespart',
+        // B6/Y-4: der Vorbehalt (Wärme geschätzt · zweiter Erzeuger) steht sichtbar an
+        // der Kopfzahl — wie unter der Ersparnis im Hub, nicht nur im eingeklappten Block.
+        subtitle: basis.co2.wpVorbehalt ?? `${anzahlMonate} Monate`, parkId: 'kpi:co2-eingespart',
         // Die Herleitung nennt die DREI Quellen, nicht mehr „Erzeugung × Faktor".
         // Genau diese Formel war N-21: sie sagte laut, was die Zahl nicht war.
         formel: 'Eigenverbrauch × Strommix + Wärmepumpe + E-Mobilität',
@@ -366,6 +368,11 @@ function Co2Inner({ basis }: { basis: AuswertungBasis }) {
                 Netzladung). Dieselbe Rechnung liegt hinter dem Block „CO₂-Bilanz"
                 in Cockpit → Jahr und hinter dem CO₂-Sensor in Home Assistant.
               </p>
+              {/* B6/Y-4 (SOLL §6): die WP-CO₂ aus geschätzter Wärme oder mit zweitem
+                  Erzeuger sagt es — dieselben Worte wie unter der Ersparnis im Hub. */}
+              {basis.co2.wpVorbehalt && (
+                <p className="text-amber-600 dark:text-amber-400">{basis.co2.wpVorbehalt}</p>
+              )}
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm border-t border-gray-200 dark:border-gray-700 pt-4">
               <div><p className="text-gray-500 dark:text-gray-400">Ø pro Monat</p><p className={`font-medium ${CO2_TEXT_CLASS}`}>{formatCo2(oProMonat).text}</p></div>
@@ -390,7 +397,7 @@ function Co2Inner({ basis }: { basis: AuswertungBasis }) {
       ...(blockAmort && sichtbar(amortIds) ? [blockAmort] : []),
       ...(sichtbar(basisIds) ? [blockBasis] : []),
     ]
-  }, [zeitreihe, kumuliertGesamt, gesamtCo2, gesamtCo2Gesamt, graueLast, anzahlMonate, anteile, klimapositiv, co2Amort, basis.jahr, schmal, park])
+  }, [zeitreihe, kumuliertGesamt, gesamtCo2, gesamtCo2Gesamt, graueLast, anzahlMonate, anteile, klimapositiv, co2Amort, basis.jahr, schmal, park, basis.co2.wpVorbehalt])
 
   if (basis.error) {
     // B8 (S15): Basis-Fetch-Fehler sichtbar machen — vorher 0-Wert-KPIs (stille Leere).
