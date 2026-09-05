@@ -13,6 +13,7 @@ from backend.core.betriebsmodus import MODUS_STROM_FELD
 from backend.core.field_definitions import (
     INVESTITION_FELDER,
     basis_feld_key,
+    get_feld_bedarf,
     get_speicher_netzladung_kwh,
     get_wp_strom_kwh,
     groesse_gibt_es_am_geraet,
@@ -20,7 +21,6 @@ from backend.core.field_definitions import (
 from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
 from backend.core.investition_kennwerte import get_erzeuger_kwp
 from backend.core.monats_luecken import ermittle_start_anker
-from backend.core.investition_parameter import ist_luft_luft_waermepumpe
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition
@@ -1032,13 +1032,16 @@ class MonatsdatenChecks:
             return ergebnisse
 
         getrennte_strommessung = param.get("getrennte_strommessung", False)
-        # Split-Klimaanlagen (wp_art="luft_luft") haben üblicherweise keinen
-        # Wärmemengenzähler — die "Heizwärme fehlt"-Warnung wäre ein
-        # Dauer-Falschpositiv. Stromverbrauch ist trotzdem Pflicht.
-        # Über den SoT-Helper statt als Literal: dieselbe Unterscheidung
-        # entscheidet in `energieprofil.py` über die Zusatz-Zähler, und genau
-        # dort hat sie bis 02.08. gefehlt.
-        ist_klima = ist_luft_luft_waermepumpe(param)
+        # B2 (05.09.2026, R1): Ob eedc an diesem Gerät Heizwärme ERWARTET und
+        # ob es eine Warmwasser-Strom-Seite GIBT, sagt die Registry — nicht die
+        # Bauart. Heizwärme ist an einer Split-Klimaanlage optional
+        # (`KLIMA_OHNE_WAERMEMENGE`: kein Wärmemengenzähler möglich, die
+        # Warnung wäre ein Dauer-Falschpositiv) und an einer Brauchwasser-WP
+        # erweitert (A6); `strom_warmwasser_kwh` existiert an einer
+        # Klimaanlage nicht (B5/N-304). ⛔ Bis B2 stand hier eine Bauart-Frage
+        # (`ist_luft_luft_waermepumpe`), an drei Stellen dieser Funktion benutzt.
+        heiz_erwartet = get_feld_bedarf("waermepumpe", "heizenergie_kwh", param)[0] == "pflicht"
+        ww_strom_gibt_es = groesse_gibt_es_am_geraet("waermepumpe", "strom_warmwasser_kwh", param)
 
         # #183: bei getrennter Strommessung wird der alte stromverbrauch_kwh-
         # Sensor in der Aggregation ignoriert. Wenn er trotzdem im Sensor-
@@ -1135,14 +1138,14 @@ class MonatsdatenChecks:
                 # anbietet — die Klasse, an der N-86 schon einmal hing:
                 # dieselbe Anlage, zwei Flächen, gegenteilige Aussage.
                 if daten.get("strom_heizen_kwh") is None and (
-                    ist_klima or daten.get("strom_warmwasser_kwh") is None
+                    not ww_strom_gibt_es or daten.get("strom_warmwasser_kwh") is None
                 ):
                     fehlend_strom.append(label)
             else:
                 if daten.get("stromverbrauch_kwh") is None:
                     fehlend_strom.append(label)
 
-            if not ist_klima and daten.get("heizenergie_kwh") is None:
+            if heiz_erwartet and daten.get("heizenergie_kwh") is None:
                 fehlend_heiz.append(label)
 
         if fehlend_strom:
@@ -1151,7 +1154,7 @@ class MonatsdatenChecks:
                 monate_str += f" (+{len(fehlend_strom) - 6} weitere)"
             if not getrennte_strommessung:
                 strom_label = "Stromverbrauch"
-            elif ist_klima:
+            elif not ww_strom_gibt_es:
                 strom_label = "Strom Heizen"   # B5: keine Warmwasser-Seite
             else:
                 strom_label = "Strom Heizen/Warmwasser"

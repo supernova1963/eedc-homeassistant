@@ -1267,12 +1267,17 @@ class DatenquelleChecks:
         nur die Aufteilung. Eine Warnung stünde in keinem Verhältnis — und ein
         Hinweis ohne Weg wäre die P-6-Falle.
 
-        ⚠ **Nur `wp_art = luft_luft`** — die Trennlinie aus F-41 gilt
-        unverändert: *Messbarkeit hängt an der Bauart, Bewertbarkeit an der
-        Pflege.* Ob ein Gerät kühlen kann, ist Bauart. Das **Feld** dagegen
-        bekommt jede Wärmepumpe angeboten (Konzept §7 E-E), weil es
-        Luft-Wasser-Geräte mit Kühlfunktion gibt und weil zwei gemeldete
-        Klimaanlagen als `luft_wasser` gepflegt sind.
+        **Welche Geräte den Hinweis bekommen — B2 (05.09.2026, R1).** Zwei Wege,
+        beide erlaubt: (1) die **Bauart schlägt vor** — an einer Split-Klimaanlage
+        (`luft_luft`) ist Heizen und Kühlen über einen Zähler der Regelfall, der
+        Hinweis ist ein Angebot, keine Forderung (ADR-002/P13, Gruppe 2);
+        (2) die **Beleglage** — jedes Gerät, an dem eine Kühl-Spur zugeordnet
+        oder gepflegt ist (Kühl-Leistung live, Kältemenge, Kühl-Betriebsart),
+        kühlt nachweislich, egal welcher Bauart. Bis B2 zählte nur (1): eine
+        Luft-Wasser-Wärmepumpe mit Kühlfunktion (MartyBr, T89667 #199) bekam
+        den Hinweis nie, obwohl ihr Strom genauso ungeteilt blieb. ⛔ *„Ob ein
+        Gerät kühlen kann, ist Bauart"* stand hier bis dahin wörtlich — und ist
+        genau der Satz, den SOLL §3.2a/E6 verwirft.
 
         ⛔ **Kein Befund für Altbestand-Zeiträume.** Der Modus lässt sich nicht
         nachtragen (Konzept D9: recorder-Purge, keine LTS für Zustände) — wer
@@ -1280,8 +1285,19 @@ class DatenquelleChecks:
         Vergangenheit wäre unauflösbar.
         """
         from datetime import date
+        from backend.core.berechnungen.betriebsart_gemessen import (
+            betriebsart_nutzenergie_kwh,
+            betriebsart_strom_kwh,
+        )
+        from backend.core.betriebsmodus import (
+            BETRIEBSART_NUTZENERGIE_FELD,
+            BETRIEBSART_STROM_FELD,
+            KUEHLEN,
+        )
         from backend.core.investition_parameter import ist_luft_luft_waermepumpe
         from backend.models.investition import Investition as _Inv
+
+        _KUEHL_FELDER = {BETRIEBSART_STROM_FELD[KUEHLEN], BETRIEBSART_NUTZENERGIE_FELD[KUEHLEN]}
 
         kat = CheckKategorie.KLIMA_MODUS_SENSOR.value
 
@@ -1299,15 +1315,51 @@ class DatenquelleChecks:
         # Hinweis, den niemand mehr aufloesen kann (P-6-Falle, dieselbe Klasse
         # wie N-313 und der SoC-Check oben).
         heute = date.today()
+        sensor_mapping = anlage.sensor_mapping or {}
+        mapping = sensor_mapping.get("investitionen", {}) or {}
+        quellen_alle = sensor_mapping.get("quellen") or {}
+        aktive = [i for i in inv_result.scalars().all() if i.ist_aktiv_an(heute)]
+
+        # Kühl-Spur aus den Monatszeilen: gemessener Kühlstrom oder Kältemenge.
+        imd_alle = (await self.db.execute(
+            select(InvestitionMonatsdaten).where(
+                InvestitionMonatsdaten.investition_id.in_([i.id for i in aktive] or [-1])
+            )
+        )).scalars().all()
+        kuehl_in_daten = {
+            imd.investition_id for imd in imd_alle
+            if betriebsart_strom_kwh(imd.verbrauch_daten or {}, KUEHLEN) is not None
+            or betriebsart_nutzenergie_kwh(imd.verbrauch_daten or {}, KUEHLEN) is not None
+        }
+
+        def _hat_kuehl_spur(inv_id: int) -> bool:
+            """Ist an diesem Gerät irgendeine Kühl-Größe zugeordnet oder gepflegt?"""
+            if inv_id in kuehl_in_daten:
+                return True
+            eintrag = mapping.get(str(inv_id))
+            if isinstance(eintrag, dict):
+                for k, m in (eintrag.get("felder") or {}).items():
+                    if basis_feld_key(k) in _KUEHL_FELDER and isinstance(m, dict) \
+                            and m.get("strategie") == "sensor" and m.get("sensor_id"):
+                        return True
+                for k, v in (eintrag.get("live") or {}).items():
+                    if basis_feld_key(k) == "leistung_kuehlen_w" and bool(v):
+                        return True
+            praefix = f"inv_energy_{inv_id}_"
+            for feld_id, q in quellen_alle.items():
+                if isinstance(feld_id, str) and feld_id.startswith(praefix) \
+                        and basis_feld_key(feld_id[len(praefix):]) in _KUEHL_FELDER:
+                    quelle = (q or {}).get("quelle") if isinstance(q, dict) else None
+                    if quelle and quelle != "keine":
+                        return True
+            return False
+
         klimas = [
-            i for i in inv_result.scalars().all()
-            if i.ist_aktiv_an(heute) and ist_luft_luft_waermepumpe(i)
+            i for i in aktive
+            if ist_luft_luft_waermepumpe(i) or _hat_kuehl_spur(i.id)
         ]
         if not klimas:
             return []
-
-        sensor_mapping = anlage.sensor_mapping or {}
-        mapping = sensor_mapping.get("investitionen", {}) or {}
 
         def _hat_modus(inv_id: int) -> bool:
             """Hat dieses Gerät IRGENDEINE Modus-Zuordnung?
@@ -1426,7 +1478,7 @@ class DatenquelleChecks:
                 kategorie=kat, schwere=CheckSeverity.OK.value,
                 meldung=(
                     f"{titel} bei {'allen ' if len(klimas) > 1 else ''}"
-                    f"{len(klimas)} Klimaanlage(n)"
+                    f"{len(klimas)} heizend-kühlenden Gerät(en)"
                 ),
                 details=herkunft,
             )]
@@ -1476,7 +1528,7 @@ class DatenquelleChecks:
                 f"Heiz- und Kühlstrom bleiben zusammen"
             ),
             details=(
-                "Deine Klimaanlage heizt und kühlt über denselben Zähler. eedc "
+                "Dieses Gerät heizt und kühlt über denselben Zähler. eedc "
                 "sieht deshalb nur eine Zahl und kann nicht sagen, welcher Teil "
                 "des Stroms ins Heizen ging und welcher ins Kühlen — aus den "
                 "vorhandenen Werten lässt sich das nicht nachrechnen. "

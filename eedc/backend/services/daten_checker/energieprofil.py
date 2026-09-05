@@ -17,9 +17,8 @@ from backend.utils.investition_filter import sort_investitionen_nach_typ
 from backend.core.investition_parameter import (
     PARAM_SONSTIGES,
     ist_dienstlich,
-    ist_luft_luft_waermepumpe,
 )
-from backend.core.field_definitions import sonstiges_feld_reihenfolge
+from backend.core.field_definitions import sonstiges_feld_reihenfolge, feld_herabgestuft, pflicht_felder_am_geraet
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.core.berechnungen.erzeuger_traeger import (
     traegt_erzeugungsgroessen_selbst,
@@ -360,42 +359,24 @@ class EnergieprofilChecks:
                 aggregat_count += 1
                 continue
 
-            # WP mit getrennter Strommessung (#183): hier zählen
-            # `strom_heizen_kwh` und `strom_warmwasser_kwh` getrennt — das
-            # Legacy-Gesamt-Feld `stromverbrauch_kwh` wird vom Aggregator
-            # ohnehin ignoriert, wenn `getrennte_strommessung=True`. Ohne
-            # diesen Zweig meldete der Checker bei korrekt konfiguriertem
-            # Premium-Setup (dietmar1968 Forum-PN 2026-05-17) eine fehlende
-            # Abdeckung trotz vollständig gemappten getrennten Sensoren.
-            if inv.typ == "waermepumpe" and (inv.parameter or {}).get("getrennte_strommessung", False):
-                erwartet = [["strom_heizen_kwh"], ["strom_warmwasser_kwh"]]
-                # ⚠ **Die Warmwasser-Seite gibt es an einer Split-Klimaanlage
-                # nicht** (B5/N-304, gemeldet von OB73-gif am 25.08.2026):
-                # *„Midea Portasplit (waermepumpe): strom_heizen_kwh,
-                # strom_warmwasser_kwh"* — ein Hinweis, den er **nicht
-                # auflösen konnte**, weil der Monatsabschluss dieses Feld bei
-                # `luft_luft` gar nicht mehr anbietet. Er hätte den Wert von
-                # Hand beschaffen müssen für einen Kreis, den das Gerät nicht
-                # hat.
-                #
-                # Dieselbe Unterscheidung steht bereits **zweimal** im
-                # Daten-Checker — in `monatsdaten.py` (B5, dort trägt das
-                # Label deshalb „Strom Heizen" statt „Strom Heizen/
-                # Warmwasser") und 150 Zeilen tiefer bei den Zusatz-Zählern
-                # (seit 02.08., dietmar1968 #89667/87). **Nur diese Schicht
-                # kannte sie nicht** — die Folgewellen-Klasse aus #236: ein
-                # Filter auf einer Schicht reicht nicht, wenn mehrere Pfade
-                # dieselbe Frage stellen.
-                #
-                # ⛔ **`strom_heizen_kwh` bleibt gefordert** und ist bewusst
-                # nicht Teil dieses Fixes: Ob ein zugeordneter
-                # Betriebsmodus-Sensor die Aufteilung ersetzen kann, hängt
-                # davon ab, ob `getrennte_strommessung` an diesem Gerät
-                # überhaupt richtig gesetzt ist — der Aggregator ignoriert
-                # dann `stromverbrauch_kwh` (#183). Offener Punkt, nicht hier
-                # mitentschieden.
-                if ist_luft_luft_waermepumpe(inv):
-                    erwartet = [["strom_heizen_kwh"]]
+            # Wärmepumpe: die erwarteten Zähler kommen aus der REGISTRY (B2,
+            # 05.09.2026, R1). Ohne getrennte Strommessung ist das
+            # `stromverbrauch_kwh`; mit ihr `strom_heizen_kwh` +
+            # `strom_warmwasser_kwh` (#183: der Aggregator ignoriert dann das
+            # Gesamtfeld, dietmar1968 PN 2026-05-17). Die Warmwasser-Seite
+            # entfällt an einer Split-Klimaanlage (B5/N-304, OB73-gif #263),
+            # die Heiz-Seite an einer Brauchwasser-Wärmepumpe (A6) — beides
+            # steht als `bedingung` in `INVESTITION_FELDER`, nicht hier.
+            # ⛔ Bis B2 stand hier `if ist_luft_luft_waermepumpe(inv)` — die
+            # Bauart entschied die Erwartung, und die Brauchwasser-WP hätte
+            # einen Heizstrom-Zähler liefern müssen, den die Zuordnungs-Fläche
+            # ihr gar nicht in der ersten Reihe anbietet.
+            if inv.typ == "waermepumpe":
+                erwartet = [
+                    [f] for f in pflicht_felder_am_geraet("waermepumpe", inv.parameter, gruppe="wp_strom")
+                ]
+                if not erwartet:
+                    continue
 
             fehlend = [
                 " oder ".join(alts)
@@ -547,17 +528,21 @@ class EnergieprofilChecks:
                 continue
             if inv.typ == "e-auto" and (hat_wallbox or ist_dienstlich(inv)):
                 continue
-            # Split-Klimaanlage: beide WP-Zusatzfelder setzen einen
-            # Wärmemengenzähler voraus, und einen Warmwasserkreis hat so ein
-            # Gerät ohnehin nicht. Der Hinweis war für den Anwender damit
-            # unauflösbar (dietmar1968, Forum #89667/87) — und widersprach der
-            # Zusage im Investitionsformular („Es genügt der
-            # Stromverbrauchs-Sensor"). Dieselbe Bedingung nimmt die
-            # Monatsdaten-Prüfung die Klima längst aus.
-            if inv.typ == "waermepumpe" and ist_luft_luft_waermepumpe(inv):
-                continue
+            # B2 (05.09.2026, R1): genannt wird nur eine Größe, die eedc an
+            # diesem Gerät **erwartet** — und ob es das tut, sagt die Registry
+            # (`feld_herabgestuft`), nicht die Bauart. Herabgestuft ist die
+            # Heizwärme an einer Split-Klimaanlage (kein Wärmemengenzähler
+            # möglich, Hinweis war unauflösbar — dietmar1968 #89667/87), die
+            # Warmwasser-Wärme dort gar nicht vorhanden (kein Warmwasserkreis),
+            # die Heizwärme an einer Brauchwasser-WP erweitert (A6). Eine
+            # Luft-Wasser-Wärmepumpe wird weiter nach beiden gefragt.
+            # ⛔ Bis B2: `if ist_luft_luft_waermepumpe(inv): continue` — die
+            # Bauart entschied das Schweigen, und die Brauchwasser-WP wäre nach
+            # einem Heizwärme-Zähler gefragt worden, den sie nicht braucht.
             fehlend = [
-                label for feld, label in zusatz if not inv_zaehler(inv.id, feld)
+                label for feld, label in zusatz
+                if not feld_herabgestuft(inv.typ, feld, inv.parameter)
+                and not inv_zaehler(inv.id, feld)
             ]
             if fehlend:
                 offen.append(f"{inv.bezeichnung}: {', '.join(fehlend)}")

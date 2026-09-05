@@ -1121,7 +1121,97 @@ def get_feld_bedarf(
     bedarf = FELD_BEDARF.get((typ, feld), FELD_BEDARF_DEFAULT)
     if (typ, feld) in KLIMA_OHNE_WAERMEMENGE and ist_luft_luft_waermepumpe(parameter):
         return ("optional", bedarf[1])
+    # B2 (05.09.2026, R1): **Ein erweitertes Feld ist nie Pflicht.** Die weiche
+    # Bedingung sagt „an diesem Gerät untypisch, aber möglich" — wer es
+    # gepflegt hat, meint es so; wer nicht, dem fehlt nichts. Bis dahin galt
+    # `strom_heizen_kwh` an einer Brauchwasser-Wärmepumpe als Pflicht, obwohl
+    # dieselbe Registry es hinter „Weitere Größen erfassen" stellte: dieselbe
+    # Anlage, zwei Aussagen. Die Regel steht HIER, damit jeder Frager (Checker,
+    # Topic-Registry, Zuordnungs-Fläche) dieselbe Antwort bekommt.
+    if parameter is not None and feld_urteil(typ, feld, parameter) == URTEIL_ERWEITERT:
+        return ("optional", bedarf[1])
     return bedarf
+
+
+def feld_urteil(typ: str, feld: str, parameter: Optional[dict]) -> str:
+    """Gilt das Feld an diesem Gerät, ist es **erweitert**, oder gibt es die Größe nicht?
+
+    Öffentliche Lesetür auf `bedingungs_urteil` für Frager außerhalb der
+    Registry (B2, 05.09.2026). ⭐ **Sie ist die eine Antwort auf die Frage, die
+    bis dahin vier Daten-Checker-Stellen selbst mit `ist_luft_luft_waermepumpe`
+    beantworteten** — jede ein wenig anders (Erwartung nach Bauart, Schweigen
+    nach Bauart, Label nach Bauart). SOLL Wärme/Klima R1: *was ein Gerät liefern
+    kann, sagt der zugeordnete Zähler, nicht seine Bauart* — und was die Bauart
+    **vorschlagen** darf, steht genau einmal, in den `bedingung`/`weich`-Einträgen
+    dieser Registry. Wer fragt, fragt hier; die Bauart selbst liest er nicht mehr
+    (ADR-002/P13 hält das baumweit).
+
+    Fail-open wie `groesse_gibt_es_am_geraet`: unbekannter Typ oder unbekanntes
+    Feld ⇒ ``URTEIL_GILT``.
+    """
+    feld = basis_feld_key(feld)
+    for eintrag in INVESTITION_FELDER.get(typ) or ():
+        if not isinstance(eintrag, dict) or eintrag.get("feld") != feld:
+            continue
+        return bedingungs_urteil(
+            eintrag.get("bedingung"), eintrag.get("weich"), _bedingungs_werte(parameter),
+        )
+    return URTEIL_GILT
+
+
+def feld_herabgestuft(typ: str, feld: str, parameter: Optional[dict]) -> bool:
+    """Hat die Registry dieses Feld **für dieses Gerät** zurückgenommen?
+
+    ``True``, wenn die Größe am Gerät nicht existiert (``URTEIL_NEIN``),
+    erweitert ist (``URTEIL_ERWEITERT``) oder ihr Bedarf gegenüber dem Typ-
+    Default herabgesetzt wurde (`KLIMA_OHNE_WAERMEMENGE`: Heizwärme an einer
+    Split-Klimaanlage ist optional statt Pflicht). Das ist die Frage, die ein
+    Hinweis stellen muss, bevor er eine Zusatz-Messstelle anmahnt: **Erwartet
+    eedc diese Größe an diesem Gerät überhaupt?** — und die Antwort kommt aus
+    der Registry, nicht aus der Bauart (B2, R1).
+    """
+    feld = basis_feld_key(feld)
+    if feld_urteil(typ, feld, parameter) != URTEIL_GILT:
+        return True
+    return get_feld_bedarf(typ, feld, parameter)[0] != get_feld_bedarf(typ, feld, None)[0]
+
+
+def pflicht_felder_am_geraet(
+    typ: str, parameter: Optional[dict], gruppe: Optional[str] = None,
+) -> list[str]:
+    """Die Felder, die dieses Gerät **liefern muss** — Pflicht UND am Gerät geltend.
+
+    ``gruppe`` schränkt auf eine Alternativ-Gruppe der `FELD_BEDARF`-Tabelle ein
+    (z. B. ``"wp_strom"`` — die Zählerfelder, die die Energieprofil-Abdeckung
+    prüft). Ohne sie kommen alle Pflichtfelder, also auch die Heizwärme, die
+    keine Zählerfrage ist.
+
+    Registry-Antwort auf „welche Zähler erwartet der Daten-Checker?" (B2). Ein
+    Feld zählt, wenn sein Bedarf `pflicht` ist und sein Urteil ``URTEIL_GILT``
+    (weder erweitert noch nicht vorhanden). Für die Wärmepumpe ergibt das je nach
+    Parametern: ohne getrennte Strommessung ``stromverbrauch_kwh``; mit ihr
+    ``strom_heizen_kwh`` + ``strom_warmwasser_kwh``; an einer Split-Klimaanlage
+    entfällt die Warmwasser-Seite (kein Warmwasserkreis, N-304/B5), an einer
+    Brauchwasser-Wärmepumpe die Heiz-Seite (erweitert, A6). **Kein `if wp_art`
+    im Frager** — die Ausnahmen stehen in der Registry, einmal.
+    """
+    felder = INVESTITION_FELDER.get(typ)
+    if not isinstance(felder, list):
+        return []
+    out: list[str] = []
+    for eintrag in felder:
+        if not isinstance(eintrag, dict) or eintrag.get("nur_bestand"):
+            continue
+        feld = eintrag["feld"]
+        bedarf, bedarf_gruppe = get_feld_bedarf(typ, feld, parameter)
+        if bedarf != "pflicht":
+            continue
+        if gruppe is not None and bedarf_gruppe != gruppe:
+            continue
+        if feld_urteil(typ, feld, parameter) != URTEIL_GILT:
+            continue
+        out.append(feld)
+    return out
 
 
 # Typen mit SoC-Live-Sensor (aus LIVE_FELDER_INV abgeleitet)

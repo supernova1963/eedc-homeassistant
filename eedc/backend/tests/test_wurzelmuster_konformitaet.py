@@ -2872,22 +2872,30 @@ P13_AUSNAHMEN: frozenset[str] = frozenset({
 
     # ── 3. Stammdatum: die Bauart reist als Eigenschaft ──────────────────────
     "backend/services/community_service.py::prepare_community_data",
+
+    # ── 2b. Hinweis-Auswahl: die Bauart schlägt vor, die Beleglage ergänzt ────
+    # B2 (05.09.2026): `_check_klima_modus_sensor` bietet den Modus-Hinweis an
+    # Geräten an, die heizen UND kühlen — an einer Split-Klimaanlage ist das der
+    # Regelfall (Bauart als VORSCHLAG, keine Forderung: INFO, freiwillig), und
+    # zusätzlich an jedem Gerät mit zugeordneter oder gepflegter Kühl-Spur
+    # (Beleglage, bauartblind). Die Bauart entscheidet hier kein Feld und keine
+    # Erwartung, nur ob ein Angebot gezeigt wird.
+    "backend/services/daten_checker/datenquelle.py::_check_klima_modus_sensor",
 })
 
 #: Gruppe 4 — nach Bauart FORDERN oder SCHWEIGEN, statt den Zähler zu fragen.
 #: R1-Verdacht, einzeln zu messen (Vorlage B, Paket Daten-Checker). Die Liste
 #: darf nur schrumpfen; `P13_NOCH_NICHT_GEMESSEN_MAX` ist ihr heutiger Stand.
-P13_NOCH_NICHT_GEMESSEN: frozenset[str] = frozenset({
-    # `erwartet = [["strom_heizen_kwh"]]` an einer Klimaanlage — Erwartung nach Bauart
-    "backend/services/daten_checker/energieprofil.py::_check_energieprofil_abdeckung",
-    # `continue` — eine Klimaanlage bekommt keine Zusatzzähler-Prüfung, auch mit Kühlzähler
-    "backend/services/daten_checker/energieprofil.py::_check_tages_zusatzfelder",
-    # F-41/K-2 nur an `luft_luft`, während `betriebsmodus` JEDER WP angeboten wird
-    "backend/services/daten_checker/datenquelle.py::_check_klima_modus_sensor",
-    # Heizwärme-Pflicht entfällt nach Bauart (K-0) — Herabstufung oder Schweigen?
-    "backend/services/daten_checker/monatsdaten.py::_check_wp_monatsdaten",
-})
-P13_NOCH_NICHT_GEMESSEN_MAX = 4
+P13_NOCH_NICHT_GEMESSEN: frozenset[str] = frozenset()
+# ✅ Geleert mit B2 (05.09.2026, Matrix-Durchgang Paket Daten-Checker): Die vier
+# Stellen fragen jetzt die REGISTRY (`feld_urteil` · `feld_herabgestuft` ·
+# `pflicht_felder_am_geraet` · `get_feld_bedarf` · `groesse_gibt_es_am_geraet`)
+# statt der Bauart — Erwartung, Schweigen und Label kommen damit aus derselben
+# Quelle wie die Zuordnungs-Fläche und der Monatsabschluss. Der Modus-Hinweis
+# (`_check_klima_modus_sensor`) liest die Bauart weiter, als VORSCHLAG neben der
+# Kühl-Beleglage — klassifiziert in Gruppe 2b. Die Liste bleibt leer; die
+# Obergrenze steht auf 0 und hält sie leer (das P10-Vorgehen).
+P13_NOCH_NICHT_GEMESSEN_MAX = 0
 
 
 def _p13_bauart_leser() -> dict[str, set[str]]:
