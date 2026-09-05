@@ -1,11 +1,127 @@
 # Was ist neu
 
-> **Stand:** September 2026 (v4.0.39)
+> **Stand:** September 2026 (v4.0.40)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.40 — 5. September 2026
+
+**Die Tages-Aggregation läuft wieder**
+
+Seit v4.0.39 schrieb eedc bei jeder Anlage, deren Stundenkurve aus Home Assistant kommt,
+**keinen Tag mehr**: *Cockpit → Tag* blieb leer, auch *Tag neu aggregieren* endete mit „keine
+Daten". Gemeldet hat es BMeyendriesch auf GitHub — mit der Ursache gleich dazu: eine
+Weiterleitung, die den neuen Vortagsrand aus v4.0.39 nicht kannte. Betroffen war auch der
+nächtliche Nachzug der Einstrahlung aus v4.0.39, der auf diesen Anlagen nie gelaufen ist.
+
+**Betrifft dich das?** Wenn deine Live-Werte über Leistungs-Zuordnungen aus Home Assistant kommen
+und *Cockpit → Tag* seit dem Update leer ist: ja. Wer nur Zählerstände über MQTT liefert, hat die
+Energie behalten und nur die Stundenkurve verloren.
+
+**Was du tun musst:** einmal *Einstellungen → Daten → Mehrere Tage neu aggregieren* für die Tage
+seit deinem Update auf v4.0.39. Deine Energie war nie in Gefahr — Zähler und Statistik sind
+vollständig. Die **Stundenkurve** holt eedc aus der Home-Assistant-History, und die reicht so weit
+zurück wie deine `purge_keep_days` (Standard: 10 Tage). Für ältere Tage bleibt die Energie, die
+Kurve nicht.
+
+**Die Einstrahlung wird auch für die Vergangenheit nachgezogen**
+
+v4.0.39 ersetzte den vorläufigen Sonnenwert nur für den einen Tag, der gerade alt genug wurde.
+Alles davor behielt den Modellwert — und ließ sich nicht heilen, weil *Mehrere Tage neu
+aggregieren* die Stundenkurve braucht, die nur wenige Tage zurückreicht. Jetzt zieht eedc
+**einmalig je Anlage bis zwei Jahre zurück** nur die Wetterzeile nach: Einstrahlung, Bewölkung,
+Wetterlage und die Performance Ratio. Alle Energiewerte bleiben, wie sie sind.
+
+**Was du siehst:** In den Nächten nach dem Update kann sich die Performance Ratio zurückliegender
+Tage ändern — sie steht dann auf gemessenen statt vorhergesagten Werten. Ein
+Doppelerfassungs-Verdacht, der nur an solchen Tagen hing, verschwindet von allein.
+
+**Deine Warmwasser-Achse richtet sich nach dem Zähler, nicht nach der Bauart**
+
+Macht dein Warmwasser ein zweites Gerät — eine Brauchwasser-Wärmepumpe zum Beispiel —, stand an
+deiner Luft-Wasser-Wärmepumpe unter *Komponenten → Wärme/Klima* weiter eine Warmwasser-Spalte mit
+einer Dauer-Null. **Der Eintrag zu v4.0.39 hat das schon versprochen; dort galt es nur für
+Split-Klimaanlagen.** Jetzt zählt, ob je ein Warmwasser-Wert gepflegt oder ein Zähler zugeordnet
+ist. Ein einziger gepflegter Monat — auch mit 0 — hält die Achse; nur wer sie nie geführt hat,
+sieht sie nicht.
+
+**Der Wärmepumpen-Hub rechnet die Ersparnis mit dem richtigen Strom**
+
+Misst du *Strom Heizen* und *Strom Warmwasser* getrennt, ohne daneben einen Gesamtzähler zu pflegen,
+stand unter *Komponenten → Wärme/Klima* im Kostenvergleich **„Wärmepumpe 0 €"** — und eine
+Ersparnis in Höhe deiner vollen Gaskosten. Cockpit und Auswertungen rechneten richtig; der Hub las
+ein Feld, das bei getrennter Messung leer bleibt. Jetzt rechnet er mit demselben Strom wie alle
+anderen Sichten. Dasselbe galt für die Strom-Spalte der Monatstabelle und den Monats-/Saisonvergleich
+im Strom-Modus: beide zeigten 0, jetzt den gemessenen Strom.
+
+**Was du siehst:** Wenn dich das betrifft, **sinkt** die Ersparnis im Hub um deine Stromkosten —
+auf den Wert, den *Cockpit → Monat* für dieselben Monate schon nannte.
+
+**Geschätzte Wärme sagt, dass sie geschätzt ist**
+
+Ohne Wärmemengenzähler rechnet eedc die Wärme aus *Strom × gepflegter Arbeitszahl*. Das ist
+zulässig — eine Schätzung, die Ersparnis und CO₂ speist. Im Hub stand sie bisher wie eine Messung
+da. Jetzt steht unter der Wärme-Kachel **„geschätzt: Strom × JAZ 3,5"**, und Ersparnis, CO₂ und der
+Kostenvergleich tragen den Satz *„Wärme geschätzt — Ersparnis und CO₂ folgen aus der Schätzung"*.
+Speist ein **zweiter Erzeuger** denselben Wärmezähler (Gas- oder Ölkessel im selben Heizkreis),
+steht dort *„zweiter Erzeuger am Wärmezähler — Ersparnis und CO₂ enthalten dessen Wärme"*: eedc
+kennt seinen Anteil nicht und rechnet ihn nicht heraus. **Es ändert sich keine Zahl** — nur, was
+daneben steht.
+
+**Ein Gesamt-Wärmemengenzähler heißt nicht mehr „Heizung 100 %"**
+
+Wer Heizung und Warmwasser über **einen** Wärmemengenzähler misst, trägt die Summe unter
+*Heizwärme* ein — und sah im Hub eine Aufteilung „Wärme nach Zweck" mit einem einzigen Segment
+„Heizung · 100 %". Das kann eedc nicht wissen. Die Aufteilung erscheint jetzt nur, wenn beide
+Achsen belegt sind; ohne Warmwasser-Achse heißen Verlauf, Vergleich und Tabellenspalte **„Wärme"**.
+
+**Der Wärme-Vorschlag rechnet mit dem Strom derselben Funktion**
+
+An einer Klimaanlage mit Betriebsart-Zählern schlug eedc **254 kWh Kühlstrom × 3,5 = 889 kWh
+„Warmwasser"** vor (dietmar1968). Und ohne getrennte Strommessung schlug es Heizwärme **und**
+Warmwasser-Wärme aus demselben Gesamtstrom vor — *Lücken füllen* übernahm beide, die Wärme stand
+doppelt in der Zeile. Jetzt entsteht Heizwärme nur aus dem **Heizstrom** (Betriebsart-Zähler vor
+getrennter Messung vor Gesamtstrom — und aus dem Gesamtstrom nur, wenn kein Kühl-, Lüft- oder
+Entfeuchtungsstrom in der Zeile steht), Warmwasser-Wärme nur aus dem getrennt gemessenen
+Warmwasser-Strom. Der übernommene Vorschlag trägt jetzt die Marke **„geschätzt"** und nennt seine
+Basis: „Geschätzt: 254 kWh (Strom Heizbetrieb) × JAZ 3,5 — keine Messung".
+
+**Ein Wert in einem Feld, das dein Gerät nicht führt, lässt sich entfernen**
+
+Verschwindet ein Feld aus dem Monatsabschluss, weil dein Gerät die Größe nicht mehr führt —
+Warmwasser an einer Split-Klimaanlage, Netzladung ohne „lädt aus dem Netz", getrennte Ströme nach
+dem Abschalten der getrennten Messung —, blieb ein früher gespeicherter Wert unsichtbar in der
+Zeile: nicht zu sehen, nicht zu entfernen (dietmar1968). Jetzt meldet der **Daten-Checker** jeden
+solchen Wert je Feld und bietet direkt daran **„Wert entfernen"** — für alle betroffenen Monate, mit
+Rückfrage. eedc löscht und verschiebt weiterhin nichts von allein.
+
+**Der Daten-Checker fragt nicht mehr die Bauart**
+
+Vier Prüfungen entschieden nach der Bauart deiner Wärmepumpe, welche Zähler sie erwarten. Für
+Split-Klimaanlagen war das richtig, für eine Brauchwasser-Wärmepumpe falsch — sie hätte Heizstrom
+und Heizwärme liefern sollen, die es an ihr nur als Zusatzgröße gibt. Und der Hinweis zur
+Betriebsmodus-Zuordnung erreichte nur Split-Klimaanlagen; eine kühlende Luft-Wasser-Wärmepumpe bekam
+ihn nie. Jetzt gilt an allen vier Stellen dieselbe Zähler-Registry, gleich welcher Bauart.
+
+**Die Verbrauchsprognose des Tages gibt es als Sensor**
+
+`eedc_verbrauchsprognose_heute_kwh` über MQTT und HA-Export — die Zahl, die *Cockpit → Live* unter
+„Heute" als Verbrauchsprognose zeigt: der **Gesamt**verbrauch des Tages aus deinem individuellen
+Stundenprofil (OB73-gif). Der Sensor entsteht erst, wenn eedc ein eigenes Profil aus deiner
+Historie hat; das Standard-Lastprofil wird bewusst nicht exportiert, ein Modellwert sähe in einer
+Automation aus wie eine Messung.
+
+**Tachostand statt gefahrener Kilometer**
+
+Beim E-Auto gibt es im Monatsabschluss das Feld **Tachostand** (8ear). Trägst du den Kilometerstand
+vom Monatsende ein, rechnet eedc die gefahrenen Kilometer aus dem Vormonatsstand, zeigt die Rechnung
+unter dem Feld und übernimmt sie auf Klick. *Gefahrene km* bleibt, wie es ist. Ohne Vormonatsstand
+oder bei rückläufigem Stand gibt es keinen Vorschlag statt eines falschen.
 
 ---
 
@@ -68,6 +184,11 @@ Fehlermeldung im Daten-Check, die nur daran hing, verschwindet.
 alles von Anfang an richtig. Ebenso Anlagen ohne Balkonkraftwerk.
 
 **Die Einstrahlung der letzten Tage wird nachgezogen**
+
+> ⚠ **Nachträglich richtiggestellt (September 2026):** Auf Anlagen, deren Stundenkurve aus Home
+> Assistant kommt, ist dieser Nachzug in v4.0.39 nie gelaufen — derselbe Fehler, der dort die
+> Tages-Aggregation anhielt, ließ ihn still aussetzen. Seit v4.0.40 läuft er, und der Altbestand
+> wird einmalig nachgezogen.
 
 Die **Performance Ratio** sagt, wie viel deine Anlage aus dem gemacht hat, was an Sonne da war.
 Wie viel da war, holt eedc beim Wetterdienst. Für Tage, die weiter als fünf Tage zurückliegen,
@@ -196,6 +317,10 @@ vollständig**, der Strom ist ja geflossen. Wärmepumpen mit Warmwasserkreis seh
 Änderung.
 
 **Eine Wärmepumpe zeigt nur die Achsen, die es an ihr gibt**
+
+> ⚠ **Nachträglich richtiggestellt (September 2026):** In v4.0.39 galt das nur für
+> Split-Klimaanlagen. An einer Luft-Wasser-Wärmepumpe ohne Warmwasser-Zähler blieb die Achse
+> stehen, weil die Anzeige allein die Bauart fragte. Behoben ist das erst mit v4.0.40.
 
 Macht dein Warmwasser ein zweites Gerät — eine Brauchwasser-Wärmepumpe zum Beispiel —, stand
 unter *Komponenten → Wärme/Klima* trotzdem überall eine Warmwasser-Spalte mit einer Dauer-Null
