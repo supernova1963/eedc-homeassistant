@@ -130,3 +130,28 @@ export function baueTagesMeldung(
     text: `${pvTeil} Alle ${erwartet} zugeordneten Komponenten tragen einen Wert.`,
   }
 }
+
+/**
+ * N-393: Rückfrage vor „Wert entfernen" — nennt Feld, Gerät und JEDEN Monat.
+ * Die Aktion nimmt alle betroffenen Monate mit (eine Meldung je Feld, nicht je
+ * Monat); die Rückfrage muss deshalb die Liste zeigen, nicht „diesen Eintrag".
+ */
+export function baueFeldwertRueckfrage(label: string, monate: string[]): string {
+  const liste = monate.join(', ')
+  const anzahl = monate.length === 1 ? 'im Monat' : `in ${monate.length} Monaten`
+  return (
+    `„${label}“ ${anzahl} ${liste} endgültig entfernen?\n\n` +
+    'Das Gerät führt dieses Feld nach seinen Einstellungen nicht mehr; im ' +
+    'Monatsabschluss ist der Wert deshalb nicht erreichbar. Soll er weiter ' +
+    'zählen, stelle stattdessen die Einstellung am Gerät zurück.'
+  )
+}
+
+/** N-393: Rückmeldung nach dem Entfernen — zählt, was wirklich weg ist. */
+export function baueFeldwertMeldung(
+  label: string, r: { entfernt: number; monate: { jahr: number; monat: number }[] },
+): ReparaturMeldung {
+  if (r.entfernt <= 0) return { art: 'hinweis', text: `„${label}“: es war nichts mehr zu entfernen.` }
+  const monate = r.monate.map(m => `${String(m.monat).padStart(2, '0')}/${m.jahr}`).join(', ')
+  return { art: 'ok', text: `„${label}“ in ${r.entfernt} Monat(en) entfernt (${monate}).` }
+}

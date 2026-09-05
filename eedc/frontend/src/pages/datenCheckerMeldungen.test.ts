@@ -7,7 +7,7 @@
  * „Zeitraum … neu aus HA-Statistics aggregiert." — ein Erfolg, den es nicht gab.
  */
 import { describe, it, expect } from 'vitest'
-import { baueBereichsMeldung, baueTagesMeldung } from './datenCheckerMeldungen'
+import { baueBereichsMeldung, baueFeldwertMeldung, baueFeldwertRueckfrage, baueTagesMeldung } from './datenCheckerMeldungen'
 
 const VON = '2026-07-19'
 const BIS = '2026-07-29'
@@ -140,5 +140,35 @@ describe('baueTagesMeldung', () => {
     expect(m.art).toBe('hinweis')
     expect(m.text).toContain(`Tag ${DATUM_DE} aus HA-Statistics neu aggregiert.`)
     expect(m.text).toContain('Wärmepumpe')
+  })
+})
+
+// N-393 — „Wert entfernen" an einem Feld, das das Gerät nicht mehr führt.
+describe('baueFeldwertRueckfrage', () => {
+  it('nennt Feld und den einen Monat', () => {
+    const t = baueFeldwertRueckfrage('Warmwasser-Wärme', ['06/2026'])
+    expect(t).toContain('„Warmwasser-Wärme“ im Monat 06/2026 endgültig entfernen?')
+    expect(t).toContain('stelle stattdessen die Einstellung am Gerät zurück')
+  })
+
+  it('zählt mehrere Monate und listet JEDEN — die Aktion nimmt alle mit', () => {
+    const t = baueFeldwertRueckfrage('Netzladung', ['01/2026', '02/2026', '03/2026'])
+    expect(t).toContain('in 3 Monaten 01/2026, 02/2026, 03/2026')
+  })
+})
+
+describe('baueFeldwertMeldung', () => {
+  it('meldet Erfolg mit den wirklich entfernten Monaten', () => {
+    const m = baueFeldwertMeldung('Warmwasser-Wärme', {
+      entfernt: 2, monate: [{ jahr: 2026, monat: 5 }, { jahr: 2026, monat: 6 }],
+    })
+    expect(m.art).toBe('ok')
+    expect(m.text).toBe('„Warmwasser-Wärme“ in 2 Monat(en) entfernt (05/2026, 06/2026).')
+  })
+
+  it('ist ein Hinweis, kein Erfolg, wenn nichts mehr da war', () => {
+    const m = baueFeldwertMeldung('Netzladung', { entfernt: 0, monate: [] })
+    expect(m.art).toBe('hinweis')
+    expect(m.text).toContain('nichts mehr zu entfernen')
   })
 })

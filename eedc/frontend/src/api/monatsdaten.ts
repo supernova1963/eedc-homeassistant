@@ -268,6 +268,20 @@ export const monatsdatenApi = {
   },
 
   /**
+   * Wert aus einem Feld entfernen, das das Gerät nicht (mehr) führt (N-393).
+   * Nur für den Daten-Checker-Weg: führt das Gerät das Feld, antwortet das
+   * Backend mit 409 und verweist auf den Monatsabschluss.
+   */
+  async deleteFeldwertNichtGefuehrt(investitionId: number, feld: string): Promise<{
+    investition_id: number
+    feld: string
+    entfernt: number
+    monate: { jahr: number; monat: number; wert: number | null }[]
+  }> {
+    return api.delete(`/monatsdaten/investition/${investitionId}/feld/${encodeURIComponent(feld)}`)
+  },
+
+  /**
    * Aggregierte Monatsdaten abrufen
    * PV-Erzeugung und Speicher-Daten werden aus InvestitionMonatsdaten summiert
    *

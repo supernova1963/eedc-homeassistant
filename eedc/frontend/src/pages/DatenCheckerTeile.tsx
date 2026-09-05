@@ -20,7 +20,7 @@ import { KPICard } from '../components/ui'
 import { datenCheckerApi, type DatenCheckResponse, type CheckErgebnis } from '../api/datenChecker'
 import { energieProfilApi } from '../api/energie_profil'
 import { monatsdatenApi } from '../api/monatsdaten'
-import { baueBereichsMeldung, baueTagesMeldung, type ReparaturMeldung } from './datenCheckerMeldungen'
+import { baueBereichsMeldung, baueFeldwertMeldung, baueFeldwertRueckfrage, baueTagesMeldung, type ReparaturMeldung } from './datenCheckerMeldungen'
 import { fmtZahl, formatDatum } from '../lib'
 import {
   KATEGORIE_LABELS as kategorieLabels,
@@ -63,6 +63,7 @@ function KategorieSektion({
   onReaggregateBereich,
   onGeraetewerteLoeschen,
   onKraftstoffpreiseNachpflegen,
+  onFeldwertEntfernen,
   reparaturBusy,
 }: {
   kategorie: string
@@ -74,6 +75,7 @@ function KategorieSektion({
     anlageId: number, jahr: number, monat: number, hatZaehler?: boolean,
   ) => Promise<void>
   onKraftstoffpreiseNachpflegen?: (anlageId: number) => Promise<void>
+  onFeldwertEntfernen?: (investitionId: number, feld: string, label: string, monate: string[]) => Promise<void>
   reparaturBusy?: string | null  // key = `${anlage_id}:${datum}` (Einzeltag) bzw. `${anlage_id}:${von}:${bis}` (Bereich) bzw. `${anlage_id}:${jahr}-${monat}` (#349)
 }) {
   const [open, setOpen] = useState(defaultOpen)
@@ -166,6 +168,18 @@ function KategorieSektion({
             const kpKey = kpAnlageId ? `${kpAnlageId}:kraftstoffpreis` : null
             const isKpBusy = kpKey && reparaturBusy === kpKey
 
+            // N-393: Wert in einem Feld, das das Gerät nicht mehr führt.
+            const fwInvId = e.action_kind === 'feldwert_entfernen'
+              ? Number(e.action_params?.investition_id) : undefined
+            const fwFeld = e.action_kind === 'feldwert_entfernen'
+              ? String(e.action_params?.feld ?? '') : undefined
+            const fwLabel = e.action_kind === 'feldwert_entfernen'
+              ? String(e.action_params?.label ?? fwFeld ?? '') : ''
+            const fwMonate = e.action_kind === 'feldwert_entfernen' && Array.isArray(e.action_params?.monate)
+              ? (e.action_params?.monate as unknown[]).map(String) : []
+            const fwKey = fwInvId && fwFeld ? `${fwInvId}:${fwFeld}` : null /* de-de-allow: interner State-Key (Busy-Kennung), keine Anzeige */
+            const isFwBusy = fwKey && reparaturBusy === fwKey
+
             return (
               <div
                 key={i}
@@ -219,6 +233,21 @@ function KategorieSektion({
                   >
                     {!isGwBusy && <Wrench className="h-3 w-3 mr-1" />}
                     {e.action_label ?? 'Messwerte entfernen'}
+                  </Button>
+                )}
+                {e.action_kind === 'feldwert_entfernen' && onFeldwertEntfernen
+                  && fwInvId && fwFeld && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="flex-shrink-0"
+                    onClick={() => onFeldwertEntfernen(fwInvId, fwFeld, fwLabel, fwMonate)}
+                    disabled={!!reparaturBusy}
+                    loading={!!isFwBusy}
+                  >
+                    {!isFwBusy && <Wrench className="h-3 w-3 mr-1" />}
+                    {e.action_label ?? 'Wert entfernen'}
                   </Button>
                 )}
                 {e.action_kind === 'kraftstoffpreis_backfill' && onKraftstoffpreiseNachpflegen
@@ -364,6 +393,30 @@ export function DatenCheckerVerwaltung({ anlageId, kopfZusatz }: { anlageId: num
       setReparaturMessage({
         art: 'fehler',
         text: e instanceof Error ? e.message : `${monatText} konnte nicht bereinigt werden`,
+      })
+    } finally {
+      setReparaturBusy(null)
+    }
+  }
+
+  // N-393: Wert aus einem Feld entfernen, das das Gerät nicht mehr führt.
+  // Zweite Aktion dieser Seite, die Daten **löscht** — deshalb mit Rückfrage,
+  // und die Rückfrage nennt Feld und jeden Monat (die Aktion nimmt alle mit).
+  const handleFeldwertEntfernen = async (
+    investitionId: number, feld: string, label: string, monate: string[],
+  ) => {
+    const key = `${investitionId}:${feld}` /* de-de-allow: interner State-Key (Busy-Kennung), keine Anzeige */
+    if (!window.confirm(baueFeldwertRueckfrage(label, monate))) return
+    setReparaturBusy(key)
+    setReparaturMessage(null)
+    try {
+      const r = await monatsdatenApi.deleteFeldwertNichtGefuehrt(investitionId, feld)
+      setReparaturMessage(baueFeldwertMeldung(label, r))
+      setRefreshKey(k => k + 1)
+    } catch (e) {
+      setReparaturMessage({
+        art: 'fehler',
+        text: e instanceof Error ? e.message : `„${label}“ konnte nicht entfernt werden`,
       })
     } finally {
       setReparaturBusy(null)
@@ -537,6 +590,7 @@ export function DatenCheckerVerwaltung({ anlageId, kopfZusatz }: { anlageId: num
                   onReaggregateBereich={handleReaggregateBereich}
                   onGeraetewerteLoeschen={handleGeraetewerteLoeschen}
                   onKraftstoffpreiseNachpflegen={handleKraftstoffpreiseNachpflegen}
+                  onFeldwertEntfernen={handleFeldwertEntfernen}
                   reparaturBusy={reparaturBusy}
                 />
               )

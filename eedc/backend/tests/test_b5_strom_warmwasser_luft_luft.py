@@ -164,8 +164,15 @@ async def _wp_befunde(db, *, parameter: dict, imd_daten: dict | None) -> list:
         select(Monatsdaten).where(Monatsdaten.anlage_id == anlage.id)
     )).scalars().all())
     assert monatsdaten, "ohne Anlagen-Monatszeile prueft der Check gar nichts"
-    return DatenChecker(db)._check_wp_monatsdaten(
-        wp, wp.bezeichnung, wp.parameter, monatsdaten,
+    checker = DatenChecker(db)
+    # N-393 (05.09.2026): die Warmwasser-INFO ist aus `_check_wp_monatsdaten`
+    # in die typübergreifende Prüfung `_check_werte_in_nicht_gefuehrten_feldern`
+    # gewandert (Klima war nur der erste Fall der Klasse). Die Harness ruft
+    # beide, damit die Proben unten weiter dieselbe Fläche sehen — ihr
+    # Gegenstand (Wortlaut, Weg, „eedc löscht nicht von allein") ist unverändert.
+    return (
+        checker._check_wp_monatsdaten(wp, wp.bezeichnung, wp.parameter, monatsdaten)
+        + checker._check_werte_in_nicht_gefuehrten_feldern(wp, wp.bezeichnung, wp.parameter)
     )
 
 
@@ -364,6 +371,11 @@ async def test_der_checker_benennt_den_unmoeglichen_warmwasser_wert(db):
         "⛔ Der gespeicherte Wert wird NICHT gelöscht und NICHT migriert — "
         "das muss der Anwender lesen können, sonst sucht er ihn"
     )
+    # N-393: der genannte Weg muss auch gehen. „bis du ihn selbst umträgst"
+    # war ein Weg ins Leere — das Feld ist an der Klimaanlage nicht erreichbar.
+    assert treffer[0].action_kind == "feldwert_entfernen"
+    assert treffer[0].action_params["feld"] == "warmwasser_kwh"
+    assert treffer[0].action_params["monate"] == ["01/2025"]
 
 
 async def test_der_checker_schweigt_wenn_die_klimaanlage_kein_warmwasser_hat(db):

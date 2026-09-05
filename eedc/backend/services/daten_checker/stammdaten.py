@@ -1477,6 +1477,12 @@ class StammdatenChecks:
                 )
 
             # Allgemeine Prüfungen für alle Typen
+            # N-393: ein gespeicherter Wert in einem Feld, das dieses Gerät nach
+            # seinen Einstellungen nicht (mehr) führt — für JEDEN Typ, nicht nur
+            # die Klimaanlage (die war bis 05.09.2026 der einzige Fall, N-379).
+            ergebnisse.extend(
+                self._check_werte_in_nicht_gefuehrten_feldern(inv, name, param)
+            )
             if inv.anschaffungsdatum is None:
                 # v4.0.1: von INFO auf ERROR hochgestuft. Ohne das Datum zählt die
                 # Komponente in JEDER Auswertung über den gesamten Zeitraum mit —

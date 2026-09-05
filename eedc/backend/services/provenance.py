@@ -522,6 +522,61 @@ def log_payload_noop(
     ))
 
 
+async def remove_json_subkey_with_provenance(
+    db: AsyncSession,
+    obj: Any,
+    json_attr: str,
+    sub_key: str,
+    *,
+    source: str,
+    writer: str,
+    decision_reason: str,
+) -> Any:
+    """Entfernt EINEN Sub-Key aus einer JSON-Spalte — mit Audit-Eintrag (N-393).
+
+    Gegenstück zu `write_json_subkey_with_provenance` für den Fall, dass ein
+    Wert nicht ersetzt, sondern **weg** soll. Bis dahin gab es dafür keinen
+    Weg: der Schreiber kennt nur Werte, `log_delete` nur ganze Zeilen. Ein
+    Anwender, dessen Gerät ein Feld nicht mehr führt (Bedingung nicht mehr
+    erfüllt — Split-Klimaanlage ohne Warmwasserkreis, Speicher ohne
+    Netzladung …), kam an den gespeicherten Wert deshalb nicht mehr heran:
+    der Monatsabschluss zeigt das Feld nicht, ein erneuter Abschluss merged je
+    Sub-Key und lässt ihn stehen (dietmar1968, T89667 #295: 889 kWh
+    „Warmwasser" an einer Klimaanlage, nicht entfernbar).
+
+    ⚠ Kein Verdrängungs-Entscheid: Wer diese Funktion ruft, hat die Entscheidung
+    getroffen (Anwender-Klick an der Daten-Checker-Meldung). Der Audit-Eintrag
+    trägt `old_value` und `new_value=None`, `decision="applied"` — dieselbe
+    Form wie ein Schreibvorgang, damit die Historie des Sub-Keys lückenlos
+    bleibt. Der Provenance-Eintrag des Sub-Keys wird mit entfernt: ein
+    Herkunftsvermerk ohne Wert wäre eine Behauptung über nichts.
+
+    Returns:
+        den entfernten Wert — oder ``None``, wenn der Sub-Key nicht vorhanden war
+        (dann wird auch nichts geschrieben und nichts geloggt).
+    """
+    json_dict: dict[str, Any] = dict(getattr(obj, json_attr) or {})
+    if sub_key not in json_dict:
+        return None
+    old_value = json_dict.pop(sub_key)
+    setattr(obj, json_attr, json_dict)
+    flag_modified(obj, json_attr)
+
+    provenance_key = f"{json_attr}.{sub_key}"
+    provenance: dict[str, Any] = dict(obj.source_provenance or {})
+    if provenance.pop(provenance_key, None) is not None:
+        obj.source_provenance = provenance
+        flag_modified(obj, "source_provenance")
+
+    _ = SOURCE_LABELS[source]  # KeyError bei unbekanntem Label
+    db.add(_make_audit_entry(
+        obj=obj, provenance_key=provenance_key, effective_source=source,
+        writer=writer, old_value=old_value, new_value=None,
+        input_hash=None, decision="applied", decision_reason=decision_reason,
+    ))
+    return old_value
+
+
 async def write_json_subkey_with_provenance(
     db: AsyncSession,
     obj: Any,

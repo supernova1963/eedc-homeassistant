@@ -20,8 +20,12 @@ export interface CheckErgebnis {
   // sonst aufräumt, ist ja gerade die gelöschte).
   // #394: 'kraftstoffpreis_backfill' — Ø-Benzinpreise aus dem EU Oil Bulletin
   // für Monatszeilen ohne Preis. Additiv: schreibt nur, wo NULL steht.
+  // N-393: 'feldwert_entfernen' — ein gespeicherter Wert in einem Feld, das
+  // das Gerät nach seinen Einstellungen nicht (mehr) führt. Der Monatsabschluss
+  // zeigt das Feld nicht, ein erneuter Abschluss lässt den Wert stehen — der
+  // einzige Weg an ihn heran ist dieser Knopf. Zweite Aktion, die entfernt.
   action_kind?: 'reaggregate_day' | 'reaggregate_range' | 'geraetewerte_loeschen'
-    | 'kraftstoffpreis_backfill'
+    | 'kraftstoffpreis_backfill' | 'feldwert_entfernen'
   action_params?: Record<string, unknown>
   action_label?: string
   // IA-V4 #243: Komponenten-Zuordnung (nur komponenten-bezogene Befunde) —

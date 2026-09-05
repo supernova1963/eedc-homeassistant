@@ -40,7 +40,7 @@ from backend.core.berechnungen.ust_eigenverbrauch import (
 )
 from backend.services.finanz_zeilen import baue_finanz_zeile
 from backend.utils.sonstige_positionen import ist_gueltige_position
-from backend.core.field_definitions import get_feld_hinweise
+from backend.core.field_definitions import basis_feld_key, get_feld_hinweise, groesse_gibt_es_am_geraet
 from backend.api.routes.strompreise import (
     lade_tarife_fuer_anlage,
     resolve_einspeise_preis_cent,
@@ -1258,6 +1258,75 @@ async def delete_verwaiste_geraetewerte(
         "jahr": jahr, "monat": monat,
         "geloescht": len(zeilen),
         "komponenten": [k["bezeichnung"] for k in beschreibung],
+    }
+
+
+@router.delete(
+    "/investition/{investition_id}/feld/{feld}", status_code=status.HTTP_200_OK
+)
+async def delete_feldwert_nicht_gefuehrt(
+    investition_id: int, feld: str, db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Entfernt einen gespeicherten Wert aus einem Feld, das das Gerät nicht führt (N-393).
+
+    Der Gegenstand ist ein Wert, an den der Anwender nicht mehr herankommt: Das
+    Feld hat eine harte Bedingung (`INVESTITION_FELDER[...]["bedingung"]`), die
+    am Gerät nicht mehr erfüllt ist — der Monatsabschluss zeigt es nicht, ein
+    erneuter Abschluss merged je Sub-Key und lässt den Altwert stehen. Der
+    Daten-Checker meldet den Zustand (`_check_werte_in_nicht_gefuehrten_feldern`)
+    und bietet diesen Weg als Inline-Aktion an. Entfernt wird der Wert in
+    **allen** Monaten dieses Geräts, in denen die Größe nicht existiert — je
+    Monat ein Audit-Eintrag (`remove_json_subkey_with_provenance`).
+
+    ⚠ Bewusst eng, wie `delete_verwaiste_geraetewerte` (#349): Führt das Gerät
+    das Feld, passiert **nichts** (409) — dann ist es im Monatsabschluss
+    erreichbar und gehört dort geleert. Ein zweiter Weg zum selben Ziel wäre
+    genau die Drift, aus der dieser Befund entstanden ist.
+    """
+    inv = (await db.execute(
+        select(Investition).where(Investition.id == investition_id)
+    )).scalar_one_or_none()
+    if inv is None:
+        raise not_found("Investition", investition_id)
+
+    basis = basis_feld_key(feld)
+    if groesse_gibt_es_am_geraet(inv.typ, basis, inv.parameter or {}):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Das Feld „{feld}“ ist an diesem Gerät vorgesehen und im "
+                "Monatsabschluss erreichbar — bitte dort leeren."
+            ),
+        )
+
+    from backend.services.provenance import remove_json_subkey_with_provenance
+
+    zeilen = (await db.execute(
+        select(InvestitionMonatsdaten)
+        .where(InvestitionMonatsdaten.investition_id == investition_id)
+        .order_by(InvestitionMonatsdaten.jahr, InvestitionMonatsdaten.monat)
+    )).scalars().all()
+
+    entfernt: list[dict] = []
+    for imd in zeilen:
+        if feld not in (imd.verbrauch_daten or {}):
+            continue
+        alter_wert = await remove_json_subkey_with_provenance(
+            db, imd, "verbrauch_daten", feld,
+            source="manual:form", writer=_MANUAL_WRITER,
+            decision_reason=(
+                f"Wert in nicht geführtem Feld entfernt (N-393) — "
+                f"{inv.typ} führt „{feld}“ nach seinen Einstellungen nicht"
+            ),
+        )
+        entfernt.append({"jahr": imd.jahr, "monat": imd.monat, "wert": alter_wert})
+
+    await db.commit()
+    return {
+        "investition_id": investition_id,
+        "feld": feld,
+        "entfernt": len(entfernt),
+        "monate": entfernt,
     }
 
 

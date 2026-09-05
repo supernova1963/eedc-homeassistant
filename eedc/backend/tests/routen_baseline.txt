@@ -1,3 +1,4 @@
+- /assets
 DELETE /api/anlagen/{anlage_id}
 DELETE /api/anlagen/{anlage_id}/foto
 DELETE /api/cloud-import/credentials/{anlage_id}
@@ -15,6 +16,7 @@ DELETE /api/investitionen/{investition_id}
 DELETE /api/live/mqtt/cache
 DELETE /api/live/mqtt/gateway/mappings/{mapping_id}
 DELETE /api/monatsdaten/geraetewerte/{anlage_id}/{jahr}/{monat}
+DELETE /api/monatsdaten/investition/{investition_id}/feld/{feld}
 DELETE /api/monatsdaten/{monatsdaten_id}
 DELETE /api/pvgis/horizont/{anlage_id}
 DELETE /api/pvgis/prognose/{prognose_id}

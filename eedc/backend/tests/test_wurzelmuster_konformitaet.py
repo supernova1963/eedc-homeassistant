@@ -2015,6 +2015,10 @@ P10_SCHREIBEN_IMPORT_CHECKER: frozenset[str] = frozenset({
     "backend/api/routes/monatsabschluss/views.py::get_monatsabschluss",
     "backend/api/routes/monatsabschluss/wizard.py::save_monatsabschluss",
     "backend/api/routes/monatsdaten.py::_save_investitionen_monatsdaten",
+    # N-393 (05.09.2026): LÖSCHPFAD. Entfernt einen Sub-Key aus `verbrauch_daten`
+    # in Monaten, in denen das Gerät die Größe nicht führt — liest die Zeilen nur,
+    # um zu wissen, WO der Schlüssel steht; keine Monatsgröße wird gebildet.
+    "backend/api/routes/monatsdaten.py::delete_feldwert_nicht_gefuehrt",
     "backend/services/import_writer.py::upsert_investition_monatsdaten_with_provenance",
     # Zählt, wie viele Werte der Überschreiben-Haken ersetzen würde (12.08.,
     # #349). Der Gegenstand ist die **Provenance** der Zeilen, nicht ihr

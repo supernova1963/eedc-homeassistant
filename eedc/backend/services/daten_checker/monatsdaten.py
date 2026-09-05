@@ -10,7 +10,13 @@ from typing import Optional
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.core.berechnungen.spez_ertrag import PV_ERZEUGER_TYPEN
 from backend.core.betriebsmodus import MODUS_STROM_FELD
-from backend.core.field_definitions import get_speicher_netzladung_kwh, get_wp_strom_kwh
+from backend.core.field_definitions import (
+    INVESTITION_FELDER,
+    basis_feld_key,
+    get_speicher_netzladung_kwh,
+    get_wp_strom_kwh,
+    groesse_gibt_es_am_geraet,
+)
 from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
 from backend.core.investition_kennwerte import get_erzeuger_kwp
 from backend.core.monats_luecken import ermittle_start_anker
@@ -882,6 +888,135 @@ class MonatsdatenChecks:
 
         return ergebnisse
 
+    def _check_werte_in_nicht_gefuehrten_feldern(
+        self, inv: Investition, name: str, param: dict
+    ) -> list[CheckErgebnis]:
+        """Ein gespeicherter Wert in einem Feld, das dieses Gerät nicht führt (N-393).
+
+        **Die Klasse.** Jedes Feld mit einer harten `bedingung` (Registry
+        `INVESTITION_FELDER`) verschwindet aus dem Monatsabschluss, sobald die
+        Bedingung am Gerät nicht mehr erfüllt ist — Warmwasser an einer
+        Split-Klimaanlage (N-304), Netzladung an einem Speicher ohne
+        `laedt_aus_netz`, V2H-Entladung ohne `v2h_faehig`, getrennte Ströme nach
+        Abschalten der getrennten Messung. Ein **vorher** gespeicherter Wert
+        bleibt in der Zeile: der Client filtert ohne Rücksicht auf Werte, der
+        Schreibpfad merged je Sub-Key. **Der Anwender kommt an ihn nicht mehr
+        heran** — dietmar1968 (T89667 #295/#300) konnte 889 kWh „Warmwasser" an
+        seiner Klimaanlage weder sehen noch entfernen; die bis dahin hier stehende
+        N-379-INFO nannte ihm einen Weg („bis du ihn selbst umträgst"), den es
+        nicht gab.
+
+        **Deshalb eine Meldung MIT Handgriff**, in der Bauform von #349
+        (`geraetewerte_loeschen`): die INFO trägt die Inline-Aktion
+        `feldwert_entfernen`, der Endpunkt `DELETE /monatsdaten/investition/
+        {id}/feld/{feld}` entfernt den Wert **nur** in Monaten, in denen das
+        Gerät die Größe nicht führt — ein erreichbares Feld wird dort abgewiesen
+        (409), es hat seinen Weg im Formular.
+
+        ⛔ **eedc löscht und verschiebt nichts von allein** (N-379-Entscheid). Es
+        weiß nicht, was der Wert ist — nur, dass er hier keine Größe dieses
+        Geräts sein kann. Die wahrscheinlichste Herkunft steht als Angebot
+        daneben (Klima: Kühlbetrieb), nie als Urteil.
+
+        ⚠ **Genau EINE Meldung je Feld, nicht je Monat** — die Aktion nimmt alle
+        betroffenen Monate mit und nennt sie; zwölf Meldungen für einen
+        umgestellten Schalter wären Lärm, nicht Auskunft
+        (`test_b5_strom_warmwasser_luft_luft.py` hält das seit N-379 fest).
+
+        ⚠ **Nur die harte Sorte.** `groesse_gibt_es_am_geraet` fragt
+        `URTEIL_NEIN`; ein *erweitertes* Feld (weiche Bedingung, R1) gilt als
+        vorhanden — es ist untypisch, nicht unmöglich, und wer es gepflegt hat,
+        meint es so. Ebenfalls **nicht** hier: `bedingung_anlage` (Verdrängung
+        durch ein anderes Gerät, z. B. Heimladung bei vorhandener Wallbox) —
+        dort gewinnt ein anderer Weg, die Größe existiert weiter.
+
+        Eine ``0`` löst nichts aus: sie ist keine Aussage über das Gerät und
+        rechnet nirgends mit.
+        """
+        felder = INVESTITION_FELDER.get(inv.typ)
+        if not isinstance(felder, list):
+            return []
+        # Nur Felder mit harter Bedingung können am Gerät fehlen — alle anderen
+        # spart die Lesetür unten ohnehin aus, die Vorprüfung hält den Lauf kurz.
+        label_je_feld = {
+            f["feld"]: f.get("label", f["feld"])
+            for f in felder
+            if isinstance(f, dict) and f.get("bedingung")
+        }
+        if not label_je_feld:
+            return []
+
+        monate_je_feld: dict[str, list[tuple[int, int]]] = {}
+        for imd in sorted(inv.monatsdaten or [], key=lambda x: (x.jahr, x.monat)):
+            daten = imd.verbrauch_daten or {}
+            for key, wert in daten.items():
+                basis = basis_feld_key(key)
+                if basis not in label_je_feld:
+                    continue
+                if not isinstance(wert, (int, float)) or isinstance(wert, bool) or wert == 0:
+                    continue
+                if groesse_gibt_es_am_geraet(inv.typ, basis, param):
+                    continue
+                monate_je_feld.setdefault(key, []).append((imd.jahr, imd.monat))
+
+        ergebnisse: list[CheckErgebnis] = []
+        kat = CheckKategorie.INVESTITIONEN
+        for key, monate in sorted(monate_je_feld.items()):
+            label = label_je_feld[basis_feld_key(key)]
+            labels = [f"{m:02d}/{j}" for (j, m) in monate]
+            monate_str = ", ".join(labels[:6])
+            if len(labels) > 6:
+                monate_str += f" (+{len(labels) - 6} weitere)"
+
+            if inv.typ == "waermepumpe" and basis_feld_key(key) == "warmwasser_kwh":
+                # Der Ursprungsfall (N-379): die Klimaanlage. Der Kühlbetrieb ist
+                # das wahrscheinlichste Ziel des Werts — als Angebot, nicht als Urteil.
+                meldung = (
+                    f"{name}: Warmwasser-Wärme in {len(labels)} Monat(en) "
+                    f"gespeichert — eine Split-Klimaanlage hat keinen Warmwasserkreis"
+                )
+                details = (
+                    f"{monate_str}. Der Wert zählt nicht als Wärme dieses Geräts: er "
+                    "würde sonst eine Ersparnis gegenüber der Heizung ausweisen, die "
+                    "das Gerät nie erzeugt hat. Stammt er aus dem Kühlbetrieb, gehört "
+                    "er in „Nutzenergie Kuehlbetrieb“ — dann rechnet eedc daraus die "
+                    "Arbeitszahl Kühlen. Im Monatsabschluss ist das Feld an einer "
+                    "Klimaanlage nicht mehr erreichbar; der gespeicherte Wert bleibt "
+                    "unverändert stehen, bis du ihn mit „Wert entfernen“ löschst. "
+                    "eedc löscht und verschiebt nichts von allein."
+                )
+            else:
+                meldung = (
+                    f"{name}: {label} in {len(labels)} Monat(en) gespeichert — "
+                    f"dieses Gerät führt das Feld nicht mehr"
+                )
+                details = (
+                    f"{monate_str}. Das Feld ist nach den Einstellungen des Geräts "
+                    "nicht mehr vorgesehen und im Monatsabschluss deshalb nicht mehr "
+                    "erreichbar; der gespeicherte Wert bleibt unverändert stehen. "
+                    "Stimmt die Einstellung, entferne den Wert mit „Wert entfernen“. "
+                    "Soll der Wert weiter zählen, stelle die Einstellung am Gerät "
+                    "zurück — dann erscheint das Feld wieder im Monatsabschluss. "
+                    "eedc löscht und verschiebt nichts von allein."
+                )
+
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.INFO,
+                meldung=meldung,
+                details=details,
+                investition_id=inv.id,
+                link=link_monat_erfassen(labels[0]),
+                action_kind="feldwert_entfernen",
+                action_label="Wert entfernen",
+                action_params={
+                    "investition_id": inv.id,
+                    "feld": key,
+                    "label": label,
+                    "monate": labels,
+                },
+            ))
+        return ergebnisse
+
     def _check_wp_monatsdaten(
         self, inv: Investition, name: str, param: dict, monatsdaten: list[Monatsdaten]
     ) -> list[CheckErgebnis]:
@@ -1038,57 +1173,11 @@ class MonatsdatenChecks:
                 link=link_monat_erfassen(fehlend_heiz[0]),
             ))
 
-        # N-379 — **ein gespeicherter Wert, den das Gerät nicht haben kann.**
-        # N-304 hat `warmwasser_kwh` an einer Split-Klimaanlage aus der Erfassung
-        # genommen (kein Warmwasserkreis). Wer den Wert VORHER gepflegt hat, hat
-        # ihn weiterhin in der Zeile — und bis heute floss er in „Wärme erzeugt",
-        # in die Arbeitszahl, in die Gas-Ersparnis und in die CO2-Bilanz.
-        # Gemeldet von dietmar1968 (T89667 #295): 889 kWh an einer Klimaanlage,
-        # daraus 38 € „Ersparnis vs. Gas" und −112 kg CO2.
-        #
-        # ⭐ **Der Lesepfad rechnet ihn nicht mehr mit** (`get_wp_warmwasser_kwh`).
-        # Diese Zeile ist die andere Hälfte davon: Ohne sie verschwände die Menge
-        # wortlos vom Bildschirm — und das wäre dieselbe Auskunftslosigkeit, nur
-        # in der Gegenrichtung (SOLL §3.3/**S3**: eine Sicht, die weniger zeigt
-        # als die Nachbarsicht, sagt warum).
-        #
-        # ⛔ **Kein zweiter Turm** (Tor 3): Geprüft wurde die vollständige
-        # Kategorien-Liste des Daten-Checkers — für „Wert in einem Feld, das es
-        # am Gerät nicht gibt" gab es keine Meldung. Die Bauform ist die bereits
-        # bestehende INFO über den obsoleten Gesamt-Strom-Sensor darüber.
-        #
-        # ⛔ **Der Wert wird NICHT gelöscht und NICHT migriert.** eedc weiß nicht,
-        # was er ist — nur, dass er hier keine Warmwasser-Wärme sein kann. Die
-        # wahrscheinlichste Herkunft steht als Angebot daneben, nicht als Urteil.
-        if ist_klima:
-            unmoeglich = sorted(
-                f"{m:02d}/{j}"
-                for (j, m), daten in imd_map.items()
-                if (daten.get("warmwasser_kwh") or 0) > 0
-            )
-            if unmoeglich:
-                monate_str = ", ".join(unmoeglich[:6])
-                if len(unmoeglich) > 6:
-                    monate_str += f" (+{len(unmoeglich) - 6} weitere)"
-                ergebnisse.append(CheckErgebnis(
-                    kategorie=kat, schwere=CheckSeverity.INFO,
-                    meldung=(
-                        f"{name}: Warmwasser-Wärme in {len(unmoeglich)} Monat(en) "
-                        f"gespeichert — eine Split-Klimaanlage hat keinen "
-                        f"Warmwasserkreis"
-                    ),
-                    details=(
-                        f"{monate_str}. Der Wert zählt nicht als Wärme dieses "
-                        "Geräts: er würde sonst eine Ersparnis gegenüber der "
-                        "Heizung ausweisen, die das Gerät nie erzeugt hat. "
-                        "Stammt er aus dem Kühlbetrieb, gehört er in "
-                        "„Nutzenergie Kuehlbetrieb“ — dann rechnet eedc daraus "
-                        "die Arbeitszahl Kühlen. Der gespeicherte Wert bleibt "
-                        "unverändert stehen, bis du ihn selbst umträgst."
-                    ),
-                    investition_id=inv.id,
-                    link=link_monat_erfassen(unmoeglich[0]),
-                ))
+        # N-379 stand bis 05.09.2026 HIER als Klima-Sonderfall („Warmwasser an einer
+        # Split-Klimaanlage"). Er ist ein Fall der allgemeineren Klasse „Wert in
+        # einem Feld, das dieses Gerät nicht führt" und steht jetzt für ALLE Typen
+        # in `_check_werte_in_nicht_gefuehrten_feldern` (N-393) — aufgerufen aus
+        # `stammdaten.py` im Block „Allgemeine Prüfungen für alle Typen".
 
         if not fehlend_strom and not fehlend_heiz:
             ergebnisse.append(CheckErgebnis(
