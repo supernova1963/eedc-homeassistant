@@ -687,6 +687,13 @@ export function baueKomponentenBloecke(
   const sonstigesGeraete = d.sonstiges_geraete ?? []
   const erzeugerGeraete = sonstigesGeraete.filter((g) => g.kategorie === 'erzeuger')
   const verbraucherGeraete = sonstigesGeraete.filter((g) => g.kategorie === 'verbraucher')
+  // §9.2 — der dritte Weg: Abgabe an Dritte (Mieterstrom, Allgemeinstrom).
+  const abgabeGeraete = sonstigesGeraete.filter((g) => g.kategorie === 'abgabe')
+  const abgabeKpis = (g: SonstigesGeraet): KpiStripItem[] => {
+    const ks: KpiStripItem[] = [{ title: 'Abgabe', value: fmt(g.abgabe_kwh), unit: 'kWh', color: 'gray', icon: TrendingUp, subtitle: 'an Dritte — kein Eigenverbrauch' }]
+    if (hat(g.erloes_euro)) ks.push({ title: 'Erlös', value: fmtCalc(g.erloes_euro ?? 0, 2, '—'), unit: '€', color: 'green', icon: TrendingUp })
+    return ks
+  }
 
   const erzeugerKpis = (g: SonstigesGeraet): KpiStripItem[] => {
     const ks: KpiStripItem[] = [{ ...SONSTIGES_ERZEUGER_KPI.erzeugung, value: fmt(g.erzeugung_kwh), unit: 'kWh' }]
@@ -727,6 +734,15 @@ export function baueKomponentenBloecke(
       id: 'k-sonstiges-verbraucher', title: 'Sonstiges – Verbraucher', ...ident('sonstiges'), defaultOpen: false,
       summary: `${fmt(summe)} kWh verbraucht`,
       render: () => <GeraeteSektionen prefix="sonstiges-verbraucher" geraete={verbraucherGeraete} kpisVon={verbraucherKpis} park={park} />,
+    })
+  }
+
+  if (abgabeGeraete.length > 0 && !sonstigesAlleGeparkt('sonstiges-abgabe', abgabeGeraete, abgabeKpis)) {
+    const summe = abgabeGeraete.reduce((a, g) => a + (g.abgabe_kwh ?? 0), 0)
+    bloecke.push({
+      id: 'k-sonstiges-abgabe', title: 'Sonstiges – Abgabe an Dritte', ...ident('sonstiges'), defaultOpen: false,
+      summary: `${fmt(summe)} kWh abgegeben`,
+      render: () => <GeraeteSektionen prefix="sonstiges-abgabe" geraete={abgabeGeraete} kpisVon={abgabeKpis} park={park} />,
     })
   }
 

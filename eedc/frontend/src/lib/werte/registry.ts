@@ -57,6 +57,8 @@ export const WERTE_METRIKEN: WerteMetrik[] = [
   { key: 'netzbezug',          label: 'Netzbezug',         unit: 'kWh',     gruppe: 'basis',       decimals: 0, aggregation: 'sum', defaultVisible: true,  granular: MONAT_TAG, higherIsBetter: false },
   { key: 'gesamtverbrauch',    label: 'Gesamtverbrauch',   unit: 'kWh',     gruppe: 'basis',       decimals: 0, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: undefined },
   { key: 'direktverbrauch',    label: 'Direktverbrauch',   unit: 'kWh',     gruppe: 'basis',       decimals: 0, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: true },
+  // §9.2 — der dritte Weg der Verwendung; nur mit Zähler an der Übergabestelle.
+  { key: 'abgabe_dritte',      label: 'Abgabe an Dritte',  unit: 'kWh',     gruppe: 'basis',       decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
   // Quoten
   { key: 'autarkie',           label: 'Autarkie',          unit: '%',       gruppe: 'quoten',      decimals: 1, aggregation: 'avg', defaultVisible: true,  granular: MONAT_TAG, higherIsBetter: true },
   { key: 'evQuote',            label: 'EV-Quote',          unit: '%',       gruppe: 'quoten',      decimals: 1, aggregation: 'avg', defaultVisible: true,  granular: MONAT_TAG, higherIsBetter: true },

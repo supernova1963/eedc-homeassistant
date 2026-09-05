@@ -279,6 +279,8 @@ class AggregierteMonatsdatenResponse(BaseModel):
     # `SonstigesFakten.hat_verbraucher_zeile`) — eine 0 hieße „da, hat nichts
     # gezogen".
     sonstige_verbrauch_kwh: Optional[float]
+    # §9.2 — an Dritte abgegebene kWh (dritter Weg der Verwendung); None = keine Abgabe.
+    abgabe_dritte_kwh: Optional[float] = None
     # Die Netzpunkt-Größe: ALLES, was hinter dem einen Hauszähler erzeugt wird
     # (`pv_module_kwh + bkw_kwh + sonstige_erzeugung_kwh`). Name aus dem Layer-SoT
     # `core/berechnungen/energie.py::erzeugung_hinter_zaehler_kwh` — bewusst nicht
@@ -700,6 +702,9 @@ async def list_monatsdaten_aggregiert(
             sonstige_erzeugung_kwh=(
                 round(f.erzeugung.sonstige_erzeuger_kwh, 1)
                 if f.sonstiges.hat_erzeuger_zeile else None
+            ),
+            abgabe_dritte_kwh=(
+                round(f.sonstiges.abgabe_kwh, 1) if f.sonstiges.abgabe_kwh > 0 else None
             ),
             sonstige_verbrauch_kwh=(
                 round(f.sonstiges.verbrauch_kwh, 1)

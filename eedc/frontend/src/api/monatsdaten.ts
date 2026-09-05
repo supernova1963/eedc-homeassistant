@@ -122,6 +122,8 @@ export interface AggregierteMonatsdaten {
   // Pool, Klimasplit). Steckt bereits im Hausverbrauch — eine Aufschlüsselung,
   // keine zusätzliche Menge. `null` = kein solches Gerät im Monat.
   sonstige_verbrauch_kwh: number | null
+  /** §9.2 — an Dritte abgegebene kWh; null = keine Abgabe. */
+  abgabe_dritte_kwh?: number | null
   // Netzpunkt-Größe: alles hinter dem Hauszähler Erzeugte
   // (`pv_module_kwh + bkw_kwh + sonstige_erzeugung_kwh`) — genau die Zahl, mit
   // der das Backend direktverbrauch/eigenverbrauch gerechnet hat. NIE als

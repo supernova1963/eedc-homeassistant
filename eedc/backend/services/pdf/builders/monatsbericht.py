@@ -246,6 +246,9 @@ def _abschnitte_energie(d: Any) -> list[Abschnitt]:
         _z("PV-Erzeugung", fmt_kwh(d.pv_erzeugung_kwh)),
         _z("Eigenverbrauch", fmt_kwh(d.eigenverbrauch_kwh)),
         _z("Einspeisung", fmt_kwh(d.einspeisung_kwh)),
+        # §9.2: der dritte Weg — nur, wenn es ihn in diesem Monat gab.
+        *([_z("Abgabe an Dritte", fmt_kwh(d.abgabe_dritte_kwh))]
+          if getattr(d, "abgabe_dritte_kwh", None) else []),
         _z("Netzbezug", fmt_kwh(d.netzbezug_kwh)),
         _z("Gesamtverbrauch", fmt_kwh(d.gesamtverbrauch_kwh)),
         _z("Autarkie", fmt_pct(d.autarkie_prozent)),

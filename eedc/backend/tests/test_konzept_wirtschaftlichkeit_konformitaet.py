@@ -70,10 +70,9 @@ BAUSCHRITTE_OFFEN: dict[int, str] = {
     # §8/1 + §8/9, Kommunikation §11 an #310 am 10.08.).
     # 8 ist gebaut (2026-08-10): `daten_checker/monatsdaten.py::ErfassungsortChecks`,
     # eigene Proben in `test_daten_checker_erfassungsort_positionen.py`.
-    # 10 — Abgabe an Dritte (§9.2, Entscheid 05.09.2026): im Bau. Proben in
-    # `test_abgabe_an_dritte_vier_sichten.py`; der Eintrag fällt mit dem
-    # letzten Commit des Pakets (Anzeige, Daten-Checker, Handbuch).
-    10: "Abgabe an Dritte — dritter Weg der Netzpunkt-Bilanz (§9.2)",
+    # 10 ist gebaut (2026-09-05, drei Commits): Abgabe an Dritte (§9.2) —
+    # Proben in `test_abgabe_an_dritte_vier_sichten.py`, `_tag_live.py`,
+    # `_anzeige.py`.
 }
 #: ⚑ **Das Dict ist leer — die Bauliste §8 ist abgearbeitet.** Wer hier wieder
 #: einen Eintrag anlegt, eröffnet einen neuen Bauschritt und trägt ihn ins

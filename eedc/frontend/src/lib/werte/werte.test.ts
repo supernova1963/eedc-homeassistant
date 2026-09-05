@@ -57,8 +57,9 @@ function tw(datum: string, over: Partial<TagWerte> = {}): TagWerte {
 }
 
 describe('W1-Registry', () => {
-  it('hat 48 Metriken (36 Monat + 12 Tag-native), jede mit gültiger Gruppe + granular', () => {
-    expect(WERTE_METRIKEN).toHaveLength(48)
+  it('hat 49 Metriken (37 Monat + 12 Tag-native), jede mit gültiger Gruppe + granular', () => {
+    // 37 seit 05.09.2026: `abgabe_dritte` (Konzept §9.2, dritter Weg der Verwendung).
+    expect(WERTE_METRIKEN).toHaveLength(49)
     for (const m of WERTE_METRIKEN) {
       expect(WERTE_GRUPPEN).toContain(m.gruppe)
       expect(m.granular.length).toBeGreaterThan(0)
@@ -82,9 +83,9 @@ describe('W1-Registry', () => {
 })
 
 describe('metrikenFuer (Granularität)', () => {
-  it('Monat = 36 Registry-Metriken, kein Tag-natives Feld', () => {
+  it('Monat = 37 Registry-Metriken, kein Tag-natives Feld', () => {
     const m = metrikenFuer('monat')
-    expect(m).toHaveLength(36)
+    expect(m).toHaveLength(37)
     expect(m.find((x) => x.key === 'peak_pv_kw')).toBeUndefined()
     expect(m.find((x) => x.key === 'wp_waerme')).toBeDefined()
     // Vollständigkeits-Spalten (Gernot 2026-06-26): verfügbare Felder als wählbare Spalten.

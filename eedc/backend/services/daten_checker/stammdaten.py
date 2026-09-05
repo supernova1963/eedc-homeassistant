@@ -968,6 +968,49 @@ class StammdatenChecks:
         ))
         return ergebnisse
 
+    def _check_abgabe_kandidat(self, inv, name: str) -> list[CheckErgebnis]:
+        """§9.2 (05.09.2026): Ein *Sonstiges/Erzeuger*, der aussieht wie eine Abgabe.
+
+        Der Fall, an dem der dritte Weg aufging (#402, N-378): zwei Übergabe-
+        Wechselrichter standen als *Erzeuger*, mit Einspeise-Zähler und Erlös,
+        und ihre „Erzeugung" war das Integral der abgegebenen Leistung — eedc
+        zählte sie als Eigenverbrauch des Hauses. Beleglage statt Bauart: gemeldet
+        wird ein Erzeuger, dessen gepflegte Monate **Einspeisung UND Erlös**
+        tragen und dessen Erzeugung nie über der Einspeisung liegt (also nichts
+        davon im Haus bleibt). INFO, freiwillig — eedc stellt nichts um
+        ([[feedback_kein_grosser_heiler_knopf]]); die Kategorie wählt der Anwender.
+        """
+        ergebnisse: list[CheckErgebnis] = []
+        kategorie = (inv.parameter or {}).get(_PARAM_SONSTIGES["KATEGORIE"])
+        if inv.typ != "sonstiges" or kategorie != "erzeuger":
+            return ergebnisse
+        treffer = 0
+        for imd in (inv.monatsdaten or []):
+            d = imd.verbrauch_daten or {}
+            einsp = float(d.get("einspeisung_kwh") or 0)
+            erloes = float(d.get("einspeise_erloes_euro") or 0)
+            erz = float(d.get("erzeugung_kwh") or 0)
+            if einsp > 0 and erloes > 0 and erz <= einsp + 1e-6:
+                treffer += 1
+        if not treffer:
+            return ergebnisse
+        ergebnisse.append(CheckErgebnis(
+            kategorie=CheckKategorie.INVESTITIONEN, schwere=CheckSeverity.INFO,
+            meldung=f"{name}: Gibt dieses Gerät Strom an Dritte ab?",
+            details=(
+                f"In {treffer} Monat(en) trägt der Erzeuger Einspeisung und Erlös, "
+                "aber keine Erzeugung über die Einspeisung hinaus — so sieht eine "
+                "Abgabe an Dritte aus (Mieterstrom, Allgemeinstrom, Nachbarhaus). "
+                "Als Erzeuger zählt diese Energie zum Eigenverbrauch deines Hauses "
+                "und hebt Autarkie und Eigenverbrauchsquote an. Wenn ein Zähler an "
+                "der Übergabestelle sitzt: Kategorie auf „Abgabe an Dritte“ umstellen "
+                "und den Zähler als „Abgabe“ zuordnen — eedc zieht die Menge dann "
+                "vom Eigenverbrauch ab. Der Erlös bleibt dein Feld."
+            ),
+            link="/einstellungen/investitionen",
+        ))
+        return ergebnisse
+
     def _check_bkw_akku_erfassungsweg(self, inv, name: str, alle_invs) -> list[CheckErgebnis]:
         """Weist Weg-B-Altbestand auf den Kanon hin — mit benannter Handlung.
 
@@ -1068,6 +1111,7 @@ class StammdatenChecks:
             # Komponenten-Hub filtert darauf. Tagging am Schleifenende, da das
             # anlagenweite _check_pv_erzeugung VOR der Schleife läuft.
             _start = len(ergebnisse)
+            ergebnisse.extend(self._check_abgabe_kandidat(inv, name))
 
             # Typ-spezifische Prüfungen
             if inv.typ == "pv-module":

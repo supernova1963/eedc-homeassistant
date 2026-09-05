@@ -352,7 +352,7 @@ Vorzeichenkorrekturen, oder das Zusammenfassen mehrerer Entitäten zu einer.
 
 ---
 
-## 7. Sonstiges (Erzeuger / Verbraucher / Speicher / Verbrauchszähler)
+## 7. Sonstiges (Erzeuger / Verbraucher / Abgabe an Dritte / Speicher / Verbrauchszähler)
 
 ### Monatserfassung
 
@@ -362,6 +362,12 @@ Vorzeichenkorrekturen, oder das Zusammenfassen mehrerer Entitäten zu einer.
 | `verbrauch_sonstig_kwh` | Verbraucher | Verbrauch | kWh | Verbrauchte Energie (z.B. Sauna, Pool). |
 | `bezug_pv_kwh` | Verbraucher | davon PV | kWh | PV-gedeckter Anteil des Verbrauchs. Optional. |
 | `bezug_netz_kwh` | Verbraucher | davon Netz | kWh | Netz-gedeckter Anteil des Verbrauchs. Optional. |
+| `abgabe_kwh` | Abgabe an Dritte | Abgabe | kWh | **Seit 05.09.2026.** An Dritte abgegebene Energie (Mieterstrom, Allgemeinstrom, Nachbarhaus) — Zähler an der Übergabestelle, kumulativ oder Tagessensor. Weder Eigenverbrauch noch Netz-Einspeisung; eedc zieht sie vom Eigenverbrauch ab (Autarkie und Quote sinken entsprechend). Ohne Zähler gibt es keine Schätzung. |
+| `einspeise_erloes_euro` | Abgabe an Dritte | Erlös | € | Erlös aus der Abgabe, dein eigener Satz — wie beim Erzeuger (§9 Weg 2). |
+| `abgabe_kwh` | Abgabe an Dritte | Abgabe | kWh | **Seit 05.09.2026.** An Dritte abgegebene Energie (Mieterstrom, Allgemeinstrom, Nachbarhaus) — Zähler an der Übergabestelle, kumulativ oder Tagessensor. Weder Eigenverbrauch noch Netz-Einspeisung; eedc zieht sie vom Eigenverbrauch ab (Autarkie und Quote sinken entsprechend). Ohne Zähler gibt es keine Schätzung. |
+| `einspeise_erloes_euro` | Abgabe an Dritte | Erlös | € | Erlös aus der Abgabe, dein eigener Satz — wie beim Erzeuger (§9 Weg 2). |
+| `abgabe_kwh` | Abgabe an Dritte | Abgabe | kWh | **Seit 05.09.2026.** An Dritte abgegebene Energie (Mieterstrom, Allgemeinstrom, Nachbarhaus) — Zähler an der Übergabestelle, kumulativ oder Tagessensor. Weder Eigenverbrauch noch Netz-Einspeisung; eedc zieht sie vom Eigenverbrauch ab (Autarkie und Quote sinken entsprechend). Ohne Zähler gibt es keine Schätzung. |
+| `einspeise_erloes_euro` | Abgabe an Dritte | Erlös | € | Erlös aus der Abgabe, dein eigener Satz — wie beim Erzeuger (§9 Weg 2). |
 | `erzeugung_kwh` | Speicher | Erzeugung/Entladung | kWh | Entladene Energie. |
 | `verbrauch_sonstig_kwh` | Speicher | Verbrauch/Ladung | kWh | Geladene Energie. |
 | `zaehlerstand` | Verbrauchszähler | Zählerstand | *(vom Gerät)* | #377 — der abgelesene Stand eines Gas-, Wasser- oder Ölzählers. **Erfasst, nicht bewertet:** geht in keine Bilanz, keine Quote, keine Wirtschaftlichkeit, kein CO₂ und nicht in die Gemeinschaftsdaten. |

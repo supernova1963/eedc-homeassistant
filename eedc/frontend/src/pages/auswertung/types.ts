@@ -78,6 +78,8 @@ export interface MonatsZeitreihe {
    */
   sonstiges_erzeugung: number | null
   sonstiges_verbrauch: number | null
+  /** §9.2 — an Dritte abgegebene kWh (dritter Weg); null = keine Abgabe. */
+  abgabe_dritte?: number | null
   // ── Finanzen ───────────────────────────────────────────────────────────
   // Alle Werte kommen **fertig aus dem Backend** (`/monatsdaten/aggregiert`,
   // SoT `baue_finanz_zeile` + `berechne_finanz_aggregat`). Bis 2026-08-04
@@ -253,6 +255,7 @@ export function createMonatsZeitreihe(
       // Beide fertig aus der Antwort — hier wird nichts gefaltet (P10).
       sonstiges_erzeugung: md.sonstige_erzeugung_kwh,
       sonstiges_verbrauch: md.sonstige_verbrauch_kwh,
+      abgabe_dritte: md.abgabe_dritte_kwh ?? null,
       einspeise_erloes: md.einspeise_erloes_euro,
       ev_ersparnis: md.ev_ersparnis_euro + md.bkw_ersparnis_euro,
       netzbezug_kosten: md.netzbezug_kosten_euro,

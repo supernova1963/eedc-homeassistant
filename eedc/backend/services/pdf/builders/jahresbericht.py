@@ -266,6 +266,8 @@ async def build_jahresbericht_context(
     speicher_entladung = sum(speicher_entladung_by_ym.values())
 
     wp_waerme = sum(f.wp.waerme_kwh for f in fakten)
+    # §9.2 — Abgabe an Dritte über den Berichtszeitraum (kein Eigenverbrauch).
+    abgabe_gesamt = sum(f.sonstiges.abgabe_kwh for f in fakten)
     wp_heizung = sum(f.wp.heizung_kwh for f in fakten)
     wp_warmwasser = sum(f.wp.warmwasser_kwh for f in fakten)
     wp_strom = sum(f.wp.strom_kwh for f in fakten)
@@ -723,6 +725,7 @@ async def build_jahresbericht_context(
         "kpis": {
             "pv_erzeugung_kwh": pv_gesamt,
             "eigenverbrauch_kwh": ev_gesamt,
+            "abgabe_dritte_kwh": abgabe_gesamt if abgabe_gesamt > 0 else None,
             "einspeisung_kwh": einsp_gesamt,
             "netzbezug_kwh": netz_gesamt,
             "gesamtverbrauch_kwh": gesamtverbrauch,

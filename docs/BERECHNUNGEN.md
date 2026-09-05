@@ -157,7 +157,7 @@ Hardcodierte Werte in `cockpit.py`:
 ```
 Erzeugung_gesamt    = PV_Erzeugung + BKW + sonstige_Erzeuger   (hinter dem Zähler)
 Direktverbrauch     = max(0, Erzeugung_gesamt - Einspeisung - Batterie_Ladung)
-Eigenverbrauch      = Direktverbrauch + Batterie_Entladung + V2H_Entladung
+Eigenverbrauch      = Direktverbrauch + Batterie_Entladung + V2H_Entladung − Abgabe_an_Dritte   (§9.2, seit 05.09.2026)
 Gesamtverbrauch     = Eigenverbrauch + Netzbezug
 EV-Quote (%)        = Eigenverbrauch / Erzeugung_gesamt * 100   (wenn Erzeugung > 0)
 Autarkie (%)        = Eigenverbrauch / Gesamtverbrauch * 100    (wenn GV > 0)

@@ -39,6 +39,7 @@ import { ZELLE, KOPF_ZELLE } from '../components/ui/tabelleMasse'
 import { VerteilungsBalken, GeraeteHinweis, GrundlastSollIstKachel } from '../components/blocks'
 import { Parkbar } from '../components/park'
 import { DATENROLLE } from '../lib'
+import { KOMPONENTEN_FARBEN } from '../lib/colors'
 import { Delta, VglChip, baueNetzKostenKpis } from './MonatBilanz'
 // R3b S7/A5: Datenrollen-Icons aus der SoT-Map (eine Datenrolle = ein Icon).
 import { DATENROLLEN_ICONS } from '../lib/komponentenStyle'
@@ -177,6 +178,10 @@ export function JahrBilanz({
       besserVj: evBesser(vj?.autarkie), besserOj: evBesser(oj?.autarkie) },
     { label: 'Direktverbrauch', ist: dv.direktverbrauch_kwh, vj: vj?.direkt ?? null, oj: oj?.direkt ?? null, unit: 'kWh' },
     { label: 'Einspeisung',     ist: dv.einspeisung_kwh,     vj: vj?.einsp ?? null,  oj: oj?.einsp ?? null,  unit: 'kWh' },
+    // §9.2 — der dritte Weg der Verwendung (Σ der Monate); nur, wo es ihn gibt.
+    ...(dv.abgabe_dritte_kwh != null ? [{ label: 'Abgabe an Dritte', ist: dv.abgabe_dritte_kwh, vj: null, oj: null, unit: 'kWh' } as BilanzRow] : []),
+    // §9.2 — der dritte Weg der Verwendung (Σ der Monate); nur, wo es ihn gibt.
+    ...(dv.abgabe_dritte_kwh != null ? [{ label: 'Abgabe an Dritte', ist: dv.abgabe_dritte_kwh, vj: null, oj: null, unit: 'kWh' } as BilanzRow] : []),
     { label: 'Netzbezug',       ist: dv.netzbezug_kwh,       vj: vj?.netz ?? null,   oj: oj?.netz ?? null,   unit: 'kWh', inv: true },
     { label: 'Gesamtverbrauch', ist: dv.gesamtverbrauch_kwh, vj: vj?.gesamt ?? null, oj: oj?.gesamt ?? null, unit: 'kWh', inv: true },
     { label: 'Autarkie',        ist: dv.autarkie_prozent,    vj: vj?.autarkie ?? null, oj: oj?.autarkie ?? null, unit: '%' },
@@ -308,6 +313,7 @@ export function JahrBilanz({
               segmente={[
                 { label: 'Eigenverbr.', wert: d.eigenverbrauch_kwh, farbe: DATENROLLE.eigenverbrauch.bg },
                 { label: 'Einspeisung', wert: d.einspeisung_kwh, farbe: DATENROLLE.einspeisung.bg },
+                ...((d.abgabe_dritte_kwh ?? 0) > 0 ? [{ label: 'Abgabe an Dritte', wert: d.abgabe_dritte_kwh as number, farbe: KOMPONENTEN_FARBEN['sonstiges'].bg }] : []),
               ]}
             />
           </Parkbar>
