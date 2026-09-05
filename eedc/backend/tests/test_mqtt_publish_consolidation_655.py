@@ -48,7 +48,14 @@ async def test_publish_anlage_sensors_liefert_echte_zahlen(db, monkeypatch):
     import backend.api.routes.ha_export as ha_export
 
     async def fake_calc(db, anlage):
-        return [object(), object(), object()]
+        # B5/X-3: der Sync-Job liest jetzt `definition.key` jedes Werts (er
+        # merkt sich, was er publiziert hat) — ein nackter Platzhalter genügt
+        # dem Vertrag nicht mehr. Drei echte Definitionen, drei Werte.
+        from backend.services.ha_sensors_export import SensorValue, get_sensor_definition
+        return [
+            SensorValue(definition=get_sensor_definition(k), value=1.0)
+            for k in ("einspeisung_gesamt_kwh", "netzbezug_gesamt_kwh", "autarkie_prozent")
+        ]
 
     monkeypatch.setattr(ha_export, "calculate_anlage_sensors", fake_calc)
 

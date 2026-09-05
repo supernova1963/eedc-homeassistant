@@ -14,7 +14,11 @@ from backend.services.mqtt_client import MQTTClient, MQTTConfig
 from backend.services.mqtt_broker_settings import (
     abgewaehlte_sensoren,
     resolve_broker_config,
+    ZULETZT_FELD,
+    schreibe_export_settings,
+    zuletzt_publizierte_sensoren,
 )
+from backend.services.ha_sensors_export import SensorValue, get_sensor_definition
 
 
 def resolve_mqtt_config(
@@ -157,11 +161,60 @@ async def publish_anlage_sensors(
             return werte
         return [sv for sv in werte if sv.definition.key not in abgewaehlt]
 
+    # ── B5/X-3: Ein Sensor, der seinen Wert verliert, bleibt sonst stehen ────
+    #
+    # ⛔ **Gemessen 05.09.2026:** Die Rechner liefern nur Sensoren MIT Wert,
+    # `publish_all_sensors` publiziert genau diese Liste, alle drei Topics mit
+    # `retain=True`, und die Discovery setzt kein `expire_after`. Verliert ein
+    # Sensor seinen Wert — die Arbeitszahl nach einem Fremdanteil-Eintrag, die
+    # Ersparnis nach „nichts ersetzt", die Modus-Sensoren nach dem Entfernen
+    # der Quelle, der Speicher-Wirkungsgrad über 100 % — dann bleibt in Home
+    # Assistant der **letzte Wert stehen**, und HA schreibt ihn stündlich
+    # weiter in seine Langzeitstatistik. Der Kommentar zum Entscheid vom
+    # 17.08. („`value` bleibt ungesetzt ⇒ der Sensor meldet `unknown`")
+    # beschrieb einen Pfad, den es nicht gab.
+    #
+    # Deshalb merkt sich der Job je Gerät, was er zuletzt publiziert hat, und
+    # leert beim nächsten Lauf, was nicht mehr geliefert wird (Zustand
+    # „unbekannt" — `publish_sensor_value` mit `value=None`). Abgewählte
+    # Sensoren (#400) nimmt die Abwahl-Route zurück; sie werden hier nicht
+    # geleert.
+    zuletzt = await zuletzt_publizierte_sensoren(db)
+    jetzt: dict[str, list[str]] = {}
+    geleert: list[str] = []
+
+    async def _nachziehen(inv_id, geliefert):
+        schluessel = f"a{anlage.id}" if inv_id is None else f"i{inv_id}"
+        keys = [sv.definition.key for sv in geliefert]
+        jetzt[schluessel] = keys
+        for key in zuletzt.get(schluessel, []):
+            if key in keys or key in abgewaehlt:
+                continue
+            definition = get_sensor_definition(key)
+            if definition is None:
+                continue
+            await client.publish_sensor_value(
+                SensorValue(definition=definition, value=None), anlage.id, inv_id
+            )
+            geleert.append(key)
+
+    async def _merken():
+        # Ohne DB-Kontext gibt es kein Gedächtnis — dieselbe Regel wie bei der
+        # Abwahl (`abgewaehlte_sensoren(None)` → alles exportieren).
+        if db is None:
+            return
+        if any(jetzt.get(k) != zuletzt.get(k) for k in jetzt):
+            await schreibe_export_settings(db, **{ZULETZT_FELD: {**zuletzt, **jetzt}})
+
     sensor_values = _behalten(await calculate_anlage_sensors(db, anlage))
     if not sensor_values:
-        return {"available": True, "no_data": True, "total": 0, "success": 0, "failed": 0, "errors": []}
+        await _nachziehen(None, [])
+        await _merken()
+        return {"available": True, "no_data": True, "total": 0, "success": 0, "failed": 0,
+                "errors": [], "geleert": geleert}
 
     result = await client.publish_all_sensors(sensor_values, anlage.id, anlage.anlagenname)
+    await _nachziehen(None, sensor_values)
     gesamt = dict(result)
     gesamt.setdefault("total", len(sensor_values))
 
@@ -213,10 +266,12 @@ async def publish_anlage_sensors(
                 db, inv, strompreis, emob_ctx, modus_map
             ))
             if not inv_values:
+                await _nachziehen(inv.id, [])
                 continue
             inv_result_pub = await client.publish_all_sensors(
                 inv_values, anlage.id, anlage.anlagenname, inv.id, inv.bezeichnung
             )
+            await _nachziehen(inv.id, inv_values)
             for schluessel in ("total", "success", "failed"):
                 gesamt[schluessel] = gesamt.get(schluessel, 0) + inv_result_pub.get(schluessel, 0)
             # Fehlergründe bleiben eine Stichprobe (wie im Anlagen-Zweig) —
@@ -226,6 +281,7 @@ async def publish_anlage_sensors(
                 if len(gesamt.setdefault("errors", [])) < 3:
                     gesamt["errors"].append(fehler)
 
+    await _merken()
     return {
         "available": True,
         "no_data": False,
@@ -233,6 +289,7 @@ async def publish_anlage_sensors(
         "success": gesamt.get("success", 0),
         "failed": gesamt.get("failed", 0),
         "errors": gesamt.get("errors", []),
+        "geleert": geleert,
     }
 
 

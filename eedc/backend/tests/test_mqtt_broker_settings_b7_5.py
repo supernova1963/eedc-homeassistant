@@ -150,7 +150,10 @@ async def test_export_publish_nutzt_denselben_broker_wie_inbound(db, monkeypatch
     monkeypatch.setattr(ha_mqtt_sync, "MQTTClient", _Client)
 
     async def fake_calc(db, anlage):
-        return [object()]
+        # B5/X-3: der Sync-Job liest `definition.key` jedes Werts — ein
+        # nackter Platzhalter genügt dem Vertrag nicht mehr.
+        from backend.services.ha_sensors_export import SensorValue, get_sensor_definition
+        return [SensorValue(definition=get_sensor_definition("einspeisung_gesamt_kwh"), value=1.0)]
 
     monkeypatch.setattr(ha_export, "calculate_anlage_sensors", fake_calc)
 

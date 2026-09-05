@@ -384,7 +384,17 @@ class MQTTClient:
             # Nachkommastellen.
             value = sensor_value.value
             if value is None:
-                value = "unknown"
+                # B5/X-3 (05.09.2026): der Leerwert eines MQTT-Sensors ist in
+                # Home Assistant der String ``"None"`` (``PAYLOAD_NONE`` in
+                # ``homeassistant/components/mqtt/const.py``; ``mqtt/sensor.py``
+                # setzt darauf ``native_value = None`` → Zustand „unbekannt").
+                # ⛔ Hier stand ``"unknown"`` — für einen Sensor mit Einheit
+                # oder ``state_class`` ist das in HA ein Fehler („has the
+                # non-numeric value"), kein Leerwert. Der Pfad war nie
+                # erreichbar: kein Produzent lieferte ``None``; seit X-3 tun es
+                # gesperrte Kennzahlen und der Sync-Job für verschwundene
+                # Sensoren.
+                value = "None"
             else:
                 value = runde_exportwert(value, sensor.unit, sensor.category)
 

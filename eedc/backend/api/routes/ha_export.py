@@ -1722,6 +1722,17 @@ async def calculate_investition_sensors(
                         if _az.zaehler_kwh is not None and _az.nenner_kwh is not None
                         else None
                     )
+                elif _az.grund and (gesamt_strom > 0 or gesamt_waerme > 0):
+                    # B5/X-3 (SOLL §3.3 S3, ADR-002/P12): eine GESPERRTE
+                    # Kennzahl ist ein Sensor ohne Wert, der seinen Grund
+                    # nennt — nicht ein Sensor, der fehlt. Fehlte er, bliebe
+                    # in Home Assistant der letzte publizierte Wert stehen
+                    # (retain, kein expire_after) und liefe stündlich in die
+                    # Langzeitstatistik weiter. Nur wo die Eingänge da sind:
+                    # ein Gerät ohne jede Messung (F1) bekommt weiterhin keinen
+                    # Sensor — sonst entstünden Entitäten für nie erfasste
+                    # Größen (#400, Knallfrosch-Klasse).
+                    zusatz_attribute = {"grund": _az.grund}
             elif sensor.key == "wp_ersparnis_euro":
                 # B5/X-1 (05.09.2026): dieselbe Rechnung wie Hub und Cockpit —
                 # der Layer `berechne_wp_ersparnis`, je Monat mit dem Tarif
@@ -1836,7 +1847,7 @@ async def calculate_investition_sensors(
                     value = wp_stunden_total
                     berechnung = "Σ erfasste Betriebsstunden"
 
-            if value is not None:
+            if value is not None or zusatz_attribute.get("grund"):
                 sensor_values.append(SensorValue(
                     definition=sensor,
                     value=value,
@@ -2040,6 +2051,7 @@ async def get_all_sensors(db: AsyncSession = Depends(get_db)):
                 state_class=sv.definition.state_class,
             )
             for sv in sensor_values
+            if sv.value is not None  # B5/X-3: leer nur für MQTT (Zustand „unbekannt")
         ]
 
         if sensors:
@@ -2092,6 +2104,7 @@ async def get_all_sensors(db: AsyncSession = Depends(get_db)):
                     state_class=sv.definition.state_class,
                 )
                 for sv in inv_sensors
+                if sv.value is not None  # B5/X-3: leer nur für MQTT (Zustand „unbekannt")
             ]
 
             if inv_sensor_items:
@@ -2145,6 +2158,7 @@ async def get_anlage_sensors(
             state_class=sv.definition.state_class,
         )
         for sv in sensor_values
+        if sv.value is not None  # B5/X-3: leer nur für MQTT (Zustand „unbekannt")
     ]
 
     return AnlageExport(

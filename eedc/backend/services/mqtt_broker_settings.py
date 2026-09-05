@@ -183,6 +183,29 @@ async def abgewaehlte_sensoren(db: Optional[AsyncSession]) -> set[str]:
     return {str(k) for k in roh if k}
 
 
+ZULETZT_FELD = "zuletzt_publiziert"
+
+
+async def zuletzt_publizierte_sensoren(db: Optional[AsyncSession]) -> dict[str, list[str]]:
+    """B5/X-3: welche Sensor-Schluessel hat der Sync-Job je Geraet zuletzt
+    publiziert? Schluessel ``a<anlage_id>`` (anlagenweit) und ``i<inv_id>``.
+
+    Der Publisher schreibt nur, was er berechnen kann, und alles mit
+    ``retain`` — ein Sensor, der diesmal keinen Wert hat, bliebe sonst mit
+    seinem letzten Wert in Home Assistant stehen. Aus dieser Liste erkennt
+    der Job, was verschwunden ist, und leert es (Zustand „unbekannt").
+    """
+    value = await _lade_settings(db, MQTT_EXPORT_SETTINGS_KEY) or {}
+    roh = value.get(ZULETZT_FELD)
+    if not isinstance(roh, dict):
+        return {}
+    return {
+        str(k): [str(x) for x in v]
+        for k, v in roh.items()
+        if isinstance(v, list)
+    }
+
+
 async def schreibe_export_settings(db: AsyncSession, **felder) -> dict:
     """Schreibt Felder in ``mqtt_export`` — **mischend**, nicht ersetzend.
 
