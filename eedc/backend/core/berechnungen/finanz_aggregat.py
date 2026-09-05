@@ -69,6 +69,8 @@ class FinanzMonatsZeile:
     speicher_ladung_kwh: float = 0.0
     speicher_entladung_kwh: float = 0.0
     v2h_entladung_kwh: float = 0.0
+    #: §9.2 — an Dritte abgegebene kWh (vom Eigenverbrauch abgezogen, Layer).
+    abgabe_dritte_kwh: float = 0.0
     bkw_eigenverbrauch_kwh: float = 0.0
     netzbezug_preis_cent: float = 0.0
     einspeiseverguetung_cent: float = 0.0
@@ -136,6 +138,7 @@ def berechne_finanz_aggregat(
             speicher_ladung_kwh=z.speicher_ladung_kwh,
             speicher_entladung_kwh=z.speicher_entladung_kwh,
             v2h_entladung_kwh=z.v2h_entladung_kwh,
+            abgabe_dritte_kwh=z.abgabe_dritte_kwh,
         )
         ev_kwh += kz.eigenverbrauch_kwh
         ev += kz.eigenverbrauch_kwh * z.netzbezug_preis_cent / 100

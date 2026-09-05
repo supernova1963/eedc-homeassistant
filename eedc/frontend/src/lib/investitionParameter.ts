@@ -396,7 +396,8 @@ export const PARAM_SONSTIGES_DEFAULTS = {
   zaehler_einheit: 'm³' as const,
 } as const
 
-export type SonstigesKategorie = 'erzeuger' | 'verbraucher' | 'speicher' | 'zaehler'
+// 'abgabe' — Abgabe an Dritte, der dritte Weg der Netzpunkt-Bilanz (Konzept §9.2, 05.09.2026).
+export type SonstigesKategorie = 'erzeuger' | 'verbraucher' | 'abgabe' | 'speicher' | 'zaehler'
 
 /**
  * Die Medium-Arten eines Verbrauchszählers (#377) — Label und Symbol, sonst

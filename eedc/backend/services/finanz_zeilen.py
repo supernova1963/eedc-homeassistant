@@ -59,6 +59,8 @@ class FinanzZeileEingabe:
     speicher_ladung_kwh: float = 0.0
     speicher_entladung_kwh: float = 0.0
     v2h_entladung_kwh: float = 0.0
+    #: §9.2 — an Dritte abgegebene kWh, vom Eigenverbrauch abgezogen (Layer).
+    abgabe_dritte_kwh: float = 0.0
     bkw_eigenverbrauch_kwh: float = 0.0
     neg_preis_kwh: Optional[float] = None
     monatsdaten: Any = None
@@ -103,6 +105,7 @@ async def baue_finanz_zeile(
         speicher_ladung_kwh=eingabe.speicher_ladung_kwh or 0,
         speicher_entladung_kwh=eingabe.speicher_entladung_kwh or 0,
         v2h_entladung_kwh=eingabe.v2h_entladung_kwh or 0,
+        abgabe_dritte_kwh=eingabe.abgabe_dritte_kwh or 0,
         bkw_eigenverbrauch_kwh=eingabe.bkw_eigenverbrauch_kwh or 0,
         # Flex-Ø-Override (dynamischer Tarif) vor dem Monatstarif.
         netzbezug_preis_cent=resolve_netzbezug_preis_cent(eingabe.monatsdaten, netz_cent),

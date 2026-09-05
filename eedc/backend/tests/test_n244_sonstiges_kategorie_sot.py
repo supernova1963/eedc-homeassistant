@@ -37,6 +37,7 @@ from backend.core.field_definitions import (
     get_felder_fuer_investition,
     get_felder_fuer_sonstiges,
     ist_gepflegte_sonstiges_kategorie,
+    ist_abgabe_kategorie,
     ist_zaehler_kategorie,
 )
 
@@ -130,10 +131,13 @@ def test_n244_ungepflegt_bietet_jedes_feld_jeder_richtung() -> None:
     **Verbraucher** liest. Das ist exakt der N-244-Schaden, nur mit anderem
     Vorzeichen.
     """
+    # §9.2 (05.09.2026): „abgabe" hat wie der Zähler eine EIGENE Richtung —
+    # ihr Feld einem ungepflegten Gerät anzubieten hieße, eine Abgabe als
+    # Verbrauch zu lesen (N-244 mit anderem Vorzeichen). Deshalb ausgenommen.
     alle = {
         f["feld"]
         for kat, felder in INVESTITION_FELDER["sonstiges"].items()
-        if not ist_zaehler_kategorie(kat)
+        if not ist_zaehler_kategorie(kat) and not ist_abgabe_kategorie(kat)
         for f in felder
     }
     ungepflegt = {f["feld"] for f in SONSTIGES_FELDER_UNGEPFLEGT}

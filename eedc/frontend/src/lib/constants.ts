@@ -92,6 +92,8 @@ export const DATENQUELLE_LABELS: Record<string, string> = {
 export const SONSTIGES_KATEGORIE_LABELS: Record<string, string> = {
   erzeuger: 'Erzeuger',
   verbraucher: 'Verbraucher',
+  // §9.2 — der dritte Weg: weder Eigenverbrauch noch Netz-Einspeisung.
+  abgabe: 'Abgabe an Dritte',
   speicher: 'Speicher',
   // #377 — der dritte Zustand, ohne Stromrichtung.
   zaehler: 'Verbrauchszähler',

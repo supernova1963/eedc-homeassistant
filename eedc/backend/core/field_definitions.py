@@ -724,6 +724,34 @@ INVESTITION_FELDER: dict = {
                 "hinweis": "Netz-gedeckter Anteil des Verbrauchs (kWh, kumulativ oder Tagessensor). Optional.",
             },
         ],
+        # Abgabe an Dritte — der dritte Weg der Netzpunkt-Bilanz (KONZEPT-
+        # WIRTSCHAFTLICHKEITSRECHNUNG §9.2, Entscheid 05.09.2026, #402/N-378).
+        # Mieterstrom, Allgemeinstrom, Nachbarhaus: Energie, die das Haus hinter
+        # dem Hausanschluss verlässt, ohne Eigenverbrauch und ohne Netz-
+        # Einspeisung zu sein. Die Menge ist ein ZÄHLER an der Übergabestelle —
+        # gemessen, nie geschätzt; ohne Zähler bleibt die Handbuch-Grenze.
+        "abgabe": [
+            {
+                "feld": "abgabe_kwh", "label": "Abgabe", "einheit": "kWh",
+                "csv_suffix": "Abgabe_kWh",
+                "hinweis": (
+                    "An Dritte abgegebene Energie (Mieterstrom, Allgemeinstrom, "
+                    "Nachbarhaus) in kWh — Zähler an der Übergabestelle, kumulativ "
+                    "oder Tagessensor. eedc zieht sie vom Eigenverbrauch ab; sie ist "
+                    "weder Eigenverbrauch noch Netz-Einspeisung."
+                ),
+            },
+            {
+                "feld": "einspeise_erloes_euro", "label": "Erlös", "einheit": "€",
+                "placeholder": "z. B. 42.30",
+                "csv_suffix": "Erloes_Euro",
+                "hinweis": (
+                    "Erlös aus der Abgabe in € (eigener Satz, den eedc nicht kennen "
+                    "kann). Am besten als kumulativer Helfer-Sensor aus Home Assistant; "
+                    "die Abrechnung an die Abnehmer ist nicht Sache von eedc."
+                ),
+            },
+        ],
         "speicher": [
             # Hinweis: cockpit/komponenten.py liest erzeugung_kwh/verbrauch_sonstig_kwh
             # für Sonstiges-Speicher — diese Feldnamen sind bindend.
@@ -1988,6 +2016,17 @@ SONSTIGES_KATEGORIE_UNGEPFLEGT: Final[str] = "verbraucher"
 # `test_377_zaehlerstaende.py` mit.
 SONSTIGES_ZAEHLER_KATEGORIEN: Final[frozenset[str]] = frozenset({"zaehler"})
 
+#: Der dritte Weg der Netzpunkt-Bilanz (§9.2): eine Kategorie mit EIGENER
+#: Richtung — weder Erzeuger noch Verbraucher. Ihr Feld darf einem Gerät ohne
+#: gepflegte Kategorie NICHT angeboten werden: dort liest jeder wertführende
+#: Pfad „Verbraucher", und eine Abgabe als Verbrauch gelesen ist die N-244-Klasse
+#: mit anderem Vorzeichen (dieselbe Begründung wie beim Verbrauchszähler).
+SONSTIGES_ABGABE_KATEGORIE: Final[str] = "abgabe"
+
+
+def ist_abgabe_kategorie(kategorie: Optional[str]) -> bool:
+    """Gibt dieses *Sonstiges*-Gerät Strom an Dritte ab (§9.2)?"""
+    return kategorie == SONSTIGES_ABGABE_KATEGORIE
 #: Der eine Feldname der Kategorie — ausgeschrieben statt aus der Registry
 #: gezogen, weil dieses Projekt von der Grep-Barkeit lebt. Dass beide
 #: übereinstimmen, hält `test_377_zaehlerstaende.py` fest.
@@ -2040,7 +2079,11 @@ def _sonstiges_felder_ungepflegt() -> list[dict]:
     sonstiges = INVESTITION_FELDER.get("sonstiges", {})
     reihenfolge = [SONSTIGES_KATEGORIE_UNGEPFLEGT] + [
         k for k in sonstiges
-        if k != SONSTIGES_KATEGORIE_UNGEPFLEGT and not ist_zaehler_kategorie(k)
+        if (
+            k != SONSTIGES_KATEGORIE_UNGEPFLEGT
+            and not ist_zaehler_kategorie(k)
+            and not ist_abgabe_kategorie(k)
+        )
     ]
     gesehen: set[str] = set()
     out: list[dict] = []
@@ -2738,6 +2781,8 @@ def sonstiges_feld_reihenfolge(kategorie: str | None) -> tuple[str, ...]:
     """
     if ist_zaehler_kategorie(kategorie):
         return ()
+    if ist_abgabe_kategorie(kategorie):
+        return ("abgabe_kwh",)
     if kategorie == "erzeuger":
         return ("erzeugung_kwh", *SONSTIGES_VERBRAUCH_FELDER)
     return (*SONSTIGES_VERBRAUCH_FELDER, "erzeugung_kwh")

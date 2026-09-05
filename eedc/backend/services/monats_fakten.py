@@ -597,6 +597,7 @@ class SonstigesGeraetFakten:
     """
 
     erzeugung_kwh: float = 0.0
+    abgabe_kwh: float = 0.0
     verbrauch_kwh: float = 0.0
     eigenverbrauch_kwh: float = 0.0
     einspeisung_kwh: float = 0.0
@@ -636,6 +637,10 @@ class SonstigesFakten:
     """
 
     erzeugung_kwh: float = 0.0
+    #: §9.2 — Σ der an Dritte abgegebenen kWh (Kategorie „abgabe"). Sie stehen
+    #: NICHT in ``erzeugung_kwh`` und werden in ``kennzahlen`` vom Eigenverbrauch
+    #: abgezogen: der dritte Weg neben Eigenverbrauch und Netz-Einspeisung.
+    abgabe_kwh: float = 0.0
     verbrauch_kwh: float = 0.0
     eigenverbrauch_kwh: float = 0.0
     einspeisung_kwh: float = 0.0
@@ -1152,6 +1157,7 @@ def finanz_zeile_eingabe(fakt: MonatsFakt) -> FinanzZeileEingabe:
         speicher_ladung_kwh=fakt.speicher.ladung_kwh,
         speicher_entladung_kwh=fakt.speicher.entladung_kwh,
         v2h_entladung_kwh=fakt.emob.v2h_entladung_kwh,
+        abgabe_dritte_kwh=fakt.sonstiges.abgabe_kwh,
         bkw_eigenverbrauch_kwh=fakt.bkw.rest_eigenverbrauch_kwh,
         neg_preis_kwh=fakt.eeg.neg_preis_kwh,
         monatsdaten=fakt.meta.monatsdaten,
@@ -1177,6 +1183,7 @@ def kennzahlen_aus_fakten(fakten: Iterable[MonatsFakt]) -> VerbrauchsKennzahlen:
         speicher_ladung_kwh=sum(f.speicher.ladung_kwh for f in fakten),
         speicher_entladung_kwh=sum(f.speicher.entladung_kwh for f in fakten),
         v2h_entladung_kwh=sum(f.emob.v2h_entladung_kwh for f in fakten),
+        abgabe_dritte_kwh=sum(f.sonstiges.abgabe_kwh for f in fakten),
     )
 
 
@@ -1345,6 +1352,7 @@ class _RohMonat:
         self.sonstiges_bezug_pv = 0.0
         self.sonstiges_bezug_netz = 0.0
         self.sonstiges_einspeise_erloes_euro = 0.0
+        self.sonstiges_abgabe = 0.0
         #: Je `Investition.id` dieselben sechs Größen — für Sichten, die die
         #: Geräte einzeln ausweisen (Monatsroute: „Sonstige Geräte"). Die
         #: Summen oben bleiben die Wahrheit der Anlage; diese Gruppe ist ihre
@@ -1548,11 +1556,12 @@ class _RohMonat:
             self.sonstiges_bezug_pv += b.sonstiges_bezug_pv
             self.sonstiges_bezug_netz += b.sonstiges_bezug_netz
             self.sonstiges_einspeise_erloes_euro += b.sonstiges_einspeise_erloes_euro
+            self.sonstiges_abgabe += b.sonstiges_abgabe
             g = self.sonstiges_je_geraet.setdefault(
                 inv.id,
                 {"erzeugung": 0.0, "verbrauch": 0.0, "eigenverbrauch": 0.0,
                  "einspeisung": 0.0, "bezug_pv": 0.0, "bezug_netz": 0.0,
-                 "einspeise_erloes_euro": 0.0},
+                 "einspeise_erloes_euro": 0.0, "abgabe": 0.0},
             )
             g["erzeugung"] += b.sonstiges_erzeugung
             g["verbrauch"] += b.sonstiges_verbrauch
@@ -1561,6 +1570,7 @@ class _RohMonat:
             g["bezug_pv"] += b.sonstiges_bezug_pv
             g["bezug_netz"] += b.sonstiges_bezug_netz
             g["einspeise_erloes_euro"] += b.sonstiges_einspeise_erloes_euro
+            g["abgabe"] += b.sonstiges_abgabe
             # Ein Erzeuger mit 0 kWh im Monat ist ein echter 0-Wert, kein
             # „nicht vorhanden" — deshalb zählt auch die Kategorie, nicht nur
             # ein Beitrag > 0.
@@ -1774,6 +1784,7 @@ async def _baue_fakt(
         ),
         sonstiges=SonstigesFakten(
             erzeugung_kwh=roh.sonstiges_erzeugung,
+            abgabe_kwh=roh.sonstiges_abgabe,
             verbrauch_kwh=roh.sonstiges_verbrauch,
             eigenverbrauch_kwh=roh.sonstiges_eigenverbrauch,
             einspeisung_kwh=roh.sonstiges_einspeisung,
@@ -1789,6 +1800,7 @@ async def _baue_fakt(
                     bezug_pv_kwh=g["bezug_pv"],
                     bezug_netz_kwh=g["bezug_netz"],
                     einspeise_erloes_euro=g.get("einspeise_erloes_euro", 0.0),
+                    abgabe_kwh=g.get("abgabe", 0.0),
                 )
                 for inv_id, g in roh.sonstiges_je_geraet.items()
             },
@@ -1809,6 +1821,7 @@ async def _baue_fakt(
             speicher_ladung_kwh=speicher.ladung_kwh,
             speicher_entladung_kwh=speicher.entladung_kwh,
             v2h_entladung_kwh=emob.v2h_entladung_kwh,
+            abgabe_dritte_kwh=roh.sonstiges_abgabe,
         ),
         meta=MetaFakten(
             monatsdaten=monatsdaten,

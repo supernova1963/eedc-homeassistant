@@ -186,7 +186,10 @@ class SonstigesGeraet(BaseModel):
     Darstellung im Cockpit: zwei Blöcke (Erzeuger/Verbraucher), darin pro Gerät
     eine eigene Werte-Zeile mit Bezeichnung."""
     bezeichnung: str
-    kategorie: str  # "erzeuger" | "verbraucher"
+    kategorie: str  # "erzeuger" | "verbraucher" | "abgabe" (§9.2)
+    # Abgabe an Dritte (§9.2)
+    abgabe_kwh: Optional[float] = None
+    erloes_euro: Optional[float] = None
     # Erzeuger
     erzeugung_kwh: Optional[float] = None
     eigenverbrauch_kwh: Optional[float] = None
@@ -387,6 +390,9 @@ class AktuellerMonatResponse(BaseModel):
 
     # Komponenten — Sonstiges
     sonstiges_erzeugung_kwh: Optional[float] = None    # Erzeuger-Typ
+    # §9.2 — Abgabe an Dritte: der dritte Weg der Verwendung (nicht im
+    # Eigenverbrauch, nicht in der Netz-Einspeisung).
+    abgabe_dritte_kwh: Optional[float] = None
     sonstiges_eigenverbrauch_kwh: Optional[float] = None
     sonstiges_einspeisung_kwh: Optional[float] = None
     sonstiges_verbrauch_kwh: Optional[float] = None    # Verbraucher-Typ
@@ -674,6 +680,8 @@ def _collect_saved_data(
         ("bkw_eigenverbrauch_kwh", fakt.bkw.eigenverbrauch_gemessen_kwh),
         # Sonstiger Erzeuger (BHKW) speist hinter den Hauszähler.
         ("sonstiges_erzeugung_kwh", fakt.sonstiges.erzeugung_kwh),
+        # §9.2: Abgabe an Dritte — wird in der Bilanz unten vom Eigenverbrauch abgezogen.
+        ("sonstiges_abgabe_kwh", fakt.sonstiges.abgabe_kwh),
     ):
         if wert > 0:
             resolved[feld] = (wert, quelle)
@@ -1617,6 +1625,7 @@ async def get_aktueller_monat(
     # `_collect_saved_data` aktiv-/anschaffungsdatum-gefiltert aggregiert
     # ([[feedback_anschaffungsdatum_grenze]]).
     sonstiges_erz_bilanz = get_val("sonstiges_erzeugung_kwh") or 0
+    abgabe_dritte = get_val("sonstiges_abgabe_kwh") or 0
     erzeugung_bilanz = erzeugung_hinter_zaehler_kwh(pv, sonstiges_erz_bilanz)
 
     # ── Berechnete Werte ──
@@ -1630,7 +1639,8 @@ async def get_aktueller_monat(
         ladung = speicher_ladung or 0
         entladung = speicher_entladung or 0
         direktverbrauch = round(max(0, erzeugung_bilanz - einspeisung - ladung), 2)
-        eigenverbrauch = round(direktverbrauch + entladung, 2)
+        # §9.2: dieselbe Formel wie der Layer — Abgabe an Dritte ist kein Eigenverbrauch.
+        eigenverbrauch = round(max(0, direktverbrauch + entladung - abgabe_dritte), 2)
 
         if netzbezug is not None:
             gesamtverbrauch = round(eigenverbrauch + netzbezug, 2)
@@ -2278,7 +2288,14 @@ async def get_aktueller_monat(
                 (inv.parameter or {}).get("kategorie"),
                 hat_erzeugung=g.erzeugung_kwh > 0,
             )
-            if kat == "verbraucher":
+            if kat == "abgabe":
+                if g.abgabe_kwh > 0 or g.einspeise_erloes_euro > 0:
+                    sonstiges_geraete.append(SonstigesGeraet(
+                        bezeichnung=inv.bezeichnung, kategorie="abgabe",
+                        abgabe_kwh=_v(g.abgabe_kwh),
+                        erloes_euro=_v(g.einspeise_erloes_euro),
+                    ))
+            elif kat == "verbraucher":
                 if g.verbrauch_kwh > 0 or g.bezug_pv_kwh > 0 or g.bezug_netz_kwh > 0:
                     sonstiges_geraete.append(SonstigesGeraet(
                         bezeichnung=inv.bezeichnung, kategorie="verbraucher",
@@ -2688,6 +2705,7 @@ async def get_aktueller_monat(
         hat_balkonkraftwerk=hat_balkonkraftwerk,
         # Komponenten — Sonstiges
         sonstiges_erzeugung_kwh=sonstiges_erzeugung,
+        abgabe_dritte_kwh=round(abgabe_dritte, 2) if abgabe_dritte > 0 else None,
         sonstiges_eigenverbrauch_kwh=sonstiges_eigenverbrauch,
         sonstiges_einspeisung_kwh=sonstiges_einspeisung,
         sonstiges_verbrauch_kwh=sonstiges_verbrauch,

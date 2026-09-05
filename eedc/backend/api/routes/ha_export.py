@@ -507,6 +507,7 @@ async def calculate_anlage_sensors(
         speicher_ladung_kwh=batterie_ladung,
         speicher_entladung_kwh=batterie_entladung,
         v2h_entladung_kwh=v2h_entladung,
+        abgabe_dritte_kwh=sum(f.sonstiges.abgabe_kwh for f in fakten),
     )
     direktverbrauch = kennzahlen.direktverbrauch_kwh
     eigenverbrauch = kennzahlen.eigenverbrauch_kwh
@@ -674,6 +675,7 @@ async def calculate_anlage_sensors(
             speicher_ladung_kwh=_lad_jahr,
             speicher_entladung_kwh=_entl_jahr,
             v2h_entladung_kwh=sum(f.emob.v2h_entladung_kwh for f in _f_jahr),
+            abgabe_dritte_kwh=sum(f.sonstiges.abgabe_kwh for f in _f_jahr),
         )
         ust_jahresanteile.append(UstJahresanteil(
             jahr=_jahr,

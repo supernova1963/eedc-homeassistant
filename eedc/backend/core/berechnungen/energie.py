@@ -151,7 +151,8 @@ def sonstiges_richtung(kategorie: Optional[str], hat_erzeugung: bool) -> str:
     muss, bevor ein Wert vorliegt. Hier geht es um die **Einordnung eines
     Geräts**, für die der Wert bereits bekannt ist.
     """
-    if kategorie in ("erzeuger", "verbraucher"):
+    # §9.2: „abgabe" ist die dritte gepflegte Richtung — nie geraten.
+    if kategorie in ("erzeuger", "verbraucher", "abgabe"):
         return kategorie
     return "erzeuger" if hat_erzeugung else "verbraucher"
 

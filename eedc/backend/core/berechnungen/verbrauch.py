@@ -74,8 +74,18 @@ def berechne_verbrauchs_kennzahlen(
     speicher_ladung_kwh: float = 0.0,
     speicher_entladung_kwh: float = 0.0,
     v2h_entladung_kwh: float = 0.0,
+    abgabe_dritte_kwh: float = 0.0,
 ) -> VerbrauchsKennzahlen:
     """Berechnet die kanonischen Verbrauchs-Kennzahlen aus Energiemengen (kWh).
+
+    ``abgabe_dritte_kwh`` (§9.2, 05.09.2026): der **dritte Weg** hinter dem
+    Hausanschluss — Energie, die an Dritte abgegeben wird (Mieterstrom,
+    Allgemeinstrom, Nachbarhaus), gemessen am Zähler der Übergabestelle. Sie
+    ist weder Eigenverbrauch noch Netz-Einspeisung und wird deshalb vom
+    Eigenverbrauch abgezogen; ob die kWh aus PV-Überschuss oder Speicher kam,
+    ist für die Bilanz gleichgültig. Gemessen an einer nachgestellten Anlage
+    (PV 1.000, Einspeisung 200, Abgabe 224): Eigenverbrauch 576 statt 1.024,
+    Autarkie 65,8 % statt 77,3 %.
 
     Alle Eingaben in kWh; None-tolerant (wird als 0 behandelt). Die
     Eigenverbrauchsquote wird auf 100 % gedeckelt (Mess-Toleranz).
@@ -87,9 +97,11 @@ def berechne_verbrauchs_kennzahlen(
     speicher_ladung = speicher_ladung_kwh or 0.0
     speicher_entladung = speicher_entladung_kwh or 0.0
     v2h_entladung = v2h_entladung_kwh or 0.0
+    abgabe = abgabe_dritte_kwh or 0.0
 
     direktverbrauch = max(0.0, pv - einspeisung - speicher_ladung) if pv > 0 else 0.0
-    eigenverbrauch = direktverbrauch + speicher_entladung + v2h_entladung
+    # §9.2: der dritte Weg — abgegebene kWh sind kein Eigenverbrauch.
+    eigenverbrauch = max(0.0, direktverbrauch + speicher_entladung + v2h_entladung - abgabe)
     gesamtverbrauch = eigenverbrauch + netzbezug
 
     autarkie = autarkie_prozent(eigenverbrauch, gesamtverbrauch)

@@ -49,6 +49,7 @@ from backend.core.field_definitions import (
     get_pv_erzeugung_kwh,
     get_sonstiges_verbrauch_kwh,
     get_wp_warmwasser_kwh,
+    ist_abgabe_kategorie,
     ist_zaehler_kategorie,
     get_speicher_netzladung_kwh,
     get_wp_heizenergie_kwh,
@@ -177,6 +178,9 @@ class ImdTypBeitrag:
     #: Kategorie-Regel wie Eigenverbrauch/Einspeisung: ein Verbraucher hat
     #: keinen Einspeise-Erlös.
     sonstiges_einspeise_erloes_euro: float = 0.0
+    #: §9.2 — an Dritte abgegebene kWh (Kategorie „abgabe"); keine Erzeugung,
+    #: keine Einspeisung, wird vom Eigenverbrauch abgezogen.
+    sonstiges_abgabe: float = 0.0
 
 
 def _f(data: dict, key: str) -> float:
@@ -337,6 +341,7 @@ def imd_typ_beitrag(
         bezug_pv = _f(data, "bezug_pv_kwh")
         bezug_netz = _f(data, "bezug_netz_kwh")
         erloes_euro = _f(data, "einspeise_erloes_euro")
+        abgabe = 0.0
         if ist_zaehler_kategorie(kategorie):
             # #377 — ein Zähler trägt **nichts** zur Energiebilanz bei, und das
             # steht hier ausdrücklich statt sich aus leeren Feldern zu ergeben.
@@ -353,6 +358,14 @@ def imd_typ_beitrag(
             eigenverbrauch = einspeisung = 0.0
             bezug_pv = bezug_netz = 0.0
             erloes_euro = 0.0
+        elif ist_abgabe_kategorie(kategorie):
+            # §9.2: das Gerät erzeugt nichts und verbraucht nichts — es gibt ab.
+            # Ein „Erzeugung"-Wert (W-Integral des Übergabe-Wechselrichters) zählt
+            # hier bewusst nicht mehr als Erzeugung hinter dem Zähler.
+            abgabe = _f(data, "abgabe_kwh")
+            erzeugung = verbrauch = 0.0
+            eigenverbrauch = einspeisung = 0.0
+            bezug_pv = bezug_netz = 0.0
         elif kategorie == "erzeuger":
             verbrauch = 0.0
             bezug_pv = bezug_netz = 0.0
@@ -372,6 +385,7 @@ def imd_typ_beitrag(
             sonstiges_bezug_pv=bezug_pv,
             sonstiges_bezug_netz=bezug_netz,
             sonstiges_einspeise_erloes_euro=erloes_euro,
+            sonstiges_abgabe=abgabe,
         )
 
     return ImdTypBeitrag(typ=typ)

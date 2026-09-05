@@ -6,6 +6,7 @@ import type { TypFelderProps } from './types'
 const KATEGORIE_OPTIONEN = [
   { value: 'erzeuger', label: 'Erzeuger (z.B. Mini-BHKW, Mini-Wind)' },
   { value: 'verbraucher', label: 'Verbraucher (z.B. Klimaanlage, Pool)' },
+  { value: 'abgabe', label: 'Abgabe an Dritte (Mieterstrom, Allgemeinstrom — Zähler an der Übergabestelle)' },
   { value: 'speicher', label: 'Speicher (z.B. Wasserstoff)' },
   // #377 — der dritte Zustand: weder Erzeuger noch Verbraucher.
   { value: 'zaehler', label: 'Verbrauchszähler (Gas, Wasser, Heizöl — wird nur erfasst)' },

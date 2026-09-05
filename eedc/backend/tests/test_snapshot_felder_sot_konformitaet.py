@@ -162,7 +162,9 @@ def test_jedes_zaehlerfeld_erzeugt_einen_beitrag_oder_ist_begruendet():
         # Sonstiges-Kategorie) — ein Feld gilt als gedeckt, wenn EINE davon es
         # aufgreift.
         varianten = (
-            [{"kategorie": "verbraucher"}, {"kategorie": "erzeuger"}] if typ == "sonstiges"
+            # §9.2 (05.09.2026): „abgabe" ist die dritte gepflegte Richtung.
+            [{"kategorie": "verbraucher"}, {"kategorie": "erzeuger"}, {"kategorie": "abgabe"}]
+            if typ == "sonstiges"
             else [{"getrennte_strommessung": True}, {}] if typ == "waermepumpe"
             else [{}]
         )

@@ -395,6 +395,7 @@ async def get_cockpit_uebersicht(
         speicher_ladung_kwh=speicher_ladung,
         speicher_entladung_kwh=speicher_entladung,
         v2h_entladung_kwh=v2h_entladung,
+        abgabe_dritte_kwh=sum(f.sonstiges.abgabe_kwh for f in fakten),
     )
     direktverbrauch = _kz.direktverbrauch_kwh
     eigenverbrauch = _kz.eigenverbrauch_kwh
@@ -732,6 +733,7 @@ async def get_cockpit_uebersicht(
             speicher_ladung_kwh=sum(f.speicher.ladung_kwh for f in _f_jahr),
             speicher_entladung_kwh=sum(f.speicher.entladung_kwh for f in _f_jahr),
             v2h_entladung_kwh=sum(f.emob.v2h_entladung_kwh for f in _f_jahr),
+            abgabe_dritte_kwh=sum(f.sonstiges.abgabe_kwh for f in _f_jahr),
         )
         ust_jahresanteile.append(UstJahresanteil(
             jahr=_jahr,
