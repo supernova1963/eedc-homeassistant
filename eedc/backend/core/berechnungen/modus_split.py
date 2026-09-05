@@ -66,8 +66,25 @@ from backend.core.betriebsmodus import AUFGETEILTE_MODI, BETRIEBSMODUS_KANON
 #: fänden je nach Herkunft die eine Hälfte nicht.
 REGEL_JAZ_MODUS_SPLIT: str = "jaz_modus_split"
 
+#: Kennung der zweiten Ableitungs-Regel: „Wärme aus Strom × gepflegter JAZ" als
+#: **Vorschlag im Monatsabschluss** (B1, 05.09.2026 — SOLL Wärme/Klima §6, F2–F5).
+#: Derselbe Rechenweg wie der Modus-Split, aber ohne Stunden-Signal: der Anwender
+#: übernimmt den Vorschlag, der Client meldet die Marke beim Speichern zurück
+#: (`abgeleiteteMarke`). Bis dahin trug der übernommene Vorschlag `manual:form`
+#: ohne Marke — und sah im Lesepfad aus wie eine Messung (dietmar1968, 889 kWh:
+#: 254 × 3,5, daraus eine „Arbeitszahl" und eine Gas-Ersparnis).
+REGEL_JAZ_VORSCHLAG: str = "jaz_vorschlag"
+
+#: Beide Regeln machen dasselbe mit der Wärme: sie ist eine Schätzung, darf
+#: multipliziert werden (Ersparnis, CO₂ — mit Kennzeichnung), nie geteilt.
+ABLEITUNGS_REGELN_WAERME: frozenset[str] = frozenset({
+    REGEL_JAZ_MODUS_SPLIT, REGEL_JAZ_VORSCHLAG,
+})
+
 #: Provenance-Schlüssel der Heizwärme in `InvestitionMonatsdaten`.
 PROVENANCE_KEY_HEIZENERGIE: str = "verbrauch_daten.heizenergie_kwh"
+#: … und der Warmwasser-Wärme — seit B1 kann auch sie abgeleitet sein.
+PROVENANCE_KEY_WARMWASSER: str = "verbrauch_daten.warmwasser_kwh"
 
 
 def heizwaerme_ist_abgeleitet(source_provenance: Optional[dict]) -> bool:
@@ -83,12 +100,28 @@ def heizwaerme_ist_abgeleitet(source_provenance: Optional[dict]) -> bool:
     Wärmemengenzähler fällt unter dieselbe Regel, eine Klimaanlage **mit**
     Zähler ist gemessen wie jede andere).
     """
+    return _waerme_ist_abgeleitet(source_provenance, PROVENANCE_KEY_HEIZENERGIE)
+
+
+def warmwasser_ist_abgeleitet(source_provenance: Optional[dict]) -> bool:
+    """Trägt die gespeicherte Warmwasser-Wärme dieser Zeile eine Ableitungs-Marke?
+
+    Dieselbe Weiche wie `heizwaerme_ist_abgeleitet`, für die zweite Wärmegröße.
+    Bis B1 (05.09.2026) konnte nur die Heizwärme abgeleitet sein (der Modus-Split
+    schreibt nur sie); der Vorschlag im Monatsabschluss kann seit B1 auch die
+    Warmwasser-Wärme aus `strom_warmwasser_kwh × JAZ` schätzen — und dann muss
+    der Lesepfad sie genauso aus dem Nenner-Zähler der Arbeitszahl halten.
+    """
+    return _waerme_ist_abgeleitet(source_provenance, PROVENANCE_KEY_WARMWASSER)
+
+
+def _waerme_ist_abgeleitet(source_provenance: Optional[dict], key: str) -> bool:
     if not source_provenance:
         return False
-    eintrag = source_provenance.get(PROVENANCE_KEY_HEIZENERGIE)
+    eintrag = source_provenance.get(key)
     if not isinstance(eintrag, dict):
         return False
-    return eintrag.get("abgeleitet") == REGEL_JAZ_MODUS_SPLIT
+    return eintrag.get("abgeleitet") in ABLEITUNGS_REGELN_WAERME
 
 
 @dataclass(frozen=True)

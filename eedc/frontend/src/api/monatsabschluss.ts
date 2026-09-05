@@ -19,10 +19,12 @@ export interface Vorschlag {
   beschreibung: string
   details?: Record<string, unknown>
   /** #352: gesetzt, wenn der Wert die **Zerlegung** eines Anlagen-Gesamtwerts
-   *  ist (`kwp_anteil` / `kapazitaet_anteil`) und keine Gerätemessung. Wer den
-   *  Vorschlag übernimmt, schickt die Marke beim Speichern zurück — sonst
-   *  gilt der gerechnete Wert in der Provenance als gemessen und die
-   *  String-Sichten ranken ihn gegen echte Messungen. */
+   *  ist (`kwp_anteil` / `kapazitaet_anteil`) und keine Gerätemessung — oder
+   *  seit B1 (05.09.2026) eine **Wärme-Schätzung** `Strom × JAZ` (`jaz_vorschlag`).
+   *  Wer den Vorschlag übernimmt, schickt die Marke beim Speichern zurück —
+   *  sonst gilt der gerechnete Wert in der Provenance als gemessen: die
+   *  String-Sichten ranken ihn gegen echte Messungen, und die Arbeitszahl gäbe
+   *  die eingetragene JAZ zurück. */
   abgeleitet?: string | null
 }
 

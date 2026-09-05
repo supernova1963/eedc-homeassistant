@@ -36,7 +36,10 @@ from backend.core.berechnungen.betriebsart_gemessen import (
     betriebsart_nutzenergie_kwh,
     modus_strom_zeile,
 )
-from backend.core.berechnungen.modus_split import heizwaerme_ist_abgeleitet
+from backend.core.berechnungen.modus_split import (
+    heizwaerme_ist_abgeleitet,
+    warmwasser_ist_abgeleitet,
+)
 from backend.core.berechnungen.waermepumpe_kennzahl import waerme_gesamt_kwh
 from backend.core.betriebsmodus import MODUS_ABDECKUNG_FELD, MODUS_STROM_FELD
 from backend.core.betriebsmodus import HEIZEN as _HEIZEN
@@ -292,8 +295,13 @@ def imd_typ_beitrag(
             ),
             # Ist die Heizwärme abgeleitet, ist der abgeleitete Anteil die
             # ganze Heizwärme dieser Zeile — es gibt keine Mischung je Zeile.
+            # B1 (05.09.2026): dasselbe für die Warmwasser-Wärme — der
+            # Vorschlag im Monatsabschluss kann seit B1 auch sie schätzen
+            # (`strom_warmwasser_kwh × JAZ`), und ein abgeleiteter Teil sperrt
+            # die Arbeitszahl (`jaz_belastbar`), egal in welcher Funktion er sitzt.
             wp_waerme_abgeleitet=(
-                heizung if heizwaerme_ist_abgeleitet(source_provenance) else 0.0
+                (heizung if heizwaerme_ist_abgeleitet(source_provenance) else 0.0)
+                + (warmwasser if warmwasser_ist_abgeleitet(source_provenance) else 0.0)
             ),
             wp_abgrenzung=abgrenzung_stoerung(params),
         )

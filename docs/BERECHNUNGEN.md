@@ -1224,6 +1224,35 @@ sieben Formeln).
 > `services/community_service.py`.
 
 
+
+#### 3.5d Der Wärme-Vorschlag im Monatsabschluss: Strom derselben Funktion × JAZ, gekennzeichnet (B1, 05.09.2026)
+
+Neben dem Modus-Split gibt es einen zweiten Weg zu einer **abgeleiteten** Wärme: der Vorschlag im
+Monatsabschluss (`vorschlag_service`), der für *Heizwärme* und *Warmwasser-Wärme* `Strom × gepflegte
+JAZ` anbietet (bzw. SCOP/COP je Funktion nach `effizienz_modus`). Seit B1 gilt dafür die Regel aus
+`core/berechnungen/waerme_vorschlag.py` — SOLL Wärme/Klima §6, Präzisierung F2–F5:
+
+| Feld | Basis-Strom | Sprosse | wenn nicht … |
+| --- | --- | --- | --- |
+| **Heizwärme** | gemessener Heizbetrieb `betriebsart_strom_heizen_kwh` | F4 | … dann `strom_heizen_kwh` (getrennte Messung, F5) |
+| | | | … dann `stromverbrauch_kwh` (F2) — **nur ohne fremde Spur** in der Zeile: kein gemessener Kühl-/Lüft-/Entfeucht-Strom, keine Kältemenge, kein getrennter Warmwasser-Strom. Sonst **kein Vorschlag** |
+| **Warmwasser-Wärme** | `strom_warmwasser_kwh` (getrennte Messung, F5) | F5 | ohne getrennte Strommessung **kein Vorschlag** — die Menge steckt im Heizwärme-Vorschlag (Gesamtwärme landet unter „Heizwärme", N-391) |
+
+**Der Vorschlag trägt die Marke `jaz_vorschlag`** (`REGEL_JAZ_VORSCHLAG`, zweite Regel neben
+`jaz_modus_split`): der Client meldet sie beim Übernehmen zurück (`abgeleitet_felder`), die
+Provenance behält sie, und `heizwaerme_ist_abgeleitet` / `warmwasser_ist_abgeleitet` sperren die
+Arbeitszahl (`wp_waerme_abgeleitet` zählt seit B1 **beide** Funktionen). Multiplizieren (Ersparnis,
+CO₂) bleibt erlaubt — mit Kennzeichnung. Die Beschreibung des Vorschlags sagt es dem Anwender:
+*„Geschätzt: 254 kWh (Strom Heizbetrieb) × JAZ 3,5 — keine Messung"*.
+
+**Was das repariert (gemessen am Code vom 05.09.2026):** (1) ohne getrennte Strommessung wurden
+**beide** Wärmefelder aus dem Gesamtstrom vorgeschlagen — „Lücken füllen" übernahm beide, die
+Gesamtwärme stand doppelt in der Zeile; (2) an einer Klimaanlage mit Betriebsart-Zählern rechnete
+der Dienst `E_gesamt × JAZ` — 254 kWh Kühlstrom wurden 889 kWh „Warmwasser" (dietmar1968, T89667
+#295); (3) der übernommene Vorschlag stand als `manual:form` ohne Marke in der Zeile und galt jeder
+Lesestelle als Messung. ⚠ **Die Bauart entscheidet hier nichts** (R1, ADR-002/P13): ob der
+Gesamtstrom der Heizstrom ist, sagt die Beleglage der Zeile, nicht `wp_art`. Proben:
+`test_waerme_vorschlag_b1.py`.
 #### 3.5d Arbeitszahl je Funktion und die Arbeitszahl Kühlen (W-4 · W-5)
 
 ⛔ **Dieser Abschnitt fehlte bis zum 27.08.2026 vollständig** — beide Größen waren gebaut und in

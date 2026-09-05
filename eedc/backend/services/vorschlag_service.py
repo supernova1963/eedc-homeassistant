@@ -20,6 +20,11 @@ from sqlalchemy import select, and_
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.core.field_definitions import ist_stand_feld
+from backend.core.berechnungen.modus_split import REGEL_JAZ_VORSCHLAG
+from backend.core.berechnungen.waerme_vorschlag import (
+    WAERME_FELDER,
+    strom_basis_fuer_waerme_vorschlag,
+)
 
 
 class VorschlagQuelle(str, Enum):
@@ -235,6 +240,26 @@ class VorschlagService:
             return round(sum(werte) / len(werte), 2)
         return None
 
+    async def _get_imd_daten(
+        self, jahr: int, monat: int, investition_id: int,
+    ) -> dict:
+        """Die `verbrauch_daten` eines Geräts für diesen Monat — oder ``{}``.
+
+        Der Wärme-Vorschlag braucht die ganze Zeile (welche Ströme sind belegt?),
+        nicht einen einzelnen Wert; `_get_feld_wert` einmal je Kandidat zu rufen
+        wäre fünf Abfragen für eine Frage.
+        """
+        result = await self.db.execute(
+            select(InvestitionMonatsdaten)
+            .where(and_(
+                InvestitionMonatsdaten.investition_id == investition_id,
+                InvestitionMonatsdaten.jahr == jahr,
+                InvestitionMonatsdaten.monat == monat,
+            ))
+        )
+        imd = result.scalar_one_or_none()
+        return dict(imd.verbrauch_daten or {}) if imd else {}
+
     async def _get_feld_wert(
         self,
         anlage_id: int,
@@ -294,22 +319,20 @@ class VorschlagService:
 
         params = inv.parameter or {}
 
-        # Wärmepumpe: Heiz-/Warmwasserenergie aus COP berechnen
-        if inv.typ == "waermepumpe" and feld in ["heizenergie_kwh", "warmwasser_kwh"]:
-            getrennte_messung = params.get("getrennte_strommessung", False)
+        # Wärmepumpe: Heiz-/Warmwasserwärme als SCHÄTZUNG aus Strom × JAZ.
+        #
+        # B1 (05.09.2026, SOLL Wärme/Klima §6 F2–F5): Die Basis kommt aus dem
+        # Layer (`core/berechnungen/waerme_vorschlag.py`) — Strom DERSELBEN
+        # Funktion, sonst kein Vorschlag —, und der Vorschlag trägt die Marke
+        # `REGEL_JAZ_VORSCHLAG`, die der Client beim Übernehmen zurückmeldet.
+        # Bis dahin: beide Felder aus dem Gesamtstrom (Doppelzählung an F2),
+        # Kühlstrom als Heizwärme (dietmar1968, 889 kWh), keine Marke (die
+        # Arbeitszahl gab die gepflegte JAZ zurück).
+        if inv.typ == "waermepumpe" and feld in WAERME_FELDER:
+            daten = await self._get_imd_daten(jahr, monat, investition_id)
+            basis = strom_basis_fuer_waerme_vorschlag(feld, daten, params)
 
-            # Bei getrennter Strommessung: spezifischen Strom-Wert verwenden
-            if getrennte_messung:
-                strom_feld = "strom_heizen_kwh" if feld == "heizenergie_kwh" else "strom_warmwasser_kwh"
-                strom = await self._get_feld_wert(
-                    anlage_id, strom_feld, jahr, monat, investition_id
-                )
-            else:
-                strom = await self._get_feld_wert(
-                    anlage_id, "stromverbrauch_kwh", jahr, monat, investition_id
-                )
-
-            if strom is not None:
+            if basis is not None:
                 # Effizienz-Modus prüfen
                 modus = params.get("effizienz_modus", "gesamt_jaz")
 
@@ -328,15 +351,20 @@ class VorschlagService:
                         cop = params.get("cop_warmwasser")
 
                 if cop:
-                    berechneter_wert = round(strom * cop, 1)
-                    strom_label = "Strom Heizen" if getrennte_messung and feld == "heizenergie_kwh" else \
-                                  "Strom WW" if getrennte_messung else "Strom"
+                    berechneter_wert = round(basis.strom_kwh * cop, 1)
                     vorschlaege.append(Vorschlag(
                         wert=berechneter_wert,
                         quelle=VorschlagQuelle.BERECHNUNG,
                         konfidenz=60,
-                        beschreibung=f"Berechnet: {strom:.0f} kWh ({strom_label}) × COP {cop}",
-                        details={"stromverbrauch": strom, "cop": cop}
+                        beschreibung=(
+                            f"Geschätzt: {basis.strom_kwh:.0f} kWh ({basis.label}) "
+                            f"× JAZ {cop} — keine Messung"
+                        ),
+                        details={
+                            "stromverbrauch": basis.strom_kwh, "cop": cop,
+                            "basis": basis.label, "sprosse": basis.sprosse,
+                        },
+                        abgeleitet=REGEL_JAZ_VORSCHLAG,
                     ))
 
         # Wärmepumpe: Gesamtstrom als Summe der getrennten Werte

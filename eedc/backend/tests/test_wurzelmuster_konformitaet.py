@@ -2046,6 +2046,11 @@ P10_SCHREIBEN_IMPORT_CHECKER: frozenset[str] = frozenset({
     "backend/services/monat_loeschen.py::_geraetewerte_des_monats",
     # Daten-Checker / Vorschläge: lesen EINEN Feldwert, um ihn zu prüfen.
     "backend/services/vorschlag_service.py::_get_feld_wert",
+    # B1 (05.09.2026): derselbe Erfassungspfad, dieselbe Zeile — liest die
+    # `verbrauch_daten` EINES Geräts für EINEN Monat, um die Strom-Basis des
+    # Wärme-Vorschlags zu bestimmen (welche Ströme sind belegt?). Bildet keine
+    # Monatsgröße; die Regel dazu sitzt im Layer (`waerme_vorschlag.py`).
+    "backend/services/vorschlag_service.py::_get_imd_daten",
     # F-60: fragt, OB überhaupt irgendeine Zeile der Klimaanlagen einen
     # gemessenen Betriebsart-Strom mitbringt — eine Ja/Nein-Auskunft über die
     # Datenlage, keine Monatsgröße. Es wird nichts summiert, nichts über die

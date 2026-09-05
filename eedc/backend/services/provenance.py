@@ -30,7 +30,7 @@ from typing import Any, Literal, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
-from backend.core.berechnungen.modus_split import REGEL_JAZ_MODUS_SPLIT
+from backend.core.berechnungen.modus_split import REGEL_JAZ_MODUS_SPLIT, REGEL_JAZ_VORSCHLAG
 from backend.core.berechnungen.pv_anteil_ladung import REGEL_EINSPEISE_DECKUNG
 from backend.core.source_priority import SOURCE_LABELS, SourcePriority
 from backend.models.data_provenance_log import DataProvenanceLog
@@ -254,9 +254,21 @@ ABGELEITET_JAZ_MODUS = REGEL_JAZ_MODUS_SPLIT
 # den Routen: bis v4.0.8 gab es zwei Schreibpfade für dieselbe Sache (der
 # Wizard-Endpoint und `/monatsdaten`), und eine zweite Kopie der Liste hätte
 # genau die Drift erzeugt, gegen die dieses Paket gebaut ist.
+#: B1 (05.09.2026, SOLL Wärme/Klima §6): die Wärme-SCHÄTZUNG aus dem
+#: Monatsabschluss — `Strom × gepflegte JAZ`, vom Vorschlagsdienst angeboten,
+#: vom Anwender übernommen. Anders als `ABGELEITET_JAZ_MODUS` entsteht sie
+#: clientseitig (der Anwender klickt „übernehmen"), deshalb steht sie in der
+#: Positivliste: der Client meldet genau diese Marke zurück, wenn der
+#: gespeicherte Wert dem Vorschlag entspricht (`abgeleiteteMarke`). Ohne die
+#: Marke stand der übernommene Vorschlag als `manual:form` in der Zeile und
+#: galt jeder Lesestelle als Messung — die Arbeitszahl gab dann die gepflegte
+#: JAZ zurück (dietmar1968, T89667 #295).
+ABGELEITET_JAZ_VORSCHLAG = REGEL_JAZ_VORSCHLAG
+
 ERLAUBTE_ABLEITUNGEN = frozenset({
     ABGELEITET_KWP_ANTEIL,
     ABGELEITET_KAPAZITAET_ANTEIL,
+    ABGELEITET_JAZ_VORSCHLAG,
 })
 
 
