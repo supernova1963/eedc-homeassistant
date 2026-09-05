@@ -307,7 +307,7 @@ async def test_mqtt_pfad_bündelt_backward(db: AsyncSession, mqtt_session):
     anlage = await _anlage(db, {})
     await _schreibe_mqtt_snapshots(db, anlage.id, _nur_zehn_bis_elf())
 
-    profil = await svc._profil_from_mqtt(anlage.id)
+    profil = await svc._profil_from_mqtt(anlage.id, db)
 
     assert profil is not None
     for teil in (profil["werktag"], profil["wochenende"]):
@@ -355,7 +355,7 @@ async def test_mqtt_spaeter_zuwachs_zaehlt_voll(db: AsyncSession, mqtt_session):
     anlage = await _anlage(db, {})
     await _schreibe_mqtt_snapshots(db, anlage.id, _nur_zehn_bis_elf(), spaet=True)
 
-    profil = await svc._profil_from_mqtt(anlage.id)
+    profil = await svc._profil_from_mqtt(anlage.id, db)
 
     assert profil is not None
     for teil in (profil["werktag"], profil["wochenende"]):
@@ -398,7 +398,7 @@ async def test_mqtt_tag_ohne_snapshots_senkt_das_profil_nicht(
     anlage = await _anlage(db, {})
     await _schreibe_mqtt_snapshots(db, anlage.id, verbrauch, ohne_tage=(luecke,))
 
-    profil = await svc._profil_from_mqtt(anlage.id)
+    profil = await svc._profil_from_mqtt(anlage.id, db)
 
     assert profil is not None
     assert profil["werktag"] == _tagesgang_in_slots()
@@ -430,7 +430,7 @@ async def test_drei_quellen_ein_profil(db: AsyncSession, monkeypatch, mqtt_sessi
 
     aus_db = await svc._profil_from_db(anlage.id, db)
     aus_ha = await svc._profil_from_ha(anlage, db)
-    aus_mqtt = await svc._profil_from_mqtt(anlage.id)
+    aus_mqtt = await svc._profil_from_mqtt(anlage.id, db)
 
     assert aus_db is not None and aus_ha is not None and aus_mqtt is not None
     for teil in ("werktag", "wochenende"):

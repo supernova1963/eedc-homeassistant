@@ -166,7 +166,7 @@ async def get_verbrauchsprofil(
 
     # 3. Fallback: MQTT Energy Snapshots
     if result is None:
-        result = await _profil_from_mqtt(anlage.id)
+        result = await _profil_from_mqtt(anlage.id, db)
         logger.info(
             "Verbrauchsprofil Anlage %s: MQTT=%s",
             anlage.id,
@@ -528,9 +528,19 @@ def _stunden_zuwaechse(
     return zuwaechse
 
 
-async def _profil_from_mqtt(anlage_id: int) -> Optional[dict]:
+async def _profil_from_mqtt(anlage_id: int, db: AsyncSession) -> Optional[dict]:
     """
     Verbrauchsprofil aus MQTT Energy Snapshots (kumulative kWh → stündliche Deltas).
+
+    ⛔ **Liest über die ÜBERGEBENE Sitzung, nicht über `get_session()`** (05.09.2026,
+    CI-Rot nach v4.0.40). Bis dahin öffnete diese Funktion — als einzige auf dem
+    Anfragepfad — eine eigene Sitzung auf der App-Datenbank. Solange nur die
+    Live-Kachel sie rief, fiel das nicht auf. Mit #395 hängt sie im HA-Export der
+    Prognose, und dessen Proben laufen gegen die Test-DB der Fixture: die
+    App-Datenbank des CI-Runners ist leer (`no such table: mqtt_energy_snapshots`),
+    der ganze Prognose-Export fiel darüber in sein `except` und lieferte keinen
+    einzigen Sensor. Lokal war es grün, weil `data/eedc.db` die Tabelle hat — ein
+    Prüfer, den nur CI kennt.
 
     Die Snapshots enthalten kumulative Monatswerte (pv_gesamt_kwh, einspeisung_kwh,
     netzbezug_kwh) alle 5 Minuten. Für jede Stunde berechnen wir das Delta und
@@ -542,7 +552,6 @@ async def _profil_from_mqtt(anlage_id: int) -> Optional[dict]:
     zufällig darin liegenden Snapshots; fehlt ein Randwert, liefert die Stunde
     keine Stichprobe (N-45).
     """
-    from backend.core.database import get_session
     from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
 
     now = datetime.now()
@@ -552,18 +561,17 @@ async def _profil_from_mqtt(anlage_id: int) -> Optional[dict]:
     # Alle Snapshots der letzten 7 Tage laden. Die Toleranz gehört mit ins
     # Fenster: der Randwert der allerersten Stundengrenze liegt davor, sonst
     # fiele diese Stunde ohne Grund als unvollständig heraus.
-    async with get_session() as session:
-        result = await session.execute(
-            select(
-                MqttEnergySnapshot.timestamp,
-                MqttEnergySnapshot.energy_key,
-                MqttEnergySnapshot.value_kwh,
-            ).where(
-                MqttEnergySnapshot.anlage_id == anlage_id,
-                MqttEnergySnapshot.timestamp >= start - RAND_TOLERANZ,
-            ).order_by(MqttEnergySnapshot.timestamp)
-        )
-        rows = result.all()
+    result = await db.execute(
+        select(
+            MqttEnergySnapshot.timestamp,
+            MqttEnergySnapshot.energy_key,
+            MqttEnergySnapshot.value_kwh,
+        ).where(
+            MqttEnergySnapshot.anlage_id == anlage_id,
+            MqttEnergySnapshot.timestamp >= start - RAND_TOLERANZ,
+        ).order_by(MqttEnergySnapshot.timestamp)
+    )
+    rows = result.all()
 
     if not rows:
         return None

@@ -130,6 +130,42 @@ async def test_prognose_sensoren_erscheinen(db, _patch_prognose):
         assert by_key[day_key].value == pytest.approx(sum(profil), abs=0.051)
 
 
+async def test_prognose_export_oeffnet_keine_eigene_sitzung(db, _patch_prognose, monkeypatch):
+    """CI-Rot nach v4.0.40 (05.09.2026): der Export lief über `get_session()` in die leere App-DB.
+
+    `_profil_from_mqtt` öffnete — als einzige Funktion auf dem Anfragepfad — eine
+    eigene Sitzung auf der App-Datenbank statt die übergebene zu nutzen. Solange nur
+    die Live-Kachel sie rief, fiel das nie auf; #395 hängte sie in den Prognose-Export,
+    und dessen Proben laufen gegen die Test-DB der Fixture. Auf dem CI-Runner ist die
+    App-Datenbank leer (`no such table: mqtt_energy_snapshots`), der ganze Export fiel
+    in sein `except` — **kein einziger Prognose-Sensor**. Lokal grün, weil `data/eedc.db`
+    die Tabelle hat: ein Prüfer, den nur CI kennt.
+
+    Die Probe stellt die CI-Lage her, ohne von einer Datei abzuhängen: Jede eigene
+    Sitzung ist hier ein Fehler.
+    """
+    from backend.api.routes.ha_export import calculate_anlage_sensors
+    import backend.core.database as database
+
+    def _keine_eigene_sitzung():
+        raise AssertionError("Anfragepfad darf keine eigene Sitzung öffnen — die übergebene `db` gilt")
+
+    monkeypatch.setattr(database, "get_session", _keine_eigene_sitzung)
+    # Der Profil-Cache ist prozessweit (anlage_id-keyed): Ohne Leeren traegt er das
+    # Ergebnis der vorigen Probe derselben Datei, der MQTT-Pfad wird nie betreten —
+    # und ein Sprengsatz bleibt stumm (gemessen 05.09.2026, erster Entwurf).
+    from backend.services.live_power_service import get_live_power_service
+    get_live_power_service()._kwh_cache._profil.clear()
+    anlage = await _seed_pv_anlage(db)
+    sensors = await calculate_anlage_sensors(db, anlage)
+    by_key = {sv.definition.key: sv for sv in sensors}
+    assert "eedc_prognose_day_plus_1_kwh" in by_key, (
+        "Der Prognose-Export ist in sein `except` gefallen — irgendwo unter ihm wurde "
+        "`get_session()` gerufen (die CI-Lage von v4.0.40)."
+    )
+    assert "eedc_prognose_rest_today_kwh" in by_key
+
+
 async def test_rest_heute_ist_echter_rest(db, _patch_prognose, monkeypatch):
     """Prognose-Kanon „ein Wert überall": „heute" = kanonischer eedc-Tageswert
     (volle Tagesprognose, identisch mit Anzeige/Persistenz/Vergleich-eedc),

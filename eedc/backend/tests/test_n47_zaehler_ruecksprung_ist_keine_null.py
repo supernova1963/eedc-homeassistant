@@ -265,7 +265,7 @@ async def test_naht_der_ruecksprung_slot_faellt_aus_dem_profil(
     anlage = await _anlage(db)
     await _schreibe_snapshots(db, anlage.id, mit_ruecksprung=True)
 
-    profil = await svc._profil_from_mqtt(anlage.id)
+    profil = await svc._profil_from_mqtt(anlage.id, db)
 
     assert profil is not None
     werktag = profil["werktag"]
@@ -290,7 +290,7 @@ async def test_naht_ohne_ruecksprung_ist_der_slot_da(db: AsyncSession, mqtt_sess
     anlage = await _anlage(db)
     await _schreibe_snapshots(db, anlage.id, mit_ruecksprung=False)
 
-    profil = await svc._profil_from_mqtt(anlage.id)
+    profil = await svc._profil_from_mqtt(anlage.id, db)
 
     assert profil is not None
     assert profil["werktag"].get(RUECKSPRUNG_SLOT) == pytest.approx(1.0)
