@@ -19,7 +19,10 @@
 > | Der gemeinsame Nenner (Mehrkosten) | ADR-002-Umfeld, `investitionskosten.py`, N-137 |
 > | Anwender-Sicht | [`docs/HANDBUCH_BEDIENUNG.md`](HANDBUCH_BEDIENUNG.md) §Auswertungen → ROI |
 >
-> ✅ **§9.2 (05.09.2026): „Abgabe an Dritte" ist entschieden und am selben Tag gebaut** (Bauschritt 10, drei Commits) — dieses Papier hat wieder keinen offenen Bauschritt.
+> ✅ **§9.2 (05.09.2026): „Abgabe an Dritte" ist entschieden und am selben Tag gebaut** (Bauschritt 10, drei Commits).
+> ⚠ **OFFEN seit 06.09.2026: die GELDSEITE von §9.2** (Bauschritt **11**) — entschieden, noch nicht
+> gebaut. Das Papier hat damit wieder **einen** offenen Bauschritt; die Release-Sperre 3
+> („abgenommenes Konzept unvollständig gebaut") greift, bis er steht.
 > **§8 — die Bauliste — ist am 10.08. abgearbeitet**, zuletzt Schritt 7. Sie war
 > Release-Bedingung (Entscheid Maintainer, 10.08.); ein GitHub-Issue gibt es
 > deshalb bewusst nicht. Der maschinelle Stand steht im Dict
@@ -69,6 +72,15 @@ nichts zu klassifizieren — und damit nichts, was eedc falsch raten könnte.
 | Investition — **Ertrag/Jahr** (`einsparung_prognose_jahr`) | zweiter Erzeuger ≈ 500 € | ✔ | Zuschlag | — |
 | Monatsabschluss, `typ: ausgabe` | Reparatur 3.000 € | ✘ | — | **+** |
 | Monatsabschluss, `typ: ertrag` | THG-Quote, Förderung | ✘ | — | **−** |
+| Monatswert je Gerät — **Erlös (€)** an *Sonstiges → Abgabe an Dritte* (`einspeise_erloes_euro`) | Mieterstrom 31 € im März | ✔ (hochgerechnet mit eigener Monatszahl) | Zuschlag | — |
+
+> ⚑ **Die fünfte Zeile ist keine dritte Kategorie, sondern die dritte FORM** (2026-09-06,
+> §9.2 Geldseite): ein Registry-Feld **je Monat**, sensorfähig, neben einer gemessenen Menge.
+> Es *kann* nicht einmalig wirken — jeder Monat bringt seinen eigenen Wert — und es *kann*
+> nicht als Jahresbetrag gelten, weil es keiner ist. Dieselbe Form haben die Wärmepumpen- und
+> die E-Auto-Ersparnis: gemessen, annualisiert **mit eigener Monatszahl** (F-20,
+> `core/berechnungen/kapitalrechnung.py`). Das Modell aus §2 bleibt damit ohne
+> Kategorien-Feld — die **Form** entscheidet, nicht ein Etikett.
 
 > ⚠ **Der Zeitraum-Bilanz ist das alles egal.** „Was hat der März gekostet und
 > eingebracht?" beantworten Cockpit, Monatsbericht, Jahresbericht-PDF, CSV-Export
@@ -232,6 +244,7 @@ ein und legt seinen Eintrag im Dict an — nicht umgekehrt.
 | ~~9~~ | ~~**Erlös je Erzeuger als €-Feld, per Sensor befüllbar** (§9, Weg 2)~~ | ~~mittel~~ | ✅ **gebaut 2026-08-10.** Entscheid Maintainer 2026-08-10: der Jahresbetrag aus §8/1 ist für den Fall aus §9 nur die Notlösung. Mit einem €-Feld an *Sonstiges/Erzeuger*, das ein **HA-Template-Sensor** befüllt, entfällt jede Schätzung: die Tarif-Logik bleibt in Home Assistant, der Wert kommt monatsgenau und wird im Monatsabschluss vorgeschlagen. **Am Code erhoben (10.08.):** *Sonstiges/Erzeuger* trägt heute **nur** `erzeugung_kwh` · `eigenverbrauch_kwh` · `einspeisung_kwh` — **ein €-Feld existiert dort nicht und muss angelegt werden** (SoT `field_definitions.py`, drei Pflicht-Stellen); `€`/`monetary` steht bereits in der Sensor-Allowlist der Datenquellen-Fläche, ein €-Sensor ist also auswählbar. ⚠ **Der Erlös entsteht heute ausschließlich aus `Monatsdaten.einspeisung_kwh` × EINEM Satz** (`monats_fakten.py:706`); die Einspeisung eines Sonstiges-Erzeugers wird **nirgends** in Geld bewertet. Das neue Feld ist deshalb ein **zusätzlicher** Ertrag dieses Erzeugers — **kein Herausrechnen aus der Anlagenbewertung nötig**. ⚑ **Begründung (Maintainer, 10.08., korrigiert einen Fehlschluss der Entwicklung):** zwei Vergütungssätze bedeuten **zwei Messungen** — anders könnte der Netzbetreiber nicht abrechnen. In den Anlagen-Einspeisezähler gehört also ohnehin nur die zum Anlagentarif vergütete Menge; die kWh des zweiten Erzeugers stehen dort gar nicht. Was bleibt, ist ein **Hinweis am Feld** (was in den Anlagenzähler gehört) — mehr kann eedc nicht wissen, welchen Sensor jemand gemappt hat, weiß nur er. **Gebaut als durchgehende Kette:** `field_definitions.py` (Registry ⇒ Monatsabschluss · CSV · MQTT · Datenquellen-Zuordnung kommen von selbst) → `imd_monatsaggregat` (kategorie-bewusst: ein Verbraucher hat keinen Einspeise-Erlös) → `monats_fakten` (Anlagen-Summe **und** je Gerät) → Layer-SoT `finanz_aggregat` als **fünfter** Summand → Aussichten · HA-Export · Cockpit → Jahr · Jahresbericht-PDF. ⚠ **Das Cockpit baut seinen Netto-Ertrag selbst aus den Einzel-Komponenten zusammen** (USt-Abzug dazwischen) und musste eigens angeschlossen werden — dieselbe Stelle, an der #326 auseinanderlief. **Am Dev-Bestand gemessen:** das Mini-BHKW (Kategorie *Erzeuger*) trägt das Feld, der Heizstab (*Verbraucher*) nicht |
 | ~~7~~ | ~~**Erträge zurück in den Nenner**~~ | ~~mittel~~ | ✅ **gebaut 2026-08-10** — der letzte der Bauliste. Die sonstigen **Erträge** mindern den Kapitaleinsatz, spiegelbildlich zu F-19 auf der Ausgabenseite; damit ist die Vollkostenrechnung vollständig und §3 Zeile 4 („Kapitaleinsatz **−**") eingelöst. **Beide Vorbedingungen waren erfüllt und wurden vor dem Bau nachgeprüft**, nicht abgeschrieben: (a) der Umstiegsweg §9.1 existiert seit §8/1 **und** §8/9 (das €-Feld je Erzeuger ist der bessere der beiden), (b) die Kommunikation an rilmor-mhrs steht als [Kommentar zu #310](https://github.com/supernova1963/eedc-homeassistant/issues/310#issuecomment-5242379712) vom 10.08. — mit der Aufforderung, die monatlichen Handbuchungen einzustellen. ⚑ **Keine Migration** (Entscheid Maintainer 10.08.): einmalige Erträge gehören nach der Regel aus §2 ohnehin in den Kapitaleinsatz, und wiederkehrende erkennt seit §8/8 der Daten-Checker **am Erfassungsort**. **Gemessen am Dev-Bestand (455 € Ertrags-Positionen):** Kapitaleinsatz **91.915 → 91.460 €** in allen vier Sichten, Tesla-Zeile 17.560 → 17.105 € (14,3 → 14,0 Jahre), HA `amortisation_jahre` 19,16 → **19,07**, `roi_prozent` 5,219 → **5,245 %**, Amortisations-Fortschritt 11,4 → **10,9 %** (der Ertrag verlässt den Zähler ganz, mindert den Nenner aber nur anteilig) — **unverändert** `netto_ertrag_euro` (Zeitraum-Bilanz) und die Modell-Dauer 15,8 Jahre. ⚑ **Ein Nebeneffekt fiel beim Bau auf und fuhr mit:** der gepflegte Erzeuger-Erlös aus §8/9 landete in der Zerlegung (§8/5) im **nicht zurechenbaren Rest**, obwohl seine Investition bekannt ist — jetzt direkt zugeordnet. Die vier ⏳-Stellen sind nachgezogen, die vierte (`HANDBUCH_BEDIENUNG.md`) trug wie angekündigt kein Kennzeichen |
 | ~~10~~ | ~~**Abgabe an Dritte** — dritter Weg der Netzpunkt-Bilanz (§9.2)~~ | ~~groß~~ | ✅ **gebaut 2026-09-05** in drei Commits (Registry/Fakten/Layer/Monat/Jahr/Export/Community · Tag/Live · Anzeige/Daten-Checker/Handbuch). Proben `test_abgabe_an_dritte_*.py`. |
+| **11** | **Geldseite der Abgabe an Dritte** (§9.2 Geldseite) — Zähler in vier Sichten der Kapitalrechnung, Netto-Ertrag (PV) in *Auswertungen → Finanzen* angeschlossen, Vorrang *gemessen vor geschätzt* am Formular sichtbar, kategorie-bewusster Hinweis statt des heutigen Schätzfeld-Rats, Benennung aus der Kategorie (`erloes_label` aus dem Backend) | **mittel–groß** | **offen (entschieden 06.09.2026)**. Symmetrie-Proben `test_kapitaleinsatz_vier_sichten_symmetrie.py` (Zähler) und `test_netto_ertrag_vier_wege_symmetrie.py` (Bilanz) um die dritte Ertragsart erweitern; nachgestellte Abgabe-Anlage als Fixture. ⚠ **CHANGELOG-pflichtig** — ROI und Amortisationsdauer bewegen sich sichtbar. ⛔ **KEINE Daten-Checker-Kategorie** (Tor 3, s. §9.2). ⚑ Beim Bau zu **messen**, nicht abzuschreiben: ob die Aussichten-Zerlegung (§8/7) Abgabe-Geräte wie Erzeuger behandelt |
 
 **Bereits gebaut** (2026-08-09, ungepusht): sonstige **Ausgaben** kumuliert in den
 Nenner statt annualisiert in den Zähler · jeder Ersparnis-Posten wird mit
@@ -337,7 +350,10 @@ heißt im Formular **„Ertrag/Jahr (€)"** und steht bei *Wallbox* und
 
 ### 9.2 Abgabe an Dritte — der dritte Weg der Netzpunkt-Bilanz (Entscheid Maintainer, 2026-09-05)
 
-> **Status: ENTSCHIEDEN (Option A, 05.09.2026), ✅ GEBAUT (05.09.2026, Bauschritt 10, Commits
+> ⚠ **Die GELDSEITE ist am 06.09.2026 entschieden und NOCH NICHT GEBAUT** (Bauschritt 11) —
+> sie steht als eigener Block unter der Modell-Tabelle.
+>
+> **Status Modell + Energieseite: ENTSCHIEDEN (Option A, 05.09.2026), ✅ GEBAUT (05.09.2026, Bauschritt 10, Commits
 > 1/3 Modell + Monatspfad · 2/3 Tag + Live · 3/3 Anzeige + Daten-Checker + Handbuch).** Die
 > Handbuch-Grenze gilt nur noch für den Fall **ohne Übergabe-Zähler** (unten).
 
@@ -367,6 +383,56 @@ die ersten zwei. Der dritte fehlt im **Modell**; er ist keine Sonderbehandlung e
 | **Geld** | bleibt das €-Feld des Anwenders; die Abrechnung an Dritte ist nicht eedcs Sache (wie §9) |
 | **Daten-Checker** | Either-Or-Gruppe der Kategorie (`abgabe_kwh`); dazu ein Hinweis an *Erzeugern* mit Einspeise-Zähler **und** Erlös, aber ohne Erzeugungs-Zähler: *„Gibt dieses Gerät Strom an Dritte ab? Dann Kategorie Abgabe."* |
 | **Migration** | keine automatische — der Anwender stellt die Kategorie um (eedc verschiebt nichts von allein); die Zuordnung `einspeisung_kwh` wird `abgabe_kwh` |
+
+**Die Geldseite (Entscheid Maintainer, 2026-09-06; Auslöser #402, dritter Kommentar von
+rilmor-mhrs nach der Umstellung auf die Kategorie).** ⚠ **Status: ENTSCHIEDEN, NOCH NICHT
+GEBAUT** — Bauschritt 11 der Liste in §8.
+
+Der dritte Weg gilt auch **im Geld**. Was der Anwender an einem Gerät der Kategorie *Abgabe an
+Dritte* als **„Erlös (€)"** pflegt — monatlich, am besten per Helfer-Sensor (§9 Weg 2) —, ist die
+**dritte Ertragsart derselben Kilowattstunde**, neben Einspeise-Erlös (Weg 1) und
+Eigenverbrauchs-Ersparnis (Weg 2). Sie kann aus keiner der beiden anderen kommen, und das ist
+am Code belegt, nicht hergeleitet:
+
+* **nicht aus der Ersparnis** — N-375 hat die abgegebenen kWh dort herausgenommen
+  (`core/berechnungen/finanz_aggregat.py`: `abgabe_dritte_kwh` mindert `eigenverbrauch_kwh`,
+  und die Ersparnis bewertet genau diese Menge);
+* **nicht aus dem Einspeise-Erlös** — der bewertet den **Anlagenzähler** mit dem **einen** Satz
+  der Anlage; die Abgabe steht in diesem Zähler nie (§8/9: zwei Vergütungssätze bedeuten zwei
+  Messungen);
+* **vorhanden ist sie trotzdem** — als gemessener Monatswert `einspeise_erloes_euro` am Gerät
+  (Registry-Feld, geführt von den Kategorien `erzeuger` und `abgabe`), vom IMD-Aggregat
+  ausdrücklich **behalten** (nur *Verbraucher* und *Zähler* stellen ihn stumm) und im Layer-SoT
+  bereits **fünfter Summand** des Netto-Ertrags.
+
+| | |
+| --- | --- |
+| **Ertragsart** | **Erlös aus Abgabe an Dritte** — gemessener Monatswert je Gerät (`einspeise_erloes_euro`, Kategorie `abgabe`). Anzeigename überall **„Abgabe an Dritte"**, derselbe wie die Energiezeile |
+| **Zeitraum-Bilanz** | fünfter Summand des Netto-Ertrags (`finanz_aggregat.erzeuger_erloes_euro`, §8/9) in **allen** Sichten. Cockpit → Monat/Jahr, HA `netto_ertrag_euro`, PDF und Aussichten führen ihn schon; **Auswertungen → Finanzen fehlte** und zieht nach. Die Kachel „Netto-Ertrag (PV)" grenzt gegen **Netzbezug-Kosten und WP/E-Mobilität** ab (R18-9) — nicht gegen die dritte Verwendung des PV-Stroms |
+| **Kapitalrechnung — Zähler** | `Σ Monatswerte ÷ Monate mit Wert × 12` als eigener `ErsparnisPosten` (F-20), in den vier Sichten ROI-Dashboard · Aussichten-Prognose · HA `jahres_ersparnis_euro`/`roi_prozent`/`amortisation_jahre` · PDF |
+| **Kapitalrechnung — Nenner** | **nicht.** Die Form ist ein laufender Messwert, keine einmalige Position (§2/2, §8/3). Ein wiederkehrender Betrag im Nenner ist die in §6/§7 mit Zahlen verworfene Zeile — er ginge bei `n = K/E` durch null |
+| **Kapitalrechnung — Fortschritt** | unverändert; er trägt den Erlös seit §8/7. **Damit reichen Fortschritt und Dauer wieder gleich weit** — heute tun sie es nicht, und das verletzt §4 („derselbe Nenner, ineinander überführbar") |
+| **Vorrang** | **gemessen vor geschätzt.** Liegt in ≥ 1 Monat ein Erlös vor (eine gepflegte **0** zählt als Aussage), gilt die Hochrechnung; „Ertrag/Jahr" wird dann **nicht** addiert. Ohne Monatswerte gilt §8/1 unverändert. ⚠ **Die Reihenfolge muss am Formular sichtbar sein** — sonst ändert sich der ROI, ohne dass jemand ein Feld angefasst hat |
+| **Ohne Erlös** | Zeile bleibt **„nicht bewertet"** (keine Fake-0, N-87/N-258). Der Hinweis muss aber die Kategorie kennen: die abgegebenen kWh tragen ohne ihn **kein** Geld — weder als Eigenverbrauch noch als Einspeisung. Der heutige Text schickt zu einem Schätzfeld und verschweigt das; `HANDBUCH_BEDIENUNG.md` Z. 606 ist für die Abgabe **falsch** |
+| **Doppelzählung** | ausgeschlossen, gemessen 06.09.: in der **Kapitalrechnung** trug der Betrag bisher **nirgends** — Zähler nur `einsparung_prognose_jahr`, Nenner nur `sonstige_positionen`. Alte Handbuchungen als Position bleiben §9.1 Schritt 4 |
+| **Geltungsbereich** | **nur Kategorie Abgabe.** Wallbox und übriges *Sonstiges* haben das Feld gar nicht (Registry). *Sonstiges/Erzeuger* mit Weg-2-Erlös bleibt bei „Ertrag/Jahr" (N-131, 01.09.) — **sein** Strom trägt in der Anlagenbilanz Geld, der der Abgabe nicht. `ERTRAGSFELD_TYPEN` unverändert |
+| **Anzeige** | T-Konto-Zeile „{Gerät} — Abgabe an Dritte"; der Name kommt aus dem **Backend** (`erloes_label`, Bauform wie `ersparnis_label`), nicht hart verdrahtet. Formel: „Am Gerät gepflegter Erlös aus Abgabe an Dritte (eigener Satz) — von eedc nicht nachgerechnet". Netto-Kachel „inkl. +X € Abgabe an Dritte", nur wenn > 0 |
+
+> ⛔ **KEINE eigene Daten-Checker-Kategorie** (Entscheid 06.09., Tor 3). Ein INFO „Abgabe ohne
+> Erlös" wurde vorgeschlagen und **verworfen**: Die ROI-Zeile nennt denselben Sachverhalt bereits
+> samt Folge und Weg. Eine zweite Meldung darüber wäre ein **zweiter Turm** über einem Fall, der
+> schon gemeldet wird — dieselbe Klasse wie N-346. Wer es doch will, bringt einen Anwender mit,
+> den der ROI-Hinweis nicht erreicht.
+
+⚑ **Warum „Abgabe" und nicht „Verkauf" oder „Mieterstrom":** *Abgabe* ist der Begriff, den die
+Kategorie, die Verwendungszeile, der Cockpit-Block und die Sensor-Referenz schon tragen — Regel 0
+verlangt für die **Geldzeile** denselben Namen wie für die **Energiezeile**, sonst sucht der
+Anwender im T-Konto ein Wort, das er in der Bilanz nie gesehen hat. *Verkauf* ist zu eng
+(Allgemeinstrom wird umgelegt, an den Nachbarn wird auch unentgeltlich abgegeben — das Feld kennt
+die gepflegte 0), *Mieterstrom* ist ein deutscher Rechtsbegriff und scheitert am DACH-Maßstab.
+Der **Schlüssel** `einspeise_erloes_euro` bleibt, obwohl er „Einspeise" heißt: Umbenennen hieße
+Bestand, CSV-Suffix und Sensor-Zuordnungen migrieren, ohne dass ein Anwender etwas davon hat.
+Der Schlüssel ist Code, der Anzeigename kommt aus der Kategorie.
 
 **Was der dritte Weg NICHT löst, und das gehört ins Handbuch:** den **Anteil-Fall ohne
 Übergabe-Zähler** (Einwand Maintainer 03.09.: *„wie, was und wo gezählt und abgerechnet wird"*).

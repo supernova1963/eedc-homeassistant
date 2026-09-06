@@ -348,6 +348,21 @@ class AggregierteMonatsdatenResponse(BaseModel):
     # bereits gekürzt — ohne diese Zahl wirkt die Kürzung wie ein Fehler.
     einspeise_nicht_verguetet_euro: float
     ev_ersparnis_euro: float
+    #: Konzept §9 Weg 2 — Σ der **gepflegten** Erlöse von Erzeugern mit eigenem
+    #: Einspeisetarif (Mieterstrom, Allgemeinstrom, Nachbarhaus). Rein
+    #: informativ: der Wert steckt **weder** in ``einspeise_erloes_euro``
+    #: **noch** in ``netto_ertrag_euro`` dieser Antwort, und das ist Absicht —
+    #: jene bewerten den **Anlagenzähler** mit dem EINEN Satz der Anlage
+    #: (`finanz_aggregat`-Docstring), dieser trägt einen Betrag mit eigenem
+    #: Vergütungssatz, den eedc nicht nachrechnet.
+    #:
+    #: ⚑ Er steht hier, damit die Sicht ihre **Abgrenzung aussprechen** kann:
+    #: Ohne dieses Feld weiß der Client nicht einmal, ob es solche Erzeuger
+    #: gibt, und kann deshalb nicht sagen, was in der Kachel fehlt. Genau
+    #: daran ist rilmor-mhrs am 06.09.2026 hängengeblieben (#402) — seine
+    #: 372,51 € standen im T-Konto darunter und in der Kachel darüber nicht,
+    #: ohne dass ein Wort die Grenze erklärte.
+    erzeuger_erloes_euro: float
     # BKW-Monate **ohne** erfasste Erzeugung (Datenlücke): ihr gemessener
     # Eigenverbrauch trägt hier, sonst 0 — sonst zählte derselbe Fluss zweimal
     # (`bkw_finanz_beitrag`, ADR-002/P9).
@@ -615,7 +630,20 @@ async def list_monatsdaten_aggregiert(
         finanz_zeile = await baue_finanz_zeile(
             db, anlage_id, finanz_zeile_eingabe(f), tarif_cache=tarif_cache
         )
-        finanz = berechne_finanz_aggregat([finanz_zeile])
+        # §9.2 Geldseite (E1, Entscheid 06.09.2026): der gepflegte Erloes eines
+        # Erzeugers mit eigenem Vergütungssatz bzw. eines Geräts der Kategorie
+        # *Abgabe an Dritte* ist der FÜNFTE Summand des Netto-Ertrags
+        # (`finanz_aggregat.py`). Cockpit → Jahr, HA-Sensor, PDF und Aussichten
+        # führen ihn längst; diese Route tat es als einzige nicht — dieselbe
+        # Kachel nannte deshalb in zwei Sichten zwei Zahlen (#402, rilmor-mhrs:
+        # „nicht mehr in den Grafen darüber").
+        # ⛔ Er geht NICHT in `einspeise_erloes_euro`: der bewertet den
+        # Anlagenzähler mit dem EINEN Satz der Anlage, und ein eigener Satz ist
+        # per Definition ein anderer (§8/9).
+        finanz = berechne_finanz_aggregat(
+            [finanz_zeile],
+            erzeuger_erloes_euro=f.sonstiges.einspeise_erloes_euro,
+        )
         netzbezug_kosten = berechne_netzbezug_kosten(
             netzbezug, f.tarif.netzbezug_preis_cent, f.tarif.grundpreis_euro_monat
         )
@@ -750,6 +778,12 @@ async def list_monatsdaten_aggregiert(
             einspeise_erloes_euro=round(finanz.einspeise_erloes_euro, 2),
             einspeise_nicht_verguetet_euro=round(finanz.nicht_vergueteter_erloes_euro, 2),
             ev_ersparnis_euro=round(finanz.ev_ersparnis_euro, 2),
+            # §9 Weg 2 / §9.2 Geldseite — der Betrag steckt seit E1 (06.09.)
+            # IN `netto_ertrag_euro` (oben gereicht) und steht hier zusätzlich
+            # als eigene Größe, damit die Sicht ihn BENENNEN kann („inkl. +X €
+            # Abgabe an Dritte"). Ohne dieses Feld wüsste der Client nicht
+            # einmal, ob es solche Erzeuger gibt.
+            erzeuger_erloes_euro=round(f.sonstiges.einspeise_erloes_euro, 2),
             bkw_ersparnis_euro=round(finanz.bkw_ersparnis_euro, 2),
             ust_eigenverbrauch_euro=round(ust_eigenverbrauch, 2),
             netzbezug_kosten_euro=round(netzbezug_kosten, 2),

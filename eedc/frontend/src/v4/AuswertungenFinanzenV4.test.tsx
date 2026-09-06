@@ -62,6 +62,84 @@ describe('AuswertungenFinanzenV4 (Sub 3)', () => {
     Object.assign(basisMock, { jahr: 2025 })
   })
 
+  // ── #402 (rilmor-mhrs, 06.09.2026): die zwei Ertragswege werden auseinander-
+  //    gehalten — und der dritte wird genannt, statt still zu fehlen ──
+  //
+  // Sein Fall: zwei Geräte mit EIGENEM Vergütungssatz (Allgemeinstrom,
+  // Victron-EG) tragen zusammen 372,51 € gepflegten Erlös. Vor §9.2/E1 stand
+  // der im T-Konto und in KEINER Kachel darüber („nicht mehr in den Grafen").
+  //
+  // Die beiden Kacheln behandeln ihn ABSICHTLICH verschieden, und genau das
+  // prüft diese Probe:
+  //   · **Einspeiseerlös** = Anlagenzähler × dem EINEN Satz der Anlage. Ein
+  //     eigener Satz ist per Definition ein anderer (§8/9) ⇒ er bleibt
+  //     DRAUSSEN, und die Kachel sagt das.
+  //   · **Netto-Ertrag (PV)** = was die Anlage einbringt. Die Abgabe ist
+  //     derselbe PV-Strom auf dem dritten Weg ⇒ er ist DRIN (fünfter Summand,
+  //     wie in Cockpit → Jahr, HA-Sensor, PDF und Aussichten), und die Kachel
+  //     sagt auch das.
+  //
+  // ⚠ Der Tooltip hängt am WERT, nicht am Kacheltitel (`KPICard.tsx:91`) —
+  // eine Probe, die den Titel hovert, öffnet nichts und misst am Gegenstand
+  // vorbei (N-365 hat genau diese Fassung schon einmal produziert).
+  const finanzBasis = (erzeugerErloes: number) => ({
+    ...basisMock,
+    gefiltert: [{
+      ...basisMock.gefiltert[0],
+      einspeise_erloes_euro: 480, einspeise_nicht_verguetet_euro: 0,
+      ev_ersparnis_euro: 300, bkw_ersparnis_euro: 0, ust_eigenverbrauch_euro: 0,
+      netzbezug_kosten_euro: 200,
+      // Der Vertrag der Route: `netto_ertrag_euro` ENTHÄLT den Erlös seit E1
+      // (`monatsdaten.py` reicht ihn in `berechne_finanz_aggregat`).
+      netto_ertrag_euro: 780 + erzeugerErloes,
+      netto_bilanz_euro: 580 + erzeugerErloes,
+      erzeuger_erloes_euro: erzeugerErloes,
+    }],
+  }) as unknown as AuswertungBasis
+
+  /** Öffnet den Formel-Tooltip der Kachel mit diesem Titel und liefert den Text. */
+  const tooltipTextVon = (titel: string) => {
+    const karte = screen.getByText(titel).closest('div')?.parentElement
+    const trigger = karte?.querySelector('.cursor-help')
+    if (!trigger) throw new Error(`Kein Formel-Tooltip an der Kachel „${titel}"`)
+    fireEvent.mouseEnter(trigger)
+    return document.body.textContent ?? ''
+  }
+
+  it('#402: Einspeiseerlös grenzt den eigenen Vergütungssatz AUS — und die Zahl bleibt der Anlagenzähler', async () => {
+    render(<AuswertungenFinanzenV4 basis={finanzBasis(372.51)} />)
+    await screen.findByText('Finanz-Übersicht')
+
+    expect(tooltipTextVon('Einspeiseerlös')).toContain('ohne Erzeuger mit eigenem Vergütungssatz')
+    // ⭐ Der Kern: 480 €, NICHT 852,51 €. Sonst wäre die Formel daneben
+    // („Einspeisung × Einspeisevergütung") eine falsche Aussage.
+    expect(document.body.textContent).toContain('480')
+    expect(document.body.textContent).not.toContain('852,51')
+  })
+
+  it('#402/E1: Netto-Ertrag (PV) SCHLIESST den dritten Weg ein und nennt ihn', async () => {
+    render(<AuswertungenFinanzenV4 basis={finanzBasis(372.51)} />)
+    await screen.findByText('Finanz-Übersicht')
+
+    const text = tooltipTextVon('Netto-Ertrag (PV)')
+    expect(text).toContain('Abgabe an Dritte')
+    expect(text).toContain('372,51')
+    // Die alte Abgrenzung darf an DIESER Kachel nicht mehr stehen — sie hat
+    // die Abweichung zu Cockpit → Jahr festgeschrieben, statt sie zu heilen.
+    expect(text).not.toContain('ohne Erzeuger mit eigenem Vergütungssatz')
+  })
+
+  it('#402: ohne solche Erzeuger bleibt beides weg (kein Posten, den es nicht gibt)', async () => {
+    render(<AuswertungenFinanzenV4 basis={finanzBasis(0)} />)
+    await screen.findByText('Finanz-Übersicht')
+    expect(tooltipTextVon('Einspeiseerlös')).not.toContain('eigenem Vergütungssatz')
+    cleanup()
+
+    render(<AuswertungenFinanzenV4 basis={finanzBasis(0)} />)
+    await screen.findByText('Finanz-Übersicht')
+    expect(tooltipTextVon('Netto-Ertrag (PV)')).not.toContain('Abgabe an Dritte')
+  })
+
   it('zeigt bei Basis-Fetch-Fehler den B8-Fehler-Baustein mit Retry statt 0-KPIs (S15)', () => {
     const refresh = vi.fn()
     Object.assign(basisMock, { error: 'Fehler beim Laden der aggregierten Daten', refresh })

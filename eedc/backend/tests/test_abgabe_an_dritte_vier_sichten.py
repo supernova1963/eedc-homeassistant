@@ -145,3 +145,71 @@ def test_registry_kennt_die_kategorie_mit_eigener_richtung():
     # Ein Gerät ohne gepflegte Kategorie bekommt KEIN Abgabe-Feld angeboten —
     # es würde als Verbrauch gelesen (N-244-Klasse mit anderem Vorzeichen).
     assert "abgabe_kwh" not in {f["feld"] for f in SONSTIGES_FELDER_UNGEPFLEGT}
+
+
+# ============================================================================
+# Die Geldseite (§9.2 Geldseite, Entscheid 06.09.2026 / E1) — #402
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_auswertungen_finanzen_traegt_den_gepflegten_erloes(db):
+    """Die FÜNFTE Sicht — und die einzige, die den Erlös nicht trug.
+
+    ``test_netto_ertrag_vier_wege_symmetrie.py`` vergleicht Cockpit ·
+    Aussichten · PDF · HA-Export. Die Route hinter *Auswertungen → Finanzen*
+    (``list_monatsdaten_aggregiert``) ist dort **nicht** dabei — und genau sie
+    reichte ``erzeuger_erloes_euro`` nicht in ``berechne_finanz_aggregat``.
+    Ergebnis: dieselbe Kachel „Netto-Ertrag (PV)" nannte in Cockpit → Jahr eine
+    andere Zahl als in Auswertungen → Finanzen, und der HA-Sensor eine dritte.
+
+    Der Melder hat genau das gesehen (#402, 06.09.2026): *„taucht jetzt auch
+    als Name--Einspeisung auf … allerdings nicht mehr in den Grafen darüber"*.
+
+    ⚠ Geprüft wird **beides** — dass der Betrag im Netto-Ertrag steckt UND dass
+    er daneben einzeln ausgewiesen ist. Nur das erste wäre eine Zahl ohne
+    Erklärung; nur das zweite wäre eine Erklärung ohne Wirkung.
+    """
+    from backend.api.routes.monatsdaten import list_monatsdaten_aggregiert
+
+    a, _so = await _robert(db, "abgabe")
+    zeile = (await list_monatsdaten_aggregiert(anlage_id=a.id, jahr=JAHR, db=db))[0]
+
+    # Einzeln ausgewiesen — die Sicht kann ihn benennen.
+    assert zeile.erzeuger_erloes_euro == pytest.approx(40.0), (
+        f"Erlös nicht ausgewiesen: {zeile.erzeuger_erloes_euro}")
+
+    # Und er wirkt: Netto-Ertrag = Einspeise-Erlös + EV-Ersparnis + Erlös.
+    erwartet = (
+        zeile.einspeise_erloes_euro
+        + zeile.ev_ersparnis_euro
+        + zeile.bkw_ersparnis_euro
+        + 40.0
+        - zeile.ust_eigenverbrauch_euro
+    )
+    assert zeile.netto_ertrag_euro == pytest.approx(erwartet, abs=0.02), (
+        f"Netto-Ertrag {zeile.netto_ertrag_euro} enthält die 40 € nicht "
+        f"(erwartet {erwartet})")
+
+
+@pytest.mark.asyncio
+async def test_der_erloes_bleibt_aus_dem_einspeise_erloes_heraus(db):
+    """Die Gegenrichtung — und die Grenze, die bleibt.
+
+    ``einspeise_erloes_euro`` bewertet den **Anlagenzähler** mit dem EINEN Satz
+    der Anlage (§8/9). Ein Gerät mit eigenem Vergütungssatz hat per Definition
+    einen anderen; sein Betrag darf dort **nicht** hinein, sonst behauptet die
+    Formel „Einspeisung × Einspeisevergütung" eine Rechnung, die niemand
+    angestellt hat.
+
+    Fixture: Einspeisung 200 kWh × 8 ct = 16,00 € — die 40 € stehen daneben,
+    nicht darin.
+    """
+    from backend.api.routes.monatsdaten import list_monatsdaten_aggregiert
+
+    a, _so = await _robert(db, "abgabe")
+    zeile = (await list_monatsdaten_aggregiert(anlage_id=a.id, jahr=JAHR, db=db))[0]
+
+    assert zeile.einspeise_erloes_euro == pytest.approx(16.0, abs=0.02), (
+        f"Einspeise-Erlös {zeile.einspeise_erloes_euro} ≠ 200 kWh × 8 ct — "
+        "der gepflegte Erlös ist hineingerutscht")

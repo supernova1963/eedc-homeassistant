@@ -217,6 +217,13 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 > **Architektur (SoT):** Der Berechnungs-Layer-Helfer (`core/berechnungen/`, ADR-001) liefert **neben dem Wert eine strukturierte Herleitung** `{ wert, einheit, formel, eingesetzte_werte[], quelle, zeitraum }` — Wert UND Erklärung aus *einer* Quelle, können nicht driften. Vertrag in [KONZEPT-BERECHNUNGS-LAYER.md §6](KONZEPT-BERECHNUNGS-LAYER.md); dieselbe Herleitung speist perspektivisch PDF + Daten-Checker. Bestehend: `FormelTooltip` (ROIDashboard) als Vorbild, B1 nennt den Berechnung-Tooltip.
 > **A3-Kopplung:** der Tooltip erklärt auch, *warum* ein Wert `—`/`N/A`/`?` ist (Datenlücke vs. strukturell vs. Schätzung).
 > **Mobile:** kein Hover auf Touch → Tap/Long-press-Popover (Touch-Target ≥ 44 px, siehe Mobile M4).
+> ⭐ **Auch der NAME einer Zeile kommt aus einer Quelle, nicht aus dem Client** (06.09.2026, §9.2
+> Geldseite): Wo eine Zeile je nach **Kategorie** etwas anderes bedeutet, liefert das Backend ihr
+> Label mit — Bauform `ersparnis_label`, künftig ebenso `erloes_label`. Der belegte Gegenfall:
+> `TKonto.tsx` schreibt `— Einspeisung` hart verdrahtet und nennt damit den **Stromverkauf an
+> Mieter** eine Einspeisung, obwohl §9.2 ausdrücklich sagt, dass eine Abgabe **keine**
+> Netz-Einspeisung ist. Ein hart verdrahteter Name driftet genauso wie eine hart verdrahtete
+> Formel — und fällt später auf, weil ein Anwender ihn liest.
 
 > **✅ Tooltip-Kanon (visuell, Fundament-P3, 2026-06-13).** EIN dunkles Tooltip-Design für alle:
 > - **Fläche:** `bg-gray-900 dark:bg-gray-950 text-white`, `rounded-lg`, `shadow-lg` — in beiden Modi dunkel. Daten-Tooltips `p-3 text-sm`, Micro-Tooltips (title-Ersatz, `SimpleTooltip`) `px-2 py-1 text-xs`.
@@ -534,6 +541,15 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 > **Zahlen-Format:** deutsches Komma, Tausender-Punkt.
 > **Display-Token `—`** als einheitliches Leerwert-Zeichen (etabliert v3.29.1).
 > **Region-/Bundesland-Schreibweise (#336):** **voller Name als Default** (SoT: `REGION_NAMEN` in `lib/constants.ts`), bei Platzmangel auf die verfügbare Breite mit „…" gekürzt (= Überlauf-Regel der KPICard, kein Umbruch, kein Abschneiden der Zahl). **Nur in sehr engen Kontexten** (z. B. Chart-Achsenbeschriftungen) das **ISO-3166-2-Kürzel** (SH, BW, NW …) statt Klarname, plus definierte Sonderfälle (**XX = Ausland**, AT/CH). **Keine erfundene Abkürzungstabelle** (Altlast `BUNDESLAENDER.kurzname` in `RegionalTab.tsx` mit „SchlHol"/„MeckPom" wird beim Community-Umbau ersatzlos aufgelöst). Begründung: ISO ist als 2-stelliger Code für Anzeige zu kryptisch („NW" statt „NRW"), als Engfall-Kürzel aber korrekt; juristische Abkürzungslisten (C.H. Beck) sind stilistisch uneinheitlich.
+
+> **Ein Sachverhalt, ein Begriff — die Geldzeile heißt wie die Energiezeile** (06.09.2026):
+> Für den dritten Weg der Netzpunkt-Bilanz gilt durchgängig **„Abgabe an Dritte"** — in der
+> Energiebilanz, im T-Konto, im ROI, im PDF und im Handbuch. **Nicht** „Stromverkauf" (zu eng:
+> Allgemeinstrom wird umgelegt, an Nachbarn wird auch unentgeltlich abgegeben) und **nicht**
+> „Mieterstrom" (deutscher Rechtsbegriff, scheitert am DACH-Maßstab). Begründung: Regel 0 —
+> wer im T-Konto ein Wort sucht, das er in der Bilanz nie gesehen hat, findet es nicht.
+> ⚑ Der **Schlüssel** darf abweichen, wenn Umbenennen Bestand migrieren hieße
+> (`einspeise_erloes_euro` bleibt): Schlüssel ist Code, der Anzeigename kommt aus der Kategorie.
 
 **Betroffene Issues:** #243 B7, #258 P6, #336.
 

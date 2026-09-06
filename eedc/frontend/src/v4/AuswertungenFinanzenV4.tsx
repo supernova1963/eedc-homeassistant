@@ -121,7 +121,14 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
     const ust = chartData.reduce((s, z) => s + (z.ust_eigenverbrauch || 0), 0)
     const nettoErtrag = chartData.reduce((s, z) => s + z.netto_ertrag, 0)
     const nettoNachSonderkosten = nettoErtrag + sonstigeErtraege - sonderkosten
-    return { einspeiseErloes, netzbezugKosten, eigenverbrauchErsparnis, sonderkosten, sonstigeErtraege, ust, nettoErtrag, nettoNachSonderkosten, nichtVerguetet, neg51Kwh }
+    // #402 (rilmor-mhrs): Erzeuger mit EIGENEM Vergütungssatz (Mieterstrom,
+    // Allgemeinstrom, Nachbarhaus) tragen einen gepflegten Erlös, den eedc
+    // nicht nachrechnet. Er gehört NICHT in die Kacheln oben — die bewerten
+    // den Anlagenzähler mit dem einen Satz der Anlage —, steht aber im
+    // T-Konto darunter. Ohne diese Summe wüsste die Sicht nicht einmal, ob es
+    // solche Erzeuger gibt, und könnte ihre Grenze nicht aussprechen.
+    const erzeugerErloes = chartData.reduce((s, z) => s + (z.erzeuger_erloes || 0), 0)
+    return { einspeiseErloes, netzbezugKosten, eigenverbrauchErsparnis, sonderkosten, sonstigeErtraege, ust, nettoErtrag, nettoNachSonderkosten, nichtVerguetet, neg51Kwh, erzeugerErloes }
   }, [chartData, sonstigeByMonth])
 
   const monate = basis.stats.anzahlMonate || 1
@@ -160,7 +167,11 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
           : hatMehrereTarife ? 'historische Tarife' : `${fmtZahl(strompreis.einspeiseverguetung_cent_kwh, 1)} ct/kWh`,
         parkId: 'kpi:einspeise',
         formel: (hatMehrereTarife ? 'Σ (Einspeisung × Tarif) pro Monat' : 'Einspeisung × Einspeisevergütung')
-          + (gesamt.nichtVerguetet > 0 ? ' · ohne Stunden mit negativem Börsenpreis (§51 EEG)' : ''),
+          + (gesamt.nichtVerguetet > 0 ? ' · ohne Stunden mit negativem Börsenpreis (§51 EEG)' : '')
+          // #402: nur nennen, wenn es solche Erzeuger gibt — sonst stünde bei
+          // jedem Anwender ein Posten in der Herleitung, den es nicht gibt
+          // (dasselbe Muster wie die §51-Zeile eine Zeile darüber).
+          + (gesamt.erzeugerErloes > 0 ? ' · ohne Erzeuger mit eigenem Vergütungssatz (im T-Konto einzeln)' : ''),
         berechnung: gesamt.nichtVerguetet > 0
           ? `${fmtZahl(basis.stats.gesamtEinspeisung, 0)} kWh gesamt, davon ${fmtZahl(gesamt.neg51Kwh, 1)} kWh ohne Vergütung`
           : `${fmtZahl(basis.stats.gesamtEinspeisung, 0)} kWh gesamt`,
@@ -196,7 +207,20 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
           // sonst stünde in jeder Herleitung ein Posten, den es nicht gibt. Ohne
           // die Nennung wäre die kleinere Zahl unerklärt (N-22).
           + (gesamt.ust > 0 ? ' − USt auf Eigenverbrauch' : '')
-          + ' · ohne Netzbezug-Kosten, ohne Wärmepumpe/E-Mobilität',
+          + ' · ohne Netzbezug-Kosten, ohne Wärmepumpe/E-Mobilität'
+          // #402 / §9.2 Geldseite (E1, 06.09.2026): Der gepflegte Erlös eines
+          // Erzeugers mit eigenem Vergütungssatz — und der einer *Abgabe an
+          // Dritte* — IST Teil dieser Zahl (fünfter Summand, seit dieser
+          // Sitzung auch auf dieser Route). Er wird genannt, weil er sonst
+          // unerklärt in der Summe steckt: die beiden Summanden darüber
+          // ergeben sie nicht mehr allein.
+          // ⛔ Die Abgrenzung „(PV)" gilt Netzbezug und WP/E-Mobilität — NICHT
+          // der dritten Verwendung des PV-Stroms. Ein Erzeuger hinter dem
+          // Hauszähler zählt hier mit (GLOSSAR), und die Abgabe ist derselbe
+          // Strom auf dem dritten Weg.
+          + (gesamt.erzeugerErloes > 0
+              ? ` · inkl. ${fmtZahl(gesamt.erzeugerErloes, 2)} € Abgabe an Dritte / eigener Vergütungssatz`
+              : ''),
         berechnung: `${fmtZahl(gesamt.einspeiseErloes, 2)} € + ${fmtZahl(gesamt.eigenverbrauchErsparnis, 2)} €`
           + (gesamt.ust > 0 ? ` − ${fmtZahl(gesamt.ust, 2)} € USt` : ''),
         ergebnis: `= ${fmtZahl(gesamt.nettoNachSonderkosten, 2)} €`,

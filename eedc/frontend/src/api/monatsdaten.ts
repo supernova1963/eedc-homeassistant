@@ -165,6 +165,11 @@ export interface AggregierteMonatsdaten {
   // §51-Diagnose: entgangener Erlös. Der Erlös oben ist bereits gekürzt.
   einspeise_nicht_verguetet_euro: number
   ev_ersparnis_euro: number
+  // Konzept §9 Weg 2: Σ der gepflegten Erlöse von Erzeugern mit EIGENEM
+  // Einspeisetarif. Steckt bewusst weder in `einspeise_erloes_euro` noch in
+  // `netto_ertrag_euro` — jene bewerten den Anlagenzähler mit dem einen Satz
+  // der Anlage. Hier nur, damit die Sicht ihre Abgrenzung benennen kann (#402).
+  erzeuger_erloes_euro: number
   // Nur für BKW-Monate ohne erfasste Erzeugung besetzt (Datenlücke, ADR-002/P9).
   bkw_ersparnis_euro: number
   // Bereits in `netto_ertrag_euro` abgezogen; 0 außerhalb der Regelbesteuerung.

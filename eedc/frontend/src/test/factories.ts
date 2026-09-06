@@ -168,6 +168,7 @@ const ZEILE_BASIS = {
   einspeise_erloes_euro: 0,
   einspeise_nicht_verguetet_euro: 0,
   ev_ersparnis_euro: 0,
+  erzeuger_erloes_euro: 0,
   bkw_ersparnis_euro: 0,
   ust_eigenverbrauch_euro: 0,
   netzbezug_kosten_euro: 0,

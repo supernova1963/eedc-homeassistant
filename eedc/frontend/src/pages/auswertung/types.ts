@@ -87,6 +87,10 @@ export interface MonatsZeitreihe {
   // eigenem §51-Abzug und ohne USt/BKW-Regel (Fund N-22). Wer hier wieder eine
   // Formel einsetzt, baut die zweite Engine neu auf.
   einspeise_erloes: number
+  // §9 Weg 2 — gepflegter Erlös von Erzeugern mit eigenem Vergütungssatz.
+  // Bewusst NICHT in `einspeise_erloes`/`netto_ertrag` addiert (s. Vertrag in
+  // `api/monatsdaten.ts`); die Sicht nennt ihn nur als Abgrenzung.
+  erzeuger_erloes: number
   ev_ersparnis: number
   netzbezug_kosten: number
   netto_ertrag: number
@@ -257,6 +261,7 @@ export function createMonatsZeitreihe(
       sonstiges_verbrauch: md.sonstige_verbrauch_kwh,
       abgabe_dritte: md.abgabe_dritte_kwh ?? null,
       einspeise_erloes: md.einspeise_erloes_euro,
+      erzeuger_erloes: md.erzeuger_erloes_euro ?? 0,
       ev_ersparnis: md.ev_ersparnis_euro + md.bkw_ersparnis_euro,
       netzbezug_kosten: md.netzbezug_kosten_euro,
       netto_ertrag: md.netto_ertrag_euro,
