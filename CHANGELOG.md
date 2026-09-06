@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.0.42] - 2026-09-06 — Das Wetter im Live-Cockpit ist wieder da
+
+### Fixed
+
+- **Cockpit → Live zeigt wieder Wetter, Solar-Aussicht und Verbrauchsprognose.** Mit v4.0.40 ist ein Programmierfehler in die Wetter-Route geraten: Beim Umbau für den neuen Verbrauchsprognose-Sensor wanderte die Herkunft des gelernten Verbrauchsprofils in eine eigene Funktion — eine Stelle las sie weiter am alten Ort, an dem es sie nicht mehr gab. ⚠ **Betroffen war jede Installation**, nicht nur die mit eigenem Verbrauchsprofil: Der Fehler trat auf, sobald der Wetterabruf gelang. ⛔ **Und eedc nannte dafür die falsche Ursache** — im Live-Cockpit stand „Wetterdaten nicht verfügbar", als läge es am Wetterdienst; tatsächlich lag es an uns. Der Fehler wurde zusätzlich für bis zu eine Stunde zwischengespeichert, sodass auch ein Neuladen nichts half. ⭐ **Jetzt trägt das Verbrauchsprofil seine Herkunft selbst**, und eine neue Regression fährt den vollständigen Erfolgsweg der Route — den bisher **keine** Prüfung durchlaufen hatte: Die drei vorhandenen prüften ausschließlich Abbruchfälle, und eine von ihnen prüfte ausgerechnet auf dieselbe Meldung, die der Fehler erzeugte. **Was du tun musst:** nichts. Nach dem Update ist das Wetter beim nächsten Aufruf wieder da.
+
+---
+
 ## [4.0.41] - 2026-09-06 — Strom, den das Haus abgibt · und ein Community-Vergleich, der die Bauart kennt
 
 ### Added

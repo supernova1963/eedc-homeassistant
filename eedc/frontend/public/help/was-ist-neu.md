@@ -1,11 +1,31 @@
 # Was ist neu
 
-> **Stand:** September 2026 (v4.0.41)
+> **Stand:** September 2026 (v4.0.42)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.42 — 6. September 2026
+
+**Das Wetter im Live-Cockpit ist wieder da**
+
+Seit v4.0.40 blieb der Wetter-Bereich in *Cockpit → Live* leer: kein Wetter, keine
+Solar-Aussicht, keine Verbrauchsprognose. eedc meldete dazu „Wetterdaten nicht verfügbar",
+als läge es am Wetterdienst — tatsächlich war es ein Fehler in eedc selbst, entstanden beim
+Umbau für den neuen Verbrauchsprognose-Sensor. Weil eedc den Fehlschlag zusätzlich für bis
+zu eine Stunde merkte, half auch Neuladen nicht.
+
+**Betrifft dich das?** Wenn du v4.0.40 oder v4.0.41 installiert hattest: ja, unabhängig von
+deiner Konfiguration.
+
+**Was du tun musst:** nichts. Nach dem Update ist das Wetter beim nächsten Aufruf wieder da.
+
+Mitgenommen: Der Weg, auf dem der Fehler entstehen konnte, ist jetzt durch eine Prüfung
+abgedeckt, die den vollständigen Erfolgsfall der Wetter-Abfrage durchläuft.
 
 ---
 
