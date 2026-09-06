@@ -62,6 +62,18 @@ class ProfilWahl:
     profil_slots: Optional[int] = None
     wp_profil: Optional[dict] = None
     referenz_temp_c: Optional[float] = None
+    #: Woher die History stammt, aus der das Profil gelernt wurde („ha", „mqtt").
+    #: ⛔ **Nachgetragen am 2026-09-06, und das Fehlen war ein Produktionsfehler.**
+    #: Beim Herausziehen dieser Funktion aus ``get_live_wetter`` (#395, `365087e4`,
+    #: ausgeliefert mit v4.0.40) wanderte ``ind_profil_data`` hierher — die Route
+    #: las die Variable aber weiter, und sie existierte dort nicht mehr. Ergebnis:
+    #: ``NameError`` **im Antwort-Dict des Erfolgspfads**, also bei JEDEM Anwender,
+    #: sobald der Wetterabruf gelang. Die Route fing ihn als
+    #: ``grund="abruf_fehlgeschlagen"`` und wies damit auf den Wetterdienst,
+    #: waehrend der Fehler bei uns lag.
+    #: *Wer eine lokale Variable in einen Rueckgabewert verschiebt, verschiebt
+    #: ALLE ihre Leser mit — auch die, die weit unten im selben Dict stehen.*
+    quelle: Optional[str] = None
 
     @property
     def ist_individuell(self) -> bool:
@@ -85,6 +97,9 @@ async def waehle_verbrauchsprofil(
     wahl = ProfilWahl()
     if not ind_profil_data:
         return wahl
+    # Die Herkunft gilt fuer das gelernte Profil als Ganzes — sie steht deshalb
+    # VOR der Werktag/Wochenende-Weiche und nicht in einem ihrer Zweige.
+    wahl.quelle = ind_profil_data.get("quelle")
 
     ist_wochenende = now.weekday() >= 5
     if ist_wochenende and ind_profil_data.get("wochenende"):

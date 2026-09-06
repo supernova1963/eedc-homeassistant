@@ -1610,7 +1610,9 @@ async def get_live_wetter(
             "grundlast_kw": grundlast,
             "verbrauchsprofil": profil,
             "profil_typ": profil_typ if ist_ind else "bdew_h0",
-            "profil_quelle": ind_profil_data.get("quelle") if ind_profil_data and ist_ind else None,
+            # `wahl.quelle` statt der frueheren lokalen `ind_profil_data` — die
+            # ist mit #395 in `waehle_verbrauchsprofil` gewandert (s. dort).
+            "profil_quelle": wahl.quelle if ist_ind else None,
             "profil_tage": profil_tage,
             "profil_slots": profil_slots,
             "prognose_quelle": pq.quelle,
