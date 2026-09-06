@@ -19,6 +19,8 @@ from pydantic import BaseModel
 from backend.core.exceptions import bad_request, not_found
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
+from backend.core.berechnungen.investitions_jahresertrag import jahresertrag_posten
+from backend.core.berechnungen.kapitalrechnung import jahres_ersparnis_euro
 from backend.models.investition import (
     ERTRAGSFELD_TYPEN,
     Investition,
@@ -1402,11 +1404,21 @@ async def get_finanz_prognose(
     # (b) nur **heute aktive** Investitionen — eine stillgelegte Komponente
     #     bringt keinen künftigen Ertrag. Der Rückblick oben ist davon
     #     unberührt, er rechnet aus gemessenen Monatswerten.
-    ertrag_jahr_ges = sum(
-        i.einsparung_prognose_jahr or 0
+    # ⚑ §9.2 Geldseite (11c): der Jahres-Ertrag je Investition kommt aus dem
+    # SoT `jahresertrag_posten` — für ein Gerät der Kategorie *Abgabe an
+    # Dritte* aus seinen gemessenen Monatserlösen, sonst aus „Ertrag/Jahr"
+    # (§8/1). Der Vorrang ist dort entschieden, nicht hier.
+    # ⛔ Der Filter (b) bleibt: eine Prognose zählt nur, was heute läuft. Das
+    # ROI-Dashboard filtert bewusst ANDERS (ohne Jahr auch stillgelegte, #123
+    # „Vergangenheit nicht löschen") — zwei Fragen, zwei Umfänge.
+    _ertrag_posten = [
+        p
         for i in alle_investitionen
         if i.typ in ERTRAGSFELD_TYPEN and i.ist_aktiv_an(_heute)
-    )
+        for p in (jahresertrag_posten(i, fakten),)
+        if p is not None
+    ]
+    ertrag_jahr_ges = jahres_ersparnis_euro(_ertrag_posten)
     bisherige_ertraege = 0.0
     bisherige_eauto_ersparnis = 0.0
 

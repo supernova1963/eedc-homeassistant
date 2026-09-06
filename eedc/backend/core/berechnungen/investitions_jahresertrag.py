@@ -38,6 +38,21 @@ an den Nachbarn abgibt, hat „bringt nichts" gesagt, und seine Zeile ist damit
 den Betrag — der Betrag kann die beiden Fälle nicht trennen
 (``imd_monatsaggregat._f`` macht aus ``None`` dieselbe ``0.0``).
 
+## Warum beide Fälle ein ``ErsparnisPosten`` sind
+
+``jahres_ersparnis_euro`` trennt zwei Eingänge: ``posten`` werden **annualisiert**,
+``jahres_ertraege_euro`` ausdrücklich **nicht** („ein Jahresbetrag an der
+Investition ist per Form wiederkehrend und darf weder verdünnt noch
+hochgerechnet werden"). Diese Funktion liefert trotzdem in **beiden** Fällen
+einen Posten — der geschätzte mit ``monate=12``.
+
+Das ist rechnerisch exakt dasselbe (``x / 12 * 12 == x``) und hat einen Grund:
+Der **Vorrang** *gemessen vor geschätzt* muss an **einer** Stelle entschieden
+werden. Gäbe der Helfer den Jahresbetrag als zweiten Rückgabewert zurück,
+müsste jeder der drei Aufrufer selbst entscheiden, welchen er nimmt — und
+genau diese Entscheidung dreimal zu treffen ist der Fehler, gegen den es diese
+Datei gibt.
+
 ## Warum ``ErsparnisPosten`` und nicht eine Jahreszahl
 
 Ein Erlös, der in **drei** von zwölf Monaten gepflegt ist, ist keine

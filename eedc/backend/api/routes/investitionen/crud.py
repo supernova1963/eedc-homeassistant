@@ -39,6 +39,11 @@ from backend.models.investition import (
     TYP_LABELS as _TYP_LABEL,
 )
 from backend.utils.investition_filter import aktiv_jetzt, aktiv_im_jahr, sort_investitionen_nach_typ
+from backend.core.berechnungen.investitions_jahresertrag import (
+    BEZEICHNUNG_ABGABE,
+    jahresertrag_posten,
+)
+from backend.core.field_definitions import ist_abgabe_kategorie
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.api.routes.strompreise import (
@@ -1131,6 +1136,7 @@ async def get_roi_dashboard(
     )
     from backend.core.berechnungen.kapitalrechnung import (
         annahme_dauer_text,
+        jahres_ersparnis_euro,
         kapitaleinsatz_euro,
     )
     from sqlalchemy import func
@@ -2375,11 +2381,31 @@ async def get_roi_dashboard(
             # Bedingung: es hat keinen Schreiber (nur in `InvestitionResponse`,
             # nicht in Base/Create/Update, kein Formularfeld, 0 Datensätze im
             # Bestand) — es kann also keinen gepflegten CO₂-Wert verdecken.
-            jahres_einsparung = inv.einsparung_prognose_jahr or 0
+            # §9.2 Geldseite (11b): der Jahres-Ertrag kommt aus dem SoT, nicht
+            # mehr direkt aus dem Feld. Für ein Gerät der Kategorie *Abgabe an
+            # Dritte* rechnet er aus den **gemessenen Monatserlösen**; für alles
+            # andere gilt §8/1 unverändert. Der Vorrang (gemessen vor geschätzt)
+            # ist dort entschieden — hier wird er nur gelesen.
+            #
+            # ⛔ Der Laufzeit-Filter bleibt bei DIESER Route und wird NICHT
+            # angeglichen: Ohne `jahr` lädt sie bewusst auch stillgelegte
+            # Investitionen (`:1189` — „Issue #123: spätere Stilllegung darf
+            # Vergangenheit nicht löschen"), während Aussichten und HA-Export
+            # auf „heute aktiv" filtern, weil sie PROGNOSEN sind. Zwei Fragen,
+            # zwei Umfänge — wer das einebnet, beantwortet eine davon falsch.
+            posten = jahresertrag_posten(inv, _anlage_fakten)
             co2_einsparung = inv.co2_einsparung_prognose_kg or 0
-            if inv.einsparung_prognose_jahr is None:
+            if posten is None:
+                jahres_einsparung = 0
                 detail = {
                     'hinweis': (
+                        'Kein Erlös gepflegt — die abgegebenen Kilowattstunden '
+                        'tragen ohne ihn kein Geld: weder als Eigenverbrauch '
+                        'noch als Einspeisung, und eedc kennt deinen Satz '
+                        'nicht. Der Erlös lässt sich am Gerät monatlich als '
+                        '„Erlös (€)" pflegen; ersatzweise ein Jahresbetrag als '
+                        '„Ertrag/Jahr (€)" in der Investitionspflege.'
+                    ) if ist_abgabe_kategorie((inv.parameter or {}).get('kategorie')) else (
                         'Kein Ertrag/Jahr gepflegt — ohne ihn bewertet eedc diese '
                         'Zeile nicht. Der Wert lässt sich in der Investitionspflege '
                         'als „Ertrag/Jahr (€)" nachtragen.'
@@ -2387,7 +2413,14 @@ async def get_roi_dashboard(
                     'nicht_bewertet': True,
                 }
             else:
-                detail = {'hinweis': 'Manuelle Prognose verwendet'}
+                jahres_einsparung = jahres_ersparnis_euro([posten])
+                detail = {
+                    'hinweis': (
+                        f'{posten.bezeichnung}: {posten.monate} Monate gemessen, '
+                        'auf ein Jahr hochgerechnet'
+                    ) if posten.bezeichnung == BEZEICHNUNG_ABGABE
+                    else 'Manuelle Prognose verwendet'
+                }
 
         # #310: manuell gepflegte sonstige Erträge/Ausgaben einrechnen — seit
         # F-19 die Ausgaben kumuliert im Nenner statt annualisiert im Zähler,

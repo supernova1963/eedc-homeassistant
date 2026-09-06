@@ -88,6 +88,10 @@ from backend.models.monatsdaten import Monatsdaten
 from backend.services.energie_profil.modus_split_monat import (
     lade_modus_split_ohne_abschluss,
 )
+from backend.core.berechnungen.investitions_jahresertrag import (
+    BEZEICHNUNG_ERTRAGSFELD,
+    jahresertrag_posten,
+)
 from backend.models.investition import (
     ERTRAGSFELD_TYPEN,
     Investition,
@@ -629,11 +633,33 @@ async def calculate_anlage_sensors(
     # diesen Summanden trügen die HA-Sensoren `jahres_ersparnis_euro`,
     # `roi_prozent` und `amortisation_jahre` eine andere Zahl als die
     # Oberfläche, sobald jemand einen Jahres-Ertrag pflegt.
-    jahres_ertraege_ges = sum(
-        i.einsparung_prognose_jahr or 0
+    # §9.2 Geldseite (11c): über denselben SoT wie ROI-Dashboard und
+    # Aussichten. `investitionen` ist bereits `aktiv_jetzt()`-gefiltert
+    # (`:421`) — ein Sensor ist eine Prognose, er zählt nur, was heute läuft;
+    # das ROI-Dashboard filtert bewusst anders (#123).
+    #
+    # ⛔ **Hier zählt NUR der geschätzte Posten extra — und das ist der
+    # Unterschied zu den Aussichten.** Der gemessene Abgabe-Erlös steckt in
+    # dieser Sicht bereits in `bilanz_ohne_sonstige` (er ist seit `:602` Teil
+    # von `_finanz.netto_ertrag_euro`) und würde als zweiter Summand doppelt
+    # zählen. **Gemessen am 06.09.2026:** ohne diese Grenze meldete der Sensor
+    # `jahres_ersparnis_euro` **960 € statt 480 €** — die Probe
+    # `test_abgabe_geldseite_drei_sichten.py` hat es beim ersten Lauf gefangen.
+    # Die Aussichten haben das Problem nicht: dort ist der Erlös in keiner
+    # anderen Prognose-Größe enthalten.
+    #
+    # ⚑ Der SoT wird trotzdem gebraucht, und zwar für den **Vorrang**: Pflegt
+    # jemand an einem Abgabe-Gerät BEIDES, liefert `jahresertrag_posten` den
+    # gemessenen Posten — dessen Bezeichnung filtern wir hier heraus, und das
+    # statische „Ertrag/Jahr" desselben Geräts zählt damit korrekt NICHT mit.
+    _ertrag_posten = [
+        p
         for i in investitionen
         if i.typ in ERTRAGSFELD_TYPEN
-    )
+        for p in (jahresertrag_posten(i, fakten),)
+        if p is not None and p.bezeichnung == BEZEICHNUNG_ERTRAGSFELD
+    ]
+    jahres_ertraege_ges = jahres_ersparnis_euro(_ertrag_posten)
 
     # #326-Inventur Dimension 2: USt auf Eigenverbrauch bei Regelbesteuerung.
     # Cockpit und Aussichten ziehen sie ab, der HA-Export bisher nicht — der
