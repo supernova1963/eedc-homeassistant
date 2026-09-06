@@ -607,6 +607,12 @@ class SonstigesGeraetFakten:
     #: keine Anlagengröße, sondern kommt hinzu — eedc kennt nur einen
     #: Einspeisesatz je Anlage, und der bewertet nur den Anlagenzähler.
     einspeise_erloes_euro: float = 0.0
+    #: Wurde der Erlös in diesem Monat **gepflegt** — auch als 0? Die Zahl
+    #: darüber trennt das nicht (fehlend und `None` werden beide zu `0.0`).
+    #: Die **Kapitalrechnung** braucht die Trennung: eine gepflegte 0 heißt
+    #: „unentgeltlich abgegeben" und ist eine Aussage, ein fehlender Wert heißt
+    #: „nicht bewertet". Gleiche Bauform wie ``hat_erzeuger_zeile`` (ADR-002/P4).
+    hat_einspeise_erloes: bool = False
 
 
 @dataclass(frozen=True)
@@ -1561,7 +1567,8 @@ class _RohMonat:
                 inv.id,
                 {"erzeugung": 0.0, "verbrauch": 0.0, "eigenverbrauch": 0.0,
                  "einspeisung": 0.0, "bezug_pv": 0.0, "bezug_netz": 0.0,
-                 "einspeise_erloes_euro": 0.0, "abgabe": 0.0},
+                 "einspeise_erloes_euro": 0.0, "abgabe": 0.0,
+                 "hat_einspeise_erloes": False},
             )
             g["erzeugung"] += b.sonstiges_erzeugung
             g["verbrauch"] += b.sonstiges_verbrauch
@@ -1570,6 +1577,12 @@ class _RohMonat:
             g["bezug_pv"] += b.sonstiges_bezug_pv
             g["bezug_netz"] += b.sonstiges_bezug_netz
             g["einspeise_erloes_euro"] += b.sonstiges_einspeise_erloes_euro
+            # ODER über die Monate: EIN gepflegter Monat genügt, damit das
+            # Gerät als bewertbar gilt. Die Zahl der Monate MIT Wert zählt der
+            # Aufrufer selbst (F-20: eigene Monatszahl je Posten).
+            g["hat_einspeise_erloes"] = (
+                g["hat_einspeise_erloes"] or b.hat_einspeise_erloes
+            )
             g["abgabe"] += b.sonstiges_abgabe
             # Ein Erzeuger mit 0 kWh im Monat ist ein echter 0-Wert, kein
             # „nicht vorhanden" — deshalb zählt auch die Kategorie, nicht nur
@@ -1800,6 +1813,7 @@ async def _baue_fakt(
                     bezug_pv_kwh=g["bezug_pv"],
                     bezug_netz_kwh=g["bezug_netz"],
                     einspeise_erloes_euro=g.get("einspeise_erloes_euro", 0.0),
+                    hat_einspeise_erloes=bool(g.get("hat_einspeise_erloes")),
                     abgabe_kwh=g.get("abgabe", 0.0),
                 )
                 for inv_id, g in roh.sonstiges_je_geraet.items()

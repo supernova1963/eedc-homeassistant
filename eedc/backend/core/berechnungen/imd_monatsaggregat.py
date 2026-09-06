@@ -178,6 +178,16 @@ class ImdTypBeitrag:
     #: Kategorie-Regel wie Eigenverbrauch/Einspeisung: ein Verbraucher hat
     #: keinen Einspeise-Erlös.
     sonstiges_einspeise_erloes_euro: float = 0.0
+    #: Ist der Erlös **gepflegt** — im Unterschied zu „nicht gepflegt"? Die Zahl
+    #: darüber kann beides nicht trennen: `_f` macht aus `None` wie aus einem
+    #: fehlenden Schlüssel dieselbe `0.0`. Für die **Bilanz** ist das egal (0 €
+    #: addieren sich weg), für die **Kapitalrechnung** nicht: Wer unentgeltlich
+    #: an den Nachbarn abgibt und `0` pflegt, hat eine Aussage getroffen
+    #: („bringt nichts") — seine ROI-Zeile ist damit **bewertet**. Wer nichts
+    #: gepflegt hat, ist **unbewertet**; dort wäre eine 0 die Fake-0 aus
+    #: N-87/N-258. Dieselbe Trennung, die `hat_erzeuger_zeile` in
+    #: `SonstigesFakten` zieht (ADR-002/P4).
+    hat_einspeise_erloes: bool = False
     #: §9.2 — an Dritte abgegebene kWh (Kategorie „abgabe"); keine Erzeugung,
     #: keine Einspeisung, wird vom Eigenverbrauch abgezogen.
     sonstiges_abgabe: float = 0.0
@@ -341,6 +351,9 @@ def imd_typ_beitrag(
         bezug_pv = _f(data, "bezug_pv_kwh")
         bezug_netz = _f(data, "bezug_netz_kwh")
         erloes_euro = _f(data, "einspeise_erloes_euro")
+        # `is not None` statt truthy (CLAUDE.md, 0-Werte): eine gepflegte 0 ist
+        # eine Aussage des Anwenders, kein fehlender Wert.
+        hat_erloes = data.get("einspeise_erloes_euro") is not None
         abgabe = 0.0
         if ist_zaehler_kategorie(kategorie):
             # #377 — ein Zähler trägt **nichts** zur Energiebilanz bei, und das
@@ -358,6 +371,7 @@ def imd_typ_beitrag(
             eigenverbrauch = einspeisung = 0.0
             bezug_pv = bezug_netz = 0.0
             erloes_euro = 0.0
+            hat_erloes = False
         elif ist_abgabe_kategorie(kategorie):
             # §9.2: das Gerät erzeugt nichts und verbraucht nichts — es gibt ab.
             # Ein „Erzeugung"-Wert (W-Integral des Übergabe-Wechselrichters) zählt
@@ -375,6 +389,7 @@ def imd_typ_beitrag(
             # Ein Verbraucher speist nicht ein und hat deshalb auch keinen
             # Einspeise-Erlös — dieselbe Stummschaltung wie oben (C1d).
             erloes_euro = 0.0
+            hat_erloes = False
         # sonst (leere Kategorie): beide Werte mitnehmen (Site-3-Verhalten)
         return ImdTypBeitrag(
             typ=typ,
@@ -385,6 +400,7 @@ def imd_typ_beitrag(
             sonstiges_bezug_pv=bezug_pv,
             sonstiges_bezug_netz=bezug_netz,
             sonstiges_einspeise_erloes_euro=erloes_euro,
+            hat_einspeise_erloes=hat_erloes,
             sonstiges_abgabe=abgabe,
         )
 

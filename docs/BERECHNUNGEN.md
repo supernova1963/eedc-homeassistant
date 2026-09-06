@@ -368,7 +368,8 @@ Die Cockpit-Übersicht aggregiert alle Monatsdaten für ein Jahr (oder alle Jahr
 ```
 Einspeise-Erlös     = Σ(Einspeisung) * Einspeisevergütung / 100
 EV-Ersparnis        = Σ(PV_Eigenverbrauch) * Netzbezug_Preis / 100  (s. Hinweis)
-Netto-Ertrag        = Einspeise-Erlös + EV-Ersparnis [- USt_Eigenverbrauch]
+Netto-Ertrag        = Einspeise-Erlös + EV-Ersparnis + Erlös_eigener_Satz
+                      [- USt_Eigenverbrauch]
 BKW-Ersparnis       = Σ(BKW_Eigenverbrauch) * Netzbezug_Preis / 100
 Sonstige-Netto      = Σ(sonstige_ertraege) - Σ(sonstige_ausgaben)
 
@@ -410,6 +411,14 @@ Jahres-Rendite (%)  = Kumulative_Ersparnis / Investition_gesamt * 100
 > Monats-Preis und EV/Netzbezug-Split sonst auseinander (#326). Der **naive** `netto_ertrag_euro`
 > = Einspeise-Erlös + EV-Ersparnis + BKW-Ersparnis + Sonstige-Netto; Sites mit Zusatzlogik (Cockpit
 > zieht `USt_Eigenverbrauch` ab) bauen den Netto-Ertrag aus den Einzel-Komponenten selbst zusammen.
+
+> **Der fünfte Summand — Erlös mit eigenem Vergütungssatz (§9.2 Geldseite, 06.09.2026):** Ein
+> Gerät der Kategorie *Abgabe an Dritte* oder ein *Sonstiges/Erzeuger* mit eigenem Einspeisetarif
+> trägt einen **gepflegten** Monatsbetrag (`einspeise_erloes_euro`). Er ist Teil des Netto-Ertrags
+> (`finanz_aggregat.erzeuger_erloes_euro`) und steht **neben** `Einspeise-Erlös`, nicht darin: Jener
+> bewertet den **Anlagenzähler** mit dem EINEN Satz der Anlage, dieser trägt einen Satz, den eedc
+> nicht kennt und **nicht nachrechnet**. Alle Sichten führen ihn — Cockpit → Monat/Jahr,
+> Auswertungen → Finanzen, HA-Sensor `netto_ertrag_euro`, Jahresbericht-PDF und Aussichten.
 
 > **G19-1 — Sonstige Positionen auf Anlage-Ebene (ab v4.0):** `Sonstige-Netto` umfasst jetzt **auch**
 > die auf **Anlage-Ebene** (nicht nur pro Komponente) erfassten Positionen — siehe [§3.10](#310-sonstige-positionen).

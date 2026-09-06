@@ -605,6 +605,8 @@ Für sonstige **Erzeuger** — ein BHKW, ein Windrad, eine kleine Wasserkraftanl
 
 > **Ein Erzeuger mit eigenem Vergütungssatz** — etwa eine Erweiterung mit einem neuen EEG-Satz — trägt sein Geld über das Feld **„Einspeise-Erlös (€)"** bei *Sonstiges/Erzeuger* (siehe [Einstellungen](HANDBUCH_EINSTELLUNGEN.md#5-investitionen--komponenten)). Dieser Betrag steht so im T-Konto, wie du ihn gepflegt hast; eedc rechnet ihn **nicht** nach, denn der Satz deiner Anlage ist ein anderer. Ohne gepflegten Betrag erscheint keine eigene Zeile — die eingespeisten Kilowattstunden sind dann bereits im Einspeise-Erlös der Anlage bewertet.
 
+> ⚠ **Bei *Abgabe an Dritte* gilt der Absatz oben NICHT.** Was du abgibst, ist weder dein Eigenverbrauch noch deine Netz-Einspeisung — die abgegebenen Kilowattstunden tragen deshalb **in keiner** der beiden Geld-Größen etwas bei. Ihr Geld ist allein dein Feld **„Erlös (€)"** am Gerät. Pflegst du es nicht, bleibt der Strom ohne Bewertung, und die ROI-Zeile des Geräts sagt „nicht bewertet" — dafür gibt es ersatzweise „Ertrag/Jahr".
+
 ⚑ **CO₂** bleibt beim sonstigen Erzeuger ebenfalls ohne Bewertung: Ein Verbrenner emittiert, statt einzusparen, und für eine Anlage ohne Brennstoff fehlt der belastbare Vergleichswert.
 
 **Verbrauchszähler** (Gas, Wasser, Heizöl …) sind die dritte Art unter *Sonstiges*. Sie zeigen den aktuellen **Zählerstand**, den Stand zu Beginn der Aufzeichnung und den Verbrauch je Monat — und sonst nichts: Wirtschaftlichkeit steht dort ausdrücklich auf **„nicht bewertet"**, weil Gas- und Wasserkosten Haushaltskosten sind und nicht in die Rechnung der PV-Anlage gehören. Wo du sie außerdem findest:
