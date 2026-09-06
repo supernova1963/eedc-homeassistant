@@ -16,7 +16,10 @@ import {
   alternativkostenHints,
   getInitialParamData,
   ERTRAGSFELD_TYPEN,
+  ERTRAGSFELD_HINT_STANDARD,
+  ERTRAGSFELD_HINT_ABGABE,
 } from './sections/investitionFormHelpers'
+import { istAbgabeKategorie } from '../../lib/fieldDefinitions'
 import { SchalterZeile } from './sections/SchalterZeile'
 import { InvestitionTypFelder } from './sections/InvestitionTypFelder'
 import type { ParamWert } from './sections/InvestitionTypFelder/types'
@@ -393,7 +396,9 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
               type="number" step="0.01" min="0"
               value={formData.einsparung_prognose_jahr}
               onChange={handleInputChange}
-              hint="Wiederkehrender Ertrag oder Einsparung, z. B. der Einspeiseerlös eines zweiten Erzeugers. Wirkt jedes Jahr — Einmaliges gehört in den Monatsabschluss."
+              hint={istAbgabeKategorie(paramData.kategorie as string)
+                ? ERTRAGSFELD_HINT_ABGABE
+                : ERTRAGSFELD_HINT_STANDARD}
             />
           )}
           <Input

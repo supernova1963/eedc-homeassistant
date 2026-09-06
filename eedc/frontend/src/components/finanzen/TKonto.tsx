@@ -207,7 +207,12 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
       const rows: TKontoPosten[] = []
       if (inv.erloes_euro != null && inv.erloes_euro > 0) {
         rows.push({
-          label: `${inv.bezeichnung} — Einspeisung`,
+          // Der NAME kommt aus dem Backend (§9.2, Style-Guide A6): ein Gerät
+          // der Kategorie *Abgabe an Dritte* speist nicht ein, es gibt ab —
+          // und wer hier „Einspeisung" liest, sucht in der Energiebilanz ein
+          // Wort, das dort nicht steht (Melder rilmor-mhrs, #402). Der
+          // Fallback deckt nur alte Antworten ohne das Feld.
+          label: `${inv.bezeichnung} — ${inv.erloes_label || 'Einspeisung'}`,
           wert: inv.erloes_euro,
           color: 'text-green-600 dark:text-green-400',
           // Nicht fest verdrahtet: beim BKW rechnet eedc `Einspeisung ×

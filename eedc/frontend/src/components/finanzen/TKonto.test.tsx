@@ -82,6 +82,42 @@ describe('TKonto', () => {
     // Aggregat-Fallback-Zeile trägt den Wert stattdessen.
     expect(screen.getAllByText(/Sonstige Erträge/).length).toBeGreaterThan(0)
   })
+
+  // ── §9.2 Geldseite, Bauschritt 11d: der Name der Erlös-Zeile ──────────────
+  //
+  // Dasselbe Feld trägt bei zwei Kategorien zwei Ertragsarten. Bis zum
+  // 06.09.2026 stand über beiden „— Einspeisung"; rilmor-mhrs (#402) las damit
+  // im T-Konto ein Wort, das seine Energiebilanz nicht kennt. Der Name kommt
+  // seither aus dem Backend — hier wird geprüft, dass der Client ihn auch liest
+  // statt ihn zu verdrahten.
+  const mitErloesZeile = (erloes_label?: string) => ({
+    ...basis,
+    investitionen_financials: [{
+      investition_id: 9, bezeichnung: 'Allg. Strom', typ: 'sonstiges',
+      betriebskosten_monat_euro: 0, erloes_euro: 209.35, ersparnis_euro: null,
+      ersparnis_label: '', formel: null, berechnung: null,
+      erloes_formel: 'Am Gerät gepflegter Erlös', erloes_label,
+      sonstige_ertraege_euro: 0, sonstige_ausgaben_euro: 0,
+    }],
+  })
+
+  it('benennt die Erlös-Zeile so, wie das Backend sie nennt', () => {
+    render(<TKonto d={mitErloesZeile('Abgabe an Dritte')} />)
+    expect(screen.getAllByText(/Allg\. Strom — Abgabe an Dritte/).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/Allg\. Strom — Einspeisung/)).toBeNull()
+  })
+
+  it('nennt einen Erzeuger weiter „Einspeisung"', () => {
+    // Gegenprobe: ohne sie wäre die Probe darüber auch dann grün, wenn jemand
+    // den Namen pauschal ersetzt.
+    render(<TKonto d={mitErloesZeile('Einspeisung')} />)
+    expect(screen.getAllByText(/Allg\. Strom — Einspeisung/).length).toBeGreaterThan(0)
+  })
+
+  it('fällt ohne das Feld auf „Einspeisung" zurück (ältere Antwort)', () => {
+    render(<TKonto d={mitErloesZeile(undefined)} />)
+    expect(screen.getAllByText(/Allg\. Strom — Einspeisung/).length).toBeGreaterThan(0)
+  })
 })
 
 /**

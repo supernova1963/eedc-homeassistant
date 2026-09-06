@@ -67,11 +67,16 @@ from __future__ import annotations
 from typing import Iterable, Optional
 
 from backend.core.berechnungen.kapitalrechnung import ErsparnisPosten
-from backend.core.field_definitions import ist_abgabe_kategorie
+from backend.core.field_definitions import (
+    SONSTIGES_ABGABE_LABEL,
+    ist_abgabe_kategorie,
+)
 
 #: Bezeichnung des gemessenen Postens — sie erscheint in Erklärzeilen und
-#: HA-Sensor-Attributen. Konzept §9.2: derselbe Begriff wie die Energiezeile.
-BEZEICHNUNG_ABGABE: str = "Erlös aus Abgabe an Dritte"
+#: HA-Sensor-Attributen. Konzept §9.2: derselbe Begriff wie die Energiezeile,
+#: deshalb **abgeleitet** statt zweitgeschrieben (`SONSTIGES_ABGABE_LABEL` ist
+#: die eine Quelle des Namens; sonst driften Geld- und Energiezeile getrennt).
+BEZEICHNUNG_ABGABE: str = f"Erlös aus {SONSTIGES_ABGABE_LABEL}"
 
 #: Bezeichnung des geschätzten Postens (§8/1, unverändert für Wallbox und das
 #: übrige *Sonstiges*).

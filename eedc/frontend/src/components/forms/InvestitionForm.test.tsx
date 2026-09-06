@@ -236,3 +236,44 @@ describe('InvestitionForm — Submit-Nutzlast', () => {
     expect('abgrenzung' in params).toBe(false)
   })
 })
+
+// ── §9.2 Geldseite, Bauschritt 11e: der Vorrang steht am Formular ───────────
+//
+// E3-Auflage des Konzepts, wörtlich: „Die Reihenfolge muss am Formular sichtbar
+// sein — sonst ändert sich der ROI, ohne dass jemand ein Feld angefasst hat."
+// Seit 11a gilt bei der Kategorie *Abgabe an Dritte* „gemessen vor geschätzt":
+// Sobald ein Monat einen Erlös trägt, bleibt „Ertrag/Jahr" außen vor. Wer das
+// nicht am Feld liest, sucht den Grund in seinen Zahlen.
+describe('InvestitionForm — Ertrag/Jahr, Vorrang gemessen vor geschätzt', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const sonstiges = (kategorie: string): Investition => ({
+    id: 9, anlage_id: 1, typ: 'sonstiges', bezeichnung: 'Allg. Strom',
+    anschaffungsdatum: '2025-01-01', aktiv: true, parameter: { kategorie },
+  })
+
+  /** Das Feld liegt in „Weitere Angaben & Kosten" — `variant="erweitert"`,
+   *  also standardmäßig eingeklappt. Ohne das Aufklappen wäre die Probe aus dem
+   *  falschen Grund rot. */
+  async function hintDesErtragsfelds(kategorie: string) {
+    render(<InvestitionForm anlageId={1} typ="sonstiges" investition={sonstiges(kategorie)}
+      onSubmit={vi.fn(() => Promise.resolve())} onCancel={() => {}} />)
+    fireEvent.click(await screen.findByRole('button', { name: /Weitere Angaben & Kosten/i }))
+    const feld = await screen.findByLabelText(/Ertrag\/Jahr/i)
+    return feld.closest('div')?.textContent ?? ''
+  }
+
+  it('sagt bei „Abgabe an Dritte", dass gepflegte Monatswerte vorgehen', async () => {
+    const hint = await hintDesErtragsfelds('abgabe')
+    expect(hint).toMatch(/Erlös \(€\)/)
+    expect(hint).toMatch(/gemessen vor geschätzt/)
+  })
+
+  it('lässt den Hint für einen Erzeuger unverändert', async () => {
+    // Gegenprobe: der Vorrang gilt NUR der Abgabe-Kategorie (§9.2
+    // „Geltungsbereich"); ein sonstiger Erzeuger bleibt bei §8/1.
+    const hint = await hintDesErtragsfelds('erzeuger')
+    expect(hint).toMatch(/Wirkt jedes Jahr/)
+    expect(hint).not.toMatch(/gemessen vor geschätzt/)
+  })
+})

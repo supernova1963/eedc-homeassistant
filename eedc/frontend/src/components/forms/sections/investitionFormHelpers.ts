@@ -143,6 +143,27 @@ export const typLabels: Record<InvestitionTyp, string> = {
  */
 export const ERTRAGSFELD_TYPEN: InvestitionTyp[] = ['wallbox', 'sonstiges']
 
+/**
+ * Der Hint des Feldes **Ertrag/Jahr (€)** — er hängt an der Kategorie.
+ *
+ * §9.2 Geldseite (E3-Auflage, 06.09.2026): Bei *Abgabe an Dritte* gilt
+ * **gemessen vor geschätzt**. Liegt in mindestens einem Monat ein „Erlös (€)"
+ * vor (eine gepflegte **0** zählt als Aussage), rechnet eedc daraus hoch und
+ * ignoriert dieses Feld. Ohne diesen Satz ändert sich der ROI, ohne dass jemand
+ * ein Feld angefasst hat — und genau das ist die Bedingung, unter der die
+ * Vorrangregel überhaupt gebaut werden durfte.
+ */
+export const ERTRAGSFELD_HINT_STANDARD =
+  'Wiederkehrender Ertrag oder Einsparung, z. B. der Einspeiseerlös eines zweiten '
+  + 'Erzeugers. Wirkt jedes Jahr — Einmaliges gehört in den Monatsabschluss.'
+
+/** @see ERTRAGSFELD_HINT_STANDARD */
+export const ERTRAGSFELD_HINT_ABGABE =
+  'Nur der Rückfall: Sobald für mindestens einen Monat ein „Erlös (€)" gepflegt '
+  + 'ist, rechnet eedc aus den gemessenen Monaten hoch und lässt dieses Feld '
+  + 'außen vor (gemessen vor geschätzt). Trag es ein, solange du die Monatswerte '
+  + 'noch nicht pflegst.'
+
 // Kontextabhängige Hints für Alternative Kosten
 //
 // F-41 (#383): Der WP-Hint nannte nur den Regelfall und verschwieg, dass 0 eine

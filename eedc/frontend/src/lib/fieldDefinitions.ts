@@ -270,6 +270,17 @@ export function istZaehlerKategorie(kategorie: string | null | undefined): boole
 }
 
 /**
+ * Die Kategorie des **dritten Wegs** (§9.2) — Strom, der das Haus Richtung
+ * Dritter verlässt. Spiegel von `field_definitions.SONSTIGES_ABGABE_KATEGORIE`.
+ */
+export const SONSTIGES_ABGABE_KATEGORIE = 'abgabe'
+
+/** Gibt dieses *Sonstiges*-Gerät Strom an Dritte ab? (§9.2) */
+export function istAbgabeKategorie(kategorie: string | null | undefined): boolean {
+  return kategorie === SONSTIGES_ABGABE_KATEGORIE
+}
+
+/**
  * Die Einheit, die neben diesem Wert stehen soll — **der eine Leser** (#377).
  *
  * Für fast jedes Feld steht sie in der Definition. Beim **Zählerstand** nicht:

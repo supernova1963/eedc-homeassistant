@@ -606,6 +606,8 @@ Für sonstige **Erzeuger** — ein BHKW, ein Windrad, eine kleine Wasserkraftanl
 > **Ein Erzeuger mit eigenem Vergütungssatz** — etwa eine Erweiterung mit einem neuen EEG-Satz — trägt sein Geld über das Feld **„Einspeise-Erlös (€)"** bei *Sonstiges/Erzeuger* (siehe [Einstellungen](HANDBUCH_EINSTELLUNGEN.md#5-investitionen--komponenten)). Dieser Betrag steht so im T-Konto, wie du ihn gepflegt hast; eedc rechnet ihn **nicht** nach, denn der Satz deiner Anlage ist ein anderer. Ohne gepflegten Betrag erscheint keine eigene Zeile — die eingespeisten Kilowattstunden sind dann bereits im Einspeise-Erlös der Anlage bewertet.
 
 > ⚠ **Bei *Abgabe an Dritte* gilt der Absatz oben NICHT.** Was du abgibst, ist weder dein Eigenverbrauch noch deine Netz-Einspeisung — die abgegebenen Kilowattstunden tragen deshalb **in keiner** der beiden Geld-Größen etwas bei. Ihr Geld ist allein dein Feld **„Erlös (€)"** am Gerät. Pflegst du es nicht, bleibt der Strom ohne Bewertung, und die ROI-Zeile des Geräts sagt „nicht bewertet" — dafür gibt es ersatzweise „Ertrag/Jahr".
+>
+> **Im T-Konto heißt die Zeile so wie in der Bilanz:** *„{Gerät} — Abgabe an Dritte"*, nicht „Einspeisung". Das ist Absicht — du sollst dieselbe Sache nicht unter zwei Namen suchen müssen. Bei einem *Sonstiges/Erzeuger* steht dort weiterhin „— Einspeisung", denn der speist tatsächlich ins Netz.
 
 ⚑ **CO₂** bleibt beim sonstigen Erzeuger ebenfalls ohne Bewertung: Ein Verbrenner emittiert, statt einzusparen, und für eine Anlage ohne Brennstoff fehlt der belastbare Vergleichswert.
 
@@ -731,6 +733,14 @@ Beide rechnen gegen **dieselbe** Investitionssumme, deshalb lassen sich die Zahl
 > Nur diese beiden Felder wirken in Prognose und Amortisationsdauer. **Buch dann nicht beides** —
 > sonst zählt derselbe Erlös zweimal; der Daten-Checker weist dich darauf hin, wenn derselbe
 > Posten Monat für Monat auftaucht.
+>
+> ⭐ **Bei *Abgabe an Dritte* nimmt eedc dir diese Entscheidung ab: gemessen geht vor geschätzt.**
+> Sobald für **mindestens einen Monat** ein „Erlös (€)" gepflegt ist, rechnet eedc aus den
+> gemessenen Monaten auf ein Jahr hoch und lässt „Ertrag/Jahr" außen vor — auch wenn dort etwas
+> steht. Doppelt zählen kann es dadurch nicht. Eine gepflegte **0** ist dabei deine Aussage
+> („in diesem Monat kein Erlös") und zählt als gemessener Monat mit. Erst wenn **kein** Monat
+> einen Wert trägt, greift „Ertrag/Jahr" als Rückfall. **Der Hinweis steht auch am Feld selbst**,
+> damit sich dein ROI nicht ändert, ohne dass du etwas angefasst hast.
 
 **ROI pro Komponente — zwei Sichten:**
 
@@ -744,7 +754,10 @@ Jeder Wert trägt einen **„Sicht"-Tooltip** (pro Investition vs. gesamt, Mehrk
 Tabelle je Komponente: **Investition** (Kaufpreis + Installation, bei WP/E-Auto der Mehrkosten-Ansatz) · **Jährliche Einsparung** · **ROI** (Jahres-%) · **Amortisation** (Jahre bis Break-Even).
 
 > **Wo eedc nichts bewertet, steht „—" statt einer Null.** Für *Wallbox* und *Sonstiges* rechnet
-> eedc keine Einsparung selbst — dort zählt allein das gepflegte Feld **„Ertrag/Jahr (€)"**. Ist es
+> eedc keine Einsparung selbst — dort zählt allein das gepflegte Feld **„Ertrag/Jahr (€)"**.
+> ⭐ **Eine Ausnahme: *Sonstiges* mit der Kategorie *Abgabe an Dritte*.** Dort zählt zuerst der
+> monatlich gepflegte **„Erlös (€)"** (siehe [§3.8](#38-sonstiges)); „Ertrag/Jahr" ist nur der
+> Rückfall, wenn kein einziger Monat einen Wert trägt. Ist es
 > leer, bleiben Einsparung, ROI, Amortisation und CO₂ dieser Zeile leer, und der Grund steht im
 > Tooltip. **Die Anschaffungskosten zählen weiter** — unbewertet heißt nicht unsichtbar, und die
 > Zeile senkt die Anlagensumme nicht. Eine gepflegte **0** ist dagegen deine Aussage („bringt

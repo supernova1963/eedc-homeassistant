@@ -2027,6 +2027,16 @@ SONSTIGES_ABGABE_KATEGORIE: Final[str] = "abgabe"
 def ist_abgabe_kategorie(kategorie: Optional[str]) -> bool:
     """Gibt dieses *Sonstiges*-Gerät Strom an Dritte ab (§9.2)?"""
     return kategorie == SONSTIGES_ABGABE_KATEGORIE
+
+
+#: Anzeigename der Kategorie — **ein** Wort für alle drei Zeilen, die dasselbe
+#: Gerät nennen: die Energiezeile der Verwendungsseite, die Geldzeile im T-Konto
+#: (`erloes_label`) und der Posten der Kapitalrechnung
+#: (`BEZEICHNUNG_ABGABE = "Erlös aus " + dieser Name`). Regel 0: wer im T-Konto
+#: „Einspeisung" liest, sucht in der Bilanz ein Wort, das dort nicht steht.
+#: ⚑ Der **Schlüssel** bleibt `einspeise_erloes_euro` — §9.2: der Schlüssel ist
+#: Code, der Anzeigename kommt aus der Kategorie.
+SONSTIGES_ABGABE_LABEL: Final[str] = "Abgabe an Dritte"
 #: Der eine Feldname der Kategorie — ausgeschrieben statt aus der Registry
 #: gezogen, weil dieses Projekt von der Grep-Barkeit lebt. Dass beide
 #: übereinstimmen, hält `test_377_zaehlerstaende.py` fest.

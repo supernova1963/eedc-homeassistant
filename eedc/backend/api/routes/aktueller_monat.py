@@ -84,12 +84,14 @@ from backend.core.berechnungen.betriebsart_gemessen import modus_strom_zeile
 from backend.core.betriebsmodus import KUEHLEN as BM_KUEHLEN
 from backend.core.betriebsmodus import MODUS_STROM_FELD
 from backend.core.field_definitions import (
+    SONSTIGES_ABGABE_LABEL,
     get_eauto_ladung_kwh,
     get_emob_pv_netz_kwh,
     get_speicher_netzladung_kwh,
     get_wp_heizenergie_kwh,
     get_wp_strom_kwh,
     get_wp_warmwasser_kwh,
+    ist_abgabe_kategorie,
 )
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
 from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
@@ -157,6 +159,12 @@ class DatenquelleInfo(BaseModel):
     abdeckung_bis: Optional[datetime] = None
 
 
+#: Anzeigename der Erlös-Zeile im Regelfall — BKW und *Sonstiges/Erzeuger*
+#: speisen ins öffentliche Netz ein. Die Kategorie *Abgabe an Dritte* setzt
+#: stattdessen `SONSTIGES_ABGABE_LABEL` (§9.2).
+ERLOES_LABEL_EINSPEISUNG: str = "Einspeisung"
+
+
 class InvestitionFinancialDetail(BaseModel):
     """Finanzielle Details einer einzelnen Investition für den T-Konto-View."""
     investition_id: int
@@ -171,6 +179,15 @@ class InvestitionFinancialDetail(BaseModel):
     #: Fall eine Rechnung behauptet, die niemand angestellt hat (Regel A6:
     #: Formel **+ eingesetzte Werte**). Wer den Wert bildet, beschreibt ihn.
     erloes_formel: Optional[str] = None
+    #: Anzeigename der Erlös-Zeile („{Gerät} — {erloes_label}"). Kommt aus dem
+    #: Backend statt aus dem Client, weil ihn die **Kategorie** entscheidet:
+    #: ein Gerät der Kategorie *Abgabe an Dritte* trägt keinen Einspeise-Erlös,
+    #: sondern den Erlös des dritten Wegs (§9.2). Der Client hatte „Einspeisung"
+    #: bis 2026-09-06 hart verdrahtet und nannte damit im T-Konto ein Wort, das
+    #: in der Energiebilanz derselben Anlage nicht vorkommt (Melder rilmor-mhrs,
+    #: #402). Regel 0 verlangt für die Geldzeile denselben Namen wie für die
+    #: Energiezeile; Bauform wie `ersparnis_label`.
+    erloes_label: str = ERLOES_LABEL_EINSPEISUNG
     ersparnis_euro: Optional[float] = None   # Eigenverbrauch, WP, eMob, Speicher, ...
     ersparnis_label: str = ""                # "Eigenverbrauch-Ersparnis", "Ersparnis vs. Gas", ...
     formel: Optional[str] = None
@@ -1154,6 +1171,9 @@ def _baue_investition_financial(
     inv_sonstige_ausgaben = round(inv_sonstige["ausgaben_euro"], 2)
     inv_erloes: Optional[float] = None
     inv_erloes_formel: Optional[str] = None
+    #: Default „Einspeisung" — die Abgabe-Kategorie überschreibt ihn unten.
+    inv_erloes_label = ERLOES_LABEL_EINSPEISUNG
+
     inv_ersparnis: Optional[float] = None
     inv_label = ""
     inv_formel: Optional[str] = None
@@ -1314,13 +1334,28 @@ def _baue_investition_financial(
         # `einspeise_erloes_euro` eine Zeile höher bereits bewertet. Wer einen
         # eigenen Vergütungssatz hat, hat einen eigenen Zähler — und pflegt
         # deshalb den Betrag (Begründung Maintainer 2026-08-10, §9).
+        #
+        # ⚑ §9.2 Geldseite (06.09.): Dasselbe Feld trägt bei der Kategorie
+        # *Abgabe an Dritte* eine **andere Ertragsart** — den Erlös des dritten
+        # Wegs statt eines Einspeise-Erlöses. Der Betrag wird gleich behandelt
+        # (gepflegt, nicht nachgerechnet), nur benannt wird er anders: Regel 0
+        # verlangt für die Geldzeile denselben Namen wie für die Energiezeile.
+        # Vorher stand über beiden „— Einspeisung", und rilmor-mhrs (#402) hat
+        # im T-Konto ein Wort gelesen, das seine Bilanz gar nicht kennt.
         erloes_gepflegt = data.get("einspeise_erloes_euro")
         if erloes_gepflegt:
             inv_erloes = round(float(erloes_gepflegt), 2)
-            inv_erloes_formel = (
-                "Am Gerät gepflegter Einspeise-Erlös (eigener Vergütungssatz) "
-                "— von eedc nicht nachgerechnet"
-            )
+            if ist_abgabe_kategorie((inv.parameter or {}).get("kategorie")):
+                inv_erloes_label = SONSTIGES_ABGABE_LABEL
+                inv_erloes_formel = (
+                    f"Am Gerät gepflegter Erlös aus {SONSTIGES_ABGABE_LABEL} "
+                    "(eigener Satz) — von eedc nicht nachgerechnet"
+                )
+            else:
+                inv_erloes_formel = (
+                    "Am Gerät gepflegter Einspeise-Erlös (eigener Vergütungssatz) "
+                    "— von eedc nicht nachgerechnet"
+                )
 
     if (
         bk_monat > 0
@@ -1336,6 +1371,7 @@ def _baue_investition_financial(
             betriebskosten_monat_euro=bk_monat,
             erloes_euro=inv_erloes,
             erloes_formel=inv_erloes_formel,
+            erloes_label=inv_erloes_label,
             ersparnis_euro=inv_ersparnis,
             ersparnis_label=inv_label,
             formel=inv_formel,

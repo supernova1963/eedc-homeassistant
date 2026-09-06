@@ -219,11 +219,16 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 > **Mobile:** kein Hover auf Touch → Tap/Long-press-Popover (Touch-Target ≥ 44 px, siehe Mobile M4).
 > ⭐ **Auch der NAME einer Zeile kommt aus einer Quelle, nicht aus dem Client** (06.09.2026, §9.2
 > Geldseite): Wo eine Zeile je nach **Kategorie** etwas anderes bedeutet, liefert das Backend ihr
-> Label mit — Bauform `ersparnis_label`, künftig ebenso `erloes_label`. Der belegte Gegenfall:
-> `TKonto.tsx` schreibt `— Einspeisung` hart verdrahtet und nennt damit den **Stromverkauf an
+> Label mit — Bauform `ersparnis_label` und `erloes_label`. Der belegte Gegenfall:
+> `TKonto.tsx` schrieb `— Einspeisung` hart verdrahtet und nannte damit den **Stromverkauf an
 > Mieter** eine Einspeisung, obwohl §9.2 ausdrücklich sagt, dass eine Abgabe **keine**
 > Netz-Einspeisung ist. Ein hart verdrahteter Name driftet genauso wie eine hart verdrahtete
 > Formel — und fällt später auf, weil ein Anwender ihn liest.
+> ✅ **Gebaut am 06.09.2026** (Bauschritt 11d): `erloes_label` kommt aus
+> `aktueller_monat.py`, den einen Anzeigenamen hält `field_definitions.SONSTIGES_ABGABE_LABEL`
+> — aus ihm ist auch `BEZEICHNUNG_ABGABE` der Kapitalrechnung abgeleitet, damit Geld- und
+> Energiezeile nicht getrennt driften können. Proben:
+> `test_abgabe_geldseite_beschriftung.py`, `components/finanzen/TKonto.test.tsx`.
 
 > **✅ Tooltip-Kanon (visuell, Fundament-P3, 2026-06-13).** EIN dunkles Tooltip-Design für alle:
 > - **Fläche:** `bg-gray-900 dark:bg-gray-950 text-white`, `rounded-lg`, `shadow-lg` — in beiden Modi dunkel. Daten-Tooltips `p-3 text-sm`, Micro-Tooltips (title-Ersatz, `SimpleTooltip`) `px-2 py-1 text-xs`.

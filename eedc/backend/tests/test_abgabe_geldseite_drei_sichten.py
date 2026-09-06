@@ -187,3 +187,41 @@ async def test_die_zwei_umfaenge_bleiben_verschieden(db):
     zeile = next((b for b in roi.berechnungen if b.investition_id == inv.id), None)
     assert zeile is not None, (
         "Das ROI-Dashboard hat die stillgelegte Zeile verloren — #123 verletzt")
+
+
+@pytest.mark.asyncio
+async def test_die_zerlegung_ordnet_den_abgabe_erloes_seiner_zeile_zu(db):
+    """Die im Konzept offengelassene Frage — gemessen, nicht angenommen.
+
+    §9.2 verlangte ausdrücklich: *„Beim Bau zu messen, nicht abzuschreiben: ob
+    die Aussichten-Zerlegung (§8/7) Abgabe-Geräte wie Erzeuger behandelt."*
+
+    **Antwort: ja, und das ist richtig.** Der Zuordnungs-Block in
+    `aussichten.py` liest jedes *Sonstiges*-Gerät mit gepflegtem
+    `einspeise_erloes_euro` — **kategorie-blind** — und ordnet den Betrag direkt
+    seiner Zeile zu. Die Bauschritt-5-Regel lautet „alles komponentenscharf
+    Vorliegende direkt", und der Abgabe-Erlös liegt genau so vor.
+
+    ⚑ **Doppelt zählen kann er dabei nicht:** `zerlege_kumulierten_ertrag`
+    **verteilt** den anlagenweiten Zähler, statt ihn zu erhöhen
+    (`nicht_zurechenbar = gesamt − Σ je_investition`, per Konstruktion). Wäre
+    die Zuordnung ein Zuschlag, stünde der Betrag zweimal in der Rechnung —
+    diese Probe prüft deshalb **beides**: die Zeile bekommt ihn, und die
+    Identität der Zerlegung hält.
+    """
+    a, inv = await _anlage(db)
+
+    prognose = await get_finanz_prognose(anlage_id=a.id, monate=12, db=db)
+    zeilen = {z.investition_id: z.bisherige_ertraege_euro
+              for z in prognose.ertraege_je_investition}
+
+    assert inv.id in zeilen, (
+        "Der Abgabe-Erlös landete im nicht zurechenbaren Rest, obwohl seine "
+        "Investition bekannt ist")
+    assert zeilen[inv.id] > 0, f"Zeile trägt {zeilen[inv.id]} €"
+
+    # Die Identität der Zerlegung — sie ist der Schutz gegen ein Doppelzählen.
+    summe = sum(zeilen.values()) + prognose.ertraege_nicht_zurechenbar_euro
+    assert summe == pytest.approx(
+        prognose.bisherige_ertraege_euro, abs=0.02), (
+        f"Σ Zeilen + Rest = {summe} ≠ Zähler {prognose.bisherige_ertraege_euro}")

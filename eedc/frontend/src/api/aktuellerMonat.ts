@@ -24,6 +24,13 @@ export interface InvestitionFinancialDetail {
   erloes_euro: number | null
   /** Herleitung der Erlös-Zeile — je Typ verschieden (gerechnet vs. gepflegt). */
   erloes_formel: string | null
+  /**
+   * Anzeigename der Erlös-Zeile („{Gerät} — {erloes_label}"). Kommt aus dem
+   * Backend, weil ihn die **Kategorie** entscheidet: „Einspeisung" für BKW und
+   * sonstige Erzeuger, „Abgabe an Dritte" für den dritten Weg (§9.2). Optional,
+   * damit ältere Antworten den Fallback des Clients behalten.
+   */
+  erloes_label?: string
   ersparnis_euro: number | null
   ersparnis_label: string
   formel: string | null
