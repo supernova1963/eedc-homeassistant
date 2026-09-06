@@ -27,12 +27,16 @@ from datetime import date
 
 import pytest
 
+from backend.core.berechnungen.modus_split import (
+    PROVENANCE_KEY_WARMWASSER,
+    REGEL_JAZ_VORSCHLAG,
+)
 from backend.models import Anlage, Investition, Monatsdaten
 from backend.models.investition import InvestitionMonatsdaten
 from backend.services.community_service import prepare_community_data
 
 
-async def _anlage_mit_wp(db, *, mit_klimaanlage: bool) -> int:
+async def _anlage_mit_wp(db, *, mit_klimaanlage: bool, waerme_abgeleitet: bool = False) -> int:
     """Eine Anlage mit Wärmepumpe — wahlweise plus Split-Klimaanlage.
 
     Die Zahlen sind die des Melders (T89667 #290): 210 kWh Wärme, 97 kWh
@@ -60,6 +64,13 @@ async def _anlage_mit_wp(db, *, mit_klimaanlage: bool) -> int:
     db.add(InvestitionMonatsdaten(
         investition_id=wp.id, jahr=2026, monat=7,
         verbrauch_daten={"stromverbrauch_kwh": 97.0, "warmwasser_kwh": 210.0},
+        # `waerme_abgeleitet`: die 210 kWh sind NICHT gemessen, sondern der vom
+        # Monatsabschluss vorgeschlagene `Strom x gepflegte JAZ` — der Anwender
+        # hat ihn uebernommen, der Client meldet die Marke zurueck.
+        source_provenance=(
+            {PROVENANCE_KEY_WARMWASSER: {"abgeleitet": REGEL_JAZ_VORSCHLAG}}
+            if waerme_abgeleitet else None
+        ),
     ))
 
     if mit_klimaanlage:
@@ -138,3 +149,64 @@ async def test_das_flag_faehrt_bei_jeder_wp_anlage_mit(db):
         juli = _juli(await prepare_community_data(db, anlage_id))
         assert "wp_jaz_belastbar" in juli
         assert isinstance(juli["wp_jaz_belastbar"], bool)
+
+
+# ── Zweite Haelfte der Sperre: die HERKUNFT (06.09.2026, rapahl per PN) ──────
+#
+# Die vier Proben darueber pruefen die **Abgrenzung** (Q und E messen
+# Verschiedenes). Es gibt einen zweiten Grund, aus dem lokal keine Arbeitszahl
+# entsteht, und der Payload kannte ihn nicht: die Waerme ist **gerechnet**
+# (`Strom x gepflegte JAZ`), nicht gemessen.
+#
+# ⭐ **Warum das schwerer wiegt als eine gewoehnliche Luecke:** Waerme aus
+# `Strom x JAZ`, geteilt durch denselben Strom, ergibt **exakt die gepflegte
+# JAZ** zurueck. Die Zahl traegt keine Information ueber die Anlage — sie ist
+# der Rueckgabewert eines Einstellungsfelds. Sie ging trotzdem mit vollem
+# Gewicht in fuenf Server-Vergleichswerte ein, waehrend `arbeitszahl()` sie dem
+# Besitzer mit „Waerme ist gerechnet, nicht gemessen" verweigert.
+#
+# Aufgefallen an rapahls Frage (simon42 PN 92196, 05.09.2026): Sein
+# Luft-Wasser-Vergleichswert lag bei rund 4,45, waehrend der bauartgefilterte
+# Schnitt derselben Community ueber `by-art` **3,99** meldete.
+
+
+@pytest.mark.asyncio
+async def test_abgeleitete_waerme_ist_nicht_belastbar(db):
+    """Gerechnete Waerme sperrt die Kennzahl — wie lokal, so im Payload."""
+    anlage_id = await _anlage_mit_wp(db, mit_klimaanlage=False, waerme_abgeleitet=True)
+    juli = _juli(await prepare_community_data(db, anlage_id))
+
+    assert juli["wp_jaz_belastbar"] is False, (
+        "210 kWh aus `Strom x JAZ` geteilt durch dieselben 97 kWh Strom ergibt "
+        "die gepflegte JAZ zurueck. Der Server bildete daraus einen "
+        "Vergleichswert und mittelte Einstellungsfelder statt Messungen."
+    )
+
+
+@pytest.mark.asyncio
+async def test_abgeleitete_waerme_laesst_die_mengen_stehen(db):
+    """E1 auch hier: gesperrt ist die Kennzahl, nie die Menge.
+
+    Der abgeleitete Anteil bleibt die beste verfuegbare Auskunft ueber die
+    erzeugte Waermemenge — er faellt nur als **Kennzahl-Basis** aus. Ohne diese
+    Probe waere die naheliegende Fehlkorrektur (die Waerme weglassen) gruen.
+    """
+    anlage_id = await _anlage_mit_wp(db, mit_klimaanlage=False, waerme_abgeleitet=True)
+    juli = _juli(await prepare_community_data(db, anlage_id))
+
+    assert juli["wp_jaz_belastbar"] is False
+    assert juli["wp_stromverbrauch_kwh"] == pytest.approx(97.0, abs=0.1)
+    assert juli["wp_warmwasser_kwh"] == pytest.approx(210.0, abs=0.1)
+
+
+@pytest.mark.asyncio
+async def test_gemessene_waerme_bleibt_belastbar_trotz_der_neuen_haelfte(db):
+    """Gegenprobe zur Gegenprobe: die neue Bedingung darf nicht alles sperren.
+
+    Dieselbe Anlage, dieselben Zahlen, **ohne** Ableitungs-Marke ⇒ `True`.
+    Ohne diese Probe waere ein `and False` an derselben Stelle gruen.
+    """
+    anlage_id = await _anlage_mit_wp(db, mit_klimaanlage=False, waerme_abgeleitet=False)
+    juli = _juli(await prepare_community_data(db, anlage_id))
+
+    assert juli["wp_jaz_belastbar"] is True

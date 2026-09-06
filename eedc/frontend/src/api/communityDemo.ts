@@ -11,6 +11,7 @@ import type {
   CommunityBenchmarkResponse, MonatswertOutput, Verteilung, MonatlicheDurchschnitte,
   ZeitraumTyp, SpeicherByClass, WPByRegion, EAutoByUsage, RegionStatistik,
   TrendDaten, DegradationsAnalyse, GlobaleStatistik, Ranking,
+  WPByArt,
 } from './community'
 
 // Saisonale spez.-Ertragskurve (kWh/kWp je Monat) — Summe ≈ 1.075/Jahr.
@@ -155,6 +156,20 @@ export function demoWaermepumpeByRegion(): WPByRegion {
       { region: 'NI', anzahl: 38, durchschnitt_jaz: 3.7, durchschnitt_stromverbrauch: 4380 },
       { region: 'HE', anzahl: 27, durchschnitt_jaz: 3.9, durchschnitt_stromverbrauch: 4120 },
       { region: 'SN', anzahl: 19, durchschnitt_jaz: 3.6, durchschnitt_stromverbrauch: 4510 },
+    ],
+  }
+}
+
+export function demoWaermepumpeByArt(): WPByArt {
+  // Die Groessenordnungen der echten Community (06.09.2026 gemessen):
+  // Luft-Wasser traegt die Masse, Luft-Luft liegt bauartbedingt deutlich
+  // darunter — genau der Unterschied, den der Regionalbalken verwischt hat.
+  return {
+    arten: [
+      { wp_art: 'luft_wasser', label: 'Luft-Wasser', anzahl: 33, durchschnitt_jaz: 3.99 },
+      { wp_art: 'sole_wasser', label: 'Sole-Wasser', anzahl: 5, durchschnitt_jaz: 4.35 },
+      { wp_art: 'grundwasser', label: 'Grundwasser', anzahl: 0, durchschnitt_jaz: null },
+      { wp_art: 'luft_luft', label: 'Luft-Luft', anzahl: 10, durchschnitt_jaz: 1.56 },
     ],
   }
 }

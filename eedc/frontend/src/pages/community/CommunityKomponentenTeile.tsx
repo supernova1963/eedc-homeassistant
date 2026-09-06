@@ -39,6 +39,7 @@ import type {
   KPIVergleich,
   SpeicherByClass,
   WPByRegion,
+  WPByArt,
   EAutoByUsage,
 } from '../../api/community'
 import {
@@ -60,6 +61,7 @@ import { useSchmaleAchse } from '../../hooks'
 export interface KomponentenDaten {
   speicherByClass: SpeicherByClass | null
   wpByRegion: WPByRegion | null
+  wpByArt: WPByArt | null
   eautoByUsage: EAutoByUsage | null
   verfuegbareKomponenten: string[]
   extraLoading: boolean
@@ -68,6 +70,7 @@ export interface KomponentenDaten {
 export function useKomponentenDaten(benchmark: CommunityBenchmarkResponse | null): KomponentenDaten {
   const [speicherByClass, setSpeicherByClass] = useState<SpeicherByClass | null>(null)
   const [wpByRegion, setWpByRegion] = useState<WPByRegion | null>(null)
+  const [wpByArt, setWpByArt] = useState<WPByArt | null>(null)
   const [eautoByUsage, setEautoByUsage] = useState<EAutoByUsage | null>(null)
   const [extraLoading, setExtraLoading] = useState(false)
 
@@ -78,12 +81,14 @@ export function useKomponentenDaten(benchmark: CommunityBenchmarkResponse | null
     Promise.all([
       communityApi.getSpeicherByClass().catch(() => null),
       communityApi.getWaermepumpeByRegion().catch(() => null),
+      communityApi.getWaermepumpeByArt().catch(() => null),
       communityApi.getEAutoByUsage().catch(() => null),
     ])
-      .then(([speicher, wp, eauto]) => {
+      .then(([speicher, wp, wpArt, eauto]) => {
         if (!ab) {
           setSpeicherByClass(speicher)
           setWpByRegion(wp)
+          setWpByArt(wpArt)
           setEautoByUsage(eauto)
         }
       })
@@ -116,7 +121,7 @@ export function useKomponentenDaten(benchmark: CommunityBenchmarkResponse | null
     return komponenten
   }, [benchmark])
 
-  return { speicherByClass, wpByRegion, eautoByUsage, verfuegbareKomponenten, extraLoading }
+  return { speicherByClass, wpByRegion, wpByArt, eautoByUsage, verfuegbareKomponenten, extraLoading }
 }
 
 // =============================================================================
@@ -169,6 +174,7 @@ export function bkwParkIds(benchmark: CommunityBenchmarkResponse): string[] {
 export function waermepumpeParkIds(
   benchmark: CommunityBenchmarkResponse,
   communityStats: WPByRegion | null,
+  artStats?: WPByArt | null,
 ): string[] {
   const wp = benchmark.benchmark_erweitert?.waermepumpe
   if (!wp) return []
@@ -183,6 +189,13 @@ export function waermepumpeParkIds(
     (r) => r.anzahl > 0 && r.durchschnitt_jaz != null,
   )
   if (regionVorhanden) ids.push('komp-wp-chart')
+  // Bauart-Balken: dieselbe Bedingung wie der Block selbst (`artData.length > 1`).
+  // ⚠ Eine Park-ID-Liste, die eine andere Bedingung stellt als die Anzeige, ist
+  // genau die Drift, die den Block leer-aber-sichtbar stehen laesst.
+  const artenMitWert = artStats?.arten?.filter(
+    (a) => a.anzahl > 0 && a.durchschnitt_jaz != null,
+  ).length ?? 0
+  if (artenMitWert > 1) ids.push('komp-wp-chart-bauart')
   ids.push('komp-wp-tipps')
   return ids
 }
@@ -459,9 +472,11 @@ export function SpeicherDeepDive({
 export function WaermepumpeDeepDive({
   benchmark,
   communityStats,
+  artStats,
 }: {
   benchmark: CommunityBenchmarkResponse
   communityStats: WPByRegion | null
+  artStats?: WPByArt | null
 }) {
   const achsen = useChartTheme()
   const schmal = useSchmaleAchse()
@@ -477,25 +492,78 @@ export function WaermepumpeDeepDive({
   )
 
   // Community-Daten nach Region
+  //
+  // ⛔ **Hier stand bis zum 06.09.2026 `.sort(JAZ absteigend).slice(0, 10)`** — der
+  // Balken zeigte damit die zehn BESTEN Regionen. Am 06.09. an der oeffentlichen
+  // API gemessen: von dreizehn Regionen mit Wert fielen genau die drei
+  // schwaechsten heraus (BY 1,64 · HE 0,98 · BE 0,00). Jede Region rutschte in
+  // diesem Bild systematisch nach unten, und die Ueberschrift zaehlte trotzdem
+  // ALLE Anlagen — „(54 Anlagen)" ueber einem Bild, das 46 zeigte.
+  // Gemeldet von rapahl (PN 92196): „Viel mehr als 3,6 sind mit einer
+  // Luft-Wasser-WP nicht wirklich erreichbar."
+  //
+  // ⭐ Jetzt entscheidet die **Belegdichte**, nicht der Rang: die zehn Regionen
+  // mit den meisten Beitraegen. Ein Balken auf zwei Anlagen ist keine Auskunft
+  // ueber eine Region — er ist eine Anlage mit einem Nachbarn.
+  // ⚠ Die **eigene** Region ist immer dabei, auch wenn sie duenn belegt ist:
+  // Sie ist der Bezugspunkt des Anwenders, und ohne sie zeigt das Bild alles
+  // ausser dem, wofuer er es geoeffnet hat.
   const regionData = useMemo(() => {
     if (!communityStats?.regionen) return []
-    return communityStats.regionen
+    const mitWert = communityStats.regionen
       .filter((r) => r.anzahl > 0 && r.durchschnitt_jaz != null)
-      .sort((a, b) => (b.durchschnitt_jaz ?? 0) - (a.durchschnitt_jaz ?? 0))
+    const top = mitWert
+      .slice()
+      .sort((a, b) => b.anzahl - a.anzahl)
       .slice(0, 10)
+    const eigene = mitWert.find((r) => r.region === eigeneRegion)
+    const sichtbar = eigene && !top.some((r) => r.region === eigene.region)
+      ? [...top, eigene]
+      : top
+    return sichtbar
+      .sort((a, b) => (b.durchschnitt_jaz ?? 0) - (a.durchschnitt_jaz ?? 0))
       .map((r) => ({
         name: r.region.replace('_', ' '),
         region: r.region,
         jaz: r.durchschnitt_jaz ?? 0,
         anzahl: r.anzahl,
       }))
-  }, [communityStats])
+  }, [communityStats, eigeneRegion])
 
-  // Gesamtanzahl
-  const gesamtAnzahlWP = useMemo(() => {
-    if (!communityStats?.regionen) return 0
-    return communityStats.regionen.reduce((sum, r) => sum + r.anzahl, 0)
-  }, [communityStats])
+  // Die Zahl neben der Ueberschrift zaehlt, was IM BILD steht — nicht, was der
+  // Server insgesamt kennt. Vorher summierte sie ueber alle Regionen und stand
+  // damit ueber einem beschnittenen Bild (s. `regionData`).
+  const gesamtAnzahlWP = useMemo(
+    () => regionData.reduce((sum, r) => sum + r.anzahl, 0),
+    [regionData],
+  )
+
+  // ⭐ **Der faire Vergleich (06.09.2026, rapahl per PN 92196).** Eine
+  // Luft-Wasser-Waermepumpe erreicht bauartbedingt andere Arbeitszahlen als eine
+  // Sole-Wasser-Anlage, eine Split-Klimaanlage wieder andere. Der Regionalbalken
+  // darueber mischt sie — er gruppiert nach Bundesland, nicht nach Physik.
+  // Der Server liefert die getrennte Sicht seit Langem; sie hatte bis heute
+  // keinen Konsumenten.
+  const artData = useMemo(() => {
+    if (!artStats?.arten) return []
+    return artStats.arten
+      .filter((a) => a.anzahl > 0 && a.durchschnitt_jaz != null)
+      .sort((a, b) => (b.durchschnitt_jaz ?? 0) - (a.durchschnitt_jaz ?? 0))
+      .map((a) => ({
+        // ⭐ Die Belegzahl steht IM Bild, nicht im Hover: „Sole-Wasser" auf fuenf
+        // Anlagen ist eine andere Auskunft als „Luft-Wasser" auf 33, und ein
+        // Tooltip erreicht weder Ausdruck noch Screenshot.
+        name: `${a.label} (${a.anzahl})`,
+        wp_art: a.wp_art,
+        jaz: a.durchschnitt_jaz ?? 0,
+        anzahl: a.anzahl,
+      }))
+  }, [artStats])
+
+  const artAnzahl = useMemo(
+    () => artData.reduce((sum, a) => sum + a.anzahl, 0),
+    [artData],
+  )
 
   // Tipps generieren - berücksichtigt Community-Größe
   const tipps = useMemo(() => {
@@ -566,6 +634,60 @@ export function WaermepumpeDeepDive({
           parkTitel="Wärmepumpe · Wärmeerzeugung"
         />
       </div>
+
+      {/* Community Wärmepumpen nach BAUART — der bauartgleiche Vergleich.
+          Steht bewusst VOR dem Regionalbalken: Er beantwortet die Frage, die die
+          Kachel oben aufwirft („−x % vs. Ø derselben Bauart"), waehrend der
+          Regionalbalken eine andere Grundgesamtheit zeigt. */}
+      {artData.length > 1 && (
+        <Parkbar id="komp-wp-chart-bauart" titel="Wärmepumpe · JAZ nach Bauart">
+        <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex items-center gap-2 mb-4">
+            <Thermometer className="h-5 w-5 text-gray-500" />
+            <h4 className="font-medium text-gray-700 dark:text-gray-300">
+              Community: JAZ nach Bauart
+            </h4>
+            <span className="text-xs text-gray-400 dark:text-gray-500">
+              ({fmtZahl(artAnzahl, 0)} {artAnzahl === 1 ? 'Anlage' : 'Anlagen'})
+            </span>
+          </div>
+          <div className="h-56">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={artData} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} horizontal={false} />
+                <XAxis type="number" tick={ACHSEN_TICK} tickFormatter={(v) => fmtZahl(v, 2)} /* achsen-allow: Wert-Achse waagerecht (JAZ), Format pro Tick (de-DE) */ />
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  tick={ACHSEN_TICK}
+                  width={schmal ? 88 : 116}
+                  /* achsen-allow: Kategorie-Namen */
+                />
+                <Tooltip content={<ChartTooltip formatter={(value) => `JAZ: ${fmtZahl(value, 2)}`} />} />
+                <Bar dataKey="jaz" radius={[0, 2, 2, 0]}>
+                  {artData.map((entry, index) => (
+                    <Cell
+                      key={`art-${index}`}
+                      fill={entry.wp_art === benchmark.anlage.wp_art ? EIGENE_SERIE_FARBEN.du : achsen.referenz}
+                    />
+                  ))}
+                  <LabelList
+                    dataKey="jaz"
+                    position="right"
+                    formatter={(value: number) => fmtZahl(value, 2)}
+                    style={{ fill: achsen.achse, fontSize: 11 }}
+                  />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+            Jede Bauart erreicht andere Arbeitszahlen — die Kachel oben vergleicht dich
+            deshalb nur mit deiner eigenen.
+          </p>
+        </div>
+        </Parkbar>
+      )}
 
       {/* Community Wärmepumpen nach Region - nur bei mehreren Regionen sinnvoll */}
       {regionData.length > 0 && (

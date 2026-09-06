@@ -92,13 +92,13 @@ function CommunityKomponentenInner({ benchmark, loading, error }: Props) {
       defaultOpen: naechsterDefaultOpen(),
       render: () => <BKWDeepDive benchmark={benchmark} />,
     } : null,
-    d.verfuegbareKomponenten.includes('waermepumpe') && wp && !alleGeparkt(waermepumpeParkIds(benchmark, d.wpByRegion)) ? {
+    d.verfuegbareKomponenten.includes('waermepumpe') && wp && !alleGeparkt(waermepumpeParkIds(benchmark, d.wpByRegion, d.wpByArt)) ? {
       id: 'waermepumpe', ...ident('waermepumpe'),
       summary: 'Effizienz-Analyse',
       badge: wp.jaz?.rang && wp.jaz.von
         ? <RangBadge rang={wp.jaz.rang} von={wp.jaz.von} /> : undefined,
       defaultOpen: naechsterDefaultOpen(),
-      render: () => <WaermepumpeDeepDive benchmark={benchmark} communityStats={d.wpByRegion} />,
+      render: () => <WaermepumpeDeepDive benchmark={benchmark} communityStats={d.wpByRegion} artStats={d.wpByArt} />,
     } : null,
     d.verfuegbareKomponenten.includes('wallbox') && wallbox && !alleGeparkt(wallboxParkIds(benchmark)) ? {
       id: 'wallbox', ...ident('wallbox'),

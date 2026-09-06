@@ -482,11 +482,38 @@ def _monatswert(
         # SoT-Aufruf. `zeitraum_versetzt` gehört nicht dazu: Der Payload liest
         # eine Quelle (die Monats-Fakten), Q und E stammen aus demselben
         # Zeitraum.
-        monatswert_data["wp_jaz_belastbar"] = abgrenzungs_grund(
-            abgrenzung_stoerung=wp.abgrenzung_stoerung,
-            bauarten_gemischt=wp.bauarten_gemischt,
-            geraete_ohne_waerme=wp.waerme_deckt_nicht_alle_geraete,
-        ) is None
+        #
+        # ⭐ **ZWEITE HÄLFTE (06.09.2026, rapahl per PN):** `abgrenzungs_grund`
+        # allein ist NICHT die ganze Sperre. Es gibt zwei Gründe, aus denen
+        # lokal keine Arbeitszahl entsteht, und dieser Payload kannte nur einen:
+        #
+        #   • **Abgrenzung** — Q und E messen verschiedene Dinge (die drei Lagen
+        #     oben). Antwort: `abgrenzungs_grund(...) is None`.
+        #   • **Herkunft** — die Wärme ist *gerechnet*, nicht gemessen
+        #     (`Strom × gepflegte JAZ`, kein Wärmemengenzähler). Antwort:
+        #     `WpFakten.jaz_belastbar`, also `waerme_abgeleitet_kwh <= 0`.
+        #
+        # `arbeitszahl()` sperrt beide hart (`waermepumpe_kennzahl.py`:
+        # „Wärme ist gerechnet, nicht gemessen"). Der Payload meldete den
+        # zweiten Fall als **belastbar** — und damit ging eine Zahl in fünf
+        # Server-Vergleichswerte ein, die gar keine Messung ist: Wärme aus
+        # `Strom × JAZ` geteilt durch denselben Strom ergibt **exakt die
+        # gepflegte JAZ** zurück. Der Community-Schnitt spiegelte an dieser
+        # Stelle ein Einstellungsfeld. Wir haben die Zahl dem Besitzer
+        # verweigert und sie allen anderen gemeldet.
+        #
+        # ⛔ Wieder nur die **Kennzahl**, nie die **Mengen** (E1): Strom,
+        # Heizwärme und Warmwasser bleiben additiv richtig und werden weiter
+        # gesendet — auch der abgeleitete Anteil, denn als *Menge* ist er die
+        # beste verfügbare Auskunft.
+        monatswert_data["wp_jaz_belastbar"] = (
+            abgrenzungs_grund(
+                abgrenzung_stoerung=wp.abgrenzung_stoerung,
+                bauarten_gemischt=wp.bauarten_gemischt,
+                geraete_ohne_waerme=wp.waerme_deckt_nicht_alle_geraete,
+            ) is None
+            and wp.jaz_belastbar
+        )
         # **W-14 — der Server bekommt die Größe, weil er sie selbst nicht bilden kann.**
         # ⛔ **Hier stand bis zum 02.09.2026 „Der Server rechnet nichts nach, also
         # bekommt er die Größe."** Das ist falsch und war es immer: Er rechnet an

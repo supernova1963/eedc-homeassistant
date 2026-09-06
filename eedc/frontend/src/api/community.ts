@@ -6,7 +6,8 @@ import { api } from './client'
 import { DEMO_DEFAULT } from '../lib/flags'
 import {
   demoBenchmark, demoDistribution, demoMonthlyAverages,
-  demoSpeicherByClass, demoWaermepumpeByRegion, demoEAutoByUsage,
+  demoSpeicherByClass, demoWaermepumpeByArt,
+  demoWaermepumpeByRegion, demoEAutoByUsage,
   demoRegionalStatistics, demoTrends, demoDegradation,
   demoGlobalStatistics, demoRanking,
 } from './communityDemo'
@@ -384,6 +385,26 @@ export interface WPByRegion {
   regionen: WPRegion[]
 }
 
+/**
+ * Ein Bauart-Segment des Community-Vergleichs.
+ *
+ * ⭐ Der Server liefert das seit Langem (`/components/waermepumpe/by-art`,
+ * Docstring dort: „Ermoeglicht fairen Vergleich"). Bis zum 06.09.2026 hatte
+ * der Endpunkt **keinen einzigen Konsumenten** im Client — waehrend der
+ * Regionalbalken daneben Luft-Wasser, Sole-Wasser und Luft-Luft in dieselben
+ * Werte warf. Gemeldet von rapahl (PN 92196).
+ */
+export interface WPArtStats {
+  wp_art: string
+  label: string
+  anzahl: number
+  durchschnitt_jaz: number | null
+}
+
+export interface WPByArt {
+  arten: WPArtStats[]
+}
+
 export interface EAutoKlasse {
   klasse: string
   beschreibung: string
@@ -596,6 +617,18 @@ export const communityApi = {
   async getWaermepumpeByRegion(): Promise<WPByRegion> {
     if (DEMO_DEFAULT) return Promise.resolve(demoWaermepumpeByRegion())
     return api.get<WPByRegion>('/community/components/waermepumpe/by-region')
+  },
+
+  /**
+   * Waermepumpen-Statistiken nach BAUART — der faire Vergleich.
+   *
+   * Eine Luft-Wasser-Waermepumpe erreicht bauartbedingt andere Arbeitszahlen
+   * als eine Sole-Wasser-Anlage; eine Split-Klimaanlage wieder andere. Wer sie
+   * in einen Topf wirft, vergleicht die Physik, nicht die Anlage.
+   */
+  async getWaermepumpeByArt(): Promise<WPByArt> {
+    if (DEMO_DEFAULT) return Promise.resolve(demoWaermepumpeByArt())
+    return api.get<WPByArt>('/community/components/waermepumpe/by-art')
   },
 
   /**
