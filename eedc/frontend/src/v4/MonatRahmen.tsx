@@ -6,20 +6,23 @@
  *   + Quellen-Provenance-Badges aus `feld_quellen`).
  * - {@link finanzTeaserBlock}: Finanz-Teaser-Block — Netto-Ertrag + Aufschlüsselung
  *   + Cross-Link „volle Finanzrechnung →" nach Auswertungen (T-Konto lebt dort, B5/F2-a).
- * - {@link communityBlock}: Community-Vergleich, data-gated (nur wenn Anlagen im
- *   Monat vorhanden, O4).
+ *
+ * ⛔ Hier stand bis zum 2026-09-06 ein dritter Baustein, `communityBlock` (Community-
+ * Vergleich als Block, O4). `748849b2` (20.06., Gernot-Feintuning „Cockpit/Monat
+ * Block-Straffung") hat ihn aus der Sicht genommen und durch einen Cross-Link ersetzt;
+ * auch dieser Ersatz existiert nicht mehr, seit die Community mit v4.0.0 ihre eigene
+ * Achse hat. Die Funktion blieb **78 Tage als toter Export mit fünf Testfällen** stehen —
+ * gefunden hat sie `check:park-gate` bei seinem ersten Lauf (sie trug kein Park-Gate),
+ * gelöscht auf Entscheid Gernot.
  */
 import { ArrowRight, CalendarClock } from 'lucide-react'
 import { ReloadButton } from './ReloadButton'
 import { fmtCalc } from '../components/ui'
-import { Table, TableHead, TableBody } from '../components/ui/Table'
-import { ZELLE, KOPF_ZELLE } from '../components/ui/tabelleMasse'
 import { KomponentenFinanzTabelle, komponentenFinanzSaldo } from '../components/finanzen/KomponentenFinanzTabelle'
-import { BLOCK_IDENTITAET, VERGLEICH_BADGE, LAUFEND_ZUSTAND } from '../lib'
+import { BLOCK_IDENTITAET, LAUFEND_ZUSTAND } from '../lib'
 import type { Block } from '../components/blocks'
 import { Parkbar, NOOP_PARK, type ParkApi } from '../components/park'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
-import type { MonatsVergleich } from '../api/community'
 import { provenanzQuellen, ProvenanzQuellenZeile } from './ProvenanzQuellen'
 
 const euro = (v: number | null | undefined) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${fmtCalc(v, 2)} €`)
@@ -120,96 +123,6 @@ export function finanzTeaserBlock(d: AktuellerMonatResponse, park: ParkApi = NOO
           </div>
         </Parkbar>
       </div>
-    ),
-  }
-}
-
-/**
- * Community-Block (O4) — nur wenn Anlagen im Monat vorhanden (data-gated).
- *
- * ⛔ **Ohne Park-Gate, und in `scripts/park-gate-allowlist.json` eingetragen — weil die
- * Funktion seit dem 2026-06-20 KEINEN Aufrufer mehr hat.** `748849b2` („Cockpit/Monat
- * Block-Straffung", Gernot-Feintuning) hat den Block aus `CockpitMonatV4` entfernt und
- * durch einen Cross-Link ersetzt; auch dieser Ersatz (`communityNudgeText`) existiert
- * heute nicht mehr — die Community hat mit v4.0.0 ihre eigene Achse bekommen.
- *
- * Gefunden von `check:park-gate` bei seinem ersten Lauf (2026-09-06). Ein Gate in eine
- * tote Funktion zu bauen wäre die Pseudo-Lösung: richtig ist, sie samt ihrer fünf
- * Testfälle zu löschen. **Das ist eine Entscheidung des Maintainers und liegt ihm vor** —
- * mit ihr fällt dieser Kommentar und der Allowlist-Eintrag.
- */
-export function communityBlock(
-  vergleich: MonatsVergleich,
-  d: AktuellerMonatResponse,
-  monatName: string,
-  jahr: number,
-): Block | null {
-  if (!vergleich || vergleich.anzahl_anlagen <= 0) return null
-  const anlagenWort = `${vergleich.anzahl_anlagen} Anlage${vergleich.anzahl_anlagen !== 1 ? 'n' : ''}`
-  // Spez.-Ertrag-Abweichung zum Community-Median — periodenkorrekt (Monats-Median),
-  // gleiche Basis wie der Vergleich (anlage.leistung_kwp). KEIN periodenfalscher Rang;
-  // ein echter periodenbezogener Rang ist als eedc-community-Erweiterung getrackt (#338).
-  const eigenSpez = d.spez_ertrag
-  const medianSpez = vergleich.spez_ertrag?.median
-  const vz = (v: number) => (v > 0 ? '+' : '')
-  const spezText =
-    eigenSpez != null && medianSpez != null && medianSpez > 0
-      ? ` · spez. Ertrag ${fmtCalc(eigenSpez, 0)} kWh/kWp (${vz(eigenSpez - medianSpez)}${fmtCalc(eigenSpez - medianSpez, 0)} / ${vz(((eigenSpez - medianSpez) / medianSpez) * 100)}${fmtCalc(((eigenSpez - medianSpez) / medianSpez) * 100, 0)} % vs. Median)`
-      : ''
-  // inv = „niedriger ist besser" (nur Netzbezug); steuert das ▲▼-Vergleichs-Badge (A2, wie IST).
-  // B2/S14 (R3b E2): transponierte Tabelle → Einheit genau EINMAL je Zeile am
-  // Zeilen-Label „Kennzahl (Einheit)", nicht in jeder Wertzelle (`unit` bleibt
-  // für die Dezimal-Logik erhalten).
-  const zeilen: { label: string; du: number | null | undefined; median: number | null | undefined; unit: string; inv?: boolean }[] = [
-    { label: 'Autarkie (%)',        du: d.autarkie_prozent,            median: vergleich.autarkie?.median,     unit: '%' },
-    { label: 'Eigenverbrauch (%)',  du: d.eigenverbrauch_quote_prozent, median: vergleich.eigenverbrauch?.median, unit: '%' },
-    { label: 'Einspeisung (kWh)',   du: d.einspeisung_kwh,             median: vergleich.einspeisung?.median,   unit: 'kWh' },
-    { label: 'Netzbezug (kWh)',     du: d.netzbezug_kwh,               median: vergleich.netzbezug?.median,     unit: 'kWh', inv: true },
-  ]
-  const fmt = (v: number | null | undefined, unit: string) => (v == null ? '—' : fmtCalc(v, unit === '%' ? 1 : 0))
-  return {
-    id: 'community',
-    title: 'Community-Vergleich',
-    ...BLOCK_IDENTITAET.community,
-    summary: `${anlagenWort} im ${monatName}${spezText}`,
-    defaultOpen: false,
-    render: () => (
-      <Parkbar id="el:community-tabelle" titel="Community-Vergleich">
-      <Table flaeche="karte">
-          <TableHead>
-            <tr className="text-left text-xs text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
-              <th className={`${KOPF_ZELLE} text-left`}><span className="sr-only">Kennzahl</span></th>
-              <th className={`${KOPF_ZELLE} text-right`}>Deine Anlage</th>
-              <th className={`${KOPF_ZELLE} text-right`}>Ø Community (Median)</th>
-              <th className={`${KOPF_ZELLE} text-right`}><span className="sr-only">Vergleich</span></th>
-            </tr>
-          </TableHead>
-          <TableBody>
-            {zeilen.map((z) => (
-              <tr key={z.label} className="border-b border-gray-100 dark:border-gray-800 last:border-0">
-                <td className={`${ZELLE} text-gray-600 dark:text-gray-400`}>{z.label}</td>
-                <td className={`${ZELLE} text-right tabular-nums font-semibold text-gray-900 dark:text-white`}>{fmt(z.du, z.unit)}</td>
-                <td className={`${ZELLE} text-right tabular-nums text-gray-500 dark:text-gray-400`}>{fmt(z.median, z.unit)}</td>
-                <td className={`${ZELLE} text-right`}>
-                  {z.du != null && z.median != null && (() => {
-                    const better = z.inv ? z.du <= z.median : z.du >= z.median
-                    return (
-                      <span className={`text-xs font-medium px-1 py-0.5 rounded-full ${
-                        better ? VERGLEICH_BADGE.besser : VERGLEICH_BADGE.schlechter
-                      }`}>
-                        {better ? '▲' : '▼'}
-                      </span>
-                    )
-                  })()}
-                </td>
-              </tr>
-            ))}
-          </TableBody>
-        </Table>
-        <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
-          Basis: {anlagenWort} · {monatName} {jahr}
-        </p>
-      </Parkbar>
     ),
   }
 }
