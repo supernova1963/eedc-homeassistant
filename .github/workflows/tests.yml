@@ -91,7 +91,15 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        # ⭐ `@v5`, nicht `@v4` (06.09.2026): v4 laeuft selbst auf der
+        # Node-20-Runtime, die GitHub abgekuendigt hat — daher die Annotation
+        # „Node.js 20 is deprecated … forced to run on Node.js 24" bei jedem Lauf.
+        # ⛔ `node-version: '20'` bleibt bewusst unveraendert: Sie bestimmt die
+        # Node-Version fuer npm/vitest, NICHT die Runtime der Action. Beidseitig
+        # gemessen — `deploy-website.yml` faehrt `@v5` MIT `node-version: 20` und
+        # hat KEINE Annotation. Wer beides zusammen anfasst, aendert ohne Not die
+        # Testumgebung und weiss hinterher nicht, welche Haelfte gewirkt hat.
+        uses: actions/setup-node@v5
         with:
           node-version: '20'
           cache: 'npm'
