@@ -16,6 +16,7 @@ import {
   Ausstattungsquoten,
   Top10Bestenliste,
   STAT_PARK_IDS,
+  top10ParkIds,
 } from '../pages/community/CommunityStatistikenTeile'
 
 type Props = {
@@ -68,7 +69,7 @@ function CommunityStatistikenInner({ benchmark, loading, error }: Props) {
       defaultOpen: false,
       render: () => <Ausstattungsquoten globalStats={d.globalStats!} />,
     } : null,
-    d.ranking && d.ranking.ranking.length > 0 && !alleGeparkt(STAT_PARK_IDS.top10) ? {
+    d.ranking && d.ranking.ranking.length > 0 && !alleGeparkt(top10ParkIds(d.ranking)) ? {
       id: 'top10', title: 'Top 10 – Spezifischer Ertrag', icon: Award, farbe: 'text-yellow-500',
       defaultOpen: false,
       render: () => <Top10Bestenliste ranking={d.ranking!} />,

@@ -4,15 +4,17 @@ import { Users } from 'lucide-react'
 import EmptyState from './EmptyState'
 import FehlerZustand from './FehlerZustand'
 
-// N-318 (2026-08-23): `check:park-leertest` unterscheidet „hier ist nichts zu messen, und
-// die Sicht sagt warum" von „hier wurde nichts gemessen" — und zwar am DOM-Merkmal
-// `data-leer-erklaert`, nicht an einer gepflegten Sichtenliste. Damit ist das Attribut ein
-// VERTRAG zwischen Produkt und Laufzeit-Gate: Fällt es weg, meldet das Gate eine legitim
-// leere Sicht als Befund (oder — schlimmer — es fehlt bei einer neuen SoT-Erklärung und der
-// Lauf wird grundlos rot). Ein Laufzeit-Gate kann das nicht schützen: Es bemerkt den Verlust
-// nur, wenn zufällig gerade eine Sicht legitim leer ist. Deshalb hier.
+// N-318 (2026-08-23): Das DOM-Merkmal `data-leer-erklaert` unterscheidet „hier ist nichts
+// zu messen, und die Sicht sagt warum" von „hier wurde nichts gemessen" — an der Sicht
+// selbst, nicht an einer gepflegten Sichtenliste.
+//
+// ⚠ **Sein damaliger Leser, `check:park-leertest`, ist am 2026-09-06 entfallen** (ersetzt
+// durch die Quelltext-Wächter `check:park-gate` + `check:park-idliste`). Diese Probe misst
+// seither nur noch die SEMANTIK der Komponente: eine erklärte Leere trägt das Merkmal, ein
+// FEHLER nicht — ein Fehler erklärt keine legitime Leere. Das bleibt richtig und prüfbar
+// ohne den Prüfer, der es einmal gelesen hat.
 describe('EmptyState (SoT „Leere Sichten erklären sich", v4.0.4)', () => {
-  it('trägt das Merkmal `data-leer-erklaert` (Vertrag mit check:park-leertest)', () => {
+  it('trägt das Merkmal `data-leer-erklaert`', () => {
     const { container } = render(
       <EmptyState icon={Users} title="Teile erst deine Daten" description="Grund steht hier." />,
     )

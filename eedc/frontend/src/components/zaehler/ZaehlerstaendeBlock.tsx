@@ -55,8 +55,27 @@ export function useZaehlerstaende(
   return staende
 }
 
-/** Die zwei Park-IDs dieses Blocks — eine je atomarer Anzeige. */
-export const ZAEHLER_PARK_IDS = ['el:zaehlerstaende', 'el:zaehlerstaende-verlauf'] as const
+/**
+ * Die Park-IDs, die dieser Block bei DIESEN Daten wirklich rendert (2026-09-06).
+ *
+ * ⛔ Bis dahin gatete Cockpit Tag/Monat/Jahr mit einer FESTEN Zwei-Element-Liste
+ * (`ZAEHLER_PARK_IDS`, hier ersatzlos entfallen).
+ * Der Verlauf entsteht aber erst ab dem **zweiten** Messpunkt (`verlauf.length > 1`).
+ * Wer einen frisch gepflegten Zähler hat, sah nur die Tabelle — parkte er sie, blieb
+ * `alleGeparkt` bei `false` (die nie gerenderte Verlauf-ID war nicht geparkt), und der
+ * Block „Zählerstände" stand **leer mit Titel und Summary** im Bild.
+ *
+ * Dieselbe Klasse wie `ueb-schwaechen` bei „3 Stärken · 0 Potenzial" (Gernot 2026-07-09) —
+ * gefunden von `check:park-idliste` (Regel L2), nicht vom Laufzeit-Leertest: dessen
+ * Demo-Datensatz trägt einen Verlauf, also konnte er den Fall nie sehen.
+ */
+export function zaehlerParkIds(staende: ZaehlerStand[]): string[] {
+  if (staende.length === 0) return []
+  return [
+    'el:zaehlerstaende',
+    ...(staende.some((z) => z.verlauf.length > 1) ? ['el:zaehlerstaende-verlauf'] : []),
+  ]
+}
 
 export default function ZaehlerstaendeBlock({
   staende,

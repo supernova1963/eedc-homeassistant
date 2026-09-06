@@ -10,8 +10,8 @@
  * `DEMO_DEFAULT` startet datenlose Echtzeit-Sichten (Cockpit/Live) direkt im
  * Demo-Modus + macht den Demo-Schalter sichtbar. Gedacht für Builds ohne echte
  * HA-/MQTT-Live-Quelle: die **Dev-Box** (Rebuild immer mit `VITE_DEMO_DEFAULT=true`)
- * und `npm run check:park-leertest`, der ohne das Flag keine Live-Sichten prüfen
- * kann. Produktiv bleibt es ungesetzt → Live verhält sich wie bisher (Demo nur via
+ * und `npm run check:chart-audit`, der ohne das Flag nicht alle Charts sieht (gemessen
+ * 2026-08-27: 37 statt 44). Produktiv bleibt es ungesetzt → Live verhält sich wie bisher (Demo nur via
  * `?debug` + Klick). Der frühere Setzer `scripts/deploy-guest.sh` ist mit der
  * Stilllegung der Guest-Box (2026-07) entfallen.
  */

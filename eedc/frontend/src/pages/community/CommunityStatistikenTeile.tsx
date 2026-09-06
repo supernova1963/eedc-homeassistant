@@ -46,8 +46,25 @@ export const STAT_PARK_IDS = {
     'stat-quote-speicher', 'stat-quote-bkw', 'stat-quote-wp', 'stat-quote-wallbox', 'stat-quote-eauto',
     'stat-typische',
   ],
-  top10: ['stat-top10-tabelle', 'stat-top10-eigener'],
+  top10: ['stat-top10-tabelle'],
 } as const
+
+/**
+ * Die Park-IDs der Top-10-Sektion bei DIESEN Daten (2026-09-06).
+ *
+ * ⛔ Bis dahin stand `stat-top10-eigener` FEST in `STAT_PARK_IDS.top10` — die Karte „Dein
+ * Rang" rendert {@link Top10Bestenliste} aber nur mit `ranking.eigener_rang`, also nur für
+ * Anlagen, die es in die Top 10 geschafft haben. Für alle anderen — der Normalfall — wurde
+ * `alleGeparkt` nie wahr: wer die Tabelle parkte, behielt den Block „Top 10 – Spezifischer
+ * Ertrag" **leer** im Bild.
+ *
+ * Dieselbe Klasse wie `ueb-schwaechen` (Gernot 2026-07-09) und wie die Zählerstände ohne
+ * Verlauf; beide gefunden von `check:park-idliste` (Regel L2). Der Laufzeit-Leertest hat
+ * `#/community/statistiken` nie besucht.
+ */
+export function top10ParkIds(ranking: Ranking): string[] {
+  return [...STAT_PARK_IDS.top10, ...(ranking.eigener_rang ? ['stat-top10-eigener'] : [])]
+}
 
 export interface CommunityStat {
   anzahlAnlagen: number

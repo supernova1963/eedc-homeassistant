@@ -99,25 +99,12 @@ cd eedc/frontend && npm run test              # faehrt seit E8/M14 ALLE 25 Quell
 # haelt `src/test/check-einhaengung.test.ts` fest (er meldet rot, sobald einer von `npm test`
 # aus nicht mehr erreichbar ist). Ein rot gemeldeter Pruefer wird im Vitest-Protokoll beim
 # Namen genannt — die Schleife lieferte nichts, was dort fehlt.
-# Ausgenommen bleiben `park-leertest` und `chart-audit`: sie brauchen eine laufende Box und
-# stehen im eigenen Kasten unter der Liste.
-
-# Braucht dieses Paket den Park-Livetest? (Auslöser statt Takt — s. Kasten unten)
-# ⛔ Seit 24.08. (Gernot) zählt das HINZUFÜGEN eines Park-Elements, nicht das blosse
-#   VORKOMMEN eines Park-Bezeichners. Testdateien und Kommentare zählen nicht.
-# ⛔ Der frühere EINZEILER an dieser Stelle maß etwas anderes als die Regel sagt und ist
-#   am 02.09. durch das Skript ersetzt: Er zählte Park-Bezeichner in **hinzugefügten
-#   Diff-Zeilen** — und eine GEÄNDERTE Zeile ist im Diff eine hinzugefügte. Über die
-#   letzten 150 Commits gemessen: **3 Auslösungen, alle 3 falsch, null echte.** An den
-#   drei historischen Belegfällen liefert das Skript exakt dieselben Werte (5/0/0), es
-#   verliert also keine Deckung. **Dritte Runde derselben Klasse** — 1. Fassung Ermessen,
-#   2. „Datei enthält", 3. „Zeile enthält", jetzt: die MENGE der Park-Elemente wächst.
-# ⚠ Basis ist HEAD, NICHT origin/main: Gates laufen VOR dem Commit, und `origin/main` würde
-#   alle bereits geprüften ungepushten Commits mitschleppen (am 23.08. beim Bau der Regel selbst
-#   passiert — sie meldete eine Park-Berührung aus `566635a2` für ein reines Doku-Paket).
-#   Umfasst das Paket schon Commits, entsprechend `HEAD~n` als Argument übergeben.
-cd /home/gernot/claude/eedc-homeassistant
-./scripts/park-ausloeser.sh          # Exit 1 ⇒ Park-Leertest fahren; Exit 0 ⇒ nicht fällig
+# Ausgenommen bleibt `chart-audit`: er braucht eine laufende Box und steht im eigenen
+# Kasten unter der Liste.
+# ⭐ Seit 06.09. gilt das NUR NOCH FUER IHN. Die Park-Doktrin haengt an keinem Livetest mehr:
+#   `check:park-gate` und `check:park-idliste` pruefen sie am Quelltext und laufen mit
+#   `npm run test`. Der frueher hier stehende Auslöser-Block (Skript `park-ausloeser.sh`)
+#   ist damit ersatzlos entfallen — es gibt nichts mehr auszuloesen.
 
 # Doku-Spiegel ans ENDE, danach inhaltlich per diff prüfen (nicht nur Exit-Code)
 ./scripts/sync-help.sh && cd website && npm run build
@@ -174,50 +161,54 @@ cd /home/gernot/claude/eedc-homeassistant
 
 Die Soll-Zahlen (pytest/Vitest) stehen **nicht hier**, sondern im laufenden Master-Register unter `~/.claude/plans/` — sie ändern sich mit jedem Paket. `check:form-controls` meldet „1 offen (WelcomeStep.tsx)" als dokumentierte Baseline.
 
-**`check:park-leertest` läuft am AUSLÖSER, nicht am Takt** (Entscheid Gernot 23.08.). Er ist ein Playwright-Livetest gegen eine laufende Box und verlangt ein `VITE_DEMO_DEFAULT=true`-Build (Runbook: `~/.claude/plans/runbook-dev-box.md`); seit dem 14.08. grün und keine Baseline mehr.
-
-**Die Regel (verschärft am 24.08., Entscheid Gernot):** Er läuft, wenn das Paket ein **Park-Element hinzufügt** — eine **hinzugefügte** Zeile unter `eedc/frontend/src`, die `data-park-id=`, `<FokusKachel` oder `<Parkbar` enthält, **ohne** Testdateien und **ohne** Kommentarzeilen (Einzeiler oben im Gate-Block; Basis ist `HEAD`, nicht `origin/main`) — **und vor jedem Release**. Sonst nicht, und das braucht dann auch keine Begründung mehr.
-
-> **Warum die zweite Fassung fiel — gemessen 24.08.** Die alte Regel fragte, ob eine geänderte Datei einen Park-Bezeichner **enthält**. Über die letzten **40 Commits** hätte sie **fünfmal** ausgelöst: **zweimal auf reine Testdateien** (`src/test/check-parkbar*.test.ts`, `CockpitJahrV4.test.tsx` — eine Testdatei kann das Laufzeitverhalten des Parks nicht brechen), dreimal auf Produktivdateien, die eine Park-ID nur *enthalten*. **In keinem einzigen der fünf Fälle kam ein Park-Element dazu.** Der teuerste Einzelprüfer des Projekts lief also fünfmal für nichts. Die neue Regel feuert über **150 Commits fünfmal**, alle zwischen dem 15. und 20.08. und alle auf echter Park-Arbeit. Gernots Begründung, die das trägt: *„wenn sie einmal eine entsprechende ID haben und einmal geprüft wurde, ob der Block nicht mehr angezeigt wird, wenn alle der ihm zugeordneten Elemente geparkt sind"* — eine bestehende, unveränderte Park-ID ist bereits geprüft.
-
-> **Warum die alte Fassung fiel:** Sie machte ihn zur Pflicht mit Begründungszwang („wer ihn nicht fährt, sagt das ausdrücklich"). Das ist bei **jedem** Commit eine Ermessensfrage — und mit **188 s der teuerste Einzelprüfer** überhaupt, teurer als ein kompletter pytest-Lauf (gemessen 23.08.). Sein eigener Docstring nennt ihn ausdrücklich „**Kein CI-Pflichtlauf — Dev-Box-Kommando**"; die Regel war strenger als der Prüfer sich selbst versteht. Der Auslöser ist mechanisch entscheidbar statt Ermessen. ⚠ **Die damalige Gegenprobe war halb falsch, gemessen 24.08.:** sie nannte `ef19173d` als Positivbeispiel („meldet fahren"). Dieser Commit fügt **null** Park-Zeilen hinzu, nicht einmal eine im Kommentar — er berührt nur eine Datei, die eine Park-ID *enthält*. **Ein Positivbeispiel, das selbst eine Falschauslösung war**, hat die Regel achtzehn Tage lang bestätigt. Beidseitige Gegenprobe zur heutigen Fassung: `0327416c` (Park-Fix) meldet **5** hinzugefügte Park-Zeilen ⇒ fahren, `e53af679` (nur Testdateien) und `ef19173d` melden **0** ⇒ nicht nötig.
+> ### ⛔ Der Park-Leertest ist abgeschafft — die Doktrin läuft jetzt VOR dem Commit (Entscheid Gernot, 06.09.)
 >
-> ⚠ **Was er als EINZIGER fängt, bleibt damit gedeckt:** `check:parkbar` (Atomarität) und `check:parkbar-vollstaendig` (Vollständigkeit) sehen nur den **Quelltext**. Drei Klassen entstehen erst zur Laufzeit — Block ohne Auto-Hide-Gate · statische Park-ID-Liste driftet von den real gerenderten IDs · leere Container-Hülle (`FokusKachel`), die sich nicht selbst versteckt. **Dafür gibt es keinen Ersatz.** Wer die Auslöser-Liste kürzt, streicht diese Deckung mit.
-
-**`check:chart-audit`** (35 s) braucht dieselbe Box. Er ist an kein Auslöser-Muster gebunden — wer ihn nicht fährt, sagt das ausdrücklich.
-
-> **Warum die DRITTE Fassung fiel — gemessen 02.09., ausgelöst durch Gernots Frage.** Ich hatte
-> den Treffer des Einzeilers mit einer Begründung abgetan (*„die Park-ID ist unverändert"*) — also
-> per **Ermessen**, genau dem, was diese Regel seit der ersten Fassung abschaffen soll. Seine
-> Rückfrage: *„Willst du dem nicht nachgehen?"*
+> **`check:park-leertest` gibt es nicht mehr**, ebenso wenig `scripts/park-ausloeser.sh` und die
+> Auslöser-Regel. An seiner Stelle stehen zwei Quelltext-Wächter, die mit `npm run test` laufen:
 >
-> **Der Befund lag am Prüfer, nicht am Paket.** Die Regel sagt seit dem 24.08. „das HINZUFÜGEN
-> zählt"; der Einzeiler zählte Park-Bezeichner in **hinzugefügten Diff-Zeilen** — und eine
-> *geänderte* Zeile ist im Diff eine hinzugefügte. Ein Paket, das an einer bestehenden
-> `<Parkbar id="chart:wp-vergleich">` nur ein Prop der Kind-Komponente ergänzt, meldete „fahren",
-> obwohl die Park-ID-Menge der Datei **bitgleich** blieb (fünf IDs vorher, dieselben fünf nachher).
+> | Wächter | Regel |
+> | --- | --- |
+> | **`check:park-gate`** | **R1** jeder Block, der Park-Elemente rendert, hängt gegated im Bau · **R2** jede `<FokusKachel>` mit parkbaren Kindern versteckt sich bei Voll-Park |
+> | **`check:park-idliste`** | **L1** jede ID einer Gate-Liste hat eine Erzeugungsstelle · **L2** eine ID in einer FEST deklarierten Liste wird auch unbedingt gerendert |
 >
-> ⭐ **Dritte Runde derselben Klasse, jedes Mal eine Ebene tiefer:** 1. Fassung *Pflicht mit
-> Begründungszwang* (Ermessen bei jedem Commit) → 2. *„Datei **enthält** einen Bezeichner"* → 3.
-> *„geänderte **Zeile** enthält einen"* → jetzt *die **Menge** der Park-Elemente wächst*. Die
-> Gegenprobe der 3. Fassung hat es nicht gefangen, weil unter ihren drei Beispielen keine geänderte
-> Zeile mit bestehender Park-ID war — **eine Gegenprobe prüft nur die Fälle, die sie kennt.**
+> **Was ihn gekippt hat, ist er selbst.** Am 06.09. meldete er **grün über ein Park-Element, das er
+> nie gesehen hat** (`komp-wp-chart-bauart` auf `#/community/komponenten` — eine Sicht, die in seiner
+> `ROUTES`-Liste fehlte). Gemessen: er besuchte **eine** der **sechs** Community-Sichten, während
+> **12 der 17** Auto-Hide-Dateien dort liegen. *Er vermied eine gepflegte ID-Liste und pflegte dafür
+> eine Routen-Liste — dieselbe Drift, eine Ebene höher.*
 >
-> **Gemessen, beidseitig:** Über die letzten **150 Commits** löst die alte Fassung **dreimal** aus —
-> **alle drei falsch, null echte** (`3efc19c5`, `f2c5b747`, `530996f5`; alle dieselbe Bauform, ein
-> Prop an einer bestehenden `<Parkbar>`). An den **drei historischen Belegfällen** liefert das neue
-> Skript **exakt dieselben** Werte wie die alte Regel — `0327416c` **5**, `e53af679` **0**,
-> `ef19173d` **0** —, es verliert also keine Deckung und diskriminiert nur schärfer.
+> ⭐ **Der Ersatz hat beim ersten Lauf drei Befunde gefunden, die der Livetest nie fand** — zwei
+> davon treffen Anwender: die **Zählerstände** ohne Verlauf (Cockpit Tag/Monat/Jahr; sein
+> Demo-Datensatz *trägt* einen Verlauf, er konnte den Fall strukturell nicht sehen) und die
+> **Top-10-Liste** für jeden, der nicht in den Top 10 steht (`#/community/statistiken`, eine der
+> fünf Sichten, die er nie besuchte). Beide sind die Klasse `ueb-schwaechen`: eine feste Liste
+> verlangt eine ID, die nur bedingt gerendert wird ⇒ `alleGeparkt` wird nie wahr ⇒ leerer Block.
 >
-> ⛔ **Und was es NICHT ist** (Gernots Rückfrage beim Bau): keine Regel „jedes Element muss parkbar
-> sein". Der Auslöser entscheidet, **wann geprüft** wird, nie was erlaubt ist. `<FokusKachel` ohne
-> Park-ID zählt mit, weil sie als Container-Hülle genau die Klasse trägt, die **nur** der Leertest
-> fängt — sieben davon stehen im Baum und sind alle richtig. Gegenüber der alten Fassung ist das
-> sogar **milder**: sie zählte jedes Vorkommen, das Skript verlangt einen **Zuwachs**.
+> ⚠ **Die ehrliche Grenze, die dazugehört:** Ein Quelltext-Wächter sieht keine Render-Geometrie.
+> Bleibt ein Block leer, weil eine Kind-Komponente unter bestimmten Daten nichts *zeichnet*, obwohl
+> ihre IDs registriert sind, fängt ihn keiner der beiden. Dafür stehen die Render-Proben
+> (`src/test/park-huelle-leer.test.tsx`, `pages/community/waermepumpeBauartVergleich.test.tsx`) —
+> die decken ab, wofür jemand eine Probe schreibt, nicht den ganzen Baum. **Der Tausch ist
+> trotzdem ein Gewinn, und zwar gemessen:** eine von sechs Community-Sichten und fünf Läufe in 150
+> Commits gegen baumweite Deckung bei jedem `npm test`.
+>
+> ⛔ **Nicht neu aufrollen** — weder den Livetest zurückholen noch eine Auslöser-Regel bauen. Wer
+> es doch will, bringt einen **Fall** mit, den die vier Wächter nicht sehen. Die Vorgeschichte der
+> vier gefallenen Auslöser-Fassungen (Ermessen → „Datei enthält" → „Zeile enthält" → „Menge wächst")
+> steht in `~/.claude/plans/EINSTIEG-archiv-bis-v4.0.39.md` und im Journal; sie ist mit der
+> Abschaffung erledigt und braucht hier keinen Platz mehr.
 
-> ✅ **Seit 27.08. verweigern BEIDE Laufzeit-Gates die falsche Box** (geteilter Vorflug, `scripts/demo-box-vorflug.mjs`): fehlt der Demo-Schalter oder ist die Box nicht erreichbar, brechen sie mit Exit 1 ab statt grün zu melden. Vorher meldete `chart-audit` gegen ein Bundle **ohne** `VITE_DEMO_DEFAULT` **37 statt 44 Charts — und Exit 0**. ⚠ **Exit-Codes nie durch eine Pipe messen**: `| tail` liefert den Exit-Code von `tail`, und genau so entstand die Fehlmessung, die diesen Bau ausgelöst hat.
+**`check:chart-audit`** (35 s) braucht eine laufende Demo-Box und ist damit das **einzige**
+Laufzeit-Gate. Er ist an kein Auslöser-Muster gebunden — wer ihn nicht fährt, sagt das ausdrücklich.
 
-> ⚠ **Hier stand bis 2026-08-14: „danach zwingend `git checkout -- eedc/frontend/dist/` — `dist/` ist versioniert."** **Das gilt nicht mehr** (Fund **N-246**, ausgeliefert mit v4.0.15): `eedc/frontend/dist` ist **nicht mehr versioniert**, weil beide Dockerfiles das Frontend in einer eigenen Stage bauen. Der Schutz gegen einen eingecheckten Demo-Build sitzt jetzt in `release.sh::pruefe_nichts_uebrig`. Ein sauberer Baum heißt seither wirklich sauber — nicht „sauber bis auf `dist/`".
+> ⭐ **Seit 06.09. wartet er auf ein KRITERIUM statt auf eine Frist** (N-330): kein Skeleton mehr im
+> DOM **und** die `.recharts-wrapper`-Zahl über zwei Ticks stabil. Vorher stand dort
+> `waitForTimeout(700)` + `(900)`, und dieselbe Box lieferte bei unverändertem Code **43 · 43 · 44**
+> Charts — alle drei Läufe Exit 0 und grün. *Eine Wartezeit ist eine Wette auf die langsamste
+> Maschine.* Im selben Zug sind seine Routen auf die **kanonischen prefix-freien** Pfade umgestellt:
+> zwei der sechzehn (`komponenten/pv-module`, `komponenten/balkonkraftwerk`) sind keine Hub-Keys und
+> landeten über den Unbekannt-Redirect auf der **ersten** Komponenten-Sicht — er maß sie dreifach
+> und die **BKW-Sicht nie**, meldete aber „16 Sichten geprüft".
 
 ### Release-Workflow (ein Script für alles!)
 

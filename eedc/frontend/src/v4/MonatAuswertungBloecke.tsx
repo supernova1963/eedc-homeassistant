@@ -15,8 +15,8 @@
  * Block (`baueMonatKpis` in {@link ./MonatBilanz}) — es ist eine Kennzahl, kein Block.
  *
  * Element-Park-Doktrin: jedes Element ist einzeln parkbar; ein Block entfällt, wenn
- * alle seine Elemente geparkt sind ODER keine Daten vorliegen (self-hide → der
- * Laufzeit-Leerblock-Gate `check:park-leertest` bleibt grün).
+ * alle seine Elemente geparkt sind ODER keine Daten vorliegen (self-hide → `check:park-gate`
+ * bleibt grün).
  */
 import { Clock, Zap, Coins } from 'lucide-react'
 import {

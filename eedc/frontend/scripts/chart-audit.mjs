@@ -17,9 +17,11 @@
  *        das `ChartLegende` nur bei gesetztem `onItemClick` rendert.
  *
  * Voraussetzung: mit `VITE_DEMO_DEFAULT=true` gebautes `dist` auf $EEDC_BASE (Default :8200) + Chromium unter
- * $PLAYWRIGHT_CHROMIUM. Sie wird seit 2026-08-27 GEPRUEFT statt vorausgesetzt (geteilter
- * Vorflug mit `park-leertest`, `demo-box-vorflug.mjs`) — gegen ein Bundle ohne das Flag
- * meldete dieser Lauf 37 statt 44 Charts und trotzdem gruen.
+ * $PLAYWRIGHT_CHROMIUM. Sie wird seit 2026-08-27 GEPRUEFT statt vorausgesetzt
+ * (`demo-box-vorflug.mjs`) — gegen ein Bundle ohne das Flag meldete dieser Lauf 37 statt 44
+ * Charts und trotzdem gruen. ⚑ Seit dem 2026-09-06 ist er das **einzige** Laufzeit-Gate:
+ * `park-leertest` ist durch die Quelltext-Waechter `check:park-gate` und
+ * `check:park-idliste` ersetzt.
  * Kein CI-Pflichtlauf — Dev-Box-Kommando ([[reference_recharts_bars_jsdom]]):
  *
  *   VITE_DEMO_DEFAULT=true npm run build
@@ -33,14 +35,23 @@ const CHROME = process.env.PLAYWRIGHT_CHROMIUM
 const BASE = process.env.EEDC_BASE || 'http://localhost:8200'
 const TOLERANZ = 2 // px Nachsicht gegen Sub-Pixel-Rundung
 
-// V4-Sichten mit Charts (Kompositions-relevant).
+// Sichten mit Charts (Kompositions-relevant) — die KANONISCHEN, prefix-freien Pfade.
+//
+// ⛔ **Bis 2026-09-06 trugen sie alle den `/v4/`-Präfix aus der Vorschauzeit** (gefallen mit
+// dem IA-V4-Flip in v4.0.0). `App.tsx` biegt ihn per Stray-Bookmark-Route um, der Lauf
+// funktionierte also — aber **zwei der sechzehn landeten woanders, als ihr Name sagt**:
+// `komponenten/pv-module` und `komponenten/balkonkraftwerk` sind keine Hub-Keys (die heißen
+// `pv-anlage` und `bkw`), und `KomponentenV4` leitet einen unbekannten Typ auf den **ersten
+// verfügbaren** um. Der Lauf maß damit die erste Komponenten-Sicht dreimal und die
+// **BKW-Sicht nie** — und meldete trotzdem „16 Sichten geprueft". Ein Prüfer, der eine
+// Sicht nennt, die er nicht ansieht (N-330).
 const ROUTES = [
-  '#/v4/auswertungen/roi', '#/v4/auswertungen/finanzen', '#/v4/auswertungen/co2',
-  '#/v4/auswertungen/prognose',
-  '#/v4/komponenten/pv-module', '#/v4/komponenten/speicher', '#/v4/komponenten/waermepumpe',
-  '#/v4/komponenten/e-auto', '#/v4/komponenten/wallbox', '#/v4/komponenten/balkonkraftwerk',
-  '#/v4/cockpit/monat', '#/v4/cockpit/jahr', '#/v4/cockpit/tag', '#/v4/cockpit/aussicht',
-  '#/v4/community/uebersicht', '#/v4/community/komponenten',
+  '#/auswertungen/roi', '#/auswertungen/finanzen', '#/auswertungen/co2',
+  '#/auswertungen/prognose',
+  '#/komponenten/pv-anlage', '#/komponenten/speicher', '#/komponenten/waermepumpe',
+  '#/komponenten/e-auto', '#/komponenten/wallbox', '#/komponenten/bkw',
+  '#/cockpit/monat', '#/cockpit/jahr', '#/cockpit/tag', '#/cockpit/aussicht',
+  '#/community/uebersicht', '#/community/komponenten',
 ]
 
 async function alleAufklappen(page) {
@@ -48,11 +59,42 @@ async function alleAufklappen(page) {
     const zu = await page.$$('button[aria-label="aufklappen"]')
     if (!zu.length) break
     for (const b of zu) { try { await b.click({ timeout: 500 }) } catch { /* Reflow */ } }
-    await page.waitForTimeout(300)
+    await warteAufRuhe(page, 1)
   }
-  // Toggles innerhalb der Charts durchspielen (Saison-Modus, Vergleich …), damit auch
-  // die zunächst versteckten Chart-Varianten einmal gerendert + geprüft werden.
-  await page.waitForTimeout(900)
+  await warteAufRuhe(page)
+}
+
+/**
+ * N-330 — **Kriterium statt Frist.** Bis 2026-09-06 wartete dieser Lauf feste 700 + 900 ms
+ * und zählte dann. Ergebnis: dieselbe Box, dasselbe Bundle, unveränderter Code, drei Läufe
+ * — **43 · 43 · 44 Charts**, alle drei Exit 0 und grün. Die Abweichung saß in genau EINER
+ * Sicht (`cockpit/jahr` lieferte 0 · 0 · 1). *Eine Wartezeit ist eine Wette auf die
+ * langsamste Maschine; ein Kriterium ist es nicht.*
+ *
+ * Die Sicht gilt als fertig, wenn (a) kein Skeleton mehr im DOM steht und (b) die Zahl der
+ * `.recharts-wrapper` über zwei aufeinanderfolgende Ticks gleich bleibt. Die Obergrenze
+ * bleibt als Notbremse — ohne sie stünde ein Lauf gegen eine hängende Sicht ewig.
+ */
+async function warteAufRuhe(page, minStabil = 2, maxMs = 12000) {
+  const TICK = 250
+  let stabil = 0
+  let zuletzt = -1
+  for (let vergangen = 0; vergangen < maxMs; vergangen += TICK) {
+    await page.waitForTimeout(TICK)
+    const { charts, laedt } = await page.evaluate(() => ({
+      charts: document.querySelectorAll('.recharts-wrapper').length,
+      // Skeleton/Spinner der App: `animate-pulse` (BlockStackSkeleton) bzw. der
+      // Lade-Spinner. Solange einer steht, ist die Sicht nicht fertig.
+      laedt: !!document.querySelector('.animate-pulse, [role="status"]'),
+    }))
+    if (laedt) { stabil = 0; zuletzt = -1; continue }
+    if (charts === zuletzt) {
+      if (++stabil >= minStabil) return
+    } else {
+      stabil = 0
+      zuletzt = charts
+    }
+  }
 }
 
 // Prüft im Browser jeden .recharts-wrapper der aktuellen Sicht.
@@ -120,7 +162,7 @@ async function main() {
   const browser = await chromium.launch({ executablePath: CHROME })
   // Vorflug (27.08.): erst die eigene Voraussetzung, dann messen. Bis dahin hatte dieser
   // Lauf nur die Schwelle „0 Charts" — gegen eine Box mit dem FALSCHEN Bundle meldete er
-  // 37 statt 44 Charts und Exit 0. Die Prüfung ist mit `park-leertest` geteilt.
+  // 37 statt 44 Charts und Exit 0.
   await pruefeDemoBox(browser, BASE, 'chart-audit')
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
   const audit = auditDom()
@@ -131,7 +173,7 @@ async function main() {
     try {
       await page.goto(`${BASE}/${route}`, { waitUntil: 'networkidle', timeout: 20000 })
     } catch { /* networkidle kann bei Live-Polling ausbleiben */ }
-    await page.waitForTimeout(700)
+    await warteAufRuhe(page)
     await alleAufklappen(page)
     const { treffer, geprueft } = await audit(page)
     geprueftGesamt += geprueft

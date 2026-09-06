@@ -29,15 +29,18 @@ import { join } from 'node:path'
 // gemacht hat.
 const FRONTEND_ROOT = process.cwd()
 
-// Die beiden Pruefer, die BEWUSST draussen bleiben: beide sind Playwright-
-// Livetests gegen eine laufende Box (Runbook `~/.claude/plans/runbook-dev-box.md`),
-// keine Quelltext-Pruefer. `park-leertest` verlangt zusaetzlich ein
-// `VITE_DEMO_DEFAULT=true`-Build und ist mit 188 s der teuerste Einzelpruefer
-// ueberhaupt — er laeuft seit dem 23.08. am Ausloeser statt am Takt (Entscheid
-// Gernot, `CLAUDE.md` §Gates). In Vitest wuerden beide ohne Box schlicht
-// scheitern.
+// Der EINE Pruefer, der BEWUSST draussen bleibt: ein Playwright-Livetest gegen
+// eine laufende Box (Runbook `~/.claude/plans/runbook-dev-box.md`), kein
+// Quelltext-Pruefer. In Vitest wuerde er ohne Box schlicht scheitern.
+//
+// ⛔ Hier stand bis zum 2026-09-06 ein zweiter Eintrag, `check:park-leertest`.
+// Den gibt es nicht mehr: er ist durch `check:park-gate` und
+// `check:park-idliste` ersetzt (Entscheid Gernot). Beide sind Quelltext-Pruefer
+// mit Wrapper — die Park-Doktrin haengt damit nicht mehr an einem 188-s-Livetest,
+// der nur am Ausloeser lief und 18 handgepflegte Routen kannte. **Die
+// Ausnahmeliste hat den Wegfall selbst gemeldet**: die zweite Probe unten wurde
+// rot, sobald das Skript aus `package.json` verschwand. Genau dafuer ist sie da.
 const OHNE_WRAPPER_MIT_GRUND: Record<string, string> = {
-  'check:park-leertest': 'Playwright gegen laufende Box + Demo-Build; laeuft am Ausloeser',
   'check:chart-audit': 'Playwright gegen laufende Box',
 }
 

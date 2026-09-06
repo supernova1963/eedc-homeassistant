@@ -124,7 +124,20 @@ export function finanzTeaserBlock(d: AktuellerMonatResponse, park: ParkApi = NOO
   }
 }
 
-/** Community-Block (O4) — nur wenn Anlagen im Monat vorhanden (data-gated). */
+/**
+ * Community-Block (O4) — nur wenn Anlagen im Monat vorhanden (data-gated).
+ *
+ * ⛔ **Ohne Park-Gate, und in `scripts/park-gate-allowlist.json` eingetragen — weil die
+ * Funktion seit dem 2026-06-20 KEINEN Aufrufer mehr hat.** `748849b2` („Cockpit/Monat
+ * Block-Straffung", Gernot-Feintuning) hat den Block aus `CockpitMonatV4` entfernt und
+ * durch einen Cross-Link ersetzt; auch dieser Ersatz (`communityNudgeText`) existiert
+ * heute nicht mehr — die Community hat mit v4.0.0 ihre eigene Achse bekommen.
+ *
+ * Gefunden von `check:park-gate` bei seinem ersten Lauf (2026-09-06). Ein Gate in eine
+ * tote Funktion zu bauen wäre die Pseudo-Lösung: richtig ist, sie samt ihrer fünf
+ * Testfälle zu löschen. **Das ist eine Entscheidung des Maintainers und liegt ihm vor** —
+ * mit ihr fällt dieser Kommentar und der Allowlist-Eintrag.
+ */
 export function communityBlock(
   vergleich: MonatsVergleich,
   d: AktuellerMonatResponse,

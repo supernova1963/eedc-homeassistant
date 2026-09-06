@@ -1,9 +1,15 @@
 /**
- * demo-box-vorflug.mjs — die EINE Voraussetzungs-Prüfung der beiden Laufzeit-Gates.
+ * demo-box-vorflug.mjs — die Voraussetzungs-Prüfung des Laufzeit-Gates.
  *
- * `park-leertest` und `chart-audit` messen beide gegen eine laufende Box mit einem
- * `VITE_DEMO_DEFAULT=true`-Bundle. Fehlt eine der beiden Hälften, messen sie **weniger,
- * als sie zu messen meinen** — und meldeten das bis 2026-08-27 verschieden:
+ * ⚑ **Seit dem 2026-09-06 hat sie noch EINEN Aufrufer: `chart-audit`.** Der zweite,
+ * `park-leertest`, ist entfallen (ersetzt durch die Quelltext-Wächter `check:park-gate`
+ * und `check:park-idliste`). Die Prüfung bleibt trotzdem hier statt zurück in den
+ * `chart-audit` zu wandern — der Grund, aus dem sie ausgelagert wurde, gilt weiter: wer
+ * eine zweite Laufzeit-Prüfung baut, ruft sie, statt die Zusicherung neu zu formulieren.
+ *
+ * Beide Gates maßen gegen eine laufende Box mit einem `VITE_DEMO_DEFAULT=true`-Bundle.
+ * Fehlt eine der beiden Hälften, messen sie **weniger, als sie zu messen meinen** — und
+ * meldeten das bis 2026-08-27 verschieden:
  *
  *   • `park-leertest` brach ab (Vorflug, N-318).
  *   • `chart-audit` hatte **keinen** Vorflug. Am 27.08. gegen die reale Nicht-Demo-Box

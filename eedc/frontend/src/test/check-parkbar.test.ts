@@ -7,10 +7,12 @@ import { execFileSync } from 'node:child_process'
 // Allowlist-Tripwire ueber `scripts/parkbar-allowlist.json`.
 //
 // Warum dieser Wrapper (M14, Etappe E8, 2026-08-24): weder Vitest-Wrapper noch
-// CI-Schritt — er lief nur in der Liste in `CLAUDE.md`. Das wiegt hier doppelt,
-// weil der teuerste Park-Pruefer (`check:park-leertest`, 188 s) seit dem 23.08.
-// bewusst NUR am Ausloeser laeuft; die beiden Quelltext-Waechter sind damit die
-// staendige Deckung der Doktrin und duerfen nicht am Gedaechtnis haengen.
+// CI-Schritt — er lief nur in der Liste in `CLAUDE.md`. Das wog damals doppelt, weil
+// der teuerste Park-Pruefer (`check:park-leertest`, 188 s) nur am Ausloeser lief.
+// ⭐ Seit dem 2026-09-06 gibt es ihn nicht mehr: `check:park-gate` und
+// `check:park-idliste` decken seine drei Klassen am Quelltext ab und laufen bei
+// JEDEM `npm test`. Die Park-Doktrin haengt damit an vier Waechtern, von denen
+// keiner eine laufende Box braucht.
 const FRONTEND_ROOT = process.cwd()
 
 describe('Element-Park-Doktrin: Atomaritaet', () => {

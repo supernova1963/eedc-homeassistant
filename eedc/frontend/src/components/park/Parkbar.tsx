@@ -121,10 +121,12 @@ export function Parkbar({
 
   return (
     <div
-      // Selbst-Entdeckung für den Laufzeit-Leerblock-Gate (scripts/park-leertest.mjs):
-      // jedes gerenderte parkbare Element trägt seine ID im DOM → keine Hand-ID-Liste,
-      // driftfrei. Nur im aktiven+ungeparkten Zweig (geparkt → null; ohne Provider → v3
-      // rendert ohne diesen Wrapper, also kein Attribut).
+      // Selbst-Entdeckung im DOM: jedes gerenderte parkbare Element trägt seine ID →
+      // keine Hand-ID-Liste, driftfrei. Nur im aktiven+ungeparkten Zweig (geparkt → null;
+      // ohne Provider → v3 rendert ohne diesen Wrapper, also kein Attribut).
+      // Leser sind die Render-Proben, die eine behauptete ID-Liste gegen das wirklich
+      // Gerenderte halten (`waermepumpeBauartVergleich.test.tsx`, `CockpitJahrV4.test.tsx`).
+      // ⚠ Der frühere Hauptleser `scripts/park-leertest.mjs` ist am 2026-09-06 entfallen.
       data-park-id={id}
       // D18-4 (detlan #210, @402px gemessen): KEIN h-full mehr — als direktes
       // Grid-/Flex-Kind streckt der Container-Stretch (align-items) die Parkbar

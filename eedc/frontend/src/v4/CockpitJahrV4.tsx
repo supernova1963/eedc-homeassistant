@@ -32,7 +32,7 @@ import { fmtCalc, FehlerZustand, ChartDatenTabelle } from '../components/ui'
 import { AnlageLeer, DatenLeer } from './OnboardingLeer'
 import { BlockShell, BlockStackSkeleton, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
-import ZaehlerstaendeBlock, { useZaehlerstaende, ZAEHLER_PARK_IDS } from '../components/zaehler/ZaehlerstaendeBlock'
+import ZaehlerstaendeBlock, { useZaehlerstaende, zaehlerParkIds } from '../components/zaehler/ZaehlerstaendeBlock'
 import { useApiData, useScrollErhalt } from '../hooks'
 import { BLOCK_IDENTITAET, formatCo2 } from '../lib'
 import { baueJahrKpis, JahrBilanz } from './JahrBilanz'
@@ -460,7 +460,7 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
         render: () => <JahrSpeicherTabelle monate={jahrAntworten} />,
       }] : []),
       // #377 — Verbrauchszähler: nur wenn wirklich einer gepflegt ist.
-      ...(zaehlerstaende && zaehlerstaende.length > 0 && !ZAEHLER_PARK_IDS.every((id) => park.istGeparkt(id)) ? [{
+      ...(zaehlerstaende && zaehlerstaende.length > 0 && !zaehlerParkIds(zaehlerstaende).every((id) => park.istGeparkt(id)) ? [{
         id: 'zaehlerstaende', title: 'Zählerstände', ...BLOCK_IDENTITAET.zaehlerstaende,
         summary: 'erfasst, nicht bewertet',
         defaultOpen: false,
