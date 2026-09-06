@@ -1,11 +1,99 @@
 # Was ist neu
 
-> **Stand:** September 2026 (v4.0.40)
+> **Stand:** September 2026 (v4.0.41)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.41 — 6. September 2026
+
+**Strom, den dein Haus an andere abgibt**
+
+Bisher kannte eedc hinter deinem Hausanschluss zwei Wege: Du verbrauchst den Strom selbst,
+oder er geht ins Netz. Wer eine Einliegerwohnung, eine Werkstatt oder Mieter mitversorgt,
+hat einen dritten — und der zählte als Eigenverbrauch. Autarkie und Eigenverbrauchsquote
+standen dadurch zu hoch.
+
+**Betrifft dich das?** Nur, wenn Strom deiner Anlage jemand anderen erreicht und du dafür
+einen Zähler hast. Sonst ändert sich für dich nichts.
+
+**Was du tun musst:** Unter *Einstellungen → Komponenten* das betreffende Gerät auf die neue
+Kategorie **„Abgabe an Dritte"** (unter *Sonstiges*) umstellen. Deine Zähler-Zuordnung bleibt,
+das Feld heißt dann *Abgabe (kWh)*, dein Erlös bleibt im €-Feld. Danach steht die Abgabe als
+eigene Zeile auf der Verwendungsseite — im Cockpit, in der Werte-Tabelle und in den Berichten.
+**eedc stellt nichts von allein um**; der Daten-Check weist dich an passenden Geräten darauf
+hin. Ein Beispiel aus einer nachgestellten Anlage: 1.000 kWh PV, 200 kWh eingespeist, 224 kWh
+abgegeben — Eigenverbrauch 1.024 → 576 kWh, Autarkie 77,3 → 65,8 %.
+
+---
+
+**Der Community-Vergleich der Wärmepumpe kennt jetzt die Bauart**
+
+Eine Luft-Wasser-Wärmepumpe erreicht bauartbedingt andere Arbeitszahlen als eine
+Erdwärmepumpe, eine Split-Klimaanlage wieder andere. Unter *Community → Komponenten →
+Wärme/Klima* steht deshalb ein neuer Vergleich **nach Bauart**, jeweils mit der Zahl der
+Anlagen dahinter.
+
+Drei Dinge sind dabei geradegerückt worden:
+
+- Die Kachel oben und der Balken darunter zeigten **zwei verschiedene Zahlen** über dieselbe
+  Sache. Sie rechnen jetzt gleich — und deine eigene Zahl entsteht nach denselben Regeln wie
+  dein Vergleichswert.
+- Der Regionalbalken zeigte die **zehn besten** Regionen; die schwächeren fielen heraus, und
+  jede verbliebene rutschte im Bild nach unten. Jetzt zählt, wie viele Anlagen hinter einer
+  Region stehen — und deine eigene ist immer dabei.
+- Wenn eedc deine Wärme aus *Strom × Arbeitszahl* schätzt, weil du keinen Wärmemengenzähler
+  hast, zeigt es dir daraus keine Arbeitszahl. **In die Community ging sie trotzdem** — und
+  gab dort genau die Zahl zurück, die in deinen Einstellungen steht. Das gilt jetzt in beide
+  Richtungen gleich.
+
+**Betrifft dich das?** Wenn du eine Wärmepumpe oder Klimaanlage teilst: ja, dein
+Vergleichswert kann sich sichtbar ändern. **Was du tun musst:** nichts.
+
+---
+
+**Wärmepumpen-Kennzahlen im Jahres-Cockpit und in den Berichten**
+
+*Cockpit → Jahr* zeigte bei der Wärmepumpe ein „—" ohne Begründung daneben, und die Zeilen je
+Funktion (Heizen, Warmwasser, Kühlen) fehlten ganz — die Zahlen lagen vor, wurden beim
+Zusammenfassen der Monate aber nicht gelesen. Das ist behoben.
+
+Dazu passend an mehreren Stellen dieselbe Sprache: Wo eedc die Wärme aus *Strom ×
+Arbeitszahl* schätzt, steht das jetzt auch in *Cockpit → Monat* und *Jahr* dabei
+(„geschätzt: Strom × JAZ 3,5"), und Ersparnis wie CO₂ tragen den Vorbehalt. Der
+PDF-Jahresbericht liest dieselben Kennzahlen wie der Bildschirm. Der Rechenweg unter der
+Ersparnis passt zur Zahl darüber — er ergab vorher einen anderen Betrag als der Wert
+daneben. Und die Kennzahl heißt überall **JAZ** statt „COP".
+
+**Betrifft dich das?** Wenn du eine Wärmepumpe oder Klimaanlage führst: ja. **Was du tun
+musst:** nichts — außer den Zahlen im Jahres-Cockpit wieder zu trauen.
+
+---
+
+**Zwei Sensoren in Home Assistant verhalten sich anders**
+
+⚠ **Das ist die einzige Änderung, die du in Home Assistant siehst.**
+
+Wenn eedc eine Kennzahl **nicht** bilden kann — etwa die Arbeitszahl, weil Zähler und Nenner
+Verschiedenes messen —, meldete es bisher gar nichts. Home Assistant zeigte deshalb den
+zuletzt bekannten Wert unbegrenzt weiter, auch in der Statistik. Ein Wert von vor Monaten sah
+aus wie eine Messung von heute.
+
+**Was sich ändert:** Solche Sensoren stehen jetzt auf **„unbekannt"** und tragen den Grund als
+Attribut. Ein Abgleich räumt außerdem Sensoren ab, die eedc nicht mehr liefert.
+
+Zusätzlich rechnet der Sensor **WP Ersparnis** jetzt wie der Komponenten-Hub: mit dem Tarif des
+jeweiligen Monats statt dem heutigen, ohne den Kühlstrom und mit den Zusatzkosten der alten
+Heizung. Sein Wert kann dadurch deutlich springen — an einer nachgestellten Anlage von 10 € auf
+100 €.
+
+**Betrifft dich das?** Nur mit aktiviertem HA-Export oder MQTT und einer Wärmepumpe.
+**Was du tun musst:** nichts. Wenn ein Sensor nach dem Update „unbekannt" zeigt, sagt sein
+Attribut *Grund*, warum — meist fehlt eine Zuordnung, die der Daten-Check dir ebenfalls nennt.
 
 ---
 

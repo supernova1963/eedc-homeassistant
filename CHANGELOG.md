@@ -7,6 +7,40 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.0.41] - 2026-09-06 — Strom, den das Haus abgibt · und ein Community-Vergleich, der die Bauart kennt
+
+### Added
+
+- **Abgabe an Dritte: der dritte Weg hinter deinem Hausanschluss** (angestoßen von **rilmor-mhrs** auf GitHub, [#402](https://github.com/supernova1963/eedc-homeassistant/issues/402)). eedc kannte für Strom hinter dem Zähler bisher **zwei** Wege — selbst verbrauchen oder einspeisen. Wer eine Einliegerwohnung, eine Werkstatt oder Mieter mitversorgt, hatte einen dritten: Strom verlässt das Haus, ohne ins Netz zu gehen. Der zählte bis jetzt als Eigenverbrauch und hob Autarkie und Eigenverbrauchsquote an. ⭐ **Jetzt gibt es unter *Sonstiges* die Kategorie „Abgabe an Dritte"** mit dem Pflichtfeld *Abgabe (kWh)*; dein Erlös bleibt, wo er ist. Die abgegebenen Kilowattstunden fallen aus Eigenverbrauch, Autarkie und Eigenverbrauchs-Ersparnis heraus und stehen auf der Verwendungsseite als eigene Zeile — in *Cockpit → Monat/Jahr*, in der Werte-Tabelle, im Tages- und Live-Bild, im Monats- und Jahresbericht. An einer nachgestellten Anlage mit 1.000 kWh PV, 200 kWh Einspeisung und 224 kWh Abgabe: Eigenverbrauch **1.024 → 576 kWh**, Autarkie **77,3 → 65,8 %**. **Was du tun musst:** nichts, wenn dich das nicht betrifft. **eedc stellt keine bestehende Komponente von allein um** — der Daten-Check weist dich an Geräten mit Einspeisung und Erlös darauf hin, umstellen tust du.
+
+- **Community: JAZ nach Bauart** (gefragt von **rapahl** per PN). Unter *Community → Komponenten → Wärme/Klima* steht jetzt ein Vergleich, der Luft-Wasser, Sole-Wasser, Grundwasser und Luft-Luft **getrennt** zeigt, jeweils mit der Zahl der Anlagen dahinter. Die Bauart entscheidet, welche Arbeitszahlen überhaupt erreichbar sind; wer sie in einen Topf wirft, vergleicht Physik statt Anlagen.
+
+### Fixed
+
+- **Der Community-Vergleich der Arbeitszahl rechnet überall gleich** (gemeldet von **rapahl** per PN). Auf einer Seite standen zwei Zahlen über dieselbe Sache: die Kachel oben verglich dich mit deiner Bauart, der Balken darunter gruppierte nach Bundesland und mischte dabei Klimaanlagen mit Erdwärmepumpen. Dahinter lagen **fünf** Stellen, die die Arbeitszahl mit **vier** verschiedenen Formeln bildeten — die vollständige stand an keiner: Mal fehlte der Ausschluss nicht belastbarer Monate, mal der Abzug des Kühlstroms, mal der Ausschluss passiv gekühlter Anlagen. ⭐ **Jetzt gibt es eine Formel und einen Ort dafür.** Deine eigene Zahl und dein Vergleichswert entstehen nach denselben Regeln.
+
+- **Der Community-Schnitt spiegelt Messungen, nicht Einstellungen.** Wer keinen Wärmemengenzähler hat, dessen Wärme rechnet eedc aus *Strom × gepflegter Arbeitszahl*. Dir selbst hat eedc daraus nie eine Arbeitszahl gezeigt („Wärme ist gerechnet, nicht gemessen") — an die Community meldete es sie trotzdem, und dort ergab sie durch denselben Strom geteilt exakt die Zahl, die im Einstellungsfeld steht. ⭐ **Jetzt gilt dieselbe Sperre in beide Richtungen.** Die **Mengen** — Strom, Heizwärme, Warmwasser — bleiben unverändert und zählen weiter; gesperrt ist allein die Kennzahl. ⚠ Der Vergleich kann dadurch auf weniger Anlagen beruhen als bisher, dafür auf gemessenen.
+
+- **Der Regionalbalken zeigt nicht mehr die besten Regionen.** Er sortierte nach Arbeitszahl und schnitt bei zehn ab — die schwächsten Regionen fielen also systematisch heraus, und jede verbleibende rutschte im Bild nach unten. Die Anlagenzahl in der Überschrift zählte trotzdem alle mit. ⭐ **Jetzt entscheidet die Belegdichte**: die zehn Regionen mit den meisten Anlagen, deine eigene immer dabei, und die Zahl in der Überschrift meint genau die Anlagen, aus denen die Balken entstanden sind.
+
+- **Cockpit → Jahr zeigt seine Wärmepumpen-Kennzahlen wieder.** Beim Zusammenfassen der Monate gingen 16 Felder verloren: Arbeitszahl, ihr Grund, Zähler und Nenner, die Werte je Funktion, Kühlen, Lüften und Entfeuchten. Die Jahresseite zeigte deshalb „—" **ohne Begründung** daneben, die Zeilen je Funktion fehlten ganz, und die Restmenge Strom war zu hoch. Die Zahlen lagen längst vor — sie wurden nur nicht gelesen.
+
+- **Geschätzte Wärme sagt auch im Cockpit, dass sie geschätzt ist.** Herkunft („geschätzt: Strom × JAZ 3,5") und der Vorbehalt an Ersparnis und CO₂ standen bisher nur im Komponenten-Hub. Jetzt tragen *Cockpit → Monat* und *Cockpit → Jahr* sie ebenfalls. **Es ändert sich keine Zahl**, nur was daneben steht.
+
+- **Der PDF-Jahresbericht liest dieselben Wärmepumpen-Kennzahlen wie das Cockpit.** Er bildete seine Arbeitszahl selbst, ohne Grund und ohne die Werte je Funktion — beides steht jetzt dort, aus derselben Quelle wie auf dem Bildschirm.
+
+- **Der Rechenweg unter der Wärmepumpen-Ersparnis passt zur Zahl darüber.** Im Tooltip stand eine Rechnung, die 10 € ergab, während daneben 100 € standen: Der Text wurde im Browser neu zusammengesetzt statt aus dem Ergebnis übernommen. Ebenfalls berichtigt: Der Monatsbericht benennt Herkunft und Vorbehalt jetzt mit denselben Worten wie die übrigen Sichten, die CO₂-Sicht trägt den Vorbehalt bei geschätzter Wärme, und die Kennzahl heißt überall **JAZ** statt „COP" — eine Jahresarbeitszahl ist keine Momentaufnahme.
+
+- **Ein HA-Sensor, der seinen Wert verliert, bleibt nicht mit dem alten stehen** (⚠ **das ändert sichtbar etwas in Home Assistant**, s. unten). Ist eine Kennzahl gesperrt — etwa die Arbeitszahl, weil Zähler und Nenner Verschiedenes messen —, meldete eedc bisher gar nichts, und Home Assistant zeigte den zuletzt bekannten Wert unbegrenzt weiter, auch in der Statistik. ⭐ **Jetzt meldet eedc den Sensor als „unbekannt" und nennt den Grund als Attribut**, und ein Abgleich räumt Sensoren ab, die eedc nicht mehr liefert.
+
+- **Der Ersparnis-Sensor der Wärmepumpe rechnet wie der Komponenten-Hub.** Er baute seine Formel selbst: ohne Abzug des Kühlstroms, mit dem **heutigen** Tarif für alle Monate — an einer nachgestellten Anlage 10 € statt 100 €, und 66,67 € statt 166,67 €, sobald sich der Strompreis im Jahr geändert hatte. Dieselbe Korrektur erreicht Jahresformel, Vorjahresvergleich und den Detailblock; die Zusatzkosten der alten Heizung zählen jetzt auch im Monatswert, sodass Hub, Cockpit, Export und Aussichten dieselbe Zahl nennen.
+
+### Changed
+
+- **Der Community-Server nennt die Abgabe an Dritte im Datenvertrag.** Es kommt kein neues Feld hinzu — was ein Monatswert bedeutet, ändert sich: Eigenverbrauch und Autarkie enthalten den abgegebenen Strom nicht mehr. Bestehende Einträge heilen beim nächsten vollständigen Teilen.
+
+---
+
 ## [4.0.40] - 2026-09-05 — Die Tages-Aggregation läuft wieder — und geschätzte Wärme sagt, dass sie geschätzt ist
 
 ### Fixed
