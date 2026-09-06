@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
@@ -438,3 +438,127 @@ async def test_discard_plan_removes_from_cache(db):
 
 
 # ── Runner ───────────────────────────────────────────────────────────────────
+
+
+# ── Die Vorschau spricht nur für das, was sie gemessen hat (N-415) ───────────
+#
+# Melder Knallfrosch (Forum simon42 T89667 #302/#304): Nach dem v4.0.39-Fehler
+# fehlten ihm Stundenwerte. Die Vorschau meldete „0 boundaries_changed ·
+# 0 slots_changed · 0 counter_fields_changed" und dazu „Reaggregate würde nichts
+# inhaltlich verändern (nur Provenance-Stempel)" — er führte trotzdem aus, und
+# der Tag war repariert.
+#
+# Am Code gemessen: Die Vorschau vergleicht die **Zählerstände** (Snapshots)
+# gegen die HA-Statistik. Der Lauf baut darüber hinaus das **Tages-Aggregat**
+# neu auf (`_reparatur_aggregat`) — genau das, was bei ihm fehlte. Auf das
+# Aggregat hat die Vorschau nie geschaut und trotzdem für es gesprochen.
+
+async def _plan_tag(db, anlage_id: int, datum_iso: str):
+    """Einen REAGGREGATE_DAY-Plan bauen und zurückgeben."""
+    return await plan(
+        RepairOperationRequest(
+            anlage_id=anlage_id,
+            operation=RepairOperationType.REAGGREGATE_DAY,
+            params={"datum": datum_iso, "mit_resnap": False},
+        ),
+        db,
+    )
+
+
+async def test_die_vorschau_behauptet_nicht_mehr_dass_nichts_passiert(db):
+    """⛔ Der Satz, der einen Anwender von seiner Reparatur abgehalten hätte.
+
+    Ohne Snapshots ist die Zählerstands-Seite trivial unverändert — genau die
+    Lage, in der die alte Fassung „Reaggregate würde nichts inhaltlich
+    verändern" schrieb.
+    """
+    a = await _make_anlage(db)
+    p = await _plan_tag(db, a.id, "2026-09-05")
+
+    text = " ".join(p.warnings)
+    assert "nichts inhaltlich verändern" not in text, (
+        "Die Vorschau spricht wieder für die ganze Operation, obwohl sie nur "
+        "die Zählerstände gemessen hat")
+    assert "Provenance-Stempel" not in text
+
+
+async def test_die_vorschau_nennt_ihren_gegenstand_und_ihre_grenze(db):
+    """Sie sagt, WAS geprüft wurde — und dass das Aggregat davon nicht erfasst ist."""
+    a = await _make_anlage(db)
+    p = await _plan_tag(db, a.id, "2026-09-05")
+
+    text = " ".join(p.warnings)
+    assert "Zählerstände" in text, f"Gegenstand nicht genannt: {p.warnings}"
+    assert "Tageszusammenfassung" in text or "Stundenwerte" in text, (
+        f"Die Grenze der Vorschau ist nicht benannt: {p.warnings}")
+
+
+async def test_fehlende_stunden_werden_beziffert(db):
+    """Der Melderfall: unvollständiges Tages-Aggregat bei sauberen Zählerständen.
+
+    Neun von 24 Stunden gespeichert ⇒ die Vorschau nennt die Zahl und sagt,
+    dass der Lauf die fehlenden nachträgt. Das ist eine **gezählte** Aussage,
+    keine Vorhersage — sie kann nicht danebenliegen.
+    """
+    a = await _make_anlage(db)
+    tag = date(2026, 9, 5)
+    for stunde in range(9):
+        db.add(TagesEnergieProfil(anlage_id=a.id, datum=tag, stunde=stunde, pv_kw=1.0))
+    await db.commit()
+
+    p = await _plan_tag(db, a.id, tag.isoformat())
+
+    text = " ".join(p.warnings)
+    assert "9 von 24" in text, f"Die Stundenzahl fehlt: {p.warnings}"
+    assert p.operation_preview.get("aggregat_stunden_vorhanden") == 9
+
+
+async def test_ein_vollstaendiger_tag_wird_nicht_angemahnt(db):
+    """Gegenprobe — sonst stünde der Hinweis an jedem Tag und wäre wertlos.
+
+    Ohne sie wäre die Probe darüber auch dann grün, wenn jemand den Hinweis
+    unbedingt ausgibt.
+    """
+    a = await _make_anlage(db)
+    tag = date(2026, 9, 4)
+    for stunde in range(24):
+        db.add(TagesEnergieProfil(anlage_id=a.id, datum=tag, stunde=stunde, pv_kw=1.0))
+    await db.commit()
+
+    p = await _plan_tag(db, a.id, tag.isoformat())
+
+    text = " ".join(p.warnings)
+    assert "von 24 Stunden gespeichert" not in text, (
+        f"Ein vollständiger Tag wird angemahnt: {p.warnings}")
+    assert p.operation_preview.get("aggregat_stunden_vorhanden") == 24
+
+
+async def test_die_stundenzahl_zaehlt_nur_den_eigenen_tag(db):
+    """Ein Nachbartag darf die Zahl nicht auffüllen — sonst meldet sie 24,
+    während der geprüfte Tag leer ist."""
+    a = await _make_anlage(db)
+    for stunde in range(24):
+        db.add(TagesEnergieProfil(anlage_id=a.id, datum=date(2026, 9, 4),
+                                  stunde=stunde, pv_kw=1.0))
+    await db.commit()
+
+    p = await _plan_tag(db, a.id, "2026-09-05")
+    assert p.operation_preview.get("aggregat_stunden_vorhanden") == 0
+
+
+async def test_die_schluessel_der_vorschau_sind_der_vertrag_mit_der_anzeige(db):
+    """Die Werkbank beschriftet diese Schlüssel — sie dürfen nicht still wandern.
+
+    Bis zum 06.09.2026 rendert die Werkbank die **rohen** Schlüssel („0
+    boundaries_changed"); seither übersetzt sie `REPARATUR_AENDERUNG_LABELS`.
+    Eine Umbenennung hier ließe die Anzeige stillschweigend wieder englisch
+    werden — deshalb steht der Satz der Schlüssel hier fest.
+    Client-Hälfte: `src/test/check-reparatur-labels.test.ts`.
+    """
+    a = await _make_anlage(db)
+    p = await _plan_tag(db, a.id, "2026-09-05")
+
+    assert set(p.estimated_changes) == {
+        "boundaries_changed", "slots_changed", "counter_fields_changed"
+    }, (f"Die Schlüssel haben sich geändert: {sorted(p.estimated_changes)} — "
+        "die Label-Map im Client zieht nicht von allein nach")

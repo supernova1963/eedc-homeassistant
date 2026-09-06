@@ -213,7 +213,29 @@ async def _load_anlage(db: AsyncSession, anlage_id: int) -> Anlage:
 async def _plan_reaggregate_day(
     req: RepairOperationRequest, db: AsyncSession
 ) -> tuple[dict[str, int], list[str], dict[str, Any]]:
-    """params: {datum: 'YYYY-MM-DD', mit_resnap: bool=True}"""
+    """params: {datum: 'YYYY-MM-DD', mit_resnap: bool=True}
+
+    ⚠ **Die Vorschau misst EINE der drei Wirkungen des Laufs.** Sie vergleicht
+    die **Zählerstände** (Snapshots) gegen die HA-Langzeitstatistik. Der Lauf
+    selbst macht darüber hinaus zwei Dinge: er zieht die Snapshots frisch nach
+    (`resnap_anlage_range`, inkl. 5-Minuten-Werte) und er **baut das
+    Tages-Aggregat neu** (`_reparatur_aggregat` — die Stundenzeilen in
+    `tages_energie_profil` und die Tageszusammenfassung). Auf das Aggregat
+    schaut die Vorschau **nicht**.
+
+    ⛔ **Bis zum 06.09.2026 sagte sie trotzdem „Reaggregate würde nichts
+    inhaltlich verändern (nur Provenance-Stempel)".** Das war für den
+    häufigsten Reparaturfall falsch, und zwar für den, wegen dem der
+    Reparatur-Knopf überhaupt gedrückt wird: Nach dem v4.0.39-Fehler standen
+    bei Knallfrosch (Forum T89667 #302/#304) die Zählerstände vollständig und
+    konsistent da — angehalten war nur die **Aggregation**. Die Vorschau
+    meldete deshalb dreimal 0 und riet ab; der Lauf hat den Tag dann repariert.
+    *Wer einer Vorschau glaubt, die für die ganze Operation zu sprechen scheint,
+    drückt „Plan verwerfen" und behält einen kaputten Tag.*
+
+    **Die Vorschau sagt jetzt, was sie gemessen hat und was nicht** — statt für
+    etwas zu sprechen, das sie nie angesehen hat.
+    """
     from backend.services.sensor_snapshot_service import get_reaggregate_preview
 
     datum_str = req.params.get("datum")
@@ -253,12 +275,41 @@ async def _plan_reaggregate_day(
             "HA Long-Term Statistics nicht verfügbar — Reaggregation arbeitet "
             "nur auf bestehenden Snapshots, ohne frischen Resnap."
         )
+    #: Wie viele der 24 Stundenzeilen liegen heute im Tages-Aggregat? Eine
+    #: **gezählte Zahl**, keine Vorhersage — deshalb kann sie nicht danebenliegen.
+    #: Sie ist genau das Signal, das im Knallfrosch-Fall gefehlt hat.
+    aggregat_stunden = int(
+        (
+            await db.execute(
+                select(func.count(TagesEnergieProfil.id)).where(
+                    TagesEnergieProfil.anlage_id == req.anlage_id,
+                    TagesEnergieProfil.datum == datum,
+                )
+            )
+        ).scalar()
+        or 0
+    )
+
     if boundary_changes == 0 and slot_changes == 0 and counter_changes == 0:
+        # ⛔ Kein „nichts ändert sich" mehr — die Vorschau hat das Aggregat nie
+        # angesehen. Sie nennt jetzt ihren Gegenstand und ihre Grenze.
         warnings.append(
-            "Vorschau zeigt keine Wert-Änderungen — Aggregat ist konsistent. "
-            "Reaggregate würde nichts inhaltlich verändern (nur Provenance-Stempel)."
+            "Die Zählerstände stimmen bereits mit der Home-Assistant-Statistik "
+            "überein — an ihnen ändert der Lauf nichts. ⚠ Geprüft wurden nur "
+            "sie: Die Stundenwerte und die Tageszusammenfassung baut der Lauf "
+            "aus diesen Zählerständen in jedem Fall neu auf, und die schaut "
+            "diese Vorschau nicht an."
         )
-    return estimated, warnings, {"preview": preview}
+    if aggregat_stunden < 24:
+        warnings.append(
+            f"Für diesen Tag sind {aggregat_stunden} von 24 Stunden gespeichert "
+            "— der Lauf trägt die fehlenden nach, sofern die Zählerstände sie "
+            "hergeben. Das ist der übliche Grund, ihn zu starten."
+        )
+    return estimated, warnings, {
+        "preview": preview,
+        "aggregat_stunden_vorhanden": aggregat_stunden,
+    }
 
 
 async def _reparatur_aggregat(

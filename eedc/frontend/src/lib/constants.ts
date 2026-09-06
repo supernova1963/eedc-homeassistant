@@ -226,6 +226,25 @@ export const NETZLADUNG_PREIS_HERKUNFT: Record<string, string> = {
   keine: 'keine Netzladung',
 }
 
+/**
+ * Die geschätzten Änderungen einer Reparatur-Vorschau (`estimated_changes`).
+ *
+ * Die Reparatur-Werkbank zeigte bis zum 06.09.2026 die **rohen Schlüssel** des
+ * Backends — „0 boundaries_changed · 0 slots_changed · 0 counter_fields_changed"
+ * stand so auf Deutsch daneben (Screenshot Knallfrosch, Forum T89667 #304).
+ * Regel 0: eine Bezeichnung, die der Anwender liest, ist eine Anzeige und
+ * kommt aus einer Label-Map — auch in einem Werkzeug für Fortgeschrittene.
+ *
+ * Unbekannte Schlüssel bleiben roh stehen (sichtbarer Rückfall statt leerer
+ * Chip), damit ein neuer Zähler nicht still verschwindet.
+ */
+export const REPARATUR_AENDERUNG_LABELS: Record<string, string> = {
+  boundaries_changed: 'Zählerstände',
+  slots_changed: 'Stundenwerte',
+  counter_fields_changed: 'Zählerfelder',
+  audit_log_count: 'Audit-Einträge',
+}
+
 export const WIRKUNGSGRAD_QUELLE_LABELS: Record<string, string> = {
   'fenster_lang': 'Langzeit-Messung',
   'soc_korrigiert': 'SoC-korrigiert',

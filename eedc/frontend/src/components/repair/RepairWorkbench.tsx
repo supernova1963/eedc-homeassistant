@@ -40,6 +40,11 @@ import {
   repairApi,
 } from '../../api/repair'
 import { energieProfilApi } from '../../api/energie_profil'
+import { REPARATUR_AENDERUNG_LABELS } from '../../lib/constants'
+
+/** Deutscher Name eines Vorschau-/Ergebnis-Zählers; unbekannte Schlüssel
+ *  bleiben roh stehen, damit ein neuer Zähler nicht still verschwindet. */
+const aenderungLabel = (key: string) => REPARATUR_AENDERUNG_LABELS[key] ?? key
 
 // D14-8 (detLAN #113/#123, Gernot #128): „Energieprofil-Daten löschen" wandert als
 // Eintrag ins Werkbank-Auswahlfeld — EINE Reparatur-UI. Technisch bleibt es der
@@ -606,7 +611,7 @@ function PlanPreviewBlock({
       <div className="mb-3 flex flex-wrap gap-2">
         {Object.entries(plan.estimated_changes).map(([k, v]) => (
           <span key={k} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs text-gray-700 dark:text-gray-300">
-            <strong>{v}</strong> {k}
+            <strong>{v}</strong> {aenderungLabel(k)}
           </span>
         ))}
       </div>
@@ -753,10 +758,10 @@ function HistoryList({ views }: { views: RepairPlanView[] }) {
             <div className="mt-1 text-xs text-gray-600 dark:text-gray-400 flex flex-wrap gap-2">
               {v.result
                 ? Object.entries(v.result.actual_changes).map(([k, val]) => (
-                    <span key={k}><strong>{val}</strong> {k}</span>
+                    <span key={k}><strong>{val}</strong> {aenderungLabel(k)}</span>
                   ))
                 : Object.entries(v.plan.estimated_changes).map(([k, val]) => (
-                    <span key={k}>geschätzt <strong>{val}</strong> {k}</span>
+                    <span key={k}>geschätzt <strong>{val}</strong> {aenderungLabel(k)}</span>
                   ))
               }
               {v.result && v.result.audit_log_ids.length > 0 && (
