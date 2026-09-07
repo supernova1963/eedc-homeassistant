@@ -39,6 +39,7 @@ from .monatsdaten import ErfassungsortChecks, MonatsdatenChecks
 from .energieprofil import EnergieprofilChecks
 from .sensoren import SensorChecks
 from .emob import EmobChecks
+from .waermepumpe import WaermepumpeChecks
 from .zaehler import ZaehlerChecks
 from .datenquelle import DatenquelleChecks
 
@@ -52,6 +53,7 @@ class DatenChecker(
     EnergieprofilChecks,
     SensorChecks,
     EmobChecks,
+    WaermepumpeChecks,
     ZaehlerChecks,
     DatenquelleChecks,
     _CheckHelpers,
@@ -145,6 +147,7 @@ class DatenChecker(
         ergebnisse.extend(await self._check_klima_modus_sensor(anlage))
         ergebnisse.extend(await self._check_leere_tage_trotz_zaehler(anlage))
         ergebnisse.extend(await self._check_pv_ueber_erfassung(anlage))
+        ergebnisse.extend(self._check_wp_arbeitszahl_unplausibel(anlage))
         ergebnisse.extend(self._check_emob_pool_pflege(anlage))
         ergebnisse.extend(self._check_emob_pv_ueber_gesamt(anlage))
         ergebnisse.extend(self._check_phev_anteil_unbestimmt(anlage))

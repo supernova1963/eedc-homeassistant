@@ -201,7 +201,16 @@ export function demoRegionalStatistics(): RegionStatistik[] {
     anteil_mit_balkonkraftwerk: 12,
     avg_speicher_ladung_kwh: 210,
     avg_speicher_entladung_kwh: 188,
+    // Energiegewichtet (Σ Wärme ÷ Σ Strom) — bewusst NICHT derselbe Wert wie
+    // `durchschnitt_jaz` in den Komponenten-Demodaten weiter oben: Die zwei
+    // Zahlen beantworten verschiedene Fragen und dürfen sich unterscheiden
+    // (Entscheid Maintainer 07.09.2026, (c)). Damit zeigt die Demo genau das,
+    // was die Beschriftung erklärt — statt eine Übereinstimmung vorzutäuschen,
+    // die es in echten Daten nicht gibt.
     avg_wp_jaz: 3.9,
+    //: Deutlich kleiner als `anzahl_anlagen` — nur Anlagen mit belastbarer,
+    //: gemessener Wärme tragen bei. Genau dafür steht das n neben dem Wert.
+    wp_jaz_anzahl: 24,
     avg_eauto_km: 920,
     avg_eauto_ladung_kwh: 165,
     avg_wallbox_kwh: 240,
@@ -210,7 +219,7 @@ export function demoRegionalStatistics(): RegionStatistik[] {
     ...extra,
   })
   return [
-    basis('BY', 1015, 187, { durchschnitt_kwp: 9.8, avg_wp_jaz: 4.1 }),
+    basis('BY', 1015, 187, { durchschnitt_kwp: 9.8, avg_wp_jaz: 4.1, wp_jaz_anzahl: 41 }),
     basis('BW', 1002, 164, { avg_wp_jaz: 4.0 }),
     basis('SL', 1048, 14, { durchschnitt_kwp: 8.9 }),
     basis('RP', 1020, 58),
@@ -218,7 +227,7 @@ export function demoRegionalStatistics(): RegionStatistik[] {
     basis('NW', 928, 241, { avg_wp_jaz: 3.7 }),
     basis('NI', 945, 132, { avg_eauto_km: null, avg_eauto_ladung_kwh: null }),
     basis('SH', 962, 71, { avg_wallbox_pv_anteil: null }),
-    basis('SN', 905, 53, { avg_wp_jaz: 3.6 }),
+    basis('SN', 905, 53, { avg_wp_jaz: 3.6, wp_jaz_anzahl: 9 }),
     basis('TH', 912, 29, { avg_bkw_kwh: null }),
     basis('BB', 938, 47),
     basis('MV', 951, 22, { avg_speicher_ladung_kwh: null, avg_speicher_entladung_kwh: null }),

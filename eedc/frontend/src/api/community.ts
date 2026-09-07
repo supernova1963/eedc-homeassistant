@@ -314,7 +314,19 @@ export interface RegionStatistik {
   // Performance-Durchschnitte (Ø pro Monat, nur Anlagen mit dem Gerät)
   avg_speicher_ladung_kwh: number | null
   avg_speicher_entladung_kwh: number | null
+  /**
+   * **Energiegewichtet**: Σ Wärme ÷ Σ Strom über alle Monatszeilen der Region.
+   *
+   * ⛔ **Keine Arbeitszahl je Anlage** — Zähler und Nenner stammen aus
+   * verschiedenen Anlagen (Wärme/Klima-SOLL **R2**). Die Anzeige heißt deshalb
+   * „Wärme je kWh Strom", nicht „JAZ". Die Arbeitszahl der **typischen Anlage**
+   * ist eine andere Größe und steht in `/components/waermepumpe/by-region`;
+   * beide bleiben nebeneinander bestehen (Entscheid Maintainer 07.09.2026, (c)).
+   * Der Feldname bleibt, weil ein Umbenennen nur Vertrag kostet.
+   */
   avg_wp_jaz: number | null
+  /** Zahl der Anlagen hinter `avg_wp_jaz` — nicht `anzahl_anlagen`. */
+  wp_jaz_anzahl?: number | null
   avg_eauto_km: number | null
   avg_eauto_ladung_kwh: number | null
   avg_wallbox_kwh: number | null

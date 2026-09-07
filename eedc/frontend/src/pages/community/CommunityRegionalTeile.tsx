@@ -236,7 +236,7 @@ function ChoroplethKarte({ allRegions, eigeneRegion }: ChoroplethKarteProps) {
             <div className="mt-1 pt-1 border-t border-gray-700 space-y-0.5 text-xs text-gray-300">
               <p>{tooltip.region.anzahl_anlagen} Anlage{tooltip.region.anzahl_anlagen !== 1 ? 'n' : ''} · Ø {fmtZahl(tooltip.region.durchschnitt_kwp, 1)} kWp</p>
               {tooltip.region.avg_speicher_ladung_kwh != null && <p>🔋 {fmtZahl(tooltip.region.avg_speicher_ladung_kwh, 0)} ↓ / {tooltip.region.avg_speicher_entladung_kwh != null ? fmtZahl(tooltip.region.avg_speicher_entladung_kwh, 0) : '–'} ↑ kWh/Mon</p>}
-              {tooltip.region.avg_wp_jaz != null && <p>♨️ JAZ {fmtZahl(tooltip.region.avg_wp_jaz, 1)}</p>}
+              {tooltip.region.avg_wp_jaz != null && <p>♨️ {fmtZahl(tooltip.region.avg_wp_jaz, 1)} kWh Wärme je kWh Strom{tooltip.region.wp_jaz_anzahl != null ? ` (aus ${tooltip.region.wp_jaz_anzahl})` : ''}</p>}
               {tooltip.region.avg_eauto_km != null && <p>🚗 {fmtZahl(tooltip.region.avg_eauto_km, 0)} km/Mon · {tooltip.region.avg_eauto_ladung_kwh != null ? `${fmtZahl(tooltip.region.avg_eauto_ladung_kwh, 0)} kWh zuhause` : '–'}</p>}
               {tooltip.region.avg_wallbox_kwh != null && <p>🔌 {fmtZahl(tooltip.region.avg_wallbox_kwh, 0)} kWh/Mon{tooltip.region.avg_wallbox_pv_anteil != null ? ` · ${fmtZahl(tooltip.region.avg_wallbox_pv_anteil, 0)} % PV` : ''}</p>}
               {tooltip.region.avg_bkw_kwh != null && <p>🪟 {fmtZahl(tooltip.region.avg_bkw_kwh, 0)} kWh/Mon</p>}
@@ -487,9 +487,14 @@ export function RegionenTabelle({ allRegions, benchmark }: { allRegions: RegionS
                   </div>
                 )}
                 {region.avg_wp_jaz != null && (
-                  <div className="flex justify-between" title="Ø Jahresarbeitszahl (Σ Wärme ÷ Σ Strom)">
-                    <span className="text-gray-500 dark:text-gray-400">♨️ JAZ</span>
-                    <span className="text-gray-600 dark:text-gray-400">{fmtZahl(region.avg_wp_jaz, 1)}</span>
+                  <div className="flex justify-between" title="Wärme je kWh Strom, energiegewichtet über alle Monate der Region (Σ Wärme ÷ Σ Strom). Das ist KEINE Arbeitszahl je Anlage — Zähler und Nenner stammen aus verschiedenen Anlagen. Die Arbeitszahl der typischen Anlage steht unter Komponenten → Wärmepumpe.">
+                    <span className="text-gray-500 dark:text-gray-400">♨️ Wärme/kWh</span>
+                    <span className="text-gray-600 dark:text-gray-400">
+                      {fmtZahl(region.avg_wp_jaz, 1)}
+                      {region.wp_jaz_anzahl != null && (
+                        <span className="text-gray-400 dark:text-gray-500"> ({region.wp_jaz_anzahl})</span>
+                      )}
+                    </span>
                   </div>
                 )}
                 {region.avg_eauto_km != null && (
@@ -533,7 +538,7 @@ export function RegionenTabelle({ allRegions, benchmark }: { allRegions: RegionS
           <th className={`${KOPF_ZELLE} text-right text-gray-500`}>Ø kWp</th>
           <th className={`${KOPF_ZELLE} text-right text-gray-500`}>Ø kWh/kWp</th>
           <th className={`${KOPF_ZELLE} text-right text-gray-500`} title="Ø Ladung ↓ / Entladung ↑ pro Monat (kWh)">🔋 Ladung/Entl.</th>
-          <th className={`${KOPF_ZELLE} text-right text-gray-500`} title="Ø Jahresarbeitszahl (Σ Wärme ÷ Σ Strom)">♨️ JAZ</th>
+          <th className={`${KOPF_ZELLE} text-right text-gray-500`} title="Wärme je kWh Strom, energiegewichtet über alle Monate der Region (Σ Wärme ÷ Σ Strom). Das ist KEINE Arbeitszahl je Anlage — Zähler und Nenner stammen aus verschiedenen Anlagen. Die Arbeitszahl der typischen Anlage steht unter Komponenten → Wärmepumpe.">♨️ Wärme/kWh</th>
           <th className={`${KOPF_ZELLE} text-right text-gray-500`} title="Ø km/Mon · Ø kWh zuhause geladen">🚗 km / kWh</th>
           <th className={`${KOPF_ZELLE} text-right text-gray-500`} title="Ø kWh geladen/Mon · davon PV-Anteil (wo messbar)">🔌 kWh / PV%</th>
           <th className={`${KOPF_ZELLE} text-right text-gray-500`} title="Ø BKW-Ertrag pro Monat (kWh)">🪟 kWh/Mon</th>
@@ -578,8 +583,10 @@ export function RegionenTabelle({ allRegions, benchmark }: { allRegions: RegionS
                     ? <><div>{fmtZahl(region.avg_speicher_ladung_kwh, 0)} ↓</div><div className="text-xs text-gray-400 dark:text-gray-500">{region.avg_speicher_entladung_kwh != null ? fmtZahl(region.avg_speicher_entladung_kwh, 0) : '–'} ↑ kWh</div></>
                     : '-'}
                 </td>
-                <td className={`${ZELLE} text-right text-gray-600 dark:text-gray-400`}>
-                  {region.avg_wp_jaz != null ? fmtZahl(region.avg_wp_jaz, 1) : '-'}
+                <td className={`${ZELLE} text-right text-gray-600 dark:text-gray-400 leading-tight`}>
+                  {region.avg_wp_jaz != null
+                    ? <><div>{fmtZahl(region.avg_wp_jaz, 1)}</div><div className="text-xs text-gray-400 dark:text-gray-500">{region.wp_jaz_anzahl != null ? `aus ${region.wp_jaz_anzahl}` : '–'}</div></>
+                    : '-'}
                 </td>
                 <td className={`${ZELLE} text-right text-gray-600 dark:text-gray-400 leading-tight`}>
                   {region.avg_eauto_km != null
