@@ -1608,7 +1608,20 @@ Bedeutung ändert, ändert sie dort mit. Altbestand heilt beim nächsten Voll-Su
 |----------|--------|
 | Anker SOLIX | ✅ an einem echten Konto bestätigt |
 | Victron VRM | ✅ an einem echten Konto bestätigt |
-| Deye / Solarman · EcoFlow PowerOcean · EcoFlow PowerStream · Fronius Solar.web · Growatt · Hoymiles S-Miles · Huawei FusionSolar · SolarEdge · Sungrow iSolarCloud · Viessmann GridBox | ⚠ `getestet=False` |
+| Deye / Solarman · EcoFlow PowerOcean · EcoFlow PowerStream · Fronius Solar.web · Growatt · Hoymiles S-Miles · Huawei FusionSolar · SolarEdge · Sungrow iSolarCloud · Viessmann GridBox / E.ON Home | ⚠ `getestet=False` |
+
+> ⚠ **Viessmann GridBox meldet sich gegen E.ON Home an, und das ist Absicht.** Die GridBox ist zum
+> **31.12.2025 samt Daten zu E.ON Home gewechselt**; der Viessmann-eigene Auth0-Realm
+> (`viessmann-authentication-db`) ist seither abgeschaltet, Anmeldeseite ist `eon.gridx.de/login`.
+> Der Provider trägt deshalb den E.ON-Home-Realm — wer dort „Viessmann" einsetzt, sperrt alle
+> Anwender aus. **Die Provider-ID bleibt `viessmann_gridbox`**: sie steht im Provenance-Vokabular
+> (`core/source_priority.py`), in gespeicherten `connector_config`-Quellen und in jeder
+> geschriebenen Provenance-Zeile — änderbar ist nur die Anzeige.
+>
+> ⚠ **Und die Auth0-Umstellung von 2026 (#410, gemeldet von gridX selbst):** Audience ist die
+> API-Basis (`https://api.gridx.de`), nicht mehr `my.gridx`, und der Bearer ist der
+> `access_token`, nicht der `id_token`. Beide alten Formen werden nur noch während einer
+> Gnadenfrist akzeptiert. Gewächtert von `backend/tests/test_viessmann_gridbox.py`.
 
 **`getestet` ist eine Aussage über die Wirklichkeit, kein Ausdruck von Zuversicht.** Das Flag geht
 erst auf `True`, wenn ein Nutzer mit einem echten Konto Einrichtung **und** Zeitraum-Import

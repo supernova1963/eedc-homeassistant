@@ -4,9 +4,14 @@ Viessmann GridBox Cloud-Import-Provider.
 Nutzt die gridX Cloud API (gleiche API wie das Viessmann GridBox Dashboard)
 um historische Energiedaten abzurufen.
 
-Auth: OAuth2 via Auth0 mit Viessmann/GridBox Login-Daten.
+Auth: OAuth2 via Auth0 mit den GridBox-Zugangsdaten.
   - Token URL: https://gridx.eu.auth0.com/oauth/token
   - API Base:  https://api.gridx.de
+  - Audience:  identisch mit der API-Basis. Bis 2026 stand hier "my.gridx";
+    gridX akzeptiert den alten Wert nur noch waehrend einer Gnadenfrist
+    (#410, gemeldet von gridX selbst).
+  - Bearer:    der `access_token` der Auth0-Antwort, NICHT der `id_token`.
+    Der id_token ist der abgekuendigte Weg derselben Umstellung.
 
 Endpoints:
   - GET /gateways                                 → Gateway-Liste mit System-IDs
@@ -18,7 +23,12 @@ und zu Monatssummen aggregiert. Die API liefert Leistungswerte in Watt,
 die über die Tages-Auflösung bereits zu Wh-Werten integriert sind.
 
 HINWEIS: Dieser Provider ist NICHT mit echten Geräten getestet (getestet=False).
-Die Zugangsdaten sind dieselben wie für https://mygridbox.viessmann.com/login
+
+Angemeldet wird gegen den Auth0-Realm von **E.ON Home**, nicht gegen einen
+Viessmann-eigenen. Das ist Absicht und keine Verwechslung: Die GridBox ist zum
+31.12.2025 samt Daten zu E.ON Home gewechselt, der Viessmann-Realm
+(`viessmann-authentication-db`) ist seither abgeschaltet. Anmeldeseite ist
+https://eon.gridx.de/login — `mygridbox.viessmann.com` gibt es nicht mehr.
 """
 
 import logging
@@ -46,13 +56,39 @@ API_BASE = "https://api.gridx.de"
 
 # Auth0 Client-Konfiguration (öffentlicher Client der GridBox-App)
 AUTH0_CLIENT_ID = "mG0Phmo7DmnvAqO7p6B0WOYBODppY3cc"
-AUTH0_AUDIENCE = "my.gridx"
+# Die Audience IST die API — so lautet die Anforderung von gridX woertlich
+# (#410). Deshalb steht hier keine zweite Zeichenkette neben `API_BASE`, die
+# unbemerkt auseinanderlaufen koennte, sondern die Kopplung selbst.
+AUTH0_AUDIENCE = API_BASE
+# E.ON Home, nicht Viessmann — siehe Kopf-Docstring. Der Viessmann-Realm ist
+# seit Ende 2025 abgeschaltet; wer ihn hier einsetzt, sperrt alle Anwender aus.
 AUTH0_REALM = "eon-home-authentication-db"
 AUTH0_SCOPE = "email openid offline_access"
 
 
-async def _get_token(username: str, password: str) -> Optional[str]:
-    """OAuth2 Token über Auth0 Password-Realm Grant holen."""
+def _auth_fehlertext(resp: httpx.Response) -> str:
+    """Grund einer abgelehnten Auth0-Antwort — nicht nur ihre Nummer.
+
+    Auth0 nennt in `error_description` den echten Grund (falscher Realm,
+    unbekannte Audience, gesperrter Account). Ohne ihn meldete eedc jeden
+    Fehlschlag als „E-Mail/Passwort prüfen" — auch dann, wenn beide stimmten.
+    """
+    try:
+        data = resp.json()
+    except ValueError:
+        return f"HTTP {resp.status_code}"
+    grund = data.get("error_description") or data.get("error")
+    return f"HTTP {resp.status_code}: {grund}" if grund else f"HTTP {resp.status_code}"
+
+
+async def _get_token(
+    username: str, password: str,
+) -> tuple[Optional[str], Optional[str]]:
+    """OAuth2 Token über Auth0 Password-Realm Grant holen.
+
+    Rückgabe: `(token, fehler)` — genau eines der beiden ist gesetzt
+    (Idiom aus `deye_solarman`).
+    """
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(
             AUTH_URL,
@@ -69,10 +105,30 @@ async def _get_token(username: str, password: str) -> Optional[str]:
         )
 
     if resp.status_code != 200:
-        return None
+        return None, _auth_fehlertext(resp)
 
     data = resp.json()
-    return data.get("id_token")
+
+    # gridX erwartet den `access_token`. Der `id_token` wird nur noch waehrend
+    # der Gnadenfrist akzeptiert (#410) und bleibt ausschliesslich als Rueckfall
+    # fuer den Fall stehen, dass Auth0 fuer diesen Realm keinen access_token
+    # liefert — dann steht es im Log, statt still den abgekuendigten Weg zu
+    # gehen. Die Audience wird NICHT zurueckgenommen: ein Audience-Fehler soll
+    # sofort durchschlagen und nicht bis zum Ende der Gnadenfrist verdeckt sein.
+    token = data.get("access_token")
+    if token:
+        return token, None
+
+    token = data.get("id_token")
+    if token:
+        logger.warning(
+            "gridX-Antwort enthielt keinen access_token — eedc verwendet den "
+            "abgekuendigten id_token. Der Zugang faellt aus, sobald gridX die "
+            "Gnadenfrist beendet (#410).",
+        )
+        return token, None
+
+    return None, "Antwort enthielt weder access_token noch id_token"
 
 
 def _auth_headers(token: str) -> dict:
@@ -97,16 +153,19 @@ class ViessmannGridBoxProvider(CloudImportProvider):
     def info(self) -> CloudProviderInfo:
         return CloudProviderInfo(
             id="viessmann_gridbox",
-            name="Viessmann GridBox",
-            hersteller="Viessmann",
+            name="Viessmann GridBox / E.ON Home",
+            hersteller="gridX",
             beschreibung=(
                 "Importiert historische Energiedaten (PV-Erzeugung, Eigenverbrauch, "
-                "Einspeisung, Netzbezug, Batterie) über die Viessmann GridBox / gridX Cloud API. "
-                "Gleiche Zugangsdaten wie mygridbox.viessmann.com."
+                "Einspeisung, Netzbezug, Batterie) über die gridX Cloud API — die "
+                "Plattform hinter der Viessmann GridBox und dem E.ON Home Manager. "
+                "Angemeldet wird mit dem E.ON-Home-Konto."
             ),
             anleitung=(
-                "1. Account unter mygridbox.viessmann.com oder in der Viessmann GridBox App\n"
-                "2. E-Mail-Adresse und Passwort bereithalten\n"
+                "1. E-Mail-Adresse und Passwort des E.ON-Home-Kontos bereithalten\n"
+                "   (Anmeldeseite: https://eon.gridx.de/login)\n"
+                "2. Viessmann-GridBox-Anlagen sind zum 31.12.2025 samt Daten zu\n"
+                "   E.ON Home gewechselt; der frühere Viessmann-Zugang besteht nicht mehr\n"
                 "3. System-ID wird beim Verbindungstest automatisch ermittelt\n"
                 "   (alternativ aus dem Dashboard-URL ablesen)"
             ),
@@ -148,11 +207,14 @@ class ViessmannGridBoxProvider(CloudImportProvider):
             )
 
         try:
-            token = await _get_token(username, password)
+            token, login_fehler = await _get_token(username, password)
             if not token:
+                # Den Grund nennen, statt ihn zu behaupten: Bis #410 stand hier
+                # pauschal „E-Mail/Passwort prüfen" — auch wenn Realm oder
+                # Audience abgelehnt wurden und die Zugangsdaten stimmten.
                 return CloudConnectionTestResult(
                     erfolg=False,
-                    fehler="Login fehlgeschlagen. E-Mail/Passwort prüfen.",
+                    fehler=f"Login fehlgeschlagen. Grund laut gridX: {login_fehler}",
                 )
 
             headers = _auth_headers(token)
@@ -235,9 +297,11 @@ class ViessmannGridBoxProvider(CloudImportProvider):
         password = credentials.get("password", "")
         system_id = credentials.get("system_id", "")
 
-        token = await _get_token(username, password)
+        token, login_fehler = await _get_token(username, password)
         if not token:
-            raise Exception("GridBox Login fehlgeschlagen")
+            raise Exception(
+                f"GridBox Login fehlgeschlagen. Grund laut gridX: {login_fehler}"
+            )
 
         headers = _auth_headers(token)
 
