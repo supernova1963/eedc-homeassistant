@@ -7,6 +7,26 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.0.43] - 2026-09-07 — Abgegebener Strom zählt jetzt auch im Geld — und zwei Zahlen nennen ihre Grundlage
+
+### Added
+
+- **Der Daten-Check erklärt eine unplausibel hohe Arbeitszahl.** Wer einen Wärmemengenzähler so verbaut hat, dass er die Wärme von Kessel **und** Wärmepumpe misst, bekommt eine Arbeitszahl, die durch den Strom nur eines Geräts geteilt wird — im Extremfall Werte um 13. Der Community-Server konnte einen solchen Wert bisher nur **sperren**; er hat die Geräte nie gesehen. eedc kennt sie und sagt jetzt, woran es liegt und wie du es abgrenzt. ⛔ **Deine eigene Anzeige bleibt unverändert** — dort siehst du weiterhin, was deine Zähler hergeben; gesperrt wird allein der Vergleichswert in der Community.
+
+### Changed
+
+- **Die Regionalzahl im Community-Vergleich heißt nicht mehr „JAZ".** Unter *Community → Regional* stand für dasselbe Bundesland eine andere Zahl als unter *Community → Komponenten → Wärmepumpe* — und beide Sichten öffnet derselbe Mensch. Beide sind richtig, sie beantworten nur verschiedene Fragen: Die regionale Zahl teilt **die Wärme aller Anlagen durch den Strom aller Anlagen**; Zähler und Nenner stammen damit aus verschiedenen Geräten, eine Arbeitszahl je Anlage ist das nicht. Sie heißt deshalb jetzt **„Wärme je kWh Strom"** und nennt die Zahl der Anlagen, über die sie mittelt. Die Arbeitszahl der typischen Anlage steht weiterhin unter *Komponenten → Wärmepumpe*. *(Angestoßen von **rapahl** per PN.)*
+
+### Fixed
+
+- **Der Erlös aus „Abgabe an Dritte" kommt jetzt in der Wirtschaftlichkeitsrechnung an** (gemeldet von **rilmor-mhrs**, [#402](https://github.com/supernova1963/eedc-homeassistant/issues/402)). Mit v4.0.41 kam die Kategorie *Abgabe an Dritte* dazu; die Energieseite rechnete sofort richtig, die Geldseite nur zur Hälfte. Der gepflegte Erlös stand im SOLL/HABEN-T-Konto und in *Cockpit → Jahr*, fehlte aber in *Auswertungen → Finanzen*, im **ROI**, in den **Aussichten** und im **HA-Sensor** — dieselbe Kachel nannte in zwei Sichten zwei Zahlen, und der ROI wurde durch die Umstellung sichtbar schlechter, obwohl das Geld weiterhin floss. ⭐ **Jetzt gibt es eine Quelle für den Jahres-Ertrag je Investition**, die alle vier Sichten lesen, und in ihr gilt **gemessen vor geschätzt**: Sobald für mindestens einen Monat ein Erlös gepflegt ist, rechnet eedc aus den gemessenen Monaten hoch und lässt das Feld „Ertrag/Jahr (€)" außen vor. Der Formular-Hinweis am Feld sagt das jetzt auch. ⚠ **Ein gepflegtes „Ertrag/Jahr" wird damit an Abgabe-Geräten nicht mehr zusätzlich gezählt** — wer beides ausgefüllt hat, sieht `jahres_ersparnis_euro`, `roi_prozent` und `amortisation_jahre` in Home Assistant einmalig **sinken**; das war vorher eine Doppelzählung. Wer nur Monats-Erlöse pflegt, sieht keine Änderung. ⚑ **Und die Zeile heißt jetzt, was sie ist:** Im T-Konto stand über dem abgegebenen Strom das Wort *„Einspeisung"* — eine Einspeisung ist das ausdrücklich nicht. Sie heißt jetzt **„Abgabe an Dritte"**, mit derselben Bezeichnung wie auf der Energieseite.
+
+- **Die Vorschau der Reparatur-Werkbank spricht nur noch für das, was sie geprüft hat** (gemeldet von **Knallfrosch** im simon42-Forum). Nach dem Aggregations-Fehler aus v4.0.39 fehlten Stundenwerte. Die Vorschau meldete „keine Wert-Änderungen" und schrieb dazu, ein Neuaufbau würde nichts bewirken — der Melder führte ihn trotzdem aus, und der Tag war repariert. ⛔ **Die Meldung war zu weit gegriffen:** Die Vorschau vergleicht ausschließlich die gespeicherten **Zählerstände** mit der Home-Assistant-Statistik. Die **Stundenwerte** und die **Tageszusammenfassung** baut der Lauf aus diesen Zählerständen in jedem Fall neu auf — und genau die hatten gefehlt. ⭐ **Jetzt nennt die Meldung ihren Gegenstand und ihre Grenze** und dazu die eine Zahl, die im Melderfall gefehlt hat: wie viele der 24 Stunden für den Tag gespeichert sind. Im Fall des Melders hätte dort „9 von 24 Stunden gespeichert" gestanden. ⛔ **Bewusst kein Abgleich des Aggregats gegen die Snapshot-Summe:** Die Aggregation füllt Lücken, löst Doppelzählungen auf und normiert — eine Differenz wäre dort oft legitim, und ein Schwellenwert würde in der Gegenrichtung lügen.
+
+- **Die Reparatur-Werkbank spricht Deutsch.** Sie zeigte die rohen Bezeichner des Backends („0 boundaries_changed") mitten in einer sonst deutschen Oberfläche. *(Aus demselben Screenshot, vom Melder nicht beanstandet.)*
+
+---
+
 ## [4.0.42] - 2026-09-06 — Das Wetter im Live-Cockpit ist wieder da
 
 ### Fixed
@@ -6568,6 +6588,8 @@ Danke an [MartyBr](https://community-smarthome.com/u/martybr) für den Vorschlag
   - Tabelle und Tooltip zeigen jetzt messbare Leistungsdaten statt Ausstattungsquoten
   - 🔋 Speicher: Ø Ladung ↑ / Entladung ↓ kWh pro Monat (getrennt)
   - ♨️ Ø berechnete JAZ (Σ Wärme ÷ Σ Strom, saisonaler Wert)
+
+    > ⚠ **Nachträglich richtiggestellt (September 2026):** Diese Zahl heißt nicht mehr „JAZ", sondern **„Wärme je kWh Strom"**. Sie summiert die Wärme aller Anlagen einer Region und teilt sie durch deren Strom — Zähler und Nenner stammen also aus verschiedenen Geräten, eine Arbeitszahl je Anlage ist das nicht. Damals fiel es nicht auf, weil es die zweite, anlagenbezogene Zahl unter *Komponenten → Wärmepumpe* noch nicht gab; erst nebeneinander widersprachen sich die beiden sichtbar.
   - 🚗 Ø km/Monat + Ø kWh zuhause geladen (gesamt − extern)
   - 🔌 Ø kWh/Monat + Ø PV-Anteil in % (wo von Wallbox messbar)
   - 🪟 Ø BKW-Ertrag kWh/Monat

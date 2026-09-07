@@ -1,11 +1,93 @@
 # Was ist neu
 
-> **Stand:** September 2026 (v4.0.42)
+> **Stand:** September 2026 (v4.0.43)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.43 — 7. September 2026
+
+**Abgegebener Strom zählt jetzt auch im Geld**
+
+Seit v4.0.41 gibt es die Kategorie *Abgabe an Dritte* — für Strom, der dein Haus verlässt,
+ohne ins Netz zu gehen. Die Energieseite hat sofort richtig gerechnet, die Geldseite nur
+zur Hälfte: Dein gepflegter Erlös stand im SOLL/HABEN-T-Konto und in *Cockpit → Jahr*,
+fehlte aber in *Auswertungen → Finanzen*, im ROI, in den Aussichten und im HA-Sensor.
+Dieselbe Zahl war je nach Sicht eine andere — und der ROI sah nach der Umstellung
+schlechter aus, obwohl das Geld weiterhin floss.
+
+Jetzt liest jede dieser Sichten denselben Wert, und darin gilt **gemessen vor geschätzt**:
+Sobald für mindestens einen Monat ein *Erlös (€)* gepflegt ist, rechnet eedc aus den
+gemessenen Monaten hoch — und lässt das Feld *Ertrag/Jahr (€)* außen vor. Der Hinweis am
+Feld sagt dir das jetzt auch, damit sich der ROI nicht ändert, ohne dass du etwas angefasst
+hast.
+
+Und die Zeile heißt, was sie ist: Im T-Konto stand über dem abgegebenen Strom das Wort
+**„Einspeisung"** — das ist es ausdrücklich nicht. Sie heißt jetzt **„Abgabe an Dritte"**,
+genau wie auf der Energieseite.
+
+**Betrifft dich das?** Nur wenn du ein Gerät der Kategorie *Abgabe an Dritte* führst.
+⚠ Wer dort **beides** gepflegt hat — *Ertrag/Jahr* **und** monatliche Erlöse —, sieht die
+HA-Sensoren für Jahres-Ersparnis, ROI und Amortisation einmalig **sinken**: Der Betrag
+wurde vorher doppelt gezählt. **Was du tun musst:** nichts.
+
+*Gemeldet von rilmor-mhrs auf GitHub (#402).*
+
+---
+
+**Die Reparatur-Vorschau sagt jetzt, was sie geprüft hat — und was nicht**
+
+Wenn du unter *Einstellungen → Daten → Energieprofil-Pflege* einen Tag neu aggregierst,
+zeigt eedc vorher eine Vorschau. Die meldete bisher unter Umständen „keine Änderung — ein
+Neuaufbau würde nichts bewirken", obwohl der Lauf genau das Fehlende repariert hätte.
+
+Der Grund: Die Vorschau vergleicht deine gespeicherten **Zählerstände** mit der
+Home-Assistant-Statistik — mehr nicht. Die **Stundenwerte** und die **Tageszusammenfassung**
+baut der Lauf aus diesen Zählerständen in jedem Fall neu auf. Und das ist der häufigste
+Grund, ihn zu starten: Wenn die Aggregation einmal ausgesetzt hat, stehen die Zählerstände
+vollständig da, und trotzdem fehlen dir Stunden.
+
+Jetzt nennt die Meldung beides — worauf sie geschaut hat und worauf nicht — und dazu, wie
+viele der 24 Stunden für den Tag gespeichert sind. Steht dort weniger als 24, trägt der Lauf
+sie nach. Nebenbei: Die Werkbank zeigte bis jetzt englische Bezeichner aus dem Innenleben
+(„0 boundaries_changed"); sie spricht jetzt Deutsch.
+
+**Betrifft dich das?** Wenn du die Reparatur-Werkbank benutzt: ja. **Was du tun musst:**
+nichts — du kannst der Vorschau jetzt glauben.
+
+*Gemeldet von Knallfrosch im simon42-Forum.*
+
+---
+
+**Die Regionalzahl im Community-Vergleich sagt, worüber sie mittelt**
+
+Unter *Community → Regional* stand für dein Bundesland eine andere Arbeitszahl als unter
+*Community → Komponenten → Wärmepumpe*. Beide Zahlen waren richtig — sie beantworten nur
+verschiedene Fragen, und keine der beiden hat das gesagt.
+
+Die regionale Zahl teilt **die Wärme aller Anlagen durch den Strom aller Anlagen**. Zähler
+und Nenner stammen damit aus verschiedenen Geräten; eine Arbeitszahl je Anlage ist das
+nicht. Sie heißt deshalb jetzt **„Wärme je kWh Strom"** und nennt daneben, über wie viele
+Anlagen sie mittelt. Wie gut die *typische* Anlage arbeitet, steht weiterhin unter
+*Komponenten → Wärmepumpe*.
+
+Dabei ist noch etwas aufgefallen: Für eine Region stand eine Arbeitszahl von **13** — ein
+Wert, den keine Wärmepumpe erreicht. Dahinter steckt fast immer ein Wärmemengenzähler, der
+hinter Kessel **und** Wärmepumpe sitzt und deshalb die Wärme von beiden misst, geteilt durch
+den Strom von einem. Der Community-Server kann so einen Wert nur aussperren — er hat deine
+Geräte nie gesehen. eedc kennt sie und **sagt dir jetzt, woran es liegt**: Der Daten-Check
+weist auf das Gerät hin und zeigt dir den Weg zur Abgrenzung. ⛔ **Deine eigene Anzeige
+bleibt davon unberührt** — dort siehst du weiterhin, was deine Zähler hergeben.
+
+**Betrifft dich das?** Wenn du eine Wärmepumpe oder Klimaanlage teilst: ja, die regionale
+Vergleichszahl heißt anders und nennt jetzt ihre Grundlage. **Was du tun musst:** nichts —
+außer der Daten-Check spricht dich auf einen unplausiblen Wert an.
+
+*Angestoßen von rapahl per PN.*
 
 ---
 
