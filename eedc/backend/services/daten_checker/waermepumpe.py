@@ -24,6 +24,7 @@ haben und trotzdem einen Wärmemengenzähler an der falschen Stelle. Die zwei
 Meldungen können nebeneinander stehen, ohne dasselbe zu sagen.
 """
 
+from backend.core.berechnungen.betriebsart_gemessen import modus_strom_zeile
 from backend.core.berechnungen.waermepumpe_kennzahl import arbeitszahl
 from backend.core.field_definitions import (
     get_wp_heizenergie_kwh,
@@ -61,6 +62,15 @@ class WaermepumpeChecks:
         einen Grund statt eines Werts zurück (Abgrenzung verletzt, Wärme
         gerechnet statt gemessen), ist der Fall bereits behandelt — dann wäre
         diese Meldung ein zweiter Turm über einer Sperre, die schon greift.
+
+        ⛔ **Derselbe Layer reicht nicht — es müssen dieselben EINGÄNGE sein**
+        (#411, 08.09.2026). Bis dahin rief diese Stelle ``arbeitszahl(Q, E)``
+        ohne ``strom_funktionsfremd_kwh``, während Kachel und Cockpit den
+        Kühl-, Lüft- und Entfeuchtungsstrom aus dem Nenner ziehen (W-14/E4).
+        Bei OB73-gifs Zeile (749 kWh Wärme · 214 kWh Strom · davon 207 kWh
+        Kühlbetrieb) rechnete der Checker **3,5** und schwieg, während die
+        Kachel **107,0** zeigte — eine Zahl, die keine Wärmepumpe leisten kann.
+        *Der Docstring darüber war schon richtig; die Umsetzung war es nicht.*
         """
         kat = CheckKategorie.MONATSDATEN_PLAUSIBILITAET.value
         ergebnisse: list[CheckErgebnis] = []
@@ -80,7 +90,13 @@ class WaermepumpeChecks:
                 waerme = (waerme_h or 0) + (waerme_w or 0)
                 if waerme <= 0:
                     continue
-                az = arbeitszahl(waerme, strom)
+                # Derselbe Nenner-Abzug wie in der Anzeige — `funktionsfremd_kwh`
+                # ist die eine Stelle, die sagt, was funktionsfremd heißt, und
+                # `modus_strom_zeile` liefert ihn aus beiden Aufteilungswegen.
+                az = arbeitszahl(
+                    waerme, strom,
+                    strom_funktionsfremd_kwh=modus_strom_zeile(daten).funktionsfremd_kwh,
+                )
                 if az.wert is None:
                     continue
                 if az.wert > self.ARBEITSZAHL_AUFFAELLIG:

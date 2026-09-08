@@ -1502,7 +1502,11 @@ class StammdatenChecks:
                     ergebnisse.append(CheckErgebnis(
                         kategorie=kat, schwere=CheckSeverity.INFO,
                         meldung=f"{name}: Alter Energiepreis nicht gesetzt",
-                        details="Wird für Einsparungs-Berechnung vs. Gas-/Ölheizung benötigt",
+                        details=(
+                            "Wird für die Einsparungs-Berechnung gegenüber der "
+                            "ersetzten Heizung benötigt (#411: der Träger ist "
+                            "gepflegt — Gas, Öl oder Strom-Direktheizung)."
+                        ),
                         link="/einstellungen/investitionen",
                     ))
 

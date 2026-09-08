@@ -236,7 +236,7 @@ describe('TKonto — B6/Y-3: der Rechenweg der WP-Ersparnis kommt aus dem Backen
   it('zeigt die Backend-Herleitung und keinen selbst gebauten Text', () => {
     render(<TKonto d={{ ...basis, wp_ersparnis_euro: 110, wp_waerme_kwh: 3000, wp_strom_kwh: 1300,
       wp_ersparnis_berechnung: BERECHNUNG }} />)
-    const label = screen.getAllByText(/WP-Ersparnis vs\. Gas/)[0]
+    const label = screen.getAllByText(/WP-Ersparnis vs\. Alternative/)[0]
     fireEvent.mouseEnter(label)
     expect(screen.getAllByText(BERECHNUNG).length).toBeGreaterThan(0)
     expect(screen.queryByText(/0,9 × 10 ct/)).toBeNull()
@@ -245,7 +245,7 @@ describe('TKonto — B6/Y-3: der Rechenweg der WP-Ersparnis kommt aus dem Backen
 
   it('ohne Backend-Text steht keine erfundene Herleitung', () => {
     render(<TKonto d={{ ...basis, wp_ersparnis_euro: 100, wp_waerme_kwh: 3000, wp_strom_kwh: 1300 }} />)
-    const label = screen.getAllByText(/WP-Ersparnis vs\. Gas/)[0]
+    const label = screen.getAllByText(/WP-Ersparnis vs\. Alternative/)[0]
     fireEvent.mouseEnter(label)
     expect(screen.queryByText(/kWh \/ 0,9/)).toBeNull()
   })

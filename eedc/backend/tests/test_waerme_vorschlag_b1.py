@@ -227,3 +227,91 @@ async def test_dienst_ohne_jaz_kein_vorschlag(db):
     heiz = [v for v in await svc.get_vorschlaege(anlage.id, "heizenergie_kwh", 2026, 6, inv.id)
             if v.quelle == VorschlagQuelle.BERECHNUNG]
     assert heiz == []
+
+
+# ── #411: die fremde Spur zählt aus BEIDEN Aufteilungswegen ─────────────────
+#
+# Der Kanon kennt zwei Wege zur Betriebsart (Handbuch Wärme/Klima, Schritt 4):
+# Weg A = zugeordnete Betriebsart-Zähler (`betriebsart_strom_*`), Weg B = der
+# Betriebsmodus-Sensor, aus dem eedc `modus_strom_*` ableitet. Die Proben oben
+# fahren ausschließlich Weg A — deshalb sah B1 vollständig aus, während Weg B
+# ungeprüft blieb und den Gesamtstrom weiter als Heizstrom durchließ.
+
+MODUS_KUEHLMONAT = {
+    "stromverbrauch_kwh": 214.0,
+    "modus_strom_kuehlen_kwh": 207.0,
+    "modus_strom_heizen_kwh": 0.0,
+}
+
+
+def test_abgeleiteter_modus_split_ist_genauso_eine_fremde_spur():
+    """OB73-gif (#411): Kühlbetrieb aus dem Modus-Sensor ⇒ kein Heizwärme-Vorschlag.
+
+    Vor dem Fix lieferte diese Zeile die Basis F2 mit 214 kWh, woraus der Dienst
+    ``214 × 3,5 = 749 kWh`` Heizwärme vorschlug — in einem Monat, in dem die
+    Split-Klimaanlage nie geheizt hat.
+    """
+    assert gesamtstrom_ist_heizstrom(MODUS_KUEHLMONAT) is False
+    assert strom_basis_fuer_waerme_vorschlag(
+        "heizenergie_kwh", MODUS_KUEHLMONAT, JAZ,
+    ) is None
+
+
+def test_beide_wege_urteilen_gleich():
+    """Dieselbe Lage, einmal gemessen und einmal abgeleitet — dasselbe Ergebnis.
+
+    Das ist die eigentliche Aussage: Die Herkunft der Aufteilung darf den
+    Vorschlag nicht entscheiden. Ein Anwender, der den bequemeren Weg wählt,
+    bekommt nicht die schlechtere Zahl.
+    """
+    weg_a = {"stromverbrauch_kwh": 214.0, "betriebsart_strom_kuehlen_kwh": 207.0}
+    assert gesamtstrom_ist_heizstrom(weg_a) is gesamtstrom_ist_heizstrom(MODUS_KUEHLMONAT)
+    assert (
+        strom_basis_fuer_waerme_vorschlag("heizenergie_kwh", weg_a, JAZ)
+        == strom_basis_fuer_waerme_vorschlag("heizenergie_kwh", MODUS_KUEHLMONAT, JAZ)
+    )
+
+
+def test_modus_split_warmwasser_sperrt_ebenso():
+    """Warmwasser aus dem Modus-Split ist keine Wärme der Heiz-Achse.
+
+    ⛔ **Nur Warmwasser und Kühlen — Lüften kommt hier bewusst nicht vor.** Der
+    abgeleitete Split kennt genau drei Betriebsarten (``AUFGETEILTE_MODI`` /
+    ``MODUS_STROM_FELD``: Heizen · Warmwasser · Kühlen); ein Modus-Signal gibt
+    Lüften und Entfeuchten nicht her. Eine Probe mit
+    ``modus_strom_lueften_kwh`` würde sich einen Zustand herstellen, den es in
+    der Produktion nicht gibt — sie war im ersten Entwurf dieser Datei drin und
+    ist rot geworden, zu Recht. Kommt eine vierte aufgeteilte Betriebsart dazu,
+    meldet der Wächter über ``MODUS_STROM_FELD``, was dann fehlt.
+    """
+    assert gesamtstrom_ist_heizstrom(
+        {"stromverbrauch_kwh": 214.0, "modus_strom_warmwasser_kwh": 90.0}
+    ) is False
+
+
+def test_reiner_heizmonat_bleibt_unberuehrt():
+    """Die Gegenprobe zum Fix: F2 ist der häufigste Fall und muss weiter tragen.
+
+    Ohne sie wäre der Fix eine Verschlechterung — jeder F2-Anwender verlöre
+    Ersparnis und CO₂ (SOLL §6: genau dafür existiert der Parameter ``jaz``).
+    """
+    basis = strom_basis_fuer_waerme_vorschlag(
+        "heizenergie_kwh", {"stromverbrauch_kwh": 1000.0}, JAZ,
+    )
+    assert basis is not None and basis.sprosse == "F2" and basis.strom_kwh == 1000.0
+
+    # Auch mit Modus-Split, solange dort nur geheizt wurde.
+    nur_heizen = {"stromverbrauch_kwh": 1000.0, "modus_strom_heizen_kwh": 1000.0}
+    basis_b = strom_basis_fuer_waerme_vorschlag("heizenergie_kwh", nur_heizen, JAZ)
+    assert basis_b is not None and basis_b.strom_kwh == 1000.0
+
+
+def test_gemessener_heizstrom_schlaegt_den_split_weiterhin():
+    """F4 vor F2 — ein zugeordneter Heiz-Zähler gewinnt gegen jede Aufteilung."""
+    daten = {
+        "stromverbrauch_kwh": 214.0,
+        "betriebsart_strom_heizen_kwh": 30.0,
+        "modus_strom_kuehlen_kwh": 207.0,
+    }
+    basis = strom_basis_fuer_waerme_vorschlag("heizenergie_kwh", daten, JAZ)
+    assert basis is not None and basis.sprosse == "F4" and basis.strom_kwh == 30.0

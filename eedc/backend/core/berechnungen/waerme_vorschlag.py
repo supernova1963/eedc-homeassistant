@@ -50,6 +50,7 @@ from backend.core.berechnungen.betriebsart_gemessen import (
     betriebsart_nutzenergie_kwh,
     betriebsart_strom_kwh,
     hat_gemessene_betriebsart,
+    modus_strom_zeile,
 )
 from backend.core.betriebsmodus import HEIZEN, KUEHLEN
 
@@ -79,14 +80,35 @@ def _zahl(wert) -> Optional[float]:
 def gesamtstrom_ist_heizstrom(daten: Optional[dict]) -> bool:
     """Darf ``stromverbrauch_kwh`` als Heizstrom gelten? — nur ohne fremde Spur.
 
-    Belegt ein anderer Funktions-Strom die Zeile (gemessene Betriebsart Kühlen ·
-    Lüften · Entfeuchten, eine gemessene Kältemenge oder ein getrennter
-    Warmwasser-Strom), enthält der Gesamtstrom Kilowattstunden, die keine Wärme
-    erzeugt haben (oder Warmwasser statt Heizung). Dann wäre ``E_gesamt × JAZ``
-    keine Schätzung, sondern eine Erfindung.
+    Belegt ein anderer Funktions-Strom die Zeile (Kühlen · Lüften · Entfeuchten ·
+    ein getrennter Warmwasser-Strom oder eine gemessene Kältemenge), enthält der
+    Gesamtstrom Kilowattstunden, die keine Wärme erzeugt haben (oder Warmwasser
+    statt Heizung). Dann wäre ``E_gesamt × JAZ`` keine Schätzung, sondern eine
+    Erfindung.
+
+    ⛔ **Die fremde Spur zählt aus BEIDEN Aufteilungswegen** (#411, OB73-gif).
+    Bis zum 08.09.2026 fragte diese Funktion nur ``hat_gemessene_betriebsart``,
+    also **Weg A** (zugeordnete Betriebsart-Zähler). Wer **Weg B** geht — den
+    Betriebsmodus-Sensor, den das Handbuch gleichrangig als „bequemer" anbietet —,
+    hat seinen Kühlstrom in ``modus_strom_kuehlen_kwh``, und den sah sie nicht:
+    Eine Split-Klimaanlage mit 207 kWh Kühlbetrieb bekam ``214 × 3,5 = 749 kWh``
+    Heizwärme vorgeschlagen, in einem Monat, in dem sie nie geheizt hat.
+    **Der Docstring war die ganze Zeit weiter als der Code** — er sprach schon
+    von „einem Kühlstrom in der Zeile", ohne dessen Herkunft zu unterscheiden.
+
+    ⭐ Gefragt wird deshalb ``modus_strom_zeile`` — dieselbe Weiche, die Monats-
+    Fakten und HA-Export lesen. Eine eigene Abfrage von ``modus_strom_*`` wäre
+    die zweite Stelle derselben Regel, und genau daran ist F-56 entstanden.
     """
     d = daten or {}
     if hat_gemessene_betriebsart(d):
+        return False
+    # Ab hier ist der gemessene Zweig ausgeschlossen; `modus_strom_zeile` liefert
+    # also den ABGELEITETEN Split. `funktionsfremd_kwh` ist die eine Stelle, die
+    # sagt, was funktionsfremd heißt (Kühlen · Lüften · Entfeuchten) — Warmwasser
+    # steht daneben, weil es zwar Wärme ist, aber nicht die der Heiz-Achse.
+    zeile = modus_strom_zeile(d)
+    if zeile.funktionsfremd_kwh > 0 or zeile.warmwasser_kwh > 0:
         return False
     if betriebsart_nutzenergie_kwh(d, KUEHLEN) is not None:
         return False

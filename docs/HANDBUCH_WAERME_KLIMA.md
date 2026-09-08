@@ -68,7 +68,7 @@ Diese Tabelle ist der Kern dieses Handbuchs. Sie beantwortet die Frage, die fast
 | **Arbeitszahl Heizen / Warmwasser getrennt** | getrennte Strommessung **und** getrennte Wärmemengen | „—" mit Grund *„Strom nicht getrennt je Funktion gemessen"* |
 | **Arbeitszahl Kühlen** | *Strom Kühlbetrieb* **und** *Nutzenergie Kühlbetrieb* (Kältemengenzähler) | „—" mit Grund *„kein Kältemengenzähler zugeordnet"* |
 | **Aufteilung Heizen/Kühlen/Lüften/Entfeuchten** | entweder **gemessene** Betriebsart-Zähler **oder** ein *Betriebsmodus*-Sensor, den eedc laufend mitliest | der Block fehlt ganz — und zwar bewusst, statt vier Nullen zu zeigen |
-| **Ersparnis vs. Gas/Öl** | gemessene oder abgeleitete Wärme **und** ein Alt-Preis am Gerät | „—" |
+| **Ersparnis vs. Alternative** | gemessene oder abgeleitete Wärme **und** ein Alt-Preis am Gerät | „—" |
 | **CO₂-Einsparung** | Stromverbrauch und Wärme | der Wärmepumpen-Anteil fehlt in der Bilanz |
 | **Kompressor-Starts / Betriebsstunden** | ein *Total-Increasing*-Zähler dafür | die Kacheln erscheinen gar nicht |
 | **Tages**werte statt nur Monatswerte | dieselben Zähler — aber **fortlaufend mitgeschrieben** | „—" mit Grund, siehe Kasten |
@@ -91,6 +91,12 @@ eedc erwartet **fortlaufend steigende Zählerstände** („total increasing"). E
 ⚠ **Auf dem MQTT-/Standalone-Pfad gilt das nicht** — dort kommt der rohe veröffentlichte Wert an. Springt er zurück, erkennt eedc das und sagt für diesen Tag **nichts**, statt eine falsche Zahl zu bilden: *„Der Zähler ist an diesem Tag zurückgesprungen."*
 
 ---
+
+> ⚑ **„Alternative" ist die Heizung, die du ersetzt hast** — am Gerät gepflegt als *Gas*, *Öl*
+> oder *Strom (Direktheizung)*. eedc rechnet mit dem Wirkungsgrad des jeweiligen Trägers (0,90 ·
+> 0,85 · 1,00) und mit deinem Preis. Bis 4.0.43 stand über der Zahl unbedingt „vs. Gas", auch wenn
+> du Öl gepflegt hattest — die Rechnung stimmte, die Beschriftung nicht. Wo mehrere Wärmepumpen in
+> **einer** Zahl zusammengefasst sind, kann sie ohnehin keinem einzelnen Träger folgen.
 
 ## 3. Was eedc bewusst *nicht* sagt
 

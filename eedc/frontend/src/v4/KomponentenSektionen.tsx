@@ -420,7 +420,7 @@ export function baueKomponentenBloecke(
       {
         ...WP_KPI.ersparnis,
         ...(wpErsparnis?.istMehrkosten
-          ? { title: 'Mehrkosten vs. Gas', icon: TrendingDown, color: 'red' as const }
+          ? { title: 'Mehrkosten vs. Alternative', icon: TrendingDown, color: 'red' as const }
           : {}),
         value: wpErsparnis?.betrag ?? '—',
         unit: '€',
@@ -575,7 +575,7 @@ export function baueKomponentenBloecke(
       // sonst Strom — Tag ohne WMZ). Period-agnostisch, kein Sonderpfad.
       summary: hat(d.wp_waerme_kwh)
         // W-10, zweite Stelle: dieselbe Klasse wie in der Kachel, ohne Melder.
-        ? `${jaz != null ? `JAZ ${fmtCalc(jaz, 2)} · ` : ''}${fmt(d.wp_waerme_kwh)} kWh Wärme${wpSummaryErsparnis ? ` · ${wpSummaryErsparnis.betrag} € vs. Gas` : ''}`
+        ? `${jaz != null ? `JAZ ${fmtCalc(jaz, 2)} · ` : ''}${fmt(d.wp_waerme_kwh)} kWh Wärme${wpSummaryErsparnis ? ` · ${wpSummaryErsparnis.betrag} € vs. Alternative` : ''}`
         : `${fmt(d.wp_strom_kwh)} kWh Strom${hat(d.wp_starts_summe_monat) ? ` · ${d.wp_starts_summe_monat!.toLocaleString('de-DE')} Starts` : ''}`,
       render: () => <Sektion kpis={wpKpis} elemente={wpEls} />,
     })

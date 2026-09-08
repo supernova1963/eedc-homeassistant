@@ -192,7 +192,7 @@ describe('KOMPONENTEN_ADAPTER', () => {
       monatsdaten: [{ jahr: 2025, monat: 11, verbrauch_daten: { heizenergie_kwh: 800, warmwasser_kwh: 200 } }],
     }])
     const [g] = await KOMPONENTEN_ADAPTER.waermepumpe.fetch(1)
-    expect(titles(g.status)).toEqual(['JAZ', 'Wärme erzeugt', 'Strom verbraucht', 'Ersparnis vs. Gas'])
+    expect(titles(g.status)).toEqual(['JAZ', 'Wärme erzeugt', 'Strom verbraucht', 'Ersparnis vs. Alternative'])
     expect(g.aufteilung?.segmente.map((s) => s.label)).toEqual(['Heizung', 'Warmwasser'])
     // CO₂-Ersparnis als eigene Kennzahl (IST-getreu)
     expect(titles(g.kennzahlen!.kpis)).toEqual(['CO₂-Ersparnis'])
@@ -561,7 +561,7 @@ describe('KOMPONENTEN_ADAPTER — spezifische Blöcke (Inc. 3b)', () => {
     const [g] = await KOMPONENTEN_ADAPTER.waermepumpe.fetch(1)
     const nach = (t: string) => g.status.find((k) => k.title === t)!
     expect(nach('Wärme erzeugt').subtitle).toBe('geschätzt: Strom × JAZ 3,5')
-    expect(nach('Ersparnis vs. Gas').subtitle).toBe('Wärme geschätzt — Ersparnis und CO₂ folgen aus der Schätzung')
+    expect(nach('Ersparnis vs. Alternative').subtitle).toBe('Wärme geschätzt — Ersparnis und CO₂ folgen aus der Schätzung')
     expect(nach('Strom verbraucht').subtitle).toBeUndefined()
     expect(g.kennzahlen!.kpis[0].subtitle).toContain('Wärme geschätzt')
   })

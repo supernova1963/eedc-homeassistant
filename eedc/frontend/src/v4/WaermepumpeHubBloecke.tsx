@@ -82,7 +82,7 @@ export function WaermepumpeVergleichIST({ anlageId, inv, melde }: { anlageId: nu
   return <Parkbar id="chart:wp-vergleich" titel="Monats-/Saisonvergleich"><WaermepumpeVergleich monatsdaten={ds.monatsdaten} jazJeMonat={ds.zusammenfassung.jaz_je_monat} hatGetrennteStrom={ds.zusammenfassung.gesamt_strom_heizen_kwh !== undefined} /></Parkbar>
 }
 
-/** Wirtschaftlichkeit: Kostenvergleich WP vs. Gas/Öl + Ersparnis. */
+/** Wirtschaftlichkeit: Kostenvergleich WP vs. Alternative + Ersparnis. */
 export function WaermepumpeWirtschaftlichkeitIST({ anlageId, inv, melde }: { anlageId: number; inv?: Investition; melde?: MeldeFn }) {
   const { ds, loading } = useWpGeraet(anlageId, inv)
   const leer = loading || !ds
@@ -91,6 +91,6 @@ export function WaermepumpeWirtschaftlichkeitIST({ anlageId, inv, melde }: { anl
   if (!ds) return <Leer text="Keine Wirtschaftlichkeitsdaten erfasst." />
   // F-42: Der Titel darf nichts versprechen, was der Block nicht zeigt — ohne
   // ersetzte Heizung gibt es keinen Vergleich, sondern nur die Stromkosten.
-  const titel = wpHatVergleich(ds.zusammenfassung) ? 'Kostenvergleich WP vs. Gas/Öl' : 'Stromkosten'
+  const titel = wpHatVergleich(ds.zusammenfassung) ? 'Kostenvergleich WP vs. Alternative' : 'Stromkosten'
   return <Parkbar id="chart:wp-kostenvergleich" titel={titel}><WaermepumpeKostenvergleich zusammenfassung={ds.zusammenfassung} /></Parkbar>
 }

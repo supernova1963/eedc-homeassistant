@@ -94,7 +94,7 @@ def _wp_alter_wirkungsgrad(wp_parameter: Optional[dict]) -> float:
 #: Zusatzkosten und ohne den Kühlstrom-Abzug: bei einer Klimaanlage ergab der
 #: gedruckte Rechenweg 10 €, während daneben 100 € standen (Style-Guide A6).
 WP_ERSPARNIS_FORMEL = (
-    "(Wärme ÷ Wirkungsgrad × Gaspreis + Zusatzkosten ÷ 12) "
+    "(Wärme ÷ Wirkungsgrad × Preis Alternative + Zusatzkosten ÷ 12) "
     "− (Strom − Kühlstrom) × WP-Strompreis"
 )
 

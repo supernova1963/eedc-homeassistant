@@ -264,13 +264,15 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
     } as TKontoPosten] : []),
     // ── Fallback: WP/eMob-Aggregate wenn kein per-Inv-Daten ──
     ...(!hasPerInv && d.wp_ersparnis_euro != null ? [{
-      label: 'WP-Ersparnis vs. Gas',
+      label: 'WP-Ersparnis vs. Alternative',
       wert: d.wp_ersparnis_euro,
       color: typColor('waermepumpe'),
       // B6/Y-3: Formel und Rechenweg kommen aus dem Backend (Layer-Ergebnis mit
       // Zusatzkosten und ohne Kühlstrom). Hier stand ein selbst gebauter Text mit
       // festem „÷ 0,9 × 10 ct" — ein Rechenweg, der nie der gerechnete war (A6, P12).
-      formel: '(Wärme ÷ Wirkungsgrad × Gaspreis + Zusatzkosten ÷ 12) − (Strom − Kühlstrom) × WP-Strompreis',
+      // ⚠ Wortgleich mit `WP_ERSPARNIS_FORMEL` im Backend — wer den einen
+      // Text ändert, ändert den anderen mit (#411).
+      formel: '(Wärme ÷ Wirkungsgrad × Preis Alternative + Zusatzkosten ÷ 12) − (Strom − Kühlstrom) × WP-Strompreis',
       berechnung: d.wp_ersparnis_berechnung ?? undefined,
       ergebnis: `= ${fmtCalc(d.wp_ersparnis_euro, 2)} €`,
     } as TKontoPosten] : []),

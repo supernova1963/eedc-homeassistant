@@ -26,7 +26,7 @@ describe('finanzTeaserBlock', () => {
       // (15+120) + (0+31,67−16,67) + (185+65,37−35) = 135 + 15 + 215,37 = 365,37
       investitionen_financials: [
         { investition_id: 2, bezeichnung: 'Daikin WP', typ: 'waermepumpe', betriebskosten_monat_euro: 16.67,
-          erloes_euro: null, ersparnis_euro: 31.67, ersparnis_label: 'Ersparnis vs. Gas',
+          erloes_euro: null, ersparnis_euro: 31.67, ersparnis_label: 'Ersparnis vs. Alternative',
           formel: '(Wärme ÷ …) − Strom × …', berechnung: '100 kWh / 0,9 …', erloes_formel: null, sonstige_ertraege_euro: 0, sonstige_ausgaben_euro: 0 },
         { investition_id: 3, bezeichnung: 'Tesla', typ: 'e-auto', betriebskosten_monat_euro: 0,
           erloes_euro: null, ersparnis_euro: 65.37, ersparnis_label: 'Ersparnis vs. Verbrenner',

@@ -25,6 +25,24 @@
 >
 > **Verwandte Dokumente:** [KONZEPT-STYLE-GUIDE.md](KONZEPT-STYLE-GUIDE.md) (visuelle Sprache) · [ADR-001](ADR-001-BERECHNUNGS-LAYER.md)/[ADR-002](ADR-002-WURZELMUSTER.md) (Berechnung — nie mit der IA vermischen, I11) · [#243](https://github.com/supernova1963/eedc-homeassistant/issues/243) (operativer Bausteine-Tracker, mit v4.0.0 abgeschlossen).
 
+> ### ⛔ Wärme/Klima: dieses Dokument sagt nur, WO — was dort gilt, steht im Handbuch
+>
+> **SoT für alles Inhaltliche der Fläche Wärme/Klima ist [HANDBUCH_WAERME_KLIMA.md](HANDBUCH_WAERME_KLIMA.md)**
+> — welche Größe eedc führt, wann eine Kennzahl verschwindet, was eedc bewusst *nicht* sagt, welcher
+> Zähler welche Anzeige trägt. Dieses Dokument ordnet die Fläche nur in die Achsen ein (Tab-Name,
+> Sektions-Reihenfolge, KPI-Plätze, Redirects).
+>
+> **Warum der Verweis hier steht (Entscheid Gernot, 2026-09-08):** Die Fläche hat seit dem
+> 05.09.2026 ein eigenes, abgenommenes Konzept samt Handbuch. Angaben, die hier beiläufig mitliefen,
+> altern seither gegen dieses Konzept — belegt an der KPI-Zeile weiter unten, die
+> *„Ersparnis vs. Gas (€)"* als abgenommene Definition führte, während der ersetzte Energieträger
+> längst wählbar ist (Gas · Öl · Strom-Direktheizung) und ein Aggregat mehrere Wärmepumpen mit
+> **verschiedenen** Trägern zusammenfassen kann (#411, OB73-gif).
+>
+> ⚠ **Wer hier etwas zu Wärme/Klima ändert, ändert es im Handbuch zuerst** — und trägt es hier nur
+> nach, soweit es die *Verortung* betrifft. Umgekehrt gilt: Ein Widerspruch zwischen beiden
+> Dokumenten wird zugunsten des Handbuchs aufgelöst, nicht ausdiskutiert.
+
 ---
 
 > **Zur Eingangsperspektive unten:** Sie beschreibt die Lage **vor** v4.0.0 und bleibt als Begründung
@@ -189,7 +207,7 @@ Sub-Tabs pro Komponententyp:
 PV-Anlage  ·  Speicher  ·  Wärme/Klima  ·  E-Auto  ·  Wallbox  ·  BKW  ·  Sonstiges
 ```
 
-Tabs erscheinen nur, wenn die Anlage die jeweilige Komponente hat (strukturell N/A → Tab ausgeblendet, vgl. Style-Guide A3 Datenzustand-Vokabular). Damit bleibt die Komponenten-Achse durch den Vorhandensein-Filter de facto bei ≤ 5 sichtbaren Tabs, obwohl bis zu 7 Typen möglich sind — das ≤5-Limit gilt strikt für die Zeit-/Wie-Achse (Cockpit/Auswertungen), wo die Tab-Inflation auftrat. **✅ Entschieden (2026-05-31):** Tab-Benennung **„Wärme/Klima"** (deckt Wärmepumpe + Split-Klimaanlagen #263 zukunftssicher ab).
+Tabs erscheinen nur, wenn die Anlage die jeweilige Komponente hat (strukturell N/A → Tab ausgeblendet, vgl. Style-Guide A3 Datenzustand-Vokabular). Damit bleibt die Komponenten-Achse durch den Vorhandensein-Filter de facto bei ≤ 5 sichtbaren Tabs, obwohl bis zu 7 Typen möglich sind — das ≤5-Limit gilt strikt für die Zeit-/Wie-Achse (Cockpit/Auswertungen), wo die Tab-Inflation auftrat. **✅ Entschieden (2026-05-31):** Tab-Benennung **„Wärme/Klima"** (deckt Wärmepumpe + Split-Klimaanlagen #263 zukunftssicher ab). ⚑ Was auf der Fläche gilt, steht im [Handbuch Wärme/Klima](HANDBUCH_WAERME_KLIMA.md) — hier nur der Ort.
 
 **Innenstruktur pro Komponenten-Seite (Variante C):**
 
@@ -218,7 +236,7 @@ Tabs erscheinen nur, wenn die Anlage die jeweilige Komponente hat (strukturell N
 
 - **Datums-Selektor statt Sub-Sub-Tabs:** Eine Achsen-Kontrolle oben, alle Sektionen folgen dem Datum. Mobile-tauglich (kein Sub-Sub-Tab-Layout, keine doppelte Zeit-Achse zur Cockpit-Zeit-Achse).
 - **Lineare Sektion-Reihenfolge (hier bewusst fix):** Status → Verlauf → Vergleich → Aussicht. Vier Sektionen sind genug und stabil über alle Komponententypen — keine komponentenspezifische Sondersortierung. **Bewusster Unterschied zu den Cockpit-Zeitsichten:** Dort sind die Sektionen sortierbar (gut angekommenes Monatsbericht-Muster), im Komponenten-Hub *nicht* — die typ-übergreifende Stabilität ist hier der höhere Wert (man findet dieselbe Sektion bei jedem Komponententyp am selben Platz). **Einklappbar und fokussierbar** (Vollbild ⤢, universelles Block-Modell oben) bleiben die Sektionen aber auch hier — nur die ↑↓-Reorder entfällt.
-- **Vergleich-Sektion (Saison + Werte):** Die „Vergleich"-Sektion trägt einen **Diagramm ⇄ Tabelle-Umschalter** — *Diagramm* mit Saison-Toggle (Winter/Heizperiode/Sommer) und Wetternormalisierung (Heizgradtage, fairer Mehrjahresvergleich; #195 Punkt 3, primär Wärme/Klima), *Tabelle* = die komponenten-scoped Werte (numerischer Zwilling, eine Tabellen-SoT, siehe Cockpit). Saisonale Mehrjahres-Muster (#110) sind die datengebundene Ausbaustufe.
+- **Vergleich-Sektion (Saison + Werte):** Die „Vergleich"-Sektion trägt einen **Diagramm ⇄ Tabelle-Umschalter** — *Diagramm* mit Saison-Toggle (Winter/Heizperiode/Sommer) und Wetternormalisierung (Heizgradtage, fairer Mehrjahresvergleich; #195 Punkt 3, primär Wärme/Klima — Inhaltliches im [Handbuch](HANDBUCH_WAERME_KLIMA.md)), *Tabelle* = die komponenten-scoped Werte (numerischer Zwilling, eine Tabellen-SoT, siehe Cockpit). Saisonale Mehrjahres-Muster (#110) sind die datengebundene Ausbaustufe.
 - **Energieprofil verschwindet als eigenständige Seite — dreifacher Zielort:** der *anlage-weite* Tagesüberblick → **Cockpit/Tag**; der *komponentenspezifische* Stundenverlauf → „Verlauf im Zeitraum"-Sektion (Strom-Profil PV, Wärme-Profil WP); die *Rohtabelle* → Auswertungen/Tabelle; die **Pflege** (Vollbackfill, Löschen, Reaggregation) → Einstellungen/Daten/Energieprofil-Pflege. **Anzeige ≠ Pflege.**
 - **Komponentenspezifische KPIs** via `lib/komponentenStyle.ts` als SoT (Style-Guide A5 + B9). Erweiterung der **Konsumtion** auf E-Auto/BKW/Wallbox/Sonstiges/PV-Anlage ist Pflicht-Voraussetzung — heute konsumieren nur WP+Speicher (Disc #163). **✅ Update 2026-06-12 (P1):** Die KPI-Stil-Records sind jetzt **real konsumiert** (WP- + Speicher-Dashboard ziehen den SoT; `fmtKpi` nach `lib/formatting.ts` umgezogen). D2-Kanon **komplett angelegt** (alle 7 Typen + 3 Sonstiges-Varianten); offen nur die Übernahme in die übrigen 5 Dashboards (B9/E1-P2). Siehe Style-Guide A5.
 
@@ -228,11 +246,21 @@ Tabs erscheinen nur, wenn die Anlage die jeweilige Komponente hat (strukturell N
 |---|---|---|---|---|
 | **PV-Anlage** | Anlagenleistung (kWp) | Gesamterzeugung (MWh) | Spez. Ertrag (kWh/kWp) | Eigenverbrauch (%) |
 | **Speicher** | Vollzyklen | Wirkungsgrad η (%) | Durchsatz (MWh) | Ersparnis (€) |
-| **Wärme/Klima** | JAZ | Wärme erzeugt (MWh) | Strom verbraucht (MWh) | Ersparnis vs. Gas (€) |
+| **Wärme/Klima** ¹ | JAZ | Wärme erzeugt (MWh) | Strom verbraucht (MWh) | Ersparnis vs. Alternative (€) |
 | **E-Auto** | Gefahren (km) | Verbrauch (kWh/100km) | PV-Anteil (%) | Ersparnis vs. Benzin (€) |
 | **Wallbox** | Heimladung (MWh) | PV-Anteil (%) | Ladevorgänge | Ersparnis vs. Extern (€) |
 | **BKW** | Erzeugung (kWh) | Eigenverbrauch (%) | Ersparnis (€) | **Spez. Ertrag (kWh/kWp)** |
 | **Sonstiges** | *3 Varianten:* Erzeuger (Erzeugung · EV-Quote · Ersparnis · CO₂→Cross-Link) / Verbraucher (Verbrauch · PV-Anteil · Netzkosten · PV-Ersparnis) / Speicher (Ladung · Entladung · Effizienz · Ersparnis) | | | |
+
+> ¹ **Wärme/Klima — Inhaltliches im [Handbuch](HANDBUCH_WAERME_KLIMA.md), hier nur der KPI-Platz.**
+> ⛔ **Bis zum 08.09.2026 stand hier „Ersparnis vs. Gas (€)"**, und das war die abgenommene
+> Definition, auf die sich fünf Anzeigestellen beriefen. Sie war schon länger falsch: Der ersetzte
+> Energieträger ist am Gerät gepflegt (**Gas · Öl · Strom-Direktheizung**) und wird auch korrekt
+> verrechnet (`alternativkosten.py::alter_wirkungsgrad` — Öl 0,85, Strom 1,0) — nur benannt wurde
+> unbedingt Gas. OB73-gif hat es gemeldet (#411), nachdem er eine Ölheizung gepflegt hatte.
+> **Die allgemeine Form ist nicht nur höflicher, sie ist die einzig mögliche:** Der Cockpit-Block
+> fasst *mehrere* Wärmepumpen zusammen, die verschiedene Träger ersetzt haben können — ein Aggregat
+> kann keinem einzelnen folgen.
 
 - **BKW achsenrein (2026-06-02):** das heutige CO₂-KPI wird durch **spez. Ertrag** ersetzt — CO₂ ist Wie-Achse und lebt in Auswertungen/CO₂ (Cross-Link bleibt). Pro-Komponente-**Geld**werte (Ersparnis) bleiben als Teaser zulässig (F2-a-Konsequenz 3), nur anlage-weite Finanzen/CO₂ wandern.
 - **Status ≠ Live:** Die Status-KPIs sind **zeitraum-skaliert** (folgen dem Datums-Selektor der Komponenten-Seite). Echte Live-Werte (SoC etc.) erscheinen nur dort, wo Live-Daten existieren.
@@ -252,7 +280,7 @@ Sub-Tabs als analytische Schnitte über die ganze Anlage:
 | **Tabelle** (volle Werkbank) | Rohdaten über alle Komponenten, voller Spalten-Picker, Jahr-vs-Jahr `[Wert \| Vergleichsjahr \| Δ]` (#195), kanonischer CSV-Export. *Scoped* Ausschnitte derselben Tabelle leben eingebettet in Cockpit/Komponenten (Werte/Tabelle-Sektion) | `Auswertung.tsx`/tabelle |
 | **Prognose-vs-IST** | Genauigkeits-Tracking, Bias, Quellen-Vergleich | `PrognoseVsIst.tsx` |
 
-> **✅ Entschieden (2026-06-01): Finanzen-Verortung (F2-a).** Das anlage-weite Finanz-T-Konto — heute der dominante Block des Monatsberichts — zieht **hierher** (Finanzen = analytischer Schnitt = Wie-Achse). Die Cockpit-Zeit-Sichten behalten nur einen **kompakten Finanz-KPI** (Netto-Ertrag, Ersparnis) im KPI-Strip + Cross-Link „volle Finanzrechnung →". *Auflage:* die konsolidierte Finanzrechnung muss die **sonstigen Positionen aus der Monatsauswertung** mit einsammeln (#310). Pro-Komponente-Geldwerte (z. B. WP-Ersparnis vs. Gas) bleiben Teaser in den Komponenten-Sektionen; nur das **anlage-weite** T-Konto wandert. **Folge-Entscheidung (2026-06-01):** der Cockpit-Tab heißt künftig „**Monat**" (nicht „Monatsbericht") — der namensgebende finanzielle *Abschluss* sitzt jetzt in Auswertungen/Finanzen.
+> **✅ Entschieden (2026-06-01): Finanzen-Verortung (F2-a).** Das anlage-weite Finanz-T-Konto — heute der dominante Block des Monatsberichts — zieht **hierher** (Finanzen = analytischer Schnitt = Wie-Achse). Die Cockpit-Zeit-Sichten behalten nur einen **kompakten Finanz-KPI** (Netto-Ertrag, Ersparnis) im KPI-Strip + Cross-Link „volle Finanzrechnung →". *Auflage:* die konsolidierte Finanzrechnung muss die **sonstigen Positionen aus der Monatsauswertung** mit einsammeln (#310). Pro-Komponente-Geldwerte (z. B. WP-Ersparnis vs. Alternative — Beschriftung seit 08.09.2026, s. Fußnote ¹) bleiben Teaser in den Komponenten-Sektionen; nur das **anlage-weite** T-Konto wandert. **Folge-Entscheidung (2026-06-01):** der Cockpit-Tab heißt künftig „**Monat**" (nicht „Monatsbericht") — der namensgebende finanzielle *Abschluss* sitzt jetzt in Auswertungen/Finanzen.
 
 **Was aus heutigem Auswertungen wegfällt:**
 

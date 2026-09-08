@@ -189,7 +189,7 @@ class InvestitionFinancialDetail(BaseModel):
     #: Energiezeile; Bauform wie `ersparnis_label`.
     erloes_label: str = ERLOES_LABEL_EINSPEISUNG
     ersparnis_euro: Optional[float] = None   # Eigenverbrauch, WP, eMob, Speicher, ...
-    ersparnis_label: str = ""                # "Eigenverbrauch-Ersparnis", "Ersparnis vs. Gas", ...
+    ersparnis_label: str = ""                # "Eigenverbrauch-Ersparnis", "Ersparnis vs. Alternative", ...
     formel: Optional[str] = None
     berechnung: Optional[str] = None
     # Sonstige Positionen (z.B. AG-Vergütung Dienstwagen, THG-Quote, Reparaturen).
@@ -1255,7 +1255,13 @@ def _baue_investition_financial(
                 strom_kuehlen_kwh=modus_strom_zeile(data).kuehlen_kwh,
             )
             inv_ersparnis = round(wp_result.ersparnis_euro, 2)
-            inv_label = "Ersparnis vs. Gas"
+            # #411: Der ersetzte Energietraeger ist gepflegt (Gas · Oel ·
+            # Strom-Direktheizung) und wird korrekt verrechnet — die
+            # Beschriftung nannte trotzdem unbedingt Gas. Der Block fasst
+            # ausserdem mehrere Waermepumpen zusammen, die verschiedene
+            # Traeger ersetzt haben koennen: ein Aggregat kann keinem
+            # einzelnen folgen. Deshalb die allgemeine Form.
+            inv_label = "Ersparnis vs. Alternative"
             # B6/Y-3: Formel und Rechnung beschreiben, was der Layer rechnet —
             # mit Zusatzkosten der Altheizung und ohne den Kühlstrom (E-B). Bis
             # hierher stand ein Text, der bei F8 10 € ergab, neben dem Wert 100 €.

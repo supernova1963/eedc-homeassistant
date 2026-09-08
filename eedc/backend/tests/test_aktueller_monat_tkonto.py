@@ -11,7 +11,7 @@ Aktuelles Verhalten (Stand v3.45.0), netz_p = 30 ct, einsp_p = 8 ct (allgemein-T
   - balkonkraftwerk: ersparnis = (eigenverbrauch|pv) × netz_p; erloes = einspeisung × einsp_p
   - speicher:        ersparnis = entladung × netz_p ("Entladung-Ersparnis")
   - sonstiges:       KEINE Ersparnis je Gerät (N-131); erloes = **gepflegter** Betrag
-  - waermepumpe:     ersparnis via berechne_wp_ersparnis (Label "Ersparnis vs. Gas")
+  - waermepumpe:     ersparnis via berechne_wp_ersparnis (Label "Ersparnis vs. Alternative")
   - e-auto dienstlich: Wirtschaftlichkeits-Zweig übersprungen, sonstige Erträge bleiben
   - betriebskosten_monat_euro = betriebskosten_jahr / 12
   - Inclusion-Guard: kein Detail, wenn weder bk noch ersparnis/erloes/sonstige > 0
@@ -179,7 +179,7 @@ async def test_waermepumpe_ersparnis_vs_gas_label(db):
     res = await get_aktueller_monat(anlage_id=anlage.id, jahr=JAHR, monat=MONAT, db=db)
     d = _detail_by_id(res, wp_id)
     assert d is not None
-    assert d.ersparnis_label == "Ersparnis vs. Gas"
+    assert d.ersparnis_label == "Ersparnis vs. Alternative"
     assert d.ersparnis_euro is not None
 
 

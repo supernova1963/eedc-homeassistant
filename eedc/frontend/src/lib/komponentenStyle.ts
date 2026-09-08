@@ -112,12 +112,15 @@ export const SPEICHER_KPI = {
   ladezustand:  { title: 'Ladezustand',    icon: BatteryMedium, color: 'orange' as const },
 } as const satisfies Record<string, KpiStyle>
 
-/** Wärme/Klima: JAZ · Wärme erzeugt · Strom verbraucht · Ersparnis vs. Gas */
+/** Wärme/Klima: JAZ · Wärme erzeugt · Strom verbraucht · Ersparnis vs. Alternative */
 export const WP_KPI = {
   jaz:       { title: 'JAZ',              icon: Thermometer, color: 'orange' as const },
   waerme:    { title: 'Wärme erzeugt',    icon: Flame,       color: 'red'    as const },
   strom:     { title: 'Strom verbraucht', icon: Zap,         color: 'yellow' as const },
-  ersparnis: { title: 'Ersparnis vs. Gas',icon: TrendingUp,  color: 'green'  as const },
+  // #411: „Alternative" statt „Gas" — der ersetzte Energieträger ist
+  // gepflegt (Gas · Öl · Strom-Direktheizung), und der Kachel-Wert kann
+  // mehrere Wärmepumpen mit verschiedenen Trägern zusammenfassen.
+  ersparnis: { title: 'Ersparnis vs. Alternative', icon: TrendingUp, color: 'green' as const },
 } as const satisfies Record<string, KpiStyle>
 
 /** E-Auto: Gefahren · Verbrauch · PV-Anteil · Ersparnis vs. Benzin */

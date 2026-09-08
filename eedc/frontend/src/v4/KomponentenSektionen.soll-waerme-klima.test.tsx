@@ -51,7 +51,7 @@ describe('Achse IV — die Zahl sagt, was sie ist', () => {
     expect(REGELN_OFFEN['§4.3/W-10']).toBeUndefined()
     rendereWpBlock({ wp_strom_kwh: 337, wp_waerme_kwh: 309, wp_ersparnis_euro: -49.53 })
 
-    // Vorher: „Ersparnis vs. Gas: **+-49,53 €**" — das Plus wurde unbesehen
+    // Vorher: „Ersparnis vs. Alternative: **+-49,53 €**" — das Plus wurde unbesehen
     // vorangestellt. Zwei Melder-Screenshots (dietmar1968, 25.08.).
     //
     // ⚠ **Am gerenderten Text gemessen, nicht vom Screenshot abgeschrieben:**
@@ -60,8 +60,8 @@ describe('Achse IV — die Zahl sagt, was sie ist', () => {
     // statt gegen die Ausgabe wäre durchgefallen.
     expect(screen.queryByText(/\+-49,53/)).toBeNull()
     expect(screen.getByText('-49,53')).toBeTruthy()
-    expect(screen.getByText('Mehrkosten vs. Gas')).toBeTruthy()
-    expect(screen.queryByText('Ersparnis vs. Gas')).toBeNull()
+    expect(screen.getByText('Mehrkosten vs. Alternative')).toBeTruthy()
+    expect(screen.queryByText('Ersparnis vs. Alternative')).toBeNull()
   })
 
   it('ERFÜLLT: eine positive Ersparnis trägt ihr Plus zu Recht', () => {
@@ -70,7 +70,7 @@ describe('Achse IV — die Zahl sagt, was sie ist', () => {
     rendereWpBlock({ wp_strom_kwh: 500, wp_waerme_kwh: 2000, wp_ersparnis_euro: 312.4 })
 
     expect(screen.getByText(/\+312,40/)).toBeTruthy()
-    expect(screen.getByText('Ersparnis vs. Gas')).toBeTruthy()
+    expect(screen.getByText('Ersparnis vs. Alternative')).toBeTruthy()
   })
 
   it('ERFÜLLT (§2.2.1/W-6): eine Arbeitszahl unter 2 trägt ihren Satz', () => {

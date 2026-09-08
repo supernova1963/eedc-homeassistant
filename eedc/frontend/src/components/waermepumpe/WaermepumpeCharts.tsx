@@ -95,7 +95,9 @@ export function WaermepumpeKostenvergleich({ zusammenfassung: z }: { zusammenfas
   }
   const data = [
     { name: 'Wärmepumpe', value: z.wp_kosten_euro, fill: GELD_COLORS.ersparnis },
-    { name: 'Gas/Öl', value: z.alte_heizung_kosten_euro, fill: GELD_COLORS.kosten },
+    // #411: „Gas/Öl" ließ den dritten wählbaren Träger aus — die
+    // Strom-Direktheizung (`alter_energietraeger: 'strom'`, η 1,0).
+    { name: 'Alternative', value: z.alte_heizung_kosten_euro, fill: GELD_COLORS.kosten },
   ]
   return (
     <div className="space-y-2">
