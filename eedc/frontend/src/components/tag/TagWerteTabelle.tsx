@@ -158,6 +158,29 @@ const TD_COLUMNS: TdColDef[] = [
   { key: 'globalstrahlung_wm2',label: 'Strahlung',   unit: 'W/m²', group: 'qualitaet', decimals: 0, isSum: false, defaultVisible: false             },
 ]
 
+/**
+ * Welche der **festen** Spalten bietet dieser Tag an?
+ *
+ * `waermepumpe_kw` und `wallbox_kw` sind die einzigen Gerätespalten mit
+ * `defaultVisible: true` — jedes andere Gerät reist als `extraSerien` an und
+ * erscheint nur, wenn das Backend es für den Tag liefert. JayJayX (simon42
+ * T89667 #307/#309, 08.09.2026) besitzt weder das eine noch das andere und
+ * bekam beide trotzdem zu sehen, im Diagramm wie in dieser Tabelle.
+ *
+ * ⛔ Die Spalte fällt auch aus dem **Picker** — eine anwählbare Spalte, die
+ * danach leer bliebe, ist dieselbe Frage aus einer anderen Richtung.
+ *
+ * Rein (statt inline im `useMemo`), damit die Regel ohne DOM prüfbar ist: diese
+ * Komponente lässt sich in jsdom nicht rendern, auch unverändert nicht — die
+ * bestehenden Proben dieser Datei prüfen deshalb ausschließlich reine
+ * Funktionen. Gemessen am 09.09.2026.
+ */
+export function angeboteneSpalten(senkenErfasst: Set<SenkenKey>): TdColDef[] {
+  return TD_COLUMNS.filter(
+    c => (c.key !== 'waermepumpe_kw' && c.key !== 'wallbox_kw') || senkenErfasst.has(c.key),
+  )
+}
+
 const TD_GROUP_LABELS: Record<TdGroup, string> = {
   erzeugung: 'Erzeugung',
   netz:      'Netz',
@@ -305,10 +328,23 @@ export function TagWerteTabelle({ daten, extraSerien, erzeugerSerien = [], datum
     })
   }, [daten, sortKey, sortDir, extraSerien, erzeugerSpalten, calcGesamterzeugung, calcHausverbrauch])
 
+  // Welche festen Spalten bietet dieser Tag überhaupt an?
+  //
+  // JayJayX (simon42 T89667 #307/#309, 08.09.2026) besitzt weder Wärmepumpe
+  // noch Wallbox und bekam beide trotzdem überall zu sehen. `waermepumpe_kw`
+  // und `wallbox_kw` sind die einzigen Gerätespalten mit `defaultVisible: true`
+  // — alle anderen Geräte reisen als `extraSerien` an und erscheinen nur, wenn
+  // das Backend sie liefert. `senkenErfasst` beantwortet die Frage seit N-95
+  // direkt darüber; sie wurde bisher nur für den Hausverbrauch gelesen.
+  //
+  // ⛔ Die Spalte verschwindet auch aus dem **Picker**: eine anwählbare Spalte,
+  // die danach leer bleibt, ist die Frage aus einer anderen Richtung.
+  const angeboteneCols = useMemo(() => angeboteneSpalten(senkenErfasst), [senkenErfasst])
+
   // Aktive Spalten in Reihenfolge: TD_COLUMNS + extra Serien (eingebettet in Gruppe)
   const allCols = useMemo(() => {
     const cols: (TdColDef | (SerieInfo & { unit: string; decimals: number; isSum: boolean; group: TdGroup }))[] = []
-    for (const c of TD_COLUMNS) {
+    for (const c of angeboteneCols) {
       cols.push(c)
       // Die Strings stehen direkt hinter ihrer Summe „PV" — sie schlüsseln sie auf.
       if (c.key === 'pv_kw') erzeugerSpalten.forEach(es => cols.push({ ...es, unit: 'kW', decimals: 2, isSum: true, group: 'erzeugung' }))
@@ -316,7 +352,7 @@ export function TagWerteTabelle({ daten, extraSerien, erzeugerSerien = [], datum
       if (c.key === 'wallbox_kw') extraVerbraucher.forEach(es => cols.push({ ...es, unit: 'kW', decimals: 2, isSum: true, group: 'verbrauch' }))
     }
     return cols.filter(c => visibleCols.has(c.key))
-  }, [visibleCols, extraErzeuger, extraVerbraucher, erzeugerSpalten])
+  }, [visibleCols, extraErzeuger, extraVerbraucher, erzeugerSpalten, angeboteneCols])
 
   // Summenzeile
   const summen = useMemo(() => {
@@ -380,7 +416,7 @@ export function TagWerteTabelle({ daten, extraSerien, erzeugerSerien = [], datum
             {pickerOpen && (
               <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3 w-56 max-h-96 overflow-y-auto">
                 {TD_GROUPS.map(group => {
-                  const fixedInGroup = TD_COLUMNS.filter(c => c.group === group)
+                  const fixedInGroup = angeboteneCols.filter(c => c.group === group)
                   const extraInGroup = group === 'erzeugung' ? extraErzeuger
                     : group === 'verbrauch' ? extraVerbraucher : []
                   const allInGroup = [...fixedInGroup, ...extraInGroup.map(es => ({ key: es.key, label: es.label }))]
@@ -401,7 +437,7 @@ export function TagWerteTabelle({ daten, extraSerien, erzeugerSerien = [], datum
                   )
                 })}
                 <button type="button"
-                  onClick={() => setVisibleCols(new Set(TD_COLUMNS.filter(c => c.defaultVisible).map(c => c.key)))}
+                  onClick={() => setVisibleCols(new Set(angeboteneCols.filter(c => c.defaultVisible).map(c => c.key)))}
                   className="mt-1 w-full text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 text-center py-1">
                   Standard wiederherstellen
                 </button>

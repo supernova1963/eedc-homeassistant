@@ -34,8 +34,14 @@ Persistenz + Chart-Slots), ``ha_export_prognose`` (MQTT), ``api/routes/
 prognosen`` (Vergleich eedc-/OM-Spalte).
 
 Robustheit: fehlende Koordinaten/kWp/OpenMeteo → ``None``. Multi-String-
-Unvollständigkeit (#306) wird pro Tag als ``om_vollstaendig=False`` markiert,
-damit der Persist-Pfad einen kollabierten Tageswert NICHT einfriert.
+Unvollständigkeit (#306) wird pro Tag als ``om_vollstaendig=False`` markiert
+**und liefert für diesen Tag keine Zahlen mehr** (``eedc_kwh``/``om_kwh``/
+``profil`` = ``None``): ein um die fehlenden Gruppen untergewichteter Tageswert
+ist keine kleinere Wahrheit, sondern eine falsche Zahl. Bis 09.09.2026 markierte
+das Flag den Fall nur, und **einer** von sechs Konsumenten las es — der
+Persist-Pfad in ``live_wetter``, damit er nichts Kollabiertes einfriert. Alle
+übrigen (Anzeige, MQTT-/HA-Export, Prognosen-Vergleich, ``/solar-prognose``,
+Energieprofil-Tagesprognose) lieferten den kollabierten Wert unbesehen aus.
 """
 
 from __future__ import annotations
@@ -471,6 +477,48 @@ async def kanon_tagesprognose(
             tage.append(None)
             continue
 
+        if not om_vollstaendig:
+            # Ein Teil-Fan-out liefert KEINEN Tageswert — er lieferte bis hier
+            # einen um die fehlenden Gruppen untergewichteten, und der ist keine
+            # kleinere Wahrheit, sondern eine falsche Zahl. Knallfrosch (simon42
+            # T89667 #306, 08.09.2026): PV1 20,24 kWp + PV2 1,74 kWp, der
+            # HA-Sensor „PV-Prognose heute" stand für je eine volle Stunde auf
+            # **7,9 statt 92,3 kWh** — genau dem Anteil der kleinen Anlage,
+            # zweimal an zwei Tagen. Jede Gruppe hat ihren eigenen Cache-Key
+            # (Neigung/Ausrichtung); fällt ein Abruf aus, landet nur SEIN Key im
+            # Negativ-Cache, die übrigen behalten ihren gültigen Eintrag.
+            #
+            # ⛔ Warum hier und nicht bei den Lesern: `om_vollstaendig` gibt es
+            # seit #306, aber von SECHS Konsumenten des Kanons hat es genau
+            # EINER je gelesen — `live_wetter` für die Frage, ob der Tageswert
+            # eingefroren werden darf. Anzeige, MQTT-/HA-Export, Prognosen-
+            # Vergleich, /solar-prognose und die Energieprofil-Tagesprognose
+            # nahmen den kollabierten Wert unbesehen. Eine Invariante, an die
+            # jeder Leser denken muss, ist keine.
+            #
+            # Das Stundenprofil fällt mit: es ist um dieselben Gruppen zu klein,
+            # und die Kanon-Invariante lautet „Tageswert == Σ Export-Slots".
+            # Das Flag bleibt am Tag stehen, damit „unvollständig abgerufen"
+            # vom Fall „gar kein Ergebnis" (`None`) unterscheidbar ist —
+            # `live_wetter` liest genau diesen Unterschied.
+            logger.warning(
+                "Prognose-Fan-out unvollständig für %s: %d von %d "
+                "Orientierungsgruppen geliefert — kein Tageswert für diesen Tag "
+                "(ein untergewichteter wäre eine falsche Zahl, #306)",
+                datum_iso, groups_present, len(gruppen),
+            )
+            tage.append(KanonTag(
+                datum=datum_iso,
+                om_kwh=None,
+                eedc_kwh=None,
+                vm_kwh=None,
+                nm_kwh=None,
+                profil=None,
+                om_stundenprofil_kwh=None,
+                om_vollstaendig=False,
+            ))
+            continue
+
         if has_hourly:
             faktoren = await korrekturfaktoren_fuer_tag(
                 db,
@@ -512,16 +560,15 @@ async def kanon_tagesprognose(
     # Rollende „heute"-Größen aus den korrigierten Slots + IST.
     rest_heute = ist_bisher = heute_rollend = None
     heute_tag = tage[0] if tage else None
-    if heute_tag is not None and heute_tag.profil is not None:
+    if heute_tag is not None:
         from backend.services.prognose_adapter import ist_profil
         now = datetime.now(_BERLIN_TZ)
-        slots = heute_tag.profil.stunden_kwh
-        # #339: laufende Stunde anteilig nach verstrichenen Minuten. Backward-
-        # Konvention (#144): Slot N = Energie [N-1, N), also ist slots[now.hour]
-        # bereits abgelaufen und slots[now.hour + 1] die laufende Stunde. Ohne den
-        # frac-Term sinkt der Rest nur einmal je Stunde in EINEM Sprung (bei
-        # kleinen Anlagen 5–8 kWh) statt gleichmäßig.
-        rest_heute = rest_aus_slots(slots, now)
+        # „Bereits erzeugt" ist GEMESSEN und hängt an keiner Prognose. Es steht
+        # deshalb vor der Profil-Weiche: sonst nimmt ein ausgefallener
+        # Wetterabruf — seit dem Teil-Fan-out-Riegel oben auch ein teilweise
+        # ausgefallener — dem Anwender eine Zahl mit, die eedc selbst gemessen
+        # hat. Das gilt genauso für den OpenMeteo-Schätzpfad (Tageswert ohne
+        # Stundenprofil), der den IST-Wert bis hierher ebenfalls verlor.
         ist_res = await db.execute(
             select(TagesEnergieProfil).where(
                 TagesEnergieProfil.anlage_id == anlage.id,
@@ -530,7 +577,15 @@ async def kanon_tagesprognose(
         )
         ist_p = ist_profil(ist_res.scalars().all(), jetzt_stunde=now.hour, datum=heute)
         ist_bisher = round(ist_p.tageswert_kwh or 0.0, 1)
-        heute_rollend = round(ist_bisher + rest_heute, 1)
+    if heute_tag is not None and heute_tag.profil is not None:
+        slots = heute_tag.profil.stunden_kwh
+        # #339: laufende Stunde anteilig nach verstrichenen Minuten. Backward-
+        # Konvention (#144): Slot N = Energie [N-1, N), also ist slots[now.hour]
+        # bereits abgelaufen und slots[now.hour + 1] die laufende Stunde. Ohne den
+        # frac-Term sinkt der Rest nur einmal je Stunde in EINEM Sprung (bei
+        # kleinen Anlagen 5–8 kWh) statt gleichmäßig.
+        rest_heute = rest_aus_slots(slots, now)
+        heute_rollend = round((ist_bisher or 0.0) + rest_heute, 1)
 
     return KanonPrognose(
         tage=tage,

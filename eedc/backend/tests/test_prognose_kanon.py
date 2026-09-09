@@ -660,7 +660,13 @@ async def test_anschaffung_im_horizont_zaehlt_erst_ab_dem_tag(db, _patch):
 
 async def test_multistring_unvollstaendig_markiert(db, _patch, monkeypatch):
     """#306: liefert eine Orientierungsgruppe keinen Forecast, ist der Tag als
-    om_vollstaendig=False markiert (Persist-Pfad friert ihn dann nicht ein)."""
+    om_vollstaendig=False markiert (Persist-Pfad friert ihn dann nicht ein).
+
+    ⚠ **Diese Probe allein hat den Fall nicht abgesichert**, und das ist der
+    Grund für die drei darunter: Sie prüft die *Markierung* und schweigt zur
+    *Folge*. Zwischen ihrer Entstehung (#306) und dem 09.09.2026 lasen fünf von
+    sechs Kanon-Konsumenten das Flag nie — sie blieb dabei durchgehend grün.
+    """
     import backend.services.solar_forecast_service as sfs
 
     async def fake_partial(**kwargs):
@@ -674,6 +680,124 @@ async def test_multistring_unvollstaendig_markiert(db, _patch, monkeypatch):
     anlage = await _seed(db, module=[(6.0, 0), (4.0, 90)])
     kanon = await kanon_tagesprognose(db, anlage, days=4)
     assert kanon.tage[0].om_vollstaendig is False
+
+
+# ── Teil-Fan-out: kein Tageswert statt eines kollabierten ────────────────────
+#
+# Melder: Knallfrosch, simon42 T89667 #306 (08.09.2026). Seine Anlage sind
+# **20,24 kWp (PV1) + 1,74 kWp (PV2)** in zwei Orientierungen. Der HA-Sensor
+# „PV-Prognose heute" stand an zwei Tagen für je genau eine Stunde auf
+# **7,9 statt 92,3 kWh** — dem Anteil der kleinen Anlage. Die Stunde ist der
+# Publish-Takt (`CronTrigger(minute=0, second=5)`), der Auslöser ein einzelner
+# ausgefallener Gruppen-Abruf: jede Orientierung hat ihren eigenen Cache-Key,
+# nur ihrer landet im Negativ-Cache.
+
+def _knallfrosch_module():
+    """Seine Konstellation: eine große und eine sehr kleine Gruppe."""
+    return [(20.24, 0), (1.74, 90)]
+
+
+async def test_teil_fanout_liefert_keinen_tageswert(db, _patch, monkeypatch):
+    """Fällt eine Gruppe aus, hat der Tag KEINE Zahlen mehr — auch kein Profil.
+
+    Ein um die fehlenden Gruppen untergewichteter Tageswert ist keine kleinere
+    Wahrheit, sondern eine falsche Zahl; das Stundenprofil ist um dieselben
+    Gruppen zu klein und fällt deshalb mit (Kanon-Invariante „Tageswert ==
+    Σ Export-Slots").
+    """
+    import backend.services.solar_forecast_service as sfs
+
+    async def fake_grosse_gruppe_faellt_aus(**kwargs):
+        if kwargs["kwp"] == pytest.approx(20.24):
+            return None
+        return _fake_prognose(kwargs["kwp"], kwargs["ausrichtung"])
+
+    monkeypatch.setattr(sfs, "get_solar_prognose", fake_grosse_gruppe_faellt_aus)
+    from backend.services.prognose_kanon import kanon_tagesprognose
+    anlage = await _seed(db, module=_knallfrosch_module())
+    kanon = await kanon_tagesprognose(db, anlage, days=4)
+
+    heute = kanon.tage[0]
+    assert heute is not None, "der Tag bleibt als Objekt stehen — mit Begründung"
+    assert heute.om_vollstaendig is False
+    assert heute.eedc_kwh is None
+    assert heute.om_kwh is None
+    assert heute.profil is None
+    assert heute.om_stundenprofil_kwh is None
+    assert heute.vm_kwh is None and heute.nm_kwh is None
+    # Und die abgeleiteten „heute"-Größen tragen den kollabierten Rest nicht
+    # weiter — „nachgeführt" wäre sonst IST + zu kleiner Rest.
+    assert kanon.rest_heute_kwh is None
+    assert kanon.heute_rollend_kwh is None
+
+
+async def test_teil_fanout_erreicht_den_ha_sensor_nicht(db, _patch, monkeypatch):
+    """Der Melderfall am Export: kein Wert statt 7,9 statt 92,3.
+
+    Ohne Wert fällt der Sensor aus `sensor_values`, und der Sync-Job für
+    verschwundene Sensoren (`ha_mqtt_sync`, N-405) leert ihn in Home Assistant
+    auf „unbekannt" — statt den kollabierten Wert eine volle Stunde stehen zu
+    lassen.
+    """
+    import backend.services.solar_forecast_service as sfs
+
+    voll = {}
+
+    async def fake_alle(**kwargs):
+        return _fake_prognose(kwargs["kwp"], kwargs["ausrichtung"])
+
+    async def fake_grosse_gruppe_faellt_aus(**kwargs):
+        if kwargs["kwp"] == pytest.approx(20.24):
+            return None
+        return _fake_prognose(kwargs["kwp"], kwargs["ausrichtung"])
+
+    from backend.services.ha_export_prognose import berechne_prognose_export
+    anlage = await _seed(db, module=_knallfrosch_module())
+
+    # Erst der Normalfall — sonst belegt die Probe nur, dass irgendetwas None ist.
+    monkeypatch.setattr(sfs, "get_solar_prognose", fake_alle)
+    voll = await berechne_prognose_export(db, anlage)
+    assert voll["heute_kwh"] is not None and voll["heute_kwh"] > 0
+
+    monkeypatch.setattr(sfs, "get_solar_prognose", fake_grosse_gruppe_faellt_aus)
+    teil = await berechne_prognose_export(db, anlage)
+    assert teil["heute_kwh"] is None
+    assert teil["rest_today_kwh"] in (None, 0.0)
+    assert teil["heute_rollend_kwh"] is None
+
+
+async def test_teil_fanout_nimmt_den_gemessenen_istwert_nicht_mit(
+    db, _patch, monkeypatch
+):
+    """„Bereits erzeugt" ist gemessen und überlebt den Prognose-Ausfall.
+
+    Sonst kostet ein ausgefallener Wetterabruf dem Anwender eine Zahl, die eedc
+    selbst gemessen hat — der Fix an der Prognose darf die IST-Seite nicht
+    mitnehmen. Bis hierher hing ``ist_bisher_kwh`` an derselben Profil-Weiche
+    wie ``rest_heute``; es steht jetzt davor.
+
+    ⚑ **Bewusst OHNE ``TagesEnergieProfil``-Zeilen**, obwohl ein echter Messwert
+    die schönere Zusage wäre: die Zeilen müssten auf ``date.today()`` liegen und
+    die Auswertung hinge zusätzlich an ``now.hour`` — eine Wette auf Tag und
+    Stunde des Laufs, gegen die ``test_konformitaet_echte_uhr_in_tests`` zu Recht
+    steht (N-167: vier von 24 Stunden rot ohne Code-Änderung). Die Unterscheidung
+    trägt auch ohne sie, denn sie ist binär: der IST-Zweig läuft (Σ leerer Slots
+    = ``0.0``) oder er wird übersprungen (``None``).
+    """
+    import backend.services.solar_forecast_service as sfs
+
+    async def fake_grosse_gruppe_faellt_aus(**kwargs):
+        if kwargs["kwp"] == pytest.approx(20.24):
+            return None
+        return _fake_prognose(kwargs["kwp"], kwargs["ausrichtung"])
+
+    anlage = await _seed(db, module=_knallfrosch_module())
+    monkeypatch.setattr(sfs, "get_solar_prognose", fake_grosse_gruppe_faellt_aus)
+    from backend.services.prognose_kanon import kanon_tagesprognose
+    kanon = await kanon_tagesprognose(db, anlage, days=4)
+
+    assert kanon.tage[0].eedc_kwh is None, "die Prognose fehlt …"
+    assert kanon.ist_bisher_kwh is not None, "… der gemessene IST-Wert bleibt"
 
 
 # ── MQTT „Rest heute" ────────────────────────────────────────────────────────

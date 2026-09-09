@@ -464,6 +464,25 @@ Einrichtung: [Einstellungen → Integration → MQTT-Export](HANDBUCH_EINSTELLUN
 > Stunde. Bis v4.0.27 war das falsch gesetzt (gemeldet von rapahl); die Einheit kWh stand und
 > steht unverändert am Sensor.
 
+> ⚠ **Wann diese Sensoren „unbekannt" zeigen — und warum das die richtige Antwort ist.**
+> eedc holt die Prognose **je Ausrichtung getrennt** (Multi-String-Fan-out): eine Ost- und eine
+> Westfläche sind zwei Abrufe, jeder mit eigenem Zwischenspeicher. Fällt einer davon aus —
+> Zeitüberschreitung oder Ratenbegrenzung beim Wetterdienst —, liefern die übrigen weiter, und
+> die Tagessumme wäre dann **um die fehlende Fläche zu klein**. Statt eine solche Zahl
+> auszugeben, lässt eedc den Sensor für diesen Durchgang **leer** (in Home Assistant:
+> „unbekannt", s. § *Ein Sensor, der seinen Wert verliert*); beim nächsten Durchgang steht der
+> volle Wert wieder da. Betroffen sind `…_heute_kwh`, `…_rest_today_kwh`,
+> `…_heute_rollend_kwh` und die Tage +1/+2/+3 samt Stundenprofilen — jeweils nur der Tag,
+> dessen Abruf unvollständig war.
+>
+> **Für Automationen heisst das:** auf `unknown`/`unavailable` prüfen, statt einen Zahlenwert
+> vorauszusetzen. Eine Anlage mit nur **einer** Ausrichtung kennt den Fall nicht — dort gibt es
+> entweder alles oder nichts. Der gemessene Wert *„PV heute erzeugt"* bleibt in jedem Fall
+> stehen: er hängt an keiner Prognose.
+>
+> Vor v4.0.44 stand hier die zu kleine Zahl, bis der nächste Durchgang sie ersetzte — bei der
+> Voreinstellung eine volle Stunde.
+
 > **Hinweis:** Bis v3.45.5 war `eedc_prognose_heute_kwh` „IST bisher + Rest" und wich damit von der App-Anzeige ab. Seit dem Prognose-Kanon trägt der Sensor den **vollen kanonischen Tageswert** (== Anzeige); „Rest heute" ist der reine Rest. Automationen, die auf den alten „IST+Rest"-Wert gebaut haben, sollten auf `…_rest_today_kwh` umgestellt werden, wenn sie den Rest brauchen.
 
 ---

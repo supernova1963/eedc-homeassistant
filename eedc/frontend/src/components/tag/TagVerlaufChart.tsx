@@ -17,6 +17,7 @@ import { EXTRA_SERIEN_FARBEN, PV_MODUL_FARBEN, KATEGORIE_FARBEN, CHART_LABELS, H
 import { pvRestKw } from '../../lib/erzeugerSpalten'
 import { useChartTheme } from '../../context/ThemeContext'
 import { useLegendenToggle } from '../../hooks'
+import { erfassteSenken, type SenkenKey } from './TagWerteTabelle'
 import type { StundenWert, SerieInfo } from '../../api/energie_profil'
 
 function round2(v: number): number {
@@ -28,6 +29,58 @@ interface ChartSerie { dataKey: string; label: string; farbe: string; stackId: '
 /** Rest-Serie „PV (übrige)" erst ab dieser Stundenleistung — darunter ist der
  *  Rest Rundung, und eine Legenden-Zeile für 0,01 kW verwirrt mehr als sie sagt. */
 const PV_REST_SCHWELLE_KW = 0.05
+
+/**
+ * Die Serienliste des Butterfly-Charts — **rein**, damit die Regel prüfbar ist.
+ *
+ * ⚑ **Warum ausgelagert und nicht am gerenderten DOM geprüft** (gemessen
+ * 09.09.2026): Recharts zeichnet in jsdom nichts, weil `ResponsiveContainer`
+ * dort die Breite 0 hat. Eine Probe „Legendeneintrag nicht im DOM" wäre deshalb
+ * grün, ohne je etwas gemessen zu haben — und bliebe grün, wenn die Serie
+ * zurückkäme. Genau die Sorte Prüfer, die aufs falsche Objekt zeigt.
+ * (Die Stundenwerte-Tabelle daneben lässt sich in dieser Umgebung überhaupt
+ * nicht rendern — auch unverändert nicht; deshalb gibt es dort bis heute nur
+ * Proben auf reine Funktionen.)
+ */
+export function baueChartSerien({
+  pvAufgeschluesselt, zeigePvRest, erzeugerSerien, extraErzeuger, extraVerbraucher, senkenErfasst,
+}: {
+  pvAufgeschluesselt: boolean
+  zeigePvRest: boolean
+  erzeugerSerien: SerieInfo[]
+  extraErzeuger: SerieInfo[]
+  extraVerbraucher: SerieInfo[]
+  senkenErfasst: Set<SenkenKey>
+}): ChartSerie[] {
+  const r: ChartSerie[] = []
+  if (pvAufgeschluesselt) {
+    // Modul-Schattierungen statt kategorischer Fremdfarben: hier liegen Module
+    // UND Rollen (Batterie/Netz/Haushalt) im selben Stapel — genau der Scope
+    // der Regel an `PV_MODUL_FARBEN`.
+    erzeugerSerien.forEach((es, i) =>
+      r.push({ dataKey: es.key, label: es.label, farbe: PV_MODUL_FARBEN[i % PV_MODUL_FARBEN.length], stackId: 'quellen' }))
+    if (zeigePvRest) r.push({ dataKey: 'pv_rest', label: 'PV (übrige)', farbe: KATEGORIE_FARBEN.pv, stackId: 'quellen' })
+  } else {
+    r.push({ dataKey: 'pv', label: 'PV', farbe: KATEGORIE_FARBEN.pv, stackId: 'quellen' })
+  }
+  extraErzeuger.forEach((es, i) =>
+    r.push({ dataKey: es.key, label: es.label, farbe: EXTRA_SERIEN_FARBEN[i % EXTRA_SERIEN_FARBEN.length], stackId: 'quellen' }))
+  r.push({ dataKey: 'bat_pos', label: 'Batterie', farbe: KATEGORIE_FARBEN.batterie, stackId: 'quellen' })
+  r.push({ dataKey: 'bat_neg', label: 'Batterie \u2193', farbe: KATEGORIE_FARBEN.batterie, stackId: 'senken', hideLabel: true })
+  r.push({ dataKey: 'netz_pos', label: 'Stromnetz', farbe: KATEGORIE_FARBEN.netz, stackId: 'quellen' })
+  r.push({ dataKey: 'netz_neg', label: 'Stromnetz \u2193', farbe: KATEGORIE_FARBEN.netz, stackId: 'senken', hideLabel: true })
+  r.push({ dataKey: 'hausverbrauch', label: 'Hausverbrauch', farbe: KATEGORIE_FARBEN.haushalt, stackId: 'senken' })
+  // JayJayX (simon42 T89667 #309): die beiden **dedizierten** Gerätesenken sind
+  // die einzigen, die bis hierher unbedingt im Stapel standen — bei ihm zwei
+  // Flächen für Geräte, die er nicht besitzt.
+  if (senkenErfasst.has('waermepumpe_kw'))
+    r.push({ dataKey: 'wp', label: 'W\u00e4rmepumpe', farbe: KATEGORIE_FARBEN.waermepumpe, stackId: 'senken' })
+  if (senkenErfasst.has('wallbox_kw'))
+    r.push({ dataKey: 'wb', label: 'Wallbox', farbe: KATEGORIE_FARBEN.wallbox, stackId: 'senken' })
+  extraVerbraucher.forEach((es, i) =>
+    r.push({ dataKey: es.key, label: es.label, farbe: EXTRA_SERIEN_FARBEN[(extraErzeuger.length + i) % EXTRA_SERIEN_FARBEN.length], stackId: 'senken' }))
+  return r
+}
 
 export function TagVerlaufChart({ daten, extraSerien, erzeugerSerien = [] }: {
   daten: StundenWert[]
@@ -46,6 +99,21 @@ export function TagVerlaufChart({ daten, extraSerien, erzeugerSerien = [] }: {
   const basisKey = (k: string) => k.replace(/_(pos|neg)$/, '')
   const extraErzeuger    = useMemo(() => extraSerien.filter(s => s.seite === 'quelle'), [extraSerien])
   const extraVerbraucher = useMemo(() => extraSerien.filter(s => s.seite === 'senke'), [extraSerien])
+  // Welche der beiden **dedizierten** Gerätesenken hat dieser Tag überhaupt?
+  // Gemeldet von JayJayX (simon42 T89667 #309, 08.09.2026): „In Cockpit/Tag/
+  // Stundenverlauf werden mir Wallbox und Wärmepumpe angezeigt und laufen
+  // parallel zum Hausverbrauch" — er besitzt keins von beidem. Alle anderen
+  // Serien kommen aus der Datenlage (`extraSerien` liefert das Backend nur für
+  // Komponenten, die am Tag etwas beigetragen haben); `wp`/`wb` standen als
+  // einzige unbedingt im Stapel. Der Live-Block macht es seit jeher richtig
+  // (`WetterWidget::vorhandeneKategorien`) — hier fehlte dieselbe Frage.
+  // `erfassteSenken` ist bewusst dieselbe Erhebung wie in der Stundenwerte-
+  // Tabelle daneben: „kein Key heißt None, nicht 0" (`geraete_spalte_kw`), ein
+  // Gerät ohne jede Spur am Tag ist damit von einer Messlücke unterscheidbar.
+  const senkenErfasst = useMemo(
+    () => erfassteSenken(daten, extraVerbraucher),
+    [daten, extraVerbraucher],
+  )
 
   // PV je String: nur aufschlüsseln, wenn es etwas zu trennen gibt (≥ 2 Serien);
   // bei einem Gerät wäre die Gerätereihe die PV-Reihe unter anderem Namen.
@@ -61,31 +129,13 @@ export function TagVerlaufChart({ daten, extraSerien, erzeugerSerien = [] }: {
   )
 
   // Chart-Serien analog Live-TagesverlaufChart: bidirektionale in _pos/_neg aufgespalten.
-  const chartSerien = useMemo<ChartSerie[]>(() => {
-    const r: ChartSerie[] = []
-    if (pvAufgeschluesselt) {
-      // Modul-Schattierungen statt kategorischer Fremdfarben: hier liegen Module
-      // UND Rollen (Batterie/Netz/Haushalt) im selben Stapel — genau der Scope
-      // der Regel an `PV_MODUL_FARBEN`.
-      erzeugerSerien.forEach((es, i) =>
-        r.push({ dataKey: es.key, label: es.label, farbe: PV_MODUL_FARBEN[i % PV_MODUL_FARBEN.length], stackId: 'quellen' }))
-      if (zeigePvRest) r.push({ dataKey: 'pv_rest', label: 'PV (übrige)', farbe: KATEGORIE_FARBEN.pv, stackId: 'quellen' })
-    } else {
-      r.push({ dataKey: 'pv', label: 'PV', farbe: KATEGORIE_FARBEN.pv, stackId: 'quellen' })
-    }
-    extraErzeuger.forEach((es, i) =>
-      r.push({ dataKey: es.key, label: es.label, farbe: EXTRA_SERIEN_FARBEN[i % EXTRA_SERIEN_FARBEN.length], stackId: 'quellen' }))
-    r.push({ dataKey: 'bat_pos', label: 'Batterie', farbe: KATEGORIE_FARBEN.batterie, stackId: 'quellen' })
-    r.push({ dataKey: 'bat_neg', label: 'Batterie ↓', farbe: KATEGORIE_FARBEN.batterie, stackId: 'senken', hideLabel: true })
-    r.push({ dataKey: 'netz_pos', label: 'Stromnetz', farbe: KATEGORIE_FARBEN.netz, stackId: 'quellen' })
-    r.push({ dataKey: 'netz_neg', label: 'Stromnetz ↓', farbe: KATEGORIE_FARBEN.netz, stackId: 'senken', hideLabel: true })
-    r.push({ dataKey: 'hausverbrauch', label: 'Hausverbrauch', farbe: KATEGORIE_FARBEN.haushalt, stackId: 'senken' })
-    r.push({ dataKey: 'wp', label: 'Wärmepumpe', farbe: KATEGORIE_FARBEN.waermepumpe, stackId: 'senken' })
-    r.push({ dataKey: 'wb', label: 'Wallbox', farbe: KATEGORIE_FARBEN.wallbox, stackId: 'senken' })
-    extraVerbraucher.forEach((es, i) =>
-      r.push({ dataKey: es.key, label: es.label, farbe: EXTRA_SERIEN_FARBEN[(extraErzeuger.length + i) % EXTRA_SERIEN_FARBEN.length], stackId: 'senken' }))
-    return r
-  }, [extraErzeuger, extraVerbraucher, erzeugerSerien, pvAufgeschluesselt, zeigePvRest])
+  const chartSerien = useMemo<ChartSerie[]>(
+    () => baueChartSerien({
+      pvAufgeschluesselt, zeigePvRest, erzeugerSerien,
+      extraErzeuger, extraVerbraucher, senkenErfasst,
+    }),
+    [extraErzeuger, extraVerbraucher, erzeugerSerien, pvAufgeschluesselt, zeigePvRest, senkenErfasst],
+  )
 
   const chartDaten = useMemo(() =>
     Array.from({ length: 24 }, (_, h) => {
