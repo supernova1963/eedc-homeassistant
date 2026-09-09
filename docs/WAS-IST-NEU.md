@@ -1,11 +1,128 @@
 # Was ist neu
 
-> **Stand:** September 2026 (v4.0.43)
+> **Stand:** September 2026 (v4.0.44)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.44 — 9. September 2026
+
+**Ein halber Wetterabruf ergibt keine Tagesprognose mehr — der Sensor sagt „unbekannt"**
+
+eedc holt die Sonnenprognose nicht einmal für die ganze Anlage, sondern **je Ausrichtung
+getrennt** — für ein Ost-West-Dach also zweimal, für eine zusätzliche kleine Anlage noch
+einmal. Wenn einer dieser Abrufe scheiterte, weil der Wetterdienst kurz nicht antwortete,
+rechnete eedc bisher mit dem weiter, was da war. Übrig blieb dann die Prognose der übrigen
+Flächen allein — bei einer 20-kWp-Anlage mit 1,7-kWp-Zweitdach also knapp acht Prozent des
+richtigen Werts. Der HA-Sensor *PV-Prognose heute* stand damit für eine volle Stunde auf
+einem viel zu kleinen Wert und erholte sich beim nächsten Versand von selbst.
+
+Jetzt gibt eedc in so einem Fall **keine Zahl mehr aus**. In Home Assistant steht dann
+**„unbekannt"**, und beim nächsten Versand ist der vollständige Wert wieder da. Eine
+Prognose, der eine ganze Dachfläche fehlt, ist keine kleinere Prognose — sie ist eine
+falsche. Der Grund steht im Log.
+
+**Betrifft dich das?** Nur, wenn deine Anlage **mehrere Ausrichtungen** hat. Bei einer
+einzigen Fläche konnte der Fall nie auftreten. ⚠ **Was du tun musst:** Wenn du eine
+Automation auf einen Prognose-Sensor gebaut hast — Speicher laden, Wallbox freigeben,
+Wärmepumpe takten —, sollte sie den Zustand **„unbekannt"** abfangen und in dem Fall nichts
+tun, statt mit einer 0 zu rechnen. Deine gemessene Erzeugung ist davon nicht berührt, die
+hängt an keiner Prognose.
+
+*Gemeldet von Knallfrosch im simon42-Forum.*
+
+---
+
+**Eine Klimaanlage, die nur gekühlt hat, bekommt keinen Heizwärme-Vorschlag mehr**
+
+Wenn du im Monatsabschluss die Wärme nicht selbst misst, schlägt eedc sie dir vor —
+gerechnet aus *Strom × Arbeitszahl*. Dieser Vorschlag nahm bisher unter Umständen den
+**gesamten** Stromverbrauch als Heizstrom, auch wenn der größte Teil davon ins **Kühlen**
+gegangen war. Für einen August, in dem eine Split-Klimaanlage ausschließlich gekühlt hat,
+standen so 750 kWh Heizenergie und 186 € Ersparnis im Vorschlag.
+
+Das passierte, wenn die Aufteilung zwischen Heizen und Kühlen nicht aus eigenen Zählern
+kommt, sondern eedc sie aus dem **Betriebsmodus-Sensor** deines Geräts ableitet. Jetzt
+erkennt der Vorschlag beide Wege gleichermaßen: Steht in deinem Monat Kühl-, Lüft- oder
+Entfeuchtungsstrom, ist der Gesamtstrom eben nicht der Heizstrom — und dann gibt es keinen
+Vorschlag statt eines falschen.
+
+Dazu rechnet der **Daten-Check** die Arbeitszahl jetzt mit denselben Zahlen wie die Anzeige.
+Er zog den funktionsfremden Strom bisher nicht ab und schwieg deshalb bei Werten, die auf
+dem Bildschirm sichtbar unmöglich waren.
+
+**Betrifft dich das?** Nur, wenn du eine Wärmepumpe oder Klimaanlage führst, die Wärme nicht
+selbst misst, und ihre Betriebsart aus einem Modus-Sensor kommt. ⚠ **Was du tun musst:**
+Vorschläge, die du in der Vergangenheit **übernommen** hast, stehen weiterhin so in deinen
+Monatsdaten — eedc ändert gespeicherte Werte nicht von allein. Wenn dir für einen reinen
+Kühlmonat eine Heizwärme auffällt, trag sie im Monatsabschluss auf 0, oder verschieb sie
+als *Nutzenergie Kühlbetrieb* dorthin, wo sie hingehört. Der Daten-Check zeigt dir die
+betroffenen Monate.
+
+*Gemeldet von OB73-gif auf GitHub (#411).*
+
+---
+
+**Die Ersparnis heißt jetzt „vs. Alternative" statt „vs. Gas"**
+
+Über der eingesparten Summe stand unbedingt **„vs. Gas"** — auch dann, wenn du am Gerät
+*Öl* oder *Strom (Direktheizung)* als ersetzte Heizung gepflegt hattest. Gerechnet wurde
+immer richtig, mit dem Wirkungsgrad und dem Preis deines Trägers; nur die Beschriftung
+kannte den Unterschied nicht. Sie lautet jetzt an allen sieben Stellen **„vs. Alternative"**.
+
+Die allgemeine Form ist dabei nicht nur höflicher, sie ist die einzig mögliche: Wo mehrere
+Wärmepumpen in **einer** Zahl zusammengefasst sind, können sie verschiedene Heizungen
+ersetzt haben.
+
+**Betrifft dich das?** Jeden mit einer Wärmepumpe oder Klimaanlage — als reine
+Beschriftung. **Was du tun musst:** nichts. **Es ändert sich keine Zahl.**
+
+---
+
+**Cockpit → Tag zeigt nur noch Geräte, die du auch hast**
+
+Im Stundenverlauf unter *Cockpit → Tag* standen **Wärmepumpe** und **Wallbox** fest im
+Diagramm und als Spalte in der Tabelle darunter — als einzige Geräte, die nicht aus deiner
+Datenlage kamen. Wer beides nicht besitzt, sah zwei Flächen im Stapel, zu denen es nichts
+zu zeigen gab.
+
+Beide erscheinen jetzt nur noch, wenn eedc für den Tag auch Werte für sie hat, genau wie
+alle übrigen Geräte und wie *Cockpit → Live* es schon immer gehalten hat. Ein einzelner
+fehlender Stundenwert zählt dabei nicht als „nicht vorhanden" — sonst verschwände dir das
+Gerät bei der ersten Messlücke.
+
+**Betrifft dich das?** Jeden, der keine Wärmepumpe oder keine Wallbox hat. **Was du tun
+musst:** nichts.
+
+*Gemeldet von JayJayX im simon42-Forum.*
+
+---
+
+**Der Zugang zu gridX und Viessmann GridBox folgt der neuen Anmeldung**
+
+gridX hat seinen Anmeldeweg umgestellt und uns selbst darauf hingewiesen. Beide alten Formen
+werden nur noch für eine Übergangszeit akzeptiert — eedc nutzt ab sofort die neue.
+
+Wichtiger für dich ist die zweite Hälfte: **Bisher meldete eedc jeden gescheiterten Login
+als „E-Mail/Passwort prüfen"** — auch dann, wenn die Zugangsdaten stimmten und die Anmeldung
+aus einem ganz anderen Grund abgelehnt wurde. Wer nach dem Ende der Übergangszeit betroffen
+gewesen wäre, hätte vergeblich sein Passwort geprüft. Jetzt reicht eedc die Begründung des
+Anmeldedienstes durch.
+
+Und der Anbieter heißt, was er ist: Die **Viessmann GridBox** ist zum 31.12.2025 samt Daten
+zu **E.ON Home** gewechselt, der alte Viessmann-Zugang ist abgeschaltet. eedc meldet sich
+längst richtig dort an — nur stand es nirgends, und die Anleitung führte auf die alte,
+tote Adresse. Anzeigename, Beschreibung und Anleitung nennen jetzt E.ON Home.
+
+**Betrifft dich das?** Nur, wenn du den Cloud-Import für gridX oder Viessmann GridBox
+nutzt. **Was du tun musst:** nichts — deine gespeicherten Zugangsdaten und Quellen bleiben
+unverändert gültig.
+
+*Gemeldet von alexmsenger auf GitHub (#410).*
 
 ---
 

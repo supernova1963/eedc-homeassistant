@@ -2405,7 +2405,7 @@ Wenn >= 2 Jahre mit jeweils >= 6 Monaten Daten:
 ```
 Bisherige_Erträge = Σ(Einspeisung * Vergütung / 100)         (PV)
                   + Σ(Eigenverbrauch * Netzbezug_Preis / 100)  (EV)
-                  + WP_Ersparnis                                 (vs. Gas)
+                  + WP_Ersparnis                                 (vs. Alternative)
                   + E-Auto_Ersparnis                             (vs. Benzin)
                   + BKW_Ersparnis                                (Eigenverbrauch)
                   + Sonstige_Netto                               (alle Investitionstypen)
