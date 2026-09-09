@@ -27,6 +27,8 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 - **Der Anbieter „Viessmann GridBox" nennt E.ON Home beim Namen.** Die GridBox ist zum 31.12.2025 samt Daten zu E.ON Home gewechselt, der Viessmann-eigene Zugang ist abgeschaltet — eedc meldet sich längst korrekt dort an, aber es stand nirgends, und die Anleitung wies auf die abgeschaltete Adresse `mygridbox.viessmann.com`. Anzeigename, Beschreibung und Anleitung nennen jetzt E.ON Home und `eon.gridx.de/login`. ⚠ **Gespeicherte Zugänge und Quellen bleiben gültig** — die interne Kennung des Anbieters ändert sich nicht.
 
+- **Die Suche in den Einstellungen hat einen eigenen Lösch-Knopf** (gemeldet von **Radiocarbonat** im simon42-Forum). Das Suchfeld filtert kategorieübergreifend — steht dort ein Begriff ohne Treffer, bleibt jeder der sieben Reiter leer, und die Sicht ist von einem Defekt nicht mehr zu unterscheiden. Der Melder hielt sie für einen Firefox-Darstellungsfehler. ⛔ **Der Weg zurück hing bis hierher am Browser:** Auf das native `type="search"`-✕ ist kein Verlass — Chromium rendert es, Firefox nicht, derselbe Code mit zwei Bedienbarkeiten. Das Feld trägt jetzt ein eigenes ✕, sobald etwas darin steht; das native wird ausgeblendet, damit nicht zwei nebeneinander stehen. ⚠ **Es ändert sich keine Zahl und kein Suchverhalten** — die Suche gilt weiterhin über alle Kategorien (so beschreibt es das Handbuch), und der Begriff wird weiterhin nicht gemerkt.
+
 ---
 
 ## [4.0.43] - 2026-09-07 — Abgegebener Strom zählt jetzt auch im Geld — und zwei Zahlen nennen ihre Grundlage

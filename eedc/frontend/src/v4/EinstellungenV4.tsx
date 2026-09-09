@@ -15,13 +15,13 @@
  */
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Home, type LucideIcon } from 'lucide-react'
+import { Home, X, type LucideIcon } from 'lucide-react'
 import { STATUS_ICONS, STATUS_TEXT_CLASS } from '../lib'
 import { IASubTabBar } from '../components/layout/IASubTabBar'
 import { ViewShell } from './ViewShell'
 import { BlockShell, BlockStackSkeleton, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss } from '../components/park'
-import { Alert, Input } from '../components/ui'
+import { Alert, Button, Input } from '../components/ui'
 import { useHAAvailable, useHAVerbunden } from '../hooks/useHAAvailable'
 import { useSelectedAnlage } from '../hooks'
 import { INVESTITION_TYP_ORDER, TYP_LABELS as INVESTITION_TYP_LABELS } from '../lib/constants'
@@ -239,13 +239,47 @@ function EinstellungenInner({ kategorie }: { kategorie: KategorieKey }) {
       <ViewShell bar={nav}>
         <div className="px-3 sm:px-6 pt-4 space-y-3 max-w-[1920px] mx-auto">
           {/* B15: ui/Input-SoT (42-px-Formular-Höhe + Focus-Ring) statt rohem <input> mit 44px. */}
-          <Input
-            type="search"
-            value={suche}
-            onChange={(e) => setSuche(e.target.value)}
-            placeholder="Suchen in allen Einstellungen …"
-            aria-label="Einstellungen durchsuchen"
-          />
+          {/*
+            Der Lösch-Knopf ist NICHT Komfort, sondern der Weg aus einer Sackgasse
+            (Radiocarbonat, simon42 T89667 #316): Ein stehengebliebener Suchbegriff
+            übersteuert `suchModus` alle sieben Kategorien, und die Sicht ist dann von
+            einem Defekt nicht mehr zu unterscheiden — er hielt sie für einen
+            Firefox-Darstellungsfehler.
+            ⛔ Auf das native `type="search"`-✕ ist kein Verlass: Chrome und Edge rendern
+            es, Firefox nicht — derselbe Code, zwei Bedienbarkeiten. Deshalb ein eigenes,
+            und das native wird ausgeblendet, damit in Chromium nicht zwei nebeneinander
+            stehen.
+            ⚑ `ui/Button` ist Pflicht, nicht Geschmack: `check:buttons` und
+            `check:roh-controls` führen diese Datei mit null erlaubten rohen
+            HTML-Buttons. ⚠ Beide Prüfer lesen Rohtext, nicht den Syntaxbaum — der
+            Elementname darf hier also auch im Kommentar nicht ausgeschrieben stehen,
+            sonst zählt sich diese Erklärung selbst als Verstoß (beim Bau eingetreten).
+            `size="icon"` bleibt unverändert (36 px im 42-px-Feld) — ein Override wäre
+            eine zweite Größen-Wahrheit neben dem SoT.
+          */}
+          <div className="relative">
+            <Input
+              type="search"
+              value={suche}
+              onChange={(e) => setSuche(e.target.value)}
+              placeholder="Suchen in allen Einstellungen …"
+              aria-label="Einstellungen durchsuchen"
+              className={`[&::-webkit-search-cancel-button]:hidden ${suchModus ? 'pr-11' : ''}`}
+            />
+            {suchModus && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 -translate-y-1/2"
+                onClick={() => setSuche('')}
+                title="Suche löschen"
+                aria-label="Suche löschen"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-400 dark:text-gray-500">
             <span className="flex items-center gap-1"><STATUS_META.ok.icon className={`h-3.5 w-3.5 ${STATUS_META.ok.farbe}`} /> eingerichtet</span>
             <span className="flex items-center gap-1"><STATUS_META.warn.icon className={`h-3.5 w-3.5 ${STATUS_META.warn.farbe}`} /> braucht Aufmerksamkeit</span>

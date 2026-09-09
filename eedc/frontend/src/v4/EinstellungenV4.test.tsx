@@ -107,4 +107,31 @@ describe('EinstellungenV4 (Einstellungen-Shell)', () => {
     expect(screen.getByText('Community-Share')).toBeInTheDocument()
     expect(screen.queryByText('Anlage')).not.toBeInTheDocument()
   })
+
+  /**
+   * Radiocarbonat (simon42 T89667 #316): Ein stehengebliebener Suchbegriff
+   * übersteuert alle Kategorien — jeder Reiter zeigt dieselbe leere Liste, und die
+   * Sicht ist von einem Defekt nicht mehr zu unterscheiden. Der Weg zurück darf
+   * nicht am Browser hängen: das native `type="search"`-✕ rendert Chromium, Firefox
+   * nicht. Geprüft wird deshalb der EIGENE Knopf, über sein `aria-label`.
+   */
+  it('ein Suchbegriff lässt sich über den Lösch-Knopf zurücknehmen', () => {
+    renderAt('/einstellungen/stammdaten')
+    const suchfeld = screen.getByLabelText('Einstellungen durchsuchen')
+
+    // Ohne Suchbegriff gibt es nichts zu löschen — sonst stünde dauerhaft ein
+    // Knopf im Feld, der nichts tut.
+    expect(screen.queryByLabelText('Suche löschen')).not.toBeInTheDocument()
+
+    // Der Melderfall: ein Begriff, der nichts trifft, blendet die Kategorie aus.
+    fireEvent.change(suchfeld, { target: { value: 'frank' } })
+    expect(screen.queryByText('Anlage')).not.toBeInTheDocument()
+
+    const loeschen = screen.getByLabelText('Suche löschen')
+    fireEvent.click(loeschen)
+
+    // Der Reiter trägt wieder seine eigenen Einträge, und der Knopf ist weg.
+    expect(screen.getByText('Anlage')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Suche löschen')).not.toBeInTheDocument()
+  })
 })

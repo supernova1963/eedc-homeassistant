@@ -126,6 +126,23 @@ unverändert gültig.
 
 ---
 
+**Ein stehengebliebener Suchbegriff sperrt die Einstellungen nicht mehr aus**
+
+Oben in den Einstellungen steht ein Suchfeld, das über **alle** Reiter hinweg sucht. Steht dort
+ein Begriff, der nichts trifft, bleibt jeder der sieben Reiter leer — die Seite sieht dann kaputt
+aus, obwohl sie nur filtert.
+
+Bisher gab es keinen sicheren Weg zurück: Chrome und Edge blenden in solchen Feldern von sich aus
+ein kleines ✕ zum Löschen ein, **Firefox nicht**. Wem der Begriff nicht auffiel, der saß fest.
+Jetzt hat das Feld ein **eigenes ✕**, sobald etwas darin steht — in jedem Browser gleich.
+
+**Betrifft dich das?** Jeden, der die Suche in den Einstellungen benutzt. **Was du tun musst:**
+nichts.
+
+*Gemeldet von Radiocarbonat im simon42-Forum.*
+
+---
+
 ## v4.0.43 — 7. September 2026
 
 **Abgegebener Strom zählt jetzt auch im Geld**
