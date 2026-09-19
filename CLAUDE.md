@@ -210,6 +210,29 @@ Laufzeit-Gate. Er ist an kein Auslöser-Muster gebunden — wer ihn nicht fährt
 > landeten über den Unbekannt-Redirect auf der **ersten** Komponenten-Sicht — er maß sie dreifach
 > und die **BKW-Sicht nie**, meldete aber „16 Sichten geprüft".
 
+### Refactoring großer Dateien — das Kriterium ist die Funktion, nicht die Datei (Entscheid Gernot, 19.09.2026)
+
+> **`wc -l` ist kein Kriterium.** Gemessen am 19.09.: `core/berechnungen/waermepumpe_kennzahl.py` hat 1 809 Zeilen, davon
+> **78 % Docstring und Kommentar** — netto 407 Codezeilen, Rang 47 von 435 Backend-Dateien. Sie war als „größte Datei" für
+> Vorlage 11 vorgesehen; **zurückgestellt, nicht neu aufrollen.** Die Begründung im Modul ist die Substanz (ADR-001 verlangt
+> sie im Docstring); eine Bruttogrenze bestraft genau das.
+>
+> **Zwei Schwellen, beide netto gemessen** — Werkzeug `~/.claude/plans/refactoring-werkzeug/komplexitaet.py` (lädt radon und
+> cognitive-complexity beim ersten Lauf selbst nach `pylib/`; auf dieser Box hat **kein** Python ein `pip`):
+>
+> * **Funktion: kognitive Komplexität > 50** (SonarQubes Metrik; radon nennt dasselbe Rang F). Stand 19.09.: **80 Funktionen
+>   in 66 Backend-Dateien**, 10 in 10 Frontend-Dateien (ESLint `complexity`). Reihenfolge absteigend, die 28 über 100 zuerst —
+>   Liste, Rollen und Bauform in `~/.claude/plans/auftrag-refactoring-funktionen.md`.
+> * **Datei: netto > 900 Codezeilen** (ohne Kommentar, Docstring, Leerzeile). Stand 19.09.: 5 Dateien. Zum Vergleich: Sonar
+>   750 netto, Pylint 1 000 brutto — bei beiden ein Code Smell „Major", nie ein Blocker. **Außen bewertet niemand die
+>   Dateilänge, aber jeder die Funktionskomplexität** (Sonar 15, Pylint 12 Verzweigungen, ~5 % unserer Funktionen liegen darüber).
+>
+> ⛔ **Gemessen an der eigenen Serie (Vorlagen 1–10):** der Schnitt in Orchestrator + Phasen-Module hat die Funktions**länge**
+> um rund zwei Drittel gesenkt, die **Verzweigungen nicht** — `get_aktueller_monat` 108 → 128, `get_finanz_prognose` 97 → 102.
+> Ausgelagert wurde der lineare Teil, der verzweigte blieb. **Eine Phase ist erst ausgelagert, wenn ihre Verzweigungen
+> mitgehen.** Deshalb ist das Gate je Vorlage die kognitive Komplexität der Funktion **vorher/nachher** mit Zielwert im
+> Auftrag — zusätzlich zu Golden Master, voller Suite und Lab-rc, nicht statt ihrer.
+
 ### Release-Workflow (ein Script für alles!)
 
 > ### ⭐ VOR `release.sh`: das Add-on im HAOS-Lab installieren und durchklicken (seit 09.09.)
