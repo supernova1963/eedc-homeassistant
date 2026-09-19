@@ -151,7 +151,8 @@ def _kanonische_feldnamen() -> set[str]:
 #   sonstige_positionen  — LISTE von Sonderposten-Dicts, kein Skalar-Feld.
 #                          `field_definitions` beschreibt Eingabefelder mit
 #                          Einheit/Label; eine Positionsliste hat beides nicht.
-#                          Gelesen in api/routes/monatsabschluss/views.py:540f.
+#                          Gelesen in
+#                          api/routes/monatsabschluss/views.py::baue_investition_status
 #                          und utils/sonstige_positionen.py:72, geschrieben in
 #                          api/routes/import_export/demo_data.py:445/449/454.
 #   sonderkosten_notiz   — FREITEXT zur Sonderkosten-Zeile, kein Messwert.
@@ -2023,7 +2024,10 @@ P10_SCHREIBEN_IMPORT_CHECKER: frozenset[str] = frozenset({
     # „Formular füllen" eingeordnet, obwohl es ein reiner Lesepfad mit
     # anlagenweiter Faltung war (N-98). Es bezieht seine Mengen jetzt aus der
     # Schicht und lädt nichts mehr selbst.)
-    "backend/api/routes/monatsabschluss/views.py::get_monatsabschluss",
+    # Der Eintrag hieß bis RF-1 (19.09.2026) `::get_monatsabschluss`; der
+    # Schnitt hat den Lader in die eine Funktion gelegt, die ihn braucht —
+    # die Ausnahme bezeichnet jetzt 44 Zeilen statt 415.
+    "backend/api/routes/monatsabschluss/views.py::baue_investition_status",
     "backend/api/routes/monatsabschluss/wizard.py::save_monatsabschluss",
     "backend/api/routes/monatsdaten.py::_save_investitionen_monatsdaten",
     # N-393 (05.09.2026): LÖSCHPFAD. Entfernt einen Sub-Key aus `verbrauch_daten`
