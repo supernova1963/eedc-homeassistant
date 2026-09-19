@@ -11,7 +11,7 @@ Schreib-Pfad (POST {anlage_id}/{jahr}/{monat}) liegt in wizard.py.
 from calendar import monthrange
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -51,6 +51,12 @@ from ._shared import (
     _warnung_to_response,
     logger,
 )
+
+if TYPE_CHECKING:  # pragma: no cover — nur für die Signatur, kein Laufzeit-Import
+    # ⛔ Bewusst NICHT auf Modulebene: `berechne_monats_durchschnittspreis` wird
+    # funktionslokal importiert, und daran hängt die Patchbarkeit in den Proben
+    # (dieselbe Regel wie beim HA-Statistik-Dienst, N-156).
+    from backend.services.strompreis_aggregator import StrompreisAggregat
 
 router = APIRouter()
 
@@ -218,6 +224,10 @@ class MonatsabschlussKontext:
     mqtt_energy: dict[str, float]
     mqtt_inv_energy: dict[int, dict[str, float]]
     alle_basis_felder: list
+    # N-535: das Ergebnis der Freischaltfrage aus `lade_basis_feldliste` — genau
+    # die Zahl, die der Vorschlag für `netzbezug_durchschnittspreis_cent`
+    # braucht. Sie reist mit, statt ein zweites Mal gerechnet zu werden.
+    preis_messung: Optional["StrompreisAggregat"]
     zaehler_ende: dict[int, float]
 
 
@@ -251,8 +261,18 @@ async def lade_monatsdaten(
 
 async def lade_basis_feldliste(
     db: AsyncSession, anlage: Anlage, anlage_id: int, jahr: int, monat: int
-) -> list:
-    """Die Basis-Felder dieses Monats — bedingte Felder mit dem Stichtag aufgelöst."""
+) -> tuple[list, Optional["StrompreisAggregat"]]:
+    """Die Basis-Felder dieses Monats — bedingte Felder mit dem Stichtag aufgelöst.
+
+    Returns:
+        ``(feldliste, preis_messung)``. Die Messung ist das Ergebnis der
+        Freischaltfrage und wird **mitgegeben, nicht ein zweites Mal
+        gerechnet** (N-535): derselbe Aufruf beantwortet „erscheint das Feld
+        ‚Ø Strompreis'?" und „welchen Wert schlagen wir vor?". Bis zum
+        19.09.2026 rief der Vorschlagszweig den Aggregator selbst — mit
+        identischen Argumenten, ohne Cache, also eine überflüssige
+        `TagesEnergieProfil`-Abfrage über den ganzen Monat je Formularaufruf.
+    """
     # Bedingungen für bedingte Basis-Felder ermitteln. Stichtag ist der Monat,
     # der abgeschlossen wird — sonst entscheidet die HEUTIGE Vertragsart, ob das
     # Feld „Ø Strompreis" erscheint: nach einem Wechsel dynamisch → fest käme man
@@ -317,7 +337,7 @@ async def lade_basis_feldliste(
         hat_dynamischen_tarif=hat_dynamischen_tarif,
         aktive_inv_typen=aktive_inv_typen,
         hat_variable_einspeisung=hat_variable_einspeisung,
-    )
+    ), _messung
 
 
 async def lade_zaehler_ende(
@@ -595,6 +615,10 @@ async def baue_kontext(
         basis_mapping, inv_mappings, jahr, monat
     )
 
+    alle_basis_felder, preis_messung = await lade_basis_feldliste(
+        db, anlage, anlage_id, jahr, monat
+    )
+
     return MonatsabschlussKontext(
         db=db,
         anlage=anlage,
@@ -616,7 +640,8 @@ async def baue_kontext(
         cloud_import_konfiguriert=cloud_import_konfiguriert,
         mqtt_energy=mqtt_energy,
         mqtt_inv_energy=mqtt_inv_energy,
-        alle_basis_felder=await lade_basis_feldliste(db, anlage, anlage_id, jahr, monat),
+        alle_basis_felder=alle_basis_felder,
+        preis_messung=preis_messung,
         zaehler_ende=await lade_zaehler_ende(db, anlage_id, jahr, monat),
     )
 
@@ -640,10 +665,14 @@ async def _bedingte_basis_vorschlaege(
     """
     if feld == "netzbezug_durchschnittspreis_cent":
         # 1. Verbrauchsgewichteter Ø aus Energieprofil-Stundendaten (höchste Qualität)
-        from backend.services.strompreis_aggregator import berechne_monats_durchschnittspreis
-        aggr = await berechne_monats_durchschnittspreis(
-            ctx.anlage_id, ctx.jahr, ctx.monat, ctx.db
-        )
+        # ⭐ N-535: **derselbe** Aggregat-Aufruf, der in `lade_basis_feldliste`
+        # entschieden hat, ob dieses Feld überhaupt erscheint. Er stand hier bis
+        # zum 19.09.2026 ein zweites Mal mit identischen Argumenten
+        # (`anlage_id, jahr, monat, db`) und ohne Cache — und genau dann, wenn
+        # der erste eine Messung geliefert hatte, also immer, wenn er überhaupt
+        # stattfand. Zwei Antworten auf dieselbe Frage wären zudem die
+        # F-56-Klasse; eine Antwort ist auch fachlich das Richtige.
+        aggr = ctx.preis_messung
         if aggr and aggr.gewichtet_cent is not None:
             abdeckung_pct = round(aggr.abdeckung * 100)
             vorschlaege.insert(0, Vorschlag(
