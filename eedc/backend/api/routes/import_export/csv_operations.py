@@ -310,22 +310,13 @@ async def import_csv(
     fehler = []
     warnungen = []
 
-    # Etappe 3d Päckchen 3: Hierarchie-Schutz-Tracking. Nicht für UPDATE-Pfad
-    # mit gleicher MANUAL-Klasse (Last-Writer-Wins, würde fälschlich als
-    # geschützt gezählt) — wir schauen explizit nach rejected_lower_priority.
-    geschuetzt_count = 0
-    geschuetzte_felder: list[str] = []
-
-    def _record_upsert(upsert_res) -> None:
-        """Sammler für Wizard-Telemetrie. Wird via `on_upsert`-Callback aus
-        den Helpers (`_distribute_*`, `_import_investition_monatsdaten_v09`,
-        `_import_investition_monatsdaten_legacy`) gerufen, damit indirekt
-        geschriebene Felder nicht ohne Tracking durchschlüpfen."""
-        nonlocal geschuetzt_count
-        geschuetzt_count += upsert_res.rejected_count
-        for sub_key in upsert_res.rejected_fields:
-            if len(geschuetzte_felder) < 15 and sub_key not in geschuetzte_felder:
-                geschuetzte_felder.append(sub_key)
+    # ⛔ Kein Schutz-Zaehler auf diesem Weg (N-538, gemessen 20.09.2026): die Quelle
+    # ist `manual:*`, und eine manuelle Quelle schreibt seit #251 (`f0b45bcc`)
+    # UNBEDINGT — `provenance._decide` kennt fuer sie kein `rejected_lower_priority`.
+    # Ohne Haken wird ein bestehender Monat oben uebersprungen, mit Haken gewinnt
+    # der letzte Schreiber (MANUAL gegen MANUAL). Der Zaehler samt Hinweis
+    # „X Felder geschuetzt" lief hier deshalb nie und ist entfernt; er lebt nur
+    # im Portal-Import (`data_import.py`, Quelle `external:*`, geraetegebunden).
 
     pv_module_vorhanden = any(inv.typ == "pv-module" for inv in investitionen)
     speicher_vorhanden = any(inv.typ == "speicher" for inv in investitionen)
@@ -410,7 +401,6 @@ async def import_csv(
                 summen = await _import_investition_monatsdaten_v09(
                     db, row, parse_float, investitionen, jahr, monat, ueberschreiben,
                     source="manual:csv_backup", writer="csv_backup_restore",
-                    on_upsert=_record_upsert,
                 )
 
             # Legacy-Spalten Validierung
@@ -444,7 +434,6 @@ async def import_csv(
                     migration_warnungen = await _distribute_legacy_pv_to_modules(
                         db, pv_erzeugung_explicit, pv_module_list, jahr, monat, ueberschreiben,
                         source="manual:csv_backup", writer="csv_backup_restore",
-                        on_upsert=_record_upsert,
                     )
                     warnungen.extend(migration_warnungen)
                     pv_erzeugung = pv_erzeugung_explicit
@@ -499,7 +488,6 @@ async def import_csv(
                         speicher_list,
                         jahr, monat, ueberschreiben,
                         source="manual:csv_backup", writer="csv_backup_restore",
-                        on_upsert=_record_upsert,
                     )
                     warnungen.extend(migration_warnungen)
                     # Für Legacy-Feld in Monatsdaten (Fallback)
@@ -550,14 +538,10 @@ async def import_csv(
                 # (Last-Writer-Wins).
                 for field_name, value in _CSV_BACKUP_FIELDS_TOP:
                     if value is not None or field_name in ("einspeisung_kwh", "netzbezug_kwh"):
-                        result = await write_with_provenance(
+                        await write_with_provenance(
                             db, existing_md, field_name, value,
                             source="manual:csv_backup", writer="csv_backup_restore",
                         )
-                        if result.decision == "rejected_lower_priority":
-                            geschuetzt_count += 1
-                            if len(geschuetzte_felder) < 15 and field_name not in geschuetzte_felder:
-                                geschuetzte_felder.append(field_name)
                 existing_md.notizen = notizen
                 existing_md.datenquelle = "csv"
             else:
@@ -592,7 +576,6 @@ async def import_csv(
             await _import_investition_monatsdaten_legacy(
                 db, row, parse_float, inv_by_type, jahr, monat, ueberschreiben,
                 source="manual:csv_backup", writer="csv_backup_restore",
-                on_upsert=_record_upsert,
             )
 
             importiert += 1
@@ -604,23 +587,12 @@ async def import_csv(
 
     await db.flush()
 
-    # Etappe 3d Päckchen 3: Wizard-Hinweis bei aktivierter Quellen-Hierarchie.
-    if geschuetzt_count > 0:
-        sample = ", ".join(geschuetzte_felder[:5])
-        suffix = f" (z. B. {sample})" if sample else ""
-        warnungen.insert(0, (
-            f"{geschuetzt_count} Felder wurden durch manuell gepflegte Werte "
-            f"geschützt{suffix} — Reset über Reparatur-Werkbank wenn gewollt."
-        ))
-
     return ImportResult(
         erfolg=len(fehler) == 0,
         importiert=importiert,
         uebersprungen=uebersprungen,
         fehler=fehler[:20],
         warnungen=warnungen[:10],
-        geschuetzt_count=geschuetzt_count,
-        geschuetzte_felder=geschuetzte_felder,
     )
 
 

@@ -50,10 +50,6 @@ class ApplyResponse(BaseModel):
     uebersprungen: int
     fehler: list[str]
     warnungen: list[str]
-    # Etappe 3d Päckchen 3: Hierarchie-Schutz-Tracking — Top-Level-Felder +
-    # Investitions-Sub-Keys, deren manuelle Werte den CSV-Apply abgewiesen haben.
-    geschuetzt_count: int = 0
-    geschuetzte_felder: list[str] = []
 
 
 # ─── Endpoint ────────────────────────────────────────────────────────────────
@@ -134,25 +130,13 @@ async def apply_custom_import(
     fehler: list[str] = []
     warnungen: list[str] = []
 
-    # Etappe 3d Päckchen 3: Hierarchie-Schutz-Tracking analog zu data_import.py.
-    geschuetzt_count = 0
-    geschuetzte_felder: list[str] = []
-
-    def _record_upsert(upsert_res) -> None:
-        """Sammler für Wizard-Telemetrie. Sowohl `_track_upsert` als auch der
-        `on_upsert`-Callback der Helpers (`_distribute_*`,
-        `_import_investition_monatsdaten_v09`) rufen dies, damit indirekt
-        geschriebene Felder nicht ohne Tracking durchschlüpfen."""
-        nonlocal geschuetzt_count
-        geschuetzt_count += upsert_res.rejected_count
-        for sub_key in upsert_res.rejected_fields:
-            if len(geschuetzte_felder) < 15 and sub_key not in geschuetzte_felder:
-                geschuetzte_felder.append(sub_key)
-
-    async def _track_upsert(*args, **kwargs):
-        upsert_res = await _upsert_investition_monatsdaten(*args, **kwargs)
-        _record_upsert(upsert_res)
-        return upsert_res
+    # ⛔ Kein Schutz-Zaehler auf diesem Weg (N-538, gemessen 20.09.2026): die Quelle
+    # ist `manual:*`, und eine manuelle Quelle schreibt seit #251 (`f0b45bcc`)
+    # UNBEDINGT — `provenance._decide` kennt fuer sie kein `rejected_lower_priority`.
+    # Ohne Haken wird ein bestehender Monat oben uebersprungen, mit Haken gewinnt
+    # der letzte Schreiber (MANUAL gegen MANUAL). Der Zaehler samt Hinweis
+    # „X Felder geschuetzt" lief hier deshalb nie und ist entfernt; er lebt nur
+    # im Portal-Import (`data_import.py`, Quelle `external:*`, geraetegebunden).
 
     def parse_float(val: str) -> Optional[float]:
         return _parse_number(val, config.dezimalzeichen)
@@ -217,7 +201,6 @@ async def apply_custom_import(
                 summen = await _import_investition_monatsdaten_v09(
                     db, row, parse_float, investitionen, jahr, monat, ueberschreiben,
                     source="manual:csv_import", writer="csv_wizard",
-                    on_upsert=_record_upsert,
                 )
 
             # ── Investitions-Felder aus manuellem Mapping (inv:ID:feld) ──────
@@ -248,7 +231,7 @@ async def apply_custom_import(
 
             # Manuell gemappte Investitions-Felder speichern + Summen berechnen
             for inv_id_int, verbrauch_daten in inv_collected.items():
-                await _track_upsert(
+                await _upsert_investition_monatsdaten(
                     db, inv_id_int, jahr, monat, verbrauch_daten, ueberschreiben,
                     source="manual:csv_import", writer="csv_wizard",
                 )
@@ -317,7 +300,6 @@ async def apply_custom_import(
                     w = await _distribute_legacy_pv_to_modules(
                         db, pv_mapped, pv_module, jahr, monat, ueberschreiben,
                         source="manual:csv_import", writer="csv_wizard",
-                        on_upsert=_record_upsert,
                     )
                     if importiert == 0:
                         warnungen.extend(w)
@@ -335,7 +317,6 @@ async def apply_custom_import(
                         db, bat_ladung_mapped, bat_entladung_mapped or 0,
                         speicher, jahr, monat, ueberschreiben,
                         source="manual:csv_import", writer="csv_wizard",
-                        on_upsert=_record_upsert,
                     )
                     if importiert == 0:
                         warnungen.extend(w)
@@ -363,14 +344,10 @@ async def apply_custom_import(
             ]
             for field_name, value in top_level_writes:
                 if value is not None:
-                    result = await write_with_provenance(
+                    await write_with_provenance(
                         db, md, field_name, value,
                         source="manual:csv_import", writer="csv_wizard",
                     )
-                    if result.decision == "rejected_lower_priority":
-                        geschuetzt_count += 1
-                        if len(geschuetzte_felder) < 15 and field_name not in geschuetzte_felder:
-                            geschuetzte_felder.append(field_name)
             md.datenquelle = "custom_import"
 
             # Legacy-Top-Level-Felder ohne Investitions-Slot (#229 JanKgh-Folge):
@@ -380,14 +357,14 @@ async def apply_custom_import(
             # Wert bereits über die inv_collected-Schiene oben.
             if eauto_km_legacy is not None and eauto_km_legacy > 0 and eautos_priv:
                 ea = eautos_priv[0]
-                await _track_upsert(
+                await _upsert_investition_monatsdaten(
                     db, ea.id, jahr, monat, {"km_gefahren": eauto_km_legacy},
                     ueberschreiben,
                     source="manual:csv_import", writer="csv_wizard",
                 )
             if wallbox_lv_legacy is not None and wallbox_lv_legacy > 0 and wallboxen_priv:
                 wb = wallboxen_priv[0]
-                await _track_upsert(
+                await _upsert_investition_monatsdaten(
                     db, wb.id, jahr, monat, {"ladevorgaenge": wallbox_lv_legacy},
                     ueberschreiben,
                     source="manual:csv_import", writer="csv_wizard",
@@ -401,23 +378,14 @@ async def apply_custom_import(
 
     await db.flush()
 
-    # Etappe 3d Päckchen 3: Wizard-Hinweis bei aktivierter Quellen-Hierarchie.
-    if geschuetzt_count > 0:
-        sample = ", ".join(geschuetzte_felder[:5])
-        suffix = f" (z. B. {sample})" if sample else ""
-        warnungen.insert(0, (
-            f"{geschuetzt_count} Felder wurden durch manuell gepflegte Werte "
-            f"geschützt{suffix} — Reset über Reparatur-Werkbank wenn gewollt."
-        ))
-
     await log_activity(
         kategorie="portal_import",
         aktion=f"Custom-Import: {importiert} Monate importiert",
         erfolg=len(fehler) == 0,
-        details=f"Anlage {anlage_id}, übersprungen: {uebersprungen}, geschützt: {geschuetzt_count}",
+        details=f"Anlage {anlage_id}, übersprungen: {uebersprungen}",
         details_json={
             "importiert": importiert, "uebersprungen": uebersprungen,
-            "geschuetzt": geschuetzt_count, "fehler": fehler[:5],
+            "fehler": fehler[:5],
         },
         anlage_id=anlage_id,
         db=db,
@@ -429,6 +397,4 @@ async def apply_custom_import(
         uebersprungen=uebersprungen,
         fehler=fehler[:20],
         warnungen=warnungen[:10],
-        geschuetzt_count=geschuetzt_count,
-        geschuetzte_felder=geschuetzte_felder,
     )
