@@ -34,7 +34,8 @@ class AggregationsQuelle:
     """Woraus könnte der Tages-Lauf für den geprüften Tag schöpfen?
 
     ``live_sensoren`` — eine Leistungs-Zuordnung steht (Basis oder Investition).
-    ``mqtt_energie``  — MQTT-Energie-Snapshots liegen im Fenster ab dem Vortag.
+    ``mqtt_energie``  — MQTT-Energie-Snapshots liegen im Fenster Vortag bis Tagesende
+    (N-539: nicht „irgendwann danach").
     """
 
     live_sensoren: bool
@@ -70,11 +71,21 @@ async def ermittle_aggregations_quelle(
 
     from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
 
+    # Fenster = [Vortag 00:00, Folgetag 00:00). Der Vortag gehoert dazu, weil der
+    # Zaehler-Pfad den Anfangsstand des Vortags braucht. ⛔ Die OBERE Grenze
+    # fehlte von #135 (22.04.2026) bis N-539 (20.09.2026): die Frage lautete
+    # „gab es je nach dem Vortag einen Snapshot" — damit galt jeder Tag bis zum
+    # letzten Snapshot als versorgt, und ``aggregate_day`` schrieb fuer Tage
+    # VOR dem ersten Snapshot 24 leere Stunden (oder ersetzte eine gefuellte
+    # Tageszeile aus einer anderen Quelle durch leere; gemessen an einer
+    # r28-Kopie). Ein Tag ohne eigenen Snapshot hat keine Quelle — Punkt.
     cutoff = datetime.combine(ab_datum, datetime.min.time()) - timedelta(days=1)
+    ende = datetime.combine(ab_datum, datetime.min.time()) + timedelta(days=1)
     treffer = await db.execute(
         select(MqttEnergySnapshot.id).where(
             MqttEnergySnapshot.anlage_id == anlage.id,
             MqttEnergySnapshot.timestamp >= cutoff,
+            MqttEnergySnapshot.timestamp < ende,
         ).limit(1)
     )
     return AggregationsQuelle(
