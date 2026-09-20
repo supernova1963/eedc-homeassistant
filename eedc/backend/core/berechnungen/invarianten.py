@@ -302,7 +302,8 @@ def pruefe_tep_komponenten_intern_konsistenz(
     toleranz_kwh: float = 0.5,
 ) -> list[KonsistenzBericht]:
     """Achse-2-Drift-Check (Issue #315): pro Tag werden in ``aggregate_day``
-    zwei parallele Stunden-Repräsentationen geschrieben —
+    (geprüft in ``aggregator.py::pruefe_invarianten``) zwei parallele
+    Stunden-Repräsentationen geschrieben —
 
     - die typisierten ``*_kw``-Spalten aus den Zähler-Snapshots (Boundary-/
       Zählerpfad, in v3.35.0/#298 saniert),

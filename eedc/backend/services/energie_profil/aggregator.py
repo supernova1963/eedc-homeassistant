@@ -14,7 +14,8 @@ hier lazy importiert.
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timedelta
+from dataclasses import dataclass, field
+from datetime import date
 from typing import Optional
 
 from sqlalchemy import and_, delete, select
@@ -77,65 +78,386 @@ _EXTERN_BEFUELLT_FELDER_RETTEN: tuple[str, ...] = (
 )
 
 
-async def aggregate_day(
+# ═══════════════════════════════════════════════════════════════════════════
+#  Zwei Rundungs-REGELN, die heute gleich aussehen und es nicht sind
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# In der Stundenzeile ist 0 ein Messwert: nachts liefert die PV 0 kW, und das ist keine
+# Lücke — genau die Projektregel „`is not None`, nicht `if val`". In der Tageszeile heißt 0
+# dagegen *keine Aussage*: ein Überschuss von 0 kWh, ein Peak von 0 kW oder eine
+# Strahlungssumme von 0 Wh/m² entsteht nur, wenn nie etwas gemessen wurde — dort wäre eine
+# gespeicherte 0 eine Behauptung, NULL ist die Lücke. Die Helfer benennen den Unterschied,
+# statt ihn 25-mal als wortgleiches Ternär zu wiederholen (18 × `rund`/`ganz` in der
+# Stundenzeile, 7 × `nur_positiv` in der Tageszeile).
+
+
+def rund(wert, stellen: int):
+    """0 ist ein Wert, ``None`` ist die Lücke (Stundenzeile)."""
+    return None if wert is None else round(wert, stellen)
+
+
+def ganz(wert):
+    """Wie ``rund``, aber ganzzahlig (``wetter_code``)."""
+    return None if wert is None else int(wert)
+
+
+def nur_positiv(wert, stellen: int):
+    """0 ist hier KEINE Aussage, sondern die Lücke (Tageszeile: Summen und Peaks).
+
+    Alle Aufrufer übergeben mit ``0.0`` initialisierte Summen bzw. Peaks — ``None`` kann
+    dort nicht ankommen, deshalb genügt der Vergleich ``> 0``.
+    """
+    return round(wert, stellen) if wert > 0 else None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Stunden-Schleife — zwei Traeger und sieben Phasen
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@dataclass(frozen=True)
+class StundenKontext:
+    """Alles, was die Stunden-Schleife LIEST. Einmal vor der Schleife gefuellt.
+
+    ``sonderschluessel`` wird bewusst hier gehalten und nicht je Stunde gebaut: es ist eine
+    Vereinigung von sechs Kategorie-Mengen, die sich innerhalb eines Tages nicht aendert.
+    """
+    anlage: Anlage
+    datum: date
+    netz_keys: set
+    pv_keys: set
+    sonderschluessel: set
+    kwh_pro_stunde: dict
+    kwh_source_label: str
+    wetter_stunden: dict
+    soc_stunden: dict
+    soc_je_stunde: dict
+    betriebsmodus_je_stunde: dict
+    strompreis_stunden: object
+    wp_starts_pro_stunde: dict
+    wp_betriebsstunden_pro_stunde: dict
+
+
+@dataclass
+class TagesAkkumulator:
+    """Alles, was die Stunden-Schleife SCHREIBT und die Tages-Phasen danach lesen.
+
+    ⛔ Bewusst NICHT ``frozen`` und bewusst nicht der Rueckgabewert einer Phase: zwei seiner
+    Felder werden NACH der Schleife noch ueberschrieben — ``komponenten_summen`` vom
+    Komponenten-Tagesgesamt (Boundary-Diff gewinnt ueber die Live-Sigma) und die drei Peaks vom
+    HA-LTS-Override (Min/Max gewinnt ueber die W-Integration). Ein unveraenderlicher Traeger
+    erzwaenge an dieser Stelle einen Kopier-Schritt, den man beim Lesen fuer eine
+    Rechenaenderung haelt. Die Reihenfolge Schleife -> Tagesgesamt -> Peak-Override ist
+    tragend, nicht zufaellig.
+    """
+    tages_ueberschuss: float = 0.0
+    tages_defizit: float = 0.0
+    peak_pv: float = 0.0
+    peak_bezug: float = 0.0
+    peak_einspeisung: float = 0.0
+    temp_values: list = field(default_factory=list)
+    strahlung_summe: float = 0.0
+    pv_ertrag_summe: float = 0.0
+    # mind. eine Stunde mit gemessener PV — s. Performance Ratio
+    pv_ertrag_erfasst: bool = False
+    gti_summe: float = 0.0          # kWp-gewichtete GTI (Wh/m²) über den Tag — für PR (#139)
+    gti_stunden_count: int = 0
+    soc_values: list = field(default_factory=list)
+    stunden_count: int = 0
+    # Per-Komponenten Tages-kWh
+    komponenten_summen: dict = field(default_factory=dict)
+    # h → kWh (für Negativpreis-Berechnung)
+    einspeisung_pro_stunde: dict = field(default_factory=dict)
+    # Eingänge für die Ableitung des PV-Anteils der Heimladung (N-141 Weg c).
+    # Hier gesammelt statt nachträglich aus `TagesEnergieProfil` gelesen:
+    # Rahmenbedingung 2 („Rechnung im Aggregator") — die Größen liegen in
+    # dieser Schleife ohnehin vor, ein zweiter Lesepfad wäre eine zweite
+    # Wahrheit.
+    lade_stunden: list = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class Leistungsspitzen:
+    """Momentanwerte der Stunde aus dem Leistungspfad (W) — nur fuer die Tages-Peaks."""
+    pv_kw_w: float
+    netzbezug_kw_w: float
+    einspeisung_kw_w: float
+
+
+@dataclass(frozen=True)
+class Zaehlerstunde:
+    """Die kWh-Werte einer Stunde aus dem Zaehlerpfad. ``None`` heisst: kein Zaehler."""
+    pv_kw: Optional[float]
+    sonstige_erz_kw: Optional[float]
+    einspeisung_kw: Optional[float]
+    netzbezug_kw: Optional[float]
+    verbrauch_kw: Optional[float]
+    waermepumpe_kw: Optional[float]
+    wallbox_kw: Optional[float]
+    batterie_kw: Optional[float]
+
+
+@dataclass(frozen=True)
+class Wetterstunde:
+    """Die Wetter-IST-Werte einer Stunde."""
+    temperatur: Optional[float]
+    strahlung: Optional[float]
+    gti: Optional[float]
+    bewoelkung: Optional[float]
+    niederschlag: Optional[float]
+    wcode: Optional[float]
+
+
+def leistungsspitzen_der_stunde(werte: dict, kontext: StundenKontext) -> Leistungsspitzen:
+    # ── Leistungs-Spitzen aus Tagesverlauf (W-Integration nur für Peaks) ──
+    # kW-Peaks brauchen keine kWh-Präzision; Zähler liefern keine Momentanwerte.
+    netz_val = sum(werte.get(k, 0) for k in kontext.netz_keys)
+    einspeisung_kw_w = abs(netz_val) if netz_val < 0 else 0.0
+    netzbezug_kw_w = netz_val if netz_val > 0 else 0.0
+
+    pv_kw_w = sum(v for k in kontext.pv_keys
+                  if (v := werte.get(k, 0)) > 0)
+    for k, v in werte.items():
+        if v is None or k in kontext.sonderschluessel:
+            continue
+        if v > 0:
+            pv_kw_w += v
+    return Leistungsspitzen(
+        pv_kw_w=pv_kw_w,
+        netzbezug_kw_w=netzbezug_kw_w,
+        einspeisung_kw_w=einspeisung_kw_w,
+    )
+
+
+def zaehlerwerte_der_stunde(h: int, kontext: StundenKontext) -> Zaehlerstunde:
+    # ── kWh-Werte aus Zähler-Snapshots (Issue #135) ───────────────────
+    # Fehlt der Zähler einer Kategorie, bleibt der Wert None.
+    # Konvention für Batterie: positiv=Ladung, negativ=Entladung (netto).
+    from backend.core.berechnungen import batterie_kw_spalte
+
+    snap_h = kontext.kwh_pro_stunde.get(h, {}) if kontext.kwh_pro_stunde else {}
+    return Zaehlerstunde(
+        pv_kw=snap_h.get("pv"),  # inkl. Sonstiges-Erzeuger (für die Bilanz)
+        sonstige_erz_kw=snap_h.get("erzeugung_sonstiges"),  # für PV-reine PR
+        einspeisung_kw=snap_h.get("einspeisung"),
+        netzbezug_kw=snap_h.get("netzbezug"),
+        verbrauch_kw=snap_h.get("verbrauch"),
+        waermepumpe_kw=snap_h.get("wp"),
+        wallbox_kw=snap_h.get("wallbox"),
+        # Spalten-Konvention: ENTLADUNG positiv, LADUNG negativ (= Negation des
+        # Bilanz-Netto `ladung − entladung`). batt_netto bleibt für die Bilanz-
+        # Formel unten (verbrauch) erhalten. SoT: core.berechnungen.batterie_kw_spalte.
+        batterie_kw=batterie_kw_spalte(snap_h.get("batterie_netto")),
+    )
+
+
+def wetter_der_stunde(h: int, kontext: StundenKontext) -> Wetterstunde:
+    wetter_h = kontext.wetter_stunden.get(h, {})
+    return Wetterstunde(
+        temperatur=wetter_h.get("temperatur_c"),
+        strahlung=wetter_h.get("globalstrahlung_wm2"),
+        gti=wetter_h.get("gti_wm2"),
+        bewoelkung=wetter_h.get("bewoelkung_prozent"),
+        niederschlag=wetter_h.get("niederschlag_mm"),
+        wcode=wetter_h.get("wetter_code"),
+    )
+
+
+def verrechne_stunde(
+    h: int,
+    zaehler: Zaehlerstunde,
+    wetter: Wetterstunde,
+    kontext: StundenKontext,
+    akku: TagesAkkumulator,
+) -> tuple:
+    """Schreibt die Stunde in den Tages-Akkumulator.
+
+    Returns:
+        (ueberschuss, defizit, soc, strompreis, boersenpreis) — die fuenf Groessen, die
+        ausserdem in der Stundenzeile stehen.
+    """
+    from backend.core.berechnungen.pv_anteil_ladung import stunde_aus_bilanzwerten
+
+    # Einspeisung pro Stunde für Negativpreis-Analyse (§51 EEG)
+    if zaehler.einspeisung_kw is not None and zaehler.einspeisung_kw > 0:
+        akku.einspeisung_pro_stunde[h] = zaehler.einspeisung_kw
+
+    # Eingänge für die PV-Anteils-Ableitung der Heimladung (N-141 Weg c).
+    # Die Vorzeichen-Übersetzung macht der Layer-Helfer — sie ist die eine
+    # Stelle, an der man sich hier vertun könnte (s. seinen Docstring).
+    #
+    # ⚠ Der Nenner ist bewusst `wallbox_kw`, also GENAU die Größe, aus der
+    # auch die gespeicherte Wallbox-Spalte entsteht. Sie ist `ladung_wallbox
+    # + verbrauch_eauto` und gegen Doppelzählung nur über
+    # `parent_investition_id` geschützt (N-196, dieselbe Masche wie F-14 im
+    # Leistungspfad). Das hier ist Absicht: eine eigene Sonderregel wäre
+    # eine zweite Wahrheit über dieselbe Ladung, und wird N-196 behoben,
+    # zieht diese Rechnung ohne Zutun mit.
+    akku.lade_stunden.append(stunde_aus_bilanzwerten(
+        ladung=zaehler.wallbox_kw,
+        netzbezug=zaehler.netzbezug_kw,
+        einspeisung=zaehler.einspeisung_kw,
+        batterie_spalte=zaehler.batterie_kw,
+    ))
+
+    # Bilanz-Aggregate (nur wenn pv und verbrauch bekannt)
+    if zaehler.pv_kw is not None and zaehler.verbrauch_kw is not None:
+        ueberschuss = max(0.0, zaehler.pv_kw - zaehler.verbrauch_kw)
+        defizit = max(0.0, zaehler.verbrauch_kw - zaehler.pv_kw)
+        akku.tages_ueberschuss += ueberschuss
+        akku.tages_defizit += defizit
+    else:
+        ueberschuss = None
+        defizit = None
+
+    if zaehler.pv_kw is not None:
+        # Performance-Ratio = reine PV-Qualität (Ertrag vs. GTI) → den in `pv`
+        # enthaltenen Sonstiges-Erzeuger-Anteil (BHKW, kein GTI-Bezug) abziehen.
+        akku.pv_ertrag_summe += zaehler.pv_kw - (zaehler.sonstige_erz_kw or 0.0)
+        akku.pv_ertrag_erfasst = True
+
+    # Wetter
+    if wetter.temperatur is not None:
+        akku.temp_values.append(wetter.temperatur)
+    if wetter.strahlung is not None:
+        akku.strahlung_summe += wetter.strahlung  # W/m² × 1h = Wh/m²
+    if wetter.gti is not None:
+        akku.gti_summe += wetter.gti
+        akku.gti_stunden_count += 1
+
+    # SoC
+    soc = kontext.soc_stunden.get(h)
+    if soc is not None:
+        akku.soc_values.append(soc)
+
+    # Strompreis (Sensor-Endpreis + Börsenpreis getrennt)
+    strompreis = kontext.strompreis_stunden.sensor.get(h)
+    boersenpreis = kontext.strompreis_stunden.boerse.get(h)
+    return ueberschuss, defizit, soc, strompreis, boersenpreis
+
+
+def summiere_live_komponenten(
+    werte: dict, kontext: StundenKontext, akku: TagesAkkumulator,
+) -> None:
+    # Per-Komponenten kWh akkumulieren (kW × 1h = kWh) — Live-Σ-Riemann.
+    # Nur im Standalone-Fallback (kein HA-LTS) aktiv. Im HA-Add-on-Modus
+    # ist diese Akkumulation redundant zum Boundary-Pfad (boundary_kwh
+    # weiter unten) und war historische Drift-Quelle: bei Schema-Mismatch
+    # zwischen Live-Service-Key und Boundary-Key (z.B. balkonkraftwerk
+    # → Live `pv_<id>`, Boundary `bkw_<id>`) blieben beide Keys parallel
+    # in `komponenten_summen` und wurden von Whitelist-Konsumenten
+    # doppelt gezählt (BKW-Bug 2026-05-19, Rainer-PN).
+    if werte and kontext.kwh_source_label != "external:ha_statistics:hourly":
+        for komp_key, komp_kw in werte.items():
+            if komp_kw is not None and komp_key != "strompreis":
+                akku.komponenten_summen[komp_key] = (
+                    akku.komponenten_summen.get(komp_key, 0.0) + komp_kw
+                )
+
+
+def baue_stundenzeile(
+    h: int,
+    werte: dict,
+    zaehler: Zaehlerstunde,
+    wetter: Wetterstunde,
+    ueberschuss: Optional[float],
+    defizit: Optional[float],
+    soc: Optional[float],
+    strompreis: Optional[float],
+    boersenpreis: Optional[float],
+    kontext: StundenKontext,
+) -> TagesEnergieProfil:
+    # is not None statt `if x` — echte 0-Werte (Nacht-PV) sind keine Lücke.
+    return TagesEnergieProfil(
+        anlage_id=kontext.anlage.id,
+        datum=kontext.datum,
+        stunde=h,
+        pv_kw=rund(zaehler.pv_kw, 3),
+        verbrauch_kw=rund(zaehler.verbrauch_kw, 3),
+        einspeisung_kw=rund(zaehler.einspeisung_kw, 3),
+        netzbezug_kw=rund(zaehler.netzbezug_kw, 3),
+        batterie_kw=rund(zaehler.batterie_kw, 3),
+        waermepumpe_kw=rund(zaehler.waermepumpe_kw, 3),
+        wallbox_kw=rund(zaehler.wallbox_kw, 3),
+        ueberschuss_kw=rund(ueberschuss, 3),
+        defizit_kw=rund(defizit, 3),
+        temperatur_c=rund(wetter.temperatur, 1),
+        globalstrahlung_wm2=rund(wetter.strahlung, 0),
+        bewoelkung_prozent=rund(wetter.bewoelkung, 0),
+        niederschlag_mm=rund(wetter.niederschlag, 2),
+        wetter_code=ganz(wetter.wcode),
+        soc_prozent=rund(soc, 1),
+        soc_je_speicher=(
+            {str(k): round(v, 1) for k, v in kontext.soc_je_stunde[h].items()}
+            if kontext.soc_je_stunde.get(h) else None
+        ),
+        # #263 K-2. `None` statt `{}` bei fehlendem Signal: die Spalte
+        # unterscheidet „nicht hingesehen" (NULL) von „hingesehen, Seite
+        # nicht zuordenbar" (Wert `unbestimmt`) — ein leeres Dict wäre
+        # weder das eine noch das andere.
+        betriebsmodus_je_wp=(
+            {str(k): v for k, v in kontext.betriebsmodus_je_stunde[h].items()}
+            if kontext.betriebsmodus_je_stunde.get(h) else None
+        ),
+        strompreis_cent=rund(strompreis, 2),
+        boersenpreis_cent=rund(boersenpreis, 2),
+        komponenten={k: v for k, v in werte.items() if k != "strompreis"} if werte else None,
+        wp_starts_anzahl=kontext.wp_starts_pro_stunde.get(h),
+        wp_betriebsstunden=kontext.wp_betriebsstunden_pro_stunde.get(h),
+    )
+
+
+def verarbeite_stunde(
+    punkt: dict,
+    kontext: StundenKontext,
+    akku: TagesAkkumulator,
+    db: AsyncSession,
+    auto_writer: str,
+) -> None:
+    """Eine Stunde: Spitzen, Zaehlerwerte, Wetter, Verrechnung, Live-Σ, Zeile schreiben."""
+    h = int(punkt["zeit"].split(":")[0])
+    werte = punkt.get("werte", {})
+
+    spitzen = leistungsspitzen_der_stunde(werte, kontext)
+    zaehler = zaehlerwerte_der_stunde(h, kontext)
+    wetter = wetter_der_stunde(h, kontext)
+    ueberschuss, defizit, soc, strompreis, boersenpreis = verrechne_stunde(
+        h, zaehler, wetter, kontext, akku,
+    )
+
+    # Peaks fortschreiben
+    akku.peak_pv = max(akku.peak_pv, spitzen.pv_kw_w)
+    akku.peak_bezug = max(akku.peak_bezug, spitzen.netzbezug_kw_w)
+    akku.peak_einspeisung = max(akku.peak_einspeisung, spitzen.einspeisung_kw_w)
+
+    summiere_live_komponenten(werte, kontext, akku)
+
+    # TagesEnergieProfil speichern
+    profil = baue_stundenzeile(
+        h, werte, zaehler, wetter, ueberschuss, defizit, soc,
+        strompreis, boersenpreis, kontext,
+    )
+    db.add(profil)
+    seed_tep_provenance(profil, writer=auto_writer, source=kontext.kwh_source_label)
+    akku.stunden_count += 1
+
+
+async def hole_tagesverlauf(
     anlage: Anlage,
     datum: date,
     db: AsyncSession,
-    *,
-    source: Source,
-    prefetched_tagesverlauf: Optional[dict] = None,
-) -> Optional[TagesZusammenfassung]:
-    """
-    Aggregiert Energiedaten eines Tages und speichert sie persistent.
+    prefetched_tagesverlauf: Optional[dict],
+) -> Optional[tuple]:
+    """Eingang und Rohverlauf — Prefetch-Zweig, Live-Zweig, synthetische Slots.
 
-    1. Holt Tagesverlauf-Daten (stündliche Butterfly-Daten)
-    2. Holt Wetter-IST-Daten (Temperatur, Strahlung)
-    3. Holt Batterie-SoC History
-    4. Speichert 24 TagesEnergieProfil-Zeilen
-    5. Berechnet + speichert TagesZusammenfassung
-
-    Args:
-        anlage: Die Anlage
-        datum: Tag für den aggregiert wird
-        db: DB-Session
-        source: Trigger-Quelle dieses Aufrufs (Source-Enum, v3.34.0 Phase A).
-            Steuert: (a) ``datenquelle``-Spaltenwert, (b) Provenance-Writer-
-            Suffix, (c) Preserve-Logik bei manueller Reaggregation. Pflicht-
-            Keyword-Parameter — kein Default, alle Aufrufer setzen ihn
-            explizit (Audit §8.12, Plan v3.34 §3 Phase A E4).
-        prefetched_tagesverlauf: Optionale vorgeholte Tagesverlauf-Daten in
-            der ``get_tagesverlauf``-Form (``{"serien": [...], "punkte":
-            [{"zeit", "werte"}]}``) für GENAU diesen Tag. Gesetzt vom
-            Vollbackfill-Pfad (``backfill_from_statistics``, v3.34.2 Phase B),
-            der die historischen Stunden-Leistungen gebündelt aus HA-LTS holt
-            (`get_hourly_sensor_data` einmal pro Range) — `get_tagesverlauf`
-            reicht nur ~10 Tage zurück, deshalb braucht der Backfill die
-            Durchreichung. Wenn gesetzt, wird `get_tagesverlauf` NICHT
-            aufgerufen; die kategorisierten Stunden-kWh, Boundary-kWh, Peaks,
-            Strompreise usw. kommen weiterhin aus den regulären
-            `aggregate_day`-Quellen (HA-LTS bevorzugt). Plan v3.34 §3 B.1 +
-            B.3 (Pflicht-Mitigation gegen Per-Tag-Bulk-Read-Verlust).
-            (Der Plan-Text nennt `dict[date, dict]`; da `aggregate_day`
-            per-Tag arbeitet, wird die Per-Tag-Form übergeben — der Caller
-            schleift über die Range.)
+    ⚠ Die beiden fruehen ``return None`` sind Vertrag, nicht Formsache: F-26 (Forum T89667 #142,
+    IdleBit) ist an ihrem Verhalten gebaut worden. Sie bleiben hier und werden vom Orchestrator
+    als ``None`` weitergereicht.
 
     Returns:
-        TagesZusammenfassung oder None bei Fehler
+        ``(serien, punkte_raw, vortagsrand_raw, synthetische_slots)`` oder ``None``.
     """
-    from backend.services.energie_profil._helpers import (
-        _get_betriebsmodus_history,
-        _get_soc_history,
-        _get_strompreis_stunden,
-        _get_wetter_ist,
-        _tage_zurueck,
-    )
-
-    # Provenance-Writer codiert die Trigger-Quelle (Scheduler / Monatsabschluss /
-    # manuelles Reaggregate / Vollbackfill). Source bleibt einheitlich
-    # `auto:monatsabschluss` (Stufe 3) — siehe seed_tz_provenance / seed_tep_provenance.
-    auto_writer = source.to_writer()
-
-    sensor_mapping = anlage.sensor_mapping or {}
+    from backend.services.energie_profil._helpers import _tage_zurueck
 
     if prefetched_tagesverlauf is not None:
         # Vollbackfill-Pfad: historische Stunden-Daten sind bereits gebündelt
@@ -196,7 +518,13 @@ async def aggregate_day(
     else:
         synthetische_slots = False
 
-    # ── Sub-stündliche Punkte auf BACKWARD-Slots bucketen (N-382) ─────────
+    return serien, punkte_raw, vortagsrand_raw, synthetische_slots
+
+
+def bucket_nach_slot(
+    punkte_raw: list, vortagsrand_raw: list, synthetische_slots: bool,
+) -> dict:
+    """Sub-stündliche Punkte auf BACKWARD-Slots bucketen (N-382)."""
     #
     # SoT: `core/berechnungen/slot_konvention.py` — **Slot h = Energie
     # [h-1, h)**, Slot 0 = [Vortag 23:00, 00:00). Der Leistungspfad
@@ -240,6 +568,11 @@ async def aggregate_day(
         if stunden_buckets and 0 not in stunden_buckets:
             stunden_buckets[0] = []
 
+    return stunden_buckets
+
+
+def mittel_je_stunde(stunden_buckets: dict) -> list:
+    """Je Slot den Mittelwert jedes Schluessels — das Ergebnis sind die 24 Stundenpunkte."""
     punkte = []
     for h in sorted(stunden_buckets):
         bucket = stunden_buckets[h]
@@ -250,6 +583,29 @@ async def aggregate_day(
             if vals:
                 gemittelt[k] = sum(vals) / len(vals)
         punkte.append({"zeit": f"{h:02d}:00", "werte": gemittelt})
+
+    return punkte
+
+
+async def lade_stammdaten(
+    anlage: Anlage,
+    datum: date,
+    db: AsyncSession,
+    serien: list,
+    sensor_mapping: dict,
+) -> tuple:
+    """Serien-Kategorien indexieren und die fuenf Stammdaten-Quellen holen.
+
+    Returns:
+        ``(pv_keys, netz_keys, sonderschluessel, wetter_stunden, soc_je_stunde,
+        soc_stunden, betriebsmodus_je_stunde, strompreis_stunden)``
+    """
+    from backend.services.energie_profil._helpers import (
+        _get_betriebsmodus_history,
+        _get_soc_history,
+        _get_strompreis_stunden,
+        _get_wetter_ist,
+    )
 
     # Serien-Kategorien indexieren (vorzeichenbasiert, zukunftssicher)
     pv_keys = {s["key"] for s in serien if s["kategorie"] == "pv"}
@@ -325,6 +681,21 @@ async def aggregate_day(
     # ── Strompreis-Stundenwerte holen ─────────────────────────────────────
     strompreis_stunden = await _get_strompreis_stunden(anlage, sensor_mapping, datum)
 
+    return (
+        pv_keys, netz_keys, _sonderschluessel, wetter_stunden,
+        soc_je_stunde, soc_stunden, betriebsmodus_je_stunde, strompreis_stunden,
+    )
+
+
+async def lade_zaehler_und_counter(
+    anlage: Anlage, datum: date, db: AsyncSession,
+) -> tuple:
+    """Zaehler-kWh je Stunde (HA-LTS mit Snapshot-Fallback) und die Stunden-Counter.
+
+    Returns:
+        ``(invs, invs_by_id, kwh_pro_stunde, kwh_source_label, wp_starts_pro_stunde,
+        wp_betriebsstunden_pro_stunde, komponenten_starts)``
+    """
     # ── Zähler-basierte Stunden-kWh (Issue #135 / Etappe 4 v3.31.0) ──────
     # Etappe 4: HA-Statistics-LTS ist Source-of-Truth, wenn verfügbar
     # (HA-Add-on oder Docker mit HA-Recorder-URL). Snapshot-Variante bleibt
@@ -440,6 +811,24 @@ async def aggregate_day(
         "wp_betriebsstunden", wp_betriebsstunden_pro_stunde, as_float=True
     )
 
+    return (
+        invs, invs_by_id, kwh_pro_stunde, kwh_source_label,
+        wp_starts_pro_stunde, wp_betriebsstunden_pro_stunde, komponenten_starts,
+    )
+
+
+async def rette_und_loesche(
+    anlage: Anlage, datum: date, db: AsyncSession,
+) -> tuple:
+    """Extern befuellte Felder retten, dann Delete-and-Recreate der beiden Tageszeilen.
+
+    ⚠ EIN Schreibpfad: Rettung und Delete gehoeren zusammen und duerfen nicht getrennt
+    werden — zwischen beiden darf nichts stehen, was die alte Zeile noch liest.
+
+    Returns:
+        ``(preserved_felder, preserved_quellen, preserved_komponenten_kwh,
+        preserved_komponenten_starts)``
+    """
     # ── Alte Daten für diesen Tag löschen (Upsert) ────────────────────────
     # Extern befüllte Felder vor dem Delete-and-Recreate retten — sie werden
     # nicht vom Aggregator gesetzt, sondern asynchron/additiv von anderen
@@ -502,189 +891,94 @@ async def aggregate_day(
         )
     )
 
-    # ── Stundenwerte berechnen + speichern ────────────────────────────────
-    tages_ueberschuss = 0.0
-    tages_defizit = 0.0
-    peak_pv = 0.0
-    peak_bezug = 0.0
-    peak_einspeisung = 0.0
-    temp_values = []
-    strahlung_summe = 0.0
-    pv_ertrag_summe = 0.0
-    pv_ertrag_erfasst = False  # mind. eine Stunde mit gemessener PV — s. PR unten
-    gti_summe = 0.0  # kWp-gewichtete GTI (Wh/m²) über den Tag — für PR (#139)
-    gti_stunden_count = 0
-    soc_values = []
-    stunden_count = 0
-    komponenten_summen: dict[str, float] = {}  # Per-Komponenten Tages-kWh
-    einspeisung_pro_stunde: dict[int, float] = {}  # h → kWh (für Negativpreis-Berechnung)
-    # Eingänge für die Ableitung des PV-Anteils der Heimladung (N-141 Weg c).
-    # Hier gesammelt statt nachträglich aus `TagesEnergieProfil` gelesen:
-    # Rahmenbedingung 2 („Rechnung im Aggregator") — die Größen liegen in
-    # dieser Schleife ohnehin vor, ein zweiter Lesepfad wäre eine zweite
-    # Wahrheit.
-    lade_stunden: list[dict[str, Optional[float]]] = []
+    return (
+        preserved_felder, preserved_quellen,
+        preserved_komponenten_kwh, preserved_komponenten_starts,
+    )
 
-    from backend.core.berechnungen import batterie_kw_spalte
-    from backend.core.berechnungen.pv_anteil_ladung import stunde_aus_bilanzwerten
 
-    for punkt in punkte:
-        h = int(punkt["zeit"].split(":")[0])
-        werte = punkt.get("werte", {})
+async def schreibe_provenance_und_restore(
+    anlage: Anlage,
+    datum: date,
+    db: AsyncSession,
+    zusammenfassung: TagesZusammenfassung,
+    *,
+    auto_writer: str,
+    tz_source_label: str,
+    lade_anteil,
+    pv_marken: dict,
+    preserved_felder: dict,
+    preserved_quellen: dict,
+) -> None:
+    """Provenance saeen, danach die geretteten Felder zurueckschreiben.
 
-        # ── Leistungs-Spitzen aus Tagesverlauf (W-Integration nur für Peaks) ──
-        # kW-Peaks brauchen keine kWh-Präzision; Zähler liefern keine Momentanwerte.
-        netz_val = sum(werte.get(k, 0) for k in netz_keys)
-        einspeisung_kw_w = abs(netz_val) if netz_val < 0 else 0.0
-        netzbezug_kw_w = netz_val if netz_val > 0 else 0.0
+    ⛔ Die Reihenfolge ist tragend (#299): ``seed_tz_provenance`` laeuft VOR dem Restore,
+    damit ``write_with_provenance`` je gerettetem Feld die echte Ursprungsquelle statt des
+    Aggregator-Labels eintraegt. Wer die beiden Bloecke tauscht, dreht das um.
+    """
+    from backend.services.provenance import (
+        ABGELEITET_EINSPEISE_DECKUNG,
+        ABGELEITET_EINSPEISE_DECKUNG_TEILWEISE,
+    )
 
-        pv_kw_w = sum(v for k in pv_keys
-                      if (v := werte.get(k, 0)) > 0)
-        for k, v in werte.items():
-            if v is None or k in _sonderschluessel:
-                continue
-            if v > 0:
-                pv_kw_w += v
-
-        # ── kWh-Werte aus Zähler-Snapshots (Issue #135) ───────────────────
-        # Fehlt der Zähler einer Kategorie, bleibt der Wert None.
-        # Konvention für Batterie: positiv=Ladung, negativ=Entladung (netto).
-        snap_h = kwh_pro_stunde.get(h, {}) if kwh_pro_stunde else {}
-        pv_kw = snap_h.get("pv")  # inkl. Sonstiges-Erzeuger (für die Bilanz)
-        sonstige_erz_kw = snap_h.get("erzeugung_sonstiges")  # für PV-reine PR
-        einspeisung_kw = snap_h.get("einspeisung")
-        netzbezug_kw = snap_h.get("netzbezug")
-        verbrauch_kw = snap_h.get("verbrauch")
-        waermepumpe_kw = snap_h.get("wp")
-        wallbox_kw = snap_h.get("wallbox")
-        # Spalten-Konvention: ENTLADUNG positiv, LADUNG negativ (= Negation des
-        # Bilanz-Netto `ladung − entladung`). batt_netto bleibt für die Bilanz-
-        # Formel unten (verbrauch) erhalten. SoT: core.berechnungen.batterie_kw_spalte.
-        batterie_kw = batterie_kw_spalte(snap_h.get("batterie_netto"))
-
-        # Einspeisung pro Stunde für Negativpreis-Analyse (§51 EEG)
-        if einspeisung_kw is not None and einspeisung_kw > 0:
-            einspeisung_pro_stunde[h] = einspeisung_kw
-
-        # Eingänge für die PV-Anteils-Ableitung der Heimladung (N-141 Weg c).
-        # Die Vorzeichen-Übersetzung macht der Layer-Helfer — sie ist die eine
-        # Stelle, an der man sich hier vertun könnte (s. seinen Docstring).
-        #
-        # ⚠ Der Nenner ist bewusst `wallbox_kw`, also GENAU die Größe, aus der
-        # auch die gespeicherte Wallbox-Spalte entsteht. Sie ist `ladung_wallbox
-        # + verbrauch_eauto` und gegen Doppelzählung nur über
-        # `parent_investition_id` geschützt (N-196, dieselbe Masche wie F-14 im
-        # Leistungspfad). Das hier ist Absicht: eine eigene Sonderregel wäre
-        # eine zweite Wahrheit über dieselbe Ladung, und wird N-196 behoben,
-        # zieht diese Rechnung ohne Zutun mit.
-        lade_stunden.append(stunde_aus_bilanzwerten(
-            ladung=wallbox_kw,
-            netzbezug=netzbezug_kw,
-            einspeisung=einspeisung_kw,
-            batterie_spalte=batterie_kw,
-        ))
-
-        # Bilanz-Aggregate (nur wenn pv und verbrauch bekannt)
-        if pv_kw is not None and verbrauch_kw is not None:
-            ueberschuss = max(0.0, pv_kw - verbrauch_kw)
-            defizit = max(0.0, verbrauch_kw - pv_kw)
-            tages_ueberschuss += ueberschuss
-            tages_defizit += defizit
-        else:
-            ueberschuss = None
-            defizit = None
-
-        if pv_kw is not None:
-            # Performance-Ratio = reine PV-Qualität (Ertrag vs. GTI) → den in `pv`
-            # enthaltenen Sonstiges-Erzeuger-Anteil (BHKW, kein GTI-Bezug) abziehen.
-            pv_ertrag_summe += pv_kw - (sonstige_erz_kw or 0.0)
-            pv_ertrag_erfasst = True
-
-        peak_pv = max(peak_pv, pv_kw_w)
-        peak_bezug = max(peak_bezug, netzbezug_kw_w)
-        peak_einspeisung = max(peak_einspeisung, einspeisung_kw_w)
-
-        # Wetter
-        wetter_h = wetter_stunden.get(h, {})
-        temperatur = wetter_h.get("temperatur_c")
-        strahlung = wetter_h.get("globalstrahlung_wm2")
-        gti = wetter_h.get("gti_wm2")
-        bewoelkung = wetter_h.get("bewoelkung_prozent")
-        niederschlag = wetter_h.get("niederschlag_mm")
-        wcode = wetter_h.get("wetter_code")
-        if temperatur is not None:
-            temp_values.append(temperatur)
-        if strahlung is not None:
-            strahlung_summe += strahlung  # W/m² × 1h = Wh/m²
-        if gti is not None:
-            gti_summe += gti
-            gti_stunden_count += 1
-
-        # SoC
-        soc = soc_stunden.get(h)
-        if soc is not None:
-            soc_values.append(soc)
-
-        # Strompreis (Sensor-Endpreis + Börsenpreis getrennt)
-        strompreis = strompreis_stunden.sensor.get(h)
-        boersenpreis = strompreis_stunden.boerse.get(h)
-
-        # Per-Komponenten kWh akkumulieren (kW × 1h = kWh) — Live-Σ-Riemann.
-        # Nur im Standalone-Fallback (kein HA-LTS) aktiv. Im HA-Add-on-Modus
-        # ist diese Akkumulation redundant zum Boundary-Pfad (boundary_kwh
-        # weiter unten) und war historische Drift-Quelle: bei Schema-Mismatch
-        # zwischen Live-Service-Key und Boundary-Key (z.B. balkonkraftwerk
-        # → Live `pv_<id>`, Boundary `bkw_<id>`) blieben beide Keys parallel
-        # in `komponenten_summen` und wurden von Whitelist-Konsumenten
-        # doppelt gezählt (BKW-Bug 2026-05-19, Rainer-PN).
-        if werte and kwh_source_label != "external:ha_statistics:hourly":
-            for komp_key, komp_kw in werte.items():
-                if komp_kw is not None and komp_key != "strompreis":
-                    komponenten_summen[komp_key] = komponenten_summen.get(komp_key, 0.0) + komp_kw
-
-        # TagesEnergieProfil speichern
-        # is not None statt `if x` — echte 0-Werte (Nacht-PV) sind keine Lücke.
-        profil = TagesEnergieProfil(
-            anlage_id=anlage.id,
-            datum=datum,
-            stunde=h,
-            pv_kw=round(pv_kw, 3) if pv_kw is not None else None,
-            verbrauch_kw=round(verbrauch_kw, 3) if verbrauch_kw is not None else None,
-            einspeisung_kw=round(einspeisung_kw, 3) if einspeisung_kw is not None else None,
-            netzbezug_kw=round(netzbezug_kw, 3) if netzbezug_kw is not None else None,
-            batterie_kw=round(batterie_kw, 3) if batterie_kw is not None else None,
-            waermepumpe_kw=round(waermepumpe_kw, 3) if waermepumpe_kw is not None else None,
-            wallbox_kw=round(wallbox_kw, 3) if wallbox_kw is not None else None,
-            ueberschuss_kw=round(ueberschuss, 3) if ueberschuss is not None else None,
-            defizit_kw=round(defizit, 3) if defizit is not None else None,
-            temperatur_c=round(temperatur, 1) if temperatur is not None else None,
-            globalstrahlung_wm2=round(strahlung, 0) if strahlung is not None else None,
-            bewoelkung_prozent=round(bewoelkung, 0) if bewoelkung is not None else None,
-            niederschlag_mm=round(niederschlag, 2) if niederschlag is not None else None,
-            wetter_code=int(wcode) if wcode is not None else None,
-            soc_prozent=round(soc, 1) if soc is not None else None,
-            soc_je_speicher=(
-                {str(k): round(v, 1) for k, v in soc_je_stunde[h].items()}
-                if soc_je_stunde.get(h) else None
-            ),
-            # #263 K-2. `None` statt `{}` bei fehlendem Signal: die Spalte
-            # unterscheidet „nicht hingesehen" (NULL) von „hingesehen, Seite
-            # nicht zuordenbar" (Wert `unbestimmt`) — ein leeres Dict wäre
-            # weder das eine noch das andere.
-            betriebsmodus_je_wp=(
-                {str(k): v for k, v in betriebsmodus_je_stunde[h].items()}
-                if betriebsmodus_je_stunde.get(h) else None
-            ),
-            strompreis_cent=round(strompreis, 2) if strompreis is not None else None,
-            boersenpreis_cent=round(boersenpreis, 2) if boersenpreis is not None else None,
-            komponenten={k: v for k, v in werte.items() if k != "strompreis"} if werte else None,
-            wp_starts_anzahl=wp_starts_pro_stunde.get(h),
-            wp_betriebsstunden=wp_betriebsstunden_pro_stunde.get(h),
+    db.add(zusammenfassung)
+    # Die beiden Ladeanteils-Spalten tragen eine eigene Herkunfts-Marke: der
+    # Source-Tag beschreibt den LAUF (HA-LTS/Snapshot), die Marke die HERKUNFT
+    # der Zahl. Ohne sie sähe eine Schätzung aus wie eine Messung — und war
+    # nicht jede Ladestunde gedeckt, sagt die Marke auch das (P4).
+    abgeleitet_marken: dict[str, str] = {}
+    if lade_anteil is not None:
+        marke = (
+            ABGELEITET_EINSPEISE_DECKUNG
+            if lade_anteil.vollstaendig
+            else ABGELEITET_EINSPEISE_DECKUNG_TEILWEISE
         )
-        db.add(profil)
-        seed_tep_provenance(profil, writer=auto_writer, source=kwh_source_label)
-        stunden_count += 1
+        abgeleitet_marken["emob_ladung_pv_abgeleitet_kwh"] = marke
+        abgeleitet_marken["emob_ladung_netz_abgeleitet_kwh"] = marke
+    seed_tz_provenance(
+        zusammenfassung,
+        writer=auto_writer,
+        source=tz_source_label,
+        abgeleitet_je_feld=abgeleitet_marken or None,
+        # #406: je `komponenten_kwh`-Sub-Key, wo der Wert aus dem Anlagen-
+        # Aggregat zerlegt wurde statt gemessen zu sein.
+        abgeleitet_je_subkey=pv_marken or None,
+    )
 
+    # Gerettete extern-befüllte Felder wiederherstellen (Prognose + Kraftstoffpreis).
+    # #299: bewusst NACH seed_tz_provenance und über write_with_provenance statt
+    # per setattr — so entsteht ein Audit-Log-Eintrag pro Restore und die
+    # Provenance trägt die echte Ursprungsquelle statt des Aggregator-Labels.
+    # Die Felder sind beim Seed noch None (frische Row → der Seed-Loop überspringt
+    # sie), also greift hier kein Hierarchie-Konflikt; der Restore wird angewandt.
+    for field, val in preserved_felder.items():
+        restore_source = preserved_quellen.get(field, "auto:preserve_restore")
+        ergebnis = await write_with_provenance(
+            db, zusammenfassung, field, val,
+            source=restore_source, writer="aggregator-preserve",
+        )
+        if not ergebnis.applied:
+            # Darf nicht passieren (frische Row, existing=None) — wenn doch,
+            # ginge der gerettete Wert still verloren. Sichtbar machen statt
+            # schlucken (feedback_silent_except_logs).
+            logger.warning(
+                f"Anlage {anlage.id}, {datum}: Restore von '{field}' "
+                f"nicht angewandt ({ergebnis.decision}: {ergebnis.reason}) — "
+                f"geretteter Wert ginge verloren."
+            )
+            setattr(zusammenfassung, field, val)
+
+
+
+def tages_kennzahlen(
+    anlage: Anlage, datum: date, invs, akku: TagesAkkumulator, strompreis_stunden,
+) -> tuple:
+    """Boersenpreis-Tagesaggregation (§51 EEG), Batterie-Vollzyklen, Performance Ratio.
+
+    Returns:
+        ``(boersenpreis_avg, boersenpreis_min, neg_stunden, einsp_neg_kwh, vollzyklen,
+        performance_ratio)``
+    """
     # ── Börsenpreis-Tagesaggregation ────────────────────────────────────
     boersen_values = [v for v in (strompreis_stunden.boerse.get(h) for h in range(24)) if v is not None]
     boersenpreis_avg = round(sum(boersen_values) / len(boersen_values), 2) if boersen_values else None
@@ -696,14 +990,14 @@ async def aggregate_day(
     for h in range(24):
         bp = strompreis_stunden.boerse.get(h)
         if bp is not None and bp < 0:
-            einsp_neg += einspeisung_pro_stunde.get(h, 0.0)
+            einsp_neg += akku.einspeisung_pro_stunde.get(h, 0.0)
     einsp_neg_kwh = round(einsp_neg, 3) if einsp_neg > 0 else None
 
     # ── Batterie-Vollzyklen berechnen ─────────────────────────────────────
     vollzyklen = None
-    if len(soc_values) >= 2:
-        delta_sum = sum(abs(soc_values[i] - soc_values[i - 1])
-                        for i in range(1, len(soc_values)))
+    if len(akku.soc_values) >= 2:
+        delta_sum = sum(abs(akku.soc_values[i] - akku.soc_values[i - 1])
+                        for i in range(1, len(akku.soc_values)))
         # Ein Vollzyklus = ΔSoC von 100% (0→100→0 = 200% ΔSoC → 1 Zyklus)
         vollzyklen = round(delta_sum / 200.0, 2)
 
@@ -730,9 +1024,32 @@ async def aggregate_day(
         invs, datum, mit_bkw=True, referenzwert=anlage.leistung_kwp,
     )
     performance_ratio = berechne_performance_ratio(
-        pv_ertrag_summe if pv_ertrag_erfasst else None, gti_summe, kwp,
+        akku.pv_ertrag_summe if akku.pv_ertrag_erfasst else None, akku.gti_summe, kwp,
     )
 
+    return (
+        boersenpreis_avg, boersenpreis_min, neg_stunden, einsp_neg_kwh,
+        vollzyklen, performance_ratio,
+    )
+
+
+async def komponenten_tagesgesamt_und_peaks(
+    anlage: Anlage,
+    datum: date,
+    db: AsyncSession,
+    invs_by_id: dict,
+    kwh_source_label: str,
+    akku: TagesAkkumulator,
+) -> dict:
+    """Tagesgesamt je Komponente (HA-LTS -> Snapshot-Fallback) und der Peak-Override aus HA-LTS.
+
+    ⛔ Beide Bloecke ueberschreiben Werte, die die Stunden-Schleife gefuellt hat, und die
+    Reihenfolge ist die Praezedenz: Boundary-Diff gewinnt ueber die Live-Σ, HA-LTS-Min/Max
+    gewinnt ueber die W-Integration. Wer einen der beiden vor die Schleife zieht, dreht sie um.
+
+    Returns:
+        ``pv_marken`` — die #406-Herkunftsmarken je ``komponenten_kwh``-Sub-Key.
+    """
     # Counter-Tagesdifferenzen (`komponenten_starts`) wurden bereits vor der
     # Stunden-Schleife geholt — die Stunden-Σ wird daraus abgeleitet (Counter-
     # Daily-Drift Variante 2-light). Hier nur noch weiterverwenden.
@@ -822,7 +1139,7 @@ async def aggregate_day(
                 f"fehlgeschlagen, Σ-Hourly-Fallback aktiv: {type(e).__name__}: {e}"
             )
     for key, val in boundary_kwh.items():
-        komponenten_summen[key] = val
+        akku.komponenten_summen[key] = val
 
     # ── Peak-Werte aus HA-LTS-Min/Max (Etappe 5 v3.31.0) ─────────────────
     # HA-Recorder schreibt für has_mean=True-Sensoren die im 5-Sekunden-Bucket
@@ -833,14 +1150,39 @@ async def aggregate_day(
         from backend.services.energie_profil._helpers import _get_tagespeaks_aus_ha_lts
         lts_peaks = await _get_tagespeaks_aus_ha_lts(anlage, datum, db)
         if lts_peaks.pv is not None:
-            peak_pv = lts_peaks.pv
+            akku.peak_pv = lts_peaks.pv
         if lts_peaks.netzbezug is not None:
-            peak_bezug = lts_peaks.netzbezug
+            akku.peak_bezug = lts_peaks.netzbezug
         if lts_peaks.einspeisung is not None:
-            peak_einspeisung = lts_peaks.einspeisung
+            akku.peak_einspeisung = lts_peaks.einspeisung
     except Exception as e:
         logger.debug(f"Peak-HA-LTS-Override für {datum}: {e}")
 
+    return pv_marken
+
+
+def baue_zusammenfassung(
+    anlage: Anlage,
+    datum: date,
+    akku: TagesAkkumulator,
+    *,
+    source: Source,
+    kwh_source_label: str,
+    komponenten_starts: dict,
+    preserved_komponenten_kwh,
+    preserved_komponenten_starts,
+    boersenpreis_avg,
+    boersenpreis_min,
+    neg_stunden,
+    einsp_neg_kwh,
+    vollzyklen,
+    performance_ratio,
+) -> tuple:
+    """PV-Anteil der Heimladung ableiten, die Tageszeile bauen, das TZ-Quell-Label bestimmen.
+
+    Returns:
+        ``(zusammenfassung, lade_anteil, tz_source_label)``
+    """
     # ── PV-Anteil der Heimladung ableiten (N-141 Weg c) ───────────────────
     # Eine Wallbox misst ihren PV-Anteil nicht; ohne evcc gab es dafür bisher
     # gar keine Quelle, und der Leser setzte ihn auf 0 — die ganze Heimladung
@@ -852,33 +1194,29 @@ async def aggregate_day(
     # SCHÄTZUNG; die Provenance trägt Regel und Deckungsgrad, damit eine
     # Teilsumme sich als solche zu erkennen gibt (P4).
     from backend.core.berechnungen.pv_anteil_ladung import leite_pv_anteil_ab
-    from backend.services.provenance import (
-        ABGELEITET_EINSPEISE_DECKUNG,
-        ABGELEITET_EINSPEISE_DECKUNG_TEILWEISE,
-    )
 
-    lade_anteil = leite_pv_anteil_ab(lade_stunden)
+    lade_anteil = leite_pv_anteil_ab(akku.lade_stunden)
 
     # ── TagesZusammenfassung speichern ────────────────────────────────────
     zusammenfassung = TagesZusammenfassung(
         anlage_id=anlage.id,
         datum=datum,
-        ueberschuss_kwh=round(tages_ueberschuss, 2) if tages_ueberschuss > 0 else None,
-        defizit_kwh=round(tages_defizit, 2) if tages_defizit > 0 else None,
-        peak_pv_kw=round(peak_pv, 2) if peak_pv > 0 else None,
-        peak_netzbezug_kw=round(peak_bezug, 2) if peak_bezug > 0 else None,
-        peak_einspeisung_kw=round(peak_einspeisung, 2) if peak_einspeisung > 0 else None,
+        ueberschuss_kwh=nur_positiv(akku.tages_ueberschuss, 2),
+        defizit_kwh=nur_positiv(akku.tages_defizit, 2),
+        peak_pv_kw=nur_positiv(akku.peak_pv, 2),
+        peak_netzbezug_kw=nur_positiv(akku.peak_bezug, 2),
+        peak_einspeisung_kw=nur_positiv(akku.peak_einspeisung, 2),
         batterie_vollzyklen=vollzyklen,
-        temperatur_min_c=round(min(temp_values), 1) if temp_values else None,
-        temperatur_max_c=round(max(temp_values), 1) if temp_values else None,
-        strahlung_summe_wh_m2=round(strahlung_summe, 0) if strahlung_summe > 0 else None,
+        temperatur_min_c=round(min(akku.temp_values), 1) if akku.temp_values else None,
+        temperatur_max_c=round(max(akku.temp_values), 1) if akku.temp_values else None,
+        strahlung_summe_wh_m2=nur_positiv(akku.strahlung_summe, 0),
         # N-384: der NENNER der Performance Ratio, damit sie nachrechenbar wird. Er
-        # wurde hier schon immer gebildet (s. `gti_summe` oben) — nur nie gespeichert,
-        # während daneben die horizontale `strahlung_summe` angezeigt wurde. `None`
+        # wurde hier schon immer gebildet (s. `akku.gti_summe` oben) — nur nie gespeichert,
+        # während daneben die horizontale `akku.strahlung_summe` angezeigt wurde. `None`
         # statt 0, wenn es keine gab: 0 wäre eine Behauptung, NULL ist eine Lücke.
-        gti_summe_wh_m2=round(gti_summe, 0) if gti_summe > 0 else None,
+        gti_summe_wh_m2=nur_positiv(akku.gti_summe, 0),
         performance_ratio=performance_ratio,
-        stunden_verfuegbar=stunden_count,
+        stunden_verfuegbar=akku.stunden_count,
         datenquelle=source.to_db_string(),
         boersenpreis_avg_cent=boersenpreis_avg,
         boersenpreis_min_cent=boersenpreis_min,
@@ -895,7 +1233,7 @@ async def aggregate_day(
         # manuell editierte Werte vor Scheduler-Überschreibung geschützt
         # werden. In TZ gibt es keine manuelle Werteingabe; „manuell"
         # bedeutet hier „Werkbank-Trigger" (Source.MANUAL_REPAIR). Der Schutz
-        # greift GENAU im else-Zweig unten, d. h. wenn `komponenten_summen`
+        # greift GENAU im else-Zweig unten, d. h. wenn `akku.komponenten_summen`
         # LEER ist (Σ-Hourly = 0, boundary leer) — ein versehentlicher
         # Werkbank-Klick bei nicht erreichbarem HA-LTS + fehlenden/korrupten
         # Snapshots würde sonst die alten korrekten Werte mit None
@@ -930,8 +1268,8 @@ async def aggregate_day(
         # deckt als die gespeicherte `stunden_verfuegbar`. Wer diesen
         # Preserve-Zweig ändert, liest den Vorflug mit.
         komponenten_kwh=(
-            {k: round(v, 2) for k, v in komponenten_summen.items()}
-            if komponenten_summen
+            {k: round(v, 2) for k, v in akku.komponenten_summen.items()}
+            if akku.komponenten_summen
             else (
                 preserved_komponenten_kwh
                 if source.is_manual_repair()
@@ -954,7 +1292,7 @@ async def aggregate_day(
     # in beiden Fällen trägt `komponenten_kwh` dieselben Keys. Die Tages-
     # Reparatur braucht ihn, um „geschrieben" nicht für einen Lauf zu behaupten,
     # der nur den Bestand stehen ließ (N-58, Forum simon42 #89667/83).
-    zusammenfassung.komponenten_frisch = bool(komponenten_summen)
+    zusammenfassung.komponenten_frisch = bool(akku.komponenten_summen)
 
     # Etappe 4: TagesZusammenfassung-Source spiegelt die Hauptquelle der
     # Daily-Werte. Wenn die Stunden aus HA-LTS kamen, ist auch die
@@ -968,53 +1306,23 @@ async def aggregate_day(
         if kwh_source_label == "external:ha_statistics:hourly"
         else "auto:monatsabschluss"
     )
-    db.add(zusammenfassung)
-    # Die beiden Ladeanteils-Spalten tragen eine eigene Herkunfts-Marke: der
-    # Source-Tag beschreibt den LAUF (HA-LTS/Snapshot), die Marke die HERKUNFT
-    # der Zahl. Ohne sie sähe eine Schätzung aus wie eine Messung — und war
-    # nicht jede Ladestunde gedeckt, sagt die Marke auch das (P4).
-    abgeleitet_marken: dict[str, str] = {}
-    if lade_anteil is not None:
-        marke = (
-            ABGELEITET_EINSPEISE_DECKUNG
-            if lade_anteil.vollstaendig
-            else ABGELEITET_EINSPEISE_DECKUNG_TEILWEISE
-        )
-        abgeleitet_marken["emob_ladung_pv_abgeleitet_kwh"] = marke
-        abgeleitet_marken["emob_ladung_netz_abgeleitet_kwh"] = marke
-    seed_tz_provenance(
-        zusammenfassung,
-        writer=auto_writer,
-        source=tz_source_label,
-        abgeleitet_je_feld=abgeleitet_marken or None,
-        # #406: je `komponenten_kwh`-Sub-Key, wo der Wert aus dem Anlagen-
-        # Aggregat zerlegt wurde statt gemessen zu sein.
-        abgeleitet_je_subkey=pv_marken or None,
-    )
+    return zusammenfassung, lade_anteil, tz_source_label
 
-    # Gerettete extern-befüllte Felder wiederherstellen (Prognose + Kraftstoffpreis).
-    # #299: bewusst NACH seed_tz_provenance und über write_with_provenance statt
-    # per setattr — so entsteht ein Audit-Log-Eintrag pro Restore und die
-    # Provenance trägt die echte Ursprungsquelle statt des Aggregator-Labels.
-    # Die Felder sind beim Seed noch None (frische Row → der Seed-Loop überspringt
-    # sie), also greift hier kein Hierarchie-Konflikt; der Restore wird angewandt.
-    for field, val in preserved_felder.items():
-        restore_source = preserved_quellen.get(field, "auto:preserve_restore")
-        ergebnis = await write_with_provenance(
-            db, zusammenfassung, field, val,
-            source=restore_source, writer="aggregator-preserve",
-        )
-        if not ergebnis.applied:
-            # Darf nicht passieren (frische Row, existing=None) — wenn doch,
-            # ginge der gerettete Wert still verloren. Sichtbar machen statt
-            # schlucken (feedback_silent_except_logs).
-            logger.warning(
-                f"Anlage {anlage.id}, {datum}: Restore von '{field}' "
-                f"nicht angewandt ({ergebnis.decision}: {ergebnis.reason}) — "
-                f"geretteter Wert ginge verloren."
-            )
-            setattr(zusammenfassung, field, val)
 
+async def pruefe_invarianten(
+    anlage: Anlage,
+    datum: date,
+    db: AsyncSession,
+    zusammenfassung: TagesZusammenfassung,
+    invs_by_id: dict,
+) -> None:
+    """``flush`` und die vier Pflicht-Invarianten (ADR-001 Berechnungs-Layer).
+
+    Der ``flush`` gehoert hierher: die Invarianten lesen die eben geschriebenen
+    ``TagesEnergieProfil``-Zeilen aus der Session zurueck, und dafuer muessen sie
+    persistiert sein. Alle vier Pruefungen loggen nur — **kein Tag wird zurueckgehalten**,
+    Drift soll sichtbar werden statt Daten zu kosten.
+    """
     await db.flush()
 
     # Pflicht-Invariante (ADR-001 Berechnungs-Layer):
@@ -1105,9 +1413,144 @@ async def aggregate_day(
                 f"Anlage {anlage.id}, {datum}: Counter-Drift — {bericht}"
             )
 
+
+
+async def aggregate_day(
+    anlage: Anlage,
+    datum: date,
+    db: AsyncSession,
+    *,
+    source: Source,
+    prefetched_tagesverlauf: Optional[dict] = None,
+) -> Optional[TagesZusammenfassung]:
+    """
+    Aggregiert Energiedaten eines Tages und speichert sie persistent.
+
+    1. Holt Tagesverlauf-Daten (stündliche Butterfly-Daten)
+    2. Holt Wetter-IST-Daten (Temperatur, Strahlung)
+    3. Holt Batterie-SoC History
+    4. Speichert 24 TagesEnergieProfil-Zeilen
+    5. Berechnet + speichert TagesZusammenfassung
+
+    Args:
+        anlage: Die Anlage
+        datum: Tag für den aggregiert wird
+        db: DB-Session
+        source: Trigger-Quelle dieses Aufrufs (Source-Enum, v3.34.0 Phase A).
+            Steuert: (a) ``datenquelle``-Spaltenwert, (b) Provenance-Writer-
+            Suffix, (c) Preserve-Logik bei manueller Reaggregation. Pflicht-
+            Keyword-Parameter — kein Default, alle Aufrufer setzen ihn
+            explizit (Audit §8.12, Plan v3.34 §3 Phase A E4).
+        prefetched_tagesverlauf: Optionale vorgeholte Tagesverlauf-Daten in
+            der ``get_tagesverlauf``-Form (``{"serien": [...], "punkte":
+            [{"zeit", "werte"}]}``) für GENAU diesen Tag. Gesetzt vom
+            Vollbackfill-Pfad (``backfill_from_statistics``, v3.34.2 Phase B),
+            der die historischen Stunden-Leistungen gebündelt aus HA-LTS holt
+            (`get_hourly_sensor_data` einmal pro Range) — `get_tagesverlauf`
+            reicht nur ~10 Tage zurück, deshalb braucht der Backfill die
+            Durchreichung. Wenn gesetzt, wird `get_tagesverlauf` NICHT
+            aufgerufen; die kategorisierten Stunden-kWh, Boundary-kWh, Peaks,
+            Strompreise usw. kommen weiterhin aus den regulären
+            `aggregate_day`-Quellen (HA-LTS bevorzugt). Plan v3.34 §3 B.1 +
+            B.3 (Pflicht-Mitigation gegen Per-Tag-Bulk-Read-Verlust).
+            (Der Plan-Text nennt `dict[date, dict]`; da `aggregate_day`
+            per-Tag arbeitet, wird die Per-Tag-Form übergeben — der Caller
+            schleift über die Range.)
+
+    Returns:
+        TagesZusammenfassung oder None bei Fehler
+    """
+    # Provenance-Writer codiert die Trigger-Quelle (Scheduler / Monatsabschluss /
+    # manuelles Reaggregate / Vollbackfill). Source bleibt einheitlich
+    # `auto:monatsabschluss` (Stufe 3) — siehe seed_tz_provenance / seed_tep_provenance.
+    auto_writer = source.to_writer()
+
+    sensor_mapping = anlage.sensor_mapping or {}
+
+    rohdaten = await hole_tagesverlauf(anlage, datum, db, prefetched_tagesverlauf)
+    if rohdaten is None:
+        return None
+    serien, punkte_raw, vortagsrand_raw, synthetische_slots = rohdaten
+
+    stunden_buckets = bucket_nach_slot(punkte_raw, vortagsrand_raw, synthetische_slots)
+    punkte = mittel_je_stunde(stunden_buckets)
+
+    (
+        pv_keys, netz_keys, _sonderschluessel, wetter_stunden,
+        soc_je_stunde, soc_stunden, betriebsmodus_je_stunde, strompreis_stunden,
+    ) = await lade_stammdaten(anlage, datum, db, serien, sensor_mapping)
+
+    (
+        invs, invs_by_id, kwh_pro_stunde, kwh_source_label,
+        wp_starts_pro_stunde, wp_betriebsstunden_pro_stunde, komponenten_starts,
+    ) = await lade_zaehler_und_counter(anlage, datum, db)
+
+    (
+        preserved_felder, preserved_quellen,
+        preserved_komponenten_kwh, preserved_komponenten_starts,
+    ) = await rette_und_loesche(anlage, datum, db)
+
+    # ── Stundenwerte berechnen + speichern ────────────────────────────────
+    akku = TagesAkkumulator()
+    kontext = StundenKontext(
+        anlage=anlage,
+        datum=datum,
+        netz_keys=netz_keys,
+        pv_keys=pv_keys,
+        sonderschluessel=_sonderschluessel,
+        kwh_pro_stunde=kwh_pro_stunde,
+        kwh_source_label=kwh_source_label,
+        wetter_stunden=wetter_stunden,
+        soc_stunden=soc_stunden,
+        soc_je_stunde=soc_je_stunde,
+        betriebsmodus_je_stunde=betriebsmodus_je_stunde,
+        strompreis_stunden=strompreis_stunden,
+        wp_starts_pro_stunde=wp_starts_pro_stunde,
+        wp_betriebsstunden_pro_stunde=wp_betriebsstunden_pro_stunde,
+    )
+
+    for punkt in punkte:
+        verarbeite_stunde(punkt, kontext, akku, db, auto_writer)
+
+    (
+        boersenpreis_avg, boersenpreis_min, neg_stunden, einsp_neg_kwh,
+        vollzyklen, performance_ratio,
+    ) = tages_kennzahlen(anlage, datum, invs, akku, strompreis_stunden)
+
+    pv_marken = await komponenten_tagesgesamt_und_peaks(
+        anlage, datum, db, invs_by_id, kwh_source_label, akku,
+    )
+
+    zusammenfassung, lade_anteil, tz_source_label = baue_zusammenfassung(
+        anlage, datum, akku,
+        source=source,
+        kwh_source_label=kwh_source_label,
+        komponenten_starts=komponenten_starts,
+        preserved_komponenten_kwh=preserved_komponenten_kwh,
+        preserved_komponenten_starts=preserved_komponenten_starts,
+        boersenpreis_avg=boersenpreis_avg,
+        boersenpreis_min=boersenpreis_min,
+        neg_stunden=neg_stunden,
+        einsp_neg_kwh=einsp_neg_kwh,
+        vollzyklen=vollzyklen,
+        performance_ratio=performance_ratio,
+    )
+
+    await schreibe_provenance_und_restore(
+        anlage, datum, db, zusammenfassung,
+        auto_writer=auto_writer,
+        tz_source_label=tz_source_label,
+        lade_anteil=lade_anteil,
+        pv_marken=pv_marken,
+        preserved_felder=preserved_felder,
+        preserved_quellen=preserved_quellen,
+    )
+
+    await pruefe_invarianten(anlage, datum, db, zusammenfassung, invs_by_id)
+
     logger.info(
-        f"Anlage {anlage.id}, {datum}: {stunden_count}h aggregiert, "
-        f"Überschuss={tages_ueberschuss:.1f}kWh, Defizit={tages_defizit:.1f}kWh, "
+        f"Anlage {anlage.id}, {datum}: {akku.stunden_count}h aggregiert, "
+        f"Überschuss={akku.tages_ueberschuss:.1f}kWh, Defizit={akku.tages_defizit:.1f}kWh, "
         f"PR={performance_ratio or '-'}"
     )
 

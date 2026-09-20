@@ -163,7 +163,7 @@ def kurven_stunden(
 ) -> int:
     """Wie viele Stunden-Zeilen der Aggregator aus dieser Kurve schriebe.
 
-    Spiegelt die Bucket-Bildung in ``aggregator.aggregate_day`` über den
+    Spiegelt die Bucket-Bildung in ``aggregator.py::bucket_nach_slot`` über den
     gemeinsamen SoT ``leistungspfad_slot``: Punkt „05:00" → Slot 6, Label 23
     fällt in den Folgetag, und Slot 0 existiert immer, sobald überhaupt ein
     Bucket entsteht (auch ohne Vortagsrand — sonst verlöre die Zeile 0 ihre
@@ -275,8 +275,8 @@ async def _wetterzeile_schreiben(
 ) -> bool:
     """Schreibt die Wetterzeile EINES Tages neu — Stunden, Tagesaggregat, PR.
 
-    Spiegelt exakt die Wetter-Spalten, die ``aggregate_day`` schreibt (Rundung
-    inklusive), und lässt jede Energie-Spalte unangetastet. ``False``, wenn der
+    Spiegelt exakt die Wetter-Spalten, die ``aggregator.py::baue_stundenzeile``
+    schreibt (Rundung inklusive), und lässt jede Energie-Spalte unangetastet. ``False``, wenn der
     Tag keine Zeilen hat — sechs Tage später erstmals einen anzulegen wäre
     neues Verhalten (s. ``nachzug_anlage``).
     """

@@ -555,8 +555,9 @@ Richtung — sie schreibt die Ersparnis eher zu klein als zu groß.
 
 Drei Stellen, in dieser Reihenfolge:
 
-1. **`services/energie_profil/aggregator.py`** — die Stundenschleife sammelt die vier Eingänge und
-   ruft `leite_pv_anteil_ab`. Die Vorzeichen-Übersetzung macht der Layer-Helfer
+1. **`services/energie_profil/aggregator.py`** — die Stundenschleife (`::verrechne_stunde`, gerufen
+   aus `::verarbeite_stunde`) sammelt die vier Eingänge, `::baue_zusammenfassung` ruft
+   `leite_pv_anteil_ab`. Die Vorzeichen-Übersetzung macht der Layer-Helfer
    `stunde_aus_bilanzwerten`, **nicht** ein Ausdruck in der Schleife (Begründung unten).
 2. **`TagesZusammenfassung`** — zwei Spalten `emob_ladung_{pv,netz}_abgeleitet_kwh` + Migration +
    `source_provenance`-Marke (Rahmenbedingung 4).

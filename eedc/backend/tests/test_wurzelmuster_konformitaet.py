@@ -2482,7 +2482,7 @@ P11_AUSNAHMEN: frozenset[str] = frozenset({
     "backend/api/routes/aussichten/finanz_eingaenge.py::investitionen_und_parameter",
 
     # ── 3. Schreib-, Import-, Migrations- und Checker-Pfade ────────────────
-    "backend/services/energie_profil/aggregator.py::aggregate_day",
+    "backend/services/energie_profil/aggregator.py::lade_stammdaten",
     "backend/services/snapshot/keys.py::_categorize_counter",
     "backend/services/snapshot/komponenten_beitraege.py::investition_beitraege",
     "backend/core/database.py::_migrate_connector_field_inv_map_backfill",
