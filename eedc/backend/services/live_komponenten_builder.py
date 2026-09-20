@@ -22,6 +22,7 @@ from backend.core.betriebsmodus import (
 )
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.core.berechnungen.energie import PV_KOMPONENTEN_PREFIXE
+from backend.core.berechnungen.erzeuger_traeger import bkw_restwerte
 from backend.services.live_sensor_config import (
     TYP_ICON,
     ERZEUGER_TYPEN,
@@ -115,6 +116,18 @@ def build_komponenten(
     )
 
     # Per-Investition Komponenten
+    # N-536: Ein Balkonkraftwerk mit `pv-module`-Kindern ist Träger wie ein
+    # Wechselrichter — seine Kinder tragen die Erzeugung, es selbst nur noch,
+    # was sie nicht messen. `bkw_restwerte` ist der SoT dieser Kürzung
+    # (ADR-001); der Rest wird hier NICHT verteilt, die kWp-Gewichtung ist eine
+    # Tages-Aussage. Ohne abtretendes BKW ist die Map leer und nichts ändert
+    # sich — auch nicht für die Anlage, deren BKW-Wechselrichter die einzige
+    # Live-Quelle ist (dann ist der Rest sein ganzer Wert).
+    bkw_rest_w = bkw_restwerte(
+        list(investitionen.values()),
+        {k: v.get("leistung_w") for k, v in inv_values.items()},
+    )
+
     for inv_id, values in inv_values.items():
         inv = investitionen.get(inv_id)
         # Die Keys von `inv_values` sind Strings, `modus_map` ist nach
@@ -274,6 +287,14 @@ def build_komponenten(
         )
 
         if typ in ERZEUGER_TYPEN:
+            # N-536: abtretendes Balkonkraftwerk → nur noch der Rest. Messen
+            # alle Kinder, ist er 0 und das Gerät bekommt keinen eigenen
+            # Knoten: seine Energie steht schon in den Modul-Knoten, und ein
+            # Knoten mit 0 W behauptete eine Messung, die es nicht gibt.
+            if inv_id in bkw_rest_w:
+                val_w = bkw_rest_w[inv_id]
+                if val_w <= 0:
+                    continue
             kw = val_w / 1000
             komponenten.append({
                 "key": f"pv_{inv_id}",

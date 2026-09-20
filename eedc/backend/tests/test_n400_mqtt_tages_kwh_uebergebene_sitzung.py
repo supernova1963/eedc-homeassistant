@@ -259,7 +259,7 @@ async def test_live_pfad_reicht_seine_sitzung_durch(db, monkeypatch):
     """
     gesehen: dict = {}
 
-    async def _spion(anlage_id, db_, tage_zurueck=0, inv_types=None):
+    async def _spion(anlage_id, db_, tage_zurueck=0, inv_types=None, erzeuger=None):
         gesehen.update(
             anlage_id=anlage_id, db=db_, tage=tage_zurueck, inv_types=inv_types,
         )

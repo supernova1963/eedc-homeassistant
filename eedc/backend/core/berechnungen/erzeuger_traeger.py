@@ -148,6 +148,152 @@ def modul_kinder(bkw_id: Any, investitionen: Sequence[Any]) -> list:
     ]
 
 
+
+def bkw_restwerte(
+    investitionen: Sequence[Any],
+    werte_je_inv: Any,
+) -> dict[str, float]:
+    """Je abtretendem Balkonkraftwerk: der **Rest**, den es noch selbst trägt.
+
+    ``werte_je_inv`` bildet ``str(inv.id)`` auf eine gemessene Größe ab —
+    Momentanleistung in W, Tagesenergie in kWh, Slot-Delta. Die Einheit ist der
+    Funktion gleich; sie rechnet nur ``Wert − Σ Werte der Kinder``.
+
+    **Die Regel (N-536).** Ein Balkonkraftwerk mit `pv-module`-Kindern ist
+    Träger wie ein Wechselrichter: seine Kinder tragen die Erzeugung. Ohne
+    Lücke bei ihnen trägt es **nichts** mehr (Rest 0); mit Lücke trägt es genau
+    das, was seine Kinder nicht messen. Ohne Kinderwerte ist der Rest sein
+    ganzer Wert — dann ändert sich gegenüber vorher nichts, und genau darauf
+    beruht der Kern der P11-Ausnahme 4b: der Wechselrichter eines
+    Balkonkraftwerks ist bei den meisten Anlagen die EINZIGE Live-Quelle.
+
+    ⛔ **Der Rest wird hier NICHT verteilt.** Die kWp-Gewichtung ist eine
+    Tages-Aussage (``snapshot/komponenten_beitraege``: über einen Tag mittelt
+    sich Ost/West aus, über eine Stunde nicht). Wer einen Momentan- oder
+    Stundenwert kWp-gewichtet auf die Kinder legt, erfindet Messwerte. Auf der
+    Tages- und Monatsachse verteilt ``resolve_pv_je_modul`` ihn — mit
+    demselben Rest als Eingang.
+
+    Negativ wird der Rest nie: messen die Kinder zusammen mehr als ihr
+    Balkonkraftwerk (verschiedene Abtastzeitpunkte, Messrauschen), ist der Rest
+    ``0.0`` — dieselbe Klemmung wie in ``pv_verteilung.resolve_pv_je_modul``.
+
+    Ein Balkonkraftwerk **ohne** eigenen Wert steht nicht im Ergebnis: es gibt
+    nichts zu kürzen, und ``0.0`` wäre eine Aussage über eine Messung, die es
+    nicht gibt (``docs/KONZEPT-UNVOLLSTAENDIGE-WERTE.md``).
+    """
+    abgetreten = abgetretene_bkw_ids(investitionen)
+    if not abgetreten:
+        return {}
+    out: dict[str, float] = {}
+    for bkw_id in abgetreten:
+        eigen = werte_je_inv.get(str(bkw_id))
+        if eigen is None:
+            continue
+        kinder_summe = 0.0
+        for kind in modul_kinder(bkw_id, investitionen):
+            wert = werte_je_inv.get(str(getattr(kind, "id", None)))
+            if wert is not None:
+                kinder_summe += float(wert)
+        out[str(bkw_id)] = max(0.0, float(eigen) - kinder_summe)
+    return out
+
+
+def bkw_kinder_decken_vollstaendig(
+    investitionen: Sequence[Any],
+    hat_wert: Any,
+) -> frozenset:
+    """IDs der abtretenden BKW, deren Kinder **alle** eine eigene Quelle haben.
+
+    Für die Stellen, die keine Werte kennen, sondern nur Zuordnungen — die
+    Entity-Sammler des Live-Pfads. Dort ist die Frage nicht „wie groß ist der
+    Rest", sondern „darf die Entity des Balkonkraftwerks überhaupt in die
+    Summe". Sie darf genau dann nicht, wenn jedes Kind selbst misst.
+
+    ``hat_wert`` ist ein Prädikat über ``str(inv.id)``. Ein abtretendes BKW
+    **ohne** Kinder mit eigener Quelle bleibt drin — sonst verlöre die Anlage
+    ihre einzige Messung.
+    """
+    abgetreten = abgetretene_bkw_ids(investitionen)
+    if not abgetreten:
+        return frozenset()
+    voll = set()
+    for bkw_id in abgetreten:
+        kinder = modul_kinder(bkw_id, investitionen)
+        if kinder and all(hat_wert(str(getattr(k, "id", None))) for k in kinder):
+            voll.add(str(bkw_id))
+    return frozenset(voll)
+
+
+def kuerze_bkw_in_werte_map(
+    werte: Any,
+    investitionen: Sequence[Any],
+    *,
+    praefixe: Optional[Sequence[str]] = None,
+) -> dict:
+    """Kürzt in einer Komponenten-Map jedes abtretende BKW auf seinen Rest.
+
+    Für die Stellen, die ihre Erzeugung als ``{"<praefix><id>": wert}`` führen —
+    der Live-Keyspace (``pv_<id>`` für ALLE Erzeuger, auch Balkonkraftwerke),
+    der MQTT-Pfad und der Boundary-Keyspace (``pv_<id>`` · ``bkw_<id>``). Beide
+    Keyspaces gleichzeitig zu bedienen ist Absicht: dieselbe Investition trägt
+    je nach Schreibpfad ein anderes Präfix, und genau dieser Mismatch war der
+    BKW-Doppelzählungs-Bug vom 2026-05-19 (``energie.py``, Rainer-PN).
+
+    Der Rest kommt aus ``bkw_restwerte`` — dieselbe Regel, dieselbe Klemmung.
+    Ist er 0, **fällt der Key heraus**: er behauptete sonst eine Messung von 0,
+    wo das Gerät nur nichts mehr beizutragen hat. Keys ohne numerische ID
+    (``pv_gesamt``) bleiben unberührt; die Wahl zwischen Anlagen-Aggregat und
+    Einzelwerten trifft eine andere Schicht.
+
+    ⛔ **Kein Verteilen.** Der Rest bleibt beim Balkonkraftwerk. Auf der
+    Tages- und Monatsachse übernimmt ``resolve_pv_je_modul`` ihn als Aggregat
+    seiner Kinder und verteilt ihn kWp-gewichtet — dort, und nur dort, ist die
+    kWp-Gewichtung eine zulässige Aussage.
+    """
+    # Die Präfix-Whitelist ist der Layer-SoT (ADR-001, `energie.py`) — sie hier
+    # als Literal zu wiederholen ist genau die Drift, die
+    # `test_pv_bkw_whitelist_tuple_nur_im_layer` verbietet. Lokaler Import wie
+    # bei `bkw_kwp_aus_kindern`: dieses Modul kettet sich nicht an ein zweites.
+    if praefixe is None:
+        from backend.core.berechnungen.energie import PV_KOMPONENTEN_PREFIXE
+
+        praefixe = PV_KOMPONENTEN_PREFIXE
+    if not werte:
+        return dict(werte or {})
+
+    def _id_aus_key(key: str) -> Optional[str]:
+        for p in praefixe:
+            if key.startswith(p):
+                rest = key[len(p):]
+                if rest.isdigit():
+                    return rest
+        return None
+
+    werte_je_inv: dict[str, float] = {}
+    key_je_inv: dict[str, str] = {}
+    for key, wert in werte.items():
+        inv_id = _id_aus_key(str(key))
+        if inv_id is None or not isinstance(wert, (int, float)):
+            continue
+        werte_je_inv[inv_id] = werte_je_inv.get(inv_id, 0.0) + float(wert)
+        key_je_inv[inv_id] = str(key)
+
+    reste = bkw_restwerte(investitionen, werte_je_inv)
+    if not reste:
+        return dict(werte)
+
+    out = dict(werte)
+    for inv_id, rest in reste.items():
+        key = key_je_inv.get(inv_id)
+        if key is None:
+            continue
+        if rest > 0:
+            out[key] = rest
+        else:
+            out.pop(key, None)
+    return out
+
 def bkw_kwp_aus_kindern(bkw: Any, investitionen: Sequence[Any]) -> Optional[float]:
     """Σ kWp der Modul-Kinder — oder ``None``, wenn das BKW nichts abgetreten hat.
 

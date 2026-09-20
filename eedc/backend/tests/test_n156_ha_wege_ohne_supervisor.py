@@ -203,7 +203,7 @@ async def test_tages_kwh_nimmt_den_ha_weg_mit_token(db, monkeypatch, ha_verbindu
 
     ha_verbindung("langlebiger-token")
 
-    async def fake_ha(anlage, db_, tage_zurueck, inv_types=None):
+    async def fake_ha(anlage, db_, tage_zurueck, inv_types=None, erzeuger=None):
         return {"pv": 12.3}
 
     monkeypatch.setattr(lhs, "get_tages_kwh", fake_ha)
@@ -224,7 +224,7 @@ async def test_ohne_ha_verbindung_bleibt_es_beim_mqtt_fallback(
     ha_verbindung(None)
     ha_gerufen = []
 
-    async def fake_ha(anlage, db_, tage_zurueck, inv_types=None):
+    async def fake_ha(anlage, db_, tage_zurueck, inv_types=None, erzeuger=None):
         ha_gerufen.append(True)
         return {"pv": 12.3}
 

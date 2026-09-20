@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Optional
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.berechnungen import summe_pv_bkw_kwh
+from backend.core.berechnungen import kuerze_bkw_in_werte_map, summe_pv_bkw_kwh
 from backend.core.database import get_session
 from backend.models.anlage import Anlage
 from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
@@ -135,6 +135,7 @@ async def cleanup_old_snapshots(retention_days: int = 31) -> int:
 async def get_tages_kwh(
     anlage_id: int, db: AsyncSession, tage_zurueck: int = 0,
     inv_types: dict[str, str] | None = None,
+    erzeuger: list | None = None,
 ) -> dict[str, Optional[float]]:
     """
     Berechnet Tages-kWh aus MQTT Energy Snapshots.
@@ -188,7 +189,7 @@ async def get_tages_kwh(
             midnight_snap = await _get_earliest_snapshot_after(anlage_id, db, today_midnight)
         if not midnight_snap:
             return {}
-        return _compute_deltas(current, midnight_snap, inv_types)
+        return _compute_deltas(current, midnight_snap, inv_types, erzeuger)
 
     else:
         # Gestern (oder weiter zurück)
@@ -198,7 +199,7 @@ async def get_tages_kwh(
         start_snap = await _get_closest_snapshot(anlage_id, db, prev_midnight)
         if not end_snap or not start_snap:
             return {}
-        return _compute_deltas(end_snap, start_snap, inv_types)
+        return _compute_deltas(end_snap, start_snap, inv_types, erzeuger)
 
 
 async def _get_closest_snapshot(
@@ -286,6 +287,7 @@ async def _get_earliest_snapshot_after(
 def _compute_deltas(
     end: dict[str, float], start: dict[str, float],
     inv_types: dict[str, str] | None = None,
+    erzeuger: list | None = None,
 ) -> dict[str, Optional[float]]:
     """
     Berechnet Deltas zwischen zwei Snapshot-Zuständen.
@@ -377,6 +379,12 @@ def _compute_deltas(
     # ALLE"): Wer das Aggregat schickt und nur einen von zwei Wechselrichtern,
     # bekommt die kleinere Zahl. Genau diese Lücke meldet der Daten-Checker
     # (Zähler-Abdeckung) — sie wird hier nicht still überdeckt.
+    # N-536: Ein Balkonkraftwerk mit `pv-module`-Kindern trägt nur noch, was
+    # seine Kinder nicht messen — sonst stünde sein Gesamtzähler neben ihren in
+    # derselben Whitelist-Summe. Die Kürzung läuft VOR `summe_pv_bkw_kwh`,
+    # damit Komponenten-Werte und Kategorie-Summe dieselbe Aussage tragen.
+    result = kuerze_bkw_in_werte_map(result, erzeuger)
+
     pv_summe = summe_pv_bkw_kwh(result)
     if pv_summe > 0:
         result["pv"] = round(pv_summe, 1)

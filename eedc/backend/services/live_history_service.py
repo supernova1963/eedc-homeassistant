@@ -12,6 +12,7 @@ Enthält:
 
 import logging
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 from typing import Optional
 
 from sqlalchemy import select
@@ -21,6 +22,10 @@ from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.utils.investition_filter import aktiv_jetzt
 from backend.core.berechnungen.energie import PV_KOMPONENTEN_PREFIXE
+from backend.core.berechnungen.erzeuger_traeger import (
+    BKW_TYP,
+    kuerze_bkw_in_werte_map,
+)
 from backend.services.live_sensor_config import (
     UNIT_TO_W,
     ERZEUGER_TYPEN,
@@ -203,6 +208,7 @@ def trapez_kwh(points: list) -> Optional[float]:
 async def get_tages_kwh(
     anlage: Anlage, db: AsyncSession, tage_zurueck: int = 0,
     inv_types: dict[str, str] | None = None,
+    erzeuger: list | None = None,
 ) -> dict[str, Optional[float]]:
     """
     Berechnet Tages-kWh aus HA-History (Leistungssensoren → Energie via Trapezregel).
@@ -220,6 +226,27 @@ async def get_tages_kwh(
             )
         )
         inv_types = {str(row[0]): row[1] for row in inv_result.all()}
+
+    # N-536: Für die Abtretung eines Balkonkraftwerks an seine `pv-module`-
+    # Kinder reicht der Typ nicht — es braucht die Elternschaft. Der Aufrufer
+    # gibt sie mit, wenn er die Investitionen ohnehin geladen hat
+    # (`live_power_service`); sonst kostet sie EINE kleine Query, und nur dann,
+    # wenn überhaupt ein Balkonkraftwerk gepflegt ist.
+    if erzeuger is None:
+        if BKW_TYP in (inv_types or {}).values():
+            erz_result = await db.execute(
+                select(
+                    Investition.id,
+                    Investition.typ,
+                    Investition.parent_investition_id,
+                ).where(Investition.anlage_id == anlage.id, aktiv_jetzt())
+            )
+            erzeuger = [
+                SimpleNamespace(id=r[0], typ=r[1], parent_investition_id=r[2])
+                for r in erz_result.all()
+            ]
+        else:
+            erzeuger = []
 
     # Entity-IDs nach Kategorie gruppieren
     category_entities: dict[str, list[str]] = {
@@ -420,7 +447,11 @@ async def get_tages_kwh(
                     result[category] = round(kwh, 1)
                     continue
         elif category == "pv":
-            pv_total = 0.0
+            # N-536: erst je Erzeuger sammeln, dann das abtretende
+            # Balkonkraftwerk auf seinen Rest kürzen, dann summieren. Vorher
+            # stand sein Gesamtzähler neben den Zählern seiner Kinder in
+            # derselben Summe.
+            pv_je_komponente: dict[str, float] = {}
             pv_has_kwh = False
             for comp_key, kwh_eid in separate_kwh_sensors.items():
                 # Erzeuger (PV-Module + Balkonkraftwerk) werden in diesem
@@ -433,10 +464,11 @@ async def get_tages_kwh(
                 ):
                     kwh = _energy_delta(kwh_eid, history, sensor_units, start, end)
                     if kwh is not None:
-                        pv_total += kwh
+                        pv_je_komponente[comp_key] = kwh
                         pv_has_kwh = True
             if pv_has_kwh:
-                result["pv"] = round(pv_total, 1)
+                gekuerzt = kuerze_bkw_in_werte_map(pv_je_komponente, erzeuger)
+                result["pv"] = round(sum(gekuerzt.values()), 1)
                 continue
             # F-49: kein Erzeuger misst selbst → der anlagenweite PV-Zähler.
             # Erst wenn auch der fehlt, wird die Leistung integriert.
@@ -449,9 +481,18 @@ async def get_tages_kwh(
                     continue
 
         # Fallback: W-Sensoren + Trapezregel
-        total_kwh = 0.0
+        # N-536: Bei der PV-Kategorie tragen die Entities Erzeuger — dort wird
+        # je Komponente gesammelt und das abtretende Balkonkraftwerk gekürzt,
+        # bevor summiert wird. Die Zuordnung Entity → Komponenten-Key steht in
+        # `component_entities`; eine Entity ohne Key (der anlagenweite Zähler)
+        # bleibt unberührt und behält ihren eigenen Schlüssel.
+        eid_je_key = (
+            {eid: key for key, eid in component_entities.items()}
+            if category == "pv" else {}
+        )
+        werte_je_key: dict[str, float] = {}
         has_data = False
-        for entity_id in entity_ids:
+        for idx, entity_id in enumerate(entity_ids):
             if entity_id not in history:
                 continue
             if _is_energy_sensor(entity_id, sensor_units):
@@ -459,10 +500,12 @@ async def get_tages_kwh(
             else:
                 kwh = trapez_kwh(history[entity_id])
             if kwh is not None:
-                total_kwh += kwh
+                werte_je_key[eid_je_key.get(entity_id, f"__{idx}")] = kwh
                 has_data = True
         if has_data:
-            result[category] = round(total_kwh, 1)
+            if category == "pv":
+                werte_je_key = kuerze_bkw_in_werte_map(werte_je_key, erzeuger)
+            result[category] = round(sum(werte_je_key.values()), 1)
 
     # Per-Komponente kWh (für Tooltips)
     for comp_key, entity_id in component_entities.items():
@@ -523,6 +566,13 @@ async def get_tages_kwh(
             if kwh is not None:
                 result[comp_key] = round(abs(kwh), 1)
 
+    # N-536: Auch die Werte JE KOMPONENTE (Energiefluss-Tooltips) tragen das
+    # abtretende Balkonkraftwerk nur noch mit seinem Rest — sonst stünde im
+    # Tooltip neben den Modulen ein Gerät mit derselben Energie. Die
+    # Kategorie-Summe `result["pv"]` ist oben bereits gekürzt und wird hier
+    # nicht berührt (sie trägt kein `_<id>`-Suffix).
+    result = kuerze_bkw_in_werte_map(result, erzeuger)
+
     return result
 
 
@@ -530,6 +580,7 @@ async def safe_get_tages_kwh(
     anlage: Anlage, db: AsyncSession, tage_zurueck: int,
     kwh_cache,
     inv_types: dict[str, str] | None = None,
+    erzeuger: list | None = None,
 ) -> dict[str, Optional[float]]:
     """Wrapper mit Fehlerbehandlung für get_tages_kwh (HA + MQTT Fallback).
 
@@ -559,7 +610,9 @@ async def safe_get_tages_kwh(
 
     if get_ha_state_service().is_available:
         try:
-            result = await get_tages_kwh(anlage, db, tage_zurueck, inv_types=inv_types)
+            result = await get_tages_kwh(
+                anlage, db, tage_zurueck, inv_types=inv_types, erzeuger=erzeuger,
+            )
             if result:
                 if tage_zurueck == 0:
                     kwh_cache.set_heute(anlage.id, result)
@@ -580,7 +633,9 @@ async def safe_get_tages_kwh(
     # ein `logger.debug` und ein leeres Ergebnis.
     try:
         from backend.services.mqtt_energy_history_service import get_tages_kwh as mqtt_get_tages_kwh
-        result = await mqtt_get_tages_kwh(anlage.id, db, tage_zurueck, inv_types=inv_types)
+        result = await mqtt_get_tages_kwh(
+            anlage.id, db, tage_zurueck, inv_types=inv_types, erzeuger=erzeuger,
+        )
         if result:
             if tage_zurueck == 0:
                 kwh_cache.set_heute(anlage.id, result)

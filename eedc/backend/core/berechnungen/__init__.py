@@ -238,7 +238,10 @@ from backend.core.berechnungen.prognose_final import (
 )
 from backend.core.berechnungen.erzeuger_traeger import (
     abgetretene_bkw_ids,
+    bkw_kinder_decken_vollstaendig,
     bkw_kwp_aus_kindern,
+    bkw_restwerte,
+    kuerze_bkw_in_werte_map,
     erzeuger_traeger,
     modul_kinder,
     traegt_erzeugungsgroessen_selbst,
@@ -453,7 +456,10 @@ __all__ = [
     "normiert",
     "soll_final_einfrieren",
     "abgetretene_bkw_ids",
+    "bkw_kinder_decken_vollstaendig",
     "bkw_kwp_aus_kindern",
+    "bkw_restwerte",
+    "kuerze_bkw_in_werte_map",
     "erzeuger_traeger",
     "modul_kinder",
     "traegt_erzeugungsgroessen_selbst",

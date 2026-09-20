@@ -38,6 +38,7 @@ Slot und setzt seine Standard-Grundlast ein, statt still 0 kW anzunehmen
 import logging
 from bisect import bisect_right
 from datetime import datetime, timedelta, date
+from types import SimpleNamespace
 from typing import Iterator, Optional
 
 from sqlalchemy import select
@@ -47,6 +48,7 @@ from backend.core.berechnungen.slot_konvention import backward_slot_aus_period_s
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.utils.investition_filter import aktiv_jetzt
+from backend.core.berechnungen.erzeuger_traeger import bkw_kinder_decken_vollstaendig
 from backend.services.live_sensor_config import (
     ERZEUGER_TYPEN,
     extract_live_config,
@@ -305,17 +307,38 @@ async def _profil_from_ha(
 
     # PV-Entity-IDs
     inv_result = await db.execute(
-        select(Investition.id, Investition.typ).where(
-            Investition.anlage_id == anlage.id, aktiv_jetzt()
-        )
+        select(
+            Investition.id, Investition.typ, Investition.parent_investition_id
+        ).where(Investition.anlage_id == anlage.id, aktiv_jetzt())
     )
-    inv_types = {str(row[0]): row[1] for row in inv_result.all()}
+    inv_zeilen = inv_result.all()
+    inv_types = {str(row[0]): row[1] for row in inv_zeilen}
+    # Die Elternschaft kommt aus derselben Query — N-536 braucht sie, und eine
+    # zweite Abfrage dafür wäre an dieser Stelle die teurere Antwort.
+    erzeuger = [
+        SimpleNamespace(id=r[0], typ=r[1], parent_investition_id=r[2])
+        for r in inv_zeilen
+    ]
+
+    # N-536: Hier liegen keine Werte vor, nur Zuordnungen — die Frage ist
+    # deshalb nicht „wie groß ist der Rest", sondern „darf die Entity des
+    # Balkonkraftwerks in die Summe". Sie darf genau dann nicht, wenn JEDES
+    # seiner `pv-module`-Kinder selbst misst; fehlt einem die Zuordnung, bleibt
+    # das Gerät drin (sonst verlöre das Profil die einzige Quelle für dieses
+    # Kind). Der Rest-Anteil, den es dann zu viel trägt, ist dieselbe
+    # Teil-Deckung, die auch der Tagespfad kennt.
+    voll_gedeckte_bkw = bkw_kinder_decken_vollstaendig(
+        erzeuger or [],
+        lambda inv_id: bool((inv_live_map.get(inv_id) or {}).get("leistung_w")),
+    )
 
     pv_eids: list[str] = []
     wp_eids: list[str] = []
     for inv_id, live in inv_live_map.items():
         typ = inv_types.get(inv_id)
         if typ in ERZEUGER_TYPEN and live.get("leistung_w"):
+            if inv_id in voll_gedeckte_bkw:
+                continue
             pv_eids.append(live["leistung_w"])
         elif typ == "waermepumpe" and live.get("leistung_w"):
             wp_eids.append(live["leistung_w"])

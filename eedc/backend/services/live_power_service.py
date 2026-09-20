@@ -317,8 +317,18 @@ class LivePowerService:
             if inv.typ == "sonstiges" and isinstance(inv.parameter, dict)
             and inv.parameter.get("kategorie") == "abgabe"
         )
-        heute_kwh = await safe_get_tages_kwh(anlage, db, 0, self._kwh_cache, inv_types=inv_types)
-        gestern_kwh = await safe_get_tages_kwh(anlage, db, 1, self._kwh_cache, inv_types=inv_types)
+        # N-536: die geladenen Investitionen tragen die Elternschaft, die der
+        # Tages-kWh-Pfad für die BKW-Abtretung braucht — mitgeben spart ihm die
+        # eigene Query.
+        erzeuger_struktur = list(investitionen.values())
+        heute_kwh = await safe_get_tages_kwh(
+            anlage, db, 0, self._kwh_cache,
+            inv_types=inv_types, erzeuger=erzeuger_struktur,
+        )
+        gestern_kwh = await safe_get_tages_kwh(
+            anlage, db, 1, self._kwh_cache,
+            inv_types=inv_types, erzeuger=erzeuger_struktur,
+        )
 
         heute_pv = heute_kwh.get("pv")
         heute_einsp = heute_kwh.get("einspeisung")
