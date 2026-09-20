@@ -112,6 +112,12 @@ export interface FeldProblem {
      *  dessen Inline-Knopf „auf keine setzen" würde hier das Feld der Zeile
      *  leeren, also die Aufteilung statt der Gesamtleistung. */
     | 'gesamtleistung_verdraengt'
+    /** N-537: Ein Balkonkraftwerk mit zugeordneten PV-Modulen hat seine
+     *  Erzeugung an sie abgetreten (N-266) — sein Wert füllt nur noch ihre
+     *  Lücken. **Bewusst nicht `redundant`**: dessen Knopf „auf keine setzen"
+     *  wäre bei teilweise gemessenen Modulen falscher Rat, weil der Wert dann
+     *  die einzige Quelle für das ungemessene Modul ist. */
+    | 'bkw_fuellt_luecken'
   /** `info`: kein Fehler, nur eine Folge der Zuordnung (Bauschnitt 7). */
   schwere: 'error' | 'warning' | 'info'
   text: string

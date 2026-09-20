@@ -28,6 +28,7 @@ from backend.core.field_definitions import (
 )
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.core.berechnungen.erzeuger_traeger import (
+    abgetretene_bkw_ids,
     traegt_erzeugungsgroessen_selbst,
 )
 from backend.core.berechnungen import (
@@ -757,6 +758,30 @@ class EnergieprofilChecks:
             return ergebnisse
 
         agg_map = {(md.jahr, md.monat): md.pv_erzeugung_kwh for md in monatsdaten}
+
+        # N-537: Der Checker kannte bis hierher nur das ANLAGEN-Aggregat. Ein
+        # Balkonkraftwerk mit `pv-module`-Kindern ist aber selbst das Aggregat
+        # seiner Kinder (N-266/N-536, `pv_monatswerte._lade_bkw_aggregate`,
+        # Stufe 2 der P7-Präzedenz). Ohne diese Zeilen meldete er
+        # `teil_luecke` — WARNING „teilgemessen, kein Aggregat" — für Monate,
+        # die die Rechnung über den BKW-Wert längst schließt, und der Anwender
+        # konnte die Warnung nicht abstellen.
+        #
+        # Die Kinder eines deckenden BKW zählen als ABGELEITET, nicht als
+        # gemessen: ihr Wert ist eine kWp-Zerlegung, keine Messung — genau die
+        # Rolle, die `n_abgeleitet` seit #352 beschreibt.
+        # Die Abtretung selbst kommt aus dem SoT (`abgetretene_bkw_ids`), nicht
+        # aus einer Handarbeit daneben — sonst stünde hier die einundzwanzigste
+        # eigene `if typ == balkonkraftwerk`-Fallunterscheidung.
+        abgetretene = abgetretene_bkw_ids(anlage.investitionen)
+        bkw_deckt: set[tuple[int, int, int]] = {
+            (b.id, imd.jahr, imd.monat)
+            for b in anlage.investitionen
+            if b.id in abgetretene
+            for imd in b.monatsdaten
+            if (imd.verbrauch_daten or {}).get("pv_erzeugung_kwh") is not None
+            or (imd.verbrauch_daten or {}).get("erzeugung_kwh") is not None
+        }
         imd_map = {
             (inv.id, imd.jahr, imd.monat): (imd.verbrauch_daten or {})
             for inv in pv_module for imd in inv.monatsdaten
@@ -794,6 +819,15 @@ class EnergieprofilChecks:
                 1 for inv in aktive
                 if imd_map.get((inv.id, jahr, monat), {}).get("pv_erzeugung_kwh") is not None
                 and (inv.id, jahr, monat) in abgeleitet_map
+            )
+            # N-537: ein Kind ohne eigenen Wert, dessen Balkonkraftwerk den
+            # Monat trägt, ist gedeckt — dieselbe Träger-Ebene wie in
+            # `ergaenze_kinder_deckung` auf der Stundenachse.
+            n_abgeleitet += sum(
+                1 for inv in aktive
+                if imd_map.get((inv.id, jahr, monat), {}).get("pv_erzeugung_kwh") is None
+                and inv.parent_investition_id is not None
+                and (inv.parent_investition_id, jahr, monat) in bkw_deckt
             )
             status = klassifiziere_pv_monat(
                 n_aktive_module=len(aktive),

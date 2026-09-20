@@ -402,6 +402,18 @@ erfasst — ohne das Gerät als Wechselrichter umdeklarieren zu müssen. So geht
 Neigung** kommen dann von den Modulen — das Gerät zeigt als Leistung die Summe seiner Module, und
 seine eigenen Felder beschreiben nur noch das Gerät. Das Formular sagt es an der Stelle.
 
+> ⭐ **Und die Sensoren ziehen mit um.** Liefert dein Wechselrichter die Strings getrennt, ordnest du
+> jedem Modul unter *Einstellungen → Datenquellen* seinen eigenen Sensor zu — **Erzeugung (kWh)** wie
+> **Leistung (W)**. Das Balkonkraftwerk darf seine eigene Zuordnung dabei behalten: eedc zählt sie
+> nicht ein zweites Mal, sondern lässt sie **nur noch die Lücken seiner Module füllen**. Messen alle
+> Module selbst, trägt das Gerät nichts mehr; misst nur eines, trägt es die Differenz; misst keines,
+> bleibt es wie bisher die Quelle für alle. Dieselbe Regel, die für den Monatswert längst gilt —
+> deshalb musst du nichts umstellen und nichts löschen, wenn du Module nachträglich zuordnest.
+>
+> ⚠ **Bereits gespeicherte Tage ändern sich dadurch nicht von allein.** Sie tragen die Zuordnung, mit
+> der sie berechnet wurden. eedc weist nach einer Änderung darauf hin; über *Einstellungen →
+> Datenverwaltung → Mehrere Tage neu aggregieren* holst du den Zeitraum zurück.
+
 > ⚠ **Was es behält, und was du weiter pflegen musst: die *Wechselrichter-Leistung (W)*.** Sie
 > gehört dem Gerät und begrenzt die **Summe** aller zugeordneten Module — sie ergibt sich gerade
 > *nicht* aus ihnen. Bei einem Stecker-Gerät sind das 800 W (bzw. 600 W bei älteren). eedc kappt dein

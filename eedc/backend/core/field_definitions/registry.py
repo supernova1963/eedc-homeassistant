@@ -916,7 +916,10 @@ LIVE_FELDER_INV: dict = {
     ],
     "balkonkraftwerk": [
         {"key": "leistung_w", "label": "Leistung", "einheit": "W",
-         "hinweis": "Momentane Leistung des Balkonkraftwerks in W."},
+         "hinweis": "Momentane Leistung des Balkonkraftwerks in W. Sind ihm PV-Module "
+                    "zugeordnet, gilt hier dieselbe Regel wie beim Monatswert: die Module "
+                    "tragen die Leistung, dieser Wert füllt nur noch ihre Lücken — messen "
+                    "alle selbst, wird er nicht mehr gelesen."},
     ],
     "sonstiges": [
         {"key": "leistung_w", "label": "Leistung", "einheit": "W",

@@ -7,6 +7,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Ein Balkonkraftwerk mit zugeordneten PV-Modulen zählte seine Erzeugung doppelt** (gemeldet von **Kai2**, Forum). Wer seine beiden Module als eigene Komponenten mit dem Balkonkraftwerk als „Gehört zu" anlegt — der Weg, den wir für zwei Ausrichtungen empfehlen — und ihnen eigene Sensoren gibt, sah dieselbe Energie zweimal: im Energiefluss als „Solarleistung 167 W" für 84 gemessene Watt, dazu einen um denselben Betrag zu hohen Hausverbrauch, eine verdoppelte Auslastung und eine zu hohe Autarkie. Betroffen waren die Live-Ansicht, „Heute PV", das Verbrauchsprofil, der Tagesverlauf sowie die gespeicherten Stunden- und Tageswerte und damit der laufende Monat. Ein Balkonkraftwerk mit Modul-Kindern ist jetzt Träger wie ein Wechselrichter: **die Module tragen die Erzeugung, das Gerät trägt nur noch, was ihnen fehlt.** Messen alle Module selbst, zählt es nicht mehr mit; misst nur eines, trägt es die Differenz; misst keines, bleibt es wie bisher die einzige Quelle — für den Normalfall (nur der Wechselrichter ist zugeordnet) ändert sich damit **keine Zahl**. Auf Monats- und Tagesebene wird sein Wert wie bisher kWp-gewichtet auf die Module verteilt und als Zerlegung gekennzeichnet, auf Stunden- und Live-Ebene bleibt er unverteilt beim Gerät (über eine Stunde mittelt sich Ost/West nicht aus). ⚠ **Bereits gespeicherte Tage tragen die Zuordnung, mit der sie berechnet wurden** — sie ändern sich nicht rückwirkend; ein Zeitraum lässt sich unter *Einstellungen → Datenverwaltung* neu aggregieren (N-536).
+
+- **Der Daten-Checker warnte vor Lücken, die das Balkonkraftwerk längst schließt.** Seine Prüfung kannte als Gesamtwert nur den Anlagen-Zählerstand. Hatte ein Balkonkraftwerk einen Monatswert und eines seiner Module keinen, meldete er ⚠️ „PV-Erzeugung unvollständig — kein Gesamtwert zum Verteilen hinterlegt", obwohl jede Zahl vorhanden war; die Warnung ließ sich nicht abstellen. Jetzt gilt der Wert des Geräts als das, was er ist — das Aggregat seiner Module —, und der Monat erscheint als ℹ️ „über kWp-Anteil geschätzt". Dazu sagt die Zuordnungs-Fläche an der Zeile des Balkonkraftwerks, welche Wirkung seine Sensoren noch haben, sobald Module eigene tragen (N-537).
+
+---
+
 ## [4.0.48] - 2026-09-19 — Die Amortisationskurve zeigt gewachsene Anlagen als Treppe
 
 ### Fixed

@@ -959,11 +959,19 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
     from backend.services.datenquellen_validierung import (
         einheit_problem, state_class_problem,
         finde_redundante_aggregate, finde_doppelmappings, stufe_bedarf_ein,
-        finde_gesamtleistung_verdraengt,
+        finde_gesamtleistung_verdraengt, finde_bkw_fuellt_kinder_luecken,
     )
     feld_einheit = {_feld_id(e["match_key"]): e.get("einheit", "") for e in eintraege}
     feld_feld = {_feld_id(e["match_key"]): e.get("feld", "") for e in eintraege}
     feld_typ = {_feld_id(e["match_key"]): e.get("typ", "basis") for e in eintraege}
+    # N-537: die Investition je Feld — die Abtretung eines Balkonkraftwerks an
+    # seine Kinder ist eine Aussage ueber GERAETE, nicht ueber Feldnamen.
+    feld_inv = {
+        _feld_id(e["match_key"]): (
+            str(e["match_key"][1]) if e["match_key"][0] != "basis" else None
+        )
+        for e in eintraege
+    }
     feld_bedarf = {_feld_id(e["match_key"]): e.get("bedarf", "optional") for e in eintraege}
     feld_bedarf_gruppe = {_feld_id(e["match_key"]): e.get("bedarf_gruppe") for e in eintraege}
     feld_bedingung_anlage = {
@@ -1018,6 +1026,7 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
 
     felder_belegt = [
         {"id": fid, "feld": feld_feld[fid], "typ": feld_typ[fid],
+         "inv_id": feld_inv.get(fid),
          "belegt": (effektiv.get(fid, {}).get("quelle", QUELLE_KEINE) != QUELLE_KEINE),
          "hat_wert": _hat_wert(fid)}
         for fid in feld_feld
@@ -1049,6 +1058,19 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
         for e in eintraege if e["match_key"][0] == "inv_live"
     ]
     for fid, p in finde_gesamtleistung_verdraengt(inv_live_felder).items():
+        _add_problem(fid, p)
+
+    # N-537: Ein Balkonkraftwerk mit `pv-module`-Kindern hat seine Erzeugung an
+    # sie abgetreten (N-266/N-536) — die Fläche sagt das jetzt an seiner Zeile,
+    # so wie sie es für das Anlagen-Aggregat und die WP-Gesamtleistung längst
+    # tut. `info`, kein Knopf: „auf keine setzen" wäre bei teilweise gemessenen
+    # Kindern falscher Rat (dann trägt der Wert ihre Lücke).
+    kind_zu_parent = {
+        str(i.id): str(i.parent_investition_id)
+        for i in invs
+        if i.typ == "pv-module" and i.parent_investition_id is not None
+    }
+    for fid, p in finde_bkw_fuellt_kinder_luecken(felder_belegt, kind_zu_parent).items():
         _add_problem(fid, p)
     # ⛔ Hier stand bis #406 eine dritte Lage: das Aggregat sei „für Tag und
     # Stunde durch einzelne Erzeuger-Zähler verdrängt, die Tagessumme still zu

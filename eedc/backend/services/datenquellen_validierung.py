@@ -67,6 +67,11 @@ _PV_AGGREGAT_FELD_LIVE = "pv_gesamt_w"
 _PV_KOMPONENTEN_FELD_MONAT = "pv_erzeugung_kwh"
 _PV_KOMPONENTEN_FELD_LIVE = "leistung_w"
 _PV_KOMPONENTEN_TYPEN = {"pv-module", "balkonkraftwerk"}
+PV_MODUL_TYP = "pv-module"
+BKW_TYP = "balkonkraftwerk"
+#: Die Größen, die ein Balkonkraftwerk an seine Kinder abtritt (N-266):
+#: Erzeugung und Momentanleistung. Die Wechselrichter-Grenze tritt es NICHT ab.
+_BKW_ABTRETBARE_FELDER = {"pv_erzeugung_kwh", "leistung_w"}
 _NETZ_AGGREGAT_FELDER = {"netz_kombi_w"}
 _NETZ_KOMPONENTEN_FELDER = {"einspeisung_w", "netzbezug_w"}
 
@@ -324,6 +329,71 @@ def finde_redundante_aggregate(felder: list[dict]) -> dict[str, dict]:
 #: gelesen wird, wird nicht doppelt gezählt — er gilt zweimal.
 _NICHT_ADDITIVE_EINHEITEN = {"ct/kwh", "€/kwh", "eur/kwh", "€", "eur", "%", "°c", "ct"}
 
+
+
+#: Text der BKW-Abtretung auf der Zuordnungs-Fläche (N-537). Er sagt die
+#: WIRKUNG, nicht eine Aufforderung — anders als `redundant`, dessen Knopf
+#: („auf keine setzen") hier falscher Rat wäre: misst nur eines von zwei
+#: Modulen selbst, ist der Wert des Balkonkraftwerks die einzige Quelle für das
+#: andere, und ihn zu entfernen halbierte die Erzeugung.
+_BKW_FUELLT_LUECKEN_TEXT = (
+    "Die zugeordneten PV-Module tragen die Erzeugung dieses Balkonkraftwerks. "
+    "Dieser Wert füllt nur noch, was ihnen fehlt — messen alle Module selbst, "
+    "wird er nicht mehr gelesen."
+)
+
+
+def finde_bkw_fuellt_kinder_luecken(
+    felder: list[dict],
+    kind_zu_parent: dict,
+) -> dict[str, dict]:
+    """BKW-Felder, deren `pv-module`-Kinder die Erzeugung tragen (N-266/N-536).
+
+    ``felder``: ``[{"id", "feld", "typ", "inv_id", "belegt"}]``;
+    ``kind_zu_parent``: ``{str(kind_id): str(bkw_id)}`` für jedes `pv-module`
+    mit Balkonkraftwerk-Parent.
+
+    **Warum `info` und kein Knopf.** Dieselbe Bauform wie
+    ``finde_gesamtleistung_verdraengt``: Es liegt kein Fehler vor, sondern eine
+    Folge der Zuordnung. Die Alternative ``redundant`` („Wirkungslos … auf
+    keine setzen") wäre hier ein **falscher Rat** — gemessen an der
+    Teil-Deckung: Misst nur eines von zwei Modulen, trägt das Balkonkraftwerk
+    die Lücke des anderen; ohne seine Zuordnung sänke die Erzeugung von 52 auf
+    28 Wh, also unter den Fehler, den der Hinweis beheben sollte.
+
+    Gemeldet wird nur, wenn mindestens ein Kind **selbst** eine Quelle hat —
+    sonst gibt es nichts abzutreten und das Gerät ist die einzige Quelle.
+    """
+    if not felder or not kind_zu_parent:
+        return {}
+    belegte_kinder_je_bkw: dict[str, set[str]] = {}
+    for f in felder:
+        if f.get("typ") != PV_MODUL_TYP or not f.get("belegt"):
+            continue
+        parent = kind_zu_parent.get(str(f.get("inv_id")))
+        if parent is not None:
+            belegte_kinder_je_bkw.setdefault(parent, set()).add(str(f.get("inv_id")))
+
+    out: dict[str, dict] = {}
+    for f in felder:
+        if f.get("typ") != BKW_TYP or f.get("feld") not in _BKW_ABTRETBARE_FELDER:
+            continue
+        if not f.get("belegt"):
+            continue
+        kinder = belegte_kinder_je_bkw.get(str(f.get("inv_id")))
+        if not kinder:
+            continue
+        out[f["id"]] = {
+            "art": "bkw_fuellt_luecken",
+            "schwere": "info",
+            "grund": "bkw_abtretung",
+            "wirksame_felder": sorted(
+                k["id"] for k in felder
+                if str(k.get("inv_id")) in kinder and k.get("feld") == f.get("feld")
+            ),
+            "text": _BKW_FUELLT_LUECKEN_TEXT,
+        }
+    return out
 
 def finde_doppelmappings(
     ha_zuordnungen: dict[str, str],

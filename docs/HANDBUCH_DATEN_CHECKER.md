@@ -206,6 +206,11 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 | **\[Name\]: Leistung (kWp) fehlt** | ⚠️ WARNING | Ohne `leistung_kwp` greift die kWp-Konsistenzprüfung in §4.1 nicht und PVGIS-Soll pro String fehlt. | Komponente öffnen, Leistung in kWp eintragen. |
 | **\[Name\]: Ausrichtung/Neigung fehlt** | ℹ️ INFO | Wird für PVGIS-Solarprognose pro String benötigt. Ohne sie nutzt die Prognose Anlagen-Defaults. | Komponente öffnen, Ausrichtung (Süd/Ost/West) und Neigung in Grad eintragen. |
 
+> ⭐ **Ein Balkonkraftwerk mit zugeordneten PV-Modulen ist selbst ein Gesamtwert** — für *seine*
+> Module. Hat es einen Wert und eines seiner Module nicht, gilt der Monat als abgedeckt (ℹ️ INFO
+> „über kWp-Anteil geschätzt"), nicht als Lücke. Bis eedc 4.0.48 stand dort ⚠️ WARNING
+> „unvollständig", obwohl jede Zahl vorhanden war und die Rechnung den Monat längst schloss.
+
 **PV-Erzeugung wird anlagenweit geprüft, nicht pro Modul.** Ein einzelner Gesamtwert deckt alle Strings ab (er füllt zur Lesezeit die Lücken, verteilt nach kWp) — eine Prüfung pro Modul meldete deshalb „fehlt" für jeden String, obwohl die Anlage vollständig gepflegt ist. Vier Zustände je Monat:
 
 | Meldung | Severity | Bedeutung | Behebung |

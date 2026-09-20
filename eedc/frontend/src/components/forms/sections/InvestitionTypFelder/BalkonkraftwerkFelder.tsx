@@ -25,7 +25,10 @@ export function BalkonkraftwerkFelder({ paramData, onInputChange, setParam, modu
             die Felder hier beschreiben nur noch das Gerät und werden nicht mehr gerechnet.
             Die <em>Wechselrichter-Leistung</em> gilt weiter: sie gehört dem Gerät, nicht den
             Modulen. Und der Monatswert <em>Erzeugung</em> zählt als Gesamtsumme der Module —
-            eigene Modulwerte haben Vorrang, dieser füllt die Lücken.
+            eigene Modulwerte haben Vorrang, dieser füllt die Lücken.{' '}
+            <strong>Dasselbe gilt für die Sensoren</strong> (N-536): Messen deine Module unter{' '}
+            <em>Einstellungen → Datenquellen</em> selbst, trägt dieses Gerät nur noch, was ihnen
+            fehlt — du musst seine Zuordnung nicht entfernen, und doppelt gezählt wird nichts.
           </Alert>
         )}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
