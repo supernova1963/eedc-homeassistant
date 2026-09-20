@@ -2414,6 +2414,16 @@ _P11_SELEKTOR_AUFRUFE: frozenset[str] = frozenset({
     "traegt_erzeugungsgroessen_selbst",
     "bkw_kwp_aus_kindern",
     "modul_kinder",
+    # N-536: die Kürzungs-Seite derselben Abtretung. `erzeuger_traeger` nimmt
+    # ein abtretendes BKW aus der Menge — diese vier lassen es drin und
+    # kürzen seinen WERT auf den Rest (Wert − Σ gemessene Kinder). Für den
+    # Live- und den Stundenpfad ist das die einzig richtige Form: dort ist das
+    # Balkonkraftwerk bei den meisten Anlagen die einzige Quelle, und eine
+    # Menge ohne es wäre leer.
+    "bkw_restwerte",
+    "kuerze_bkw_in_werte_map",
+    "ergaenze_kinder_deckung",
+    "bkw_kinder_decken_vollstaendig",
 })
 
 #: Klassifizierte Ausnahmen. Form `modul.py::funktion` — funktions-granular,
@@ -2510,19 +2520,28 @@ P11_AUSNAHMEN: frozenset[str] = frozenset({
     "backend/api/routes/pvgis.py::get_pvgis_modul_prognose",
     "backend/services/pdf/builders/anlagendokumentation.py::_build_investition_tech_grid",
 
-    # ── 4b. Live-Pfad: die Zuordnung folgt dem SENSOR, nicht der Struktur ──
-    # Diese vier ordnen einer Investition eine **Entity** zu bzw. summieren
-    # Momentanwerte gemappter Sensoren. Wer einen Sensor hat, zählt — und beim
-    # Melder-Fall ist das gerade das Balkonkraftwerk: sein Wechselrichter ist
-    # oft der EINZIGE Zähler, die Module darunter haben keinen eigenen. Der
-    # Selektor hier würde die einzige Live-Quelle der Anlage stillschweigend
-    # verwerfen. Wer BKW **und** Module mappt, beschreibt dieselbe Energie
-    # zweimal — genau wie heute schon bei Wechselrichter + Modul-Sensoren; das
-    # ist eine Zuordnungs-Frage der Datenquellen-Fläche, keine der Monatsachsen.
-    "backend/services/live_history_service.py::get_tages_kwh",
-    "backend/services/live_komponenten_builder.py::build_komponenten",
+    # ── 4b. Live-Pfad: eine Entity-Zuordnung, keine Σ einer Größe ──────────
+    # ⛔ Hier standen bis N-536 (20.09.2026) VIER Einträge mit der Begründung
+    # „die Zuordnung folgt dem Sensor, nicht der Struktur … wer BKW und Module
+    # mappt, beschreibt dieselbe Energie zweimal — genau wie heute schon bei
+    # Wechselrichter + Modul-Sensoren". **Der zweite Halbsatz beschrieb einen
+    # Zustand, den es nicht gibt:** `SKIP_TYPEN = {"wechselrichter"}` überspringt
+    # den Wechselrichter an jeder Live-Stelle, das Balkonkraftwerk nie. Seit
+    # N-266 spielt ein BKW mit Kindern dieselbe Trägerrolle — und wurde als
+    # einziger Träger doppelt gezählt (Melder Kai2, Forum T89667 #354:
+    # „Solarleistung 167 W" für 84 gemessene Watt).
+    #
+    # Die drei Summen-Stellen implementieren die Abtretung jetzt selbst
+    # (`bkw_restwerte` / `kuerze_bkw_in_werte_map` / `bkw_kinder_decken_vollstaendig`)
+    # und sind damit über `_P11_SELEKTOR_AUFRUFE` freigekauft — sie brauchen
+    # hier keinen Eintrag mehr. Der **Kern** der alten Begründung gilt
+    # unverändert und ist in der Formel aufgehoben: ohne Werte seiner Kinder
+    # ist der Rest der ganze BKW-Wert, die einzige Live-Quelle bleibt also
+    # erhalten.
+    #
+    # Was bleibt, ist die eine Stelle, die wirklich nur eine Entity AUSWÄHLT
+    # und keine Größe summiert:
     "backend/services/live_tagesverlauf_service.py::_resolve_counter_eid",
-    "backend/services/live_verbrauchsprofil_service.py::_profil_from_ha",
 
     # ── 5. Durchreicher an eine Stelle, die den Selektor trägt ─────────────
     # Sie laden die Menge und geben sie weiter an `orientierungs_gruppen` bzw.

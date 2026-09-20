@@ -161,3 +161,121 @@ def test_live_auslastung_nimmt_zaehler_und_nenner_aus_derselben_menge():
     res = _live({"2": 52.0, "21": 28.0, "22": 24.0})
     gauge = next(g for g in res["gauges"] if g["key"] == "pv_leistung")
     assert gauge["wert"] == pytest.approx(5.0, abs=0.5)
+
+
+# ─── 3. Tagesebene: Stufe 2 vor dem Anlagen-Aggregat ────────────────────────
+
+def _tag(komponenten: dict[str, float], kinder: int = 2):
+    from backend.services.snapshot.komponenten_beitraege import loese_pv_tageswerte_auf
+
+    bkw, module = _anlage_mit_bkw(kinder)
+    invs = {str(i.id): i for i in [bkw, *module]}
+    return loese_pv_tageswerte_auf(komponenten, invs, date(2026, 9, 19))
+
+
+def _summe(out: dict) -> float:
+    from backend.core.berechnungen.energie import summe_pv_bkw_kwh
+
+    return summe_pv_bkw_kwh(out)
+
+
+def test_tag_kai2_zaehlt_die_energie_einmal():
+    out, _ = _tag({"bkw_2": 0.52, "pv_21": 0.28, "pv_22": 0.24})
+    assert _summe(out) == pytest.approx(0.52)
+    assert out["bkw_2"] == 0.0, "abgetretene Null, nicht gelöscht (#350 zeigt Erzeuger je Gerät)"
+
+
+def test_tag_findet_das_bkw_auch_im_live_keyspace():
+    """Derselbe Tag kann vom Boundary-Pfad (`bkw_<id>`) oder vom Live-Pfad
+    (`pv_<id>` für jeden Erzeuger) geschrieben sein — der Mismatch war der
+    BKW-Doppelzählungs-Bug vom 2026-05-19."""
+    out, _ = _tag({"pv_2": 0.52, "pv_21": 0.28, "pv_22": 0.24})
+    assert _summe(out) == pytest.approx(0.52)
+    assert out["pv_2"] == 0.0
+
+
+def test_tag_verteilt_den_rest_kwp_gewichtet_und_kennzeichnet_ihn():
+    """Nur das BKW misst → seine Kinder bekommen den kWp-Anteil, als Zerlegung
+    markiert. Auf der TAGESEBENE ist die kWp-Gewichtung zulässig (über einen Tag
+    mittelt sich Ost/West aus) — auf der Stundenebene nicht."""
+    from backend.services.provenance import ABGELEITET_KWP_ANTEIL
+
+    out, marken = _tag({"bkw_2": 0.52})
+    assert _summe(out) == pytest.approx(0.52)
+    assert out["pv_21"] == pytest.approx(0.26)
+    assert out["pv_22"] == pytest.approx(0.26)
+    assert marken == {"pv_21": ABGELEITET_KWP_ANTEIL, "pv_22": ABGELEITET_KWP_ANTEIL}
+
+
+def test_tag_teil_deckung_laesst_die_messung_stehen():
+    out, marken = _tag({"bkw_2": 0.52, "pv_21": 0.28})
+    assert out["pv_21"] == pytest.approx(0.28), "gemessene Module behalten ihren Wert (P7)"
+    assert out["pv_22"] == pytest.approx(0.24)
+    assert set(marken) == {"pv_22"}
+
+
+def test_tag_bkw_ohne_kinder_bleibt_unveraendert():
+    out, marken = _tag({"bkw_2": 0.52}, kinder=0)
+    assert out == {"bkw_2": 0.52}
+    assert marken == {}
+
+
+# ─── 4. Stundenebene: Deckung auf Träger-Ebene, Rest unverteilt ─────────────
+
+def test_stunde_deckung_steigt_auf_die_traeger_ebene():
+    """Ohne diese Ergänzung fiele eine Anlage mit BKW-Zähler und Kindern ohne
+    eigene Zähler dauerhaft auf das Anlagen-Aggregat zurück."""
+    from backend.core.berechnungen.erzeuger_traeger import ergaenze_kinder_deckung
+
+    bkw, module = _anlage_mit_bkw()
+    invs = [bkw, *module]
+    assert ergaenze_kinder_deckung({"2"}, invs) == {"2", "21", "22"}
+    # Ergänzt nur, streicht nie:
+    assert ergaenze_kinder_deckung({"21"}, invs) == {"21"}
+
+
+def test_stunde_summe_zaehlt_die_energie_einmal_und_verteilt_nicht():
+    """Die Stundensumme kürzt das BKW auf den Rest — aber sie legt ihn NICHT
+    kWp-gewichtet auf die Kinder (`komponenten_beitraege`: der kWp-Schlüssel ist
+    eine Tages-Aussage, über eine Stunde mittelt sich Ost/West nicht aus)."""
+    bkw, module = _anlage_mit_bkw()
+    invs = [bkw, *module]
+
+    einzel = {"2": 0.052, "21": 0.028, "22": 0.024}
+    einzel.update(bkw_restwerte(invs, einzel))
+    assert sum(einzel.values()) == pytest.approx(0.052)
+
+    teil = {"2": 0.052, "21": 0.028}
+    teil.update(bkw_restwerte(invs, teil))
+    assert sum(teil.values()) == pytest.approx(0.052)
+    assert teil["2"] == pytest.approx(0.024), "der Rest bleibt beim Gerät, unverteilt"
+
+
+def test_beide_stundenpfade_haengen_die_kuerzung_wirklich_ein():
+    """⚠ Diese Probe schließt eine gemessene Lücke der Probe darüber.
+
+    `test_stunde_summe_…` ruft `bkw_restwerte` selbst auf und prüft damit die
+    **Formel**, nicht ihre **Einhängung**: Bei der Gegenprobe am 20.09.2026 blieb
+    sie grün, während der Aufruf in `snapshot/aggregator.py` entschärft war. Der
+    Stundenpfad ist ohne Snapshots und DB nicht in einer Werte-Probe erreichbar —
+    also hält ihn ein Quelltext-Wächter, so wie die Wurzelmuster-Prüfer es für
+    dieselbe Frage tun.
+
+    Der P11-Wächter allein genügt hier nicht: ihm reicht **ein** Selektor-Aufruf
+    je Funktion, und `ergaenze_kinder_deckung` (die Deckungs-Hälfte) würde die
+    Funktion freikaufen, auch wenn die Kürzung der Summe verschwunden ist.
+    """
+    from pathlib import Path
+
+    basis = Path(__file__).resolve().parents[1]
+    for rel in ("services/snapshot/aggregator.py", "services/snapshot/lts_aggregator.py"):
+        quelle = (basis / rel).read_text(encoding="utf-8")
+        assert "bkw_restwerte(_alle_invs, einzel)" in quelle, (
+            f"{rel}: die Summe des Einzel-Zweigs kürzt das abtretende "
+            f"Balkonkraftwerk nicht mehr — N-536 wäre dort wieder offen."
+        )
+        assert "ergaenze_kinder_deckung(" in quelle, (
+            f"{rel}: die Deckungsfrage steht nicht mehr auf der Träger-Ebene — "
+            f"eine Anlage mit BKW-Zähler und Kindern ohne eigenen Zähler fiele "
+            f"wieder auf das Anlagen-Aggregat oder eine Teilsumme zurück."
+        )

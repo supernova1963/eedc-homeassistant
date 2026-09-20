@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.utils.investition_filter import aktiv_jetzt
+from backend.core.berechnungen.erzeuger_traeger import kuerze_bkw_in_werte_map
 from backend.services.live_sensor_config import (
     ERZEUGER_TYPEN,
     LEISTUNGS_FELDER,
@@ -307,6 +308,8 @@ async def get_tagesverlauf(
         )
     )
     investitionen = {str(inv.id): inv for inv in inv_result.scalars().all()}
+    # N-536: die Menge für die BKW-Abtretung (leer ⇒ nichts zu kürzen).
+    _bkw_erzeuger = list(investitionen.values())
 
     now = datetime.now()
     if tage_zurueck > 0:
@@ -570,6 +573,20 @@ async def get_tagesverlauf(
                 raw_values["einspeisung"] = -einsp_kw
                 werte["einspeisung"] = round(-einsp_kw, 2)
 
+        # N-536: Ein Balkonkraftwerk mit `pv-module`-Kindern trägt nur noch
+        # den Rest — vor der Haushalts-Bilanz UND in der Kurve, sonst zeigte
+        # das Chart eine Serie, die die Bilanz nicht mehr kennt. Der Rest bleibt
+        # unverteilt (kWp-Gewichtung ist eine Tages-Aussage); bei Rest 0
+        # verschwindet die Serie, weil ihre Energie in den Modul-Serien steht.
+        if _bkw_erzeuger:
+            gekuerzt = kuerze_bkw_in_werte_map(raw_values, _bkw_erzeuger)
+            for weg in set(raw_values) - set(gekuerzt):
+                werte.pop(weg, None)
+            for skey_neu, wert_neu in gekuerzt.items():
+                if raw_values.get(skey_neu) != wert_neu:
+                    werte[skey_neu] = round(wert_neu, 2)
+            raw_values = gekuerzt
+
         # Haushalt aus ungerundeten Rohwerten berechnen
         quellen_sum = sum(v for v in raw_values.values() if v > 0)
         senken_sum = sum(v for v in raw_values.values() if v < 0)
@@ -716,6 +733,8 @@ async def _get_tagesverlauf_mqtt(
         )
     )
     investitionen = {str(inv.id): inv for inv in inv_result.scalars().all()}
+    # N-536: die Menge für die BKW-Abtretung (leer ⇒ nichts zu kürzen).
+    _bkw_erzeuger = list(investitionen.values())
 
     serien: list[dict] = []
     serie_comp_keys: dict[str, list[str]] = {}
@@ -920,6 +939,20 @@ async def _get_tagesverlauf_mqtt(
             if has_einspeisung and einsp_kw > 0.001:
                 raw_values["einspeisung"] = -einsp_kw
                 werte["einspeisung"] = round(-einsp_kw, 2)
+
+        # N-536: Ein Balkonkraftwerk mit `pv-module`-Kindern trägt nur noch
+        # den Rest — vor der Haushalts-Bilanz UND in der Kurve, sonst zeigte
+        # das Chart eine Serie, die die Bilanz nicht mehr kennt. Der Rest bleibt
+        # unverteilt (kWp-Gewichtung ist eine Tages-Aussage); bei Rest 0
+        # verschwindet die Serie, weil ihre Energie in den Modul-Serien steht.
+        if _bkw_erzeuger:
+            gekuerzt = kuerze_bkw_in_werte_map(raw_values, _bkw_erzeuger)
+            for weg in set(raw_values) - set(gekuerzt):
+                werte.pop(weg, None)
+            for skey_neu, wert_neu in gekuerzt.items():
+                if raw_values.get(skey_neu) != wert_neu:
+                    werte[skey_neu] = round(wert_neu, 2)
+            raw_values = gekuerzt
 
         # Haushalt berechnen
         quellen_sum = sum(v for v in raw_values.values() if v > 0)

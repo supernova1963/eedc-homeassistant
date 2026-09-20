@@ -294,6 +294,33 @@ def kuerze_bkw_in_werte_map(
             out.pop(key, None)
     return out
 
+
+def ergaenze_kinder_deckung(
+    gedeckte_ids: Any,
+    investitionen: Sequence[Any],
+) -> set:
+    """Ein Kind gilt als gedeckt, wenn es selbst **oder** sein BKW liefert.
+
+    Die Deckungsfrage der Stundenachse (``pv_tages_praezedenz.einzel_deckt_den_tag``)
+    lautet „tragen die Einzelzähler den ganzen Tag?". Sie ist auf der **Träger**-
+    Ebene zu stellen, seit ein Balkonkraftwerk Kinder haben kann: Sein Zähler
+    misst dieselbe Energie wie sie. Ohne diese Ergänzung fiele eine Anlage mit
+    BKW-Zähler und Modul-Kindern ohne eigene Zähler dauerhaft auf das
+    Anlagen-Aggregat zurück — oder, wenn es keines gibt, auf eine Teilsumme.
+
+    ⚠ Sie ergänzt nur, sie streicht nie: ein Kind mit eigenem Zähler bleibt
+    gedeckt, auch wenn sein Balkonkraftwerk in dieser Stunde nichts liefert.
+    """
+    gedeckt = set(gedeckte_ids or ())
+    for bkw_id in abgetretene_bkw_ids(investitionen):
+        if str(bkw_id) not in gedeckt:
+            continue
+        for kind in modul_kinder(bkw_id, investitionen):
+            kind_id = getattr(kind, "id", None)
+            if kind_id is not None:
+                gedeckt.add(str(kind_id))
+    return gedeckt
+
 def bkw_kwp_aus_kindern(bkw: Any, investitionen: Sequence[Any]) -> Optional[float]:
     """Σ kWp der Modul-Kinder — oder ``None``, wenn das BKW nichts abgetreten hat.
 

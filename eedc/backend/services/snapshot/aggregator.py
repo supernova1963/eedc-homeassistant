@@ -53,6 +53,10 @@ from backend.core.berechnungen.pv_tages_praezedenz import (
     erwartete_erzeuger_ids,
     waehle_pv_quelle,
 )
+from backend.core.berechnungen.erzeuger_traeger import (
+    bkw_restwerte,
+    ergaenze_kinder_deckung,
+)
 from backend.services.snapshot.komponenten_beitraege import (
     basis_beitraege,
     basis_hourly_eintraege,
@@ -467,10 +471,17 @@ async def get_hourly_kwh_by_category(
     # Aggregat. Die Wahl gilt für ALLE Slots — nur so bleibt die Quelle über
     # den Tag einheitlich und Σ Hourly / Tages-Boundary behalten die
     # Konsistenz, die sie heute haben.
+    # N-536: Deckung auf TRÄGER-Ebene und Summe ohne Doppelzählung.
+    # Ein Kind gilt als gedeckt, wenn es selbst oder sein abtretendes
+    # Balkonkraftwerk liefert (sie messen dieselbe Energie); und in der Summe
+    # trägt das Balkonkraftwerk nur noch den Rest. **Unverteilt** — die
+    # kWp-Gewichtung ist eine Tages-Aussage (s. `komponenten_beitraege`).
+    _alle_invs = list(investitionen_by_id.values())
     pv_quelle = waehle_pv_quelle(
         erwartete_ids=erwartete_erzeuger_ids(investitionen_by_id.values(), datum),
         gedeckte_ids_je_slot={
-            h: set(ids.keys()) for h, ids in pv_einzel_je_slot.items()
+            h: ergaenze_kinder_deckung(ids.keys(), _alle_invs)
+            for h, ids in pv_einzel_je_slot.items()
         },
         aggregat_je_slot=pv_aggregat_je_slot,
     )
@@ -479,6 +490,9 @@ async def get_hourly_kwh_by_category(
             wert = pv_aggregat_je_slot.get(slot_idx)
         elif pv_quelle == QUELLE_EINZEL:
             einzel = pv_einzel_je_slot.get(slot_idx) or {}
+            if einzel:
+                einzel = dict(einzel)
+                einzel.update(bkw_restwerte(_alle_invs, einzel))
             wert = sum(einzel.values()) if einzel else None
         else:
             wert = None

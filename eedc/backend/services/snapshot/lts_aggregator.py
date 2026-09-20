@@ -42,6 +42,10 @@ from backend.core.berechnungen.pv_tages_praezedenz import (
     erwartete_erzeuger_ids,
     waehle_pv_quelle,
 )
+from backend.core.berechnungen.erzeuger_traeger import (
+    bkw_restwerte,
+    ergaenze_kinder_deckung,
+)
 from backend.services.snapshot.komponenten_beitraege import (
     basis_beitraege,
     basis_hourly_eintraege,
@@ -206,10 +210,14 @@ async def get_hourly_kwh_by_category_lts(
 
     # PV-Präzedenz je Tag (#406) — dieselbe Wahl wie im Snapshot-Pfad und wie
     # auf der Tagesebene; ein zweiter Rechenweg wäre die F-56-Klasse.
+    # N-536: Deckung auf TRÄGER-Ebene, Summe ohne Doppelzählung, Rest
+    # unverteilt — wortgleich zum Snapshot-Pfad (`snapshot/aggregator`).
+    _alle_invs = list(investitionen_by_id.values())
     pv_quelle = waehle_pv_quelle(
         erwartete_ids=erwartete_erzeuger_ids(investitionen_by_id.values(), datum),
         gedeckte_ids_je_slot={
-            h: set(ids.keys()) for h, ids in pv_einzel_je_slot.items()
+            h: ergaenze_kinder_deckung(ids.keys(), _alle_invs)
+            for h, ids in pv_einzel_je_slot.items()
         },
         aggregat_je_slot=pv_aggregat_je_slot,
     )
@@ -218,6 +226,9 @@ async def get_hourly_kwh_by_category_lts(
             wert = pv_aggregat_je_slot.get(h)
         elif pv_quelle == QUELLE_EINZEL:
             einzel = pv_einzel_je_slot.get(h) or {}
+            if einzel:
+                einzel = dict(einzel)
+                einzel.update(bkw_restwerte(_alle_invs, einzel))
             wert = sum(einzel.values()) if einzel else None
         else:
             wert = None

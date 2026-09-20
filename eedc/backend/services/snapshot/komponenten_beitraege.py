@@ -871,6 +871,10 @@ def loese_pv_tageswerte_auf(
         erwartete_erzeuger_ids,
         waehle_pv_quelle,
     )
+    from backend.core.berechnungen.erzeuger_traeger import (
+        abgetretene_bkw_ids,
+        modul_kinder,
+    )
     from backend.core.investition_kennwerte import get_erzeuger_kwp
     from backend.services.provenance import ABGELEITET_KWP_ANTEIL
     from backend.services.snapshot.keys import PV_AGGREGAT_BASIS_FELD
@@ -883,6 +887,54 @@ def loese_pv_tageswerte_auf(
     def _key(inv) -> Optional[str]:
         praefix = _TYP_KEY_PREFIX.get(getattr(inv, "typ", None))
         return f"{praefix}{inv.id}" if praefix else None
+
+    alle_invs = list(investitionen_by_id.values())
+    marken: dict[str, str] = {}
+
+    # ── N-536, Stufe 2: das Balkonkraftwerk ist das Aggregat SEINER Kinder ──
+    #
+    # Vor dem Anlagen-Aggregat und mit derselben Formel: gemessene Kinder
+    # behalten ihren Wert, die übrigen bekommen den kWp-gewichteten Anteil am
+    # Rest. Danach trägt das Gerät selbst **0** — nicht gelöscht, denn
+    # `erzeuger_kwh_je_investition` (#350) zeigt Erzeuger je Gerät in
+    # *Cockpit → Tag*, und ein fehlender Key ist dort etwas anderes als eine
+    # abgetretene Null.
+    #
+    # ⚠ Der Key wird in BEIDEN Keyspaces gesucht: derselbe Tag kann vom
+    # Boundary-Pfad (`bkw_<id>`) oder vom Live-Pfad (`pv_<id>` für jeden
+    # Erzeuger) geschrieben sein. Genau dieser Mismatch war der
+    # BKW-Doppelzählungs-Bug vom 2026-05-19 (`core/berechnungen/energie.py`).
+    for bkw_id in abgetretene_bkw_ids(alle_invs):
+        bkw_key = next(
+            (k for k in (f"bkw_{bkw_id}", f"pv_{bkw_id}") if k in out), None
+        )
+        if bkw_key is None:
+            continue
+        bkw_wert = out.get(bkw_key)
+        if not isinstance(bkw_wert, (int, float)):
+            continue
+        kinder = [k for k in modul_kinder(bkw_id, alle_invs) if _key(k) is not None]
+        if not kinder:
+            continue
+        aufgeloest_bkw = resolve_pv_je_modul(
+            aggregat_kwh=float(bkw_wert),
+            module=[
+                PvModul(
+                    inv_id=kind.id,
+                    leistung_kwp=get_erzeuger_kwp(kind),
+                    eigen_kwh=out.get(_key(kind)),
+                )
+                for kind in kinder
+            ],
+        )
+        for kind in kinder:
+            wert = aufgeloest_bkw.get(kind.id)
+            if wert is None:
+                continue
+            out[_key(kind)] = wert.pv_erzeugung_kwh
+            if wert.quelle == QUELLE_VERTEILT:
+                marken[_key(kind)] = ABGELEITET_KWP_ANTEIL
+        out[bkw_key] = 0.0
 
     erzeuger = [
         inv for inv in investitionen_by_id.values()
@@ -899,7 +951,7 @@ def loese_pv_tageswerte_auf(
         aggregat_je_slot={0: aggregat},
     )
     if quelle != QUELLE_AGGREGAT or aggregat is None:
-        return out, {}
+        return out, marken
 
     aufgeloest = resolve_pv_je_modul(
         aggregat_kwh=aggregat,
@@ -913,7 +965,6 @@ def loese_pv_tageswerte_auf(
             if _key(inv) is not None
         ],
     )
-    marken: dict[str, str] = {}
     for inv in erzeuger:
         k = _key(inv)
         wert = aufgeloest.get(inv.id)
