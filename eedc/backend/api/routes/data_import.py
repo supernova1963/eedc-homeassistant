@@ -6,6 +6,7 @@ Unterstützt Auto-Detection des Formats und Vorschau vor dem Import.
 """
 
 import logging
+from dataclasses import dataclass, field
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
@@ -39,6 +40,14 @@ from backend.utils.investition_value import get_inv_value
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Etappe 3d Päckchen 2: Source-Konstante für die Provenance-Wrapper.
+# Aktuell werden alle Datenquellen unter external:portal_import geführt
+# (gleiche Hierarchie-Klasse wie external:cloud_import:*), weil das
+# Frontend den konkreten Cloud-Provider-Slug nicht durchreicht. Der writer
+# differenziert via datenquelle für Diagnose-Queries auf data_provenance_log
+# und steht deshalb im `ImportKontext`, nicht hier.
+_PROVENANCE_SOURCE = "external:portal_import"
 
 
 # ─── Schemas ─────────────────────────────────────────────────────────────────
@@ -351,15 +360,125 @@ async def preview_import(
     )
 
 
-@router.post("/apply/{anlage_id}", response_model=ApplyResponse)
-async def apply_import(
-    anlage_id: int,
-    data: ApplyRequest,
-    ueberschreiben: bool = Query(False, description="Bestehende Monatsdaten überschreiben"),
-    datenquelle: str = Query("portal_import", description="Datenquelle (portal_import, cloud_import)"),
-    db: AsyncSession = Depends(get_db, scope="function"),
+# ─── Import-Anwendung: Träger und Phasen ─────────────────────────────────────
+
+
+@dataclass
+class ImportKontext:
+    """Die Eingänge eines Apply-Laufs — nach `_baue_import_kontext` nur gelesen.
+
+    Elf Phasen brauchen dieselbe Menge (Session, Anlage, Geräte-Listen, Ziel,
+    Provenance-Konstanten); als Einzelargumente wären das zehn bis vierzehn
+    Schlüsselwörter je Aufruf. Wer hier etwas ändern will, ändert stattdessen
+    ein Feld der `ImportBilanz` — der Kontext wird nie zurückgeschrieben.
+    """
+
+    db: AsyncSession
+    anlage_id: int
+    ueberschreiben: bool
+    datenquelle: str
+    zuordnung: Optional[InvestitionsZuordnung]
+    pv_module: list[Investition]
+    speicher: list[Investition]
+    wallboxen: list[Investition]
+    eautos: list[Investition]
+    ziel: Optional[Investition] = None
+    ziel_pv_module: list[Investition] = field(default_factory=list)
+    ziel_speicher: list[Investition] = field(default_factory=list)
+    source: str = _PROVENANCE_SOURCE
+    writer: str = ""
+
+
+@dataclass
+class ImportBilanz:
+    """Was der Lauf gezählt hat und zu sagen hat — der einzige geschriebene Zustand.
+
+    Etappe 3d Päckchen 2: `geschuetzt_count`/`geschuetzte_felder` sind das
+    Hierarchie-Schutz-Tracking (manuell gepflegte Werte, die der
+    Provenance-Helper gegen Portal-/Cloud-Apply abweist).
+
+    N-229/12.08.: `hauszaehler_uebernommen` sagt, ob der gerätegebundene Weg
+    Hauszähler-Größen in die Monatszeile übernommen hat. Steuert den
+    Abschlusshinweis — ohne das Flag behauptete er etwas, das im Konfliktfall
+    nicht stattgefunden hat.
+    """
+
+    importiert: int = 0
+    uebersprungen: int = 0
+    fehler: list[str] = field(default_factory=list)
+    warnungen: list[str] = field(default_factory=list)
+    geschuetzt_count: int = 0
+    geschuetzte_felder: list[str] = field(default_factory=list)  # Top-15 Sample
+    hauszaehler_uebernommen: bool = False
+
+    @property
+    def erste_runde(self) -> bool:
+        """Ist noch kein Monat übernommen? Warnungen gelten dem Lauf, nicht dem
+        Monat — sonst steht derselbe Satz zwölfmal im Ergebnis."""
+        return self.importiert == 0
+
+    def _merke_feld(self, feld: str) -> None:
+        """Die eine Stichproben-Regel: bis zu 15 Namen, keine Dubletten."""
+        if len(self.geschuetzte_felder) < 15 and feld not in self.geschuetzte_felder:
+            self.geschuetzte_felder.append(feld)
+
+    def merke_geschuetzt(self, feld: str) -> None:
+        """Ein direkt abgewiesenes Top-Level-Feld."""
+        self.geschuetzt_count += 1
+        self._merke_feld(feld)
+
+    def merke_upsert(self, upsert_res) -> None:
+        """Sammler für die Wizard-Hinweis-Telemetrie. Wird sowohl vom direkten
+        `_upsert_und_merke`-Wrapper als auch via `on_upsert`-Callback aus den
+        Helpers (`_distribute_*`) gerufen, damit indirekt geschriebene Felder
+        nicht ohne Tracking durchschlüpfen."""
+        self.geschuetzt_count += upsert_res.rejected_count
+        for sub_key in upsert_res.rejected_fields:
+            self._merke_feld(sub_key)
+
+
+async def _upsert_und_merke(bilanz: ImportBilanz, *args, **kwargs):
+    """Wrapper über _upsert_investition_monatsdaten der die rejected_*-
+    Counts in den Apply-Response-Sammler legt. Periode steht im Audit-
+    Log, daher dort nur Sub-Key-Sample für den Wizard-Hinweis."""
+    upsert_res = await _upsert_investition_monatsdaten(*args, **kwargs)
+    bilanz.merke_upsert(upsert_res)
+    return upsert_res
+
+
+async def _schreibe_top_level(
+    bilanz: ImportBilanz, db: AsyncSession, obj, feld: str, wert,
+    *, source: str, writer: str, ueberschreiben: bool,
 ):
-    """Bestätigte Monatswerte aus Portal-Import oder Cloud-Import in die Datenbank übernehmen."""
+    """Ein Top-Level-Feld über die Quellen-Hierarchie schreiben und das
+    Ergebnis verbuchen.
+
+    Die EINE Stelle für beide Schreibwege (gerätegebundener Hauszähler-Zweig
+    und anlagenweite Monatszeile) — bis 20.09.2026 stand derselbe Vierzeiler
+    zweimal wortgleich in `apply_import`.
+    """
+    res = await write_with_provenance(
+        db, obj, feld, wert,
+        source=source, writer=writer,
+        # Der Haken IST die Anordnung des Anwenders (12.08.) —
+        # vorher meldete der Import „geschützt" und tat nicht,
+        # was angekreuzt war.
+        benutzer_override=ueberschreiben,
+    )
+    if res.decision == "rejected_lower_priority":
+        bilanz.merke_geschuetzt(feld)
+    return res
+
+
+async def _baue_import_kontext(
+    db: AsyncSession, anlage_id: int, data: ApplyRequest,
+    ueberschreiben: bool, datenquelle: str,
+) -> ImportKontext:
+    """Anlage prüfen, Investitionen laden, Ziel auflösen (N-229).
+
+    Die Route bekommt einen fertigen Kontext oder gar keinen — beide 404/400
+    entstehen hier, bevor ein Monat angefasst wird.
+    """
     # Anlage prüfen
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = result.scalar_one_or_none()
@@ -371,9 +490,6 @@ async def apply_import(
         select(Investition).where(Investition.anlage_id == anlage_id)
     )
     investitionen = inv_result.scalars().all()
-    pv_module = [i for i in investitionen if i.typ == "pv-module"]
-    speicher = [i for i in investitionen if i.typ == "speicher"]
-    wallboxen = [i for i in investitionen if i.typ == "wallbox"]
 
     # ── Ziel-Erzeuger auflösen (N-229) ───────────────────────────────────────
     # Das Ziel ist der Wechselrichter bzw. das Balkonkraftwerk, an dem die
@@ -394,394 +510,497 @@ async def apply_import(
         ziel_pv_module = empfaenger.pv_module
         ziel_speicher = empfaenger.speicher
 
-    importiert = 0
-    uebersprungen = 0
-    fehler: list[str] = []
-    warnungen: list[str] = []
-    # Etappe 3d Päckchen 2: Hierarchie-Schutz-Tracking (manuell gepflegte
-    # Werte, die der Provenance-Helper gegen Portal-/Cloud-Apply abweist).
-    geschuetzt_count = 0
-    geschuetzte_felder: list[str] = []
-    # N-229/12.08.: ob der gerätegebundene Weg Hauszähler-Größen in die
-    # Monatszeile übernommen hat. Steuert den Abschlusshinweis — ohne das Flag
-    # behauptete er etwas, das im Konfliktfall nicht stattgefunden hat.
-    hauszaehler_uebernommen = False
+    return ImportKontext(
+        db=db, anlage_id=anlage_id, ueberschreiben=ueberschreiben,
+        datenquelle=datenquelle, zuordnung=data.zuordnung,
+        pv_module=[i for i in investitionen if i.typ == "pv-module"],
+        speicher=[i for i in investitionen if i.typ == "speicher"],
+        wallboxen=[i for i in investitionen if i.typ == "wallbox"],
+        eautos=[i for i in investitionen if i.typ == "e-auto"],
+        ziel=ziel, ziel_pv_module=ziel_pv_module, ziel_speicher=ziel_speicher,
+        source=_PROVENANCE_SOURCE, writer=f"portal_apply:{datenquelle}",
+    )
 
-    # Etappe 3d Päckchen 2: Source-/Writer-Konstanten für Provenance-Wrapper.
-    # Aktuell werden alle Datenquellen unter external:portal_import geführt
-    # (gleiche Hierarchie-Klasse wie external:cloud_import:*), weil das
-    # Frontend den konkreten Cloud-Provider-Slug nicht durchreicht. writer
-    # differenziert via datenquelle für Diagnose-Queries auf data_provenance_log.
-    _PROVENANCE_SOURCE = "external:portal_import"
-    _PROVENANCE_WRITER = f"portal_apply:{datenquelle}"
 
-    def _record_upsert(upsert_res) -> None:
-        """Sammler für die Wizard-Hinweis-Telemetrie. Wird sowohl vom direkten
-        `_track_upsert`-Wrapper als auch via `on_upsert`-Callback aus den
-        Helpers (`_distribute_*`) gerufen, damit indirekt geschriebene Felder
-        nicht ohne Tracking durchschlüpfen."""
-        nonlocal geschuetzt_count
-        geschuetzt_count += upsert_res.rejected_count
-        for sub_key in upsert_res.rejected_fields:
-            if len(geschuetzte_felder) < 15 and sub_key not in geschuetzte_felder:
-                geschuetzte_felder.append(sub_key)
+async def _verteile_ziel_erzeugung(
+    ktx: ImportKontext, bilanz: ImportBilanz, monat_input: ApplyMonthInput,
+    jahr: int, monat: int,
+) -> bool:
+    """PV und Speicherumsatz an die Kinder des Ziels — was diese Station misst,
+    gehört ihren Geräten. `True`, wenn etwas geschrieben wurde."""
+    etwas_geschrieben = False
 
-    async def _track_upsert(*args, **kwargs):
-        """Wrapper über _upsert_investition_monatsdaten der die rejected_*-
-        Counts in den Apply-Response-Sammler legt. Periode steht im Audit-
-        Log, daher hier nur Sub-Key-Sample für den Wizard-Hinweis."""
-        upsert_res = await _upsert_investition_monatsdaten(*args, **kwargs)
-        _record_upsert(upsert_res)
-        return upsert_res
+    if (monat_input.pv_erzeugung_kwh or 0) > 0:
+        w = await _distribute_legacy_pv_to_modules(
+            ktx.db, monat_input.pv_erzeugung_kwh, ktx.ziel_pv_module,
+            jahr, monat, ktx.ueberschreiben,
+            source=ktx.source, writer=ktx.writer,
+            on_upsert=bilanz.merke_upsert,
+        )
+        # Bei genau einem Empfänger ist nichts verteilt worden —
+        # die Verteil-Warnung wäre dort schlicht unwahr.
+        if len(ktx.ziel_pv_module) > 1 and bilanz.erste_runde:
+            bilanz.warnungen.extend(w)
+        etwas_geschrieben = True
 
-    for monat_input in data.monate:
-        try:
-            jahr = monat_input.jahr
-            monat = monat_input.monat
-
-            if monat < 1 or monat > 12:
-                fehler.append(f"{jahr}/{monat:02d}: Ungültiger Monat")
-                continue
-
-            # ── Gerätegebundener Weg (N-229) ─────────────────────────────────
-            # **Kein Monats-Skip**: die Geräte-Zeile eines zweiten Erzeugers darf
-            # nicht daran scheitern, dass der erste den Monat bereits angelegt
-            # hat (#349 — genau das machte die zweite Solarman-Station
-            # unimportierbar). Über Ergänzen vs. Ersetzen entscheidet weiterhin
-            # `ueberschreiben`, aber je Sub-Key im Import-Writer statt für die
-            # ganze Monatszeile.
-            #
-            # ⚠ **Die Monatsdaten-Zeile wird hier sehr wohl geschrieben — aber
-            # nur ihre Hauszähler-Größen.** Bis 2026-08-12 blieb sie ganz
-            # unberührt, begründet mit P7 („eine von zwei Stationen ist eine
-            # Teilsumme"). Das gilt für Erzeugung und Speicherumsatz, **nicht**
-            # für Einspeisung und Netzbezug: die misst kein Wechselrichter, die
-            # kommen vom Smartmeter am Hausanschluss. Zwei Stationen an einem
-            # Anschluss melden denselben Wert — redundant, nicht partiell.
-            # Verboten ist das Summieren, nicht das Übernehmen. Ohne diesen
-            # Zweig entstand nie eine Zählerzeile und der Anwender hatte keinen
-            # Monatsabschluss mehr. Entscheidungsregeln:
-            # `services/import_hauszaehler.py`.
-            if ziel is not None:
-                etwas_geschrieben = False
-
-                if (monat_input.pv_erzeugung_kwh or 0) > 0:
-                    w = await _distribute_legacy_pv_to_modules(
-                        db, monat_input.pv_erzeugung_kwh, ziel_pv_module,
-                        jahr, monat, ueberschreiben,
-                        source=_PROVENANCE_SOURCE, writer=_PROVENANCE_WRITER,
-                        on_upsert=_record_upsert,
-                    )
-                    # Bei genau einem Empfänger ist nichts verteilt worden —
-                    # die Verteil-Warnung wäre dort schlicht unwahr.
-                    if len(ziel_pv_module) > 1 and importiert == 0:
-                        warnungen.extend(w)
-                    etwas_geschrieben = True
-
-                bat_lad = monat_input.batterie_ladung_kwh or 0
-                bat_ent = monat_input.batterie_entladung_kwh or 0
-                if bat_lad > 0 or bat_ent > 0:
-                    if ziel_speicher:
-                        w = await _distribute_legacy_battery_to_storages(
-                            db, bat_lad, bat_ent, ziel_speicher,
-                            jahr, monat, ueberschreiben,
-                            source=_PROVENANCE_SOURCE, writer=_PROVENANCE_WRITER,
-                            on_upsert=_record_upsert,
-                        )
-                        if len(ziel_speicher) > 1 and importiert == 0:
-                            warnungen.extend(w)
-                        etwas_geschrieben = True
-                    elif importiert == 0:
-                        warnungen.append(
-                            f"Die Quelle liefert Speicherwerte, aber an "
-                            f"'{ziel.bezeichnung or ziel.typ}' hängt kein Speicher — "
-                            f"sie wurden nicht übernommen."
-                        )
-
-                # ── Hauszähler-Größen (anlagenweit, nicht stationsbezogen) ───
-                md_ziel = (
-                    await db.execute(
-                        select(Monatsdaten).where(
-                            Monatsdaten.anlage_id == anlage_id,
-                            Monatsdaten.jahr == jahr,
-                            Monatsdaten.monat == monat,
-                        )
-                    )
-                ).scalar_one_or_none()
-
-                entscheid = entscheide_hauszaehler(
-                    neu_einspeisung_kwh=monat_input.einspeisung_kwh,
-                    neu_netzbezug_kwh=monat_input.netzbezug_kwh,
-                    bestand_einspeisung_kwh=(
-                        md_ziel.einspeisung_kwh if md_ziel else None
-                    ),
-                    bestand_netzbezug_kwh=md_ziel.netzbezug_kwh if md_ziel else None,
-                    hat_bestandszeile=md_ziel is not None,
-                    ueberschreiben=ueberschreiben,
-                    quelle_bezeichnung=f"'{ziel.bezeichnung or ziel.typ}'",
-                )
-                # Warnungen nur einmal je Lauf, nicht je Monat — sonst steht
-                # derselbe Satz zwölfmal im Ergebnis.
-                if entscheid.warnung and entscheid.warnung not in warnungen:
-                    warnungen.append(entscheid.warnung)
-
-                if entscheid.schreiben:
-                    if md_ziel is None:
-                        md_ziel = Monatsdaten(
-                            anlage_id=anlage_id, jahr=jahr, monat=monat
-                        )
-                        db.add(md_ziel)
-                        # flush, damit md_ziel.id für den Provenance-Audit-Log
-                        # existiert — dieselbe Reihenfolge wie im Weg ohne Ziel.
-                        await db.flush()
-                    for feld, wert in (
-                        ("einspeisung_kwh", entscheid.einspeisung_kwh),
-                        ("netzbezug_kwh", entscheid.netzbezug_kwh),
-                    ):
-                        if wert is None:
-                            continue
-                        res = await write_with_provenance(
-                            db, md_ziel, feld, wert,
-                            source=_PROVENANCE_SOURCE, writer=_PROVENANCE_WRITER,
-                            benutzer_override=ueberschreiben,
-                        )
-                        if res.decision == "rejected_lower_priority":
-                            geschuetzt_count += 1
-                            if len(geschuetzte_felder) < 15 and feld not in geschuetzte_felder:
-                                geschuetzte_felder.append(feld)
-                    md_ziel.datenquelle = datenquelle
-                    etwas_geschrieben = True
-                    hauszaehler_uebernommen = True
-
-                if etwas_geschrieben:
-                    importiert += 1
-                else:
-                    uebersprungen += 1
-                continue
-
-            # Bestehende Monatsdaten prüfen
-            existing = await db.execute(
-                select(Monatsdaten).where(
-                    Monatsdaten.anlage_id == anlage_id,
-                    Monatsdaten.jahr == jahr,
-                    Monatsdaten.monat == monat,
-                )
+    bat_lad = monat_input.batterie_ladung_kwh or 0
+    bat_ent = monat_input.batterie_entladung_kwh or 0
+    if bat_lad > 0 or bat_ent > 0:
+        if ktx.ziel_speicher:
+            w = await _distribute_legacy_battery_to_storages(
+                ktx.db, bat_lad, bat_ent, ktx.ziel_speicher,
+                jahr, monat, ktx.ueberschreiben,
+                source=ktx.source, writer=ktx.writer,
+                on_upsert=bilanz.merke_upsert,
             )
-            existing_md = existing.scalar_one_or_none()
+            if len(ktx.ziel_speicher) > 1 and bilanz.erste_runde:
+                bilanz.warnungen.extend(w)
+            etwas_geschrieben = True
+        elif bilanz.erste_runde:
+            bilanz.warnungen.append(
+                f"Die Quelle liefert Speicherwerte, aber an "
+                f"'{ktx.ziel.bezeichnung or ktx.ziel.typ}' hängt kein Speicher — "
+                f"sie wurden nicht übernommen."
+            )
 
-            if existing_md and not ueberschreiben:
-                uebersprungen += 1
-                continue
+    return etwas_geschrieben
 
-            # Monatsdaten erstellen oder aktualisieren
-            if existing_md:
-                md = existing_md
-            else:
-                md = Monatsdaten(anlage_id=anlage_id, jahr=jahr, monat=monat)
-                db.add(md)
 
-            zuordnung = data.zuordnung
+async def _uebernimm_hauszaehler(
+    ktx: ImportKontext, bilanz: ImportBilanz, monat_input: ApplyMonthInput,
+    jahr: int, monat: int,
+) -> bool:
+    """Hauszähler-Größen (anlagenweit, nicht stationsbezogen) übernehmen.
 
-            # ── PV-Erzeugung ─────────────────────────────────────────────────
-            pv_erzeugung: Optional[float] = None
-            if monat_input.pv_erzeugung_kwh is not None and monat_input.pv_erzeugung_kwh > 0:
-                if pv_module:
-                    pv_kwh = monat_input.pv_erzeugung_kwh
-                    if zuordnung and zuordnung.pv:
-                        # Manuelle Zuordnung: % pro Modul
-                        for inv in pv_module:
-                            anteil = zuordnung.pv.get(inv.id, 0) / 100.0
-                            pv_anteil = round(pv_kwh * anteil, 1)
-                            if pv_anteil > 0:
-                                await _track_upsert(
-                                    db, inv.id, jahr, monat,
-                                    {"pv_erzeugung_kwh": pv_anteil}, ueberschreiben,
-                                    source=_PROVENANCE_SOURCE, writer=_PROVENANCE_WRITER,
-                                )
-                    else:
-                        # Proportional nach kWp (Default)
-                        w = await _distribute_legacy_pv_to_modules(
-                            db, pv_kwh, pv_module, jahr, monat, ueberschreiben,
-                            source=_PROVENANCE_SOURCE, writer=_PROVENANCE_WRITER,
-                            on_upsert=_record_upsert,
-                        )
-                        if importiert == 0:
-                            warnungen.extend(w)
-                pv_erzeugung = monat_input.pv_erzeugung_kwh
+    Entscheidungsregeln: `services/import_hauszaehler.py`. `True`, wenn die
+    Monatszeile dadurch etwas bekommen hat.
+    """
+    md_ziel = (
+        await ktx.db.execute(
+            select(Monatsdaten).where(
+                Monatsdaten.anlage_id == ktx.anlage_id,
+                Monatsdaten.jahr == jahr,
+                Monatsdaten.monat == monat,
+            )
+        )
+    ).scalar_one_or_none()
 
-            # ── Batterie ──────────────────────────────────────────────────────
-            bat_ladung: Optional[float] = None
-            bat_entladung: Optional[float] = None
-            bat_ladung_raw = monat_input.batterie_ladung_kwh
-            bat_entladung_raw = monat_input.batterie_entladung_kwh
-            if (bat_ladung_raw or 0) > 0 or (bat_entladung_raw or 0) > 0:
-                if speicher:
-                    if zuordnung and zuordnung.batterie:
-                        # Manuelle Zuordnung: % pro Speicher
-                        for inv in speicher:
-                            anteil = zuordnung.batterie.get(inv.id, 0) / 100.0
-                            vd = {}
-                            if bat_ladung_raw and bat_ladung_raw > 0:
-                                vd["ladung_kwh"] = round(bat_ladung_raw * anteil, 1)
-                            if bat_entladung_raw and bat_entladung_raw > 0:
-                                vd["entladung_kwh"] = round(bat_entladung_raw * anteil, 1)
-                            if vd:
-                                await _track_upsert(
-                                    db, inv.id, jahr, monat, vd, ueberschreiben,
-                                    source=_PROVENANCE_SOURCE, writer=_PROVENANCE_WRITER,
-                                )
-                    else:
-                        # Proportional nach Kapazität (Default)
-                        w = await _distribute_legacy_battery_to_storages(
-                            db, bat_ladung_raw or 0, bat_entladung_raw or 0,
-                            speicher, jahr, monat, ueberschreiben,
-                            source=_PROVENANCE_SOURCE, writer=_PROVENANCE_WRITER,
-                            on_upsert=_record_upsert,
-                        )
-                        if importiert == 0:
-                            warnungen.extend(w)
-                bat_ladung = bat_ladung_raw
-                bat_entladung = bat_entladung_raw
+    entscheid = entscheide_hauszaehler(
+        neu_einspeisung_kwh=monat_input.einspeisung_kwh,
+        neu_netzbezug_kwh=monat_input.netzbezug_kwh,
+        bestand_einspeisung_kwh=(
+            md_ziel.einspeisung_kwh if md_ziel else None
+        ),
+        bestand_netzbezug_kwh=md_ziel.netzbezug_kwh if md_ziel else None,
+        hat_bestandszeile=md_ziel is not None,
+        ueberschreiben=ktx.ueberschreiben,
+        quelle_bezeichnung=f"'{ktx.ziel.bezeichnung or ktx.ziel.typ}'",
+    )
+    # Warnungen nur einmal je Lauf, nicht je Monat — sonst steht
+    # derselbe Satz zwölfmal im Ergebnis.
+    if entscheid.warnung and entscheid.warnung not in bilanz.warnungen:
+        bilanz.warnungen.append(entscheid.warnung)
 
-            # ── Monatsdaten schreiben ─────────────────────────────────────────
-            # Top-Level-Felder gehen über write_with_provenance, damit manuell
-            # gepflegte Form-Werte (manual:form, MANUAL) gegen den
-            # external:portal_import-Schreiber (EXTERNAL_AUTHORITATIVE) geschützt
-            # sind. Frische Rows (existing_md None) sind initial_write → applied.
-            if md.id is None:
-                # Frisch via db.add(md) — flush damit md.id existiert + Provenance
-                # später flag_modified greifen kann.
-                await db.flush()
+    if not entscheid.schreiben:
+        return False
 
-            top_level_writes: list[tuple[str, Optional[float]]] = [
-                ("einspeisung_kwh", monat_input.einspeisung_kwh),
-                ("netzbezug_kwh", monat_input.netzbezug_kwh),
-                ("eigenverbrauch_kwh", monat_input.eigenverbrauch_kwh),
-                ("pv_erzeugung_kwh", pv_erzeugung),
-                ("batterie_ladung_kwh", bat_ladung),
-                ("batterie_entladung_kwh", bat_entladung),
-            ]
-            for field_name, value in top_level_writes:
-                if value is not None:
-                    result = await write_with_provenance(
-                        db, md, field_name, value,
-                        source=_PROVENANCE_SOURCE, writer=_PROVENANCE_WRITER,
-                        # Der Haken IST die Anordnung des Anwenders (12.08.) —
-                        # vorher meldete der Import „geschützt" und tat nicht,
-                        # was angekreuzt war.
-                        benutzer_override=ueberschreiben,
-                    )
-                    if result.decision == "rejected_lower_priority":
-                        geschuetzt_count += 1
-                        if len(geschuetzte_felder) < 15 and field_name not in geschuetzte_felder:
-                            geschuetzte_felder.append(field_name)
-            # datenquelle ist Pre-Provenance-Spalte — bleibt direkt gesetzt
-            # (sie ist nicht Teil der Hierarchie-Logik und nutzt source_provenance nicht).
-            md.datenquelle = datenquelle
+    if md_ziel is None:
+        md_ziel = Monatsdaten(
+            anlage_id=ktx.anlage_id, jahr=jahr, monat=monat
+        )
+        ktx.db.add(md_ziel)
+        # flush, damit md_ziel.id für den Provenance-Audit-Log
+        # existiert — dieselbe Reihenfolge wie im Weg ohne Ziel.
+        await ktx.db.flush()
+    for feld, wert in (
+        ("einspeisung_kwh", entscheid.einspeisung_kwh),
+        ("netzbezug_kwh", entscheid.netzbezug_kwh),
+    ):
+        if wert is None:
+            continue
+        await _schreibe_top_level(
+            bilanz, ktx.db, md_ziel, feld, wert,
+            source=ktx.source, writer=ktx.writer,
+            ueberschreiben=ktx.ueberschreiben,
+        )
+    md_ziel.datenquelle = ktx.datenquelle
+    bilanz.hauszaehler_uebernommen = True
+    return True
 
-            # ── Wallbox ───────────────────────────────────────────────────────
-            if monat_input.wallbox_ladung_kwh is not None and monat_input.wallbox_ladung_kwh > 0:
-                if wallboxen:
-                    # Manuelle Zuordnung oder erste Wallbox
-                    wb = next(
-                        (w for w in wallboxen if zuordnung and w.id == zuordnung.wallbox_id),
-                        wallboxen[0]
-                    )
-                    verbrauch = {"ladung_kwh": monat_input.wallbox_ladung_kwh}
-                    if monat_input.wallbox_ladung_pv_kwh is not None:
-                        verbrauch["ladung_pv_kwh"] = monat_input.wallbox_ladung_pv_kwh
-                        # #262: Pool-Max-Aggregationen (Cockpit, Wallbox-/E-Auto-
-                        # Dashboard) lesen `ladung_netz_kwh` direkt. evcc-CSV liefert
-                        # nur Gesamt + Solar-% → Netz wird hier explizit aus
-                        # `Total − PV` abgeleitet, damit PV-Anteil + Netz-Lade-Kosten
-                        # in allen Sichten konsistent sind. Read-Site-Helper deckt
-                        # Legacy-Daten ohne diesen Key zusätzlich ab.
-                        verbrauch["ladung_netz_kwh"] = max(
-                            0.0,
-                            monat_input.wallbox_ladung_kwh - monat_input.wallbox_ladung_pv_kwh,
-                        )
-                    if monat_input.wallbox_ladevorgaenge is not None:
-                        verbrauch["ladevorgaenge"] = monat_input.wallbox_ladevorgaenge
-                    await _track_upsert(
-                        db, wb.id, jahr, monat, verbrauch, ueberschreiben,
-                        source=_PROVENANCE_SOURCE, writer=_PROVENANCE_WRITER,
-                    )
-                    if len(wallboxen) > 1 and not (zuordnung and zuordnung.wallbox_id) and importiert == 0:
-                        warnungen.append(
-                            f"Mehrere Wallboxen vorhanden – Ladedaten wurden der ersten "
-                            f"Wallbox '{wb.bezeichnung or wb.typ}' zugeordnet."
-                        )
-                else:
-                    if importiert == 0:
-                        warnungen.append(
-                            "Wallbox-Ladedaten gefunden, aber keine Wallbox als Investition angelegt. "
-                            "Bitte zuerst eine Wallbox unter Investitionen anlegen."
-                        )
 
-            # ── E-Auto ────────────────────────────────────────────────────────
-            if monat_input.eauto_km_gefahren is not None and monat_input.eauto_km_gefahren > 0:
-                eautos = [i for i in investitionen if i.typ == "e-auto"]
-                if eautos:
-                    ea = next(
-                        (e for e in eautos if zuordnung and e.id == zuordnung.eauto_id),
-                        eautos[0]
-                    )
-                    await _track_upsert(
-                        db, ea.id, jahr, monat,
-                        {"km_gefahren": monat_input.eauto_km_gefahren},
-                        ueberschreiben,
-                        source=_PROVENANCE_SOURCE, writer=_PROVENANCE_WRITER,
-                    )
+# ── Gerätegebundener Weg (N-229) ─────────────────────────────────────────────
+# **Kein Monats-Skip**: die Geräte-Zeile eines zweiten Erzeugers darf
+# nicht daran scheitern, dass der erste den Monat bereits angelegt
+# hat (#349 — genau das machte die zweite Solarman-Station
+# unimportierbar). Über Ergänzen vs. Ersetzen entscheidet weiterhin
+# `ueberschreiben`, aber je Sub-Key im Import-Writer statt für die
+# ganze Monatszeile.
+#
+# ⚠ **Die Monatsdaten-Zeile wird hier sehr wohl geschrieben — aber
+# nur ihre Hauszähler-Größen.** Bis 2026-08-12 blieb sie ganz
+# unberührt, begründet mit P7 („eine von zwei Stationen ist eine
+# Teilsumme"). Das gilt für Erzeugung und Speicherumsatz, **nicht**
+# für Einspeisung und Netzbezug: die misst kein Wechselrichter, die
+# kommen vom Smartmeter am Hausanschluss. Zwei Stationen an einem
+# Anschluss melden denselben Wert — redundant, nicht partiell.
+# Verboten ist das Summieren, nicht das Übernehmen. Ohne diesen
+# Zweig entstand nie eine Zählerzeile und der Anwender hatte keinen
+# Monatsabschluss mehr. Entscheidungsregeln:
+# `services/import_hauszaehler.py`.
+async def _importiere_monat_mit_ziel(
+    ktx: ImportKontext, bilanz: ImportBilanz, monat_input: ApplyMonthInput,
+    jahr: int, monat: int,
+) -> None:
+    """Ein Monat für den gerätegebundenen Weg — erst die Geräte, dann das Haus."""
+    erzeugung = await _verteile_ziel_erzeugung(ktx, bilanz, monat_input, jahr, monat)
+    hauszaehler = await _uebernimm_hauszaehler(ktx, bilanz, monat_input, jahr, monat)
+    if erzeugung or hauszaehler:
+        bilanz.importiert += 1
+    else:
+        bilanz.uebersprungen += 1
 
-            importiert += 1
 
-        except Exception as e:
-            logger.exception(f"Fehler bei Monat {monat_input.jahr}/{monat_input.monat}")
-            fehler.append(f"{monat_input.jahr}/{monat_input.monat:02d}: {str(e)}")
+async def _hole_oder_lege_monatszeile_an(
+    ktx: ImportKontext, bilanz: ImportBilanz, jahr: int, monat: int,
+) -> Optional[Monatsdaten]:
+    """Die Monatszeile des anlagenweiten Weges — `None`, wenn der Monat
+    übersprungen wird (Bestand ohne „überschreiben").
 
-    await db.flush()
+    ⛔ Die frische Zeile wird hier schon der Session übergeben (`db.add`), also
+    **vor** der PV-/Batterie-Verteilung: die Verteil-Helper flushen, und
+    `_schreibe_monatszeile` prüft danach `md.id is None`.
+    """
+    # Bestehende Monatsdaten prüfen
+    existing = await ktx.db.execute(
+        select(Monatsdaten).where(
+            Monatsdaten.anlage_id == ktx.anlage_id,
+            Monatsdaten.jahr == jahr,
+            Monatsdaten.monat == monat,
+        )
+    )
+    existing_md = existing.scalar_one_or_none()
 
+    if existing_md and not ktx.ueberschreiben:
+        bilanz.uebersprungen += 1
+        return None
+
+    # Monatsdaten erstellen oder aktualisieren
+    if existing_md:
+        return existing_md
+    md = Monatsdaten(anlage_id=ktx.anlage_id, jahr=jahr, monat=monat)
+    ktx.db.add(md)
+    return md
+
+
+async def _verteile_pv_nach_zuordnung(
+    ktx: ImportKontext, bilanz: ImportBilanz, pv_kwh: float, jahr: int, monat: int,
+) -> None:
+    """Manuelle Zuordnung: % pro Modul."""
+    for inv in ktx.pv_module:
+        anteil = ktx.zuordnung.pv.get(inv.id, 0) / 100.0
+        pv_anteil = round(pv_kwh * anteil, 1)
+        if pv_anteil > 0:
+            await _upsert_und_merke(
+                bilanz, ktx.db, inv.id, jahr, monat,
+                {"pv_erzeugung_kwh": pv_anteil}, ktx.ueberschreiben,
+                source=ktx.source, writer=ktx.writer,
+            )
+
+
+async def _verteile_pv(
+    ktx: ImportKontext, bilanz: ImportBilanz, monat_input: ApplyMonthInput,
+    jahr: int, monat: int,
+) -> Optional[float]:
+    """PV-Erzeugung auf die Module verteilen; zurück kommt der Anlagenwert für
+    die Monatszeile."""
+    if monat_input.pv_erzeugung_kwh is None or monat_input.pv_erzeugung_kwh <= 0:
+        return None
+    if not ktx.pv_module:
+        return monat_input.pv_erzeugung_kwh
+    pv_kwh = monat_input.pv_erzeugung_kwh
+    if ktx.zuordnung and ktx.zuordnung.pv:
+        await _verteile_pv_nach_zuordnung(ktx, bilanz, pv_kwh, jahr, monat)
+    else:
+        # Proportional nach kWp (Default)
+        w = await _distribute_legacy_pv_to_modules(
+            ktx.db, pv_kwh, ktx.pv_module, jahr, monat, ktx.ueberschreiben,
+            source=ktx.source, writer=ktx.writer,
+            on_upsert=bilanz.merke_upsert,
+        )
+        if bilanz.erste_runde:
+            bilanz.warnungen.extend(w)
+    return monat_input.pv_erzeugung_kwh
+
+
+async def _verteile_batterie_nach_zuordnung(
+    ktx: ImportKontext, bilanz: ImportBilanz,
+    bat_ladung_raw: Optional[float], bat_entladung_raw: Optional[float],
+    jahr: int, monat: int,
+) -> None:
+    """Manuelle Zuordnung: % pro Speicher."""
+    for inv in ktx.speicher:
+        anteil = ktx.zuordnung.batterie.get(inv.id, 0) / 100.0
+        vd = {}
+        if bat_ladung_raw and bat_ladung_raw > 0:
+            vd["ladung_kwh"] = round(bat_ladung_raw * anteil, 1)
+        if bat_entladung_raw and bat_entladung_raw > 0:
+            vd["entladung_kwh"] = round(bat_entladung_raw * anteil, 1)
+        if vd:
+            await _upsert_und_merke(
+                bilanz, ktx.db, inv.id, jahr, monat, vd, ktx.ueberschreiben,
+                source=ktx.source, writer=ktx.writer,
+            )
+
+
+async def _verteile_batterie(
+    ktx: ImportKontext, bilanz: ImportBilanz, monat_input: ApplyMonthInput,
+    jahr: int, monat: int,
+) -> tuple[Optional[float], Optional[float]]:
+    """Ladung/Entladung auf die Speicher verteilen; zurück kommen die
+    Anlagenwerte für die Monatszeile."""
+    bat_ladung_raw = monat_input.batterie_ladung_kwh
+    bat_entladung_raw = monat_input.batterie_entladung_kwh
+    if not ((bat_ladung_raw or 0) > 0 or (bat_entladung_raw or 0) > 0):
+        return None, None
+    if not ktx.speicher:
+        return bat_ladung_raw, bat_entladung_raw
+    if ktx.zuordnung and ktx.zuordnung.batterie:
+        await _verteile_batterie_nach_zuordnung(
+            ktx, bilanz, bat_ladung_raw, bat_entladung_raw, jahr, monat
+        )
+    else:
+        # Proportional nach Kapazität (Default)
+        w = await _distribute_legacy_battery_to_storages(
+            ktx.db, bat_ladung_raw or 0, bat_entladung_raw or 0,
+            ktx.speicher, jahr, monat, ktx.ueberschreiben,
+            source=ktx.source, writer=ktx.writer,
+            on_upsert=bilanz.merke_upsert,
+        )
+        if bilanz.erste_runde:
+            bilanz.warnungen.extend(w)
+    return bat_ladung_raw, bat_entladung_raw
+
+
+async def _schreibe_monatszeile(
+    ktx: ImportKontext, bilanz: ImportBilanz, md: Monatsdaten,
+    monat_input: ApplyMonthInput, pv_erzeugung: Optional[float],
+    bat_ladung: Optional[float], bat_entladung: Optional[float],
+) -> None:
+    """Die Top-Level-Felder der Monatszeile schreiben.
+
+    Sie gehen über write_with_provenance, damit manuell
+    gepflegte Form-Werte (manual:form, MANUAL) gegen den
+    external:portal_import-Schreiber (EXTERNAL_AUTHORITATIVE) geschützt
+    sind. Frische Rows (existing_md None) sind initial_write → applied.
+    """
+    if md.id is None:
+        # Frisch via db.add(md) — flush damit md.id existiert + Provenance
+        # später flag_modified greifen kann.
+        await ktx.db.flush()
+
+    top_level_writes: list[tuple[str, Optional[float]]] = [
+        ("einspeisung_kwh", monat_input.einspeisung_kwh),
+        ("netzbezug_kwh", monat_input.netzbezug_kwh),
+        ("eigenverbrauch_kwh", monat_input.eigenverbrauch_kwh),
+        ("pv_erzeugung_kwh", pv_erzeugung),
+        ("batterie_ladung_kwh", bat_ladung),
+        ("batterie_entladung_kwh", bat_entladung),
+    ]
+    for field_name, value in top_level_writes:
+        if value is not None:
+            await _schreibe_top_level(
+                bilanz, ktx.db, md, field_name, value,
+                source=ktx.source, writer=ktx.writer,
+                ueberschreiben=ktx.ueberschreiben,
+            )
+    # datenquelle ist Pre-Provenance-Spalte — bleibt direkt gesetzt
+    # (sie ist nicht Teil der Hierarchie-Logik und nutzt source_provenance nicht).
+    md.datenquelle = ktx.datenquelle
+
+
+def _wallbox_verbrauch(monat_input: ApplyMonthInput) -> dict:
+    """Die Ladewerte einer Wallbox-Zeile aus der Einfuhr."""
+    verbrauch = {"ladung_kwh": monat_input.wallbox_ladung_kwh}
+    if monat_input.wallbox_ladung_pv_kwh is not None:
+        verbrauch["ladung_pv_kwh"] = monat_input.wallbox_ladung_pv_kwh
+        # #262: Pool-Max-Aggregationen (Cockpit, Wallbox-/E-Auto-
+        # Dashboard) lesen `ladung_netz_kwh` direkt. evcc-CSV liefert
+        # nur Gesamt + Solar-% → Netz wird hier explizit aus
+        # `Total − PV` abgeleitet, damit PV-Anteil + Netz-Lade-Kosten
+        # in allen Sichten konsistent sind. Read-Site-Helper deckt
+        # Legacy-Daten ohne diesen Key zusätzlich ab.
+        verbrauch["ladung_netz_kwh"] = max(
+            0.0,
+            monat_input.wallbox_ladung_kwh - monat_input.wallbox_ladung_pv_kwh,
+        )
+    if monat_input.wallbox_ladevorgaenge is not None:
+        verbrauch["ladevorgaenge"] = monat_input.wallbox_ladevorgaenge
+    return verbrauch
+
+
+async def _schreibe_wallbox(
+    ktx: ImportKontext, bilanz: ImportBilanz, monat_input: ApplyMonthInput,
+    jahr: int, monat: int,
+) -> None:
+    """Die Ladedaten in die Wallbox-Investition schreiben."""
+    if monat_input.wallbox_ladung_kwh is None or monat_input.wallbox_ladung_kwh <= 0:
+        return
+    if not ktx.wallboxen:
+        if bilanz.erste_runde:
+            bilanz.warnungen.append(
+                "Wallbox-Ladedaten gefunden, aber keine Wallbox als Investition angelegt. "
+                "Bitte zuerst eine Wallbox unter Investitionen anlegen."
+            )
+        return
+    zuordnung = ktx.zuordnung
+    # Manuelle Zuordnung oder erste Wallbox
+    wb = next(
+        (w for w in ktx.wallboxen if zuordnung and w.id == zuordnung.wallbox_id),
+        ktx.wallboxen[0]
+    )
+    await _upsert_und_merke(
+        bilanz, ktx.db, wb.id, jahr, monat, _wallbox_verbrauch(monat_input),
+        ktx.ueberschreiben,
+        source=ktx.source, writer=ktx.writer,
+    )
+    if len(ktx.wallboxen) > 1 and not (zuordnung and zuordnung.wallbox_id) and bilanz.erste_runde:
+        bilanz.warnungen.append(
+            f"Mehrere Wallboxen vorhanden – Ladedaten wurden der ersten "
+            f"Wallbox '{wb.bezeichnung or wb.typ}' zugeordnet."
+        )
+
+
+async def _schreibe_eauto(
+    ktx: ImportKontext, bilanz: ImportBilanz, monat_input: ApplyMonthInput,
+    jahr: int, monat: int,
+) -> None:
+    """Die gefahrenen Kilometer in die E-Auto-Investition schreiben."""
+    if monat_input.eauto_km_gefahren is None or monat_input.eauto_km_gefahren <= 0:
+        return
+    if not ktx.eautos:
+        return
+    zuordnung = ktx.zuordnung
+    ea = next(
+        (e for e in ktx.eautos if zuordnung and e.id == zuordnung.eauto_id),
+        ktx.eautos[0]
+    )
+    await _upsert_und_merke(
+        bilanz, ktx.db, ea.id, jahr, monat,
+        {"km_gefahren": monat_input.eauto_km_gefahren},
+        ktx.ueberschreiben,
+        source=ktx.source, writer=ktx.writer,
+    )
+
+
+async def _importiere_monat_anlagenweit(
+    ktx: ImportKontext, bilanz: ImportBilanz, monat_input: ApplyMonthInput,
+    jahr: int, monat: int,
+) -> None:
+    """Anlagenweiter Weg: eine Monatszeile, verteilt auf die Geräte."""
+    md = await _hole_oder_lege_monatszeile_an(ktx, bilanz, jahr, monat)
+    if md is None:
+        return
+
+    pv_erzeugung = await _verteile_pv(ktx, bilanz, monat_input, jahr, monat)
+    bat_ladung, bat_entladung = await _verteile_batterie(
+        ktx, bilanz, monat_input, jahr, monat
+    )
+    await _schreibe_monatszeile(
+        ktx, bilanz, md, monat_input, pv_erzeugung, bat_ladung, bat_entladung
+    )
+    await _schreibe_wallbox(ktx, bilanz, monat_input, jahr, monat)
+    await _schreibe_eauto(ktx, bilanz, monat_input, jahr, monat)
+
+    bilanz.importiert += 1
+
+
+async def _importiere_monat(
+    ktx: ImportKontext, bilanz: ImportBilanz, monat_input: ApplyMonthInput,
+) -> None:
+    """Ein Monat der Einfuhr — gerätegebunden oder anlagenweit."""
+    jahr = monat_input.jahr
+    monat = monat_input.monat
+
+    if monat < 1 or monat > 12:
+        bilanz.fehler.append(f"{jahr}/{monat:02d}: Ungültiger Monat")
+        return
+
+    if ktx.ziel is not None:
+        await _importiere_monat_mit_ziel(ktx, bilanz, monat_input, jahr, monat)
+        return
+
+    await _importiere_monat_anlagenweit(ktx, bilanz, monat_input, jahr, monat)
+
+
+def _abschluss_hinweise(ktx: ImportKontext, bilanz: ImportBilanz) -> None:
+    """Was der Anwender am Ende erfährt. ⛔ Die Reihenfolge der beiden
+    `insert(0, …)` ist das Ergebnis: erst Hauszähler, dann Geschützt — der
+    Schutz-Hinweis steht dadurch am Ende ganz vorn."""
     # N-229: Sagen, was mit den Größen des Hauses geschehen ist. Sie gelten nur
     # einmal je Netzanschluss — deshalb werden sie übernommen, aber nie
     # summiert. (Bis 12.08. sagte dieser Hinweis, sie würden NICHT übernommen;
-    # das war die Folge der falschen P7-Begründung, s. o.)
-    if ziel is not None and hauszaehler_uebernommen:
-        warnungen.insert(0, (
-            f"Erzeugung und Speicherwerte wurden '{ziel.bezeichnung or ziel.typ}' "
+    # das war die Folge der falschen P7-Begründung, s. `_importiere_monat_mit_ziel`.)
+    if ktx.ziel is not None and bilanz.hauszaehler_uebernommen:
+        bilanz.warnungen.insert(0, (
+            f"Erzeugung und Speicherwerte wurden '{ktx.ziel.bezeichnung or ktx.ziel.typ}' "
             "zugeordnet. Einspeisung und Netzbezug gelten für den ganzen "
             "Hausanschluss und wurden einmal in den Monat übernommen — eine "
             "zweite Quelle am selben Anschluss addiert sie nicht dazu."
         ))
 
     # Etappe 3d Päckchen 2: Wizard-Hinweis bei aktivierter Quellen-Hierarchie.
-    if geschuetzt_count > 0:
-        sample = ", ".join(geschuetzte_felder[:5])
+    if bilanz.geschuetzt_count > 0:
+        sample = ", ".join(bilanz.geschuetzte_felder[:5])
         suffix = f" (z. B. {sample})" if sample else ""
-        warnungen.insert(0, (
-            f"{geschuetzt_count} Felder wurden durch manuell gepflegte Werte "
+        bilanz.warnungen.insert(0, (
+            f"{bilanz.geschuetzt_count} Felder wurden durch manuell gepflegte Werte "
             f"geschützt — der Import hat sie nicht überschrieben{suffix}. "
             "Reset über Reparatur-Werkbank wenn gewollt."
         ))
 
+
+@router.post("/apply/{anlage_id}", response_model=ApplyResponse)
+async def apply_import(
+    anlage_id: int,
+    data: ApplyRequest,
+    ueberschreiben: bool = Query(False, description="Bestehende Monatsdaten überschreiben"),
+    datenquelle: str = Query("portal_import", description="Datenquelle (portal_import, cloud_import)"),
+    db: AsyncSession = Depends(get_db, scope="function"),
+):
+    """Bestätigte Monatswerte aus Portal-Import oder Cloud-Import in die Datenbank übernehmen."""
+    ktx = await _baue_import_kontext(db, anlage_id, data, ueberschreiben, datenquelle)
+    bilanz = ImportBilanz()
+
+    for monat_input in data.monate:
+        try:
+            await _importiere_monat(ktx, bilanz, monat_input)
+        except Exception as e:
+            logger.exception(f"Fehler bei Monat {monat_input.jahr}/{monat_input.monat}")
+            bilanz.fehler.append(f"{monat_input.jahr}/{monat_input.monat:02d}: {str(e)}")
+
+    await db.flush()
+
+    _abschluss_hinweise(ktx, bilanz)
+
     await log_activity(
         kategorie="portal_import",
-        aktion=f"Portal-Import: {importiert} Monate importiert",
-        erfolg=len(fehler) == 0,
-        details=f"Quelle: {datenquelle}, übersprungen: {uebersprungen}, geschützt: {geschuetzt_count}",
+        aktion=f"Portal-Import: {bilanz.importiert} Monate importiert",
+        erfolg=len(bilanz.fehler) == 0,
+        details=f"Quelle: {datenquelle}, übersprungen: {bilanz.uebersprungen}, geschützt: {bilanz.geschuetzt_count}",
         details_json={
-            "importiert": importiert, "uebersprungen": uebersprungen,
-            "geschuetzt": geschuetzt_count, "fehler": fehler[:5],
+            "importiert": bilanz.importiert, "uebersprungen": bilanz.uebersprungen,
+            "geschuetzt": bilanz.geschuetzt_count, "fehler": bilanz.fehler[:5],
         },
         anlage_id=anlage_id,
         db=db,
     )
 
     return ApplyResponse(
-        erfolg=len(fehler) == 0,
-        importiert=importiert,
-        uebersprungen=uebersprungen,
-        fehler=fehler[:20],
-        warnungen=warnungen[:10],
-        geschuetzt_count=geschuetzt_count,
-        geschuetzte_felder=geschuetzte_felder,
+        erfolg=len(bilanz.fehler) == 0,
+        importiert=bilanz.importiert,
+        uebersprungen=bilanz.uebersprungen,
+        fehler=bilanz.fehler[:20],
+        warnungen=bilanz.warnungen[:10],
+        geschuetzt_count=bilanz.geschuetzt_count,
+        geschuetzte_felder=bilanz.geschuetzte_felder,
     )

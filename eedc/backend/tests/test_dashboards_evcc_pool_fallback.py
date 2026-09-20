@@ -2,7 +2,7 @@
 Wallbox- + E-Auto-Dashboard: Pool-Fallback bei evcc-Portal-Import (#262).
 
 junky84 hat evcc-CSV importiert → Ladedaten landen architektonisch in der
-Wallbox-Investition (data_import.py:453), nicht in der E-Auto-Investition.
+Wallbox-Investition (data_import.py::_schreibe_wallbox), nicht in der E-Auto-Investition.
 Vor dem Fix zeigte:
   - Wallbox-Dashboard: "keine Ladedaten" (las nur E-Auto-Aggregate)
   - E-Auto-Dashboard: alle Ladung-Felder 0 (las nur eigene Monatsdaten)
@@ -417,7 +417,7 @@ def test_evcc_parser_to_write_writes_ladung_netz_kwh():
         wallbox_ladevorgaenge = 5
 
     monat_input = MockInput()
-    # Reproduktion der Logik aus data_import.py:460-475
+    # Reproduktion der Logik aus data_import.py::_wallbox_verbrauch
     verbrauch = {"ladung_kwh": monat_input.wallbox_ladung_kwh}
     if monat_input.wallbox_ladung_pv_kwh is not None:
         verbrauch["ladung_pv_kwh"] = monat_input.wallbox_ladung_pv_kwh

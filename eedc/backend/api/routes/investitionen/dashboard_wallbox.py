@@ -102,7 +102,7 @@ async def get_wallbox_dashboard(
 
     # E-Auto- und Wallbox-IMD getrennt sammeln, dann via SoT-Helper zu EINER
     # konsistenten Heimladungs-Trias poolen (#262 junky84): evcc-Portal-Import
-    # schreibt die Ladedaten in die Wallbox-Investition (data_import.py:453),
+    # schreibt die Ladedaten in die Wallbox-Investition (data_import.py::_schreibe_wallbox),
     # das Premium-Setup (separate E-Auto-Sensoren) aus E-Auto-Sicht. Früher
     # feldweises `max()` über pv/netz getrennt — das konnte pv aus der einen
     # und netz aus der anderen Quelle nehmen → PV-Anteil > 100 %. Jetzt

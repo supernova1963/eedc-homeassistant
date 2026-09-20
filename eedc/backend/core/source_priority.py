@@ -69,7 +69,7 @@ SOURCE_LABELS: dict[str, SourcePriority] = {
     # Treffer außerhalb dieser Datei sind Leser, Kommentare und Test-Fixtures).
     # Der Apply-Pfad routes/data_import.py → routes/import_export/helpers.py
     # ::_upsert_investition_monatsdaten existiert, stempelt aber
-    # `external:portal_import` (data_import.py:415) — ausdrücklich, „weil das
+    # `external:portal_import` (data_import.py::_PROVENANCE_SOURCE) — ausdrücklich, „weil das
     # Frontend den konkreten Cloud-Provider-Slug nicht durchreicht". Ein
     # Cloud-Import ist damit nicht vom CSV-Upload aus dem Hersteller-Portal
     # zu unterscheiden. Wer das ändern will, fängt dort an, nicht hier.
