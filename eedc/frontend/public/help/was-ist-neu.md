@@ -1,11 +1,64 @@
 # Was ist neu
 
-> **Stand:** September 2026 (v4.0.48) — der Abschnitt ganz oben gilt der **kommenden** Version und trägt ihre Nummer, sobald sie feststeht.
+> **Stand:** September 2026 (v4.0.49) — der Abschnitt ganz oben gilt der **kommenden** Version und trägt ihre Nummer, sobald sie feststeht.
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.49 — 21. September 2026
+
+**Ein Balkonkraftwerk mit zugeordneten Modulen zählt seine Erzeugung einmal**
+
+**Betrifft dich das?** Ja, wenn du die Module deines Balkonkraftwerks als eigene
+Komponenten angelegt und dem Balkonkraftwerk zugeordnet hast — der Weg, den wir
+für zwei Ausrichtungen empfehlen — und wenn die Module eigene Sensoren tragen.
+
+**Was war:** Dieselbe Energie erschien zweimal: im Energiefluss stand etwa
+„Solarleistung 167 W" für 84 gemessene Watt, der Hausverbrauch war um denselben
+Betrag zu hoch, die Auslastung verdoppelt und die Autarkie zu gut. Betroffen waren
+die Live-Ansicht, „Heute PV", das Verbrauchsprofil, der Tagesverlauf und die
+gespeicherten Stunden- und Tageswerte, mit ihnen der laufende Monat. Der
+Daten-Checker warnte außerdem vor Lücken, die das Balkonkraftwerk längst schloss,
+und die Warnung ließ sich nicht abstellen.
+
+**Was jetzt:** Das Balkonkraftwerk ist Träger wie ein Wechselrichter: Die Module
+tragen die Erzeugung, das Gerät trägt nur, was ihnen fehlt. Messen alle Module
+selbst, zählt es nicht mehr mit; misst nur eines, trägt es die Differenz; misst
+keines, bleibt es wie bisher die einzige Quelle. Für den Normalfall — nur der
+Wechselrichter ist zugeordnet — ändert sich keine Zahl. Der Daten-Checker meldet
+einen solchen Monat als „über kWp-Anteil geschätzt" statt als Lücke, und die
+Zuordnungs-Fläche sagt am Balkonkraftwerk, welche Wirkung seine Sensoren noch
+haben, sobald Module eigene tragen. ⚠ **Bereits gespeicherte Tage ändern sich
+nicht rückwirkend** — ein Zeitraum lässt sich unter *Einstellungen →
+Datenverwaltung* neu aggregieren. **Was du tun musst:** nichts; wer den
+Reparatur-Tipp aus dem Forum befolgt hat (Zuordnung des Geräts auf „keine"), darf
+sie so lassen oder zurücksetzen — beides zählt jetzt einmal.
+
+---
+
+**Ein Tages-Lauf ohne Messwerte legt keine leeren Tage mehr an**
+
+**Betrifft dich das?** Ja, wenn du eedc ohne Home Assistant betreibst und deine
+Zählerstände über MQTT hereinkommen, ohne dass eine Leistungs-Zuordnung besteht.
+
+**Was war:** Die Frage „gibt es für diesen Tag Zählerstände?" wurde in Wahrheit als
+„gab es nach dem Vortag irgendwann welche" beantwortet. Damit galt jeder Tag bis zum
+letzten Zählerstand als versorgt, auch Monate vor der Einrichtung. Der
+Monatsabschluss, „Mehrere Tage neu aggregieren" und der nächtliche Lauf an einem
+Ausfalltag legten für solche Tage 24 leere Stunden an, die danach als aggregiert
+zählten; eine schon gefüllte Tageszeile aus der Home-Assistant-Statistik wurde
+dabei durch die leere ersetzt.
+
+**Was jetzt:** Nur der Tag selbst zählt (mit dem Vortag für den Anfangsstand). Ohne
+eigenen Zählerstand läuft nichts, gefüllte Tage bleiben, und die Tagessicht nennt
+den ehrlichen Grund statt einen Knopf anzubieten, der nichts holen kann. **Was du
+tun musst:** nichts. Leere Tage, die schon angelegt wurden, bleiben leer; wer sie
+loswerden will, aggregiert den Zeitraum unter *Einstellungen → Datenverwaltung*
+neu — die leeren Zeilen verschwinden dann, weil der Lauf sie nicht mehr schreibt.
 
 ---
 
@@ -4666,6 +4719,14 @@ Rest nach Leistungsanteil. Doppelt gezählt wird nichts.
 > oben ausführlich. Unauffällig war es, weil Autarkie, Eigenverbrauchsquote und CO₂ von Anfang an
 > korrekt rechneten: die Sperre gegen Doppelzählung saß auf der Energieseite, und die
 > Wirtschaftlichkeit nahm einen anderen Weg.
+>
+> ⚠ **Nachträglich richtiggestellt (September 2026):** Auch für die **Energie** galt der Satz nur
+> auf der **Monatsebene**. In der Live-Ansicht, in den Stunden- und Tageswerten und im laufenden
+> Monat zählte ein Balkonkraftwerk **neben** seinen zugeordneten Modulen mit, sobald die Module
+> eigene Sensoren trugen — im Energiefluss standen dann etwa 167 W für 84 gemessene. Jetzt trägt
+> das Gerät auf allen Ebenen nur, was seinen Modulen fehlt. Unauffällig war es, weil die
+> Empfehlung „Module einzeln anlegen" bis dahin ohne eigene Modul-Sensoren umgesetzt wurde; erst mit
+> ihnen wurde die zweite Zählung sichtbar (gemeldet im Forum, September 2026).
 
 **Wer keine Module zuordnet, sieht keine veränderte Zahl.**
 
