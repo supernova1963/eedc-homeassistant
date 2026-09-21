@@ -57,6 +57,32 @@ from backend.core.investition_parameter import (
 from backend.api.routes.ha_export.emob import _EmobPoolCtx, _emob_month_share
 
 
+def laufzeit_attribute(investition: Investition, heute: Optional[date] = None) -> dict:
+    """N-543 — die Laufzeit eines Geraets als Attribute seines Kosten-Sensors.
+
+    ⛔ **Warum (Gernot, 21.09.2026):** Der Geraete-Export laeuft ueber ALLE Investitionen
+    der Anlage (`ha_mqtt_sync.py`, `sensoren.py` — kein Filter), die anlagenweite Summe
+    `investition_gesamt_euro` nur ueber die heute aktiven (`anlage_sensoren.py`,
+    `aktiv_jetzt()`). In HA stand damit je Geraet ein Kostenwert, dem man weder Laufzeit
+    noch Stilllegung ansah, neben einer Summe, die stillgelegte Geraete nicht enthaelt.
+    Die Attribute machen es sichtbar; sie rechnen nichts neu (Stammdaten).
+
+    `betriebsjahre`: von der Anschaffung bis heute bzw. bis zur Stilllegung, eine
+    Nachkommastelle; `None` ohne Anschaffungsdatum (ADR-002/P4 — keine erfundene 0).
+    """
+    heute = heute or date.today()
+    ab = investition.anschaffungsdatum
+    bis = investition.stilllegungsdatum
+    ende = bis if (bis and bis < heute) else heute
+    jahre = round((ende - ab).days / 365.25, 1) if ab else None
+    return {
+        "anschaffungsdatum": ab.isoformat() if ab else None,
+        "stilllegungsdatum": bis.isoformat() if bis else None,
+        "aktiv": bool(investition.aktiv) and not (bis and bis < heute),
+        "betriebsjahre": jahre,
+    }
+
+
 async def calculate_investition_sensors(
     db: AsyncSession,
     investition: Investition,
@@ -116,7 +142,8 @@ async def calculate_investition_sensors(
                 sensor_values.append(SensorValue(
                     definition=sensor,
                     value=investition.anschaffungskosten_gesamt,
-                    berechnung=None
+                    berechnung=None,
+                    zusatz_attribute=laufzeit_attribute(investition),
                 ))
 
     # E-Auto / Wallbox Sensoren

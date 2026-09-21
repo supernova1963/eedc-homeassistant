@@ -55,6 +55,35 @@ unter anderem:
 ein Fenster und einen Betrag. Was daraus folgt, entscheidest du in deiner
 Automation.
 
+**Die 19 neuen Sensoren — damit du vor dem Update weißt, was kommt.** Alle sind
+standardmäßig **an** (so wie jeder eedc-Sensor); abwählen kannst du sie unter
+*Einstellungen → Integration → MQTT-Export*, am besten direkt nach dem Update,
+bevor der nächste automatische Publish läuft (er folgt dem eingestellten Takt, in der
+Voreinstellung zur nächsten vollen Stunde). Je Anlage entstehen 13 Entitäten, dazu 4 je
+Wärmepumpe und 2 je Sonstiges-Verbraucher.
+
+| Key | Name | Typ | Ebene |
+|---|---|---|---|
+| `eedc_ueberschuss_heute_kwh` | Überschuss heute | sensor | je Anlage |
+| `eedc_ueberschuss_jetzt_kw` | Überschuss letzte Stunde | sensor | je Anlage |
+| `eedc_ueberschuss_verfuegbar` | Überschuss verfügbar | binary_sensor | je Anlage |
+| `eedc_guenstige_stunde` | Günstige Stunde | binary_sensor | je Anlage |
+| `eedc_speicher_voll` | Speicher voll | binary_sensor | je Anlage |
+| `eedc_speicher_voll_um_ts` | Speicher voll um (Zeitstempel) | sensor | je Anlage |
+| `eedc_speicher_soc_prozent` | Ladestand | sensor | je Anlage |
+| `eedc_netzbezug_spitze_heute_kw` | Netzbezugs-Spitze heute | sensor | je Anlage |
+| `eedc_ueberschuss_prognose_heute_kwh` | Überschuss-Prognose heute | sensor | je Anlage |
+| `eedc_arbitrage_vorschlag_kwh` | Arbitrage-Vorschlag | sensor | je Anlage |
+| `eedc_bestes_fenster_ab` | Bestes Fenster ab | sensor | je Anlage |
+| `eedc_prognose_abweichung_heute_prozent` | Prognose-Abweichung heute | sensor | je Anlage |
+| `eedc_prognose_auffaellig` | Prognose-Abweichung auffällig | binary_sensor | je Anlage |
+| `wp_warmwasserbetrieb` | Warmwasserbetrieb | binary_sensor | je Wärmepumpe |
+| `wp_warmwasser_fenster_ab` | Warmwasser-Fenster ab | sensor | je Wärmepumpe |
+| `wp_heizfenster_stunden` | Günstige Heizstunden heute | sensor | je Wärmepumpe |
+| `wp_kuehlfenster_ab` | Kühlfenster ab | sensor | je Wärmepumpe |
+| `sonstiges_verbrauch_monat_kwh` | Verbrauch (Monat) | sensor | je Sonstiges-Verbraucher |
+| `sonstiges_fenster_ab` | Bestes Fenster ab | sensor | je Sonstiges-Verbraucher |
+
 **Und aufgeräumt:** Wer eedc vor März 2026 installiert hat, hat in Home Assistant
 noch Entitäten `number.eedc_…_start` stehen — sie stammen aus einer alten
 Erfassungsweise und zeigen seither „unbekannt". **„Sensoren entfernen" nimmt sie

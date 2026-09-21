@@ -608,6 +608,7 @@ Die bisherigen Abschnitte beschreiben Sensoren, die eedc **aus HA liest**. Diese
 | `einspeise_erloes_euro` / `eigenverbrauch_ersparnis_euro` | € | Finanz-Bausteine (deckungsgleich mit Cockpit/Berichten) |
 | `co2_ersparnis_kg` | kg | **Volle CO₂-Bilanz** (PV-Eigenverbrauch inkl. BKW/sonstige Erzeuger + Wärmepumpe + E-Mobilität) — siehe Wertsemantik unten |
 | `investition_gesamt_euro`, `jahres_ersparnis_euro`, `roi_prozent`, `amortisation_jahre` | €, €/Jahr, %, Jahre | Investitions-KPIs — Nenner ist der **Kapitaleinsatz** (siehe Hinweis unten) |
+| `investition_gesamt_euro` **je Gerät** | € | Anschaffungskosten des Geräts — mit Attributen `anschaffungsdatum` · `stilllegungsdatum` · `aktiv` · `betriebsjahre` (seit eedc@ha Teil 1). ⚠ Je Gerät exportiert eedc **alle** Investitionen der Anlage, auch stillgelegte; die anlagenweite Summe zählt nur die heute aktiven — das Attribut `aktiv` sagt, welche Geräte darin stecken |
 | `speicher_zyklen`, `speicher_effizienz_prozent` | —, % | Speicher-KPIs. `speicher_zyklen` = **Entladung ÷ Brutto-Kapazität** — seit 2026-07-28 dieselbe Definition wie in Komponenten-Hub, Cockpit und PDF ([Berechnungen §3.3](BERECHNUNGEN.md#33-speicher-einsparung)). Nicht zu verwechseln mit den „SoC-Hüben" der Energieprofil-Tabelle. |
 | `letzter_import_jahr/_monat/_monat_name`, `anzahl_monate_erfasst` | — | Status der Datenbasis (Diagnose-Kategorie — erscheint in HA im Diagnose-Bereich des Geräts) |
 
