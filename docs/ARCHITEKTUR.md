@@ -1128,18 +1128,34 @@ SensorDefinition(
 
 **Funktion:** Publizieren von Sensoren via MQTT Auto-Discovery.
 
-**Erweiterte Methoden:**
-- `publish_number_discovery()` - Erstellt Number-Entities für Monatsstarts
-- `publish_calculated_sensor()` - Erstellt Sensoren mit value_template
-- `update_month_start_value()` - Aktualisiert retained Startwerte
+**Methoden:**
+- `publish_sensor_discovery()` / `publish_sensor_value()` - Discovery-Config und Wert je Sensor
+- `publish_all_sensors()` - beides über **eine** Verbindung für eine ganze Sensorliste
+- `remove_sensors()` - Rücknahme **bestandsgetrieben**: zusätzlich zu den Topics der heutigen
+  Definitionen fragt sie über `verwaiste_topics()` den Broker, was unter dem Präfix dieser Anlage
+  sonst noch retained liegt, und räumt es mit (`altlast_topics` in der Antwort). Damit fallen auch
+  Entitäten früherer Fassungen weg — konkret die `number.eedc_*_mwd_*_start` aus der Zeit vor
+  `77c6e211` (13.03.2026). ⛔ Nur eigene Topics; fremde bleiben unberührt.
+- `verwaiste_topics()` - Bestandsaufnahme (Wildcard-Subscribe, retained 1,5 s sammeln)
 - `publish_monatsdaten()` - Publiziert finale Monatswerte
 
-**Topics:**
+⛔ **Hier standen bis zum 21.09.2026 `publish_number_discovery()`, `publish_calculated_sensor()`
+und `update_month_start_value()`.** Alle drei sind mit `77c6e211` entfallen (MWD-MQTT durch
+HA-Statistics-DB ersetzt); die Liste hat den Wegfall über ein halbes Jahr nicht mitbekommen.
+
+**Topics** (`{komponente}` ist `sensor` oder `binary_sensor` — seit S2 gibt es beide):
 ```
-homeassistant/sensor/eedc_{anlage_id}_{key}/config  → Discovery
-eedc/{anlage_id}/{key}                              → State
-eedc/{anlage_id}/{key}/attributes                   → Attributes
+homeassistant/{komponente}/eedc_{anlage_id}_{key}/config  → Discovery
+eedc/anlage/{anlage_id}/{key}                             → State
+eedc/anlage/{anlage_id}/{key}/attributes                  → Attributes
+eedc/anlage/{anlage_id}/{key}/availability                → nur binary_sensor
 ```
+
+⚠ **Das vierte Topic gibt es nur beim `binary_sensor`, und es ist kein Beiwerk** (B2b): HA kennt
+für ihn keinen Leerwert, also ist „nicht verfügbar" die einzige Form, in der ein fehlender
+Eingang sichtbar wird (ADR-002/P4). Ein `sensor` bekommt es **nicht** — dort ist der Leerwert
+`"None"` selbst die Aussage (N-405). Alle vier liegen `retain=True`; `MQTTClient.alle_topics` ist
+die eine Stelle, die sie aufzählt, und damit dieselbe für Publish und Rücknahme (#400).
 
 ### HA Statistics Service
 

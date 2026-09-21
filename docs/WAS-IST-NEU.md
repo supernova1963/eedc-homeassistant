@@ -9,6 +9,61 @@
 
 ---
 
+## Unreleased — eedc@ha, Teil 1
+
+**Dein HA-Dashboard bekommt die Zahlen, mit denen sich etwas entscheiden lässt**
+
+**Betrifft dich das?** Ja, wenn du den MQTT-Export nutzt und in Home Assistant
+automatisieren willst — Wallbox, Wärmepumpe, Speicher, Pool, Trockner.
+
+**Was war:** eedc hat nach Home Assistant exportiert, **was ist** — Mengen, Geld,
+Quoten, Prognosen, Börsenpreise. Für eine Automation fehlte der zweite Schritt:
+*Was gilt gerade?* und *Wann lohnt es sich?* Den Überschuss je Stunde, das
+günstigste Zwei-Stunden-Fenster, den Ladestand als Zahl — all das gab es in eedc,
+aber es verließ die App nicht.
+
+**Was jetzt:** Eine neue Gruppe **„Steuerungshilfen"** in der Sensorliste. Darin
+unter anderem:
+
+- **Überschuss** — als Tageszahl, als Wert der letzten vollen Stunde und als
+  **Prognose je Stunde für heute**, samt der zusammenhängenden Blöcke („ab 10:00
+  für 5 Stunden, mindestens 2,1 kW"). Das ist die Zahl, die eine Wallbox oder
+  eine Wärmepumpe von sich aus nicht bilden kann: Sie kennen ihr eigenes Gerät,
+  aber nicht den Verbrauchsgang deines Hauses mit Wärmepumpen-Korrektur.
+- **Bestes Fenster ab** — wann eine verschiebbare Last am günstigsten läuft, in
+  vier Dauern (1, 2, 3 und 4 Stunden) und mit den Kosten je Kilowattstunde für
+  jede Stunde des Tages. ⭐ In einer Stunde mit Überschuss kostet die zusätzliche
+  Kilowattstunde **nichts** — deshalb liegt das Fenster mittags oft vor dem
+  billigen Börsenpreis in der Nacht.
+- **Schalter statt Zahlen** für das, was ohnehin nur zwei Zustände hat:
+  *Überschuss verfügbar*, *Günstige Stunde*, *Speicher voll*, *Warmwasserbetrieb*.
+  ⭐ **Fehlt einem Schalter die Grundlage, wird er in Home Assistant *nicht
+  verfügbar*** — er bleibt nicht auf seinem letzten Stand stehen. Fällt etwa der
+  Preisabruf aus, zeigt *Günstige Stunde* nicht weiter „an", sondern gar nichts;
+  eine Automation, die auf „an" prüft, löst dann nicht mehr aus. Bei einem
+  gewöhnlichen Zahlen-Sensor bleibt es wie bisher bei „unbekannt".
+- **Fenster je Gerät** — Warmwasser, Heizen und Vorkühlen der Wärmepumpe, dazu
+  Monatsverbrauch und bestes Fenster für Pool, Sauna, Trockner oder einen
+  Heizstab mit eigenem Zähler. Für solche Geräte gab es bisher **gar keinen**
+  Energiewert in Home Assistant.
+- **Prognose-Abweichung auffällig** — eine Ampel, die anspringt, wenn der Tag
+  deutlich stärker von der Prognose abweicht als sonst. Die Schwelle hängt an
+  **deiner** Anlage (dem mittleren Fehler der letzten 30 Tage), nicht an einem
+  festen Prozentwert.
+
+⚠ **Es bleiben Vorschläge.** eedc schaltet nichts und ruft nichts auf — es nennt
+ein Fenster und einen Betrag. Was daraus folgt, entscheidest du in deiner
+Automation.
+
+**Und aufgeräumt:** Wer eedc vor März 2026 installiert hat, hat in Home Assistant
+noch Entitäten `number.eedc_…_start` stehen — sie stammen aus einer alten
+Erfassungsweise und zeigen seither „unbekannt". **„Sensoren entfernen" nimmt sie
+jetzt mit zurück.** Entitäten anderer Integrationen bleiben unberührt.
+
+→ [Sensor-Referenz §11](?doc=sensor-referenz) · [Einstellungen → Integration → MQTT-Export](?doc=handbuch-einstellungen)
+
+---
+
 ## v4.0.49 — 21. September 2026
 
 **Ein Balkonkraftwerk mit zugeordneten Modulen zählt seine Erzeugung einmal**

@@ -7,6 +7,29 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased] — eedc@ha, Teil 1: Entscheidungs- und Plan-Sensoren für Home Assistant
+
+### Added
+
+- **Neue Sensor-Gruppe „Steuerungshilfen" — die Zahlen, aus denen eine HA-Automation ihre Entscheidung baut.** Bisher sagte der Export, **was ist** (57 Sensoren). Dazu kommen jetzt **19** Sensoren, die sagen, **was jetzt gilt** und **wann es gilt**: Überschuss heute und der letzten vollen Stunde, Ladestand, „Speicher voll um" als echter Zeitstempel, Netzbezugs-Spitze, die **Überschuss-Prognose je Stunde** samt zusammenhängender Blöcke, das **beste Fenster** für eine verschiebbare Last in vier Dauern (1/2/3/4 h) mit Kostenprofil je kWh, ein **Arbitrage-Vorschlag** für Speicher, die aus dem Netz laden dürfen, und eine Ampel für auffällige Prognose-Abweichungen. Je Gerät kommen **Warmwasser-, Heiz- und Kühlfenster** der Wärmepumpe dazu sowie **Monatsverbrauch und bestes Fenster** eines sonstigen Verbrauchers (Pool, Sauna, Trockner, Heizstab mit eigenem Zähler) — für solche Geräte exportierte eedc bisher **keinen einzigen Energiewert**. Vollständige Liste mit Attributen in der [Sensor-Referenz §11](docs/SENSOR-REFERENZ.md).
+
+- **Erster zweiter HA-Komponententyp: `binary_sensor`.** Fünf der neuen Sensoren sind Schalter statt Zahlen — „Überschuss verfügbar", „Günstige Stunde", „Speicher voll", „Prognose-Abweichung auffällig" und je Wärmepumpe „Warmwasserbetrieb". ⚠ Ein `binary_sensor` kennt in Home Assistant kein „unbekannt"; verliert er seine Grundlage, **wird er in HA *nicht verfügbar*** (eigener Verfügbarkeits-Kanal je Schalter), statt seinen letzten Zustand stehen zu lassen. Das ist der Unterschied zwischen „keine Daten" und einer falschen Wahrheit: bliebe der alte Zustand stehen, ließe ein ausgefallener Preisabruf „Günstige Stunde" womöglich dauerhaft auf *an* stehen, und eine Automation lüde zur teuersten Stunde. Ein gewöhnlicher Sensor zeigt bei fehlendem Wert weiterhin „unbekannt" und bleibt verfügbar — dort ist der leere Wert selbst die Aussage.
+
+- **Die Verbrauchsprognose trägt jetzt ihre Stundenreihe mit.** `eedc_verbrauchsprognose_heute_kwh` bekommt die Attribute `stundenprofil_kwh` (24 Slots) und `wp_stundenprofil_kwh` (der darin enthaltene Wärmepumpen-Anteil, temperaturkorrigiert). Aus ihr und der PV-Reihe entsteht die Überschuss-Prognose — die Größe, die weder eine Wallbox noch eine Wärmepumpe selbst bilden kann, weil keine von beiden den Verbrauchsgang **dieses** Hauses kennt.
+
+### Fixed
+
+- **„Sensoren entfernen" räumt jetzt auch weg, was eedc vor März 2026 angelegt hat.** Bis `77c6e211` (13.03.2026) legte eedc je bequelltem Feld eine `number.eedc_…_start`-Entität für den Zählerstand vom Monatsanfang an; der Statistik-Import hat diesen Weg ersetzt, die Entitäten blieben aber in Home Assistant stehen — in einer Produktions-Instanz gemessen: **19 Stück, alle „unbekannt"**. Die Rücknahme arbeitete **definitionsgetrieben** und konnte deshalb nur räumen, was eedc **heute** publiziert; was es früher einmal publiziert hat, kannte nur der Broker. Sie ist jetzt **bestandsgetrieben**: sie fragt den Broker nach allem, was unter dem Präfix dieser Anlage retained liegt, und nimmt es mit zurück; die Meldung nennt die Zahl getrennt. ⛔ Nur eigene Topics — Entitäten anderer Integrationen werden nicht angefasst. Dazu die Hilfe: §6.3 beschrieb die `number`-Entitäten und ihre Startwerte weiter als aktuellen Weg.
+
+### Intern
+
+- Der **Fenster-Rechner** liegt als ein Modul `core/berechnungen/fenster.py` mit fünf reinen Funktionen im Berechnungs-Layer; `bestes_fenster` ist der eine Fenster-Rechner, den P4/P5/P7/P8/P9 rufen — Warmwasser-, Heiz-, Kühl-, Sonstiges- und „bestes Fenster" mit anderen Eingängen. Ein Wächter (`test_fenster_rechner_nur_im_layer`) hält drei Formen eines zweiten Rechners fern. Dieselbe Bauform für die **Heizgradtag-Korrektur** des WP-Profils (`wp_temperatur_faktor`) und den **mittleren Prognosefehler** (`prognose_genauigkeit.py`), der bis hierher nur als lokale Funktion in der Genauigkeits-Route existierte.
+- Die Frage „hat dieses Gerät einen **Kühl-Stromzähler**?" steht jetzt an einer Stelle (`daten_checker/kuehl_zaehler.py`) statt als verschachtelte Funktion im Daten-Checker — der Sensor und der Checker beantworten sie damit gleich.
+- Preis- und Prognosedaten werden je Publish-Lauf **einmal** beschafft und an alle Geräte weitergereicht; die mengenneutrale Kostenrechnung entsteht einmal je Anlage.
+- Ein `binary_sensor` belegt **vier** retained Topics statt drei (dazu `…/availability`). Publish und Rücknahme bilden die Liste an **einer** Stelle (`MQTTClient.alle_topics`), damit die Abwahl eines einzelnen Sensors nichts liegen lässt (#400-Klasse); die bestandsgetriebene Rücknahme deckt den Zweig ohnehin ab.
+
+---
+
 ## [4.0.49] - 2026-09-21 — Ein Balkonkraftwerk mit zugeordneten Modulen zählt seine Erzeugung einmal
 
 ### Fixed
