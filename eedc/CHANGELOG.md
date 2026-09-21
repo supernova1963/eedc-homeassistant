@@ -7,6 +7,26 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.0.49] - 2026-09-21 — Ein Balkonkraftwerk mit zugeordneten Modulen zählt seine Erzeugung einmal
+
+### Fixed
+
+- **Ein Balkonkraftwerk mit zugeordneten PV-Modulen zählte seine Erzeugung doppelt** (gemeldet von **Kai2**, Forum). Wer seine beiden Module als eigene Komponenten mit dem Balkonkraftwerk als „Gehört zu" anlegt — der Weg, den wir für zwei Ausrichtungen empfehlen — und ihnen eigene Sensoren gibt, sah dieselbe Energie zweimal: im Energiefluss als „Solarleistung 167 W" für 84 gemessene Watt, dazu einen um denselben Betrag zu hohen Hausverbrauch, eine verdoppelte Auslastung und eine zu hohe Autarkie. Betroffen waren die Live-Ansicht, „Heute PV", das Verbrauchsprofil, der Tagesverlauf sowie die gespeicherten Stunden- und Tageswerte und damit der laufende Monat. Ein Balkonkraftwerk mit Modul-Kindern ist jetzt Träger wie ein Wechselrichter: **die Module tragen die Erzeugung, das Gerät trägt nur noch, was ihnen fehlt.** Messen alle Module selbst, zählt es nicht mehr mit; misst nur eines, trägt es die Differenz; misst keines, bleibt es wie bisher die einzige Quelle — für den Normalfall (nur der Wechselrichter ist zugeordnet) ändert sich damit **keine Zahl**. Auf Monats- und Tagesebene wird sein Wert wie bisher kWp-gewichtet auf die Module verteilt und als Zerlegung gekennzeichnet, auf Stunden- und Live-Ebene bleibt er unverteilt beim Gerät (über eine Stunde mittelt sich Ost/West nicht aus). ⚠ **Bereits gespeicherte Tage tragen die Zuordnung, mit der sie berechnet wurden** — sie ändern sich nicht rückwirkend; ein Zeitraum lässt sich unter *Einstellungen → Datenverwaltung* neu aggregieren (N-536).
+
+- **Ein Tages-Lauf ohne Messwerte schrieb leere Stunden statt nichts** (Standalone-Betrieb mit MQTT, ohne Leistungs-Zuordnung). Die Vorbedingung „gibt es für diesen Tag MQTT-Zählerstände?" fragte in Wahrheit „gab es nach dem Vortag *irgendwann* welche" — damit galt jeder Tag bis zum letzten Zählerstand als versorgt, auch Monate vor der Einrichtung. Der Monatsabschluss-Backfill, „Mehrere Tage neu aggregieren" und der Vortagsjob an einem Ausfalltag legten für solche Tage 24 leere Stunden an, die danach als aggregiert zählten; eine bereits gefüllte Tageszeile aus der Home-Assistant-Statistik wurde dabei durch die leere ersetzt. Jetzt gilt nur der Tag selbst (mit dem Vortag für den Anfangsstand) als Fenster: ohne eigenen Zählerstand läuft nichts, gefüllte Tage bleiben, und die Tagessicht nennt den ehrlichen Grund statt einen Knopf anzubieten, der nichts holen kann (N-539).
+
+- **Der Daten-Checker warnte vor Lücken, die das Balkonkraftwerk längst schließt.** Seine Prüfung kannte als Gesamtwert nur den Anlagen-Zählerstand. Hatte ein Balkonkraftwerk einen Monatswert und eines seiner Module keinen, meldete er ⚠️ „PV-Erzeugung unvollständig — kein Gesamtwert zum Verteilen hinterlegt", obwohl jede Zahl vorhanden war; die Warnung ließ sich nicht abstellen. Jetzt gilt der Wert des Geräts als das, was er ist — das Aggregat seiner Module —, und der Monat erscheint als ℹ️ „über kWp-Anteil geschätzt". Dazu sagt die Zuordnungs-Fläche an der Zeile des Balkonkraftwerks, welche Wirkung seine Sensoren noch haben, sobald Module eigene tragen (N-537).
+
+### Intern
+
+- **Intern — der Monatsabschluss-Endpunkt ist ein Orchestrator mit 21 Phasen-Funktionen (Refactoring „Funktion vor Datei", Vorlage RF-1).** `get_monatsabschluss` hinter *Cockpit → Monat → Monatsabschluss* hatte eine kognitive Komplexität von 264 (SonarQube-Maßstab: 15) und ruft seine Abschnitte jetzt als Funktionen in derselben Datei; der Rest liegt bei 1, die höchste Phase bei 19. Antworten bitgleich (Golden Master über 125 Sichten). Dazu rechnet der Status den gemessenen Monats-Strompreis je Aufruf nur noch einmal statt zweimal (N-535).
+
+- **Intern — der Portal-Import ist ein Orchestrator mit 23 Phasen-Funktionen (Vorlage RF-2).** `apply_import` (kognitiv 220 → 3, höchste Phase 16) zerlegt in Träger, Ziel-Weg, anlagenweiten Weg, Wallbox/E-Auto und Klammer; Golden Master über 336 Sichten und Schreibschritte bitgleich. Die beiden CSV-Wege (Backup-Restore, CSV-Wizard) führen keinen Schutz-Zähler „X Felder durch manuell gepflegte Werte geschützt" mehr — er konnte seit Mai 2026 (#251: manuell gepflegte Werte schreiben unbedingt) nie feuern und stand in zwei Dateien als toter Zweig (N-538).
+
+- **Intern — der Tages-Aggregator ist ein Orchestrator mit 21 Phasen-Funktionen (Vorlage RF-3).** `aggregate_day`, die längste Funktion im Baum (kognitiv 201 → 4, höchste Phase 16), bleibt in einer Datei; 25 wortgleiche Rundungs-Ternäre heißen jetzt `rund`/`ganz`/`nur_positiv`, damit „0 ist keine Lücke" und „0 heißt keine Aussage" unterscheidbar sind. Neuer Schreib-Golden-Master über drei Bestände und drei Szenarien (41 292 Zeilen, 0 Unterschiede). Das Refactoring-Kriterium der Serie ist seit dem 19.09. die kognitive Komplexität der Funktion (> 50), nicht mehr die Zeilenzahl der Datei.
+
+---
+
 ## [4.0.48] - 2026-09-19 — Die Amortisationskurve zeigt gewachsene Anlagen als Treppe
 
 ### Fixed
