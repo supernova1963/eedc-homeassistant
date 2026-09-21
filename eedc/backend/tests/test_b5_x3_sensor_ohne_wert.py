@@ -143,8 +143,9 @@ class _FakeMqttClient:
         self.geleert.append((investition_id, sensor_value.definition.key, sensor_value.value))
         return True
 
-    async def remove_sensors(self, eintraege):
-        return {"sensoren": len(eintraege), "topics": len(eintraege) * 3, "fehler": None}
+    async def remove_sensors(self, eintraege, *, anlage_id_bestand=None):
+        return {"sensoren": len(eintraege), "topics": len(eintraege) * 3,
+                "altlast_topics": [], "fehler": None}
 
 
 def _haenge_klient_ein(monkeypatch, klient):

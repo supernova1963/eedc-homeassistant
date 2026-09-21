@@ -24,6 +24,12 @@ const SENSOREN = [
   { key: 'pv_erzeugung_gesamt_kwh', name: 'PV Erzeugung Gesamt', unit: 'kWh', icon: 'mdi:solar-power', category: 'energie', formel: 'Σ', exportiert: true },
   { key: 'einspeisung_gesamt_kwh', name: 'Einspeisung Gesamt', unit: 'kWh', icon: 'mdi:transmission-tower', category: 'energie', formel: 'Σ', exportiert: true },
   { key: 'roi_prozent', name: 'ROI', unit: '%', icon: 'mdi:percent', category: 'investition', formel: 'x', exportiert: true },
+  // S2/S3 („eedc@ha, Teil 1"): die zwei neuen Gruppen. ⛔ Ohne Eintrag in
+  // `categoryLabels` fiele der rohe Enum-Wert samt Pin-Default-Icon durch —
+  // genau die Klasse, die #179 für die übrigen Kategorien behoben hat und die
+  // #400 für `prognose`/`preis` ein zweites Mal aufgedeckt hat.
+  { key: 'eedc_ueberschuss_heute_kwh', name: 'Überschuss heute', unit: 'kWh', icon: 'mdi:solar-power-variant', category: 'steuerung', formel: 'Σ', exportiert: true },
+  { key: 'sonstiges_verbrauch_monat_kwh', name: 'Verbrauch (Monat)', unit: 'kWh', icon: 'mdi:power-plug', category: 'sonstiges', formel: 'Σ', exportiert: true },
 ]
 
 const ANLAGE = {
@@ -39,14 +45,14 @@ const ANLAGE = {
 vi.mock('../api', () => ({
   haApi: {
     getExportSensors: () => Promise.resolve({
-      anlagen: [], investitionen: [], sensor_count: 3, mqtt_available: true,
+      anlagen: [], investitionen: [], sensor_count: 5, mqtt_available: true,
     }),
     getMqttConfig: () => Promise.resolve({
       host: 'core-mosquitto', port: 1883, username: '', auto_publish: true, quelle: 'addon',
     }),
     getAnlageSensors: () => Promise.resolve(ANLAGE),
-    getYamlSnippet: () => Promise.resolve({ yaml: '', sensor_count: 3 }),
-    publishMqtt: () => Promise.resolve({ total: 3, success: 3, failed: 0 }),
+    getYamlSnippet: () => Promise.resolve({ yaml: '', sensor_count: 5 }),
+    publishMqtt: () => Promise.resolve({ total: 5, success: 5, failed: 0 }),
     removeMqtt: () => Promise.resolve(),
     testMqttConnection: () => Promise.resolve({ connected: true, broker: 'x' }),
     setAutoPublish: () => Promise.resolve({ gespeichert: true, enabled: true }),
@@ -143,5 +149,30 @@ describe('#400 Sensor-Abwahl', () => {
 
     expect(await screen.findByText(/Alle Sensoren entfernen\?/i)).toBeInTheDocument()
     expect(screen.getByText(/Deine Daten in eedc bleiben unberührt/i)).toBeInTheDocument()
+  })
+})
+
+describe('S2/S3 — die zwei neuen Gruppen haben Namen und Symbol', () => {
+  it('zeigt „Steuerungshilfen" und „Sonstiges" statt des rohen Enum-Werts', async () => {
+    render(<MqttExportVerwaltung anlageId={1} />)
+
+    expect(await screen.findByText('Steuerungshilfen')).toBeInTheDocument()
+    expect(screen.getByText('Sonstiges')).toBeInTheDocument()
+    // ⛔ Die Gegenprobe gehört dazu: der rohe Schlüssel darf NICHT dastehen.
+    expect(screen.queryByText('steuerung')).not.toBeInTheDocument()
+  })
+
+  it('das Sammel-Häkchen kennt die neue Kategorie beim Namen', async () => {
+    render(<MqttExportVerwaltung anlageId={1} />)
+
+    const kasten = await screen.findByRole('checkbox', {
+      name: /Alle Sensoren der Kategorie Steuerungshilfen exportieren/i,
+    })
+    fireEvent.click(kasten)
+    fireEvent.click(await screen.findByRole('button', { name: /Auswahl speichern/i }))
+
+    await screen.findByText(/Sensoren abwählen\?/i)
+    const genannt = screen.getAllByRole('listitem').map(li => li.textContent)
+    expect(genannt).toEqual(['Überschuss heute'])
   })
 })

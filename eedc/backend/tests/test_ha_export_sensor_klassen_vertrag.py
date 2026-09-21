@@ -67,7 +67,30 @@ HA_ERLAUBTE_STATE_CLASSES: dict[str, frozenset[str]] = {
     # nicht aufsummieren, dafuer gibt es `energy`. Der Waechter hat den neuen
     # Fall gemeldet statt ihn durchzuwinken; genau dafuer ist er gebaut.
     "power": frozenset({"measurement"}),
+    # Dazugekommen am 21.09.2026 mit E4 (`eedc_speicher_soc_prozent`, S2). HA
+    # fuehrt `battery` unter den Momentangroessen wie `power`:
+    # `DEVICE_CLASS_STATE_CLASSES` erlaubt dort ausschliesslich `MEASUREMENT` —
+    # ein Ladestand laesst sich weder summieren noch fortschreiben. Der
+    # Waechter hat den neuen Fall gemeldet, statt ihn durchzuwinken.
+    "battery": frozenset({"measurement"}),
+    # Dazugekommen am 21.09.2026 mit E3 (`eedc_speicher_voll_um_ts`, S2). HA
+    # fuehrt `timestamp` unter den Nicht-Zahlen: `DEVICE_CLASS_STATE_CLASSES`
+    # erlaubt dort **keine** state_class — der Zustand ist ein ISO-Zeitstempel,
+    # ueber den sich weder ein Mittelwert noch eine Summe bilden laesst.
+    "timestamp": frozenset(),
 }
+
+#: Die device_classes, die HA fuer einen `binary_sensor` kennt — hier wieder
+#: nur die, die eedc wirklich benutzt (dieselbe Regel wie oben: eine Tabelle,
+#: die Unbekanntes durchwinkt, deckt genau den neuen Fall nicht).
+#: Quelle: ``homeassistant/components/binary_sensor/const.py::BinarySensorDeviceClass``.
+#:
+#: ⚠ **Zwei getrennte Tabellen, und das ist kein Versehen.** `power` heisst bei
+#: beiden Komponenten etwas anderes: beim `sensor` ist es eine Leistung in W,
+#: beim `binary_sensor` „Strom fliesst / fliesst nicht". Eine gemeinsame Tabelle
+#: wuerde die beiden Bedeutungen verschmelzen — und genau daraus entstuende die
+#: naechste Kombination, die HA ablehnt.
+HA_BINARY_DEVICE_CLASSES: frozenset[str] = frozenset({"power", "running", "problem"})
 
 
 def _alle_definitionen() -> list[tuple[str, SensorDefinition]]:
@@ -176,3 +199,64 @@ def test_waechter_meldet_einen_verstoss_auch_wirklich():
     assert not _verstoesse([("probe", "monetary", "total")])
     assert not _verstoesse([("probe", None, "measurement")])
     assert not _verstoesse([("probe", "energy", None)])
+
+
+# ── S2: der zweite Komponententyp und sein eigener Vertrag ──────────────────
+
+def test_binary_sensor_traegt_nie_state_class_oder_einheit():
+    """Ein ``binary_sensor`` kennt in HA zwei Zustaende — keine Einheit, keine Statistik.
+
+    ⛔ **Warum das ein Waechter ist und kein Kommentar:** Die
+    ``SensorDefinition`` traegt ``unit`` als **Pflichtfeld** (leerer String
+    erlaubt) und ``state_class`` als optionales. Wer eine neue Zeile aus einer
+    bestehenden kopiert — der ueblichste Weg, eine Definition anzulegen —
+    schleppt beide mit, und HA quittiert es mit einer Protokollzeile, die
+    niemand liest, plus einer Entitaet ohne Statistik. Dieselbe Klasse wie
+    F-63, nur eine Komponente weiter.
+    """
+    schaeden = [
+        f"{kategorie}/{s.key}: binary_sensor mit "
+        + ", ".join(
+            t for t in (
+                f"unit={s.unit!r}" if s.unit else "",
+                f"state_class={s.state_class!r}" if s.state_class else "",
+            ) if t
+        )
+        for kategorie, s in _alle_definitionen()
+        if s.komponente == "binary_sensor" and (s.unit or s.state_class)
+    ]
+    assert not schaeden, (
+        f"{len(schaeden)} binary_sensor-Definition(en) tragen Felder, die HA fuer "
+        f"diesen Typ nicht kennt:\n  " + "\n  ".join(schaeden)
+    )
+
+
+def test_binary_sensor_device_class_steht_in_der_tabelle():
+    """Und die device_class stammt aus HAs ``BinarySensorDeviceClass``."""
+    schaeden = [
+        f"{kategorie}/{s.key}: device_class={s.device_class!r} steht nicht in "
+        f"HA_BINARY_DEVICE_CLASSES — eintragen (mit Beleg aus HAs "
+        f"BinarySensorDeviceClass) oder device_class weglassen"
+        for kategorie, s in _alle_definitionen()
+        if s.komponente == "binary_sensor" and s.device_class
+        and s.device_class not in HA_BINARY_DEVICE_CLASSES
+    ]
+    assert not schaeden, "\n  ".join(schaeden)
+
+
+def test_discovery_payload_eines_binary_sensors_traegt_on_off_und_keine_einheit():
+    """Und dasselbe an der Stelle, an der HA es liest — im fertigen Payload."""
+    from backend.services.mqtt_client import MQTTClient, MQTTConfig
+
+    client = MQTTClient(MQTTConfig(host="localhost"))
+    binaere = [s for _k, s in _alle_definitionen() if s.komponente == "binary_sensor"]
+    assert binaere, "keine binary_sensor-Definition gefunden — Waechter laeuft ins Leere"
+
+    for sensor in binaere:
+        payload = client._build_discovery_payload(
+            sensor=sensor, anlage_id=1, anlage_name="Testanlage"
+        )
+        assert payload.get("payload_on") == "ON", sensor.key
+        assert payload.get("payload_off") == "OFF", sensor.key
+        assert "unit_of_measurement" not in payload, sensor.key
+        assert "state_class" not in payload, sensor.key

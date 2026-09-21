@@ -9,6 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import Optional
 from backend.core.berechnungen import heizwaerme_ist_abgeleitet
+from backend.core.berechnungen.imd_monatsaggregat import imd_typ_beitrag
+from backend.core.berechnungen.fenster import verteile_auf_guenstigste
+from backend.services.daten_checker.kuehl_zaehler import hat_kuehl_zaehler
 from backend.core.berechnungen.waermepumpe_kennzahl import (
     abgrenzungs_grund,
     arbeitszahl,
@@ -60,13 +63,19 @@ async def calculate_investition_sensors(
     strompreis: Optional[Strompreis],
     emob_ctx: Optional[_EmobPoolCtx] = None,
     modus_map: Optional[dict[int, str]] = None,
+    fenster_ctx=None,
 ) -> list[SensorValue]:
     """Berechnet Sensor-Werte für eine Investition basierend auf Typ.
 
     `emob_ctx` (Phase 2a): liegt die Heimladung kanonisch auf der Wallbox
     (evcc), ziehen die E-Auto-Sensoren PV-Anteil + Ersparnis km-anteilig aus dem
     Wallbox-Pool statt aus der leeren E-Auto-IMD. Ohne Kontext (Default) bleibt
-    das Verhalten unverändert (eigene IMD-Werte)."""
+    das Verhalten unverändert (eigene IMD-Werte).
+
+    `fenster_ctx` (S3, 21.09.2026): der gemeinsame Eingang der Fenster-Sensoren
+    (`services/ha_export_fenster.py::FensterKontext`), **einmal je Publish-Lauf**
+    gebildet und hier nur benutzt. Ohne ihn entstehen die Plan-Sensoren P4/P7/P8/P9
+    schlicht nicht — sie sind eine Zugabe, kein Bestandteil der bisherigen Antwort."""
     sensor_values = []
 
     # InvestitionMonatsdaten laden
@@ -583,4 +592,381 @@ async def calculate_investition_sensors(
                     zusatz_attribute=zusatz_attribute,
                 ))
 
+        # ── S2/S3: Entscheidung und Plan dieser Wärmepumpe ──────────────────
+        await _wp_steuerung_und_plan(
+            db=db,
+            investition=investition,
+            sensor_values=sensor_values,
+            fenster_ctx=fenster_ctx,
+            modus_map=modus_map,
+            monatsdaten=monatsdaten,
+            kuehl_je_monat=kuehl_je_monat,
+        )
+
+    # ── S3/P9: Sonstige Verbraucher je Gerät ────────────────────────────────
+    elif investition.typ == "sonstiges":
+        await _sonstiges_sensoren(
+            db=db,
+            investition=investition,
+            sensor_values=sensor_values,
+            fenster_ctx=fenster_ctx,
+        )
+
     return sensor_values
+
+
+# =============================================================================
+# S2/S3 — Entscheidung und Plan je Gerät (KONZEPT-EEDC-AT-HA §5, P4/P7/P8/P9)
+# =============================================================================
+#
+# ⚠ **Die Achse entscheidet, nicht die Bauart** (ADR-002/P13, Wärme/Klima R1).
+# Ob ein Gerät ein Warmwasser-, Heiz- oder Kühlfenster bekommt, hängt daran, ob
+# diese Achse **gemessen oder gepflegt** ist — nie an `wp_art`. Das Wort kommt
+# in diesem Abschnitt deshalb nicht vor.
+#
+# ⛔ **Kein Fenster wird hier gerechnet.** Die Formel steht im Layer
+# (`core/berechnungen/fenster.py`), der gemeinsame Eingang im Dienst
+# (`services/ha_export_fenster.py`). Hier steht nur, WELCHE Menge, WELCHE Dauer
+# und WELCHE Frist für dieses Gerät gilt.
+
+#: Wie lange ein Warmwasser-Fenster dauert. Eine Wärmepumpe lädt den
+#: Warmwasserspeicher in ein bis zwei Stunden; zwei ist die Dauer, die auch
+#: ohne exakte Kenntnis der Anlage nicht daneben liegt.
+_WW_FENSTER_DAUER_H = 2
+
+#: Über wie viele Monate der Ø-Tagesverbrauch gebildet wird. Drei Monate
+#: glätten einen einzelnen Ausreißer-Monat und folgen trotzdem der Jahreszeit —
+#: ein Jahresmittel täte das nicht (Warmwasser im August ist nicht Warmwasser
+#: im Januar).
+_MENGE_MONATE = 3
+
+
+def _monatsschluessel(heute: date, zurueck: int) -> list[tuple[int, int]]:
+    """Die letzten ``zurueck`` **abgeschlossenen** Monate, neueste zuerst."""
+    out: list[tuple[int, int]] = []
+    jahr, monat = heute.year, heute.month
+    for _ in range(zurueck):
+        monat -= 1
+        if monat == 0:
+            jahr, monat = jahr - 1, 12
+        out.append((jahr, monat))
+    return out
+
+
+def _tage_im_monat(jahr: int, monat: int) -> int:
+    import calendar
+    return calendar.monthrange(jahr, monat)[1]
+
+
+async def _wp_steuerung_und_plan(
+    *, db, investition, sensor_values, fenster_ctx, modus_map,
+    monatsdaten, kuehl_je_monat: dict,
+):
+    """E2 (Warmwasserbetrieb) sowie P4 · P7 · P8 dieser Wärmepumpe.
+
+    ⚠ **Die Faltung über `monatsdaten` (P4, unten) ist ein per-Investition-Aggregat
+    im Sinne von `P10_PER_INVESTITION`; die Zeilen kommen aus
+    `calculate_investition_sensors`, dem dort gelisteten Lader; der Wächter sieht
+    diese Funktion nicht (kein `select`).** Der P10-Wächter
+    (`test_wurzelmuster_konformitaet.py::_p10_imd_lader`, :2219) erkennt nur
+    Funktionen, in deren Rumpf ein `select(...)` mit `InvestitionMonatsdaten`
+    steht — hier steht keines, die Zeilen sind ein Parameter. Wer diese Funktion
+    von ihrem Lader löst, verliert damit **auch** die Deckung durch den Eintrag
+    :2109; die Klassifizierung ist an dieser Stelle Dokumentation, nicht
+    Ergebnis einer Messung.
+
+    ⛔ **Warum überhaupt je Investition und nicht über `lade_monats_fakten`:**
+    `WpFakten.strom_warmwasser_kwh` ist eine **anlagenweite** Summe über alle
+    Wärmepumpen — bei zwei Geräten wäre die Menge des einen die Summe beider.
+    Gelesen wird deshalb über `imd_typ_beitrag`, denselben Layer-SoT, den die
+    Monats-Fakten selbst benutzen; ein eigener Griff ins `verbrauch_daten` wäre
+    der Nachbau, an dem F-56 entstanden ist.
+    """
+    from backend.core.betriebsmodus import WARMWASSER
+    from backend.services.ha_export_fenster import fenster_fuer_menge
+    from backend.services.ha_sensors_export import WAERMEPUMPE_SENSOREN
+
+    def _def(key):
+        for d in WAERMEPUMPE_SENSOREN:
+            if d.key == key:
+                return d
+        raise KeyError(key)
+
+    def _an(key, wert, zusatz=None, berechnung=None):
+        if wert is None:
+            return
+        sensor_values.append(SensorValue(
+            definition=_def(key), value=wert, berechnung=berechnung,
+            zusatz_attribute={k: v for k, v in (zusatz or {}).items() if v is not None},
+        ))
+
+    # ── E2 · Warmwasserbetrieb ──────────────────────────────────────────────
+    #
+    # ⚠ Dieselbe Quelle wie `wp_betriebsmodus` (#398, `betriebsmodus_live`) —
+    # und dieselbe Leer-Regel: ohne Zuordnung gibt es den Sensor nicht, statt
+    # einer Entität, die in HA für immer „aus" zeigt.
+    _modus = (modus_map or {}).get(investition.id)
+    if _modus:
+        _an("wp_warmwasserbetrieb", _modus == WARMWASSER,
+            {"modus": BETRIEBSMODUS_LABEL[_modus]})
+
+    if fenster_ctx is None:
+        return
+
+    heute = fenster_ctx.heute
+
+    # ── P4 · Warmwasser-Fenster ─────────────────────────────────────────────
+    #
+    # **Menge:** der Ø-Warmwasserstrom je Tag der letzten drei abgeschlossenen
+    # Monate.
+    #
+    # ⭐ **F-56 „gemessen schlägt abgeleitet", und zwar über den Layer-SoT.**
+    # Es gibt zwei Wege zu dieser Größe, und sie sind nicht dasselbe:
+    #   * **gemessen** — `strom_warmwasser_kwh` der getrennten Strommessung
+    #     (ein eigener Zähler am Warmwasserbetrieb);
+    #   * **abgeleitet** — `modus_strom_warmwasser_kwh`, aus dem
+    #     mitgeschriebenen Betriebsmodus gerechnet.
+    # `imd_typ_beitrag` liest beide je Zeile (`wp_strom_warmwasser` +
+    # `..._gemessen`) — dieselbe Tür, die die Monats-Fakten benutzen. Ein
+    # eigener Griff ins `verbrauch_daten` wäre genau der Nachbau, an dem F-56
+    # entstanden ist. `herkunft` sagt dem Anwender, welcher Weg es war; bis zum
+    # 21.09.2026 behauptete die Hilfe „ohne Warmwasser-Zähler kein Fenster",
+    # und das stimmte schon damals nicht.
+    letzte = _monatsschluessel(heute, _MENGE_MONATE)
+    menge_gemessen = 0.0
+    menge_abgeleitet = 0.0
+    tage = 0
+    ist_gemessen = False
+    for md in monatsdaten:
+        if (md.jahr, md.monat) not in letzte:
+            continue
+        beitrag = imd_typ_beitrag(investition, md.verbrauch_daten or {})
+        menge_gemessen += beitrag.wp_strom_warmwasser
+        ist_gemessen = ist_gemessen or beitrag.wp_strom_warmwasser_gemessen
+        menge_abgeleitet += modus_strom_zeile(md.verbrauch_daten or {}).warmwasser_kwh
+        tage += _tage_im_monat(md.jahr, md.monat)
+
+    menge = menge_gemessen if (ist_gemessen and menge_gemessen > 0) else menge_abgeleitet
+    herkunft = "gemessen" if (ist_gemessen and menge_gemessen > 0) else "abgeleitet"
+    je_tag = (menge / tage) if tage else None
+    if je_tag and je_tag > 0:
+        f = fenster_fuer_menge(
+            fenster_ctx, je_tag, dauer_h=_WW_FENSTER_DAUER_H,
+            frist_slot=min(
+                23, fenster_ctx.frist_slot if fenster_ctx.frist_slot is not None else 23
+            ),
+        )
+        if f is not None:
+            _an("wp_warmwasser_fenster_ab", fenster_ctx.slot_iso(f.ab), {
+                **fenster_ctx.fenster_attribute(f),
+                "menge_kwh": round(je_tag, 1),
+                "herkunft": herkunft,
+                "kosten_cent": round(f.kosten_cent_kwh * je_tag),
+                "ersparnis_cent_vs_jetzt": (
+                    None if f.delta_vs_jetzt is None
+                    else round(-f.delta_vs_jetzt * je_tag)
+                ),
+                "preisquelle": fenster_ctx.preisquelle,
+            }, berechnung=(
+                f"Ø {je_tag:.1f} kWh Warmwasserstrom je Tag aus {tage} Tagen "
+                f"({'gemessen' if herkunft == 'gemessen' else 'aus dem Betriebsmodus abgeleitet'})"
+            ))
+
+    # ── P7 · Heizfenster ────────────────────────────────────────────────────
+    #
+    # **Menge:** das **erwartete** WP-Stundenprofil von heute (Modell A mit
+    # Heizgradtag-Korrektur), nicht eine Monatssumme — verschoben wird ein
+    # Tagesgang, keine Jahresmenge. Ohne individuelles Profil (N-332) gibt es
+    # die Reihe nicht und damit auch dieses Fenster nicht.
+    wp_reihe = fenster_ctx.wp_stundenprofil_kwh
+    if wp_reihe and any(v > 0 for v in wp_reihe):
+        heizstunden = [i for i, v in enumerate(wp_reihe) if v > 0 and i >= fenster_ctx.jetzt_slot]
+        verteilung = verteile_auf_guenstigste(fenster_ctx.kosten, wp_reihe, heizstunden)
+        if verteilung is not None and verteilung.stunden:
+            _an("wp_heizfenster_stunden", len(verteilung.stunden), {
+                "heizstrom_stundenprofil_kwh": [round(v, 2) for v in wp_reihe],
+                "guenstige_heizstunden": [
+                    f"{h % 24:02d}:00" for h in verteilung.stunden
+                ],
+                "ersparnis_cent_vs_profil": round(verteilung.ersparnis_cent),
+                "heizzeit_stunden": len(heizstunden),
+                "preisquelle": fenster_ctx.preisquelle,
+                **fenster_ctx.profil_attribute,
+            }, berechnung=(
+                f"{len(verteilung.stunden)} von {len(heizstunden)} Stunden der "
+                f"erwarteten Heizzeit — Verschiebung der gleichen Menge in die "
+                f"günstigsten davon"
+            ))
+
+    # ── P8 · Kühlfenster ────────────────────────────────────────────────────
+    #
+    # ⛔ **Zwei Kriterien, beide nötig** (Wärme/Klima R1/E6):
+    #   1. die Kühl-Achse liegt **am Zähler** — `hat_kuehl_zaehler`, derselbe
+    #      SoT, den der Daten-Checker befragt. Eine Kältemenge oder eine
+    #      zugeordnete Kühl-Leistung sind kein kWh-Zähler und lösen den Fall
+    #      nicht auf.
+    #   2. es gibt eine **gemessene Kühlstrom-Menge** in den letzten drei
+    #      abgeschlossenen Monaten — das ist die Antwort auf „wie viel?" der
+    #      Aufnahmeregel (Konzept §5).
+    #
+    # ⛔ **Hier stand im Bauplan `leistung_kuehlen_w` als Mengen-Quelle. Das
+    # geht nicht, und zwar am Code gemessen (21.09.2026):** `leistung_kuehlen_w`
+    # ist ein **Live-Feld** (`field_definitions/registry.py:885`, Einheit W,
+    # ausdrücklich „reine Anzeige … die Mengen kommen aus dem kWh-Zähler") und
+    # steht als **Entity-Zuordnung** im `sensor_mapping`, nicht als Zahl im
+    # `parameter`-JSON (`PARAM_WAERMEPUMPE` kennt keinen solchen Schlüssel).
+    # Aus einer Entity-ID lässt sich keine Menge bilden. Die gemessene
+    # Kühlstrom-Menge kann es — und sie stammt aus derselben Auflösung, die die
+    # Modus-Sensoren oben schon gefahren haben. *Ob das Live-Feld zugeordnet
+    # ist, reist trotzdem als Attribut mit: F6 (S4) soll dem Anwender sagen
+    # können, was ihm zum vollen Bild noch fehlt.*
+    if kuehl_je_monat and hat_kuehl_zaehler(
+        investition.id,
+        imd_zeilen=monatsdaten,
+        mapping=_mapping_der_anlage(investition),
+        quellen=_quellen_der_anlage(investition),
+    ):
+        letzte = _monatsschluessel(heute, _MENGE_MONATE)
+        menge = sum(v for k, v in kuehl_je_monat.items() if k in letzte)
+        tage = sum(_tage_im_monat(*k) for k in kuehl_je_monat if k in letzte)
+        je_tag = (menge / tage) if tage else 0.0
+        temperaturen = [
+            (i, t) for i, t in enumerate(fenster_ctx.temperatur_c[:24]) if t is not None
+        ]
+        spitze = max(temperaturen, key=lambda x: x[1])[0] if temperaturen else None
+        if je_tag > 0 and spitze is not None and spitze > fenster_ctx.jetzt_slot:
+            # Frist = die Stunde VOR der Hitzespitze: vorkühlen heißt vorher.
+            f = fenster_fuer_menge(
+                fenster_ctx, je_tag, dauer_h=2, frist_slot=spitze - 1,
+            )
+            if f is not None:
+                im_fenster = sum(fenster_ctx.ueberschuss_kwh[f.ab:f.bis])
+                _an("wp_kuehlfenster_ab", fenster_ctx.slot_iso(f.ab), {
+                    **fenster_ctx.fenster_attribute(f),
+                    "temperatur_max_um": f"{spitze:02d}:00",
+                    "temperatur_max_c": round(max(t for _i, t in temperaturen), 1),
+                    "ueberschuss_kwh_im_fenster": round(im_fenster, 2),
+                    "menge_kwh": round(je_tag, 1),
+                    "leistung_kuehlen_zugeordnet": bool(
+                        (_mapping_der_anlage(investition)
+                         .get(str(investition.id), {}) or {})
+                        .get("live", {}).get("leistung_kuehlen_w")
+                    ),
+                    "preisquelle": fenster_ctx.preisquelle,
+                }, berechnung=(
+                    f"Ø {je_tag:.1f} kWh gemessener Kühlstrom je Tag — günstigstes "
+                    f"2-Stunden-Fenster vor der Tageshöchsttemperatur um {spitze:02d}:00"
+                ))
+
+
+def _mapping_der_anlage(investition) -> dict:
+    """`sensor_mapping["investitionen"]` der Anlage — ohne Nachladen.
+
+    ⚠ Die Beziehung ist in diesem Pfad geladen (die Aufrufer holen die Anlage
+    ohnehin); ist sie es nicht, bleibt das Mapping leer und `hat_kuehl_zaehler`
+    entscheidet allein über die gepflegten Monatszeilen. Das ist die
+    vorsichtige Richtung: im Zweifel **kein** Sensor.
+    """
+    anlage = getattr(investition, "anlage", None)
+    return ((getattr(anlage, "sensor_mapping", None) or {}).get("investitionen") or {})
+
+
+def _quellen_der_anlage(investition) -> dict:
+    anlage = getattr(investition, "anlage", None)
+    return ((getattr(anlage, "sensor_mapping", None) or {}).get("quellen") or {})
+
+
+async def _sonstiges_sensoren(*, db, investition, sensor_values, fenster_ctx):
+    """P9 — Monatsverbrauch und bestes Fenster eines sonstigen Verbrauchers.
+
+    ⭐ **Das ist auch Stufe 1.** Bis zum 21.09.2026 exportierte eedc für ein
+    Gerät der Kategorie *Sonstiges/Verbraucher* (Pool, Sauna, Trockner,
+    Heizstab mit eigenem Zähler = Fall H-A) **keinen einzigen Energiewert** —
+    je Gerät gab es höchstens `investition_gesamt_euro`. Erst der Gerätesensor,
+    dann das Fenster.
+
+    ⛔ **Die Mengen kommen aus den Monats-Fakten** (ADR-002/P10): `SonstigesFakten`
+    trägt seit C1d `je_geraet` mit genau diesen drei Größen, inklusive
+    Laufzeit-Filter. Eine eigene Faltung über `InvestitionMonatsdaten` wäre die
+    Klasse hinter der Drift-Inventur vom 31.07.2026.
+    """
+    from backend.services.ha_export_fenster import fenster_fuer_menge
+    from backend.services.monats_fakten import lade_monats_fakten
+    from backend.services.ha_sensors_export import SONSTIGES_SENSOREN
+
+    if (investition.parameter or {}).get("kategorie") != "verbraucher":
+        return
+
+    def _def(key):
+        for d in SONSTIGES_SENSOREN:
+            if d.key == key:
+                return d
+        raise KeyError(key)
+
+    def _an(key, wert, zusatz=None, berechnung=None):
+        if wert is None:
+            return
+        sensor_values.append(SensorValue(
+            definition=_def(key), value=wert, berechnung=berechnung,
+            zusatz_attribute={k: v for k, v in (zusatz or {}).items() if v is not None},
+        ))
+
+    heute = fenster_ctx.heute if fenster_ctx is not None else date.today()
+    monate = _monatsschluessel(heute, _MENGE_MONATE)
+    von = min(monate)
+    fakten = await lade_monats_fakten(
+        db, investition.anlage_id, von=von, bis=(heute.year, heute.month)
+    )
+    if not fakten:
+        return
+
+    laufend = next(
+        (f for f in fakten if (f.jahr, f.monat) == (heute.year, heute.month)), None
+    )
+    geraet = (
+        (laufend.sonstiges.je_geraet or {}).get(investition.id) if laufend else None
+    )
+    if geraet is not None and geraet.verbrauch_kwh > 0:
+        pv_anteil = (
+            round(geraet.bezug_pv_kwh / geraet.verbrauch_kwh * 100, 1)
+            if geraet.verbrauch_kwh > 0 else None
+        )
+        _an("sonstiges_verbrauch_monat_kwh", round(geraet.verbrauch_kwh, 1), {
+            "pv_anteil_prozent": pv_anteil,
+            "bezug_pv_kwh": round(geraet.bezug_pv_kwh, 1),
+            "bezug_netz_kwh": round(geraet.bezug_netz_kwh, 1),
+        }, berechnung=f"Stromverbrauch im laufenden Monat ({heute.month}/{heute.year})")
+
+    if fenster_ctx is None:
+        return
+
+    # Ø-Tagesverbrauch aus den abgeschlossenen Monaten — der laufende Monat
+    # ist unvollständig und würde die Menge systematisch zu klein machen.
+    menge, tage = 0.0, 0
+    for f in fakten:
+        if (f.jahr, f.monat) not in monate:
+            continue
+        g = (f.sonstiges.je_geraet or {}).get(investition.id)
+        if g is None:
+            continue
+        menge += g.verbrauch_kwh
+        tage += _tage_im_monat(f.jahr, f.monat)
+    je_tag = (menge / tage) if tage else None
+    if not je_tag or je_tag <= 0:
+        return
+
+    fenster = fenster_fuer_menge(fenster_ctx, je_tag, dauer_h=2)
+    if fenster is None:
+        return
+    _an("sonstiges_fenster_ab", fenster_ctx.slot_iso(fenster.ab), {
+        **fenster_ctx.fenster_attribute(fenster),
+        "menge_kwh": round(je_tag, 1),
+        "ersparnis_cent_vs_jetzt": (
+            None if fenster.delta_vs_jetzt is None
+            else round(-fenster.delta_vs_jetzt * je_tag)
+        ),
+        "preisquelle": fenster_ctx.preisquelle,
+        **fenster_ctx.profil_attribute,
+    }, berechnung=(
+        f"Ø {je_tag:.1f} kWh je Tag aus {tage} Tagen — günstigstes 2-Stunden-Fenster"
+    ))

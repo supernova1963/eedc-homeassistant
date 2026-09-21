@@ -44,7 +44,11 @@ async def get_all_sensors(db: AsyncSession = Depends(get_db)):
     for anlage in anlagen:
         # Anlage-Sensoren berechnen — ohne Open-Meteo-Jitter (N-531): HA fragt diese Sicht per REST mit
         # 10 s Timeout ab; bis zu 30 s Wartezeit bei kaltem Cache hiessen einmal je Stunde „nicht verfügbar".
-        sensor_values = await calculate_anlage_sensors(db, anlage, skip_jitter=True)
+        # S3: ein Fenster-Kontext je Anlage, an alle Geraete weitergereicht.
+        _kontext: dict = {}
+        sensor_values = await calculate_anlage_sensors(
+            db, anlage, skip_jitter=True, kontext_out=_kontext,
+        )
 
         sensors = [
             SensorExportItem(
@@ -97,7 +101,8 @@ async def get_all_sensors(db: AsyncSession = Depends(get_db)):
 
         for inv in investitionen:
             inv_sensors = await calculate_investition_sensors(
-                db, inv, strompreis, emob_ctx, modus_map
+                db, inv, strompreis, emob_ctx, modus_map,
+                fenster_ctx=_kontext.get("fenster"),
             )
             inv_sensor_items = [
                 SensorExportItem(

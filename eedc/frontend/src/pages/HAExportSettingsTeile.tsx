@@ -500,6 +500,13 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
     // (20 der 44 anlagenweiten Sensoren), deshalb faellt es jetzt auf.
     prognose: 'Prognose',
     preis: 'Börsenpreis',
+    // S2/S3 („eedc@ha, Teil 1"): die anlagenweiten Entscheidungs- und
+    // Plan-Größen bekommen eine eigene Gruppe statt in „Prognose" aufzugehen —
+    // dort stünden sonst 20+ Zeilen, von denen die Hälfte keine Prognose ist.
+    // `sonstiges` ist die Geräte-Gruppe der sonstigen Verbraucher (Pool,
+    // Sauna, Trockner, Heizstab mit eigenem Zähler).
+    steuerung: 'Steuerungshilfen',
+    sonstiges: 'Sonstiges',
     // Defensive Fallbacks fuer aelteren Backend-Stand
     autarkie: 'Autarkie & Eigenverbrauch',
     performance: 'Performance',
@@ -520,6 +527,8 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
     status: '⚙️',
     prognose: '🔮',
     preis: '💶',
+    steuerung: '🎛️',
+    sonstiges: '🔧',
     autarkie: '🏠',
     performance: '📊',
     sonstige: '📌',
@@ -533,7 +542,10 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
     'anlage', 'energie', 'speicher',
     'investition', 'wallbox', 'e_auto', 'waermepumpe',
     'finanzen', 'quote', 'umwelt',
-    'prognose', 'preis',
+    // `steuerung` steht neben Prognose und Börsenpreis: die drei sind die
+    // Gruppen, aus denen eine Automation ihre Auslöser nimmt.
+    'prognose', 'preis', 'steuerung',
+    'sonstiges',
     'autarkie', 'performance', 'sonstige',
     'status',
   ]

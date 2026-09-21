@@ -58,6 +58,8 @@ class _FakeMqttClient:
         self.is_available = True
         self.laeufe: list[tuple[int | None, list[str]]] = []
         self.entfernt: list[tuple[str, int, int | None]] = []
+        #: S2: mit welcher Anlagen-ID wurde die Bestandsaufnahme verlangt?
+        self.bestand_gefragt: list[int | None] = []
 
     async def publish_all_sensors(self, sensor_values, anlage_id, anlage_name,
                                   investition_id=None, investition_name=None):
@@ -65,9 +67,11 @@ class _FakeMqttClient:
         return {"total": len(sensor_values), "success": len(sensor_values),
                 "failed": 0, "errors": []}
 
-    async def remove_sensors(self, eintraege):
+    async def remove_sensors(self, eintraege, *, anlage_id_bestand=None):
         self.entfernt.extend((d.key, a, i) for d, a, i in eintraege)
-        return {"sensoren": len(eintraege), "topics": len(eintraege) * 3, "fehler": None}
+        self.bestand_gefragt.append(anlage_id_bestand)
+        return {"sensoren": len(eintraege), "topics": len(eintraege) * 3,
+                "altlast_topics": [], "fehler": None}
 
     def alle_publizierten(self) -> set[str]:
         return {k for _, keys in self.laeufe for k in keys}

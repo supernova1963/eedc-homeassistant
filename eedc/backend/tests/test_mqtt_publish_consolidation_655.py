@@ -47,7 +47,7 @@ async def test_publish_anlage_sensors_liefert_echte_zahlen(db, monkeypatch):
     monkeypatch.setattr(ha_mqtt_sync, "MQTTClient", _FakeClient)
     import backend.api.routes.ha_export as ha_export
 
-    async def fake_calc(db, anlage, *, skip_jitter=False):   # N-531: Signatur des echten Rechners
+    async def fake_calc(db, anlage, *, skip_jitter=False, kontext_out=None):   # N-531/S3: Signatur des echten Rechners
         # B5/X-3: der Sync-Job liest jetzt `definition.key` jedes Werts (er
         # merkt sich, was er publiziert hat) — ein nackter Platzhalter genügt
         # dem Vertrag nicht mehr. Drei echte Definitionen, drei Werte.
@@ -80,7 +80,7 @@ async def test_publish_anlage_sensors_keine_daten(monkeypatch):
     monkeypatch.setattr(ha_mqtt_sync, "MQTTClient", _FakeClient)
     import backend.api.routes.ha_export as ha_export
 
-    async def fake_calc(db, anlage, *, skip_jitter=False):   # N-531: Signatur des echten Rechners
+    async def fake_calc(db, anlage, *, skip_jitter=False, kontext_out=None):   # N-531/S3: Signatur des echten Rechners
         return []
 
     monkeypatch.setattr(ha_export, "calculate_anlage_sensors", fake_calc)

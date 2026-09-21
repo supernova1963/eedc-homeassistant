@@ -365,6 +365,23 @@ async def prognose_und_preis_sensoren(*, anlage, db, sensor_values, skip_jitter)
                         "profil_tage": prognose.get("verbrauch_profil_tage"),
                         "profil_slots": prognose.get("verbrauch_profil_slots"),
                     }
+                    # ── S3/P1 (21.09.2026): die Reihe, aus der die Summe wird ──
+                    #
+                    # ⭐ Sie lag intern laengst vor und wurde nur nie exportiert.
+                    # Erst mit ihr ist die **Ueberschuss-Prognose je Stunde**
+                    # rechenbar — die Groesse, die eine Wallbox, eine Waermepumpe
+                    # und eine Speicher-Arbitrage brauchen und keines dieser
+                    # Systeme selbst bilden kann. Slot-Konvention wie bei der
+                    # PV-Reihe daneben (Index = Stunde der Prozesszone).
+                    #
+                    # ⚠ `wp_stundenprofil_kwh` ist eine **Teilmenge** von
+                    # `stundenprofil_kwh`, kein Summand daneben — wer beide
+                    # addiert, zaehlt den Waermepumpenstrom doppelt. Derselbe
+                    # Satz wie bei den Modus-Sensoren der Waermepumpe.
+                    if prognose.get("verbrauch_stundenprofil_kwh"):
+                        zusatz["stundenprofil_kwh"] = prognose["verbrauch_stundenprofil_kwh"]
+                    if prognose.get("verbrauch_wp_stundenprofil_kwh"):
+                        zusatz["wp_stundenprofil_kwh"] = prognose["verbrauch_wp_stundenprofil_kwh"]
 
             if value is not None:
                 sensor_values.append(SensorValue(
@@ -426,5 +443,10 @@ async def prognose_und_preis_sensoren(*, anlage, db, sensor_values, skip_jitter)
                 sensor_values.append(SensorValue(
                     definition=sensor, value=value, zusatz_attribute=zusatz
                 ))
-    return {}
+    # S2/S3: beide Ergebnisse gehen an die Steuerungs-Phase weiter — sie darf
+    # weder Preis noch Prognose ein zweites Mal holen. Ein zweiter Abruf waere
+    # nicht nur langsam (Open-Meteo, Markt-API), er waere eine zweite
+    # Momentaufnahme: derselbe Sensor und sein Fenster-Attribut stuenden dann
+    # auf verschiedenen Staenden desselben Tages.
+    return {"prognose": prognose, "preis": preis}
 

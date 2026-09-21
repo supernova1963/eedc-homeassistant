@@ -212,7 +212,12 @@ async def publish_anlage_sensors(
         if any(jetzt.get(k) != zuletzt.get(k) for k in jetzt):
             await schreibe_export_settings(db, **{ZULETZT_FELD: {**zuletzt, **jetzt}})
 
-    sensor_values = _behalten(await calculate_anlage_sensors(db, anlage, skip_jitter=skip_jitter))
+    # S3: der Fenster-Kontext entsteht EINMAL in der Anlagen-Rechnung und geht
+    # an jedes Geraet weiter — nicht je Geraet neu (s. `calculate_anlage_sensors`).
+    _kontext: dict = {}
+    sensor_values = _behalten(await calculate_anlage_sensors(
+        db, anlage, skip_jitter=skip_jitter, kontext_out=_kontext,
+    ))
     if not sensor_values:
         await _nachziehen(None, [])
         await _merken()
@@ -269,7 +274,8 @@ async def publish_anlage_sensors(
 
         for inv in investitionen:
             inv_values = _behalten(await calculate_investition_sensors(
-                db, inv, strompreis, emob_ctx, modus_map
+                db, inv, strompreis, emob_ctx, modus_map,
+                fenster_ctx=_kontext.get("fenster"),
             ))
             if not inv_values:
                 await _nachziehen(inv.id, [])

@@ -12,6 +12,9 @@ Liefert die Vorausschau-Sensoren für `calculate_anlage_sensors()`:
   - „Speicher voll um" (SoC-Simulation ab AKTUELLEM Speicherstand)
   - die eedc-Stundenprofile heute + Tag+1/2/3 (als Sensor-Attribut, kein
     eigenes Topic)
+  - seit v4.0.50 (S3/P1) die **Verbrauchs**-Stundenreihe von Modell A samt
+    ihrem WP-Anteil und der Temperaturvorhersage — der Rohstoff der
+    Überschuss-Prognose (§5/P2) und der Fenster-Sensoren
 
 Prognose-Basis: ``services/prognose_kanon.py`` (Multi-String-Fan-out +
 eedc-Korrektur pro Energie-Slot), Tageswert = Σ korrigierte Stunden-Slots
@@ -134,6 +137,7 @@ async def berechne_prognose_export(db, anlage, *, skip_jitter: bool = False) -> 
         # „Speicher voll um" — Simulation ab aktuellem SoC (nicht Mitternacht).
         speicher_voll_um = None
         speicher_verbrauch_profil = None
+        speicher_voll_um_slot: Optional[int] = None
         speicher_kap, speicher_eta, akt_soc = await _aktueller_speicher(
             db, anlage.id, heute
         )
@@ -150,6 +154,13 @@ async def berechne_prognose_export(db, anlage, *, skip_jitter: bool = False) -> 
             )
             speicher_voll_um = sim.speicher_voll_um
             speicher_verbrauch_profil = _speicher_verbrauch_profil(vp, verbrauch_stunden)
+            # E3 (S2): derselbe Zeitpunkt als Slot — der ISO-Zeitstempel entsteht
+            # erst beim Sensor, damit die Zonen-Frage genau einmal beantwortet wird.
+            if speicher_voll_um:
+                try:
+                    speicher_voll_um_slot = int(str(speicher_voll_um).split(":")[0])
+                except ValueError:
+                    speicher_voll_um_slot = None
 
         # #395 (OB73-gif): die Verbrauchsprognose des Tages — dieselbe Zahl wie
         # die Kachel in Cockpit → Live, aus demselben Dienst. `None` ohne
@@ -186,6 +197,21 @@ async def berechne_prognose_export(db, anlage, *, skip_jitter: bool = False) -> 
             "verbrauch_profil_typ": verbrauch.profil_typ if verbrauch else None,
             "verbrauch_profil_tage": verbrauch.profil_tage if verbrauch else None,
             "verbrauch_profil_slots": verbrauch.profil_slots if verbrauch else None,
+            # ── S3/P1: die Stundenreihen von Modell A ───────────────────────
+            # Sie verlassen den Dienst ab v4.0.50 als Attribut; die Tagessumme
+            # daneben bleibt unveraendert. ⚠ Ohne individuelles Profil ist
+            # `verbrauch` None — dann gibt es KEINE Reihe und keinen Sensor
+            # (N-332), nicht eine Reihe aus Nullen.
+            "verbrauch_stundenprofil_kwh": verbrauch.stunden_kwh if verbrauch else None,
+            "verbrauch_wp_stundenprofil_kwh": (
+                verbrauch.wp_stunden_kwh if verbrauch else None
+            ),
+            "verbrauch_temperatur_c": verbrauch.temperatur_c if verbrauch else None,
+            # ── S2: was die Steuerungs-Sensoren aus derselben Rechnung brauchen ──
+            "speicher_voll_um_slot": speicher_voll_um_slot,
+            "speicher_kap_kwh": speicher_kap or None,
+            "speicher_eta_prozent": speicher_eta,
+            "speicher_soc_prozent": akt_soc,
             "stundenprofil_heute": [round(v, 2) for v in stunden_kwh_heute],
             "stundenprofil_day_plus_1": _stundenprofil(1),
             "stundenprofil_day_plus_2": _stundenprofil(2),

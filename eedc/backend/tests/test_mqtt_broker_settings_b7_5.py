@@ -149,7 +149,7 @@ async def test_export_publish_nutzt_denselben_broker_wie_inbound(db, monkeypatch
 
     monkeypatch.setattr(ha_mqtt_sync, "MQTTClient", _Client)
 
-    async def fake_calc(db, anlage, *, skip_jitter=False):   # N-531: Signatur des echten Rechners
+    async def fake_calc(db, anlage, *, skip_jitter=False, kontext_out=None):   # N-531/S3: Signatur des echten Rechners
         # B5/X-3: der Sync-Job liest `definition.key` jedes Werts — ein
         # nackter Platzhalter genügt dem Vertrag nicht mehr.
         from backend.services.ha_sensors_export import SensorValue, get_sensor_definition

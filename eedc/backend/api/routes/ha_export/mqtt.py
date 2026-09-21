@@ -168,8 +168,17 @@ async def remove_sensors_mqtt(
     # Topics zurueck (Config, Wert, Attribute).
     from backend.services.ha_mqtt_sync import belegte_sensor_eintraege
 
+    # ── Bestandsgetrieben statt definitionsgetrieben (S2, 21.09.2026) ───────
+    #
+    # `belegte_sensor_eintraege` kennt die **heutigen** Definitionen. Was eedc
+    # frueher publiziert hat, kennt nur der Broker: die MWD-Startwerte als
+    # `homeassistant/number/eedc_*` (bis `77c6e211^`, 13.03.2026) liegen bei
+    # jeder Installation von vorher bis heute retained auf dem Broker, und die
+    # In-App-Hilfe beschrieb sie weiter als Weg zu den Startwerten. Mit
+    # `anlage_id_bestand` fragt das Entfernen zusaetzlich den Bestand ab — nur
+    # unter dem eigenen Praefix — und raeumt ihn mit.
     eintraege = await belegte_sensor_eintraege(db, anlage)
-    ergebnis = await client.remove_sensors(eintraege)
+    ergebnis = await client.remove_sensors(eintraege, anlage_id_bestand=anlage.id)
 
     if ergebnis["fehler"]:
         raise HTTPException(
@@ -184,6 +193,11 @@ async def remove_sensors_mqtt(
         details=(
             f"{ergebnis['sensoren']} Sensorstellen / {ergebnis['topics']} Topics "
             f"für {anlage.anlagenname}"
+            # Die Altlast steht ausdruecklich daneben: sie ist der Teil, den
+            # der Anwender nicht erwartet hat, und genau deshalb der, von dem
+            # er erfahren soll.
+            + (f" (davon {len(ergebnis.get('altlast_topics') or [])} aus "
+               f"früheren Versionen)" if ergebnis.get("altlast_topics") else "")
         ),
         anlage_id=anlage.id,
         db=db,
@@ -194,4 +208,5 @@ async def remove_sensors_mqtt(
         "anlage_id": anlage.id,
         "removed": ergebnis["sensoren"],
         "topics": ergebnis["topics"],
+        "altlast_topics": ergebnis.get("altlast_topics") or [],
     }

@@ -9,8 +9,21 @@ Unterstützt zwei Export-Methoden:
 
 import math
 from dataclasses import dataclass, field
-from typing import Optional, Any
+from typing import Literal, Optional, Any
 from enum import Enum
+
+
+#: Die **einzigen** HA-Komponententypen, die eedc publiziert (KONZEPT-EEDC-AT-HA §2).
+#:
+#: ⛔ **Das ist eine Entscheidung, kein technischer Riegel.** Einen `switch` oder
+#: `number` zu publizieren kostet dieselben Zeilen wie den `binary_sensor` hier —
+#: eedc hat es bis `77c6e211^` (13.03.2026) sogar getan (MWD-Startwerte als
+#: `homeassistant/number/eedc_*`). Was eedc nicht schaltet, schaltet es, **weil es
+#: so entschieden ist** (31.08.2026: bereitstellen statt zustellen), nicht weil es
+#: nicht ginge. Wer die Menge hier erweitert, ändert diese Entscheidung — und der
+#: Wächter `test_s2_zweiter_komponententyp.py::test_nur_zwei_komponententypen`
+#: sorgt dafür, dass das ein bewusster Schritt ist und kein Nebeneffekt.
+KOMPONENTEN_TYPEN: tuple[str, ...] = ("sensor", "binary_sensor")
 
 
 class SensorCategory(str, Enum):
@@ -28,6 +41,16 @@ class SensorCategory(str, Enum):
     STATUS = "status"           # Status-Informationen (letzter Import, etc.)
     PROGNOSE = "prognose"       # PV-Prognose (eedc-eigen, Vorausschau)
     PREIS = "preis"             # Börsenpreis-Trigger (dynamische Tarife)
+    # ── S2/S3 „eedc@ha, Teil 1" (21.09.2026) ────────────────────────────────
+    # `steuerung` buendelt die anlagenweiten Entscheidungs- und Plan-Groessen
+    # (Ueberschuss, guenstige Stunde, bestes Fenster, Arbitrage-Vorschlag).
+    # ⚠ **Warum eine eigene Gruppe und nicht „prognose"/„preis"** (Entscheid
+    # Gernot 21.09.): die Abwahl-Flaeche zeigt je Gruppe eine Liste; unter
+    # „Prognose" staenden sonst 20+ Zeilen, von denen die Haelfte gar keine
+    # Prognose ist. Die Gruppe ist eine **Lese**-Ordnung, keine zweite
+    # Wahrheit — abgewaehlt wird weiterhin je `key`.
+    STEUERUNG = "steuerung"     # Entscheidungs-/Plan-Groessen fuer Automationen
+    SONSTIGES = "sonstiges"     # Sonstige Verbraucher je Geraet (Pool, Sauna, Heizstab)
 
 
 @dataclass
@@ -42,6 +65,21 @@ class SensorDefinition:
     device_class: Optional[str] = None # HA device_class (z.B. "energy", "monetary")
     state_class: Optional[str] = None  # HA state_class (z.B. "total", "measurement")
     entity_category: Optional[str] = None  # HA entity_category (z.B. "diagnostic")
+    #: HA-Komponententyp des Discovery-Topics (`homeassistant/{komponente}/…`).
+    #:
+    #: ⭐ **Warum ein Feld an der Definition und keine Namenskonvention** (S2,
+    #: 21.09.2026): Der Typ entscheidet über drei Dinge auf einmal — das
+    #: Config-Topic, die erlaubten Felder im Payload (`binary_sensor` kennt
+    #: weder `unit_of_measurement` noch `state_class`) und die Form des
+    #: Zustands (`ON`/`OFF` statt einer Zahl). Wer ihn aus dem Schlüsselnamen
+    #: ableitet, verteilt dieselbe Entscheidung auf drei Stellen, die
+    #: auseinanderlaufen können — genau die Klasse, aus der #400 entstand
+    #: (Publisher und Entferner bildeten ihre Adressen getrennt).
+    #:
+    #: ⚠ Ein `binary_sensor` trägt **nie** `unit` oder `state_class`; der
+    #: Klassen-Vertrag (`test_ha_export_sensor_klassen_vertrag.py`) hält das
+    #: fest, damit es nicht erst in HAs Protokoll auffällt.
+    komponente: Literal["sensor", "binary_sensor"] = "sensor"
     # ⛔ **Hier stand bis zum 28.08.2026 `enabled_by_default: bool = True`** — ein
     # Feld, das nichts steuerte: es wurde ausschliesslich in einer API-Antwort
     # durchgereicht und erreichte den Discovery-Payload nie. Mit dem Entscheid zu
@@ -536,6 +574,62 @@ WAERMEPUMPE_SENSOREN = [
         device_class="duration",
         state_class="total",
     ),
+    # ── S2/S3 „eedc@ha, Teil 1" (21.09.2026): Entscheidung + Plan je WP ─────
+    #
+    # ⚠ **Die Achse entscheidet, nicht die Bauart** (ADR-002/P13, Wärme/Klima
+    # R1). Ob ein Gerät ein Warmwasser-, Heiz- oder Kühlfenster bekommt, hängt
+    # daran, ob diese Achse am **Zähler** liegt bzw. gepflegt ist — nie daran,
+    # ob es eine Luft-Luft- oder Luft-Wasser-Wärmepumpe ist.
+    SensorDefinition(
+        key="wp_warmwasserbetrieb",
+        name="Warmwasserbetrieb",
+        unit="",
+        icon="mdi:water-boiler",
+        category=SensorCategory.WAERMEPUMPE,
+        formel="AN, wenn der mitgeschriebene Betriebsmodus der letzten vollen Stunde 'warmwasser' war",
+        device_class="running",
+        komponente="binary_sensor",
+    ),
+    SensorDefinition(
+        key="wp_warmwasser_fenster_ab",
+        name="Warmwasser-Fenster ab",
+        unit="",
+        icon="mdi:water-thermometer",
+        category=SensorCategory.WAERMEPUMPE,
+        # ⚠ Deckt auch den **in der WP verbauten Heizstab** (Fall H-B des
+        # Wärme/Klima-Konzepts, §5.7): sein Strom läuft über denselben Zähler.
+        # Ein Heizstab ist keine eedc-Größe, sein Zähler ist eine.
+        formel="Beginn des günstigsten 2-Stunden-Fensters heute für den Ø-Warmwasserstrom; Menge, Kosten und Herkunft (gemessen/abgeleitet) als Attribut",
+        device_class="timestamp",
+    ),
+    SensorDefinition(
+        key="wp_heizfenster_stunden",
+        name="Günstige Heizstunden heute",
+        unit="h",
+        icon="mdi:radiator",
+        category=SensorCategory.WAERMEPUMPE,
+        # ⚠ **Was eedc hier NICHT kennt und nicht erfindet:** Heizkurve,
+        # Vorlauftemperatur, Speichervermögen des Gebäudes. Wie weit eine
+        # Anhebung trägt, entscheidet die Regelung der Wärmepumpe — eedc nennt
+        # Fenster und Preisvorteil, nicht die Gradzahl.
+        formel="Anzahl der Stunden innerhalb der erwarteten Heizzeit, in die sich das Heizprofil günstiger verschieben ließe; erwartetes Heizstrom-Stundenprofil als Attribut",
+        # Bewusst ohne `device_class: duration`: das ist keine gelaufene Zeit,
+        # sondern eine Anzahl von Stunden-Slots. HA würde sie sonst mit den
+        # Betriebsstunden darüber in eine Reihe stellen.
+        state_class="measurement",
+    ),
+    SensorDefinition(
+        key="wp_kuehlfenster_ab",
+        name="Kühlfenster ab",
+        unit="",
+        icon="mdi:snowflake-melt",
+        category=SensorCategory.WAERMEPUMPE,
+        # ⚠ Kühlen bleibt **keine Wärme-Achse** (Wärme/Klima R1) — das hier ist
+        # Strom-Timing, keine Kennzahl. Zwei Kriterien, beide nötig: Kühlstrom
+        # am Zähler UND gepflegte `leistung_kuehlen_w`.
+        formel="Beginn des Überschuss-Fensters vor der Stunde der Tageshöchsttemperatur (Vorkühlen); Frist und Überschussmenge als Attribut",
+        device_class="timestamp",
+    ),
 ]
 
 # =============================================================================
@@ -879,6 +973,234 @@ PREIS_SENSOREN = [
 ]
 
 # =============================================================================
+# SENSOR-DEFINITIONEN - Steuerungshilfen (Stufe 2 + 3, KONZEPT-EEDC-AT-HA §5)
+# =============================================================================
+# ⭐ **Wofuer diese Gruppe da ist.** Ein steuerungsfaehiges HA-Dashboard braucht
+# drei Sorten Zahl: *was ist* (Stufe 1 — die 57 Sensoren darueber), *was gilt
+# jetzt* (Stufe 2 — Ueberschuss, guenstige Stunde, Speicher voll) und *wann es
+# gilt* (Stufe 3 — Fenster mit Betrag). Die ersten beiden Stufen liegen in eedc
+# laengst als Groesse vor und wurden nur nie exportiert; die dritte ist eine
+# Ableitung aus vorhandenen Stundenreihen.
+#
+# ⛔ **Vorschlag, kein Urteil.** Kein Name hier sagt „lade jetzt" oder „Anlage
+# defekt". Sie nennen ein Fenster und einen Betrag; was daraus folgt, entscheidet
+# die Automation des Anwenders — eedc ist nicht die Strom-Polizei. Deshalb heisst
+# die Ampel „Prognose-Abweichung auffaellig" und nicht „Anlage defekt".
+#
+# ⚠ **Zwei Verbrauchsmodelle stehen nebeneinander** (N-392, entschieden 18.09.):
+# alles hier rechnet mit dem 7-Tage-Profil der Live-Kachel (**Modell A**), nur
+# der Arbitrage-Vorschlag mit dem 8-Wochen-Profil der Speicher-Simulation
+# (**Modell B**) — weil er auf derselben Simulation sitzt wie
+# `eedc_speicher_voll_um`. Jeder betroffene Sensor nennt sein Modell im Attribut
+# `profil_typ`; zusammengefuehrt wird hier nichts.
+STEUERUNG_SENSOREN = [
+    # ── E1 · Ueberschuss ────────────────────────────────────────────────────
+    SensorDefinition(
+        key="eedc_ueberschuss_heute_kwh",
+        name="Überschuss heute",
+        unit="kWh",
+        icon="mdi:solar-power-variant",
+        category=SensorCategory.STEUERUNG,
+        formel="Σ max(0; Erzeugung − Verbrauch) heute bis jetzt (15-Minuten-Takt); Defizit als Attribut",
+        device_class="energy",
+        # ⚠ `total` und nicht `measurement`: das IST ein Zaehler, er faengt nur
+        # jede Nacht bei 0 an. HA kennt genau dafuer `total` (ein Rueckfall auf
+        # 0 ist erlaubt). Die Prognose-Sensoren daneben tragen bewusst KEIN
+        # device_class — sie sind kein Zaehler, sondern eine Vorhersage, und
+        # ihre Summe ueber Tage ergaebe Unsinn. Der Unterschied ist nicht die
+        # Einheit, sondern ob die Zahl etwas Gemessenes fortschreibt.
+        state_class="total",
+    ),
+    SensorDefinition(
+        key="eedc_ueberschuss_jetzt_kw",
+        name="Überschuss letzte Stunde",
+        unit="kW",
+        icon="mdi:flash",
+        category=SensorCategory.STEUERUNG,
+        formel="Überschuss der letzten vollständigen Stundenzeile (Stundenmittel); negativ = Defizit",
+        device_class="power",
+        state_class="measurement",
+    ),
+    # ── E2 · die vier binary_sensor (anlagenweit; der fuenfte haengt an der WP) ──
+    SensorDefinition(
+        key="eedc_ueberschuss_verfuegbar",
+        name="Überschuss verfügbar",
+        unit="",
+        icon="mdi:solar-power",
+        category=SensorCategory.STEUERUNG,
+        formel="AN, wenn der Überschuss der letzten vollen Stunde über 0 liegt",
+        device_class="power",
+        komponente="binary_sensor",
+    ),
+    SensorDefinition(
+        key="eedc_guenstige_stunde",
+        name="Günstige Stunde",
+        unit="",
+        icon="mdi:cash-clock",
+        category=SensorCategory.STEUERUNG,
+        formel="AN, wenn die laufende Stunde unter der Günstig-Schwelle liegt (dieselbe Markierung wie der Börsenpreis-Rang)",
+        komponente="binary_sensor",
+    ),
+    SensorDefinition(
+        key="eedc_speicher_voll",
+        name="Speicher voll",
+        unit="",
+        icon="mdi:battery-high",
+        category=SensorCategory.STEUERUNG,
+        # ⚠ Bewusst OHNE `device_class`: HAs `battery_charging` hiesse „laedt",
+        # und `battery` am binary_sensor hiesse „Batterie schwach" — beides das
+        # Gegenteil dessen, was hier steht.
+        formel="AN, wenn der kapazitätsgewichtete Ladestand der Anlage bei 99 % oder darüber liegt",
+        komponente="binary_sensor",
+    ),
+    # ── E3 · derselbe Zeitpunkt als echter Zeitstempel ──────────────────────
+    SensorDefinition(
+        key="eedc_speicher_voll_um_ts",
+        name="Speicher voll um (Zeitstempel)",
+        unit="",
+        icon="mdi:battery-clock",
+        category=SensorCategory.STEUERUNG,
+        # ⛔ **Warum ein zweiter Sensor und kein Umbau des bestehenden**
+        # (Entscheid Gernot 21.09.): `eedc_speicher_voll_um` traegt seit v4.0.27
+        # den Text „14:00" und ist oeffentlicher Vertrag. `device_class:
+        # timestamp` verlangt ISO-8601 mit Zone — der Umbau braeche jede
+        # Automation, die den Text vergleicht. Zwei Sensoren auf derselben
+        # Simulation kosten ein Attribut `quelle`; ein gebrochener Vertrag
+        # kostet den Anwender seine Automation.
+        formel="Derselbe Zeitpunkt wie der Textsensor 'Speicher voll um' — als ISO-8601-Zeitstempel, damit HA 'in 2 h' anzeigen kann",
+        device_class="timestamp",
+    ),
+    # ── E4 · Ladestand ──────────────────────────────────────────────────────
+    SensorDefinition(
+        key="eedc_speicher_soc_prozent",
+        name="Ladestand",
+        unit="%",
+        icon="mdi:battery-70",
+        category=SensorCategory.STEUERUNG,
+        formel="Kapazitätsgewichteter Ladestand aller Speicher der Anlage; Aufschlüsselung je Speicher als Attribut",
+        device_class="battery",
+        state_class="measurement",
+    ),
+    # ── E5 · Netzbezugs-Spitze ──────────────────────────────────────────────
+    SensorDefinition(
+        key="eedc_netzbezug_spitze_heute_kw",
+        name="Netzbezugs-Spitze heute",
+        unit="kW",
+        icon="mdi:transmission-tower-import",
+        category=SensorCategory.STEUERUNG,
+        # ⚠ **Zwei verschiedene Groessen, und der Sensor traegt die eine.** Der
+        # Wert ist die hoechste gemessene LEISTUNG des Tages; das Attribut
+        # `stunde_max_mittel` nennt die Stunde mit dem hoechsten
+        # Stunden-MITTEL. Das ist nicht dieselbe Stunde und heisst deshalb
+        # nicht „Stunde der Spitze" — eine Uhrzeit zum W-Peak gibt es in eedc
+        # nicht (gemessen 21.09.2026).
+        formel="Höchste gemessene Netzbezugs-Leistung heute; die Stunde mit dem höchsten Stundenmittel als Attribut",
+        device_class="power",
+        state_class="measurement",
+    ),
+    # ── P2 · Ueberschuss-Prognose ───────────────────────────────────────────
+    SensorDefinition(
+        key="eedc_ueberschuss_prognose_heute_kwh",
+        name="Überschuss-Prognose heute",
+        unit="kWh",
+        icon="mdi:chart-areaspline",
+        category=SensorCategory.STEUERUNG,
+        # ⭐ **Die Groesse, die sonst niemand bilden kann.** evcc kennt das Auto
+        # und vielleicht eine PV-Prognose, aber nicht den Verbrauchsgang DIESES
+        # Hauses mit Waermepumpen-Korrektur. Der Ueberschuss ist die Differenz
+        # der beiden — und sie kostet keine neue Rechnung, nur einen Export.
+        formel="Σ max(0; PV-Prognose − Verbrauchsprognose) je Stunde heute; Stundenreihen und Überschuss-Blöcke als Attribut",
+        # Eine Prognose ist kein Zaehler (F-63-Begruendung der PROGNOSE-Gruppe)
+        # — deshalb hier KEIN device_class und `measurement`.
+        state_class="measurement",
+    ),
+    # ── P3 · Arbitrage ──────────────────────────────────────────────────────
+    SensorDefinition(
+        key="eedc_arbitrage_vorschlag_kwh",
+        name="Arbitrage-Vorschlag",
+        unit="kWh",
+        icon="mdi:swap-vertical-bold",
+        category=SensorCategory.STEUERUNG,
+        # ⚠ Ein Vorschlag ist keine gemessene Menge und auch keine Prognose —
+        # deshalb weder device_class noch state_class. Er entsteht nur, wenn
+        # sich etwas lohnt; sonst gibt es ihn nicht (ADR-002/P4).
+        formel="Empfohlene Netzladung heute — laden in günstigen Stunden, entladen gegen das teuerste Defizit danach; Ersparnis als Attribut",
+    ),
+    # ── P5 · bestes Fenster ─────────────────────────────────────────────────
+    SensorDefinition(
+        key="eedc_bestes_fenster_ab",
+        name="Bestes Fenster ab",
+        unit="",
+        icon="mdi:calendar-clock",
+        category=SensorCategory.STEUERUNG,
+        # ⭐ **Warum vier feste Dauern und keine Mengen-Eingabe** (Fachentscheid,
+        # abgenommen 21.09.): ein Sensor kann keinen Parameter entgegennehmen —
+        # eine HA-Karte liest Zustaende, sie ruft keine Services (§2, HACS
+        # bleibt draussen). Das Kostenprofil je kWh ist mengenneutral, die vier
+        # Dauern 1/2/3/4 h decken „jetzt oder um 14 Uhr" fuer Waschmaschine,
+        # Trockner, Spuelmaschine und Auto.
+        formel="Beginn des günstigsten 2-Stunden-Fensters ab jetzt; die Dauern 1/2/3/4 h und das Kostenprofil je kWh als Attribut",
+        device_class="timestamp",
+    ),
+    # ── P6 · Abweichungs-Ampel ──────────────────────────────────────────────
+    SensorDefinition(
+        key="eedc_prognose_abweichung_heute_prozent",
+        name="Prognose-Abweichung heute",
+        unit="%",
+        icon="mdi:chart-bell-curve",
+        category=SensorCategory.STEUERUNG,
+        formel="(IST bis zur letzten vollen Stunde − Prognose bis dahin) ÷ Prognose × 100 — negativ = weniger erzeugt als vorhergesagt",
+        state_class="measurement",
+    ),
+    SensorDefinition(
+        key="eedc_prognose_auffaellig",
+        name="Prognose-Abweichung auffällig",
+        unit="",
+        icon="mdi:alert-outline",
+        category=SensorCategory.STEUERUNG,
+        # ⛔ **Der Name ist die Aussage.** Er sagt „die Abweichung ist
+        # auffaellig", nicht „die Anlage ist defekt" — eedc sieht Verschattung,
+        # Schnee, einen Sensorausfall und einen echten Defekt als dieselbe
+        # Zahl. Ein Urteil waere eine Behauptung ueber eine Ursache, die eedc
+        # nicht kennt.
+        formel="AN, wenn die Tagesabweichung über dem Doppelten des mittleren Fehlers der letzten 30 Tage liegt — frühestens nach 3 vollen Sonnenstunden",
+        device_class="problem",
+        komponente="binary_sensor",
+    ),
+]
+
+# =============================================================================
+# SENSOR-DEFINITIONEN - Sonstige Verbraucher je Geraet (Stufe 3, P9)
+# =============================================================================
+# ⚠ **P9 ist auch Stufe 1.** Fuer ein Geraet der Kategorie *Sonstiges/
+# Verbraucher* (Pool, Sauna, Trockner, Heizstab mit eigenem Zaehler = Fall H-A
+# des Waerme/Klima-Konzepts) exportierte eedc bis zum 21.09.2026 **keinen
+# einzigen Energiewert** — je Geraet lieferte die INVESTITION-Gruppe hoechstens
+# `investition_gesamt_euro`, die drei anderen Keys jener Gruppe sind
+# anlagenweit. Erst der Geraetesensor, dann das Fenster.
+SONSTIGES_SENSOREN = [
+    SensorDefinition(
+        key="sonstiges_verbrauch_monat_kwh",
+        name="Verbrauch (Monat)",
+        unit="kWh",
+        icon="mdi:power-plug",
+        category=SensorCategory.SONSTIGES,
+        formel="Stromverbrauch dieses Geräts im laufenden Monat; PV-Anteil und Netzbezug als Attribut",
+        device_class="energy",
+        state_class="total",
+    ),
+    SensorDefinition(
+        key="sonstiges_fenster_ab",
+        name="Bestes Fenster ab",
+        unit="",
+        icon="mdi:calendar-clock",
+        category=SensorCategory.SONSTIGES,
+        formel="Beginn des günstigsten 2-Stunden-Fensters für den Ø-Tagesverbrauch dieses Geräts",
+        device_class="timestamp",
+    ),
+]
+
+# =============================================================================
 # ALLE SENSOREN ZUSAMMENGEFASST
 # =============================================================================
 ALL_SENSOR_DEFINITIONS = {
@@ -890,6 +1212,8 @@ ALL_SENSOR_DEFINITIONS = {
     "status": LETZTER_IMPORT_SENSOREN,
     "prognose": PROGNOSE_SENSOREN,
     "preis": PREIS_SENSOREN,
+    "steuerung": STEUERUNG_SENSOREN,
+    "sonstiges": SONSTIGES_SENSOREN,
 }
 
 

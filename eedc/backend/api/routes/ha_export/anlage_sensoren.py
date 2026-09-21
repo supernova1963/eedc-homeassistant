@@ -36,7 +36,7 @@ from backend.core.berechnungen import (
     vollzyklen as berechne_vollzyklen,
 )
 from backend.services.prognose_auswahl import lade_aktive_prognose
-from datetime import date
+from datetime import date, datetime
 from backend.services.strompreis_aggregator import (
     lade_preis_aggregate_je_monat,
     aufgeloester_monatspreis,
@@ -100,6 +100,8 @@ from backend.api.routes.ha_export.anlage_komponenten import (
     speicher_kpis,
 )
 from backend.api.routes.ha_export.anlage_sensorwerte import sensorwerte_erstellen, prognose_und_preis_sensoren
+from backend.api.routes.ha_export.anlage_steuerung import steuerungs_sensoren
+from backend.services.ha_export_fenster import baue_fenster_kontext
 
 
 # Vorlage 8b: `grundlast_sensorwert` ist in anlage_sensorwerte.py umgezogen (die Sensorwerte-Phase ruft es); hier nur der Re-Export
@@ -111,6 +113,8 @@ async def calculate_anlage_sensors(
     anlage: Anlage,
     *,
     skip_jitter: bool = False,
+    kontext_out: Optional[dict] = None,
+    jetzt: Optional[datetime] = None,
 ) -> list[SensorValue]:
     """
     Berechnet alle Sensor-Werte für eine Anlage.
@@ -121,6 +125,22 @@ async def calculate_anlage_sensors(
 
     ``skip_jitter`` (N-531): ``True`` auf den On-Demand-Wegen (REST-Sichten, Publish-Knopf) — der
     Prognose-Kanon würfelt sonst vor jedem Open-Meteo-Abruf bis zu 30 s Wartezeit (s. `berechne_prognose_export`).
+
+    ``kontext_out`` (S3, 21.09.2026) ist ein **Ausgabe-Dict**: wer es mitgibt, bekommt darin den
+    ``FensterKontext`` dieser Anlage zurück (Schlüssel ``fenster``) und reicht ihn an
+    ``calculate_investition_sensors`` weiter.
+
+    ⭐ **Warum ein Ausgabe-Parameter und kein zweiter Rückgabewert:** Die Signatur
+    ``-> list[SensorValue]`` hat fünf Aufrufer, von denen drei den Kontext nicht brauchen (YAML-Snippet,
+    Abwahl-Sicht, Anlagen-Einzelsicht). Ein Tupel hätte alle fünf geändert, damit zwei etwas bekommen.
+    Der Kontext ist **eine Rechnung je Publish-Lauf** — Preisreihe, Überschussreihe und Kostenprofil
+    entstehen einmal, nicht einmal je Gerät; eine Anlage mit zwei Wärmepumpen und drei sonstigen
+    Verbrauchern riefe sonst fünfmal dieselbe Rechnung.
+
+    ``jetzt`` ist die Uhr der Steuerungs- und Plan-Sensoren — ein **Parameter** und kein
+    ``datetime.now()`` in der Phase selbst (dasselbe Muster wie ``grundlast_sensorwert``). Ohne
+    Angabe liest der Orchestrator die Prozessuhr; eine Probe setzt sie fest und muss damit nicht
+    auf die Stunde ihres Laufs wetten (N-167: vier von 24 Stunden rot ohne Code-Änderung).
     """
     # Monatsdaten laden (für Zählerwerte: einspeisung, netzbezug)
     result = await db.execute(
@@ -311,6 +331,26 @@ async def calculate_anlage_sensors(
         strompreis=strompreis,
     )
     if "sensor_values" in _out: sensor_values = _out["sensor_values"]
-    # ── prognose_und_preis_sensoren (Vorlage 8b: Phase in anlage_sensorwerte.py, Schnittstelle 3 ein / 0 aus) ──
+    # ── prognose_und_preis_sensoren (Vorlage 8b: Phase in anlage_sensorwerte.py, Schnittstelle 3 ein / 2 aus) ──
     _out = await prognose_und_preis_sensoren(anlage=anlage, db=db, sensor_values=sensor_values, skip_jitter=skip_jitter)
+
+    # ── steuerungs_sensoren (S2/S3: Phase in anlage_steuerung.py) ───────────
+    #
+    # Die Uhr wird HIER gelesen und als Parameter weitergegeben (N-167-Muster,
+    # wie `grundlast_sensorwert`): eine Phase, die selbst `date.today()` ruft,
+    # zwingt jede Probe, auf die Stunde ihres Laufs zu wetten.
+    _jetzt = jetzt or datetime.now()
+    _fenster_ctx = baue_fenster_kontext(_out.get("prognose"), _out.get("preis"), jetzt=_jetzt)
+    await steuerungs_sensoren(
+        anlage=anlage,
+        db=db,
+        sensor_values=sensor_values,
+        prognose=_out.get("prognose"),
+        preis=_out.get("preis"),
+        fenster_ctx=_fenster_ctx,
+        heute=_jetzt.date(),
+        jetzt_stunde=_jetzt.hour,
+    )
+    if kontext_out is not None:
+        kontext_out["fenster"] = _fenster_ctx
     return sensor_values
