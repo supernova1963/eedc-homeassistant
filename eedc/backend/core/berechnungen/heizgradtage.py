@@ -54,6 +54,53 @@ def heizgradtage_tag(tagesmittel_c: float) -> float:
     return max(0.0, HEIZGRENZE_C - float(tagesmittel_c))
 
 
+def wp_temperatur_faktor(
+    referenz_temp_c: Optional[float], forecast_temp_c: Optional[float]
+) -> float:
+    """Skalierungsfaktor für den **Wärmepumpen-Anteil** eines Stundenprofils.
+
+    Das gelernte WP-Profil stammt aus einer Referenzperiode mit einer
+    mittleren Außentemperatur; heute ist es kälter oder wärmer. Der Faktor ist
+    das Verhältnis der Heizgradtage — bei Referenz-Ø 5 °C und Vorhersage 0 °C
+    also ``15 / 10 = 1,5``.
+
+    ⚠ **Zwei Fälle, und der zweite ist der, an dem eine reine Division
+    scheitert.** War die Referenzperiode **mild** (Ø ≥ 14 °C, die Wärmepumpe
+    lief praktisch nur für Warmwasser), ist ``hdd_ref`` nahe 0 — ein Verhältnis
+    liefe gegen unendlich und hochskalieren ergäbe keinen Sinn, weil im
+    Referenzprofil gar kein Heizanteil steckt, den man strecken könnte. Für
+    diesen Fall ein sanfter Zuschlag von 15 % je Heizgrad. Beides gekappt auf
+    ``0,1…3,0``, damit keine Ausreißertemperatur das Tagesprofil kippt.
+
+    ⭐ **Warum das seit dem 21.09.2026 hier steht und nicht mehr nur in
+    ``api/routes/live_wetter.py::_berechne_verbrauchsprofil``:** Mit den
+    Plan-Sensoren (P1/P7) braucht die **erwartete WP-Stundenreihe** einen
+    zweiten Leser. Ein zweiter Nachbau derselben Skalierung hieße: die Kachel
+    in Cockpit → Live und der HA-Sensor daneben rechnen denselben Heizstrom
+    mit verschiedenen Faktoren. Die Heizgrenze liegt aus genau diesem Grund
+    schon hier (G-G, 12.09.2026); der Faktor gehört dazu.
+
+    Args:
+        referenz_temp_c: mittlere Außentemperatur der Referenzperiode.
+        forecast_temp_c: vorhergesagte Außentemperatur dieser Stunde.
+
+    Returns:
+        ``1.0``, wenn eine der beiden Temperaturen fehlt — dann gibt es nichts
+        zu skalieren, und ein erfundener Faktor wäre schlechter als keiner.
+    """
+    if referenz_temp_c is None or forecast_temp_c is None:
+        return 1.0
+    hdd_ref = heizgradtage_tag(referenz_temp_c)
+    hdd_fc = heizgradtage_tag(forecast_temp_c)
+    if hdd_ref >= 1.0:
+        faktor = hdd_fc / hdd_ref
+    elif hdd_fc > 0:
+        faktor = 1.0 + hdd_fc * 0.15
+    else:
+        faktor = 1.0
+    return max(0.1, min(3.0, faktor))
+
+
 @dataclass(frozen=True)
 class HeizgradtageMonat:
     """Die Heizgradtage eines Kalendermonats — **mit ihrer Vollständigkeit**.

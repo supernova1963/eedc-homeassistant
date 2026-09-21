@@ -11,6 +11,7 @@ from backend.core.field_definitions import basis_feld_key
 from backend.models.anlage import Anlage
 from backend.models.investition import InvestitionMonatsdaten
 from backend.core.berechnungen import hat_gemessene_betriebsart
+from backend.services.daten_checker.kuehl_zaehler import hat_kuehl_zaehler
 from backend.services.daten_checker.kategorien import (
     CheckErgebnis,
     CheckKategorie,
@@ -149,28 +150,17 @@ class KlimaChecks:
             ⚠ Enger als {@link _hat_kuehl_spur}: Eine Kältemenge und erst recht
             ein `leistung_kuehlen_w` sind **kein** kWh-Zähler und lösen den
             Fall nicht auf. Wer nur sie hat, soll den Hinweis bekommen.
+
+            ⭐ **Die Regel steht seit dem 21.09.2026 auf Modulebene**
+            (`daten_checker/kuehl_zaehler.py`): das Kühlfenster des HA-Exports
+            (S3/P8) stellt dieselbe Frage, und ein Nachbau dort hieße, dass der
+            Checker „Kühlanteil wird geschätzt" sagt, während der Sensor
+            daneben so tut, als wäre er gemessen. Hier bleibt nur die Bindung
+            an die drei lokalen Namen.
             """
-            if any(
-                imd.investition_id == inv_id
-                and betriebsart_strom_kwh(imd.verbrauch_daten or {}, KUEHLEN) is not None
-                for imd in imd_alle
-            ):
-                return True
-            feld = BETRIEBSART_STROM_FELD[KUEHLEN]
-            eintrag = mapping.get(str(inv_id))
-            if isinstance(eintrag, dict):
-                for k, m in (eintrag.get("felder") or {}).items():
-                    if basis_feld_key(k) == feld and isinstance(m, dict) \
-                            and m.get("strategie") == "sensor" and m.get("sensor_id"):
-                        return True
-            praefix = f"inv_energy_{inv_id}_"
-            for feld_id, q in quellen_alle.items():
-                if isinstance(feld_id, str) and feld_id.startswith(praefix) \
-                        and basis_feld_key(feld_id[len(praefix):]) == feld:
-                    quelle = (q or {}).get("quelle") if isinstance(q, dict) else None
-                    if quelle and quelle != "keine":
-                        return True
-            return False
+            return hat_kuehl_zaehler(
+                inv_id, imd_zeilen=imd_alle, mapping=mapping, quellen=quellen_alle,
+            )
 
         geschaetzter_kuehlanteil = []
         for i in aktive:

@@ -22,7 +22,7 @@ from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.core.config import settings
 from backend.core.berechnungen.energie import summe_pv_bkw_kwh
-from backend.core.berechnungen.heizgradtage import HEIZGRENZE_C
+from backend.core.berechnungen.heizgradtage import wp_temperatur_faktor
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.utils.investition_filter import aktiv_jetzt
@@ -325,19 +325,12 @@ def _berechne_verbrauchsprofil(
             if wp_profil and referenz_temp_c is not None:
                 temp = s.get("temperatur_c")
                 if temp is not None:
-                    hdd_ref = max(0.0, HEIZGRENZE_C - referenz_temp_c)
-                    hdd_fc = max(0.0, HEIZGRENZE_C - temp)
-                    if hdd_ref >= 1.0:
-                        # Normaler Heizbetrieb in Referenzperiode → proportional
-                        faktor = hdd_fc / hdd_ref
-                    elif hdd_fc > 0:
-                        # Referenz war mild (WP nur Warmwasser), Forecast kalt
-                        # Sanfter Zuschlag: +15% pro Heizgrad unter Heizgrenze
-                        faktor = 1.0 + hdd_fc * 0.15
-                    else:
-                        # Beide über Heizgrenze → kein Heizbedarf
-                        faktor = 1.0
-                    faktor = max(0.1, min(3.0, faktor))
+                    # ⭐ Seit 21.09.2026 aus dem Layer (`wp_temperatur_faktor`)
+                    # statt hier ausgeschrieben: die Plan-Sensoren P1/P7
+                    # brauchen dieselbe Skalierung fuer die erwartete
+                    # WP-Stundenreihe, und zwei Nachbauten hiessen zwei
+                    # Heizstrom-Zahlen unter einem Namen.
+                    faktor = wp_temperatur_faktor(referenz_temp_c, temp)
                     wp_kw = wp_profil.get(h, wp_profil.get(str(h), 0.0))
                     haus_kw = max(0.0, verbrauch_kw - wp_kw)
                     verbrauch_kw = round(max(0.0, haus_kw + wp_kw * faktor), 2)

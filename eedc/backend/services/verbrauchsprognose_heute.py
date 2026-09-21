@@ -36,7 +36,7 @@ hier (Register N-392, Verdacht).
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -121,12 +121,33 @@ async def waehle_verbrauchsprofil(
 
 @dataclass
 class VerbrauchsprognoseHeute:
-    """Die Tageszahl samt ihrer Grundlage — für Sensor-Attribut und Rechenweg."""
+    """Die Tageszahl samt ihrer Grundlage — für Sensor-Attribut und Rechenweg.
+
+    ⭐ **Die drei Stundenreihen kamen am 21.09.2026 dazu (S3/P1).** Bis dahin
+    verließ nur die Tagessumme diesen Dienst — die Reihe, aus der sie gebildet
+    wird, blieb in der Funktion liegen. Genau sie ist aber der Rohstoff der
+    Stufe 3: die **Überschuss-Prognose je Stunde** ist die Differenz aus der
+    PV-Reihe (gibt es als Attribut längst) und dieser hier, und sie ist die
+    Größe, die eine Wallbox, eine Wärmepumpe und eine Speicher-Arbitrage
+    brauchen und keines dieser Systeme selbst bilden kann.
+
+    ``wp_stunden_kwh`` ist der **temperaturkorrigierte** Wärmepumpen-Anteil
+    derselben Reihe (``None`` ohne WP-Profil) — er ist eine **Teilmenge** von
+    ``stunden_kwh``, kein Summand daneben. ``temperatur_c`` reist mit, weil
+    P8 die Stunde des Tagesmaximums braucht und ein zweiter Forecast-Abruf
+    dafür weder nötig noch erlaubt wäre (derselbe Cache, dieselbe Wahrheit).
+    """
 
     summe_kwh: float
     profil_typ: str
     profil_tage: Optional[int]
     profil_slots: Optional[int]
+    #: 24 Stunden-kWh (1 h × kW); Index = Stunde in der Prozesszone.
+    stunden_kwh: list[float] = field(default_factory=list)
+    #: derselbe Zeitraster, nur der WP-Anteil — `None` ohne WP-Profil.
+    wp_stunden_kwh: Optional[list[float]] = None
+    #: die Temperaturvorhersage je Stunde, so wie sie in die Korrektur ging.
+    temperatur_c: list[Optional[float]] = field(default_factory=list)
 
 
 def summe_verbrauchsprofil_kwh(profil: list[dict]) -> float:
@@ -207,9 +228,37 @@ async def verbrauchsprognose_heute(
     )
     if not profil:
         return None
+
+    # ── Die Reihen, aus denen die Summe entsteht (S3/P1) ────────────────────
+    #
+    # ⚠ **Die Länge ist die des Forecasts, nicht 24.** Am Ende der Sommerzeit
+    # hat ein Tag 23 oder 25 Stunden (F-6); wer hier auf 24 auffüllt, erfindet
+    # eine Stunde oder verliert eine. Die Aufrufer rechnen über die Länge.
+    temperaturen = [s.get("temperatur_c") for s in stunden]
+    wp_reihe: Optional[list[float]] = None
+    if wahl.wp_profil and wahl.referenz_temp_c is not None:
+        # ⛔ **Dieselbe Skalierung wie in `_berechne_verbrauchsprofil`, und
+        # zwar aus demselben Layer-Helfer** (`wp_temperatur_faktor`, seit
+        # 21.09.2026). Ein eigener Faktor hier hiesse: die Kachel in Cockpit →
+        # Live und das Heizfenster-Attribut daneben nennen verschiedene
+        # Heizstrom-Mengen für dieselbe Stunde.
+        from backend.core.berechnungen.heizgradtage import wp_temperatur_faktor
+
+        wp_reihe = []
+        for i, eintrag in enumerate(profil):
+            h = int(eintrag["zeit"].split(":")[0])
+            roh = wahl.wp_profil.get(h, wahl.wp_profil.get(str(h), 0.0)) or 0.0
+            temp = temperaturen[i] if i < len(temperaturen) else None
+            wp_reihe.append(round(
+                float(roh) * wp_temperatur_faktor(wahl.referenz_temp_c, temp), 2
+            ))
+
     return VerbrauchsprognoseHeute(
         summe_kwh=summe_verbrauchsprofil_kwh(profil),
         profil_typ=wahl.profil_typ,
         profil_tage=wahl.profil_tage,
         profil_slots=wahl.profil_slots,
+        stunden_kwh=[round(float(p.get("verbrauch_kw") or 0.0), 2) for p in profil],
+        wp_stunden_kwh=wp_reihe,
+        temperatur_c=temperaturen[:len(profil)],
     )

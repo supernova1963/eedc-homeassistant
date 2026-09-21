@@ -23,6 +23,11 @@ from backend.core.exceptions import bad_request, not_found
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.api.deps import get_db
 from backend.core.berechnungen import summe_pv_bkw_kwh
+from backend.core.berechnungen.prognose_genauigkeit import (
+    mae_prozent,
+    mbe_prozent,
+    relativer_tagesfehler_prozent,
+)
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.services.prognose_auswahl import lade_aktive_prognose
@@ -974,14 +979,14 @@ async def get_prognosen_genauigkeit(
             eedc_kwh = forecast_kwh * lernfaktor
 
         # Vorzeichenbehaftete relative Tagesfehler je Quelle (nur bei brauchbarem IST)
-        om_err = eedc_err = sc_err = None
-        if ist_kwh is not None and ist_kwh > 0.5:
-            if forecast_kwh and forecast_kwh > 0:
-                om_err = (forecast_kwh - ist_kwh) / ist_kwh * 100
-            if eedc_kwh is not None and eedc_kwh > 0:
-                eedc_err = (eedc_kwh - ist_kwh) / ist_kwh * 100
-            if tz.solcast_prognose_kwh and tz.solcast_prognose_kwh > 0:
-                sc_err = (tz.solcast_prognose_kwh - ist_kwh) / ist_kwh * 100
+        # ⭐ Seit 21.09.2026 aus dem Layer (`relativer_tagesfehler_prozent`): die
+        # Abweichungs-Ampel des HA-Exports (S3/P6) braucht dieselbe Rechnung als
+        # Schwelle, und zwei Fassungen hiessen zwei mittlere Fehler unter einem
+        # Namen. Die Bedingung `IST > 0,5 kWh` steckt jetzt in der Funktion — sie
+        # galt hier fuer alle drei Quellen gemeinsam und gilt dort ebenso.
+        om_err = relativer_tagesfehler_prozent(forecast_kwh, ist_kwh)
+        eedc_err = relativer_tagesfehler_prozent(eedc_kwh, ist_kwh)
+        sc_err = relativer_tagesfehler_prozent(tz.solcast_prognose_kwh, ist_kwh)
 
         abweichungen = [abs(e) for e in (om_err, eedc_err, sc_err) if e is not None]
         ist_ausreisser = bool(abweichungen) and max(abweichungen) > AUSREISSER_SCHWELLE
@@ -1010,11 +1015,8 @@ async def get_prognosen_genauigkeit(
         if sc_err is not None:
             sc_signed.append(sc_err)
 
-    def _mae(xs):
-        return round(sum(abs(x) for x in xs) / len(xs), 1) if xs else None
-
-    def _mbe(xs):
-        return round(sum(xs) / len(xs), 1) if xs else None
+    _mae = mae_prozent    # Layer-SoT (21.09.2026) — die Namen bleiben, der Rechner ist einer
+    _mbe = mbe_prozent
 
     def _asymmetrie(xs) -> AsymmetrieEintrag:
         """Splittet signed errors an 0 in „darüber" (Prognose > IST) und „darunter"."""

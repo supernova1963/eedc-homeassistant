@@ -342,6 +342,89 @@ def test_heizgrenze_nur_im_layer():
     )
 
 
+# Pattern: ein zweiter Fenster-Rechner (S2/S3 „eedc@ha, Teil 1", 21.09.2026).
+#
+# Fünf Stufe-3-Stücke (P4 Warmwasser · P5 bestes Fenster · P7 Heizfenster ·
+# P8 Kühlfenster · P9 Sonstiges) beantworten dieselbe Frage mit anderen
+# Eingängen. Die Formel steht EINMAL in `core/berechnungen/fenster.py`; jede
+# zweite Fassung wäre die Drift-Klasse vom 31.07.2026 — sechs Befunde, kein
+# Rechenfehler im Layer, aber sechs Read-Sites, die selbst falteten.
+#
+# ⚠ **Drei Formen, ein Wächter** — und jede fängt eine andere Art, es doch
+# selbst zu tun:
+#   1. eine zweite **Definition** einer der fünf Layer-Funktionen (die
+#      offensichtliche Form: „ich schreibe mir das schnell nach");
+#   2. das **gleitende Mittel** über eine Preis-/Kosten-Reihe
+#      (`sum(kosten[a:a+d]) / d`) — die Rechnung hinter `bestes_fenster`,
+#      auch wenn sie anders heißt;
+#   3. der **Mischpreis** `preis × (1 − Überschussanteil)` — die Rechnung
+#      hinter `kosten_profil`.
+# Form 2 und 3 tragen keinen Namen, unter dem man sie suchen würde; genau
+# deshalb stehen sie hier neben Form 1 (dieselbe Begründung wie bei der
+# Heizgrenze darüber).
+_FENSTER_DEFINITION = re.compile(
+    r"^\s*(?:async\s+)?def\s+"
+    r"(bestes_fenster|kosten_profil|ueberschuss_bloecke|verteile_auf_guenstigste"
+    r"|arbitrage_vorschlag)\s*\("
+)
+_FENSTER_GLEITENDES_MITTEL = re.compile(
+    r"sum\(\s*(?:kosten|preis|preise|slot_kosten)[a-z_]*\s*\[[^\]]*:[^\]]*\]\s*\)\s*/"
+)
+_FENSTER_MISCHPREIS = re.compile(
+    r"\(\s*1(?:\.0)?\s*-\s*(?:min\s*\()?[^)\n]*(?:ueberschuss|überschuss)"
+)
+
+ALLOWED_FENSTER_FILES = {
+    "core/berechnungen/fenster.py",      # der EINE Fenster-Rechner (SoT)
+    "core/berechnungen/__init__.py",     # Re-Export
+}
+
+
+def test_fenster_rechner_nur_im_layer():
+    """Es gibt genau **einen** Fenster-Rechner, und er steht im Layer.
+
+    Die Probe `test_waechter_fenster_kann_rot_melden` daneben ist Pflicht:
+    ein Wächter, der nur grün kann, beweist nichts.
+    """
+    verstoesse: list[tuple[str, int, str]] = []
+    for path, rel in _iter_py_files():
+        if rel in ALLOWED_FENSTER_FILES:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        for line_no, line in enumerate(text.splitlines(), start=1):
+            if (_FENSTER_DEFINITION.search(line)
+                    or _FENSTER_GLEITENDES_MITTEL.search(line)
+                    or _FENSTER_MISCHPREIS.search(line)):
+                verstoesse.append((rel, line_no, line.strip()))
+
+    assert not verstoesse, _format_verstoesse_meldung(
+        verstoesse,
+        regel="Zweiter Fenster-Rechner außerhalb von core/berechnungen/fenster.py",
+    ) + (
+        "\n\nSoT-Migration:\n"
+        "  from backend.core.berechnungen.fenster import (\n"
+        "      bestes_fenster, kosten_profil, ueberschuss_bloecke,\n"
+        "      verteile_auf_guenstigste, arbitrage_vorschlag,\n"
+        "  )"
+    )
+
+
+def test_waechter_fenster_kann_rot_melden():
+    """Gegenprobe zu den drei Formen — je eine Zeile, die rot sein MUSS."""
+    assert _FENSTER_DEFINITION.search("def bestes_fenster(kosten, dauer):")
+    assert _FENSTER_DEFINITION.search("    async def kosten_profil(p, u):")
+    assert _FENSTER_GLEITENDES_MITTEL.search("m = sum(kosten[a:a + dauer]) / dauer")
+    assert _FENSTER_GLEITENDES_MITTEL.search("x = sum(preise[i:i+n]) / n")
+    assert _FENSTER_MISCHPREIS.search("eff = p * (1 - min(1, ueberschuss / menge))")
+    # ... und die Gegenrichtung: gewöhnlicher Code bleibt still
+    assert not _FENSTER_DEFINITION.search("def _kuehlfenster_sensorwert(inv):")
+    assert not _FENSTER_GLEITENDES_MITTEL.search("summe = sum(werte) / len(werte)")
+    assert not _FENSTER_MISCHPREIS.search("rest = (1 - anteil) * menge")
+
+
 # Pattern: Inline-Eigenverbrauchsquote `eigenverbrauch… / (pv|erzeugung)… * 100`
 # (Schläfer-Block 3). Nach der Konsolidierung lebt sie nur noch im Helper
 # `eigenverbrauchsquote_prozent` (gecappt auf 100 %, Maintainer-Entscheid).

@@ -30,6 +30,11 @@ Submodule:
   per-Monat-aktives kWp) — Cockpit-Kachel == HA-Export-Sensor
 - `prognose_korrektur` — Kaskaden-Faktoren auf Prognose-Stundenprofil,
   Tageswert = Σ Export-Slots (Invariante HA-Export #150 / Prognosen-Vergleich)
+- `fenster` — der EINE Fenster-Rechner (Kostenprofil je Slot, bestes
+  n-Stunden-Fenster, Überschuss-Blöcke, Verschiebung auf die günstigsten
+  Stunden, Arbitrage-Vorschlag) hinter P4/P5/P7/P8/P9 des HA-Exports
+- `prognose_genauigkeit` — relativer Tagesfehler + MAE/MBE (Genauigkeits-Tracking
+  und die Schwelle der Abweichungs-Ampel im HA-Export)
 - `heizgradtage` — Heizgrenze + Heizgradtage je Tag/Monat und die Normierung
   „Menge je Kd" (die EINE Definition für Verbrauchsprognose und
   wetternormierten Vergleich)
@@ -175,6 +180,17 @@ from backend.core.berechnungen.energie import (
     summe_wallbox_eauto_kwh,
     wert_basis_kwh,
 )
+from backend.core.berechnungen.fenster import (
+    Arbitrage,
+    Fenster,
+    UeberschussBlock,
+    Verteilung,
+    arbitrage_vorschlag,
+    bestes_fenster,
+    kosten_profil,
+    ueberschuss_bloecke,
+    verteile_auf_guenstigste,
+)
 from backend.core.berechnungen.heizgradtage import (
     GRUND_KEINE_TEMPERATURREIHE,
     HEIZGRENZE_C,
@@ -183,6 +199,7 @@ from backend.core.berechnungen.heizgradtage import (
     heizgradtage_je_monat,
     heizgradtage_tag,
     normiert,
+    wp_temperatur_faktor,
 )
 from backend.core.berechnungen.invarianten import (
     aggregiere_tep_komponenten,
@@ -219,6 +236,12 @@ from backend.core.berechnungen.pv_verteilung import (
     klassifiziere_pv_monat,
     resolve_pv_je_modul,
     verteile_basis_kwh_nach_kwp,
+)
+from backend.core.berechnungen.prognose_genauigkeit import (
+    IST_MINDESTMENGE_KWH,
+    mae_prozent,
+    mbe_prozent,
+    relativer_tagesfehler_prozent,
 )
 from backend.core.berechnungen.preis_rang import (
     GUENSTIG_SCHWELLE_FAKTOR,
@@ -445,6 +468,10 @@ __all__ = [
     "RANG_TEUER",
     "PreisRangErgebnis",
     "berechne_preis_rang",
+    "IST_MINDESTMENGE_KWH",
+    "mae_prozent",
+    "mbe_prozent",
+    "relativer_tagesfehler_prozent",
     "guenstig_schwelle",
     "KorrigiertesTagesprofil",
     "korrigiere_tagesprofil",
@@ -453,7 +480,17 @@ __all__ = [
     "HeizgradtageMonat",
     "heizgradtage_grund",
     "heizgradtage_je_monat",
+    "Arbitrage",
+    "Fenster",
+    "UeberschussBlock",
+    "Verteilung",
+    "arbitrage_vorschlag",
+    "bestes_fenster",
+    "kosten_profil",
+    "ueberschuss_bloecke",
+    "verteile_auf_guenstigste",
     "heizgradtage_tag",
+    "wp_temperatur_faktor",
     "normiert",
     "soll_final_einfrieren",
     "abgetretene_bkw_ids",
