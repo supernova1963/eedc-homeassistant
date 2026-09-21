@@ -481,6 +481,33 @@ async def test_remove_sensors_raeumt_neu_und_alt_und_laesst_fremdes_liegen(monke
     assert set(broker.retained) == {_FREMD, _FREMDE_ANLAGE}
 
 
+_MONATSDATEN = "eedc/anlage/1/monatsdaten/2026/07"
+
+
+async def test_verwaiste_topics_laesst_finale_monatsdaten_liegen(monkeypatch):
+    """⛔ Gemessen im HAOS-Lab am 21.09.2026: die erste Fassung nahm die retained
+    Monatsabschluss-Nachricht (`publish_final_month_data`) als „verwaist" mit.
+
+    Sie liegt unter dem eigenen State-Praefix, steht in keiner Sensor-Definition
+    und ist trotzdem kein Sensor — der Knopf heisst „Sensoren entfernen", und ein
+    Monatsabschluss publiziert seine Nachricht genau einmal. Das Topic bleibt;
+    die MWD-Altlast daneben faellt weiterhin.
+    """
+    bestand = _bestand()
+    bestand[_MONATSDATEN] = json.dumps({"pv_erzeugung_kwh": 812.0}).encode()
+    broker = _FakeBroker(bestand)
+    _broker_einhaengen(monkeypatch, broker)
+    client = MQTTClient(MQTTConfig(host="localhost"))
+
+    gefunden = await client.verwaiste_topics(1, bekannte=set(), sammelzeit_s=0.2)
+    assert _MONATSDATEN not in gefunden, "finale Monatsdaten sind kein Sensor"
+    assert _ALTLAST in gefunden, "die Altlast daneben faellt weiterhin"
+
+    ergebnis = await client.remove_sensors([], anlage_id_bestand=1)
+    assert _MONATSDATEN not in ergebnis["altlast_topics"]
+    assert _MONATSDATEN in broker.retained, "die Nachricht liegt nach dem Entfernen noch"
+
+
 async def test_abwahl_nimmt_auch_das_verfuegbarkeits_topic_zurueck(monkeypatch):
     """B2b — der Weg OHNE Bestandsaufnahme, und das ist der kritische.
 

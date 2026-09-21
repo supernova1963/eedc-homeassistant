@@ -654,6 +654,14 @@ class MQTTClient:
         #: auseinanderlaufen koennen (#400-Klasse).
         eigen_praefix = f"/eedc_{anlage_id}_"
         state_praefix = f"{self.config.state_prefix}/anlage/{anlage_id}/"
+        #: ⛔ **Die finalen Monatsdaten sind keine Sensor-Nachrichten und bleiben
+        #: liegen** (`publish_final_month_data`, retained, ein Topic je Monat).
+        #: Gemessen 21.09.2026 im HAOS-Lab: die erste Fassung der Bestandsaufnahme
+        #: nahm `eedc/anlage/1/monatsdaten/2026/07` als „verwaist" mit — der Knopf
+        #: heisst „Sensoren entfernen", und ein Monatsabschluss publiziert seine
+        #: Nachricht nur einmal; ein Konsument in HA haette sie bis zum naechsten
+        #: Abschluss verloren, ohne dass der Dialog das angekuendigt hat.
+        monatsdaten_praefix = f"{state_praefix}monatsdaten/"
         try:
             async with aiomqtt.Client(
                 hostname=self.config.host,
@@ -675,6 +683,8 @@ class MQTTClient:
                         if not (topic.startswith(state_praefix)
                                 or eigen_praefix in topic):
                             continue        # fremd — gesehen, nicht gemerkt
+                        if topic.startswith(monatsdaten_praefix):
+                            continue        # eigene Daten, kein Sensor — bleibt
                         gefunden.add(topic)
 
                 try:

@@ -644,7 +644,7 @@ eedc exportiert berechnete Kennzahlen an einen Broker (HA-Discovery-Konvention).
 >
 > Wer die Werte lieber behalten, aber nicht aufzeichnen will, kann sie in HA weiterhin per `recorder:`-`exclude` von der Aufzeichnung ausnehmen (aktuelle Werte bleiben sichtbar, keine DB-Historie).
 
-> **„Sensoren entfernen" nimmt alles zurück.** Der rote Knopf entfernt sämtliche eedc-Sensoren dieser Anlage von Home Assistant und vom Broker — die anlagenweiten **und** die je Komponente, jeweils mit Wert und Attributen. Auch hier wird vorher gefragt. Mit **Sensoren publizieren** oder beim nächsten automatischen Lauf kommen sie neu — ohne ihre alte Historie.
+> **„Sensoren entfernen" nimmt alles zurück.** Der rote Knopf entfernt sämtliche eedc-Sensoren dieser Anlage von Home Assistant und vom Broker — die anlagenweiten **und** die je Komponente, jeweils mit Wert und Attributen. Auch hier wird vorher gefragt. Mit **Sensoren publizieren** oder beim nächsten automatischen Lauf kommen sie neu — ohne ihre alte Historie. **Was liegen bleibt:** die Monatsabschluss-Nachrichten (`eedc/anlage/…/monatsdaten/…`), die eedc beim Abschluss eines Monats einmalig auf den Broker legt — sie sind keine Sensoren, und ein Abschluss wiederholt sich nicht.
 >
 > ⚠ **Bis August 2026 räumte dieser Knopf unvollständig:** Er entfernte 34 der 44 anlagenweiten Sensoren und keinen einzigen der gerätebezogenen — meldete aber Erfolg. Wer aufgeräumt hatte, behielt den Rest und hielt ihn für gelöscht.
 >

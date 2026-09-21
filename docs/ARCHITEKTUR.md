@@ -1133,7 +1133,8 @@ SensorDefinition(
 - `publish_all_sensors()` - beides über **eine** Verbindung für eine ganze Sensorliste
 - `remove_sensors()` - Rücknahme **bestandsgetrieben**: zusätzlich zu den Topics der heutigen
   Definitionen fragt sie über `verwaiste_topics()` den Broker, was unter dem Präfix dieser Anlage
-  sonst noch retained liegt, und räumt es mit (`altlast_topics` in der Antwort). Damit fallen auch
+  sonst noch retained liegt, und räumt es mit (`altlast_topics` in der Antwort) — **außer** dem
+  Zweig `…/monatsdaten/` (finale Monatsdaten, keine Sensoren). Damit fallen auch
   Entitäten früherer Fassungen weg — konkret die `number.eedc_*_mwd_*_start` aus der Zeit vor
   `77c6e211` (13.03.2026). ⛔ Nur eigene Topics; fremde bleiben unberührt.
 - `verwaiste_topics()` - Bestandsaufnahme (Wildcard-Subscribe, retained 1,5 s sammeln)
