@@ -2203,6 +2203,161 @@ P10_BASELINE_AUSNAHMEN: frozenset[str] = (
     P10_SCHREIBEN_IMPORT_CHECKER | P10_PER_INVESTITION | P10_NOCH_NICHT_MIGRIERT
 )
 
+
+# ── Zweiter Suchlauf: die Faltung über einen PARAMETER (N-542) ──────────────
+#
+# **Warum ein zweiter Sammler.** `_p10_imd_lader()` erkennt eine Faltung an
+# ihrem `select(InvestitionMonatsdaten)`. Seit den Orchestrator-Schnitten
+# (Vorlagen 5b/8b, RF-1…RF-3, S3) **lädt** die eine Funktion und **faltet** die
+# Phase daneben, die die Zeilen als Parameter bekommt. Für diese Bauform war
+# der Wächter blind: gemessen am 2026-09-22 stehen **26 Funktionen** in `api/`
+# und `services/`, die eine übergebene Zeile auswerten, **keine einzige** mit
+# eigenem `select`. Heute ist keine davon falsch — jede hängt an einem
+# gelisteten Lader. Aber ADR-002 verspricht für P10 einen **baumweiten**
+# Wächter, und ein Versprechen, das eine ganze Bauform nicht sieht, ist keines.
+# Bis hierher stand die Blindstelle als Docstring in
+# `ha_export/investition_sensoren.py::_wp_steuerung_und_plan` — und ein
+# Docstring ist keine Messung: er beschreibt eine Stelle, er fängt keine neue.
+#
+# **Sichtfeld: `backend/api/` und `backend/services/` — nicht `backend/core/`.**
+# `core/berechnungen/` ist der Berechnungs-Layer, und ADR-001 regelt dort das
+# **Wo** einer Aggregat-Formel: eine Formel wertet die Zeile aus, die eine
+# Read-Site ihr übergibt. Sie faltet nichts an der Schicht vorbei, weil sie
+# gar nicht lädt; sie ist der Ort, an dem die Auswertung stehen SOLL. Sechs
+# Funktionen liegen dort (darunter `imd_monatsaggregat.py::imd_typ_beitrag`
+# selbst, also einer der Marker) — sie einzutragen hieße, den Layer als Schuld
+# zu führen. `services/monats_fakten/` ist die Schicht und aus demselben Grund
+# ausgenommen wie beim Lader (dort zwei weitere Fundstellen).
+#
+# **Die drei Marker** sind die Formen, in denen eine übergebene Zeile
+# ausgewertet wird: das JSON-Feld — die Spalte `verbrauch_daten` gibt es
+# ausschließlich an `InvestitionMonatsdaten` (`models/investition.py`) —
+# und die beiden Lesetüren, die eine Zeile in Mengen übersetzen. Als Konstante,
+# damit ein vierter Marker EINE Zeile ist.
+_P10_FALT_MARKER_ATTRIBUT = "verbrauch_daten"
+
+_P10_FALT_MARKER_AUFRUFE: frozenset[str] = frozenset({
+    "imd_typ_beitrag",     # core/berechnungen/imd_monatsaggregat.py
+    "modus_strom_zeile",   # core/berechnungen/betriebsart_gemessen.py
+})
+
+#: Präfixe, auf die der Falter-Suchlauf sieht. Begründung im Block darüber.
+_P10_FALT_SICHTFELD: tuple[str, ...] = ("backend/api/", "backend/services/")
+
+#: **Phase → ihr Lader.** Diese Funktionen falten eine Monatszeile, die sie als
+#: Parameter bekommen; die Zeilen stammen aus der danebenstehenden Funktion,
+#: und **die** ist ein gelisteter `select`-Lader. Damit ist die Phase genauso
+#: klassifiziert wie ihr Lader — `test_p10_phase_haengt_an_gelistetem_lader`
+#: prüft, dass der GENANNTE Lader gelistet ist. ⚠ Dass er die Phase auch
+#: beliefert, prüft kein Test (gemessen 22.09.2026, Sprengsatz: eine Phase, die
+#: ihre Zeilen aus `Investition.monatsdaten` statt vom Lader nimmt, bleibt
+#: grün) — die Zuordnung ist am Aufrufer belegt, nicht gewächtert.
+#:
+#: ⚠ **Der Name sagt `PER_INVESTITION`, die Kategorie ist weiter.** Ein Lader
+#: darf auch aus `P10_SCHREIBEN_IMPORT_CHECKER` kommen oder in der Schicht
+#: liegen — drei Einträge unten sind genau das (Schreib- und Löschpfade). Die
+#: gemeinsame Aussage ist nicht „per Investition", sondern: **diese Funktion
+#: lädt nicht, sie bekommt.** Wer den Lader verschiebt, verschiebt die Phase mit.
+#:
+#: ⛔ **Keine vorsorglichen Einträge** (Sitzung-36-Lehre, wie beim Lader): jeder
+#: Schlüssel unten hat heute einen Treffer, jeder Wert heute einen Lader. Ein
+#: Eintrag ohne Treffer wäre eine Allowlist-Leiche, die eine künftige Stelle
+#: still freistellt — `test_p10_phasen_ausnahmen_sind_noch_belegt` hält die
+#: Liste leer von so etwas.
+P10_PER_INVESTITION_PHASE: dict[str, str] = {
+    # T-Konto je Investition: die Financial-Zeile EINES Geräts aus der
+    # übergebenen `verbrauch_daten`. Zweiter Aufrufer mit demselben Recht ist
+    # `aktueller_monat/vergleich.py::_load_vorjahr` (ebenfalls gelistet) —
+    # genannt ist der Lader des Haupt-Pfades (Cockpit → Monat).
+    "backend/api/routes/aktueller_monat/tkonto.py::_baue_investition_financial":
+        "backend/api/routes/aktueller_monat/finanzen.py::t_konto_je_investition",
+    # Vorlage 8b: Phase des Anlagen-Rechners. Faltet `historische_inv_daten`,
+    # das die Lade-Phase eine Zeile vorher gebaut hat (WP-Ersparnis, CO₂).
+    "backend/api/routes/ha_export/anlage_komponenten.py::alternativkosten_und_co2":
+        "backend/api/routes/ha_export/anlage_komponenten.py::historische_komponenten",
+    # Die eMob-Mengen EINER Zeile für die Geräte-Sensoren.
+    "backend/api/routes/ha_export/investition_sensoren.py::_emob_daten":
+        "backend/api/routes/ha_export/investition_sensoren.py::calculate_investition_sensors",
+    # E2/P4/P7/P8 einer Wärmepumpe. Der Docstring dieser Funktion benannte die
+    # Blindstelle, gegen die dieser Suchlauf gebaut ist.
+    "backend/api/routes/ha_export/investition_sensoren.py::_wp_steuerung_und_plan":
+        "backend/api/routes/ha_export/investition_sensoren.py::calculate_investition_sensors",
+    # Verschachtelte Phase im E-Auto-Dashboard (E-Auto- und Wallbox-Zeile).
+    "backend/api/routes/investitionen/dashboard_eauto.py::_emob_daten_von":
+        "backend/api/routes/investitionen/dashboard_eauto.py::get_eauto_dashboard",
+    # CHECKER-Phase: beantwortet „führt dieses Gerät einen Kühl-Zähler?" über
+    # übergebene Zeilen. Der Lader ist der Datenquellen-Check daneben; zweiter
+    # Aufrufer ist `_wp_steuerung_und_plan` (selbst eine Phase, s. o.).
+    "backend/services/daten_checker/kuehl_zaehler.py::hat_kuehl_zaehler":
+        "backend/services/daten_checker/datenquelle/klima.py::_check_klima_modus_sensor",
+    # SCHREIBpfad #263/K-2: liest den Gesamtwert der Zeile, in die er schreibt,
+    # als Bezugsgröße der Teilmengen-Invariante. Lader ist `_lade_imd` daneben.
+    "backend/services/energie_profil/modus_split_schreiben.py::schreibe_modus_split_monat":
+        "backend/services/energie_profil/modus_split_schreiben.py::_lade_imd",
+    "backend/services/energie_profil/modus_split_schreiben.py::_entferne_split":
+        "backend/services/energie_profil/modus_split_schreiben.py::_lade_imd",
+    # LÖSCHpfad #349: benennt die Gerätewerte eines Monats für den Dialog. Die
+    # Zeilen sind der Gegenstand, nicht die Quelle einer Zahl.
+    "backend/services/monat_loeschen.py::beschreibe_geraetewerte_des_monats":
+        "backend/services/monat_loeschen.py::_geraetewerte_des_monats",
+    # WK-16c: die Strom-Verteilung JE GERÄT aus der übergebenen Monatszeile.
+    "backend/services/waerme_verteilung.py::_eingabe_aus_monatszeile":
+        "backend/services/waerme_verteilung.py::_monatszeilen",
+    # WK-16a: die Mengen JE GERÄT. Zweiter Aufrufer über
+    # `kennzahlen_aus_monatszeilen` ist `dashboard_waermepumpe.py::get_waermepumpe_dashboard`
+    # (ebenfalls gelistet).
+    "backend/services/waermepumpe_kennzahlen_je_geraet.py::mengen_aus_monatszeilen":
+        "backend/services/waermepumpe_kennzahlen_je_geraet.py::lade_kennzahlen_je_geraet",
+}
+
+#: **Checker-Pfade ohne Lader** — die Blindstelle aus dem Prüfbericht
+#: Daten-Checker 2026-08-22/B8, jetzt zählbar statt nur beschrieben. Diese
+#: fünfzehn Funktionen bekommen ihre Zeilen weder aus einem `select` noch von
+#: einer Phase, sondern über die eager geladene Relationship
+#: `Investition.monatsdaten` (bei `_check_phev_anteil_unbestimmt` als
+#: `getattr(inv, "monatsdaten", [])` — dieselbe Relationship). Sie **prüfen**
+#: Zeilen und leiten keine Auswertungsgröße ab; das ist auf Dauer legitim,
+#: genau wie in `P10_SCHREIBEN_IMPORT_CHECKER`.
+#:
+#: ⚠ **Warum eine EIGENE Liste und nicht `P10_SCHREIBEN_IMPORT_CHECKER`.**
+#: Gemessen (22.09.): ein Eintrag dieser Art in der Lader-Liste macht
+#: `test_p10_baseline_ausnahmen_sind_noch_belegt` **rot** — der Test verlangt
+#: für jeden seiner Einträge eine `select`-Fundstelle, und die gibt es hier
+#: nicht. Beide Listen getrennt zu führen ist aber nicht nur der Weg um die
+#: Kollision herum, sondern der schärfere: so bleibt jeder Belegt-Test exakt.
+#: Eine gemischte Liste würde eine Funktion, die ihr `select` verliert und nur
+#: noch faltet, nicht mehr als verwaist melden.
+P10_FALT_SCHREIBEN_IMPORT_CHECKER: frozenset[str] = frozenset({
+    # E-Mobilität: Pool-Pflege, PV-über-Gesamt, PHEV-Anteil unbestimmt.
+    "backend/services/daten_checker/emob.py::_check_emob_pool_pflege",
+    "backend/services/daten_checker/emob.py::_check_emob_pv_ueber_gesamt",
+    "backend/services/daten_checker/emob.py::_check_phev_anteil_unbestimmt",
+    # Energieprofil: PV-Erzeugung der Module gegen das Anlagen-Aggregat (P7).
+    "backend/services/daten_checker/energieprofil.py::_check_pv_erzeugung",
+    # Monatsdaten: Erfassungsort, Waisen-Gerätewerte, Plausibilität, Werte in
+    # nicht geführten Feldern, WP-Monatswerte.
+    "backend/services/daten_checker/monatsdaten.py::_check_erfassungsort_positionen",
+    "backend/services/daten_checker/monatsdaten.py::_check_geraetewerte_ohne_monatszeile",
+    "backend/services/daten_checker/monatsdaten.py::_check_investition_monatsdaten",
+    "backend/services/daten_checker/monatsdaten.py::_check_monatsdaten_plausibilitaet",
+    "backend/services/daten_checker/monatsdaten.py::_check_werte_in_nicht_gefuehrten_feldern",
+    "backend/services/daten_checker/monatsdaten.py::_check_wp_monatsdaten",
+    # Stammdaten: Abgabe-Kandidat, BKW-Akku-Erfassungsweg, Speicher-Netzladung
+    # kumulativ, Wechselrichter-Altbestand (#229).
+    "backend/services/daten_checker/stammdaten.py::_check_abgabe_kandidat",
+    "backend/services/daten_checker/stammdaten.py::_check_bkw_akku_erfassungsweg",
+    "backend/services/daten_checker/stammdaten.py::_check_investitionen",
+    "backend/services/daten_checker/stammdaten.py::_check_wechselrichter_pv_altbestand",
+    # Wärmepumpe: unplausible Arbeitszahl — prüft dieselben Eingänge wie die
+    # Anzeige (Konzept Wärme/Klima 11.5), bildet aber keine Sicht-Größe.
+    "backend/services/daten_checker/waermepumpe.py::_check_wp_arbeitszahl_unplausibel",
+})
+
+#: Alles, was der Falter-Suchlauf hinnimmt.
+P10_FALT_AUSNAHMEN: frozenset[str] = (
+    frozenset(P10_PER_INVESTITION_PHASE) | P10_FALT_SCHREIBEN_IMPORT_CHECKER
+)
+
 #: Wo eine `FinanzZeileEingabe` außerhalb der Schicht entstehen darf.
 #: Der **Tages-Pfad** ist Nicht-Ziel der Schicht (`KONZEPT-MONATS-FAKTEN.md` §4):
 #: seine Mengen kommen aus `bilanz_aus_stundenrows` über die Snapshots — eine
@@ -2353,6 +2508,133 @@ def test_p10_finanz_zeile_eingabe_nur_aus_einem_monats_fakt():
         "`services/monats_fakten/ableitungen.py::finanz_zeile_eingabe` aus einem "
         "`MonatsFakt` — nur so tragen alle Sichten denselben Tarif-Stichtag (P8) "
         "und dieselbe BKW-Aufteilung (P9)."
+    )
+
+
+def _p10_imd_falter() -> dict[str, list[int]]:
+    """`modul.py::funktion` → Zeilen, an denen eine ÜBERGEBENE Monatszeile gefaltet wird.
+
+    Der zweite Suchlauf neben `_p10_imd_lader()` (N-542): erfasst jede Funktion
+    im Sichtfeld, die einen der drei Marker trägt (`_P10_FALT_MARKER_ATTRIBUT`,
+    `_P10_FALT_MARKER_AUFRUFE`) und **kein eigenes** `select(InvestitionMonatsdaten)`
+    hat — also die Bauform „ich lade nicht, ich bekomme die Zeilen".
+
+    Dieselbe Bauform wie der Lader: Funktions-Stapel, verschachtelte Funktionen
+    zählen zur innersten Funktion (`get_eauto_dashboard::_emob_daten_von` wird
+    als `_emob_daten_von` gemeldet, damit die Ausnahme so eng ist wie möglich).
+    """
+    lader = _p10_imd_lader()
+    treffer: dict[str, list[int]] = {}
+
+    for pfad, baum in _quelldateien():
+        modul = f"backend/{pfad.relative_to(_BACKEND).as_posix()}"
+        if not modul.startswith(_P10_FALT_SICHTFELD) or modul.startswith(_P10_SCHICHT):
+            continue
+        stapel: list[str] = []
+
+        def besuche(knoten: ast.AST) -> None:
+            if isinstance(knoten, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                stapel.append(knoten.name)
+                for kind in ast.iter_child_nodes(knoten):
+                    besuche(kind)
+                stapel.pop()
+                return
+            ist_marker = (
+                isinstance(knoten, ast.Attribute)
+                and knoten.attr == _P10_FALT_MARKER_ATTRIBUT
+            ) or (
+                isinstance(knoten, ast.Call)
+                and isinstance(knoten.func, ast.Name)
+                and knoten.func.id in _P10_FALT_MARKER_AUFRUFE
+            )
+            if ist_marker:
+                schluessel = f"{modul}::{stapel[-1] if stapel else '<modul>'}"
+                if schluessel not in lader:
+                    treffer.setdefault(schluessel, []).append(knoten.lineno)
+            for kind in ast.iter_child_nodes(knoten):
+                besuche(kind)
+
+        besuche(baum)
+
+    return treffer
+
+
+def test_p10_faltung_ueber_parameter_nur_in_gelisteten_phasen():
+    """Baumweit: keine neue Phase faltet eine übergebene Monatszeile unklassifiziert.
+
+    Der Zwilling von `test_p10_monatszeile_nur_aus_der_schicht` für die Bauform
+    seit den Orchestrator-Schnitten. Wer eine Phase hinzufügt, ordnet sie ihrem
+    Lader zu — oder migriert sie auf die Schicht.
+    """
+    offen = sorted(
+        f"{schluessel} (Z. {zeilen[0]})"
+        for schluessel, zeilen in _p10_imd_falter().items()
+        if schluessel not in P10_FALT_AUSNAHMEN
+    )
+
+    assert offen == [], (
+        f"{len(offen)} Funktionen falten eine ÜBERGEBENE `InvestitionMonatsdaten`-"
+        f"Zeile: {offen}\n"
+        "Eine abgeleitete Monatsgröße einer Anlage kommt aus "
+        "`services/monats_fakten/laden.py::lade_monats_fakten` — dort gelten die "
+        "Zeitfilter (aktiv · Anschaffung · Stilllegung), der Dienstwagen-Filter, "
+        "die P7-Auflösung der PV und der Monatstarif (P8) genau einmal. Wer "
+        "selbst faltet, verliert erfahrungsgemäß eine davon, und niemand merkt "
+        "es, weil die Zahl plausibel bleibt (Drift-Inventur 2026-07-31, sechs "
+        "Befunde, kein einziger Rechenfehler). Dass die Zeilen hier als "
+        "**Parameter** ankommen statt aus einem eigenen `select`, ändert daran "
+        "nichts — es macht die Faltung nur unsichtbarer.\n"
+        "Eine Phase, deren Zeilen von einem gelisteten Lader kommen, gehört mit "
+        "diesem Lader nach P10_PER_INVESTITION_PHASE. Ein Checker-/Schreibpfad "
+        "ohne Lader (Relationship `Investition.monatsdaten`) gehört mit "
+        "Begründung nach P10_FALT_SCHREIBEN_IMPORT_CHECKER. Alles andere "
+        "migriert auf die Schicht."
+    )
+
+
+def test_p10_phase_haengt_an_gelistetem_lader():
+    """Jede Phase nennt einen Lader, und der ist selbst klassifiziert.
+
+    Ohne diesen Test wäre `P10_PER_INVESTITION_PHASE` eine Behauptung: „die
+    Zeilen kommen von woanders her" — ohne dass jemand prüft, ob dieses
+    Woanders überhaupt bekannt ist. Zeigt eine Phase auf einen Lader, der in
+    keiner Liste steht, dann ist entweder der Lader offene Schuld (dann meldet
+    ihn `test_p10_monatszeile_nur_aus_der_schicht`) oder der Eintrag ist
+    veraltet — beides will gesehen werden.
+    """
+    erlaubt = P10_BASELINE_AUSNAHMEN
+    unbekannt = sorted(
+        f"{phase} → {lader}"
+        for phase, lader in P10_PER_INVESTITION_PHASE.items()
+        if lader not in erlaubt and not lader.startswith(_P10_SCHICHT)
+    )
+
+    assert unbekannt == [], (
+        f"{len(unbekannt)} Phasen hängen an einem Lader, der nirgends gelistet "
+        f"ist: {unbekannt}\n"
+        "Der Lader einer Phase muss in P10_SCHREIBEN_IMPORT_CHECKER, in "
+        "P10_PER_INVESTITION oder in P10_NOCH_NICHT_MIGRIERT stehen — oder in "
+        "`services/monats_fakten/` liegen. Sonst ist die Phase nicht "
+        "klassifiziert, sondern nur weitergereicht."
+    )
+
+
+def test_p10_phasen_ausnahmen_sind_noch_belegt():
+    """Keine verwaiste Phase — dieselbe Pflicht wie bei allen anderen Listen.
+
+    Ohne diesen Test bliebe ein Eintrag stehen, nachdem die Funktion umbenannt
+    oder migriert wurde, und die nächste Fassung derselben Stelle liefe still
+    an P10 vorbei. Genau das ist die Sitzung-36-Lehre, die im Kommentar über
+    `P10_PER_INVESTITION_PHASE` steht.
+    """
+    vorhanden = set(_p10_imd_falter())
+    verwaist = sorted(P10_FALT_AUSNAHMEN - vorhanden)
+
+    assert verwaist == [], (
+        f"P10-Falter-Ausnahmen ohne Fundstelle: {verwaist} — die Funktion "
+        "faltet keine übergebene `InvestitionMonatsdaten`-Zeile mehr (oder "
+        "heißt anders, oder hat inzwischen ein eigenes `select` und gehört "
+        "damit in die Lader-Listen). Eintrag streichen bzw. umhängen."
     )
 
 

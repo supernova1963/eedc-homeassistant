@@ -691,16 +691,18 @@ async def _wp_steuerung_und_plan(
 ):
     """E2 (Warmwasserbetrieb) sowie P4 · P7 · P8 dieser Wärmepumpe.
 
-    ⚠ **Die Faltung über `monatsdaten` (P4, unten) ist ein per-Investition-Aggregat
-    im Sinne von `P10_PER_INVESTITION`; die Zeilen kommen aus
-    `calculate_investition_sensors`, dem dort gelisteten Lader; der Wächter sieht
-    diese Funktion nicht (kein `select`).** Der P10-Wächter
-    (`test_wurzelmuster_konformitaet.py::_p10_imd_lader`, :2219) erkennt nur
-    Funktionen, in deren Rumpf ein `select(...)` mit `InvestitionMonatsdaten`
-    steht — hier steht keines, die Zeilen sind ein Parameter. Wer diese Funktion
-    von ihrem Lader löst, verliert damit **auch** die Deckung durch den Eintrag
-    :2109; die Klassifizierung ist an dieser Stelle Dokumentation, nicht
-    Ergebnis einer Messung.
+    ⚠ **Die Faltung über `monatsdaten` (P4, unten) ist ein per-Investition-Aggregat;
+    die Zeilen kommen aus `calculate_investition_sensors`, dem in
+    `P10_PER_INVESTITION` gelisteten Lader.** Seit N-542 (22.09.2026) sieht der
+    P10-Wächter auch diese Bauform: `test_wurzelmuster_konformitaet.py::_p10_imd_falter`
+    findet Funktionen, die `verbrauch_daten`/`imd_typ_beitrag`/`modus_strom_zeile`
+    über einen Parameter falten, und diese Funktion steht dort in
+    `P10_PER_INVESTITION_PHASE` mit ihrem Lader. Wer die Funktion umbenennt oder
+    aus der Liste nimmt, macht den Wächter rot; dass die Zeilen tatsächlich vom
+    genannten Lader kommen, prüft er nicht (gemessen 22.09.2026) — das belegt der
+    Aufruf in `calculate_investition_sensors`, nicht der Test. (Hier stand bis
+    N-542: „der Wächter sieht diese Funktion nicht (kein `select`)" — das war die
+    Blindstelle.)
 
     ⛔ **Warum überhaupt je Investition und nicht über `lade_monats_fakten`:**
     `WpFakten.strom_warmwasser_kwh` ist eine **anlagenweite** Summe über alle
