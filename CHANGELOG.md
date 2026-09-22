@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased] — eedc@ha, Teil 1: Entscheidungs- und Plan-Sensoren für Home Assistant — und jede Anzeige als Karte im HA-Dashboard
+## [4.0.50] - 2026-09-22 — eedc@ha, Teil 1: Entscheidungs- und Plan-Sensoren für Home Assistant — und jede Anzeige als Karte im HA-Dashboard
 
 ### Added
 

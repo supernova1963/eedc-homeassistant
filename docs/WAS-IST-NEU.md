@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** September 2026 (v4.0.49) — der Abschnitt ganz oben gilt der **kommenden** Version und trägt ihre Nummer, sobald sie feststeht.
+> **Stand:** September 2026 (v4.0.50)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -9,7 +9,7 @@
 
 ---
 
-## Unreleased — eedc@ha, Teil 1
+## v4.0.50 — 22. September 2026
 
 **Dein HA-Dashboard bekommt die Zahlen, mit denen sich etwas entscheiden lässt**
 
