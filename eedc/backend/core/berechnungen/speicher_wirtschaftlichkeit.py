@@ -60,6 +60,43 @@ class SpeicherIstAggregat:
     jahres_faktor: float
 
 
+#: Warum ein IST-Aggregat nicht zustande kam — das Vokabular von
+#: `speicher_ist_mit_grund`. Beide Gründe führen zum selben Rückfall auf das
+#: Prognose-Modell, aber zu **verschiedenen** Ratschlägen an den Anwender:
+#: „warte noch" gegen „erfass die Entladung deines Speichers".
+GRUND_ZU_WENIG_MONATE = "zu-wenig-monate"
+GRUND_KEINE_ENTLADUNG = "keine-entladung"
+
+
+def speicher_ist_mit_grund(
+    verbrauch_daten_je_monat: Iterable[dict],
+) -> tuple[Optional["SpeicherIstAggregat"], Optional[str]]:
+    """Wie `aggregiere_speicher_ist` — und sagt bei `None`, **warum**.
+
+    ⭐ **Warum es diese Funktion gibt** (Nachlese 4.0.50, A7): Bis zum
+    22.09.2026 warf `aggregiere_speicher_ist` zwei völlig verschiedene Lagen in
+    denselben Rückgabewert:
+
+    * **Zu wenig Monate** — die Anlage ist jung, die Messung kommt von selbst.
+    * **Keine Entladung erfasst** — die Monate sind da, aber das Feld
+      `entladung_kwh` ist leer. Das geht nie von allein weg; der Anwender muss
+      eine Quelle zuordnen oder den Wert pflegen.
+
+    Der HA-Export beschriftete beide als `zu-wenig-monate` und riet damit der
+    Hälfte der Betroffenen das Falsche („warte noch ein paar Monate"). Der
+    Rückfall auf den gepflegten Parameter ist in beiden Fällen derselbe — nur
+    der Satz daneben unterscheidet sich, und genau den verlangt
+    KONZEPT-FLEX-TARIFE §8 („keine stille Ersetzung").
+
+    Returns:
+        `(aggregat, None)` wenn es zustande kam, sonst `(None, grund)` mit
+        `GRUND_ZU_WENIG_MONATE` oder `GRUND_KEINE_ENTLADUNG`. **Die Reihenfolge
+        ist festgelegt:** zu wenige Monate gewinnt, denn ohne genug Monate ist
+        über die Entladung noch gar nichts zu sagen.
+    """
+    return _aggregiere(verbrauch_daten_je_monat)
+
+
 def aggregiere_speicher_ist(
     verbrauch_daten_je_monat: Iterable[dict],
 ) -> Optional[SpeicherIstAggregat]:
@@ -72,7 +109,19 @@ def aggregiere_speicher_ist(
     Liefert `None`, wenn weniger als `SPEICHER_IST_MIN_MONATE` Monate
     vorliegen oder gar keine Entladung erfasst ist — der Caller fällt
     dann auf das Prognose-Modell zurück.
+
+    ⭐ Wer den **Grund** braucht, ruft `speicher_ist_mit_grund` daneben; diese
+    Signatur bleibt, weil drei Aufrufer nur das Aggregat wollen
+    (`services/speicher_wirtschaftlichkeit.py`, `investitionen/roi_pv.py`,
+    `investitionen/dashboard_speicher.py` über den Service).
     """
+    return _aggregiere(verbrauch_daten_je_monat)[0]
+
+
+def _aggregiere(
+    verbrauch_daten_je_monat: Iterable[dict],
+) -> tuple[Optional[SpeicherIstAggregat], Optional[str]]:
+    """Die eine Faltung hinter beiden Einstiegen — ein Durchlauf, eine Regel."""
     entladung_sum = 0.0
     ladung_netz_sum = 0.0
     ladung_sum = 0.0
@@ -90,8 +139,10 @@ def aggregiere_speicher_ist(
         )
         ladung_sum += float(data.get("ladung_kwh") or 0)
 
-    if monate < SPEICHER_IST_MIN_MONATE or entladung_sum <= 0:
-        return None
+    if monate < SPEICHER_IST_MIN_MONATE:
+        return None, GRUND_ZU_WENIG_MONATE
+    if entladung_sum <= 0:
+        return None, GRUND_KEINE_ENTLADUNG
 
     # Auf 12 Monate hochrechnen — bei weniger als 12 erfassten Monaten ist das
     # eine konservative Annahme (Saison-Effekte werden geglättet). Bei ≥ 12
@@ -104,7 +155,7 @@ def aggregiere_speicher_ist(
         ladung_kwh_jahr=ladung_sum * jahres_faktor,
         anzahl_monate=monate,
         jahres_faktor=jahres_faktor,
-    )
+    ), None
 
 
 @dataclass

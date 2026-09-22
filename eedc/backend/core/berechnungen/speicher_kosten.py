@@ -30,9 +30,20 @@ Die drei Stufen, in dieser Reihenfolge (`services/speicher_wirtschaftlichkeit
    Automation wäre er eine Behauptung über *dieses* Gerät.
 
 `wirkungsgrad_messung` nennt immer, welcher Weg es war — auch wenn die Messung
-gescheitert ist (`fenster-zu-kurz`, `keine-ladung`, `nicht-ermittelbar`,
-`zu-wenig-monate`). Ein stummer Fallback wäre Flex §8 („keine stille
-Ersetzung").
+gescheitert ist. Fünf Worte, und jedes verlangt einen anderen Handgriff:
+
+| Wert | Was los ist | Was der Anwender tun kann |
+| --- | --- | --- |
+| `zu-wenig-monate` | weniger als `SPEICHER_IST_MIN_MONATE` erfasste Monate | warten — das wächst von allein |
+| `keine-entladung` | Monate genug, aber `entladung_kwh` ist leer | die Entladung des Speichers erfassen (Quelle zuordnen oder Wert pflegen) |
+| `keine-ladung` | im Fenster wurde gar nicht geladen | nichts — es gab nichts zu messen |
+| `fenster-zu-kurz` | kurzes Fenster **und** keine SoC-Werte am Rand | SoC-Sensor zuordnen |
+| `nicht-ermittelbar` | der Quotient ist unmöglich (> 100 %) | die erfassten Mengen prüfen (Daten-Checker sagt wo) |
+
+⚠ **`keine-entladung` gibt es erst seit der Nachlese 4.0.50 (A7).** Vorher trug
+dieser Fall `zu-wenig-monate` und riet damit das Falsche: „warte noch" gegen
+einen Zustand, der nie von allein vergeht. Ein stummer Fallback wäre Flex §8
+(„keine stille Ersetzung") — ein **falsch beschrifteter** ist kaum besser.
 """
 
 from __future__ import annotations

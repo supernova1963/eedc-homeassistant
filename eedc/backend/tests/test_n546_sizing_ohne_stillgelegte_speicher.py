@@ -35,15 +35,17 @@ from backend.models.tages_energie_profil import TagesEnergieProfil
 
 #: Der laufende Speicher: 12,8 kWh brutto, 10,24 kWh nutzbar (die Melder-Zahl),
 #: 95 % Wirkungsgrad. Daraus leitet sich die Leer-Schwelle ab
-#: (`leer_schwelle_prozent`, 3 pp Toleranz): **23,0 %** im Sizing (rechnet mit
-#: den rohen Summen), **23,3 %** im Potential (rechnet mit den auf eine
-#: Nachkommastelle **gerundeten** Kapazitäten — Bestand, hier nicht angefasst).
+#: (`leer_schwelle_prozent`, 3 pp Toleranz): **23,0 %** — in **beiden** Sichten.
+#: ⭐ Hier stand bis zur Nachlese 4.0.50 „23,0 % im Sizing, 23,3 % im Potential
+#: (rechnet mit den gerundeten Kapazitäten — Bestand, hier nicht angefasst)".
+#: Genau diesen Bestand hat Posten A4 getilgt: das Potential bildet die Schwelle
+#: jetzt ebenfalls aus den rohen Summen, die Antwortfelder bleiben gerundet.
 LAUFEND = {"kapazitaet_kwh": 12.8, "nutzbare_kapazitaet_kwh": 10.24,
            "wirkungsgrad_prozent": 95}
 #: Das abgelöste Gerät: 5,06 kWh, 85 % — beides so gewählt, dass es in **jeder**
 #: der drei Größen sichtbar würde. Summe netto 15,3 (die falsche Zahl des
-#: Melders), Summe brutto 17,86 ⇒ Leer-Schwelle **17,3 %** (Sizing, aus
-#: 15,3/17,86) bzw. **17,5 %** (Potential, aus den gerundeten 15,3/17,9).
+#: Melders), Summe brutto 17,86 ⇒ Leer-Schwelle **17,3 %** — seit A4 in beiden
+#: Sichten (vorher 17,5 % im Potential, aus den gerundeten 15,3/17,9).
 ABGELOEST = {"kapazitaet_kwh": 5.06, "nutzbare_kapazitaet_kwh": 5.06,
              "wirkungsgrad_prozent": 85}
 
@@ -175,7 +177,9 @@ async def test_potential_kapazitaeten_und_schwelle_nur_vom_laufenden_geraet(db):
 
     assert antwort.kapazitaet_kwh == 10.2, "netto: 15,3 wäre die Melder-Zahl"
     assert antwort.kapazitaet_brutto_kwh == 12.8, "brutto: 17,9 wäre sie ungefiltert"
-    assert antwort.soc_leer_prozent == 23.3, "ungefiltert wären es 17,5"
+    assert antwort.soc_leer_prozent == 23.0, (
+        "ungefiltert wären es 17,3 — und vor A4 stand hier 23,3, weil die Schwelle\n        aus den gerundeten Kapazitäten kam"
+    )
     assert antwort.soc_leer_ist_abgeleitet is True
     assert antwort.anzahl_speicher == 1
 
@@ -205,7 +209,7 @@ async def test_stilllegung_in_der_zukunft_zaehlt_heute_noch_mit(db):
 
     assert potential.kapazitaet_kwh == 15.3
     assert potential.kapazitaet_brutto_kwh == 17.9
-    assert potential.soc_leer_prozent == 17.5
+    assert potential.soc_leer_prozent == 17.3, "seit A4 dieselbe Zahl wie im Sizing"
     assert potential.anzahl_speicher == 2
 
 

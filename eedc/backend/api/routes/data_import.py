@@ -7,6 +7,7 @@ Unterstützt Auto-Detection des Formats und Vorschau vor dem Import.
 
 import logging
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
@@ -245,7 +246,26 @@ async def get_zuordnung_info(
     result = await db.execute(
         select(Investition).where(Investition.anlage_id == anlage_id)
     )
-    investitionen = result.scalars().all()
+    # ⚠ Nur die HEUTE laufenden Geräte (Nachlese 4.0.50, A1) — dieselbe Klasse und dieselbe
+    # Bauform wie N-546 nebenan im Speicher-Sizing. Ohne den Filter zählte ein
+    # abgelöstes Zweitgerät dreifach mit: es erzwang den Zuordnungs-Schritt
+    # (`benoetigt`), es stand als anzukreuzende Zeile darin, und seine
+    # Kapazität bzw. kWp lag als Nenner unter den Default-Anteilen — bei
+    # 12,8 kWh laufend neben 5,06 kWh ausgebaut schlug der Wizard 71,7/28,3
+    # statt 100 vor, und wer den Vorschlag übernahm, schrieb gut ein Viertel
+    # der importierten Speichermengen auf ein Gerät, das es nicht mehr gibt.
+    #
+    # ⛔ **Stichtag ist `date.today()`, nicht der Zeitraum des Imports** — die
+    # Route kennt ihn nicht: sie bekommt nur `anlage_id` (kein Query-Parameter,
+    # kein Body), und der Wizard ruft sie beim **Wählen der Anlage**, also
+    # bevor die Vorschau die Perioden kennt (`DataImportWizard.tsx`, Effekt auf
+    # `selectedAnlageId`). Der Stichtag ist damit dieselbe Wahl wie in N-546
+    # und im Wirkungsgrad-Pfad des HA-Exports.
+    heute = date.today()
+    investitionen = [
+        i for i in result.scalars().all()
+        if i.aktiv and (not i.stilllegungsdatum or i.stilllegungsdatum >= heute)
+    ]
 
     pv_module = [i for i in investitionen if i.typ == "pv-module"]
     speicher = [i for i in investitionen if i.typ == "speicher"]

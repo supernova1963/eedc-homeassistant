@@ -150,6 +150,61 @@ class AutoPublishRequest(BaseModel):
     """Body für den Export-Toggle (B7-5b)."""
     enabled: bool
 
+class SensorAbwahlItem(BaseModel):
+    """Eine Zeile der Abwahl-Liste — eine **Definition**, kein Messwert.
+
+    Die Feldfolge ist die der bisherigen handgebauten Dicts; das Modell
+    beschreibt den Vertrag, es ändert ihn nicht.
+    """
+    key: str
+    name: str
+    #: Leer bei jedem `binary_sensor` und bei den Text-Sensoren — `""`, nicht
+    #: `None`: die Oberfläche hängt die Einheit direkt an die Zahl.
+    unit: str
+    icon: str
+    #: `SensorCategory`-**Wert** (`.value`), nicht das Enum — die Route liefert
+    #: seit jeher den String, und das Frontend gruppiert danach.
+    category: str
+    formel: str
+    exportiert: bool
+    neu: bool
+
+
+class SensorPaketInfo(BaseModel):
+    """Das AKTUELLE Sensor-Paket und was davon abgewählt ist (N-545).
+
+    Aus `keys` und `abgewaehlt` entscheidet die Oberfläche, ob sie den
+    Hinweiskasten über der Liste zeigt: bei einer Bestandsinstallation stehen
+    nach dem Update alle Paket-Schlüssel in `abgewaehlt`, bei einer
+    Neuinstallation keiner.
+    """
+    paket: int
+    label: str
+    keys: list[str]
+    abgewaehlt: list[str]
+
+
+class SensorAbwahlResponse(BaseModel):
+    """Antwort von `GET /api/ha/export/mqtt/abwahl`.
+
+    ⭐ **Warum es dieses Modell gibt** (Nachlese 4.0.50, A6): Die Route gab bis
+    zum 22.09.2026 ein handgebautes `dict` **ohne** `response_model` zurück.
+    Zwei Folgen, beide gemessen:
+      * **Das OpenAPI-Schema kannte die Antwort nicht** — `/api/docs` zeigte
+        für diese Route einen leeren Rumpf, `neues_paket` kam dort überhaupt
+        nicht vor. Wer den Vertrag nachschlagen wollte, musste den Quelltext
+        lesen.
+      * **Nichts hielt die Feldfolge und die Typen fest.** Ein vergessenes Feld
+        oder ein `None` statt `""` wäre erst im Frontend aufgefallen — genau
+        die Klasse, gegen die `SensorExportItem` oben längst steht.
+    Die Antwort selbst ist **bitgleich** zu vorher; das Modell beschreibt nur,
+    was ohnehin schon herauskam.
+    """
+    abgewaehlt: list[str]
+    neues_paket: SensorPaketInfo
+    sensoren: list[SensorAbwahlItem]
+
+
 class AbwahlRequest(BaseModel):
     """Body für die Sensor-Abwahl (#400).
 

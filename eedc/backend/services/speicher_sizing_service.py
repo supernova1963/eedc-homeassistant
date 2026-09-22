@@ -240,9 +240,27 @@ async def lade_sizing_auswertung(
     tage_mit_daten = len({z.datum for z in zeilen})
     tage_simuliert = len({z.zeit.date() for z in simulierbar})
 
-    soc_nutzung = messe_soc_nutzung(
-        stunden, [z.soc_je_speicher for z in zeilen], leer_schwelle
-    )
+    # ⚠ **Die Aufschlüsselung nennt nur die HEUTE laufenden Geräte**
+    # (Nachlese 4.0.50, A5). `TagesEnergieProfil.soc_je_speicher` trägt die
+    # Ladestände **aller** Geräte, die den Tag über gemessen wurden — auch die
+    # eines inzwischen ausgebauten. `messe_soc_nutzung` faltet sie ungefiltert
+    # zu `median_je_speicher`, und die Sicht beschriftet daraus „Speicher <id>"
+    # (`v4/SpeicherSizingIST.tsx`). Nach N-546 stand deshalb ein Widerspruch in
+    # einem Block: der Hinweistext hängt an `anzahl_speicher` (gefiltert, „1
+    # Speicher"), die Liste darüber zeigte zwei Zeilen — eine davon für ein
+    # Gerät, das nirgends sonst mehr vorkommt.
+    #
+    # ⭐ **Gefiltert wird der EINGANG, nicht das Ergebnis** — der Layer
+    # (`core/berechnungen/speicher_sizing.messe_soc_nutzung`) bleibt
+    # unverändert: er soll auswerten, was man ihm gibt, und nicht wissen
+    # müssen, welche Investition heute läuft. Dieselbe Arbeitsteilung wie bei
+    # den Kapazitäten oben.
+    laufende_ids = {str(s.id) for s in speicher}
+    soc_je_speicher = [
+        {k: v for k, v in (eintrag or {}).items() if str(k) in laufende_ids} or None
+        for eintrag in (z.soc_je_speicher for z in zeilen)
+    ]
+    soc_nutzung = messe_soc_nutzung(stunden, soc_je_speicher, leer_schwelle)
     kalibrierung = kalibriere_speicher(stunden)
     if kalibrierung is not None:
         basis = kalibrierung

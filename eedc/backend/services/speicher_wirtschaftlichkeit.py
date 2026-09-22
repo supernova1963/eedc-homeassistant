@@ -38,7 +38,9 @@ from backend.core.berechnungen.speicher_wirtschaftlichkeit import (  # noqa: F40
     SPEICHER_IST_MIN_MONATE,
     SpeicherErsparnisErgebnis,
     SpeicherIstAggregat,
+    GRUND_ZU_WENIG_MONATE,
     aggregiere_speicher_ist,
+    speicher_ist_mit_grund,  # A7: derselbe Lauf, plus der Grund
     berechne_speicher_ersparnis,
     berechne_v2h_ersparnis,
     ist_eta_degradation_alarm,
@@ -528,20 +530,60 @@ async def wirkungsgrad_ist_fuer_speicher(
         `quelle` auch dann etwas sagt, wenn kein Wert herauskam
         (`fenster-zu-kurz` · `keine-ladung` · `nicht-ermittelbar`).
 
-    ⛔ **Der Grund für `None` wird hier NICHT beschriftet.** „Zu wenig Monate"
-    und „keine Entladung erfasst" sind für `aggregiere_speicher_ist` derselbe
-    Rückgabewert; ihn hier in eine `quelle` zu übersetzen hieße, eine
-    Unterscheidung zu behaupten, die der SoT nicht trifft. Der Aufrufer, der
-    einen Text braucht (der HA-Export), setzt ihn selbst — und weiß dabei, dass
-    er beide Fälle meint.
+    ⭐ **Den Grund liefert die Schwester-Funktion**
+    `wirkungsgrad_ist_fuer_speicher_mit_grund` darunter. Hier stand bis zum 22.09.2026: „Der Grund für `None` wird hier
+    NICHT beschriftet — ‚zu wenig Monate' und ‚keine Entladung erfasst' sind
+    für `aggregiere_speicher_ist` derselbe Rückgabewert." Der zweite Halbsatz
+    war wahr und ist es nicht mehr: der Layer trennt die beiden Lagen seit der
+    Nachlese 4.0.50 (`speicher_ist_mit_grund`, A7). Die **Begründung** des
+    Satzes war richtig — eine Unterscheidung nicht zu behaupten, die der SoT
+    nicht trifft; sie trägt jetzt in die andere Richtung.
+    """
+    ergebnis, _grund = await wirkungsgrad_ist_fuer_speicher_mit_grund(
+        db, anlage_id=anlage_id, speicher=speicher,
+        verbrauch_daten_je_monat=verbrauch_daten_je_monat, von=von, bis=bis,
+    )
+    return ergebnis
+
+
+async def wirkungsgrad_ist_fuer_speicher_mit_grund(
+    db: AsyncSession,
+    *,
+    anlage_id: int,
+    speicher: Any,
+    verbrauch_daten_je_monat: "Iterable[dict]",
+    von: date,
+    bis: date,
+) -> "tuple[Optional[WirkungsgradErgebnis], Optional[str]]":
+    """Wie `wirkungsgrad_ist_fuer_speicher` — plus der Grund, wenn nichts herauskam.
+
+    ⭐ **Warum daneben und nicht statt dessen** (Nachlese 4.0.50, A7): Drei der
+    vier Aufrufer wollen nur den Wert und würden ein Tupel bloß auspacken und
+    wegwerfen. Der vierte — der HA-Export — **schreibt den Grund in ein
+    Sensor-Attribut**, das ein Anwender in seiner Automation liest; für ihn ist
+    es der Unterschied zwischen „warte noch" und „erfass die Entladung deines
+    Speichers".
+
+    Returns:
+        `(ergebnis, None)`, wenn das Aggregat zustande kam — das `ergebnis`
+        sagt dann über seine `quelle` selbst, ob ein Wert herauskam.
+        Sonst `(None, grund)` mit dem Vokabular aus
+        `core/berechnungen/speicher_wirtschaftlichkeit` (`zu-wenig-monate` ·
+        `keine-entladung`).
     """
     from backend.core.investition_kennwerte import get_speicher_nutzbare_kapazitaet_kwh
 
-    ist = aggregiere_speicher_ist(list(verbrauch_daten_je_monat))
-    if ist is None or ist.jahres_faktor <= 0:
-        return None
+    ist, grund = speicher_ist_mit_grund(list(verbrauch_daten_je_monat))
+    if ist is None:
+        return None, grund
+    if ist.jahres_faktor <= 0:
+        # Kann nur bei `anzahl_monate <= 0` auftreten — das fängt schon die
+        # Monatsschwelle oben ab. Die Wache bleibt trotzdem stehen: sie schützt
+        # die Division darunter, und ein `None` ohne Grund wäre hier schlimmer
+        # als ein konservativ gesetzter.
+        return None, GRUND_ZU_WENIG_MONATE
     nutzbar = get_speicher_nutzbare_kapazitaet_kwh(speicher) or 0
-    return await berechne_ist_wirkungsgrad(
+    ergebnis = await berechne_ist_wirkungsgrad(
         db,
         anlage_id=anlage_id,
         von=von,
@@ -551,6 +593,7 @@ async def wirkungsgrad_ist_fuer_speicher(
         nutzbare_kapazitaet_kwh=float(nutzbar),
         fenster_monate=ist.anzahl_monate,
     )
+    return ergebnis, None
 
 
 async def _lese_soc_am_periodenrand(

@@ -468,10 +468,21 @@ async def get_pvgis_prognose(
     )).scalars().all()
     # F-11: ein DC-gekoppelter Speicher am Träger der Grenze nimmt den Überschuss
     # auf, der sonst weggekappt würde — dann darf gar nicht gekappt werden.
+    #
+    # ⚠ **`aktiv_jetzt()` wie bei den Erzeugern darüber (Nachlese 4.0.50, A3).**
+    # Bis zum 22.09.2026 stand diese Abfrage ohne Filter, während die
+    # Erzeuger-Abfrage zwanzig Zeilen höher ihn längst trug. Ein **ausgebauter**
+    # DC-Speicher landete damit in `_dc_speicher_traeger`, und dessen Träger
+    # wurde in `zuordne_grenzen` auf `(None, None)` gesetzt: **die Kappung
+    # unterblieb ganz.** Die Prognose lag damit über dem, was der
+    # Wechselrichter überhaupt abgeben kann — und zwar dauerhaft, weil sie sich
+    # auf ein Gerät stützte, das nicht mehr da ist. Die Richtung ist die
+    # unangenehme: zu hoch, nicht zu niedrig.
     speicher = (await db.execute(
         select(Investition)
         .where(Investition.anlage_id == anlage_id)
         .where(Investition.typ == InvestitionTyp.SPEICHER.value)
+        .where(aktiv_jetzt())
     )).scalars().all()
     grenzen = zuordne_grenzen(alle_erzeuger, wechselrichter, speicher)
 
@@ -699,10 +710,14 @@ async def get_pvgis_modul_prognose(
         .where(Investition.typ.in_(PVGIS_ERZEUGER_TYPEN))
         .where(aktiv_jetzt())
     )).scalars().all()
+    # ⚠ `aktiv_jetzt()` wie bei den Geschwistern darüber — dieselbe Stelle, nur
+    # für EIN Modul (Nachlese 4.0.50, A3). Begründung s. `zuordne_grenzen`-Aufruf
+    # in der Anlagen-Prognose oben.
     speicher = (await db.execute(
         select(Investition)
         .where(Investition.anlage_id == modul.anlage_id)
         .where(Investition.typ == InvestitionTyp.SPEICHER.value)
+        .where(aktiv_jetzt())
     )).scalars().all()
     grenzen = zuordne_grenzen(geschwister, wechselrichter, speicher)
     grenze_kw, grenz_id = grenzen.get(modul.id, (None, None))

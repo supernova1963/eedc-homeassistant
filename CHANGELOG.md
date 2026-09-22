@@ -7,6 +7,32 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Der Import-Wizard bietet keine ausgebauten Geräte mehr an.** Wer seinen alten Speicher (oder ein altes PV-Modul, eine alte Wallbox, ein altes Auto) nach unserer Anleitung mit Stilllegungsdatum stehen lässt und das neue Gerät daneben anlegt, bekam im Zuordnungs-Schritt beide angeboten — und der vorgeschlagene Anteil teilte die importierten Mengen zwischen ihnen auf. Bei 12,8 kWh laufend neben 5,06 kWh ausgebaut schlug der Wizard 71,7 / 28,3 vor; wer den Vorschlag übernahm, schrieb gut ein Viertel der Import-Werte auf ein Gerät, das es nicht mehr gibt. Jetzt zählen nur die heute laufenden Geräte: ein Gerät, kein Zuordnungs-Schritt, 100 %.
+
+- **„Aus Home Assistant übernehmen" schlägt die Batterie-Sensoren am laufenden Speicher vor.** Nach einem Gerätetausch landeten Lade- und Entlade-Entität am **alten** Speicher (er hat die kleinere interne Nummer) — der neue blieb ohne Quelle. eedc wählt jetzt das jüngste heute laufende Gerät.
+
+- **Die PVGIS-Prognose kappt wieder an der Wechselrichter-Grenze, wenn der DC-Speicher ausgebaut ist.** Ein gleichstromseitig angeschlossener Speicher nimmt den Überschuss über der AC-Grenze auf — deshalb wird dann nicht gekappt. Das galt bisher auch für einen **stillgelegten** Speicher: das SOLL lag dauerhaft über dem, was der Wechselrichter abgeben kann, und der SOLL/IST-Vergleich zeigte ein Minus, das niemand zu verantworten hatte.
+
+- **Speicher-Hub: eine Zahl für „leer", nicht zwei.** Sizing-Simulator und Speicher-Potential leiten dieselbe Entladegrenze aus den gepflegten Kapazitäten ab, rechneten sie aber verschieden (23,0 % gegen 23,3 % bei 10,24 von 12,8 kWh) — der Potential-Block nahm die gerundeten Anzeigewerte. Eine Nacht mit einem Tiefpunkt dazwischen galt damit im einen Block als aufgebraucht und im anderen nicht, mit gegenteiliger Empfehlung. Die Rundung bleibt in der Anzeige, aus der Rechnung ist sie raus.
+
+- **Die Ladestands-Aufschlüsselung des Sizing-Simulators nennt keine ausgebauten Speicher mehr.** Der Hinweistext darunter zählt seit 4.0.50 nur laufende Geräte — die Liste darüber zeigte weiterhin jede Nummer, die je gemessen wurde. Zwei Zeilen unter der Überschrift „1 Speicher".
+
+- **Der HA-Sensor „Speicher-Ladestand" führt keine ausgebauten Geräte mehr in seinem Attribut.** `eedc_speicher_soc_prozent` schlüsselt unter `je_speicher` nach Gerät auf — und nannte dabei jede Nummer, die an diesem Tag je gemessen wurde, auch die eines längst stillgelegten Speichers. Eine Automation, die das Attribut aufschlüsselt, sah damit ein Gerät zu viel. Der Sensorwert selbst (der kapazitätsgewichtete Ladestand) war und bleibt davon unberührt.
+
+- **Der Wirkungsgrad-Sensor sagt jetzt „keine Entladung erfasst", wenn genau das der Fall ist.** Bisher hieß dieser Zustand `zu-wenig-monate` — ein Rat, der ins Leere führt: Warten hilft nicht, wenn die Entladung des Speichers schlicht nicht erfasst wird. Das Attribut `wirkungsgrad_messung` kennt dafür jetzt den eigenen Wert `keine-entladung` (siehe [Sensor-Referenz §11](docs/SENSOR-REFERENZ.md)).
+
+### Changed
+
+- **Intern: `GET /api/ha/export/mqtt/abwahl` trägt ein Antwortmodell.0.50 das Feld `neues_paket` liefert. Die Antwort selbst ist unverändert.
+
+- **Intern: drei Park-Wächter sehen mehr.** (1) Eine Fokus-Kachel mit einzeln parkbaren Kindern muss ein Gate auf die **Kinder-IDs** tragen — eine umhüllende Park-Leiste genügt nicht mehr; sie parkt die Kachel als ein Element und sagt nichts über den Fall, dass jemand alle Kinder einzeln wegräumt. (2) Trägt in einer Kennzahlen-Leiste **eine** Kachel eine Park-ID, müssen es alle tun; eine ohne war für beide bisherigen Regeln unsichtbar. (3) Der ID-Sammler liest keine Kommentare mehr — eine auskommentierte Park-Leiste galt ihm als Erzeugungsstelle und hätte die Lücke verdeckt, gegen die er gebaut ist.
+
+---
+
 ## [4.0.50] - 2026-09-22 — eedc@ha, Teil 1: Entscheidungs- und Plan-Sensoren für Home Assistant — und jede Anzeige als Karte im HA-Dashboard
 
 ### Added

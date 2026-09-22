@@ -23,6 +23,10 @@ from typing import Any, Optional
 
 from sqlalchemy import select
 
+from backend.core.berechnungen.speicher_wirtschaftlichkeit import (
+    GRUND_KEINE_ENTLADUNG,  # noqa: F401  — Vokabular, hier dokumentiert
+    GRUND_ZU_WENIG_MONATE,
+)
 from backend.models.investition import Investition, InvestitionMonatsdaten
 
 logger = logging.getLogger(__name__)
@@ -47,7 +51,9 @@ async def lade_speicher_wirkungsgrade(
     Sichten dieselbe Zahl nennen.
     """
     from backend.core.investition_kennwerte import get_speicher_wirkungsgrad_gepflegt
-    from backend.services.speicher_wirtschaftlichkeit import wirkungsgrad_ist_fuer_speicher
+    from backend.services.speicher_wirtschaftlichkeit import (
+        wirkungsgrad_ist_fuer_speicher_mit_grund,
+    )
 
     res = await db.execute(
         select(Investition).where(
@@ -79,9 +85,17 @@ async def lade_speicher_wirkungsgrade(
     for sp in speicher:
         gepflegt = get_speicher_wirkungsgrad_gepflegt(sp)
         gemessen = None
+        # ⭐ **Der Grund reist seit A7 mit** (Nachlese 4.0.50). Vorher stand hier
+        # `wirkungsgrad_ist_fuer_speicher` und der Resolver darunter schrieb bei
+        # `None` pauschal `zu-wenig-monate` — auch wenn die Monate längst da
+        # waren und bloß die Entladung fehlte. `GRUND_ZU_WENIG_MONATE` ist der
+        # Anfangswert, weil eine Anlage ohne Anschaffungsdatum (`periode_von is
+        # None`) genau diesen Fall beschreibt: es gibt noch keinen Zeitraum, aus
+        # dem gemessen werden könnte.
+        grund = GRUND_ZU_WENIG_MONATE
         if periode_von is not None:
             try:
-                gemessen = await wirkungsgrad_ist_fuer_speicher(
+                gemessen, grund = await wirkungsgrad_ist_fuer_speicher_mit_grund(
                     db,
                     anlage_id=anlage.id,
                     speicher=sp,
@@ -98,7 +112,8 @@ async def lade_speicher_wirkungsgrade(
                     "HA-Export η-IST fehlgeschlagen (Speicher %s): %s: %s",
                     sp.id, type(e).__name__, e,
                 )
-        out[sp.id] = _aufloesen(sp, gemessen, gepflegt)
+                gemessen, grund = None, GRUND_ZU_WENIG_MONATE
+        out[sp.id] = _aufloesen(sp, gemessen, gepflegt, grund)
     return out
 
 
@@ -131,14 +146,18 @@ class WirkungsgradInfo:
         }
 
 
-def _aufloesen(speicher: Any, gemessen, gepflegt: Optional[float]) -> WirkungsgradInfo:
+def _aufloesen(speicher: Any, gemessen, gepflegt: Optional[float],
+               grund_ohne_aggregat: str = GRUND_ZU_WENIG_MONATE) -> WirkungsgradInfo:
     """gemessen › gepflegt › keiner — und der Grund reist mit."""
     laedt = bool((getattr(speicher, "parameter", None) or {}).get("laedt_aus_netz"))
 
     if gemessen is None:
-        # `aggregiere_speicher_ist` gab `None`: zu wenige Monate ODER gar keine
-        # erfasste Entladung. Der SoT trennt die beiden nicht — der Text auch nicht.
-        messung = "zu-wenig-monate"
+        # ⭐ **Der Grund kommt vom Aufrufer** (Nachlese 4.0.50, A7). Hier stand
+        # fest `"zu-wenig-monate"` mit der Begründung „der SoT trennt die
+        # beiden nicht" — seit `speicher_ist_mit_grund` trennt er sie, und
+        # `keine-entladung` verlangt einen anderen Handgriff des Anwenders
+        # (Quelle zuordnen) als „warte noch ein paar Monate".
+        messung = grund_ohne_aggregat
     elif gemessen.wirkungsgrad_prozent is not None:
         return WirkungsgradInfo(
             round(float(gemessen.wirkungsgrad_prozent), 1), "gemessen", gemessen.quelle, laedt

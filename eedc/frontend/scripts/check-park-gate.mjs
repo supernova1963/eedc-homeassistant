@@ -22,10 +22,18 @@
  *       sie erwartet), dessen `render` Park-Elemente erzeugt, muss GEGATED eingehängt sein.
  *       Sonst bleibt der Block leer-aber-sichtbar stehen, wenn der Anwender alles darin parkt.
  *
- *  R2 · HÜLLEN-GATE — Eine `<FokusKachel>`, deren Kinder Park-Elemente erzeugen, muss
- *       entweder selbst in einer `<Parkbar>` stecken (dann verschwindet sie mit ihr) ODER
- *       ihre Funktion trägt einen Park-Früh-Return. Das ist die dritte Klasse aus dem
- *       Fehlertext des Livetests: „Container-Hülle versteckt sich nicht bei Voll-Park".
+ *  R2 · HÜLLEN-GATE — Eine `<FokusKachel>`, deren Kinder Park-Elemente erzeugen, muss an ein
+ *       Gate gebunden sein, das die **Kinder-IDs** prüft ({@link GATE_KINDER}: `alleGeparkt(ids)`
+ *       bzw. `<name>VollGeparkt(daten, istGeparkt)`) — in einer der drei Formen unten. Das ist
+ *       die dritte Klasse aus dem Fehlertext des Livetests: „Container-Hülle versteckt sich
+ *       nicht bei Voll-Park".
+ *
+ *       ⛔ **Eine umhüllende `<Parkbar>` genügt seit dem 2026-09-22 NICHT mehr.** Sie parkt die
+ *       Hülle als EIN Element und sagt nichts über den Fall, dass der Anwender die Kinder
+ *       einzeln parkt. Gemessen am Börsenpreis-Block: neun Kennzahlen plus Diagramm einzeln
+ *       parkbar, Hülle in ihrer `<Parkbar>` — entfernte man das Kinder-Gate aus dem Bau, blieb
+ *       dieser Prüfer **grün** (`plans/opus-berichte/BOERSENPREIS-PARK-BAU.md` §6). Baseline
+ *       beim Umbau: 4 Hüllen, 2 mit parkbaren Kindern, **1** davon doppelt parkbar.
  *
  * ── Die drei Gate-Formen, die der Baum benutzt (2026-09-06 erhoben, nicht angenommen) ──
  *
@@ -71,6 +79,22 @@ const MAX_TIEFE = 3
 const PARK_DIREKT = /<Parkbar\b|\bparkId\s*[:=]|<KpiStrip\b|\bmelde\b/
 /** Die Bezeichner, an denen ein Park-Gate im Baum erkennbar ist. */
 const GATE = /\bistGeparkt\b|\balleGeparkt\b|\bsichtbar\b|\bregVerstecken\b|\bparkbareAnzahl\b|Verstecken\b/
+
+/**
+ * R2 braucht ein SCHÄRFERES Muster: ein Gate, das die **Kinder-IDs** prüft.
+ *
+ * ⛔ **Warum `GATE` hier nicht genügt** (gemessen 2026-09-22): Er enthält
+ * `\bistGeparkt\b`, und `istGeparkt` reist in dieser Sicht als **Datum** mit —
+ * `CockpitLiveV4.tsx` baut ein `fokusLage`-Objekt (`{…, istGeparkt: park.istGeparkt}`)
+ * für die Deep-Link-Degradation und gibt es einem Früh-Return mit. Mit `GATE`
+ * und der transitiven Variablen-Auflösung galt **jede** Hülle in dieser Datei
+ * als gegated, egal was an ihr steht — der Sprengsatz blieb stumm.
+ *
+ * Dieses Muster nennt die Funktionsform, in der eine Hülle ihre Kinder prüft:
+ * `alleGeparkt(ids)` bzw. `<name>VollGeparkt(daten, istGeparkt)` (beide im Baum
+ * belegt) und `parkbareAnzahl`.
+ */
+const GATE_KINDER = /\balleGeparkt\b|VollGeparkt\b|\bparkbareAnzahl\b/
 
 function dateien(dir) {
   const out = []
@@ -196,11 +220,35 @@ function gateVariablen(sf) {
   return set
 }
 
+/**
+ * Variablen, deren Initialisierer SELBST ein Kinder-Gate ist — **nicht transitiv**.
+ *
+ * ⛔ Die Nicht-Transitivität ist der Punkt: `const boersenpreisAllesGeparkt =
+ * useMemo(() => … boersenpreisVollGeparkt(…))` zählt (sein Initialisierer nennt
+ * das Muster), `const fokusLage = { …, boersenpreisAllesGeparkt, … }` zählt
+ * **nicht** — dort reist der Wert als Datum mit, er gated nichts. Der Fixpunkt
+ * von `gateVariablen()` macht genau diesen Unterschied zunichte.
+ */
+function gateVariablenKinder(sf) {
+  const set = new Set()
+  const geh = (n) => {
+    if (ts.isVariableDeclaration(n) && n.initializer && ts.isIdentifier(n.name)) {
+      if (GATE_KINDER.test(n.initializer.getText())) set.add(n.name.text)
+    }
+    ts.forEachChild(n, geh)
+  }
+  geh(sf)
+  return set
+}
+
 const istGateAusdruck = (txt, vars) =>
   GATE.test(txt) || [...vars].some((v) => new RegExp(`\\b${v}\\b`).test(txt))
 
+const istKinderGateAusdruck = (txt, vars) =>
+  GATE_KINDER.test(txt) || [...vars].some((v) => new RegExp(`\\b${v}\\b`).test(txt))
+
 /** Trägt die umgebende Funktion VOR `knoten` einen Park-Früh-Return? (Gate-Form c) */
-function fruehReturnDavor(knoten, vars) {
+function fruehReturnDavor(knoten, vars, passt = istGateAusdruck) {
   let p = knoten.parent
   while (p) {
     if (
@@ -210,7 +258,7 @@ function fruehReturnDavor(knoten, vars) {
       const rumpf = p.getText()
       const vor = rumpf.slice(0, Math.max(0, knoten.getStart() - p.getStart()))
       const treffer = [...vor.matchAll(/\bif\s*\(([\s\S]{0,200}?)\)\s*(?:\{\s*)?return\b/g)]
-      if (treffer.some((m) => istGateAusdruck(m[1], vars))) return true
+      if (treffer.some((m) => passt(m[1], vars))) return true
     }
     p = p.parent
   }
@@ -218,31 +266,31 @@ function fruehReturnDavor(knoten, vars) {
 }
 
 /** Ist dieser Knoten an ein Park-Gate gebunden? (Gate-Formen a, b, c — auch über Variablen) */
-function istGegated(knoten, sf, vars) {
+function istGegated(knoten, sf, vars, passt = istGateAusdruck) {
   let p = knoten.parent
   let tiefe = 0
   while (p && tiefe++ < 16) {
-    if (ts.isConditionalExpression(p) && istGateAusdruck(p.condition.getText(), vars)) return true
-    if (ts.isBinaryExpression(p) && istGateAusdruck(p.left.getText(), vars)) return true
-    if (ts.isIfStatement(p) && istGateAusdruck(p.expression.getText(), vars)) return true
+    if (ts.isConditionalExpression(p) && passt(p.condition.getText(), vars)) return true
+    if (ts.isBinaryExpression(p) && passt(p.left.getText(), vars)) return true
+    if (ts.isIfStatement(p) && passt(p.expression.getText(), vars)) return true
     // Der Block liegt in einer Variablen — wird DIESE gegated eingehängt?
     if (ts.isVariableDeclaration(p) && ts.isIdentifier(p.name)) {
-      if (variableGegatedVerwendet(sf, p.name.text, vars)) return true
+      if (variableGegatedVerwendet(sf, p.name.text, vars, passt)) return true
       break
     }
     p = p.parent
   }
-  return fruehReturnDavor(knoten, vars)
+  return fruehReturnDavor(knoten, vars, passt)
 }
 
-function variableGegatedVerwendet(sf, name, vars) {
+function variableGegatedVerwendet(sf, name, vars, passt = istGateAusdruck) {
   const re = new RegExp(`\\b${name}\\b`)
   let treffer = false
   const geh = (n) => {
     if (treffer) return
-    if (ts.isConditionalExpression(n) && istGateAusdruck(n.condition.getText(), vars) && re.test(n.getText())) treffer = true
-    else if (ts.isBinaryExpression(n) && istGateAusdruck(n.left.getText(), vars) && re.test(n.right.getText())) treffer = true
-    else if (ts.isIfStatement(n) && istGateAusdruck(n.expression.getText(), vars) && re.test(n.getText())) treffer = true
+    if (ts.isConditionalExpression(n) && passt(n.condition.getText(), vars) && re.test(n.getText())) treffer = true
+    else if (ts.isBinaryExpression(n) && passt(n.left.getText(), vars) && re.test(n.right.getText())) treffer = true
+    else if (ts.isIfStatement(n) && passt(n.expression.getText(), vars) && re.test(n.getText())) treffer = true
     if (!treffer) ts.forEachChild(n, geh)
   }
   geh(sf)
@@ -258,11 +306,13 @@ let bloeckeGesamt = 0
 let bloeckeMitPark = 0
 let huellenGesamt = 0
 let huellenMitPark = 0
+let huellenDoppeltParkbar = 0
 
 for (const pfad of dateien(SRC)) {
   const { text, sf } = quelle(pfad)
   if (!/render:|<FokusKachel/.test(text)) continue
   const vars = gateVariablen(sf)
+  const varsKinder = gateVariablenKinder(sf)
 
   const geh = (node) => {
     // R1 — Block-Objektliterale
@@ -301,13 +351,34 @@ for (const pfad of dateien(SRC)) {
           }
           return false
         })()
+        if (inParkbar) huellenDoppeltParkbar++
+        // ⛔ **Die äußere `<Parkbar>` zählt NICHT mehr als Gate** (2026-09-22).
+        // Sie parkt die Hülle als EIN Element; sie sagt nichts darüber, was
+        // passiert, wenn der Anwender die **Kinder** einzeln parkt. Genau diese
+        // Lage entstand mit dem Börsenpreis-Block: neun Kennzahlen und ein
+        // Diagramm wurden einzeln parkbar, die Hülle blieb in ihrer `<Parkbar>`
+        // — und der Prüfer blieb grün, auch wenn man das Kinder-Gate
+        // (`!boersenpreisAllesGeparkt`) aus dem Bau entfernte. Gemessen am
+        // Sprengsatz; der Befund stammt aus `plans/opus-berichte/
+        // BOERSENPREIS-PARK-BAU.md` §6.
+        //
+        // Verlangt wird jetzt ein Gate, das die **Kinder-IDs** prüft
+        // (`GATE_KINDER`) — in einer der drei Formen (a)/(b)/(c). Eine Hülle
+        // OHNE Kinder-Gate ist rot, ob sie in einer `<Parkbar>` steckt oder
+        // nicht; beides nebeneinander ist der Normalfall („ganzen Block weg"
+        // mit einer Geste UND „alle Elemente einzeln weg").
         const marke = `${kurz(pfad)}::<FokusKachel>@${zeileVon(text, node.getStart())}`
-        if (!inParkbar && !fruehReturnDavor(node, vars) && !ALLOWLIST.has(marke)) {
+        const kinderGate = istGegated(node, sf, varsKinder, istKinderGateAusdruck)
+        if (!kinderGate && !ALLOWLIST.has(marke)) {
           verstoesse.push({
             regel: 'R2',
             datei: kurz(pfad),
             zeile: zeileVon(text, node.getStart()),
-            was: '<FokusKachel> mit parkbaren Kindern versteckt sich bei Voll-Park nicht',
+            was: inParkbar
+              ? '<FokusKachel> mit parkbaren Kindern steckt zwar in einer <Parkbar>, '
+                + 'prüft aber ihre KINDER-IDs nicht — parkt der Anwender alle Kinder, '
+                + 'bleibt die leere Karte stehen'
+              : '<FokusKachel> mit parkbaren Kindern versteckt sich bei Voll-Park nicht',
           })
         }
       }
@@ -326,7 +397,10 @@ if (verstoesse.length > 0) {
     "  (a) `...(sichtbar(ids) ? [block] : [])` bzw. `!alleGeparkt(ids) ? {…} : null`\n" +
     "  (b) `if (!alleGeparkt(ids)) bloecke.push({…})`\n" +
     "  (c) `if (ids.every(park.istGeparkt)) return null` VOR dem Block\n" +
-    'Bei einer <FokusKachel>: entweder in eine <Parkbar> hüllen oder (c).\n' +
+    'Bei einer <FokusKachel> mit parkbaren Kindern: ein Gate auf die KINDER-IDs\n' +
+    "  (`alleGeparkt(ids)` bzw. ein `<name>VollGeparkt(daten, istGeparkt)`), in Form (a), (b) oder (c).\n" +
+    '  Eine umhüllende <Parkbar> genügt NICHT — sie parkt die Hülle als ein Element,\n' +
+    '  nicht ihre Kinder. Beides nebeneinander ist der Normalfall.\n' +
     'Ist die Stelle eine begründete Ausnahme → scripts/park-gate-allowlist.json (mit Kommentar im Code).\n',
   )
   process.exit(1)
@@ -334,6 +408,7 @@ if (verstoesse.length > 0) {
 
 console.log(
   `\ncheck:park-gate — ${bloeckeGesamt} Block-Definitionen (davon ${bloeckeMitPark} mit Park-Elementen) ` +
-  `und ${huellenGesamt} <FokusKachel>-Hüllen (davon ${huellenMitPark} mit parkbaren Kindern) geprüft.`,
+  `und ${huellenGesamt} <FokusKachel>-Hüllen (davon ${huellenMitPark} mit parkbaren Kindern, ` +
+  `${huellenDoppeltParkbar} davon zusätzlich in einer <Parkbar>) geprüft.`,
 )
 console.log('✅ Jeder Block und jede Hülle mit parkbaren Elementen verschwindet bei Voll-Park.')

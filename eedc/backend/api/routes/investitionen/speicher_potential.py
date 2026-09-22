@@ -172,24 +172,32 @@ async def get_speicher_potential(
     # („wie viel wäre zusätzlich hindurchgegangen?"), und für genau diese Klasse
     # gilt laut `investition_kennwerte` der nutzbare Hub. Der Helper fällt still
     # auf brutto zurück, wenn das optionale Feld leer ist.
-    kapazitaet = None
-    if speicher:
-        summe = sum(get_speicher_nutzbare_kapazitaet_kwh(s) or 0 for s in speicher)
-        kapazitaet = round(summe, 1) if summe else None
+    summe = sum(get_speicher_nutzbare_kapazitaet_kwh(s) or 0 for s in speicher)
+    kapazitaet = round(summe, 1) if summe else None
 
     # BRUTTO daneben — und zwar **nur** für die Vollzyklen. Zwei Nenner in einer
     # Antwort sind erklärungsbedürftig, ein abweichender Zyklenwert gegenüber
     # Cockpit/HA-Sensor/PDF wäre schlimmer: `vollzyklen()` ist auf brutto
     # festgelegt, weil der Netto-Wert selten gepflegt ist.
-    kapazitaet_brutto = None
-    if speicher:
-        summe_brutto = sum(get_speicher_kapazitaet_kwh(s) or 0 for s in speicher)
-        kapazitaet_brutto = round(summe_brutto, 1) if summe_brutto else None
+    summe_brutto = sum(get_speicher_kapazitaet_kwh(s) or 0 for s in speicher)
+    kapazitaet_brutto = round(summe_brutto, 1) if summe_brutto else None
 
     # Die Untergrenze, ab der dieser Speicher nichts mehr abgibt (#379). Beide
     # Kapazitäten liegen hier ohnehin schon vor — die Ableitung braucht keine
     # zusätzliche Abfrage und kein neues Eingabefeld.
-    leer_schwelle = leer_schwelle_prozent(kapazitaet_brutto, kapazitaet)
+    #
+    # ⚠ **Aus den ROHEN Summen, nicht aus den gerundeten Antwortfeldern**
+    # (Nachlese 4.0.50, A4). Bis zum 22.09.2026 stand hier
+    # `leer_schwelle_prozent(kapazitaet_brutto, kapazitaet)` — also mit den auf
+    # eine Nachkommastelle gerundeten Werten, während der Sizing-Simulator
+    # nebenan (`services/speicher_sizing_service.py`) dieselbe Schwelle aus den
+    # rohen Summen bildet. **Bei 10,24 / 12,8 kWh sagte dieselbe Anlage im
+    # selben Hub 23,3 % und 23,0 %.** Die Rundung ist eine Anzeigeentscheidung;
+    # sie darf keine Rechengröße verschieben, und zwei Zahlen für „leer" in
+    # zwei Blöcken derselben Fläche sind genau die Drift-Klasse, gegen die
+    # #379 gebaut wurde. Die Antwortfelder bleiben gerundet — nur der Eingang
+    # der Ableitung ändert sich.
+    leer_schwelle = leer_schwelle_prozent(summe_brutto or None, summe or None)
     abgeleitet = leer_schwelle > SOC_LEER_PROZENT
 
     auswertung = await lade_potential_auswertung(

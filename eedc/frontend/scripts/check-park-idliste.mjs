@@ -81,13 +81,74 @@ const parse = (pfad) => {
   return { text, sf: ts.createSourceFile(pfad, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX) }
 }
 
+/**
+ * Kommentare aus dem Quelltext streichen — **längengleich**, damit jede Position
+ * und damit jede Zeilennummer erhalten bleibt.
+ *
+ * ⛔ **Warum das sein muss** (2026-09-22): Die Ernte unten liest den ROHEN Dateitext
+ * mit Regexen. Ein `id="…"` oder `parkId: '…'` **in einem Kommentar** zählte damit als
+ * Erzeugungsstelle — und genau das kann L1 blind machen: Wer eine `<Parkbar>` entfernt
+ * und ihre Zeile auskommentiert (oder sie in einem erklärenden Kommentar zitiert),
+ * behält die ID in der Ernte, während sie niemand mehr rendert. Die Liste verlangt
+ * sie weiter, `alleGeparkt` wird nie wahr, der leere Block bleibt stehen — der
+ * Referenzfall dieses Wächters, nur von hinten.
+ *
+ * Gemessen beim Einbau: **257 Literale mit und ohne Kommentare** — heute ändert der
+ * Schnitt nichts, er schließt die Tür, bevor jemand hindurchgeht.
+ *
+ * ⚠ **Nicht per Regex und nicht per Scanner** — beides gemessen: ein `//` in einem
+ * String (eine URL) darf nicht als Kommentar gelten, und der Token-Scanner läuft über
+ * einer ganzen `.tsx` aus dem Tritt, sobald er JSX-Text mit Apostroph oder `<` sieht
+ * (die Gegenprobe blieb damit stumm — sie stand grün, obwohl die `<Parkbar>` nur noch
+ * im Kommentar stand). Der **Parser** kennt beide Lagen richtig: Kommentar-Trivia hängt
+ * an den Knoten, und ein JSX-Kommentar parst als `JsxExpression` ohne Ausdruck.
+ */
+function ohneKommentare(text, pfad) {
+  const sf = ts.createSourceFile(pfad, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  const bereiche = []
+  const geh = (n) => {
+    // JSX-Kommentar (geschweifte Klammern um einen Blockkommentar) parst als
+    // JsxExpression ohne Ausdruck — der ganze Knoten fällt weg.
+    if (ts.isJsxExpression(n) && !n.expression) {
+      bereiche.push([n.getStart(), n.getEnd()])
+      return
+    }
+    for (const r of ts.getLeadingCommentRanges(text, n.getFullStart()) || []) {
+      bereiche.push([r.pos, r.end])
+    }
+    for (const r of ts.getTrailingCommentRanges(text, n.getEnd()) || []) {
+      bereiche.push([r.pos, r.end])
+    }
+    ts.forEachChild(n, geh)
+  }
+  geh(sf)
+  if (bereiche.length === 0) return text
+  // ⚠ Über `slice`, nicht über `[...text]`: ein Zeichen-Array spaltet nach Code-POINTS,
+  // die Positionen des Parsers sind Code-UNITS — bei einem Emoji im Quelltext (die gibt
+  // es hier reichlich) verschöbe sich alles dahinter um eins.
+  bereiche.sort((a, b) => a[0] - b[0])
+  const teile = []
+  let pos = 0
+  for (const [a, b] of bereiche) {
+    if (b <= pos) continue
+    const von = Math.max(a, pos)
+    teile.push(text.slice(pos, von))
+    // Zeilenumbrüche stehen lassen: gleiche Länge, gleiche Zeilennummern.
+    teile.push(text.slice(von, b).replace(/[^\n]/g, ' '))
+    pos = b
+  }
+  teile.push(text.slice(pos))
+  return teile.join('')
+}
+
 // ── 1. Erzeugungsstellen baumweit einsammeln ────────────────────────────────────────
 const literale = new Set()
 const praefixe = new Set()
 /** Listen-Namen, die SELBST die Quelle einer gerenderten `parkId` sind. */
 const alsQuelleVerwendet = new Set()
 for (const pfad of alleDateien) {
-  const text = readFileSync(pfad, 'utf8')
+  // ⚠ OHNE Kommentare — eine auskommentierte `<Parkbar>` rendert nichts (s. o.).
+  const text = ohneKommentare(readFileSync(pfad, 'utf8'), pfad)
   for (const m of text.matchAll(/<Parkbar\b[^>]*?\bid="([^"]+)"/g)) literale.add(m[1])
   for (const m of text.matchAll(/\bparkId\s*[:=]\s*['"]([^'"]+)['"]/g)) literale.add(m[1])
   // dynamisch: id={`praefix-${…}`} / parkId: `praefix-${…}`

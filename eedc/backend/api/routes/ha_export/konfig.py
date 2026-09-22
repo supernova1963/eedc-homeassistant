@@ -27,7 +27,12 @@ from backend.services.mqtt_broker_settings import (
     schreibe_export_settings,
     ABWAHL_FELD,
 )
-from backend.api.routes.ha_export.schemas import AbwahlRequest, AutoPublishRequest, MQTTConfigResponse
+from backend.api.routes.ha_export.schemas import (
+    AbwahlRequest,
+    AutoPublishRequest,
+    MQTTConfigResponse,
+    SensorAbwahlResponse,
+)
 
 router = APIRouter()
 
@@ -86,7 +91,7 @@ async def set_auto_publish(payload: AutoPublishRequest, db: AsyncSession = Depen
 # Sensor-Abwahl (#400) — welche Sensoren gehen ueberhaupt nach HA?
 # =============================================================================
 
-@router.get("/mqtt/abwahl")
+@router.get("/mqtt/abwahl", response_model=SensorAbwahlResponse)
 async def get_sensor_abwahl(db: AsyncSession = Depends(get_db)):
     """Alle exportierbaren Sensor-Definitionen samt Abwahl-Zustand.
 

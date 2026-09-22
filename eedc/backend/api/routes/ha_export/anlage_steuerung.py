@@ -131,6 +131,31 @@ def _iso_ende(tag: date, slot: int) -> str:
     return _iso(tag, slot + 1)
 
 
+async def _laufende_speicher(db, anlage_id: int, heute: date) -> list:
+    """Die HEUTE laufenden Speicher dieser Anlage — `aktiv` + Stilllegung ≥ heute.
+
+    ⭐ **Eine Abfrage für die ganze Phase** (Nachlese 4.0.50, Nachtrag c). Genau
+    dieselbe Abfrage stand bis zum 22.09.2026 nur in `_arbitrage_sensor`; der
+    SoC-Sensor daneben filterte gar nicht. Sie hier zu heben ist **kein**
+    zusätzlicher Zugriff, sondern derselbe an einer Stelle — die Regel dieses
+    Moduls („holt nichts, was schon geholt wurde") gilt auch für sich selbst.
+
+    Bauform und Stichtag wie N-546 und `lade_speicher_wirkungsgrade`: `>= heute`,
+    damit ein für heute angekündigter Ausbau noch mitzählt.
+    """
+    res = await db.execute(
+        select(Investition).where(
+            Investition.anlage_id == anlage_id,
+            Investition.typ == "speicher",
+            Investition.aktiv.is_(True),
+        )
+    )
+    return [
+        i for i in res.scalars().all()
+        if not i.stilllegungsdatum or i.stilllegungsdatum >= heute
+    ]
+
+
 async def _lade_tagesprofil(db, anlage_id: int, heute: date):
     """Die Stundenzeilen von heute **und** die Tageszeile — ein Query je Tabelle."""
     stunden_res = await db.execute(
@@ -204,6 +229,7 @@ async def steuerungs_sensoren(
     preis = preis or {}
 
     zeilen, tageszeile = await _lade_tagesprofil(db, anlage.id, heute)
+    speicher_laufend = await _laufende_speicher(db, anlage.id, heute)
 
     # Die letzte Stundenzeile **mit Wert** — nicht einfach `zeilen[-1]`.
     #
@@ -295,9 +321,31 @@ async def steuerungs_sensoren(
         # dann trotzdem in der Stundenzeile, die wir ohnehin geladen haben.
         soc = next((z.soc_prozent for z in reversed(zeilen) if z.soc_prozent is not None), None)
     if soc is not None:
-        je_speicher = next(
+        # ⚠ **Nur die HEUTE laufenden Geräte im Attribut** (Nachlese 4.0.50,
+        # Nachtrag c — dieselbe Klasse wie A5, nur im Export).
+        # `TagesEnergieProfil.soc_je_speicher` trägt die Ladestände **aller**
+        # Geräte, die an diesem Tag gemessen wurden — auch die eines inzwischen
+        # ausgebauten. Ungefiltert stand in Home Assistant unter
+        # `je_speicher` eine Investitions-Nummer, die es nicht mehr gibt: eine
+        # Automation, die das Attribut aufschlüsselt, sah ein Gerät zu viel.
+        #
+        # ⛔ **Der Sensorwert selbst bleibt unberührt.** Er kommt aus der
+        # Prognose (kapazitätsgewichtet über die laufenden Speicher, N-239) bzw.
+        # aus `zeile.soc_prozent` — einem historischen Messwert der **Anlage**,
+        # der richtig bleibt, auch wenn später ein Gerät ausgebaut wird.
+        # Gefiltert wird ausschließlich die Aufschlüsselung, also genau die
+        # Aussage über den heutigen Bestand.
+        #
+        # ⚠ `None` statt `{}`, wenn nichts übrig bleibt: `_anhaengen` verwirft
+        # `None`-Attribute, und ein leeres Dict wäre die Behauptung „aufgeschlüsselt,
+        # Ergebnis leer" — dasselbe Argument wie an der Spalte selbst.
+        laufende_ids = {str(i.id) for i in speicher_laufend}
+        je_speicher_roh = next(
             (z.soc_je_speicher for z in reversed(zeilen) if z.soc_je_speicher), None
         )
+        je_speicher = {
+            k: v for k, v in (je_speicher_roh or {}).items() if str(k) in laufende_ids
+        } or None
         _anhaengen(
             sensor_values, "eedc_speicher_soc_prozent", round(float(soc), 1),
             {"je_speicher": je_speicher},
@@ -380,7 +428,7 @@ async def steuerungs_sensoren(
     await _arbitrage_sensor(
         anlage=anlage, db=db, sensor_values=sensor_values,
         prognose=prognose, fenster_ctx=fenster_ctx, heute=heute,
-        speicher_eta=speicher_eta,
+        speicher_eta=speicher_eta, speicher=speicher_laufend,
     )
 
     # ── P5 · bestes Fenster ─────────────────────────────────────────────────
@@ -396,7 +444,7 @@ async def steuerungs_sensoren(
 
 
 async def _arbitrage_sensor(*, anlage, db, sensor_values, prognose, fenster_ctx, heute,
-                            speicher_eta=None):
+                            speicher_eta=None, speicher=None):
     """P3 — nur bei einem Speicher, der **aus dem Netz laden darf**.
 
     ⭐ **Das Gate ist `laedt_aus_netz`, nicht `arbitrage_faehig`** (Konzept §5/P3):
@@ -414,17 +462,11 @@ async def _arbitrage_sensor(*, anlage, db, sensor_values, prognose, fenster_ctx,
     if not kap or soc is None:
         return
 
-    res = await db.execute(
-        select(Investition).where(
-            Investition.anlage_id == anlage.id,
-            Investition.typ == "speicher",
-            Investition.aktiv.is_(True),
-        )
-    )
-    speicher = [
-        i for i in res.scalars().all()
-        if not i.stilllegungsdatum or i.stilllegungsdatum >= heute
-    ]
+    # ⭐ Die Liste kommt seit dem Nachtrag (c) von der Phase — dieselbe Abfrage,
+    # die dort schon für das `je_speicher`-Attribut gebraucht wird. Der
+    # Rückfall bleibt stehen, weil diese Funktion auch einzeln geprüft wird.
+    if speicher is None:
+        speicher = await _laufende_speicher(db, anlage.id, heute)
     laedt = [i for i in speicher if (i.parameter or {}).get("laedt_aus_netz")]
     if not laedt:
         return

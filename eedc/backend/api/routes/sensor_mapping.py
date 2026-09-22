@@ -20,6 +20,7 @@ Wer die alten Wege sucht: ``/api/datenquellen/{id}/felder`` (lesen · speichern)
 """
 
 import logging
+from datetime import date
 from enum import Enum
 from typing import Optional, Any
 
@@ -267,9 +268,38 @@ async def get_ha_energy_suggest(anlage_id: int):
     inv_map: dict[str, dict[str, str]] = {}
     matches: list[HAEnergyInvestitionSuggestion] = []
 
-    # 1. Batterie → Speicher-Investition (erste aktive Speicher-Investition wählen)
+    # 1. Batterie → Speicher-Investition: das JÜNGSTE heute laufende Gerät.
+    #
+    # ⚠ **Bis zur Nachlese 4.0.50 (A2) stand hier `next(i for i in investitionen
+    # if i.typ == "speicher")` — der Kommentar sagte „erste **aktive**", der Code
+    # prüfte weder `aktiv` noch `stilllegungsdatum`.** Die Abfrage darüber sortiert
+    # nach `Investition.id`; nach einem Gerätetausch hat das ALTE Gerät die
+    # kleinere ID, und der Import der HA-Energiekonfiguration schlug die
+    # Batterie-Sensoren dort vor. Wer den Vorschlag übernahm, hängte die
+    # Lade-/Entlade-Entities an einen Speicher, der nicht mehr im Keller steht —
+    # und der neue blieb ohne Quelle. Dieselbe Klasse wie N-546.
+    #
+    # **Ein Vorschlag bleibt ein Vorschlag**: bei ZWEI laufenden Speichern (die
+    # Erweiterung, kein Tausch) gab es vorher auch schon nur einen, und es
+    # bleibt bei einem — den zweiten ordnet der Anwender von Hand zu. Gewählt
+    # wird jetzt das **jüngste** statt des ältesten: wer gerade die
+    # HA-Energiekonfiguration importiert, hat in aller Regel zuletzt etwas
+    # angeschlossen. Sortierschlüssel ist das `anschaffungsdatum` (Pflichtfeld
+    # seit v4.0.1) mit der ID als Tiebreaker für Altbestand ohne Datum — die ID
+    # allein wäre nur ein Stellvertreter für „später angelegt".
+    # Stichtag `date.today()` wie in N-546: die Frage ist nach vorn gerichtet
+    # („welches Gerät misst heute?").
     if suggestions.battery and (suggestions.battery.ladung_entity or suggestions.battery.entladung_entity):
-        speicher = next((i for i in investitionen if i.typ == "speicher"), None)
+        heute = date.today()
+        laufende_speicher = [
+            i for i in investitionen
+            if i.typ == "speicher" and i.aktiv
+            and (not i.stilllegungsdatum or i.stilllegungsdatum >= heute)
+        ]
+        speicher = max(
+            laufende_speicher,
+            key=lambda i: (i.anschaffungsdatum or date.min, i.id),
+        ) if laufende_speicher else None
         if speicher:
             felder_keys = {f["feld"] for f in get_felder_fuer_investition(speicher.typ, speicher.parameter)}
             entry: dict[str, str] = {}
