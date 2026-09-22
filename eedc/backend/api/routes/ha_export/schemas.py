@@ -5,7 +5,7 @@ Sensor-Abwahl) und `_hinweis` (der Vorbehalt eines Sensorwerts als Text).
 # Code 1:1 uebernommen, kein Verhaltenswechsel. Die Fassade `__init__.py` haengt den Router ein und exportiert
 # die Namen weiter, die Aufrufer und Tests bisher aus dem Modul importierten.
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional, Any
 from backend.services.ha_sensors_export import SensorValue, runde_exportwert
 
@@ -56,6 +56,46 @@ class SensorExportItem(BaseModel):
     # (Wärme geschätzt · zweiter Erzeuger) oder Grund einer Sperre. Dieselben
     # Worte wie Hub und Cockpit; MQTT trägt sie als Attribut.
     hinweis: Optional[str] = None
+    # ⭐ **N-541 (22.09.2026): die Zusatz-Attribute, die MQTT längst publiziert.**
+    # Bis hierher trug REST nur `hinweis` — den einen Satz, der aus
+    # `zusatz_attribute` herausgezogen wurde; alles andere (Stundenreihen,
+    # Fenster, Quellenangaben, `je_speicher`, `preisquelle` …) endete an dieser
+    # Grenze. Zwei Folgen, beide gemessen:
+    #   * **Ein HA-Anwender ohne MQTT sah sie nicht** — die Sensor-Referenz
+    #     beschreibt Attribute, die über REST nie ankamen.
+    #   * **Der Golden Master sah sie nicht.** Jeder Umbau, der ein Attribut
+    #     ändert (S3b/B0 stellt die gesamte Zeitachse um), lief bis hierher
+    #     durch ein Gate, das genau diese Hälfte des Exports nicht kennt —
+    #     „26 Sichten, 0 Unterschiede" hieß „0 Unterschiede in dem, was REST
+    #     zeigt". Deshalb steht dieser Schritt VOR der Achsen-Umstellung.
+    # `hinweis` bleibt daneben stehen: er ist die herausgehobene Kurzform für
+    # die Oberfläche, nicht dasselbe wie das Roh-Attribut.
+    attribute: dict = Field(default_factory=dict)
+
+    @classmethod
+    def von_sensorwert(cls, sv: SensorValue) -> "SensorExportItem":
+        """Ein `SensorValue` als REST-Item — die EINE Übersetzung.
+
+        ⚠ **Warum als Klassenmethode und nicht dreimal ausgeschrieben.** Genau
+        dieselben elf Felder wurden an drei Stellen gefüllt (`/sensors` zweimal,
+        `/sensors/{id}`); ein neues Feld musste dreimal nachgetragen werden, und
+        wer eine vergisst, erzeugt zwei REST-Sichten mit verschiedenem Inhalt.
+        Dasselbe Argument, mit dem die Rundung schon an diesem Modell sitzt.
+        """
+        return cls(
+            key=sv.definition.key,
+            name=sv.definition.name,
+            value=sv.value,
+            unit=sv.definition.unit,
+            icon=sv.definition.icon,
+            category=sv.definition.category.value,
+            formel=sv.definition.formel,
+            berechnung=sv.berechnung,
+            hinweis=_hinweis(sv),
+            device_class=sv.definition.device_class,
+            state_class=sv.definition.state_class,
+            attribute=dict(sv.zusatz_attribute or {}),
+        )
 
     @model_validator(mode="after")
     def _runde_wert(self):

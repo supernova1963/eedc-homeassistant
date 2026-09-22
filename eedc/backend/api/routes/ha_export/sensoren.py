@@ -20,7 +20,7 @@ from backend.services.mqtt_client import MQTTClient
 from backend.api.routes.ha_export.anlage_sensoren import calculate_anlage_sensors
 from backend.api.routes.ha_export.emob import _load_emob_pool_ctx
 from backend.api.routes.ha_export.investition_sensoren import calculate_investition_sensors
-from backend.api.routes.ha_export.schemas import AnlageExport, FullExportResponse, HAYamlSnippet, InvestitionExport, SensorExportItem, _hinweis
+from backend.api.routes.ha_export.schemas import AnlageExport, FullExportResponse, HAYamlSnippet, InvestitionExport, SensorExportItem
 
 router = APIRouter()
 
@@ -51,19 +51,7 @@ async def get_all_sensors(db: AsyncSession = Depends(get_db)):
         )
 
         sensors = [
-            SensorExportItem(
-                key=sv.definition.key,
-                name=sv.definition.name,
-                value=sv.value,
-                unit=sv.definition.unit,
-                icon=sv.definition.icon,
-                category=sv.definition.category.value,
-                formel=sv.definition.formel,
-                berechnung=sv.berechnung,
-                hinweis=_hinweis(sv),
-                device_class=sv.definition.device_class,
-                state_class=sv.definition.state_class,
-            )
+            SensorExportItem.von_sensorwert(sv)
             for sv in sensor_values
             if sv.value is not None  # B5/X-3: leer nur für MQTT (Zustand „unbekannt")
         ]
@@ -105,19 +93,7 @@ async def get_all_sensors(db: AsyncSession = Depends(get_db)):
                 fenster_ctx=_kontext.get("fenster"),
             )
             inv_sensor_items = [
-                SensorExportItem(
-                    key=sv.definition.key,
-                    name=sv.definition.name,
-                    value=sv.value,
-                    unit=sv.definition.unit,
-                    icon=sv.definition.icon,
-                    category=sv.definition.category.value,
-                    formel=sv.definition.formel,
-                    berechnung=sv.berechnung,
-                    hinweis=_hinweis(sv),
-                    device_class=sv.definition.device_class,
-                    state_class=sv.definition.state_class,
-                )
+                SensorExportItem.von_sensorwert(sv)
                 for sv in inv_sensors
                 if sv.value is not None  # B5/X-3: leer nur für MQTT (Zustand „unbekannt")
             ]
@@ -158,19 +134,7 @@ async def get_anlage_sensors(
     sensor_values = await calculate_anlage_sensors(db, anlage, skip_jitter=True)   # N-531: On-Demand ohne Jitter
 
     sensors = [
-        SensorExportItem(
-            key=sv.definition.key,
-            name=sv.definition.name,
-            value=sv.value,
-            unit=sv.definition.unit,
-            icon=sv.definition.icon,
-            category=sv.definition.category.value,
-            formel=sv.definition.formel,
-            berechnung=sv.berechnung,
-            hinweis=_hinweis(sv),
-            device_class=sv.definition.device_class,
-            state_class=sv.definition.state_class,
-        )
+        SensorExportItem.von_sensorwert(sv)
         for sv in sensor_values
         if sv.value is not None  # B5/X-3: leer nur für MQTT (Zustand „unbekannt")
     ]
