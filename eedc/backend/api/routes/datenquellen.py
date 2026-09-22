@@ -41,6 +41,7 @@ from backend.services.live_sensor_config import extract_live_config
 from backend.services.mqtt_topic_registry import build_expected_topics
 from backend.services.mqtt_broker_settings import import_aktiviert
 from backend.utils.investition_filter import aktiv_am_tag, sort_investitionen_nach_typ
+from backend.core.berechnungen.preis_reihe import ist_dynamisch
 
 logger = logging.getLogger(__name__)
 
@@ -599,7 +600,7 @@ async def _basis_preis_eintraege(db: AsyncSession, anlage_id: int) -> list[dict]
 
     tarife = await lade_tarife_fuer_anlage(db, anlage_id)
     allgemein = tarife.get("allgemein")
-    if not (allgemein and allgemein.vertragsart == "dynamisch"):
+    if not ist_dynamisch(allgemein):
         return []
 
     eintraege: list[dict] = []

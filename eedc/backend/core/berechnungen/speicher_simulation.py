@@ -38,6 +38,30 @@ class StundenBilanz:
     soc_prozent: Optional[float]   # None wenn kein Speicher vorhanden
 
 
+#: Ab diesem Ladestand gilt der Speicher in der Simulation als **voll**.
+#: ⚠ Nicht dieselbe Schwelle wie beim Sensor `eedc_speicher_voll` (99 %): der
+#: beantwortet „ist er JETZT voll?", diese hier „wann ist die Ladung fertig?".
+SOC_VOLL_PROZENT: float = 98.0
+
+#: Ab diesem Ladestand gilt der Speicher als **leer**. Nicht 0 %: die
+#: Simulation rechnet mit Stundenmitteln, und ein Speicher, der über eine
+#: Stunde auf 1,5 % fällt, war darin praktisch leer.
+#:
+#: ⭐ **Seit S3b Konstanten statt Literale** (22.09.2026) — die beiden Schwellen
+#: standen als `98.0`/`2.0` direkt in der Schleife, und die Sensoren
+#: `eedc_speicher_leer_um_ts` / `eedc_speicher_reicht_bis_mitternacht` müssen
+#: **dieselbe** Schwelle anwenden wie der Lauf, aus dem sie ihre Reihe lesen.
+#: Eine zweite 2.0 an der Auswertungsstelle wäre die Drift-Klasse dieses
+#: Projekts in Reinform.
+SOC_LEER_PROZENT: float = 2.0
+
+#: Ab dieser Stunde meldet die Simulation „leer" (`speicher_leer_um`).
+#: Morgendliche Niedrigstände sind normal und keine Aussage über den Abend.
+#: ⚠ Gilt **nur** für dieses Textfeld; die S3b-Sensoren lesen `soc_pro_stunde`
+#: und wenden eine Übergangsregel an, die diesen Filter nicht braucht.
+SOC_LEER_AB_STUNDE: int = 12
+
+
 @dataclass
 class SpeicherSimErgebnis:
     """Ergebnis der SoC-Tagessimulation."""
@@ -127,9 +151,9 @@ def simuliere_speicher_tag(
 
             soc_h = round(soc, 1)
             soc_pro_stunde[h] = soc_h
-            if soc >= 98.0 and voll is None:
+            if soc >= SOC_VOLL_PROZENT and voll is None:
                 voll = f"{h:02d}:00"
-            if soc <= 2.0 and leer is None and h >= 12:
+            if soc <= SOC_LEER_PROZENT and leer is None and h >= SOC_LEER_AB_STUNDE:
                 leer = f"{h:02d}:00"
         else:
             # Ohne Batterie: direkte Bilanz.

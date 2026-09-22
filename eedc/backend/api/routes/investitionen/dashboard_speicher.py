@@ -37,6 +37,7 @@ from backend.core.berechnungen.speicher_wirtschaftlichkeit import (
 from backend.services.speicher_wirtschaftlichkeit import (
     berechne_effektiver_ladepreis,
     berechne_ist_wirkungsgrad,
+    wirkungsgrad_ist_fuer_speicher,
 )
 from backend.core.field_definitions import get_speicher_netzladung_kwh
 from backend.core.berechnungen import (
@@ -266,29 +267,21 @@ async def get_speicher_dashboard(
         eta_ist = None
         if monatsdaten and periode_von is not None:
             try:
-                ist_agg = aggregiere_speicher_ist(
-                    [md.verbrauch_daten or {} for md in monatsdaten]
+                # ⭐ **Seit S3b über den SoT-Helper** (22.09.2026) — er trägt die
+                # N-140-Wache in sich: `aggregiere_speicher_ist` liefert `None`
+                # im VÖLLIG NORMALEN Fall (weniger als `SPEICHER_IST_MIN_MONATE`
+                # Monate Historie oder gar keine erfasste Entladung). Der
+                # ungeprüfte Zugriff auf `.jahres_faktor` machte daraus einen
+                # `AttributeError`, den der breite `except` unten als „η-IST
+                # fehlgeschlagen" ins Log schrieb: eine frische Anlage erzeugte
+                # bei jedem Abruf eine Warnung über einen Fehler, den es nicht
+                # gab. Jetzt steht die Wache an **einer** Stelle statt an drei.
+                # Identisches Verhalten: `eta_ist` bleibt `None`.
+                eta_ist = await wirkungsgrad_ist_fuer_speicher(
+                    db, anlage_id=anlage_id, speicher=speicher,
+                    verbrauch_daten_je_monat=[md.verbrauch_daten or {} for md in monatsdaten],
+                    von=periode_von, bis=periode_bis,
                 )
-                # N-140: `aggregiere_speicher_ist` ist dokumentiert `Optional`
-                # und liefert `None` im VÖLLIG NORMALEN Fall — weniger als
-                # `SPEICHER_IST_MIN_MONATE` Monate Historie oder gar keine
-                # erfasste Entladung. Der ungeprüfte Zugriff auf
-                # `.jahres_faktor` machte daraus einen `AttributeError`, den
-                # der breite `except` unten als „η-IST fehlgeschlagen" ins Log
-                # schrieb: eine frische Anlage erzeugte bei jedem Abruf eine
-                # Warnung über einen Fehler, den es nicht gab. Der Schwesterpfad
-                # `crud.py` prüft an derselben Stelle seit jeher auf `None`.
-                if ist_agg is not None and ist_agg.jahres_faktor > 0:
-                    # A31-2: netto mit stillem Brutto-Fallback über den SoT-
-                    # Helper (bisher inline). Identisches Verhalten.
-                    nutzbar = get_speicher_nutzbare_kapazitaet_kwh(speicher) or 0
-                    eta_ist = await berechne_ist_wirkungsgrad(
-                        db, anlage_id=anlage_id, von=periode_von, bis=periode_bis,
-                        ladung_kwh=ist_agg.ladung_kwh_jahr / ist_agg.jahres_faktor,
-                        entladung_kwh=ist_agg.entladung_kwh_jahr / ist_agg.jahres_faktor,
-                        nutzbare_kapazitaet_kwh=float(nutzbar),
-                        fenster_monate=ist_agg.anzahl_monate,
-                    )
             except Exception as e:
                 logger.warning(
                     f"Speicher-Dashboard Anlage {anlage_id}, Speicher {speicher.id}: "

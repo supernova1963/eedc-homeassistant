@@ -55,12 +55,17 @@ unter anderem:
 ein Fenster und einen Betrag. Was daraus folgt, entscheidest du in deiner
 Automation.
 
-**Die 19 neuen Sensoren — damit du vor dem Update weißt, was kommt.** Alle sind
+**Die 28 neuen Sensoren — damit du vor dem Update weißt, was kommt.** Alle sind
 standardmäßig **an** (so wie jeder eedc-Sensor); abwählen kannst du sie unter
 *Einstellungen → Integration → MQTT-Export*, am besten direkt nach dem Update,
 bevor der nächste automatische Publish läuft (er folgt dem eingestellten Takt, in der
-Voreinstellung zur nächsten vollen Stunde). Je Anlage entstehen 13 Entitäten, dazu 4 je
+Voreinstellung zur nächsten vollen Stunde). Je Anlage entstehen 22 Entitäten, dazu 4 je
 Wärmepumpe und 2 je Sonstiges-Verbraucher.
+
+⚠ **Nicht jeder entsteht bei jedem.** Ein Sensor, dessen Grundlage fehlt, wird
+in eedc nicht erfunden — er fehlt dann. Ohne hinterlegten Tarif gibt es keine
+Preise, ohne Speicher keine Speicherkosten, ohne gepflegte Wechselrichter-Grenze
+keine Abregelung. Die Spalte „Entsteht nur mit" sagt es je Zeile.
 
 | Key | Name | Typ | Ebene |
 |---|---|---|---|
@@ -83,6 +88,45 @@ Wärmepumpe und 2 je Sonstiges-Verbraucher.
 | `wp_kuehlfenster_ab` | Kühlfenster ab | sensor | je Wärmepumpe |
 | `sonstiges_verbrauch_monat_kwh` | Verbrauch (Monat) | sensor | je Sonstiges-Verbraucher |
 | `sonstiges_fenster_ab` | Bestes Fenster ab | sensor | je Sonstiges-Verbraucher |
+
+**Dazu neun Sensoren rund um Preise und Speicher** — sie beantworten die Frage,
+die hinter jeder Verschiebe-Automation steht: *was kostet mich diese Stunde,
+und was spare ich?*
+
+| Key | Name | Typ | Entsteht nur mit |
+|---|---|---|---|
+| `eedc_bezugspreis_jetzt_cent` | Bezugspreis jetzt | sensor | hinterlegtem Stromtarif |
+| `eedc_einspeiseverguetung_cent` | Einspeisevergütung | sensor | hinterlegtem Stromtarif |
+| `eedc_eigenverbrauch_wert_cent` | Eigenverbrauch wert | sensor | vollständigem Bezugspreis **und** Vergütung |
+| `eedc_speicher_strom_kosten_cent` | Speicherstrom kostet | sensor | Speicher **und** belastbarem Wirkungsgrad |
+| `eedc_speicher_netzladen_kosten_cent` | Netzladen kostet | sensor | zusätzlich „lädt aus dem Netz" |
+| `eedc_speicher_leer_um_ts` | Speicher leer um | sensor | Ladestand-Sensor; nur wenn er wirklich leer läuft |
+| `eedc_speicher_reicht_bis_mitternacht` | Speicher reicht bis Mitternacht | binary_sensor | Ladestand-Sensor |
+| `eedc_abregelung_heute_kwh` | Abregelung heute | sensor | gepflegter Wechselrichter-Grenze |
+| `eedc_einspeisung_unerwuenscht` | Einspeisung unerwünscht | binary_sensor | Börsenpreisen (Koordinaten gepflegt) |
+
+⭐ **Der Preis ist deiner, nicht der der Börse.** Wer einen Festpreis zahlt,
+sah bisher in den Fenster-Sensoren den Börsenpreis — eine Zahl, die auf seiner
+Rechnung nie auftaucht. Jetzt steht dort der Arbeitspreis seines Tarifs, und die
+Fenster sagen damit erstmals, was eine verschobene Waschmaschine wirklich
+kostet. Bei einem **dynamischen** Tarif rechnet eedc `(1 + USt) × Börsenpreis +
+Aufschlag` — und **leitet den Aufschlag selbst ab**, aus deiner letzten
+Abrechnung oder aus den gemessenen Stunden deines Preis-Sensors. Du musst dafür
+nichts eintragen; jeder Sensor sagt im Attribut, woher seine Zahl stammt.
+
+⚠ **Zwei Dinge ändern sich an Sensoren, die es schon gab.** Beides betrifft nur
+diese Vorab-Version, nicht ein veröffentlichtes Release:
+
+* **Die Fenster-Sensoren rechnen mit dem Tarifpreis statt mit der Börse.** Für
+  einen Festpreis-Haushalt heißt das: es gibt keine „billigste Stunde" mehr —
+  jede kostet gleich viel, und einen Unterschied macht nur noch der Überschuss.
+  Das Fenster liegt dann dort, wo die Sonne scheint, und nicht mehr nachts.
+* **Stundenangaben sind um eine Stunde korrigiert.** eedc rechnet in
+  Stunden-Intervallen; die Angabe „14:00" bei einem Überschuss-Lauf meinte
+  bisher mal den Beginn, mal das Ende. Jetzt sagt jedes Attribut, was es meint
+  (`stunde_von`/`stunde_bis` statt `stunde`), und die Zeiten sitzen auf der
+  richtigen Stunde. **Wer eine Automation auf die alten Zeiten gebaut hat,
+  verschiebt sie um eine Stunde.**
 
 **Und aufgeräumt:** Wer eedc vor März 2026 installiert hat, hat in Home Assistant
 noch Entitäten `number.eedc_…_start` stehen — sie stammen aus einer alten

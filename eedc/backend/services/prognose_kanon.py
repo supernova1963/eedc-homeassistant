@@ -99,6 +99,23 @@ class KanonTag:
     profil: Optional[KorrigiertesTagesprofil]
     om_stundenprofil_kwh: Optional[list]   # 24 roh-OM-Slots (multi-string)
     om_vollstaendig: bool             # #306: False wenn Fan-out untergewichtet
+    #: ⭐ **S3b: der erwartete Kappungsverlust — in der Skala, in der gekappt wird.**
+    #: Σ(roh − gekappt) je Slot bzw. über den Tag, **vor** der eedc-Korrektur
+    #: (OpenMeteo-Rohprognose). `None`, wenn an dieser Anlage gar nicht gekappt
+    #: wird (keine AC-Grenze, oder nur DC-Speicher am Träger, F-11).
+    #:
+    #: ⛔ **Warum der Verlust NICHT mitkorrigiert wird.** Die Kappung ist
+    #: `max(0, P − Grenze)` und damit **nichtlinear**: sie skaliert nicht mit
+    #: einem Korrekturfaktor. Eine Anlage, deren Rohprognose die Grenze um
+    #: 1 kW überschreitet, hat bei Faktor 0,8 nicht 0,8 kW Verlust, sondern
+    #: möglicherweise **gar keinen** (das korrigierte Profil liegt dann unter
+    #: der Grenze). Den Verlust in der korrigierten Skala auszuweisen hieße,
+    #: eine Zahl zu bilden, die niemand gerechnet hat. Das Attribut `skala`
+    #: sagt dem Anwender, worauf er schaut.
+    abregelung_om_kwh: Optional[float] = None
+    abregelung_om_stundenprofil_kwh: Optional[list] = None
+    #: `{grenz_id: kW}` — die Grenzen, an denen gekappt wurde.
+    grenzen_kw: Optional[dict] = None
 
 
 @dataclass
@@ -110,6 +127,19 @@ class KanonPrognose:
     ist_bisher_kwh: Optional[float]    # IST heute bis jetzt (TagesEnergieProfil)
     heute_rollend_kwh: Optional[float]  # ist_bisher + rest_heute
     skalar_fallback: Optional[float]   # Legacy-Lernfaktor (Diagnose/Fallback)
+    #: ⭐ **Bis zu welchem Backward-Slot `ist_bisher_kwh` reicht** (N-544,
+    #: 22.09.2026) — der höchste Slot, der einen Messwert beigesteuert hat, oder
+    #: `None` ohne jede Messung.
+    #:
+    #: ⚠ **Das ist NICHT `jetzt.hour`.** `ist_profil` summiert jede Zeile mit
+    #: `pv_kw`; HA schreibt die LTS-Stunde erst gegen Minute ~12, und die Zeile
+    #: der laufenden Stunde existiert bereits ohne Zählerwert. Die IST-Summe
+    #: endet damit im Regelfall **einen Slot vor** dem, was eine
+    #: „bis jetzt"-Rechnung annimmt, zwischen :00 und :12 dagegen gleich. Wer
+    #: eine SOLL-Summe danebenstellt (P6), muss dieselbe Grenze nehmen — sonst
+    #: vergleicht er 13 IST-Stunden gegen 14 SOLL-Stunden und meldet morgens
+    #: eine Abweichung, die es nicht gibt.
+    ist_bisher_bis_slot: Optional[int] = None
 
 
 # Untergrenze des Kanon-Horizonts: so viele Tage, wie der weitest blickende
@@ -399,6 +429,13 @@ async def kanon_tagesprognose(
         )
 
         om_slots = [0.0] * 24
+        # ⭐ **S3b: die UNGEKAPPTE Rohreihe daneben.** `om_slots` traegt nach
+        # der Kappung die gekappten Werte — die Differenz zur Rohprognose ist
+        # der Abregelungsverlust, und sie laesst sich danach nicht mehr
+        # zurueckrechnen. Sie entsteht deshalb hier mit, im selben Durchgang.
+        roh_slots = [0.0] * 24
+        abregelung_slots = [0.0] * 24
+        grenzen_kw: dict = {}
         pv_ertrag_sum = 0.0
         groups_present = 0
         has_hourly = False
@@ -447,11 +484,17 @@ async def kanon_tagesprognose(
         # den dieses Modul geschrieben ist.
         kappen = mitglieder is not None and hat_kappung(mitglieder)
         gekappte: Optional[list[list[float]]] = None
-        faktoren: Optional[list[float]] = None
+        # ⚠ **Baufalle, seit S3b entschärft:** diese Variable hiess bis zum
+        # 22.09.2026 `faktoren` — genauso wie die **Korrektur**faktoren, die
+        # weiter unten (`korrekturfaktoren_fuer_tag`) an denselben Namen
+        # gebunden werden. Zwei voellig verschiedene Groessen, ein Name, 70
+        # Zeilen auseinander; wer dazwischen etwas einfuegt, greift leicht die
+        # falsche ab.
+        kapp_faktoren: Optional[list[float]] = None
         if kappen:
             gruppen_kwp = [g.kwp for g in gruppen]
             gekappte = kappe_profile(roh_stunden, gruppen_kwp, mitglieder)
-            faktoren = kappungs_faktoren(roh_stunden, gruppen_kwp, mitglieder)
+            kapp_faktoren = kappungs_faktoren(roh_stunden, gruppen_kwp, mitglieder)
 
         for grp_idx in range(len(gruppen)):
             if not vorhanden[grp_idx]:
@@ -464,18 +507,29 @@ async def kanon_tagesprognose(
             if kappen and grp_mitglieder and stunden_kw:
                 werte = gekappte[grp_idx] if gekappte is not None else []
                 pv_ertrag_sum += tages_kwh * (
-                    faktoren[grp_idx] if faktoren is not None else 1.0
+                    kapp_faktoren[grp_idx] if kapp_faktoren is not None else 1.0
                 )
                 if any(werte):
                     has_hourly = True
                     for h in range(min(24, len(werte))):
                         om_slots[h] += werte[h]
+                        roh = float(stunden_kw[h] or 0.0) if h < len(stunden_kw) else 0.0
+                        roh_slots[h] += roh
+                        # `max(0, …)` ist keine Vorsicht, sondern die Definition:
+                        # gekappt ist nie mehr als roh.
+                        abregelung_slots[h] += max(0.0, roh - werte[h])
+                for m in grp_mitglieder:
+                    if m.grenze_kw is not None and m.grenze_kw > 0 and m.grenz_id is not None:
+                        grenzen_kw.setdefault(str(m.grenz_id), round(float(m.grenze_kw), 2))
             else:
                 pv_ertrag_sum += tages_kwh * gew
                 if stunden_kw and any(v for v in stunden_kw):
                     has_hourly = True
                     for h in range(min(24, len(stunden_kw))):
-                        om_slots[h] += (stunden_kw[h] or 0.0) * gew
+                        gewichtet = (stunden_kw[h] or 0.0) * gew
+                        om_slots[h] += gewichtet
+                        # Ungekappte Gruppe: roh == gekappt, Verlust 0.
+                        roh_slots[h] += gewichtet
 
         # #306: untergewichtet, wenn nicht alle Gruppen den Tag lieferten.
         om_vollstaendig = groups_present == len(gruppen)
@@ -562,10 +616,20 @@ async def kanon_tagesprognose(
             profil=profil,
             om_stundenprofil_kwh=[round(v, 3) for v in om_slots] if has_hourly else None,
             om_vollstaendig=om_vollstaendig,
+            # S3b: nur wo ueberhaupt gekappt wird — sonst bleibt der Sensor weg
+            # (ADR-002/P4: **0 ist ein Wert**, „nicht gekappt" ist keiner).
+            abregelung_om_kwh=(
+                round(sum(abregelung_slots), 2) if (kappen and has_hourly) else None
+            ),
+            abregelung_om_stundenprofil_kwh=(
+                [round(v, 3) for v in abregelung_slots] if (kappen and has_hourly) else None
+            ),
+            grenzen_kw=(grenzen_kw or None) if kappen else None,
         ))
 
     # Rollende „heute"-Größen aus den korrigierten Slots + IST.
     rest_heute = ist_bisher = heute_rollend = None
+    ist_bis_slot: Optional[int] = None
     heute_tag = tage[0] if tage else None
     if heute_tag is not None:
         from backend.services.prognose_adapter import ist_profil
@@ -584,6 +648,13 @@ async def kanon_tagesprognose(
         )
         ist_p = ist_profil(ist_res.scalars().all(), jetzt_stunde=now.hour, datum=heute)
         ist_bisher = round(ist_p.tageswert_kwh or 0.0, 1)
+        # N-544: bis wohin reicht diese Summe? Der hoechste Slot, der einen
+        # Messwert beigesteuert hat — `ist_profil` summiert jede Zeile mit
+        # `pv_kw`, unabhaengig von `now.hour`. Wer eine SOLL-Summe daneben
+        # stellt (P6), braucht genau diese Grenze und nicht die Uhr.
+        ist_bis_slot = max(
+            (h for h, v in enumerate(ist_p.slots_kw) if v is not None), default=None
+        )
     if heute_tag is not None and heute_tag.profil is not None:
         slots = heute_tag.profil.stunden_kwh
         # #339: laufende Stunde anteilig nach verstrichenen Minuten. Backward-
@@ -600,6 +671,7 @@ async def kanon_tagesprognose(
         ist_bisher_kwh=ist_bisher,
         heute_rollend_kwh=heute_rollend,
         skalar_fallback=skalar,
+        ist_bisher_bis_slot=ist_bis_slot,
     )
 
 

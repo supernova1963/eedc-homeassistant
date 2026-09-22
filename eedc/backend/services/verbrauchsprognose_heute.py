@@ -148,6 +148,20 @@ class VerbrauchsprognoseHeute:
     wp_stunden_kwh: Optional[list[float]] = None
     #: die Temperaturvorhersage je Stunde, so wie sie in die Korrektur ging.
     temperatur_c: list[Optional[float]] = field(default_factory=list)
+    #: ⭐ **Das Stunden-LABEL je Position** (N-544, 22.09.2026) — die Zahl aus
+    #: `profil[i]["zeit"]`, also die Stunde, für die der Forecast den Wert
+    #: ausgibt. Bis hierher trug das Ergebnis nur **Positionslisten**, und jeder
+    #: Leser musste „Position i = Stunde i" annehmen. Am Normaltag stimmt das;
+    #: an den beiden DST-Tagen **nicht** — der Tag hat 23 bzw. 25 Einträge
+    #: (`_berechne_verbrauchsprofil` rechnet über `stunden`, nicht über
+    #: `range(24)`), und ab der Umstellungsstunde sind Position und Stunde
+    #: auseinander. Wer eine dieser Reihen auf eine Slot-Achse legt, braucht das
+    #: Label; die Positionsannahme wäre dort eine stille Verschiebung.
+    #: ⚠ Am Ende der Sommerzeit kommt `2` **zweimal** vor — dieselbe Lage wie bei
+    #: der Börse (`strompreis_markt_service`: „die erste gewinnt"). Die Liste gibt
+    #: beide wieder; welche gewinnt, entscheidet der Leser (der Fenster-Kontext
+    #: nimmt die erste).
+    stunden_label: list[int] = field(default_factory=list)
 
 
 def summe_verbrauchsprofil_kwh(profil: list[dict]) -> float:
@@ -261,4 +275,10 @@ async def verbrauchsprognose_heute(
         stunden_kwh=[round(float(p.get("verbrauch_kw") or 0.0), 2) for p in profil],
         wp_stunden_kwh=wp_reihe,
         temperatur_c=temperaturen[:len(profil)],
+        # N-544: dasselbe Label, das `_berechne_verbrauchsprofil` intern zum
+        # Nachschlagen im individuellen Profil benutzt (`live_wetter.py`:
+        # `h = int(s["zeit"].split(":")[0])`). Es hier mitzugeben ist die einzige
+        # Stelle, an der es entstehen kann — der Forecast-Zeitstempel verlässt
+        # den Dienst sonst nicht.
+        stunden_label=[int(p["zeit"].split(":")[0]) for p in profil],
     )

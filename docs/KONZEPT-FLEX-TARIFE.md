@@ -281,6 +281,30 @@ nicht separat auf Slots verteilt. [F]
 Vertragspreis bzw. ein gepflegter Erwartungswert, und die Zahl ist als Erwartung zu beschriften.
 Eine Prognose darf nie aussehen wie eine Messung. [F]
 
+⭐ **Für einen dynamischen Tarif gibt es keinen Vertragspreis je Stunde — und genau deshalb einen
+abgeleiteten Erwartungswert** (Abnahme Gernot, 22.09.2026). Er entsteht als
+`(1 + USt) × Börsenpreis + Aufschlag`, und der **Aufschlag** kommt aus einer Kaskade, die das
+Spiegelbild der Vergangenheits-Kaskade ist (gemessen › abgerechnet › Vertrag):
+
+1. **Abrechnung** — der letzte abgerechnete Monat **im laufenden Tarifzeitraum**: sein
+   Durchschnittspreis minus dem verbrauchsgewichteten Börsenmittel desselben Monats. Gewichtet,
+   weil der Monats-Ø selbst gewichtet ist (A-1: keine arithmetischen Mittel über Preise).
+2. **Gemessene Stunden** — der Median über `Endpreis_h − (1 + USt) × Börse_h` der letzten sieben
+   Tage, mindestens 24 Paare. Median statt Mittel aus demselben Grund wie A-1.
+3. **Keiner** — dann bleibt der **nackte Börsenpreis** stehen, und zwar ausdrücklich beschriftet
+   (`preisquelle: boersenpreis`, `aufschlag_quelle: keiner`). Das ist die einzige nach **T-1**
+   zulässige Form, einen Börsenpreis in Endpreis-Position zu zeigen.
+
+**Es gibt dafür kein Pflegefeld.** Das Verfahren braucht kein Tarifmodell, nur die Annahme „Börse
+plus ein über den Zeitraum konstanter Anteil"; ein Deckel- oder Staffeltarif bekommt darunter einen
+Durchschnitt, und `aufschlag_basis` sagt, worauf er beruht. Ein manuelles Feld wird nachgereicht,
+wenn ein Anwender es braucht.
+
+⚠ **Die Grenze nach P-5:** Aus einer Näherung wird **kein** Eigenverbrauchs-Wert gebildet. „Nackter
+Börsenpreis minus Vertragsvergütung" wäre keine gröbere Näherung, sondern eine Differenz aus zwei
+verschiedenen Preisebenen — und damit eine Zahl ohne Bedeutung. Fehlt der Aufschlag, fehlt der Wert,
+und der Grund steht daneben.
+
 ---
 
 ## 7. Herkunft und Beschriftung
@@ -293,6 +317,16 @@ sie unterscheiden können.
 **H-2 — Die Beschriftung beschreibt die Zahl daneben.** [F]
 Eine Formelzeile, die „gemessen" sagt, während die Kachel den Vertragspreis zeigt, ist schlimmer
 als gar keine Beschriftung: Sie erzeugt Vertrauen in eine falsche Zuordnung.
+
+**H-2a — Ein Preis nennt auch, aus welcher *Ableitung* er stammt, nicht nur aus welcher Quelle.** [F]
+Zwei Zahlen können beide „aus dem Tarif" kommen und doch verschieden entstanden sein: der
+Arbeitspreis einer Festpreis-Zeile ist **exakt**, der Endpreis eines dynamischen Tarifs ist
+**gerechnet**. Die Sensoren tragen dafür `preisquelle` (`vertrag` · `zeitfenster` ·
+`boerse_plus_aufschlag` · `boersenpreis` · `keine`) und, wo ein Aufschlag im Spiel ist,
+`aufschlag_quelle` samt `aufschlag_basis`. Dieselbe Unterscheidung beim Speicher-Wirkungsgrad
+(`wirkungsgrad_quelle` `gemessen`/`parameter` **und** `wirkungsgrad_messung` mit dem Grund, falls
+die Messung nicht ging) — ein Rückfall auf einen gepflegten Wert ist nach §8 keine stille Ersetzung,
+solange er sich nennt.
 
 **H-3 — Abdeckung wird mitgeliefert, nicht als Schwelle verwendet.** [F]
 Eine Mindestschwelle, unterhalb derer auf eine gröbere Quelle zurückgefallen wird, verwirft die

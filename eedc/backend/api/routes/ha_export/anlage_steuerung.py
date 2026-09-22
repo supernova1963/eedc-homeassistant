@@ -79,15 +79,56 @@ def _anhaengen(sensor_values: list, key: str, wert, zusatz: Optional[dict] = Non
     ))
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Wie eedc eine Stunde beschriftet (N-544, 22.09.2026)
+# ─────────────────────────────────────────────────────────────────────────────
+# **Jede Zeitangabe zu einem Slot sagt, ob sie Beginn oder Ende meint.** Das ist
+# eine Regel über die Kategorie *Zeitangabe eines Slots*, nicht über einzelne
+# Attribute:
+#
+#   Beginn-Angaben : `ab` · `seit` · `stunden` · `stunde_von`
+#   End-Angaben    : `bis` · `*_um` · `frist` · `stand` · `stunde_bis`
+#
+# Alle Slots dieses Moduls sind **backward** (#144): Slot `h` deckt `[h−1, h)`.
+# Ein Slot „14" beginnt also um 13:00 und endet um 14:00 — bis zum 22.09.2026
+# schrieb dieses Modul für beide Bedeutungen `f"{h:02d}:00"`, und damit lagen
+# vier Beginn-Angaben eine Stunde zu spät (E2 `seit`, E5 `stunde_max_mittel`,
+# P2 `fenster[].ab/bis`, P7 `guenstige_heizstunden`) und `stand` eine Stunde
+# voraus. Ein `stunde`-Attribut ohne Beginn/Ende-Angabe („h:00") war schlicht
+# nicht entscheidbar.
+
+
 def _hhmm(stunde: int) -> str:
+    """Eine **Uhrzeit** als „HH:00" — nicht für Slots, s. die beiden darunter."""
     return f"{stunde:02d}:00"
 
 
+def _hhmm_beginn(slot: int) -> str:
+    """Der **Beginn** des Backward-Slots `slot` als „HH:00" — Slot `h` beginnt `(h−1):00`."""
+    return f"{(slot - 1) % SLOTS_JE_TAG:02d}:00"
+
+
+def _hhmm_ende(slot: int) -> str:
+    """Das **Ende** des Backward-Slots `slot` als „HH:00" — Slot `h` endet `h:00`."""
+    return f"{slot % SLOTS_JE_TAG:02d}:00"
+
+
 def _iso(tag: date, slot: int) -> str:
-    """Ein Slot als ISO-8601-Zeitstempel mit Zone — s. `FensterKontext.slot_iso`."""
-    return datetime.combine(
-        tag + timedelta(days=slot // SLOTS_JE_TAG), time(hour=slot % SLOTS_JE_TAG)
-    ).astimezone().isoformat()
+    """Der **Beginn** eines Achsen-Slots als ISO-Zeitstempel — s. `FensterKontext.slot_iso`.
+
+    Dieselbe Rechnung, derselbe SoT (`zeittarif.uhrzeit_des_slots`): Slot `s`
+    beginnt `(s−1)` Stunden nach Mitternacht von `tag`. Sie steht hier, weil
+    zwei Stellen einen Zeitstempel ohne Fenster-Kontext brauchen (E3 und die
+    neuen Sim-Sensoren); der Kontext baut keinen zweiten.
+    """
+    from backend.core.berechnungen.zeittarif import uhrzeit_des_slots
+
+    return uhrzeit_des_slots(tag, slot).astimezone().isoformat()
+
+
+def _iso_ende(tag: date, slot: int) -> str:
+    """Das **Ende** eines Achsen-Slots — der Beginn des nächsten."""
+    return _iso(tag, slot + 1)
 
 
 async def _lade_tagesprofil(db, anlage_id: int, heute: date):
@@ -123,7 +164,15 @@ def _ueberschuss_jetzt_kw(zeile) -> Optional[float]:
 
 
 def _ueberschuss_seit(zeilen: list, bis_index: int) -> Optional[str]:
-    """Seit wann läuft der aktuelle Überschuss-Lauf? (Attribut von E2)"""
+    """Seit wann läuft der aktuelle Überschuss-Lauf? (Attribut von E2)
+
+    ⭐ **`seit` ist eine Beginn-Angabe** (N-544): Der Lauf beginnt mit dem
+    **Anfang** des ersten Überschuss-Slots, nicht mit seinem Ende. Bis zum
+    22.09.2026 stand hier `_hhmm(start)` — für Slot 11 (= 10–11 Uhr) also
+    „11:00", obwohl der Überschuss um **10:00** einsetzte. Eine Stunde zu spät,
+    und zwar genau in der Zahl, auf die eine Automation „läuft schon lange
+    genug" stützt.
+    """
     start = None
     for zeile in zeilen[: bis_index + 1]:
         wert = _ueberschuss_jetzt_kw(zeile)
@@ -131,7 +180,7 @@ def _ueberschuss_seit(zeilen: list, bis_index: int) -> Optional[str]:
             start = zeile.stunde if start is None else start
         else:
             start = None
-    return _hhmm(start) if start is not None else None
+    return _hhmm_beginn(start) if start is not None else None
 
 
 async def steuerungs_sensoren(
@@ -144,6 +193,7 @@ async def steuerungs_sensoren(
     fenster_ctx,
     heute: date,
     jetzt_stunde: int,
+    speicher_eta: Optional[dict] = None,
 ):
     """E1–E5, P2, P3, P5 und P6 an die Sensorliste anhängen.
 
@@ -155,31 +205,55 @@ async def steuerungs_sensoren(
 
     zeilen, tageszeile = await _lade_tagesprofil(db, anlage.id, heute)
 
+    # Die letzte Stundenzeile **mit Wert** — nicht einfach `zeilen[-1]`.
+    #
+    # ⭐ **N-544/W9: die laufende Stunde hat schon eine Zeile, aber noch keine
+    # Zählerwerte.** `live_tagesverlauf_service` rastert bis `now`, der
+    # Aggregator legt den Bucket an und schreibt die Zeile — um 14:30 existiert
+    # also Zeile `stunde=15` mit `ueberschuss_kw`/`defizit_kw` = `None`
+    # (`verrechne_stunde` setzt sie leer, wenn `pv_kw`/`verbrauch_kw` fehlen).
+    # `_ueberschuss_jetzt_kw` überspringt sie deshalb richtig — `stand` nahm
+    # dagegen `zeilen[-1]` und meldete damit das Ende einer Stunde, die noch
+    # gar nicht gemessen ist: **eine Stunde voraus**.
+    letzte = None
+    letzte_index = -1
+    for i, zeile in enumerate(zeilen):
+        if _ueberschuss_jetzt_kw(zeile) is not None:
+            letzte, letzte_index = zeile, i
+
     # ── E1 · Überschuss heute + letzte volle Stunde ──────────────────────────
     if tageszeile is not None and tageszeile.ueberschuss_kwh is not None:
         _anhaengen(
             sensor_values, "eedc_ueberschuss_heute_kwh", tageszeile.ueberschuss_kwh,
             {
                 "defizit_heute_kwh": tageszeile.defizit_kwh,
-                "stand": _hhmm(zeilen[-1].stunde) if zeilen else None,
+                # End-Angabe: „bis wann ist gerechnet" = Ende des letzten Slots
+                # mit Wert.
+                "stand": _hhmm_ende(letzte.stunde) if letzte is not None else None,
             },
             berechnung="Σ der Stundenüberschüsse heute (aus dem 15-Minuten-Takt aggregiert)",
         )
 
-    letzte = None
-    letzte_index = -1
-    for i, zeile in enumerate(zeilen):
-        if _ueberschuss_jetzt_kw(zeile) is not None:
-            letzte, letzte_index = zeile, i
     if letzte is not None:
         jetzt_kw = _ueberschuss_jetzt_kw(letzte)
         _anhaengen(
             sensor_values, "eedc_ueberschuss_jetzt_kw", jetzt_kw,
-            {"stunde": _hhmm(letzte.stunde), "defizit_kw": letzte.defizit_kw},
+            {
+                # ⛔ Hier stand bis 22.09.2026 ein einzelnes `stunde: "h:00"` —
+                # nicht entscheidbar, ob Beginn oder Ende gemeint war. Die
+                # **Entfernung** dieses Attributs ist die einzige des Pakets
+                # (S3b/B5, Golden Master `--erwartete-entfernungen`).
+                "stunde_von": _hhmm_beginn(letzte.stunde),
+                "stunde_bis": _hhmm_ende(letzte.stunde),
+                "defizit_kw": letzte.defizit_kw,
+            },
             # ⚠ Der Sensor heißt „letzte Stunde" und nicht „jetzt", weil er
             # genau das ist: ein Stundenmittel, bis zu 15 Minuten alt. Einen
             # Live-Überschuss gibt es in eedc als Größe nicht (gemessen 21.09.).
-            berechnung=f"Stundenmittel der Stunde {_hhmm(letzte.stunde)} — kein Live-Wert",
+            berechnung=(
+                f"Stundenmittel der Stunde {_hhmm_beginn(letzte.stunde)}–"
+                f"{_hhmm_ende(letzte.stunde)} — kein Live-Wert"
+            ),
         )
         # ── E2 · Überschuss verfügbar ───────────────────────────────────────
         _anhaengen(
@@ -188,16 +262,31 @@ async def steuerungs_sensoren(
         )
 
     # ── E2 · günstige Stunde ────────────────────────────────────────────────
-    if fenster_ctx is not None and fenster_ctx.hat_preis:
-        slot = jetzt_stunde
-        if 0 <= slot < len(fenster_ctx.guenstig):
-            _anhaengen(
-                sensor_values, "eedc_guenstige_stunde", bool(fenster_ctx.guenstig[slot]),
-                {
-                    "schwelle_cent": preis.get("guenstig_schwelle_cent"),
-                    "preis_cent": fenster_ctx.preis_cent[slot],
-                },
-            )
+    #
+    # ⭐ **Dieser Sensor liest die BÖRSE, nicht den Fenster-Kontext** (S3b).
+    # Er ist seit v4.0.27 die Markierung, die `eedc_preis_rang` trägt — „ist
+    # diese Stunde am Markt billig?" —, und seine Attribute sind Vertrag. Der
+    # Kontext daneben beantwortet ab S3b eine **andere** Frage (er rechnet mit
+    # dem Bezugspreis des Haushalts, bei Festtarif also mit einer Reihe ohne
+    # Tal). Läse dieser Sensor ihn weiter, hätte ein Festtarif-Haushalt ab S3b
+    # dauerhaft „nicht günstig" stehen — eine stille Bedeutungsänderung an
+    # einem released Sensor.
+    #
+    # `rang_profil` ist **forward** (`strompreis_markt_service`), die laufende
+    # Stunde dort also `jetzt.hour` — genau der Index, den dieser Sensor
+    # immer hatte. Er bleibt damit bitgleich.
+    rang_jetzt = next(
+        (e for e in (preis.get("rang_profil") or []) if e.get("stunde") == jetzt_stunde),
+        None,
+    )
+    if rang_jetzt is not None:
+        _anhaengen(
+            sensor_values, "eedc_guenstige_stunde", bool(rang_jetzt.get("unter_schwelle")),
+            {
+                "schwelle_cent": preis.get("guenstig_schwelle_cent"),
+                "preis_cent": rang_jetzt.get("preis_cent"),
+            },
+        )
 
     # ── E4 · Ladestand + E2 · Speicher voll ─────────────────────────────────
     soc = prognose.get("speicher_soc_prozent")
@@ -228,8 +317,14 @@ async def steuerungs_sensoren(
         # frühere Stunde als „jetzt" kann sie nicht liefern. Sollte sie es
         # doch (Uhrensprung zwischen Simulation und Export), meint sie morgen.
         slot = voll_slot if voll_slot >= jetzt_stunde else voll_slot + SLOTS_JE_TAG
+        # N-544: `*_um` ist eine **End**-Angabe. Der Sim-Slot `h` ist voll, wenn
+        # die Stunde `[h−1, h)` durchgerechnet ist — der Zeitpunkt ist `h:00`,
+        # also das ENDE des Slots. Bis 22.09.2026 kam dieselbe Zahl aus
+        # `_iso(heute, slot)` heraus, weil `_iso` damals den forward-Index nahm;
+        # mit der backward-Achse ist `_iso_ende` die richtige Funktion **und**
+        # benennt, was gemeint ist. Der Wert bleibt bitgleich.
         _anhaengen(
-            sensor_values, "eedc_speicher_voll_um_ts", _iso(heute, slot),
+            sensor_values, "eedc_speicher_voll_um_ts", _iso_ende(heute, slot),
             {"quelle": "eedc_speicher_voll_um",
              **(prognose.get("speicher_verbrauch_profil") or {})},
         )
@@ -245,7 +340,10 @@ async def steuerungs_sensoren(
             sensor_values, "eedc_netzbezug_spitze_heute_kw", tageszeile.peak_netzbezug_kw,
             {
                 # ⚠ Andere Größe als der Wert daneben — s. die Definition.
-                "stunde_max_mittel": _hhmm(max(mittel, key=lambda x: x[1])[0]) if mittel else None,
+                # N-544: Beginn-Angabe (die Stunde, in der das Maximum lag).
+                "stunde_max_mittel": (
+                    _hhmm_beginn(max(mittel, key=lambda x: x[1])[0]) if mittel else None
+                ),
                 "max_mittel_kw": round(max(m[1] for m in mittel), 2) if mittel else None,
                 "grundlast_kw": grundlast,
             },
@@ -264,6 +362,10 @@ async def steuerungs_sensoren(
             {
                 "stundenprofil_kwh": ueber,
                 "defizit_stundenprofil_kwh": defizit,
+                # N-544: `ab` ist der Beginn des ersten Slots, `bis` der Beginn
+                # des ersten Slots NACH dem Block — also sein Ende. `b.ab`/`b.bis`
+                # sind Backward-Slot-Indizes des heutigen Tages und liegen damit
+                # auf derselben Achse wie der Fenster-Kontext.
                 "fenster": [
                     {"ab": _iso(heute, b.ab), "bis": _iso(heute, b.bis),
                      "stunden": b.stunden, "min_kw": b.min_kw, "summe_kwh": b.summe_kwh}
@@ -278,6 +380,7 @@ async def steuerungs_sensoren(
     await _arbitrage_sensor(
         anlage=anlage, db=db, sensor_values=sensor_values,
         prognose=prognose, fenster_ctx=fenster_ctx, heute=heute,
+        speicher_eta=speicher_eta,
     )
 
     # ── P5 · bestes Fenster ─────────────────────────────────────────────────
@@ -292,7 +395,8 @@ async def steuerungs_sensoren(
     return {}
 
 
-async def _arbitrage_sensor(*, anlage, db, sensor_values, prognose, fenster_ctx, heute):
+async def _arbitrage_sensor(*, anlage, db, sensor_values, prognose, fenster_ctx, heute,
+                            speicher_eta=None):
     """P3 — nur bei einem Speicher, der **aus dem Netz laden darf**.
 
     ⭐ **Das Gate ist `laedt_aus_netz`, nicht `arbitrage_faehig`** (Konzept §5/P3):
@@ -327,7 +431,25 @@ async def _arbitrage_sensor(*, anlage, db, sensor_values, prognose, fenster_ctx,
     arbitrage_faehig = any((i.parameter or {}).get("arbitrage_faehig") for i in laedt)
 
     frei = max(0.0, float(kap) * (1.0 - float(soc) / 100.0))
-    eta = prognose.get("speicher_eta_prozent") or 90.0
+    # ⭐ **S3b: derselbe Resolver wie die Speicherkosten-Sensoren** — gemessen
+    # › gepflegt › **kein Vorschlag**. Bis zum 22.09.2026 stand hier
+    # `prognose.get("speicher_eta_prozent") or 90.0`: eine Kaskade aus zwei
+    # Defaults übereinander (`aggregiere_speicher_basis` liefert selbst schon
+    # den Kanon-Default 95, das `or 90.0` greift also nur, wenn gar kein
+    # Speicher da ist). Die genannte Cent-Ersparnis stand damit auf einer
+    # Herstellerangabe, die niemand bestätigt hat — an der Demo-Anlage sind es
+    # **gemessen 85,0 %** statt der gepflegten 95.
+    from backend.core.berechnungen.speicher_kosten import eta_anlage
+
+    eta_info = speicher_eta or {}
+    eta = eta_anlage([i.wirkungsgrad for i in eta_info.values()]) if eta_info else None
+    if eta is None:
+        # Ohne belastbaren Wirkungsgrad gibt es keinen Vorschlag: die Ersparnis
+        # ist eine Differenz zweier Preise ÜBER η, und ein geratenes η
+        # verschiebt sie um zweistellige Prozente (ADR-002/P4).
+        return
+    _quellen = {i.quelle for i in eta_info.values() if i.wirkungsgrad is not None}
+    _messungen = {i.messung for i in eta_info.values() if i.wirkungsgrad is not None}
     ergebnis = arbitrage_vorschlag(
         fenster_ctx.kosten,
         # Das Defizit der Prognose ist die Menge, die eine Entladung ersetzen
@@ -344,11 +466,14 @@ async def _arbitrage_sensor(*, anlage, db, sensor_values, prognose, fenster_ctx,
     _anhaengen(
         sensor_values, "eedc_arbitrage_vorschlag_kwh", ergebnis.menge_kwh,
         {
-            "stunden": [_hhmm(h % SLOTS_JE_TAG) for h in ergebnis.lade_stunden],
+            # N-544: `stunden` ist eine Beginn-Angabe — „laden ab".
+            "stunden": [_hhmm_beginn(h) for h in ergebnis.lade_stunden],
             "ersparnis_cent": round(ergebnis.ersparnis_cent),
             "soc_prozent": round(float(soc), 1),
             "frei_kwh": round(frei, 1),
             "wirkungsgrad_prozent": eta,
+            "wirkungsgrad_quelle": _quellen.pop() if len(_quellen) == 1 else None,
+            "wirkungsgrad_messung": _messungen.pop() if len(_messungen) == 1 else None,
             "arbitrage_faehig": arbitrage_faehig,
             "preisquelle": fenster_ctx.preisquelle,
             # N-392: die Simulation hinter „Speicher voll um" rechnet mit
@@ -416,9 +541,33 @@ async def _abweichungs_ampel(*, anlage, db, sensor_values, prognose, heute, jetz
     if ist is None or not stundenprofil:
         return
 
-    # Prognose bis zur letzten VOLLEN Stunde — dieselbe Grenze wie beim IST.
-    bis_stunde = max(0, jetzt_stunde)
-    soll = sum(float(v or 0.0) for v in stundenprofil[:bis_stunde])
+    # ⭐ **Dieselbe Grenze wie beim IST — und die kommt aus derselben Quelle**
+    # (N-544). Bis 22.09.2026 stand hier `bis_stunde = max(0, jetzt_stunde)`:
+    # die Uhr als Grenze für eine Summe, die der Kanon aus **gemessenen Zeilen**
+    # bildet. Gemessen, wann die beiden auseinanderlaufen:
+    #
+    #   * zwischen :00 und ~:12 — HA hat die eben abgelaufene LTS-Stunde noch
+    #     nicht geschrieben. IST endet bei Slot `jetzt.hour`, die Uhr-Summe
+    #     `[:jetzt_stunde]` ebenfalls bei Slot `jetzt.hour − 1` … beide bei
+    #     derselben Stunde. **Gleich.**
+    #   * ab ~:12 bis zur vollen Stunde — die Zeile ist da. IST endet jetzt bei
+    #     Slot `jetzt.hour + 1`, die Uhr-Summe weiterhin eine Stunde davor:
+    #     **eine gemessene Stunde mehr als prognostizierte**. Der Sensor meldete
+    #     dann drei Viertel jeder Stunde eine Abweichung, die aus der Grenze
+    #     stammte und nicht aus der Anlage — bei einer Vormittagsstunde mit
+    #     1 kWh über einer 7-kWh-Summe sind das rund +14 %.
+    #
+    # Der Kanon sagt jetzt selbst, bis wohin er gemessen hat.
+    #
+    # `ist_bisher_bis_slot` ist der **höchste Slot mit Wert** und wird deshalb
+    # INKLUSIVE summiert. Fehlt er (ältere Prognose-Dicts, keine Messzeile),
+    # bleibt es beim bisherigen Uhr-Schnitt.
+    bis_slot = prognose.get("ist_bisher_bis_slot")
+    if bis_slot is None:
+        bis_index = max(0, jetzt_stunde)
+    else:
+        bis_index = max(0, int(bis_slot) + 1)
+    soll = sum(float(v or 0.0) for v in stundenprofil[:bis_index])
     if soll <= 0:
         return   # vor Sonnenaufgang ist jede Prozentzahl eine Division durch fast 0
 
@@ -437,7 +586,9 @@ async def _abweichungs_ampel(*, anlage, db, sensor_values, prognose, heute, jetz
         {
             "ist_kwh": round(float(ist), 1),
             "prognose_kwh": round(soll, 1),
-            "bis_stunde": _hhmm(bis_stunde),
+            # End-Angabe (N-544): bis wann gerechnet wurde = Ende des
+            # letzten einbezogenen Slots.
+            "bis_stunde": _hhmm_ende(bis_index - 1) if bis_index > 0 else None,
             "mae_30_tage_prozent": mae,
         },
         berechnung=f"({ist:.1f} − {soll:.1f}) ÷ {soll:.1f} × 100",
@@ -445,7 +596,7 @@ async def _abweichungs_ampel(*, anlage, db, sensor_values, prognose, heute, jetz
 
     if mae is None:
         return
-    sonnenstunden = sum(1 for v in stundenprofil[:bis_stunde] if float(v or 0.0) > 0)
+    sonnenstunden = sum(1 for v in stundenprofil[:bis_index] if float(v or 0.0) > 0)
     schwelle = P6_SCHWELLE_FAKTOR * mae
     genug = sonnenstunden >= P6_MINDEST_SONNENSTUNDEN
     _anhaengen(

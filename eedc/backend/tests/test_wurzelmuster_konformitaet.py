@@ -2106,6 +2106,11 @@ P10_PER_INVESTITION: frozenset[str] = frozenset({
     "backend/api/routes/aussichten/finanz_eingaenge.py::lade_finanz_eingaenge",   # Vorlage 7b (18.09.2026): finanzen.py::get_finanz_prognose → finanz_eingaenge.py
     "backend/api/routes/ha_export/emob.py::_load_emob_pool_ctx",   # Vorlage 8 (18.09.2026): ha_export.py → Paket ha_export/
     "backend/api/routes/ha_export/anlage_komponenten.py::historische_komponenten",   # Vorlage 8b (18.09.2026): Phase des Anlagen-Rechners (IMD-Lader)
+    # S3b (22.09.2026): der Wirkungsgrad JE SPEICHER — ein Geraeteaggregat aus den Lade-/
+    # Entlademengen ueber die Lebensdauer EINES Geraets, keine Monatszeilen-Faltung. Aus einem
+    # aufbereiteten Anlagenmonat laesst sich eta eines einzelnen Speichers nicht zurueckrechnen;
+    # dieselbe Bauform und derselbe Grund wie `roi_pv.py::pv_einsparung_und_speicher_ist`.
+    "backend/api/routes/ha_export/anlage_preise_speicher.py::lade_speicher_wirkungsgrade",
     "backend/api/routes/ha_export/investition_sensoren.py::calculate_investition_sensors",   # Vorlage 8 (18.09.2026): ha_export.py → Paket ha_export/
     # Vorlage 5b (18.09.2026): die IMD-Ladungen des ROI-Dashboards zogen aus dem Endpunkt in zwei Phasen —
     # sonstige Positionen je Investition (Kopf) und Speicher-IST-Aggregate (PV-Seite).

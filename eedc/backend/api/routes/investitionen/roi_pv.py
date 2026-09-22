@@ -34,6 +34,7 @@ from backend.services.speicher_wirtschaftlichkeit import (
     EffektiverLadepreisErgebnis,
     berechne_effektiver_ladepreis,
     berechne_ist_wirkungsgrad,
+    wirkungsgrad_ist_fuer_speicher,
 )
 from backend.core.calculations import CO2_FAKTOR_STROM_KG_KWH, berechne_roi
 from backend.services.monats_fakten import lade_monats_fakten
@@ -331,22 +332,29 @@ async def pv_einsparung_und_speicher_ist(
             # Pro Speicher η-IST aus IMD-Aggregaten und (bei kurzem Fenster)
             # SoC-Werten am Periodenrand.
             for sp in speicher_invs_alle:
-                ist = speicher_ist_by_inv.get(sp.id)
-                if ist is None:
-                    continue
-                # A31-2: netto mit stillem Brutto-Fallback — bisher hier inline,
-                # jetzt der SoT-Helper. Identisches Verhalten.
-                nutzbar = get_speicher_nutzbare_kapazitaet_kwh(sp) or 0
-                speicher_eta_by_inv[sp.id] = await berechne_ist_wirkungsgrad(
+                # ⭐ **Seit S3b über den SoT-Helper** (22.09.2026): dieselben vier
+                # Schritte — Aggregat, `None`-Wache, nutzbare Kapazität,
+                # `berechne_ist_wirkungsgrad` — standen hier, im
+                # Speicher-Dashboard und im Komponenten-Hub je einmal
+                # ausgeschrieben. Mit dem HA-Export wäre ein vierter Nachbau
+                # dazugekommen, und der erste, dessen Ergebnis als ct-Betrag in
+                # eine Automation geht. **Identisches Verhalten:** der Helfer
+                # liefert `None` genau dann, wenn `aggregiere_speicher_ist` es
+                # täte — also in dem Fall, in dem hier bisher `continue` stand.
+                erg = await wirkungsgrad_ist_fuer_speicher(
                     db,
                     anlage_id=anlage_id,
+                    speicher=sp,
+                    verbrauch_daten_je_monat=[
+                        (imd.verbrauch_daten or {})
+                        for imd in sp_imd_by_inv.get(sp.id, [])
+                        if sp.ist_aktiv_im_monat(imd.jahr, imd.monat)
+                    ],
                     von=periode_von,
                     bis=periode_bis,
-                    ladung_kwh=ist.ladung_kwh_jahr / ist.jahres_faktor,
-                    entladung_kwh=ist.entladung_kwh_jahr / ist.jahres_faktor,
-                    nutzbare_kapazitaet_kwh=float(nutzbar),
-                    fenster_monate=ist.anzahl_monate,
                 )
+                if erg is not None:
+                    speicher_eta_by_inv[sp.id] = erg
 
     # PV-Einsparung einmal berechnen (wird auf Module verteilt)
     pv_jahres_einsparung, pv_co2, pv_detail = await berechne_pv_einsparung_aus_monatsdaten()

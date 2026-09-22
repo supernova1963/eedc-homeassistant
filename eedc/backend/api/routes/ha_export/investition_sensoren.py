@@ -710,7 +710,7 @@ async def _wp_steuerung_und_plan(
     der Nachbau, an dem F-56 entstanden ist.
     """
     from backend.core.betriebsmodus import WARMWASSER
-    from backend.services.ha_export_fenster import fenster_fuer_menge
+    from backend.services.ha_export_fenster import SLOTS_JE_TAG, fenster_fuer_menge
     from backend.services.ha_sensors_export import WAERMEPUMPE_SENSOREN
 
     def _def(key):
@@ -779,8 +779,13 @@ async def _wp_steuerung_und_plan(
     if je_tag and je_tag > 0:
         f = fenster_fuer_menge(
             fenster_ctx, je_tag, dauer_h=_WW_FENSTER_DAUER_H,
+            # N-544: „heute" endet backward mit Slot `SLOTS_JE_TAG` (= 24 =
+            # 23–24 Uhr), nicht mit 23 (= 22–23 Uhr). Der Deckel 23 haette die
+            # letzte Stunde des Tages ausgeschlossen, in der ein
+            # Warmwasser-Fenster durchaus liegen kann.
             frist_slot=min(
-                23, fenster_ctx.frist_slot if fenster_ctx.frist_slot is not None else 23
+                SLOTS_JE_TAG,
+                fenster_ctx.frist_slot if fenster_ctx.frist_slot is not None else SLOTS_JE_TAG,
             ),
         )
         if f is not None:
@@ -812,8 +817,11 @@ async def _wp_steuerung_und_plan(
         if verteilung is not None and verteilung.stunden:
             _an("wp_heizfenster_stunden", len(verteilung.stunden), {
                 "heizstrom_stundenprofil_kwh": [round(v, 2) for v in wp_reihe],
+                # N-544: Beginn-Angabe — Slot `h` beginnt `(h-1):00`. Bis
+                # 22.09.2026 stand hier `h % 24`, also das ENDE: eine Automation
+                # heizte eine Stunde zu spat.
                 "guenstige_heizstunden": [
-                    f"{h % 24:02d}:00" for h in verteilung.stunden
+                    f"{(h - 1) % 24:02d}:00" for h in verteilung.stunden
                 ],
                 "ersparnis_cent_vs_profil": round(verteilung.ersparnis_cent),
                 "heizzeit_stunden": len(heizstunden),
@@ -858,19 +866,35 @@ async def _wp_steuerung_und_plan(
         tage = sum(_tage_im_monat(*k) for k in kuehl_je_monat if k in letzte)
         je_tag = (menge / tage) if tage else 0.0
         temperaturen = [
-            (i, t) for i, t in enumerate(fenster_ctx.temperatur_c[:24]) if t is not None
+            # N-544: die Temperaturreihe deckt HEUTE — backward sind das die
+            # Slots 0…24 (Slot 24 = 23–24 Uhr). Der Schnitt bei 24 haette die
+            # letzte Stunde des Tages uebersprungen; Modell A liefert sie zwar
+            # ohnehin nicht (die 24er-Reihe endet bei Slot 23), der Schnitt sagt
+            # aber jetzt dasselbe wie der Rest der Achse.
+            (i, t) for i, t in enumerate(fenster_ctx.temperatur_c[:SLOTS_JE_TAG + 1])
+            if t is not None
         ]
         spitze = max(temperaturen, key=lambda x: x[1])[0] if temperaturen else None
-        if je_tag > 0 and spitze is not None and spitze > fenster_ctx.jetzt_slot:
-            # Frist = die Stunde VOR der Hitzespitze: vorkühlen heißt vorher.
+        # ⭐ **N-544: `spitze` ist ein Slot, kein Zeitpunkt.** Die Temperaturreihe
+        # liegt backward auf derselben Achse wie alles andere: Slot `i` deckt
+        # `[i-1, i)` und ENDET um `i:00`. Vorkuehlen heisst „bis zur Spitze
+        # fertig sein" — die Frist ist also `spitze` selbst (inklusiv, das
+        # Fenster darf im Slot davor enden), nicht `spitze - 1`. Und die Spitze
+        # zaehlt noch, wenn sie in der laufenden Stunde liegt: `>=` statt `>`.
+        # Auf der frueheren forward-Achse war `spitze - 1` / `>` dasselbe.
+        if je_tag > 0 and spitze is not None and spitze >= fenster_ctx.jetzt_slot:
             f = fenster_fuer_menge(
-                fenster_ctx, je_tag, dauer_h=2, frist_slot=spitze - 1,
+                fenster_ctx, je_tag, dauer_h=2, frist_slot=spitze,
             )
             if f is not None:
                 im_fenster = sum(fenster_ctx.ueberschuss_kwh[f.ab:f.bis])
                 _an("wp_kuehlfenster_ab", fenster_ctx.slot_iso(f.ab), {
                     **fenster_ctx.fenster_attribute(f),
-                    "temperatur_max_um": f"{spitze:02d}:00",
+                    # Die Forecast-Temperatur ist ein MOMENTANWERT um `i:00`
+                    # (nicht ein Stundenmittel) — die Angabe bleibt damit
+                    # unveraendert `spitze:00` und ist eine Zeitpunkt-Angabe,
+                    # keine Slot-Beschriftung.
+                    "temperatur_max_um": f"{spitze % 24:02d}:00",
                     "temperatur_max_c": round(max(t for _i, t in temperaturen), 1),
                     "ueberschuss_kwh_im_fenster": round(im_fenster, 2),
                     "menge_kwh": round(je_tag, 1),

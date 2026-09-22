@@ -198,9 +198,18 @@ async def test_e1_jetzt_ist_eine_zahl_mit_vorzeichen(db, monkeypatch):
     werte, _ = await _rechne(db, anlage)
     sv = _sv(werte, "eedc_ueberschuss_jetzt_kw")
     assert sv.value == 2.5, "letzte Zeile ist Stunde 12 mit 2,5 kW Überschuss"
-    assert sv.zusatz_attribute["stunde"] == "12:00"
+    # ⛔ Hier stand bis 22.09.2026 `zusatz_attribute["stunde"] == "12:00"`.
+    # Das Attribut gab nicht her, was es meinte: Slot 12 ist backward die
+    # Stunde 11–12 Uhr (N-544). Es heisst jetzt `stunde_von` (Beginn) +
+    # `stunde_bis` (Ende) — die EINE Entfernung dieses Pakets.
+    assert "stunde" not in sv.zusatz_attribute
+    assert sv.zusatz_attribute["stunde_von"] == "11:00"
+    assert sv.zusatz_attribute["stunde_bis"] == "12:00"
     assert _sv(werte, "eedc_ueberschuss_verfuegbar").value is True
-    assert _sv(werte, "eedc_ueberschuss_verfuegbar").zusatz_attribute["seit"] == "10:00"
+    # ⛔ Hier stand bis 22.09.2026 „10:00". Der Ueberschuss-Lauf beginnt mit
+    # Slot 10 der Fixture, und der deckt backward die Stunde **09–10 Uhr**
+    # (N-544): `seit` ist eine Beginn-Angabe, also 09:00.
+    assert _sv(werte, "eedc_ueberschuss_verfuegbar").zusatz_attribute["seit"] == "09:00"
 
 
 async def test_e1_jetzt_wird_negativ_wenn_defizit_herrscht(db, monkeypatch):
@@ -295,7 +304,10 @@ async def test_e5_nennt_den_peak_und_die_stunde_des_hoechsten_mittels_getrennt(d
     sv = _sv(werte, "eedc_netzbezug_spitze_heute_kw")
     assert sv.value == 4.8, "der W-Peak des Tages"
     assert sv.zusatz_attribute["max_mittel_kw"] == 1.2, "das höchste Stundenmittel"
-    assert sv.zusatz_attribute["stunde_max_mittel"] == "00:00"
+    # ⛔ Hier stand bis 22.09.2026 „00:00". `stunde_max_mittel` ist eine
+    # BEGINN-Angabe (N-544): das hoechste Stundenmittel liegt in Slot 0, und
+    # der beginnt am Vortag um 23:00. „00:00" war sein ENDE.
+    assert sv.zusatz_attribute["stunde_max_mittel"] == "23:00"
 
 
 # ── 2 · P2 — Überschuss-Prognose ────────────────────────────────────────────
@@ -357,7 +369,12 @@ async def test_p5_traegt_vier_dauern_und_ein_kostenprofil(db, monkeypatch):
         eintrag = sv.zusatz_attribute[f"dauer_{d}h"]
         assert eintrag["stunden"] == d
         assert "ab" in eintrag and "bis" in eintrag and "kosten_cent_kwh" in eintrag
-    assert len(sv.zusatz_attribute["kosten_profil_cent_kwh"]) == 24
+    # ⛔ Hier stand bis 22.09.2026 `== 24`. Die Achse ist seit N-544 backward
+    # und ohne Morgen-Satz **25** Slots lang: Slot 24 ist heute 23–24 Uhr und
+    # fiele auf einer 24er-Achse heraus, obwohl er noch im Rahmen liegt. Die
+    # Profil-Attribute folgen der Achse — sonst waere ein Fenster in Slot 24
+    # im Attribut nicht auffindbar.
+    assert len(sv.zusatz_attribute["kosten_profil_cent_kwh"]) == 25
     assert sv.zusatz_attribute["preisquelle"] == "boersenpreis"
     erstes = f"dauer_2h" if "dauer_2h" in sv.zusatz_attribute else f"dauer_{erwartet[0]}h"
     assert sv.value == sv.zusatz_attribute[erstes]["ab"]
@@ -421,7 +438,11 @@ async def test_p3_entsteht_mit_laedt_aus_netz_auch_ohne_arbitrage_haken(db, monk
         guenstig=ctx.guenstig, ab_h=1,
     )
     assert ergebnis is not None, "Laden bei 10 ct, Entladen gegen 45 ct lohnt"
-    assert ergebnis.lade_stunden == (2, 3) or ergebnis.lade_stunden == (2,)
+    # ⛔ Hier stand bis 22.09.2026 `(2, 3)`/`(2,)`. Das Preistal der Fixture
+    # liegt bei den **forward** beschrifteten Boersenstunden 2 und 3; auf der
+    # backward-Achse sind das die Slots **3 und 4** (N-544) — dieselben
+    # physischen Stunden.
+    assert ergebnis.lade_stunden in ((3, 4), (3,))
 
 
 # ── 5 · P6 — Abweichungs-Ampel ──────────────────────────────────────────────
@@ -453,7 +474,10 @@ async def test_p6_zahl_entsteht_sobald_der_tag_prognose_hatte(db, monkeypatch):
     assert sv.value == pytest.approx(-25.0)
     assert sv.zusatz_attribute["ist_kwh"] == 9.0
     assert sv.zusatz_attribute["prognose_kwh"] == pytest.approx(12.0)
-    assert sv.zusatz_attribute["bis_stunde"] == "12:00"
+    # ⛔ Hier stand bis 22.09.2026 „12:00" — die UHR-Stunde. `bis_stunde` ist
+    # eine End-Angabe ueber die letzte einbezogene Stunde: summiert werden die
+    # Slots 0…11, und Slot 11 endet um **11:00** (N-544).
+    assert sv.zusatz_attribute["bis_stunde"] == "11:00"
 
 
 async def test_p6_ampel_mit_schwelle(db, monkeypatch):

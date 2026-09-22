@@ -242,7 +242,11 @@ async def test_p4_liegt_im_ueberschuss_wenn_er_die_menge_deckt(db):
     sv = _sv(werte, "wp_warmwasser_fenster_ab")
     assert sv.zusatz_attribute["menge_kwh"] == pytest.approx(1.0)
     assert sv.zusatz_attribute["kosten_cent_kwh"] == pytest.approx(0.0)
-    assert 8 <= int(sv.value[11:13]) <= 14, "das Fenster liegt in den Überschuss-Stunden"
+        # ⛔ Hier stand bis 22.09.2026 `8 <= … <= 14`. Der PV-Wert an Index 8
+        # deckt backward die Stunde **07–08 Uhr** (N-544) — das Fenster beginnt
+        # also um 07:00, nicht um 08:00. Dieselbe physische Stunde, die richtige
+        # Beschriftung.
+    assert 7 <= int(sv.value[11:13]) <= 13, "das Fenster liegt in den Überschuss-Stunden"
 
 
 async def test_p4_liegt_im_preistal_wenn_kein_ueberschuss_da_ist(db):
@@ -299,7 +303,10 @@ async def test_p7_nennt_die_guenstigen_heizstunden_und_die_ersparnis(db):
     sv = _sv(werte, "wp_heizfenster_stunden")
     assert sv is not None
     assert sv.value >= 1
-    assert len(sv.zusatz_attribute["heizstrom_stundenprofil_kwh"]) == 24
+    # ⛔ Hier stand bis 22.09.2026 `== 24` — s. die Begruendung bei P5 in
+    # `test_s2_entscheidungs_sensoren.py`: die backward-Achse ist ohne
+    # Morgen-Satz 25 Slots lang.
+    assert len(sv.zusatz_attribute["heizstrom_stundenprofil_kwh"]) == 25
     assert all(":" in h for h in sv.zusatz_attribute["guenstige_heizstunden"])
     assert sv.zusatz_attribute["profil_typ"] == "individuell_werktag"
 

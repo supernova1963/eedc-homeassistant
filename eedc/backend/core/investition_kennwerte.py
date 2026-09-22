@@ -482,6 +482,35 @@ def get_speicher_wirkungsgrad_prozent(inv: Any) -> float:
     return wert if 0 < wert <= 100 else default
 
 
+def get_speicher_wirkungsgrad_gepflegt(inv: Any) -> Optional[float]:
+    """Der Roundtrip-Wirkungsgrad, **den jemand gepflegt hat** — oder `None`.
+
+    ⭐ **Der Unterschied zum Getter darüber ist der ganze Punkt** (ADR-002/P3-a,
+    S3b): `get_speicher_wirkungsgrad_prozent` liefert **immer** eine Zahl und
+    fällt dafür auf den Kanon-Default (95 %) zurück. Das ist für eine
+    Ertragsrechnung über Jahre richtig — „ein Speicher ohne gepflegten
+    Wirkungsgrad hat trotzdem einen".
+
+    Für einen **ct-Betrag in einer HA-Automation** ist derselbe Default eine
+    Behauptung über *dieses* Gerät: „Speicherstrom kostet dich 8,5 ct" steht
+    dann auf einer Herstellerangabe, die niemand bestätigt hat. Der
+    Speicherkosten-Sensor entsteht deshalb lieber gar nicht (ADR-002/P4) — und
+    dafür braucht er genau diese Unterscheidung.
+
+    Dieselbe Prüfung wie der defaultende Getter (`0 < wert <= 100`), nur ohne
+    Ersatzwert: ein unplausibler Eintrag ist kein gepflegter Wert.
+    """
+    params = getattr(inv, "parameter", None) or {}
+    roh = params.get(PARAM_SPEICHER["WIRKUNGSGRAD_PROZENT"])
+    if roh is None:
+        return None
+    try:
+        wert = float(roh)
+    except (TypeError, ValueError):
+        return None
+    return wert if 0 < wert <= 100 else None
+
+
 def aggregiere_speicher_basis(speicher: Any) -> tuple[Optional[float], float]:
     """``(Σ nutzbare Kapazität kWh | None, min Wirkungsgrad %)`` über mehrere Geräte.
 

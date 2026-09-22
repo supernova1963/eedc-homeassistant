@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import date
-from typing import Optional
+from typing import Any, Iterable, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,6 +31,7 @@ from backend.models.tages_energie_profil import TagesEnergieProfil
 # Re-Export der reinen Funktionen/Typen/Konstanten aus dem Berechnungs-Layer.
 # Bestands-Caller importieren weiter aus diesem Service-Modul; SoT ist
 # `core.berechnungen.speicher_wirtschaftlichkeit` (Pure/DB-Split Block 4).
+from backend.core.berechnungen.preis_reihe import ist_dynamisch
 from backend.core.berechnungen.speicher_wirtschaftlichkeit import (  # noqa: F401
     ETA_DEGRADATION_SCHWELLE_PROZENTPUNKTE,
     SOC_DRIFT_SCHWELLE_PROZENTPUNKTE,
@@ -183,7 +184,7 @@ async def berechne_effektiver_ladepreis(
 
     tarife = await lade_tarife_fuer_anlage(db, anlage_id, von)
     allgemein_tarif = tarife.get("allgemein")
-    hat_dyn_tarif = bool(allgemein_tarif and allgemein_tarif.vertragsart == "dynamisch")
+    hat_dyn_tarif = ist_dynamisch(allgemein_tarif)
     # Spalten-Projektion statt voller ORM-Zeilen: der Helper braucht nur diese
     # vier Float-Spalten. Volle TEP-Objekte würden pro Zeile zwei JSON-Spalten
     # (komponenten + source_provenance) deserialisieren — bei mehrjährigen
@@ -488,6 +489,67 @@ async def berechne_ist_wirkungsgrad(
         ladung_kwh=ladung_kwh,
         entladung_kwh=entladung_kwh,
         delta_soc_kwh=delta_soc_kwh,
+    )
+
+
+async def wirkungsgrad_ist_fuer_speicher(
+    db: AsyncSession,
+    *,
+    anlage_id: int,
+    speicher: Any,
+    verbrauch_daten_je_monat: "Iterable[dict]",
+    von: date,
+    bis: date,
+) -> Optional[WirkungsgradErgebnis]:
+    """Der gemessene Wirkungsgrad **eines** Speichers — Aggregat und Rechnung in einem Griff.
+
+    ⭐ **Warum es diesen Helfer gibt.** Bis zum 22.09.2026 bauten **drei**
+    Aufrufer dieselben vier Schritte selbst zusammen: Monatszeilen filtern,
+    `aggregiere_speicher_ist`, die `None`-Wache, die nutzbare Kapazität holen,
+    `berechne_ist_wirkungsgrad` rufen (`roi_pv.py:318-347`,
+    `dashboard_speicher.py:269-290`, `aktueller_monat/komponenten.py:147`). Mit
+    dem HA-Export käme ein vierter dazu — und der erste, dessen Ergebnis als
+    ct-Betrag in eine Automation geht. Vier Nachbauten einer Kaskade sind vier
+    Stellen, an denen die `None`-Wache fehlen kann; genau daran ist N-140
+    entstanden (der ungeprüfte Zugriff auf `.jahres_faktor` schrieb bei jeder
+    frischen Anlage eine Warnung über einen Fehler, den es nicht gab).
+
+    Args:
+        verbrauch_daten_je_monat: die `verbrauch_daten`-Dicts der Monate, die
+            der Aufrufer bereits auf `Investition.ist_aktiv_im_monat` gefiltert
+            hat — dieselbe Eingangsform wie bei `aggregiere_speicher_ist`.
+        von/bis: die Periode, aus der bei kurzem Fenster die SoC-Ränder kommen.
+
+    Returns:
+        `None`, wenn das Aggregat nicht zustande kommt (weniger als
+        `SPEICHER_IST_MIN_MONATE` Monate **oder** gar keine erfasste Entladung)
+        — genau der Fall, in dem die Bestandsaufrufer heute `continue` bzw.
+        `eta_ist = None` machen. Sonst das `WirkungsgradErgebnis`, dessen
+        `quelle` auch dann etwas sagt, wenn kein Wert herauskam
+        (`fenster-zu-kurz` · `keine-ladung` · `nicht-ermittelbar`).
+
+    ⛔ **Der Grund für `None` wird hier NICHT beschriftet.** „Zu wenig Monate"
+    und „keine Entladung erfasst" sind für `aggregiere_speicher_ist` derselbe
+    Rückgabewert; ihn hier in eine `quelle` zu übersetzen hieße, eine
+    Unterscheidung zu behaupten, die der SoT nicht trifft. Der Aufrufer, der
+    einen Text braucht (der HA-Export), setzt ihn selbst — und weiß dabei, dass
+    er beide Fälle meint.
+    """
+    from backend.core.investition_kennwerte import get_speicher_nutzbare_kapazitaet_kwh
+
+    ist = aggregiere_speicher_ist(list(verbrauch_daten_je_monat))
+    if ist is None or ist.jahres_faktor <= 0:
+        return None
+    nutzbar = get_speicher_nutzbare_kapazitaet_kwh(speicher) or 0
+    return await berechne_ist_wirkungsgrad(
+        db,
+        anlage_id=anlage_id,
+        von=von,
+        bis=bis,
+        ladung_kwh=ist.ladung_kwh_jahr / ist.jahres_faktor,
+        entladung_kwh=ist.entladung_kwh_jahr / ist.jahres_faktor,
+        nutzbare_kapazitaet_kwh=float(nutzbar),
+        fenster_monate=ist.anzahl_monate,
     )
 
 

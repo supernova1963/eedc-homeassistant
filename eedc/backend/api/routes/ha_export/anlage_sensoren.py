@@ -67,6 +67,10 @@ from backend.core.berechnungen.investitions_jahresertrag import (
 )
 from backend.models.investition import ERTRAGSFELD_TYPEN, Investition, InvestitionMonatsdaten
 from backend.utils.investition_filter import aktiv_jetzt
+
+import logging
+
+logger = logging.getLogger(__name__)
 from backend.services.ha_sensors_export import (
     SensorValue,
     ANLAGE_SENSOREN,
@@ -101,6 +105,7 @@ from backend.api.routes.ha_export.anlage_komponenten import (
 )
 from backend.api.routes.ha_export.anlage_sensorwerte import sensorwerte_erstellen, prognose_und_preis_sensoren
 from backend.api.routes.ha_export.anlage_steuerung import steuerungs_sensoren
+from backend.api.routes.ha_export.anlage_preise_speicher import preise_speicher_sensoren
 from backend.services.ha_export_fenster import baue_fenster_kontext
 
 
@@ -340,7 +345,39 @@ async def calculate_anlage_sensors(
     # wie `grundlast_sensorwert`): eine Phase, die selbst `date.today()` ruft,
     # zwingt jede Probe, auf die Stunde ihres Laufs zu wetten.
     _jetzt = jetzt or datetime.now()
-    _fenster_ctx = baue_fenster_kontext(_out.get("prognose"), _out.get("preis"), jetzt=_jetzt)
+
+    # ── S3b: die Eingänge, die ZWEI Phasen brauchen — einmal geholt ─────────
+    #
+    # ⭐ **Warum hier und nicht in der Phase, die sie ausgibt.** Die
+    # Bezugspreis-Reihen speisen den Fenster-Kontext (also P2/P4/P5/P7/P8/P9),
+    # die Wirkungsgrade speisen P3 in `steuerungs_sensoren` — **beide** also
+    # eine Phase, die VOR der Preis-und-Speicher-Phase läuft. Stünde die
+    # Beschaffung dort, bräuchte P3 sie vor ihrer Entstehung.
+    #
+    # ⛔ **Und der Geräte-Rechner kann es auch nicht liefern:**
+    # `calculate_investition_sensors` läuft **nach** dem Anlagen-Rechner
+    # (`sensoren.py:49/103`), und `/sensors/{id}` wie `/yaml/{id}` rufen nur
+    # diesen hier. Eine anlagenweite Größe aus einer Geräte-Schleife zu holen,
+    # erreicht die Hälfte der Sichten nie.
+    from backend.api.routes.ha_export.anlage_preise_speicher import lade_speicher_wirkungsgrade
+    from backend.services.ha_export_bezugspreis import lade_bezugspreise
+
+    _heute = _jetzt.date()
+    try:
+        _bezugspreise = await lade_bezugspreise(
+            db, anlage, _out.get("preis"), monatsdaten, heute=_heute,
+        )
+    except Exception as e:      # Preise sind eine Zugabe — der Export bleibt grün
+        logger.warning(
+            "HA-Export Bezugspreise fehlgeschlagen (Anlage %s): %s: %s",
+            getattr(anlage, "id", "?"), type(e).__name__, e,
+        )
+        _bezugspreise = None
+    _speicher_eta = await lade_speicher_wirkungsgrade(db, anlage, heute=_heute)
+
+    _fenster_ctx = baue_fenster_kontext(
+        _out.get("prognose"), _out.get("preis"), _bezugspreise, jetzt=_jetzt,
+    )
     await steuerungs_sensoren(
         anlage=anlage,
         db=db,
@@ -348,7 +385,19 @@ async def calculate_anlage_sensors(
         prognose=_out.get("prognose"),
         preis=_out.get("preis"),
         fenster_ctx=_fenster_ctx,
-        heute=_jetzt.date(),
+        heute=_heute,
+        jetzt_stunde=_jetzt.hour,
+        speicher_eta=_speicher_eta,
+    )
+    await preise_speicher_sensoren(
+        anlage=anlage,
+        sensor_values=sensor_values,
+        prognose=_out.get("prognose"),
+        preis=_out.get("preis"),
+        fenster_ctx=_fenster_ctx,
+        bezugspreise=_bezugspreise,
+        speicher_eta=_speicher_eta,
+        heute=_heute,
         jetzt_stunde=_jetzt.hour,
     )
     if kontext_out is not None:

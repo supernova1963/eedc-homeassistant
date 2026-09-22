@@ -138,6 +138,9 @@ async def berechne_prognose_export(db, anlage, *, skip_jitter: bool = False) -> 
         speicher_voll_um = None
         speicher_verbrauch_profil = None
         speicher_voll_um_slot: Optional[int] = None
+        speicher_soc_pro_stunde: Optional[dict] = None
+        speicher_end_soc_prozent: Optional[float] = None
+        speicher_sim_start: Optional[int] = None
         speicher_kap, speicher_eta, akt_soc = await _aktueller_speicher(
             db, anlage.id, heute
         )
@@ -153,6 +156,9 @@ async def berechne_prognose_export(db, anlage, *, skip_jitter: bool = False) -> 
                 wirkungsgrad_prozent=speicher_eta,
             )
             speicher_voll_um = sim.speicher_voll_um
+            speicher_soc_pro_stunde = dict(sim.soc_pro_stunde)
+            speicher_end_soc_prozent = round(float(sim.end_soc_prozent), 1)
+            speicher_sim_start = now.hour
             speicher_verbrauch_profil = _speicher_verbrauch_profil(vp, verbrauch_stunden)
             # E3 (S2): derselbe Zeitpunkt als Slot — der ISO-Zeitstempel entsteht
             # erst beim Sensor, damit die Zonen-Frage genau einmal beantwortet wird.
@@ -179,6 +185,10 @@ async def berechne_prognose_export(db, anlage, *, skip_jitter: bool = False) -> 
             # ausdrücklich „(nachgeführt)".
             "heute_rollend_kwh": prognose.heute_rollend_kwh,
             "ist_bisher_kwh": prognose.ist_bisher_kwh,
+            # N-544: bis wohin die IST-Summe reicht (hoechster gemessener
+            # Backward-Slot). P6 summiert das SOLL bis genau dorthin — eine
+            # Quelle statt zweier Grenzen.
+            "ist_bisher_bis_slot": prognose.ist_bisher_bis_slot,
             "heute_vormittag_kwh": _haelften(0)[0],
             "heute_nachmittag_kwh": _haelften(0)[1],
             "morgen_vormittag_kwh": _haelften(1)[0],
@@ -207,12 +217,37 @@ async def berechne_prognose_export(db, anlage, *, skip_jitter: bool = False) -> 
                 verbrauch.wp_stunden_kwh if verbrauch else None
             ),
             "verbrauch_temperatur_c": verbrauch.temperatur_c if verbrauch else None,
+            # N-544: das Stunden-Label je Position der drei Reihen darüber. Der
+            # Fenster-Kontext ordnet danach auf seine Slot-Achse ein, statt
+            # „Position i = Stunde i" anzunehmen — an den beiden DST-Tagen ist
+            # diese Annahme falsch (23 bzw. 25 Einträge).
+            "verbrauch_stunden_label": verbrauch.stunden_label if verbrauch else None,
             # ── S2: was die Steuerungs-Sensoren aus derselben Rechnung brauchen ──
             "speicher_voll_um_slot": speicher_voll_um_slot,
+            # ── S3b: derselbe Sim-Lauf, zwei weitere Groessen ───────────────
+            # ⭐ **EIN Lauf, nicht zwei.** „Voll um", „leer um" und „reicht bis
+            # Mitternacht" sind drei Fragen an **denselben** simulierten Tag;
+            # eine zweite Simulation daneben koennte zu einem anderen Ergebnis
+            # kommen (anderer Start-SoC, andere Uhr) und stuende dann mit einer
+            # zweiten Wahrheit neben der ersten.
+            "speicher_soc_pro_stunde": speicher_soc_pro_stunde,
+            "speicher_end_soc_prozent": speicher_end_soc_prozent,
+            "speicher_sim_start_stunde": speicher_sim_start,
             "speicher_kap_kwh": speicher_kap or None,
             "speicher_eta_prozent": speicher_eta,
             "speicher_soc_prozent": akt_soc,
             "stundenprofil_heute": [round(v, 2) for v in stunden_kwh_heute],
+            # ── S3b: die Abregelung von heute, in der Skala der Kappung ─────
+            "abregelung_om_kwh": heute_tag.abregelung_om_kwh if heute_tag else None,
+            "abregelung_om_stundenprofil_kwh": (
+                heute_tag.abregelung_om_stundenprofil_kwh if heute_tag else None
+            ),
+            "abregelung_grenzen_kw": heute_tag.grenzen_kw if heute_tag else None,
+            # Der **Rest des Tages** aus derselben Verlust-Reihe — dieselbe
+            # `rest_aus_slots`-Rechnung wie beim Ertrag (#339: laufende Stunde
+            # anteilig), damit „noch abzuregeln" und „noch zu erwarten" nicht
+            # zwei verschiedene Tagesreste meinen.
+            "abregelung_rest_heute_kwh": _abregelung_rest(heute_tag, now),
             "stundenprofil_day_plus_1": _stundenprofil(1),
             "stundenprofil_day_plus_2": _stundenprofil(2),
             "stundenprofil_day_plus_3": _stundenprofil(3),
@@ -223,6 +258,16 @@ async def berechne_prognose_export(db, anlage, *, skip_jitter: bool = False) -> 
             getattr(anlage, "id", "?"), type(e).__name__, e,
         )
         return None
+
+
+def _abregelung_rest(heute_tag, jetzt) -> Optional[float]:
+    """Der noch bevorstehende Kappungsverlust von heute — `None` ohne Kappung."""
+    if heute_tag is None or not heute_tag.abregelung_om_stundenprofil_kwh:
+        return None
+    from backend.services.prognose_kanon import rest_aus_slots
+
+    rest = rest_aus_slots(heute_tag.abregelung_om_stundenprofil_kwh, jetzt)
+    return None if rest is None else round(rest, 2)
 
 
 def _speicher_verbrauch_profil(

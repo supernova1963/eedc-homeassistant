@@ -28,6 +28,7 @@ from backend.core.field_definitions import (
     innengeraet_id_von_feld,
 )
 from backend.services.provenance import seed_provenance, write_with_provenance
+from backend.core.berechnungen.preis_reihe import ist_dynamisch
 
 from .schemas import ImportResult, CSVTemplateInfo
 from .helpers import (
@@ -67,7 +68,7 @@ async def get_csv_template_info(anlage_id: int, db: AsyncSession = Depends(get_d
     # Bei dynamischem Tarif: Durchschnittspreis-Spalte
     tarife = await lade_tarife_fuer_anlage(db, anlage_id)
     allgemein_tarif = tarife.get("allgemein")
-    if allgemein_tarif and allgemein_tarif.vertragsart == "dynamisch":
+    if ist_dynamisch(allgemein_tarif):
         spalten.append("Durchschnittspreis_Cent")
         beschreibung["Durchschnittspreis_Cent"] = "Ø Strompreis bei dynamischem Tarif (ct/kWh)"
 
@@ -653,7 +654,7 @@ async def export_csv(
     # Bei dynamischem Tarif: Durchschnittspreis-Spalte
     export_tarife = await lade_tarife_fuer_anlage(db, anlage_id)
     export_allgemein = export_tarife.get("allgemein")
-    hat_dynamisch_export = export_allgemein and export_allgemein.vertragsart == "dynamisch"
+    hat_dynamisch_export = ist_dynamisch(export_allgemein)
     if hat_dynamisch_export:
         header.append("Durchschnittspreis_Cent")
     # #392: bei variabler Einspeisevergütung die Monatssatz-Spalte

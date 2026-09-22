@@ -217,6 +217,39 @@ def backward_slot_aus_period_end(period_end: datetime) -> tuple[date, int]:
     return marker.date(), marker.hour
 
 
+def forward_stunde_zu_backward_slot(stunde: int) -> int:
+    """Eine **forward** beschriftete Stunde ``[h, h+1)`` → ihr Backward-Slot ``h+1``.
+
+    ⭐ **Die EINE Verschiebung der drei Forward-Bahnen** (N-387, oben namentlich
+    aufgeführt): ``boersenpreis_cent``, ``strompreis_cent`` und ``soc_prozent``
+    tragen den Perioden-**Beginn** als Schlüssel. Wer einen dieser Werte neben
+    eine Backward-Größe derselben Zeile stellt, muss ihn um **eine** Stunde
+    versetzen — und zwar hier, nicht an der Verwendungsstelle.
+
+        >>> forward_stunde_zu_backward_slot(0)    # aWATTar „00:00" = [00, 01)
+        1
+        >>> forward_stunde_zu_backward_slot(23)   # „23:00" = [23, 24) = Slot 0 des FOLGETAGS
+        24
+
+    ⚠ **Slot 24 ist kein Fehler und wird hier nicht zurückgefaltet.** Die
+    Backward-Achse eines Tages endet mit Slot 23 = ``[22, 23)``; die Stunde
+    ``[23, 24)`` gehört zu Slot 0 des Folgetags. Ob der Aufrufer sie als Slot 24
+    einer **mehrtägigen** Achse führt (so der HA-Export-Fensterkontext: Slot
+    ``s`` = Stunde ab ``Mitternacht + (s−1) h``) oder als Slot 0 des nächsten
+    Datums (so ``preis_tag.persistierte_preise`` für den Vortag), ist eine
+    Entscheidung über die **Achse**, nicht über die Umrechnung. Eine Funktion,
+    die hier ``% 24`` rechnete, würde die Stunde still auf den Tagesanfang
+    zurückwerfen und damit genau den Versatz erzeugen, gegen den sie steht.
+
+    ⛔ **Sie ist nicht dasselbe wie ``leistungspfad_slot`` darunter**, auch wenn
+    beide ``+1`` rechnen: jener beschreibt eine Punkt-Beschriftung mit
+    Raster-Semantik und gibt für ``>= 23`` bewusst ``None`` (der Bucket fällt im
+    eigenen Tag weg). Hier gibt es nichts wegzulassen — der Preis der Stunde
+    ``[23, 24)`` existiert und wird gebraucht.
+    """
+    return stunde + 1
+
+
 def leistungspfad_slot(punkt_stunde: int) -> int | None:
     """Punkt-Label des Leistungspfads (Slot-BEGINN) → Backward-Slot.
 

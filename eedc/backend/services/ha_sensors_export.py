@@ -1167,6 +1167,102 @@ STEUERUNG_SENSOREN = [
         device_class="problem",
         komponente="binary_sensor",
     ),
+
+    # ── Stufe 3b · Preise und Speicher (S3b, 22.09.2026) ────────────────────
+    #
+    # ⚠ **ct/kWh traegt KEINE `device_class`** (F-63): HA kennt `monetary` nur
+    # fuer einen Betrag, nicht fuer einen Preis je Einheit — mit `monetary`
+    # wuerde HA versuchen, ct/kWh ueber die Zeit zu summieren. `measurement`
+    # als `state_class` ist dagegen richtig: es ist ein Momentanwert.
+    SensorDefinition(
+        key="eedc_bezugspreis_jetzt_cent",
+        name="Bezugspreis jetzt",
+        unit="ct/kWh",
+        icon="mdi:cash-clock",
+        category=SensorCategory.STEUERUNG,
+        formel=(
+            "Arbeitspreis der laufenden Stunde: bei Festpreis/Zeitfenster exakt aus dem Tarif, "
+            "bei dynamischem Tarif (1 + USt) × Börse + abgeleiteter Aufschlag; `preisquelle` sagt, welcher Fall"
+        ),
+        state_class="measurement",
+    ),
+    SensorDefinition(
+        key="eedc_einspeiseverguetung_cent",
+        name="Einspeisevergütung",
+        unit="ct/kWh",
+        icon="mdi:transmission-tower-export",
+        category=SensorCategory.STEUERUNG,
+        formel="Vergütung je eingespeister kWh — Stammwert des Tarifs, bei variabler Vergütung der Monatswert",
+        state_class="measurement",
+    ),
+    SensorDefinition(
+        key="eedc_eigenverbrauch_wert_cent",
+        name="Eigenverbrauch wert",
+        unit="ct/kWh",
+        icon="mdi:home-lightning-bolt",
+        category=SensorCategory.STEUERUNG,
+        formel="Bezugspreis − Einspeisevergütung: was eine selbst verbrauchte kWh spart (nur mit vollständigem Bezugspreis)",
+        state_class="measurement",
+    ),
+    SensorDefinition(
+        key="eedc_speicher_strom_kosten_cent",
+        name="Speicherstrom kostet",
+        unit="ct/kWh",
+        icon="mdi:battery-arrow-down",
+        category=SensorCategory.STEUERUNG,
+        formel="Einspeisevergütung ÷ Wirkungsgrad — was eine aus dem Speicher entnommene kWh kostet (gemessener oder gepflegter η, nie der Default)",
+        state_class="measurement",
+    ),
+    SensorDefinition(
+        key="eedc_speicher_netzladen_kosten_cent",
+        name="Netzladen kostet",
+        unit="ct/kWh",
+        icon="mdi:transmission-tower-import",
+        category=SensorCategory.STEUERUNG,
+        formel="Bezugspreis der laufenden Stunde ÷ Wirkungsgrad — nur für Speicher, die aus dem Netz laden dürfen",
+        state_class="measurement",
+    ),
+    SensorDefinition(
+        key="eedc_speicher_leer_um_ts",
+        name="Speicher leer um",
+        unit="",
+        icon="mdi:battery-alert-variant-outline",
+        category=SensorCategory.STEUERUNG,
+        formel="Ende der ersten Stunde nach jetzt, in der der Ladestand in den Leerstand übergeht — Simulation, derselbe Lauf wie bei Speicher voll um",
+        device_class="timestamp",
+    ),
+    SensorDefinition(
+        key="eedc_speicher_reicht_bis_mitternacht",
+        name="Speicher reicht bis Mitternacht",
+        unit="",
+        icon="mdi:battery-clock",
+        category=SensorCategory.STEUERUNG,
+        formel="AN, wenn der Ladestand bis Mitternacht nicht in den Leerstand übergeht und über der Schwelle endet — dieselbe Regel, derselbe Lauf",
+        komponente="binary_sensor",
+    ),
+    SensorDefinition(
+        key="eedc_abregelung_heute_kwh",
+        name="Abregelung heute",
+        unit="kWh",
+        icon="mdi:scissors-cutting",
+        category=SensorCategory.STEUERUNG,
+        # ⚠ **Keine `device_class`** (F-63, wie die Prognose-Sensoren): das ist
+        # eine Vorhersage, kein Zaehler — ihre Summe ueber Tage ergaebe Unsinn.
+        formel="Erwarteter Kappungsverlust heute an der Wechselrichter-Grenze — in der Skala der Rohprognose (vor der eedc-Korrektur)",
+        state_class="measurement",
+    ),
+    SensorDefinition(
+        key="eedc_einspeisung_unerwuenscht",
+        name="Einspeisung unerwünscht",
+        unit="",
+        icon="mdi:cash-minus",
+        category=SensorCategory.STEUERUNG,
+        # ⛔ **Kein Urteil, ein Marktzustand.** Der Sensor sagt nicht „schalte
+        # ab", sondern „in dieser Stunde ist der Boersenpreis negativ und es
+        # wird Erzeugung erwartet". Was daraus folgt, entscheidet der Anwender.
+        formel="AN, wenn der Börsenpreis der laufenden Stunde negativ ist UND für dieselbe Stunde PV-Erzeugung erwartet wird (§51 EEG als Slot-Regel)",
+        komponente="binary_sensor",
+    ),
 ]
 
 # =============================================================================

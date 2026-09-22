@@ -44,6 +44,7 @@ from backend.services.provenance import (
 )
 from backend.services.vorschlag_service import Vorschlag, VorschlagQuelle, VorschlagService
 from backend.services.zaehlerstaende import lade_zaehlerstaende
+from backend.core.berechnungen.preis_reihe import ist_dynamisch
 
 from ._shared import (
     MONAT_NAMEN,
@@ -322,7 +323,7 @@ async def lade_basis_feldliste(
         hat_gemessene_preise
         or (
             allgemein_tarif
-            and (allgemein_tarif.vertragsart == "dynamisch" or hat_zeitfenster(allgemein_tarif))
+            and (ist_dynamisch(allgemein_tarif) or hat_zeitfenster(allgemein_tarif))
         )
     )
     # #392: dieselbe Stichtags-Logik für die variable Einspeisevergütung —
