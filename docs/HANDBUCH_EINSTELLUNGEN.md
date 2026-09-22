@@ -636,7 +636,9 @@ eedc exportiert berechnete Kennzahlen an einen Broker (HA-Discovery-Konvention).
 
 > #### Zu viele Entitäten? Wähl sie in eedc ab
 >
-> In der Sensorliste hat jede Zeile ein Häkchen, jede Kategorie ein Sammel-Häkchen. Nimm das Häkchen weg, und dieser Sensor geht nicht mehr nach Home Assistant. **Voreingestellt sind alle an** — was du abwählst, ist deine Entscheidung, nicht unsere Voreinstellung.
+> In der Sensorliste hat jede Zeile ein Häkchen, jede Kategorie ein Sammel-Häkchen. Nimm das Häkchen weg, und dieser Sensor geht nicht mehr nach Home Assistant. Bei einer **Neuinstallation** sind alle an — was du abwählst, ist deine Entscheidung, nicht unsere Voreinstellung.
+>
+> ⭐ **Bei einer bestehenden Installation starten die Sensoren eines neuen Pakets abgewählt.** Bringt ein Update neue Sensoren mit, kommen sie **nicht** von allein nach Home Assistant. Du findest sie hier in der Liste mit der Markierung **„Neu"**, und über der Liste steht ein Kasten, der sagt, wie viele es sind und was sie können; ein Knopf **„Alle neuen anwählen"** nimmt sie auf einen Griff. **Es geht dabei nichts verloren** — sie waren nie in Home Assistant, es gibt also keine Historie, die fehlen könnte. Der Grund für diesen Unterschied: In Home Assistant lässt sich eine einmal angelegte Entität nicht dauerhaft loswerden (der Registry-Eintrag bleibt), und mit v4.0.27 kamen 21 Sensoren auf einen Schlag — das soll dir nicht noch einmal ungefragt passieren. Umgekehrt gilt weiterhin: was du **schon hast**, behältst du; ein Update wählt nie etwas ab, das schon lief.
 >
 > **Warum die Abwahl hier sitzt und nicht in Home Assistant:** HA kann eine Entität deaktivieren oder löschen, aber ihr Eintrag in der Registry bleibt bestehen — bei der nächsten Auto-Discovery ist sie wieder da. Abwählen lässt sie sich deshalb nur dort, wo sie herkommt.
 >

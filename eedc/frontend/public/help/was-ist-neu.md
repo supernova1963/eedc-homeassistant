@@ -59,12 +59,21 @@ aus dem Netz laden, wenn die Kilowattstunde unter deiner Grenze bleibt · einen
 Heizstab in die Abregelung legen. Dort steht auch, wie Home Assistant die
 Entity-IDs der eedc-Sensoren bildet — sie tragen deinen Anlagennamen.
 
-**Die 28 neuen Sensoren — damit du vor dem Update weißt, was kommt.** Alle sind
-standardmäßig **an** (so wie jeder eedc-Sensor); abwählen kannst du sie unter
-*Einstellungen → Integration → MQTT-Export*, am besten direkt nach dem Update,
-bevor der nächste automatische Publish läuft (er folgt dem eingestellten Takt, in der
-Voreinstellung zur nächsten vollen Stunde). Je Anlage entstehen 22 Entitäten, dazu 4 je
-Wärmepumpe und 2 je Sonstiges-Verbraucher.
+**Die 28 neuen Sensoren — damit du vor dem Update weißt, was kommt.** ⭐ **Wenn
+du eedc schon benutzt, kommen sie *nicht* von allein nach Home Assistant.** Sie
+starten bei einer bestehenden Installation **abgewählt**: du findest sie unter
+*Einstellungen → Integration → MQTT-Export* in der Sensorliste mit der Markierung
+**„Neu"**, dazu einen Kasten über der Liste und einen Knopf **„Alle neuen
+anwählen"** — und hakst an, was du haben willst. Es geht dabei nichts verloren,
+denn sie waren nie in Home Assistant. Bei einer **Neu**installation ist wie bisher
+alles an. Je Anlage entstehen 22 Entitäten, dazu 4 je Wärmepumpe und 2 je
+Sonstiges-Verbraucher.
+
+Der Grund für diesen Unterschied: In Home Assistant lässt sich eine einmal
+angelegte Entität nicht dauerhaft loswerden — der Registry-Eintrag bleibt, und bei
+der nächsten Auto-Discovery ist sie wieder da. Mit v4.0.27 kamen 21 Sensoren auf
+einen Schlag; das soll dir nicht noch einmal ungefragt passieren. Was du **schon
+hast**, behältst du: ein Update wählt nie etwas ab, das bei dir schon läuft.
 
 ⚠ **Nicht jeder entsteht bei jedem.** Ein Sensor, dessen Grundlage fehlt, wird
 in eedc nicht erfunden — er fehlt dann. Ohne hinterlegten Tarif gibt es keine

@@ -55,11 +55,35 @@ export interface SensorAbwahlItem {
   category: string
   formel: string
   exportiert: boolean
+  /**
+   * N-545: Kam diese Definition mit dem AKTUELLEN Sensor-Paket dazu?
+   *
+   * Optional, weil ein aelteres Backend das Feld nicht kennt — dann bleibt es
+   * `undefined` und die Flaeche zeigt weder Badge noch Hinweiskasten.
+   */
+  neu?: boolean
+}
+
+/**
+ * N-545: Das Sensor-Paket, das dieser Stand mitbringt.
+ *
+ * `abgewaehlt` sind die Paket-Schluessel, die der Anwender HEUTE nicht in Home
+ * Assistant hat — bei einer Bestandsinstallation direkt nach dem Update alle,
+ * bei einer Neuinstallation keiner. Genau daran entscheidet die Flaeche, ob der
+ * Hinweiskasten ueberhaupt etwas zu sagen hat.
+ */
+export interface SensorPaketInfo {
+  paket: number
+  label: string
+  keys: string[]
+  abgewaehlt: string[]
 }
 
 export interface SensorAbwahlResponse {
   abgewaehlt: string[]
   sensoren: SensorAbwahlItem[]
+  /** Optional — aelteres Backend ohne N-545 liefert das Feld nicht. */
+  neues_paket?: SensorPaketInfo
 }
 
 export interface SensorAbwahlErgebnis {

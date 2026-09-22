@@ -1224,6 +1224,26 @@ async def _run_data_migrations() -> None:
             migriere_quellen_ins_mapping,
         )
 
+        # N-545: Die Sensor-Definitionen eines NEUEN Pakets starten bei einer
+        # BESTANDSinstallation abgewaehlt (Entscheid Gernot 22.09.2026). Kein
+        # `_apply_once` — der Name einer Migration gilt einmal je Installation,
+        # dieser Schritt muss aber JEDES kuenftige Paket sehen; seine Idempotenz
+        # traegt er selbst im `sensor_paket_stand`. MUSS nach
+        # `migriere_mqtt_richtungen` laufen: der schreibt fuer Bestands-Add-ons
+        # erst den expliziten `mqtt_export.enabled` — eines der drei Merkmale, an
+        # denen dieser Schritt Bestand von Neuinstallation unterscheidet.
+        # DB-only, kein HTTP, kein MQTT.
+        try:
+            from backend.services.migrations.migrate_sensor_paket_abwahl import (
+                neue_sensoren_bei_bestand_abwaehlen,
+            )
+            await neue_sensoren_bei_bestand_abwaehlen(session)
+        except Exception as e:
+            logger.error(
+                "Sensor-Paket-Abwahl (N-545) fehlgeschlagen: %s: %s", type(e).__name__, e
+            )
+            await session.rollback()
+
         # HINWEIS (v3.45.8): Die in v3.45.7 hier registrierte Migration
         # `batterie_kw_entladung_positiv` wurde ENTFERNT. Sie reaggregierte beim
         # Start ALLE historischen Tage über externe HTTP-Calls (HA-History +

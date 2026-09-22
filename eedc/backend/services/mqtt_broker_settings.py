@@ -166,7 +166,31 @@ async def export_aktiviert(db: Optional[AsyncSession]) -> bool:
 # 28.08.). Wer „Ladezyklen" abwaehlt, waehlt sie an allen Speichern ab. Beide
 # Melder (rapahl per PN, Knallfrosch T89667 #236) richten sich gegen Sensor-
 # *Sorten* („ohne erkennbaren Nutzen"), nicht gegen einzelne Geraete.
+#
+# ⭐ **Praezisierung N-545 (Entscheid Gernot 22.09.2026): „Default an" gilt fuer
+# eine NEUINSTALLATION und fuer alles, was zum Zeitpunkt der Installation schon
+# existierte** — nicht fuer ein Paket, das ERST MIT EINEM UPDATE dazukommt. Der
+# 28.08.-Grund (eine Voreinstellung waere eine Wette auf die Zeitreihe) traegt
+# genau so weit: bei einem neuen Paket ist noch keine Zeitreihe da, die verloren
+# gehen koennte — die Sensoren wurden nie publiziert. Was dagegen entsteht, ist
+# der Fall v4.0.27: 21 neue Entitaeten auf einen Schlag, zwei Melder binnen
+# 24 Stunden (#400), und die Registry-Reste bleiben in HA stehen. Deshalb
+# startet ein SPAETERES Paket bei einer Bestandsinstallation **abgewaehlt**; der
+# Anwender hakt in der Abwahl-Flaeche an, was er will (Markierung „Neu"). Der
+# Schritt laeuft in `migrations/migrate_sensor_paket_abwahl.py` und traegt seinen
+# Stand in `SENSOR_PAKET_FELD`.
 ABWAHL_FELD = "abgewaehlte_sensoren"
+
+#: N-545: bis zu welchem **Paket-Stand** hat der Erstlauf-Schritt die neuen
+#: Sensor-Definitionen dieser Installation schon eingewertet? (int, im
+#: ``mqtt_export``-Dict, mischend ueber ``schreibe_export_settings``.)
+#:
+#: ``None``/fehlt = noch nie geschrieben; dann entscheidet der Schritt zuerst, ob
+#: es sich um eine Bestands- oder eine Neuinstallation handelt. Die Zaehlung
+#: fuehrt ``ha_sensors_export.AKTUELLES_SENSOR_PAKET`` — bewusst eine ganze Zahl
+#: und **kein Versionsstring**: die Release-Nummer bumpt ``release.sh`` in fuenf
+#: Dateien, nicht in einer Sensor-Definition.
+SENSOR_PAKET_FELD = "sensor_paket_stand"
 
 
 async def abgewaehlte_sensoren(db: Optional[AsyncSession]) -> set[str]:
@@ -175,6 +199,13 @@ async def abgewaehlte_sensoren(db: Optional[AsyncSession]) -> set[str]:
     Leere Menge = alles wird exportiert (der Default, s. Kasten oben). Ohne
     DB-Kontext gibt es keine Wahrheit ueber die Abwahl — dann exportiert eedc
     alles, statt still zu schweigen.
+
+    ⚠ **N-545:** bei einer BESTANDSinstallation stehen hier nach einem Update
+    zusaetzlich die Schluessel des neuen Sensor-Pakets — eingetragen vom
+    Erstlauf-Schritt `migrations/migrate_sensor_paket_abwahl.py`, EINMAL je
+    Paket. Das ist keine zweite Voreinstellung an der Definition, sondern
+    derselbe eine Speicher: wer einen davon anhakt, verschwindet hier heraus und
+    kommt nie wieder herein (der Schritt vereinigt nur, er ersetzt nie).
     """
     value = await _lade_settings(db, MQTT_EXPORT_SETTINGS_KEY) or {}
     roh = value.get(ABWAHL_FELD)

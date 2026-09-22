@@ -106,6 +106,7 @@ function MdiIcon({ name }: { name: string }) {
 }
 import type {
   SensorAbwahlItem,
+  SensorPaketInfo,
   FullExportResponse,
   AnlageExport,
   SensorExportItem,
@@ -167,6 +168,10 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
   const [abwahlDialogOffen, setAbwahlDialogOffen] = useState(false)
   const [abwahlMeldung, setAbwahlMeldung] = useState<string | null>(null)
   const [abwahlFehler, setAbwahlFehler] = useState<string | null>(null)
+  // N-545: Welches Sensor-Paket bringt dieser Stand mit, und was davon steht
+  // heute NICHT in Home Assistant? `null` = aelteres Backend ohne das Feld —
+  // dann gibt es weder Badge noch Hinweiskasten.
+  const [neuesPaket, setNeuesPaket] = useState<SensorPaketInfo | null>(null)
   const [entfernenDialogOffen, setEntfernenDialogOffen] = useState(false)
 
   // UI State
@@ -203,6 +208,7 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
         const gesetzt = new Set(abwahlResult.abgewaehlt)
         setGespeicherteAbwahl(gesetzt)
         setAbwahlEntwurf(new Set(gesetzt))
+        setNeuesPaket(abwahlResult.neues_paket ?? null)
       }
 
       // Aufgelöste Broker-Config (DB-Broker-Block → ENV) — nur zur Anzeige.
@@ -413,6 +419,22 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
     () => [...abwahlEntwurf].filter(k => !gespeicherteAbwahl.has(k)),
     [abwahlEntwurf, gespeicherteAbwahl]
   )
+
+  // ── N-545: das NEUE Sensor-Paket ──────────────────────────────────────────
+  //
+  // ⭐ **Der Kasten haengt am SERVER-Zustand, die Zahl darin am Entwurf.** Haette
+  // er selbst am Entwurf gehangen, verschwaende er in dem Moment, in dem der
+  // Anwender den letzten neuen Sensor anhakt — mitten in seiner Arbeit, noch vor
+  // dem Speichern, und mit ihm der Knopf, mit dem er es rueckgaengig macht.
+  const neueKeys = useMemo(
+    () => new Set(abwahlDefs.filter(d => d.neu).map(d => d.key)),
+    [abwahlDefs]
+  )
+  const paketNochAbgewaehlt = useMemo(
+    () => (neuesPaket?.keys ?? []).filter(k => abwahlEntwurf.has(k)),
+    [neuesPaket, abwahlEntwurf]
+  )
+  const zeigePaketHinweis = (neuesPaket?.abgewaehlt.length ?? 0) > 0
 
   const setzeAbwahl = (keys: string[], abwaehlen: boolean) => {
     setAbwahlMeldung(null)
@@ -1014,11 +1036,50 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
               deshalb auf der SENDENDEN Seite sitzen. */}
           {abwahlDefs.length > 0 && anlageExport.sensors.length > 0 && (
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-              Häkchen ab = dieser Sensor geht nicht nach Home Assistant. Alle sind
-              voreingestellt an; was du abwählst, ist deine bewusste Entscheidung.
-              Sensoren ohne Wert stehen mit „—" da — sie sind heute nicht in Home
-              Assistant, lassen sich aber vorab abwählen.
+              Häkchen ab = dieser Sensor geht nicht nach Home Assistant. Was du
+              abwählst, ist deine bewusste Entscheidung. Sensoren ohne Wert stehen
+              mit „—" da — sie sind heute nicht in Home Assistant, lassen sich aber
+              vorab abwählen. Sensoren mit der Markierung „Neu" kamen mit dem letzten
+              Update dazu und starten in einer bestehenden Installation abgewählt.
             </p>
+          )}
+
+          {/* ── N-545: Was mit dem letzten Update dazukam ───────────────────
+              Entscheid Gernot 22.09.: neue Sensor-Definitionen starten bei einer
+              BESTEHENDEN Installation abgewaehlt. Anlass v4.0.27 — 21 neue
+              Entitaeten auf einen Schlag, zwei Melder binnen 24 Stunden, und in
+              HA bleibt der Registry-Eintrag. Der Hinweis sitzt genau dort, wo die
+              Wahl getroffen wird; einen Daten-Checker-Hinweis gibt es bewusst
+              NICHT (er koennte „noch nicht angesehen" nicht von „bewusst
+              abgewaehlt" unterscheiden und wuerde eine legitime Wahl anmahnen). */}
+          {zeigePaketHinweis && neuesPaket && (
+            <div className="mb-4 p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 flex gap-3">
+              <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 text-sm text-blue-700 dark:text-blue-300">
+                <p className="font-medium mb-1">
+                  Mit dem letzten Update kamen {neuesPaket.keys.length} Sensoren dazu
+                  {neuesPaket.label ? ` (${neuesPaket.label})` : ''}.
+                </p>
+                <p>
+                  Bei bestehenden Installationen starten sie abgewählt
+                  {paketNochAbgewaehlt.length > 0
+                    ? ` — ${paketNochAbgewaehlt.length} davon sind es noch.`
+                    : ' — keiner davon ist es noch.'}
+                  {' '}Hake an, was du in Home Assistant haben willst.
+                </p>
+                {paketNochAbgewaehlt.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => setzeAbwahl(paketNochAbgewaehlt, false)}
+                  >
+                    Alle neuen anwählen
+                  </Button>
+                )}
+              </div>
+            </div>
           )}
 
           {abwahlMeldung && (
@@ -1137,6 +1198,15 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
                               <span className="font-medium text-gray-900 dark:text-white">
                                 {sensor.name}
                               </span>
+                              {/* N-545: dieselbe Badge-Form wie „abgewählt"
+                                  daneben — Regel 0a, ein Pattern, eine Bauform.
+                                  Eine eigene Komponente waere eine zweite fuer
+                                  ein bestehendes Muster. */}
+                              {neueKeys.has(sensor.key) && (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
+                                  Neu
+                                </span>
+                              )}
                               {abwahlEntwurf.has(sensor.key) && (
                                 <span className="text-xs px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
                                   abgewählt

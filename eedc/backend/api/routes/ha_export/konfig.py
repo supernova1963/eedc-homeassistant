@@ -12,7 +12,11 @@ from sqlalchemy import select
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.services.activity_service import log_activity
-from backend.services.ha_sensors_export import get_all_sensor_definitions
+from backend.services.ha_sensors_export import (
+    AKTUELLES_SENSOR_PAKET,
+    SENSOR_PAKET_LABELS,
+    get_all_sensor_definitions,
+)
 from backend.services.mqtt_client import MQTTClient
 from backend.services.mqtt_broker_settings import (
     resolve_broker_config,
@@ -92,12 +96,29 @@ async def get_sensor_abwahl(db: AsyncSession = Depends(get_db)):
     Baute die Abwahl darauf auf, koennte man einen Sensor nicht abwaehlen, der
     heute leer ist und morgen einen Wert liefert — er erschiene dann
     unangekuendigt in HA, obwohl der Anwender die Fläche durchgesehen hat.
+
+    ⭐ **N-545 (22.09.2026):** Jeder Eintrag sagt zusaetzlich, ob er mit dem
+    AKTUELLEN Sensor-Paket dazugekommen ist (``neu``), und die Antwort traegt
+    ``neues_paket`` — Nummer, Klartext-Label, die Schluessel des Pakets und
+    davon die aktuell abgewaehlten. Aus dem letzten Paar entscheidet die
+    Oberflaeche, ob sie den Hinweiskasten ueber der Liste zeigt: bei einer
+    Bestandsinstallation stehen dort nach dem Update alle Paket-Schluessel, bei
+    einer Neuinstallation keiner. **Nur Leserichtung** — diese Route schreibt
+    nichts und waehlt nichts ab; das tut einmalig der Erstlauf-Schritt
+    `migrations/migrate_sensor_paket_abwahl.py`.
     """
     abgewaehlt = await abgewaehlte_sensoren(db)
     definitionen = get_all_sensor_definitions()
+    paket_keys = [d.key for d in definitionen if d.seit_paket == AKTUELLES_SENSOR_PAKET]
 
     return {
         "abgewaehlt": sorted(abgewaehlt),
+        "neues_paket": {
+            "paket": AKTUELLES_SENSOR_PAKET,
+            "label": SENSOR_PAKET_LABELS.get(AKTUELLES_SENSOR_PAKET, ""),
+            "keys": paket_keys,
+            "abgewaehlt": [k for k in paket_keys if k in abgewaehlt],
+        },
         "sensoren": [
             {
                 "key": d.key,
@@ -107,6 +128,7 @@ async def get_sensor_abwahl(db: AsyncSession = Depends(get_db)):
                 "category": d.category.value,
                 "formel": d.formel,
                 "exportiert": d.key not in abgewaehlt,
+                "neu": d.seit_paket == AKTUELLES_SENSOR_PAKET,
             }
             for d in definitionen
         ],

@@ -26,6 +26,27 @@ from enum import Enum
 KOMPONENTEN_TYPEN: tuple[str, ...] = ("sensor", "binary_sensor")
 
 
+#: Der **Paket-Stand**, den dieser Code mitbringt — eine fortlaufende ganze Zahl.
+#:
+#: ⭐ **Warum eine Zahl und kein Versionsstring** (N-545, 22.09.2026): Die
+#: Release-Nummer entscheidet der Maintainer zum Zeitpunkt des Releases;
+#: `release.sh` zieht sie in fünf Dateien nach, nicht aber in einer Sensor-
+#: Definition. Ein `seit_version = "4.0.50"` hier wäre also eine **Behauptung**
+#: über eine Zahl, die dieser Code nicht kennt — die Lab-Kopie hieß beim Bau
+#: `4.0.50-rc1`, das Release kann anders heißen. Ein Paket-Stand ist von der
+#: Versionsnummer entkoppelt und bleibt bei jedem Bump unberührt.
+#:
+#: Wer ein neues Sensor-Paket ausliefert, erhöht diese Zahl um 1, trägt ein Label
+#: nach und setzt `seit_paket` an **jeder** neuen Definition. Dass niemand das
+#: Letzte vergisst, hält `test_n545_neue_sensoren_bei_bestand_abgewaehlt.py` fest.
+AKTUELLES_SENSOR_PAKET: int = 1
+
+#: Klartext je Paket-Stand — was der Anwender in der Abwahl-Fläche liest.
+SENSOR_PAKET_LABELS: dict[int, str] = {
+    1: "eedc@ha, Teil 1 — Steuerungshilfen, Preise und Speicher",
+}
+
+
 class SensorCategory(str, Enum):
     """Sensor-Kategorien für Gruppierung."""
     ANLAGE = "anlage"           # PV-Anlage Gesamt
@@ -80,6 +101,22 @@ class SensorDefinition:
     #: Klassen-Vertrag (`test_ha_export_sensor_klassen_vertrag.py`) hält das
     #: fest, damit es nicht erst in HAs Protokoll auffällt.
     komponente: Literal["sensor", "binary_sensor"] = "sensor"
+    #: Mit welchem **Sensor-Paket** kam diese Definition dazu? (N-545, 22.09.2026)
+    #:
+    #: ``0`` = „seit immer" — die 57 Definitionen, die es zum Zeitpunkt der
+    #: Einführung schon gab (Stand `ca6cf36f`). Ein höherer Wert benennt das
+    #: Paket, mit dem der Sensor NEU ist; `AKTUELLES_SENSOR_PAKET` oben führt die
+    #: Zählung, `SENSOR_PAKET_LABELS` den Klartext.
+    #:
+    #: ⚠ **Das ist keine zweite Voreinstellung.** Die Definition steuert nichts —
+    #: sie trägt nur ihren Paket-Stand. Ob ein Sensor exportiert wird, entscheidet
+    #: allein die Abwahlliste in den Export-Settings
+    #: (`mqtt_broker_settings.ABWAHL_FELD`); der Erstlauf-Schritt
+    #: `migrations/migrate_sensor_paket_abwahl.py` liest den Paket-Stand **einmal
+    #: je Paket** und trägt die neuen Schlüssel dort ein — aber nur bei
+    #: **Bestands**installationen (eine Neuinstallation bekommt weiterhin alles,
+    #: 28.08.-Entscheid).
+    seit_paket: int = 0
     # ⛔ **Hier stand bis zum 28.08.2026 `enabled_by_default: bool = True`** — ein
     # Feld, das nichts steuerte: es wurde ausschliesslich in einer API-Antwort
     # durchgereicht und erreichte den Discovery-Payload nie. Mit dem Entscheid zu
@@ -88,6 +125,12 @@ class SensorDefinition:
     # angenommen, hier lasse sich eine Voreinstellung setzen, die es bewusst nicht
     # geben soll. Die Abwahl liegt in den Export-Settings
     # (`mqtt_broker_settings.ABWAHL_FELD`), nicht an der Definition.
+    #
+    # ⭐ **Auch `seit_paket` (N-545, 22.09.) ist keine Rueckkehr dieses Feldes.**
+    # Die Abwahl liegt weiter in den Settings — die Definition traegt nur ihren
+    # Paket-Stand. Aus ihm leitet der Erstlauf-Schritt EINMAL je Paket ab, was
+    # fuer **Bestands**installationen abgewaehlt startet; wer den Sensor danach
+    # anhakt, behaelt ihn ueber jeden Neustart.
 
 
 @dataclass
@@ -582,6 +625,7 @@ WAERMEPUMPE_SENSOREN = [
     # ob es eine Luft-Luft- oder Luft-Wasser-Wärmepumpe ist.
     SensorDefinition(
         key="wp_warmwasserbetrieb",
+        seit_paket=1,
         name="Warmwasserbetrieb",
         unit="",
         icon="mdi:water-boiler",
@@ -592,6 +636,7 @@ WAERMEPUMPE_SENSOREN = [
     ),
     SensorDefinition(
         key="wp_warmwasser_fenster_ab",
+        seit_paket=1,
         name="Warmwasser-Fenster ab",
         unit="",
         icon="mdi:water-thermometer",
@@ -604,6 +649,7 @@ WAERMEPUMPE_SENSOREN = [
     ),
     SensorDefinition(
         key="wp_heizfenster_stunden",
+        seit_paket=1,
         name="Günstige Heizstunden heute",
         unit="h",
         icon="mdi:radiator",
@@ -620,6 +666,7 @@ WAERMEPUMPE_SENSOREN = [
     ),
     SensorDefinition(
         key="wp_kuehlfenster_ab",
+        seit_paket=1,
         name="Kühlfenster ab",
         unit="",
         icon="mdi:snowflake-melt",
@@ -997,6 +1044,7 @@ STEUERUNG_SENSOREN = [
     # ── E1 · Ueberschuss ────────────────────────────────────────────────────
     SensorDefinition(
         key="eedc_ueberschuss_heute_kwh",
+        seit_paket=1,
         name="Überschuss heute",
         unit="kWh",
         icon="mdi:solar-power-variant",
@@ -1013,6 +1061,7 @@ STEUERUNG_SENSOREN = [
     ),
     SensorDefinition(
         key="eedc_ueberschuss_jetzt_kw",
+        seit_paket=1,
         name="Überschuss letzte Stunde",
         unit="kW",
         icon="mdi:flash",
@@ -1024,6 +1073,7 @@ STEUERUNG_SENSOREN = [
     # ── E2 · die vier binary_sensor (anlagenweit; der fuenfte haengt an der WP) ──
     SensorDefinition(
         key="eedc_ueberschuss_verfuegbar",
+        seit_paket=1,
         name="Überschuss verfügbar",
         unit="",
         icon="mdi:solar-power",
@@ -1034,6 +1084,7 @@ STEUERUNG_SENSOREN = [
     ),
     SensorDefinition(
         key="eedc_guenstige_stunde",
+        seit_paket=1,
         name="Günstige Stunde",
         unit="",
         icon="mdi:cash-clock",
@@ -1043,6 +1094,7 @@ STEUERUNG_SENSOREN = [
     ),
     SensorDefinition(
         key="eedc_speicher_voll",
+        seit_paket=1,
         name="Speicher voll",
         unit="",
         icon="mdi:battery-high",
@@ -1056,6 +1108,7 @@ STEUERUNG_SENSOREN = [
     # ── E3 · derselbe Zeitpunkt als echter Zeitstempel ──────────────────────
     SensorDefinition(
         key="eedc_speicher_voll_um_ts",
+        seit_paket=1,
         name="Speicher voll um (Zeitstempel)",
         unit="",
         icon="mdi:battery-clock",
@@ -1073,6 +1126,7 @@ STEUERUNG_SENSOREN = [
     # ── E4 · Ladestand ──────────────────────────────────────────────────────
     SensorDefinition(
         key="eedc_speicher_soc_prozent",
+        seit_paket=1,
         name="Ladestand",
         unit="%",
         icon="mdi:battery-70",
@@ -1084,6 +1138,7 @@ STEUERUNG_SENSOREN = [
     # ── E5 · Netzbezugs-Spitze ──────────────────────────────────────────────
     SensorDefinition(
         key="eedc_netzbezug_spitze_heute_kw",
+        seit_paket=1,
         name="Netzbezugs-Spitze heute",
         unit="kW",
         icon="mdi:transmission-tower-import",
@@ -1101,6 +1156,7 @@ STEUERUNG_SENSOREN = [
     # ── P2 · Ueberschuss-Prognose ───────────────────────────────────────────
     SensorDefinition(
         key="eedc_ueberschuss_prognose_heute_kwh",
+        seit_paket=1,
         name="Überschuss-Prognose heute",
         unit="kWh",
         icon="mdi:chart-areaspline",
@@ -1117,6 +1173,7 @@ STEUERUNG_SENSOREN = [
     # ── P3 · Arbitrage ──────────────────────────────────────────────────────
     SensorDefinition(
         key="eedc_arbitrage_vorschlag_kwh",
+        seit_paket=1,
         name="Arbitrage-Vorschlag",
         unit="kWh",
         icon="mdi:swap-vertical-bold",
@@ -1129,6 +1186,7 @@ STEUERUNG_SENSOREN = [
     # ── P5 · bestes Fenster ─────────────────────────────────────────────────
     SensorDefinition(
         key="eedc_bestes_fenster_ab",
+        seit_paket=1,
         name="Bestes Fenster ab",
         unit="",
         icon="mdi:calendar-clock",
@@ -1145,6 +1203,7 @@ STEUERUNG_SENSOREN = [
     # ── P6 · Abweichungs-Ampel ──────────────────────────────────────────────
     SensorDefinition(
         key="eedc_prognose_abweichung_heute_prozent",
+        seit_paket=1,
         name="Prognose-Abweichung heute",
         unit="%",
         icon="mdi:chart-bell-curve",
@@ -1154,6 +1213,7 @@ STEUERUNG_SENSOREN = [
     ),
     SensorDefinition(
         key="eedc_prognose_auffaellig",
+        seit_paket=1,
         name="Prognose-Abweichung auffällig",
         unit="",
         icon="mdi:alert-outline",
@@ -1176,6 +1236,7 @@ STEUERUNG_SENSOREN = [
     # als `state_class` ist dagegen richtig: es ist ein Momentanwert.
     SensorDefinition(
         key="eedc_bezugspreis_jetzt_cent",
+        seit_paket=1,
         name="Bezugspreis jetzt",
         unit="ct/kWh",
         icon="mdi:cash-clock",
@@ -1188,6 +1249,7 @@ STEUERUNG_SENSOREN = [
     ),
     SensorDefinition(
         key="eedc_einspeiseverguetung_cent",
+        seit_paket=1,
         name="Einspeisevergütung",
         unit="ct/kWh",
         icon="mdi:transmission-tower-export",
@@ -1197,6 +1259,7 @@ STEUERUNG_SENSOREN = [
     ),
     SensorDefinition(
         key="eedc_eigenverbrauch_wert_cent",
+        seit_paket=1,
         name="Eigenverbrauch wert",
         unit="ct/kWh",
         icon="mdi:home-lightning-bolt",
@@ -1206,6 +1269,7 @@ STEUERUNG_SENSOREN = [
     ),
     SensorDefinition(
         key="eedc_speicher_strom_kosten_cent",
+        seit_paket=1,
         name="Speicherstrom kostet",
         unit="ct/kWh",
         icon="mdi:battery-arrow-down",
@@ -1215,6 +1279,7 @@ STEUERUNG_SENSOREN = [
     ),
     SensorDefinition(
         key="eedc_speicher_netzladen_kosten_cent",
+        seit_paket=1,
         name="Netzladen kostet",
         unit="ct/kWh",
         icon="mdi:transmission-tower-import",
@@ -1224,6 +1289,7 @@ STEUERUNG_SENSOREN = [
     ),
     SensorDefinition(
         key="eedc_speicher_leer_um_ts",
+        seit_paket=1,
         name="Speicher leer um",
         unit="",
         icon="mdi:battery-alert-variant-outline",
@@ -1233,6 +1299,7 @@ STEUERUNG_SENSOREN = [
     ),
     SensorDefinition(
         key="eedc_speicher_reicht_bis_mitternacht",
+        seit_paket=1,
         name="Speicher reicht bis Mitternacht",
         unit="",
         icon="mdi:battery-clock",
@@ -1242,6 +1309,7 @@ STEUERUNG_SENSOREN = [
     ),
     SensorDefinition(
         key="eedc_abregelung_heute_kwh",
+        seit_paket=1,
         name="Abregelung heute",
         unit="kWh",
         icon="mdi:scissors-cutting",
@@ -1253,6 +1321,7 @@ STEUERUNG_SENSOREN = [
     ),
     SensorDefinition(
         key="eedc_einspeisung_unerwuenscht",
+        seit_paket=1,
         name="Einspeisung unerwünscht",
         unit="",
         icon="mdi:cash-minus",
@@ -1277,6 +1346,7 @@ STEUERUNG_SENSOREN = [
 SONSTIGES_SENSOREN = [
     SensorDefinition(
         key="sonstiges_verbrauch_monat_kwh",
+        seit_paket=1,
         name="Verbrauch (Monat)",
         unit="kWh",
         icon="mdi:power-plug",
@@ -1287,6 +1357,7 @@ SONSTIGES_SENSOREN = [
     ),
     SensorDefinition(
         key="sonstiges_fenster_ab",
+        seit_paket=1,
         name="Bestes Fenster ab",
         unit="",
         icon="mdi:calendar-clock",
