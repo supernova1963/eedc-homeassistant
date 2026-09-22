@@ -12,7 +12,7 @@ Liefert die Vorausschau-Sensoren für `calculate_anlage_sensors()`:
   - „Speicher voll um" (SoC-Simulation ab AKTUELLEM Speicherstand)
   - die eedc-Stundenprofile heute + Tag+1/2/3 (als Sensor-Attribut, kein
     eigenes Topic)
-  - seit v4.0.50 (S3/P1) die **Verbrauchs**-Stundenreihe von Modell A samt
+  - seit eedc@ha Teil 1 (S3/P1, 21.09.2026) die **Verbrauchs**-Stundenreihe von Modell A samt
     ihrem WP-Anteil und der Temperaturvorhersage — der Rohstoff der
     Überschuss-Prognose (§5/P2) und der Fenster-Sensoren
 
@@ -208,7 +208,7 @@ async def berechne_prognose_export(db, anlage, *, skip_jitter: bool = False) -> 
             "verbrauch_profil_tage": verbrauch.profil_tage if verbrauch else None,
             "verbrauch_profil_slots": verbrauch.profil_slots if verbrauch else None,
             # ── S3/P1: die Stundenreihen von Modell A ───────────────────────
-            # Sie verlassen den Dienst ab v4.0.50 als Attribut; die Tagessumme
+            # Sie verlassen den Dienst seit S3/P1 als Attribut; die Tagessumme
             # daneben bleibt unveraendert. ⚠ Ohne individuelles Profil ist
             # `verbrauch` None — dann gibt es KEINE Reihe und keinen Sensor
             # (N-332), nicht eine Reihe aus Nullen.

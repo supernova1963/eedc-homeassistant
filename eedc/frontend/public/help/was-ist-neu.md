@@ -141,12 +141,43 @@ diese Vorab-Version, nicht ein veröffentlichtes Release:
   richtigen Stunde. **Wer eine Automation auf die alten Zeiten gebaut hat,
   verschiebt sie um eine Stunde.**
 
+**Der REST-Weg bekommt die Attribute mit.** Wer die Sensoren statt über MQTT per
+`rest`-Plattform einbindet (das YAML-Snippet unter *Einstellungen → Integration*),
+sah bis hierher nur den nackten Wert und den Hinweis-Satz — Stundenreihen, Fenster
+und Quellenangaben endeten an der REST-Grenze. Jetzt liefert die Export-Adresse je
+Sensor das Feld `attribute` mit demselben Inhalt wie über MQTT; das bisherige Feld
+`hinweis` bleibt daneben stehen, bestehende Einbindungen laufen unverändert weiter.
+
 **Und aufgeräumt:** Wer eedc vor März 2026 installiert hat, hat in Home Assistant
 noch Entitäten `number.eedc_…_start` stehen — sie stammen aus einer alten
 Erfassungsweise und zeigen seither „unbekannt". **„Sensoren entfernen" nimmt sie
-jetzt mit zurück.** Entitäten anderer Integrationen bleiben unberührt.
+jetzt mit zurück.** Entitäten anderer Integrationen bleiben unberührt. Was liegen
+bleibt, sind die Monatsabschluss-Nachrichten auf dem Broker — sie sind keine
+Sensoren, und ein Abschluss wiederholt sich nicht.
 
 → [Sensor-Referenz §11](?doc=sensor-referenz) · [Einstellungen → Integration → MQTT-Export](?doc=handbuch-einstellungen)
+
+### „Größerer Speicher?" und „Speicher-Potential" rechnen nur noch mit dem Speicher, der heute bei dir steht
+
+**Betrifft dich das?** Nur, wenn du einen Speicher gegen einen anderen getauscht und das alte
+Gerät — wie empfohlen — mit **Stilllegungsdatum** stehen gelassen hast. Bei einem einzigen
+Speicher ändert sich nichts.
+
+**Was war:** Beide Planungs-Sichten unter *Komponenten → Speicher* nahmen als Ausgangsbasis
+**alle** Speicher deiner Anlage, auch die stillgelegten. Ein Anwender sah so 15,3 kWh statt seiner
+10,24 kWh — die Differenz war sein abgelöstes Gerät. Und weil eedc beim Wirkungsgrad den
+**schlechtesten** Wert aller Speicher nimmt, drückte das alte Gerät auch die Rechnung dauerhaft
+nach unten. Die Empfehlung ging damit von mehr und schlechterem Speicher aus, als da ist, und
+riet eher zu wenig Zubau.
+
+**Was jetzt:** Kapazität, Wirkungsgrad und die Schwelle „Speicher leer" kommen aus den Geräten,
+die **heute** laufen. Ein stillgelegtes oder deaktiviertes Gerät bleibt in deiner Historie —
+die Vergangenheit rechnet weiter mit dem Speicher, der damals dastand —, aber es zählt nicht
+mehr zur Basis der Frage „lohnt sich ein größerer?".
+
+**Was du tun musst:** Nichts. Deine Erfassung als zweites Gerät mit Stilllegungsdatum war und
+bleibt der richtige Weg. Danke an **Radiocarbonat** für die Meldung mit den Zahlen, die den
+Fehler auf den Punkt gebracht haben.
 
 ---
 
