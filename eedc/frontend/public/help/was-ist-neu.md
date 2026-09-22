@@ -53,7 +53,11 @@ unter anderem:
 
 ⚠ **Es bleiben Vorschläge.** eedc schaltet nichts und ruft nichts auf — es nennt
 ein Fenster und einen Betrag. Was daraus folgt, entscheidest du in deiner
-Automation.
+Automation. **Drei fertige Beispiele zum Kopieren** stehen in der Sensor-Referenz
+(§11, am Ende): Speicher schonen, solange Netzstrom billiger ist als Speicherstrom ·
+aus dem Netz laden, wenn die Kilowattstunde unter deiner Grenze bleibt · einen
+Heizstab in die Abregelung legen. Dort steht auch, wie Home Assistant die
+Entity-IDs der eedc-Sensoren bildet — sie tragen deinen Anlagennamen.
 
 **Die 28 neuen Sensoren — damit du vor dem Update weißt, was kommt.** Alle sind
 standardmäßig **an** (so wie jeder eedc-Sensor); abwählen kannst du sie unter

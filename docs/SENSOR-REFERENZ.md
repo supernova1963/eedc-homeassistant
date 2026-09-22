@@ -675,7 +675,7 @@ Bis September 2026 hat eedc genau **eine** Sorte HA-Entität angelegt: `sensor`.
 
 ⭐ **Warum das wichtiger ist, als es klingt.** Bliebe stattdessen einfach der letzte Zustand stehen, bekäme eine Automation ihn weiter als Wahrheit geliefert — ein ausgefallener Preisabruf ließe `eedc_guenstige_stunde` womöglich dauerhaft auf `ON` stehen, und das Auto lüde zur teuersten Stunde. Ein fehlender Eingang muss sichtbar sein; „nicht verfügbar" ist die einzige Form, die HA dafür kennt.
 
-**Was das für Automationen heißt:** Eine Bedingung `is_state('binary_sensor.eedc_guenstige_stunde', 'on')` ist bei einem Ausfall von selbst `false` — sie löst nicht mehr fälschlich aus. Wer den Unterschied zwischen „aus" und „keine Daten" ausdrücklich behandeln will, fragt `states(...) == 'unavailable'` ab. Für einen **gewöhnlichen Sensor** gilt das *nicht*: der zeigt bei fehlendem Wert weiterhin „unbekannt" (`unknown`) und bleibt verfügbar — dort ist der leere Wert selbst die Aussage.
+**Was das für Automationen heißt:** Eine Bedingung `is_state('binary_sensor.eedc_haus_gunstige_stunde', 'on')` (Anlage „Haus" — die Entity-ID trägt deinen Anlagennamen, s. die Automations-Beispiele am Ende von §11) ist bei einem Ausfall von selbst `false` — sie löst nicht mehr fälschlich aus. Wer den Unterschied zwischen „aus" und „keine Daten" ausdrücklich behandeln will, fragt `states(...) == 'unavailable'` ab. Für einen **gewöhnlichen Sensor** gilt das *nicht*: der zeigt bei fehlendem Wert weiterhin „unbekannt" (`unknown`) und bleibt verfügbar — dort ist der leere Wert selbst die Aussage.
 
 ### Stufe 3 je Gerät — Fenster mit Betrag
 
@@ -858,12 +858,16 @@ schließt daraus, dass eedc sie nicht liefert. Sie sind da — als Attribut, nic
 
 Die drei Vorlagen lassen sich unverändert in *Entwicklerwerkzeuge → Vorlage* kopieren. Wer eine
 davon als Sensor haben will, setzt sie in `configuration.yaml` unter `template: - sensor:` mit
-`state: >`.
+`state: >`. **Sie nehmen eine Anlage namens „Haus" an:** Home Assistant bildet die Entity-ID aus dem
+Gerätenamen `eedc - <Anlage>` und dem Anzeigenamen des Sensors („Börsenpreis-Rang", Umlaut ohne
+Punkte), also `sensor.eedc_haus_borsenpreis_rang` — an einer Anlage „Winterborn" heißt er
+`sensor.eedc_winterborn_borsenpreis_rang`. Setz deinen Anlagennamen ein; welche ID dein Sensor trägt,
+zeigt *Einstellungen → Geräte & Dienste → MQTT*, Gerät „eedc - *dein Anlagenname*".
 
 **1) Der Tageshöchstpreis**
 
 ```jinja
-{%- set p = state_attr('sensor.eedc_preis_rang','rang_profil') or [] -%}
+{%- set p = state_attr('sensor.eedc_haus_borsenpreis_rang','rang_profil') or [] -%}
 {{ (p | map(attribute='preis_cent') | max | round(2)) if p else 'unbekannt' }}
 ```
 
@@ -872,7 +876,7 @@ Für morgen dasselbe mit `rang_profil_morgen` — aber erst, wenn `morgen_verfue
 **2) Die Ränge mit ihren Preisen**
 
 ```jinja
-{%- set p = state_attr('sensor.eedc_preis_rang','rang_profil') or [] -%}
+{%- set p = state_attr('sensor.eedc_haus_borsenpreis_rang','rang_profil') or [] -%}
 {%- for s in p | rejectattr('rang','eq',99) | sort(attribute='stunde') %}
 {{ '%02d'|format(s.stunde) }}:00 Uhr | Rang {{ s.rang }} | {{ s.preis_cent | round(2) }} ct
 {%- endfor -%}
@@ -888,8 +892,8 @@ Für morgen dasselbe mit `rang_profil_morgen` — aber erst, wenn `morgen_verfue
 
 ```jinja
 {%- set eta = 0.90 -%}
-{%- set heute  = state_attr('sensor.eedc_preis_rang','rang_profil') or [] -%}
-{%- set morgen = state_attr('sensor.eedc_preis_rang','rang_profil_morgen') or [] -%}
+{%- set heute  = state_attr('sensor.eedc_haus_borsenpreis_rang','rang_profil') or [] -%}
+{%- set morgen = state_attr('sensor.eedc_haus_borsenpreis_rang','rang_profil_morgen') or [] -%}
 {%- set r = namespace(reihe=[]) -%}
 {%- for s in heute if s.stunde >= now().hour -%}
   {%- set r.reihe = r.reihe + [{'t': s.stunde, 'p': s.preis_cent}] -%}
@@ -928,6 +932,184 @@ verwendbar. `eta` ist dein Speicher-Wirkungsgrad — trag deinen eigenen Wert ei
 > ⚠ **Der Tag hat nicht immer 24 Stunden.** Am Ende der Sommerzeit fehlt die zweite Zwei-Uhr-
 > Stunde, im Frühjahr die Stunde 2 ganz; `rang_profil` hat dann 23 Einträge. Alle drei Vorlagen
 > laufen darüber, weil keine auf eine feste Länge prüft — wer eigene baut, prüft es auch nicht.
+
+### Drei Automationen, die auf diesen Sensoren aufsetzen
+
+eedc nennt Fenster, Preise und Mengen — **schalten tust du.** Die drei Beispiele zeigen, wie
+eine HA-Automation die Sensoren dieser Gruppe liest. Sie sind vollständig, aber jede enthält
+**eine Zeile, die du ersetzen musst:** die Entität deines Geräts (Speicher, Wallbox, Heizstab). Wie
+dein Speicher „nicht entladen" oder „aus dem Netz laden" heißt, weiß nur seine Integration —
+eedc kennt kein Schaltelement und erfindet keins.
+
+Die YAML-Blöcke sind so geschrieben, dass sie sich unter *Einstellungen → Automationen → Neue
+Automation → ⋮ → In YAML bearbeiten* einfügen lassen. **Die Entity-IDs darin gelten für eine Anlage
+namens „Haus"** — Home Assistant bildet die ID aus dem Gerätenamen `eedc - <Anlage>` und dem
+**Anzeigenamen** des Sensors, nicht aus seinem Schlüssel: aus `eedc_bezugspreis_jetzt_cent` an der
+Anlage „Winterborn" wird `sensor.eedc_winterborn_bezugspreis_jetzt`, aus dem Schalter „Speicher
+voll" `binary_sensor.eedc_winterborn_speicher_voll`; Umlaute fallen weg (`borsenpreis_rang`,
+`gunstige_stunde`). Welche ID dein Sensor trägt, zeigt *Einstellungen → Geräte & Dienste → MQTT*, Gerät „eedc - *dein Anlagenname*". Alle drei nutzen native Bedingungen
+(`numeric_state`, `state`) statt Vorlagen, wo Home Assistant das kann; nur das dritte Beispiel
+liest eine Stundenreihe und braucht dafür eine Vorlage.
+
+> **Zwei Eigenschaften der Sensoren, auf die sich die Beispiele verlassen.** Erstens: ein
+> `binary_sensor` wird bei fehlender Grundlage **nicht verfügbar** — eine Bedingung auf `on` ist
+> dann von selbst falsch, die Automation schaltet nichts (s. oben). Zweitens: ein Sensor, den eedc
+> nicht bilden kann, **fehlt** — `eedc_speicher_netzladen_kosten_cent` gibt es nur für Speicher mit
+> „lädt aus dem Netz", `eedc_abregelung_heute_kwh` nur mit gepflegter Wechselrichter-Grenze.
+> Fehlt der Sensor, läuft die Automation ins Leere, ohne Fehler. Prüfe vor dem Bau in
+> *Einstellungen → Integration → MQTT-Export*, ob er bei dir entsteht.
+
+**1) Speicher schonen, solange Netzstrom billiger ist als Speicherstrom**
+
+Strom aus dem Speicher kostet die entgangene Einspeisevergütung geteilt durch den Wirkungsgrad
+(`eedc_speicher_strom_kosten_cent`, bei der Demo-Anlage 9,8 ct). In einer Stunde, in der der
+Bezugspreis darunter liegt — bei einem dynamischen Tarif nachts oder bei negativen Börsenpreisen —
+ist es günstiger, den Speicher zu **halten** und den Haushalt aus dem Netz zu versorgen. Die
+Automation vergleicht die beiden Sensoren bei jedem neuen Preis und stellt den Speicher auf
+„nicht entladen", solange das gilt.
+
+```yaml
+alias: "eedc — Speicher schonen bei billigem Netz"
+description: >
+  Solange der Bezugspreis der laufenden Stunde unter den Kosten einer Speicher-Kilowattstunde
+  liegt, wird der Speicher nicht entladen. Beide Zahlen kommen von eedc; die Schalt-Entität
+  ist die des Speichers.
+mode: single
+triggers:
+  - trigger: state
+    entity_id: sensor.eedc_haus_bezugspreis_jetzt
+    note: "eedc publiziert zur vollen Stunde einen neuen Preis — das ist der Takt."
+actions:
+  - if:
+      - condition: numeric_state
+        entity_id: sensor.eedc_haus_bezugspreis_jetzt
+        below: sensor.eedc_haus_speicherstrom_kostet
+        note: "Netz billiger als Speicher: halten."
+    then:
+      - action: select.select_option
+        target:
+          entity_id: select.speicher_betriebsmodus   # ← Entität deines Speichers
+        data:
+          option: "Entladung sperren"                # ← Wortlaut deiner Integration
+    else:
+      - action: select.select_option
+        target:
+          entity_id: select.speicher_betriebsmodus   # ← Entität deines Speichers
+        data:
+          option: "Automatik"                        # ← Wortlaut deiner Integration
+```
+
+Bei einem **Festpreis** greift der `then`-Zweig praktisch nie (30 ct gegen 9,8 ct) — die
+Automation ist dann harmlos, aber nutzlos. Sie ist für dynamische Tarife gedacht; dort trägt
+`eedc_bezugspreis_jetzt_cent` den Endpreis inklusive abgeleitetem Aufschlag, nicht den nackten
+Börsenpreis (Attribut `preisquelle`).
+
+**2) Aus dem Netz laden, wenn die Kilowattstunde unter deiner Grenze bleibt**
+
+`eedc_speicher_netzladen_kosten_cent` ist der Bezugspreis geteilt durch den Wirkungsgrad — also
+das, was eine später *entnommene* Netz-Kilowattstunde wirklich kostet. Die Grenze legst du in
+einem Zahlen-Helfer fest (*Einstellungen → Geräte & Dienste → Helfer → Zahl*, hier
+`input_number.netzladen_grenze_cent`); so änderst du sie, ohne die Automation anzufassen. Geladen
+wird nur, wenn der Speicher nach heutiger Simulation **nicht** bis Mitternacht reicht — sonst
+würdest du Netzstrom einlagern, den die PV am Tag ohnehin liefert.
+
+```yaml
+alias: "eedc — Netzladen unter Preisgrenze"
+description: >
+  Startet die Netzladung, wenn eine aus dem Speicher entnommene Netz-Kilowattstunde unter der
+  eigenen Grenze kostet und der Speicher heute nicht bis Mitternacht reicht; beendet sie, sobald
+  eine der Bedingungen fällt oder der Speicher voll ist.
+mode: single
+triggers:
+  - trigger: state
+    entity_id:
+      - sensor.eedc_haus_netzladen_kostet
+      - binary_sensor.eedc_haus_speicher_reicht_bis_mitternacht
+      - binary_sensor.eedc_haus_speicher_voll
+    note: "Jeder dieser drei Sensoren kann die Entscheidung kippen."
+actions:
+  - if:
+      - condition: numeric_state
+        entity_id: sensor.eedc_haus_netzladen_kostet
+        below: input_number.netzladen_grenze_cent
+      - condition: state
+        entity_id: binary_sensor.eedc_haus_speicher_reicht_bis_mitternacht
+        state: "off"
+        note: "Bei »nicht verfügbar« (keine Simulation möglich) wird nicht geladen."
+      - condition: state
+        entity_id: binary_sensor.eedc_haus_speicher_voll
+        state: "off"
+    then:
+      - action: switch.turn_on
+        target:
+          entity_id: switch.speicher_netzladen      # ← Entität deines Speichers
+    else:
+      - action: switch.turn_off
+        target:
+          entity_id: switch.speicher_netzladen      # ← Entität deines Speichers
+```
+
+Wer stattdessen der **Menge** folgen will, nimmt `eedc_arbitrage_vorschlag_kwh` (empfohlene
+Netzladung heute, mit `stunden` als Liste der günstigen Stunden) — er entsteht nur, wenn sich
+Laden und späteres Entladen nach Abzug der Verluste lohnt.
+
+**3) Einen Verbraucher in die Abregelung legen**
+
+Was der Wechselrichter an seiner Grenze abregelt, entsteht gar nicht erst. Ein Heizstab, eine
+Poolpumpe oder ein Warmwasserboiler läuft in diesen Stunden also mit Strom, der sonst verloren
+wäre — billiger als jedes Überschuss-Fenster. `eedc_abregelung_heute_kwh` trägt in
+`stundenprofil_kwh` je Stunde die erwartete Kappung (24 Werte, Index 0 = 23–00 Uhr des Vortags,
+Index 15 = 14–15 Uhr) und in `rest_heute_kwh`, was heute noch bevorsteht. Eine Stundenreihe
+lässt sich nicht nativ lesen — hier ist die Vorlage die richtige Form.
+
+```yaml
+alias: "eedc — Heizstab in die Abregelung"
+description: >
+  Schaltet den Heizstab ein, solange eedc für die laufende Stunde eine Abregelung an der
+  Wechselrichter-Grenze erwartet, und danach wieder aus. Die Reihe ist eine Prognose auf der
+  Rohvorhersage (Attribut skala) — Größenordnung und Uhrzeiten, keine Messung.
+mode: single
+triggers:
+  - trigger: state
+    entity_id: sensor.eedc_haus_abregelung_heute
+    note: "Feuert bei jedem Publish, auch wenn sich nur die Attribute ändern."
+  - trigger: time_pattern
+    minutes: 1
+    note: "Zusätzlich zur vollen Stunde, falls der Publish später kommt."
+variables:
+  kappung_jetzt_kwh: >-
+    {% set p = state_attr('sensor.eedc_haus_abregelung_heute', 'stundenprofil_kwh') or [] %}
+    {% set i = now().hour + 1 %}
+    {{ (p[i] | float(0)) if p | length > i else 0 }}
+actions:
+  - if:
+      - condition: numeric_state
+        entity_id: sensor.eedc_haus_abregelung_heute
+        attribute: rest_heute_kwh
+        above: 0.5
+        note: "Heute steht überhaupt noch eine nennenswerte Kappung bevor."
+      - "{{ kappung_jetzt_kwh > 0.2 }}"
+    then:
+      - action: switch.turn_on
+        target:
+          entity_id: switch.heizstab                # ← dein Verbraucher
+    else:
+      - action: switch.turn_off
+        target:
+          entity_id: switch.heizstab                # ← dein Verbraucher
+```
+
+`now().hour + 1` ist der Index der **laufenden** Stunde: die Reihe ist rückwärts beschriftet
+(Index 15 = 14:00–15:00), also liegt 14:37 Uhr in Index 15. Um 23 Uhr gibt es keinen Eintrag
+(er wäre Index 24 — die Stunde gehört schon zur Reihe von morgen), die Vorlage liefert dann 0;
+für einen PV-Verbraucher ist das kein Verlust. Die Schwellen (0,5 kWh Rest, 0,2 kWh in der Stunde)
+sind Beispiele — bei einem 3-kW-Heizstab lohnt eine Stunde mit 0,2 kWh Kappung kaum, bei einer
+Poolpumpe mit 0,5 kW schon.
+
+> ⚠ **Was keins der drei Beispiele tut:** einen Live-Wert lesen. `eedc_ueberschuss_jetzt_kw` ist ein
+> Stundenmittel und bis zu 15 Minuten alt; wer eine Wallbox nach dem *aktuellen* Überschuss regeln
+> will, braucht dafür die Leistungssensoren seines Zählers, nicht eedc. eedc liefert die Planung
+> für heute — Fenster, Reihen, Preise —, und die drei Beispiele bleiben in genau diesem Rahmen.
 
 ---
 
