@@ -27,7 +27,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Changed
 
-- **Intern: `GET /api/ha/export/mqtt/abwahl` trägt ein Antwortmodell.0.50 das Feld `neues_paket` liefert. Die Antwort selbst ist unverändert.
+- **Intern: `GET /api/ha/export/mqtt/abwahl` trägt ein Antwortmodell.** OpenAPI zeigt jetzt, dass die Route seit 4.0.50 das Feld `neues_paket` liefert. Die Antwort selbst ist unverändert.
 
 - **Intern: drei Park-Wächter sehen mehr.** (1) Eine Fokus-Kachel mit einzeln parkbaren Kindern muss ein Gate auf die **Kinder-IDs** tragen — eine umhüllende Park-Leiste genügt nicht mehr; sie parkt die Kachel als ein Element und sagt nichts über den Fall, dass jemand alle Kinder einzeln wegräumt. (2) Trägt in einer Kennzahlen-Leiste **eine** Kachel eine Park-ID, müssen es alle tun; eine ohne war für beide bisherigen Regeln unsichtbar. (3) Der ID-Sammler liest keine Kommentare mehr — eine auskommentierte Park-Leiste galt ihm als Erzeugungsstelle und hätte die Lücke verdeckt, gegen die er gebaut ist.
 
