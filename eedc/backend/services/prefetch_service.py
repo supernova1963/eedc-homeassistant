@@ -40,7 +40,9 @@ logger = logging.getLogger(__name__)
 PREFETCH_JITTER_MAX = 60  # Ein Jitter pro Durchlauf, nicht pro Call
 
 
-async def prefetch_all_prognosen(skip_jitter: bool = False) -> dict:
+async def prefetch_all_prognosen(
+    skip_jitter: bool = False, heute: date | None = None,
+) -> dict:
     """
     Scheduler-Job: Prefetcht Solar- und Wetterprognosen für alle Anlagen.
 
@@ -49,6 +51,8 @@ async def prefetch_all_prognosen(skip_jitter: bool = False) -> dict:
 
     Args:
         skip_jitter: True beim Kaltstart-Prefetch (kein Wartezeit gewünscht).
+        heute: Stichtag (Default: heutiges Datum). Nur für Proben — der Job
+            selbst übergibt ihn nie.
     """
     if not skip_jitter:
         await asyncio.sleep(random.uniform(5, PREFETCH_JITTER_MAX))
@@ -65,7 +69,7 @@ async def prefetch_all_prognosen(skip_jitter: bool = False) -> dict:
 
         for anlage in anlagen:
             try:
-                result = await _prefetch_for_anlage(anlage, db)
+                result = await _prefetch_for_anlage(anlage, db, heute=heute)
                 results[anlage.id] = result
             except Exception as e:
                 logger.warning(f"Prefetch Anlage {anlage.id}: {type(e).__name__}: {e}")
@@ -76,8 +80,12 @@ async def prefetch_all_prognosen(skip_jitter: bool = False) -> dict:
     return results
 
 
-async def _prefetch_for_anlage(anlage: Anlage, db) -> dict:
+async def _prefetch_for_anlage(
+    anlage: Anlage, db, heute: date | None = None,
+) -> dict:
     """Prefetcht Solar-Prognose und Wetter-Forecast für eine Anlage."""
+    if heute is None:
+        heute = date.today()
     wetter_modell = anlage.wetter_modell or "auto"
 
     # PV-Module + Balkonkraftwerke laden
@@ -171,7 +179,7 @@ async def _prefetch_for_anlage(anlage: Anlage, db) -> dict:
     # ── Heutige PV-Prognose in DB persistieren (für Lernfaktor) ──
     # Erster Result ist die PV-Prognose (single oder multi); der Snapshot deckt
     # alle Horizonte, gelesen wird hier nur der heutige Tag.
-    pv_heute_kwh = _extract_heute_kwh(results[0], has_multi)
+    pv_heute_kwh = _extract_heute_kwh(results[0], has_multi, heute)
     # #306: Bei Multi-String prüfen, ob alle Orientierungsgruppen geliefert
     # haben. Ein unvollständiger Fan-out lieferte einen kollabierten Solo-
     # String/BKW-Wert; den frieren wir NICHT als heutige OpenMeteo-Tages-
@@ -206,14 +214,73 @@ async def _prefetch_for_anlage(anlage: Anlage, db) -> dict:
             "Prefetch Anlage %s: Multi-String-Prognose unvollständig — "
             "OpenMeteo-Tageswert nicht eingefroren (#306)", anlage.id,
         )
-    if om_heute_kwh is not None or solcast_kwh is not None:
+
+    # ── N-547: Day-Ahead-Profile über den Kanon ───────────────────────────
+    #
+    # ⭐ **Warum der Prefetch das jetzt tut, und nicht mehr nur der Live-Pfad.**
+    # Bis 22.09.2026 entstanden `pv_prognose_stundenprofil` (die Vorhersage)
+    # und damit die ganze Lern-Grundlage des Korrekturprofils **nur beim ersten
+    # Seitenbesuch** von *Cockpit → Live*. Wer eedc über Tage nicht öffnet,
+    # bekam keine Bins — und das Lern-SOLL braucht dieselbe Reihe. Der Prefetch
+    # läuft ohnehin alle 45 Minuten und hat den Fan-out gerade eben geholt;
+    # der first-write-wins-Schnappschuss wandert damit vom „ersten Besuch" auf
+    # den ersten Lauf nach Mitternacht — also auf den Zeitpunkt, der
+    # „Day-Ahead" überhaupt bedeutet.
+    #
+    # ⛔ **0 zusätzliche Open-Meteo-Abrufe, und das ist keine Hoffnung.** Der
+    # Kanon fragt je Orientierungsgruppe `get_solar_prognose` — deren
+    # HTTP-Cache-Schlüssel ist `gti:lat:lon:neigung:ausrichtung:abruf_days:
+    # modell` (`solar_forecast_service:230-236`), also genau der, den die
+    # Abrufe oben soeben gesetzt haben; `kwp` und `system_losses` stehen nicht
+    # darin, sie wirken erst beim lokalen Umrechnen. ⚠ `KANON_MIN_DAYS` (= 4,
+    # nicht 1) — derselbe Horizont wie der Live-Pfad. Mit `days=1` läge nach
+    # Mitternacht der Snapshot des Vortages im TTL-Cache und `tage[0]` wäre
+    # `None` (Ü2). ⛔ Die Zahl steht bewusst NICHT als Literal hier:
+    # `test_prognose_snapshot_kanon_a29` verbietet konstante `days=`-Werte in
+    # dieser Datei, weil ein zweiter fester Horizont einen zweiten
+    # Open-Meteo-Cache-Key bedeuten KÖNNTE. Der Kanon-Horizont hat seinen SoT
+    # in `prognose_kanon.KANON_MIN_DAYS`, und dort gehört er hin.
+    kanon_heute = None
+    try:
+        from backend.services.prognose_kanon import (
+            KANON_MIN_DAYS, kanon_tagesprognose,
+        )
+        kanon = await kanon_tagesprognose(
+            db, anlage, days=KANON_MIN_DAYS, skip_jitter=True, heute=heute,
+        )
+        kanon_heute = kanon.tage[0] if (kanon and kanon.tage) else None
+    except Exception as e:
+        logger.debug(f"Prefetch Kanon Anlage {anlage.id}: {type(e).__name__}: {e}")
+
+    # #306 gilt hier wie im Live-Pfad: ein unvollständiger Fan-out friert
+    # nichts ein — auch kein Lern-SOLL. Und ohne Stundenprofil (OpenMeteo-
+    # Schätzpfad) gibt es weder Vorhersage- noch Lern-Reihe.
+    kanon_nutzbar = kanon_heute is not None and kanon_heute.om_vollstaendig
+    pv_stundenprofil = (
+        kanon_heute.profil.stundenprofil_export_kwh
+        if (kanon_nutzbar and kanon_heute.profil is not None)
+        else None
+    )
+    # ⛔ Auch das Tages-SOLL hängt an der Stundenreihe: ohne sie (OpenMeteo-
+    # Schätzpfad) ist `om_kwh` die UNGEKAPPTE Tagessumme — kein Lern-SOLL.
+    hat_lern_reihe = kanon_nutzbar and kanon_heute.om_stundenprofil_kwh is not None
+    lern_stundenprofil = (
+        kanon_heute.om_stundenprofil_kwh if hat_lern_reihe else None
+    )
+    lern_kwh = kanon_heute.om_kwh if hat_lern_reihe else None
+
+    if (om_heute_kwh is not None or solcast_kwh is not None
+            or pv_stundenprofil is not None or lern_kwh is not None):
         try:
             from backend.api.routes.live_wetter import _speichere_prognose
             await _speichere_prognose(
-                anlage.id, date.today(), om_heute_kwh,
+                anlage.id, heute, om_heute_kwh,
                 solcast_kwh=solcast_kwh,
                 solcast_p10_kwh=solcast_p10,
                 solcast_p90_kwh=solcast_p90,
+                pv_stundenprofil=pv_stundenprofil,
+                lern_stundenprofil=lern_stundenprofil,
+                lern_kwh=lern_kwh,
             )
         except Exception as e:
             logger.warning(f"Prefetch Prognose-Persistierung Anlage {anlage.id}: {e}")
@@ -221,12 +288,14 @@ async def _prefetch_for_anlage(anlage: Anlage, db) -> dict:
     return {"status": "ok", "strings": len(strings), "multi": has_multi}
 
 
-def _extract_heute_kwh(result, is_multi: bool) -> float | None:
+def _extract_heute_kwh(
+    result, is_multi: bool, stichtag: date | None = None,
+) -> float | None:
     """Extrahiert den heutigen PV-Ertrag (kWh) aus dem Prognose-Ergebnis."""
     if result is None or isinstance(result, Exception):
         return None
 
-    heute = date.today().isoformat()
+    heute = (stichtag or date.today()).isoformat()
 
     if is_multi:
         # Multi-String: result ist ein dict mit "string_prognosen"

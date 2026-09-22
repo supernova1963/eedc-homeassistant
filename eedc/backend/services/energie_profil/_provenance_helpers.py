@@ -32,6 +32,10 @@ _TZ_SKIP_COLUMNS = frozenset({
     # Stunden-Profile sind interne Caches, keine Aggregat-Werte
     "pv_prognose_stundenprofil", "solcast_prognose_stundenprofil",
     "sfml_prognose_stundenprofil",
+    # N-547: das Lern-SOLL ist ebenfalls ein interner Cache des
+    # Korrekturprofil-Lernens (ein Schreiber, festes Muster) — kein
+    # Aggregat-Wert, den ein Anwender irgendwo abliest.
+    "lern_soll_stundenprofil_kwh", "lern_soll_kwh",
 })
 
 # TagesEnergieProfil:

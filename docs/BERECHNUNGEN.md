@@ -2667,6 +2667,8 @@ Die eedc-Prognose ist die korrigierte OpenMeteo-Prognose; der Skalar-Lernfaktor 
 faktor = Σ(IST_kWh) / Σ(EEDC_Roh_Prognose_kWh)
 ```
 
+> ⚠ **Der Skalar-Lernfaktor hier ist der LEGACY-Faktor** (`live_wetter._get_lernfaktor_detail`) und liest weiter `pv_prognose_kwh`, also die **ungekappte** Rohprognose — N-547 hat ihn bewusst nicht angefasst. Die Skalar-Stufe des **Korrekturprofils** (Stufe 4 der Kaskade) rechnet dagegen seit N-547 gegen `lern_soll_kwh`, also gegen die **gekappte** Summe. Zwei Größen mit ähnlichem Namen, zwei Bezugsgrößen; dass der Legacy-Faktor auf gekappten Anlagen zu niedrig ausfällt, ist ein eigener, benannter Punkt und hier nur vermerkt.
+
 Seit v3.16.15 nutzt eedc eine **saisonale Kaskade** mit den jeweils vorhandenen Daten:
 
 | Stufe | Bedingung | Bezugszeitraum |
@@ -3299,6 +3301,25 @@ Architektur trennt Counter-Felder strikt von kWh-Feldern in `KUMULATIVE_COUNTER_
 **Day-Ahead-Stundenprofil-Snapshot (v3.23.4, intern):**
 
 Zwei JSON-Felder in `TagesZusammenfassung` (`pv_prognose_stundenprofil`, `solcast_prognose_stundenprofil`) speichern den ersten OpenMeteo-/Solcast-Forecast des Tages als 24-Werte-Liste in kWh (Backward-Slot). First-write-wins: spätere Aufrufe am selben Tag überschreiben das Profil nicht. Reine Hintergrund-Datensammlung für künftige Diagnostik (Korrekturprofil-Konzept). Speicher ~80 KB/Jahr/Anlage.
+
+**Geschrieben wird der Schnappschuss seit N-547 vom Prefetch-Job** (alle 45 min, erster Lauf nach Mitternacht) statt beim ersten Besuch von *Cockpit → Live*. Anlagen ohne täglichen Seitenbesuch bekamen vorher gar keins — und damit nie genug Stunden für die Stufen 1–3 der Kaskade.
+
+#### Das Lern-SOLL des Korrekturprofils (N-547, gebaut 22.09.2026)
+
+⛔ **Wogegen gelernt wird, ist nicht dasselbe wie das, was vorhergesagt wurde.** Bis zum 22.09.2026 las der Korrekturprofil-Aggregator sein SOLL aus `pv_prognose_stundenprofil` — der **korrigierten** Kanon-Ausgabe, also dem Produkt genau der Faktoren, die er gerade lernt. Der gepoolte Quotient `Σ IST / Σ SOLL` folgt dann der Abbildung `f ↦ r/f`, und deren Fixpunkt ist **√r, nicht r**: bei einem wahren Verhältnis r = 0,85 konvergieren die Faktoren auf 0,922 — **+8,5 % an jedem Tag**.
+
+Zwei Felderpaare, zwei Fragen:
+
+| Feld | Frage, die es beantwortet | Inhalt |
+| --- | --- | --- |
+| `pv_prognose_stundenprofil` / `pv_prognose_kwh` | *Was hat eedc vorhergesagt?* (Genauigkeit, Stratifizierung) | korrigiert + gekappt bzw. **roh** für den Tageswert |
+| `lern_soll_stundenprofil_kwh` / `lern_soll_kwh` | *Wogegen darf eedc lernen?* | **roh, unkorrigiert, aber gekappt** (`KanonTag.om_stundenprofil_kwh` / `om_kwh`) |
+
+**Warum gekappt.** Die AC-Grenze des Wechselrichters ist keine Prognoseabweichung, sondern eine physikalische Schranke: oberhalb von ihr *kann* die Anlage nicht liefern. Ein ungekapptes SOLL schriebe diesen Deckel als dauerhaften Fehler in die Mittagsfaktoren.
+
+**Warum der Tageswert `pv_prognose_kwh` roh und UNgekappt bleibt.** Seine drei Leser (Genauigkeits-Tracking, HA-Abweichungs-Ampel, Tages-SOLL im Energieprofil) multiplizieren ihn mit dem Legacy-Lernfaktor; sie erwarten die rohe Lage. Er wurde nur von zwei Schreibern in **zwei verschiedenen** Lagen gefüllt (Prefetch roh, Live korrigiert+gekappt, „letzter gewinnt") — seit N-547 schreiben beide roh (`KanonTag.roh_kwh` = `om_kwh + abregelung_om_kwh`).
+
+**Übergang ohne Bruch (kein Backfill).** Die neuen Felder entstehen ab dem Update; Bestandszeilen bleiben NULL. Damit der erste nächtliche Lauf nicht jeden Bin mit einem leeren Pool überschreibt, gilt je Bin: **der neue Wert ersetzt den alten erst, wenn er das Gate seiner Stufe mit NEUEN Datenpunkten erreicht** (Sonnenstand×Wetter 10 h, Sonnenstand 15 h, Stunde Σ 50 h je Monat, Skalar 7 Tage — dieselben Schwellen, die der Lookup anwendet). Beim Skalar gehören `tage_eingegangen` und `faktor_skalar` zum gehaltenen Wert, sonst fiele Stufe 4 aus. Die Marke je Bin steht in `Korrekturprofil.lern_basis_pro_bin` (`"alt"` | `"neu"`), der Beginn in `lern_umstellung_am`; nach **365 Tagen** endet die Regel (sonst bliebe ein saisonal nie wieder belegter Bin für immer auf seinem alten Wert).
 
 ### Monats-Rollup (rollup_month)
 

@@ -12,10 +12,11 @@ Variante C (`investition_id` gesetzt) und alle Fallback-Stufen ohne
 Schema-Änderung tragen.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
 from sqlalchemy import (
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -113,6 +114,30 @@ class Korrekturprofil(Base):
     # Skalar-Faktor-Wert für schnellen Zugriff (z. B. Diagnose-Header).
     # NULL für nicht-skalare Profil-Typen.
     faktor_skalar: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # ── N-547: woher der Wert eines Bins stammt ───────────────────────────
+    #: Je Bin-Schlüssel `"neu"` | `"alt"` — **`"alt"` heißt: dieser Faktor ist
+    #: noch gegen die eigene Ausgabe gelernt** (zirkulär, s. N-547 im Docstring
+    #: von `TagesZusammenfassung.lern_soll_stundenprofil_kwh`), er wird nur
+    #: gehalten, bis genug Datenpunkte gegen das neue Lern-SOLL aufgelaufen
+    #: sind. Schlüsselraum = der von `datenpunkte_pro_bin` (bei `stunde` also
+    #: `"monat_stunde"`, bei `skalar` `"value"`).
+    #:
+    #: ⛔ **Eigener Container, nicht in `datenpunkte_pro_bin`** (Ü4): dort
+    #: stehen `int`-Zählungen, die der Lookup summiert
+    #: (`korrekturprofil_lookup:123-125`) — eine Zeichenkette daneben würde
+    #: dort mit `int(...)` sterben. `None` = vor N-547 geschrieben.
+    lern_basis_pro_bin: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    #: Beginn der Übergangs-/Keep-Regel für diese Zeile (erster Aggregator-Lauf
+    #: mit N-547). Danach ersetzt ein neuer Bin-Wert den alten erst, wenn er
+    #: das **reale Gate seiner Stufe** mit NEUEN Datenpunkten erreicht.
+    #:
+    #: ⛔ Die Regel endet nach 365 Tagen (`_KEEP_TAGE` im Aggregator) — danach
+    #: Vollersatz wie vor N-547. Ohne dieses Ende blieben saisonal leere Bins
+    #: (Dezember-Stunden einer Anlage, die im Januar dazukam) **für immer** auf
+    #: ihrem alten, zirkulär gelernten Wert stehen.
+    lern_umstellung_am: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
 
     # Relationships
     anlage = relationship("Anlage")

@@ -73,15 +73,25 @@ async def _seed_tag(
     datum: date,
     stunden: dict[int, tuple[float, float]],
 ) -> None:
-    """Ein Tag mit Day-Ahead-Profil + stündlichem IST.
+    """Ein Tag mit Day-Ahead-**Lern-SOLL** + stündlichem IST.
 
-    `stunden` = {stunde: (ist_kw, prognose_kwh)}.
+    `stunden` = {stunde: (ist_kw, soll_kwh)}.
+
+    ⚑ **Feldwechsel N-547 (22.09.2026), Substanz unverändert.** Gesät wurde
+    bis dahin `pv_prognose_stundenprofil` — das Feld, gegen das der Aggregator
+    damals lernte. Seit N-547 lernt er gegen `lern_soll_stundenprofil_kwh`
+    (die rohe, gekappte, UNkorrigierte Reihe), weil das alte Feld seine eigene
+    korrigierte Ausgabe trägt und die Faktoren dadurch auf √r statt r liefen.
+    Diese Datei prüft die **Saisonbin-Kaskade** (Monat → Quartal → Gesamt) und
+    die Lookup-Reihenfolge; beides ist von der Frage, welches Feld das SOLL
+    liefert, unberührt. Die Zahlen und Erwartungen sind unverändert — nur der
+    Eingangskanal heißt anders.
     """
     db.add(
         TagesZusammenfassung(
             anlage_id=anlage_id,
             datum=datum,
-            pv_prognose_stundenprofil=_prog_profil(
+            lern_soll_stundenprofil_kwh=_prog_profil(
                 {h: prog for h, (_, prog) in stunden.items()}
             ),
             stunden_verfuegbar=24,

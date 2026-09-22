@@ -43,6 +43,11 @@ def test_rettungsliste_deckt_alle_prognose_felder():
         "pv_prognose_stundenprofil",
         "solcast_prognose_stundenprofil",
         "sfml_prognose_stundenprofil",
+        # N-547: Lern-SOLL (Stundenreihe + Tagessumme). Diese Menge ist der
+        # DRITTE Ort neben den zwei Listen, die K1 koppelt — K1 vergleicht nur
+        # Liste gegen Liste und merkt nicht, wenn BEIDE ein Feld verlieren.
+        "lern_soll_stundenprofil_kwh",
+        "lern_soll_kwh",
     }
     fehlend = vom_wetter_endpoint_geschrieben - set(_PROGNOSE_FELDER_RETTEN)
     assert not fehlend, (

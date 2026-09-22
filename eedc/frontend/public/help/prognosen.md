@@ -283,6 +283,15 @@ Ein einzelner Faktor korrigiert nur die *Tagessumme*, nicht den *Tagesgang*. Wen
 
 Die **Korrekturprofil-Heatmap** in der Prognose-Auswertung visualisiert genau das (rot = Prognose war zu hoch, grün = zu niedrig, grau = passt).
 
+#### Wogegen eedc vergleicht (seit 22.09.2026)
+
+Verglichen wird das gemessene IST mit der **rohen** Wetterprognose — nicht mit der Zahl, die eedc dir angezeigt hat. Das klingt nach einer Feinheit, ist aber der Unterschied zwischen „richtig" und „dauerhaft 8 % zu hoch": Wer gegen die bereits korrigierte Vorhersage vergleicht, misst seine eigene Korrektur mit und landet auf der **Wurzel** des wahren Verhältnisses. Erntest du tatsächlich 85 % der Rohprognose, ergaben sich vorher Faktoren um 92 %.
+
+Zwei Dinge gehören dazu:
+
+- **Die Wechselrichter-Grenze zählt nicht als Fehler.** Wenn deine Module mittags mehr liefern, als der Wechselrichter abgeben darf, fehlt diese Energie im IST — aber nicht, weil die Prognose falsch lag. eedc vergleicht deshalb gegen die **gekappte** Rohprognose.
+- **Die Umstellung wirkt über Nächte.** Jeder Bereich (Stunde bzw. Sonnenstand) behält seinen bisherigen Faktor, bis genug neue Vergleichstage für ihn aufgelaufen sind — es geht nichts verloren, und es springt nichts. Bereiche, die eine Jahreszeit lang nicht vorkommen, wandern entsprechend später mit.
+
 ---
 
 ## 6. Genauigkeits-Tracking (MAE & Bias)

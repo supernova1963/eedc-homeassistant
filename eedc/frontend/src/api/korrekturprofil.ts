@@ -54,6 +54,15 @@ export interface StratifizierungResponse {
   tep_tage_ohne_wetter: number
   pro_klasse: Record<Wetterklasse, StratifizierungEintrag>
   pro_klasse_stunde: Record<string, StratifizierungEintrag>  // key "klasse.stunde"
+  // N-547: je Profil-Typ die Bin-Marken 'neu' (gegen das rohe, gekappte
+  // Lern-SOLL gelernt) oder 'alt' (noch der zirkulaer gelernte Bestand,
+  // gehalten bis zum Gate seiner Stufe). Schluesselraum wie
+  // `datenpunkte_pro_bin` der jeweiligen Stufe.
+  // `Partial`, weil das Backend nur die Typen liefert, deren Zeile schon
+  // Marken traegt — eine Stufe ohne Profil fehlt im Objekt ganz.
+  lern_basis_pro_bin: Partial<Record<ProfilTyp, Record<string, 'neu' | 'alt'>>>
+  // Beginn der 365-Tage-Uebergangsregel (ISO-Datum) oder null.
+  lern_umstellung_am: string | null
 }
 
 export const getStratifizierung = async (

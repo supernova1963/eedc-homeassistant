@@ -117,6 +117,32 @@ class KanonTag:
     #: `{grenz_id: kW}` — die Grenzen, an denen gekappt wurde.
     grenzen_kw: Optional[dict] = None
 
+    @property
+    def roh_kwh(self) -> Optional[float]:
+        """Die **ungekappte** Roh-Tagessumme (Σ `roh_slots`) — die Lage, in der
+        `TagesZusammenfassung.pv_prognose_kwh` geführt wird.
+
+        ⭐ **Warum abgeleitet und nicht als eigenes Feld.** `om_kwh` ist Σ der
+        **gekappten** Slots, `abregelung_om_kwh` ist Σ(roh − gekappt) über
+        dieselben Slots derselben Schleife (`:515-519`). Ihre Summe ist damit
+        exakt Σ roh — eine zweite gespeicherte Zahl könnte nur noch davon
+        abdriften. Ohne Kappung ist `abregelung_om_kwh` `None` und `om_kwh`
+        bereits die Rohsumme.
+
+        ⛔ **Wozu sie gebraucht wird (N-547, W1).** Zwei Schreiber füllen
+        `pv_prognose_kwh`: der Prefetch alle 45 Minuten mit Σ der rohen
+        OM-Tageswerte je String (ungekappt, unkorrigiert), der Live-Pfad beim
+        Seitenbesuch bis 22.09.2026 mit `eedc_kwh` (korrigiert **und**
+        gekappt). Gleiche Provenance-Quelle, „letzter gewinnt" — dasselbe Feld
+        trug je nach Tageszeit zwei verschiedene Größen, und seine drei Leser
+        (Genauigkeits-Tracking, HA-Export-Schwelle, Energieprofil-Tages-SOLL)
+        multiplizieren es alle mit dem Legacy-Lernfaktor. Seit N-547 schreiben
+        **beide** dieselbe Lage: roh.
+        """
+        if self.om_kwh is None:
+            return None
+        return round(self.om_kwh + (self.abregelung_om_kwh or 0.0), 1)
+
 
 @dataclass
 class KanonPrognose:
@@ -326,6 +352,7 @@ async def kanon_tagesprognose(
     anlage,
     days: int = 4,
     skip_jitter: bool = False,
+    heute: Optional[date] = None,
 ) -> Optional[KanonPrognose]:
     """Berechnet die kanonische PV-Tagesprognose einer Anlage.
 
@@ -337,7 +364,12 @@ async def kanon_tagesprognose(
     if not anlage.latitude or not anlage.longitude:
         return None
 
-    heute = date.today()
+    # `heute` ist injizierbar, damit Proben den Horizont festnageln können
+    # (der Wächter `test_konformitaet_echte_uhr_in_tests.py` verbietet
+    # `date.today()` in neuen Proben, und ein Fake-Forecast muss dieselben
+    # ISO-Daten tragen wie die Schleife unten). Default unverändert.
+    if heute is None:
+        heute = date.today()
     tagesdaten = [heute + timedelta(days=o) for o in range(days)]
     invs = await pv_invs_im_horizont(db, anlage, tagesdaten[0], tagesdaten[-1])
     gruppen = orientierungs_gruppen(invs)

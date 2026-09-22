@@ -61,6 +61,10 @@ _PROGNOSE_FELDER_RETTEN: tuple[str, ...] = (
     "pv_prognose_stundenprofil",
     "solcast_prognose_stundenprofil",
     "sfml_prognose_stundenprofil",
+    # N-547: Lern-SOLL des Korrekturprofils — dieselbe Verlustklasse wie
+    # `pv_prognose_stundenprofil` oben, nur mit anderem Inhalt.
+    "lern_soll_stundenprofil_kwh",
+    "lern_soll_kwh",
 )
 
 

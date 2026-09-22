@@ -11,8 +11,21 @@ docs/archive/KONZEPT-KORREKTURPROFIL.md):
 4. `skalar` — O1+O2-Skalar als letzter Fallback
 
 Datenquelle:
-- Tages-Day-Ahead-Snapshot `TagesZusammenfassung.pv_prognose_stundenprofil`
-  (24 Werte in kWh, vor Sonnenaufgang gefroren)
+- Tages-Day-Ahead-**Lern-SOLL** `TagesZusammenfassung.lern_soll_stundenprofil_kwh`
+  (24 Werte in kWh, vor Sonnenaufgang gefroren) — die rohe, gekappte,
+  **unkorrigierte** OpenMeteo-Reihe.
+
+  ⛔ **Hier stand bis 22.09.2026 `pv_prognose_stundenprofil`, und das war der
+  Fund N-547.** Jenes Feld trägt die **korrigierte** Kanon-Ausgabe, also das
+  Ergebnis genau der Faktoren, die hier gelernt werden. Der Quotient
+  Σ IST / Σ SOLL rechnete damit gegen die eigene Ausgabe: aus
+  `f_neu = IST / (roh × f_alt)` wird über den gepoolten Mittelwert der
+  Fixpunkt von `f ↦ r/f`, also **√r statt r**. Gemessen (V2, 22.09.2026,
+  echtes Verhältnis r = 0,85): 0,922 statt 0,850 — **+8,5 % Überschätzung an
+  jedem Tag**, sichtbar in `eedc_prognose_heute_kwh`, im HA-Sensor und in der
+  Aussicht. Gekappt muss das SOLL sein, weil der Wechselrichter über seiner
+  AC-Grenze nichts liefern KANN; ein ungekapptes SOLL würde die physikalische
+  Grenze als dauerhaften Prognosefehler in die Faktoren schreiben.
 - Stündliches IST `TagesEnergieProfil.pv_kw` (Stundenmittel in kW, numerisch
   = kWh pro Stunden-Slot)
 - Stündliches Wetter `TagesEnergieProfil.bewoelkung_prozent / niederschlag_mm
@@ -50,7 +63,13 @@ from backend.services.wetter.solar_position import (
     solar_position_lokal,
 )
 from backend.services.wetter.utils import WETTERKLASSEN, klassifiziere_stunde
-from backend.services.korrekturprofil_lookup import invalidate_cache
+from backend.services.korrekturprofil_lookup import (
+    MIN_DATENPUNKTE_SONNENSTAND,
+    MIN_DATENPUNKTE_SONNENSTAND_WETTER,
+    MIN_STUNDEN_STUNDE_SAISONBIN,
+    MIN_TAGE_SKALAR,
+    invalidate_cache,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +91,35 @@ ST_MIN_TAGE_MONAT = 15
 ST_MIN_TAGE_QUARTAL = 15
 ST_MIN_TAGE_GESAMT = 7
 ST_GESAMT_FENSTER_TAGE = 30
+
+
+# ── N-547: die Übergangsregel ─────────────────────────────────────────────
+#
+# Die neuen Lern-SOLL-Felder entstehen **ab jetzt** — es gibt keinen Backfill
+# (die alten Zeilen tragen die korrigierte Reihe; sie zurückzurechnen wäre
+# geraten, nicht gemessen). Ohne weitere Vorkehrung würde der erste nächtliche
+# Lauf nach dem Update **alle** Bins mit dem leeren neuen Pool überschreiben:
+# das Korrekturprofil einer Anlage wäre über Nacht weg, und die Prognose fiele
+# wochenlang auf den Legacy-Skalar zurück.
+#
+# Deshalb: je Bin bleibt der alte Wert stehen, **bis das reale Gate seiner
+# Stufe mit NEUEN Datenpunkten erreicht ist**. Die Gates sind nicht neu
+# erfunden, sondern die des Lookups — ein Bin, der sie nicht erreicht, wird
+# dort ohnehin übersprungen; ihn vorher zu ersetzen hieße, einen brauchbaren
+# Faktor gegen einen zu tauschen, den niemand benutzt.
+_GATE_JE_TYP: dict[str, int] = {
+    PROFIL_TYP_SONNENSTAND_WETTER: MIN_DATENPUNKTE_SONNENSTAND_WETTER,  # 10 Stunden je Bin
+    PROFIL_TYP_SONNENSTAND: MIN_DATENPUNKTE_SONNENSTAND,                # 15 Stunden je Bin
+    PROFIL_TYP_STUNDE: MIN_STUNDEN_STUNDE_SAISONBIN,                    # Σ 50 Stunden je Monat
+    PROFIL_TYP_SKALAR: MIN_TAGE_SKALAR,                                 # 7 Tage
+}
+
+# ⛔ **Ende der Keep-Regel.** Ohne Ende bliebe ein Bin, den die Anlage
+# saisonal nie wieder füllt (Dezember-Stunden einer im Januar erweiterten
+# Anlage), **für immer** auf seinem zirkulär gelernten Wert — und niemand
+# sähe es. Nach einem vollen Jahr hatte jeder Bin seine Saison; danach gilt
+# wieder Vollersatz wie vor N-547.
+_KEEP_TAGE = 365
 
 
 def _clamp(faktor: float) -> float:
@@ -160,18 +208,25 @@ class _BinAccumulator:
 async def _lade_tagesprognose(
     db: AsyncSession, anlage_id: int, von: date, bis: date
 ) -> dict[date, list[float]]:
-    """Day-Ahead-Stundenprofile als `{datum: [24 kWh-Werte]}`."""
+    """Day-Ahead-**Lern-SOLL**-Stundenreihen als `{datum: [24 kWh-Werte]}`.
+
+    ⛔ **Nicht `pv_prognose_stundenprofil`** — das ist die korrigierte
+    Vorhersage und damit die eigene Ausgabe dieses Aggregators (N-547, s.
+    Modul-Docstring). Tage vor der Umstellung tragen `NULL` und fallen hier
+    heraus; ihre Bins behalten über `_upsert_profil` ihren alten Faktor, bis
+    genug neue Datenpunkte aufgelaufen sind.
+    """
     result = await db.execute(
         select(
             TagesZusammenfassung.datum,
-            TagesZusammenfassung.pv_prognose_stundenprofil,
-            TagesZusammenfassung.pv_prognose_kwh,
+            TagesZusammenfassung.lern_soll_stundenprofil_kwh,
+            TagesZusammenfassung.lern_soll_kwh,
         ).where(
             and_(
                 TagesZusammenfassung.anlage_id == anlage_id,
                 TagesZusammenfassung.datum >= von,
                 TagesZusammenfassung.datum < bis,
-                TagesZusammenfassung.pv_prognose_stundenprofil.isnot(None),
+                TagesZusammenfassung.lern_soll_stundenprofil_kwh.isnot(None),
             )
         )
     )
@@ -188,24 +243,30 @@ async def _lade_tagesist_skalar(
     """Pro Tag im Zeitraum: `(ist_kwh, prognose_kwh)` als Skalar-Tagesdaten.
 
     IST = Summe `pv_kw` über die 24 Stunden des Tages (kW × 1h = kWh).
-    Prognose = `pv_prognose_kwh` aus TagesZusammenfassung.
+    SOLL = `lern_soll_kwh` aus TagesZusammenfassung (Σ der Lern-SOLL-Slots).
 
-    Unabhängig von `pv_prognose_stundenprofil` — die Skalar-Stufe braucht
-    nur die Tages-Prognose, damit der Live-Pfad auch dann einen
-    Korrekturprofil-Faktor hat, wenn Day-Ahead-Stundenprofile noch nicht
+    ⛔ **Nicht `pv_prognose_kwh`** (N-547). Jenes Feld ist die rohe,
+    **ungekappte** OM-Tagessumme — an einer Anlage mit AC-Grenze liegt es
+    dauerhaft über dem, was die Anlage liefern kann, und der Skalar lernte
+    diesen Deckel als Prognosefehler ein. `lern_soll_kwh` ist dieselbe Reihe
+    **gekappt** und damit die Größe, gegen die sich ein IST fair messen lässt.
+
+    Unabhängig von `lern_soll_stundenprofil_kwh` — die Skalar-Stufe braucht
+    nur das Tages-SOLL, damit der Live-Pfad auch dann einen
+    Korrekturprofil-Faktor hat, wenn Day-Ahead-Stundenreihen noch nicht
     aufgelaufen sind.
     """
     result = await db.execute(
         select(
             TagesZusammenfassung.datum,
-            TagesZusammenfassung.pv_prognose_kwh,
+            TagesZusammenfassung.lern_soll_kwh,
         ).where(
             and_(
                 TagesZusammenfassung.anlage_id == anlage_id,
                 TagesZusammenfassung.datum >= von,
                 TagesZusammenfassung.datum < bis,
-                TagesZusammenfassung.pv_prognose_kwh.isnot(None),
-                TagesZusammenfassung.pv_prognose_kwh > 0,
+                TagesZusammenfassung.lern_soll_kwh.isnot(None),
+                TagesZusammenfassung.lern_soll_kwh > 0,
             )
         )
     )
@@ -237,6 +298,88 @@ async def _lade_tagesist_skalar(
     }
 
 
+def _monats_summen(datenpunkte: Optional[dict]) -> dict[str, int]:
+    """Σ Datenpunkte je Saisonbin aus `{"monat_stunde": n}`.
+
+    Dieselbe Bildung wie im Lookup (`korrekturprofil_lookup:123-125`) — das
+    Gate der `stunde`-Stufe greift dort auf den **Monat**, nicht auf die
+    einzelne Zelle.
+    """
+    summen: dict[str, int] = {}
+    for key, anzahl in (datenpunkte or {}).items():
+        monat = str(key).split("_", 1)[0]
+        summen[monat] = summen.get(monat, 0) + int(anzahl or 0)
+    return summen
+
+
+def _mische_flach(
+    alt_faktoren: dict, alt_datenpunkte: dict, alt_basis: dict,
+    neu_faktoren: dict, neu_datenpunkte: dict, gate: int,
+) -> tuple[dict, dict, dict]:
+    """Bin-weiser Übergang für die flachen Stufen (`{bin: faktor}`).
+
+    Der neue Wert ersetzt den alten nur, wenn er das Gate **mit neuen
+    Datenpunkten** erreicht. Sonst bleibt der alte Wert **samt seiner alten
+    Datenpunktzahl** — sie ist es, die den Lookup passieren lässt; nur den
+    Faktor zu behalten und die Zählung zu ersetzen hieße, den Bin still
+    stillzulegen.
+    """
+    faktoren: dict = {}
+    datenpunkte: dict = {}
+    basis: dict = {}
+    for k in set(alt_faktoren) | set(neu_faktoren):
+        n_neu = int((neu_datenpunkte or {}).get(k, 0) or 0)
+        if k in neu_faktoren and n_neu >= gate:
+            faktoren[k], datenpunkte[k], basis[k] = neu_faktoren[k], n_neu, "neu"
+        elif k in alt_faktoren:
+            faktoren[k] = alt_faktoren[k]
+            datenpunkte[k] = int((alt_datenpunkte or {}).get(k, 0) or 0)
+            # Die Herkunft wird GEERBT, nicht gesetzt: auf einer frisch
+            # aufgesetzten Anlage stammt auch der „alte" Wert schon aus dem
+            # neuen Lern-SOLL. Fehlt der Eintrag (Zeile von vor N-547), ist
+            # „alt" die richtige Antwort.
+            basis[k] = (alt_basis or {}).get(k, "alt")
+        else:
+            faktoren[k], datenpunkte[k], basis[k] = neu_faktoren[k], n_neu, "neu"
+    return faktoren, datenpunkte, basis
+
+
+def _mische_stunde(
+    alt_faktoren: dict, alt_datenpunkte: dict, alt_basis: dict,
+    neu_faktoren: dict, neu_datenpunkte: dict, gate: int,
+) -> tuple[dict, dict, dict]:
+    """Übergang der `stunde`-Stufe — Einheit ist der **Saisonbin**.
+
+    Ihr Gate ist Σ über den Monat (`MIN_STUNDEN_STUNDE_SAISONBIN`), und der
+    Lookup entscheidet ebenso je Monat. Ein Monat wandert deshalb als Ganzes
+    auf das neue Lern-SOLL oder gar nicht — eine Mischung aus alten und neuen
+    Zellen **innerhalb** eines Monats wäre ein Profil, das es nie gab.
+    """
+    neu_summen = _monats_summen(neu_datenpunkte)
+    faktoren: dict = {}
+    datenpunkte: dict = {}
+    basis: dict = {}
+    for monat in set(alt_faktoren) | set(neu_faktoren):
+        nimm_neu = monat in neu_faktoren and neu_summen.get(monat, 0) >= gate
+        quelle_f, quelle_d, marke = (
+            (neu_faktoren, neu_datenpunkte, "neu") if nimm_neu
+            else (alt_faktoren, alt_datenpunkte, None) if monat in alt_faktoren
+            else (neu_faktoren, neu_datenpunkte, "neu")
+        )
+        zellen = quelle_f.get(monat) or {}
+        if not zellen:
+            continue
+        faktoren[monat] = dict(zellen)
+        for stunde in zellen:
+            zell_key = f"{monat}_{stunde}"
+            datenpunkte[zell_key] = int((quelle_d or {}).get(zell_key, 0) or 0)
+            basis[zell_key] = (
+                marke if marke is not None
+                else (alt_basis or {}).get(zell_key, "alt")
+            )
+    return faktoren, datenpunkte, basis
+
+
 async def _upsert_profil(
     db: AsyncSession,
     *,
@@ -246,9 +389,19 @@ async def _upsert_profil(
     faktoren: dict,
     datenpunkte_pro_bin: dict,
     tage_eingegangen: int,
+    heute: date,
     faktor_skalar: Optional[float] = None,
     quelle: str = "openmeteo",
 ) -> None:
+    """Profil-Zeile je Stufe anlegen oder fortschreiben — inkl. Übergangsregel (N-547).
+
+    ⚠ **Der Skalar bekommt `lern_umstellung_am` später als die drei Bin-Stufen**
+    (Nachmessung 22.09.2026): sein Aufruf hängt an `raw_skalar is not None`, also
+    an der ersten Nacht mit einer `lern_soll_kwh`-Zeile; die Bin-Stufen laufen
+    auch mit leerem Pool. Sein 365-Tage-Fenster beginnt dadurch um die Tage
+    versetzt, die bis zur ersten Lern-Zeile vergehen — unschädlich, weil das
+    7-Tage-Gate lange vorher greift.
+    """
     result = await db.execute(
         select(Korrekturprofil).where(
             and_(
@@ -260,6 +413,7 @@ async def _upsert_profil(
         )
     )
     profil = result.scalar_one_or_none()
+    neu_angelegt = profil is None
     if profil is None:
         profil = Korrekturprofil(
             anlage_id=anlage_id,
@@ -268,11 +422,66 @@ async def _upsert_profil(
             profil_typ=profil_typ,
         )
         db.add(profil)
+
+    # N-547: Beginn der Keep-Regel. Eine Bestandszeile bekommt ihn beim ersten
+    # Lauf nach dem Update, eine neue Zeile ihren Anlage-Tag — dort gibt es
+    # ohnehin nichts zu halten.
+    if profil.lern_umstellung_am is None:
+        profil.lern_umstellung_am = heute
+
+    keep_aktiv = (
+        not neu_angelegt
+        and (heute - profil.lern_umstellung_am).days <= _KEEP_TAGE
+    )
+
+    lern_basis: dict = {}
+    if keep_aktiv:
+        gate = _GATE_JE_TYP.get(profil_typ, 0)
+        alt_faktoren = profil.faktoren or {}
+        alt_datenpunkte = profil.datenpunkte_pro_bin or {}
+        alt_basis = profil.lern_basis_pro_bin or {}
+        if profil_typ == PROFIL_TYP_SKALAR:
+            n_neu = int((datenpunkte_pro_bin or {}).get("value", 0) or 0)
+            if faktoren and n_neu >= gate:
+                lern_basis = {"value": "neu"}
+            elif alt_faktoren:
+                # Ü3: beim Skalar gehören `tage_eingegangen` UND
+                # `faktor_skalar` zum gehaltenen Wert — der Lookup liest
+                # genau diese beiden (`korrekturprofil_lookup:139-140/231`).
+                # Ohne sie fiele Stufe 4 aus, und mit ihr die letzte
+                # Rückfallebene der ganzen Kaskade.
+                faktoren = alt_faktoren
+                datenpunkte_pro_bin = alt_datenpunkte
+                tage_eingegangen = profil.tage_eingegangen or 0
+                faktor_skalar = profil.faktor_skalar
+                lern_basis = {"value": alt_basis.get("value", "alt")}
+            else:
+                lern_basis = {"value": "neu"}
+        else:
+            mischer = (
+                _mische_stunde if profil_typ == PROFIL_TYP_STUNDE else _mische_flach
+            )
+            faktoren, datenpunkte_pro_bin, lern_basis = mischer(
+                alt_faktoren, alt_datenpunkte, alt_basis,
+                faktoren, datenpunkte_pro_bin, gate,
+            )
+            # Die Zeile trägt jetzt Bins aus zwei Pools. `tage_eingegangen` ist
+            # für diese Stufen rein informativ (die Gates hängen an
+            # `datenpunkte_pro_bin`); der größere der beiden Pools ist die
+            # ehrlichste Einzelzahl dafür.
+            tage_eingegangen = max(tage_eingegangen, profil.tage_eingegangen or 0)
+    else:
+        # Kein Keep: alles, was hier steht, ist gegen das neue Lern-SOLL
+        # gelernt — bei `stunde` sind die Bin-Schlüssel die Zell-Schlüssel
+        # der Datenpunkte, nicht die Monats-Schlüssel der Faktoren.
+        lern_basis = {k: "neu" for k in (datenpunkte_pro_bin or {})}
+
     profil.bin_definition = bin_definition
     profil.faktoren = faktoren
     profil.datenpunkte_pro_bin = datenpunkte_pro_bin
     profil.tage_eingegangen = tage_eingegangen
     profil.faktor_skalar = faktor_skalar
+    profil.lern_basis_pro_bin = lern_basis
     profil.aktualisiert_am = datetime.now()
 
 
@@ -402,6 +611,7 @@ async def aggregiere_korrekturprofil_anlage(
         faktoren=sw_faktoren,
         datenpunkte_pro_bin=sw_datenpunkte,
         tage_eingegangen=len(tage_genutzt),
+        heute=heute,
     )
 
     # ── stunde (Variante A: Saisonbin × Stunde) ───────────────────────────
@@ -440,6 +650,7 @@ async def aggregiere_korrekturprofil_anlage(
         faktoren=st_faktoren,
         datenpunkte_pro_bin=st_datenpunkte,
         tage_eingegangen=len(st_tage),
+        heute=heute,
     )
 
     # ── sonnenstand (Fallback) ────────────────────────────────────────────
@@ -463,6 +674,7 @@ async def aggregiere_korrekturprofil_anlage(
         faktoren=s_faktoren,
         datenpunkte_pro_bin=s_datenpunkte,
         tage_eingegangen=len(tage_genutzt),
+        heute=heute,
     )
 
     # ── skalar (O1+O2 auf Tagesebene als letzter Fallback) ────────────────
@@ -482,6 +694,7 @@ async def aggregiere_korrekturprofil_anlage(
             faktoren={"value": skalar_faktor},
             datenpunkte_pro_bin={"value": n_skalar},
             tage_eingegangen=n_skalar,
+            heute=heute,
             faktor_skalar=skalar_faktor,
         )
     else:

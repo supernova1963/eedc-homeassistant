@@ -945,6 +945,31 @@ async def run_migrations(conn):
                 connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN emob_ladung_pv_abgeleitet_kwh FLOAT'))
             if 'emob_ladung_netz_abgeleitet_kwh' not in existing_columns:
                 connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN emob_ladung_netz_abgeleitet_kwh FLOAT'))
+            # N-547: das Lern-SOLL des Korrekturprofils (rohe, GEKAPPTE, aber
+            # unkorrigierte OpenMeteo-Reihe) — getrennt von der Vorhersage
+            # `pv_prognose_stundenprofil`, gegen die bis 22.09.2026 gelernt
+            # wurde (zirkulär: Faktoren konvergierten auf √r statt r).
+            # ⛔ RÜCKWÄRTS LEER, kein Backfill: Bestandszeilen tragen die
+            # korrigierte Reihe, eine Rückrechnung wäre geraten. Die Bins
+            # behalten dafür ihren alten Faktor, bis das Gate ihrer Stufe mit
+            # NEUEN Datenpunkten erreicht ist (Korrekturprofil-Aggregator).
+            if 'lern_soll_stundenprofil_kwh' not in existing_columns:
+                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN lern_soll_stundenprofil_kwh JSON'))
+            if 'lern_soll_kwh' not in existing_columns:
+                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN lern_soll_kwh FLOAT'))
+
+        # N-547: Übergangs-Marker am Korrekturprofil. `lern_basis_pro_bin` sagt
+        # je Bin, ob sein Faktor schon gegen das neue Lern-SOLL gelernt ist
+        # („neu") oder noch der zirkulär gelernte Bestand ist („alt");
+        # `lern_umstellung_am` trägt den Beginn der 365-Tage-Keep-Regel.
+        # NULL bei Bestandszeilen — der Aggregator liest das als „alt" bzw.
+        # setzt das Datum beim ersten Lauf.
+        if 'korrekturprofile' in inspector.get_table_names():
+            existing_columns = {col['name'] for col in inspector.get_columns('korrekturprofile')}
+            if 'lern_basis_pro_bin' not in existing_columns:
+                connection.execute(text('ALTER TABLE korrekturprofile ADD COLUMN lern_basis_pro_bin JSON'))
+            if 'lern_umstellung_am' not in existing_columns:
+                connection.execute(text('ALTER TABLE korrekturprofile ADD COLUMN lern_umstellung_am DATE'))
 
         # v3.6.9: Energieprofil-Revision — vorzeichenbasierte Aggregation, WP/Wallbox separat
         # Altdaten werden gelöscht (fehlerhafte kategorie-basierte Aggregation),

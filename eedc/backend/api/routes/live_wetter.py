@@ -79,6 +79,14 @@ _TZ_SCHREIBFELDER_PROGNOSE: tuple[str, ...] = (
     "pv_prognose_stundenprofil",
     "solcast_prognose_stundenprofil",
     "sfml_prognose_stundenprofil",
+    # N-547: das Lern-SOLL (rohe, gekappte, UNkorrigierte OM-Reihe + ihre
+    # Tagessumme). ⛔ Beide MÜSSEN in `_PROGNOSE_FELDER_RETTEN` mitgeführt
+    # werden — `aggregate_day` legt die TZ-Zeile alle 15 Minuten neu an
+    # (`energie_profil_heute_job`), und was dort nicht gerettet wird, ist
+    # binnen einer Viertelstunde weg. Genau so verlor v3.31.7 den Day-Ahead-
+    # Snapshot und die Korrekturprofil-Heatmap blieb monatelang leer.
+    "lern_soll_stundenprofil_kwh",
+    "lern_soll_kwh",
 )
 
 logger = logging.getLogger(__name__)
@@ -874,6 +882,8 @@ async def _speichere_prognose(
     solcast_stundenprofil: list[float] | None = None,
     sfml_stundenprofil: list[float] | None = None,
     pv_final_sonne_unter: bool = False,
+    lern_stundenprofil: list[float] | None = None,
+    lern_kwh: float | None = None,
 ):
     """
     Speichert die PV-Tagesprognose in TagesZusammenfassung (Upsert).
@@ -887,6 +897,15 @@ async def _speichere_prognose(
     Snapshot bleibt als Day-Ahead-Forecast erhalten, spätere Aufrufe
     überschreiben das Profil nicht (sonst würde der nachmittagsaktualisierte
     Forecast die morgendliche Day-Ahead-Sicht verlieren).
+
+    N-547 — `lern_stundenprofil` / `lern_kwh`: das **Lern-SOLL** des
+    Korrekturprofils (rohe, gekappte, UNkorrigierte OpenMeteo-Reihe +
+    ihre Tagessumme). Bewusst NICHT dasselbe wie `pv_stundenprofil`: jenes
+    ist die **Vorhersage** (korrigiert + gekappt), gegen die die
+    Stratifizierung die Güte misst. Der Aggregator lernte bis 22.09.2026
+    gegen die Vorhersage — gegen seine eigene Ausgabe — und konvergierte
+    dadurch auf √r statt r. Stundenreihe **first-write-wins** (Day-Ahead
+    wie die übrigen Profile), Tageswert rollend wie `pv_prognose_kwh`.
 
     Prognose-Kanon §6 (`pv_prognose_final_kwh`/`_final_at`): der
     Genauigkeits-Tracking-Endwert rollt mit `prognose_kwh` mit, bis OpenMeteo
@@ -956,6 +975,14 @@ async def _speichere_prognose(
                     tz.solcast_prognose_stundenprofil = solcast_stundenprofil
                 if sfml_stundenprofil is not None and tz.sfml_prognose_stundenprofil is None:
                     tz.sfml_prognose_stundenprofil = sfml_stundenprofil
+                # N-547: Lern-SOLL. Stundenreihe first-write-wins (derselbe
+                # Day-Ahead-Gedanke), Tagessumme rollend — sie ist das SOLL der
+                # Skalar-Stufe und soll dem konvergierenden OM-Tageswert folgen.
+                if (lern_stundenprofil is not None
+                        and tz.lern_soll_stundenprofil_kwh is None):
+                    tz.lern_soll_stundenprofil_kwh = lern_stundenprofil
+                if lern_kwh is not None:
+                    tz.lern_soll_kwh = lern_kwh
             else:
                 _final_at = None
                 if (prognose_kwh is not None and soll_final_einfrieren(
@@ -974,6 +1001,8 @@ async def _speichere_prognose(
                     pv_prognose_stundenprofil=pv_stundenprofil,
                     solcast_prognose_stundenprofil=solcast_stundenprofil,
                     sfml_prognose_stundenprofil=sfml_stundenprofil,
+                    lern_soll_stundenprofil_kwh=lern_stundenprofil,
+                    lern_soll_kwh=lern_kwh,
                     stunden_verfuegbar=0,
                     datenquelle="wetter_prognose",
                 )
@@ -1554,10 +1583,43 @@ async def get_live_wetter(
         # den Lernfaktor. Vollständigkeit kommt jetzt aus dem Kanon-Fan-out
         # (om_vollstaendig); kein Kanon (kein PV/Koordinaten) → nichts einfrieren.
         om_unvollstaendig = kanon_heute is None or not kanon_heute.om_vollstaendig
-        om_prognose = None if (om_unvollstaendig or pv_prognose is None or pv_prognose <= 0) else pv_prognose
+        # ⭐ **N-547/W1: hier stand bis 22.09.2026 `pv_prognose`** — und das ist
+        # seit dem Kanon-Zweig oben (`:1315`) `kanon_heute.eedc_kwh`, also der
+        # **korrigierte und gekappte** Tageswert. Der Prefetch schrieb in
+        # dasselbe Feld alle 45 Minuten die **rohe, ungekappte** Σ der
+        # OM-String-Tageswerte. Gleiche Provenance-Quelle, „letzter gewinnt":
+        # `pv_prognose_kwh` trug je nach Tageszeit zwei verschiedene Größen,
+        # und seine drei Leser (Genauigkeits-Tracking `prognosen.py:970-998`,
+        # HA-Export-Schwelle `prognose_genauigkeit_service.py:69-74`,
+        # Energieprofil-Tages-SOLL `energie_profil/tag.py:135-144`)
+        # multiplizieren es ausnahmslos mit dem Legacy-Lernfaktor — sie
+        # erwarten also die rohe Lage. Seit N-547 schreiben beide sie.
+        roh_tageswert = kanon_heute.roh_kwh if kanon_heute is not None else None
+        om_prognose = (
+            None if (om_unvollstaendig or roh_tageswert is None or roh_tageswert <= 0)
+            else roh_tageswert
+        )
         # Das OpenMeteo-Stundenprofil stammt aus demselben (kollabierten) Profil —
         # bei Unvollständigkeit ebenfalls nicht einfrieren (first-write-wins).
         om_stundenprofil = None if om_unvollstaendig else pv_stundenprofil
+        # N-547: das Lern-SOLL — die gekappte, UNkorrigierte Rohreihe und ihre
+        # Summe. Ohne Kanon-Stundenprofil (OpenMeteo-Schätzpfad ohne Hourly)
+        # gibt es keins; dann bleiben die Felder NULL, statt eine Reihe zu
+        # erfinden. #306 gilt hier genauso: unvollständiger Fan-out ⇒ nichts
+        # einfrieren, auch kein Lern-SOLL.
+        # ⛔ **Beide Felder hängen am Stundenprofil, auch das Tages-SOLL.** Im
+        # OpenMeteo-Schätzpfad (Tagessumme ohne Hourly, `prognose_kanon:600-608`)
+        # ist `om_kwh` die **ungekappte** Σ der Tageswerte — die Kappung wirkt
+        # nur auf Stundenwerte. Als `lern_soll_kwh` wäre das auf einer Anlage
+        # mit AC-Grenze eine Zahl, die die Anlage nie erreichen kann, und der
+        # Skalar lernte den Deckel als Prognosefehler ein. Lieber NULL.
+        hat_lern_reihe = (
+            not om_unvollstaendig and kanon_heute.om_stundenprofil_kwh is not None
+        )
+        lern_stundenprofil = (
+            kanon_heute.om_stundenprofil_kwh if hat_lern_reihe else None
+        )
+        lern_kwh = kanon_heute.om_kwh if hat_lern_reihe else None
         # §6: nach Sonnenuntergang ist der OM-Tageswert konvergiert → der
         # Genauigkeits-Endwert darf eingefroren werden (Anzeige bleibt rollend).
         from backend.services.solar_forecast_service import sonnenauf_unter_stunde
@@ -1569,7 +1631,8 @@ async def get_live_wetter(
         except Exception:
             pv_final_sonne_unter = False
         if (om_prognose is not None or solcast_kwh is not None
-                or sfml_kwh is not None or sfml_stundenprofil_heute is not None):
+                or sfml_kwh is not None or sfml_stundenprofil_heute is not None
+                or lern_kwh is not None):
             asyncio.create_task(
                 _speichere_prognose(
                     anlage.id, date.today(), om_prognose, sfml_kwh,
@@ -1580,6 +1643,8 @@ async def get_live_wetter(
                     solcast_stundenprofil=solcast_stundenprofil,
                     sfml_stundenprofil=sfml_stundenprofil_heute,
                     pv_final_sonne_unter=pv_final_sonne_unter,
+                    lern_stundenprofil=lern_stundenprofil,
+                    lern_kwh=lern_kwh,
                 )
             )
 

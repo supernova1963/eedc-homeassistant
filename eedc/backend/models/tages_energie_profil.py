@@ -253,6 +253,36 @@ class TagesZusammenfassung(Base):
     # SFML-Quelle SFMLs eigene Kurvenform statt GTI-Schmier (Tracking #110 „A").
     sfml_prognose_stundenprofil: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
 
+    # ⭐ **N-547: das LERN-SOLL des Korrekturprofils — und warum es ein eigenes
+    # Feld sein muss.** Bis 2026-09-22 lernte der Korrekturprofil-Aggregator
+    # gegen `pv_prognose_stundenprofil`. Das ist aber die **korrigierte**
+    # Kanon-Ausgabe (`prognose_kanon.korrigiere_tagesprofil`), also das
+    # Ergebnis der Faktoren, die er gerade lernt. Ein Regelkreis, der seine
+    # eigene Ausgabe als Soll nimmt, konvergiert nicht auf das wahre
+    # Verhältnis r = IST/SOLL, sondern auf dessen **Wurzel**: der Fixpunkt von
+    # f ↦ r/f ist √r. Gemessen (V2, 22.09.2026, r = 0,85): Faktoren laufen auf
+    # 0,922 statt 0,850 ⇒ **+8,5 % Überschätzung an JEDEM Tag**.
+    #
+    # Diese beiden Felder tragen deshalb das, wogegen gelernt werden MUSS:
+    # die **rohe OpenMeteo-Stundenreihe**, unkorrigiert, aber **gekappt**
+    # (`KanonTag.om_stundenprofil_kwh`) — gekappt, weil der Wechselrichter
+    # oberhalb seiner AC-Grenze nichts liefern KANN und ein Faktor sonst eine
+    # physikalische Grenze als Prognosefehler lernt.
+    #
+    # ⛔ Getrennt von `pv_prognose_stundenprofil`, nicht statt seiner: jenes
+    # bleibt die **Vorhersage** (korrigiert + gekappt), an der die
+    # Stratifizierung misst, wie gut eedc vorhergesagt hat. Zwei Fragen, zwei
+    # Felder. Rückwärts leer — Bestandszeilen bleiben NULL („nicht erhoben"),
+    # kein Backfill: die alten Zeilen tragen die korrigierte Reihe, und eine
+    # Rückrechnung wäre geraten, nicht gemessen.
+    #
+    # First-write-wins wie die Vorhersage-Profile (Day-Ahead-Charakter).
+    lern_soll_stundenprofil_kwh: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    # Σ der Lern-SOLL-Slots (= `KanonTag.om_kwh`, dieselbe `om_slots`-Quelle) —
+    # das Tages-SOLL der Skalar-Stufe. Letzter Schreiber gewinnt (der Tageswert
+    # rollt mit OpenMeteo mit, wie `pv_prognose_kwh`).
+    lern_soll_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
     # Anzahl verfügbarer Stundenwerte (Qualitätsindikator)
     stunden_verfuegbar: Mapped[int] = mapped_column(Integer, default=0)
 
