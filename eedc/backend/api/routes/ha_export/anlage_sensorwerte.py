@@ -355,6 +355,11 @@ async def prognose_und_preis_sensoren(*, anlage, db, sensor_values, skip_jitter)
                 # statt 7-Tage-Profil); das Attribut `profil_typ` sagt es.
                 if value is not None and prognose.get("speicher_verbrauch_profil"):
                     zusatz = dict(prognose["speicher_verbrauch_profil"])
+                    # V1: dazu die START-Annahme (Slot + Anteil). Der Wert
+                    # verschiebt sich mit ihr um bis zu eine halbe Stunde —
+                    # eine Automation, die auf „HH:MM" schaltet, soll die
+                    # Annahme lesen können statt sie zu raten.
+                    zusatz.update(prognose.get("speicher_sim_annahme") or {})
             elif sensor.key == "eedc_verbrauchsprognose_heute_kwh":
                 value = prognose.get("verbrauch_heute_kwh")
                 if value is not None:

@@ -361,10 +361,22 @@ async def steuerungs_sensoren(
     # ── E3 · „Speicher voll um" als Zeitstempel ─────────────────────────────
     voll_slot = prognose.get("speicher_voll_um_slot")
     if voll_slot is not None:
-        # Die Simulation läuft ab der laufenden Stunde bis Mitternacht; eine
-        # frühere Stunde als „jetzt" kann sie nicht liefern. Sollte sie es
-        # doch (Uhrensprung zwischen Simulation und Export), meint sie morgen.
-        slot = voll_slot if voll_slot >= jetzt_stunde else voll_slot + SLOTS_JE_TAG
+        # Die Simulation läuft von ihrem Start-Slot bis Mitternacht; eine
+        # frühere Stunde als diesen Start kann sie konstruktiv nicht liefern.
+        # Der +24-Zweig ist seit V1 nur noch ein Rückfall für den Fall, dass
+        # der Sim-Start im Dict fehlt und `jetzt_stunde` einspringt (bis
+        # 22.09.2026 war er per Uhrensprung zwischen Simulation und Export
+        # erreichbar: `now.hour` wurde zweimal gelesen).
+        #
+        # ⚠ **Maßstab ist der SIM-Start, nicht `jetzt_stunde`** (V1,
+        # 22.09.2026). Bis dahin waren beide dasselbe, weil die Simulation bei
+        # `now.hour` begann. Seit V1 beginnt sie bei der zuletzt von HA
+        # verdichteten Stunde — hinkt HA zwei Stunden nach, liegt der Start
+        # VOR `jetzt_stunde`, und ein „voll" in dieser Lücke hätte hier
+        # +24 Stunden bekommen und als **morgen** dagestanden.
+        sim_start = prognose.get("speicher_sim_start_stunde")
+        grenze = sim_start if sim_start is not None else jetzt_stunde
+        slot = voll_slot if voll_slot >= grenze else voll_slot + SLOTS_JE_TAG
         # N-544: `*_um` ist eine **End**-Angabe. Der Sim-Slot `h` ist voll, wenn
         # die Stunde `[h−1, h)` durchgerechnet ist — der Zeitpunkt ist `h:00`,
         # also das ENDE des Slots. Bis 22.09.2026 kam dieselbe Zahl aus
@@ -374,7 +386,8 @@ async def steuerungs_sensoren(
         _anhaengen(
             sensor_values, "eedc_speicher_voll_um_ts", _iso_ende(heute, slot),
             {"quelle": "eedc_speicher_voll_um",
-             **(prognose.get("speicher_verbrauch_profil") or {})},
+             **(prognose.get("speicher_verbrauch_profil") or {}),
+             **(prognose.get("speicher_sim_annahme") or {})},
         )
 
     # ── E5 · Netzbezugs-Spitze ──────────────────────────────────────────────

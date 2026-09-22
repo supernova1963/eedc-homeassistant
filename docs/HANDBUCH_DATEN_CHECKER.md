@@ -374,6 +374,7 @@ Ein Monat besteht in eedc aus zwei Teilen: der **Zählerzeile** der Anlage (Eins
 | **MM/JJJJ: Netzbezug nicht erfasst** | ❌ ERROR | Kernfeld `netzbezug_kwh` ist `NULL`. Hausverbrauch und Stromkosten nicht berechenbar. | Monatsdaten öffnen, Netzbezug eintragen. |
 | **MM/JJJJ: Batterie-Ladung nicht erfasst (Speicher vorhanden)** | ⚠️ WARNING | Aktive Speicher-Komponente vorhanden, aber weder Legacy-Feld `batterie_ladung_kwh` noch neues `InvestitionMonatsdaten.ladung_kwh`. Hausverbrauchs-Berechnung wird falsch. | Monatsdaten öffnen, Batterie-Ladung in der Speicher-Komponente eintragen. |
 | **MM/JJJJ: Batterie-Entladung nicht erfasst (Speicher vorhanden)** | ⚠️ WARNING | Analog zur Ladung — `entladung_kwh` fehlt. | Monatsdaten öffnen, Batterie-Entladung eintragen. |
+| **MM/JJJJ: „Gerät“: Entladung nicht erfasst (Ladung X kWh vorhanden)** | ⚠️ WARNING | Derselbe Befund auf dem heutigen Erfassungsweg, **je Gerät**: für diesen Speicher steht eine Ladung in `InvestitionMonatsdaten`, das Feld `entladung_kwh` ist leer. Ohne Entladung gibt es keinen gemessenen Wirkungsgrad und keine Speicher-Ersparnis — der HA-Sensor meldet dann `wirkungsgrad_messung: keine-entladung`. ⚠ **`0` ist ein Wert:** ein Monat, in dem der Speicher nichts abgegeben hat, ist erfasst und wird nicht gemeldet. | Monatsdaten öffnen, Entladung beim **genannten** Gerät eintragen. |
 
 #### Werte-Plausibilität
 

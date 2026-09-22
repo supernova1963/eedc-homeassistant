@@ -5,12 +5,18 @@ aus PV- und Verbrauchs-Stundenprofil. Liefert u. a. die Uhrzeit, zu der der
 Speicher voll bzw. leer ist.
 
 Berechnungs-Layer (ADR-001): die Aggregat-Logik liegt hier, nicht inline in
-Routes/Services. Für den HA-Export simulieren wir ab dem **aktuellen** SoC
-(`start_stunde` = jetzige Stunde) — bewusst NICHT das Mitternachts-Mittel, das
-der Planungs-Tab (`energie_profil/prognose.py`) für seine eigene, deskriptive
-Ganztags-Vorschau nutzt. Die beiden Pfade sind absichtlich verschieden
-parametrisiert (anderer Start-SoC, andere Start-Stunde) und damit kein
+Routes/Services. Für den HA-Export simulieren wir ab dem **aktuellen** SoC —
+bewusst NICHT das Mitternachts-Mittel, das der Planungs-Tab
+(`energie_profil/prognose.py`) für seine eigene, deskriptive Ganztags-Vorschau
+nutzt. Die beiden Pfade sind absichtlich verschieden parametrisiert (anderer
+Start-SoC, andere Start-Stunde, anderer `start_anteil`) und damit kein
 Symmetrie-Paar.
+
+⭐ **Der Start-Slot ist seit V1 (22.09.2026) teilbar** (`start_anteil`). Grund:
+Der HA-Export startet mit einem Stunden-**Mittel** aus
+`TagesEnergieProfil.soc_prozent`, also mit dem Ladestand etwa zur **Mitte**
+eines Intervalls — und rechnete dieses Intervall danach **ganz** noch einmal.
+Details am Parameter.
 """
 
 from __future__ import annotations
@@ -80,6 +86,7 @@ def simuliere_speicher_tag(
     start_soc_prozent: float,
     start_stunde: int = 0,
     wirkungsgrad_prozent: float = 100.0,
+    start_anteil: float = 1.0,
 ) -> SpeicherSimErgebnis:
     """Simuliert den Batterie-SoC stündlich von ``start_stunde`` bis 23 Uhr.
 
@@ -105,8 +112,25 @@ def simuliere_speicher_tag(
             (≤ 0 → keine Sim). Die Simulation fährt von 0 auf 100 % dieser
             Zahl — mit der Brutto-Kapazität wäre der Speicher rechnerisch
             später voll als real (A31-2/E-1).
-        start_soc_prozent: SoC zu Beginn von ``start_stunde`` (0–100).
-        start_stunde: erste simulierte Stunde (0–23).
+        start_soc_prozent: SoC zu Beginn des simulierten Teils von
+            ``start_stunde`` (0–100) — bei ``start_anteil < 1`` also NICHT der
+            SoC zu Beginn des Slots, sondern der an seiner Anteils-Grenze.
+        start_stunde: erster simulierter Slot (0–23; ``>= 24`` ⇒ leerer Lauf).
+        start_anteil: welcher Anteil des Start-Slots noch zu simulieren ist
+            (0 < anteil ≤ 1, Default **1.0 = Bestandsverhalten**). PV und
+            Verbrauch dieses einen Slots gehen mit diesem Faktor ein, alle
+            weiteren Slots ganz.
+
+            ⭐ **Wozu (V1, 22.09.2026):** Der HA-Export startet mit dem zuletzt
+            geschriebenen **Stunden-MITTEL** des SoC
+            (``TagesEnergieProfil.soc_prozent``) — das ist der Ladestand etwa
+            zur **Mitte** des zugehörigen Intervalls, nicht zu seinem Beginn.
+            Wer denselben Slot danach **ganz** simuliert, rechnet dessen erste
+            Hälfte ein zweites Mal; der Fehler pendelt um ±½ h und traf
+            ``eedc_speicher_voll_um`` und die drei S3b-Sensoren daneben. Mit
+            ``start_anteil=0.5`` beginnt die Rechnung dort, wo das Mittel
+            steht. Der Planungs-Tab (``energie_profil/prognose.py``) startet um
+            Mitternacht an einer echten Slot-Grenze und bleibt beim Default.
         wirkungsgrad_prozent: Roundtrip-Wirkungsgrad, aus
             `investition_kennwerte.aggregiere_speicher_basis`. Der Default 100
             ist **verlustfrei = das Verhalten vor N-238** und steht hier, damit
@@ -124,9 +148,20 @@ def simuliere_speicher_tag(
     stunden_bilanz: list[StundenBilanz] = []
     hat_speicher = speicher_kap_kwh > 0
 
-    for h in range(max(0, start_stunde), 24):
+    erster_slot = max(0, start_stunde)
+    anteil = max(0.0, min(1.0, start_anteil))
+
+    for h in range(erster_slot, 24):
         pv = (pv_stunden[h] if h < len(pv_stunden) else 0.0) or 0.0
         vb = (verbrauch_stunden[h] if h < len(verbrauch_stunden) else 0.0) or 0.0
+        if h == erster_slot and anteil != 1.0:
+            # Beide Seiten gewichtet, nicht nur das Netto: die Zeile der
+            # `stunden_bilanz` soll die Energie beschreiben, die **simuliert**
+            # wurde. Rechnerisch identisch (netto = (pv − vb) · anteil), aber
+            # `netzbezug_kwh`/`einspeisung_kwh` blieben sonst die Reste einer
+            # ganzen Stunde neben einem halben PV-Wert.
+            pv *= anteil
+            vb *= anteil
         netto = pv - vb
         netzbezug = 0.0
         einspeisung = 0.0

@@ -141,10 +141,12 @@ async def berechne_prognose_export(db, anlage, *, skip_jitter: bool = False) -> 
         speicher_soc_pro_stunde: Optional[dict] = None
         speicher_end_soc_prozent: Optional[float] = None
         speicher_sim_start: Optional[int] = None
-        speicher_kap, speicher_eta, akt_soc = await _aktueller_speicher(
-            db, anlage.id, heute
+        speicher_sim_anteil: Optional[float] = None
+        speicher_kap, speicher_eta, akt_soc, soc_datum, soc_stunde = (
+            await _aktueller_speicher(db, anlage.id, heute)
         )
-        if speicher_kap > 0 and akt_soc is not None:
+        sim_start, sim_anteil = _sim_start(soc_datum, soc_stunde, heute)
+        if speicher_kap > 0 and akt_soc is not None and sim_start is not None:
             vp = await get_verbrauch_prognose(anlage.id, heute, db)
             verbrauch_stunden = vp["stunden_kw"] if vp else [0.0] * 24
             sim = simuliere_speicher_tag(
@@ -152,13 +154,15 @@ async def berechne_prognose_export(db, anlage, *, skip_jitter: bool = False) -> 
                 verbrauch_stunden=verbrauch_stunden,
                 speicher_kap_kwh=speicher_kap,
                 start_soc_prozent=akt_soc,
-                start_stunde=now.hour,
+                start_stunde=sim_start,
                 wirkungsgrad_prozent=speicher_eta,
+                start_anteil=sim_anteil,
             )
             speicher_voll_um = sim.speicher_voll_um
             speicher_soc_pro_stunde = dict(sim.soc_pro_stunde)
             speicher_end_soc_prozent = round(float(sim.end_soc_prozent), 1)
-            speicher_sim_start = now.hour
+            speicher_sim_start = sim_start
+            speicher_sim_anteil = sim_anteil
             speicher_verbrauch_profil = _speicher_verbrauch_profil(vp, verbrauch_stunden)
             # E3 (S2): derselbe Zeitpunkt als Slot — der ISO-Zeitstempel entsteht
             # erst beim Sensor, damit die Zonen-Frage genau einmal beantwortet wird.
@@ -233,6 +237,18 @@ async def berechne_prognose_export(db, anlage, *, skip_jitter: bool = False) -> 
             "speicher_soc_pro_stunde": speicher_soc_pro_stunde,
             "speicher_end_soc_prozent": speicher_end_soc_prozent,
             "speicher_sim_start_stunde": speicher_sim_start,
+            # V1: die **Start**-Annahme der Simulation als fertiges
+            # Attribut-Paar — Slot und Anteil. Die S3b-Regel „jeder Sensor
+            # nennt sein Modell" galt bis 22.09.2026 nur für das
+            # Verbrauchsmodell daneben; die Start-Annahme blieb stumm, obwohl
+            # genau sie den Wert um bis zu eine halbe Stunde verschiebt.
+            "speicher_sim_annahme": (
+                {
+                    "sim_start_stunde": speicher_sim_start,
+                    "sim_start_anteil": speicher_sim_anteil,
+                }
+                if speicher_sim_start is not None else None
+            ),
             "speicher_kap_kwh": speicher_kap or None,
             "speicher_eta_prozent": speicher_eta,
             "speicher_soc_prozent": akt_soc,
@@ -258,6 +274,55 @@ async def berechne_prognose_export(db, anlage, *, skip_jitter: bool = False) -> 
             getattr(anlage, "id", "?"), type(e).__name__, e,
         )
         return None
+
+
+def _sim_start(
+    soc_datum: Optional[date], soc_stunde: Optional[int], heute: date
+) -> tuple[Optional[int], float]:
+    """Aus der gelesenen SoC-Zeile den Start-Slot der Simulation und seinen Anteil (V1).
+
+    ⭐ **Zwei Umrechnungen in einer Funktion, und beide waren vorher geraten.**
+
+    1. **Konvention.** ``TagesEnergieProfil.soc_prozent`` liegt **forward**
+       (N-387, `core/berechnungen/slot_konvention.py`): Zeile ``stunde = s``
+       trägt das Mittel über ``[s:00, s+1:00)``. Die Simulation rechnet
+       **backward** (Slot ``h`` = ``[h-1, h)``, wie die PV-Reihe, die sie
+       bekommt). Dasselbe Wanduhr-Intervall heißt dort ``s + 1``.
+    2. **Anteil.** Ein **Mittel** beschreibt den Ladestand etwa zur **Mitte**
+       seines Intervalls, nicht an dessen Beginn ⇒ von diesem einen Slot steht
+       noch die **halbe** Stunde aus (``0.5``).
+
+    Bis 22.09.2026 stand hier ``start_stunde = now.hour``, ganz. Im verdichteten
+    Normalfall (HA schreibt gegen :12) traf das denselben Slot — und rechnete
+    dessen erste Hälfte ein zweites Mal. Hinkt HA nach, war zusätzlich die
+    **Stunde** falsch; jetzt startet die Rechnung bei der zuletzt gemessenen
+    Stunde und simuliert die Lücke bis jetzt mit **ganzen** Slots mit. Das ist
+    kein Sonderfall im Code, sondern fällt hier von selbst an.
+
+    **Stammt der SoC von gestern** (die Abfrage lässt ``datum >= heute − 1`` zu):
+
+    * ``stunde = 23`` ist der **Normalfall kurz nach Mitternacht** und gar
+      nicht veraltet — ``[gestern 23:00, 00:00)`` **ist** der Backward-Slot 0
+      von heute. Also Slot 0, Anteil ``0.5``.
+    * jede frühere Stunde heißt „heute liegt noch gar kein SoC vor". Dann wird
+      der **ganze** Tag ab Slot 0 durchsimuliert (Anteil ``1.0``) — der
+      Startwert ist dann älter als der Slot, und das ist die kleinere
+      Ungenauigkeit als ein übersprungener Vormittag.
+
+    Returns:
+        ``(start_slot | None, anteil)``. ``None`` heißt „keine Simulation" —
+        entweder gibt es keine SoC-Zeile, oder ihr Slot liegt hinter dem
+        Tagesende (``heute``/``stunde = 23``; erreichbar nur, wenn die Uhr des
+        Aufrufers hinter der letzten verdichteten Stunde zurückliegt).
+    """
+    from backend.core.berechnungen.slot_konvention import forward_stunde_zu_backward_slot
+
+    if soc_datum is None or soc_stunde is None:
+        return None, 1.0
+    slot = forward_stunde_zu_backward_slot(int(soc_stunde))   # s + 1, SoT der Konvention
+    if soc_datum == heute:
+        return (slot, 0.5) if slot < 24 else (None, 1.0)
+    return (0, 0.5) if slot >= 24 else (0, 1.0)
 
 
 def _abregelung_rest(heute_tag, jetzt) -> Optional[float]:
@@ -323,11 +388,24 @@ def _solar_noon_text(tag: date, longitude: Optional[float]) -> Optional[str]:
 
 async def _aktueller_speicher(
     db, anlage_id: int, heute: date
-) -> tuple[float, float, Optional[float]]:
-    """(Speicher-Kapazität kWh, Wirkungsgrad %, aktueller SoC %).
+) -> tuple[float, float, Optional[float], Optional[date], Optional[int]]:
+    """(Speicher-Kapazität kWh, Wirkungsgrad %, aktueller SoC %, Datum, Stunde).
 
     Der „aktuelle SoC" ist der zuletzt gespeicherte Stunden-SoC (heute, sonst
     gestern) aus ``TagesEnergieProfil`` — robust und ohne Live-Abhängigkeit.
+
+    ⭐ **Seit V1 (22.09.2026) reist mitzurück, WO dieser Wert steht** (Datum +
+    `stunde`-Spalte). Der Aufrufer hat die Start-Stunde der Simulation bis
+    dahin aus `now.hour` **geraten**; das stimmte nur, solange HA pünktlich
+    verdichtet hatte, und sagte nichts über den Anteil des Slots, der noch
+    bevorsteht. `None`/`None` heißt „keine SoC-Zeile gefunden" — dann ist auch
+    der SoC `None`.
+
+    ⚠ **`soc_prozent` liegt forward** (`core/berechnungen/slot_konvention.py`,
+    N-387): Zeile `stunde = s` trägt das Mittel über `[s:00, s+1:00)`. Die
+    Simulation rechnet **backward** (Slot `h` = `[h-1, h)`). Dasselbe
+    Wanduhr-Intervall heißt dort also `s + 1` — die Umrechnung macht der
+    Aufrufer, diese Funktion liefert die Rohspalte.
     """
     res = await db.execute(
         select(Investition).where(
@@ -349,10 +427,14 @@ async def _aktueller_speicher(
     # bewusst, s. Modul-Docstring von `speicher_simulation`.)
     kap, eta = aggregiere_speicher_basis(speicher)
     if not kap:
-        return 0.0, eta, None
+        return 0.0, eta, None, None, None
 
     soc_res = await db.execute(
-        select(TagesEnergieProfil.soc_prozent).where(
+        select(
+            TagesEnergieProfil.soc_prozent,
+            TagesEnergieProfil.datum,
+            TagesEnergieProfil.stunde,
+        ).where(
             TagesEnergieProfil.anlage_id == anlage_id,
             TagesEnergieProfil.datum >= heute - timedelta(days=1),
             TagesEnergieProfil.soc_prozent.isnot(None),
@@ -360,4 +442,7 @@ async def _aktueller_speicher(
             TagesEnergieProfil.datum.desc(), TagesEnergieProfil.stunde.desc()
         ).limit(1)
     )
-    return float(kap), eta, soc_res.scalar_one_or_none()
+    zeile = soc_res.first()
+    if zeile is None:
+        return float(kap), eta, None, None, None
+    return float(kap), eta, zeile[0], zeile[1], int(zeile[2])

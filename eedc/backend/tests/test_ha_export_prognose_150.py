@@ -270,9 +270,12 @@ _N392_HEUTE = date(2026, 6, 17)
 
 
 async def _seed_speicher_mit_soc(db, anlage, *, mit_historie: bool) -> None:
-    """Ein 10-kWh-Speicher mit gestrigem SoC 50 % — und wahlweise drei
-    vollständige Tage desselben Wochentags in den letzten acht Wochen (die
-    Kaskadenstufe „gleicher_wochentag" braucht MIN_TAGE_GLEICHER_WT = 3)."""
+    """Ein 10-kWh-Speicher mit SoC 50 % in der Zeile `gestern, stunde 23` — seit
+    V1 (22.09.2026) ist das der Backward-Slot 0 von heute: die Simulation
+    startet bei Slot 0 mit Anteil 0,5 und rechnet den ganzen Tag, nicht ab der
+    gestellten Uhr. Wahlweise dazu drei vollständige Tage desselben Wochentags
+    in den letzten acht Wochen (die Kaskadenstufe „gleicher_wochentag" braucht
+    MIN_TAGE_GLEICHER_WT = 3)."""
     from backend.models.tages_energie_profil import TagesEnergieProfil
 
     heute = _N392_HEUTE

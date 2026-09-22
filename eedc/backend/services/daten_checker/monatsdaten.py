@@ -514,23 +514,55 @@ class MonatsdatenChecks:
         # Batterie-Installation (Issue #226 JanKgh: PV seit 11/2021, Speicher erst
         # ab 11/2022 — der Datenchecker monierte Batterie-Daten für 11/2021).
         speicher_aktiv_monate: set[tuple[int, int]] = set()
+        # (e') Ladung erfasst, Entladung fehlt — JE GERÄT, nicht aggregiert.
+        #
+        # ⭐ Die Warnung darunter („Batterie-Entladung nicht erfasst") gibt es
+        # seit jeher, aber **nur auf dem Legacy-Pfad** (`md.batterie_*`, und
+        # auch nur, solange für den Monat gar keine `InvestitionMonatsdaten`
+        # vorliegen). Auf dem heutigen Erfassungsweg blieb ein Monat mit
+        # `ladung_kwh > 0` und fehlender `entladung_kwh` **stumm** — derselbe
+        # Fall, den der HA-Export seit A7 `keine-entladung` nennt.
+        #
+        # ⚠ Je Gerät, weil die Aggregation darunter (`speicher_imd_bat`) die
+        # Lücke gerade verdeckt: zwei Speicher, einer davon vollständig, und
+        # die Summe sieht heil aus. Der Anwender muss wissen, an welchem Gerät
+        # das Feld fehlt — er füllt es dort.
+        speicher_ohne_entladung: dict[tuple[int, int], list[tuple[str, float]]] = {}
         for inv in anlage.investitionen:
             if inv.typ == "speicher" and inv.aktiv:
                 start = (inv.anschaffungsdatum.year, inv.anschaffungsdatum.month) if inv.anschaffungsdatum else None
                 end = (inv.stilllegungsdatum.year, inv.stilllegungsdatum.month) if inv.stilllegungsdatum else None
+
+                def _aktiv_im(key: tuple[int, int], _s=start, _e=end) -> bool:
+                    """Zählt dieser Monat für DIESES Gerät? (Anschaffung/Stilllegung)"""
+                    return not (
+                        (_s is not None and key < _s) or (_e is not None and key > _e)
+                    )
+
                 for md in monatsdaten:
                     md_key = (md.jahr, md.monat)
-                    if start is not None and md_key < start:
-                        continue
-                    if end is not None and md_key > end:
+                    if not _aktiv_im(md_key):
                         continue
                     speicher_aktiv_monate.add(md_key)
                 for imd in inv.monatsdaten:
                     daten = imd.verbrauch_daten or {}
                     ladung = daten.get("ladung_kwh")
                     entladung = daten.get("entladung_kwh")
+                    imd_key = (imd.jahr, imd.monat)
+                    # `entladung == 0` ist ein WERT und kein Hinweis (ADR-002/P4):
+                    # ein Speicher, der in einem Monat nichts abgegeben hat, ist
+                    # erfasst. Nur `None` heißt „Feld leer".
+                    if (
+                        entladung is None
+                        and ladung is not None
+                        and float(ladung) > 0
+                        and _aktiv_im(imd_key)
+                    ):
+                        speicher_ohne_entladung.setdefault(imd_key, []).append(
+                            (inv.bezeichnung or f"#{inv.id}", float(ladung))
+                        )
                     if ladung is not None or entladung is not None:
-                        key = (imd.jahr, imd.monat)
+                        key = imd_key
                         prev = speicher_imd_bat.get(key, (0.0, 0.0))
                         speicher_imd_bat[key] = (
                             prev[0] + (ladung or 0),
@@ -590,6 +622,31 @@ class MonatsdatenChecks:
                         details="Ohne Batterie-Daten wird der Hausverbrauch falsch berechnet",
                         link=md_link,
                     ))
+
+            # (e') Derselbe Befund auf dem HEUTIGEN Erfassungsweg — je Gerät.
+            #
+            # ⛔ **Er steht bewusst AUSSERHALB des `not in speicher_imd_monate`-
+            # Zweigs darüber.** Genau dieser Zweig ist der Grund, warum es den
+            # Fall bisher nicht gab: sobald für den Monat irgendein
+            # `InvestitionMonatsdaten`-Wert vorliegt, schweigt die
+            # Legacy-Prüfung — und der neue Weg hatte gar keine. Ein Monat
+            # bekommt deshalb entweder die Legacy-Warnung ODER diese hier, nie
+            # beide: `speicher_ohne_entladung` ist nur befüllt, wo eine
+            # IMD-Zeile mit Ladung existiert, und dann ist der Monat in
+            # `speicher_imd_monate`.
+            for geraet, ladung_kwh in speicher_ohne_entladung.get((md.jahr, md.monat), []):
+                ergebnisse.append(CheckErgebnis(
+                    kategorie=kat, schwere=CheckSeverity.WARNING,
+                    meldung=(
+                        f"{prefix}: {geraet}: Entladung nicht erfasst "
+                        f"(Ladung {fmt_zahl(ladung_kwh, 1)} kWh vorhanden)"
+                    ),
+                    details=(
+                        "Ohne Entladung gibt es keinen gemessenen Wirkungsgrad "
+                        "und keine Speicher-Ersparnis"
+                    ),
+                    link=md_link,
+                ))
 
             # 1. Negative Werte
             for feld, wert in [

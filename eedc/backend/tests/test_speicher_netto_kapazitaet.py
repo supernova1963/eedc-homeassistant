@@ -279,7 +279,9 @@ async def test_ha_sensor_speicher_voll_um_nutzt_dieselbe_kapazitaet(db, monkeypa
     ))
     await db.commit()
 
-    kap, eta, soc = await _aktueller_speicher(db, anlage_id, HEUTE)
+    # V1 (22.09.2026): der Helper liefert zusaetzlich, WO der SoC steht —
+    # Datum und `stunde`-Spalte der gelesenen Zeile.
+    kap, eta, soc, soc_datum, soc_stunde = await _aktueller_speicher(db, anlage_id, HEUTE)
 
     assert kap == pytest.approx(_NETTO_KWH), (
         "Der HA-Sensor lief auf der Brutto-Kapazität weiter — zwei Uhrzeiten "
@@ -290,6 +292,7 @@ async def test_ha_sensor_speicher_voll_um_nutzt_dieselbe_kapazitaet(db, monkeypa
         "verlustfrei gerechnet meldet er die volle Batterie zu früh."
     )
     assert soc == pytest.approx(40.0)
+    assert (soc_datum, soc_stunde) == (HEUTE, 8)
 
 
 # ============================================================================

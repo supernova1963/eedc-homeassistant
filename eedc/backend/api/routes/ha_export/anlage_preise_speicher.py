@@ -241,8 +241,8 @@ def _leer_um_und_reicht(
 
     ⛔ **Hier stand in Fassung 3 der Vorlage „erster Slot ab jetzt ≤ 2 %".** Das
     hätte den häufigsten Abendfall falsch gemeldet: Der Start-Slot der
-    Simulation ist die **abgelaufene** Stunde, und sein SoC ist der
-    Ausgangswert. Ein jetzt leerer Speicher, den die PV bis 11 Uhr wieder füllt,
+    Simulation ist die **zuletzt gemessene** Stunde (bis 22.09.2026 die
+    laufende, s. u.), und sein SoC ist der Ausgangswert. Ein jetzt leerer Speicher, den die PV bis 11 Uhr wieder füllt,
     hätte „leer um" in der Vergangenheit gemeldet und daneben „reicht: AUS" —
     während „voll um 11:00" danebensteht. Mit der Übergangsregel: kein Übergang
     ⇒ kein „leer um", und „reicht" ist AN, wenn er über der Schwelle endet.
@@ -250,7 +250,18 @@ def _leer_um_und_reicht(
     ⚠ Der **12-Uhr-Filter** der Simulation (`speicher_leer_um`) bleibt dem
     Planungs-Tab: er ist dort richtig, weil jene Simulation um Mitternacht
     startet und morgendliche Niedrigstände keine Aussage über den Abend sind.
-    Diese hier startet **jetzt** und braucht ihn nicht.
+    Diese hier startet beim **zuletzt gemessenen Ladestand** und braucht ihn
+    nicht.
+
+    ⚠ **„Leer um" darf in der Vergangenheit liegen (V1, 22.09.2026).** Seit V1
+    beginnt die Simulation nicht mehr bei ``now.hour``, sondern bei der
+    zuletzt von HA verdichteten Stunde — hinkt HA nach oder gibt es heute noch
+    keinen Ladestand, liegt dieser Start **vor** jetzt, und der Übergang kann
+    in diese Lücke fallen. Der Zeitstempel bleibt dann so, wie das Modell ihn
+    sieht („seit 09:00 leer"); ein Anheben auf die laufende Stunde wäre eine
+    zweite Uhr neben dem Sim-Start und genau die Vermischung, die V1 beendet
+    hat. Die Attribute ``sim_start_stunde``/``sim_start_anteil`` nennen den
+    Start.
 
     Returns:
         ``(leer_slot | None, reicht | None, end_soc | None, min_slot | None)``
@@ -452,18 +463,26 @@ async def preise_speicher_sensoren(
     )
     if end_soc is not None:
         modell_b = prognose.get("speicher_verbrauch_profil") or {}
+        # V1: die Start-Annahme der Simulation (Slot + Anteil) reist mit —
+        # dieselbe Regel wie beim Verbrauchsmodell daneben, nur fuer die
+        # andere Haelfte der Annahme.
+        sim_annahme = prognose.get("speicher_sim_annahme") or {}
         if leer_slot is not None:
             _anhaengen(
                 sensor_values, "eedc_speicher_leer_um_ts", _iso_ende(heute, leer_slot),
                 {
                     "quelle": "simulation",
-                    "regel": "Übergang in den Leerstand nach der laufenden Stunde",
+                    "regel": "Übergang in den Leerstand nach dem Start-Slot der Simulation "
+                             "(zuletzt gemessene Stunde)",
                     "end_soc_prozent": end_soc,
                     **modell_b,
+                    **sim_annahme,
                 },
                 berechnung=(
-                    f"erste Stunde nach jetzt, in der der Ladestand unter die "
-                    f"Leer-Schwelle fällt (Simulation ab {jetzt_stunde:02d}:00)"
+                    f"erste Stunde nach dem Sim-Start, in der der Ladestand unter die "
+                    f"Leer-Schwelle fällt (Start beim zuletzt gemessenen Ladestand, "
+                    f"Slot {sim_annahme.get('sim_start_stunde')}, davon "
+                    f"{sim_annahme.get('sim_start_anteil')} simuliert)"
                 ),
             )
         _anhaengen(
@@ -475,6 +494,7 @@ async def preise_speicher_sensoren(
                 "min_soc_um": _iso_ende(heute, min_slot) if min_slot is not None else None,
                 "end_soc_prozent": end_soc,
                 **modell_b,
+                **sim_annahme,
             },
         )
 
