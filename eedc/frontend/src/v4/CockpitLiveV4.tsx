@@ -28,9 +28,12 @@ import EnergieFluss from '../components/live/EnergieFluss'
 import TagesverlaufChart, { tagesverlaufTabelle } from '../components/live/TagesverlaufChart'
 import BoersenpreisBlock, { boersenpreisVollGeparkt } from '../components/live/BoersenpreisBlock'
 import WetterWidget from '../components/live/WetterWidget'
-import LiveAufEinenBlick from '../components/live/LiveAufEinenBlick'
+import LiveAufEinenBlick, { aufEinenBlickVollGeparkt } from '../components/live/LiveAufEinenBlick'
 import { zaehlerstaendeApi, type ZaehlerStand } from '../api/zaehlerstaende'
 import { FokusKachel, FokusVollbild } from '../components/blocks'
+import { FokusFehltOverlay } from '../components/blocks/FokusFehlt'
+import { EinbettenKnopf } from '../components/blocks/EinbettenKnopf'
+import { useDeepLinkFokus } from '../hooks/useDeepLinkFokus'
 import { ChartDatenTabelle } from '../components/ui'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { AnlageLeer } from './OnboardingLeer'
@@ -62,6 +65,73 @@ interface LiveSeed {
 // persistKey-SoT der Sicht (Element-Park-Scope `eedc-park:v4-cockpit-live`).
 const SICHT_KEY = 'v4-cockpit-live'
 
+/**
+ * FD-1: Die fünf fokussierbaren Anzeigen dieser Sicht — und damit ihre
+ * Deep-Link-Adressen (`#/cockpit/live?fokus=<id>`).
+ *
+ * ⚠ Vier davon tragen **dieselbe Zeichenkette** wie ihre Park-ID; das ist
+ * Absicht (zwei Namen für dieselbe Kachel hülfen niemandem), aber eine ANDERE
+ * Ebene: der Park räumt weg, der Deep-Link zeigt her. `live:auf-einen-blick`
+ * hat **keine** Park-ID — der Block ist eine Hülle, geparkt werden seine
+ * Abschnitte einzeln; für ihn ist die ID hier neu.
+ *
+ * Diese Liste ist öffentlicher Vertrag (sie steht in fremden HA-Dashboards) —
+ * gewächtert von `src/test/fokus-id-vertrag.test.ts`.
+ */
+export const LIVE_FOKUS_IDS = [
+  'live:energiefluss',
+  'live:auf-einen-blick',
+  'live:wetter-heute',
+  'live:tagesverlauf',
+  'live:boersenpreis',
+] as const
+
+/** Was die Sicht gerade an Daten und Park-Zustand hat — Eingang von
+ *  {@link liveFokusVorhanden}. Als eigener Typ, damit die Regel ohne React
+ *  prüfbar ist (die Live-Sicht hat keine Render-Probe mit echten Sensoren). */
+export interface LiveFokusLage {
+  data: LiveDashboardResponse | null
+  wetter: LiveWetterResponse | null
+  prognose3Tage: SolarPrognoseTag[] | null
+  zaehlerstaende: ZaehlerStand[] | null
+  boersenpreise: BoersenpreisResponse | null
+  hatTagesverlauf: boolean
+  boersenpreisAllesGeparkt: boolean
+  istGeparkt: (id: string) => boolean
+}
+
+/**
+ * ⭐ FD-5 für die Live-Sicht: Gibt es die angefragte Anzeige gerade?
+ *
+ * Die Sicht hat keine `BlockShell` — ohne diese Regel hätten fünf der acht
+ * Beispiel-Anzeigen keinen Degradations-Fall, und eine Webseiten-Karte mit
+ * falscher, geparkter oder datenloser ID zeigte klaglos die ganze Live-Sicht
+ * statt der bestellten Anzeige.
+ *
+ * ⚠ Die Bedingungen sind dieselben, unter denen die Kachel weiter unten
+ * überhaupt gemountet wird. Sie stehen absichtlich in DERSELBEN Datei — eine
+ * Änderung am Mount-Zweig muss hier mitgehen, und die Probe prüft beide Seiten.
+ */
+export function liveFokusVorhanden(id: string, l: LiveFokusLage): boolean {
+  if (!(LIVE_FOKUS_IDS as readonly string[]).includes(id)) return false
+  if (id === 'live:boersenpreis') {
+    const b = l.boersenpreise
+    return !!b && (b.tage.length > 0 || !!b.hinweis) && !l.boersenpreisAllesGeparkt && !l.istGeparkt(id)
+  }
+  // Alles Übrige hängt am Live-Abruf.
+  const data = l.data
+  if (data == null || !data.verfuegbar) return false
+  if (id === 'live:energiefluss') return !l.istGeparkt(id)
+  if (id === 'live:wetter-heute') return l.wetter != null && !l.istGeparkt(id)
+  if (id === 'live:tagesverlauf') return l.hatTagesverlauf && !l.istGeparkt(id)
+  // „Auf einen Blick" ist eine Hülle ohne eigene Park-ID: sie verschwindet,
+  // wenn ALLE ihre verfügbaren Abschnitte geparkt sind (R2).
+  return !aufEinenBlickVollGeparkt(
+    { data, wetter: l.wetter, prognose3Tage: l.prognose3Tage, zaehlerstaende: l.zaehlerstaende ?? undefined },
+    l.istGeparkt,
+  )
+}
+
 export default function CockpitLiveV4(props: { anlageId: number | undefined }) {
   // Element-Park (SLICE 1): Live-Sektionen werden parkbar (Element-Ebene, KEINE
   // BlockShell-Block-Ebene — Gernot 2026-06-26). Energiefluss-Fokus/Vollbild bleibt.
@@ -87,7 +157,11 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdate, setLastUpdate] = useState<string | null>(seed?.lastUpdate ?? null)
-  const [eflFokus, setEflFokus] = useState(false) // Energiefluss-Vollbild (⤢ in seiner eigenen Kopfzeile)
+  const [eflFokusState, setEflFokus] = useState(false) // Energiefluss-Vollbild (⤢ in seiner eigenen Kopfzeile)
+  // FD-1: Im Deep-Link-Modus entscheidet die Adresse — je Render abgeleitet,
+  // nie als Initialisierer (die Live-Daten kommen erst mit dem ersten Abruf).
+  const deep = useDeepLinkFokus()
+  const eflFokus = deep.deepLink ? deep.fokusId === 'live:energiefluss' : eflFokusState
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const wetterIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -273,6 +347,12 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
     [boersenpreise, park],
   )
 
+  // FD-5: Lage der Sicht für die Deep-Link-Degradation (Regel s. o. am Modul).
+  const fokusLage: LiveFokusLage = {
+    data, wetter, prognose3Tage, zaehlerstaende, boersenpreise,
+    hatTagesverlauf, boersenpreisAllesGeparkt, istGeparkt: park.istGeparkt,
+  }
+
   // Live-Status in die app-weite Fusszeile melden (G11): Frische · Live-Punkt ·
   // Quelle (P5-Provenance; erster Konsument). MQTT/Verbindung liegt seit P2 im
   // globalen Status-Hook der Fusszeile.
@@ -289,6 +369,19 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
         <AnlageLeer titel="Noch keine Anlage gewählt." />
       </div>
     )
+  }
+
+  // ⚠ Erst entscheiden, wenn der erste Abruf durch ist UND Daten da sind:
+  // `loading` steht beim allerersten Render noch auf `false` (es wird im Effekt
+  // gesetzt) — ohne diese Bedingung blitzte der Hinweis vor dem Spinner auf.
+  // Und ein Abruf-FEHLER ohne Daten (Backend-Neustart, Netz weg) ist kein Urteil
+  // über die Anzeige: dann fällt die Sicht unten in ihren Fehlerbanner, statt in
+  // der HA-Karte „gibt es nicht (mehr)" zu behaupten (Nachmessung 22.09., Punkt 3).
+  const abrufDurch = data != null
+  if (deep.deepLink && deep.fokusId != null && !loading && abrufDurch && !liveFokusVorhanden(deep.fokusId, fokusLage)) {
+    // Ohne Zeitraum-Teil: Live hat keine Zeitraum-Navigation, an der sich etwas
+    // ändern ließe — „nicht für diesen Zeitraum" wäre hier ein falscher Rat.
+    return <FokusFehltOverlay fokusId={deep.fokusId} />
   }
 
   return (
@@ -336,7 +429,14 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
           {/* Energiefluss-Vollbild (⤢ liegt in seiner eigenen Kopfzeile, nicht in
               einer Leerzeile) — Overlay ist fixed, Position im JSX egal. */}
           {eflFokus && (
-            <FokusVollbild titel="Energiefluss" icon={Workflow} onClose={() => setEflFokus(false)}>
+            <FokusVollbild
+              titel="Energiefluss" icon={Workflow}
+              deepLink={deep.deepLink}
+              // FD-2: auch der Energiefluss ist verlinkbar — er hat sein eigenes
+              // Overlay (kein FokusKachel), also auch seinen eigenen Knopf.
+              aktionen={(ansicht) => <EinbettenKnopf fokusId="live:energiefluss" ansicht={ansicht} />}
+              onClose={() => setEflFokus(false)}
+            >
               <EnergieFluss {...flussProps} />
             </FokusVollbild>
           )}
@@ -355,14 +455,18 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
                     {...flussProps}
                     kopfAktion={
                       // D14-16: „Vergrößern" unter 640 px ausblenden (nicht entfernen).
-                      <button
-                        type="button"
-                        onClick={() => setEflFokus(true)}
-                        aria-label="Energiefluss: Fokus / Vollbild"
-                        className="max-sm:hidden p-1 rounded text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/50"
-                      >
-                        <Maximize2 className="h-4 w-4" />
-                      </button>
+                      // In der Deep-Link-Ansicht gibt es nichts zu vergrößern (das
+                      // Overlay IST die Karte) und keinen Weg zurück.
+                      deep.deepLink ? undefined : (
+                        <button
+                          type="button"
+                          onClick={() => setEflFokus(true)}
+                          aria-label="Energiefluss: Fokus / Vollbild"
+                          className="max-sm:hidden p-1 rounded text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/50"
+                        >
+                          <Maximize2 className="h-4 w-4" />
+                        </button>
+                      )
                     }
                   />
                 )}
@@ -378,7 +482,7 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
           {/* Volle Breite (wie IST): Wetter heute, dann Tagesverlauf — je parkbar. */}
           {wetter && (
             <Parkbar id="live:wetter-heute" titel="Wetter heute">
-              <FokusKachel titel="Wetter heute" icon={CloudSun} zeigeTitel>
+              <FokusKachel titel="Wetter heute" fokusId="live:wetter-heute" icon={CloudSun} zeigeTitel>
                 <WetterWidget wetter={wetter} tagesverlauf={tagesverlauf} anlageId={anlageId ?? null} />
               </FokusKachel>
             </Parkbar>
@@ -387,6 +491,7 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
             <Parkbar id="live:tagesverlauf" titel="Tagesverlauf">
               <FokusKachel
                 titel="Tagesverlauf"
+                fokusId="live:tagesverlauf"
                 icon={LineChart}
                 // Paket CT (Pilot): Tabellen-Ablesung im Fokus-Overlay — dieselben
                 // Serien/Punkte wie der Butterfly-Chart, Vorzeichen statt _pos/_neg.
@@ -435,7 +540,7 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
       {!loading && boersenpreise && (boersenpreise.tage.length > 0 || boersenpreise.hinweis)
         && !boersenpreisAllesGeparkt && (
         <Parkbar id="live:boersenpreis" titel="Börsenpreis">
-          <FokusKachel titel="Börsenpreis heute & morgen" icon={Coins} zeigeTitel>
+          <FokusKachel titel="Börsenpreis heute & morgen" fokusId="live:boersenpreis" icon={Coins} zeigeTitel>
             <BoersenpreisBlock daten={boersenpreise} />
           </FokusKachel>
         </Parkbar>

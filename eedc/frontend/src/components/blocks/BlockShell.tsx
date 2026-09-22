@@ -16,6 +16,9 @@ import {
 } from 'lucide-react'
 import type { Block } from './types'
 import { FokusVollbild } from './FokusVollbild'
+import { FokusFehltOverlay } from './FokusFehlt'
+import { EinbettenKnopf } from './EinbettenKnopf'
+import { useDeepLinkFokus } from '../../hooks/useDeepLinkFokus'
 
 // ─── Persistenz Klappzustand + Reihenfolge (detLAN #243 A4) ───────────────────
 const LS_PREFIX = 'eedc-bloecke:'
@@ -88,11 +91,26 @@ export function BlockShell({
     })
   }, [oeffneBeimMount])
 
-  const [fokus, setFokus] = useState<string | null>(null)
+  const [fokusState, setFokus] = useState<string | null>(null)
+  // FD-1: Ein `#/<sicht>?fokus=<block-id>` öffnet diesen Block beim Laden — als
+  // Deep-Link-Ansicht (kein Zurück, kein ESC, Park read-only). Der Parameter ist
+  // ein EINGANG, kein Spiegel: ⤢ und „Zurück" schreiben die Adresse nicht.
+  const deep = useDeepLinkFokus()
   // Letzte Meta des fokussierten Blocks — damit das Vollbild Titel/Icon behält,
   // falls der Block kurzzeitig aus der Liste fällt (Lücken-Tag).
   const lastFokusMeta = useRef<Pick<Block, 'title' | 'icon' | 'farbe'> | null>(null)
   const byId = useMemo(() => Object.fromEntries(bloecke.map((b) => [b.id, b] as const)), [bloecke])
+
+  // ⛔ Der Deep-Link-Fokus wird JE RENDER abgeleitet — NIE als `useState`-
+  // Initialisierer. Mehrere Blöcke entstehen erst mit einem ZWEITEN Abruf (`co2`
+  // auf Jahr, `zaehlerstaende`, die Auswertungs-Blöcke des Monats, `bilanz` an
+  // einem Lücken-Tag): beim ersten Render stehen sie nicht in `byId`. Ein
+  // Initialisierer wird nie neu ausgewertet — das Overlay verschwände, und in
+  // der Webseiten-Karte stünde die normale Sicht statt der bestellten Anzeige.
+  // Der lokale State bleibt für den normalen Betrieb unverändert zuständig.
+  const fokus = deep.deepLink
+    ? (deep.fokusId != null && deep.fokusId in byId ? deep.fokusId : null)
+    : fokusState
 
   // Sichtbare Blöcke in gemerkter Reihenfolge — absente Lücken-Tag-/Komponenten-IDs
   // (z. B. E-Mobilität nur an manchen Tagen) rausgefiltert. Basis fürs Rendering UND
@@ -182,6 +200,12 @@ export function BlockShell({
         <FokusVollbild
           titel={meta.title} icon={meta.icon} farbe={meta.farbe} kopf={fokusKopf}
           tabelle={b?.renderTabelle?.()}
+          deepLink={deep.deepLink}
+          ansichtStart={deep.deepLink ? deep.ansicht : 'chart'}
+          // FD-2: „Link / Einbetten" — die Adresse dieser Anzeige für eine
+          // Webseiten-Karte im HA-Dashboard. Als Funktion, weil sie die gerade
+          // offene Ablesung (Chart/Tabelle) mit aufnimmt.
+          aktionen={(ansicht) => <EinbettenKnopf fokusId={fokus} ansicht={ansicht} />}
           onClose={() => setFokus(null)}
         >
           {b
@@ -194,6 +218,20 @@ export function BlockShell({
         </FokusVollbild>
       )
     }
+  }
+
+  // FD-5 (Degradation): Der Deep-Link nennt eine ID, die es hier nicht gibt —
+  // unbekannt, umbenannt, an diesem Zeitraum ohne Daten oder vollständig
+  // geparkt. Statt der nackten Sicht steht das Hinweis-Overlay da; die
+  // Zeitraum-Nav läuft mit, und sobald der Block auftaucht (zweiter Abruf,
+  // anderer Tag), greift der Zweig darüber im SELBEN Render.
+  //
+  // ⚠ BlockShell hat keinen Skeleton-Fall (der sitzt in den Sichten VOR dem
+  // Mount) — der Hinweis kann also kurz vor einem Nachzügler stehen. Das ist
+  // die ehrliche Form: lieber eine Sekunde „gibt es nicht", als dauerhaft
+  // etwas anderes zu zeigen als bestellt.
+  if (deep.deepLink && deep.fokusId != null) {
+    return <FokusFehltOverlay fokusId={deep.fokusId} kopf={fokusKopf} mitZeitraum />
   }
 
   // D7-4 (detLAN R7): KEIN Eigen-Padding/-max-width mehr — die konsumierende Sicht

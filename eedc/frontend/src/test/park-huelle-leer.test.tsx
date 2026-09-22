@@ -49,7 +49,7 @@ describe('Klasse 3 — die Container-Hülle nimmt sich zurück', () => {
     // ihre Kinder geparkt sind — sonst bliebe die Karte samt ⤢-Knopf im Bild.
     if (!zeige) return null
     return (
-      <FokusKachel titel="Auf einen Blick" zeigeTitel>
+      <FokusKachel titel="Auf einen Blick" fokusId="live:auf-einen-blick" zeigeTitel>
         <Parkbar id="live:solar" titel="Solar-Aussicht">
           <p>Solar-Aussicht</p>
         </Parkbar>
@@ -86,7 +86,7 @@ describe('Klasse 3 — die Container-Hülle nimmt sich zurück', () => {
     parke('live:solar')
     const { container } = render(
       <ParkProvider persistKey={SICHT}>
-        <FokusKachel titel="Auf einen Blick" zeigeTitel>
+        <FokusKachel titel="Auf einen Blick" fokusId="live:auf-einen-blick" zeigeTitel>
           <Parkbar id="live:solar" titel="Solar-Aussicht">
             <p>Solar-Aussicht</p>
           </Parkbar>

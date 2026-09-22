@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { BlockShell } from './BlockShell'
 import type { Block } from './types'
@@ -152,5 +152,88 @@ describe('BlockShell', () => {
     expect(screen.queryByText('Inhalt A')).not.toBeInTheDocument() // A bleibt zu
     const titel = screen.getAllByText(/^Block [ABC]$/).map((e) => e.textContent)
     expect(titel).toEqual(['Block A', 'Block C', 'Block B'])
+  })
+})
+
+// ── FD: Fokus-Deep-Link (`#/<sicht>?fokus=<block-id>`) ────────────────────────
+// ⚠ Die Proben setzen `window.location.hash` — NICHT `renderMitProvidern({ route })`.
+// Der füllt nur `MemoryRouter.initialEntries` und lässt `window.location` unberührt;
+// der Hook liest aber den echten Hash (unter `HashRouter` steht die Query dort).
+
+describe('BlockShell — Fokus-Deep-Link (FD-1/FD-5)', () => {
+  const URSPRUNG = window.location.hash
+  beforeEach(() => { localStorage.clear(); window.location.hash = '' })
+  afterEach(() => { window.location.hash = URSPRUNG })
+
+  it('?fokus=b öffnet Block B als Deep-Link-Ansicht — ohne Zurück, ohne Unterzeile', () => {
+    window.location.hash = '#/x?fokus=b'
+    render(<BlockShell bloecke={bloecke()} persistKey={KEY} />)
+    expect(screen.getByText('Inhalt B')).toBeInTheDocument()
+    expect(screen.queryByText('Inhalt A')).not.toBeInTheDocument()
+    expect(screen.queryByText('Zurück')).not.toBeInTheDocument()
+    expect(screen.queryByText('Fokus / Vollbild')).not.toBeInTheDocument()
+  })
+
+  it('ohne ?fokus= bleibt alles wie bisher (lokaler Fokus-State)', () => {
+    window.location.hash = '#/x'
+    render(<BlockShell bloecke={bloecke()} persistKey={KEY} />)
+    expect(screen.getByText('Inhalt A')).toBeInTheDocument()
+    fireEvent.click(screen.getAllByLabelText('Fokus / Vollbild')[1])
+    expect(screen.getByText('Zurück')).toBeInTheDocument()
+    // Der Deep-Link schreibt die Adresse NICHT — ⤢ ändert den Hash nicht.
+    expect(window.location.hash).toBe('#/x')
+  })
+
+  it('?fokus=gibtesnicht ⇒ Hinweis-Overlay OHNE den Schließen-Satz (FD-5 Fall 1)', () => {
+    window.location.hash = '#/x?fokus=gibtesnicht'
+    render(<BlockShell bloecke={bloecke()} persistKey={KEY} fokusKopf={<p>Zeitraum-Nav</p>} />)
+    expect(screen.getByText(/gibt es in dieser Sicht nicht/)).toBeInTheDocument()
+    expect(screen.getByText(/nicht für diesen Zeitraum/)).toBeInTheDocument()
+    // Kein Ausweg, kein Bestandssatz aus dem normalen Lücken-Tag-Zweig.
+    expect(screen.queryByText('Zurück')).not.toBeInTheDocument()
+    expect(screen.queryByText(/schließe die Vollansicht/)).not.toBeInTheDocument()
+    // Die Sicht dahinter bleibt verdeckt — kein Leerbild, kein normaler Block-Stack.
+    expect(screen.queryByText('Inhalt A')).not.toBeInTheDocument()
+    // Die Zeitraum-Nav läuft mit (FD-5 Fall 2: weiterblättern bis Daten da sind).
+    expect(screen.getByText('Zeitraum-Nav')).toBeInTheDocument()
+  })
+
+  it('Nachzügler: der Block kommt mit dem ZWEITEN Abruf und wird im selben Render fokussiert', () => {
+    // Der reale Fall: `co2` auf Cockpit/Jahr, `bilanz` an einem Lücken-Tag. Ein
+    // `useState`-Initialisierer hätte hier für immer den Hinweis stehen lassen.
+    window.location.hash = '#/x?fokus=c'
+    const { rerender } = render(<BlockShell bloecke={[bloecke()[0]]} persistKey={KEY} />)
+    expect(screen.getByText(/gibt es in dieser Sicht nicht/)).toBeInTheDocument()
+    rerender(<BlockShell bloecke={bloecke()} persistKey={KEY} />)
+    expect(screen.getByText('Inhalt C')).toBeInTheDocument()
+    expect(screen.queryByText(/gibt es in dieser Sicht nicht/)).not.toBeInTheDocument()
+  })
+
+  it('… und verschwindet der Block wieder, steht der Hinweis statt des Bestandssatzes', () => {
+    window.location.hash = '#/x?fokus=c'
+    const { rerender } = render(<BlockShell bloecke={bloecke()} persistKey={KEY} />)
+    expect(screen.getByText('Inhalt C')).toBeInTheDocument()
+    rerender(<BlockShell bloecke={[bloecke()[0]]} persistKey={KEY} />)
+    expect(screen.getByText(/gibt es in dieser Sicht nicht/)).toBeInTheDocument()
+    expect(screen.queryByText(/keine Daten vor/)).not.toBeInTheDocument()
+  })
+
+  it('?ansicht=tabelle startet in der Tabellen-Ablesung (CT-5)', () => {
+    window.location.hash = '#/x?fokus=b&ansicht=tabelle'
+    const mitTabelle: Block[] = [
+      { id: 'b', title: 'Block B', defaultOpen: true, render: () => <p>Chart B</p>, renderTabelle: () => <p>Tabelle B</p> },
+    ]
+    render(<BlockShell bloecke={mitTabelle} persistKey={KEY} />)
+    expect(screen.getByText('Tabelle B')).toBeInTheDocument()
+    expect(screen.queryByText('Chart B')).not.toBeInTheDocument()
+  })
+
+  it('ohne ansicht-Param startet der Deep-Link beim Chart', () => {
+    window.location.hash = '#/x?fokus=b'
+    const mitTabelle: Block[] = [
+      { id: 'b', title: 'Block B', defaultOpen: true, render: () => <p>Chart B</p>, renderTabelle: () => <p>Tabelle B</p> },
+    ]
+    render(<BlockShell bloecke={mitTabelle} persistKey={KEY} />)
+    expect(screen.getByText('Chart B')).toBeInTheDocument()
   })
 })

@@ -117,3 +117,66 @@ describe('FokusVollbild — ESC mit echtem DatumPicker im kopf-Slot', () => {
     expect(screen.getByText('Inhalt')).toBeInTheDocument()
   })
 })
+
+describe('FokusVollbild — Deep-Link-Ansicht (FD-1/FD-3)', () => {
+  const escSenden = () => document.dispatchEvent(
+    new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+  )
+
+  it('deepLink: kein „Zurück", keine Unterzeile, keine Aktionen — Chart⇄Tabelle und kopf bleiben', () => {
+    render(
+      <FokusVollbild
+        titel="Energie-Bilanz"
+        onClose={() => {}}
+        deepLink
+        aktionen={<button type="button">Link / Einbetten</button>}
+        kopf={<p>Zeitraum-Nav</p>}
+        tabelle={<p>Tabellen-Inhalt</p>}
+      >
+        <p>Chart-Inhalt</p>
+      </FokusVollbild>,
+    )
+    expect(screen.queryByRole('button', { name: /Zurück/ })).not.toBeInTheDocument()
+    expect(screen.queryByText('Fokus / Vollbild')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Link / Einbetten' })).not.toBeInTheDocument()
+    // Was bleibt: die Zeitraum-Nav und der Chart-⇄-Tabelle-Umschalter.
+    expect(screen.getByText('Zeitraum-Nav')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Tabelle' }))
+    expect(screen.getByText('Tabellen-Inhalt')).toBeInTheDocument()
+  })
+
+  it('deepLink: ESC bleibt wirkungslos (kein Zuhörer registriert)', async () => {
+    const onClose = vi.fn()
+    render(<FokusVollbild titel="Verlauf" onClose={onClose} deepLink><p>Inhalt</p></FokusVollbild>)
+    escSenden()
+    await tick()
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByText('Inhalt')).toBeInTheDocument()
+  })
+
+  it('ansichtStart="tabelle" startet in der Tabellen-Ablesung (CT-5)', () => {
+    render(
+      <FokusVollbild titel="Verlauf" onClose={() => {}} ansichtStart="tabelle" tabelle={<p>Tabellen-Inhalt</p>}>
+        <p>Chart-Inhalt</p>
+      </FokusVollbild>,
+    )
+    expect(screen.getByText('Tabellen-Inhalt')).toBeInTheDocument()
+    expect(screen.queryByText('Chart-Inhalt')).not.toBeInTheDocument()
+    // Der Umschalter bleibt bedienbar — `ansichtStart` ist ein Startwert, kein Zwang.
+    fireEvent.click(screen.getByRole('button', { name: 'Chart' }))
+    expect(screen.getByText('Chart-Inhalt')).toBeInTheDocument()
+  })
+
+  it('im normalen Betrieb steht der aktionen-Slot links vom „Zurück"', () => {
+    render(
+      <FokusVollbild titel="Verlauf" onClose={() => {}} aktionen={<button type="button">Link / Einbetten</button>}>
+        <p>Inhalt</p>
+      </FokusVollbild>,
+    )
+    const aktion = screen.getByRole('button', { name: 'Link / Einbetten' })
+    const zurueck = screen.getByRole('button', { name: /Zurück/ })
+    expect(aktion).toBeInTheDocument()
+    // DOCUMENT_POSITION_FOLLOWING = 4: „Zurück" steht NACH der Aktion.
+    expect(aktion.compareDocumentPosition(zurueck) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+})

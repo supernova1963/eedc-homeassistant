@@ -4,6 +4,14 @@
  * Geteilte SoT für „bildschirmfüllend" (KONZEPT-IA-V4 Z.76): genutzt von der
  * {@link BlockShell} (⤢ je Block) UND der {@link FokusKachel} (⤢ je Karte ohne
  * Block-Stack). Ein Verhalten + ein Look app-weit — keine zweite Kopie.
+ *
+ * Seit FD (Fokus-Deep-Link) trägt dasselbe Overlay ZWEI Betriebsarten:
+ *  • **normal** — geöffnet per ⤢, mit „Zurück", ESC und Einbetten-Knopf;
+ *  • **Deep-Link** (`deepLink`) — geöffnet durch `#/…?fokus=<id>`, ohne Ausweg,
+ *    gedacht für die Webseiten-Karte eines HA-Dashboards (KONZEPT-FOKUS-DEEPLINK).
+ * Es ist bewusst dieselbe Komponente: die Karte im Dashboard soll exakt das
+ * zeigen, was der Anwender im Fokus sieht — nicht eine zweite Darstellung, die
+ * ihr eigenes Leben führt (Regel 0a).
  */
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
@@ -12,7 +20,9 @@ import { Minimize2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { SegmentControl } from '../ui'
 
-export function FokusVollbild({ titel, icon: Icon, farbe, onClose, kopf, tabelle, children }: {
+export function FokusVollbild({
+  titel, icon: Icon, farbe, onClose, kopf, tabelle, aktionen, deepLink = false, ansichtStart = 'chart', children,
+}: {
   titel: string
   icon?: LucideIcon
   farbe?: string
@@ -24,10 +34,29 @@ export function FokusVollbild({ titel, icon: Icon, farbe, onClose, kopf, tabelle
    *  Gesetzt → Chart-⇄-Tabelle-Umschalter in der Kopfzeile; der Zugang zur
    *  Chart-Tabelle lebt NUR hier (kein Kartenkopf-Icon, Gernot 2026-07-18). */
   tabelle?: ReactNode
+  /** Zusatz-Aktionen links vom „Zurück" (heute: der Einbetten-Knopf). Im
+   *  Deep-Link-Modus NICHT gerendert — dort gibt es keinen Anwender, der eine
+   *  Adresse kopieren will, sondern eine Karte in einem fremden Dashboard.
+   *
+   *  ⚠ Auch als **Funktion** erlaubt: Der Einbetten-Knopf muss wissen, ob gerade
+   *  Chart oder Tabelle offen ist (`&ansicht=tabelle`) — und das weiß NUR diese
+   *  Komponente, der Zustand liegt hier. Ein reiner Knoten hätte die Adresse
+   *  immer mit „Chart" gebaut, auch wenn der Anwender die Tabelle vor sich hat. */
+  aktionen?: ReactNode | ((ansicht: 'chart' | 'tabelle') => ReactNode)
+  /** FD-1 Deep-Link-Ansicht (`#/…?fokus=<id>`): dieselbe Anzeige, aber **ohne
+   *  Ausweg** — kein „Zurück", kein ESC-Zuhörer, keine Unterzeile, keine
+   *  Aktionen. Die Sicht dahinter ist nicht gemeint und nicht erreichbar; ein
+   *  Knopf, der ins Nichts führt, wäre schlimmer als keiner.
+   *  Chart⇄Tabelle und der `kopf`-Slot (Zeitraum-Nav) bleiben bedienbar. */
+  deepLink?: boolean
+  /** CT-5: Start-Ablesung (`?ansicht=tabelle`). Wirkt nur beim Öffnen — danach
+   *  entscheidet der Umschalter, die Adresse wird nicht zurückgeschrieben. */
+  ansichtStart?: 'chart' | 'tabelle'
   children: ReactNode
 }) {
-  // Flüchtig wie der Fokus selbst: jedes Öffnen startet beim Chart.
-  const [ansicht, setAnsicht] = useState<'chart' | 'tabelle'>('chart')
+  // Flüchtig wie der Fokus selbst: jedes Öffnen startet beim Chart — außer der
+  // Deep-Link nennt die Tabelle (`ansichtStart`), dann beginnt es dort.
+  const [ansicht, setAnsicht] = useState<'chart' | 'tabelle'>(ansichtStart)
 
   // Schließen-Konvention (Style-Guide B16, Gernot 2026-07-17): ESC schließt. Einen
   // Backdrop-Klick gibt es hier bewusst NICHT — das Overlay ist deckend, es gibt kein
@@ -46,14 +75,20 @@ export function FokusVollbild({ titel, icon: Icon, farbe, onClose, kopf, tabelle
   // VOR dem nächsten Zuhörer und sieht dessen `preventDefault` nicht. jsdom tut das
   // nicht: die Vitest-Probe war grün, während die Anwendung Picker und Vollbild
   // gemeinsam schloss. Ein Makrotask läuft in beiden erst nach der ganzen Zustellung.
+  //
+  // ⛔ Im Deep-Link-Modus wird gar nicht erst registriert (der `setTimeout`-
+  // Mechanismus darunter bleibt unberührt): ESC hätte dort nichts zu schließen —
+  // die Karte im HA-Dashboard würde auf die nackte Sicht zurückfallen, die der
+  // Deep-Link gerade NICHT zeigen soll.
   useEffect(() => {
+    if (deepLink) return
     const beiTaste = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       setTimeout(() => { if (!e.defaultPrevented) onClose() }, 0)
     }
     document.addEventListener('keydown', beiTaste)
     return () => document.removeEventListener('keydown', beiTaste)
-  }, [onClose])
+  }, [onClose, deepLink])
 
   // D10-1 (detLAN R10): Portal an `document.body`. Ein Ancestor der Block-Zone
   // erzeugt einen Containing-Block (transform/filter/backdrop-blur/contain) → ein
@@ -68,7 +103,9 @@ export function FokusVollbild({ titel, icon: Icon, farbe, onClose, kopf, tabelle
         <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
           {Icon && <Icon className={`h-5 w-5 ${farbe ?? ''}`} />}
           {titel}
-          <span className="text-xs font-normal text-gray-400 dark:text-gray-500">Fokus / Vollbild</span>
+          {!deepLink && (
+            <span className="text-xs font-normal text-gray-400 dark:text-gray-500">Fokus / Vollbild</span>
+          )}
         </h2>
         <div className="flex items-center gap-2">
           {tabelle != null && (
@@ -83,13 +120,16 @@ export function FokusVollbild({ titel, icon: Icon, farbe, onClose, kopf, tabelle
               onChange={setAnsicht}
             />
           )}
-          <button
-            type="button"
-            onClick={onClose}
-            className="min-h-[44px] flex items-center gap-2 px-3 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
-          >
-            <Minimize2 className="h-4 w-4" /> Zurück
-          </button>
+          {!deepLink && (typeof aktionen === 'function' ? aktionen(ansicht) : aktionen)}
+          {!deepLink && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="min-h-[44px] flex items-center gap-2 px-3 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
+            >
+              <Minimize2 className="h-4 w-4" /> Zurück
+            </button>
+          )}
         </div>
       </div>
       {kopf != null && <div className="flex-shrink-0">{kopf}</div>}

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { ParkProvider, Parkbar, ParkFuss, usePark } from './index'
 
@@ -134,5 +134,38 @@ describe('Element-Park (SLICE 1)', () => {
     // kpi:a ohne titel = ungültig → nicht geparkt → A sichtbar.
     expect(screen.getByText('Inhalt A')).toBeInTheDocument()
     expect(screen.queryByText(/Parkplatz \(/)).not.toBeInTheDocument()
+  })
+})
+
+// ── FD: Deep-Link-Ansicht ⇒ Park read-only ───────────────────────────────────
+describe('Element-Park — read-only in der Deep-Link-Ansicht (FD-1)', () => {
+  const URSPRUNG = window.location.hash
+  beforeEach(() => { localStorage.clear(); window.location.hash = '' })
+  afterEach(() => { window.location.hash = URSPRUNG })
+
+  it('mit ?fokus= gibt es keine Park-Geste mehr — der Inhalt bleibt stehen', () => {
+    window.location.hash = '#/cockpit/live?fokus=live:tagesverlauf'
+    render(<Harness />)
+    expect(screen.getByText('Inhalt A')).toBeInTheDocument()
+    // Rechtsklick: früher erschien hier „Parken". Jetzt passiert nichts.
+    fireEvent.contextMenu(screen.getByText('Inhalt A'))
+    expect(screen.queryByText('Parken')).not.toBeInTheDocument()
+    expect(screen.getByText('Inhalt A')).toBeInTheDocument()
+    expect(screen.queryByText('Parkplatz (1)')).not.toBeInTheDocument()
+  })
+
+  it('geparkt bleibt geparkt — die Kuratierung pro Gerät wirkt weiter', () => {
+    localStorage.setItem(LS, JSON.stringify([{ id: 'kpi:a', titel: 'Kennzahl A' }]))
+    window.location.hash = '#/cockpit/live?fokus=live:tagesverlauf'
+    render(<Harness />)
+    expect(screen.queryByText('Inhalt A')).not.toBeInTheDocument()
+    expect(screen.getByText('Inhalt B')).toBeInTheDocument()
+  })
+
+  it('ohne ?fokus= ist die Geste da wie bisher (Gegenrichtung)', () => {
+    window.location.hash = '#/cockpit/live'
+    render(<Harness />)
+    fireEvent.contextMenu(screen.getByText('Inhalt A'))
+    expect(screen.getByText('Parken')).toBeInTheDocument()
   })
 })

@@ -81,6 +81,17 @@ export function Parkbar({
   // Inert ohne Provider bzw. wenn geparkt → nichts an der kanonischen Stelle.
   if (!park.aktiv) return className ? <div className={className}>{children}</div> : <>{children}</>
   if (park.istGeparkt(id)) return null
+  // FD-1 Deep-Link-Ansicht: read-only. Derselbe DOM-Knoten samt `data-park-id`
+  // (die Render-Proben lesen ihn), aber ohne Geste — in einer HA-Karte könnte
+  // man sonst parken und nie wieder entparken, weil der ParkFuss unter dem
+  // Overlay liegt. Geparktes bleibt oben weiterhin unsichtbar.
+  if (park.readOnly) {
+    return (
+      <div data-park-id={id} className={`relative${className ? ` ${className}` : ''}`}>
+        {children}
+      </div>
+    )
+  }
 
   const abbrechen = () => {
     if (timer.current) { clearTimeout(timer.current); timer.current = null }

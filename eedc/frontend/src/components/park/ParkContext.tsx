@@ -17,6 +17,7 @@
  * ist damit inert, solange keine Sicht aktiv opt-in macht.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useDeepLinkFokus } from '../../hooks/useDeepLinkFokus'
 
 const LS_PREFIX = 'eedc-park:'
 
@@ -41,6 +42,14 @@ export interface ParkApi {
   /** Anzahl aktuell montierter parkbarer Elemente (inkl. geparkter, die `null`
    *  rendern, aber montiert bleiben) — 0 ⇒ Sicht hat nichts Parkbares. */
   parkbareAnzahl: number
+  /** FD-1: In der Deep-Link-Ansicht ist der Park **lesend**. Grund ist keine
+   *  Vorsicht, sondern eine Einbahnstraße: Das Fokus-Overlay deckt die ganze
+   *  Seite, der {@link ParkFuss} zum Zurückholen liegt darunter. Ohne diese
+   *  Sperre könnte man in einer HA-Karte parken und es nie wieder rückgängig
+   *  machen. **Geparkt bleibt geparkt** — die Kuratierung pro Gerät wirkt
+   *  weiter, nur die Geste ist stillgelegt.
+   *  Optional: der No-Op und von Hand gebaute Test-Stubs sind nie read-only. */
+  readOnly?: boolean
 }
 
 /** Inertes No-Op (kein Provider / kein Park-Kontext). Auch Default für Block-Bauer,
@@ -54,6 +63,7 @@ export const NOOP_PARK: ParkApi = {
   geparkt: [],
   registriere: () => () => {},
   parkbareAnzahl: 0,
+  readOnly: false,
 }
 
 const ParkCtx = createContext<ParkApi>(NOOP_PARK)
@@ -100,6 +110,9 @@ export function ParkProvider({
   children: ReactNode
 }) {
   const [geparkt, setGeparkt] = useState<GeparktesElement[]>(() => laden(persistKey))
+  // FD-1: Steht ein `?fokus=` in der Adresse, ist die Sicht eine Deep-Link-
+  // Ansicht (Webseiten-Karte im HA-Dashboard) — der Park wird read-only.
+  const { deepLink } = useDeepLinkFokus()
 
   // Sichtwechsel (persistKey ändert sich) → frisch aus dem passenden Scope laden.
   useEffect(() => {
@@ -134,8 +147,8 @@ export function ParkProvider({
   const zuruecksetzen = useCallback(() => setGeparkt([]), [])
 
   const api = useMemo<ParkApi>(
-    () => ({ aktiv: true, istGeparkt, park, entparke, zuruecksetzen, geparkt, registriere, parkbareAnzahl: registriert.size }),
-    [istGeparkt, park, entparke, zuruecksetzen, geparkt, registriere, registriert],
+    () => ({ aktiv: true, istGeparkt, park, entparke, zuruecksetzen, geparkt, registriere, parkbareAnzahl: registriert.size, readOnly: deepLink }),
+    [istGeparkt, park, entparke, zuruecksetzen, geparkt, registriere, registriert, deepLink],
   )
 
   return <ParkCtx.Provider value={api}>{children}</ParkCtx.Provider>

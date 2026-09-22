@@ -33,13 +33,67 @@ import type { SolarPrognoseTag } from '../../api/wetter'
 import type { ZaehlerStand } from '../../api/zaehlerstaende'
 
 interface Abschnitt {
-  key: string
+  key: AbschnittKey
   titel: string
   icon: LucideIcon
   /** Bringt die Sub-Komponente ihre eigene Überschrift mit? Sonst ergänzen wir eine. */
   eigenerTitel: boolean
   verfuegbar: boolean
   render: () => ReactNode
+}
+
+/** Die Abschnitte dieses Blocks — Park-IDs sind `live:<key>`. */
+export type AbschnittKey =
+  | 'heute' | 'sonnenstand' | 'solar-aussicht' | 'ladezustand'
+  | 'temperaturen' | 'zaehlerstaende' | 'innengeraete'
+
+export interface AufEinenBlickDaten {
+  data: LiveDashboardResponse
+  wetter: LiveWetterResponse | null
+  prognose3Tage: SolarPrognoseTag[] | null
+  zaehlerstaende?: ZaehlerStand[]
+}
+
+/**
+ * Welche Abschnitte erscheinen unter diesen Daten überhaupt?
+ *
+ * Eigene Funktion, weil die Antwort an ZWEI Stellen gebraucht wird: hier für das
+ * Rendern — und in `CockpitLiveV4` für die Deep-Link-Degradation (FD-5). Ein
+ * `#/cockpit/live?fokus=live:auf-einen-blick` muss wissen, ob es diesen Block
+ * gerade gibt; die Sicht kann das nicht raten, ohne die Regeln zu kopieren.
+ */
+export function aufEinenBlickVerfuegbar({ data, wetter, prognose3Tage, zaehlerstaende }: AufEinenBlickDaten): Set<AbschnittKey> {
+  const keys: AbschnittKey[] = ['heute']
+  if (wetter?.sunrise && wetter?.sunset) keys.push('sonnenstand')
+  if (prognose3Tage && prognose3Tage.length > 0) keys.push('solar-aussicht')
+  if (data.gauges?.some((g) => g.key.startsWith('soc_'))) keys.push('ladezustand')
+  if (wetter?.aktuell?.temperatur_c != null || data.warmwasser_temperatur_c != null) keys.push('temperaturen')
+  // #377: Der Abschnitt erscheint nur, wenn wirklich ein Stand vorliegt — ein
+  // angelegter Zähler ohne Messung bekäme sonst eine leere Kachel.
+  if (zaehlerstaende?.some((z) => z.stand_ende != null)) keys.push('zaehlerstaende')
+  // #263: dieselbe Regel wie beim Zähler — ein angelegtes Innengerät ohne
+  // jeden Wert bekommt keine leere Kachel.
+  if (data.innengeraete?.some((g) => g.leistung_w != null || g.ist_temperatur_c != null || g.soll_temperatur_c != null)) {
+    keys.push('innengeraete')
+  }
+  return new Set(keys)
+}
+
+/**
+ * Park-Doktrin R2: Sind ALLE verfügbaren Abschnitte geparkt, verschwindet die
+ * ganze Hülle (sonst bliebe ein leerer Kachel-Kopf stehen). Zugleich die
+ * FD-5-Bedingung der Sicht: dann gibt es nichts zu fokussieren.
+ *
+ * ⚠ Eine LEERE Menge zählt NICHT als „alles geparkt" — `heute` ist immer
+ * verfügbar, die Menge ist also nie leer; die Prüfung steht trotzdem da, weil
+ * derselbe Fehler den Börsenpreis-Block einmal unsichtbar gemacht hätte.
+ */
+export function aufEinenBlickVollGeparkt(d: AufEinenBlickDaten, istGeparkt: (id: string) => boolean): boolean {
+  // ⚠ Die Liste wird aus den DATEN abgeleitet, nie fest geschrieben — genau das
+  // verlangt `check:park-idliste` (L2): eine feste Liste, die eine nur bedingt
+  // gerenderte ID nennt, macht `alleGeparkt` nie wahr.
+  const ids = [...aufEinenBlickVerfuegbar(d)].map((k) => `live:${k}`)
+  return ids.length > 0 && ids.every((id) => istGeparkt(id))
 }
 
 export default function LiveAufEinenBlick({ data, wetter, prognose3Tage, zaehlerstaende }: {
@@ -50,26 +104,15 @@ export default function LiveAufEinenBlick({ data, wetter, prognose3Tage, zaehler
   zaehlerstaende?: ZaehlerStand[]
 }) {
   const park = usePark()
-  const hatSonne = !!(wetter?.sunrise && wetter?.sunset)
-  const hatAussicht = !!(prognose3Tage && prognose3Tage.length > 0)
-  const hatSoc = !!data.gauges?.some((g) => g.key.startsWith('soc_'))
-  const hatTemp = !!(wetter?.aktuell?.temperatur_c != null || data.warmwasser_temperatur_c != null)
-  // #377: Der Abschnitt erscheint nur, wenn wirklich ein Stand vorliegt — ein
-  // angelegter Zähler ohne Messung bekäme sonst eine leere Kachel.
-  const hatZaehler = !!zaehlerstaende?.some((z) => z.stand_ende != null)
-  // #263: dieselbe Regel wie beim Zähler — ein angelegtes Innengerät ohne
-  // jeden Wert bekommt keine leere Kachel.
-  const hatInnengeraete = !!data.innengeraete?.some(
-    (g) => g.leistung_w != null || g.ist_temperatur_c != null || g.soll_temperatur_c != null,
-  )
+  const verfuegbar = aufEinenBlickVerfuegbar({ data, wetter, prognose3Tage, zaehlerstaende })
 
   const abschnitte: Abschnitt[] = [
     {
-      key: 'heute', titel: 'Heute', icon: Calendar, eigenerTitel: true, verfuegbar: true,
+      key: 'heute', titel: 'Heute', icon: Calendar, eigenerTitel: true, verfuegbar: verfuegbar.has('heute'),
       render: () => <LiveHeuteKacheln data={data} />,
     },
     {
-      key: 'sonnenstand', titel: 'Sonnenstand', icon: Sunrise, eigenerTitel: false, verfuegbar: hatSonne,
+      key: 'sonnenstand', titel: 'Sonnenstand', icon: Sunrise, eigenerTitel: false, verfuegbar: verfuegbar.has('sonnenstand'),
       render: () => (
         <SunProgressBar
           sunrise={wetter!.sunrise!}
@@ -82,15 +125,15 @@ export default function LiveAufEinenBlick({ data, wetter, prognose3Tage, zaehler
       ),
     },
     {
-      key: 'solar-aussicht', titel: 'Solar-Aussicht', icon: Sun, eigenerTitel: true, verfuegbar: hatAussicht,
+      key: 'solar-aussicht', titel: 'Solar-Aussicht', icon: Sun, eigenerTitel: true, verfuegbar: verfuegbar.has('solar-aussicht'),
       render: () => <SolarAussicht3Tage prognose3Tage={prognose3Tage!} wetter={wetter} heutePvKwh={data.heute_pv_kwh} />,
     },
     {
-      key: 'ladezustand', titel: 'Ladezustand', icon: Battery, eigenerTitel: true, verfuegbar: hatSoc,
+      key: 'ladezustand', titel: 'Ladezustand', icon: Battery, eigenerTitel: true, verfuegbar: verfuegbar.has('ladezustand'),
       render: () => <LiveSocBalken gauges={data.gauges} />,
     },
     {
-      key: 'temperaturen', titel: 'Temperaturen', icon: Thermometer, eigenerTitel: false, verfuegbar: hatTemp,
+      key: 'temperaturen', titel: 'Temperaturen', icon: Thermometer, eigenerTitel: false, verfuegbar: verfuegbar.has('temperaturen'),
       render: () => (
         <LiveTemperaturen
           aussenC={wetter?.aktuell?.temperatur_c}
@@ -103,14 +146,14 @@ export default function LiveAufEinenBlick({ data, wetter, prognose3Tage, zaehler
     {
       // #377 — direkt unter *Temperaturen*, und zwar aus demselben Grund:
       // beides sind Werte, die eedc anzeigt, ohne sie zu verrechnen.
-      key: 'zaehlerstaende', titel: 'Zählerstände', icon: Gauge, eigenerTitel: false, verfuegbar: hatZaehler,
+      key: 'zaehlerstaende', titel: 'Zählerstände', icon: Gauge, eigenerTitel: false, verfuegbar: verfuegbar.has('zaehlerstaende'),
       render: () => <LiveZaehlerstaende staende={zaehlerstaende ?? []} />,
     },
     {
       // #263 — aus demselben Grund direkt hier: Werte, die eedc anzeigt, ohne
       // sie zu verrechnen.
       key: 'innengeraete', titel: 'Innengeräte', icon: Thermometer, eigenerTitel: false,
-      verfuegbar: hatInnengeraete,
+      verfuegbar: verfuegbar.has('innengeraete'),
       render: () => <LiveInnengeraete geraete={data.innengeraete ?? []} />,
     },
   ]
@@ -120,12 +163,12 @@ export default function LiveAufEinenBlick({ data, wetter, prognose3Tage, zaehler
   // Hülle (sonst bliebe ein leerer Kachel-Kopf stehen). Ohne ParkProvider (v3-IST) ist
   // `istGeparkt` immer false → nie versteckt, DOM unverändert.
   const sichtbareAbschnitte = abschnitte.filter((a) => a.verfuegbar)
-  if (sichtbareAbschnitte.length > 0 && sichtbareAbschnitte.every((a) => park.istGeparkt(`live:${a.key}`))) {
+  if (aufEinenBlickVollGeparkt({ data, wetter, prognose3Tage, zaehlerstaende }, park.istGeparkt)) {
     return null
   }
 
   return (
-    <FokusKachel titel="Auf einen Blick" icon={LayoutGrid} zeigeTitel>
+    <FokusKachel titel="Auf einen Blick" fokusId="live:auf-einen-blick" icon={LayoutGrid} zeigeTitel>
       <div className="space-y-4">
         {sichtbareAbschnitte.map((a) => (
           <Parkbar key={a.key} id={`live:${a.key}`} titel={a.titel}>

@@ -1,0 +1,154 @@
+{
+  "src/components/live/DatenquellenZuordnung.tsx": [
+    "dq-topics"
+  ],
+  "src/components/live/LiveAufEinenBlick.tsx": [
+    "live:auf-einen-blick"
+  ],
+  "src/v4/AuswertungenCo2V4.tsx": [
+    "amort",
+    "basis",
+    "bilanz"
+  ],
+  "src/v4/AuswertungenFinanzenV4.tsx": [
+    "berichte",
+    "kein-tarif",
+    "tkonto",
+    "uebersicht"
+  ],
+  "src/v4/AuswertungenPrognoseV4.tsx": [
+    "genauigkeit",
+    "mehrjahr",
+    "profil",
+    "pvgis",
+    "pvstrings"
+  ],
+  "src/v4/AuswertungenRoiV4.tsx": [
+    "amortisation",
+    "detail",
+    "verteilung",
+    "wirtschaftlichkeit"
+  ],
+  "src/v4/AuswertungenTabelleV4.tsx": [
+    "energieprofile",
+    "monatswerte"
+  ],
+  "src/v4/CockpitAussichtV4.tsx": [
+    "degradation",
+    "details",
+    "finanzen",
+    "kpi",
+    "monatswerte",
+    "saison",
+    "stunden",
+    "stundenwerte",
+    "verlauf",
+    "verlauf",
+    "wp-aussicht"
+  ],
+  "src/v4/CockpitJahrV4.tsx": [
+    "bilanz",
+    "co2",
+    "co2",
+    "kpi",
+    "kpi",
+    "speicher-verlauf",
+    "verlauf",
+    "zaehlerstaende"
+  ],
+  "src/v4/CockpitLiveV4.tsx": [
+    "live:boersenpreis",
+    "live:energiefluss",
+    "live:tagesverlauf",
+    "live:wetter-heute"
+  ],
+  "src/v4/CockpitMonatV4.tsx": [
+    "bilanz",
+    "kpi",
+    "kpi",
+    "tagesverlauf",
+    "zaehlerstaende"
+  ],
+  "src/v4/CockpitTagV4.tsx": [
+    "bilanz",
+    "kpi",
+    "kpi",
+    "stundenwerte",
+    "verlauf",
+    "zaehlerstaende"
+  ],
+  "src/v4/CommunityKomponentenV4.tsx": [
+    "bkw",
+    "eauto",
+    "speicher",
+    "waermepumpe",
+    "wallbox"
+  ],
+  "src/v4/CommunityPVErtragV4.tsx": [
+    "hinweis",
+    "jahresuebersicht",
+    "kennzahlen",
+    "monatsertrag",
+    "verteilung"
+  ],
+  "src/v4/CommunityRegionalV4.tsx": [
+    "einordnung",
+    "karte",
+    "position",
+    "tabelle",
+    "vergleich"
+  ],
+  "src/v4/CommunityStatistikenV4.tsx": [
+    "anlage",
+    "position",
+    "quoten",
+    "top10",
+    "uebersicht"
+  ],
+  "src/v4/CommunityTrendsV4.tsx": [
+    "community",
+    "degradation",
+    "jahresvergleich",
+    "monatsverlauf",
+    "saisonal",
+    "verlauf"
+  ],
+  "src/v4/CommunityUebersichtV4.tsx": [
+    "achievements",
+    "komponenten",
+    "performance",
+    "profil",
+    "ranking"
+  ],
+  "src/v4/KomponentenSektionen.tsx": [
+    "k-bkw",
+    "k-emob",
+    "k-sonstiges-abgabe",
+    "k-sonstiges-erzeuger",
+    "k-sonstiges-verbraucher",
+    "k-speicher",
+    "k-waermepumpe"
+  ],
+  "src/v4/KomponentenTypV4.tsx": [
+    "daten-checker",
+    "dimensionierung",
+    "einstellungen",
+    "infothek",
+    "status",
+    "struktur",
+    "sub",
+    "vergleich",
+    "verlauf",
+    "wirtschaftlichkeit",
+    "wirtschaftlichkeit"
+  ],
+  "src/v4/MonatAuswertungBloecke.tsx": [
+    "kategorien",
+    "negativpreis",
+    "peaks",
+    "tagesprofil"
+  ],
+  "src/v4/MonatRahmen.tsx": [
+    "finanzen"
+  ]
+}

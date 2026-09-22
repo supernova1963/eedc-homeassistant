@@ -155,7 +155,7 @@ jetzt mit zurück.** Entitäten anderer Integrationen bleiben unberührt. Was li
 bleibt, sind die Monatsabschluss-Nachrichten auf dem Broker — sie sind keine
 Sensoren, und ein Abschluss wiederholt sich nicht.
 
-→ [Sensor-Referenz §11](?doc=sensor-referenz) · [Einstellungen → Integration → MQTT-Export](?doc=handbuch-einstellungen)
+→ [Sensor-Referenz §11](?doc=sensor-referenz) · [Einstellungen → Integration → MQTT-Export](?doc=einstellungen)
 
 ### „Größerer Speicher?" und „Speicher-Potential" rechnen nur noch mit dem Speicher, der heute bei dir steht
 
@@ -178,6 +178,37 @@ mehr zur Basis der Frage „lohnt sich ein größerer?".
 **Was du tun musst:** Nichts. Deine Erfassung als zweites Gerät mit Stilllegungsdatum war und
 bleibt der richtige Weg. Danke an **Radiocarbonat** für die Meldung mit den Zahlen, die den
 Fehler auf den Punkt gebracht haben.
+
+### Eine einzelne eedc-Anzeige im Home-Assistant-Dashboard
+
+**Betrifft dich das?** Ja, wenn du ein HA-Dashboard oder ein Wandtablet pflegst und dort
+eine bestimmte eedc-Anzeige sehen willst — den Energiefluss, die Preiskurve, die
+Energie-Bilanz des Monats.
+
+**Was war:** eedc ließ sich nur als Ganzes verlinken. Wer eine einzelne Anzeige in sein
+Dashboard holen wollte, landete bei der vollen Oberfläche samt Navigation — auf einer
+Dashboard-Karte kaum lesbar. Fesa2702 beschrieb es im Forum für sein Wandtablet,
+OB73-gif fragte nach „kopierbaren Blöcken".
+
+**Was jetzt:** Jede Anzeige mit dem ⤢-Symbol hat eine **eigene Adresse**. Im Fokus steht
+oben ein Knopf **„Link / Einbetten"**: Er zeigt sie an, kopiert sie auf Klick und erklärt
+in drei Zeilen den Weg in Home Assistant (*Dashboard bearbeiten → Karte hinzufügen →
+Webseite*). Du musst also **nie** eine Adresse von Hand bauen.
+
+Die Karte zeigt dann nur diese eine Anzeige — ohne Navigation, ohne „Zurück", ohne
+Theme-Umschalter; das **Theme folgt dem Gerät**, damit sie zum Dashboard passt. Bedienbar
+bleibt, was zur Anzeige gehört: der Umschalter **Chart ⇄ Tabelle** und die
+**Zeitraum-Auswahl** der Bilanzen. `&ansicht=tabelle` startet gleich in der Tabelle,
+`?jahr=2025&monat=3` hält einen festen Monat.
+
+⭐ **Wenn etwas nicht passt, sagt es die Karte.** Zeigt die Adresse auf eine Anzeige, die
+es in dieser Sicht nicht (mehr) gibt, die geparkt ist oder für diesen Zeitraum keine Daten
+hat, steht genau das im Bild — statt kommentarlos etwas anderes.
+
+**Was du tun musst:** Nichts. Wer eine Anzeige einbetten will, schneidet sie vorher in
+eedc zu (Geparktes bleibt geparkt, und **in** der Karte lässt sich nichts zurückholen) und
+kopiert dann den Link. Die Schritt-für-Schritt-Anleitung steht im Handbuch unter
+*[Bedienung §1.5](HANDBUCH_BEDIENUNG.md#15-eine-eedc-anzeige-im-home-assistant-dashboard)*.
 
 ---
 

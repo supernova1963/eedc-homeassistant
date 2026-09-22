@@ -95,7 +95,7 @@ function Sicht({ daten }: { daten: BoersenpreisResponse }) {
   if (boersenpreisVollGeparkt(daten, park.istGeparkt)) return null
   return (
     <Parkbar id="live:boersenpreis" titel="Börsenpreis">
-      <FokusKachel titel="Börsenpreis heute & morgen" icon={Coins} zeigeTitel>
+      <FokusKachel titel="Börsenpreis heute & morgen" fokusId="live:boersenpreis" icon={Coins} zeigeTitel>
         <BoersenpreisBlock daten={daten} />
       </FokusKachel>
     </Parkbar>

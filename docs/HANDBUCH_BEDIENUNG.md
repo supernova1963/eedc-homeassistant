@@ -51,6 +51,7 @@ Fast alle Sichten sind aus **Blöcken** aufgebaut — abgegrenzte Karten wie „
 
 - **Ein-/Ausklappen:** Klick auf den Block-Kopf klappt ihn zu oder auf. Zwei Sammelknöpfe klappen alle Blöcke einer Sicht auf einmal auf bzw. zu.
 - **Fokus / Vollbild (⤢):** Über das Vergrößern-Symbol öffnet sich ein Block als konzentrierte Vollbild-Ansicht — nützlich für ein Diagramm oder eine dichte Tabelle. Die Datums-/Zeit-Navigation der Sicht läuft im Fokus oben mit.
+- **Link / Einbetten:** In der Kopfzeile des Fokus steht ein Knopf **„Link / Einbetten"**. Er zeigt die Adresse, unter der genau diese eine Anzeige direkt aufgeht — zum Weitergeben oder für eine **Webseiten-Karte** im Home-Assistant-Dashboard (siehe [§1.5](#15-eine-eedc-anzeige-im-home-assistant-dashboard)). Ist gerade die Tabellen-Ablesung offen, trägt die Adresse das mit.
 - **Reihenfolge ändern (↑ ↓):** In Cockpit- und Komponenten-Sichten lassen sich Blöcke verschieben, sodass du die für dich wichtigsten oben hast.
 - **Einzelne Anzeigen parken:** Nicht nur ganze Blöcke, sondern einzelne Kacheln, Diagramme oder Tabellen kannst du **parken** (ausblenden). Am Seitenende zeigt eine Zeile „Geparkt (n)", über die du Geparktes jederzeit wieder einblendest. Ist alles in einem Block geparkt, verschwindet der Block selbst.
 
@@ -67,6 +68,45 @@ Deine Klapp-Zustände, die Reihenfolge und die geparkten Elemente werden **pro S
   - **Ganz rechts (Meta):** ein Demo-Schalter (nur im Debug-Betrieb).
 
   Die Farbe eines Symbols folgt der Schwere (grün = ok, blau = Info, amber = Warnung, rot = Fehler, grau = kein Zustand).
+
+### 1.5 Eine eedc-Anzeige im Home-Assistant-Dashboard
+
+Manchmal will man nur **eine** Anzeige sehen — den Energiefluss auf dem Wandtablet, die Energie-Bilanz des Monats neben den übrigen HA-Karten. Dafür gibt es den **Fokus-Link**: eine Adresse, die eedc mit genau dieser Anzeige im Vollbild öffnet, ohne die übrige Sicht.
+
+**So kommt die Anzeige ins Dashboard:**
+
+1. In eedc die gewünschte Anzeige über **⤢ Fokus / Vollbild** öffnen.
+2. In der Kopfzeile auf **„Link / Einbetten"** klicken und die Adresse **kopieren**.
+3. In Home Assistant: **Dashboard bearbeiten → Karte hinzufügen → Webseite** und die Adresse einfügen. Die Kartenhöhe stellst du dort ein (`aspect_ratio`).
+
+Die Karte zeigt dann **nur diese Anzeige** — ohne Navigation, ohne „Zurück", ohne Theme-Umschalter. Das ist Absicht: In einem Dashboard ist die Karte ein Baustein, kein zweites Programm; der Rückweg ist das Dashboard drumherum. Das **Theme folgt dem Gerät** (hell/dunkel), damit die Karte zum übrigen Dashboard passt.
+
+**Beispiele** (die Adresse aus dem Knopf enthält zusätzlich deinen eedc-Host):
+
+| Anzeige | Adresse |
+| --- | --- |
+| Energiefluss | `#/cockpit/live?fokus=live:energiefluss` |
+| Auf einen Blick | `#/cockpit/live?fokus=live:auf-einen-blick` |
+| Wetter heute | `#/cockpit/live?fokus=live:wetter-heute` |
+| Tagesverlauf | `#/cockpit/live?fokus=live:tagesverlauf` |
+| Börsenpreis heute & morgen | `#/cockpit/live?fokus=live:boersenpreis` |
+| Energie-Bilanz (Tag) | `#/cockpit/tag?fokus=bilanz` |
+| Energie-Bilanz (Monat) | `#/cockpit/monat?fokus=bilanz` |
+| Energie-Bilanz (Jahr) | `#/cockpit/jahr?fokus=bilanz` |
+
+Jede Anzeige mit einem ⤢ hat eine solche Adresse — die Liste oben sind nur die naheliegenden Beispiele.
+
+**Was du dazu wissen solltest:**
+
+- **Die Karte braucht deine angemeldete Home-Assistant-Sitzung, und das eedc-Panel muss in dieser Browser-Sitzung einmal geöffnet worden sein.** Home Assistant legt die Verbindung zum Add-on erst beim Öffnen des Panels an; vorher zeigt die Karte „401: Unauthorized". Das trifft dich nach jeder neuen Anmeldung, etwa auf einem neuen Gerät oder in einem anderen Browser: einmal **eedc** in der Seitenleiste öffnen, dann das Dashboard neu laden. Danach hält die Verbindung — im Test blieb eine Karte über eine Viertelstunde ohne geöffnetes Panel erreichbar und ließ sich neu laden. Zeigt die Karte stattdessen einen eedc-Fehler wie „nicht erreichbar", ist das Add-on gerade nicht da (Neustart, Update); sie holt sich die Anzeige beim nächsten Abruf von selbst.
+- **Chart ⇄ Tabelle und die Zeitraum-Auswahl bleiben bedienbar.** In den Bilanzen blätterst du also auch in der Karte durch Tage, Monate oder Jahre.
+- **Geparktes bleibt geparkt — und in der Karte lässt sich nichts zurückholen** (der Parkplatz liegt außerhalb des Vollbilds). Schneide die Anzeige deshalb **vorher** in eedc zu; beim Börsenpreis-Block etwa lassen sich einzelne Kennzahlen und die Kurve getrennt parken. Geparkt wird pro Gerät und Browser: Ein Wandtablet kann eine andere Auswahl zeigen als dein Rechner.
+- **Ein fester Zeitraum:** `datum`, `jahr`, `monat` und `h` laufen weiter mit. `#/cockpit/monat?jahr=2025&monat=3&fokus=bilanz` zeigt immer den März 2025. Ohne diese Angaben zeigt die Karte den laufenden Zeitraum — meistens das, was man will.
+- **Tabelle statt Diagramm:** `&ansicht=tabelle` startet die Anzeige in der Tabellen-Ablesung, sofern sie eine hat.
+- **Die Adressen sind stabil.** Wir behandeln die Anzeige-Namen in diesen Links als Zusage: Sie werden nicht ohne Not umbenannt, und wenn doch, steht es im Änderungsprotokoll.
+- **Findet eedc die Anzeige nicht**, sagt die Karte das im Klartext („Die Anzeige … gibt es in dieser Sicht nicht (mehr) …") statt kommentarlos etwas anderes zu zeigen. Häufigster Grund: Tippfehler in der Adresse, geparkte Anzeige oder ein Zeitraum ohne Daten.
+- **Standalone-Betrieb:** Läuft eedc über HTTP und dein Home Assistant über HTTPS, blockiert der Browser die Einbettung (Mixed Content). Der Link funktioniert dann direkt im Browser, aber nicht als Karte. Als Add-on über den Ingress tritt das nicht auf.
+- **Home Assistant baut die Ansichten nicht nach.** Die Karte ist eedc in einem Rahmen. Wer eedc-**Zahlen** in eigenen HA-Karten verrechnen will, nutzt den HA-Export (siehe [Teil III: Einstellungen](HANDBUCH_EINSTELLUNGEN.md)) — eedc stellt seine Kennzahlen als HA-Sensoren bereit.
 
 ---
 
