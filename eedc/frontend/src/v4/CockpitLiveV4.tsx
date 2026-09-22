@@ -26,13 +26,13 @@ import { wetterApi } from '../api/wetter'
 import type { SolarPrognoseTag } from '../api/wetter'
 import EnergieFluss from '../components/live/EnergieFluss'
 import TagesverlaufChart, { tagesverlaufTabelle } from '../components/live/TagesverlaufChart'
-import BoersenpreisBlock from '../components/live/BoersenpreisBlock'
+import BoersenpreisBlock, { boersenpreisVollGeparkt } from '../components/live/BoersenpreisBlock'
 import WetterWidget from '../components/live/WetterWidget'
 import LiveAufEinenBlick from '../components/live/LiveAufEinenBlick'
 import { zaehlerstaendeApi, type ZaehlerStand } from '../api/zaehlerstaende'
 import { FokusKachel, FokusVollbild } from '../components/blocks'
 import { ChartDatenTabelle } from '../components/ui'
-import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
+import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { AnlageLeer } from './OnboardingLeer'
 import { useDemoMode, useReportDatenStatus } from './status/AppStatusContext'
 
@@ -255,6 +255,24 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
 
   const hatTagesverlauf = !!(tagesverlauf && tagesverlauf.punkte.length > 0 && tagesverlauf.serien?.length > 0)
 
+  // R2 der Park-Doktrin: Seit dem 22.09.2026 sind die neun Börsenpreis-Kennzahlen
+  // und das Diagramm EINZELN parkbar — also muss die Hülle darum verschwinden,
+  // sobald der Anwender sie alle geparkt hat. Sonst bliebe die Karte samt Titel
+  // und ⤢-Knopf leer im Bild stehen (`check:park-gate` R2).
+  //
+  // ⚠ Welche IDs das sind und warum eine LEERE Liste nicht als „alles geparkt"
+  // zählt, steht in `boersenpreisVollGeparkt` — dort unter einer Probe, weil
+  // diese Sicht keine Render-Probe hat.
+  //
+  // Der äußere `<Parkbar id="live:boersenpreis">` bleibt: Wer den ganzen Block
+  // auf einmal wegräumen will, tut das weiterhin mit EINER Geste und bekommt
+  // EINEN Chip statt zehn.
+  const park = usePark()
+  const boersenpreisAllesGeparkt = useMemo(
+    () => !!boersenpreise && boersenpreisVollGeparkt(boersenpreise, park.istGeparkt),
+    [boersenpreise, park],
+  )
+
   // Live-Status in die app-weite Fusszeile melden (G11): Frische · Live-Punkt ·
   // Quelle (P5-Provenance; erster Konsument). MQTT/Verbindung liegt seit P2 im
   // globalen Status-Hook der Fusszeile.
@@ -414,7 +432,8 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
           `data.verfuegbar`-Zweigs (s. o.) — er wartet jetzt nur, bis der
           Ladezustand entschieden ist. Die Alternative, ein Skeleton in
           Blockhöhe, müsste die Höhe des Energieflusses raten. */}
-      {!loading && boersenpreise && (boersenpreise.tage.length > 0 || boersenpreise.hinweis) && (
+      {!loading && boersenpreise && (boersenpreise.tage.length > 0 || boersenpreise.hinweis)
+        && !boersenpreisAllesGeparkt && (
         <Parkbar id="live:boersenpreis" titel="Börsenpreis">
           <FokusKachel titel="Börsenpreis heute & morgen" icon={Coins} zeigeTitel>
             <BoersenpreisBlock daten={boersenpreise} />

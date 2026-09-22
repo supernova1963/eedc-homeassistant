@@ -163,6 +163,12 @@ auf einer durchgehenden Zeitachse:
 - Die **Günstig-Schwelle stellst du selbst ein** (Standard: 10 % unter dem Ø ohne Peaks) —
   siehe [Teil III](HANDBUCH_EINSTELLUNGEN.md). ⚠ **0 % schaltet die Schwelle nicht ab**, sondern
   legt sie genau auf den Durchschnitt.
+- **Jede Kennzahl und die Kurve sind einzeln parkbar** (Rechtsklick bzw. langes Drücken,
+  siehe [§1.3](#13-das-block-modell-klappen-fokussieren-umsortieren-parken)) — du kannst den
+  Block also auf die zwei, drei Zahlen zuschneiden, die dich interessieren. Parkst du die
+  Kurve, nehmen die Kacheln die volle Breite ein und umgekehrt; ist **alles** geparkt,
+  verschwindet der Block samt Überschrift. Zeigt er statt Preisen nur den Grund, warum
+  gerade keine vorliegen, bleibt dieser Hinweis stehen — dort gibt es nichts zu parken.
 
 > Der Block braucht **keine zugeordneten Sensoren** — Börsenpreise sind öffentliche Marktdaten.
 > Er erscheint deshalb auch dann, wenn Live sonst noch „Keine Live-Daten verfügbar" meldet.
