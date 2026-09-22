@@ -191,11 +191,25 @@ async def lade_sizing_auswertung(
         query = query.where(TagesEnergieProfil.datum <= bis)
     zeilen = list((await db.execute(query)).scalars().all())
 
-    speicher = list((await db.execute(
-        select(Investition)
-        .where(Investition.anlage_id == anlage_id)
-        .where(Investition.typ == InvestitionTyp.SPEICHER.value)
-    )).scalars().all())
+    # ⚠ Nur die HEUTE laufenden Speicher (N-546, Radiocarbonat T89667 #358).
+    # Stichtag `date.today()` aus demselben Grund wie der Tarif (Modul-Docstring
+    # oben): die Frage ist nach vorn gerichtet — „lohnt sich ein größerer
+    # Speicher?" steht auf dem Gerät, das der Anwender JETZT hat; die Historie
+    # liefert nur das Verbrauchs- und PV-Muster. Ein abgelöstes Gerät zog sonst
+    # die Kapazität hoch und — über das Minimum in `aggregiere_speicher_basis`
+    # — den Wirkungsgrad dauerhaft herunter.
+    heute = date.today()
+    res = await db.execute(
+        select(Investition).where(
+            Investition.anlage_id == anlage_id,
+            Investition.typ == InvestitionTyp.SPEICHER.value,
+            Investition.aktiv.is_(True),
+        )
+    )
+    speicher = [
+        i for i in res.scalars().all()
+        if not i.stilllegungsdatum or i.stilllegungsdatum >= heute
+    ]
     gepflegte_kapazitaet, gepflegter_wirkungsgrad = aggregiere_speicher_basis(speicher)
 
     # Leer-Schwelle wie in Phase 2 nebenan (#379). `aggregiere_speicher_basis`

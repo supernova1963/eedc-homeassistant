@@ -539,7 +539,7 @@ Dazu eine Grafik mit **drei Spuren über dieselbe Monatsachse**:
 
 > **Warum keine Ampelfarben?** Ein voller Speicher ist nicht „gut" und ein leerer nicht „schlecht" — die Aussage entsteht erst aus beidem zusammen. Eine grüne Färbung für „immer voll" würde ausgerechnet den Zustand belohnen, in dem Überschuss verschenkt wird.
 
-> **Mehrere Speicher:** Den Ladestand erfasst eedc für die Anlage als Ganzes. Die Auswertung gilt dann für alle Speicher zusammen, nicht je Gerät — die Sicht weist darauf hin.
+> **Mehrere Speicher:** Den Ladestand erfasst eedc für die Anlage als Ganzes. Die Auswertung gilt dann für alle Speicher zusammen, nicht je Gerät — die Sicht weist darauf hin. Gezählt werden dabei nur die **heute laufenden** Speicher: Ein Gerät, das du deaktiviert (Häkchen „Aktiv" entfernt) oder mit Stilllegungsdatum versehen hast, bleibt in der Historie, zählt aber nicht mehr zur Kapazität, mit der hier gerechnet wird.
 
 #### Größerer Speicher? — der Sizing-Regler
 
@@ -552,7 +552,7 @@ Angezeigt werden:
 - **Amortisation** — wie lange die Mehrkosten brauchen, bis sie wieder hereinkommen. Zugrunde liegt ein **Richtwert von rund 500 € je kWh** Nachrüstung. **Kennst du deinen Preis, trage ihn im Feld neben dem Regler ein** — die Rechnung nimmt dann deine Zahl. Das lohnt sich: An dieser Zahl hängt die Aussage „das rechnet sich nicht", und wer günstiger nachrüstet, bekam vorher eine deutlich zu lange Amortisationsdauer angezeigt (3,2 kWh für 1.000 € statt der angenommenen 1.600 € — Faktor 1,6). ⚠ Der Wert wird **nicht gespeichert**: Er gehört zu dieser einen Überlegung, nicht zum Gerät. Nach einem Seitenwechsel steht wieder der Richtwert da.
 - **Kurve über alle Größen** — flacht sie nach rechts ab, ist dein Speicher bereits groß genug. Die Null-Linie ist deine heutige Kapazität.
 
-**Womit gerechnet wird.** Nicht mit der Kapazität vom Typenschild, sondern mit der, die dein Speicher im Alltag **wirklich bewegt** — eedc leitet sie aus dem Verlauf deines Ladestands ab. ⚠ Das ist **kein Gerätemangel**: Reserven, Ladestrategie, Leistungsgrenzen und Standby gehören dazu. Mit der Zahl vom Typenschild fällt die Rechnung systematisch zu optimistisch aus (an einer echten Anlage: −17,5 % Abweichung beim Netzbezug statt −5,4 %). Lässt sich die Basis nicht ableiten, rechnet eedc mit den gepflegten Parametern **und sagt es**.
+**Womit gerechnet wird.** Nicht mit der Kapazität vom Typenschild, sondern mit der, die dein Speicher im Alltag **wirklich bewegt** — eedc leitet sie aus dem Verlauf deines Ladestands ab. ⚠ Das ist **kein Gerätemangel**: Reserven, Ladestrategie, Leistungsgrenzen und Standby gehören dazu. Mit der Zahl vom Typenschild fällt die Rechnung systematisch zu optimistisch aus (an einer echten Anlage: −17,5 % Abweichung beim Netzbezug statt −5,4 %). Lässt sich die Basis nicht ableiten, rechnet eedc mit den gepflegten Parametern **und sagt es**. Grundlage sind dabei nur die **heute laufenden** Speicher — ein stillgelegtes oder deaktiviertes Gerät bleibt in der Historie, zählt aber nicht zur Basis, denn die Frage „lohnt sich ein größerer?" steht auf dem Speicher, der jetzt bei dir steht.
 
 **Und der Block sagt, woran ein Unterschied liegt.** Unter *Wie groß ist Ihr Speicher wirklich?* stehen die gepflegte nutzbare Kapazität und die gemessene nebeneinander, dazu der Ladestands-Bereich, in dem dein Speicher lebt, und an wie vielen Tagen er voll bzw. leer wurde. Daraus folgt die Unterscheidung:
 

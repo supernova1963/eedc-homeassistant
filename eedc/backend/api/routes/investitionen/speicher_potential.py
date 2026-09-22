@@ -150,11 +150,23 @@ async def get_speicher_potential(
     auch wieder abgegeben worden wäre. Begründung und Messung stehen im Docstring
     von `core/berechnungen/speicher_potential.py`.
     """
-    speicher = list((await db.execute(
-        select(Investition)
-        .where(Investition.anlage_id == anlage_id)
-        .where(Investition.typ == InvestitionTyp.SPEICHER.value)
-    )).scalars().all())
+    # ⚠ Nur die HEUTE laufenden Speicher (N-546) — dieselbe Frage nach vorn wie
+    # im Sizing-Simulator nebenan, dieselbe Begründung für den Stichtag
+    # `date.today()` (s. `services/speicher_sizing_service.py`,
+    # `lade_sizing_auswertung`). Ein abgelöstes Gerät gehört in die Historie,
+    # aber nicht in die Kapazität, mit der hier gerechnet wird.
+    heute = date.today()
+    res = await db.execute(
+        select(Investition).where(
+            Investition.anlage_id == anlage_id,
+            Investition.typ == InvestitionTyp.SPEICHER.value,
+            Investition.aktiv.is_(True),
+        )
+    )
+    speicher = [
+        i for i in res.scalars().all()
+        if not i.stilllegungsdatum or i.stilllegungsdatum >= heute
+    ]
 
     # NETTO, nicht brutto: Diese Sicht fährt den Speicher rechnerisch durch
     # („wie viel wäre zusätzlich hindurchgegangen?"), und für genau diese Klasse

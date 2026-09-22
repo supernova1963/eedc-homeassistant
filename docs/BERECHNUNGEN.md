@@ -691,6 +691,14 @@ Ein Speicher trägt zwei Kapazitäten, beide im Formular. Die Trennlinie läuft 
 > die übergebene Kapazität die abgabefähige Menge ist — sie zusätzlich beim Entladen anzusetzen wäre
 > Doppelzählung (dieselbe Konvention wie `core/berechnungen/speicher_sizing.py`).
 >
+> ⚑ **Welche Geräte in den Helper gehen, entscheidet der Aufrufer — und für die beiden
+> Planungs-Sichten sind es seit N-546 (2026-09-22) nur die HEUTE laufenden.** `Sizing` und
+> `Speicher-Potential` holten bis dahin **alle** Investitionen vom Typ Speicher, ohne `aktiv`
+> und ohne `stilllegungsdatum`; ein abgelöstes Gerät hob damit die Kapazität, senkte über das
+> **Minimum** den Wirkungsgrad und verschob die Leer-Schwelle (beide Summen gehen ein).
+> Stichtag ist `date.today()` und nicht das Fenster-Ende: beide Sichten fragen nach vorn, wie
+> schon der Tarif im Docstring von `speicher_sizing_service.py`.
+>
 > ⚠ **Die gepflegte Kapazität bleibt maßgeblich und wird NICHT durch die gemessene ersetzt**
 > (Gernots Entscheid 2026-08-12). Sie trägt eine **Absicht**: es gibt Anwender, die ihren Speicher
 > bewusst nicht auf 100 % laden, und für die wäre eine Korrektur nach unten falsch — sie wollen
