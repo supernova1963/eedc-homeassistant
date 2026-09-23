@@ -401,6 +401,19 @@ def _ist_vorstunde(vor: Any, zeile: Any) -> bool:
     return vor.stunde == zeile.stunde - 1 and vor.datum == zeile.datum
 
 
+def zeile_traegt_backward_kw(zeile: Any, ab: date = SLOT_PAARUNG_VORZEILE_AB) -> bool:
+    """Liegen die ``*_kw`` dieser Zeile backward? — die öffentliche Auskunft (N-552).
+
+    Dieselbe Regel wie in ``forward_werte_je_backward_zeile`` (Bestandsgrenze an
+    der Aggregationszeit), für Konsumenten, die nicht **paaren**, sondern je Zeile
+    wissen müssen, welches Wanduhr-Intervall ihre Energie trägt: die
+    Sizing-Kalibrierung (``speicher_sizing.kalibriere_speicher``) stellt einen
+    SoC-Hub gegen **zwei** Stundenmengen und muss dafür wissen, ob die Zeile
+    ``[s-1, s)`` (backward) oder ``[s, s+1)`` (forward-Altbestand) meint.
+    """
+    return _traegt_backward_kw(zeile, ab)
+
+
 def _traegt_backward_kw(zeile: Any, ab: date) -> bool:
     """Liegen die ``*_kw`` dieser Zeile backward? (s. ``SLOT_PAARUNG_VORZEILE_AB``)"""
     erzeugt = getattr(zeile, "created_at", None)

@@ -715,7 +715,29 @@ Das betrifft sichtbar:
 > Vorzeile 12,44/13,62 (1,095); **beide fallen aus dem Plausibilitätsband und ergeben `None`**,
 > die Sicht nimmt dann die gepflegten Werte. Die Paarung ist hier also nicht die Stellschraube.
 > **Die Lösung ist die Formel** — der Hub gehört gegen das *Mittel der zwei angrenzenden
-> Stundenmengen* —, sie ist ein Layer-Eingriff und als eigener Fund offen.
+> Stundenmengen*.
+
+#### Wie die Sizing-Kalibrierung Kapazität und Wirkungsgrad misst (N-552, 23.09.2026)
+
+Der *Größerer Speicher?*-Simulator braucht die **tatsächlich nutzbare** Kapazität und den
+Roundtrip-Wirkungsgrad. eedc misst beides aus der Bewegung des Ladestands: Wo der Speicher in einer
+Stunde deutlich lädt oder entlädt, wird der Hub des Ladestands gegen die bewegte Energie gestellt.
+
+Beide Ladestände sind **Stundenmittel**. Ihre Differenz beschreibt deshalb den Fluss zwischen den
+**Mitten** der beiden Stunden, also je zur Hälfte zwei Wanduhr-Stunden — und genau diese zwei
+halben Stunden stellt eedc dem Hub seit N-552 gegenüber (`½ (b_s + b_{s+1})` bei heutigen Zeilen,
+`½ (b_{s−1} + b_s)` bei Altbestand vor dem 04.06.2026, entschieden je Zeile an ihrer
+Aggregationszeit). Läuft die eine Hälfte in die andere Richtung als die zweite, zählt der Hub nicht:
+dann mischt er zwei Wirkungsgrade.
+
+**Gemessen an einem echten Jahr** (eine Anlage, 356 vollständige Tage): Der Hub folgt der Formel mit
+einer Korrelation von 0,98 (die Einzelstunde vorher: 0,95). Gegen die gemessene Einspeisung und den
+gemessenen Netzbezug weicht die simulierte Anlage jetzt um zusammen 3,3 Prozentpunkte ab statt 4,9;
+der Wirkungsgrad bleibt über Zeiträume und Schwellen stabil bei 72–74 % (vorher 82–88 %). Die
+nutzbare Kapazität hängt weiter am Median der selteneren Entladestunden und kann zwischen Zeiträumen
+um einige Zehntel Kilowattstunden schwanken. Die Mindestschwelle von 10 Prozentpunkten Hub bleibt:
+eine höhere wäre an dieser Anlage minimal besser, halbierte aber die Entladestunden und ließe
+Anlagen mit weniger Daten auf die gepflegten Werte zurückfallen.
 
 > ⛔ **Die Umkehr gilt nicht rückwirkend für jede gespeicherte Zeile.** Der HA-Stundenpfad
 > beschriftete seine Energiemengen bis zum **04.06.2026** selbst *forward* — auf einer Zeile, die

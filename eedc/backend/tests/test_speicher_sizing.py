@@ -123,35 +123,44 @@ def _kalibrier_reihe(
     *, kap_kwh: float, roundtrip: float, paare: int, invertiert: bool = False,
     start: datetime = START,
 ) -> list[SizingStunde]:
-    """Baut eine bilanzkonsistente Reihe mit abwechselnd Lade- und Entladepaaren.
+    """Baut eine bilanzkonsistente Reihe mit abwechselnd Lade- und Entladeeinheiten.
 
-    Je „Paar" eine Ruhestunde (Referenz-SoC) und eine Bewegungsstunde mit 25 pp
-    Hub. Die Bewegungsstunde trägt alle fünf Bilanz-Summanden, damit die
-    Vorzeichen-Probe greifen kann — bei ``invertiert`` mit gedrehtem
-    ``batterie_kwh``, also genau dem Alt-Tag-Regime.
+    Je Einheit eine Ruhestunde und eine Bewegungsstunde mit 25 pp Hub. Die
+    Bewegungszeile trägt alle fünf Bilanz-Summanden, damit die Vorzeichen-Probe
+    greifen kann — bei ``invertiert`` mit gedrehtem ``batterie_kwh``, also genau
+    dem Alt-Tag-Regime.
+
+    ⭐ **In der Konvention echter Daten** (N-552, 23.09.2026): Zeile ``s`` trägt
+    die Energie von ``[s-1, s)`` (backward) und als Ladestand das **Mittel** über
+    ``[s, s+1)`` — so liefert Home Assistant beides. Bis N-552 setzte dieser
+    Generator den Ladestand als **Zustand am Ende** der Energie derselben Zeile;
+    diese Konvention gibt es in keiner Datenquelle (sie war die des alten
+    Demo-Seeds), und nur mit ihr traf die Ein-Stunden-Formel. Die erwarteten
+    Zahlen der Proben sind unverändert — geändert ist allein, wie die Reihe
+    entsteht.
     """
     hub = 25.0
     ein_kwh = kap_kwh * hub / 100.0 / roundtrip   # Ladung: rein
     aus_kwh = kap_kwh * hub / 100.0              # Entladung: raus
-    zeilen: list[SizingStunde] = []
-    zeit = start
+    # Fluss je Wanduhr-Stunde [h, h+1): gerade = Ruhe, ungerade = Bewegung.
+    fluss: list[float] = []                       # batterie_kwh-Vorzeichen: + = Entladung
     for i in range(paare):
-        laden = i % 2 == 0
-        soc_vor, soc_nach = (30.0, 55.0) if laden else (55.0, 30.0)
-        batterie = -ein_kwh if laden else aus_kwh
-        # Bilanz: pv − verbrauch + batterie = einspeisung − netzbezug.
-        pv, verbrauch = (ein_kwh, 0.0) if laden else (0.0, aus_kwh)
+        fluss += [0.0, -ein_kwh if i % 2 == 0 else aus_kwh]
+    zustand = [30.0]
+    for f in fluss + [0.0]:
+        delta = (-f / ein_kwh * hub) if f < 0 else (-f / aus_kwh * hub) if f > 0 else 0.0
+        zustand.append(zustand[-1] + delta)
+    zeilen: list[SizingStunde] = []
+    for s in range(len(fluss) + 1):
+        f = fluss[s - 1] if s >= 1 else 0.0          # backward: Zeile s ← [s-1, s)
+        pv, verbrauch = (-f, 0.0) if f < 0 else (0.0, f)
         zeilen.append(SizingStunde(
-            zeit=zeit, pv_kwh=0.0, verbrauch_kwh=0.0, soc_prozent=soc_vor,
-            batterie_kwh=0.0, einspeisung_kwh=0.0, netzbezug_kwh=0.0,
-        ))
-        zeilen.append(SizingStunde(
-            zeit=zeit + timedelta(hours=1),
-            pv_kwh=pv, verbrauch_kwh=verbrauch, soc_prozent=soc_nach,
-            batterie_kwh=-batterie if invertiert else batterie,
+            zeit=start + timedelta(hours=s),
+            pv_kwh=pv, verbrauch_kwh=verbrauch,
+            soc_prozent=(zustand[s] + zustand[s + 1]) / 2.0,   # Mittel über [s, s+1)
+            batterie_kwh=-f if (invertiert and f) else f,
             einspeisung_kwh=0.0, netzbezug_kwh=0.0,
         ))
-        zeit += timedelta(hours=2)
     return zeilen
 
 

@@ -113,6 +113,14 @@ class SizingStunde:
     batterie_kwh: Optional[float] = None
     einspeisung_kwh: Optional[float] = None
     netzbezug_kwh: Optional[float] = None
+    #: N-552: Welches Wanduhr-Intervall tragen die Energiemengen dieser Zeile?
+    #: ``True`` (Normalfall, seit dem 04.06.2026 aggregiert) = ``[s-1, s)``,
+    #: ``False`` = ``[s, s+1)`` (forward-Altbestand). Der Ladestand liegt in
+    #: beiden Fällen forward. Nur `kalibriere_speicher` fragt danach — die
+    #: Simulation paart PV und Verbrauch derselben Zeile, die beide dieselbe
+    #: Konvention tragen. Setzt der Aufrufer über
+    #: ``slot_konvention.zeile_traegt_backward_kw``.
+    kw_backward: bool = True
 
 
 @dataclass(frozen=True)
@@ -417,6 +425,49 @@ def _ist_bilanzkonsistent(zeile: SizingStunde) -> bool:
     return abs(rest) <= BILANZ_TOLERANZ_KWH
 
 
+_EINE_STUNDE = timedelta(hours=1)
+
+
+def _hub_energie(
+    stunden: Sequence[SizingStunde], konsistent: Sequence[bool], i: int,
+) -> Optional[float]:
+    """Die Batterie-Energie, die zum Hub ``soc[i] − soc[i−1]`` gehört (N-552).
+
+    Beide Ladestände sind **Stundenmittel**, der Hub beschreibt also den Fluss
+    zwischen den Mitten der zwei Intervalle — je zur Hälfte **zwei** Stunden:
+    ``[s-1, s)`` und ``[s, s+1)`` auf der Wanduhr. Welche Zeilen diese Energie
+    tragen, hängt an ihrer Konvention (``SizingStunde.kw_backward``):
+
+    * **backward** (Normalfall): ``[s-1, s)`` steht in Zeile ``i``, ``[s, s+1)``
+      in der **Folgezeile** ⇒ ``½ (b[i] + b[i+1])``.
+    * **forward-Altbestand**: ``[s-1, s)`` steht in der **Vorzeile**,
+      ``[s, s+1)`` in Zeile ``i`` ⇒ ``½ (b[i-1] + b[i])``.
+
+    ``None`` (kein Paar), wenn die zweite Zeile fehlt, nicht genau eine Stunde
+    daneben liegt, eine andere Konvention trägt oder die Bilanzprobe nicht
+    besteht — und wenn die **beiden Hälften gegeneinander laufen** (eine lädt,
+    die andere entlädt): dann mischt der Hub zwei Wirkungsgrade, und kein
+    Quotient daraus ist eine Kapazität.
+    """
+    nachher = stunden[i]
+    if nachher.kw_backward:
+        if i + 1 >= len(stunden):
+            return None
+        folge = stunden[i + 1]
+        if (folge.zeit - nachher.zeit != _EINE_STUNDE or not folge.kw_backward
+                or not konsistent[i + 1]):
+            return None
+        erste, zweite = nachher.batterie_kwh, folge.batterie_kwh
+    else:
+        vorher = stunden[i - 1]
+        if vorher.kw_backward or not konsistent[i - 1]:
+            return None
+        erste, zweite = vorher.batterie_kwh, nachher.batterie_kwh
+    if erste is None or zweite is None or erste * zweite < 0:
+        return None
+    return (erste + zweite) / 2.0
+
+
 def kalibriere_speicher(
     stunden: Sequence[SizingStunde],
 ) -> Optional[Kalibrierung]:
@@ -436,9 +487,50 @@ def kalibriere_speicher(
        von SoC-Sprüngen an Tagesgrenzen dominiert, weil es quadratisch gewichtet.
     3. **Beide Seiten belegt.** Die Entladeseite ist die dünnere und zugleich
        die, die die Kapazität bestimmt.
+    4. **Der Hub gehört gegen ZWEI halbe Stunden** (N-552, 23.09.2026). Beide
+       Ladestände sind Stunden**mittel**; ihre Differenz beschreibt den Fluss
+       zwischen den Intervall-Mitten, also je zur Hälfte ``[s-1, s)`` und
+       ``[s, s+1)``. Bis N-552 stand hier die Menge **einer** Stunde — eine
+       halbe Stunde daneben, und zwar so, dass steile Ladeanfänge den Roundtrip
+       nach oben trieben. Welche Zeilen die zwei Hälften tragen, entscheidet die
+       Konvention (``SizingStunde.kw_backward``, s. ``_hub_energie``); laufen die
+       Hälften gegeneinander, mischt der Hub zwei Wirkungsgrade und zählt nicht.
+
+    ⭐ **Gemessen an einem echten Jahr** (23.09.2026, Prod-Anlage, Reihe
+    2025-09-22…2026-09-22 über die Stunden-Route, kalibriert ab 2026-02-01,
+    validiert auf 356 vollständigen Tagen wie unten): Der Hub korreliert je
+    Monat mit ``½ (b[s] + b[s+1])`` zu 0,98, mit ``b[s]`` allein zu 0,95; die
+    Monate bis Dezember 2025 tragen die Altkonvention und korrelieren mit
+    ``½ (b[s-1] + b[s])``. Ergebnis gegen dieselbe Validierung, Σ|Δ| in pp:
+
+    ======  ==============================  ==============================
+    Hub ≥   bis N-552 (eine Stunde)         seit N-552 (zwei Hälften)
+    ======  ==============================  ==============================
+    5 pp    8,38 kWh · 86,2 % → 7,5         8,25 kWh · 70,7 % → 4,3
+    7,5 pp  7,53 kWh · 78,2 % → **0,9**     7,48 kWh · 64,9 % → 7,1
+    10 pp   7,99 kWh · 83,2 % → 4,9         8,09 kWh · 72,7 % → **3,3**
+    12,5 pp 8,40 kWh · 87,2 % → 8,0         7,89 kWh · 72,2 % → 2,4
+    15 pp   8,97 kWh · 93,2 % → 12,3        7,64 kWh · 72,8 % → 1,6
+    ======  ==============================  ==============================
+
+    Bestes Gitter derselben Validierung: 7,50 kWh · 76 % → 0,3. **Der
+    Roundtrip ist seither stabil** (71–73 % über 5–15 pp, und 72–74 % in zwei
+    getrennten Halbjahren Feb–Mai/Jun–Sep, alte Formel 82 % gegen 88 %). Die
+    Kapazität bleibt vom dünnen Entlade-Median abhängig — das ist ein anderes
+    Problem als N-552. Das alte Optimum bei 7,5 pp war ein scharfes Einzelstück
+    einer Formel, die daneben stark springt.
+
+    ⛔ **Die Schwelle bleibt 10 pp — bewusst, nicht aus Trägheit.** Mit der
+    neuen Formel wäre 15 pp an dieser einen Anlage am besten (1,6), halbiert
+    aber die Entladepaare (39 statt 125, Mindestzahl 20): eine Anlage mit
+    weniger Daten fiele dann regelmäßig auf „nicht kalibrierbar" zurück. Eine
+    Schwelle gegen **eine** Anlage zu optimieren wäre Überanpassung; bei 10 pp
+    ist die neue Formel schon besser als die alte an ihrer eigenen Schwelle.
 
     ⚠ **Was diese Zahl trägt, ist die Jahres-Validierung — nicht der Median**
-    (nachgemessen 2026-08-12 auf Gernots Rückfrage zu N-238). Der Paar-Median
+    (nachgemessen 2026-08-12 auf Gernots Rückfrage zu N-238, **noch mit der
+    Ein-Stunden-Formel vor N-552** — die Tabelle darunter ist Historie, die
+    geltende steht oben unter Punkt 4). Der Paar-Median
     ist **schwellenabhängig**: mit `MIN_SOC_HUB_PROZENTPUNKTE` = 3 statt 10
     liefert derselbe Datenbestand **9,64 kWh** statt 8,35, weil dann die vielen
     kleinen SoC-Schritte mit ihrer Quantisierung dominieren. Entschieden hat ein
@@ -468,26 +560,28 @@ def kalibriere_speicher(
     laden: list[float] = []
     entladen: list[float] = []
     verworfen = 0
+    konsistent = [_ist_bilanzkonsistent(z) for z in stunden]
 
-    for vorher, nachher in zip(stunden, stunden[1:]):
-        if nachher.zeit - vorher.zeit != timedelta(hours=1):
+    for i in range(1, len(stunden)):
+        vorher, nachher = stunden[i - 1], stunden[i]
+        if nachher.zeit - vorher.zeit != _EINE_STUNDE:
             continue  # Lücke oder Tagesgrenze ohne Nachbarn — kein Paar.
-        if not _ist_bilanzkonsistent(nachher):
+        if not konsistent[i]:
             verworfen += 1
             continue
 
         soc_vor, soc_nach = vorher.soc_prozent, nachher.soc_prozent
-        batterie = nachher.batterie_kwh
-        if soc_vor is None or soc_nach is None or batterie is None:
+        energie = _hub_energie(stunden, konsistent, i)
+        if soc_vor is None or soc_nach is None or energie is None:
             continue
         hub = soc_nach - soc_vor
         if abs(hub) < MIN_SOC_HUB_PROZENTPUNKTE:
             continue
 
-        if hub > 0 and batterie <= -MIN_BATTERIE_KWH:
-            laden.append(-batterie / hub * 100.0)
-        elif hub < 0 and batterie >= MIN_BATTERIE_KWH:
-            entladen.append(batterie / -hub * 100.0)
+        if hub > 0 and energie <= -MIN_BATTERIE_KWH:
+            laden.append(-energie / hub * 100.0)
+        elif hub < 0 and energie >= MIN_BATTERIE_KWH:
+            entladen.append(energie / -hub * 100.0)
 
     if len(laden) < MIN_PAARE_JE_SEITE or len(entladen) < MIN_PAARE_JE_SEITE:
         return None

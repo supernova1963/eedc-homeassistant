@@ -57,6 +57,7 @@ from backend.core.berechnungen.speicher_sizing import (
     sizing_kurve,
 )
 from backend.core.berechnungen.speicher_potential import leer_schwelle_prozent
+from backend.core.berechnungen.slot_konvention import zeile_traegt_backward_kw
 from backend.core.investition_kennwerte import (
     aggregiere_speicher_basis,
     get_speicher_kapazitaet_kwh,
@@ -121,51 +122,27 @@ def _als_sizing_stunde(zeile: TagesEnergieProfil) -> SizingStunde:
     heißen `_kw`, tragen aber das Stundenmittel; über eine Stunde integriert ist
     der Zahlenwert derselbe. Der Layer rechnet ausdrücklich in kWh.
 
-    ⛔ **Hier wird der Ladestand NICHT auf die Vorzeile umgerechnet — weil die
-    Paarung die Frage gar nicht entscheidet** (N-387, 23.09.2026; zweite
-    Ausnahme neben `speicher_wirtschaftlichkeit._lese_soc_am_periodenrand`,
-    aber aus einem anderen Grund).
+    ⛔ **Der Ladestand wird hier NICHT auf die Vorzeile umgerechnet** (N-387) —
+    anders als beim Nachbarn `speicher_potential_service`, der einen Ladestand
+    mit einer Menge derselben Stunde **paart**. `kalibriere_speicher` paart
+    nicht, es bildet eine **Differenz zweier Stundenmittel**. Die beschreibt den
+    Fluss zwischen den Intervall-Mitten, also je zur Hälfte **zwei** Stunden —
+    und genau diese zwei Stunden nimmt der Layer seit N-552 selbst
+    (``½ (b[s] + b[s+1])``, bei Altbestand ``½ (b[s-1] + b[s])``). Eine
+    Verschiebung hier bräche das.
 
-    Der Nachbar nebenan (`speicher_potential_service`) **paart** einen
-    Ladestand mit einer Menge derselben Stunde — dort ist die Umrechnung eine
-    reine Intervall-Zuordnung und richtig. `kalibriere_speicher` dagegen bildet
-    eine **Differenz zweier Stundenmittel** und stellt sie einer einzelnen
-    Stundenmenge gegenüber. Eine Differenz benachbarter Intervallmittel
-    beschreibt den Fluss zwischen den Intervall-**Mitten**, also je zur Hälfte
-    **zwei** Stunden: ``ΔSoC(s-1 → s) ≈ ½ (b_s + b_{s+1})``, gegenübergestellt
-    wird aber ``b_s`` allein. Beide Fassungen liegen damit um eine halbe Stunde
-    daneben, und zwar in entgegengesetzte Richtungen.
+    ⭐ **Was der Layer dafür braucht, ist die Konvention der Energie je Zeile**
+    (``kw_backward``): dieselbe Bestandsgrenze wie N-387, an der
+    Aggregationszeit (``slot_konvention.zeile_traegt_backward_kw``). Gemessen am
+    echten Jahr einer Anlage (23.09.2026): bis Dezember 2025 korreliert der Hub
+    am besten mit ``½ (b[s-1] + b[s])``, ab Januar 2026 mit ``½ (b[s] + b[s+1])``
+    (0,98 gegen 0,95 für die Einzelstunde) — die Zeilen tragen beide
+    Konventionen, und eine Formel für beide wäre auf der Hälfte falsch.
 
-    **Gemessen** (23.09.2026, **reine** Demo-Reihe: 4 800 Stundenzeilen, alle
-    mit forward-Stundenmittel geseedet; Wahrheit im Seed 10,0 kWh je 100 % SoC
-    und Roundtrip 1,00):
-
-    ===================  ==================  ==================  ===========  ==============
-    Paarung              Laden (Median)      Entladen (Median)   Roundtrip    Ergebnis
-    ===================  ==================  ==================  ===========  ==============
-    **Zeile (heute)**    10,03 (n 639)       11,11 (n 329)       1,108        **None**
-    Vorzeile             12,44 (n 593)       13,62 (n 275)       1,095        **None**
-    ===================  ==================  ==================  ===========  ==============
-
-    **Beide verfehlen, und beide fallen aus dem Plausibilitätsband** (Roundtrip
-    > ``ROUNDTRIP_MAX``) — die Funktion liefert in beiden Fassungen ``None``,
-    der Aufrufer nimmt die **gepflegten** Parameter, und am Endpunkt bewegt sich
-    keine Zahl. Die Paarung ist hier also nicht die Stellschraube: **keine der
-    beiden ist überlegen**, die Zeilen-Paarung bleibt schlicht, weil sie der
-    Bestand ist.
-
-    ⭐ **Die Lösung ist die Formel, nicht die Paarung** — der Hub gehört gegen
-    das **Mittel der zwei angrenzenden Stundenmengen** (``½ (b_s + b_{s+1})``)
-    statt gegen eine. Das ist ein Layer-Eingriff (ADR-001,
-    ``core/berechnungen/speicher_sizing.kalibriere_speicher``), war nicht
-    Gegenstand dieses Baus und ist als **eigener Fund** vorzulegen.
-
-    ⛔ **Was hier bis zur Nachmessung am 23.09.2026 stand, war falsch:** eine
-    Tabelle „Zeile 9,99/9,99 gegen Vorzeile 11,11/9,82", erhoben auf einer
-    **gemischten** Kopie (4 800 neu geseedete Zeilen neben 2 640 Altzeilen vom
-    13.09.2025–31.12.2025, die noch die alte Seed-Konvention trugen). Die
-    „perfekten" 9,99 waren die Altzeilen. *Eine Messung ist nur so gut wie die
-    Reinheit ihrer Stichprobe.*
+    ⛔ **Hier stand bis N-552 eine Messtabelle „Zeile gegen Vorzeile"** mit dem
+    Schluss, die Paarung entscheide nichts. Das bleibt wahr — die Lösung war die
+    Formel im Layer, nicht die Paarung hier. Messung und Validierung stehen jetzt
+    am Layer (`kalibriere_speicher`).
     """
     return SizingStunde(
         zeit=datetime.combine(zeile.datum, datetime.min.time())
@@ -176,6 +153,7 @@ def _als_sizing_stunde(zeile: TagesEnergieProfil) -> SizingStunde:
         batterie_kwh=zeile.batterie_kw,
         einspeisung_kwh=zeile.einspeisung_kw,
         netzbezug_kwh=zeile.netzbezug_kw,
+        kw_backward=zeile_traegt_backward_kw(zeile),
     )
 
 

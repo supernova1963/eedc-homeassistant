@@ -214,11 +214,14 @@ def test_die_sizing_kalibrierung_entscheidet_die_paarung_nicht():
     **Beide verfehlen gleich** und fallen aus dem Plausibilitätsband; am
     Endpunkt bewegt sich in keiner der beiden Fassungen eine Zahl. Die Lösung
     ist deshalb **die Formel, nicht die Paarung** — der Hub gehört gegen das
-    *Mittel der zwei angrenzenden Stundenmengen*; das ist ein Layer-Eingriff
-    (ADR-001) und als **eigener Fund** vorzulegen.
+    *Mittel der zwei angrenzenden Stundenmengen*. ✅ **Gebaut als N-552**
+    (23.09.2026) im Layer (`speicher_sizing._hub_energie`); die zwei Hälften
+    nimmt der Layer dort selbst, der Adapter reicht nur die Konvention je Zeile
+    durch (`kw_backward`, Probe in `test_n552_kalibrierung_zwei_stundenhaelften.py`).
 
-    Diese Probe hält fest, dass hier bewusst nichts verschoben ist — sie meldet
-    rot, sobald jemand es doch tut, ohne die Formel anzufassen.
+    Diese Probe hält weiter fest, dass der **Adapter** den Ladestand nicht
+    verschiebt — eine Verschiebung hier stünde jetzt gegen die Formel im Layer
+    und wäre doppelt.
     """
     zeile = TagesEnergieProfil(
         anlage_id=1, datum=TAG, stunde=6, batterie_kw=-1.0, soc_prozent=55.0,
