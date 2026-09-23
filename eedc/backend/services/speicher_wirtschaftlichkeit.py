@@ -18,12 +18,13 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from typing import Any, Iterable, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.berechnungen.slot_konvention import forward_werte_je_backward_zeile
 from backend.core.berechnungen.speicher import netz_ladung_stunde_kwh
 from backend.core.berechnungen.speicher_wirkungsgrad import speicher_wirkungsgrad
 from backend.models.tages_energie_profil import TagesEnergieProfil
@@ -188,28 +189,45 @@ async def berechne_effektiver_ladepreis(
     allgemein_tarif = tarife.get("allgemein")
     hat_dyn_tarif = ist_dynamisch(allgemein_tarif)
     # Spalten-Projektion statt voller ORM-Zeilen: der Helper braucht nur diese
-    # vier Float-Spalten. Volle TEP-Objekte würden pro Zeile zwei JSON-Spalten
-    # (komponenten + source_provenance) deserialisieren — bei mehrjährigen
-    # Anlagen sind das zehntausende Stundenzeilen und der Hauptkostenfaktor des
-    # Speicher-Dashboards (#333). Filter bleibt batterie_kw IS NOT NULL (nicht
-    # < 0), damit `stunden_gesamt_im_fenster` und die quelle-Unterscheidung
-    # keine-tep-daten vs. keine-netzladung (UI-Badge) exakt erhalten bleiben.
+    # wenigen skalaren Spalten. Volle TEP-Objekte würden pro Zeile zwei
+    # JSON-Spalten (komponenten + source_provenance) deserialisieren — bei
+    # mehrjährigen Anlagen sind das zehntausende Stundenzeilen und der
+    # Hauptkostenfaktor des Speicher-Dashboards (#333).
+    #
+    # ⭐ **N-387: der Preis kommt aus der Vorzeile.** `batterie_kw`/`netzbezug_kw`
+    # der Zeile `s` liegen backward (`[s-1, s)`), `strompreis_cent`/
+    # `boersenpreis_cent` derselben Zeile forward (`[s, s+1)`) — die Netzladung
+    # einer Stunde zahlte damit den Preis der Nachbarstunde.
+    # ⛔ **Deshalb steht der Filter `batterie_kw IS NOT NULL` jetzt in Python
+    # und nicht mehr in SQL**: eine Zeile ohne Batteriewert ist zwar keine
+    # Lade-/Entladestunde, aber sie kann die **Preiszeile** der Stunde danach
+    # sein. In SQL gefiltert verschwände ihr Preis still.
+    # Das Fenster beginnt einen Tag früher, damit die Zeile 0 des ersten Tages
+    # ihren Preis bekommt; diese Vorzeilen zählen selbst nicht mit.
     result = await db.execute(
         select(
+            TagesEnergieProfil.datum,
+            TagesEnergieProfil.stunde,
             TagesEnergieProfil.batterie_kw,
             TagesEnergieProfil.netzbezug_kw,
             TagesEnergieProfil.strompreis_cent,
             TagesEnergieProfil.boersenpreis_cent,
+            TagesEnergieProfil.created_at,
         )
         .where(
             TagesEnergieProfil.anlage_id == anlage_id,
-            TagesEnergieProfil.datum >= von,
+            TagesEnergieProfil.datum >= von - timedelta(days=1),
             TagesEnergieProfil.datum <= bis,
-            TagesEnergieProfil.batterie_kw.isnot(None),
         )
         .order_by(TagesEnergieProfil.datum, TagesEnergieProfil.stunde)
     )
-    rows = result.all()
+    alle = result.all()
+    strom_gepaart = forward_werte_je_backward_zeile(alle, "strompreis_cent")
+    boerse_gepaart = forward_werte_je_backward_zeile(alle, "boersenpreis_cent")
+    rows = [
+        (z, sp, bp) for z, sp, bp in zip(alle, strom_gepaart, boerse_gepaart)
+        if z.datum >= von and z.batterie_kw is not None
+    ]
 
     if not rows:
         return EffektiverLadepreisErgebnis(
@@ -230,7 +248,7 @@ async def berechne_effektiver_ladepreis(
     netzlade_stunden_gesamt = 0  # alle Stunden mit netz_lade > 0 (mit oder ohne Preis)
     hat_endkundenpreis = False
 
-    for row in rows:
+    for row, preis_stunde, boerse_stunde in rows:
         batterie = row.batterie_kw or 0
         if batterie > 0:
             # Entladestunde: die Energie ersetzt in DIESER Stunde Netzbezug,
@@ -239,9 +257,9 @@ async def berechne_effektiver_ladepreis(
             # Endkundenpreis und gilt nur bei ausdrücklich dynamischem Tarif.
             entlade_h = batterie  # kW × 1 h ≈ kWh (Stundenraster)
             entlade_summe_gesamt += entlade_h
-            _preis_e = row.strompreis_cent
+            _preis_e = preis_stunde
             if _preis_e is None and hat_dyn_tarif:
-                _preis_e = row.boersenpreis_cent
+                _preis_e = boerse_stunde
             if _preis_e is not None:
                 entlade_summe += entlade_h
                 entlade_wert_summe += entlade_h * _preis_e
@@ -259,12 +277,12 @@ async def berechne_effektiver_ladepreis(
 
         netzlade_stunden_gesamt += 1
 
-        preis = row.strompreis_cent
+        preis = preis_stunde
         if preis is None and hat_dyn_tarif:
-            preis = row.boersenpreis_cent
+            preis = boerse_stunde
         if preis is None:
             continue
-        if row.strompreis_cent is not None:
+        if preis_stunde is not None:
             hat_endkundenpreis = True
 
         netz_lade_summe += netz_lade_h

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 
 from sqlalchemy import and_, delete, select
@@ -974,25 +974,78 @@ async def schreibe_provenance_und_restore(
 
 
 
+async def _boerse_vortag_23(db, anlage_id: int, datum: date) -> Optional[float]:
+    """Boersenpreis der Forward-Stunde 23 des Vortags — der Preis zu Slot 0 (N-387).
+
+    Slot 0 des Tages traegt die Einspeisung von ``[Vortag 23:00, 00:00)``; ihr
+    Preis steht in der **Zeile 23 des Vortags** (``boersenpreis_cent``, forward).
+    Dieselbe Zeile, die ``ha_export_bezugspreis._boerse_slot_null`` fuer die
+    Bezugspreis-Reihe liest — dort ueber ``preis_tag.persistierte_preise``.
+
+    Eine fehlende Vortagszeile ist der Normalfall am ersten Tag einer Anlage und
+    kein Fehler: Slot 0 bleibt dann unbewertet, statt den Preis der falschen
+    Stunde zu nehmen.
+    """
+    from backend.models.tages_energie_profil import TagesEnergieProfil as _TEP
+
+    res = await db.execute(
+        select(_TEP.boersenpreis_cent).where(
+            _TEP.anlage_id == anlage_id,
+            _TEP.datum == datum - timedelta(days=1),
+            _TEP.stunde == 23,
+        )
+    )
+    return res.scalar_one_or_none()
+
+
 def tages_kennzahlen(
     anlage: Anlage, datum: date, invs, akku: TagesAkkumulator, strompreis_stunden,
+    boerse_vortag_23: Optional[float] = None,
 ) -> tuple:
     """Boersenpreis-Tagesaggregation (§51 EEG), Batterie-Vollzyklen, Performance Ratio.
+
+    Args:
+        boerse_vortag_23: Boersenpreis der **forward**-Stunde 23 des Vortags —
+            der Preis, der zur Einspeisung des Backward-Slots 0 gehoert
+            (s. §51 unten). ``None``, wenn der Vortag keine Zeile hat.
 
     Returns:
         ``(boersenpreis_avg, boersenpreis_min, neg_stunden, einsp_neg_kwh, vollzyklen,
         performance_ratio)``
     """
     # ── Börsenpreis-Tagesaggregation ────────────────────────────────────
+    # ⚠ Diese drei Kennzahlen beschreiben den **Preistag** `[00:00, 24:00)` und
+    # werden deshalb NICHT verschoben: `boerse` liegt forward, die Stunden 0..23
+    # sind genau der Kalendertag. Verschieben hieße, den Tages-Ø über
+    # `[Vortag 23, 23)` zu bilden — eine andere Aussage.
     boersen_values = [v for v in (strompreis_stunden.boerse.get(h) for h in range(24)) if v is not None]
     boersenpreis_avg = round(sum(boersen_values) / len(boersen_values), 2) if boersen_values else None
     boersenpreis_min = round(min(boersen_values), 2) if boersen_values else None
     neg_stunden = sum(1 for v in boersen_values if v < 0) if boersen_values else None
 
     # Einspeisung bei negativem Börsenpreis (§51 EEG)
+    #
+    # ⭐ **N-387: hier wird gepaart, also wird umgerechnet.** `einspeisung_pro_stunde[h]`
+    # ist die Energie des Backward-Slots `[h-1, h)`; `boerse[h]` ist der Preis der
+    # Forward-Stunde `[h, h+1)`. Zusammen gehören Slot `h` und Preis `h-1` —
+    # dieselbe Verschiebung wie in `slot_konvention.forward_werte_je_backward_zeile`,
+    # hier nur auf einem Stunden-Dict statt auf Zeilen. Für Slot 0 liefert der
+    # Aufrufer die Stunde 23 des Vortags nach; fehlt sie, bleibt Slot 0 außen vor
+    # (keine stille Nachbar-Übernahme).
+    #
+    # ⚠ **Ohne Bestandsgrenze — und das ist hier richtig.** Der Zeilen-Helfer
+    # prüft je Zeile an ihrer `created_at`, ob sie schon die Backward-Mengen
+    # trägt (`SLOT_PAARUNG_VORZEILE_AB`, für Zeilen vor dem 04.06.2026 gilt die
+    # Zeilen-Paarung). Diese Stelle rechnet dagegen **während** der Aggregation
+    # auf Stunden-Dicts: die Zeilen, die zu dieser Zahl gehören, entstehen im
+    # selben Lauf und tragen damit **immer** die heutige Konvention. Ein
+    # Alt-Wert kann hier gar nicht auftreten — er steckt allenfalls in einer
+    # **persistierten** `einspeisung_neg_preis_kwh` von früher, und die wird
+    # nicht umgerechnet, sondern beim Neu-Aggregieren des Tages neu gebildet
+    # (derselbe Reparaturweg, den CHANGELOG und BERECHNUNGEN nennen).
     einsp_neg = 0.0
     for h in range(24):
-        bp = strompreis_stunden.boerse.get(h)
+        bp = boerse_vortag_23 if h == 0 else strompreis_stunden.boerse.get(h - 1)
         if bp is not None and bp < 0:
             einsp_neg += akku.einspeisung_pro_stunde.get(h, 0.0)
     einsp_neg_kwh = round(einsp_neg, 3) if einsp_neg > 0 else None
@@ -1519,7 +1572,10 @@ async def aggregate_day(
     (
         boersenpreis_avg, boersenpreis_min, neg_stunden, einsp_neg_kwh,
         vollzyklen, performance_ratio,
-    ) = tages_kennzahlen(anlage, datum, invs, akku, strompreis_stunden)
+    ) = tages_kennzahlen(
+        anlage, datum, invs, akku, strompreis_stunden,
+        await _boerse_vortag_23(db, anlage.id, datum),
+    )
 
     pv_marken = await komponenten_tagesgesamt_und_peaks(
         anlage, datum, db, invs_by_id, kwh_source_label, akku,

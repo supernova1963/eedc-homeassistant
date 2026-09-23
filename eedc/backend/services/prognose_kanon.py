@@ -438,8 +438,17 @@ async def kanon_tagesprognose(
 
     # Legacy-Skalar (Kaskaden-Miss-Fallback). Function-local Import =
     # Monkeypatch-fähig (Tests patchen live_wetter._get_lernfaktor).
-    from backend.api.routes.live_wetter import _get_lernfaktor
+    from backend.api.routes.live_wetter import (
+        _get_lernfaktor, _get_lernfaktor_gekappt,
+    )
     skalar = await _get_lernfaktor(anlage.id, db)
+    # ⭐ **N-551: für die gekappten Slots der zweite Faktor.** `skalar` ist auf
+    # der **rohen** Tagesprognose gelernt (`pv_prognose_kwh`, W1); `om_slots`
+    # unten sind an der AC-/WR-Grenze bereits **gekappt**. Der rohe Faktor
+    # rechnete die Abregelung dort ein zweites Mal heraus (an einer Messkopie
+    # mit 12-kW-Grenze −12,4 %). `None`, solange zu wenige Tage ein
+    # `lern_soll_kwh` tragen — dann bleibt es beim bisherigen Verhalten.
+    skalar_gekappt = await _get_lernfaktor_gekappt(anlage.id, db)
 
     # #347/#354: AC-Grenze. Sie kann dem Erzeuger selbst gehören (BKW) oder
     # dem Wechselrichter, dem er zugeordnet ist (PV-String) — beides löst
@@ -623,7 +632,13 @@ async def kanon_tagesprognose(
                 stunden_niederschlag=wetter_nieder,
                 stunden_wetter_code=wetter_code,
             )
-            profil = korrigiere_tagesprofil(om_slots, faktoren, fallback_faktor=skalar)
+            # N-551: `om_slots` sind die **gekappten** Slots ⇒ der Rückfall für
+            # Stunden ohne Korrekturprofil ist der auf der gekappten Basis
+            # gelernte Faktor (sonst der bisherige Roh-Faktor).
+            profil = korrigiere_tagesprofil(
+                om_slots, faktoren,
+                fallback_faktor=skalar_gekappt if skalar_gekappt is not None else skalar,
+            )
             eedc_kwh = profil.tageswert_kwh
             om_kwh = round(sum(om_slots), 1)
             vm_kwh, nm_kwh = vm_nm_split(
@@ -633,6 +648,10 @@ async def kanon_tagesprognose(
             # OpenMeteo-Schätzpfad (Tagessumme ohne Hourly): Tages-Ertrag ×
             # Skalar, kein Profil (bisheriges Verhalten, eedc_prognose_service).
             profil = None
+            # ⚠ **Hier bleibt der ROHE Faktor** (N-551): `pv_ertrag_sum` ist der
+            # ungekappte OpenMeteo-Tagesertrag — dieselbe Basis, auf der der
+            # Skalar gelernt wurde. Der gekappte Faktor gehört nur dorthin, wo
+            # die Reihe selbst gekappt ist (Stundenpfad oben).
             eedc_kwh = (
                 round(pv_ertrag_sum * (skalar or 1.0), 1) if pv_ertrag_sum else None
             )

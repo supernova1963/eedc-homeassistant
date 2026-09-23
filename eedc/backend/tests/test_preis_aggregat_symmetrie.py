@@ -43,7 +43,7 @@ from datetime import date
 import pytest
 
 from backend.models import Anlage
-from backend.models.tages_energie_profil import TagesEnergieProfil
+from backend.tests.slot_saat import tep_zeilen
 from backend.services.strompreis_aggregator import (
     berechne_monats_durchschnittspreis,
     lade_preis_aggregate_je_monat,
@@ -57,12 +57,19 @@ async def _anlage(db, name="Preismessung") -> int:
     return anlage.id
 
 
-async def _stunde(db, anlage_id, d: date, stunde: int, preis, bezug, pv=None, einspeisung=None):
-    db.add(TagesEnergieProfil(
-        anlage_id=anlage_id, datum=d, stunde=stunde,
-        strompreis_cent=preis, netzbezug_kw=bezug,
-        pv_kw=pv, einspeisung_kw=einspeisung,
-    ))
+def _stunde(d: date, stunde: int, preis, bezug, pv=None, einspeisung=None) -> dict:
+    """Eine **Stunde** — Menge und Preis derselben Stunde, nicht derselben Zeile.
+
+    ⭐ **N-387 (23.09.2026): `strompreis_cent` liegt forward.** Die Menge der
+    Stunde `h` steht in Zeile `h` (backward), ihr Preis in Zeile `h-1` — über
+    die Tagesgrenze in Zeile 23 des Vortags. `tep_zeilen` verteilt das; bis
+    dahin legte diese Datei beides in dieselbe Zeile und schrieb damit den
+    Versatz fest, den N-387 beschreibt. **Alle Erwartungswerte unten sind
+    unverändert** — sie waren von Hand aus den Stunden gerechnet, nicht aus den
+    Zeilen, und genau deshalb tragen sie die Umstellung.
+    """
+    return {"datum": d, "stunde": stunde, "strompreis_cent": preis,
+            "netzbezug_kw": bezug, "pv_kw": pv, "einspeisung_kw": einspeisung}
 
 
 async def _bestand(db) -> int:
@@ -78,29 +85,30 @@ async def _bestand(db) -> int:
       die dem März **nicht** zufallen dürfen.
     """
     aid = await _anlage(db)
-    for tag in (1, 2, 3):
-        for stunde in range(24):
-            await _stunde(db, aid, date(2025, 3, tag), stunde, 30.0, 1.0)
-    for stunde in range(4):
-        await _stunde(db, aid, date(2025, 3, 10), stunde, 10.0, -2.0)
-    for stunde in (5, 6):
-        await _stunde(db, aid, date(2025, 3, 10), stunde, 50.0, None)
-    for stunde in range(10):
-        await _stunde(db, aid, date(2025, 4, 5), stunde, 20.0, 2.0)
-    for stunde in range(24):
-        await _stunde(db, aid, date(2025, 5, 7), stunde, 40.0, 0.0)
-    for stunde in range(24):
-        await _stunde(db, aid, date(2025, 6, 9), stunde, None, 3.0)
-    await _stunde(db, aid, date(2025, 2, 28), 23, 99.0, 9.0)
-    await _stunde(db, aid, date(2025, 4, 1), 0, 88.0, 9.0)
+    stunden = [
+        _stunde(date(2025, 3, tag), stunde, 30.0, 1.0)
+        for tag in (1, 2, 3) for stunde in range(24)
+    ]
+    stunden += [_stunde(date(2025, 3, 10), stunde, 10.0, -2.0) for stunde in range(4)]
+    stunden += [_stunde(date(2025, 3, 10), stunde, 50.0, None) for stunde in (5, 6)]
+    stunden += [_stunde(date(2025, 4, 5), stunde, 20.0, 2.0) for stunde in range(10)]
+    stunden += [_stunde(date(2025, 5, 7), stunde, 40.0, 0.0) for stunde in range(24)]
+    stunden += [_stunde(date(2025, 6, 9), stunde, None, 3.0) for stunde in range(24)]
+    stunden += [_stunde(date(2025, 2, 28), 23, 99.0, 9.0)]
+    stunden += [_stunde(date(2025, 4, 1), 0, 88.0, 9.0)]
     # **2025-07** — A-2: vier Mittagsstunden mit vermiedenem Bezug (PV 3, Einspeisung 1
     # ⇒ EV 2) zu 10 ct, vier Abendstunden mit Bezug 2 kW zu 50 ct und ohne PV;
     # dazu eine Stunde, in der die Einspeisung die PV übersteigt (EV klemmt auf 0).
-    for stunde in (11, 12, 13, 14):
-        await _stunde(db, aid, date(2025, 7, 8), stunde, 10.0, 0.0, pv=3.0, einspeisung=1.0)
-    for stunde in (19, 20, 21, 22):
-        await _stunde(db, aid, date(2025, 7, 8), stunde, 50.0, 2.0, pv=0.0, einspeisung=0.0)
-    await _stunde(db, aid, date(2025, 7, 8), 23, 70.0, 0.0, pv=0.5, einspeisung=1.5)
+    stunden += [
+        _stunde(date(2025, 7, 8), stunde, 10.0, 0.0, pv=3.0, einspeisung=1.0)
+        for stunde in (11, 12, 13, 14)
+    ]
+    stunden += [
+        _stunde(date(2025, 7, 8), stunde, 50.0, 2.0, pv=0.0, einspeisung=0.0)
+        for stunde in (19, 20, 21, 22)
+    ]
+    stunden += [_stunde(date(2025, 7, 8), 23, 70.0, 0.0, pv=0.5, einspeisung=1.5)]
+    db.add_all(tep_zeilen(aid, stunden))
     await db.flush()
     return aid
 
@@ -171,8 +179,9 @@ class TestBeideWegeSagenDasselbe:
         """Zwei Anlagen mit denselben Monaten dürfen sich nicht vermischen."""
         aid = await _bestand(db)
         fremd = await _anlage(db, "Nachbar")
-        for stunde in range(24):
-            await _stunde(db, fremd, date(2025, 3, 1), stunde, 5.0, 1.0)
+        db.add_all(tep_zeilen(fremd, [
+            _stunde(date(2025, 3, 1), stunde, 5.0, 1.0) for stunde in range(24)
+        ]))
         await db.flush()
 
         eigene = await lade_preis_aggregate_je_monat(db, aid)

@@ -120,6 +120,52 @@ def _als_sizing_stunde(zeile: TagesEnergieProfil) -> SizingStunde:
     Dieselbe Umbenennung wie in `speicher_potential_service.py`: die Spalten
     heißen `_kw`, tragen aber das Stundenmittel; über eine Stunde integriert ist
     der Zahlenwert derselbe. Der Layer rechnet ausdrücklich in kWh.
+
+    ⛔ **Hier wird der Ladestand NICHT auf die Vorzeile umgerechnet — weil die
+    Paarung die Frage gar nicht entscheidet** (N-387, 23.09.2026; zweite
+    Ausnahme neben `speicher_wirtschaftlichkeit._lese_soc_am_periodenrand`,
+    aber aus einem anderen Grund).
+
+    Der Nachbar nebenan (`speicher_potential_service`) **paart** einen
+    Ladestand mit einer Menge derselben Stunde — dort ist die Umrechnung eine
+    reine Intervall-Zuordnung und richtig. `kalibriere_speicher` dagegen bildet
+    eine **Differenz zweier Stundenmittel** und stellt sie einer einzelnen
+    Stundenmenge gegenüber. Eine Differenz benachbarter Intervallmittel
+    beschreibt den Fluss zwischen den Intervall-**Mitten**, also je zur Hälfte
+    **zwei** Stunden: ``ΔSoC(s-1 → s) ≈ ½ (b_s + b_{s+1})``, gegenübergestellt
+    wird aber ``b_s`` allein. Beide Fassungen liegen damit um eine halbe Stunde
+    daneben, und zwar in entgegengesetzte Richtungen.
+
+    **Gemessen** (23.09.2026, **reine** Demo-Reihe: 4 800 Stundenzeilen, alle
+    mit forward-Stundenmittel geseedet; Wahrheit im Seed 10,0 kWh je 100 % SoC
+    und Roundtrip 1,00):
+
+    ===================  ==================  ==================  ===========  ==============
+    Paarung              Laden (Median)      Entladen (Median)   Roundtrip    Ergebnis
+    ===================  ==================  ==================  ===========  ==============
+    **Zeile (heute)**    10,03 (n 639)       11,11 (n 329)       1,108        **None**
+    Vorzeile             12,44 (n 593)       13,62 (n 275)       1,095        **None**
+    ===================  ==================  ==================  ===========  ==============
+
+    **Beide verfehlen, und beide fallen aus dem Plausibilitätsband** (Roundtrip
+    > ``ROUNDTRIP_MAX``) — die Funktion liefert in beiden Fassungen ``None``,
+    der Aufrufer nimmt die **gepflegten** Parameter, und am Endpunkt bewegt sich
+    keine Zahl. Die Paarung ist hier also nicht die Stellschraube: **keine der
+    beiden ist überlegen**, die Zeilen-Paarung bleibt schlicht, weil sie der
+    Bestand ist.
+
+    ⭐ **Die Lösung ist die Formel, nicht die Paarung** — der Hub gehört gegen
+    das **Mittel der zwei angrenzenden Stundenmengen** (``½ (b_s + b_{s+1})``)
+    statt gegen eine. Das ist ein Layer-Eingriff (ADR-001,
+    ``core/berechnungen/speicher_sizing.kalibriere_speicher``), war nicht
+    Gegenstand dieses Baus und ist als **eigener Fund** vorzulegen.
+
+    ⛔ **Was hier bis zur Nachmessung am 23.09.2026 stand, war falsch:** eine
+    Tabelle „Zeile 9,99/9,99 gegen Vorzeile 11,11/9,82", erhoben auf einer
+    **gemischten** Kopie (4 800 neu geseedete Zeilen neben 2 640 Altzeilen vom
+    13.09.2025–31.12.2025, die noch die alte Seed-Konvention trugen). Die
+    „perfekten" 9,99 waren die Altzeilen. *Eine Messung ist nur so gut wie die
+    Reinheit ihrer Stichprobe.*
     """
     return SizingStunde(
         zeit=datetime.combine(zeile.datum, datetime.min.time())
@@ -235,6 +281,8 @@ async def lade_sizing_auswertung(
     if not zeilen:
         return leer
 
+    # N-387: hier bleibt die Zeilen-Paarung — die Begründung samt Messung steht
+    # im Docstring von `_als_sizing_stunde`.
     stunden = [_als_sizing_stunde(z) for z in zeilen]
     simulierbar = _vollstaendige_tage(stunden)
     tage_mit_daten = len({z.datum for z in zeilen})

@@ -28,7 +28,7 @@ import pytest
 from backend.api.routes.investitionen.dashboards import get_speicher_dashboard
 from backend.models import Anlage, Investition, Monatsdaten, Strompreis
 from backend.models.investition import InvestitionMonatsdaten
-from backend.models.tages_energie_profil import TagesEnergieProfil
+from backend.tests.slot_saat import tep_zeilen
 
 JAHR, MONAT = 2026, 5
 TAG = date(2026, 5, 10)
@@ -66,18 +66,18 @@ async def _anlage(db, *, mit_stundenpreisen: bool) -> int:
     # Mittags laden (aus PV, kein Netzbezug), abends entladen.
     preis_mittag = 10.0 if mit_stundenpreisen else None
     preis_abend = ENTLADUNG_ABEND_CENT if mit_stundenpreisen else None
-    db.add_all([
-        TagesEnergieProfil(
-            anlage_id=anlage.id, datum=TAG, stunde=12,
-            pv_kw=5.0, verbrauch_kw=1.0, einspeisung_kw=2.0, netzbezug_kw=0.0,
-            batterie_kw=-2.0, strompreis_cent=preis_mittag,
-        ),
-        TagesEnergieProfil(
-            anlage_id=anlage.id, datum=TAG, stunde=19,
-            pv_kw=0.0, verbrauch_kw=3.0, einspeisung_kw=0.0, netzbezug_kw=1.0,
-            batterie_kw=2.0, strompreis_cent=preis_abend,
-        ),
-    ])
+    # ⭐ **N-387: der Stundenpreis steht in der Zeile davor.** `batterie_kw` und
+    # `netzbezug_kw` einer Stunde liegen backward, `strompreis_cent` forward —
+    # `tep_zeilen` verteilt beides so, wie die Produktion es ablegt. Die Aussage
+    # der Probe ist unverändert: die Entladestunde 19 gilt 50 ct.
+    db.add_all(tep_zeilen(anlage.id, [
+        {"datum": TAG, "stunde": 12,
+         "pv_kw": 5.0, "verbrauch_kw": 1.0, "einspeisung_kw": 2.0, "netzbezug_kw": 0.0,
+         "batterie_kw": -2.0, "strompreis_cent": preis_mittag},
+        {"datum": TAG, "stunde": 19,
+         "pv_kw": 0.0, "verbrauch_kw": 3.0, "einspeisung_kw": 0.0, "netzbezug_kw": 1.0,
+         "batterie_kw": 2.0, "strompreis_cent": preis_abend},
+    ]))
     await db.commit()
     return anlage.id
 

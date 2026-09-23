@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from backend.core.database import Base
 from backend.models import Anlage
 from backend.models.tages_energie_profil import TagesEnergieProfil
+from backend.tests.slot_saat import tep_zeilen
 from backend.services.speicher_wirtschaftlichkeit import (
     ETA_DEGRADATION_SCHWELLE_PROZENTPUNKTE,
     LADEPREIS_STUNDEN_ABDECKUNG_MIN,
@@ -89,25 +90,47 @@ async def _seed_tarif(db: AsyncSession, anlage_id: int, *, vertragsart: str | No
     await db.commit()
 
 
+#: Wann die Zeilen aggregiert wurden — **fest**, nicht `datetime.now()`.
+#:
+#: `created_at` entscheidet seit N-387, ob eine Zeile die Backward-Konvention
+#: trägt (`slot_konvention.SLOT_PAARUNG_VORZEILE_AB`); ein Datum danach ist der
+#: Normalfall. Fest, weil eine Probe nicht auf die Stunde ihres Laufs wetten
+#: soll (N-167, Wächter `test_konformitaet_echte_uhr_in_tests.py`) — vorher
+#: stand hier `datetime.now()`.
+AGGREGIERT_AM = datetime(2026, 7, 1, 12, 0)
+
+
 async def _seed_tep_stunden(db: AsyncSession, anlage_id: int, rows: list[dict]):
-    """Seeded TEP-Zeilen, jeweils mit datum/stunde + Sensorwerten."""
-    for r in rows:
-        db.add(TagesEnergieProfil(
-            anlage_id=anlage_id,
-            datum=r["datum"],
-            stunde=r["stunde"],
-            pv_kw=r.get("pv_kw"),
-            verbrauch_kw=r.get("verbrauch_kw"),
-            einspeisung_kw=r.get("einspeisung_kw"),
-            netzbezug_kw=r.get("netzbezug_kw"),
-            batterie_kw=r.get("batterie_kw"),
-            soc_prozent=r.get("soc_prozent"),
-            strompreis_cent=r.get("strompreis_cent"),
-            boersenpreis_cent=r.get("boersenpreis_cent"),
-            created_at=datetime.now(),
-        ))
+    """Seeded TEP-Zeilen — jede Beschreibung ist **eine Stunde**, nicht eine Zeile.
+
+    ⭐ **N-387: Preis und Ladestand landen in der Zeile davor.** `batterie_kw`
+    und `netzbezug_kw` einer Stunde stehen backward in ihrer eigenen Zeile,
+    `strompreis_cent`/`boersenpreis_cent`/`soc_prozent` forward in der
+    vorhergehenden (SoT `core/berechnungen/slot_konvention.py`, gemeinsamer
+    Helfer `tests/slot_saat.py`). Bis 23.09.2026 schrieb diese Datei beides in
+    dieselbe Zeile — die Aussagen der Proben sind unverändert, nur ihre Saat
+    trägt jetzt die Konvention der Produktion.
+    """
+    db.add_all(tep_zeilen(anlage_id, rows, created_at=AGGREGIERT_AM))
     await db.commit()
 
+
+
+async def _seed_tep_zeilen(db: AsyncSession, anlage_id: int, zeilen: list[dict]):
+    """Zeilen **so, wie sie in der Tabelle stehen** — ohne Stunden-Verteilung.
+
+    ⛔ Für die Proben um `_lese_soc_am_periodenrand`: diese Stelle paart die
+    Kalenderperiode mit **Monatsintegralen** aus den Investitions-Monatsdaten,
+    nicht mit Stundenzeilen, und bleibt deshalb bewusst bei der Zeilen-Lesart
+    (N-387/Gegenprüfung G1: Zeile 0 ≈ 00:30, Zeile 23 ≈ 23:30 — symmetrisch
+    ±½ h; die Vorzeile machte daraus −1½ h und wäre schlechter). Ihr Gegenstand
+    ist die **Randzeile**, also wird sie hier auch als Zeile gesät.
+    """
+    db.add_all([
+        TagesEnergieProfil(anlage_id=anlage_id, created_at=AGGREGIERT_AM, **z)
+        for z in zeilen
+    ])
+    await db.commit()
 
 # ----------------------------------------------------------------------------
 # berechne_effektiver_ladepreis
@@ -328,7 +351,7 @@ async def test_eta_kurzes_fenster_mit_soc_korrektur_loest_110_prozent_bug() -> N
             {"datum": date(2025, 5, 31), "stunde": 23,
              "batterie_kw": 0, "soc_prozent": 5.0},
         ]
-        await _seed_tep_stunden(db, anlage_id, rows)
+        await _seed_tep_zeilen(db, anlage_id, rows)
 
         # In dem Monat: 200 kWh geladen, 280 kWh entladen
         # Naiver Quotient: 280/200 = 140 %
@@ -356,7 +379,7 @@ async def test_eta_realistisch_korrektur_mit_groeserer_kapazitaet() -> None:
     plausiblem η ~ 95 %.
     """
     async with _db_ctx() as (db, anlage_id):
-        await _seed_tep_stunden(db, anlage_id, [
+        await _seed_tep_zeilen(db, anlage_id, [
             {"datum": date(2025, 5, 1), "stunde": 0, "batterie_kw": 0, "soc_prozent": 80.0},
             {"datum": date(2025, 5, 31), "stunde": 23, "batterie_kw": 0, "soc_prozent": 20.0},
         ])

@@ -132,6 +132,20 @@ class PrognosenVergleichResponse(BaseModel):
     # Zwecken neben dem Legacy-Faktor. Live-Pfad nutzt nur eedc_lernfaktor.
     eedc_lernfaktor_o12: Optional[float] = None
     eedc_lernfaktor_o12_delta_pct: Optional[float] = None  # 100 * (O12 - Legacy) / Legacy
+    # ── N-551: es gibt ZWEI Faktoren, je Basis einen ────────────────────────
+    #: Worauf `eedc_lernfaktor` steht — heute immer die **rohe**, ungekappte
+    #: Tagesprognose (`pv_prognose_kwh`, W1 aus N-547). Als Feld und nicht als
+    #: Wissen des Lesers: ein Faktor ohne seine Basis ist nicht anwendbar.
+    eedc_lernfaktor_basis: str = "roh"
+    #: Tage, aus denen `eedc_lernfaktor` gelernt ist (die Zahl steht auch im
+    #: Text von `eedc_lernfaktor_stufe`, dort aber nicht auswertbar).
+    eedc_lernfaktor_tage: Optional[int] = None
+    #: Derselbe Lernstoff auf der **gekappten** Basis (`lern_soll_kwh`) — den
+    #: nimmt der Kanon-Fallback für die an der Wechselrichter-Grenze gekappten
+    #: Slots. `None` an Anlagen ohne Kappung oder mit zu wenigen Tagen; dann
+    #: rechnet der Fallback wie bisher mit dem Roh-Faktor.
+    eedc_lernfaktor_gekappt: Optional[float] = None
+    eedc_lernfaktor_gekappt_tage: Optional[int] = None
     eedc_prognose_basis: str = "eedc"  # "eedc" oder "solcast" (für EEDC-Diagnose)
     eedc_tageshaelften: List[Optional[TageshaelfteSchema]] = []
 
@@ -831,6 +845,9 @@ async def get_prognosen_vergleich(
         eedc_lernfaktor_stufe=lf_result.label,
         eedc_lernfaktor_o12=lf_result.faktor_o12,
         eedc_lernfaktor_o12_delta_pct=lf_result.delta_o12_pct,
+        eedc_lernfaktor_tage=lf_result.tage_count or None,
+        eedc_lernfaktor_gekappt=lf_result.faktor_gekappt,
+        eedc_lernfaktor_gekappt_tage=lf_result.tage_count_gekappt or None,
         eedc_prognose_basis="eedc",  # EEDC basiert immer auf OpenMeteo
         solcast_verfuegbar=solcast is not None,
         solcast_status=sc_status,

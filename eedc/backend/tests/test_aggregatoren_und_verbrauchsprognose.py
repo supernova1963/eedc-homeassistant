@@ -16,6 +16,7 @@ Gemessen am 2026-08-24 per AST, je **0** Importe im Testbaum:
 from datetime import date, timedelta
 
 import pytest
+from sqlalchemy import select
 
 from backend.models.tages_energie_profil import TagesEnergieProfil
 from backend.services.monatsabschluss_aggregator import (
@@ -32,12 +33,34 @@ from backend.services.verbrauch_prognose_service import (
     get_verbrauch_prognose,
 )
 from backend.tests.factories import anlage
+from backend.tests.slot_saat import tep_stunden
 
 
 async def stunde(db, anlage_id, tag: date, stunde_nr: int, **werte):
-    db.add(TagesEnergieProfil(
-        anlage_id=anlage_id, datum=tag, stunde=stunde_nr, **werte
-    ))
+    """Eine **Stunde** säen — nicht eine Zeile.
+
+    ⭐ **N-387: forward-Werte landen in der Zeile davor.** `netzbezug_kw` einer
+    Stunde liegt backward in ihrer eigenen Zeile, `strompreis_cent` forward in
+    der vorhergehenden (SoT `core/berechnungen/slot_konvention.py`, Helfer
+    `tests/slot_saat.py`). Zwei benachbarte Stunden teilen sich dadurch eine
+    Zeile — deshalb wird hier **zusammengeführt** statt blind angelegt, sonst
+    gäbe es zwei Zeilen zu derselben `(datum, stunde)`.
+    """
+    for zeile in tep_stunden(anlage_id, tag, {stunde_nr: werte}):
+        vorhanden = (await db.execute(
+            select(TagesEnergieProfil).where(
+                TagesEnergieProfil.anlage_id == anlage_id,
+                TagesEnergieProfil.datum == zeile.datum,
+                TagesEnergieProfil.stunde == zeile.stunde,
+            )
+        )).scalar_one_or_none()
+        if vorhanden is None:
+            db.add(zeile)
+        else:
+            for spalte in werte:
+                wert = getattr(zeile, spalte, None)
+                if wert is not None:
+                    setattr(vorhanden, spalte, wert)
     await db.flush()
 
 

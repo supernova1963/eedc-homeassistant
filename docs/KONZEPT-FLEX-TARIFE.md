@@ -63,6 +63,18 @@ Er ist ein **Intervall der Anlagen-Ortszeit** (eedc folgt der Zeitzone von Home 
 Tag der Zeitumstellung hat entsprechend mehr oder weniger Slots. **Preis und Menge eines Slots
 gehören zusammen** und werden nie getrennt weiterverarbeitet.
 
+**Slot-Zuordnung des Preises.** [F] *Ein gemessener Preis wird dem Slot zugeordnet, dessen
+Intervall er beschreibt — nicht der Zeile, in der er gespeichert ist.* In eedcs Stundentabelle
+liegen Menge und Preis derselben Zeile auf **verschiedenen** Intervallen: die Mengen-Spalten meinen
+`[s-1, s)` (Backward-Konvention), `strompreis_cent`/`boersenpreis_cent` meinen `[s, s+1)`, weil
+Home Assistant und die Markt-APIs den Perioden-**Beginn** als Schlüssel führen. Der Preis eines
+Slots steht deshalb in der **vorhergehenden** Zeile (über die Tagesgrenze: in der Zeile 23 des
+Vortags). Das ist eine Frage der Speicherform, nicht dieses Konzepts — die Regel oben („Preis und
+Menge eines Slots gehören zusammen") gilt unverändert, und die Umrechnung sitzt in der Lese-Stelle
+(`core/berechnungen/slot_konvention.forward_werte_je_backward_zeile`, N-387, gebaut 2026-09-23).
+Bis dahin rechneten Tageskosten, Monats-Ø und die EV-Ersparnis auf dynamischen Tarifen mit dem
+Preis der Nachbarstunde. Bei einem Festpreis ändert sich dadurch **keine** Zahl.
+
 ⚠ **Keine Regel dieses Dokuments zählt Slots je Tag oder nennt eine Slot-Länge.** Der Day-Ahead-
 Markt rechnet seit 2025 viertelstündlich **[A]**, und die Steuerung nach §14a arbeitet ebenfalls
 feiner als stündlich. Wird der Slot künftig 15 Minuten, bleibt jede Regel hier wörtlich gültig;

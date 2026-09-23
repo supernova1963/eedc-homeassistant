@@ -34,6 +34,7 @@ from backend.core.berechnungen.speicher import (
     soc_spanne,
     vollzyklen,
 )
+from backend.core.berechnungen.slot_konvention import forward_werte_je_backward_zeile
 from backend.core.berechnungen.speicher_potential import (
     SOC_VOLL_PROZENT,
     PotentialErgebnis,
@@ -106,15 +107,24 @@ class PotentialAuswertung:
     bis: Optional[date]
 
 
-def _als_speicher_stunde(zeile: TagesEnergieProfil) -> SpeicherStunde:
+def _als_speicher_stunde(
+    zeile: TagesEnergieProfil, soc_prozent: Optional[float]
+) -> SpeicherStunde:
     """Stundenmittel in kW ⇒ kWh der Stunde: numerisch identisch, benannt verschieden.
 
     Die Spalten heißen `_kw`, tragen aber das **Stundenmittel**; über eine Stunde
     integriert ist der Zahlenwert derselbe. Der Layer rechnet ausdrücklich in kWh,
     deshalb wird hier umbenannt statt stillschweigend gemischt.
+
+    ⭐ **Der Ladestand kommt NICHT aus `zeile`** (N-387): `einspeisung_kw` und
+    `netzbezug_kw` der Zeile `s` liegen backward (`[s-1, s)`), `soc_prozent`
+    derselben Zeile forward (`[s, s+1)`). Der Aufrufer reicht deshalb den
+    Wert der **Vorzeile** herein (`slot_konvention.forward_werte_je_backward_zeile`)
+    — sonst zählte die Einspeisung der Stunde **vor** dem Vollwerden als
+    „Überschuss bei vollem Speicher".
     """
     return SpeicherStunde(
-        soc_prozent=zeile.soc_prozent,
+        soc_prozent=soc_prozent,
         einspeisung_kwh=zeile.einspeisung_kw or 0.0,
         netzbezug_kwh=zeile.netzbezug_kw or 0.0,
     )
@@ -198,13 +208,19 @@ async def lade_potential_auswertung(
             von=None, bis=None,
         )
 
+    # N-387: der Ladestand jeder Zeile kommt aus ihrer Vorzeile — **einmal über
+    # die ganze sortierte Reihe**, nicht je Monatsliste (sonst bekäme die Zeile 0
+    # eines Monats keinen Wert, obwohl die 23 des Vormonats direkt davor steht).
+    soc_gepaart = forward_werte_je_backward_zeile(zeilen, "soc_prozent")
+
     gesamt = berechne_zusatzpotential(
-        [_als_speicher_stunde(z) for z in zeilen], leer_schwelle_prozent
+        [_als_speicher_stunde(z, soc) for z, soc in zip(zeilen, soc_gepaart)],
+        leer_schwelle_prozent,
     )
 
-    nach_monat: dict[tuple[int, int], list[TagesEnergieProfil]] = {}
-    for zeile in zeilen:
-        nach_monat.setdefault((zeile.datum.year, zeile.datum.month), []).append(zeile)
+    nach_monat: dict[tuple[int, int], list[tuple[TagesEnergieProfil, Optional[float]]]] = {}
+    for zeile, soc in zip(zeilen, soc_gepaart):
+        nach_monat.setdefault((zeile.datum.year, zeile.datum.month), []).append((zeile, soc))
 
     entladung_je_monat = await _entladung_je_monat(
         db, anlage_id, zeilen[0].datum, zeilen[-1].datum
@@ -213,10 +229,14 @@ async def lade_potential_auswertung(
     monate: list[MonatsPotential] = []
     for (jahr, monat), monats_zeilen in sorted(nach_monat.items()):
         teil = berechne_zusatzpotential(
-            [_als_speicher_stunde(z) for z in monats_zeilen], leer_schwelle_prozent
+            [_als_speicher_stunde(z, soc) for z, soc in monats_zeilen],
+            leer_schwelle_prozent,
         )
 
-        soc_werte = [z.soc_prozent for z in monats_zeilen if z.soc_prozent is not None]
+        # ⭐ **Dieselbe Uhr wie `stunden_voll` daneben** (N-387): `anteil_voll`
+        # und `anteil_leer` zählen die Ladestände, die der Layer eine Zeile
+        # weiter oben bewertet hat — also die gepaarten, nicht die der Zeile.
+        soc_werte = [soc for _z, soc in monats_zeilen if soc is not None]
         stunden_mit_soc = len(soc_werte)
         anteil_voll = anteil_leer = None
         if stunden_mit_soc:
@@ -232,7 +252,7 @@ async def lade_potential_auswertung(
         # (Layer-Docstring), deshalb summiert und nicht am Monat neu gebildet.
         ladung = 0.0
         netz_ladung = 0.0
-        for zeile in monats_zeilen:
+        for zeile, _soc in monats_zeilen:
             batterie = zeile.batterie_kw
             if batterie is None or batterie >= 0:
                 continue

@@ -23,7 +23,7 @@ from datetime import date
 import pytest
 
 from backend.models import Anlage, Strompreis
-from backend.models.tages_energie_profil import TagesEnergieProfil
+from backend.tests.slot_saat import tep_zeilen
 from backend.services.strompreis_aggregator import lade_slot_kosten_je_tag
 
 TAG = date(2026, 5, 10)
@@ -49,11 +49,20 @@ async def _anlage(db, *, arbeitspreis: float = 30.0) -> tuple[int, Strompreis]:
     return anlage.id, tarif
 
 
-def _stunde(aid: int, h: int, netzbezug, preis=None, *, datum: date = TAG):
-    return TagesEnergieProfil(
-        anlage_id=aid, datum=datum, stunde=h,
-        netzbezug_kw=netzbezug, strompreis_cent=preis,
-    )
+def _stunden(aid: int, *beschreibungen, datum: date = TAG) -> list:
+    """`(stunde, netzbezug, preis)` je **Stunde** ⇒ Zeilen.
+
+    ⭐ **N-387: der gemessene Preis steht in der Zeile davor.** `netzbezug_kw`
+    einer Stunde liegt backward in ihrer eigenen Zeile, `strompreis_cent`
+    forward in der vorhergehenden (SoT `core/berechnungen/slot_konvention.py`,
+    gemeinsamer Helfer `tests/slot_saat.py`). Bis 23.09.2026 legte diese Datei
+    beides in dieselbe Zeile; die Aussagen sind unverändert, nur die Saat trägt
+    jetzt die Konvention der Produktion.
+    """
+    return tep_zeilen(aid, [
+        {"datum": datum, "stunde": h, "netzbezug_kw": nb, "strompreis_cent": preis}
+        for h, nb, preis in beschreibungen
+    ])
 
 
 async def _lade(db, aid, tarif, *, abgerechnet=None, tag: date = TAG):
@@ -75,7 +84,7 @@ async def test_gemessene_slotpreise_schlagen_den_tarif(db):
     aid, tarif = await _anlage(db)
     # 1 kWh zu 10 ct, 3 kWh zu 50 ct ⇒ 1,60 € und Ø 40 ct.
     # Das arithmetische Mittel wäre 30 ct — also zufällig genau der Tarif.
-    db.add_all([_stunde(aid, 2, 1.0, 10.0), _stunde(aid, 19, 3.0, 50.0)])
+    db.add_all(_stunden(aid, (2, 1.0, 10.0), (19, 3.0, 50.0)))
     await db.flush()
 
     sk = await _lade(db, aid, tarif)
@@ -94,7 +103,7 @@ async def test_festpreis_bewegt_keine_zahl(db):
     sonst hätte dieser Bau einem Festpreis-Anwender die Zahlen verschoben.
     """
     aid, tarif = await _anlage(db, arbeitspreis=29.53)
-    db.add_all([_stunde(aid, 7, 1.5), _stunde(aid, 8, 2.5), _stunde(aid, 20, 2.0)])
+    db.add_all(_stunden(aid, (7, 1.5, None), (8, 2.5, None), (20, 2.0, None)))
     await db.flush()
 
     sk = await _lade(db, aid, tarif)
@@ -118,7 +127,7 @@ async def test_abgerechneter_monats_oe_schlaegt_den_stammpreis(db):
     den Monat **verteilt**, nicht in diesem Slot gemessen.
     """
     aid, tarif = await _anlage(db, arbeitspreis=30.0)
-    db.add_all([_stunde(aid, 7, 2.0), _stunde(aid, 20, 4.0)])
+    db.add_all(_stunden(aid, (7, 2.0, None), (20, 4.0, None)))
     await db.flush()
 
     sk = await _lade(db, aid, tarif, abgerechnet=18.0)
@@ -136,7 +145,7 @@ async def test_gemessene_stunde_schlaegt_auch_den_abgerechneten_oe(db):
     abgerechneten Ø (18 ct). Herkunft ``gemischt``, und der Ø liegt dazwischen.
     """
     aid, tarif = await _anlage(db)
-    db.add_all([_stunde(aid, 19, 2.0, 50.0), _stunde(aid, 20, 2.0)])
+    db.add_all(_stunden(aid, (19, 2.0, 50.0), (20, 2.0, None)))
     await db.flush()
 
     sk = await _lade(db, aid, tarif, abgerechnet=18.0)
@@ -155,7 +164,7 @@ async def test_negativer_preis_ist_ein_wert(db):
     dort, wo der Anwender Geld bekommen hat.
     """
     aid, tarif = await _anlage(db)
-    db.add_all([_stunde(aid, 3, 4.0, -5.0), _stunde(aid, 19, 1.0, 40.0)])
+    db.add_all(_stunden(aid, (3, 4.0, -5.0), (19, 1.0, 40.0)))
     await db.flush()
 
     sk = await _lade(db, aid, tarif)
@@ -175,7 +184,7 @@ async def test_ohne_tarif_und_ohne_messung_bleibt_die_menge_unbewertet(db):
     viel davon bewertet ist (**A-1**: Anteil der MENGE, nicht der Slots).
     """
     aid, _tarif = await _anlage(db)
-    db.add_all([_stunde(aid, 7, 3.0), _stunde(aid, 19, 1.0, 40.0)])
+    db.add_all(_stunden(aid, (7, 3.0, None), (19, 1.0, 40.0)))
     await db.flush()
 
     sk = (await lade_slot_kosten_je_tag(
@@ -197,7 +206,7 @@ async def test_abdeckung_zaehlt_menge_und_nicht_stunden(db):
     nur 10 %. Genau diese Zahl gehört neben den Wert.
     """
     aid, _tarif = await _anlage(db)
-    db.add_all([_stunde(aid, 3, 1.0, 20.0), _stunde(aid, 19, 9.0)])
+    db.add_all(_stunden(aid, (3, 1.0, 20.0), (19, 9.0, None)))
     await db.flush()
 
     sk = (await lade_slot_kosten_je_tag(
@@ -215,7 +224,7 @@ async def test_negativer_netzbezug_wird_geklemmt(db):
     Menge sehen, sonst driften Tag und Monat auseinander.
     """
     aid, tarif = await _anlage(db)
-    db.add_all([_stunde(aid, 7, -5.0, 30.0), _stunde(aid, 19, 2.0, 30.0)])
+    db.add_all(_stunden(aid, (7, -5.0, 30.0), (19, 2.0, 30.0)))
     await db.flush()
 
     sk = await _lade(db, aid, tarif)
@@ -243,7 +252,7 @@ async def test_zeitumstellung_fruehjahr_rechnet_mit_23_slots(db):
     """Kein Auffüllen auf 24, keine Interpolation der fehlenden Stunde (P-4)."""
     aid, tarif = await _anlage(db)
     stunden = [h for h in range(24) if h != 2]
-    db.add_all([_stunde(aid, h, 1.0, 20.0 + h, datum=FRUEHJAHR) for h in stunden])
+    db.add_all(_stunden(aid, *[(h, 1.0, 20.0 + h) for h in stunden], datum=FRUEHJAHR))
     await db.flush()
 
     sk = await _lade(db, aid, tarif, tag=FRUEHJAHR)
@@ -257,7 +266,7 @@ async def test_zeitumstellung_fruehjahr_rechnet_mit_23_slots(db):
 async def test_zeitumstellung_herbst_bleibt_ein_quotient(db):
     """24 gespeicherte Slots des 25-Stunden-Tags: Σ und Ø aus genau diesen."""
     aid, tarif = await _anlage(db)
-    db.add_all([_stunde(aid, h, 0.5, 30.0, datum=HERBST) for h in range(24)])
+    db.add_all(_stunden(aid, *[(h, 0.5, 30.0) for h in range(24)], datum=HERBST))
     await db.flush()
 
     sk = await _lade(db, aid, tarif, tag=HERBST)

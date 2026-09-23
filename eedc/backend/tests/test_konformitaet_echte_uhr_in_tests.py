@@ -132,7 +132,6 @@ _BASELINE: dict[str, int] = {
     "test_reparatur_lts_reichweite.py": 1,
     "test_reparatur_werkbank_komponenten_korrektur.py": 3,
     "test_solcast_tagesprofile_357.py": 7,
-    "test_speicher_dyn_tarif_und_soc.py": 1,
     "test_speicher_netto_kapazitaet.py": 1,
     "test_symmetrie_aggregator_today.py": 6,
     "test_tag_status_leere_tagessicht.py": 5,

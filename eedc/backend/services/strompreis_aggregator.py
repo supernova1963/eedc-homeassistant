@@ -18,12 +18,13 @@ from __future__ import annotations
 import logging
 from calendar import monthrange
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 
-from sqlalchemy import and_, extract, func, select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.berechnungen.slot_konvention import forward_werte_je_backward_zeile
 from backend.core.berechnungen.zeittarif import (
     gewichteter_arbeitspreis_cent,
     hat_zeitfenster,
@@ -47,6 +48,97 @@ def monats_fenster(jahr: int, monat: int) -> tuple[date, date]:
     ``backend/tests/test_query_budget_monats_fakten.py``.
     """
     return date(jahr, monat, 1), date(jahr + (monat == 12), (monat % 12) + 1, 1)
+
+
+# =============================================================================
+# Die EINE Bauform der Preis-Paarung (N-387)
+# =============================================================================
+
+
+async def _zeilen_mit_gepaartem_preis(
+    db: AsyncSession,
+    anlage_id: int,
+    *,
+    ab: Optional[date] = None,
+    bis_inklusive: Optional[date] = None,
+    bis_exklusive: Optional[date] = None,
+    nur_wenn_gemessen: bool = False,
+) -> list[tuple]:
+    """Stundenzeilen des Fensters **samt dem Preis, der zu ihrer Stunde gehört**.
+
+    ⭐ **Die eine Bauform für alle Preis-Leser dieses Moduls und des
+    Speicher-Dashboards** (N-387). Die Menge einer Zeile ``s`` (``netzbezug_kw``,
+    ``pv_kw``, ``einspeisung_kw``) liegt **backward** (`[s-1, s)`), ihr
+    ``strompreis_cent`` **forward** (`[s, s+1)`) — gepaart wird deshalb über
+    ``slot_konvention.forward_werte_je_backward_zeile``, also mit der Vorzeile
+    und über die Tagesgrenze hinweg mit Zeile 23 des Vortags.
+
+    ⛔ **Python-Shift statt SQL-Self-Join — die Wahl ist begründet.** Ein Join
+    auf ``stunde − 1`` bräuchte für die Tagesgrenze SQLite-eigene
+    Datumsarithmetik (``date(datum, '-1 day')``) und für die Bestandsgrenze
+    (``SLOT_PAARUNG_VORZEILE_AB``) ein ``CASE`` — die Regel stünde dann ein
+    zweites Mal in SQL, und genau das soll der benannte Helfer verhindern.
+    Die Zahl der Abfragen bleibt unverändert (der Wächter
+    ``test_query_budget_monats_fakten.py`` zählt Abfragen, nicht Zeilen);
+    geladen werden sieben **skalare** Spalten, keine JSON-Spalte.
+
+    ⚠ **Das Fenster beginnt einen Tag früher**, damit die Zeile 0 des ersten
+    Tages ihren Preis noch bekommt; diese Vorzeilen werden nicht ausgeliefert.
+
+    ⭐ **``nur_wenn_gemessen`` ist der Vorabtest für die Monats-Aggregate.** Sie
+    liefern ohne gemessenen Preis **gar kein** Ergebnis — dann lohnt es nicht,
+    die Stundenzeilen überhaupt zu laden. Ein ``EXISTS`` über **dasselbe**
+    Fenster (einschließlich des Vorzeilen-Tages!) beantwortet die Frage in
+    einer Abfrage, die der Index bedient. **Gemessen** (23.09.2026, r28-Kopie
+    mit 8 304 Stundenzeilen und **ohne** eine einzige Preiszeile, je 5 Läufe):
+    **21,7 ms ohne den Vorabtest, 0,8 ms mit ihm** — der Bestand (SQL-`GROUP BY`)
+    braucht dort 1,4 ms. Auf einer Kopie **mit** Preisen ändert er
+    erwartungsgemäß nichts (7,5 ms Bestand, 61,6 ms mit Paarung).
+    ⛔ **Für ``lade_slot_kosten_je_tag`` gilt das NICHT** — dort trägt die
+    Kaskade den Tag auch ohne Messung (abgerechneter Ø, Vertragspreis), ein
+    leeres Ergebnis wäre dort ein Datenverlust. Deshalb ein Schalter und keine
+    eingebaute Abkürzung.
+
+    Returns:
+        ``[(zeile, preis_cent | None), …]`` in Zeitordnung — nur Zeilen im
+        angefragten Fenster.
+    """
+    bedingungen = [TagesEnergieProfil.anlage_id == anlage_id]
+    if ab is not None:
+        bedingungen.append(TagesEnergieProfil.datum >= ab - timedelta(days=1))
+    if bis_inklusive is not None:
+        bedingungen.append(TagesEnergieProfil.datum <= bis_inklusive)
+    if bis_exklusive is not None:
+        bedingungen.append(TagesEnergieProfil.datum < bis_exklusive)
+
+    if nur_wenn_gemessen:
+        gemessen = await db.execute(
+            select(TagesEnergieProfil.id)
+            .where(and_(*bedingungen, TagesEnergieProfil.strompreis_cent.isnot(None)))
+            .limit(1)
+        )
+        if gemessen.first() is None:
+            return []
+
+    result = await db.execute(
+        select(
+            TagesEnergieProfil.datum,
+            TagesEnergieProfil.stunde,
+            TagesEnergieProfil.netzbezug_kw,
+            TagesEnergieProfil.pv_kw,
+            TagesEnergieProfil.einspeisung_kw,
+            TagesEnergieProfil.strompreis_cent,
+            TagesEnergieProfil.created_at,
+        )
+        .where(and_(*bedingungen))
+        .order_by(TagesEnergieProfil.datum, TagesEnergieProfil.stunde)
+    )
+    zeilen = result.all()
+    preise = forward_werte_je_backward_zeile(zeilen, "strompreis_cent")
+    return [
+        (z, p) for z, p in zip(zeilen, preise)
+        if ab is None or z.datum >= ab
+    ]
 
 
 @dataclass
@@ -93,22 +185,14 @@ async def berechne_monats_durchschnittspreis(
         StrompreisAggregat oder None wenn keine Preisdaten vorhanden.
     """
     _von, _bis = monats_fenster(jahr, monat)
-    result = await db.execute(
-        select(
-            TagesEnergieProfil.strompreis_cent,
-            TagesEnergieProfil.netzbezug_kw,
-            TagesEnergieProfil.pv_kw,
-            TagesEnergieProfil.einspeisung_kw,
-        ).where(
-            and_(
-                TagesEnergieProfil.anlage_id == anlage_id,
-                TagesEnergieProfil.datum >= _von,
-                TagesEnergieProfil.datum < _bis,
-                TagesEnergieProfil.strompreis_cent.isnot(None),
-            )
+    # N-387: Menge backward, Preis forward — gepaart über die Vorzeile.
+    rows = [
+        (preis, z.netzbezug_kw, z.pv_kw, z.einspeisung_kw)
+        for z, preis in await _zeilen_mit_gepaartem_preis(
+            db, anlage_id, ab=_von, bis_exklusive=_bis, nur_wenn_gemessen=True
         )
-    )
-    rows = result.all()
+        if preis is not None
+    ]
 
     if not rows:
         return None
@@ -200,72 +284,59 @@ async def lade_preis_aggregate_je_monat(
     produktiven Anlage **117 Abfragen** je ``GET /monatsdaten/aggregiert``.
     Bauform wie ``einspeise_erloes_service.get_neg_preis_einspeisung_je_monat``.
 
-    ⚠ **Der Clamp trägt, das ``COALESCE`` nicht — beides gemessen.** Ein
-    negativer Netzbezug muss auf 0 **geclampt** und nicht verworfen werden;
-    nimmt man ``MAX(…, 0)`` heraus, meldet
+    ⚠ **Der Clamp trägt.** Ein negativer Netzbezug muss auf 0 **geclampt** und
+    nicht verworfen werden; nimmt man ``max(…, 0)`` heraus, meldet
     ``backend/tests/test_preis_aggregat_symmetrie.py`` drei Proben rot
-    (Gegenprobe 15.09.2026). Das ``COALESCE`` davor ist dagegen **folgenlos**:
-    ``MAX(NULL, 0)`` ist in SQLite zwar ``NULL``, aber ``SUM`` überspringt
-    ``NULL``, und die Stunde trüge ohnehin 0 bei — ``arithmetisch_cent`` und
-    ``abgedeckte_stunden`` hängen an ``strompreis_cent`` bzw. ``COUNT(*)``, nicht
-    am Bezug. Es steht hier, damit die Absicht („fehlender Bezug = 0", wie
-    ``max(0.0, bezug or 0.0)`` im Original) nicht von einer Ignorier-Regel des
-    SQL-Dialekts abhängt — ohne den Anspruch, eine Zahl zu retten.
+    (Gegenprobe 15.09.2026).
+
+    ⭐ **Seit N-387 (23.09.2026) aggregiert diese Funktion in Python statt in
+    ``GROUP BY``** — nicht aus Geschmack: der Preis einer Menge steht in der
+    **Vorzeile** (Menge backward, Preis forward), und die Tagesgrenze dieser
+    Paarung ließe sich in SQL nur mit dialekteigener Datumsarithmetik
+    nachbauen. Die Regel steht deshalb genau einmal
+    (``slot_konvention.forward_werte_je_backward_zeile``), die Abfrage bleibt
+    **eine** — das Budget aus ``test_query_budget_monats_fakten.py`` zählt
+    Abfragen, nicht Zeilen. Das frühere ``COALESCE`` in SQL ist damit
+    gegenstandslos; ``float(… or 0.0)`` sagt dasselbe direkt.
 
     Die Gleichheit beider Wege hält ``backend/tests/test_preis_aggregat_symmetrie.py``
     fest.
     """
-    bezug = func.max(func.coalesce(TagesEnergieProfil.netzbezug_kw, 0.0), 0.0)
-    # A-2: vermiedener Bezug je Slot = max(0, PV − Einspeisung) — dieselbe
-    # Bildung wie im Einzelmonat und auf der Tagesebene (`lade_slot_kosten_je_tag`).
-    ev = func.max(
-        func.coalesce(TagesEnergieProfil.pv_kw, 0.0)
-        - func.coalesce(TagesEnergieProfil.einspeisung_kw, 0.0),
-        0.0,
-    )
-    bedingungen = [
-        TagesEnergieProfil.anlage_id == anlage_id,
-        TagesEnergieProfil.strompreis_cent.isnot(None),
-    ]
-    if von is not None:
-        bedingungen.append(TagesEnergieProfil.datum >= von)
-    if bis is not None:
-        bedingungen.append(TagesEnergieProfil.datum < bis)
-
-    jahr_spalte = extract("year", TagesEnergieProfil.datum).label("jahr")
-    monat_spalte = extract("month", TagesEnergieProfil.datum).label("monat")
-    # `extract` steht hier in GROUP BY und SELECT, **nicht** im Filter über
-    # `anlage_id`/`datum` — der Index bleibt nutzbar. Genau diese Trennung
-    # bewacht `test_query_budget_monats_fakten.py`.
-    result = await db.execute(
-        select(
-            jahr_spalte,
-            monat_spalte,
-            func.sum(TagesEnergieProfil.strompreis_cent * bezug),
-            func.sum(bezug),
-            func.sum(TagesEnergieProfil.strompreis_cent),
-            func.count(),
-            func.sum(TagesEnergieProfil.strompreis_cent * ev),
-            func.sum(ev),
-        )
-        .where(and_(*bedingungen))
-        .group_by(jahr_spalte, monat_spalte)
-    )
+    # N-387: Menge backward, Preis forward — dieselbe Paarung wie im
+    # Einzelmonat, über denselben Lader. Die Aggregation steht seither in
+    # Python statt in `GROUP BY`; die **Zahl der Abfragen** (eine) und damit
+    # das Budget aus `test_query_budget_monats_fakten.py` bleibt unverändert.
+    summen: dict[tuple[int, int], list[float]] = {}
+    for z, preis in await _zeilen_mit_gepaartem_preis(
+        db, anlage_id, ab=von, bis_exklusive=bis, nur_wenn_gemessen=True
+    ):
+        if preis is None:
+            continue
+        # Negativen Netzbezug auf 0 klemmen — der Clamp trägt (s. Docstring).
+        kw = max(0.0, float(z.netzbezug_kw or 0.0))
+        # A-2: vermiedener Bezug je Slot = max(0, PV − Einspeisung) — dieselbe
+        # Bildung wie im Einzelmonat und auf der Tagesebene.
+        ev = max(0.0, float(z.pv_kw or 0.0) - float(z.einspeisung_kw or 0.0))
+        eintrag = summen.setdefault((z.datum.year, z.datum.month), [0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        eintrag[0] += preis * kw
+        eintrag[1] += kw
+        eintrag[2] += preis
+        eintrag[3] += 1
+        eintrag[4] += preis * ev
+        eintrag[5] += ev
 
     je_monat: dict[tuple[int, int], StrompreisAggregat] = {}
-    for jahr, monat, summe_kosten, summe_kwh, summe_preise, n, summe_ev_kosten, summe_ev in result.all():
-        jahr, monat, n = int(jahr), int(monat), int(n or 0)
+    for (jahr, monat), (summe_kosten, summe_kwh, summe_preise, n, summe_ev_kosten, summe_ev) in summen.items():
+        n = int(n)
         if n <= 0:
             continue
-        summe_kwh = float(summe_kwh or 0.0)
-        summe_ev = float(summe_ev or 0.0)
         je_monat[(jahr, monat)] = StrompreisAggregat(
-            gewichtet_cent=round(float(summe_kosten or 0.0) / summe_kwh, 2) if summe_kwh > 0 else None,
-            arithmetisch_cent=round(float(summe_preise or 0.0) / n, 2),
+            gewichtet_cent=round(summe_kosten / summe_kwh, 2) if summe_kwh > 0 else None,
+            arithmetisch_cent=round(summe_preise / n, 2),
             abgedeckte_stunden=n,
             sollstunden=monthrange(jahr, monat)[1] * 24,
             ev_gewichtet_cent=(
-                round(float(summe_ev_kosten or 0.0) / summe_ev, 2) if summe_ev > 0 else None
+                round(summe_ev_kosten / summe_ev, 2) if summe_ev > 0 else None
             ),
         )
     return PreisMessung(anlage_id, je_monat)
@@ -407,27 +478,17 @@ async def lade_slot_kosten_je_tag(
         ``{datum: SlotKosten}`` — nur für Tage mit Stundenzeilen. Ein Tag ohne
         Zeilen fehlt im Dict; er hat keine Kosten von 0, sondern keine Aussage.
     """
-    result = await db.execute(
-        select(
-            TagesEnergieProfil.datum,
-            TagesEnergieProfil.stunde,
-            TagesEnergieProfil.netzbezug_kw,
-            TagesEnergieProfil.strompreis_cent,
-            # Fuer die EV-Gewichtung (A-2) — dieselbe Abfrage, damit beide
-            # Seiten der Tagesbilanz aus derselben Quelle stammen (P-5).
-            TagesEnergieProfil.pv_kw,
-            TagesEnergieProfil.einspeisung_kw,
-        )
-        .where(
-            TagesEnergieProfil.anlage_id == anlage_id,
-            TagesEnergieProfil.datum >= von,
-            TagesEnergieProfil.datum <= bis,
-        )
-        .order_by(TagesEnergieProfil.datum, TagesEnergieProfil.stunde)
+    # N-387: der **gemessene** Slot-Preis kommt aus der Vorzeile (Menge
+    # backward, Preis forward); der abgeleitete Preis der Stufen 2 und 3 hängt
+    # am Tag bzw. am Zeitfenster und bleibt, wo er war.
+    gepaart = await _zeilen_mit_gepaartem_preis(
+        db, anlage_id, ab=von, bis_inklusive=bis
     )
 
     roh: dict[date, list[float]] = {}
-    for datum, stunde, netzbezug_kw, preis_cent, pv_kw, einspeisung_kw in result.all():
+    for _z, preis_cent in gepaart:
+        datum, stunde = _z.datum, _z.stunde
+        netzbezug_kw, pv_kw, einspeisung_kw = _z.netzbezug_kw, _z.pv_kw, _z.einspeisung_kw
         # Negative Mengen klemmen (Zähler-Glitch) — dieselbe Behandlung wie im
         # Monats-Aggregat oben, damit beide Ebenen dieselbe Menge sehen.
         menge = max(0.0, float(netzbezug_kw or 0.0))

@@ -12,6 +12,7 @@ Verwendung:
   python ../scripts/seed_demo_profil.py              # Demo-Anlage (ID 1)
   python ../scripts/seed_demo_profil.py --anlage-id 2  # explizit andere Anlage
   python ../scripts/seed_demo_profil.py --alle         # alle Anlagen
+  python ../scripts/seed_demo_profil.py --db /tmp/kopie.db   # in eine Kopie (Messungen)
 
 Muster:
   PV        — Sinuskurve, aufgespalten auf vorhandene PV/BKW-Investitionen
@@ -99,6 +100,18 @@ def seed_anlage(conn: sqlite3.Connection, anlage_id: int, kwp: float, tage: int)
     inserted_tep = 0
     inserted_tz = 0
 
+    # ⭐ **Der Ladestand laeuft ueber Mitternacht weiter** (N-387, 23.09.2026).
+    # Bis dahin stand diese Zeile in der Tagesschleife und setzte den Speicher
+    # jede Nacht auf `BATTERIE_SOC_START` zurueck — ein Sprung, den kein echter
+    # Speicher macht. Jede Messung ueber die Tagesgrenze (Tages-Wirkungsgrad aus
+    # ΔSoC, Kalibrierung an der ersten Stunde) las an der Demo-Anlage deshalb
+    # einen Sprung statt eines Flusses. Der Startwert gilt jetzt einmal fuer die
+    # ganze Reihe.
+    soc = BATTERIE_SOC_START
+    #: Die Zeile 23 des zuletzt geschriebenen Tages — ihr Stundenmittel braucht
+    #: den Zustand nach der Stunde 0 des Folgetags und wird dort nachgetragen.
+    offene_randzeile: tuple | None = None
+
     for tage_zurueck in range(tage, 0, -1):
         tag = gestern - timedelta(days=tage_zurueck - 1)
         tag_im_jahr = tag.timetuple().tm_yday
@@ -125,7 +138,6 @@ def seed_anlage(conn: sqlite3.Connection, anlage_id: int, kwp: float, tage: int)
         pool_dauer = random.randint(3, 5)
         pool_kw    = round(random.uniform(0.6, 1.2), 2) if pool_aktiv else 0.0
 
-        soc = BATTERIE_SOC_START
         stunden_daten = []
 
         for stunde in range(24):
@@ -239,6 +251,10 @@ def seed_anlage(conn: sqlite3.Connection, anlage_id: int, kwp: float, tage: int)
 
             stunden_daten.append({
                 "stunde":            stunde,
+                # ⭐ **N-387: `soc_zustand` ist der Stand am ENDE dieses Slots**
+                # (= an der Stundengrenze). Er ist NICHT die Spalte — die
+                # entsteht nach der Schleife als forward-Stundenmittel.
+                "soc_zustand":       round(soc, 1),
                 "pv_kw":             round(pv_total, 3),
                 "verbrauch_kw":      round(vbr_total, 3),
                 "einspeisung_kw":    round(einsp, 3),
@@ -250,9 +266,52 @@ def seed_anlage(conn: sqlite3.Connection, anlage_id: int, kwp: float, tage: int)
                 "defizit_kw":        round(max(0, vbr_total - pv_total), 3),
                 "temperatur_c":      _temperatur(stunde, tag_im_jahr),
                 "globalstrahlung_wm2": round(pv_gesamt / kwp * 1000 * 1.1 + random.uniform(-20, 20), 0) if kwp > 0 and pv_gesamt > 0 else 0.0,
-                "soc_prozent":       round(soc, 1),
                 "komponenten":       komp if komp else None,
             })
+
+        # ── Ladestand: forward-Stundenmittel (N-387) ──────────────────────
+        #
+        # ⭐ **Warum das nicht der Zustand nach dem Stundenfluss ist.** In der
+        # Produktion trägt eine `TagesEnergieProfil`-Zeile zwei Uhren (SoT
+        # `core/berechnungen/slot_konvention.py`): die `*_kw`-Spalten liegen
+        # **backward** (Zeile `s` = `[s-1, s)`), `soc_prozent` dagegen
+        # **forward** (Zeile `s` = `[s, s+1)`), weil
+        # `ha_statistics_service.get_hourly_sensor_data` den Perioden-BEGINN
+        # als Schlüssel nimmt und den **Mittelwert** der Periode liefert.
+        #
+        # ⛔ **Bis zum 23.09.2026 schrieb dieses Skript hier den Zustand NACH
+        # dem Fluss derselben Zeile.** Gemessen an den Demo-Kopien: die
+        # Korrelation zwischen ΔSoC[h-1→h] und `−batterie_kw[h]` lag bei
+        # **0,972**, also genau die Paarung, die N-387 als falsch ausweist. Die
+        # Demo-Anlagen trugen damit eine Konvention, die HA nie liefert — und
+        # jede Messung an ihnen belegte den Versatz statt ihn zu zeigen.
+        #
+        # Die Zeile `s` bekommt deshalb das Mittel der Zustände an den Grenzen
+        # `s` und `s+1` — also das Mittel über das Intervall `[s, s+1)`, das
+        # sie beschreibt.
+        #
+        # ⭐ **Auch die Zeile 23 bekommt ihr Mittel** — ihr Nachfolger ist der
+        # Zustand nach der Stunde 0 des **Folgetags**, und den gibt es, seit
+        # der Ladestand über Mitternacht weiterläuft (s. oben). Sie wird
+        # deshalb nachgetragen, sobald der Folgetag gerechnet ist; nur die
+        # letzte Zeile der ganzen Reihe behält den Randzustand, weil es dort
+        # keinen Folgetag mehr gibt.
+        for i, d in enumerate(stunden_daten):
+            danach = stunden_daten[i + 1]["soc_zustand"] if i + 1 < len(stunden_daten) else None
+            d["soc_prozent"] = round(
+                (d["soc_zustand"] + danach) / 2 if danach is not None else d["soc_zustand"], 1
+            )
+
+        # Die 23er-Zeile des VORTAGS nachtragen: jetzt ist ihr Nachfolger bekannt.
+        if offene_randzeile is not None:
+            vortag, zustand_23 = offene_randzeile
+            conn.execute(
+                "UPDATE tages_energie_profil SET soc_prozent=? "
+                "WHERE anlage_id=? AND datum=? AND stunde=23",
+                (round((zustand_23 + stunden_daten[0]["soc_zustand"]) / 2, 1),
+                 anlage_id, vortag.isoformat()),
+            )
+        offene_randzeile = (tag, stunden_daten[23]["soc_zustand"])
 
         # TagesEnergieProfil schreiben
         for d in stunden_daten:
@@ -323,13 +382,17 @@ def main():
                         help="Alle Anlagen befüllen (Standard: nur erste Anlage)")
     parser.add_argument("--tage", type=int, default=60,
                         help="Anzahl Tage zurück (Standard: 60)")
+    parser.add_argument("--db", default=None,
+                        help="Pfad zur Ziel-Datenbank (Standard: eedc/data/eedc.db). "
+                             "Für Messungen auf einer KOPIE — nie auf einer Produktiv-DB.")
     args = parser.parse_args()
 
-    if not DB_PATH.exists():
-        print(f"Fehler: DB nicht gefunden unter {DB_PATH}", file=sys.stderr)
+    ziel = Path(args.db) if args.db else DB_PATH
+    if not ziel.exists():
+        print(f"Fehler: DB nicht gefunden unter {ziel}", file=sys.stderr)
         sys.exit(1)
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(ziel)
     conn.execute("PRAGMA journal_mode=WAL")
 
     rows = conn.execute("SELECT id, anlagenname, leistung_kwp FROM anlagen ORDER BY id").fetchall()
@@ -337,7 +400,7 @@ def main():
         print("Keine Anlagen in der DB gefunden.", file=sys.stderr)
         sys.exit(1)
 
-    print(f"Seed Demo-Profildaten ({args.tage} Tage) in {DB_PATH}")
+    print(f"Seed Demo-Profildaten ({args.tage} Tage) in {ziel}")
     random.seed(42)
 
     for anlage_id, name, kwp in rows:

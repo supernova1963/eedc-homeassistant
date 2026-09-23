@@ -40,7 +40,7 @@ import pytest
 
 from backend.api.routes.monatsabschluss.views import get_monatsabschluss
 from backend.models import Anlage, Strompreis
-from backend.models.tages_energie_profil import TagesEnergieProfil
+from backend.tests.slot_saat import tep_zeilen
 from backend.services import strompreis_aggregator as aggregator_modul
 
 FELD = "netzbezug_durchschnittspreis_cent"
@@ -84,11 +84,15 @@ async def _anlage_mit_stundenpreisen(db) -> int:
         netzbezug_arbeitspreis_cent_kwh=30.0, einspeiseverguetung_cent_kwh=8.0,
         # vertragsart bewusst NICHT gesetzt — die Messung allein schaltet frei (#412).
     ))
-    for stunde in range(24):
-        db.add(TagesEnergieProfil(
-            anlage_id=anlage.id, datum=date(JAHR, MONAT, 1),
-            stunde=stunde, strompreis_cent=PREIS_CENT, netzbezug_kw=1.0,
-        ))
+    # ⭐ **N-387: der Preis einer Stunde steht in der Zeile davor** (Menge
+    # backward, Preis forward). `tep_zeilen` legt ihn dorthin — für die Stunde 0
+    # also in die letzte Zeile des Vormonats. Die Aussage bleibt: **24**
+    # bewertete Stunden am 1. des Monats zu 20 ct.
+    db.add_all(tep_zeilen(anlage.id, [
+        {"datum": date(JAHR, MONAT, 1), "stunde": stunde,
+         "strompreis_cent": PREIS_CENT, "netzbezug_kw": 1.0}
+        for stunde in range(24)
+    ]))
     await db.flush()
     return anlage.id
 

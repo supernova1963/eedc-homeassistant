@@ -28,6 +28,7 @@ from backend.models import Anlage, Strompreis
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.strompreis import StrompreisZeitfenster
 from backend.models.tages_energie_profil import TagesEnergieProfil
+from backend.tests.slot_saat import tep_zeilen
 from backend.services.strompreis_aggregator import (
     PREIS_HERKUNFT_GEMESSEN,
     PREIS_HERKUNFT_GEPFLEGT,
@@ -73,13 +74,19 @@ async def _anlage(db, *, vertragsart=None, nachtfenster=False) -> tuple[int, Str
 
 
 async def _stundenpreise(db, anlage_id: int, *, tage: int, preis: float, bezug: float):
-    """`tage` Tage à 24 Stunden mit demselben Preis und Netzbezug."""
-    for tag in range(1, tage + 1):
-        for stunde in range(24):
-            db.add(TagesEnergieProfil(
-                anlage_id=anlage_id, datum=date(JAHR, MONAT, tag), stunde=stunde,
-                strompreis_cent=preis, netzbezug_kw=bezug,
-            ))
+    """`tage` Tage à 24 **Stunden** mit demselben Preis und Netzbezug.
+
+    ⭐ **N-387: der Preis einer Stunde steht in der Zeile davor** (Menge
+    backward, Preis forward) — `tep_zeilen` verteilt ihn, für die Stunde 0 des
+    ersten Tages also in die letzte Zeile des Vormonats. Die Aussage der Proben
+    ist unverändert: **alle** gesäten Stunden tragen Preis und Menge.
+    """
+    db.add_all(tep_zeilen(anlage_id, [
+        {"datum": date(JAHR, MONAT, tag), "stunde": stunde,
+         "strompreis_cent": preis, "netzbezug_kw": bezug}
+        for tag in range(1, tage + 1)
+        for stunde in range(24)
+    ]))
     await db.flush()
 
 
@@ -131,13 +138,12 @@ class TestDieVierStufen:
         """Nicht das arithmetische Mittel: teure Stunden zählen so viel, wie in
         ihnen bezogen wurde."""
         anlage_id, tarif = await _anlage(db)
-        for stunde in range(24):
-            teuer = stunde < 6
-            db.add(TagesEnergieProfil(
-                anlage_id=anlage_id, datum=date(JAHR, MONAT, 1), stunde=stunde,
-                strompreis_cent=40.0 if teuer else 20.0,
-                netzbezug_kw=3.0 if teuer else 1.0,
-            ))
+        db.add_all(tep_zeilen(anlage_id, [
+            {"datum": date(JAHR, MONAT, 1), "stunde": stunde,
+             "strompreis_cent": 40.0 if stunde < 6 else 20.0,
+             "netzbezug_kw": 3.0 if stunde < 6 else 1.0}
+            for stunde in range(24)
+        ]))
         await db.flush()
 
         p = await aufgeloester_monatspreis(db, anlage_id, JAHR, MONAT, None, tarif)

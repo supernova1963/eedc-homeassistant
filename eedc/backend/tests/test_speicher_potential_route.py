@@ -17,7 +17,7 @@ from sqlalchemy import select
 
 from backend.api.routes.investitionen import get_speicher_potential
 from backend.models import Anlage, Investition, InvestitionMonatsdaten
-from backend.models.tages_energie_profil import TagesEnergieProfil
+from backend.tests.slot_saat import tep_stunden
 
 
 async def _seed(db, *, mit_speicher: bool = True) -> int:
@@ -33,26 +33,32 @@ async def _seed(db, *, mit_speicher: bool = True) -> int:
     return anlage.id
 
 
-def _stunde(
-    anlage_id: int, tag: date, stunde: int, soc,
-    einspeisung=0.0, netzbezug=0.0, batterie=None,
-):
-    """`batterie`: Vorzeichen-SoT der Spalte — positiv = Entladung, negativ = Ladung."""
-    return TagesEnergieProfil(
-        anlage_id=anlage_id, datum=tag, stunde=stunde,
-        soc_prozent=soc, einspeisung_kw=einspeisung, netzbezug_kw=netzbezug,
-        batterie_kw=batterie,
-    )
+def _tag(anlage_id: int, tag: date, stunden: dict[int, dict]) -> list:
+    """Eine Stundenreihe säen — `stunden[h]` beschreibt **die Stunde h**.
+
+    ⭐ **N-387: der Ladestand landet in der Zeile davor.** Die Flüsse einer
+    Stunde stehen backward in ihrer eigenen Zeile, `soc_prozent` forward in der
+    vorhergehenden — die Saat folgt damit der Produktion (SoT
+    `core/berechnungen/slot_konvention.py`, gemeinsamer Helfer
+    `tests/slot_saat.py`). Bis 23.09.2026 stand beides in derselben Zeile und
+    schrieb genau den Versatz fest, den N-387 beschreibt; die Aussagen dieser
+    Datei sind unverändert.
+
+    `batterie_kw`: Vorzeichen-SoT der Spalte — positiv = Entladung, negativ = Ladung.
+    """
+    return tep_stunden(anlage_id, tag, {
+        h: {"einspeisung_kw": 0.0, "netzbezug_kw": 0.0, **w} for h, w in stunden.items()
+    })
 
 
 async def test_sommerfall_meldet_null_statt_der_ueberschusssumme(db):
     """Voller Speicher, viel Einspeisung — aber die Nacht endet bei 40 %."""
     anlage_id = await _seed(db)
     tag = date(2026, 6, 10)
-    for h in range(10, 18):
-        db.add(_stunde(anlage_id, tag, h, 100.0, einspeisung=8.0))
-    for h in range(18, 24):
-        db.add(_stunde(anlage_id, tag, h, 40.0, netzbezug=0.5))
+    db.add_all(_tag(anlage_id, tag, {
+        **{h: {"soc_prozent": 100.0, "einspeisung_kw": 8.0} for h in range(10, 18)},
+        **{h: {"soc_prozent": 40.0, "netzbezug_kw": 0.5} for h in range(18, 24)},
+    }))
     await db.commit()
 
     antwort = await get_speicher_potential(anlage_id, von=None, bis=None, db=db)
@@ -67,11 +73,11 @@ async def test_sommerfall_meldet_null_statt_der_ueberschusssumme(db):
 async def test_leergelaufene_nacht_wird_bis_zum_nachtbezug_gutgeschrieben(db):
     anlage_id = await _seed(db)
     tag = date(2026, 3, 10)
-    for h in range(10, 14):
-        db.add(_stunde(anlage_id, tag, h, 100.0, einspeisung=5.0))
-    db.add(_stunde(anlage_id, tag, 20, 30.0))
-    for h in (21, 22, 23):
-        db.add(_stunde(anlage_id, tag, h, 2.0, netzbezug=1.5))
+    db.add_all(_tag(anlage_id, tag, {
+        **{h: {"soc_prozent": 100.0, "einspeisung_kw": 5.0} for h in range(10, 14)},
+        20: {"soc_prozent": 30.0},
+        **{h: {"soc_prozent": 2.0, "netzbezug_kw": 1.5} for h in (21, 22, 23)},
+    }))
     await db.commit()
 
     antwort = await get_speicher_potential(anlage_id, von=None, bis=None, db=db)
@@ -90,10 +96,12 @@ async def test_monate_werden_getrennt_mit_eigener_spanne_ausgewiesen(db):
     Monate. P10/P50/P90 je Monat kennen die anderen Monate nicht.
     """
     anlage_id = await _seed(db)
-    for h in range(10, 14):
-        db.add(_stunde(anlage_id, date(2026, 6, 10), h, 100.0, einspeisung=5.0))
-    for h in range(10, 13):
-        db.add(_stunde(anlage_id, date(2026, 7, 10), h, 15.0))
+    db.add_all(_tag(anlage_id, date(2026, 6, 10), {
+        h: {"soc_prozent": 100.0, "einspeisung_kw": 5.0} for h in range(10, 14)
+    }))
+    db.add_all(_tag(anlage_id, date(2026, 7, 10), {
+        h: {"soc_prozent": 15.0} for h in range(10, 13)
+    }))
     await db.commit()
 
     antwort = await get_speicher_potential(anlage_id, von=None, bis=None, db=db)
@@ -113,8 +121,9 @@ async def test_monate_werden_getrennt_mit_eigener_spanne_ausgewiesen(db):
 async def test_spanne_bleibt_leer_wenn_der_monat_keinen_ladestand_traegt(db):
     """Kein SoC ⇒ `None`, nicht 0 — sonst sähe „nicht gemessen" wie „leer" aus."""
     anlage_id = await _seed(db)
-    for h in range(10, 14):
-        db.add(_stunde(anlage_id, date(2026, 6, 10), h, None, einspeisung=5.0))
+    db.add_all(_tag(anlage_id, date(2026, 6, 10), {
+        h: {"soc_prozent": None, "einspeisung_kw": 5.0} for h in range(10, 14)
+    }))
     await db.commit()
 
     antwort = await get_speicher_potential(anlage_id, von=None, bis=None, db=db)
@@ -136,9 +145,11 @@ async def test_netzgeladener_anteil_je_monat_ist_die_obergrenze(db):
     """
     anlage_id = await _seed(db)
     tag = date(2026, 2, 10)
-    db.add(_stunde(anlage_id, tag, 2, 40.0, netzbezug=4.0, batterie=-2.0))
-    db.add(_stunde(anlage_id, tag, 12, 60.0, batterie=-4.0))
-    db.add(_stunde(anlage_id, tag, 20, 30.0, netzbezug=1.0, batterie=3.0))
+    db.add_all(_tag(anlage_id, tag, {
+        2: {"soc_prozent": 40.0, "netzbezug_kw": 4.0, "batterie_kw": -2.0},
+        12: {"soc_prozent": 60.0, "batterie_kw": -4.0},
+        20: {"soc_prozent": 30.0, "netzbezug_kw": 1.0, "batterie_kw": 3.0},
+    }))
     await db.commit()
 
     antwort = await get_speicher_potential(anlage_id, von=None, bis=None, db=db)
@@ -167,8 +178,9 @@ async def test_vollzyklen_kommen_aus_den_monats_fakten_mit_brutto_kapazitaet(db)
         investition_id=speicher.id, jahr=2026, monat=6,
         verbrauch_daten={"entladung_kwh": 25.0, "ladung_kwh": 30.0},
     ))
-    for h in range(10, 14):
-        db.add(_stunde(anlage_id, date(2026, 6, 10), h, 80.0, batterie=1.0))
+    db.add_all(_tag(anlage_id, date(2026, 6, 10), {
+        h: {"soc_prozent": 80.0, "batterie_kw": 1.0} for h in range(10, 14)
+    }))
     await db.commit()
 
     antwort = await get_speicher_potential(anlage_id, von=None, bis=None, db=db)
@@ -181,8 +193,9 @@ async def test_vollzyklen_kommen_aus_den_monats_fakten_mit_brutto_kapazitaet(db)
 async def test_vollzyklen_bleiben_leer_ohne_gepflegte_kapazitaet(db):
     """Ohne Kapazität kein Durchsatz-Wert — `None` statt 0 (kein 0-Ersatz)."""
     anlage_id = await _seed(db, mit_speicher=False)
-    for h in range(10, 14):
-        db.add(_stunde(anlage_id, date(2026, 6, 10), h, 80.0, batterie=-1.0))
+    db.add_all(_tag(anlage_id, date(2026, 6, 10), {
+        h: {"soc_prozent": 80.0, "batterie_kw": -1.0} for h in range(10, 14)
+    }))
     await db.commit()
 
     antwort = await get_speicher_potential(anlage_id, von=None, bis=None, db=db)
@@ -194,7 +207,7 @@ async def test_vollzyklen_bleiben_leer_ohne_gepflegte_kapazitaet(db):
 async def test_kapazitaet_wird_netto_ausgewiesen(db):
     """v4.0.2-Kanon: wo der Speicher durchfahren wird, gilt der nutzbare Hub."""
     anlage_id = await _seed(db)
-    db.add(_stunde(anlage_id, date(2026, 6, 10), 12, 50.0))
+    db.add_all(_tag(anlage_id, date(2026, 6, 10), {12: {"soc_prozent": 50.0}}))
     await db.commit()
 
     antwort = await get_speicher_potential(anlage_id, von=None, bis=None, db=db)
@@ -205,10 +218,12 @@ async def test_kapazitaet_wird_netto_ausgewiesen(db):
 
 async def test_zeitraum_grenzen_werden_beachtet(db):
     anlage_id = await _seed(db)
-    for h in range(10, 14):
-        db.add(_stunde(anlage_id, date(2026, 6, 10), h, 100.0, einspeisung=5.0))
-    for h in range(10, 14):
-        db.add(_stunde(anlage_id, date(2026, 7, 10), h, 100.0, einspeisung=9.0))
+    db.add_all(_tag(anlage_id, date(2026, 6, 10), {
+        h: {"soc_prozent": 100.0, "einspeisung_kw": 5.0} for h in range(10, 14)
+    }))
+    db.add_all(_tag(anlage_id, date(2026, 7, 10), {
+        h: {"soc_prozent": 100.0, "einspeisung_kw": 9.0} for h in range(10, 14)
+    }))
     await db.commit()
 
     nur_juni = await get_speicher_potential(
@@ -241,7 +256,9 @@ async def test_anlage_ohne_speicher_liefert_keine_kapazitaet(db):
     deshalb ist das kein 404.
     """
     anlage_id = await _seed(db, mit_speicher=False)
-    db.add(_stunde(anlage_id, date(2026, 6, 10), 12, 100.0, einspeisung=3.0))
+    db.add_all(_tag(anlage_id, date(2026, 6, 10), {
+        12: {"soc_prozent": 100.0, "einspeisung_kw": 3.0}
+    }))
     await db.commit()
 
     antwort = await get_speicher_potential(anlage_id, von=None, bis=None, db=db)
@@ -272,10 +289,11 @@ async def _seed_mit_reserve(db, *, brutto: float, nutzbar: float | None) -> int:
 
 def _glens_tag(anlage_id: int, tag: date) -> list:
     """Überschuss am Mittag, nachts runter auf 21 % — seine gemessene Kurve."""
-    zeilen = [_stunde(anlage_id, tag, h, 100.0, einspeisung=5.0) for h in range(11, 15)]
-    zeilen += [_stunde(anlage_id, tag, h, 60.0) for h in range(15, 20)]
-    zeilen += [_stunde(anlage_id, tag, h, 21.0, netzbezug=2.0) for h in range(20, 24)]
-    return zeilen
+    return _tag(anlage_id, tag, {
+        **{h: {"soc_prozent": 100.0, "einspeisung_kw": 5.0} for h in range(11, 15)},
+        **{h: {"soc_prozent": 60.0} for h in range(15, 20)},
+        **{h: {"soc_prozent": 21.0, "netzbezug_kw": 2.0} for h in range(20, 24)},
+    })
 
 
 async def test_gepflegte_reserve_macht_die_nacht_sichtbar(db):
@@ -352,10 +370,10 @@ async def test_ohne_pflege_und_ohne_bodenberuehrung_ist_die_aussage_offen(db):
     """
     anlage_id = await _seed_mit_reserve(db, brutto=30.0, nutzbar=None)
     tag = date(2026, 6, 10)
-    for h in range(10, 18):
-        db.add(_stunde(anlage_id, tag, h, 100.0, einspeisung=8.0))
-    for h in range(18, 24):
-        db.add(_stunde(anlage_id, tag, h, 40.0, netzbezug=0.5))
+    db.add_all(_tag(anlage_id, tag, {
+        **{h: {"soc_prozent": 100.0, "einspeisung_kw": 8.0} for h in range(10, 18)},
+        **{h: {"soc_prozent": 40.0, "netzbezug_kw": 0.5} for h in range(18, 24)},
+    }))
     await db.commit()
 
     antwort = await get_speicher_potential(anlage_id, von=None, bis=None, db=db)
@@ -374,10 +392,10 @@ async def test_mit_gepflegter_grenze_bleibt_die_klare_aussage_erhalten(db):
     """
     anlage_id = await _seed_mit_reserve(db, brutto=30.0, nutzbar=24.0)
     tag = date(2026, 6, 10)
-    for h in range(10, 18):
-        db.add(_stunde(anlage_id, tag, h, 100.0, einspeisung=8.0))
-    for h in range(18, 24):
-        db.add(_stunde(anlage_id, tag, h, 40.0, netzbezug=0.5))
+    db.add_all(_tag(anlage_id, tag, {
+        **{h: {"soc_prozent": 100.0, "einspeisung_kw": 8.0} for h in range(10, 18)},
+        **{h: {"soc_prozent": 40.0, "netzbezug_kw": 0.5} for h in range(18, 24)},
+    }))
     await db.commit()
 
     antwort = await get_speicher_potential(anlage_id, von=None, bis=None, db=db)
@@ -394,12 +412,11 @@ async def test_wer_seinen_boden_beruehrt_bekommt_weiter_die_klare_aussage(db):
     """
     anlage_id = await _seed_mit_reserve(db, brutto=30.0, nutzbar=None)
     tag = date(2026, 11, 10)
-    for h in range(10, 14):
-        db.add(_stunde(anlage_id, tag, h, 100.0, einspeisung=3.0))
-    for h in range(14, 20):
-        db.add(_stunde(anlage_id, tag, h, 40.0))
-    for h in range(20, 24):
-        db.add(_stunde(anlage_id, tag, h, 3.0, netzbezug=1.0))
+    db.add_all(_tag(anlage_id, tag, {
+        **{h: {"soc_prozent": 100.0, "einspeisung_kw": 3.0} for h in range(10, 14)},
+        **{h: {"soc_prozent": 40.0} for h in range(14, 20)},
+        **{h: {"soc_prozent": 3.0, "netzbezug_kw": 1.0} for h in range(20, 24)},
+    }))
     await db.commit()
 
     antwort = await get_speicher_potential(anlage_id, von=None, bis=None, db=db)

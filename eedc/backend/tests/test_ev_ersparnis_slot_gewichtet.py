@@ -27,7 +27,7 @@ from datetime import date
 import pytest
 
 from backend.models import Anlage, Strompreis
-from backend.models.tages_energie_profil import TagesEnergieProfil
+from backend.tests.slot_saat import tep_zeilen
 from backend.services.energie_profil.tage_werte import baue_tage_werte
 
 TAG = date(2026, 5, 10)
@@ -53,18 +53,17 @@ async def _anlage_mit_tagesprofil(db) -> int:
         netzbezug_arbeitspreis_cent_kwh=STAMM_CENT,
         einspeiseverguetung_cent_kwh=8.0,
     ))
-    db.add_all([
-        TagesEnergieProfil(
-            anlage_id=anlage.id, datum=TAG, stunde=12,
-            pv_kw=4.0, verbrauch_kw=3.0, einspeisung_kw=1.0, netzbezug_kw=0.0,
-            strompreis_cent=10.0,
-        ),
-        TagesEnergieProfil(
-            anlage_id=anlage.id, datum=TAG, stunde=19,
-            pv_kw=0.0, verbrauch_kw=2.0, einspeisung_kw=0.0, netzbezug_kw=2.0,
-            strompreis_cent=50.0,
-        ),
-    ])
+    # ⭐ **N-387: der Stundenpreis steht in der Zeile davor** (Menge backward,
+    # Preis forward) — `tep_zeilen` verteilt beides so, wie die Produktion es
+    # ablegt. Die Aussage bleibt: mittags 10 ct, abends 50 ct.
+    db.add_all(tep_zeilen(anlage.id, [
+        {"datum": TAG, "stunde": 12,
+         "pv_kw": 4.0, "verbrauch_kw": 3.0, "einspeisung_kw": 1.0, "netzbezug_kw": 0.0,
+         "strompreis_cent": 10.0},
+        {"datum": TAG, "stunde": 19,
+         "pv_kw": 0.0, "verbrauch_kw": 2.0, "einspeisung_kw": 0.0, "netzbezug_kw": 2.0,
+         "strompreis_cent": 50.0},
+    ]))
     await db.commit()
     return anlage.id
 
@@ -123,16 +122,12 @@ async def test_ohne_slotpreise_bleibt_es_beim_bezugspreis(db):
         netzbezug_arbeitspreis_cent_kwh=STAMM_CENT,
         einspeiseverguetung_cent_kwh=8.0,
     ))
-    db.add_all([
-        TagesEnergieProfil(
-            anlage_id=anlage.id, datum=TAG, stunde=12,
-            pv_kw=4.0, verbrauch_kw=3.0, einspeisung_kw=1.0, netzbezug_kw=0.0,
-        ),
-        TagesEnergieProfil(
-            anlage_id=anlage.id, datum=TAG, stunde=19,
-            pv_kw=0.0, verbrauch_kw=2.0, einspeisung_kw=0.0, netzbezug_kw=2.0,
-        ),
-    ])
+    db.add_all(tep_zeilen(anlage.id, [
+        {"datum": TAG, "stunde": 12,
+         "pv_kw": 4.0, "verbrauch_kw": 3.0, "einspeisung_kw": 1.0, "netzbezug_kw": 0.0},
+        {"datum": TAG, "stunde": 19,
+         "pv_kw": 0.0, "verbrauch_kw": 2.0, "einspeisung_kw": 0.0, "netzbezug_kw": 2.0},
+    ]))
     await db.commit()
 
     z = await _zeile(db, anlage.id)

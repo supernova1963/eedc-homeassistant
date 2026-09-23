@@ -72,12 +72,48 @@ Zählerpfad (alle ``*_kw``-Spalten), ``wp_starts_anzahl`` /
 * ``boersenpreis_cent`` — ``strompreis_markt_service`` nimmt
   ``lokal.hour`` aus dem ``start_timestamp`` der aWATTar-Antwort.
 
-**Wen das trifft, gemessen:** ``speicher_sizing_service`` und
-``speicher_potential_service`` stellen den SoC neben die Backward-Spalten
-derselben Zeile; ``speicher_wirtschaftlichkeit`` multipliziert die
-**Netz-Ladung** einer Stunde (backward) mit dem **Preis** derselben Zeile
-(forward) — der effektive Ladepreis eines Speichers rechnet damit auf einem
-dynamischen Tarif mit dem Preis der Nachbarstunde.
+**Wen das trifft, gemessen (Stand 23.09.2026 — die Liste hiess bis dahin
+„drei Konsumenten" und nannte drei von zehn Stellen in sieben Dateien):**
+Alle paarenden Leser holen ihren Forward-Wert seither ueber
+``forward_werte_je_backward_zeile`` weiter unten — **eine** Stelle, an der die
+Verschiebung steht:
+
+* ``services/speicher_potential_service.py`` — SoC neben ``einspeisung_kw`` /
+  ``netzbezug_kw`` (Ueberschuss bei vollem, Fehlmenge bei leerem Speicher),
+  **und** die Monatsanteile ``anteil_voll``/``anteil_leer`` daneben.
+* ``services/speicher_sizing_service.py`` — SoC und ``soc_je_speicher`` neben
+  ``batterie_kw``/``pv_kw``/… (Kalibrierung, SoC-Nutzung).
+* ``services/speicher_wirtschaftlichkeit.py`` — Netz-Ladung **und** Entladung
+  einer Stunde (backward) mal dem **Preis** derselben Zeile (forward): der
+  effektive Ladepreis rechnete auf einem dynamischen Tarif mit dem Preis der
+  Nachbarstunde.
+* ``services/strompreis_aggregator.py`` — Monats-Ø-Preis (Einzelmonat **und**
+  SQL-Zwilling ``lade_preis_aggregate_je_monat``) sowie ``lade_slot_kosten_je_tag``
+  (Flex-Kaskade: Tageskosten, EV-Ersparnis).
+* ``services/energie_profil/aggregator.py::tages_kennzahlen`` — Einspeisung
+  einer Stunde (backward) gegen den **negativen Boersenpreis** (forward) fuer
+  ``einspeisung_neg_preis_kwh`` (§51). Der Wert wird **persistiert**; er zieht
+  erst bei Neu-Aggregation nach.
+* ``services/energie_profil/tage_werte.py`` — Tages-Wirkungsgrad: ΔSoC ueber
+  erste/letzte Zeile gegen Σ ``batterie_kw``.
+* ``services/ha_export_bezugspreis.py::_boersenmittel_monat`` — rechnet seit
+  S3b/N-544 selbst um (ueber ``forward_stunde_zu_backward_slot``, Dict-Form
+  statt Zeilenfolge).
+
+⛔ **Zwei Stellen paaren bewusst OHNE Umkehr — beide gemessen (23.09.2026):**
+
+* ``speicher_wirtschaftlichkeit._lese_soc_am_periodenrand`` paart die
+  SoC-Randzeilen mit **IMD-Monatsintegralen** ueber ``[von 00:00, bis 24:00)``,
+  nicht mit Stundenzeilen. Zeile 0 beschreibt ``[00,01)`` (Schwerpunkt 00:30,
+  **+½ h**), Zeile 23 ``[23,24)`` (Schwerpunkt 23:30, **−½ h**) — der Versatz
+  ist **symmetrisch** und hebt sich in der Differenz weitgehend auf. Die
+  Vorzeile machte daraus 22:30 (**−1½ h**) bei unveraendertem Anfang und waere
+  schlechter. *Symmetrisch, keine Umkehr.*
+* ``services/preis_tag.py::persistierte_preise`` liefert ``{stunde: preis}``
+  **forward**, genau wie die Markt-API, deren Rueckfall sie ist. Ihr einziger
+  Konsument (``ha_export_bezugspreis``) nimmt gezielt Zeile 23 des Vortags als
+  Slot 0 und rechnet selbst um. *Liefert forward, Konsument rechnet um* — eine
+  Umkehr hier waere eine Doppelverschiebung.
 
 ⭐ **Und die Tagesdetail-Zähler — eine zweite Klasse aus demselben Raster
 (N-444, 13.09.2026).** Sie ist NICHT einer der drei Forward-Bahnen oben,
@@ -143,6 +179,7 @@ gerundet werden — siehe ``backward_slot_aus_period_start`` /
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
+from typing import Any, Sequence
 
 
 def openmeteo_preceding_hour_slot(stunde: int) -> int:
@@ -271,3 +308,104 @@ def leistungspfad_slot(punkt_stunde: int) -> int | None:
     if punkt_stunde >= 23:
         return None
     return punkt_stunde + 1
+
+
+# ---------------------------------------------------------------------------
+# Die Zeilen-Fassung derselben Verschiebung (N-387)
+# ---------------------------------------------------------------------------
+
+#: **Ab wann eine Zeile ihre `*_kw` backward traegt** — die Bestandsgrenze der
+#: Paarung unten.
+#:
+#: Der HA-LTS-Stundenpfad labelte bis ``c71b0f08`` (2026-06-04 17:37 UTC,
+#: „fix(aggregator): HA-LTS-Stundenpfad auf Backward angleichen") **forward**;
+#: davor kamen die ``*_kw`` teils aus der Leistungsintegration (vor v3.19.0,
+#: 2026-04-22) — beides ohne Neu-Aggregation des Bestands. Auf einer solchen
+#: Zeile ist die **Zeilen**-Paarung richtig und die Vorzeile falsch.
+#:
+#: ⚠ **Geprueft wird die Aggregationszeit (``created_at``), nicht ``datum``** —
+#: gemessen am 23.09.2026: die Demo-Kopien tragen ``datum`` von 2025-09-13 bis
+#: 2026-09-13, aber ``created_at`` 2026-06-20 (Seed-Lauf). Eine ``datum``-Grenze
+#: erklaerte jede dieser Zeilen zu Altbestand, obwohl sie nach der Umstellung
+#: geschrieben wurde. Nur die ``created_at``-Lesart macht ausserdem den
+#: dokumentierten Reparaturweg wahr: ``aggregate_day`` loescht den Tag und
+#: schreibt ihn neu — **neu aggregieren stellt einen alten Tag um**.
+SLOT_PAARUNG_VORZEILE_AB = date(2026, 6, 4)
+
+
+def forward_werte_je_backward_zeile(
+    zeilen: Sequence[Any],
+    feld: str,
+    *,
+    ab: date = SLOT_PAARUNG_VORZEILE_AB,
+) -> list[Any]:
+    """Je Zeile der **Forward-Wert, der zu ihrer Backward-Stunde gehoert**.
+
+    ⭐ **Die Zeilen-Fassung von ``forward_stunde_zu_backward_slot``** (N-387):
+    eine Zeile ``s`` traegt ihre ``*_kw`` fuer ``[s-1, s)``, ihren
+    ``soc_prozent``/``strompreis_cent``/``boersenpreis_cent`` dagegen fuer
+    ``[s, s+1)`` (Absatz „DREI Bahnen" oben). Wer beide Haelften **verrechnet**,
+    nimmt den Forward-Wert deshalb aus der **Vorzeile** — ueber die Tagesgrenze
+    hinweg aus Zeile 23 des Vortags, denn ``forward_stunde_zu_backward_slot(23)``
+    ist Slot 0 des Folgetags.
+
+    Args:
+        zeilen: nach ``(datum, stunde)`` **aufsteigend sortierte** Folge. Jedes
+            Element braucht ``datum``, ``stunde``, ``created_at`` und das
+            genannte Feld — ORM-Objekt und Spalten-Projektion (``Row``) taugen
+            beide. ⚠ Unsortiert liefert die Funktion stillschweigend ``None``
+            statt einer falschen Zahl (die Nachbarschaftsprobe schlaegt fehl),
+            sie sortiert aber **nicht** selbst: das wuerde einen Fehler des
+            Aufrufers verdecken.
+        feld: Name der Forward-Spalte.
+        ab: Bestandsgrenze, s. ``SLOT_PAARUNG_VORZEILE_AB``.
+
+    Returns:
+        Liste in der Laenge von ``zeilen``; Eintrag ``i`` ist der Wert, der zur
+        Backward-Stunde von ``zeilen[i]`` gehoert.
+
+    ⛔ **Keine stille Nachbar-Uebernahme.** Fehlt die Vorzeile (erste Zeile der
+    Folge) oder ist sie **nicht** die unmittelbar vorhergehende Stunde (Luecke,
+    Sprung ueber einen Tag), ist der Eintrag ``None`` — nicht der naechstbeste
+    Wert. Ein Preis der uebernaechsten Stunde ist keine Messung dieser Stunde.
+
+    ⚠ **DST bleibt unberuehrt.** Die Zeile traegt eine Wanduhr-Stunde
+    ``0..23``; die Nachbarschaft wird auf derselben Wanduhr geprueft. Ein
+    fehlender oder doppelter Slot am Umstellungstag faellt damit unter
+    „keine Vorzeile" bzw. wird wie jede andere Nachbarstunde behandelt —
+    genau wie im uebrigen Slot-Raster.
+
+        >>> class Z:                      # doctest: +SKIP
+        ...     def __init__(self, d, h, p, c): ...
+        >>> forward_werte_je_backward_zeile(zeilen, "strompreis_cent")  # doctest: +SKIP
+        [None, 12.1, 13.4, ...]
+    """
+    werte: list[Any] = []
+    for i, zeile in enumerate(zeilen):
+        if not _traegt_backward_kw(zeile, ab):
+            # Altbestand: die `*_kw` dieser Zeile liegen selbst forward —
+            # hier ist die Zeilen-Paarung die richtige.
+            werte.append(getattr(zeile, feld, None))
+            continue
+        vor = zeilen[i - 1] if i > 0 else None
+        werte.append(getattr(vor, feld, None) if _ist_vorstunde(vor, zeile) else None)
+    return werte
+
+
+def _ist_vorstunde(vor: Any, zeile: Any) -> bool:
+    """``vor`` ist die unmittelbar vorhergehende Stunde von ``zeile``."""
+    if vor is None:
+        return False
+    if zeile.stunde == 0:
+        return vor.stunde == 23 and vor.datum == zeile.datum - timedelta(days=1)
+    return vor.stunde == zeile.stunde - 1 and vor.datum == zeile.datum
+
+
+def _traegt_backward_kw(zeile: Any, ab: date) -> bool:
+    """Liegen die ``*_kw`` dieser Zeile backward? (s. ``SLOT_PAARUNG_VORZEILE_AB``)"""
+    erzeugt = getattr(zeile, "created_at", None)
+    if erzeugt is None:
+        # Ohne Schreibzeit bleibt nur das Datum der Zeile — die schlechtere,
+        # aber einzige Auskunft.
+        return zeile.datum >= ab
+    return (erzeugt.date() if hasattr(erzeugt, "date") else erzeugt) >= ab

@@ -671,6 +671,48 @@ kostenneutrale Durchleitung (z. B. Backup-Vorhaltung).
 > Layer zu haben genügt nicht; sie ist erst durchgesetzt, wenn keine Inline-Kopie mehr danebensteht
 > (ADR-001).
 
+#### Welche Stunde gilt — Ladestand, Preis und Menge (N-387, 2026-09-23)
+
+Eine Stundenzeile trägt **zwei Uhren** (SoT `core/berechnungen/slot_konvention.py`): die
+`*_kw`-Spalten meinen das Intervall **vor** ihrer Stunde (`[s-1, s)`, Backward-Konvention #144),
+`soc_prozent`, `strompreis_cent` und `boersenpreis_cent` dagegen das Intervall **ab** ihrer Stunde
+(`[s, s+1)`) — so liefert Home Assistant sie. **Wer beide Hälften verrechnet, nimmt den
+Ladestand bzw. Preis deshalb aus der Zeile davor** (über die Tagesgrenze: aus der Zeile 23 des
+Vortags). Der eine Ort dafür ist `slot_konvention.forward_werte_je_backward_zeile`.
+
+Das betrifft sichtbar:
+
+* **Speicher-Potential** — „Überschuss bei vollem Speicher" zählte bis dahin auch die Einspeisung
+  der Stunde **vor** dem Vollwerden, „Fehlmenge bei leerem Speicher" spiegelbildlich den Netzbezug
+  der Stunde, in der er erst leerlief. Das Fenster lag eine Stunde zu früh.
+* **Effektiver Ladepreis und Entladewert** — die Netzladung einer Stunde zahlte den Preis der
+  Nachbarstunde. Bei einem **Festpreis** ändert das nichts (jede Stunde derselbe Preis); bei einem
+  dynamischen Tarif ist es die volle Differenz zweier Nachbarstunden.
+* **Tageskosten, Monats-Ø-Preis und Eigenverbrauchs-Ersparnis** der Flex-Kaskade
+  ([KONZEPT-FLEX-TARIFE §2](KONZEPT-FLEX-TARIFE.md)) sowie der **§51-Einspeiseerlös**.
+
+> ⛔ **Zwei Stellen paaren bewusst OHNE diese Umkehr, beide gemessen.**
+> (1) Der **Wirkungsgrad am Periodenrand** (`speicher_wirtschaftlichkeit._lese_soc_am_periodenrand`)
+> stellt SoC-Randzeilen gegen **Monatsintegrale**: Zeile 0 liegt ½ h nach dem Periodenbeginn,
+> Zeile 23 ½ h vor dem Ende — symmetrisch; die Vorzeile machte daraus 1½ h und wäre schlechter.
+> (2) Die **Sizing-Kalibrierung** (`speicher_sizing_service._als_sizing_stunde`) bildet eine
+> *Differenz zweier Stundenmittel* und stellt sie einer **einzelnen** Stundenmenge gegenüber:
+> `ΔSoC(s−1 → s) ≈ ½ (b_s + b_{s+1})`, verglichen wird aber `b_s` allein. **Beide Fassungen
+> verfehlen gleichermaßen** — an einer reinen Demo-Reihe (4 800 Stunden, Wahrheit 10,0 kWh je
+> 100 % SoC und Roundtrip 1,00) liefert die Zeilen-Paarung 10,03/11,11 (Roundtrip 1,108), die
+> Vorzeile 12,44/13,62 (1,095); **beide fallen aus dem Plausibilitätsband und ergeben `None`**,
+> die Sicht nimmt dann die gepflegten Werte. Die Paarung ist hier also nicht die Stellschraube.
+> **Die Lösung ist die Formel** — der Hub gehört gegen das *Mittel der zwei angrenzenden
+> Stundenmengen* —, sie ist ein Layer-Eingriff und als eigener Fund offen.
+
+> ⛔ **Die Umkehr gilt nicht rückwirkend für jede gespeicherte Zeile.** Der HA-Stundenpfad
+> beschriftete seine Energiemengen bis zum **04.06.2026** selbst *forward* — auf einer Zeile, die
+> damals aggregiert wurde, ist die Paarung innerhalb **derselben** Zeile die richtige. eedc
+> entscheidet das je Zeile an ihrer **Aggregationszeit** (`created_at`, Grenze
+> `slot_konvention.SLOT_PAARUNG_VORZEILE_AB`), nicht an ihrem Datum. **Reparaturweg: neu
+> aggregieren stellt einen alten Tag um** — `aggregate_day` löscht den Tag und schreibt ihn neu,
+> die Zeilen tragen danach die heutige Konvention und werden auch so gepaart.
+
 #### Brutto oder netto — wann welche Kapazität gilt
 
 Ein Speicher trägt zwei Kapazitäten, beide im Formular. Die Trennlinie läuft **nicht** zwischen
@@ -2667,7 +2709,9 @@ Die eedc-Prognose ist die korrigierte OpenMeteo-Prognose; der Skalar-Lernfaktor 
 faktor = Σ(IST_kWh) / Σ(EEDC_Roh_Prognose_kWh)
 ```
 
-> ⚠ **Der Skalar-Lernfaktor hier ist der LEGACY-Faktor** (`live_wetter._get_lernfaktor_detail`) und liest weiter `pv_prognose_kwh`, also die **ungekappte** Rohprognose — N-547 hat ihn bewusst nicht angefasst. Die Skalar-Stufe des **Korrekturprofils** (Stufe 4 der Kaskade) rechnet dagegen seit N-547 gegen `lern_soll_kwh`, also gegen die **gekappte** Summe. Zwei Größen mit ähnlichem Namen, zwei Bezugsgrößen; dass der Legacy-Faktor auf gekappten Anlagen zu niedrig ausfällt, ist ein eigener, benannter Punkt und hier nur vermerkt.
+> ⚠ **Der Skalar-Lernfaktor hier ist der LEGACY-Faktor** (`live_wetter._get_lernfaktor_detail`) und liest `pv_prognose_kwh`, also die **ungekappte** Rohprognose. Die Skalar-Stufe des **Korrekturprofils** (Stufe 4 der Kaskade) rechnet seit N-547 gegen `lern_soll_kwh`, also gegen die **gekappte** Summe.
+>
+> ⭐ **Seit N-551 (2026-09-23) gibt es ihn deshalb ZWEIMAL — einmal je Bezugsgröße.** Ein Faktor, der auf der rohen Prognose gelernt ist, rechnet auf einer an der Wechselrichter-Grenze **gekappten** Reihe die Abregelung ein zweites Mal heraus (an einer Messkopie mit 12-kW-Grenze: 0,809 statt 0,923, **−12,4 %**). Ein bloßer Nenner-Tausch wäre aber falsch gewesen: **fünf** Leser wenden denselben Faktor auf die **rohe** Basis an (Genauigkeits-Tracking, Prognosen-Vergleich, Energieprofil-Tages-SOLL, Tagesprognose, Kanon-Schätzpfad) — sie hätten dann um +14,2 % zu hoch gelegen. Gebaut ist daher: `faktor` bleibt Σ IST / Σ `pv_prognose_kwh`; daneben steht `faktor_gekappt` = Σ IST / Σ `lern_soll_kwh` über die Tage **derselben** Kaskadenstufe, die das Feld tragen (Gate ≥ 7 Tage, sonst kein zweiter Faktor). Den gekappten nimmt **nur** der Kanon-Fallback, also die Stelle, die auf gekappte Slots trifft. Ohne Kappung sind beide Zahlen gleich; an einer Anlage ohne AC-Grenze bewegt sich nichts.
 
 Seit v3.16.15 nutzt eedc eine **saisonale Kaskade** mit den jeweils vorhandenen Daten:
 

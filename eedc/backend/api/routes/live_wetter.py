@@ -602,6 +602,26 @@ class LernfaktorResult:
     # Beobachtung — siehe docs/archive/KONZEPT-KORREKTURPROFIL.md.
     faktor_o12: Optional[float] = None
     delta_o12_pct: Optional[float] = None  # 100 * (o12 - legacy) / legacy
+    #: ⭐ **Der zweite Faktor — derselbe Lernstoff, andere Basis** (N-551).
+    #:
+    #: `faktor` steht auf der **rohen** Tagesprognose (`pv_prognose_kwh`, W1:
+    #: ungekappt, unkorrigiert). Wer ihn auf eine **gekappte** Reihe anwendet —
+    #: der Kanon-Fallback tut das (`prognose_kanon.py`, `korrigiere_tagesprofil`
+    #: auf den bereits an der AC-Grenze gekappten Slots) —, rechnet die
+    #: Abregelung ein zweites Mal heraus: an einer r28-Messkopie mit 12-kW-Grenze
+    #: 0,809 statt 0,923 (**−12,4 %**).
+    #:
+    #: ⛔ **Ein Nenner-Tausch wäre die falsche Antwort gewesen.** Denselben Faktor
+    #: lesen fünf Stellen auf der **rohen** Basis (`prognosen.py`,
+    #: `prognose_genauigkeit_service`, `energie_profil/tag.py`,
+    #: `energie_profil/prognose.py`, der Kanon-Schätzpfad) — mit dem gekappten
+    #: Nenner lägen die um **+14,2 %** zu hoch. Deshalb **zwei** Faktoren, je
+    #: Basis einer; jeder aus seinem eigenen, reinen Tage-Pool.
+    #:
+    #: `None`, solange weniger als `_MIN_TAGE_GEKAPPT` Tage ein `lern_soll_kwh`
+    #: tragen — dann nimmt der Kanon-Fallback weiter den Roh-Faktor.
+    faktor_gekappt: Optional[float] = None
+    tage_count_gekappt: int = 0
 
 
 _MONAT_NAMEN = {
@@ -665,6 +685,11 @@ def _aggregiere_legacy(
 
 
 # O1+O2 Parameter — siehe docs/archive/KONZEPT-KORREKTURPROFIL.md
+#: Gate des **gekappten** Faktors (N-551) — dieselbe Zahl wie die letzte Stufe
+#: der Kaskade oben („gesamt", ≥ 7 Tage). Weniger Tage heißt: kein zweiter
+#: Faktor, der Kanon-Fallback bleibt beim Roh-Faktor.
+_MIN_TAGE_GEKAPPT = 7
+
 _O1_RECENCY_DAYS = 30      # Tage jünger als N erhalten Recency-Boost
 _O1_RECENCY_BOOST = 1.30   # +30 % Gewicht für junge Tage
 _O2_TRIM_PCT = 0.10        # 10 % oberste/unterste Tage werden verworfen
@@ -733,7 +758,8 @@ def _berechne_faktor(tage: list, db_feld: str) -> tuple[float, float, int]:
 
 
 async def _get_lernfaktor_detail(
-    anlage_id: int, db: AsyncSession, quelle: str = "openmeteo"
+    anlage_id: int, db: AsyncSession, quelle: str = "openmeteo",
+    heute: Optional[date] = None,
 ) -> LernfaktorResult:
     """
     Berechnet einen Korrekturfaktor (MOS-basiert) aus historischen IST/Prognose-Vergleichen.
@@ -745,6 +771,11 @@ async def _get_lernfaktor_detail(
 
     Args:
         quelle: "openmeteo" oder "solcast" — bestimmt welches Prognose-Feld verglichen wird.
+        heute: Stichtag der Kaskade (Pools, Recency, Cache-Schlüssel). ``None``
+            heißt „die echte Uhr" — der Produktivfall. Der Parameter existiert,
+            damit Proben einen **festen** Tag setzen können, statt auf die
+            Stunde ihres Laufs zu wetten (N-167; dieselbe Bauform wie
+            ``aggregiere_korrekturprofil_anlage(..., heute=…)``).
 
     Produktionsgewichtete Berechnung: Σ(IST) / Σ(Prognose).
     Ergebnis wird tageweise gecacht (ändert sich max 1x/Tag nach Tagesabschluss).
@@ -757,13 +788,12 @@ async def _get_lernfaktor_detail(
 
     # Cache prüfen (pro Anlage + Quelle)
     cache_key = (anlage_id, quelle)
-    heute_str = date.today().isoformat()
+    heute = heute or date.today()
+    heute_str = heute.isoformat()
     if cache_key in _lernfaktor_cache:
         cached_datum, cached_result = _lernfaktor_cache[cache_key]
         if cached_datum == heute_str:
             return cached_result
-
-    heute = date.today()
 
     # Alle historischen Tage laden (max ~730 Rows bei 2 Jahren, performant)
     prognose_col = getattr(TagesZusammenfassung, db_feld)
@@ -793,29 +823,41 @@ async def _get_lernfaktor_detail(
     stufe = None
     label = None
     daten_aktiv: list[tuple[date, float, float]] = []
+    # N-551: die Stufe entscheidet der Roh-Faktor; der gekappte Faktor lernt aus
+    # **derselben** Stufe, damit beide dieselbe Saison beschreiben.
+    pool_aktiv: list = []
 
     daten = _filtere_tage(pool_monat, db_feld)
     if len(daten) >= 15:
         stufe = "saisonal"
         label = f"saisonal {_MONAT_NAMEN[aktueller_monat]} ({len(daten)} Tage)"
         daten_aktiv = daten
+        pool_aktiv = pool_monat
     else:
         daten = _filtere_tage(pool_quartal, db_feld)
         if len(daten) >= 15:
             stufe = "quartal"
             label = f"Quartal Q{q_nr} ({len(daten)} Tage)"
             daten_aktiv = daten
+            pool_aktiv = pool_quartal
         else:
             daten = _filtere_tage(pool_gesamt, db_feld)
             if len(daten) >= 7:
                 stufe = "gesamt"
                 label = f"gesamt ({len(daten)} Tage)"
                 daten_aktiv = daten
+                pool_aktiv = pool_gesamt
 
     if stufe is None:
         lf_result = LernfaktorResult(faktor=None, tage_count=0, quelle=quelle)
         _lernfaktor_cache[cache_key] = (heute_str, lf_result)
         return lf_result
+
+    # ⭐ **N-551: derselbe Pool, die gekappte Basis** — Σ IST / Σ `lern_soll_kwh`
+    # über die Tage **dieser Stufe**, die das Feld tragen. Reiner Pool: kein Tag
+    # ohne Lern-SOLL mischt sich hinein, sonst stünden in einer Summe zwei
+    # verschiedene Nenner-Begriffe nebeneinander.
+    daten_gekappt = _filtere_tage(pool_aktiv, "lern_soll_kwh")
 
     raw_legacy, tage_count = _aggregiere_legacy(daten_aktiv)
     if raw_legacy is None:
@@ -838,6 +880,19 @@ async def _get_lernfaktor_detail(
     # Live-Faktor: O12 wenn verfügbar, Legacy als Fallback
     faktor = faktor_o12 if faktor_o12 is not None else faktor_legacy
 
+    # Der zweite Faktor, gleiche Bauform: O12 (Recency + Trim) mit Legacy als
+    # Rückfall, dieselbe Klemmung, dieselbe Rundung — nur die Basis ist die
+    # gekappte. Unterhalb des Gates gar kein Wert (nicht etwa der Roh-Faktor:
+    # der Aufrufer soll den Unterschied sehen können).
+    faktor_gekappt: Optional[float] = None
+    tage_count_gekappt = len(daten_gekappt)
+    if tage_count_gekappt >= _MIN_TAGE_GEKAPPT:
+        raw_g_o12, _ = _aggregiere_o12(daten_gekappt, heute)
+        raw_g_legacy, _ = _aggregiere_legacy(daten_gekappt)
+        raw_gekappt = raw_g_o12 if raw_g_o12 is not None else raw_g_legacy
+        if raw_gekappt is not None:
+            faktor_gekappt = round(max(0.5, min(1.3, raw_gekappt)), 3)
+
     sum_ist = sum(d[1] for d in daten_aktiv)
     sum_prognose = sum(d[2] for d in daten_aktiv)
     quelle_label = quelle_config["label"]
@@ -846,9 +901,16 @@ async def _get_lernfaktor_detail(
         if delta_o12_pct is not None
         else ""
     )
+    gekappt_log = (
+        f", gekappte Basis={faktor_gekappt:.3f} ({tage_count_gekappt} Tage)"
+        if faktor_gekappt is not None
+        else (f", gekappte Basis: nur {tage_count_gekappt} Tage mit Lern-SOLL"
+              if tage_count_gekappt else "")
+    )
     logger.info(
         f"Lernfaktor Anlage {anlage_id} ({quelle_label}): {faktor:.3f} — {label} "
-        f"(Σ IST={sum_ist:.1f} kWh / Σ Prognose={sum_prognose:.1f} kWh){legacy_log}"
+        f"(Σ IST={sum_ist:.1f} kWh / Σ Prognose={sum_prognose:.1f} kWh)"
+        f"{legacy_log}{gekappt_log}"
     )
 
     lf_result = LernfaktorResult(
@@ -859,15 +921,42 @@ async def _get_lernfaktor_detail(
         quelle=quelle,
         faktor_o12=faktor_o12,
         delta_o12_pct=delta_o12_pct,
+        faktor_gekappt=faktor_gekappt,
+        tage_count_gekappt=tage_count_gekappt,
     )
     _lernfaktor_cache[cache_key] = (heute_str, lf_result)
     return lf_result
 
 
-async def _get_lernfaktor(anlage_id: int, db: AsyncSession, quelle: str = "openmeteo") -> Optional[float]:
-    """Abwärtskompatibel: gibt nur den Faktor-Wert zurück."""
-    result = await _get_lernfaktor_detail(anlage_id, db, quelle=quelle)
+async def _get_lernfaktor(
+    anlage_id: int, db: AsyncSession, quelle: str = "openmeteo",
+    heute: Optional[date] = None,
+) -> Optional[float]:
+    """Abwärtskompatibel: gibt nur den Faktor-Wert zurück.
+
+    ⚠ **Das ist der Faktor auf der ROHEN Basis** (`pv_prognose_kwh`, W1). Wer
+    ihn auf eine an der Wechselrichter-Grenze **gekappte** Reihe anwendet,
+    nimmt `_get_lernfaktor_gekappt` (N-551).
+    """
+    result = await _get_lernfaktor_detail(anlage_id, db, quelle=quelle, heute=heute)
     return result.faktor
+
+
+async def _get_lernfaktor_gekappt(
+    anlage_id: int, db: AsyncSession, quelle: str = "openmeteo",
+    heute: Optional[date] = None,
+) -> Optional[float]:
+    """Der Lernfaktor auf der **gekappten** Basis (N-551) — `None` ohne Datenlage.
+
+    Eigene Funktion und nicht ein Argument an `_get_lernfaktor`: die Proben
+    ersetzen `_get_lernfaktor` an mehreren Stellen durch eigene Fassungen mit
+    fester Signatur (`(anlage_id, db, quelle="openmeteo")`). Ein zusätzliches
+    Schlüsselwort dort hätte sie reihenweise gebrochen, ohne dass es um ihren
+    Gegenstand ginge. Beide teilen sich denselben Tagescache
+    (`_get_lernfaktor_detail`), es kostet also keine zweite Messung.
+    """
+    result = await _get_lernfaktor_detail(anlage_id, db, quelle=quelle, heute=heute)
+    return result.faktor_gekappt
 
 
 async def _speichere_prognose(
