@@ -33,6 +33,12 @@ export interface StundenWert {
 export interface StundenAntwort {
   stunden: StundenWert[]
   serien: SerieInfo[]
+  /** N-553: jüngster GEMESSENER Ladestand des Tages, ungepaart.
+   *  Nicht `stunden[at(-1)].soc_prozent` — dort steht der Stand, der zur
+   *  Backward-Stunde der Zeile gehört. Für „Stand am Tagesende" ist der
+   *  jüngste Messwert gemeint; sein Intervall liegt backward schon im
+   *  Folgetag und fehlt deshalb in der Liste. */
+  soc_zuletzt_prozent?: number | null
 }
 
 export interface WochenmusterPunkt {

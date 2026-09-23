@@ -690,6 +690,18 @@ Das betrifft sichtbar:
   dynamischen Tarif ist es die volle Differenz zweier Nachbarstunden.
 * **Tageskosten, Monats-Ø-Preis und Eigenverbrauchs-Ersparnis** der Flex-Kaskade
   ([KONZEPT-FLEX-TARIFE §2](KONZEPT-FLEX-TARIFE.md)) sowie der **§51-Einspeiseerlös**.
+* **Die Stundenliste des Tagesdetails** (`GET /energie-profil/{id}/stunden`, N-553): Sie zeigt
+  keine Rechnung, aber dieselbe Zeile — wer in *Cockpit → Tag → Stundenwerte* die Spalte „SoC"
+  einschaltet, las den Ladestand der Nachbarstunde neben dem Batteriefluss. Die Liste trägt den
+  Ladestand jetzt zur Stunde ihrer Zeile.
+
+> ⭐ **„Stand am Tagesende" ist eine andere Frage und hat deshalb eine eigene Größe** (N-553).
+> Die Kachel *Ladestand* im Speicher-Block fragt „wie voll war der Speicher **zuletzt**", nicht
+> „welcher Stand gehört zu dieser Stunde". Der jüngste Messwert wandert durch die Paarung aus dem
+> Tagesraster (sein Intervall `[23, 24)` liegt backward schon im Folgetag), und am **laufenden**
+> Tag wäre die Kachel damit eine Stunde älter geworden. Die Antwort führt ihn deshalb ungepaart
+> als `soc_zuletzt_prozent` mit. **Spanne** (min/max) ist gegen die Zuordnung unempfindlich und
+> kommt weiter aus der Liste.
 
 > ⛔ **Zwei Stellen paaren bewusst OHNE diese Umkehr, beide gemessen.**
 > (1) Der **Wirkungsgrad am Periodenrand** (`speicher_wirtschaftlichkeit._lese_soc_am_periodenrand`)

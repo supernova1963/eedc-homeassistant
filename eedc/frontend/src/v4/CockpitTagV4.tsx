@@ -174,6 +174,7 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
         datum,
         stunden: stundenAntwort.stunden,
         serien: stundenAntwort.serien,
+        socZuletzt: stundenAntwort.soc_zuletzt_prozent ?? null,
         tagDetail: detail,
         tag: fenster.find((r) => r.datum === datum) ?? null,
         vortag: fenster.find((r) => r.datum === vortagISO) ?? null,
@@ -215,6 +216,9 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
   )
   const stunden = useMemo<StundenWert[]>(() => tagQ.data?.stunden ?? [], [tagQ.data])
   const serien = useMemo<SerieInfo[]>(() => tagQ.data?.serien ?? [], [tagQ.data]) // volle Serien (Komponenten-Klassifikation)
+  // N-553: der jüngste gemessene Ladestand des Tages — eigene Größe, weil die
+  // Stundenliste seither gepaart ist (s. `socTagWerte`).
+  const socZuletzt: number | null = tagQ.data?.socZuletzt ?? null
   const tag: TagWerte | null = tagQ.data?.tag ?? null
   const tagDetail: TagDetail | null = tagQ.data?.tagDetail ?? null
   const vortag: TagWerte | null = tagQ.data?.vortag ?? null
@@ -339,7 +343,7 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
     // Komponenten-Detailblöcke (aktiv-gegated) + Finanz-Teaser — dieselben Bauer
     // wie Cockpit/Monat (period='tag'). `tagDetail` füttert die tagesgenauen
     // Zusatzwerte (WP-Strom-Split, Speicher-Netzladung/Ladepreis).
-    if (tag) list.push(...baueTagKomponentenUndFinanz(tag, stunden, serien, park, tagDetail, wpVerlaufStunden, wpVerteilung))
+    if (tag) list.push(...baueTagKomponentenUndFinanz(tag, stunden, serien, park, tagDetail, wpVerlaufStunden, wpVerteilung, socZuletzt))
     // #377: nur wenn wirklich ein Zähler gepflegt IST — ein leerer Block wäre
     // eine Anzeige über eine Funktion, die dieser Anwender nicht benutzt.
     if (zaehlerstaende && zaehlerstaende.length > 0 && !zaehlerParkIds(zaehlerstaende).every((id) => park.istGeparkt(id))) list.push({
@@ -351,7 +355,7 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
       ),
     })
     return list
-  }, [tag, vortag, wtStats, stunden, serien, angezeigterTag, tagDetail, park, anlageId, laden, zaehlerstaende, wpVerlaufStunden, wpVerteilung])
+  }, [tag, vortag, wtStats, stunden, serien, angezeigterTag, tagDetail, park, anlageId, laden, zaehlerstaende, wpVerlaufStunden, wpVerteilung, socZuletzt])
 
   if (!anlageId) {
     return (

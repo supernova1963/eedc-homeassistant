@@ -228,14 +228,28 @@ export function baueTagAlsMonat(
  * am laufenden Tag ist das die zuletzt aggregierte Stunde. Das ist gewollt: eine
  * Lücke am Tagesrand darf keinen SoC von 0 % vortäuschen.
  *
+ * ⚠ **Seit N-553 kommt dieser eine Wert aus der Antwort, nicht aus der Liste.**
+ * Die Stundenliste trägt seither den Ladestand, der zur Backward-Stunde ihrer
+ * Zeile gehört (also aus deren Vorzeile) — richtig für die Stundentabelle,
+ * falsch für „wie voll war er zuletzt": der jüngste Messwert wandert dabei aus
+ * dem Tagesraster. `soc_zuletzt_prozent` ist genau dieser Messwert. Fehlt das
+ * Feld (ältere Antwort), bleibt der letzte Listenwert der Rückfall.
+ *
  * Gemeldet von dietmar1968 (Forum T89667 #97, 05.08.2026): „In dieser Aufstellung
  * fehlt mir eigentlich der Batteriespeicher mit Lade- bzw. Entladeenergie kWh und
  * SOC." Ladung/Entladung standen bereits im Speicher-Block, der SoC nicht.
  */
-export function socTagWerte(stunden: StundenWert[]): { min: number; max: number; ende: number } | null {
+export function socTagWerte(
+  stunden: StundenWert[], socZuletzt?: number | null,
+): { min: number; max: number; ende: number } | null {
   const werte = stunden.map((s) => s.soc_prozent).filter((v): v is number => v != null)
-  if (werte.length === 0) return null
-  return { min: Math.min(...werte), max: Math.max(...werte), ende: werte[werte.length - 1] }
+  if (werte.length === 0) return socZuletzt != null
+    ? { min: socZuletzt, max: socZuletzt, ende: socZuletzt }
+    : null
+  return {
+    min: Math.min(...werte), max: Math.max(...werte),
+    ende: socZuletzt ?? werte[werte.length - 1],
+  }
 }
 
 /**
@@ -285,13 +299,15 @@ export function baueTagKomponentenUndFinanz(
   /** WK-16c: Verteilung & Verlauf des Tages (Stunden). Gleiche Bauform — ohne
    *  ihn fehlt genau dieser Blockteil. */
   wpVerteilung?: VerteilungVerlauf | null,
+  /** N-553: jüngster gemessener Ladestand des Tages (`StundenAntwort`). */
+  socZuletzt?: number | null,
 ): Block[] {
   const d = baueTagAlsMonat(tag, stunden, serien, tagDetail)
   const finanz = finanzTeaserBlock(d, park)
   const wpVerlauf = wpVerlaufStunden ? baueTagWaermeVerlauf(wpVerlaufStunden.stunden, stunden) : null
   return [
     ...baueKomponentenBloecke(
-      d, park, 'tag', socTagWerte(stunden), wpVerlauf,
+      d, park, 'tag', socTagWerte(stunden, socZuletzt), wpVerlauf,
       wpVerlaufStunden
         ? {
             strom: wpVerlaufStunden.ohne_stundenform_kwh,

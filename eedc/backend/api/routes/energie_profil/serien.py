@@ -9,7 +9,7 @@ GET /api/energie-profil/{anlage_id}/wochenmuster       — Ø-Tagesprofil je Woc
 # exportiert die Endpunkt-Namen weiter, die Aufrufer und Tests bisher von dort importierten.
 
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +18,7 @@ from backend.core.berechnungen import (
     WALLBOX_KOMPONENTEN_PREFIXE,
     geraete_spalte_kw,
 )
+from backend.core.berechnungen.slot_konvention import forward_werte_je_backward_zeile
 from backend.core.exceptions import bad_request, not_found
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
@@ -100,15 +101,34 @@ async def get_stundenwerte(
     if not result.scalar_one_or_none():
         raise not_found("Anlage", anlage_id)
 
+    # N-553: der Ladestand jeder Zeile kommt aus ihrer **Vorzeile** — dieselbe
+    # Regel wie in den Rechnungen (N-387, `slot_konvention`). Dafür wird der
+    # Vortag mitgeladen: ohne seine Stunde 23 bekäme Slot 0 dieses Tages keinen
+    # Wert, und das wäre eine Lücke, die es in den Daten nicht gibt.
     result = await db.execute(
         select(TagesEnergieProfil)
         .where(
             TagesEnergieProfil.anlage_id == anlage_id,
-            TagesEnergieProfil.datum == datum,
+            TagesEnergieProfil.datum >= datum - timedelta(days=1),
+            TagesEnergieProfil.datum <= datum,
         )
-        .order_by(TagesEnergieProfil.stunde)
+        .order_by(TagesEnergieProfil.datum, TagesEnergieProfil.stunde)
     )
-    rows = result.scalars().all()
+    alle = result.scalars().all()
+    soc_je_zeile = forward_werte_je_backward_zeile(alle, "soc_prozent")
+    paare = [(z, soc) for z, soc in zip(alle, soc_je_zeile) if z.datum == datum]
+    rows = [z for z, _ in paare]
+
+    # ⭐ **Zwei Fragen, zwei Groessen** (N-553): Die Zeile oben beantwortet
+    # „welcher Ladestand gehoert zu DIESER Stunde" — dafuer die Paarung. Die
+    # Kachel „Ladestand · Stand am Tagesende" fragt etwas anderes: „was ist der
+    # JUENGSTE gemessene Stand". Der steht ungepaart in der letzten Zeile des
+    # Tages; durch die Paarung wandert er aus dem Tagesraster (er gehoert zu
+    # Slot 0 des Folgetags). Deshalb reist er als eigenes Feld mit, statt dass
+    # eine Groesse beide Fragen halb beantwortet.
+    soc_zuletzt = next(
+        (z.soc_prozent for z in reversed(rows) if z.soc_prozent is not None), None,
+    )
 
     # Investments für Label-Auflösung laden
     inv_result = await db.execute(
@@ -165,15 +185,17 @@ async def get_stundenwerte(
             defizit_kw=r.defizit_kw,
             temperatur_c=r.temperatur_c,
             globalstrahlung_wm2=r.globalstrahlung_wm2,
-            soc_prozent=r.soc_prozent,
+            soc_prozent=soc,
             komponenten=r.komponenten,
             wp_starts_anzahl=r.wp_starts_anzahl,
             wp_betriebsstunden=r.wp_betriebsstunden,
         )
-        for r in rows
+        for r, soc in paare
     ]
 
-    return StundenAntwort(stunden=stunden, serien=serien)
+    return StundenAntwort(
+        stunden=stunden, serien=serien, soc_zuletzt_prozent=soc_zuletzt,
+    )
 
 @router.get("/{anlage_id}/wochenmuster", response_model=list[WochenmusterPunkt])
 async def get_wochenmuster(

@@ -354,4 +354,22 @@ describe('socTagWerte — Spanne und Tagesende aus den Stundenwerten', () => {
     expect(socTagWerte([std(null), std(null)])).toBeNull()
     expect(socTagWerte([])).toBeNull()
   })
+
+  // N-553: die Stundenliste ist seit dem Slot-Abgleich GEPAART — ihre letzte
+  // Zeile trägt den Stand der Vorstunde. Der jüngste Messwert kommt deshalb
+  // als eigene Größe aus der Antwort; ohne sie bleibt der Listenwert.
+  it('Ende kommt aus der Antwort, Spanne aus der Liste', () => {
+    expect(socTagWerte([std(30), std(85), std(64)], 71)).toEqual({ min: 30, max: 85, ende: 71 })
+  })
+
+  it('ohne das Feld bleibt der letzte Listenwert das Ende', () => {
+    expect(socTagWerte([std(30), std(64)], null)).toEqual({ min: 30, max: 64, ende: 64 })
+    expect(socTagWerte([std(30), std(64)], undefined)).toEqual({ min: 30, max: 64, ende: 64 })
+  })
+
+  it('nur der Antwortwert (Liste ohne Messung) trägt die Kachel allein', () => {
+    // Der erste Tag einer Anlage: Slot 0 hat keine Vorzeile, die übrigen
+    // Stunden sind noch nicht aggregiert — gemessen wurde trotzdem etwas.
+    expect(socTagWerte([std(null)], 55)).toEqual({ min: 55, max: 55, ende: 55 })
+  })
 })

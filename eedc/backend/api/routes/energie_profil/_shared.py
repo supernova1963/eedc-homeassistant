@@ -180,6 +180,16 @@ class StundenAntwort(BaseModel):
     """Tagesdetail-Antwort: Stundenwerte + aufgelöste Serie-Labels."""
     stunden: list[StundenWertResponse]
     serien: list[SerieInfo]  # alle in komponenten vorkommenden Serien mit Label
+    # N-553: der **jüngste gemessene** Ladestand des Tages, ungepaart.
+    #
+    # ⚠ Das ist bewusst **nicht** `stunden[-1].soc_prozent`. Dort steht seit
+    # N-553 der Ladestand, der zur Backward-Stunde der Zeile gehört (also aus
+    # ihrer Vorzeile) — richtig für „welcher Stand gehört zu dieser Stunde",
+    # falsch für „wie voll ist der Speicher zuletzt gewesen". Die letzte
+    # gemessene Stunde des Tages trägt ihr Mittel über `[s, s+1)`; dieses
+    # Intervall liegt im Backward-Raster schon im Folgetag und fällt aus der
+    # Liste. `None` heißt „an diesem Tag wurde kein Ladestand gemessen".
+    soc_zuletzt_prozent: Optional[float] = None
 
 
 class WochenmusterPunkt(BaseModel):
