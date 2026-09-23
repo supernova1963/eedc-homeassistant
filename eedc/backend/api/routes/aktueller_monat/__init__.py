@@ -92,7 +92,7 @@ from backend.api.routes.aktueller_monat.aggregation import (  # Vorlage 2
     _WP_WAERME_D1_SUFFIX,
     aggregiere_typen,
     berechne_bilanzwerte,
-    emob_max_pool,
+    emob_heimladung_pool,
     extrahiere_werte,
 )
 from backend.api.routes.aktueller_monat.finanzen import (  # Vorlage 2
@@ -699,8 +699,8 @@ async def get_aktueller_monat(
     # ── aggregiere_typen (Vorlage 2: Abschnitt in aggregation.py, Schnittstelle 5 ein / 1 aus) ──
     _out = aggregiere_typen(investitionen=investitionen, jahr=jahr, monat=monat, resolved=resolved, teilzeitraum=teilzeitraum)
     if "direct_fields" in _out: direct_fields = _out["direct_fields"]
-    # ── emob_max_pool (Vorlage 2: Abschnitt in aggregation.py, Schnittstelle 5 ein / 0 aus) ──
-    _out = emob_max_pool(direct_fields=direct_fields, investitionen=investitionen, jahr=jahr, monat=monat, resolved=resolved)
+    # ── emob_heimladung_pool (Vorlage 2: Abschnitt in aggregation.py, Schnittstelle 5 ein / 0 aus) ──
+    _out = emob_heimladung_pool(direct_fields=direct_fields, investitionen=investitionen, jahr=jahr, monat=monat, resolved=resolved)
     # ── extrahiere_werte (Vorlage 2: Abschnitt in aggregation.py, Schnittstelle 2 ein / 10 aus) ──
     _out = extrahiere_werte(monats_fakt=monats_fakt, resolved=resolved)
     if "abgabe_dritte" in _out: abgabe_dritte = _out["abgabe_dritte"]

@@ -1,4 +1,4 @@
-"""Aggregation von *Cockpit → Monat*: die Investitions-Felder je Typ auf Anlagenebene, der E-Mob-Max-Pool, die
+"""Aggregation von *Cockpit → Monat*: die Investitions-Felder je Typ auf Anlagenebene, der E-Mob-Heimlade-Pool, die
 Werte-Extraktion (mit `get_val`) und die berechneten Bilanzwerte.
 """
 # Vorlage 2 des Refactorings grosser Dateien (18.09.2026): Abschnitte des Endpunkts
@@ -102,9 +102,9 @@ def aggregiere_typen(*, investitionen, jahr, monat, resolved, teilzeitraum):
         # E-Auto und Wallbox NICHT hier — sie messen denselben Stromfluss aus
         # zwei Perspektiven (Vehicle vs. Loadpoint). Aufsummieren über beide
         # Typen würde Pool-Doppelzählung produzieren (Joachim/Gernot
-        # 2026-05-02). Aggregation passiert unten als max-Pool nach dem
-        # Standard-Loop, identisch zu `_collect_saved_data` (Commit 92d522a8)
-        # und `cockpit/uebersicht.py`.
+        # 2026-05-02). Aggregation passiert unten in `emob_heimladung_pool`
+        # über den SoT `get_emob_heimladung_canonical` — dieselbe strukturelle
+        # Regel wie Monats-Fakten und `cockpit/uebersicht.py`.
         # BKW zählt in ZWEI Größen, und das ist keine Doppelzählung:
         # `bkw_erzeugung_kwh` ist die **eigene Zeile** (ROI/Finanz — dort hat das
         # BKW eine getrennte Position, s. [[project_bkw_erzeuger_abgrenzung]]),
@@ -320,22 +320,32 @@ def aggregiere_typen(*, investitionen, jahr, monat, resolved, teilzeitraum):
     return {k: _loc[k] for k in ("direct_fields",) if k in _loc}
 
 
-def emob_max_pool(*, direct_fields, investitionen, jahr, monat, resolved):
-    """E-Mobilitaet: max-Pool ueber E-Auto + Wallbox (veraendert `resolved` in place).
+def emob_heimladung_pool(*, direct_fields, investitionen, jahr, monat, resolved):
+    """E-Mobilitaet: Heimladung nach der **strukturellen** Quellen-Regel (veraendert `resolved` in place).
 
-    Aus `get_aktueller_monat` Zeilen 1020-1071 (Stand vor dem Umzug) byte-identisch herausgeloest — Vorlage 2.
+    ⭐ **Seit dem Wallbox-Fix (23.09.2026) derselbe SoT wie jede andere Sicht:**
+    ``eauto_wirtschaftlichkeit.get_emob_heimladung_canonical`` (KONZEPT-WALLBOX-EAUTO,
+    Entscheidung 1): Existiert eine Wallbox mit Heimladung, ist sie die Quelle —
+    sonst das E-Auto. Hier stand bis dahin ``max(eauto_ladung, wb_ladung)``, die
+    **Groessen-Heuristik**, die dieser SoT ausdruecklich abgeloest hat (sie kippte bei
+    verirrten Streudaten, #262). Cockpit-Uebersicht, Monats-Fakten, Jahresbericht und
+    Wallbox-Dashboard lesen laengst den SoT; der Live-Zweig des laufenden Monats war
+    die letzte Stelle mit der alten Regel — gefunden, weil er einen Fahrverbrauchs-
+    Zaehler am E-Auto (Feld „Verbrauch") ueber eine kleinere Wallbox-Ladung stellte.
+    Der gespeicherte Zweig desselben Monats lief schon ueber den SoT; beide Zahlen
+    stimmten also nicht ueberein, sobald der Monat abgeschlossen wurde.
+
+    Die Live-Werte stehen in ``resolved`` als ``inv_<id>_<feld>``; sie werden je Geraet
+    zu demselben Dict geformt, das der SoT aus ``InvestitionMonatsdaten`` bekommt.
+    Dienstwagen und vor der Anschaffung liegende Monate bleiben wie bisher draussen.
+    Die Buchhaltung der Datenquelle (``emob_quelle``) ist unveraendert.
     """
-    # ── E-Mobilität: max-Pool über E-Auto + Wallbox ──
-    # Dienstliche Fahrzeuge früh herausfiltern (sie zählen separat in
-    # `dienstlich_ladekosten`, nicht in der Haus-Energiebilanz). Pro Feld die
-    # größere Quelle gewinnt; PV ≤ Gesamt erzwingen. Identische Logik wie in
-    # `_collect_saved_data` (Commit 92d522a8) und `cockpit/uebersicht.py`.
+    from backend.services.eauto_wirtschaftlichkeit import get_emob_heimladung_canonical
+
     if "emob_ladung_kwh" not in direct_fields:
-        eauto_ladung = 0.0
+        eauto_daten: list[dict] = []
+        wallbox_daten: list[dict] = []
         eauto_km = 0.0
-        eauto_extern_euro = 0.0
-        wb_ladung = 0.0
-        wb_extern_euro = 0.0
         emob_quelle: Optional[tuple] = None
         for inv in investitionen:
             if ist_dienstlich(inv):
@@ -344,38 +354,35 @@ def emob_max_pool(*, direct_fields, investitionen, jahr, monat, resolved):
             # Monaten nicht in den Monatsbericht-Pool aggregieren.
             if not inv.ist_aktiv_im_monat(jahr, monat):
                 continue
+            if inv.typ not in ("e-auto", "wallbox"):
+                continue
+            praefix = f"inv_{inv.id}_"
+            werte = {k[len(praefix):]: v for k, v in resolved.items() if k.startswith(praefix)}
+            (eauto_daten if inv.typ == "e-auto" else wallbox_daten).append(
+                {feld: eintrag[0] for feld, eintrag in werte.items()}
+            )
             if inv.typ == "e-auto":
                 for suffix in ("ladung_kwh", "verbrauch_kwh"):
-                    entry = resolved.get(f"inv_{inv.id}_{suffix}")
-                    if entry:
-                        eauto_ladung += entry[0]
-                        emob_quelle = entry[1]
+                    if werte.get(suffix):
+                        emob_quelle = werte[suffix][1]
                         break
-                km_entry = resolved.get(f"inv_{inv.id}_km_gefahren")
+                km_entry = werte.get("km_gefahren")
                 if km_entry:
                     eauto_km += km_entry[0]
                     emob_quelle = km_entry[1]
-                extern_entry = resolved.get(f"inv_{inv.id}_ladung_extern_euro")
-                if extern_entry:
-                    eauto_extern_euro += extern_entry[0]
-            elif inv.typ == "wallbox":
-                entry = resolved.get(f"inv_{inv.id}_ladung_kwh")
-                if entry:
-                    wb_ladung += entry[0]
-                    emob_quelle = entry[1]
-                extern_entry = resolved.get(f"inv_{inv.id}_ladung_extern_euro")
-                if extern_entry:
-                    wb_extern_euro += extern_entry[0]
-        emob_ladung = max(eauto_ladung, wb_ladung)
-        if emob_ladung > 0 and emob_quelle is not None:
-            resolved["emob_ladung_kwh"] = (emob_ladung, emob_quelle)
+            elif werte.get("ladung_kwh"):
+                emob_quelle = werte["ladung_kwh"][1]
+        pool = get_emob_heimladung_canonical(
+            eauto_imd_data=eauto_daten, wallbox_imd_data=wallbox_daten,
+        )
+        if pool.ladung_kwh > 0 and emob_quelle is not None:
+            resolved["emob_ladung_kwh"] = (pool.ladung_kwh, emob_quelle)
         if "emob_km" not in direct_fields and eauto_km > 0 and emob_quelle is not None:
             resolved["emob_km"] = (eauto_km, emob_quelle)
-        # #260: externe Lade-Kosten poolen wie ladung_kwh
+        # #260: externe Lade-Kosten — der SoT nimmt die Quelle mit den hoeheren Kosten.
         if "emob_ladung_extern_euro" not in direct_fields:
-            emob_extern_euro = max(eauto_extern_euro, wb_extern_euro)
-            if emob_extern_euro > 0 and emob_quelle is not None:
-                resolved["emob_ladung_extern_euro"] = (emob_extern_euro, emob_quelle)
+            if pool.extern_euro > 0 and emob_quelle is not None:
+                resolved["emob_ladung_extern_euro"] = (pool.extern_euro, emob_quelle)
     return {}
 
 
