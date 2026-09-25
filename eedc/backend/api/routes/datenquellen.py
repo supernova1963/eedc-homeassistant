@@ -13,6 +13,7 @@ B2.2/B5. Die aktive Quelle ist daher vorerst konstant der Standard-Inbound-Pfad.
 """
 
 import asyncio
+import copy
 import json as json_mod
 import logging
 from datetime import date, datetime, timezone
@@ -39,7 +40,11 @@ from backend.core.betriebsmodus import betriebsmodus_klartext
 from backend.core.feld_auswertungen import sichten_fuer
 from backend.core.field_definitions import ist_zustand_feld
 from backend.services.datenquellen_resolver import resolve_effektive_quelle
-from backend.services.live_sensor_config import extract_live_config
+from backend.services.live_sensor_config import (
+    entferne_legacy_invert,
+    extract_live_config,
+    legacy_invert_aktiv,
+)
 from backend.services.mqtt_topic_registry import build_expected_topics
 from backend.services.mqtt_broker_settings import import_aktiviert
 from backend.utils.investition_filter import aktiv_am_tag, sort_investitionen_nach_typ
@@ -1222,7 +1227,11 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
             # Invert-Modell (Datenquellen-V4): Vorzeichen-Flip ist quellen-
             # UNABHÄNGIG, aus dem vereinheitlichten Store gelesen (nicht aus dem
             # quellen-Eintrag), am Read-Endwert angewendet.
-            "invertieren": bool(invert_store.get(fid)),
+            # N-562: ein Legacy-`live_invert` (vor v4) wirkt über die Union in
+            # `extract_live_config` mit — der Schalter zeigt, was wirkt, nicht
+            # nur, was im Store steht.
+            "invertieren": bool(invert_store.get(fid))
+            or legacy_invert_aktiv(anlage.sensor_mapping or {}, fid),
             # R1/W-2 (SOLL Wärme/Klima §3.2a): Die Größe ist an dieser Bauart
             # untypisch, aber möglich — etwa die Kühl-Achse an einer
             # Luft-Wasser-Wärmepumpe. Sie steht hinter dem Schritt „Weitere
@@ -1348,13 +1357,17 @@ async def set_feld_invert(
     if not anlage:
         raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
 
-    mapping = dict(anlage.sensor_mapping or {})
+    mapping = copy.deepcopy(anlage.sensor_mapping or {})
     invert = dict(mapping.get("invertieren") or {})
-    vorher_invertiert = bool(invert.get(field_id))
+    vorher_invertiert = bool(invert.get(field_id)) or legacy_invert_aktiv(mapping, field_id)
     if body.invertieren:
         invert[field_id] = True
     else:
         invert.pop(field_id, None)
+        # N-562: Ausschalten heißt aus — auch ein Legacy-`live_invert` (vor v4)
+        # geht mit, sonst hielte die Union in `extract_live_config` den Wert
+        # weiter umgedreht, während der Schalter grau ist (T89667 #378).
+        entferne_legacy_invert(mapping, field_id)
     mapping["invertieren"] = invert
     # Konzept #192 B: das Vorzeichen dreht die Aggregation, wirkt aber erst ab
     # dem nächsten Lauf — die gespeicherten Tage behalten ihre Richtung. Genau

@@ -336,6 +336,57 @@ def inv_ids_mit_serie(serien: Sequence[TagesverlaufSerie]) -> set[str]:
     return {s.inv_id for s in serien}
 
 
+def _legacy_invert_ablage(mapping: dict, field_id: str) -> tuple[Optional[dict], Optional[str]]:
+    """Wo das Legacy-`live_invert` einer Feld-ID liegt: ``(Ablage, Key)`` oder ``(None, None)``.
+
+    Die Zerlegung ist dieselbe wie in `extract_live_config` unten — eine
+    zweite Lesart der Feld-ID hätte hier genau die Drift erzeugt, die N-562
+    behebt.
+    """
+    if not isinstance(field_id, str):
+        return None, None
+    if field_id.startswith("basis_live_"):
+        basis = mapping.get("basis")
+        ablage = basis.get("live_invert") if isinstance(basis, dict) else None
+        return (ablage if isinstance(ablage, dict) else None), field_id[len("basis_live_"):]
+    if field_id.startswith("inv_live_"):
+        inv_id, sep, key = field_id[len("inv_live_"):].partition("_")
+        if not (sep and inv_id.isdigit() and key):
+            return None, None
+        inv_data = (mapping.get("investitionen") or {}).get(inv_id)
+        ablage = inv_data.get("live_invert") if isinstance(inv_data, dict) else None
+        return (ablage if isinstance(ablage, dict) else None), key
+    return None, None
+
+
+def legacy_invert_aktiv(mapping: dict, field_id: str) -> bool:
+    """True, wenn das Feld über ein Legacy-`live_invert` (vor v4) umgekehrt wird.
+
+    ⭐ **N-562 (T89667 #378):** `extract_live_config` unioniert dieses Flag mit
+    dem Store `sensor_mapping.invertieren` — es **wirkt** also. Die Fläche las bis
+    dahin nur den Store und zeigte den Schalter grau, während der Wert weiter
+    umgedreht wurde. Wer wissen will, ob ein Feld umgekehrt ist, fragt beide.
+    """
+    ablage, key = _legacy_invert_ablage(mapping, field_id)
+    return bool(ablage and ablage.get(key))
+
+
+def entferne_legacy_invert(mapping: dict, field_id: str) -> bool:
+    """Entfernt das Legacy-`live_invert` des Feldes; True, wenn eines da war.
+
+    ⭐ **N-562:** Ohne das blieb eine vor v4 gesetzte Umkehr **unabschaltbar** —
+    der Schalter entfernte nur den Store-Eintrag, die Union in
+    `extract_live_config` hielt das Legacy-Flag aktiv, und die Startup-Migration
+    läuft nur einmal (`_apply_once`), räumt also nie nach. Mutiert ``mapping``
+    in-place; der Aufrufer setzt `flag_modified`.
+    """
+    ablage, key = _legacy_invert_ablage(mapping, field_id)
+    if not ablage or key not in ablage:
+        return False
+    war_aktiv = bool(ablage.pop(key))
+    return war_aktiv
+
+
 def extract_live_config(anlage: Anlage) -> tuple[
     dict[str, str], dict[str, dict[str, str]],
     dict[str, bool], dict[str, dict[str, bool]],
