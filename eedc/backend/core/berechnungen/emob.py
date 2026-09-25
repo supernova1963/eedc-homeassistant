@@ -25,7 +25,7 @@ Hintergrund `verbrauch_kwh`-Überladung: docs/KONZEPT-WALLBOX-EAUTO.md §A.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Iterable, Optional
 
 # Quellen-Marker für die UI (ehrliches Label je nach Berechnungsbasis).
 QUELLE_GEMESSEN = "gemessen"
@@ -39,6 +39,13 @@ class EffizienzWert:
 
     wert: Optional[float]   # kWh/100 km — None, wenn keine Basis vorliegt
     quelle: str             # QUELLE_GEMESSEN | QUELLE_LADUNG | QUELLE_KEINE
+    #: N-557: die **Menge**, aus der ``wert`` gebildet ist (gemessener
+    #: Fahrverbrauch bzw. Heim + Extern) — ``None`` ohne Basis. Ein Zeitraum
+    #: summiert diese Mengen und ihre km, statt Quoten zu mitteln oder die
+    #: Ladung neu zu teilen (``eauto_effizienz_zeitraum``).
+    basis_kwh: Optional[float] = None
+    #: Die km, die zu ``basis_kwh`` gehören (0 ohne Basis).
+    km: float = 0.0
 
 
 def eauto_effizienz_100km(
@@ -61,7 +68,50 @@ def eauto_effizienz_100km(
     if km <= 0:
         return EffizienzWert(None, QUELLE_KEINE)
     if verbrauch_kwh and verbrauch_kwh > 0:
-        return EffizienzWert(verbrauch_kwh / km * 100.0, QUELLE_GEMESSEN)
+        return EffizienzWert(
+            verbrauch_kwh / km * 100.0, QUELLE_GEMESSEN, float(verbrauch_kwh), float(km),
+        )
     if ladung_kwh and ladung_kwh > 0:
-        return EffizienzWert(ladung_kwh / km * 100.0, QUELLE_LADUNG)
-    return EffizienzWert(None, QUELLE_KEINE)
+        return EffizienzWert(
+            ladung_kwh / km * 100.0, QUELLE_LADUNG, float(ladung_kwh), float(km),
+        )
+    # km ohne jede Energiemenge: keine Basis, aber die km bleiben sichtbar — der
+    # Zeitraum braucht sie für „gemessen nur, wenn JEDER Monat mit km gemessen ist".
+    return EffizienzWert(None, QUELLE_KEINE, None, float(km))
+
+
+def eauto_effizienz_zeitraum(monate: Iterable[EffizienzWert]) -> EffizienzWert:
+    """Ø Verbrauch über einen Zeitraum: **Σ Monatswerte ÷ Σ km** (N-557, Konzept Regel 10).
+
+    Jeder Monat entscheidet für sich (``eauto_effizienz_100km``: gemessener
+    Fahrverbrauch vor Heim + Extern); der Zeitraum summiert die **Mengen** und die
+    km dieser Monate. So bleibt ein Jahr, dessen Verbrauchssensor erst im Juli
+    kam, richtig: Januar–Juni tragen ihre Ladungs-Näherung bei, Juli–Dezember
+    ihren gemessenen Fahrverbrauch.
+
+    ⛔ **Warum nicht mehr ``eauto_effizienz_100km(Σ Fahrverbrauch, Σ Ladung, Σ km)``.**
+    So rechneten Übersicht, Auswertungen und Hub bis 25.09.2026: sobald irgendein
+    Monat einen Fahrverbrauch trug, wurde **nur** dieser durch die km **aller**
+    Monate geteilt — im Beispiel oben die halbe Jahresmenge durch die ganzen
+    Jahres-km, also rund die Hälfte des echten Werts, beschriftet „gemessen".
+
+    Monate ohne Basis (keine km, oder km ohne jede Energiemenge) zählen weder im
+    Zähler noch im Nenner; ein Monat mit km, aber ohne Energiemenge, verdünnte die
+    Quote sonst. **„gemessen"** steht nur, wenn **jeder** Monat mit km gemessen ist
+    — sonst „ladung" (Näherung über die Ladung). Beides ist die Auslegung des
+    Konzeptsatzes „Summe der Monatswerte geteilt durch die Summe der Kilometer"
+    (Bericht N-555, offene Frage F-2).
+    """
+    monate = list(monate)
+    beitraege = [m for m in monate if m.basis_kwh is not None and m.km > 0]
+    km = sum(m.km for m in beitraege)
+    if km <= 0:
+        return EffizienzWert(None, QUELLE_KEINE)
+    basis = sum(m.basis_kwh for m in beitraege)
+    alle_gemessen = all(m.quelle == QUELLE_GEMESSEN for m in monate if m.km > 0)
+    return EffizienzWert(
+        basis / km * 100.0,
+        QUELLE_GEMESSEN if alle_gemessen else QUELLE_LADUNG,
+        basis,
+        km,
+    )

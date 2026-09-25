@@ -26,6 +26,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+from backend.core.zahlenformat import fmt_euro, fmt_zahl
+
 from backend.core.investition_parameter import (
     PARAM_WAERMEPUMPE,
     PARAM_WAERMEPUMPE_DEFAULTS,
@@ -109,19 +111,28 @@ def wp_ersparnis_berechnung(
     """Die Rechnung hinter einer Ersparnis-Zahl, mit den Zahlen dieses Monats.
 
     Nennt Zusatzkosten und Kühlstrom nur, wenn sie größer 0 sind — sonst liest
-    sich die Zeile wie früher: ``3500 kWh / 0,90 × 12,0 ct − 1000 kWh × 30,00 ct``.
+    sich die Zeile wie früher: ``3.500,0 kWh / 0,90 × 12,0 ct − 1.000,0 kWh × 30,00 ct``.
+
+    N-555 (§11): Der Docstring versprach schon immer die deutsche Schreibweise, der
+    Code schrieb „3500.0 kWh / 0.90"; jetzt über ``core/zahlenformat.py``.
     """
     zusatz = _wp_zusatzkosten_jahr(wp_parameter) / 12
-    alt = f"{waerme_kwh:.1f} kWh / {ergebnis.verwendeter_wirkungsgrad:.2f} × {ergebnis.verwendeter_gaspreis_cent:.1f} ct"
+    alt = (
+        f"{fmt_zahl(waerme_kwh, 1)} kWh / {fmt_zahl(ergebnis.verwendeter_wirkungsgrad, 2)}"
+        f" × {fmt_zahl(ergebnis.verwendeter_gaspreis_cent, 1)} ct"
+    )
     if zusatz > 0:
-        alt += f" + {zusatz:.2f} € Zusatzkosten"
+        alt += f" + {fmt_euro(zusatz)} Zusatzkosten"
     kuehl_kwh = (
         ergebnis.kuehl_kosten_euro * 100 / strompreis_cent if strompreis_cent else 0.0
     )
     if kuehl_kwh > 0:
-        wp = f"({strom_kwh:.1f} − {kuehl_kwh:.1f} Kühlstrom) kWh × {strompreis_cent:.2f} ct"
+        wp = (
+            f"({fmt_zahl(strom_kwh, 1)} − {fmt_zahl(kuehl_kwh, 1)} Kühlstrom) kWh"
+            f" × {fmt_zahl(strompreis_cent, 2)} ct"
+        )
     else:
-        wp = f"{strom_kwh:.1f} kWh × {strompreis_cent:.2f} ct"
+        wp = f"{fmt_zahl(strom_kwh, 1)} kWh × {fmt_zahl(strompreis_cent, 2)} ct"
     return f"{alt} − {wp}"
 
 

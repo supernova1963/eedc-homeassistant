@@ -45,8 +45,9 @@ logger = logging.getLogger(__name__)
 
 
 def _feld_id(match_key) -> str:
-    """Stabile Feld-Kennung aus dem match_key — identisch zu datenquellen._feld_id."""
-    return "_".join(str(x) for x in match_key)
+    """Stabile Feld-Kennung aus dem match_key — N-559: aus der gemeinsamen Quelle."""
+    from backend.services.datenquellen_mapping_sync import feld_id
+    return feld_id(match_key)
 
 
 # `_ha_entity_fuer_feld` + `_topic_suffix` leben jetzt in datenquellen_resolver

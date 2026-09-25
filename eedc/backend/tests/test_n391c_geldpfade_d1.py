@@ -230,7 +230,8 @@ async def test_a2_gesamtzaehler_neben_der_aufteilung_zaehlt_einmal(db):
 
     assert len(beides) == 1
     assert beides[0].ersparnis_euro == pytest.approx(BESTAND_MONATSZEILE_EURO)
-    assert "3000.0 kWh" in (beides[0].berechnung or ""), beides[0].berechnung
+    # N-555 (§11): deutsche Schreibweise über `core/zahlenformat.py`.
+    assert "3.000,0 kWh" in (beides[0].berechnung or ""), beides[0].berechnung
 
 
 # ═══ b — die Jahresformel: Aussichten, ROI, HA-Export-Jahresersparnis ═══════

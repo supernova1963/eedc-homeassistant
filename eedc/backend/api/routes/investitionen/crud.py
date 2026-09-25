@@ -8,6 +8,7 @@ Seit 18.09.2026 (Vorlage 5 des Refactorings grosser Dateien, reiner Umzug) liege
 behaelt die CRUD-Routen, haengt den ROI-Router nach ihnen ein und exportiert die bisherigen Namen weiter.
 """
 
+import logging
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -17,6 +18,9 @@ from sqlalchemy.orm.attributes import flag_modified
 from pydantic import BaseModel
 from backend.core.exceptions import not_found
 from backend.core.field_definitions import innengeraet_id_von_feld
+from backend.services.datenquellen_mapping_sync import inv_feld_der_investition
+from backend.services.activity_service import log_activity
+from backend.core.zahlenformat import fmt_datum
 from backend.api.deps import get_db
 from backend.models.investition import (
     Investition,
@@ -44,6 +48,7 @@ from backend.api.routes.investitionen.roi import (  # noqa: F401 — Re-Export (
 )
 from backend.api.routes.investitionen.roi import router as _roi_router
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -198,7 +203,8 @@ async def create_investition(data: InvestitionCreate, db: AsyncSession = Depends
     """
     # Anlage prüfen
     anlage_result = await db.execute(select(Anlage).where(Anlage.id == data.anlage_id))
-    if not anlage_result.scalar_one_or_none():
+    anlage = anlage_result.scalar_one_or_none()
+    if not anlage:
         raise not_found("Anlage")
 
     # Typ validieren
@@ -216,7 +222,46 @@ async def create_investition(data: InvestitionCreate, db: AsyncSession = Depends
     db.add(inv)
     await db.flush()
     await db.refresh(inv)
+    # N-560: in DIESER Sitzung (N-532) — die Zeile geht mit dem Commit der Route.
+    await log_activity(
+        kategorie=KATEGORIE_KOMPONENTEN,
+        aktion="Komponente angelegt",
+        details=_komponente_klartext(anlage, inv),
+        details_json={"investition_id": inv.id, "typ": inv.typ},
+        anlage_id=inv.anlage_id,
+        db=db,
+    )
     return inv
+
+
+#: N-560: Kategorie des Aktivitätsprotokolls für Anlegen/Ändern/Löschen einer
+#: Komponente. Keine der vorhandenen passt — `sensor_mapping` ist die Zuordnung
+#: einer Datenquelle, `backup_import` die Übernahme einer ganzen Anlage.
+KATEGORIE_KOMPONENTEN = "investitionen"
+
+#: Welche Änderungen einer Komponente eine Protokollzeile wert sind (N-560): die,
+#: die entscheiden, OB und AB WANN sie in Auswertungen zählt. Parameter und
+#: Kosten ändern Zahlen, nicht die Zugehörigkeit — sie stehen nicht im Protokoll.
+_PROTOKOLL_FELDER = {
+    "typ": "Typ",
+    "aktiv": "Aktiv",
+    "anschaffungsdatum": "Anschaffung",
+    "stilllegungsdatum": "Stilllegung",
+}
+
+
+def _komponente_klartext(anlage, inv) -> str:
+    """„Anlage · Typ · Bezeichnung" für das Aktivitätsprotokoll (N-560)."""
+    name = getattr(anlage, "anlagenname", None) or f"Anlage {inv.anlage_id}"
+    return f"{name} · {_TYP_LABEL.get(inv.typ, inv.typ)} · {inv.bezeichnung}"
+
+
+def _wert_klartext(feld: str, wert) -> str:
+    if feld == "typ":
+        return _TYP_LABEL.get(wert, str(wert))
+    if feld == "aktiv":
+        return "ja" if wert else "nein"
+    return fmt_datum(wert, leer="—")
 
 async def _validate_parent_child(
     db: AsyncSession,
@@ -335,11 +380,29 @@ async def update_investition(
             db, inv, neu_parameter=update_data.get("parameter"),
         )
 
+    # N-560: alt → neu der protokollwürdigen Felder, bevor `setattr` sie überschreibt.
+    aenderungen = [
+        f"{label}: {_wert_klartext(feld, getattr(inv, feld))} → {_wert_klartext(feld, update_data[feld])}"
+        for feld, label in _PROTOKOLL_FELDER.items()
+        if feld in update_data and update_data[feld] != getattr(inv, feld)
+    ]
+
     for field, value in update_data.items():
         setattr(inv, field, value)
 
     await db.flush()
     await db.refresh(inv)
+    if aenderungen:
+        anlage = (await db.execute(select(Anlage).where(Anlage.id == inv.anlage_id))).scalar_one_or_none()
+        await log_activity(
+            kategorie=KATEGORIE_KOMPONENTEN,
+            aktion="Komponente geändert",
+            details=f"{_komponente_klartext(anlage, inv)} · " + " · ".join(aenderungen),
+            details_json={"investition_id": inv.id, "felder": [
+                f for f in _PROTOKOLL_FELDER if f in update_data]},
+            anlage_id=inv.anlage_id,
+            db=db,
+        )
     return inv
 
 async def _raeume_innengeraete_zuordnungen(
@@ -368,36 +431,92 @@ async def _raeume_innengeraete_zuordnungen(
     if not anlage or not anlage.sensor_mapping:
         return
 
-    eintrag = (anlage.sensor_mapping.get("investitionen") or {}).get(str(inv.id))
-    if not isinstance(eintrag, dict):
-        return
-
     def _betroffen(key: str) -> bool:
         gid = innengeraet_id_von_feld(key)
         return gid is not None and gid in entfallen
 
     geaendert = False
-    for abschnitt in ("live", "live_invert", "felder"):
-        werte = eintrag.get(abschnitt)
-        if not isinstance(werte, dict):
-            continue
-        for key in [k for k in werte if _betroffen(k)]:
-            del werte[key]
-            geaendert = True
-
-    # Die feld-zentrische `quellen`-Ablage (Datenquellen-V4) trägt dieselben
-    # Zuordnungen unter `inv:<id>:<feld>` — sie gehört mit aufgeräumt, sonst
-    # holt der Read-Through sie zurück.
-    quellen = anlage.sensor_mapping.get("quellen")
-    if isinstance(quellen, dict):
-        praefix = f"inv:{inv.id}:"
-        for key in [k for k in quellen if k.startswith(praefix)]:
-            if _betroffen(key[len(praefix):]):
-                del quellen[key]
+    eintrag = (anlage.sensor_mapping.get("investitionen") or {}).get(str(inv.id))
+    if isinstance(eintrag, dict):
+        for abschnitt in ("live", "live_invert", "felder"):
+            werte = eintrag.get(abschnitt)
+            if not isinstance(werte, dict):
+                continue
+            for key in [k for k in werte if _betroffen(k)]:
+                del werte[key]
                 geaendert = True
+
+    # Die feld-zentrischen Ablagen der Fläche (`quellen`, `invertieren`) tragen
+    # dieselben Zuordnungen unter der Feld-ID — sie gehören mit aufgeräumt, sonst
+    # holt der Read-Through (`snapshot/keys.extract_quellen_energy`) sie zurück.
+    # ⚠ Kein früher Ausstieg ohne klassischen Eintrag: eine MQTT-Zuordnung steht
+    # NUR in `quellen`.
+    feld_geaendert, gateway_ids = _raeume_feld_ablagen(anlage.sensor_mapping, inv.id, _betroffen)
+    if feld_geaendert:
+        geaendert = True
 
     if geaendert:
         flag_modified(anlage, "sensor_mapping")
+    # N-561: die Gateway-Zeilen der entfallenen Felder gehen mit — sonst abonniert
+    # der Gateway ihr Topic weiter.
+    await _entferne_gateway_zeilen(db, gateway_ids)
+
+
+def _raeume_feld_ablagen(mapping: dict, inv_id: int, betroffen) -> tuple[bool, list[int]]:
+    """Entfernt aus `quellen` und `invertieren` die Feld-IDs dieser Investition,
+    deren Feld-Key ``betroffen`` ist (N-559). In-place.
+
+    Returns:
+        ``(geändert, gateway_ids)`` — die `mapping_id` jeder entfernten
+        Gateway-Zuordnung, damit der Aufrufer ihre Zeile löscht (N-561).
+
+    N-559: Bis 25.09.2026 suchte das Aufräumen nach ``inv:<id>:<feld>`` — das ist
+    der Snapshot-Schlüssel, den `extract_quellen_energy` erst beim Lesen bildet,
+    nicht die gespeicherte Feld-ID (``inv_energy_<id>_<feld>`` /
+    ``inv_live_<id>_<key>``). Es fand nie etwas; gemessen blieben nach dem
+    Entfernen eines Innengeräts alle elf seiner `quellen`-Einträge liegen. Die Form
+    kommt jetzt aus `datenquellen_mapping_sync` — derselben Quelle wie die Fläche.
+    """
+    geaendert = False
+    gateway_ids: list[int] = []
+    for ablage in ("quellen", "invertieren"):
+        werte = mapping.get(ablage)
+        if not isinstance(werte, dict):
+            continue
+        for fid in list(werte):
+            feld = inv_feld_der_investition(fid, inv_id)
+            if feld is not None and betroffen(feld):
+                eintrag = werte.pop(fid)
+                if isinstance(eintrag, dict) and eintrag.get("mapping_id") is not None:
+                    gateway_ids.append(eintrag["mapping_id"])
+                geaendert = True
+    return geaendert, gateway_ids
+
+
+async def _entferne_gateway_zeilen(db: AsyncSession, gateway_ids: list[int]) -> list[str]:
+    """Löscht die Gateway-Zeilen und lädt den Gateway neu (N-561).
+
+    Derselbe Löschweg wie das Wegschalten in `datenquellen.set_feld_quelle`
+    (`mqtt_gateway.entferne_gateway_zeile`), derselbe Reload (`_reload_gateway`).
+    Der Reload liest in DIESER Sitzung und sieht die Löschung schon vor dem
+    Commit — dieselbe Reihenfolge wie `DELETE /mqtt/gateway/mappings/{id}`.
+    Gibt die Topics der gelöschten Zeilen zurück (für das Protokoll).
+    """
+    if not gateway_ids:
+        return []
+    from backend.api.routes.mqtt_gateway import _reload_gateway, entferne_gateway_zeile
+
+    topics = []
+    for mid in gateway_ids:
+        row = await entferne_gateway_zeile(db, mid)
+        if row is not None:
+            topics.append(row.quell_topic)
+    if topics:
+        try:
+            await _reload_gateway(db)
+        except Exception:  # Reload ist best-effort — wie in `set_feld_quelle`.
+            logger.warning("Gateway-Reload nach dem Aufräumen fehlgeschlagen", exc_info=True)
+    return topics
 
 @router.delete("/{investition_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_investition(investition_id: int, db: AsyncSession = Depends(get_db, scope="function")):
@@ -419,11 +538,39 @@ async def delete_investition(investition_id: int, db: AsyncSession = Depends(get
     # sensor_mapping der Anlage aufräumen (verwaiste Einträge vermeiden)
     anlage_result = await db.execute(select(Anlage).where(Anlage.id == inv.anlage_id))
     anlage = anlage_result.scalar_one_or_none()
+    gateway_topics: list[str] = []
     if anlage and anlage.sensor_mapping:
+        geaendert = False
         inv_mapping = anlage.sensor_mapping.get("investitionen", {})
         if str(investition_id) in inv_mapping:
             del inv_mapping[str(investition_id)]
+            geaendert = True
+        # N-559: auch die feld-zentrischen Ablagen der Fläche — sonst bleiben
+        # `quellen`/`invertieren` dieser ID liegen und gelten für die nächste
+        # Investition, die dieselbe ID bekommt (§13: SQLite vergibt sie wieder).
+        feld_geaendert, gateway_ids = _raeume_feld_ablagen(
+            anlage.sensor_mapping, investition_id, lambda _feld: True,
+        )
+        if feld_geaendert:
+            geaendert = True
+        if geaendert:
             flag_modified(anlage, "sensor_mapping")
+        # N-561: und die Gateway-Zeilen dieser Zuordnungen, samt Reload.
+        gateway_topics = await _entferne_gateway_zeilen(db, gateway_ids)
+
+    # N-560: in DIESER Sitzung (N-532), vor dem Löschen — danach gibt es die
+    # Bezeichnung nicht mehr.
+    await log_activity(
+        kategorie=KATEGORIE_KOMPONENTEN,
+        aktion="Komponente gelöscht",
+        details=_komponente_klartext(anlage, inv) + (
+            f" · MQTT-Gateway-Zuordnung entfernt ({', '.join(gateway_topics)})"
+            if gateway_topics else ""
+        ),
+        details_json={"investition_id": inv.id, "typ": inv.typ},
+        anlage_id=inv.anlage_id,
+        db=db,
+    )
 
     await db.delete(inv)
 

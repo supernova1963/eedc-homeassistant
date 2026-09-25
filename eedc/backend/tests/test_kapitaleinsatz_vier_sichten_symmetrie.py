@@ -392,7 +392,8 @@ def test_layer_erklaerung_nennt_die_betriebskosten():
 
     posten = [ErsparnisPosten("Anlagenbilanz", 1200.0, 12)]
     text = erklaerung_jahres_ersparnis(posten, betriebskosten_jahr_euro=500.0)
-    assert "500.00" in text and "Betriebskosten" in text
+    # N-555 (§12): deutsche Schreibweise über `core/zahlenformat.py`.
+    assert "500,00" in text and "Betriebskosten" in text
     # Und der Text beschreibt wirklich den gelieferten Wert.
     assert jahres_ersparnis_euro(posten, betriebskosten_jahr_euro=500.0) == pytest.approx(700.0)
 

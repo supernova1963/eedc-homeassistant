@@ -14,6 +14,7 @@ from backend.models.investition import Investition
 from backend.core.berechnungen import (
     berechne_netzbezug_kosten,
     eauto_effizienz_100km,
+    eauto_effizienz_zeitraum,
     einspeise_erloes_euro,
     speicher_wirkungsgrad,
 )
@@ -204,9 +205,7 @@ async def get_komponenten_zeitreihe(
     monatswerte = []
     # E-Mobilität: Σ über alle Monate für das Komponenten-Aggregat (Ø Verbrauch
     # via Helper über die Summen — nicht das Mittel der Monats-Prozente).
-    agg_emob_verbrauch = 0.0
-    agg_emob_ladung = 0.0
-    agg_emob_km = 0.0
+    effizienz_monate = []
 
     for f in sichtbar:
         jahr, monat = f.jahr, f.monat
@@ -262,12 +261,12 @@ async def get_komponenten_zeitreihe(
             emob.ladung_pv_kwh / emob.ladung_kwh * 100
         ) if emob.ladung_kwh > 0 else None
         # Ø Verbrauch pro Monat via zentralem Helper (gemessen > Ladungs-Näherung).
+        # N-557: die Näherung ist Heim + Extern (Vertrag des Helfers); bis
+        # 25.09.2026 bekam er hier nur die Heimladung.
         eff_m = eauto_effizienz_100km(
-            emob.fahrverbrauch_kwh, emob.ladung_kwh, emob.km
+            emob.fahrverbrauch_kwh, emob.ladung_kwh + emob.extern_kwh, emob.km
         )
-        agg_emob_verbrauch += emob.fahrverbrauch_kwh
-        agg_emob_ladung += emob.ladung_kwh
-        agg_emob_km += emob.km
+        effizienz_monate.append(eff_m)
 
         if f.meta.hat_zaehlerzeile:
             m_netzbezug_kosten = berechne_netzbezug_kosten(
@@ -373,8 +372,10 @@ async def get_komponenten_zeitreihe(
             einspeise_erloes_euro=round(m_einspeise_erloes, 2),
         ))
 
-    # Aggregat-Effizienz via Helper über die Summen (gemessen > Ladungs-Näherung).
-    eff_gesamt = eauto_effizienz_100km(agg_emob_verbrauch, agg_emob_ladung, agg_emob_km)
+    # N-557 (Konzept Regel 10): Σ Monatswerte ÷ Σ km. Hier stand
+    # `eauto_effizienz_100km(Σ Fahrverbrauch, Σ Heim, Σ km)` — sobald ein Monat
+    # einen Fahrverbrauch trug, teilte er ihn durch die km ALLER Monate.
+    eff_gesamt = eauto_effizienz_zeitraum(effizienz_monate)
 
     return KomponentenZeitreiheResponse(
         anlage_id=anlage_id,

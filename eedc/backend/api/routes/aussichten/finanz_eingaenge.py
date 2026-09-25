@@ -19,13 +19,14 @@ from backend.core.berechnungen import (
 )
 from backend.services.strompreis_aggregator import lade_preis_aggregate_je_monat
 from backend.services.monats_fakten import lade_monats_fakten
-from backend.core.field_definitions import get_emob_pv_netz_kwh, get_wp_strom_kwh
+from backend.core.field_definitions import get_wp_strom_kwh
 from backend.services.eauto_wirtschaftlichkeit import (
     build_emob_pool_ctx,
     eigener_verbrauch_l_100km,
-    emob_month_share,
+    emob_heimladung_im_monat,
 )
-from backend.services.emob_ladeanteil import reichere_monatszeilen_an
+from backend.services.emob_ladeanteil import reichere_monatszeilen_an_mit_quoten
+from backend.services.emob_heimlade_quellen import laufende_heimlade_quellen
 from backend.core.investition_parameter import (
     PARAM_E_AUTO,
     PARAM_E_AUTO_DEFAULTS,
@@ -115,8 +116,9 @@ async def lade_finanz_eingaenge(*, anlage, anlage_id, db):
         and _inv.typ in ("e-auto", "wallbox")
         and not ist_dienstlich(_inv)
     ]
+    _emob_quoten: dict = {}
     if _emob_keys:
-        _emob_daten = await reichere_monatszeilen_an(
+        _emob_daten, _emob_quoten = await reichere_monatszeilen_an_mit_quoten(
             db,
             anlage_id,
             [
@@ -139,10 +141,20 @@ async def lade_finanz_eingaenge(*, anlage, anlage_id, db):
     # in der Prognose auf den 0,5-Default, weil PV und Netz beide 0 waren.
     # An Gernots Anlage (Mär–Jul 2026, ausschließlich Sensordaten gemessen):
     # 0 statt 126,23 kWh Netz und 0 statt 619,77 kWh PV.
+    _private_wallboxen = [
+        i for i in inv_by_id_hist.values() if i.typ == "wallbox" and not ist_dienstlich(i)
+    ]
     emob_pool_ctx = build_emob_pool_ctx(
         historische_inv_daten,
         {i.id for i in inv_by_id_hist.values() if i.typ == "e-auto" and not ist_dienstlich(i)},
-        {i.id for i in inv_by_id_hist.values() if i.typ == "wallbox" and not ist_dienstlich(i)},
+        {i.id for i in _private_wallboxen},
+        # N-555: der Entscheid je Monat braucht „Wallbox in Betrieb" und die Quote
+        # der Schätzung (Konzept Regel 2-Ü, Regel 6).
+        wallbox_in_betrieb=lambda j, m: any(w.ist_aktiv_im_monat(j, m) for w in _private_wallboxen),
+        quoten=_emob_quoten,
+        quellen_je_monat=await laufende_heimlade_quellen(
+            db, anlage_id, list(inv_by_id_hist.values()),
+        ),
     )
 
     # Monatsdaten für Eigenverbrauch etc.
@@ -208,19 +220,14 @@ async def lade_finanz_eingaenge(*, anlage, anlage_id, db):
     for ea in e_autos:
         for (inv_id, jahr, monat), daten in historische_inv_daten.items():
             if inv_id == ea.id and ea.ist_aktiv_im_monat(jahr, monat):
-                # N-199: über den SoT-Helper statt roh — der evcc-Portal-Import
-                # schreibt `ladung_kwh` + `ladung_pv_kwh` und **kein**
-                # `ladung_netz_kwh`; der Rohzugriff sah dort eine 0, wo der
-                # Helfer `Total − PV` ableitet.
-                pv_ladung, _ = get_emob_pv_netz_kwh(daten)
-                # F-17: liegt die Ladung kanonisch auf der Wallbox, kommt der
-                # km-anteilige Pool-Anteil statt der eigenen (leeren) Zeile.
-                share = emob_month_share(
-                    emob_pool_ctx, "e-auto",
-                    daten.get("km_gefahren", 0) or 0, jahr, monat,
+                # N-199/F-17/N-555: die Heimladung DIESES Autos im Monat nach dem
+                # Entscheid der einen Funktion — Wallbox-Anteil nach km, eigene
+                # Heim-Felder (über den SoT-Leser, `Total − PV` bei evcc), die
+                # Schätzung aus dem Fahrverbrauch oder 0.
+                pv_ladung, _ = emob_heimladung_im_monat(
+                    emob_pool_ctx, inv_id,
+                    daten.get("km_gefahren", 0) or 0, jahr, monat, daten,
                 )
-                if share is not None:
-                    pv_ladung = share.pv_kwh
                 gesamt_eauto_pv += pv_ladung
                 eauto_pv_pro_inv[ea.id] = eauto_pv_pro_inv.get(ea.id, 0.0) + pv_ladung
 

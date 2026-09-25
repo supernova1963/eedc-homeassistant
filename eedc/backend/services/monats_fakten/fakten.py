@@ -209,8 +209,17 @@ class EmobFakten:
     fahrverbrauch_je_fahrzeug: dict[int, float] = field(default_factory=dict)
     dienstlich_ladung_pv_kwh: float = 0.0
     dienstlich_ladung_netz_kwh: float = 0.0
+    #: N-555: stammt die dienstliche Menge (ganz oder teilweise) aus dem
+    #: Fahrverbrauch eines Dienstwagens ohne eigene Ladefelder? Die Menge ist
+    #: dieselbe wie vor N-555 (Konzept Regel 2-Ü: Dienstwagen unverändert); das
+    #: Kennzeichen sagt nur, dass sie eine Schätzung ist, statt es zu verschweigen.
+    dienstlich_geschaetzt: bool = False
     eauto_ladedaten: tuple[dict, ...] = ()
     wallbox_ladedaten: tuple[dict, ...] = ()
+    #: N-555: dieselben privaten Zeilen (E-Auto und Wallbox) je ``Investition.id`` —
+    #: für *Cockpit → Monat*, das die gespeicherte Zeile mit Live- und
+    #: HA-Statistik-Werten zusammenführt und dann die eine Funktion fragt.
+    ladedaten_je_inv: dict[int, dict] = field(default_factory=dict)
     eauto_summe: EmobLadungPool = field(
         default_factory=lambda: EmobLadungPool(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, "")
     )

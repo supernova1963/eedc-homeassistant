@@ -83,6 +83,40 @@ def split_inv(rest: str) -> tuple[Optional[str], Optional[str]]:
     return inv_id, feld
 
 
+#: Feld-ID-Präfixe der Datenquellen-Fläche, die eine Investitions-ID tragen
+#: (`inv_energy_{id}_{feld}`, `inv_live_{id}_{key}`). N-559: EINE Quelle für die
+#: Schreibform — die Fläche, das Aufräumen in `investitionen/crud.py` und der
+#: JSON-Import-Remap lesen sie hier. Bis 25.09.2026 suchte das Aufräumen nach
+#: `inv:{id}:{feld}` (der Snapshot-Schlüssel, nicht die Feld-ID) und fand nie etwas.
+INV_FELD_PRAEFIXE = ("inv_energy_", "inv_live_")
+
+
+def feld_id(match_key) -> str:
+    """Stabile Feld-Kennung der Fläche aus dem `match_key` der Topic-Registry.
+
+    ``("inv_energy", "7", "pv_erzeugung_kwh")`` → ``inv_energy_7_pv_erzeugung_kwh``.
+    Dieselbe Form trägt `sensor_mapping.quellen` und `sensor_mapping.invertieren`.
+    """
+    return "_".join(str(x) for x in match_key)
+
+
+def inv_feld_der_investition(field_id, inv_id) -> Optional[str]:
+    """Der Feld-Key hinter einer Feld-ID, wenn sie zu dieser Investition gehört — sonst ``None``.
+
+    ``inv_live_7_leistung_w-3`` mit ``inv_id=7`` → ``leistung_w-3``; mit ``inv_id=70`` → ``None``
+    (die Zerlegung trennt am ersten ``_`` hinter dem Präfix, ein reiner
+    Präfixvergleich ``inv_live_7`` träfe auch ``inv_live_70_…``).
+    """
+    if not isinstance(field_id, str):
+        return None
+    for praefix in INV_FELD_PRAEFIXE:
+        if field_id.startswith(praefix):
+            iid, feld = split_inv(field_id[len(praefix):])
+            if iid is not None and iid == str(inv_id):
+                return feld
+    return None
+
+
 def uebernehme_quelle_ins_mapping(
     mapping: dict, field_id: str, quelle: str, entity_id: Optional[str],
 ) -> bool:

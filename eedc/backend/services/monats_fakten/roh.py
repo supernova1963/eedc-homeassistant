@@ -21,7 +21,6 @@ from backend.core.investition_parameter import (
     ist_dienstlich,
     ist_luft_luft_waermepumpe,
 )
-from backend.core.field_definitions import get_emob_pv_netz_kwh
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.monatsdaten import Monatsdaten
 from backend.services.emob_ladeanteil import hat_gepflegten_pv_anteil
@@ -174,14 +173,21 @@ class _RohMonat:
         #: zweite Gerät sauber misst.
         self.wp_abgrenzung: Optional[str] = None
         self.eauto_ladedaten: list[dict] = []
+        #: N-555: dieselben E-Auto-Zeilen je ``Investition.id`` — die eine Funktion
+        #: (``entscheide_emob_heimladung``) entscheidet je Auto, und ihre Schätzung
+        #: ist je Auto. Parallel zu ``eauto_ladedaten`` (gleiche Reihenfolge).
+        self.eauto_ladedaten_ids: list[int] = []
         self.wallbox_ladedaten: list[dict] = []
+        self.wallbox_ladedaten_ids: list[int] = []
+        #: N-555: Dienstwagen und dienstliche Wallboxen je ``Investition.id`` —
+        #: ihre Menge rechnet jetzt die eine Funktion (bitgleich), nicht mehr diese
+        #: Faltung über die Lese-Hilfe mit ihrem stillen Fahrverbrauch-Ersatz.
+        self.dienstlich_je_inv: dict[int, dict] = {}
         self.eauto_km = 0.0
         self.eauto_km_je_fahrzeug: dict[int, float] = {}
         self.eauto_fahrverbrauch_je_fahrzeug: dict[int, float] = {}
         self.eauto_fahrverbrauch = 0.0
         self.eauto_v2h = 0.0
-        self.dienstlich_pv = 0.0
-        self.dienstlich_netz = 0.0
         self.sonstiges_erzeugung = 0.0
         self.sonstiges_verbrauch = 0.0
         self.sonstiges_eigenverbrauch = 0.0
@@ -431,11 +437,15 @@ class _RohMonat:
                 # wird herausgefiltert, aber nicht verworfen: er gehört als
                 # Ausgabe in die Sonstige-Summen (Bewertung beim Aufrufer, sie
                 # braucht den Monatstarif). [[feedback_dienstwagen_alle_checks]]
-                pv_kwh, netz_kwh = get_emob_pv_netz_kwh(data)
-                self.dienstlich_pv += pv_kwh
-                self.dienstlich_netz += netz_kwh
+                #
+                # N-555: die Menge rechnet die eine Funktion (`bau.py`, über
+                # `entscheide_emob_heimladung`) — bitgleich zu vorher, aber der
+                # Fahrverbrauch als Schätzung steht dort ausdrücklich. Hier stand
+                # `get_emob_pv_netz_kwh(data)`, dessen Ersatz still einsprang.
+                self.dienstlich_je_inv[inv.id] = data
             elif inv.typ == "e-auto":
                 self.eauto_ladedaten.append(data)
+                self.eauto_ladedaten_ids.append(inv.id)
                 self.eauto_km += b.eauto_km
                 self.eauto_fahrverbrauch += b.eauto_verbrauch
                 self.eauto_v2h += b.eauto_v2h
@@ -450,6 +460,7 @@ class _RohMonat:
                     )
             else:
                 self.wallbox_ladedaten.append(data)
+                self.wallbox_ladedaten_ids.append(inv.id)
 
         elif inv.typ == "pv-module":
             # Nur zur Monats-Kandidatur; der WERT kommt aus der P7-Auflösung.

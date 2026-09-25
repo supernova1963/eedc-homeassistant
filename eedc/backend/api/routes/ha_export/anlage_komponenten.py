@@ -25,7 +25,6 @@ from backend.api.routes.strompreise import (
     lade_tarife_fuer_anlage,
     resolve_strompreis_for_komponente,
 )
-from backend.core.field_definitions import get_emob_pv_netz_kwh
 from backend.core.berechnungen.kapitalrechnung import (
     ErsparnisPosten,
     jahres_ersparnis_euro,
@@ -39,10 +38,12 @@ from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import InvestitionMonatsdaten
 from backend.core.investition_parameter import PARAM_E_AUTO, PARAM_E_AUTO_DEFAULTS, ist_dienstlich
 from backend.core.calculations import berechne_co2_bilanz
+from backend.services.emob_heimlade_quellen import laufende_heimlade_quellen
 from backend.api.routes.ha_export.emob import (
     _build_emob_pool_ctx,
-    _emob_month_share,
-    _reichere_emob_imd_an,
+    _emob_extern_im_monat,
+    _emob_heimladung_im_monat,
+    _reichere_emob_imd_an_mit_quoten,
 )
 
 
@@ -92,8 +93,9 @@ async def historische_komponenten(*, _tarife, anlage, db, investitionen, monatsd
         i.id for i in investitionen
         if i.typ in ("e-auto", "wallbox") and not ist_dienstlich(i)
     }
+    _emob_quoten: dict = {}
     if _emob_ids:
-        _angereichert = await _reichere_emob_imd_an(
+        _angereichert, _emob_quoten = await _reichere_emob_imd_an_mit_quoten(
             db,
             anlage.id,
             {
@@ -114,6 +116,10 @@ async def historische_komponenten(*, _tarife, anlage, db, investitionen, monatsd
         historische_inv_daten,
         {e.id for e in e_autos},
         {w.id for w in wallboxen},
+        # N-555: Entscheid je Monat (Wallbox in Betrieb, Quote der Schätzung).
+        wallbox_in_betrieb=lambda j, m: any(w.ist_aktiv_im_monat(j, m) for w in wallboxen),
+        quoten=_emob_quoten,
+        quellen_je_monat=await laufende_heimlade_quellen(db, anlage.id, investitionen),
     )
 
     netzbezug_preis_cent = (
@@ -265,6 +271,7 @@ def alternativkosten_und_co2(
     _ea_netz_pro_monat: dict[int, list[tuple[int, int, float]]] = {}
     _ea_netz_total: dict[int, float] = {}
     _ea_fahrverbrauch: dict[int, float] = {}
+    _ea_extern_euro: dict[int, float] = {}
     for ea in e_autos:
         params = ea.parameter or {}
         ea_vergleich_l_100km = params.get(
@@ -275,12 +282,13 @@ def alternativkosten_und_co2(
             if inv_id != ea.id:
                 continue
             km = daten.get("km_gefahren", 0) or 0
-            # #262: SoT-Helper konsolidiert den Netz-Read mit Fallback.
-            _, netz = get_emob_pv_netz_kwh(daten)
-            # Phase 2a: evcc-Setup → Netz km-anteilig aus dem Wallbox-Pool.
-            share = _emob_month_share(emob_ctx, "e-auto", km, jahr, monat)
-            if share is not None:
-                netz = share.netz_kwh
+            # #262/Phase 2a/N-555: Netz DIESES Autos nach dem Entscheid des
+            # Monats — Wallbox-Anteil nach km, eigene Heim-Felder, Schätzung, 0.
+            _, netz = _emob_heimladung_im_monat(emob_ctx, inv_id, km, jahr, monat, daten)
+            # N-555 (§11): externe Ladekosten nach der Topf-Regel (`waehle_extern_paar`).
+            _ea_extern_euro[ea.id] = _ea_extern_euro.get(ea.id, 0.0) + _emob_extern_im_monat(
+                emob_ctx, km, jahr, monat, daten,
+            )[1]
             # DI-2: CO₂-Aggregate mitziehen (gleicher Netz-/km-/Benzin-Pfad).
             co2_emob_km += km
             co2_emob_netz_kwh += netz
@@ -311,11 +319,13 @@ def alternativkosten_und_co2(
         _erg = berechne_eauto_ersparnis_periode(
             km_pro_monat=km_pro_monat,
             ladung_netz_kwh_gesamt=_ea_netz_total.get(ea.id, 0.0),
-            # ⚠ Der Anlagen-Sensor kannte externe Ladekosten noch nie — hier
-            # bewusst 0.0, damit das Umhängen die Preisachse ändert und sonst
-            # nichts. Die Lücke gegenüber dem Cockpit ist notiert, nicht
-            # nebenbei gefüllt.
-            ladung_extern_euro_gesamt=0.0,
+            # N-555 (§11, Entscheid Gernot 25.09.2026 „angleichen"): externe
+            # Ladekosten gehören in die Stromkosten — so rechnen Cockpit, Hub
+            # und T-Konto. Hier stand bis dahin bewusst 0,0 (beim Umhängen der
+            # Preisachse nicht nebenbei gefüllt); der Anlagen-Sensor lag damit um
+            # genau diese Kosten über dem Cockpit. Einmaliger Sprung in der
+            # HA-Langzeitstatistik, im CHANGELOG angekündigt.
+            ladung_extern_euro_gesamt=_ea_extern_euro.get(ea.id, 0.0),
             wallbox_strompreis_cent=wallbox_netzbezug_preis_cent,
             eauto_parameter=ea.parameter,
             monats_benzinpreis_lookup=_benzinpreis_lookup_export,

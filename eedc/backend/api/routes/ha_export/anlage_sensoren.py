@@ -47,17 +47,12 @@ from backend.api.routes.strompreise import (
     lade_tarife_fuer_anlage,
     resolve_strompreis_for_komponente,
 )
-from backend.core.field_definitions import get_emob_pv_netz_kwh
 from backend.core.berechnungen.kapitalrechnung import (
     ErsparnisPosten,
     annahme_dauer_text,
     erklaerung_jahres_ersparnis,
     jahres_ersparnis_euro,
     kapitaleinsatz_euro,
-)
-from backend.services.eauto_wirtschaftlichkeit import (
-    berechne_eauto_ersparnis_periode,
-    eigener_verbrauch_l_100km,
 )
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
@@ -89,7 +84,6 @@ from backend.core.berechnungen.ust_eigenverbrauch import (
     bemessungsgrundlage_aus_investitionen,
     ust_eigenverbrauch_fuer_anlage,
 )
-from backend.api.routes.ha_export.emob import _build_emob_pool_ctx, _emob_month_share, _reichere_emob_imd_an
 # Vorlage 8b: die Phasen des Anlagen-Rechners (Bauform wie `aussichten/finanz_*.py`, ohne Lazy-Import —
 # die Phasenmodule brauchen nichts aus diesem Modul, ein Zyklus entsteht nicht).
 from backend.api.routes.ha_export.anlage_energie import (

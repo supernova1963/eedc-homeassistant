@@ -877,7 +877,7 @@ Vollständiger **JSON-Export** einer Anlage und **Drag-&-Drop-Restore** — inli
 Das zentrale Werkzeug zur Fehlersuche — zwei Tabs, Debug-Umschalter und Neustart im Kopf.
 
 - **System-Logs:** Echtzeit-Logviewer (Ring-Puffer, max. 500 Einträge, gehen beim Neustart verloren). Filter nach Level (DEBUG/INFO/WARNING/ERROR), Modul und Freitext; Copy (als Markdown-Tabelle für GitHub-Issues) und Download (.txt).
-- **Aktivitäten:** persistentes Protokoll in der DB (überlebt Neustarts, Bereinigung nach 90 Tagen / max. 1000 Einträge). Filter nach Kategorie (Connector, Cloud-/Portal-Import, Backup, Monatsabschluss, HA-Statistiken, Scheduler-Jobs, MQTT, Community, Datenquellen, HA-Export …), Status und Freitext.
+- **Aktivitäten:** persistentes Protokoll in der DB (überlebt Neustarts, Bereinigung nach 90 Tagen / max. 1000 Einträge). Filter nach Kategorie (Connector, Cloud-/Portal-Import, Backup, Monatsabschluss, HA-Statistiken, Scheduler-Jobs, MQTT, Community, Datenquellen-Zuordnung — jedes Zuordnen, Entfernen, Vorzeichen-Umkehren und jede Energie-Dashboard-Übernahme mit alter → neuer Quelle —, Komponenten — Anlegen, Löschen und Änderungen an Typ, Aktiv, Anschaffung oder Stilllegung —, HA-Export …), Status und Freitext.
 - **Debug** (Käfer): schaltet den Log-Level auf DEBUG (danach wieder aus — erhöhter Speicherverbrauch), kein Neustart nötig. **Neustart** (Pfeil): über Supervisor-API (Add-on) bzw. Container-Restart (Standalone), mit Bestätigung.
 
 **Support-Workflow:** Debug an → Problem reproduzieren → System-Logs (Level WARNING, Modul-Filter) → Aktivitäten prüfen → Logs kopieren → in Issue einfügen → Debug wieder aus.

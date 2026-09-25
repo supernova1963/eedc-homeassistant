@@ -33,6 +33,7 @@ deren Auslieferungs-Garantien.
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Optional
 
 #: Was ein fehlender Wert anzeigt, wenn der Aufrufer nichts anderes sagt.
@@ -109,3 +110,15 @@ def fmt_einheit(
     if wert is None:
         return leer
     return f"{fmt_zahl(wert, decimals)} {einheit}"
+
+
+def fmt_datum(wert: Optional[date], leer: str = LEER) -> str:
+    """``01.09.2026`` — das Datum in derselben Schreibweise wie Oberfläche und PDF.
+
+    N-560 (25.09.2026): das Aktivitätsprotokoll nennt Anschaffungs- und
+    Stilllegungsdatum einer Komponente im Klartext; bisher bildete jeder
+    Konsument ``strftime("%d.%m.%Y")`` selbst (PDF-Builder, Daten-Checker).
+    """
+    if wert is None:
+        return leer
+    return wert.strftime("%d.%m.%Y")

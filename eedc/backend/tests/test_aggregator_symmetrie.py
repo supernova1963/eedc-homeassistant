@@ -390,6 +390,76 @@ def _setup_sonstiges_erzeuger_nur_fallback():
     return sm, invs, deltas, sk_map
 
 
+def _setup_wallbox_und_eauto_verbrauch():
+    """N-555 (Konzept Regel 6): Wallbox mit Zähler in Betrieb, daneben das Feld
+    „Verbrauch" am E-Auto (ohne Parent). Die Wallbox trägt die Ladung, der
+    Fahrverbrauch zählt in KEINER Stunde zusätzlich — bis 25.09.2026 tat die
+    Stunde genau das (N-196 kannte nur den Tag), und Σ Stunden ≠ Tag.
+    Energie nur in Stunden 0..22 (S3-Snapshot braucht window-deckungsgleiche Deltas).
+    """
+    sm = {"basis": {}, "investitionen": {
+        "2": {"felder": {"ladung_kwh": _sensor("sensor.wb")}},
+        "1": {"felder": {"verbrauch_kwh": _sensor("sensor.ea_verbr")}},
+    }}
+    invs = {"2": _make_inv(2, "wallbox"), "1": _make_inv(1, "e-auto")}
+    deltas = {
+        "sensor.wb": {h: (2.0 if 18 <= h <= 21 else 0.0) for h in range(24)},   # 8.0
+        "sensor.ea_verbr": {h: (0.5 if h < 23 else 0.0) for h in range(24)},     # 11.0 — keine Ladung
+    }
+    sk_map = {
+        _sensor_key_for_feld("ladung_kwh", "2"): "sensor.wb",
+        _sensor_key_for_feld("verbrauch_kwh", "1"): "sensor.ea_verbr",
+    }
+    return sm, invs, deltas, sk_map
+
+
+def _setup_eauto_pv_netz_und_verbrauch():
+    """N-555 (Konzept Regel 6; Fable-Runde 6, C3): Steckerlader mit „Heim: PV" +
+    „Heim: Netz" und „Verbrauch". Die Tages-Ladung ist PV + Netz (12,0), der
+    Fahrverbrauch (19,2) zählt nicht — bis 25.09.2026 bildete der Tag die Ladung
+    des Autos nur aus `ladung_kwh`/`verbrauch_kwh` und nahm den Fahrverbrauch."""
+    sm = {"basis": {}, "investitionen": {
+        "1": {"felder": {
+            "ladung_pv_kwh": _sensor("sensor.ea_pv"),
+            "ladung_netz_kwh": _sensor("sensor.ea_netz"),
+            "verbrauch_kwh": _sensor("sensor.ea_verbr"),
+        }},
+    }}
+    invs = {"1": _make_inv(1, "e-auto")}
+    deltas = {
+        "sensor.ea_pv": {h: 0.3 for h in range(24)},     # 7.2
+        "sensor.ea_netz": {h: 0.2 for h in range(24)},   # 4.8
+        "sensor.ea_verbr": {h: 0.8 for h in range(24)},  # 19.2 — keine Ladung
+    }
+    sk_map = {
+        _sensor_key_for_feld("ladung_pv_kwh", "1"): "sensor.ea_pv",
+        _sensor_key_for_feld("ladung_netz_kwh", "1"): "sensor.ea_netz",
+        _sensor_key_for_feld("verbrauch_kwh", "1"): "sensor.ea_verbr",
+    }
+    return sm, invs, deltas, sk_map
+
+
+def _setup_wallbox_nicht_in_betrieb_und_eauto():
+    """N-555 (Konzept Regel 6): eine Wallbox mit Zähler, die am Tag noch NICHT in
+    Betrieb ist (Anschaffung später), nimmt dem E-Auto seine Ladung nicht weg."""
+    sm = {"basis": {}, "investitionen": {
+        "2": {"felder": {"ladung_kwh": _sensor("sensor.wb")}},
+        "1": {"felder": {"ladung_kwh": _sensor("sensor.ea_lade")}},
+    }}
+    wb = _make_inv(2, "wallbox")
+    wb.anschaffungsdatum = date(2026, 6, 1)   # nach dem Stichtag 22.05.2026
+    invs = {"2": wb, "1": _make_inv(1, "e-auto")}
+    deltas = {
+        "sensor.wb": {h: 0.0 for h in range(24)},
+        "sensor.ea_lade": {h: (1.5 if h < 23 else 0.0) for h in range(24)},  # 34.5
+    }
+    sk_map = {
+        _sensor_key_for_feld("ladung_kwh", "2"): "sensor.wb",
+        _sensor_key_for_feld("ladung_kwh", "1"): "sensor.ea_lade",
+    }
+    return sm, invs, deltas, sk_map
+
+
 def _setup_basis_einspeisung_und_netzbezug():
     sm = {"basis": {
         "einspeisung": _sensor("sensor.einsp"),
@@ -442,6 +512,10 @@ SETUPS = {
     "eauto_mit_parent_wallbox": _setup_eauto_mit_parent_wallbox,
     "eauto_fallback_verbrauch": _setup_eauto_fallback_verbrauch,
     "eauto_verbrauch_und_ladung": _setup_eauto_verbrauch_und_ladung,
+    # N-555 (Konzept Regel 6) — Tag und Stunde: eine Auswahl.
+    "wallbox_und_eauto_verbrauch": _setup_wallbox_und_eauto_verbrauch,
+    "eauto_pv_netz_und_verbrauch": _setup_eauto_pv_netz_und_verbrauch,
+    "wallbox_nicht_in_betrieb_und_eauto": _setup_wallbox_nicht_in_betrieb_und_eauto,
     "sonstiges_verbraucher_doppelt": _setup_sonstiges_verbraucher_doppelt,
     "sonstiges_erzeuger_doppelt": _setup_sonstiges_erzeuger_doppelt,
     "sonstiges_erzeuger_nur_fallback": _setup_sonstiges_erzeuger_nur_fallback,

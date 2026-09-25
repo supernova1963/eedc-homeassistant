@@ -117,12 +117,22 @@ def hat_wp_warmwasser_wert(data: dict, params: Optional[dict] = None) -> bool:
     return data.get("warmwasser_kwh") is not None
 
 def get_eauto_ladung_kwh(data: dict) -> float:
-    """E-Auto- oder Wallbox-Gesamtladung in kWh.
-    Liest `ladung_kwh` (kanonisch), Legacy-Fallback `verbrauch_kwh`.
+    """E-Auto- oder Wallbox-Gesamtladung in kWh — **nur** `ladung_kwh`.
+
+    ⛔ **Hier stand bis 25.09.2026 ein Ersatz: `ladung_kwh or verbrauch_kwh`** (N-555).
+    Am E-Auto ist `verbrauch_kwh` der **Fahrverbrauch**, keine Ladung; der Ersatz
+    stammte aus der Zeit vor der Schlüssel-Migration (v3.25.8), als die Wallbox ihre
+    Ladung noch unter `verbrauch_kwh` führte. Er setzte den Fahrverbrauch still als
+    Heimladung ein — auch neben einer Wallbox, die gemessen 0 kWh geladen hatte, und
+    gleich neun Aufrufer weit. Die Schätzung aus dem Fahrverbrauch gibt es weiter,
+    aber nur noch **ausdrücklich** und an **einer** Stelle:
+    `services/eauto_wirtschaftlichkeit.entscheide_emob_heimladung` (Konzept
+    Heimladung/Fahrverbrauch, Regel 1 + 6). Eine Wallbox trägt kein `verbrauch_kwh`
+    mehr (die Startroutine benennt es um), für sie ändert sich nichts.
     """
     if not data:
         return 0.0
-    return float(data.get("ladung_kwh") or data.get("verbrauch_kwh") or 0)
+    return float(data.get("ladung_kwh") or 0)
 
 def get_speicher_netzladung_kwh(data: dict) -> float:
     """Speicher-Netzladung (Arbitrage). Liest `ladung_netz_kwh` (kanonisch),
@@ -146,6 +156,10 @@ def get_emob_pv_netz_kwh(data: dict, total_kwh: float | None = None) -> tuple[fl
 
     `total_kwh` darf vom Aufrufer übergeben werden, wenn die Gesamt-Ladung bereits
     via `get_eauto_ladung_kwh()` bestimmt wurde — spart eine zweite Lesung.
+
+    ⛔ Ohne `total_kwh` ist die Gesamt-Ladung **nur** `ladung_kwh` — kein
+    Fahrverbrauch (N-555, Begründung an `get_eauto_ladung_kwh`). Eine Zeile, die
+    nur „Heim: PV" trägt, hat damit Netz 0 statt `Verbrauch − PV`.
     """
     if not data:
         return (0.0, 0.0)

@@ -134,6 +134,29 @@ def _db_to_gateway_mapping(m: MqttGatewayMapping) -> GatewayMapping:
     )
 
 
+async def entferne_gateway_zeile(
+    db: AsyncSession, mapping_id: Optional[int],
+) -> Optional[MqttGatewayMapping]:
+    """Löscht EINE Gateway-Zeile — der eine Löschweg für alle Aufrufer (N-561).
+
+    Aufrufer: `DELETE /mqtt/gateway/mappings/{id}`, das Wegschalten in
+    `datenquellen.set_feld_quelle` und das Aufräumen beim Löschen einer
+    Komponente bzw. Entfernen eines Innengeräts (`investitionen/crud.py`).
+    Gibt die gelöschte Zeile zurück (Topic bleibt lesbar), ``None`` ohne Zeile.
+    Neu laden muss der Aufrufer — einmal, nach allen Löschungen (`_reload_gateway`).
+    """
+    if mapping_id is None:
+        return None
+    row = (await db.execute(
+        select(MqttGatewayMapping).where(MqttGatewayMapping.id == mapping_id)
+    )).scalar_one_or_none()
+    if row is None:
+        return None
+    await db.delete(row)
+    await db.flush()
+    return row
+
+
 async def _reload_gateway(db: AsyncSession) -> dict:
     """Lädt alle aktiven Mappings und reloaded den Gateway-Service."""
     svc = get_mqtt_gateway_service()
@@ -240,15 +263,8 @@ async def delete_mapping(
     db: AsyncSession = Depends(get_db, scope="function"),
 ):
     """Mapping löschen."""
-    result = await db.execute(
-        select(MqttGatewayMapping).where(MqttGatewayMapping.id == mapping_id)
-    )
-    mapping = result.scalar_one_or_none()
-    if not mapping:
+    if await entferne_gateway_zeile(db, mapping_id) is None:
         raise HTTPException(404, "Mapping nicht gefunden")
-
-    await db.delete(mapping)
-    await db.flush()
 
     reload_result = await _reload_gateway(db)
 

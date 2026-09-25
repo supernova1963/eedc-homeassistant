@@ -598,12 +598,22 @@ def _migrate_verbrauch_daten_keys_v326(connection) -> None:
     Konsolidierte Pairs (Legacy → Kanon):
       erzeugung_kwh        → pv_erzeugung_kwh        (PV-Modul, BKW)
       heizung_kwh          → heizenergie_kwh         (WP)
-      verbrauch_kwh        → ladung_kwh              (E-Auto, Wallbox)
+      verbrauch_kwh        → ladung_kwh              (Wallbox)
       speicher_ladung_netz_kwh → ladung_netz_kwh     (Speicher Arbitrage)
 
     Achtung: `verbrauch_kwh` ist bei Sonstiges-Investitionen ein eigenes
     legitimes Feld (Verbraucher-Kategorie). Diese Migration prüft daher den
     Investitions-Typ; bei Sonstiges bleibt `verbrauch_kwh` unangetastet.
+
+    ⛔ **Und beim E-Auto ebenfalls — seit N-555 (Konzept Heimladung/Fahrverbrauch,
+    Regel 5).** Hier stand bis 25.09.2026 `'e-auto': {'verbrauch_kwh': 'ladung_kwh'}`.
+    Am E-Auto ist „Verbrauch" der **Fahrverbrauch** (Registry-Hinweis: „der reine
+    Fahrverbrauch"), keine Ladung. Weil diese Funktion bei **jedem** Start läuft (kein
+    `_apply_once`), buchte sie jeden neu erfassten Fahrverbrauch beim nächsten Start in
+    eine Heimladung um und löschte ihn — auch über eine gepflegte Ladung von 0 hinweg
+    (`in (None, '', 0)` unten). Die Spur räumt einmalig
+    `services/migrations/migrate_eauto_fahrverbrauch_rueckbenennung.py`. Für die übrigen
+    Paare gibt es keinen Befund; sie bleiben.
 
     Idempotent: läuft beim ersten Mal echt, danach No-Op.
     """
@@ -621,9 +631,8 @@ def _migrate_verbrauch_daten_keys_v326(connection) -> None:
         'waermepumpe': {
             'heizung_kwh': 'heizenergie_kwh',
         },
-        'e-auto': {
-            'verbrauch_kwh': 'ladung_kwh',
-        },
+        # 'e-auto': absichtlich nicht mehr (N-555, Regel 5) — `verbrauch_kwh` ist
+        # dort der Fahrverbrauch, keine Ladung. Begründung im Docstring.
         'wallbox': {
             'verbrauch_kwh': 'ladung_kwh',
         },
@@ -1200,6 +1209,19 @@ async def _run_data_migrations() -> None:
         await _apply_once(
             "phase_2a_emob_canonical_source",
             migrate_emob_canonical_source,
+        )
+
+        # N-555 Stufe 1, Regel 5: herkunftslose E-Auto-`ladung_kwh` sind Umbuchungen
+        # der Startroutine (`_migrate_verbrauch_daten_keys_v326`, bis 25.09.2026) —
+        # zurück in den Fahrverbrauch bzw. entfernt. Grenze 09.05.2026 (Stempel
+        # `legacy:unknown`) im Modul-Docstring. MUSS nach der Initial-Provenance laufen,
+        # sonst sähe sie Zeilen ohne jeden Stempel als Umbuchung.
+        from backend.services.migrations.migrate_eauto_fahrverbrauch_rueckbenennung import (
+            migrate_eauto_fahrverbrauch_rueckbenennung,
+        )
+        await _apply_once(
+            "n555_eauto_fahrverbrauch_rueckbenennung",
+            migrate_eauto_fahrverbrauch_rueckbenennung,
         )
 
         # Datenquellen-V4 B8: effektive Quelle jedes Feldes explizit machen

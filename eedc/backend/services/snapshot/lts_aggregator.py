@@ -121,6 +121,11 @@ async def get_hourly_kwh_by_category_lts(
                     ))
 
     investitionen_map = sensor_mapping.get("investitionen", {}) or {}
+    # N-555 (Konzept Regel 6): dieselbe Wallbox-Regel wie am Tag, jetzt auch in
+    # der Stunde — und nur für eine Wallbox in Betrieb.
+    _wb_deckt = wallbox_deckt_ladung_ab(
+        investitionen_by_id.values(), sensor_mapping, datum=datum,
+    )
     for inv_id_str, inv_data in investitionen_map.items():
         if not isinstance(inv_data, dict):
             continue
@@ -128,7 +133,7 @@ async def get_hourly_kwh_by_category_lts(
         if inv is None:
             continue
         felder = inv_data.get("felder", {}) or {}
-        for he in investition_hourly_eintraege(inv, inv_data):
+        for he in investition_hourly_eintraege(inv, inv_data, wallbox_deckt_ladung=_wb_deckt):
             cfg = felder.get(he.feld)
             if isinstance(cfg, dict):
                 eid = cfg.get("sensor_id")
@@ -357,7 +362,9 @@ async def get_komponenten_tageskwh_lts(
     investitionen_map = sensor_mapping.get("investitionen", {}) or {}
     # N-196: strukturelle Quellen-Regel der E-Mob-Fläche, einmal je Lauf —
     # dieselbe Regel, die der Leistungspfad seit #356 kennt.
-    _wb_deckt = wallbox_deckt_ladung_ab(investitionen_by_id.values(), sensor_mapping)
+    _wb_deckt = wallbox_deckt_ladung_ab(
+        investitionen_by_id.values(), sensor_mapping, datum=datum,
+    )
     for inv_id_str, inv_data in investitionen_map.items():
         if not isinstance(inv_data, dict):
             continue

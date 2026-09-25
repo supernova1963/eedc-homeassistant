@@ -239,3 +239,87 @@ async def test_cross_endpoint_verbrauch_100km_symmetrisch(db):
     ueb = await get_cockpit_uebersicht(anlage_id=anlage_id, jahr=None, db=db)
     assert ueb.emob_verbrauch_quelle == "ladung"
     assert ueb.emob_verbrauch_100km == pytest.approx(50.0, abs=0.2)
+
+
+# ── D. N-555 (Konzept Regel 6): laufender Monat, Tag und Stunde folgen derselben Regel ──
+
+
+async def test_laufender_monat_und_gespeicherter_monat_entscheiden_gleich(db):
+    """Dieselben Werte — einmal gespeichert (Monats-Fakten), einmal live (`resolved`) —
+    ergeben dieselbe Heimladung: beide Wege rufen `entscheide_emob_heimladung`.
+    Drei Lagen: Johnny (Wallbox 0 + Verbrauch), Steckerlader neben Wallbox 0, Schätzfall."""
+    from backend.api.routes.aktueller_monat.aggregation import emob_heimladung_pool
+    from backend.api.routes.aktueller_monat.schemas import DatenquelleInfo
+    from backend.services.monats_fakten import lade_monats_fakten
+
+    lagen = [
+        ({"ladung_kwh": 0.0}, {"km_gefahren": 900.0, "verbrauch_kwh": 400.0}, 0.0),
+        ({"ladung_kwh": 0.0}, {"km_gefahren": 900.0, "ladung_pv_kwh": 30.0,
+                               "ladung_netz_kwh": 20.0, "verbrauch_kwh": 90.0}, 50.0),
+        (None, {"km_gefahren": 900.0, "verbrauch_kwh": 170.0}, 170.0),
+    ]
+    info = DatenquelleInfo(quelle="ha_statistics", konfidenz=92)
+    for i, (wb_daten, ea_daten, erwartet) in enumerate(lagen):
+        anlage = Anlage(anlagenname=f"Lage {i}", leistung_kwp=10.0)
+        db.add(anlage)
+        await db.flush()
+        invs = []
+        wb = None
+        if wb_daten is not None:
+            wb = Investition(anlage_id=anlage.id, typ="wallbox", bezeichnung="WB",
+                             anschaffungsdatum=date(2024, 1, 1), aktiv=True)
+            db.add(wb)
+            invs.append(wb)
+        ea = Investition(anlage_id=anlage.id, typ="e-auto", bezeichnung="Auto",
+                         anschaffungsdatum=date(2024, 1, 1), aktiv=True)
+        db.add(ea)
+        invs.append(ea)
+        await db.flush()
+        if wb is not None:
+            db.add(InvestitionMonatsdaten(investition_id=wb.id, jahr=2026, monat=4,
+                                          verbrauch_daten=dict(wb_daten)))
+        db.add(InvestitionMonatsdaten(investition_id=ea.id, jahr=2026, monat=4,
+                                      verbrauch_daten=dict(ea_daten)))
+        await db.commit()
+
+        (fakt,) = await lade_monats_fakten(db, anlage.id, von=(2026, 4), bis=(2026, 4))
+        resolved = {f"inv_{ea.id}_{k}": (v, info) for k, v in ea_daten.items()}
+        if wb is not None:
+            resolved.update({f"inv_{wb.id}_{k}": (v, info) for k, v in wb_daten.items() if v})
+        ha_mit_daten = frozenset({f"inv_{wb.id}_ladung_kwh"}) if wb is not None else frozenset()
+        emob_heimladung_pool(
+            direct_fields=set(), investitionen=invs, jahr=2026, monat=4, resolved=resolved,
+            ist_aktueller_monat=False, ha_felder_mit_daten=ha_mit_daten,
+        )
+        live = resolved.get("emob_ladung_kwh", (0.0, None))[0]
+        assert fakt.emob.ladung_kwh == pytest.approx(erwartet), f"Lage {i} gespeichert"
+        assert live == pytest.approx(erwartet), f"Lage {i} live"
+
+
+@pytest.mark.parametrize("setup_name,eauto_zaehlt", [
+    ("wallbox_und_eauto_verbrauch", False),
+    ("eauto_pv_netz_und_verbrauch", True),
+])
+async def test_tag_und_stunde_folgen_der_monatsregel(setup_name, eauto_zaehlt):
+    """Tag (Σ Stunden) und Monat wählen dieselbe Quelle: neben einer Wallbox mit Zähler trägt
+    die Wallbox, ohne sie das Auto mit seinen Heim-Feldern — nie sein Fahrverbrauch."""
+    from unittest.mock import MagicMock, patch
+
+    from backend.services.snapshot.lts_aggregator import (
+        get_hourly_kwh_by_category_lts,
+        get_komponenten_tageskwh_lts,
+    )
+    from backend.tests.test_aggregator_symmetrie import SETUPS, _build_mock_ha_svc, _make_anlage
+
+    sm, invs, deltas, _sk = SETUPS[setup_name]()
+    anlage = _make_anlage(sm)
+    with patch(
+        "backend.services.snapshot.lts_aggregator.get_ha_statistics_service",
+        return_value=_build_mock_ha_svc(deltas),
+    ):
+        tag = await get_komponenten_tageskwh_lts(anlage, invs, date(2026, 5, 22))
+        stunden = await get_hourly_kwh_by_category_lts(MagicMock(), anlage, invs, date(2026, 5, 22))
+    assert ("eauto_1" in tag) is eauto_zaehlt
+    summe_stunden = sum((stunden.get(h) or {}).get("wallbox") or 0.0 for h in range(24))
+    summe_tag = sum(v for k, v in tag.items() if k.startswith(("wallbox_", "eauto_")))
+    assert summe_stunden == pytest.approx(summe_tag, abs=0.01), "Σ Stunden = Tag"

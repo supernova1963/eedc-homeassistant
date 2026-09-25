@@ -651,3 +651,87 @@ def test_dienstliche_ladung_nur_im_layer_bewertet():
               "`berechne_dienstliche_ladekosten(DienstlicheLadungZeile(...))` "
               "(N-12/N-13/N-18)",
     )
+
+
+# ============================================================================
+# CO₂-Mengen nur aus den Faktoren des Layers (N-555, Nebenfund 1)
+# ============================================================================
+#
+# Anlass: Der Jahresbericht rechnete die E-Mob-CO₂ bis 25.09.2026 als
+# `emob_km * 0.12` — eine eigene Konstante neben der EINEN Rechenregel
+# `core/calculations.py::berechne_co2_bilanz` (ADR-001/DI-2). Das PDF nannte
+# damit eine andere Zahl als *Cockpit → Jahr*, und kein Wächter sah es:
+# `check:co2-roh` wacht nur den Client.
+#
+# Regel: Ein Name, der „co2" trägt (Variable, Attribut, Schlüsselwort-Argument),
+# wird außerhalb der Faktor-Definitionen nie aus einem Ausdruck mit einem
+# **Gleitkomma-Literal** (≠ 0/1) gebildet. Faktoren kommen als benannte Konstante
+# (`CO2_FAKTOR_*`) oder über `berechne_co2_bilanz`. Rundungen (`round(x, 1)`)
+# tragen Ganzzahlen und sind nicht gemeint.
+#
+# ⚠ Was er NICHT fängt, ehrlich benannt: eine Konstante unter einem Namen ohne
+# „co2" (z. B. `aequivalent_auto_km = int(co2 / 0.12)` — eine Umrechnung zur
+# Anzeige, keine CO₂-Menge) und ein ganzzahliger Faktor.
+ALLOWED_CO2_LITERAL_FILES = {
+    "core/calculations.py",   # die Definitionen `CO2_FAKTOR_*`
+}
+
+
+def _co2_literal_zuweisungen(text: str) -> list[tuple[int, str]]:
+    import ast
+
+    try:
+        baum = ast.parse(text)
+    except SyntaxError:
+        return []
+    zeilen = text.splitlines()
+    treffer: list[tuple[int, str]] = []
+    for knoten in ast.walk(baum):
+        if isinstance(knoten, ast.Assign):
+            ziele, wert, zeile = knoten.targets, knoten.value, knoten.lineno
+        elif isinstance(knoten, ast.AnnAssign) and knoten.value is not None:
+            ziele, wert, zeile = [knoten.target], knoten.value, knoten.lineno
+        elif isinstance(knoten, ast.keyword) and knoten.arg:
+            ziele, wert, zeile = [ast.Name(id=knoten.arg)], knoten.value, knoten.value.lineno
+        else:
+            continue
+        namen = [
+            z.id if isinstance(z, ast.Name) else (z.attr if isinstance(z, ast.Attribute) else "")
+            for z in ziele
+        ]
+        if not any("co2" in n.lower() for n in namen):
+            continue
+        if any(
+            isinstance(c, ast.Constant) and isinstance(c.value, float) and c.value not in (0.0, 1.0)
+            for c in ast.walk(wert)
+        ):
+            quelle = zeilen[zeile - 1].strip() if zeile <= len(zeilen) else ""
+            treffer.append((zeile, quelle))
+    return treffer
+
+
+def test_co2_mengen_ohne_eigene_faktor_literale():
+    verstoesse: list[tuple[str, int, str]] = []
+    for path, rel in _iter_py_files():
+        if rel in ALLOWED_CO2_LITERAL_FILES:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        for line_no, quelle in _co2_literal_zuweisungen(text):
+            verstoesse.append((rel, line_no, quelle))
+
+    assert not verstoesse, _format_verstoesse_meldung(
+        verstoesse,
+        regel="CO₂-Menge mit eigenem Faktor-Literal — nutze `berechne_co2_bilanz` "
+              "(bzw. `services/monats_co2.co2_bilanz_aus_fakt`) oder eine "
+              "`CO2_FAKTOR_*`-Konstante aus `core/calculations.py` (ADR-001/DI-2)",
+    )
+
+
+def test_co2_literal_waechter_faengt_die_alte_jahresbericht_zeile():
+    """Gegenprobe am Anlassfall — der Wächter muss ihn rot melden können."""
+    assert _co2_literal_zuweisungen("co2_emob = emob_km * 0.12 if hat else 0\n")
+    assert not _co2_literal_zuweisungen("aequivalent_auto_km = int(co2_gesamt / 0.12)\n")
+    assert not _co2_literal_zuweisungen("co2 = round(x * CO2_FAKTOR_STROM_KG_KWH, 1)\n")

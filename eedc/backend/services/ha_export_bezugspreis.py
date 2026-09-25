@@ -63,6 +63,7 @@ from backend.core.berechnungen.preis_reihe import (
     ist_dynamisch,
 )
 from backend.core.berechnungen.slot_konvention import forward_stunde_zu_backward_slot
+from backend.core.zahlenformat import fmt_pct, fmt_zahl
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.tages_energie_profil import TagesEnergieProfil
 
@@ -232,7 +233,7 @@ async def _boersenmittel_monat(
             gedeckt = sum(1 for k in mit_bezug if k in boerse_je)
             abdeckung = gedeckt / len(mit_bezug)
         if abdeckung < MINDEST_ABDECKUNG:
-            return None, f"Börse deckt nur {abdeckung:.0%} der Bezugsstunden"
+            return None, f"Börse deckt nur {fmt_pct(abdeckung * 100, 0)} der Bezugsstunden"
 
     mittel = boersenmittel_gewichtet(
         (boerse_je.get(k), bezug_je[k]) for k in mit_bezug
@@ -311,7 +312,7 @@ async def _aufschlag_aus_abrechnung(db, anlage, tarif, *, heute: date) -> Option
         return Aufschlag(
             cent=cent,
             quelle=f"abrechnung {md.jahr:04d}-{md.monat:02d}",
-            basis=f"Börsenmittel {mittel:.2f} ct ({basis})",
+            basis=f"Börsenmittel {fmt_zahl(mittel, 2)} ct ({basis})",
         )
     return None
 

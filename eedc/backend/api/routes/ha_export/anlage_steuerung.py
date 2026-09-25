@@ -25,6 +25,8 @@ from typing import Optional
 
 from sqlalchemy import select
 
+from backend.core.zahlenformat import fmt_zahl
+
 from backend.core.berechnungen.fenster import (
     arbitrage_vorschlag,
     bestes_fenster,
@@ -538,7 +540,7 @@ async def _arbitrage_sensor(*, anlage, db, sensor_values, prognose, fenster_ctx,
         },
         berechnung=(
             f"Laden in {len(ergebnis.lade_stunden)} günstigen Stunden, Entladung "
-            f"gegen das teuerste Defizit danach (Wirkungsgrad {eta:.0f} %)"
+            f"gegen das teuerste Defizit danach (Wirkungsgrad {fmt_zahl(eta, 0)} %)"
         ),
     )
 
@@ -646,7 +648,7 @@ async def _abweichungs_ampel(*, anlage, db, sensor_values, prognose, heute, jetz
             "bis_stunde": _hhmm_ende(bis_index - 1) if bis_index > 0 else None,
             "mae_30_tage_prozent": mae,
         },
-        berechnung=f"({ist:.1f} − {soll:.1f}) ÷ {soll:.1f} × 100",
+        berechnung=f"({fmt_zahl(ist, 1)} − {fmt_zahl(soll, 1)}) ÷ {fmt_zahl(soll, 1)} × 100",
     )
 
     if mae is None:

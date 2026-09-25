@@ -339,6 +339,25 @@ async def get_hourly_kwh_by_category(
                 seen_keys.add(sk)
 
     investitionen_map = sensor_mapping.get("investitionen", {}) or {}
+    # N-555 (Konzept Regel 6): EINE Auswahl für Tag und Stunde — die Wallbox-Regel
+    # gilt jetzt auch hier (bis 25.09.2026 nur am Tag), und die Heimlade-Felder
+    # eines E-Autos werden über HA **und** MQTT gemeinsam gewählt.
+    _mqtt_sk_set = set(mqtt_sks_alle)
+
+    def _hat_zaehler(inv_id: str, feld: str) -> bool:
+        _felder = ((investitionen_map.get(inv_id) or {}).get("felder") or {})
+        return feld_hat_zaehler(
+            _felder.get(feld), f"inv:{inv_id}:{feld}", quellen_energy, _mqtt_sk_set,
+        )
+
+    def _auswahl(inv_id: str):
+        return lambda feld: _hat_zaehler(inv_id, feld)
+
+    _wb_deckt = wallbox_deckt_ladung_ab(
+        investitionen_by_id.values(), sensor_mapping,
+        ist_verfuegbar=lambda inv, feld: _hat_zaehler(str(inv.id), feld),
+        datum=datum,
+    )
     for inv_id_str, inv_data in investitionen_map.items():
         if not isinstance(inv_data, dict):
             continue
@@ -346,7 +365,10 @@ async def get_hourly_kwh_by_category(
         if inv is None:
             continue
         felder = inv_data.get("felder", {}) or {}
-        for he in investition_hourly_eintraege(inv, inv_data):
+        for he in investition_hourly_eintraege(
+            inv, inv_data, wallbox_deckt_ladung=_wb_deckt,
+            auswahl_verfuegbar=_auswahl(str(inv_id_str)),
+        ):
             cfg = felder.get(he.feld)
             if isinstance(cfg, dict):
                 eid = cfg.get("sensor_id")
@@ -366,7 +388,8 @@ async def get_hourly_kwh_by_category(
     # Gruppe aufgelöst statt doppelt gezählt — gleiche #298-Klasse, MQTT-Pfad.
     mqtt_sks = [sk for sk in mqtt_sks_alle if sk not in seen_keys]
     for sk, kat, grp in mqtt_hourly_eintraege(
-        mqtt_sks, investitionen_by_id, investitionen_map
+        mqtt_sks, investitionen_by_id, investitionen_map,
+        wallbox_deckt_ladung=_wb_deckt, auswahl_je_inv=_auswahl,
     ):
         if sk in seen_keys:
             continue
@@ -776,7 +799,18 @@ async def get_komponenten_tageskwh(
     # 2. Investitionen — Per-Typ-Auswahl im Helper
     # N-196: strukturelle Quellen-Regel der E-Mob-Fläche, einmal je Lauf —
     # dieselbe Regel, die der Leistungspfad seit #356 kennt.
-    _wb_deckt = wallbox_deckt_ladung_ab(investitionen_by_id.values(), sensor_mapping)
+    # N-555 (Konzept Regel 6): „Wallbox mit Zähler" heißt HA-Sensor **oder**
+    # MQTT-Zählerstände (dieselbe Frage wie für jedes andere Feld) und **in
+    # Betrieb** an diesem Tag. Bis 25.09.2026 sah diese Zeile nur HA-Sensoren.
+    _wb_map = (sensor_mapping.get("investitionen") or {})
+    _wb_deckt = wallbox_deckt_ladung_ab(
+        investitionen_by_id.values(), sensor_mapping,
+        ist_verfuegbar=lambda inv, feld: feld_hat_zaehler(
+            ((_wb_map.get(str(inv.id)) or {}).get("felder") or {}).get(feld),
+            f"inv:{inv.id}:{feld}", quellen_energy, mqtt_keys,
+        ),
+        datum=datum,
+    )
     for inv_id_str, inv, inv_data in _investitionen_mit_mapping(
         sensor_mapping, investitionen_by_id
     ):
@@ -1330,6 +1364,19 @@ async def get_tagesdetail_kwh(
     felder_je: dict[str, dict[str, dict[str, float]]] = {}
     abdeckung_von: Optional[datetime] = None
     abdeckung_bis: Optional[datetime] = None
+    # N-555 (Konzept Regel 6, „PV/Netz folgt"): dieselbe Wallbox-Regel wie
+    # `komponenten_kwh`. Ist eine Wallbox mit Zähler in Betrieb, zählen die
+    # Heim-PV/-Netz-Zähler der Autos nicht zusätzlich — bis 25.09.2026 flossen
+    # Wallbox- und Auto-PV hier in denselben Key, der PV-Anteil zählte doppelt.
+    _inv_map = (sensor_mapping.get("investitionen") or {})
+    _wb_deckt = wallbox_deckt_ladung_ab(
+        investitionen_by_id.values(), sensor_mapping,
+        ist_verfuegbar=lambda i, f: feld_hat_zaehler(
+            ((_inv_map.get(str(i.id)) or {}).get("felder") or {}).get(f),
+            f"inv:{i.id}:{f}", quellen_energy, mqtt_keys,
+        ),
+        datum=datum,
+    )
     for inv_id_str, inv, inv_data in _investitionen_mit_mapping(
         sensor_mapping, investitionen_by_id
     ):
@@ -1337,6 +1384,8 @@ async def get_tagesdetail_kwh(
         # E-Auto mit parent (Wallbox misst die Ladung) → Skip, sonst Doppelzählung
         # (spiegelt investition_beitraege/Live-Pfad).
         if typ == "e-auto" and getattr(inv, "parent_investition_id", None) is not None:
+            continue
+        if typ == "e-auto" and _wb_deckt:
             continue
         # Das Fenster hängt am Bezug DIESES Typs, nicht am Aufrufweg (S1a).
         rng_typ = tagesfenster_fuer(

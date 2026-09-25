@@ -82,7 +82,8 @@ async def test_bkw_erloes_trennt_formel_und_eingesetzte_werte(db):
     d = _detail(res, bkw_id)
     assert d is not None
     assert d.erloes_formel == "Einspeisung × Einspeisevergütung"
-    assert d.erloes_berechnung == "50.0 kWh × 8.00 ct/kWh"
+    # N-555 (§11): deutsche Schreibweise über `core/zahlenformat.py`.
+    assert d.erloes_berechnung == "50,0 kWh × 8,00 ct/kWh"
     # Der Wert selbst ändert sich nicht: 50 kWh × 8 ct.
     assert d.erloes_euro == 4.0
 

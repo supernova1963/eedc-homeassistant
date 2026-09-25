@@ -18,8 +18,9 @@ from backend.core.berechnungen import (
 )
 from backend.models.investition import Investition
 from backend.models.monatsdaten import Monatsdaten
+from backend.core.investition_parameter import ist_dienstlich
 from backend.services.eauto_wirtschaftlichkeit import (
-    get_emob_heimladung_canonical,
+    entscheide_emob_heimladung,
     summiere_emob_quelle,
 )
 from backend.services.emob_ladeanteil import reichere_ladezeilen_an
@@ -47,6 +48,7 @@ async def _baue_fakt(
     tages_summe: Optional[TagesMonatsSumme] = None,
     preis_cache: Optional[dict] = None,
     preis_messung: Optional[PreisMessung] = None,
+    heimlade_quellen: frozenset = frozenset(),
 ) -> MonatsFakt:
     jahr, monat = schluessel
 
@@ -121,10 +123,30 @@ async def _baue_fakt(
     if anteil_abgeleitet:
         tageswert_gruppen.add(TAGESWERT_EMOB_ANTEIL)
 
-    pool = get_emob_heimladung_canonical(
-        eauto_imd_data=eauto_ladedaten,
-        wallbox_imd_data=wallbox_ladedaten,
+    # ── N-555 Stufe 1: die EINE Funktion entscheidet (Regel 1, 2-Ü, 6) ──────
+    # Abgeschlossene Monate entscheiden nur nach dem gespeicherten Wert; nur für
+    # den laufenden Monat reicht `laden.py` die Heimlade-Quellen herein. „Wallbox in Betrieb" kommt aus der
+    # Investitionsliste, nicht aus der Existenz einer Zeile: eine Wallbox ohne
+    # Monatszeile ist trotzdem da (Regel 2-Ü Schritt 2, alter Gesamtwert am Auto).
+    # Die Tages-Quote gilt auch für die Schätzung — dieselbe Zahl wie vor N-555,
+    # als die Anreicherung sie über den Fahrverbrauch der Zeile legte.
+    entscheid = entscheide_emob_heimladung(
+        eauto_je_inv=dict(zip(roh.eauto_ladedaten_ids, eauto_ladedaten)),
+        wallbox_zeilen=wallbox_ladedaten,
+        wallbox_in_betrieb=bool(wallbox_ladedaten) or any(
+            i.typ == "wallbox" and not ist_dienstlich(i)
+            and i.ist_aktiv_im_monat(jahr, monat)
+            for i in investitionen
+        ),
+        dienstwagen_je_inv=roh.dienstlich_je_inv,
+        # Nur im laufenden Monat nicht leer (Regel 1: dort zählt auch eine Quelle).
+        heimlade_quellen=heimlade_quellen,
+        pv_quote=tages_summe.abgeleiteter_pv_anteil if tages_summe is not None else None,
     )
+    pool = entscheid.pool
+    if entscheid.anteil_abgeleitet:
+        anteil_abgeleitet = True
+        tageswert_gruppen.add(TAGESWERT_EMOB_ANTEIL)
 
     emob = EmobFakten(
         ladung_kwh=pool.ladung_kwh,
@@ -140,9 +162,17 @@ async def _baue_fakt(
         v2h_entladung_kwh=roh.eauto_v2h,
         km_je_fahrzeug=dict(roh.eauto_km_je_fahrzeug),
         fahrverbrauch_je_fahrzeug=dict(roh.eauto_fahrverbrauch_je_fahrzeug),
-        dienstlich_ladung_pv_kwh=roh.dienstlich_pv,
-        dienstlich_ladung_netz_kwh=roh.dienstlich_netz,
+        dienstlich_ladung_pv_kwh=entscheid.dienstlich_pv_kwh,
+        dienstlich_ladung_netz_kwh=entscheid.dienstlich_netz_kwh,
+        dienstlich_geschaetzt=any(
+            not d.gemessen for d in entscheid.dienstlich_je_inv.values()
+            if d.pv_kwh + d.netz_kwh > 0
+        ),
         eauto_ladedaten=tuple(eauto_ladedaten),
+        ladedaten_je_inv={
+            **dict(zip(roh.eauto_ladedaten_ids, eauto_ladedaten)),
+            **dict(zip(roh.wallbox_ladedaten_ids, wallbox_ladedaten)),
+        },
         wallbox_ladedaten=tuple(wallbox_ladedaten),
         eauto_summe=summiere_emob_quelle(eauto_ladedaten),
         wallbox_summe=summiere_emob_quelle(wallbox_ladedaten),

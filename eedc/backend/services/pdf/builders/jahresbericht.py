@@ -30,9 +30,9 @@ from backend.core.berechnungen import (
 )
 from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
 from backend.core.investition_parameter import ist_dienstlich
-from backend.services.eauto_wirtschaftlichkeit import get_emob_heimladung_canonical
 from backend.services.waermepumpe_jahreskennzahlen import waermepumpe_jahreskennzahlen
 from backend.services.monats_fakten import finanz_zeile_eingabe, lade_monats_fakten
+from backend.services.monats_co2 import co2_bilanz_aus_fakt
 from backend.core.calculations import (
     CO2_FAKTOR_STROM_KG_KWH,
     co2_wp_ersparnis_kg,
@@ -281,18 +281,15 @@ async def build_jahresbericht_context(
     emob_km = sum(f.emob.km for f in fakten)
     emob_v2h = sum(v2h_by_ym.values())
 
-    # E-Mob-Heimladung: EINE kanonische Quellenwahl über den GESAMTEN
-    # Berichtszeitraum, nicht monatsweise summiert — die Rohdicts beider Quellen
-    # kommen dafür (bereits dienstwagen- und laufzeitgefiltert) aus der Schicht.
-    # Roh über E-Auto UND Wallbox zu summieren ergäbe bei evcc-Setups, die
-    # denselben Stromfluss auf beide Investitionen schreiben, Doppelzählung.
-    emob_pool = get_emob_heimladung_canonical(
-        eauto_imd_data=[d for f in fakten for d in f.emob.eauto_ladedaten],
-        wallbox_imd_data=[d for f in fakten for d in f.emob.wallbox_ladedaten],
-    )
-    emob_ladung = emob_pool.ladung_kwh
-    emob_pv = emob_pool.pv_kwh
-    emob_netz = emob_pool.netz_kwh
+    # E-Mob-Heimladung: die Summe der Monats-Entscheide der Schicht (N-555,
+    # Konzept Regel 1: „Ein Jahr ist die Summe seiner Monate"). Hier stand bis
+    # 25.09.2026 EINE Quellenwahl über den ganzen Berichtszeitraum — eine Wallbox,
+    # die erst ab Juli misst, verdrängte damit die gemessenen Monate davor.
+    # Doppelzählung bei evcc-Setups (derselbe Fluss auf E-Auto UND Wallbox)
+    # schließt die Monats-Entscheidung genauso aus: je Monat genau eine Quelle.
+    emob_ladung = sum(f.emob.ladung_kwh for f in fakten)
+    emob_pv = sum(f.emob.ladung_pv_kwh for f in fakten)
+    emob_netz = sum(f.emob.ladung_netz_kwh for f in fakten)
 
     # ── 8. Monats-Tabelle aufbauen ──────────────────────────────────────
     # #326: Tarif PRO MONAT (historische Tarife) statt Einheitstarif — die
@@ -507,7 +504,21 @@ async def build_jahresbericht_context(
         0 if not hat_waermepumpe
         else co2_wp_ersparnis_kg(wp_waerme_mit_ersatz, wp_strom_mit_ersatz)
     )
-    co2_emob = emob_km * 0.12 if hat_emobilitaet else 0
+    # N-555 (Nebenfund 1): die E-Mob-CO₂ aus der EINEN Rechenregel
+    # (`core/calculations.py::berechne_co2_bilanz`, ADR-001/DI-2), zusammengestellt
+    # je Monat wie *Cockpit → Nachhaltigkeit* (`services/monats_co2.co2_bilanz_aus_fakt`),
+    # je Monat bei 0 geklemmt und summiert — dieselbe Zahl wie der CO₂-Block im
+    # Cockpit für denselben Zeitraum. Hier stand bis 25.09.2026 `emob_km × 0,12`:
+    # eine eigene Konstante, ohne Vergleichs-Verbrenner des Fahrzeugs, ohne den
+    # Netzstrom der Ladung und ohne den getankten Anteil eines Plug-in-Hybrids.
+    _eauto_parameter = {i.id: i.parameter for i in investitionen if i.typ == "e-auto"}
+    co2_emob = (
+        sum(
+            max(0.0, co2_bilanz_aus_fakt(f, _eauto_parameter).co2_emob_kg)
+            for f in fakten
+        )
+        if hat_emobilitaet else 0
+    )
     co2_gesamt = co2_pv + max(0, co2_wp) + max(0, co2_emob)
 
     # Vollzyklen = ENTLADUNG ÷ Kapazität über den Layer-SoT (Kanon 2026-07-28).

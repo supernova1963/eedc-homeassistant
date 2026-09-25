@@ -511,7 +511,15 @@ def _categorize_counter(
             return "verbrauch_wp"
     if inv_typ == "wallbox" and feld == "ladung_kwh":
         return "ladung_wallbox"
-    if inv_typ == "e-auto" and feld in ("verbrauch_kwh", "ladung_kwh"):
+    # N-555: „Heim: PV" und „Heim: Netz" sind Ladung dieses Autos — seit die
+    # Auswahl (`komponenten_beitraege.eauto_heimlade_felder_nach_quelle`) sie
+    # nimmt, brauchen sie ihre Kategorie. ⛔ `verbrauch_kwh` bleibt hier stehen:
+    # „neben einer Wallbox mit Zähler ist der Fahrverbrauch keine Ladung" sitzt in
+    # der AUSWAHL, nicht in dieser Abbildung — ohne Wallbox ist er die erlaubte
+    # Stunden-Schätzung (Konzept Regel 6; Fable-Runde 6, C3).
+    if inv_typ == "e-auto" and feld in (
+        "verbrauch_kwh", "ladung_kwh", "ladung_pv_kwh", "ladung_netz_kwh",
+    ):
         return "verbrauch_eauto"
     if inv_typ == "sonstiges":
         kategorie = (

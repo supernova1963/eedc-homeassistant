@@ -175,6 +175,13 @@ from backend.core.field_definitions.reader import (  # noqa: F401 — Re-Export
     sonstiges_feld_reihenfolge,
     get_sonstiges_verbrauch_kwh,
 )
+from backend.core.field_definitions.heimladung import (  # noqa: F401 — Re-Export
+    HEIMLADE_FELDER,
+    HEIMLADE_MENGEN_FELDER,
+    ist_heimlade_feld,
+    ist_heimlade_mengen_feld,
+    traegt_heimlade_wert,
+)
 from backend.core.field_definitions.wp_strom import (  # noqa: F401 — Re-Export
     FEINE_STROM_FELDER,
     WP_GESAMT_STROM_FELDER,
@@ -286,6 +293,11 @@ __all__ = [
     'get_eauto_ladung_kwh',
     'get_speicher_netzladung_kwh',
     'get_emob_pv_netz_kwh',
+    'HEIMLADE_FELDER',
+    'HEIMLADE_MENGEN_FELDER',
+    'ist_heimlade_feld',
+    'ist_heimlade_mengen_feld',
+    'traegt_heimlade_wert',
     'SONSTIGES_VERBRAUCH_FELDER',
     'sonstiges_feld_reihenfolge',
     'get_sonstiges_verbrauch_kwh',

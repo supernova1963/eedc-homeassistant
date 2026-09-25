@@ -20,8 +20,9 @@ from backend.api.routes.strompreise import (
 )
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
 from backend.core.investition_parameter import PARAM_WALLBOX, PARAM_WALLBOX_DEFAULTS, ist_dienstlich
-from backend.services.eauto_wirtschaftlichkeit import get_emob_heimladung_canonical
-from backend.services.emob_ladeanteil import reichere_monatszeilen_an
+from backend.services.eauto_wirtschaftlichkeit import build_emob_pool_ctx
+from backend.services.emob_ladeanteil import reichere_monatszeilen_an_mit_quoten
+from backend.services.emob_heimlade_quellen import laufende_heimlade_quellen
 from backend.core.calculations import berechne_roi
 from backend.core.berechnungen.kapitalrechnung import (
     ErsparnisPosten,
@@ -136,7 +137,7 @@ async def get_wallbox_dashboard(
         if not _nicht_aktiv_im_monat(inv_id, md.jahr, md.monat)
         and inv_id in (eauto_id_set | wallbox_id_set)
     ]
-    _wb_daten = await reichere_monatszeilen_an(
+    _wb_daten, _wb_quoten = await reichere_monatszeilen_an_mit_quoten(
         db,
         anlage_id,
         [
@@ -144,29 +145,37 @@ async def get_wallbox_dashboard(
             for inv_id, md in _wb_zeilen
         ],
     )
-    eauto_imd_data: list[dict] = []
-    wb_imd_data: list[dict] = []
+    inv_daten: dict[tuple[int, int, int], dict] = {}
     for (inv_id, md), d in zip(_wb_zeilen, _wb_daten):
         # Dienstwagen / dienstliche Wallbox sind oben schon heraus: ihre Zeile
         # öffnet auch keinen Periodenmonat. Sonst verlängert sie `anzahl_monate`,
         # drückt `ladevorgaenge_pro_monat` und zieht einen Monat ohne private
         # Ladung in den gewichteten Tarif-Ø (P8).
-        if inv_id in eauto_id_set:
-            eauto_imd_data.append(d)
-        else:
-            wb_imd_data.append(d)
+        inv_daten[(inv_id, md.jahr, md.monat)] = d
         monate_set.add((md.jahr, md.monat))
 
-    emob_pool = get_emob_heimladung_canonical(
-        eauto_imd_data=eauto_imd_data,
-        wallbox_imd_data=wb_imd_data,
+    # N-555 (Konzept Regel 1: „Die Entscheidung fällt je Monat … Ein Jahr ist die
+    # Summe seiner Monate"): jeder Monat entscheidet über die eine Funktion, der
+    # Zeitraum ist die Summe. Bis 25.09.2026 wurde hier EINMAL über den ganzen
+    # Zeitraum gepoolt — eine Wallbox, die erst ab Juli misst, verdrängte damit
+    # auch die Monate davor. Dass die Wallbox-Sichten künftig die **Messung der
+    # Wallbox** zeigen, ist Stufe 2 (Konzept §6).
+    _private_wb = [w for w in wallboxen if not ist_dienstlich(w)]
+    emob_ctx = build_emob_pool_ctx(
+        inv_daten, eauto_id_set, wallbox_id_set,
+        wallbox_in_betrieb=lambda j, m: any(w.ist_aktiv_im_monat(j, m) for w in _private_wb),
+        quoten=_wb_quoten,
+        quellen_je_monat=await laufende_heimlade_quellen(
+            db, anlage_id, [*[e for e in eautos if not ist_dienstlich(e)], *_private_wb],
+        ),
     )
-    gesamt_heim_pv = emob_pool.pv_kwh
-    gesamt_heim_netz = emob_pool.netz_kwh
-    gesamt_extern_kwh = emob_pool.extern_kwh
-    gesamt_extern_euro = emob_pool.extern_euro
-    gesamt_ladevorgaenge = emob_pool.ladevorgaenge
-    gesamt_heim_ladung = emob_pool.ladung_kwh
+    _pools = [e.pool for e in emob_ctx.entscheide.values()]
+    gesamt_heim_pv = sum(p.pv_kwh for p in _pools)
+    gesamt_heim_netz = sum(p.netz_kwh for p in _pools)
+    gesamt_extern_kwh = sum(p.extern_kwh for p in _pools)
+    gesamt_extern_euro = sum(p.extern_euro for p in _pools)
+    gesamt_ladevorgaenge = sum(p.ladevorgaenge for p in _pools)
+    gesamt_heim_ladung = sum(p.ladung_kwh for p in _pools)
     anzahl_monate = len(monate_set)
 
     # PV-Anteil der Heimladung
@@ -175,10 +184,11 @@ async def get_wallbox_dashboard(
     # Kosten Heimladung (nur Netzstrom, PV ist "kostenlos").
     # ADR-002/P8: Tarif über die Monate der Periode mitteln statt den heutigen
     # zu nehmen. Hier bewusst GLEICHGEWICHTET über `monate_set`: die
-    # Heimladung kommt aus `get_emob_heimladung_canonical`, das die IMD-Dicts
-    # zu einem Pool zusammenfasst — eine Netz-kWh-Aufteilung je Monat gibt es
-    # an dieser Stelle nicht. Genauer als der heutige Tarif, gröber als das
-    # mengengewichtete Mittel im E-Auto-Dashboard.
+    # Heimladung kam bis N-555 aus EINEM Pool über den Zeitraum — eine
+    # Netz-kWh-Aufteilung je Monat gab es an dieser Stelle nicht. Seit N-555 ist
+    # sie die Summe der Monats-Entscheide; die Preisachse bleibt bewusst
+    # gleichgewichtet (N-555 ändert keine Preisregel). Genauer als der heutige
+    # Tarif, gröber als das mengengewichtete Mittel im E-Auto-Dashboard.
     # Nur die Bezugsseite: die Wallbox rechnet keinen Spread, ihre Kosten sind
     # bezogener Strom. `.bezug_cent` statt Tupel-Auspacken, damit sichtbar
     # bleibt, dass die zweite Preisseite hier absichtlich ungenutzt ist.

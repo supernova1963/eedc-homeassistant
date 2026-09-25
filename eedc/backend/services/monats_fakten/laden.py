@@ -296,6 +296,28 @@ async def lade_monats_fakten(
             await lade_tarife_je_stichtag(db, anlage_id, _offene_stichtage)
         )
 
+    # N-555 (Konzept Regel 1): der LAUFENDE Monat fragt zusätzlich, ob einem
+    # Heimlade-Feld eine Quelle zugeordnet ist — sonst stünde in Übersicht, Hubs und
+    # Jahresbericht für einen Monat, dessen Wallbox misst und noch nichts geladen hat,
+    # der Fahrverbrauch als Schätzung, während *Cockpit → Monat* 0 zeigt (gemessen in
+    # der Wirkungsmessung: 1.544 gegen 0 kWh). Eine Abfrage, nur wenn der laufende
+    # Monat gebaut wird und E-Mobilität in Betrieb ist.
+    from backend.services.emob_heimlade_quellen import (
+        lade_emob_heimlade_quellen,
+        laufender_monat,
+    )
+
+    _laufend = laufender_monat()
+    _laufend_quellen: frozenset = frozenset()
+    if _laufend in kandidaten and _im_fenster(_laufend, von, bis):
+        from backend.models.anlage import Anlage as _Anlage
+
+        _anlage = await db.get(_Anlage, anlage_id)
+        if _anlage is not None:
+            _laufend_quellen = await lade_emob_heimlade_quellen(
+                db, _anlage, investitionen, *_laufend,
+            )
+
     fakten: list[MonatsFakt] = []
     for schluessel in sorted(k for k in kandidaten if _im_fenster(k, von, bis)):
         fakten.append(
@@ -314,6 +336,7 @@ async def lade_monats_fakten(
                 tages_summe=tages_summen.get(schluessel),
                 preis_cache=preis_cache,
                 preis_messung=preis_messung,
+                heimlade_quellen=_laufend_quellen if schluessel == _laufend else frozenset(),
             )
         )
     return fakten

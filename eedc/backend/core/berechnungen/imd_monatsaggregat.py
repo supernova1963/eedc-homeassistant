@@ -50,7 +50,6 @@ from backend.core.betriebsmodus import MODUS_ABDECKUNG_FELD, MODUS_STROM_FELD
 from backend.core.betriebsmodus import HEIZEN as _HEIZEN
 from backend.core.betriebsmodus import KUEHLEN as _KUEHLEN
 from backend.core.field_definitions import (
-    get_eauto_ladung_kwh,
     get_pv_erzeugung_kwh,
     get_sonstiges_verbrauch_kwh,
     get_wp_warmwasser_kwh,
@@ -223,7 +222,6 @@ class ImdTypBeitrag:
     eauto_km: float = 0.0
     eauto_verbrauch: float = 0.0          # gemessener Fahrverbrauch
     eauto_v2h: float = 0.0
-    eauto_ladung_kanonisch: float = 0.0   # get_eauto_ladung_kwh (Vorjahr-max-Logik)
     eauto_ladung_pv_netz: float = 0.0     # ladung_pv + ladung_netz (/aggregiert)
     wallbox_ladung: float = 0.0
     wallbox_ladung_pv: float = 0.0
@@ -454,7 +452,6 @@ def imd_typ_beitrag(
             eauto_km=_f(data, "km_gefahren"),
             eauto_verbrauch=_f(data, "verbrauch_kwh"),
             eauto_v2h=_f(data, "v2h_entladung_kwh"),
-            eauto_ladung_kanonisch=get_eauto_ladung_kwh(data),
             eauto_ladung_pv_netz=_f(data, "ladung_pv_kwh") + _f(data, "ladung_netz_kwh"),
         )
 

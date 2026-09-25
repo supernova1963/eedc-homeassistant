@@ -355,6 +355,14 @@ class AktuellerMonatResponse(BaseModel):
     emob_ladung_netz_kwh: Optional[float] = None     # Netz-Anteil
     emob_ladung_extern_kwh: Optional[float] = None   # Extern (Ladesäule o.ä.)
     emob_v2h_kwh: Optional[float] = None             # V2H-Rückspeisung
+    #: N-557 (Konzept Regel 10): „Ladung gesamt" = Heimladung + Extern, soweit
+    #: Extern bekannt ist — eine **eigene** Anzeige-Größe. `emob_ladung_kwh` bleibt
+    #: die Heimladung (PV-Anteil, T-Konto, CO₂ und Community rechnen mit ihr).
+    emob_ladung_gesamt_kwh: Optional[float] = None
+    #: N-557: die **Menge** hinter `emob_verbrauch_100km` (gemessener Fahrverbrauch
+    #: bzw. Heim + Extern), damit ein Zeitraum Σ Monatswerte ÷ Σ km bilden kann,
+    #: statt die Ladung neu zu teilen (Cockpit → Jahr). `None` ohne Basis.
+    emob_verbrauch_basis_kwh: Optional[float] = None
     hat_emobilitaet: bool = False
 
     # Komponenten — BKW
@@ -397,6 +405,11 @@ class AktuellerMonatResponse(BaseModel):
     netto_ertrag_euro: Optional[float] = None
     wp_ersparnis_euro: Optional[float] = None
     emob_ersparnis_euro: Optional[float] = None
+    #: N-555 (Nebenfund 2): der Rechenweg hinter `emob_ersparnis_euro` — je Fahrzeug
+    #: die Zeile, die das T-Konto dort schon trägt (km × SEIN Vergleichsverbrauch ×
+    #: Benzinpreis des Monats). Der Client zeigte im Fallback „7/100 × 1,80 €", zwei
+    #: Werte, mit denen seit dem Drift-Audit A2 nicht mehr gerechnet wird.
+    emob_ersparnis_berechnung: Optional[str] = None
     # Sonstige Positionen aggregiert (z.B. AG-Vergütung Dienstwagen, THG-Quote,
     # Reparaturen). Detail-Zeilen pro Investition stehen in
     # investitionen_financials. Frontend addiert sonstige_netto auf

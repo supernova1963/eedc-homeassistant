@@ -126,6 +126,7 @@ from backend.core.berechnungen.emob import (
     QUELLE_LADUNG,
     EffizienzWert,
     eauto_effizienz_100km,
+    eauto_effizienz_zeitraum,
 )
 from backend.core.berechnungen.imd_monatsaggregat import (
     ImdTypBeitrag,
@@ -430,6 +431,7 @@ __all__ = [
     "QUELLE_KEINE",
     "EffizienzWert",
     "eauto_effizienz_100km",
+    "eauto_effizienz_zeitraum",
     "PV_KOMPONENTEN_PREFIXE",
     "WAERMEPUMPE_KOMPONENTEN_PREFIXE",
     "WALLBOX_KOMPONENTEN_PREFIXE",

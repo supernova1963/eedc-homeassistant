@@ -107,8 +107,11 @@ async def get_activity_kategorien():
         {"id": "scheduler", "label": "Scheduler-Jobs"},
         {"id": "mqtt", "label": "MQTT"},
         {"id": "community", "label": "Community"},
-        {"id": "sensor_mapping", "label": "Sensor-Mapping"},
+        # N-556: die id bleibt (Bestandszeilen), das Label nennt die heutige Fläche.
+        {"id": "sensor_mapping", "label": "Datenquellen-Zuordnung"},
         {"id": "ha_export", "label": "HA-Export"},
+        # N-560: Anlegen, Löschen und Ändern (Typ · Aktiv · Anschaffung · Stilllegung) einer Komponente.
+        {"id": "investitionen", "label": "Komponenten"},
     ]
 
 

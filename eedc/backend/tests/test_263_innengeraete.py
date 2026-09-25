@@ -41,6 +41,7 @@ from backend.core.field_definitions import (
     ist_zustand_feld,
 )
 from backend.models import Anlage, Investition  # noqa: F401  (Base.metadata)
+from backend.services.datenquellen_mapping_sync import feld_id
 from backend.models.investition import InvestitionMonatsdaten  # noqa: F401
 from backend.models.tages_energie_profil import (  # noqa: F401
     TagesEnergieProfil,
@@ -379,9 +380,18 @@ async def test_das_loeschen_eines_innengeraets_entfernt_seine_zuordnung(db):
             bleibt: {"strategie": "sensor", "sensor_id": "sensor.a"},
             faellt: {"strategie": "sensor", "sensor_id": "sensor.b"},
         }}},
+        # N-559: die Schreibform der Fläche (`inv_energy_<id>_<feld>`), aus derselben
+        # Quelle wie `datenquellen.py`. Bis 25.09.2026 säte diese Probe
+        # `inv:<id>:<feld>` — den Snapshot-Schlüssel, den kein Schreibweg in
+        # `quellen` legt — und prüfte damit ein Aufräumen, das an echten Daten
+        # nie etwas fand. Dazu `invertieren`, die zweite feld-zentrische Ablage.
         "quellen": {
-            f"inv:{inv.id}:{bleibt}": {"quelle": "ha_app", "entity_id": "sensor.a"},
-            f"inv:{inv.id}:{faellt}": {"quelle": "ha_app", "entity_id": "sensor.b"},
+            feld_id(("inv_energy", inv.id, bleibt)): {"quelle": "ha_app", "entity_id": "sensor.a"},
+            feld_id(("inv_energy", inv.id, faellt)): {"quelle": "ha_app", "entity_id": "sensor.b"},
+        },
+        "invertieren": {
+            feld_id(("inv_energy", inv.id, bleibt)): True,
+            feld_id(("inv_energy", inv.id, faellt)): True,
         },
     }
     await db.commit()
@@ -401,5 +411,8 @@ async def test_das_loeschen_eines_innengeraets_entfernt_seine_zuordnung(db):
     assert bleibt in felder, "eine bleibende Zuordnung darf nicht mitgelöscht werden"
     assert faellt not in felder
     quellen = anlage.sensor_mapping["quellen"]
-    assert f"inv:{inv.id}:{bleibt}" in quellen
-    assert f"inv:{inv.id}:{faellt}" not in quellen
+    assert feld_id(("inv_energy", inv.id, bleibt)) in quellen
+    assert feld_id(("inv_energy", inv.id, faellt)) not in quellen
+    invertieren = anlage.sensor_mapping["invertieren"]
+    assert feld_id(("inv_energy", inv.id, bleibt)) in invertieren
+    assert feld_id(("inv_energy", inv.id, faellt)) not in invertieren

@@ -524,17 +524,72 @@ E-Mob-Ersparnis     = Benzin_Kosten - Strom_Kosten
 
 > **G20-2 — Aggregat bei mehreren E-Autos = Σ der Einzel-Fahrzeuge:** Die Gesamt-E-Mob-Ersparnis wird als **Summe der pro Fahrzeug** gerechneten Ersparnisse gebildet — jedes E-Auto mit seinem **eigenen** Vergleichsverbrauch (L/100 km) und Benzinpreis. Sie ist NICHT ein Einmal-Lauf über die Gesamt-Kilometer mit dem Parametersatz des ersten Fahrzeugs (das überschätzte die Ersparnis, sobald zwei E-Autos unterschiedliche Vergleichsverbräuche hatten). Bei genau **einem** E-Auto ist das Ergebnis unverändert. Die Per-Fahrzeug-Zeilen (T-Konto) rechneten schon immer je Fahrzeug korrekt; nur das aggregierte Cockpit-Feld ist jetzt symmetrisch dazu.
 
-**Kanonische Heimladungs-Quelle (ab Phase 2a):** `Ladung_gesamt` und `Ladung_PV` der Heimladung kommen strukturell aus **genau einer** Quelle: existiert eine Wallbox-Investition mit Heimladung, ist sie die Quelle (Infrastruktur misst den Stromfluss am Ladepunkt); ohne Wallbox (Steckerlader/Schuko) liefert das E-Auto die Werte. Bei mehreren Wallboxen ist die Heimladung die **Summe** aller Wallbox-Ladepunkte. Diese Regel ist deterministisch (existiert eine Wallbox?), nicht magnitudenabhängig — der frühere Pool-/„größere Heimladung gewinnt"-Mechanismus entfällt. Die km-anteilige Aufteilung auf mehrere Fahrzeuge (Attribution) bleibt unverändert. Zentraler Helper: `get_emob_heimladung_canonical()`.
+**Kanonische Heimladungs-Quelle (ab Phase 2a):** `Ladung_gesamt` und `Ladung_PV` der Heimladung kommen strukturell aus **genau einer** Quelle: existiert eine Wallbox-Investition mit Heimladung, ist sie die Quelle (Infrastruktur misst den Stromfluss am Ladepunkt); ohne Wallbox (Steckerlader/Schuko) liefert das E-Auto die Werte. Bei mehreren Wallboxen ist die Heimladung die **Summe** aller Wallbox-Ladepunkte. Diese Regel ist deterministisch (existiert eine Wallbox?), nicht magnitudenabhängig — der frühere Pool-/„größere Heimladung gewinnt"-Mechanismus entfällt. Die km-anteilige Aufteilung auf mehrere Fahrzeuge (Attribution) bleibt unverändert. Zentraler Helper: `entscheide_emob_heimladung()` (`services/eauto_wirtschaftlichkeit.py`; `get_emob_heimladung_canonical()` ist seine Kurzform).
+
+#### Heimladung und Fahrverbrauch — zwei verschiedene Mengen (ab N-555)
+
+Am E-Auto gibt es zwei Energiemengen, die leicht zu verwechseln sind:
+
+- **Heimladung** — was zu Hause ins Auto geladen wird. Gemessen an der **Wallbox** („Ladung gesamt", „Ladung PV")
+  und, wo vorhanden, am Auto („Heim: PV", „Heim: Netz", der alte Gesamtwert `ladung_kwh`). Das sind die
+  **Heimlade-Felder** (`core/field_definitions/heimladung.py::HEIMLADE_FELDER`).
+- **Fahrverbrauch** — das Feld **„Verbrauch"** am E-Auto (`verbrauch_kwh`): was das Auto beim Fahren aus seiner
+  Batterie verbraucht. Daraus rechnet eedc die kWh/100 km und beim Plug-in-Hybrid den elektrischen Anteil.
+
+**Regel 1 — der Fahrverbrauch springt nur ein, wenn über die Heimladung nichts bekannt ist:** Er zählt nur dann als
+Heimladung, wenn für die Heimladung **weder ein Wert erfasst** (auch **0** ist ein Wert) **noch** — im laufenden Monat,
+am Tag, in der Stunde — **eine Quelle zugeordnet** ist (HA-Sensor oder angekommene MQTT-Zählerstände; eine Quelle
+„keine" zählt nicht). Dann ist er eine **Schätzung**: ausdrücklich so gekennzeichnet (`quelle = "schaetzung"`), nie
+gespeichert. Abgeschlossene Monate entscheiden nur nach dem gespeicherten Wert; ergänzt *Cockpit → Monat* einen Monat
+ohne Monatsabschluss aus der HA-Statistik, zählt deren Wert wie ein gespeicherter, auch 0, sofern die Statistik Daten
+hat. Die Entscheidung fällt **je Monat**; ein Jahr, eine Übersicht, ein Hub-Zeitraum ist die **Summe seiner Monate**.
+
+**Regel 2-Ü — wer die Heimladung trägt** (je Monat, private Fahrzeuge):
+
+```
+1. Private Wallbox in Betrieb mit Heimladung > 0                    ⇒ Wallbox
+2. Sonst private E-Autos mit „Heim: PV"/„Heim: Netz"                 ⇒ diese (Steckerlader)
+   (der alte Gesamtwert `ladung_kwh` am Auto nur OHNE Wallbox in Betrieb)
+3. Sonst: irgendein Heimlade-Feld trägt einen Wert (auch 0)
+   oder — im laufenden Monat — eine Quelle                           ⇒ Heimladung 0
+4. Sonst                                                             ⇒ Fahrverbrauch je Auto (Schätzung)
+```
+
+Beispiel (gemeldet, Johnny_1993): Wallbox mit HA-Sensor, 0 kWh im September, am Auto nur „Verbrauch" 1.364 kWh ⇒
+Schritt 3 ⇒ Heimladung **0**. Der Verbrauch zählt nur für die kWh/100 km. Eine Schätzung bekommt denselben aus der
+Tagesebene abgeleiteten PV-Anteil wie jede andere Heimladung (s. „PV-Anteil der Heimladung" unten).
+
+Der **Dienstwagen** bleibt in dieser Stufe unverändert: seine dienstliche Menge aus seinen Feldern, sonst sein
+Fahrverbrauch als Netzstrom (als Schätzung gekennzeichnet, `EmobFakten.dienstlich_geschaetzt`).
+
+**Tag und Stunde** wählen über **eine** Auswahl (`snapshot/komponenten_beitraege.py`): Ist eine Wallbox mit Zähler
+**in Betrieb**, zählt die Wallbox, und die Heimlade-Zähler der Autos zählen nicht zusätzlich — auch nicht in der Stunde.
+Sonst zählt je Auto „Heim: PV" + „Heim: Netz", sonst der alte Gesamtwert, sonst „Heim: PV" allein, und der
+Fahrverbrauch nur, wenn keines davon eine Quelle hat. Gewählt wird nach der **Quelle**, nicht nach den Tagesdaten;
+die Summe der Stunden ergibt den Tag.
 
 **Ø Verbrauch (kWh/100 km) — Quellen-Vorrang:** Die Effizienz-KPI in E-Auto-Dashboard, Monatsbericht und Komponenten-Auswertung kommt aus **einem** Helper (`core/berechnungen/emob.py`, `eauto_effizienz_100km`):
 
 ```
-1. gemessener Fahrverbrauch:  verbrauch_kwh ÷ km × 100     (Vorrang, exakt)
-2. sonst Näherung aus Ladung: Ladung_gesamt ÷ km × 100     (Fallback)
+1. gemessener Fahrverbrauch:  verbrauch_kwh ÷ km × 100                  (Vorrang, exakt)
+2. sonst Näherung aus Ladung: (Heimladung + Extern) ÷ km × 100          (Fallback)
 3. sonst:                     —   (nie 0,0 erfinden)
 ```
 
-Die Ladungs-Näherung **überschätzt** den echten Fahrverbrauch (AC-Ladung an der Wallbox enthält Ladeverluste ~10–15 %, blendet SoC-Drift + nicht erfasste Fremdladung aus) — in der UI als „≈ aus Ladung (inkl. Ladeverluste)" gelabelt. Vorteil: funktioniert auch ohne Verbrauchssensor (den die wenigsten Fahrzeuge liefern). Alle Read-Sites zeigen denselben Wert; das Aggregat rechnet über die **Summen** (Σverbrauch / Σladung / Σkm), nicht über das Mittel der Monats-Prozente. Symmetrie abgesichert durch `test_emob_readsite_symmetrie.py`.
+Die Ladungs-Näherung **überschätzt** den echten Fahrverbrauch (AC-Ladung an der Wallbox enthält Ladeverluste ~10–15 %, blendet SoC-Drift + nicht erfasste Fremdladung aus) — in der UI als „≈ aus Ladung (inkl. Ladeverluste)" gelabelt. Vorteil: funktioniert auch ohne Verbrauchssensor (den die wenigsten Fahrzeuge liefern). Alle Read-Sites zeigen denselben Wert. Symmetrie abgesichert durch `test_emob_readsite_symmetrie.py` und `test_n555_fahrverbrauch_bleibt_fahrverbrauch.py`.
+
+**Zeitraum (Jahr, Übersicht, Hub, Auswertungen) — ab N-557:** Jeder Monat entscheidet für sich (Regel oben), der
+Zeitraum ist die **Summe der Monatswerte geteilt durch die Summe der Kilometer**
+(`eauto_effizienz_zeitraum`; im Client für *Cockpit → Jahr* gespiegelt in `lib/emobEffizienz.ts`). Monate ohne jede
+Energiemenge zählen weder im Zähler noch im Nenner. „gemessen" steht nur, wenn **jeder** Monat mit Kilometern gemessen
+ist, sonst „Näherung über die Ladung". Bis v4.0.50 teilte das Aggregat den Fahrverbrauch der Monate **mit** Sensor
+durch die Kilometer **aller** Monate — mit einem Verbrauchssensor ab Juli also rund die halbe Zahl, beschriftet
+„gemessen"; *Cockpit → Jahr* bildete sogar Heimladung ÷ km.
+
+**„Ladung gesamt" — ab N-557:** Heimladung **plus Extern**, soweit Extern bekannt ist (mit Sensor im laufenden Monat
+sofort, bei Pflege von Hand ab dem Monatsabschluss); darunter „davon extern … kWh". Eine **eigene** Anzeige-Größe
+(`emob_ladung_gesamt_kwh`): die Heimladung (`emob_ladung_kwh`) behält ihre Bedeutung, der **PV-Anteil** bleibt auf
+die Heimladung bezogen, T-Konto, CO₂ und Community rechnen weiter mit ihr. Extern liegt außerhalb der Hausbilanz.
 
 **Hinweis Kraftstoffpreis (ab v3.17.0):** Im Cockpit werden weiterhin die hardcodierten Defaults verwendet. In der **Finanz-Prognose** ([Auswertungen → Finanzen](HANDBUCH_BEDIENUNG.md#41-finanzen)), im **HA-Sensor-Export** und im **PDF-Finanzbericht** wird stattdessen pro Monat der echte Kraftstoffpreis aus `Monatsdaten.kraftstoffpreis_euro` verwendet (Quelle: EU Weekly Oil Bulletin). Fallback auf den statischen `benzinpreis_euro`-Parameter der Komponente wenn kein Monatswert vorhanden.
 

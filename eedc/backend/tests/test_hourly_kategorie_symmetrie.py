@@ -331,10 +331,11 @@ def test_k3_eauto_doppelmapping_teilt_eine_either_or_gruppe():
     }}
     hourly = investition_hourly_eintraege(inv, inv_data)
 
+    # N-555 (Konzept Regel 6): die Substanz — kein Doppelzählen — bleibt; die
+    # Form ist die Auswahl nach Quelle statt einer Either-Or-Gruppe nach
+    # Tagesdaten. Es bleibt genau EIN Eintrag, die Ladung.
     eauto_entries = [he for he in hourly if he.kategorie == "verbrauch_eauto"]
-    assert len(eauto_entries) == 2, eauto_entries
-    gruppen = {he.fallback_gruppe for he in eauto_entries}
-    assert gruppen == {f"eauto_either_or_1"}, (
-        f"Doppelt gemappte E-Auto-Felder müssen EINE Either-Or-Gruppe teilen, "
-        f"sonst Doppelzählung — gefunden: {gruppen}"
+    assert [he.feld for he in eauto_entries] == ["ladung_kwh"], (
+        f"Doppelt gemappte E-Auto-Felder dürfen nur EINMAL zählen — "
+        f"gefunden: {eauto_entries}"
     )

@@ -353,7 +353,7 @@ async def komponenten_detail(*, _wp_abgrenzung_je_funktion, _wp_funktion, _wp_ke
     return {k: _loc[k] for k in ("mf_bkw", "mf_emob", "mf_sonstiges", "mf_wp", "speicher_auslastung", "speicher_auslastungs_basis", "speicher_eff_ladepreis", "speicher_eff_ladepreis_quelle", "speicher_ersparnis", "speicher_imd_ladepreis", "speicher_kapazitaet", "speicher_ladung_netz", "speicher_soc_drift_flag", "speicher_vollzyklen", "speicher_wirkungsgrad", "speicher_wirkungsgrad_quelle", "wp_az_funktion", "wp_az_kuehlen", "wp_heizung", "wp_modus_abdeckung", "wp_modus_bezug", "wp_modus_entfeuchten", "wp_modus_gemessen", "wp_modus_heizen", "wp_modus_kuehlen", "wp_modus_lueften", "wp_modus_rest", "wp_modus_warmwasser", "wp_nutz_entfeuchten", "wp_nutz_lueften", "wp_strom_heizen", "wp_strom_warmwasser", "wp_warmwasser",) if k in _loc}
 
 
-def geraete_sicht(*, _wp_kennzahlen_je_geraet, get_val, investitionen, mf_bkw, mf_emob, mf_sonstiges, netzbezug_preis_effektiv_cent, speicher_eff_ladepreis, speicher_imd_ladepreis, speicher_ladung_netz, wp_arbeitszahl, wp_az_funktion, wp_az_kuehlen):
+def geraete_sicht(*, _wp_kennzahlen_je_geraet, get_val, emob_entscheid=None, investitionen, mf_bkw, mf_emob, mf_sonstiges, netzbezug_preis_effektiv_cent, speicher_eff_ladepreis, speicher_imd_ladepreis, speicher_ladung_netz, wp_arbeitszahl, wp_az_funktion, wp_az_kuehlen):
     """D-Sicht: die Tabelle je Geraet und der EINE Kasten; Sonstiges-Geraete, E-Mob-Mengen, BKW-Eigenverbrauch.
 
     Aus `get_aktueller_monat` Zeilen 1151-1278 (Stand vor dem Umzug) byte-identisch herausgeloest — Vorlage 2.
@@ -393,6 +393,17 @@ def geraete_sicht(*, _wp_kennzahlen_je_geraet, get_val, investitionen, mf_bkw, m
             emob_ladung_extern = round(mf_emob.extern_kwh, 2)
         if mf_emob.v2h_entladung_kwh > 0:
             emob_v2h = round(mf_emob.v2h_entladung_kwh, 2)
+    # N-555/N-557: hat die Route den Monat selbst entschieden (laufender Monat,
+    # Monat ohne gemessene gespeicherte Heimladung), gehören Netz und Extern zu
+    # DIESEM Entscheid — sonst stünde der Netz-Anteil einer verworfenen Schätzung
+    # neben einer Heimladung von 0, und Extern käme erst mit dem Monatsabschluss.
+    if emob_entscheid is not None:
+        _pool = emob_entscheid.pool
+        # Die Trias kommt geschlossen aus EINER Entscheidung (#262).
+        emob_pv = round(_pool.pv_kwh, 2) if _pool.pv_kwh > 0 else None
+        emob_ladung_netz = round(_pool.netz_kwh, 2) if _pool.netz_kwh > 0 else None
+        if _pool.extern_kwh > 0:
+            emob_ladung_extern = round(_pool.extern_kwh, 2)
 
     # BKW: Eigenverbrauch
     bkw_eigenverbrauch = None

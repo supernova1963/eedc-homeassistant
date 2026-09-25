@@ -110,7 +110,11 @@ def test_eauto():
     assert b.eauto_km == 1500.0
     assert b.eauto_verbrauch == 300.0
     assert b.eauto_v2h == 50.0
-    assert b.eauto_ladung_kanonisch == 300.0  # ladung_kwh fehlt → verbrauch_kwh-Legacy
+    # N-555: Das Feld `eauto_ladung_kanonisch` ist entfernt — es hatte keinen
+    # Produktiv-Leser und trug bis 25.09.2026 den still eingesetzten
+    # Fahrverbrauch (300). Die Ladung steht in PV + Netz, der Fahrverbrauch in
+    # `eauto_verbrauch`.
+    assert not hasattr(b, "eauto_ladung_kanonisch")
     assert b.eauto_ladung_pv_netz == 300.0    # 200 + 100
 
 

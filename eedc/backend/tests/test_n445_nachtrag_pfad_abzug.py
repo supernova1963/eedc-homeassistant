@@ -246,7 +246,8 @@ async def test_ha_export_nachtrag_kuerzt_den_f5_nenner_nicht(db):
     assert sv.value == pytest.approx(3.789, abs=0.001), (
         f"Der Sensor rechnet mit dem falschen Nenner: {sv.value}"
     )
-    assert sv.berechnung == "3600 / 950"
+    # N-555 (§12): deutsche Schreibweise über `core/zahlenformat.py`.
+    assert sv.berechnung == "3.600 / 950"
 
 
 async def test_ha_export_nachtrag_ohne_f5_bleibt_der_abzug(db):
@@ -255,7 +256,7 @@ async def test_ha_export_nachtrag_ohne_f5_bleibt_der_abzug(db):
     sv = await _wp_arbeitszahl_sensor(db, inv)
 
     assert sv.value == pytest.approx(3.913, abs=0.001)
-    assert sv.berechnung == "3600 / 920"
+    assert sv.berechnung == "3.600 / 920"
 
 
 async def test_ha_export_und_monats_fakten_sagen_dasselbe(db):

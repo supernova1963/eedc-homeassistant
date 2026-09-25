@@ -213,6 +213,7 @@ def wallbox_deckt_ladung_ab(
     sensor_mapping: Optional[dict],
     *,
     ist_verfuegbar: Optional[Callable[[Any, str], bool]] = None,
+    datum: Optional[date] = None,
 ) -> bool:
     """Trägt irgendeine Wallbox der Anlage einen kWh-Ladezähler? (N-196)
 
@@ -227,16 +228,24 @@ def wallbox_deckt_ladung_ab(
     die falsche Quelle, das war der Befund von #262.
 
     Args:
-        investitionen: alle Investitionen der Anlage (der Aufrufer filtert
-            nicht — Aktivität spielt für die Existenz eines Zählers keine
-            Rolle, und ein stillgelegtes Gerät hat keine Tageswerte mehr).
+        investitionen: alle Investitionen der Anlage.
         sensor_mapping: ``anlage.sensor_mapping``.
         ist_verfuegbar: ``(inv, feld) -> bool`` für den MQTT-/Standalone-Pfad,
             der seine Verfügbarkeit nicht aus dem Sensor-Mapping zieht.
+        datum: der Tag. **N-555 (Konzept Regel 6): nur eine Wallbox in Betrieb
+            zählt.** Hier stand bis 25.09.2026 *„Aktivität spielt für die Existenz
+            eines Zählers keine Rolle, und ein stillgelegtes Gerät hat keine
+            Tageswerte mehr"* — die zweite Hälfte stimmt, die erste nicht: eine
+            stillgelegte oder noch nicht angeschaffte Wallbox mit zugeordnetem
+            Zähler nahm dem E-Auto seine Tages-Ladung, obwohl sie an diesem Tag
+            nichts gemessen hat (Stecker-Laden vor der Wallbox, nach ihrem
+            Ausbau). ``None`` ⇒ ohne Zeitbezug wie bisher (Einstufung der Fläche).
     """
     inv_map = ((sensor_mapping or {}).get("investitionen") or {})
     for inv in investitionen or ():
         if getattr(inv, "typ", None) != "wallbox":
+            continue
+        if datum is not None and hasattr(inv, "ist_aktiv_an") and not inv.ist_aktiv_an(datum):
             continue
         if ist_verfuegbar is not None:
             if ist_verfuegbar(inv, "ladung_kwh"):
@@ -248,6 +257,38 @@ def wallbox_deckt_ladung_ab(
     return False
 
 
+def eauto_heimlade_felder_nach_quelle(
+    hat_quelle: Callable[[str], bool],
+) -> tuple[str, ...]:
+    """Die Felder, die am Tag/in der Stunde die Heimladung EINES E-Autos tragen.
+
+    Die eine Reihenfolge (N-555, Konzept Regel 6; Fable-Runde 6, C3), gewählt
+    nach der **Quelle** eines Felds, nie nach seinen Tagesdaten:
+
+    1. „Heim: Netz" hat eine Quelle ⇒ „Heim: PV" + „Heim: Netz" (die PV-Zeile nur,
+       wenn sie selbst eine hat) — dieselbe Lesart wie der Monat
+       (`get_emob_pv_netz_kwh`: ein Netz-Wert gewinnt vor `Total − PV`).
+    2. Sonst der alte Gesamtwert ``ladung_kwh`` (er lebt: Zuordnungs-Assistent bis
+       04.04.2026, MQTT-Topic, „Aus HA laden").
+    3. Sonst „Heim: PV" allein (Netz 0, wie im Monat).
+    4. Sonst der **Fahrverbrauch** ``verbrauch_kwh`` — die erlaubte Schätzung ohne
+       jede Heimlade-Quelle; er fällt in der Stunde an, in der sein Zähler steigt.
+
+    Neben einer Wallbox mit Zähler in Betrieb ruft der Aufrufer diese Funktion
+    gar nicht (``wallbox_deckt_ladung``): dort zählt die Wallbox, und keines dieser
+    Felder zusätzlich — auch nicht in der Stunde.
+    """
+    if hat_quelle("ladung_netz_kwh"):
+        return tuple(f for f in ("ladung_pv_kwh", "ladung_netz_kwh") if hat_quelle(f))
+    if hat_quelle("ladung_kwh"):
+        return ("ladung_kwh",)
+    if hat_quelle("ladung_pv_kwh"):
+        return ("ladung_pv_kwh",)
+    if hat_quelle("verbrauch_kwh"):
+        return ("verbrauch_kwh",)
+    return ()
+
+
 def investition_beitraege(
     inv,
     sensor_mapping_for_inv: dict,
@@ -255,6 +296,7 @@ def investition_beitraege(
     ist_verfuegbar: Optional[Callable[[str], bool]] = None,
     wallbox_deckt_ladung: bool = False,
     kandidaten: Optional[Iterable[str]] = None,
+    auswahl_verfuegbar: Optional[Callable[[str], bool]] = None,
 ) -> list[KomponentenBeitrag]:
     """Per-Typ-Beiträge einer Investition zur `komponenten_kwh`.
 
@@ -279,6 +321,12 @@ def investition_beitraege(
             dann gibt es sein Gerätefeld gar nicht. Default (None) = die
             Schlüssel des Mapping-Dicts — bitgleich zu vor dem 15.09.2026, weil
             die übrigen Zweige nur exakte Feldnamen kennen.
+        auswahl_verfuegbar: N-555 — die Verfügbarkeit, nach der die Heimlade-Felder
+            eines E-Autos **gewählt** werden (HA-Sensor **oder** MQTT, also
+            `feld_hat_zaehler`). Der Stundenpfad sammelt HA- und MQTT-Einträge in
+            zwei Durchgängen, jeder mit seiner eigenen ``ist_verfuegbar``; ohne
+            gemeinsame Wahl nähme der HA-Durchgang „Heim: PV/Netz" und der
+            MQTT-Durchgang daneben den Fahrverbrauch. Default: ``ist_verfuegbar``.
 
     Returns:
         Liste der Beiträge. Leer wenn keinem der zulässigen Felder ein
@@ -470,12 +518,18 @@ def investition_beitraege(
         # von zwei Pfaden kennt, ist die nächste Drift-Quelle.
         if wallbox_deckt_ladung:
             return []
-        # Either-Or: erst ladung_kwh, sonst fallback verbrauch_kwh — vom
-        # Aggregator über `fallback_gruppe` ausgewertet (genau ein Delta
-        # pro Gruppe).
-        gruppe = f"eauto_either_or_{inv_id_str}"
-        _add("ladung_kwh", fallback_gruppe=gruppe)
-        _add("verbrauch_kwh", fallback_gruppe=gruppe)
+        # ⭐ N-555 (Konzept Regel 6): die Heimladung DIESES Autos aus seinen
+        # Heimlade-Feldern, sein Fahrverbrauch nur, wenn keines davon eine Quelle
+        # hat. Gewählt wird nach der QUELLE (`ist_verfuegbar` = `feld_hat_zaehler`),
+        # nicht nach den Tagesdaten — Tag, Stunde und Monat fragen dasselbe.
+        #
+        # ⛔ Hier stand bis 25.09.2026 eine Either-Or-Gruppe `ladung_kwh` →
+        # `verbrauch_kwh`, aufgelöst nach „hat der Sensor heute Daten". Zwei
+        # Folgen: „Heim: PV"/„Heim: Netz" gingen am Tag gar nicht in die Ladung
+        # des Autos ein (nur in die PV/Netz-Keys), und ein stummer Ladezähler
+        # ließ den Fahrverbrauch einspringen, obwohl die Ladung gemessen wird.
+        for feld in eauto_heimlade_felder_nach_quelle(auswahl_verfuegbar or ist_verfuegbar):
+            _add(feld)
 
     elif typ == "sonstiges":
         # Pro Investition genau ein Komponenten-Wert, immer mit positivem
@@ -543,6 +597,11 @@ def erwartete_komponenten_keys(
     erwartet: dict[str, Any] = {
         b.target_key: None for b in basis_beitraege(sensor_mapping)
     }
+    # N-555: dieselbe Wallbox-Regel wie der Lauf — sonst verspräche die Menge
+    # eine E-Auto-Ladung, die der Tag neben einer Wallbox nie schreibt.
+    _wb_deckt = wallbox_deckt_ladung_ab(
+        investitionen_by_id.values(), sensor_mapping, datum=tag,
+    )
     investitionen = (sensor_mapping or {}).get("investitionen") or {}
     for inv_id_str, inv_data in investitionen.items():
         if not isinstance(inv_data, dict):
@@ -552,7 +611,7 @@ def erwartete_komponenten_keys(
             continue
         if not inv.ist_aktiv_an(tag):
             continue
-        for b in investition_beitraege(inv, inv_data):
+        for b in investition_beitraege(inv, inv_data, wallbox_deckt_ladung=_wb_deckt):
             erwartet[b.target_key] = inv
     return erwartet
 
@@ -682,6 +741,8 @@ def investition_hourly_eintraege(
     *,
     ist_verfuegbar: Optional[Callable[[str], bool]] = None,
     kandidaten: Optional[Iterable[str]] = None,
+    wallbox_deckt_ladung: bool = False,
+    auswahl_verfuegbar: Optional[Callable[[str], bool]] = None,
 ) -> list[HourlyEintrag]:
     """Hourly-Einträge einer Investition — Whitelist + Either-Or + parent-Skip
     aus `investition_beitraege` (Daily-SoT), gemappt auf die Energiefluss-
@@ -695,6 +756,11 @@ def investition_hourly_eintraege(
     `ist_verfuegbar` wird an `investition_beitraege` durchgereicht — der MQTT-/
     Standalone-Pfad (#317) nutzt das, um dieselbe Normalisierung quellen-agnostisch
     zu fahren.
+
+    `wallbox_deckt_ladung` (N-555, Konzept Regel 6): dieselbe Wallbox-Regel wie am
+    Tag. Bis 25.09.2026 fehlte sie in der Stunde — neben einer Wallbox mit Zähler
+    zählte das Feld „Verbrauch" des E-Autos in jeder Stunde zusätzlich als Ladung
+    (N-196 kannte nur den Tag), und Σ Stunden ≠ Tag.
     """
     typ = getattr(inv, "typ", None)
     parameter = getattr(inv, "parameter", None)
@@ -702,6 +768,8 @@ def investition_hourly_eintraege(
     for b in investition_beitraege(
         inv, sensor_mapping_for_inv,
         ist_verfuegbar=ist_verfuegbar, kandidaten=kandidaten,
+        wallbox_deckt_ladung=wallbox_deckt_ladung,
+        auswahl_verfuegbar=auswahl_verfuegbar,
     ):
         kat = _categorize_counter(b.feld, typ, parameter)
         if kat:
@@ -714,6 +782,9 @@ def mqtt_hourly_eintraege(
     mqtt_sensor_keys: Iterable[str],
     investitionen_by_id: dict,
     investitionen_map: dict,
+    *,
+    wallbox_deckt_ladung: bool = False,
+    auswahl_je_inv: Optional[Callable[[str], Callable[[str], bool]]] = None,
 ) -> list[tuple[str, str, Optional[str]]]:
     """MQTT-/Standalone-Counter normalisiert wie der HA-gemappte Pfad (#317).
 
@@ -783,6 +854,8 @@ def mqtt_hourly_eintraege(
             # in KEINEM `felder`-Dict — seine Kandidaten sind genau die Keys,
             # die der Broker geliefert hat (N-328b, eine Ebene weiter).
             kandidaten=sorted(felder_vorhanden),
+            wallbox_deckt_ladung=wallbox_deckt_ladung,
+            auswahl_verfuegbar=auswahl_je_inv(str(inv_id)) if auswahl_je_inv else None,
         ):
             out.append((f"inv:{inv_id}:{he.feld}", he.kategorie, he.fallback_gruppe))
     return out

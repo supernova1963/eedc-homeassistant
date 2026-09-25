@@ -120,6 +120,8 @@ import math
 from dataclasses import dataclass
 from typing import Iterable
 
+from backend.core.zahlenformat import fmt_zahl
+
 
 def kapitaleinsatz_euro(
     *,
@@ -238,7 +240,7 @@ def annahme_dauer_text(*, betriebskosten_jahr_euro: float = 0.0) -> str:
     """
     if not betriebskosten_jahr_euro:
         return "ohne künftige Instandhaltung"
-    betrag = f"{betriebskosten_jahr_euro:_.2f}".replace(".", ",").replace("_", ".")
+    betrag = fmt_zahl(betriebskosten_jahr_euro, 2)
     return f"inkl. {betrag} €/Jahr Betriebskosten, ohne weitere Instandhaltung"
 
 
@@ -257,15 +259,15 @@ def erklaerung_jahres_ersparnis(
     hier ebenso, sobald er gepflegt ist.
     """
     teile = [
-        f"({p.summe_euro:.2f} ÷ {p.monate}) × 12 [{p.bezeichnung}]"
+        f"({fmt_zahl(p.summe_euro, 2)} ÷ {p.monate}) × 12 [{p.bezeichnung}]"
         for p in posten
         if p.monate > 0 and p.summe_euro
     ]
-    text = " + ".join(teile) if teile else "0.00"
+    text = " + ".join(teile) if teile else "0,00"
     if jahres_ertraege_euro:
-        text += f" + {jahres_ertraege_euro:.2f} (Ertrag/Jahr an Investitionen)"
+        text += f" + {fmt_zahl(jahres_ertraege_euro, 2)} (Ertrag/Jahr an Investitionen)"
     if betriebskosten_jahr_euro:
-        text += f" − {betriebskosten_jahr_euro:.2f} (Betriebskosten/Jahr)"
+        text += f" − {fmt_zahl(betriebskosten_jahr_euro, 2)} (Betriebskosten/Jahr)"
     return text
 
 

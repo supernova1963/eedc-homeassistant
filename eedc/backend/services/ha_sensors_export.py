@@ -494,7 +494,9 @@ E_AUTO_SENSOREN = [
         unit="kWh/100km",
         icon="mdi:gauge",
         category=SensorCategory.E_AUTO,
-        formel="Gesamtverbrauch ÷ km × 100",
+        # N-555 F-3 (Konzept Regel 10): dieselbe Regel wie die App — je Monat
+        # gemessener Fahrverbrauch, sonst Heim + Extern; Σ Monatswerte ÷ Σ km.
+        formel="Σ Monatswerte (Fahrverbrauch, sonst Heim + Extern) ÷ Σ km × 100",
         state_class="measurement",
     ),
     SensorDefinition(
@@ -503,7 +505,10 @@ E_AUTO_SENSOREN = [
         unit="%",
         icon="mdi:solar-power",
         category=SensorCategory.E_AUTO,
-        formel="PV-Ladung ÷ Gesamt-Ladung × 100",
+        # N-557 (Konzept Regel 10): der Wert ist der PV-Anteil der HEIMladung
+        # (PV + Netz); „Gesamt-Ladung" hieß in der App seither Heim + Extern.
+        # Beschriftung berichtigt, Wert unverändert (kein Sprung in der LTS).
+        formel="PV-Heimladung ÷ Heimladung (PV + Netz) × 100",
         state_class="measurement",
     ),
     SensorDefinition(

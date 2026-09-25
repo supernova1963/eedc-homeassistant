@@ -29,10 +29,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from backend.services.datenquellen_mapping_sync import split_inv
+from backend.services.datenquellen_mapping_sync import INV_FELD_PRAEFIXE, split_inv
 
-# Feld-ID-Präfixe der Datenquellen-Fläche, die eine Investitions-ID tragen.
-INV_PREFIXE = ("inv_energy_", "inv_live_")
+# Feld-ID-Präfixe der Datenquellen-Fläche, die eine Investitions-ID tragen —
+# N-559: aus der gemeinsamen Quelle, keine eigene Konstante.
+INV_PREFIXE = INV_FELD_PRAEFIXE
 
 
 @dataclass

@@ -298,9 +298,13 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
       label: 'eMob-Ersparnis vs. Verbrenner',
       wert: d.emob_ersparnis_euro,
       color: 'text-purple-500',
-      formel: '(km × 7 L/100km × 1,80 €/L) − Netzladung × Strompreis',
+      // N-555 (Nebenfund 2): hier stand „7 L/100km × 1,80 €/L" — zwei feste
+      // Werte, mit denen seit dem Drift-Audit A2 nicht mehr gerechnet wird (die
+      // Rechnung nimmt je Fahrzeug SEINEN Vergleichsverbrauch und den Benzinpreis
+      // des Monats). ⚠ Wortgleich mit `inv_formel` in `aktueller_monat/tkonto.py`.
+      formel: '(km × Verbrauch × Benzinpreis) − Netzladung × Strompreis',
       berechnung: d.emob_km != null ? [
-        `${fmt(d.emob_km, 0)} km × 7/100 × 1,80 €`,
+        d.emob_ersparnis_berechnung ?? `${fmt(d.emob_km, 0)} km × Vergleichsverbrauch × Benzinpreis`,
         d.emob_ladung_netz_kwh != null
           ? `− ${fmt(d.emob_ladung_netz_kwh, 1)} kWh Netz × ${fmtCalc(netzPreis, 2)} ct`
           : `− ${fmt(d.emob_ladung_kwh, 1)} kWh × ${fmtCalc(netzPreis, 2)} ct`,

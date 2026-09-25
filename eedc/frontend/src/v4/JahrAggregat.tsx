@@ -18,6 +18,7 @@
  */
 import { MONAT_KURZ } from '../lib/constants'
 import { speicherWirkungsgrad } from '../lib/speicherWirkungsgrad'
+import { emobEffizienzZeitraum } from '../lib/emobEffizienz'
 import type { AktuellerMonatResponse, InvestitionFinancialDetail, SonstigesGeraet } from '../api/aktuellerMonat'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 import type { CockpitUebersicht } from '../api/cockpit'
@@ -204,6 +205,11 @@ export function baueJahrAlsMonat(
   const wpStrom = summe(f('wp_strom_kwh'))
   const emobLadung = summe(f('emob_ladung_kwh'))
   const emobKm = summe(f('emob_km'))
+  const emobEffizienz = emobEffizienzZeitraum(monate.map((m) => ({
+    basis_kwh: m.emob_verbrauch_basis_kwh,
+    km: m.emob_km,
+    quelle: m.emob_verbrauch_quelle,
+  })))
 
   // Effektiver Netzbezugspreis je Monat — dieselbe Vorrang-Regel wie in der
   // Kachel und im Backend (`resolve_netzbezug_preis_cent`): der mitgeschriebene
@@ -437,9 +443,14 @@ export function baueJahrAlsMonat(
     // E-Mobilität
     emob_ladung_kwh: emobLadung,
     emob_km: emobKm,
-    emob_verbrauch_100km: quote(emobLadung, emobKm),
-    emob_verbrauch_quelle: monate.some((m) => m.emob_verbrauch_quelle === 'gemessen') ? 'gemessen'
-      : monate.some((m) => m.emob_verbrauch_quelle === 'ladung') ? 'ladung' : 'keine',
+    // N-557 (Konzept Regel 10): Σ Monatswerte ÷ Σ km über den Spiegel des
+    // Layer-SoT. Hier stand `quote(Σ Heimladung, Σ km)`, beschriftet „gemessen",
+    // sobald EIN Monat gemessen war — mit Verbrauchssensor also eine Ladungs-
+    // Quote unter dem Etikett einer Messung.
+    emob_verbrauch_100km: emobEffizienz.wert,
+    emob_verbrauch_quelle: emobEffizienz.quelle,
+    emob_verbrauch_basis_kwh: summe(f('emob_verbrauch_basis_kwh')),
+    emob_ladung_gesamt_kwh: summe(f('emob_ladung_gesamt_kwh')),
     emob_ladung_pv_kwh: summe(f('emob_ladung_pv_kwh')),
     emob_ladung_netz_kwh: summe(f('emob_ladung_netz_kwh')),
     emob_ladung_extern_kwh: summe(f('emob_ladung_extern_kwh')),

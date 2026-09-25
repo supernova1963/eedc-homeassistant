@@ -189,19 +189,32 @@ def test_wallbox_nur_ladung_kwh():
 # ─── E-Auto ───────────────────────────────────────────────────────────────
 
 def test_eauto_either_or_ladung_dann_verbrauch():
+    """Ladezähler UND Fahrverbrauch zugeordnet ⇒ genau EIN Beitrag: die Ladung.
+
+    N-555 (Konzept Regel 6): gewählt wird nach der QUELLE, nicht mehr über eine
+    Either-Or-Gruppe nach Tagesdaten. Die Substanz dieser Probe bleibt — das Auto
+    zählt nur einmal, und die Ladung geht vor dem Fahrverbrauch —, nur die Form
+    ist eine andere: der Fahrverbrauch wird gar nicht erst Kandidat, wenn ein
+    Heimlade-Feld eine Quelle hat (bis 25.09.2026 sprang er ein, sobald der
+    Ladezähler an einem Tag stumm war).
+    """
     inv = _inv(1, "e-auto")
     sm = {"felder": {
         "ladung_kwh": _sensor("sensor.ea_lade"),
         "verbrauch_kwh": _sensor("sensor.ea_verbr"),
     }}
     b = investition_beitraege(inv, sm)
-    assert len(b) == 2
-    assert b[0].feld == "ladung_kwh"
-    assert b[1].feld == "verbrauch_kwh"
-    # gleiche fallback_gruppe
-    assert b[0].fallback_gruppe == b[1].fallback_gruppe
-    assert b[0].fallback_gruppe is not None
+    assert [x.feld for x in b] == ["ladung_kwh"]
     assert all(x.target_key == "eauto_1" for x in b)
+
+
+def test_eauto_verbrauch_nur_ohne_heimlade_quelle():
+    """N-555: ohne jedes Heimlade-Feld mit Quelle ist der Fahrverbrauch die
+    erlaubte Tages-/Stunden-Schätzung (Konzept Regel 6)."""
+    inv = _inv(1, "e-auto")
+    sm = {"felder": {"verbrauch_kwh": _sensor("sensor.ea_verbr")}}
+    b = investition_beitraege(inv, sm)
+    assert [x.feld for x in b] == ["verbrauch_kwh"]
 
 
 def test_eauto_skip_wenn_parent_wallbox():
@@ -211,7 +224,14 @@ def test_eauto_skip_wenn_parent_wallbox():
 
 
 def test_eauto_ladung_pv_netz_nicht_addiert():
-    """Wenn jemand ladung_pv_kwh/ladung_netz_kwh mappt: ignorieren."""
+    """Gesamt UND PV/Netz zugeordnet ⇒ die Ladung zählt EINMAL, nie Gesamt + Teile.
+
+    N-555 (Konzept Regel 6; Fable-Runde 6, C3): „Heim: PV" + „Heim: Netz" SIND
+    die Heimladung des Autos — mit Netz-Quelle gehen sie vor dem alten
+    Gesamtwert (dieselbe Lesart wie der Monat, `get_emob_pv_netz_kwh`). Bis
+    25.09.2026 wurden sie am Tag ignoriert; die Substanz dieser Probe — keine
+    Doppelzählung von Gesamt und Teilen — bleibt.
+    """
     inv = _inv(1, "e-auto")
     sm = {"felder": {
         "ladung_kwh": _sensor("sensor.ea"),
@@ -219,9 +239,9 @@ def test_eauto_ladung_pv_netz_nicht_addiert():
         "ladung_netz_kwh": _sensor("sensor.ea_netz"),
     }}
     b = investition_beitraege(inv, sm)
-    # Nur Either-Or für ladung_kwh + verbrauch_kwh — beide Split-Felder raus
     felder = {x.feld for x in b}
-    assert felder == {"ladung_kwh"}  # verbrauch_kwh nicht gemappt
+    assert felder == {"ladung_pv_kwh", "ladung_netz_kwh"}
+    assert "ladung_kwh" not in felder
 
 
 # ─── Sonstiges ─────────────────────────────────────────────────────────────

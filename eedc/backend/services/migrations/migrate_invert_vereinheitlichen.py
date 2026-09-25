@@ -37,7 +37,9 @@ logger = logging.getLogger(__name__)
 
 
 def _feld_id(match_key) -> str:
-    return "_".join(str(x) for x in match_key)
+    # N-559: dieselbe Form wie die Fläche, aus der gemeinsamen Quelle.
+    from backend.services.datenquellen_mapping_sync import feld_id
+    return feld_id(match_key)
 
 
 async def migrate_invert_vereinheitlichen(session: AsyncSession) -> None:

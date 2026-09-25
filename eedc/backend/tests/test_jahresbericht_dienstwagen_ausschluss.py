@@ -77,8 +77,14 @@ async def test_jahresbericht_ignoriert_dienstwagen(db):
     assert emob["km"] == pytest.approx(10000.0)          # nur privat, nicht 50.000
     assert emob["ladung_kwh"] == pytest.approx(2000.0)   # nur privat, nicht 7.000
     assert emob["v2h_kwh"] == pytest.approx(300.0)       # Dienst-V2H raus
-    # CO₂ (emob_km × 0,12) nur auf privater km-Basis
-    assert ctx["co2"]["emob_kg"] == pytest.approx(10000.0 * 0.12, abs=0.1)
+    # CO₂ nur auf privater Basis. N-555 (Nebenfund 1): nicht mehr `emob_km × 0,12`,
+    # sondern die eine Rechenregel (`berechne_co2_bilanz`, wie das Cockpit):
+    # Verbrenner 10.000 km × 7,5 L/100 km × 2,37 kg/L − Netzladung 800 kWh × 0,38.
+    # Die Substanz der Probe — der Dienstwagen (40.000 km, 3.000 kWh Netz) zählt
+    # nicht mit — bleibt; mit ihm stünde hier ein Vielfaches.
+    assert ctx["co2"]["emob_kg"] == pytest.approx(
+        10000.0 / 100 * 7.5 * 2.37 - 800.0 * 0.38, abs=0.1,
+    )
 
 
 async def test_jahresbericht_emob_deckungsgleich_cockpit(db):

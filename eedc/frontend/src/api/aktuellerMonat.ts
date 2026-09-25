@@ -212,6 +212,9 @@ export interface AktuellerMonatResponse {
   wp_ersparnis_vorbehalt?: string | null
   /** B6/Y-3: der Rechenweg hinter der Ersparnis, aus dem Layer-Ergebnis. */
   wp_ersparnis_berechnung?: string | null
+  /** N-555: der Rechenweg hinter `emob_ersparnis_euro` je Fahrzeug, aus dem Backend
+   *  (km × Vergleichsverbrauch × Benzinpreis des Monats) — kein fester Default im Client. */
+  emob_ersparnis_berechnung?: string | null
   // #191: Strom-Aufteilung Heizung/Warmwasser. Nur befüllt wenn mindestens
   // eine WP-Investition `getrennte_strommessung=true` hat.
   wp_strom_heizen_kwh: number | null
@@ -295,6 +298,13 @@ export interface AktuellerMonatResponse {
   emob_ladung_netz_kwh: number | null
   emob_ladung_extern_kwh: number | null
   emob_v2h_kwh: number | null
+  /** N-557: „Ladung gesamt" = Heimladung + Extern, soweit Extern bekannt ist —
+   *  eine eigene Anzeige-Größe; `emob_ladung_kwh` bleibt die Heimladung (PV-Anteil,
+   *  T-Konto rechnen mit ihr). Optional: der Tag kennt kein Extern. */
+  emob_ladung_gesamt_kwh?: number | null
+  /** N-557: die Menge hinter `emob_verbrauch_100km` — damit ein Zeitraum
+   *  Σ Monatswerte ÷ Σ km bilden kann (`lib/emobEffizienz.ts`). */
+  emob_verbrauch_basis_kwh?: number | null
   hat_emobilitaet: boolean
 
   // Komponenten — BKW

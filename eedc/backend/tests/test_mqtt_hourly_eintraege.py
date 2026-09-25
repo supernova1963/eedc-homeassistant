@@ -40,21 +40,25 @@ def test_ist_verfuegbar_ersetzt_sensor_mapping_check():
     inv = _inv(1, "e-auto")
     vorhanden = {"ladung_kwh", "verbrauch_kwh"}
     b = investition_beitraege(inv, {}, ist_verfuegbar=lambda f: f in vorhanden)
-    assert [x.feld for x in b] == ["ladung_kwh", "verbrauch_kwh"]
-    assert b[0].fallback_gruppe == b[1].fallback_gruppe is not None
+    # N-555: Auswahl nach Quelle — die Ladung, nicht zusätzlich der Fahrverbrauch.
+    assert [x.feld for x in b] == ["ladung_kwh"]
 
 
 # ─── mqtt_hourly_eintraege ──────────────────────────────────────────────────
 
 def test_eauto_doppelmapping_bekommt_either_or_gruppe():
-    """#317-Kern: E-Auto mit ladung_kwh UND verbrauch_kwh per MQTT → beide
-    Einträge teilen eine fallback_gruppe (vorher None → keine Dedup)."""
+    """#317-Kern: E-Auto mit ladung_kwh UND verbrauch_kwh per MQTT → es zählt
+    genau EIN Eintrag (keine Doppelzählung).
+
+    N-555: nicht mehr über eine Either-Or-Gruppe nach Tagesdaten, sondern über
+    die Auswahl nach Quelle — die Ladung geht vor, der Fahrverbrauch wird nicht
+    Kandidat (Konzept Regel 6). Die Substanz (#317: kein Doppelzählen per MQTT)
+    bleibt.
+    """
     inv = _inv(1, "e-auto")
     sks = ["inv:1:ladung_kwh", "inv:1:verbrauch_kwh"]
     eintraege = mqtt_hourly_eintraege(sks, {"1": inv}, {})
-    assert len(eintraege) == 2
-    gruppen = {e[2] for e in eintraege}
-    assert len(gruppen) == 1 and None not in gruppen
+    assert [e[0] for e in eintraege] == ["inv:1:ladung_kwh"]
 
 
 def test_eauto_doppelmapping_resolve_nimmt_nur_einen():
@@ -113,8 +117,8 @@ def test_mehrere_invs_unabhaengig():
         "inv:3:ladung_kwh", "inv:3:verbrauch_kwh",
     ]
     eintraege = mqtt_hourly_eintraege(sks, {"1": ea1, "3": ea2}, {})
-    gruppen = {e[2] for e in eintraege}
-    assert len(gruppen) == 2  # eine Gruppe pro E-Auto
+    # N-555: je E-Auto genau ein Eintrag (Auswahl nach Quelle, je Auto getrennt).
+    assert sorted(e[0] for e in eintraege) == ["inv:1:ladung_kwh", "inv:3:ladung_kwh"]
 
 
 # ─── N-529: Reihenfolge haengt nicht am Hash-Seed ────────────────────────────

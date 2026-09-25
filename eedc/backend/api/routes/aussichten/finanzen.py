@@ -61,17 +61,9 @@ from backend.core.berechnungen.ust_eigenverbrauch import (
 )
 from backend.core.berechnungen.waermepumpe_kennzahl import heizwaerme_kwh, waerme_gesamt_kwh
 from backend.core.field_definitions import (
-    get_emob_pv_netz_kwh,
     get_wp_strom_kwh,
     get_wp_warmwasser_kwh,
 )
-from backend.services.eauto_wirtschaftlichkeit import (
-    berechne_eauto_ersparnis_periode,
-    build_emob_pool_ctx,
-    eigener_verbrauch_l_100km,
-    emob_month_share,
-)
-from backend.services.emob_ladeanteil import reichere_monatszeilen_an
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,

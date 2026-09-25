@@ -39,6 +39,7 @@ from backend.services.snapshot.komponenten_beitraege import (
     investition_hourly_eintraege,
     mqtt_hourly_eintraege,
     resolve_either_or_eintraege,
+    wallbox_deckt_ladung_ab,
 )
 from backend.services.snapshot.writer import snapshot_anlage, snapshot_anlage_5min
 
@@ -130,6 +131,24 @@ async def get_reaggregate_preview(
                 seen_keys.add(sk)
 
     investitionen_map = sensor_mapping.get("investitionen", {}) or {}
+    # N-555 (Konzept Regel 6): dieselbe Auswahl wie der Stunden-Aggregator —
+    # Wallbox-Regel in der Stunde, E-Auto-Felder über HA und MQTT gemeinsam gewählt.
+    _mqtt_sk_set = set(mqtt_sks_alle)
+
+    def _hat_zaehler(inv_id: str, feld: str) -> bool:
+        _felder = ((investitionen_map.get(inv_id) or {}).get("felder") or {})
+        return feld_hat_zaehler(
+            _felder.get(feld), f"inv:{inv_id}:{feld}", quellen_energy, _mqtt_sk_set,
+        )
+
+    def _auswahl(inv_id: str):
+        return lambda feld: _hat_zaehler(inv_id, feld)
+
+    _wb_deckt = wallbox_deckt_ladung_ab(
+        investitionen_by_id.values(), sensor_mapping,
+        ist_verfuegbar=lambda inv, feld: _hat_zaehler(str(inv.id), feld),
+        datum=datum,
+    )
     for inv_id_str, inv_data in investitionen_map.items():
         if not isinstance(inv_data, dict):
             continue
@@ -137,7 +156,10 @@ async def get_reaggregate_preview(
         if inv is None:
             continue
         felder = inv_data.get("felder", {}) or {}
-        for he in investition_hourly_eintraege(inv, inv_data):
+        for he in investition_hourly_eintraege(
+            inv, inv_data, wallbox_deckt_ladung=_wb_deckt,
+            auswahl_verfuegbar=_auswahl(str(inv_id_str)),
+        ):
             cfg = felder.get(he.feld)
             if isinstance(cfg, dict):
                 eid = cfg.get("sensor_id")
@@ -154,7 +176,8 @@ async def get_reaggregate_preview(
     # doppelt summiert — deckungsgleich mit dem Snapshot-Hourly-Schreibwert.
     mqtt_sks = [sk for sk in mqtt_sks_alle if sk not in seen_keys]
     for sk, kat, grp in mqtt_hourly_eintraege(
-        mqtt_sks, investitionen_by_id, investitionen_map
+        mqtt_sks, investitionen_by_id, investitionen_map,
+        wallbox_deckt_ladung=_wb_deckt, auswahl_je_inv=_auswahl,
     ):
         if sk in seen_keys:
             continue

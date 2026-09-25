@@ -20,8 +20,12 @@ from backend.core.berechnungen import (
     spezifischer_ertrag_kwh_kwp,
 )
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
-from backend.services.eauto_wirtschaftlichkeit import compute_emob_pool_attribution
-from backend.services.emob_ladeanteil import reichere_monatszeilen_an
+from backend.services.eauto_wirtschaftlichkeit import (
+    compute_emob_pool_attribution,
+    entscheide_emob_heimladung,
+)
+from backend.services.emob_ladeanteil import reichere_monatszeilen_an_mit_quoten
+from backend.services.emob_heimlade_quellen import laufende_heimlade_quellen
 from backend.services.monats_fakten import SonstigesFakten
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
@@ -300,7 +304,7 @@ async def t_konto_je_investition(*, _zt_cache, allgemein_tarif, anlage_id, db, e
             and i.id in imd_by_inv
             and i.typ in ("e-auto", "wallbox")
         ]
-        _emob_daten = await reichere_monatszeilen_an(
+        _emob_daten, _emob_quoten = await reichere_monatszeilen_an_mit_quoten(
             db,
             anlage_id,
             [
@@ -317,6 +321,21 @@ async def t_konto_je_investition(*, _zt_cache, allgemein_tarif, anlage_id, db, e
         emob_pool_attr = compute_emob_pool_attribution(
             eauto_imd_data=eauto_imd_data,
             wallbox_imd_data=wb_imd_data,
+        )
+        # N-555: der Entscheid des Monats — dieselbe Funktion wie die Schicht.
+        emob_entscheid = entscheide_emob_heimladung(
+            eauto_je_inv={i.id: imd_by_inv[i.id] for i in _emob_invs if i.typ == "e-auto"},
+            wallbox_zeilen=wb_imd_data,
+            wallbox_in_betrieb=bool(wb_imd_data) or any(
+                i.typ == "wallbox" and not ist_dienstlich(i)
+                and i.ist_aktiv_im_monat(jahr, monat)
+                for i in investitionen
+            ),
+            pv_quote=_emob_quoten.get((jahr, monat)),
+            # Nur im laufenden Monat nicht leer (Regel 1).
+            heimlade_quellen=(await laufende_heimlade_quellen(
+                db, anlage_id, investitionen,
+            )).get((jahr, monat), frozenset()),
         )
 
         for inv in investitionen:
@@ -352,6 +371,7 @@ async def t_konto_je_investition(*, _zt_cache, allgemein_tarif, anlage_id, db, e
                 monats_gaspreis=monats_gaspreis,
                 monats_benzinpreis=monats_benzinpreis,
                 emob_pool_attr=emob_pool_attr,
+                emob_entscheid=emob_entscheid,
             )
             if detail is not None:
                 investitionen_financials.append(detail)
@@ -369,7 +389,7 @@ async def t_konto_je_investition(*, _zt_cache, allgemein_tarif, anlage_id, db, e
     return {k: _loc[k] for k in ("investitionen_financials", "speicher_ersparnis",) if k in _loc}
 
 
-def emob_aggregat_und_kennzahlen(*, anlage, einspeise_erloes, emob_ersparnis, ev_ersparnis, get_val, investitionen, investitionen_financials, jahr, monat, netzbezug_kosten, pv, wp_ersparnis):
+def emob_aggregat_und_kennzahlen(*, anlage, einspeise_erloes, emob_ladung_extern=None, emob_ersparnis, ev_ersparnis, get_val, investitionen, investitionen_financials, jahr, monat, netzbezug_kosten, pv, wp_ersparnis):
     """G20-2: eMob-Ersparnis-Aggregat = Summe der Fahrzeug-Zeilen, Gesamtnettoertrag, E-Auto-Effizienz, spezifischer Ertrag.
 
     Aus `get_aktueller_monat` Zeilen 1931-1990 (Stand vor dem Umzug) byte-identisch herausgeloest — Vorlage 2.
@@ -389,6 +409,12 @@ def emob_aggregat_und_kennzahlen(*, anlage, einspeise_erloes, emob_ersparnis, ev
     ]
     if _emob_rows:
         emob_ersparnis = round(sum(d.ersparnis_euro for d in _emob_rows), 2)
+        # N-555 (Nebenfund 2): der Rechenweg dazu aus denselben Zeilen — mit den
+        # Werten, mit denen gerechnet wurde, statt fester Defaults im Client.
+        emob_ersparnis_berechnung = "\n".join(
+            f"{d.bezeichnung}: {d.berechnung}" if len(_emob_rows) > 1 else d.berechnung
+            for d in _emob_rows if d.berechnung
+        ) or None
 
     # Gesamtnettoertrag jetzt bilden (emob_ersparnis = Summe der Fahrzeug-Zeilen).
     if einspeise_erloes is not None and ev_ersparnis is not None and netzbezug_kosten is not None:
@@ -400,11 +426,21 @@ def emob_aggregat_und_kennzahlen(*, anlage, einspeise_erloes, emob_ersparnis, ev
             2,
         )
 
+    # N-557 (Konzept Regel 10): „Ladung gesamt" = Heimladung + Extern, soweit
+    # Extern bekannt ist. Eine eigene Größe — `emob_ladung_kwh` bleibt Heim.
+    _heim = get_val("emob_ladung_kwh")
+    emob_ladung_gesamt = (
+        round((_heim or 0) + (emob_ladung_extern or 0), 2)
+        if _heim is not None or emob_ladung_extern is not None else None
+    )
+
     # Ø Verbrauch (kWh/100 km) via zentralem Helper aus den FINALEN (ggf. connector-
     # überschriebenen) Werten — gemessener Fahrverbrauch hat Vorrang vor Ladung.
+    # N-557: die Näherung ist Heim + Extern, wie der Vertrag des Helfers es verlangt
+    # (`core/berechnungen/emob.py`); bis 25.09.2026 bekam er hier nur die Heimladung.
     emob_eff = eauto_effizienz_100km(
         get_val("emob_verbrauch_kwh") or 0,
-        get_val("emob_ladung_kwh") or 0,
+        emob_ladung_gesamt or 0,
         get_val("emob_km") or 0,
     )
 
@@ -434,5 +470,5 @@ def emob_aggregat_und_kennzahlen(*, anlage, einspeise_erloes, emob_ersparnis, ev
         ),
     )
     _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
-    return {k: _loc[k] for k in ("emob_eff", "emob_ersparnis", "gesamtnettoertrag", "spez_ertrag",) if k in _loc}
+    return {k: _loc[k] for k in ("emob_eff", "emob_ersparnis", "emob_ersparnis_berechnung", "emob_ladung_gesamt", "gesamtnettoertrag", "spez_ertrag",) if k in _loc}
 

@@ -10,6 +10,7 @@ Speicher- und Letzter-Import-Sensoren aus den berechneten Größen sowie die Pro
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from datetime import date
+from backend.core.zahlenformat import fmt_zahl
 from backend.core.berechnungen.kapitalrechnung import (
     annahme_dauer_text,
     erklaerung_jahres_ersparnis,
@@ -131,25 +132,25 @@ async def sensorwerte_erstellen(
             value = netzbezug
         elif sensor.key == "gesamtverbrauch_kwh":
             value = gesamtverbrauch
-            berechnung = f"{eigenverbrauch:.0f} + {netzbezug:.0f}"
+            berechnung = f"{fmt_zahl(eigenverbrauch, 0)} + {fmt_zahl(netzbezug, 0)}"
         elif sensor.key == "autarkie_prozent":
             value = autarkie
-            berechnung = f"{eigenverbrauch:.0f} ÷ {gesamtverbrauch:.0f} × 100"
+            berechnung = f"{fmt_zahl(eigenverbrauch, 0)} ÷ {fmt_zahl(gesamtverbrauch, 0)} × 100"
         elif sensor.key == "eigenverbrauch_quote_prozent":
             value = ev_quote
             # DI-2-B: Nenner = Netzpunkt-Erzeugung (PV inkl. BKW + sonstige
             # Erzeuger), deckungsgleich mit der Cockpit-EV-Quote.
-            berechnung = f"{eigenverbrauch:.0f} ÷ {erzeugung_bilanz:.0f} × 100"
+            berechnung = f"{fmt_zahl(eigenverbrauch, 0)} ÷ {fmt_zahl(erzeugung_bilanz, 0)} × 100"
         elif sensor.key == "spezifischer_ertrag_kwh_kwp":
             value = spez_ertrag if spez_ertrag else None
             if value is not None:
                 berechnung = (
-                    f"{pv_erzeugung:.0f} kWh annualisiert "
+                    f"{fmt_zahl(pv_erzeugung, 0)} kWh annualisiert "
                     f"(saisonal gewichtet, wie Cockpit)"
                 )
         elif sensor.key == "netto_ertrag_euro":
             value = netto_ertrag
-            berechnung = f"{einspeise_erloes:.2f} + {ev_ersparnis:.2f} + {sonstige_netto_gesamt:.2f} (sonstige)"
+            berechnung = f"{fmt_zahl(einspeise_erloes, 2)} + {fmt_zahl(ev_ersparnis, 2)} + {fmt_zahl(sonstige_netto_gesamt, 2)} (sonstige)"
         elif sensor.key == "einspeise_erloes_euro":
             value = einspeise_erloes
             if strompreis and getattr(strompreis, "einspeisung_variabel", False):
@@ -157,15 +158,15 @@ async def sensorwerte_erstellen(
                 # Monatssatz gerechnet — ein einzelner Satz im Text wäre
                 # eine Behauptung, die die Zahl nicht deckt.
                 berechnung = (
-                    f"{einspeisung:.0f} kWh × Monatssatz "
+                    f"{fmt_zahl(einspeisung, 0)} kWh × Monatssatz "
                     f"(variable Vergütung, je Monat aufgelöst)"
                 )
             elif strompreis:
-                berechnung = f"{einspeisung:.0f} × {strompreis.einspeiseverguetung_cent_kwh:.2f} ct/kWh"
+                berechnung = f"{fmt_zahl(einspeisung, 0)} × {fmt_zahl(strompreis.einspeiseverguetung_cent_kwh, 2)} ct/kWh"
         elif sensor.key == "eigenverbrauch_ersparnis_euro":
             value = ev_ersparnis
             if strompreis:
-                berechnung = f"{eigenverbrauch:.0f} × {strompreis.netzbezug_arbeitspreis_cent_kwh:.2f} ct/kWh"
+                berechnung = f"{fmt_zahl(eigenverbrauch, 0)} × {fmt_zahl(strompreis.netzbezug_arbeitspreis_cent_kwh, 2)} ct/kWh"
         elif sensor.key == "co2_ersparnis_kg":
             value = co2_ersparnis
             berechnung = "PV-Eigenverbrauch + Wärmepumpe + E-Mobilität (vermiedenes CO₂)"
@@ -203,7 +204,7 @@ async def sensorwerte_erstellen(
         elif sensor.key == "roi_prozent":
             if roi_prozent is not None:
                 value = roi_prozent
-                berechnung = f"{jahres_ersparnis:.2f} ÷ {kapitaleinsatz:.2f} × 100"
+                berechnung = f"{fmt_zahl(jahres_ersparnis, 2)} ÷ {fmt_zahl(kapitaleinsatz, 2)} × 100"
         elif sensor.key == "amortisation_jahre":
             if amortisation_jahre is not None:
                 value = amortisation_jahre
@@ -211,17 +212,17 @@ async def sensorwerte_erstellen(
                 # solange sonstige Positionen ihn von den relevanten Kosten
                 # unterscheiden — sonst bliebe die Differenz unerklärt (N-212).
                 if sonstige_ausgaben_gesamt or sonstige_ertraege_gesamt:
-                    _nenner = f"{relevante_kosten:.2f}"
+                    _nenner = f"{fmt_zahl(relevante_kosten, 2)}"
                     if sonstige_ausgaben_gesamt:
-                        _nenner += f" + {sonstige_ausgaben_gesamt:.2f} sonstige Ausgaben"
+                        _nenner += f" + {fmt_zahl(sonstige_ausgaben_gesamt, 2)} sonstige Ausgaben"
                     # Bauschritt 7: die Erträge mindern den Nenner und werden
                     # deshalb genauso ausgeschrieben — sonst bliebe die
                     # Differenz zum Ergebnis unerklärt (N-212).
                     if sonstige_ertraege_gesamt:
-                        _nenner += f" − {sonstige_ertraege_gesamt:.2f} sonstige Erträge"
-                    berechnung = f"({_nenner}) ÷ {jahres_ersparnis:.2f}"
+                        _nenner += f" − {fmt_zahl(sonstige_ertraege_gesamt, 2)} sonstige Erträge"
+                    berechnung = f"({_nenner}) ÷ {fmt_zahl(jahres_ersparnis, 2)}"
                 else:
-                    berechnung = f"{kapitaleinsatz:.2f} ÷ {jahres_ersparnis:.2f}"
+                    berechnung = f"{fmt_zahl(kapitaleinsatz, 2)} ÷ {fmt_zahl(jahres_ersparnis, 2)}"
                 # Konzept §5/§8-6: die Annahme steht im selben Attribut wie der
                 # Rechenweg. Ein HA-Sensor hat keinen Tooltip — wer die Zahl in
                 # ein Dashboard hängt, sieht sonst eine Dauer ohne jede
@@ -244,11 +245,11 @@ async def sensorwerte_erstellen(
             if sensor.key == "speicher_zyklen":
                 if speicher_zyklen is not None:
                     value = speicher_zyklen
-                    berechnung = f"{batterie_entladung:.0f} ÷ {speicher_kapazitaet:.1f}"
+                    berechnung = f"{fmt_zahl(batterie_entladung, 0)} ÷ {fmt_zahl(speicher_kapazitaet, 1)}"
             elif sensor.key == "speicher_effizienz_prozent":
                 if speicher_effizienz is not None:
                     value = speicher_effizienz
-                    berechnung = f"{batterie_entladung:.0f} ÷ {batterie_ladung:.0f} × 100"
+                    berechnung = f"{fmt_zahl(batterie_entladung, 0)} ÷ {fmt_zahl(batterie_ladung, 0)} × 100"
 
             if value is not None:
                 sensor_values.append(SensorValue(

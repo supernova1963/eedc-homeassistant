@@ -57,6 +57,7 @@ __all__ = [
     "reichere_ladezeilen_an",
     "lade_abgeleitete_ladeanteile",
     "reichere_monatszeilen_an",
+    "reichere_monatszeilen_an_mit_quoten",
 ]
 
 #: Eine Monatszeile, wie die Direkt-Leser sie halten: Monat, Quelle, Rohdict.
@@ -177,6 +178,12 @@ def reichere_ladezeilen_an(
             if zeile.get("ladung_pv_kwh") is not None:
                 ergebnis.append(zeile)
                 continue
+            # N-555: die Basis ist die **Ladung** der Zeile, nie ihr Fahrverbrauch.
+            # Bis 25.09.2026 fiel eine reine „Verbrauch"-Zeile über die Lese-Hilfe
+            # hier hinein und kam mit „Heim: PV/Netz" wieder heraus — danach sah sie
+            # aus wie eine gemessene Heimladung. Die Schätzung bekommt ihren
+            # PV-Anteil jetzt in `entscheide_emob_heimladung` (`pv_quote`), mit
+            # derselben Quote und derselben Zahl, aber als Schätzung erkennbar.
             pv, netz = get_emob_pv_netz_kwh(
                 zeile, total_kwh=get_eauto_ladung_kwh(zeile)
             )
@@ -231,6 +238,27 @@ async def reichere_monatszeilen_an(
     anlage_id: int,
     zeilen: Sequence[LadeZeile],
 ) -> list[dict]:
+    """Die Zeilen mit abgeleitetem PV-Anteil — Kurzform ohne die Quoten.
+
+    Siehe ``reichere_monatszeilen_an_mit_quoten``.
+    """
+    daten, _quoten = await reichere_monatszeilen_an_mit_quoten(db, anlage_id, zeilen)
+    return daten
+
+
+def _hat_schaetzbaren_fahrverbrauch(zeilen: Sequence[LadeZeile], idx: Iterable[int]) -> bool:
+    """Trägt ein E-Auto des Monats einen Fahrverbrauch (Kandidat der Schätzung)?"""
+    return any(
+        not zeilen[i][1] and float((zeilen[i][2] or {}).get("verbrauch_kwh") or 0) > 0
+        for i in idx
+    )
+
+
+async def reichere_monatszeilen_an_mit_quoten(
+    db: AsyncSession,
+    anlage_id: int,
+    zeilen: Sequence[LadeZeile],
+) -> tuple[list[dict], dict[MonatsSchluessel, float]]:
     """Der bequeme Weg für Sichten, die ``InvestitionMonatsdaten`` selbst laden.
 
     Nimmt die Zeilen **einer Sicht** in beliebiger Reihenfolge, gruppiert sie
@@ -256,12 +284,15 @@ async def reichere_monatszeilen_an(
             bereits nach Anschaffung/Stilllegung und Dienstwagen gefiltert.
 
     Returns:
-        Die ``verbrauch_daten``-Dicts in Eingangsreihenfolge; angereichert, wo
-        die Ableitung greift, sonst das unveränderte Original.
+        ``(daten, quoten)`` — die ``verbrauch_daten``-Dicts in Eingangsreihenfolge
+        (angereichert, wo die Ableitung greift, sonst das unveränderte Original)
+        und die abgeleitete Quote je Monat, soweit geladen. Die Quote braucht die
+        Schätzung aus dem Fahrverbrauch (N-555, ``build_emob_pool_ctx(quoten=…)``):
+        sie bekommt denselben PV-Anteil wie vorher, aber in der einen Funktion.
     """
     zeilen = list(zeilen)
     if not zeilen:
-        return []
+        return [], {}
 
     je_monat: dict[MonatsSchluessel, tuple[list[int], list[int]]] = {}
     for index, (schluessel, ist_wallbox, _daten) in enumerate(zeilen):
@@ -277,13 +308,19 @@ async def reichere_monatszeilen_an(
         if not hat_gepflegten_pv_anteil(
             [zeilen[i][2] for i in eauto_idx], [zeilen[i][2] for i in wallbox_idx]
         )
-        and any(
-            get_eauto_ladung_kwh(zeilen[i][2] or {}) > 0
-            for i in (*eauto_idx, *wallbox_idx)
+        and (
+            any(
+                get_eauto_ladung_kwh(zeilen[i][2] or {}) > 0
+                for i in (*eauto_idx, *wallbox_idx)
+            )
+            # N-555: auch ein Monat, der nur geschätzt werden kann, braucht seine
+            # Quote — vorher lief er über den Fahrverbrauch-Ersatz der Lese-Hilfe
+            # in die Bedingung darüber.
+            or _hat_schaetzbaren_fahrverbrauch(zeilen, eauto_idx)
         )
     ]
     if not offen:
-        return [daten for _s, _w, daten in zeilen]
+        return [daten for _s, _w, daten in zeilen], {}
 
     quoten = await lade_abgeleitete_ladeanteile(
         db, anlage_id, von=min(offen), bis=max(offen)
@@ -304,4 +341,4 @@ async def reichere_monatszeilen_an(
             ergebnis[i] = daten
         for i, daten in zip(wallbox_idx, wb):
             ergebnis[i] = daten
-    return ergebnis
+    return ergebnis, {k: q for k, q in quoten.items() if k in set(offen)}

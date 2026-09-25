@@ -109,8 +109,10 @@ async def test_wp_spezialtarif_wird_nicht_zum_allgemeinen_preis(db):
                verwendung="waermepumpe"),
     ])
     text = await _genannter_bezugspreis(db, anlage)
-    assert "30.00 ct/kWh" in text, text
-    assert "20.00 ct/kWh" not in text, text
+    # N-555 (§12): deutsche Schreibweise über `core/zahlenformat.py` — auch die
+    # Gegenrichtung („not in") ist umgestellt, sonst wäre sie leer.
+    assert "30,00 ct/kWh" in text, text
+    assert "20,00 ct/kWh" not in text, text
 
 
 async def test_wallbox_spezialtarif_ebenso(db):
@@ -120,7 +122,7 @@ async def test_wallbox_spezialtarif_ebenso(db):
         _tarif(gueltig_ab=date(2025, 1, 1), netzbezug_arbeitspreis_cent_kwh=22.0,
                verwendung="wallbox"),
     ])
-    assert "30.00 ct/kWh" in await _genannter_bezugspreis(db, anlage)
+    assert "30,00 ct/kWh" in await _genannter_bezugspreis(db, anlage)
 
 
 # ── Der verlorene `gueltig_bis`-Filter ───────────────────────────────────
@@ -136,8 +138,8 @@ async def test_ausgelaufener_tarif_gilt_nicht_weiter(db):
                netzbezug_arbeitspreis_cent_kwh=99.0),
     ])
     text = await _genannter_bezugspreis(db, anlage)
-    assert "30.00 ct/kWh" in text, text
-    assert "99.00 ct/kWh" not in text, text
+    assert "30,00 ct/kWh" in text, text
+    assert "99,00 ct/kWh" not in text, text
 
 
 async def test_zukuenftiger_tarif_gilt_noch_nicht(db):
@@ -147,8 +149,8 @@ async def test_zukuenftiger_tarif_gilt_noch_nicht(db):
         _tarif(gueltig_ab=KUENFTIG_AB, netzbezug_arbeitspreis_cent_kwh=50.0),
     ])
     text = await _genannter_bezugspreis(db, anlage)
-    assert "30.00 ct/kWh" in text, text
-    assert "50.00 ct/kWh" not in text, text
+    assert "30,00 ct/kWh" in text, text
+    assert "50,00 ct/kWh" not in text, text
 
 
 # ── Gegenrichtung: der normale Fall bleibt normal ────────────────────────
@@ -161,7 +163,7 @@ async def test_juengster_gueltiger_allgemeintarif_gewinnt_weiter(db):
         _tarif(gueltig_ab=date(2025, 1, 1), netzbezug_arbeitspreis_cent_kwh=32.0),
     ])
     text = await _genannter_bezugspreis(db, anlage)
-    assert "32.00 ct/kWh" in text, text
+    assert "32,00 ct/kWh" in text, text
 
 
 # ── Die zweite Fundstelle: die Route, die alle Sensoren ausliefert ───────

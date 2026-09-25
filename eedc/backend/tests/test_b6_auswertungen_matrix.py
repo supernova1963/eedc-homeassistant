@@ -94,7 +94,8 @@ async def test_y3_der_rechenweg_ergibt_die_zahl_die_daneben_steht(db):
     det = next(f for f in d.investitionen_financials if f.typ == "waermepumpe")
     assert det.ersparnis_euro == pytest.approx(110.0, abs=0.01)
     assert "Kühlstrom" in det.berechnung and "Zusatzkosten" in det.berechnung, det.berechnung
-    assert "300.0 Kühlstrom" in det.berechnung and "10.00 € Zusatzkosten" in det.berechnung
+    # N-555 (§11): deutsche Schreibweise über `core/zahlenformat.py`.
+    assert "300,0 Kühlstrom" in det.berechnung and "10,00 € Zusatzkosten" in det.berechnung
     assert "Kühlstrom" in det.formel and "Zusatzkosten" in det.formel
     assert d.wp_ersparnis_berechnung == det.berechnung
 
@@ -107,7 +108,9 @@ async def test_y3_ohne_kuehlstrom_und_zusatzkosten_bleibt_der_text_schlicht(db):
     d = await get_aktueller_monat(a.id, jahr=JAHR, monat=MONAT, db=db)
     det = next(f for f in d.investitionen_financials if f.typ == "waermepumpe")
     assert "Kühlstrom" not in det.berechnung and "Zusatzkosten" not in det.berechnung
-    assert det.berechnung.startswith("3500.0 kWh / 0.90 × 12.0 ct − 1000.0 kWh × 30.00 ct")
+    # N-555 (§11): deutsche Schreibweise — der Docstring von `wp_ersparnis_berechnung`
+    # versprach sie schon immer.
+    assert det.berechnung.startswith("3.500,0 kWh / 0,90 × 12,0 ct − 1.000,0 kWh × 30,00 ct")
 
 
 @pytest.mark.asyncio

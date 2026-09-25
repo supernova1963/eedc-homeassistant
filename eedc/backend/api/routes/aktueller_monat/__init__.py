@@ -29,6 +29,7 @@ from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
+from backend.core.investition_parameter import ist_dienstlich
 from backend.core.berechnungen.zeittarif import hat_zeitfenster
 from backend.api.routes.connector import _calc_month_delta
 from backend.core.berechnungen.waermepumpe_kennzahl import hub_hilft
@@ -92,6 +93,7 @@ from backend.api.routes.aktueller_monat.aggregation import (  # Vorlage 2
     _WP_WAERME_D1_SUFFIX,
     aggregiere_typen,
     berechne_bilanzwerte,
+    emob_heimlade_quellen,
     emob_heimladung_pool,
     extrahiere_werte,
 )
@@ -180,6 +182,53 @@ async def _collect_ha_statistics_data(anlage: Anlage, jahr: int, monat: int) -> 
             resolved[feld_name] = (sensor_wert.differenz, quelle)
 
     return resolved
+
+
+async def _ha_heimlade_felder_mit_daten(anlage: Anlage, investitionen, jahr: int, monat: int) -> set[str]:
+    """Die Heimlade-Felder, für die die HA-Statistik im Monat **Daten** hat — auch mit 0.
+
+    N-555, Konzept Regel 1: *„Ergänzt eine Sicht einen abgeschlossenen Monat ohne
+    Monatsabschluss aus der HA-Statistik (Cockpit → Monat), zählt deren Wert wie ein
+    gespeicherter, auch 0, sofern die Statistik für den Monat Daten hat."*
+    ``_collect_ha_statistics_data`` führt als Quelle der Präzedenz-Kaskade nur Werte
+    über 0 (eine 0 dort verdrängte fremde Felder); die Heimladung fragt deshalb
+    getrennt — nur die Heimlade-Felder privater E-Autos und Wallboxen, und nur, wenn
+    ihnen ein Sensor zugeordnet ist.
+
+    Returns:
+        ``{"inv_<id>_<feld>", …}``.
+    """
+    from backend.core.field_definitions import HEIMLADE_FELDER
+
+    inv_mapping = (anlage.sensor_mapping or {}).get("investitionen", {}) or {}
+    sensor_to_feld: dict[str, str] = {}
+    for inv in investitionen:
+        if inv.typ not in HEIMLADE_FELDER or ist_dienstlich(inv):
+            continue
+        felder = (inv_mapping.get(str(inv.id)) or {}).get("felder", {}) or {}
+        for feld in HEIMLADE_FELDER[inv.typ]:
+            cfg = felder.get(feld)
+            if cfg and cfg.get("strategie") == "sensor" and cfg.get("sensor_id"):
+                sensor_to_feld[cfg["sensor_id"]] = f"inv_{inv.id}_{feld}"
+    if not sensor_to_feld:
+        return set()
+
+    from backend.services.ha_statistics_service import get_ha_statistics_service
+    ha_stats = get_ha_statistics_service()
+    if not ha_stats.is_available:
+        return set()
+    try:
+        result = await asyncio.to_thread(
+            ha_stats.get_monatswerte, list(sensor_to_feld), jahr, monat,
+        )
+    except Exception:
+        logger.warning("HA Statistics DB nicht erreichbar (Heimlade-Felder)")
+        return set()
+    return {
+        sensor_to_feld[s.sensor_id]
+        for s in result.sensoren
+        if s.sensor_id in sensor_to_feld and s.differenz is not None
+    }
 
 
 async def _collect_connector_data(anlage: Anlage, jahr: int, monat: int) -> dict[str, tuple[float, DatenquelleInfo]]:
@@ -629,6 +678,12 @@ async def get_aktueller_monat(
         if ist_aktueller_monat else {}
     )
     ha_stats = await _collect_ha_statistics_data(anlage, jahr, monat)
+    # N-555: welche Heimlade-Felder hat die HA-Statistik in einem ABGESCHLOSSENEN
+    # Monat überhaupt (auch mit 0)? Im laufenden Monat genügt die Quelle.
+    ha_felder_mit_daten: set[str] = (
+        await _ha_heimlade_felder_mit_daten(anlage, investitionen, jahr, monat)
+        if not ist_aktueller_monat else set()
+    )
     # Fünfte Quelle (N-472) — nur im laufenden Monat, und das ist eine Aussage
     # über die Kategorie, nicht über den Aufwand: Im laufenden Monat IST eine
     # Teilmenge der Tage die vollständige Auskunft über das bisher Geschehene,
@@ -700,7 +755,18 @@ async def get_aktueller_monat(
     _out = aggregiere_typen(investitionen=investitionen, jahr=jahr, monat=monat, resolved=resolved, teilzeitraum=teilzeitraum)
     if "direct_fields" in _out: direct_fields = _out["direct_fields"]
     # ── emob_heimladung_pool (Vorlage 2: Abschnitt in aggregation.py, Schnittstelle 5 ein / 0 aus) ──
-    _out = emob_heimladung_pool(direct_fields=direct_fields, investitionen=investitionen, jahr=jahr, monat=monat, resolved=resolved)
+    # N-555: dazu die Heimlade-Quellen (nur laufender Monat), die gespeicherte
+    # Zeile des Monats und die HA-Felder mit Daten — die eine Funktion entscheidet.
+    _out = emob_heimladung_pool(
+        direct_fields=direct_fields, investitionen=investitionen, jahr=jahr, monat=monat, resolved=resolved,
+        monats_fakt=monats_fakt, ist_aktueller_monat=ist_aktueller_monat,
+        heimlade_quellen=(
+            await emob_heimlade_quellen(db, anlage, investitionen, jahr, monat)
+            if ist_aktueller_monat else frozenset()
+        ),
+        ha_felder_mit_daten=ha_felder_mit_daten,
+    )
+    emob_entscheid = _out.get("emob_entscheid")
     # ── extrahiere_werte (Vorlage 2: Abschnitt in aggregation.py, Schnittstelle 2 ein / 10 aus) ──
     _out = extrahiere_werte(monats_fakt=monats_fakt, resolved=resolved)
     if "abgabe_dritte" in _out: abgabe_dritte = _out["abgabe_dritte"]
@@ -807,7 +873,7 @@ async def get_aktueller_monat(
     if "wp_strom_warmwasser" in _out: wp_strom_warmwasser = _out["wp_strom_warmwasser"]
     if "wp_warmwasser" in _out: wp_warmwasser = _out["wp_warmwasser"]
     # ── geraete_sicht (Vorlage 2: Abschnitt in komponenten.py, Schnittstelle 13 ein / 15 aus) ──
-    _out = geraete_sicht(_wp_kennzahlen_je_geraet=_wp_kennzahlen_je_geraet, get_val=get_val, investitionen=investitionen, mf_bkw=mf_bkw, mf_emob=mf_emob, mf_sonstiges=mf_sonstiges, netzbezug_preis_effektiv_cent=netzbezug_preis_effektiv_cent, speicher_eff_ladepreis=speicher_eff_ladepreis, speicher_imd_ladepreis=speicher_imd_ladepreis, speicher_ladung_netz=speicher_ladung_netz, wp_arbeitszahl=wp_arbeitszahl, wp_az_funktion=wp_az_funktion, wp_az_kuehlen=wp_az_kuehlen)
+    _out = geraete_sicht(_wp_kennzahlen_je_geraet=_wp_kennzahlen_je_geraet, emob_entscheid=emob_entscheid, get_val=get_val, investitionen=investitionen, mf_bkw=mf_bkw, mf_emob=mf_emob, mf_sonstiges=mf_sonstiges, netzbezug_preis_effektiv_cent=netzbezug_preis_effektiv_cent, speicher_eff_ladepreis=speicher_eff_ladepreis, speicher_imd_ladepreis=speicher_imd_ladepreis, speicher_ladung_netz=speicher_ladung_netz, wp_arbeitszahl=wp_arbeitszahl, wp_az_funktion=wp_az_funktion, wp_az_kuehlen=wp_az_kuehlen)
     if "bkw_eigenverbrauch" in _out: bkw_eigenverbrauch = _out["bkw_eigenverbrauch"]
     if "emob_ladung_extern" in _out: emob_ladung_extern = _out["emob_ladung_extern"]
     if "emob_ladung_netz" in _out: emob_ladung_netz = _out["emob_ladung_netz"]
@@ -893,8 +959,10 @@ async def get_aktueller_monat(
     if "investitionen_financials" in _out: investitionen_financials = _out["investitionen_financials"]
     if "speicher_ersparnis" in _out: speicher_ersparnis = _out["speicher_ersparnis"]
     # ── emob_aggregat_und_kennzahlen (Vorlage 2: Abschnitt in finanzen.py, Schnittstelle 12 ein / 4 aus) ──
-    _out = emob_aggregat_und_kennzahlen(anlage=anlage, einspeise_erloes=einspeise_erloes, emob_ersparnis=emob_ersparnis, ev_ersparnis=ev_ersparnis, get_val=get_val, investitionen=investitionen, investitionen_financials=investitionen_financials, jahr=jahr, monat=monat, netzbezug_kosten=netzbezug_kosten, pv=pv, wp_ersparnis=wp_ersparnis)
+    _out = emob_aggregat_und_kennzahlen(anlage=anlage, emob_ladung_extern=emob_ladung_extern, einspeise_erloes=einspeise_erloes, emob_ersparnis=emob_ersparnis, ev_ersparnis=ev_ersparnis, get_val=get_val, investitionen=investitionen, investitionen_financials=investitionen_financials, jahr=jahr, monat=monat, netzbezug_kosten=netzbezug_kosten, pv=pv, wp_ersparnis=wp_ersparnis)
     if "emob_eff" in _out: emob_eff = _out["emob_eff"]
+    if "emob_ladung_gesamt" in _out: emob_ladung_gesamt = _out["emob_ladung_gesamt"]
+    emob_ersparnis_berechnung = _out.get("emob_ersparnis_berechnung")
     if "emob_ersparnis" in _out: emob_ersparnis = _out["emob_ersparnis"]
     if "gesamtnettoertrag" in _out: gesamtnettoertrag = _out["gesamtnettoertrag"]
     if "spez_ertrag" in _out: spez_ertrag = _out["spez_ertrag"]
@@ -1007,6 +1075,10 @@ async def get_aktueller_monat(
         emob_ladung_netz_kwh=emob_ladung_netz,
         emob_ladung_extern_kwh=emob_ladung_extern,
         emob_v2h_kwh=emob_v2h,
+        emob_ladung_gesamt_kwh=emob_ladung_gesamt,
+        emob_verbrauch_basis_kwh=(
+            round(emob_eff.basis_kwh, 2) if emob_eff.basis_kwh is not None else None
+        ),
         hat_emobilitaet=hat_emobilitaet,
         # Komponenten — BKW
         bkw_erzeugung_kwh=get_val("bkw_erzeugung_kwh"),
@@ -1032,6 +1104,7 @@ async def get_aktueller_monat(
         netto_ertrag_euro=netto_ertrag,
         wp_ersparnis_euro=wp_ersparnis,
         emob_ersparnis_euro=emob_ersparnis,
+        emob_ersparnis_berechnung=emob_ersparnis_berechnung,
         sonstige_ertraege_euro=sonstige_ertraege_total,
         sonstige_ausgaben_euro=sonstige_ausgaben_total,
         sonstige_netto_euro=sonstige_netto_total,

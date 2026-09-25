@@ -16,8 +16,12 @@ from backend.services.wp_wirtschaftlichkeit import (
     wp_ersparnis_berechnung,
 )
 from backend.services.eauto_wirtschaftlichkeit import (
+    QUELLE_WALLBOX,
     attribute_emob_pool_by_km,
     berechne_eauto_ersparnis,
+    entscheide_emob_heimladung,
+    heimladung_des_autos,
+    waehle_extern_paar,
 )
 from backend.core.berechnungen.betriebsart_gemessen import modus_strom_zeile
 from backend.core.field_definitions import (
@@ -30,6 +34,7 @@ from backend.core.field_definitions import (
     ist_abgabe_kategorie,
 )
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
+from backend.core.zahlenformat import fmt_euro, fmt_zahl
 from backend.core.investition_parameter import ist_dienstlich
 from backend.api.routes.aktueller_monat.schemas import ERLOES_LABEL_EINSPEISUNG, InvestitionFinancialDetail
 
@@ -45,6 +50,7 @@ def _baue_investition_financial(
     monats_gaspreis: Optional[float],
     monats_benzinpreis: Optional[float],
     emob_pool_attr,
+    emob_entscheid=None,
 ) -> Optional[InvestitionFinancialDetail]:
     """Baut das T-Konto-Detail (InvestitionFinancialDetail) EINER Investition.
 
@@ -85,7 +91,7 @@ def _baue_investition_financial(
             inv_ersparnis = round(ev_kwh * netz_p / 100, 2)
             inv_label = "Eigenverbrauch-Ersparnis"
             inv_formel = "BKW-Eigenverbrauch × Netzbezugspreis"
-            inv_berechnung = f"{ev_kwh:.1f} kWh × {netz_p:.2f} ct/kWh"
+            inv_berechnung = f"{fmt_zahl(ev_kwh, 1)} kWh × {fmt_zahl(netz_p, 2)} ct/kWh"
         if einsp_kwh and einsp_kwh > 0:
             inv_erloes = round(einsp_kwh * einsp_p / 100, 2)
             # A6: Formel und eingesetzte Werte in GETRENNTE Felder — beides in
@@ -93,7 +99,7 @@ def _baue_investition_financial(
             # andere Kachel „Berechnung" daneben führt. Kein Wert ändert sich.
             inv_erloes_formel = "Einspeisung × Einspeisevergütung"
             inv_erloes_berechnung = (
-                f"{einsp_kwh:.1f} kWh × {einsp_p:.2f} ct/kWh"
+                f"{fmt_zahl(einsp_kwh, 1)} kWh × {fmt_zahl(einsp_p, 2)} ct/kWh"
             )
 
     elif inv.typ == "speicher":
@@ -129,12 +135,12 @@ def _baue_investition_financial(
             if netzladung > 0:
                 inv_formel = "PV-Anteil × (Netzbezug − Einspeisung) + Netz-Anteil × (Netzbezug − Ladepreis)"
                 inv_berechnung = (
-                    f"{erg.pv_anteil_entladung_kwh:.1f} kWh × {erg.spread_cent_kwh:.2f} ct/kWh"
-                    f" + {erg.netz_anteil_entladung_kwh:.1f} kWh Netz-Anteil"
+                    f"{fmt_zahl(erg.pv_anteil_entladung_kwh, 1)} kWh × {fmt_zahl(erg.spread_cent_kwh, 2)} ct/kWh"
+                    f" + {fmt_zahl(erg.netz_anteil_entladung_kwh, 1)} kWh Netz-Anteil"
                 )
             else:
                 inv_formel = "Speicher-Entladung × (Netzbezugspreis − Einspeisevergütung)"
-                inv_berechnung = f"{entl_kwh:.1f} kWh × {erg.spread_cent_kwh:.2f} ct/kWh"
+                inv_berechnung = f"{fmt_zahl(entl_kwh, 1)} kWh × {fmt_zahl(erg.spread_cent_kwh, 2)} ct/kWh"
 
     elif inv.typ == "waermepumpe":
         # N-398: dieselbe Weiche wie im Layer — Geraetefeld, sonst die gemessene
@@ -195,15 +201,39 @@ def _baue_investition_financial(
         ladung_pv = ladung_pv or None
         if km and km > 0:
             extern_euro = data.get("ladung_extern_euro", 0) or 0
-            # Wallbox-Pool-Override für evcc-Setups (Ladedaten auf der
-            # Wallbox-IMD, nur km am E-Auto). Selbes Pattern wie im
-            # EAutoDashboard.
-            if emob_pool_attr.use_wb_pool and inv.typ == "e-auto":
-                share = attribute_emob_pool_by_km(emob_pool_attr, km)
-                if share.netz_kwh + share.pv_kwh > 0:
-                    netz_kwh = share.netz_kwh
-                    ladung_pv = share.pv_kwh or None
-                    extern_euro = share.extern_euro
+            if inv.typ == "e-auto":
+                # N-555 (Konzept Regel 2-Ü): die Heimladung DIESES Autos kommt aus
+                # dem Entscheid des Monats — Wallbox-Anteil nach km (wie bisher),
+                # eigene Heim-Felder, Schätzung aus dem Fahrverbrauch oder 0.
+                # Bis 25.09.2026 las diese Zeile die eigene Zeile über die
+                # Lese-Hilfe, und die setzte den Fahrverbrauch still ein, auch
+                # wenn die Wallbox im Monat gemessen 0 geladen hatte.
+                # Ohne übergebenen Entscheid (Einzelaufruf) entscheidet die
+                # Funktion aus dieser Zeile und dem Wallbox-Topf des Aufrufers.
+                entscheid = emob_entscheid or entscheide_emob_heimladung(
+                    eauto_je_inv={inv.id: data},
+                    wallbox_zeilen=[{
+                        "ladung_kwh": emob_pool_attr.wb_pool_pv + emob_pool_attr.wb_pool_netz,
+                        "ladung_pv_kwh": emob_pool_attr.wb_pool_pv,
+                    }] if emob_pool_attr.use_wb_pool else [],
+                )
+                share = None
+                if entscheid.quelle == QUELLE_WALLBOX:
+                    share = attribute_emob_pool_by_km(emob_pool_attr, km)
+                    if share.netz_kwh + share.pv_kwh > 0:
+                        # Wallbox-Pool-Override für evcc-Setups (Ladedaten auf
+                        # der Wallbox-IMD, nur km am E-Auto). N-555 F-5: Extern
+                        # nach der Topf-Regel (höhere Kosten), nicht blind der
+                        # Wallbox-Anteil — sonst fiel das Extern des Autos weg.
+                        _, extern_euro = waehle_extern_paar(
+                            share.extern_kwh, share.extern_euro,
+                            data.get("ladung_extern_kwh", 0) or 0, extern_euro,
+                        )
+                pv_a, netz_a = heimladung_des_autos(
+                    entscheid, inv.id, data, wallbox_anteil=share,
+                )
+                ladung_pv = pv_a or None
+                netz_kwh = netz_a
             eauto_result = berechne_eauto_ersparnis(
                 km_gefahren=km,
                 ladung_netz_kwh=max(0, netz_kwh),
@@ -220,14 +250,18 @@ def _baue_investition_financial(
             inv_label = "Ersparnis vs. Verbrenner"
             inv_formel = "(km × Verbrauch × Benzinpreis) − Netzladung × Strompreis"
             inv_berechnung = (
-                f"{km:.0f} km × {eauto_result.verwendeter_verbrauch_l_100km:.1f} L/100km × "
-                f"{eauto_result.verwendeter_benzinpreis_euro:.2f} €"
+                # N-555 (§11): deutsche Schreibweise über den Backend-SoT
+                # `core/zahlenformat.py` (Style-Guide 0a) — hier stand
+                # „1500 km × 7.5 L/100km × 1.65 €" mit Dezimalpunkt.
+                f"{fmt_zahl(km, 0)} km × "
+                f"{fmt_zahl(eauto_result.verwendeter_verbrauch_l_100km, 1)} L/100 km × "
+                f"{fmt_euro(eauto_result.verwendeter_benzinpreis_euro)}"
             )
         elif inv.typ == "wallbox" and ladung_pv and ladung_pv > 0:
             inv_ersparnis = round(ladung_pv * wb_p / 100, 2)
             inv_label = "PV-Ladung-Ersparnis"
             inv_formel = "PV-Ladung × Netzbezugspreis"
-            inv_berechnung = f"{ladung_pv:.1f} kWh × {wb_p:.2f} ct/kWh"
+            inv_berechnung = f"{fmt_zahl(ladung_pv, 1)} kWh × {fmt_zahl(wb_p, 2)} ct/kWh"
 
     elif inv.typ == "sonstiges":
         # ⛔ KEINE Eigenverbrauchs-Bewertung je Gerät (N-131, Entscheid Gernot

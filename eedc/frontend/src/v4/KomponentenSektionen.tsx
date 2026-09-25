@@ -1106,7 +1106,11 @@ export function baueKomponentenBloecke(
   }
 
   // ── E-Mobilität ─────────────────────────────────────────────────────────
-  if (hat(d.emob_ladung_kwh) || hat(d.emob_km)) {
+  // N-557 (Konzept Regel 10): „Ladung gesamt" = Heim + Extern, soweit Extern
+  // bekannt ist — eine eigene Größe aus dem Backend. Der Tag kennt kein Extern;
+  // dort (und bei älteren Antworten) ist sie die Heimladung.
+  const emobGesamt = d.emob_ladung_gesamt_kwh ?? d.emob_ladung_kwh
+  if (hat(emobGesamt) || hat(d.emob_km)) {
     const pvAnteil = hat(d.emob_ladung_pv_kwh) && d.emob_ladung_kwh
       ? (d.emob_ladung_pv_kwh! / d.emob_ladung_kwh) * 100 : null
     // PV-Anteil/Netz-Anteil sind auf Tag mit Sensor erhebbar (tagDetail);
@@ -1126,7 +1130,10 @@ export function baueKomponentenBloecke(
     // Wärmepumpe hat eine, die E-Mobilität nicht.
     const emobErsparnis = ersparnisAnzeige(d.emob_ersparnis_euro, 2)
     const kpis: KpiStripItem[] = [
-      { title: 'Ladung gesamt', value: fmt(d.emob_ladung_kwh), unit: 'kWh', color: 'purple', icon: Plug },
+      { title: 'Ladung gesamt', value: fmt(emobGesamt), unit: 'kWh', color: 'purple', icon: Plug,
+        // „PV-Anteil (Heim)" daneben bleibt auf die Heimladung bezogen.
+        subtitle: hat(d.emob_ladung_extern_kwh) && (d.emob_ladung_extern_kwh ?? 0) > 0
+          ? `davon extern ${fmt(d.emob_ladung_extern_kwh)} kWh` : undefined },
       { ...EAUTO_KPI.pvAnteil, value: fmtCalc(pvAnteil, 0, '—'), unit: '%',
         // W-18, dieselbe Klasse: Auch hier stand „Sensor zuordnen" bei jedem
         // „—", auch bei zugeordnetem Zähler. Der Grund kommt jetzt aus dem
@@ -1165,7 +1172,7 @@ export function baueKomponentenBloecke(
       // W-10, dritte Stelle. Sie hatte keinen Melder und wäre bei einem Fix
       // nur an der gemeldeten Kachel stehen geblieben — der Grund, warum das
       // Vorzeichen einen SoT bekommen hat statt drei Einzelkorrekturen.
-      summary: `${fmt(d.emob_ladung_kwh)} kWh geladen${hat(d.emob_km) ? ` · ${fmt(d.emob_km)} km` : ''}${emobErsparnis ? ` · ${emobErsparnis.betrag} € vs. Verbrenner` : ''}`,
+      summary: `${fmt(emobGesamt)} kWh geladen${hat(d.emob_km) ? ` · ${fmt(d.emob_km)} km` : ''}${emobErsparnis ? ` · ${emobErsparnis.betrag} € vs. Verbrenner` : ''}`,
       render: () => <Sektion kpis={emobKpis} elemente={emobEls} />,
     })
   }

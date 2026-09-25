@@ -21,6 +21,8 @@ import logging
 from datetime import date
 from typing import Any, Optional
 
+from backend.core.zahlenformat import fmt_zahl
+
 from sqlalchemy import select
 
 from backend.core.berechnungen.speicher_wirtschaftlichkeit import (
@@ -395,7 +397,7 @@ async def preise_speicher_sensoren(
                     "stundenprofil_morgen_cent": _ev_profil(reihe.preis_cent, bezugspreise.verguetung_cent, 24, 48),
                 },
                 berechnung=(
-                    f"{bezug_jetzt} ct Bezug − {bezugspreise.verguetung_cent} ct Vergütung"
+                    f"{fmt_zahl(bezug_jetzt, 2)} ct Bezug − {fmt_zahl(bezugspreise.verguetung_cent, 2)} ct Vergütung"
                     if bezug_jetzt is not None and bezugspreise.verguetung_cent is not None
                     else None
                 ),
@@ -430,7 +432,7 @@ async def preise_speicher_sensoren(
                 "verguetung_quelle": bezugspreise.verguetung_quelle,
             },
             berechnung=(
-                f"{bezugspreise.verguetung_cent} ct entgangene Vergütung ÷ {eta} % Wirkungsgrad"
+                f"{fmt_zahl(bezugspreise.verguetung_cent, 2)} ct entgangene Vergütung ÷ {fmt_zahl(eta, 0)} % Wirkungsgrad"
                 if bezugspreise.verguetung_cent is not None and eta is not None else None
             ),
         )
@@ -452,7 +454,7 @@ async def preise_speicher_sensoren(
                     "stundenprofil_morgen_cent": _eta_profil(reihe.preis_cent, eta, 24, 48),
                 },
                 berechnung=(
-                    f"{bezug_jetzt} ct Bezug ÷ {eta} % Wirkungsgrad"
+                    f"{fmt_zahl(bezug_jetzt, 2)} ct Bezug ÷ {fmt_zahl(eta, 0)} % Wirkungsgrad"
                     if bezug_jetzt is not None and eta is not None else None
                 ),
             )
@@ -482,7 +484,7 @@ async def preise_speicher_sensoren(
                     f"erste Stunde nach dem Sim-Start, in der der Ladestand unter die "
                     f"Leer-Schwelle fällt (Start beim zuletzt gemessenen Ladestand, "
                     f"Slot {sim_annahme.get('sim_start_stunde')}, davon "
-                    f"{sim_annahme.get('sim_start_anteil')} simuliert)"
+                    f"{fmt_zahl(sim_annahme.get('sim_start_anteil'), 1)} simuliert)"
                 ),
             )
         _anhaengen(
@@ -561,7 +563,7 @@ async def preise_speicher_sensoren(
 
 def _bezug_berechnung(reihe, aufschlag, ust) -> Optional[str]:
     if reihe.quelle == "boerse_plus_aufschlag" and aufschlag is not None:
-        return f"(1 + {ust:.0f} % USt) × Börsenpreis + {aufschlag.cent} ct Aufschlag ({aufschlag.quelle})"
+        return f"(1 + {fmt_zahl(ust, 0)} % USt) × Börsenpreis + {fmt_zahl(aufschlag.cent, 2)} ct Aufschlag ({aufschlag.quelle})"
     if reihe.quelle == "boersenpreis":
         return "Börsenpreis der laufenden Stunde — Näherung ohne ableitbaren Aufschlag"
     if reihe.quelle == "zeitfenster":

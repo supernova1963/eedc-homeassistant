@@ -31,10 +31,11 @@ from backend.core.berechnungen.ust_eigenverbrauch import (
     ust_eigenverbrauch_fuer_anlage,
 )
 from backend.core.berechnungen.waermepumpe_kennzahl import heizwaerme_kwh, waerme_gesamt_kwh
-from backend.core.field_definitions import get_emob_pv_netz_kwh, get_wp_warmwasser_kwh
+from backend.core.field_definitions import get_wp_warmwasser_kwh
 from backend.services.eauto_wirtschaftlichkeit import (
     berechne_eauto_ersparnis_periode,
-    emob_month_share,
+    emob_extern_im_monat,
+    emob_heimladung_im_monat,
 )
 from backend.core.wirtschaftlichkeit_defaults import (
     NETZBEZUG_DEFAULT_CENT,
@@ -259,14 +260,16 @@ async def alternativkosten_rueckblick(
             if inv_id != ea.id or not ea.ist_aktiv_im_monat(jahr, monat):
                 continue
             km = daten.get("km_gefahren", 0) or 0
-            # N-199: SoT-Helper statt Rohkey (leitet `Total − PV` ab).
-            _, netz = get_emob_pv_netz_kwh(daten)
-            # F-17: kanonische Quelle ist die Wallbox, wenn sie Ladung trägt.
-            share = emob_month_share(emob_pool_ctx, "e-auto", km, jahr, monat)
-            if share is not None:
-                netz = share.netz_kwh
+            # N-199/F-17/N-555: Netz-Anteil DIESES Autos nach dem Entscheid des
+            # Monats (Wallbox-Anteil nach km · eigene Heim-Felder · Schätzung · 0).
+            _, netz = emob_heimladung_im_monat(
+                emob_pool_ctx, inv_id, km, jahr, monat, daten,
+            )
             agg["km"] += km
             agg["netz_kwh"] += netz
+            # N-555 (§12): externe Ladekosten nach der Topf-Regel, wie Hub und HA-Sensor.
+            _, _extern_euro = emob_extern_im_monat(emob_pool_ctx, km, jahr, monat, daten)
+            agg["extern_euro"] = agg.get("extern_euro", 0.0) + _extern_euro
             agg["fahrverbrauch_kwh"] += daten.get("verbrauch_kwh", 0) or 0
             if km > 0:
                 agg.setdefault("km_monate", []).append((jahr, monat, km))
@@ -296,9 +299,12 @@ async def alternativkosten_rueckblick(
         _erg = berechne_eauto_ersparnis_periode(
             km_pro_monat=agg["km_monate"],
             ladung_netz_kwh_gesamt=agg["netz_kwh"],
-            # Externe Ladekosten sind in dieser Sicht noch nie eingegangen —
-            # beim Umhängen nicht stillschweigend dazunehmen.
-            ladung_extern_euro_gesamt=0.0,
+            # N-555 (§12, Entscheid Gernot 25.09.2026): externe Ladekosten
+            # gehören in die Stromkosten — so rechnen E-Auto-Hub, T-Konto,
+            # Cockpit und die HA-Sensoren. Hier stand bis dahin bewusst 0,0
+            # („noch nie eingegangen"); die bisherige E-Auto-Ersparnis und
+            # damit der ROI-Fortschritt lagen um genau diese Kosten zu hoch.
+            ladung_extern_euro_gesamt=agg.get("extern_euro", 0.0),
             wallbox_strompreis_cent=netzbezug_preis,
             eauto_parameter=inv_by_id_hist.get(ea.id).parameter if inv_by_id_hist.get(ea.id) else ea.parameter,
             monats_benzinpreis_lookup=_benzin_lookup_aus,

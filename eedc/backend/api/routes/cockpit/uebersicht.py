@@ -28,6 +28,7 @@ from backend.core.berechnungen import (
     berechne_verbrauchs_kennzahlen,
     berechne_netzbezug_kosten,
     eauto_effizienz_100km,
+    eauto_effizienz_zeitraum,
     erzeugung_hinter_zaehler_kwh,
     monatsgewichte_aus_pvgis,
     speicher_wirkungsgrad,
@@ -64,7 +65,6 @@ from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
 from backend.services.eauto_wirtschaftlichkeit import (
     berechne_eauto_ersparnis_periode,
     fossil_getankte_liter,
-    get_emob_heimladung_canonical,
 )
 
 router = APIRouter()
@@ -324,32 +324,30 @@ async def get_cockpit_uebersicht(
     sonstige_ausgaben_gesamt = sum(f.sonstiges.ausgaben_euro for f in fakten)
     v2h_entladung = sum(f.emob.v2h_entladung_kwh for f in fakten)
 
-    # E-Mobilitäts-Pool: EINE Quelle liefert die konsistente Heimladungs-
-    # Trias (pv + netz == ladung). Früher feldweises max() über pv/netz —
-    # das konnte pv aus der einen, netz aus der anderen Quelle nehmen und
-    # PV-Anteil > 100 % erzeugen (#262 junky84). Externe Lade-Kosten (#260)
-    # kommen paarweise aus der Quelle mit den höheren Extern-Kosten.
+    # E-Mobilitäts-Pool: EINE Quelle je Monat liefert die konsistente
+    # Heimladungs-Trias (pv + netz == ladung, #262 junky84); externe Lade-Kosten
+    # (#260) kommen paarweise aus der Quelle mit den höheren Extern-Kosten.
     #
-    # **Bewusst EINMAL global gepoolt, nicht monatsweise summiert** (Falle 3 der
-    # S1-Übergabe): die Quellenwahl E-Auto-IMD vs. Wallbox-IMD ist in der Schicht
-    # eine Monats-Entscheidung, hier eine Zeitraum-Entscheidung — beides
-    # vertretbar, aber es sind zwei verschiedene Zahlen. Die Schicht reicht
-    # deshalb die bereits dienstwagen- und laufzeitgefilterten Rohdicts durch,
-    # damit dieselbe Poolung über denselben SoT laufen kann.
-    emob_pool = get_emob_heimladung_canonical(
-        eauto_imd_data=[d for f in fakten for d in f.emob.eauto_ladedaten],
-        wallbox_imd_data=[d for f in fakten for d in f.emob.wallbox_ladedaten],
-    )
-    emob_ladung = emob_pool.ladung_kwh
-    emob_pv_ladung = emob_pool.pv_kwh
-    emob_netz_ladung = emob_pool.netz_kwh
+    # ⛔ **Seit N-555 die Summe der Monate, nicht mehr EIN Pool über den Zeitraum.**
+    # Hier stand „bewusst einmal global gepoolt … beides vertretbar" (Falle 3 der
+    # S1-Übergabe). Das Konzept Heimladung/Fahrverbrauch entscheidet es (Regel 1:
+    # „Die Entscheidung fällt je Monat und je Auto … Ein Jahr ist die Summe seiner
+    # Monate"): global gepoolt verdrängte eine Wallbox, die erst ab Juli misst, die
+    # gemessenen Monate davor — und eine Wallbox mit 0 im September den Monat nicht.
+    emob_ladung = sum(f.emob.ladung_kwh for f in fakten)
+    emob_pv_ladung = sum(f.emob.ladung_pv_kwh for f in fakten)
+    emob_netz_ladung = sum(f.emob.ladung_netz_kwh for f in fakten)
     emob_km = sum(f.emob.km for f in fakten)
-    # Ø Verbrauch (kWh/100 km) via zentralem Helper — gemessener Fahrverbrauch hat
-    # Vorrang, sonst Ladungs-Näherung; konsistent zu E-Auto-Dashboard + Komponenten.
-    emob_eff = eauto_effizienz_100km(
-        sum(f.emob.fahrverbrauch_kwh for f in fakten), emob_ladung, emob_km
+    # Ø Verbrauch (kWh/100 km), N-557: Σ Monatswerte ÷ Σ km — jeder Monat nach der
+    # Layer-Regel (gemessener Fahrverbrauch vor Heim + Extern). Bis 25.09.2026
+    # stand hier `eauto_effizienz_100km(Σ Fahrverbrauch, Σ Heim, Σ km)`.
+    emob_eff = eauto_effizienz_zeitraum(
+        eauto_effizienz_100km(
+            f.emob.fahrverbrauch_kwh, f.emob.ladung_kwh + f.emob.extern_kwh, f.emob.km,
+        )
+        for f in fakten
     )
-    emob_extern_euro_total = emob_pool.extern_euro
+    emob_extern_euro_total = sum(f.emob.extern_euro for f in fakten)
 
     # G20-2: km PRO FAHRZEUG (inv.id) und pro Monat, damit das eMob-Ersparnis-
     # Aggregat = Σ der Per-Fahrzeug-Läufe (jeder mit dem Verbrauchs-Parameter

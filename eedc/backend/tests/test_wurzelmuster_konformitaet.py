@@ -2052,6 +2052,9 @@ P10_SCHREIBEN_IMPORT_CHECKER: frozenset[str] = frozenset({
     "backend/api/routes/import_export/csv_operations.py::export_csv",
     "backend/api/routes/import_export/json_operations.py::_export_anlage_full_impl",
     "backend/services/migrations/migrate_emob_canonical_source.py::migrate_emob_canonical_source",
+    # N-555 (25.09.2026): einmalige Rückbenennung der Startroutine-Umbuchungen —
+    # SCHREIBT E-Auto-Zeilen (Schlüssel zurück in `verbrauch_kwh`), leitet nichts ab.
+    "backend/services/migrations/migrate_eauto_fahrverbrauch_rueckbenennung.py::migrate_eauto_fahrverbrauch_rueckbenennung",
     # Reparatur-Werkbank: prüft und schreibt Provenance, leitet nichts ab.
     "backend/services/repair_orchestrator.py::_scan_cloud_provenance",
     "backend/services/repair_orchestrator.py::_execute_reset_cloud_import",
