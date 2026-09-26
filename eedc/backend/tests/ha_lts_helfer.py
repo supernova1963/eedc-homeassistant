@@ -49,7 +49,7 @@ from backend.services.ha_statistics_service import HAStatisticsService
 _WERTE_TABELLEN = ("statistics", "statistics_short_term")
 
 
-def mach_service() -> HAStatisticsService:
+def mach_service(*, thread_sicher: bool = False) -> HAStatisticsService:
     """`HAStatisticsService` auf einer frischen In-Memory-SQLite mit HA-Schema.
 
     Der reguläre Konstruktor setzt alle Felder (u. a. den Metadaten-Cache) und
@@ -58,7 +58,17 @@ def mach_service() -> HAStatisticsService:
     damit `is_available` liefert, ohne `_init_engine` erneut anzustoßen.
     """
     svc = HAStatisticsService()
-    svc._engine = create_engine("sqlite:///:memory:")
+    if thread_sicher:
+        # Eine In-Memory-DB je Thread wäre für `asyncio.to_thread`-Aufrufer
+        # (der LTS-Aggregator liest den Recorder im Thread, Wächter
+        # `test_ha_last_und_index`) eine LEERE Datenbank — StaticPool teilt
+        # die eine Verbindung.
+        from sqlalchemy.pool import StaticPool
+        svc._engine = create_engine(
+            "sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False},
+        )
+    else:
+        svc._engine = create_engine("sqlite:///:memory:")
     svc._is_mysql = False
     svc._initialized = True
     with svc._engine.begin() as conn:
@@ -149,3 +159,81 @@ def zeile(
             {"mid": metadata_id, "ts": ts, "state": state, "sum": sum_wert,
              "mean": mean, "min": min_wert, "max": max_wert},
         )
+
+
+# ── Zählerlücken wie HA (Schnitt 4): Slot-Tabelle aus Stunden-Deltas ─────────
+
+
+def slot_reihen_aus_deltas(deltas_je_sensor: dict) -> dict:
+    """``{eid: {h: kwh|None}}`` → ``{eid: SensorSlotReihe}`` mit ``n = 1`` je Slot.
+
+    **Warum es diese Brücke gibt.** Seit „Zählerlücken wie HA" liest der
+    LTS-Aggregator die Slot-Tabelle (`get_hourly_slots_for_day`) statt der
+    Stunden-Deltas. Die Proben, die den Transport mit einem `MagicMock`
+    ersetzen, lieferten ihre Stundenwerte als Delta-Dict; diese Funktion
+    übersetzt es 1:1 in die Slot-Form (jeder Wert eine reale Stunde, ``None``
+    = leerer Slot) — **ohne** Bündel, damit die Probe genau das prüft, was sie
+    vorher geprüft hat. Bündel prüfen die `test_zaehlerluecken_*`-Proben.
+    """
+    from backend.services.ha_statistics_service import SensorSlotReihe, StundenSlot
+
+    return {
+        eid: SensorSlotReihe(
+            slots={h: StundenSlot(round(v, 3), 1) for h, v in (slots or {}).items() if v is not None},
+            anker_start_ts=0.0,
+        )
+        for eid, slots in deltas_je_sensor.items()
+    }
+
+
+def slots_side_effect(deltas_fn):
+    """`side_effect` für `svc.get_hourly_slots_for_day` aus einer Delta-Funktion
+    ``(sensor_ids, datum) -> {eid: {h: kwh}}`` — dieselbe Funktion, die die
+    Probe für `get_hourly_kwh_deltas_for_day` schon hat."""
+    return lambda sensor_ids, datum: slot_reihen_aus_deltas(deltas_fn(sensor_ids, datum))
+
+
+def lts_tabelle(stunden: dict, komponenten: dict | None = None,
+                marken: dict | None = None, verworfen: dict | None = None):
+    """Eine `LtsTagesTabelle` für Proben, die `aggregate_day` mit festen
+    Stunden- und Tageswerten füttern — oder ``None`` für „HA liefert nichts".
+
+    **Warum es diese Brücke gibt.** Bis „Zählerlücken wie HA" las
+    `aggregate_day` den HA-Pfad über zwei Funktionen
+    (`get_hourly_kwh_by_category_lts` für die Stunden,
+    `get_komponenten_tageskwh_lts` für den Tag), und die Proben ersetzten beide
+    getrennt. Seit R5 kommt beides aus EINEM Lesezugriff
+    (`lts_aggregator.lts_tagestabelle`); die Proben ersetzen jetzt diese eine
+    Funktion mit denselben Werten wie vorher. Leere Stunden hießen vorher
+    „LTS-Pfad liefert nichts ⇒ Snapshot-Fallback" — das ist hier ``None``.
+    """
+    from backend.services.snapshot.lts_aggregator import LtsTagesTabelle
+
+    if not stunden:
+        return None
+    return LtsTagesTabelle(
+        stunden=stunden,
+        komponenten_kwh=dict(komponenten or {}),
+        pv_marken=dict(marken or {}),
+        verworfen=dict(verworfen or {}),
+    )
+
+
+def tages_tabelle(stunden: dict | None = None, komponenten: dict | None = None,
+                  marken: dict | None = None, verworfen: dict | None = None):
+    """Eine `TagesTabelle` **immer** (auch ohne Stunden) — für Proben, die dem
+    Snapshot-Pfad einen Tageswert vorgeben (`snapshot_tagestabelle`).
+
+    Bis „Zählerlücken wie HA" kam der Snapshot-Tageswert aus einer eigenen
+    Funktion (`get_komponenten_tageskwh`, Kalendertag); seit E5 kommt er aus
+    derselben Tagestabelle wie die Stunden. Proben, die ihn vorgaben, geben
+    jetzt diese Tabelle vor — mit denselben Werten.
+    """
+    from backend.services.snapshot.tages_tabelle import TagesTabelle
+
+    return TagesTabelle(
+        stunden=dict(stunden or {}),
+        komponenten_kwh=dict(komponenten or {}),
+        pv_marken=dict(marken or {}),
+        verworfen=dict(verworfen or {}),
+    )

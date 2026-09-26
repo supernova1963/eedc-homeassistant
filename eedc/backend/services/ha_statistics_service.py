@@ -40,6 +40,7 @@ from pydantic import BaseModel
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
+from backend.core.berechnungen.spannen import deckel_fenster_stunden
 from backend.core.config import settings
 from backend.core.berechnungen.slot_konvention import lts_boundary_index
 
@@ -62,6 +63,9 @@ class SensorMonatswert(BaseModel):
     end_wert: float
     differenz: float
     einheit: str = "kWh"
+    #: Zählerlücken wie HA (R3/R4 für den Monat): verworfene Menge — Rücksprung
+    #: des HA-`sum` oder über dem Deckel. `differenz` enthält sie nicht.
+    verworfen_kwh: float = 0.0
 
 
 class MonatswertResponse(BaseModel):
@@ -94,6 +98,40 @@ class SensorMeta(NamedTuple):
     id: int
     unit: Optional[str]
     has_sum: bool
+
+
+class StundenSlot(NamedTuple):
+    """Ein belegter Stunden-Slot eines Zählers (Zählerlücken wie HA, R1/R2).
+
+    ``delta``: kWh = Stand(Slot) − Stand(Anker), auf 3 Stellen gerundet — das,
+    was HA im Energie-Dashboard für diese Stunde zeigt.
+    ``n``: wie viele **reale** Stunden die Menge trägt (aus ``start_ts``, nicht
+    aus dem Index). 1 im Regelfall; > 1, wenn HA die Stunden davor nicht
+    geschrieben hat (die Energie der Lücke steht hier). Ein Delta von 0 hat
+    immer ``n = 1`` (R2: 0 über n Stunden ist in jeder Stunde 0).
+    """
+    delta: float
+    n: int
+
+
+class SensorSlotReihe(NamedTuple):
+    """Die Slot-Tabelle eines Zählers für einen Tag (``get_hourly_slots_for_day``).
+
+    ``slots``: nur die **belegten** Slots 0..23. Ein fehlender Slot ist leer —
+    seine Energie steht im nächsten belegten Slot, notfalls im Folgetag.
+    ``anker_start_ts``: ``start_ts`` der Zeile, auf die sich der erste
+    belegte Slot stützt (Index −1 im Fenster oder die Anker-Zeile davor);
+    ``None``, wenn die Reihe im Fenster beginnt (kein Anker — R1, benannte
+    Abweichung zu HA).
+    """
+    slots: dict[int, StundenSlot]
+    anker_start_ts: Optional[float]
+
+
+#: Rückwärts wachsende Suchfenster (Tage) für den Anker auf dem WS-Weg (T2):
+#: 1 · 8 · 32 · 128 · 1024. Kein neuer WS-Befehl — `statistics_during_period`
+#: liefert die Zeile samt `start_ts`, ohne den es kein n gibt (W2).
+_WS_ANKER_FENSTER_TAGE: tuple[int, ...] = (1, 8, 32, 128, 1024)
 
 
 # Konvertierungsfaktoren nach kWh
@@ -625,102 +663,171 @@ class HAStatisticsService:
                     ohne_sum.append(sid)
         return mit_sum, ohne_sum, fehlend
 
+    def _letzter_sum_vor(
+        self, conn, meta: SensorMeta, sensor_id: str, ts: float,
+    ) -> Optional[tuple[float, float]]:
+        """Letzte Zeile mit `sum` eines Sensors **vor** ``ts`` (``sum IS NOT
+        NULL``, beliebig weit zurück) als ``(start_ts, sum)`` — der Anker nach
+        R1/R10. Roh, ohne Einheitenfaktor.
+
+        SQL: eine Zeile über den Index ``(metadata_id, start_ts)``. WS: kein
+        neuer Befehl (W2) — ``statistics_during_period`` über wachsende Fenster
+        vor ``ts`` (1 · 8 · 32 · 128 · 1024 Tage), Abbruch beim ersten Treffer,
+        wie der Anker in `get_hourly_slots_for_day`.
+        """
+        if conn is None:
+            for tage in _WS_ANKER_FENSTER_TAGE:
+                zeilen = self._ws_zeilen(
+                    [sensor_id], ts - tage * 86400, ts - 1, types=["sum"],
+                ).get(sensor_id, [])
+                treffer = [z for z in zeilen
+                           if z.get("sum") is not None and z["start_ts"] < ts]
+                if treffer:
+                    letzte = max(treffer, key=lambda z: z["start_ts"])
+                    return float(letzte["start_ts"]), letzte["sum"]
+            return None
+        zeile = conn.execute(text("""
+            SELECT start_ts, sum FROM statistics
+            WHERE metadata_id = :mid AND start_ts < :ts AND sum IS NOT NULL
+            ORDER BY start_ts DESC LIMIT 1
+        """), {"mid": meta.id, "ts": ts}).fetchone()
+        return (float(zeile[0]), zeile[1]) if zeile is not None else None
+
     def get_sensor_monatswert(
         self,
         conn,
         meta: SensorMeta,
         sensor_id: str,
         jahr: int,
-        monat: int
+        monat: int,
+        deckel_kwh_je_stunde: Optional[float] = None,
     ) -> Optional[SensorMonatswert]:
         """
         Ermittelt den Monatswert für einen Sensor.
 
-        Bevorzugt MAX(sum) - MIN(sum) (HA's eigene reset-bereinigte Kumulation
-        für total_increasing-Sensoren — funktioniert auch bei Tagesreset-
-        Zählern und Mehrfach-Resets im Monat). Fallback auf MAX(state) - MIN(state)
+        Bevorzugt `sum` (HA's eigene reset-bereinigte Kumulation für
+        total_increasing-Sensoren — funktioniert auch bei Tagesreset-Zählern
+        und Mehrfach-Resets im Monat). Fallback auf MAX(state) - MIN(state)
         wenn `sum` nicht verfügbar (z.B. measurement-Sensoren ohne has_sum).
 
-        Hintergrund: state-Differenz war früher der einzige Pfad, liefert aber
-        bei Tagesreset-Zählern fälschlich die größte Tagessumme im Monat statt
-        der Monatssumme (Discussion #131). HA's `sum`-Spalte wird automatisch
-        bei jedem Reset um den vorigen Endwert weitergeführt — exakt das, was
-        das HA-Energy-Dashboard intern auch nutzt.
+        ⭐ **Zählerlücken wie HA (R10 + Vorlage §10, W-R10):** der Monatswert ist
+        die **Σ der Stundenänderungen ab dem Anker** — der letzten Zeile mit
+        `sum` VOR dem Monat (beliebig weit zurück; ohne sie der älteste `sum`
+        im Monat, die erste Stunde der Reihe fehlt dann einmal wie bei R1).
+        Der Monat rechnet mit derselben Regel wie der Tag:
 
-        Werte werden automatisch nach kWh konvertiert (Wh, MWh, etc.).
+        * **R4** — eine negative Änderung (Rücksprung des HA-`sum`) ist
+          verworfen, nicht abgezogen. Ohne Rücksprung ist das exakt „neuester
+          `sum` − Anker" (R10).
+        * **R3** — mit ``deckel_kwh_je_stunde`` (die Schwelle einer Stunde,
+          nur für Felder der Achsen PV/Einspeisung, vom Aufrufer aus
+          `plausibility.schwelle_pv_einspeisung_stunde_kwh(kwp)`) ist eine
+          Änderung verworfen, die größer ist als Schwelle × Fenster —
+          Fenster = Zeit seit der letzten Änderung des Standes (n plus
+          vorangehende Nullzeilen, Anteil der Nullzeilen bis 24 h;
+          `spannen.deckel_fenster_stunden`, Nachträge II), wie am Tag. Ohne
+          Parameter kein Deckel — ein Aufwärtssprung zählt dann als Menge
+          (benannt).
+
+        Grund auf Kategorie-Ebene: ein Monatswert ist eine Summe von Stunden;
+        was die Stunden verwerfen, verwirft der Monat — sonst zeigen
+        Monatsabschluss-Vorschlag und Cockpit → Tag für denselben Sensor zwei
+        Zahlen. Bis 26.09.2026 stand hier MAX(sum) − MIN(sum) im Monat: das
+        verlor die erste Stunde jedes Monats und nach einer Recorder-Lücke über
+        die Monatsgrenze alles bis zur ersten Zeile (N-563).
+
+        ``start_wert``/``end_wert`` sind Anker und neuester Stand; ``differenz``
+        ist die Summe und weicht von ihrer Differenz genau um
+        ``verworfen_kwh`` ab. Werte werden nach kWh konvertiert (Wh, MWh, …).
         """
         ts_start, ts_ende = _monatsgrenzen_ts(jahr, monat)
+        faktor = _ENERGY_UNIT_TO_KWH.get(meta.unit, 1.0) if meta.unit else 1.0
 
         if conn is None:
-            # Ohne Datenbank rechnet Python die vier Aggregate — `period=month`
-            # taugt hier NICHT: HA liefert dort den Wert am Perioden-**Ende**,
-            # gebraucht wird aber MAX−MIN **innerhalb** des Monats. Ein anderer
-            # Bezugspunkt wäre eine andere Zahl, nicht dieselbe über ein anderes
-            # Kabel.
+            # Ohne Datenbank rechnet Python dieselben Größen aus den Zeilen —
+            # `period=month` taugt hier NICHT: HA liefert dort den Wert am
+            # Perioden-**Ende** eines anderen Bezugspunkts.
             zeilen = self._ws_zeilen(
                 [sensor_id], ts_start, ts_ende - 1, types=["sum", "state"],
             ).get(sensor_id, [])
             states = [z["state"] for z in zeilen if z["state"] is not None]
-            sums = [z["sum"] for z in zeilen if z["sum"] is not None]
-            if not states and not sums:
-                return None
-            state_min = min(states) if states else None
-            state_max = max(states) if states else None
-            sum_min = min(sums) if sums else None
-            sum_max = max(sums) if sums else None
-        else:
-            result = conn.execute(
-                text("""
-                    SELECT
-                        MIN(state) as state_min,
-                        MAX(state) as state_max,
-                        MIN(sum)   as sum_min,
-                        MAX(sum)   as sum_max
-                    FROM statistics
-                    WHERE metadata_id = :mid
-                    AND start_ts >= :start
-                    AND start_ts < :end
-                """),
-                {"mid": meta.id, "start": ts_start, "end": ts_ende}
+            sum_zeilen = sorted(
+                (float(z["start_ts"]), z["sum"]) for z in zeilen if z["sum"] is not None
             )
-
-            row = result.fetchone()
-            if not row or (row[0] is None and row[2] is None):
-                return None
-
-            state_min, state_max, sum_min, sum_max = row[0], row[1], row[2], row[3]
-
-        # Bevorzugt sum-basiert (reset-bereinigt), Fallback state-basiert
-        if sum_min is not None and sum_max is not None:
-            start_wert = sum_min
-            end_wert = sum_max
         else:
-            start_wert = state_min
-            end_wert = state_max
-        differenz = end_wert - start_wert
+            fenster = {"mid": meta.id, "start": ts_start, "end": ts_ende}
+            states = [r[0] for r in conn.execute(text("""
+                SELECT state FROM statistics
+                WHERE metadata_id = :mid AND start_ts >= :start AND start_ts < :end
+                  AND state IS NOT NULL
+            """), fenster)]
+            sum_zeilen = [(float(r[0]), r[1]) for r in conn.execute(text("""
+                SELECT start_ts, sum FROM statistics
+                WHERE metadata_id = :mid AND start_ts >= :start AND start_ts < :end
+                  AND sum IS NOT NULL
+                ORDER BY start_ts
+            """), fenster)]
+        if not states and not sum_zeilen:
+            return None
 
-        # Einheiten-Konvertierung nach kWh
-        faktor = _ENERGY_UNIT_TO_KWH.get(meta.unit, 1.0) if meta.unit else 1.0
-        if faktor != 1.0:
-            logger.info(f"Sensor {sensor_id}: Konvertiere {meta.unit} → kWh (Faktor {faktor})")
-            start_wert *= faktor
-            end_wert *= faktor
-            differenz *= faktor
+        verworfen = 0.0
+        if sum_zeilen:
+            anker = self._letzter_sum_vor(conn, meta, sensor_id, ts_start)
+            reihe = ([anker] if anker is not None else []) + sum_zeilen
+            start_wert = reihe[0][1] * faktor
+            end_wert = reihe[-1][1] * faktor
+            differenz = 0.0
+            # R3, Nachträge II: Stunden unveränderten Standes vor einer Änderung
+            # (Nullzeilen eines eingefrorenen Zählers) verlängern das Fenster.
+            null_lauf_h = 0.0
+            for (ts_vor, s_vor), (ts_nach, s_nach) in zip(reihe, reihe[1:]):
+                delta = (s_nach - s_vor) * faktor
+                n = max(1, round((ts_nach - ts_vor) / 3600))
+                if abs(delta) <= 1e-9:
+                    null_lauf_h += (ts_nach - ts_vor) / 3600
+                    continue
+                seit = n + null_lauf_h
+                null_lauf_h = 0.0
+                if delta < 0:                                   # R4
+                    verworfen += -delta
+                    continue
+                if deckel_kwh_je_stunde is not None and deckel_kwh_je_stunde > 0:
+                    fenster = deckel_fenster_stunden(n, seit)
+                    if delta > deckel_kwh_je_stunde * fenster:  # R3 (Fenster)
+                        verworfen += delta
+                        continue
+                differenz += delta
+            if verworfen:
+                logger.info(
+                    f"Sensor {sensor_id} {jahr}-{monat:02d}: {verworfen:.3f} kWh verworfen "
+                    f"(Rücksprung oder Deckel, wie am Tag)"
+                )
+        else:
+            start_wert = min(states) * faktor
+            end_wert = max(states) * faktor
+            differenz = end_wert - start_wert
 
         return SensorMonatswert(
             sensor_id=sensor_id,
             start_wert=round(start_wert, 3),
             end_wert=round(end_wert, 3),
-            differenz=round(differenz, 2)
+            differenz=round(differenz, 2),
+            verworfen_kwh=round(verworfen, 3),
         )
 
     def get_monatswerte(
         self,
         sensor_ids: list[str],
         jahr: int,
-        monat: int
+        monat: int,
+        deckel_je_sensor: Optional[dict[str, float]] = None,
     ) -> MonatswertResponse:
-        """Holt Monatswerte für mehrere Sensoren."""
+        """Holt Monatswerte für mehrere Sensoren.
+
+        ``deckel_je_sensor``: Stunden-Schwelle (kWh) je Sensor-ID für den
+        R3-Deckel (nur PV/Einspeisung, s. `deckel_je_sensor_fuer_anlage`);
+        Sensoren ohne Eintrag rechnen ohne Deckel.
+        """
         if not self.is_available:
             raise RuntimeError("HA-Datenbank nicht verfügbar")
 
@@ -733,7 +840,10 @@ class HAStatisticsService:
                     logger.warning(f"Sensor {sensor_id} nicht in HA statistics gefunden")
                     continue
 
-                wert = self.get_sensor_monatswert(conn, meta, sensor_id, jahr, monat)
+                wert = self.get_sensor_monatswert(
+                    conn, meta, sensor_id, jahr, monat,
+                    deckel_kwh_je_stunde=(deckel_je_sensor or {}).get(sensor_id),
+                )
                 if wert:
                     sensoren.append(wert)
 
@@ -903,9 +1013,11 @@ class HAStatisticsService:
     def get_alle_monatswerte(
         self,
         sensor_ids: list[str],
-        ab_datum: Optional[date] = None
+        ab_datum: Optional[date] = None,
+        deckel_je_sensor: Optional[dict[str, float]] = None,
     ) -> list[MonatswertResponse]:
-        """Holt Monatswerte für alle verfügbaren Monate."""
+        """Holt Monatswerte für alle verfügbaren Monate (``deckel_je_sensor``
+        wie bei `get_monatswerte`)."""
         verfuegbar = self.get_verfuegbare_monate(sensor_ids)
 
         ergebnisse: list[MonatswertResponse] = []
@@ -915,7 +1027,10 @@ class HAStatisticsService:
                 if monat_start < ab_datum:
                     continue
 
-            werte = self.get_monatswerte(sensor_ids, monat_info.jahr, monat_info.monat)
+            werte = self.get_monatswerte(
+                sensor_ids, monat_info.jahr, monat_info.monat,
+                deckel_je_sensor=deckel_je_sensor,
+            )
             if werte.sensoren:
                 ergebnisse.append(werte)
 
@@ -1431,97 +1546,116 @@ class HAStatisticsService:
         sensor_ids: list[str],
         datum: date,
     ) -> dict[str, dict[int, Optional[float]]]:
+        """Stunden-Deltas eines Tages — **Projektion** der Slot-Tabelle.
+
+        ⭐ **Seit „Zählerlücken wie HA" (Vorlage Fassung 7, R5) ist die SoT
+        `get_hourly_slots_for_day`.** Diese Funktion bleibt mit ihrer alten
+        Rückgabeform ``{entity_id: {slot_h: kwh_delta_or_None}}`` stehen, damit
+        die Proben des Rohpfads (Slot-Konvention, Einheit, Transport-Symmetrie)
+        weiter beweisen, dass der Rohpfad nicht driftet. Kein Produktivpfad
+        liest sie mehr; der Aggregator liest die Slot-Tabelle direkt.
+
+        **Die Projektion:** ein Slot erscheint mit seinem Wert, wenn er genau
+        **eine** reale Stunde trägt (``n == 1``), sonst ``None``. Damit ist sie
+        für jede lückenlose Reihe bitgleich zum Stand vor dem Umbau — Slot h =
+        Zähler(h) − Zähler(h−1) — und eine gebündelte Stunde erscheint hier
+        weiterhin als Lücke, weil diese Rückgabeform keine Spanne tragen kann.
+        Wer die Energie einer Lücke braucht, liest `get_hourly_slots_for_day`.
+
+        Slot-Konvention (unverändert, #144/#297): Slot h = Energie [h-1, h),
+        Zähler(k) = sum @ start_ts=(k-1), Boundary-Index aus
+        `lts_boundary_index`. ``entity_id`` fehlt im Ergebnis, wenn der Sensor
+        in `statistics_meta` fehlt oder im Fenster keine Zeile hat.
         """
-        Etappe 4 (v3.31.0): Liest stündliche kWh-Deltas direkt aus
-        HA-LTS-Statistics für einen Tag — ohne sensor_snapshots-Zwischenschritt.
+        reihen = self.get_hourly_slots_for_day(sensor_ids, datum)
+        return {
+            sid: {
+                h: (slot.delta if (slot := reihe.slots.get(h)) is not None and slot.n == 1 else None)
+                for h in range(24)
+            }
+            for sid, reihe in reihen.items()
+        }
 
-        Pro Sensor 24 Stunden-Deltas in **Backward-Konvention** (#144/#297):
-        Slot h = Energie im Intervall [h-1, h) — dasselbe Slot-Raster wie
-        BoundaryRange.for_hourly_slots (Snapshot-Pfad) und die Prognosequellen.
-        Symmetrie über alle Pfade: tests/test_slot_konvention_quellen.py.
+    def get_hourly_slots_for_day(
+        self,
+        sensor_ids: list[str],
+        datum: date,
+    ) -> dict[str, SensorSlotReihe]:
+        """Slot-Tabelle je Zähler für einen Tag — **was HA für jede Stunde zeigt**.
 
-        HA-Statistics-Konvention (empirisch belegt 2026-06-04 gegen Live-HA):
-        state/sum bei start_ts=H ist der Counter-Stand AM ENDE der Periode,
-        also Zähler um (H+1):00. Mit Zähler(k) := Counter um k:00 gilt
-        Zähler(k) = sum @ start_ts=(k-1); der Boundary-Index kommt aus
-        `lts_boundary_index` (slot_konvention.py). Für Slot h (Energie [h-1, h)):
-            end   = Zähler(h)    = sum @ start_ts=(h-1)
-            start = Zähler(h-1)  = sum @ start_ts=(h-2)
-            delta = end - start
+        ⭐ **Zählerlücken wie HA (Vorlage Fassung 7, R1/R2/T1/T2).** HA rechnet
+        eine Stunde als ``sum`` minus die letzte **vorhandene** ``sum`` davor,
+        beliebig weit zurück (`recorder/statistics.py::_augment_result_with_change`).
+        Diese Funktion tut dasselbe auf dem Backward-Raster von eedc:
 
-        Boundary-Spezialfälle:
-            - Slot 0:  [23:00 Vortag, 00:00 heute)  → Zähler(0) − Zähler(-1)
-            - Slot 23: [22:00 heute, 23:00 heute)   → Zähler(23) − Zähler(22)
+        * Die HA-Zeilen des Fensters ``[Vortag 22:00, heute 22:00]`` (``start_ts``,
+          5 min Polster) werden über `lts_boundary_index` auf die Indizes −1…23
+          abgebildet (Zähler(k) = sum @ start_ts=(k−1)). Fallen zwei Zeilen auf
+          einen Index (Herbst-Umstellung), gilt die spätere.
+        * **Anker für Slot h** ist der höchste belegte Index < h — über den
+          **Index**, nicht über den Zeitstempel (W1: am Herbst-Umstellungstag
+          verlöre der Zeitstempel-Anker 1 kWh). Hat das Fenster davor keinen
+          belegten Index, trägt die **Anker-Zeile vor dem Fenster**: die letzte
+          Zeile mit ``sum IS NOT NULL``, beliebig weit zurück, mit Wert **und**
+          ``start_ts``. Sie kommt immer aus HA, nie aus eedc — D und D+1 hängen
+          damit nur von HA ab.
+        * Slot h = Stand(h) − Stand(Anker); fehlt Stand(h), bleibt Slot h leer
+          und seine Energie steht im nächsten belegten Slot (auch im Folgetag:
+          D weniger, D+1 mehr — wie im HA-Dashboard).
+        * ``n`` = round((start_ts(h) − start_ts(Anker)) / 3600) in **realen**
+          Stunden: Herbst-Doppelslot n = 2, Frühjahr leerer Index ohne Spanne
+          und Folgeslot n = 1. Ein Delta von 0 hat n = 1 (R2).
+        * **Kein Anker** (die Reihe beginnt im Fenster): der erste Slot bleibt
+          leer. Benannte Abweichung — HA nimmt dort 0 und zeigt die erste Stunde.
 
-        HISTORIE: Bis v3.3x labelte dieser Pfad FORWARD (Slot h = [h, h+1)),
-        während Prognosen + Snapshot-Pfad backward waren → IST erschien im
-        Stundenvergleich 1 h zu früh (Rainer/Gernot, 2026-06-04). Der
-        Symmetrie-Test deckte nur den Snapshot-Pfad ab und blieb grün.
+        Transport: SQL (Recorder-Datei/-URL) liest den Anker mit
+        ``start_ts < ts_von AND sum IS NOT NULL ORDER BY start_ts DESC LIMIT 1``
+        (Index ``(metadata_id, start_ts)``); der WebSocket-Weg fragt denselben
+        `statistics_during_period`-Befehl rückwärts wachsend über
+        1 · 8 · 32 · 128 · 1024 Tage (kein neuer Befehl, W2). Ein Anker wird nur
+        gesucht, wenn der Index −1 im Fenster fehlt — an Tagen ohne Lücke kostet
+        das nichts.
 
-        Verwendet die `sum`-Spalte (HA-recompile-bereinigte Lifetime-Summe,
-        reset-tolerant). Fallback auf `state` nur für Sensoren ohne has_sum
-        (keine Energie-Counter — wird im Energie-Pfad ignoriert).
-
-        Bei Counter-Resets in der Mitte des Tages (negative Deltas): das
-        Plausibility-Cap aus snapshot/plausibility.py greift im Aufrufer
-        (Schritt 4) — diese Funktion liefert das Roh-Delta einschliesslich
-        Vorzeichen, damit der Aufrufer kategorisierte Cap-Entscheidungen
-        treffen kann.
-
-        Args:
-            sensor_ids: HA Entity-IDs der kumulativen kWh-Counter
-            datum: Der Tag (Slots 0..23)
+        Negative Deltas werden roh geliefert; verwerfen (R4) und deckeln (R3)
+        entscheidet der Aggregator.
 
         Returns:
-            {entity_id: {slot_h: kwh_delta_or_None}}
-            None pro Slot bei Lücke (fehlende Boundary in Statistics).
-            entity_id fehlt im Result, wenn der Sensor in statistics_meta
-            nicht gefunden wurde oder keine Daten im Zeitraum hat.
+            ``{entity_id: SensorSlotReihe}`` — ``entity_id`` fehlt, wenn der
+            Sensor in `statistics_meta` fehlt, keine Summen-Spalte hat oder im
+            Fenster keine Zeile.
         """
         if not self.is_available or not sensor_ids:
             return {}
 
         import time as time_module
 
-        # Backward (#144): Slot h = Zähler(h) − Zähler(h-1) = Energie [h-1, h).
-        # Wir brauchen Zählerstände an den Stunden -1..23 (23:00 Vortag … 23:00
-        # heute). Zähler(k) = sum @ start_ts=(k-1) → die Rows reichen von
-        # start_ts=22:00 Vortag bis 22:00 heute. (Vor dem Backward-Fix lag das
-        # Fenster eine Stunde später, was die Forward-Fehlbeschriftung zementierte.)
-        # 5-Min-Polster gegen Boundary-Drift (start_ts=H:00:01 statt H:00:00).
         boundary_start = datetime.combine(datum - timedelta(days=1), datetime.min.time()).replace(hour=22)
         boundary_end = datetime.combine(datum, datetime.min.time()).replace(hour=22)
         ts_von = time_module.mktime((boundary_start - timedelta(minutes=5)).timetuple())
         ts_bis = time_module.mktime((boundary_end + timedelta(minutes=5)).timetuple())
 
-        params: dict = {f"id_{i}": sid for i, sid in enumerate(sensor_ids)}
-        placeholders = ", ".join(f":id_{i}" for i in range(len(sensor_ids)))
-        params["ts_von"] = ts_von
-        params["ts_bis"] = ts_bis
-
-        # Per-Sensor: {boundary_hour_index: counter_value_in_kwh}
-        # boundary_hour_index = Zähler(k):00, k = Stunden-Offset ab 00:00 heute:
-        #  -1 = 23:00 Vortag (= sum @ start_ts=22:00 Vortag), 0 = 00:00 heute,
-        #  …, 23 = 23:00 heute. Index via lts_boundary_index (SoT/Symmetrie-Test).
-        per_sensor_boundaries: dict[str, dict[int, float]] = {sid: {} for sid in sensor_ids}
+        # Per-Sensor: {boundary_index: (stand_kwh, start_ts)}; Index -1..24.
+        per_sensor: dict[str, dict[int, tuple[float, float]]] = {sid: {} for sid in sensor_ids}
+        anker: dict[str, tuple[float, float]] = {}
 
         try:
             with self._verbindung() as conn:
-                # Metadaten laden (faktor, has_sum)
                 meta_by_id: dict[str, SensorMeta] = {}
                 for sid in sensor_ids:
                     m = self.get_metadata(conn, sid)
-                    if m:
+                    if m and m.has_sum:
                         meta_by_id[sid] = m
-
                 if not meta_by_id:
                     return {}
-
                 meta_id_to_sensor: dict[int, str] = {m.id: sid for sid, m in meta_by_id.items()}
+
+                def _faktor(sid: str) -> float:
+                    unit = meta_by_id[sid].unit
+                    return _ENERGY_UNIT_TO_KWH.get(unit, 1.0) if unit else 1.0
 
                 if conn is None:
                     rows = [
-                        (meta_by_id[sid].id, z["start_ts"], z["sum"], z["state"])
+                        (meta_by_id[sid].id, z["start_ts"], z["sum"])
                         for sid, zeilen in self._ws_zeilen(
                             list(meta_by_id), ts_von, ts_bis, types=["sum", "state"],
                         ).items()
@@ -1535,7 +1669,7 @@ class HAStatisticsService:
                     }
                     rows = conn.execute(
                         text(f"""
-                            SELECT metadata_id, start_ts, sum, state
+                            SELECT metadata_id, start_ts, sum
                             FROM statistics
                             WHERE metadata_id IN ({placeholders_meta})
                               AND start_ts >= :ts_von
@@ -1544,58 +1678,80 @@ class HAStatisticsService:
                         """),
                         {**meta_params, "ts_von": ts_von, "ts_bis": ts_bis},
                     )
-                for row in rows:
-                    metadata_id = row[0]
-                    start_ts = row[1]
-                    sum_val = row[2]
-                    state_val = row[3]
+                for metadata_id, start_ts, sum_val in rows:
                     sid = meta_id_to_sensor.get(metadata_id)
-                    if not sid:
-                        continue
-                    meta = meta_by_id[sid]
-
-                    # Counter-Wert in kWh
-                    if meta.has_sum:
-                        if sum_val is None:
-                            continue  # NULL → Lücke, Caller interpoliert oder verwirft
-                        raw = sum_val
-                    else:
-                        # Nicht-Energie-Sensor — wird im Aufrufer durch
-                        # _categorize_counter ohnehin ausgefiltert (Power-Sensor
-                        # liefert keine Energie-Kategorie). Defensiv überspringen.
-                        continue
-
-                    faktor = _ENERGY_UNIT_TO_KWH.get(meta.unit, 1.0) if meta.unit else 1.0
-                    wert_kwh = raw * faktor
-
-                    # start_ts=H → Counter am Ende von H = Zähler(H+1):00.
-                    # Boundary-Index (Stunden-Offset ab 00:00 heute, -1..24) aus
-                    # der SoT-Helper-Funktion — DST-robust, Symmetrie-getestet.
-                    dt = datetime.fromtimestamp(start_ts)
-                    b_idx = lts_boundary_index(dt, datum)
+                    if not sid or sum_val is None:
+                        continue  # NULL → keine Zeile; die Energie trägt die nächste
+                    b_idx = lts_boundary_index(datetime.fromtimestamp(start_ts), datum)
                     if b_idx < -1 or b_idx > 24:
-                        continue  # Außerhalb relevanter Boundary-Range
-                    per_sensor_boundaries[sid][b_idx] = wert_kwh
+                        continue
+                    # Aufsteigend gelesen ⇒ bei zwei Zeilen auf einem Index
+                    # (Herbst-Umstellung) gewinnt die spätere.
+                    per_sensor[sid][b_idx] = (sum_val * _faktor(sid), float(start_ts))
+
+                # Anker vor dem Fenster — nur, wo Index -1 fehlt und das Fenster
+                # überhaupt eine Zeile trägt.
+                brauchen = [sid for sid in meta_by_id
+                            if per_sensor[sid] and -1 not in per_sensor[sid]]
+                if brauchen:
+                    if conn is None:
+                        offen = list(brauchen)
+                        for tage in _WS_ANKER_FENSTER_TAGE:
+                            if not offen:
+                                break
+                            zeilen = self._ws_zeilen(
+                                offen, ts_von - tage * 86400, ts_von - 1, types=["sum"],
+                            )
+                            for sid in list(offen):
+                                treffer = [z for z in zeilen.get(sid, [])
+                                           if z.get("sum") is not None and z["start_ts"] < ts_von]
+                                if treffer:
+                                    letzte = max(treffer, key=lambda z: z["start_ts"])
+                                    anker[sid] = (letzte["sum"] * _faktor(sid), float(letzte["start_ts"]))
+                                    offen.remove(sid)
+                    else:
+                        for sid in brauchen:
+                            zeile = conn.execute(
+                                text("""
+                                    SELECT start_ts, sum FROM statistics
+                                    WHERE metadata_id = :mid
+                                      AND start_ts < :ts_von
+                                      AND sum IS NOT NULL
+                                    ORDER BY start_ts DESC
+                                    LIMIT 1
+                                """),
+                                {"mid": meta_by_id[sid].id, "ts_von": ts_von},
+                            ).fetchone()
+                            if zeile is not None:
+                                anker[sid] = (zeile[1] * _faktor(sid), float(zeile[0]))
 
         except Exception as e:
-            logger.warning(f"get_hourly_kwh_deltas_for_day Fehler: {type(e).__name__}: {e}")
+            logger.warning(f"get_hourly_slots_for_day Fehler: {type(e).__name__}: {e}")
             return {}
 
-        # Backward (#144): Slot h = Zähler(h) − Zähler(h-1) = Energie [h-1, h).
-        # Slot 0 = [23:00 Vortag, 00:00 heute) → boundary[0] − boundary[-1].
-        result: dict[str, dict[int, Optional[float]]] = {}
-        for sid, boundaries in per_sensor_boundaries.items():
+        result: dict[str, SensorSlotReihe] = {}
+        for sid, boundaries in per_sensor.items():
             if not boundaries:
-                continue  # Sensor hatte keine Daten — wird im Aufrufer als Lücke behandelt
-            slots: dict[int, Optional[float]] = {}
+                continue  # Sensor hatte im Fenster keine Zeile — seine Energie trägt der Folgetag
+            vorher: Optional[tuple[float, float]] = boundaries.get(-1) or anker.get(sid)
+            erster_anker_ts: Optional[float] = vorher[1] if vorher else None
+            erster = True
+            slots: dict[int, StundenSlot] = {}
             for h in range(24):
-                start = boundaries.get(h - 1)
-                end = boundaries.get(h)
-                if start is None or end is None:
-                    slots[h] = None
-                else:
-                    slots[h] = round(end - start, 3)
-            result[sid] = slots
+                stand = boundaries.get(h)
+                if stand is None:
+                    continue  # leerer Slot — die Energie trägt der nächste belegte
+                if vorher is not None:
+                    delta = round(stand[0] - vorher[0], 3)
+                    n = 1 if delta == 0 else max(1, round((stand[1] - vorher[1]) / 3600))
+                    slots[h] = StundenSlot(delta=delta, n=n)
+                    if erster:
+                        erster = False
+                elif erster:
+                    erster_anker_ts = None  # Reihe beginnt im Fenster: kein Anker
+                    erster = False
+                vorher = stand
+            result[sid] = SensorSlotReihe(slots=slots, anker_start_ts=erster_anker_ts)
 
         return result
 

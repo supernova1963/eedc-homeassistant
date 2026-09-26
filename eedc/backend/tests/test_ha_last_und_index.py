@@ -296,6 +296,9 @@ _RECORDER_METHODEN = {
     "count_statistics_sensors", "filter_summen_faehige_sensor_ids",
     "filter_valid_sensor_ids", "get_alle_monatswerte",
     "get_hourly_kwh_deltas_for_day", "get_hourly_mean_for_day",
+    # Zählerlücken wie HA (26.09.2026): die Slot-Tabelle ist der neue Rohpfad des
+    # LTS-Aggregators — er ruft sie über `asyncio.to_thread`.
+    "get_hourly_slots_for_day",
     "get_hourly_minmax_sensor_data", "get_hourly_sensor_data",
     "get_monatsanfang_wert", "get_monatswerte", "get_sensor_monatswert",
     "get_short_term_5min_for_day", "get_value_at", "get_verfuegbare_monate",
@@ -320,11 +323,12 @@ _NOCH_NICHT_ENTKOPPELT = {
     ("api/routes/ha_statistics.py", "get_verfuegbare_monate"),
     ("api/routes/ha_statistics.py", "get_alle_monatswerte"),
     ("api/routes/ha_statistics.py", "get_monatsanfang_wert"),
-    ("services/snapshot/lts_aggregator.py", "get_hourly_kwh_deltas_for_day"),
+    # Zählerlücken wie HA (26.09.2026): `lts_aggregator` liest die Slot-Tabelle
+    # jetzt über `asyncio.to_thread` — der Eintrag ist getilgt, die Liste schrumpft.
     ("services/snapshot/reader.py", "get_value_at"),
     ("services/snapshot/reaggregator.py", "get_value_at"),
 }
-_RESTSCHULD_OBERGRENZE = 14
+_RESTSCHULD_OBERGRENZE = 11   # 26.09.2026: 14 → 11 (lts_aggregator entkoppelt)
 
 
 def _blockierende_aufrufe() -> list[tuple[str, int, str, str]]:

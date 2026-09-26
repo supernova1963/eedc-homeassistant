@@ -86,6 +86,9 @@ def _mapping(*inv_ids: int) -> dict:
 def _db():
     result = MagicMock()
     result.all.return_value = []
+    # Zählerlücken wie HA (T3): der Snapshot-Pfad fragt bei fehlendem Stand am
+    # Fensterbeginn nach dem letzten Stand davor — hier gibt es keinen.
+    result.scalar_one_or_none.return_value = None
 
     async def _execute(*a, **k):
         return result

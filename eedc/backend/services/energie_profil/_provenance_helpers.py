@@ -36,6 +36,10 @@ _TZ_SKIP_COLUMNS = frozenset({
     # Korrekturprofil-Lernens (ein Schreiber, festes Muster) — kein
     # Aggregat-Wert, den ein Anwender irgendwo abliest.
     "lern_soll_stundenprofil_kwh", "lern_soll_kwh",
+    # Zählerlücken wie HA (R4/R9): `verworfen` ist eine Markierung ÜBER die
+    # Zeile (welche Achse eine Menge verworfen hat) und die Regelmarke — kein
+    # Aggregat-Wert mit eigener Herkunft.
+    "verworfen",
 })
 
 # TagesEnergieProfil:
@@ -43,6 +47,9 @@ _TEP_JSON_SUBKEY_COLUMNS = ("komponenten",)
 _TEP_SKIP_COLUMNS = frozenset({
     "id", "anlage_id", "datum", "stunde",
     "source_provenance", "source_hash",
+    # Zählerlücken wie HA (R2): die Spanne beschreibt die Zeile, sie ist kein
+    # Messwert mit eigener Herkunft.
+    "spannen",
 })
 
 

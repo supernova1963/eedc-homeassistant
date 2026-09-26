@@ -384,9 +384,11 @@ async def _load_grundlast_nacht_kw(
     from calendar import monthrange
     from backend.models.tages_energie_profil import TagesEnergieProfil
 
+    from backend.core.berechnungen.spannen import verbrauch_gebuendelt
+
     monat_ende = date(jahr, monat, monthrange(jahr, monat)[1])
     result = await db.execute(
-        select(TagesEnergieProfil.verbrauch_kw).where(
+        select(TagesEnergieProfil.verbrauch_kw, TagesEnergieProfil.spannen).where(
             TagesEnergieProfil.anlage_id == anlage_id,
             TagesEnergieProfil.datum >= date(jahr, monat, 1),
             TagesEnergieProfil.datum <= monat_ende,
@@ -395,4 +397,7 @@ async def _load_grundlast_nacht_kw(
             TagesEnergieProfil.verbrauch_kw > 0,
         )
     )
-    return [float(w) for w in result.scalars().all()]
+    # Zählerlücken wie HA (§2, Ü3): eine Nachtzeile, deren Verbrauchs-Achsen
+    # mehr als eine reale Stunde tragen, ist keine Stunden-Leistung — sie
+    # fällt aus dem Median (dieselbe Regel wie `tage_werte`).
+    return [float(r.verbrauch_kw) for r in result.all() if not verbrauch_gebuendelt(r)]

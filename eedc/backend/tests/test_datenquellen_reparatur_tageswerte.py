@@ -29,6 +29,7 @@ import pytest
 from sqlalchemy import select
 
 from backend.models.anlage import Anlage
+from backend.tests import ha_lts_helfer
 from backend.models.investition import Investition
 from backend.models.sensor_snapshot import SensorSnapshot
 from backend.services.migrations.migrate_quellen_ins_mapping import (
@@ -93,6 +94,9 @@ def _mock_ha_svc() -> MagicMock:
     svc.get_hourly_kwh_deltas_for_day.side_effect = lambda ids, _d: {
         eid: DELTAS[eid] for eid in ids if eid in DELTAS
     }
+    # Zählerlücken wie HA (Schnitt 4): der Aggregator liest die Slot-Tabelle.
+    svc.get_hourly_slots_for_day.side_effect = ha_lts_helfer.slots_side_effect(
+        svc.get_hourly_kwh_deltas_for_day.side_effect)
     return svc
 
 
@@ -224,6 +228,9 @@ async def test_zaehler_ohne_summen_spalte_bleibt_leer_trotz_reparatur(db):
     svc.get_hourly_kwh_deltas_for_day.side_effect = lambda ids, _d: {
         eid: DELTAS[eid] for eid in ids if eid == EID_PV
     }
+    # Zählerlücken wie HA (Schnitt 4): der Aggregator liest die Slot-Tabelle.
+    svc.get_hourly_slots_for_day.side_effect = ha_lts_helfer.slots_side_effect(
+        svc.get_hourly_kwh_deltas_for_day.side_effect)
     with patch(
         "backend.services.snapshot.lts_aggregator.get_ha_statistics_service",
         return_value=svc,

@@ -139,6 +139,12 @@ _BASELINE: dict[str, int] = {
     "test_wp_dashboard_betriebsstunden.py": 1,
     "test_wurzelmuster_p1_orientierung.py": 6,
     "test_wurzelmuster_p4_teilsumme.py": 2,
+    # Zählerlücken wie HA (26.09.2026), NEU in dieser Liste: vier Prüflinge
+    # (`stratifizierung_endpoint`, `get_prognosen_genauigkeit`,
+    # `_check_pv_ueber_erfassung`, `_profil_from_db`) verankern ihr Fenster
+    # SELBST an `date.today()` und nehmen keinen Stichtag entgegen; die Proben
+    # legen ihre Tage relativ zu heute (nur Tagesabstände, keine Uhrzeit).
+    "test_zaehlerluecken_leser.py": 4,
 }
 
 

@@ -82,6 +82,19 @@ export function baueTagAlsMonat(
     }
   }
   const pos = (v: number) => (v > 0 ? v : null)
+  // ⭐ Zählerlücken wie HA (§2, „Leistungspfad-Σ neben Zählerpfad"): der
+  // Zählerpfad hat Vorrang. Nach einer Lücke in HA trägt er die Energie der
+  // Lücke in der Folgestunde, der Leistungspfad kennt die Lückenstunden gar
+  // nicht — die Σ über `komponenten` bliebe dann zu niedrig und wiche von der
+  // Tagesbilanz ab. Der Leistungspfad bleibt der Rückfall für Tage ohne Zähler
+  // (Rollup leer: `tag.bkw` = 0, `tag.sonstiges_*` = null — der Server fällt
+  // selbst schon auf die Stunden zurück, `tage_werte.py`).
+  // ⚠ E-Mobilität bleibt hier bewusst auf den Stunden: `TagWerte` trägt keinen
+  // Zählerpfad-Tageswert für sie, und die Heimlade-Zuordnung (Auto vor Wallbox,
+  // N-555) gehört nicht in diese Datei.
+  bkw = tag.bkw > 0 ? tag.bkw : bkw
+  sonstErz = tag.sonstiges_erzeugung ?? sonstErz
+  sonstVerb = tag.sonstiges_verbrauch ?? sonstVerb
   return {
     // Speicher (TagWerte, backend-aggregiert) + tagesgenaue Netzladung/Ladepreis (tagDetail).
     speicher_ladung_kwh: tag.speicher_ladung,

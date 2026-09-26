@@ -26,6 +26,7 @@ from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
 
 from backend.tests.snapshot_doubles import DbOhneZwischenstaende
+from backend.tests import ha_lts_helfer
 
 import pytest
 
@@ -120,6 +121,9 @@ def _build_mock_ha_svc(deltas_per_sensor: dict[str, dict[int, float]]) -> MagicM
         return {eid: deltas_per_sensor[eid] for eid in sensor_ids if eid in deltas_per_sensor}
 
     svc.get_hourly_kwh_deltas_for_day.side_effect = _get_deltas
+    # Zählerlücken wie HA (Schnitt 4): der Aggregator liest die Slot-Tabelle —
+    # dieselben Stundenwerte, je eine reale Stunde (keine Bündel).
+    svc.get_hourly_slots_for_day.side_effect = ha_lts_helfer.slots_side_effect(_get_deltas)
     return svc
 
 

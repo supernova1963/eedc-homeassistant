@@ -70,6 +70,7 @@ from backend.services.snapshot.keys import (
 )
 from backend.services.snapshot.reader import (
     get_snapshot,
+    letzter_stand_vor,
     mqtt_zaehler_keys,
     tageswert_aus_reihe,
 )
@@ -237,10 +238,27 @@ async def lade_tageswerte_je_geraet(
 
                 for tag, (tages_start, tages_ende) in fenster_je_tag.items():
                     s0, s1 = stand_am[tages_start], stand_am[tages_ende]
+                    anker_ts = tages_start
+                    if s0 is None and s1 is not None:
+                        # ⭐ Zählerlücken wie HA (R1): fehlt der Stand am
+                        # Tagesbeginn, trägt der letzte Stand davor — zuerst aus
+                        # der geladenen Reihe, sonst beliebig weit zurück. Die
+                        # Energie einer Lücke über Mitternacht gehört zu diesem
+                        # Tag (wie im HA-Dashboard, wie Cockpit → Tag).
+                        vorher = [(ts, w) for ts, w in reihe if ts < tages_start]
+                        if vorher:
+                            anker_ts, s0 = vorher[-1]
+                        else:
+                            anker = await letzter_stand_vor(
+                                db, anlage.id, sensor_key, tages_start,
+                                sensor_id=sensor_id, quellen_energy=quellen_energy,
+                            )
+                            if anker is not None:
+                                anker_ts, s0 = anker
                     if s0 is None or s1 is None:
                         continue
                     zwischen = [
-                        w for ts, w in reihe if tages_start < ts < tages_ende
+                        w for ts, w in reihe if anker_ts < ts < tages_ende
                     ]
                     wert = tageswert_aus_reihe(s0, s1, zwischen)
                     if wert is None:

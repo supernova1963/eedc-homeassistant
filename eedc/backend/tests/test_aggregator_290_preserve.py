@@ -33,6 +33,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from backend.tests import ha_lts_helfer
 from backend.models.anlage import Anlage
 from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
 from backend.models.tages_energie_profil import TagesZusammenfassung
@@ -98,8 +99,9 @@ async def test_manuell_0h_behaelt_komponenten_kwh(db) -> None:
         "backend.services.live_power_service.LivePowerService.get_tagesverlauf",
         new=AsyncMock(return_value={"serien": [], "punkte": []}),
     ), patch(
-        "backend.services.snapshot.aggregator.get_komponenten_tageskwh",
-        new=AsyncMock(return_value={}),
+        # Zählerlücken wie HA (E5): der Snapshot-Tageswert kommt aus der Tagestabelle.
+        "backend.services.snapshot.aggregator.snapshot_tagestabelle",
+        new=AsyncMock(return_value=ha_lts_helfer.tages_tabelle(komponenten={})),
     ), patch(
         "backend.services.sensor_snapshot_service.get_daily_counter_deltas_by_inv",
         new=AsyncMock(return_value={}),
@@ -146,8 +148,9 @@ async def test_scheduler_0h_setzt_komponenten_kwh_auf_none(db) -> None:
         "backend.services.live_power_service.LivePowerService.get_tagesverlauf",
         new=AsyncMock(return_value={"serien": [], "punkte": []}),
     ), patch(
-        "backend.services.snapshot.aggregator.get_komponenten_tageskwh",
-        new=AsyncMock(return_value={}),
+        # Zählerlücken wie HA (E5): der Snapshot-Tageswert kommt aus der Tagestabelle.
+        "backend.services.snapshot.aggregator.snapshot_tagestabelle",
+        new=AsyncMock(return_value=ha_lts_helfer.tages_tabelle(komponenten={})),
     ), patch(
         "backend.services.sensor_snapshot_service.get_daily_counter_deltas_by_inv",
         new=AsyncMock(return_value={}),
@@ -184,12 +187,15 @@ async def test_heute_ueberspringt_boundary_diff(db) -> None:
     await _mqtt_anchor(db, anlage.id, heute)
     await db.commit()
 
-    boundary_mock = AsyncMock(return_value={"waermepumpe_99": 99.9})
+    boundary_mock = AsyncMock(
+        return_value=ha_lts_helfer.tages_tabelle(komponenten={"waermepumpe_99": 99.9}),
+    )
     with patch(
         "backend.services.live_power_service.LivePowerService.get_tagesverlauf",
         new=AsyncMock(return_value={"serien": [], "punkte": []}),
     ), patch(
-        "backend.services.snapshot.aggregator.get_komponenten_tageskwh",
+        # Zählerlücken wie HA (E5): der Snapshot-Tageswert kommt aus der Tagestabelle.
+        "backend.services.snapshot.aggregator.snapshot_tagestabelle",
         new=boundary_mock,
     ), patch(
         "backend.services.sensor_snapshot_service.get_daily_counter_deltas_by_inv",
@@ -198,7 +204,8 @@ async def test_heute_ueberspringt_boundary_diff(db) -> None:
         result = await aggregate_day(anlage, heute, db, source=Source.SCHEDULER)
 
     assert result is not None
-    # Boundary-Diff darf für heute NICHT aufgerufen worden sein
-    boundary_mock.assert_not_called()
+    # Der Snapshot-Tageswert darf für heute NICHT geschrieben werden (seit E5
+    # liefert dieselbe Tabelle die Stunden, sie wird gerufen — ihr Tageswert
+    # nicht übernommen; `komponenten_kwh is None` unten prüft genau das).
     # Komponenten-Aggregate aus Σ-Hourly = leer (keine Live-Daten gemockt)
     assert result.komponenten_kwh is None

@@ -64,7 +64,11 @@ class StundenProfil:
     tageswert_kwh: float | None = None
     p10_kw: tuple[float | None, ...] | None = None
     p90_kw: tuple[float | None, ...] | None = None
-    unvollstaendig: bool = False  # IST: echtes Datenloch in abgelaufener Stunde
+    unvollstaendig: bool = False  # IST: Mitternachtsbündel oder verworfene PV (s. ist_profil)
+    #: IST: Slots, deren PV mehr als eine reale Stunde trägt (Zählerlücken wie
+    #: HA). Ihre Energie steht in ``tageswert_kwh``, der Slot selbst in
+    #: ``slots_kw`` als Lücke — eine gebündelte Stunde ist keine Stundenmenge.
+    buendel_stunden: tuple[int, ...] = ()
 
     @property
     def hat_messung(self) -> bool:
@@ -80,7 +84,7 @@ class StundenProfil:
         **falsch** — sie wäre immer wahr und machte aus „—" eine 0,0 für
         Anlagen, die gar nichts messen (N-52/N-344 (1), gemessen 29.08.2026).
         """
-        return any(v is not None for v in self.slots_kw)
+        return any(v is not None for v in self.slots_kw) or bool(self.buendel_stunden)
 
 
 def openmeteo_gti_profil(
@@ -291,32 +295,56 @@ def sfml_profil(slots_kw, datum: date | None = None) -> StundenProfil:
     )
 
 
-def ist_profil(ist_rows, jetzt_stunde: int, datum: date | None = None) -> StundenProfil:
+def ist_profil(
+    ist_rows, jetzt_stunde: int, datum: date | None = None,
+    verworfen: dict | None = None,
+) -> StundenProfil:
     """Normalisiert IST-Stundenzeilen (``TagesEnergieProfil`` für heute) zu einem
     None-toleranten 24-Slot-Profil. ``ist_rows`` muss nach ``stunde`` sortiert sein.
 
     Issue #135: ``pv_kw=None`` = Datenlücke → Slot bleibt ``None`` und fließt NICHT
-    in den Tageswert. Eine Lücke in einer bereits abgelaufenen Stunde (``stunde <
-    jetzt_stunde``) setzt ``unvollstaendig=True``; die gerade abgeschlossene Stunde
-    wird bewusst nicht geflaggt (HA-Hourly-Row-Verzögerung, siehe prognosen.py).
+    in den Tageswert.
+
+    ⭐ **Zählerlücken wie HA (§2, Vorlage Fassung 7):** Eine Zeile, deren PV mehr
+    als eine reale Stunde trägt, fällt aus dem **Stundenvergleich** (Slot
+    ``None``, gemerkt in ``buendel_stunden``) — ihre Energie zählt im
+    ``tageswert_kwh`` mit. ``unvollstaendig`` ist nur noch wahr bei einem
+    **Mitternachtsbündel** mit Energie (die Zeilen tragen Vortagsenergie ⇒ der
+    Tag steht zu hoch) oder bei ``verworfen.pv`` der Tageszeile. Eine fehlende
+    Stunde allein macht den Tag nicht mehr unvollständig: ihre Energie steht in
+    der nächsten belegten Stunde, wie im HA-Dashboard. (Bis zum Umbau setzte
+    jede Lücke einer abgelaufenen Stunde das Flag; ``jetzt_stunde`` bleibt als
+    Parameter für die Aufrufer stehen.)
 
     ``tageswert_kwh`` ist hier die **rohe, ungerundete** Slot-Summe (≥ 0.0) — der
     Vergleich-Tab braucht sie unverändert für die ``verbleibend``-Rechnung und
     rundet erst an der Response-Grenze (verhaltensneutral zum Inline-Stand).
     """
+    from backend.core.berechnungen.spannen import (
+        tag_traegt_vortagsenergie,
+        zeile_gebuendelt,
+    )
+
+    ist_rows = list(ist_rows)
     slots: list[float | None] = [None] * 24
     present: list[int] = []
+    buendel: list[int] = []
     tageswert = 0.0
-    unvollstaendig = False
     for row in ist_rows:
         present.append(row.stunde)
         if row.pv_kw is None:
-            if row.stunde < jetzt_stunde:
-                unvollstaendig = True
+            slots[row.stunde] = None
+            continue
+        tageswert += row.pv_kw
+        if zeile_gebuendelt(row, "pv"):
+            buendel.append(row.stunde)
             slots[row.stunde] = None
             continue
         slots[row.stunde] = round(row.pv_kw, 2)
-        tageswert += row.pv_kw
+    unvollstaendig = (
+        tag_traegt_vortagsenergie(ist_rows, "pv")
+        or bool(verworfen and "pv" in verworfen)
+    )
     return StundenProfil(
         datum=datum,
         quelle="ist",
@@ -324,4 +352,5 @@ def ist_profil(ist_rows, jetzt_stunde: int, datum: date | None = None) -> Stunde
         present_stunden=tuple(present),
         tageswert_kwh=tageswert,  # roh/ungerundet — Endpoint rundet an Response-Grenze
         unvollstaendig=unvollstaendig,
+        buendel_stunden=tuple(buendel),
     )

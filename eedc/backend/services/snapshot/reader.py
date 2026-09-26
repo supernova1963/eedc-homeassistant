@@ -716,6 +716,72 @@ async def letzter_stand_im_fenster(
     )).scalar_one_or_none()
 
 
+async def letzter_stand_vor(
+    db: AsyncSession,
+    anlage_id: int,
+    sensor_key: str,
+    zeitpunkt: datetime,
+    *,
+    sensor_id: Optional[str] = None,
+    quellen_energy: Optional[dict] = None,
+) -> Optional[tuple[datetime, float]]:
+    """Der letzte mitgeschriebene Stand **vor** ``zeitpunkt`` — Zeitpunkt **und** Wert.
+
+    ⭐ **Zählerlücken wie HA, T3 (Vorlage Fassung 7).** Der Snapshot-/MQTT-Pfad
+    (Standalone) bekommt dieselbe Regel wie der HA-Pfad: fehlt der Stand am
+    Fensterbeginn (Vortag 23:00), trägt der **letzte vorhandene Stand davor**,
+    beliebig weit zurück. Der erste belegte Slot des Tages ist dann ein
+    **Bündel** mit Spanne aus den Zeitstempeln — nicht linear aufgefüllt
+    (E1/Ü6: eine interpolierte Stunde ist eine Aussage ohne Messung; über den
+    Fensterrand hinweg würde sie Vortagsenergie für die Leser unsichtbar machen).
+
+    Gesucht wird in derselben Reihenfolge wie {@link erster_stand_im_fenster}:
+    erst ``sensor_snapshots``, dann ``mqtt_energy_snapshots``. Der **Wert** kommt
+    danach über {@link get_snapshot} am gefundenen Zeitpunkt — Self-Healing und
+    C2b-Read-Through gelten damit auch für den Anker. Eine „keine"-Zuordnung
+    liefert ``None``.
+
+    Returns:
+        ``(zeitpunkt, stand_kwh)`` oder ``None`` (kein Stand vor dem Zeitpunkt —
+        die Reihe beginnt im Fenster; wie im HA-Pfad kein Anker).
+    """
+    if quellen_energy:
+        _eid, behalten = resolve_energy_snapshot_eid(quellen_energy, sensor_key, sensor_id)
+        if not behalten:
+            return None
+    ts = (await db.execute(
+        select(func.max(SensorSnapshot.zeitpunkt)).where(
+            and_(
+                SensorSnapshot.anlage_id == anlage_id,
+                SensorSnapshot.sensor_key == sensor_key,
+                SensorSnapshot.zeitpunkt < zeitpunkt,
+                SensorSnapshot.wert_kwh.isnot(None),
+            )
+        )
+    )).scalar_one_or_none()
+    if ts is None:
+        mqtt_key = _sensor_key_to_mqtt_key(sensor_key)
+        if mqtt_key:
+            ts = (await db.execute(
+                select(func.max(MqttEnergySnapshot.timestamp)).where(
+                    and_(
+                        MqttEnergySnapshot.anlage_id == anlage_id,
+                        MqttEnergySnapshot.energy_key == mqtt_key,
+                        MqttEnergySnapshot.timestamp < zeitpunkt,
+                        MqttEnergySnapshot.value_kwh.isnot(None),
+                    )
+                )
+            )).scalar_one_or_none()
+    if ts is None:
+        return None
+    wert = await get_snapshot(
+        db, anlage_id, sensor_key, sensor_id, ts, quellen_energy=quellen_energy,
+    )
+    if wert is None:
+        return None
+    return ts, wert
+
+
 async def delta_mit_rand(
     db: AsyncSession,
     anlage_id: int,

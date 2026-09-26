@@ -123,10 +123,19 @@ def _als_speicher_stunde(
     — sonst zählte die Einspeisung der Stunde **vor** dem Vollwerden als
     „Überschuss bei vollem Speicher".
     """
+    # Zählerlücken wie HA (§2): der Ladestand einer Stunde wird mit der Menge
+    # DERSELBEN Stunde gepaart — eine gebündelte Menge (n > 1 reale Stunden)
+    # gehört nicht zu diesem einen Ladestand und zählt hier wie keine Messung.
+    from backend.core.berechnungen.spannen import zeile_gebuendelt
+
     return SpeicherStunde(
         soc_prozent=soc_prozent,
-        einspeisung_kwh=zeile.einspeisung_kw or 0.0,
-        netzbezug_kwh=zeile.netzbezug_kw or 0.0,
+        einspeisung_kwh=(
+            0.0 if zeile_gebuendelt(zeile, "einspeisung") else (zeile.einspeisung_kw or 0.0)
+        ),
+        netzbezug_kwh=(
+            0.0 if zeile_gebuendelt(zeile, "netzbezug") else (zeile.netzbezug_kw or 0.0)
+        ),
     )
 
 

@@ -31,14 +31,12 @@ from backend.services.snapshot.keys import (
 )
 from backend.services.snapshot.reader import (
     MQTT_AKTIV_TAGE,
-    TAGESRESET_TOLERANZ_KWH,
     mqtt_zaehler_keys,
 )
 from backend.services.snapshot.komponenten_beitraege import (
     basis_hourly_eintraege,
     investition_hourly_eintraege,
     mqtt_hourly_eintraege,
-    resolve_either_or_eintraege,
     wallbox_deckt_ladung_ab,
 )
 from backend.services.snapshot.writer import snapshot_anlage, snapshot_anlage_5min
@@ -236,68 +234,76 @@ async def get_reaggregate_preview(
                 "neu_kwh": neu,
             })
 
-    # Either-Or-Auflösung pro Spalte (alt/neu) auf Tages-Ebene (Issue #298):
-    # ein doppelt gemappter Zähler (E-Auto `verbrauch_kwh` + `ladung_kwh`,
-    # Sonstiges-Hybrid) zählt sonst doppelt in die Tagesumme. Alt und neu
-    # werden getrennt aufgelöst, weil ihre Sensor-Verfügbarkeit unterschiedlich
-    # sein kann; jede Spalte ist damit deckungsgleich mit dem späteren Reload-
-    # Schreibwert (aggregate_day nutzt dieselbe Normalisierung). Die per-Sensor
-    # `boundaries`-Detailliste oben bleibt vollständig (Diagnose).
-    def _hat_tagesdaten(snaps: dict, sk: str) -> bool:
-        s = snaps.get(sk, {})
-        return any(
-            s.get(h - 1) is not None and s.get(h) is not None for h in range(24)
+    # ── Stunden alt/neu (Zählerlücken wie HA, Ü7) ─────────────────────────────
+    # ⭐ **„neu" ist, was der Lauf schreiben WÜRDE — über dieselbe Tagestabelle
+    # wie der Aggregator** (R5): HA erreichbar ⇒ die HA-Slot-Tabelle
+    # (`lts_tagestabelle`, der Lauf liest nach dem Resnap genau sie), sonst die
+    # Snapshot-Tabelle aus den gespeicherten Ständen. **„alt" ist, was gespeichert
+    # ist** — die Stundenzeilen (`TagesEnergieProfil`), nicht noch einmal
+    # gerechnet. Bis zum Umbau rechnete die Vorschau beide Spalten mit einer
+    # eigenen Slot-Arithmetik aus den Snapshots (Nachbarstände, eine Lücke leerte
+    # zwei Slots) — eine zweite Rechnung neben dem Lauf, die mit dem Umbau
+    # auseinandergelaufen wäre („Vorschau sagt 69, Ergebnis 39").
+    #
+    # Die Zeilen sind je **Achse** (pv · einspeisung · netzbezug · batterie ·
+    # waermepumpe · wallbox), dieselben Größen wie die Spalten der Stundenzeile;
+    # Batterie mit deren Vorzeichen (Entladung positiv). `spanne_neu` sagt, wie
+    # viele reale Stunden der neue Wert trägt — eine Stunde nach einer Lücke
+    # zeigt dort ihre Energie „aus der Lücke".
+    from backend.core.berechnungen import batterie_kw_spalte
+    from backend.models.tages_energie_profil import TagesEnergieProfil
+    from backend.services.snapshot import aggregator as _snapshot_aggregator
+    from backend.services.snapshot import lts_aggregator as _lts_aggregator
+
+    tep_alt = {
+        r.stunde: r for r in (await db.execute(
+            select(TagesEnergieProfil).where(
+                TagesEnergieProfil.anlage_id == anlage.id,
+                TagesEnergieProfil.datum == datum,
+            )
+        )).scalars().all()
+    }
+    tabelle_neu = None
+    if ha_verfuegbar:
+        tabelle_neu = await _lts_aggregator.lts_tagestabelle(anlage, investitionen_by_id, datum)
+    if tabelle_neu is None:
+        tabelle_neu = await _snapshot_aggregator.snapshot_tagestabelle(
+            db, anlage, investitionen_by_id, datum,
         )
+    stunden_neu = tabelle_neu.stunden if tabelle_neu is not None else {}
 
-    eintraege_alt = resolve_either_or_eintraege(
-        eintraege, lambda e: e[3], lambda e: _hat_tagesdaten(snap_alt, e[0]))
-    eintraege_neu = resolve_either_or_eintraege(
-        eintraege, lambda e: e[3], lambda e: _hat_tagesdaten(snap_neu, e[0]))
-
-    # Slot-Deltas aggregieren pro Kategorie (alt und neu getrennt)
+    _ACHSEN_VORSCHAU = (
+        ("pv", "pv_kw", lambda z: z.get("pv")),
+        ("einspeisung", "einspeisung_kw", lambda z: z.get("einspeisung")),
+        ("netzbezug", "netzbezug_kw", lambda z: z.get("netzbezug")),
+        ("batterie", "batterie_kw", lambda z: batterie_kw_spalte(z.get("batterie_netto"))),
+        ("waermepumpe", "waermepumpe_kw", lambda z: z.get("wp")),
+        ("wallbox", "wallbox_kw", lambda z: z.get("wallbox")),
+    )
     slot_deltas: list[dict] = []
     tagesumme_alt: dict[str, Optional[float]] = {}
     tagesumme_neu: dict[str, Optional[float]] = {}
-
-    # alle Kategorien, die nach der Either-Or-Auflösung tatsächlich vorkommen
-    alle_kategorien = sorted(
-        {kat for _, _, kat, _ in eintraege_alt} | {kat for _, _, kat, _ in eintraege_neu}
-    )
-
     for h in range(24):
-        per_kat_alt: dict[str, Optional[float]] = {}
-        per_kat_neu: dict[str, Optional[float]] = {}
-        for sensor_key, _eid, kat, _grp in eintraege_alt:
-            a0 = snap_alt[sensor_key].get(h - 1)
-            a1 = snap_alt[sensor_key].get(h)
-            if a0 is not None and a1 is not None:
-                d = a1 - a0
-                if d < -TAGESRESET_TOLERANZ_KWH and a1 < 0.5 and a0 > 0.5:
-                    d = max(0.0, a1)  # Tagesreset-Schutz analog get_hourly_kwh_by_category
-                if d >= -TAGESRESET_TOLERANZ_KWH:
-                    d = max(0.0, d)
-                    per_kat_alt[kat] = (per_kat_alt.get(kat) or 0.0) + d
-        for sensor_key, _eid, kat, _grp in eintraege_neu:
-            n0 = snap_neu[sensor_key].get(h - 1)
-            n1 = snap_neu[sensor_key].get(h)
-            if n0 is not None and n1 is not None:
-                d = n1 - n0
-                if d < -TAGESRESET_TOLERANZ_KWH and n1 < 0.5 and n0 > 0.5:
-                    d = max(0.0, n1)
-                if d >= -TAGESRESET_TOLERANZ_KWH:
-                    d = max(0.0, d)
-                    per_kat_neu[kat] = (per_kat_neu.get(kat) or 0.0) + d
-        for kat in alle_kategorien:
+        zeile_alt = tep_alt.get(h)
+        zeile_neu = stunden_neu.get(h) or {}
+        spannen_neu = zeile_neu.get("spannen") or {}
+        for achse, spalte, neu_fn in _ACHSEN_VORSCHAU:
+            alt = getattr(zeile_alt, spalte, None) if zeile_alt is not None else None
+            neu = neu_fn(zeile_neu)
+            neu = round(neu, 3) if neu is not None else None
+            if alt is None and neu is None:
+                continue
             slot_deltas.append({
                 "stunde": h,
-                "kategorie": kat,
-                "alt_kwh": per_kat_alt.get(kat),
-                "neu_kwh": per_kat_neu.get(kat),
+                "kategorie": achse,
+                "alt_kwh": alt,
+                "neu_kwh": neu,
+                "spanne_neu": spannen_neu.get(achse),
             })
-            if per_kat_alt.get(kat) is not None:
-                tagesumme_alt[kat] = (tagesumme_alt.get(kat) or 0.0) + per_kat_alt[kat]
-            if per_kat_neu.get(kat) is not None:
-                tagesumme_neu[kat] = (tagesumme_neu.get(kat) or 0.0) + per_kat_neu[kat]
+            if alt is not None:
+                tagesumme_alt[achse] = (tagesumme_alt.get(achse) or 0.0) + alt
+            if neu is not None:
+                tagesumme_neu[achse] = (tagesumme_neu.get(achse) or 0.0) + neu
 
     # ── Counter-Tagesdelta (KUMULATIVE_COUNTER_FELDER) ────────────────────────
     # Reine Counter (z. B. wp_starts_anzahl) tauchen in den kWh-Slots/Tagesummen

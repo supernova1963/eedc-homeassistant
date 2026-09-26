@@ -148,6 +148,25 @@ class TagesEnergieProfil(Base):
     # z.B. {"pv_3": 2.1, "waermepumpe_5": -0.8, "haushalt": -1.2}
     komponenten: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
+    # ⭐ **Zählerlücken wie HA (R2, Vorlage Fassung 7):** wie viele **reale**
+    # Stunden die Menge einer Achse in dieser Zeile trägt — nur für n > 1,
+    # z. B. ``{"pv": 3, "netzbezug": 3}``. Fehlt in HA eine Stundenzeile, steht
+    # die Energie der Lücke in der nächsten belegten Stunde (wie im
+    # HA-Energie-Dashboard); diese Spalte sagt, dass es so ist. ``None`` (der
+    # Regelfall) heißt: jede Achse trägt genau ihre Stunde.
+    #
+    # Leser, die **Stunde gegen Stunde** stellen (Korrekturprofil,
+    # Verbrauchsprofil, Speicher-Stundenrechnungen …), lassen eine gebündelte
+    # Zeile über ``core/berechnungen/spannen.py::zeile_gebuendelt`` aus; jede
+    # **Summe** zählt die Energie trotzdem.
+    #
+    # ⚠ ``none_as_null=True`` aus demselben Grund wie ``soc_je_speicher``:
+    # Altbestand hat SQL-NULL, und ein geschriebenes ``None`` darf nicht als
+    # JSON-``null`` daneben stehen.
+    spannen: Mapped[Optional[dict]] = mapped_column(
+        JSON(none_as_null=True), nullable=True
+    )
+
     # Per-Feld-Provenance (Etappe 3d Päckchen 1, KONZEPT-DATENPIPELINE.md Sektion 3.2).
     source_provenance: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
 
@@ -330,6 +349,26 @@ class TagesZusammenfassung(Base):
     # z.B. {"wp_starts_anzahl": {"5": 12}} = WP-Investition 5 hatte 12 Starts an dem Tag.
     # Wird aus Snapshot-Differenz Tag-Anfang vs. Folgetag-Anfang berechnet.
     komponenten_starts: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    # ⭐ **Zählerlücken wie HA (R4 + R9, Vorlage Fassung 7) — zwei Aufgaben in
+    # einer Spalte:**
+    #
+    # 1. **Verworfen** ist das Einzige, was eedc an einer Tageszeile markiert:
+    #    ``{achse: kWh}`` für eine Achse, auf der ein Stunden-Slot gedeckelt
+    #    (R3) oder ein negatives Zähler-Delta verworfen wurde. Keine Markierung
+    #    für Lücken, Vortagsenergie oder Sensor-Anfang/-Ende — HA kennt keine.
+    # 2. **Regelmarke (R9):** Jede Tageszeile, die der Aggregator seit dem
+    #    Umbau schreibt, trägt hier mindestens ``{}``. ``NULL`` trägt nur der
+    #    Altbestand — dessen Stunden haben die Lückenenergie noch verloren, er
+    #    rechnet deshalb weiter nach N-92 (E6), bis er neu aggregiert wird
+    #    (E7: der Daten-Checker nennt ihn).
+    #
+    # Leser fragen ``tz.verworfen is not None`` — sie brauchen dafür weder
+    # Stundenzeile noch Provenance. ``none_as_null=True`` ist Bedingung: ein
+    # NULL muss NULL bleiben, ``{}`` muss ``{}`` bleiben.
+    verworfen: Mapped[Optional[dict]] = mapped_column(
+        JSON(none_as_null=True), nullable=True
+    )
 
     # Per-Feld-Provenance (Etappe 3d Päckchen 1, KONZEPT-DATENPIPELINE.md Sektion 3.2).
     source_provenance: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)

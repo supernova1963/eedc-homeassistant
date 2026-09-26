@@ -14,6 +14,7 @@ import { exportToCSV } from '../../utils/export'
 import type { StundenWert, SerieInfo } from '../../api/energie_profil'
 import { HerkunftZeile } from '../blocks'
 import { unvollstaendigHerkunft } from '../../lib/prognoseHinweise'
+import { fmtZahl } from '../../lib/einheiten'
 
 function round2(v: number): number {
   return Math.round(v * 100) / 100
@@ -121,6 +122,61 @@ export function alsAnzeigewert(roh: number | null | undefined, seite: string): n
   return seite === 'senke' ? Math.abs(roh) : roh
 }
 
+/**
+ * Zählerlücken wie HA (R2): wie viele **reale** Stunden trägt diese Zeile?
+ *
+ * Fehlt in Home Assistant eine Stundenzeile, zeigt HA die Energie der Lücke in
+ * der ersten Stunde danach — eedc legt genau das ab und schreibt die Spanne in
+ * `spannen`. Die Tabelle beschriftet eine solche Zeile („enthält n Stunden"),
+ * damit sie nicht als Spitze gelesen wird. 1 = die Zeile trägt ihre Stunde.
+ */
+export function spanneDerZeile(s: StundenWert | undefined): number {
+  const werte = Object.values(s?.spannen ?? {}).filter((n): n is number => typeof n === 'number')
+  return werte.length ? Math.max(1, ...werte) : 1
+}
+
+/**
+ * Σ-Zeile „Gesamtverbrauch" = **der Tageswert vom Server** (R7, Vorlage §2).
+ *
+ * Der Tag rechnet seinen Verbrauch nach der HA-Formel (PV + Netz + Entladung −
+ * Einspeisung − Ladung) — auch dann, wenn einzelne Stunden keinen
+ * Stundenverbrauch tragen (verschiedene Spannen, R6). Die Summe der
+ * Stundenzellen wäre dort zu niedrig. `undefined` = der Aufrufer kennt den
+ * Tageswert nicht ⇒ die Stundensumme wie bisher; `null` = der Server sagt
+ * „nicht bildbar" (Total-Fall) ⇒ „—".
+ */
+export function summeVerbrauchTag(
+  stundenSumme: number | null,
+  serverGesamtverbrauch: number | null | undefined,
+): number | null {
+  return serverGesamtverbrauch === undefined ? stundenSumme : serverGesamtverbrauch
+}
+
+/** Achsen, die in „Verfügbare Energie" eingehen (PV + Batterie-Entladung). */
+const ACHSEN_VERFUEGBAR: Record<string, string> = { pv: 'PV', batterie: 'Batterie' }
+
+/**
+ * Hinweis „Verfügbare Energie" (N-94) — **nur noch, wenn der Tag etwas verworfen
+ * hat** (R4, Vorlage §2). Eine fehlende Stunde allein macht die Summe nicht
+ * mehr zu niedrig: ihre Energie steht in der nächsten Stunde, wie im
+ * HA-Dashboard. Zu niedrig ist die Summe nur, wo eedc eine unplausible Menge
+ * verworfen hat (Deckel oder Zähler-Rücksprung).
+ */
+export function verworfenHerkunft(verworfen: Record<string, number> | null | undefined) {
+  const teile = Object.entries(verworfen ?? {})
+    .filter(([achse, kwh]) => achse in ACHSEN_VERFUEGBAR && kwh > 0)
+    .map(([achse, kwh]) => `${ACHSEN_VERFUEGBAR[achse]} ${fmtZahl(kwh, 1)} kWh`)
+  if (teile.length === 0) return undefined
+  return unvollstaendigHerkunft(
+    [
+      `An diesem Tag hat eedc eine unplausible Zählermenge verworfen (${teile.join(', ')}) — `
+      + 'einen Sprung oder Rücksprung, den keine Anlage erzeugen kann. Die Summe '
+      + '„Verfügbare Energie" enthält ihn nicht und ist deshalb zu niedrig.',
+    ],
+    'Verfügbare Energie',
+  )
+}
+
 type TdGroup = 'erzeugung' | 'netz' | 'verbrauch' | 'bilanz' | 'qualitaet'
 
 interface TdColDef {
@@ -191,9 +247,17 @@ const TD_GROUP_LABELS: Record<TdGroup, string> = {
 const TD_GROUPS: TdGroup[] = ['erzeugung', 'netz', 'verbrauch', 'bilanz', 'qualitaet']
 const TD_STORAGE_KEY = 'eedc_tagesprofil_visible_cols'
 
-export function TagWerteTabelle({ daten, extraSerien, erzeugerSerien = [], datum }: {
+export function TagWerteTabelle({
+  daten, extraSerien, erzeugerSerien = [], datum, gesamtverbrauchTag, verworfen,
+}: {
   daten: StundenWert[]
   extraSerien: SerieInfo[]
+  /** Zählerlücken wie HA (R7): der Tages-Gesamtverbrauch vom Server — trägt die
+   *  Σ-Zeile „Gesamtverbrauch". Nicht gesetzt ⇒ Stundensumme wie bisher. */
+  gesamtverbrauchTag?: number | null
+  /** Zählerlücken wie HA (R4): verworfene Mengen des Tages — einziger Anlass
+   *  für den Hinweis „Verfügbare Energie" (N-94). */
+  verworfen?: Record<string, number> | null
   /** PV-Strings/BKW mit eigenem Sensor (#350, Rainer) — je Gerät eine Spalte,
    *  eingehängt hinter „PV". Sie sind bewusst **keine** `extraSerien`: die gehen
    *  in `calcGesamterzeugung` ein, und da die Strings Bestandteile der bereits
@@ -231,24 +295,10 @@ export function TagWerteTabelle({ daten, extraSerien, erzeugerSerien = [], datum
   // die Summe richtungssicher zu niedrig; der Nutzer weiß dann, in welche
   // Richtung er korrigieren muss. Die Zeile ist dieselbe wie im Komponenten-Hub
   // (`HerkunftZeile`, Regel 0a) — keine zweite Bauform für dieselbe Aussage.
-  const erzeugungHerkunft = useMemo(() => {
-    const luecken: string[] = []
-    if (daten.some((s) => s.pv_kw != null) && daten.some((s) => s.pv_kw == null)) luecken.push('PV')
-    for (const es of extraErzeuger) {
-      const hatWert = daten.some((s) => s.komponenten?.[es.key] != null)
-      const hatLuecke = daten.some((s) => s.komponenten?.[es.key] == null)
-      if (hatWert && hatLuecke) luecken.push(es.label)
-    }
-    if (luecken.length === 0) return undefined
-    return unvollstaendigHerkunft(
-      [
-        `Nicht jede Stunde dieses Tages hat einen Messwert (${luecken.join(', ')}). `
-        + 'Die Summe „Verfügbare Energie" zählt nur die gemessenen Stunden und ist '
-        + 'deshalb zu niedrig — nicht falsch, sondern unvollständig.',
-      ],
-      'Verfügbare Energie',
-    )
-  }, [daten, extraErzeuger])
+  // ⭐ Zählerlücken wie HA (§2): der Hinweis feuert nur noch bei VERWORFENEN
+  // Mengen. Der frühere Anlass („nicht jede Stunde hat einen Messwert") ist
+  // entfallen — die Energie einer fehlenden Stunde steht in der nächsten.
+  const erzeugungHerkunft = useMemo(() => verworfenHerkunft(verworfen), [verworfen])
 
   // Sichtbare Spalten aus localStorage
   const [visibleCols, setVisibleCols] = useState<Set<string>>(() => {
@@ -362,8 +412,10 @@ export function TagWerteTabelle({ daten, extraSerien, erzeugerSerien = [], datum
       const vals = rows.map(row => row.vals[col.key]).filter(v => v != null) as number[]
       r[col.key] = vals.length ? vals.reduce((a, b) => a + b, 0) : null
     }
+    // Zählerlücken wie HA (R7): der Tages-Gesamtverbrauch kommt vom Server.
+    if ('verbrauch_kw' in r) r.verbrauch_kw = summeVerbrauchTag(r.verbrauch_kw, gesamtverbrauchTag)
     return r
-  }, [rows, allCols])
+  }, [rows, allCols, gesamtverbrauchTag])
 
   // CSV Export
   function handleExport() {
@@ -481,9 +533,20 @@ export function TagWerteTabelle({ daten, extraSerien, erzeugerSerien = [], datum
             </tr>
           </TableHead>
           <TableBody>
-            {rows.map(({ h, vals }) => (
+            {rows.map(({ h, s, vals }) => (
               <tr key={h} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/40">
-                <td className={`${ZELLE} font-medium text-gray-600 dark:text-gray-300 tabular-nums`}>{h}:00</td>
+                <td className={`${ZELLE} font-medium text-gray-600 dark:text-gray-300 tabular-nums`}>
+                  {h}:00
+                  {/* Zählerlücken wie HA (R2): Zeile trägt n reale Stunden */}
+                  {spanneDerZeile(s) > 1 && (
+                    <span
+                      className="ml-1 text-[10px] font-normal text-gray-400 dark:text-gray-500"
+                      title={`Diese Zeile enthält ${spanneDerZeile(s)} Stunden: Home Assistant hatte die Stunden davor nicht geschrieben, die Energie steht hier — wie im HA-Energie-Dashboard.`}
+                    >
+                      · enthält {spanneDerZeile(s)} h
+                    </span>
+                  )}
+                </td>
                 {allCols.map(c => (
                   <td key={c.key} className={`${ZELLE} text-right tabular-nums text-gray-700 dark:text-gray-300`}>
                     {cell(vals[c.key], c.decimals)}

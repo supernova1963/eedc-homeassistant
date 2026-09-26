@@ -337,7 +337,7 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
         id: 'stundenwerte', title: 'Stundenwerte', ...BLOCK_IDENTITAET.werte,
         summary: 'Stundenwerte in kW · Σ-Zeile = kWh/Tag',
         defaultOpen: false,
-        render: () => <Parkbar id="el:stundenwerte" titel="Stundenwerte"><TagWerteTabelle daten={stunden} extraSerien={extraSerien} erzeugerSerien={erzeugerSerien} datum={angezeigterTag} /></Parkbar>,
+        render: () => <Parkbar id="el:stundenwerte" titel="Stundenwerte"><TagWerteTabelle daten={stunden} extraSerien={extraSerien} erzeugerSerien={erzeugerSerien} datum={angezeigterTag} gesamtverbrauchTag={tag ? tag.gesamtverbrauch : undefined} verworfen={tag?.verworfen} /></Parkbar>,
       })
     }
     // Komponenten-Detailblöcke (aktiv-gegated) + Finanz-Teaser — dieselben Bauer

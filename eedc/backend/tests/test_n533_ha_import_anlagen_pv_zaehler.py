@@ -55,10 +55,10 @@ class _FakeStats:
     def _sensoren(self, sensor_ids):
         return [_Wert(s, self._werte[s]) for s in sensor_ids if s in self._werte]
 
-    def get_monatswerte(self, sensor_ids, jahr, monat):
+    def get_monatswerte(self, sensor_ids, jahr, monat, deckel_je_sensor=None):
         return _Monat(self._sensoren(sensor_ids))
 
-    def get_alle_monatswerte(self, sensor_ids, ab_datum=None):
+    def get_alle_monatswerte(self, sensor_ids, ab_datum=None, deckel_je_sensor=None):
         return [_Monat(self._sensoren(sensor_ids))]
 
 

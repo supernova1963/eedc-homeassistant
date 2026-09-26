@@ -129,7 +129,12 @@ def test_ist_none_toleranz_und_unvollstaendig_flag(monkeypatch=None):
     assert p.slots_kw[3] is None, "Datenlücke muss None bleiben (#135)"
     assert p.present_stunden == (0, 1, 3, 4)
     assert p.tageswert_kwh == 7.0  # 1+2+4, None fließt nicht ein
-    assert p.unvollstaendig is True, "Lücke in abgelaufener Stunde 3 < jetzt 5"
+    # ⭐ Zählerlücken wie HA (§2, 26.09.2026): eine fehlende Stunde allein macht
+    # den Tag NICHT mehr unvollständig — ihre Energie steht in der nächsten
+    # belegten Stunde, wie im HA-Dashboard. Bis dahin: True („Lücke in
+    # abgelaufener Stunde 3 < jetzt 5"). Das Flag trägt jetzt nur noch das
+    # Mitternachtsbündel und `verworfen.pv` — s. `test_zaehlerluecken_leser.py`.
+    assert p.unvollstaendig is False
 
 
 def test_ist_luecke_in_aktueller_stunde_nicht_geflaggt():
@@ -341,4 +346,8 @@ def test_golden_ist_inline_aequivalenz():
     neu_profil = [(h, p.slots_kw[h]) for h in p.present_stunden]
     assert neu_profil == alt_profil
     assert p.tageswert_kwh == alt_sum
-    assert p.unvollstaendig == alt_unvoll
+    # Zählerlücken wie HA (§2): die Lücke in Stunde 7 setzte das alte Flag
+    # (alt_unvoll is True); die neue Regel setzt es nur bei Mitternachtsbündel
+    # oder verworfener PV. Profil und Summe bleiben bitgleich.
+    assert alt_unvoll is True
+    assert p.unvollstaendig is False

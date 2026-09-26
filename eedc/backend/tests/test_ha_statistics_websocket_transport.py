@@ -219,14 +219,22 @@ def test_7_monatsgrenze_wird_eingehalten():
     """
     sid = "sensor.zaehler"
     zeilen = _monatsstunden(2026, 6, sid, startwert=1000.0, pro_stunde=1.0)
-    # Je eine Zeile davor und danach, beide mit weit abweichendem Zählerstand
-    zeilen[sid].insert(0, _zeile(datetime(2026, 5, 31, 23).timestamp(), sum=1.0, state=1.0))
+    # ⚑ Umgestellt 26.09.2026 (R10 / N-563, Zählerlücken wie HA): die Zeile
+    # 31.05. 23:00 trägt den Stand am 01.06. 00:00 — sie IST der Anker des Juni.
+    # Bis dahin stand sie hier mit einem abweichenden Wert als „darf nicht
+    # zählen"; genau diese Regel verlor die erste Stunde jedes Monats. Substanz
+    # gehalten: nur die LETZTE Zeile vor dem Monat zählt (die ältere mit 1,0
+    # nicht), der Folgemonat zählt gar nicht.
+    zeilen[sid].insert(0, _zeile(datetime(2026, 5, 31, 22).timestamp(), sum=1.0, state=1.0))
+    zeilen[sid].insert(1, _zeile(datetime(2026, 5, 31, 23).timestamp(), sum=999.0, state=999.0))
     zeilen[sid].append(_zeile(datetime(2026, 7, 1, 0).timestamp(), sum=99999.0, state=99999.0))
     svc, _ = _service_mit_ws({sid: WsSensorMeta("kWh", True, False)}, zeilen)
 
     wert = svc.get_monatswerte([sid], 2026, 6).sensoren[0]
-    assert wert.start_wert == 1000.0, f"Vormonat mitgezählt: start={wert.start_wert}"
+    stunden = len(zeilen[sid]) - 3
+    assert wert.start_wert == 999.0, f"Anker falsch: start={wert.start_wert}"
     assert wert.end_wert < 99999.0, f"Folgemonat mitgezählt: end={wert.end_wert}"
+    assert wert.differenz == float(stunden), f"differenz={wert.differenz}, erwartet {stunden}"
     print(f"  ✓ 7. Monatsgrenze gehalten ({wert.start_wert} … {wert.end_wert})")
 
 

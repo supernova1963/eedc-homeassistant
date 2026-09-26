@@ -174,6 +174,12 @@ class StundenWertResponse(BaseModel):
     wp_starts_anzahl: Optional[int] = None
     # WP-Betriebsstunden in dieser Stunde, summiert über alle WPs (Issue #238).
     wp_betriebsstunden: Optional[float] = None
+    # Zählerlücken wie HA (R2): ``{achse: n}`` nur für Achsen, deren Menge in
+    # dieser Zeile ``n > 1`` reale Stunden trägt (HA hatte die Stunden davor
+    # nicht geschrieben; die Energie steht hier wie im HA-Dashboard). ``None``
+    # im Regelfall. Die Stundentabelle beschriftet die Zeile damit
+    # („enthält n Stunden"), statt sie als Spitze zu zeigen.
+    spannen: Optional[dict[str, int]] = None
 
 
 class StundenAntwort(BaseModel):
@@ -539,6 +545,13 @@ class TagWerteResponse(BaseModel):
     datum: date
     stunden_verfuegbar: int = 0
     datenquelle: Optional[str] = None
+    # Zählerlücken wie HA (R4/R9): ``{achse: kWh}`` einer Achse, auf der ein
+    # Stunden-Slot gedeckelt oder ein negatives Zähler-Delta verworfen wurde —
+    # das Einzige, was eedc an einem Tag markiert. ``{}`` heißt: nach der
+    # neuen Regel gerechnet, nichts verworfen; ``None``: Tag von vor dem Umbau
+    # (rechnet N-92, bis er neu aggregiert wird). Der Client zeigt den Hinweis
+    # „Verfügbare Energie" (N-94) nur, wenn hier eine Achse steht.
+    verworfen: Optional[dict[str, float]] = None
     # Energie (additive kWh) — Registry-Keys.
     # `erzeugung`/`eigenverbrauch` sind `None`, wenn für den Tag keine einzige
     # Stunde einen PV-Wert trug (kein kWh-Zähler je Erzeuger — z. B. wenn die PV

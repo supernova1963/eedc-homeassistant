@@ -236,11 +236,19 @@ from backend.models.tages_energie_profil import TagesEnergieProfil  # noqa: E402
 
 
 async def _add_spike_stunde(db, anlage_id: int, datum: date, *, kw: float) -> None:
-    """Eine Stunde mit physikalisch unmöglichem Wert — der nachgelieferte Sprung."""
+    """Eine Stunde mit physikalisch unmöglichem Wert — der nachgelieferte Sprung.
+
+    ⚑ Umgestellt 26.09.2026 (Zählerlücken wie HA, R3 Nachträge II): der Deckel
+    rechnet mit der Zeit seit der letzten Änderung des Standes. Standen hier
+    vor dem Sprung sieben Nullstunden, war das Fenster 8 h (8 × 3 = 24 kWh) und
+    10 kWh kein Spike mehr — die benannte Grenze der Regel (Nacht mit echten
+    Nullen). Substanz gehalten: der Stand ändert sich jede Stunde (0,1 kWh),
+    das Fenster der Spike-Stunde ist 1 h, 10 kWh > 2 kWp × 1,5 bleibt ein Spike.
+    """
     for stunde in range(24):
         db.add(TagesEnergieProfil(
             anlage_id=anlage_id, datum=datum, stunde=stunde,
-            pv_kw=kw if stunde == 7 else 0.0,
+            pv_kw=kw if stunde == 7 else 0.1,
         ))
 
 

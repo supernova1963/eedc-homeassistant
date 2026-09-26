@@ -34,6 +34,7 @@ from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
 from backend.services.energie_profil.source import Source
 from backend.utils.investition_filter import aktiv_am_tag
 from backend.tests import factories
+from backend.tests import ha_lts_helfer
 
 
 # ───────────────────────── aktiv_am_tag (Baustein 3) ────────────────────────
@@ -200,18 +201,23 @@ async def test_s1_scheduler_und_backfill_pfad_symmetrisch(db) -> None:
 
     tv = _tv_data()
 
+    async def fake_lts_tabelle(anlage_arg, investitionen_by_id, datum):
+        # Zählerlücken wie HA (R5): Stunden und Tag aus EINEM Lesezugriff —
+        # die Tageswerte weiter abhängig von der geladenen Inv-Menge.
+        return ha_lts_helfer.lts_tabelle(
+            _LTS_HOURLY, await fake_lts_komp(anlage_arg, investitionen_by_id, datum),
+        )
+
     patches = lambda: (
-        patch("backend.services.snapshot.lts_aggregator.get_hourly_kwh_by_category_lts",
-              new=AsyncMock(return_value=_LTS_HOURLY)),
-        patch("backend.services.snapshot.lts_aggregator.get_komponenten_tageskwh_lts",
-              new=AsyncMock(side_effect=fake_lts_komp)),
+        patch("backend.services.snapshot.lts_aggregator.lts_tagestabelle",
+              new=AsyncMock(side_effect=fake_lts_tabelle)),
         patch("backend.services.sensor_snapshot_service.get_daily_counter_deltas_by_inv",
               new=AsyncMock(return_value={})),
     )
 
     # ── Pfad A: Scheduler (get_tagesverlauf liefert tv) ──
-    p1, p2, p3 = patches()
-    with p1, p2, p3, patch(
+    p1, p2 = patches()
+    with p1, p2, patch(
         "backend.services.live_power_service.LivePowerService.get_tagesverlauf",
         new=AsyncMock(return_value=tv),
     ):
@@ -220,8 +226,8 @@ async def test_s1_scheduler_und_backfill_pfad_symmetrisch(db) -> None:
     await db.commit()
 
     # ── Pfad B: Vollbackfill (prefetched_tagesverlauf == dieselben tv) ──
-    p1, p2, p3 = patches()
-    with p1, p2, p3:
+    p1, p2 = patches()
+    with p1, p2:
         tz_bf = await aggregate_day(
             anlage, historisch, db,
             source=Source.VOLLBACKFILL_FROM_LTS,
@@ -288,11 +294,9 @@ async def test_s2_konsolidierter_pfad_fuellt_zusatzfelder(db) -> None:
     peaks = TagesPeaks(pv=7.5, netzbezug=3.2, einspeisung=4.1)
 
     with patch(
-        "backend.services.snapshot.lts_aggregator.get_hourly_kwh_by_category_lts",
-        new=AsyncMock(return_value=_LTS_HOURLY),
-    ), patch(
-        "backend.services.snapshot.lts_aggregator.get_komponenten_tageskwh_lts",
-        new=AsyncMock(return_value={"pv_3": 28.8}),
+        # Zählerlücken wie HA (R5): Stunden und Tag aus EINEM Lesezugriff.
+        "backend.services.snapshot.lts_aggregator.lts_tagestabelle",
+        new=AsyncMock(return_value=ha_lts_helfer.lts_tabelle(_LTS_HOURLY, {"pv_3": 28.8})),
     ), patch(
         "backend.services.sensor_snapshot_service.get_daily_counter_deltas_by_inv",
         new=AsyncMock(return_value={}),

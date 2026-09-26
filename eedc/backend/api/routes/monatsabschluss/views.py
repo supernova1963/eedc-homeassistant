@@ -567,7 +567,8 @@ def _sensor_ids_aus_mapping(basis_mapping: dict, inv_mappings: dict) -> list[str
 
 
 async def lade_ha_statistik_werte(
-    basis_mapping: dict, inv_mappings: dict, jahr: int, monat: int
+    basis_mapping: dict, inv_mappings: dict, jahr: int, monat: int,
+    deckel_je_sensor: Optional[dict[str, float]] = None,
 ) -> dict[str, float]:
     """HA Statistics Service für Sensor-Vorschläge: sensor_id → Monatsdifferenz.
 
@@ -595,7 +596,11 @@ async def lade_ha_statistik_werte(
         return {}
 
     try:
-        stats_result = await asyncio.to_thread(ha_stats_svc.get_monatswerte, all_sensor_ids, jahr, monat)
+        # Zählerlücken wie HA (Vorlage §10): der Monat verwirft, was die
+        # Stunden verwerfen — Rücksprung immer, Deckel für PV/Einspeisung.
+        stats_result = await asyncio.to_thread(
+            ha_stats_svc.get_monatswerte, all_sensor_ids, jahr, monat, deckel_je_sensor,
+        )
         return {s.sensor_id: s.differenz for s in stats_result.sensoren if s.differenz is not None}
     except Exception:
         logger.warning("HA Statistics DB nicht erreichbar für Monatsabschluss-Vorschläge")
@@ -629,8 +634,14 @@ async def baue_kontext(
     # Bestehende Monatsdaten laden
     monatsdaten = await lade_monatsdaten(db, anlage_id, jahr, monat)
 
+    from backend.models.investition import Investition
+    from backend.services.monatswert_deckel import deckel_je_sensor
+    _invs = (await db.execute(
+        select(Investition).where(Investition.anlage_id == anlage_id)
+    )).scalars().all()
     ha_stats_werte = await lade_ha_statistik_werte(
-        basis_mapping, inv_mappings, jahr, monat
+        basis_mapping, inv_mappings, jahr, monat,
+        deckel_je_sensor=deckel_je_sensor(anlage, _invs),
     )
 
     alle_basis_felder, preis_messung = await lade_basis_feldliste(

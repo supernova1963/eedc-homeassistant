@@ -31,6 +31,7 @@ from backend.services.snapshot.lts_aggregator import (
     get_hourly_kwh_by_category_lts,
     get_komponenten_tageskwh_lts,
 )
+from backend.tests import ha_lts_helfer
 
 
 def _make_anlage_dict(sensor_mapping: dict):
@@ -84,6 +85,9 @@ def _build_mock_ha_svc(deltas_per_sensor: dict[str, dict[int, float]]) -> MagicM
         }
 
     svc.get_hourly_kwh_deltas_for_day.side_effect = _get_deltas
+    # Zählerlücken wie HA (Schnitt 4): der Aggregator liest die Slot-Tabelle —
+    # dieselben Stundenwerte, je eine reale Stunde (keine Bündel).
+    svc.get_hourly_slots_for_day.side_effect = ha_lts_helfer.slots_side_effect(_get_deltas)
     return svc
 
 

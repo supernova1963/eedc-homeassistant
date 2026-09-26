@@ -68,7 +68,8 @@ async def test_snapshot_ausserhalb_ist_keine_quelle(db, wann):
 
 _PATCHES = dict(
     tv="backend.services.live_power_service.LivePowerService.get_tagesverlauf",
-    komp="backend.services.snapshot.aggregator.get_komponenten_tageskwh",
+    # Zählerlücken wie HA (E5): der Snapshot-Tageswert kommt aus der Tagestabelle.
+    komp="backend.services.snapshot.aggregator.snapshot_tagestabelle",
     counter="backend.services.sensor_snapshot_service.get_daily_counter_deltas_by_inv",
 )
 
@@ -76,7 +77,7 @@ _PATCHES = dict(
 async def _aggregate(anlage, db):
     from backend.services.energie_profil.aggregator import aggregate_day
     with patch(_PATCHES["tv"], new=AsyncMock(return_value={"serien": [], "punkte": []})), \
-         patch(_PATCHES["komp"], new=AsyncMock(return_value={})), \
+         patch(_PATCHES["komp"], new=AsyncMock(return_value=None)), \
          patch(_PATCHES["counter"], new=AsyncMock(return_value={})):
         return await aggregate_day(anlage, TAG, db, source=Source.SCHEDULER)
 

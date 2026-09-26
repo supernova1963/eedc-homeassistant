@@ -317,8 +317,11 @@ from backend.core.berechnungen.speicher_wirtschaftlichkeit import (
     ist_soc_drift_signifikant,
 )
 from backend.core.berechnungen.tagesbilanz import (
+    MonatsBilanz,
     TagesBilanz,
     bilanz_aus_stundenrows,
+    gesamtverbrauch_ha_formel_kwh,
+    monatsbilanz_aus_tagen,
 )
 from backend.core.berechnungen.verbrauch import (
     VerbrauchsKennzahlen,
@@ -348,8 +351,11 @@ __all__ = [
     "anteilig",
     "monatsfenster",
     "monatsfenster_investition",
+    "MonatsBilanz",
     "TagesBilanz",
     "bilanz_aus_stundenrows",
+    "gesamtverbrauch_ha_formel_kwh",
+    "monatsbilanz_aus_tagen",
     "berechne_wp_alternativkosten_ersparnis",
     "alter_wirkungsgrad",
     "ersetzt_keine_heizung",

@@ -170,10 +170,20 @@ def test_monatswert_einheit_wh_skaliert_nach_kwh():
 
 
 def test_monatswert_anderer_monat_ausgeschlossen():
-    """Nur Zeilen im Zielmonat zählen; April-/Juni-Werte verändern das Delta nicht."""
+    """Der Folgemonat zählt nicht; vom Vormonat zählt genau **eine** Zeile — die
+    letzte vor dem Monat, als Anker (R10 / N-563, Zählerlücken wie HA).
+
+    ⚑ Umgestellt 26.09.2026: bis dahin behauptete diese Probe „April-Werte
+    verändern das Delta nicht" (MAX−MIN nur im Fenster). Genau das war N-563 —
+    der Stand am Monatsbeginn ist `sum` der letzten Stunde davor, und ohne ihn
+    fehlt dem Monat die Energie bis zur ersten Zeile im Fenster. Substanz
+    gehalten: die Monatsgrenze nach hinten (Juni) und dass nur der LETZTE
+    Vormonatsstand zählt, nicht ein älterer.
+    """
     svc = _make_service_with_mock_db()
     mid = _seed_sensor(svc, "sensor.pv", "kWh", has_sum=True)
-    _seed_row(svc, mid, datetime(2026, 4, 30, 0, 0), sum_val=50.0)   # Vormonat
+    _seed_row(svc, mid, datetime(2026, 4, 29, 0, 0), sum_val=40.0)   # älter — kein Anker
+    _seed_row(svc, mid, datetime(2026, 4, 30, 0, 0), sum_val=50.0)   # letzter vor Mai = Anker
     _seed_row(svc, mid, datetime(2026, 5, 2, 0, 0), sum_val=100.0)
     _seed_row(svc, mid, datetime(2026, 5, 28, 0, 0), sum_val=200.0)
     _seed_row(svc, mid, datetime(2026, 6, 1, 0, 0), sum_val=999.0)   # Folgemonat
@@ -181,7 +191,9 @@ def test_monatswert_anderer_monat_ausgeschlossen():
     with svc._engine.connect() as conn:
         meta = svc.get_metadata(conn, "sensor.pv")
         wert = svc.get_sensor_monatswert(conn, meta, "sensor.pv", 2026, 5)
-    assert wert.differenz == 100.0
+    assert wert.start_wert == 50.0
+    assert wert.end_wert == 200.0
+    assert wert.differenz == 150.0
 
 
 def test_monatswert_keine_daten_gibt_none():

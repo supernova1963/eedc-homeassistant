@@ -55,6 +55,7 @@ from backend.models.korrekturprofil import (
     PROFIL_TYP_STUNDE,
     Korrekturprofil,
 )
+from backend.core.berechnungen.spannen import spanne
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 from backend.services.wetter.solar_position import (
     AZIMUT_BIN_BREITE_DEFAULT,
@@ -544,6 +545,7 @@ async def aggregiere_korrekturprofil_anlage(
                 TagesEnergieProfil.bewoelkung_prozent,
                 TagesEnergieProfil.niederschlag_mm,
                 TagesEnergieProfil.wetter_code,
+                TagesEnergieProfil.spannen,
             ).where(
                 and_(
                     TagesEnergieProfil.anlage_id == anlage.id,
@@ -553,8 +555,13 @@ async def aggregiere_korrekturprofil_anlage(
         )
         tep_rows = list(tep_result.all())
 
-    for datum, stunde, pv_kw, bw, ns, wc in tep_rows:
+    for datum, stunde, pv_kw, bw, ns, wc, spannen in tep_rows:
         if pv_kw is None or pv_kw < MIN_LEISTUNG_KW:
+            continue
+        # Zählerlücken wie HA (§2): eine Stunde, deren PV mehr als eine reale
+        # Stunde trägt (Energie einer Lücke), ist keine Stunden-Stichprobe für
+        # einen Korrekturfaktor — sie fällt hier aus, bleibt in jeder Summe.
+        if spanne(spannen, "pv") > 1:
             continue
         prog_profil = prog_pro_tag.get(datum)
         if not prog_profil:

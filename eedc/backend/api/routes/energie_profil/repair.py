@@ -196,6 +196,7 @@ async def reaggregate_tag(
     )
     pv_kwh_neu = await _pv_tagessumme(db, anlage_id, datum)
     stunden_mit_messdaten = await _stunden_mit_messdaten(db, anlage_id, datum)
+    pv_kwh_aus_luecke = await _pv_aus_luecke(db, anlage_id, datum)
     return {
         "status": "ok",
         "datum": summary.get("datum", datum.isoformat()),
@@ -203,6 +204,10 @@ async def reaggregate_tag(
         "stunden_mit_messdaten": stunden_mit_messdaten,
         "pv_kwh_alt": pv_kwh_alt,
         "pv_kwh_neu": pv_kwh_neu,
+        # Zählerlücken wie HA (§2): wie viel von `pv_kwh_neu` in Stunden steht,
+        # die mehr als eine reale Stunde tragen — die Energie einer Lücke in HA.
+        # Die Rückmeldung beschriftet das Δ damit („davon … aus einer Lücke").
+        "pv_kwh_aus_luecke": pv_kwh_aus_luecke,
         "komponenten": summary.get("komponenten", []),
         "komponenten_erwartet": summary.get("komponenten_erwartet", 0),
         "komponenten_geschrieben": summary.get("komponenten_geschrieben", 0),
@@ -243,6 +248,29 @@ async def _stunden_mit_messdaten(
         )
     )
     return int(result.scalar_one() or 0)
+
+
+async def _pv_aus_luecke(
+    db: AsyncSession, anlage_id: int, datum: date,
+) -> Optional[float]:
+    """Σ PV der Stunden des Tages, deren PV-Menge mehr als eine reale Stunde trägt.
+
+    Zählerlücken wie HA (§2, Repair-Vorschau Δ): Nach einer Neuaggregation
+    steht die Energie einer Lücke in der Folgestunde bzw. im Folgetag — das Δ
+    der Rückmeldung ist dann keine „Reparatur eines Fehlers", sondern die
+    Energie, die HA nachgeliefert hat. ``None``, wenn keine Stunde gebündelt ist.
+    """
+    from backend.core.berechnungen.spannen import spanne
+
+    rows = (await db.execute(
+        select(TagesEnergieProfil.pv_kw, TagesEnergieProfil.spannen).where(
+            TagesEnergieProfil.anlage_id == anlage_id,
+            TagesEnergieProfil.datum == datum,
+            TagesEnergieProfil.spannen.is_not(None),
+        )
+    )).all()
+    summe = sum(pv for pv, sp in rows if pv is not None and spanne(sp, "pv") > 1)
+    return round(summe, 2) if summe > 0 else None
 
 
 async def _pv_tagessumme(

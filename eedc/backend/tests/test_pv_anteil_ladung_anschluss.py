@@ -43,6 +43,7 @@ from backend.services.provenance import (
     ABGELEITET_EINSPEISE_DECKUNG_TEILWEISE,
 )
 from backend.tests import factories
+from backend.tests import ha_lts_helfer
 
 ANSCHAFFUNG = date(2024, 1, 1)
 
@@ -431,11 +432,9 @@ async def test_aggregate_day_schreibt_den_abgeleiteten_ladeanteil(db):
             "punkte": [{"zeit": f"{h:02d}:00", "werte": {}} for h in range(24)],
         }),
     ), patch(
-        "backend.services.snapshot.lts_aggregator.get_hourly_kwh_by_category_lts",
-        new=AsyncMock(return_value=stunden),
-    ), patch(
-        "backend.services.snapshot.lts_aggregator.get_komponenten_tageskwh_lts",
-        new=AsyncMock(return_value={}),
+        # Zählerlücken wie HA (R5): Stunden und Tag aus EINEM Lesezugriff.
+        "backend.services.snapshot.lts_aggregator.lts_tagestabelle",
+        new=AsyncMock(return_value=ha_lts_helfer.lts_tabelle(stunden, {})),
     ), patch(
         "backend.services.sensor_snapshot_service.get_daily_counter_deltas_by_inv",
         new=AsyncMock(return_value={}),
@@ -507,11 +506,9 @@ async def test_aggregate_day_ohne_ladung_laesst_die_spalten_leer(db):
             "punkte": [{"zeit": f"{h:02d}:00", "werte": {}} for h in range(24)],
         }),
     ), patch(
-        "backend.services.snapshot.lts_aggregator.get_hourly_kwh_by_category_lts",
-        new=AsyncMock(return_value=stunden),
-    ), patch(
-        "backend.services.snapshot.lts_aggregator.get_komponenten_tageskwh_lts",
-        new=AsyncMock(return_value={}),
+        # Zählerlücken wie HA (R5): Stunden und Tag aus EINEM Lesezugriff.
+        "backend.services.snapshot.lts_aggregator.lts_tagestabelle",
+        new=AsyncMock(return_value=ha_lts_helfer.lts_tabelle(stunden, {})),
     ), patch(
         "backend.services.sensor_snapshot_service.get_daily_counter_deltas_by_inv",
         new=AsyncMock(return_value={}),
@@ -570,11 +567,9 @@ async def test_aggregate_day_kennzeichnet_eine_unvollstaendige_deckung(db):
             "punkte": [{"zeit": f"{h:02d}:00", "werte": {}} for h in range(24)],
         }),
     ), patch(
-        "backend.services.snapshot.lts_aggregator.get_hourly_kwh_by_category_lts",
-        new=AsyncMock(return_value=stunden),
-    ), patch(
-        "backend.services.snapshot.lts_aggregator.get_komponenten_tageskwh_lts",
-        new=AsyncMock(return_value={}),
+        # Zählerlücken wie HA (R5): Stunden und Tag aus EINEM Lesezugriff.
+        "backend.services.snapshot.lts_aggregator.lts_tagestabelle",
+        new=AsyncMock(return_value=ha_lts_helfer.lts_tabelle(stunden, {})),
     ), patch(
         "backend.services.sensor_snapshot_service.get_daily_counter_deltas_by_inv",
         new=AsyncMock(return_value={}),

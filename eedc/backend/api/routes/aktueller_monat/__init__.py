@@ -167,7 +167,23 @@ async def _collect_ha_statistics_data(anlage: Anlage, jahr: int, monat: int) -> 
     # Synchronen SQLite-Zugriff in Thread auslagern
     try:
         sensor_ids = list(sensor_to_feld.keys())
-        result = await asyncio.to_thread(ha_stats.get_monatswerte, sensor_ids, jahr, monat)
+        # Zählerlücken wie HA (Vorlage §10): der Monat verwirft, was die
+        # Stunden verwerfen — Rücksprung immer, Deckel für PV/Einspeisung.
+        # Die Investitionen (für die Achse eines Felds) hängen an der Anlage —
+        # die Route lädt sie per `selectinload`. Sind sie nicht geladen, wird
+        # hier nichts nachgeladen (kein Lazy-Load in der async-Sitzung); dann
+        # deckeln nur die Basis-Felder, der Rücksprung (R4) gilt immer.
+        from sqlalchemy import inspect as _sa_inspect
+        from backend.services.monatswert_deckel import deckel_je_sensor
+        _zustand = _sa_inspect(anlage, raiseerr=False)
+        _invs = (
+            anlage.investitionen
+            if _zustand is None or "investitionen" not in _zustand.unloaded else []
+        )
+        result = await asyncio.to_thread(
+            ha_stats.get_monatswerte, sensor_ids, jahr, monat,
+            deckel_je_sensor(anlage, _invs),
+        )
     except Exception:
         logger.warning("HA Statistics DB nicht erreichbar")
         return {}

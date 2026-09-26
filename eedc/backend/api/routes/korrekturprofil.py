@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.berechnungen.spannen import spanne
 from backend.core.exceptions import not_found
 from backend.core.database import get_db
 from backend.models.anlage import Anlage
@@ -260,6 +261,7 @@ async def stratifizierung_endpoint(
             TagesEnergieProfil.bewoelkung_prozent,
             TagesEnergieProfil.niederschlag_mm,
             TagesEnergieProfil.wetter_code,
+            TagesEnergieProfil.spannen,
         ).where(
             and_(
                 TagesEnergieProfil.anlage_id == anlage_id,
@@ -274,9 +276,11 @@ async def stratifizierung_endpoint(
     # Pro-Tag-Tracking für Empty-State-Diagnose
     tage_mit_klassifikation: set[date] = set()
 
-    for tep_datum, stunde, pv_kw, bw, ns, wc in tep_query.all():
+    for tep_datum, stunde, pv_kw, bw, ns, wc, spannen in tep_query.all():
         if pv_kw is None or pv_kw < 0.05:
             continue  # Nacht / Sensor-Lücke / unter Mess-Schwelle
+        if spanne(spannen, "pv") > 1:
+            continue  # Zählerlücken wie HA (§2): gebündelte Stunde ist keine Stichprobe
         prognose_profil = prognose_pro_tag.get(tep_datum)
         if not prognose_profil:
             continue

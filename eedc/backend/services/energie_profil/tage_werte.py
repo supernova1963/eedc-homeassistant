@@ -47,6 +47,7 @@ from backend.api.routes.energie_profil._shared import TagWerteResponse
 from backend.core.berechnungen.kennzahlen import autarkie_prozent, eigenverbrauchsquote_prozent
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.core.berechnungen.slot_konvention import forward_werte_je_backward_zeile
+from backend.core.berechnungen.spannen import verbrauch_gebuendelt
 from backend.core.berechnungen import (
     aggregiere_tep_komponenten,
     berechne_finanz_aggregat,
@@ -256,8 +257,13 @@ async def baue_tage_werte(
 
     for tag in alle_tage:
         stunden_rows = tep_pro_tag.get(tag, [])
-        bilanz = bilanz_aus_stundenrows(stunden_rows)
         tz = tz_pro_tag.get(tag)
+        # Zählerlücken wie HA (R7/R9): die Tageszeile sagt selbst, nach welcher
+        # Regel sie gerechnet ist — `verworfen` ist die Regelmarke. Ohne Marke
+        # (Altbestand) rechnet der Tag N-92 wie bisher (E6).
+        bilanz = bilanz_aus_stundenrows(
+            stunden_rows, verworfen=(tz.verworfen if tz else None),
+        )
 
         # Grundlast dieser Nacht (ADR-001: Sourcing hier, Formel im Layer).
         # Der Filter ist WOERTLICH der der Monats-/Jahres-Kachel
@@ -267,9 +273,15 @@ async def baue_tage_werte(
         # ⚠ Keine Mindestzahl an Nachtstunden: fehlen sie ganz, liefert
         # `berechne_grundlast` None und die Spalte zeigt „—" (Total-Fall);
         # eine Teilabdeckung bleibt stehen, wie ueberall im Baum.
+        # ⚠ Zählerlücken wie HA (§2, Grundlast-Guard): eine Zeile, deren
+        # Verbrauchs-Achsen mehr als eine reale Stunde tragen, ist keine
+        # Stunden-Stichprobe — sie trüge den Verbrauch einer ganzen Lücke als
+        # „Nachtleistung". R6 lässt `verbrauch_kw` bei verschiedenen Spannen
+        # schon leer; bei gleicher Spanne fällt die Zeile hier heraus.
         nacht_kw = [
             float(r.verbrauch_kw) for r in stunden_rows
             if r.stunde < 5 and r.verbrauch_kw is not None and r.verbrauch_kw > 0
+            and not verbrauch_gebuendelt(r)
         ]
         grundlast_kw = berechne_grundlast(
             nacht_verbrauch_kw=nacht_kw,
@@ -424,6 +436,8 @@ async def baue_tage_werte(
             datum=tag,
             stunden_verfuegbar=(tz.stunden_verfuegbar if tz else bilanz.stunden),
             datenquelle=(tz.datenquelle if tz else None),
+            # Zählerlücken wie HA (R4/R9): Markierung + Regelmarke der Tageszeile.
+            verworfen=(tz.verworfen if tz else None),
             # Energie. `erzeugung` ist None, solange keine Stunde einen PV-Wert
             # trug — eine 0 wäre hier nicht „nichts erzeugt", sondern „nicht
             # gemessen" (`docs/KONZEPT-UNVOLLSTAENDIGE-WERTE.md`). Betrifft

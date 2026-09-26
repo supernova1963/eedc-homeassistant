@@ -27,10 +27,6 @@ from backend.core.berechnungen.betriebsart_gemessen import (
 )
 from backend.core.betriebsmodus import BETRIEBSART_NUTZENERGIE_FELD, HEIZEN, KUEHLEN
 from backend.core.field_definitions import FEINE_STROM_FELDER, WP_GESAMT_STROM_FELDER
-from backend.core.berechnungen.stundenbilanz import (
-    berechne_batterie_netto_kwh,
-    stunden_verbrauch_kwh,
-)
 from backend.core.tageswert_grund import (
     GRUND_KEINE_ZAEHLERSTAENDE,
     GRUND_NICHT_ZUGEORDNET,
@@ -39,47 +35,34 @@ from backend.core.tageswert_grund import (
 )
 from backend.services.snapshot.boundary_range import BoundaryRange, tagesfenster_fuer
 from backend.services.snapshot.keys import (
+    _categorize_counter,
     KUMULATIVE_COUNTER_FELDER,
     FLOAT_COUNTER_FELDER,
-    PV_AGGREGAT_BASIS_FELD,
     extract_quellen_energy,
     feld_hat_zaehler,
     innengeraet_felder,
     zaehler_feld_kandidaten,
 )
-from backend.core.berechnungen.pv_tages_praezedenz import (
-    QUELLE_AGGREGAT,
-    QUELLE_EINZEL,
-    erwartete_erzeuger_ids,
-    waehle_pv_quelle,
-)
-from backend.core.berechnungen.erzeuger_traeger import (
-    bkw_restwerte,
-    ergaenze_kinder_deckung,
-)
 from backend.services.snapshot.komponenten_beitraege import (
     basis_beitraege,
-    basis_hourly_eintraege,
     investition_beitraege,
-    investition_hourly_eintraege,
-    mqtt_hourly_eintraege,
     loese_pv_tageswerte_auf,
-    resolve_either_or_eintraege,
     wallbox_deckt_ladung_ab,
 )
-from backend.services.snapshot.plausibility import (
-    cap_pv_einspeisung_stunde,
-    schwelle_pv_einspeisung_stunde_kwh,
-)
 from backend.services.snapshot.reader import (
-    MQTT_AKTIV_TAGE,
     TAGESRESET_TOLERANZ_KWH,
     erster_stand_im_fenster,
     get_snapshot,
     letzter_stand_im_fenster,
+    letzter_stand_vor,
     mqtt_zaehler_keys,
     reihe_im_fenster,
     tageswert_aus_reihe,
+)
+from backend.services.snapshot.tages_tabelle import (
+    TabellenEintrag,
+    TagesTabelle,
+    baue_tagestabelle,
 )
 
 logger = logging.getLogger(__name__)
@@ -229,6 +212,34 @@ def stunden_slot_delta(
         Menge in kWh (≥ 0), oder ``None`` für einen Rücksprung, der kein
         Tagesreset ist (protokolliert).
     """
+    wert, art = stunden_slot_art(s0, s1)
+    if art == SLOT_RUECKSPRUNG:
+        logger.warning(
+            f"Negatives Delta bei {sensor_key} ({datum} Slot{slot_idx}): {wert:.3f}"
+        )
+        return None
+    return wert
+
+
+#: Art eines Stunden-Slots aus zwei Zählerständen (`stunden_slot_art`).
+SLOT_MENGE = "menge"
+SLOT_TAGESRESET = "tagesreset"
+SLOT_RUECKSPRUNG = "ruecksprung"
+
+
+def stunden_slot_art(s0: float, s1: float) -> tuple[float, str]:
+    """Die Regel von {@link stunden_slot_delta} — mit der **Art** des Ergebnisses.
+
+    ``(menge, "menge")`` im Regelfall (≥ 0 geklemmt), ``(s1, "tagesreset")``
+    für den Tagesreset eines `utility_meter` (s1 < 0,5 ∧ s0 > 0,5: s0 ≈
+    Tagesendwert, s1 ≈ Energie seit dem Reset — eine **Menge** für diese
+    Stunde, R4), ``(s1 − s0, "ruecksprung")`` für jeden anderen Rücksprung (das
+    negative Rohdelta — der Aufrufer verwirft es und bucht den Betrag nach
+    ``verworfen``, R4).
+
+    Eine Funktion statt zweier Fassungen: `stunden_slot_delta` (Tag-Verlauf,
+    Wärme/Klima) und die Snapshot-Tagestabelle lesen dieselbe Schwelle.
+    """
     d = s1 - s0
     if d < -TAGESRESET_TOLERANZ_KWH:
         # Tagesreset-Zähler (HA utility_meter mit daily cycle): s0 ≈ Tagesendwert,
@@ -236,12 +247,9 @@ def stunden_slot_delta(
         # gewertet statt verworfen, sonst bliebe Slot 0 dauerhaft None und
         # ist_unvollstaendig=True würde irreführend triggern.
         if s1 < 0.5 and s0 > 0.5:
-            return max(0.0, s1)
-        logger.warning(
-            f"Negatives Delta bei {sensor_key} ({datum} Slot{slot_idx}): {d:.3f}"
-        )
-        return None
-    return max(0.0, d)
+            return max(0.0, s1), SLOT_TAGESRESET
+        return d, SLOT_RUECKSPRUNG
+    return max(0.0, d), SLOT_MENGE
 
 
 def _fill_gaps_linear(snaps_per_hour: dict[int, Optional[float]]) -> None:
@@ -278,321 +286,174 @@ async def get_hourly_kwh_by_category(
     investitionen_by_id: dict,
     datum: date,
 ) -> dict[int, dict[str, Optional[float]]]:
-    """
-    Berechnet stündliche kWh-Werte pro Energiefluss-Kategorie aus Zähler-Deltas.
+    """Stündliche kWh je Energiefluss-Kategorie aus Zähler-Snapshots — Wrapper
+    über {@link snapshot_tagestabelle} (Format ``{h: {"pv", "einspeisung",
+    "netzbezug", "batterie_netto", "wp", "wallbox", "verbrauch_sonstiges",
+    "verbrauch", "spannen", …}}``). ``{}``, wenn kein Zähler zugeordnet ist."""
+    tabelle = await snapshot_tagestabelle(db, anlage, investitionen_by_id, datum)
+    return tabelle.stunden if tabelle is not None else {}
 
-    Für jede Stunde H (0..23) wird snapshot(H+1) - snapshot(H) pro Kategorie
-    gebildet. Fehlende Snapshots werden on-demand via HA Statistics gefüllt
-    (Self-Healing).
 
-    Args:
-        db: Async Session
-        anlage: Anlage-Objekt (mit sensor_mapping)
-        investitionen_by_id: {str(inv_id): Investition} — für typ/parameter
-        datum: Der Tag (alle Stunden 00..23 + Abschluss am Folgetag 00:00)
+async def _snapshot_eintraege(
+    db: AsyncSession, anlage, investitionen_by_id: dict, datum: date,
+) -> tuple[list[TabellenEintrag], dict[str, Optional[str]], dict]:
+    """Die zugeordneten Zähler des Tages — HA-Sensor **oder** MQTT, eine Auswahl.
+
+    Dieselbe Auswahl wie der Tageswert bisher (`get_komponenten_tageskwh`):
+    `basis_beitraege`/`investition_beitraege` mit ``feld_hat_zaehler`` über
+    HA-Zuordnung **und** MQTT-Keys (jede Historie, ``seit=None``) und den
+    Innengerät-Kandidaten (K3 Regel 4). Bis „Zählerlücken wie HA" las die
+    Stunde eine zweite Liste (`*_hourly_eintraege`, MQTT nur der letzten
+    7 Tage) — dieselbe Auswahl zweimal, mit zwei Grenzen.
 
     Returns:
-        {h: {"pv": 4.2, "einspeisung": 3.1, ..., "verbrauch": 2.1}}
-        Werte können None sein (kein Zähler gemappt oder Lücke).
-        "verbrauch" wird bilanziell berechnet (SoT:
-        `core/berechnungen/stundenbilanz.py`):
-            verbrauch = pv + netzbezug - einspeisung - (ladung - entladung)
-        nur wenn pv, einspeisung und netzbezug verfügbar sind.
+        ``(eintraege, entity_je_key, quellen_energy)`` — ``entity_je_key`` ist
+        die HA-Entity je ``sensor_key`` (``None`` für MQTT-only) für den
+        Self-Healing-Weg von `get_snapshot`.
     """
     sensor_mapping = anlage.sensor_mapping or {}
     quellen_energy = extract_quellen_energy(anlage)  # C2b-Read-Through
+    mqtt_keys = await mqtt_zaehler_keys(db, anlage.id)  # N-328b, jede Historie
+    eintraege: list[TabellenEintrag] = []
+    entity_je_key: dict[str, Optional[str]] = {}
 
-    # 1. Zähler-Entities sammeln mit Kategorien
-    # (sensor_key, entity_id | None, kategorie, fallback_gruppe)
-    # entity_id=None bei reinen MQTT-Quellen (Standalone/Docker-Modus)
-    eintraege: list[tuple[str, Optional[str], str, Optional[str]]] = []
-    seen_keys: set[str] = set()
+    def _sid(cfg) -> Optional[str]:
+        return cfg.get("sensor_id") if isinstance(cfg, dict) else None
 
-    # 1a-vorab. Die MQTT-Keys werden hier geholt und erst in 1b verarbeitet.
-    # ⛔ Bis #406 stand hier zusätzlich die Alles-oder-nichts-Regel für
-    # `basis:pv_gesamt` (Stufe 1 zu F-7) — sie musste BEIDE Quellen kennen,
-    # bevor der Basis-Beitrag entstand. Die Regel ist entfallen: sie fragte die
-    # Konfiguration statt die Daten. Beide Quellen sind jetzt Kandidaten, die
-    # Wahl fällt in Schritt 3b über `core/berechnungen/pv_tages_praezedenz.py`.
-    # Die Doppelzählung, gegen die die alte Regel gebaut war, verhindert die
-    # Präzedenz genauso — sie nimmt in JEDEM Slot genau eine Seite.
-    cutoff = datetime.now() - timedelta(days=MQTT_AKTIV_TAGE)
-    mqtt_sks_alle: list[str] = sorted(
-        await mqtt_zaehler_keys(db, anlage.id, seit=cutoff)
-    )
+    basis_map = sensor_mapping.get("basis", {}) or {}
+    for b in basis_beitraege(
+        sensor_mapping,
+        ist_verfuegbar=lambda feld: feld_hat_zaehler(
+            basis_map.get(feld), f"basis:{feld}", quellen_energy, mqtt_keys,
+        ),
+    ):
+        kat = _categorize_counter(b.feld, None, None)
+        if not kat:
+            continue
+        sk = f"basis:{b.feld}"
+        eintraege.append(TabellenEintrag(sk, kat, b.fallback_gruppe, sk, b.target_key, b.vorzeichen))
+        entity_je_key[sk] = _sid(basis_map.get(b.feld))
 
-    # 1a. HA-gemappte Zähler aus sensor_mapping — Feld-Auswahl (Whitelist +
-    # Either-Or + parent-Skip) über DIESELBE Normalisierung wie der Daily-Pfad
-    # (`*_hourly_eintraege`), nicht mehr über rohe `_categorize_counter`-
-    # Aufrufe. Issue #298 (Audit-§6.2, Pattern-Klasse
-    # [[feedback_aggregator_symmetrie]]): ein doppelt gemappter E-Auto-Zähler
-    # (`verbrauch_kwh` + `ladung_kwh`) wird in der Either-Or-Gruppe aufgelöst
-    # statt doppelt summiert.
-    basis = sensor_mapping.get("basis", {}) or {}
-    for he in basis_hourly_eintraege(sensor_mapping):
-        cfg = basis.get(he.feld)
-        if isinstance(cfg, dict):
-            eid = cfg.get("sensor_id")
-            if eid:
-                sk = f"basis:{he.feld}"
-                eintraege.append((sk, eid, he.kategorie, he.fallback_gruppe))
-                seen_keys.add(sk)
-
-    investitionen_map = sensor_mapping.get("investitionen", {}) or {}
-    # N-555 (Konzept Regel 6): EINE Auswahl für Tag und Stunde — die Wallbox-Regel
-    # gilt jetzt auch hier (bis 25.09.2026 nur am Tag), und die Heimlade-Felder
-    # eines E-Autos werden über HA **und** MQTT gemeinsam gewählt.
-    _mqtt_sk_set = set(mqtt_sks_alle)
-
-    def _hat_zaehler(inv_id: str, feld: str) -> bool:
-        _felder = ((investitionen_map.get(inv_id) or {}).get("felder") or {})
-        return feld_hat_zaehler(
-            _felder.get(feld), f"inv:{inv_id}:{feld}", quellen_energy, _mqtt_sk_set,
-        )
-
-    def _auswahl(inv_id: str):
-        return lambda feld: _hat_zaehler(inv_id, feld)
-
+    _wb_map = (sensor_mapping.get("investitionen") or {})
     _wb_deckt = wallbox_deckt_ladung_ab(
         investitionen_by_id.values(), sensor_mapping,
-        ist_verfuegbar=lambda inv, feld: _hat_zaehler(str(inv.id), feld),
+        ist_verfuegbar=lambda inv, feld: feld_hat_zaehler(
+            ((_wb_map.get(str(inv.id)) or {}).get("felder") or {}).get(feld),
+            f"inv:{inv.id}:{feld}", quellen_energy, mqtt_keys,
+        ),
         datum=datum,
     )
-    for inv_id_str, inv_data in investitionen_map.items():
-        if not isinstance(inv_data, dict):
-            continue
-        inv = investitionen_by_id.get(inv_id_str) or investitionen_by_id.get(str(inv_id_str))
-        if inv is None:
-            continue
-        felder = inv_data.get("felder", {}) or {}
-        for he in investition_hourly_eintraege(
-            inv, inv_data, wallbox_deckt_ladung=_wb_deckt,
-            auswahl_verfuegbar=_auswahl(str(inv_id_str)),
-        ):
-            cfg = felder.get(he.feld)
-            if isinstance(cfg, dict):
-                eid = cfg.get("sensor_id")
-                if eid:
-                    sk = f"inv:{inv_id_str}:{he.feld}"
-                    eintraege.append((sk, eid, he.kategorie, he.fallback_gruppe))
-                    seen_keys.add(sk)
-
-    # 1b. MQTT-gespeiste Zähler (Standalone/Docker-Modus ohne HA-Integration).
-    # Die Keys stehen schon oben bereit (`mqtt_sks_alle`, Filter: letzte 7 Tage,
-    # um nur aktive Topics zu berücksichtigen).
-    # Sie werden seen-gefiltert und über DIESELBE Normalisierung wie
-    # der HA-Pfad oben auflösen (#317): inv-Keys laufen durch
-    # `investition_hourly_eintraege` mit „MQTT-Key vorhanden" als Verfügbarkeit,
-    # damit Whitelist + Either-Or + parent-Skip auch hier greifen. Ein E-Auto mit
-    # ladung_kwh UND verbrauch_kwh per MQTT (evcc-Bridge) wird so in der Either-Or-
-    # Gruppe aufgelöst statt doppelt gezählt — gleiche #298-Klasse, MQTT-Pfad.
-    mqtt_sks = [sk for sk in mqtt_sks_alle if sk not in seen_keys]
-    for sk, kat, grp in mqtt_hourly_eintraege(
-        mqtt_sks, investitionen_by_id, investitionen_map,
-        wallbox_deckt_ladung=_wb_deckt, auswahl_je_inv=_auswahl,
+    for inv_id_str, inv, inv_data in _investitionen_mit_mapping(
+        sensor_mapping, investitionen_by_id
     ):
-        if sk in seen_keys:
-            continue
-        eintraege.append((sk, None, kat, grp))  # entity_id=None → MQTT-Fallback
-        seen_keys.add(sk)
+        felder = inv_data.get("felder", {}) or {}
+        for b in investition_beitraege(
+            inv, inv_data, wallbox_deckt_ladung=_wb_deckt,
+            ist_verfuegbar=lambda feld, _id=inv_id_str, _f=felder: feld_hat_zaehler(
+                _f.get(feld), f"inv:{_id}:{feld}", quellen_energy, mqtt_keys,
+            ),
+            kandidaten=zaehler_feld_kandidaten(inv_id_str, felder, mqtt_keys),
+        ):
+            kat = _categorize_counter(
+                b.feld, getattr(inv, "typ", None), getattr(inv, "parameter", None),
+            )
+            if not kat:
+                logger.warning(
+                    "Anlage %s, %s: Feld %s (inv %s) hat keine Energiefluss-Kategorie "
+                    "— zählt weder in der Stunde noch im Tag",
+                    anlage.id, datum, b.feld, inv_id_str,
+                )
+                continue
+            sk = f"inv:{inv_id_str}:{b.feld}"
+            eintraege.append(TabellenEintrag(sk, kat, b.fallback_gruppe, sk, b.target_key, b.vorzeichen))
+            entity_je_key[sk] = _sid(felder.get(b.feld))
+    return eintraege, entity_je_key, quellen_energy
 
+
+async def snapshot_tagestabelle(
+    db: AsyncSession,
+    anlage,
+    investitionen_by_id: dict,
+    datum: date,
+) -> Optional[TagesTabelle]:
+    """Stunden **und** Tag aus Zähler-Snapshots (Standalone/MQTT) — T3, E1, E5.
+
+    ⭐ **Zählerlücken wie HA auf dem Snapshot-Pfad (Vorlage Fassung 7).** Je
+    Zähler die 25 Stände Vortag 23:00 … heute 23:00 (`get_snapshot`, mit
+    Self-Healing), dann:
+
+    * **E1 (präzisiert):** lineare Interpolation (#145) **nur zwischen Ständen
+      innerhalb des Fensters** (`_fill_gaps_linear`).
+    * **T3:** fehlt der Stand am Fensterbeginn, trägt der letzte vorhandene
+      Stand davor (`reader.letzter_stand_vor`, beliebig weit zurück). Der
+      erste belegte Slot ist dann ein **Bündel** mit Spanne aus den
+      Zeitstempeln; die Slots davor bleiben leer.
+    * **R4:** der Tagesreset (s1 < 0,5 ∧ s0 > 0,5) ist in der Stunde eine
+      Menge; jeder andere Rücksprung wird verworfen. Der **Tageswert** eines
+      Zählers mit Tagesreset bleibt abgelehnt (Rücksprung-Entscheid 28.08.,
+      SOLL Wärme/Klima §3.1) — seine Stunden zählen, `komponenten_kwh` trägt
+      für seinen Ziel-Key keine Aussage.
+    * Danach dieselbe Rechnung wie der HA-Pfad (`tages_tabelle.baue_tagestabelle`).
+
+    **E5:** `komponenten_kwh` ist damit Σ der Stunden — also im Stundenfenster
+    [Vortag 23:00, 23:00) wie im HA-Pfad, nicht mehr im Kalendertag. Die
+    Tageszeile trägt die Regelmarke (R9); `boundary_range.tageszeile_ist_rueckwaerts`
+    liest daran ab, dass ihre Teilmengen im selben Fenster zu lesen sind.
+    """
+    eintraege, entity_je_key, quellen_energy = await _snapshot_eintraege(
+        db, anlage, investitionen_by_id, datum,
+    )
     if not eintraege:
-        return {}
+        return None
 
-    # 2. Snapshots für alle benötigten Stundenboundaries holen.
-    # Backward-Konvention nach Issue #144 — gekapselt in BoundaryRange.
-    # Slot 0 = Delta von Vortag 23:00 → Heute 00:00
-    # Slot 23 = Delta von Heute 22:00 → 23:00
-    # → 25 Boundaries (offsets -1..23), 24 Slots (0..23).
     rng = BoundaryRange.for_hourly_slots(datum)
-    result: dict[int, dict[str, Optional[float]]] = {h: {} for h in range(24)}
-
-    # pro sensor_key: {boundary_offset: wert}
-    snaps: dict[str, dict[int, Optional[float]]] = {}
-    for sensor_key, entity_id, _kat, _grp in eintraege:
-        snaps[sensor_key] = {}
+    slots_je_key: dict[str, dict[int, tuple[float, int]]] = {}
+    tagesreset: set[str] = set()
+    for sk in dict.fromkeys(e.schluessel for e in eintraege):
+        entity_id = entity_je_key.get(sk)
+        staende: dict[int, Optional[float]] = {}
         for offset in rng.boundary_offsets:
-            ts = rng.boundary_at(offset)
-            wert = await get_snapshot(
-                db, anlage.id, sensor_key, entity_id, ts,
+            staende[offset] = await get_snapshot(
+                db, anlage.id, sk, entity_id, rng.boundary_at(offset),
                 quellen_energy=quellen_energy,
             )
-            snaps[sensor_key][offset] = wert
+        _fill_gaps_linear(staende)                       # E1: nur innen
 
-    # 2b. Lücken durch lineare Interpolation füllen (Issue #145).
-    # Kumulative Zähler sind monoton steigend, aber der genaue stündliche
-    # Zuwachs über eine Lücke ist unbekannt — lineare Interpolation verteilt
-    # das Gesamt-Delta gleichmäßig über die fehlenden Stunden. Das ist
-    # deutlich besser als "Stunde-Null + Folge-Spike" (2h-Delta in eine
-    # einzige Stunde aufgestaut), auch wenn es die reale intra-day-Dynamik
-    # nicht perfekt wiedergibt.
-    for sensor_key in snaps:
-        _fill_gaps_linear(snaps[sensor_key])
-
-    # 2c. Either-Or-Auflösung auf TAGES-Ebene (Issue #298): pro fallback_gruppe
-    # gewinnt der erste Eintrag, dessen Sensor an irgendeinem Slot ein
-    # vollständiges Delta-Paar liefert — identisch zur Daily-Auflösung in
-    # `get_komponenten_tageskwh._apply_beitraege`. Tages-Ebene (nicht pro
-    # Stunde), damit die Wahl über alle 24 Stunden stabil bleibt. MQTT-Einträge
-    # (fallback_gruppe=None) bleiben unberührt.
-    def _hat_tagesdaten(sensor_key: str) -> bool:
-        s = snaps.get(sensor_key, {})
-        return any(
-            s.get(prev_off) is not None and s.get(curr_off) is not None
-            for _slot, prev_off, curr_off in rng.slot_pairs
-        )
-
-    eintraege = resolve_either_or_eintraege(
-        eintraege,
-        gruppe_fn=lambda e: e[3],            # (sensor_key, eid, kat, gruppe)
-        hat_tagesdaten_fn=lambda e: _hat_tagesdaten(e[0]),
-    )
-
-    # 3. Deltas pro Stunde und Kategorie summieren (Backward-Konvention).
-    # Slot h = snap[curr=h] - snap[prev=h-1] → Energie [h-1, h).
-    #
-    # ⚑ #406: Die Kategorie `pv` wird dabei NICHT sofort zusammengeworfen. Sie
-    # hat zwei Quellen — das Anlagen-Aggregat `basis:pv_gesamt` und die Zähler
-    # je Erzeuger —, und welche von beiden den Tag trägt, entscheidet Schritt 3b
-    # nach dem Lesen. Würden sie hier addiert, stünde die Anlagensumme neben
-    # ihren eigenen Summanden (#290/#298).
-    pv_aggregat_je_slot: dict[int, Optional[float]] = {}
-    pv_einzel_je_slot: dict[int, dict[str, float]] = {}
-    for slot_idx, prev_off, curr_off in rng.slot_pairs:
-        per_kat: dict[str, Optional[float]] = {}
-        pv_aggregat_je_slot[slot_idx] = None
-        pv_einzel_je_slot[slot_idx] = {}
-        for sensor_key, _eid, kat, _grp in eintraege:
-            s0 = snaps[sensor_key][prev_off]
-            s1 = snaps[sensor_key][curr_off]
-            if s0 is None or s1 is None:
-                continue  # Kategorie unvollständig für diese Stunde
-            d = stunden_slot_delta(
-                s0, s1, sensor_key=sensor_key, datum=datum, slot_idx=slot_idx,
+        vorher: Optional[tuple[datetime, float]] = None
+        if staende.get(-1) is not None:
+            vorher = (rng.boundary_at(-1), staende[-1])
+        elif any(staende.get(h) is not None for h in range(24)):
+            vorher = await letzter_stand_vor(             # T3: Anker vor dem Fenster
+                db, anlage.id, sk, rng.boundary_at(-1),
+                sensor_id=entity_id, quellen_energy=quellen_energy,
             )
-            if d is None:
+        slots: dict[int, tuple[float, int]] = {}
+        for h in range(24):
+            stand = staende.get(h)
+            if stand is None:
                 continue
-            if kat == "pv":
-                # Getrennt halten statt summieren — die Wahl fällt in 3b.
-                if sensor_key == f"basis:{PV_AGGREGAT_BASIS_FELD}":
-                    pv_aggregat_je_slot[slot_idx] = (
-                        pv_aggregat_je_slot[slot_idx] or 0.0
-                    ) + d
+            ts_h = rng.boundary_at(h)
+            if vorher is not None:
+                wert, art = stunden_slot_art(vorher[1], stand)
+                if art == SLOT_TAGESRESET:
+                    tagesreset.add(sk)
+                if round(wert, 3) == 0:
+                    n = 1                               # R2: 0 über n Stunden ist 0 je Stunde
+                elif vorher[0] == rng.boundary_at(h - 1):
+                    n = 1                               # Nachbarstand (auch interpoliert)
                 else:
-                    # `inv:<id>:pv_erzeugung_kwh` — die ID trägt die Deckung.
-                    inv_id = sensor_key.split(":", 2)[1]
-                    pv_einzel_je_slot[slot_idx][inv_id] = (
-                        pv_einzel_je_slot[slot_idx].get(inv_id, 0.0) + d
-                    )
-                continue
-            per_kat[kat] = (per_kat.get(kat) or 0.0) + d
-        result[slot_idx] = per_kat
+                    n = max(1, round((ts_h.timestamp() - vorher[0].timestamp()) / 3600))
+                slots[h] = (wert, n)
+            vorher = (ts_h, stand)
+        if slots:
+            slots_je_key[sk] = slots
 
-    # 3b. Welche PV-Quelle trägt diesen Tag? (#406, Layer-SoT)
-    # Die Präzedenz ist die des Monats, auf den Tag übertragen: liefern alle
-    # erwarteten Erzeuger den ganzen Tag, gewinnen sie; sonst trägt das
-    # Aggregat. Die Wahl gilt für ALLE Slots — nur so bleibt die Quelle über
-    # den Tag einheitlich und Σ Hourly / Tages-Boundary behalten die
-    # Konsistenz, die sie heute haben.
-    # N-536: Deckung auf TRÄGER-Ebene und Summe ohne Doppelzählung.
-    # Ein Kind gilt als gedeckt, wenn es selbst oder sein abtretendes
-    # Balkonkraftwerk liefert (sie messen dieselbe Energie); und in der Summe
-    # trägt das Balkonkraftwerk nur noch den Rest. **Unverteilt** — die
-    # kWp-Gewichtung ist eine Tages-Aussage (s. `komponenten_beitraege`).
-    _alle_invs = list(investitionen_by_id.values())
-    pv_quelle = waehle_pv_quelle(
-        erwartete_ids=erwartete_erzeuger_ids(investitionen_by_id.values(), datum),
-        gedeckte_ids_je_slot={
-            h: ergaenze_kinder_deckung(ids.keys(), _alle_invs)
-            for h, ids in pv_einzel_je_slot.items()
-        },
-        aggregat_je_slot=pv_aggregat_je_slot,
+    if not slots_je_key:
+        return None
+    return baue_tagestabelle(
+        anlage, investitionen_by_id, datum, eintraege, slots_je_key,
+        ohne_tageswert=frozenset(tagesreset),
     )
-    for slot_idx in range(24):
-        if pv_quelle == QUELLE_AGGREGAT:
-            wert = pv_aggregat_je_slot.get(slot_idx)
-        elif pv_quelle == QUELLE_EINZEL:
-            einzel = pv_einzel_je_slot.get(slot_idx) or {}
-            if einzel:
-                einzel = dict(einzel)
-                einzel.update(bkw_restwerte(_alle_invs, einzel))
-            wert = sum(einzel.values()) if einzel else None
-        else:
-            wert = None
-        if wert is not None:
-            result[slot_idx]["pv"] = wert
-
-    # 4. Aggregierte Kategorien zu Bilanz-Feldern:
-    #    pv, einspeisung, netzbezug, batterie_lade_netto, wp, wallbox, verbrauch
-    schwelle_spike = schwelle_pv_einspeisung_stunde_kwh(
-        getattr(anlage, "leistung_kwp", None)
-    )
-    final: dict[int, dict[str, Optional[float]]] = {}
-    for h in range(24):
-        d = result[h]
-        pv = d.get("pv")
-        einsp = d.get("einspeisung")
-        bez = d.get("netzbezug")
-        ladung_batt = d.get("ladung_batterie")
-        entladung_batt = d.get("entladung_batterie")
-        wp = d.get("verbrauch_wp")
-        wallbox = d.get("ladung_wallbox")
-        eauto = d.get("verbrauch_eauto")
-        sonst_erz = d.get("erzeugung_sonstiges")
-        sonst_verbr = d.get("verbrauch_sonstiges")
-
-        # Gesamt-PV inkl. Sonstiges-Erzeuger
-        pv_total = None
-        if pv is not None or sonst_erz is not None:
-            pv_total = (pv or 0.0) + (sonst_erz or 0.0)
-
-        # Plausibilitäts-Cap (Counter-Spike-Schutz, dietmar1968/Forum #529):
-        # Wenn PV oder Einspeisung > kwp × 1.5 → None, weil physikalisch
-        # unmöglich und typisch für HA-Counter-Off-by-ones nach Restarts.
-        # Daten-Checker `_check_energieprofil_plausibilitaet` teilt die
-        # Schwelle (SoT in `plausibility.py`).
-        pv_total = cap_pv_einspeisung_stunde(
-            pv_total, schwelle_spike,
-            anlage_id=anlage.id, datum=datum, stunde=h, kategorie="pv",
-        )
-        einsp = cap_pv_einspeisung_stunde(
-            einsp, schwelle_spike,
-            anlage_id=anlage.id, datum=datum, stunde=h, kategorie="einspeisung",
-        )
-
-        # Batterie netto (positiv = Ladung, negativ = Entladung) und der
-        # Bilanz-Verbrauch kommen aus dem Layer-SoT (ADR-001) — die Formel stand
-        # bis 29.08.2026 hier UND im LTS-Pfad wortgleich. Verhaltensneutral;
-        # dass ein fehlender Batterie-Beitrag als 0 zählt, ist dort als offener
-        # Punkt beschrieben.
-        batt_netto = berechne_batterie_netto_kwh(
-            ladung_kwh=ladung_batt,
-            entladung_kwh=entladung_batt,
-        )
-        verbrauch = stunden_verbrauch_kwh(
-            pv_kwh=pv_total,
-            netzbezug_kwh=bez,
-            einspeisung_kwh=einsp,
-            batterie_netto_kwh=batt_netto,
-        )
-
-        final[h] = {
-            "pv": pv_total,
-            # Sonstiges-Erzeuger-Anteil separat ausweisen, damit die
-            # Performance-Ratio nur die REINE PV-Erzeugung gegen GTI rechnet
-            # (`pv` enthält den Sonstiges-Anteil bewusst für die Bilanz).
-            "erzeugung_sonstiges": sonst_erz,
-            "einspeisung": einsp,
-            "netzbezug": bez,
-            "ladung_batterie": ladung_batt,
-            "entladung_batterie": entladung_batt,
-            "batterie_netto": batt_netto,
-            "wp": wp,
-            "wallbox": (wallbox or 0.0) + (eauto or 0.0) if (wallbox is not None or eauto is not None) else None,
-            "verbrauch_sonstiges": sonst_verbr,
-            "verbrauch": verbrauch,
-        }
-    return final
 
 
 async def get_daily_counter_deltas_by_inv(
@@ -918,15 +779,29 @@ async def _tagesdetail_boundary_diff_mit_grund(
     von, bis = ts_start, ts_ende
     if rueckfall_tagesrand and (s0 is None or s1 is None):
         if s0 is None:
-            von_neu = await erster_stand_im_fenster(
-                db, anlage.id, sensor_key, ts_start, ts_ende,
+            # ⭐ Zählerlücken wie HA (R1, §2 Wärme/Klima-Tagesleser): fehlt der
+            # Stand am Fensterbeginn, trägt zuerst der LETZTE STAND DAVOR —
+            # beliebig weit zurück, wie HA eine Stunde rechnet. Die Energie
+            # einer Lücke über Mitternacht gehört dann zu diesem Tag (wie im
+            # HA-Dashboard und wie in der Stunden-Tabelle desselben Tages).
+            # Erst wenn es davor keinen Stand gibt (die Reihe beginnt im
+            # Fenster), rückt der Rand auf den ersten Stand im Fenster.
+            anker = await letzter_stand_vor(
+                db, anlage.id, sensor_key, ts_start,
+                sensor_id=sensor_id, quellen_energy=quellen_energy,
             )
-            if von_neu is not None:
-                s0 = await get_snapshot(
-                    db, anlage.id, sensor_key, sensor_id, von_neu,
-                    quellen_energy=quellen_energy,
+            if anker is not None:
+                von, s0 = anker
+            else:
+                von_neu = await erster_stand_im_fenster(
+                    db, anlage.id, sensor_key, ts_start, ts_ende,
                 )
-                von = von_neu
+                if von_neu is not None:
+                    s0 = await get_snapshot(
+                        db, anlage.id, sensor_key, sensor_id, von_neu,
+                        quellen_energy=quellen_energy,
+                    )
+                    von = von_neu
         if s1 is None:
             bis_neu = await letzter_stand_im_fenster(
                 db, anlage.id, sensor_key, von, ts_ende,
@@ -959,7 +834,9 @@ async def _tagesdetail_boundary_diff_mit_grund(
         return None, GRUND_ZAEHLER_RUECKSPRUNG
     return TagesRandMenge(
         wert_kwh=wert, seit=von, bis=bis,
-        ab_tagesbeginn=von == ts_start, bis_tagesende=bis == ts_ende,
+        # Ein Anker VOR dem Fenster deckt den Tagesbeginn (R1) — keine
+        # Einschränkung auszuweisen (G3: eedc markiert nicht mehr als HA).
+        ab_tagesbeginn=von <= ts_start, bis_tagesende=bis == ts_ende,
     ), None
 
 

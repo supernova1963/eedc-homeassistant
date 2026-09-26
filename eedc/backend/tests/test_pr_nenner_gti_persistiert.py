@@ -50,6 +50,7 @@ from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
 from backend.models.tages_energie_profil import TagesZusammenfassung
 from backend.services.energie_profil.source import Source
 from backend.tests import factories
+from backend.tests import ha_lts_helfer
 
 # Eine Sonnenstunde reicht: die PR ist ein Tagesquotient, kein Stundenwert.
 PV_STUNDE = 8
@@ -122,11 +123,9 @@ async def _fahre_tag(db, name: str, *, mit_gti: bool) -> TagesZusammenfassung:
     from backend.services.energie_profil.aggregator import aggregate_day
 
     with patch(
-        "backend.services.snapshot.lts_aggregator.get_hourly_kwh_by_category_lts",
-        new=AsyncMock(return_value=_lts_nur_in_slot(PV_STUNDE, PV_KWH)),
-    ), patch(
-        "backend.services.snapshot.lts_aggregator.get_komponenten_tageskwh_lts",
-        new=AsyncMock(return_value={}),
+        # Zählerlücken wie HA (R5): Stunden und Tag aus EINEM Lesezugriff.
+        "backend.services.snapshot.lts_aggregator.lts_tagestabelle",
+        new=AsyncMock(return_value=ha_lts_helfer.lts_tabelle(_lts_nur_in_slot(PV_STUNDE, PV_KWH), {})),
     ), patch(
         "backend.services.sensor_snapshot_service.get_daily_counter_deltas_by_inv",
         new=AsyncMock(return_value={}),

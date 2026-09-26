@@ -313,11 +313,18 @@ async def test_s3_reaggregator_preview_kein_doppelmapping(db):
     ):
         prev = await get_reaggregate_preview(db, anlage, invs, datum)
 
-    # ladung_kwh ist primary → 46.0 (= 23 × 2.0), NICHT 46+23=69 (doppelt).
-    eauto_alt = prev["tagesumme_alt"].get("verbrauch_eauto", 0.0)
-    assert abs(eauto_alt - 46.0) < 0.01, (
-        f"Reaggregator-Vorschau verbrauch_eauto={eauto_alt} (Doppelmapping nicht aufgelöst?)"
+    # ⭐ Zählerlücken wie HA (Ü7, 26.09.2026): „neu" rechnet die Vorschau über
+    # DIESELBE Tagestabelle wie der Lauf (HA nicht erreichbar ⇒ Snapshot-Tabelle
+    # aus diesen DB-Snapshots), „alt" sind die gespeicherten Stundenzeilen —
+    # hier keine. Die Substanz der Probe bleibt: ladung_kwh ist primary → 46.0
+    # (= 23 × 2.0), NICHT 46 + 23 = 69 (doppelt). Die Zeilen heißen jetzt nach
+    # der Achse der Stundenzeile (`wallbox` = Wallbox + E-Auto), nicht nach der
+    # Energiefluss-Kategorie.
+    eauto_neu = prev["tagesumme_neu"].get("wallbox", 0.0)
+    assert abs(eauto_neu - 46.0) < 0.01, (
+        f"Reaggregator-Vorschau wallbox={eauto_neu} (Doppelmapping nicht aufgelöst?)"
     )
+    assert prev["tagesumme_alt"] == {}
 
 
 def test_k3_eauto_doppelmapping_teilt_eine_either_or_gruppe():

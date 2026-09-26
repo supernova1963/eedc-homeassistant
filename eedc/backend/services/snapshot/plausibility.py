@@ -28,16 +28,32 @@ logger = logging.getLogger(__name__)
 SPIKE_FAKTOR_STUNDE = 1.5
 
 
-def schwelle_pv_einspeisung_stunde_kwh(kwp: Optional[float]) -> Optional[float]:
+def schwelle_pv_einspeisung_stunde_kwh(
+    kwp: Optional[float], spanne: int = 1,
+) -> Optional[float]:
     """
-    Maximaler plausibler Stunden-kWh-Wert für PV oder Einspeisung.
+    Maximaler plausibler kWh-Wert für PV oder Einspeisung in einem Slot, der
+    ``spanne`` reale Stunden trägt.
+
+    ⭐ **Zählerlücken wie HA (R3, Vorlage Fassung 7):** Fehlt in HA eine
+    Stundenzeile, steht die Energie der Lücke im nächsten belegten Slot — so
+    wie im HA-Energie-Dashboard. Ein Slot mit ``spanne = n`` trägt dann ``n``
+    Stunden Erzeugung, und die Schwelle wächst mit: ``kwp × 1,5 × n``. Ohne
+    diesen Faktor würfe der Deckel jedes echte Lücken-Bündel als „Spike" weg
+    — genau die Energie, die der Umbau zurückholt. Aggregator und
+    Daten-Checker rufen DIESE Funktion mit der Spanne der Zeile; eine zweite
+    Rechnung daneben wäre der Vertragsbruch, den das Modul verhindern soll.
+
+    ⚠ **Benannte Grenze (Ü5):** bei ``n = 129`` und 10 kWp passiert ein
+    Sprung bis ~1,9 MWh. Das ist die Folge von „wie HA" — HA kappt gar nicht.
 
     Returns None falls kwp nicht bekannt/0 — dann findet kein Cap statt
     (z. B. Anlagen ohne PV-Leistungs-Eintrag im Setup).
     """
     if kwp is None or kwp <= 0:
         return None
-    return float(kwp) * SPIKE_FAKTOR_STUNDE
+    n = spanne if spanne is not None and spanne > 1 else 1
+    return float(kwp) * SPIKE_FAKTOR_STUNDE * n
 
 
 def cap_pv_einspeisung_stunde(

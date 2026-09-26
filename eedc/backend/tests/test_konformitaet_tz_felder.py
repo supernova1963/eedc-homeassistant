@@ -62,6 +62,10 @@ _AGGREGATOR_SETTER_FELDER: frozenset[str] = frozenset({
     # gelöscht wird, wird im selben Lauf neu gerechnet.
     "emob_ladung_pv_abgeleitet_kwh",
     "emob_ladung_netz_abgeleitet_kwh",
+    # Zählerlücken wie HA (R4/R9): Markierung verworfener Mengen UND Regelmarke.
+    # Fall (a): der Aggregator schreibt sie für JEDE neue Tageszeile (mindestens
+    # `{}`); sie wird nie gerettet — was gelöscht wird, entsteht im selben Lauf neu.
+    "verworfen",
 })
 
 

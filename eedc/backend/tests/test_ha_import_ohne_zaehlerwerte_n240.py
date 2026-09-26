@@ -69,7 +69,7 @@ class _FakeStats:
     def __init__(self, werte):
         self._werte = werte
 
-    def get_monatswerte(self, sensor_ids, jahr, monat):
+    def get_monatswerte(self, sensor_ids, jahr, monat, deckel_je_sensor=None):
         class _A:
             pass
         a = _A()

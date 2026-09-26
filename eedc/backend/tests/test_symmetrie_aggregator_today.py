@@ -35,6 +35,7 @@ from backend.models.anlage import Anlage
 from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
 from backend.services.energie_profil.source import Source
 from backend.tests import factories
+from backend.tests import ha_lts_helfer
 
 
 _LTS_HOURLY = {
@@ -109,19 +110,20 @@ async def test_aggregate_day_today_ha_addon_lts_pfad_gefuellt(db) -> None:
     await _mqtt_anchor(db, anlage.id, heute)
     await db.commit()
 
-    boundary_snap_mock = AsyncMock(return_value={"INVALID": 99.9})
+    boundary_snap_mock = AsyncMock(
+        return_value=ha_lts_helfer.tages_tabelle(komponenten={"INVALID": 99.9}),
+    )
 
     with patch(
         "backend.services.live_power_service.LivePowerService.get_tagesverlauf",
         new=AsyncMock(return_value={"serien": [], "punkte": []}),
     ), patch(
-        "backend.services.snapshot.lts_aggregator.get_hourly_kwh_by_category_lts",
-        new=AsyncMock(return_value=_LTS_HOURLY_TEILTAG),
+        # Zählerlücken wie HA (R5): Stunden und Tag aus EINEM Lesezugriff.
+        "backend.services.snapshot.lts_aggregator.lts_tagestabelle",
+        new=AsyncMock(return_value=ha_lts_helfer.lts_tabelle(_LTS_HOURLY_TEILTAG, _LTS_KOMP_TEILTAG)),
     ), patch(
-        "backend.services.snapshot.lts_aggregator.get_komponenten_tageskwh_lts",
-        new=AsyncMock(return_value=_LTS_KOMP_TEILTAG),
-    ), patch(
-        "backend.services.snapshot.aggregator.get_komponenten_tageskwh",
+        # Zählerlücken wie HA (E5): der Snapshot-Tageswert kommt aus der Tagestabelle.
+        "backend.services.snapshot.aggregator.snapshot_tagestabelle",
         new=boundary_snap_mock,
     ), patch(
         "backend.services.sensor_snapshot_service.get_daily_counter_deltas_by_inv",
@@ -150,19 +152,20 @@ async def test_aggregate_day_historisch_ha_addon_lts_pfad_gefuellt(db) -> None:
     await _mqtt_anchor(db, anlage.id, gestern)
     await db.commit()
 
-    boundary_snap_mock = AsyncMock(return_value={"INVALID": 99.9})
+    boundary_snap_mock = AsyncMock(
+        return_value=ha_lts_helfer.tages_tabelle(komponenten={"INVALID": 99.9}),
+    )
 
     with patch(
         "backend.services.live_power_service.LivePowerService.get_tagesverlauf",
         new=AsyncMock(return_value={"serien": [], "punkte": []}),
     ), patch(
-        "backend.services.snapshot.lts_aggregator.get_hourly_kwh_by_category_lts",
-        new=AsyncMock(return_value=_LTS_HOURLY),
+        # Zählerlücken wie HA (R5): Stunden und Tag aus EINEM Lesezugriff.
+        "backend.services.snapshot.lts_aggregator.lts_tagestabelle",
+        new=AsyncMock(return_value=ha_lts_helfer.lts_tabelle(_LTS_HOURLY, _LTS_KOMP_VOLLTAG)),
     ), patch(
-        "backend.services.snapshot.lts_aggregator.get_komponenten_tageskwh_lts",
-        new=AsyncMock(return_value=_LTS_KOMP_VOLLTAG),
-    ), patch(
-        "backend.services.snapshot.aggregator.get_komponenten_tageskwh",
+        # Zählerlücken wie HA (E5): der Snapshot-Tageswert kommt aus der Tagestabelle.
+        "backend.services.snapshot.aggregator.snapshot_tagestabelle",
         new=boundary_snap_mock,
     ), patch(
         "backend.services.sensor_snapshot_service.get_daily_counter_deltas_by_inv",
@@ -191,20 +194,22 @@ async def test_aggregate_day_historisch_standalone_snapshot_pfad_gefuellt(db) ->
     await _mqtt_anchor(db, anlage.id, gestern)
     await db.commit()
 
-    boundary_snap_mock = AsyncMock(return_value=_LTS_KOMP_VOLLTAG)
+    # Zählerlücken wie HA (E5): Stunden UND Tageswert des Snapshot-Pfads kommen
+    # aus EINER Tagestabelle (vorher: zwei Funktionen, zwei Fenster).
+    boundary_snap_mock = AsyncMock(
+        return_value=ha_lts_helfer.lts_tabelle(_LTS_HOURLY, _LTS_KOMP_VOLLTAG),
+    )
 
     with patch(
         "backend.services.live_power_service.LivePowerService.get_tagesverlauf",
         new=AsyncMock(return_value={"serien": [], "punkte": []}),
     ), patch(
         # LTS-Stunden-Pfad failt → Fallback → kwh_source_label = "auto:monatsabschluss"
-        "backend.services.snapshot.lts_aggregator.get_hourly_kwh_by_category_lts",
-        new=AsyncMock(return_value={}),
+        # (Zählerlücken wie HA, R5: Stunden und Tag aus EINEM Lesezugriff)
+        "backend.services.snapshot.lts_aggregator.lts_tagestabelle",
+        new=AsyncMock(return_value=None),
     ), patch(
-        "backend.services.sensor_snapshot_service.get_hourly_kwh_by_category",
-        new=AsyncMock(return_value=_LTS_HOURLY),
-    ), patch(
-        "backend.services.snapshot.aggregator.get_komponenten_tageskwh",
+        "backend.services.snapshot.aggregator.snapshot_tagestabelle",
         new=boundary_snap_mock,
     ), patch(
         "backend.services.sensor_snapshot_service.get_daily_counter_deltas_by_inv",
@@ -237,20 +242,22 @@ async def test_aggregate_day_zukunft_ha_addon_skip_bleibt(db) -> None:
     await _mqtt_anchor(db, anlage.id, morgen)
     await db.commit()
 
-    lts_komp_mock = AsyncMock(return_value=_LTS_KOMP_VOLLTAG)
-    boundary_snap_mock = AsyncMock(return_value=_LTS_KOMP_VOLLTAG)
+    boundary_snap_mock = AsyncMock(
+        return_value=ha_lts_helfer.tages_tabelle(komponenten=_LTS_KOMP_VOLLTAG),
+    )
 
     with patch(
         "backend.services.live_power_service.LivePowerService.get_tagesverlauf",
         new=AsyncMock(return_value={"serien": [], "punkte": []}),
     ), patch(
-        "backend.services.snapshot.lts_aggregator.get_hourly_kwh_by_category_lts",
-        new=AsyncMock(return_value=_LTS_HOURLY),
+        # Zählerlücken wie HA (R5): Stunden und Tag aus EINEM Lesezugriff. Die
+        # Tabelle trägt Tageswerte — für einen Zukunftstag darf der Lauf sie
+        # trotzdem nicht schreiben (Assertion `komponenten_kwh is None` unten).
+        "backend.services.snapshot.lts_aggregator.lts_tagestabelle",
+        new=AsyncMock(return_value=ha_lts_helfer.lts_tabelle(_LTS_HOURLY, _LTS_KOMP_VOLLTAG)),
     ), patch(
-        "backend.services.snapshot.lts_aggregator.get_komponenten_tageskwh_lts",
-        new=lts_komp_mock,
-    ), patch(
-        "backend.services.snapshot.aggregator.get_komponenten_tageskwh",
+        # Zählerlücken wie HA (E5): der Snapshot-Tageswert kommt aus der Tagestabelle.
+        "backend.services.snapshot.aggregator.snapshot_tagestabelle",
         new=boundary_snap_mock,
     ), patch(
         "backend.services.sensor_snapshot_service.get_daily_counter_deltas_by_inv",
@@ -259,8 +266,9 @@ async def test_aggregate_day_zukunft_ha_addon_skip_bleibt(db) -> None:
         result = await aggregate_day(anlage, morgen, db, source=Source.SCHEDULER)
 
     assert result is not None
-    # Zukunft: KEIN Boundary-Aufruf, weder LTS noch Snapshot.
-    lts_komp_mock.assert_not_called()
+    # Zukunft: KEIN Boundary-Aufruf, weder LTS noch Snapshot. (Die LTS-Tageswerte
+    # kommen seit R5 aus derselben Tabelle wie die Stunden; dass sie für die
+    # Zukunft nicht geschrieben werden, prüft `komponenten_kwh is None` unten.)
     boundary_snap_mock.assert_not_called()
     # komponenten_kwh = None (kein Schreiber für Zukunfts-Tag).
     assert result.komponenten_kwh is None
@@ -293,14 +301,13 @@ async def test_aggregate_day_today_lts_leer_edge_case_0005_scheduler(db) -> None
         "backend.services.live_power_service.LivePowerService.get_tagesverlauf",
         new=AsyncMock(return_value={"serien": [], "punkte": []}),
     ), patch(
-        "backend.services.snapshot.lts_aggregator.get_hourly_kwh_by_category_lts",
-        new=AsyncMock(return_value=_LTS_HOURLY_TEILTAG),
+        # Zählerlücken wie HA (R5): Stunden und Tag aus EINEM Lesezugriff.
+        "backend.services.snapshot.lts_aggregator.lts_tagestabelle",
+        new=AsyncMock(return_value=ha_lts_helfer.lts_tabelle(_LTS_HOURLY_TEILTAG, {})),
     ), patch(
-        "backend.services.snapshot.lts_aggregator.get_komponenten_tageskwh_lts",
-        new=AsyncMock(return_value={}),
-    ), patch(
-        "backend.services.snapshot.aggregator.get_komponenten_tageskwh",
-        new=AsyncMock(return_value={"INVALID": 99.9}),
+        # Zählerlücken wie HA (E5): der Snapshot-Tageswert kommt aus der Tagestabelle.
+        "backend.services.snapshot.aggregator.snapshot_tagestabelle",
+        new=AsyncMock(return_value=ha_lts_helfer.tages_tabelle(komponenten={"INVALID": 99.9})),
     ) as boundary_snap_mock, patch(
         "backend.services.sensor_snapshot_service.get_daily_counter_deltas_by_inv",
         new=AsyncMock(return_value={}),
@@ -356,11 +363,9 @@ async def test_aggregate_day_bkw_regression_live_sigma_bypass_aktiv(db) -> None:
         "backend.services.live_power_service.LivePowerService.get_tagesverlauf",
         new=AsyncMock(return_value=live_tv),
     ), patch(
-        "backend.services.snapshot.lts_aggregator.get_hourly_kwh_by_category_lts",
-        new=AsyncMock(return_value=_LTS_HOURLY),
-    ), patch(
-        "backend.services.snapshot.lts_aggregator.get_komponenten_tageskwh_lts",
-        new=AsyncMock(return_value=bkw_boundary),
+        # Zählerlücken wie HA (R5): Stunden und Tag aus EINEM Lesezugriff.
+        "backend.services.snapshot.lts_aggregator.lts_tagestabelle",
+        new=AsyncMock(return_value=ha_lts_helfer.lts_tabelle(_LTS_HOURLY, bkw_boundary)),
     ), patch(
         "backend.services.sensor_snapshot_service.get_daily_counter_deltas_by_inv",
         new=AsyncMock(return_value={}),

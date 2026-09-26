@@ -127,12 +127,15 @@ async def lade_tages_verteilung(
         select(
             TagesZusammenfassung.komponenten_kwh,
             TagesZusammenfassung.source_provenance,
+            TagesZusammenfassung.verworfen,
         ).where(
             TagesZusammenfassung.anlage_id == anlage.id,
             TagesZusammenfassung.datum == datum,
         )
     )).one_or_none()
-    rueckwaerts = tageszeile_ist_rueckwaerts(tz_zeile[1] if tz_zeile else None)
+    rueckwaerts = tageszeile_ist_rueckwaerts(
+        tz_zeile[1] if tz_zeile else None, tz_zeile[2] if tz_zeile else None,
+    )
     menge_je_inv = waermepumpe_kwh_je_investition(
         (tz_zeile[0] if tz_zeile else None) or {},
     )

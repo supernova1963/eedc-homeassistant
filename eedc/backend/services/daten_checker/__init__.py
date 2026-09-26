@@ -133,6 +133,10 @@ class DatenChecker(
             self._check_energieprofil_abdeckung(anlage, monatsdaten, mqtt_zaehler)
         )
         ergebnisse.extend(await self._check_energieprofil_plausibilitaet(anlage))
+        # E7 (Zählerlücken wie HA): Bestandstage ohne Regelmarke + Reparaturweg.
+        ergebnisse.extend(await self._check_bestandstage_ohne_regelmarke(anlage))
+        # Nachträge II: Tage mit mehr Einspeisung als Erzeugung + Entladung.
+        ergebnisse.extend(await self._check_einspeisung_ueber_erzeugung(anlage))
         ergebnisse.extend(await self._check_mqtt_topic_abdeckung(anlage))
         ergebnisse.extend(await self._check_zaehler_ruecksprung(anlage))
         ergebnisse.extend(await self._check_sensor_mapping_lts(anlage))

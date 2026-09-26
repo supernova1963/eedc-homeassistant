@@ -113,13 +113,16 @@ async def get_tag_detail(
         select(
             TagesZusammenfassung.komponenten_kwh,
             TagesZusammenfassung.source_provenance,
+            TagesZusammenfassung.verworfen,
         ).where(
             TagesZusammenfassung.anlage_id == anlage_id,
             TagesZusammenfassung.datum == datum,
         )
     )).one_or_none()
     tz_komp = tz_zeile[0] if tz_zeile else None
-    tz_rueckwaerts = tageszeile_ist_rueckwaerts(tz_zeile[1] if tz_zeile else None)
+    tz_rueckwaerts = tageszeile_ist_rueckwaerts(
+        tz_zeile[1] if tz_zeile else None, tz_zeile[2] if tz_zeile else None,
+    )
 
     _tagesdetail = await get_tagesdetail_kwh(
         db, anlage, investitionen_by_id, datum,

@@ -40,19 +40,33 @@ TZ_QUELLE_LTS: str = "external:ha_statistics:daily"
 _WP_PROVENANCE_PRAEFIX = "komponenten_kwh.waermepumpe_"
 
 
-def tageszeile_ist_rueckwaerts(source_provenance: Optional[dict[str, Any]]) -> bool:
+def tageszeile_ist_rueckwaerts(
+    source_provenance: Optional[dict[str, Any]],
+    verworfen: Optional[dict[str, Any]] = None,
+) -> bool:
     """Steht der Wärmepumpen-Tagesstrom dieser Tageszeile im Rückwärtsfenster?
 
-    ``True``, wenn ein ``komponenten_kwh.waermepumpe_*``-Eintrag die Quelle
-    {@link TZ_QUELLE_LTS} trägt — dann ist der Wert Σ der LTS-Slots
-    [Vortag 23:00, Heute 23:00) und jede Teilmenge desselben Geräts muss über
+    ``True``, wenn
+
+    * die Zeile die **Regelmarke** trägt (``verworfen is not None``, Zählerlücken
+      wie HA R9/E5): seit dem Umbau ist `komponenten_kwh` in **beiden** Pfaden
+      Σ der Stunden-Slots [Vortag 23:00, Heute 23:00) — auch im Snapshot-Pfad
+      (Standalone), der vorher im Kalendertag rechnete. Ohne diesen Schalter
+      läsen die vier WP-Sichten die Teilmengen eines Standalone-Tages im
+      falschen Fenster („2,23 statt 4,04"-Klasse, Ü1); **oder**
+    * ein ``komponenten_kwh.waermepumpe_*``-Eintrag die Quelle
+      {@link TZ_QUELLE_LTS} trägt (N-434) — dann ist der Wert Σ der LTS-Slots,
+      auch bei einer Zeile von vor dem Umbau.
+
+    Jede Teilmenge desselben Geräts muss dann über
     {@link BoundaryRange.for_day_backward} gelesen werden.
 
-    ``False`` sonst — auch ohne Provenance (Altbestand, Snapshot-Pfad, Fixture):
-    dann gilt das bisherige HA-Tagesfenster [00:00, 24:00). Das ist die
-    Voreinstellung, die bis N-434 überall galt; eine Zeile ohne Angabe wird
-    nicht umgedeutet.
+    ``False`` sonst — auch ohne Provenance und ohne Marke (Snapshot-Altbestand,
+    Fixture): dann gilt das bisherige Tagesfenster [00:00, 24:00). Eine Zeile
+    ohne Angabe wird nicht umgedeutet.
     """
+    if verworfen is not None:
+        return True
     if not isinstance(source_provenance, dict):
         return False
     for key, eintrag in source_provenance.items():

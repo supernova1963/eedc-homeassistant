@@ -84,8 +84,10 @@ def _nebenquellen_leer():
 
     stack = ExitStack()
     for ziel, wert in (
-        ("backend.services.snapshot.aggregator.get_komponenten_tageskwh", {}),
-        ("backend.services.snapshot.lts_aggregator.get_komponenten_tageskwh_lts", {}),
+        # Zählerlücken wie HA (R5/E5): Stunden und Tag beider Zählerpfade kommen
+        # aus je einer Tagestabelle — beide leer, die Probe misst nur die Kurve.
+        ("backend.services.snapshot.aggregator.snapshot_tagestabelle", None),
+        ("backend.services.snapshot.lts_aggregator.lts_tagestabelle", None),
         ("backend.services.sensor_snapshot_service.get_daily_counter_deltas_by_inv", {}),
         ("backend.services.energie_profil._helpers._get_strompreis_stunden",
          StrompreisStunden(sensor={}, boerse={})),

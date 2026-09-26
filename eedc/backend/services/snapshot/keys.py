@@ -509,6 +509,20 @@ def _categorize_counter(
             "stromverbrauch_kwh", "strom_heizen_kwh", "strom_warmwasser_kwh",
         ):
             return "verbrauch_wp"
+        # ⭐ **E3 (Zählerlücken wie HA, 26.09.2026): die gemessenen
+        # Betriebsart-Stromzähler tragen denselben Energiefluss.** Die
+        # Beitragsschicht wählt sie in zwei Lagen aus (K3 Regel 4: nur
+        # Betriebsart-Zähler; W-16: Kühlen/Lüften/Entfeuchten neben den feinen
+        # Achsen) und legt sie in `waermepumpe_<id>`. Hier fehlten sie — die
+        # Stunde nahm eine kleinere Feldmenge als der Tag (W-16: 4,5 kWh
+        # Kühlstrom), und Σ Stunden ≠ `komponenten_kwh`. Welche davon zählen,
+        # entscheidet weiterhin allein die Auswahl davor
+        # (`komponenten_beitraege.investition_beitraege`); diese Zeile lässt
+        # nichts ein, was sie nicht ausgewählt hat. Innengerät-Suffix
+        # (`…_kwh-3`) eingeschlossen.
+        from backend.core.betriebsmodus import ist_betriebsart_strom_feld
+        if ist_betriebsart_strom_feld(feld):
+            return "verbrauch_wp"
     if inv_typ == "wallbox" and feld == "ladung_kwh":
         return "ladung_wallbox"
     # N-555: „Heim: PV" und „Heim: Netz" sind Ladung dieses Autos — seit die

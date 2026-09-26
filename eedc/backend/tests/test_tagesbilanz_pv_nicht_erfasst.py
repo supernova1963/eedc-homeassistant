@@ -33,6 +33,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from backend.core.berechnungen.tagesbilanz import bilanz_aus_stundenrows
 
 
@@ -170,101 +172,164 @@ def test_erfasste_pv_rechnet_unveraendert():
 
 
 # ───────────────────────────────────────────────────────────────────────────
-# N-92 (2026-08-22): eine Differenz erbt die Unvollständigkeit JEDES Summanden
+# N-92 (2026-08-22) und R7 (Zählerlücken wie HA, 26.09.2026)
 #
-# Die Regel darüber (`pv_erfasst`) schützt nur den Total-Fall „PV nirgends
-# erfasst". Zwischen ihm und der vollen Abdeckung liegen zwei Lagen, die bis
-# hierher still falsch gerechnet haben — beide am Layer gemessen, bevor der
-# Fix geschrieben wurde.
+# ⭐ **Umgeschrieben am 26.09.2026, nicht gelockert.** Jede Lage steht jetzt
+# ZWEIMAL da — so, wie sie ein Tag **ohne** Regelmarke rechnet (Altbestand,
+# ``verworfen=None`` ⇒ N-92 wie bisher: seine Stunden haben die Energie einer
+# Lücke verloren, eine Teilabdeckung ist dort ein echter Fehler, E6) und so,
+# wie sie ein Tag **mit** Regelmarke rechnet (``verworfen={}`` ⇒ R7: jede
+# Stunde trägt, was HA zeigt, die Lückenenergie steht in der Folgestunde; die
+# Differenz wird nur noch im Total-Fall oder bei ``verworfen`` unterdrückt —
+# wie in HA, G3). Die Werte beider Seiten sind exakt festgehalten.
 # ───────────────────────────────────────────────────────────────────────────
 
+ALTBESTAND = None
+MARKE = {}
 
-def test_teilabdeckung_unterdrueckt_die_differenz():
-    """PV über alle Stunden, Einspeisung nur über einen Teil ⇒ keine Aussage.
 
-    Gemessen am 2026-08-22 **vor** dem Fix: 24 h PV à 2 kW und 18 h Einspeisung
-    à 1 kW ergaben ``48 − 18 = 30 kWh`` Eigenverbrauch. Richtig wären 24 —
-    die Differenz war um genau die sechs **nicht gemessenen** Einspeisungs-
-    stunden zu hoch. Kein Alarm, kein unmöglicher Wert, nur eine zu gute Zahl.
+def test_teilabdeckung_altbestand_unterdrueckt_neue_regel_rechnet_wie_ha():
+    """PV über alle Stunden, Einspeisung nur über einen Teil (Sensor endet).
+
+    Altbestand: gemessen am 2026-08-22 **vor** N-92: 24 h PV à 2 kW und 18 h
+    Einspeisung à 1 kW ergaben ``48 − 18 = 30 kWh``; die Stunden eines solchen
+    Tages können die Energie einer Lücke verloren haben ⇒ keine Aussage.
+
+    Neue Regel (P11): Eine Stunde ohne Einspeisungswert ist unter R1 eine
+    Stunde, in der HA keine Einspeisung zeigt — die Energie einer Lücke stünde
+    in der Folgestunde. EV = 30 wie im HA-Dashboard, kein „—".
     """
     rows = [_row(pv_kw=2.0, einspeisung_kw=1.0) for _ in range(18)]
     rows += [_row(pv_kw=2.0) for _ in range(6)]
 
-    bilanz = bilanz_aus_stundenrows(rows)
+    alt = bilanz_aus_stundenrows(rows, verworfen=ALTBESTAND)
+    assert (alt.erzeugung_kwh, alt.einspeisung_kwh) == (48.0, 18.0)
+    assert alt.eigenverbrauch_kwh is None
+    assert alt.ev_quote_prozent is None
+    assert (alt.pv_stunden, alt.einspeisung_stunden) == (24, 18)
 
-    # Die additiven Summen bleiben unberührt — sie sind richtungssicher.
-    assert bilanz.erzeugung_kwh == 48.0
-    assert bilanz.einspeisung_kwh == 18.0
-    # Die Differenz nicht: 30.0 wäre der Befund.
-    assert bilanz.eigenverbrauch_kwh is None
-    assert bilanz.ev_quote_prozent is None
-    assert (bilanz.pv_stunden, bilanz.einspeisung_stunden) == (24, 18)
+    neu = bilanz_aus_stundenrows(rows, verworfen=MARKE)
+    assert (neu.erzeugung_kwh, neu.einspeisung_kwh) == (48.0, 18.0)
+    assert neu.eigenverbrauch_kwh == 30.0
+    assert neu.ev_quote_prozent == 62.5
 
 
-def test_einspeisung_nie_gemessen_unterdrueckt_die_differenz():
+def test_teilabdeckung_mit_verworfen_bleibt_unterdrueckt():
+    """R7: ``verworfen`` auf pv oder einspeisung unterdrückt EV und EV-Quote."""
+    rows = [_row(pv_kw=2.0, einspeisung_kw=1.0) for _ in range(24)]
+    for achse in ("pv", "einspeisung"):
+        b = bilanz_aus_stundenrows(rows, verworfen={achse: 31368.0})
+        assert b.eigenverbrauch_kwh is None and b.ev_quote_prozent is None
+        assert b.erzeugung_kwh == 48.0          # die Menge bleibt
+
+
+def test_einspeisung_nie_gemessen_ist_in_beiden_regeln_ein_total_fall():
     """Ohne Einspeisungs-Messung ist nicht die ganze Erzeugung Eigenverbrauch.
 
     ``pv_sum - 0`` behauptete, jede erzeugte Kilowattstunde sei selbst genutzt
-    worden. Die Tageszeile schrieb in dieselbe Reihe bereits „—" in die
-    Einspeisungs-Spalte (die Anzeige liest ``einspeisung_erfasst``) — und
-    daneben eine EV-Zahl, die genau diese fehlende Spalte als 0 gelesen hat.
+    worden. Das ist der **Total-Fall** — er bleibt auch unter R7 unterdrückt.
     """
     rows = [_row(pv_kw=2.0) for _ in range(24)]
-
-    bilanz = bilanz_aus_stundenrows(rows)
-
-    assert bilanz.pv_erfasst is True
-    assert bilanz.einspeisung_erfasst is False
-    assert bilanz.erzeugung_kwh == 48.0
-    assert bilanz.eigenverbrauch_kwh is None
+    for regel in (ALTBESTAND, MARKE):
+        bilanz = bilanz_aus_stundenrows(rows, verworfen=regel)
+        assert bilanz.pv_erfasst is True
+        assert bilanz.einspeisung_erfasst is False
+        assert bilanz.erzeugung_kwh == 48.0
+        assert bilanz.eigenverbrauch_kwh is None
 
 
 def test_autarkie_ohne_netzbezugs_messung_ist_keine_100_prozent():
     """Strikers Januar, eine Kachel weiter (T89667 #162).
 
-    ``Verbrauch − Netzbezug`` ist ebenfalls eine Differenz, und sie war bis
-    2026-08-22 **gar nicht** geschützt — nicht einmal gegen den Total-Fall.
-    Gemessen: Verbrauch über 24 h erfasst, Netzbezug nirgends ⇒ ``netzbezug_sum``
-    bleibt 0.0 ⇒ **Autarkie 100,0 %**. Dieselbe Tageszeile zeigte in der
-    Netzbezug-Spalte längst „—". Eine 100 %, die niemand gemessen hat, ist
-    keine Bestleistung.
+    Altbestand: ``Verbrauch − Netzbezug`` mit Verbrauch über 24 h und Netzbezug
+    nirgends ⇒ ``netzbezug_sum = 0`` ⇒ **Autarkie 100,0 %** vor N-92.
+    Neue Regel: Netzbezug ist ein Total-Fall ⇒ der Gesamtverbrauch nach
+    HA-Formel ist nicht bildbar (auch PV fehlt hier) ⇒ Verbrauch „—", Autarkie
+    „—". In keiner Regel 100 %.
     """
     rows = [_row(verbrauch_kw=1.0, einspeisung_kw=2.0) for _ in range(24)]
 
-    bilanz = bilanz_aus_stundenrows(rows)
+    alt = bilanz_aus_stundenrows(rows, verworfen=ALTBESTAND)
+    assert alt.verbrauch_erfasst is True
+    assert alt.netzbezug_erfasst is False
+    assert alt.gesamtverbrauch_kwh == 24.0
+    assert alt.autarkie_prozent is None
 
-    assert bilanz.verbrauch_erfasst is True
-    assert bilanz.netzbezug_erfasst is False
-    assert bilanz.gesamtverbrauch_kwh == 24.0        # die Summe bleibt
-    assert bilanz.autarkie_prozent is None           # 100.0 wäre der Befund
-
-
-def test_autarkie_teilabdeckung_unterdrueckt():
-    """Auch die Autarkie braucht deckungsgleiche Grundlagen, nicht nur ≥ 1 Stunde."""
-    rows = [_row(verbrauch_kw=1.0, netzbezug_kw=0.5) for _ in range(20)]
-    rows += [_row(verbrauch_kw=1.0) for _ in range(4)]
-
-    bilanz = bilanz_aus_stundenrows(rows)
-
-    assert bilanz.netzbezug_erfasst is True          # der alte Träger griffe
-    assert bilanz.autarkie_prozent is None           # der neue nicht
+    neu = bilanz_aus_stundenrows(rows, verworfen=MARKE)
+    assert neu.netzbezug_erfasst is False
+    assert neu.verbrauch_erfasst is False
+    assert neu.autarkie_prozent is None
 
 
-def test_volle_abdeckung_rechnet_unveraendert_weiter():
-    """Gegenprobe: der Normalfall darf sich durch die Regel NICHT verschieben.
+def test_autarkie_teilabdeckung_altbestand_unterdrueckt_neue_regel_rechnet():
+    """Altbestand: die Autarkie braucht deckungsgleiche Grundlagen.
+    Neue Regel: Netzbezug fehlt 4 Stunden (keine Zeile in HA), der Tag rechnet
+    nach HA-Formel — Autarkie da."""
+    rows = [_row(pv_kw=0.5, verbrauch_kw=1.0, einspeisung_kw=0.0, netzbezug_kw=0.5)
+            for _ in range(20)]
+    rows += [_row(pv_kw=0.5, verbrauch_kw=1.0, einspeisung_kw=0.0) for _ in range(4)]
 
-    Ohne diese Probe misst die Regel oben nur, dass sie unterdrückt — nicht,
-    dass sie das Richtige stehen lässt. Enthält bewusst auch eine **gemessene
-    Null** auf beiden Achsen.
+    alt = bilanz_aus_stundenrows(rows, verworfen=ALTBESTAND)
+    assert alt.netzbezug_erfasst is True          # der alte Träger griffe
+    assert alt.autarkie_prozent is None           # N-92 nicht
+
+    neu = bilanz_aus_stundenrows(rows, verworfen=MARKE)
+    # GV = 12 PV + 10 Netz − 0 Einsp = 22; Autarkie = (22 − 10) / 22
+    assert neu.gesamtverbrauch_kwh == 22.0
+    assert neu.autarkie_prozent == pytest.approx(12 / 22 * 100)
+
+
+def test_autarkie_mit_verworfen_bleibt_unterdrueckt():
+    rows = [_row(pv_kw=1.0, einspeisung_kw=0.2, netzbezug_kw=0.3, batterie_kw=0.0)
+            for _ in range(24)]
+    for achse in ("pv", "netzbezug", "einspeisung", "batterie"):
+        b = bilanz_aus_stundenrows(rows, verworfen={achse: 5.0})
+        assert b.autarkie_prozent is None, achse
+    assert bilanz_aus_stundenrows(rows, verworfen={"wallbox": 1906.5}).autarkie_prozent is not None
+
+
+def test_volle_abdeckung_rechnet_in_beiden_regeln_gleich():
+    """Gegenprobe: der Normalfall darf sich durch keine der Regeln verschieben.
+
+    Enthält bewusst auch eine **gemessene Null** auf beiden Achsen.
     """
     rows = [_row(pv_kw=2.0, verbrauch_kw=1.0, einspeisung_kw=1.0, netzbezug_kw=0.5)
             for _ in range(23)]
     rows += [_row(pv_kw=0.0, verbrauch_kw=1.0, einspeisung_kw=0.0, netzbezug_kw=1.0)]
 
-    bilanz = bilanz_aus_stundenrows(rows)
+    for regel in (ALTBESTAND, MARKE):
+        bilanz = bilanz_aus_stundenrows(rows, verworfen=regel)
+        assert bilanz.eigenverbrauch_kwh == 46.0 - 23.0
+        assert bilanz.autarkie_prozent is not None
+        assert bilanz.ev_quote_prozent is not None
+        assert bilanz.pv_stunden == bilanz.einspeisung_stunden == 24
+        assert bilanz.pv_und_einspeisung_stunden == 24
 
-    assert bilanz.eigenverbrauch_kwh == 46.0 - 23.0
-    assert bilanz.autarkie_prozent is not None
-    assert bilanz.ev_quote_prozent is not None
-    assert bilanz.pv_stunden == bilanz.einspeisung_stunden == 24
-    assert bilanz.pv_und_einspeisung_stunden == 24
+
+def test_r7_gesamtverbrauch_nach_ha_formel_auch_ohne_stunden_verbrauch():
+    """P10: Tagesverbrauch nach HA-Formel mit negativen Stunden; da, obwohl
+    jede Stunde R6-``None`` ist (Ein-Achsen-Lücke)."""
+    rows = [_row(pv_kw=0.0, netzbezug_kw=4.0, einspeisung_kw=0.0, verbrauch_kw=None)]
+    rows += [_row(pv_kw=3.0, netzbezug_kw=0.0, einspeisung_kw=4.0, verbrauch_kw=None,
+                  batterie_kw=1.5)]          # Entladung 1,5
+    rows += [_row(pv_kw=1.0, netzbezug_kw=0.0, einspeisung_kw=0.0, verbrauch_kw=None,
+                  batterie_kw=-2.0)]         # Ladung 2,0
+    b = bilanz_aus_stundenrows(rows, verworfen=MARKE)
+    # 4 PV + 4 Netz + 1,5 Entl − 4 Einsp − 2 Lad = 3,5
+    assert b.gesamtverbrauch_kwh == pytest.approx(3.5)
+    assert b.verbrauch_erfasst is True
+    assert b.autarkie_prozent == pytest.approx((3.5 - 4.0) / 3.5 * 100)
+    # Altbestand: nur Σ der Stundenwerte — hier keiner ⇒ „nicht erfasst"
+    assert bilanz_aus_stundenrows(rows, verworfen=ALTBESTAND).verbrauch_erfasst is False
+
+
+def test_ev_einmal_bei_null_geklemmt_mit_regelmarke():
+    """Vorlage §10 (Entscheid Master 26.09.): mehr Einspeisung als PV ist ein
+    Widerspruch der Eingänge, keine negative Kennzahl — EV = max(0, ΣPV − ΣEinsp),
+    die Quote 0. Der Wert bleibt stehen (nicht None), die Mengen unverändert."""
+    rows = [_row(pv_kw=1.0, einspeisung_kw=3.0, netzbezug_kw=0.5),
+            _row(pv_kw=0.0, einspeisung_kw=1.0, netzbezug_kw=0.5)]
+    b = bilanz_aus_stundenrows(rows, verworfen={})
+    assert b.eigenverbrauch_kwh == 0.0
+    assert b.ev_quote_prozent == 0.0
+    assert b.einspeisung_kwh == 4.0 and b.erzeugung_kwh == 1.0

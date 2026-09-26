@@ -806,6 +806,13 @@ async def _get_lernfaktor_detail(
         )
     )
     alle_tage = result.scalars().all()
+    # ⭐ Zählerlücken wie HA (§2, Ü2): ein Tag um ein Mitternachtsbündel mit
+    # Energie (D zu niedrig, D+1 zu hoch) oder mit verworfener PV ist kein
+    # Einzeltag für einen Quotienten IST/Prognose — beide fallen aus dem Pool.
+    from backend.services.energie_profil.vergleichstage import tage_ohne_tagesvergleich
+    _ohne = await tage_ohne_tagesvergleich(db, anlage_id, "pv", bis=heute)
+    if _ohne:
+        alle_tage = [t for t in alle_tage if t.datum not in _ohne]
 
     # Tage in Pools aufteilen
     aktueller_monat = heute.month

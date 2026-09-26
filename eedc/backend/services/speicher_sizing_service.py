@@ -144,15 +144,19 @@ def _als_sizing_stunde(zeile: TagesEnergieProfil) -> SizingStunde:
     Formel im Layer, nicht die Paarung hier. Messung und Validierung stehen jetzt
     am Layer (`kalibriere_speicher`).
     """
+    # Zählerlücken wie HA (§2): eine gebündelte Batterie- bzw. Netzbezug-Menge
+    # (mehr als eine reale Stunde) ist keine Stundenmenge — wie `None`.
+    from backend.core.berechnungen.spannen import zeile_gebuendelt
+
     return SizingStunde(
         zeit=datetime.combine(zeile.datum, datetime.min.time())
         + timedelta(hours=zeile.stunde),
         pv_kwh=zeile.pv_kw,
         verbrauch_kwh=zeile.verbrauch_kw,
         soc_prozent=zeile.soc_prozent,
-        batterie_kwh=zeile.batterie_kw,
+        batterie_kwh=None if zeile_gebuendelt(zeile, "batterie") else zeile.batterie_kw,
         einspeisung_kwh=zeile.einspeisung_kw,
-        netzbezug_kwh=zeile.netzbezug_kw,
+        netzbezug_kwh=None if zeile_gebuendelt(zeile, "netzbezug") else zeile.netzbezug_kw,
         kw_backward=zeile_traegt_backward_kw(zeile),
     )
 

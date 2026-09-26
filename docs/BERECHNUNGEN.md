@@ -2884,6 +2884,7 @@ Tageshälften (Vormittag/Nachmittag) werden nicht hart bei 12:00 Uhr Clockzeit g
 - **Backward-Slot-Konvention** (siehe §6b): Slot N enthält Energie aus dem Intervall `[N-1, N)`.
 - **Gerade abgeschlossene Stunde (v3.23.0):** wird nicht als Lücke geflaggt — HA Long-Term Statistics schreibt die Stunden-Row erst am Ende der Stunde, das Zeitfenster zwischen Stundenwechsel und HA-Stats-Write (typisch ~5–60 Min) wird mit `<` (statt `<=`) toleriert.
 - **Echte Lücken (>1 h alt)** werden mit ⚠ markiert. Klick auf das Symbol öffnet einen Reparatur-Popover mit „Tag neu berechnen" (`POST /api/energie-profil/{anlage_id}/reaggregate-tag`) und einem Fallback-Link zur [Datenquellen-Zuordnung](HANDBUCH_EINSTELLUNGEN.md#7-datenquellen--feld-zentrische-zuordnung).
+- **Gebündelte Stunde (ab v4.0.51, Zählerlücken wie HA):** trägt eine IST-Stunde die Energie mehrerer realer Stunden (HA hatte davor keine Zeile), steht sie im Stundenvergleich **nicht** als Stichprobe (Slot leer, Stunde in `buendel_stunden`); ihre Energie zählt in der Tagessumme. Als unvollständig gilt der Tag nur noch bei einem **Mitternachtsbündel** der PV (Energie aus dem Vortag) oder bei verworfener PV — nicht mehr bei jeder fehlenden Stunde.
 
 ### 4.2 Langfrist-Prognose (12 Monate)
 
@@ -3346,6 +3347,35 @@ Defizit_kWh       = max(0, Verbrauch_kWh + Bat_Ladung - PV)
 ```
 
 **Strikte NULL-Semantik:** Wenn ein Zähler nicht gemappt ist, bleibt das zugehörige Feld `NULL` (statt aus Leistungs-Samples zu schätzen). Im Frontend zeigt eedc ein ⚠-Badge bei Datenlücken — siehe Reparatur-Popover in §4.1c.
+
+#### Zählerlücken wie HA (ab v4.0.51)
+
+Fehlt in Home Assistant eine Stundenzeile eines Zählers, zeigt HA die Energie der Lücke in der
+ersten Stunde danach. eedc legt je Stunde genau das ab (G1: Σ Stunden = Tag = HA). SoT der
+Slot-Rechnung ist **eine** Tabelle für Stunde und Tag (`services/snapshot/tages_tabelle.py`, gespeist
+aus `ha_statistics_service.get_hourly_slots_for_day` bzw. im Standalone aus den Snapshots):
+
+```
+Anker(h)      = letzte Zeile mit sum vor Slot h (beliebig weit zurück; R1)
+Slot h        = sum(h) − sum(Anker)              n = reale Stunden seit dem Anker (R2)
+verworfen     wenn Slot < 0 (Rücksprung, R4)
+              oder bei PV/Einspeisung Slot > kWp × 1,5 × Fenster (je Sensor und Achsensumme, R3)
+Fenster       = Stunden seit der letzten Zeile desselben Sensors mit Delta ≠ 0 (ab Anker),
+                nie unter n, der Anteil aus Nullzeilen höchstens 24 h (spannen.deckel_fenster_stunden)
+spannen[achse]= n, nur für n > 1 (TagesEnergieProfil.spannen)
+komponenten_kwh = Σ derselben Geräte-Slots (R5)
+```
+
+- **Stundenverbrauch** (R6) nur, wenn PV, Netzbezug und Einspeisung **dieselbe** Spanne tragen; eine fehlende Batterie zählt 0, eine Batterie mit anderer Spanne ⇒ `None`.
+- **Tagesverbrauch** (R7) nach der HA-Formel über den Tag; `None` nur im Total-Fall. **Eigenverbrauch** = max(0, ΣPV − ΣEinsp). Autarkie = (GV − Netzbezug) / GV. Unterdrückt werden EV/EV-Quote bei `verworfen` auf PV oder Einspeisung, die Autarkie bei `verworfen` auf PV, Netzbezug, Einspeisung oder Batterie.
+- **Monat** (R8, `monatsbilanz_aus_tagen`): faltet Tagesbilanzen; ein Total-Fall-Tag propagiert nicht; EV ebenfalls bei 0 geklemmt.
+- **Regelmarke** (R9): `TagesZusammenfassung.verworfen` ist für jeden neu geschriebenen Tag mindestens `{}`; NULL = Altbestand, der bis zur Neuaggregation N-92 rechnet (Daten-Checker §4.6 nennt ihn).
+- **Monatswert aus der HA-Statistik** (R10, `get_sensor_monatswert`): Σ der Stundenänderungen ab dem letzten Stand **vor** dem Monat, mit derselben Verwerfung (Rücksprung immer, Deckel × Fenster für PV/Einspeisung aus der Anlagen-kWp). Damit zählt die erste Stunde des Monats (N-563), und eine Lücke über die Monatsgrenze landet im Folgemonat.
+- **Stundenzeilen:** jeder Slot mit Zählerwert bekommt eine Zeile, auch ohne Leistungspunkt (dort keine `komponenten`, keine Spitze).
+- **Leser:** Stunde-gegen-Stunde-Auswertungen lassen Zeilen mit `spannen > 1` als Stichprobe aus; Tag-gegen-Tag-Auswertungen (Lernfaktor, Prognose-Genauigkeit, PR-Check) lassen beide Tage um ein Mitternachtsbündel mit Energie aus. Die Energie zählt in jeder Summe. Helfer: `core/berechnungen/spannen.py`.
+- **Eingefrorener Stand:** Liefert HA Stunden mit unverändertem `sum` und danach den Nachtrag in einer Zeile, bleiben die Nullzeilen Nullstunden und die Menge steht in der Nachtragsstunde (n = 1, wie HA). Der Deckel rechnet dort mit dem Fenster seit der letzten Änderung — der Nachtrag bleibt Menge (Lab 24.05.2026: +37 kWh nach drei stillen Stunden). Grenze: nach einer Nacht mit echten Nullen passiert ein Sprung bis Schwelle × (Nullstunden + 1) — am Tag ab dem Anker Vortag 22:00 (Winter ≈ 150 kWh bei 10 kWp), im Monat bis zur Kappe von 24 Stunden (360 kWh); dazwischen verwirft der Tag, der Monat nimmt (benannte Asymmetrie). Der Spike-Checker (§4.7 im Daten-Checker-Handbuch) liest dieselbe Regel.
+- **Daten-Checker:** Tage mit Regelmarke, an denen Σ Einspeisung > Σ PV + Σ Entladung + 0,5 kWh, erscheinen als Hinweis „Einspeisung über Erzeugung" (Entladung ins Netz ist erlaubt).
+- **Benannt:** Die Live-Tageskacheln (`live_history_service`) weichen von *Cockpit → Tag* um jedes Mitternachtsbündel ab. Preise einer gebündelten Stunde: s. [KONZEPT-FLEX-TARIFE](KONZEPT-FLEX-TARIFE.md) [A-6].
 
 **Peaks aus W-Integration (für Spitzenwerte):**
 

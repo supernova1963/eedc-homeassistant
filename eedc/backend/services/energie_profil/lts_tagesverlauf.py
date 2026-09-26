@@ -203,12 +203,37 @@ async def lade_tagesverlauf_aus_lts(
     # (`live_tagesverlauf_service`), damit Scheduler- und LTS-Aggregation
     # desselben Tages deckungsgleiche TEP.komponenten/Peaks liefern. Hier nur die
     # Kern-Felder; Chart-Metadaten sind Live-spezifisch.
-    serien_core, serie_entities = baue_investitions_serien(inv_live_map, investitionen)
-    serien: list[dict] = [
-        {"key": s.key, "inv_id": s.inv_id, "kategorie": s.kategorie,
-         "seite": s.seite, "bidirektional": s.bidirektional}
-        for s in serien_core
-    ]
+    #
+    # ⭐ S2-8b (Zählerlücken wie HA, Mitnahme aus N-555 Stufe 2): „Wallbox **in
+    # Betrieb**" entscheidet sich **je Tag** (Konzept Heimladung Regel 0: „im
+    # betrachteten Monat oder Tag"). Bis 26.09.2026 lief die Auswahl EINMAL über
+    # die ganze Range ohne `tag` — eine Wallbox, die irgendwann im Zeitraum in
+    # Betrieb war, verdrängte die E-Auto-Serie auch an den Tagen VOR ihrer
+    # Anschaffung (bzw. nach ihrer Stilllegung); die Ladung dieser Tage fehlte
+    # im Tagesverlauf. Jetzt je Tag eine Auswahl; der gebündelte HA-Abruf holt
+    # die Vereinigung aller Entities.
+    serien_je_tag: dict[date, list[dict]] = {}
+    serie_entities: dict[str, list[str]] = {}
+    _tag = von
+    while _tag <= bis:
+        if nur_tage is None or _tag in nur_tage:
+            _core, _entities = baue_investitions_serien(inv_live_map, investitionen, tag=_tag)
+            serien_je_tag[_tag] = [
+                {"key": s.key, "inv_id": s.inv_id, "kategorie": s.kategorie,
+                 "seite": s.seite, "bidirektional": s.bidirektional}
+                for s in _core
+            ]
+            serie_entities.update(_entities)
+        _tag += timedelta(days=1)
+    # Vereinigung aller Tages-Serien (stabile Reihenfolge) — für Fallback-/Netz-
+    # Entscheidungen und das Rückgabe-Feld `serien`.
+    serien: list[dict] = []
+    _gesehen: set[str] = set()
+    for _liste in serien_je_tag.values():
+        for s in _liste:
+            if s["key"] not in _gesehen:
+                _gesehen.add(s["key"])
+                serien.append(s)
 
     # PV Gesamt als Fallback
     has_individual_pv = any(s["kategorie"] == "pv" for s in serien)
@@ -291,8 +316,13 @@ async def lade_tagesverlauf_aus_lts(
         # Serien filtern: nur Investitionen, die an diesem Tag aktiv waren.
         # In-Memory-Pendant zum `aktiv_am_tag`-Inv-Load in `aggregate_day`
         # (Audit §6.4) — punkte + Serien-Metadaten bleiben so tag-konsistent.
+        # S2-8b: die Investitions-Serien DIESES Tages (Wallbox in Betrieb je
+        # Tag), dazu die Basis-Serien (PV Gesamt, Netz) aus der Vereinigung.
+        kandidaten = serien_je_tag.get(current, []) + [
+            s for s in serien if s.get("inv_id") is None
+        ]
         tages_serien = [
-            s for s in serien
+            s for s in kandidaten
             if s.get("inv_id") is None  # Basis-Serien (PV Gesamt, Netz)
             or investitionen.get(s["inv_id"], None) is None  # Safety
             or investitionen[s["inv_id"]].ist_aktiv_an(current)

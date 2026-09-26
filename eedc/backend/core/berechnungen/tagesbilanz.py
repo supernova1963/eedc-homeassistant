@@ -38,7 +38,7 @@ DB-frei: nimmt eine Iterable beliebiger Objekte mit den Attributen
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterable, Optional, Protocol
 
 from backend.core.berechnungen.kennzahlen import (
@@ -115,10 +115,58 @@ class TagesBilanz:
     #: Differenz auf einer gemeinsamen Grundlage.
     pv_und_einspeisung_stunden: int = 0
     verbrauch_und_netzbezug_stunden: int = 0
+    #: Zählerlücken wie HA (R7/R9): nach welcher Regel ist diese Bilanz
+    #: gerechnet? ``True`` = neue Regel (Tageszeile mit Regelmarke), ``False``
+    #: = N-92 (Altbestand ohne Marke, oder Monatsfaltung über rohe Stunden).
+    regelmarke: bool = False
+    #: Die verworfenen Mengen der Tageszeile (R4) — ``{}`` ohne Befund.
+    verworfen: dict = field(default_factory=dict)
 
 
-def bilanz_aus_stundenrows(rows: Iterable[_StundenRow]) -> TagesBilanz:
-    """Aggregiert stündliche TEP-Rows zur Energie-Bilanz (siehe Modul-Docstring)."""
+def gesamtverbrauch_ha_formel_kwh(
+    *,
+    pv_kwh: float,
+    netzbezug_kwh: float,
+    einspeisung_kwh: float,
+    speicher_entladung_kwh: float,
+    speicher_ladung_kwh: float,
+) -> float:
+    """Tages-Hausverbrauch nach der Formel des HA-Energie-Dashboards (R7/G2).
+
+    ``PV + Netzbezug + Entladung − Einspeisung − Ladung``, **einmal** auf ≥ 0
+    geklemmt (E2: die Stunde klemmt jede Stunde, der Tag rechnet ungeklemmt
+    und klemmt einmal). Der Netto-Split je Stunde ist über den Tag algebraisch
+    identisch mit Brutto. Bildbarkeit prüft der Aufrufer.
+    """
+    return max(0.0, pv_kwh + netzbezug_kwh + speicher_entladung_kwh
+               - einspeisung_kwh - speicher_ladung_kwh)
+
+
+def bilanz_aus_stundenrows(
+    rows: Iterable[_StundenRow], *, verworfen: Optional[dict] = None,
+) -> TagesBilanz:
+    """Aggregiert stündliche TEP-Rows zur Energie-Bilanz (siehe Modul-Docstring).
+
+    ⭐ **Zählerlücken wie HA (R7, Vorlage Fassung 7).** ``verworfen`` ist die
+    Spalte der Tageszeile und zugleich ihre **Regelmarke** (R9):
+
+    * ``None`` (Altbestand, oder eine Faltung ohne Tageszeile) ⇒ **N-92 wie
+      bisher**: Differenzen und Quoten nur bei gleicher Abdeckung ihrer
+      Summanden. Die Stunden solcher Tage haben die Energie einer Lücke noch
+      verloren (E6) — eine Teilabdeckung ist dort ein echter Fehler.
+    * ein Dict (auch ``{}``) ⇒ **R7**: jede Stunde trägt, was HA für sie zeigt,
+      die Energie einer Lücke steht in der Folgestunde. Mengen = Σ Stunden;
+      **Gesamtverbrauch nach HA-Formel** (`gesamtverbrauch_ha_formel_kwh`),
+      ``None`` nur im **Total-Fall** (PV, Netzbezug oder Einspeisung hat am Tag
+      keinen einzigen Stundenwert; fehlende Batterie = 0). EV = PV −
+      Einspeisung. Unterdrückt werden nur noch: EV/EV-Quote bei Total-Fall
+      oder ``verworfen`` auf pv/einspeisung; Autarkie bei fehlendem
+      Gesamtverbrauch oder ``verworfen`` auf pv/netzbezug/einspeisung/batterie.
+      Teilabdeckung wird nicht mehr unterdrückt — wie in HA (G3).
+
+    Direktverbrauch, Überschuss und Defizit bleiben in beiden Regeln Σ über die
+    Stunden mit (R6-)Verbrauchswert — benannte Teilsummen.
+    """
     pv_sum = 0.0
     pv_erfasst = False
     # Abdeckung je Achse + die beiden Paar-Abdeckungen der Differenzen (N-92).
@@ -210,11 +258,34 @@ def bilanz_aus_stundenrows(rows: Iterable[_StundenRow]) -> TagesBilanz:
     # **unterdrückt**, nicht beschriftet, weil ihre Fehlerrichtung davon abhängt,
     # *welcher* Summand fehlt. Und §3 Regel 1 wörtlich: „Eine Differenz erbt die
     # Unvollständigkeit jedes Summanden."
-    eigenverbrauch = (
-        (pv_sum - einspeisung_sum)
-        if pv_erfasst and pv_n == einspeisung_n == pv_ein_n
-        else None
-    )
+    regelmarke = verworfen is not None
+    verw = dict(verworfen or {})
+    gesamtverbrauch_ha: Optional[float] = None
+    if regelmarke:
+        # R7: Total-Fall statt Abdeckungsgleichheit.
+        if pv_erfasst and netzbezug_erfasst and einspeisung_erfasst:
+            gesamtverbrauch_ha = gesamtverbrauch_ha_formel_kwh(
+                pv_kwh=pv_sum, netzbezug_kwh=netzbezug_sum,
+                einspeisung_kwh=einspeisung_sum,
+                speicher_entladung_kwh=batt_entlade_sum,
+                speicher_ladung_kwh=batt_lade_sum,
+            )
+        # ⭐ Vorlage §10: EV einmal bei 0 geklemmt (dieselbe Bauform wie R7
+        # für den Gesamtverbrauch). Mehr Einspeisung als PV ist keine Kennzahl,
+        # sondern ein Widerspruch der Eingänge (PV-Ausfall bei laufender
+        # Einspeisung) — die Quote darf ihn nicht als „−33 %" ausweisen.
+        eigenverbrauch = (
+            max(0.0, pv_sum - einspeisung_sum)
+            if pv_erfasst and einspeisung_erfasst
+            and "pv" not in verw and "einspeisung" not in verw
+            else None
+        )
+    else:
+        eigenverbrauch = (
+            (pv_sum - einspeisung_sum)
+            if pv_erfasst and pv_n == einspeisung_n == pv_ein_n
+            else None
+        )
     # Quoten über den SoT (kennzahlen-Layer); None statt 0 wenn Nenner fehlt,
     # damit die UI '—' statt '0 %' zeigt.
     #
@@ -228,13 +299,21 @@ def bilanz_aus_stundenrows(rows: Iterable[_StundenRow]) -> TagesBilanz:
     # Autarkie" — ein Wert, der aus der fehlenden Spalte gerechnet ist.
     # Eine 100 %, die niemand gemessen hat, ist keine Bestleistung, sondern
     # eine Lücke mit Ausrufezeichen.
-    autarkie = (
-        autarkie_prozent(verbrauch_sum - netzbezug_sum, verbrauch_sum)
-        if verbrauch_sum > 0
-        and netzbezug_erfasst
-        and verbrauch_n == netzbezug_n == verb_netz_n
-        else None
-    )
+    if regelmarke:
+        autarkie = (
+            autarkie_prozent(gesamtverbrauch_ha - netzbezug_sum, gesamtverbrauch_ha)
+            if gesamtverbrauch_ha is not None and gesamtverbrauch_ha > 0
+            and not ({"pv", "netzbezug", "einspeisung", "batterie"} & set(verw))
+            else None
+        )
+    else:
+        autarkie = (
+            autarkie_prozent(verbrauch_sum - netzbezug_sum, verbrauch_sum)
+            if verbrauch_sum > 0
+            and netzbezug_erfasst
+            and verbrauch_n == netzbezug_n == verb_netz_n
+            else None
+        )
     ev_quote = (
         eigenverbrauchsquote_prozent(eigenverbrauch, pv_sum)
         if pv_erfasst and eigenverbrauch is not None and pv_sum > 0 else None
@@ -242,6 +321,13 @@ def bilanz_aus_stundenrows(rows: Iterable[_StundenRow]) -> TagesBilanz:
     speicher_eff = (
         batt_entlade_sum / batt_lade_sum * 100 if batt_lade_sum > 0.1 else None
     )
+
+    if regelmarke:
+        # Der Gesamtverbrauch der neuen Regel ist die HA-Formel; getragen wird
+        # er über denselben Träger wie bisher (`verbrauch_erfasst`), damit die
+        # Anzeige-Schicht („—" statt 0) unverändert entscheidet.
+        verbrauch_sum = gesamtverbrauch_ha if gesamtverbrauch_ha is not None else 0.0
+        verbrauch_erfasst = gesamtverbrauch_ha is not None
 
     return TagesBilanz(
         erzeugung_kwh=pv_sum,
@@ -269,4 +355,110 @@ def bilanz_aus_stundenrows(rows: Iterable[_StundenRow]) -> TagesBilanz:
         verbrauch_erfasst=verbrauch_erfasst,
         einspeisung_erfasst=einspeisung_erfasst,
         netzbezug_erfasst=netzbezug_erfasst,
+        regelmarke=regelmarke,
+        verworfen=verw,
+    )
+
+
+
+@dataclass
+class MonatsBilanz:
+    """Monat aus Tagesbilanzen (R8) — dieselben Felder, die Leser brauchen.
+
+    Mengen sind Σ Tage; ``gesamtverbrauch_kwh`` ist Σ der Tages-Gesamtverbräuche
+    (Tage ohne Gesamtverbrauch tragen nichts bei). Quoten aus den Summen.
+    """
+    erzeugung_kwh: float
+    einspeisung_kwh: float
+    netzbezug_kwh: float
+    gesamtverbrauch_kwh: Optional[float]
+    eigenverbrauch_kwh: Optional[float]
+    autarkie_prozent: Optional[float]
+    ev_quote_prozent: Optional[float]
+    speicher_ladung_kwh: float
+    speicher_entladung_kwh: float
+    direktverbrauch_kwh: float
+    ueberschuss_kwh: float
+    defizit_kwh: float
+    wp_strom_kwh: float
+    pv_erfasst: bool
+    einspeisung_erfasst: bool
+    netzbezug_erfasst: bool
+    tage: int
+
+
+def monatsbilanz_aus_tagen(tage: Iterable[TagesBilanz]) -> MonatsBilanz:
+    """Faltet Tagesbilanzen zum Monat — **R8 symmetrisch** (Vorlage Fassung 7).
+
+    Eingang sind die Tagesbilanzen **so, wie der Tag sie rechnet** (R7 mit
+    Regelmarke, N-92 ohne). Mengen = Σ Tage; Verbrauch = Σ Tages-Gesamtverbrauch;
+    EV = Σ PV − Σ Einspeisung (so rechnet HA den Monat). Unterdrückt wird:
+
+    * **EV/EV-Quote**, wenn (a) kein Tag einen PV-Wert hat, (b) kein Tag einen
+      Einspeisungs-Wert hat, (c) ein Tag ``verworfen.pv`` oder
+      ``verworfen.einspeisung`` trägt, oder (d) ein Tag **ohne** Regelmarke
+      (Altbestand) EV ``None`` hat — der E6-Schutz: dessen Stunden haben die
+      Lückenenergie verloren.
+    * **Autarkie** analog: kein Tag mit Gesamtverbrauch, ``verworfen`` auf
+      pv/netzbezug/einspeisung/batterie an einem Tag, oder ein Altbestandstag
+      mit Autarkie ``None``.
+
+    ⭐ **Ein Total-Fall-Tag propagiert nicht** — genau wie eine Total-Fall-Stunde
+    im Tag nicht (W4). Die Autarkie rechnet über die Tage mit Gesamtverbrauch:
+    (Σ GV − Σ Netzbezug dieser Tage) / Σ GV.
+    """
+    alle_tage = list(tage)
+    # „Tage ohne jede Bilanz-Achse zählen nicht" (R8) — eine Tageszeile ohne
+    # Stundenwert auf PV, Einspeisung und Netzbezug sagt über EV und Autarkie
+    # des Monats nichts. Die additiven Mengen (Speicher, WP) summieren dennoch
+    # über ALLE Tage: eine Summe darf keinen Tag verlieren.
+    tage = [t for t in alle_tage if t.pv_erfasst or t.einspeisung_erfasst or t.netzbezug_erfasst]
+    pv = sum(t.erzeugung_kwh for t in tage)
+    einsp = sum(t.einspeisung_kwh for t in tage)
+    netz = sum(t.netzbezug_kwh for t in tage)
+    gv_tage = [t for t in tage if t.verbrauch_erfasst]
+    gv = sum(t.gesamtverbrauch_kwh for t in gv_tage) if gv_tage else None
+    pv_erfasst = any(t.pv_erfasst for t in tage)
+    einsp_erfasst = any(t.einspeisung_erfasst for t in tage)
+    netz_erfasst = any(t.netzbezug_erfasst for t in tage)
+
+    ev_gesperrt = (
+        not pv_erfasst or not einsp_erfasst
+        or any(("pv" in t.verworfen or "einspeisung" in t.verworfen) for t in tage)
+        or any((not t.regelmarke and t.eigenverbrauch_kwh is None) for t in tage)
+    )
+    # Vorlage §10: einmal bei 0 geklemmt, wie am Tag — ein PV-toter Tag mit
+    # laufender Einspeisung drückt den Monat höchstens auf 0, nicht darunter.
+    ev = None if ev_gesperrt else max(0.0, pv - einsp)
+    aut_gesperrt = (
+        gv is None
+        or any(({"pv", "netzbezug", "einspeisung", "batterie"} & set(t.verworfen)) for t in tage)
+        or any((not t.regelmarke and t.autarkie_prozent is None) for t in tage)
+    )
+    netz_gv_tage = sum(t.netzbezug_kwh for t in gv_tage)
+    autarkie = (
+        autarkie_prozent(gv - netz_gv_tage, gv)
+        if not aut_gesperrt and gv is not None and gv > 0 else None
+    )
+    ev_quote = (
+        eigenverbrauchsquote_prozent(ev, pv) if ev is not None and pv > 0 else None
+    )
+    return MonatsBilanz(
+        erzeugung_kwh=pv,
+        einspeisung_kwh=einsp,
+        netzbezug_kwh=netz,
+        gesamtverbrauch_kwh=gv,
+        eigenverbrauch_kwh=ev,
+        autarkie_prozent=autarkie,
+        ev_quote_prozent=ev_quote,
+        speicher_ladung_kwh=sum(t.speicher_ladung_kwh for t in alle_tage),
+        speicher_entladung_kwh=sum(t.speicher_entladung_kwh for t in alle_tage),
+        direktverbrauch_kwh=sum(t.direktverbrauch_kwh for t in alle_tage),
+        ueberschuss_kwh=sum(t.ueberschuss_kwh for t in alle_tage),
+        defizit_kwh=sum(t.defizit_kwh for t in alle_tage),
+        wp_strom_kwh=sum(t.wp_strom_kwh for t in alle_tage),
+        pv_erfasst=pv_erfasst,
+        einspeisung_erfasst=einsp_erfasst,
+        netzbezug_erfasst=netz_erfasst,
+        tage=len(tage),
     )

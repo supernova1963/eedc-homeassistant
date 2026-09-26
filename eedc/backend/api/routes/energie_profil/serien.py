@@ -189,6 +189,7 @@ async def get_stundenwerte(
             komponenten=r.komponenten,
             wp_starts_anzahl=r.wp_starts_anzahl,
             wp_betriebsstunden=r.wp_betriebsstunden,
+            spannen=r.spannen or None,
         )
         for r, soc in paare
     ]

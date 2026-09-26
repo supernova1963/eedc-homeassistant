@@ -47,6 +47,7 @@ from backend.services.energie_profil.archiv_nachzug import (
 )
 from backend.services.wetter_backfill_service import ARCHIVE_LAG_TAGE, archive_cutoff
 from backend.tests import factories
+from backend.tests import ha_lts_helfer
 
 @pytest.fixture
 def job_session(monkeypatch, db):
@@ -251,9 +252,9 @@ def _quellen_mocks(gti: float, punkte: list | None = None):
 
     stack = ExitStack()
     for ziel, wert in (
-        ("backend.services.snapshot.lts_aggregator.get_hourly_kwh_by_category_lts",
-         _lts_nur_in_slot(PV_STUNDE, PV_KWH)),
-        ("backend.services.snapshot.lts_aggregator.get_komponenten_tageskwh_lts", {}),
+        # Zählerlücken wie HA (R5): Stunden und Tag aus EINEM Lesezugriff.
+        ("backend.services.snapshot.lts_aggregator.lts_tagestabelle",
+         ha_lts_helfer.lts_tabelle(_lts_nur_in_slot(PV_STUNDE, PV_KWH), {})),
         ("backend.services.sensor_snapshot_service.get_daily_counter_deltas_by_inv", {}),
         ("backend.services.energie_profil._helpers._get_strompreis_stunden",
          StrompreisStunden(sensor={}, boerse={})),

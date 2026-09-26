@@ -67,6 +67,7 @@ from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
 from backend.models.tages_energie_profil import TagesEnergieProfil
 from backend.services.energie_profil.source import Source
 from backend.tests import factories
+from backend.tests import ha_lts_helfer
 
 # Dasselbe physische Intervall wie in `test_slot_konvention_quellen.py`:
 # [05:00, 06:00) → Backward-Slot 6.
@@ -156,11 +157,9 @@ async def test_leistungspfad_landet_im_selben_backward_slot_wie_der_zaehlerpfad(
     from backend.services.energie_profil.aggregator import aggregate_day
 
     with patch(
-        "backend.services.snapshot.lts_aggregator.get_hourly_kwh_by_category_lts",
-        new=AsyncMock(return_value=_lts_nur_in_slot(BACKWARD_SLOT, PV_KWH)),
-    ), patch(
-        "backend.services.snapshot.lts_aggregator.get_komponenten_tageskwh_lts",
-        new=AsyncMock(return_value={}),
+        # Zählerlücken wie HA (R5): Stunden und Tag aus EINEM Lesezugriff.
+        "backend.services.snapshot.lts_aggregator.lts_tagestabelle",
+        new=AsyncMock(return_value=ha_lts_helfer.lts_tabelle(_lts_nur_in_slot(BACKWARD_SLOT, PV_KWH), {})),
     ), patch(
         "backend.services.sensor_snapshot_service.get_daily_counter_deltas_by_inv",
         new=AsyncMock(return_value={}),
@@ -249,11 +248,9 @@ async def _aggregiere(db, tag, prefetched: dict, lts_slot: int = BACKWARD_SLOT):
     from backend.services.energie_profil.aggregator import aggregate_day
 
     with patch(
-        "backend.services.snapshot.lts_aggregator.get_hourly_kwh_by_category_lts",
-        new=AsyncMock(return_value=_lts_nur_in_slot(lts_slot, PV_KWH)),
-    ), patch(
-        "backend.services.snapshot.lts_aggregator.get_komponenten_tageskwh_lts",
-        new=AsyncMock(return_value={}),
+        # Zählerlücken wie HA (R5): Stunden und Tag aus EINEM Lesezugriff.
+        "backend.services.snapshot.lts_aggregator.lts_tagestabelle",
+        new=AsyncMock(return_value=ha_lts_helfer.lts_tabelle(_lts_nur_in_slot(lts_slot, PV_KWH), {})),
     ), patch(
         "backend.services.sensor_snapshot_service.get_daily_counter_deltas_by_inv",
         new=AsyncMock(return_value={}),

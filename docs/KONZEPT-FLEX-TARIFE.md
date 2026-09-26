@@ -386,6 +386,18 @@ der Sache; die Schwelle braucht eine Messung an echten Daten, keine gesetzte Zah
 Antwort an OB73 vom 15.09. sagt, der gepflegte Ø gelte „rückwirkend für alle Tage des Monats" —
 P-2 hebt das auf. Die Korrektur geht mit dem Bau hinaus, nicht vorher.
 
+**[A-6] — BENANNTE NÄHERUNG (Zählerlücken wie HA, 26.09.2026): eine gebündelte Stunde trägt den
+Preis ihrer eigenen Stunde.** Fehlt in Home Assistant eine Stundenzeile, steht die Energie der Lücke
+in der ersten Stunde danach (`TagesEnergieProfil.spannen` > 1), wie im HA-Energie-Dashboard. Kosten,
+Bezugspreis, §51-Einspeisung bei negativem Preis und Zeitfenster-Tarif bewerten diese Menge mit dem
+Preis bzw. Fenster **dieser einen** Stunde, obwohl sie über n Stunden anfiel. Die Energie zählt
+vollständig (keine Menge geht verloren); nur ihre zeitliche Verteilung auf die Preise der n Stunden
+ist unbekannt, und eedc erfindet sie nicht (P-4: nie nach unten interpolieren). Beim Festpreis ist
+das bedeutungslos; beim dynamischen Tarif ist der Fehler auf die Lückenstunden begrenzt und in der
+Richtung unbestimmt. Es gibt keinen Code-Zweig dafür: `strompreis_aggregator`,
+`ha_export_bezugspreis`, `aggregator.tages_kennzahlen` und `core/berechnungen/zeittarif.py` lesen
+die Stundenmenge wie jede andere.
+
 **[A-5] Viertelstunden-Slots.** Dass der Day-Ahead-Markt seit 2025 viertelstündlich rechnet, ist
 Fachkunde, nicht von uns gemessen. Die Slot-Formulierung (§2) macht das Konzept davon unabhängig;
 der Zeitpunkt einer Umstellung ist offen.

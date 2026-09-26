@@ -31,6 +31,7 @@ from backend.core.berechnungen.energie import (
     wert_basis_kwh,
 )
 
+from backend.core.berechnungen.spannen import zeile_gebuendelt
 
 @dataclass
 class KonsistenzBericht:
@@ -274,6 +275,15 @@ _ACHSE2_KATEGORIEN: tuple[
 )
 
 
+#: Achse-2-Spalte → Achse der Spanne (Zählerlücken wie HA).
+_ACHSE_JE_TEP_FELD: dict[str, str] = {
+    "pv_kw": "pv",
+    "waermepumpe_kw": "waermepumpe",
+    "wallbox_kw": "wallbox",
+    "batterie_kw": "batterie",
+}
+
+
 def aggregiere_tep_komponenten(tep_rows: Iterable) -> dict[str, float]:
     """Σ aller stündlichen ``TagesEnergieProfil.komponenten``-Dicts (Leistungs-
     pfad) zu einem Tages-Dict — Gegenstück zu ``komponenten_kwh`` aus dem
@@ -389,6 +399,29 @@ def pruefe_tep_komponenten_intern_konsistenz(
             summe_komp = -summe_komp
         abweichung = abs(summe_tep - summe_komp)
         konsistent = abweichung <= toleranz_kwh
+        details = (
+            ""
+            if konsistent
+            else "Drift zwischen Zähler-Spalten und Leistungs-JSON "
+            "derselben Stunden (Achse 2, #315). Mögliche Ursache: "
+            "Step-Integrations-Spike im Leistungspfad oder Schema-"
+            "Mismatch."
+        )
+        # ⭐ Zählerlücken wie HA (§2): trägt eine Zeile der Kategorie mehr als eine
+        # reale Stunde, steht im Zählerpfad die Energie einer Lücke, die der
+        # Leistungspfad nie gesehen hat (er kennt die Lückenstunden nicht). Der
+        # Zählerpfad hat Vorrang; der Tag wird toleriert und bekommt einen
+        # Hinweis statt einer Drift-Warnung.
+        _achse = _ACHSE_JE_TEP_FELD.get(tep_feld)
+        if not konsistent and _achse and any(
+            zeile_gebuendelt(r, _achse) for r in tep_rows
+        ):
+            konsistent = True
+            details = (
+                "gebündelter Tag (Zählerlücken wie HA): der Zählerpfad trägt "
+                "die Energie einer Lücke, der Leistungspfad nicht — "
+                "Zählerpfad hat Vorrang."
+            )
         berichte.append(
             KonsistenzBericht(
                 konsistent=konsistent,
@@ -399,14 +432,7 @@ def pruefe_tep_komponenten_intern_konsistenz(
                 erwartet=summe_tep,
                 tatsaechlich=summe_komp,
                 toleranz_kwh=toleranz_kwh,
-                details=(
-                    ""
-                    if konsistent
-                    else "Drift zwischen Zähler-Spalten und Leistungs-JSON "
-                    "derselben Stunden (Achse 2, #315). Mögliche Ursache: "
-                    "Step-Integrations-Spike im Leistungspfad oder Schema-"
-                    "Mismatch."
-                ),
+                details=details,
             )
         )
 

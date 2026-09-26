@@ -17,7 +17,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from backend.core.berechnungen.kennzahlen import autarkie_prozent, eigenverbrauchsquote_prozent
+from backend.core.berechnungen import bilanz_aus_stundenrows, monatsbilanz_aus_tagen
+from backend.core.berechnungen.spannen import verbrauch_gebuendelt, zeile_gebuendelt
 from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
@@ -122,20 +123,9 @@ async def get_monatsauswertung(
 
     # ── Heatmap + Summen aggregieren ──
     heatmap: list[HeatmapZelle] = []
-    pv_sum = 0.0
-    verbrauch_sum = 0.0
-    einspeisung_sum = 0.0
-    netzbezug_sum = 0.0
-    # Abdeckung je Achse + Paar-Abdeckung der beiden Differenzen (N-92) —
-    # dieselbe Rechnung wie in `core/berechnungen/tagesbilanz.py`, weil dieser
-    # Endpunkt laut Modul-Docstring dessen NULL-Semantik 1:1 trägt.
-    pv_n = verbrauch_n = einspeisung_n = netzbezug_n = 0
-    pv_ein_n = verb_netz_n = 0
-    ueberschuss_sum = 0.0
-    defizit_sum = 0.0
-    batt_lade_sum = 0.0
-    batt_entlade_sum = 0.0
-    direkt_sum = 0.0
+    # Die Summen und Quoten kommen seit „Zählerlücken wie HA" aus der
+    # Tagesfaltung unten (R8) — die Schleife sammelt nur noch Heatmap, Profil,
+    # Spitzen und die PV je Tag.
 
     tage_mit_daten: set[date] = set()
     pv_pro_tag: dict[date, float] = defaultdict(float)
@@ -164,53 +154,28 @@ async def get_monatsauswertung(
         verbrauch = r.verbrauch_kw
         einspeisung = r.einspeisung_kw
         netzbezug = r.netzbezug_kw
-        batt = r.batterie_kw
 
         if pv is None:
             stunden_fehlend_pv += 1
         if verbrauch is None:
             stunden_fehlend_verbrauch += 1
 
-        # Summen: NULL überspringt stillschweigend (statt als 0 zu zählen)
+        # PV je Tag (Tagesverteilung): NULL überspringt still, statt 0 zu zählen
         if pv is not None:
-            pv_sum += pv
             pv_pro_tag[r.datum] += pv
-            pv_n += 1
-        if verbrauch is not None:
-            verbrauch_sum += verbrauch
-            verbrauch_n += 1
-        if einspeisung is not None:
-            einspeisung_sum += einspeisung
-            einspeisung_n += 1
-        if netzbezug is not None:
-            netzbezug_sum += netzbezug
-            netzbezug_n += 1
-        if pv is not None and einspeisung is not None:
-            pv_ein_n += 1
-        if verbrauch is not None and netzbezug is not None:
-            verb_netz_n += 1
 
-        # Überschuss/Defizit + Direkt-Eigenverbrauch nur wenn beide Werte da
+        # Überschuss der Stunde (Heatmap) nur wenn beide Werte da
         ueberschuss: Optional[float] = None
         if pv is not None and verbrauch is not None:
             ueberschuss = pv - verbrauch
-            if ueberschuss > 0:
-                ueberschuss_sum += ueberschuss
-            else:
-                defizit_sum += -ueberschuss
-            direkt_sum += min(pv, verbrauch)
 
-        # Batterie getrennt nach Richtung (nur wenn Wert vorhanden)
-        if batt is not None:
-            if batt < 0:
-                batt_lade_sum += -batt
-            elif batt > 0:
-                batt_entlade_sum += batt
-
-        # Profilsammlung
-        if pv is not None:
+        # Profilsammlung. ⚠ Zählerlücken wie HA (§2): eine Zeile, die auf der
+        # Achse mehr als eine reale Stunde trägt, ist keine Stunden-Stichprobe —
+        # sie fällt aus Profil, Grundbedarf und Spitzen (ihre Energie bleibt in
+        # jeder Summe).
+        if pv is not None and not zeile_gebuendelt(r, "pv"):
             profil_pv[r.stunde].append(pv)
-        if verbrauch is not None:
+        if verbrauch is not None and not verbrauch_gebuendelt(r):
             profil_verbrauch[r.stunde].append(verbrauch)
             if 0 <= r.stunde < 5:
                 nacht_verbrauch.append(verbrauch)
@@ -225,15 +190,15 @@ async def get_monatsauswertung(
             ueberschuss_kw=round(ueberschuss, 3) if ueberschuss is not None else None,
         ))
 
-        if r.netzbezug_kw is not None and r.netzbezug_kw > 0:
+        if r.netzbezug_kw is not None and r.netzbezug_kw > 0 and not zeile_gebuendelt(r, "netzbezug"):
             netzbezug_kandidaten.append(PeakStunde(
                 datum=r.datum, stunde=r.stunde, wert_kw=round(r.netzbezug_kw, 3),
             ))
-        if r.einspeisung_kw is not None and r.einspeisung_kw > 0:
+        if r.einspeisung_kw is not None and r.einspeisung_kw > 0 and not zeile_gebuendelt(r, "einspeisung"):
             einspeisung_kandidaten.append(PeakStunde(
                 datum=r.datum, stunde=r.stunde, wert_kw=round(r.einspeisung_kw, 3),
             ))
-        if r.pv_kw is not None and r.pv_kw > 0:
+        if r.pv_kw is not None and r.pv_kw > 0 and not zeile_gebuendelt(r, "pv"):
             if peak_pv is None or r.pv_kw > peak_pv.wert_kw:
                 peak_pv = PeakStunde(
                     datum=r.datum, stunde=r.stunde, wert_kw=round(r.pv_kw, 3),
@@ -257,19 +222,37 @@ async def get_monatsauswertung(
     # erfasst, meldete die Autarkie **100 %**. Der Zwilling im Tages-Layer trägt
     # die Begründung ausführlich; hier steht dieselbe Regel, damit die beiden
     # Sichten nicht auseinanderlaufen (die N-129-Klasse).
-    eigenverbrauch_pv = pv_sum - einspeisung_sum
-    ev_abdeckung_gleich = pv_n > 0 and pv_n == einspeisung_n == pv_ein_n
-    autarkie_abdeckung_gleich = (
-        netzbezug_n > 0 and verbrauch_n == netzbezug_n == verb_netz_n
+    #
+    # ⭐ **Zählerlücken wie HA (R8, Vorlage Fassung 7): der Monat faltet
+    # TAGESbilanzen**, nicht mehr die rohen Stunden. Jeder Tag rechnet nach
+    # seiner Regelmarke (R7 mit Marke, N-92 ohne — E6); der Monat summiert
+    # die Mengen, nimmt als Verbrauch Σ der Tages-Gesamtverbräuche und
+    # unterdrückt EV/Autarkie nur, wenn kein Tag die Achse hat, ein Tag etwas
+    # verworfen hat oder ein Altbestandstag schon unterdrückt war. Ein
+    # Total-Fall-Tag propagiert nicht (W4). Die eigene N-92-Zählung dieser
+    # Route (`pv_n`/`pv_ein_n`/…) ist damit entfallen — sie war der dritte
+    # Ort derselben Regel.
+    stunden_je_tag: dict[date, list] = defaultdict(list)
+    for r in stunden_rows:
+        stunden_je_tag[r.datum].append(r)
+    tz_je_tag = {t.datum: t for t in tag_rows}
+    mb = monatsbilanz_aus_tagen(
+        bilanz_aus_stundenrows(
+            rows, verworfen=(tz_je_tag[d].verworfen if d in tz_je_tag else None),
+        )
+        for d, rows in sorted(stunden_je_tag.items())
     )
-    autarkie = (
-        round(autarkie_prozent(verbrauch_sum - netzbezug_sum, verbrauch_sum), 1)
-        if verbrauch_sum > 0 and autarkie_abdeckung_gleich else None
-    )
-    eigenverbrauch = (
-        round(eigenverbrauchsquote_prozent(eigenverbrauch_pv, pv_sum), 1)
-        if pv_sum > 0 and ev_abdeckung_gleich else None
-    )
+    pv_sum = mb.erzeugung_kwh
+    einspeisung_sum = mb.einspeisung_kwh
+    netzbezug_sum = mb.netzbezug_kwh
+    verbrauch_sum = mb.gesamtverbrauch_kwh or 0.0
+    ueberschuss_sum = mb.ueberschuss_kwh
+    defizit_sum = mb.defizit_kwh
+    direkt_sum = mb.direktverbrauch_kwh
+    batt_lade_sum = mb.speicher_ladung_kwh
+    batt_entlade_sum = mb.speicher_entladung_kwh
+    autarkie = round(mb.autarkie_prozent, 1) if mb.autarkie_prozent is not None else None
+    eigenverbrauch = round(mb.ev_quote_prozent, 1) if mb.ev_quote_prozent is not None else None
 
     grundbedarf = (
         round(sum(nacht_verbrauch) / len(nacht_verbrauch), 3)

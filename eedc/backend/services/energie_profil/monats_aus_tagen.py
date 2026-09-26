@@ -61,6 +61,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.berechnungen import (
     bilanz_aus_stundenrows,
+    monatsbilanz_aus_tagen,
     summe_bkw_kwh,
     summe_pv_anlage_kwh,
 )
@@ -243,6 +244,7 @@ async def lade_monats_summen_aus_tagen(
             tage_je_monat[schluessel].add(row.datum)
 
     tz_result = await db.execute(tz_query)
+    verworfen_je_tag: dict[date, Optional[dict]] = {}
     pv_je_monat: dict[MonatsSchluessel, float] = defaultdict(float)
     bkw_je_monat: dict[MonatsSchluessel, float] = defaultdict(float)
     lade_pv_je_monat: dict[MonatsSchluessel, float] = defaultdict(float)
@@ -259,11 +261,22 @@ async def lade_monats_summen_aus_tagen(
         lade_pv_je_monat[schluessel] += tz.emob_ladung_pv_abgeleitet_kwh or 0.0
         lade_netz_je_monat[schluessel] += tz.emob_ladung_netz_abgeleitet_kwh or 0.0
         tage_je_monat[schluessel].add(tz.datum)
+        verworfen_je_tag[tz.datum] = tz.verworfen
 
     summen: dict[MonatsSchluessel, TagesMonatsSumme] = {}
     for schluessel in sorted(set(stunden_je_monat) | set(pv_je_monat) | set(bkw_je_monat)):
         stunden = stunden_je_monat.get(schluessel, [])
-        bilanz = bilanz_aus_stundenrows(stunden)
+        # ⭐ Zählerlücken wie HA (R8): der Monat faltet TAGESbilanzen — jeder
+        # Tag nach seiner Regelmarke. Für die Mengen dieser Summe ist das
+        # bitgleich zur Σ über die Stunden (Σ ist assoziativ); es ist dieselbe
+        # Faltung wie im Monats-Endpunkt, damit keine zweite entsteht.
+        stunden_je_tag: dict[date, list] = defaultdict(list)
+        for row in stunden:
+            stunden_je_tag[row.datum].append(row)
+        bilanz = monatsbilanz_aus_tagen(
+            bilanz_aus_stundenrows(rows, verworfen=verworfen_je_tag.get(tag))
+            for tag, rows in sorted(stunden_je_tag.items())
+        )
         tage = tage_je_monat.get(schluessel, set())
         summen[schluessel] = TagesMonatsSumme(
             einspeisung_kwh=bilanz.einspeisung_kwh,

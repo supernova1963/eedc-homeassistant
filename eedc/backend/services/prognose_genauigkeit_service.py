@@ -60,8 +60,14 @@ async def eedc_mae_prozent(
                 TagesZusammenfassung.datum < heute,
             )
         )
+        from backend.services.energie_profil.vergleichstage import tage_ohne_tagesvergleich
+        # Zählerlücken wie HA (§2): D und D+1 um ein Mitternachtsbündel sowie
+        # Tage mit verworfener PV sind keine Einzeltage für einen Tagesfehler.
+        ohne = await tage_ohne_tagesvergleich(db, anlage_id, "pv", von=von, bis=heute)
         fehler: list[float] = []
         for tz in res.scalars().all():
+            if tz.datum in ohne:
+                continue
             ist = summe_pv_bkw_kwh(tz.komponenten_kwh) if tz.komponenten_kwh else None
             # Prognose-Kanon §6: der konvergenz-gefrorene Wert hat Vorrang —
             # dieselbe Vorrangregel wie in der Auswertung, damit die Schwelle

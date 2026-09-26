@@ -457,6 +457,7 @@ async def _zaehlerstrom_je_tag(
             TagesZusammenfassung.datum,
             TagesZusammenfassung.komponenten_kwh,
             TagesZusammenfassung.source_provenance,
+            TagesZusammenfassung.verworfen,
         )
         .where(and_(
             TagesZusammenfassung.anlage_id == anlage_id,
@@ -466,8 +467,8 @@ async def _zaehlerstrom_je_tag(
     )
     je_tag: dict[date, dict[str, float]] = {}
     rueckwaerts_tage: set[date] = set()
-    for datum, komponenten, provenance in result.all():
-        if tageszeile_ist_rueckwaerts(provenance):
+    for datum, komponenten, provenance, verworfen in result.all():
+        if tageszeile_ist_rueckwaerts(provenance, verworfen):
             rueckwaerts_tage.add(datum)
         if komponenten:
             werte = waermepumpe_kwh_je_investition(komponenten)

@@ -182,6 +182,10 @@ gebildete Differenz.
 > ⚠ Die zweite genannte Stelle (`views.py:1400`, heute `prognose.py::get_tagesprognose`) gehört **nicht**
 > zu dieser Klasse: sie summiert eine **Prognose**, kein Messfeld — dort gibt es
 > keine Abdeckungsfrage. Am 29.08. gemessen und abgegrenzt.
+>
+> ⭐ **Seit „Zählerlücken wie HA" (26.09.2026) gilt N-92 nur noch für den Altbestand** — Tage
+> ohne Regelmarke. Für neu aggregierte Tage ist eine fehlende Zähler-Stunde keine Teilsumme mehr
+> (die Energie steht in der Folgestunde), s. §3a.
 
 ---
 
@@ -229,6 +233,48 @@ angezeigt, nicht als „—".
    Teilsummen eine Differenz bildet, prüft die Abdeckung **beider**.
 2. **Ein Provenance-Flag ohne Leser ist kein Provenance.** Wer eines einführt,
    liefert es im selben Schritt aus.
+
+### §3a Zählerlücken wie HA — wann eine Zähler-Stunde gar keine Teilsumme ist (26.09.2026)
+
+§3 setzt voraus, dass eine fehlende Stunde **Energie verliert**. Für Mengen aus **kumulativen
+Zählern** stimmt das nicht mehr: Fehlt in Home Assistant eine Stundenzeile, trägt die erste Zeile
+danach die Energie der Lücke (Stand minus letzter *vorhandener* Stand, beliebig weit zurück) — so
+zeigt es das HA-Energie-Dashboard, und so legt eedc es seit diesem Umbau ab (Vorlage
+„Zählerlücken wie HA", Regeln R1–R10). Die Summe der Stunden ist dann **vollständig**; nur die
+Verteilung auf die Stunden ist gröber. Daraus folgt:
+
+| Früher (§2.5, N-92) | Jetzt, für Tage mit Regelmarke |
+| --- | --- |
+| Achsen mit verschiedener Stunden-Abdeckung ⇒ EV/Autarkie unterdrückt | EV/Autarkie/Gesamtverbrauch stehen; **unterdrückt nur im Total-Fall** (eine Achse hat am Tag gar keinen Wert) oder wenn eedc auf der Achse etwas **verworfen** hat |
+| Tagesverbrauch = Σ Stundenverbrauch (nur Stunden mit allen Achsen) | **HA-Formel** über den Tag: Σ PV + Σ Netzbezug + Σ Entladung − Σ Einspeisung − Σ Ladung, ≥ 0 |
+| Monat zählt Stunden mit eigener N-92-Abdeckung | Monat faltet **Tagesbilanzen** (R8, symmetrisch): ein Total-Fall-Tag propagiert nicht, ein `verworfen`-Tag nimmt dem Monat die betroffene Kennzahl |
+| Eigenverbrauch konnte negativ werden (Einspeisung ohne PV-Messung) | EV = max(0, ΣPV − ΣEinsp), **einmal geklemmt** wie der Gesamtverbrauch; den Widerspruch der Eingänge meldet der Daten-Checker — je Tag („Einspeisung über Erzeugung", Entladung ins Netz erlaubt) und je Monat („Einspeisung > PV-Erzeugung") |
+
+**Was „verworfen" heißt.** `TagesZusammenfassung.verworfen` ist Markierung **und** Regelmarke
+zugleich: `{}` = neue Regel, nichts verworfen; `{"pv": 37.0}` = eedc hat auf der Achse PV 37 kWh
+weggelassen (Zähler-Rücksprung, R4, oder Sprung über `kWp × 1,5 × Fenster`, R3 — Fenster = Zeit
+seit der letzten Änderung des Standes, nie unter n); NULL = Altbestand, der
+N-92 rechnet, bis er neu aggregiert wird (E6). Der Daten-Checker nennt diese Tage und bietet die
+Reparatur an (E7). Nur `verworfen` auf PV oder Batterie löst den Hinweis „Verfügbare Energie" in der
+Stundentabelle aus (N-94 neu) — eine fehlende Stunde allein nicht mehr.
+
+**Leser — ein Grundsatz, zwei Merkmale.** Die Energie zählt in **jeder Summe**. Wer *Stunde gegen
+Stunde* stellt (Korrekturprofil, Verbrauchsprofil, Grundlast, Speicher-Simulation, Spitzen), lässt
+Zeilen mit `spannen[achse] > 1` als Stichprobe aus. Wer *Tag gegen Tag* stellt (Lernfaktor,
+Prognose-Genauigkeit, PR-Check), lässt **beide** Tage um ein Mitternachtsbündel mit Energie aus
+(`core/berechnungen/spannen.py`).
+
+**Benannte Abweichungen.** (1) *Live-Tageskacheln* (`live_history_service`) rechnen weiter ihren
+eigenen Tageswert und weichen von *Cockpit → Tag* um jedes Mitternachtsbündel ab. (2) Das
+Tagesfenster `[Vortag 23:00, 23:00)` bleibt (N-434); HAs Kalendertag weicht darin ab. (3) Ein
+eingefrorener HA-Stand (Zeilen mit gleichem `sum`, danach der Nachtrag in **einer** Stunde) ist
+nach R2 keine Lücke (n = 1, die Nullzeilen bleiben Nullstunden, die Menge steht wie in HA in der
+Nachtragsstunde). Der Deckel rechnet dort mit der Zeit, in der der Stand unverändert war (Lab
+24.05.2026: +37 kWh nach drei eingefrorenen Stunden bleibt Menge). Grenze: nach einer Nacht mit
+echten Nullen passiert ein Sprung bis Schwelle × (Nullstunden + 1). Der Tag sieht die Nullfolge nur ab dem Anker
+(Vortag 22:00) — im Winter etwa 10 Stunden, also rund 150 kWh bei 10 kWp bzw. 185 kWh bei 12,32 kWp; der Monat kennt
+keine Tagesgrenze und kappt die Nullfolge bei 24 Stunden, also 360 bzw. 444 kWh. Ein Sprung zwischen beiden Grenzen wird
+am Tag verworfen, im Monat genommen (benannte Asymmetrie; am Lab in 24 Monaten kein solcher Sprung, gemessen 26.09.2026).
 
 ---
 

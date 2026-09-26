@@ -91,8 +91,13 @@ async def get_verbrauch_prognose(
     ziel_ist_werktag = ziel_wt < 5
 
     # Gruppiere nach Datum → {datum: {stunde: verbrauch_kw}}
+    from backend.core.berechnungen.spannen import verbrauch_gebuendelt
+
     tage: dict[date, dict[int, float]] = defaultdict(dict)
     for r in rows:
+        # Zählerlücken wie HA (§2): gebündelte Stunde ist keine Stundenmenge.
+        if verbrauch_gebuendelt(r):
+            continue
         tage[r.datum][r.stunde] = r.verbrauch_kw
 
     # Filtere nur Tage mit >= 20 Stunden (Qualitätsfilter)

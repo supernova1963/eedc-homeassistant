@@ -28,6 +28,12 @@ export interface StundenWert {
   wp_starts_anzahl: number | null
   // WP-Betriebsstunden in dieser Stunde (Summe über alle WPs der Anlage, Issue #238)
   wp_betriebsstunden: number | null
+  /** Zählerlücken wie HA (R2): `{achse: n}` nur für Achsen, deren Menge in
+   *  dieser Zeile n > 1 reale Stunden trägt — HA hatte die Stunden davor nicht
+   *  geschrieben, die Energie steht hier wie im HA-Energie-Dashboard. Fehlt
+   *  bzw. `null` im Regelfall. Achsen: pv · einspeisung · netzbezug · batterie
+   *  · waermepumpe · wallbox · sonstige. */
+  spannen?: Record<string, number> | null
 }
 
 export interface StundenAntwort {
@@ -92,6 +98,12 @@ export interface TagWerte {
   datum: string
   stunden_verfuegbar: number
   datenquelle: string | null
+  /** Zählerlücken wie HA (R4/R9): `{achse: kWh}` einer Achse, auf der eine
+   *  Menge verworfen wurde (Deckel oder negatives Zähler-Delta) — das Einzige,
+   *  was eedc an einem Tag markiert. `{}` = neue Regel, nichts verworfen;
+   *  `null` = Tag von vor dem Umbau. Der Hinweis „Verfügbare Energie" (N-94)
+   *  feuert nur, wenn hier eine Achse steht. */
+  verworfen?: Record<string, number> | null
   // Energie (kWh).
   // `erzeugung`/`eigenverbrauch` sind `null`, wenn für den Tag keine Stunde
   // einen PV-Wert trug — etwa wenn die PV nur als Anlagen-Aggregat gepflegt
@@ -574,6 +586,10 @@ export interface ReaggregateTagResponse {
   stunden_mit_messdaten: number
   pv_kwh_alt: number | null
   pv_kwh_neu: number | null
+  /** Zählerlücken wie HA (§2): Anteil von `pv_kwh_neu` in Stunden, die mehr als
+   *  eine reale Stunde tragen (die Energie einer Lücke in HA). Fehlt bei
+   *  älteren Backends. */
+  pv_kwh_aus_luecke?: number | null
   komponenten: ReaggregateTagKomponente[]
   komponenten_erwartet: number
   komponenten_geschrieben: number

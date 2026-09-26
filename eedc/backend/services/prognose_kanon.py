@@ -704,7 +704,11 @@ async def kanon_tagesprognose(
         # `pv_kw`, unabhaengig von `now.hour`. Wer eine SOLL-Summe daneben
         # stellt (P6), braucht genau diese Grenze und nicht die Uhr.
         ist_bis_slot = max(
-            (h for h, v in enumerate(ist_p.slots_kw) if v is not None), default=None
+            [h for h, v in enumerate(ist_p.slots_kw) if v is not None]
+            # Zählerlücken wie HA: ein gebündelter Slot trägt Energie in der
+            # Summe, also reicht die Summe bis zu ihm.
+            + list(ist_p.buendel_stunden),
+            default=None,
         )
     if heute_tag is not None and heute_tag.profil is not None:
         slots = heute_tag.profil.stunden_kwh

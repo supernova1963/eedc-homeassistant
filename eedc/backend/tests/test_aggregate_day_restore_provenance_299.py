@@ -93,8 +93,9 @@ async def test_restore_schreibt_audit_log_und_erhaelt_werte(db) -> None:
         "backend.services.live_power_service.LivePowerService.get_tagesverlauf",
         new=AsyncMock(return_value={"serien": [], "punkte": []}),
     ), patch(
-        "backend.services.snapshot.aggregator.get_komponenten_tageskwh",
-        new=AsyncMock(return_value={}),
+        # Zählerlücken wie HA (E5): der Snapshot-Tageswert kommt aus der Tagestabelle.
+        "backend.services.snapshot.aggregator.snapshot_tagestabelle",
+        new=AsyncMock(return_value=None),
     ), patch(
         "backend.services.sensor_snapshot_service.get_daily_counter_deltas_by_inv",
         new=AsyncMock(return_value={}),

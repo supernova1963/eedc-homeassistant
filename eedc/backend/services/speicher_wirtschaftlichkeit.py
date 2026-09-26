@@ -213,6 +213,7 @@ async def berechne_effektiver_ladepreis(
             TagesEnergieProfil.strompreis_cent,
             TagesEnergieProfil.boersenpreis_cent,
             TagesEnergieProfil.created_at,
+            TagesEnergieProfil.spannen,
         )
         .where(
             TagesEnergieProfil.anlage_id == anlage_id,
@@ -224,9 +225,16 @@ async def berechne_effektiver_ladepreis(
     alle = result.all()
     strom_gepaart = forward_werte_je_backward_zeile(alle, "strompreis_cent")
     boerse_gepaart = forward_werte_je_backward_zeile(alle, "boersenpreis_cent")
+    # Zählerlücken wie HA (§2): eine Zeile, deren Batterie- oder Netzbezug-Menge
+    # mehr als eine reale Stunde trägt, ist keine Lade-/Entladestunde — sie
+    # zählt hier wie ein fehlender Batteriewert (Stunden-Paarung Ladung ×
+    # Netzbezug × Preis wäre über n Stunden eine Behauptung).
+    from backend.core.berechnungen.spannen import zeile_gebuendelt
+
     rows = [
         (z, sp, bp) for z, sp, bp in zip(alle, strom_gepaart, boerse_gepaart)
         if z.datum >= von and z.batterie_kw is not None
+        and not zeile_gebuendelt(z, "batterie") and not zeile_gebuendelt(z, "netzbezug")
     ]
 
     if not rows:

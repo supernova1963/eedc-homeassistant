@@ -268,7 +268,17 @@ def test_beide_stundenpfade_haengen_die_kuerzung_wirklich_ein():
     from pathlib import Path
 
     basis = Path(__file__).resolve().parents[1]
+    # Zählerlücken wie HA (26.09.2026): beide Stundenpfade rechnen PV-Präzedenz und
+    # BKW-Kürzung in EINER Funktion (`tages_tabelle.baue_tagestabelle`). Der
+    # Wächter prüft deshalb dort die Formel-Einhängung — und in beiden Pfaden,
+    # dass sie diese Funktion wirklich rufen.
     for rel in ("services/snapshot/aggregator.py", "services/snapshot/lts_aggregator.py"):
+        quelle = (basis / rel).read_text(encoding="utf-8")
+        assert "baue_tagestabelle(" in quelle, (
+            f"{rel}: rechnet die Stunden nicht mehr über die gemeinsame "
+            f"Tagestabelle — die BKW-Kürzung (N-536) hinge dort an nichts."
+        )
+    for rel in ("services/snapshot/tages_tabelle.py",):
         quelle = (basis / rel).read_text(encoding="utf-8")
         assert "bkw_restwerte(_alle_invs, einzel)" in quelle, (
             f"{rel}: die Summe des Einzel-Zweigs kürzt das abtretende "

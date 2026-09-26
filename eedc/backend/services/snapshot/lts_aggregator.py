@@ -16,352 +16,76 @@ Unterschied zur Snapshot-Variante:
     Snapshot-Variante (`get_hourly_kwh_by_category`) als Fallback
 
 Konzept-Doc: `docs/archive/KONZEPT-ETAPPE-4-HA-LTS-SOT.md`.
+
+⭐ **Seit „Zählerlücken wie HA" (Vorlage Fassung 7, R2–R5) ein Pfad für Stunde
+und Tag.** `lts_tagestabelle` liest HA **einmal** je Tag über die Slot-Tabelle
+(`ha_statistics_service.get_hourly_slots_for_day`) und leitet daraus beides ab:
+die Stundenachsen (mit Spanne je Achse) **und** `komponenten_kwh` als Σ der in
+den Stunden verwendeten Gerätewerte. Σ Stunden == `komponenten_kwh` gilt damit
+per Konstruktion für PV+BKW, Wärmepumpe, Wallbox+E-Auto, Batterie, Einspeisung
+und Netzbezug. `get_hourly_kwh_by_category_lts` und `get_komponenten_tageskwh_lts`
+bleiben als dünne Wrapper für ihre Aufrufer stehen.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import date
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.berechnungen.stundenbilanz import (
-    berechne_batterie_netto_kwh,
-    stunden_verbrauch_kwh,
-)
 from backend.services.ha_statistics_service import get_ha_statistics_service
 from backend.services.snapshot.keys import (
-    PV_AGGREGAT_BASIS_FELD,
+    _categorize_counter,
     extract_quellen_energy,
     resolve_energy_ha_eid,
 )
-from backend.core.berechnungen.pv_tages_praezedenz import (
-    QUELLE_AGGREGAT,
-    QUELLE_EINZEL,
-    erwartete_erzeuger_ids,
-    waehle_pv_quelle,
-)
-from backend.core.berechnungen.erzeuger_traeger import (
-    bkw_restwerte,
-    ergaenze_kinder_deckung,
-)
 from backend.services.snapshot.komponenten_beitraege import (
     basis_beitraege,
-    basis_hourly_eintraege,
-    loese_pv_tageswerte_auf,
     investition_beitraege,
-    investition_hourly_eintraege,
-    resolve_either_or_eintraege,
     wallbox_deckt_ladung_ab,
 )
-from backend.services.snapshot.plausibility import (
-    cap_pv_einspeisung_stunde,
-    schwelle_pv_einspeisung_stunde_kwh,
+from backend.services.snapshot.tages_tabelle import (
+    TabellenEintrag,
+    TagesTabelle,
+    baue_tagestabelle,
 )
+
+#: Rückwärtskompatibler Name (Proben, Aufrufer): dieselbe Tabelle.
+LtsTagesTabelle = TagesTabelle
 
 logger = logging.getLogger(__name__)
 
 
-async def get_hourly_kwh_by_category_lts(
-    db: AsyncSession,
-    anlage,
-    investitionen_by_id: dict,
-    datum: date,
-) -> dict[int, dict[str, Optional[float]]]:
+def _lts_eintraege(anlage, investitionen_by_id: dict, datum: date) -> list[TabellenEintrag]:
+    """Die zugeordneten Zähler des Tages — **eine** Auswahl für Stunde und Tag.
+
+    Die Feld-Auswahl (Whitelist · Either-Or · Parent-Skip · K3 · Wallbox-Regel)
+    kommt aus der Beitragsschicht (`basis_beitraege`/`investition_beitraege`),
+    die Kategorie aus `_categorize_counter`. Bis zum Umbau gab es dafür zwei
+    Listen (`*_hourly_eintraege` für die Stunde, `*_beitraege` für den Tag) —
+    dieselbe Auswahl, zweimal gelesen; die Stunde ließ Felder ohne Kategorie
+    weg (vor E3 die Betriebsart-Zähler), der Tag nicht.
     """
-    Etappe 4: Stündliche kWh-Werte pro Energiefluss-Kategorie aus HA-LTS.
-
-    Returns:
-        Gleiches Format wie `services.snapshot.aggregator.get_hourly_kwh_by_category`:
-        {h: {"pv": x, "einspeisung": y, "netzbezug": z, "verbrauch": v,
-             "wp": w, "wallbox": w2, "batterie_netto": b, "verbrauch_sonstiges": s}}
-        Werte können None sein (kein Sensor-Mapping oder HA-LTS-Lücke).
-
-    Keine Daten:
-        Wenn HA-LTS nicht verfügbar oder kein Sensor-Mapping greift, wird
-        ein leeres Dict `{}` zurückgegeben — der Aufrufer kann dann auf die
-        Snapshot-Variante als Fallback fallen.
-    """
-    ha_svc = get_ha_statistics_service()
-    if not ha_svc.is_available:
-        return {}
-
     sensor_mapping = anlage.sensor_mapping or {}
-
-    # Sensor-Mapping durchgehen: (entity_id, kategorie, fallback_gruppe) pro
-    # Counter-Feld. Die Feld-Auswahl (Whitelist + Either-Or + parent-Skip)
-    # kommt aus DERSELBEN Normalisierung wie der Daily-Pfad
-    # (`investition_hourly_eintraege`/`basis_hourly_eintraege`), nicht mehr aus
-    # rohen `_categorize_counter`-Aufrufen pro Feld — Issue #298 (Audit-§6.2,
-    # Pattern-Klasse [[feedback_aggregator_symmetrie]]). Anders als bei der
-    # Snapshot-Variante: HA-LTS hat keine MQTT-Zähler, also nur HA-gemappte
-    # Sensoren — deshalb bleibt hier auch die Alles-oder-nichts-Prüfung für
-    # `basis:pv_gesamt` (Stufe 1 zu F-7) beim Mapping-Default: ein per MQTT
-    # gespeister Zähler je Erzeuger hat keine HA-Entity und liefert diesem Pfad
-    # ohnehin nichts, was das Aggregat verdrängen könnte.
-    # (entity_id, kategorie, gruppe, sensor_key) — der sensor_key ist seit #406
-    # nötig: die Kategorie `pv` hat zwei Quellen (Anlagen-Aggregat und Zähler je
-    # Erzeuger), und nur der Key sagt, welche vorliegt.
-    eintraege: list[tuple[str, str, Optional[str], str]] = []
     quellen_energy = extract_quellen_energy(anlage)  # C2b-Read-Through (HA-only-Pfad)
+    out: list[TabellenEintrag] = []
 
     basis = sensor_mapping.get("basis", {}) or {}
-    for he in basis_hourly_eintraege(sensor_mapping):
-        cfg = basis.get(he.feld)
-        if isinstance(cfg, dict):
-            eid = cfg.get("sensor_id")
-            if eid:
-                eid, behalten = resolve_energy_ha_eid(
-                    quellen_energy, f"basis:{he.feld}", eid
-                )
-                if behalten and eid:
-                    eintraege.append((
-                        eid, he.kategorie, he.fallback_gruppe, f"basis:{he.feld}",
-                    ))
-
-    investitionen_map = sensor_mapping.get("investitionen", {}) or {}
-    # N-555 (Konzept Regel 6): dieselbe Wallbox-Regel wie am Tag, jetzt auch in
-    # der Stunde — und nur für eine Wallbox in Betrieb.
-    _wb_deckt = wallbox_deckt_ladung_ab(
-        investitionen_by_id.values(), sensor_mapping, datum=datum,
-    )
-    for inv_id_str, inv_data in investitionen_map.items():
-        if not isinstance(inv_data, dict):
-            continue
-        inv = investitionen_by_id.get(inv_id_str) or investitionen_by_id.get(str(inv_id_str))
-        if inv is None:
-            continue
-        felder = inv_data.get("felder", {}) or {}
-        for he in investition_hourly_eintraege(inv, inv_data, wallbox_deckt_ladung=_wb_deckt):
-            cfg = felder.get(he.feld)
-            if isinstance(cfg, dict):
-                eid = cfg.get("sensor_id")
-                if eid:
-                    eid, behalten = resolve_energy_ha_eid(
-                        quellen_energy, f"inv:{inv_id_str}:{he.feld}", eid
-                    )
-                    if behalten and eid:
-                        eintraege.append((
-                            eid, he.kategorie, he.fallback_gruppe,
-                            f"inv:{inv_id_str}:{he.feld}",
-                        ))
-
-    if not eintraege:
-        return {}
-
-    # HA-LTS-Read: alle entity_ids in einem Schwung, 24 Stunden-Deltas pro Sensor.
-    # `ha_svc.get_hourly_kwh_deltas_for_day` ist synchron (SQL-Engine ist
-    # connection-pool-basiert); im async-Kontext akzeptabel als Inline-Call,
-    # weil es eine kurze Read-Operation ist.
-    sensor_ids = list({eid for eid, _kat, _grp, _sk in eintraege})
-    deltas = ha_svc.get_hourly_kwh_deltas_for_day(sensor_ids, datum)
-
-    if not deltas:
-        return {}
-
-    # Either-Or-Auflösung auf TAGES-Ebene (vor der Stunden-Summierung), damit
-    # Σ Hourly == Tages-Boundary bleibt: pro fallback_gruppe gewinnt der erste
-    # Eintrag, dessen Sensor überhaupt Tagesdaten hat — identisch zu
-    # `get_komponenten_tageskwh_lts` (Z. 284-292). Stunden-weise Auflösung
-    # würde die Symmetrie brechen, wenn der primäre Sensor nur zeitweise misst.
-    def _hat_tagesdaten(eid: str) -> bool:
-        slots = deltas.get(eid)
-        return bool(slots) and any(v is not None for v in slots.values())
-
-    eintraege = resolve_either_or_eintraege(
-        eintraege,
-        gruppe_fn=lambda e: e[2],            # (eid, kat, gruppe)
-        hat_tagesdaten_fn=lambda e: _hat_tagesdaten(e[0]),
-    )
-
-    # Per-Stunde-Kategorie-Aggregation
-    # ⚑ #406: `pv` wird nicht sofort zusammengeworfen — die Kategorie hat zwei
-    # Quellen, und welche den Tag trägt, entscheidet die Präzedenz unten.
-    result_kat: dict[int, dict[str, Optional[float]]] = {h: {} for h in range(24)}
-    pv_aggregat_je_slot: dict[int, Optional[float]] = {}
-    pv_einzel_je_slot: dict[int, dict[str, float]] = {}
-    for h in range(24):
-        per_kat: dict[str, Optional[float]] = {}
-        pv_aggregat_je_slot[h] = None
-        pv_einzel_je_slot[h] = {}
-        for eid, kat, _grp, sensor_key in eintraege:
-            slot_delta = deltas.get(eid, {}).get(h)
-            if slot_delta is None:
-                continue
-            # Negative Deltas (Counter-Reset Mitten am Tag): roh durchreichen,
-            # Cap greift im Plausibility-Schritt unten. Snapshot-Variante
-            # behandelt das speziell (Tagesreset → s1 nehmen); für HA-LTS
-            # wären solche Resets in `sum` schon bereinigt — sehr selten.
-            if slot_delta < 0:
-                logger.warning(
-                    f"Anlage {anlage.id}, {datum} h={h} {eid}: "
-                    f"negatives HA-LTS-Delta {slot_delta:.3f} — verwerfe"
-                )
-                continue
-            if kat == "pv":
-                if sensor_key == f"basis:{PV_AGGREGAT_BASIS_FELD}":
-                    pv_aggregat_je_slot[h] = (
-                        pv_aggregat_je_slot[h] or 0.0
-                    ) + slot_delta
-                else:
-                    inv_id = sensor_key.split(":", 2)[1]
-                    pv_einzel_je_slot[h][inv_id] = (
-                        pv_einzel_je_slot[h].get(inv_id, 0.0) + slot_delta
-                    )
-                continue
-            per_kat[kat] = (per_kat.get(kat) or 0.0) + slot_delta
-        result_kat[h] = per_kat
-
-    # PV-Präzedenz je Tag (#406) — dieselbe Wahl wie im Snapshot-Pfad und wie
-    # auf der Tagesebene; ein zweiter Rechenweg wäre die F-56-Klasse.
-    # N-536: Deckung auf TRÄGER-Ebene, Summe ohne Doppelzählung, Rest
-    # unverteilt — wortgleich zum Snapshot-Pfad (`snapshot/aggregator`).
-    _alle_invs = list(investitionen_by_id.values())
-    pv_quelle = waehle_pv_quelle(
-        erwartete_ids=erwartete_erzeuger_ids(investitionen_by_id.values(), datum),
-        gedeckte_ids_je_slot={
-            h: ergaenze_kinder_deckung(ids.keys(), _alle_invs)
-            for h, ids in pv_einzel_je_slot.items()
-        },
-        aggregat_je_slot=pv_aggregat_je_slot,
-    )
-    for h in range(24):
-        if pv_quelle == QUELLE_AGGREGAT:
-            wert = pv_aggregat_je_slot.get(h)
-        elif pv_quelle == QUELLE_EINZEL:
-            einzel = pv_einzel_je_slot.get(h) or {}
-            if einzel:
-                einzel = dict(einzel)
-                einzel.update(bkw_restwerte(_alle_invs, einzel))
-            wert = sum(einzel.values()) if einzel else None
-        else:
-            wert = None
-        if wert is not None:
-            result_kat[h]["pv"] = wert
-
-    # Kategorien zu Bilanz-Feldern aggregieren — analog Snapshot-Variante.
-    schwelle_spike = schwelle_pv_einspeisung_stunde_kwh(
-        getattr(anlage, "leistung_kwp", None),
-    )
-    final: dict[int, dict[str, Optional[float]]] = {}
-    for h in range(24):
-        d = result_kat[h]
-        pv = d.get("pv")
-        einsp = d.get("einspeisung")
-        bez = d.get("netzbezug")
-        ladung_batt = d.get("ladung_batterie")
-        entladung_batt = d.get("entladung_batterie")
-        wp = d.get("verbrauch_wp")
-        wallbox = d.get("ladung_wallbox")
-        eauto = d.get("verbrauch_eauto")
-        sonst_erz = d.get("erzeugung_sonstiges")
-        sonst_verbr = d.get("verbrauch_sonstiges")
-
-        pv_total = None
-        if pv is not None or sonst_erz is not None:
-            pv_total = (pv or 0.0) + (sonst_erz or 0.0)
-
-        pv_total = cap_pv_einspeisung_stunde(
-            pv_total, schwelle_spike,
-            anlage_id=anlage.id, datum=datum, stunde=h, kategorie="pv",
-        )
-        einsp = cap_pv_einspeisung_stunde(
-            einsp, schwelle_spike,
-            anlage_id=anlage.id, datum=datum, stunde=h, kategorie="einspeisung",
-        )
-
-        # Netto und Verbrauch kommen aus dem Layer-SoT (ADR-001), nicht aus
-        # einer zweiten Kopie der Formel — sie stand bis 29.08.2026 hier UND im
-        # Snapshot-Pfad wortgleich. Verhaltensneutral; dass ein fehlender
-        # Batterie-Beitrag als 0 zählt, ist dort als offener Punkt beschrieben.
-        batt_netto = berechne_batterie_netto_kwh(
-            ladung_kwh=ladung_batt,
-            entladung_kwh=entladung_batt,
-        )
-        verbrauch = stunden_verbrauch_kwh(
-            pv_kwh=pv_total,
-            netzbezug_kwh=bez,
-            einspeisung_kwh=einsp,
-            batterie_netto_kwh=batt_netto,
-        )
-
-        final[h] = {
-            "pv": pv_total,
-            # Sonstiges-Erzeuger-Anteil separat (für PV-reine Performance-Ratio;
-            # `pv` enthält ihn bewusst für die Bilanz) — symmetrisch zu
-            # snapshot/aggregator.py.
-            "erzeugung_sonstiges": sonst_erz,
-            "einspeisung": einsp,
-            "netzbezug": bez,
-            "batterie_netto": batt_netto,
-            "wp": wp,
-            "wallbox": (wallbox or 0.0) + (eauto or 0.0) if (wallbox is not None or eauto is not None) else None,
-            "verbrauch_sonstiges": sonst_verbr,
-            "verbrauch": verbrauch,
-        }
-    return final
-
-
-async def get_komponenten_tageskwh_lts(
-    anlage,
-    investitionen_by_id: dict,
-    datum: date,
-    *,
-    marken_out: Optional[dict[str, str]] = None,
-) -> dict[str, float]:
-    """
-    Etappe 4 (v3.31.0): Tages-kWh pro Komponente aus HA-LTS — direkter
-    Ersatz für `snapshot.aggregator.get_komponenten_tageskwh` (Snapshot-
-    Pfad).
-
-    Liefert `{komponenten_key: tages_kwh}` mit gleicher Key-Konvention wie
-    die Snapshot-Variante:
-        einspeisung           Basis
-        netzbezug             Basis
-        pv_<inv_id>           pv-module
-        bkw_<inv_id>          balkonkraftwerk
-        batterie_<inv_id>     speicher (ladung − entladung)
-        waermepumpe_<inv_id>  waermepumpe (alle Strom-Sensoren summiert)
-        wallbox_<inv_id>      wallbox
-        eauto_<inv_id>        e-auto
-        sonstige_<inv_id>     sonstiges (erzeugung − verbrauch)
-
-    Tagessumme = Σ der 24 LTS-Stunden-Deltas pro Sensor. Damit ist
-    Σ Hourly == Daily per Konstruktion — kein Drift zwischen
-    TagesEnergieProfil.*_kw und TagesZusammenfassung.komponenten_kwh.
-
-    Investitionen ohne gemappten Counter erscheinen NICHT im Dict
-    (analog Snapshot-Variante; Caller behält für solche Keys seinen
-    Live-Σ-Fallback).
-    """
-    ha_svc = get_ha_statistics_service()
-    if not ha_svc.is_available:
-        return {}
-
-    sensor_mapping = anlage.sensor_mapping or {}
-
-    # Pro Komponenten-Beitrag: (sensor_id, KomponentenBeitrag, mapping_quelle)
-    # mapping_quelle: das Per-Investition-/Per-Basis-Dict, aus dem die
-    # sensor_id für ein Feld gezogen wird.
-    eintraege: list[tuple[str, object, dict]] = []
-    quellen_energy = extract_quellen_energy(anlage)  # C2b-Read-Through (HA-only-Pfad)
-
-    basis_map = sensor_mapping.get("basis", {}) or {}
     for b in basis_beitraege(sensor_mapping):
-        cfg = basis_map.get(b.feld)
-        if isinstance(cfg, dict):
-            eid = cfg.get("sensor_id")
-            if eid:
-                eid, behalten = resolve_energy_ha_eid(
-                    quellen_energy, f"basis:{b.feld}", eid
-                )
-                if behalten and eid:
-                    eintraege.append((eid, b, basis_map))
+        cfg = basis.get(b.feld)
+        if not isinstance(cfg, dict) or not cfg.get("sensor_id"):
+            continue
+        eid, behalten = resolve_energy_ha_eid(quellen_energy, f"basis:{b.feld}", cfg["sensor_id"])
+        kat = _categorize_counter(b.feld, None, None)
+        if behalten and eid and kat:
+            out.append(TabellenEintrag(eid, kat, b.fallback_gruppe, f"basis:{b.feld}",
+                                   b.target_key, b.vorzeichen))
 
     investitionen_map = sensor_mapping.get("investitionen", {}) or {}
-    # N-196: strukturelle Quellen-Regel der E-Mob-Fläche, einmal je Lauf —
-    # dieselbe Regel, die der Leistungspfad seit #356 kennt.
+    # N-196/N-555 (Konzept Regel 6): strukturelle Wallbox-Regel, einmal je Lauf.
     _wb_deckt = wallbox_deckt_ladung_ab(
         investitionen_by_id.values(), sensor_mapping, datum=datum,
     )
@@ -374,62 +98,121 @@ async def get_komponenten_tageskwh_lts(
         felder = inv_data.get("felder", {}) or {}
         for b in investition_beitraege(inv, inv_data, wallbox_deckt_ladung=_wb_deckt):
             cfg = felder.get(b.feld)
-            if isinstance(cfg, dict):
-                eid = cfg.get("sensor_id")
-                if eid:
-                    eid, behalten = resolve_energy_ha_eid(
-                        quellen_energy, f"inv:{inv_id_str}:{b.feld}", eid
-                    )
-                    if behalten and eid:
-                        eintraege.append((eid, b, felder))
+            if not isinstance(cfg, dict) or not cfg.get("sensor_id"):
+                continue
+            eid, behalten = resolve_energy_ha_eid(
+                quellen_energy, f"inv:{inv_id_str}:{b.feld}", cfg["sensor_id"],
+            )
+            kat = _categorize_counter(b.feld, getattr(inv, "typ", None), getattr(inv, "parameter", None))
+            if not (behalten and eid):
+                continue
+            if not kat:
+                logger.warning(
+                    "Anlage %s, %s: Feld %s (inv %s) hat keine Energiefluss-Kategorie "
+                    "— zählt weder in der Stunde noch im Tag",
+                    anlage.id, datum, b.feld, inv_id_str,
+                )
+                continue
+            out.append(TabellenEintrag(eid, kat, b.fallback_gruppe, f"inv:{inv_id_str}:{b.feld}",
+                                   b.target_key, b.vorzeichen))
+    return out
 
+
+async def lts_tagestabelle(
+    anlage,
+    investitionen_by_id: dict,
+    datum: date,
+) -> Optional[TagesTabelle]:
+    """Stunden **und** Tag eines Tages aus der HA-Slot-Tabelle (R2–R5).
+
+    Ablauf (Vorlage Fassung 7):
+
+    1. Eine Auswahl der Zähler (`_lts_eintraege`), ein HA-Lesezugriff
+       (`get_hourly_slots_for_day`, im Thread — der Recorder ist synchron).
+    Die Schritte 2–7 rechnet `tages_tabelle.baue_tagestabelle` — dieselbe
+    Funktion wie im Snapshot-Pfad (Standalone), keine zweite Fassung.
+
+    2. Either-Or je Tag (`resolve_either_or_eintraege`): je Gruppe der erste
+       Zähler mit mindestens einem belegten Slot.
+    3. Je Sensor-Slot: **R4** negatives Delta ⇒ verworfen (Betrag nach
+       ``verworfen[achse]``); **R3** auf pv/einspeisung Deckel
+       ``kwp × 1,5 × n`` je Sensor-Slot.
+    4. PV-Präzedenz je Tag (`waehle_pv_quelle`), BKW-Rest je Slot
+       (`bkw_restwerte`) — unverändert.
+    5. **R3** Deckel auf die Achsensumme der Stunde (pv inkl. Sonstiges-
+       Erzeuger, einspeisung) mit der Achsen-Spanne; fällt die Summe, fallen
+       alle Sensor-Slots dieser Stunde — auch aus `komponenten_kwh`.
+    6. Achsen-Spanne = max n der verwendeten Sensor-Slots, gespeichert nur für
+       n > 1. **R6**: Verbrauch nur bei gleicher Spanne von pv/netzbezug/
+       einspeisung; Batterie mit anderer Spanne ⇒ `None`, fehlend ⇒ 0.
+    7. **R5b** `komponenten_kwh` = Σ der verwendeten Gerätewerte je Ziel-Key;
+       nur im PV-Aggregat-Fall `loese_pv_tageswerte_auf`. **E4**: im
+       Einzelfall trägt der BKW-Key Σ seines Rests (je Slot ≥ 0 geklemmt).
+
+    Returns:
+        ``None``, wenn HA nicht erreichbar ist, kein Zähler zugeordnet ist oder
+        HA für keinen davon eine Zeile im Fenster hat — der Aufrufer fällt
+        dann auf den Snapshot-Pfad zurück.
+    """
+    ha_svc = get_ha_statistics_service()
+    if not ha_svc.is_available:
+        return None
+    eintraege = _lts_eintraege(anlage, investitionen_by_id, datum)
     if not eintraege:
+        return None
+
+    sensor_ids = sorted({e.schluessel for e in eintraege})
+    reihen = await asyncio.to_thread(ha_svc.get_hourly_slots_for_day, sensor_ids, datum)
+    if not reihen:
+        return None
+
+    return baue_tagestabelle(
+        anlage, investitionen_by_id, datum, eintraege,
+        {
+            eid: {h: (slot.delta, slot.n) for h, slot in reihe.slots.items()}
+            for eid, reihe in reihen.items()
+        },
+    )
+
+
+async def get_hourly_kwh_by_category_lts(
+    db: AsyncSession,
+    anlage,
+    investitionen_by_id: dict,
+    datum: date,
+) -> dict[int, dict[str, Optional[float]]]:
+    """Stündliche kWh je Energiefluss-Kategorie aus HA-LTS — Wrapper über
+    `lts_tagestabelle` (Format wie `snapshot.aggregator.get_hourly_kwh_by_category`,
+    dazu ``spannen`` je Stunde). ``{}``, wenn HA nichts liefert — der Aufrufer
+    fällt dann auf den Snapshot-Pfad zurück."""
+    tabelle = await lts_tagestabelle(anlage, investitionen_by_id, datum)
+    return tabelle.stunden if tabelle is not None else {}
+
+
+async def get_komponenten_tageskwh_lts(
+    anlage,
+    investitionen_by_id: dict,
+    datum: date,
+    *,
+    marken_out: Optional[dict[str, str]] = None,
+) -> dict[str, float]:
+    """Tages-kWh je Komponente aus HA-LTS — **dünner Wrapper** über
+    `lts_tagestabelle` (R5, W3: fünf Aufrufer — Tag-Status, drei Daten-Checker,
+    Migration).
+
+    Key-Konvention unverändert (`einspeisung` · `netzbezug` · `pv_<id>` ·
+    `bkw_<id>` · `batterie_<id>` (Entladung − Ladung) · `waermepumpe_<id>` ·
+    `wallbox_<id>` · `eauto_<id>` · `sonstige_<id>`).
+
+    ⭐ Seit „Zählerlücken wie HA" ist der Wert Σ der in den **Stunden
+    verwendeten** Gerätewerte desselben Laufs: inklusive der Energie einer
+    Lücke (sie steht im nächsten belegten Slot), ohne verworfene Mengen (R3/R4),
+    BKW-Key = Σ Rest (E4). Σ Hourly == Daily damit exakt statt nur „aus
+    derselben Quelle". Investitionen ohne Wert erscheinen nicht im Dict.
+    """
+    tabelle = await lts_tagestabelle(anlage, investitionen_by_id, datum)
+    if tabelle is None:
         return {}
-
-    sensor_ids = list({eid for eid, _b, _src in eintraege})
-    deltas = ha_svc.get_hourly_kwh_deltas_for_day(sensor_ids, datum)
-
-    if not deltas:
-        return {}
-
-    # Pro Sensor: Tages-Σ aus den 24 Stunden-Slots. Lücken (None) werden
-    # ignoriert — wer mehrere Stunden Lücken hat, bekommt entsprechend
-    # niedrigeren Tageswert. Caller-Live-Σ-Fallback greift dann ggf.
-    sensor_tagessumme: dict[str, float] = {}
-    for eid, slots in deltas.items():
-        s = 0.0
-        any_valid = False
-        for h_val in slots.values():
-            if h_val is not None:
-                s += h_val
-                any_valid = True
-        if any_valid:
-            sensor_tagessumme[eid] = s
-
-    # Either-Or-Fallback: pro fallback_gruppe nur den ersten Beitrag mit
-    # verfügbarem Sensor-Wert übernehmen (E-Auto ladung_kwh vs verbrauch_kwh,
-    # Sonstiges primary vs secondary).
-    result: dict[str, float] = {}
-    gruppe_genommen: set[str] = set()
-    for eid, b, _src in eintraege:
-        if b.fallback_gruppe and b.fallback_gruppe in gruppe_genommen:
-            continue
-        s = sensor_tagessumme.get(eid)
-        if s is None:
-            continue
-        if b.fallback_gruppe:
-            gruppe_genommen.add(b.fallback_gruppe)
-        result[b.target_key] = result.get(b.target_key, 0.0) + b.vorzeichen * s
-
-    # PV-Präzedenz je Tag (#406) — symmetrisch zum Snapshot-Pfad: Einzelzähler
-    # schlagen das Aggregat, sobald sie den Tag vollständig tragen; sonst löst
-    # sich das Aggregat in die Erzeuger auf. `pv_gesamt` verlässt die Funktion
-    # in keinem Fall.
-    result, marken = loese_pv_tageswerte_auf(result, investitionen_by_id, datum)
     if marken_out is not None:
-        marken_out.update(marken)
-
-    # Negative Tagessummen (z. B. Speicher netto entladen) bleiben negativ;
-    # die Snapshot-Variante macht das gleichermaßen. Konsumenten können den
-    # Vorzeichen-Sinn aus der Key-Konvention herleiten.
-    return result
+        marken_out.update(tabelle.pv_marken)
+    return dict(tabelle.komponenten_kwh)

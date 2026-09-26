@@ -94,7 +94,12 @@ export function baueTagesMeldung(
   if (alt !== null && neu !== null && Math.abs(alt - neu) < 0.1) {
     pvTeil = `Tag ${datumDe}: PV-Wert blieb ${fmtZahl(alt, 1)} kWh (keine Änderung).`
   } else if (alt !== null && neu !== null) {
-    pvTeil = `Tag ${datumDe} repariert: PV ${fmtZahl(alt, 1)} → ${fmtZahl(neu, 1)} kWh.`
+    // Zählerlücken wie HA (§2): steht ein Teil der neuen PV in einer Stunde, die
+    // mehr als eine reale Stunde trägt, sagt die Meldung das — sonst läse man
+    // die Energie einer HA-Lücke als unerklärten Sprung.
+    const ausLuecke = r.pv_kwh_aus_luecke ?? 0
+    const lueckenTeil = ausLuecke >= 0.05 ? ` (davon ${fmtZahl(ausLuecke, 1)} kWh aus einer Lücke in Home Assistant)` : ''
+    pvTeil = `Tag ${datumDe} repariert: PV ${fmtZahl(alt, 1)} → ${fmtZahl(neu, 1)} kWh${lueckenTeil}.`
   } else {
     pvTeil = `Tag ${datumDe} aus HA-Statistics neu aggregiert.`
   }

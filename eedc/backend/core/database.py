@@ -966,6 +966,12 @@ async def run_migrations(conn):
                 connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN lern_soll_stundenprofil_kwh JSON'))
             if 'lern_soll_kwh' not in existing_columns:
                 connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN lern_soll_kwh FLOAT'))
+            # Zählerlücken wie HA (R4/R9): `verworfen` ist Markierung UND
+            # Regelmarke. Rein additiv, kein Backfill — Altbestand behält NULL
+            # und rechnet damit weiter nach N-92, bis er neu aggregiert wird
+            # (E6/E7; der Daten-Checker nennt die Tage). Kein Start-Rewrite.
+            if 'verworfen' not in existing_columns:
+                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN verworfen JSON'))
 
         # N-547: Übergangs-Marker am Korrekturprofil. `lern_basis_pro_bin` sagt
         # je Bin, ob sein Faktor schon gegen das neue Lern-SOLL gelernt ist
@@ -1024,6 +1030,10 @@ async def run_migrations(conn):
             # Aufteilung ab heute; Altbestand bleibt `NULL` = „nicht hingesehen".
             if 'betriebsmodus_je_wp' not in existing_columns:
                 connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN betriebsmodus_je_wp JSON'))
+            # Zählerlücken wie HA (R2): Spanne je Achse, nur für n > 1.
+            # Additiv, Altbestand NULL (= jede Achse trägt ihre Stunde).
+            if 'spannen' not in existing_columns:
+                connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN spannen JSON'))
             # v3.26.0: Stündliches Wetter (Bewölkung, Niederschlag, WMO-Code)
             # für Wetter-Stratifizierung und Korrekturprofil — siehe KONZEPT-KORREKTURPROFIL.md
             if 'bewoelkung_prozent' not in existing_columns:

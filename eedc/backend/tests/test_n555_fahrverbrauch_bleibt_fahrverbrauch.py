@@ -569,7 +569,7 @@ class _FakeStats:
     def __init__(self, werte):
         self._werte = werte
 
-    def get_monatswerte(self, sensor_ids, jahr, monat):
+    def get_monatswerte(self, sensor_ids, jahr, monat, deckel_je_sensor=None):
         sens = [SimpleNamespace(sensor_id=s, differenz=self._werte[s]) for s in sensor_ids if s in self._werte]
         return SimpleNamespace(jahr=jahr, monat=monat, monat_name="Sep", sensoren=sens)
 

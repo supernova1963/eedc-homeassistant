@@ -205,6 +205,7 @@ async def _profil_from_db(
             TagesEnergieProfil.verbrauch_kw,
             TagesEnergieProfil.waermepumpe_kw,
             TagesEnergieProfil.temperatur_c,
+            TagesEnergieProfil.spannen,
         ).where(
             TagesEnergieProfil.anlage_id == anlage_id,
             TagesEnergieProfil.datum >= start_date,
@@ -240,8 +241,15 @@ async def _profil_from_db(
     temp_werte: list[float] = []
     hat_wp = False
 
-    for datum, stunde, verbrauch_kw, waermepumpe_kw, temperatur_c in rows:
+    from backend.core.berechnungen.spannen import verbrauch_gebuendelt
+
+    for row in rows:
+        datum, stunde, verbrauch_kw, waermepumpe_kw, temperatur_c = row[:5]
         if verbrauch_kw is None:
+            continue
+        # Zählerlücken wie HA (§2): eine gebündelte Stunde ist keine Stichprobe
+        # für das Stundenprofil — ihre Energie bleibt in jeder Summe.
+        if verbrauch_gebuendelt(row):
             continue
 
         ist_wochenende = datum.weekday() >= 5
