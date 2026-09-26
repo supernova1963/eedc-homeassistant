@@ -7,6 +7,7 @@ Enthält nur reine Daten und Logik ohne I/O.
 
 import logging
 from dataclasses import dataclass
+from datetime import date
 from typing import Callable, Container, Mapping, Optional, Sequence
 
 from backend.core.field_definitions import (
@@ -118,6 +119,7 @@ class TagesverlaufSerie:
 def baue_investitions_serien(
     inv_live_map: dict[str, dict[str, str]],
     investitionen: dict[str, "object"],
+    tag: Optional[date] = None,
 ) -> tuple[list[TagesverlaufSerie], dict[str, list[str]]]:
     """Single Source of Truth für die Investitions-Serien-Selektion des
     Tagesverlaufs (Issue #318, M1).
@@ -139,6 +141,9 @@ def baue_investitions_serien(
         inv_live_map: ``{inv_id: {leistung_w: entity_id, ...}}`` aus
             ``extract_live_config``.
         investitionen: ``{inv_id: Investition}`` (typ/parameter/parent_id/…).
+        tag: der betrachtete Tag — für „Wallbox **in Betrieb**" (N-555 Stufe 2, Konzept
+            Regel 0/8). ``None`` ⇒ die Auswahl des Aufrufers gilt (er hat die
+            Investitionen schon auf seinen Zeitraum gefiltert, `aktiv_im_zeitraum`).
 
     Returns:
         ``(serien, serie_entities)`` — Kern-Serien in stabiler, Pool-deduplizierter
@@ -256,7 +261,17 @@ def baue_investitions_serien(
     # Ladung, die **nicht** über die eigene Wallbox lief (auswärts), fällt damit
     # aus dem Tagesverlauf. Das ist beabsichtigt: sie ist kein Hausstrom und
     # stünde sonst als Senke in einer Bilanz, durch die sie nie geflossen ist.
-    if any(s.kategorie == "wallbox" for s in dedupliziert):
+    # ⭐ N-555 Stufe 2 (Konzept Regel 8, letzte Stelle, die noch „gibt es eine Wallbox"
+    # fragte): die Wallbox muss am betrachteten Tag **in Betrieb** sein (Regel 0: nicht
+    # vor der Anschaffung, nicht nach der Stilllegung). Eine Wallbox, die erst nach dem
+    # Tag gekauft oder vorher stillgelegt wurde, verdrängt das Auto nicht.
+    def _in_betrieb(serie: TagesverlaufSerie) -> bool:
+        inv = investitionen.get(serie.inv_id)
+        if tag is None or inv is None or not hasattr(inv, "ist_aktiv_an"):
+            return True
+        return inv.ist_aktiv_an(tag)
+
+    if any(s.kategorie == "wallbox" and _in_betrieb(s) for s in dedupliziert):
         behalten: list[TagesverlaufSerie] = []
         for serie in dedupliziert:
             if serie.kategorie == "eauto":

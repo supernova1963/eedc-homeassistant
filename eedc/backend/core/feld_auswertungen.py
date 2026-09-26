@@ -440,6 +440,13 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
         _a(COCKPIT_MONAT, "core/berechnungen/imd_monatsaggregat.py", "imd_typ_beitrag"),
         _a(AUSW_FINANZEN, "core/berechnungen/dienstliche_ladekosten.py", "berechne_dienstliche_ladekosten"),
     ),
+    # N-555 Stufe 2 (E5): „Heim: gesamt" — gelesen von der einen Funktion (Regel 2
+    # Schritt 1), über sie von allen Sichten; am Tag über die Tagesauswahl.
+    ("e-auto", "ladung_kwh"): (
+        _a(KOMP_EAUTO, "api/routes/investitionen/dashboard_eauto.py", "get_eauto_dashboard"),
+        _a(COCKPIT_MONAT, "services/eauto_wirtschaftlichkeit.py", "entscheide_emob_heimladung"),
+        _a(COCKPIT_JAHR, "api/routes/cockpit/uebersicht.py", "get_cockpit_uebersicht"),
+    ),
     ("e-auto", "ladung_extern_kwh"): (
         _a(KOMP_EAUTO, "api/routes/investitionen/dashboard_eauto.py", "get_eauto_dashboard"),
         _a(COCKPIT_MONAT, "api/routes/aktueller_monat/__init__.py", "get_aktueller_monat"),

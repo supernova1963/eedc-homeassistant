@@ -43,6 +43,7 @@ from backend.core.berechnungen import eauto_effizienz_100km, eauto_effizienz_zei
 from backend.services.eauto_wirtschaftlichkeit import (
     berechne_eauto_ersparnis_periode,
     dienstliche_ladung_der_zeile,
+    monate_des_autos,
 )
 from backend.models.monatsdaten import Monatsdaten
 from backend.services.energie_profil.modus_split_monat import lade_modus_split_ohne_abschluss
@@ -64,7 +65,6 @@ from backend.api.routes.ha_export.emob import (
     _EmobPoolCtx,
     _emob_extern_im_monat,
     _emob_heimladung_im_monat,
-    _emob_month_share,
 )
 
 
@@ -72,23 +72,24 @@ def _emob_pv_netz_des_monats(
     investition: Investition, emob_ctx: Optional[_EmobPoolCtx],
     km: float, jahr: int, monat: int, d: dict,
 ) -> tuple[float, float]:
-    """``(pv, netz)`` der Heimladung dieses Geräts im Monat — N-555, Konzept Regel 2-Ü.
+    """``(pv, netz)`` der Heimladung dieses Geräts im Monat — N-555, Konzept Regel 0/2/3.
 
     * **Privates E-Auto:** nach dem Entscheid der einen Funktion
-      (``emob_heimladung_im_monat``): Wallbox-Anteil nach km, eigene Heim-Felder,
-      Schätzung aus dem Fahrverbrauch oder 0. Hier stand bis 25.09.2026 die eigene
-      Zeile über die Lese-Hilfe, und die setzte den Fahrverbrauch still ein.
-    * **Dienstwagen:** unverändert (Konzept, Stufe 1): Wallbox-Anteil, wenn der Monat
-      einen hat, sonst seine Felder bzw. sein Fahrverbrauch als Netz — bitgleich,
-      nur ausdrücklich (``dienstliche_ladung_der_zeile``).
-    * **Wallbox:** ihre eigenen Felder (sie **ist** die Quelle).
+      (``emob_heimladung_im_monat`` → ``entscheid.je_auto``): seine eigene Messung, sein
+      Anteil am Rest der Wallbox, die Schätzung aus dem Fahrverbrauch oder 0.
+    * **Dienstwagen** (Regel 3, Stufe 2): seine dienstliche Menge aus dem Entscheid —
+      Messung, sonst Fahrverbrauch als Netz; neben einer dienstlichen Wallbox in Betrieb 0.
+      Bis 26.09.2026 bekam er hier, wenn die private Wallbox im Monat lud, einen
+      „km-Anteil" am privaten Topf (sein km durch die km der PRIVATEN Autos).
+    * **Wallbox:** ihre eigenen Felder — sie **ist** die Summe (Regel 0).
     """
     if investition.typ == "e-auto" and not ist_dienstlich(investition):
         return _emob_heimladung_im_monat(emob_ctx, investition.id, km, jahr, monat, d)
-    share = _emob_month_share(emob_ctx, investition.typ, km, jahr, monat)
-    if share is not None:
-        return (share.pv_kwh, share.netz_kwh)
     if investition.typ == "e-auto":
+        entscheid = emob_ctx.entscheide.get((jahr, monat)) if emob_ctx is not None else None
+        if entscheid is not None:
+            dl = entscheid.dienstlich_je_inv.get(investition.id)
+            return (dl.pv_kwh, dl.netz_kwh) if dl is not None else (0.0, 0.0)
         dl = dienstliche_ladung_der_zeile(d)
         return (dl.pv_kwh, dl.netz_kwh)
     # #262: PV/Netz via SoT-Helper — bei Imports ohne expliziten
@@ -196,12 +197,22 @@ async def calculate_investition_sensors(
         # (gemessener Fahrverbrauch vor Heim + Extern), der Zeitraum ist
         # Σ Monatswerte ÷ Σ km — dieselbe Regel wie Cockpit, Hub und Auswertungen.
         effizienz_monate = []
-        for md in monatsdaten:
-            d = _emob_daten(md)
+        # N-555 Stufe 2 (Konzept Regel 2 Schritt 3): ein privates Auto bekommt Rest der
+        # Wallbox auch in Monaten ohne eigene Zeile (`monate_des_autos`) — dieselben
+        # Monate hier und in der Ersparnis unten, sonst ginge die Summe der Fahrzeug-
+        # Sensoren am Anlagen-Topf vorbei.
+        emob_monate = [(md.jahr, md.monat, _emob_daten(md)) for md in monatsdaten]
+        if investition.typ == "e-auto" and not ist_dienstlich(investition):
+            _mit_zeile = {(j, m) for j, m, _ in emob_monate}
+            emob_monate += [
+                (j, m, {}) for j, m, _ in monate_des_autos(emob_ctx, investition.id, {})
+                if (j, m) not in _mit_zeile and investition.ist_aktiv_im_monat(j, m)
+            ]
+        for _j, _m, d in emob_monate:
             km_m = d.get("km_gefahren", 0) or 0
             gesamt_km += km_m
             gesamt_verbrauch += d.get("verbrauch_kwh", 0) or 0
-            pv, netz = _emob_pv_netz_des_monats(investition, emob_ctx, km_m, md.jahr, md.monat, d)
+            pv, netz = _emob_pv_netz_des_monats(investition, emob_ctx, km_m, _j, _m, d)
             gesamt_pv_ladung += pv
             gesamt_netz_ladung += netz
             effizienz_monate.append(eauto_effizienz_100km(
@@ -264,26 +275,25 @@ async def calculate_investition_sensors(
                     extern_euro_sensor = 0.0
                     fahrverbrauch_sensor = 0.0
                     monate_sensor: list[tuple[int, int]] = []
-                    for md in monatsdaten:
-                        d = _emob_daten(md)
+                    for _j, _m, d in emob_monate:
                         km = d.get("km_gefahren", 0) or 0
                         _, netz = _emob_pv_netz_des_monats(
-                            investition, emob_ctx, km, md.jahr, md.monat, d,
+                            investition, emob_ctx, km, _j, _m, d,
                         )
-                        monate_sensor.append((md.jahr, md.monat))
+                        monate_sensor.append((_j, _m))
                         netz_total_sensor += netz
                         # N-555 (§11): externe Ladekosten nach der Topf-Regel.
                         if investition.typ == "e-auto" and not ist_dienstlich(investition):
                             _, extern_euro = _emob_extern_im_monat(
-                                emob_ctx, km, md.jahr, md.monat, d,
+                                emob_ctx, km, _j, _m, d,
                             )
                         else:
                             extern_euro = float(d.get("ladung_extern_euro", 0) or 0)
                         extern_euro_sensor += extern_euro
                         if netz > 0:
-                            netz_pro_monat_sensor.append((md.jahr, md.monat, netz))
+                            netz_pro_monat_sensor.append((_j, _m, netz))
                         if km > 0:
-                            km_pro_monat_sensor.append((md.jahr, md.monat, km))
+                            km_pro_monat_sensor.append((_j, _m, km))
                             fahrverbrauch_sensor += d.get("verbrauch_kwh", 0) or 0
 
                     preis_lookup_sensor = await monats_strompreis_lookup(

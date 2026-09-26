@@ -2288,6 +2288,13 @@ P10_PER_INVESTITION_PHASE: dict[str, str] = {
     # Verschachtelte Phase im E-Auto-Dashboard (E-Auto- und Wallbox-Zeile).
     "backend/api/routes/investitionen/dashboard_eauto.py::_emob_daten_von":
         "backend/api/routes/investitionen/dashboard_eauto.py::get_eauto_dashboard",
+    # N-555 Stufe 2: der E-Mob-Kontext der Sichten, die `InvestitionMonatsdaten` selbst
+    # laden — er bekommt deren Zeilen übergeben (Herkunft, Anreicherung, Entscheid je
+    # Monat über die EINE Funktion) und bildet keine eigene Monatsgröße. Aufrufer sind
+    # ausschließlich gelistete Lader: E-Auto-/Wallbox-Hub, T-Konto, Vorjahr, Aussichten,
+    # HA-Export (zweimal); genannt ist der Lader des E-Auto-Hubs.
+    "backend/services/emob_kontext.py::lade_emob_kontext":
+        "backend/api/routes/investitionen/dashboard_eauto.py::get_eauto_dashboard",
     # CHECKER-Phase: beantwortet „führt dieses Gerät einen Kühl-Zähler?" über
     # übergebene Zeilen. Der Lader ist der Datenquellen-Check daneben; zweiter
     # Aufrufer ist `_wp_steuerung_und_plan` (selbst eine Phase, s. o.).

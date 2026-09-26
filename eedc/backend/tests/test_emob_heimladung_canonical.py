@@ -53,10 +53,19 @@ def test_eauto_streudaten_groesser_wallbox_gewinnt_trotzdem():
             "ladung_kwh": 500, "ladung_pv_kwh": 200, "ladung_netz_kwh": 300,
         }],
     )
+    # ⚑ N-555 Stufe 2 (26.09.2026): die strukturelle Regel „Wallbox vorhanden ⇒ die Auto-
+    # Werte zählen nicht" (Phase 2a / Entscheidung 1) ist mit Gernots Modell vom 24.09.
+    # **gedreht** (Konzept Heimladung/Fahrverbrauch 7.2, Regel 2 Schritt 1 und Anhang C,
+    # „Modellwechsel"): trägt das Auto „Heim: PV/Netz", ist das seine eigene Messung, auch
+    # neben der Wallbox. Das #262-Risiko (Streudaten am Auto) fängt seither der
+    # Daten-Checker — „Autos zusammen mehr als die Wallbox" (Regel 7, E2: weiterrechnen
+    # und warnen, nicht kappen); seine Probe steht in `test_n555_stufe2_messung_je_auto.py`
+    # §S2-6. Diese Probe hält jetzt fest: die Wallbox bestimmt den Monat (`quelle`), der Topf
+    # ist die Messung des Autos, der Rest ist 0 (nie unter 0).
     assert pool.quelle == "wallbox"
-    assert pool.ladung_kwh == 500
-    assert pool.pv_kwh == 200
-    assert pool.netz_kwh == 300
+    assert pool.ladung_kwh == 3300
+    assert pool.pv_kwh == 1000
+    assert pool.netz_kwh == 2300
 
 
 def test_steckerlader_keine_wallbox_eauto_ist_quelle():

@@ -41,7 +41,7 @@ Die Monats-Fakten führen dafür ``eauto_summe_gemessen``/``wallbox_summe_gemess
 neben den angereicherten Summen.
 """
 
-from typing import Iterable, Optional, Sequence
+from typing import Callable, Iterable, Optional, Sequence
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -53,6 +53,7 @@ from backend.services.energie_profil.monats_aus_tagen import (
 )
 
 __all__ = [
+    "braucht_tages_quote",
     "hat_gepflegten_pv_anteil",
     "reichere_ladezeilen_an",
     "lade_abgeleitete_ladeanteile",
@@ -117,11 +118,38 @@ def hat_gepflegten_pv_anteil(
     )
 
 
+def _zeile_ohne_aufteilung(zeile: Optional[dict]) -> bool:
+    """Trägt die Zeile weder „PV" noch „Netz" (auch keine 0)? — S2-4, die Frage je Zeile."""
+    zeile = zeile or {}
+    return zeile.get("ladung_pv_kwh") is None and zeile.get("ladung_netz_kwh") is None
+
+
+def braucht_tages_quote(
+    eauto_daten: Iterable[dict],
+    wallbox_daten: Iterable[dict] = (),
+) -> bool:
+    """Braucht dieser Monat die abgeleitete PV-Quote der Tagesebene? (N-555 Stufe 2, S2-4)
+
+    Ja, wenn eine Zeile eine Ladung über 0 **ohne** eigene Aufteilung trägt (sie wird je Zeile
+    abgeleitet, bzw. am Auto neben einer Wallbox ohne Wallbox-Anteil mit der Quote geteilt),
+    oder ein E-Auto einen Fahrverbrauch trägt (Kandidat der Schätzung, Regel 1).
+
+    Ergänzt die monatsweise Vorprüfung ``not hat_gepflegten_pv_anteil(…)`` — sie bleibt, damit
+    nie ein Monat seine Quote verliert, den die Vorprüfung bisher geladen hat.
+    """
+    ea = [z or {} for z in eauto_daten]
+    wb = [z or {} for z in wallbox_daten]
+    if any(_zeile_ohne_aufteilung(z) and get_eauto_ladung_kwh(z) > 0 for z in (*ea, *wb)):
+        return True
+    return any(float(z.get("verbrauch_kwh") or 0) > 0 for z in ea)
+
+
 def reichere_ladezeilen_an(
     *,
     eauto_daten: Sequence[dict],
     wallbox_daten: Sequence[dict],
     quote: Optional[float],
+    wallbox_in_betrieb: Optional[bool] = None,
 ) -> tuple[list[dict], list[dict], bool]:
     """Schreibt den abgeleiteten PV-/Netz-Anteil in **Kopien** der Monatszeilen.
 
@@ -148,6 +176,9 @@ def reichere_ladezeilen_an(
         wallbox_daten: dasselbe für die Wallboxen.
         quote: Anteil der Heimladung aus eigener Sonne (0…1) aus der Tagesebene.
             ``None`` heißt „keine Aussage" und lässt alles unverändert.
+        wallbox_in_betrieb: Ist im Monat eine private Wallbox in Betrieb (auch ohne
+            Zeile)? Dann bleiben die Auto-Zeilen ungeteilt (N-555 Stufe 2, s. unten).
+            ``None`` ⇒ „es gibt eine Wallbox-Zeile".
 
     Returns:
         ``(eauto', wallbox', abgeleitet)`` — die Zeilen (Kopien nur dort, wo
@@ -158,7 +189,7 @@ def reichere_ladezeilen_an(
     """
     ea = list(eauto_daten)
     wb = list(wallbox_daten)
-    if quote is None or hat_gepflegten_pv_anteil(ea, wb):
+    if quote is None:
         return ea, wb, False
 
     abgeleitet = False
@@ -168,14 +199,15 @@ def reichere_ladezeilen_an(
         ergebnis: list[dict] = []
         for zeile in zeilen:
             zeile = zeile or {}
-            # ⛔ Ein gepflegter Wert wird NIE ueberschrieben — jetzt auch auf
-            # Zeilenebene. Solange das Tor ueber beide Seiten lief, war das
-            # zwangslaeufig erfuellt: war irgendwo ein Wert, blieb das Tor zu.
-            # Seit das Tor nur die Quelle fragt, kann es offen sein, waehrend
-            # die ANDERE Seite einen Altwert traegt — ohne diese Zeile wuerde
-            # er hier durch eine Schaetzung ersetzt. Unter dem alten Verhalten
-            # aendert die Pruefung nichts (sie war dort leer erfuellt).
-            if zeile.get("ladung_pv_kwh") is not None:
+            # ⛔ Ein gepflegter Wert wird NIE ueberschrieben — und seit N-555 Stufe 2
+            # (S2-4, Konzept Regel 2 Schritt 2) ist das die GANZE Regel: **je Zeile**.
+            # Eine Zeile, die „PV" ODER „Netz" traegt (auch 0), bleibt unangetastet.
+            # Bis 26.09.2026 stand hier nur „PV" — eine Auto-Zeile mit nur „Heim:
+            # Netz" bekam einen erfundenen PV-Anteil (Fable-Runde 5, #3) — und davor
+            # ein Torwaechter je MONAT (`hat_gepflegten_pv_anteil`): trug ein Auto
+            # „Heim: PV", blieb ein zweites Auto mit nur „Heim: gesamt" ungeteilt,
+            # PV 0 % (Fable-Runde 7, „Nicht belegt", `emob_ladeanteil.py:161`).
+            if not _zeile_ohne_aufteilung(zeile):
                 ergebnis.append(zeile)
                 continue
             # N-555: die Basis ist die **Ladung** der Zeile, nie ihr Fahrverbrauch.
@@ -198,7 +230,18 @@ def reichere_ladezeilen_an(
             abgeleitet = True
         return ergebnis
 
-    return _anreichern(ea), _anreichern(wb), abgeleitet
+    # N-555 Stufe 2: eine Auto-Zeile wird nur abgeleitet, wenn der Monat KEINE
+    # Wallbox-Zeile hat. Neben einer Wallbox teilt die eine Funktion „Heim: gesamt" mit
+    # dem PV-Anteil der WALLBOX (Regel 2 Schritt 1), nicht mit der Tages-Quote — eine hier
+    # angereicherte Zeile sähe dort aus wie eine eigene PV-Messung. Ohne Wallbox-Anteil
+    # (Wallbox leer oder 0) nimmt die Funktion dieselbe Quote selbst.
+    #
+    # ⚠ „In Betrieb", nicht „hat eine Zeile": eine Wallbox ohne Monatszeile ist trotzdem
+    # da, und ein alter Gesamtwert am Auto zählt neben ihr nicht — angereichert trüge er
+    # „Heim: PV/Netz" und sähe aus wie eine eigene Messung (Regel 2 Schritt 1).
+    if wallbox_in_betrieb is None:
+        wallbox_in_betrieb = bool(wb)
+    return (ea if wallbox_in_betrieb else _anreichern(ea)), _anreichern(wb), abgeleitet
 
 
 async def lade_abgeleitete_ladeanteile(
@@ -258,6 +301,8 @@ async def reichere_monatszeilen_an_mit_quoten(
     db: AsyncSession,
     anlage_id: int,
     zeilen: Sequence[LadeZeile],
+    *,
+    wallbox_in_betrieb: Optional[Callable[[int, int], bool]] = None,
 ) -> tuple[list[dict], dict[MonatsSchluessel, float]]:
     """Der bequeme Weg für Sichten, die ``InvestitionMonatsdaten`` selbst laden.
 
@@ -305,18 +350,25 @@ async def reichere_monatszeilen_an_mit_quoten(
     offen = [
         schluessel
         for schluessel, (eauto_idx, wallbox_idx) in je_monat.items()
-        if not hat_gepflegten_pv_anteil(
-            [zeilen[i][2] for i in eauto_idx], [zeilen[i][2] for i in wallbox_idx]
-        )
-        and (
-            any(
-                get_eauto_ladung_kwh(zeilen[i][2] or {}) > 0
-                for i in (*eauto_idx, *wallbox_idx)
+        if (
+            not hat_gepflegten_pv_anteil(
+                [zeilen[i][2] for i in eauto_idx], [zeilen[i][2] for i in wallbox_idx]
             )
-            # N-555: auch ein Monat, der nur geschätzt werden kann, braucht seine
-            # Quote — vorher lief er über den Fahrverbrauch-Ersatz der Lese-Hilfe
-            # in die Bedingung darüber.
-            or _hat_schaetzbaren_fahrverbrauch(zeilen, eauto_idx)
+            and (
+                any(
+                    get_eauto_ladung_kwh(zeilen[i][2] or {}) > 0
+                    for i in (*eauto_idx, *wallbox_idx)
+                )
+                # N-555: auch ein Monat, der nur geschätzt werden kann, braucht seine
+                # Quote — vorher lief er über den Fahrverbrauch-Ersatz der Lese-Hilfe
+                # in die Bedingung darüber.
+                or _hat_schaetzbaren_fahrverbrauch(zeilen, eauto_idx)
+            )
+        )
+        # N-555 Stufe 2 (S2-4): die Ableitung gilt je Zeile — ein Monat, in dem ein Auto
+        # „Heim: PV" trägt und ein zweites nur „Heim: gesamt", braucht die Quote auch.
+        or braucht_tages_quote(
+            [zeilen[i][2] for i in eauto_idx], [zeilen[i][2] for i in wallbox_idx]
         )
     ]
     if not offen:
@@ -336,6 +388,11 @@ async def reichere_monatszeilen_an_mit_quoten(
             eauto_daten=[zeilen[i][2] for i in eauto_idx],
             wallbox_daten=[zeilen[i][2] for i in wallbox_idx],
             quote=quote,
+            # N-555 Stufe 2: „Wallbox in Betrieb" auch ohne Zeile (Regel 2 Schritt 1).
+            wallbox_in_betrieb=(
+                bool(wallbox_idx) or wallbox_in_betrieb(*schluessel)
+                if wallbox_in_betrieb is not None else None
+            ),
         )
         for i, daten in zip(eauto_idx, ea):
             ergebnis[i] = daten

@@ -12,6 +12,9 @@ Gliederung nach Regel:
 * **Regel 5** — die Startroutine bucht nicht mehr um; die einmalige Rückbenennung.
 * **Regel 6** — der Wächter (Fahrverbrauch als Menge nur in der einen Funktion), Tag und Stunde.
 * **Regel 10** — „Ladung gesamt" und kWh/100 km (N-557), Symmetrie über vier Sichten.
+
+Schwesterdateien: test_n555_stufe2_messung_je_auto.py (Stufe 2, Messung je Auto),
+test_n557_emob_effizienz_symmetrie.py.
 """
 
 from __future__ import annotations
@@ -744,6 +747,8 @@ N555_VERBRAUCH_LESESTELLEN: dict[str, str] = {
     "backend/services/snapshot/keys.py::_categorize_counter": "Kategorie (die Wahl sitzt in der Auswahl)",
     # ── Vorprüfung: lädt die Tages-Quote für die Schätzung ──
     "backend/services/emob_ladeanteil.py::_hat_schaetzbaren_fahrverbrauch": "nur Anwesenheit, keine Menge",
+    # N-555 Stufe 2 (S2-4): dieselbe Vorprüfung, je Zeile.
+    "backend/services/emob_ladeanteil.py::braucht_tages_quote": "nur Anwesenheit, keine Menge",
     # ── Schreib-, Import- und Migrationspfade ──
     "backend/api/routes/import_export/helpers.py::_import_investition_monatsdaten_legacy": "CSV-Import (schreibt)",
     "backend/services/migrations/migrate_eauto_fahrverbrauch_rueckbenennung.py::migrate_eauto_fahrverbrauch_rueckbenennung":

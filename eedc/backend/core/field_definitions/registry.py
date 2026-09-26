@@ -526,22 +526,49 @@ INVESTITION_FELDER: dict = {
             "csv_suffix": "Verbrauch_kWh",
             "hinweis": "Kumulativer kWh-Zähler des gefahrenen Energieverbrauchs (zählt fortlaufend hoch, Tagessensor geht auch) — der reine Fahrverbrauch, NICHT pro Fahrt und NICHT kWh/100 km. eedc errechnet daraus mit den km die Effizienz. Optional: fehlt der Wert, nähert eedc die kWh/100 km aus der geladenen Energie an (inkl. Ladeverluste).",
         },
+        # ⭐ N-555 Stufe 2 (Konzept Heimladung/Fahrverbrauch, Regel 2 + 8): die drei
+        # Heim-Felder werden JEDEM E-Auto angeboten, auch neben einer privaten
+        # Wallbox. Hier stand bis 26.09.2026 `bedingung_anlage: keine_wallbox`
+        # (Phase 2a, Entscheidung 1 des Wallbox-Konzepts: „die Wallbox ist die
+        # kanonische Quelle, am Auto nicht zusätzlich erfassen"). Das Modell hat sich
+        # gedreht: die Wallbox ist die SUMME (Regel 0), ein Auto mit eigener Messung
+        # trägt seine eigene Heimladung, die Wallbox den Rest (Regel 2). Ohne die
+        # Messung je Auto zählte ein Dienstwagen an der privaten Wallbox doppelt —
+        # einmal in der Stromrechnung der privaten Autos, einmal dienstlich (F4).
+        # Das Risiko, gegen das Phase 2a gebaut war (#262, Streudaten am Auto),
+        # fängt jetzt der Daten-Checker (Regel 7, „Autos zusammen mehr als die
+        # Wallbox") — er meldet, er schützt nicht (E2).
+        # Nur ein Dienstwagen neben einer dienstlichen Wallbox in Betrieb bekommt
+        # die Felder nicht (Regel 3: dort ist die Wallbox die dienstliche Ladung).
         {
             "feld": "ladung_pv_kwh", "label": "Heim: PV", "einheit": "kWh",
             "placeholder": "z.B. 130",
             "csv_suffix": "Ladung_PV_kWh",
-            # Phase 2a: existiert eine Wallbox-Investition, ist SIE die kanonische
-            # Quelle der Heimladung — dann nicht zusätzlich am E-Auto erfassen
-            # (sonst Dual-Daten / Doppelzählung, siehe docs/KONZEPT-WALLBOX-EAUTO.md).
-            "bedingung_anlage": "keine_wallbox",
-            "hinweis": "Zu Hause aus PV geladene Energie (kWh, kumulativ oder Tagessensor). Nur ohne Wallbox — mit Wallbox wird die Heimladung dort erfasst. Alternativ per EV-Quote aus der Gesamt-Ladung berechnet.",
+            "bedingung_anlage": "keine_dienstliche_wallbox",
+            "hinweis": "Zu Hause aus PV in dieses Auto geladene Energie (kWh, kumulativ oder Tagessensor). Neben einer Wallbox: Zählt für dieses Auto. Die Wallbox trägt den Rest. Ohne Wert leitet eedc den PV-Anteil ab.",
         },
         {
             "feld": "ladung_netz_kwh", "label": "Heim: Netz", "einheit": "kWh",
             "placeholder": "z.B. 50",
             "csv_suffix": "Ladung_Netz_kWh",
-            "bedingung_anlage": "keine_wallbox",  # s. ladung_pv_kwh (Phase 2a)
-            "hinweis": "Zu Hause aus dem Netz geladene Energie (kWh, kumulativ oder Tagessensor). Nur ohne Wallbox. Alternativ per EV-Quote berechnet.",
+            "bedingung_anlage": "keine_dienstliche_wallbox",  # s. ladung_pv_kwh
+            "hinweis": "Zu Hause aus dem Netz in dieses Auto geladene Energie (kWh, kumulativ oder Tagessensor). Neben einer Wallbox: Zählt für dieses Auto. Die Wallbox trägt den Rest.",
+        },
+        # N-555 Stufe 2 (E5, Fable-Runde 7): „Heim: gesamt" liegt auf dem BESTEHENDEN
+        # Schlüssel `ladung_kwh` — er ist in allen Pfaden schon die Gesamt-Heimladung
+        # des Autos (Kategorie, Tages-/Stundenauswahl, Heimlade-Felder, MQTT,
+        # Snapshot). Ein Wert mit Herkunft `legacy:unknown` oder ohne Herkunft ist
+        # der ALTE Gesamtwert und zählt nur ohne Wallbox (Lesezeit-Regel,
+        # `field_definitions/heimladung.py::eauto_zeile_mit_herkunft`); kein
+        # Bestand wird angefasst. Ein Zähler je Auto kennt meist nur die Summe
+        # (evcc: „Ladevorgänge: Energie [Fzg.]") — geteilt wird sie mit dem
+        # PV-Anteil der Wallbox im Monat, ohne Wallbox wie „Heim: PV/Netz" abgeleitet.
+        {
+            "feld": "ladung_kwh", "label": "Heim: gesamt", "einheit": "kWh",
+            "placeholder": "z.B. 180",
+            "csv_suffix": "Ladung_Heim_kWh",
+            "bedingung_anlage": "keine_dienstliche_wallbox",  # s. ladung_pv_kwh
+            "hinweis": "Zu Hause in dieses Auto geladene Energie gesamt (kWh, kumulativ oder Tagessensor) — für einen Zähler am Auto, der PV und Netz nicht trennt. Zählt für dieses Auto. Die Wallbox trägt den Rest. Geteilt wird mit dem PV-Anteil der Wallbox. Mit „Heim: PV“/„Heim: Netz“ leer lassen.",
         },
         {
             "feld": "ladung_extern_kwh", "label": "Extern", "einheit": "kWh",

@@ -20,6 +20,7 @@ from backend.models.investition import Investition
 from backend.models.monatsdaten import Monatsdaten
 from backend.core.investition_parameter import ist_dienstlich
 from backend.services.eauto_wirtschaftlichkeit import (
+    eauto_zeile_ohne_altwert,
     entscheide_emob_heimladung,
     summiere_emob_quelle,
 )
@@ -115,10 +116,23 @@ async def _baue_fakt(
     # Rohdicts selbst poolt (Cockpit → Jahr, Jahresbericht-PDF) oder die IMD
     # direkt liest (Komponenten-Hub, Aussichten, HA-Export), zeigte weiter 0 %.
     # Unterhalb des Pools angesetzt gilt die Aufteilung für jeden dieser Wege.
+    # N-555 Stufe 2: „Wallbox in Betrieb" kommt aus der Investitionsliste, nicht aus der
+    # Existenz einer Zeile — eine Wallbox ohne Monatszeile ist trotzdem da (Regel 2).
+    wallbox_in_betrieb = bool(roh.wallbox_ladedaten) or any(
+        i.typ == "wallbox" and not ist_dienstlich(i)
+        and i.ist_aktiv_im_monat(jahr, monat)
+        for i in investitionen
+    )
+    dienstliche_wallbox_in_betrieb = bool(roh.dienstliche_wallbox_ids) or any(
+        i.typ == "wallbox" and ist_dienstlich(i)
+        and i.ist_aktiv_im_monat(jahr, monat)
+        for i in investitionen
+    )
     eauto_ladedaten, wallbox_ladedaten, anteil_abgeleitet = reichere_ladezeilen_an(
         eauto_daten=roh.eauto_ladedaten,
         wallbox_daten=roh.wallbox_ladedaten,
         quote=tages_summe.abgeleiteter_pv_anteil if tages_summe is not None else None,
+        wallbox_in_betrieb=wallbox_in_betrieb,
     )
     if anteil_abgeleitet:
         tageswert_gruppen.add(TAGESWERT_EMOB_ANTEIL)
@@ -133,15 +147,45 @@ async def _baue_fakt(
     entscheid = entscheide_emob_heimladung(
         eauto_je_inv=dict(zip(roh.eauto_ladedaten_ids, eauto_ladedaten)),
         wallbox_zeilen=wallbox_ladedaten,
-        wallbox_in_betrieb=bool(wallbox_ladedaten) or any(
-            i.typ == "wallbox" and not ist_dienstlich(i)
-            and i.ist_aktiv_im_monat(jahr, monat)
-            for i in investitionen
-        ),
-        dienstwagen_je_inv=roh.dienstlich_je_inv,
+        wallbox_in_betrieb=wallbox_in_betrieb,
+        # N-555 Stufe 2 (Regel 3): Dienstwagen und dienstliche Wallboxen getrennt — eine
+        # gemessene dienstliche Ladung fehlt im Rest der privaten Wallbox, eine dienstliche
+        # Wallbox in Betrieb macht Felder und Schätzung der Dienstwagen wirkungslos.
+        dienstwagen_je_inv={
+            i: z for i, z in roh.dienstlich_je_inv.items()
+            if i not in roh.dienstliche_wallbox_ids
+        },
+        dienstliche_wallbox_je_inv={
+            i: z for i, z in roh.dienstlich_je_inv.items()
+            if i in roh.dienstliche_wallbox_ids
+        },
+        dienstliche_wallbox_in_betrieb=dienstliche_wallbox_in_betrieb,
         # Nur im laufenden Monat nicht leer (Regel 1: dort zählt auch eine Quelle).
         heimlade_quellen=heimlade_quellen,
         pv_quote=tages_summe.abgeleiteter_pv_anteil if tages_summe is not None else None,
+        # Regel 8 (E5): welches `ladung_kwh` „Heim: gesamt" ist — nach Herkunft.
+        heim_gesamt=roh.heim_gesamt_ids,
+        # Wessen Quelle ist eine Wallbox-Quelle? (Die Quellen tragen seit Stufe 2 auch
+        # Dienstwagen — eine Quelle am Dienstwagen sagt nichts über die private Wallbox.)
+        wallbox_ids={
+            i.id for i in investitionen
+            if i.typ == "wallbox" and not ist_dienstlich(i)
+            and i.ist_aktiv_im_monat(jahr, monat)
+        },
+        # Regel 2 Schritt 3: Empfänger des Rests sind alle privaten Autos in Betrieb, auch
+        # die ohne Monatszeile (0 km, E6) — sonst fiele der Rest eines Monats, in dem nur
+        # die Wallbox erfasst ist, aus dem Topf.
+        eauto_in_betrieb=[
+            i.id for i in investitionen
+            if i.typ == "e-auto" and not ist_dienstlich(i)
+            and i.ist_aktiv_im_monat(jahr, monat)
+        ],
+        # W-1 (Konzept Regel 2 Schritt 3): „nur eine Wallbox" nur ohne Dienstwagen in Betrieb.
+        dienstwagen_in_betrieb=[
+            i.id for i in investitionen
+            if i.typ == "e-auto" and ist_dienstlich(i)
+            and i.ist_aktiv_im_monat(jahr, monat)
+        ],
     )
     pool = entscheid.pool
     if entscheid.anteil_abgeleitet:
@@ -168,6 +212,28 @@ async def _baue_fakt(
             not d.gemessen for d in entscheid.dienstlich_je_inv.values()
             if d.pv_kwh + d.netz_kwh > 0
         ),
+        # N-555 Stufe 2: die Ausgabe je Auto (Regel 2/3); ihre Summe ist der Topf oben.
+        je_auto=dict(entscheid.je_auto),
+        rest_pv_kwh=entscheid.rest_pv_kwh,
+        rest_netz_kwh=entscheid.rest_netz_kwh,
+        rest_zugeordnet=entscheid.rest_zugeordnet,
+        wallbox_hat_wert=entscheid.wallbox_hat_wert,
+        wallbox_in_betrieb=entscheid.wallbox_in_betrieb,
+        dienstlich_gemessen_pv_kwh=sum(
+            entscheid.dienstlich_je_inv[i].pv_kwh for i in entscheid.dienstwagen_gemessen
+        ),
+        dienstlich_gemessen_netz_kwh=sum(
+            entscheid.dienstlich_je_inv[i].netz_kwh for i in entscheid.dienstwagen_gemessen
+        ),
+        dienstwagen_ungemessen=entscheid.dienstwagen_ungemessen,
+        dienstwagen_gemessen=entscheid.dienstwagen_gemessen,
+        dienstliche_wallbox_in_betrieb=entscheid.dienstliche_wallbox_in_betrieb,
+        dienstwagen_in_betrieb=any(
+            i.typ == "e-auto" and ist_dienstlich(i) and i.ist_aktiv_im_monat(jahr, monat)
+            for i in investitionen
+        ),
+        heim_gesamt_ids=frozenset(roh.heim_gesamt_ids),
+        dienstlich_ladedaten_je_inv=dict(roh.dienstlich_je_inv),
         eauto_ladedaten=tuple(eauto_ladedaten),
         ladedaten_je_inv={
             **dict(zip(roh.eauto_ladedaten_ids, eauto_ladedaten)),
@@ -177,7 +243,18 @@ async def _baue_fakt(
         eauto_summe=summiere_emob_quelle(eauto_ladedaten),
         wallbox_summe=summiere_emob_quelle(wallbox_ladedaten),
         # Ungeschätzt — nur für den Community-Payload (s. Feld-Docstring).
-        eauto_summe_gemessen=summiere_emob_quelle(roh.eauto_ladedaten),
+        # N-555 Stufe 2 (F2 der Nachmessung, Regel 8): die E-Auto-Seite liest die Zeilen wie
+        # die eine Funktion — ein alter Gesamtwert `ladung_kwh` (Herkunft `legacy:unknown`
+        # oder ohne) zählt neben einer privaten Wallbox in Betrieb nicht, auch nicht als
+        # Messwert an die Community; „Heim: gesamt" mit Herkunft und ohne Wallbox der
+        # Altwert (Steckerlader) schon.
+        eauto_summe_gemessen=summiere_emob_quelle(
+            eauto_zeile_ohne_altwert(
+                z, wallbox_in_betrieb=wallbox_in_betrieb,
+                heim_gesamt=i in roh.heim_gesamt_ids,
+            )
+            for i, z in zip(roh.eauto_ladedaten_ids, roh.eauto_ladedaten)
+        ),
         wallbox_summe_gemessen=summiere_emob_quelle(roh.wallbox_ladedaten),
     )
 

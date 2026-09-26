@@ -16,7 +16,10 @@ Vier Zusagen des Moduls stehen hier als Probe:
 
 import pytest
 
-from backend.services.eauto_wirtschaftlichkeit import get_emob_heimladung_canonical
+from backend.services.eauto_wirtschaftlichkeit import (
+    entscheide_emob_heimladung,
+    get_emob_heimladung_canonical,
+)
 from backend.services.emob_ladeanteil import (
     hat_gepflegten_pv_anteil,
     reichere_ladezeilen_an,
@@ -112,9 +115,21 @@ class TestAnreicherung:
         assert abgeleitet is True
 
     def test_die_trias_bleibt_in_jeder_zeile_geschlossen(self):
-        """#262: PV-Anteil über 100 % entstand, als kWh übernommen wurden."""
-        ea, wb, _ = reichere_ladezeilen_an(
+        """#262: PV-Anteil über 100 % entstand, als kWh übernommen wurden.
+
+        ⚑ N-555 Stufe 2 (S2-4): Neben einer Wallbox-Zeile bleiben die Auto-Zeilen ungeteilt
+        — „Heim: gesamt" teilt dort die eine Funktion mit dem PV-Anteil der WALLBOX (Regel 2
+        Schritt 1). Bis 26.09.2026 lief diese Probe mit Autos UND Wallbox in einem Aufruf;
+        die Trias wird jetzt je Seite geprüft, die Substanz (jede angereicherte Zeile ist
+        geschlossen, PV in [0, Ladung]) ist dieselbe.
+        """
+        ea, _wb, _ = reichere_ladezeilen_an(
             eauto_daten=[{"ladung_kwh": 30.0}, {"ladung_kwh": 70.0}],
+            wallbox_daten=[],
+            quote=0.42,
+        )
+        ea_neben_wb, wb, _ = reichere_ladezeilen_an(
+            eauto_daten=[{"ladung_kwh": 30.0}],
             wallbox_daten=[{"ladung_kwh": 250.0}],
             quote=0.42,
         )
@@ -123,6 +138,7 @@ class TestAnreicherung:
                 zeile["ladung_kwh"]
             )
             assert 0 <= zeile["ladung_pv_kwh"] <= zeile["ladung_kwh"]
+        assert "ladung_pv_kwh" not in ea_neben_wb[0]
 
     def test_summe_ueber_die_zeilen_gleich_summe_mal_quote(self):
         zeilen = [{"ladung_kwh": k} for k in (10.0, 25.0, 65.0)]
@@ -245,7 +261,11 @@ class TestMonatszeilenOrchestrierung:
         ]
         ergebnis = await reichere_monatszeilen_an(None, 1, zeilen)
         assert [z["wer"] for z in ergebnis] == ["auto", "wallbox", "auto2"]
-        assert [z["ladung_pv_kwh"] for z in ergebnis] == [5.0, 10.0, 15.0]
+        # ⚑ N-555 Stufe 2 (S2-4): neben der Wallbox-Zeile bleiben die Auto-Zeilen ungeteilt
+        # (die eine Funktion teilt „Heim: gesamt" mit dem Wallbox-Anteil). Bis 26.09.2026
+        # stand hier [5.0, 10.0, 15.0]; die Substanz — Reihenfolge und Zuordnung Zeile ↔
+        # Ergebnis — prüft die Zeile darüber und die Wallbox-Zeile hier.
+        assert [z.get("ladung_pv_kwh") for z in ergebnis] == [None, 10.0, None]
 
     @pytest.mark.asyncio
     async def test_der_torwaechter_gilt_JE_MONAT(self, quoten):
@@ -310,17 +330,35 @@ class TestQuelleUndTorwaechterWidersprechenSichNicht:
             eauto_imd_data=ea, wallbox_imd_data=wb
         ), ea
 
+    def _entscheid(self, eauto, wallbox, quote):
+        """⚑ N-555 Stufe 2: der ganze Entscheid — Topf UND Messung der Wallbox."""
+        ea, wb, _abgeleitet = reichere_ladezeilen_an(
+            eauto_daten=eauto, wallbox_daten=wallbox, quote=quote
+        )
+        return entscheide_emob_heimladung(
+            eauto_je_inv=dict(enumerate(ea)), wallbox_zeilen=wb,
+        )
+
     def test_der_altwert_am_fahrzeug_unterdrueckt_die_ableitung_NICHT_mehr(self):
         """Der gemessene Schaden: 0 % PV, obwohl die Tagesebene 62 % kennt.
 
         Vor dem 24.08. lieferte genau dieser Bestand ``PV=0 / Netz=200`` — keine
         falsche Zahl, sondern **gar keine Aussage** ueber die Sonne.
         """
-        pool, _ea = self._pool(self.EAUTO_ALTWERT, self.WALLBOX, 0.62)
-        assert pool.quelle == "wallbox"
-        assert pool.ladung_kwh == pytest.approx(200.0)
-        assert pool.pv_kwh == pytest.approx(124.0)
-        assert pool.netz_kwh == pytest.approx(76.0)
+        # ⚑ N-555 Stufe 2 (26.09.2026, Konzept Regel 2 Schritt 1 + Regel 3/G1): die Substanz
+        # bleibt — die WALLBOX bekommt ihren abgeleiteten Anteil (124/76), die Aufteilung
+        # am Fahrzeug unterdrückt ihn nicht. Neu: „Heim: PV/Netz" am Fahrzeug ist eine
+        # eigene Messung, die auch neben der Wallbox zählt (Modellwechsel 24.09.; Regel 8
+        # „Was ab dann wirkt": Restbestände der Juni-Umstellung). Der Topf ist damit die
+        # private Heimladung 130/50; der Rest der Wallbox (20, PV 124 − 130 < 0 ⇒ 0 PV)
+        # hat keinen Empfänger. Bis Stufe 1 war der Topf die Wallbox (124/76).
+        e = self._entscheid(self.EAUTO_ALTWERT, self.WALLBOX, 0.62)
+        assert e.pool.quelle == "wallbox"
+        assert e.wallbox_summe.ladung_kwh == pytest.approx(200.0)
+        assert e.wallbox_summe.pv_kwh == pytest.approx(124.0)
+        assert e.wallbox_summe.netz_kwh == pytest.approx(76.0)
+        assert (e.pool.pv_kwh, e.pool.netz_kwh) == (pytest.approx(130.0), pytest.approx(50.0))
+        assert e.rest_nicht_zugeordnet_kwh == pytest.approx(20.0)
 
     def test_der_altwert_am_fahrzeug_bleibt_unangetastet(self):
         """Kein Bestand wird ueberschrieben — auch nicht in der Kopie.
@@ -354,9 +392,12 @@ class TestQuelleUndTorwaechterWidersprechenSichNicht:
         Tagesebene eine Quote liefert. Wer sie nicht hat, sieht dasselbe wie
         vorher — das gehoert zur ehrlichen Reichweite der Aenderung.
         """
-        pool, _ea = self._pool(self.EAUTO_ALTWERT, self.WALLBOX, None)
-        assert pool.pv_kwh == pytest.approx(0.0)
-        assert pool.netz_kwh == pytest.approx(200.0)
+        # ⚑ N-555 Stufe 2: die Gegenprobe gilt für die WALLBOX (s. o.) — ohne Quote bleibt
+        # ihr PV-Anteil 0. Der Topf ist die Messung des Fahrzeugs (unabhängig von der Quote).
+        e = self._entscheid(self.EAUTO_ALTWERT, self.WALLBOX, None)
+        assert e.wallbox_summe.pv_kwh == pytest.approx(0.0)
+        assert e.wallbox_summe.netz_kwh == pytest.approx(200.0)
+        assert (e.pool.pv_kwh, e.pool.netz_kwh) == (pytest.approx(130.0), pytest.approx(50.0))
 
     def test_die_trias_bleibt_in_jeder_zeile_geschlossen(self):
         """``ladung_kwh == pv + netz`` — die #262-Invariante, hier erneut."""

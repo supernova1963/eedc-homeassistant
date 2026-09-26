@@ -34,10 +34,16 @@ def laufender_monat() -> tuple[int, int]:
 async def lade_emob_heimlade_quellen(
     db: AsyncSession, anlage, investitionen: Iterable, jahr: int, monat: int,
 ) -> frozenset:
-    """Die Heimlade-Felder privater Geräte in Betrieb, denen eine Quelle zugeordnet ist.
+    """Die Heimlade-Felder der Geräte in Betrieb, denen eine Quelle zugeordnet ist.
+
+    Private E-Autos und Wallboxen — und seit N-555 Stufe 2 auch **Dienstwagen** (Konzept
+    Regel 2 Schritt 1: „Eine eigene Messung hat ein Auto, wenn … im laufenden Monat eine
+    Quelle hat. Das gilt für private Autos und Dienstwagen gleich"). Eine **dienstliche
+    Wallbox** nicht: ihre Menge ist die dienstliche Ladung, eine Quelle an ihr sagt über die
+    private Heimladung nichts.
 
     Returns:
-        ``frozenset({(inv_id, feld), …})`` — leer ohne private E-Autos/Wallboxen in Betrieb
+        ``frozenset({(inv_id, feld), …})`` — leer ohne E-Autos/private Wallboxen in Betrieb
         (dann fällt auch keine Abfrage an).
     """
     from backend.services.snapshot.keys import extract_quellen_energy, feld_hat_zaehler
@@ -46,7 +52,7 @@ async def lade_emob_heimlade_quellen(
     kandidaten = [
         inv for inv in investitionen
         if inv.typ in HEIMLADE_FELDER
-        and not ist_dienstlich(inv)
+        and not (inv.typ == "wallbox" and ist_dienstlich(inv))
         and inv.ist_aktiv_im_monat(jahr, monat)
     ]
     if not kandidaten:
@@ -78,7 +84,10 @@ async def laufende_heimlade_quellen(
     from backend.models.anlage import Anlage
 
     investitionen = list(investitionen)
-    if not any(i.typ in HEIMLADE_FELDER and not ist_dienstlich(i) for i in investitionen):
+    if not any(
+        i.typ in HEIMLADE_FELDER and not (i.typ == "wallbox" and ist_dienstlich(i))
+        for i in investitionen
+    ):
         return {}
     laufend = laufender_monat()
     anlage = await db.get(Anlage, anlage_id)

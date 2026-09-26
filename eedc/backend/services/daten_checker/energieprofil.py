@@ -548,8 +548,9 @@ class EnergieprofilChecks:
                 während über das Feld 1286,62 kWh liefen.
         """
         # Deckt eine Wallbox die Heimladung ab, ist die PV-Ladung am E-Auto
-        # redundant — dieselbe Regel wie `bedingung_anlage: "keine_wallbox"`
-        # in `core/field_definitions.py` und wie oben bei `ladung_kwh`.
+        # redundant — wie oben bei `ladung_kwh`. (Bis N-555 Stufe 2 dieselbe Regel
+        # wie `bedingung_anlage: "keine_wallbox"`; seitdem darf ein Auto neben der
+        # Wallbox eine eigene Messung tragen — sie ist freiwillig, nichts fehlt.)
         hat_wallbox = any(
             i.typ == "wallbox" and i.ist_aktiv_an(heute) for i in anlage.investitionen
         )

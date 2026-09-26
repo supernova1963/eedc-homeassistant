@@ -13,12 +13,23 @@
 > Achse-2-Magnitude-Drift geschlossen ([#356](https://github.com/supernova1963/eedc-homeassistant/issues/356)) ·
 > die beiden Daten-Checker-Fehlalarme A + B.
 >
-> ⛔ **Verworfen am 2026-08-28 (Entscheid Gernot): die Aufschlüsselung je Fahrzeug** — weder
-> eigene `ladung_heim_*`-Felder mit evcc-Vehicle-Topics (vormals „Phase 2b") noch die Zerlegung
-> der Wallbox-Summe auf einzelne Autos (vormals „Phase 3"). Der Trigger dafür ist seit Mai 2026
-> nicht eingetreten, und die Pool-Aggregation deckt jedes gemeldete Setup. **Kein Rückstand,
-> sondern eine Entscheidung** — Einzelheiten und die damit gegenstandslosen offenen Fragen im
-> [archivierten Bau-Vertrag](archive/KONZEPT-WALLBOX-EAUTO-BAUVERTRAG.md).
+> ⭐ **Umgeschrieben am 2026-09-26 (N-555 Stufe 2, Gernots Modell vom 24.09., v4.0.51): die
+> Heimladung wird je Auto geführt.** Am 2026-08-28 war die Aufschlüsselung je Fahrzeug verworfen
+> („die Pool-Aggregation deckt jedes gemeldete Setup"). **Grund für die Umkehr:** *Die Summe reicht
+> nicht, sobald Autos verschiedene Nutznießer haben.* Ein Dienstwagen oder Gast an der privaten
+> Wallbox zählte in der Ersparnis der privaten Autos mit, und der Dienstwagen zugleich als
+> dienstliche Ausgabe — doppelt. Jetzt gilt: **die Wallbox ist die Summe**, jedes Auto mit eigener
+> Messung („Heim: PV", „Heim: Netz", „Heim: gesamt") trägt seine eigene, der **Rest** geht nach km
+> an die privaten Autos ohne Messung, ohne solche bleibt er **nicht zugeordnet** (nur Verbrauch).
+> Die „Heimladung" (`EmobFakten.ladung_*`) ist die **Summe der privaten Autos**, die Messung der
+> Wallbox steht getrennt daneben. Regeln und Proben: `docs/BERECHNUNGEN.md` (Regel 2/3),
+> Konzept `docs/drafts/KONZEPT-HEIMLADUNG-FAHRVERBRAUCH.md` §4 (wird nach der Abnahme ein Kapitel
+> dieses Dokuments). Nicht gebaut bleibt der evcc-Import je Fahrzeug (die Vehicle-Topics der
+> „Phase 2b" sind durch „Heim: gesamt" abgedeckt). Der alte Wortlaut:
+>
+> > ~~Verworfen am 2026-08-28 (Entscheid Gernot): die Aufschlüsselung je Fahrzeug — weder eigene
+> > `ladung_heim_*`-Felder mit evcc-Vehicle-Topics (vormals „Phase 2b") noch die Zerlegung der
+> > Wallbox-Summe auf einzelne Autos (vormals „Phase 3").~~ [archivierter Bau-Vertrag](archive/KONZEPT-WALLBOX-EAUTO-BAUVERTRAG.md)
 >
 > **Zwei Dinge, die neben diesem Dokument entstanden sind und hier hingehören:** Der Dienstwagen
 > **kostet**, statt zu verdienen (v4.0.5, `core/berechnungen/dienstliche_ladekosten.py`) — die
@@ -160,7 +171,9 @@ eine Migration geradegezogen (`services/migrations/migrate_emob_canonical_source
 Heimladung (`services/emob_ladeanteil.py`, `core/berechnungen/pv_anteil_ladung.py`) und der
 geschlossene **Achse-2-Drift** (#356).
 
-⛔ **Bewusst nicht gebaut — verworfen am 2026-08-28 (Entscheid Gernot):** die Aufschlüsselung der
+⭐ **Seit v4.0.51 gebaut (N-555 Stufe 2, s. Status oben) — die folgende Entscheidung vom 2026-08-28
+ist umgekehrt, weil die Summe nicht reicht, sobald Autos verschiedene Nutznießer haben:**
+~~Bewusst nicht gebaut — verworfen am 2026-08-28 (Entscheid Gernot):~~ die Aufschlüsselung der
 Heimladung **je Fahrzeug**. Weder eigene `ladung_heim_*`-Felder am E-Auto mit evcc-Vehicle-Topics
 (vormals „Phase 2b") noch die Zerlegung der Wallbox-Summe auf einzelne Autos (vormals „Phase 3").
 Ihr Trigger — „wenn Vehicle-Sensoren nachgefragt werden" — ist seit Mai 2026 nicht eingetreten,
@@ -183,6 +196,7 @@ An die Stelle der **datenabhängigen** Laufzeit-Heuristik (`use_wb_pool` hieß e
 
 ### Getroffene Entscheidungen
 1. **Fallback ja.** Nutzer **ohne** Wallbox-Investition (inkl. **Steckerlader**/Schuko — sehr häufig!) behalten die E-Auto-Trias als kanonische Quelle. Kein Breaking Change. Regel: *Wallbox-Investition vorhanden + hat Heimladung → Wallbox ist Quelle; sonst → E-Auto.* Strukturell (existiert eine Wallbox?), nicht magnitudenabhängig → kippt nicht.
+   ⭐ **Seit v4.0.51 gedreht (N-555 Stufe 2, 26.09.2026):** Die Wallbox ist die **Summe**, aber nicht mehr die einzige Quelle — ein Auto mit **eigener Messung** trägt sie auch neben der Wallbox, die Wallbox trägt den Rest. *Grund:* die Summe reicht nicht, sobald Autos verschiedene Nutznießer haben (Dienstwagen, Gast, zwei private Autos mit eigener Messung). Das Risiko, gegen das diese Entscheidung gebaut war (#262, Streudaten am Auto), fängt seither der Daten-Checker: „Autos zusammen mehr als die Wallbox" (Toleranz max(10 kWh, 10 %)) — er meldet, er kappt nicht. Der Fallback ohne Wallbox bleibt.
 2. **Migration löst automatisch auf, „höherer Wert gewinnt".** Wo historisch BEIDE Seiten Heimladung tragen, gewinnt pro aktivem Monat der **höhere** Heimladungs-Wert als überlebender kanonischer Wert (in die Wallbox geschrieben, E-Auto-Trias geräumt). Nur Fälle, die diese Regel **nicht** sauber auflösen kann (z. B. Total auf der einen, PV-Split nur auf der anderen Seite → keine konsistente Trias bildbar), bleiben stehen und tauchen im Daten-Checker (`_check_emob_pool_pflege`) auf. Ziel: möglichst wenig manuelle Fälle, kein „großer Heiler-Knopf" für das Unauflösbare.
 3. **Nur aktive Monate.** Migration und Auflösung respektieren Anschaffungs-/Stilllegungsdatum (konsistent mit der Aktiv-Filter-Invariante).
 4. **Multi-Wallbox:** Liegen mehrere Wallboxen vor, ist jede ein eigener Ladepunkt (Garage + Carport); die Heimladung gesamt = **Summe aller Wallbox-IMD** (entschieden 2026-06-04, physikalisch korrekt, keine Unterzählung). „Größtes Ladevolumen" greift damit nur als Wallbox-vs-E-Auto-Quellenwahl, nicht als Auswahl *einer* Wallbox; für den 0/1-Wallbox-Fall ist das identisch.

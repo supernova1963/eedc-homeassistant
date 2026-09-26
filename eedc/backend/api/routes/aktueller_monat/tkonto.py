@@ -192,48 +192,46 @@ def _baue_investition_financial(
             )
 
     elif inv.typ in ("e-auto", "wallbox") and not ist_dienstlich(inv):
-        km = data.get("km_gefahren")
+        km = data.get("km_gefahren") or 0
         ladung = get_eauto_ladung_kwh(data) or None
         # #262: SoT-Helper konsolidiert den vorherigen Inline-Fallback
         # (netz = ladung_netz ?? total − pv) — gleiche Semantik, gleiche
         # Drift-Quelle wie in den anderen Read-Sites.
         ladung_pv, netz_kwh = get_emob_pv_netz_kwh(data, total_kwh=ladung or 0)
         ladung_pv = ladung_pv or None
-        if km and km > 0:
+        heim_des_autos = 0.0
+        if inv.typ == "e-auto":
+            # N-555 (Konzept Regel 2): die Heimladung DIESES Autos kommt aus dem
+            # Entscheid des Monats (`je_auto`) — seine eigene Messung, sein Anteil am
+            # Rest der Wallbox (nach km, bei 0 km zusammen gleich verteilt, E6), die
+            # Schätzung aus dem Fahrverbrauch oder 0. Ohne übergebenen Entscheid
+            # (Einzelaufruf) entscheidet die Funktion aus dieser Zeile und dem
+            # Wallbox-Topf des Aufrufers.
+            entscheid = emob_entscheid or entscheide_emob_heimladung(
+                eauto_je_inv={inv.id: data},
+                wallbox_zeilen=[{
+                    "ladung_kwh": emob_pool_attr.wb_pool_pv + emob_pool_attr.wb_pool_netz,
+                    "ladung_pv_kwh": emob_pool_attr.wb_pool_pv,
+                }] if emob_pool_attr.use_wb_pool else [],
+            )
+            pv_a, netz_a = heimladung_des_autos(entscheid, inv.id)
+            ladung_pv = pv_a or None
+            netz_kwh = netz_a
+            heim_des_autos = pv_a + netz_a
+        # ⭐ N-555 Stufe 2: das `km > 0`-Tor gilt nicht mehr für ein E-Auto, das geladen
+        # hat (Konzept Regel 2, E6): hier stand `if km and km > 0` — ein Auto, das im
+        # Monat geladen hat, aber nicht gefahren ist, verlor still seine Stromrechnung.
+        if (km and km > 0) or heim_des_autos > 0:
             extern_euro = data.get("ladung_extern_euro", 0) or 0
-            if inv.typ == "e-auto":
-                # N-555 (Konzept Regel 2-Ü): die Heimladung DIESES Autos kommt aus
-                # dem Entscheid des Monats — Wallbox-Anteil nach km (wie bisher),
-                # eigene Heim-Felder, Schätzung aus dem Fahrverbrauch oder 0.
-                # Bis 25.09.2026 las diese Zeile die eigene Zeile über die
-                # Lese-Hilfe, und die setzte den Fahrverbrauch still ein, auch
-                # wenn die Wallbox im Monat gemessen 0 geladen hatte.
-                # Ohne übergebenen Entscheid (Einzelaufruf) entscheidet die
-                # Funktion aus dieser Zeile und dem Wallbox-Topf des Aufrufers.
-                entscheid = emob_entscheid or entscheide_emob_heimladung(
-                    eauto_je_inv={inv.id: data},
-                    wallbox_zeilen=[{
-                        "ladung_kwh": emob_pool_attr.wb_pool_pv + emob_pool_attr.wb_pool_netz,
-                        "ladung_pv_kwh": emob_pool_attr.wb_pool_pv,
-                    }] if emob_pool_attr.use_wb_pool else [],
-                )
-                share = None
-                if entscheid.quelle == QUELLE_WALLBOX:
-                    share = attribute_emob_pool_by_km(emob_pool_attr, km)
-                    if share.netz_kwh + share.pv_kwh > 0:
-                        # Wallbox-Pool-Override für evcc-Setups (Ladedaten auf
-                        # der Wallbox-IMD, nur km am E-Auto). N-555 F-5: Extern
-                        # nach der Topf-Regel (höhere Kosten), nicht blind der
-                        # Wallbox-Anteil — sonst fiel das Extern des Autos weg.
-                        _, extern_euro = waehle_extern_paar(
-                            share.extern_kwh, share.extern_euro,
-                            data.get("ladung_extern_kwh", 0) or 0, extern_euro,
-                        )
-                pv_a, netz_a = heimladung_des_autos(
-                    entscheid, inv.id, data, wallbox_anteil=share,
-                )
-                ladung_pv = pv_a or None
-                netz_kwh = netz_a
+            if inv.typ == "e-auto" and entscheid.quelle == QUELLE_WALLBOX:
+                share = attribute_emob_pool_by_km(emob_pool_attr, km)
+                if share.netz_kwh + share.pv_kwh > 0:
+                    # N-555 F-5: Extern nach der Topf-Regel (höhere Kosten), nicht
+                    # blind der Wallbox-Anteil — sonst fiel das Extern des Autos weg.
+                    _, extern_euro = waehle_extern_paar(
+                        share.extern_kwh, share.extern_euro,
+                        data.get("ladung_extern_kwh", 0) or 0, extern_euro,
+                    )
             eauto_result = berechne_eauto_ersparnis(
                 km_gefahren=km,
                 ladung_netz_kwh=max(0, netz_kwh),

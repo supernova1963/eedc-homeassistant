@@ -107,16 +107,28 @@ def test_ohne_lookup_und_ohne_params_nimmt_kanon_default():
 
 
 def test_keine_km_im_zeitraum_liefert_null_ergebnis():
+    """⚑ N-555 Stufe 2 (26.09.2026, Konzept Heimladung/Fahrverbrauch Regel 2, E6): ohne km
+    gibt es keinen vermiedenen Verbrenner (Benzin 0), aber die **Stromrechnung bleibt** —
+    ein Auto, das geladen hat und nicht gefahren ist, trägt sie. Bis dahin stand hier
+    „wird ignoriert wenn km=0" und die Probe verlangte 0 € Stromkosten; sie war nur wahr,
+    weil die Funktion genau das `km > 0`-Tor trug, das E6 beseitigt. Substanz gehalten:
+    ohne km keine Benzinkosten; ohne Ladung bleibt alles 0 (zweiter Teil).
+    """
     erg = berechne_eauto_ersparnis_periode(
         km_pro_monat=[],
-        ladung_netz_kwh_gesamt=50.0,  # wird ignoriert wenn km=0
+        ladung_netz_kwh_gesamt=50.0,
         ladung_extern_euro_gesamt=10.0,
         wallbox_strompreis_cent=30.0,
         eauto_parameter={"vergleich_verbrauch_l_100km": 7.5},
     )
-    assert erg.ersparnis_euro == 0.0
     assert erg.benzin_kosten_euro == 0.0
-    assert erg.strom_kosten_euro == 0.0
+    assert erg.strom_kosten_euro == 25.0   # 50 kWh × 30 ct + 10 € extern
+    assert erg.ersparnis_euro == -25.0
+    leer = berechne_eauto_ersparnis_periode(
+        km_pro_monat=[], ladung_netz_kwh_gesamt=0.0, ladung_extern_euro_gesamt=0.0,
+        wallbox_strompreis_cent=30.0, eauto_parameter={"vergleich_verbrauch_l_100km": 7.5},
+    )
+    assert (leer.ersparnis_euro, leer.benzin_kosten_euro, leer.strom_kosten_euro) == (0.0, 0.0, 0.0)
 
 
 def test_monate_mit_km_0_oder_negativ_werden_uebersprungen():

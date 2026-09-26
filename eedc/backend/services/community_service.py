@@ -633,12 +633,33 @@ def _monatswert(
         if emob.v2h_entladung_kwh > 0:
             monatswert_data["eauto_v2h_kwh"] = round(emob.v2h_entladung_kwh, 1)
 
+    # ⭐ N-555 Stufe 2 (Konzept Heimladung/Fahrverbrauch 7.2, Community E3): das
+    # Wallbox-Feld trägt, was sein Vertrag verlangt — nur die **private** Ladung
+    # („nur privat genutzte Fahrzeuge", `eedc-community/backend/schemas.py`). Der Server
+    # ändert sich nicht.
+    # * kWh und PV um die gemessenen Dienstwagen gekürzt (sonst bildete der Server aus
+    #   gekürzter kWh und ungekürzter PV einen PV-Anteil über 100 %);
+    # * ≤ 0 ⇒ Feld weglassen (ein negativer Wert scheiterte am Schema `ge=0` und wiese
+    #   den ganzen Submit ab);
+    # * ein Dienstwagen ohne eigene Messung neben einer privaten Wallbox in Betrieb ⇒
+    #   Wallbox-Feld weglassen (wo er lädt, ist nicht feststellbar);
+    # * Ladevorgänge weglassen, sobald ein Dienstwagen an der privaten Wallbox geladen
+    #   haben kann (in Betrieb, keine dienstliche Wallbox) — nicht aufteilbar.
+    # Die E-Auto-Seite oben bleibt unverändert (nur private Messwerte, keine Schätzung).
     wallbox = emob.wallbox_summe_gemessen
-    if wallbox.ladung_kwh > 0:
-        monatswert_data["wallbox_ladung_kwh"] = round(wallbox.ladung_kwh, 1)
-        if wallbox.pv_kwh > 0:
-            monatswert_data["wallbox_ladung_pv_kwh"] = round(wallbox.pv_kwh, 1)
-        if wallbox.ladevorgaenge > 0:
+    dienst_pv = emob.dienstlich_gemessen_pv_kwh
+    dienst_gesamt = dienst_pv + emob.dienstlich_gemessen_netz_kwh
+    wb_privat = wallbox.ladung_kwh - dienst_gesamt
+    wb_privat_pv = min(max(0.0, wallbox.pv_kwh - dienst_pv), max(0.0, wb_privat))
+    dienstwagen_unbekannt = bool(emob.dienstwagen_ungemessen) and emob.wallbox_in_betrieb
+    if wb_privat > 0 and not dienstwagen_unbekannt:
+        monatswert_data["wallbox_ladung_kwh"] = round(wb_privat, 1)
+        if wb_privat_pv > 0:
+            monatswert_data["wallbox_ladung_pv_kwh"] = round(wb_privat_pv, 1)
+        dienstwagen_kann_laden = (
+            emob.dienstwagen_in_betrieb and not emob.dienstliche_wallbox_in_betrieb
+        )
+        if wallbox.ladevorgaenge > 0 and not dienstwagen_kann_laden:
             monatswert_data["wallbox_ladevorgaenge"] = int(wallbox.ladevorgaenge)
 
     # BKW: der GEMESSENE Eigenverbrauch, nicht der aus der Hausbilanz

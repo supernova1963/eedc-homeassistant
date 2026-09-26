@@ -114,7 +114,14 @@ async def test_emob_quellenwahl_ist_strukturell_nicht_magnitudenabhaengig(db):
     await db.commit()
 
     res = await get_aktueller_monat(anlage_id=anlage.id, jahr=JAHR, monat=MONAT, db=db)
-    assert res.emob_ladung_netz_kwh == 50.0
+    # ⚑ N-555 Stufe 2 (26.09.2026, Konzept Regel 2 Schritt 1, E2): das Auto trägt „Heim:
+    # PV/Netz" — seine eigene Messung zählt auch neben der Wallbox (Phase 2a /
+    # Entscheidung 1 ist gedreht, Konzept Anhang C „Modellwechsel 24.09."). Autos (400)
+    # übersteigen die Wallbox (124) ⇒ Rest 0; eedc rechnet mit den erfassten Werten weiter,
+    # der Daten-Checker meldet den Widerspruch (Regel 7). Bis Stufe 1 stand hier 50 (die
+    # Wallbox). Die Substanz — die Route erbt die EINE Regel statt einer eigenen — bleibt:
+    # derselbe Wert wie die Monats-Fakten.
+    assert res.emob_ladung_netz_kwh == 300.0
 
 
 async def test_emob_netzanteil_ohne_wallbox_unveraendert(db):

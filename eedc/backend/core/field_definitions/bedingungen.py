@@ -8,6 +8,7 @@
 from typing import Final, Optional
 from backend.core.investition_parameter import (
     ist_brauchwasser_waermepumpe,
+    ist_dienstlich,
     ist_luft_luft_waermepumpe,
 )
 from backend.core.betriebsmodus import (
@@ -118,14 +119,17 @@ FELD_BEDARF: dict[tuple[str, str], tuple[str, Optional[str]]] = {
 
     # ── E-Auto ──────────────────────────────────────────────────────────────
     # Kilometer sind der Bezugswert für Effizienz und Benzin-Vergleich.
-    # Die Heimladungs-Felder sind bei vorhandener Wallbox verdrängt
-    # (`bedingung_anlage: keine_wallbox`) — das wertet die Fläche selbst aus.
+    # Die Heimladungs-Felder gibt es seit N-555 Stufe 2 an jedem E-Auto; nur ein
+    # Dienstwagen neben einer dienstlichen Wallbox bekommt sie nicht
+    # (`bedingung_anlage: keine_dienstliche_wallbox`) — das wertet die Fläche selbst aus.
     ("e-auto", "km_gefahren"): ("pflicht", None),
     # #407: der Stand ist Hilfe, nicht Pflicht — wer die Menge kennt, trägt sie ein.
     ("e-auto", "km_stand"): ("optional", None),
     ("e-auto", "verbrauch_kwh"): ("optional", None),
     ("e-auto", "ladung_pv_kwh"): ("optional", None),
     ("e-auto", "ladung_netz_kwh"): ("optional", None),
+    # N-555 Stufe 2: „Heim: gesamt" (E5) — optional wie die beiden Teile.
+    ("e-auto", "ladung_kwh"): ("optional", None),
     ("e-auto", "ladung_extern_kwh"): ("optional", None),
     ("e-auto", "ladung_extern_euro"): ("optional", None),
     ("e-auto", "v2h_entladung_kwh"): ("optional", None),
@@ -362,13 +366,77 @@ URTEIL_NEIN: Final[str] = "nein"
 #: ⚑ `bedingung` und `weich` hatten ihren Auswerter längst (`bedingungs_urteil`),
 #: `label_wenn` wird an genau einer Stelle gelesen — `bedingung_anlage` war der
 #: einzige Schlüssel der Registry ohne SoT.
+#: Pseudo-Typ für die Anlagen-Typenmenge (N-555 Stufe 2, Konzept Regel 3 + 8): eine
+#: **dienstliche Wallbox in Betrieb**. Sie ist die dienstliche Ladung; die Heim-Felder
+#: und die Schätzung eines Dienstwagens zählen daneben nicht (die eine Funktion
+#: ``entscheide_emob_heimladung`` entscheidet das, nicht das Formular — das Formular
+#: bietet die Felder dort nur nicht an). Er steht in der Typenmenge nur, wenn
+#: ``anlage_typen_mit_kontext`` ihn setzt.
+TYP_DIENSTLICHE_WALLBOX: Final[str] = "wallbox:dienstlich"
+
 BEDINGUNG_ANLAGE_VERDRAENGT: Final[dict[str, str]] = {
+    # Bis 26.09.2026 an „Heim: PV/Netz" des E-Autos (Phase 2a). Seit N-555 Stufe 2
+    # von keinem Feld mehr benutzt — der Wert bleibt im Vokabular, damit die Regel
+    # wieder gesetzt werden kann, ohne sie neu herzuleiten.
     "keine_wallbox": "wallbox",
     # Von keinem Feld mehr benutzt (s. Kasten bei `ladung_pv_kwh`: die Bedingung
     # ist 2026 bewusst entfallen) — der Wert bleibt im Vokabular, damit die
     # Regel wieder gesetzt werden kann, ohne sie neu herzuleiten.
     "keine_pv_module": "pv-module",
+    # N-555 Stufe 2: die Heim-Felder eines DIENSTWAGENS neben einer dienstlichen
+    # Wallbox in Betrieb. Gilt nur für einen Dienstwagen — ``bedingung_anlage_fuer``
+    # nimmt die Bedingung an einem privaten Auto heraus.
+    "keine_dienstliche_wallbox": TYP_DIENSTLICHE_WALLBOX,
 }
+
+#: Bedingungen, die nur an einem **Dienstwagen** greifen (``bedingung_anlage_fuer``).
+_NUR_AM_DIENSTWAGEN: Final[frozenset[str]] = frozenset({"keine_dienstliche_wallbox"})
+
+
+def bedingung_anlage_fuer(bedingung_anlage, parameter) -> Optional[str]:
+    """Die ``bedingung_anlage`` eines Felds, wie sie an DIESEM Gerät gilt.
+
+    ``keine_dienstliche_wallbox`` gilt nur an einem Dienstwagen (Konzept Regel 3): ein
+    privates Auto neben einer dienstlichen Wallbox behält seine Heim-Felder. Alle anderen
+    Werte gelten unabhängig vom Gerät. Gibt ``None`` zurück, wenn am Gerät nichts gilt.
+    """
+    if not bedingung_anlage:
+        return None
+    if bedingung_anlage in _NUR_AM_DIENSTWAGEN and not ist_dienstlich(parameter):
+        return None
+    return bedingung_anlage
+
+
+def _in_betrieb(inv, jahr: Optional[int], monat: Optional[int]) -> bool:
+    """Regel 0: in Betrieb im betrachteten Monat — ohne Zeitraum: heute."""
+    if jahr is not None and monat is not None and hasattr(inv, "ist_aktiv_im_monat"):
+        return bool(inv.ist_aktiv_im_monat(jahr, monat))
+    if hasattr(inv, "ist_aktiv_an"):
+        from datetime import date as _date
+        return bool(inv.ist_aktiv_an(_date.today()))
+    return True  # Proben mit Platzhalter-Objekten: ohne Laufzeit gilt das Gerät
+
+
+def anlage_typen_mit_kontext(
+    anlage_investitionen, *, jahr: Optional[int] = None, monat: Optional[int] = None,
+) -> set:
+    """Die Typenmenge der Anlage für ``bedingung_anlage`` — mit den Pseudo-Typen.
+
+    Die Investitionstypen, dazu ``TYP_DIENSTLICHE_WALLBOX``, wenn eine dienstliche
+    Wallbox **in Betrieb** ist (Regel 0: im betrachteten Monat; wo kein Zeitraum da ist —
+    CSV-Vorlage, Datenquellen-Fläche —, heute). Der eine Ort für beide Auswerter
+    (``get_felder_fuer_investition`` und die Datenquellen-Fläche).
+    """
+    invs = list(anlage_investitionen or ())
+    typen = {getattr(i, "typ", None) for i in invs}
+    if any(
+        getattr(i, "typ", None) == "wallbox"
+        and ist_dienstlich(getattr(i, "parameter", None))
+        and _in_betrieb(i, jahr, monat)
+        for i in invs
+    ):
+        typen.add(TYP_DIENSTLICHE_WALLBOX)
+    return typen
 
 def verdraengender_typ(bedingung_anlage) -> Optional[str]:
     """Welcher Investitionstyp verdrängt ein Feld mit dieser `bedingung_anlage`?

@@ -60,3 +60,58 @@ def traegt_heimlade_wert(typ: Optional[str], daten: Optional[Mapping]) -> bool:
     if not daten:
         return False
     return any(daten.get(f) is not None for f in HEIMLADE_FELDER.get(typ or "", ()))
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# N-555 Stufe 2 — „Heim: gesamt" oder alter Gesamtwert? (Regel 8, E5, Fable-Runde 7)
+# ═════════════════════════════════════════════════════════════════════════════
+#
+# „Heim: gesamt" liegt auf dem BESTEHENDEN Schlüssel ``ladung_kwh`` am E-Auto. Derselbe
+# Schlüssel trägt im Bestand den **alten Gesamtwert**: die Umbuchungen der Startroutine vom
+# 01.05. bis 09.05.2026 (Herkunft ``legacy:unknown``, nicht von echten alten Ladungen zu
+# unterscheiden, Regel 5) und Werte ohne jeden Herkunftseintrag. Die Rückbenennung (Stufe 1)
+# prüft allein die Herkunft (``migrate_eauto_fahrverbrauch_rueckbenennung.py``), jeder
+# persistente Schreibweg stempelt ``verbrauch_daten.ladung_kwh`` (Formular, „Aus HA laden",
+# Import, Wiederherstellung). Deshalb entscheidet die **Herkunft zur Lesezeit**, kein
+# Bestand wird angefasst:
+#
+# * Herkunft ``legacy:unknown`` oder keine ⇒ alter Gesamtwert — zählt nur **ohne** Wallbox in
+#   Betrieb (wie in Stufe 1).
+# * jede andere Herkunft (``manual:form``, ``ha_statistics``, Import, Sicherung) ⇒
+#   „Heim: gesamt" — zählt für dieses Auto, auch neben einer Wallbox.
+#
+# ⚠ Die Antwort wandert als **Menge von Investitions-IDs** zur einen Funktion
+# (``entscheide_emob_heimladung(heim_gesamt=…)``), nicht als Marke in der Monatszeile: die
+# Zeilen gehen in API-Antworten (E-Auto-Hub-Tabelle) und bleiben an Sessions gebundene
+# JSON-Felder — eine Lesezeit-Marke darin wäre ein Leck in beide Richtungen.
+
+#: Der Herkunftsschlüssel, den jeder persistente Schreibweg für ``ladung_kwh`` setzt.
+HERKUNFT_LADUNG_KWH = "verbrauch_daten.ladung_kwh"
+
+#: Herkünfte, die den alten Gesamtwert kennzeichnen (Initial-Provenance vom 09.05.2026).
+ALTWERT_HERKUNFT: frozenset[str] = frozenset({"legacy:unknown"})
+
+
+def herkunft_quelle(source_provenance: Optional[Mapping], schluessel: str) -> Optional[str]:
+    """Die ``source`` des Herkunftseintrags ``schluessel`` — ``None`` ohne Eintrag."""
+    if not source_provenance:
+        return None
+    eintrag = source_provenance.get(schluessel)
+    if eintrag is None:
+        return None
+    if isinstance(eintrag, Mapping):
+        quelle = eintrag.get("source")
+        return str(quelle) if quelle else None
+    return str(eintrag)
+
+
+def ist_heim_gesamt(daten: Optional[Mapping], source_provenance: Optional[Mapping]) -> bool:
+    """Ist ``ladung_kwh`` dieser E-Auto-Zeile „Heim: gesamt" (und kein alter Gesamtwert)?
+
+    ``True`` nur, wenn die Zeile einen Wert trägt (auch 0) **und** dessen Herkunft weder fehlt
+    noch ``legacy:unknown`` ist.
+    """
+    if not daten or daten.get("ladung_kwh") is None:
+        return False
+    quelle = herkunft_quelle(source_provenance, HERKUNFT_LADUNG_KWH)
+    return quelle is not None and quelle not in ALTWERT_HERKUNFT

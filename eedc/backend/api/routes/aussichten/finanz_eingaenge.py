@@ -21,12 +21,11 @@ from backend.services.strompreis_aggregator import lade_preis_aggregate_je_monat
 from backend.services.monats_fakten import lade_monats_fakten
 from backend.core.field_definitions import get_wp_strom_kwh
 from backend.services.eauto_wirtschaftlichkeit import (
-    build_emob_pool_ctx,
     eigener_verbrauch_l_100km,
     emob_heimladung_im_monat,
+    monate_des_autos,
 )
-from backend.services.emob_ladeanteil import reichere_monatszeilen_an_mit_quoten
-from backend.services.emob_heimlade_quellen import laufende_heimlade_quellen
+from backend.services.emob_kontext import lade_emob_kontext
 from backend.core.investition_parameter import (
     PARAM_E_AUTO,
     PARAM_E_AUTO_DEFAULTS,
@@ -94,7 +93,8 @@ async def lade_finanz_eingaenge(*, anlage, anlage_id, db):
             )
         )
         # #236: IMD vor anschaffungs- / nach stilllegungsdatum überspringen
-        for imd in result.scalars().all():
+        _imd_objekte = result.scalars().all()
+        for imd in _imd_objekte:
             inv_hist = inv_by_id_hist.get(imd.investition_id)
             if not inv_hist or not inv_hist.ist_aktiv_im_monat(imd.jahr, imd.monat):
                 continue
@@ -109,53 +109,24 @@ async def lade_finanz_eingaenge(*, anlage, anlage_id, db):
     # Prognose schriebe die ungeteilte Historie fort. Angereichert wird an genau
     # DIESER Stelle, weil sechs Lesestellen weiter unten aus derselben Map
     # schöpfen — eine je Lesestelle wäre die Kopie, die N-181 beschreibt.
-    _emob_keys = [
-        key
-        for key in historische_inv_daten
-        if (_inv := inv_by_id_hist.get(key[0])) is not None
-        and _inv.typ in ("e-auto", "wallbox")
-        and not ist_dienstlich(_inv)
-    ]
-    _emob_quoten: dict = {}
-    if _emob_keys:
-        _emob_daten, _emob_quoten = await reichere_monatszeilen_an_mit_quoten(
-            db,
-            anlage_id,
-            [
-                (
-                    (jahr, monat),
-                    inv_by_id_hist[inv_id].typ == "wallbox",
-                    historische_inv_daten[(inv_id, jahr, monat)],
-                )
-                for (inv_id, jahr, monat) in _emob_keys
-            ],
-        )
-        for key, daten in zip(_emob_keys, _emob_daten):
-            historische_inv_daten[key] = daten
-
+    #
     # F-17: Wallbox-Pool-Attribution — die Lücke, die diese Route als EINZIGE
     # der fünf E-Mob-Sichten hatte. Bei einem evcc-Setup liegt die Heimladung
     # auf der *Wallbox*; die Schleifen unten filtern aber auf `inv_id == ea.id`
-    # und sahen deshalb null Ladung. Folge auf beiden Achsen: die historische
-    # Ersparnis zog **gar keine** Netz-Stromkosten ab, und `netz_anteil` fiel
-    # in der Prognose auf den 0,5-Default, weil PV und Netz beide 0 waren.
-    # An Gernots Anlage (Mär–Jul 2026, ausschließlich Sensordaten gemessen):
-    # 0 statt 126,23 kWh Netz und 0 statt 619,77 kWh PV.
-    _private_wallboxen = [
-        i for i in inv_by_id_hist.values() if i.typ == "wallbox" and not ist_dienstlich(i)
-    ]
-    emob_pool_ctx = build_emob_pool_ctx(
-        historische_inv_daten,
-        {i.id for i in inv_by_id_hist.values() if i.typ == "e-auto" and not ist_dienstlich(i)},
-        {i.id for i in _private_wallboxen},
-        # N-555: der Entscheid je Monat braucht „Wallbox in Betrieb" und die Quote
-        # der Schätzung (Konzept Regel 2-Ü, Regel 6).
-        wallbox_in_betrieb=lambda j, m: any(w.ist_aktiv_im_monat(j, m) for w in _private_wallboxen),
-        quoten=_emob_quoten,
-        quellen_je_monat=await laufende_heimlade_quellen(
-            db, anlage_id, list(inv_by_id_hist.values()),
-        ),
+    # und sahen deshalb null Ladung. An Gernots Anlage (Mär–Jul 2026,
+    # ausschließlich Sensordaten gemessen): 0 statt 126,23 kWh Netz und 0 statt
+    # 619,77 kWh PV.
+    #
+    # N-555 Stufe 2: beides kommt aus dem einen Kontext (`services/emob_kontext.py`) —
+    # mit Dienstwagen, dienstlicher Wallbox, Herkunft von „Heim: gesamt" und den
+    # Quellen des laufenden Monats (Konzept Regel 2, 3, 8).
+    _emob_kontext = await lade_emob_kontext(
+        db, anlage_id, alle_investitionen, _imd_objekte if inv_ids else [],
     )
+    for _key, _daten in _emob_kontext.daten.items():
+        if _key in historische_inv_daten:
+            historische_inv_daten[_key] = _daten
+    emob_pool_ctx = _emob_kontext.ctx
 
     # Monatsdaten für Eigenverbrauch etc.
     result = await db.execute(
@@ -218,8 +189,10 @@ async def lade_finanz_eingaenge(*, anlage, anlage_id, db):
     # (Vergleichsverbrauch, JAZ) — dafür reicht die Monatssumme nicht.
     eauto_pv_pro_inv: dict[int, float] = {}
     for ea in e_autos:
-        for (inv_id, jahr, monat), daten in historische_inv_daten.items():
-            if inv_id == ea.id and ea.ist_aktiv_im_monat(jahr, monat):
+        inv_id = ea.id
+        # N-555 Stufe 2: auch die Monate ohne Zeile mit Rest der Wallbox (Regel 2 Schritt 3).
+        for jahr, monat, daten in monate_des_autos(emob_pool_ctx, ea.id, historische_inv_daten):
+            if ea.ist_aktiv_im_monat(jahr, monat):
                 # N-199/F-17/N-555: die Heimladung DIESES Autos im Monat nach dem
                 # Entscheid der einen Funktion — Wallbox-Anteil nach km, eigene
                 # Heim-Felder (über den SoT-Leser, `Total − PV` bei evcc), die

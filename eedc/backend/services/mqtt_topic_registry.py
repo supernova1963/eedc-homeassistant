@@ -23,6 +23,7 @@ from backend.core.field_definitions import (
     BASIS_LIVE_FELDER,
     BEDARF_GRUPPEN_ALTERNATIV,
     basis_feld_key,
+    bedingung_anlage_fuer,
     einheit_fuer,
     get_alle_felder_fuer_investition,
     get_feld_bedarf,
@@ -273,7 +274,11 @@ async def build_expected_topics(
                 # Feld muss sichtbar bleiben, sonst lässt sich die Zuordnung
                 # nicht mehr entfernen. Die Fläche entscheidet (routes/datenquellen.py).
                 "bedingung": feld.get("bedingung"),
-                "bedingung_anlage": feld.get("bedingung_anlage"),
+                # N-555 Stufe 2: an DIESEM Gerät aufgelöst — `keine_dienstliche_wallbox`
+                # gilt nur an einem Dienstwagen (`bedingung_anlage_fuer`).
+                "bedingung_anlage": bedingung_anlage_fuer(
+                    feld.get("bedingung_anlage"), inv.parameter,
+                ),
                 "nur_manuell": bool(feld.get("nur_manuell")),
                 "gruppe_id": gruppe_id,
                 "gruppe_titel": gruppe_titel,

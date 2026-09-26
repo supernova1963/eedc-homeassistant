@@ -5,7 +5,7 @@
 # alle Namen weiter, die Aufrufer und Tests bisher aus dem Modul importierten.
 
 from typing import Final, Optional
-from backend.core.field_definitions.bedingungen import URTEIL_ERWEITERT, URTEIL_NEIN, _bedingungs_werte, _ist_geraeteklasse, _label_aufgeloest, bedingungs_urteil, verdraengender_typ
+from backend.core.field_definitions.bedingungen import URTEIL_ERWEITERT, URTEIL_NEIN, _bedingungs_werte, _ist_geraeteklasse, _label_aufgeloest, anlage_typen_mit_kontext, bedingung_anlage_fuer, bedingungs_urteil, verdraengender_typ
 from backend.core.field_definitions.keys import _mit_innengeraeten, basis_feld_key
 from backend.core.field_definitions.registry import BASIS_FELDER, BEDINGTE_BASIS_FELDER, INVESTITION_FELDER, LIVE_FELDER_INV, OPTIONALE_FELDER
 
@@ -54,6 +54,8 @@ def get_felder_fuer_investition(
     parameter: Optional[dict],
     anlage_investitionen: Optional[list] = None,
     belegte_felder: Optional[set[str]] = None,
+    jahr: Optional[int] = None,
+    monat: Optional[int] = None,
 ) -> list[dict]:
     """
     Gibt die relevanten Felder für eine Investition zurück (Bedingungen aufgelöst).
@@ -79,6 +81,9 @@ def get_felder_fuer_investition(
                         sagt der zugeordnete Zähler, nicht seine Bauart."* Ohne
                         das Argument (Import, Checker) bleibt es beim harten
                         Bild — dort ändert sich nichts.
+        jahr, monat: Der betrachtete Monat (Monatsabschluss) — „in Betrieb" einer
+                     verdrängenden Investition gilt dann für ihn (N-555 Stufe 2,
+                     Konzept Regel 0). Ohne: heute.
 
     Returns:
         Liste von Feld-Dicts ohne "bedingung"-Keys (bereits aufgelöst)
@@ -94,7 +99,10 @@ def get_felder_fuer_investition(
     # Anlage-Kontext vorberechnen (einmalig, nicht pro Feld)
     anlage_typen: set[str] = set()
     if anlage_investitionen is not None:
-        anlage_typen = {getattr(i, "typ", None) for i in anlage_investitionen}
+        # N-555 Stufe 2: mit dem Pseudo-Typ „dienstliche Wallbox in Betrieb".
+        anlage_typen = anlage_typen_mit_kontext(
+            anlage_investitionen, jahr=jahr, monat=monat,
+        )
 
     result = []
     bedingungs_werte = _bedingungs_werte(params)
@@ -114,7 +122,8 @@ def get_felder_fuer_investition(
         if feld.get("nur_bestand"):
             continue
         bedingung = feld.get("bedingung")
-        bedingung_anlage = feld.get("bedingung_anlage")
+        # N-555 Stufe 2: `keine_dienstliche_wallbox` gilt nur an einem Dienstwagen.
+        bedingung_anlage = bedingung_anlage_fuer(feld.get("bedingung_anlage"), params)
 
         # ── Anlage-Kontext-Bedingung ─────────────────────────────────────────
         # Hier wird gefiltert (Monatsabschluss/Import-Kontext). Die Datenquellen-

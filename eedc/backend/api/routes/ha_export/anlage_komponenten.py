@@ -38,13 +38,12 @@ from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import InvestitionMonatsdaten
 from backend.core.investition_parameter import PARAM_E_AUTO, PARAM_E_AUTO_DEFAULTS, ist_dienstlich
 from backend.core.calculations import berechne_co2_bilanz
-from backend.services.emob_heimlade_quellen import laufende_heimlade_quellen
+from backend.services.emob_kontext import lade_emob_kontext
 from backend.api.routes.ha_export.emob import (
-    _build_emob_pool_ctx,
     _emob_extern_im_monat,
     _emob_heimladung_im_monat,
-    _reichere_emob_imd_an_mit_quoten,
 )
+from backend.services.eauto_wirtschaftlichkeit import monate_des_autos
 
 
 async def historische_komponenten(*, _tarife, anlage, db, investitionen, monatsdaten, strompreis):
@@ -62,10 +61,6 @@ async def historische_komponenten(*, _tarife, anlage, db, investitionen, monatsd
         i for i in investitionen
         if i.typ == "e-auto" and not ist_dienstlich(i)
     ]
-    wallboxen = [
-        i for i in investitionen
-        if i.typ == "wallbox" and not ist_dienstlich(i)
-    ]
 
     # IMD vor anschaffungsdatum / nach stilllegungsdatum überspringen (#236):
     # Sonst fließen Werte in HA-Sensor-Aggregate ein, obwohl die Komponente
@@ -78,7 +73,8 @@ async def historische_komponenten(*, _tarife, anlage, db, investitionen, monatsd
             select(InvestitionMonatsdaten)
             .where(InvestitionMonatsdaten.investition_id.in_(inv_ids))
         )
-        for imd in imd_alle.scalars().all():
+        _imd_objekte = imd_alle.scalars().all()
+        for imd in _imd_objekte:
             inv = inv_by_id_export.get(imd.investition_id)
             if not inv or not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
                 continue
@@ -86,41 +82,18 @@ async def historische_komponenten(*, _tarife, anlage, db, investitionen, monatsd
                 imd.verbrauch_daten or {}
             )
 
-    # F-16: die E-Mob-Zeilen bekommen ihren abgeleiteten PV-Anteil, bevor
-    # irgendetwas daraus gerechnet wird — der Pool-Kontext unten und die
-    # Ersparnis-Schleife weiter unten schöpfen beide aus dieser Map.
-    _emob_ids = {
-        i.id for i in investitionen
-        if i.typ in ("e-auto", "wallbox") and not ist_dienstlich(i)
-    }
-    _emob_quoten: dict = {}
-    if _emob_ids:
-        _angereichert, _emob_quoten = await _reichere_emob_imd_an_mit_quoten(
-            db,
-            anlage.id,
-            {
-                key: daten
-                for key, daten in historische_inv_daten.items()
-                if key[0] in _emob_ids
-            },
-            {w.id for w in wallboxen},
-        )
-        historische_inv_daten.update(_angereichert)
-
-    # Phase 2a: Emob-Pool-Kontext aus den bereits aktiv-gefilterten IMD bauen.
-    # Liegt die Heimladung kanonisch auf der Wallbox (evcc), zieht die
-    # E-Auto-Ersparnis unten den km-anteiligen Wallbox-Netz-Anteil statt des
-    # (leeren) E-Auto-Netz — sonst würde `bisherige_eauto_ersparnis` keinen
-    # Netzstrom abziehen und die Ersparnis überhöhen.
-    emob_ctx = _build_emob_pool_ctx(
-        historische_inv_daten,
-        {e.id for e in e_autos},
-        {w.id for w in wallboxen},
-        # N-555: Entscheid je Monat (Wallbox in Betrieb, Quote der Schätzung).
-        wallbox_in_betrieb=lambda j, m: any(w.ist_aktiv_im_monat(j, m) for w in wallboxen),
-        quoten=_emob_quoten,
-        quellen_je_monat=await laufende_heimlade_quellen(db, anlage.id, investitionen),
+    # F-16 + Phase 2a + N-555: die E-Mob-Zeilen mit abgeleitetem PV-Anteil und der
+    # Entscheid je Monat aus dem einen Kontext (`services/emob_kontext.py`) — mit
+    # Dienstwagen, dienstlicher Wallbox, Herkunft von „Heim: gesamt" und den Quellen des
+    # laufenden Monats (Konzept Regel 2, 3, 8). Der Pool-Kontext und die
+    # Ersparnis-Schleife unten schöpfen beide aus dieser Map.
+    _emob_kontext = await lade_emob_kontext(
+        db, anlage.id, investitionen, _imd_objekte if inv_ids else [],
     )
+    for _key, _daten in _emob_kontext.daten.items():
+        if _key in historische_inv_daten:
+            historische_inv_daten[_key] = _daten
+    emob_ctx = _emob_kontext.ctx
 
     netzbezug_preis_cent = (
         strompreis.netzbezug_arbeitspreis_cent_kwh if strompreis else 30.0
@@ -278,9 +251,10 @@ def alternativkosten_und_co2(
             PARAM_E_AUTO["VERGLEICH_VERBRAUCH_L_100KM"],
             PARAM_E_AUTO_DEFAULTS["vergleich_verbrauch_l_100km"],
         ) or PARAM_E_AUTO_DEFAULTS["vergleich_verbrauch_l_100km"]
-        for (inv_id, jahr, monat), daten in historische_inv_daten.items():
-            if inv_id != ea.id:
-                continue
+        inv_id = ea.id
+        # N-555 Stufe 2: auch die Monate ohne Zeile, in denen das Auto Rest der Wallbox
+        # bekommt (`monate_des_autos`, Konzept Regel 2 Schritt 3).
+        for jahr, monat, daten in monate_des_autos(emob_ctx, ea.id, historische_inv_daten):
             km = daten.get("km_gefahren", 0) or 0
             # #262/Phase 2a/N-555: Netz DIESES Autos nach dem Entscheid des
             # Monats — Wallbox-Anteil nach km, eigene Heim-Felder, Schätzung, 0.
@@ -314,7 +288,10 @@ def alternativkosten_und_co2(
     emob_posten: list[ErsparnisPosten] = []
     for ea in e_autos:
         km_pro_monat = _ea_km_pro_monat.get(ea.id, [])
-        if not km_pro_monat:
+        # ⭐ N-555 Stufe 2 (Konzept Regel 2, E6): hier stand `if not km_pro_monat` — ein
+        # Auto, das geladen hat, aber nie gefahren ist, verlor still seine Stromrechnung
+        # (dasselbe `km > 0`-Tor wie in der Übersicht).
+        if not km_pro_monat and not _ea_netz_pro_monat.get(ea.id):
             continue
         _erg = berechne_eauto_ersparnis_periode(
             km_pro_monat=km_pro_monat,
@@ -339,7 +316,11 @@ def alternativkosten_und_co2(
         emob_posten.append(ErsparnisPosten(
             bezeichnung=f"E-Auto {ea.bezeichnung}",
             summe_euro=_erg.ersparnis_euro,
-            monate=len({(j, m) for (j, m, _km) in km_pro_monat}),
+            # N-555 Stufe 2: ein Auto ganz ohne km (E6) zählt die Monate seiner
+            # Netzladung; sonst unverändert die km-Monate (F-20).
+            monate=len({(j, m) for (j, m, _km) in km_pro_monat}) or len(
+                {(j, m) for (j, m, _n) in _ea_netz_pro_monat.get(ea.id, [])}
+            ),
         ))
         eigener_l = eigener_verbrauch_l_100km(ea.parameter)
         if eigener_l is not None and _erg.km_verbrenner > 0:

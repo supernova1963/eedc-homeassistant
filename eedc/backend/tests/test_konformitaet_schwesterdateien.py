@@ -154,7 +154,6 @@ _BASELINE: frozenset[str] = frozenset({
     "test_daten_checker_connector_monatswert.py",
     "test_daten_checker_custom_import_quelle.py",
     "test_daten_checker_einspeiseverguetung_null.py",
-    "test_daten_checker_emob_pool_pflege.py",
     "test_daten_checker_emob_sensor_doppelmapping.py",
     "test_daten_checker_erfassungsort_positionen.py",
     "test_daten_checker_erzeuger_vor_anlage.py",

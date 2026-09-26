@@ -229,30 +229,46 @@ async def test_drei_f55_faelle_namentlich(db):
 
 
 @pytest.mark.asyncio
-async def test_n302_wallbox_verdraengt_eauto_heimladung_auch_in_der_vorlage(db):
+async def test_n302_die_vorlage_folgt_dem_anlagen_kontext_des_formulars(db):
     """N-302 — die Vorlage bietet an, was der Monatsabschluss auch anbietet.
 
-    Existiert eine Wallbox, ist sie die kanonische Heimladungs-Quelle
-    (`get_emob_heimladung_canonical`) und `bedingung_anlage: keine_wallbox`
-    blendet `ladung_pv_kwh`/`ladung_netz_kwh` am E-Auto aus. Die Vorlage rief
-    `get_felder_fuer_investition` **ohne** `anlage_investitionen` und bot die
-    Spalten trotzdem an — ein Angebot, das die Oberfläche daneben zurücknimmt.
+    ⚑ **Umgestellt am 26.09.2026 (N-555 Stufe 2).** Bis dahin hieß die Probe
+    „Wallbox verdrängt die E-Auto-Heimladung auch in der Vorlage": mit Wallbox blendete
+    `bedingung_anlage: keine_wallbox` „Heim: PV/Netz" am E-Auto aus. Das Konzept
+    Heimladung/Fahrverbrauch (Regel 8) bietet die Heim-Felder seitdem **jedem** E-Auto an,
+    auch neben einer Wallbox (sie ist die Summe, ein Auto mit eigener Messung trägt seine
+    eigene Heimladung). **Die Substanz von N-302 bleibt:** die Vorlage reicht
+    ``anlage_investitionen`` durch und nimmt damit zurück, was das Formular zurücknimmt —
+    jetzt die Heim-Felder eines **Dienstwagens neben einer dienstlichen Wallbox** (Regel 3).
+    Ohne den Anlagen-Kontext böte die Vorlage sie an (die Gegenprobe unten).
 
     Der **Import** nimmt sie weiterhin an: er darf nie still etwas wegwerfen
     (das ist die F-55-Lehre und der Vertrag von
     `get_alle_felder_fuer_investition`). Geprüft wird deshalb nur das Angebot.
     """
-    anlage_id, _ = await _baue_anlage(db, GERAETE)          # MIT Wallbox
+    anlage_id, _ = await _baue_anlage(db, GERAETE)          # MIT (privater) Wallbox
     mit_wb = set((await get_csv_template_info(anlage_id, db)).spalten)
-    assert "EAutoZoe_Ladung_PV_kWh" not in mit_wb
-    assert "EAutoZoe_Ladung_Netz_kWh" not in mit_wb
-    # Die Heimladung verschwindet nicht — sie steht an der Wallbox, dort ist
-    # sie die kanonische Quelle. Und was am E-Auto NICHT verdrängt ist (externe
-    # Ladung, km, V2H), bleibt selbstverständlich erfassbar.
+    # Regel 8: das private Auto trägt seine Heim-Felder auch neben der Wallbox.
+    assert "EAutoZoe_Ladung_PV_kWh" in mit_wb
+    assert "EAutoZoe_Ladung_Netz_kWh" in mit_wb
+    assert "EAutoZoe_Ladung_Heim_kWh" in mit_wb
     assert "WallboxHof_Ladung_kWh" in mit_wb
     assert "WallboxHof_Ladung_PV_kWh" in mit_wb
     assert "EAutoZoe_Ladung_Extern_kWh" in mit_wb
     assert "EAutoZoe_V2H_kWh" in mit_wb
+
+    # Regel 3: Dienstwagen neben einer dienstlichen Wallbox — die Vorlage nimmt zurück.
+    anlage_dw, _ = await _baue_anlage(db, [
+        ("e-auto", "Dienstwagen", {"ist_dienstlich": True}),
+        ("wallbox", "WallboxFirma", {"ist_dienstlich": True}),
+        ("e-auto", "Privat", {}),
+    ])
+    spalten = set((await get_csv_template_info(anlage_dw, db)).spalten)
+    for suffix in ("Ladung_PV_kWh", "Ladung_Netz_kWh", "Ladung_Heim_kWh"):
+        assert f"Dienstwagen_{suffix}" not in spalten, suffix
+        assert f"Privat_{suffix}" in spalten, suffix
+    assert "Dienstwagen_Ladung_Extern_kWh" in spalten
+    assert "WallboxFirma_Ladung_kWh" in spalten
 
 
 @pytest.mark.asyncio

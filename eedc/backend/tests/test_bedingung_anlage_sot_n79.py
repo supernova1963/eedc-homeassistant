@@ -23,6 +23,8 @@ import pytest
 from backend.core.field_definitions import (
     BEDINGUNG_ANLAGE_VERDRAENGT,
     INVESTITION_FELDER,
+    TYP_DIENSTLICHE_WALLBOX,
+    anlage_typen_mit_kontext,
     get_felder_fuer_investition,
     verdraengender_typ,
 )
@@ -86,17 +88,26 @@ def test_ein_unbekannter_wert_verdraengt_nichts():
 
 # ─── Je Auswerter eine eigene Gegenprobe ────────────────────────────────────
 #
-# Beide biegen den SoT für `keine_wallbox` von "wallbox" auf "speicher" um.
-# Liest der Auswerter den SoT, dreht sich das Verhalten mit. Hat er seine eigene
-# Kopie, bleibt er bei "wallbox" — und die Probe wird rot.
+# Beide biegen den SoT um (Registry-Weg: `keine_dienstliche_wallbox` von der
+# dienstlichen Wallbox auf "speicher"; Fläche: `keine_wallbox` von "wallbox" auf
+# "speicher"). Liest der Auswerter den SoT, dreht sich das Verhalten mit. Hat er
+# seine eigene Kopie, bleibt er beim alten Typ — und die Probe wird rot.
+#
+# ⚑ N-555 Stufe 2 (26.09.2026): `ladung_pv_kwh` am E-Auto trägt seitdem
+# `keine_dienstliche_wallbox` statt `keine_wallbox` (Konzept Heimladung/Fahrverbrauch,
+# Regel 3 + 8). Die Gegenprobe des Registry-Wegs läuft deshalb über den Dienstwagen —
+# dieselbe Substanz (der Auswerter liest den SoT), ein anderer Wert.
 
-_FELD = "ladung_pv_kwh"          # e-auto, trägt `bedingung_anlage: keine_wallbox`
-_PARAM = {"laedt_aus_netz": True}
+_FELD = "ladung_pv_kwh"   # e-auto, trägt `bedingung_anlage: keine_dienstliche_wallbox`
+_PARAM = {"laedt_aus_netz": True, "ist_dienstlich": True}
 
 
 def _felder_der_anlage(typen: list[str]) -> set[str]:
     class _Inv:
-        def __init__(self, typ): self.typ = typ
+        def __init__(self, typ):
+            self.typ = typ
+            # `wallbox` ist hier die DIENSTLICHE Wallbox (sie verdrängt am Dienstwagen).
+            self.parameter = {"ist_dienstlich": typ == "wallbox"}
     felder = get_felder_fuer_investition(
         "e-auto", _PARAM, anlage_investitionen=[_Inv(t) for t in typen],
     )
@@ -105,16 +116,16 @@ def _felder_der_anlage(typen: list[str]) -> set[str]:
 
 def test_registry_weg_liest_den_sot(monkeypatch):
     """Gegenprobe 1 — `field_definitions.get_felder_fuer_investition`."""
-    # Ausgangslage: die Wallbox verdrängt, der Speicher nicht.
+    # Ausgangslage: die dienstliche Wallbox verdrängt, der Speicher nicht.
     assert _FELD not in _felder_der_anlage(["wallbox"])
     assert _FELD in _felder_der_anlage(["speicher"])
 
-    monkeypatch.setitem(BEDINGUNG_ANLAGE_VERDRAENGT, "keine_wallbox", "speicher")
+    monkeypatch.setitem(BEDINGUNG_ANLAGE_VERDRAENGT, "keine_dienstliche_wallbox", "speicher")
 
     # Jetzt muss es genau andersherum sein — sonst rechnet die Stelle selbst.
     assert _FELD in _felder_der_anlage(["wallbox"]), (
         "get_felder_fuer_investition folgt dem SoT nicht — es verdrängt weiter "
-        "bei 'wallbox', obwohl der SoT 'speicher' sagt (N-79)"
+        "bei der dienstlichen Wallbox, obwohl der SoT 'speicher' sagt (N-79)"
     )
     assert _FELD not in _felder_der_anlage(["speicher"])
 
@@ -146,5 +157,17 @@ def test_datenquellen_flaeche_liest_den_sot(monkeypatch):
 @pytest.mark.parametrize("wert,typ", sorted(BEDINGUNG_ANLAGE_VERDRAENGT.items()))
 def test_sot_eintraege_nennen_einen_echten_investitionstyp(wert, typ):
     """Ein Vokabel-Eintrag, der auf einen Typ zeigt, den es nicht gibt,
-    verdrängt nie — und sieht dabei aus wie eine gesetzte Regel."""
+    verdrängt nie — und sieht dabei aus wie eine gesetzte Regel.
+
+    N-555 Stufe 2: ein **Pseudo-Typ** (`TYP_DIENSTLICHE_WALLBOX`) ist erlaubt, wenn die
+    Typenmenge der Anlage ihn erzeugen kann — sonst wäre er genau der tote Eintrag, den
+    diese Probe fängt. Deshalb wird er hier ERZEUGT, nicht nur benannt."""
+    if typ == TYP_DIENSTLICHE_WALLBOX:
+        class _Wb:
+            typ = "wallbox"
+            parameter = {"ist_dienstlich": True}
+        assert typ in anlage_typen_mit_kontext([_Wb()]), (
+            f"{wert!r} zeigt auf einen Pseudo-Typ, den anlage_typen_mit_kontext nie setzt"
+        )
+        return
     assert typ in INVESTITION_FELDER, f"{wert!r} zeigt auf unbekannten Typ {typ!r}"

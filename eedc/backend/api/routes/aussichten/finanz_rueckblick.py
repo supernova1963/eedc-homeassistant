@@ -36,6 +36,7 @@ from backend.services.eauto_wirtschaftlichkeit import (
     berechne_eauto_ersparnis_periode,
     emob_extern_im_monat,
     emob_heimladung_im_monat,
+    monate_des_autos,
 )
 from backend.core.wirtschaftlichkeit_defaults import (
     NETZBEZUG_DEFAULT_CENT,
@@ -256,8 +257,11 @@ async def alternativkosten_rueckblick(
     _strompreis_lookup_aus: dict[tuple[int, int], float] = {}
     for ea in e_autos:
         agg = eauto_aggregate[ea.id]
-        for (inv_id, jahr, monat), daten in historische_inv_daten.items():
-            if inv_id != ea.id or not ea.ist_aktiv_im_monat(jahr, monat):
+        inv_id = ea.id
+        # N-555 Stufe 2: auch die Monate ohne Zeile, in denen das Auto Rest der Wallbox
+        # bekommt (`monate_des_autos`, Konzept Regel 2 Schritt 3).
+        for jahr, monat, daten in monate_des_autos(emob_pool_ctx, ea.id, historische_inv_daten):
+            if not ea.ist_aktiv_im_monat(jahr, monat):
                 continue
             km = daten.get("km_gefahren", 0) or 0
             # N-199/F-17/N-555: Netz-Anteil DIESES Autos nach dem Entscheid des
@@ -294,10 +298,13 @@ async def alternativkosten_rueckblick(
 
     for ea in e_autos:
         agg = eauto_aggregate[ea.id]
-        if not agg.get("km_monate"):
+        # ⭐ N-555 Stufe 2 (Konzept Regel 2, E6): hier stand `if not agg.get("km_monate")`
+        # — ein Auto, das geladen hat, aber nie gefahren ist, verlor still seine
+        # Stromrechnung (dasselbe `km > 0`-Tor wie in der Übersicht).
+        if not agg.get("km_monate") and not agg.get("netz_monate"):
             continue
         _erg = berechne_eauto_ersparnis_periode(
-            km_pro_monat=agg["km_monate"],
+            km_pro_monat=agg.get("km_monate", []),
             ladung_netz_kwh_gesamt=agg["netz_kwh"],
             # N-555 (§12, Entscheid Gernot 25.09.2026): externe Ladekosten
             # gehören in die Stromkosten — so rechnen E-Auto-Hub, T-Konto,

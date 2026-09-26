@@ -29,7 +29,7 @@ from backend.services.eauto_wirtschaftlichkeit import (
     compute_emob_pool_attribution,
     entscheide_emob_heimladung,
 )
-from backend.services.emob_ladeanteil import reichere_monatszeilen_an_mit_quoten
+from backend.services.emob_kontext import lade_emob_kontext
 from backend.services.monats_fakten import lade_monats_fakten
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
@@ -146,10 +146,9 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
     # Monate überspringen — die Anschaffungsdatum-Grenze gilt für ALLE
     # Auswertungen ([[feedback_anschaffungsdatum_grenze]], #236).
     imd_data_by_inv_vj: dict[int, dict] = {}
-    _pv_quote_vj = None
+    _emob_entscheid_vj = None
     emob_inv_ids = [
-        i.id for i in investitionen
-        if i.typ in ("e-auto", "wallbox") and not ist_dienstlich(i)
+        i.id for i in investitionen if i.typ in ("e-auto", "wallbox")
     ]
     if emob_inv_ids:
         imd_result = await db.execute(
@@ -159,30 +158,24 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
                 InvestitionMonatsdaten.monat == monat,
             )
         )
-        inv_by_id_vj = {i.id: i for i in investitionen}
-        for imd in imd_result.scalars().all():
-            inv = inv_by_id_vj.get(imd.investition_id)
-            if inv is None or not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
-                continue
-            imd_data_by_inv_vj[imd.investition_id] = imd.verbrauch_daten or {}
-
-        # F-16: auch die Vorjahres-Zeile bekommt den abgeleiteten PV-Anteil.
-        # Sie speist die Vorjahres-eMob-Ersparnis, die in Cockpit → Monat direkt
-        # neben der laufenden steht — ungeteilt daneben wäre der Vergleich eine
-        # Aussage über die Rechenweise statt über das Jahr.
-        _wb_ids_vj = {i.id for i in investitionen if i.typ == "wallbox"}
-        _keys_vj = list(imd_data_by_inv_vj)
-        _daten_vj, _quoten_vj = await reichere_monatszeilen_an_mit_quoten(
-            db,
-            anlage_id,
-            [
-                ((vj, monat), inv_id in _wb_ids_vj, imd_data_by_inv_vj[inv_id])
-                for inv_id in _keys_vj
-            ],
+        # F-16 + N-555: auch die Vorjahres-Zeile bekommt den abgeleiteten PV-Anteil, und
+        # der Vorjahresmonat entscheidet über den einen Kontext (`services/emob_kontext.py`)
+        # — mit Dienstwagen, dienstlicher Wallbox und Herkunft (Konzept Regel 2, 3, 8). Sie
+        # speist die Vorjahres-eMob-Ersparnis, die in Cockpit → Monat direkt neben der
+        # laufenden steht — anders entschieden daneben wäre der Vergleich eine Aussage über
+        # die Rechenweise statt über das Jahr.
+        _kontext_vj = await lade_emob_kontext(
+            db, anlage_id, investitionen, imd_result.scalars().all(),
         )
-        imd_data_by_inv_vj = dict(zip(_keys_vj, _daten_vj))
-        # N-555: die Schätzung aus dem Fahrverbrauch bekommt dieselbe Quote.
-        _pv_quote_vj = _quoten_vj.get((vj, monat))
+        _privat_vj = {
+            i.id for i in investitionen
+            if i.typ in ("e-auto", "wallbox") and not ist_dienstlich(i)
+        }
+        imd_data_by_inv_vj = {
+            inv_id: daten for (inv_id, _j, _m), daten in _kontext_vj.daten.items()
+            if inv_id in _privat_vj
+        }
+        _emob_entscheid_vj = _kontext_vj.ctx.entscheide.get((vj, monat))
 
     # Berechnete Energie-Werte — aus der Schicht, also inkl. V2H (Entladung ins
     # Haus zählt wie Speicher-Entladung) und inkl. sonstiger Erzeuger hinter dem
@@ -312,19 +305,12 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
                 eauto_imd_data=_ea_data_vj,
                 wallbox_imd_data=_wb_data_vj,
             )
-            # N-555: der Entscheid des Vorjahresmonats — dieselbe eine Funktion.
-            _emob_entscheid_vj = entscheide_emob_heimladung(
-                eauto_je_inv={
-                    i.id: imd_data_by_inv_vj[i.id] for i in _emob_aktiv if i.typ == "e-auto"
-                },
-                wallbox_zeilen=_wb_data_vj,
-                wallbox_in_betrieb=bool(_wb_data_vj) or any(
-                    i.typ == "wallbox" and not ist_dienstlich(i)
-                    and i.ist_aktiv_im_monat(vj, monat)
-                    for i in investitionen
-                ),
-                pv_quote=_pv_quote_vj,
-            )
+            # N-555: der Entscheid des Vorjahresmonats kommt aus dem Kontext oben —
+            # dieselbe eine Funktion. Ohne Zeile im Monat: leer entschieden.
+            if _emob_entscheid_vj is None:
+                _emob_entscheid_vj = entscheide_emob_heimladung(
+                    eauto_je_inv={}, wallbox_zeilen=[],
+                )
             for i in _emob_aktiv:
                 _d_vj = _baue_investition_financial(
                     i,

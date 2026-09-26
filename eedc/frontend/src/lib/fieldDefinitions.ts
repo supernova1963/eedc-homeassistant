@@ -148,8 +148,15 @@ const EAUTO_FELDER: FeldDefinition[] = [
     hint: 'Kilometerstand am Monatsende. eedc rechnet daraus die gefahrenen Kilometer (Stand minus Stand des Vormonats).',
     differenzZiel: 'km_gefahren' },
   { feld: 'verbrauch_kwh',     label: 'Verbrauch',    einheit: 'kWh', placeholder: 'z.B. 216'  },
-  { feld: 'ladung_pv_kwh',     label: 'Heim: PV',     einheit: 'kWh', placeholder: 'z.B. 130'  },
-  { feld: 'ladung_netz_kwh',   label: 'Heim: Netz',   einheit: 'kWh', placeholder: 'z.B. 50'   },
+  { feld: 'ladung_pv_kwh',     label: 'Heim: PV',     einheit: 'kWh', placeholder: 'z.B. 130',
+    hint: 'Zählt für dieses Auto. Die Wallbox trägt den Rest.' },
+  { feld: 'ladung_netz_kwh',   label: 'Heim: Netz',   einheit: 'kWh', placeholder: 'z.B. 50',
+    hint: 'Zählt für dieses Auto. Die Wallbox trägt den Rest.' },
+  // N-555 Stufe 2 (E5): „Heim: gesamt" auf dem bestehenden Schlüssel `ladung_kwh` —
+  // Spiegel von `field_definitions/registry.py`. Die Anlagen-Bedingung (Dienstwagen neben
+  // dienstlicher Wallbox) löst der Backend-Status auf (MonatsdatenForm, D1-Fix).
+  { feld: 'ladung_kwh',        label: 'Heim: gesamt', einheit: 'kWh', placeholder: 'z.B. 180',
+    hint: 'Zählt für dieses Auto. Die Wallbox trägt den Rest.' },
   { feld: 'ladung_extern_kwh', label: 'Extern',       einheit: 'kWh', placeholder: 'z.B. 36'   },
   { feld: 'ladung_extern_euro',label: 'Extern Kosten',einheit: '€',   placeholder: 'z.B. 18.00'},
   { feld: 'v2h_entladung_kwh', label: 'V2H Entladung',einheit: 'kWh', placeholder: 'z.B. 25', bedingung: 'v2h_faehig' },

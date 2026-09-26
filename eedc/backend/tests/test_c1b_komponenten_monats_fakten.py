@@ -440,8 +440,14 @@ async def test_alle_wege_in_einem_monat(db):
     # Pool statt Summe: 175 (Wallbox gewinnt strukturell) statt 355 — und der
     # Dienstwagen mit seinen 500 kWh ist gar nicht erst dabei. Der Netz-Anteil
     # wird abgeleitet: 175 − 115 = 60 (`get_emob_pv_netz_kwh`, #262).
-    assert sep.emob_ladung_kwh == 175.0
-    assert sep.emob_ladung_pv_kwh == 115.0
+    # ⚑ N-555 Stufe 2 (26.09.2026, Konzept Regel 2 Schritt 1 + Regel 3/G1): das private Auto
+    # trägt „Heim: PV/Netz" (180 = 120/60) — seine eigene Messung zählt auch neben der
+    # Wallbox, und der Topf ist die private Heimladung. Autos (privat 180 + Dienstwagen
+    # „Heim: PV" 300) übersteigen die Wallbox (175) ⇒ Rest 0 (E2; der Checker meldet es,
+    # Regel 7). Bis Stufe 1 stand hier die Wallbox (175/115/60). Substanz — der Dienstwagen
+    # steht nicht in der privaten Heimladung (F-7) — bleibt.
+    assert sep.emob_ladung_kwh == 180.0
+    assert sep.emob_ladung_pv_kwh == 120.0
     assert sep.emob_ladung_netz_kwh == 60.0
     assert sep.emob_km == 1000.0, "km nur vom privaten E-Auto"
     assert sep.emob_v2h_kwh == 25.0, "V2H nur vom E-Auto — die Wallbox kennt es nicht"

@@ -1067,6 +1067,8 @@ async def baue_investition_status(
         inv.typ, inv.parameter,
         anlage_investitionen=ctx.anlage.investitionen,
         belegte_felder=belegte_felder,
+        # N-555 Stufe 2 (Regel 0): „dienstliche Wallbox in Betrieb" im Monat des Formulars.
+        jahr=ctx.jahr, monat=ctx.monat,
     )
     if not felder_config:
         return None

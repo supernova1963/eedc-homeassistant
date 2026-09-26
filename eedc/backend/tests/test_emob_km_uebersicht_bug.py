@@ -173,8 +173,14 @@ async def test_H7_dienstwagen_plus_nichtdienstliche_wallbox(db):
     assert result.emob_km == 0, (
         f"Dienstwagen → km gefiltert, erwartet 0, war {result.emob_km}"
     )
-    assert 340 <= result.emob_ladung_kwh <= 360, (
-        f"Wallbox-Pool muss durchkommen, war {result.emob_ladung_kwh}"
+    # ⚑ N-555 Stufe 2 (26.09.2026, Konzept §6 „Nur ein Dienstwagen, private Wallbox → Rest
+    # nicht zugeordnet: nur Verbrauch", Regel 2 Schritt 3 und W-1): ein Dienstwagen ist ein
+    # bekannter Nutznießer, aber kein privater — die Wallbox-Ladung ist keine private
+    # Heimladung und steht nicht in der Cockpit-Kachel (sie zählt weiter als Verbrauch und
+    # in der Wallbox-Sicht, Regel 0). Bis Stufe 1 lief sie hier ganz durch (340…360). Die
+    # Substanz — der Dienstwagen-Filter greift für km — bleibt oben.
+    assert result.emob_ladung_kwh == 0, (
+        f"Wallbox-Rest ohne privates Auto ist nicht zugeordnet, war {result.emob_ladung_kwh}"
     )
 
 
@@ -212,7 +218,12 @@ async def test_H6_szenario_screenshot_eauto_plus_wallbox(db):
     assert result.emob_km == 3000, (
         f"Screenshot-Bug: km müssen ankommen, war {result.emob_km}"
     )
-    assert result.emob_ladung_kwh > 360, (
-        f"Ladung max-Pool > 360, war {result.emob_ladung_kwh}"
+    # ⚑ N-555 Stufe 2 (26.09.2026, Konzept Regel 2 Schritt 1 + Regel 3/G1): das Auto trägt
+    # „Heim: PV/Netz" (seine eigene Messung, 360) und zählt auch neben der Wallbox; die
+    # 10 kWh Rest der Wallbox haben keinen Empfänger (das einzige Auto ist gemessen) und
+    # zählen nur als Verbrauch. Bis Stufe 1 stand hier „> 360" (die Wallbox, 370). Die
+    # Substanz des Screenshot-Bugs — km UND Ladung kommen gleichzeitig an — bleibt.
+    assert abs(result.emob_ladung_kwh - 360.0) < 1e-6, (
+        f"Heimladung = Messung des Autos, war {result.emob_ladung_kwh}"
     )
 

@@ -1,5 +1,15 @@
 """Daten-Checker: evcc-Pool-Pflege-Mismatch-Warnung (Wallbox/EAuto-Konzept Phase 2a).
 
+⚑ **Umgestellt mit N-555 Stufe 2 (26.09.2026, Konzept Heimladung/Fahrverbrauch 7.2,
+Regel 7).** Die Prüfung meldet nicht mehr „Wallbox und E-Auto tragen beide Heimladung"
+(INFO/WARNING „Pflege-Konflikt") — nach Regel 2 ist das der Normalfall: ein Auto mit
+eigener Messung trägt sie, die Wallbox den Rest. Sie meldet jetzt, gerichtet, wenn die
+Autos zusammen **mehr** geladen haben als die Wallbox gemessen hat (Toleranz max(10 kWh,
+10 %)), und den fehlenden Heimladewert am Dienstwagen (E7). Substanz dieser Datei
+gehalten: kein Fehlalarm bei nur einer Seite, bei Krümeln, bei gleich großen Werten; ein
+echter Widerspruch (#262, Streudaten am Auto) wird gemeldet. Die neuen Fälle stehen in
+`test_n555_stufe2_messung_je_auto.py` §S2-6.
+
 Trigger: junky84 #262 hatte ~3.300 kWh Streudaten auf der E-Auto-Investition
 zusätzlich zur korrekten Wallbox-Pflege. Seit Phase 2a wählen die Read-Sites
 die Quelle strukturell (`get_emob_heimladung_canonical`) und die Migration
@@ -142,10 +152,11 @@ async def test_kruemel_pflege_kein_eintrag(db):
 
 
 async def test_einmaliger_doppelmonat_kein_eintrag(db):
-    """Eine Monatslücke (Doppel-Pflege nur in 1 Monat) → kein Pflege-Muster.
+    """Eine Monatslücke (Doppel-Pflege nur in 1 Monat) → kein Befund.
 
-    Schwelle EMOB_POOL_MINDEST_MONATE = 3 verhindert Fehlalarm bei
-    Einmal-Sondersituationen (z. B. Wechsel des Sensors mid-month).
+    ⚑ N-555 Stufe 2: der Grund ist jetzt ein anderer — die Autos übersteigen die Wallbox
+    nicht (Regel 7 ist gerichtet); die frühere Schwelle `EMOB_POOL_MINDEST_MONATE` gibt es
+    nicht mehr, ein einzelner Monat mit echtem Überschuss wird gemeldet (§S2-6).
     """
     anlage = await _seed_anlage(db)
     wb = await _add_inv(db, anlage.id, "wallbox")
@@ -163,7 +174,12 @@ async def test_einmaliger_doppelmonat_kein_eintrag(db):
 
 
 async def test_drei_doppelmonate_konsistent_info(db):
-    """≥ 3 Monate Doppel-Pflege mit übereinstimmenden PV-Werten → INFO."""
+    """≥ 3 Monate Doppel-Pflege mit übereinstimmenden Werten → **kein** Befund mehr.
+
+    ⚑ N-555 Stufe 2 (Konzept Regel 7, „Entfällt"): hier stand eine INFO „die Wallbox ist
+    die Quelle". Nach Regel 2 trägt das Auto seine Messung, die Wallbox den Rest (hier 0) —
+    kein Widerspruch, nichts zu melden. Name bleibt, damit die Historie auffindbar ist.
+    """
     anlage = await _seed_anlage(db)
     wb = await _add_inv(db, anlage.id, "wallbox")
     ea = await _add_inv(db, anlage.id, "e-auto")
@@ -175,23 +191,27 @@ async def test_drei_doppelmonate_konsistent_info(db):
     await db.commit()
 
     ergebnisse = await _run_check(db, anlage)
-    assert len(ergebnisse) == 1
-    e = ergebnisse[0]
-    assert e.kategorie == CheckKategorie.EMOB_POOL_PFLEGE.value
-    assert e.schwere == CheckSeverity.INFO.value
-    assert "wallbox ist die quelle" in e.meldung.lower()
+    assert ergebnisse == []
 
 
 async def test_pv_inkonsistenz_warning(db):
-    """≥ 3 Doppelmonate UND PV-Differenz > 10 % → WARNING (echter Konflikt)."""
+    """Echter Widerspruch am Auto → WARNING.
+
+    ⚑ N-555 Stufe 2 (Konzept Regel 7): hier stand „PV-Anteile von Wallbox und Auto weichen
+    > 10 % ab" — nach Regel 2 misst das Auto seine eigene Ladung, verschiedene PV-Anteile
+    sind kein Widerspruch. Der #262-Fall (Streudaten am Auto) ist jetzt gerichtet: die
+    Messungen der Autos (300 kWh) übersteigen die Wallbox (200 kWh) um mehr als die
+    Toleranz max(10 kWh, 10 %).
+    """
     anlage = await _seed_anlage(db)
     wb = await _add_inv(db, anlage.id, "wallbox")
     ea = await _add_inv(db, anlage.id, "e-auto")
     for j, m in _letzte_n_monate(6):
-        # WB sieht 80 % PV, EA nur 20 % — sollte derselbe Stromfluss sein,
-        # ist es offensichtlich nicht. Echter Pflege-Konflikt.
         await _add_monat(db, wb.id, j, m, ladung_kwh=200.0, ladung_pv_kwh=160.0)
-        await _add_monat(db, ea.id, j, m, ladung_kwh=200.0, ladung_pv_kwh=40.0)
+        db.add(InvestitionMonatsdaten(
+            investition_id=ea.id, jahr=j, monat=m,
+            verbrauch_daten={"ladung_pv_kwh": 100.0, "ladung_netz_kwh": 200.0},
+        ))
     await db.commit()
 
     ergebnisse = await _run_check(db, anlage)
@@ -199,11 +219,17 @@ async def test_pv_inkonsistenz_warning(db):
     e = ergebnisse[0]
     assert e.kategorie == CheckKategorie.EMOB_POOL_PFLEGE.value
     assert e.schwere == CheckSeverity.WARNING.value
-    assert "Konflikt" in e.meldung
+    assert "mehr" in e.meldung
 
 
 async def test_dienstwagen_wird_ignoriert(db):
-    """`ist_dienstlich=True` zählt nicht zur Pool-Pflege — eigene Kosten-Logik."""
+    """Dienstwagen mit Heimladung unter der Wallbox → kein Befund.
+
+    ⚑ N-555 Stufe 2: der Dienstwagen zählt jetzt MIT (seine Messung fehlt im Rest der
+    Wallbox, Regel 3) — hier übersteigt er die Wallbox nicht („Heim: PV" 150 < 200; der
+    alte Gesamtwert 200 ohne Herkunft ist keine Messung), und er hat eine Messung, also
+    auch kein Hinweis E7.
+    """
     anlage = await _seed_anlage(db)
     wb = await _add_inv(db, anlage.id, "wallbox")
     ea = await _add_inv(
@@ -216,5 +242,4 @@ async def test_dienstwagen_wird_ignoriert(db):
     await db.commit()
 
     ergebnisse = await _run_check(db, anlage)
-    # Dienst-EA ist raus → effektiv nur Wallbox → kein Konflikt.
     assert ergebnisse == []

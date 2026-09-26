@@ -20,9 +20,8 @@ from backend.api.routes.strompreise import (
 )
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
 from backend.core.investition_parameter import PARAM_WALLBOX, PARAM_WALLBOX_DEFAULTS, ist_dienstlich
-from backend.services.eauto_wirtschaftlichkeit import build_emob_pool_ctx
-from backend.services.emob_ladeanteil import reichere_monatszeilen_an_mit_quoten
-from backend.services.emob_heimlade_quellen import laufende_heimlade_quellen
+from backend.services.eauto_wirtschaftlichkeit import summiere_emob_quelle
+from backend.services.emob_kontext import lade_emob_kontext
 from backend.core.calculations import berechne_roi
 from backend.core.berechnungen.kapitalrechnung import (
     ErsparnisPosten,
@@ -101,81 +100,47 @@ async def get_wallbox_dashboard(
     for md in all_monatsdaten:
         md_by_inv.setdefault(md.investition_id, []).append(md)
 
-    # E-Auto- und Wallbox-IMD getrennt sammeln, dann via SoT-Helper zu EINER
-    # konsistenten Heimladungs-Trias poolen (#262 junky84): evcc-Portal-Import
-    # schreibt die Ladedaten in die Wallbox-Investition (data_import.py::_schreibe_wallbox),
-    # das Premium-Setup (separate E-Auto-Sensoren) aus E-Auto-Sicht. Früher
-    # feldweises `max()` über pv/netz getrennt — das konnte pv aus der einen
-    # und netz aus der anderen Quelle nehmen → PV-Anteil > 100 %. Jetzt
-    # gewinnt die Quelle mit der größeren Heimladung die komplette Trias,
-    # identisch zu Cockpit-Übersicht, Komponenten und EAutoDashboard.
+    # Die Monate der Periode: jeder Monat mit einer privaten E-Auto- oder Wallbox-Zeile
+    # in Betrieb (#153/#155/#236: vor der Anschaffung, nach der Stilllegung nicht).
     monate_set = set()
-
-    # Issue #153 / #155: Daten vor Anschaffungsdatum ignorieren
-    inv_by_id = {e.id: e for e in eautos}
-    inv_by_id.update({w.id: w for w in wallboxen})
-
-    def _nicht_aktiv_im_monat(inv_id: int, jahr: int, monat: int) -> bool:
-        """#236: nicht-aktive Monate (vor anschaffungs- / nach stilllegungsdatum) überspringen."""
-        inv = inv_by_id.get(inv_id)
-        if not inv:
-            return False
-        return not inv.ist_aktiv_im_monat(jahr, monat)
 
     # F-7: nur privat geladene Fahrzeuge/Wallboxen bilden die Heimladung, aus
     # der unten kWh, PV-Anteil und `ersparnis_vs_extern` entstehen.
     eauto_id_set = {e.id for e in eautos if not ist_dienstlich(e)}
     wallbox_id_set = {w.id for w in wallboxen if not ist_dienstlich(w)}
-    # F-16: die Zeilen laufen erst durch die Ableitung des PV-Anteils, dann in
-    # den Pool. Dieser Hub liest die IMD direkt (P10-Restschuld) und zeigte
-    # deshalb `pv_anteil_prozent` = 0, während Cockpit und Auswertungen für
-    # dieselbe Heimladung einen abgeleiteten Anteil nannten.
-    _wb_zeilen = [
-        (inv_id, md)
-        for inv_id, md_list in md_by_inv.items()
-        for md in md_list
-        if not _nicht_aktiv_im_monat(inv_id, md.jahr, md.monat)
-        and inv_id in (eauto_id_set | wallbox_id_set)
-    ]
-    _wb_daten, _wb_quoten = await reichere_monatszeilen_an_mit_quoten(
-        db,
-        anlage_id,
-        [
-            ((md.jahr, md.monat), inv_id in wallbox_id_set, md.verbrauch_daten or {})
-            for inv_id, md in _wb_zeilen
-        ],
+    # F-16 + N-555: der Kontext der einen Funktion (`services/emob_kontext.py`) — die
+    # Zeilen mit abgeleitetem PV-Anteil (je Zeile), der Entscheid je Monat mit
+    # Dienstwagen, Herkunft und den Quellen des laufenden Monats.
+    _kontext = await lade_emob_kontext(
+        db, anlage_id, [*eautos, *wallboxen], all_monatsdaten,
     )
     inv_daten: dict[tuple[int, int, int], dict] = {}
-    for (inv_id, md), d in zip(_wb_zeilen, _wb_daten):
-        # Dienstwagen / dienstliche Wallbox sind oben schon heraus: ihre Zeile
-        # öffnet auch keinen Periodenmonat. Sonst verlängert sie `anzahl_monate`,
-        # drückt `ladevorgaenge_pro_monat` und zieht einen Monat ohne private
-        # Ladung in den gewichteten Tarif-Ø (P8).
-        inv_daten[(inv_id, md.jahr, md.monat)] = d
-        monate_set.add((md.jahr, md.monat))
+    for (inv_id, jahr, monat), d in _kontext.daten.items():
+        # Dienstwagen / dienstliche Wallbox bleiben draußen: ihre Zeile öffnet auch
+        # keinen Periodenmonat. Sonst verlängert sie `anzahl_monate`, drückt
+        # `ladevorgaenge_pro_monat` und zieht einen Monat ohne private Ladung in den
+        # gewichteten Tarif-Ø (P8).
+        if inv_id in eauto_id_set or inv_id in wallbox_id_set:
+            inv_daten[(inv_id, jahr, monat)] = d
+            monate_set.add((jahr, monat))
+    emob_ctx = _kontext.ctx
 
-    # N-555 (Konzept Regel 1: „Die Entscheidung fällt je Monat … Ein Jahr ist die
-    # Summe seiner Monate"): jeder Monat entscheidet über die eine Funktion, der
-    # Zeitraum ist die Summe. Bis 25.09.2026 wurde hier EINMAL über den ganzen
-    # Zeitraum gepoolt — eine Wallbox, die erst ab Juli misst, verdrängte damit
-    # auch die Monate davor. Dass die Wallbox-Sichten künftig die **Messung der
-    # Wallbox** zeigen, ist Stufe 2 (Konzept §6).
-    _private_wb = [w for w in wallboxen if not ist_dienstlich(w)]
-    emob_ctx = build_emob_pool_ctx(
-        inv_daten, eauto_id_set, wallbox_id_set,
-        wallbox_in_betrieb=lambda j, m: any(w.ist_aktiv_im_monat(j, m) for w in _private_wb),
-        quoten=_wb_quoten,
-        quellen_je_monat=await laufende_heimlade_quellen(
-            db, anlage_id, [*[e for e in eautos if not ist_dienstlich(e)], *_private_wb],
-        ),
+    # ⭐ N-555 Stufe 2 (Konzept Regel 0, §6 „Wallbox-Sichten, Kachel Heimladung"): der
+    # Wallbox-Hub zeigt die **Messung der Wallbox** — die Summe aller Ladungen an ihr,
+    # mit Gast und Dienstwagen. Bis 26.09.2026 zeigte er den Heimladungs-Topf der
+    # Anlage (je Monat Wallbox ODER E-Auto); trug ein Auto eine eigene Messung, stand
+    # hier deren Summe statt dessen, was die Wallbox gezählt hat. PV-Anteil nach
+    # Phase 5 (je Zeile), Extern und Ladevorgänge wie bisher aus dem Entscheid.
+    _wb_summe = summiere_emob_quelle(
+        d for (inv_id, _j, _m), d in inv_daten.items() if inv_id in wallbox_id_set
     )
     _pools = [e.pool for e in emob_ctx.entscheide.values()]
-    gesamt_heim_pv = sum(p.pv_kwh for p in _pools)
-    gesamt_heim_netz = sum(p.netz_kwh for p in _pools)
+    gesamt_heim_pv = _wb_summe.pv_kwh
+    gesamt_heim_netz = _wb_summe.netz_kwh
     gesamt_extern_kwh = sum(p.extern_kwh for p in _pools)
     gesamt_extern_euro = sum(p.extern_euro for p in _pools)
     gesamt_ladevorgaenge = sum(p.ladevorgaenge for p in _pools)
-    gesamt_heim_ladung = sum(p.ladung_kwh for p in _pools)
+    gesamt_heim_ladung = _wb_summe.ladung_kwh
     anzahl_monate = len(monate_set)
 
     # PV-Anteil der Heimladung
@@ -198,12 +163,35 @@ async def get_wallbox_dashboard(
         fallback_bezug=strompreis_cent,
         fallback_einspeise=resolve_einspeiseverguetung_cent(tarife),
     )).bezug_cent
-    heim_kosten = gesamt_heim_netz * wb_strompreis_cent / 100
+    # ⭐ N-555 Stufe 2 (Konzept Regel 3, §6 „Wallbox-Sichten", NF-1, Master 26.09.): die
+    # **Ersparnis gegenüber externem Laden** und damit die Amortisation rechnen mit dem
+    # TOPF — der privaten Heimladung (Σ der privaten Autos), nicht mit der Messung der
+    # Wallbox darüber. Gast (nicht zugeordneter Rest) und Dienstwagen nützen dem Haushalt
+    # nichts; bis 26.09.2026 stand hier die ganze Wallbox bzw. der Topf alter Bedeutung
+    # (je Monat Wallbox ODER E-Auto) — mit Gast und Dienstwagen.
+    #
+    # ⭐ Und je Monat höchstens die **Messung der Wallbox** (F1 der Nachmessung, Master
+    # 26.09.): sind die Autos zusammen mehr als die Wallbox (E2 — Streudaten, eine Quelle
+    # am Auto, die unterwegs mitzählt, Steckdose), bleibt der Topf zwar die Summe der
+    # Autos, aber die Wallbox kann nicht mehr ersparen, als sie geliefert hat; der
+    # Daten-Checker meldet den Widerspruch (Regel 7). Ohne diese Kappung „sparte" die
+    # Wallbox an den Demo-Beständen mit 7.698 kWh bei 4.208 kWh gezählter Ladung
+    # (1.008 → 3.506 €, Amortisation 1,9 → 0,5 J.). Trägt die Wallbox im Monat keinen
+    # Wert (leer), gibt es nichts zu kappen: dann gilt die Annahme E4 (die Heimladung
+    # der Autos fand an der Wallbox statt) und die Basis ist der Topf.
+    topf_ladung = topf_netz = 0.0
+    for _e in emob_ctx.entscheide.values():
+        _basis = _e.pool
+        if _e.wallbox_hat_wert and _e.wallbox_summe.ladung_kwh < _e.pool.ladung_kwh:
+            _basis = _e.wallbox_summe
+        topf_ladung += _basis.ladung_kwh
+        topf_netz += _basis.netz_kwh
+    heim_kosten = topf_netz * wb_strompreis_cent / 100
 
     # Was hätte externe Ladung gekostet?
     # Durchschnittspreis extern (wenn vorhanden) oder Annahme 50 ct/kWh
     extern_preis_kwh = (gesamt_extern_euro / gesamt_extern_kwh) if gesamt_extern_kwh > 0 else 0.50
-    heim_als_extern_kosten = gesamt_heim_ladung * extern_preis_kwh
+    heim_als_extern_kosten = topf_ladung * extern_preis_kwh
 
     # Ersparnis durch Heimladen (Wallbox-ROI)
     ersparnis_vs_extern = heim_als_extern_kosten - heim_kosten
@@ -291,7 +279,9 @@ async def get_wallbox_dashboard(
         )
 
         zusammenfassung = {
-            # Heimladung (aus E-Auto-Daten)
+            # Heimladung: die Messung der Wallbox (Regel 0, mit Gast und Dienstwagen).
+            # Die Kosten- und Ersparnis-Felder darunter rechnen mit der privaten
+            # Heimladung (Topf, Regel 3) — s. `topf_ladung` oben.
             'gesamt_heim_ladung_kwh': round(gesamt_heim_ladung, 1),
             'ladung_pv_kwh': round(gesamt_heim_pv, 1),
             'ladung_netz_kwh': round(gesamt_heim_netz, 1),

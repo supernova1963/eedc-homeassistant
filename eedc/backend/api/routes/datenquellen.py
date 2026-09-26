@@ -38,7 +38,7 @@ from backend.services.datenquellen_historie import (
 )
 from backend.core.betriebsmodus import betriebsmodus_klartext
 from backend.core.feld_auswertungen import sichten_fuer
-from backend.core.field_definitions import ist_zustand_feld
+from backend.core.field_definitions import anlage_typen_mit_kontext, ist_zustand_feld
 from backend.services.datenquellen_resolver import resolve_effektive_quelle
 from backend.services.live_sensor_config import (
     entferne_legacy_invert,
@@ -1016,7 +1016,9 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
     feld_bedingung_anlage = {
         _feld_id(e["match_key"]): e.get("bedingung_anlage") for e in eintraege
     }
-    vorhandene_inv_typen = {i.typ for i in invs}
+    # N-555 Stufe 2: mit dem Pseudo-Typ „dienstliche Wallbox in Betrieb" (heute) —
+    # derselbe SoT wie der Monatsabschluss (`anlage_typen_mit_kontext`).
+    vorhandene_inv_typen = anlage_typen_mit_kontext(invs)
     probleme_je_feld: dict[str, list] = {}
 
     def _add_problem(fid: str, p: dict | None) -> None:

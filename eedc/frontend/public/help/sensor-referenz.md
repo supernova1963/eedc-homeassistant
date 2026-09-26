@@ -320,14 +320,15 @@ Vorzeichenkorrekturen, oder das Zusammenfassen mehrerer Entitäten zu einer.
 
 ## 5. E-Auto
 
-> **Heimladung gehört kanonisch an die Wallbox (ab Phase 2a).** Existiert eine Wallbox-Komponente, ist sie die Quelle der Heimladung — die folgenden Felder `ladung_pv_kwh`/`ladung_netz_kwh` werden dann am E-Auto **nicht** erfasst (das Formular blendet sie aus). Sie gelten nur für Setups **ohne** Wallbox (Steckerlader/Schuko). Km-, Verbrauchs-, Extern- und V2H-Felder bleiben in jedem Fall am E-Auto.
+> **Die Wallbox ist die Summe, ein Auto mit eigener Messung trägt seine eigene Heimladung (seit v4.0.51).** Die Heim-Felder `ladung_pv_kwh` („Heim: PV“), `ladung_netz_kwh` („Heim: Netz“) und `ladung_kwh` („Heim: gesamt“) werden **jedem** E-Auto angeboten, auch neben einer Wallbox. Trägt ein Auto dort einen Wert (auch 0) oder — im laufenden Monat — eine zugeordnete Quelle, zählt dieser Wert für dieses Auto; die Wallbox trägt den Rest, und der Rest geht nach Kilometern an die privaten Autos ohne eigene Messung ([Berechnungen, Heimladung je Auto](BERECHNUNGEN.md)). Nur an einem **Dienstwagen neben einer dienstlichen Wallbox** fehlen die Felder: dort ist die dienstliche Wallbox die dienstliche Ladung. Km-, Verbrauchs-, Extern- und V2H-Felder bleiben in jedem Fall am E-Auto. Ist die Summe der Autos größer als die Wallbox, meldet der Daten-Checker es.
 
 ### Monatserfassung
 
 | Feld | Label | Einheit | Sensortyp | Beschreibung | Ausgewertet in |
 |------|-------|---------|-----------|-------------|-----------------|
-| `ladung_pv_kwh` | Heim: PV | kWh | Kumulativ oder Tagessensor | Zu Hause aus PV geladene Energie. **Nur ohne Wallbox** (sonst an der Wallbox). Kann via EV-Quote aus Gesamt-Ladung berechnet werden. | Komponenten → E-Auto · Cockpit → Monat · Cockpit → Jahr |
-| `ladung_netz_kwh` | Heim: Netz | kWh | Kumulativ oder Tagessensor | Zu Hause aus Netz geladene Energie. **Nur ohne Wallbox.** Kann via EV-Quote berechnet werden. | Komponenten → E-Auto · Cockpit → Monat · Auswertungen → Finanzen |
+| `ladung_pv_kwh` | Heim: PV | kWh | Kumulativ oder Tagessensor | Zu Hause aus PV in dieses Auto geladene Energie. Neben einer Wallbox: zählt für dieses Auto, die Wallbox trägt den Rest. Ohne Wert leitet eedc den PV-Anteil ab. | Komponenten → E-Auto · Cockpit → Monat · Cockpit → Jahr |
+| `ladung_netz_kwh` | Heim: Netz | kWh | Kumulativ oder Tagessensor | Zu Hause aus dem Netz in dieses Auto geladene Energie. Neben einer Wallbox: zählt für dieses Auto, die Wallbox trägt den Rest. | Komponenten → E-Auto · Cockpit → Monat · Auswertungen → Finanzen |
+| `ladung_kwh` | Heim: gesamt | kWh | Kumulativ oder Tagessensor | Zu Hause in dieses Auto geladene Energie **gesamt** — für einen Zähler am Auto, der PV und Netz nicht trennt (z. B. evcc „Ladevorgänge: Energie [Fzg.]“; er springt am Ende jedes Ladevorgangs um dessen Menge und liefert damit den Monat richtig, die Stunde nicht). Geteilt wird mit dem PV-Anteil der Wallbox im Monat, ohne Wallbox wie „Heim: PV“ abgeleitet. Mit „Heim: PV“/„Heim: Netz“ leer lassen. Ein alter Wert in diesem Feld aus der Zeit vor v4.0.51 mit „Herkunft unbekannt“ zählt neben einer Wallbox nicht. | Komponenten → E-Auto · Cockpit → Monat · Auswertungen → Finanzen |
 | `ladung_extern_kwh` | Externe Ladung | kWh | — | Extern geladene Energie (Autobahn, Arbeit). Manuell erfassen. Optional. | Komponenten → E-Auto · Cockpit → Monat |
 | `ladung_extern_euro` | Externe Ladekosten | € | — | Kosten der externen Ladung. Manuell. Optional. | Komponenten → E-Auto · Cockpit → Jahr |
 | `verbrauch_kwh` | Verbrauch gesamt | kWh | Kumulativ oder Tagessensor | Gefahrener Energieverbrauch des E-Autos (reiner **Fahrverbrauch**), für die kWh/100 km-Effizienz mit `km_gefahren` verrechnet und beim Plug-in-Hybrid für den elektrischen Anteil. **Keine Ladung:** Als Heimladung setzt eedc ihn nur als ausdrücklich gekennzeichnete **Schätzung** ein, wenn für die Heimladung weder ein Wert (auch 0) noch — im laufenden Monat — eine Quelle bekannt ist ([Berechnungen, Heimladung und Fahrverbrauch](BERECHNUNGEN.md)). Hat die Wallbox einen Sensor und im Monat 0 kWh geladen, ist die Heimladung 0. Optional — fehlt der Wert, nähert eedc die kWh/100 km aus der geladenen Energie (Heim + Extern) an (inkl. Ladeverluste). | Komponenten → E-Auto · Cockpit → Monat |
@@ -345,7 +346,7 @@ Vorzeichenkorrekturen, oder das Zusammenfassen mehrerer Entitäten zu einer.
 
 | MQTT-Topic | Feld | Hinweis |
 |------------|------|---------|
-| `eedc/.../energy/inv/{inv_id}_{name}/ladung_kwh` | — | ⚠️ Gesamt-Ladung, **nicht** PV/Netz-Split. Aufteilung nur im Monatsdaten-Formular via EV-Quote. |
+| `eedc/.../energy/inv/{inv_id}_{name}/ladung_kwh` | `ladung_kwh` („Heim: gesamt“) | Gesamt-Heimladung dieses Autos, **nicht** PV/Netz-Split — geteilt wird mit dem PV-Anteil der Wallbox. |
 | `eedc/.../energy/inv/{inv_id}_{name}/km_gefahren` | `km_gefahren` | |
 | `eedc/.../energy/inv/{inv_id}_{name}/v2h_entladung_kwh` | `v2h_entladung_kwh` | |
 | ⚠️ `ladung_pv_kwh` / `ladung_netz_kwh` | — | **Kein MQTT-Topic** — Split wird berechnet, nicht gemessen |
@@ -354,7 +355,7 @@ Vorzeichenkorrekturen, oder das Zusammenfassen mehrerer Entitäten zu einer.
 
 ## 6. Wallbox
 
-> **Wallbox = kanonische Heimladungs-Quelle (ab Phase 2a).** Ist eine Wallbox angelegt, liefert sie die zu Hause geladene Energie (gesamt/PV/Netz) für alle Auswertungen; die km-anteilige Aufteilung auf ein oder mehrere Fahrzeuge berechnet eedc daraus. Mehrere Wallboxen werden summiert (jeder Ladepunkt zählt). Ordne den Loadpoint-/Wallbox-Energiesensor daher hier zu, nicht am E-Auto.
+> **Die Wallbox ist die Summe aller Ladungen an ihr** — privates Auto, Gast, Dienstwagen. So zählt sie in der Energiebilanz, am Tag, in der Stunde und in ihrer eigenen Anzeige. Mehrere Wallboxen werden summiert (jeder Ladepunkt zählt). Trägt ein Auto eine eigene Heim-Messung (siehe E-Auto), zählt sie für dieses Auto; der **Rest** der Wallbox geht nach Kilometern an die privaten Autos ohne eigene Messung, ohne solche bleibt er nicht zugeordnet (Gast, Verluste: nur Verbrauch, keine Ersparnis) — außer es ist gar kein Fahrzeug angelegt: dann ist die Wallbox selbst das private Auto. Ohne Messung am Auto ist das die bisherige km-anteilige Aufteilung. Ordne den Loadpoint-/Wallbox-Energiesensor hier zu.
 
 ### Monatserfassung
 

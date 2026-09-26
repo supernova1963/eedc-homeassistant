@@ -220,10 +220,21 @@ async def test_pflege_auf_der_anderen_quelle_zaehlt_NICHT(db):
 
     emob = _fakt(await lade_monats_fakten(db, anlage.id), 2025, 5).emob
 
+    # ⚑ N-555 Stufe 2 (26.09.2026, Konzept Regel 2 Schritt 1 + Regel 3/G1): die Probe hält
+    # ihre Substanz — die **Wallbox** bekommt ihren abgeleiteten PV-Anteil (180/20), die
+    # Pflege am Fahrzeug unterdrückt ihn nicht. Neu ist, was der Topf ist: das Auto trägt
+    # „Heim: PV" (40) — eine eigene Messung, die auch neben der Wallbox zählt; „Heim: Netz"
+    # fehlt und zählt als 0, der alte Gesamtwert 80 (ohne Herkunft) zählt neben der Wallbox
+    # nicht (Regel 2 Schritt 1, Regel 8). Topf = private Heimladung = 40/0; der Rest der
+    # Wallbox (160 = 140 PV / 20 Netz) hat keinen Empfänger. Bis Stufe 1 war der Topf die
+    # Wallbox (180/20); Gernots Entscheid vom 24.08. („der Altwert zählt nicht gegen die
+    # Wallbox") ist mit dem Modellwechsel vom 24.09. für „Heim: PV/Netz" gedreht.
     assert emob.quelle == "wallbox"
-    assert emob.ladung_anteil_abgeleitet is True
-    assert emob.ladung_pv_kwh == pytest.approx(180.0)
-    assert emob.ladung_netz_kwh == pytest.approx(20.0)
+    assert emob.wallbox_summe.pv_kwh == pytest.approx(180.0)
+    assert emob.wallbox_summe.netz_kwh == pytest.approx(20.0)
+    assert emob.ladung_pv_kwh == pytest.approx(40.0)
+    assert emob.ladung_netz_kwh == pytest.approx(0.0)
+    assert (emob.rest_pv_kwh, emob.rest_netz_kwh) == (pytest.approx(140.0), pytest.approx(20.0))
     assert emob.ladung_pv_kwh + emob.ladung_netz_kwh == pytest.approx(
         emob.ladung_kwh
     ), "die Trias bleibt geschlossen (#262)"

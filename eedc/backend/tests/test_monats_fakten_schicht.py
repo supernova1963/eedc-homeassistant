@@ -299,9 +299,19 @@ async def test_emob_pool_kommt_geschlossen_aus_einer_quelle(db):
 
     emob = _fakt(await lade_monats_fakten(db, anlage.id), 2025, 5).emob
 
+    # ⚑ N-555 Stufe 2 (26.09.2026, Konzept Regel 2 Schritt 1 + Regel 3/G1): das Auto trägt
+    # „Heim: PV/Netz" — seine eigene Messung zählt auch neben der Wallbox; der Topf ist die
+    # private Heimladung (50 + 30 = 80). Die Wallbox (200) bestimmt den Monat und steht als
+    # Messung getrennt daneben; ihr Rest (120 = 70 PV / 50 Netz) hat keinen Empfänger. Bis
+    # Stufe 1 stand hier 200 (die Wallbox als Topf). Die Substanz — die Trias kommt
+    # geschlossen, PV nie aus der einen und Netz aus der anderen Menge — bleibt.
     assert emob.quelle == "wallbox"
-    assert emob.ladung_kwh == pytest.approx(200.0)
+    assert emob.ladung_kwh == pytest.approx(80.0)
+    assert emob.ladung_pv_kwh == pytest.approx(50.0)
     assert emob.ladung_pv_kwh + emob.ladung_netz_kwh == pytest.approx(emob.ladung_kwh)
+    assert emob.wallbox_summe.ladung_kwh == pytest.approx(200.0)
+    assert (emob.rest_pv_kwh, emob.rest_netz_kwh) == (pytest.approx(70.0), pytest.approx(50.0))
+    assert emob.rest_zugeordnet is False
     assert emob.km == pytest.approx(1000.0), "km kommen immer vom Fahrzeug"
     assert emob.v2h_entladung_kwh == pytest.approx(25.0)
     assert emob.km_je_fahrzeug == {auto.id: pytest.approx(1000.0)}

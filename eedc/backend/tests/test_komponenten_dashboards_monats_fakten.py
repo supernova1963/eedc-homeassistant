@@ -356,11 +356,19 @@ async def test_wallbox_dashboard_zaehlt_dienstliche_ladung_nicht_mit(db):
     (karte,) = await get_wallbox_dashboard(anlage_id=anlage.id, strompreis_cent=None, db=db)
     z = karte.zusammenfassung
 
-    assert z["gesamt_heim_ladung_kwh"] == pytest.approx(180.0), (
-        "360 kWh wären beide Fahrzeuge — der Dienstwagen gehört nicht dazu"
+    # ⚑ N-555 Stufe 2 (26.09.2026, Konzept Regel 0/3, §6 „Wallbox-Sichten", NF-1 Master
+    # 26.09.): die kWh-Kachel der Wallbox-Sicht ist die **Messung der Wallbox** — hier hat
+    # die Wallbox keine Monatszeile, also 0 (bis Stufe 1 stand hier die gewählte Quelle,
+    # das private E-Auto, 180). Die F-7-Substanz sitzt jetzt in der Ersparnis: „Ersparnis
+    # vs. extern" rechnet mit dem Topf (private Heimladung) — nur das private Fahrzeug
+    # (180 kWh × 0,50 € − 60 kWh Netz × Tarif = 72 €); mit dem Dienstwagen wären es 144 €.
+    assert z["gesamt_heim_ladung_kwh"] == pytest.approx(0.0), (
+        "die Kachel zeigt die Messung der Wallbox (Regel 0) — sie hat keine Zeile"
     )
-    assert z["ladung_pv_kwh"] == pytest.approx(120.0)
-    assert z["ladung_netz_kwh"] == pytest.approx(60.0)
+    assert z["heim_als_extern_kosten_euro"] == pytest.approx(90.0), (
+        "360 kWh wären beide Fahrzeuge — der Dienstwagen gehört nicht in die Ersparnis"
+    )
+    assert z["ersparnis_vs_extern_euro"] == pytest.approx(72.0)
     assert z["dienstlich"] is False
 
 

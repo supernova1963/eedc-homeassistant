@@ -141,6 +141,16 @@ class SpeicherFakten:
 class EmobFakten:
     """E-Mobilität des Monats — **ohne Dienstwagen**.
 
+    ⭐ **N-555 Stufe 2 (Konzept Heimladung/Fahrverbrauch 7.2, Regel 3, G1):** der Topf
+    ``ladung_kwh``/``ladung_pv_kwh``/``ladung_netz_kwh`` ist die **private Heimladung** —
+    ``Σ je_auto`` (eigene Messungen, zugeordneter Rest, Schätzungen der privaten Autos),
+    in jedem Monat, auch wenn die Wallbox geladen hat. Gast und Dienstwagen stehen nicht
+    darin; die **Messung der Wallbox** (Regel 0, mit Gast und Dienstwagen) ist
+    ``wallbox_summe``, der Rest ohne Empfänger ``rest_*`` bei ``rest_zugeordnet = False``,
+    die gemessene dienstliche Ladung ``dienstlich_gemessen_*``. Der Absatz unten
+    beschreibt die Quellenwahl bis Stufe 1 (eine Quelle je Monat); ``quelle`` sagt seit
+    Stufe 2 nur noch, was den Monat bestimmt.
+
     Die Heimladungs-Trias (``ladung_kwh == ladung_pv_kwh + ladung_netz_kwh``)
     kommt geschlossen aus EINER Quelle (``get_emob_heimladung_canonical``,
     Entscheidung 1 von ``KONZEPT-WALLBOX-EAUTO.md``); feldweises ``max()`` über
@@ -214,6 +224,36 @@ class EmobFakten:
     #: dieselbe wie vor N-555 (Konzept Regel 2-Ü: Dienstwagen unverändert); das
     #: Kennzeichen sagt nur, dass sie eine Schätzung ist, statt es zu verschweigen.
     dienstlich_geschaetzt: bool = False
+    #: ⭐ N-555 Stufe 2 (Konzept Regel 2/3): die Heimladung JEDES privaten Autos im Monat
+    #: (``inv_id → AutoHeimladung``: gemessen, Rest-Anteil nach km, Schätzung oder 0) — aus
+    #: der einen Funktion. Wer je Fahrzeug rechnet (Übersicht, Jahresbericht), liest hier.
+    je_auto: dict = field(default_factory=dict)
+    #: Regel 2 Schritt 2/3: der Rest der Wallbox und ob er an private Autos ging.
+    rest_pv_kwh: float = 0.0
+    rest_netz_kwh: float = 0.0
+    rest_zugeordnet: bool = False
+    #: Trägt eine private Wallbox einen Wert (auch 0) oder — laufend — eine Quelle?
+    wallbox_hat_wert: bool = False
+    #: Ist eine private Wallbox im Monat in Betrieb (auch ohne Zeile)?
+    wallbox_in_betrieb: bool = False
+    #: Regel 3 / E3: die gemessene dienstliche Ladung (vom Rest abgezogen) — der
+    #: Community-Payload kürzt das Wallbox-Feld darum.
+    dienstlich_gemessen_pv_kwh: float = 0.0
+    dienstlich_gemessen_netz_kwh: float = 0.0
+    #: Regel 3 / E3 / E7: Dienstwagen ohne bzw. mit eigener Messung (``inv_id``s).
+    dienstwagen_ungemessen: frozenset = frozenset()
+    dienstwagen_gemessen: frozenset = frozenset()
+    #: Regel 3: eine dienstliche Wallbox in Betrieb (dann zählen die Dienstwagen nicht).
+    dienstliche_wallbox_in_betrieb: bool = False
+    #: E3: ist im Monat ein Dienstwagen in Betrieb (auch ohne Zeile)? Dann kann er an der
+    #: privaten Wallbox geladen haben — die Zahl der Ladevorgänge ist nicht aufteilbar.
+    dienstwagen_in_betrieb: bool = False
+    #: Regel 8 (E5): E-Autos, deren gespeichertes ``ladung_kwh`` „Heim: gesamt" ist (nach
+    #: Herkunft) — für *Cockpit → Monat*, das die gespeicherte Zeile neu entscheidet.
+    heim_gesamt_ids: frozenset = frozenset()
+    #: Regel 3: die gespeicherten Zeilen der Dienstwagen und dienstlichen Wallboxen
+    #: (``inv_id →``, roh) — für *Cockpit → Monat*, das den Monat neu entscheidet.
+    dienstlich_ladedaten_je_inv: dict = field(default_factory=dict)
     eauto_ladedaten: tuple[dict, ...] = ()
     wallbox_ladedaten: tuple[dict, ...] = ()
     #: N-555: dieselben privaten Zeilen (E-Auto und Wallbox) je ``Investition.id`` —

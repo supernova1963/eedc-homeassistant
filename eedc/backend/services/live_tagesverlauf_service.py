@@ -331,7 +331,10 @@ async def get_tagesverlauf(
     # Serien-Selektion (inkl. Pool-Dedup) über die geteilte Quelle — identisch
     # zum Backfill-Pfad (Issue #318, M1). Chart-Metadaten (label/farbe/max_w)
     # rekonstruieren wir hier aus den Kern-Specs; sie sind Live-spezifisch.
-    serien_core, serie_entities = baue_investitions_serien(inv_live_map, investitionen)
+    # N-555 Stufe 2 (Regel 0/8): „Wallbox in Betrieb" am betrachteten Tag, nicht heute.
+    serien_core, serie_entities = baue_investitions_serien(
+        inv_live_map, investitionen, tag=start.date(),
+    )
 
     # Wer NICHT gezeichnet wird, und warum — die geteilte Bedingung (N-447).
     # ⛔ Sie steht bewusst NACH dem Serien-Bau: bis 12.09.2026 lief sie davor und

@@ -24,8 +24,7 @@ from backend.services.eauto_wirtschaftlichkeit import (
     compute_emob_pool_attribution,
     entscheide_emob_heimladung,
 )
-from backend.services.emob_ladeanteil import reichere_monatszeilen_an_mit_quoten
-from backend.services.emob_heimlade_quellen import laufende_heimlade_quellen
+from backend.services.emob_kontext import lade_emob_kontext
 from backend.services.monats_fakten import SonstigesFakten
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
@@ -284,7 +283,8 @@ async def t_konto_je_investition(*, _zt_cache, allgemein_tarif, anlage_id, db, e
             )
         )
         imd_by_inv: dict[int, dict] = {}
-        for imd in all_imd_result.scalars().all():
+        _imd_objekte = all_imd_result.scalars().all()
+        for imd in _imd_objekte:
             imd_by_inv[imd.investition_id] = imd.verbrauch_daten or {}
 
         # Wallbox-Pool-Attribution für die E-Auto-Komponente: bei evcc-Setups
@@ -296,6 +296,12 @@ async def t_konto_je_investition(*, _zt_cache, allgemein_tarif, anlage_id, db, e
         # bewusst offen gelassen) — und er sitzt in derselben Route wie die
         # Heimladungs-Trias aus den Monats-Fakten. Ohne die Anreicherung stünden
         # in EINER Sicht zwei PV-Anteile derselben Ladung nebeneinander.
+        # N-555 Stufe 2: Zeilen und Entscheid des Monats aus dem einen Kontext
+        # (`services/emob_kontext.py`) — mit Dienstwagen, dienstlicher Wallbox, Herkunft
+        # von „Heim: gesamt" und den Quellen des laufenden Monats (Regel 1, 2, 3, 8).
+        _kontext = await lade_emob_kontext(
+            db, anlage_id, [i for i in investitionen if i.aktiv], _imd_objekte,
+        )
         _emob_invs = [
             i for i in investitionen
             if i.aktiv
@@ -304,18 +310,11 @@ async def t_konto_je_investition(*, _zt_cache, allgemein_tarif, anlage_id, db, e
             and i.id in imd_by_inv
             and i.typ in ("e-auto", "wallbox")
         ]
-        _emob_daten, _emob_quoten = await reichere_monatszeilen_an_mit_quoten(
-            db,
-            anlage_id,
-            [
-                ((jahr, monat), i.typ == "wallbox", imd_by_inv[i.id])
-                for i in _emob_invs
-            ],
-        )
-        for i, daten in zip(_emob_invs, _emob_daten):
-            imd_by_inv[i.id] = daten
+        for i in _emob_invs:
+            imd_by_inv[i.id] = _kontext.daten.get((i.id, jahr, monat), imd_by_inv[i.id])
 
-        # Wallbox-Pool-Attribution auf denselben (angereicherten) Zeilen.
+        # Wallbox-Pool-Attribution auf denselben (angereicherten) Zeilen — nur noch für
+        # die externe Ladung (F-5, `waehle_extern_paar`).
         eauto_imd_data = [imd_by_inv[i.id] for i in _emob_invs if i.typ == "e-auto"]
         wb_imd_data = [imd_by_inv[i.id] for i in _emob_invs if i.typ == "wallbox"]
         emob_pool_attr = compute_emob_pool_attribution(
@@ -323,19 +322,8 @@ async def t_konto_je_investition(*, _zt_cache, allgemein_tarif, anlage_id, db, e
             wallbox_imd_data=wb_imd_data,
         )
         # N-555: der Entscheid des Monats — dieselbe Funktion wie die Schicht.
-        emob_entscheid = entscheide_emob_heimladung(
-            eauto_je_inv={i.id: imd_by_inv[i.id] for i in _emob_invs if i.typ == "e-auto"},
-            wallbox_zeilen=wb_imd_data,
-            wallbox_in_betrieb=bool(wb_imd_data) or any(
-                i.typ == "wallbox" and not ist_dienstlich(i)
-                and i.ist_aktiv_im_monat(jahr, monat)
-                for i in investitionen
-            ),
-            pv_quote=_emob_quoten.get((jahr, monat)),
-            # Nur im laufenden Monat nicht leer (Regel 1).
-            heimlade_quellen=(await laufende_heimlade_quellen(
-                db, anlage_id, investitionen,
-            )).get((jahr, monat), frozenset()),
+        emob_entscheid = _kontext.ctx.entscheide.get((jahr, monat)) or entscheide_emob_heimladung(
+            eauto_je_inv={}, wallbox_zeilen=[],
         )
 
         for inv in investitionen:

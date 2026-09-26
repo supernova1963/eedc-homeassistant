@@ -391,23 +391,34 @@ def emob_heimladung_pool(
         return {}
 
     gespeicherte_zeilen = dict(gespeichert.ladedaten_je_inv) if gespeichert is not None else {}
+    # N-555 Stufe 2: auch die dienstlichen Zeilen (Regel 3) und die Herkunft von
+    # „Heim: gesamt" (Regel 8) — dieselben Eingänge wie die Monats-Fakten.
+    gespeicherte_dienstlich = (
+        dict(gespeichert.dienstlich_ladedaten_je_inv) if gespeichert is not None else {}
+    )
+    heim_gesamt: set[int] = set(gespeichert.heim_gesamt_ids) if gespeichert is not None else set()
     eauto_je_inv: dict[int, dict] = {}
     wallbox_daten: list[dict] = []
+    dienstwagen_je_inv: dict[int, dict] = {}
+    dienstliche_wallbox_je_inv: dict[int, dict] = {}
+    wallbox_ids: set[int] = set()
     eauto_km = 0.0
     emob_quelle: Optional[tuple] = None
     wallbox_in_betrieb = False
     for inv in investitionen:
-        if ist_dienstlich(inv):
-            continue
         # #239 detLAN-Folge: HA-Statistics-Werte aus vor-Anschaffungs-
         # Monaten nicht in den Monatsbericht-Pool aggregieren.
         if not inv.ist_aktiv_im_monat(jahr, monat):
             continue
         if inv.typ not in ("e-auto", "wallbox"):
             continue
+        dienstlich = ist_dienstlich(inv)
         praefix = f"inv_{inv.id}_"
         werte = {k[len(praefix):]: v for k, v in resolved.items() if k.startswith(praefix)}
-        zeile = dict(gespeicherte_zeilen.get(inv.id) or {})
+        gespeicherte_zeile = (
+            (gespeicherte_dienstlich if dienstlich else gespeicherte_zeilen).get(inv.id) or {}
+        )
+        zeile = dict(gespeicherte_zeile)
         for feld, eintrag in werte.items():
             if ist_aktueller_monat:
                 zeile[feld] = eintrag[0]
@@ -417,6 +428,23 @@ def emob_heimladung_pool(
         for feld in HEIMLADE_FELDER[inv.typ]:
             if f"{praefix}{feld}" in ha_felder_mit_daten:
                 zeile.setdefault(feld, 0.0)
+        # Regel 8: ein `ladung_kwh` am Auto, das aus einer Quelle (HA, MQTT, Live) in die
+        # Zeile kam, ist „Heim: gesamt" — nur der gespeicherte alte Gesamtwert ohne
+        # Herkunft ist es nicht (sein Status steht in `heim_gesamt_ids` der Schicht).
+        if inv.typ == "e-auto":
+            gespeichert_ladung = gespeicherte_zeile.get("ladung_kwh")
+            aus_quelle = (
+                ("ladung_kwh" in werte and (ist_aktueller_monat or gespeichert_ladung is None))
+                or (f"{praefix}ladung_kwh" in ha_felder_mit_daten and gespeichert_ladung is None)
+            )
+            if aus_quelle:
+                heim_gesamt.add(inv.id)
+        if dienstlich:
+            if inv.typ == "e-auto":
+                dienstwagen_je_inv[inv.id] = zeile
+            else:
+                dienstliche_wallbox_je_inv[inv.id] = zeile
+            continue
         if inv.typ == "e-auto":
             eauto_je_inv[inv.id] = zeile
             # N-555: auch „Heim: PV/Netz" und Extern tragen die Herkunft — bis
@@ -434,6 +462,7 @@ def emob_heimladung_pool(
                 emob_quelle = km_entry[1]
         else:
             wallbox_in_betrieb = True
+            wallbox_ids.add(inv.id)
             wallbox_daten.append(zeile)
             for suffix in ("ladung_kwh", "ladung_pv_kwh"):
                 if werte.get(suffix):
@@ -443,6 +472,10 @@ def emob_heimladung_pool(
         eauto_je_inv=eauto_je_inv,
         wallbox_zeilen=wallbox_daten,
         wallbox_in_betrieb=wallbox_in_betrieb,
+        dienstwagen_je_inv=dienstwagen_je_inv,
+        dienstliche_wallbox_je_inv=dienstliche_wallbox_je_inv,
+        heim_gesamt=heim_gesamt,
+        wallbox_ids=wallbox_ids,
         heimlade_quellen=heimlade_quellen if ist_aktueller_monat else (),
         # Die Quote der gespeicherten Schaetzung gilt weiter; eine andere kennt
         # dieser Zweig nicht (die Tagesebene liest die Schicht).

@@ -651,49 +651,51 @@ async def get_cockpit_uebersicht(
     # Benzinpreis: der Tarif kommt aus `lade_tarife_fuer_anlage` und existiert
     # auch für Monate ohne eigene Zählerzeile.
     strompreis_lookup = {f.schluessel: f.tarif.wallbox_preis_effektiv_cent for f in fakten}
-    # Gewichte der Preis-Mittelung: die kanonisch gepoolte Netzladung je Monat
-    # (`lade_monats_fakten` hat die Quellen-Entscheidung Wallbox/E-Auto bereits
-    # getroffen). Nur Monate mit Netzladung — ein Monat ohne sie darf seinen
-    # Tarif nicht in den Ø tragen.
-    emob_netz_pro_monat = [
-        (f.schluessel[0], f.schluessel[1], f.emob.ladung_netz_kwh)
-        for f in fakten
-        if f.emob.ladung_netz_kwh > 0
-    ]
     # G20-2 (Gernot 2026-07-20): eMob-Ersparnis = Σ der Per-Fahrzeug-Läufe (jeder
     # mit dem Verbrauchs-Parameter SEINES Fahrzeugs), statt EIN Lauf über die
-    # Gesamt-km mit dem Referenz-Parameter des ersten E-Autos (der bei
-    # unterschiedlichem Verbrauch je Fahrzeug falsch rechnete). Die gepoolte
-    # Heim-Netzladung + externen Kosten werden km-anteilig auf die Fahrzeuge
-    # verteilt (Pool bleibt EINE Quelle). Bei genau EINEM E-Auto ist der 100 %-
-    # Anteil == der frühere Einmal-Lauf → bitgleich. [[feedback_aggregator_symmetrie]]
+    # Gesamt-km mit dem Referenz-Parameter des ersten E-Autos.
+    # [[feedback_aggregator_symmetrie]]
+    #
+    # ⭐ N-555 Stufe 2 (Konzept Regel 2, E6): die Heim-Netzladung JEDES Fahrzeugs ist
+    # Σ Monate seiner Menge aus dem Entscheid (`f.emob.je_auto[inv].netz_kwh`: eigene
+    # Messung, Anteil am Rest, Schätzung). Bis 26.09.2026 stand hier `emob_netz_ladung ×
+    # km-Anteil` mit `if _km_total <= 0: continue` — ein Auto, das geladen hat, aber
+    # nicht gefahren ist, verlor still seine Stromrechnung, und ein Auto mit eigener
+    # Messung bekam den km-Anteil statt seiner Werte. Die Preis-Gewichte sind jetzt die
+    # Netzladung DIESES Fahrzeugs je Monat (F-18, wie im E-Auto-Hub). Extern-Kosten
+    # bleiben nach km-Anteil (die eine Funktion verteilt Extern nicht je Auto).
     total_eauto_km = sum(eauto_km_by_inv.values())
+    netz_je_inv: dict[int, float] = {}
+    netz_pro_monat_je_inv: dict[int, list[tuple[int, int, float]]] = {}
+    for f in fakten:
+        for _inv_id, _auto in f.emob.je_auto.items():
+            if _auto.netz_kwh:
+                netz_je_inv[_inv_id] = netz_je_inv.get(_inv_id, 0.0) + _auto.netz_kwh
+                netz_pro_monat_je_inv.setdefault(_inv_id, []).append(
+                    (f.schluessel[0], f.schluessel[1], _auto.netz_kwh)
+                )
     emob_ersparnis = 0.0
     benzin_verbrauch = 0.0
-    if total_eauto_km > 0:
-        for _inv_id, _km_total in eauto_km_by_inv.items():
-            if _km_total <= 0:
-                continue
-            _share = _km_total / total_eauto_km
-            _car_result = berechne_eauto_ersparnis_periode(
-                km_pro_monat=[(j, mo, km) for (j, mo), km in eauto_km_pro_monat_by_inv[_inv_id].items()],
-                ladung_netz_kwh_gesamt=emob_netz_ladung * _share,
-                ladung_extern_euro_gesamt=emob_extern_euro_total * _share,
-                wallbox_strompreis_cent=wallbox_preis_cent,
-                eauto_parameter=getattr(inv_by_id.get(_inv_id), "parameter", None),
-                monats_benzinpreis_lookup=benzinpreis_lookup,
-                fahrverbrauch_kwh_gesamt=eauto_fahrverbrauch_by_inv.get(_inv_id) or None,
-                # F-18: der Tarif DES MONATS statt des heutigen. Die Gewichte
-                # sind die kanonisch gepoolte Netzladung je Monat — dieselbe
-                # Größe, nach der auch der Komponenten-Hub mittelt. Der
-                # `_share` je Fahrzeug ist über die ganze Periode konstant und
-                # kürzt sich in der Gewichtung heraus; die anlagenweite
-                # Aufteilung ist deshalb für jedes Fahrzeug die richtige.
-                monats_strompreis_lookup=strompreis_lookup,
-                netz_pro_monat=emob_netz_pro_monat or None,
-            )
-            emob_ersparnis += _car_result.ersparnis_euro
-            benzin_verbrauch += (_km_total / 100) * _car_result.verwendeter_verbrauch_l_100km
+    for _inv_id in sorted(set(eauto_km_by_inv) | set(netz_je_inv)):
+        _km_total = eauto_km_by_inv.get(_inv_id, 0.0)
+        _share = _km_total / total_eauto_km if total_eauto_km > 0 else 0.0
+        _car_result = berechne_eauto_ersparnis_periode(
+            km_pro_monat=[
+                (j, mo, km) for (j, mo), km in eauto_km_pro_monat_by_inv.get(_inv_id, {}).items()
+            ],
+            ladung_netz_kwh_gesamt=netz_je_inv.get(_inv_id, 0.0),
+            ladung_extern_euro_gesamt=emob_extern_euro_total * _share,
+            wallbox_strompreis_cent=wallbox_preis_cent,
+            eauto_parameter=getattr(inv_by_id.get(_inv_id), "parameter", None),
+            monats_benzinpreis_lookup=benzinpreis_lookup,
+            fahrverbrauch_kwh_gesamt=eauto_fahrverbrauch_by_inv.get(_inv_id) or None,
+            # F-18: der Tarif DES MONATS statt des heutigen, gewichtet mit der
+            # Netzladung dieses Fahrzeugs je Monat.
+            monats_strompreis_lookup=strompreis_lookup,
+            netz_pro_monat=netz_pro_monat_je_inv.get(_inv_id) or None,
+        )
+        emob_ersparnis += _car_result.ersparnis_euro
+        benzin_verbrauch += (_km_total / 100) * _car_result.verwendeter_verbrauch_l_100km
     emob_ersparnis = round(emob_ersparnis, 2)
 
     bkw_invs = [i for i in investitionen if i.typ == "balkonkraftwerk" and i.ist_aktiv_an(today)]

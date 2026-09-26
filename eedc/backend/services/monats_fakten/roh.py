@@ -23,7 +23,8 @@ from backend.core.investition_parameter import (
 )
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.monatsdaten import Monatsdaten
-from backend.services.emob_ladeanteil import hat_gepflegten_pv_anteil
+from backend.services.emob_ladeanteil import braucht_tages_quote, hat_gepflegten_pv_anteil
+from backend.core.field_definitions import ist_heim_gesamt
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
 from backend.services.monats_fakten.fakten import MonatsSchluessel
 
@@ -183,6 +184,13 @@ class _RohMonat:
         #: ihre Menge rechnet jetzt die eine Funktion (bitgleich), nicht mehr diese
         #: Faltung über die Lese-Hilfe mit ihrem stillen Fahrverbrauch-Ersatz.
         self.dienstlich_je_inv: dict[int, dict] = {}
+        #: N-555 Stufe 2 (Regel 3): welche der dienstlichen Zeilen eine **Wallbox** ist —
+        #: ihre Menge ist die dienstliche Ladung; ein Dienstwagen daneben zählt nicht.
+        self.dienstliche_wallbox_ids: set[int] = set()
+        #: N-555 Stufe 2 (Regel 8, E5): E-Autos (privat und dienstlich), deren
+        #: ``ladung_kwh`` „Heim: gesamt" ist — Herkunft weder fehlend noch ``legacy:unknown``
+        #: (``field_definitions.ist_heim_gesamt``). Der alte Gesamtwert zählt nur ohne Wallbox.
+        self.heim_gesamt_ids: set[int] = set()
         self.eauto_km = 0.0
         self.eauto_km_je_fahrzeug: dict[int, float] = {}
         self.eauto_fahrverbrauch_je_fahrzeug: dict[int, float] = {}
@@ -218,9 +226,12 @@ class _RohMonat:
         """
         if not (self.eauto_ladedaten or self.wallbox_ladedaten):
             return False
+        # N-555 Stufe 2 (S2-4): die Ableitung gilt je Zeile — die Vorprüfung fragt beides.
+        # Die monatsweise Frage bleibt, damit kein Monat seine Tagesebene verliert, den sie
+        # bisher geladen hat (die Tagesebene füllt dann auch andere Lücken, s. `laden.py`).
         return not hat_gepflegten_pv_anteil(
             self.eauto_ladedaten, self.wallbox_ladedaten
-        )
+        ) or braucht_tages_quote(self.eauto_ladedaten, self.wallbox_ladedaten)
 
     def falte(
         self,
@@ -443,7 +454,13 @@ class _RohMonat:
                 # Fahrverbrauch als Schätzung steht dort ausdrücklich. Hier stand
                 # `get_emob_pv_netz_kwh(data)`, dessen Ersatz still einsprang.
                 self.dienstlich_je_inv[inv.id] = data
+                if inv.typ == "wallbox":
+                    self.dienstliche_wallbox_ids.add(inv.id)
+                elif ist_heim_gesamt(data, source_provenance):
+                    self.heim_gesamt_ids.add(inv.id)
             elif inv.typ == "e-auto":
+                if ist_heim_gesamt(data, source_provenance):
+                    self.heim_gesamt_ids.add(inv.id)
                 self.eauto_ladedaten.append(data)
                 self.eauto_ladedaten_ids.append(inv.id)
                 self.eauto_km += b.eauto_km

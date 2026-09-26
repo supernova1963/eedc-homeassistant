@@ -354,7 +354,8 @@ _SNAPSHOT_AUSNAHMEN: dict[tuple[str, str], str] = {
 # Stelle, an der `verbrauch_sonstig_kwh` fehlte, und täuschte Abdeckung vor.
 _SNAPSHOT_KOMPATIBILITAET: dict[str, tuple[str, ...]] = {
     "wallbox": ("ladung_netz_kwh",),   # Wallbox-Registry kennt nur ladung_kwh/ladung_pv_kwh
-    "e-auto": ("ladung_kwh",),         # Registry führt verbrauch_kwh; komponenten_beitraege nutzt beide
+    # ⚑ N-555 Stufe 2 (26.09.2026): `e-auto/ladung_kwh` stand hier als Alias — seitdem ist
+    # es das Registry-Feld „Heim: gesamt" (E5) und damit kein Kompatibilitäts-Name mehr.
     "sonstiges": ("verbrauch_kwh",),   # Legacy-Zwilling von verbrauch_sonstig_kwh (s. get_sonstiges_verbrauch_kwh)
 }
 

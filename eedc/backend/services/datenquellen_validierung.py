@@ -489,6 +489,9 @@ _VERDRAENGT_TEXT = {
                      "dort zuordnen, nicht hier.",
     "keine_pv_module": "Die PV-Module sind einzeln erfasst — dort zuordnen, "
                        "nicht hier.",
+    # N-555 Stufe 2 (Konzept Regel 3): am Dienstwagen neben einer dienstlichen Wallbox.
+    "keine_dienstliche_wallbox": "Die dienstliche Wallbox ist die dienstliche Ladung "
+                                 "dieses Dienstwagens — dort zuordnen, nicht hier.",
 }
 # N-79: die Zuordnung Wert → verdrängender Typ ist KEIN lokales Wissen mehr.
 # Sie stand hier wertgleich neben einer `if`-Kette in `field_definitions.py`;

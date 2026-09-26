@@ -1445,6 +1445,10 @@ class StammdatenChecks:
                 # Bedingung verhindern soll.
                 # Dieselbe Regel steht ausformuliert in `energieprofil.py`
                 # (`_check_tages_zusatzfelder`) — hier fehlte sie, dort nicht.
+                # ⚑ N-555 Stufe 2 (26.09.2026): Seitdem bietet das Formular die
+                # Heim-Felder auch neben einer Wallbox an (Konzept Regel 8) — die
+                # Bedingung hier bleibt trotzdem: mit Wallbox trägt SIE den Rest,
+                # eine Messung am Auto ist dort freiwillig und nichts, was fehlt.
                 if not hat_wallbox:
                     ergebnisse.extend(self._check_investition_monatsdaten(
                         inv, name, "ladung_pv_kwh", "Ladung PV", CheckSeverity.INFO, monatsdaten,

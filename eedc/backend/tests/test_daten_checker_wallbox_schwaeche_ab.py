@@ -76,8 +76,14 @@ async def test_eauto_nur_fahrverbrauch_kein_pflege_konflikt(db):
 
 
 async def test_eauto_echte_heimladung_weiterhin_konflikt(db):
-    """Gegenprobe: trägt das E-Auto explizit `ladung_kwh`, bleibt der
-    bestehende Pflege-Konflikt erhalten (PV-Inkonsistenz → WARNING)."""
+    """Gegenprobe: trägt das E-Auto eine echte Heimladung, die die Wallbox übersteigt,
+    meldet der Check (WARNING).
+
+    ⚑ N-555 Stufe 2 (Konzept Regel 7): bis 26.09.2026 genügte „beide tragen Heimladung,
+    PV-Anteil weicht ab". Nach Regel 2 ist eine eigene Messung am Auto der Normalfall;
+    gemeldet wird der gerichtete Widerspruch „Autos mehr als die Wallbox". Die Substanz
+    (Schwäche A: nur Heimlade-Felder zählen, nie der Fahrverbrauch) bleibt — die Probe
+    darüber mit `verbrauch_kwh` bleibt still."""
     anlage = Anlage(anlagenname="Test", leistung_kwp=10.0, standort_land="DE")
     db.add(anlage)
     await db.flush()
@@ -94,7 +100,7 @@ async def test_eauto_echte_heimladung_weiterhin_konflikt(db):
         ))
         db.add(InvestitionMonatsdaten(
             investition_id=ea.id, jahr=j, monat=m,
-            verbrauch_daten={"ladung_kwh": 200.0, "ladung_pv_kwh": 40.0},
+            verbrauch_daten={"ladung_pv_kwh": 40.0, "ladung_netz_kwh": 200.0},
         ))
     await db.commit()
 
