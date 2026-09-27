@@ -598,6 +598,22 @@ export const KOMPONENTEN_FARBEN = {
  *  Identität, da KEIN eigener Investitionstyp. Lime, distinkt von PV-Amber/Emerald. */
 export const SONSTIGES_ERZEUGER_FARBE = { hex: '#84cc16', bg: 'bg-lime-500', text: 'text-lime-500', tint: 'bg-lime-50 dark:bg-lime-900/20' } as const
 
+/**
+ * Zählerstand-Verlauf (Verbrauchszähler, #377) — EINE Rolle für alle Medien
+ * (Wasser, Gas, Heizöl …): der Verlauf ist immer ein Ein-Linien-Chart je Gerät,
+ * die Identität kommt aus dem Titel, nicht aus der Farbe.
+ *
+ * sky-500 statt der Komponenten-Identität `sonstiges` (Grau): eine 2-px-Linie
+ * in gray-500 ging im Dark Mode gegen das Gitter unter (N-570, MartyBr,
+ * simon42 T89667 #384 — Screenshot). Grau bleibt die Flächen-Identität von
+ * „Sonstiges" (Hub-Balken, Kategorien-Leisten), färbt aber keine Linie mehr.
+ * Ko-Existenz sky-500 bewusst: `niederschlag` (Wetter-Widget) und
+ * `modusKuehlen`/`kuehlung` (Wärme-Sichten) — andere Sichten, dieselbe
+ * Wasser-Familie. NICHT blue-500: das ist im selben Cockpit-Tag-View bereits
+ * die Batterie-Linie.
+ */
+export const ZAEHLER_VERLAUF_FARBE = '#0ea5e9' // sky-500
+
 // ─── Tagesverlauf-Kategorien ─────────────────────────────────────────────────
 
 /** Farben für Energiefluss-/Bilanz-Visualisierungen (nach Tagesverlauf-Kategorie).

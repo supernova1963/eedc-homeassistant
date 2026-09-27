@@ -83,7 +83,7 @@ export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizie
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthlyData} margin={{ top: ACHSEN_MARGIN_TOP }}>
-                <CartesianGrid strokeDasharray="3 3" />
+                <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                 <XAxis dataKey="name" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
                 <YAxis tickFormatter={achsenTick} {...yAchse(schmal, 70)} label={achsenEinheit('kWh')} />
                 <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip />} />
@@ -110,7 +110,7 @@ export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizie
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={monthlyData} margin={{ top: ACHSEN_MARGIN_TOP }}>
-                <CartesianGrid strokeDasharray="3 3" />
+                <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                 <XAxis dataKey="name" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
                 <YAxis tickFormatter={achsenTick} {...yAchse(schmal, 40)} label={achsenEinheit('Zyklen')} />
                 <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip decimals={1} />} />
@@ -129,7 +129,7 @@ export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizie
         <div className="h-48">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={effizienzData} margin={{ top: ACHSEN_MARGIN_TOP }}>
-              <CartesianGrid strokeDasharray="3 3" />
+              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis dataKey="name" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
               <YAxis domain={[0, 100]} tickFormatter={achsenTick} {...yAchse(schmal, 55)} label={achsenEinheit('%')} />
               <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="%" decimals={1} />} />

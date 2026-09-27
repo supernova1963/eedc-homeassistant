@@ -379,7 +379,7 @@ export function WaermepumpeVergleich({ monatsdaten, jazJeMonat, hatGetrennteStro
           <ResponsiveContainer width="100%" height="100%">
             {achse === 'monate' ? (
               <BarChart data={monatData} margin={{ top: ACHSEN_MARGIN_TOP }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" vertical={false} />
                 <XAxis dataKey="name" {...xAchse()} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
                 <YAxis domain={modus === 'jaz' ? [0, 6] : undefined} {...yAchse(false)} tickFormatter={achsenTick} label={achsenEinheit(modus === 'jaz' ? 'JAZ' : 'kWh')} />
                 <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip formatter={(v) => modus === 'jaz' ? fmtZahl(v, 2) : `${v} kWh`} />} />
@@ -397,7 +397,7 @@ export function WaermepumpeVergleich({ monatsdaten, jazJeMonat, hatGetrennteStro
               // (Style-Guide B7). Die Blass-Dimmung erklärt der Fuß-Hinweis. (check:charts
               // erlaubt Einzelserien ohne Legende.)
               <BarChart data={saisonData} margin={{ top: ACHSEN_MARGIN_TOP }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" vertical={false} />
                 <XAxis dataKey="name" {...xAchse()} /* achsen-allow: Zeit-/Kategorie-Achse (Saison) */ />
                 {/* Domain bei kWh/Kd bewusst frei: die Größenordnung hängt am Gebäude,
                     eine feste Skala wie bei der JAZ [0,6] würde Anlagen abschneiden. */}

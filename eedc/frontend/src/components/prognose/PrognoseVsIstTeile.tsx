@@ -229,7 +229,7 @@ export function PvgisMonatsChart({ vm, jahr }: { vm: PrognoseVsIstVM; jahr: numb
       <div className="h-80">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={vm.vergleichsDaten} margin={{ top: ACHSEN_MARGIN_TOP }}>
-            <CartesianGrid strokeDasharray="3 3" />
+            <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
             <XAxis dataKey="monatName" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse */ />
             <YAxis yAxisId="left" tickFormatter={eAchse.tick} label={achsenEinheit(eAchse.einheit)} {...yAchse(schmal)} />
             <YAxis yAxisId="right" orientation="right" {...yAchse(schmal)} tickFormatter={achsenTick} label={achsenEinheit('%', 'rechts')} />

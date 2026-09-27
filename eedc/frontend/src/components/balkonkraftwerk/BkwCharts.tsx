@@ -35,7 +35,7 @@ export function BkwErzeugungVerlauf({ monatsdaten }: { monatsdaten: InvestitionM
     <div className="h-64">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: ACHSEN_MARGIN_TOP }}>
-          <CartesianGrid strokeDasharray="3 3" />
+          <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
           <XAxis dataKey="name" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse */ />
           <YAxis {...yAchse(schmal)} tickFormatter={achsenTick} label={achsenEinheit('kWh')} />
           <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip />} />
@@ -57,7 +57,7 @@ export function BkwSpeicherVerlauf({ monatsdaten }: { monatsdaten: InvestitionMo
     <div className="h-48">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: ACHSEN_MARGIN_TOP }}>
-          <CartesianGrid strokeDasharray="3 3" />
+          <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
           <XAxis dataKey="name" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse */ />
           <YAxis {...yAchse(schmal)} tickFormatter={achsenTick} label={achsenEinheit('kWh')} />
           <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip />} />

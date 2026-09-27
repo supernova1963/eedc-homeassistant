@@ -38,7 +38,7 @@ import {
   xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP,
   formatDatumZeit, formatUhrzeit,
 } from '../../lib'
-import { KOMPONENTEN_FARBEN } from '../../lib/colors'
+import { ZAEHLER_VERLAUF_FARBE } from '../../lib/colors'
 import { useSchmaleAchse } from '../../hooks'
 import { eedcTooltipProps } from '../ui'
 import type { ZaehlerStand, ZaehlerZeitraum } from '../../api/zaehlerstaende'
@@ -90,7 +90,7 @@ export default function ZaehlerVerlaufChart(
             <div className="h-48">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={rows} margin={{ top: ACHSEN_MARGIN_TOP, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                   <XAxis
                     dataKey="name"
                     {...xAchse(schmal)}
@@ -121,10 +121,12 @@ export default function ZaehlerVerlaufChart(
                     type="monotone"
                     dataKey="stand"
                     name="Zählerstand"
-                    /* Farb-SoT: die Komponenten-Identität von `sonstiges` (Grau). Bewusst
-                       KEINE Rollenfarbe aus COLORS — die stehen für Rollen in der
-                       Energiebilanz, an der ein Zählerstand nicht teilnimmt. */
-                    stroke={KOMPONENTEN_FARBEN['sonstiges'].hex}
+                    /* Farb-SoT: die Zählerstand-Rolle (sky-500, N-570). Bewusst KEINE
+                       Rollenfarbe aus COLORS — die stehen für Rollen in der
+                       Energiebilanz, an der ein Zählerstand nicht teilnimmt — und
+                       nicht mehr das Identitäts-Grau: als 2-px-Linie ging es im
+                       Dark Mode gegen das Gitter unter (MartyBr, T89667 #384). */
+                    stroke={ZAEHLER_VERLAUF_FARBE}
                     dot={false}
                     strokeWidth={2}
                   />

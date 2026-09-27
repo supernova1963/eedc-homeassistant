@@ -432,7 +432,7 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
                       }))}
                       margin={{ top: ACHSEN_MARGIN_TOP, right: 20, left: 20, bottom: 5 }}
                     >
-                      <CartesianGrid strokeDasharray="3 3" />
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                       <XAxis dataKey="name" {...xAchse()} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
                       <YAxis
                         width={70}
@@ -649,7 +649,7 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
                     <div className="h-64">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={chartData} margin={{ top: ACHSEN_MARGIN_TOP, right: 20, left: 20, bottom: 5 }}>
-                          <CartesianGrid strokeDasharray="3 3" />
+                          <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                           <XAxis dataKey="name" {...xAchse()} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
                           <YAxis
                             width={70}

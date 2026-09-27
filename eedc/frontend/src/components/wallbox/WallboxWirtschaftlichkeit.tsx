@@ -53,7 +53,7 @@ export function WallboxWirtschaftlichkeit({ zusammenfassung: z, investition, mel
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={kostenVergleichData} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" />
+              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis type="number" tickFormatter={(v) => `${fmtZahl(v, 0)} €`} tick={{ fontSize: 10 }} /* achsen-allow: Wert-Achse waagerecht, Einheit/Format pro Tick (de-DE) */ />
               <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 10 }} /* achsen-allow: Kategorie-Namen (Heimladung tatsächlich/extern) */ />
               <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="€" decimals={2} />} />

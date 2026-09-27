@@ -74,7 +74,7 @@ export function KomponentenVergleich({
           <ResponsiveContainer width="100%" height="100%">
             {/* D12-4: fill je Datum mitgeben → ChartTooltip-Swatch trifft die Balkenfarbe (sonst SERIE_NEUTRAL-Grau). */}
             <BarChart data={sortiert.map((j) => ({ name: String(j.jahr), summe: j.summe, fill: farbe }))} margin={{ top: ACHSEN_MARGIN_TOP, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" />
+              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis dataKey="name" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse (Jahr) */ />
               <YAxis {...yAchse(schmal, 44)} tickFormatter={achsenTick} label={achsenEinheit(einheit)} />
               <Tooltip {...eedcTooltipProps({ unit: einheit, decimals: 0 })} />

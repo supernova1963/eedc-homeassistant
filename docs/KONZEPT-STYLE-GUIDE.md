@@ -345,7 +345,7 @@ Daraus die drei Klauseln:
 **Charts — zwei klar getrennte Mechanismen (Regel Nr. 0):**
 
 1. **Recharts-TEXT** (Tick-Werte, Legende, Pie-Labels) → zentrale `html.dark .recharts-*`-Overrides in `index.css` (Catch-all, greift ohne Pro-Komponenten-Props).
-2. **Recharts-STROKES/FILLS** (CartesianGrid, ReferenceLine, PolarGrid, neutrale Balken) → Hook **`useChartTheme()`** (`context/ThemeContext.tsx`), liefert `CHART_ACHSEN.{light|dark}` modusabhängig. **Kein** hartkodiertes `CHART_ACHSEN.light.*` mehr in Komponenten.
+2. **Recharts-STROKES/FILLS** (CartesianGrid, ReferenceLine, PolarGrid, neutrale Balken) → Hook **`useChartTheme()`** (`context/ThemeContext.tsx`), liefert `CHART_ACHSEN.{light|dark}` modusabhängig. **Kein** hartkodiertes `CHART_ACHSEN.light.*` mehr in Komponenten. Für `<CartesianGrid>` ist die Tailwind-Paarung `className="stroke-gray-200 dark:stroke-gray-700"` die gleichwertige zweite Form; **nackt (Recharts-Default `#ccc`) ist verboten** — im Dark Mode steht das Gitter sonst heller als manche Serienlinie vor den Daten (N-570, MartyBr T89667 #384). Wächter: `check:charts` **R4**.
 
 > **`CHART_ACHSEN` führt bewusst KEINEN `border`-Key.** Card-/Tabellen-Rahmen laufen über Tailwind `border` / `dark:border-gray-700` (siehe Text-Paarungen) — ein Muster pro Aufgabe. `CHART_ACHSEN` bleibt auf Recharts-Inline-Styles (`achse`/`grid`/`referenz`, je hell+dunkel) beschränkt; die Modus-Matrix ist `lib/colors.ts:CHART_ACHSEN` (SoT, keine Doc-Tabelle — A2-Pointer-Prinzip).
 

@@ -319,7 +319,7 @@ function SizingKurve({ d }: { d: SpeicherSizingResponse }) {
     <div>
       <ChartContainer height="h-64">
         <LineChart data={daten} margin={{ top: ACHSEN_MARGIN_TOP }}>
-          <CartesianGrid strokeDasharray="3 3" />
+          <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
           <XAxis dataKey="name" {...xAchse(schmal)} /* achsen-allow: Kategorie-Achse (Kapazitätsstufe) */ />
           <YAxis tickFormatter={achsenTick} {...yAchse(schmal, 55)} label={achsenEinheit('€/Jahr')} />
           <Tooltip {...eedcTooltipProps({ unit: ' €/Jahr', decimals: 0, cursor: false })} />

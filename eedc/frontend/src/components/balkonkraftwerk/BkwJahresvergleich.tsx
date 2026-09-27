@@ -59,7 +59,7 @@ export function BkwJahresvergleich({ monatsdaten, embed = false, melde }: { mona
       <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={daten} margin={{ top: ACHSEN_MARGIN_TOP, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" />
+            <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
             <XAxis dataKey="jahr" {...xAchse()} /* achsen-allow: Zeit-/Kategorie-Achse (Jahr) */ />
             <YAxis tick={{ fontSize: 10 }} width={56} tickFormatter={achsenTick} label={achsenEinheit('kWh')} />
             <Tooltip {...eedcTooltipProps({ unit: ' kWh', decimals: 0, percentOf: 'gesamt' })} />

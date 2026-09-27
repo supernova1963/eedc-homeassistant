@@ -388,7 +388,7 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
             <ResponsiveContainer width="100%" height="100%">
               {embed ? (
                 <BarChart data={moduleVergleichData} margin={{ top: 20, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                   <XAxis dataKey="name" {...xAchse()} /* achsen-allow: Kategorie-Achse (Modul-Name) */ />
                   <YAxis tickFormatter={jahresAchse.tick} label={achsenEinheit(jahresAchse.einheit)} width={70} tick={{ fontSize: 10 }} />
                   <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="kWh" />} />
@@ -402,7 +402,7 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
                 </BarChart>
               ) : (
                 <BarChart data={jahresChartData} margin={{ top: ACHSEN_MARGIN_TOP }}>
-                  <CartesianGrid strokeDasharray="3 3" />
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                   <XAxis dataKey="name" {...xAchse()} /* achsen-allow: Zeit-/Kategorie-Achse (Jahr) */ />
                   <YAxis tickFormatter={jahresAchse.tick} label={achsenEinheit(jahresAchse.einheit)} width={80} tick={{ fontSize: 10 }} />
                   <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="kWh" />} />
@@ -457,7 +457,7 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={saisonalChartData} margin={{ top: ACHSEN_MARGIN_TOP }}>
-                <CartesianGrid strokeDasharray="3 3" />
+                <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                 <XAxis dataKey="name" {...xAchse()} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
                 <YAxis tickFormatter={saisonalAchse.tick} label={achsenEinheit(saisonalAchse.einheit)} width={80} tick={{ fontSize: 10 }} />
                 <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="kWh" />} />

@@ -388,7 +388,7 @@ export function RoiAmortisationChart({ vm }: { vm: RoiAnalyseVM }) {
       <div className="h-80">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={vm.amortisationData} margin={{ top: ACHSEN_MARGIN_TOP }}>
-            <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+            <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" opacity={0.3} />
             {/* Die Reihe trägt Kalenderjahre (mit gepflegtem Anschaffungsdatum,
                 Radiocarbonat) oder den Jahres-Index ab 0 — beides schon vom
                 Backend, hier nur beschriftet. */}
@@ -449,7 +449,7 @@ export function RoiTypBalken({ vm }: { vm: RoiAnalyseVM }) {
       <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={daten} layout="vertical" margin={{ right: 56 }}>
-            <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+            <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" opacity={0.3} />
             <XAxis type="number" domain={[0, 'auto']} tickFormatter={(v) => `${fmtZahl(v, 0)} €`} tick={{ fontSize: 10 }} /* achsen-allow: Wert-Achse waagerecht, Einheit/Format pro Tick (de-DE) */ />
             <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 10 }} /* achsen-allow: Kategorie-Namen (Typen) */ />
             <Tooltip content={<ChartTooltip formatter={(value: number) => `${fmtZahl(value, 0)} €/Jahr`} />} />
@@ -474,7 +474,7 @@ export function RoiVergleichBar({ vm }: { vm: RoiAnalyseVM }) {
       <div className="h-80">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={vm.investitionenChart} layout="vertical">
-            <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+            <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" opacity={0.3} />
             {/* D9-F: Domain an Daten klemmen (Werte ≥ 0 → kein leerer Negativbereich) + € als Einheit. */}
             <XAxis type="number" domain={[0, 'auto']} tickFormatter={(v) => `${fmtZahl(v, 0)} €`} tick={{ fontSize: 10 }} /* achsen-allow: Wert-Achse waagerecht, Einheit/Format pro Tick (de-DE) */ />
             <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 10 }} /* achsen-allow: Kategorie-Namen (Investitionen) */ />

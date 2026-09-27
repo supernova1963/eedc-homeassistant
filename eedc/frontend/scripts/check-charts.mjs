@@ -87,6 +87,7 @@ const fehler = []
 let pieOk = 0
 let legendOk = 0
 let yBreiteOk = 0
+let gridOk = 0
 
 for (const file of tsxFiles(SRC)) {
   const rel = relative(ROOT, file).replaceAll('\\', '/')
@@ -117,6 +118,21 @@ for (const file of tsxFiles(SRC)) {
     fehler.push(`✗ ${rel}:${zeileVon(lm.index)} — rohe <Legend> — R2: content={<ChartLegende />} (S1-Bildsprache, kein farbiger Legendentext).`)
   }
 
+  // ── R4: jede <CartesianGrid> ist dark-aware ───────────────────────────────────
+  // Der Recharts-Default (stroke #ccc) ist im Dark Mode HELLER als viele
+  // Serienlinien — das Gitter steht dann vor den Daten (N-570, MartyBr,
+  // T89667 #384: graue Zählerstand-Linie hinter hellem Raster). Erlaubt sind
+  // die beiden bestehenden Formen: `stroke=` (useChartTheme()/achsen.grid)
+  // oder die Tailwind-Paarung `className="stroke-… dark:stroke-…"`.
+  const gridRe = /<CartesianGrid\b/g
+  let gm
+  while ((gm = gridRe.exec(src)) !== null) {
+    if (istKommentar(gm.index)) continue
+    const tag = openTag(src, gm.index)
+    if (/\bstroke=/.test(tag) || /className="stroke-[^"]*dark:stroke-/.test(tag)) { gridOk++; continue }
+    fehler.push(`✗ ${rel}:${zeileVon(gm.index)} — <CartesianGrid> ohne Dark-Mode-Farbe — R4: stroke={achsen.grid} (useChartTheme) oder className="stroke-gray-200 dark:stroke-gray-700" (Recharts-Default #ccc blendet im Dark Mode).`)
+  }
+
   // ── R3: <YAxis> mit expliziter Breite — yAchse(…) (Zentrale) oder width= ──────
   if (R3_SCOPE.some((p) => rel.startsWith(p))) {
     const yRe = /<YAxis\b/g
@@ -135,4 +151,4 @@ if (fehler.length) {
   console.error(`\ncheck:charts — ${fehler.length} Verstoß/Verstöße. (Laufzeit-Komposition: npm run check:chart-audit)`)
   process.exit(1)
 }
-console.log(`✅ check:charts — ${pieOk} Pie-Charts SoT/allowlist-konform, ${legendOk} Legenden über ChartLegende, ${yBreiteOk} Y-Achsen mit expliziter Breite (R3). (Multi-Serie-Legende + Overflow: check:chart-audit)`)
+console.log(`✅ check:charts — ${pieOk} Pie-Charts SoT/allowlist-konform, ${legendOk} Legenden über ChartLegende, ${yBreiteOk} Y-Achsen mit expliziter Breite (R3), ${gridOk} Grids dark-aware (R4). (Multi-Serie-Legende + Overflow: check:chart-audit)`)

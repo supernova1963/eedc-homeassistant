@@ -91,7 +91,7 @@ export function EAutoKmVerlauf({ monatsdaten }: { monatsdaten: InvestitionMonats
     <div className="h-64">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: ACHSEN_MARGIN_TOP }}>
-          <CartesianGrid strokeDasharray="3 3" />
+          <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
           <XAxis dataKey="name" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse */ />
           <YAxis label={achsenEinheit('km')} tickFormatter={achsenTick} {...yAchse(schmal)} />
           <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip />} />
@@ -111,7 +111,7 @@ export function EAutoLadungVerlauf({ monatsdaten }: { monatsdaten: InvestitionMo
     <div className="h-64">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: ACHSEN_MARGIN_TOP }}>
-          <CartesianGrid strokeDasharray="3 3" />
+          <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
           <XAxis dataKey="name" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse */ />
           <YAxis label={achsenEinheit('kWh')} tickFormatter={achsenTick} {...yAchse(schmal)} />
           <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip />} />
@@ -136,7 +136,7 @@ export function EAutoKostenvergleich({ zusammenfassung: z }: { zusammenfassung: 
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} layout="vertical">
-            <CartesianGrid strokeDasharray="3 3" />
+            <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
             <XAxis type="number" tickFormatter={(v) => `${fmtZahl(v, 0)} €`} tick={{ fontSize: 10 }} /* achsen-allow: Wert-Achse waagerecht, Einheit/Format pro Tick (de-DE) */ />
             <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 10 }} /* achsen-allow: Kategorie-Namen */ />
             <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="€" decimals={2} />} />
