@@ -22,6 +22,7 @@ from backend.core.investition_kennwerte import (
     get_speicher_nutzbare_kapazitaet_kwh,
 )
 from backend.core.berechnungen.erzeuger_traeger import traegt_erzeugungsgroessen_selbst
+from backend.utils.investition_value import param_zahl
 from backend.models.investition import Investition, InvestitionTyp, InvestitionMonatsdaten
 from backend.models.monatsdaten import Monatsdaten
 from backend.core.investition_parameter import (
@@ -438,7 +439,10 @@ def pv_systeme_zeilen(
             ist_aggregat=speicher_ist_by_inv.get(sp.id),
             eff_ladepreis=speicher_ladepreis_anlage,
             eta_ist=speicher_eta_by_inv.get(sp.id),
-            entlade_preis_cent=(sp.parameter or {}).get(
+            # N-571: param_zahl — ein geleertes Feld ("") erreichte sonst den
+            # Arbitrage-Spread (calculations.py:305) als TypeError/500.
+            entlade_preis_cent=param_zahl(
+                sp.parameter,
                 PARAM_SPEICHER["ENTLADE_VERMIEDENER_PREIS_CENT"],
                 PARAM_SPEICHER_DEFAULTS["entlade_vermiedener_preis_cent"],
             ) if sp.parent_investition_id is None else 0,

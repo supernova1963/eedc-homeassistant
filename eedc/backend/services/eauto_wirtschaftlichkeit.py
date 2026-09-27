@@ -40,6 +40,7 @@ from backend.core.field_definitions import (
     get_emob_pv_netz_kwh,
     traegt_heimlade_wert,
 )
+from backend.utils.investition_value import param_zahl
 from backend.core.investition_parameter import (
     PARAM_E_AUTO,
     PARAM_E_AUTO_DEFAULTS,
@@ -277,7 +278,10 @@ def resolve_eauto_benzinpreis(
     if query_override is not None:
         return BenzinpreisAufloesung(float(query_override), "slider")
     if eauto_parameter is not None:
-        param_preis = eauto_parameter.get(PARAM_E_AUTO["BENZINPREIS_EURO"])
+        # N-571: param_zahl — `float("")` eines geleerten Felds beendete sonst
+        # die ROI-Route mit ValueError/500. Nicht gepflegt ⇒ nächste Stufe
+        # der Kaskade (Monatsdaten-Preis, dann Default).
+        param_preis = param_zahl(eauto_parameter, PARAM_E_AUTO["BENZINPREIS_EURO"])
         if param_preis is not None:
             return BenzinpreisAufloesung(float(param_preis), "parameter")
     if letzter_monats_benzinpreis is not None:

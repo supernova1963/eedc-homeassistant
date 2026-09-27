@@ -29,6 +29,7 @@ from backend.core.investition_kennwerte import (
 )
 from backend.core.berechnungen.erzeuger_traeger import traegt_erzeugungsgroessen_selbst
 from backend.api.deps import get_db
+from backend.utils.investition_value import param_zahl
 from backend.models.investition import Investition, InvestitionTyp, InvestitionMonatsdaten
 from backend.utils.investition_filter import aktiv_im_jahr, sort_investitionen_nach_typ
 from backend.core.berechnungen.investitions_jahresertrag import (
@@ -327,7 +328,11 @@ def _speicher_roi(
 
     params = inv.parameter or {}
     kapazitaet_netto = get_speicher_nutzbare_kapazitaet_kwh(inv)
-    wirkungsgrad = params.get(
+    # N-571: param_zahl statt roher .get — ein geleertes Feld ("") lief sonst
+    # bis in die Formel (calculations.py:285 bzw. speicher_wirtschaftlichkeit
+    # :230) und beendete die ganze ROI-Sicht mit TypeError/500.
+    wirkungsgrad = param_zahl(
+        params,
         PARAM_SPEICHER["WIRKUNGSGRAD_PROZENT"],
         PARAM_SPEICHER_DEFAULTS["wirkungsgrad_prozent"],
     )
@@ -337,7 +342,8 @@ def _speicher_roi(
         PARAM_SPEICHER["ARBITRAGE_FAEHIG"],
         PARAM_SPEICHER_DEFAULTS["arbitrage_faehig"],
     )
-    lade_preis = params.get(
+    lade_preis = param_zahl(
+        params,
         PARAM_SPEICHER["LADE_DURCHSCHNITTSPREIS_CENT"],
         PARAM_SPEICHER_DEFAULTS["lade_durchschnittspreis_cent"],
     )

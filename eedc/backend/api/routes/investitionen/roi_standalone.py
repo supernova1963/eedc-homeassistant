@@ -18,6 +18,7 @@ from backend.core.investition_kennwerte import (
     get_speicher_kopplung_gepflegt,
 )
 from backend.models.investition import InvestitionTyp
+from backend.utils.investition_value import param_zahl
 from backend.core.berechnungen.investitions_jahresertrag import (
     BEZEICHNUNG_ABGABE,
     jahresertrag_posten,
@@ -184,23 +185,23 @@ async def standalone_zeilen(
             # — Form/Wizard schreiben aber 'jahresfahrleistung_km', 'pv_ladeanteil_prozent',
             # 'vergleich_verbrauch_l_100km', 'v2h_faehig'. ROI ignorierte deshalb alle vier
             # User-Eingaben und nutzte stattdessen die hier hinterlegten Defaults.
-            km_jahr = params.get(PARAM_E_AUTO["JAHRESFAHRLEISTUNG_KM"], PARAM_E_AUTO_DEFAULTS["jahresfahrleistung_km"])
-            verbrauch = params.get(PARAM_E_AUTO["VERBRAUCH_KWH_100KM"], PARAM_E_AUTO_DEFAULTS["verbrauch_kwh_100km"])
+            km_jahr = param_zahl(params, PARAM_E_AUTO["JAHRESFAHRLEISTUNG_KM"], PARAM_E_AUTO_DEFAULTS["jahresfahrleistung_km"])
+            verbrauch = param_zahl(params, PARAM_E_AUTO["VERBRAUCH_KWH_100KM"], PARAM_E_AUTO_DEFAULTS["verbrauch_kwh_100km"])
             # N-188: die Prognose rät den PV-Anteil nicht mehr, wenn das IST ihn
             # kennt. Rangfolge: gepflegter Parameter (auch **0** — geprüft wird
             # die Anwesenheit, nicht die Größe, F-15-Klasse) → IST-Anteil aus den
             # Monats-Fakten → Default. Bis hierher stand dieselbe Anlage auf
             # 60 % in der Prognose und dem gemessenen Anteil im IST; zwei Zahlen
             # für dieselbe Größe, nur auf zwei Zeitachsen.
-            pv_anteil = params.get(PARAM_E_AUTO["PV_LADEANTEIL_PROZENT"])
+            pv_anteil = param_zahl(params, PARAM_E_AUTO["PV_LADEANTEIL_PROZENT"])
             if pv_anteil is None:
                 pv_anteil = await _ist_pv_ladeanteil()
             if pv_anteil is None:
                 pv_anteil = PARAM_E_AUTO_DEFAULTS["pv_ladeanteil_prozent"]
-            benzin_verbrauch = params.get(PARAM_E_AUTO["VERGLEICH_VERBRAUCH_L_100KM"], PARAM_E_AUTO_DEFAULTS["vergleich_verbrauch_l_100km"])
+            benzin_verbrauch = param_zahl(params, PARAM_E_AUTO["VERGLEICH_VERBRAUCH_L_100KM"], PARAM_E_AUTO_DEFAULTS["vergleich_verbrauch_l_100km"])
             nutzt_v2h = params.get(PARAM_E_AUTO["V2H_FAEHIG"], PARAM_E_AUTO_DEFAULTS["v2h_faehig"])
-            v2h_entladung = params.get(PARAM_E_AUTO["V2H_ENTLADUNG_KWH_JAHR"], 0)
-            v2h_preis = params.get(PARAM_E_AUTO["V2H_ENTLADE_PREIS_CENT"], strompreis_cent)
+            v2h_entladung = param_zahl(params, PARAM_E_AUTO["V2H_ENTLADUNG_KWH_JAHR"], 0)
+            v2h_preis = param_zahl(params, PARAM_E_AUTO["V2H_ENTLADE_PREIS_CENT"], strompreis_cent)
 
             # Benzinpreis-Auflösung: Slider-Override > per-Inv-Param > letzter
             # Monatsdaten-Preis (EU OB) > Default 1,65. Korrigiert die v3.25.0-
@@ -302,7 +303,7 @@ async def standalone_zeilen(
             # diese ganze Route mit einem TypeError lahm; mit dem Leser fällt
             # auch der Absturz weg.
             alter_energietraeger = params.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"], PARAM_WAERMEPUMPE_DEFAULTS["alter_energietraeger"])
-            alter_preis = params.get(PARAM_WAERMEPUMPE["ALTER_PREIS_CENT_KWH"], PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"])
+            alter_preis = param_zahl(params, PARAM_WAERMEPUMPE["ALTER_PREIS_CENT_KWH"], PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"])
             alternativ_zusatzkosten = params.get(PARAM_WAERMEPUMPE["ALTERNATIV_ZUSATZKOSTEN_JAHR"], 0) or 0
             # N-88/F2b: KEIN Default mehr — `_wp_nicht_bewertbar` oben laesst diesen
             # Zweig nur mit gepflegtem Bedarf ueberhaupt laufen. Der frueher hier
@@ -332,8 +333,8 @@ async def standalone_zeilen(
 
             if effizienz_modus == 'getrennte_cops':
                 # Getrennte COPs für Heizung und Warmwasser
-                cop_heizung = params.get(PARAM_WAERMEPUMPE["COP_HEIZUNG"], PARAM_WAERMEPUMPE_DEFAULTS["cop_heizung"])
-                cop_warmwasser = params.get(PARAM_WAERMEPUMPE["COP_WARMWASSER"], PARAM_WAERMEPUMPE_DEFAULTS["cop_warmwasser"])
+                cop_heizung = param_zahl(params, PARAM_WAERMEPUMPE["COP_HEIZUNG"], PARAM_WAERMEPUMPE_DEFAULTS["cop_heizung"])
+                cop_warmwasser = param_zahl(params, PARAM_WAERMEPUMPE["COP_WARMWASSER"], PARAM_WAERMEPUMPE_DEFAULTS["cop_warmwasser"])
 
                 result = berechne_waermepumpe_einsparung(
                     heizwaermebedarf_kwh=heizwaermebedarf,
@@ -350,9 +351,9 @@ async def standalone_zeilen(
 
             elif effizienz_modus == 'scop':
                 # EU-Label SCOP-Werte (saisonale Effizienz)
-                scop_heizung = params.get(PARAM_WAERMEPUMPE["SCOP_HEIZUNG"], PARAM_WAERMEPUMPE_DEFAULTS["scop_heizung"])
-                scop_warmwasser = params.get(PARAM_WAERMEPUMPE["SCOP_WARMWASSER"], PARAM_WAERMEPUMPE_DEFAULTS["scop_warmwasser"])
-                vorlauftemperatur = params.get(PARAM_WAERMEPUMPE["VORLAUFTEMPERATUR"], PARAM_WAERMEPUMPE_DEFAULTS["vorlauftemperatur"])
+                scop_heizung = param_zahl(params, PARAM_WAERMEPUMPE["SCOP_HEIZUNG"], PARAM_WAERMEPUMPE_DEFAULTS["scop_heizung"])
+                scop_warmwasser = param_zahl(params, PARAM_WAERMEPUMPE["SCOP_WARMWASSER"], PARAM_WAERMEPUMPE_DEFAULTS["scop_warmwasser"])
+                vorlauftemperatur = param_zahl(params, PARAM_WAERMEPUMPE["VORLAUFTEMPERATUR"], PARAM_WAERMEPUMPE_DEFAULTS["vorlauftemperatur"])
 
                 result = berechne_waermepumpe_einsparung(
                     heizwaermebedarf_kwh=heizwaermebedarf,
@@ -369,9 +370,9 @@ async def standalone_zeilen(
 
             else:
                 # Standard: Ein JAZ für alles (gemessene Jahresarbeitszahl)
-                jaz = params.get(PARAM_WAERMEPUMPE["JAZ"], PARAM_WAERMEPUMPE_DEFAULTS["jaz"])
+                jaz = param_zahl(params, PARAM_WAERMEPUMPE["JAZ"], PARAM_WAERMEPUMPE_DEFAULTS["jaz"])
                 # Wärmebedarf: explizit oder aus Komponenten
-                waermebedarf = params.get(PARAM_WAERMEPUMPE["WAERMEBEDARF_KWH"])
+                waermebedarf = param_zahl(params, PARAM_WAERMEPUMPE["WAERMEBEDARF_KWH"])
                 if waermebedarf is None:
                     waermebedarf = heizwaermebedarf + warmwasserbedarf
 

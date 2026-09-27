@@ -19,6 +19,7 @@ from backend.core.berechnungen.speicher_wirtschaftlichkeit import (
     berechne_v2h_ersparnis,
 )
 from backend.services.speicher_wirtschaftlichkeit import berechne_effektiver_ladepreis
+from backend.utils.investition_value import param_zahl
 from backend.core.investition_parameter import (
     PARAM_E_AUTO,
     PARAM_E_AUTO_DEFAULTS,
@@ -87,9 +88,13 @@ async def komponenten_beitraege_zusammenstellen(
         speicher_netzladung_hist_total / speicher_ladung_hist_total
         if speicher_ladung_hist_total > 0 else 0.0
     )
+    # N-571: param_zahl — ein geleertes Feld ("") im `sum` beendete sonst
+    # Cockpit → Aussicht mit TypeError/500, ohne jedes Gate, für jede Anlage
+    # mit Speicher (das Feld ist im Formular vorbelegt und damit leerbar).
     speicher_wirkungsgrad_avg = (
         sum(
-            (sp.parameter or {}).get(
+            param_zahl(
+                sp.parameter,
                 PARAM_SPEICHER["WIRKUNGSGRAD_PROZENT"],
                 PARAM_SPEICHER_DEFAULTS["wirkungsgrad_prozent"],
             )
@@ -105,7 +110,8 @@ async def komponenten_beitraege_zusammenstellen(
     ]
     speicher_lade_preis_cent = (
         sum(
-            (sp.parameter or {}).get(
+            param_zahl(
+                sp.parameter,
                 PARAM_SPEICHER["LADE_DURCHSCHNITTSPREIS_CENT"],
                 PARAM_SPEICHER_DEFAULTS["lade_durchschnittspreis_cent"],
             )

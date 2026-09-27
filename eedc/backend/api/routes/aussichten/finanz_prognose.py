@@ -15,6 +15,7 @@ from backend.core.berechnungen.ust_eigenverbrauch import (
     bemessungsgrundlage_aus_investitionen,
     ust_eigenverbrauch_fuer_anlage,
 )
+from backend.utils.investition_value import param_zahl
 from backend.core.investition_parameter import PARAM_WAERMEPUMPE, PARAM_WAERMEPUMPE_DEFAULTS
 from backend.services.wetter.pvgis import get_pvgis_tmy_defaults
 from backend.api.routes.aussichten.basis import MONATSNAMEN
@@ -132,10 +133,18 @@ def monatsprognose(
         Lesern unterschiedlich behandelt; die Entscheidung gehört zum Leser,
         nicht zur Lesetür (s. dort).
         """
-        roh = (wp.parameter or {}).get(
-            PARAM_WAERMEPUMPE["PV_ANTEIL_PROZENT"],
-            PARAM_WAERMEPUMPE_DEFAULTS["pv_anteil_prozent"],
-        )
+        # N-571, Ausnahme-Bauform (s. `param_zahl`-Docstring): DREI Wege.
+        # Fehlender Key = nie gepflegt ⇒ Default 30; vorhandener Key mit
+        # `null` ODER `""` (geleertes Formularfeld) = ausdrücklich
+        # zurückgenommen ⇒ None, das Gerät fällt aus dem Mittel (N-277 —
+        # gemessenes Verhalten, nicht im Vorbeigehen ändern). Ein pauschaler
+        # Default machte aus der Rücknahme wieder 30 und bewegte den
+        # Eigenverbrauchs-Fallback; `float("")` warf vorher ValueError/500.
+        params = wp.parameter or {}
+        if PARAM_WAERMEPUMPE["PV_ANTEIL_PROZENT"] not in params:
+            roh = PARAM_WAERMEPUMPE_DEFAULTS["pv_anteil_prozent"]
+        else:
+            roh = param_zahl(params, PARAM_WAERMEPUMPE["PV_ANTEIL_PROZENT"])
         return float(roh) / 100.0 if roh is not None else None
 
     if waermepumpen:

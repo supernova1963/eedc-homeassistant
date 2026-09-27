@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from dataclasses import asdict
 from datetime import date
 from backend.api.deps import get_db
+from backend.utils.investition_value import param_zahl
 from backend.models.investition import Investition, InvestitionTyp, InvestitionMonatsdaten
 from backend.models.monatsdaten import Monatsdaten
 from backend.api.routes.strompreise import (
@@ -407,7 +408,10 @@ async def get_speicher_dashboard(
                     eff_ladepreis.abdeckung_prozent, 0
                 )
         if eta_ist is not None:
-            wirkungsgrad_param = params.get(
+            # N-571: param_zahl — round("") eines geleerten Felds beendete
+            # sonst Komponenten → Speicher mit TypeError/500.
+            wirkungsgrad_param = param_zahl(
+                params,
                 PARAM_SPEICHER["WIRKUNGSGRAD_PROZENT"],
                 PARAM_SPEICHER_DEFAULTS["wirkungsgrad_prozent"],
             )

@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from backend.api.deps import get_db
+from backend.utils.investition_value import param_zahl
 from backend.models.investition import Investition, InvestitionTyp, InvestitionMonatsdaten
 from backend.models.monatsdaten import Monatsdaten
 from backend.api.routes.strompreise import (
@@ -382,7 +383,10 @@ async def get_eauto_dashboard(
         # User kann `v2h_entlade_preis_cent` als expliziten Override pflegen;
         # ohne Override: Spread (Bezug − Einspeise) — die V2H-Energie hätte
         # alternativ eingespeist werden können.
-        v2h_preis_override = params.get('v2h_entlade_preis_cent')
+        # N-571: param_zahl — `""` aus Import/Altbestand passierte das
+        # `is not None` und beendete die Sicht mit TypeError/500; nicht
+        # gepflegt ⇒ Spread-Modell (heutige Semantik).
+        v2h_preis_override = param_zahl(params, 'v2h_entlade_preis_cent')
         if v2h_preis_override is not None:
             v2h_ersparnis = gesamt_v2h * v2h_preis_override / 100
         else:
