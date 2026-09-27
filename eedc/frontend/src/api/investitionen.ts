@@ -186,7 +186,10 @@ export interface HubLeerGrundResponse {
 
 // Investitions-Dashboard Types
 export interface InvestitionMonatsdaten {
-  id: number
+  /** `null` nur für eine nicht gespeicherte Anzeigezeile: der E-Auto-Hub zeigt einen Monat,
+   *  in dem das Auto Rest der Wallbox bekommt, aber keine eigene Monatszeile hat (N-564,
+   *  `verbrauch_daten.ladung_aus_rest`). Jede gespeicherte Zeile trägt ihre ID. */
+  id: number | null
   investition_id: number
   jahr: number
   monat: number

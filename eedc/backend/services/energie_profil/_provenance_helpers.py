@@ -40,6 +40,9 @@ _TZ_SKIP_COLUMNS = frozenset({
     # Zeile (welche Achse eine Menge verworfen hat) und die Regelmarke — kein
     # Aggregat-Wert mit eigener Herkunft.
     "verworfen",
+    # N-567: `nachtrag` benennt Mengen der Zeile (welche Achse einen Nachtrag nach
+    # Nullstunden trägt) — ebenfalls eine Markierung, kein Aggregat-Wert.
+    "nachtrag",
 })
 
 # TagesEnergieProfil:

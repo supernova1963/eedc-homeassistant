@@ -247,8 +247,14 @@ const TD_GROUP_LABELS: Record<TdGroup, string> = {
 const TD_GROUPS: TdGroup[] = ['erzeugung', 'netz', 'verbrauch', 'bilanz', 'qualitaet']
 const TD_STORAGE_KEY = 'eedc_tagesprofil_visible_cols'
 
+/** N-566: der Default der optionalen Prop `erzeugerSerien` — EINE Referenz für alle Renders.
+ *  Ein `= []` im Parameter erzeugte je Render ein neues Array; über `erzeugerSpalten` lief es
+ *  in den Spalten-Effekt, der State setzt ⇒ Endlosschleife, sobald ein Aufrufer die Prop
+ *  weglässt (gemessen im Lücken-Bau, Vitest hing bis `timeout 60`). */
+const KEINE_ERZEUGER_SERIEN: SerieInfo[] = []
+
 export function TagWerteTabelle({
-  daten, extraSerien, erzeugerSerien = [], datum, gesamtverbrauchTag, verworfen,
+  daten, extraSerien, erzeugerSerien = KEINE_ERZEUGER_SERIEN, datum, gesamtverbrauchTag, verworfen,
 }: {
   daten: StundenWert[]
   extraSerien: SerieInfo[]

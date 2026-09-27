@@ -137,6 +137,8 @@ class DatenChecker(
         ergebnisse.extend(await self._check_bestandstage_ohne_regelmarke(anlage))
         # Nachträge II: Tage mit mehr Einspeisung als Erzeugung + Entladung.
         ergebnisse.extend(await self._check_einspeisung_ueber_erzeugung(anlage))
+        # N-567: Nachtrag nach eingefrorenem Zähler — nur benannt (eedc folgt HA).
+        ergebnisse.extend(await self._check_nachtrag_nach_eingefrorenem_zaehler(anlage))
         ergebnisse.extend(await self._check_mqtt_topic_abdeckung(anlage))
         ergebnisse.extend(await self._check_zaehler_ruecksprung(anlage))
         ergebnisse.extend(await self._check_sensor_mapping_lts(anlage))

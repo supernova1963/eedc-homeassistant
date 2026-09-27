@@ -114,14 +114,12 @@ async def get_wallbox_dashboard(
     _kontext = await lade_emob_kontext(
         db, anlage_id, [*eautos, *wallboxen], all_monatsdaten,
     )
-    inv_daten: dict[tuple[int, int, int], dict] = {}
     for (inv_id, jahr, monat), d in _kontext.daten.items():
         # Dienstwagen / dienstliche Wallbox bleiben draußen: ihre Zeile öffnet auch
         # keinen Periodenmonat. Sonst verlängert sie `anzahl_monate`, drückt
         # `ladevorgaenge_pro_monat` und zieht einen Monat ohne private Ladung in den
         # gewichteten Tarif-Ø (P8).
         if inv_id in eauto_id_set or inv_id in wallbox_id_set:
-            inv_daten[(inv_id, jahr, monat)] = d
             monate_set.add((jahr, monat))
     emob_ctx = _kontext.ctx
 
@@ -131,20 +129,13 @@ async def get_wallbox_dashboard(
     # Anlage (je Monat Wallbox ODER E-Auto); trug ein Auto eine eigene Messung, stand
     # hier deren Summe statt dessen, was die Wallbox gezählt hat. PV-Anteil nach
     # Phase 5 (je Zeile), Extern und Ladevorgänge wie bisher aus dem Entscheid.
-    _wb_summe = summiere_emob_quelle(
-        d for (inv_id, _j, _m), d in inv_daten.items() if inv_id in wallbox_id_set
-    )
+    # N-568: die Messung wird seitdem JE Wallbox gebildet (`_eigen_je_wb` unten) — die
+    # Summe über alle Wallboxen stand hier bis 26.09.2026 auf jeder Karte.
     _pools = [e.pool for e in emob_ctx.entscheide.values()]
-    gesamt_heim_pv = _wb_summe.pv_kwh
-    gesamt_heim_netz = _wb_summe.netz_kwh
     gesamt_extern_kwh = sum(p.extern_kwh for p in _pools)
     gesamt_extern_euro = sum(p.extern_euro for p in _pools)
     gesamt_ladevorgaenge = sum(p.ladevorgaenge for p in _pools)
-    gesamt_heim_ladung = _wb_summe.ladung_kwh
     anzahl_monate = len(monate_set)
-
-    # PV-Anteil der Heimladung
-    pv_anteil = (gesamt_heim_pv / gesamt_heim_ladung * 100) if gesamt_heim_ladung > 0 else 0
 
     # Kosten Heimladung (nur Netzstrom, PV ist "kostenlos").
     # ADR-002/P8: Tarif über die Monate der Periode mitteln statt den heutigen
@@ -196,6 +187,42 @@ async def get_wallbox_dashboard(
     # Ersparnis durch Heimladen (Wallbox-ROI)
     ersparnis_vs_extern = heim_als_extern_kosten - heim_kosten
 
+    # ⭐ N-568 (26.09.2026, Konzept Heimladung Regel 0 „Wallbox-Sichten zeigen die Messung DER
+    # Wallbox"): die Route liefert eine Karte JE Wallbox (der Hub rendert jede Karte aus
+    # dieser Anlagen-Route, `komponentenAdapter.tsx` `wallbox.fetch` / `WallboxHubBloecke`).
+    # Bis hierher trug jede Karte die Summe ALLER privaten Wallboxen als Kachel, der Verlauf
+    # darunter aber nur ihre eigenen Zeilen — bei Garage + Carport zwei Zahlen in einer Karte
+    # (r28 + zweite Wallbox: 4508 auf beiden Karten gegen 4208 bzw. 300 im Verlauf).
+    # Jetzt: kWh, PV-Anteil und Ladevorgänge sind die Messung DIESER Wallbox; Ersparnis
+    # gegenüber externem Laden (und damit die Amortisation gegen IHRE Anschaffungskosten)
+    # ist der Anteil der Karte am Anlagen-Ergebnis nach ihrer Messung. Σ Karten = Anlage.
+    # Bei einer Wallbox ist jeder Anteil exakt 1,0 (a / a) — die Karte bleibt bitgleich.
+    _eigen_je_wb = {
+        w.id: summiere_emob_quelle(
+            d for (inv_id, _j, _m), d in _kontext.daten.items() if inv_id == w.id
+        )
+        for w in wallboxen
+    }
+    _private_wb = [w for w in wallboxen if w.id in wallbox_id_set]
+    _kwh_privat = sum(_eigen_je_wb[w.id].ladung_kwh for w in _private_wb)
+    _lv_privat = sum(_eigen_je_wb[w.id].ladevorgaenge for w in _private_wb)
+
+    def _anteil_kwh(wb_id: int) -> float:
+        """Anteil einer privaten Wallbox an der Anlage nach ihrer gemessenen kWh; ohne jede
+        Messung gleich verteilt (trägt keine Wallbox einen Wert, rechnet die Ersparnis mit
+        dem Topf der Autos, E4 — dann gibt es keine Messung, nach der sich teilen ließe)."""
+        if _kwh_privat > 0:
+            return _eigen_je_wb[wb_id].ladung_kwh / _kwh_privat
+        return 1.0 / len(_private_wb)
+
+    def _anteil_ladevorgaenge(wb_id: int) -> float:
+        """Die Ladevorgänge der Anlage kommen je Monat aus dem Entscheid (Wallbox oder Autos,
+        das Größere); die Karte trägt davon den Anteil nach IHREN gezählten Vorgängen —
+        zählen die Wallboxen keine, nach ihrer kWh."""
+        if _lv_privat > 0:
+            return _eigen_je_wb[wb_id].ladevorgaenge / _lv_privat
+        return _anteil_kwh(wb_id)
+
     dashboards = []
     for wallbox in wallboxen:
         # Wallbox-eigene Monatsdaten aus Batch-Ergebnis
@@ -213,7 +240,18 @@ async def get_wallbox_dashboard(
         # F-7: eine dienstliche Wallbox trägt keine private Ersparnis. Die
         # anlagenweite Heimladung steht daneben weiter — sie ist gemessen.
         wb_dienstlich = ist_dienstlich(wallbox)
-        wb_ersparnis = 0.0 if wb_dienstlich else ersparnis_vs_extern
+        # N-568: die Messung DIESER Wallbox und ihr Anteil am Anlagen-Ergebnis.
+        wb_eigen = _eigen_je_wb[wallbox.id]
+        if wb_dienstlich:
+            wb_anteil = 0.0
+            wb_ladevorgaenge = wb_eigen.ladevorgaenge
+        else:
+            wb_anteil = _anteil_kwh(wallbox.id)
+            wb_ladevorgaenge = gesamt_ladevorgaenge * _anteil_ladevorgaenge(wallbox.id)
+        wb_pv_anteil = (
+            wb_eigen.pv_kwh / wb_eigen.ladung_kwh * 100 if wb_eigen.ladung_kwh > 0 else 0
+        )
+        wb_ersparnis = 0.0 if wb_dienstlich else ersparnis_vs_extern * wb_anteil
 
         # N-230: die Amortisationsdauer entsteht HIER, aus denselben zwei
         # SoT-Hälften wie überall sonst — nicht im Client aus
@@ -282,17 +320,21 @@ async def get_wallbox_dashboard(
             # Heimladung: die Messung der Wallbox (Regel 0, mit Gast und Dienstwagen).
             # Die Kosten- und Ersparnis-Felder darunter rechnen mit der privaten
             # Heimladung (Topf, Regel 3) — s. `topf_ladung` oben.
-            'gesamt_heim_ladung_kwh': round(gesamt_heim_ladung, 1),
-            'ladung_pv_kwh': round(gesamt_heim_pv, 1),
-            'ladung_netz_kwh': round(gesamt_heim_netz, 1),
-            'pv_anteil_prozent': round(pv_anteil, 1),
+            # N-568: je Karte die Messung DIESER Wallbox (Σ Karten = Anlage).
+            'gesamt_heim_ladung_kwh': round(wb_eigen.ladung_kwh, 1),
+            'ladung_pv_kwh': round(wb_eigen.pv_kwh, 1),
+            'ladung_netz_kwh': round(wb_eigen.netz_kwh, 1),
+            'pv_anteil_prozent': round(wb_pv_anteil, 1),
             # Externe Ladung zum Vergleich
             'extern_ladung_kwh': round(gesamt_extern_kwh, 1),
             'extern_kosten_euro': round(gesamt_extern_euro, 2),
             'extern_preis_kwh_euro': round(extern_preis_kwh, 2),
             # Kostenvergleich
-            'heim_kosten_euro': round(heim_kosten, 2),
-            'heim_als_extern_kosten_euro': round(heim_als_extern_kosten, 2),
+            # N-568: Anteil der Karte (nach ihrer Messung) am Anlagen-Ergebnis.
+            # Eine dienstliche Wallbox hat keinen Anteil an der privaten Heimladung (F-7):
+            # ihre Karte nennt 0 statt der Kosten der privaten Wallboxen.
+            'heim_kosten_euro': round(heim_kosten * wb_anteil, 2),
+            'heim_als_extern_kosten_euro': round(heim_als_extern_kosten * wb_anteil, 2),
             'ersparnis_vs_extern_euro': round(wb_ersparnis, 2),
             # Amortisation aus dem Kapitalrechnungs-SoT (N-230). `None` heißt
             # „nicht bewertbar" und ist nicht 0 — `berechne_roi` liefert das
@@ -312,8 +354,8 @@ async def get_wallbox_dashboard(
             # Wallbox-Info
             'dienstlich': wb_dienstlich,
             'leistung_kw': leistung_kw,
-            'gesamt_ladevorgaenge': int(gesamt_ladevorgaenge),
-            'ladevorgaenge_pro_monat': round(gesamt_ladevorgaenge / anzahl_monate, 1) if anzahl_monate > 0 else 0,
+            'gesamt_ladevorgaenge': int(wb_ladevorgaenge),
+            'ladevorgaenge_pro_monat': round(wb_ladevorgaenge / anzahl_monate, 1) if anzahl_monate > 0 else 0,
             'anzahl_monate': anzahl_monate,
         }
 

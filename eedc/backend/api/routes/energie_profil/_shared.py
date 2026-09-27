@@ -552,6 +552,11 @@ class TagWerteResponse(BaseModel):
     # (rechnet N-92, bis er neu aggregiert wird). Der Client zeigt den Hinweis
     # „Verfügbare Energie" (N-94) nur, wenn hier eine Achse steht.
     verworfen: Optional[dict[str, float]] = None
+    # N-567: ``{achse: kWh}`` der Stunden, die der Deckel nur dank seines Fensters
+    # durchgelassen hat (Nachtrag nach Nullstunden) — IN den Summen enthalten, eedc folgt
+    # HA. ``None``: kein Nachtrag (oder Tag von vor N-567). Keine Anzeigeregel; der
+    # Daten-Checker nennt die Tage.
+    nachtrag: Optional[dict[str, float]] = None
     # Energie (additive kWh) — Registry-Keys.
     # `erzeugung`/`eigenverbrauch` sind `None`, wenn für den Tag keine einzige
     # Stunde einen PV-Wert trug (kein kWh-Zähler je Erzeuger — z. B. wenn die PV

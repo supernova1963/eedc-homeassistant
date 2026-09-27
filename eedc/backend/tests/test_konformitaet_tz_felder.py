@@ -66,6 +66,10 @@ _AGGREGATOR_SETTER_FELDER: frozenset[str] = frozenset({
     # Fall (a): der Aggregator schreibt sie für JEDE neue Tageszeile (mindestens
     # `{}`); sie wird nie gerettet — was gelöscht wird, entsteht im selben Lauf neu.
     "verworfen",
+    # N-567: Nachtrag nach Nullstunden (benannt, nicht abgezogen). Fall (a): der
+    # Aggregator schreibt ihn aus derselben Tagestabelle wie `verworfen` (``None``, wenn
+    # es keinen gab); nie gerettet — was gelöscht wird, entsteht im selben Lauf neu.
+    "nachtrag",
 })
 
 

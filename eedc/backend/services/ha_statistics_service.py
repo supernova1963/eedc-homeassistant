@@ -66,6 +66,10 @@ class SensorMonatswert(BaseModel):
     #: Zählerlücken wie HA (R3/R4 für den Monat): verworfene Menge — Rücksprung
     #: des HA-`sum` oder über dem Deckel. `differenz` enthält sie nicht.
     verworfen_kwh: float = 0.0
+    #: N-567: Menge der Stunden, die der Deckel nur dank seines Fensters durchgelassen
+    #: hat (über Schwelle × n, nicht über Schwelle × Fenster). `differenz` ENTHÄLT sie —
+    #: eedc folgt HA; das Feld benennt sie nur (Gegenstück zu `verworfen_kwh`).
+    nachtrag_kwh: float = 0.0
 
 
 class MonatswertResponse(BaseModel):
@@ -738,7 +742,9 @@ class HAStatisticsService:
 
         ``start_wert``/``end_wert`` sind Anker und neuester Stand; ``differenz``
         ist die Summe und weicht von ihrer Differenz genau um
-        ``verworfen_kwh`` ab. Werte werden nach kWh konvertiert (Wh, MWh, …).
+        ``verworfen_kwh`` ab. ``nachtrag_kwh`` (N-567) benennt die Stunden, die nur
+        dank des Fensters passiert sind — sie stehen IN ``differenz``. Werte werden nach
+        kWh konvertiert (Wh, MWh, …).
         """
         ts_start, ts_ende = _monatsgrenzen_ts(jahr, monat)
         faktor = _ENERGY_UNIT_TO_KWH.get(meta.unit, 1.0) if meta.unit else 1.0
@@ -771,6 +777,7 @@ class HAStatisticsService:
             return None
 
         verworfen = 0.0
+        nachtrag = 0.0
         if sum_zeilen:
             anker = self._letzter_sum_vor(conn, meta, sensor_id, ts_start)
             reihe = ([anker] if anker is not None else []) + sum_zeilen
@@ -796,6 +803,8 @@ class HAStatisticsService:
                     if delta > deckel_kwh_je_stunde * fenster:  # R3 (Fenster)
                         verworfen += delta
                         continue
+                    if delta > deckel_kwh_je_stunde * n:        # N-567: nur dank Fenster
+                        nachtrag += delta
                 differenz += delta
             if verworfen:
                 logger.info(
@@ -813,6 +822,7 @@ class HAStatisticsService:
             end_wert=round(end_wert, 3),
             differenz=round(differenz, 2),
             verworfen_kwh=round(verworfen, 3),
+            nachtrag_kwh=round(nachtrag, 3),
         )
 
     def get_monatswerte(

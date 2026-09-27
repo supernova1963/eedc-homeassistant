@@ -775,6 +775,30 @@ describe('KOMPONENTEN_ADAPTER — spezifische Blöcke (Inc. 3b)', () => {
     expect(g.sekundaer).toBeUndefined()
   })
 
+  it('E-Auto: eine Anzeigezeile „aus Wallbox-Rest" zählt nicht als erfasster Monat (N-564)', async () => {
+    // Ein Auto ganz ohne eigene Monatszeilen, das Rest der Wallbox bekommt: die Tabelle trägt
+    // Restzeilen, `monatswerte` bleibt 0 — der N-247-Hinweis „keine Monatswerte" bleibt stehen.
+    getEAutoDashboard.mockResolvedValue([{
+      investition: inv({ typ: 'e-auto' }),
+      zusammenfassung: { gesamt_km: 0, durchschnitt_verbrauch_kwh_100km: null, pv_anteil_heim_prozent: 50,
+        ersparnis_vs_benzin_euro: 0, gesamt_ladung_kwh: 400, ladung_pv_kwh: 200, ladung_netz_kwh: 200, ladung_extern_kwh: 0 },
+      monatsdaten: [
+        { id: null, jahr: 2026, monat: 5, verbrauch_daten: { ladung_pv_kwh: 200, ladung_netz_kwh: 200, ladung_aus_rest: true } },
+      ],
+    }, {
+      investition: inv({ id: 2, typ: 'e-auto' }),
+      zusammenfassung: { gesamt_km: 0, durchschnitt_verbrauch_kwh_100km: null, pv_anteil_heim_prozent: 0,
+        ersparnis_vs_benzin_euro: 0, gesamt_ladung_kwh: 0, ladung_pv_kwh: 0, ladung_netz_kwh: 0, ladung_extern_kwh: 0 },
+      monatsdaten: [
+        { id: 7, jahr: 2026, monat: 4, verbrauch_daten: { km_gefahren: 100 } },
+        { id: null, jahr: 2026, monat: 5, verbrauch_daten: { ladung_pv_kwh: 1, ladung_netz_kwh: 1, ladung_aus_rest: true } },
+      ],
+    }])
+    const [nurRest, gemischt] = await KOMPONENTEN_ADAPTER['e-auto'].fetch(1)
+    expect(nurRest.monatswerte).toBe(0)
+    expect(gemischt.monatswerte).toBe(1)
+  })
+
   it('E-Auto ③ V2H nur wenn entladen', async () => {
     getEAutoDashboard.mockResolvedValue([{
       investition: inv({ typ: 'e-auto' }),

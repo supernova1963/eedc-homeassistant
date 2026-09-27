@@ -112,6 +112,13 @@ _BASELINE: dict[str, int] = {
     # kWh-Probe derselben Datei kommt mit einem festen Datum aus. Begruendung
     # steht auch im Modul-Docstring der Probe.
     "test_n439_leistung_kuehlen_anzeige.py": 1,
+    # N-565 (26.09.2026), NEU in dieser Liste — derselbe Grund wie N-439 darüber:
+    # `get_tagesverlauf`/`_get_tagesverlauf_mqtt` rechnen den Tag SELBST aus
+    # `datetime.now()` und `tage_zurueck`, und die Probe prüft genau die Grenze
+    # „heute gegen vergangenen Tag" (Stilllegung gestern, Anschaffung morgen).
+    # Ein festes Datum fiele aus diesem Fenster. GENAU EINE Ablesung, in der
+    # Modul-Konstanten `HEUTE`; nur Tagesabstände, keine Uhrzeit.
+    "test_n565_tagesverlauf_investitionen_je_tag.py": 1,
     "test_multi_string_forecast_robustness_306.py": 4,
     "test_prognose_kanon.py": 11,
     # N-317 (29.08.), NEU in dieser Liste — die einzige erlaubte Richtung ist

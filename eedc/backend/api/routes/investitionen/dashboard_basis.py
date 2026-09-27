@@ -134,7 +134,10 @@ async def _gewichtete_monatspreise(
 
 class InvestitionMonatsdatenResponse(BaseModel):
     """Monatsdaten für eine Investition."""
-    id: int
+    #: ``None`` nur für eine Zeile, die nicht gespeichert ist: der E-Auto-Hub zeigt einen
+    #: Monat, in dem das Auto Rest der Wallbox bekommt, aber keine eigene Monatszeile hat
+    #: (N-564, ``verbrauch_daten.ladung_aus_rest``). Jede gespeicherte Zeile trägt ihre ID.
+    id: Optional[int] = None
     investition_id: int
     jahr: int
     monat: int

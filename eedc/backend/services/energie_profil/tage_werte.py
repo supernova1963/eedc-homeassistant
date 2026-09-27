@@ -438,6 +438,8 @@ async def baue_tage_werte(
             datenquelle=(tz.datenquelle if tz else None),
             # Zählerlücken wie HA (R4/R9): Markierung + Regelmarke der Tageszeile.
             verworfen=(tz.verworfen if tz else None),
+            # N-567: Nachtrag nach Nullstunden — benannt, in den Summen enthalten.
+            nachtrag=(tz.nachtrag if tz else None),
             # Energie. `erzeugung` ist None, solange keine Stunde einen PV-Wert
             # trug — eine 0 wäre hier nicht „nichts erzeugt", sondern „nicht
             # gemessen" (`docs/KONZEPT-UNVOLLSTAENDIGE-WERTE.md`). Betrifft

@@ -84,8 +84,13 @@ function WetterTick({ x, y, payload, symbole }: {
   )
 }
 
+/** N-566 (Klassen-Dreifrage c): Default der optionalen Prop `linien` — EINE Referenz. Ein
+ *  `= []` im Parameter wäre je Render neu und liefe in die Memo-Abhängigkeit von
+ *  `einheitJeLabel` (dieselbe Bauform wie `TagWerteTabelle`/`TagVerlaufChart`). */
+const KEINE_LINIEN: VerlaufLinie[] = []
+
 export function WaermeVerlaufChart({
-  rows, stapel, linien = [], einheit = 'kWh', rechteEinheit, tall, wetterSymbole,
+  rows, stapel, linien = KEINE_LINIEN, einheit = 'kWh', rechteEinheit, tall, wetterSymbole,
 }: {
   rows: WaermeVerlaufRow[]
   stapel: VerlaufStapel[]

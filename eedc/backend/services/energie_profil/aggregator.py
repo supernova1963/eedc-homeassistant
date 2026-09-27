@@ -1291,13 +1291,15 @@ def baue_zusammenfassung(
     vollzyklen,
     performance_ratio,
     verworfen: Optional[dict] = None,
+    nachtrag: Optional[dict] = None,
 ) -> tuple:
     """PV-Anteil der Heimladung ableiten, die Tageszeile bauen, das TZ-Quell-Label bestimmen.
 
     ``verworfen``: die verworfenen Mengen des Laufs (R4). ⭐ Die Tageszeile
     bekommt **immer** mindestens ``{}`` — das ist die Regelmarke (R9): sie
     sagt jedem Leser, dass dieser Tag nach „Zählerlücken wie HA" gerechnet ist.
-    NULL trägt nur der Altbestand.
+    NULL trägt nur der Altbestand. ``nachtrag``: die Stunden, die nur dank des
+    Deckel-Fensters passiert sind (N-567) — ``None``, wenn es keine gab.
 
     Returns:
         ``(zusammenfassung, lade_anteil, tz_source_label)``
@@ -1343,6 +1345,8 @@ def baue_zusammenfassung(
         einspeisung_neg_preis_kwh=einsp_neg_kwh,
         # Zählerlücken wie HA (R4 + R9): nie NULL aus diesem Schreiber.
         verworfen=dict(verworfen or {}),
+        # N-567: benannt, nicht abgezogen — die Menge steht in den Stunden wie in HA.
+        nachtrag=dict(nachtrag) if nachtrag else None,
         emob_ladung_pv_abgeleitet_kwh=(
             lade_anteil.pv_kwh if lade_anteil is not None else None
         ),
@@ -1666,6 +1670,7 @@ async def aggregate_day(
         vollzyklen=vollzyklen,
         performance_ratio=performance_ratio,
         verworfen=(tages_tabelle.verworfen if tages_tabelle is not None else {}),
+        nachtrag=(tages_tabelle.nachtrag if tages_tabelle is not None else None),
     )
 
     await schreibe_provenance_und_restore(

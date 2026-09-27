@@ -5,7 +5,7 @@ Ausgelagert aus live_power_service.py (Schritt 5 des Refactorings).
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 from sqlalchemy import select
@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
-from backend.utils.investition_filter import aktiv_jetzt
+from backend.utils.investition_filter import aktiv_am_tag, aktiv_jetzt
 from backend.core.berechnungen.erzeuger_traeger import kuerze_bkw_in_werte_map
 from backend.services.live_sensor_config import (
     ERZEUGER_TYPEN,
@@ -236,6 +236,27 @@ def _baue_short_term_overlays(
     return mean_overlay, counter_overlay
 
 
+def _investitionen_des_tages(tage_zurueck: int, tag: date):
+    """SQL-Filter der Investitionen für den betrachteten Tag — N-565 (26.09.2026).
+
+    Ein vergangener Tag (``tage_zurueck > 0``) nimmt die Investitionen, die **an diesem
+    Tag** in Betrieb waren (`aktiv_am_tag`: Anschaffung bis zum Tag, Stilllegung nicht
+    davor). Bis hierher stand dort `aktiv_jetzt()` — eine Wallbox, die zwischen dem Tag
+    und heute stillgelegt wurde, fehlte ganz: sie verdrängte das Auto nicht (Regel 6 des
+    Heimlade-Konzepts, `baue_investitions_serien(tag=…)`) und stand in keiner Serie des
+    Tages, obwohl sie an ihm lud. Dieselbe Frage „in Betrieb am Tag" stellt der
+    LTS-Pfad seit dem Lücken-Bau (Schnitt 10b, `lts_tagesverlauf.py`).
+
+    **Heute bleibt `aktiv_jetzt()`** — bewusst, nicht aus Versehen: die Live-Sicht fragt
+    „was ist jetzt da", und die beiden Filter unterscheiden sich gerade an heute (eine
+    Anschaffung in der Zukunft zählt live mit, eine Stilllegung heute nicht). Der Tausch
+    hätte jede Serie des Live-Pfads berührt; der Fund betrifft nur vergangene Tage.
+    """
+    if tage_zurueck > 0:
+        return aktiv_am_tag(tag)
+    return aktiv_jetzt()
+
+
 async def get_tagesverlauf(
     anlage: Anlage, db: AsyncSession, tage_zurueck: int = 0,
     *, mit_vortagsrand: bool = False,
@@ -300,17 +321,6 @@ async def get_tagesverlauf(
             anlage, db, tage_zurueck, mit_vortagsrand=mit_vortagsrand,
         )
 
-    # Investitionen aus DB laden (brauchen Bezeichnung + Typ + parent_id)
-    inv_result = await db.execute(
-        select(Investition).where(
-            Investition.anlage_id == anlage.id,
-            aktiv_jetzt(),
-        )
-    )
-    investitionen = {str(inv.id): inv for inv in inv_result.scalars().all()}
-    # N-536: die Menge für die BKW-Abtretung (leer ⇒ nichts zu kürzen).
-    _bkw_erzeuger = list(investitionen.values())
-
     now = datetime.now()
     if tage_zurueck > 0:
         tag = now - timedelta(days=tage_zurueck)
@@ -319,6 +329,18 @@ async def get_tagesverlauf(
     else:
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         end = now
+
+    # Investitionen aus DB laden (brauchen Bezeichnung + Typ + parent_id) — die des
+    # betrachteten Tages (N-565), heute unverändert die Live-Menge.
+    inv_result = await db.execute(
+        select(Investition).where(
+            Investition.anlage_id == anlage.id,
+            _investitionen_des_tages(tage_zurueck, start.date()),
+        )
+    )
+    investitionen = {str(inv.id): inv for inv in inv_result.scalars().all()}
+    # N-536: die Menge für die BKW-Abtretung (leer ⇒ nichts zu kürzen).
+    _bkw_erzeuger = list(investitionen.values())
 
     # Abruf-Fenster ≠ Tagesfenster: für den Backward-Slot 0 braucht der
     # Aggregator die letzte Stunde des VORTAGS. Statt eines zweiten vollen
@@ -728,11 +750,11 @@ async def _get_tagesverlauf_mqtt(
 
     available_keys = set(history.keys())
 
-    # Investitionen laden
+    # Investitionen laden — die des betrachteten Tages (N-565, wie der HA-Zweig).
     inv_result = await db.execute(
         select(Investition).where(
             Investition.anlage_id == anlage.id,
-            aktiv_jetzt(),
+            _investitionen_des_tages(tage_zurueck, start.date()),
         )
     )
     investitionen = {str(inv.id): inv for inv in inv_result.scalars().all()}

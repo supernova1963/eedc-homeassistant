@@ -85,9 +85,10 @@ describe('TagWerteTabelle — gerendert', () => {
     // Stunde 11 fehlt ganz — früher löste das den N-94-Hinweis aus.
     stunde(12, { pv_kw: 2.0, netzbezug_kw: 0.1, einspeisung_kw: 0.4, verbrauch_kw: 1.7 }),
   ]
-  // ⚠ `erzeugerSerien` stabil übergeben: der Default `= []` erzeugt je Render ein
-  // neues Array, der Spalten-Effekt setzt daraufhin State — Endlosschleife,
-  // sobald der Aufrufer die Prop weglässt (Nebenfund, CockpitTagV4 übergibt sie).
+  // `erzeugerSerien` wird hier wie in `CockpitTagV4` übergeben. Bis N-566 (26.09.2026)
+  // war das Pflicht: der Default `= []` im Parameter lief je Render neu in den
+  // Spalten-Effekt — Endlosschleife ohne die Prop. Seitdem ist der Default eine
+  // Modul-Konstante; die Probe ohne Prop steht in `n566ArrayDefault.test.tsx`.
   const KEINE: SerieInfo[] = []
 
   it('Σ „Gesamtverbrauch" = Server-Tageswert, nicht die Stundensumme', () => {

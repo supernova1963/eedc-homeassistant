@@ -83,11 +83,15 @@ class TagesTabelle:
     Ziel-Key (R5b); der PV-Aggregat-Fall ist über `loese_pv_tageswerte_auf`
     aufgelöst. ``pv_marken``: #406-Herkunftsmarken. ``verworfen``:
     ``{achse: kWh}`` verworfener Mengen (R4) — ``{}`` heißt „nichts verworfen".
+    ``nachtrag``: ``{achse: kWh}`` der Stunden, die **nur durch das Deckel-Fenster**
+    passiert sind (N-567) — Menge über Schwelle × n, aber nicht über Schwelle × Fenster
+    (Nullstunden davor, R3 Nachträge II). Sie zählen wie in HA; das Feld benennt sie nur.
     """
     stunden: dict[int, dict[str, Optional[float]]]
     komponenten_kwh: dict[str, float] = field(default_factory=dict)
     pv_marken: dict[str, str] = field(default_factory=dict)
     verworfen: dict[str, float] = field(default_factory=dict)
+    nachtrag: dict[str, float] = field(default_factory=dict)
 
 
 def baue_tagestabelle(
@@ -122,6 +126,7 @@ def baue_tagestabelle(
 
     kwp = getattr(anlage, "leistung_kwp", None)
     verworfen: dict[str, float] = {}
+    nachtrag: dict[str, float] = {}
 
     def _verwerfe(achse: str, kwh: float) -> None:
         verworfen[achse] = verworfen.get(achse, 0.0) + abs(kwh)
@@ -240,6 +245,17 @@ def baue_tagestabelle(
                 je_achse.pop(achse)
                 for kat in ((_PV_KATEGORIEN) if achse == "pv" else (achse,)):
                     kat_summe.pop(kat, None)
+                continue
+            # N-567: passiert, aber nur dank des Fensters? Dann ist es ein Nachtrag nach
+            # Nullstunden (eingefrorener Zähler — oder ein Sprung nach einer Nacht mit echten
+            # Nullen, den eedc nicht unterscheiden kann). Er zählt wie in HA; hier wird er
+            # nur BENANNT, damit der Daten-Checker ihn zeigen kann — vorher (Fenster n) stand
+            # er in `verworfen`, seit dem Fenster wäre er sonst nirgends sichtbar.
+            # (Über Schwelle × n und trotzdem durch den Deckel ⇒ das Fenster war größer als n.)
+            n_achse = max(n for _t, _w, n in beitraege)
+            schwelle_n = schwelle_pv_einspeisung_stunde_kwh(kwp, spanne=n_achse)
+            if schwelle_n is not None and abs(summe) > schwelle_n:
+                nachtrag[achse] = nachtrag.get(achse, 0.0) + abs(summe)
 
         # ── 7. komponenten_kwh aus denselben Werten (R5b) ────────────────
         for beitraege in je_achse.values():
@@ -307,6 +323,7 @@ def baue_tagestabelle(
         komponenten_kwh=komponenten,
         pv_marken=pv_marken,
         verworfen={k: round(v, 3) for k, v in verworfen.items()},
+        nachtrag={k: round(v, 3) for k, v in nachtrag.items()},
     )
 
 

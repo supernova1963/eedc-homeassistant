@@ -22,6 +22,7 @@ from backend.api.routes.strompreise import (
 from backend.core.investition_parameter import ist_dienstlich
 from backend.services.eauto_wirtschaftlichkeit import (
     ART_GEMESSEN,
+    ART_REST,
     ART_SCHAETZUNG,
     QUELLE_NULL,
     attribute_emob_pool_by_km,
@@ -264,13 +265,16 @@ async def get_eauto_dashboard(
 
         # N-555 Stufe 2 (Konzept Regel 2 Schritt 3): Monate OHNE Zeile, in denen das Auto
         # Rest der Wallbox bekommt (Empfänger sind alle privaten Autos in Betrieb) — sonst
-        # gingen Topf und Summe der Fahrzeuge auseinander. Die Monatstabelle zeigt nur
-        # Zeilen; die Kacheln tragen die Menge.
+        # gingen Topf und Summe der Fahrzeuge auseinander. N-564: dieselbe Monatsmenge
+        # bekommt unten die Tabelle — je Monat eine Zeile „aus Wallbox-Rest", damit Kachel
+        # und Summe der Tabelle dieselbe Zahl ergeben (bis 26.09.2026 zeigte sie nur Zeilen).
+        monate_ohne_zeile: list[tuple[int, int]] = []
         if not dienstlich:
             _mit_zeile = {(md.jahr, md.monat) for md in monatsdaten}
             for _j, _m, _ in monate_des_autos(emob_ctx, eauto.id, {}):
                 if (_j, _m) in _mit_zeile or not eauto.ist_aktiv_im_monat(_j, _m):
                     continue
+                monate_ohne_zeile.append((_j, _m))
                 pv, netz = emob_heimladung_im_monat(emob_ctx, eauto.id, 0.0, _j, _m, {})
                 gesamt_pv_ladung += pv
                 gesamt_netz_ladung += netz
@@ -489,6 +493,40 @@ async def get_eauto_dashboard(
                 einsparung_monat_euro=md.einsparung_monat_euro,
                 co2_einsparung_kg=md.co2_einsparung_kg,
             ))
+
+        # ⭐ N-564 (Konzept Regel 2 Schritt 3, Entscheid Master 26.09.2026): ein Monat, in dem
+        # das Auto Rest der Wallbox bekommt, aber keine eigene Monatszeile hat, steht in der
+        # Kachel „Heimladung" (Schleife oben) — bis hierher fehlte er in der Tabelle, und die
+        # Summe der Tabelle ergab die Kachel nicht (Nachmessung Stufe 2, F3: Tesla 28 Monate
+        # in der Kachel, 25 Zeilen). Jetzt trägt die Tabelle für genau diese Monate eine Zeile
+        # **ohne km** und ohne ID (sie ist nicht gespeichert), mit `ladung_*` aus dem Entscheid
+        # (`je_auto`), gekennzeichnet `ladung_aus_rest`. Sie ist Anzeige, kein Datensatz: der
+        # Monatsabschluss und jede Zählung „erfasster Monate" sehen sie nicht.
+        for _j, _m in monate_ohne_zeile:
+            _e = emob_ctx.entscheide.get((_j, _m))
+            _a = _e.je_auto.get(eauto.id) if _e is not None else None
+            if _a is None:
+                continue
+            _d: dict[str, Any] = {
+                'ladung_pv_kwh': round(_a.pv_kwh, 2),
+                'ladung_netz_kwh': round(_a.netz_kwh, 2),
+                'ladung_kwh': round(_a.pv_kwh + _a.netz_kwh, 2),
+            }
+            if _a.art == ART_REST:
+                _d['ladung_aus_rest'] = True
+            elif _a.art == ART_SCHAETZUNG:
+                _d['ladung_geschaetzt'] = True
+            monatsdaten_response.append(InvestitionMonatsdatenResponse(
+                id=None,
+                investition_id=eauto.id,
+                jahr=_j,
+                monat=_m,
+                verbrauch_daten=_d,
+                einsparung_monat_euro=None,
+                co2_einsparung_kg=None,
+            ))
+        if monate_ohne_zeile:
+            monatsdaten_response.sort(key=lambda r: (r.jahr, r.monat))
 
         dashboards.append(EAutoDashboardResponse(
             investition=eauto,

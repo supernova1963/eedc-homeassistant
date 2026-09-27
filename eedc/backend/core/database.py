@@ -972,6 +972,10 @@ async def run_migrations(conn):
             # (E6/E7; der Daten-Checker nennt die Tage). Kein Start-Rewrite.
             if 'verworfen' not in existing_columns:
                 connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN verworfen JSON'))
+            # N-567: Nachtrag nach Nullstunden (nur benannt, zählt wie in HA). Rein additiv,
+            # kein Backfill — Bestandstage bekommen ihn mit der nächsten Neuaggregation.
+            if 'nachtrag' not in existing_columns:
+                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN nachtrag JSON'))
 
         # N-547: Übergangs-Marker am Korrekturprofil. `lern_basis_pro_bin` sagt
         # je Bin, ob sein Faktor schon gegen das neue Lern-SOLL gelernt ist

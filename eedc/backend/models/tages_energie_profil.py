@@ -370,6 +370,19 @@ class TagesZusammenfassung(Base):
         JSON(none_as_null=True), nullable=True
     )
 
+    # N-567 (26.09.2026): ``{achse: kWh}`` der Stunden, die der Deckel nur dank seines
+    # Fensters durchgelassen hat — Menge über Schwelle × n, aber nicht über Schwelle ×
+    # Stunden seit der letzten Änderung (R3, Vorlage Zählerlücken §10 Nachträge II). Ein
+    # Nachtrag nach einem eingefrorenen Zähler (Lab 24.05.2026: +37 kWh nach drei
+    # Nullstunden) oder ein Sprung nach einer Nacht mit echten Nullen — eedc kann beide nicht
+    # unterscheiden und folgt HA: die Menge ZÄHLT. Die Spalte benennt sie nur, damit der
+    # Daten-Checker sie zeigen kann (sonst wäre sie nirgends sichtbar). Keine Anzeigeregel,
+    # kein Verwerfen. ``NULL`` = kein Nachtrag (oder Tag von vor N-567) — die Regelmarke
+    # bleibt allein ``verworfen``.
+    nachtrag: Mapped[Optional[dict]] = mapped_column(
+        JSON(none_as_null=True), nullable=True
+    )
+
     # Per-Feld-Provenance (Etappe 3d Päckchen 1, KONZEPT-DATENPIPELINE.md Sektion 3.2).
     source_provenance: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
 

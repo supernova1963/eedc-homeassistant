@@ -252,7 +252,13 @@ export function baueChartDaten({
   })
 }
 
-export function TagVerlaufChart({ daten, extraSerien, erzeugerSerien = [], wpSerien = [] }: {
+/** N-566: Default der optionalen Serien-Props — EINE Referenz für alle Renders. Ein `= []` im
+ *  Parameter wäre je Render neu und liefe über `pvRest`/`chartSerien`/`chartDaten` in die
+ *  Memo-Abhängigkeiten (jeder Render rechnete den Chart neu). Dieselbe Bauform wie
+ *  `TagWerteTabelle`, dort mit Effekt und Endlosschleife. */
+const KEINE_SERIEN: SerieInfo[] = []
+
+export function TagVerlaufChart({ daten, extraSerien, erzeugerSerien = KEINE_SERIEN, wpSerien = KEINE_SERIEN }: {
   daten: StundenWert[]
   extraSerien: SerieInfo[]
   /** PV-Strings/BKW mit eigenem Sensor (#350, Rainer). Sie **ersetzen** den

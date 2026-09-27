@@ -849,6 +849,94 @@ class EnergieprofilChecks:
             action_label="Zeitraum neu aggregieren",
         )]
 
+    #: Achse → Anzeigename in der Tagesliste des Nachtrag-Hinweises (N-567).
+    _NACHTRAG_ACHSEN_LABEL = {"pv": "PV", "einspeisung": "Einspeisung"}
+
+    async def _check_nachtrag_nach_eingefrorenem_zaehler(self, anlage: Anlage) -> list[CheckErgebnis]:
+        """N-567: Tage, an denen der Deckel eine Stunde **nur dank seines Fensters**
+        durchgelassen hat — ``TagesZusammenfassung.nachtrag`` (Aggregator, `tages_tabelle`).
+
+        Seit dem Deckel-Fenster (Vorlage Zählerlücken §10 Nachträge II) prüft der Deckel eine
+        Menge gegen die Zeit seit der letzten Änderung des Standes. Ein Zähler, der Stunden
+        still steht und dann nachliefert (Lab 24.05.2026: drei Nullstunden, +37 kWh), bleibt
+        damit Menge — wie in HA. Dieselbe Regel lässt aber auch einen Sprung nach einer Nacht
+        mit echten Nullen durch (bis ≈ Schwelle × Nullstunden), und der wäre sonst nirgends
+        sichtbar: vorher (Fenster n) stand er in ``verworfen`` mit N-94-Hinweis.
+
+        **Nur benennen:** kein Verwerfen, keine Anzeigeregel, kein Knopf. Eine Zeile je Anlage
+        mit Tagesliste (neueste zuerst, höchstens zehn je Herkunft). Ohne Nachtrag: still.
+
+        **Der Satz folgt der Herkunft der Tageszeile** (Entscheid Master 26.09.): nur ein Tag aus
+        der HA-Langzeitstatistik darf sagen, die Menge habe in HA in derselben Stunde gestanden.
+        Ein Tag aus Zählerständen (Snapshot-/MQTT-Pfad, Standalone) nutzt dieselbe Tagestabelle
+        und bekommt denselben `nachtrag`, eine HA-Stunde gibt es dort aber nicht. Die Herkunft
+        steht in der Provenance der Zeile: der Aggregator sät sie mit `TZ_QUELLE_LTS` genau
+        dann, wenn die Stunden aus der HA-Statistik kamen (`aggregator.py`, `tz_source_label`).
+        """
+        from backend.models.tages_energie_profil import TagesZusammenfassung
+        from backend.services.snapshot.boundary_range import TZ_QUELLE_LTS
+
+        def _aus_lts(prov) -> bool:
+            return isinstance(prov, dict) and any(
+                isinstance(e, dict) and e.get("source") == TZ_QUELLE_LTS for e in prov.values()
+            )
+
+        tz = TagesZusammenfassung
+        befunde = [
+            (d, n, _aus_lts(p)) for d, n, p in (await self.db.execute(
+                select(tz.datum, tz.nachtrag, tz.source_provenance).where(
+                    tz.anlage_id == anlage.id, tz.nachtrag.is_not(None),
+                )
+            )).all() if n
+        ]
+        if not befunde:
+            return []
+        befunde.sort(key=lambda t: t[0], reverse=True)
+        neuester, aeltester = befunde[0][0], befunde[-1][0]
+
+        def _teile(n: dict) -> str:
+            return ", ".join(
+                f"{self._NACHTRAG_ACHSEN_LABEL.get(a, a)} {fmt_zahl(float(kwh), 1)} kWh"
+                for a, kwh in sorted(n.items())
+            )
+
+        def _liste(tage: list) -> str:
+            s = "; ".join(f"{d.isoformat()}: {_teile(n)}" for d, n, _ in tage[:10])
+            if len(tage) > 10:
+                s += f"; … und {len(tage) - 10} weitere"
+            return s
+
+        lts = [b for b in befunde if b[2]]
+        zaehler = [b for b in befunde if not b[2]]
+        teile = []
+        if lts:
+            teile.append(
+                f"Aus der HA-Langzeitstatistik gerechnet: {_liste(lts)}. "
+                "eedc folgt hier Home Assistant: die Menge stand in HA in derselben Stunde."
+            )
+        if zaehler:
+            teile.append(
+                f"Aus Zählerständen gerechnet (ohne HA-Statistik): {_liste(zaehler)}. "
+                "Die Menge steht in der Stunde, in der der Zähler sie gemeldet hat."
+            )
+        return [CheckErgebnis(
+            kategorie=CheckKategorie.ENERGIEPROFIL_PLAUSIBILITAET,
+            schwere=CheckSeverity.INFO,
+            meldung=(
+                f"{len(befunde)} Tag(e) mit Nachtrag nach eingefrorenem Zähler "
+                f"({aeltester.isoformat()} … {neuester.isoformat()})"
+            ),
+            details=(
+                "An diesen Tagen stand ein Zähler (PV oder Einspeisung) mehrere Stunden still und "
+                "lieferte die Menge danach in einer einzigen Stunde nach — mehr, als in einer Stunde "
+                "erzeugt werden kann. Sie zählt im Tag und im Monat mit. "
+                + " ".join(teile) + " "
+                "Dieselbe Form hat ein Zählersprung nach einer Nacht ohne Erzeugung; stimmt eine "
+                "dieser Mengen nicht, liegt der Fehler in der Zähler-Historie der Quelle."
+            ),
+            link=LINK_ENERGIEPROFIL,
+        )]
+
     async def _check_energieprofil_plausibilitaet(self, anlage: Anlage) -> list[CheckErgebnis]:
         """
         Erkennt Stundenwerte im TagesEnergieProfil, die physikalisch unmöglich sind

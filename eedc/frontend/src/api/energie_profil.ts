@@ -104,6 +104,10 @@ export interface TagWerte {
    *  `null` = Tag von vor dem Umbau. Der Hinweis „Verfügbare Energie" (N-94)
    *  feuert nur, wenn hier eine Achse steht. */
   verworfen?: Record<string, number> | null
+  /** N-567: `{achse: kWh}` der Stunden, die der Deckel nur dank seines Fensters durchließ
+   *  (Nachtrag nach Nullstunden). In den Summen enthalten — eedc folgt HA; keine Anzeigeregel,
+   *  der Daten-Checker nennt die Tage. `null` = kein Nachtrag. */
+  nachtrag?: Record<string, number> | null
   // Energie (kWh).
   // `erzeugung`/`eigenverbrauch` sind `null`, wenn für den Tag keine Stunde
   // einen PV-Wert trug — etwa wenn die PV nur als Anlagen-Aggregat gepflegt

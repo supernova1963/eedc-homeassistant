@@ -30,6 +30,7 @@ import { istZaehlerKategorie } from '../lib/fieldDefinitions'
 import { SPEICHER_KOPPLUNG_LABELS, aufgeloesteSpeicherKopplung, speicherParameter } from '../lib/investitionParameter'
 import { cockpitApi, type PVStringsGesamtlaufzeitResponse } from '../api/cockpit'
 import { investitionenApi, type InvestitionMonatsdaten } from '../api/investitionen'
+import { istRestZeile } from '../components/eauto/EAutoCharts'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
 import {
   PV_ANLAGE_KPI, SPEICHER_KPI, WP_KPI, EAUTO_KPI, WALLBOX_KPI, BKW_KPI,
@@ -731,7 +732,9 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
       const ds = await investitionenApi.getEAutoDashboard(anlageId)
       return ds.map(({ investition: inv, zusammenfassung: z, monatsdaten: md }) => ({
         inv, label: inv.bezeichnung,
-        monatswerte: md.length,
+        // N-564: nur erfasste Monatszeilen — eine Anzeigezeile „aus Wallbox-Rest" ist kein
+        // erfasster Monat; der N-247-Hinweis „keine Monatswerte" bleibt damit wie bisher.
+        monatswerte: md.filter((m) => !istRestZeile(m)).length,
         status: [
           kpi(EAUTO_KPI.gefahren, n0(z.gesamt_km), 'km'),
           kpi(EAUTO_KPI.verbrauch, n1(z.durchschnitt_verbrauch_kwh_100km), 'kWh/100km'),
