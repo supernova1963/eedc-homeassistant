@@ -451,7 +451,12 @@ export function WaermepumpeFelder({ paramData, onInputChange, setParam, zeige, m
             type="number" step="1" min="0" max="100"
             value={paramData.pv_anteil_prozent as string}
             onChange={onInputChange}
-            hint="Anteil des WP-Stroms aus PV — dient der Zuordnung des Eigenverbrauchs, senkt die Stromkosten der Wärmepumpe nicht"
+            // N-572: bewusst NICHT vorbelegt. Drei Zustände (N-277/N-354): nie
+            // eingetragen = 30 %, geleert = fällt aus dem Prognose-MITTEL (der
+            // Beitrag je Gerät rechnet dann weiter mit 30 %, `finanz_prognose.py`)
+            // — deshalb sagt der Hinweis „Mittel" und nicht „Prognose".
+            placeholder="nicht gepflegt"
+            hint="Anteil des WP-Stroms aus PV — dient der Zuordnung des Eigenverbrauchs, senkt die Stromkosten der Wärmepumpe nicht. Nie eingetragen: eedc rechnet mit 30 %. Leerst du einen eingetragenen Wert, zählt diese Wärmepumpe nicht mehr zum Prognose-Mittel der PV-Anteile."
           />
           <Input
             label="Zusatzkosten Alt-Heizung (€/Jahr)"

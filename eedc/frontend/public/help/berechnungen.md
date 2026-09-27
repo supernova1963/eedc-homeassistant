@@ -646,7 +646,7 @@ sofort, bei Pflege von Hand ab dem Monatsabschluss); darunter „davon extern �
 (`emob_ladung_gesamt_kwh`): die Heimladung (`emob_ladung_kwh`) behält ihre Bedeutung, der **PV-Anteil** bleibt auf
 die Heimladung bezogen, T-Konto, CO₂ und Community rechnen weiter mit ihr. Extern liegt außerhalb der Hausbilanz.
 
-**Hinweis Kraftstoffpreis (ab v3.17.0):** Im Cockpit werden weiterhin die hardcodierten Defaults verwendet. In der **Finanz-Prognose** ([Auswertungen → Finanzen](HANDBUCH_BEDIENUNG.md#41-finanzen)), im **HA-Sensor-Export** und im **PDF-Finanzbericht** wird stattdessen pro Monat der echte Kraftstoffpreis aus `Monatsdaten.kraftstoffpreis_euro` verwendet (Quelle: EU Weekly Oil Bulletin). Fallback auf den statischen `benzinpreis_euro`-Parameter der Komponente wenn kein Monatswert vorhanden.
+**Hinweis Kraftstoffpreis (ab v3.17.0):** Im Cockpit werden weiterhin die hardcodierten Defaults verwendet. In der **Finanz-Prognose** ([Auswertungen → Finanzen](HANDBUCH_BEDIENUNG.md#41-finanzen)), im **HA-Sensor-Export** und im **PDF-Finanzbericht** wird stattdessen pro Monat der echte Kraftstoffpreis aus `Monatsdaten.kraftstoffpreis_euro` verwendet (Quelle: EU Weekly Oil Bulletin). Fallback auf den statischen `benzinpreis_euro`-Parameter der Komponente wenn kein Monatswert vorhanden. Das Formularfeld *Benzinpreis (€/L)* ist seit 27.09.2026 (N-572) nicht mehr vorbelegt: ein geleertes Feld bleibt leer, und die Kette fällt dann auf 1,65 €/L zurück.
 
 #### Investitionskosten (Mehrkosten-Ansatz)
 
@@ -1039,8 +1039,8 @@ Zwei Pfade, in dieser Reihenfolge:
 |------|--------|
 | `jahresfahrleistung_km` | `Investition.parameter` (Default: 15000) |
 | `verbrauch_kwh_100km` | `Investition.parameter` (Default: 18) |
-| `pv_ladeanteil_prozent` | `Investition.parameter` (Default: 60) |
-| `benzinpreis_euro` | `Investition.parameter` (Default: 1,65) |
+| `pv_ladeanteil_prozent` | `Investition.parameter` (Default: 60) — im Formular **nicht vorbelegt** (N-572, 27.09.2026): ein geleertes Feld bleibt leer, dann gilt der gemessene IST-Anteil, ohne Messung 60 (s. N-188 unten) |
+| `benzinpreis_euro` | `Investition.parameter` (Default: 1,65) — im Formular **nicht vorbelegt** (N-572): ein geleertes Feld bleibt leer, dann gilt der Kraftstoffpreis der Monatsdaten, ohne ihn 1,65 |
 | `vergleich_verbrauch_l_100km` | `Investition.parameter` (Default: 7,5) — der **fiktive** Vergleichs-Benziner |
 | `v2h_faehig` | `Investition.parameter` (Default: false) |
 | `eigener_verbrauch_l_100km` | `Investition.parameter` — **kein Default**, s. „Plug-in-Hybrid" unten |
@@ -1128,14 +1128,15 @@ Für Jahresprognose:
                        ∨ Investition.parameter.benzinpreis_euro  (Fallback)
 ```
 
-**Datenquelle:** EU Weekly Oil Bulletin (Euro-Super 95, inkl. Steuern, wöchentlich, History seit 2005). Befüllung durch den Scheduler-Job (**täglich 06:00 + Startlauf**), den Reparatur-Pfad „Kraftstoffpreise nachpflegen" oder den Backfill-Endpoint. Fehlt der Monatswert, rechnet die Kette mit dem Investitions-Parameter bzw. 1,65 €/L weiter — der Daten-Checker meldet offene Monate deshalb als eigene Kategorie.
+**Datenquelle:** EU Weekly Oil Bulletin (Euro-Super 95, inkl. Steuern, wöchentlich, History seit 2005). Befüllung durch den Scheduler-Job (**täglich 06:00 + Startlauf**), den Reparatur-Pfad „Kraftstoffpreise nachpflegen" oder den Backfill-Endpoint. Fehlt der Monatswert, rechnet die Kette mit dem Investitions-Parameter bzw. 1,65 €/L weiter — der Daten-Checker meldet offene Monate deshalb als eigene Kategorie. Das Feld *Benzinpreis (€/L)* am E-Auto ist seit 27.09.2026 (N-572) nicht mehr mit 1,65 vorbelegt: ein geleertes Feld bleibt beim nächsten Speichern leer, und es gilt der Monatspreis bzw. 1,65 €/L. Wer dort eine Zahl einträgt, legt den Preis fest — in der ROI-Sicht (`resolve_eauto_benzinpreis`) hat sie Vorrang vor dem jüngsten Monatspreis.
 
 **Betroffen:** Aussichten (`aussichten/finanzen.py`), HA-Sensor-Export (`ha_export.py`), PDF-Finanzbericht (`pdf_operations.py`).
 
 #### PV-Anteil der Heimladung: gemessen, sonst abgeleitet (ab 2026-08-08, N-141)
 
 Die Formeln oben beschreiben die **Prognose**-Achse, die den von Hand gepflegten
-`pv_ladeanteil_prozent` liest — und, wo er fehlt, seit 2026-08-08 den IST-Anteil (s. unten).
+`pv_ladeanteil_prozent` liest — und, wo er fehlt oder leer ist, seit 2026-08-08 den IST-Anteil (s. unten;
+das Formularfeld ist seit N-572 nicht mehr vorbelegt, ein geleertes Feld bleibt leer).
 Auf der **IST**-Achse gibt es diesen Parameter nicht — dort steht
 je Monat das erfasste Paar `ladung_pv_kwh` / `ladung_netz_kwh`. Und genau das fehlte den meisten
 Anlagen: **eine Wallbox misst ihren PV-Anteil nicht**, sie zählt nur Kilowattstunden. Ohne evcc
@@ -1188,7 +1189,12 @@ holen dieselbe Anreicherung über `reichere_monatszeilen_an`.
 **Die Prognose-Achse rechnet mit derselben Zahl** (N-188, seit 2026-08-08): fehlt am Fahrzeug der
 gepflegte `pv_ladeanteil_prozent`, nimmt die ROI-Prognose den IST-Anteil über
 `monats_fakten.ist_pv_ladeanteil_prozent` (Σ PV ÷ Σ Ladung, ladungsgewichtet) statt des früheren
-Vorgabewerts von 60 %. Der Default greift nur noch, wenn auch das IST keine Heimladung kennt. Die
+Vorgabewerts von 60 %. Der Default greift nur noch, wenn auch das IST keine Heimladung kennt.
+**Seit 27.09.2026 (N-572) belegt das Formular das Feld nicht mehr mit 60 vor:** ein geleertes Feld
+bleibt beim nächsten Speichern leer, und es gilt der IST-Anteil. Vorher schrieb jedes Speichern die
+60 als gepflegten Wert zurück, und der IST-Anteil kam an formular-gespeicherten Fahrzeugen nie zum
+Zug. Eine früher gespeicherte 60 bleibt stehen — eedc kann sie nicht von einer Eingabe
+unterscheiden; wer den gemessenen Anteil will, leert das Feld. Die
 zweite Prognose-Quelle (`aussichten/finanz_prognose.py`, leitet ihre Quote aus der Historie ab) zieht über dieselbe
 Anreicherung mit.
 
@@ -1442,7 +1448,7 @@ CO2-Einsparung        = CO2_alt - CO2_WP
 | COP Warmwasser | `cop_warmwasser` | 3.0 |
 | Heizwärmebedarf | `heizwaermebedarf_kwh` | **kein Default mehr** in der ROI-Rechnung; im Formular Vorbelegung 12000 — **nicht** vorbelegt, wo dem Gerät eine der beiden Wärme-Achsen fehlt (`luft_luft` seit 2026-08-16, `brauchwasser` seit 14.09.2026). Zählt nur auf einer Achse, die es am Gerät gibt, s. (4) oben |
 | Warmwasserbedarf | `warmwasserbedarf_kwh` | **kein Default mehr** in der ROI-Rechnung; im Formular Vorbelegung 3000 — **nicht** vorbelegt, wo dem Gerät eine der beiden Wärme-Achsen fehlt (`luft_luft` seit 2026-08-16, `brauchwasser` seit 14.09.2026). Zählt nur auf einer Achse, die es am Gerät gibt, s. (4) oben |
-| PV-Anteil | `pv_anteil_prozent` | 30 |
+| PV-Anteil | `pv_anteil_prozent` | 30, wenn nie eingetragen — im Formular **nicht vorbelegt** (N-572, 27.09.2026); ein geleertes Feld bleibt leer und nimmt das Gerät aus dem Prognose-Mittel (s. „`WP_PV_Anteil`" in §4.4) |
 | Alter Energieträger | `alter_energietraeger` | `gas` |
 | Alter Preis | `alter_preis_cent_kwh` | 12 (Fallback wenn `Monatsdaten.gaspreis_cent_kwh` leer) |
 | Alternativ-Zusatzkosten | `alternativ_zusatzkosten_jahr` | 0 (€/Jahr) |
@@ -3038,8 +3044,10 @@ Normierung     = Σ_Monate(Saison_Faktor) / Σ_Monate(Saison_Faktor * sqrt(PV_Fa
 ```
 
 > ⚠ **`WP_PV_Anteil` hat zwei Bestandteile, die leicht verwechselt werden.**
-> `PV_Anteil_gepflegt` ist der am Gerät eingetragene *PV-Anteil (%)* (Vorgabe 30 %; bei
-> mehreren Wärmepumpen ihr Mittel, Geräte ohne Pflege fallen aus dem Mittel heraus).
+> `PV_Anteil_gepflegt` ist der am Gerät eingetragene *PV-Anteil (%)* (Vorgabe 30 %, wenn nie
+> eingetragen; bei mehreren Wärmepumpen ihr Mittel). Ein **geleertes** Feld ist eine Rücknahme: es
+> bleibt leer (das Formular belegt es seit 27.09.2026, N-572, nicht mehr vor), und das Gerät fällt
+> aus dem Mittel heraus. Der Beitrag **je Gerät** rechnet in diesem Fall weiter mit 30 %.
 > `sqrt(PV_Faktor)` gibt der Größe ihre **Saisonform** — im Sommer steht mehr PV zur
 > Verfügung —, und die `Normierung` über die **zwölf Kalendermonate** sorgt dafür, dass
 > die Jahressumme trotz dieser Form genau dem gepflegten Anteil entspricht. Ohne sie

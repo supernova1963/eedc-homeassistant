@@ -56,8 +56,6 @@ from backend.services.ha_sensors_export import (
     WAERMEPUMPE_SENSOREN,
 )
 from backend.core.investition_parameter import (
-    PARAM_E_AUTO,
-    PARAM_E_AUTO_DEFAULTS,
     abgrenzung_stoerung,
     ist_dienstlich,
 )
@@ -252,12 +250,6 @@ async def calculate_investition_sensors(
                     berechnung = f"{fmt_zahl(gesamt_pv_ladung, 0)} / {fmt_zahl(gesamt_ladung, 0)} × 100"
             elif sensor.key == "e_auto_ersparnis_vs_benzin_euro":
                 if gesamt_km > 0:
-                    # Monatliche Kraftstoffpreise laden (Fallback: statischer Parameter)
-                    fallback_benzinpreis = params.get(PARAM_E_AUTO["BENZINPREIS_EURO"], PARAM_E_AUTO_DEFAULTS["benzinpreis_euro"])
-                    vergleich_l = params.get(
-                        PARAM_E_AUTO["VERGLEICH_VERBRAUCH_L_100KM"],
-                        PARAM_E_AUTO_DEFAULTS["vergleich_verbrauch_l_100km"],
-                    )
                     anlage_md_result = await db.execute(
                         select(Monatsdaten).where(Monatsdaten.anlage_id == investition.anlage_id)
                     )

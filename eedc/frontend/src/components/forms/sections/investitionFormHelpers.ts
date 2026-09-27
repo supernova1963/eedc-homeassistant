@@ -196,9 +196,14 @@ export function getInitialParamData(
         batteriekapazitaet_kwh: paramStr(params.batteriekapazitaet_kwh),
         verbrauch_kwh_100km: paramStr(params.verbrauch_kwh_100km, PARAM_E_AUTO_DEFAULTS.verbrauch_kwh_100km),
         jahresfahrleistung_km: paramStr(params.jahresfahrleistung_km, PARAM_E_AUTO_DEFAULTS.jahresfahrleistung_km),
-        pv_ladeanteil_prozent: paramStr(params.pv_ladeanteil_prozent, PARAM_E_AUTO_DEFAULTS.pv_ladeanteil_prozent),
+        // N-572: bewusst OHNE Default-Argument — die Leser werten die
+        // ANWESENHEIT des Keys aus (PV-Ladeanteil: N-188-Kaskade gepflegt →
+        // gemessen → 60; Benzinpreis: Parameter → EU-Monatspreis → 1,65).
+        // Vorbelegt schrieb jedes Speichern den Default als gepflegten Wert
+        // zurück, auch nach dem Leeren. Wächter: `src/test/n572-*.test.tsx`.
+        pv_ladeanteil_prozent: paramStr(params.pv_ladeanteil_prozent),
         vergleich_verbrauch_l_100km: paramStr(params.vergleich_verbrauch_l_100km, PARAM_E_AUTO_DEFAULTS.vergleich_verbrauch_l_100km),
-        benzinpreis_euro: paramStr(params.benzinpreis_euro, PARAM_E_AUTO_DEFAULTS.benzinpreis_euro),
+        benzinpreis_euro: paramStr(params.benzinpreis_euro),
         // #331: bewusst OHNE Default-Argument — das leere Feld ist die Aussage
         // „dieses Fahrzeug fährt rein elektrisch". Ein vorbelegter Wert würde
         // aus jedem Bestands-BEV beim ersten Speichern einen Hybrid machen.
@@ -292,7 +297,11 @@ export function getInitialParamData(
               warmwasserbedarf_kwh: paramStr(params.warmwasserbedarf_kwh),
             }),
         // Vergleich mit alter Heizung
-        pv_anteil_prozent: paramStr(params.pv_anteil_prozent, PARAM_WAERMEPUMPE_DEFAULTS.pv_anteil_prozent),
+        // N-572: bewusst OHNE Default-Argument — drei Zustände (N-277/N-354):
+        // Key fehlt = nie gepflegt (30 %), `''` = zurückgenommen (fällt aus
+        // dem Prognose-Mittel), Zahl = Wert. Vorbelegt machte das nächste
+        // Speichern aus „zurückgenommen" still wieder eine gepflegte 30.
+        pv_anteil_prozent: paramStr(params.pv_anteil_prozent),
         alter_energietraeger: paramStr(params.alter_energietraeger, PARAM_WAERMEPUMPE_DEFAULTS.alter_energietraeger),
         alter_preis_cent_kwh: paramStr(params.alter_preis_cent_kwh, PARAM_WAERMEPUMPE_DEFAULTS.alter_preis_cent_kwh),
         alternativ_zusatzkosten_jahr: paramStr(params.alternativ_zusatzkosten_jahr, PARAM_WAERMEPUMPE_DEFAULTS.alternativ_zusatzkosten_jahr),

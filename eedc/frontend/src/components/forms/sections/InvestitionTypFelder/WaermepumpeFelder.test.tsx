@@ -123,9 +123,13 @@ describe('WaermepumpeFelder — „PV-Anteil (%)" sagt, was er tut (N-459 / SOLL
   }
 
   it('sagt, dass das Feld die Stromkosten der Wärmepumpe NICHT senkt', () => {
+    // N-572 (27.09.2026): der Hinweis trägt seither zwei Sätze mehr — was ein
+    // leeres Feld bedeutet. Die Aussage dieser Probe steht unverändert vorn.
     expect(pvAnteilHinweis().textContent).toBe(
       'Anteil des WP-Stroms aus PV — dient der Zuordnung des Eigenverbrauchs, '
-      + 'senkt die Stromkosten der Wärmepumpe nicht',
+      + 'senkt die Stromkosten der Wärmepumpe nicht. Nie eingetragen: eedc rechnet '
+      + 'mit 30 %. Leerst du einen eingetragenen Wert, zählt diese Wärmepumpe nicht '
+      + 'mehr zum Prognose-Mittel der PV-Anteile.',
     )
   })
 

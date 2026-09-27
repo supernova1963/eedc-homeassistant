@@ -629,7 +629,7 @@ Zusätzlich: **JAZ Heizen / JAZ Warmwasser getrennt** (nur wenn du Strom je Funk
 - **Gefahrene Kilometer** im Zeitraum
 - **Verbrauch** (kWh)
 - **Ladequellen-Aufteilung** — PV-Ladung (kostenlos), Netz-Ladung (zu Hause), externe Ladung (unterwegs); unter dem PV-Anteil steht **„davon aus dem Speicher"**, wenn ein Speicherzähler existiert (Strom aus dem Hausakku zählt als eigener Strom, ist aber kein Direktverbrauch aus der PV)
-- **Kostenersparnis** gegenüber Benziner/Diesel — auf Basis echter **monatlicher Benzinpreise** aus dem EU Weekly Oil Bulletin (Fallback: statischer Parameter)
+- **Kostenersparnis** gegenüber Benziner/Diesel — auf Basis echter **monatlicher Benzinpreise** aus dem EU Weekly Oil Bulletin (fehlt ein Monatspreis: der am E-Auto eingetragene *Benzinpreis (€/L)*, sonst 1,65 €/L — das Feld ist nicht vorbelegt, ein geleertes Feld bleibt leer)
 - **V2H-Entladung** (wenn aktiviert)
 
 In der Monatstabelle steht ein Monat, in dem das Auto nur einen Anteil am Rest der Wallbox bekommt, als eigene Zeile **„aus Wallbox-Rest"** (ohne km) — so ergibt die Tabelle die Kachel „Heimladung". Liegt an „Heim: gesamt" ein Ladezähler je Auto (etwa evccs „Ladevorgänge: Energie [Fzg.]"), steht je Monat **„aus n Ladevorgängen"** dabei, und wie viele davon die Wallbox nicht voll gezählt hat.

@@ -34,7 +34,10 @@ export function EAutoFelder({ paramData, onInputChange, setParam }: TypFelderPro
             type="number" step="1" min="0" max="100"
             value={paramData.pv_ladeanteil_prozent as string}
             onChange={onInputChange}
-            hint="Anteil der Ladung aus PV-Strom"
+            // N-572: das Feld ist bewusst NICHT vorbelegt — leer ist eine
+            // Aussage (N-188: gepflegt → gemessen → 60 %), kein fehlender Wert.
+            placeholder="gemessen, sonst 60"
+            hint="Anteil der Ladung aus PV-Strom. Leer lassen: eedc nimmt den gemessenen Anteil aus deinen Monatsdaten, ohne Messung 60 %."
           />
         </div>
       </FormSection>
@@ -55,7 +58,10 @@ export function EAutoFelder({ paramData, onInputChange, setParam }: TypFelderPro
             type="number" step="0.01" min="0"
             value={paramData.benzinpreis_euro as string}
             onChange={onInputChange}
-            hint="Aktueller Benzin/Diesel-Preis"
+            // N-572: bewusst NICHT vorbelegt — ein eingetragener Preis hat
+            // Vorrang vor dem Kraftstoffpreis der Monatsdaten und friert ihn ein.
+            placeholder="Monatspreis, sonst 1,65"
+            hint="Benzin-/Diesel-Preis je Liter. Leer lassen: eedc nimmt den Kraftstoffpreis aus deinen Monatsdaten (EU-Monatswert), ohne ihn 1,65 €."
           />
         </div>
       </FormSection>
