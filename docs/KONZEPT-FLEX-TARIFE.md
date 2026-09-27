@@ -188,8 +188,9 @@ eine **Prüfgröße**, nicht nur ein Schönheitsfehler. [F]
 
 > **Wortwahl:** „Abweichung", nicht „Differenz". Im Projekt bezeichnet „Differenz" die Subtraktion
 > zweier Größen, die bei ungleicher Abdeckung *unterdrückt* wird
-> (`KONZEPT-UNVOLLSTAENDIGE-WERTE.md` §3). Hier ist das Gegenteil gemeint: ein Vergleich zweier
-> gültiger Zahlen, der sichtbar bleibt.
+> (`KONZEPT-UNVOLLSTAENDIGE-WERTE.md` §3; seit „Zählerlücken wie HA" nur noch im Total-Fall, bei
+> verworfener Menge oder für Altbestand ohne Regelmarke, §3a dort). Hier ist das Gegenteil gemeint:
+> ein Vergleich zweier gültiger Zahlen, der sichtbar bleibt.
 
 ### P-3a · Aggregate werden aus Monaten gebildet, nie aus Tagen [F]
 

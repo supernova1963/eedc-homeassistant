@@ -1,11 +1,317 @@
 # Was ist neu
 
-> **Stand:** September 2026 (v4.0.50)
+> **Stand:** September 2026 (v4.0.51)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.51 — 27. September 2026
+
+**In dieser Version:** Zählerlücken rechnen wie Home Assistant · jedes E-Auto trägt seine eigene Heimladung · die Prognose ist verfeinert.
+
+**E-Auto: Was du fährst, und was du lädst, sind wieder zwei Zahlen**
+
+**Betrifft dich das?** Ja, wenn du ein E-Auto erfasst, besonders mit Wallbox oder
+mit Laden unterwegs.
+
+**Was war:** Am E-Auto gibt es zwei Mengen: die **Heimladung** (was zu Hause ins
+Auto geht) und den **Fahrverbrauch** (woraus die kWh/100 km entstehen). eedc hat
+den Fahrverbrauch als Heimladung eingesetzt, sobald keine Ladung eingetragen war,
+auch wenn die Wallbox in dem Monat nachweislich nichts geladen hatte. Und beim
+Start hat eedc den Fahrverbrauch sogar in „Ladung" umgebucht.
+
+**Was jetzt:**
+
+- **Eine Wallbox mit 0 kWh zeigt 0.** Der Fahrverbrauch springt nur noch ein, wenn
+  über die Heimladung gar nichts bekannt ist, und dann ausdrücklich als
+  **Schätzung**. Die Umbuchung beim Start ist abgeschaltet; Umbuchungen seit dem
+  09.05.2026 werden beim ersten Start einmalig zurückgenommen.
+- **Laden unterwegs kostet überall Geld.** E-Auto-Hub, T-Konto, Aussichten und die
+  HA-Sensoren ziehen die externen Ladekosten jetzt nach derselben Regel ab.
+- **„Ladung gesamt" ist überall Heim + Extern**, und die **kWh/100 km** folgen
+  überall einer Regel: je Monat der gemessene Fahrverbrauch, sonst die Ladung;
+  über einen Zeitraum die Summe der Monate durch die Kilometer. Der HA-Sensor
+  „Verbrauch" am E-Auto rechnet genauso und sagt im Attribut `quelle`, ob der Wert
+  gemessen oder angenähert ist.
+- **Der Monatsabschluss schlägt bei der Heimladung auch 0 vor**, wenn die Wallbox
+  im Monat nichts geladen hat.
+- **Der laufende Monat wählt die Ladequelle wie ein abgeschlossener.** In
+  *Cockpit → Monat* stand bisher die größere von Wallbox- und Auto-Zahl; jetzt
+  gilt dieselbe Regel wie nach dem Monatsabschluss, und die Zahl springt beim
+  Abschluss nicht mehr.
+- **Die CO₂-Einsparung der E-Mobilität im Jahresbericht (PDF)** ist dieselbe Zahl
+  wie in *Cockpit → Jahr* — mit dem Vergleichs-Verbrenner deines Fahrzeugs statt
+  einer Pauschale.
+
+**Was du tun musst:** Nichts. ⚠ **Wer externe Ladung pflegt, sieht die Ersparnis
+gegenüber dem Verbrenner kleiner** — in der App und in Home Assistant, wo
+`e_auto_ersparnis_vs_benzin_euro`, `jahres_ersparnis_euro`, `roi_prozent` und
+`amortisation_jahre` einmalig springen (die Langzeitstatistik bekommt einen Knick,
+deine Daten ändern sich nicht). Wer keine externe Ladung erfasst, merkt davon
+nichts. Hast du den Fahrverbrauch schon **bis Anfang Mai 2026** erfasst, kann er in
+diesen alten Monaten als „Ladung" stehen geblieben sein — eedc kann diese Fälle
+nicht von echten alten Ladungen unterscheiden. Trag ihn dort im Monatsabschluss
+wieder unter „Verbrauch" ein.
+
+→ [Bedienung → E-Auto](HANDBUCH_BEDIENUNG.md#35-e-auto) · [Berechnungen §3.4](BERECHNUNGEN.md#34-e-auto-einsparung)
+
+### Jedes Auto trägt seine eigene Heimladung, die Wallbox den Rest
+
+**Betrifft dich das?** Ja, wenn du eine Wallbox hast — besonders mit zwei Autos,
+einem Dienstwagen oder Gästen, die bei dir laden.
+
+**Was war:** eedc kannte je Monat nur **eine** Heimlade-Quelle. Hatte die Wallbox
+geladen, galt ihre ganze Menge als deine private Heimladung und wurde nach
+Kilometern auf die Autos verteilt; Heimlade-Werte am Auto blieben neben einer
+Wallbox wirkungslos und wurden im Formular gar nicht angeboten. Was ein Gast oder
+der Dienstwagen lud, stand damit als deine Ersparnis da.
+
+**Was jetzt:** Die **Wallbox ist die Summe** aller Ladungen an ihr. Ein Auto mit
+**eigener Messung** („Heim: PV", „Heim: Netz" oder das neue Feld **„Heim: gesamt"**,
+auch 0) trägt diese — auch neben der Wallbox. **Der Rest der Wallbox** geht nach
+Kilometern an die privaten Autos ohne eigene Messung; gibt es keines, zählt er nur
+als Verbrauch (Gäste, Verluste). Ein **Dienstwagen** mit eigener Messung zählt
+dienstlich und fehlt im Rest. Die drei Heim-Felder stehen jetzt an jedem E-Auto —
+im Monatsabschluss, in den Datenquellen, in der CSV-Vorlage und über MQTT.
+
+- Im **E-Auto-Hub** steht ein Monat, in dem ein Auto nur Rest der Wallbox bekommt,
+  als eigene Zeile „aus Wallbox-Rest" — so ergibt die Tabelle die Kachel
+  „Heimladung".
+- Der **Wallbox-Hub** zeigt als „Heimladung" die ganze Messung der Wallbox (mit
+  Gast und Dienstwagen); Ersparnis und Amortisation rechnen nur mit dem privaten
+  Teil. Wer **mehrere Wallboxen** hat, sieht auf jeder Karte deren eigene Messung
+  statt der Summe aller. Die Karte einer dienstlichen Wallbox sagt, warum dort
+  keine private Ersparnis steht.
+- Ein Auto, das geladen hat, aber **nicht gefahren** ist, trägt jetzt seine
+  Stromkosten (Ersparnis negativ statt 0), und die **Ersparnis je Fahrzeug** in
+  *Cockpit → Übersicht* rechnet mit der Netzladung jedes Autos aus seinen eigenen
+  Monaten. An den **Community-Vergleich** geht nur noch die private Wallbox-Ladung.
+- Der **Daten-Checker** warnt, wenn die Autos zusammen mehr geladen haben, als die
+  Wallbox gemessen hat, und weist darauf hin, wenn an einem gefahrenen Dienstwagen
+  die Heimladung fehlt, während die private Wallbox geladen hat.
+
+**Was du tun musst:** Nichts. Laden nur deine eigenen Autos an der Wallbox und hat
+keines eine eigene Messung, bleiben die Summen gleich; nur die Aufteilung auf die
+Autos kann sich in Monaten ohne Kilometer verschieben. ⚠ **Laden
+Gäste oder ein gemessener Dienstwagen an deiner Wallbox, sinkt deine Heimladung**
+in Cockpit, CO₂-Bilanz, Jahresbericht, Aussichten und den HA-Anlagen-Sensoren, und
+die Ersparnis gegenüber dem Verbrenner steigt; die Langzeitstatistik in Home
+Assistant bekommt einen einmaligen Knick. **Alte Heimlade-Werte und -Zuordnungen am
+Auto wirken wieder** (etwa eine Sensor-Zuordnung an „Ladung gesamt" aus der Zeit
+vor April 2026, heute „Heim: gesamt") — prüf sie im Monatsabschluss, falls die
+Zahlen am Auto nicht mehr stimmen. Lädt dein Dienstwagen nur beim Arbeitgeber,
+trag an ihm 0 als Heimladung ein; dann schweigt der Hinweis.
+
+→ [Daten-Checker §4.3.9](HANDBUCH_DATEN_CHECKER.md#439-heimladung-je-auto) · [Bedienung → Wallbox](HANDBUCH_BEDIENUNG.md#36-wallbox)
+
+### Mit einem Ladezähler je Auto bekommt jeder Ladevorgang seine Stunden
+
+**Betrifft dich das?** Nur, wenn an „Heim: gesamt" deines Autos ein Zähler liegt,
+der am **Ende** eines Ladevorgangs um dessen ganze Menge springt — so verhält sich
+etwa evccs Fahrzeug-Sensor „Ladevorgänge: Energie [Fzg.]" —, und die Wallbox einen
+eigenen Zähler hat.
+
+**Was jetzt:** eedc sucht zu jedem Sprung die Stunden der Wallbox, in denen genau
+dieser Ladevorgang lief. Die **Menge** bleibt die des Autos; die Stunden liefern den
+**PV-Anteil dieses Autos** und den **Monat**. Lädt ein Auto mittags und das andere
+nachts, trennen sich ihre PV-Anteile. Ein Ladevorgang über den Monatswechsel zählt
+anteilig in beiden Monaten, und der Daten-Checker meldet dort keinen Widerspruch
+mehr. Im E-Auto-Hub steht je Monat „aus n Ladevorgängen" und, falls die Wallbox
+einen nicht voll gezählt hat, wie viele.
+
+**Was du tun musst:** Den Monat des Updates in der Reparatur-Werkbank neu
+berechnen (*Einstellungen → Daten → Energieprofil-Pflege*, „Mehrere Tage neu
+aggregieren", vom Monatsersten bis gestern). Die Zuordnung gilt nur für Monate, deren Tage alle mit dieser Version
+berechnet sind — bis dahin rechnet der Monat wie bisher.
+
+### Strom aus dem Hausakku zählt beim Laden als eigener Strom
+
+**Betrifft dich das?** Ja, wenn du einen Speicher hast, zu Hause lädst und den
+PV-Anteil der Ladung **nicht** selbst pflegst (etwa aus evcc).
+
+**Was war:** eedc leitet den PV-Anteil deiner Heimladung aus den Stundenwerten ab.
+Lud das Auto abends aus dem Hausakku, zählte diese Ladung als Netzstrom — an echten
+evcc-Ladevorgängen lag eedc damit bei 76 % statt 93,5 %.
+
+**Was jetzt:** Gespeicherter Sonnenstrom ist eigener Strom. Der PV-Anteil steigt
+(an derselben Anlage auf 94,5 %), die Stromkosten der E-Mobilität sinken, die
+Ersparnis gegenüber dem Verbrenner steigt. Im E-Auto-Hub steht unter dem PV-Anteil
+neu **„davon aus dem Speicher"** — Speicherstrom ist kein Direktverbrauch und kostet
+Wandlungsverluste. Ohne Speicherzähler gibt es diese Zeile nicht.
+
+**Was du tun musst:** Nichts für neue Tage. ⚠ **In Home Assistant springen
+`e_auto_pv_anteil_prozent` und die Ersparnis-Sensoren einmalig.** Tage, die vor dem
+Update berechnet wurden, behalten ihren alten Anteil, bis du sie in der
+Reparatur-Werkbank neu aggregierst.
+
+### Lücken in der Home-Assistant-Statistik: eedc rechnet wie das Energie-Dashboard
+
+**Betrifft dich das?** Ja, wenn du eedc mit Home Assistant betreibst. Fehlt dort
+einmal eine Stunde (Neustart, Update, WLAN weg), betrifft es dich an genau diesen
+Tagen — und der Monatswert betrifft dich jeden Monat.
+
+**Was war:** Hat der Recorder eine Stunde nicht geschrieben, blieb sie in eedc leer,
+und *Cockpit → Tag* zeigte bei Eigenverbrauch, Autarkie und Verbrauch „—", obwohl
+die Tagessumme stimmte. Der Monatswert aus der HA-Statistik ließ außerdem die erste
+Stunde jedes Monats aus.
+
+**Was jetzt:** eedc legt je Stunde ab, was das HA-Energie-Dashboard für diese Stunde
+zeigt. Die Energie einer fehlenden Stunde steht in der Stunde danach, und die ist in
+der Stundentabelle und im Tagesverlauf beschriftet („enthält 3 Stunden").
+Tageswerte, Monatswerte und HA stimmen überein; der Monatsabschluss-Vorschlag zählt
+die erste Stunde des Monats wieder mit. Nur ein Zählersprung, den keine Anlage
+erzeugen kann, wird weggelassen, und nur dann erscheint der Hinweis „Verfügbare
+Energie". Der Eigenverbrauch wird nie negativ. Bei einem Balkonkraftwerk mit eigenen
+Modul-Sensoren steht der Teil, den sein eigener Zähler über die Module hinaus
+misst, jetzt auch im Tageswert des Geräts.
+
+Neu im Daten-Checker: Tage, an denen mehr eingespeist als erzeugt und aus dem
+Speicher entladen wurde („Einspeisung über Erzeugung"), und Tage, an denen ein
+Zähler stundenlang stillstand und die Menge danach auf einmal nachlieferte
+(„Nachtrag nach eingefrorenem Zähler") — sie zählt wie in HA mit und bleibt so
+sichtbar.
+
+**Was du tun musst:** ⚠ **Ältere Tage** behalten ihre alte Rechnung, bis du sie neu
+aggregierst. Der Daten-Checker zeigt, wie viele es sind, und bietet dafür den Knopf
+„Zeitraum neu aggregieren" an ([Daten-Checker §4.6](HANDBUCH_DATEN_CHECKER.md#46-energieprofil--zaehler-abdeckung)).
+Liegt eine Lücke über Mitternacht, steht ihre Energie im Folgetag; wer einen solchen
+Tag repariert, rechnet den Folgetag mit.
+
+### Die Prognose liegt nicht mehr systematisch zu hoch
+
+**Betrifft dich das?** Ja, wenn du die PV-Prognose nutzt — in der App oder über
+`eedc_prognose_heute_kwh` in Home Assistant.
+
+**Was war:** Die Korrektur verglich die Ernte mit ihrer **eigenen**, schon
+korrigierten Vorhersage. Ein Regelkreis, der seine Ausgabe als Maßstab nimmt, bleibt
+auf halbem Weg stehen: Wer 85 % der Rohprognose erntet, bekam Faktoren um 92 %, gut
+8 % zu hoch, jeden Tag. Dazu zählte die Wechselrichter-Grenze als Prognosefehler,
+und auf Anlagen mit mehr Modul- als Wechselrichterleistung ging sie zweimal ab,
+solange das Stundenprofil noch zu wenige Tage hatte (die Prognose lag dann rund 12 %
+zu niedrig). Anlagen, deren Cockpit selten geöffnet wird, bekamen nie
+eine Stundenkorrektur, weil der Tagesschnappschuss dafür erst beim Seitenbesuch
+entstand.
+
+**Was jetzt:** eedc lernt gegen die **rohe** Wetterprognose, begrenzt auf das, was
+der Wechselrichter abgeben kann. Der Tagesschnappschuss entsteht im Hintergrund nach
+Mitternacht, ohne einen zusätzlichen Wetterabruf.
+
+**Was du tun musst:** Nichts. Das neue Lernen wirkt über Nächte: eedc wandert Stufe
+für Stufe auf das wahre Verhältnis, bis dahin behält jede Stunde ihren bisherigen
+Faktor — hier springt nichts. ⚠ Auf Anlagen mit mehr Modul- als
+Wechselrichterleistung, deren Stundenprofil noch nicht greift, hebt sich die bisher
+rund 12 % zu niedrige Tagesprognose dagegen in einem Schritt, sobald etwa eine Woche
+mit der neuen Lern-Basis gesammelt ist — in Home Assistant samt
+`eedc_prognose_heute_kwh` und den Folgetag-Sensoren. An selten besuchten Anlagen übernimmt nach etwa einer
+Woche die Stundenkorrektur, und `eedc_prognose_heute_kwh` folgt dann sichtbar dem
+Tagesgang der Anlage.
+
+→ [Handbuch Prognosen](HANDBUCH_PROGNOSEN.md)
+
+### Jede Stunde trägt ihren eigenen Ladestand und Preis
+
+**Betrifft dich das?** Ja, wenn du einen dynamischen Stromtarif (Tibber, aWATTar,
+EPEX) oder einen Speicher mit Ladestands-Sensor hast.
+
+**Was war:** In der Stundentabelle stehen die Energiemengen für die **vorangegangene**
+Stunde, Ladestand und Preis aber für die **folgende**. Mehrere Rechnungen haben beides
+ohne Umrechnung gepaart und so mit dem Preis bzw. Ladestand der Nachbarstunde
+gerechnet.
+
+**Was jetzt:** Tageskosten, Monats-Ø-Preis, Eigenverbrauchs-Ersparnis, Ladepreis des
+Speichers und der Einspeiseerlös bei negativen Preisen nehmen den Preis ihrer eigenen
+Stunde — typisch ein bis drei Prozent Unterschied je Tag; beim Festpreis ändert sich
+nichts. Das Speicher-Potential sitzt eine Stunde weiter hinten, wo es hingehört, die
+Spalte „SoC" in *Cockpit → Tag → Stundenwerte* zeigt den Ladestand ihrer Stunde, und
+„Größerer Speicher?" misst Wirkungsgrad und nutzbare Kapazität genauer (an einem
+echten Jahr stabil 72–74 % statt 82–88 %; die Empfehlung kann sich leicht
+verschieben).
+
+**Was du tun musst:** Nichts. ⚠ Bei dynamischem Tarif rücken in Home Assistant die
+Finanz-Sensoren der Anlage (Ersparnis, Netto-Ertrag, ROI, Amortisation) und die
+Speicherstrom-Preise um dieselbe Größenordnung nach. Für Tage, die vor dem 04.06.2026
+berechnet wurden, gilt die alte Zuordnung weiter, bis du sie in der Reparatur-Werkbank neu aggregierst
+(*Einstellungen → Daten → Energieprofil-Pflege*). Der gespeicherte Einspeiseerlös
+eines Tages zieht erst beim Neuberechnen nach.
+
+### „Speicher voll um" rechnet ab der zuletzt gemessenen Stunde
+
+**Betrifft dich das?** Ja, wenn du in Home Assistant `eedc_speicher_voll_um`,
+`eedc_speicher_voll_um_ts`, `eedc_speicher_leer_um_ts` oder
+`eedc_speicher_reicht_bis_mitternacht` nutzt, etwa für eine Automation.
+
+**Was war:** Die Simulation begann bei der laufenden Uhrzeit, ihr Startwert ist aber
+der Ladestand zur Mitte der zuletzt gemessenen Stunde. Die erste halbe Stunde zählte
+doppelt, und hinkte Home Assistant beim Verdichten hinterher, fehlten ganze Stunden —
+an einem sonnigen Nachmittag der Unterschied zwischen „wird heute nicht mehr voll"
+und „voll um 18:00".
+
+**Was jetzt:** eedc startet bei der zuletzt gemessenen Stunde und rechnet die Lücke
+bis jetzt mit. Die neuen Attribute `sim_start_stunde` und `sim_start_anteil` nennen
+die Annahme.
+
+**Was du tun musst:** ⚠ **Prüf Automationen, die an diesen Sensoren hängen.** Das
+Format „HH:MM" bleibt, der Wert kann sich aber um bis zu eine halbe Stunde
+verschieben, und „Speicher leer um" kann jetzt in der Vergangenheit liegen — dann ist
+der Speicher nach dem Modell seit dieser Zeit leer.
+
+→ [Sensor-Referenz §11](?doc=sensor-referenz)
+
+### Nach einem Speichertausch zählt überall nur der Speicher, der heute läuft
+
+**Betrifft dich das?** Nur, wenn du ein Gerät (meist den Speicher) getauscht und das
+alte, wie empfohlen, mit Stilllegungsdatum stehen gelassen hast.
+
+**Was jetzt:** Der **Import-Wizard** bietet keine ausgebauten Geräte mehr an und teilt
+die importierten Mengen nicht mehr mit ihnen. **„Aus Home Assistant übernehmen"**
+legt die Batterie-Sensoren an den laufenden Speicher. Die **PVGIS-Prognose** kappt
+wieder an der Wechselrichter-Grenze, wenn der DC-Speicher ausgebaut ist. Im
+**Speicher-Hub** gibt es eine Zahl für „leer" statt zwei, die Ladestands-Liste des
+Sizing-Reglers nennt nur laufende Geräte, und das Attribut `je_speicher` des
+HA-Sensors `eedc_speicher_soc_prozent` ebenso.
+
+Dazu, auch ohne Tausch: Der **Daten-Checker** warnt je Gerät, wenn zu einer
+Batterie-Ladung die Entladung fehlt — bisher nur auf dem alten anlagenweiten
+Erfassungsweg. Der Wirkungsgrad-Sensor sagt in diesem Fall im Attribut
+`wirkungsgrad_messung` jetzt `keine-entladung` statt `zu-wenig-monate`.
+
+**Was du tun musst:** Hast du nach einem Tausch schon einmal importiert und den
+vorgeschlagenen Anteil übernommen, sieh dir die importierten Monate am **alten** Gerät
+an — dort kann ein Teil der Werte liegen. Meldet der Daten-Checker eine fehlende
+Entladung, trag sie am genannten Gerät nach; `0` ist ein Wert.
+
+### Eine Vorzeichen-Umkehr aus Version 3 lässt sich wieder abschalten
+
+**Betrifft dich das?** Nur, wenn du vor Version 4 ein Vorzeichen umgekehrt hast (etwa
+an der Speicher-Leistung) oder ein älteres Backup eingespielt hast.
+
+**Was war:** Der Knopf „Vorzeichen umkehren" (⇅) in *Einstellungen → Datenquellen*
+ließ sich grau schalten, und der Wert blieb trotzdem umgedreht — in der Live-Ansicht
+stand eine Ladung als Entladung da, und der Hausverbrauch zeigte PV plus
+Batterieladung.
+
+**Was jetzt:** Der Knopf zeigt, was tatsächlich wirkt, und das Ausschalten hebt die
+Umkehr ganz auf. Die kWh-Zähler waren nie betroffen.
+
+**Was du tun musst:** Sieh dir nach dem Update die Datenquellen an: Leuchtet der Knopf
+an einem Feld, an dem du keine Umkehr willst, schalte ihn aus.
+
+### Außerdem
+
+- **Das Aktivitätsprotokoll nennt wieder jede Datenquellen-Zuordnung** und dazu
+  Anlegen, Löschen und wesentliche Änderungen einer Komponente. Wer eine Komponente
+  entfernt, entfernt jetzt auch ihre Zuordnungen und MQTT-Gateway-Einträge — die
+  nächste neu angelegte Komponente erbt keine Reste mehr.
+- **Rechenwege in deutscher Schreibweise** — im T-Konto und im Attribut
+  `berechnung` der HA-Sensoren („1.387,50" statt „1387.50"). Die Sensorwerte ändern
+  sich nicht. **Was du tun musst:** Wer diesen Text in einer HA-Vorlage auswertet,
+  stellt auf Komma und Tausenderpunkt um.
+
+Alle Einzelheiten stehen im [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md).
 
 ---
 
@@ -240,6 +546,8 @@ nicht rückwirkend** — ein Zeitraum lässt sich unter *Einstellungen →
 Datenverwaltung* neu aggregieren. **Was du tun musst:** nichts; wer den
 Reparatur-Tipp aus dem Forum befolgt hat (Zuordnung des Geräts auf „keine"), darf
 sie so lassen oder zurücksetzen — beides zählt jetzt einmal.
+
+> ⚠ **Nachträglich richtiggestellt (September 2026):** „Messen alle Module selbst, zählt es nicht mehr mit“ gilt so nicht mehr. Seit eedc Zählerlücken wie Home Assistant rechnet, trägt ein Balkonkraftwerk mit eigenem Zähler auch dann den Teil, den dieser Zähler über die Module hinaus misst — je Stunde gerechnet und nie negativ; im Tageswert des Geräts steht damit dieser Rest statt 0. Doppelt gezählt wird weiterhin nichts. Bei gut übereinstimmenden Zählern liegt der Rest nahe 0, deshalb fiel der Unterschied nicht auf.
 
 ---
 
@@ -4024,6 +4332,8 @@ Wer eine **Wallbox** hat, dessen Heimladung führt eedc dort — und bietet die
 Aufteilung in Sonne und Netz am Fahrzeug deshalb gar nicht mehr an. Sonst stünde
 sie zweimal in den Daten.
 
+> ⚠ **Nachträglich richtiggestellt (September 2026):** „Und bietet die Aufteilung am Fahrzeug gar nicht mehr an“ gilt nicht mehr. Seit September 2026 stehen „Heim: PV“, „Heim: Netz“ und das neue „Heim: gesamt“ wieder an jedem E-Auto; eine eigene Messung am Auto zählt auch neben der Wallbox, die Wallbox trägt den Rest. Die Daten-Check-Regel dieses Eintrags bleibt: neben einer Wallbox ist die Messung am Auto freiwillig und wird nicht als fehlend gemeldet.
+
 Der Daten-Check kannte diese Regel als einziger nicht. Er meldete weiterhin
 „Ladung PV fehlt" am E-Auto, und diese Meldung war nicht abstellbar: Ihr
 *Beheben*-Knopf führte in ein Formular, in dem es dieses Feld nicht gibt. Wer den
@@ -4134,6 +4444,8 @@ Aufteilungswert, der aus der Zeit davor am *Fahrzeug* stehengeblieben ist, hat
 trotzdem weitergewirkt und verhindert, dass eedc den Sonnen-Anteil aus den
 eigenen Stundenwerten ableitet — die Heimladung stand dann vollständig auf der
 Netz-Seite. Ab jetzt zählt allein die Quelle, die eedc auch verwendet.
+
+> ⚠ **Nachträglich richtiggestellt (September 2026):** Seit September 2026 zählt ein Heimlade-Wert am Fahrzeug („Heim: PV“, „Heim: Netz“, „Heim: gesamt“) wieder — als eigene Messung dieses Autos, auch neben der Wallbox; die Wallbox trägt nur noch den Rest. Ein alter Aufteilungswert am Fahrzeug wirkt damit wieder; stimmt er nicht, korrigierst du ihn im Monatsabschluss. Nur ein alter Gesamtwert mit „Herkunft unbekannt“ zählt neben einer Wallbox weiterhin nicht.
 
 **Der Ø-Benzinpreis wird täglich nachgetragen — und du merkst es, wenn er fehlt**
 
@@ -5950,6 +6262,8 @@ Eine Wallbox zählt Kilowattstunden, nicht deren Herkunft. Fehlte die Angabe, ha
 Jetzt leitet eedc den Anteil aus deinen eigenen Stundenwerten ab, nach derselben Idee wie evcc: Was in einer Ladestunde weder aus dem Netz noch aus dem Speicher kam, kann nur aus deiner PV gekommen sein — und was du in dieser Stunde eingespeist hast, hätte stattdessen laden können.
 
 **Wie gut das trifft, ist gemessen und nicht behauptet:** An einer echten Anlage mit evcc als Referenz (963 kWh Heimladung über sieben Monate) kam evcc auf **67,9 %** Sonnenanteil, eedcs Rechnung auf **64,7 %**. Sie untertreibt also eher, als dir zu schmeicheln. Der Wert ist in der Datenherkunft ausdrücklich als **abgeleitet** gekennzeichnet; wo nicht jede Ladestunde auswertbar war, steht das dabei.
+
+> ⚠ **Nachträglich richtiggestellt (September 2026):** Die Regel oben zog auch die Entladung des Hausakkus ab: lud dein Auto aus dem Speicher, galt das als Netzstrom. Seit September 2026 zählt Speicherstrom als eigener Strom, und der E-Auto-Hub zeigt „davon aus dem Speicher“ getrennt. Nachgemessen an echten evcc-Ladevorgängen Juni–August 2026: 94,5 % gegen evcc 93,5 % (mit der alten Regel 76 %). Die Messung oben stammt aus einem überwiegend winterlichen Zeitraum, in dem das Auto kaum aus dem Speicher lud.
 
 **Was du tun musst: nichts.** Deine Zahlen werden größer — die E-Auto-Netzladung sinkt, die ausgewiesene Ersparnis steigt, und zwar **überall dieselbe**: Komponenten-Hub (E-Auto und Wallbox), *Cockpit → Monat* und *→ Jahr*, *Auswertungen → Komponenten*, Aussichten, Jahresbericht-PDF, Monats-Tabelle und CO₂-Bilanz.
 
@@ -9114,6 +9428,8 @@ Der Setup-Wizard beim ersten Start führt in neuer Optik durch Anlage, Tarif, PV
 - **Wer eine Wallbox hat, pflegt die Ladestrom-Daten nur noch dort.** Bisher konnte dieselbe zu Hause geladene Energie an zwei Stellen liegen — an der Wallbox *und* am E-Auto. Das führte zu widersprüchlichen Zahlen (z. B. einem PV-Anteil über 100 % oder doppelt gezähltem Ladestrom). Ab sofort ist die Heimladung (gesamt / aus PV / aus Netz) eindeutig an der **Wallbox** zu Hause: Sie misst den Strom am Ladepunkt. Das **E-Auto** trägt nur noch, was wirklich zum Fahrzeug gehört — gefahrene km, Verbrauch, externe Ladung unterwegs und V2H. Im E-Auto-Eingabeformular blendet eedc die Heimladungs-Felder „Heim: PV"/„Heim: Netz" deshalb aus, sobald eine Wallbox vorhanden ist.
 - **Ohne Wallbox ändert sich nichts.** Wer per Steckerlader/Schuko lädt und keine Wallbox als Investition angelegt hat, erfasst die Heimladung weiterhin direkt am E-Auto.
 - **Deine bestehenden Daten werden automatisch umgezogen.** Beim Update verschiebt eedc vorhandene Heimladungs-Werte einmalig vom E-Auto in den Wallbox-Slot (pro Monat gewinnt der höhere, vollständigere Wert). Fälle, die sich nicht eindeutig zusammenführen lassen, bleiben unverändert stehen und werden im **Daten-Checker** als Pflege-Hinweis angezeigt — dort kannst du in Ruhe entscheiden, welche Quelle stimmt. **Tipp:** Vor dem Update wie immer ein Backup der Daten anlegen.
+
+  > ⚠ **Nachträglich richtiggestellt (September 2026):** „Die Heimladung ist eindeutig an der Wallbox zu Hause, das E-Auto trägt nur noch, was zum Fahrzeug gehört“ gilt nicht mehr. Seit September 2026 ist die Wallbox die **Summe** aller Ladungen an ihr; ein Auto mit eigener Messung („Heim: PV“, „Heim: Netz“ oder „Heim: gesamt“) trägt diese auch neben der Wallbox, und der Rest der Wallbox geht an die Autos ohne eigene Messung. Das Formular bietet die Heim-Felder wieder an jedem E-Auto an. Doppelt gezählt wird dabei nichts.
 - **Auswertungen bleiben gleich aussehend.** E-Auto- und Wallbox-Dashboard zeigen die Ladequellen weiter wie gewohnt — die Zahlen stammen nur jetzt aus einer eindeutigen Quelle statt aus zwei konkurrierenden.
 
 ### Außerdem in dieser Version
@@ -10237,6 +10553,8 @@ Als Übergangslösung nimmt eedc jetzt pro Feld die größere der beiden Quellen
 
 Bei Anlagen mit Dienstwagen + Privatauto an gemeinsamer Wallbox bleibt eine Restungenauigkeit: die `kWh/100km`-Berechnung dividiert die Wallbox-Lieferung (inkl. Dienstwagen-Strom) durch die Privat-km — der Wert ist nach diesem Update plausibler, aber noch nicht perfekt. Phase 2 löst das mit Vehicle-Sensoren pro Fahrzeug.
 
+> ⚠ **Nachträglich richtiggestellt (September 2026):** Die Übergangslösung „pro Feld die größere Quelle“ ist abgelöst. Seit Juni 2026 bestimmt eine feste Regel die Heimlade-Quelle, und seit September 2026 folgt ihr auch die letzte Stelle mit der Größer-Regel, der laufende Monat in *Cockpit → Monat*. Heute ist die Wallbox die Summe aller Ladungen an ihr, jedes Auto mit eigener Messung trägt diese, der Rest der Wallbox geht an die Autos ohne eigene Messung — und ein Dienstwagen mit eigener Messung zählt dienstlich statt privat.
+
 → [Monatsbericht → E-Mobilität](HANDBUCH_BEDIENUNG.md#10-monatsabschluss)
 
 ### Selbsthilfe gegen Counter-Spikes im Tagesprofil *(v3.25.11)*
@@ -10278,6 +10596,8 @@ Verursacht wurde der Bug durch eine Fehlinterpretation von HA's API-Konvention; 
 > ℹ️ **Versionssprung 3.25.8 → 3.25.10 ist beabsichtigt:** Die hier beschriebenen Drift-Audit-Bündel-G-Änderungen waren ursprünglich für v3.25.9 vorgesehen. Während der CHANGELOG schon stand, wurde der Off-by-one-Bug entdeckt — beide Pakete sind unter Tag `v3.25.10` zusammen ausgeliefert worden, statt zwei Releases im Minutenabstand zu schießen. Es gibt also kein Tag `v3.25.9` im Repository.
 
 Letzter Bündel der Aufräum-Aktion, die mit #178 ([Werte-Drift bei der Wärmepumpe](https://github.com/supernova1963/eedc-homeassistant/issues/178)) startete. Insgesamt wurden 16 Drift-Stellen in 6 Domänen identifiziert und in v3.25.7–v3.25.10 abgearbeitet. Dieses Bündel hat **keine User-sichtbare Werte-Wirkung** — es konsolidiert nur intern Daten in der Datenbank auf einheitliche Schlüssel und ersetzt 23 verstreute Doppel-Read-Stellen im Code durch fünf zentrale Helper. Die DB-Migration läuft beim Add-on-Start einmalig automatisch durch.
+
+> ⚠ **Nachträglich richtiggestellt (September 2026):** „Keine User-sichtbare Werte-Wirkung“ traf für das E-Auto nicht zu. Dort war das Feld „Verbrauch“ kein alter Name der Ladung, sondern der **Fahrverbrauch** — die Startroutine hat ihn seit Mai 2026 bei jedem Start in eine Heimladung umgebucht und den Verbrauch gelöscht, die kWh/100 km verloren ihren Messwert. Seit September 2026 passiert das nicht mehr; Umbuchungen seit dem 09.05.2026 werden einmalig zurückgenommen, frühere bleiben stehen, weil sie von echten alten Ladungen nicht zu unterscheiden sind. Unauffällig war es, weil ein Fahrverbrauch als Ladung plausibel aussieht.
 
 Hintergrund: bei mehreren früheren Schema-Wechseln blieben Code-Stellen mit Doppel-Reads der Form `data.get("alt", 0) or data.get("neu", 0)` als Sicherheitsnetz zurück. Gleichzeitig waren in der DB beide Schlüssel-Versionen parallel vorhanden. Beides wurde jetzt vereinheitlicht — bei künftigen Schema-Änderungen muss nur noch eine zentrale Stelle gepflegt werden.
 
@@ -10500,6 +10820,8 @@ Die PR-Formel berücksichtigt jetzt die **Global Tilted Irradiance** (auf die Mo
 ### Snapshot-Lücken-Interpolation
 
 Fehlt ein stündlicher Sensor-Snapshot, wird die Lücke jetzt **linear zwischen den Nachbar-Stunden interpoliert** statt das Gesamt-Delta in eine Stunde aufzustauen. Damit kein „Stunde-0 + Folge-Spike"-Muster mehr in den Stundenwerten. Issue [#145](https://github.com/supernova1963/eedc-homeassistant/issues/145).
+
+> ⚠ **Nachträglich richtiggestellt (September 2026):** Für Anlagen mit Home-Assistant-Statistik gilt die lineare Auffüllung nicht mehr. eedc rechnet eine fehlende Stunde seither wie das HA-Energie-Dashboard: ihre Energie steht in der Stunde danach, die in Stundentabelle und Tagesverlauf beschriftet ist („enthält n Stunden“) und in Stunden-Auswertungen nicht als Stichprobe zählt. Linear aufgefüllt wird nur noch innerhalb eines Tages, wenn eedc ohne HA-Statistik aus Zählerständen rechnet (Standalone, MQTT). Die Tagessumme stimmte in beiden Fällen.
 
 ---
 

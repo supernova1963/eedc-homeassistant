@@ -3223,6 +3223,8 @@ Beispiel: snap[10] = 1500 kWh, snap[11] = None, snap[12] = 1505 kWh
 
 Ränder (h0 fehlend am Tagesanfang, h24 am Tagesende) werden **nicht** extrapoliert — der Wert bleibt None und die betroffene Stunde fällt aus der Delta-Bildung. Tagessumme bleibt in jedem Fall korrekt (`snap[24] − snap[0]`).
 
+> ⚠ **Seit „Zählerlücken wie HA" (v4.0.51) gilt die Interpolation nur noch innen und nur im Zählerstands-Pfad** (Standalone/MQTT ohne HA-Statistik, `snapshot/aggregator.py`). Im HA-Pfad wird nichts aufgefüllt: die Energie einer fehlenden Stunde steht wie im HA-Energie-Dashboard in der Stunde danach (Bündel mit Spanne `n`), und der Rand am Tagesanfang wird über den letzten vorhandenen Stand davor verankert — auch in diesem Pfad, statt die erste Stunde auszulassen. Regeln und Leser: Abschnitt *Zählerlücken wie HA* weiter unten.
+
 **HA-Statistics-Toleranz (v3.20.0, #145):** Reduziert von 120 min auf **10 min**. Wenn die Zielstunde in HA-Statistics noch nicht vorhanden ist, schreibt der Job nichts (statt einen Nachbar-Wert zu liefern, der Slot N als 0 und Slot N+1 als 2-Stunden-Delta entstehen ließ). Der nächste `aggregate_day`-Lauf 15 Min später holt den Wert via Self-Healing nach.
 
 **Restart-Recovery (v3.23.0):** Beim Scheduler-Start läuft `sensor_snapshot_startup_recovery()` im Hintergrund — holt für die letzten 6 Stunden je Anlage HA-Statistics-Snapshots (idempotent dank Upsert) plus für die laufende Stunde einen Live-Snapshot, anschließend `aggregate_today_all`.

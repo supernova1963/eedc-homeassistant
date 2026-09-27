@@ -66,7 +66,7 @@ Die stündliche Tagesprognose (PV vs. Verbrauch vs. Netto mit Ladezustands-Overl
 
 Die tabellarische **Zeile-pro-Tag**-Sicht mit Spalten-Selektor, Monats-Summen-/Durchschnittszeile und den Detail-Spalten (Tages-kWh je Gerät, Peaks, Performance Ratio, Börsenpreis-Spalten …) ist in die **Werte-Werkbank** unter [Auswertungen → Tabelle](HANDBUCH_BEDIENUNG.md#45-tabelle-werte-werkbank) gezogen. Dort wählst du Granularität (Tag/Monat) und Spalten und exportierst bei Bedarf.
 
-> **Vorzeichen der Geräte-Spalten:** positiv = Erzeugung, negativ = Verbrauch. Die Spalte „Stunden verfügbar" (z. B. `20/24`) bleibt die wichtigste Diagnose: zeigt sie dauerhaft weniger als 24, fehlen dir Stunden — ein Hinweis auf Snapshot-Lücken oder ein Datenquellen-Problem.
+> **Vorzeichen der Geräte-Spalten:** positiv = Erzeugung, negativ = Verbrauch. Die Spalte „Stunden verfügbar" (z. B. `20/24`) bleibt die wichtigste Diagnose: zeigt sie dauerhaft weniger als 24, fehlen dir Stunden — ein Hinweis auf Snapshot-Lücken oder ein Datenquellen-Problem. Eine **einzelne** fehlende Stunde in der Home-Assistant-Statistik (Neustart, Update) kostet dagegen keine Energie: eedc rechnet sie wie das HA-Energie-Dashboard, ihre Energie steht in der Stunde danach, und die ist in Stundentabelle und Tagesverlauf als „enthält n Stunden" beschriftet — der Tag bleibt vollständig, auch wenn hier `23/24` steht.
 
 ### 2.5 Pflege → Einstellungen → Daten
 

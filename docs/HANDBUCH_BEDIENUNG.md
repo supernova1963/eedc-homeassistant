@@ -628,18 +628,22 @@ Zusätzlich: **JAZ Heizen / JAZ Warmwasser getrennt** (nur wenn du Strom je Funk
 
 - **Gefahrene Kilometer** im Zeitraum
 - **Verbrauch** (kWh)
-- **Ladequellen-Aufteilung** — PV-Ladung (kostenlos), Netz-Ladung (zu Hause), externe Ladung (unterwegs)
+- **Ladequellen-Aufteilung** — PV-Ladung (kostenlos), Netz-Ladung (zu Hause), externe Ladung (unterwegs); unter dem PV-Anteil steht **„davon aus dem Speicher"**, wenn ein Speicherzähler existiert (Strom aus dem Hausakku zählt als eigener Strom, ist aber kein Direktverbrauch aus der PV)
 - **Kostenersparnis** gegenüber Benziner/Diesel — auf Basis echter **monatlicher Benzinpreise** aus dem EU Weekly Oil Bulletin (Fallback: statischer Parameter)
 - **V2H-Entladung** (wenn aktiviert)
 
-> **Wo wird die Heimladung erfasst — Wallbox oder E-Auto?** Hast du eine **Wallbox** als Komponente angelegt, ist sie die alleinige Quelle der zu Hause geladenen Energie (gesamt / aus PV / aus Netz); das E-Auto trägt dann nur fahrzeugspezifische Werte (km, Verbrauch, externe Ladung, V2H). **Ohne Wallbox** (z. B. Schuko-Lader) bleibt das E-Auto selbst die Quelle der Heimladung — dann erfasst du „Heim: PV" / „Heim: Netz" direkt am E-Auto. Mehr in [Berechnungen §3.4](BERECHNUNGEN.md#34-e-auto-einsparung).
+In der Monatstabelle steht ein Monat, in dem das Auto nur einen Anteil am Rest der Wallbox bekommt, als eigene Zeile **„aus Wallbox-Rest"** (ohne km) — so ergibt die Tabelle die Kachel „Heimladung". Liegt an „Heim: gesamt" ein Ladezähler je Auto (etwa evccs „Ladevorgänge: Energie [Fzg.]"), steht je Monat **„aus n Ladevorgängen"** dabei, und wie viele davon die Wallbox nicht voll gezählt hat.
+
+> **Wo wird die Heimladung erfasst — Wallbox oder E-Auto?** Beides ist möglich, und es zählt nichts doppelt. Die **Wallbox** misst die **Summe** aller Ladungen an ihr. Hat ein Auto eine **eigene Messung** („Heim: PV", „Heim: Netz" oder „Heim: gesamt", auch 0), trägt es diese — auch neben der Wallbox. Der **Rest der Wallbox** geht nach Kilometern an die privaten Autos ohne eigene Messung; gibt es keines, zählt er nur als Verbrauch (Gäste, Verluste). Ein **Dienstwagen** mit eigener Messung zählt dienstlich und fehlt im Rest. **Ohne Wallbox** (z. B. Schuko-Lader) erfasst du die Heimladung direkt am E-Auto. Km, Verbrauch, externe Ladung und V2H stehen immer am E-Auto. Mehr in [Berechnungen §3.4](BERECHNUNGEN.md#34-e-auto-einsparung).
 
 ### 3.6 Wallbox
 
-- **Geladene Energie** (kWh)
+- **Geladene Energie** (kWh) — die **Messung dieser Wallbox**, also alles, was an ihr geladen wurde (auch Gäste und Dienstwagen)
 - **Ladevorgänge** (Anzahl)
 - **Durchschnittliche Lademenge**
 - **PV-Anteil** der Ladungen
+
+**Ersparnis und Amortisation** rechnen dagegen nur mit der **privaten** Heimladung — Gast und Dienstwagen sind keine Ersparnis. Hast du **mehrere Wallboxen**, zeigt jede Karte ihre eigene Messung; Kosten, Ersparnis und Amortisation einer Karte sind ihr Anteil nach dieser Messung, gerechnet gegen ihre eigenen Anschaffungskosten. Die Karte einer **dienstlichen** Wallbox trägt keine private Ersparnis und sagt das dazu; ihre Ladekosten stehen im Cockpit.
 
 ### 3.7 Balkonkraftwerk
 
