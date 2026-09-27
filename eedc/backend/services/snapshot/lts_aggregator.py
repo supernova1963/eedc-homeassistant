@@ -32,7 +32,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import date
-from typing import Optional
+from typing import Iterable, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -122,6 +122,8 @@ async def lts_tagestabelle(
     anlage,
     investitionen_by_id: dict,
     datum: date,
+    *,
+    zusatz_schluessel: Iterable[str] = (),
 ) -> Optional[TagesTabelle]:
     """Stunden **und** Tag eines Tages aus der HA-Slot-Tabelle (R2–R5).
 
@@ -149,6 +151,12 @@ async def lts_tagestabelle(
        nur im PV-Aggregat-Fall `loese_pv_tageswerte_auf`. **E4**: im
        Einzelfall trägt der BKW-Key Σ seines Rests (je Slot ≥ 0 geklemmt).
 
+    ``zusatz_schluessel`` (N-555 Stufe 3, Konzept 7.2 Anhang D, D-6): weitere
+    HA-Entities — die Heimlade-Zähler je Auto —, die **im selben Lesezugriff**
+    mitgelesen und roh in ``TagesTabelle.zusatz_slots`` zurückgegeben werden. Die
+    Rechnung der Tabelle sieht sie nicht (sie bekommt nur die Slots ihrer Einträge);
+    ohne Zusatz ist alles bitgleich wie vorher.
+
     Returns:
         ``None``, wenn HA nicht erreichbar ist, kein Zähler zugeordnet ist oder
         HA für keinen davon eine Zeile im Fenster hat — der Aufrufer fällt
@@ -161,18 +169,28 @@ async def lts_tagestabelle(
     if not eintraege:
         return None
 
-    sensor_ids = sorted({e.schluessel for e in eintraege})
+    eigene = {e.schluessel for e in eintraege}
+    zusatz = [z for z in dict.fromkeys(zusatz_schluessel or ()) if z not in eigene]
+    sensor_ids = sorted(eigene | set(zusatz))
     reihen = await asyncio.to_thread(ha_svc.get_hourly_slots_for_day, sensor_ids, datum)
-    if not reihen:
+    # Nur die eigenen Zähler entscheiden, ob HA den Tag trägt — ein Zusatz-Zähler
+    # allein darf den Rückfall auf den Snapshot-Pfad nicht verhindern.
+    if not reihen or not any(eid in eigene for eid in reihen):
         return None
 
-    return baue_tagestabelle(
+    tabelle = baue_tagestabelle(
         anlage, investitionen_by_id, datum, eintraege,
         {
             eid: {h: (slot.delta, slot.n) for h, slot in reihe.slots.items()}
             for eid, reihe in reihen.items()
+            if eid in eigene
         },
     )
+    tabelle.zusatz_slots = {
+        eid: {h: (slot.delta, slot.n) for h, slot in reihen[eid].slots.items()}
+        for eid in zusatz if eid in reihen
+    }
+    return tabelle
 
 
 async def get_hourly_kwh_by_category_lts(

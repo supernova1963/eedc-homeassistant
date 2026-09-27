@@ -83,15 +83,43 @@ class TestRegelEinspeiseDeckung:
         assert r.pv_kwh == 2.0
         assert r.netz_kwh == 1.0
 
-    def test_speicherentladung_zaehlt_nicht_als_pv(self):
-        """Was der Speicher liefert, ist nicht Direktverbrauch aus der Sonne.
+    def test_speicherentladung_ist_eigenstrom(self):
+        """N-569 (Anhang E): was der Speicher liefert, ist gespeicherter Eigenstrom — kein Netz.
 
-        Bewusst konservativ und mit evcc konsistent (Buffer-SoC). Die Messung
-        vom 2026-08-08 hat genau diese Variante als treffsicherste bestätigt.
+        ⚠ Umgestellt 27.09.2026. Bis dahin hieß die Probe
+        ``test_speicherentladung_zaehlt_nicht_als_pv`` und erwartete PV 0 / Netz 5: sie war nur
+        wegen der alten Konvention wahr (Speicher-Entladung im Abzug, „mit evcc konsistent" nach
+        der Messung vom 08.08.). Die Nachmessung vom 27.09. an 15 Blöcken zeigte das Gegenteil
+        (76,0 % gegen evcc 93,5 %; ohne Abzug 94,5 %). Substanz bleibt: die Stunde ist voll
+        bewertet, PV + Netz = Ladung — und ausgewiesen wird, dass sie aus dem Speicher kam.
         """
         r = leite_pv_anteil_ab([_stunde(5.0, netzbezug=0.0, speicher_entladung=5.0)])
-        assert r.pv_kwh == 0.0
-        assert r.netz_kwh == 5.0
+        assert r.pv_kwh == 5.0
+        assert r.netz_kwh == 0.0
+        assert r.speicher_kwh == 5.0
+
+    def test_netzbezug_ist_die_einzige_fremde_quelle(self):
+        """Ladung 5, Netz 5 ⇒ PV 0; Ladung 5, Netz 2 ⇒ PV 3 — auch mit Speicher daneben."""
+        assert leite_pv_anteil_ab([_stunde(5.0, netzbezug=5.0)]).pv_kwh == 0.0
+        r = leite_pv_anteil_ab([_stunde(5.0, netzbezug=2.0, einspeisung=0.0)])
+        assert (r.pv_kwh, r.netz_kwh) == (pytest.approx(3.0), pytest.approx(2.0))
+        r = leite_pv_anteil_ab([_stunde(5.0, netzbezug=2.0, speicher_entladung=4.0)])
+        assert (r.pv_kwh, r.speicher_kwh) == (pytest.approx(3.0), pytest.approx(3.0))
+
+    def test_mischfall_einspeisung_und_speicher(self):
+        """Ladung 5, Netz 0, Einspeisung 3, Entladung 2 ⇒ PV 5, davon Speicher 2."""
+        r = leite_pv_anteil_ab([_stunde(5.0, netzbezug=0.0, einspeisung=3.0, speicher_entladung=2.0)])
+        assert (r.pv_kwh, r.netz_kwh, r.speicher_kwh) == (5.0, 0.0, 2.0)
+        # Netz 3, Einspeisung 1, Entladung 4: PV = min(5, 2 + 1) = 3, Speicher ≤ PV ⇒ 3.
+        r = leite_pv_anteil_ab([_stunde(5.0, netzbezug=3.0, einspeisung=1.0, speicher_entladung=4.0)])
+        assert (r.pv_kwh, r.netz_kwh, r.speicher_kwh) == (3.0, 2.0, 3.0)
+
+    def test_ohne_speicherzaehler_kein_speicheranteil(self):
+        """Ohne Speicherwert in der Stunde bleibt der Anteil leer — keine Zeile, keine 0."""
+        r = leite_pv_anteil_ab([{"ladung": 4.0, "netzbezug": 0.0, "einspeisung": 2.0}])
+        assert r.speicher_kwh is None
+        r = leite_pv_anteil_ab([_stunde(4.0, netzbezug=0.0, einspeisung=2.0, speicher_entladung=None)])
+        assert r.speicher_kwh is None
 
     def test_regel_wird_benannt(self):
         r = leite_pv_anteil_ab([_stunde(1.0, netzbezug=1.0)])
@@ -151,20 +179,25 @@ class TestInvarianten:
 class TestGemesseneReferenz:
     """Die Regel ist an Gernots Anlage gegen evcc vermessen worden.
 
-    Referenz 2026-08-08: Feb–Aug 2026, 963 kWh Heimladung, evcc 67,9 % PV,
-    diese Regel 64,7 % (−3,2 pp). Der Test hält den Charakter fest, den die
-    Messung gezeigt hat — die Regel untertreibt eher, als zu schmeicheln.
+    Referenz 2026-09-27 (N-569, Anhang E): 15 Blöcke Jun–Aug 2026, evcc 93,5 %, diese Regel
+    94,5 % (mit dem früheren Speicherabzug 76,0 %); anlagenweit Mai–Sep 79,4 → 92,6 %.
+    *Historie:* 2026-08-08, Feb–Aug, 963 kWh, evcc 67,9 %, damals mit Speicherabzug 64,7 %.
+
+    ⚠ Umgestellt 27.09.2026: die Probe hieß ``test_regel_untertreibt_gegenueber_der_rein_
+    netzbasierten_variante`` und erwartete, dass die Speicherdeckung 3 von 5 kWh PV „zurücknimmt"
+    (PV 2) — nur wegen der alten Konvention wahr. Substanz bleibt: die Einspeisung belegt
+    zusätzlichen Überschuss, sonst ist die Regel netzbasiert.
     """
 
-    def test_regel_untertreibt_gegenueber_der_rein_netzbasierten_variante(self):
-        # Dieselben Stunden, einmal mit Speicher/Einspeisungswissen.
-        # Rein netzbasiert (ladung − netzbezug) ergäbe hier 5 kWh PV;
-        # die Speicherdeckung nimmt davon 3 kWh zurück.
+    def test_ohne_einspeisung_ist_die_regel_netzbasiert(self):
         stunden = [_stunde(5.0, netzbezug=0.0, einspeisung=0.0, speicher_entladung=3.0)]
         r = leite_pv_anteil_ab(stunden)
-        naiv_netzbasiert = 5.0 - 0.0
-        assert r.pv_kwh < naiv_netzbasiert
-        assert r.pv_kwh == 2.0
+        assert r.pv_kwh == 5.0 - 0.0
+        assert r.speicher_kwh == 3.0
+
+    def test_einspeisung_hebt_ueber_die_netzbasierte_variante(self):
+        r = leite_pv_anteil_ab([_stunde(4.0, netzbezug=3.0, einspeisung=2.0)])
+        assert r.pv_kwh == pytest.approx(3.0)        # netzbasiert wären es 1
 
 
 class TestVorzeichenUebersetzung:
@@ -217,9 +250,11 @@ class TestVorzeichenUebersetzung:
     def test_das_ergebnis_passt_in_den_layer(self):
         """Vertrag zwischen Helfer und Regel — beide zusammen, nicht getrennt.
 
-        Belegt zugleich die Folge der Verwechslung: mit korrektem Vorzeichen
-        deckt die Speicherentladung 3 der 5 kWh, mit dem Netto-Vorzeichen
-        (−3) fiele sie weg und der PV-Anteil wäre 5 statt 2 kWh.
+        ⚠ Umgestellt 27.09.2026 (N-569): bis dahin entschied das Vorzeichen der Entladung den
+        PV-Anteil (richtig 2, verwechselt 5 kWh) — nur wegen des alten Speicherabzugs wahr.
+        Seit Anhang E zählt die Entladung nicht mehr gegen die PV; das Vorzeichen wirkt nur noch
+        auf den **Speicheranteil**: richtig übersetzt 3 von 5 kWh aus dem Speicher, mit dem
+        Netto-Vorzeichen (−3) fiele er still auf 0.
         """
         richtig = leite_pv_anteil_ab([stunde_aus_bilanzwerten(
             ladung=5.0, netzbezug=0.0, einspeisung=0.0, batterie_spalte=3.0
@@ -227,8 +262,8 @@ class TestVorzeichenUebersetzung:
         verwechselt = leite_pv_anteil_ab([stunde_aus_bilanzwerten(
             ladung=5.0, netzbezug=0.0, einspeisung=0.0, batterie_spalte=-3.0
         )])
-        assert richtig.pv_kwh == pytest.approx(2.0)
-        assert verwechselt.pv_kwh == pytest.approx(5.0)
-        assert richtig.pv_kwh < verwechselt.pv_kwh, (
-            "die Verwechslung schreibt der Sonne zu, was der Speicher lieferte"
+        assert richtig.pv_kwh == verwechselt.pv_kwh == pytest.approx(5.0)
+        assert richtig.speicher_kwh == pytest.approx(3.0)
+        assert verwechselt.speicher_kwh == pytest.approx(0.0), (
+            "die Verwechslung verschweigt, was der Speicher lieferte"
         )

@@ -542,6 +542,29 @@ Differenz des Wallbox-Zählers.
 **Entscheid: Einspeise-Deckung.** Sie trifft die Referenz am besten und irrt in die unverdächtige
 Richtung — sie schreibt die Ersparnis eher zu klein als zu groß.
 
+### Nachgemessen am 2026-09-27 — die Speicher-Entladung zählt zur PV-Deckung (N-569)
+
+Die Abnahme von N-555 Stufe 3 (Ladeblöcke je Auto, Probe P8) zeigte an Gernots evcc-Sitzungen
+Juni–August 2026 einen Abstand, den die Messung vom 08.08. nicht sehen konnte: **lädt das Auto aus dem
+Hausakku, zählte die Einspeise-Deckung das als Netzstrom.** Im überwiegend winterlichen Zeitraum
+Feb–Aug kam das kaum vor; im Sommer liegen 62 % der Block-kWh in Stunden mit Speicher-Entladung.
+Gemessen an der Lab-Kopie des Recorders (Fable, kWh-gewichtet gegen evcc-Solar-%):
+
+| Zeitraum | mit Speicherabzug (bis 4.0.50) | **ohne Speicherabzug (gebaut)** | evcc |
+| --- | --- | --- | --- |
+| 15 Ladevorgänge Jun–Aug 2026 | 76,0 % | **94,5 %** | 93,5 % |
+| Anlage Mai–Sep 2026 | 79,4 % | **92,6 %** | — |
+
+Die beiden Zeiträume stehen **getrennt**: Feb–Aug 2026 ist an der Lab-Kopie nicht neu messbar (sie
+beginnt am 01.05.). **Regel seit 4.0.51:** `ungedeckt = max(0, Ladung − Netzbezug)`, `PV = min(Ladung,
+ungedeckt + Einspeisung)`, Netz = Ladung − PV. *Grund:* der PV-Anteil beantwortet, wie viel der Ladung
+**nicht aus dem Netz** kam — das ist die Größe, die Stromkosten und Ersparnis brauchen. Gespeicherter
+Eigenstrom ist Eigenstrom; die einzige fremde Quelle der Stunde ist der Netzbezug. **Davon aus dem
+Speicher** weist eedc zusätzlich aus (je Stunde `min(Speicher-Entladung, PV-Anteil)`, eine Teilmenge
+des PV-Anteils; ohne Speicherzähler keine Zeile) — Speicherstrom ins Auto ist kein Direktverbrauch und
+kostet Wandlungsverluste und Zyklen. Er wirkt auf keine Kosten- oder Ersparnisrechnung.
+Konzept: `docs/drafts/KONZEPT-HEIMLADUNG-FAHRVERBRAUCH.md` Anhang E.
+
 ### Zwei Messbefunde, die die Bauform bestimmen
 
 1. ⚠ **Der Wallbox-Zähler dieser Anlage meldet nur ganze Kilowattstunden** — 218 von 218

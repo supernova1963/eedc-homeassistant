@@ -19,6 +19,10 @@ import type { Investition } from '../../types'
 
 type Zusammenfassung = WallboxDashboardResponse['zusammenfassung']
 
+/** Karte einer dienstlichen Wallbox (Regel 3): ein Wortlaut für Karte und Probe. */
+export const WALLBOX_DIENSTLICH_HINWEIS =
+  'dienstlich — keine private Ersparnis; die dienstlichen Ladekosten stehen im Cockpit'
+
 export function WallboxWirtschaftlichkeit({ zusammenfassung: z, investition, melde }: {
   zusammenfassung: Zusammenfassung; investition: Investition; melde?: (ids: string[]) => void
 }) {
@@ -75,7 +79,13 @@ export function WallboxWirtschaftlichkeit({ zusammenfassung: z, investition, mel
         </p>
         <ul className="text-sm text-cyan-600 dark:text-cyan-400 list-disc list-inside">
           <li>PV-Ladung zuhause: kostenlos ({fmtZahl(z.ladung_pv_kwh || 0, 0)} kWh)</li>
-          <li>Netz-Ladung zuhause: Haushaltsstrom ({fmtZahl(z.ladung_netz_kwh || 0, 0)} kWh = {fmtZahl(z.heim_kosten_euro || 0, 2)} €)</li>
+          {/* Regel 3 (Konzept Heimladung/Fahrverbrauch): eine dienstliche Wallbox hat keine
+              private Ersparnis — „n kWh = 0,00 €" las sich wie ein Rechenfehler. */}
+          {z.dienstlich ? (
+            <li>{WALLBOX_DIENSTLICH_HINWEIS}</li>
+          ) : (
+            <li>Netz-Ladung zuhause: Haushaltsstrom ({fmtZahl(z.ladung_netz_kwh || 0, 0)} kWh = {fmtZahl(z.heim_kosten_euro || 0, 2)} €)</li>
+          )}
           <li>Vergleichspreis extern: {fmtZahl(z.extern_preis_kwh_euro || 0.50, 2)} €/kWh</li>
         </ul>
         {(z.extern_ladung_kwh || 0) > 0 && (

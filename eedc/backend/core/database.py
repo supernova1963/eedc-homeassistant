@@ -954,6 +954,10 @@ async def run_migrations(conn):
                 connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN emob_ladung_pv_abgeleitet_kwh FLOAT'))
             if 'emob_ladung_netz_abgeleitet_kwh' not in existing_columns:
                 connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN emob_ladung_netz_abgeleitet_kwh FLOAT'))
+            # N-569-Ergänzung: davon aus dem Speicher (Teilmenge des PV-Anteils). Additiv,
+            # Bestand bleibt NULL = keine Aussage.
+            if 'emob_ladung_speicher_abgeleitet_kwh' not in existing_columns:
+                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN emob_ladung_speicher_abgeleitet_kwh FLOAT'))
             # N-547: das Lern-SOLL des Korrekturprofils (rohe, GEKAPPTE, aber
             # unkorrigierte OpenMeteo-Reihe) — getrennt von der Vorhersage
             # `pv_prognose_stundenprofil`, gegen die bis 22.09.2026 gelernt
@@ -1049,6 +1053,13 @@ async def run_migrations(conn):
 
         # Etappe 3c P1 (KONZEPT-ENERGIEPROFIL-3C.md): Source-Marker auf SensorSnapshot.
         # Diagnostiziert Schreib-Pfad pro Snapshot — Voraussetzung für 3d-Schablone.
+        # N-555 Stufe 3 / N-569: `emob_ladebloecke` entsteht per `create_all`; eine
+        # Entwicklungs-DB, die die Tabelle vor der Spalte `speicher_kwh` bekam, holt sie nach.
+        if 'emob_ladebloecke' in inspector.get_table_names():
+            existing_columns = {col['name'] for col in inspector.get_columns('emob_ladebloecke')}
+            if 'speicher_kwh' not in existing_columns:
+                connection.execute(text('ALTER TABLE emob_ladebloecke ADD COLUMN speicher_kwh FLOAT'))
+
         if 'sensor_snapshots' in inspector.get_table_names():
             existing_columns = {col['name'] for col in inspector.get_columns('sensor_snapshots')}
             if 'quelle' not in existing_columns:
@@ -1325,6 +1336,9 @@ async def init_db():
     """
     # Importiere alle Models damit sie registriert werden
     from backend.models import anlage, monatsdaten, investition, strompreis, settings as settings_model, pvgis_prognose, activity_log, mqtt_energy_snapshot, mqtt_live_snapshot, tages_energie_profil, mqtt_gateway_mapping, infothek, api_cache, sensor_snapshot, data_provenance_log
+    # N-555 Stufe 3: `emob_ladebloecke` — neue Tabelle, `create_all` legt sie idempotent an
+    # (erzeugt nur Fehlendes; kein ALTER nötig, weil es sie vorher nicht gab).
+    from backend.models import emob_ladeblock  # noqa: F401
 
     async with engine.begin() as conn:
         # Migrationen ausführen

@@ -188,7 +188,9 @@ export interface HubLeerGrundResponse {
 export interface InvestitionMonatsdaten {
   /** `null` nur für eine nicht gespeicherte Anzeigezeile: der E-Auto-Hub zeigt einen Monat,
    *  in dem das Auto Rest der Wallbox bekommt, aber keine eigene Monatszeile hat (N-564,
-   *  `verbrauch_daten.ladung_aus_rest`). Jede gespeicherte Zeile trägt ihre ID. */
+   *  `verbrauch_daten.ladung_aus_rest`). Jede gespeicherte Zeile trägt ihre ID.
+   *  N-555 Stufe 3: `verbrauch_daten.ladung_aus_bloecken` (Menge = Σ der Sprünge des
+   *  Fahrzeug-Zählers), `ladevorgaenge_bloecke`, `ladevorgaenge_ungedeckt`. */
   id: number | null
   investition_id: number
   jahr: number
@@ -217,6 +219,9 @@ export interface EAutoDashboardResponse {
     ladung_extern_euro: number
     // PV-Anteile
     pv_anteil_heim_prozent: number
+    /** N-569-Ergänzung: davon aus dem Speicher in % der Heimladung (Teil des PV-Anteils);
+     *  `null` ohne Speicherzähler — dann keine Unterzeile. */
+    speicher_anteil_heim_prozent?: number | null
     pv_anteil_gesamt_prozent: number
     // V2H
     v2h_entladung_kwh: number
@@ -638,6 +643,8 @@ export interface WallboxDashboardResponse {
     gesamt_ladevorgaenge: number
     ladevorgaenge_pro_monat: number
     anzahl_monate: number
+    /** F-7/Regel 3: dienstliche Wallbox — keine private Ersparnis. */
+    dienstlich?: boolean
   }
 }
 

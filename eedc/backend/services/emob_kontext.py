@@ -103,6 +103,26 @@ async def lade_emob_kontext(
     daten = dict(roh)
     daten.update(zip(privat, angereichert))
 
+    # N-555 Stufe 3 (Konzept 7.2 Regel 9 Punkt 3, Anhang D): die geltenden Ladeblöcke je
+    # Monat — dieselben Eingänge wie die Monats-Fakten (`monats_fakten/laden.py`).
+    bloecke_je_monat: dict = {}
+    if privat_wallboxen and (privat_eautos or dienstwagen):
+        from backend.services.energie_profil.monats_aus_tagen import emob_je_auto_monate
+
+        bloecke_je_monat = await emob_je_auto_monate(
+            db, anlage_id, list(emob.values()), {(j, m) for (_i, j, m) in roh},
+        )
+
+    # N-569-Ergänzung: „davon aus dem Speicher" je Monat (eine Tageszeilen-Abfrage, nur
+    # mit privater Wallbox; Ausweis — keine Rechnung liest ihn).
+    speicher_quoten: dict = {}
+    if privat_wallboxen and privat_eautos:
+        from backend.services.energie_profil.monats_aus_tagen import lade_speicher_anteile
+
+        speicher_quoten = await lade_speicher_anteile(
+            db, anlage_id, {(j, m) for (_i, j, m) in roh},
+        )
+
     ctx = build_emob_pool_ctx(
         daten,
         privat_eautos,
@@ -119,5 +139,7 @@ async def lade_emob_kontext(
         eauto_in_betrieb=_eautos_in_betrieb,
         # W-1: „nur eine Wallbox" nur ohne privates Auto UND ohne Dienstwagen in Betrieb.
         dienstwagen_in_betrieb=_dienstwagen_in_betrieb,
+        bloecke_je_monat=bloecke_je_monat,
+        speicher_quoten=speicher_quoten,
     )
     return EmobKontext(ctx=ctx, daten=daten, quoten=quoten)

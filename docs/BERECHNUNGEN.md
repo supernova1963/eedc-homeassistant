@@ -588,6 +588,35 @@ Wallbox in Betrieb** ist deren Menge die dienstliche Ladung, Felder und Schätzu
 ohne eigene Messung ist sein Fahrverbrauch die Schätzung (als Netzstrom, `EmobFakten.dienstlich_geschaetzt`) und wird
 **nie** vom Rest abgezogen (sie enthält auch das Laden beim Arbeitgeber).
 
+**Ladevorgänge je Auto — Regel 9 (ab v4.0.51, N-555 Stufe 3):** Trägt ein Auto an „Heim: gesamt" einen **Zähler**, der
+am Ende eines Ladevorgangs um dessen Menge springt (evcc-Fahrzeug-Sensor), und hat eine Wallbox in Betrieb einen
+Ladezähler, ordnet die Tagesberechnung jeden Sprung den Stunden der Wallbox zu (`services/emob_ladebloecke.py`, Ablage
+`emob_ladebloecke`, geschrieben aus `aggregate_day`):
+
+```
+Block    vom Sprung rückwärts über die Wallbox-Stunden; aus jeder Stunde, was frühere Blöcke nicht genommen
+         haben — in der Sprungstunde höchstens den Bedarf, davor höchstens Bedarf + 0,05 kWh —, bis
+         Σ ≥ Sprung − 0,05 kWh, höchstens bis zur Stunde des vorigen Sprungs IRGENDEINES Autos (einschließlich).
+         Nullstunden werden übersprungen; eine gemeinsame Stunde wird nach Restmengen geteilt.
+Menge    = der Sprung (gemessen am Auto) — nie die Summe der Wallbox-Stunden.
+PV       = Σ (Blockstunde × PV-Anteil dieser Stunde nach der Einspeise-Deckung) ÷ Σ Blockstunden × Sprung
+           (davon aus dem Speicher ebenso, als Teilmenge);
+           eine gebündelte Stunde (Zählerlücke, n > 1) zählt zur Blockenergie, liefert aber keinen Anteil —
+           ohne ableitbare Stunde teilt der Wallbox-Monatsanteil. Der Anteil ist eine Schätzung derselben
+           Regel wie der PV-Anteil der Heimladung.
+Monat    Anteil eines Monats = Σ Blockstunden, die in ihm BEGINNEN, ÷ Σ Blockstunden, angewandt auf den Sprung.
+           Ein Sprung ohne Blockstunde zählt im Monat des Sprungs.
+Kennzeichen  stunden_gedeckt = Σ Blockstunden ÷ Sprung; unter 0,95 hat die Wallbox den Vorgang nicht voll gezählt.
+           Mikrosprünge bis 0,05 kWh (Standby des Fahrzeug-Zählers) zählen als Menge, nicht als Ladevorgang.
+```
+
+In Regel 2 Schritt 1 ist die Summe der monatsverteilten Sprünge dann die eigene Messung des Autos (Menge **und**
+PV-Anteil) an der Stelle von „Heim: gesamt"; „Heim: PV/Netz" gehen weiter vor. Der Daten-Checker (Regel 7) vergleicht
+dieselbe Größe mit dem Wallbox-Monatswert. **Bedingung:** die Blöcke eines Autos gelten für einen Monat nur, wenn jeder
+Tag des Monats bis gestern, an dem das Auto in Betrieb war, nach dem Lückenhandling gerechnet ist (Tageszeile mit
+Regelmarke); die Blöcke von heute zählen, sobald die heutige Tageszeile existiert. Sonst rechnet der Monat ohne sie. *Grund:* die Blöcke entstehen nur an so gerechneten Tagen; ein Monat mit
+nur einem Teil davon hätte eine zu kleine Menge je Auto und einen zu großen Rest.
+
 **Tag und Stunde** wählen über **eine** Auswahl (`snapshot/komponenten_beitraege.py`): Ist eine Wallbox mit Zähler
 **in Betrieb**, zählt die Wallbox, und die Heimlade-Zähler der Autos zählen nicht zusätzlich — auch nicht in der Stunde.
 Sonst zählt je Auto „Heim: PV" + „Heim: Netz", sonst der alte Gesamtwert, sonst „Heim: PV" allein, und der
@@ -1121,13 +1150,20 @@ gesamte Heimladung galt als Netzstrom.
 2. **Sonst leitet eedc den Anteil aus den eigenen Stundenwerten ab**, Regel **Einspeise-Deckung**:
 
    ```
-   je Stunde:  ungedeckt = max(0, Ladung − Netzbezug − Speicherentladung)
+   je Stunde:  ungedeckt = max(0, Ladung − Netzbezug)          (ab v4.0.51, N-569)
                PV        = min(Ladung, ungedeckt + Einspeisung)
                Netz      = Ladung − PV
+               davon aus dem Speicher = min(Speicherentladung, PV)   (nur Ausweis)
    ```
+   Der Speicheranteil rechnet mit dem **Stunden-Netto** der Batterie (Entladung − Ladung derselben Stunde): lädt und entlädt der
+   Speicher in einer Stunde, untertreibt er (Lab-Fixture 21,7 % netto gegen 24,8 % brutto); der PV-Anteil ist davon unberührt.
 
    Der zweite Summand fängt die Unschärfe der Stundenmittelung auf: Was in derselben Stunde
-   eingespeist wurde, hätte stattdessen laden können.
+   eingespeist wurde, hätte stattdessen laden können. **Die Speicherentladung zählt zur PV-Deckung**
+   (bis v4.0.50 wurde sie abgezogen): der PV-Anteil sagt, wie viel der Ladung nicht aus dem Netz kam,
+   und gespeicherter Eigenstrom ist Eigenstrom. „Davon aus dem Speicher" ist eine **Teilmenge** des
+   PV-Anteils (PV = Direkt + Speicher), gezeigt als Unterzeile im E-Auto-Hub; ohne Speicherzähler gibt
+   es sie nicht, und keine Kosten-, Ersparnis-, CO₂- oder Community-Rechnung liest sie.
 3. **Angewandt wird der Anteil, nicht die Kilowattstunde.** Der abgeleitete Prozentsatz geht auf
    die kanonische Monatsladung — nur so bleibt `Ladung == PV + Netz` exakt geschlossen, auch wenn
    die Tagesspur eine andere Menge kennt als die Monatszeile.
@@ -1168,7 +1204,12 @@ Wert eine Teilsumme, P4).
 | --- | --- | --- |
 | netzbasiert `min(Ladung, Netzbezug)` | 73,8 % | +5,9 pp |
 | netz + Speicherentladung | 60,8 % | −7,2 pp |
-| **Einspeise-Deckung (gebaut)** | **64,7 %** | **−3,2 pp** |
+| Einspeise-Deckung (bis v4.0.50, mit Speicherabzug) | 64,7 % | −3,2 pp |
+
+**Nachgemessen 2026-09-27** (N-569, Lab-Kopie des Recorders, evcc-Solar-%): 15 Ladevorgänge Juni–August
+2026 — mit Speicherabzug 76,0 %, **ohne (gebaut ab v4.0.51) 94,5 %**, evcc 93,5 %; anlagenweit Mai–September
+79,4 → 92,6 %. Feb–Aug ist dort nicht neu messbar; die Zeiträume stehen getrennt. Im Sommer lädt das Auto
+oft aus dem Hausakku — den Fall sah die Messung vom 08.08. kaum.
 
 ⚠ **Keine rückwirkende Berechnung.** Der Wert entsteht beim Aggregieren eines Tages; Zeiträume vor
 diesem Feature tragen `NULL`, und `NULL` heißt „keine Aussage", nicht „keine Sonne".

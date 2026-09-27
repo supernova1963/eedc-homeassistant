@@ -35,6 +35,42 @@ export const REST_ZEILE_HINWEIS =
   + '(Wallbox minus die eigenen Messungen der Autos, nach Kilometern verteilt). '
   + 'Kilometer und Fahrverbrauch sind nicht erfasst.'
 
+/**
+ * N-555 Stufe 3 (Konzept Heimladung Regel 9): die Heimladung dieses Monats kommt aus den
+ * Ladevorgängen des Fahrzeug-Zählers (Sprung je Vorgang, Stunden der Wallbox für Anteil und
+ * Monat). Die Notiz nennt ihre Zahl — und wie viele davon die Wallbox nicht voll gezählt hat.
+ */
+export function ladevorgaengeNotiz(md: InvestitionMonatsdaten): string | null {
+  if (!md.verbrauch_daten.ladung_aus_bloecken) return null
+  const n = md.verbrauch_daten.ladevorgaenge_bloecke || 0
+  const text = n === 1 ? 'aus 1 Ladevorgang' : `aus ${n} Ladevorgängen`
+  const ungedeckt = md.verbrauch_daten.ladevorgaenge_ungedeckt || 0
+  return ungedeckt > 0 ? `${text}, ${ungedeckt} mit Wallbox-Lücke` : text
+}
+
+/** Tooltip der Ladevorgangs-Notiz — ein Wortlaut für Tabelle und Probe. */
+export const LADEVORGAENGE_HINWEIS =
+  'Menge und PV-Anteil kommen aus den Ladevorgängen des Fahrzeug-Zählers: je Vorgang zählt '
+  + 'sein Sprung, die Stunden der Wallbox liefern PV-Anteil und Monat. „Wallbox-Lücke": die '
+  + 'Wallbox hat weniger gezählt als das Auto — die Menge bleibt die des Autos.'
+
+/**
+ * N-569-Ergänzung (Konzept Heimladung Anhang E): „davon aus dem Speicher" — eine Teilmenge
+ * des PV-Anteils (PV = Direkt + Speicher). Nur mit einem Wert über 0; ohne Speicherzähler
+ * gibt es keine Zeile.
+ */
+export function speicherUnterzeile(prozent: number | null | undefined): string | undefined {
+  if (prozent == null || prozent <= 0) return undefined
+  return `davon aus dem Speicher ${fmtZahl(prozent, 0)} %`
+}
+
+/** Monatszeile: „davon aus dem Speicher x kWh" (Teil der Spalte PV), sonst `null`. */
+export function speicherNotiz(md: InvestitionMonatsdaten): string | null {
+  const kwh = md.verbrauch_daten.ladung_speicher_kwh
+  if (!kwh || kwh <= 0) return null
+  return `davon ${fmtZahl(kwh, 1)} kWh aus dem Speicher`
+}
+
 export function prepEAutoMonate(monatsdaten: InvestitionMonatsdaten[]) {
   return monatsdaten.map((md) => ({
     name: `${MONAT_KURZ[md.monat]} ${md.jahr.toString().slice(2)}`,
@@ -137,6 +173,8 @@ export function EAutoMonatsTabelle({ monatsdaten }: { monatsdaten: InvestitionMo
           // und V2H sind nicht erfasst (`—`, A3 Datenlücke). Die Kennzeichnung ist dieselbe
           // leise Zeilen-Notiz wie „· enthält n h" in der Stundentabelle (Regel 0).
           const ausRest = istRestZeile(md)
+          const vorgaenge = ladevorgaengeNotiz(md)
+          const speicher = speicherNotiz(md)
           return (
             <tr key={md.id ?? `${md.jahr}-${md.monat}`} className="border-b border-gray-100 dark:border-gray-800">
               <td className={ZELLE}>
@@ -144,6 +182,16 @@ export function EAutoMonatsTabelle({ monatsdaten }: { monatsdaten: InvestitionMo
                 {ausRest && (
                   <span className="ml-1 text-[10px] font-normal text-gray-400 dark:text-gray-500" title={REST_ZEILE_HINWEIS}>
                     · aus Wallbox-Rest
+                  </span>
+                )}
+                {vorgaenge && (
+                  <span className="ml-1 text-[10px] font-normal text-gray-400 dark:text-gray-500" title={LADEVORGAENGE_HINWEIS}>
+                    · {vorgaenge}
+                  </span>
+                )}
+                {speicher && (
+                  <span className="ml-1 text-[10px] font-normal text-gray-400 dark:text-gray-500">
+                    · {speicher}
                   </span>
                 )}
               </td>

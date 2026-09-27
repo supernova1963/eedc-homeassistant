@@ -16,23 +16,34 @@ damit auf **60 % PV in der Prognose und 0 % im IST** (Fund **N-188**).
 **Die Idee ist von evcc geborgt, nicht erfunden.** evcc kennt ebenfalls keinen
 PV-Sensor an der Wallbox — es kennt PV-Leistung, Netzbezug/Einspeisung und
 Ladeleistung und rechnet je Zeitschritt, welcher Teil der Ladung gerade durch
-Überschuss gedeckt war. Genau das tut ``leite_pv_anteil_ab``, nur mit eedcs
+eigenen Strom gedeckt war. Genau das tut ``leite_pv_anteil_ab``, nur mit eedcs
 eigenen Stundengrößen.
 
-Vermessen am 2026-08-08 gegen evcc als Referenz (Anlage 1, Feb–Aug 2026,
-963 kWh Heimladung, evcc-Referenz 67,9 % PV) — drei Regeln standen zur Wahl:
+**Die Regel seit N-569 (Konzept Heimladung/Fahrverbrauch, Anhang E, Entscheid
+Master 27.09.2026, Gernot: in 4.0.51):** Der PV-Anteil sagt, wie viel der Ladung
+**nicht aus dem Netz** kam — das ist die Größe, die Stromkosten und Ersparnis der
+E-Mobilität brauchen. Gespeicherter Eigenstrom ist Eigenstrom; die einzige fremde
+Quelle in der Stunde ist der **Netzbezug**. Die Speicher-Entladung wird deshalb
+nicht mehr von der PV-Deckung abgezogen.
 
-=================================  =========  =====================
-Regel                              PV-Anteil  Abweichung zu evcc
-=================================  =========  =====================
-netzbasiert                          73,8 %   **+5,9 pp** (zu hoch)
-netz + Speicherentladung             60,8 %   −7,2 pp (zu tief)
-**Einspeise-Deckung (gebaut)**     **64,7 %** **−3,2 pp**
-=================================  =========  =====================
+Gemessen am 2026-09-27 an der Lab-Kopie von Gernots Recorder gegen evcc
+(kWh-gewichtet, Fable-Messung):
 
-Gernots Entscheid: **Einspeise-Deckung**. Sie trifft die Referenz am besten und
-irrt in die unverdächtige Richtung — sie schreibt die Ersparnis eher zu klein
-als zu groß.
+=====================================  ===========  ==============  ========
+Regel                                  15 Blöcke    Anlage          evcc
+                                       Jun–Aug 2026 Mai–Sep 2026
+=====================================  ===========  ==============  ========
+Einspeise-Deckung mit Speicherabzug      76,0 %       79,4 %
+**Einspeise-Deckung ohne Speicherabzug** **94,5 %**   **92,6 %**    93,5 %
+=====================================  ===========  ==============  ========
+
+*Historie:* Am 2026-08-08 war gegen evcc über Feb–Aug 2026 (963 kWh, evcc 67,9 %)
+die Variante **mit** Speicherabzug gewählt worden (64,7 %, −3,2 pp; netzbasiert
+73,8 %, netz + Speicherentladung 60,8 %). Speicherladen ins Auto kam in diesem
+überwiegend winterlichen Zeitraum kaum vor — den Fall hat die damalige Messung
+nicht gesehen (Abnahmeprobe P8 des N-555-Stufe-3-Baus, 27.09.: je Sitzung bis
+−61 pp). Feb–Aug ist an der Lab-Kopie nicht neu messbar (sie beginnt 01.05.);
+die beiden Zeiträume stehen getrennt.
 
 ⚠ **Das Ergebnis ist eine Schätzung und muss als solche gekennzeichnet werden.**
 Der Aufrufer trägt es nach der P4-Linie als abgeleitet aus (Muster
@@ -68,6 +79,11 @@ def stunde_aus_bilanzwerten(
     batterie_spalte: Optional[float],
 ) -> dict[str, Optional[float]]:
     """Baut eine Eingangs-Stunde aus den Größen, wie der Aggregator sie hält.
+
+    ⚠ **Seit N-569 (Anhang E) wirkt die Speicher-Entladung in der Regel nicht
+    mehr** — die Übersetzung bleibt, weil der Eingangsvertrag sie weiter trägt und
+    eine spätere Regel sie wieder brauchen könnte; eine Verwechslung ändert heute
+    kein Ergebnis mehr.
 
     **Warum es diese Funktion gibt: wegen genau eines Vorzeichens.**
     ``leite_pv_anteil_ab`` verlangt eine **positive** Speicherentladung. Im
@@ -126,6 +142,12 @@ class AbgeleiteterLadeAnteil:
     stunden_gedeckt: int
     #: Stunden mit Ladung überhaupt — inklusive der ungedeckten.
     stunden_mit_ladung: int
+    #: ⭐ N-569-Ergänzung (Gernot 27.09., Anhang E): **davon aus dem Speicher** —
+    #: je Stunde ``min(Speicher-Entladung, PV-Anteil)``, eine **Teilmenge** von
+    #: ``pv_kwh`` (PV = Direkt + Speicher), keine dritte Menge. ``None``, wenn in
+    #: keiner gedeckten Ladestunde ein Speicherwert vorlag (ohne Speicherzähler:
+    #: keine Zeile). Wirkt auf keine Kosten- oder Ersparnisrechnung — Ausweis.
+    speicher_kwh: Optional[float] = None
 
     @property
     def vollstaendig(self) -> bool:
@@ -148,12 +170,12 @@ def leite_pv_anteil_ab(
 ) -> Optional[AbgeleiteterLadeAnteil]:
     """Teilt eine Heimladung in PV- und Netzanteil, ohne dass jemand sie misst.
 
-    Je Stunde gilt die **Einspeise-Deckung**:
+    Je Stunde gilt die **Einspeise-Deckung** (N-569, Anhang E):
 
-    1. Was die Ladung übersteigt, das gleichzeitig aus Netz und Speicher kam,
-       kann nur aus der PV gekommen sein::
+    1. Was die Ladung übersteigt, das gleichzeitig aus dem Netz kam, ist eigener
+       Strom — aus der PV oder aus dem Speicher (gespeicherter Eigenstrom)::
 
-           ungedeckt = max(0, ladung − netzbezug − speicher_entladung)
+           ungedeckt = max(0, ladung − netzbezug)
 
     2. Was in derselben Stunde eingespeist wurde, hätte stattdessen laden
        können — es belegt zusätzlichen Überschuss. Das fängt die Unschärfe der
@@ -166,6 +188,8 @@ def leite_pv_anteil_ab(
     Args:
         stunden: je Stunde ein Dict mit ``ladung``, ``netzbezug``,
             ``einspeisung`` und ``speicher_entladung`` (kWh, nicht-negativ).
+            ⚠ ``speicher_entladung`` bleibt im Vertrag (die Aufrufer liefern es),
+            wirkt seit N-569 aber nicht mehr: die Entladung ist Eigenstrom.
             ``None`` bedeutet „nicht erhoben"; fehlt eine der vier Größen in
             einer Ladestunde, zählt diese Stunde als **ungedeckt** und geht
             nicht in die Summen ein. Die Schlüssel entsprechen dem Vertrag von
@@ -179,6 +203,8 @@ def leite_pv_anteil_ab(
     """
     pv_summe = 0.0
     netz_summe = 0.0
+    speicher_summe = 0.0
+    speicher_gesehen = False
     gedeckt = 0
     mit_ladung = 0
 
@@ -190,23 +216,27 @@ def leite_pv_anteil_ab(
 
         netzbezug = stunde.get("netzbezug")
         einspeisung = stunde.get("einspeisung")
-        speicher = stunde.get("speicher_entladung")
-        # Der Speicher ist der einzige optionale Eingang: eine Anlage ohne
-        # Batterie hat hier dauerhaft nichts stehen, und das ist kein Mangel.
-        # Netzbezug und Einspeisung dagegen MÜSSEN vorliegen — ohne sie ist die
-        # Deckung nicht bestimmbar, und ein fehlender Wert als 0 zu lesen hieße,
-        # die ganze Stunde der Sonne gutzuschreiben.
+        # Netzbezug und Einspeisung MÜSSEN vorliegen — ohne sie ist die Deckung
+        # nicht bestimmbar, und ein fehlender Wert als 0 zu lesen hieße, die ganze
+        # Stunde dem Eigenstrom gutzuschreiben. Die Speicher-Entladung ist seit
+        # N-569 kein Eingang der Rechnung mehr (gespeicherter Eigenstrom ist
+        # Eigenstrom, Anhang E) — ⛔ nicht wieder abziehen: das war die Konvention,
+        # die Speicherladen ins Auto als Netzstrom zählte (Lab: 76,0 % statt 94,5 %).
         if netzbezug is None or einspeisung is None:
             continue
-        if speicher is None:
-            speicher = 0.0
 
-        ungedeckt = max(0.0, ladung - max(0.0, netzbezug) - max(0.0, speicher))
+        ungedeckt = max(0.0, ladung - max(0.0, netzbezug))
         pv = min(ladung, ungedeckt + max(0.0, einspeisung))
 
         pv_summe += pv
         netz_summe += ladung - pv
         gedeckt += 1
+        # Davon aus dem Speicher (Anhang E, Ergänzung): „Auto als letzte Last" wie die
+        # Einspeise-Deckung — höchstens die Entladung der Stunde, nie mehr als der PV-Teil.
+        speicher = stunde.get("speicher_entladung")
+        if speicher is not None:
+            speicher_gesehen = True
+            speicher_summe += min(max(0.0, speicher), pv)
 
     if mit_ladung == 0 or gedeckt == 0:
         return None
@@ -217,4 +247,5 @@ def leite_pv_anteil_ab(
         regel=REGEL_EINSPEISE_DECKUNG,
         stunden_gedeckt=gedeckt,
         stunden_mit_ladung=mit_ladung,
+        speicher_kwh=round(speicher_summe, 3) if speicher_gesehen else None,
     )

@@ -51,6 +51,33 @@ class EAutoDashboardResponse(BaseModel):
     monatsdaten: list[InvestitionMonatsdatenResponse]
     zusammenfassung: dict[str, Any]
 
+
+def _speicher_addieren(summe, entscheid, inv_id: int):
+    """N-569-Ergänzung: „davon aus dem Speicher" des Monats zur Summe — ``None`` bleibt
+    ``None``, solange kein Monat eine Aussage hat (ohne Speicherzähler keine Unterzeile)."""
+    a = entscheid.je_auto.get(inv_id) if entscheid is not None else None
+    if a is None or a.speicher_kwh is None:
+        return summe
+    return (summe or 0.0) + a.speicher_kwh
+
+
+def _bloecke_kennzeichnen(d: dict, entscheid, inv_id: int) -> None:
+    """N-555 Stufe 3 (Auftrag S3-4): ein Monat, dessen Heimladung aus Ladeblöcken stammt, sagt
+    es — „aus n Ladevorgängen" (Sprünge über der Kleinstgrenze, D-4) und, wenn ein Vorgang
+    die Wallbox-Stunden nicht deckt (``stunden_gedeckt`` < 0,95), wie viele. Die Menge selbst
+    steht schon aus dem Entscheid in ``ladung_*`` (Σ monatsverteilter Sprünge, G2)."""
+    a = entscheid.je_auto.get(inv_id) if entscheid is not None else None
+    if a is not None and a.speicher_kwh:
+        # N-569-Ergänzung: davon aus dem Speicher (Teil von `ladung_pv_kwh`).
+        d['ladung_speicher_kwh'] = round(a.speicher_kwh, 2)
+    bm = (entscheid.bloecke_je_auto.get(inv_id) if entscheid is not None else None)
+    if bm is None:
+        return
+    d['ladung_aus_bloecken'] = True
+    d['ladevorgaenge_bloecke'] = bm.ladevorgaenge
+    if bm.ladevorgaenge_ungedeckt:
+        d['ladevorgaenge_ungedeckt'] = bm.ladevorgaenge_ungedeckt
+
 @router.get("/dashboard/e-auto/{anlage_id}", response_model=list[EAutoDashboardResponse])
 async def get_eauto_dashboard(
     anlage_id: int,
@@ -204,6 +231,8 @@ async def get_eauto_dashboard(
         gesamt_extern_ladung = 0
         gesamt_extern_kosten = 0
         gesamt_v2h = 0
+        # N-569-Ergänzung: davon aus dem Speicher (Teil der PV-Heimladung) — nur Ausweis.
+        gesamt_speicher: Optional[float] = None
         # #260: km pro Monat sammeln, damit berechne_eauto_ersparnis_periode
         # mit dem jeweils gültigen Monats-Benzinpreis rechnen kann.
         km_pro_monat: list[tuple[int, int, float]] = []
@@ -250,6 +279,7 @@ async def get_eauto_dashboard(
                 pv, netz = emob_heimladung_im_monat(
                     emob_ctx, eauto.id, km_this, md.jahr, md.monat, d,
                 )
+                gesamt_speicher = _speicher_addieren(gesamt_speicher, _entscheid, eauto.id)
             gesamt_pv_ladung += pv
             gesamt_netz_ladung += netz
             if netz:
@@ -276,6 +306,9 @@ async def get_eauto_dashboard(
                     continue
                 monate_ohne_zeile.append((_j, _m))
                 pv, netz = emob_heimladung_im_monat(emob_ctx, eauto.id, 0.0, _j, _m, {})
+                gesamt_speicher = _speicher_addieren(
+                    gesamt_speicher, emob_ctx.entscheide.get((_j, _m)), eauto.id,
+                )
                 gesamt_pv_ladung += pv
                 gesamt_netz_ladung += netz
                 if netz:
@@ -421,6 +454,13 @@ async def get_eauto_dashboard(
             'ladung_extern_euro': round(gesamt_extern_kosten, 2),
             # PV-Anteile
             'pv_anteil_heim_prozent': round(pv_anteil_heim, 1),
+            # N-569-Ergänzung (Anhang E): davon aus dem Speicher, in % der Heimladung — Teil
+            # des PV-Anteils; `None` ohne Speicherzähler (keine Unterzeile). Nur Ausweis.
+            'speicher_anteil_heim_prozent': (
+                round(gesamt_speicher / gesamt_heim_ladung * 100, 1)
+                if gesamt_speicher is not None and gesamt_heim_ladung > 0 and not dienstlich
+                else None
+            ),
             'pv_anteil_gesamt_prozent': round(pv_anteil_gesamt, 1),
             # V2H
             'v2h_entladung_kwh': round(gesamt_v2h, 1),
@@ -484,6 +524,7 @@ async def get_eauto_dashboard(
                     d['ladung_kwh'] = round(_a.pv_kwh + _a.netz_kwh, 2)
                     if _a.art == ART_SCHAETZUNG:
                         d['ladung_geschaetzt'] = True
+                _bloecke_kennzeichnen(d, _e, eauto.id)
             monatsdaten_response.append(InvestitionMonatsdatenResponse(
                 id=md.id,
                 investition_id=md.investition_id,
@@ -516,6 +557,7 @@ async def get_eauto_dashboard(
                 _d['ladung_aus_rest'] = True
             elif _a.art == ART_SCHAETZUNG:
                 _d['ladung_geschaetzt'] = True
+            _bloecke_kennzeichnen(_d, _e, eauto.id)
             monatsdaten_response.append(InvestitionMonatsdatenResponse(
                 id=None,
                 investition_id=eauto.id,

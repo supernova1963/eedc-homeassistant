@@ -11,6 +11,7 @@ from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusamme
 from backend.models.infothek import InfothekEintrag, InfothekDatei
 from backend.models.korrekturprofil import Korrekturprofil
 from backend.models.data_provenance_log import DataProvenanceLog
+from backend.models.emob_ladeblock import EmobLadeblock
 
 __all__ = [
     "Anlage",
@@ -32,4 +33,5 @@ __all__ = [
     "InfothekDatei",
     "Korrekturprofil",
     "DataProvenanceLog",
+    "EmobLadeblock",
 ]

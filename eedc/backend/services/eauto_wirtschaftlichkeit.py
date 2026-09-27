@@ -31,8 +31,8 @@ Strompreis: **der zum jeweiligen Monat gültige** separate Wallbox-Tarif >
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Callable, Iterable, Mapping, Optional
+from dataclasses import dataclass, field, replace
+from typing import Any, Callable, Iterable, Mapping, Optional
 
 from backend.core.berechnungen.phev_anteil import teile_fahrleistung
 from backend.core.field_definitions import (
@@ -821,6 +821,8 @@ def build_emob_pool_ctx(
     heim_gesamt_keys: Iterable[tuple[int, int, int]] = (),
     eauto_in_betrieb: Optional[Callable[[int, int], Iterable[int]]] = None,
     dienstwagen_in_betrieb: Optional[Callable[[int, int], Iterable[int]]] = None,
+    bloecke_je_monat: Optional[Mapping[tuple[int, int], Mapping[int, Any]]] = None,
+    speicher_quoten: Optional[Mapping[tuple[int, int], float]] = None,
 ) -> EmobPoolCtx:
     """Baut den Pool-Kontext aus bereits aktiv-gefilterten IMD.
 
@@ -846,6 +848,8 @@ def build_emob_pool_ctx(
     Die privaten Zeilen dürfen schon angereichert sein (Phase 5), die dienstlichen nicht.
     ``eauto_in_betrieb(jahr, monat)`` nennt die privaten E-Autos in Betrieb, auch ohne
     Zeile — sie sind Empfänger des Rests (Regel 2 Schritt 3).
+    ``bloecke_je_monat`` (N-555 Stufe 3): ``(jahr, monat) → {inv_id: BlockMonat}`` der
+    geltenden Ladeblöcke (``monats_aus_tagen.emob_je_auto_monate``, W-C geprüft).
     """
     dienstwagen_ids = set(dienstwagen_ids or ())
     dienstliche_wallbox_ids = set(dienstliche_wallbox_ids or ())
@@ -903,6 +907,8 @@ def build_emob_pool_ctx(
                 dienstwagen_in_betrieb(jahr, monat)
                 if dienstwagen_in_betrieb is not None else None
             ),
+            bloecke=(bloecke_je_monat or {}).get((jahr, monat)),
+            speicher_quote=(speicher_quoten or {}).get((jahr, monat)),
         )
     return EmobPoolCtx(
         use_wb_pool, wb_pool_by_month, eauto_km_by_month, dict(inv_daten),
@@ -1231,6 +1237,10 @@ class AutoHeimladung:
     pv_kwh: float
     netz_kwh: float
     art: str
+    #: ⭐ N-569-Ergänzung (Anhang E): **davon aus dem Speicher** — Teilmenge von ``pv_kwh``,
+    #: nur Ausweis (keine Kosten-/Ersparnisrechnung liest ihn). ``None`` = keine Aussage
+    #: (ohne Speicherzähler bzw. ohne Tages-/Blockanteil).
+    speicher_kwh: Optional[float] = None
 
     @property
     def ladung_kwh(self) -> float:
@@ -1284,6 +1294,9 @@ class EmobHeimladungEntscheid:
     wallbox_summe: EmobLadungPool = field(
         default_factory=lambda: EmobLadungPool(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, "")
     )
+    #: ⭐ Stufe 3: je Auto die Ladeblöcke (``BlockMonat``), die in diesem Monat seine Messung
+    #: sind — Menge, Anteil, Zahl der Ladevorgänge, Kennzeichen. Leer ⇒ Stufe 2.
+    bloecke_je_auto: dict = field(default_factory=dict)
 
     @property
     def quelle(self) -> str:
@@ -1346,6 +1359,12 @@ def dienstliche_ladung_der_zeile(zeile: Optional[dict]) -> DienstlicheLadung:
     return DienstlicheLadung(pv, 0.0, pv > 0)
 
 
+def _hat_heim_pv_netz(zeile: Optional[dict]) -> bool:
+    """Trägt die Zeile „Heim: PV" oder „Heim: Netz" (auch 0)? Dann gehen sie vor (D-5)."""
+    zeile = zeile or {}
+    return zeile.get("ladung_pv_kwh") is not None or zeile.get("ladung_netz_kwh") is not None
+
+
 def eigene_messung_des_autos(
     zeile: Optional[dict],
     *,
@@ -1354,6 +1373,7 @@ def eigene_messung_des_autos(
     hat_quelle: bool = False,
     wallbox_pv_anteil: Optional[float] = None,
     pv_quote: Optional[float] = None,
+    block=None,
 ) -> Optional[tuple[float, float, bool]]:
     """Regel 2 Schritt 1: die eigene Messung EINES Autos — ``(pv, netz, anteil_abgeleitet)``
     oder ``None`` (keine eigene Messung).
@@ -1366,6 +1386,13 @@ def eigene_messung_des_autos(
       (``wallbox_pv_anteil``); ohne Wallbox-Anteil mit der Tages-Quote (Phase 5,
       ``pv_quote``), ohne beide ganz Netz.
     * Sonst im **laufenden** Monat eine Quelle an einem Heim-Feld ⇒ gemessen, 0.
+
+    ⭐ **Stufe 3 (Konzept 7.2 Regel 9 Punkt 3, Anhang D):** trägt das Auto im Monat
+    **Ladeblöcke** (``block``, ``emob_ladebloecke.BlockMonat`` — der Leser
+    ``monats_aus_tagen.emob_je_auto`` hat die Tages-Bedingung W-C schon geprüft), sind sie
+    seine Messung, Menge **und** Anteil: Σ der monatsverteilten Sprünge, der PV-Teil aus den
+    Blockstunden, der Teil ohne ableitbare Stunde mit dem Wallbox-Monatsanteil (D-2). Sie
+    stehen an der Stelle von „Heim: gesamt"; „Heim: PV/Netz" gehen weiter vor (D-5).
     """
     zeile = zeile or {}
     pv_w = zeile.get("ladung_pv_kwh")
@@ -1377,6 +1404,13 @@ def eigene_messung_des_autos(
         pv = float(pv_w or 0)
         netz = float(netz_w) if netz_w is not None else max(0.0, float(gesamt or 0) - pv)
         return pv, netz, False
+    if block is not None:
+        anteil = wallbox_pv_anteil if wallbox_pv_anteil is not None else pv_quote
+        pv, netz = block.aufteilung(anteil)
+        abgeleitet = (
+            wallbox_pv_anteil is None and pv_quote is not None and block.kwh_ohne_pv > 0
+        )
+        return pv, netz, abgeleitet
     if gesamt is not None:
         g = float(gesamt)
         if wallbox_pv_anteil is not None:
@@ -1405,6 +1439,8 @@ def entscheide_emob_heimladung(
     wallbox_ids: Optional[Iterable[int]] = None,
     eauto_in_betrieb: Optional[Iterable[int]] = None,
     dienstwagen_in_betrieb: Optional[Iterable[int]] = None,
+    bloecke: Optional[Mapping[int, Any]] = None,
+    speicher_quote: Optional[float] = None,
 ) -> EmobHeimladungEntscheid:
     """Regel 0 + 1 + 2 + 3 für EINEN Monat — die eine Stelle (Regel 6).
 
@@ -1460,6 +1496,15 @@ def entscheide_emob_heimladung(
             ohne dienstliche Wallbox in Betrieb — als Dienstwagen ohne eigene Messung
             (``dienstwagen_ungemessen``, Community E3). ``None`` ⇒ nur die Dienstwagen mit Zeile.
 
+        bloecke: N-555 Stufe 3 — ``inv_id → BlockMonat`` der Autos (privat und Dienstwagen),
+            deren Ladeblöcke in diesem Monat gelten (``monats_aus_tagen.emob_je_auto``, W-C
+            geprüft). Sie sind die eigene Messung des Autos an der Stelle von „Heim: gesamt"
+            (Regel 9 Punkt 3); Regel 7 vergleicht damit dieselbe Größe. ``None`` ⇒ Stufe 2.
+        speicher_quote: N-569-Ergänzung — der Speicheranteil der Heimladung dieses Monats aus
+            der Tagesebene (``TagesMonatsSumme.abgeleiteter_speicher_anteil``, 0…1). Er füllt
+            nur ``AutoHeimladung.speicher_kwh`` (Ausweis „davon aus dem Speicher", je Auto
+            höchstens sein PV-Teil); PV, Netz, Topf, Rest und Dienstwagen bleiben unberührt.
+
     **Nur eine Wallbox (W-1, Master 26.09., Konzept Regel 2 Schritt 3):** Ist im Monat weder
     ein privates E-Auto noch ein Dienstwagen in Betrieb, gilt die Wallbox als das private
     Auto — der Rest geht in den Topf (``rest_zugeordnet``). „Nicht zugeordnet" setzt
@@ -1479,6 +1524,11 @@ def entscheide_emob_heimladung(
         dienstliche_wallbox_in_betrieb = bool(dwb_je_inv)
     heim_gesamt = frozenset(heim_gesamt or ())
     quellen = frozenset(heimlade_quellen or ())
+    bloecke = dict(bloecke or {})
+    # Stufe 3: ein Dienstwagen mit Blöcken, aber ohne Monatszeile, hat trotzdem eine Messung.
+    for _inv_id in dienstwagen_in_betrieb:
+        if _inv_id in bloecke:
+            dienstwagen_je_inv.setdefault(_inv_id, {})
     auto_ids = set(eauto_je_inv) | set(dienstwagen_je_inv)
 
     def _inv_der_quelle(q):
@@ -1519,6 +1569,7 @@ def entscheide_emob_heimladung(
             heim_gesamt=inv_id in heim_gesamt, hat_quelle=_hat_quelle(inv_id),
             wallbox_pv_anteil=wb_pv_anteil if wallbox_in_betrieb else None,
             pv_quote=pv_quote,
+            block=bloecke.get(inv_id),
         )
         if m is not None:
             gemessen[inv_id] = (m[0], m[1])
@@ -1542,6 +1593,7 @@ def entscheide_emob_heimladung(
                 heim_gesamt=inv_id in heim_gesamt, hat_quelle=_hat_quelle(inv_id),
                 wallbox_pv_anteil=wb_pv_anteil if wallbox_in_betrieb else None,
                 pv_quote=None,  # wie bisher: eine Dienstwagen-Zeile wird nie abgeleitet
+                block=bloecke.get(inv_id),
             )
             if m is not None:
                 dienstlich_je_inv[inv_id] = DienstlicheLadung(m[0], m[1], True)
@@ -1617,6 +1669,20 @@ def entscheide_emob_heimladung(
             else:
                 je_auto[i] = AutoHeimladung(0.0, 0.0, ART_NULL)
 
+    # ── N-569-Ergänzung: davon aus dem Speicher je privatem Auto (nur Ausweis) ───
+    # Mit Blöcken: ihr Speicherteil, der Teil ohne ableitbare Stunde mit dem Tagesanteil;
+    # sonst Ladung × Tagesanteil — je Auto nie mehr als sein PV-Teil (Teilmenge, Anhang E).
+    for _i, _a in list(je_auto.items()):
+        _b = bloecke.get(_i) if _i not in dienstwagen_je_inv else None
+        _genutzt = _b is not None and not _hat_heim_pv_netz(eauto_je_inv.get(_i))
+        if _genutzt and (_b.speicher_kwh is not None or speicher_quote is not None):
+            _sp = (_b.speicher_kwh or 0.0) + _b.kwh_ohne_pv * (speicher_quote or 0.0)
+        elif not _genutzt and speicher_quote is not None:
+            _sp = _a.ladung_kwh * speicher_quote
+        else:
+            continue
+        je_auto[_i] = replace(_a, speicher_kwh=max(0.0, min(_a.pv_kwh, _sp)))
+
     # ── der Topf: die private Heimladung = Σ der privaten Autos (Regel 3, G1) ───
     # In JEDEM Fall, auch wenn die Wallbox über 0 geladen hat: eigene Messungen,
     # zugeordneter Rest und Schätzungen. Gast (nicht zugeordneter Rest) und gemessene
@@ -1686,6 +1752,12 @@ def entscheide_emob_heimladung(
         dienstwagen_ungemessen=frozenset(dw_ungemessen),
         dienstliche_wallbox_in_betrieb=dienstliche_wallbox_in_betrieb,
         wallbox_summe=wb,
+        bloecke_je_auto={
+            i: b for i, b in bloecke.items()
+            if (i in gemessen or i in dw_gemessen) and not _hat_heim_pv_netz(
+                eauto_je_inv.get(i) if i in eauto_je_inv else dienstwagen_je_inv.get(i)
+            )
+        },
     )
 
 

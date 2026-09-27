@@ -320,6 +320,20 @@ def aggregiere_typen(*, investitionen, jahr, monat, resolved, teilzeitraum):
     return {k: _loc[k] for k in ("direct_fields",) if k in _loc}
 
 
+async def emob_bloecke_des_monats(db, anlage_id, investitionen, jahr, monat) -> dict:
+    """N-555 Stufe 3: ``{inv_id: BlockMonat}`` der geltenden Ladeblöcke des Monats.
+
+    Nur mit E-Auto **und** Wallbox (sonst keine Abfrage); die Tages-Bedingung W-C prüft
+    ``monats_aus_tagen.emob_je_auto``.
+    """
+    typen = {getattr(i, "typ", None) for i in investitionen}
+    if not {"e-auto", "wallbox"} <= typen:
+        return {}
+    from backend.services.energie_profil.monats_aus_tagen import emob_je_auto
+
+    return await emob_je_auto(db, anlage_id, investitionen, jahr, monat)
+
+
 async def emob_heimlade_quellen(db, anlage, investitionen, jahr, monat) -> frozenset:
     """Die Heimlade-Felder mit zugeordneter Quelle — nur für den **laufenden** Monat.
 
@@ -335,6 +349,7 @@ def emob_heimladung_pool(
     *, direct_fields, investitionen, jahr, monat, resolved,
     monats_fakt=None, ist_aktueller_monat=True,
     heimlade_quellen=frozenset(), ha_felder_mit_daten=frozenset(),
+    bloecke=None,
 ):
     """E-Mobilitaet: Heimladung nach der **einen Funktion** (veraendert `resolved` in place).
 
@@ -477,6 +492,8 @@ def emob_heimladung_pool(
         heim_gesamt=heim_gesamt,
         wallbox_ids=wallbox_ids,
         heimlade_quellen=heimlade_quellen if ist_aktueller_monat else (),
+        # N-555 Stufe 3 (Regel 9 Punkt 3): geltende Ladeblöcke sind die Messung je Auto.
+        bloecke=bloecke,
         # Die Quote der gespeicherten Schaetzung gilt weiter; eine andere kennt
         # dieser Zweig nicht (die Tagesebene liest die Schicht).
         pv_quote=(

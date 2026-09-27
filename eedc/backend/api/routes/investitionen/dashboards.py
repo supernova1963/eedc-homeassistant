@@ -213,6 +213,16 @@ async def get_hub_leer_grund(
     **demselben Filter wie die Dashboards** (``ist_aktiv_im_monat``), sonst
     könnte der Hinweis neben gefüllten Blöcken stehen.
 
+    ⚠ **Grenze dieser Invariante — ein E-Auto mit nur Restzeilen (N-564).** Gezählt werden
+    gespeicherte ``InvestitionMonatsdaten``. Seit N-555 Stufe 2 bekommt ein privates Auto ohne
+    eigene Monatszeile den Rest der Wallbox, und der E-Auto-Hub zeigt dafür Anzeigezeilen ohne
+    ID (``ladung_aus_rest``, ``dashboard_eauto.py``); seit Stufe 3 kann seine Heimladung auch
+    allein aus Ladeblöcken stammen (``emob_ladebloecke``). Hier kommt dann ``leer=True``
+    heraus, und weil der Adapter (``v4/komponentenAdapter.tsx``, N-564) nur erfasste Zeilen
+    als Monatswerte zählt, **steht der Hinweis „noch keine Monatswerte" in genau diesem Fall
+    neben gefüllten Blöcken** — Kachel und Tabelle tragen den Wallbox-Rest. Das ist benannt,
+    nicht behoben: der Satz sagt dort weiter die Wahrheit über die *erfassten* Monate.
+
     ``leer=False`` ⇒ das Gerät hat Monatswerte, die Sicht zeigt nichts an.
     """
     result = await db.execute(

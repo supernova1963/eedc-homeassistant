@@ -339,6 +339,10 @@ class TagesZusammenfassung(Base):
     # gibt (P4-Linie).
     emob_ladung_pv_abgeleitet_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     emob_ladung_netz_abgeleitet_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # N-569-Ergänzung (Konzept Heimladung Anhang E, Gernot 27.09.2026): **davon aus dem
+    # Speicher** — Teilmenge von `emob_ladung_pv_abgeleitet_kwh` (PV = Direkt + Speicher),
+    # keine dritte Menge. `None` ohne Speicherzähler. Ausweis, wirkt auf keine Rechnung.
+    emob_ladung_speicher_abgeleitet_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # Per-Komponenten Tages-kWh (Summe der stündlichen kW-Werte)
     # z.B. {"pv_3": 22.5, "waermepumpe_5": -8.3, "wallbox_7": -12.1, "haushalt": -15.2}

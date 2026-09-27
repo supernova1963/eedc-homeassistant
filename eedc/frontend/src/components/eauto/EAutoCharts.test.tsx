@@ -44,3 +44,52 @@ describe('EAutoMonatsTabelle — Monat aus Wallbox-Rest (N-564)', () => {
     expect(DATEN.map(istRestZeile)).toEqual([false, true, false])
   })
 })
+
+// ─── N-555 Stufe 3 — „aus n Ladevorgängen" (Konzept Heimladung Regel 9) ───────
+import { ladevorgaengeNotiz, LADEVORGAENGE_HINWEIS } from './EAutoCharts'
+
+describe('EAutoMonatsTabelle — Monat aus Ladevorgängen (N-555 Stufe 3)', () => {
+  const BLOECKE = [
+    zeile(7, { km_gefahren: 900, ladung_pv_kwh: 20, ladung_netz_kwh: 10, ladung_aus_bloecken: true, ladevorgaenge_bloecke: 3 }),
+    zeile(8, { km_gefahren: 700, ladung_pv_kwh: 30, ladung_netz_kwh: 4, ladung_aus_bloecken: true, ladevorgaenge_bloecke: 5, ladevorgaenge_ungedeckt: 1 }),
+    zeile(9, { km_gefahren: 500, ladung_pv_kwh: 9, ladung_netz_kwh: 1, ladung_aus_bloecken: true, ladevorgaenge_bloecke: 1 }),
+    zeile(10, { km_gefahren: 100, ladung_pv_kwh: 1, ladung_netz_kwh: 1 }),
+  ]
+
+  it('nennt die Zahl der Ladevorgänge und die mit Wallbox-Lücke, sonst nichts', () => {
+    expect(BLOECKE.map(ladevorgaengeNotiz)).toEqual([
+      'aus 3 Ladevorgängen', 'aus 5 Ladevorgängen, 1 mit Wallbox-Lücke', 'aus 1 Ladevorgang', null,
+    ])
+  })
+
+  it('zeigt die Notiz in der Monatszelle mit dem Hinweis als Tooltip', () => {
+    render(<EAutoMonatsTabelle monatsdaten={BLOECKE} />)
+    const [jul, aug, , okt] = screen.getAllByRole('row').slice(1)
+    expect(within(jul).getByText('· aus 3 Ladevorgängen').getAttribute('title')).toBe(LADEVORGAENGE_HINWEIS)
+    expect(within(aug).getByText('· aus 5 Ladevorgängen, 1 mit Wallbox-Lücke')).toBeTruthy()
+    expect(within(okt).queryByText(/Ladevorg/)).toBeNull()
+  })
+})
+
+// ─── N-569-Ergänzung — „davon aus dem Speicher" (Konzept Heimladung Anhang E) ─────
+import { speicherUnterzeile, speicherNotiz } from './EAutoCharts'
+
+describe('E-Auto-Hub — davon aus dem Speicher (N-569)', () => {
+  it('Kachel-Unterzeile nur mit einem Wert über 0', () => {
+    expect(speicherUnterzeile(31.4)).toBe('davon aus dem Speicher 31 %')
+    expect(speicherUnterzeile(0)).toBeUndefined()
+    expect(speicherUnterzeile(null)).toBeUndefined()
+    expect(speicherUnterzeile(undefined)).toBeUndefined()
+  })
+
+  it('Monatstabelle nennt die Speicher-kWh als Notiz, ohne Speicherwert nichts', () => {
+    const mit = zeile(7, { km_gefahren: 900, ladung_pv_kwh: 20, ladung_netz_kwh: 10, ladung_speicher_kwh: 6.25 })
+    const ohne = zeile(8, { km_gefahren: 700, ladung_pv_kwh: 30, ladung_netz_kwh: 4 })
+    expect(speicherNotiz(mit)).toBe('davon 6,3 kWh aus dem Speicher')
+    expect(speicherNotiz(ohne)).toBeNull()
+    render(<EAutoMonatsTabelle monatsdaten={[mit, ohne]} />)
+    const [jul, aug] = screen.getAllByRole('row').slice(1)
+    expect(within(jul).getByText('· davon 6,3 kWh aus dem Speicher')).toBeTruthy()
+    expect(within(aug).queryByText(/aus dem Speicher/)).toBeNull()
+  })
+})

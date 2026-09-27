@@ -318,6 +318,20 @@ async def lade_monats_fakten(
                 db, _anlage, investitionen, *_laufend,
             )
 
+    # N-555 Stufe 3 (Konzept 7.2 Regel 9 Punkt 3, Anhang D): die Ladeblöcke je Auto — lokal,
+    # eine Abfrage, nur mit E-Auto UND Wallbox. Der Leser prüft die Tages-Bedingung W-C
+    # (jeder Tag des Monats mit Regelmarke); ohne sie rechnet der Monat nach Stufe 2.
+    _bloecke: dict = {}
+    if any(i.typ == "e-auto" for i in investitionen) and any(
+        i.typ == "wallbox" for i in investitionen
+    ):
+        from backend.services.energie_profil.monats_aus_tagen import emob_je_auto_monate
+
+        _bloecke = await emob_je_auto_monate(
+            db, anlage_id, investitionen,
+            [k for k in kandidaten if _im_fenster(k, von, bis)],
+        )
+
     fakten: list[MonatsFakt] = []
     for schluessel in sorted(k for k in kandidaten if _im_fenster(k, von, bis)):
         fakten.append(
@@ -337,6 +351,7 @@ async def lade_monats_fakten(
                 preis_cache=preis_cache,
                 preis_messung=preis_messung,
                 heimlade_quellen=_laufend_quellen if schluessel == _laufend else frozenset(),
+                bloecke=_bloecke.get(schluessel),
             )
         )
     return fakten

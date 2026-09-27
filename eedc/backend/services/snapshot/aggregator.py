@@ -375,6 +375,8 @@ async def snapshot_tagestabelle(
     anlage,
     investitionen_by_id: dict,
     datum: date,
+    *,
+    zusatz_schluessel: Optional[dict[str, Optional[str]]] = None,
 ) -> Optional[TagesTabelle]:
     """Stunden **und** Tag aus Zähler-Snapshots (Standalone/MQTT) — T3, E1, E5.
 
@@ -399,6 +401,10 @@ async def snapshot_tagestabelle(
     [Vortag 23:00, 23:00) wie im HA-Pfad, nicht mehr im Kalendertag. Die
     Tageszeile trägt die Regelmarke (R9); `boundary_range.tageszeile_ist_rueckwaerts`
     liest daran ab, dass ihre Teilmengen im selben Fenster zu lesen sind.
+
+    ``zusatz_schluessel`` (N-555 Stufe 3, Anhang D, D-6): ``{sensor_key: entity}`` der
+    Heimlade-Zähler je Auto — dieselbe Slot-Bildung (T3, E1, R4), Ergebnis roh in
+    ``TagesTabelle.zusatz_slots``; die Rechnung der Tabelle sieht sie nicht.
     """
     eintraege, entity_je_key, quellen_energy = await _snapshot_eintraege(
         db, anlage, investitionen_by_id, datum,
@@ -409,8 +415,12 @@ async def snapshot_tagestabelle(
     rng = BoundaryRange.for_hourly_slots(datum)
     slots_je_key: dict[str, dict[int, tuple[float, int]]] = {}
     tagesreset: set[str] = set()
-    for sk in dict.fromkeys(e.schluessel for e in eintraege):
-        entity_id = entity_je_key.get(sk)
+    eigene_keys = list(dict.fromkeys(e.schluessel for e in eintraege))
+    zusatz = {
+        k: v for k, v in (zusatz_schluessel or {}).items() if k not in set(eigene_keys)
+    }
+    for sk in [*eigene_keys, *zusatz]:
+        entity_id = entity_je_key.get(sk) if sk not in zusatz else zusatz[sk]
         staende: dict[int, Optional[float]] = {}
         for offset in rng.boundary_offsets:
             staende[offset] = await get_snapshot(
@@ -448,12 +458,15 @@ async def snapshot_tagestabelle(
         if slots:
             slots_je_key[sk] = slots
 
+    zusatz_slots = {k: slots_je_key.pop(k) for k in list(zusatz) if k in slots_je_key}
     if not slots_je_key:
         return None
-    return baue_tagestabelle(
+    tabelle = baue_tagestabelle(
         anlage, investitionen_by_id, datum, eintraege, slots_je_key,
-        ohne_tageswert=frozenset(tagesreset),
+        ohne_tageswert=frozenset(tagesreset - set(zusatz)),
     )
+    tabelle.zusatz_slots = zusatz_slots
+    return tabelle
 
 
 async def get_daily_counter_deltas_by_inv(

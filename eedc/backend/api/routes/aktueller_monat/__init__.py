@@ -93,6 +93,7 @@ from backend.api.routes.aktueller_monat.aggregation import (  # Vorlage 2
     _WP_WAERME_D1_SUFFIX,
     aggregiere_typen,
     berechne_bilanzwerte,
+    emob_bloecke_des_monats as _emob_bloecke_des_monats,
     emob_heimlade_quellen,
     emob_heimladung_pool,
     extrahiere_werte,
@@ -781,6 +782,9 @@ async def get_aktueller_monat(
             if ist_aktueller_monat else frozenset()
         ),
         ha_felder_mit_daten=ha_felder_mit_daten,
+        # N-555 Stufe 3: die geltenden Ladeblöcke des Monats (W-C geprüft) — dieselbe
+        # Messung je Auto wie in den Monats-Fakten, auch wenn hier entschieden wird.
+        bloecke=await _emob_bloecke_des_monats(db, anlage.id, investitionen, jahr, monat),
     )
     emob_entscheid = _out.get("emob_entscheid")
     # ── extrahiere_werte (Vorlage 2: Abschnitt in aggregation.py, Schnittstelle 2 ein / 10 aus) ──

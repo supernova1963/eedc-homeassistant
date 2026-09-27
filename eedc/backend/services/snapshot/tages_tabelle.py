@@ -92,6 +92,11 @@ class TagesTabelle:
     pv_marken: dict[str, str] = field(default_factory=dict)
     verworfen: dict[str, float] = field(default_factory=dict)
     nachtrag: dict[str, float] = field(default_factory=dict)
+    #: N-555 Stufe 3 (Konzept 7.2 Anhang D, D-6): die Slots ``{h: (delta, n)}`` der
+    #: **zusätzlich** gelesenen Zähler (Heimlade-Zähler je Auto), roh aus demselben
+    #: Lesezugriff. Sie gehen in keine Achse und in keinen Tageswert — die Rechnung der
+    #: Tabelle sieht sie nicht; nur der Ladeblock-Hook liest sie.
+    zusatz_slots: dict[str, dict[int, tuple[float, int]]] = field(default_factory=dict)
 
 
 def baue_tagestabelle(

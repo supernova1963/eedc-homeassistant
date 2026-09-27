@@ -776,9 +776,18 @@ async def lade_zaehler_und_counter(
     # verworfenen Mengen. Bis zum Umbau las `komponenten_tagesgesamt_und_peaks`
     # HA ein zweites Mal über `get_komponenten_tageskwh_lts`.
     lts_tabelle = None
+    # N-555 Stufe 3 (Konzept 7.2 Anhang D, D-6): die Heimlade-Zähler je Auto werden im
+    # SELBEN Lesezugriff mitgelesen (`zusatz_slots`) — kein zweiter HA-Zugriff. Die
+    # Rechnung der Tabelle sieht sie nicht; der Ladeblock-Hook in `aggregate_day` liest sie.
+    from backend.services import emob_ladebloecke_speicher as _ladebloecke
     try:
         from backend.services.snapshot import lts_aggregator
-        lts_tabelle = await lts_aggregator.lts_tagestabelle(anlage, invs_by_id, datum)
+        # Ohne Fahrzeug-Zähler ruft der Aggregator die Tabelle genau wie vorher auf.
+        _zusatz_lts = _ladebloecke.fahrzeug_zaehler_lts(anlage, invs_by_id, datum)
+        lts_tabelle = await lts_aggregator.lts_tagestabelle(
+            anlage, invs_by_id, datum,
+            **({"zusatz_schluessel": _zusatz_lts} if _zusatz_lts else {}),
+        )
     except Exception as e:
         logger.warning(
             f"Anlage {anlage.id}, {datum}: HA-LTS-Pfad fehlgeschlagen: "
@@ -798,8 +807,17 @@ async def lade_zaehler_und_counter(
         tages_tabelle = None
         try:
             from backend.services.snapshot import aggregator as snapshot_aggregator
+            try:
+                _zusatz_snap = {
+                    k: v[1] for k, v in (await _ladebloecke.fahrzeug_zaehler_snapshot(
+                        db, anlage, invs_by_id, datum,
+                    )).items()
+                }
+            except Exception:
+                _zusatz_snap = {}  # ohne Fahrzeug-Zähler rechnet der Tag wie vorher
             tages_tabelle = await snapshot_aggregator.snapshot_tagestabelle(
                 db, anlage, invs_by_id, datum,
+                **({"zusatz_schluessel": _zusatz_snap} if _zusatz_snap else {}),
             )
         except Exception as e:
             logger.warning(
@@ -1353,6 +1371,10 @@ def baue_zusammenfassung(
         emob_ladung_netz_abgeleitet_kwh=(
             lade_anteil.netz_kwh if lade_anteil is not None else None
         ),
+        # N-569-Ergänzung: davon aus dem Speicher (Teilmenge, nur Ausweis).
+        emob_ladung_speicher_abgeleitet_kwh=(
+            lade_anteil.speicher_kwh if lade_anteil is not None else None
+        ),
         # Preserve-Logik nur bei manueller Reaggregation — Pattern-Adaption
         # v3.32.4 (#290, Audit §4.2). Ursprung: Monatsdaten-Kontext, wo
         # manuell editierte Werte vor Scheduler-Überschreibung geschützt
@@ -1613,6 +1635,22 @@ async def aggregate_day(
         wp_starts_pro_stunde, wp_betriebsstunden_pro_stunde, komponenten_starts,
         tages_tabelle,
     ) = await lade_zaehler_und_counter(anlage, datum, db)
+
+    # ── N-555 Stufe 3: Ladeblöcke (Konzept 7.2 Regel 9, Anhang D) ──────────
+    # Direkt nach der Slot-Tabelle des Tages: Blöcke der Sprünge an D bilden und in
+    # `emob_ladebloecke` ersetzen (idempotent je Tag, P9). Die Stunden und Tage dieser
+    # Aggregation berührt der Hook nicht; scheitert er, bleibt der Tag gerechnet und die
+    # Monate rechnen nach Stufe 2 (W-C: ohne Blöcke kein Stufe-3-Wert).
+    try:
+        from backend.services.emob_ladebloecke_speicher import aktualisiere_ladebloecke_des_tages
+        await aktualisiere_ladebloecke_des_tages(
+            db, anlage, datum, invs_by_id, tages_tabelle, kwh_source_label,
+        )
+    except Exception as e:
+        logger.warning(
+            f"Anlage {anlage.id}, {datum}: Ladeblöcke (N-555 Stufe 3) nicht gebildet: "
+            f"{type(e).__name__}: {e}"
+        )
 
     (
         preserved_felder, preserved_quellen,

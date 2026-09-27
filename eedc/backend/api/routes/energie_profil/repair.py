@@ -36,6 +36,7 @@ from backend.core.berechnungen import (
     pruefe_tep_komponenten_intern_konsistenz,
 )
 from backend.models.anlage import Anlage
+from backend.models.emob_ladeblock import EmobLadeblock
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 from backend.services import repair_orchestrator as orch
 from backend.services.repair_orchestrator import (
@@ -125,6 +126,11 @@ async def delete_rohdaten(
     del_tage = await db.execute(
         delete(TagesZusammenfassung).where(TagesZusammenfassung.anlage_id == anlage_id)
     )
+    # N-555 Stufe 3 (NF-1): die Ladeblöcke sind sitzungsgebunden und aus denselben Tagen
+    # gebildet — gelöscht wird jeder Tag, also jeder Block der Anlage. Rechnerisch wäre ein
+    # Rest folgenlos (ohne Tageszeilen mit Regelmarke gelten keine Blöcke, W-C); der
+    # Scheduler bildet sie mit den Tagen neu.
+    await db.execute(delete(EmobLadeblock).where(EmobLadeblock.anlage_id == anlage_id))
     # Flag zurücksetzen, damit der nächste Monatsabschluss den Auto-Vollbackfill
     # aus HA Statistics erneut anstößt
     anlage.vollbackfill_durchgefuehrt = False
@@ -548,6 +554,8 @@ async def delete_alle_rohdaten(
     """
     del_stunden = await db.execute(delete(TagesEnergieProfil))
     del_tage = await db.execute(delete(TagesZusammenfassung))
+    # N-555 Stufe 3 (NF-1): mit allen Tagen gehen alle Ladeblöcke (s. `delete_rohdaten`).
+    await db.execute(delete(EmobLadeblock))
     # Flag bei ALLEN Anlagen zurücksetzen, damit der nächste Monatsabschluss
     # den Auto-Vollbackfill aus HA Statistics erneut anstößt
     await db.execute(update(Anlage).values(vollbackfill_durchgefuehrt=False))

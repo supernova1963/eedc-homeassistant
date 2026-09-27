@@ -59,8 +59,33 @@ class EmobChecks:
                 doppel.update(int(i) for i in inv_ids if typ_by_id.get(i) == "e-auto")
         return doppel
 
-    def _check_emob_pool_pflege(
+    def _fenster_monate(self, heute: date) -> list[tuple[int, int]]:
+        return [
+            (heute.year + ((heute.month - 1 - o) // 12), ((heute.month - 1 - o) % 12) + 1)
+            for o in range(self.EMOB_POOL_FENSTER_MONATE)
+        ]
+
+    async def _emob_bloecke_fuer_pflege(
         self, anlage: Anlage, heute: "date | None" = None,
+    ) -> dict:
+        """N-555 Stufe 3: die geltenden Ladeblöcke des Beobachtungsfensters (W-C geprüft).
+
+        Regel 7 vergleicht damit dieselbe Größe wie die Rechnung — Σ der monatsverteilten
+        Sprünge je Auto gegen den Wallbox-Monatswert (Konzept 7.2 Regel 9 Punkt 3, W3).
+        """
+        from backend.core.investition_parameter import ist_dienstlich
+        from backend.services.energie_profil.monats_aus_tagen import emob_je_auto_monate
+
+        invs = list(anlage.investitionen)
+        if not any(i.typ == "wallbox" and not ist_dienstlich(i) for i in invs):
+            return {}
+        return await emob_je_auto_monate(
+            self.db, anlage.id, invs, self._fenster_monate(heute or date.today()),
+            heute=heute,
+        )
+
+    def _check_emob_pool_pflege(
+        self, anlage: Anlage, heute: "date | None" = None, bloecke: "dict | None" = None,
     ) -> list[CheckErgebnis]:
         """Regel 7: „Autos zusammen mehr als die Wallbox" und „Heimladung am Dienstwagen fehlt".
 
@@ -81,6 +106,10 @@ class EmobChecks:
         hängt, meldet schon `_check_emob_sensor_doppelmapping` — es zählt hier nicht.
 
         ``heute`` (Probe) legt das Fenster fest; ohne ihn die Uhr des Prozesses.
+        ``bloecke`` (N-555 Stufe 3): ``(jahr, monat) → {inv_id: BlockMonat}`` der geltenden
+        Ladeblöcke (``_emob_bloecke_fuer_pflege``) — die Messung eines Autos mit Zähler ist
+        dann Σ seiner monatsverteilten Sprünge (Regel 9 Punkt 3), dieselbe Größe wie in der
+        Rechnung; so meldet ein Ladevorgang über den Monatswechsel nicht mehr.
         """
         from backend.core.field_definitions import ist_heim_gesamt
         from backend.core.investition_parameter import ist_dienstlich
@@ -132,6 +161,7 @@ class EmobChecks:
                 wallbox_ids={w.id for w in privat_wb},
                 eauto_in_betrieb=[i.id for i in eautos],
                 dienstwagen_in_betrieb=[i.id for i in dienstwagen],
+                bloecke=(bloecke or {}).get((jahr, monat)),
             )
             wallbox = e.wallbox_summe.ladung_kwh
             # (a) Autos zusammen mehr als die Wallbox

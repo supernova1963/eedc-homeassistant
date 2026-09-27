@@ -50,6 +50,7 @@ async def _baue_fakt(
     preis_cache: Optional[dict] = None,
     preis_messung: Optional[PreisMessung] = None,
     heimlade_quellen: frozenset = frozenset(),
+    bloecke: Optional[dict] = None,
 ) -> MonatsFakt:
     jahr, monat = schluessel
 
@@ -186,6 +187,13 @@ async def _baue_fakt(
             if i.typ == "e-auto" and ist_dienstlich(i)
             and i.ist_aktiv_im_monat(jahr, monat)
         ],
+        # N-555 Stufe 3 (Regel 9 Punkt 3): hat ein Auto im Monat geltende Ladeblöcke, sind
+        # sie seine Messung (Menge und Anteil), nicht der gespeicherte „Heim: gesamt".
+        bloecke=bloecke,
+        # N-569-Ergänzung: „davon aus dem Speicher" — nur Ausweis je Auto.
+        speicher_quote=(
+            tages_summe.abgeleiteter_speicher_anteil if tages_summe is not None else None
+        ),
     )
     pool = entscheid.pool
     if entscheid.anteil_abgeleitet:

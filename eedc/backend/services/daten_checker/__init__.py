@@ -154,7 +154,9 @@ class DatenChecker(
         ergebnisse.extend(await self._check_leere_tage_trotz_zaehler(anlage))
         ergebnisse.extend(await self._check_pv_ueber_erfassung(anlage))
         ergebnisse.extend(self._check_wp_arbeitszahl_unplausibel(anlage))
-        ergebnisse.extend(self._check_emob_pool_pflege(anlage))
+        ergebnisse.extend(self._check_emob_pool_pflege(
+            anlage, bloecke=await self._emob_bloecke_fuer_pflege(anlage),
+        ))
         ergebnisse.extend(self._check_emob_pv_ueber_gesamt(anlage))
         ergebnisse.extend(self._check_phev_anteil_unbestimmt(anlage))
         ergebnisse.extend(self._check_emob_sensor_doppelmapping(anlage))

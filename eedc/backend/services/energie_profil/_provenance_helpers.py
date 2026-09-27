@@ -43,6 +43,10 @@ _TZ_SKIP_COLUMNS = frozenset({
     # N-567: `nachtrag` benennt Mengen der Zeile (welche Achse einen Nachtrag nach
     # Nullstunden trägt) — ebenfalls eine Markierung, kein Aggregat-Wert.
     "nachtrag",
+    # N-569-Ergänzung: „davon aus dem Speicher" ist eine Teilmenge von
+    # `emob_ladung_pv_abgeleitet_kwh` — dessen Herkunfts-Marke (abgeleitet,
+    # Einspeise-Deckung) gilt für ihn mit; keine eigene Herkunft.
+    "emob_ladung_speicher_abgeleitet_kwh",
 })
 
 # TagesEnergieProfil:
