@@ -66,7 +66,8 @@ eedc-homeassistant/           ← Source of Truth
 ### Entwicklungsserver starten
 
 ```bash
-# Backend (Terminal 1)
+# Backend (Terminal 1) — Dev-Venv laeuft auf Python 3.11 (= Add-on-Image python:3.11-slim und CI; seit 27.09.2026,
+# vorher 3.12 = System-Python der Box). Neu anlegen: `uv venv --python 3.11 backend/venv && uv pip install --python backend/venv/bin/python -r backend/requirements.txt -r backend/requirements-dev.txt`
 cd eedc && source backend/venv/bin/activate
 uvicorn backend.main:app --reload --port 8099
 
