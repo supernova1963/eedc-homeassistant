@@ -26,6 +26,7 @@ from typing import Optional
 from sqlalchemy import select
 
 from backend.core.zahlenformat import fmt_zahl
+from backend.core.berechnungen.spannen import verbrauch_gebuendelt
 
 from backend.core.berechnungen.fenster import (
     arbitrage_vorschlag,
@@ -183,6 +184,14 @@ def _ueberschuss_jetzt_kw(zeile) -> Optional[float]:
     Sensoren, von denen immer einer 0 ist, wären die schlechtere Antwort auf
     dieselbe Frage. Der Defizit-Betrag reist als Attribut mit.
     """
+    # ⛔ Eine **gebündelte** Zeile (Zählerlücken wie HA, Vorlage §2: nach einer
+    # Recorder-Lücke trägt die erste Stunde danach die Energie von n Stunden,
+    # `spannen`) ist kein Stundenmittel — ihr Überschuss wäre das n-Fache und
+    # liefe als „jetzt" in Automationen. Sie zählt hier wie eine fehlende
+    # Stunde (so stand die Zeile vor 4.0.51 leer); die Energie bleibt in
+    # `eedc_ueberschuss_heute_kwh` über die Tageszeile erhalten.
+    if verbrauch_gebuendelt(zeile):
+        return None
     ueber = zeile.ueberschuss_kw
     defizit = zeile.defizit_kw
     if ueber is None and defizit is None:

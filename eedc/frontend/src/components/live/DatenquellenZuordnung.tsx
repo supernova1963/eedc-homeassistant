@@ -706,7 +706,7 @@ function HistorieHinweisBlock({
       </p>
       <p className="mt-2">
         Wenn du die zurückliegenden Tage mit der neuen Zuordnung neu rechnen lassen
-        willst, geht das in der Reparatur-Werkbank („Zeitraum neu aggregieren", bis zu
+        willst, geht das in der Reparatur-Werkbank („Mehrere Tage neu aggregieren", bis zu
         31 Tage je Lauf). Deine Monatsdaten bleiben dabei unberührt.
       </p>
       <div className="mt-3 flex flex-wrap gap-2">

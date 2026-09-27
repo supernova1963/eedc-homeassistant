@@ -160,9 +160,11 @@ def bkw_restwerte(
     Funktion gleich; sie rechnet nur ``Wert − Σ Werte der Kinder``.
 
     **Die Regel (N-536).** Ein Balkonkraftwerk mit `pv-module`-Kindern ist
-    Träger wie ein Wechselrichter: seine Kinder tragen die Erzeugung. Ohne
-    Lücke bei ihnen trägt es **nichts** mehr (Rest 0); mit Lücke trägt es genau
-    das, was seine Kinder nicht messen. Ohne Kinderwerte ist der Rest sein
+    Träger wie ein Wechselrichter: seine Kinder tragen die Erzeugung. Messen
+    die Kinder alles, trägt es **nichts** mehr (Rest 0); messen sie weniger —
+    Lücke oder eine nicht gemessene Menge —, trägt es genau den Rest
+    (``max(0, eigen − Σ Kinder)``; seit „Zählerlücken wie HA" E4 auch im
+    Tageswert). Ohne Kinderwerte ist der Rest sein
     ganzer Wert — dann ändert sich gegenüber vorher nichts, und genau darauf
     beruht der Kern der P11-Ausnahme 4b: der Wechselrichter eines
     Balkonkraftwerks ist bei den meisten Anlagen die EINZIGE Live-Quelle.

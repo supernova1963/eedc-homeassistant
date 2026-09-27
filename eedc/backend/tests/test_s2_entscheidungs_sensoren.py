@@ -212,6 +212,31 @@ async def test_e1_jetzt_ist_eine_zahl_mit_vorzeichen(db, monkeypatch):
     assert _sv(werte, "eedc_ueberschuss_verfuegbar").zusatz_attribute["seit"] == "09:00"
 
 
+async def test_e1_jetzt_ueberspringt_eine_gebuendelte_stunde(db, monkeypatch):
+    """Zählerlücken wie HA (Doku-Durchgang 4.0.51, Verdacht 1): nach einer Recorder-
+    Lücke trägt die erste Stunde danach die Energie von n Stunden (`spannen`). Sie ist
+    kein Stundenmittel — `eedc_ueberschuss_jetzt_kw` und `eedc_ueberschuss_verfuegbar`
+    (steuerungsrelevant) nehmen sie NICHT als „letzte volle Stunde", sondern die
+    Stunde davor; `seit` bleibt eine Beginn-Angabe des echten Laufs."""
+    anlage = await _anlage(db)
+    await _tagesprofil(db, anlage.id, HEUTE, bis_stunde=11)
+    # Slot 12 bündelt drei Stunden (9–12 Uhr Recorder-Lücke): 7,5 kW „Mittel" wären das Dreifache.
+    db.add(TagesEnergieProfil(
+        anlage_id=anlage.id, datum=HEUTE, stunde=12,
+        ueberschuss_kw=7.5, defizit_kw=0.0, netzbezug_kw=0.0,
+        spannen={"pv": 3, "netzbezug": 3, "einspeisung": 3},
+    ))
+    await db.commit()
+    _stelle_quellen(monkeypatch, _prognose(), _preis())
+
+    werte, _ = await _rechne(db, anlage)
+    sv = _sv(werte, "eedc_ueberschuss_jetzt_kw")
+    assert sv.value == 2.5, "die gebündelte Stunde 12 zählt nicht — Stunde 11 ist die letzte volle"
+    assert sv.zusatz_attribute["stunde_bis"] == "11:00"
+    assert _sv(werte, "eedc_ueberschuss_verfuegbar").value is True
+    assert _sv(werte, "eedc_ueberschuss_verfuegbar").zusatz_attribute["seit"] == "09:00"
+
+
 async def test_e1_jetzt_wird_negativ_wenn_defizit_herrscht(db, monkeypatch):
     anlage = await _anlage(db)
     heute = HEUTE
