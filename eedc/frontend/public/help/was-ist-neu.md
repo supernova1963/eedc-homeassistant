@@ -1,11 +1,44 @@
 # Was ist neu
 
-> **Stand:** September 2026 (v4.0.51)
+> **Stand:** September 2026 (v4.0.52)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.52 — 27. September 2026
+
+**In dieser Version:** ein geleertes Eingabefeld legt keine Auswertung mehr lahm · die Zählerstand-Linie ist im Dunkelmodus wieder zu sehen.
+
+**Leere Eingabefelder: Auswertungen laufen weiter**
+
+**Betrifft dich das?** Ja, wenn du an einer Komponente ein Zahlenfeld leerst — zum
+Beispiel den PV-Ladeanteil am E-Auto, damit die Prognose mit deinem **gemessenen**
+Anteil rechnet.
+
+**Was war:** Ein geleertes Feld ließ *Auswertungen → ROI* für die ganze Anlage mit
+einer Fehlermeldung stehen; ein geleerter Speicher-Wirkungsgrad konnte dasselbe in
+*Cockpit → Aussicht* auslösen. Der einzige Rückweg war, wieder irgendeine Zahl
+einzutragen.
+
+**Was jetzt:** Ein geleertes Feld heißt „nicht gepflegt" — es greift der gemessene
+Wert, die nächste Stufe oder der Standard, und die Auswertung läuft weiter. Eine
+eingetragene **0** bleibt dabei eine 0 (sie ist eine Aussage, kein leeres Feld).
+Den PV-Ladeanteil zu leeren ist damit wie vorgesehen der Weg zum gemessenen Anteil.
+
+**Zählerstände: kräftige Linie statt Grau in Grau**
+
+**Betrifft dich das?** Ja, wenn du einen Verbrauchszähler (Wasser, Gas, …) erfasst
+und den Verlauf in *Cockpit → Tag/Monat/Jahr* ansiehst — besonders im Dunkelmodus.
+
+**Was war:** Die Verlaufslinie war grau und ging im Dunkelmodus gegen das
+gestrichelte Gitter unter; das Gitter war sogar heller als die Linie.
+
+**Was jetzt:** Die Linie trägt ein kräftiges Wasserblau, und das Gitter nimmt sich
+im Dunkelmodus in **allen** Diagrammen zurück. Danke an MartyBr für den Screenshot.
 
 ---
 

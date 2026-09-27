@@ -7,6 +7,17 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.0.52] - 2026-09-27 — Leere Eingabefelder legen keine Auswertung mehr lahm, Diagramme mit klarem Kontrast im Dunkelmodus
+
+### Fixed
+
+- **Ein geleertes Zahlenfeld an einer Komponente bricht keine Auswertung mehr ab.** Wer an einem E-Auto ein Prognose-Feld leerte — etwa den PV-Ladeanteil, um ab sofort mit dem *gemessenen* Anteil zu rechnen —, bekam in *Auswertungen → ROI* nur noch eine Fehlermeldung für die ganze Anlage; dasselbe konnte ein geleerter Speicher-Wirkungsgrad in *Cockpit → Aussicht* und *Komponenten → Speicher* auslösen. Jetzt gilt ein geleertes Feld überall als „nicht gepflegt": Es greift der gemessene Wert, die nächste Stufe der Kaskade oder der Standard — eine eingetragene 0 bleibt dagegen eine 0. Ein neuer Wächter prüft das für **jedes** Parameterfeld aller Komponententypen, auch künftige. (N-571; betroffen seit v4.0.35)
+- **Die Zählerstand-Linie ist wieder zu sehen.** Der Verlauf eines Verbrauchszählers (z. B. Wasser) in *Cockpit → Tag/Monat/Jahr* zeichnete eine graue Linie, die im Dunkelmodus gegen das Gitter unterging — das Gitter war dort sogar heller als die Linie. Die Linie trägt jetzt ein kräftiges Wasserblau, und das Diagramm-Gitter nimmt sich in **allen** Diagrammen im Dunkelmodus zurück, statt vor den Daten zu stehen. Danke MartyBr für den Screenshot. (N-570)
+
+### Intern
+
+- Neuer Chart-Wächter `check:charts` R4: kein Diagramm-Gitter mehr im hellen Recharts-Default; neuer Backend-Wächter gegen rohe Parameter-Leser (Registry-getrieben, prüft auch `null` aus Altbeständen).
+
 ## [4.0.51] - 2026-09-27 — Zählerlücken rechnen wie Home Assistant, jedes E-Auto trägt seine eigene Heimladung, die Prognose ist verfeinert
 
 ### Fixed
