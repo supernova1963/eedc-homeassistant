@@ -138,12 +138,18 @@ async def get_mqtt_settings(db: AsyncSession = Depends(get_db)):
             "quelle": "env",
         }
     val = setting.value
+    # N-577: Ein Leerstring im DB-Block heißt „nicht gesetzt" — Start und Export
+    # nehmen dann das ENV-Passwort (`resolve_broker_config`). Der Platzhalter
+    # folgt derselben Kaskade, sonst zeigt das Formular ein leeres Feld, obwohl
+    # ein Passwort wirkt, und „Verbindung testen" schickt keins.
+    from backend.services.mqtt_broker_settings import resolve_broker_config
+    passwort_wirkt = bool((await resolve_broker_config(db)).password)
     return {
         "enabled": enabled,
         "host": val.get("host", "localhost"),
         "port": val.get("port", 1883),
         "username": val.get("username", ""),
-        "password": "***" if val.get("password") else "",
+        "password": "***" if passwort_wirkt else "",
         "quelle": "db",
     }
 
@@ -227,7 +233,8 @@ async def save_mqtt_settings(
     if setting and setting.value:
         old_password = setting.value.get("password", "")
 
-    if password == "***":
+    platzhalter = password == "***"
+    if platzhalter:
         password = old_password
 
     new_value = {
@@ -247,6 +254,17 @@ async def save_mqtt_settings(
 
     await db.commit()
 
+    # N-577: In die DB geht nur, was dort schon stand (oben) — ein ENV-Passwort
+    # (Add-on-Optionen) wird NICHT in den Block kopiert, sonst wirkten die
+    # Add-on-Optionen danach nicht mehr. Für den Sofort-Start löst der
+    # Platzhalter aber über dieselbe Kaskade auf wie der Start in
+    # `main.py::_load_mqtt_config` (DB → ENV); bis hierher lief der Subscriber
+    # in diesem Fall bis zum nächsten Neustart ohne Passwort.
+    live_password = password or None
+    if platzhalter:
+        from backend.services.mqtt_broker_settings import resolve_broker_config
+        live_password = (await resolve_broker_config(db)).password
+
     from backend.services.mqtt_inbound_service import (
         get_mqtt_inbound_service, init_mqtt_inbound_service
     )
@@ -258,7 +276,7 @@ async def save_mqtt_settings(
         svc = init_mqtt_inbound_service(
             host=host, port=port,
             username=username or None,
-            password=password or None,
+            password=live_password,
         )
         started = await svc.start()
 
@@ -267,7 +285,7 @@ async def save_mqtt_settings(
             topic_list = [t["topic"] for t in topics_resp.get("topics", [])]
             if topic_list:
                 published = await _publish_initial_values(
-                    host, port, username or None, password or None, topic_list,
+                    host, port, username or None, live_password, topic_list,
                 )
                 logger.info("MQTT-Inbound: %d Topics mit Initialwert published", published)
 
@@ -325,7 +343,10 @@ async def get_mqtt_topics(
 
 
 @router.post("/mqtt/test")
-async def test_mqtt_connection(config: dict):
+async def test_mqtt_connection(
+    config: dict,
+    db: AsyncSession = Depends(get_db, scope="function"),
+):
     """Testet die MQTT-Verbindung ohne zu speichern."""
     try:
         import aiomqtt
@@ -341,10 +362,15 @@ async def test_mqtt_connection(config: dict):
     password = config.get("password", "").strip() or None
 
     if password == "***":
-        from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
-        svc = get_mqtt_inbound_service()
-        if svc:
-            password = svc.password
+        # N-577: „***" ist der Platzhalter aus GET /mqtt/settings für ein
+        # GESPEICHERTES Passwort (DB-Broker-Block, ohne Eintrag ENV). Aufgelöst
+        # wird es über dieselbe Kaskade, mit der `main.py::_load_mqtt_config` den
+        # Import beim Start verbindet — der Test prüft damit genau das, was
+        # später läuft. Bis hierher kam es aus der laufenden Inbound-Instanz:
+        # bei ausgeschaltetem Import gibt es keine, und „***" ging als echtes
+        # Passwort an den Broker („Not authorized", #415).
+        from backend.services.mqtt_broker_settings import resolve_broker_config
+        password = (await resolve_broker_config(db)).password
 
     if not host:
         return {"connected": False, "error": "Host ist erforderlich"}
