@@ -69,6 +69,8 @@ const ALLOWLIST = new Map([
   // ── (F) Gleichnamiges Feld auf einer ANDEREN Response ─────────────────────
   ['src/components/live/EnergieFluss.tsx::k',
     '(F) Live-Komponenten-Response. Liefert seit A24-2 (live_komponenten_builder.py) bereits den EFFEKTIVEN Wert über `get_erzeuger_kwp` — hier ist nichts mehr zu heilen.'],
+  ['src/components/live/energieFlussLayout.ts::mitglied',
+    '(F) dieselbe Live-Komponenten-Response wie `EnergieFluss.tsx::k` — die PV-Gruppenkachel (Bau A §A3, #341/#348) summiert die kWp ihrer Mitglieds-Knoten, die der Builder schon EFFEKTIV liefert (`get_erzeuger_kwp`); fehlt einem Mitglied der Wert, bleibt die Summe `null`.'],
   ['src/components/prognose/PvStringsTeile.tsx::s',
     '(F) `/cockpit/pv-strings-gesamtlaufzeit`-Response (PV-String), eigene Provenance seit A4 — keine Investition.'],
   ['src/components/pv/PVStringVergleich.tsx::s',
