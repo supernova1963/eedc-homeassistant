@@ -12,16 +12,24 @@
  * Es ist bewusst dieselbe Komponente: die Karte im Dashboard soll exakt das
  * zeigen, was der Anwender im Fokus sieht — nicht eine zweite Darstellung, die
  * ihr eigenes Leben führt (Regel 0a).
+ *
+ * Seit Bau A §A5 (#341/#348) zusätzlich eine **Dialog-Betriebsart** (`dialog`):
+ * ein Detail-Fenster, das ÜBER einer Sicht (auch über einem Deep-Link-Vollbild)
+ * aufgeht — heute die „Liste mit Balken" einer Energiefluss-Gruppe. Es ist ein
+ * gewöhnliches Vollbild mit Ausweg (ESC-Zuhörer und Knopf wie im Normalmodus),
+ * nur als Dialog ausgezeichnet. Regel 0a Stufe 2: die Zentrale erweitert statt
+ * eines lokalen Nachbaus — `FokusVollbild` trug bis dahin weder `role` noch
+ * `aria-modal`, und sein einziger Knopf („Zurück") lag außerhalb des Inhalts.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Minimize2 } from 'lucide-react'
+import { Minimize2, X } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { SegmentControl } from '../ui'
 
 export function FokusVollbild({
-  titel, icon: Icon, farbe, onClose, kopf, tabelle, aktionen, deepLink = false, ansichtStart = 'chart', children,
+  titel, icon: Icon, farbe, onClose, kopf, tabelle, aktionen, deepLink = false, dialog = false, ansichtStart = 'chart', children,
 }: {
   titel: string
   icon?: LucideIcon
@@ -49,6 +57,14 @@ export function FokusVollbild({
    *  Knopf, der ins Nichts führt, wäre schlimmer als keiner.
    *  Chart⇄Tabelle und der `kopf`-Slot (Zeitraum-Nav) bleiben bedienbar. */
   deepLink?: boolean
+  /** Bau A §A5 — Dialog-Betriebsart für ein Detail-Fenster ÜBER einer Sicht
+   *  (Default `false`: jeder bestehende Nutzer rendert unverändert).
+   *  Gesetzt → die Fläche ist `role="dialog"` + `aria-modal`, ihr zugänglicher
+   *  Name ist der Titel (`aria-labelledby` → die Überschrift); statt „Fokus /
+   *  Vollbild" + „Zurück" trägt der Kopf einen Knopf „Schließen", der beim
+   *  Öffnen den Fokus bekommt. ESC-Zuhörer wie im Normalmodus. Nicht mit
+   *  `deepLink` kombinieren — ein Dialog hat immer einen Ausweg. */
+  dialog?: boolean
   /** CT-5: Start-Ablesung (`?ansicht=tabelle`). Wirkt nur beim Öffnen — danach
    *  entscheidet der Umschalter, die Adresse wird nicht zurückgeschrieben. */
   ansichtStart?: 'chart' | 'tabelle'
@@ -57,6 +73,14 @@ export function FokusVollbild({
   // Flüchtig wie der Fokus selbst: jedes Öffnen startet beim Chart — außer der
   // Deep-Link nennt die Tabelle (`ansichtStart`), dann beginnt es dort.
   const [ansicht, setAnsicht] = useState<'chart' | 'tabelle'>(ansichtStart)
+  const titelId = useId()
+  const schliessenRef = useRef<HTMLButtonElement>(null)
+  // Dialog: der Fokus steht beim Öffnen auf „Schließen" (Muster „Liste mit
+  // Balken"). Die Rückgabe an das auslösende Element macht der Aufrufer — nur er
+  // kennt es.
+  useEffect(() => {
+    if (dialog) schliessenRef.current?.focus()
+  }, [dialog])
 
   // Schließen-Konvention (Style-Guide B16, Gernot 2026-07-17): ESC schließt. Einen
   // Backdrop-Klick gibt es hier bewusst NICHT — das Overlay ist deckend, es gibt kein
@@ -98,12 +122,15 @@ export function FokusVollbild({
   // Fokus-Modus die Seite — Seiten-Scroller behalten den nativen Balken (wie
   // LayoutV4/ViewShell); der ScrollSchatten-Fade gilt für Inhalts-Container.
   const overlay = (
-    <div className="fixed inset-0 z-50 bg-white dark:bg-gray-900 flex flex-col p-3 sm:p-6 gap-3 overflow-auto">
+    <div
+      className="fixed inset-0 z-50 bg-white dark:bg-gray-900 flex flex-col p-3 sm:p-6 gap-3 overflow-auto"
+      {...(dialog ? { role: 'dialog', 'aria-modal': true, 'aria-labelledby': titelId } : {})}
+    >
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+        <h2 id={dialog ? titelId : undefined} className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
           {Icon && <Icon className={`h-5 w-5 ${farbe ?? ''}`} />}
           {titel}
-          {!deepLink && (
+          {!deepLink && !dialog && (
             <span className="text-xs font-normal text-gray-400 dark:text-gray-500">Fokus / Vollbild</span>
           )}
         </h2>
@@ -122,12 +149,17 @@ export function FokusVollbild({
           )}
           {!deepLink && (typeof aktionen === 'function' ? aktionen(ansicht) : aktionen)}
           {!deepLink && (
+            // EIN Knopf für beide Betriebsarten (Roh-Control-Freeze: 1): im
+            // Normalmodus „Zurück", im Dialog „Schließen" mit dem Anfangsfokus.
             <button
+              ref={dialog ? schliessenRef : undefined}
               type="button"
               onClick={onClose}
-              className="min-h-[44px] flex items-center gap-2 px-3 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
+              className={`min-h-[44px] flex items-center gap-2 px-3 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700${dialog ? ' focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500' : ''}`}
             >
-              <Minimize2 className="h-4 w-4" /> Zurück
+              {dialog
+                ? <><X className="h-4 w-4" /> Schließen</>
+                : <><Minimize2 className="h-4 w-4" /> Zurück</>}
             </button>
           )}
         </div>

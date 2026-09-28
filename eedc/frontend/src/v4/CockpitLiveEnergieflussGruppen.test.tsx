@@ -10,12 +10,16 @@
  * der Karte bleibt sie 600 × 380 (die Karte wird nie höher), auch wenn eine
  * Höhe gemeldet wird.
  *
+ * Seit §A5 dazu die „Liste mit Balken": Öffnen per Klick und Tastatur, ESC-
+ * Staffelung über dem ⤢-Vollbild und im Deep-Link, die 5-s-Regel (Key weg ⇒
+ * zu), Fokus-Rückgabe und die unberührten Fokus-IDs.
+ *
  * ⚠ jsdom hat keinen ResizeObserver; der Stub hier meldet für den Container
  * 1000 px Breite und für das SVG 500 px Höhe (Verhältnis 2) — ein Wert, der
  * weder die Karte (600/380 ≈ 1,58) noch das jsdom-Fenster (1024/768 ≈ 1,33) ist.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, fireEvent, within } from '@testing-library/react'
 import type {
   BoersenpreisResponse, LiveDashboardResponse, LiveKomponente, TagesverlaufResponse,
 } from '../api/liveDashboard'
@@ -52,9 +56,12 @@ const keinePreise: BoersenpreisResponse = {
   aktuelle_stunde: null, heute: null, hinweis: null, endpreis_jetzt_cent: null,
 }
 
+/** Was der nächste Abruf liefert — eine Probe kann den 5-s-Takt damit umstellen. */
+let antwort: LiveDashboardResponse = daten
+
 vi.mock('../api/liveDashboard', () => ({
   liveDashboardApi: {
-    getData: vi.fn(() => Promise.resolve(daten)),
+    getData: vi.fn(() => Promise.resolve(antwort)),
     getWetter: vi.fn(() => Promise.reject(new Error('kein Wetter'))),
     getTagesverlauf: vi.fn(() => Promise.resolve(leererVerlauf)),
     getBoersenpreise: vi.fn(() => Promise.resolve(keinePreise)),
@@ -101,6 +108,7 @@ describe('Cockpit → Live: gruppierter Energiefluss', () => {
     _clearSwrCacheForTests()
     stubMatchMedia()
     window.location.hash = ''
+    antwort = daten
     vi.stubGlobal('ResizeObserver', class {
       private cb: ResizeObserverCallback
       constructor(cb: ResizeObserverCallback) { this.cb = cb }
@@ -123,8 +131,12 @@ describe('Cockpit → Live: gruppierter Energiefluss', () => {
     expect(await screen.findByRole('heading', { name: 'Energiefluss', level: 2 })).toBeInTheDocument()
     await waitFor(() => expect(gruppenTitel()).toEqual(['Ost (2)', 'Süd (5)', 'West (2)', 'Speicher (4)']))
     expect(verhaeltnis(flussSvg())).toBeCloseTo(1000 / 500, 6)
-    // A5-Gegenrichtung auch im Overlay: keine Klick-Affordanz an den Gruppen.
-    expect(flussSvg().querySelectorAll('[role="button"], [tabindex], .cursor-pointer')).toHaveLength(0)
+    // §A5 (Positiv-Probe, vorher A4-Gegenrichtung): im Deep-Link sind GENAU die
+    // Gruppen Knöpfe — die Sicht reicht `onGruppeKlick` auch hier durch.
+    const knoepfe = [...flussSvg().querySelectorAll('[role="button"]')]
+    expect(knoepfe.map(k => k.getAttribute('data-gruppe'))).toEqual(['pv_grp_ost', 'pv_grp_sued', 'pv_grp_west', 'batterie_grp'])
+    expect(flussSvg().querySelectorAll('[tabindex="0"]')).toHaveLength(4)
+    expect(flussSvg().querySelectorAll('.cursor-pointer')).toHaveLength(4)
   })
 
   it('Karte (ohne ?fokus=): dieselben Gruppen, Zeichenfläche 600 × 380 — die gemeldete Höhe bleibt unausgewertet', async () => {
@@ -132,5 +144,146 @@ describe('Cockpit → Live: gruppierter Energiefluss', () => {
     renderMitProvidern(<CockpitLiveV4 anlageId={1} />)
     await waitFor(() => expect(gruppenTitel()).toEqual(['Ost (2)', 'Süd (5)', 'West (2)', 'Speicher (4)']))
     expect(flussSvg().getAttribute('viewBox')).toBe('0 0 600 380')
+  })
+})
+
+// ── §A5: die „Liste mit Balken" in der Sicht ──────────────────────────────────
+
+const tick = () => new Promise(r => setTimeout(r, 0))
+const escSenden = () => {
+  const e = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+  document.dispatchEvent(e)
+  return e
+}
+const gruppenKachel = async (key: string) => {
+  await waitFor(() => expect(document.body.querySelector(`[data-gruppe="${key}"]`)).not.toBeNull())
+  return document.body.querySelector<SVGGElement>(`[data-gruppe="${key}"]`)!
+}
+/** Ein neuer 5-s-Abruf, sofort ausgelöst: die Sicht frischt beim Sichtwechsel auf. */
+const naechsterTakt = () => document.dispatchEvent(new Event('visibilitychange'))
+
+describe('Cockpit → Live §A5: Liste mit Balken', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    _clearSwrCacheForTests()
+    stubMatchMedia()
+    window.location.hash = '#/cockpit/live'
+    antwort = daten
+    vi.stubGlobal('ResizeObserver', class {
+      private cb: ResizeObserverCallback
+      constructor(cb: ResizeObserverCallback) { this.cb = cb }
+      observe(target: Element) {
+        const istSvg = target.tagName.toLowerCase() === 'svg'
+        this.cb([{ target, contentRect: { width: 1000, height: istSvg ? 500 : 900 } } as unknown as ResizeObserverEntry], this as unknown as ResizeObserver)
+      }
+      unobserve() {}
+      disconnect() {}
+    })
+  })
+  afterEach(() => {
+    window.location.hash = URSPRUNG
+    vi.unstubAllGlobals()
+  })
+
+  it('Karte: Klick öffnet den Dialog „Süd (5)" mit einer Zeile je Mitglied; Fokus auf „Schließen"; Schließen gibt den Fokus an die Kachel zurück', async () => {
+    renderMitProvidern(<CockpitLiveV4 anlageId={1} />)
+    const sued = await gruppenKachel('pv_grp_sued')
+    fireEvent.click(sued)
+    const d = await screen.findByRole('dialog', { name: 'Süd (5)' })
+    expect([...d.querySelectorAll('li[data-zeile]')].map(li => li.getAttribute('data-zeile')))
+      .toEqual(['pv_11', 'pv_12', 'pv_13', 'pv_14', 'pv_15'])
+    const schliessen = within(d).getByRole('button', { name: /Schließen/ })
+    expect(document.activeElement).toBe(schliessen)
+    fireEvent.click(schliessen)
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    // Rückgabe über den Key (Safari fokussiert beim Mausklick nichts)
+    await waitFor(() => expect(document.activeElement).toBe(document.body.querySelector('[data-gruppe="pv_grp_sued"]')))
+  })
+
+  it('Karte: Tastatur — Enter öffnet, Leertaste auch; ESC schließt und gibt den Fokus zurück', async () => {
+    renderMitProvidern(<CockpitLiveV4 anlageId={1} />)
+    const speicher = await gruppenKachel('batterie_grp')
+    fireEvent.keyDown(speicher, { key: 'Enter' })
+    expect(await screen.findByRole('dialog', { name: 'Speicher (4)' })).toBeInTheDocument()
+    expect(escSenden().defaultPrevented).toBe(true)
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(document.body.querySelector('[data-gruppe="batterie_grp"]')))
+    fireEvent.keyDown(await gruppenKachel('pv_grp_west'), { key: ' ' })
+    expect(await screen.findByRole('dialog', { name: 'West (2)' })).toBeInTheDocument()
+  })
+
+  it('⤢-Vollbild: ESC schließt NUR die Liste, das Vollbild darunter bleibt', async () => {
+    renderMitProvidern(<CockpitLiveV4 anlageId={1} />)
+    await gruppenKachel('pv_grp_sued')
+    fireEvent.click(screen.getByRole('button', { name: 'Energiefluss: Fokus / Vollbild' }))
+    expect(await screen.findByRole('button', { name: /Zurück/ })).toBeInTheDocument()
+    fireEvent.click(await gruppenKachel('pv_grp_ost'))
+    const d = await screen.findByRole('dialog', { name: 'Ost (2)' })
+    // Die Liste liegt ÜBER dem Vollbild: ihr Portal steht im body danach.
+    const vollbild = screen.getByRole('button', { name: /Zurück/ }).closest('.fixed')!
+    expect(vollbild.compareDocumentPosition(d) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    escSenden()
+    await tick()
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    // das äußere Vollbild ist noch da (es hat nach defaultPrevented entschieden)
+    expect(screen.getByRole('button', { name: /Zurück/ })).toBeInTheDocument()
+    expect(screen.getByText('Fokus / Vollbild')).toBeInTheDocument()
+  })
+
+  it('Deep-Link: die Liste öffnet ÜBER dem rahmenlosen Vollbild; ESC und „Schließen" schließen nur sie', async () => {
+    window.location.hash = '#/cockpit/live?fokus=live:energiefluss'
+    renderMitProvidern(<CockpitLiveV4 anlageId={1} />)
+    expect(await screen.findByRole('heading', { name: 'Energiefluss', level: 2 })).toBeInTheDocument()
+    fireEvent.click(await gruppenKachel('pv_grp_sued'))
+    const d = await screen.findByRole('dialog', { name: 'Süd (5)' })
+    const deep = screen.getByRole('heading', { name: 'Energiefluss', level: 2 }).closest('.fixed')!
+    expect(deep.compareDocumentPosition(d) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // Der Dialog hat seinen Ausweg, auch wenn das Deep-Link-Vollbild keinen hat
+    expect(within(d).getByRole('button', { name: /Schließen/ })).toBeInTheDocument()
+    escSenden()
+    await tick()
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(screen.getByRole('heading', { name: 'Energiefluss', level: 2 })).toBeInTheDocument()
+    // …und noch einmal über „Schließen"
+    fireEvent.click(await gruppenKachel('batterie_grp'))
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Speicher (4)' })).getByRole('button', { name: /Schließen/ }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(screen.getByRole('heading', { name: 'Energiefluss', level: 2 })).toBeInTheDocument()
+  })
+
+  it('5-s-Takt: die Zeilen folgen den neuen Werten; entfällt der Gruppen-Key, schließt sich die Liste', async () => {
+    renderMitProvidern(<CockpitLiveV4 anlageId={1} />)
+    fireEvent.click(await gruppenKachel('pv_grp_sued'))
+    const d = await screen.findByRole('dialog', { name: 'Süd (5)' })
+    const wert = (key: string) => d.querySelector(`li[data-zeile="${key}"] > span:nth-child(3)`)?.textContent
+    expect(wert('pv_11')).toBe('1.900 W')
+    // Takt 1: neuer Wert, dieselbe Gruppe ⇒ bleibt offen, Zeile aktuell
+    antwort = { ...daten, komponenten: daten.komponenten.map(k => (k.key === 'pv_11' ? { ...k, erzeugung_kw: 0.7 } : k)) }
+    naechsterTakt()
+    await waitFor(() => expect(wert('pv_11')).toBe('700 W'))
+    expect(screen.getByRole('dialog', { name: 'Süd (5)' })).toBeInTheDocument()
+    // Takt 2: nur noch EIN Süd-String ⇒ keine Gruppe „Süd" mehr ⇒ zu
+    antwort = { ...daten, komponenten: daten.komponenten.filter(k => !['pv_12', 'pv_13', 'pv_14', 'pv_15'].includes(k.key)) }
+    naechsterTakt()
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(document.body.querySelector('[data-gruppe="pv_grp_sued"]')).toBeNull()
+    // Takt 3: die Gruppe kommt zurück — das Fenster ist ZU, nicht nur versteckt,
+    // und springt deshalb nicht von selbst wieder auf.
+    antwort = daten
+    naechsterTakt()
+    await gruppenKachel('pv_grp_sued')
+    await tick()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('das Fenster bekommt keine Fokus-ID und keinen Einbetten-Knopf (LIVE_FOKUS_IDS unverändert)', async () => {
+    const { LIVE_FOKUS_IDS } = await import('./CockpitLiveV4')
+    expect([...LIVE_FOKUS_IDS]).toEqual([
+      'live:energiefluss', 'live:auf-einen-blick', 'live:wetter-heute', 'live:tagesverlauf', 'live:boersenpreis',
+    ])
+    renderMitProvidern(<CockpitLiveV4 anlageId={1} />)
+    fireEvent.click(await gruppenKachel('pv_grp_sued'))
+    const d = await screen.findByRole('dialog', { name: 'Süd (5)' })
+    expect(within(d).queryByRole('button', { name: /Link|Einbetten/ })).toBeNull()
   })
 })

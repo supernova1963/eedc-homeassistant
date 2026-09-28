@@ -15,7 +15,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, fireEvent, act } from '@testing-library/react'
-import { useTouchTitleTooltip } from './useTouchTitleTooltip'
+import { useTouchTitleTooltip, verbergeTouchTooltip } from './useTouchTitleTooltip'
 
 function Harness() {
   useTouchTitleTooltip()
@@ -83,6 +83,30 @@ describe('N-390 — Touch-Tooltip', () => {
     tap(getByTestId('mit-title'))
     fireEvent.touchEnd(getByTestId('mit-title'))
     expect(tooltipText().join()).toContain('Haushalt')
+    act(() => { vi.advanceTimersByTime(6100) })
+    expect(tooltipText()).toHaveLength(0)
+  })
+
+  it('mehrzeilige Auskunft behält ihre Umbrüche (white-space: pre-line, Bau A NB-1)', () => {
+    // Vorher lief „Haushalt\nAktuell: …" als ein Fließtext: der Container setzte
+    // kein white-space, und ein Zeilenumbruch in textContent ist dann ein Leerzeichen.
+    const { getByTestId } = render(<Harness />)
+    tap(getByTestId('mit-title'))
+    const el = Array.from(document.body.children)
+      .find((e) => (e as HTMLElement).style.position === 'fixed') as HTMLElement
+    expect(el.textContent).toBe('Haushalt\nAktuell: 1,20 kW')
+    expect(el.style.whiteSpace).toBe('pre-line')
+  })
+
+  it('verbergeTouchTooltip() räumt einen offenen Tooltip sofort weg (Bau A §A5)', () => {
+    const { getByTestId } = render(<Harness />)
+    tap(getByTestId('mit-data-title'))
+    fireEvent.touchEnd(getByTestId('mit-data-title'))
+    expect(tooltipText().join()).toContain('Summe aller PV-Erzeuger')
+    verbergeTouchTooltip()
+    expect(tooltipText()).toHaveLength(0)
+    // ohne offenen Tooltip: kein Fehler, und der Auto-Timeout ist mit weg
+    expect(() => verbergeTouchTooltip()).not.toThrow()
     act(() => { vi.advanceTimersByTime(6100) })
     expect(tooltipText()).toHaveLength(0)
   })

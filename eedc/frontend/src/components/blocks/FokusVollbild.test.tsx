@@ -180,3 +180,60 @@ describe('FokusVollbild — Deep-Link-Ansicht (FD-1/FD-3)', () => {
     expect(aktion.compareDocumentPosition(zurueck) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })
+
+describe('FokusVollbild — Dialog-Betriebsart (Bau A §A5)', () => {
+  const escSenden = () => document.dispatchEvent(
+    new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+  )
+
+  it('Bestandsschutz: OHNE `dialog` rendert es exakt wie bisher — „Fokus / Vollbild", „Zurück", kein role/aria-modal', () => {
+    // Auflage des Masters: der Default darf keinen bestehenden Nutzer verändern
+    // (BlockShell, FokusKachel, Energiefluss-⤢, Deep-Link, FokusFehlt).
+    render(<FokusVollbild titel="Verlauf" onClose={() => {}}><p>Inhalt</p></FokusVollbild>)
+    expect(screen.getByText('Fokus / Vollbild')).toBeInTheDocument()
+    // „Zurück" samt Klassen bitgleich zum Stand vor §A5 (ein Knopf für beide Betriebsarten)
+    expect(screen.getByRole('button', { name: /Zurück/ }).className).toBe(
+      'min-h-[44px] flex items-center gap-2 px-3 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700',
+    )
+    expect(screen.queryByRole('button', { name: /Schließen/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    const flaeche = document.body.querySelector('.fixed.inset-0') as HTMLElement
+    expect(flaeche.hasAttribute('role')).toBe(false)
+    expect(flaeche.hasAttribute('aria-modal')).toBe(false)
+    expect(flaeche.hasAttribute('aria-labelledby')).toBe(false)
+    expect(screen.getByRole('heading', { name: /Verlauf/ }).hasAttribute('id')).toBe(false)
+    // …und der Fokus bleibt, wo er war — nur der Dialog zieht ihn an sich.
+    expect(document.activeElement).toBe(document.body)
+  })
+
+  it('dialog: role="dialog" + aria-modal, der zugängliche Name IST der Titel', () => {
+    render(<FokusVollbild titel="Süd (5)" dialog onClose={() => {}}><p>Liste</p></FokusVollbild>)
+    const d = screen.getByRole('dialog', { name: 'Süd (5)' })
+    expect(d.getAttribute('aria-modal')).toBe('true')
+    const ueberschrift = document.getElementById(d.getAttribute('aria-labelledby')!)
+    expect(ueberschrift?.tagName).toBe('H2')
+    expect(ueberschrift?.textContent).toBe('Süd (5)')
+    // Inhalt UND Schließen-Knopf liegen im modalen Bereich.
+    expect(d.contains(screen.getByText('Liste'))).toBe(true)
+    expect(d.contains(screen.getByRole('button', { name: /Schließen/ }))).toBe(true)
+  })
+
+  it('dialog: „Schließen" statt „Zurück", keine Unterzeile „Fokus / Vollbild", Fokus steht auf „Schließen"', () => {
+    const onClose = vi.fn()
+    render(<FokusVollbild titel="Speicher (4)" dialog onClose={onClose}><p>Liste</p></FokusVollbild>)
+    const schliessen = screen.getByRole('button', { name: /Schließen/ })
+    expect(screen.queryByRole('button', { name: /Zurück/ })).not.toBeInTheDocument()
+    expect(screen.queryByText('Fokus / Vollbild')).not.toBeInTheDocument()
+    expect(document.activeElement).toBe(schliessen)
+    fireEvent.click(schliessen)
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('dialog: ESC schließt wie im Normalmodus (Makrotask, nach defaultPrevented)', async () => {
+    const onClose = vi.fn()
+    render(<FokusVollbild titel="Laden (2)" dialog onClose={onClose}><p>Liste</p></FokusVollbild>)
+    escSenden()
+    await tick()
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+})

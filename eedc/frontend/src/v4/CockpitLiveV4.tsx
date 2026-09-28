@@ -25,6 +25,8 @@ import type {
 import { wetterApi } from '../api/wetter'
 import type { SolarPrognoseTag } from '../api/wetter'
 import EnergieFluss from '../components/live/EnergieFluss'
+import GruppenListeOverlay from '../components/live/GruppenListeOverlay'
+import type { GezeichneterKnoten } from '../components/live/energieFlussLayout'
 import TagesverlaufChart, { tagesverlaufTabelle } from '../components/live/TagesverlaufChart'
 import BoersenpreisBlock, { boersenpreisVollGeparkt } from '../components/live/BoersenpreisBlock'
 import WetterWidget from '../components/live/WetterWidget'
@@ -162,6 +164,42 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
   // nie als Initialisierer (die Live-Daten kommen erst mit dem ersten Abruf).
   const deep = useDeepLinkFokus()
   const eflFokus = deep.deepLink ? deep.fokusId === 'live:energiefluss' : eflFokusState
+
+  // Bau A §A5 — die „Liste mit Balken" einer Energiefluss-Gruppe. Gehalten wird
+  // der Gruppen-KEY, nie das Objekt: die Zeilen entstehen je Render aus den
+  // aktuellen Daten. `gruppen` ist das, was der gerade gezeichnete Energiefluss
+  // meldet (P-1) — nur bei offenem Fenster abonniert; `null` = noch nichts
+  // gemeldet (Render direkt nach dem Klick) ⇒ offen lassen, nicht schließen.
+  const [offeneGruppe, setOffeneGruppe] = useState<string | null>(null)
+  const [gruppen, setGruppen] = useState<GezeichneterKnoten[] | null>(null)
+  const oeffneGruppe = useCallback((key: string) => {
+    setGruppen(null)
+    setOffeneGruppe(key)
+  }, [])
+  const schliesseGruppe = useCallback(() => setOffeneGruppe(null), [])
+  // Existiert der Key im aktuellen Layout nicht mehr (5-s-Takt: Knoten weg,
+  // Stufe gewechselt), schließt sich das Fenster (Vorlage §A5, Ü5).
+  const offenerKnoten = offeneGruppe != null ? gruppen?.find(g => g.komp.key === offeneGruppe) ?? null : null
+  useEffect(() => {
+    if (offeneGruppe != null && gruppen != null && offenerKnoten == null) setOffeneGruppe(null)
+  }, [offeneGruppe, gruppen, offenerKnoten])
+  // Fokus-Rückgabe an die auslösende Gruppenkachel (a11y, Muster): über den
+  // Key, nicht über `document.activeElement` — Safari fokussiert beim
+  // Mausklick nichts. Gibt es die Kachel nicht mehr (Schließen durch den
+  // Takt), bleibt der Fokus, wo er ist.
+  const zuletztOffen = useRef<string | null>(null)
+  useEffect(() => {
+    if (offeneGruppe != null) {
+      zuletztOffen.current = offeneGruppe
+      return
+    }
+    const key = zuletztOffen.current
+    zuletztOffen.current = null
+    setGruppen(null)
+    if (key == null) return
+    const kachel = document.querySelector<SVGGElement>(`[data-gruppe="${key}"]`)
+    kachel?.focus()
+  }, [offeneGruppe])
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const wetterIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -423,6 +461,10 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
           gauges: data.gauges,
           netzPufferW: selectedAnlage?.netz_puffer_w ?? 100,
           pvSollKw,
+          // §A5: Gruppenkacheln öffnen die Liste; das Layout wird nur bei
+          // offenem Fenster gemeldet (sonst kein Zusatz-Render je Takt).
+          onGruppeKlick: oeffneGruppe,
+          onGruppen: offeneGruppe != null ? setGruppen : undefined,
         }
         return (
         <div className="space-y-4">
@@ -439,6 +481,18 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
             >
               <EnergieFluss {...flussProps} vollbild={eflFokus} />
             </FokusVollbild>
+          )}
+          {/* §A5: die „Liste mit Balken" — ein eigenes FokusVollbild in der
+              Dialog-Betriebsart, NACH dem Energiefluss-Vollbild gemountet und
+              damit darüber (auch über dem rahmenlosen Deep-Link-Vollbild).
+              ⛔ Keine Fokus-ID, kein Einbetten-Knopf: `LIVE_FOKUS_IDS` bleibt. */}
+          {offenerKnoten && (
+            <GruppenListeOverlay
+              gruppe={offenerKnoten}
+              komponenten={data.komponenten}
+              gauges={data.gauges}
+              onClose={schliesseGruppe}
+            />
           )}
           {/* Kopf-Region „auf einen Blick": Energiefluss (2/3) ⟷ Kennzahl-Block (1/3),
               ab xl nebeneinander (IST, #164 detLAN: Side-by-Side erst ab xl).

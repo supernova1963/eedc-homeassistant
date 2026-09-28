@@ -8,10 +8,11 @@
  * füllt, das Auto in die Wallbox-Kachel legt und im Vollbild die Zeichenfläche
  * auf das Overlay-Verhältnis zieht.
  *
- * ⛔ **Gegenrichtung A5:** eine Gruppenkachel trägt in diesem Stand KEINE
- * Klick-Affordanz — kein `role="button"`, kein `tabindex`, kein
- * `cursor-pointer`. Die kommt mit dem Overlay in §A5; kein Commit trägt einen
- * Knopf ohne Wirkung. Die letzte Probe hält das fest.
+ * ⭐ **Seit §A5 Positiv-Probe (vorher A4-Gegenrichtung „keine Klick-Affordanz"):**
+ * eine GRUPPENkachel ist ein Knopf (`role="button"`, `tabindex="0"`,
+ * `cursor-pointer`, Klick + Enter/Leertaste) — aber nur, wenn der Aufrufer
+ * `onGruppeKlick` reicht; Einzelkacheln sind es nie. Der letzte Block hält das
+ * fest, dazu die Meldung der gezeichneten Gruppen (`onGruppen`, P-1).
  *
  * ⚠ Kartenbreite und (im Vollbild) Höhe der Zeichenfläche misst ein
  * ResizeObserver; jsdom hat keinen (der Stub in `setup.ts` meldet nie).
@@ -20,11 +21,13 @@
  * der Karte (dort muss die Komponente sie ignorieren).
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { render } from '@testing-library/react'
+import { render, fireEvent } from '@testing-library/react'
 import EnergieFluss, { SATZ_ZUORDNUNG_UNBEKANNT } from './EnergieFluss'
 import { ThemeProvider } from '../../context/ThemeContext'
 import { stubMatchMedia } from '../../test/render'
 import type { LiveFahrzeug, LiveGauge, LiveKomponente } from '../../api/liveDashboard'
+import type { GezeichneterKnoten } from './energieFlussLayout'
+import { useTouchTitleTooltip } from '../../hooks/useTouchTitleTooltip'
 
 const ORIGINAL_RO = globalThis.ResizeObserver
 
@@ -111,7 +114,10 @@ function eineWallbox(kw: number, autos: LiveFahrzeug[]): LiveKomponente[] {
 
 function zeichne(
   komponenten: LiveKomponente[],
-  opt: { gauges?: LiveGauge[]; tagesWerte?: Record<string, number | null>; vollbild?: boolean } = {},
+  opt: {
+    gauges?: LiveGauge[]; tagesWerte?: Record<string, number | null>; vollbild?: boolean
+    onGruppeKlick?: (key: string) => void; onGruppen?: (g: GezeichneterKnoten[]) => void
+  } = {},
 ) {
   return render(
     <ThemeProvider>
@@ -123,6 +129,8 @@ function zeichne(
         gauges={opt.gauges ?? []}
         tagesWerte={opt.tagesWerte}
         vollbild={opt.vollbild}
+        onGruppeKlick={opt.onGruppeKlick}
+        onGruppen={opt.onGruppen}
       />
     </ThemeProvider>,
   )
@@ -319,14 +327,97 @@ describe('EnergieFluss §A4 — Maßstab in der Karte und im Vollbild', () => {
   })
 })
 
-describe('EnergieFluss §A4 — Gegenrichtung A5: noch keine Klick-Affordanz', () => {
-  it('keine Kachel trägt role="button", tabindex oder cursor-pointer', () => {
+describe('EnergieFluss §A5 — Gruppenkacheln sind klickbar (Positiv-Probe, vorher A4-Gegenrichtung)', () => {
+  const svgVon = (c: HTMLElement) => c.querySelector('svg.flex-1')!
+
+  it('mit onGruppeKlick: JEDE Gruppe trägt role="button", tabindex="0", cursor-pointer und ihren Key — keine Einzelkachel', () => {
+    mitBreite(600)
+    const { container } = zeichne(bestandD().komp, { gauges: bestandD().gauges, onGruppeKlick: () => {} })
+    const gruppen = kacheln(container).filter(k => k.stapel > 0)
+    expect(gruppen.map(g => g.g.getAttribute('data-gruppe'))).toEqual(['pv_grp_ost', 'pv_grp_sued', 'pv_grp_west', 'batterie_grp'])
+    gruppen.forEach(({ g }) => {
+      expect(g.getAttribute('role')).toBe('button')
+      expect(g.getAttribute('tabindex')).toBe('0')
+      expect(g.classList.contains('cursor-pointer')).toBe(true)
+      expect(g.getAttribute('aria-label')).toMatch(/\(\d+\): Liste öffnen$/)
+    })
+    // Einzelkacheln bleiben ohne Affordanz — genau die Gruppen sind Knöpfe.
+    const svg = svgVon(container)
+    expect(svg.querySelectorAll('[role="button"]')).toHaveLength(gruppen.length)
+    expect(svg.querySelectorAll('[tabindex]')).toHaveLength(gruppen.length)
+    expect(svg.querySelectorAll('.cursor-pointer')).toHaveLength(gruppen.length)
+    expect(kachel(container, 'Wärmepumpe').g.hasAttribute('role')).toBe(false)
+  })
+
+  it('OHNE onGruppeKlick: keine Affordanz — kein Knopf ohne Wirkung', () => {
     mitBreite(360)
     const { container } = zeichne(bestandD().komp, { gauges: bestandD().gauges })
-    const svg = container.querySelector('svg.flex-1')!
+    const svg = svgVon(container)
     expect(kacheln(container).filter(k => k.stapel > 0).length).toBeGreaterThan(0)
-    expect(svg.querySelectorAll('[role="button"]')).toHaveLength(0)
-    expect(svg.querySelectorAll('[tabindex]')).toHaveLength(0)
-    expect(svg.querySelectorAll('.cursor-pointer')).toHaveLength(0)
+    expect(svg.querySelectorAll('[role="button"], [tabindex], .cursor-pointer')).toHaveLength(0)
+  })
+
+  it('Klick, Enter und Leertaste melden den Gruppen-Key; andere Tasten nicht', () => {
+    mitBreite(600)
+    const klick = vi.fn()
+    const { container } = zeichne(bestandD().komp, { gauges: bestandD().gauges, onGruppeKlick: klick })
+    const sued = kachel(container, 'Süd (5)').g
+    fireEvent.click(sued)
+    expect(klick).toHaveBeenLastCalledWith('pv_grp_sued')
+    const speicher = kachel(container, 'Speicher (4)').g
+    fireEvent.keyDown(speicher, { key: 'Enter' })
+    expect(klick).toHaveBeenLastCalledWith('batterie_grp')
+    fireEvent.keyDown(sued, { key: ' ' })
+    expect(klick).toHaveBeenCalledTimes(3)
+    fireEvent.keyDown(sued, { key: 'a' })
+    fireEvent.keyDown(sued, { key: 'Tab' })
+    expect(klick).toHaveBeenCalledTimes(3)
+    // Klick auf eine Einzelkachel meldet nichts.
+    fireEvent.click(kachel(container, 'Wärmepumpe').g)
+    expect(klick).toHaveBeenCalledTimes(3)
+  })
+
+  it('Handy (360 px): der Klickpfad hängt an keinem max-sm:hidden — der Melder-Fall ist mobil', () => {
+    mitBreite(360)
+    const klick = vi.fn()
+    const { container } = zeichne(bestandD().komp, { gauges: bestandD().gauges, onGruppeKlick: klick })
+    const knoepfe = [...svgVon(container).querySelectorAll('[role="button"]')]
+    expect(knoepfe.length).toBeGreaterThan(0)
+    knoepfe.forEach(k => {
+      for (let el: Element | null = k; el; el = el.parentElement) {
+        expect(el.getAttribute('class') ?? '').not.toMatch(/(^|\s)(max-sm:hidden|hidden|sm:block)(\s|$)/)
+      }
+    })
+    fireEvent.click(knoepfe[0])
+    expect(klick).toHaveBeenCalledTimes(1)
+  })
+
+  it('der Tipp räumt einen offenen Touch-Tooltip weg, bevor das Fenster aufgeht', () => {
+    mitBreite(600)
+    // Ein Touch-Tooltip, wie ihn useTouchTitleTooltip anlegt — dafür ist der
+    // Hook hier eingehängt (App-global in App.tsx).
+    render(<TooltipHaken />)
+    const ef = zeichne(bestandD().komp, { gauges: bestandD().gauges, onGruppeKlick: () => {} })
+    const sued = kachel(ef.container, 'Süd (5)').g
+    fireEvent.touchStart(sued, { touches: [{ clientX: 50, clientY: 200 }] })
+    expect(touchTooltips()).toHaveLength(1)
+    fireEvent.click(sued)
+    expect(touchTooltips()).toHaveLength(0)
+  })
+
+  it('onGruppen meldet die GEZEICHNETEN Gruppen (P-1) — und nur, wenn der Prop gesetzt ist', () => {
+    mitBreite(600)
+    const meldung = vi.fn()
+    zeichne(bestandD().komp, { gauges: bestandD().gauges, onGruppen: meldung })
+    const letzte = meldung.mock.calls.at(-1)![0] as GezeichneterKnoten[]
+    expect(letzte.map(g => g.komp.key)).toEqual(['pv_grp_ost', 'pv_grp_sued', 'pv_grp_west', 'batterie_grp'])
+    expect(letzte.find(g => g.komp.key === 'pv_grp_sued')!.mitglieder!.map(m => m.key)).toEqual(['pv_11', 'pv_12', 'pv_13', 'pv_14', 'pv_15'])
   })
 })
+
+function TooltipHaken() {
+  useTouchTitleTooltip()
+  return null
+}
+const touchTooltips = () => [...document.body.children]
+  .filter(el => el.tagName === 'DIV' && (el as HTMLElement).style.position === 'fixed')

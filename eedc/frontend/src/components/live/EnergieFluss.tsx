@@ -15,8 +15,9 @@ import { useChartTheme } from '../../context/ThemeContext'
 import EnergieFlussBackground from './EnergieFlussBackground'
 import {
   W_DEFAULT, flowPath, layoutEnergieFluss,
-  type BuehnenMass, type KachelAuto,
+  type BuehnenMass, type GezeichneterKnoten, type KachelAuto,
 } from './energieFlussLayout'
+import { verbergeTouchTooltip } from '../../hooks/useTouchTitleTooltip'
 
 // ─── Lite-Modus (reduzierte Animationen für Mobile/WebView) ─────────
 
@@ -133,8 +134,10 @@ function getNetzColor(komp: LiveKomponente, pufferW: number): string {
   return COLORS.grid                                        // dunkelrot — Netzbezug (F2)
 }
 
-/** Farbe für eine Komponente — Netz dynamisch, Batterie nach Lade-/Entladezustand, Rest statisch */
-function getNodeColor(komp: LiveKomponente, netzPufferW = 100): string {
+/** Farbe für eine Komponente — Netz dynamisch, Batterie nach Lade-/Entladezustand, Rest statisch.
+ *  Exportiert für die „Liste mit Balken" (`GruppenListeOverlay`, Bau A §A5):
+ *  ein Balken trägt dieselbe Rollenfarbe wie die Kachel — EINE Farbquelle. */
+export function getNodeColor(komp: LiveKomponente, netzPufferW = 100): string {
   if (komp.key === 'netz') return getNetzColor(komp, netzPufferW)
   // Batterie/Speicher: Kanon Ladung=grün / Entladung=blau (Maintainer-entschieden)
   if (komp.key.startsWith('batterie_')) {
@@ -144,8 +147,9 @@ function getNodeColor(komp: LiveKomponente, netzPufferW = 100): string {
   return getColor(komp.key)
 }
 
-/** Leistung formatieren: < 10 kW → Watt, ≥ 10 kW → kW */
-function formatPower(kw: number): string {
+/** Leistung formatieren: < 10 kW → Watt, ≥ 10 kW → kW. Exportiert für die
+ *  „Liste mit Balken" — ihr Wert steht im selben Format wie auf der Kachel. */
+export function formatPower(kw: number): string {
   if (kw <= 0) return '0 W'
   const w = Math.round(kw * 1000)
   if (w < 10000) return `${fmtZahl(w, 0)} W`
@@ -182,6 +186,23 @@ interface EnergieFlussProps {
    * wäre eine Rückkopplung).
    */
   vollbild?: boolean
+  /**
+   * Bau A §A5: Klick (oder Enter/Leertaste) auf eine GRUPPENkachel meldet
+   * ihren Key nach oben — `CockpitLiveV4` öffnet damit die „Liste mit Balken".
+   * Ohne Handler bleibt die Kachel ohne Klick-Affordanz (kein Knopf ohne
+   * Wirkung). ⛔ Nicht an `max-sm:hidden` gebunden: der Melder-Fall (viele
+   * Strings, gruppiert) ist mobil.
+   */
+  onGruppeKlick?: (key: string) => void
+  /**
+   * Bau A §A5 (P-1): meldet nach jeder Layout-Änderung die GEZEICHNETEN
+   * Gruppenknoten. Das Layout hängt an der gemessenen Breite, die nur diese
+   * Komponente kennt — der Aufrufer braucht es, um zu entscheiden, ob der Key
+   * eines offenen Overlays noch existiert. Reine Meldung: `EnergieFluss` hält
+   * keinen Overlay-Zustand. `CockpitLiveV4` setzt den Prop nur bei offenem
+   * Overlay (sonst kein zusätzlicher Render je 5-s-Takt).
+   */
+  onGruppen?: (gruppen: GezeichneterKnoten[]) => void
 }
 
 /** Versatz der hinteren Stapel-Rechtecke einer Gruppenkachel (Muster `stack: 7`, detLAN #138). */
@@ -250,8 +271,9 @@ function IconElement({ name, size, color, className }: { name: string; size: num
   return <Icon width={size} height={size} color={color} className={className} />
 }
 
-/** SoC aus gauges extrahieren für einen Komponenten-Key (z.B. "batterie_3" → soc_3) */
-function getSoc(key: string, gauges?: LiveGauge[]): number | null {
+/** SoC aus gauges extrahieren für einen Komponenten-Key (z.B. "batterie_3" → soc_3).
+ *  Exportiert für die „Liste mit Balken" (Ladestand je Speicher/Auto). */
+export function getSoc(key: string, gauges?: LiveGauge[]): number | null {
   if (!gauges) return null
   // Key-Format: "batterie_3" oder "eauto_4" → Investitions-ID ist der Teil nach dem letzten "_"
   const match = key.match(/_(\d+)$/)
@@ -259,6 +281,17 @@ function getSoc(key: string, gauges?: LiveGauge[]): number | null {
   const invId = match[1]
   const gauge = gauges.find(g => g.key === `soc_${invId}`)
   return gauge ? gauge.wert : null
+}
+
+/**
+ * Nennleistung eines PV-Knotens der Live-Response (kWp) oder `null`. Das Feld
+ * liefert der Builder schon EFFEKTIV (`get_erzeuger_kwp`); der Leser steht hier,
+ * damit die „Liste mit Balken" (Bau A §A5) ihre Auslastung aus derselben
+ * klassifizierten Stelle bezieht wie die Kachel (`check:kennwert-roh`,
+ * Eintrag `EnergieFluss.tsx::k`) — kein zweiter Roh-Leser.
+ */
+export function nennleistungKwp(k: LiveKomponente): number | null {
+  return k.leistung_kwp != null && k.leistung_kwp > 0 ? k.leistung_kwp : null
 }
 
 /** SoC Farbe: rot < 20%, gelb 20-50%, grün > 50% */
@@ -272,7 +305,7 @@ function socColor(pct: number): string {
 
 export default function EnergieFluss({
   komponenten, summeErzeugung, summeVerbrauch, summePv, tagesWerte, gauges, pvSollKw,
-  netzPufferW = 100, kopfAktion, vollbild = false,
+  netzPufferW = 100, kopfAktion, vollbild = false, onGruppeKlick, onGruppen,
 }: EnergieFlussProps) {
   const achsen = useChartTheme()
   const [lite, toggleLite] = useLiteMode()
@@ -335,6 +368,11 @@ export default function EnergieFluss({
 
     return { layout: _layout, nettoHausverbrauch: _nettoHausverbrauch }
   }, [komponenten, containerW, hoeheImVollbild, gauges, tagesWerte])
+
+  // P-1: die gezeichneten Gruppen nach oben melden (nur wenn jemand fragt).
+  useEffect(() => {
+    onGruppen?.(layout.nodes.filter(n => n.mitglieder))
+  }, [layout, onGruppen])
 
   if (komponenten.length === 0) return null
 
@@ -575,10 +613,10 @@ export default function EnergieFluss({
         )}
 
         {/* Komponenten-Knoten — Einzelkacheln und Gruppen (Bau A §A4).
-            ⛔ Noch KEINE Klick-Affordanz an Gruppen (kein role="button", kein
-            cursor-pointer): die kommt mit dem Overlay in §A5 — kein Commit trägt
-            einen Knopf ohne Wirkung. Der Detailzugang dieses Stands ist der
-            Tooltip (eine Zeile je Mitglied). */}
+            Seit §A5 ist eine GRUPPENkachel ein Knopf (Klick, Enter, Leertaste)
+            und öffnet die „Liste mit Balken" — aber nur, wenn der Aufrufer
+            `onGruppeKlick` reicht (kein Knopf ohne Wirkung). Einzelkacheln
+            bleiben `cursor-default`, ihr Detailzugang ist der Tooltip. */}
         {nodes.map(node => {
           const k = node.komp
           const mitglieder = node.mitglieder
@@ -685,9 +723,46 @@ export default function EnergieFluss({
           const nx = node.x - NODE_W / 2
           const ny = node.y - NODE_H / 2
 
+          // Gruppe = Knopf (§A5). Der Tap hat per `touchstart` schon den
+          // Tooltip der Kachel gezeigt — er stünde sonst bis zu 6 s über dem
+          // Overlay (`Z_TOOLTIP` > z-50), deshalb vor dem Öffnen wegräumen.
+          const oeffnen = mitglieder && onGruppeKlick
+            ? () => { verbergeTouchTooltip(); onGruppeKlick(k.key) }
+            : null
+          const knopf = oeffnen ? {
+            role: 'button',
+            tabIndex: 0,
+            'aria-label': `${k.label} (${mitglieder!.length}): Liste öffnen`,
+            'data-gruppe': k.key,
+            onClick: oeffnen,
+            onKeyDown: (e: React.KeyboardEvent<SVGGElement>) => {
+              if (e.key !== 'Enter' && e.key !== ' ') return
+              e.preventDefault()
+              oeffnen()
+            },
+          } : {}
+
           return (
-            <g key={`node-${k.key}`} className="cursor-default" data-title={tip}>
+            <g
+              key={`node-${k.key}`}
+              className={oeffnen ? 'group cursor-pointer outline-none' : 'cursor-default'}
+              data-title={tip}
+              {...knopf}
+            >
               <title>{tip}</title>
+
+              {/* Tastatur-Fokus der Gruppenkachel: ein Rahmen, nur bei :focus-visible. */}
+              {oeffnen && (
+                <rect
+                  data-fokusrahmen
+                  x={nx - 3} y={ny - STAPEL_VERSATZ - 3}
+                  width={NODE_W + STAPEL_VERSATZ + 6} height={NODE_H + STAPEL_VERSATZ + 6}
+                  rx={NODE_R + 2}
+                  fill="none"
+                  strokeWidth={1.5}
+                  className="stroke-emerald-500 opacity-0 group-focus-visible:opacity-100"
+                />
+              )}
 
               {/* Stapel-Optik der Gruppe (detLAN #138, Muster `stack: 7`): zwei
                   versetzte Rahmen hinter der Kachel — „hier liegen mehrere". */}

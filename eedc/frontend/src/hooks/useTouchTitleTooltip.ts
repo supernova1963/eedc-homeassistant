@@ -36,16 +36,32 @@ const AUTO_HIDE_MS = 6000
  * `hide`). Ein Bedienelement darauf wäre eine neue Bauform neben `FormelTooltip`
  * und `SimpleTooltip` — die Hausregel kennt zwei, nicht drei.
  */
+// Der offene Tooltip — Modul-Zustand, damit ihn auch ein Aufrufer außerhalb des
+// Hooks wegräumen kann (`verbergeTouchTooltip`). Es gibt höchstens EINEN: der Hook
+// läuft einmal app-weit, und `show` räumt vor jedem neuen Tooltip den alten ab.
+let tooltip: HTMLDivElement | null = null
+let autoHide: ReturnType<typeof setTimeout> | null = null
+
+/**
+ * Blendet einen offenen Touch-Tooltip sofort aus (dasselbe Ausblenden, das der
+ * Hook bei `touchmove`, beim Tap ins Leere und nach dem Auto-Timeout nimmt).
+ *
+ * Für Bedienelemente, die auf einen Tap hin eine NEUE Fläche öffnen: der Tap
+ * hat per `touchstart` zuerst den Tooltip der Kachel gezeigt, und der stünde
+ * sonst bis zu {@link AUTO_HIDE_MS} über dem gerade geöffneten Overlay
+ * (`Z_TOOLTIP` liegt über `z-50`). Erster Nutzer: die Gruppenkachel des
+ * Energieflusses (Bau A §A5, Plan 19.09. Paket 5 Fallstrick 3). Es bleibt EINE
+ * Tooltip-Bauform — das hier ist nur ihr Ausschalter.
+ */
+export function verbergeTouchTooltip(): void {
+  if (autoHide) { clearTimeout(autoHide); autoHide = null }
+  tooltip?.remove()
+  tooltip = null
+}
+
 export function useTouchTitleTooltip() {
   useEffect(() => {
-    let tooltip: HTMLDivElement | null = null
-    let autoHide: ReturnType<typeof setTimeout> | null = null
-
-    const hide = () => {
-      if (autoHide) { clearTimeout(autoHide); autoHide = null }
-      tooltip?.remove()
-      tooltip = null
-    }
+    const hide = verbergeTouchTooltip
 
     const show = (text: string, touchX: number, touchY: number) => {
       hide()
@@ -62,6 +78,10 @@ export function useTouchTitleTooltip() {
         lineHeight: '1.4',
         maxWidth: '260px',
         wordBreak: 'break-word',
+        // Mehrzeilige Auskünfte (`data-title` mit `\n`: der Haus-Knoten, die
+        // Gruppenkacheln des Energieflusses mit einer Zeile je Mitglied) behalten
+        // ihre Umbrüche — ohne das lief alles als ein Fließtext (Bau A NB-1).
+        whiteSpace: 'pre-line',
         pointerEvents: 'none',
         boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
         // Vorläufige Position — wird nach DOM-Einfügen korrigiert
