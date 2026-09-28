@@ -147,3 +147,18 @@ class InvestitionMonatsdatenResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class InvestitionMonatsdatenFormResponse(InvestitionMonatsdatenResponse):
+    """Eine Gerätezeile, wie das Monatsformular sie lädt — mit ihren Herkunftsmarken.
+
+    N-578 B2a (H1): ``abgeleitet_felder`` = ``{sub_key: ABGELEITET_*}`` aus der
+    Provenance der Zeile (`provenance.abgeleitete_subkeys`). Das Formular lädt
+    einen ``summe_achsen``-markierten WP-Gesamtstrom **nicht** als Handpflege,
+    damit seine Auto-Summe bei jedem Speichern neu rechnet.
+
+    ⚠ **Eigenes Modell statt eines Feldes am geteilten:** Die Dashboards liefern
+    `InvestitionMonatsdatenResponse` in ihren Antworten aus — ein Feld dort
+    änderte jede Hub-Antwort. Additiv und nur an der Laderoute des Formulars.
+    """
+    abgeleitet_felder: dict[str, str] = {}

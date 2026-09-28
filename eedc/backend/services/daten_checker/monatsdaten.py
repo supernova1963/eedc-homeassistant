@@ -29,6 +29,7 @@ from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition
 from backend.models.pvgis_prognose import PVGISPrognose
 from backend.services.zaehlerstaende import ist_zaehler_investition
+from backend.services.provenance import ABGELEITET_SUMME_ACHSEN
 
 from .kategorien import (
     CheckErgebnis,
@@ -1251,6 +1252,40 @@ class MonatsdatenChecks:
         # die die Rechnung daneben durchgehen lässt).
         strom_widerspruch: list[str] = []
         rest_auffaellig: list[tuple[str, float, float]] = []
+        # N-578 (H3, Master-Entscheid): **keine neue Meldung, eine zweite Deutung
+        # an den zwei bestehenden.** Ein Gesamtwert, den das Monatsformular
+        # geschrieben hat und der NICHT seine eigene Auto-Summe ist
+        # (`manual:form` ohne `summe_achsen`), kann ein stehen gebliebener
+        # früherer Stand sein: bis N-578 fror die Auto-Summe beim ersten
+        # Speichern eines Monats ein (#416, Rainer). Genau dann nennen die
+        # Meldungen den Handgriff „Feld leeren". Ein Sensor-/Import-Wert
+        # (`external:*`, CSV) bekommt den Satz nicht — er ist gemessen, und die
+        # 25-%-Regel darunter (WK-16d D2) bleibt, wie sie ist.
+        _formular_monate: set[tuple[int, int]] = set()
+        for _imd in inv.monatsdaten:
+            _e = (_imd.source_provenance or {}).get("verbrauch_daten.stromverbrauch_kwh")
+            if (isinstance(_e, dict) and _e.get("source") == "manual:form"
+                    and _e.get("abgeleitet") != ABGELEITET_SUMME_ACHSEN):
+                _formular_monate.add((_imd.jahr, _imd.monat))
+
+        def _handgriff(monate: list[str]) -> str:
+            _vielleicht = [m for m in monate
+                           if (int(m[3:]), int(m[:2])) in _formular_monate]
+            if not _vielleicht:
+                return ""
+            return (
+                " Der Gesamtwert in "
+                + ", ".join(_vielleicht[:6])
+                + (" …" if len(_vielleicht) > 6 else "")
+                + " stammt aus dem Monatsformular. Hast du den Monat früher "
+                "schon einmal gespeichert, als Strom Heizen oder Strom "
+                "Warmwasser noch andere Werte hatten, kann er ein stehen "
+                "gebliebener alter Stand sein: Leere dann im Monatsformular das "
+                "Feld „Stromverbrauch“ und speichere — eedc rechnet ihn danach "
+                "selbst aus Heizen + Warmwasser. Ist er der Wert eines eigenen "
+                "Gesamtzählers, lass ihn stehen."
+            )
+
         for (jahr, monat), daten in sorted(imd_map.items()):
             _auf = wp_strom_aufteilung(daten, param)
             if _auf.gesamtzaehler_zu_klein:
@@ -1295,6 +1330,7 @@ class MonatsdatenChecks:
                     "rechnet in diesen Monaten mit der Summe der Achsen, damit "
                     "nichts verloren geht — prüf bitte im Monatsabschluss, "
                     "welcher Zähler welchen Wert liefert."
+                    + _handgriff(strom_widerspruch)
                 ),
                 link=link_monat_erfassen(strom_widerspruch[0]),
                 investition_id=inv.id,
@@ -1325,6 +1361,7 @@ class MonatsdatenChecks:
                     "noch etwas anderes hängt als die Wärmepumpe. Prüf das "
                     "unter Einstellungen → Datenquellen; ändern musst du "
                     "nichts, wenn der Zähler stimmt."
+                    + _handgriff([m for m, _, _ in rest_auffaellig])
                 ),
                 link=LINK_DATENQUELLEN,
                 investition_id=inv.id,

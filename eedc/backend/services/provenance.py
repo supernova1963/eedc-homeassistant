@@ -265,25 +265,64 @@ ABGELEITET_JAZ_MODUS = REGEL_JAZ_MODUS_SPLIT
 #: JAZ zurück (dietmar1968, T89667 #295).
 ABGELEITET_JAZ_VORSCHLAG = REGEL_JAZ_VORSCHLAG
 
+#: N-578 B2a (29.09.2026): der WP-Gesamtstrom, den das Monatsformular beim
+#: Speichern **selbst rechnet** — `strom_heizen_kwh + strom_warmwasser_kwh`,
+#: solange der Anwender keinen eigenen Gesamtwert pflegt. Ohne die Marke stand
+#: die Summe als `manual:form` in der Zeile und war von einem gepflegten
+#: Gesamtzähler-Wert (cf3b0a16/K3) nicht zu unterscheiden — die Marke ist die
+#: Voraussetzung dafür, dass Formular und Daten-Checker gerechnete von
+#: gepflegten Werten trennen können (N-578 B2/B3). Spiegel: `lib/fieldDefinitions.ts::
+#: ABGELEITET_SUMME_ACHSEN`. Kein Rechenpfad liest sie — die Menge bleibt die
+#: Menge (gemessen 29.09.: Provenance-Leser von `abgeleitet` gibt es nur für
+#: `pv_erzeugung_kwh` und die beiden Wärmegrößen).
+ABGELEITET_SUMME_ACHSEN = "summe_achsen"
+
 ERLAUBTE_ABLEITUNGEN = frozenset({
     ABGELEITET_KWP_ANTEIL,
     ABGELEITET_KAPAZITAET_ANTEIL,
     ABGELEITET_JAZ_VORSCHLAG,
+    ABGELEITET_SUMME_ACHSEN,
 })
 
+#: Marken, die nur an **bestimmten** Feldern etwas bedeuten (N-578 B2a).
+#:
+#: ⚠ **Technischer Grund, nicht Ordnungsliebe:** zwei Lesestellen werten die
+#: *Anwesenheit* irgendeiner Marke aus, nicht ihren Wert —
+#: `pv_monatswerte.py` und `daten_checker/energieprofil.py` stufen einen
+#: `pv_erzeugung_kwh` mit **beliebiger** Marke als kWp-Zerlegung ein. Eine
+#: `summe_achsen`, die ein Client an ein PV-Feld hängte, machte dort still aus
+#: einer Messung eine Verteilung. Die drei älteren Marken bleiben ungebunden
+#: (Bestand, keine Änderung ihres Vertrags).
+ABLEITUNG_NUR_FUER_FELDER: dict[str, frozenset[str]] = {
+    ABGELEITET_SUMME_ACHSEN: frozenset({"stromverbrauch_kwh"}),
+}
 
-def gepruefte_ableitung(wert: Any) -> Optional[str]:
+
+def gepruefte_ableitung(wert: Any, feld: Optional[str] = None) -> Optional[str]:
     """Nimmt nur bekannte Ableitungs-Marken an (#352).
 
     Ein unbekannter String käme sonst ungeprüft in die Provenance und gälte
     dort still als Ableitung, die keine Lesezeit auswerten kann. Verworfene
     Marken landen im Log, damit ein Client-/Backend-Versionsversatz sichtbar
     wird statt still geschluckt zu werden.
+
+    Args:
+        feld: der Sub-Key, an dem die Marke hängen soll. Nötig für Marken aus
+            ``ABLEITUNG_NUR_FUER_FELDER``; fehlt er, wird eine gebundene Marke
+            verworfen (der Wizard-Endpunkt ruft ohne Feld — er kennt die
+            Summen-Marke nicht und hat keinen Client-Aufrufer mehr).
     """
     if wert is None:
         return None
     if isinstance(wert, str) and wert in ERLAUBTE_ABLEITUNGEN:
-        return wert
+        gebunden = ABLEITUNG_NUR_FUER_FELDER.get(wert)
+        if gebunden is None or feld in gebunden:
+            return wert
+        logger.warning(
+            "Ableitungs-Marke %r am Feld %r verworfen (gilt nur für %s)",
+            wert, feld, ", ".join(sorted(gebunden)),
+        )
+        return None
     logger.warning(
         "Unbekannte Ableitungs-Marke %r verworfen (erlaubt: %s)",
         wert, ", ".join(sorted(ERLAUBTE_ABLEITUNGEN)),
@@ -297,9 +336,33 @@ def gepruefte_ableitungen(werte: Any) -> dict[str, str]:
         return {}
     out: dict[str, str] = {}
     for feld, marke in werte.items():
-        geprueft = gepruefte_ableitung(marke)
+        geprueft = gepruefte_ableitung(marke, feld=str(feld))
         if geprueft is not None:
             out[str(feld)] = geprueft
+    return out
+
+
+def abgeleitete_subkeys(
+    source_provenance: Optional[dict], json_attr: str = "verbrauch_daten",
+) -> dict[str, str]:
+    """Die Ableitungs-Marken einer Zeile je Sub-Key — die **Lese**seite von #352.
+
+    ``{sub_key: ABGELEITET_*}`` für jeden Sub-Key von ``json_attr``, dessen
+    Provenance-Eintrag eine Marke trägt. N-578 B2a: das Monatsformular muss beim
+    Laden wissen, ob der gespeicherte WP-Gesamtstrom die eigene Auto-Summe ist
+    (``summe_achsen`` ⇒ nicht als Handpflege laden, bei jedem Speichern neu
+    rechnen) oder ein gepflegter Wert. Bis dahin ging der Kanal nur in eine
+    Richtung — die älteren Marken bildet der Client beim Speichern aus dem
+    Vorschlag neu und brauchte sie nie zu lesen.
+    """
+    out: dict[str, str] = {}
+    praefix = f"{json_attr}."
+    for key, eintrag in (source_provenance or {}).items():
+        if not key.startswith(praefix) or not isinstance(eintrag, dict):
+            continue
+        marke = eintrag.get("abgeleitet")
+        if isinstance(marke, str) and marke:
+            out[key[len(praefix):]] = marke
     return out
 
 

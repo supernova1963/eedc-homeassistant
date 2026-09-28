@@ -25,8 +25,10 @@ from backend.core.hub_leer_grund import bestimme_leer_grund
 from backend.core.berechnungen import summe_graue_last
 from backend.api.routes.investitionen.dashboard_basis import (  # noqa: F401 — Re-Export (investitionen/__init__.py, Tests)
     GewichtetePreise,
+    InvestitionMonatsdatenFormResponse,
     InvestitionMonatsdatenResponse,
 )
+from backend.services.provenance import abgeleitete_subkeys
 from backend.api.routes.investitionen.dashboard_eauto import (  # noqa: F401 — Re-Export (investitionen/__init__.py, Tests)
     router as _dashboard_eauto_router,
     EAutoDashboardResponse,
@@ -73,7 +75,7 @@ router.include_router(_dashboard_waermepumpe_router)
 router.include_router(_dashboard_speicher_router)
 
 
-@router.get("/monatsdaten/{anlage_id}/{jahr}/{monat}", response_model=list[InvestitionMonatsdatenResponse])
+@router.get("/monatsdaten/{anlage_id}/{jahr}/{monat}", response_model=list[InvestitionMonatsdatenFormResponse])
 async def get_investition_monatsdaten_by_month(
     anlage_id: int,
     jahr: int,
@@ -114,7 +116,18 @@ async def get_investition_monatsdaten_by_month(
         .where(InvestitionMonatsdaten.jahr == jahr)
         .where(InvestitionMonatsdaten.monat == monat)
     )
-    return md_result.scalars().all()
+    # N-578 B2a (H1): die Herkunftsmarken je Zeile reisen mit — additiv, s.
+    # `InvestitionMonatsdatenFormResponse`.
+    return [
+        InvestitionMonatsdatenFormResponse(
+            id=imd.id, investition_id=imd.investition_id, jahr=imd.jahr, monat=imd.monat,
+            verbrauch_daten=imd.verbrauch_daten or {},
+            einsparung_monat_euro=imd.einsparung_monat_euro,
+            co2_einsparung_kg=imd.co2_einsparung_kg,
+            abgeleitet_felder=abgeleitete_subkeys(imd.source_provenance),
+        )
+        for imd in md_result.scalars().all()
+    ]
 
 
 # dashboard_wallbox.py — Vorlage 6: das Dashboard haengt an seiner bisherigen Stelle (Routen-Reihenfolge unveraendert).

@@ -29,8 +29,24 @@ export interface FeldDefinition {
    * dort mit, sonst zeigen Monatsabschluss und Backend verschiedene Felder.
    */
   bedingung?: string | string[]
+  /**
+   * N-578 B2b: die Bedingungs-Schlüssel, die hier nur **weich** gelten — Spiegel
+   * von `"weich"` in `field_definitions/registry.py` und der Auswertung in
+   * `bedingungen.py::bedingungs_urteil`. Scheitert das Feld allein an weichen
+   * Schlüsseln, erscheint es trotzdem, **sobald es belegt ist** (drittes Argument
+   * von {@link getFelderFuerInvestition}). Ein scheiternder harter Schlüssel
+   * schlägt weich (wie im Backend).
+   *
+   * ⚠ Bewusst nur dort gesetzt, wo das Formular die weiche Form braucht
+   * (`stromverbrauch_kwh` bei getrennter Messung, cf3b0a16). Die übrigen weichen
+   * Backend-Felder sind im Client entweder ohne Bedingung (`heizenergie_kwh`)
+   * oder gar nicht vorhanden (`betriebsart_*`, eigene Zuordnungs-Fläche).
+   */
+  weich?: string[]
   // #281: konditionelles Label — trifft eine Bedingung zu, ersetzt sie `label`.
   label_wenn?: Record<string, string>
+  /** N-578 B2b: konditioneller Hinweis — dieselbe Form wie `label_wenn`. */
+  hint_wenn?: Record<string, string>
   /**
    * #377: Der Parameter-Schlüssel, unter dem die Einheit am **Gerät** steht.
    *
@@ -88,7 +104,8 @@ const SPEICHER_FELDER: FeldDefinition[] = [
  *
  * ⭐ **WK-15c (14.09.2026): die kleinste Spiegelung, die die Frage beantwortet.**
  * Der Client hat keinen Urteils-Auswerter — `getFelderFuerInvestition` unten
- * kennt nur „Feld zeigen oder nicht" und keine *weichen* Bedingungen. Ein
+ * kennt nur „Feld zeigen oder nicht" und die *weiche* Form nur für die
+ * Sichtbarkeit belegter Felder (`weich` + `belegteFelder`, N-578). Ein
  * vollständiger Spiegel von `bedingungs_urteil` wäre erheblich mehr Code, als
  * die zwei Fragen wert sind, die ihn brauchen (Vorbelegung und Feld-
  * Sichtbarkeit im Investitionsformular). Deshalb zwei benannte Prädikate mit
@@ -114,9 +131,41 @@ export function hatWarmwasserAchse(params: Record<string, unknown> | null | unde
   return !istLuftLuft(params)
 }
 
+/**
+ * N-578 B2a: Herkunftsmarke des **vom Formular gerechneten** WP-Gesamtstroms
+ * (`strom_heizen_kwh + strom_warmwasser_kwh`, Auto-Summe beim Speichern).
+ *
+ * Spiegel von `services/provenance.py::ABGELEITET_SUMME_ACHSEN` — der Wert geht
+ * über den #352-Kanal `abgeleitet_felder` mit und landet in der Provenance des
+ * Sub-Keys. Er unterscheidet die gerechnete Summe von einem **gepflegten**
+ * Gesamtzähler-Wert (cf3b0a16/K3): nur der zweite ist eine eigene Aussage.
+ */
+export const ABGELEITET_SUMME_ACHSEN = 'summe_achsen'
+
+/**
+ * N-578: Rechnet das Formular diesen Wert beim Speichern selbst (Auto-Summe)?
+ *
+ * Der WP-Gesamtstrom bei getrennter Messung: leer = `strom_heizen_kwh +
+ * strom_warmwasser_kwh`, gesendet mit {@link ABGELEITET_SUMME_ACHSEN}. **Die eine
+ * Stelle** für die Frage — das Formular fragt sie beim Speichern (Summe bilden?)
+ * und bei den Vorschlägen (der Summen-Vorschlag `berechnung` ist daneben
+ * redundant und würde, übernommen, als unmarkierte Handpflege wieder einfrieren).
+ */
+export function istAutoSummenFeld(
+  typ: string, feld: string, parameter: InvParameter | null | undefined,
+): boolean {
+  return typ === 'waermepumpe' && feld === 'stromverbrauch_kwh'
+    && (parameter ?? {}).getrennte_strommessung === true
+}
+
 const WAERMEPUMPE_FELDER: FeldDefinition[] = [
+  // N-578 B2b: bei getrennter Messung WEICH (Spiegel von registry.py, cf3b0a16) —
+  // das Feld erscheint dann, sobald es belegt ist: ein gepflegter Wert ohne die
+  // Summen-Marke oder ein zugeordneter Gesamt-Sensor. Leer lassen = eedc rechnet.
   { feld: 'stromverbrauch_kwh',   label: 'Stromverbrauch',   einheit: 'kWh', bedingung: '!getrennte_strommessung',
-    hint: 'Stromaufnahme der WP (elektrisch)' },
+    weich: ['getrennte_strommessung'],
+    hint: 'Stromaufnahme der WP (elektrisch)',
+    hint_wenn: { getrennte_strommessung: 'Gesamtzähler der WP. Leer lassen: eedc rechnet Strom Heizen + Strom Warmwasser. Ein eigener Wert gewinnt; was er mehr misst, gilt als Steuerung/Standby („nicht aufgeteilt").' } },
   { feld: 'strom_heizen_kwh',     label: 'Strom Heizen',     einheit: 'kWh', bedingung: 'getrennte_strommessung',
     hint: 'Stromaufnahme nur für Heizung (elektrisch)' },
   // B5: die zweite Hälfte von N-304 — eine Split-Klimaanlage hat keinen
@@ -224,7 +273,14 @@ type InvParameter = Record<string, unknown>
  */
 export function getFelderFuerInvestition(
   typ: string,
-  parameter: InvParameter | null | undefined
+  parameter: InvParameter | null | undefined,
+  /**
+   * N-578 B2b: Felder, die an diesem Gerät **belegt** sind — Spiegel von
+   * `belegte_felder` in `field_definitions/auswahl.py`. Entscheidet allein über
+   * Felder mit `weich`; ohne das Argument bleibt es beim harten Bild (alle
+   * übrigen Aufrufer, und das Formular, solange nichts belegt ist).
+   */
+  belegteFelder?: ReadonlySet<string>,
 ): FeldDefinition[] {
   const params = parameter ?? {}
 
@@ -281,24 +337,41 @@ export function getFelderFuerInvestition(
   // `bedingungsWerte`, optional mit `!` negiert; eine Liste gilt als UND.
   // Ein unbekannter Schlüssel ZEIGT das Feld (fail-open) — ein Tippfehler darf
   // kein zugeordnetes Feld unsichtbar machen. Begründung im Backend-Docstring.
-  const erfuellt = (bedingung: string | string[] | undefined): boolean => {
+  //
+  // N-578 B2b: Spiegel von `bedingungs_urteil` — ein scheiternder Schlüssel aus
+  // `weich` blendet das Feld nur aus, solange es nicht belegt ist; ein
+  // scheiternder harter Schlüssel blendet es immer aus (hart schlägt weich).
+  const erfuellt = (f: FeldDefinition): boolean => {
+    const { bedingung } = f
     if (!bedingung) return true
     const tokens = typeof bedingung === 'string' ? [bedingung] : bedingung
-    return tokens.every(token => {
+    const weich = new Set(f.weich ?? [])
+    let nurWeichGescheitert = false
+    for (const token of tokens) {
       const negiert = token.startsWith('!')
       const schluessel = negiert ? token.slice(1) : token
-      if (!(schluessel in bedingungsWerte)) return true
-      return bedingungsWerte[schluessel] !== negiert
-    })
-  }
-
-  return allFields.filter(f => erfuellt(f.bedingung)).map(({ bedingung: _b, label_wenn, ...rest }) => {
-    if (label_wenn) {
-      for (const [cond, altLabel] of Object.entries(label_wenn)) {
-        if (bedingungsWerte[cond]) return { ...rest, label: altLabel }
+      if (!(schluessel in bedingungsWerte)) continue
+      if (bedingungsWerte[schluessel] === negiert) {
+        if (!weich.has(schluessel)) return false
+        nurWeichGescheitert = true
       }
     }
-    return rest
+    return !nurWeichGescheitert || (belegteFelder?.has(f.feld) ?? false)
+  }
+
+  return allFields.filter(erfuellt).map(({ bedingung: _b, weich: _w, label_wenn, hint_wenn, ...rest }) => {
+    let feld: FeldDefinition = rest
+    if (hint_wenn) {
+      for (const [cond, altHint] of Object.entries(hint_wenn)) {
+        if (bedingungsWerte[cond]) { feld = { ...feld, hint: altHint }; break }
+      }
+    }
+    if (label_wenn) {
+      for (const [cond, altLabel] of Object.entries(label_wenn)) {
+        if (bedingungsWerte[cond]) return { ...feld, label: altLabel }
+      }
+    }
+    return feld
   })
 }
 

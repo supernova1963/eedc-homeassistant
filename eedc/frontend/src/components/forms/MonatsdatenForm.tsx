@@ -10,7 +10,7 @@ import { investitionenApi, wetterApi, monatsabschlussApi } from '../../api'
 import type { MonatsabschlussResponse, FeldStatus, BehalteneAbweichung } from '../../api/monatsabschluss'
 import type { WetterDaten } from '../../api/wetter'
 import type { Monatsdaten, Investition } from '../../types'
-import { getFelderFuerInvestition, LEGACY_FELDNAMEN, readFeldWert } from '../../lib/fieldDefinitions'
+import { getFelderFuerInvestition, LEGACY_FELDNAMEN, readFeldWert, ABGELEITET_SUMME_ACHSEN, istAutoSummenFeld } from '../../lib/fieldDefinitions'
 import { prefillWert, ermittleZustand, zaehleAmpel, behaltenEintrag, abgeleiteteMarke, type ErfassungZustand } from '../../lib/erfassungZustand'
 import { istAktivImMonat } from '../../lib/investitionAktiv'
 import { fmtZahl, SONSTIGES_KATEGORIE_LABELS } from '../../lib'
@@ -289,17 +289,25 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
   // ausgelassen und die alte Liste bliebe in der DB stehen (#286 rcmcronny).
   const [initialHattePositionen, setInitialHattePositionen] = useState<Record<string, boolean>>({})
   const [loadingInvData, setLoadingInvData] = useState(false)
+  // N-578 B2b: je Gerät die beim Laden BELEGTEN Felder — gespeicherter Wert,
+  // der nicht die eigene Auto-Summe ist (`summe_achsen`). Entscheidet über die
+  // weichen Felder der Registry (Spiegel von `belegte_felder` im Backend). Fest
+  // ab dem Laden: ein Feld, das der Anwender leert, bleibt bis zum Speichern
+  // stehen (sonst verschwände es unter dem Cursor).
+  const [belegtBeimLaden, setBelegtBeimLaden] = useState<Record<string, Set<string>>>({})
 
   // Initialisiere Investitions-Daten und lade vorhandene Daten beim Bearbeiten
   useEffect(() => {
     if (aktiveInvestitionen.length === 0) return
 
     const initializeAndLoad = async () => {
-      // Initialisiere mit leeren Werten
       const initial: Record<string, Record<string, string>> = {}
-      // Generische Initialisierung aus field_definitions (E3)
-      aktiveInvestitionen.forEach(inv => {
-        const felder = getFelderFuerInvestition(inv.typ, inv.parameter)
+      // N-578 B2b: belegte Felder je Gerät (s. `belegtBeimLaden`).
+      const belegt: Record<string, Set<string>> = {}
+      // Generische Initialisierung aus field_definitions (E3) — mit den belegten
+      // Feldern, damit ein weiches Feld mit gepflegtem Wert seinen Schlüssel hat.
+      const initialisiere = () => aktiveInvestitionen.forEach(inv => {
+        const felder = getFelderFuerInvestition(inv.typ, inv.parameter, belegt[String(inv.id)])
         const init: Record<string, string> = {}
         felder.forEach(f => { init[f.feld] = '' })
         initial[inv.id] = init
@@ -317,6 +325,24 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
             monatsdaten.jahr,
             monatsdaten.monat
           )
+
+          // N-578 B2a/B2b: ein `summe_achsen`-markierter Wert ist die eigene
+          // Auto-Summe des Formulars — keine Handpflege. Er macht sein Feld nicht
+          // „belegt"; das weiche Feld bekommt dann keinen Schlüssel, und der Wert
+          // wird nicht geladen (sonst hielte `hasValue` die Summe beim Speichern
+          // an, und der Wert fröre ein). Ohne getrennte Messung ist das Feld hart
+          // sichtbar — dort wird auch ein markierter Wert normal geladen, denn er
+          // ist dann die Menge, mit der eedc rechnet.
+          const istAutoSumme = (imd: { abgeleitet_felder?: Record<string, string> }, key: string) =>
+            imd.abgeleitet_felder?.[key] === ABGELEITET_SUMME_ACHSEN
+          existingData.forEach(imd => {
+            const b = new Set<string>()
+            Object.entries(imd.verbrauch_daten ?? {}).forEach(([key, value]) => {
+              if (value !== null && value !== undefined && !istAutoSumme(imd, key)) b.add(key)
+            })
+            belegt[String(imd.investition_id)] = b
+          })
+          initialisiere()
 
           // Merge vorhandene Daten in initial
           existingData.forEach(imd => {
@@ -401,6 +427,8 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           setLoadingInvData(false)
         }
       }
+      // Neuer Monat oder Ladefehler: nichts belegt, harte Registry.
+      if (Object.keys(initial).length === 0) initialisiere()
 
       // =================================================================
       // HA-Vorausfüllung: Werte aus HA-Statistik einfügen
@@ -419,6 +447,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
       }
 
       setInvestitionsDaten(initial)
+      setBelegtBeimLaden(belegt)
       if (Object.keys(loadedPositionen).length > 0) {
         setSonstigePositionen(loadedPositionen)
       }
@@ -538,10 +567,42 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
     const map: Record<number, Record<string, FeldStatus>> = {}
     if (status) for (const inv of status.investitionen) {
       map[inv.id] = {}
-      for (const f of inv.felder) map[inv.id][f.feld] = f
+      const parameter = investitionen.find(i => i.id === inv.id)?.parameter
+      for (const f of inv.felder) {
+        // N-578 (Master-Entscheid H2): Am Feld, das das Formular selbst als
+        // Summe rechnet, ist der Summen-Vorschlag `berechnung` (Heizen +
+        // Warmwasser der GESPEICHERTEN Achsen, `vorschlag_service.py`) redundant.
+        // Vorbelegt oder per „übernehmen" in das Feld geholt, stünde er als
+        // unmarkierte Handpflege da und fröre beim nächsten Achsen-Update wieder
+        // ein. Er wird deshalb hier — an der einen Stelle, aus der Vorbelegung,
+        // Assistenz und Marken-Abgleich lesen — nicht angeboten. Messwert-
+        // Vorschläge (HA-Sensor, MQTT, …) bleiben.
+        map[inv.id][f.feld] = istAutoSummenFeld(inv.typ, f.feld, parameter)
+          ? { ...f, vorschlaege: f.vorschlaege.filter(v => v.quelle !== 'berechnung') }
+          : f
+      }
     }
     return map
-  }, [status])
+  }, [status, investitionen])
+
+  // N-578 B2b/H2: Felder mit zugeordnetem SENSOR je Gerät — aus dem Status
+  // (`FeldStatus.strategie`). Der Status ist die eine Stelle, die die Zuordnung
+  // des Geräts für diesen Monat auflöst; die Laderoute liefert nur gespeicherte
+  // Zeilen (ein neuer Monat hat keine) und kennt die Zuordnung nicht.
+  // ⚠ `strategie === 'sensor'`, nicht „Schlüssel vorhanden": eine geräumte
+  // Zuordnung bleibt als `{"strategie": "keine"}` stehen
+  // (`datenquellen_mapping_sync.py`) und liefert keinen Wert.
+  const sensorFelder = useCallback((invId: number): Set<string> => new Set(
+    Object.values(invStatus[invId] ?? {}).filter(f => f.strategie === 'sensor').map(f => f.feld),
+  ), [invStatus])
+
+  // Belegt im Sinn der weichen Registry-Bedingung — Spiegel von `belegte_felder`
+  // (`monatsabschluss/views.py`: Wert ODER Zuordnung), mit zwei Präzisierungen:
+  // die eigene Auto-Summe zählt nicht als Wert, und zugeordnet heißt Sensor.
+  const belegteFuer = useCallback((inv: Investition): Set<string> => new Set([
+    ...(belegtBeimLaden[String(inv.id)] ?? []),
+    ...sensorFelder(inv.id),
+  ]), [belegtBeimLaden, sensorFelder])
 
   // Wechselt beim Statusladen → Ampel-Blöcke remounten mit korrektem Einklapp-Default.
   const statusMonthKey = status ? `${status.jahr}-${status.monat}` : 'nostatus'
@@ -551,11 +612,11 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
   // Ist der Status geladen, ist SEINE Feldmenge maßgeblich; sonst Fallback auf die
   // clientseitige Registry.
   const felderFuer = useCallback((inv: Investition) => {
-    const alle = getFelderFuerInvestition(inv.typ, inv.parameter)
+    const alle = getFelderFuerInvestition(inv.typ, inv.parameter, belegteFuer(inv))
     const erlaubt = invStatus[inv.id]
     if (!erlaubt || Object.keys(erlaubt).length === 0) return alle
     return alle.filter(f => f.feld in erlaubt)
-  }, [invStatus])
+  }, [invStatus, belegteFuer])
 
   // Kopf-Ampel (§6.2) + Review (§6.6): Zustände über den Pflicht-Kern (Zähler +
   // Investitionsfelder; Wetter/Preise/Sonderkosten zählen nicht als „offen") und
@@ -638,8 +699,21 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
       for (const inv of status.investitionen) {
         const cur = next[inv.id]
         if (!cur) continue
+        // N-578 B1: vorbelegt wird nur, was das Formular für DIESES Gerät
+        // zeichnet (`felderFuer` — dieselbe Liste wie die Sektion darunter).
+        // Der Status führt auch Felder, die der Client ausblendet (weiche
+        // Backend-Bedingung, cf3b0a16). Ein Vorschlag landete dann in einem
+        // unsichtbaren Schlüssel: nie gesendet, aber „belegt" — die WP-Auto-
+        // Summe beim Speichern fragt genau diesen Schlüssel und fiel aus, der
+        // Gesamtstrom fror auf dem Stand des ersten Speicherns ein (#416).
+        // Ein Vorschlag zu einem nicht gezeichneten Feld wird verworfen.
+        const geraet = aktiveInvestitionen.find(i => i.id === inv.id)
+        const gezeichnet = new Set((geraet ? felderFuer(geraet) : []).map(f => f.feld))
         const nc = { ...cur }
-        for (const f of inv.felder) {
+        // Die Feldstände aus `invStatus` — dort ist der Summen-Vorschlag am
+        // Auto-Summen-Feld schon herausgenommen (N-578, s. oben).
+        for (const f of Object.values(invStatus[inv.id] ?? {})) {
+          if (!gezeichnet.has(f.feld)) continue
           if ((nc[f.feld] ?? '') === '') {
             const w = prefillWert(f)
             if (w != null) nc[f.feld] = String(w)
@@ -649,7 +723,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
       }
       return next
     })
-  }, [status, investitionsDaten, aktiveInvestitionen])
+  }, [status, investitionsDaten, aktiveInvestitionen, felderFuer, invStatus])
 
   // Wetterdaten automatisch abrufen
   const fetchWetterdaten = async () => {
@@ -768,8 +842,9 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
 
         const parsed: InvestitionMonatsdaten = {}
 
-        // Generisches Parsen aus field_definitions (E4)
-        const felder = getFelderFuerInvestition(inv.typ, inv.parameter)
+        // Generisches Parsen aus field_definitions (E4) — mit den belegten
+        // Feldern (N-578 B2b): ein sichtbares weiches Feld wird auch gesendet.
+        const felder = getFelderFuerInvestition(inv.typ, inv.parameter, belegteFuer(inv))
         // #352: Steht im Feld genau der Vorschlag, den das Backend als
         // ZERLEGUNG eines Anlagen-Gesamtwerts geliefert hat (Connector/Cloud
         // bei mehreren Modulen bzw. Speichern), geben wir seine Marke mit.
@@ -786,11 +861,23 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
             if (marke) abgeleiteteFelder[f.feld] = marke
           }
         })
-        // WP Auto-Sum: stromverbrauch aus getrennten Werten berechnen
-        if (inv.typ === 'waermepumpe' && inv.parameter?.getrennte_strommessung === true && !hasValue(daten.stromverbrauch_kwh)) {
+        // WP Auto-Sum: stromverbrauch aus getrennten Werten berechnen.
+        // N-578 (H2): NICHT, wenn ein Gesamt-Sensor zugeordnet ist — dann
+        // liefert er die Menge (Vorschlag im sichtbaren Feld bzw. später der
+        // HA-Statistik-Import); eine gesendete Summe stünde als `manual:form`
+        // davor und hielte den Import ab. Leer + kein Sensor = eedc rechnet.
+        if (istAutoSummenFeld(inv.typ, 'stromverbrauch_kwh', inv.parameter)
+            && !hasValue(daten.stromverbrauch_kwh)
+            && !sensorFelder(inv.id).has('stromverbrauch_kwh')) {
           const sh = hasValue(daten.strom_heizen_kwh) ? pf(daten.strom_heizen_kwh) : 0
           const sw = hasValue(daten.strom_warmwasser_kwh) ? pf(daten.strom_warmwasser_kwh) : 0
-          if (sh > 0 || sw > 0) (parsed as Record<string, number>).stromverbrauch_kwh = sh + sw
+          if (sh > 0 || sw > 0) {
+            (parsed as Record<string, number>).stromverbrauch_kwh = sh + sw
+            // N-578 B2a: die Summe kennzeichnet sich — sonst stünde sie in der
+            // Provenance wie ein gepflegter Gesamtzähler-Wert, und nichts
+            // unterschiede sie später von einer eigenen Aussage des Anwenders.
+            abgeleiteteFelder.stromverbrauch_kwh = ABGELEITET_SUMME_ACHSEN
+          }
         }
 
         // Sonstige Positionen (Erträge & Ausgaben) für alle Investitionstypen.

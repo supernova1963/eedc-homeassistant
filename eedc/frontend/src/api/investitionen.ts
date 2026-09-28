@@ -198,6 +198,11 @@ export interface InvestitionMonatsdaten {
   verbrauch_daten: Record<string, number>
   einsparung_monat_euro: number | null
   co2_einsparung_kg: number | null
+  /** N-578 B2a: Herkunftsmarken je Sub-Key (`{feld: 'summe_achsen' | 'kwp_anteil' | …}`).
+   *  Nur die Laderoute des Monatsformulars (`getMonatsdatenByMonth`) liefert sie; die
+   *  Dashboards nicht. Ein `summe_achsen`-markierter WP-Gesamtstrom ist die eigene
+   *  Auto-Summe des Formulars und wird nicht als Handpflege geladen. */
+  abgeleitet_felder?: Record<string, string>
 }
 
 export interface EAutoDashboardResponse {
