@@ -20,6 +20,36 @@ export interface LiveKomponente {
    */
   betriebsmodus?: string | null
   betriebsmodus_label?: string | null
+  // ── #341/#348: Merkmale für die Gruppierung im Energiefluss (Bau A) ──
+  // Reine Anreicherung, alle optional: fehlen sie (älteres Backend), fällt die
+  // Gruppierung auf ihre letzte Stufe. Noch ohne Leser (die kommen mit §A3/A4).
+  /** Investitionstyp — an jedem Investitions-Knoten, nie an netz/haushalt/pv_gesamt. */
+  typ?: string | null
+  /** Nur Sonstiges: die gepflegte Kategorie (erzeuger · abgabe · speicher · verbraucher · zaehler …), roh. */
+  kategorie?: string | null
+  /** Nur `pv_*`, nur bei gepflegter Ausrichtung (kein Süd-Default); „Ost-West" ist EIN Label. */
+  ausrichtung_label?: string | null
+  /** Nur `pv_*`: ID des Trägers (Wechselrichter oder Balkonkraftwerk; BKW-Rest trägt die eigene). */
+  traeger_id?: number | null
+  /** Nur `batterie_*`: nutzbare Kapazität in kWh (Backend-SoT). */
+  kapazitaet_kwh?: number | null
+  /** Nur `wallbox_*`: die zugeordneten Autos — dieselbe Zuordnung wie `parent_key`. */
+  fahrzeuge?: LiveFahrzeug[] | null
+  /** Nur `wallbox_*`: „eindeutig" bei genau einer live liefernden Wallbox, sonst „geschaetzt". */
+  fahrzeuge_zuordnung?: 'eindeutig' | 'geschaetzt' | null
+}
+
+/**
+ * Ein E-Auto in der Wallbox-Kachel (#341/#348, Plan 1.4a) — auch ohne eigenen
+ * Knoten (nur Ladestand, Leistungssensor mit der Wallbox geteilt).
+ */
+export interface LiveFahrzeug {
+  investition_id: number
+  label: string
+  soc: number | null
+  /** kW, vorzeichenbehaftet: positiv lädt, negativ gibt ab (V2H); `null` = nicht getrennt gemessen. */
+  kw: number | null
+  v2h: boolean
 }
 
 export interface LiveGauge {
