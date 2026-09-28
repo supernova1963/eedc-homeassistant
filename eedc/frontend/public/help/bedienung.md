@@ -945,7 +945,9 @@ Der interaktive Überblick über alle Monatswerte in einer sortierbaren Tabelle 
 > **Sonstiges als Spalte (Monat und Tag).** Der Spalten-Picker führt die Gruppe **„Sonstiges"** mit
 > zwei wählbaren Spalten: **Sonstiges Erzeugung (kWh)** und **Sonstiges Verbrauch (kWh)** — die
 > Summe deiner Geräte vom Typ *Sonstiges*, getrennt nach der bei ihnen gepflegten **Kategorie**
-> (*Erzeuger* z. B. ein Mini-BHKW, *Verbraucher* z. B. ein Heizstab). Beide sind **nicht**
+> (*Erzeuger* z. B. ein Mini-BHKW, *Verbraucher* z. B. ein Heizstab). Steht die Kategorie auf
+> *Automatisch*, zählt die Monatsspalte, was beim Gerät als Erzeugung bzw. Verbrauch erfasst ist, und
+> die Tagesspalte führt es als Verbrauch. Beide sind **nicht**
 > voreingestellt; du blendest sie über „Spalten" ein. Der Verbrauch steckt bereits im
 > Gesamtverbrauch — die Spalte schlüsselt ihn auf, sie addiert nichts hinzu.
 >

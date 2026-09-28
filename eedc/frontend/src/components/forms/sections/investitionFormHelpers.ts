@@ -9,7 +9,6 @@ import {
   PARAM_WAERMEPUMPE_DEFAULTS,
   PARAM_WALLBOX_DEFAULTS,
   PARAM_BALKONKRAFTWERK_DEFAULTS,
-  PARAM_SONSTIGES_DEFAULTS,
 } from '../../../lib'
 import type { Innengeraet } from '../../../lib/investitionParameter'
 import { hatHeizAchse, hatWarmwasserAchse } from '../../../lib/fieldDefinitions'
@@ -341,7 +340,17 @@ export function getInitialParamData(
       }
     case 'sonstiges':
       return {
-        kategorie: paramStr(params.kategorie, PARAM_SONSTIGES_DEFAULTS.kategorie),
+        // N-573: bewusst OHNE Default-Argument — leer = „Automatisch (nach den
+        // Monatswerten)", Bauform wie `kopplung` (#351). Die Leser werten
+        // „nicht gepflegt" anders aus als „erzeuger": die Monatsebene ordnet
+        // das Gerät nach seinen Werten ein (N-250,
+        // `core/berechnungen/energie.py::sonstiges_richtung`), die Tages-Σ
+        // (`sonstiges_kwh_je_richtung`) und die Live-Serie
+        // (`live_sensor_config.py`, nur gepflegtes „erzeuger" wird Quelle)
+        // zählen es als Verbraucher. Vorbelegt schrieb das erste Speichern
+        // still „erzeuger" fest — beim Bearbeiten eines Bestandsgeräts ebenso
+        // wie beim Anlegen, wo die erste Option wie eine getroffene Wahl aussah.
+        kategorie: paramStr(params.kategorie),
         beschreibung: paramStr(params.beschreibung),
         // F-77: beide Schluessel fehlten hier — ein Wasserzaehler zeigte beim
         // Oeffnen immer „Gas"/„m³". Bewusst OHNE Default (#397-Muster): der

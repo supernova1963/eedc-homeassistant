@@ -390,6 +390,9 @@ export const PARAM_SONSTIGES = {
 } as const
 
 export const PARAM_SONSTIGES_DEFAULTS = {
+  // Historischer Default, seit N-573 ohne Formular-Leser: das Formular belegt
+  // die Kategorie nicht mehr vor (leer = „Automatisch (nach den Monatswerten)").
+  // Stehen gelassen als Spiegel von `core/investition_parameter.py`.
   kategorie: 'erzeuger' as const,
   zaehler_art: 'gas' as const,
   // ⚠ Anzeige-Vorbelegung, keine Umrechnung. eedc rechnet Zählerstände nie um.

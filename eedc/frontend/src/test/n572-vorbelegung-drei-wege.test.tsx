@@ -83,6 +83,9 @@ describe('N-572 — getInitialParamData belegt die Drei-Wege-Keys nicht vor', ()
         expect(warum.length).toBeGreaterThan(40)
       })
 
+      // N-573-Klarstellung: „Anlegen ({})" ist seit N-572 zugleich der Fall
+      // „Bearbeiten eines Geräts OHNE den Key" — `getInitialParamData` kennt
+      // keinen Modus, das Verhalten ist identisch. Titel bewusst unverändert.
       it('Anlegen ({}): Key ist vorhanden und leer', () => {
         const result = getInitialParamData(typ, {})
         // Gegenrichtung: ein umbenannter oder gewanderter Key fiele sonst still
@@ -102,6 +105,8 @@ describe('N-572 — getInitialParamData belegt die Drei-Wege-Keys nicht vor', ()
   }
 })
 
+// N-573-Klarstellung: „beim Anlegen" heißt hier `getInitialParamData(typ, {})`
+// — derselbe Zustand wie ein Bestandsgerät ohne den Key (s. o.).
 describe('N-572 — das gerenderte Feld zeigt beim Anlegen nichts vor', () => {
   const noop = () => {}
 
@@ -263,5 +268,145 @@ describe('N-572 — Formular-Roundtrip (Vorlage §3/4)', () => {
     // Gegenprobe: der Merge hat die übrigen Keys getragen.
     expect(parameter.verbrauch_kwh_100km).toBe(17)
     expect(parameter.sensor_mapping_hinweis).toBe('wizard')
+  })
+})
+
+// ── N-573 — die Kategorie eines *Sonstiges*-Geräts wird nicht vorbelegt ────
+//
+// Eigener Block, NICHT in `DREI_WEGE_KEYS`: deren generische Fälle sind für
+// ein Zahlenfeld gebaut (`{key: 42}` ⇒ `'42'`, Rendertest über `input.value`),
+// die Kategorie ist ein Select mit festen Werten.
+//
+// Warum „leer" hier eine Aussage ist — am Leser begründet:
+// * Monatsebene (N-250, `core/berechnungen/energie.py::sonstiges_richtung`):
+//   ohne gepflegte Kategorie entscheidet der WERT, ob das Gerät Erzeuger oder
+//   Verbraucher ist. Eine vorbelegte „erzeuger" schaltet das ab.
+// * Tages-Σ (`sonstiges_kwh_je_richtung`) und Live-Serie
+//   (`services/live_sensor_config.py`, nur gepflegtes „erzeuger" wird Quelle)
+//   lesen ungepflegt als Verbraucher — eine vorbelegte „erzeuger" dreht die
+//   Richtung der Tages-kWh und macht das Gerät zur Quelle.
+// ⚠ Voraussetzung: `''` ≡ fehlend bei allen Lesern (die `.get(…, UNGEPFLEGT)`-
+// Klasse fällt mit `''` in dieselben Zweige). Eine künftige Stelle, die `''`
+// anders behandelt, fängt dieser Block NICHT.
+
+describe('N-573 — getInitialParamData belegt die Sonstiges-Kategorie nicht vor', () => {
+  it('(1) ohne Key ({}): Key ist vorhanden und leer', () => {
+    const result = getInitialParamData('sonstiges', {})
+    // Gegenrichtung wie oben: ein gewanderter Key sähe als `undefined` leer aus.
+    expect('kategorie' in result).toBe(true)
+    expect(result.kategorie).toBe('')
+  })
+
+  it("(2) gepflegt ({kategorie: 'verbraucher'}): bleibt der Wert", () => {
+    expect(getInitialParamData('sonstiges', { kategorie: 'verbraucher' }).kategorie).toBe('verbraucher')
+  })
+
+  it("(3) zurückgenommen ({kategorie: ''}): bleibt leer", () => {
+    expect(getInitialParamData('sonstiges', { kategorie: '' }).kategorie).toBe('')
+  })
+
+  it('(4) gerendert: das Select zeigt „Automatisch (nach den Monatswerten)"', () => {
+    const noop = () => {}
+    render(
+      <InvestitionTypFelder
+        typ="sonstiges"
+        paramData={getInitialParamData('sonstiges', {})}
+        onInputChange={noop}
+        setParam={noop}
+        zeige={() => undefined}
+        markTouched={noop}
+        setFeldRef={() => () => {}}
+      />,
+    )
+    const select = screen.getByLabelText('Kategorie') as HTMLSelectElement
+    expect(select.name).toBe('param_kategorie')
+    expect(select.value).toBe('')
+    expect(screen.getByRole('option', { name: 'Automatisch (nach den Monatswerten)' })).toBeTruthy()
+    expect(select.selectedOptions[0].textContent).toBe('Automatisch (nach den Monatswerten)')
+  })
+})
+
+// ── N-573-Roundtrip-Proben (g)–(k), Vorlage §2 B4 ──────────────────────────
+
+function sonstiges(parameter: Record<string, unknown>): Investition {
+  return {
+    id: 13, anlage_id: 1, typ: 'sonstiges', bezeichnung: 'Pool',
+    anschaffungsdatum: '2024-03-01', aktiv: true, parameter,
+  }
+}
+
+function kategorieSelect(): HTMLSelectElement {
+  return screen.getByLabelText('Kategorie') as HTMLSelectElement
+}
+
+describe('N-573 — Formular-Roundtrip Sonstiges-Kategorie', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('(g) Sonstiges OHNE Key bearbeiten, nichts wählen, speichern ⇒ Key bleibt abwesend', async () => {
+    const onSubmit = vi.fn(() => Promise.resolve())
+    oeffnen('sonstiges', sonstiges({ beschreibung: 'Gartenpool' }), onSubmit)
+    expect(kategorieSelect().value).toBe('')
+    const parameter = await speichern(onSubmit)
+    expect('kategorie' in parameter).toBe(false)
+    // Gegenprobe: das Parameter-JSON wurde gesendet und trägt die übrigen Keys.
+    expect(parameter.beschreibung).toBe('Gartenpool')
+  })
+
+  it('(h) gespeicherte Kategorie öffnen ⇒ zeigt sie ⇒ speichern ⇒ unverändert', async () => {
+    const onSubmit = vi.fn(() => Promise.resolve())
+    oeffnen('sonstiges', sonstiges({ kategorie: 'verbraucher', beschreibung: 'Gartenpool' }), onSubmit)
+    expect(kategorieSelect().value).toBe('verbraucher')
+    const parameter = await speichern(onSubmit)
+    expect(parameter.kategorie).toBe('verbraucher')
+  })
+
+  it("(i) gespeicherte Kategorie auf „Automatisch\" stellen, speichern ⇒ '' in der Nutzlast", async () => {
+    const onSubmit = vi.fn(() => Promise.resolve())
+    oeffnen('sonstiges', sonstiges({ kategorie: 'erzeuger', beschreibung: 'BHKW' }), onSubmit)
+    expect(kategorieSelect().value).toBe('erzeuger')
+    fireEvent.change(kategorieSelect(), { target: { value: '' } })
+    expect(kategorieSelect().value).toBe('')
+    const parameter = await speichern(onSubmit)
+    expect('kategorie' in parameter).toBe(true)
+    expect(parameter.kategorie).toBe('')
+    expect(parameter.beschreibung).toBe('BHKW')
+  })
+
+  it("(j') NEU anlegen ohne Wahl ⇒ kategorie fehlt im JSON", async () => {
+    const onSubmit = vi.fn(() => Promise.resolve())
+    oeffnen('sonstiges', undefined, onSubmit)
+    expect(kategorieSelect().value).toBe('')
+    await pflichtfelderAnlegen('Neuer Pool')
+    // Gegenprobe wie N-572 (c): ein anderer Key ist gesetzt, `parameter` wird gesendet.
+    fireEvent.change(document.querySelector('[name="param_beschreibung"]')!, { target: { value: 'Pool mit Pumpe' } })
+    const parameter = await speichern(onSubmit)
+    expect('kategorie' in parameter).toBe(false)
+    expect(parameter.beschreibung).toBe('Pool mit Pumpe')
+  })
+
+  it("(j'') NEU anlegen, „Erzeuger\" gewählt ⇒ kategorie: 'erzeuger'", async () => {
+    const onSubmit = vi.fn(() => Promise.resolve())
+    oeffnen('sonstiges', undefined, onSubmit)
+    await pflichtfelderAnlegen('Neues BHKW')
+    fireEvent.change(kategorieSelect(), { target: { value: 'erzeuger' } })
+    const parameter = await speichern(onSubmit)
+    expect(parameter.kategorie).toBe('erzeuger')
+  })
+
+  it("(k) Zähler auf „Automatisch\" ⇒ kategorie '' · zaehler_art/-einheit unverändert · Zusatzfelder weg", async () => {
+    const onSubmit = vi.fn(() => Promise.resolve())
+    oeffnen('sonstiges', sonstiges({ kategorie: 'zaehler', zaehler_art: 'wasser', zaehler_einheit: 'kWh' }), onSubmit)
+    expect(kategorieSelect().value).toBe('zaehler')
+    // Gegenprobe: vorher SIND die Zähler-Zusatzfelder da — sonst wäre „weg" trivial.
+    expect(screen.getByLabelText('Was wird gezählt?')).toBeTruthy()
+    expect(screen.getByLabelText('Einheit')).toBeTruthy()
+    fireEvent.change(kategorieSelect(), { target: { value: '' } })
+    expect(screen.queryByLabelText('Was wird gezählt?')).toBeNull()
+    expect(screen.queryByLabelText('Einheit')).toBeNull()
+    const parameter = await speichern(onSubmit)
+    expect('kategorie' in parameter).toBe(true)
+    expect(parameter.kategorie).toBe('')
+    expect(parameter.zaehler_art).toBe('wasser')
+    expect(parameter.zaehler_einheit).toBe('kWh')
   })
 })
