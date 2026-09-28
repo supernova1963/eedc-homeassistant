@@ -25,6 +25,7 @@ Die kWp-Helper selbst liegen seit A24-1 in `core/investition_kennwerte.py`
 (`get_pv_kwp` · `get_bkw_kwp` · `get_erzeuger_kwp`) und werden hier
 re-exportiert; Neigung und Azimut bleiben hier.
 """
+import math
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -73,9 +74,15 @@ def get_pv_neigung(inv: Any, default: int = 35) -> int:
     return default
 
 
-def get_pv_azimut(inv: Any, default: int = 0) -> int:
-    """Azimut in Grad (0=Süd). Priorität: parameter.ausrichtung_grad →
-    Top-Level-String → parameter.ausrichtung (String oder Zahl) → Default."""
+def _gepflegter_azimut(inv: Any) -> Optional[int]:
+    """Der GEPFLEGTE Azimut in Grad (0=Süd) — ``None``, wenn keiner lesbar ist.
+
+    Der eine Leser hinter ``get_pv_azimut`` (der daraus mit seinem Default eine
+    Zahl macht) und ``ausrichtung_label`` (der den Default gerade NICHT will).
+    Priorität: parameter.ausrichtung_grad → Top-Level-String →
+    parameter.ausrichtung (String oder Zahl). ⛔ ``ausrichtung_grad = 0`` ist ein
+    gepflegtes Süd — geprüft wird ``is not None``, nie die Wahrheit des Werts.
+    """
     params = getattr(inv, "parameter", None) or {}
     val = params.get("ausrichtung_grad")
     if val is not None:
@@ -95,7 +102,14 @@ def get_pv_azimut(inv: Any, default: int = 0) -> int:
             return mapped
     elif isinstance(param_val, (int, float)):
         return int(param_val)
-    return default
+    return None
+
+
+def get_pv_azimut(inv: Any, default: int = 0) -> int:
+    """Azimut in Grad (0=Süd). Priorität: parameter.ausrichtung_grad →
+    Top-Level-String → parameter.ausrichtung (String oder Zahl) → Default."""
+    azimut = _gepflegter_azimut(inv)
+    return default if azimut is None else azimut
 
 
 def ausrichtung_text(inv: Any) -> Optional[str]:
@@ -136,6 +150,65 @@ def ist_ost_west(ausrichtung: Optional[str]) -> bool:
         return False
     al = ausrichtung.lower().strip()
     return al in ("ost-west", "east-west", "ow", "o-w") or "ost-west" in al or "east-west" in al
+
+
+#: Die acht Himmelsrichtungen ab Süd im Uhrzeigersinn der Azimut-Konvention
+#: (0 = Süd, +45 = Südwest, +90 = West … −90 = Ost, −45 = Südost).
+_HIMMELSRICHTUNGEN: tuple[str, ...] = (
+    "Süd", "Südwest", "West", "Nordwest", "Nord", "Nordost", "Ost", "Südost",
+)
+#: Das EINE Label einer Ost-West-Komponente (#348). Sie ist eine Kachel mit
+#: einer kWp — anders als im Prognosepfad, der sie in zwei halbe Abrufe teilt.
+OST_WEST_LABEL = "Ost-West"
+
+
+def ausrichtung_label(inv: Any) -> Optional[str]:
+    """Die gepflegte Ausrichtung als Gruppen-Label (#348) — ``None`` ohne Pflege.
+
+    Das Merkmal, nach dem der Live-Energiefluss PV-Kacheln gruppiert, wenn die
+    Reihe nicht reicht. Gleiche Gruppe ⇔ gleiches Label.
+
+    ⛔ **Kein Süd-Default** (anders als ``get_pv_azimut``): eine Anlage ohne
+    jede Ausrichtungsangabe landete sonst geschlossen in einer Gruppe „Süd" und
+    behauptete etwas, das niemand eingegeben hat — die Ausrichtungs-Stufe liefe
+    nie leer, die Träger-Stufe wäre tot. ``None`` schickt die Kachel in die
+    Restgruppe „Weitere".
+
+    ⛔ **Präzedenz wie ``erzeuger_abrufe`` (N-527), NICHT wie ``get_pv_azimut``:**
+    zuerst der Ost-West-Text — er gewinnt vor einem liegengebliebenen
+    ``ausrichtung_grad`` (das Formular schreibt den Grad bei Ost-West nicht,
+    s. ``erzeuger_abrufe``); ``get_pv_azimut`` läse den Alt-Grad zuerst und
+    machte aus der Ost-West-Anlage „Süd". Danach der gepflegte Azimut
+    (``_gepflegter_azimut``, ``0`` ist Süd), gerundet auf die nächste der acht
+    Himmelsrichtungen. Ein Text, der weder Ost-West noch über
+    ``AUSRICHTUNG_MAP`` lesbar ist („Süd-Ost", „SSW"), zählt als **nicht
+    gepflegt** — nie als eigenes Roh-Text-Label, sonst entstünden zwei Gruppen
+    für eine Richtung.
+
+    ⛔ ``orientierungs_gruppen()`` ist bewusst NICHT die Quelle: sie spaltet eine
+    Ost-West-Komponente in zwei halbe Anlagen (richtig für den Wetterabruf, eine
+    Gruppe zu viel und eine halbierte kWp für eine Live-Kachel). Geteilt werden
+    die Leser (``ausrichtung_text``, ``ist_ost_west``, ``_gepflegter_azimut``),
+    nicht die Gruppierung.
+    """
+    if ist_ost_west(ausrichtung_text(inv)):
+        return OST_WEST_LABEL
+    azimut = _gepflegter_azimut(inv)
+    if azimut is None:
+        return None
+    # Sektoren zu je 45° um die acht Richtungen; die Grenze (±22,5°) gehört
+    # der im Uhrzeigersinn folgenden Richtung — deterministisch, ohne das
+    # Banker's Rounding von ``round``.
+    return _HIMMELSRICHTUNGEN[math.floor((azimut + 22.5) / 45) % 8]
+
+
+def hat_ausrichtung(inv: Any) -> bool:
+    """Ist für diesen Erzeuger eine Ausrichtung gepflegt? (#348, ohne Süd-Default)
+
+    Dasselbe Urteil wie ``ausrichtung_label`` — ein zweites Prädikat mit
+    eigener Lese-Logik wäre die Drift, gegen die dieses Modul gebaut ist.
+    """
+    return ausrichtung_label(inv) is not None
 
 
 @dataclass(frozen=True)
