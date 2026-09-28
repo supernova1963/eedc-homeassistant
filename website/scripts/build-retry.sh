@@ -8,8 +8,17 @@
 # Der Store behält erfolgreich geladene Einträge über Fehlversuche hinweg — jeder
 # Retry rendert nur die noch fehlenden nach und konvergiert (empirisch: 2. Versuch).
 # Deshalb zwischen den Versuchen NIEMALS .astro/ oder node_modules/.astro löschen.
+#
+# N-574: VOR Versuch 1 muss der Store dagegen WEG. Ein über Gate-Läufe hinweg
+# warmer Store liefert Exit 0 mit veraltetem dist/ — gemessen 27.09.2026:
+# src/content trug 8× einen neuen Doku-Anker, dist/ 0×, Build grün mit acht
+# „Duplicate id … will overwrite". Das lokale Gate war damit blind für genau
+# das, was es prüfen soll (die __pycache__-Klasse N-389, nur bei Astro); der
+# Deploy-Workflow baut ohnehin kalt. Kalt + Retries = frisch UND konvergent.
 set -uo pipefail
 cd "$(dirname "$0")/.."
+
+rm -rf .astro node_modules/.astro
 
 for try in 1 2 3 4; do
     if npx astro build; then
