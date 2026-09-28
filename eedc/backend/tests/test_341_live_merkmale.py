@@ -12,6 +12,8 @@ nur das Backend. Paket A1 liefert deshalb sechs optionale Felder je Knoten —
   Alt-Grad, ``0`` ist Süd, nicht lesbarer Freitext ist nicht gepflegt);
 * ``traeger_id`` — Wechselrichter oder Balkonkraftwerk; der Rest-Knoten eines
   abtretenden BKW trägt seine eigene ID;
+* ``traeger_label`` (Nachtrag A1b) — die Bezeichnung dieses Trägers, genau dann
+  gesetzt, wenn ``traeger_id`` es ist (die Gruppe heißt „<Name> (n)");
 * ``kapazitaet_kwh`` — nur ``batterie_*``, über den SoT-Helper;
 * ``fahrzeuge`` + ``fahrzeuge_zuordnung`` — nur ``wallbox_*``, aus derselben
   Zuordnung wie ``parent_key``, mit beiden knotenlosen Auto-Klassen.
@@ -48,10 +50,10 @@ from backend.services import live_power_service as lps
 from backend.services.pv_orientation import ausrichtung_label, hat_ausrichtung
 from backend.tests import factories
 
-#: Die Felder, die A1 neu an einen Knoten legt.
+#: Die Felder, die A1 (und der Nachtrag A1b: `traeger_label`) neu an einen Knoten legt.
 NEUE_FELDER = (
-    "typ", "kategorie", "ausrichtung_label", "traeger_id", "kapazitaet_kwh",
-    "fahrzeuge", "fahrzeuge_zuordnung",
+    "typ", "kategorie", "ausrichtung_label", "traeger_id", "traeger_label",
+    "kapazitaet_kwh", "fahrzeuge", "fahrzeuge_zuordnung",
 )
 
 
@@ -477,6 +479,93 @@ async def test_speicher_am_wechselrichter_bekommt_keinen_traeger(db, abruf):
     sp = await _inv(db, a, "speicher", parent_investition_id=wr.id)
     res = await abruf(a, {**_NETZ, "pv_gesamt_w": 1000.0}, {sp: {"leistung_w": 400.0}})
     assert _knoten(res)[f"batterie_{sp.id}"]["traeger_id"] is None
+
+
+# ── traeger_label (Nachtrag A1b) ─────────────────────────────────────────────
+#
+# Die Response kannte keinen Wechselrichter-Namen — eine Träger-Gruppe hieß im
+# Client „PV-Gruppe 1". `traeger_label` trägt den Namen, und zwar aus DERSELBEN
+# Entscheidung wie `traeger_id` (`live_komponenten_builder._traeger`): gesetzt
+# genau dann, wenn die ID gesetzt ist.
+
+async def test_traeger_label_ist_der_name_des_traegers(db, abruf):
+    """WR-Kind → Name des WR · BKW-Kind → Name des BKW · BKW-Rest → sein EIGENER
+    Name (derselbe wie der seiner Gruppe) · ohne Träger → keiner."""
+    a = await _anlage(db)
+    wr = await _inv(db, a, "wechselrichter", "Fronius Symo")
+    am_wr = await _inv(db, a, "pv-module", "Dach", parent_investition_id=wr.id)
+    bkw = await _inv(db, a, "balkonkraftwerk", "Balkon Süd")
+    am_bkw = await _inv(db, a, "pv-module", "Gaube", parent_investition_id=bkw.id)
+    frei = await _inv(db, a, "pv-module", "Garage")
+    solo = await _inv(db, a, "balkonkraftwerk", "Balkon")
+    res = await abruf(a, _NETZ, {
+        am_wr: {"leistung_w": 3000.0},
+        bkw: {"leistung_w": 800.0}, am_bkw: {"leistung_w": 500.0},   # Rest 300 W
+        frei: {"leistung_w": 1000.0}, solo: {"leistung_w": 400.0},
+    })
+    k = _knoten(res)
+    assert k[f"pv_{am_wr.id}"]["traeger_label"] == "Fronius Symo"
+    assert k[f"pv_{am_bkw.id}"]["traeger_label"] == "Balkon Süd"
+    assert k[f"pv_{bkw.id}"]["traeger_label"] == "Balkon Süd"
+    assert k[f"pv_{bkw.id}"]["erzeugung_kw"] == pytest.approx(0.3)  # wirklich der Rest-Knoten
+    assert k[f"pv_{frei.id}"]["traeger_label"] is None
+    assert k[f"pv_{solo.id}"]["traeger_label"] is None
+
+
+async def test_traeger_label_genau_dann_wenn_traeger_id(db, abruf):
+    """An JEDEM Knoten der Response: ``traeger_label`` gesetzt ⇔ ``traeger_id``
+    gesetzt — über alle Träger-Fälle, einen stillgelegten und einen inaktiven
+    Parent, einen DC-Speicher am WR und die Nicht-PV-Knoten."""
+    a = await _anlage(db)
+    wr = await _inv(db, a, "wechselrichter", "WR")
+    alt = await _inv(db, a, "wechselrichter", "Alt", stilllegungsdatum=date(2025, 1, 1))
+    aus = await _inv(db, a, "wechselrichter", "Aus", aktiv=False)
+    bkw = await _inv(db, a, "balkonkraftwerk", "BKW")
+    werte = {
+        await _inv(db, a, "pv-module", "S1", parent_investition_id=wr.id): {"leistung_w": 1000.0},
+        await _inv(db, a, "pv-module", "S2", parent_investition_id=alt.id): {"leistung_w": 900.0},
+        await _inv(db, a, "pv-module", "S3", parent_investition_id=aus.id): {"leistung_w": 800.0},
+        await _inv(db, a, "pv-module", "S4", parent_investition_id=bkw.id): {"leistung_w": 300.0},
+        bkw: {"leistung_w": 600.0},                                     # Rest 300 W
+        await _inv(db, a, "pv-module", "S5"): {"leistung_w": 700.0},
+        await _inv(db, a, "speicher", "DC", parent_investition_id=wr.id): {"leistung_w": 400.0},
+        await _inv(db, a, "waermepumpe", "WP"): {"leistung_w": 900.0},
+    }
+    res = await abruf(a, _NETZ, werte)
+    knoten = res["komponenten"]
+    mit_id = [k["key"] for k in knoten if k["traeger_id"] is not None]
+    assert len(mit_id) == 3                        # S1 (WR) · S4 (BKW) · BKW-Rest
+    for k in knoten:
+        assert (k["traeger_label"] is None) == (k["traeger_id"] is None), k["key"]
+
+
+async def test_stillgelegter_traeger_hat_weder_id_noch_label(db, abruf):
+    """Fehlt der Parent in der Live-Menge (``aktiv_jetzt()``), tragen die Strings
+    BEIDE Felder nicht — kein Name eines Geräts, das nicht mehr läuft."""
+    a = await _anlage(db)
+    alt = await _inv(db, a, "wechselrichter", "Alt", stilllegungsdatum=date(2025, 1, 1))
+    aus = await _inv(db, a, "wechselrichter", "Aus", aktiv=False)
+    s1 = await _inv(db, a, "pv-module", "S1", parent_investition_id=alt.id)
+    s2 = await _inv(db, a, "pv-module", "S2", parent_investition_id=aus.id)
+    res = await abruf(a, _NETZ, {s1: {"leistung_w": 1000.0}, s2: {"leistung_w": 1000.0}})
+    k = _knoten(res)
+    for s in (s1, s2):
+        assert k[f"pv_{s.id}"]["traeger_id"] is None
+        assert k[f"pv_{s.id}"]["traeger_label"] is None
+
+
+def test_demo_daten_tragen_die_namen_ihrer_zwei_wechselrichter():
+    """Die Demo-Anlage (Lab-Durchklick): jeder PV-String trägt den Namen seines
+    Demo-Wechselrichters, und das Feld überlebt das Response-Modell."""
+    daten = live_dashboard.LiveDashboardResponse(
+        **live_dashboard._generate_demo_data(1, "Demo"),
+    ).model_dump()
+    pv = [k for k in daten["komponenten"] if k["key"].startswith("pv_")]
+    assert len(pv) == 6
+    namen = {k["traeger_id"]: k["traeger_label"] for k in pv}
+    assert namen == {20: "WR Hausdach", 21: "WR Garage"}
+    for k in pv:
+        assert k["traeger_label"] is not None and k["traeger_id"] is not None
 
 
 # ── Bilanz bitgleich: reine Anreicherung ─────────────────────────────────────

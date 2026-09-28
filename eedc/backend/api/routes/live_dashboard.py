@@ -77,6 +77,10 @@ class LiveKomponente(BaseModel):
     #: Nur `pv_*`: ID des Trägers (Wechselrichter oder Balkonkraftwerk); der
     #: Rest-Knoten eines abtretenden Balkonkraftwerks trägt seine eigene ID.
     traeger_id: Optional[int] = None
+    #: Nur `pv_*`, genau dann gesetzt, wenn `traeger_id` es ist: die Bezeichnung
+    #: des Trägers (bzw. des BKW-Rests selbst) — die Gruppe heißt im Client
+    #: „<traeger_label> (n)" (#341/#348 A1b).
+    traeger_label: Optional[str] = None
     #: Nur `batterie_*`: nutzbare Kapazität (SoT `get_speicher_nutzbare_kapazitaet_kwh`).
     kapazitaet_kwh: Optional[float] = None
     #: Nur `wallbox_*`: die zugeordneten Autos (dieselbe Zuordnung wie `parent_key`).
@@ -227,9 +231,12 @@ class BoersenpreisResponse(BaseModel):
 # PV-Strings an zwei Wechselrichtern in drei Ausrichtungen, zwei Wallboxen,
 # zwei E-Autos (eines meldet nur seinen Ladestand und hat deshalb keinen
 # eigenen Knoten), zwei Sonstige Verbraucher. Die Merkmale je Knoten (`typ`,
-# `kategorie`, `ausrichtung_label`, `traeger_id`, `kapazitaet_kwh`,
-# `fahrzeuge`) stehen hier so, wie der Live-Builder sie für diesen Bestand
-# liefern würde.
+# `kategorie`, `ausrichtung_label`, `traeger_id`, `traeger_label`,
+# `kapazitaet_kwh`, `fahrzeuge`) stehen hier so, wie der Live-Builder sie für
+# diesen Bestand liefern würde.
+
+#: Die zwei Demo-Wechselrichter: Träger-ID → Bezeichnung (`traeger_label`).
+_DEMO_WECHSELRICHTER: dict[int, str] = {20: "WR Hausdach", 21: "WR Garage"}
 
 #: (Investitions-ID, Bezeichnung, Ausrichtung, Träger-ID (Wechselrichter),
 #:  kWp, kW jetzt, Spitzenstunde, kWh heute)
@@ -322,7 +329,8 @@ def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
         {"key": f"pv_{sid}", "label": label, "icon": "sun",
          "erzeugung_kw": pv_kw_je[sid], "verbrauch_kw": None,
          "leistung_kwp": kwp, "typ": "pv-module",
-         "ausrichtung_label": ausr, "traeger_id": traeger}
+         "ausrichtung_label": ausr, "traeger_id": traeger,
+         "traeger_label": _DEMO_WECHSELRICHTER[traeger]}
         for sid, label, ausr, traeger, kwp, _kw, _p, _e in _DEMO_PV_STRINGS
     ]
     komponenten += [

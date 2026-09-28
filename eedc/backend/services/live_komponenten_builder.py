@@ -328,6 +328,7 @@ def build_komponenten(
                 if val_w <= 0:
                     continue
             kw = val_w / 1000
+            traeger_id, traeger_label = _traeger(inv, inv_id, investitionen, bkw_rest_w)
             komponenten.append({
                 "key": f"pv_{inv_id}",
                 "label": inv.bezeichnung,
@@ -344,7 +345,10 @@ def build_komponenten(
                 # Anreicherung: keine Summe und kein Residual liest sie.
                 "typ": typ,
                 "ausrichtung_label": ausrichtung_label(inv),
-                "traeger_id": _traeger_id(inv, inv_id, investitionen, bkw_rest_w),
+                "traeger_id": traeger_id,
+                # #341/#348 A1b: der Name des Trägers, damit die Gruppe im
+                # Client „<Wechselrichter> (n)" heißt statt „PV-Gruppe 1".
+                "traeger_label": traeger_label,
             })
             summe_erzeugung += kw
             pv_total_w += val_w
@@ -810,31 +814,37 @@ def _sonstiges_kategorie(inv: Investition) -> Optional[str]:
     return None
 
 
-def _traeger_id(
+def _traeger(
     inv: Investition,
     inv_id: str,
     investitionen: dict[str, Investition],
     bkw_rest_w: dict[str, float],
-) -> Optional[int]:
-    """Der Träger eines PV-Knotens: Wechselrichter oder Balkonkraftwerk.
+) -> tuple[Optional[int], Optional[str]]:
+    """Der Träger eines PV-Knotens: Wechselrichter oder Balkonkraftwerk — ID und Name.
 
-    * Ein `pv-module` mit Parent vom Typ WR oder BKW trägt dessen ID.
+    * Ein `pv-module` mit Parent vom Typ WR oder BKW trägt dessen ID und
+      Bezeichnung.
     * Der **Rest-Knoten** eines abtretenden Balkonkraftwerks (N-536) trägt
-      seine **eigene** ID — sonst landete der Rest getrennt von seinen Modulen.
+      seine **eigene** ID und Bezeichnung — sonst landete der Rest getrennt
+      von seinen Modulen.
     * ⛔ Nie über `parent_key`: das Feld zeichnet im Client eine Linie zum
       Parent statt zum Haus.
     * Ein Parent, der nicht in `investitionen` steht (stillgelegt), liefert
-      ``None`` — die Kachel degradiert definiert auf die letzte Stufe.
+      ``(None, None)`` — die Kachel degradiert definiert auf die letzte Stufe.
+
+    ⭐ ID und Name kommen aus EINER Entscheidung (#341/#348 A1b): das Label ist
+    genau dann gesetzt, wenn die ID es ist — eine Gruppe mit ID, aber ohne
+    Namen, oder ein Name ohne Gruppe, kann so nicht entstehen.
     """
     if inv_id in bkw_rest_w:
-        return inv.id
+        return inv.id, inv.bezeichnung
     parent_id = inv.parent_investition_id
     if parent_id is None:
-        return None
+        return None, None
     parent = investitionen.get(str(parent_id))
     if parent is not None and parent.typ in _TRAEGER_TYPEN:
-        return parent_id
-    return None
+        return parent_id, parent.bezeichnung
+    return None, None
 
 
 def _innengeraete_live(
