@@ -128,13 +128,38 @@ Live zeigt **Echtzeit-Leistungsdaten** deiner gesamten Anlage und aktualisiert s
 - **Erzeuger** (PV-Module, Balkonkraftwerk) oben
 - **Netz** links (bidirektional: Bezug / Einspeisung)
 - **Speicher** rechts (bidirektional: Laden / Entladen)
-- **Verbraucher** (Wärmepumpe, Wallbox, E-Auto, Sonstige) unten
+- **Verbraucher** (Wärmepumpe, Wallbox, E-Auto ohne Wallbox, Sonstige — auch ein BHKW) unten
 
-Die **animierten Flusslinien** zeigen Richtung und Stärke: Liniendicke und Animationsgeschwindigkeit steigen mit der Leistung, Farbcodierung nach Komponententyp. Die **Netz-Farbe** wechselt dynamisch: grün (Balance), orange (Einspeisung), rot (Netzbezug). Bei Batterien und E-Autos wird der **Ladezustand (SoC)** als Pegel im Knoten dargestellt (rot < 20 %, gelb 20–50 %, grün > 50 %).
+Die **animierten Flusslinien** zeigen Richtung und Stärke: Liniendicke und Animationsgeschwindigkeit steigen mit der Leistung, Farbcodierung nach Komponententyp. Die **Netz-Farbe** wechselt dynamisch: grün (Balance), orange (Einspeisung), rot (Netzbezug). Bei Speichern, bei der Wallbox (Ladestand ihres Autos) und bei E-Autos ohne Wallbox wird der **Ladezustand (SoC)** als Pegel im Knoten dargestellt (rot < 20 %, gelb 20–50 %, grün > 50 %).
 
-> **E-Auto an der Wallbox, auch mit V2H:** Hinter einer Wallbox bucht die Wallbox. Lädt das Auto, zählt die Ladung einmal — als Verbrauch der Wallbox —, und das Auto steht als ihr Kind daneben. Speist ein V2H-fähiges Auto ins Haus zurück, zeigt der Fluss die Entladung als **Quelle** (an der Wallbox, wenn sie den negativen Wert misst, sonst am Auto), und sie zählt wie eine Speicher-Entladung in Autarkie und Eigenverbrauch. Mit einem V2H-fähigen Auto liest eedc die Wallbox deshalb **mit Vorzeichen**: Zeigt sie beim **Laden** einen negativen Wert, ist ihr Sensor andersherum angeschlossen — dann unter **Einstellungen → Datenquellen** am Leistungswert der Wallbox **„Vorzeichen umkehren" (⇅)** einschalten.
+**Eine Reihe je Bereich.** Erzeuger, Verbraucher und Speicher stehen jeweils in **einer** Reihe (die Speicher in einer Spalte), jede Linie endet am Haus — keine Linie kreuzt eine andere. Die Karte wird dabei **nie höher**, egal wie viele Geräte deine Anlage hat:
 
-- **Hintergrund-Varianten** (Auswahl im Live-Kopf): Sterne (Standard), Sunset, Alps oder ein eigenes Foto aus der Anlagen-Galerie.
+- **Am breiten Bildschirm** verkleinert eedc zuerst die ganze Zeichnung, damit alle Kacheln einzeln in ihre Reihe passen. Die Beschriftung bleibt dabei mindestens 12 px groß (bzw. so groß wie bisher, wenn sie schon kleiner war). Erst wenn das nicht mehr reicht, fasst eedc gleichartige Geräte zu **Gruppen** zusammen. (Lässt sich nichts mehr zusammenfassen, verkleinert eedc weiter — lieber kleiner als übereinander.)
+- **Auf dem Handy** (Karte schmaler als 500 px) wird nicht verkleinert; eine Reihe fasst drei Kacheln (unter 375 px Kartenbreite) bzw. vier. Was mehr ist, wird gruppiert.
+
+**Gruppen.** Gruppiert wird nur Gleichartiges, und zwar schrittweise — nur so weit, bis die Reihe passt:
+
+- **Oben (PV):** zuerst nach **Ausrichtung** („Süd (5)", „Ost (2)" …; Module ohne gepflegte Ausrichtung sammelt „Weitere"), dann nach **Wechselrichter bzw. Balkonkraftwerk** („Name (n)"), zuletzt alle zusammen als **„PV gesamt"**.
+- **Rechts (Speicher):** mehrere Speicher stehen übereinander; stießen sie dabei an eine Nachbarkachel, an den „Gesamtleistung"-Rahmen oder ans Haus, zeigt eedc eine Kachel **„Speicher (n)"** mit dem Saldo aus Laden und Entladen.
+- **Unten (Verbraucher):** zuerst der Gerätetyp mit den meisten Kacheln — **„Wärmepumpen"**, **„Laden"** (Wallboxen), **„E-Autos"**, **„Sonstige"**. Ein BHKW kommt nie in eine Gruppe mit Verbrauchern. Auf dem Handy fasst eedc notfalls einzelne Verbraucher unter **„Weitere"** zusammen.
+- **Links** steht nur das Netz.
+
+Eine Gruppenkachel erkennst du an den zwei versetzten Rahmen dahinter („hier liegen mehrere") und an der Anzahl im Namen. Sie zeigt die **Summe** ihrer Geräte; Auslastung (PV), Ladestand (Speicher, nach Kapazität gewichtet) und den Heute-Wert zeigt sie nur, wenn sie ihn für **jedes** Gerät kennt — sonst keinen, statt einen zu kleinen. Der Tooltip nennt jedes Gerät in einer eigenen Zeile.
+
+**Liste mit Balken.** Ein Klick (oder Tipp) auf eine Gruppenkachel öffnet die Gruppe als Liste: je Gerät der Name, die aktuelle Leistung als Balken (gemessen am stärksten Gerät der Gruppe) und der Wert, dazu je nach Typ die Auslastung mit Ausrichtung und Wechselrichter (PV), ob der Speicher lädt, entlädt oder ruht, samt Ladestand und nutzbarer Kapazität, die Autos an der Wallbox, die Betriebsart der Wärmepumpe oder die Kategorie eines sonstigen Geräts. Die Liste läuft mit den Live-Werten mit; gibt es die Gruppe nicht mehr (etwa weil nach dem Drehen des Tablets wieder alle Kacheln einzeln Platz haben), schließt sie sich von selbst. **Mit der Tastatur:** Die Gruppenkachel ist mit Tab erreichbar, Enter oder Leertaste öffnet die Liste, Esc schließt sie (ein offenes Vollbild darunter bleibt stehen), und der Fokus kehrt zur Kachel zurück.
+
+**Das Auto steckt in der Wallbox-Kachel.** Ein E-Auto hinter einer Wallbox hat keine eigene Kachel mehr — sein Strom fließt durch die Wallbox, eine zweite Kachel zeigte ihn doppelt und zöge eine eigene Linie. Du findest es in der Kachel seiner Wallbox:
+
+- **Eine Wallbox:** Die Kachel nennt das Auto mit Ladestand („ID.4 52 %"), der Pegel ist sein Ladestand. Hängen mehrere Autos an dieser Wallbox, zeigt sie das eine, das gerade lädt; lädt keines (oder mehr als eines), stehen die Ladestände nebeneinander („64 · 81 %"), ohne Pegel.
+- **Zwei oder mehr Wallboxen** (die gerade Werte liefern): Die Kacheln zeigen kein Auto. Der Tooltip und die Liste nennen alle Autos mit Ladestand und sagen dazu: „Welches Auto an welcher Wallbox lädt, weiß eedc noch nicht."
+- **V2H:** Gibt ein Auto Strom ins Haus ab, nennt der Tooltip die Leistung („entlädt 2,00 kW (V2H)"); hängt es allein an der einzigen Wallbox, steht in der Kachel zusätzlich „· entlädt".
+- **Ohne Wallbox** (keine erfasst oder keine liefert gerade Werte) behält jedes E-Auto seine eigene Kachel; mehrere bündelt eedc bei Platzmangel als „E-Autos".
+
+**„Gesamtleistung" über der PV-Reihe.** Zeigt der Energiefluss mehr als einen PV-Erzeuger (mehrere Strings, ein Balkonkraftwerk neben dem Dach …), fasst ein feiner Rahmen die PV-Kacheln zusammen, und ein Schild darauf nennt die **Gesamtleistung** aller PV-Erzeuger — ohne Speicher und Netz, und ohne ein BHKW. Das gilt auch, wenn eedc die PV-Kacheln gerade gruppiert. Bei nur einem PV-Erzeuger entfällt beides, weil seine Kachel denselben Wert schon zeigt; nachts, wenn die Summe 0 ist, ebenfalls. Direkt über dem Haus steht das **Solar-Soll** — die PV-Leistung, die die Prognose für die aktuelle Stunde erwartet (sofern eine vorliegt).
+
+> **E-Auto an der Wallbox, auch mit V2H:** Hinter einer Wallbox bucht die Wallbox. Lädt das Auto, zählt die Ladung einmal — als Verbrauch der Wallbox —, und das Auto erscheint in ihrer Kachel (siehe oben). Speist ein V2H-fähiges Auto ins Haus zurück, zählt die Entladung einmal wie eine Speicher-Entladung in Autarkie und Eigenverbrauch: gebucht von der Wallbox, wenn sie den negativen Wert misst — dann fließt ihre Linie zum Haus —, sonst vom Auto. Mit einem V2H-fähigen Auto liest eedc die Wallbox deshalb **mit Vorzeichen**: Zeigt sie beim **Laden** einen negativen Wert, ist ihr Sensor andersherum angeschlossen — dann unter **Einstellungen → Datenquellen** am Leistungswert der Wallbox **„Vorzeichen umkehren" (⇅)** einschalten.
+
+- **Hintergrund-Varianten** (Auswahl im Kopf des Energieflusses): Tech (Standard), Sunset, Alpen sowie die Foto-Hintergründe Alpenpanorama, Milchstraße, Dolomiten, Nebula, Sternennacht und Exoplanet.
 - **Lite- vs. Effekt-Modus:** Auf schwächeren Mobile-Geräten schaltet eedc automatisch in einen reduzierten Lite-Modus; im Effekt-Modus laufen zusätzlich Sonnenstrahlen, Reflexionen, Schneefunkeln und SoC-Partikel. Manueller Umschalter im Kopf.
 
 **Tageswerte (bilanztreu sortiert)** — unterhalb des Diagramms als Kacheln, von den Quellen über den Eigenverbrauch zu den Verbrauchern:

@@ -179,8 +179,21 @@ def ausrichtung_label(inv: Any) -> Optional[str]:
     ``ausrichtung_grad`` (das Formular schreibt den Grad bei Ost-West nicht,
     s. ``erzeuger_abrufe``); ``get_pv_azimut`` läse den Alt-Grad zuerst und
     machte aus der Ost-West-Anlage „Süd". Danach der gepflegte Azimut
-    (``_gepflegter_azimut``, ``0`` ist Süd), gerundet auf die nächste der acht
-    Himmelsrichtungen. Ein Text, der weder Ost-West noch über
+    (``_gepflegter_azimut``, ``0`` ist Süd), einsortiert in die acht
+    Himmelsrichtungs-Sektoren zu je 45°.
+
+    Sektorgrenzen: gerechnet wird ``floor((azimut + 22,5) / 45)`` — eine Grenze
+    von genau ±22,5° usw. gehörte der im Uhrzeigersinn folgenden Richtung.
+    Diese Grenze erreicht die Funktion aber nie: ``_gepflegter_azimut`` liefert
+    schon ``int(...)``, und das schneidet Nachkommastellen **zur Null hin** ab.
+    Für die ganzzahligen Grade des Formulars gilt die Sektor-Regel exakt
+    (Süd = −22…22, Südwest = 23…67, …, Nord = 158…180 und −180…−158); ein
+    Float-Grad wird vorher abgeschnitten (22,9 → 22 → Süd, −22,9 → −22 → Süd,
+    67,5 → 67 → Südwest), der Süd-Sektor reicht für Floats also offen von −23
+    bis 23. Ein Grad als Text mit Nachkommastelle („22.5") ist für ``int()``
+    nicht lesbar und fällt auf den Text-Zweig von ``_gepflegter_azimut``.
+
+    Ein Text, der weder Ost-West noch über
     ``AUSRICHTUNG_MAP`` lesbar ist („Süd-Ost", „SSW"), zählt als **nicht
     gepflegt** — nie als eigenes Roh-Text-Label, sonst entstünden zwei Gruppen
     für eine Richtung.
@@ -196,9 +209,9 @@ def ausrichtung_label(inv: Any) -> Optional[str]:
     azimut = _gepflegter_azimut(inv)
     if azimut is None:
         return None
-    # Sektoren zu je 45° um die acht Richtungen; die Grenze (±22,5°) gehört
-    # der im Uhrzeigersinn folgenden Richtung — deterministisch, ohne das
-    # Banker's Rounding von ``round``.
+    # Sektoren zu je 45° um die acht Richtungen (Grenzen s. Docstring: bei
+    # ganzzahligem Azimut exakt, ein Float ist hier schon abgeschnitten) —
+    # deterministisch, ohne das Banker's Rounding von ``round``.
     return _HIMMELSRICHTUNGEN[math.floor((azimut + 22.5) / 45) % 8]
 
 

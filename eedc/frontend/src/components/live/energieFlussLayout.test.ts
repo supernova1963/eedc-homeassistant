@@ -23,6 +23,7 @@ import {
   type BuehnenMass, type EnergieFlussLayout, type GezeichneterKnoten, type LayoutEingaben,
   kapazitaet, klassifiziere, layoutEnergieFluss, sonstigesZweig, ueberlappungsfrei, wBedarf, waehleStufen,
   wallboxKachelAuto,
+  RAHMEN_CHIP_HOEHE, RAHMEN_VERSATZ, pvKnotenAnzahl,
 } from './energieFlussLayout'
 
 function k(key: string, extra: Partial<LiveKomponente> = {}): LiveKomponente {
@@ -443,14 +444,19 @@ describe('§A3 Maßstab — Kapazität, Breitenbedarf, Zirkel-Auflösung', () =>
     }
   })
 
-  it('Inhalt senkrecht mittig: alle y-Anker um (H − 380)/2 verschoben', () => {
-    const l = lay(bestandM(), 1150) // 8 einzeln ⇒ k = 754/600
+  it('Inhalt senkrecht mittig: alle y-Anker um (H − 380)/2 verschoben — mit Rahmen (§A6) zusätzlich um 14', () => {
+    const l = lay(bestandM(), 1150) // 8 einzeln ⇒ k = 754/600; 8 PV-Knoten ⇒ Rahmen
     expect(l.k).toBeCloseTo(754 / 600, 10)
-    const yOff = (l.H - 380) / 2
+    const yOff = (l.H - 380) / 2 + RAHMEN_VERSATZ
     expect(zone(l, 'oben')[0].y).toBeCloseTo(50 + yOff, 9)
     expect(l.CY).toBeCloseTo(170 + yOff, 9)
     expect(zone(l, 'unten')[0].y).toBeCloseTo(305 + yOff, 9)
     expect(l.CX).toBeCloseTo(l.W / 2, 9)
+    // ein PV-Knoten (#137): kein Rahmen, kein Versatz
+    const a = lay(bestandA(), 1150)
+    expect(a.gesamtRahmen).toBeNull()
+    expect(zone(a, 'oben')[0].y).toBeCloseTo(50 + (a.H - 380) / 2, 9)
+    expect(a.CY).toBeCloseTo(a.dims.cy, 9)
   })
 
   it('Vollbild: Höhe bleibt 380·k, die Breite nimmt das Overlay-Verhältnis an; Schrift über die Höhe', () => {
@@ -819,11 +825,18 @@ describe('§A3 Schlüssel, Reihenfolge, Überlappung', () => {
     expect(ueberlappungsfrei([{ x: 545, y: 50 }, { x: 545, y: 101 }], d, haus)).toBe(false)
     expect(ueberlappungsfrei([{ x: 300, y: 115 }], d, haus)).toBe(false) // Kachelunterkante 139 > 136
     expect(ueberlappungsfrei([{ x: 300, y: 111 }], d, haus)).toBe(true)
+    // §A6 (NB-A6-1): der Rahmen ist Hindernis — was er fasst, darf darin liegen,
+    // alles andere hält `ABSTAND_MIN` Abstand. Rahmen 6…594 × 31…95 wie D@1150.
+    const rahmen = { x: 6, y: 31, breite: 588, hoehe: 64 }
+    expect(ueberlappungsfrei([{ x: 55, y: 64 }, { x: 545, y: 64 }], d, haus, rahmen)).toBe(true) // gefasste PV-Kacheln
+    expect(ueberlappungsfrei([{ x: 545, y: 123 }], d, haus, rahmen)).toBe(true) // Oberkante 99 = 95 + 4
+    expect(ueberlappungsfrei([{ x: 545, y: 122 }], d, haus, rahmen)).toBe(false) // Oberkante 98 < 99
+    expect(ueberlappungsfrei([{ x: 545, y: 122 }], d, haus)).toBe(true) // ohne Rahmen kein Hindernis
   })
 
   it('Raster Breiten × Bestände (+ Vollbild): überlappungsfrei, je Zone eine Reihe, alles im Bild', () => {
     for (const { name, l } of alleLayouts()) {
-      expect(ueberlappungsfrei(l.nodes, l.dims, { x: l.CX, y: l.CY }), name).toBe(true)
+      expect(ueberlappungsfrei(l.nodes, l.dims, { x: l.CX, y: l.CY }, l.gesamtRahmen), name).toBe(true)
       expect(new Set(zone(l, 'oben').map(n => n.y)).size, name).toBeLessThanOrEqual(1)
       expect(new Set(zone(l, 'unten').map(n => n.y)).size, name).toBeLessThanOrEqual(1)
       expect(new Set(zone(l, 'rechts').map(n => n.x)).size, name).toBeLessThanOrEqual(1)
@@ -852,5 +865,113 @@ describe('§A3 Schlüssel, Reihenfolge, Überlappung', () => {
     const alt = layoutNodes(b.komp, 600)
     expect(alt.nodes.some(n => n.komp.key.includes('_grp'))).toBe(false)
     expect(alt.nodes.filter(n => n.komp.key.startsWith('pv_'))).toHaveLength(9)
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════
+// §A6 — „Gesamtleistung"-Rahmen (#341 Rainer)
+// ═══════════════════════════════════════════════════════════════════
+//
+// Muster-Bauform: sobald die Response MEHR als einen PV-Knoten trägt (#137,
+// gezählt über die Komponenten), rückt der ganze Inhalt um 14 Einheiten nach
+// unten, und ein Rahmen (Luft 9 oben/links/rechts, 7 unten) fasst die
+// gezeichneten PV-Kacheln. Die Zeichenfläche wird dabei NICHT höher.
+
+/** Stapel-Optik einer Gruppenkachel (`STAPEL_VERSATZ` in `EnergieFluss.tsx`, Muster `stack: 7`). */
+const STAPEL = 7
+
+describe('§A6 „Gesamtleistung"-Rahmen', () => {
+  it('Rahmen genau bei > 1 PV-Knoten in der Response — über alle Bestände und Maße', () => {
+    for (const [name, f] of Object.entries(BESTAENDE)) {
+      for (const m of MASSE) {
+        const b = f()
+        const l = lay(b, m)
+        expect(l.gesamtRahmen != null, `${name}@${m.breitePx}`).toBe(pvKnotenAnzahl(b.komp) > 1)
+      }
+    }
+    // die Stichproben ausdrücklich: ein String, `pv_gesamt`, ohne PV ⇒ kein Rahmen
+    expect(lay(bestandA(), 1150).gesamtRahmen).toBeNull()
+    expect(lay(bestandPvGesamt(), 1150).gesamtRahmen).toBeNull()
+    expect(lay(bestandOhnePv(), 1150).gesamtRahmen).toBeNull()
+    expect(pvKnotenAnzahl(bestandD().komp)).toBe(9)
+  })
+
+  it('gezählt werden Komponenten, nicht Kacheln: „PV gesamt" (eine Kachel) behält den Rahmen', () => {
+    // vier Strings ohne Merkmal am Handy: nur die Stufe „PV gesamt" passt
+    const komp = [...[1, 2, 3, 4].map(i => pvS(i, `String ${i}`, null, 1, 2)), wpS(9, 'WP', 1), NETZ, HAUS]
+    const l = lay({ komp, gauges: [] }, 360)
+    expect(keys(zone(l, 'oben'))).toEqual(['pv_grp_gesamt'])
+    expect(l.gesamtRahmen).not.toBeNull()
+  })
+
+  it('D bei 1150 px (nach Ausrichtung): Rahmen 6 · 31 · 588 × 64, alles 14 tiefer', () => {
+    const l = lay(bestandD(), 1150)
+    expect(l.k).toBe(1)
+    expect(labels(zone(l, 'oben'))).toEqual(['Ost', 'Süd', 'West'])
+    // 5er-Stufe (unten 6): nodeW 80, nodeH 48, Rand 55 ⇒ x 55 · 300 · 545, y 50 + 14
+    expect(zone(l, 'oben').map(n => n.y)).toEqual([64, 64, 64])
+    expect(l.CY).toBe(170 + 14)
+    expect(zone(l, 'unten')[0].y).toBe(305 + 14)
+    expect(l.gesamtRahmen).toEqual({ x: 55 - 40 - 9, y: 64 - 24 - 9, breite: 545 + 40 + 9 - 6, hoehe: 48 + 16 })
+  })
+
+  it('der Rahmen fasst jede PV-Kachel samt Stapel-Optik — über alle Bestände und Maße', () => {
+    for (const { name, l } of alleLayouts()) {
+      const r = l.gesamtRahmen
+      if (!r) continue
+      const { nodeW, nodeH } = l.dims
+      for (const n of zone(l, 'oben')) {
+        expect(n.x - nodeW / 2, `${name} ${n.komp.key}`).toBeGreaterThanOrEqual(r.x - 1e-9)
+        expect(n.x + nodeW / 2 + STAPEL, `${name} ${n.komp.key}`).toBeLessThanOrEqual(r.x + r.breite + 1e-9)
+        expect(n.y - nodeH / 2 - STAPEL, `${name} ${n.komp.key}`).toBeGreaterThanOrEqual(r.y - 1e-9)
+        expect(n.y + nodeH / 2, `${name} ${n.komp.key}`).toBeLessThanOrEqual(r.y + r.hoehe + 1e-9)
+      }
+      // nur die PV-Reihe: Netz und Haus stehen darunter
+      expect(l.CY - l.dims.hausR, name).toBeGreaterThan(r.y + r.hoehe)
+    }
+  })
+
+  it('die Karte wird mit Rahmen nicht höher: Chip und Kacheln im Bild, im ≤ 3er-Zweig endet alles bei ≤ 373', () => {
+    let maxDreier = 0
+    for (const { name, l } of alleLayouts()) {
+      // die Höhe hängt nur am Maßstab — der Rahmen verschiebt, er dehnt nicht
+      expect(l.H, name).toBeCloseTo(380 * l.k, 9)
+      if (l.gesamtRahmen) {
+        expect(l.gesamtRahmen.y - RAHMEN_CHIP_HOEHE / 2, name).toBeGreaterThanOrEqual(0)
+        expect(l.gesamtRahmen.x, name).toBeGreaterThanOrEqual(0)
+        expect(l.gesamtRahmen.x + l.gesamtRahmen.breite, name).toBeLessThanOrEqual(l.W + 1e-9)
+      }
+      const unten = Math.max(...l.nodes.map(n => n.y + l.dims.nodeH / 2))
+      expect(unten, name).toBeLessThanOrEqual(l.H + 1e-9)
+      if (l.dims.nodeW === 100) {
+        const relativ = unten - (l.H - 380) / 2
+        expect(relativ, name).toBeLessThanOrEqual(373)
+        maxDreier = Math.max(maxDreier, relativ)
+      }
+    }
+    // gemessen: die untere Reihe endet im ≤ 3er-Zweig bei 320 + 14 + 29 = 363
+    expect(maxDreier).toBe(363)
+  })
+})
+
+describe('§A6 NB-A6-1 — der Rahmen ist Hindernis im Speicher-Stapel-Entscheid', () => {
+  it('M am Handy (360): drei gestapelte Speicher träfen den Rahmen ⇒ „Speicher (3)"; mit EINEM PV-Knoten (kein Rahmen) bleibt der Dreier-Stapel', () => {
+    const m = lay(bestandM(), 360)
+    expect(m.gesamtRahmen).not.toBeNull()
+    expect(m.stufen.speicherGruppiert).toBe(true)
+    expect(labels(zone(m, 'rechts'))).toEqual(['Speicher'])
+    expect(zone(m, 'rechts')[0].mitglieder).toHaveLength(3)
+    // Gegenfall: derselbe Bestand mit nur einem PV-String — kein Rahmen, der Stapel bleibt einzeln
+    const b = bestandM()
+    const einString = { ...b, komp: b.komp.filter(k => !k.key.startsWith('pv_') || k.key === 'pv_71') }
+    const e = lay(einString, 360)
+    expect(e.gesamtRahmen).toBeNull()
+    expect(e.stufen.speicherGruppiert).toBe(false)
+    expect(keys(zone(e, 'rechts'))).toEqual(['batterie_81', 'batterie_82', 'batterie_83'])
+    // derselbe Dreier-Stapel mit Rahmen hätte ihn geschnitten: ohne Hindernis-Regel wäre er „frei"
+    const alsStapel = zone(e, 'rechts').map(n => ({ x: n.x, y: n.y + RAHMEN_VERSATZ }))
+    const obenMitRahmen = zone(m, 'oben').map(n => ({ x: n.x, y: n.y }))
+    expect(ueberlappungsfrei([...obenMitRahmen, ...alsStapel], m.dims, { x: m.CX, y: m.CY })).toBe(true)
+    expect(ueberlappungsfrei([...obenMitRahmen, ...alsStapel], m.dims, { x: m.CX, y: m.CY }, m.gesamtRahmen)).toBe(false)
   })
 })

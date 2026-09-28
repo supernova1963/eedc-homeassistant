@@ -14,7 +14,7 @@ import { CHART_COLORS, COLORS, KATEGORIE_FARBEN, SOLAR_INTENSITAET, STATUS_COLOR
 import { useChartTheme } from '../../context/ThemeContext'
 import EnergieFlussBackground from './EnergieFlussBackground'
 import {
-  W_DEFAULT, flowPath, layoutEnergieFluss,
+  RAHMEN_CHIP_HOEHE, W_DEFAULT, flowPath, layoutEnergieFluss,
   type BuehnenMass, type GezeichneterKnoten, type KachelAuto,
 } from './energieFlussLayout'
 import { verbergeTouchTooltip } from '../../hooks/useTouchTitleTooltip'
@@ -208,6 +208,9 @@ interface EnergieFlussProps {
 /** Versatz der hinteren Stapel-Rechtecke einer Gruppenkachel (Muster `stack: 7`, detLAN #138). */
 const STAPEL_VERSATZ = 7
 
+/** Tooltip des „Gesamtleistung"-Chips (#341) — bei BHKW-Anlagen die Abgrenzung des Werts. */
+export const TIP_GESAMTLEISTUNG = 'Summe aller PV-Erzeuger (ohne Batterie/Netz)'
+
 /** Tooltip-Satz bei ≥ 2 Wallboxen (Plan §1.4a) — eedc kennt die Zuordnung Auto → Wallbox noch nicht. */
 export const SATZ_ZUORDNUNG_UNBEKANNT = 'Welches Auto an welcher Wallbox lädt, weiß eedc noch nicht.'
 
@@ -378,7 +381,7 @@ export default function EnergieFluss({
 
   // `maxKw` über die GEZEICHNETEN Knoten (eine Gruppe überschreitet jedes
   // Einzelgerät); die Zeichenfläche W × svgH kommt aus dem Layout.
-  const { nodes, dims, W, H: svgH, CX, CY, maxKw } = layout
+  const { nodes, dims, W, H: svgH, CX, CY, maxKw, gesamtRahmen } = layout
   const { nodeW: NODE_W, nodeH: NODE_H, nodeR: NODE_R, hausR: HAUS_R } = dims
   // Alle Autos an allen Wallboxen — bei „geschätzt" (≥ 2 Wallboxen) listet jede
   // Wallbox ALLE, denn die Zuordnung reihum ist nur eine Annahme (Plan §1.4a).
@@ -386,9 +389,30 @@ export default function EnergieFluss({
     nodes.flatMap(n => n.fahrzeuge ?? []).map(f => [f.investition_id, f] as const),
   ).values()].sort((a, b) => a.investition_id - b.investition_id)
   const haushalt = komponenten.find(k => k.key === 'haushalt')
-  // PV-Knoten-Anzahl: bei nur einem PV-String ist "Solarleistung X kW"
-  // über dem Haus redundant (Wert = einzelner Knoten); Issue #137.
+  // PV-Knoten-Anzahl: bei nur einem PV-String ist die Summe redundant
+  // (Wert = einzelner Knoten); Issue #137. Seit Bau A §A6 steht sie als
+  // „Gesamtleistung" im Rahmen über der PV-Reihe statt über dem Haus.
   const pvCount = komponenten.filter(k => k.key.startsWith('pv_')).length
+
+  // „Gesamtleistung"-Rahmen + Chip (#341 Rainer, Bau A §A6). Bedingung wie die
+  // frühere „Solarleistung"-Zeile: Summe > 0 und mehr als ein PV-Knoten (über
+  // die Komponenten, nicht über die gezeichneten Kacheln — eine gruppierte
+  // Anlage behält ihre Summe). Den Platz (+14 Einheiten) hält das Layout
+  // unabhängig vom Wert frei, damit das Bild nicht springt.
+  const gesamt = summePv > 0 && pvCount > 1 && gesamtRahmen ? (() => {
+    const text = `Gesamtleistung ${formatPower(summePv)}`
+    const font = dims.socFontSize + 1
+    // Breite geschätzt wie `zeichenBudget` (0,62 em je Zeichen, die breiteste
+    // gängige Schrift) plus 7 Einheiten Innenrand je Seite (Muster).
+    const breite = text.length * 0.62 * font + 14
+    // Muster: links im Rahmen (10 Einheiten eingerückt). Ist der Rahmen dafür
+    // zu schmal (eine einzige Kachel, z. B. „PV gesamt"), sitzt der Chip
+    // mittig darüber — nie außerhalb der Zeichenfläche.
+    const x = breite <= gesamtRahmen.breite - 20
+      ? gesamtRahmen.x + 10
+      : Math.min(Math.max(2, gesamtRahmen.x + gesamtRahmen.breite / 2 - breite / 2), W - breite - 2)
+    return { text, font, breite, x }
+  })() : null
 
   const hausTip = [
     'Haushalt',
@@ -441,6 +465,23 @@ export default function EnergieFluss({
       >
         <EnergieFlussBackground W={W} svgH={svgH} CX={CX} CY={CY} lite={lite} bgVariant={bgVariant} bgPhotoFile={BG_PHOTO_FILE} />
 
+        {/* „Gesamtleistung"-Rahmen (#341, Bau A §A6): fein, in der PV-Farbe,
+            HINTER Linien und Kacheln — er fasst die PV-Reihe zusammen, der
+            Chip darüber (nach den Kacheln gezeichnet) trägt den Wert. Kein
+            Park-Element, keine Fokus-ID. */}
+        {gesamt && gesamtRahmen && (
+          <rect
+            data-gesamtleistung-rahmen
+            x={gesamtRahmen.x} y={gesamtRahmen.y}
+            width={gesamtRahmen.breite} height={gesamtRahmen.hoehe}
+            rx={12}
+            fill="none"
+            stroke={KATEGORIE_FARBEN.pv}
+            strokeOpacity={0.5}
+            strokeWidth={1}
+            pointerEvents="none"
+          />
+        )}
 
         {/* Verbindungslinien */}
         {nodes.map(node => {
@@ -574,32 +615,15 @@ export default function EnergieFluss({
           </text>
         </g>
 
-        {/* Solarleistung + PV-Soll — oberhalb des Hauses.
-            "Solarleistung" wird bei Einzel-PV-Konfiguration NICHT gezeigt,
-            weil der Wert dann identisch zum einzigen PV-Knoten-Label ist
-            (Forum #335 detlan, Issue #137). Bei ≥ 2 PVs ist die Summe eine
-            echte Zusatzinformation und bleibt sichtbar. */}
-        {summePv > 0 && pvCount > 1 && (
-          <text
-            x={CX} y={CY - HAUS_R - 8}
-            textAnchor="middle"
-            // Hervorgehoben (Issue #314, kingcap1): fett + leicht größer +
-            // kräftigere, besser lesbare PV-Farbe als die übrigen Labels.
-            style={{ fontSize: `${dims.socFontSize + 1}px`, fontWeight: 700 }}
-            className={bgVariant === 'sunset'
-              ? 'fill-amber-900 dark:fill-yellow-300'
-              : bgVariant === 'alps'
-                ? 'fill-blue-900 dark:fill-blue-200'
-                : 'fill-amber-600 dark:fill-yellow-300'}
-          data-title="Summe aller PV-Erzeuger (ohne Batterie/Netz)"
-          >
-            <title>Summe aller PV-Erzeuger (ohne Batterie/Netz)</title>
-            Solarleistung {formatPower(summePv)}
-          </text>
-        )}
+        {/* PV-Soll — oberhalb des Hauses. Bis Bau A §A6 stand darüber noch
+            „Solarleistung"; die Summe ist in den „Gesamtleistung"-Chip über
+            der PV-Reihe gezogen, das Soll rückt auf ihren Platz direkt über
+            dem Haus (vorher dort, wenn die Summe fehlte — bei einem PV-Knoten
+            oder nachts). */}
         {pvSollKw != null && pvSollKw > 0 && (
           <text
-            x={CX} y={CY - HAUS_R - 8 - (summePv > 0 && pvCount > 1 ? dims.socFontSize + 4 : 0)}
+            data-solar-soll
+            x={CX} y={CY - HAUS_R - 8}
             textAnchor="middle"
             style={{ fontSize: `${dims.socFontSize - 1}px` }}
             className={bgVariant === 'sunset'
@@ -676,7 +700,7 @@ export default function EnergieFluss({
           // Entwurf und wurde beim Umbau nicht mitgezogen. Dieselbe Klasse wie
           // der 13-Uhr-Kommentar in `prognosen.py` (N-331).
           if (k.betriebsmodus_label) tipParts.push(`Betrieb: ${k.betriebsmodus_label}`)
-          if (auslastungPct !== null) tipParts.push(`Auslastung: ${fmtZahl(auslastungPct, 0)} % von ${k.leistung_kwp} kWp`)
+          if (auslastungPct !== null) tipParts.push(`Auslastung: ${fmtZahl(auslastungPct, 0)} % von ${fmtZahl(k.leistung_kwp, 1)} kWp`)
           // Netz: Bezug + Einspeisung separat anzeigen + Farberklärung
           if (k.key === 'netz') {
             const bezug = tagesWerte?.netz_bezug
@@ -890,6 +914,39 @@ export default function EnergieFluss({
             </g>
           )
         })}
+
+        {/* Chip „Gesamtleistung <Wert>" auf der Oberkante des Rahmens — NACH
+            den Kacheln, damit ihn die Stapel-Optik einer Gruppe nicht verdeckt.
+            Hervorhebung wie die frühere „Solarleistung"-Zeile (Issue #314,
+            kingcap1: fett, leicht größer, kräftige PV-Farbe); der Tooltip
+            grenzt den Wert ab (bei BHKW-Anlagen zählt der Erzeuger nicht mit). */}
+        {gesamt && gesamtRahmen && (
+          <g data-gesamtleistung className="cursor-default" data-title={TIP_GESAMTLEISTUNG}>
+            <title>{TIP_GESAMTLEISTUNG}</title>
+            <rect
+              x={gesamt.x} y={gesamtRahmen.y - RAHMEN_CHIP_HOEHE / 2}
+              width={gesamt.breite} height={RAHMEN_CHIP_HOEHE}
+              rx={RAHMEN_CHIP_HOEHE / 2}
+              className="fill-white dark:fill-gray-800"
+              fillOpacity={0.92}
+              stroke={KATEGORIE_FARBEN.pv}
+              strokeOpacity={0.5}
+              strokeWidth={1}
+            />
+            <text
+              x={gesamt.x + gesamt.breite / 2} y={gesamtRahmen.y + gesamt.font * 0.35}
+              textAnchor="middle"
+              style={{ fontSize: `${gesamt.font}px`, fontWeight: 700 }}
+              className={bgVariant === 'sunset'
+                ? 'fill-amber-900 dark:fill-yellow-300'
+                : bgVariant === 'alps'
+                  ? 'fill-blue-900 dark:fill-blue-200'
+                  : 'fill-amber-600 dark:fill-yellow-300'}
+            >
+              {gesamt.text}
+            </text>
+          </g>
+        )}
       </svg>
     </div>
   )

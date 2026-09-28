@@ -8,6 +8,8 @@
  * und Faltung als **eigene** Funktion `layoutEnergieFluss`; seit §A4 zeichnet
  * `EnergieFluss.tsx` damit. `flowPath` bleibt unverändert (Beule fix 25), der
  * alte Pfad `layoutNodes` steht als festgenagelter IST-Anker weiter hier.
+ * §A6 ergänzt den „Gesamtleistung"-Rahmen um die PV-Reihe (`gesamtRahmen`,
+ * `RAHMEN_VERSATZ`); gezeichnet wird er in `EnergieFluss.tsx`.
  */
 
 import type { LiveFahrzeug, LiveGauge, LiveKomponente } from '../../api/liveDashboard'
@@ -180,6 +182,40 @@ export const ABSTAND_MIN = 4
 export const MINDEST_SCHRIFT_PX = 12
 /** Ab dieser Kartenbreite gilt der Desktop-Maßstab (Zoom), darunter Handy (360/450, kein Zoom). */
 export const DESKTOP_AB_PX = 500
+
+/**
+ * „Gesamtleistung"-Rahmen (Bau A §A6, #341 Rainer): sobald die Anlage MEHR
+ * als einen PV-Knoten hat, rückt der ganze Inhalt um diese Einheiten nach
+ * unten — Platz für den Chip über der Erzeugerreihe (Muster
+ * `rahmen = P.length > 1 ? 14 : 0`). Die Zeichenfläche bleibt gleich hoch:
+ * im engsten Zweig (≤ 3 Kacheln je Reihe, `verbraucherY` 320, `nodeH` 58)
+ * endet die untere Reihe bei 320 + 14 + 29 = 363 < 380.
+ */
+export const RAHMEN_VERSATZ = 14
+/** Luft zwischen PV-Kachel und Rahmen oben/links/rechts (Muster: 9) — fasst die Stapel-Optik (7) einer Gruppe mit. */
+export const RAHMEN_LUFT = 9
+/** Luft unter der PV-Reihe (Muster: Rahmenhöhe `nodeH + 16` ⇒ unten 7). */
+export const RAHMEN_LUFT_UNTEN = 7
+/** Höhe des Chips „Gesamtleistung …" — er sitzt mittig auf der Oberkante des Rahmens (Muster: 16). */
+export const RAHMEN_CHIP_HOEHE = 16
+
+/**
+ * Anzahl der PV-Knoten in der RESPONSE — dieselbe Zählung wie `pvCount` in
+ * `EnergieFluss.tsx` (#137: bei genau einem PV-Knoten ist die Summe redundant).
+ * ⛔ Gezählt werden die Komponenten, nie die gezeichneten Kacheln: eine
+ * gruppierte Anlage („PV gesamt", eine Kachel) behält ihren Rahmen.
+ */
+export function pvKnotenAnzahl(komponenten: LiveKomponente[]): number {
+  return komponenten.filter(k => k.key.startsWith('pv_')).length
+}
+
+/** Der Rahmen um die PV-Reihe in Einheiten der Zeichenfläche. */
+export interface GesamtRahmen {
+  x: number
+  y: number
+  breite: number
+  hoehe: number
+}
 
 /**
  * Wie viele Kacheln fasst eine Reihe der Breite `W`, ohne dass sich zwei
@@ -815,14 +851,18 @@ export function waehleStufen(pvAnzahlen: number[], untenAnzahlen: number[], mass
 
 /**
  * Überlappungsfrei = keine zwei Kachel-Rechtecke kommen sich näher als
- * `ABSTAND_MIN`, und keine Kachel schneidet den Hauskreis. Produktiv
- * entscheidet sie, ob der Speicher-Stapel bleiben darf (Plan §1.3); die
- * Tests prüfen mit ihr jedes Layout.
+ * `ABSTAND_MIN`, keine Kachel schneidet den Hauskreis und — mit Rahmen
+ * (§A6) — keine Kachel außerhalb des „Gesamtleistung"-Rahmens kommt ihm
+ * näher als `ABSTAND_MIN`. Der Rahmen ist gezeichnete Fläche wie eine
+ * Kachel; nur die Kacheln, die er fasst (ganz innen), dürfen darin liegen.
+ * Produktiv entscheidet sie, ob der Speicher-Stapel bleiben darf (Plan §1.3);
+ * die Tests prüfen mit ihr jedes Layout.
  */
 export function ueberlappungsfrei(
   nodes: { x: number; y: number }[],
   dims: Pick<LayoutDims, 'nodeW' | 'nodeH' | 'hausR'>,
   haus: { x: number; y: number },
+  rahmen: GesamtRahmen | null = null,
 ): boolean {
   const { nodeW, nodeH, hausR } = dims
   for (let i = 0; i < nodes.length; i++) {
@@ -834,6 +874,13 @@ export function ueberlappungsfrei(
     const nx = Math.min(Math.max(haus.x, a.x - nodeW / 2), a.x + nodeW / 2)
     const ny = Math.min(Math.max(haus.y, a.y - nodeH / 2), a.y + nodeH / 2)
     if ((nx - haus.x) ** 2 + (ny - haus.y) ** 2 < hausR ** 2) return false
+    if (rahmen) {
+      const l = a.x - nodeW / 2, r = a.x + nodeW / 2, o = a.y - nodeH / 2, u = a.y + nodeH / 2
+      const innen = l >= rahmen.x && r <= rahmen.x + rahmen.breite && o >= rahmen.y && u <= rahmen.y + rahmen.hoehe
+      const nah = l < rahmen.x + rahmen.breite + ABSTAND_MIN && r > rahmen.x - ABSTAND_MIN
+        && o < rahmen.y + rahmen.hoehe + ABSTAND_MIN && u > rahmen.y - ABSTAND_MIN
+      if (!innen && nah) return false
+    }
   }
   return true
 }
@@ -844,9 +891,18 @@ export interface EnergieFlussLayout extends LayoutResult {
   nodes: GezeichneterKnoten[]
   /**
    * Größenstufe der Kacheln; `cy`/`verbraucherY` sind bereits um den
-   * senkrechten Versatz `(H − 380)/2` verschoben (Inhalt mittig).
+   * senkrechten Versatz `(H − 380)/2` (Inhalt mittig) und — mit Rahmen — um
+   * `RAHMEN_VERSATZ` verschoben.
    */
   dims: LayoutDims
+  /**
+   * „Gesamtleistung"-Rahmen um die gezeichneten PV-Kacheln (§A6) — `null`
+   * bei höchstens einem PV-Knoten in der Response (#137). Ob er gezeichnet
+   * wird, entscheidet `EnergieFluss` zusätzlich am Wert (`summePv > 0`); der
+   * Versatz hängt nur an der Knotenzahl, damit das Bild bei Sonnenauf- und
+   * -untergang nicht springt.
+   */
+  gesamtRahmen: GesamtRahmen | null
   W: number
   H: number
   /** Hausmitte. */
@@ -905,7 +961,12 @@ export function layoutEnergieFluss(
   const obenStufe = pvK[m.iP]
   const untenStufe = uK[m.iU]
 
-  const yOff = (m.H - H_BASIS) / 2
+  // §A6: mit Rahmen rückt der ganze Inhalt um `RAHMEN_VERSATZ` nach unten —
+  // alle Zonen gleich, die Kacheln untereinander bleiben also, wie sie waren;
+  // die Höhe der Zeichenfläche auch. Neu hinzu kommt nur der Rahmen selbst
+  // als Hindernis im Speicher-Stapel-Entscheid (s. unten).
+  const mitRahmen = pvKnotenAnzahl(komponenten) > 1 && obenStufe.kacheln.length > 0
+  const yOff = (m.H - H_BASIS) / 2 + (mitRahmen ? RAHMEN_VERSATZ : 0)
   const dims: LayoutDims = { ...m.dims, cy: m.dims.cy + yOff, verbraucherY: m.dims.verbraucherY + yOff }
   const margin = dims.nodeW / 2 + 15
   const CX = m.W / 2
@@ -918,6 +979,20 @@ export function layoutEnergieFluss(
   untenStufe.kacheln.forEach((k, i) => nodes.push({ ...k, x: untenXs[i], y: dims.verbraucherY, zone: 'unten' }))
   if (netz) nodes.push({ ...(netz as Kachel), x: margin, y: CY, zone: 'links' })
 
+  // Rahmen um die PV-Reihe (Muster-Bauform): links/rechts/oben `RAHMEN_LUFT`,
+  // unten `RAHMEN_LUFT_UNTEN` — die Stapel-Optik einer Gruppe (7 nach rechts
+  // oben) liegt damit innen. Er steht VOR dem Speicher-Stapel-Entscheid fest —
+  // er ist dort Hindernis wie eine Kachel (NB-A6-1).
+  let gesamtRahmen: GesamtRahmen | null = null
+  if (mitRahmen) {
+    const xs = obenXs
+    const y = 50 + yOff
+    const x0 = Math.min(...xs) - dims.nodeW / 2 - RAHMEN_LUFT
+    const x1 = Math.max(...xs) + dims.nodeW / 2 + RAHMEN_LUFT
+    const y0 = y - dims.nodeH / 2 - RAHMEN_LUFT
+    gesamtRahmen = { x: x0, y: y0, breite: x1 - x0, hoehe: dims.nodeH + RAHMEN_LUFT + RAHMEN_LUFT_UNTEN }
+  }
+
   const stapel = (liste: Kachel[]): GezeichneterKnoten[] => liste.map((k, i) => ({
     ...k,
     x: m.W - margin,
@@ -927,14 +1002,14 @@ export function layoutEnergieFluss(
   const speicher = [...rechts].sort(vergleicheKacheln)
   let rechtsKnoten = stapel(speicher)
   const speicherGruppiert = speicher.length > 1
-    && !ueberlappungsfrei([...nodes, ...rechtsKnoten], dims, { x: CX, y: CY })
+    && !ueberlappungsfrei([...nodes, ...rechtsKnoten], dims, { x: CX, y: CY }, gesamtRahmen)
   if (speicherGruppiert) rechtsKnoten = stapel([speicherGruppe(speicher, eingaben)])
   nodes.push(...rechtsKnoten)
 
   const maxKw = Math.max(...nodes.flatMap(n => [n.komp.erzeugung_kw ?? 0, n.komp.verbrauch_kw ?? 0]), 0.1)
 
   return {
-    nodes, dims, W: m.W, H: m.H, CX, CY, k: m.k, geraet: m.geraet,
+    nodes, dims, gesamtRahmen, W: m.W, H: m.H, CX, CY, k: m.k, geraet: m.geraet,
     schriftPx: m.schriftPx, mindestSchriftPx: m.mindestSchriftPx, maxKw,
     stufen: {
       oben: { name: obenStufe.name, index: m.iP, anzahl: pvK.length },
