@@ -8,6 +8,35 @@
 import { memo } from 'react'
 import type { BgVariant } from './EnergieFluss'
 
+/**
+ * Bildformat der Variante „Haus" (Bau B, Regel A): aus dem Seitenverhältnis
+ * der ZEICHENFLÄCHE (viewBox `W × svgH`), nicht aus der Kartenbreite.
+ *
+ * In der Karte deckungsgleich mit „schmal < 500 px ⇒ quadratisch": das Handy
+ * zeichnet 360×380 (0,947) oder 450×380 (1,184), der Desktop immer im
+ * 600er-Verhältnis (1,579) — jede Schwelle dazwischen reproduziert das, 1,3
+ * liegt mittig. Im Vollbild und in einer Einbettung ist die Fläche dagegen
+ * formatvariabel (`verhaeltnis = ctr/hoehe` im Layout): eine hohe 600×900-
+ * Einbettung zeigt so das Quadrat-Bild ganz statt 41,5 % des breiten
+ * (Mast und Speicher abgeschnitten — „das Bild zeigt immer alle Objekte").
+ * Keine Hysterese: an der 500-px-Grenze flippt ohnehin das ganze Layout.
+ */
+export const HAUS_FORMAT_SCHWELLE = 1.3
+export function hausFormat(W: number, svgH: number): 'breit' | 'quadrat' {
+  return W / svgH >= HAUS_FORMAT_SCHWELLE ? 'breit' : 'quadrat'
+}
+
+/** Die vier Bilder der Variante „Haus" (Bau B, Regel B): je Format ein Tag-
+ *  und ein Nachtbild. Beide eines Formats liegen gestapelt im DOM; das Thema
+ *  wählt per `dark:`-Opacity-Paar — dieselbe Bauform wie der Schleier der
+ *  Foto-Varianten, kein Theme-Hook, kein Nachlade-Blitz beim Wechsel.
+ *  ⚠ Austausch = Dateitausch unter gleichem Namen: `public/` läuft ungehasht
+ *  über den SPA-Catch-all (Revalidierung per ETag), wie die Foto-Bestände. */
+export const HAUS_BILDER = {
+  breit:   { tag: './backgrounds/anlage-breit-tag.webp',   nacht: './backgrounds/anlage-breit-nacht.webp' },
+  quadrat: { tag: './backgrounds/anlage-quadrat-tag.webp', nacht: './backgrounds/anlage-quadrat-nacht.webp' },
+} as const
+
 interface BackgroundProps {
   W: number
   svgH: number
@@ -344,8 +373,39 @@ function EnergieFlussBackground({
 
         {/* ═══ Hintergrund-Layer ═══ */}
         <g className="pointer-events-none">
-          {/* Basis-Hintergrund (Light etwas dunkler für Kontrast) */}
+          {/* Basis-Hintergrund (Light etwas dunkler für Kontrast).
+              ⭐ „Haus" (Bau B) erbt ihn bewusst als UNTERLAGE: er liegt unter
+              den beiden Bildern (die mit `slice` die ganze Fläche decken) und
+              ist nur zu sehen, solange ein Bild lädt — dann die vertraute
+              Tech-Fläche statt Schwarz (der Foto-Zweig legt `#000` unter). */}
           {bgVariant !== 'sunset' && bgVariant !== 'alps' && !bgPhotoFile[bgVariant] && <rect width={W} height={svgH} className="fill-gray-100 dark:fill-gray-900" rx="8" />}
+
+          {/* „Haus" (Bau B, #341/#348): beide Bilder des Formats, das Thema
+              wählt per `dark:`-Paar (Regel B). KEIN Schleier — die eigens
+              erzeugten Bilder tragen die 0,6-deckenden Kacheln (Entscheid
+              28.09.); im hellen Bild bekommen die Linien stattdessen einen
+              Saum (EnergieFluss.tsx, Regel C). */}
+          {bgVariant === 'haus' && (() => {
+            const bild = HAUS_BILDER[hausFormat(W, svgH)]
+            return <>
+              <image
+                data-haus-bild="tag"
+                href={bild.tag}
+                x="0" y="0" width={W} height={svgH}
+                preserveAspectRatio="xMidYMid slice"
+                clipPath="url(#ef-photo-clip)"
+                className="opacity-100 dark:opacity-0"
+              />
+              <image
+                data-haus-bild="nacht"
+                href={bild.nacht}
+                x="0" y="0" width={W} height={svgH}
+                preserveAspectRatio="xMidYMid slice"
+                clipPath="url(#ef-photo-clip)"
+                className="opacity-0 dark:opacity-100"
+              />
+            </>
+          })()}
 
           {/* Foto-Hintergrund */}
           {bgPhotoFile[bgVariant] && <>
@@ -458,8 +518,9 @@ function EnergieFlussBackground({
             )
           })()}
 
-          {/* ─── Perspektivgitter (Fluchtpunkt = Haus-Zentrum) — nur im Effekt-Modus ─── */}
-          {!lite && bgVariant !== 'sunset' && bgVariant !== 'alps' && (
+          {/* ─── Perspektivgitter (Fluchtpunkt = Haus-Zentrum) — nur im Effekt-Modus ───
+              „Haus" nie: Hintergrund-Deko läge über dem Bild (Bau B, Regel E). */}
+          {!lite && bgVariant !== 'sunset' && bgVariant !== 'alps' && bgVariant !== 'haus' && (
             <g mask="url(#ef-grid-mask)">
               {/* Radiale Strahlen vom Zentrum zu den Rändern */}
               {Array.from({ length: 32 }, (_, i) => {
@@ -727,8 +788,10 @@ function EnergieFlussBackground({
             <line x1={0} y1={CY} x2={W} y2={CY} stroke="#ffd700" strokeWidth="0.8" strokeOpacity="0.38" />
           )}
 
-          {/* ─── Hintergrund-Animationen — nur im Effekt-Modus ─── */}
-          {!lite && bgVariant !== 'sunset' && (<>
+          {/* ─── Hintergrund-Animationen — nur im Effekt-Modus ───
+              „Haus" nie (Ströme, Ringe, Hintergrund-Partikel — Bau B, Regel E);
+              die Vordergrund-Effekte der Linien und Kacheln bleiben wie bei Tech. */}
+          {!lite && bgVariant !== 'sunset' && bgVariant !== 'haus' && (<>
           {/* Fließende Strom-Ströme */}
           <path
             d={`M ${CX - 80} 10 Q ${CX - 40} ${CY * 0.4} ${CX} ${CY}`}
@@ -1008,7 +1071,10 @@ function EnergieFlussBackground({
             <line x1={12} y1={CY} x2={W - 12} y2={CY} stroke="#88b8d8" strokeWidth="0.6" strokeOpacity={0.18} strokeDasharray="3 5" />
           </>}
 
-          {/* Tiefe-Vignette (dunkelt Ränder ab → 3D-Einbuchtung) — nur im Effekt-Modus */}
+          {/* Tiefe-Vignette (dunkelt Ränder ab → 3D-Einbuchtung) — nur im Effekt-Modus.
+              Nur `default`: „Haus" ist damit strukturell ausgeschlossen, ein
+              eigener Ausschluss wäre toter Code (Bau B, Regel E; gehalten von
+              der DOM-Wächterprobe in `EnergieFluss.haus.test.tsx`). */}
           {!lite && bgVariant === 'default' && (
             <>
               <rect width={W} height={svgH} className="opacity-100 dark:opacity-0" fill="url(#ef-vignette-light)" rx="8" />

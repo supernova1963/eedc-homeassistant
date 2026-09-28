@@ -572,6 +572,14 @@ export const CHART_FLAECHE = {
   dark: '#1f2937',   // gray-800
 }
 
+/** Saum der Flusslinien im Energiefluss auf dem hellen „Haus"-Bild (Bau B,
+ *  #341/#348; Muster SAUM_HELL) — ein dunkler Rand, der eine Flusslinie gegen
+ *  den hellen Himmel abhebt (PV-Linie nackt 1,39:1, mit Saum 9,5–10:1, gemessen
+ *  in der Gegenprüfung 29.09.). **Infrastruktur wie {@link CHART_ACHSEN}, keine
+ *  Datenrolle:** er trägt keine Aussage, nur Lesbarkeit; gezeichnet mit
+ *  Deckung 0,4 und nur im hellen Thema (`dark:opacity-0` am Pfad). */
+export const ENERGIEFLUSS_SAUM = '#1e293b' // slate-800
+
 // ─── Komponenten-Identität (Investitionstyp) — kanonische SoT (Regel A) ──────
 /**
  * **Kanonische Komponenten-Identitäts-Farbmap (SoT, Gernot 2026-06-24, Regel A)**

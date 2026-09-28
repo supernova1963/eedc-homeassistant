@@ -10,7 +10,7 @@
 import { useState, useEffect, useRef, useMemo, type ReactNode } from 'react'
 import { Sun, Zap, Battery, Car, Flame, Wrench, Home, Plug, Heater, Droplets, Snowflake, Fan, Waves, Sparkles, Zap as ZapIcon } from 'lucide-react'
 import type { LiveFahrzeug, LiveKomponente, LiveGauge } from '../../api/liveDashboard'
-import { CHART_COLORS, COLORS, KATEGORIE_FARBEN, SOLAR_INTENSITAET, STATUS_COLORS, fmtZahl } from '../../lib'
+import { CHART_COLORS, COLORS, ENERGIEFLUSS_SAUM, KATEGORIE_FARBEN, SOLAR_INTENSITAET, STATUS_COLORS, fmtZahl } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 import EnergieFlussBackground from './EnergieFlussBackground'
 import {
@@ -57,12 +57,13 @@ function useLiteMode(): [boolean, () => void] {
 // ─── Hintergrund-Variante ────────────────────────────────────────────
 
 const BG_VARIANT_KEY = 'eedc-energiefluss-bg'
-export type BgVariant = 'default' | 'sunset' | 'alps' | 'alpenpanorama' | 'milchstrasse' | 'dolomiten' | 'nebula' | 'sternennacht' | 'exoplanet'
+export type BgVariant = 'default' | 'haus' | 'sunset' | 'alps' | 'alpenpanorama' | 'milchstrasse' | 'dolomiten' | 'nebula' | 'sternennacht' | 'exoplanet'
 
-const BG_VARIANTS: BgVariant[] = ['default', 'sunset', 'alps', 'alpenpanorama', 'milchstrasse', 'dolomiten', 'nebula', 'sternennacht', 'exoplanet']
+const BG_VARIANTS: BgVariant[] = ['default', 'haus', 'sunset', 'alps', 'alpenpanorama', 'milchstrasse', 'dolomiten', 'nebula', 'sternennacht', 'exoplanet']
 
 const BG_LABELS: Record<BgVariant, string> = {
   default:       'Tech',
+  haus:          'Haus',
   sunset:        'Sunset',
   alps:          'Alpen',
   alpenpanorama: 'Alpenpanorama',
@@ -531,6 +532,24 @@ export default function EnergieFluss({
                 strokeOpacity={isActive ? 0.2 : 0.08}
                 strokeLinecap="round"
               />
+              {/* Saum (Bau B, Regel C): nur „Haus", nur aktive Linien, nur im
+                  hellen Bild (`dark:opacity-0`). ⛔ Lesbarkeit, KEIN Effekt —
+                  deshalb in BEIDEN Schalterstellungen und nicht im `!lite`-
+                  Zweig: gerade in Lite stünde die Kernlinie sonst nackt auf
+                  dem hellen Himmel (PV 1,39:1; mit Saum 9,5–10:1). Ohne
+                  `flow-line`, die Partikel laufen darüber. */}
+              {isActive && bgVariant === 'haus' && (
+                <path
+                  data-saum
+                  d={d}
+                  fill="none"
+                  stroke={ENERGIEFLUSS_SAUM}
+                  strokeWidth={Math.max(thickness * 0.4, 1.5) + 2}
+                  strokeOpacity={0.4}
+                  strokeLinecap="round"
+                  className="dark:opacity-0"
+                />
+              )}
               {/* Kern-Linie (leuchtend, schmal). Im Lite-Modus zusätzlich
                   CSS-animierter Dashoffset-Fluss (wie LuminaCard / STATS
                   Card) — GPU-beschleunigt, kein SMIL-Ruckler auf Mobile-
@@ -642,7 +661,12 @@ export default function EnergieFluss({
               ? 'fill-purple-800 dark:fill-purple-400'
               : bgVariant === 'alps'
                 ? 'fill-indigo-800 dark:fill-indigo-300'
-                : 'fill-purple-500 dark:fill-purple-400'}
+                // „Haus" (Bau B, Regel D): der Text steht nackt auf dem Bild —
+                // hell dunkel wie bei Alpen (6,4:1 statt 2,55:1 mit purple-500),
+                // dunkel der Bestand.
+                : bgVariant === 'haus'
+                  ? 'fill-indigo-800 dark:fill-purple-400'
+                  : 'fill-purple-500 dark:fill-purple-400'}
           >
             Solar Soll ~{fmtZahl(pvSollKw, 1)} kW
           </text>
