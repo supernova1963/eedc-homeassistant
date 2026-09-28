@@ -1,11 +1,102 @@
 # Was ist neu
 
-> **Stand:** September 2026 (v4.0.52)
+> **Stand:** September 2026 (v4.1.0)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.1.0 — 28. September 2026
+
+**In dieser Version:** der Energiefluss ordnet sich selbst · Einzelwerte auf Klick, mit heutigem Ertrag · wahlweise vor einem Anlagenbild · ein Auto an der Wallbox zählt nur einmal · der Stromverbrauch einer Wärmepumpe bleibt aktuell.
+
+**Der Energiefluss wird auch mit vielen Geräten lesbar**
+
+**Betrifft dich das?** Ja, wenn du mehrere PV-Strings, Speicher oder Verbraucher hast
+— oder den Energiefluss am Telefon anschaust.
+
+**Was war:** Alle Geräte standen nebeneinander, bis die Beschriftungen ineinander
+liefen. Bei sechs Strings war das schon am Laptop so.
+
+**Was jetzt:** Wird es eng, fasst eedc gleichartige Geräte zu **einer Kachel**
+zusammen — PV-Strings nach ihrer Ausrichtung („Süd (5)"), sonst nach ihrem
+Wechselrichter; Speicher und Verbraucher nach Art. Auf der Kachel steht die
+gemeinsame Leistung. **Ein Klick darauf öffnet die Einzelwerte** als Liste mit einem
+Balken je Gerät, mit aktueller Leistung und **„heute X kWh"**. Solange genug Platz
+ist, bleibt alles einzeln stehen; die Karte wird dabei nie höher, und die Schrift
+bleibt lesbar.
+
+**Neu außerdem:** Über den Erzeugern steht ihre **Gesamtleistung** in einem feinen
+Rahmen. Und ein **Auto an einer Wallbox** steckt jetzt in der Wallbox-Kachel statt
+daneben — mit Ladezustand und Richtung.
+
+→ *Cockpit → Live*
+
+**Der Energiefluss wahlweise vor einem Anlagenbild**
+
+**Betrifft dich das?** Nur, wenn du magst — die bisherigen Varianten bleiben genau
+wie sie sind.
+
+**Was jetzt:** Unter den Hintergrund-Varianten steht neben „technisch" und
+„schlicht" jetzt **„Haus"**: Der Energiefluss liegt dann vor einem Bild mit Haus,
+Photovoltaik, Speicher, Wallbox und Auto. Es gibt ein Tag- und ein Nachtbild, passend
+zum hellen bzw. dunklen Modus. Die Kacheln stehen dabei genauso wie in der
+technischen Ansicht.
+
+⚠ **Die Bilder sind KI-erzeugte Beispielbilder** — sie zeigen nicht deine Anlage.
+
+→ *Cockpit → Live → Hintergrund*
+
+**Ein bidirektionales Auto an der Wallbox zählt einmal**
+
+**Betrifft dich das?** Ja, wenn du ein V2H-fähiges Auto an einer erfassten Wallbox
+lädst.
+
+**Was war:** Die Leistung des Autos zählte doppelt — einmal als Wallbox-Ladung,
+einmal als Batterie-Ladung. Der Eigenverbrauchs-Anteil in der Live-Ansicht wurde
+dadurch viel zu klein.
+
+**Was jetzt:** Die **Wallbox** bucht die Richtung, in beide Richtungen; die
+Batterie-Rolle trägt nur noch eine wirklich gemessene Entladung. Es ging nur um die
+Live-Anzeige — an deinen gespeicherten Werten ändert sich nichts.
+
+**Der Stromverbrauch der Wärmepumpe bleibt aktuell**
+
+**Betrifft dich das?** Ja, wenn deine Wärmepumpe auf **getrennte Strommessung**
+steht (Heizen und Warmwasser einzeln).
+
+**Was war:** Den Gesamtverbrauch rechnet eedc in diesem Fall selbst aus beiden
+Achsen — bisher aber nur beim **ersten** Speichern eines Monats. Wer später eine der
+beiden Zahlen korrigierte, dessen Gesamtwert blieb auf dem alten Stand stehen. Der
+Daten-Checker warnte dann über einen Wert, den man im Formular gar nicht sehen
+konnte.
+
+**Was jetzt:** eedc rechnet die Summe bei **jedem** Speichern neu. Und trägt ein
+Monat einen eigenen Gesamtwert — von Hand eingetragen oder von einem zugeordneten
+Gesamtzähler —, dann zeigt das Formular das Feld *Stromverbrauch* auch an. Einen
+stehen gebliebenen alten Wert räumst du weg, indem du das Feld leerst und speicherst;
+die Hinweise des Daten-Checkers nennen diesen Handgriff jetzt.
+
+→ *Monatsabschluss*
+
+**Kleinere Korrekturen**
+
+- **„Verbindung testen" beim MQTT-Import** meldete „Not authorized", obwohl das
+  gespeicherte Passwort stimmte — der Test prüft jetzt genau das, womit sich der
+  Import auch beim Start verbindet. Stand das Passwort nur in der
+  Add-on-Konfiguration, lief der Import nach dem Speichern außerdem bis zum nächsten
+  Neustart ohne Passwort; auch das ist behoben.
+- **Ein geleertes Prognose-Feld bleibt geleert:** PV-Ladeanteil und Benzinpreis am
+  E-Auto sowie der PV-Anteil an der Wärmepumpe standen mit ihrem Standardwert
+  vorbelegt und wurden beim Speichern als *gepflegt* zurückgeschrieben. Der Weg zum
+  **gemessenen** Anteil hielt damit nur bis zum nächsten Speichern.
+- **Kategorie unter „Sonstiges":** Beim Bearbeiten eines älteren Geräts ohne
+  Kategorie wurde stillschweigend „Erzeuger" gesetzt — ein Verbraucher konnte so in
+  die Erzeugung rutschen. Erste Option ist jetzt „Automatisch (nach den
+  Monatswerten)", und sie bleibt auch stehen.
 
 ---
 

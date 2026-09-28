@@ -7,6 +7,33 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.1.0] - 2026-09-28 — Der Energiefluss ordnet sich: Gruppen statt Gedränge, Einzelwerte auf Klick, wahlweise mit Anlagenbild
+
+### Added
+
+- **Der Energiefluss gruppiert, wenn der Platz nicht reicht.** Bisher standen alle Erzeuger, Speicher und Verbraucher nebeneinander, bis die Beschriftungen unleserlich wurden — mit sechs PV-Strings war das schon am Laptop der Fall. Jetzt fasst eedc gleichartige Knoten zu einer gestapelten Kachel zusammen: PV-Strings nach ihrer **Ausrichtung** („Süd (5)") oder, wo es die Ausrichtung nicht hergibt, nach ihrem **Wechselrichter**; Speicher nach Kapazität, Verbraucher nach Art. Die Kachel nennt die gemeinsame Leistung. Solange genug Platz ist, bleibt alles einzeln stehen — am Telefon greift die Gruppierung entsprechend früher. **Die Karte wird dabei nie höher**, und die Schrift bleibt lesbar (mindestens 12 px). Danke @Safi105 für den Anstoß samt Bild (#348).
+- **Ein Klick auf eine Gruppenkachel öffnet die Einzelwerte.** Als Liste mit einem Balken je Gerät: aktuelle Leistung, Anteil an der Gruppe und **„heute X kWh"** in jeder Zeile. Die Liste schließt mit Klick daneben, mit „Schließen" oder mit Esc.
+- **Die Erzeugerreihe trägt ihre Gesamtleistung.** Über den Erzeugern steht ein feiner Rahmen mit der Beschriftung „Gesamtleistung" und der Summe — sichtbar, sobald mehr als eine Erzeuger-Kachel da ist. Wunsch aus dem Tester-Sammelthread (#341).
+- **Neue Hintergrund-Variante „Haus".** Unter *Cockpit → Live* lässt sich der Energiefluss jetzt vor ein Anlagenbild legen — Haus mit Photovoltaik, Speicher, Wallbox und Auto, mit passendem Tag- und Nachtbild, das dem hellen bzw. dunklen Modus folgt. Die Verteilung der Kacheln ist dieselbe wie in der technischen Ansicht. **Die Bilder sind KI-erzeugte Beispielbilder** und zeigen nicht deine Anlage; die bisherigen Varianten (technisch, schlicht) bleiben unverändert.
+
+### Changed
+
+- **Ein Auto an der Wallbox steckt jetzt in der Wallbox-Kachel** statt daneben zu stehen — mit Ladezustand und Richtung. Das war der häufigste Grund, warum die Verbraucherreihe überlief; eine eigene Auto-Kachel gibt es nur noch für Autos ohne Wallbox.
+
+### Fixed
+
+- **Ein bidirektionales Auto hinter einer Wallbox zählt in der Live-Bilanz nur noch einmal.** Wer ein V2H-fähiges Auto an einer erfassten Wallbox lädt, sah dessen Leistung doppelt: einmal als Wallbox-Ladung, einmal als Batterie-Ladung — der Eigenverbrauchs-Anteil sank dadurch im Messbeispiel auf 30 % statt 100 %. Jetzt bucht die **Wallbox** die Richtung (laden wie entladen), und die Batterie-Rolle trägt nur noch eine tatsächlich gemessene Entladung. Betroffen war nur die Live-Ansicht, keine gespeicherten Werte. (N-575)
+- **Der gesamte Stromverbrauch einer Wärmepumpe friert nicht mehr ein.** Bei getrennter Strommessung rechnet der Monatsabschluss den Gesamtverbrauch selbst (Heizen + Warmwasser) — bisher aber nur beim **ersten** Speichern eines Monats. Wurde eine der beiden Achsen später korrigiert, blieb der alte Gesamtwert unsichtbar stehen, und der Daten-Checker warnte über einen Wert, den man im Formular weder sehen noch ändern konnte. Jetzt rechnet eedc die Summe bei **jedem** Speichern neu. Trägt ein Monat einen eigenen Gesamtwert — von Hand gepflegt oder von einem zugeordneten Gesamtzähler —, zeigt das Formular das Feld *Stromverbrauch* an; leeren und speichern stellt die Summe wieder her. Die beiden bestehenden Checker-Hinweise nennen diesen Handgriff jetzt mit. Danke @rapahl für die Bilder (#416). (N-578)
+- **„Verbindung testen" beim MQTT-Import meldet kein falsches „Not authorized" mehr.** Bei ausgeschaltetem Import schickte der Knopf den Passwort-Platzhalter als echtes Passwort an den Broker — das gespeicherte Passwort war die ganze Zeit in Ordnung. Jetzt löst der Test das Passwort über dieselbe Kaskade auf, mit der sich der Import beim Start verbindet (Web-Einstellungen, sonst Add-on-Konfiguration), und prüft damit genau das, was später läuft. Im selben Zug behoben: Steht das Broker-Passwort **nur** in der Add-on-Konfiguration, lief der Import nach dem Speichern des Broker-Blocks bis zum nächsten Neustart ohne Passwort. Das Passwort aus der Add-on-Konfiguration wird dabei weiterhin nicht in die Datenbank kopiert. (#415, N-577)
+- **Ein geleertes Prognose-Feld bleibt geleert.** PV-Ladeanteil und Benzinpreis am E-Auto sowie der PV-Anteil an der Wärmepumpe standen im Formular mit ihrem Standardwert vorbelegt — jedes Speichern schrieb ihn als *gepflegten* Wert zurück, auch nachdem man das Feld geleert hatte. Der mit v4.0.52 freigeschaltete Weg zum **gemessenen** Anteil hielt damit nur bis zum nächsten Speichern. Die Felder starten jetzt leer, und Platzhalter und Hinweis nennen, was der leere Zustand bewirkt. (N-572)
+- **Die Kategorie einer Komponente unter „Sonstiges" wird nicht mehr stillschweigend auf „Erzeuger" gesetzt.** Beim Bearbeiten eines Bestandsgeräts ohne gepflegte Kategorie machte die Vorauswahl aus einer datengetriebenen Einschätzung beim nächsten Speichern eine feste Angabe — ein Verbraucher konnte so in die Erzeugungs-Summe kippen. Erste Option ist jetzt **„Automatisch (nach den Monatswerten)"**, und sie bleibt bestehen. (N-573)
+
+### Intern
+
+- Das Layout des Energieflusses liegt in einem eigenen, testbaren Modul (`energieFlussLayout.ts`); die Überlappungsfreiheit ist ein einziger Entscheider und zugleich der Wächter darüber. Die Live-Knoten tragen ihre Gruppierungs-Merkmale (Typ, Kategorie, Ausrichtung, Träger, Kapazität, Fahrzeuge) aus dem Backend.
+- Die Herkunft eines Werts unterscheidet jetzt die vom Formular gerechnete Summe von einer eigenen Angabe (`summe_achsen`); die Laderoute des Monatsformulars liefert die Herkunftsmarken mit.
+- Das lokale Doku-Gate baut kalt — der warme Astro-Store lieferte Exit 0 mit veraltetem `dist`. (N-574)
+
 ## [4.0.52] - 2026-09-27 — Leere Eingabefelder legen keine Auswertung mehr lahm, Diagramme mit klarem Kontrast im Dunkelmodus
 
 ### Fixed
