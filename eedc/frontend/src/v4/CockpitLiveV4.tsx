@@ -491,6 +491,7 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
               gruppe={offenerKnoten}
               komponenten={data.komponenten}
               gauges={data.gauges}
+              tagesWerte={flussProps.tagesWerte}
               onClose={schliesseGruppe}
             />
           )}

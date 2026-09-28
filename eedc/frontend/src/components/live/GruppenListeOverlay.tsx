@@ -7,7 +7,8 @@
  * Mitglied, in der Rollenfarbe des Mitglieds), Wert — und darunter die
  * typabhängige Angabe (PV: Auslastung + Ausrichtung/Träger · Speicher:
  * lädt/entlädt/ruht + Ladestand + nutzbare Kapazität · Wallbox: die Autos ·
- * Wärmepumpe: Betriebsart · Sonstige: Kategorie).
+ * Wärmepumpe: Betriebsart · Sonstige: Kategorie), zuletzt — wo bekannt — der
+ * Tageswert „heute X kWh" (§A7).
  *
  * **Bauform (Regel 0a):** das EINE Vollbild-Overlay `FokusVollbild` in seiner
  * Dialog-Betriebsart — `role="dialog"`, `aria-modal`, zugänglicher Name = der
@@ -33,7 +34,7 @@ import { Battery, Car, Flame, Plug, Sun, Wrench, type LucideIcon } from 'lucide-
 import type { LiveGauge, LiveKomponente } from '../../api/liveDashboard'
 import { FokusVollbild } from '../blocks'
 import { SONSTIGES_KATEGORIE_LABELS, fmtZahl } from '../../lib'
-import { SATZ_ZUORDNUNG_UNBEKANNT, formatPower, getNodeColor, getSoc, nennleistungKwp } from './EnergieFluss'
+import { SATZ_ZUORDNUNG_UNBEKANNT, formatPower, getNodeColor, getSoc, heuteKwhVon, nennleistungKwp } from './EnergieFluss'
 import { praefix, wallboxFahrzeuge, type GezeichneterKnoten } from './energieFlussLayout'
 
 interface Props {
@@ -42,6 +43,8 @@ interface Props {
   /** Die aktuelle Live-Antwort — Quelle der Zeilenwerte. */
   komponenten: LiveKomponente[]
   gauges?: LiveGauge[]
+  /** „Heute"-kWh je Komponente — dieselben Werte wie am `EnergieFluss` (§A7). */
+  tagesWerte?: Record<string, number | null>
   onClose: () => void
 }
 
@@ -82,7 +85,7 @@ interface Zeile {
   zusatz: string[]
 }
 
-export default function GruppenListeOverlay({ gruppe, komponenten, gauges, onClose }: Props) {
+export default function GruppenListeOverlay({ gruppe, komponenten, gauges, tagesWerte, onClose }: Props) {
   // ESC schließt NUR dieses Fenster: `preventDefault` meldet die Taste als
   // verbraucht — das Vollbild darunter (⤢) lässt sie daraufhin liegen.
   useEffect(() => {
@@ -141,6 +144,11 @@ export default function GruppenListeOverlay({ gruppe, komponenten, gauges, onClo
     } else if (p === 'sonstige') {
       if (m.kategorie) zusatz.push(SONSTIGES_KATEGORIE_LABELS[m.kategorie] ?? m.kategorie)
     }
+    // §A7: der Tageswert je Gerät — nach der Gruppierung sonst nirgends mehr
+    // je Gerät ablesbar. Dieselbe Lookup-Regel wie der Kachel-Tooltip
+    // (`heuteKwhVon`); fehlt der Wert, kein Zusatz — nichts statt 0 (P4).
+    const heute = heuteKwhVon(tagesWerte, m.key)
+    if (heute != null) zusatz.push(`heute ${fmtZahl(heute, 1)} kWh`)
     return { key: m.key, name: m.label, kw, farbe: getNodeColor(m), zusatz }
   })
 

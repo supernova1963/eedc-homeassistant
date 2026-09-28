@@ -255,6 +255,67 @@ describe('GruppenListeOverlay — je Mitglied eine Zeile mit Balken', () => {
   })
 })
 
+describe('GruppenListeOverlay — Tageswert je Mitglied (§A7)', () => {
+  /** Öffnet die Gruppe mit `tagesWerte` (der Rest wie `oeffne`). */
+  function oeffneMitTag(b: { komp: LiveKomponente[]; gauges: LiveGauge[] }, breite: number, key: string, tagesWerte?: Record<string, number | null>) {
+    const g = gruppe(b, breite, key)
+    return render(<GruppenListeOverlay gruppe={g} komponenten={b.komp} gauges={b.gauges} tagesWerte={tagesWerte} onClose={() => {}} />)
+  }
+
+  it('Wert vorhanden ⇒ „heute X kWh" als letzte Angabe in DER Zeile des Geräts, deutsches Format', () => {
+    oeffneMitTag(bestandD(), 600, 'pv_grp_sued', { pv_11: 12.08, pv_12: 9.5, pv_13: 8.04, pv_14: 7, pv_15: 0 })
+    expect(zeilen().map(r => [r.name, r.zusatz])).toEqual([
+      ['Süd 1', '63 % von 3,0 kWp · Süd · WR Hausdach · heute 12,1 kWh'],
+      ['Süd 2', '60 % von 3,0 kWp · Süd · WR Hausdach · heute 9,5 kWh'],
+      ['Süd 3', '50 % von 3,0 kWp · Süd · WR Hausdach · heute 8,0 kWh'],
+      ['Süd Garage', 'Süd · heute 7,0 kWh'],
+      // ein gemessener Tag ohne Ertrag ist bekannt: 0,0 — nicht dasselbe wie „fehlt"
+      ['Süd Gaube', '0 % von 3,0 kWp · Süd · WR Hausdach · heute 0,0 kWh'],
+    ])
+  })
+
+  it('Wert fehlt für EIN Mitglied ⇒ genau dessen Zeile ohne Zusatz, die anderen mit — nichts statt 0 (P4)', () => {
+    // pv_13 fehlt im Datensatz, pv_15 ist ausdrücklich null
+    oeffneMitTag(bestandD(), 600, 'pv_grp_sued', { pv_11: 12.08, pv_12: 9.5, pv_14: 7, pv_15: null })
+    const z = zeilen()
+    expect(z.map(r => [r.name, r.zusatz])).toEqual([
+      ['Süd 1', '63 % von 3,0 kWp · Süd · WR Hausdach · heute 12,1 kWh'],
+      ['Süd 2', '60 % von 3,0 kWp · Süd · WR Hausdach · heute 9,5 kWh'],
+      ['Süd 3', '50 % von 3,0 kWp · Süd · WR Hausdach'],
+      ['Süd Garage', 'Süd · heute 7,0 kWh'],
+      ['Süd Gaube', '0 % von 3,0 kWp · Süd · WR Hausdach'],
+    ])
+    expect(z[2].zusatz).not.toMatch(/heute|kWh$/)
+  })
+
+  it('ohne sonstige Angabe trägt der Tageswert die Zusatzzeile allein', () => {
+    oeffneMitTag(bestandKlassen(), 360, 'waermepumpe_grp', { waermepumpe_2: 6.3, waermepumpe_3: 1.94 })
+    expect(zeilen().map(r => [r.name, r.zusatz])).toEqual([['WP Haus', 'Heizen · heute 6,3 kWh'], ['WP Werkstatt', 'heute 1,9 kWh']])
+  })
+
+  it('Präfix-Fallback greift wie am Kachel-Tooltip: exakter Key zuerst, sonst der Key ohne Nummer', () => {
+    oeffneMitTag(bestandKlassen(), 360, 'waermepumpe_grp', { waermepumpe_2: 6.3, waermepumpe: 2.04 })
+    expect(zeilen().map(r => [r.name, r.zusatz])).toEqual([['WP Haus', 'Heizen · heute 6,3 kWh'], ['WP Werkstatt', 'heute 2,0 kWh']])
+  })
+
+  it('ohne Prop (und mit leerem Datensatz) rendert alles wie bisher — kein „heute" in irgendeiner Zeile', () => {
+    for (const tw of [undefined, {}]) {
+      for (const [b, breite, key] of [
+        [bestandD(), 600, 'pv_grp_sued'], [bestandD(), 600, 'batterie_grp'], [bestandD(), 420, 'wallbox_grp'],
+        [bestandKlassen(), 360, 'waermepumpe_grp'], [bestandKlassen(), 360, 'eauto_grp'],
+      ] as const) {
+        const { unmount } = oeffneMitTag(b, breite, key, tw)
+        expect(document.body.textContent, `${key} mit ${JSON.stringify(tw)}`).not.toMatch(/heute/)
+        unmount()
+      }
+    }
+    // die bestehenden Zeilen bleiben wortgleich
+    oeffneMitTag(bestandD(), 600, 'pv_grp_sued')
+    expect(zeilen()[0].zusatz).toBe('63 % von 3,0 kWp · Süd · WR Hausdach')
+    expect(zeilen()[3].zusatz).toBe('Süd')
+  })
+})
+
 describe('GruppenListeOverlay — live und ESC', () => {
   it('die Zeilen kommen aus den AKTUELLEN komponenten, nicht aus der Gruppe (eingefrorene Mitglieder)', () => {
     const b = bestandD()

@@ -156,6 +156,18 @@ export function formatPower(kw: number): string {
   return `${fmtZahl(kw, 1)} kW`
 }
 
+/** „Heute"-kWh eines EINZELNEN Knotens aus `tagesWerte`: exakter Key, sonst
+ *  der Key ohne angehängte Nummer (`waermepumpe_5` → `waermepumpe`); fehlt
+ *  beides, `null` — nichts statt 0 (ADR-002/P4). Exportiert für die „Liste mit
+ *  Balken" (`GruppenListeOverlay`, Bau A §A7): Tooltip und Mitglieder-Zeile
+ *  lesen den Tageswert mit EINER Regel. Nicht für Gruppen (deren Σ trägt
+ *  `heuteKwh` aus dem Layout) und nicht fürs Netz (Bezug/Einspeisung getrennt). */
+export function heuteKwhVon(tagesWerte: Record<string, number | null> | undefined, key: string): number | null {
+  return tagesWerte?.[key]
+    ?? tagesWerte?.[key.replace(/_\d+$/, '')]
+    ?? null
+}
+
 /** log(1 + kW) für Liniendicke, normiert auf min..max px */
 function logThickness(kw: number, maxKw: number): number {
   if (kw <= 0) return 1.5
@@ -682,9 +694,7 @@ export default function EnergieFluss({
           // `tagesWerte` nie).
           const tagesKwh = mitglieder
             ? node.heuteKwh ?? null
-            : tagesWerte?.[k.key]
-              ?? tagesWerte?.[k.key.replace(/_\d+$/, '')]
-              ?? null
+            : heuteKwhVon(tagesWerte, k.key)
           const tipParts = [mitglieder ? `${k.label} (${mitglieder.length})` : k.label]
           const netto = mitglieder && (node.gegenlaeufig?.length ?? 0) > 0 ? ', netto' : ''
           const aktuell = mitglieder ? 'Summe' : 'Aktuell'
