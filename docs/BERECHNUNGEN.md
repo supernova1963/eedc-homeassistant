@@ -1279,6 +1279,18 @@ Tage bleiben davon unberührt — dafür meldet der Daten-Checker sie (Kategorie
 Start-Migrationslauf:** die Heilung überschreibt Messwerte und bleibt eine Entscheidung des
 Anwenders.
 
+**Auch in der Live-Bilanz bucht die Wallbox (Cockpit → Live, N-575).** Ist eine Wallbox erfasst,
+ist die Heimladung eines E-Autos Hausverbrauch — auch beim V2H-fähigen Auto, nie Batterie-Ladung.
+Liefert die Wallbox einen Wert, bucht sie, und das Auto steht nur als ihr Kind daneben; liefert sie
+gerade keinen, zählt das Auto selbst als Verbraucher. Eine gemessene V2H-**Entladung** zählt wie
+eine Speicher-Entladung zum Eigenverbrauch, und zwar einmal: Meldet die Wallbox den negativen Wert,
+ist **sie** die Quelle und das Auto zeigt nur seine Richtung; misst nur das Auto, bucht das Auto.
+Ohne erfasste Wallbox bleibt das V2H-Auto ein Speicher am Hausanschluss (F-69). Vorzeichentreu
+liest eedc die Wallbox nur, wenn ein V2H-fähiges Auto erfasst ist — sonst weiter den Betrag. Ein
+invertiert angeschlossener Wallbox-Sensor im V2H-Haushalt gehört deshalb über „Vorzeichen umkehren
+(⇅)" an seiner Datenquelle korrigiert. Ort: `services/live_komponenten_builder.py`, Proben
+`test_n575_v2h_hinter_wallbox.py`.
+
 ### 3.5 Wärmepumpe-Einsparung
 
 **Funktion:** `berechne_waermepumpe_einsparung()` in `core/calculations.py`

@@ -115,6 +115,33 @@ def build_komponenten(
         for iid, vals in inv_values.items()
     )
 
+    # N-575 — V2H hinter der Wallbox: **die Semantik hängt an der erfassten
+    # Topologie, die Buchung am Messpunkt.** Drei Fragen, getrennt erhoben:
+    #
+    # * `hat_wallbox_investition` — ist eine Wallbox ERFASST? `investitionen`
+    #   enthält alle aktiven, auch sensorlose (`live_power_service`,
+    #   `aktiv_jetzt()`). Die Semantik der Heimladung darf nicht am Uptime des
+    #   Wallbox-Sensors hängen, sonst flackerte die EV-Gauge im 5-s-Takt.
+    # * `wallbox_entlaedt` — meldet eine Wallbox LIVE einen negativen Wert?
+    #   Dann bucht sie die V2H-Entladung, und das Auto zeigt nur.
+    # * `hat_v2h_auto` — steht ein V2H-fähiges Auto im Bestand? Nur dann wird
+    #   der Wallbox-Zweig vorzeichentreu (R3); jede andere Installation behält
+    #   den Betrag — auch die mit invertiert angeschlossenem Sensor.
+    hat_wallbox_investition = any(
+        inv.typ == "wallbox" for inv in investitionen.values()
+    )
+    wallbox_entlaedt = any(
+        (investitionen.get(iid) and investitionen.get(iid).typ == "wallbox"
+         and vals.get("leistung_w") is not None and vals.get("leistung_w") < 0)
+        for iid, vals in inv_values.items()
+    )
+    hat_v2h_auto = any(
+        inv.typ == "e-auto"
+        and isinstance(inv.parameter, dict)
+        and bool(inv.parameter.get(PARAM_E_AUTO["V2H_FAEHIG"]))
+        for inv in investitionen.values()
+    )
+
     # Per-Investition Komponenten
     # N-536: Ein Balkonkraftwerk mit `pv-module`-Kindern ist Träger wie ein
     # Wechselrichter — seine Kinder tragen die Erzeugung, es selbst nur noch,
@@ -347,7 +374,31 @@ def build_komponenten(
             kw = abs(val_w) / 1000
             ist_ladung = val_w > 0
             kategorie = TAGESVERLAUF_KATEGORIE.get(typ, "batterie")
-            bidirektionale_keys.add(f"{kategorie}_{inv_id}")
+            # N-575 — ein V2H-Auto hinter einer ERFASSTEN Wallbox:
+            #
+            # * R1 Laden: die Heimladung ist Hausverbrauch, nie Batterie-Ladung
+            #   — sie wird überwiegend verfahren und kehrt nicht zurück. Liefert
+            #   eine Wallbox live, bucht SIE (das Auto zeigt nur, `parent_key`
+            #   unten); liefert keine, bucht das Auto als gewöhnlicher
+            #   Verbraucher — derselbe Failover wie beim Nicht-V2H-Auto im
+            #   `else`-Zweig.
+            # * R2 Entladen: die Batterie-Rolle verdient nur die gemessene
+            #   Entladung, und sie wird EINMAL gebucht — meldet die Wallbox sie
+            #   (`wallbox_entlaedt`), bucht die Wallbox, und das Auto zeigt nur
+            #   seine Richtung (`erzeugung_kw`, ohne Summe, ohne Rolle).
+            #
+            # Ohne Wallbox-Investition bleibt alles wie F-69: der
+            # vorzeichenbehaftete Auto-Sensor ist dann der einzige Zugang zum
+            # Ladepunkt, und das Auto ist messbar ein Speicher am Hausanschluss.
+            hinter_wallbox = bool(ist_v2h) and hat_wallbox_investition
+            if not hinter_wallbox:
+                traegt_rolle = True
+            elif ist_ladung:
+                traegt_rolle = False
+            else:
+                traegt_rolle = not wallbox_entlaedt
+            if traegt_rolle:
+                bidirektionale_keys.add(f"{kategorie}_{inv_id}")
             komponenten.append({
                 "key": f"{kategorie}_{inv_id}",
                 "label": inv.bezeichnung,
@@ -356,8 +407,9 @@ def build_komponenten(
                 "verbrauch_kw": round(kw, 3) if ist_ladung else None,
             })
             if ist_ladung:
-                summe_verbrauch += kw
-            else:
+                if not (hinter_wallbox and hat_wallbox):
+                    summe_verbrauch += kw
+            elif traegt_rolle:
                 summe_erzeugung += kw
 
         else:
@@ -365,12 +417,25 @@ def build_komponenten(
             prefix = LIVE_KEY_PREFIX.get(typ, TAGESVERLAUF_KATEGORIE.get(typ, typ))
             komp_key = f"{prefix}_{inv_id}"
             _modus = (modus_map or {}).get(inv_id_int) if typ == "waermepumpe" else None
+            # N-575 (R2/R3) — die Wallbox eines V2H-Haushalts meldet eine
+            # Entladung: sie ist dann die QUELLE und bucht mit Batterie-Rolle
+            # (`bat_entladung` ⇒ Eigenverbrauch). Vorzeichentreu NUR bei
+            # `hat_v2h_auto`: sonst bleibt der Betrag der Schutz gegen einen
+            # invertiert angeschlossenen Sensor, und jede Nicht-V2H-Anlage
+            # rechnet bitgleich. Im V2H-Haushalt korrigiert ein invertierter
+            # Sensor über das `invertieren`-Flag seiner Datenquelle.
+            # Der Live-Tagesverlauf derselben Seite zeichnet dieselbe Entladung
+            # bis auf Weiteres als Senke — `live_tagesverlauf_service.py`,
+            # Senken-Betrag; bewusst nicht mitgefixt, Entscheid 28.09.
+            wallbox_quelle = typ == "wallbox" and hat_v2h_auto and val_w < 0
+            if wallbox_quelle:
+                bidirektionale_keys.add(komp_key)
             komponenten.append({
                 "key": komp_key,
                 "label": inv.bezeichnung,
                 "icon": wp_icon or TYP_ICON.get(typ, "wrench"),
-                "erzeugung_kw": None,
-                "verbrauch_kw": round(kw, 3),
+                "erzeugung_kw": round(kw, 3) if wallbox_quelle else None,
+                "verbrauch_kw": None if wallbox_quelle else round(kw, 3),
                 # Klartext statt Kanon-Enum: die Deutung gehört in den Kanon,
                 # nicht in eine zweite Tabelle im Client ([[feedback_typ_labels_pattern]]).
                 # Ohne Modus steht hier `None` — kein „—", keine leere Zeile.
@@ -388,13 +453,17 @@ def build_komponenten(
                     else None
                 ),
             })
+            # R4 (N-575): richtungsunabhängig — sonst verlören ladende Kinder
+            # bei entladender Wallbox ihren `parent_key` (Layout + Residual).
             if typ == "wallbox":
                 wallbox_keys.append(komp_key)
+            if wallbox_quelle:
+                summe_erzeugung += kw
             # E-Auto nur ausschließen, wenn es tatsächlich unter eine Wallbox
             # gepoolt wird (hat_wallbox → parent_key unten). Ohne Wallbox ist es
             # ein realer Verbraucher und zählt normal (konsistent mit gesamt_senken,
             # das nur parent_key-Kinder ausschließt) — #314-Folge.
-            if not (typ == "e-auto" and hat_wallbox):
+            elif not (typ == "e-auto" and hat_wallbox):
                 summe_verbrauch += kw
 
         # SoC-Gauge pro Investition
@@ -461,7 +530,14 @@ def build_komponenten(
             summe_verbrauch += einsp_kw
 
     # Haushalt = Residual
-    gesamt_quellen = sum(k.get("erzeugung_kw") or 0 for k in komponenten)
+    # N-575 (R2): symmetrisch zur Senken-Regel darunter — ein Kind mit
+    # `parent_key`, das KEINE Batterie-Rolle trägt, zeigt nur (die V2H-
+    # Entladung, die die Wallbox schon als Quelle bucht). Ohne den Ausschluss
+    # zählte derselbe Fluss zweimal ins Residual.
+    gesamt_quellen = sum(
+        k.get("erzeugung_kw") or 0 for k in komponenten
+        if not (k.get("parent_key") and k["key"] not in bidirektionale_keys)
+    )
     gesamt_senken = sum(
         k.get("verbrauch_kw") or 0 for k in komponenten
         if not k.get("parent_key")

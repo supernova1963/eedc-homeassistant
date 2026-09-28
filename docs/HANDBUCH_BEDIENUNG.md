@@ -132,6 +132,8 @@ Live zeigt **Echtzeit-Leistungsdaten** deiner gesamten Anlage und aktualisiert s
 
 Die **animierten Flusslinien** zeigen Richtung und Stärke: Liniendicke und Animationsgeschwindigkeit steigen mit der Leistung, Farbcodierung nach Komponententyp. Die **Netz-Farbe** wechselt dynamisch: grün (Balance), orange (Einspeisung), rot (Netzbezug). Bei Batterien und E-Autos wird der **Ladezustand (SoC)** als Pegel im Knoten dargestellt (rot < 20 %, gelb 20–50 %, grün > 50 %).
 
+> **E-Auto an der Wallbox, auch mit V2H:** Hinter einer Wallbox bucht die Wallbox. Lädt das Auto, zählt die Ladung einmal — als Verbrauch der Wallbox —, und das Auto steht als ihr Kind daneben. Speist ein V2H-fähiges Auto ins Haus zurück, zeigt der Fluss die Entladung als **Quelle** (an der Wallbox, wenn sie den negativen Wert misst, sonst am Auto), und sie zählt wie eine Speicher-Entladung in Autarkie und Eigenverbrauch. Mit einem V2H-fähigen Auto liest eedc die Wallbox deshalb **mit Vorzeichen**: Zeigt sie beim **Laden** einen negativen Wert, ist ihr Sensor andersherum angeschlossen — dann unter **Einstellungen → Datenquellen** am Leistungswert der Wallbox **„Vorzeichen umkehren" (⇅)** einschalten.
+
 - **Hintergrund-Varianten** (Auswahl im Live-Kopf): Sterne (Standard), Sunset, Alps oder ein eigenes Foto aus der Anlagen-Galerie.
 - **Lite- vs. Effekt-Modus:** Auf schwächeren Mobile-Geräten schaltet eedc automatisch in einen reduzierten Lite-Modus; im Effekt-Modus laufen zusätzlich Sonnenstrahlen, Reflexionen, Schneefunkeln und SoC-Partikel. Manueller Umschalter im Kopf.
 
