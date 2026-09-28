@@ -437,7 +437,7 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
               aktionen={(ansicht) => <EinbettenKnopf fokusId="live:energiefluss" ansicht={ansicht} />}
               onClose={() => setEflFokus(false)}
             >
-              <EnergieFluss {...flussProps} />
+              <EnergieFluss {...flussProps} vollbild={eflFokus} />
             </FokusVollbild>
           )}
           {/* Kopf-Region „auf einen Blick": Energiefluss (2/3) ⟷ Kennzahl-Block (1/3),

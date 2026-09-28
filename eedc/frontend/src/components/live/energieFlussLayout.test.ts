@@ -656,6 +656,21 @@ describe('§A3 Faltung — Kinder nie als Kachel, das Auto steckt in der Wallbox
     expect(oben[1].komp.label).toBe('PV-Gruppe 1') // kein Name in der Response ⇒ neutral nummeriert
   })
 
+  it('A1b: Träger-Gruppen heißen nach `traeger_label` — ohne das Feld bleibt der Rückfall von oben', () => {
+    const b = bestandBkw()
+    // Der BKW-Name weicht bewusst vom Label des Rest-Knotens („Balkon") ab: so
+    // zeigt die Probe, dass der Name aus `traeger_label` kommt, nicht vom Rest.
+    b.komp = b.komp.map(x => x.traeger_id === 30 ? { ...x, traeger_label: 'Balkon Süd' }
+      : x.traeger_id === 44 ? { ...x, traeger_label: 'WR Dach' } : x)
+    const oben = zone(lay(b, 360), 'oben')
+    expect(keys(oben)).toEqual(['pv_grp_tr30', 'pv_grp_tr44'])
+    expect(labels(oben)).toEqual(['Balkon Süd', 'WR Dach'])
+    // Nur der zweiten Gruppe fehlt das Feld (gemischt) ⇒ nur sie fällt auf die Nummer zurück.
+    const halb = bestandBkw()
+    halb.komp = halb.komp.map(x => x.traeger_id === 30 ? { ...x, traeger_label: 'Balkon Süd' } : x)
+    expect(labels(zone(lay(halb, 360), 'oben'))).toEqual(['Balkon Süd', 'PV-Gruppe 1'])
+  })
+
   it('eine Stufe, die die Kachelzahl nicht senkt, wird übersprungen', () => {
     // drei Strings, drei Richtungen: „nach Ausrichtung" wären wieder drei Kacheln
     const drei: Bestand = {

@@ -9,11 +9,14 @@
 
 import { useState, useEffect, useRef, useMemo, type ReactNode } from 'react'
 import { Sun, Zap, Battery, Car, Flame, Wrench, Home, Plug, Heater, Droplets, Snowflake, Fan, Waves, Sparkles, Zap as ZapIcon } from 'lucide-react'
-import type { LiveKomponente, LiveGauge } from '../../api/liveDashboard'
+import type { LiveFahrzeug, LiveKomponente, LiveGauge } from '../../api/liveDashboard'
 import { CHART_COLORS, COLORS, KATEGORIE_FARBEN, SOLAR_INTENSITAET, STATUS_COLORS, fmtZahl } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 import EnergieFlussBackground from './EnergieFlussBackground'
-import { W_DEFAULT, flowPath, layoutNodes } from './energieFlussLayout'
+import {
+  W_DEFAULT, flowPath, layoutEnergieFluss,
+  type BuehnenMass, type KachelAuto,
+} from './energieFlussLayout'
 
 // ─── Lite-Modus (reduzierte Animationen für Mobile/WebView) ─────────
 
@@ -170,6 +173,66 @@ interface EnergieFlussProps {
   netzPufferW?: number
   /** Optionale Aktion ganz rechts in der Kopfzeile (z. B. Fokus/Vollbild-⤢). */
   kopfAktion?: ReactNode
+  /**
+   * Bau A §A3/§A4: steht der Energiefluss im Vollbild-Overlay (⤢ oder
+   * Deep-Link)? Nur dann wird die gemessene HÖHE der Zeichenfläche
+   * ausgewertet — die Zeichenfläche behält die Höhe `380·k` und wird so BREIT,
+   * wie die Fläche es erlaubt. In der Karte bleibt die Höhe unausgewertet: dort
+   * hängt sie am eigenen viewBox-Verhältnis (ResizeObserver → viewBox → Höhe
+   * wäre eine Rückkopplung).
+   */
+  vollbild?: boolean
+}
+
+/** Versatz der hinteren Stapel-Rechtecke einer Gruppenkachel (Muster `stack: 7`, detLAN #138). */
+const STAPEL_VERSATZ = 7
+
+/** Tooltip-Satz bei ≥ 2 Wallboxen (Plan §1.4a) — eedc kennt die Zuordnung Auto → Wallbox noch nicht. */
+export const SATZ_ZUORDNUNG_UNBEKANNT = 'Welches Auto an welcher Wallbox lädt, weiß eedc noch nicht.'
+
+/** Kürzt `name` so, dass `name + suffix` höchstens `max` Zeichen hat — der Suffix (Anzahl, Ladestand) bleibt immer ganz. */
+function kuerzeMitSuffix(name: string, suffix: string, max: number): string {
+  if (name.length + suffix.length <= max) return name + suffix
+  const platz = max - suffix.length
+  return platz >= 3 ? name.slice(0, platz - 1) + '…' + suffix : suffix.trimStart()
+}
+
+/**
+ * Zeichenbudget der zwei Texte, die Bau A neu in die Kachel bringt — Gruppen-
+ * titel „Name (n)" und Auto-Zeile der Wallbox: Kachelbreite abzüglich Rand,
+ * geteilt durch die mittlere Zeichenbreite. 0,62 em ist am breitesten
+ * gängigen Font gemessen (DejaVu Sans, die System-Schrift der Dev-Box:
+ * 0,49–0,71 em je Zeichen, 28.09.2026) — schmalere Schriften haben Luft.
+ * ⚠ Die Einzelkachel bleibt bei `labelMaxChars` (vertraute Anzeige); für den
+ * Gruppentitel ist die Grenze zu eng: „Speicher (4)" (≈ 57 von 80 Einheiten)
+ * würde zu „Speich… (4)".
+ */
+function zeichenBudget(nodeW: number, fontSize: number): number {
+  return Math.floor((nodeW - 6) / (0.62 * fontSize))
+}
+
+/**
+ * Die Auto-Zeile der Wallbox-Kachel (Plan §1.4a, Muster `faltAutos`):
+ * ein Auto „ID.4 52 %" (entlädt es — V2H —, mit „· entlädt"); mehrere, von
+ * denen keines eindeutig lädt, die Ladestände nebeneinander „64 · 81 %".
+ * Der Name weicht zuerst, Ladestand und Richtung nie.
+ */
+function autoZeile(auto: KachelAuto, max: number): string {
+  if (auto.art === 'ladestaende') {
+    return auto.autos.map(a => (a.soc != null ? String(a.soc) : '–')).join(' · ') + ' %'
+  }
+  const a = auto.auto
+  const rest = [a.soc != null ? `${a.soc} %` : null, (a.kw ?? 0) < 0 ? 'entlädt' : null]
+    .filter(Boolean).join(' · ')
+  return rest ? kuerzeMitSuffix(a.label, ' ' + rest, max) : kuerzeMitSuffix(a.label, '', max)
+}
+
+/** Eine Tooltip-Zeile je Auto: Ladestand und — gemessen — lädt/entlädt. */
+function autoTip(a: LiveFahrzeug): string {
+  const soc = a.soc != null ? `${a.soc} %` : 'Ladestand unbekannt'
+  const kw = a.kw ?? 0
+  const richtung = kw > 0 ? `, lädt ${fmtZahl(kw, 2)} kW` : kw < 0 ? `, entlädt ${fmtZahl(-kw, 2)} kW (V2H)` : ''
+  return `${a.label}: ${soc}${richtung}`
 }
 
 // ─── SVG Helpers ────────────────────────────────────────────────────
@@ -209,33 +272,48 @@ function socColor(pct: number): string {
 
 export default function EnergieFluss({
   komponenten, summeErzeugung, summeVerbrauch, summePv, tagesWerte, gauges, pvSollKw,
-  netzPufferW = 100, kopfAktion,
+  netzPufferW = 100, kopfAktion, vollbild = false,
 }: EnergieFlussProps) {
   const achsen = useChartTheme()
   const [lite, toggleLite] = useLiteMode()
   const [bgVariant, setBgVariant] = useBgVariant()
   const containerRef = useRef<HTMLDivElement>(null)
+  const svgRef = useRef<SVGSVGElement>(null)
   const [containerW, setContainerW] = useState(W_DEFAULT)
+  const [flaecheH, setFlaecheH] = useState<number | null>(null)
 
+  // EIN ResizeObserver: die Kartenbreite (Container) und — für das Vollbild —
+  // die Höhe der eigenen Zeichenfläche (das SVG). Gemessen wird beides immer;
+  // ausgewertet wird die Höhe nur bei `vollbild` (s. `hoeheImVollbild`). Im
+  // Overlay ist sie durch das Flex-Layout fest (`flex-1 min-h-0`), in der
+  // Karte folgt sie der viewBox. Die Fläche selbst, nicht das Fenster: das
+  // Overlay trägt zwei Kopfzeilen, ein Fenster-Verhältnis läge daneben (Bau A
+  // W-1, gemessen: 10,74 statt 12,38 px Schrift bei 1280×800).
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
+    const svg = svgRef.current
     const ro = new ResizeObserver(entries => {
-      const w = entries[0]?.contentRect.width ?? W_DEFAULT
-      setContainerW(w)
+      for (const e of entries) {
+        if (svg && e.target === svg) setFlaecheH(e.contentRect.height)
+        else setContainerW(e.contentRect.width ?? W_DEFAULT)
+      }
     })
     ro.observe(el)
+    if (svg) ro.observe(svg)
     return () => ro.disconnect()
   }, [])
+  const hoeheImVollbild = vollbild && flaecheH != null && flaecheH > 0 ? flaecheH : null
 
-  // SVG-Breite: Container < 375 → 360, 375-499 → 450, ≥500 → 600
-  const W = containerW < 375 ? 360 : containerW < 500 ? 450 : 600
-  const CX = W / 2
-
-  // Layout + abgeleitete Werte memoizen (teuerste Berechnung, O(n²) Filter/Map)
-  const { nodes, dims, nodeMap, maxKw, nettoHausverbrauch, svgH } = useMemo(() => {
-    const layout = layoutNodes(komponenten, W)
-    const _nodeMap = new Map(layout.nodes.map(n => [n.komp.key, n]))
+  // Layout „eine Reihe je Zone" (Bau A §A3): Kaskaden, Maßstab und Faltung.
+  // Die Zeichenfläche folgt der gemessenen Kartenbreite (Handy < 500 px:
+  // 360/450 Einheiten, sonst 600·k mit Zoom statt höherer Karte). Im Vollbild
+  // zählt zusätzlich die Höhe der Zeichenfläche (Höhe fest 380·k, Breite wächst).
+  const { layout, nettoHausverbrauch } = useMemo(() => {
+    const mass: BuehnenMass = hoeheImVollbild != null
+      ? { breitePx: containerW, vollbild: { hoehePx: hoeheImVollbild } }
+      : { breitePx: containerW }
+    const _layout = layoutEnergieFluss(komponenten, mass, { gauges, tagesWerte })
 
     // Mitte = Residual-Verbrauch, der keinem separat dargestellten Verbraucher
     // zugeordnet ist. Das Backend liefert ihn als 'haushalt'-Komponente
@@ -255,19 +333,20 @@ export default function EnergieFluss({
           .filter(k => !k.key.startsWith('pv_') && k.key !== 'netz' && !k.key.startsWith('batterie_') && !k.parent_key)
           .reduce((sum, k) => sum + (k.verbrauch_kw ?? 0), 0)
 
-    const _maxY = Math.max(...layout.nodes.map(n => n.y), layout.dims.verbraucherY)
-    const _svgH = Math.max(380, _maxY + layout.dims.nodeH / 2 + 10)
-
-    const allKw = komponenten.flatMap(k => [k.erzeugung_kw ?? 0, k.verbrauch_kw ?? 0])
-    const _maxKw = Math.max(...allKw, 0.1)
-
-    return { nodes: layout.nodes, dims: layout.dims, nodeMap: _nodeMap, maxKw: _maxKw, nettoHausverbrauch: _nettoHausverbrauch, svgH: _svgH }
-  }, [komponenten, W])
+    return { layout: _layout, nettoHausverbrauch: _nettoHausverbrauch }
+  }, [komponenten, containerW, hoeheImVollbild, gauges, tagesWerte])
 
   if (komponenten.length === 0) return null
 
+  // `maxKw` über die GEZEICHNETEN Knoten (eine Gruppe überschreitet jedes
+  // Einzelgerät); die Zeichenfläche W × svgH kommt aus dem Layout.
+  const { nodes, dims, W, H: svgH, CX, CY, maxKw } = layout
   const { nodeW: NODE_W, nodeH: NODE_H, nodeR: NODE_R, hausR: HAUS_R } = dims
-  const CY = dims.cy
+  // Alle Autos an allen Wallboxen — bei „geschätzt" (≥ 2 Wallboxen) listet jede
+  // Wallbox ALLE, denn die Zuordnung reihum ist nur eine Annahme (Plan §1.4a).
+  const alleAutos = [...new Map(
+    nodes.flatMap(n => n.fahrzeuge ?? []).map(f => [f.investition_id, f] as const),
+  ).values()].sort((a, b) => a.investition_id - b.investition_id)
   const haushalt = komponenten.find(k => k.key === 'haushalt')
   // PV-Knoten-Anzahl: bei nur einem PV-String ist "Solarleistung X kW"
   // über dem Haus redundant (Wert = einzelner Knoten); Issue #137.
@@ -318,6 +397,7 @@ export default function EnergieFluss({
       </div>
 
       <svg
+        ref={svgRef}
         viewBox={`0 0 ${W} ${svgH}`}
         className="w-full flex-1 min-h-0"
       >
@@ -333,11 +413,9 @@ export default function EnergieFluss({
           const isActive = kw > 0
           const isSource = (k.erzeugung_kw ?? 0) > 0
           const duration = flowDuration(kw)
-          // Kinder verbinden sich zum Parent statt zum Haus
-          const parentNode = k.parent_key ? nodeMap.get(k.parent_key) : null
-          const targetX = parentNode ? parentNode.x : CX
-          const targetY = parentNode ? parentNode.y : CY
-          const d = flowPath(node.x, node.y, targetX, targetY)
+          // Jede Linie endet am Haus: Kinder (Auto hinter der Wallbox) zeichnet
+          // das Layout nicht mehr — bei einer Reihe je Zone kreuzt sich nichts.
+          const d = flowPath(node.x, node.y, CX, CY)
 
           return (
             <g key={`line-${k.key}`}>
@@ -496,38 +574,62 @@ export default function EnergieFluss({
           </text>
         )}
 
-        {/* Komponenten-Knoten */}
+        {/* Komponenten-Knoten — Einzelkacheln und Gruppen (Bau A §A4).
+            ⛔ Noch KEINE Klick-Affordanz an Gruppen (kein role="button", kein
+            cursor-pointer): die kommt mit dem Overlay in §A5 — kein Commit trägt
+            einen Knopf ohne Wirkung. Der Detailzugang dieses Stands ist der
+            Tooltip (eine Zeile je Mitglied). */}
         {nodes.map(node => {
           const k = node.komp
+          const mitglieder = node.mitglieder
           const kw = Math.max(k.erzeugung_kw ?? 0, k.verbrauch_kw ?? 0)
           const color = getNodeColor(k, netzPufferW)
           const isActive = kw > 0
-          const soc = getSoc(k.key, gauges)
-          const hasSoc = soc !== null
+          // Füllstand: trägt der gezeichnete Knoten ihn SELBST (Speicher-Gruppe
+          // kapazitätsgewichtet, Wallbox = Ladestand des Autos; `null` =
+          // ausdrücklich keiner), gilt der; sonst wie bisher aus den Gauges.
+          const soc = node.ladestand !== undefined ? node.ladestand : getSoc(k.key, gauges)
+          const hasSoc = soc != null
 
           // Trägt dieser Knoten zwischen kW-Wert und Gerätename eine ZWEITE
-          // Zeile? Heute sind das SoC (Speicher) und Betriebsmodus (Wärmepumpe)
-          // — nie beides am selben Gerät, deshalb teilen sie sich den Platz.
+          // Zeile? Das sind SoC (Speicher), Betriebsmodus (Wärmepumpe) und seit
+          // Bau A die Auto-Zeile der Wallbox — nie zwei davon am selben Gerät,
+          // deshalb teilen sie sich den Platz.
           // ⭐ Die Frage steht hier EINMAL, weil ihre Antwort an ZWEI Stellen
           // gebraucht wird: für die Zeile selbst und für die Verschiebung des
           // Namens darunter. Genau diese zweite Stelle hat #398 Stufe 2
           // vergessen (s. Kommentar am Label).
-          const zweiteZeile = hasSoc || !!k.betriebsmodus_label
+          const zweite: { text: string; fill: string | null } | null = node.kachelAuto
+            ? { text: autoZeile(node.kachelAuto, zeichenBudget(NODE_W, dims.socFontSize)), fill: hasSoc ? socColor(soc) : null }
+            : hasSoc
+              ? { text: `${soc} %`, fill: socColor(soc) }
+              : !mitglieder && k.betriebsmodus_label
+                ? { text: k.betriebsmodus_label, fill: isActive ? color : achsen.referenz }
+                : null
+          const zweiteZeile = zweite != null
 
-          // PV-Auslastung: Ist-Leistung / installierte kWp
+          // PV-Auslastung: Ist-Leistung / installierte kWp (bei der PV-Gruppe
+          // Σ kW / Σ kWp — die Summe ist `null`, sobald einem Mitglied die kWp fehlt)
           const isPv = k.key.startsWith('pv_')
           const auslastungPct = isPv && k.leistung_kwp && k.leistung_kwp > 0 && (k.erzeugung_kw ?? 0) > 0
             ? Math.min(100, ((k.erzeugung_kw ?? 0) / k.leistung_kwp) * 100)
             : null
 
-          // Tooltip — tagesWerte per exaktem Key oder Prefix matchen
-          const tagesKwh = tagesWerte?.[k.key]
-            ?? tagesWerte?.[k.key.replace(/_\d+$/, '')]
-            ?? null
-          const tipParts = [k.label]
-          if ((k.erzeugung_kw ?? 0) > 0) tipParts.push(`Aktuell: ${fmtZahl(k.erzeugung_kw!, 2)} kW (Erzeugung)`)
-          if ((k.verbrauch_kw ?? 0) > 0) tipParts.push(`Aktuell: ${fmtZahl(k.verbrauch_kw!, 2)} kW (Verbrauch)`)
-          if (hasSoc) tipParts.push(`SoC: ${soc} %`)
+          // Tooltip — tagesWerte per exaktem Key oder Prefix matchen; die Gruppe
+          // bringt ihre Σ der Mitglieds-Keys mit (ihr eigener Key trifft
+          // `tagesWerte` nie).
+          const tagesKwh = mitglieder
+            ? node.heuteKwh ?? null
+            : tagesWerte?.[k.key]
+              ?? tagesWerte?.[k.key.replace(/_\d+$/, '')]
+              ?? null
+          const tipParts = [mitglieder ? `${k.label} (${mitglieder.length})` : k.label]
+          const netto = mitglieder && (node.gegenlaeufig?.length ?? 0) > 0 ? ', netto' : ''
+          const aktuell = mitglieder ? 'Summe' : 'Aktuell'
+          if ((k.erzeugung_kw ?? 0) > 0) tipParts.push(`${aktuell}: ${fmtZahl(k.erzeugung_kw!, 2)} kW (Erzeugung${netto})`)
+          if ((k.verbrauch_kw ?? 0) > 0) tipParts.push(`${aktuell}: ${fmtZahl(k.verbrauch_kw!, 2)} kW (Verbrauch${netto})`)
+          if (hasSoc && mitglieder) tipParts.push(`Ladestand: ${soc} % (nach Kapazität gewichtet)`)
+          else if (hasSoc && !node.kachelAuto) tipParts.push(`SoC: ${soc} %`)
           // #398 Stufe 2: der Modus im Klartext — im Tooltip UND als zweite
           // Zeile im Knoten (s. dort). Der Tooltip trägt ihn zusätzlich, weil
           // er den ungekürzten Gerätenamen daneben zeigt.
@@ -547,11 +649,38 @@ export default function EnergieFluss({
           } else if (tagesKwh != null) {
             tipParts.push(`Heute: ${fmtZahl(tagesKwh, 1)} kWh`)
           }
+          // Gruppe: eine Zeile je Mitglied (Plan §1.6) — Leistung, beim Speicher
+          // der Ladestand, bei der Wärmepumpe die Betriebsart; wer gegen die
+          // Netto-Richtung der Gruppe läuft, ist markiert (Plan §1.4).
+          if (mitglieder) {
+            mitglieder.forEach(m => {
+              const mKw = Math.max(m.erzeugung_kw ?? 0, m.verbrauch_kw ?? 0)
+              const mSoc = m.key.startsWith('batterie_') ? getSoc(m.key, gauges) : null
+              const zusatz = [
+                mSoc != null ? `${mSoc} %` : null,
+                m.betriebsmodus_label ?? null,
+                node.gegenlaeufig?.includes(m) ? ((m.erzeugung_kw ?? 0) > 0 ? 'gegenläufig: gibt ab' : 'gegenläufig: nimmt auf') : null,
+              ].filter(Boolean).join(', ')
+              tipParts.push(`• ${m.label}: ${mKw > 0 ? `${fmtZahl(mKw, 2)} kW` : '0 kW'}${zusatz ? ` (${zusatz})` : ''}`)
+            })
+          }
+          // Autos an der Wallbox (Plan §1.4a): eindeutig — die eigenen, mit
+          // Ladestand und gemessener Richtung (V2H „entlädt"); geschätzt (≥ 2
+          // Wallboxen) — ALLE Autos und der Satz, dass eedc die Zuordnung nicht kennt.
+          if (node.fahrzeugeZuordnung === 'eindeutig') {
+            (node.fahrzeuge ?? []).forEach(a => tipParts.push(`Auto ${autoTip(a)}`))
+          } else if (node.fahrzeugeZuordnung === 'geschaetzt' && alleAutos.length > 0) {
+            tipParts.push('Autos:')
+            alleAutos.forEach(a => tipParts.push(`• ${autoTip(a)}`))
+            tipParts.push(SATZ_ZUORDNUNG_UNBEKANNT)
+          }
           const tip = tipParts.join('\n')
 
-          // Label kürzen
+          // Label kürzen — die Gruppe behält ihre Anzahl „(n)" immer ganz
           const maxC = dims.labelMaxChars
-          const shortLabel = k.label.length > maxC ? k.label.slice(0, maxC - 2) + '…' : k.label
+          const shortLabel = mitglieder
+            ? kuerzeMitSuffix(k.label, ` (${mitglieder.length})`, zeichenBudget(NODE_W, dims.labelFontSize))
+            : k.label.length > maxC ? k.label.slice(0, maxC - 2) + '…' : k.label
 
           const nx = node.x - NODE_W / 2
           const ny = node.y - NODE_H / 2
@@ -559,6 +688,23 @@ export default function EnergieFluss({
           return (
             <g key={`node-${k.key}`} className="cursor-default" data-title={tip}>
               <title>{tip}</title>
+
+              {/* Stapel-Optik der Gruppe (detLAN #138, Muster `stack: 7`): zwei
+                  versetzte Rahmen hinter der Kachel — „hier liegen mehrere". */}
+              {mitglieder && [STAPEL_VERSATZ, STAPEL_VERSATZ / 2].map((v, i) => (
+                <rect
+                  key={`stapel-${v}`}
+                  data-stapel={i + 1}
+                  x={nx + v} y={ny - v}
+                  width={NODE_W} height={NODE_H}
+                  rx={NODE_R}
+                  className="fill-white dark:fill-gray-800"
+                  fillOpacity={bgVariant === 'sunset' ? 0.5 : 0.33}
+                  stroke={isActive ? color : achsen.referenz}
+                  strokeWidth={isActive ? 0.8 : 0.5}
+                  strokeOpacity={i === 0 ? 0.35 : 0.5}
+                />
+              ))}
 
               {/* Knoten-Hintergrund (halbtransparent, Gitter scheint durch).
                   Filter-Attribut im Lite-Modus weglassen, damit Safari pro Knoten
@@ -624,35 +770,25 @@ export default function EnergieFluss({
                 {formatPower(kw)}
               </text>
 
-              {/* SoC-Anzeige */}
-              {hasSoc && (
+              {/* Zweite Zeile: SoC · Betriebsmodus im Klartext (#398 Stufe 2) ·
+                  Auto der Wallbox (Bau A, Plan §1.4a — „ID.4 52 %", bei V2H
+                  „· entlädt"; lädt keins eindeutig: „64 · 81 %" ohne Füllstand).
+                  ⭐ Bewusst in DERSELBEN Zeile statt in einer vierten: ein
+                  Speicher hat einen SoC und keinen Betriebsmodus, eine
+                  Wärmepumpe umgekehrt, eine Wallbox nur ihr Auto — der Platz ist
+                  also frei, und der Knoten wächst nicht. Ein Tooltip allein wäre
+                  auf dem Handy unerreichbar gewesen; die Frage des Melders war
+                  „sieht man, was das Gerät gerade tut?", und Hovern ist dort
+                  keine Antwort. */}
+              {zweite && (
                 <text
                   x={node.x} y={node.y + dims.kwFontSize + 2}
                   textAnchor="middle"
                   style={{ fontSize: `${dims.socFontSize}px` }}
-                  className="font-semibold"
-                  fill={socColor(soc)}
+                  className={zweite.fill ? 'font-semibold' : 'font-semibold fill-gray-500 dark:fill-gray-400'}
+                  fill={zweite.fill ?? undefined}
                 >
-                  {soc} %
-                </text>
-              )}
-
-              {/* Betriebsmodus im Klartext (#398 Stufe 2).
-                  ⭐ Bewusst in DERSELBEN Zeile wie der SoC statt in einer vierten:
-                  ein Speicher hat einen SoC und keinen Betriebsmodus, eine
-                  Wärmepumpe umgekehrt — der Platz ist also frei, und der Knoten
-                  wächst nicht. Ein Tooltip allein wäre auf dem Handy unerreichbar
-                  gewesen; die Frage des Melders war „sieht man, was das Gerät
-                  gerade tut?", und Hovern ist dort keine Antwort. */}
-              {!hasSoc && k.betriebsmodus_label && (
-                <text
-                  x={node.x} y={node.y + dims.kwFontSize + 2}
-                  textAnchor="middle"
-                  style={{ fontSize: `${dims.socFontSize}px` }}
-                  className="font-semibold"
-                  fill={isActive ? color : achsen.referenz}
-                >
-                  {k.betriebsmodus_label}
+                  {zweite.text}
                 </text>
               )}
 

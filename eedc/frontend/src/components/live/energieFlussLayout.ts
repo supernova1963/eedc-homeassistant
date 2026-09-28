@@ -5,9 +5,9 @@
  * Render prüfbar ist — reiner Umzug, Signaturen und Verhalten unverändert.
  *
  * Bau A §A3 ergänzt darunter (Abschnitt „Eine Reihe je Zone") Kaskaden, Maßstab
- * und Faltung als **eigene** Funktion `layoutEnergieFluss`. Der alte Pfad
- * (`layoutNodes`, `flowPath`) bleibt bis zur Verdrahtung in §A4 unverändert —
- * `EnergieFluss.tsx` liest ihn weiter, es gibt keinen Zwischenzustand im Bild.
+ * und Faltung als **eigene** Funktion `layoutEnergieFluss`; seit §A4 zeichnet
+ * `EnergieFluss.tsx` damit. `flowPath` bleibt unverändert (Beule fix 25), der
+ * alte Pfad `layoutNodes` steht als festgenagelter IST-Anker weiter hier.
  */
 
 import type { LiveFahrzeug, LiveGauge, LiveKomponente } from '../../api/liveDashboard'
@@ -584,13 +584,18 @@ export function pvKaskade(pv: Kachel[], eingaben: LayoutEingaben = {}): Stufe[] 
     einzeln,
     k => k.traeger_id,
     (id, teile) => {
-      // Der BKW-Rest trägt seine eigene ID als `traeger_id` — ist er dabei,
-      // heißt die Gruppe wie er. Einen Wechselrichter-Namen kennt die
-      // Response nicht; dann eine neutrale Nummer in Sortierreihenfolge.
+      // Name der Gruppe: der Träger-Name aus der Response (`traeger_label`,
+      // Nachtrag A1b — Wechselrichter bzw. das BKW selbst). Ohne das Feld
+      // (älteres Backend): ist der BKW-Rest dabei (er trägt seine eigene ID
+      // als `traeger_id`), heißt die Gruppe wie er; sonst eine neutrale
+      // Nummer in Sortierreihenfolge.
       // Key `pv_grp_tr<id>`: vor den Ziffern steht `r`, nicht `_` — `getSoc`
       // (`/_(\d+)$/`) greift also nicht.
+      const name = teile.map(t => t.komp.traeger_label).find(l => l != null && l !== '')
       const selbst = teile.find(t => idAus(t.komp.key) === id)
-      return pvGruppe(`pv_grp_tr${id}`, selbst ? selbst.komp.label : `PV-Gruppe ${++unbenannt}`, teile, eingaben)
+      return pvGruppe(
+        `pv_grp_tr${id}`, name ?? (selbst ? selbst.komp.label : `PV-Gruppe ${++unbenannt}`), teile, eingaben,
+      )
     },
     teile => pvGruppe(`pv_grp_${slug(REST_LABEL)}`, REST_LABEL, teile, eingaben),
     ([a, ta], [b, tb]) => vergleicheZahl(a == null ? 1 : 0, b == null ? 1 : 0) || vergleicheKacheln(ta[0], tb[0]),

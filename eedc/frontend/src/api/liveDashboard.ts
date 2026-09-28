@@ -22,7 +22,7 @@ export interface LiveKomponente {
   betriebsmodus_label?: string | null
   // ── #341/#348: Merkmale für die Gruppierung im Energiefluss (Bau A) ──
   // Reine Anreicherung, alle optional: fehlen sie (älteres Backend), fällt die
-  // Gruppierung auf ihre letzte Stufe. Noch ohne Leser (die kommen mit §A3/A4).
+  // Gruppierung auf ihre letzte Stufe. Leser: `components/live/energieFlussLayout.ts`.
   /** Investitionstyp — an jedem Investitions-Knoten, nie an netz/haushalt/pv_gesamt. */
   typ?: string | null
   /** Nur Sonstiges: die gepflegte Kategorie (erzeuger · abgabe · speicher · verbraucher · zaehler …), roh. */
@@ -31,6 +31,8 @@ export interface LiveKomponente {
   ausrichtung_label?: string | null
   /** Nur `pv_*`: ID des Trägers (Wechselrichter oder Balkonkraftwerk; BKW-Rest trägt die eigene). */
   traeger_id?: number | null
+  /** Nur `pv_*`, genau dann gesetzt, wenn `traeger_id` es ist: der Name des Trägers (Nachtrag A1b). */
+  traeger_label?: string | null
   /** Nur `batterie_*`: nutzbare Kapazität in kWh (Backend-SoT). */
   kapazitaet_kwh?: number | null
   /** Nur `wallbox_*`: die zugeordneten Autos — dieselbe Zuordnung wie `parent_key`. */
