@@ -42,6 +42,7 @@ import type { Anlage, Investition } from '../types'
 import { MONAT_NAMEN } from '../lib/constants'
 import { fmtZahl } from '../lib/einheiten'
 import { ManuelleWerteHinweis } from '../components/import/ManuelleWerteHinweis'
+import { mitAnzahl, plural } from '../lib/plural'
 
 export default function CloudImportWizard() {
   const navigate = useNavigate()
@@ -523,7 +524,7 @@ export default function CloudImportWizard() {
       {currentStep === 2 && preview && (
         <div className="space-y-4">
           <Alert type="info">
-            <strong>{preview.provider.name}</strong> – {preview.anzahl_monate} Monate abgerufen
+            <strong>{preview.provider.name}</strong> – {mitAnzahl(preview.anzahl_monate, 'Monat', 'Monate')} abgerufen
           </Alert>
 
           {/* Anlage-Auswahl */}
@@ -646,7 +647,7 @@ export default function CloudImportWizard() {
             </Button>
             <div className="flex items-center gap-3">
               <span className="text-sm text-gray-500 dark:text-gray-400">
-                {selectedMonths.size} von {preview.monate.length} Monaten
+                {selectedMonths.size} von {preview.monate.length} {plural(preview.monate.length, 'Monat', 'Monaten')}
               </span>
               <Button variant="secondary" onClick={handleAbbrechen}>
                 Abbrechen
@@ -657,7 +658,7 @@ export default function CloudImportWizard() {
                 loading={isImporting}
                 disabled={selectedMonths.size === 0 || !selectedAnlageId}
               >
-                {isImporting ? 'Importiere…' : `${selectedMonths.size} Monate importieren`}
+                {isImporting ? 'Importiere…' : `${mitAnzahl(selectedMonths.size, 'Monat', 'Monate')} importieren`}
                 {!isImporting && <ChevronRight className="w-4 h-4 ml-1" />}
               </Button>
             </div>

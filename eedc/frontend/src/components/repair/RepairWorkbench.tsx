@@ -46,6 +46,7 @@ import {
   baueRohdatenLoeschMeldung,
   ROHDATEN_LOESCH_BESCHREIBUNG,
 } from '../../pages/datenCheckerMeldungen'
+import { mitAnzahl } from '../../lib/plural'
 
 /** Deutscher Name eines Vorschau-/Ergebnis-Zählers; unbekannte Schlüssel
  *  bleiben roh stehen, damit ein neuer Zähler nicht still verschwindet. */
@@ -398,7 +399,7 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
             >
               {historyOpen ? <ChevronDown className="h-4 w-4 mr-2" /> : <ChevronRight className="h-4 w-4 mr-2" />}
               <History className="h-4 w-4 mr-2" />
-              Verlauf der letzten {history.length} Reparaturen
+              Verlauf der letzten {mitAnzahl(history.length, 'Reparatur', 'Reparaturen')}
             </Button>
             {historyOpen && (
               <div className="mt-3">
@@ -724,7 +725,7 @@ function DiffPreviewTable({ diffs, truncated, totalCount }: {
       {truncated && (
         <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800 text-xs text-gray-600 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700">
           … und {totalCount - diffs.length} weitere Felder werden ebenfalls geändert
-          (Vorschau ist auf {diffs.length} Einträge gekappt).
+          (Vorschau ist auf {mitAnzahl(diffs.length, 'Eintrag', 'Einträge')} gekappt).
         </div>
       )}
     </div>
@@ -771,7 +772,7 @@ function HistoryList({ views }: { views: RepairPlanView[] }) {
               }
               {v.result && v.result.audit_log_ids.length > 0 && (
                 <span className="ml-auto" title={v.result.audit_log_ids.join(', ')}>
-                  Audit-Log: {v.result.audit_log_ids.length} Einträge
+                  Audit-Log: {mitAnzahl(v.result.audit_log_ids.length, 'Eintrag', 'Einträge')}
                 </span>
               )}
             </div>

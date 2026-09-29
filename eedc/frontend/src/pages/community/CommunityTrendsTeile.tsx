@@ -24,6 +24,7 @@ import {
   MONAT_KURZ, MONAT_NAMEN, EIGENE_SERIE_FARBEN, TYP_COLORS,
   ACHSEN_MARGIN_TOP, xAchse, yAchse, achsenEinheit, achsenTick, fmtZahl,
 } from '../../lib'
+import { mitAnzahl } from '../../lib/plural'
 
 const MONATSNAMEN = MONAT_KURZ.slice(1)     // 0-basiert
 const MONATSNAMEN_LANG = MONAT_NAMEN.slice(1) // 0-basiert
@@ -294,7 +295,7 @@ export function SaisonalePerformance({ saisonaleAnalyse }: {
               <span className="text-sm text-gray-500">kWh/kWp</span>
             </div>
             <p className="text-xs text-gray-500 mt-1">
-              Ø pro Monat ({jz.anzahlMonate} Monate)
+              Ø pro Monat ({mitAnzahl(jz.anzahlMonate, 'Monat', 'Monate')})
             </p>
           </div>
           </Parkbar>
@@ -422,7 +423,7 @@ export function TypischerMonatsverlauf({ monatlicherDurchschnitt, ertragsverlauf
 
       <Parkbar id="tr-monatsverlauf-caption" titel="Typischer Monatsverlauf (Hinweis)">
       <p className="text-sm text-gray-500 text-center mt-2">
-        Basierend auf {ertragsverlauf.length} Monaten Daten
+        Basierend auf {mitAnzahl(ertragsverlauf.length, 'Monat', 'Monaten')} Daten
       </p>
       </Parkbar>
     </div>
@@ -560,7 +561,7 @@ export function DegradationBlock({ degradation }: {
           </span>
         </div>
         <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
-          Basierend auf {degradation.nach_alter.reduce((sum, a) => sum + a.anzahl, 0)} Anlagen unterschiedlichen Alters
+          Basierend auf {mitAnzahl(degradation.nach_alter.reduce((sum, a) => sum + a.anzahl, 0), 'Anlage', 'Anlagen')} unterschiedlichen Alters
         </p>
       </div>
       </Parkbar>

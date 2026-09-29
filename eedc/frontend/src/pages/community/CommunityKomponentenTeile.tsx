@@ -55,6 +55,7 @@ import {
   Legend,
 } from 'recharts'
 import { useSchmaleAchse } from '../../hooks'
+import { plural } from '../../lib/plural'
 
 // ─── Daten-Hook (lädt Speicher-/WP-/E-Auto-Deep-Dive-Statistiken) ─────────────
 
@@ -416,7 +417,7 @@ export function SpeicherDeepDive({
               Community: Speicher nach Kapazitätsklasse
             </h4>
             <span className="text-xs text-gray-400 dark:text-gray-500">
-              ({fmtZahl(gesamtAnzahl, 0)} Anlagen)
+              ({fmtZahl(gesamtAnzahl, 0)} {plural(gesamtAnzahl, 'Anlage', 'Anlagen')})
             </span>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -716,7 +717,7 @@ export function WaermepumpeDeepDive({
               </p>
               {regionData.length === 1 && (
                 <p className="text-sm text-blue-600 dark:text-blue-400 mt-2">
-                  Aktuell: {regionData[0].name} mit JAZ {fmtZahl(regionData[0].jaz, 2)} ({fmtZahl(regionData[0].anzahl, 0)} Anlage)
+                  Aktuell: {regionData[0].name} mit JAZ {fmtZahl(regionData[0].jaz, 2)} ({fmtZahl(regionData[0].anzahl, 0)} {plural(regionData[0].anzahl, 'Anlage', 'Anlagen')})
                 </p>
               )}
             </div>

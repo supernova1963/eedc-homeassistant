@@ -30,6 +30,7 @@ import { DataLoadingState } from '../components/common'
 import { useSelectedAnlage, useApiData } from '../hooks'
 import { useWizardHost } from '../v4/wizardHost'
 import { TYP_LABELS, INVESTITION_TYP_ORDER } from '../lib/constants'
+import { mitAnzahl } from '../lib/plural'
 
 // Import-Modus für schnelle Auswahl
 type ImportModus = 'alle' | 'nur_basis' | 'nur_komponenten' | 'manuell'
@@ -534,7 +535,7 @@ export default function HAStatistikImport() {
                   loading={importing}
                   size="lg"
                 >
-                  {importing ? 'Importiere...' : <><Download className="w-5 h-5 mr-2" />{selectedCount} Monate importieren</>}
+                  {importing ? 'Importiere...' : <><Download className="w-5 h-5 mr-2" />{mitAnzahl(selectedCount, 'Monat', 'Monate')} importieren</>}
                 </Button>
               </div>
             </div>

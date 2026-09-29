@@ -26,6 +26,7 @@ import { REGION_NAMEN, WP_ART_LABELS, MONAT_NAMEN } from '../lib/constants'
 import { fmtZahl } from '../lib'
 import Button from '../components/ui/Button'
 import Switch from '../components/ui/Switch'
+import { mitAnzahl, plural } from '../lib/plural'
 
 // Ausstattungs-Badge-Icons aus der Typ-Identitäts-SoT (A5) statt lokaler Kopien.
 const SpeicherIcon = KOMPONENTEN_IDENTITAET['speicher'].icon
@@ -171,7 +172,7 @@ export function GeteilteFelderDetail({ v }: { v: CommunityDataPreview }) {
   return (
     <details className="border-t border-gray-100 dark:border-gray-800 pt-3">
       <summary className="cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
-        Geteilte Felder im Detail anzeigen ({anlagenZeilen.length + monatsZeilen.length} Felder)
+        Geteilte Felder im Detail anzeigen ({mitAnzahl(anlagenZeilen.length + monatsZeilen.length, 'Feld', 'Felder')})
       </summary>
       <div className="mt-3 space-y-4">
         <div>
@@ -363,7 +364,7 @@ export function CommunityShareBlockInhalt() {
             {uebertragungAusstehend ? (
               <div className="flex flex-wrap items-center gap-3">
                 <p className="text-sm text-yellow-600 dark:text-yellow-400">
-                  Erste Übertragung steht noch aus ({fmtZahl(preview.anzahl_monate, 0)} Monatswerte bereit).
+                  Erste Übertragung steht noch aus ({fmtZahl(preview.anzahl_monate, 0)} {plural(preview.anzahl_monate, 'Monatswert', 'Monatswerte')} bereit).
                 </p>
                 <Button variant="secondary" size="sm" loading={uebertrage} onClick={jetztUebertragen}>
                   Jetzt übertragen
@@ -390,7 +391,7 @@ export function CommunityShareBlockInhalt() {
             ) : (
               <p className="text-sm text-gray-500 dark:text-gray-400">
                 {preview?.anzahl_monate
-                  ? `${fmtZahl(preview.anzahl_monate, 0)} Monatswerte ${teiltAuto ? 'werden' : 'würden'} geteilt.`
+                  ? `${fmtZahl(preview.anzahl_monate, 0)} ${plural(preview.anzahl_monate, 'Monatswert', 'Monatswerte')} ${teiltAuto ? 'werden' : 'würden'} geteilt.`
                   : 'Noch keine Monatswerte zum Teilen vorhanden.'}
               </p>
             )}

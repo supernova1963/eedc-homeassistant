@@ -113,7 +113,11 @@ describe('AuswertungenCo2V4 (Sub 2)', () => {
     expect(screen.getAllByText('1,50').length).toBeGreaterThan(0)
     expect(screen.queryByText('4,56')).toBeNull()
     // Ein Monat im Zeitraum — die Ø-Rechnung teilt durch dieselbe Menge, die sie summiert.
-    expect(screen.getByText('1 Monate')).toBeInTheDocument()
+    // ⚑ Hier stand bis N-580 (29.09.2026) `'1 Monate'`. Die **Substanz** dieser
+    //   Zeile ist die Anzahl 1, nicht die Wortform — und der falsche Plural war
+    //   genau der Defekt. Die Probe war also nur wahr, WEIL der Fehler da war;
+    //   sie ist damit zugleich der Beleg, dass er Anwender erreicht hat.
+    expect(screen.getByText('1 Monat')).toBeInTheDocument()
     cleanup()
     Object.assign(basisMock, { jahr: 'alle', gefiltert: [monat2024, monat2025] })
   })

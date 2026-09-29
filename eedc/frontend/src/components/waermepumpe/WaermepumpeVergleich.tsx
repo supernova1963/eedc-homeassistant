@@ -19,6 +19,7 @@ import { HerkunftZeile } from '../blocks'
 import { MONAT_KURZ, SAISON_FENSTER, SERIEN_PALETTE, CHART_HOVER_CURSOR, SERIE_GEDIMMT, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import type { InvestitionMonatsdaten } from '../../api/investitionen'
 import { useLegendenToggle } from '../../hooks'
+import { mitAnzahl } from '../../lib/plural'
 
 
 /** Stromverbrauch eines Monats — aus der Layer-Zeitreihe, Rohspalte nur als Fallback.
@@ -417,7 +418,7 @@ export function WaermepumpeVergleich({ monatsdaten, jazJeMonat, hatGetrennteStro
 
       {achse === 'saison' && saisonData.length > 0 && (
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          {cfg.label}: {cfg.bereich} ({cfg.monate.length} Monate).{' '}
+          {cfg.label}: {cfg.bereich} ({mitAnzahl(cfg.monate.length, 'Monat', 'Monate')}).{' '}
           {/* ⚠ Die Definition steht bereits in der HerkunftZeile über dem Chart
               (Style-Guide B7: keine Doppelbeschriftung). Hier steht nur, was
               sie NICHT sagt — die Abgrenzung und die Eingangsregel. */}

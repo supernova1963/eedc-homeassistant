@@ -19,6 +19,7 @@
  */
 import { Alert } from '../ui'
 import type { PrognoseQuellenStatus } from '../../api/aussichten'
+import { mitAnzahl, plural } from '../../lib/plural'
 
 const LABEL: Record<string, string> = { sfml: 'Solar Forecast ML', solcast: 'Solcast' }
 
@@ -56,7 +57,7 @@ export default function PrognoseQuellenBefund({ quelle, status }: {
   if (fehlend.length === 0) {
     return (
       <p className="mt-2 text-xs text-emerald-600 dark:text-emerald-400">
-        {name}: alle {s.anzahl_gesamt} Sensoren erkannt
+        {name}: alle {mitAnzahl(s.anzahl_gesamt, 'Sensor', 'Sensoren')} erkannt
         {!ueberNamen ? ' — über die Integration, unabhängig von ihren Namen' : ''}.
       </p>
     )
@@ -65,7 +66,7 @@ export default function PrognoseQuellenBefund({ quelle, status }: {
   return (
     <div className="mt-2 space-y-1">
       <p className="text-xs text-gray-500 dark:text-gray-400">
-        {name}: <span className="font-medium">{s.anzahl_gefunden} von {s.anzahl_gesamt}</span> Sensoren erkannt.
+        {name}: <span className="font-medium">{s.anzahl_gefunden} von {s.anzahl_gesamt}</span> {plural(s.anzahl_gesamt, 'Sensor', 'Sensoren')} erkannt.
       </p>
       {s.fehlend_wesentlich.length > 0 ? (
         <Alert type="warning">
@@ -74,7 +75,7 @@ export default function PrognoseQuellenBefund({ quelle, status }: {
           statt einen aus einer anderen Quelle zu schätzen.{' '}
           {ueberNamen
             ? 'Home Assistant hat die Zugehörigkeit nicht mitgeteilt; eedc sucht deshalb an der Entity-ID und findet eine abweichend benannte Entität nicht.'
-            : `eedc kennt ${s.anzahl_entities} Entitäten dieser Integration — diese Rolle ist nicht darunter. Liefert deine Version der Integration sie?`}
+            : `eedc kennt ${mitAnzahl(s.anzahl_entities, 'Entität', 'Entitäten')} dieser Integration — diese Rolle ist nicht darunter. Liefert deine Version der Integration sie?`}
         </Alert>
       ) : (
         <p className="text-xs text-gray-400 dark:text-gray-500">

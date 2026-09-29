@@ -27,6 +27,7 @@ import { useLegendenToggle } from '../../hooks'
 import type { SolarPrognoseTag } from '../../api/wetter'
 import type { FinanzPrognose, LangfristPrognose, TrendAnalyseResponse } from '../../api/aussichten'
 import type { WaermepumpeDashboardResponse } from '../../api/investitionen'
+import { mitAnzahl } from '../../lib/plural'
 
 // ─── Helfer ──────────────────────────────────────────────────────────────────
 
@@ -509,7 +510,7 @@ export function WpAussicht({ wpDashboards }: { wpDashboards: WaermepumpeDashboar
                 {avgStrom != null && avgWaerme != null ? (
                   <p className="tabular-nums">~{fmtZahl(avgStrom * 6, 0)} kWh Strom · ~{fmtZahl(avgWaerme * 6, 0)} kWh Wärme</p>
                 ) : <p className="text-gray-400 dark:text-gray-500">noch zu wenig Heizsaison-Daten</p>}
-                <p className="text-xs text-gray-400 dark:text-gray-500">Ø aus {heiz.length} erfassten Heizmonaten × 6</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500">Ø aus {mitAnzahl(heiz.length, 'erfasstem Heizmonat', 'erfassten Heizmonaten')} × 6</p>
               </div>
             </div>
           </div>

@@ -22,6 +22,7 @@ import { Button, Input, Select, SegmentControl } from '../components/ui'
 import { useCopyFeedback } from '../hooks'
 import { systemLogsApi } from '../api/systemLogs'
 import type { LogEntry, ActivityEntry, ActivityKategorie } from '../api/systemLogs'
+import { mitAnzahl } from '../lib/plural'
 
 // Copy-to-Clipboard: SoT ist `hooks/useCopyFeedback` (2026-08-20 zusammengezogen,
 // vorher hier lokal und in `HAExportSettingsTeile` ein zweites Mal inline).
@@ -253,7 +254,7 @@ function SystemLogsTab() {
         </div>
       </div>
       <p className="text-xs text-gray-400 dark:text-gray-500">
-        {logs.length} Einträge angezeigt (max. 500 im Speicher, gehen bei Restart verloren)
+        {mitAnzahl(logs.length, 'Eintrag', 'Einträge')} angezeigt (max. 500 im Speicher, gehen bei Restart verloren)
       </p>
     </div>
   )

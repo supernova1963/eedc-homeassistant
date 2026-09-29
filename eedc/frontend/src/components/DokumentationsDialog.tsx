@@ -30,6 +30,7 @@ import { downloadFile } from '../lib'
 import { geparkteElemente } from './park'
 import { MONAT_PARK_KEY } from '../v4/monatParkScope'
 import type { Anlage } from '../types'
+import { mitAnzahl } from '../lib/plural'
 
 interface DokumentationsDialogProps {
   anlage: Anlage | null
@@ -481,7 +482,7 @@ export default function DokumentationsDialog({ anlage, onClose }: Dokumentations
             loading={loading === 'ZIP'}
           >
             {loading !== 'ZIP' && <FolderArchive className="h-4 w-4 mr-2" />}
-            Als ZIP herunterladen ({zipBerichte.length} Berichte)
+            Als ZIP herunterladen ({mitAnzahl(zipBerichte.length, 'Bericht', 'Berichte')})
           </Button>
         )}
 

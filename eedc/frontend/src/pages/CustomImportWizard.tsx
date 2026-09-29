@@ -48,6 +48,7 @@ import type {
 } from '../api/customImport'
 import { useSelectedAnlage } from '../hooks'
 import { MONAT_NAMEN, fmtZahl } from '../lib'
+import { mitAnzahl, plural } from '../lib/plural'
 
 export default function CustomImportWizard() {
   const navigate = useNavigate()
@@ -422,7 +423,7 @@ export default function CustomImportWizard() {
       {currentStep === 1 && analysis && (
         <div className="space-y-4">
           <Alert type="info">
-            <strong>{analysis.dateiname}</strong> – {analysis.zeilen_gesamt} Zeilen, {analysis.spalten.length} Spalten erkannt ({analysis.format.toUpperCase()})
+            <strong>{analysis.dateiname}</strong> – {mitAnzahl(analysis.zeilen_gesamt, 'Zeile', 'Zeilen')}, {mitAnzahl(analysis.spalten.length, 'Spalte', 'Spalten')} erkannt ({analysis.format.toUpperCase()})
           </Alert>
 
           {/* Templates */}
@@ -573,7 +574,7 @@ export default function CustomImportWizard() {
       {currentStep === 2 && preview && (
         <div className="space-y-4">
           <Alert type="info">
-            {preview.anzahl_monate} Monate erkannt
+            {mitAnzahl(preview.anzahl_monate, 'Monat', 'Monate')} erkannt
             {preview.warnungen.length > 0 && (
               <span className="block text-xs mt-1">
                 {preview.warnungen.join('. ')}
@@ -694,7 +695,7 @@ export default function CustomImportWizard() {
             </Button>
             <div className="flex items-center gap-3">
               <span className="text-sm text-gray-500 dark:text-gray-400">
-                {selectedMonths.size} von {preview.monate.length} Monaten
+                {selectedMonths.size} von {preview.monate.length} {plural(preview.monate.length, 'Monat', 'Monaten')}
               </span>
               <Button variant="secondary" onClick={handleAbbrechen}>
                 Abbrechen
@@ -705,7 +706,7 @@ export default function CustomImportWizard() {
                 loading={isImporting}
                 disabled={selectedMonths.size === 0 || !selectedAnlageId}
               >
-                {isImporting ? 'Importiere…' : `${selectedMonths.size} Monate importieren`}
+                {isImporting ? 'Importiere…' : `${mitAnzahl(selectedMonths.size, 'Monat', 'Monate')} importieren`}
                 {!isImporting && <ChevronRight className="w-4 h-4 ml-1" />}
               </Button>
             </div>

@@ -9,6 +9,7 @@ import { fmtZahl } from '../../../lib/einheiten'
 import { ermittleZustand, rollupBadge } from '../../../lib/erfassungZustand'
 import { FormSection, ErfassungZustandBadge, InlineAktion } from '../../ui'
 import AssistenzFeld from '../AssistenzFeld'
+import { mitAnzahl } from '../../../lib/plural'
 
 interface InvestitionSectionProps {
   title: string
@@ -101,7 +102,7 @@ export function InvestitionSection({
               {/* Eintrags-Schnellweg: alle Schätzungen dieses Geräts als geprüft bestätigen. */}
               {zuPruefen.length > 1 && onBestaetigen && (
                 <InlineAktion ton="bestaetigen" className="mb-2" onClick={() => onBestaetigen(inv.id, zuPruefen)}>
-                  <Check className="w-3 h-3" /> alle {zuPruefen.length} Schätzungen bestätigen
+                  <Check className="w-3 h-3" /> alle {mitAnzahl(zuPruefen.length, 'Schätzung', 'Schätzungen')} bestätigen
                 </InlineAktion>
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-3 gap-y-2 items-start">

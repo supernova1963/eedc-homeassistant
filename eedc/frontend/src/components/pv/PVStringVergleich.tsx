@@ -22,6 +22,7 @@ import { HerkunftZeile } from '../blocks'
 import { pvVerteiltHerkunft } from '../../lib/pvHerkunft'
 import { cockpitApi, type PVStringsGesamtlaufzeitResponse } from '../../api/cockpit'
 import { SOLL_IST_COLORS, STRING_COLORS, CHART_HOVER_CURSOR, PROGNOSE_DASH, xAchse, achsenEinheit, ACHSEN_MARGIN_TOP, fmtZahl, formatProzent } from '../../lib'
+import { mitAnzahl } from '../../lib/plural'
 
 const KEINE_IDS: string[] = []
 
@@ -324,7 +325,7 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
           unit="MWh"
           color="blue"
           icon={TrendingUp}
-          subtitle={`${data.anzahl_jahre} Jahre × PVGIS`}
+          subtitle={`${mitAnzahl(data.anzahl_jahre, 'Jahr', 'Jahre')} × PVGIS`}
         /></Parkbar>}
         <Parkbar id="kpi:pv-ist" titel="IST (Erzeugt)"><KPICard
           title="IST (Erzeugt)"
@@ -332,7 +333,7 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
           unit="MWh"
           color="yellow"
           icon={Sun}
-          subtitle={`${data.anzahl_monate} Monate erfasst`}
+          subtitle={`${mitAnzahl(data.anzahl_monate, 'Monat', 'Monate')} erfasst`}
         /></Parkbar>
         {hatPrognose && <Parkbar id="kpi:pv-abweichung" titel="Abweichung"><KPICard
           title="Abweichung"

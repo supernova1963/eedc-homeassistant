@@ -13,6 +13,7 @@ import {
   useRegionalDaten, RegionalKpiStrip, VergleichsChart, RegionaleEinordnung,
   ChoroplethBlock, RegionenTabelle, REG_PARK_IDS,
 } from '../pages/community/CommunityRegionalTeile'
+import { plural } from '../lib/plural'
 
 type Props = {
   benchmark: CommunityBenchmarkResponse | null
@@ -63,12 +64,12 @@ function CommunityRegionalInner({ benchmark, loading, error }: Props) {
     } : null,
     d.allRegions.length > 0 && !alleGeparkt(REG_PARK_IDS.karte) ? {
       id: 'karte', title: 'Spezifischer Ertrag nach Bundesland', icon: MapPin, farbe: 'text-blue-500',
-      summary: `${fmtZahl(d.allRegions.length, 0)} Regionen`, defaultOpen: false,
+      summary: `${fmtZahl(d.allRegions.length, 0)} ${plural(d.allRegions.length, 'Region', 'Regionen')}`, defaultOpen: false,
       render: () => <ChoroplethBlock allRegions={d.allRegions} benchmark={benchmark} />,
     } : null,
     d.allRegions.length > 0 && !alleGeparkt(REG_PARK_IDS.tabelle) ? {
       id: 'tabelle', title: 'Alle Regionen im Vergleich', icon: MapPin, farbe: 'text-green-500',
-      summary: `${fmtZahl(d.allRegions.length, 0)} Regionen im Ranking`, defaultOpen: false,
+      summary: `${fmtZahl(d.allRegions.length, 0)} ${plural(d.allRegions.length, 'Region', 'Regionen')} im Ranking`, defaultOpen: false,
       render: () => <RegionenTabelle allRegions={d.allRegions} benchmark={benchmark} />,
     } : null,
   ]

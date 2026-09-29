@@ -56,6 +56,7 @@ import type { AuswertungBasis } from './useAuswertungBasis'
 import { AuswertungKopf } from './AuswertungKopf'
 import { ZeitraumHinweis } from './ZeitraumHinweis'
 import { AnlageLeer } from './OnboardingLeer'
+import { mitAnzahl } from '../lib/plural'
 
 const SICHT_KEY = 'v4-auswertungen-co2'
 // Anschauliche Äquivalenz-Faktoren (kg CO₂).
@@ -186,7 +187,7 @@ function Co2Inner({ basis }: { basis: AuswertungBasis }) {
         title: 'CO₂ eingespart', value: fc.wert, unit: fc.einheit, color: 'green', icon: Leaf,
         // B6/Y-4: der Vorbehalt (Wärme geschätzt · zweiter Erzeuger) steht sichtbar an
         // der Kopfzahl — wie unter der Ersparnis im Hub, nicht nur im eingeklappten Block.
-        subtitle: basis.co2.wpVorbehalt ?? `${anzahlMonate} Monate`, parkId: 'kpi:co2-eingespart',
+        subtitle: basis.co2.wpVorbehalt ?? mitAnzahl(anzahlMonate, 'Monat', 'Monate'), parkId: 'kpi:co2-eingespart',
         // Die Herleitung nennt die DREI Quellen, nicht mehr „Erzeugung × Faktor".
         // Genau diese Formel war N-21: sie sagte laut, was die Zahl nicht war.
         formel: 'Eigenverbrauch × Strommix + Wärmepumpe + E-Mobilität',

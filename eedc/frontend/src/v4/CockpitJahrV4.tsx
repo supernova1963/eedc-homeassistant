@@ -55,6 +55,7 @@ import {
 import { aktuellerMonatApi, type AktuellerMonatResponse } from '../api/aktuellerMonat'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
 import { cockpitApi } from '../api/cockpit'
+import { mitAnzahl } from '../lib/plural'
 
 // persistKey-SoT der Sicht — geteilt von BlockShell (Block-Ebene) und ParkProvider
 // (Element-Ebene); eigene LS-Prefixe (`eedc-bloecke:` vs. `eedc-park:`).
@@ -413,7 +414,7 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
         color: 'green', icon: Leaf, parkId: 'kpi:co2-jahr',
         subtitle: `${angezeigtesJahr} · PV + Wärmepumpe + E-Mobilität`,
         formel: 'Σ der Monatswerte des gewählten Jahres',
-        berechnung: `${co2Punkte.length} Monate mit Daten`, ergebnis: `= ${fcJahr.text}`,
+        berechnung: `${mitAnzahl(co2Punkte.length, 'Monat', 'Monate')} mit Daten`, ergebnis: `= ${fcJahr.text}`,
         sicht: `Jahr ${angezeigtesJahr}`,
       },
       {
@@ -421,7 +422,7 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
         color: 'green', icon: Sprout, parkId: 'kpi:co2-kumuliert',
         subtitle: 'gesamte Historie — nicht jahresgebunden',
         formel: 'Σ aller erfassten Monate',
-        berechnung: `${co2Monate.length} Monate mit Daten`, ergebnis: `= ${fcKum.text}`,
+        berechnung: `${mitAnzahl(co2Monate.length, 'Monat', 'Monate')} mit Daten`, ergebnis: `= ${fcKum.text}`,
         sicht: 'Gesamte Historie',
       },
     ]
@@ -513,7 +514,7 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
       ...(speicherZeilen.length > 0
           && !jahrSpeicherParkIds(jahrAntworten).every((id) => park.istGeparkt(id)) ? [{
         id: 'speicher-verlauf', title: 'Speicher im Jahr', ...BLOCK_IDENTITAET.werte,
-        summary: `${speicherZeilen.length} Monate mit Speicher-Bewegung`,
+        summary: `${mitAnzahl(speicherZeilen.length, 'Monat', 'Monate')} mit Speicher-Bewegung`,
         defaultOpen: false,
         render: () => <JahrSpeicherTabelle monate={jahrAntworten} />,
       }] : []),

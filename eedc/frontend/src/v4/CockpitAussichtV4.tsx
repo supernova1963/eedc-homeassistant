@@ -42,6 +42,7 @@ import { useApiData, useSelectedAnlage } from '../hooks'
 import { wetterApi, type SolarPrognose } from '../api/wetter'
 import { aussichtenApi, type FinanzPrognose, type LangfristPrognose, type TrendAnalyseResponse } from '../api/aussichten'
 import { energieProfilApi, type TagesPrognose as TagesprognoseDaten } from '../api/energie_profil'
+import { mitAnzahl } from '../lib/plural'
 
 // Zwei Horizonte reichen (Gernot 2026-06-23): „7 + 14 = kurzfristig". Kurzfristig
 // = 14-Tage-Solarprognose + Tages-Stundenchart; Langfristig = 12-Monats-Prognose.
@@ -85,7 +86,7 @@ function kurzKpis(p: SolarPrognose, eedcHeute?: number | null): KpiStripItem[] {
   return [
     { title: 'Heute', value: fmtZahl(eedcHeute ?? (heute ? pvErtragKwh(heute) : 0), 1), unit: 'kWh', color: 'gray', icon: CloudSun, subtitle: vmNm(heute) },
     { title: 'Morgen', value: fmtZahl(morgen ? pvErtragKwh(morgen) : 0, 1), unit: 'kWh', color: 'gray', icon: CloudSun, subtitle: vmNm(morgen) },
-    { title: `Summe ${p.tage.length} Tage`, value: fmtZahl(prognoseSummeKwh(p), 0), unit: 'kWh', color: 'yellow', icon: Zap },
+    { title: `Summe ${mitAnzahl(p.tage.length, 'Tag', 'Tage')}`, value: fmtZahl(prognoseSummeKwh(p), 0), unit: 'kWh', color: 'yellow', icon: Zap },
     { title: `Ø/Tag (${p.tage.length} T)`, value: fmtZahl(prognoseDurchschnittKwh(p), 1), unit: 'kWh', color: 'blue', icon: Sun },
   ]
 }
@@ -279,14 +280,14 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
       // alle Tagesbalken eine Teilsumme. Das Backend sagt es in `hinweise`; hier
       // steht es an beiden Stellen, wo die betroffenen Zahlen stehen.
       const kurzHerkunft = unvollstaendigHerkunft(kurz.hinweise, 'PV-Prognose')
-      const kpi = kennzahlenBlock(kurzKpis(kurz, eedcHeute), `${fmtZahl(prognoseSummeKwh(kurz), 0)} kWh in ${kurz.tage.length} Tagen · Ø ${fmtZahl(prognoseDurchschnittKwh(kurz), 1)} kWh/Tag`, kurzHerkunft)
+      const kpi = kennzahlenBlock(kurzKpis(kurz, eedcHeute), `${fmtZahl(prognoseSummeKwh(kurz), 0)} kWh in ${mitAnzahl(kurz.tage.length, 'Tag', 'Tagen')} · Ø ${fmtZahl(prognoseDurchschnittKwh(kurz), 1)} kWh/Tag`, kurzHerkunft)
       // Aussicht-Anzeigen sind einzeln parkbar (Doktrin): render in `Parkbar`, und ist
       // die Anzeige geparkt → ganzer Block weg (wie Cockpit/Monat-Verlauf).
       const list: Block[] = [
         ...(kpi ? [kpi] : []),
         ...(park.istGeparkt('el:aussicht-tages') ? [] : [{
           id: 'verlauf', title: 'Tages-Prognose', ...BLOCK_IDENTITAET.wetter,
-          summary: `${kurz.tage.length} Tage: Wetter, Temperatur & PV-Ertrag je Tag · Quelle ${quelleLabel}`,
+          summary: `${mitAnzahl(kurz.tage.length, 'Tag', 'Tage')}: Wetter, Temperatur & PV-Ertrag je Tag · Quelle ${quelleLabel}`,
           defaultOpen: true,
           render: () => (
             <Parkbar id="el:aussicht-tages" titel="Tages-Prognose">

@@ -25,6 +25,7 @@ import {
   formatEnergie, energieAchse, formatProzent, formatSpezErtrag, fmtZahl,
   xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP,
 } from '../../lib'
+import { mitAnzahl } from '../../lib/plural'
 
 export interface PvStringsVM {
   loading: boolean
@@ -180,7 +181,7 @@ export function PvStringHeaderZeile({ data, zeitraumLabel, onCsv }: {
     <div className="flex items-center justify-between">
       <p className="text-sm text-gray-500 dark:text-gray-400">
         <span className="font-medium text-gray-700 dark:text-gray-300">{zeitraumLabel}</span>
-        {' '}&bull;{' '}{data.strings.length} Strings &bull; {fmtZahl(data.anlagen_leistung_kwp, 1)} kWp
+        {' '}&bull;{' '}{mitAnzahl(data.strings.length, 'String', 'Strings')} &bull; {fmtZahl(data.anlagen_leistung_kwp, 1)} kWp
       </p>
       {/* D13-10/D14-18: Icon + Wort IMMER (CsvExportButton-SoT) — Icon-only wirkte
           mobil wie „CSV fehlt". */}

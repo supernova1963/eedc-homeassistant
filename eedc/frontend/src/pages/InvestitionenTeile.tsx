@@ -35,6 +35,7 @@ import {
   heuteIso,
   KOMPONENTEN_FARBEN,
 } from '../lib'
+import { mitAnzahl } from '../lib/plural'
 
 // Icon pro Typ; Identitätsfarbe + Tint kommen aus der Kanon-SoT KOMPONENTEN_FARBEN
 // (lib/colors.ts) — keine zweite Farbmap mehr (Regel A, war zuvor gedriftet:
@@ -126,7 +127,7 @@ export function useInvestitionenVerwaltung(anlageId?: number, anlagenname?: stri
     try {
       const result = await infothekApi.migrateBatch(anlageId)
       setMigrationCount(0)
-      setMigrationDone(`${result.count} Einträge in die Infothek übernommen.`)
+      setMigrationDone(`${mitAnzahl(result.count, 'Eintrag', 'Einträge')} in die Infothek übernommen.`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Fehler bei der Migration')
     } finally {
@@ -504,14 +505,14 @@ function InvestitionCard({ investition, onEdit, onDelete }: InvestitionCardProps
         if (investition.leistung_kwp_effektiv != null) {
           details.push(`${fmtZahl(investition.leistung_kwp_effektiv, 1)} kWp`)
         }
-        if (p.anzahl_module) details.push(`${p.anzahl_module} Module`)
+        if (p.anzahl_module) details.push(mitAnzahl(p.anzahl_module, 'Modul', 'Module'))
         if (p.modul_leistung_wp) details.push(`${p.modul_leistung_wp} Wp`)
         break
       }
       case 'balkonkraftwerk': {
         const p = balkonkraftwerkParameter(investition.parameter)
         if (p.leistung_wp) details.push(`${p.leistung_wp} Wp`)
-        if (p.anzahl) details.push(`${p.anzahl} Module`)
+        if (p.anzahl) details.push(mitAnzahl(p.anzahl, 'Modul', 'Module'))
         break
       }
     }
@@ -586,7 +587,7 @@ function InvestitionCard({ investition, onEdit, onDelete }: InvestitionCardProps
             <div className="relative">
               <InlineAktion onClick={() => setShowDropdown(!showDropdown)} ton="aktion" ariaExpanded={showDropdown}>
                 <FileText className="h-3 w-3" />
-                {infothekEintraege.length} Komponenten-Akten
+                {mitAnzahl(infothekEintraege.length, 'Komponenten-Akte', 'Komponenten-Akten')}
                 <ChevronDown className="h-3 w-3" />
               </InlineAktion>
               {showDropdown && (

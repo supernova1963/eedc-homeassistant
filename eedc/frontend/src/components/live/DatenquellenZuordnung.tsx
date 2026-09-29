@@ -38,6 +38,7 @@ import { STATUS_TEXT_CLASS } from '../../lib/colors'
 // ein blauer Text unter einem Warndreieck wäre die halbe Übernahme.
 import { STATUS_ICONS } from '../../lib/komponentenStyle'
 import { formatDatum } from '../../lib/datum'
+import { plural, mitAnzahl } from '../../lib/plural'
 import { TYP_ICON_STYLE } from '../../pages/InvestitionenTeile'
 import {
   datenquellenApi,
@@ -549,7 +550,7 @@ export default function DatenquellenZuordnung() {
     const offen = offenePflichten(g.felder)
     return (
       <span className="text-xs text-gray-400 dark:text-gray-500">
-        {g.felder.length} Felder{offen > 0 && <span className={STATUS_TEXT_CLASS.kritisch}> · {offen} noch ohne Quelle</span>}
+        {mitAnzahl(g.felder.length, 'Feld', 'Felder')}{offen > 0 && <span className={STATUS_TEXT_CLASS.kritisch}> · {offen} noch ohne Quelle</span>}
       </span>
     )
   }
@@ -573,8 +574,8 @@ export default function DatenquellenZuordnung() {
     const offen = offenePflichten(alleFelder)
     const istBasis = tc.typ === 'basis'
     const summary = istBasis
-      ? `${alleFelder.length} Felder${offen > 0 ? ` · ${offen} noch ohne Quelle` : ''}`
-      : `${tc.geraete.length} ${tc.geraete.length === 1 ? 'Gerät' : 'Geräte'}${offen > 0 ? ` · ${offen} Felder noch ohne Quelle` : ''}`
+      ? `${mitAnzahl(alleFelder.length, 'Feld', 'Felder')}${offen > 0 ? ` · ${offen} noch ohne Quelle` : ''}`
+      : `${mitAnzahl(tc.geraete.length, 'Gerät', 'Geräte')}${offen > 0 ? ` · ${mitAnzahl(offen, 'Feld', 'Felder')} noch ohne Quelle` : ''}`
     return {
       id: `dq-${tc.typ}`,
       title: tc.label,
@@ -697,10 +698,10 @@ function HistorieHinweisBlock({
   return (
     <Alert type="warning" title="Zuordnung geändert — die bisherigen Werte bleiben, wie sie waren">
       <p>
-        Seit {formatDatum(hinweis.seit)} {felder.length === 1 ? 'wurde' : 'wurden'} die
-        {' '}Datenquelle{felder.length === 1 ? '' : 'n'} von{' '}
+        Seit {formatDatum(hinweis.seit)} {plural(felder.length, 'wurde', 'wurden')} die
+        {' '}{plural(felder.length, 'Datenquelle', 'Datenquellen')} von{' '}
         <span className="font-medium">{benannt.map((f) => f.label).join(' · ')}</span>
-        {rest > 0 && <> und {rest} weiteren Feldern</>} geändert. Neue Werte kommen ab
+        {rest > 0 && <> und {mitAnzahl(rest, 'weiterem Feld', 'weiteren Feldern')}</>} geändert. Neue Werte kommen ab
         sofort aus der neuen Quelle; die bereits gespeicherten Tages- und Stundenwerte
         stammen weiter aus der vorherigen Zuordnung.
       </p>

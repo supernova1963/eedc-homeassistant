@@ -46,6 +46,7 @@ import type {
   FetchResult,
 } from '../api/connector'
 import type { Anlage, Investition } from '../types'
+import { mitAnzahl } from '../lib/plural'
 
 /** Connectors die read_live() implementieren und Echtzeit-Watt liefern können. */
 const LIVE_CONNECTORS = new Set([
@@ -451,7 +452,7 @@ export default function ConnectorSetupWizard() {
               {testResult.verfuegbare_sensoren.length > 0 && (
                 <details className="text-sm">
                   <summary className="cursor-pointer text-gray-500 dark:text-gray-400 hover:text-gray-700">
-                    {testResult.verfuegbare_sensoren.length} Sensoren verfügbar
+                    {mitAnzahl(testResult.verfuegbare_sensoren.length, 'Sensor', 'Sensoren')} verfügbar
                   </summary>
                   <div className="mt-2 max-h-40 overflow-y-auto text-xs font-mono bg-gray-50 dark:bg-gray-800 rounded p-2">
                     {testResult.verfuegbare_sensoren.map(s => (

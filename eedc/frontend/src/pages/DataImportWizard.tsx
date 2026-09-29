@@ -47,6 +47,7 @@ import type { Anlage } from '../types'
 import { MONAT_NAMEN } from '../lib/constants'
 import { fmtZahl } from '../lib/einheiten'
 import { ManuelleWerteHinweis } from '../components/import/ManuelleWerteHinweis'
+import { mitAnzahl, plural } from '../lib/plural'
 
 // ── Vorschau-Tabellen-Spalten ───────────────────────────────────────────────
 // Adaptive Liste: nur Spalten, für die der gewählte Parser tatsächlich Werte liefert,
@@ -484,7 +485,7 @@ export default function DataImportWizard() {
       {currentStep === 1 && preview && (
         <div className="space-y-4">
           <Alert type="info">
-            Erkannt: <strong>{preview.parser.name}</strong> – {preview.anzahl_monate} Monate gefunden
+            Erkannt: <strong>{preview.parser.name}</strong> – {mitAnzahl(preview.anzahl_monate, 'Monat', 'Monate')} gefunden
           </Alert>
 
           <Card>
@@ -589,7 +590,7 @@ export default function DataImportWizard() {
             </Button>
             <div className="flex items-center gap-3">
               <span className="text-sm text-gray-500 dark:text-gray-400">
-                {selectedMonths.size} von {preview.monate.length} Monaten
+                {selectedMonths.size} von {preview.monate.length} {plural(preview.monate.length, 'Monat', 'Monaten')}
               </span>
               <Button variant="secondary" onClick={handleAbbrechen}>
                 Abbrechen
@@ -604,7 +605,7 @@ export default function DataImportWizard() {
                   ? <>Weiter <ChevronRight className="w-4 h-4 ml-1" /></>
                   : isImporting
                     ? 'Importiere…'
-                    : <>{selectedMonths.size} Monate importieren <ChevronRight className="w-4 h-4 ml-1" /></>
+                    : <>{mitAnzahl(selectedMonths.size, 'Monat', 'Monate')} importieren <ChevronRight className="w-4 h-4 ml-1" /></>
                 }
               </Button>
             </div>
@@ -707,7 +708,7 @@ export default function DataImportWizard() {
             >
               {isImporting
                 ? 'Importiere…'
-                : <>{selectedMonths.size} Monate importieren <ChevronRight className="w-4 h-4 ml-1" /></>
+                : <>{mitAnzahl(selectedMonths.size, 'Monat', 'Monate')} importieren <ChevronRight className="w-4 h-4 ml-1" /></>
               }
             </Button>
             </div>

@@ -16,6 +16,7 @@ import { useLegendenToggle } from '../../hooks'
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { Parkbar } from '../park'
 import type { InvestitionMonatsdaten } from '../../api/investitionen'
+import { mitAnzahl } from '../../lib/plural'
 
 const KEINE_IDS: string[] = []
 const JAHRES_IDS = ['info:eauto-jahres', 'chart:eauto-jahresvergleich', 'tabelle:eauto-jahre']
@@ -80,7 +81,7 @@ export function EAutoJahresvergleich({ monatsdaten, embed = false, melde }: { mo
       <Parkbar id="tabelle:eauto-jahre" titel="Jahres-Tabelle">
       <details className="border-t border-gray-100 dark:border-gray-800 pt-3">
         <summary className="cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
-          Werte anzeigen ({daten.length} Jahre)
+          Werte anzeigen ({mitAnzahl(daten.length, 'Jahr', 'Jahre')})
         </summary>
         <Table aussenClassName="mt-3">
           <TableHead>

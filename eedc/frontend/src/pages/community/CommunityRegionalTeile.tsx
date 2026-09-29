@@ -20,6 +20,7 @@ import type { CommunityBenchmarkResponse, RegionStatistik } from '../../api/comm
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
+import { mitAnzahl } from '../../lib/plural'
 
 // Bundesland-Daten
 const BUNDESLAENDER: Record<string, { name: string; kurzname: string }> = {
@@ -273,7 +274,7 @@ export function RegionalKpiStrip({ regionalStats }: { regionalStats: RegionalSta
         <KPICard
           title="Dein Standort"
           value={regionalStats.regionName}
-          subtitle={`${regionalStats.anzahlAnlagen} Anlagen in der Region`}
+          subtitle={`${mitAnzahl(regionalStats.anzahlAnlagen, 'Anlage', 'Anlagen')} in der Region`}
           color="blue"
           icon={MapPin}
         />

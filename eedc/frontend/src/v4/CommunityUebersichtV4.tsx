@@ -16,6 +16,7 @@ import {
   AchievementsBlock, KomponentenBenchmarks,
   UEB_PARK_IDS, uebAchievementParkIds, uebKomponentenParkIds,
 } from '../pages/community/CommunityUebersichtTeile'
+import { plural } from '../lib/plural'
 
 type Props = {
   benchmark: CommunityBenchmarkResponse | null
@@ -66,7 +67,7 @@ function CommunityUebersichtInner({ benchmark, loading, error }: Props) {
     } : null,
     (d.staerken.length > 0 || d.schwaechen.length > 0) && !alleGeparkt(perfIds) ? {
       id: 'performance', title: 'Deine Performance', icon: ThumbsUp, farbe: 'text-green-500',
-      summary: `${fmtZahl(d.staerken.length, 0)} Stärken · ${fmtZahl(d.schwaechen.length, 0)} mit Potenzial`,
+      summary: `${fmtZahl(d.staerken.length, 0)} ${plural(d.staerken.length, 'Stärke', 'Stärken')} · ${fmtZahl(d.schwaechen.length, 0)} mit Potenzial`,
       defaultOpen: true,
       render: () => <StaerkenSchwaechen staerken={d.staerken} schwaechen={d.schwaechen} />,
     } : null,

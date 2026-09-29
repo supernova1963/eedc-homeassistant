@@ -14,6 +14,7 @@ import {
   usePVErtragDaten, PvKpiStrip, MonatsErtragChart, JahresUebersicht,
   VerteilungHistogramm, VergleichHinweis, PV_PARK_IDS,
 } from '../pages/community/CommunityPVErtragTeile'
+import { plural } from '../lib/plural'
 
 type Props = {
   benchmark: CommunityBenchmarkResponse | null
@@ -56,7 +57,7 @@ function CommunityPVErtragInner({ benchmark, loading, error }: Props) {
     } : null,
     d.jahresStats && d.jahresStats.length > 0 && !alleGeparkt(PV_PARK_IDS.jahresuebersicht) ? {
       id: 'jahresuebersicht', title: 'Jahresübersicht', icon: Calendar,
-      summary: `${fmtZahl(d.jahresStats.length, 0)} Jahre`, defaultOpen: false,
+      summary: `${fmtZahl(d.jahresStats.length, 0)} ${plural(d.jahresStats.length, 'Jahr', 'Jahre')}`, defaultOpen: false,
       render: () => <JahresUebersicht benchmark={benchmark} jahresStats={d.jahresStats!} />,
     } : null,
     d.distribution && d.distribution.bins.length > 0 && !alleGeparkt(PV_PARK_IDS.verteilung) ? {

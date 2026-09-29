@@ -69,6 +69,7 @@ import { haApi, anlagenApi } from '../api'
 import { Button, Input, SegmentControl, Switch, EmptyState, Checkbox, ConfirmDialog } from '../components/ui'
 import { VERBINDUNG_GEAENDERT_EVENT } from '../api/datenquellen'
 import { useCopyFeedback } from '../hooks'
+import { mitAnzahl, plural } from '../lib/plural'
 
 const MDI_ICON_MAP: Record<string, string> = {
   'mdi:solar-power': mdiSolarPower,
@@ -457,7 +458,7 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
       setAbwahlMeldung(
         ergebnis.fehler
           ? `Gespeichert — die Topics konnten aber nicht zurückgenommen werden: ${ergebnis.fehler}`
-          : `Gespeichert. ${ergebnis.abgewaehlt.length} Sensoren gehen nicht mehr nach Home Assistant` +
+          : `Gespeichert. ${mitAnzahl(ergebnis.abgewaehlt.length, 'Sensor', 'Sensoren')} ${plural(ergebnis.abgewaehlt.length, 'geht', 'gehen')} nicht mehr nach Home Assistant` +
             (ergebnis.entfernte_topics
               ? `, ${ergebnis.entfernte_topics} MQTT-Topics zurückgenommen.`
               : '.')
@@ -915,7 +916,7 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
             <p>
               {neuAbgewaehlt.length === 1
                 ? 'Dieser Sensor wird nicht mehr nach Home Assistant exportiert:'
-                : `Diese ${neuAbgewaehlt.length} Sensoren werden nicht mehr nach Home Assistant exportiert:`}
+                : `${plural(neuAbgewaehlt.length, 'Dieser', 'Diese')} ${mitAnzahl(neuAbgewaehlt.length, 'Sensor', 'Sensoren')} ${plural(neuAbgewaehlt.length, 'wird', 'werden')} nicht mehr nach Home Assistant exportiert:`}
             </p>
             <ul className="list-disc pl-5 text-sm max-h-40 overflow-y-auto">
               {neuAbgewaehlt.map(k => <li key={k}>{nameZuSchluessel(k)}</li>)}
@@ -1057,7 +1058,7 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
               <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
               <div className="flex-1 text-sm text-blue-700 dark:text-blue-300">
                 <p className="font-medium mb-1">
-                  Mit dem letzten Update kamen {neuesPaket.keys.length} Sensoren dazu
+                  Mit dem letzten Update {plural(neuesPaket.keys.length, 'kam', 'kamen')} {mitAnzahl(neuesPaket.keys.length, 'Sensor', 'Sensoren')} dazu
                   {neuesPaket.label ? ` (${neuesPaket.label})` : ''}.
                 </p>
                 <p>
@@ -1097,7 +1098,7 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
             <div className="mb-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 flex flex-wrap items-center gap-3">
               <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
               <span className="text-sm text-amber-700 dark:text-amber-300 flex-1 min-w-[12rem]">
-                {abwahlEntwurf.size} Sensoren abgewählt
+                {mitAnzahl(abwahlEntwurf.size, 'Sensor', 'Sensoren')} abgewählt
                 {neuAbgewaehlt.length > 0 && <> — davon {neuAbgewaehlt.length} neu</>}
                 . Noch nicht gespeichert.
               </span>
@@ -1274,7 +1275,7 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
                     {inv.bezeichnung}
                   </span>
                   <span className="ml-2 text-sm text-gray-500">
-                    ({TYP_LABELS[inv.typ] ?? inv.typ} - {inv.sensors.length} Sensoren)
+                    ({TYP_LABELS[inv.typ] ?? inv.typ} - {mitAnzahl(inv.sensors.length, 'Sensor', 'Sensoren')})
                   </span>
                 </summary>
                 <div className="p-3 space-y-2">

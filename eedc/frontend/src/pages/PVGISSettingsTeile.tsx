@@ -24,6 +24,7 @@ import {
 } from 'recharts'
 import ChartTooltip from '../components/ui/ChartTooltip'
 import CollapsibleSection from '../components/ui/CollapsibleSection'
+import { mitAnzahl } from '../lib/plural'
 
 const monatNamen = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
 
@@ -618,7 +619,7 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
                     </p>
                     <p className="text-2xl font-bold text-green-700 dark:text-green-300">
                       {(aktivePrognose.module?.length ?? 0) > 1
-                        ? `${aktivePrognose.module!.length} Strings`
+                        ? mitAnzahl(aktivePrognose.module!.length, 'String', 'Strings')
                         : aktivePrognose.ausrichtung_richtung}
                     </p>
                   </div>
