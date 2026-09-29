@@ -32,6 +32,7 @@ export default defineConfig({
 					label: 'Projekt',
 					items: [
 						{ label: 'Features', slug: 'features' },
+						{ label: 'Galerie', slug: 'galerie' },
 						{ label: 'Installation', slug: 'installation' },
 						{ label: 'Support', slug: 'support' },
 						{ label: 'Über das Projekt', slug: 'ueber' },

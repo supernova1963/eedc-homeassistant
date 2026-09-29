@@ -1,0 +1,188 @@
+---
+title: Galerie
+description: Wie eedc mit gepflegten Daten aussieht – zwölf Ansichten in hell und dunkel
+---
+
+import cockpitMainLight from '../../assets/screenshots/cockpit_main.png';
+import cockpitMainDark from '../../assets/screenshots/cockpit_main-dark.png';
+import liveHausLight from '../../assets/screenshots/cockpit_live_haus.png';
+import liveHausDark from '../../assets/screenshots/cockpit_live_haus-dark.png';
+import gruppenListeLight from '../../assets/screenshots/cockpit_live_gruppenliste.png';
+import gruppenListeDark from '../../assets/screenshots/cockpit_live_gruppenliste-dark.png';
+import monatLight from '../../assets/screenshots/cockpit_monat.png';
+import monatDark from '../../assets/screenshots/cockpit_monat-dark.png';
+import jahrLight from '../../assets/screenshots/cockpit_jahr.png';
+import jahrDark from '../../assets/screenshots/cockpit_jahr-dark.png';
+import speicherLight from '../../assets/screenshots/komponenten_speicher.png';
+import speicherDark from '../../assets/screenshots/komponenten_speicher-dark.png';
+import roiLight from '../../assets/screenshots/auswertungen_roi.png';
+import roiDark from '../../assets/screenshots/auswertungen_roi-dark.png';
+import aussichtLight from '../../assets/screenshots/aussichten_langfristig.png';
+import aussichtDark from '../../assets/screenshots/aussichten_langfristig-dark.png';
+import communityLight from '../../assets/screenshots/community_uebersicht.png';
+import communityDark from '../../assets/screenshots/community_uebersicht-dark.png';
+import fokusLight from '../../assets/screenshots/block_fokus.png';
+import fokusDark from '../../assets/screenshots/block_fokus-dark.png';
+import datenquellenLight from '../../assets/screenshots/einstellungen_datenquellen.png';
+import datenquellenDark from '../../assets/screenshots/einstellungen_datenquellen-dark.png';
+import deeplinkLight from '../../assets/screenshots/deeplink_karte.png';
+import deeplinkDark from '../../assets/screenshots/deeplink_karte-dark.png';
+
+Alle Bilder auf dieser Seite stammen aus einer **Demo-Anlage** – erfundene Geräte, erfundene
+Zählerstände, erfundener Standort. Es sind **keine echten Anlagen- oder Verbrauchsdaten** von
+Anwendern zu sehen. Die Demo-Anlage ist bewusst gut gepflegt: so sieht eedc aus, wenn die
+Datenquellen sitzen und die Monate vollständig sind.
+
+:::note[Hell und dunkel]
+Jedes Bild gibt es zweimal. Welches du siehst, entscheidet die Farbvorliebe deines Geräts –
+stell dein System auf Dunkelmodus um, und die Seite zeigt die dunklen Fassungen.
+:::
+
+---
+
+## Cockpit
+
+### Live – der Energiefluss
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={cockpitMainDark.src} />
+  <img src={cockpitMainLight.src} alt="eedc Cockpit → Live mit Energiefluss, Kennzahlen, Wetter und Tagesverlauf" />
+</picture>
+
+Die Startseite: links der Energiefluss mit jedem Erzeuger und Verbraucher einzeln, rechts „Auf
+einen Blick", darunter Wetter, Tagesverlauf und Börsenpreis.
+
+### Live – der Energiefluss vor dem Haus
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={liveHausDark.src} />
+  <img src={liveHausLight.src} alt="Energiefluss vor der Hintergrund-Variante „Haus“" />
+</picture>
+
+Derselbe Fluss, anderer Hintergrund: die Variante „Haus" stellt die Geräte vor ein Gebäude –
+umschaltbar im Kopf des Blocks, zehn Varianten stehen zur Wahl.
+
+### Live – Gruppenkachel angetippt
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={gruppenListeDark.src} />
+  <img src={gruppenListeLight.src} alt="Liste mit Balken nach Klick auf eine Gruppenkachel" />
+</picture>
+
+Wird es schmal, bündelt der Energiefluss Gleichartiges zu einer Kachel („Ost (2)"). Ein Tipp
+darauf öffnet die Liste mit Balken – jedes Gerät der Gruppe mit Leistung, Anteil und Tagesertrag.
+
+### Monat
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={monatDark.src} />
+  <img src={monatLight.src} alt="eedc Cockpit → Monat mit Kennzahlen, Energie-Bilanz und Tagesverlauf" />
+</picture>
+
+Der abgeschlossene Monat: Kennzahlen, Energie-Bilanz gegen Vormonat und Vorjahr, Tagesverlauf,
+Kategorien und das typische Tagesprofil. Links blätterst du durch alle erfassten Monate.
+
+### Jahr / Gesamt
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={jahrDark.src} />
+  <img src={jahrLight.src} alt="eedc Cockpit → Jahr mit Jahreskennzahlen und Monatsvergleich" />
+</picture>
+
+Dieselbe Anordnung eine Zeitstufe höher – Jahresertrag, Autarkie, Jahresergebnis und der
+Vergleich der Monate untereinander.
+
+### Aussicht
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={aussichtDark.src} />
+  <img src={aussichtLight.src} alt="eedc Cockpit → Aussicht mit 14-Tage-Prognose" />
+</picture>
+
+Der Blick nach vorn: erwartete Erzeugung für heute, morgen und die nächsten 14 Tage, gerechnet
+aus Wetterprognose und der gelernten Korrektur der eigenen Anlage.
+
+---
+
+## Komponenten
+
+### Speicher
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={speicherDark.src} />
+  <img src={speicherLight.src} alt="eedc Komponenten → Speicher mit Zyklen, Wirkungsgrad und Netzladung" />
+</picture>
+
+Jedes Gerät hat eine feste Heimat mit derselben Gliederung: Status → Verlauf → Vergleich →
+Wirtschaftlichkeit. Hier der Speicher mit Vollzyklen, Wirkungsgrad, Durchsatz und Netzladeanteil.
+
+---
+
+## Auswertungen
+
+### ROI
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={roiDark.src} />
+  <img src={roiLight.src} alt="eedc Auswertungen → ROI mit Amortisationsverlauf und Detailübersicht je Investition" />
+</picture>
+
+Der Amortisationsverlauf über die ganze Anlage, Einsparungen nach Typ und eine Zeile je
+Investition – mit Kosten, Einsparung pro Jahr, Rendite und Fortschritt.
+
+---
+
+## Community
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={communityDark.src} />
+  <img src={communityLight.src} alt="eedc Community-Übersicht mit anonymem Benchmark" />
+</picture>
+
+Der anonyme Vergleich mit anderen Anlagen: Rang gesamt und in der Region, Stärken und Schwächen
+der eigenen Anlage. Teilnahme ist freiwillig und jederzeit widerrufbar.
+
+---
+
+## Bedienung
+
+### Ein Block im Vollbild
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={fokusDark.src} />
+  <img src={fokusLight.src} alt="Ein Block im Fokus-/Vollbild-Modus" />
+</picture>
+
+Jeder Block lässt sich per ⤢ bildschirmfüllend öffnen – zum Lesen eines Charts, zum Umschalten
+auf die Tabelle oder um den Link für ein Home-Assistant-Dashboard zu kopieren.
+
+### Der Block als Karte im Home-Assistant-Dashboard
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={deeplinkDark.src} />
+  <img src={deeplinkLight.src} alt="Energiefluss als Webseiten-Karte in einem HA-Dashboard, 520 × 420 Pixel" />
+</picture>
+
+Derselbe Block unter seiner eigenen Adresse (`#/cockpit/live?fokus=live:energiefluss`), hier in
+einem 520 × 420 Pixel schmalen Fenster: genau so sitzt er als Webseiten-Karte in einem
+Home-Assistant-Dashboard – ohne Navigation, ohne Zurück, und er folgt dem Erscheinungsbild des
+Dashboards.
+
+### Datenquellen
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={datenquellenDark.src} />
+  <img src={datenquellenLight.src} alt="eedc Einstellungen → Datenquellen: ein Feld, eine Quelle" />
+</picture>
+
+Ein Feld, eine Quelle: unter *Einstellungen → Datenquellen* bekommt jedes eedc-Feld genau einen
+HA-Sensor, ein MQTT-Topic oder einen Geräte-Connector – mit Prüfung je Feld.
+
+---
+
+:::tip[Für Entwickler]
+Die Bilder entstehen nicht von Hand, sondern über `scripts/galerie-screenshots.mjs` –
+ein Playwright-Lauf mit fester Ansichtsliste gegen eine Demo-Box. Vor jedem größeren Release
+einmal gefahren, zeigt die Galerie den ausgelieferten Stand. Der Kopf des Skripts beschreibt,
+wie die Box aufgesetzt wird.
+:::
