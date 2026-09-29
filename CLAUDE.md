@@ -262,6 +262,22 @@ Laufzeit-Gate. Er ist an kein Auslöser-Muster gebunden — wer ihn nicht fährt
 > **Bei einem RC ist die Versionsnummer schon gebumpt** — sonst sieht der Supervisor kein Update.
 > Wer den Durchlauf auslässt, sagt das ausdrücklich; er ist an kein Auslöser-Muster gebunden.
 
+> ### Die Galerie-Bilder altern still — vor `release.sh` auf Nachfrage neu aufnehmen (seit 29.09.)
+>
+> `scripts/galerie-screenshots.mjs` erzeugt die fünfzehn Ansichten der öffentlichen
+> [Bildergalerie](https://supernova1963.github.io/eedc-homeassistant/galerie/) (hell und dunkel, WebP)
+> in einem Lauf, rund 16 Minuten. **Vor einem Release anbieten, nicht stillschweigend überspringen** —
+> ⛔ die vorigen Bilder standen vom 23.07. bis 28.09. auf dem v4.0.0-Stand, ohne dass es auffiel: Sie
+> waren von Hand gemacht, und was keinen Anker im Ablauf hat, wird nicht erneuert. Gefahren wird der
+> Lauf **auf Nachfrage** (nicht jedes Release ändert die Oberfläche); der Kopf-Docstring des Skripts
+> sagt, wie die Box aufgesetzt wird.
+>
+> ⚠ **Zwei Fallen, beide gemessen (29.09.):** Der Lauf braucht ein Bundle mit `VITE_DEMO_DEFAULT=true`
+> **und** den Demo-Modus der Live-Route — ohne ihn zeigt Cockpit → Live nur „0 W". Und
+> `reducedMotion: 'reduce'` am Browser-Kontext (gegen halb gezeichnete Diagramme) schaltet über
+> `detectLiteDefault()` den **Energiefluss auf „Lite"**; das Skript belegt den Schalter deshalb vor.
+> Danach das Bundle ohne Flag zurückbauen.
+
 ```bash
 cd /home/gernot/claude/eedc-homeassistant
 ./scripts/release.sh <version>   # Zielversion, z. B. die nächste Patch-Nummer laut CHANGELOG
