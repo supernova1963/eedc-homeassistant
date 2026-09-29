@@ -299,6 +299,64 @@ const ANSICHTEN = [
     pflicht: ['Energiefluss'],
     titel: 'Fokus-Deep-Link als Webseiten-Karte (520 × 420)',
   },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Motiv „Dieselbe Anlage, drei Breiten" — die Kaskade, die ein einzelnes
+  // Bild nicht zeigen kann.
+  //
+  // ⭐ Die drei Breiten sind ein MESSERGEBNIS, kein Richtwert. Gemessen am
+  // 29.09.2026 ueber den Deep-Link, `[data-gruppe]` im DOM gezaehlt; die
+  // Umschaltpunkte sind auf 1 px eingekreist:
+  //
+  //   Fenster ≥ 524 px (Karte ≥ 490)  → 0 Gruppen, 15 Knoten   ← alle einzeln
+  //   Fenster 397 … 523 (Karte 363…489) → 4 Gruppen, 11 Knoten ← teilweise
+  //   Fenster ≤ 396 px (Karte ≤ 362)  → 5 Gruppen, 10 Knoten   ← voll
+  //
+  // Gewaehlt sind drei Breiten mit Abstand zu beiden Kanten, damit ein
+  // Rendering-Pixel das Motiv nicht kippt: 900 (376 px ueber der Kante),
+  // 460 (63 bzw. 64 px Abstand nach beiden Seiten), 360 (36 px unter der
+  // Kante, zugleich die klassische Handy-Breite).
+  //
+  // Die HOEHEN sind ebenfalls gerechnet, nicht geraten: die Zeichenflaeche
+  // traegt je Breite ein anderes Seitenverhaeltnis (viewBox 618×380 · 450×380 ·
+  // 360×380). Fenster = Kopfzeile + Breite/Seitenverhaeltnis + Rand, sonst
+  // liegt der Fluss in weissen Baendern statt den Rahmen zu fuellen.
+  //
+  // ⛔ Der Deep-Link ist Absicht: er liefert den Block OHNE Kopfzeile und
+  // Seitenleiste. Eine volle Seite bei 360 px waere eine lange Handy-Seite,
+  // auf der man den Fluss erst suchen muesste — die drei Bilder waeren nicht
+  // mehr vergleichbar.
+  {
+    name: 'breiten_gross',
+    demo: true,
+    route: '#/cockpit/live?fokus=live:energiefluss',
+    fenster: { width: 900, height: 630 },
+    bg: 'default',
+    pflicht: ['Energiefluss', 'Poolpumpe', 'Sauna'],
+    titel: 'Drei Breiten ① 900 px — jedes Gerät einzeln',
+  },
+  {
+    name: 'breiten_mittel',
+    demo: true,
+    route: '#/cockpit/live?fokus=live:energiefluss',
+    fenster: { width: 460, height: 462 },
+    bg: 'default',
+    // Die Gruppenkacheln tragen die Anzahl im Namen — „Ost (2)" steht also im
+    // Text, sobald zusammengefasst wurde. Genau das soll das Bild zeigen.
+    pflicht: ['Ost (2)', 'Laden (2)', 'Poolpumpe'],
+    titel: 'Drei Breiten ② 460 px — Gleichartiges zusammengefasst',
+  },
+  {
+    name: 'breiten_schmal',
+    demo: true,
+    route: '#/cockpit/live?fokus=live:energiefluss',
+    fenster: { width: 360, height: 449 },
+    bg: 'default',
+    // Auf der letzten Stufe wandern auch Poolpumpe und Sauna in eine Kachel —
+    // „Poolpumpe" darf hier also gerade NICHT mehr einzeln stehen.
+    pflicht: ['Ost (2)', 'Laden (2)', 'Sonstige (2)'],
+    titel: 'Drei Breiten ③ 360 px — auch die Verbraucher gebündelt',
+  },
 ]
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -435,8 +493,27 @@ async function lauf() {
         viewport: { ...fenster },
         colorScheme: modus === 'dunkel' ? 'dark' : 'light',
         deviceScaleFactor: 1,
+        // Haelt Chart-Einlauf-Animationen still, damit kein Bild einen halb
+        // gezeichneten Chart erwischt.
         reducedMotion: 'reduce',
       })
+
+      // ⛔ …und macht damit einen Nebeneffekt noetig, der KEINE Schoenung ist,
+      // sondern die Rueckname eines Artefakts dieses Werkzeugs:
+      // `detectLiteDefault()` in `EnergieFluss.tsx` schaltet den Energiefluss
+      // auf „Lite" (weniger Animationen, keine Fluss-Partikel, kein Leuchten),
+      // sobald `prefers-reduced-motion: reduce` gilt — also genau wegen der
+      // Zeile darueber. Ohne diese Vorbelegung zeigt JEDES Fluss-Bild der
+      // Galerie einen Zustand, den ein Besucher ohne
+      // Bewegungsreduzierungs-Einstellung nie sieht (gemessen 29.09.2026:
+      // Probeaufnahme ohne `reduce` = „Effekte" mit Partikeln, mit `reduce`
+      // = „Lite" ohne). Dieselbe Klasse wie der ausgeblendete Demo-Umschalter.
+      // Der Anwender kann hier ohnehin selbst umschalten; `'0'` ist der Wert,
+      // den ein Desktop-Browser ohne diese Einstellung von sich aus waehlt.
+      await ctx.addInitScript(() => {
+        try { localStorage.setItem('eedc-energiefluss-lite', '0') } catch { /* privater Modus */ }
+      })
+
       const page = await ctx.newPage()
       const fehler = []
       let demoGesehen = false

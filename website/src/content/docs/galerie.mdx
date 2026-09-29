@@ -9,6 +9,12 @@ import liveHausLight from '../../assets/screenshots/cockpit_live_haus.webp';
 import liveHausDark from '../../assets/screenshots/cockpit_live_haus-dark.webp';
 import gruppenListeLight from '../../assets/screenshots/cockpit_live_gruppenliste.webp';
 import gruppenListeDark from '../../assets/screenshots/cockpit_live_gruppenliste-dark.webp';
+import breitenGrossLight from '../../assets/screenshots/breiten_gross.webp';
+import breitenGrossDark from '../../assets/screenshots/breiten_gross-dark.webp';
+import breitenMittelLight from '../../assets/screenshots/breiten_mittel.webp';
+import breitenMittelDark from '../../assets/screenshots/breiten_mittel-dark.webp';
+import breitenSchmalLight from '../../assets/screenshots/breiten_schmal.webp';
+import breitenSchmalDark from '../../assets/screenshots/breiten_schmal-dark.webp';
 import monatLight from '../../assets/screenshots/cockpit_monat.webp';
 import monatDark from '../../assets/screenshots/cockpit_monat-dark.webp';
 import jahrLight from '../../assets/screenshots/cockpit_jahr.webp';
@@ -71,6 +77,45 @@ umschaltbar im Kopf des Blocks, zehn Varianten stehen zur Wahl.
 
 Wird es schmal, bündelt der Energiefluss Gleichartiges zu einer Kachel („Ost (2)"). Ein Tipp
 darauf öffnet die Liste mit Balken – jedes Gerät der Gruppe mit Leistung, Anteil und Tagesertrag.
+
+---
+
+## Dieselbe Anlage, drei Breiten
+
+Der Energiefluss fasst **erst zusammen, wenn es sonst eng würde** – und zwar von selbst. Ist
+Platz da, bekommt jedes Gerät seine eigene Kachel. Wird die Fläche schmaler, rücken
+gleichartige Geräte zu **einer** Kachel mit der Anzahl im Namen zusammen („Ost (2)"), und ein
+Klick darauf öffnet die Liste mit Balken aus dem Bild davor. Nichts verschwindet – es wird nur
+gefaltet.
+
+Die drei Bilder zeigen **dieselbe Anlage zur selben Zeit**, nur in drei Fensterbreiten. Weil
+das eine Bewegung ist, die ein einzelnes Bild nicht zeigen kann, stehen sie hier nebeneinander.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={breitenGrossDark.src} />
+  <img src={breitenGrossLight.src} alt="Energiefluss bei 900 Pixel Breite – jedes Gerät hat eine eigene Kachel" />
+</picture>
+
+**① 900 Pixel – jedes Gerät einzeln.** Sechs PV-Strings, Wärmepumpe, beide Wallboxen,
+Poolpumpe und Sauna stehen jeweils für sich; fünfzehn Kacheln um das Haus.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={breitenMittelDark.src} />
+  <img src={breitenMittelLight.src} alt="Energiefluss bei 460 Pixel Breite – PV-Strings und Wallboxen zusammengefasst" />
+</picture>
+
+**② 460 Pixel – Gleichartiges rückt zusammen.** Die sechs Strings werden zu drei Kacheln nach
+Ausrichtung („Ost (2)", „Süd (2)", „West (2)"), die beiden Wallboxen zu „Laden (2)“. Poolpumpe
+und Sauna haben noch Platz und bleiben einzeln – elf Kacheln.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={breitenSchmalDark.src} />
+  <img src={breitenSchmalLight.src} alt="Energiefluss bei 360 Pixel Breite – zusätzlich die Verbraucher gebündelt" />
+</picture>
+
+**③ 360 Pixel – auch die Verbraucher gebündelt.** Auf Handy-Breite wandern zuletzt Poolpumpe
+und Sauna in eine gemeinsame Kachel „Sonstige (2)“ – zehn Kacheln, und der Fluss bleibt
+lesbar, statt die Beschriftungen zu zerquetschen.
 
 ### Monat
 
