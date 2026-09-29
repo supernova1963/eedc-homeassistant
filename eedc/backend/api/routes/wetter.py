@@ -9,8 +9,6 @@ Unterstützte Datenquellen:
 - PVGIS TMY: Langjährige Durchschnittswerte als Fallback
 """
 
-import calendar
-from datetime import date
 from typing import Optional, List, Literal
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel, Field
@@ -20,9 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.exceptions import bad_request, not_found
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
-from backend.services.mitteltemperatur import lade_monatsmittel_temperatur
+from backend.services.wetter.monatswerte import loese_monats_wetter
 from backend.services.wetter.orchestrator import (
-    get_wetterdaten,
     get_wetterdaten_multi,
     get_available_providers,
     get_provider_comparison,
@@ -196,52 +193,18 @@ async def get_wetter_monat(
     if not anlage:
         raise not_found("Anlage", anlage_id)
 
-    if not anlage.latitude or not anlage.longitude:
+    # ⭐ Die Auflösung — Anbieterwahl der Anlage UND Temperatur-Vorrangkette —
+    # steht seit dem Paket „Wetterreihe geradeziehen" im Service
+    # (`services/wetter/monatswerte.py`). Sie stand bis dahin HIER, und damit
+    # rief der CSV-Import als einziger anderer Schreiber eine zweite, ärmere
+    # Kaskade (immer Open-Meteo). Konvergenz statt zweitem Code-Pfad: Route,
+    # Import, Nachzug und Lückenschluss rufen dieselbe Funktion.
+    try:
+        data = await loese_monats_wetter(db, anlage, jahr, monat, provider=provider)
+    except ValueError as e:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Anlage hat keine Geokoordinaten. Bitte latitude/longitude in den Stammdaten ergänzen."
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
         )
-
-    # Ohne expliziten Wunsch gilt die gespeicherte Wahl der Anlage (#386).
-    gewaehlt = provider or getattr(anlage, "wetter_provider", None) or "auto"
-
-    # Wetterdaten mit Multi-Provider abrufen
-    data = await get_wetterdaten_multi(
-        latitude=anlage.latitude,
-        longitude=anlage.longitude,
-        jahr=jahr,
-        monat=monat,
-        provider=gewaehlt,  # type: ignore
-        land=anlage.standort_land,
-    )
-
-    # ── Ø-Temperatur: die eigene Messreihe steht VOR dem Archiv (N-426) ──────
-    #
-    # Der Provider-Wert oben ist damit die **letzte** Stufe derselben
-    # Vorrangkette, mit der die Temperaturlinie des Wärme/Klima-Verlaufs
-    # rechnet — und sie wird GERUFEN, nicht nachgebaut (`services/
-    # mitteltemperatur.py`, ADR-001): Stundenmittel, sonst Tages-Min/Max.
-    #
-    # ⛔ **Ohne ihre dritte Stufe**, und das ist keine Sparsamkeit: Stufe 3 ist
-    # `Monatsdaten.durchschnittstemperatur` — genau das Feld, das diese Antwort
-    # füllen soll. Gäbe man `gepflegt_je_monat` mit, bestätigte das Auto-Fill
-    # dem Anwender seinen eigenen Wert als „gemessen" und die Kette liefe im
-    # Kreis. Dieselbe Trennung wie bei `lade_heizgradtage_je_monat`.
-    #
-    # ⚠ Für den LAUFENDEN Monat liefert der Provider ohnehin nichts (die
-    # Anbieter-Schleife greift nur für vergangene Monate, `orchestrator.py`) —
-    # dort ist die Messreihe nicht nur besser, sondern die einzige Quelle.
-    letzter_tag = calendar.monthrange(jahr, monat)[1]
-    gemessen = await lade_monatsmittel_temperatur(
-        db,
-        anlage_id,
-        von=date(jahr, monat, 1),
-        bis=date(jahr, monat, letzter_tag),
-    )
-    kettenwert = gemessen.get((jahr, monat))
-    if kettenwert is not None:
-        data["durchschnittstemperatur_c"] = kettenwert
-        data["temperatur_herkunft"] = "messung"
 
     return WetterDatenResponse(**data)
 

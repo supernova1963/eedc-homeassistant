@@ -69,6 +69,14 @@ IMMER_REGISTRIERT = {
     "api_cache_cleanup",
     "pvgis_aktualitaet",
     "kraftstoffpreis",
+    # #395 Punkt 1 (2026-09-29): der Wetterwerte-Lückenschluss läuft
+    # BEDINGUNGSLOS. #322 fragt hier „soll er das?" — ja, aus demselben Grund
+    # wie der Archiv-Nachzug darüber: Er hängt an keiner Betriebsart und an
+    # keinem Schalter, und er nimmt sich selbst zurück, wo nichts zu tun ist
+    # (ohne Lücke fragt er keinen Anbieter — ein SELECT je Anlage und Nacht).
+    # Er ist zudem die Bedingung, unter der die Vormonats-Vorbelegung der
+    # Wetterfelder wegfallen durfte: ohne ihn bliebe ein Monat ohne Klick leer.
+    "wetter_luecken",
 }
 
 #: Erst über `add_mqtt_snapshot_jobs()` (#322).

@@ -15,6 +15,7 @@ export type RepairOperationType =
   | 'reaggregate_today'
   | 'vollbackfill'
   | 'kraftstoffpreis_backfill'
+  | 'wetter_backfill'
   | 'delete_monatsdaten'
   | 'reset_cloud_import'
   | 'solcast_rewrite'
@@ -117,6 +118,13 @@ export const OPERATION_META: OperationMeta[] = [
     label: 'Kraftstoffpreise nachpflegen',
     description:
       'EU Oil Bulletin Wochenpreise (Euro-Super 95) für offene Tages- bzw. Monatsdaten-Zeilen.',
+    inWorkbench: true,
+  },
+  {
+    type: 'wetter_backfill',
+    label: 'Wetterreihe nachziehen',
+    description:
+      'Holt Globalstrahlung, Sonnenstunden und Ø Temperatur aller abgeschlossenen Monate von der an der Anlage gewählten Wetterquelle. Vorhandene Werte werden ersetzt — eine Reihe aus zwei Anbietern ist nicht vergleichbar (Sonnenstunden: Faktor 1,6–2,0). Der laufende Monat bleibt draußen.',
     inWorkbench: true,
   },
   {

@@ -40,7 +40,6 @@ from backend.services.wetter.pvgis import (
     get_pvgis_tmy_defaults,
 )
 from backend.services.wetter.orchestrator import (
-    get_wetterdaten,
     get_wetterdaten_multi,
     get_available_providers,
     get_provider_comparison,
@@ -61,6 +60,6 @@ __all__ = [
     # PVGIS
     "PVGIS_TMY_DEFAULTS", "fetch_pvgis_tmy_monat", "get_pvgis_tmy_defaults",
     # Orchestrator
-    "get_wetterdaten", "get_wetterdaten_multi",
+    "get_wetterdaten_multi",
     "get_available_providers", "get_provider_comparison",
 ]

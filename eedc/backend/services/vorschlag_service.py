@@ -19,7 +19,7 @@ from sqlalchemy import select, and_
 
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
-from backend.core.field_definitions import ist_stand_feld
+from backend.core.field_definitions import ist_stand_feld, ist_wetter_feld
 from backend.core.berechnungen.modus_split import REGEL_JAZ_VORSCHLAG
 from backend.core.berechnungen.waerme_vorschlag import (
     WAERME_FELDER,
@@ -112,7 +112,28 @@ class VorschlagService:
         # vorbelegt, hätte ein Klick eine Differenz von 0 gespeichert. Für einen
         # Stand gibt es genau zwei Quellen: den mitgeschriebenen Sensorstand
         # (`views.py`, Quelle ZAEHLERSTAND) und die Hand.
-        if not ist_stand_feld(feld):
+        #
+        # ⛔ Ein WETTERWERT ebenso, aus der anderen Richtung (#395 Punkt 1,
+        # 29.09.2026): er ist die Messung eines ANDEREN Monats, keine Schätzung
+        # für diesen. Beim Stand ist der Vormonat der Anfang des Werts, hier ist
+        # er schlicht ein fremder Wert — Vormonat, Vorjahr und Ø 12 Monate
+        # entfallen alle drei.
+        #
+        # Und es blieb nicht bei einem Vorschlag: das Monatsformular belegte
+        # damit jedes leere Wetterfeld vor, und beide Speicherwege stempeln jedes
+        # gesendete Feld `manual:form` (MANUAL, „Niemals von Maschine
+        # überschreiben", FrodoVDR #251). Ein Wert, den niemand getippt hat, war
+        # damit gegen jede externe Quelle verriegelt — an einer echten Anlage
+        # 4 von 38 Monatspaaren in BEIDEN Wetterfeldern identisch.
+        #
+        # Es kostet nichts, denn die Quelle ist einen Klick entfernt: das Feld
+        # bleibt leer, der Wetter-Knopf sieht wieder eine LÜCKE (er füllt seit
+        # N-426 nur noch Lücken) und der nächtliche Lückenschluss erledigt den
+        # Rest ohne Klick.
+        #
+        # ⚠ Die Wärmepumpen-Rechnung DARUNTER bleibt unberührt: sie hängt an
+        # `investition_id` und rührt kein Basisfeld an.
+        if not ist_stand_feld(feld) and not ist_wetter_feld(feld):
             # 1. Vormonat
             vormonat = await self._get_vormonat_wert(
                 anlage_id, feld, jahr, monat, investition_id

@@ -502,6 +502,54 @@ def stand_felder() -> frozenset[str]:
 #: Die Stand-Felder als Konstante — einmal abgeleitet, überall dieselbe Antwort.
 STAND_FELDER: Final[frozenset[str]] = stand_felder()
 
+def wetter_felder() -> frozenset[str]:
+    """Die Monatsfelder, deren Wert das **Wetter** beschreibt — abgeleitet aus
+    `BASIS_FELDER` über ``gruppe == "wetter"``.
+
+    **Warum es diese Unterscheidung gibt (Paket „Die Wetterreihe geradeziehen",
+    #395 Punkt 1, 29.09.2026).** Ein Wetterwert ist die Messung EINES Monats.
+    Der Vormonat, das Vorjahr und der Zwölf-Monats-Schnitt beschreiben andere
+    Monate — sie sind für ein Wetterfeld keine Schätzung, sondern eine fremde
+    Messung. Dieselbe Begründung wie beim Stand darüber, nur aus der anderen
+    Richtung: dort ist der Vormonat der ANFANG des Werts, hier ist er ein
+    ANDERER Wert.
+
+    ⛔ **Und es blieb nicht bei einem Vorschlag.** Das Monatsformular belegte
+    damit jedes leere Wetterfeld vor, und beide Speicherwege stempeln jedes
+    gesendete Feld als ``manual:form`` = ``SourcePriority.MANUAL`` mit dem
+    Vermerk „Niemals von Maschine überschreiben". Ein Wert, den niemand getippt
+    hat, war damit gegen jede externe Quelle verriegelt. Gemessen an einer
+    echten Anlage: 4 von 38 Monatspaaren in **beiden** Wetterfeldern identisch;
+    der Dienst hätte für 2026-02 70,8 h gesagt statt der übernommenen 44,0
+    (38 % zu niedrig).
+
+    **Die Quelle ist einen Klick entfernt** — deshalb kostet das Weglassen
+    nichts: das Feld bleibt leer, der Wetter-Knopf sieht wieder eine LÜCKE und
+    füllt sie (er füllt seit N-426 nur noch Lücken, und ein vorbelegtes Feld
+    ist keine). Was ohne Klick passiert, erledigt der nächtliche
+    Lückenschluss.
+    """
+    namen: set[str] = set()
+    for f in BASIS_FELDER:
+        if f.get("gruppe") == "wetter":
+            namen.add(f["feld"])
+    return frozenset(namen)
+
+#: Die Wetterfelder als Konstante — einmal abgeleitet, überall dieselbe Antwort.
+WETTER_FELDER: Final[frozenset[str]] = wetter_felder()
+
+def ist_wetter_feld(feld: str) -> bool:
+    """Beschreibt dieses Feld das **Wetter** des Monats?
+
+    Mit Innengeräte-Auflösung wie `ist_stand_feld` — ein Feld-Key kann das
+    Suffix ``-<id>`` tragen (`basis_feld_key`). Für die drei Wetterfelder
+    kommt das heute nicht vor; die Funktion verhält sich damit wie ihre
+    Schwester und nicht wie eine Ausnahme.
+    """
+    if not feld:
+        return False
+    return basis_feld_key(feld) in WETTER_FELDER
+
 def ist_stand_feld(feld: str) -> bool:
     """Ist der Wert dieses Feldes ein **Stand** (Bestandsgröße)?
 

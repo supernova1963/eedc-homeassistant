@@ -19,7 +19,7 @@ from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.utils.investition_filter import aktiv_jetzt, sort_investitionen_nach_typ
-from backend.services.wetter.orchestrator import get_wetterdaten
+from backend.services.wetter.monatswerte import loese_monats_wetter
 from backend.utils.sonstige_positionen import berechne_sonstige_summen, get_sonstige_positionen
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage
 from backend.core.field_definitions import (
@@ -381,16 +381,21 @@ async def import_csv(
             if globalstrahlung is not None and globalstrahlung > 250:
                 warnungen.append(f"Zeile {i}: Globalstrahlung ({globalstrahlung}) ungewöhnlich hoch")
 
-            # Wetterdaten automatisch abrufen
+            # Wetterdaten automatisch abrufen — über DIESELBE Auflösung wie das
+            # Monatsformular (`services/wetter/monatswerte.py`).
+            #
+            # ⛔ Hier stand bis zum Paket „Wetterreihe geradeziehen" ein Aufruf
+            # von `get_wetterdaten`: eine zweite Kaskade **ohne Bright-Sky-Zweig**,
+            # also immer Open-Meteo — gegen die Zusage der eigenen Oberfläche
+            # („Automatische Auswahl: Bright Sky für DE"). Wer Monate nachträglich
+            # importierte, bekam sie auf einem anderen Lineal als die Monate, die
+            # er im Formular geholt hatte: bei den Sonnenstunden Faktor 1,6–2,0
+            # (2025-06 gemessen: 380 h gegen 231,8 h). Eine Jahresreihe aus beiden
+            # Quellen beantwortet „war mein Jahr schwach?" falsch.
             if auto_wetter and globalstrahlung is None and sonnenstunden is None:
                 if anlage.latitude and anlage.longitude:
                     try:
-                        wetter = await get_wetterdaten(
-                            latitude=anlage.latitude,
-                            longitude=anlage.longitude,
-                            jahr=jahr,
-                            monat=monat
-                        )
+                        wetter = await loese_monats_wetter(db, anlage, jahr, monat)
                         globalstrahlung = wetter.get("globalstrahlung_kwh_m2")
                         sonnenstunden = wetter.get("sonnenstunden")
                     except Exception as e:

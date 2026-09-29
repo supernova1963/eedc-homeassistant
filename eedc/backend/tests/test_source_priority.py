@@ -127,7 +127,7 @@ class TestVokabularBaseline:
     bewusst über seine Klasse. Diese Probe ist der Ort, an dem das auffällt.
     """
 
-    #: Stand 2026-08-24, aus dem Modul erhoben.
+    #: Stand 2026-09-29, aus dem Modul erhoben.
     ERWARTET = {
         "repair": 0,
         "manual:form": 1,
@@ -139,6 +139,13 @@ class TestVokabularBaseline:
         "external:ha_statistics:hourly": 2,
         "external:portal_import": 2,
         "external:openmeteo": 2,
+        # #395 Punkt 1: die zweite Monats-Wetterquelle. Sie steht bewusst in
+        # DERSELBEN Klasse wie `external:openmeteo` — beide sind messende
+        # Archive, keines schlägt das andere. Welche eine Anlage benutzt,
+        # entscheidet ihre Einstellung, nicht die Hierarchie; und ein Nachzug
+        # von der einen auf die andere ist eine ANGEORDNETE Aktion
+        # (`benutzer_override`), kein Hierarchie-Sieg.
+        "external:brightsky": 2,
         "external:solcast": 2,
         "external:fuel_price": 2,
         "external:tom_ha_sfml": 2,

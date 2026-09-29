@@ -336,6 +336,26 @@ class EEDCScheduler:
                 replace_existing=True,
             )
 
+            # Wetterwerte-Lückenschluss: täglich um 06:20.
+            #
+            # ⚠ **Täglich und NICHT am Monatswechsel**, und das ist gemessen:
+            # der Monats-Job oben läuft am 1. um 00:01 — eine Minute nach
+            # Monatsende, da liefert kein Archiv den Monat. Open-Meteo hinkt
+            # laut eigenem Kommentar 2–5 Tage nach (N-388). Ein täglicher
+            # Versuch klappt irgendwann und fängt zugleich jede andere Ursache:
+            # Ausfall, kein Netz, ein später nachgetragener Monat.
+            #
+            # ⭐ **Erst DB, dann Netz** — wie der Kraftstoff-Job darüber. Ohne
+            # eine einzige Lücke ist der Lauf ein SELECT je Anlage und kein
+            # einziger Abruf.
+            self._scheduler.add_job(
+                wetter_luecken_job,
+                CronTrigger(hour=6, minute=20),
+                id="wetter_luecken",
+                name="Wetterwerte-Lückenschluss",
+                replace_existing=True,
+            )
+
             self._scheduler.start()
             self._running = True
             logger.info("EEDC Scheduler gestartet")
@@ -1269,6 +1289,64 @@ async def kraftstoffpreis_job() -> None:
                             gesamt_tage, gesamt_monate)
     except Exception as e:
         logger.warning("Kraftstoffpreis-Job fehlgeschlagen: %s: %s", type(e).__name__, e)
+
+
+async def wetter_luecken_job() -> None:
+    """Füllt fehlende Monats-Wetterwerte aller Anlagen — nur Lücken.
+
+    Gernots Freigabe-Bedingung für das Paket „Die Wetterreihe geradeziehen":
+    *„nur wenn sichergestellt ist, dass zukünftig kein Monat ohne diese Daten
+    entstehen kann."* Ohne ihn stünde ein Monat, dessen Vormonats-Vorbelegung
+    weggefallen ist, ohne Klick leer da.
+
+    ⛔ **Er überschreibt nichts.** Das Umlegen einer ganzen Reihe bleibt die
+    angeordnete Aktion in der Reparatur-Werkbank (``WETTER_BACKFILL``).
+
+    ⛔ **Er schreibt nie ein langjähriges Mittel.** Liefert kein messendes
+    Archiv, bleibt die Lücke und der Daten-Checker nennt sie — ein
+    PVGIS-TMY-Wert machte ein schwaches Jahr unsichtbar.
+    """
+    try:
+        from backend.core.database import get_session
+        from backend.models.anlage import Anlage
+        from backend.services.wetter.luecken import schliesse_wetter_luecken
+        from sqlalchemy import select
+
+        async with get_session() as db:
+            anlagen = (await db.execute(select(Anlage))).scalars().all()
+
+            gefuellt = 0
+            monate = 0
+            offen = 0
+            for anlage in anlagen:
+                try:
+                    r = await schliesse_wetter_luecken(db, anlage)
+                    gefuellt += r.felder_gefuellt
+                    monate += r.monate_gefuellt
+                    offen += len(r.ohne_messende_quelle)
+                except Exception as e:
+                    logger.warning(
+                        "Wetter-Lückenschluss Anlage %d: %s: %s",
+                        anlage.id, type(e).__name__, e,
+                    )
+            if gefuellt or monate:
+                await db.commit()
+                await log_activity(
+                    kategorie="scheduler",
+                    aktion="Wetterwerte-Lückenschluss",
+                    erfolg=True,
+                    details=(
+                        f"{monate} Monat(e), {gefuellt} Feld(er) für "
+                        f"{len(anlagen)} Anlagen"
+                        + (f"; {offen} Monat(e) ohne messende Quelle" if offen else "")
+                    ),
+                    db=db,
+                )
+                logger.info(
+                    "Wetter-Lückenschluss: %d Monate, %d Felder gefüllt", monate, gefuellt
+                )
+    except Exception as e:
+        logger.warning("Wetter-Lückenschluss fehlgeschlagen: %s: %s", type(e).__name__, e)
 
 
 async def kraftstoffpreis_startup_recovery() -> None:

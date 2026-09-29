@@ -145,7 +145,9 @@ from backend.core.field_definitions.karten import (  # noqa: F401 — Re-Export
     kumulative_zaehler_felder_je_typ,
     stand_felder,
     STAND_FELDER,
+    WETTER_FELDER,
     ist_stand_feld,
+    ist_wetter_feld,
 )
 from backend.core.field_definitions.auswahl import (  # noqa: F401 — Re-Export
     get_feld_hinweise,
@@ -278,7 +280,9 @@ __all__ = [
     'kumulative_zaehler_felder_je_typ',
     'stand_felder',
     'STAND_FELDER',
+    'WETTER_FELDER',
     'ist_stand_feld',
+    'ist_wetter_feld',
     'get_feld_hinweise',
     'get_felder_fuer_investition',
     'get_alle_felder_fuer_investition',

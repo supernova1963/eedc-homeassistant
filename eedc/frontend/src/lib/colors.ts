@@ -203,6 +203,15 @@ export const CHART_COLORS = {
   // Wetter / Umgebung
   temperatur: '#6366f1',         // Indigo
   strahlung: '#f59e0b',          // = solar (GHI/GTI)
+  // Sonnenstunden je Monat (#395 Punkt 1, Auswertungen → Prognose-vs-IST).
+  // Eigene Rolle, weil sie NEBEN der Globalstrahlung im selben Chart steht —
+  // zwei Serien in einer Farbe wären dort nicht lesbar. Bewusst warm und in
+  // Sonnen-Nachbarschaft, aber deutlich vom Amber der Strahlung getrennt.
+  // ⚠ Teilt den Hexwert mit `solarNoon` (beide orange-500), und das ist wie bei
+  // `modusKuehlen`/`niederschlag` hingenommen: der Sonnenhöchststand ist ein
+  // Marker im Tagesverlauf, die Sonnenstunden eine Monatsreihe — sie treffen in
+  // keinem Chart aufeinander.
+  sonnenstunden: '#f97316',
   bewoelkung: '#94a3b8',         // slate-400
   niederschlag: '#0ea5e9',       // sky-500
   strompreis: '#a855f7',         // Purple-500

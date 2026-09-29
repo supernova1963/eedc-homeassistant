@@ -183,6 +183,18 @@ Die [Prognose-Auswertung](HANDBUCH_BEDIENUNG.md#43-prognose-genauigkeit-gegen-is
 - **24-Stunden- und 7-Tage-Vergleichstabellen** mit Abweichungs-Badges (siehe unten).
 - **Genauigkeits-Tracking** (siehe [§6](#6-genauigkeits-tracking-mae--bias)).
 - **Korrekturprofil-Heatmap:** Sonnenstand (Azimut × Höhe) × Wetterklasse als Farbkacheln — rein diagnostisch.
+- **Sonnenangebot:** Globalstrahlung (Balken, kWh/m²) und Sonnenstunden (Linie, h) je Monat — siehe unten.
+
+#### „Sonnenangebot" — war mein Jahr schwach, oder meine Anlage?
+
+Der Block steht **neben** der Mehrjahres-Performance, und das ist Absicht: Dort beantwortet die Performance Ratio je String dieselbe Frage — für den, der eine PR lesen kann. Das Sonnenangebot ist die Bezugsgröße daneben, die jeder versteht.
+
+- **Zwei Größen, zwei Achsen.** Die **Globalstrahlung** (links) ist die für PV physikalisch tragende; die **Sonnenstunden** (rechts) sind die anschauliche. Beide gehören dazu: Nur die Stunden zu zeigen hieße, die schwächere Größe allein zu lassen — Wetterdienste sind sich bei ihnen deutlich weniger einig als bei der Strahlung (12–16 % gegen bis zu Faktor 2).
+- **Der Jahr-Filter wirkt**, „Alle Jahre" eingeschlossen — genau dafür ist der Block da.
+- **Eine Lücke bleibt eine Lücke.** Monate ohne Wetterwert werden nicht übersprungen, sondern als Unterbrechung gezeichnet. Ein durchgezogener Verlauf über einen Monat, für den nichts vorliegt, wäre genau die Aussage, die dieser Block widerlegen soll. Welche Monate betroffen sind, sagt der [Daten-Checker](HANDBUCH_DATEN_CHECKER.md#425-wetterwerte-fehlende-monatswerte).
+- Im Fokus-Overlay (⤢) lässt sich zwischen Kurve und **Tabelle** umschalten; die Tabelle exportiert als CSV.
+
+> **Voraussetzung für einen ehrlichen Mehrjahres-Vergleich:** Die Reihe muss durchgehend von **einer** Wetterquelle stammen. Der Daten-Checker meldet es, wenn nicht, und die Reparatur-Werkbank zieht sie nach.
 
 #### „Stundenvergleich heute" — was die Abweichungen sagen
 

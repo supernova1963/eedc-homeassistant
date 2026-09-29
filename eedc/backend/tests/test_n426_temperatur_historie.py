@@ -77,8 +77,25 @@ async def _anlage(
 
 
 async def _befunde(db, anlage_id: int):
+    """Die Zeilen dieser Kategorie, die von der **Ø Temperatur** handeln.
+
+    ⚠ **Warum hier gefiltert wird (29.09.2026, Paket „Die Wetterreihe
+    geradeziehen").** Bis dahin trug `wetterwert_fehlt` genau ein Feld, und
+    „eine Zeile in der Kategorie" hieß dasselbe wie „eine Zeile über die
+    Ø Temperatur". Seit die Kategorie ihre ganze Klasse trägt — Strahlung,
+    Sonnenstunden und die Einheitlichkeit der Quelle — stimmt diese Gleichung
+    nicht mehr. **Die Substanz der Proben darunter ist unverändert:** sie
+    prüfen die Temperatur-Zeile, und genau die kommen sie hier weiter.
+
+    Gefiltert wird über das Feld, von dem die Zeile handelt. Die Proben dieser
+    Datei prüfen ohnehin den vollen Meldungstext — ein Filter über denselben
+    Text fügt keinen neuen Vertrag hinzu.
+    """
     result = await DatenChecker(db).check_anlage(anlage_id)
-    return [e for e in result.ergebnisse if e.kategorie == KAT]
+    return [
+        e for e in result.ergebnisse
+        if e.kategorie == KAT and "Ø Temperatur" in e.meldung
+    ]
 
 
 async def _temperaturen(db, anlage_id: int) -> dict[int, float | None]:

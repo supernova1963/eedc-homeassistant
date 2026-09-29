@@ -126,6 +126,21 @@ SOURCE_LABELS: dict[str, SourcePriority] = {
     "external:tom_ha_sfml":  SourcePriority.EXTERNAL_AUTHORITATIVE,
     "external:solcast":      SourcePriority.EXTERNAL_AUTHORITATIVE,
 
+    # External Authoritative — Bright Sky (DWD) als MONATS-Wetterquelle
+    # (Paket „Die Wetterreihe geradeziehen", #395 Punkt 1).
+    #
+    # ⛔ Warum es das Label braucht, obwohl `external:openmeteo` schon dasteht:
+    # Genau weil beide existieren, ist eine Reihe überhaupt erkennbar gemischt.
+    # Bright Sky und Open-Meteo messen Sonnenstunden nicht gleich — 2025-07
+    # gemessen: 172,3 h gegen 341 h, Faktor 1,98. Ein Wetterwert ohne Anbieter
+    # in der Provenance lässt sich hinterher keiner Quelle mehr zuordnen, und
+    # der Daten-Checker kann eine gemischte Reihe nicht nennen.
+    #
+    # Geschrieben wird immer das Label des **tatsächlich liefernden** Anbieters
+    # (`services/wetter/monatswerte.py::PROVENANCE_LABEL`), nie „auto" — das ist
+    # eine Regel, kein Anbieter, und sie kann morgen anders entscheiden.
+    "external:brightsky":    SourcePriority.EXTERNAL_AUTHORITATIVE,
+
     # External Authoritative — Kraftstoff-Preis-Quellen (P3-Aufräum 2026-05-09).
     # Generisches Label statt provider-spezifisch (Memory-Linie
     # `feedback_pfadabhaengigkeits_reflex.md`): heute liefert nur EU Oil

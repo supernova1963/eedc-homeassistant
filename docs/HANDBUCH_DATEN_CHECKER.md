@@ -903,7 +903,7 @@ Fehlt der Wert für einen Monat, rechnet eedc trotzdem weiter — dann aber mit 
 
 ### 4.25 Wetterwerte – fehlende Monatswerte <a name="425-wetterwerte-fehlende-monatswerte"></a>
 
-**Was wird geprüft:** Trägt jeder erfasste Monat eine **Ø Temperatur**?
+**Was wird geprüft:** Trägt jeder abgeschlossene Monat seine **drei Wetterwerte** — Globalstrahlung, Sonnenstunden und Ø Temperatur —, stammen sie **aus derselben Quelle**, und ist diese Quelle überhaupt **festgehalten**?
 
 **Warum das zählt:** Das Feld *„Ø Temperatur"* im Monatsabschluss wird beim Abschließen automatisch gefüllt — eedc nimmt zuerst **deine eigene Messreihe** (Stundenwerte der Außentemperatur, ersatzweise das Tages-Min/Max) und sonst das Wetter-Archiv. Zwischen dem Oberflächen-Wechsel im **Juli 2026** und der Reparatur im **September 2026** gab es dieses Auto-Fill nicht: Jeder in dieser Zeit abgeschlossene Monat steht ohne Wert da, und der zurückgebaute Auto-Fill wirkt nur nach vorn.
 
@@ -916,12 +916,33 @@ Fehlt der Wert für einen Monat, rechnet eedc trotzdem weiter — dann aber mit 
 | **Ø Temperatur fehlt in N Monat(en), für M davon reicht die Messreihe** | ℹ️ INFO | N Monate ohne Wert; für M davon liegen eigene Temperatur-Messwerte vor. | Knopf **„Temperatur aus Messung übernehmen"** direkt am Befund. Er trägt die M erreichbaren Monate aus deinen eigenen Messwerten nach; **bereits gepflegte Werte bleiben unberührt**, mehrfaches Ausführen ist gefahrlos. Für die übrigen: Monat im Monatsabschluss öffnen und *„Wetterdaten holen"* drücken. |
 | **Ø Temperatur fehlt in N Monat(en)** | ℹ️ INFO | Kein einziger dieser Monate wird von der Messreihe erreicht. | **Kein Knopf** — hier hilft nur der Monatsabschluss: Monat öffnen, *„Wetterdaten holen"*. eedc holt den Wert dann aus dem Wetter-Archiv. |
 | **Alle N erfassten Monate tragen eine Ø Temperatur** | ✅ OK | Nichts zu tun. | — |
+| **Globalstrahlung oder Sonnenstunden fehlen in N Monat(en)** | ℹ️ INFO | Beide Größen sagen, wie viel Sonne ein Monat überhaupt hatte. Ohne sie lässt sich ein schwaches Jahr nicht von einer schwachen Anlage unterscheiden. | **Reparatur-Werkbank → „Wetterreihe nachziehen"** (*Einstellungen → Daten → Energieprofil*). Sie holt alle abgeschlossenen Monate von der an der Anlage gewählten Quelle. |
+| **N Monat(e) stammen aus einer anderen Wetterquelle als die aktuelle Wahl** | ℹ️ INFO | Die Reihe steht auf **zwei Linealen**. Open-Meteo und Bright Sky (DWD) messen Sonnenstunden nicht gleich: für denselben Monat 380 h gegen 232 h. Ein Vergleich über mehrere Jahre sagt dann etwas über die Quelle, nicht über die Sonne. | Dieselbe Aktion: **„Wetterreihe nachziehen"**. Sie ersetzt die abweichenden Monate — die Vorschau nennt vorher die Zahl. |
+| **N abgeschlossene(r) Monat(e) tragen keine festgehaltene Wetterquelle** | ℹ️ INFO | Bei diesen Monaten steht nicht dabei, woher Globalstrahlung und Sonnenstunden stammen. **Der Befund behauptet nicht, dass die Reihe gemischt ist** — er sagt, dass es sich nicht mehr feststellen lässt. Das ist der Normalzustand jeder Anlage, die es schon vor dieser Neuerung gab. | **„Wetterreihe nachziehen"** einmal laufen lassen: danach trägt jeder Monat seine Quelle, und der Hinweis verschwindet von selbst. |
 
 > **Warum es für die übrigen Monate keinen Knopf gibt.** Ein Wert aus dem Wetter-Archiv ist ein **Abruf im Internet, je Monat einer**. Das ist eine Sache, die du auslöst, wenn du den Monat vor dir hast — nicht etwas, das eedc im Hintergrund über 34 Monate laufen lässt. Der Knopf am Befund arbeitet ausschließlich mit Daten, die ohnehin bei dir liegen.
 
+> **Der laufende Monat wird nie bemängelt** — und auch nicht nachgezogen. Die Wetter-Archive liefern einen Monat erst ein paar Tage nach seinem Ende vollständig; ein halber Monat, als ganzer festgeschrieben, wäre eine falsche Zahl, die danach feststeht.
+
+> **Warum die beiden neuen Zeilen keinen Knopf direkt am Befund tragen.** „Wetterreihe nachziehen" **ersetzt** vorhandene Werte — das ist ihr Zweck, denn eine Reihe aus zwei Quellen wird man nicht anders los. Etwas, das ersetzt, bekommt bei eedc **immer erst eine Vorschau**: die Reparatur-Werkbank sagt vorher, wie viele Monate betroffen sind und wie viele davon überschrieben werden. Ein Ein-Klick-Knopf könnte das nicht.
+
+> **Warum die vierte Zeile die wichtigste für Bestandsanlagen ist.** An einer echten Anlage nachgemessen (39 Monate): Globalstrahlung und Sonnenstunden fehlten in **keinem** Monat, und **kein einziger** trug eine festgehaltene Quelle. Die beiden Zeilen davor schweigen in dieser Lage beide — die eine, weil Werte da sind, die andere, weil es nichts zu vergleichen gibt. Ohne die vierte Zeile bliebe eine möglicherweise gemischte Reihe also unbemerkt, während das Werkzeug daneben bereitläge.
+>
+> **Sie geht wieder weg.** Sobald jeder Monat seine Quelle trägt, ist die Menge leer. Es ist ein Übergangsbefund für den Bestand, kein Dauerzustand.
+>
+> **Die Ø Temperatur zählt hier bewusst nicht mit.** Sie hat legitim keinen Wetterdienst als Quelle: Kommt sie aus deiner eigenen Messreihe, ist genau das richtig — und es ändert sich nie. Zählte eedc sie mit, stünde auf jeder gesunden Anlage dauerhaft ein Hinweis, den man durch nichts abstellen kann.
+
+> **Was diese Prüfung nicht sehen kann.** Sie liest die mitgeschriebene **Herkunft** jedes Werts und fragt dafür kein Wetter-Archiv (eine Prüfung ohne Nebenwirkung). Werte, die vor dieser Neuerung geschrieben wurden, tragen diese Herkunft noch nicht — sie gelten als *unbekannt*, nicht als *abweichend*, und werden deshalb **nicht** mitgezählt. Der Bestand heilt beim ersten Nachzug: der schreibt die echte Quelle mit.
+
 #### Wo du den Wert siehst
 
-*Einstellungen → Daten → Monatsdaten* → Monat öffnen → Abschnitt **Wetter** → **„Ø Temperatur"**. Ein von Hand gesetzter Wert wird **nie** überschrieben — weder vom Auto-Fill noch von diesem Knopf.
+*Einstellungen → Daten → Monatsdaten* → Monat öffnen → Abschnitt **Wetter**. Ein von Hand gesetzter Wert wird **nie** überschrieben — weder vom Auto-Fill noch vom Knopf „Temperatur aus Messung übernehmen" noch vom nächtlichen Lückenschluss. Die **einzige** Ausnahme ist „Wetterreihe nachziehen", und die fragst du ausdrücklich an.
+
+Als Kurve stehen Globalstrahlung und Sonnenstunden unter *Auswertungen → Prognose-vs-IST* im Block **„Sonnenangebot"** — neben der Mehrjahres-Performance, wo die Frage „war mein Jahr schwach, oder meine Anlage?" beantwortet wird.
+
+#### Was eedc von allein tut
+
+Einmal täglich sieht eedc nach, ob ein abgeschlossener Monat eines der drei Felder vermissen lässt, und füllt **nur diese Lücken** — mit der an der Anlage gewählten Quelle. Was schon dasteht, bleibt stehen. Liefert kein messendes Archiv (das kommt außerhalb des DWD-Netzes vor), **bleibt die Lücke sichtbar**, statt mit einem langjährigen Mittelwert zugedeckt zu werden: ein Durchschnitt über viele Jahre würde ein schwaches Jahr unsichtbar machen.
 
 ---
 

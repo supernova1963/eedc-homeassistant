@@ -21,7 +21,8 @@
     "mehrjahr",
     "profil",
     "pvgis",
-    "pvstrings"
+    "pvstrings",
+    "sonnenangebot"
   ],
   "src/v4/AuswertungenRoiV4.tsx": [
     "amortisation",

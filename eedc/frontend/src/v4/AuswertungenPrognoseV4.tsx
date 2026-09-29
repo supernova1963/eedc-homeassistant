@@ -25,7 +25,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Target, Sun, TrendingUp, GitCompareArrows, Clock } from 'lucide-react'
-import { Alert, FehlerZustand, KpiStripSkeleton, ChartSkeleton, TabellenSkeleton } from '../components/ui'
+import { Alert, ChartDatenTabelle, FehlerZustand, KpiStripSkeleton, ChartSkeleton, TabellenSkeleton } from '../components/ui'
 import { BlockShell, BlockStackSkeleton, KpiStrip, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import {
@@ -42,6 +42,9 @@ import {
   PvgKpiMatrix, PvgStatusHinweise, PvgLernfaktorO12, PvgStratifizierung, PvgHeatmap,
   PvgStundenprofil, Pvg24hTabelle, Pvg7TageTabelle, PvgGenauigkeitsTracking,
 } from '../components/prognose/PrognoseVergleichTeile'
+import {
+  SonnenangebotChart, SONNENANGEBOT_SPALTEN, baueSonnenangebot, hatSonnenangebot,
+} from '../components/prognose/SonnenangebotTeile'
 import { useSelectedAnlage } from '../hooks'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 import type { AuswertungBasis } from './useAuswertungBasis'
@@ -144,6 +147,33 @@ function BlockMehrjahrInner({ anlageId, jahre, melde }: { anlageId: number; jahr
   return (
     <Parkbar id="chart:mehrjahr" titel="Performance-Entwicklung über Jahre">
       <PvStringMehrjahr data={data} jahresvergleichData={jahresvergleichData} />
+    </Parkbar>
+  )
+}
+
+// ③b Sonnenangebot — Globalstrahlung und Sonnenstunden je Monat (#395 Punkt 1) ─
+//
+// Steht NEBEN der Mehrjahres-Performance, und zwar bewusst: dort wird die Frage
+// „war mein Jahr schwach — oder meine Anlage?" heute für den beantwortet, der
+// eine Performance Ratio lesen kann. Das Sonnenangebot ist die laienlesbare
+// Bezugsgröße daneben. Kein neuer Ladepfad — die Monatszeilen der
+// Auswertungs-Basis tragen beide Größen bereits.
+function BlockSonnenangebot({ zeilen, melde }: { zeilen: AggregierteMonatsdaten[]; melde: MeldeFn }) {
+  const punkte = useMemo(() => baueSonnenangebot(zeilen), [zeilen])
+  const zeigt = hatSonnenangebot(punkte)
+  const ids = useMemo(() => (zeigt ? ['chart:sonnenangebot'] : []), [zeigt])
+  useEffect(() => melde('sonnenangebot', ids), [melde, ids])
+  if (!zeigt) {
+    return (
+      <p className="text-sm text-gray-500 dark:text-gray-400">
+        Für keinen erfassten Monat liegen Globalstrahlung oder Sonnenstunden vor. Der Daten-Checker
+        nennt die betroffenen Monate und den Weg, sie nachzuziehen.
+      </p>
+    )
+  }
+  return (
+    <Parkbar id="chart:sonnenangebot" titel="Sonnenangebot je Monat">
+      <SonnenangebotChart punkte={punkte} />
     </Parkbar>
   )
 }
@@ -290,6 +320,20 @@ function PrognoseInner({ basis }: { basis: AuswertungBasis }) {
       id: 'mehrjahr', title: 'Mehrjahres-Performance', icon: TrendingUp, farbe: 'text-blue-500', defaultOpen: false,
       summary: 'Performance-Ratio pro String über die Jahre (bei „Alle Jahre")',
       render: () => <BlockMehrjahr anlageId={anlageId} jahre={basis.jahre} aktiv={zeigeMehrjahr} melde={melde} />,
+    }] : []),
+    ...(sichtbar('sonnenangebot') ? [{
+      id: 'sonnenangebot', title: 'Sonnenangebot', icon: Sun, farbe: 'text-amber-500', defaultOpen: false,
+      summary: 'Globalstrahlung und Sonnenstunden je Monat — wie viel Sonne gab es überhaupt?',
+      render: () => <BlockSonnenangebot zeilen={basis.gefiltert} melde={melde} />,
+      renderTabelle: () => (
+        <ChartDatenTabelle
+          xLabel="Monat"
+          xKey="monat"
+          spalten={SONNENANGEBOT_SPALTEN}
+          daten={baueSonnenangebot(basis.gefiltert)}
+          csvDateiname={`sonnenangebot_${basis.zeitraumLabel}.csv`}
+        />
+      ),
     }] : []),
     ...(sichtbar('genauigkeit') ? [{
       id: 'genauigkeit', title: 'Quellen-Genauigkeit (OM · eedc · Solcast)', icon: GitCompareArrows, farbe: 'text-orange-500', defaultOpen: false,

@@ -53,6 +53,7 @@ from backend.services.provenance import (
     write_json_subkey_with_provenance,
     write_with_provenance,
 )
+from backend.services.wetter.monatswerte import WETTER_MONATSFELDER
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,7 @@ class RepairOperationType(str, Enum):
     REAGGREGATE_TODAY = "reaggregate_today"
     VOLLBACKFILL = "vollbackfill"
     KRAFTSTOFFPREIS_BACKFILL = "kraftstoffpreis_backfill"
+    WETTER_BACKFILL = "wetter_backfill"
     DELETE_MONATSDATEN = "delete_monatsdaten"
     RESET_CLOUD_IMPORT = "reset_cloud_import"
     SOLCAST_REWRITE = "solcast_rewrite"
@@ -803,6 +805,195 @@ async def _execute_kraftstoffpreis_backfill(
     return summary
 
 
+# ── Operation: WETTER_BACKFILL ──────────────────────────────────────────────
+
+
+def _abgeschlossene_monate(zeilen: list[Monatsdaten]) -> list[Monatsdaten]:
+    """Alle Monatszeilen AUSSER dem laufenden (und allem danach).
+
+    ⛔ **Der laufende Monat bleibt draußen, und zwar messbar begründet:**
+    ``fetch_brightsky_month`` fragt nur bis gestern und setzt ``tage_gesamt``
+    dann auf den *gestrigen* Tag. Die Abdeckung läse sich als ~100 %, obwohl
+    der Monat halb ist — eedc schriebe eine halbe Monatssumme als ganze fest,
+    und weil der Nachzug überschreibt, stünde sie danach fest.
+    """
+    heute = date.today()
+    return [
+        md for md in zeilen
+        if (md.jahr, md.monat) < (heute.year, heute.month)
+    ]
+
+
+async def _wetter_monate(db: AsyncSession, anlage_id: int) -> list[Monatsdaten]:
+    zeilen = (await db.execute(
+        select(Monatsdaten)
+        .where(Monatsdaten.anlage_id == anlage_id)
+        .order_by(Monatsdaten.jahr, Monatsdaten.monat)
+    )).scalars().all()
+    return _abgeschlossene_monate(list(zeilen))
+
+
+def _hat_wetterwert(md: Monatsdaten) -> bool:
+    return any(
+        getattr(md, feld, None) is not None for feld in WETTER_MONATSFELDER
+    )
+
+
+async def _plan_wetter_backfill(
+    req: RepairOperationRequest, db: AsyncSession
+) -> tuple[dict[str, int], list[str], dict[str, Any]]:
+    """Zieht die ganze Wetterreihe einer Anlage auf die gewählte Quelle nach.
+
+    ⚠ **Die Vorschau zählt DIESELBE Menge, die der Lauf schreibt** — die Lehre,
+    die im Kraftstoff-Plan als Kommentar steht. Sie nennt zusätzlich, wie viele
+    Monate **ersetzt** werden: ``write_with_provenance`` verlangt im Docstring
+    ausdrücklich, dass der Aufrufer dem Anwender vorher sagt, was er überschreibt.
+    """
+    anlage = await _load_anlage(db, req.anlage_id)
+    monate = await _wetter_monate(db, req.anlage_id)
+    belegt = [md for md in monate if _hat_wetterwert(md)]
+
+    estimated = {
+        "monate_gesamt": len(monate),
+        "monate_mit_werten": len(belegt),
+        "monate_ohne_werte": len(monate) - len(belegt),
+    }
+
+    warnings: list[str] = []
+    if not anlage.latitude or not anlage.longitude:
+        warnings.append(
+            "Anlage hat keine Geokoordinaten — ohne sie kann kein Wetterdienst "
+            "gefragt werden. Operation ist No-Op."
+        )
+    elif not monate:
+        warnings.append(
+            "Kein abgeschlossener Monat mit Zählerzeile — Operation ist No-Op. "
+            "Der laufende Monat bleibt bewusst draußen (die Archive liefern ihn "
+            "noch nicht vollständig)."
+        )
+    elif belegt:
+        warnings.append(
+            f"{len(belegt)} Monat(e) tragen bereits Wetterwerte und werden "
+            "ERSETZT — auch von Hand eingetragene. Das ist der Zweck: eine "
+            "Reihe aus zwei Anbietern ist nicht vergleichbar."
+        )
+
+    return (
+        estimated,
+        warnings,
+        {
+            "quelle": getattr(anlage, "wetter_provider", None) or "auto",
+            "land": anlage.standort_land or None,
+            "von": f"{monate[0].jahr}-{monate[0].monat:02d}" if monate else None,
+            "bis": f"{monate[-1].jahr}-{monate[-1].monat:02d}" if monate else None,
+        },
+    )
+
+
+async def _execute_wetter_backfill(
+    req: RepairOperationRequest, db: AsyncSession
+) -> dict[str, Any]:
+    """Holt für jeden abgeschlossenen Monat die Werte der gewählten Quelle.
+
+    **Was geschrieben wird und unter welchem Label:**
+
+    * Globalstrahlung und Sonnenstunden unter dem Label des **tatsächlich
+      liefernden** Anbieters (`external:brightsky` / `external:openmeteo`).
+    * Die Ø-Temperatur über dieselbe Kette wie der Formular-Knopf — die eigene
+      **Messreihe zuerst**. Kommt sie von dort, trägt sie ``manual:form``, das
+      Label, das derselbe Wert schon heute über die Aktion „Temperatur aus
+      Messung übernehmen" bekommt (N-426). Zwei Labels für denselben Wert, je
+      nachdem welchen Knopf jemand gedrückt hat, wären die Drift.
+
+    ⛔ **``benutzer_override=True``** — der im Code vorgesehene Weg für einen
+    vom Anwender **angeordneten** Durchbruch, der die echte Quelle behält.
+    Ohne ihn prallte der Nachzug an jedem ``manual:form``-Wert ab, und genau
+    die sind das Problem: die Vormonats-Vorbelegung hat sie gesetzt, ohne dass
+    jemand sie getippt hätte.
+
+    ⛔ **Ein langjähriges Mittel wird NIE geschrieben.** Liefert kein messendes
+    Archiv (PVGIS-TMY oder die statischen Defaults antworten), bleibt der Monat
+    unberührt und wird gezählt — ein Mittel über viele Jahre machte ein
+    schwaches Jahr unsichtbar, also genau den Fehler, gegen den dieser Nachzug
+    gebaut ist.
+
+    ⚠ **Null Sonnenstunden werden nicht festgeschrieben.** Der
+    Abdeckungs-Wächter (#386) zählt Tage mit ``solar``, nicht mit ``sunshine``;
+    eine Station ohne Sonnenschein-Fühler rutschte mit ``0.0 h`` durch. Ein
+    Monat mit Strahlung und ohne eine einzige Sonnenstunde ist keine Messung,
+    sondern eine Lücke — und eine Lücke nennt der Daten-Checker.
+    """
+    from backend.services.wetter.monatswerte import (
+        loese_monats_wetter,
+        provenance_label,
+    )
+
+    anlage = await _load_anlage(db, req.anlage_id)
+    monate = await _wetter_monate(db, req.anlage_id)
+
+    geschrieben = 0
+    monate_geschrieben = 0
+    ohne_messende_quelle: list[str] = []
+    fehler: list[str] = []
+    je_quelle: dict[str, int] = {}
+
+    for md in monate:
+        try:
+            data = await loese_monats_wetter(db, anlage, md.jahr, md.monat)
+        except Exception as e:  # noqa: BLE001 — ein Monat darf den Lauf nicht töten
+            fehler.append(f"{md.jahr}-{md.monat:02d}: {type(e).__name__}: {e}")
+            continue
+
+        label = provenance_label(data.get("datenquelle"))
+        if label is None:
+            ohne_messende_quelle.append(f"{md.jahr}-{md.monat:02d}")
+            continue
+
+        werte: list[tuple[str, float, str]] = []
+        for feld, schluessel in (
+            ("globalstrahlung_kwh_m2", "globalstrahlung_kwh_m2"),
+            ("sonnenstunden", "sonnenstunden"),
+        ):
+            wert = data.get(schluessel)
+            if wert is None:
+                continue
+            if feld == "sonnenstunden" and not wert > 0:
+                continue
+            werte.append((feld, float(wert), label))
+
+        temperatur = data.get("durchschnittstemperatur_c")
+        if temperatur is not None:
+            werte.append((
+                "durchschnittstemperatur",
+                float(temperatur),
+                "manual:form" if data.get("temperatur_herkunft") == "messung" else label,
+            ))
+
+        vorher = geschrieben
+        for feld, wert, quelle in werte:
+            ergebnis = await write_with_provenance(
+                db, md, feld, wert,
+                source=quelle, writer="wetter_backfill",
+                benutzer_override=True,
+            )
+            if ergebnis.applied:
+                geschrieben += 1
+        if geschrieben > vorher:
+            monate_geschrieben += 1
+            je_quelle[label] = je_quelle.get(label, 0) + 1
+
+    await db.commit()
+    return {
+        "monate_gesamt": len(monate),
+        "monate_geschrieben": monate_geschrieben,
+        "felder_geschrieben": geschrieben,
+        "monate_ohne_messende_quelle": len(ohne_messende_quelle),
+        "ohne_messende_quelle": ohne_messende_quelle[:12],
+        "je_quelle": je_quelle,
+        "fehler": fehler[:12],
+    }
+
+
 # ── Operation: DELETE_MONATSDATEN ───────────────────────────────────────────
 
 
@@ -1183,6 +1374,8 @@ async def plan(req: RepairOperationRequest, db: AsyncSession) -> RepairPlan:
         estimated, warnings, op_preview = await _plan_vollbackfill(req, db)
     elif req.operation == RepairOperationType.KRAFTSTOFFPREIS_BACKFILL:
         estimated, warnings, op_preview = await _plan_kraftstoffpreis_backfill(req, db)
+    elif req.operation == RepairOperationType.WETTER_BACKFILL:
+        estimated, warnings, op_preview = await _plan_wetter_backfill(req, db)
     elif req.operation == RepairOperationType.DELETE_MONATSDATEN:
         estimated, warnings, op_preview = await _plan_delete_monatsdaten(req, db)
     elif req.operation == RepairOperationType.RESET_CLOUD_IMPORT:
@@ -1260,6 +1453,8 @@ async def execute(plan_id: UUID, db: AsyncSession) -> RepairResult:
         summary = await _execute_vollbackfill(req, db)
     elif req.operation == RepairOperationType.KRAFTSTOFFPREIS_BACKFILL:
         summary = await _execute_kraftstoffpreis_backfill(req, db)
+    elif req.operation == RepairOperationType.WETTER_BACKFILL:
+        summary = await _execute_wetter_backfill(req, db)
     elif req.operation == RepairOperationType.DELETE_MONATSDATEN:
         summary = await _execute_delete_monatsdaten(req, db)
     elif req.operation == RepairOperationType.RESET_CLOUD_IMPORT:

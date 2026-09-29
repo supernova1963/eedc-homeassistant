@@ -39,6 +39,25 @@ PVGIS_TMY_DEFAULTS = {
 }
 
 
+#: Wie PVGIS die Stunde benennt. **`time(UTC)` ist der heutige Name** (v5_3,
+#: am 29.09.2026 an der Live-API gegengeprüft: 8760 Stunden, Schlüssel
+#: ``['time(UTC)', 'T2m', 'RH', 'G(h)', …]``). ``time`` steht daneben, weil
+#: PVGIS den Namen schon einmal geändert hat — und weil genau diese Annahme
+#: die Funktion von `f6f67b88` (04.04.2026) bis heute stumm auf 0,0 gestellt
+#: hat: der Monatsfilter griff nie, und JEDER Monat an JEDEM Ort kam als
+#: ``{globalstrahlung 0.0, sonnenstunden 0.0}`` zurück.
+_ZEIT_SCHLUESSEL = ("time(UTC)", "time")
+
+
+def _zeitstempel(stunde: dict) -> str:
+    """Der Zeitstempel einer TMY-Stunde, unabhängig von der Schreibweise."""
+    for key in _ZEIT_SCHLUESSEL:
+        wert = stunde.get(key)
+        if wert:
+            return str(wert)
+    return ""
+
+
 async def fetch_pvgis_tmy_monat(
     latitude: float,
     longitude: float,
@@ -60,7 +79,10 @@ async def fetch_pvgis_tmy_monat(
         timeout: Timeout in Sekunden
 
     Returns:
-        dict mit globalstrahlung_kwh_m2 und sonnenstunden oder None bei Fehler
+        dict mit globalstrahlung_kwh_m2 und sonnenstunden — oder ``None`` bei
+        einem Fehler **und** bei einem Monat ohne jede Strahlung. Ein dict mit
+        zwei Nullen wäre truthy und käme beim Anwender als „0,0 kWh/m²" an;
+        derselbe Riegel wie bei Bright Sky (#386, `orchestrator.py`).
     """
     # Cache prüfen (TMY-Daten sind statistisch → 24h TTL)
     cache_key = f"pvgis_tmy:{latitude:.2f}:{longitude:.2f}:{monat}"
@@ -100,7 +122,7 @@ async def fetch_pvgis_tmy_monat(
 
             for hour in hourly_data:
                 # Format: "20050101:0010" (YYYYMMDD:HHMM)
-                time_str = hour.get("time", "")
+                time_str = _zeitstempel(hour)
                 if len(time_str) >= 6:
                     hour_month = int(time_str[4:6])
                     if hour_month == monat:
@@ -123,6 +145,23 @@ async def fetch_pvgis_tmy_monat(
                 f"Globalstrahlung: {globalstrahlung_kwh} kWh/m², "
                 f"Sonnenstunden: {sonnenstunden}h"
             )
+
+            # ⛔ Ein Monat ohne einen einzigen Strahlungswert ist KEIN Ergebnis
+            # — dieselbe Bauform wie der Bright-Sky-Riegel in
+            # `orchestrator.py` (#386). Ein dict mit zwei Nullen ist truthy;
+            # der Aufrufer nahm es an, und die vierte Stufe der Kaskade
+            # (`get_pvgis_tmy_defaults`) war damit toter Code. Sie wird erst
+            # durch dieses `None` überhaupt erreichbar.
+            #
+            # Hier steht bewusst KEIN Cache-Eintrag: eine Nicht-Antwort 24 h
+            # festzuschreiben hieße, einen vorübergehend kaputten Abruf einen
+            # Tag lang zu konservieren.
+            if globalstrahlung_kwh <= 0:
+                logger.warning(
+                    "PVGIS TMY: Monat %s @ (%s, %s) ohne Strahlung — kein Ergebnis",
+                    monat, latitude, longitude,
+                )
+                return None
 
             result = {
                 "globalstrahlung_kwh_m2": globalstrahlung_kwh,
