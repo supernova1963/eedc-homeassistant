@@ -4,7 +4,7 @@
  * ============================================================================
  *
  * Erzeugt die Bilder unter `website/src/assets/screenshots/` neu: je Ansicht
- * ein Paar `<name>.png` (hell) und `<name>-dark.png` (dunkel). Die Namen sind
+ * ein Paar `<name>.webp` (hell) und `<name>-dark.webp` (dunkel). Die Namen sind
  * **Vertrag** — `website/src/content/docs/features.mdx`, `installation.mdx` und
  * `galerie.mdx` importieren sie direkt; ein umbenanntes Bild bricht den
  * Website-Build.
@@ -12,6 +12,14 @@
  * ⭐ Der Wert dieses Skripts ist der WIEDERHOLBARE LAUF, nicht die Bilder von
  * heute. Vor jedem größeren Release einmal fahren, dann zeigt die Galerie den
  * ausgelieferten Stand statt den von vor einem Jahr.
+ *
+ * **Format WebP** (seit 29.09.2026, vorher PNG): derselbe Bildinhalt bei rund
+ * einem Fuenftel der Dateigroesse — der Ordner ist Repo-Gewicht, das bei jedem
+ * Galerie-Lauf neu geschrieben wird. Playwright liefert nur PNG/JPEG, die
+ * Umwandlung macht `sharp` (schon im Baum, s. oben). Die Galerie betrifft
+ * ausschliesslich die Website: kein aktives Dokument unter `docs/` bindet diese
+ * Bilder ein, `release.sh` spiegelt nur `eedc/backend/` und `eedc/frontend/` in
+ * den Standalone, und das Add-on-Image traegt die Website nicht.
  *
  * ---------------------------------------------------------------------------
  * 1. Box aufsetzen (einmal je Lauf)
@@ -108,6 +116,12 @@ const HIER = dirname(fileURLToPath(import.meta.url))
 const REPO = resolve(HIER, '..')
 const require = createRequire(resolve(REPO, 'eedc/frontend/package.json'))
 const { chromium } = require('playwright-core')
+// ⭐ KEINE neue Abhaengigkeit: `sharp` liegt bereits im Baum, weil Astro es fuer
+// die Bildoptimierung der Website nutzt (`website/node_modules/sharp`, 0.34.5).
+// Aufgeloest wird es deshalb ueber die package.json der Website — dasselbe
+// Muster wie `playwright-core` ueber die des Frontends, eine Zeile darueber.
+const requireWeb = createRequire(resolve(REPO, 'website/package.json'))
+const sharp = requireWeb('sharp')
 
 const CHROME = process.env.CHROME || '/home/gernot/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome'
 const BASE = (process.env.EEDC_BASE || 'http://localhost:8201').replace(/\/$/, '')
@@ -121,6 +135,11 @@ const FENSTER = { width: 1400, height: 1000 }
  *  7000 px hohes Bild zu erzeugen, das niemand ansieht (und das die
  *  Dateigroesse der Galerie sprengt). */
 const MAX_HOEHE = 2400
+/** WebP-Qualitaet. 88 ist gemessen der Punkt, an dem die Schrift in den
+ *  Kacheln und die duennen Chart-Linien unverändert lesbar bleiben, der Ordner
+ *  aber auf rund ein Fuenftel faellt (7,22 MB PNG → s. Bericht). Screenshots
+ *  sind Anschauungsbilder, keine Messbilder — verlustbehaftet ist hier richtig. */
+const WEBP_QUALITAET = 88
 
 // ───────────────────────────────────────────────────────────────────────────
 // Die Ansichtsliste — EINE Konstante, hier wird gepflegt.
@@ -517,14 +536,18 @@ async function lauf() {
           fehler.push('KEIN Demo-Modus — Bundle ohne VITE_DEMO_DEFAULT gebaut? Das Bild zeigt nur „0 W".')
         }
 
-        const pfad = `${OUT}/${a.name}${suffix}.png`
+        // Playwright kann nur PNG/JPEG — das Bild kommt deshalb als Puffer
+        // zurueck und geht durch `sharp` nach WebP (§6).
+        const pfad = `${OUT}/${a.name}${suffix}.webp`
+        let roh
         if (a.ziel) {
           const el = await page.$(a.ziel)
-          if (!el) { fehler.push(`Zielelement fehlt: ${a.ziel}`); await page.screenshot({ path: pfad }) }
-          else await el.screenshot({ path: pfad })
+          if (!el) { fehler.push(`Zielelement fehlt: ${a.ziel}`); roh = await page.screenshot() }
+          else roh = await el.screenshot()
         } else {
-          await page.screenshot({ path: pfad })
+          roh = await page.screenshot()
         }
+        await sharp(roh).webp({ quality: WEBP_QUALITAET }).toFile(pfad)
         const kb = Math.round(statSync(pfad).size / 1024)
         const gr = page.viewportSize()
         const ok = fehler.length === 0
