@@ -603,7 +603,7 @@ INVESTITION_FELDER: dict = {
             "feld": "ladung_pv_kwh", "label": "Ladung PV", "einheit": "kWh",
             "placeholder": "z.B. 80",
             "csv_suffix": "Ladung_PV_kWh",
-            "hinweis": "PV-Anteil der Wallbox-Ladung (kWh, kumulativ oder Tagessensor). Optional — manche Wallboxen (z. B. go-e) messen das separat.",
+            "hinweis": "PV-Anteil der Wallbox-Ladung (kWh, kumulativ oder Tagessensor). Optional — nur für Wallboxen, die den PV-Anteil selbst zählen, oder einen eigenen Zähler dafür.",
         },
         {
             "feld": "ladevorgaenge", "label": "Ladevorgänge", "einheit": "",
