@@ -25,6 +25,7 @@
 
 import Card from './Card'
 import FormelTooltip, { SimpleTooltip } from './FormelTooltip'
+import { LEER_TOKEN } from '../../lib/einheiten'
 import { COLOR_CLASSES, type KomponentenColor } from '../../lib/komponentenStyle'
 
 export interface KPICardProps {
@@ -66,6 +67,18 @@ export function KPICard({
 }: KPICardProps) {
   const formattedValue = typeof value === 'number' ? value.toLocaleString('de-DE') : value
 
+  // ⛔ Steht „—" im Feld, steht im Tooltip KEINE gefüllte Rechnung (Entscheid Gernot
+  // 30.09.2026, N-579). Vorher hingen Wert und `berechnung` an verschiedenen
+  // Bedingungen: die Autarkie-Kachel zeigte „—" und darunter „(35 − 1) ÷ 35 kWh"
+  // ohne Ergebnis — der Leser teilt selbst und kommt auf einen Wert, den eedc
+  // bewusst zurückhält, dazu aus einer gekürzten Zahl (verworfener Netzbezug).
+  // Die Regel sitzt HIER und nicht an den ~44 Kachel-Definitionen: dort wäre sie
+  // 44 Bedingungen, die die nächste neue Kachel wieder bricht.
+  // `formel` bleibt — sie nennt die Größe und ergibt keinen Wert.
+  const wertFehlt = String(formattedValue).trim() === LEER_TOKEN
+  const zeigeBerechnung = wertFehlt ? undefined : berechnung
+  const zeigeErgebnis = wertFehlt ? undefined : ergebnis
+
   const trendMark =
     trend === 'up' ? <span className="ml-1 text-green-500">↑</span>
     : trend === 'down' ? <span className="ml-1 text-red-500">↓</span>
@@ -89,7 +102,7 @@ export function KPICard({
         </div>
         <div>
           {formel ? (
-            <FormelTooltip formel={formel} berechnung={berechnung} ergebnis={ergebnis} sicht={sicht}>
+            <FormelTooltip formel={formel} berechnung={zeigeBerechnung} ergebnis={zeigeErgebnis} sicht={sicht}>
               {valueContent}
             </FormelTooltip>
           ) : hinweis ? (
@@ -127,7 +140,7 @@ export function KPICard({
         <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">{title}</p>
         <div className="mt-1">
           {formel ? (
-            <FormelTooltip formel={formel} berechnung={berechnung} ergebnis={ergebnis} sicht={sicht}>
+            <FormelTooltip formel={formel} berechnung={zeigeBerechnung} ergebnis={zeigeErgebnis} sicht={sicht}>
               {valueContent}
             </FormelTooltip>
           ) : hinweis ? (

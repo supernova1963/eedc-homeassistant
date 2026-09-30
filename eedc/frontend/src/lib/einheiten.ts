@@ -15,7 +15,12 @@
  * `text` = „wert einheit" für Tooltips/Tabellen/CSV.
  */
 
-const FALLBACK = '—'
+/** Der Platzhalter für „kein Wert" — EINE Wahrheit für Anzeige und Prüfung.
+ *  Exportiert seit 30.09.2026, weil `KPICard` ihn kennen muss: steht er im Feld,
+ *  darf im Tooltip keine gefüllte Rechnung stehen (Entscheid Gernot 30.09.). */
+export const LEER_TOKEN = '—'
+
+const FALLBACK = LEER_TOKEN
 
 /** de-DE-Zahl mit Tausenderpunkt + fester NK (gleiche Semantik wie `fmtCalc`,
  *  aber layer-sauber in lib). Mengen-SoT — Nicht-Mengen (Jahr/ID) NICHT hierdurch. */
