@@ -362,7 +362,7 @@ Vorzeichenkorrekturen, oder das Zusammenfassen mehrerer Entitäten zu einer.
 | Feld | Label | Einheit | Sensortyp | Beschreibung | Ausgewertet in |
 |------|-------|---------|-----------|-------------|-----------------|
 | `ladung_kwh` | Ladung gesamt | kWh | Kumulativ oder Tagessensor | Gesamte von der Wallbox abgegebene Ladeenergie im Monat. | Komponenten → Wallbox · Cockpit → Monat |
-| `ladung_pv_kwh` | Ladung PV | kWh | Kumulativ oder Tagessensor | Anteil aus PV. Optional — manche Wallboxen (z.B. go-e) messen das separat. | Komponenten → Wallbox · Cockpit → Monat |
+| `ladung_pv_kwh` | Ladung PV | kWh | Kumulativ oder Tagessensor | Anteil aus PV. Optional — manche Wallboxen messen das separat. | Komponenten → Wallbox · Cockpit → Monat |
 | `ladevorgaenge` | Ladevorgänge | Anzahl | Kumulativ oder Tagessensor | Anzahl der Ladevorgänge. Optional. | Komponenten → Wallbox |
 
 ### Live-Dashboard
