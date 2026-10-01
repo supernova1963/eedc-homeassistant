@@ -85,6 +85,16 @@ export function EinbettenKnopf({ fokusId, ansicht, ort = window.location }: {
             Adresse einfügen</strong>. Die Karte zeigt nur diese Anzeige, ohne Zurück; das
             Theme folgt dem Gerät.
           </p>
+          {/* N-589: der echte Auslöser der 401 im Add-on-Betrieb — das Gegenstück
+              zum Standalone-Hinweis darunter, dieselben Klassen. Die Sitzung legt
+              HA nur beim Öffnen des Panels an (Lab 01.10.2026). */}
+          {istIngress(ort) && (
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Hinweis: Nach einem Neustart von Browser oder Home-Assistant-App zeigt die Karte
+              „401: Unauthorized", bis du eedc einmal über die Seitenleiste öffnest — erst dort
+              legt Home Assistant die Verbindung zum Add-on an. Danach das Dashboard neu laden.
+            </p>
+          )}
           {!istIngress(ort) && (
             <p className="text-sm text-gray-500 dark:text-gray-400">
               Hinweis zum Standalone-Betrieb: Läuft eedc über HTTP und Home Assistant über

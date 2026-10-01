@@ -75,6 +75,20 @@ describe('EinbettenKnopf — Dialog', () => {
     expect(screen.getByText(/api\/hassio_ingress\/AbC123/)).toBeInTheDocument()
     expect(screen.queryByText(/Mixed Content/)).not.toBeInTheDocument()
   })
+
+  it('N-589: unter Ingress nennt der Dialog den Auslöser der 401 (Neustart von Browser/App)', () => {
+    render(<EinbettenKnopf fokusId="bilanz" ansicht="chart" ort={INGRESS} />)
+    fireEvent.click(screen.getByRole('button', { name: /Link \/ Einbetten/ }))
+    const hinweis = screen.getByText(/401: Unauthorized/)
+    expect(hinweis).toHaveTextContent(/Neustart von Browser oder Home-Assistant-App/)
+    expect(hinweis).toHaveTextContent(/über die Seitenleiste/)
+  })
+
+  it('N-589: im Standalone-Betrieb steht der 401-Hinweis NICHT da (dort gibt es keinen Ingress)', () => {
+    render(<EinbettenKnopf fokusId="bilanz" ansicht="chart" ort={STANDALONE} />)
+    fireEvent.click(screen.getByRole('button', { name: /Link \/ Einbetten/ }))
+    expect(screen.queryByText(/401: Unauthorized/)).not.toBeInTheDocument()
+  })
 })
 
 describe('EinbettenKnopf im Fokus-Overlay', () => {

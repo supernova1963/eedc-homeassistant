@@ -355,6 +355,12 @@ Wie du die eingerichteten Daten dann **ansiehst und auswertest** (Cockpit, Kompo
 2. Bei vielen fehlenden Tagen nach einem Add-on-Neustart: kurz warten – eedc holt nach dem Start die letzten Stunden je Anlage idempotent nach.
 3. Bei systematisch fehlenden Werten: die Datenquellen-Zuordnung prüfen. Der Daten-Checker zeigt fehlende kWh-Zähler pro Komponente unter „Energieprofil – Zähler-Abdeckung".
 
+### Eingebettete eedc-Karte zeigt 401
+
+**Problem:** Eine eedc-Anzeige als Webseiten-Karte im HA-Dashboard zeigt „401: Unauthorized" — meist nach einem Neustart von Browser oder Home-Assistant-App.
+
+**Lösung:** Siehe [Teil II: Bedienung §1.5](HANDBUCH_BEDIENUNG.md#15-eine-eedc-anzeige-im-home-assistant-dashboard) — einmal **eedc** in der Seitenleiste öffnen, dann das Dashboard neu laden.
+
 ### Backup-/CSV-/PDF-Download zeigt 401 in der HA-Companion-App
 
 **Problem:** Ein Download (Backup, CSV-Export, PDF) liefert in der iOS-HA-Companion-App „401: unauthorized", im Browser funktioniert er.
