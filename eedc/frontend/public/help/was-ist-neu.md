@@ -11,7 +11,7 @@
 
 ## Unreleased
 
-**In dieser Version:** die Verbrauchsprognose gibt es auch für morgen · die Wärmepumpe verschiebt die Verbrauchsprognose nicht mehr in die Nacht · warum eine eingebettete Karte „401" zeigt.
+**In dieser Version:** die Verbrauchsprognose gibt es auch für morgen · die Wärmepumpe verschiebt die Verbrauchsprognose nicht mehr in die Nacht · die Wetter-Monatsreihe steht auf einem Lineal, mit neuem Block „Sonnenangebot" · warum eine eingebettete Karte „401" zeigt · ein „—" in einer Kachel zeigt keine Rechnung mehr.
 
 **Die Verbrauchsprognose für morgen kommt in Home Assistant an**
 
@@ -58,6 +58,33 @@ Kachel **Verbrauchsprognose** in *Cockpit → Live* und an
 
 → *Cockpit → Live*
 
+**Sonnenstunden und Globalstrahlung: eine Quelle für die ganze Reihe**
+
+**Betrifft dich das?** Ja, wenn du Monate per CSV importiert und andere über den
+Wetter-Knopf im Monatsabschluss geholt hast — oder wenn du Jahre miteinander
+vergleichst, um zu sehen, ob ein schwaches Jahr am Wetter lag.
+
+**Was war:** Der CSV-Import holte die Wetterwerte immer von Open-Meteo, der Knopf
+im Monatsabschluss von der Quelle, die an deiner Anlage eingestellt ist. Beide
+liefern plausible Zahlen, messen **Sonnenstunden** aber sehr verschieden — für
+denselben Monat und Ort stehen 380 h gegen 232 h. Eine Reihe aus beiden Wegen
+lag damit auf zwei Linealen, und ein Jahresvergleich daraus sagte mehr über die
+Quelle als über die Sonne.
+
+**Was jetzt:** Jeder Weg folgt der eingestellten Quelle, und jeder Wert trägt
+seine Herkunft. Der **Daten-Checker** meldet Monate mit fehlenden Werten oder
+mit einer anderen Quelle, und die **Reparatur-Werkbank** zieht die Reihe mit
+Vorschau auf eine Quelle nach („Wetterreihe nachziehen"). Fehlt einem
+abgeschlossenen Monat ein Wert, füllt eedc die Lücke nachts selbst — ohne etwas
+zu überschreiben. Im Monatsabschluss steht bei den Wetterfeldern nicht mehr der
+Vormonat als Vorschlag.
+
+Neu dazu in *Auswertungen → Prognose-vs-IST*: der Block **„Sonnenangebot"** mit
+Globalstrahlung und Sonnenstunden je Monat — die Antwort auf „war mein Jahr
+schwach, oder meine Anlage?", ohne Performance Ratio.
+
+→ *[Prognosen](HANDBUCH_PROGNOSEN.md)* · *[Daten-Checker](HANDBUCH_DATEN_CHECKER.md)*
+
 **Eingebettete Karte zeigt „401: Unauthorized"**
 
 **Betrifft dich das?** Nur, wenn du eine eedc-Anzeige als Webseiten-Karte in dein
@@ -71,6 +98,15 @@ auch wenn du dabei angemeldet bleibst.
 bisher: einmal **eedc** in der Seitenleiste öffnen, dann das Dashboard neu laden.
 
 → *[Bedienung §1.5](HANDBUCH_BEDIENUNG.md#15-eine-eedc-anzeige-im-home-assistant-dashboard)*
+
+**Ein „—" in einer Kachel zeigt keine Rechnung mehr**
+
+**Was war:** Stand in einer Kachel „—", weil eedc einen Wert bewusst zurückhält,
+zeigte der Tooltip darunter trotzdem eine Rechnung mit Zahlen — man konnte sich
+den zurückgehaltenen Wert selbst ausrechnen.
+
+**Was jetzt:** Der Tooltip nennt dann nur noch die Formel. Warum ein Wert fehlt,
+sagt der Daten-Checker.
 
 ---
 
