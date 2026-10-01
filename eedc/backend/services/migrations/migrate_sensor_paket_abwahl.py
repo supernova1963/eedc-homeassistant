@@ -163,7 +163,7 @@ async def neue_sensoren_bei_bestand_abwaehlen(db: AsyncSession) -> None:
     )
     logger.info(
         "N-545: %s neue Sensoren starten abgewaehlt (Paket %s — %s); "
-        "Abwahl jetzt %s Schluessel. Anhaken unter Einstellungen → Home-Assistant-Export.",
+        "Abwahl jetzt %s Schluessel. Anhaken unter Einstellungen → Integration → MQTT-Export.",
         len(neue),
         AKTUELLES_SENSOR_PAKET,
         SENSOR_PAKET_LABELS.get(AKTUELLES_SENSOR_PAKET, "ohne Label"),

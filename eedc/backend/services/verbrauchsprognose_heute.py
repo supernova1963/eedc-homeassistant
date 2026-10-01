@@ -18,6 +18,10 @@ gebraucht — zwei Fassungen derselben Wahl sind die Klasse, aus der N-332
 entstand (zwei „Grundlast"-Zahlen unter einem Namen). Deshalb steht die Wahl
 hier **einmal**, und die Route ruft sie.
 
+**Und für morgen** (N-591, #420): ``verbrauchsprognose_morgen`` ruft denselben
+Rechenkern (``_rechne_tagesprognose``) mit der Profilwahl für den Wochentag von
+morgen und den Stundentemperaturen von morgen — kein zweiter Nachbau.
+
 ⛔ **Nur aus einem individuellen Profil, nie aus dem BDEW-Standardprofil.**
 Dieselbe Regel wie beim Grundlast-Sensor (N-332): Ein Modellwert, der als
 Sensor in eine Automation läuft, ist die teuerste Sorte Zahl — er sieht aus
@@ -37,7 +41,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 from zoneinfo import ZoneInfo
 
@@ -61,7 +65,9 @@ class ProfilWahl:
     profil_tage: Optional[int] = None
     profil_slots: Optional[int] = None
     wp_profil: Optional[dict] = None
-    referenz_temp_c: Optional[float] = None
+    #: Heizgradtage der Lernwoche (Mittel der Tages-Heizgradtage, N-593) —
+    #: bis 01.10.2026 ``referenz_temp_c`` (Mittel aller Stundentemperaturen).
+    referenz_hdd_kd: Optional[float] = None
     #: Woher die History stammt, aus der das Profil gelernt wurde („ha", „mqtt").
     #: ⛔ **Nachgetragen am 2026-09-06, und das Fehlen war ein Produktionsfehler.**
     #: Beim Herausziehen dieser Funktion aus ``get_live_wetter`` (#395, `365087e4`,
@@ -115,7 +121,7 @@ async def waehle_verbrauchsprofil(
 
     wp_key = "wp_wochenende" if ist_wochenende else "wp_werktag"
     wahl.wp_profil = ind_profil_data.get(wp_key)
-    wahl.referenz_temp_c = ind_profil_data.get("referenz_temp_c")
+    wahl.referenz_hdd_kd = ind_profil_data.get("referenz_hdd_kd")
     return wahl
 
 
@@ -142,6 +148,10 @@ class VerbrauchsprognoseHeute:
     profil_typ: str
     profil_tage: Optional[int]
     profil_slots: Optional[int]
+    #: Der Kalendertag der Prognose (ISO) — gesetzt für „morgen" (N-591), damit
+    #: eine Automation nach Mitternacht einen stehengebliebenen Wert erkennt
+    #: (Präzedenz N-104); `None` für „heute", dort ist der Tag die Gegenwart.
+    datum: Optional[str] = None
     #: 24 Stunden-kWh (1 h × kW); Index = Stunde in der Prozesszone.
     stunden_kwh: list[float] = field(default_factory=list)
     #: derselbe Zeitraster, nur der WP-Anteil — `None` ohne WP-Profil.
@@ -151,15 +161,19 @@ class VerbrauchsprognoseHeute:
     #: ⭐ **Das Stunden-LABEL je Position** (N-544, 22.09.2026) — die Zahl aus
     #: `profil[i]["zeit"]`, also die Stunde, für die der Forecast den Wert
     #: ausgibt. Bis hierher trug das Ergebnis nur **Positionslisten**, und jeder
-    #: Leser musste „Position i = Stunde i" annehmen. Am Normaltag stimmt das;
-    #: an den beiden DST-Tagen **nicht** — der Tag hat 23 bzw. 25 Einträge
-    #: (`_berechne_verbrauchsprofil` rechnet über `stunden`, nicht über
-    #: `range(24)`), und ab der Umstellungsstunde sind Position und Stunde
-    #: auseinander. Wer eine dieser Reihen auf eine Slot-Achse legt, braucht das
-    #: Label; die Positionsannahme wäre dort eine stille Verschiebung.
-    #: ⚠ Am Ende der Sommerzeit kommt `2` **zweimal** vor — dieselbe Lage wie bei
-    #: der Börse (`strompreis_markt_service`: „die erste gewinnt"). Die Liste gibt
-    #: beide wieder; welche gewinnt, entscheidet der Leser (der Fenster-Kontext
+    #: Leser musste „Position i = Stunde i" annehmen. Wer eine dieser Reihen auf
+    #: eine Slot-Achse legt, braucht das Label; die Positionsannahme macht eine
+    #: Aussage über die Länge des Tages, die das Label nicht macht.
+    #: ⚠ **Hier stand bis 01.10.2026, an den DST-Tagen habe der Tag 23 bzw. 25
+    #: Einträge.** Für OpenMeteo gemessen (historische Forecast-API, 26.10.2025
+    #: und 29.03.2026, Berlin): **24** Einträge mit einer **festen** UTC-
+    #: Verschiebung je Antwort — ab der Umstellung steht die Beschriftung eine
+    #: Stunde neben der Wanduhr, und keine Stunde kommt doppelt. Die Regel „über
+    #: die gelieferte Länge rechnen, nie auf 24 auffüllen" bleibt richtig; nur
+    #: ihre Begründung war eine Annahme (N-591, Vorlage §7 N-a).
+    #: Liefert eine Quelle Wanduhrzeiten (wie die Börse, `strompreis_markt_service`:
+    #: „die erste gewinnt"), kommt `2` am Ende der Sommerzeit zweimal vor. Die
+    #: Liste gibt dann beide wieder; welche gewinnt, entscheidet der Leser (der Fenster-Kontext
     #: nimmt die erste).
     stunden_label: list[int] = field(default_factory=list)
 
@@ -197,7 +211,6 @@ async def verbrauchsprognose_heute(
     # Lokale Importe: die Route importiert diesen Dienst — ein Import auf
     # Modulebene wäre zirkulär. Dieselbe Bauform wie `_helpers._get_wetter_ist`.
     from backend.api.routes.live_wetter import (
-        _berechne_verbrauchsprofil,
         _get_pv_orientierungsgruppen,
         _lade_forecast_gecached,
         live_wetter_cache_key,
@@ -236,38 +249,69 @@ async def verbrauchsprognose_heute(
         {"zeit": f"{int(t[11:13]):02d}:00", "temperatur_c": temps[i] if i < len(temps) else None}
         for i, t in enumerate(times)
     ]
+    return _rechne_tagesprognose(wahl, stunden, kwp)
+
+
+def _rechne_tagesprognose(
+    wahl: ProfilWahl,
+    stunden: list[dict],
+    kwp: float,
+    datum: Optional[str] = None,
+) -> Optional[VerbrauchsprognoseHeute]:
+    """Der Rechenkern von heute UND morgen (N-591): Profil, WP-Reihe, Summe.
+
+    Herausgezogen aus ``verbrauchsprognose_heute``, damit „morgen" nicht eine
+    zweite Fassung derselben Rechnung wird — beide Tage unterscheiden sich nur
+    in der Profilwahl (Wochentag) und in den Stundentemperaturen, die sie
+    hereinreichen. ``stunden`` sind die Stunden **eines** Tages
+    (``[{"zeit": "HH:00", "temperatur_c": …}]``); GTI/GHI bleiben leer, der
+    PV-Anteil dieser Rechnung ist hier nicht die Frage.
+    """
+    # Lokaler Import: die Route importiert diesen Dienst (zirkulär).
+    from backend.api.routes.live_wetter import _berechne_verbrauchsprofil
+
     profil, _pv, _grundlast, _ist_ind = _berechne_verbrauchsprofil(
         stunden, kwp, individuelles_profil=wahl.ind_stunden_profil,
-        wp_profil=wahl.wp_profil, referenz_temp_c=wahl.referenz_temp_c,
+        wp_profil=wahl.wp_profil, referenz_hdd_kd=wahl.referenz_hdd_kd,
     )
     if not profil:
         return None
 
     # ── Die Reihen, aus denen die Summe entsteht (S3/P1) ────────────────────
     #
-    # ⚠ **Die Länge ist die des Forecasts, nicht 24.** Am Ende der Sommerzeit
-    # hat ein Tag 23 oder 25 Stunden (F-6); wer hier auf 24 auffüllt, erfindet
-    # eine Stunde oder verliert eine. Die Aufrufer rechnen über die Länge.
+    # ⚠ **Die Länge ist die des Forecasts, nicht 24.** Wer hier auf 24
+    # auffüllt oder kürzt, erfindet eine Stunde oder verliert eine; die
+    # Aufrufer rechnen über die Länge. ⚠ Die frühere Begründung („am Ende der
+    # Sommerzeit hat ein Tag 23 oder 25 Stunden") ist am 01.10.2026 gemessen
+    # widerlegt (Vorlage N-591 §2/§7 N-a): Open-Meteo liefert mit
+    # `timezone=Europe/Berlin` auch an beiden Umstellungstagen **24** Werte mit
+    # einem für die ganze Antwort festen `utc_offset_seconds` — ab der
+    # Umstellung steht jede Beschriftung eine Stunde neben der Wanduhr. Die
+    # Regel bleibt trotzdem richtig: eedc nimmt, was geliefert wird.
     temperaturen = [s.get("temperatur_c") for s in stunden]
     wp_reihe: Optional[list[float]] = None
-    if wahl.wp_profil and wahl.referenz_temp_c is not None:
+    if wahl.wp_profil and wahl.referenz_hdd_kd is not None:
         # ⛔ **Dieselbe Skalierung wie in `_berechne_verbrauchsprofil`, und
-        # zwar aus demselben Layer-Helfer** (`wp_temperatur_faktor`, seit
-        # 21.09.2026). Ein eigener Faktor hier hiesse: die Kachel in Cockpit →
-        # Live und das Heizfenster-Attribut daneben nennen verschiedene
-        # Heizstrom-Mengen für dieselbe Stunde.
-        from backend.core.berechnungen.heizgradtage import wp_temperatur_faktor
+        # zwar aus demselben Layer-Helfer** (`wp_tagesfaktor`, N-593: EIN
+        # Faktor je Tag aus dem Tagesmittel, gleich für alle Stunden). Ein
+        # eigener Faktor hier hiesse: die Kachel in Cockpit → Live und das
+        # Heizfenster-Attribut daneben nennen verschiedene Heizstrom-Mengen
+        # für dieselbe Stunde. Eine Stunde ohne Temperatur bleibt unkorrigiert
+        # — dieselbe Regel wie dort.
+        from backend.core.berechnungen.heizgradtage import wp_tagesfaktor
 
+        faktor = wp_tagesfaktor(wahl.referenz_hdd_kd, temperaturen)
         wp_reihe = []
         for i, eintrag in enumerate(profil):
             h = int(eintrag["zeit"].split(":")[0])
             roh = wahl.wp_profil.get(h, wahl.wp_profil.get(str(h), 0.0)) or 0.0
             temp = temperaturen[i] if i < len(temperaturen) else None
             wp_reihe.append(round(
-                float(roh) * wp_temperatur_faktor(wahl.referenz_temp_c, temp), 2
+                float(roh) * (faktor if temp is not None else 1.0), 2
             ))
 
     return VerbrauchsprognoseHeute(
+        datum=datum,
         summe_kwh=summe_verbrauchsprofil_kwh(profil),
         profil_typ=wahl.profil_typ,
         profil_tage=wahl.profil_tage,
@@ -282,3 +326,74 @@ async def verbrauchsprognose_heute(
         # den Dienst sonst nicht.
         stunden_label=[int(p["zeit"].split(":")[0]) for p in profil],
     )
+
+
+async def verbrauchsprognose_morgen(
+    anlage: Anlage,
+    db: AsyncSession,
+    now: Optional[datetime] = None,
+    skip_jitter: bool = False,
+) -> Optional[VerbrauchsprognoseHeute]:
+    """Die Verbrauchsprognose für **morgen** — dieselbe Rechnung wie „heute" (N-591).
+
+    *„Wer die Batterie zur günstigsten Stunde so laden will, dass sie über die
+    Nacht reicht, kennt nur den Verbrauch bis Mitternacht"* (#420, OB73-gif).
+    Modell (a), Entscheid Gernot 01.10.2026: das individuelle Profil der
+    Anlage, der Wärmepumpen-Anteil mit der Temperaturvorhersage von morgen.
+
+    * **Profilwahl:** der Wochentag von **morgen** entscheidet (Freitag ⇒
+      Wochenend-Profil für Samstag). Gelernt bleibt das Profil der letzten
+      7 Tage — dasselbe wie für heute.
+    * **Temperaturen:** aus dem Abruf, den der Prognose-Kanon ohnehin macht
+      (``solar_forecast_service.stunden_temperatur_tag`` mit Neigung/
+      Ausrichtung der stärksten Kanon-Orientierungsgruppe ⇒ Cache-Treffer).
+      ⛔ Nicht über ``_lade_forecast_gecached``: der Live-Abruf holt mit
+      ``forecast_days: 1`` nur heute, und ihn zu verlängern änderte Route,
+      Multi-String-Abruf und Cache-Inhalt mit.
+    * **Länge:** so viele Stunden, wie der Forecast für morgen hat — nie
+      aufgefüllt, nie gekürzt.
+
+    ``None`` (kein Sensor) ohne Standort, ohne individuelles Profil für den
+    Tagestyp von morgen (N-332 — nie BDEW), ohne erreichbaren Forecast oder
+    ohne einen einzigen Eintrag für morgen (ADR-002/P4).
+    """
+    if not anlage.latitude or not anlage.longitude:
+        return None
+
+    now = now or datetime.now(ZoneInfo("Europe/Berlin"))
+    morgen = now + timedelta(days=1)
+    wahl = await waehle_verbrauchsprofil(anlage, db, morgen)
+    if not wahl.ist_individuell:
+        return None
+
+    from backend.services import solar_forecast_service as sfs
+    from backend.services.prognose_kanon import KANON_MIN_DAYS, pv_invs_im_horizont
+    from backend.services.pv_orientation import orientierungs_gruppen
+
+    # Die Gruppen so, wie der Kanon sie für seinen Fan-out bildet
+    # (`kanon_tagesprognose`: Horizont heute … heute + days − 1, days = 4 im
+    # Export) — die stärkste zuerst. Ohne Gruppe 35°/Süd wie der Kanon.
+    heute = now.date()
+    invs = await pv_invs_im_horizont(
+        db, anlage, heute, heute + timedelta(days=KANON_MIN_DAYS - 1)
+    )
+    gruppen = orientierungs_gruppen(invs)
+    neigung, ausrichtung = (
+        (gruppen[0].neigung, gruppen[0].ausrichtung) if gruppen else (35, 0)
+    )
+    kwp = sum(g.kwp for g in gruppen) if gruppen else (anlage.leistung_kwp or 10.0)
+    wetter_modell = getattr(anlage, "wetter_modell", None) or "auto"
+
+    tag = morgen.date().isoformat()
+    try:
+        stunden = await sfs.stunden_temperatur_tag(
+            anlage.latitude, anlage.longitude, neigung, ausrichtung, tag,
+            wetter_modell=wetter_modell, skip_jitter=skip_jitter,
+        )
+    except Exception as e:  # noqa: BLE001 — der Export darf am Wetter nicht sterben
+        logger.debug("Verbrauchsprognose morgen: Forecast nicht verfügbar (%s)", e)
+        return None
+    if not stunden:
+        return None
+
+    return _rechne_tagesprognose(wahl, stunden, kwp, datum=tag)

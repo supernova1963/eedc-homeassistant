@@ -200,7 +200,8 @@ from backend.core.berechnungen.heizgradtage import (
     heizgradtage_je_monat,
     heizgradtage_tag,
     normiert,
-    wp_temperatur_faktor,
+    referenz_heizgradtage,
+    wp_tagesfaktor,
 )
 from backend.core.berechnungen.invarianten import (
     aggregiere_tep_komponenten,
@@ -499,7 +500,8 @@ __all__ = [
     "ueberschuss_bloecke",
     "verteile_auf_guenstigste",
     "heizgradtage_tag",
-    "wp_temperatur_faktor",
+    "referenz_heizgradtage",
+    "wp_tagesfaktor",
     "normiert",
     "soll_final_einfrieren",
     "abgetretene_bkw_ids",

@@ -12,8 +12,9 @@ Wetter herausrechnen: Nicht „kWh", sondern „kWh je Heizgradtag".
 ``HEIZGRENZE_C`` ist die **Heizgrenze** nach Gradtag-Konvention, **nicht** eine
 Innenraum-Solltemperatur: Unterhalb 15 °C Außentemperatur wird geheizt, darüber
 tragen die inneren Gewinne das Haus. Dieselbe Konstante trägt die
-Temperaturkorrektur der Verbrauchsprognose (``api/routes/live_wetter.py``) —
-dass es bei **einer** Definition bleibt, hält
+Temperaturkorrektur der Verbrauchsprognose (``wp_tagesfaktor``, seit N-593 aus
+Tagesmitteln wie jede andere Gradtag-Rechnung) — dass es bei **einer**
+Definition bleibt, hält
 ``test_berechnungs_layer_konformitaet.py::test_heizgrenze_nur_im_layer`` fest.
 
 ⛔ **Der Eingang sind TAGESmittel, nie ein Monatsmittel** (K-2, gemessen).
@@ -38,7 +39,7 @@ from __future__ import annotations
 import calendar
 from dataclasses import dataclass
 from datetime import date
-from typing import Final, Mapping, Optional
+from typing import Final, Mapping, Optional, Sequence
 
 #: Heizgrenze in °C — die EINE Definitionsstelle (G-G, 12.09.2026).
 #: Unterhalb dieser Außentemperatur wird geheizt (Gradtag-Konvention, DACH).
@@ -54,48 +55,100 @@ def heizgradtage_tag(tagesmittel_c: float) -> float:
     return max(0.0, HEIZGRENZE_C - float(tagesmittel_c))
 
 
-def wp_temperatur_faktor(
-    referenz_temp_c: Optional[float], forecast_temp_c: Optional[float]
-) -> float:
-    """Skalierungsfaktor für den **Wärmepumpen-Anteil** eines Stundenprofils.
+def referenz_heizgradtage(
+    temperaturen_je_tag: Mapping[object, Sequence[float]],
+) -> Optional[float]:
+    """Die Heizgradtage der Referenzperiode: **Mittel der Tages-Heizgradtage** (K-2).
 
-    Das gelernte WP-Profil stammt aus einer Referenzperiode mit einer
-    mittleren Außentemperatur; heute ist es kälter oder wärmer. Der Faktor ist
-    das Verhältnis der Heizgradtage — bei Referenz-Ø 5 °C und Vorhersage 0 °C
-    also ``15 / 10 = 1,5``.
+    Die Referenzperiode ist die Lernwoche des Verbrauchsprofils (7 volle
+    Tage). Je Tag wird das Tagesmittel aus seinen Stundentemperaturen gebildet,
+    daraus die Heizgradtage dieses Tages, und über die Tage gemittelt.
 
-    ⚠ **Zwei Fälle, und der zweite ist der, an dem eine reine Division
-    scheitert.** War die Referenzperiode **mild** (Ø ≥ 14 °C, die Wärmepumpe
-    lief praktisch nur für Warmwasser), ist ``hdd_ref`` nahe 0 — ein Verhältnis
-    liefe gegen unendlich und hochskalieren ergäbe keinen Sinn, weil im
-    Referenzprofil gar kein Heizanteil steckt, den man strecken könnte. Für
-    diesen Fall ein sanfter Zuschlag von 15 % je Heizgrad. Beides gekappt auf
-    ``0,1…3,0``, damit keine Ausreißertemperatur das Tagesprofil kippt.
+    ⛔ **Nicht** die Heizgradtage des Wochenmittels — ``max(0; 15 − T)`` ist
+    konvex (Modul-Docstring, K-2): eine Woche mit Tagen beidseits der
+    Heizgrenze hat mehr Heizbedarf, als ihr Mittelwert verrät. Derselbe Grund,
+    aus dem ein Monatsmittel keine Heizgradtag-Quelle ist.
 
-    ⭐ **Warum das seit dem 21.09.2026 hier steht und nicht mehr nur in
-    ``api/routes/live_wetter.py::_berechne_verbrauchsprofil``:** Mit den
-    Plan-Sensoren (P1/P7) braucht die **erwartete WP-Stundenreihe** einen
-    zweiten Leser. Ein zweiter Nachbau derselben Skalierung hieße: die Kachel
-    in Cockpit → Live und der HA-Sensor daneben rechnen denselben Heizstrom
-    mit verschiedenen Faktoren. Die Heizgrenze liegt aus genau diesem Grund
-    schon hier (G-G, 12.09.2026); der Faktor gehört dazu.
+    Bewusst **ungerundet** — sonst ergäbe ein Prognosetag mit genau dem Wetter
+    der Referenzwoche einen Faktor knapp neben 1,0 (Invarianz, N-593).
 
     Args:
-        referenz_temp_c: mittlere Außentemperatur der Referenzperiode.
-        forecast_temp_c: vorhergesagte Außentemperatur dieser Stunde.
+        temperaturen_je_tag: ``{tag: [Stundentemperaturen °C]}``. Ein Tag ohne
+            einen einzigen Wert zählt nicht mit.
 
     Returns:
-        ``1.0``, wenn eine der beiden Temperaturen fehlt — dann gibt es nichts
-        zu skalieren, und ein erfundener Faktor wäre schlechter als keiner.
+        Kd je Tag im Mittel, oder ``None``, wenn kein Tag eine Temperatur trägt.
     """
-    if referenz_temp_c is None or forecast_temp_c is None:
+    tages_hdd = [
+        heizgradtage_tag(sum(werte) / len(werte))
+        for werte in temperaturen_je_tag.values()
+        if werte
+    ]
+    if not tages_hdd:
+        return None
+    return sum(tages_hdd) / len(tages_hdd)
+
+
+def wp_tagesfaktor(
+    referenz_hdd_kd: Optional[float],
+    stunden_temperaturen_c: Sequence[Optional[float]],
+) -> float:
+    """Skalierungsfaktor für den **Wärmepumpen-Anteil** eines Tagesprofils (N-593).
+
+    **Ein Faktor je Tag, für alle Stunden gleich:** das Verhältnis der
+    Heizgradtage des Prognosetags (aus dem **Tagesmittel** seiner
+    Stundentemperaturen) zu den Heizgradtagen der Referenzperiode
+    (``referenz_heizgradtage``: Mittel der Tages-Heizgradtage). Bei
+    Referenz 10 Kd und einem Tag mit Ø 0 °C also ``15 / 10 = 1,5`` — für jede
+    Stunde dieses Tages.
+
+    ⛔ **Was hier bis zum 01.10.2026 stand** (``wp_temperatur_faktor``): die
+    Heizgradtage **jeder Stunde** gegen die Heizgradtage des **Mittels aller
+    Stunden** der Referenzwoche. Das verletzte zweierlei. (1) K-2 — der
+    Eingang einer Gradtag-Rechnung sind Tagesmittel, nie Stundenwerte.
+    (2) **Invarianz** — bei genau dem Wetter der Referenzwoche muss das
+    gelernte Profil unverändert bleiben; die Stundenformel gab bei einem
+    Tagesgang 7–17 °C (Ø 12 °C) der 7-°C-Stunde ×2,67 und der 17-°C-Stunde
+    ×0,1, verteilte also den Wärmepumpen-Strom bei *unverändertem* Wetter
+    in die Nacht um. Der Tagesgang steckt aber schon im gelernten Profil;
+    die Korrektur hat nur die Frage „ist dieser Tag kälter als die
+    Referenzwoche?" zu beantworten — und die hat je Tag genau eine Antwort.
+
+    ⚠ **Zwei Fälle, und der zweite ist der, an dem eine reine Division
+    scheitert.** War die Referenzperiode **mild** (``referenz_hdd_kd < 1``, die
+    Wärmepumpe lief praktisch nur für Warmwasser), liefe ein Verhältnis gegen
+    unendlich — und hochskalieren ergäbe keinen Sinn, weil im Referenzprofil
+    gar kein Heizanteil steckt, den man strecken könnte. Für diesen Fall ein
+    sanfter Zuschlag von 15 % je Heizgradtag des Prognosetags. Beides gekappt
+    auf ``0,1…3,0``, damit kein Ausreißertag das Profil kippt.
+
+    ⭐ **Warum das hier steht und nicht in einem Leser:** Kachel und Live-Kurve
+    (``api/routes/live_wetter.py::_berechne_verbrauchsprofil``), die
+    WP-Stundenreihe des HA-Exports (``services/verbrauchsprognose_heute.py``,
+    gelesen vom P7-Heizfenster) und die Verbrauchsprognose für morgen rechnen
+    denselben Heizstrom — zwei Nachbauten hießen zwei Heizstrom-Zahlen unter
+    einem Namen (Wächter ``test_heizgrenze_nur_im_layer``).
+
+    Args:
+        referenz_hdd_kd: Heizgradtage der Referenzperiode
+            (``referenz_heizgradtage``).
+        stunden_temperaturen_c: die vorhergesagten Stundentemperaturen **eines**
+            Tages; fehlende Werte (``None``) zählen nicht ins Tagesmittel.
+
+    Returns:
+        ``1.0``, wenn die Referenz fehlt oder der Tag keine einzige Temperatur
+        trägt — dann gibt es nichts zu skalieren, und ein erfundener Faktor
+        wäre schlechter als keiner.
+    """
+    werte = [float(t) for t in stunden_temperaturen_c if t is not None]
+    if referenz_hdd_kd is None or not werte:
         return 1.0
-    hdd_ref = heizgradtage_tag(referenz_temp_c)
-    hdd_fc = heizgradtage_tag(forecast_temp_c)
+    hdd_ref = float(referenz_hdd_kd)
+    hdd_tag = heizgradtage_tag(sum(werte) / len(werte))
     if hdd_ref >= 1.0:
-        faktor = hdd_fc / hdd_ref
-    elif hdd_fc > 0:
-        faktor = 1.0 + hdd_fc * 0.15
+        faktor = hdd_tag / hdd_ref
+    elif hdd_tag > 0:
+        faktor = 1.0 + hdd_tag * 0.15
     else:
         faktor = 1.0
     return max(0.1, min(3.0, faktor))

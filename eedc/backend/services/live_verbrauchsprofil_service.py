@@ -44,6 +44,7 @@ from typing import Iterator, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.berechnungen.heizgradtage import referenz_heizgradtage
 from backend.core.berechnungen.slot_konvention import backward_slot_aus_period_start
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
@@ -238,7 +239,9 @@ async def _profil_from_db(
     wp_wochenende_sums: dict[int, list[float]] = {h: [] for h in range(24)}
     werktage_set: set[str] = set()
     wochenende_set: set[str] = set()
-    temp_werte: list[float] = []
+    # N-593: Temperaturen JE TAG — die Referenz ist das Mittel der Tages-
+    # Heizgradtage (K-2), nicht das Mittel aller Stunden.
+    temp_je_tag: dict[date, list[float]] = {}
     hat_wp = False
 
     from backend.core.berechnungen.spannen import verbrauch_gebuendelt
@@ -269,15 +272,13 @@ async def _profil_from_db(
                 hat_wp = True
 
         if temperatur_c is not None:
-            temp_werte.append(temperatur_c)
-
-    referenz_temp_c = round(sum(temp_werte) / len(temp_werte), 1) if temp_werte else None
+            temp_je_tag.setdefault(datum, []).append(temperatur_c)
 
     return _build_profil_result(
         werktag_sums, wochenende_sums, werktage_set, wochenende_set, "db",
         wp_werktag_sums=wp_werktag_sums if hat_wp else None,
         wp_wochenende_sums=wp_wochenende_sums if hat_wp else None,
-        referenz_temp_c=referenz_temp_c,
+        referenz_hdd_kd=referenz_heizgradtage(temp_je_tag),
     )
 
 
@@ -397,7 +398,7 @@ async def _profil_from_ha(
     wp_wochenende_sums: dict[int, list[float]] = {h: [] for h in range(24)}
     werktage_set: set[str] = set()
     wochenende_set: set[str] = set()
-    temp_werte: list[float] = []
+    temp_je_tag: dict[date, list[float]] = {}  # N-593, wie im DB-Pfad
     unbeobachtet = 0
 
     for h_start, h_end, slot_datum, h in _slot_fenster(start_tag):
@@ -458,7 +459,7 @@ async def _profil_from_ha(
             pts = history.get(temp_eid, [])
             h_pts = [p[1] for p in pts if h_start <= p[0] < h_end]
             if h_pts:
-                temp_werte.append(sum(h_pts) / len(h_pts))
+                temp_je_tag.setdefault(slot_datum, []).append(sum(h_pts) / len(h_pts))
 
         if ist_wochenende:
             wochenende_sums[h].append(verbrauch_kw)
@@ -476,13 +477,11 @@ async def _profil_from_ha(
             anlage.id, unbeobachtet, TAGE_FENSTER * 24,
         )
 
-    referenz_temp_c = round(sum(temp_werte) / len(temp_werte), 1) if temp_werte else None
-
     return _build_profil_result(
         werktag_sums, wochenende_sums, werktage_set, wochenende_set, "ha",
         wp_werktag_sums=wp_werktag_sums if wp_eids else None,
         wp_wochenende_sums=wp_wochenende_sums if wp_eids else None,
-        referenz_temp_c=referenz_temp_c,
+        referenz_hdd_kd=referenz_heizgradtage(temp_je_tag),
     )
 
 
@@ -681,9 +680,16 @@ def _build_profil_result(
     quelle: str,
     wp_werktag_sums: Optional[dict[int, list[float]]] = None,
     wp_wochenende_sums: Optional[dict[int, list[float]]] = None,
-    referenz_temp_c: Optional[float] = None,
+    referenz_hdd_kd: Optional[float] = None,
 ) -> Optional[dict]:
-    """Baut das Profil-Ergebnis aus den gesammelten Stundenwerten."""
+    """Baut das Profil-Ergebnis aus den gesammelten Stundenwerten.
+
+    ``referenz_hdd_kd`` (N-593, 01.10.2026): die Heizgradtage der Lernwoche als
+    Mittel der Tages-Heizgradtage (``core.berechnungen.heizgradtage.
+    referenz_heizgradtage``). Bis dahin stand hier ``referenz_temp_c``, das
+    Mittel aller Stundentemperaturen — der Nenner der Stundenformel, die N-593
+    ersetzt hat.
+    """
     tage_wt = len(werktage_set)
     tage_we = len(wochenende_set)
 
@@ -724,7 +730,7 @@ def _build_profil_result(
         result["wp_werktag"] = build_profil(wp_werktag_sums) if tage_wt >= 2 else None
         result["wp_wochenende"] = build_profil(wp_wochenende_sums) if tage_we >= 2 else None
 
-    if referenz_temp_c is not None:
-        result["referenz_temp_c"] = referenz_temp_c
+    if referenz_hdd_kd is not None:
+        result["referenz_hdd_kd"] = referenz_hdd_kd
 
     return result

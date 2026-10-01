@@ -388,6 +388,23 @@ async def prognose_und_preis_sensoren(*, anlage, db, sensor_values, skip_jitter)
                         zusatz["stundenprofil_kwh"] = prognose["verbrauch_stundenprofil_kwh"]
                     if prognose.get("verbrauch_wp_stundenprofil_kwh"):
                         zusatz["wp_stundenprofil_kwh"] = prognose["verbrauch_wp_stundenprofil_kwh"]
+            elif sensor.key == "eedc_verbrauchsprognose_morgen_kwh":
+                # N-591: derselbe Aufbau wie `…_heute` darüber, dazu das Datum —
+                # nach Mitternacht muss eine Automation ein stehengebliebenes
+                # „morgen" erkennen können (Präzedenz N-104, `eedc_preis_rang`).
+                value = prognose.get("verbrauch_morgen_kwh")
+                if value is not None:
+                    zusatz = {
+                        "profil_typ": prognose.get("verbrauch_morgen_profil_typ"),
+                        "profil_tage": prognose.get("verbrauch_morgen_profil_tage"),
+                        "profil_slots": prognose.get("verbrauch_morgen_profil_slots"),
+                        "datum": prognose.get("verbrauch_morgen_datum"),
+                    }
+                    if prognose.get("verbrauch_morgen_stundenprofil_kwh"):
+                        zusatz["stundenprofil_kwh"] = prognose["verbrauch_morgen_stundenprofil_kwh"]
+                    # Teilmenge von `stundenprofil_kwh`, kein Summand (wie heute).
+                    if prognose.get("verbrauch_morgen_wp_stundenprofil_kwh"):
+                        zusatz["wp_stundenprofil_kwh"] = prognose["verbrauch_morgen_wp_stundenprofil_kwh"]
 
             if value is not None:
                 sensor_values.append(SensorValue(

@@ -110,21 +110,24 @@ def test_individuelles_profil_int_und_fehlende_stunde():
 # ---------------------------------------------------------------------------
 
 def test_wp_hdd_proportional():
-    """Referenz 5 °C, Forecast 0 °C: hdd_ref=10, hdd_fc=15 → Faktor 1,5.
-    Haus 0,6 + WP 0,4×1,5 = 1,2."""
+    """Referenz 10 Kd (Lernwoche mit Tagesmittel 5 °C), Tag Ø 0 °C: hdd_tag=15
+    → Faktor 1,5. Haus 0,6 + WP 0,4×1,5 = 1,2.
+
+    N-593: der Eingang ist seit 01.10.2026 die Referenz in **Kd** statt einer
+    Referenztemperatur; die Aussage (Verhältnis der Heizgradtage) ist dieselbe."""
     profil, _, _, _ = _berechne_verbrauchsprofil(
         [_stunde("12:00", gti=0, temp=0)], kwp=10.0,
-        individuelles_profil={12: 1.0}, wp_profil={12: 0.4}, referenz_temp_c=5.0,
+        individuelles_profil={12: 1.0}, wp_profil={12: 0.4}, referenz_hdd_kd=10.0,
     )
     assert _verbrauch_at(profil, "12:00") == 1.2
 
 
 def test_wp_milde_referenz_zuschlag_geclamped():
-    """Milde Referenz (14,5 °C → hdd_ref=0,5 < 1): Zuschlag 1 + 15×0,15 = 3,25,
-    geclamped auf 3,0. Haus 0,6 + WP 0,4×3,0 = 1,8."""
+    """Milde Referenz (hdd_ref=0,5 Kd < 1, etwa Tagesmittel 14,5 °C): Zuschlag
+    1 + 15×0,15 = 3,25, geclamped auf 3,0. Haus 0,6 + WP 0,4×3,0 = 1,8."""
     profil, _, _, _ = _berechne_verbrauchsprofil(
         [_stunde("12:00", gti=0, temp=0)], kwp=10.0,
-        individuelles_profil={12: 1.0}, wp_profil={12: 0.4}, referenz_temp_c=14.5,
+        individuelles_profil={12: 1.0}, wp_profil={12: 0.4}, referenz_hdd_kd=0.5,
     )
     assert _verbrauch_at(profil, "12:00") == 1.8
 

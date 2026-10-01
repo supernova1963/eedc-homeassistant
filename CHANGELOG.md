@@ -7,6 +7,25 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Verbrauchsprognose für morgen als HA-/MQTT-Sensor.** Neben der Verbrauchsprognose für heute gibt eedc jetzt auch den erwarteten Verbrauch von **morgen** aus (`eedc_verbrauchsprognose_morgen_kwh`) — mit derselben Rechnung: das eigene Profil des Wochentags von morgen (am Freitag also das Wochenend-Profil für Samstag) und der Wärmepumpen-Anteil mit der Temperaturvorhersage von morgen. Als Attribute reisen das Stundenprofil, der Wärmepumpen-Anteil darin und das Datum mit, für das der Wert gilt. Gedacht für die Planung über die Nacht, etwa um den Speicher zur günstigsten Stunde so zu laden, dass er bis zum Morgen reicht. Wie jeder neue Sensor **startet er nach dem Update abgewählt** — unter *Einstellungen → Integration → MQTT-Export* anhaken (Markierung „Neu"). Wunsch aus #420.
+
+### Fixed
+
+- **Die Temperaturkorrektur der Wärmepumpe in der Verbrauchsprognose rechnet mit dem Tagesmittel.** Bei gleichem Wetter bleibt das gelernte Profil jetzt, wie es ist; vorher bekam jede Stunde einen eigenen Faktor aus ihrer eigenen Temperatur, und dadurch wurden die kalten Nachtstunden zu hoch und die warmen Nachmittage zu niedrig angesetzt — auch dann, wenn der Tag genau so warm war wie die Woche, aus der das Profil stammt. Jetzt fragt die Korrektur nur noch, ob der ganze Tag kälter oder wärmer ist als diese Woche, und verteilt das gleichmäßig auf alle Stunden. Bei Anlagen mit Wärmepumpe ändern sich dadurch die Kachel „Verbrauchsprognose" in *Cockpit → Live*, der Sensor `eedc_verbrauchsprognose_heute_kwh` und die Sensoren, die auf dieser Prognose aufbauen (Überschuss-Prognose, Heizfenster).
+
+### Changed
+
+- **Doku: warum eine eingebettete eedc-Karte „401: Unauthorized" zeigt.** Der Grund ist ein Neustart von Browser oder Home-Assistant-App — auch wenn du dabei angemeldet bleibst —, nicht eine neue Anmeldung. Das Handbuch (Bedienung §1.5) sagt es jetzt so, der Dialog „Link / Einbetten" nennt es im Add-on-Betrieb direkt, und die Fehlerbehebung im Installationshandbuch verweist darauf. Abhilfe bleibt: einmal **eedc** in der Seitenleiste öffnen, dann das Dashboard neu laden. Gemeldet in #418.
+
+### Intern
+
+- Ein Faktor für den Wärmepumpen-Anteil je Tag aus Heizgradtagen (`core/berechnungen/heizgradtage.py::wp_tagesfaktor`, Referenz = Mittel der Tages-Heizgradtage der Lernwoche) ersetzt den Stundenfaktor `wp_temperatur_faktor`; Kachel, Live-Kurve, Export-Reihe und der neue Sensor rufen ihn. Proben zu Invarianz, Konvexität und Kälte. (N-593)
+- Die Verbrauchsprognose für heute und morgen teilt einen Rechenkern; die Temperaturen von morgen kommen aus dem Abruf, den der Prognose-Kanon ohnehin macht — kein zusätzlicher Open-Meteo-Abruf. Sensor-Paket 2. (N-591)
+
 ## [4.1.0] - 2026-09-28 — Der Energiefluss ordnet sich: Gruppen statt Gedränge, Einzelwerte auf Klick, wahlweise mit Anlagenbild
 
 ### Added

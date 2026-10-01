@@ -312,6 +312,81 @@ async def fetch_gti_forecast(
         return None
 
 
+def _temperaturen_des_tages(data: Optional[dict], tag: str) -> list[dict]:
+    """Die Stundeneinträge einer Antwort für ``tag`` (``YYYY-MM-DD``) — in
+    gelieferter Reihenfolge, ohne Auffüllen und ohne Kürzen (N-591)."""
+    hourly = (data or {}).get("hourly") or {}
+    zeiten = hourly.get("time") or []
+    temps = hourly.get("temperature_2m") or []
+    return [
+        {"zeit": f"{int(ts[11:13]):02d}:00", "temperatur_c": temps[i] if i < len(temps) else None}
+        for i, ts in enumerate(zeiten)
+        if ts[:10] == tag
+    ]
+
+
+async def stunden_temperatur_tag(
+    latitude: float,
+    longitude: float,
+    neigung: int,
+    ausrichtung: int,
+    tag: str,
+    wetter_modell: str = "auto",
+    skip_jitter: bool = False,
+) -> Optional[list[dict]]:
+    """Die stündliche Temperaturvorhersage eines Tages — für die
+    Verbrauchsprognose von morgen (N-591).
+
+    **Kein eigener Abruf, kein eigener Cache-Eintrag.** Gelesen wird die
+    Antwort von ``fetch_gti_forecast``, die der Prognose-Kanon für seine
+    Orientierungsgruppen ohnehin holt (E15: ``days`` hängt am Modell, nicht am
+    Aufrufer). Der Aufrufer übergibt deshalb Neigung/Ausrichtung der
+    **stärksten Orientierungsgruppe des Kanons** — nur so trifft der Abruf
+    dessen Eintrag. Die Temperatur selbst hängt nicht von der Dachfläche ab.
+
+    ⚠ **Warum nicht ``get_solar_prognose``:** dessen Parser hält je Tag nur
+    Höchst- und Tiefsttemperatur (``SolarPrognoseTag.temperatur_max_c``/
+    ``_min_c``) — die Wärmepumpen-Korrektur braucht das Tagesmittel aus den
+    Stunden (KONZEPT-EEDC-AT-HA §12: „Prognose-Parser hält je Tag nur die
+    Höchsttemperatur").
+
+    **Modell der Anlage zuerst, best_match bei Lücken** (F-36-Regel, wie
+    ``_merge_nach_abdeckung``): fehlt im gewählten Modell für ``tag`` auch nur
+    eine Stundentemperatur, wird best_match gefragt und gewinnt, wenn es
+    **mehr** Stunden trägt; bei Gleichstand bleibt das gewählte Modell.
+
+    Returns:
+        ``[{"zeit": "HH:00", "temperatur_c": float|None}, …]`` — so viele
+        Einträge, wie die Antwort für ``tag`` hat (nie auf 24 aufgefüllt oder
+        gekürzt), oder ``None``, wenn es keine gibt.
+    """
+    model_name, _ = WETTER_MODELLE.get(wetter_modell, (None, 16))
+
+    def _abdeckung(eintraege: list[dict]) -> int:
+        return sum(1 for e in eintraege if e["temperatur_c"] is not None)
+
+    eintraege: list[dict] = []
+    if model_name is not None:
+        data = await fetch_gti_forecast(
+            latitude, longitude, neigung, ausrichtung, 2,
+            model=model_name, skip_jitter=skip_jitter,
+        )
+        eintraege = _temperaturen_des_tages(data, tag)
+
+    if not eintraege or _abdeckung(eintraege) < len(eintraege):
+        fallback = _temperaturen_des_tages(
+            await fetch_gti_forecast(
+                latitude, longitude, neigung, ausrichtung, 2,
+                model=None, skip_jitter=skip_jitter,
+            ),
+            tag,
+        )
+        if (not eintraege and fallback) or _abdeckung(fallback) > _abdeckung(eintraege):
+            eintraege = fallback
+
+    return eintraege or None
+
+
 def berechne_pv_ertrag(
     gti_wh_m2: float,
     kwp: float,

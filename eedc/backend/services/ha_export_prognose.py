@@ -15,6 +15,8 @@ Liefert die Vorausschau-Sensoren für `calculate_anlage_sensors()`:
   - seit eedc@ha Teil 1 (S3/P1, 21.09.2026) die **Verbrauchs**-Stundenreihe von Modell A samt
     ihrem WP-Anteil und der Temperaturvorhersage — der Rohstoff der
     Überschuss-Prognose (§5/P2) und der Fenster-Sensoren
+  - seit N-591 (01.10.2026) die Verbrauchsprognose für **morgen** (Modell A, Wochentag und
+    Temperaturvorhersage von morgen) samt Stundenreihe und Datum
 
 Prognose-Basis: ``services/prognose_kanon.py`` (Multi-String-Fan-out +
 eedc-Korrektur pro Energie-Slot), Tageswert = Σ korrigierte Stunden-Slots
@@ -67,7 +69,8 @@ async def berechne_prognose_export(db, anlage, *, skip_jitter: bool = False) -> 
         (str "HH:00" | None), ``speicher_verbrauch_profil`` (die Verbrauchsannahme
         dieser Simulation als Attribut-Dict, s. ``_speicher_verbrauch_profil``; None,
         solange nicht simuliert wurde), ``verbrauch_heute_kwh`` (Σ des Live-Verbrauchsprofils,
-        nur aus einem individuellen Profil — sonst None, #395), ``stundenprofil_heute`` und
+        nur aus einem individuellen Profil — sonst None, #395), ``verbrauch_morgen_kwh`` samt
+        ``verbrauch_morgen_*`` (dieselbe Rechnung für morgen, N-591), ``stundenprofil_heute`` und
         ``stundenprofil_day_plus_1/2/3`` (je 24 kWh-Slots) — oder ``None``.
     """
     try:
@@ -175,8 +178,19 @@ async def berechne_prognose_export(db, anlage, *, skip_jitter: bool = False) -> 
         # #395 (OB73-gif): die Verbrauchsprognose des Tages — dieselbe Zahl wie
         # die Kachel in Cockpit → Live, aus demselben Dienst. `None` ohne
         # individuelles Profil (kein Sensor aus einem Standardprofil, N-332).
-        from backend.services.verbrauchsprognose_heute import verbrauchsprognose_heute
+        from backend.services.verbrauchsprognose_heute import (
+            verbrauchsprognose_heute,
+            verbrauchsprognose_morgen,
+        )
         verbrauch = await verbrauchsprognose_heute(anlage, db)
+        # N-591 (#420, OB73-gif): dieselbe Rechnung für morgen — Wochentag und
+        # Temperaturvorhersage von morgen. NACH dem Kanon gerufen: dessen Abruf
+        # hat den Forecast-Eintrag gewärmt, aus dem die Temperaturen kommen.
+        # Die Speicher-Simulation bleibt, wie sie ist (endet um Mitternacht;
+        # Modell (c) war nicht gewählt).
+        verbrauch_morgen = await verbrauchsprognose_morgen(
+            anlage, db, skip_jitter=skip_jitter,
+        )
 
         return {
             "heute_kwh": heute_kwh,
@@ -223,9 +237,30 @@ async def berechne_prognose_export(db, anlage, *, skip_jitter: bool = False) -> 
             "verbrauch_temperatur_c": verbrauch.temperatur_c if verbrauch else None,
             # N-544: das Stunden-Label je Position der drei Reihen darüber. Der
             # Fenster-Kontext ordnet danach auf seine Slot-Achse ein, statt
-            # „Position i = Stunde i" anzunehmen — an den beiden DST-Tagen ist
-            # diese Annahme falsch (23 bzw. 25 Einträge).
+            # „Position i = Stunde i" anzunehmen. (Die Begründung „an DST-Tagen
+            # 23 bzw. 25 Einträge" ist für OpenMeteo widerlegt — 24 Einträge mit
+            # fester Verschiebung, s. `VerbrauchsprognoseHeute.stunden_label`.)
             "verbrauch_stunden_label": verbrauch.stunden_label if verbrauch else None,
+            # ── N-591: die Verbrauchsprognose für morgen (eigener Sensor) ────
+            # ⚠ Ohne individuelles Profil für den Tagestyp von morgen ist sie
+            # None — dann kein Sensor (N-332), auch wenn es „heute" gibt.
+            "verbrauch_morgen_kwh": verbrauch_morgen.summe_kwh if verbrauch_morgen else None,
+            "verbrauch_morgen_profil_typ": (
+                verbrauch_morgen.profil_typ if verbrauch_morgen else None
+            ),
+            "verbrauch_morgen_profil_tage": (
+                verbrauch_morgen.profil_tage if verbrauch_morgen else None
+            ),
+            "verbrauch_morgen_profil_slots": (
+                verbrauch_morgen.profil_slots if verbrauch_morgen else None
+            ),
+            "verbrauch_morgen_stundenprofil_kwh": (
+                verbrauch_morgen.stunden_kwh if verbrauch_morgen else None
+            ),
+            "verbrauch_morgen_wp_stundenprofil_kwh": (
+                verbrauch_morgen.wp_stunden_kwh if verbrauch_morgen else None
+            ),
+            "verbrauch_morgen_datum": verbrauch_morgen.datum if verbrauch_morgen else None,
             # ── S2: was die Steuerungs-Sensoren aus derselben Rechnung brauchen ──
             "speicher_voll_um_slot": speicher_voll_um_slot,
             # ── S3b: derselbe Sim-Lauf, zwei weitere Groessen ───────────────

@@ -39,11 +39,12 @@ KOMPONENTEN_TYPEN: tuple[str, ...] = ("sensor", "binary_sensor")
 #: Wer ein neues Sensor-Paket ausliefert, erhöht diese Zahl um 1, trägt ein Label
 #: nach und setzt `seit_paket` an **jeder** neuen Definition. Dass niemand das
 #: Letzte vergisst, hält `test_n545_neue_sensoren_bei_bestand_abgewaehlt.py` fest.
-AKTUELLES_SENSOR_PAKET: int = 1
+AKTUELLES_SENSOR_PAKET: int = 2
 
 #: Klartext je Paket-Stand — was der Anwender in der Abwahl-Fläche liest.
 SENSOR_PAKET_LABELS: dict[int, str] = {
     1: "eedc@ha, Teil 1 — Steuerungshilfen, Preise und Speicher",
+    2: "Verbrauchsprognose morgen",
 }
 
 
@@ -906,6 +907,31 @@ PROGNOSE_SENSOREN = [
             "Ohne eigenes Profil gibt es den Sensor nicht."
         ),
         state_class="measurement",
+    ),
+    # ── Verbrauchsprognose morgen (N-591, #420 OB73-gif) ────────────────────
+    #
+    # Dieselbe Rechnung wie der Nachbar darüber (`verbrauchsprognose_morgen`
+    # ruft denselben Kern), nur für morgen: Profil des Wochentags von morgen,
+    # Wärmepumpen-Anteil mit der Temperaturvorhersage von morgen. Für die
+    # Planung über die Nacht (Speicher zur günstigsten Stunde laden). Kein
+    # `device_class` (F-63); Paket 2 ⇒ startet bei Bestandsinstallationen
+    # abgewählt (N-545).
+    SensorDefinition(
+        key="eedc_verbrauchsprognose_morgen_kwh",
+        name="Verbrauchsprognose morgen",
+        unit="kWh",
+        icon="mdi:home-clock-outline",
+        category=SensorCategory.PROGNOSE,
+        formel=(
+            "Σ des individuellen Stunden-Verbrauchsprofils für morgen: Profil des "
+            "Wochentags von morgen (Werktag/Wochenende aus der eigenen Historie), "
+            "Wärmepumpen-Anteil mit der Temperaturvorhersage von morgen (Tagesmittel) "
+            "korrigiert — Gesamtverbrauch, dieselbe Rechnung wie "
+            "eedc_verbrauchsprognose_heute_kwh. Ohne eigenes Profil für den Tagestyp "
+            "von morgen gibt es den Sensor nicht."
+        ),
+        state_class="measurement",
+        seit_paket=2,
     ),
     SensorDefinition(
         key="eedc_speicher_voll_um",

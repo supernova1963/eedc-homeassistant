@@ -9,6 +9,71 @@
 
 ---
 
+## Unreleased
+
+**In dieser Version:** die Verbrauchsprognose gibt es auch für morgen · die Wärmepumpe verschiebt die Verbrauchsprognose nicht mehr in die Nacht · warum eine eingebettete Karte „401" zeigt.
+
+**Die Verbrauchsprognose für morgen kommt in Home Assistant an**
+
+**Betrifft dich das?** Ja, wenn du den MQTT-Export nutzt und in Home Assistant über
+die Nacht planst — zum Beispiel den Speicher zur günstigsten Stunde laden willst.
+
+**Was war:** eedc gab die PV-Prognose für morgen aus, den Verbrauch aber nur für
+heute. Wer den Speicher abends so laden wollte, dass er bis zum Morgen reicht,
+kannte nur die eine Hälfte der Rechnung.
+
+**Was jetzt:** Ein neuer Sensor **Verbrauchsprognose morgen**. Er rechnet genau
+wie die Verbrauchsprognose für heute: dein eigenes Profil für den Wochentag von
+morgen — am Freitag also das Wochenend-Profil für Samstag — und den
+Wärmepumpen-Anteil mit der Temperaturvorhersage von morgen. Das Stundenprofil
+reist als Attribut mit, dazu das **Datum**, für das der Wert gilt; so erkennt
+eine Automation nach Mitternacht, ob schon der neue Wert da ist. Ohne eigenes
+Profil für den Tagestyp von morgen gibt es den Sensor nicht — eedc schreibt kein
+Standardprofil in eine Automation.
+
+⭐ **Er startet abgewählt.** Wie jeder Sensor, der mit einem Update dazukommt,
+musst du ihn einmal anhaken: *Einstellungen → Integration → MQTT-Export*, er
+trägt dort die Markierung **„Neu"**.
+
+→ *[Sensor-Referenz §11](SENSOR-REFERENZ.md#anlage-weite-sensoren)*
+
+**Die Wärmepumpe verschiebt die Verbrauchsprognose nicht mehr in die Nacht**
+
+**Betrifft dich das?** Ja, wenn eine Wärmepumpe zu deiner Anlage gehört und eedc
+die Außentemperatur kennt.
+
+**Was war:** eedc korrigiert den Wärmepumpen-Anteil der Verbrauchsprognose mit
+der Temperaturvorhersage. Bisher bekam dabei **jede Stunde** ihren eigenen
+Faktor aus ihrer eigenen Temperatur. Weil es nachts kälter ist als am
+Nachmittag, rechnete eedc die Nachtstunden hoch und die Nachmittage herunter —
+auch an einem Tag, der genau so warm war wie die Woche, aus der dein Profil
+stammt. Den Tagesgang deiner Heizung kennt das Profil aber längst.
+
+**Was jetzt:** Die Korrektur fragt nur noch, ob der **ganze Tag** kälter oder
+wärmer ist als diese Woche, und verteilt das gleichmäßig auf alle Stunden. Bei
+gleichem Wetter bleibt dein Profil, wie es ist. Du siehst die Änderung an der
+Kachel **Verbrauchsprognose** in *Cockpit → Live* und an
+`eedc_verbrauchsprognose_heute_kwh` — und an allem, was darauf aufbaut, etwa der
+Überschuss-Prognose.
+
+→ *Cockpit → Live*
+
+**Eingebettete Karte zeigt „401: Unauthorized"**
+
+**Betrifft dich das?** Nur, wenn du eine eedc-Anzeige als Webseiten-Karte in dein
+Home-Assistant-Dashboard eingebettet hast.
+
+**Was war:** Das Handbuch nannte als Auslöser „jede neue Anmeldung". Der
+eigentliche Auslöser ist ein **Neustart von Browser oder Home-Assistant-App** —
+auch wenn du dabei angemeldet bleibst.
+
+**Was jetzt:** Handbuch und Dialog „Link / Einbetten" sagen es so. Abhilfe wie
+bisher: einmal **eedc** in der Seitenleiste öffnen, dann das Dashboard neu laden.
+
+→ *[Bedienung §1.5](HANDBUCH_BEDIENUNG.md#15-eine-eedc-anzeige-im-home-assistant-dashboard)*
+
+---
+
 ## v4.1.0 — 28. September 2026
 
 **In dieser Version:** der Energiefluss ordnet sich selbst · Einzelwerte auf Klick, mit heutigem Ertrag · wahlweise vor einem Anlagenbild · ein Auto an der Wallbox zählt nur einmal · der Stromverbrauch einer Wärmepumpe bleibt aktuell.

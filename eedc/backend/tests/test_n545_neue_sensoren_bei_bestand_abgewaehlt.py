@@ -81,6 +81,18 @@ PAKET_1_KEYS: frozenset[str] = frozenset({
     "eedc_einspeisung_unerwuenscht",
 })
 
+# ── Paket 2 (N-591, 01.10.2026) — ebenso eingefroren, nicht abgeleitet ──────
+#
+# Gemessen am 01.10.2026: `comm -13` über die `key="…"`-Mengen von `3c22f81f`
+# und dem Bau liefert genau diesen einen Schlüssel.
+PAKET_2_KEYS: frozenset[str] = frozenset({
+    "eedc_verbrauchsprognose_morgen_kwh",
+})
+
+#: Was eine Bestandsinstallation ohne gespeicherten Stand nachgetragen bekommt:
+#: ALLE Pakete, die sie noch nie gesehen hat (Stand 0 ⇒ Paket 1 und 2).
+NEUE_KEYS_AB_STAND_0: frozenset[str] = PAKET_1_KEYS | PAKET_2_KEYS
+
 
 async def _lege_anlage_an(db):
     from backend.models import Anlage
@@ -104,7 +116,8 @@ async def _stand(db) -> int | None:
 # ── (a) Bestand über den expliziten Export-Schalter ─────────────────────────
 
 async def test_a_bestand_bekommt_das_paket_abgewaehlt(db):
-    """Die 28 kommen dazu — und die Wahl des Anwenders bleibt unberührt.
+    """Die 28 (Paket 1) und der eine aus Paket 2 kommen dazu — und die Wahl des
+    Anwenders bleibt unberührt.
 
     ⛔ **Vereinigung, nicht Ersetzen.** Ein Schritt, der die Liste schriebe
     statt sie zu ergänzen, hätte dem Anwender seinen abgewählten
@@ -116,8 +129,8 @@ async def test_a_bestand_bekommt_das_paket_abgewaehlt(db):
 
     await neue_sensoren_bei_bestand_abwaehlen(db)
 
-    assert await abgewaehlte_sensoren(db) == PAKET_1_KEYS | {"roi_prozent"}
-    assert len(await abgewaehlte_sensoren(db)) == 29
+    assert await abgewaehlte_sensoren(db) == NEUE_KEYS_AB_STAND_0 | {"roi_prozent"}
+    assert len(await abgewaehlte_sensoren(db)) == 30
     assert await _stand(db) == AKTUELLES_SENSOR_PAKET
 
 
@@ -135,7 +148,7 @@ async def test_b_bestand_erkannt_an_zuletzt_publiziert(db):
 
     await neue_sensoren_bei_bestand_abwaehlen(db)
 
-    assert await abgewaehlte_sensoren(db) == PAKET_1_KEYS
+    assert await abgewaehlte_sensoren(db) == NEUE_KEYS_AB_STAND_0
     assert await _stand(db) == AKTUELLES_SENSOR_PAKET
 
 
@@ -182,10 +195,13 @@ async def test_e_zweiter_lauf_aendert_nichts_und_respektiert_die_anwahl(db):
     await _lege_anlage_an(db)
     await schreibe_export_settings(db, enabled=True)
     await neue_sensoren_bei_bestand_abwaehlen(db)
-    assert await abgewaehlte_sensoren(db) == PAKET_1_KEYS
+    assert await abgewaehlte_sensoren(db) == NEUE_KEYS_AB_STAND_0
 
-    # Der Anwender hakt einen des Pakets wieder an.
-    rest = sorted(PAKET_1_KEYS - {"eedc_speicher_soc_prozent"})
+    # Der Anwender hakt einen aus jedem Paket wieder an.
+    rest = sorted(
+        NEUE_KEYS_AB_STAND_0
+        - {"eedc_speicher_soc_prozent", "eedc_verbrauchsprognose_morgen_kwh"}
+    )
     await schreibe_export_settings(db, **{ABWAHL_FELD: rest})
 
     await neue_sensoren_bei_bestand_abwaehlen(db)
@@ -193,13 +209,51 @@ async def test_e_zweiter_lauf_aendert_nichts_und_respektiert_die_anwahl(db):
 
     assert await abgewaehlte_sensoren(db) == set(rest)
     assert "eedc_speicher_soc_prozent" not in await abgewaehlte_sensoren(db)
+    assert "eedc_verbrauchsprognose_morgen_kwh" not in await abgewaehlte_sensoren(db)
     assert await _stand(db) == AKTUELLES_SENSOR_PAKET
+
+
+# ── (f2) Paket 2 — das ERSTE echte Folgepaket (N-591) ────────────────────────
+
+async def test_f2_stand_1_bekommt_genau_paket_2(db):
+    """Eine Installation, die Paket 1 schon eingewertet hat (Stand 1), bekommt
+    beim Update genau den einen Paket-2-Sensor abgewählt — und behält ihre
+    eigene Wahl aus Paket 1 (hier: `eedc_speicher_soc_prozent` angehakt, alle
+    übrigen abgewählt).
+
+    Ohne diese Probe wäre (f) weiter nur ein gestelltes Paket: hier läuft das
+    erste ausgelieferte Folgepaket durch den Mechanismus.
+    """
+    await _lege_anlage_an(db)
+    eigene_wahl = sorted(PAKET_1_KEYS - {"eedc_speicher_soc_prozent"})
+    await schreibe_export_settings(
+        db, enabled=True, **{SENSOR_PAKET_FELD: 1, ABWAHL_FELD: eigene_wahl}
+    )
+
+    await neue_sensoren_bei_bestand_abwaehlen(db)
+
+    assert await abgewaehlte_sensoren(db) == set(eigene_wahl) | PAKET_2_KEYS
+    assert "eedc_speicher_soc_prozent" not in await abgewaehlte_sensoren(db), (
+        "ein angehakter Paket-1-Sensor darf mit Paket 2 nicht wieder abgewählt werden"
+    )
+    assert await _stand(db) == 2
+
+
+async def test_f3_neuinstallation_bekommt_auch_paket_2(db):
+    """Neuinstallation (Anlage ja, Export nie benutzt) ⇒ auch der Paket-2-Sensor
+    ist an — der Entscheid vom 28.08. gilt für jedes Paket."""
+    await _lege_anlage_an(db)
+
+    await neue_sensoren_bei_bestand_abwaehlen(db)
+
+    assert PAKET_2_KEYS.isdisjoint(await abgewaehlte_sensoren(db))
+    assert await _stand(db) == 2
 
 
 # ── (f) Das NÄCHSTE Paket ───────────────────────────────────────────────────
 
 async def test_f_ein_kuenftiges_paket_nimmt_nur_seine_eigenen_keys(db, monkeypatch):
-    """Stand 1, Paket 2 ⇒ genau die EINE Definition von Paket 2 kommt dazu.
+    """Stand 2, Paket 3 ⇒ genau die EINE Definition von Paket 3 kommt dazu.
 
     Ohne diese Probe wäre der Mechanismus nur für das erste Paket belegt —
     und genau der Teil, der ihn tragen soll (jedes künftige Release), ungemessen.
@@ -211,26 +265,29 @@ async def test_f_ein_kuenftiges_paket_nimmt_nur_seine_eigenen_keys(db, monkeypat
     definition = next(d for d in get_all_sensor_definitions() if d.key == opfer)
     assert definition.seit_paket == 0, "Vorbedingung: ein Bestands-Sensor"
 
-    monkeypatch.setattr(hse, "AKTUELLES_SENSOR_PAKET", 2)
-    monkeypatch.setattr(schritt, "AKTUELLES_SENSOR_PAKET", 2)
-    monkeypatch.setattr(definition, "seit_paket", 2)
+    # N-591: Paket 2 gibt es seit 01.10.2026 wirklich — das gestellte
+    # „nächste" Paket ist damit Paket 3 auf Stand 2 (vorher Paket 2 auf Stand 1).
+    monkeypatch.setattr(hse, "AKTUELLES_SENSOR_PAKET", 3)
+    monkeypatch.setattr(schritt, "AKTUELLES_SENSOR_PAKET", 3)
+    monkeypatch.setattr(definition, "seit_paket", 3)
 
     await _lege_anlage_an(db)
-    await schreibe_export_settings(db, enabled=True, **{SENSOR_PAKET_FELD: 1})
+    await schreibe_export_settings(db, enabled=True, **{SENSOR_PAKET_FELD: 2})
 
     await neue_sensoren_bei_bestand_abwaehlen(db)
 
     assert await abgewaehlte_sensoren(db) == {opfer}, (
-        "nur das Paket-2-Key — die 28 aus Paket 1 sind für diese Installation "
+        "nur das Paket-3-Key — Paket 1 und 2 sind für diese Installation "
         "nicht neu und dürfen nicht nachträglich abgewählt werden"
     )
-    assert await _stand(db) == 2
+    assert await _stand(db) == 3
 
 
 # ── (g) Der Wächter gegen die Drift ─────────────────────────────────────────
 
 def test_g_jede_definition_traegt_ihre_paket_zuordnung():
-    """Die 28 tragen Paket 1, ALLE anderen 0 — und keine liegt in der Zukunft.
+    """Die 28 tragen Paket 1, der eine Sensor aus N-591 Paket 2, ALLE anderen 0 —
+    und keine liegt in der Zukunft.
 
     ⛔ **Das ist die Drift, die den ganzen Mechanismus entwertet.** Wer eine
     Definition anlegt und `seit_paket` vergisst, bekommt eine, die als
@@ -242,12 +299,15 @@ def test_g_jede_definition_traegt_ihre_paket_zuordnung():
     je_paket = {d.key: d.seit_paket for d in definitionen}
 
     assert {k for k, p in je_paket.items() if p == 1} == set(PAKET_1_KEYS)
-    assert {k for k, p in je_paket.items() if p != 0} == set(PAKET_1_KEYS), (
-        "eine Definition trägt einen Paket-Stand, der nicht zu Paket 1 gehört"
+    assert {k for k, p in je_paket.items() if p == 2} == set(PAKET_2_KEYS)
+    assert {k for k, p in je_paket.items() if p != 0} == set(NEUE_KEYS_AB_STAND_0), (
+        "eine Definition trägt einen Paket-Stand, der weder zu Paket 1 noch zu Paket 2 gehört"
     )
+    assert AKTUELLES_SENSOR_PAKET == 2, "N-591 liefert Paket 2 aus"
     zu_weit = {k: p for k, p in je_paket.items() if p > AKTUELLES_SENSOR_PAKET}
     assert not zu_weit, f"Paket-Stand über {AKTUELLES_SENSOR_PAKET}: {zu_weit}"
     assert len(PAKET_1_KEYS) == 28
+    assert len(PAKET_2_KEYS) == 1
     assert len(definitionen) == len(je_paket), "Sensor-Schlüssel sind nicht eindeutig"
 
 
@@ -268,16 +328,18 @@ async def test_h_route_traegt_neu_und_neues_paket(db):
     vorher = await get_sensor_abwahl(db)
     assert vorher["neues_paket"]["paket"] == AKTUELLES_SENSOR_PAKET
     assert vorher["neues_paket"]["label"]
-    assert set(vorher["neues_paket"]["keys"]) == set(PAKET_1_KEYS)
+    assert set(vorher["neues_paket"]["keys"]) == set(PAKET_2_KEYS)
     assert vorher["neues_paket"]["abgewaehlt"] == [], "noch lief der Schritt nicht"
-    assert {s["key"] for s in vorher["sensoren"] if s["neu"]} == set(PAKET_1_KEYS)
+    # „Neu" heißt: aus dem AKTUELLEN Paket — Paket 1 trägt die Markierung nicht mehr.
+    assert {s["key"] for s in vorher["sensoren"] if s["neu"]} == set(PAKET_2_KEYS)
     assert all(s["exportiert"] for s in vorher["sensoren"])
 
     await neue_sensoren_bei_bestand_abwaehlen(db)
 
     nachher = await get_sensor_abwahl(db)
-    assert set(nachher["neues_paket"]["abgewaehlt"]) == set(PAKET_1_KEYS)
-    assert {s["key"] for s in nachher["sensoren"] if s["neu"]} == set(PAKET_1_KEYS)
-    assert {s["key"] for s in nachher["sensoren"] if not s["exportiert"]} == set(PAKET_1_KEYS)
+    assert set(nachher["neues_paket"]["abgewaehlt"]) == set(PAKET_2_KEYS)
+    assert {s["key"] for s in nachher["sensoren"] if s["neu"]} == set(PAKET_2_KEYS)
+    # Stand 0 ⇒ BEIDE Pakete starten abgewählt, markiert ist nur das aktuelle.
+    assert {s["key"] for s in nachher["sensoren"] if not s["exportiert"]} == set(NEUE_KEYS_AB_STAND_0)
     # Der Bestand bleibt unberührt — 57 Definitionen exportieren weiter.
-    assert sum(1 for s in nachher["sensoren"] if s["exportiert"]) == len(nachher["sensoren"]) - 28
+    assert sum(1 for s in nachher["sensoren"] if s["exportiert"]) == len(nachher["sensoren"]) - 29

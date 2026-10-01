@@ -100,7 +100,7 @@ async def test_profilwahl_folgt_dem_wochentag(db):
     daten = {
         "werktag": {h: 0.5 for h in range(24)}, "tage_werktag": 5, "slots_werktag": 24,
         "wochenende": {h: 0.8 for h in range(24)}, "tage_wochenende": 2, "slots_wochenende": 20,
-        "wp_werktag": {h: 0.1 for h in range(24)}, "referenz_temp_c": 12.0,
+        "wp_werktag": {h: 0.1 for h in range(24)}, "referenz_hdd_kd": 3.0,
     }
     with patch(
         "backend.services.verbrauchsprognose_heute.get_live_power_service"
@@ -110,7 +110,7 @@ async def test_profilwahl_folgt_dem_wochentag(db):
         wochenende = await waehle_verbrauchsprofil(anlage, db, _SAMSTAG)
 
     assert werktag.profil_typ == "individuell_werktag" and werktag.profil_tage == 5
-    assert werktag.wp_profil == daten["wp_werktag"] and werktag.referenz_temp_c == 12.0
+    assert werktag.wp_profil == daten["wp_werktag"] and werktag.referenz_hdd_kd == 3.0
     assert wochenende.profil_typ == "individuell_wochenende" and wochenende.profil_slots == 20
     # Am Wochenende gibt es kein WP-Wochenend-Profil in den Daten → None, nicht das Werktags-Profil.
     assert wochenende.wp_profil is None
@@ -163,7 +163,7 @@ async def test_waermepumpe_wird_wie_in_der_anzeige_temperaturkorrigiert(db):
     anlage = await factories.anlage(db, latitude=51.0, longitude=11.0)
     daten = {
         "werktag": {h: 1.0 for h in range(24)}, "tage_werktag": 7, "slots_werktag": 24,
-        "wp_werktag": {h: 0.5 for h in range(24)}, "referenz_temp_c": 5.0,
+        "wp_werktag": {h: 0.5 for h in range(24)}, "referenz_hdd_kd": 10.0,
     }
     with patch(
         "backend.services.verbrauchsprognose_heute.get_live_power_service"
@@ -174,7 +174,8 @@ async def test_waermepumpe_wird_wie_in_der_anzeige_temperaturkorrigiert(db):
         svc.return_value.get_verbrauchsprofil = AsyncMock(return_value=daten)
         kalt = await verbrauchsprognose_heute(anlage, db, now=_MITTWOCH)
 
-    # Referenz 5 °C, Forecast 0 °C, Heizgrenze 15: Faktor 15/10 = 1,5 auf den WP-Anteil.
+    # Referenz 10 Kd (Lernwoche Ø 5 °C), Tag Ø 0 °C, Heizgrenze 15: Faktor 15/10 = 1,5
+    # auf den WP-Anteil (N-593: seit 01.10.2026 Referenz in Kd, Tagesfaktor).
     # Haus 0,5 + WP 0,5 × 1,5 = 1,25 kW × 24 h = 30 kWh — mehr als die 24 kWh des Profils.
     assert kalt is not None
     assert kalt.summe_kwh == pytest.approx(30.0)

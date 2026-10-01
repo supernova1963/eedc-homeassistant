@@ -22,7 +22,7 @@ from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.core.config import settings
 from backend.core.berechnungen.energie import summe_pv_bkw_kwh
-from backend.core.berechnungen.heizgradtage import wp_temperatur_faktor
+from backend.core.berechnungen.heizgradtage import wp_tagesfaktor
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.utils.investition_filter import aktiv_jetzt
@@ -275,7 +275,7 @@ def _berechne_verbrauchsprofil(
     jahresverbrauch_kwh: float = 4000,
     individuelles_profil: Optional[dict] = None,
     wp_profil: Optional[dict] = None,
-    referenz_temp_c: Optional[float] = None,
+    referenz_hdd_kd: Optional[float] = None,
 ) -> tuple[list[dict], Optional[float], Optional[float], bool]:
     """
     Berechnet stündliches PV-Ertrag + Verbrauchsprofil.
@@ -284,14 +284,31 @@ def _berechne_verbrauchsprofil(
     sonst Fallback auf GHI (shortwave_radiation).
     Temperaturkorrektur: -0.4%/°C über 25°C Modultemperatur.
 
+    ``stunden`` sind die Stunden **eines** Tages — die Wärmepumpen-Korrektur
+    bildet daraus ihr Tagesmittel (N-593).
+
     Args:
         individuelles_profil: Stundenwerte {0: kW, 1: kW, ..., 23: kW} oder None
+        referenz_hdd_kd: Heizgradtage der Lernwoche des Profils (Mittel der
+            Tages-Heizgradtage, ``referenz_heizgradtage``) — ``None`` ⇒ keine
+            Wärmepumpen-Korrektur.
 
     Returns:
         (profil, pv_prognose_kwh, grundlast_kw, ist_individuell)
     """
     ist_individuell = individuelles_profil is not None
     tages_faktor = jahresverbrauch_kwh / 4000  # Nur für BDEW-Fallback
+
+    # WP-Temperaturkorrektur (N-593): EIN Faktor für den ganzen Tag — die
+    # Heizgradtage seines Tagesmittels gegen die der Lernwoche
+    # (`wp_tagesfaktor`). Bis 01.10.2026 bekam jede Stunde ihren eigenen
+    # Faktor aus ihrer eigenen Temperatur; bei unverändertem Wetter schob das
+    # den Wärmepumpen-Strom in die kalten Nachtstunden.
+    wp_faktor = (
+        wp_tagesfaktor(referenz_hdd_kd, [s.get("temperatur_c") for s in stunden])
+        if wp_profil and referenz_hdd_kd is not None
+        else 1.0
+    )
 
     profil = []
     pv_summe_kwh = 0.0
@@ -324,24 +341,20 @@ def _berechne_verbrauchsprofil(
             # Individuelles Profil: Schlüssel sind int oder str
             verbrauch_kw = round(individuelles_profil.get(h, individuelles_profil.get(str(h), 0.3)), 2)
 
-            # WP-Temperaturkorrektur: WP-Anteil mit Heizgradtagen skalieren
-            #
-            # Heizgradtage (HDD) = max(0, Heizgrenze - Temperatur)
-            # Bei Referenz-Ø 5°C und Forecast 0°C: HDD_fc/HDD_ref = 15/10 = 1.5×
-            # Bei Referenz-Ø 14°C (mild): HDD_ref < 1 → WP lief kaum (Warmwasser),
-            #   Hochskalieren ergibt keinen Sinn → Zuschlag pro Heizgrad stattdessen
-            if wp_profil and referenz_temp_c is not None:
+            # WP-Temperaturkorrektur: WP-Anteil mit dem Tagesfaktor skalieren
+            # (Heizgradtage des Tagesmittels / Heizgradtage der Lernwoche,
+            # N-593). Eine Stunde ohne Temperatur bleibt unkorrigiert —
+            # wie vor N-593 (Vorlage §4).
+            if wp_profil and referenz_hdd_kd is not None:
                 temp = s.get("temperatur_c")
                 if temp is not None:
-                    # ⭐ Seit 21.09.2026 aus dem Layer (`wp_temperatur_faktor`)
-                    # statt hier ausgeschrieben: die Plan-Sensoren P1/P7
-                    # brauchen dieselbe Skalierung fuer die erwartete
-                    # WP-Stundenreihe, und zwei Nachbauten hiessen zwei
-                    # Heizstrom-Zahlen unter einem Namen.
-                    faktor = wp_temperatur_faktor(referenz_temp_c, temp)
+                    # ⭐ Seit 21.09.2026 aus dem Layer statt hier
+                    # ausgeschrieben: die Plan-Sensoren P1/P7 brauchen dieselbe
+                    # Skalierung fuer die erwartete WP-Stundenreihe, und zwei
+                    # Nachbauten hiessen zwei Heizstrom-Zahlen unter einem Namen.
                     wp_kw = wp_profil.get(h, wp_profil.get(str(h), 0.0))
                     haus_kw = max(0.0, verbrauch_kw - wp_kw)
-                    verbrauch_kw = round(max(0.0, haus_kw + wp_kw * faktor), 2)
+                    verbrauch_kw = round(max(0.0, haus_kw + wp_kw * wp_faktor), 2)
         else:
             # BDEW H0 Fallback
             verbrauch_kw = round(_LASTPROFIL_KW.get(h, 0.3) * tages_faktor, 2)
@@ -1399,11 +1412,11 @@ async def get_live_wetter(
         profil_tage = wahl.profil_tage
         profil_slots = wahl.profil_slots
         wp_stunden_profil = wahl.wp_profil
-        referenz_temp_c = wahl.referenz_temp_c
+        referenz_hdd_kd = wahl.referenz_hdd_kd
 
         profil, pv_prognose, grundlast, ist_ind = _berechne_verbrauchsprofil(
             alle_stunden, kwp, individuelles_profil=ind_stunden_profil,
-            wp_profil=wp_stunden_profil, referenz_temp_c=referenz_temp_c,
+            wp_profil=wp_stunden_profil, referenz_hdd_kd=referenz_hdd_kd,
         )
 
         # Defaults, bevor der Kanon-Zweig sie setzt: fehlt der Kanon (kein

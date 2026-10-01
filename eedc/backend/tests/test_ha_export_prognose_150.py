@@ -357,6 +357,13 @@ async def test_speicher_voll_um_nennt_seine_verbrauchsannahme(db, _patch_prognos
     ) as svc, patch(
         "backend.api.routes.live_wetter._lade_forecast_gecached",
         new=AsyncMock(return_value=forecast),
+    ), patch(
+        # N-591: seit 01.10.2026 holt der Export auch die Verbrauchsprognose für
+        # morgen — deren Temperaturen kommen aus `fetch_gti_forecast`. Diese
+        # Probe fragt nach „Speicher voll um", nicht nach morgen; ohne den
+        # Ersatz ginge sie ans Netz (und würfelte vorher bis 30 s Jitter).
+        "backend.services.solar_forecast_service.fetch_gti_forecast",
+        new=AsyncMock(return_value=None),
     ):
         svc.return_value.get_verbrauchsprofil = AsyncMock(return_value=daten)
         sensors = await calculate_anlage_sensors(db, anlage)
