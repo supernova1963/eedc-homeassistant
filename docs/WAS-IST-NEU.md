@@ -11,7 +11,32 @@
 
 ## Unreleased
 
-**In dieser Version:** die Verbrauchsprognose gibt es auch für morgen · die Wärmepumpe verschiebt die Verbrauchsprognose nicht mehr in die Nacht · die Wetter-Monatsreihe steht auf einem Lineal, mit neuem Block „Sonnenangebot" · warum eine eingebettete Karte „401" zeigt · ein „—" in einer Kachel zeigt keine Rechnung mehr.
+**In dieser Version:** der Monatsabschluss löscht die Aufteilung Heizen/Kühlen nicht mehr · die Verbrauchsprognose gibt es auch für morgen · die Wärmepumpe verschiebt die Verbrauchsprognose nicht mehr in die Nacht · die Wetter-Monatsreihe steht auf einem Lineal, mit neuem Block „Sonnenangebot" · warum eine eingebettete Karte „401" zeigt · ein „—" in einer Kachel zeigt keine Rechnung mehr.
+
+**Der Monatsabschluss löscht die Aufteilung Heizen/Kühlen nicht mehr**
+
+**Betrifft dich das?** Ja, wenn deiner Wärmepumpe oder Klimaanlage ein
+Betriebsart-Sensor zugeordnet ist — eedc teilt ihren Strom dann nach Heizen,
+Kühlen und Warmwasser auf.
+
+**Was war:** Ob ein Gerät in einer Stunde geheizt oder gekühlt hat, kennt Home
+Assistant nur aus seinem Verlauf, und den hebt es standardmäßig rund **zehn
+Tage** auf. Wurde ein älterer Tag neu berechnet, ersetzte eedc die gespeicherte
+Betriebsart durch „kein Signal". Genau das tut der **Monatsabschluss**: Er
+rechnet den ganzen Monat neu, also auch die ersten rund zwanzig Tage. Ebenso
+„Tag neu aggregieren" in der Reparatur-Werkbank und die Knöpfe „Zeitraum neu
+aggregieren" im Daten-Checker. Danach stand der Monat auf **„nicht
+aufgeteilt"**.
+
+**Was jetzt:** Kennt Home Assistant einen Tag nicht mehr, bleibt die bei eedc
+gespeicherte Betriebsart stehen; was Home Assistant noch liefert, gewinnt.
+Dasselbe gilt für **Ladestand** und **Strompreis**, wenn deren Sensor keine
+Langzeitstatistik hat.
+
+⚠ **Schon verlorene Stunden kommen damit nicht zurück** — nur über eine
+Sicherung von eedc aus der Zeit davor.
+
+→ *[Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)*
 
 **Die Verbrauchsprognose für morgen kommt in Home Assistant an**
 
