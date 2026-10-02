@@ -1534,6 +1534,106 @@ class MonatsdatenChecks:
 
         return ergebnisse
 
+    async def _check_modus_split_nicht_gespeichert(self, anlage: Anlage) -> list[CheckErgebnis]:
+        """N-597: Aufteilung nach Betriebsart, die der Monatsabschluss nicht speichern kann.
+
+        Der Zwilling des Widerspruchs in ``_check_wp_monatsdaten`` („Heiz- und
+        Kühlstrom zusammen größer als der Gesamtverbrauch"): der prüft einen
+        **gespeicherten** Split gegen einen später kleiner gepflegten Monatsstrom.
+        Dieser hier den Fall davor — der Abschluss hat den Split gar nicht erst
+        gespeichert, weil er schon beim Schreiben nicht passte
+        (``modus_split_schreiben.py``: ``teilmengen_passen`` ⇒ ``_entferne_split``,
+        bisher nur eine INFO-Zeile im Log). Die Sichten zeigen danach
+        „nicht aufgeteilt", ohne dass irgendwo stand, warum (ADR-002/P4).
+
+        Gerechnet wird mit genau den Bausteinen des Schreibpfads: dieselbe
+        Faltung (``lade_modus_split_je_monat``, **ein** Aufruf je Anlage),
+        derselbe Monatsstrom (``get_wp_strom_kwh``), dieselbe Invariante
+        (``teilmengen_passen``, Toleranz 0,5 kWh, ohne Monatsstrom ⇒ passt nicht).
+        Der Checker kappt nichts und normiert nichts (Konzept 263 §9).
+
+        Nicht gemeldet: Monate mit gespeichertem Split oder gemessener Betriebsart
+        (zuständig ist der Widerspruchs-Zwilling, dieselbe Unterscheidung wie
+        ``monats_fakten/laden.py``), Monate ohne Monatszeile (dort läuft kein
+        Abschluss), der laufende Monat (er ist nicht abgeschlossen) und Faltungen
+        ohne aufgeteilte Menge (eine Teilmenge 0 geht nicht verloren — dieselbe
+        Schwelle wie der Zwilling).
+        """
+        from backend.core.berechnungen import hat_gemessene_betriebsart
+        from backend.core.berechnungen.modus_split import teilmengen_passen
+        from backend.core.betriebsmodus import MODUS_ABDECKUNG_FELD
+        from backend.services.energie_profil.modus_split_monat import (
+            lade_modus_split_je_monat,
+        )
+
+        waermepumpen = [i for i in anlage.investitionen if i.typ == "waermepumpe"]
+        if not waermepumpen:
+            return []
+        splits = await lade_modus_split_je_monat(self.db, anlage.id)
+        if not splits:
+            return []
+
+        heute = date.today()
+        laufender_monat = (heute.year, heute.month)
+        ergebnisse: list[CheckErgebnis] = []
+        for inv in waermepumpen:
+            name = inv.bezeichnung
+            param = inv.parameter or {}
+            for imd in sorted(inv.monatsdaten, key=lambda z: (z.jahr, z.monat)):
+                schluessel = (imd.jahr, imd.monat)
+                if schluessel >= laufender_monat or not inv.ist_aktiv_im_monat(*schluessel):
+                    continue
+                split = splits.get(schluessel, {}).get(str(inv.id))
+                if split is None or split.aufgeteilt_kwh <= 0:
+                    continue
+                daten = imd.verbrauch_daten or {}
+                if float(daten.get(MODUS_ABDECKUNG_FELD) or 0) > 0 or hat_gemessene_betriebsart(daten):
+                    continue
+                gesamt = get_wp_strom_kwh(daten, param)
+                if teilmengen_passen(split, gesamt if gesamt > 0 else None):
+                    continue
+                monat_str = f"{imd.monat:02d}/{imd.jahr}"
+                teile_str = f"{fmt_zahl(split.aufgeteilt_kwh, 1)} kWh"
+                if gesamt > 0:
+                    meldung = (
+                        f"{name}: Aufteilung nach Betriebsart nicht gespeichert ({monat_str}) — "
+                        f"Heiz-/Kühl-/Warmwasserstrom zusammen {teile_str}, "
+                        f"Monatsstrom {fmt_zahl(gesamt, 1)} kWh"
+                    )
+                    warum = (
+                        "Die gemessenen Stunden ergeben mehr Strom für Heizen, Kühlen und "
+                        "Warmwasser, als im Monatsabschluss für das ganze Gerät eingetragen "
+                        "ist. Eine Teilmenge kann nicht größer sein als das Ganze — deshalb "
+                        "hat eedc die Aufteilung nicht gespeichert, und die Auswertungen "
+                        "zeigen den Monat als „nicht aufgeteilt“."
+                    )
+                else:
+                    meldung = (
+                        f"{name}: Aufteilung nach Betriebsart nicht gespeichert ({monat_str}) — "
+                        f"Heiz-/Kühl-/Warmwasserstrom zusammen {teile_str}, Monatsstrom fehlt"
+                    )
+                    warum = (
+                        "Für diesen Monat ist kein Stromverbrauch des Geräts eingetragen. "
+                        "Die Aufteilung nach Betriebsart ist ein Teil davon — ohne den "
+                        "Gesamtwert speichert eedc sie nicht, und die Auswertungen zeigen "
+                        "den Monat als „nicht aufgeteilt“."
+                    )
+                ergebnisse.append(CheckErgebnis(
+                    kategorie=CheckKategorie.INVESTITIONEN,
+                    schwere=CheckSeverity.WARNING,
+                    meldung=meldung,
+                    details=(
+                        f"{warum} Zwei Wege: Prüfe den Stromverbrauch dieses Monats im "
+                        "Monatsabschluss (stimmt er, oder fehlt ein Zähler?) — oder prüfe "
+                        "unter Einstellungen → Datenquellen, ob die Leistung des Geräts "
+                        "richtig zugeordnet ist. Nach dem Korrigieren den Monat erneut "
+                        "speichern, dann rechnet eedc die Aufteilung neu."
+                    ),
+                    link="/monatsabschluss",
+                    investition_id=inv.id,
+                ))
+        return ergebnisse
+
 
 # ─── Konzept-Wirtschaftlichkeit §8.1 — der Erfassungsort ────────────────────
 #

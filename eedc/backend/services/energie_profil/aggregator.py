@@ -90,9 +90,12 @@ _EXTERN_BEFUELLT_FELDER_RETTEN: tuple[str, ...] = (
 # (Standard 10 Tage) löscht.
 #
 # * `betriebsmodus_je_wp` — **immer** nur Recorder (`climate` hat keine LTS,
-#   Konzept 263 D9). Ein Monatsabschluss am Monatsersten schrieb damit rund zwei
-#   Drittel des Monats ohne Betriebsart neu; die Aufteilung Heizen/Kühlen fiel auf
-#   „nicht aufgeteilt".
+#   Konzept 263 D9). Bis N-596 schrieb ein Monatsabschluss am Monatsersten damit
+#   rund zwei Drittel des Monats ohne Betriebsart neu; die Aufteilung Heizen/Kühlen
+#   fiel auf „nicht aufgeteilt". Seit N-596 lässt er Tage, deren Leistungskurve
+#   keinen Wert mehr trägt, stehen (``hole_tagesverlauf``); die Rettung hier greift
+#   weiter, wo ein solcher Tag doch neu geschrieben wird — Werkbank aus der
+#   Langzeitstatistik (die keine Betriebsart kennt) und Tage ohne Gerätewerte.
 # * `soc_prozent` / `soc_je_speicher` / `strompreis_cent` — nur dann, wenn ihr
 #   Sensor keine Langzeitstatistik hat und der History-Fallback greift.
 #
@@ -525,17 +528,89 @@ def setze_gerettete_herkunft(profil: TagesEnergieProfil, herkunft: dict) -> None
         profil.source_provenance = provenance
 
 
+#: Schlüssel einer Tageskurve, die KEINE Leistung sind (N-596). Der Börsenpreis-Rückfall in
+#: ``get_tagesverlauf`` schreibt ``strompreis`` in jeden Punkt — auch für einen Tag, den Home
+#: Assistant längst gepurgt hat (aWATTar liefert rückwirkend; gemessen 02.10.2026: 150 von 150
+#: Punkten des 30.08. tragen ihn). Ausdrücklich genannt, weil die Serie dazu nur angehängt wird,
+#: wenn ein Punkt ihn trägt; alle weiteren Overlays erkennt ``kurve_traegt_leistung`` an
+#: ``serien[*].seite == "overlay"``.
+_KURVEN_OVERLAY_SCHLUESSEL: frozenset[str] = frozenset({"strompreis"})
+
+
+def kurve_traegt_leistung(
+    punkte_raw: Optional[list],
+    vortagsrand_raw: Optional[list],
+    serien: Optional[list],
+) -> bool:
+    """Trägt die Kurve irgendwo einen Leistungswert? (N-596)
+
+    ``True``, sobald ein Punkt aus ``punkte_raw`` oder ``vortagsrand_raw`` für einen Schlüssel,
+    der kein Overlay ist, einen Wert ``≠ None`` trägt — auch ``0.0`` (ein Sensor, der null
+    meldet, hat gemessen).
+
+    ⚠ „Liste leer" ist NICHT die Frage: Der HA-Zweig von ``get_tagesverlauf`` liefert für einen
+    vergangenen Tag immer das volle Raster — 144 Punkte und 6 Vortagsrand-Punkte —, auch wenn
+    Home Assistant für den Tag nichts mehr hat. Bis N-596 prüfte ``hole_tagesverlauf`` nur die
+    Länge und schrieb solche Tage mit leerer Kurve neu.
+    """
+    overlay = set(_KURVEN_OVERLAY_SCHLUESSEL) | {
+        s.get("key") for s in (serien or []) if s.get("seite") == "overlay"
+    }
+    for punkt in (*(punkte_raw or ()), *(vortagsrand_raw or ())):
+        for schluessel, wert in ((punkt or {}).get("werte") or {}).items():
+            if schluessel not in overlay and wert is not None:
+                return True
+    return False
+
+
+async def _tag_hat_geraetewerte(anlage: Anlage, datum: date, db: AsyncSession) -> bool:
+    """Trägt mindestens eine gespeicherte Stundenzeile des Tages Gerätewerte (``komponenten``)?
+
+    Leeres Dict und ``NULL`` zählen beide als „keine" — eine Zählerzeile ohne Leistungspunkt
+    schreibt ``{}`` (nur Börsenpreis in ``werte``) bzw. ``NULL`` (``werte`` leer).
+    """
+    zeilen = await db.execute(
+        select(TagesEnergieProfil.komponenten).where(
+            and_(
+                TagesEnergieProfil.anlage_id == anlage.id,
+                TagesEnergieProfil.datum == datum,
+            )
+        )
+    )
+    return any(bool(k) for (k,) in zeilen.all())
+
+
 async def hole_tagesverlauf(
     anlage: Anlage,
     datum: date,
     db: AsyncSession,
     prefetched_tagesverlauf: Optional[dict],
+    *,
+    source: Optional[Source] = None,
+    leere_kurve_erlaubt: bool = False,
 ) -> Optional[tuple]:
     """Eingang und Rohverlauf — Prefetch-Zweig, Live-Zweig, synthetische Slots.
 
     ⚠ Die beiden fruehen ``return None`` sind Vertrag, nicht Formsache: F-26 (Forum T89667 #142,
     IdleBit) ist an ihrem Verhalten gebaut worden. Sie bleiben hier und werden vom Orchestrator
     als ``None`` weitergereicht.
+
+    ⭐ Dritter früher Ausstieg, dieselbe Semantik (N-596, #422): **Eine Kurve ohne einen
+    einzigen Leistungswert überschreibt keine gespeicherten Gerätewerte.** Nur im Live-Zweig
+    (nicht Prefetch, nicht synthetische Slots, nicht MQTT-Energie ohne Leistungszuordnung);
+    die Kurve trägt keine Leistung, wenn ``kurve_traegt_leistung`` nein sagt — typisch, weil
+    Home Assistant den Tag aus dem Verlauf gelöscht hat (``purge_keep_days``). Dann:
+
+    a) Werkbank (``source.is_manual_repair()``) ohne ``leere_kurve_erlaubt`` ⇒ ``None``: sie
+       versucht zuerst ihren LTS-Rückfall (``repair_orchestrator._reparatur_aggregat``) — auch
+       für einen Tag, der schon leer geschrieben ist (Rückweg).
+    b) sonst, wenn eine gespeicherte Stundenzeile des Tages ``komponenten`` trägt ⇒ ``None``:
+       der Tag bleibt stehen (Monatsabschluss, Scheduler, Archiv-Nachzug, Werkbank nach
+       leerem LTS-Rückfall).
+    c) sonst weiter wie bisher: der Tag wird aus den Zählern geschrieben (N-563 O1). Ein Tag
+       ohne Gerätewerte hat nichts zu verlieren, und eine Anlage, deren Leistungssensoren
+       keine Historie haben (Recorder-Ausschluss, umbenannte Entity), friert sonst nach dem
+       ersten Lauf des Tages ein.
 
     Returns:
         ``(serien, punkte_raw, vortagsrand_raw, synthetische_slots)`` oder ``None``.
@@ -600,6 +675,31 @@ async def hole_tagesverlauf(
         return None
     else:
         synthetische_slots = False
+
+    # ── N-596: Kurve ohne Leistungswert (s. Docstring a/b/c) ──────────────
+    # Nicht bei MQTT-Energie ohne Leistungszuordnung (`has_mqtt_energy` ist nur
+    # dann wahr, s. `ermittle_aggregations_quelle`): dort gibt es keine
+    # Leistungsquelle, die verfallen könnte — die Kurve ist immer leer, und der
+    # Tag kommt wie bisher aus den Zählern (dieselbe Lage wie die synthetischen
+    # Slots, nur dass die Punkte schon da sind).
+    if (
+        prefetched_tagesverlauf is None
+        and not synthetische_slots
+        and not has_mqtt_energy
+        and not kurve_traegt_leistung(punkte_raw, vortagsrand_raw, serien)
+    ):
+        if source is not None and source.is_manual_repair() and not leere_kurve_erlaubt:
+            logger.info(
+                f"Anlage {anlage.id}, {datum}: Leistungskurve ohne Wert "
+                "(HA-Verlauf vermutlich gepurgt) — Werkbank versucht die Langzeitstatistik"
+            )
+            return None
+        if await _tag_hat_geraetewerte(anlage, datum, db):
+            logger.info(
+                f"Anlage {anlage.id}, {datum}: Leistungskurve ohne Wert (HA-Verlauf vermutlich "
+                "gepurgt) — gespeicherte Gerätewerte bleiben stehen, Tag nicht neu geschrieben"
+            )
+            return None
 
     return serien, punkte_raw, vortagsrand_raw, synthetische_slots
 
@@ -1842,6 +1942,7 @@ async def aggregate_day(
     *,
     source: Source,
     prefetched_tagesverlauf: Optional[dict] = None,
+    leere_kurve_erlaubt: bool = False,
 ) -> Optional[TagesZusammenfassung]:
     """
     Aggregiert Energiedaten eines Tages und speichert sie persistent.
@@ -1876,9 +1977,15 @@ async def aggregate_day(
             (Der Plan-Text nennt `dict[date, dict]`; da `aggregate_day`
             per-Tag arbeitet, wird die Per-Tag-Form übergeben — der Caller
             schleift über die Range.)
+        leere_kurve_erlaubt: Nur für die Werkbank nach einem leeren LTS-Rückfall (N-596).
+            Trägt die Leistungskurve keinen Wert, steigt ein ``MANUAL_REPAIR``-Lauf sonst
+            immer aus (damit der Rückfall zuerst versucht wird); mit ``True`` gilt für ihn
+            dieselbe Regel wie für alle anderen Aufrufer: Tag mit gespeicherten
+            Gerätewerten bleibt stehen, Tag ohne wird aus den Zählern geschrieben.
 
     Returns:
-        TagesZusammenfassung oder None bei Fehler
+        TagesZusammenfassung oder ``None`` — bei Fehler, ohne Quelle (F-26) oder wenn eine Kurve
+        ohne Leistungswert den Tag stehen lässt (N-596, s. ``hole_tagesverlauf``).
     """
     # Provenance-Writer codiert die Trigger-Quelle (Scheduler / Monatsabschluss /
     # manuelles Reaggregate / Vollbackfill). Source bleibt einheitlich
@@ -1887,7 +1994,10 @@ async def aggregate_day(
 
     sensor_mapping = anlage.sensor_mapping or {}
 
-    rohdaten = await hole_tagesverlauf(anlage, datum, db, prefetched_tagesverlauf)
+    rohdaten = await hole_tagesverlauf(
+        anlage, datum, db, prefetched_tagesverlauf,
+        source=source, leere_kurve_erlaubt=leere_kurve_erlaubt,
+    )
     if rohdaten is None:
         return None
     serien, punkte_raw, vortagsrand_raw, synthetische_slots = rohdaten

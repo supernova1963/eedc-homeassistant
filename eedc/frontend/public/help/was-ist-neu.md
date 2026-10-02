@@ -11,32 +11,48 @@
 
 ## Unreleased
 
-**In dieser Version:** der Monatsabschluss löscht die Aufteilung Heizen/Kühlen nicht mehr · die Verbrauchsprognose gibt es auch für morgen · die Wärmepumpe verschiebt die Verbrauchsprognose nicht mehr in die Nacht · die Wetter-Monatsreihe steht auf einem Lineal, mit neuem Block „Sonnenangebot" · warum eine eingebettete Karte „401" zeigt · ein „—" in einer Kachel zeigt keine Rechnung mehr.
+**In dieser Version:** das Speichern eines Monats überschreibt ältere Tage nicht mehr — Gerätewerte und Aufteilung Heizen/Kühlen bleiben · die Verbrauchsprognose gibt es auch für morgen · die Wärmepumpe verschiebt die Verbrauchsprognose nicht mehr in die Nacht · die Wetter-Monatsreihe steht auf einem Lineal, mit neuem Block „Sonnenangebot" · warum eine eingebettete Karte „401" zeigt · ein „—" in einer Kachel zeigt keine Rechnung mehr.
 
-**Der Monatsabschluss löscht die Aufteilung Heizen/Kühlen nicht mehr**
+**Speichern eines Monats überschreibt ältere Tage nicht mehr**
 
-**Betrifft dich das?** Ja, wenn deiner Wärmepumpe oder Klimaanlage ein
-Betriebsart-Sensor zugeordnet ist — eedc teilt ihren Strom dann nach Heizen,
-Kühlen und Warmwasser auf.
+**Betrifft dich das?** Ja, wenn du eedc mit Home Assistant betreibst und einem
+Gerät einen Leistungssensor zugeordnet hast — besonders, wenn eedc den Strom
+deiner Wärmepumpe oder Klimaanlage nach Heizen, Kühlen und Warmwasser aufteilt.
 
-**Was war:** Ob ein Gerät in einer Stunde geheizt oder gekühlt hat, kennt Home
-Assistant nur aus seinem Verlauf, und den hebt es standardmäßig rund **zehn
-Tage** auf. Wurde ein älterer Tag neu berechnet, ersetzte eedc die gespeicherte
-Betriebsart durch „kein Signal". Genau das tut der **Monatsabschluss**: Er
-rechnet den ganzen Monat neu, also auch die ersten rund zwanzig Tage. Ebenso
-„Tag neu aggregieren" in der Reparatur-Werkbank und die Knöpfe „Zeitraum neu
-aggregieren" im Daten-Checker. Danach stand der Monat auf **„nicht
-aufgeteilt"**.
+**Was war:** Seit Version 4.0.47 rechnet eedc bei jedem Speichern eines Monats
+alle Tage dieses Monats neu. Home Assistant hebt seinen Verlauf standardmäßig
+aber nur rund **zehn Tage** auf. Für ältere Tage bekam eedc deshalb eine
+Leistungskurve ohne einen einzigen Wert — und schrieb den Tag trotzdem neu: Die
+**Gerätewerte je Stunde** wurden leer, ebenso die **Betriebsart**; danach stand
+der Monat auf **„nicht aufgeteilt"**. Ein Gerät, das nur einen Leistungssensor
+und keinen Stromzähler hat (etwa eine Split-Klimaanlage), verlor beim Speichern
+auch seine **Tagesmenge**. Die Gerätewerte je Stunde und die Betriebsart gingen
+ebenso über „Tag neu aggregieren" und „Mehrere Tage neu aggregieren" in der
+Reparatur-Werkbank verloren und über die Knöpfe „Neu aggregieren" im
+Daten-Checker.
 
-**Was jetzt:** Kennt Home Assistant einen Tag nicht mehr, bleibt die bei eedc
-gespeicherte Betriebsart stehen; was Home Assistant noch liefert, gewinnt.
-Dasselbe gilt für **Ladestand** und **Strompreis**, wenn deren Sensor keine
-Langzeitstatistik hat.
+**Was jetzt:** Ein Tag, für den Home Assistant keine Leistungswerte mehr hat,
+bleibt beim Speichern eines Monats stehen. Die Reparatur-Werkbank und die Knöpfe
+im Daten-Checker holen die Kurve in diesem Fall aus der **Langzeitstatistik**
+von Home Assistant; hat auch die nichts, bleibt der Tag unverändert, und die
+Meldung sagt dir, warum. Wird ein Tag doch neu geschrieben, bleibt die
+gespeicherte Betriebsart stehen — ebenso Ladestand und Strompreis, wenn deren
+Sensor keine Langzeitstatistik hat.
 
-⚠ **Schon verlorene Stunden kommen damit nicht zurück** — nur über eine
-Sicherung von eedc aus der Zeit davor.
+**Schon betroffen?** Die **Gerätewerte** holst du zurück: *Einstellungen →
+Daten → Energieprofil-Pflege → „Mehrere Tage neu aggregieren"* für die
+betroffenen Tage (höchstens 31 je Lauf) — eedc nimmt sie aus der
+Langzeitstatistik, soweit die den Tag kennt. Die **Betriebsart** kennt die
+Langzeitstatistik nicht; sie kommt nur über eine Sicherung von eedc aus der Zeit
+davor zurück.
 
-→ *[Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)*
+**Neu im Daten-Checker:** Passt die Aufteilung eines Monats nicht zum
+eingetragenen Stromverbrauch des Geräts — zusammen mehr als der Monatsstrom,
+oder der Monatsstrom fehlt —, speichert eedc sie nicht. Das geschah bisher
+still; jetzt nennt der Daten-Checker den Monat und beide Zahlen und führt zum
+Monatsabschluss.
+
+→ *[Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)* · *[Daten-Checker §4.14](HANDBUCH_DATEN_CHECKER.md#414-klimaanlage--betriebsmodus)*
 
 **Die Verbrauchsprognose für morgen kommt in Home Assistant an**
 

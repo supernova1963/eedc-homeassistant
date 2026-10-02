@@ -117,6 +117,8 @@ class DatenChecker(
             anlage, monatsdaten, hat_stundenwerte=hat_stundenwerte
         ))
         ergebnisse.extend(self._check_investitionen(anlage, monatsdaten))
+        # N-597: Aufteilung nach Betriebsart, die der Abschluss nicht speichern kann.
+        ergebnisse.extend(await self._check_modus_split_nicht_gespeichert(anlage))
         ergebnisse.extend(self._check_monatsdaten_vollstaendigkeit(anlage, monatsdaten))
         ergebnisse.extend(self._check_geraetewerte_ohne_monatszeile(anlage, monatsdaten))
         ergebnisse.extend(await self._check_monatsdaten_plausibilitaet(

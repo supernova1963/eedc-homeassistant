@@ -2322,7 +2322,7 @@ P10_PER_INVESTITION_PHASE: dict[str, str] = {
 
 #: **Checker-Pfade ohne Lader** — die Blindstelle aus dem Prüfbericht
 #: Daten-Checker 2026-08-22/B8, jetzt zählbar statt nur beschrieben. Diese
-#: fünfzehn Funktionen bekommen ihre Zeilen weder aus einem `select` noch von
+#: sechzehn Funktionen bekommen ihre Zeilen weder aus einem `select` noch von
 #: einer Phase, sondern über die eager geladene Relationship
 #: `Investition.monatsdaten` (bei `_check_phev_anteil_unbestimmt` als
 #: `getattr(inv, "monatsdaten", [])` — dieselbe Relationship). Sie **prüfen**
@@ -2352,6 +2352,9 @@ P10_FALT_SCHREIBEN_IMPORT_CHECKER: frozenset[str] = frozenset({
     "backend/services/daten_checker/monatsdaten.py::_check_monatsdaten_plausibilitaet",
     "backend/services/daten_checker/monatsdaten.py::_check_werte_in_nicht_gefuehrten_feldern",
     "backend/services/daten_checker/monatsdaten.py::_check_wp_monatsdaten",
+    # N-597: hält die Live-Faltung des Modus-Splits gegen den gepflegten
+    # Monatsstrom der Zeile — prüft, leitet keine Sicht-Größe ab.
+    "backend/services/daten_checker/monatsdaten.py::_check_modus_split_nicht_gespeichert",
     # Stammdaten: Abgabe-Kandidat, BKW-Akku-Erfassungsweg, Speicher-Netzladung
     # kumulativ, Wechselrichter-Altbestand (#229).
     "backend/services/daten_checker/stammdaten.py::_check_abgabe_kandidat",

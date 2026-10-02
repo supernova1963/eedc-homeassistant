@@ -314,6 +314,52 @@ async def _plan_reaggregate_day(
     }
 
 
+#: Präfix der Rückgabe von ``_reparatur_aggregat``, wenn der Lauf den Tag stehen lässt (N-596).
+#: Form ``"unveraendert:<LTS-Grund>"`` — ``teile_reparatur_quelle`` trennt beides wieder.
+QUELLE_UNVERAENDERT = "unveraendert"
+
+
+def teile_reparatur_quelle(quelle: str) -> tuple[str, Optional[str]]:
+    """``"unveraendert:keine_daten"`` → ``("unveraendert", "keine_daten")``; sonst ``(quelle, None)``."""
+    art, _, grund = quelle.partition(":")
+    if art == QUELLE_UNVERAENDERT:
+        return art, grund or None
+    return quelle, None
+
+
+def unveraendert_text(lts_grund: Optional[str]) -> str:
+    """Anwender-Satz für einen Tag, den die Werkbank stehen gelassen hat (N-596)."""
+    from backend.services.energie_profil.lts_tagesverlauf import grund_text
+
+    lts = grund_text(lts_grund) if lts_grund else ""
+    return (
+        "Der Tag bleibt unverändert: Home Assistant hat für ihn keine Leistungswerte mehr "
+        "im Verlauf, und auch aus der Langzeitstatistik kam keine Kurve"
+        + (f" ({lts.rstrip('.')})" if lts else "")
+        + ". Die gespeicherten Stunden- und Gerätewerte bleiben deshalb stehen, statt durch "
+        "leere ersetzt zu werden."
+    )
+
+
+async def _tag_gespeichert(anlage, datum: date, db: AsyncSession) -> bool:
+    """Hat der Tag schon eine Tages- oder Stundenzeile?"""
+    tz = await db.scalar(
+        select(func.count(TagesZusammenfassung.id)).where(
+            TagesZusammenfassung.anlage_id == anlage.id,
+            TagesZusammenfassung.datum == datum,
+        )
+    )
+    if tz:
+        return True
+    tep = await db.scalar(
+        select(func.count(TagesEnergieProfil.id)).where(
+            TagesEnergieProfil.anlage_id == anlage.id,
+            TagesEnergieProfil.datum == datum,
+        )
+    )
+    return bool(tep)
+
+
 async def _reparatur_aggregat(
     anlage, datum: date, db: AsyncSession
 ) -> tuple[Any, str]:
@@ -331,9 +377,21 @@ async def _reparatur_aggregat(
     HA-LTS, die auch der Vollbackfill benutzt, und reicht sie durch. Kein zweiter
     Aggregations-Pfad — `aggregate_day` bleibt der einzige Schreiber.
 
+    ⭐ N-596 (#422): Für einen gepurgten Tag liefert die Historie keine leere Liste,
+    sondern das volle Raster OHNE Leistungswert — `aggregate_day` schrieb den Tag
+    damit neu (leere Gerätewerte), und dieser Rückfall griff nie. Seit N-596 steigt
+    ein `MANUAL_REPAIR`-Lauf bei einer Kurve ohne Leistungswert aus (Stufe 1 ⇒
+    `None`), die Langzeitstatistik wird versucht (Stufe 2), und erst wenn auch sie
+    nichts hat, läuft Stufe 3 mit `leere_kurve_erlaubt=True`: ein Tag mit
+    gespeicherten Gerätewerten bleibt stehen, ein Tag ohne wird wie bisher aus den
+    Zählern geschrieben (keine Verschlechterung gegenüber vorher).
+
     Returns:
-        (TagesZusammenfassung | None, quelle) — `quelle` ist „historie", „lts"
-        oder der LTS-Grund, warum auch der Rückfall nichts holen konnte.
+        (TagesZusammenfassung | None, quelle) — `quelle` ist
+        „historie" · „lts" · „zaehler" (aus Zählern neu, ohne Leistungskurve) ·
+        „unveraendert:<LTS-Grund>" (Tag stehen gelassen, s. `teile_reparatur_quelle`)
+        oder — wenn es den Tag noch gar nicht gibt — der LTS-Grund, warum auch der
+        Rückfall nichts holen konnte.
     """
     from backend.services.energie_profil_service import aggregate_day
     from backend.services.energie_profil.source import Source
@@ -348,7 +406,26 @@ async def _reparatur_aggregat(
     verlauf = await lade_tagesverlauf_aus_lts(db, anlage, datum, datum)
     prefetched = verlauf.tage.get(datum)
     if prefetched is None:
-        return None, verlauf.grund if verlauf.grund != "ok" else "keine_daten"
+        lts_grund = verlauf.grund if verlauf.grund != "ok" else "keine_daten"
+        # Stufe 3 (N-596): ohne Leistungskurve — Zähler, sofern der Tag keine
+        # Gerätewerte zu verlieren hat. Nur, wenn Stufe 1 überhaupt an einer Kurve
+        # ohne Leistungswert ausgestiegen sein KANN: ohne Live-Zuordnung liefert
+        # `get_tagesverlauf` gar keine Kurve (dieselbe Bedingung, :292), Stufe 1
+        # ist dann am F-26-Ausstieg gescheitert und Stufe 3 wäre derselbe Lauf.
+        from backend.services.live_sensor_config import extract_live_config
+
+        basis_live, inv_live_map, _, _ = extract_live_config(anlage)
+        if basis_live or inv_live_map:
+            zusammenfassung = await aggregate_day(
+                anlage, datum, db,
+                source=Source.MANUAL_REPAIR,
+                leere_kurve_erlaubt=True,
+            )
+            if zusammenfassung is not None:
+                return zusammenfassung, "zaehler"
+        if await _tag_gespeichert(anlage, datum, db):
+            return None, f"{QUELLE_UNVERAENDERT}:{lts_grund}"
+        return None, lts_grund
 
     zusammenfassung = await aggregate_day(
         anlage, datum, db,
@@ -443,6 +520,11 @@ async def _execute_reaggregate_day(
 
     zusammenfassung, quelle = await _reparatur_aggregat(anlage, datum, db)
     if zusammenfassung is None:
+        art, lts_grund = teile_reparatur_quelle(quelle)
+        if art == QUELLE_UNVERAENDERT:
+            # N-596: kein „ok" mit 0 Stunden — der Tag ist bewusst stehen geblieben,
+            # und die Meldung sagt warum.
+            raise RuntimeError(f"Tag {datum} nicht neu geschrieben — {unveraendert_text(lts_grund)}")
         # Den Grund nennen, nicht raten: „keine Daten gefunden" schickte den
         # Anwender auf eine Fehlersuche bei sich selbst.
         erklaerung = grund_text(quelle) or (
@@ -580,7 +662,8 @@ async def _execute_reaggregate_range(
                     # Trägt jetzt den echten Grund (`keine_live_zuordnung` /
                     # `ha_nicht_verfuegbar` / `keine_daten`) statt pauschal
                     # „keine_daten" — der Bereichs-Lauf lief über Alttage sonst
-                    # komplett ins Leere, ohne zu sagen warum.
+                    # komplett ins Leere, ohne zu sagen warum. N-596: ein stehen
+                    # gelassener Tag meldet sich als „unveraendert:<LTS-Grund>".
                     "grund": quelle,
                 })
             else:
