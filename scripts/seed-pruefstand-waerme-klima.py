@@ -519,12 +519,19 @@ class DbSeeder:
                 # sonst wüchse die Spalte mit jedem Lauf.
                 alt = abs(float((json.loads(row["komponenten"] or "{}") or {})
                                 .get(f"waermepumpe_{inv_id}", 0.0)))
+                # `created_at` mitstempeln (N-595): die Zeile trägt die Modus-Spur
+                # jetzt backward, gepaart mit `komponenten` derselben Zeile. Bliebe
+                # die Schreibzeit des Demo-Seeds (vor N-382, 04.09.) stehen, hielte
+                # `slot_konvention.betriebsmodus_ziel_slot` die Spur für forward und
+                # schöbe sie beim Neu-Aggregieren eine Stunde weiter. Für die `*_kw`
+                # ändert sich nichts — die Demo-Zeilen liegen schon nach
+                # `SLOT_PAARUNG_VORZEILE_AB`.
                 self.cur.execute(
                     "UPDATE tages_energie_profil SET komponenten=?, "
-                    " betriebsmodus_je_wp=?, waermepumpe_kw=? WHERE id=?",
+                    " betriebsmodus_je_wp=?, waermepumpe_kw=?, created_at=? WHERE id=?",
                     (json.dumps(komponenten, ensure_ascii=False),
                      json.dumps(modus_map, ensure_ascii=False) if modus_map else None,
-                     round(basis - alt + kwh, 4), row["id"]),
+                     round(basis - alt + kwh, 4), SEED_ZEIT, row["id"]),
                 )
                 n += 1
             # Tages-Zählersumme: der Bezug, auf den der Modus-Split normiert.

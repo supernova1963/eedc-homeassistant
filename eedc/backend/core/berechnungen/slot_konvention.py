@@ -414,6 +414,60 @@ def zeile_traegt_backward_kw(zeile: Any, ab: date = SLOT_PAARUNG_VORZEILE_AB) ->
     return _traegt_backward_kw(zeile, ab)
 
 
+#: **Ab wann eine Zeile ihre ``betriebsmodus_je_wp`` backward traegt** (N-595).
+#:
+#: Die Betriebsart lag bis N-382 (Commit ``bb818a46``, 2026-09-04 05:40 +0200,
+#: erstmals ausgeliefert mit v4.0.39 vom selben Tag) **forward**: Zeile ``h``
+#: trug den Modus von ``[h, h+1)`` (Absatz „FÜNFTE Bahn" oben). Seither liegt sie
+#: backward wie die ``*_kw``. Die Spalte selbst gibt es seit v4.0.21 (19.08.) —
+#: die Forward-Aera umfasst also Zeilen mit ``created_at`` vom 19.08. bis 03.09.
+#:
+#: Gebraucht wird die Grenze nur an **einer** Stelle: wenn ``aggregate_day`` eine
+#: gemessene Betriebsart vor dem Neuschreiben rettet (die Quelle — HAs Recorder —
+#: ist nach der Aufbewahrungsfrist gepurgt). Eine Forward-Zeile gibt ihren Modus
+#: dann an den **Folge**-Slot weiter (``betriebsmodus_ziel_slot``).
+#:
+#: ⚠ **Dieselbe ``created_at``-Lesart und dieselbe benannte Unschaerfe wie
+#: ``SLOT_PAARUNG_VORZEILE_AB``:** Wer erst nach dem 04.09. aktualisiert hat, hat
+#: Zeilen mit ``created_at`` nach der Grenze, die noch forward liegen. Sie werden
+#: zeilengleich gerettet — an einem Modus-Wechsel steht der Modus dann eine Stunde
+#: zu frueh. Benannt statt verschwiegen; die Zeile selbst traegt keine Auskunft,
+#: mit welcher Version sie geschrieben wurde.
+BETRIEBSMODUS_BACKWARD_AB = date(2026, 9, 4)
+
+
+def betriebsmodus_ziel_slot(zeile: Any) -> tuple[date, int] | None:
+    """In welchen **Backward**-Slot gehoert die Betriebsart dieser Zeile? (N-595)
+
+    * Backward-Zeile (``created_at`` ab ``BETRIEBSMODUS_BACKWARD_AB``):
+      ``(datum, stunde)`` — die Zeile meint schon ``[stunde-1, stunde)``.
+    * Forward-Zeile (Altbestand vor N-382): sie meint ``[stunde, stunde+1)`` und
+      damit den Folge-Slot ``(datum, stunde+1)``; fuer Stunde 23 ist das Slot 0
+      des **Folgetags** — ``(datum+1, 0)``. Dieselbe Verschiebung wie
+      ``forward_stunde_zu_backward_slot`` (Absatz „DREI Bahnen"), hier mit der
+      Tagesachse, weil der Aufrufer Zeilen ueber eine Tagesgrenze liest.
+
+    ``None``, wenn die Zeile keine gueltige Stunde ``0..23`` traegt.
+
+    ⛔ **Nur fuer ``betriebsmodus_je_wp``.** ``soc_prozent``, ``soc_je_speicher``
+    und ``strompreis_cent`` liegen **unveraendert** forward (N-387) — ihre
+    Semantik hat nie gewechselt, sie werden zeilengleich gerettet.
+
+    Args:
+        zeile: braucht ``datum``, ``stunde`` und ``created_at`` (ORM-Objekt oder
+            Spalten-Projektion). Ohne ``created_at`` entscheidet das Datum —
+            dieselbe Rueckfallregel wie bei ``zeile_traegt_backward_kw``.
+    """
+    stunde = getattr(zeile, "stunde", None)
+    if stunde is None or not 0 <= stunde <= 23:
+        return None
+    if _traegt_backward_kw(zeile, BETRIEBSMODUS_BACKWARD_AB):
+        return zeile.datum, stunde
+    if stunde == 23:
+        return zeile.datum + timedelta(days=1), 0
+    return zeile.datum, stunde + 1
+
+
 def _traegt_backward_kw(zeile: Any, ab: date) -> bool:
     """Liegen die ``*_kw`` dieser Zeile backward? (s. ``SLOT_PAARUNG_VORZEILE_AB``)"""
     erzeugt = getattr(zeile, "created_at", None)
