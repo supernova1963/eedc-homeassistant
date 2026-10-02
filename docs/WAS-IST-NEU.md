@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** September 2026 (v4.1.0)
+> **Stand:** Oktober 2026 (v4.1.1)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -9,7 +9,7 @@
 
 ---
 
-## Unreleased
+## v4.1.1 — 2. Oktober 2026
 
 **In dieser Version:** das Speichern eines Monats überschreibt ältere Tage nicht mehr — Gerätewerte und Aufteilung Heizen/Kühlen bleiben · die Verbrauchsprognose gibt es auch für morgen · die Wärmepumpe verschiebt die Verbrauchsprognose nicht mehr in die Nacht · die Wetter-Monatsreihe steht auf einem Lineal, mit neuem Block „Sonnenangebot" · warum eine eingebettete Karte „401" zeigt · ein „—" in einer Kachel zeigt keine Rechnung mehr.
 

@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.1.1] - 2026-10-02 — Ältere Tage bleiben beim Speichern eines Monats erhalten, Verbrauchsprognose auch für morgen
 
 ### Added
 
