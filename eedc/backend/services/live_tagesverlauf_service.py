@@ -656,7 +656,7 @@ async def get_tagesverlauf(
     if any("haushalt" in p["werte"] for p in punkte):
         serien.append({
             "key": "haushalt",
-            "label": "Haushalt",
+            "label": "Restverbrauch",  # N-603 (03.10.2026): Label, der Schlüssel bleibt
             "kategorie": "haushalt",
             "farbe": "#64748b",
             "seite": "senke",
@@ -1004,7 +1004,7 @@ async def _get_tagesverlauf_mqtt(
     if any("haushalt" in p["werte"] for p in punkte):
         serien.append({
             "key": "haushalt",
-            "label": "Haushalt",
+            "label": "Restverbrauch",  # N-603 (03.10.2026): Label, der Schlüssel bleibt
             "kategorie": "haushalt",
             "farbe": "#64748b",
             "seite": "senke",

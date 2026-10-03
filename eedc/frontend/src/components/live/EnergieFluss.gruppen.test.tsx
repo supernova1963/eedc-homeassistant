@@ -79,7 +79,7 @@ const fz = (id: number, label: string, soc: number | null, kw: number | null, v2
 const soc = (id: number, wert: number): LiveGauge =>
   ({ key: `soc_${id}`, label: `soc ${id}`, wert, min_wert: 0, max_wert: 100, einheit: '%' })
 const NETZ = knoten('netz', { label: 'Stromnetz', icon: 'zap', erzeugung_kw: 1 })
-const HAUS = knoten('haushalt', { label: 'Haushalt', icon: 'home', verbrauch_kw: 0.6 })
+const HAUS = knoten('haushalt', { label: 'Restverbrauch', icon: 'home', verbrauch_kw: 0.6 })
 
 /** Plan-Tabelle D: 9 Strings (Süd 5 · Ost 2 · West 2), 4 Speicher, WP, 2 Wallboxen, 3 Autos, Pool, Sauna, BHKW. */
 function bestandD(): { komp: LiveKomponente[]; gauges: LiveGauge[] } {
@@ -144,7 +144,7 @@ function kacheln(container: HTMLElement) {
     titel: g.querySelector(':scope > title')?.textContent ?? '',
     texte: [...g.querySelectorAll('text')].map(t => t.textContent?.trim() ?? ''),
     stapel: g.querySelectorAll('rect[data-stapel]').length,
-  })).filter(k => !k.tip.startsWith('Haushalt'))
+  })).filter(k => !k.tip.startsWith('Restverbrauch'))
 }
 const kachel = (container: HTMLElement, ersteZeile: string) => {
   const treffer = kacheln(container).filter(k => k.tip.split('\n')[0] === ersteZeile)

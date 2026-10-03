@@ -446,7 +446,7 @@ class EnergieprofilChecks:
                     "Komponenten leer. Betroffen sind Prognosen-IST, Heatmap, "
                     "Lernfaktor und Monatsberichte. Bei einem Speicher oder "
                     "einer PV-Erzeugung kommt die teuerste Folge hinzu: Der "
-                    "bilanzielle Hausverbrauch je Stunde (PV + Netzbezug − "
+                    "bilanzielle Gesamtverbrauch je Stunde (PV + Netzbezug − "
                     "Einspeisung − Speicher) rechnet den fehlenden Anteil als 0 "
                     "und fällt damit zu niedrig aus — und mit ihm die Grundlast, "
                     "die als Median der Nachtstunden daraus gebildet wird "

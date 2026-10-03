@@ -41,7 +41,7 @@ _TYP_SEITE: dict[str, str] = {
 # die beiden Split-Keys fielen Neu-Tage in Geräteliste/Diagnose-Serien still
 # durch `_key_to_serie_info → None` (Achse-3-Konsument-Robustheit, #316).
 _VIRTUAL_SERIEN: dict[str, dict] = {
-    "haushalt":    {"label": "Haushalt",    "typ": "virtual", "kategorie": "haushalt", "seite": "senke"},
+    "haushalt":    {"label": "Restverbrauch", "typ": "virtual", "kategorie": "haushalt", "seite": "senke"},
     "netz":        {"label": "Stromnetz",   "typ": "virtual", "kategorie": "netz",     "seite": "bidirektional"},
     "netzbezug":   {"label": "Netzbezug",   "typ": "virtual", "kategorie": "netz",     "seite": "bidirektional"},
     "einspeisung": {"label": "Einspeisung", "typ": "virtual", "kategorie": "netz",     "seite": "bidirektional"},

@@ -930,7 +930,7 @@ Die HA-History hat nur ~10 Tage Retention. eedc sichert die verdichteten Werte d
 Zur Deutung der Stunden-/Tageswerte:
 
 - **PV** — Summe aller lokalen Erzeuger (PV-Module, Balkonkraftwerk).
-- **Verbrauch** — Gesamtverbrauch (Haushalt + Wärmepumpe + Wallbox + …).
+- **Verbrauch** — Gesamtverbrauch (Restverbrauch + Wärmepumpe + Wallbox + …).
 - **Bezug / Einspeisung** — Netto-Austausch mit dem Stromnetz.
 - **Batterie** — positiv = Entladung (Quelle), negativ = Ladung (Senke).
 - **Überschuss** = max(0, PV − Verbrauch) je Stunde; **Defizit** = max(0, Verbrauch − PV) je Stunde.

@@ -60,7 +60,7 @@ BASIS_ENERGY_TOPICS = [
      "manuell erfassbar. " + _HEUTE_HINWEIS),
     ("netzbezug_kwh", "Netzbezug Zählerstand", "kWh",
      "Zählerstand der aus dem Netz bezogenen Energie. Kernwert: ohne ihn lassen sich "
-     "Hausverbrauch und Stromkosten nicht berechnen. Ohne Sensor im Monatsabschluss "
+     "Gesamtverbrauch und Stromkosten nicht berechnen. Ohne Sensor im Monatsabschluss "
      "manuell erfassbar. " + _HEUTE_HINWEIS),
 ]
 

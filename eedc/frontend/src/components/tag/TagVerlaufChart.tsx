@@ -79,7 +79,7 @@ export function baueChartSerien({
   r.push({ dataKey: 'bat_neg', label: 'Batterie \u2193', farbe: KATEGORIE_FARBEN.batterie, stackId: 'senken', hideLabel: true })
   r.push({ dataKey: 'netz_pos', label: 'Stromnetz', farbe: KATEGORIE_FARBEN.netz, stackId: 'quellen' })
   r.push({ dataKey: 'netz_neg', label: 'Stromnetz \u2193', farbe: KATEGORIE_FARBEN.netz, stackId: 'senken', hideLabel: true })
-  r.push({ dataKey: 'hausverbrauch', label: 'Hausverbrauch', farbe: KATEGORIE_FARBEN.haushalt, stackId: 'senken' })
+  r.push({ dataKey: 'hausverbrauch', label: 'Restverbrauch', farbe: KATEGORIE_FARBEN.haushalt, stackId: 'senken' })
   // JayJayX (simon42 T89667 #309): die beiden **dedizierten** Gerätesenken sind
   // die einzigen, die bis hierher unbedingt im Stapel standen — bei ihm zwei
   // Flächen für Geräte, die er nicht besitzt.

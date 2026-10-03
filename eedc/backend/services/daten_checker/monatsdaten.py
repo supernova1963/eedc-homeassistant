@@ -602,7 +602,7 @@ class MonatsdatenChecks:
                 ergebnisse.append(CheckErgebnis(
                     kategorie=kat, schwere=CheckSeverity.ERROR,
                     meldung=f"{prefix}: Netzbezug nicht erfasst",
-                    details="Kernfeld – ohne Netzbezug sind Hausverbrauch und Stromkosten nicht berechenbar",
+                    details="Kernfeld – ohne Netzbezug sind Gesamtverbrauch und Stromkosten nicht berechenbar",
                     link=md_link,
                 ))
             if (
@@ -615,14 +615,14 @@ class MonatsdatenChecks:
                     ergebnisse.append(CheckErgebnis(
                         kategorie=kat, schwere=CheckSeverity.WARNING,
                         meldung=f"{prefix}: Batterie-Ladung nicht erfasst (Speicher vorhanden)",
-                        details="Ohne Batterie-Daten wird der Hausverbrauch falsch berechnet",
+                        details="Ohne Batterie-Daten wird der Gesamtverbrauch falsch berechnet",
                         link=md_link,
                     ))
                 if md.batterie_entladung_kwh is None:
                     ergebnisse.append(CheckErgebnis(
                         kategorie=kat, schwere=CheckSeverity.WARNING,
                         meldung=f"{prefix}: Batterie-Entladung nicht erfasst (Speicher vorhanden)",
-                        details="Ohne Batterie-Daten wird der Hausverbrauch falsch berechnet",
+                        details="Ohne Batterie-Daten wird der Gesamtverbrauch falsch berechnet",
                         link=md_link,
                     ))
 
@@ -893,7 +893,7 @@ class MonatsdatenChecks:
                 if hausverbrauch < -0.5:
                     ergebnisse.append(CheckErgebnis(
                         kategorie=kat, schwere=CheckSeverity.ERROR,
-                        meldung=f"{prefix}: Energiebilanz ergibt negativen Hausverbrauch ({fmt_zahl(hausverbrauch, 1)} kWh)",
+                        meldung=f"{prefix}: Energiebilanz ergibt negativen Gesamtverbrauch ({fmt_zahl(hausverbrauch, 1)} kWh)",
                         details=(
                             f"PV {fmt_zahl(pv, 0)} – Einspeisung {fmt_zahl(md.einspeisung_kwh, 0)} "
                             f"+ Netzbezug {fmt_zahl(md.netzbezug_kwh, 0)} "

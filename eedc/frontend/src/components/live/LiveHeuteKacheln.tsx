@@ -10,7 +10,7 @@
  *
  * Reihenfolge nach Energiebilanz (#157 detLAN):
  *   Quellen:    PV + Batterie-Entladung      → Σ Eigenverbrauch
- *   Verbrauch:  Eigenverbrauch + Netzbezug   → Σ Hausverbrauch
+ *   Verbrauch:  Eigenverbrauch + Netzbezug   → Σ Gesamtverbrauch
  *   Einspeisung als PV-Überschuss separat am Ende.
  */
 import { Info } from 'lucide-react'
@@ -68,10 +68,10 @@ export default function LiveHeuteKacheln({ data }: { data: LiveDashboardResponse
             <div className="text-lg font-bold text-red-600 dark:text-red-400">{fmtZahl(data.heute_netzbezug_kwh, 1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
           </div>
         )}
-        {/* Hausverbrauch heute (= Eigenverbrauch + Netzbezug) */}
+        {/* Gesamtverbrauch heute (= Eigenverbrauch + Netzbezug; N-603: kein „Hausverbrauch" mehr) */}
         {data.heute_kwh_pro_komponente?.haushalt != null && (
           <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg px-3 py-2">
-            <div className="text-xs text-gray-500 dark:text-gray-400">Hausverbrauch <SimpleTooltip text="Gesamter Stromverbrauch des Haushalts (Eigenverbrauch + Netzbezug)"><Info className="inline w-3 h-3 opacity-50 cursor-help" /></SimpleTooltip></div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Gesamtverbrauch <SimpleTooltip text="Gesamtverbrauch = Eigenverbrauch + Netzbezug"><Info className="inline w-3 h-3 opacity-50 cursor-help" /></SimpleTooltip></div>
             <div className="text-lg font-bold text-indigo-600 dark:text-indigo-400">{fmtZahl(data.heute_kwh_pro_komponente.haushalt, 1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
           </div>
         )}

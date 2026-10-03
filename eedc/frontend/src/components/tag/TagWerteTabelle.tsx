@@ -15,6 +15,7 @@ import type { StundenWert, SerieInfo } from '../../api/energie_profil'
 import { HerkunftZeile } from '../blocks'
 import { unvollstaendigHerkunft } from '../../lib/prognoseHinweise'
 import { fmtZahl } from '../../lib/einheiten'
+import { SimpleTooltip } from '../ui/FormelTooltip'
 
 function round2(v: number): number {
   return Math.round(v * 100) / 100
@@ -49,7 +50,7 @@ export function erfassteSenken(daten: StundenWert[], extraVerbraucher: SerieInfo
 }
 
 /**
- * Hausverbrauch einer Stunde = Gesamtverbrauch − Wärmepumpe − Wallbox − sonstige Senken.
+ * Restverbrauch einer Stunde (bis 03.10.2026 „Hausverbrauch", N-603) = Gesamtverbrauch − Wärmepumpe − Wallbox − sonstige Senken.
  *
  * Eine **Differenz**: fehlt ihr Ausgangswert, ist sie nicht bestimmbar und die Zelle
  * bleibt leer („—"), statt eine Zahl zu behaupten
@@ -188,6 +189,9 @@ interface TdColDef {
   isSum: boolean        // kW × 1h = kWh in Summenzeile
   defaultVisible: boolean
   calc?: boolean        // berechnete Spalte (kein direktes StundenWert-Feld)
+  /** Definition im Spaltenkopf-Tooltip (N-603 „jede Zahl trägt ihre Formel") — eine Begriffsdefinition, keine
+   *  Rechnung mit eingesetzten Werten (die stehen je Zelle in der Zeile selbst). */
+  definition?: string
 }
 
 const TD_COLUMNS: TdColDef[] = [
@@ -199,8 +203,12 @@ const TD_COLUMNS: TdColDef[] = [
   { key: 'netzbezug_kw',   label: 'Netzbezug',       unit: 'kW', group: 'netz',      decimals: 2, isSum: true,  defaultVisible: true                },
   { key: 'einspeisung_kw', label: 'Einspeisung',     unit: 'kW', group: 'netz',      decimals: 2, isSum: true,  defaultVisible: false               },
   // Verbrauch
-  { key: 'verbrauch_kw',   label: 'Gesamtverbrauch', unit: 'kW', group: 'verbrauch', decimals: 2, isSum: true,  defaultVisible: true                },
-  { key: 'hausverbrauch',  label: 'Hausverbrauch',   unit: 'kW', group: 'verbrauch', decimals: 2, isSum: true,  defaultVisible: true,  calc: true   },
+  { key: 'verbrauch_kw',   label: 'Gesamtverbrauch', unit: 'kW', group: 'verbrauch', decimals: 2, isSum: true,  defaultVisible: true,
+    definition: 'Gesamtverbrauch = Eigenverbrauch + Netzbezug' },
+  // N-603 (03.10.2026): hieß „Hausverbrauch" — dasselbe Wort stand in der Live-Kachel für den GESAMTverbrauch.
+  // Der Schlüssel bleibt (gespeicherte Spaltenauswahl).
+  { key: 'hausverbrauch',  label: 'Restverbrauch',   unit: 'kW', group: 'verbrauch', decimals: 2, isSum: true,  defaultVisible: true,  calc: true,
+    definition: 'Restverbrauch = Gesamtverbrauch − Wärmepumpe − Wallbox − sonstige erfasste Verbraucher' },
   { key: 'waermepumpe_kw', label: 'Wärmepumpe',      unit: 'kW', group: 'verbrauch', decimals: 2, isSum: true,  defaultVisible: true                },
   { key: 'wp_starts_anzahl', label: 'WP-Starts',     unit: '',   group: 'verbrauch', decimals: 0, isSum: true,  defaultVisible: false               },
   { key: 'wp_betriebsstunden', label: 'WP-Betriebsstd.', unit: 'h', group: 'verbrauch', decimals: 2, isSum: true, defaultVisible: false             },
@@ -531,7 +539,7 @@ export function TagWerteTabelle({
                 >
                   <span className="flex items-center justify-end gap-1">
                     <SortIcon colKey={c.key} />
-                    <span>{c.label}</span>
+                    {'definition' in c && c.definition ? <SimpleTooltip text={c.definition}><span>{c.label}</span></SimpleTooltip> : <span>{c.label}</span>}
                   </span>
                   <span className="font-normal text-[10px] opacity-60">{c.unit}</span>
                 </th>

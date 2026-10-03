@@ -41,7 +41,7 @@ const daten: LiveDashboardResponse = {
     sp(21, 'Akku 1', 1.2), sp(22, 'Akku 2', 0.8), sp(23, 'Akku 3', 0.6), sp(24, 'Akku 4', 0.4),
     { key: 'waermepumpe_31', label: 'Wärmepumpe', icon: 'flame', erzeugung_kw: null, verbrauch_kw: 1.4, typ: 'waermepumpe' },
     { key: 'netz', label: 'Stromnetz', icon: 'zap', erzeugung_kw: null, verbrauch_kw: 5.1 },
-    { key: 'haushalt', label: 'Haushalt', icon: 'home', erzeugung_kw: null, verbrauch_kw: 0.8 },
+    { key: 'haushalt', label: 'Restverbrauch', icon: 'home', erzeugung_kw: null, verbrauch_kw: 0.8 },
   ],
   summe_erzeugung_kw: 11.3, summe_verbrauch_kw: 11.3, summe_pv_kw: 11.3,
   gauges: [], heute_pv_kwh: 40, heute_einspeisung_kwh: 20, heute_netzbezug_kwh: 1,

@@ -13,12 +13,12 @@
 > Domänen-Flag ohne Zugriff unter `backend/api/` macht die Suite rot.
 >
 > **Auslöser:** Rainer (PN 89905), gefunden an coolxmads Screenshot, nicht an der eigenen Anlage:
-> fällt ein Sensor aus, verschwindet der **abgeleitete** Wert (Hausverbrauch) ganz, obwohl Netz
+> fällt ein Sensor aus, verschwindet der **abgeleitete** Wert (Gesamtverbrauch) ganz, obwohl Netz
 > und Batterie weiter messen.
 >
 > **Sein Lösungsvorschlag „fehlend → 0" wird nicht gebaut.** Er verstößt gegen die 0-Werte-Regel
 > (`is not None`, nicht `if val`) und gegen „HA-Werte sind SoT, kein stiller Fallback". Eine 0
-> macht aus *unbekannt* ein *war nichts* — der Hausverbrauch stünde dadurch zu hoch, ohne dass es
+> macht aus *unbekannt* ein *war nichts* — der Gesamtverbrauch stünde dadurch zu hoch, ohne dass es
 > jemand sieht. Das ist schlimmer als eine Lücke.
 >
 > **Verhältnis zu ADR-002/P4:** P4 gilt für die Wetter-/Prognose-Abrufe (zwei Response-Verträge,
@@ -59,10 +59,10 @@ bat_ladung = sum(v for k, v in kwh.items() if k.endswith("_ladung") and v)   # (
 hausverbrauch = … if bezug is not None or eigenverbrauch > 0 else None       # (3) `bezug or 0`
 ```
 
-Fehlt die PV, verschwindet **auch** der Hausverbrauch, den Netz und Batterie
+Fehlt die PV, verschwindet **auch** der Gesamtverbrauch, den Netz und Batterie
 tragen würden — das ist Rainers Meldung, wörtlich. Fehlt die Batterie, wird sie
 still als 0 gerechnet und der Direktverbrauch zu hoch. Fehlt der Netzbezug, wird
-der Hausverbrauch **zu niedrig** ausgeliefert, ohne Kennzeichnung. Drei
+der Gesamtverbrauch **zu niedrig** ausgeliefert, ohne Kennzeichnung. Drei
 Fehlerrichtungen, eine Funktion, keine davon dokumentiert.
 
 ---
@@ -218,7 +218,7 @@ und beschriftet (richtig). `aktueller_monat` ist eine Differenz und unterdrückt
 der Satz, der sie zusammenhält.
 
 **Kandidat (c), Unter-/Obergrenze, wird verworfen.** Er bräuchte eine zweite,
-unabhängig gemessene Größe als Schranke — die es für den Hausverbrauch nicht
+unabhängig gemessene Größe als Schranke — die es für den Gesamtverbrauch nicht
 gibt — und verdoppelt jede Kachel. Für den einzigen Fall, in dem eedc eine echte
 Schranke hat (PV gegen PVGIS-SOLL), ist das bereits eine Plausibilitätsprüfung im
 Daten-Checker und keine Anzeigefrage.
@@ -286,10 +286,10 @@ meldet die Fälle heute schon — wörtlich (`daten_checker/monatsdaten.py:306-3
 
 - „Einspeisung nicht erfasst" — ERROR, Detail: *„ohne Einspeisung sind
   Eigenverbrauch und Autarkie **nicht berechenbar**"*
-- „Netzbezug nicht erfasst" — ERROR, Detail: *„ohne Netzbezug sind Hausverbrauch
+- „Netzbezug nicht erfasst" — ERROR, Detail: *„ohne Netzbezug sind Gesamtverbrauch
   und Stromkosten **nicht berechenbar**"*
 - „Batterie-Ladung nicht erfasst (Speicher vorhanden)" — WARNING, Detail: *„Ohne
-  Batterie-Daten wird der Hausverbrauch **falsch berechnet**"*
+  Batterie-Daten wird der Gesamtverbrauch **falsch berechnet**"*
 
 **eedc sagt an einer Stelle „nicht berechenbar" und zeigt zwei Klicks weiter eine
 Zahl.** Das Papier führt also keinen zweiten Meldeweg ein — es bringt den

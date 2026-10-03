@@ -40,7 +40,7 @@ function WetterIcon({ symbol, className = 'h-5 w-5' }: { symbol: string; classNa
 
 // Verbrauchs-Kategorien für gestapeltes Chart
 const VERBRAUCH_KATEGORIEN = [
-  { key: 'haushalt', label: 'Haushalt', farbe: KATEGORIE_FARBEN.haushalt },
+  { key: 'haushalt', label: 'Restverbrauch', farbe: KATEGORIE_FARBEN.haushalt },
   { key: 'batterie_ladung', label: 'Speicher-Ladung', farbe: KATEGORIE_FARBEN.batterie },
   { key: 'wallbox', label: 'Wallbox', farbe: KATEGORIE_FARBEN.wallbox },
   { key: 'waermepumpe', label: 'Wärmepumpe', farbe: KATEGORIE_FARBEN.waermepumpe },
@@ -367,7 +367,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
   const tooltipLabels: Record<string, string> = {
     pv_ist: 'PV (IST)',
     pv_prognose: 'PV (Prognose)',
-    haushalt_ist: 'Haushalt',
+    haushalt_ist: 'Restverbrauch',
     batterie_ladung_ist: 'Speicher-Ladung',
     wallbox_ist: 'Wallbox',
     waermepumpe_ist: 'Wärmepumpe',

@@ -42,7 +42,7 @@ const fz = (id: number, label: string, soc: number | null, kw: number | null, v2
 const soc = (id: number, wert: number): LiveGauge =>
   ({ key: `soc_${id}`, label: `soc ${id}`, wert, min_wert: 0, max_wert: 100, einheit: '%' })
 const NETZ = knoten('netz', { label: 'Stromnetz', icon: 'zap', erzeugung_kw: 3.4 })
-const HAUS = knoten('haushalt', { label: 'Haushalt', icon: 'home', verbrauch_kw: 0.6 })
+const HAUS = knoten('haushalt', { label: 'Restverbrauch', icon: 'home', verbrauch_kw: 0.6 })
 
 /** Plan-Tabelle D (wie `EnergieFluss.gruppen.test.tsx`), die Süd-Strings mit Träger-Namen. */
 function bestandD(): { komp: LiveKomponente[]; gauges: LiveGauge[] } {

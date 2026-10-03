@@ -88,7 +88,9 @@ async def test_komponenten_meldung_nennt_hausverbrauch_und_grundlast(db):
         "dieser Test den falschen Zustand."
     )
     details = warnungen[0].details or ""
-    for wort in ("Hausverbrauch", "Grundlast"):
+    # N-603 (03.10.2026): das Wort heißt „Gesamtverbrauch" (bis dahin „Hausverbrauch") — die Substanz bleibt: die
+    # Meldung nennt die bilanzielle Verbrauchsgröße UND die Grundlast.
+    for wort in ("Gesamtverbrauch", "Grundlast"):
         assert wort in details, (
             f"N-346: Die Meldung nennt „{wort}“ nicht. Wer nur "
             "„Prognosen-IST, Heatmap, Lernfaktor, Monatsberichte“ liest, hält "

@@ -615,7 +615,7 @@ def build_komponenten(
         haushalt_kw = max(0, gesamt_quellen - gesamt_senken)
         komponenten.append({
             "key": "haushalt",
-            "label": "Haushalt",
+            "label": "Restverbrauch",  # N-603 (03.10.2026): Label, der Schlüssel bleibt
             "icon": "home",
             "erzeugung_kw": None,
             "verbrauch_kw": round(haushalt_kw, 3),

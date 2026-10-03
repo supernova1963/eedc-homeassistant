@@ -688,7 +688,7 @@ class SensorChecks:
                         "In einen Leistungs-Slot gehört ein Leistungssensor (W/kW), "
                         "kein kWh-Zähler. Der Zählerstand wird sonst als Momentan"
                         "leistung gelesen (z. B. 7130 kWh → 7130 W) — im Live-"
-                        "Energiefluss kippt dadurch der berechnete Hausverbrauch "
+                        "Energiefluss kippt dadurch der berechnete Restverbrauch "
                         f"(klemmt auf 0). Bitte für „{label}\" einen Leistungssensor "
                         f"(W/kW) wählen; aktuell: {eid}."
                     ),

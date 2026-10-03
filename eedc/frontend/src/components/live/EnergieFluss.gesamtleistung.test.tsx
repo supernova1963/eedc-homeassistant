@@ -46,7 +46,7 @@ const knoten = (key: string, extra: Partial<LiveKomponente>): LiveKomponente =>
 const pv = (id: number, label: string, ausr: string | null, kw: number, kwp: number | null = 3) =>
   knoten(`pv_${id}`, { label, icon: 'sun', erzeugung_kw: kw, typ: 'pv-module', ausrichtung_label: ausr, leistung_kwp: kwp })
 const NETZ = knoten('netz', { label: 'Stromnetz', icon: 'zap', erzeugung_kw: 1 })
-const HAUS = knoten('haushalt', { label: 'Haushalt', icon: 'home', verbrauch_kw: 0.6 })
+const HAUS = knoten('haushalt', { label: 'Restverbrauch', icon: 'home', verbrauch_kw: 0.6 })
 const WP = knoten('waermepumpe_31', { label: 'Wärmepumpe', icon: 'flame', typ: 'waermepumpe', verbrauch_kw: 1.4 })
 
 /** Neun Strings wie Plan-Tabelle D (Süd 5 · Ost 2 · West 2) — bei 1150 px nach Ausrichtung gruppiert. */
@@ -110,7 +110,7 @@ describe('EnergieFluss §A6 — „Gesamtleistung" im Rahmen über der PV-Reihe'
     const svg = container.querySelector('svg.flex-1')! // die Zeichenfläche, nicht ein Symbol im Kopf
     const kinder = [...svg.children]
     expect(kinder.indexOf(c)).toBe(kinder.length - 1)
-    const haus = kinder.findIndex(e => (e.getAttribute('data-title') ?? '').startsWith('Haushalt'))
+    const haus = kinder.findIndex(e => (e.getAttribute('data-title') ?? '').startsWith('Restverbrauch'))
     expect(haus).toBeGreaterThan(0)
     expect(kinder.indexOf(rahmen(container)!)).toBeLessThan(haus)
   })

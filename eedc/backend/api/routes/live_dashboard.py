@@ -364,7 +364,7 @@ def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
         {"key": f"sonstige_{_DEMO_SAUNA[0]}", "label": _DEMO_SAUNA[1], "icon": "wrench",
          "erzeugung_kw": None, "verbrauch_kw": sauna_kw,
          "typ": "sonstiges", "kategorie": "verbraucher"},
-        {"key": "haushalt", "label": "Haushalt", "icon": "home",
+        {"key": "haushalt", "label": "Restverbrauch", "icon": "home",
          "erzeugung_kw": None, "verbrauch_kw": haushalt_kw},
     ]
 
@@ -478,7 +478,7 @@ def _generate_demo_tagesverlauf(anlage_id: int) -> dict:
          "farbe": "#6b7280", "seite": "senke", "bidirektional": False},
         {"key": "netz", "label": "Stromnetz", "kategorie": "netz",
          "farbe": "#b91c1c", "seite": "quelle", "bidirektional": True},
-        {"key": "haushalt", "label": "Haushalt", "kategorie": "haushalt",
+        {"key": "haushalt", "label": "Restverbrauch", "kategorie": "haushalt",
          "farbe": "#64748b", "seite": "senke", "bidirektional": False},
     ]
 

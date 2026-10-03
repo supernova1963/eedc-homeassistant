@@ -63,7 +63,7 @@ const knoten = (key: string, extra: Partial<LiveKomponente>): LiveKomponente =>
 const pv = (id: number, label: string, ausr: string | null, kw: number) =>
   knoten(`pv_${id}`, { label, icon: 'sun', erzeugung_kw: kw, typ: 'pv-module', ausrichtung_label: ausr, leistung_kwp: 3 })
 const NETZ = knoten('netz', { label: 'Stromnetz', icon: 'zap', verbrauch_kw: 2.1 })
-const HAUS = knoten('haushalt', { label: 'Haushalt', icon: 'home', verbrauch_kw: 0.6 })
+const HAUS = knoten('haushalt', { label: 'Restverbrauch', icon: 'home', verbrauch_kw: 0.6 })
 const WP = knoten('waermepumpe_31', { label: 'Wärmepumpe', icon: 'flame', typ: 'waermepumpe', verbrauch_kw: 1.4 })
 /** Ein Speicher ohne Fluss: seine Linie ist INAKTIV — daran hängt „nur aktive Linien bekommen den Saum". */
 const SPEICHER_RUHT = knoten('batterie_41', { label: 'Speicher', icon: 'battery', typ: 'speicher', erzeugung_kw: 0, verbrauch_kw: 0 })

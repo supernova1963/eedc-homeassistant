@@ -326,7 +326,7 @@ function MonatsSpuren({ d }: { d: SpeicherPotentialResponse }) {
         {hatNetzladung && (
           <> Wo Ladung aus dem Netz kam, füllt sich der Speicher ohne Sonne; solche Monate
           beantworten die Frage nach mehr Kapazität nur eingeschränkt. Der Anteil ist eine
-          Obergrenze — kein Zähler trennt Haushalt und Speicher innerhalb einer Stunde.</>
+          Obergrenze — kein Zähler trennt Verbrauch und Speicher innerhalb einer Stunde.</>
         )}
       </p>
     </div>

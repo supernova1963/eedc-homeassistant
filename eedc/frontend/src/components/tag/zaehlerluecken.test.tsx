@@ -95,7 +95,7 @@ describe('TagWerteTabelle — gerendert', () => {
     render(<TagWerteTabelle daten={daten} extraSerien={KEINE} erzeugerSerien={KEINE} datum="2025-11-06" gesamtverbrauchTag={9.6} verworfen={{}} />)
     expect(screen.getAllByText('9,60')).toHaveLength(1)
     // Die Stundensumme wäre 2,80. Sie steht jetzt nur noch EINMAL da — in der
-    // Spalte „Hausverbrauch" (1,10 + 1,70), nicht mehr unter „Gesamtverbrauch".
+    // Spalte „Restverbrauch" (bis 03.10.2026 „Hausverbrauch"; 1,10 + 1,70), nicht mehr unter „Gesamtverbrauch".
     expect(screen.getAllByText('2,80')).toHaveLength(1)
   })
 

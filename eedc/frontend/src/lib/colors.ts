@@ -662,7 +662,7 @@ export const ENERGIE_KATEGORIE: Record<string, { label: string; bg: string; grup
   sonstige_erzeuger:    { label: 'Sonstige Erzeuger',    bg: SONSTIGES_ERZEUGER_FARBE.bg,              gruppe: 'erzeuger' },
   waermepumpe:          { label: 'Wärmepumpe',           bg: KOMPONENTEN_FARBEN['waermepumpe'].bg,     gruppe: 'verbraucher' },
   wallbox_eauto:        { label: 'Wallbox / E-Auto',     bg: KOMPONENTEN_FARBEN['wallbox'].bg,          gruppe: 'verbraucher' },
-  haushalt:             { label: 'Haushalt',             bg: 'bg-slate-500',                            gruppe: 'verbraucher' },
+  haushalt:             { label: 'Restverbrauch',        bg: 'bg-slate-500',                            gruppe: 'verbraucher' },
   sonstige_verbraucher: { label: 'Sonstige Verbraucher', bg: KOMPONENTEN_FARBEN['sonstiges'].bg,        gruppe: 'verbraucher' },
   // §9.2 — Abgabe an Dritte: Verwendungsseite, aber kein Eigenverbrauch.
   sonstige_abgabe:      { label: 'Abgabe an Dritte',     bg: KOMPONENTEN_FARBEN['sonstiges'].bg,        gruppe: 'verbraucher' },
@@ -708,7 +708,7 @@ export const CHART_LABELS: Record<string, string> = {
   bat_pos: 'Batterie', bat_neg: 'Batterie ↓', batterie: 'Batterie',
   netz_pos: 'Stromnetz', netz_neg: 'Stromnetz ↓', netzbezug: 'Netzbezug',
   einspeisung: 'Einspeisung', eigenverbrauch: 'Eigenverbrauch', direktverbrauch: 'Direktverbrauch',
-  hausverbrauch: 'Hausverbrauch', verbrauch: 'Verbrauch',
+  hausverbrauch: 'Restverbrauch', verbrauch: 'Verbrauch',
   wp: 'Wärmepumpe', wb: 'Wallbox', autarkie: 'Autarkie',
 }
 

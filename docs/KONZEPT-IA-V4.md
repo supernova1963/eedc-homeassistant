@@ -115,7 +115,7 @@ Sub-Tabs in chronologischer Reihenfolge:
 
 | Sicht | KPI-Strip (anlage-weit) | Vergleichsbasis | Auflösung |
 |---|---|---|---|
-| **Live** | PV-Leistung · Hausverbrauch · Netz ± · SoC — zugleich die kWh des laufenden Tages (heutige „Heute"-Kacheln) | Gestern | kW live + kWh heute |
+| **Live** | PV-Leistung · Gesamtverbrauch · Netz ± · SoC — zugleich die kWh des laufenden Tages (heutige „Heute"-Kacheln) | Gestern | kW live + kWh heute |
 | **Tag** | PV · Autarkie · Eigenverbrauch · Einspeisung · Netzbezug | Vergleichstag | kWh/Tag |
 | **Monat** | dieselben 5 **+ Netto-Ertrag (€)** | Vormonat / Vorjahr / Ø-Monat | kWh/Monat |
 | **Jahr/Gesamt** | dieselben 5 + Netto-Ertrag **+ spez. Ertrag (kWh/kWp)** | Vorjahr (Gesamt: —) | kWh / MWh |

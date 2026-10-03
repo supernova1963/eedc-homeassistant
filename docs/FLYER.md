@@ -104,7 +104,7 @@ Live-Cockpit für den laufenden Monat:
 
 Das Dashboard zeigt auf einen Blick:
 - **Hero-Leiste** mit den 3 wichtigsten KPIs und Trend-Vergleich zum Vorjahr
-- **Energie-Fluss-Diagramm**: Wohin fließt euer PV-Strom? Woher kommt euer Hausverbrauch?
+- **Energie-Fluss-Diagramm**: Wohin fließt euer PV-Strom? Woher kommt euer Gesamtverbrauch?
 - **Ring-Gauges** für Autarkie und Eigenverbrauchsquote
 - **Sparkline** mit monatlichen PV-Erträgen über den gesamten Zeitraum
 - **Amortisations-Fortschrittsbalken** mit geschätztem Amortisationsjahr

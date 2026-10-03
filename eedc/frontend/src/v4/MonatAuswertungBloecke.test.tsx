@@ -119,7 +119,8 @@ describe('baueMonatAuswertungBloecke — Render (jsdom-fähige Blöcke)', () => 
     expect(screen.getByText('PV-Module')).toBeInTheDocument()
     expect(screen.getByText('Verbrauch nach Kategorie')).toBeInTheDocument()
     expect(screen.getByText('Wärmepumpe')).toBeInTheDocument()
-    expect(screen.getByText('Haushalt')).toBeInTheDocument()
+    // N-603 (03.10.2026): die Kategorie heißt „Restverbrauch" (bis dahin „Haushalt"), Schlüssel `haushalt` unverändert.
+    expect(screen.getByText('Restverbrauch')).toBeInTheDocument()
   })
 
   it('§51: die drei KPI-Kacheln', () => {

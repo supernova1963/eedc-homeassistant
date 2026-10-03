@@ -163,7 +163,7 @@ const fz = (id: number, label: string, soc: number | null, kw: number | null): L
 const soc = (id: number, wert: number): LiveGauge =>
   ({ key: `soc_${id}`, label: `soc ${id}`, wert, min_wert: 0, max_wert: 100, einheit: '%' })
 const NETZ = knoten('netz', { label: 'Stromnetz', icon: 'zap', erzeugung_kw: 1 })
-const HAUS = knoten('haushalt', { label: 'Haushalt', icon: 'home', verbrauch_kw: 0.6 })
+const HAUS = knoten('haushalt', { label: 'Restverbrauch', icon: 'home', verbrauch_kw: 0.6 })
 
 /** A · Standard: 1 String, 1 Speicher, WP, Wallbox mit ID.4 (Knoten-Auto als Kind). */
 function bestandA(): Bestand {

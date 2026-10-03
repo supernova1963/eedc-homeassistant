@@ -86,7 +86,7 @@ async def test_keys_werden_zu_serieninfo_aufgeloest(db):
     assert wp.seite == "senke"
 
     haushalt = by_key["haushalt"]
-    assert haushalt.label == "Haushalt"
+    assert haushalt.label == "Restverbrauch"  # N-603 (03.10.2026): bis dahin „Haushalt"; Schlüssel unverändert
     assert haushalt.typ == "virtual"
 
 

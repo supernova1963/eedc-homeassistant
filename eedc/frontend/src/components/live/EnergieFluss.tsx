@@ -427,14 +427,18 @@ export default function EnergieFluss({
     return { text, font, breite, x }
   })() : null
 
+  // N-603 (03.10.2026): „Restverbrauch" statt „Haushalt", mit Formel. ⚠ Die Heute-Zeile ist NICHT der Rest:
+  // `heute_kwh_pro_komponente.haushalt` ist Eigenverbrauch + Netzbezug (`live_power_service.py::_calc_tages_ev_hv`),
+  // also der Gesamtverbrauch — sie heißt deshalb so. Einen Tages-Restverbrauch liefert das Backend nicht.
   const hausTip = [
-    'Haushalt',
+    'Restverbrauch',
     `Aktuell: ${haushalt ? fmtZahl(haushalt.verbrauch_kw ?? 0, 2) : '—'} kW`,
-    'Verbrauch ohne separat erfasste Geräte (z. B. Wallbox);',
+    'Restverbrauch = Gesamtverbrauch − separat erfasste Verbraucher (z. B. Wallbox, Wärmepumpe);',
     'enthält auch nicht einzeln gemessene Verbraucher',
     `Verbrauchsseite (Bilanz): ${fmtZahl(summeVerbrauch, 2)} kW`,
     `Quellen: ${fmtZahl(summeErzeugung, 2)} kW`,
-    ...(tagesWerte?.haushalt != null ? [`Heute: ${fmtZahl(tagesWerte.haushalt, 1)} kWh`] : []),
+    ...(tagesWerte?.haushalt != null
+      ? [`Heute gesamt (Eigenverbrauch + Netzbezug): ${fmtZahl(tagesWerte.haushalt, 1)} kWh`] : []),
   ].join('\n')
 
   return (
@@ -635,7 +639,7 @@ export default function EnergieFluss({
           <foreignObject x={CX - dims.hausIconSize / 2} y={CY - dims.hausIconSize * 0.75} width={dims.hausIconSize} height={dims.hausIconSize}>
             <IconElement name="home" size={dims.hausIconSize} className="text-emerald-500" />
           </foreignObject>
-          {/* Haushalt-Residual im Kreis (ohne separat erfasste Verbraucher, #314) */}
+          {/* Restverbrauch im Kreis (ohne separat erfasste Verbraucher, #314; N-603) */}
           <text
             x={CX} y={CY + dims.hausIconSize * 0.7}
             textAnchor="middle"
