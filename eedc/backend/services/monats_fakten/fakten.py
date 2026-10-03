@@ -62,7 +62,8 @@ class ErzeugungFakten:
     - ``pv_module_kwh`` — die P7-aufgelöste Modul-PV. ``None`` heißt „mindestens
       ein aktives Modul ohne Wert und ohne Aggregat" (N42) — eine Teilsumme wäre
       als Anlagenerzeugung irreführend. Wer summiert, behandelt ``None`` als
-      Lücke, **nie** als 0.
+      Lücke, **nie** als 0. Ein Anlagen-Aggregat steht für alle PV-Quellen: die
+      Module bekommen nur, was nach Abzug der eigenen BKW-Werte bleibt (N-611).
     - ``pv_kwh`` — Module + Balkonkraftwerk. Die PV-Achse: spezifischer Ertrag,
       Performance Ratio, SOLL/IST **und** der Eingang der Finanz-Zeile (P9).
     - ``hinter_zaehler_kwh`` — zusätzlich die sonstigen Erzeuger (BHKW/Mini-KWK).

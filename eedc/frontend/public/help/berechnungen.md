@@ -53,7 +53,7 @@ und zum Verständnis der Datenflüsse.
 
 **Legacy-Felder (NICHT neu befüllen):**
 - `Monatsdaten.batterie_*` - Nutze `InvestitionMonatsdaten` (Speicher)
-- `Monatsdaten.pv_erzeugung_kwh` - **kein Schreibziel** für neuen Code (Pro-Modul-Werte gehören in `InvestitionMonatsdaten`) und seit 2026-07-29 auch **keine allgemeine Lesequelle** mehr: das Feld trägt den manuell erfassten oder importierten **PV-Gesamtwert** eines Monats und ist **ausschließlich Eingang** des Read-time-SoT `core/berechnungen/pv_verteilung.py` (`resolve_pv_je_modul`). Der füllt damit die Lücken der Module ohne eigenen Wert und kennzeichnet sie als gerechnet. Wer nur einen Gesamt-Sensor hat, pflegt weiterhin ausschließlich hier. Jede einzelne Berechnung liest die Pro-Modul-Schicht bzw. deren Summe — nie das Feld selbst. Ladepfad: `services/pv_monatswerte.py`.
+- `Monatsdaten.pv_erzeugung_kwh` - **kein Schreibziel** für neuen Code (Pro-Modul-Werte gehören in `InvestitionMonatsdaten`) und seit 2026-07-29 auch **keine allgemeine Lesequelle** mehr: das Feld trägt den manuell erfassten oder importierten **PV-Gesamtwert** eines Monats und ist **ausschließlich Eingang** des Read-time-SoT `core/berechnungen/pv_verteilung.py` (`resolve_pv_je_modul`). Der füllt damit die Lücken der Module ohne eigenen Wert und kennzeichnet sie als gerechnet. Der Gesamtwert steht für **alle** PV-Quellen der Anlage: bevor er die Lücken füllt, geht der eigene Monatswert jedes Balkonkraftwerks ab, das in diesem Monat selbst trägt (nicht an Modul-Kinder abgetreten) — das BKW kommt in `pv_erzeugung_kwh = pv_module_kwh + bkw_kwh` als eigener Summand dazu und stünde sonst zweimal darin. Ein BKW **ohne** eigenen Wert bekommt keinen Anteil. Wer nur einen Gesamt-Sensor hat, pflegt weiterhin ausschließlich hier. Jede einzelne Berechnung liest die Pro-Modul-Schicht bzw. deren Summe — nie das Feld selbst. Ladepfad: `services/pv_monatswerte.py`.
 
 > **Seit 2026-07-31 ist die Lesequelle nicht mehr `lade_pv_je_monat`, sondern eine Schicht darüber:** `services/monats_fakten/::lade_monats_fakten` (ADR-002/**P10**, [Konzept](KONZEPT-MONATS-FAKTEN.md)). Sie liefert die **ganze** Monatszeile kanonisch aufgelöst — die PV ist darin ein Feld (`erzeugung.pv_module_kwh` bzw. `erzeugung.pv_kwh`), daneben stehen Zähler, Speicher, E-Mobilität, Wärmepumpe, Sonstiges, Tarif, §51 und die Verbrauchs-Kennzahlen. Sie **ruft** `lade_pv_je_monat` (die P7-Regel bleibt unverändert), wendet aber zusätzlich **einmal** alle Zeitfilter (`aktiv` · Anschaffung · Stilllegung) und den Dienstwagen-Filter an. Wer eine abgeleitete Monatsgröße auswertet, nimmt sie von dort; `lade_pv_je_monat` direkt zu rufen bleibt richtig, wo **nur** die Pro-Modul-PV gebraucht wird (String-Vergleich, PV-Diagnose). Ausgenommen sind Schreib-, Import- und Checker-Pfade — die Schicht ist reines Lesen.
 >
@@ -329,7 +329,9 @@ Die Felder derselben Antwort:
 >
 > 1. der **gemessene Wert des Moduls** gewinnt,
 > 2. der **Monatswert des Balkonkraftwerks** füllt die Lücken *seiner* Module (nach kWp verteilt),
-> 3. das **Anlagen-Aggregat** `Monatsdaten.pv_erzeugung_kwh` füllt, was danach noch offen ist.
+> 3. das **Anlagen-Aggregat** `Monatsdaten.pv_erzeugung_kwh` füllt, was danach noch offen ist —
+>    gemindert um die eigenen Werte der Balkonkraftwerke, die in diesem Monat **selbst** tragen
+>    (ein abtretendes BKW steckt schon in Stufe 2).
 >
 > Der Monatswert am Balkonkraftwerk bleibt also voll erfassbar und zuordenbar — bei einem Set ist
 > der Wechselrichter oft der einzige Zähler, und die Module darunter haben gar keinen eigenen. Er
@@ -2534,8 +2536,8 @@ Der IST-Wert je Modul kommt aus dem Read-time-SoT `core/berechnungen/pv_verteilu
 ```
 1. Messwert       InvestitionMonatsdaten.verbrauch_daten["pv_erzeugung_kwh"]
                   → Quelle „gemessen" — IMMER und AUSNAHMSLOS
-2. Lücke füllen   (Monatsdaten.pv_erzeugung_kwh − Σ gemessene) × kWp_Anteil,
-                  nur auf die Module OHNE eigenen Wert
+2. Lücke füllen   (Monatsdaten.pv_erzeugung_kwh − Σ eigene BKW-Werte − Σ gemessene) × kWp_Anteil,
+                  nur auf die Module OHNE eigenen Wert (Rest nie unter 0)
                   → Quelle „geschätzt (kWp-Anteil)", in der Anzeige gekennzeichnet
 3. keine Quelle   kein Wert (kein 0)
 ```

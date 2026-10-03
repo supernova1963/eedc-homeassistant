@@ -13,9 +13,10 @@ und Handbuch §7.6). Grundgesamtheit wie am Tag (``erwartete_erzeuger_ids``): ak
 Σ gemessene + max(0, Zähler − Σ gemessene). Das BKW kommt NICHT zusätzlich obendrauf;
 ``bkw_erzeugung_kwh`` bleibt sein eigener Wert.
 
-⚠ Der abgeschlossene Monat (Monats-Fakten) liest den Zähler noch als „nur Module" und
-addiert das BKW dazu — in den zwei Fällen „Zähler füllt eine Lücke + BKW" weicht er bis
-**N-611** ab (dort ``xfail(strict=True)``, damit der Fix die Markierung erzwingt).
+Seit **N-611** liest der abgeschlossene Monat (Monats-Fakten, Schreibweg N-533) den Zähler
+genauso: der eigene BKW-Wert mindert ihn, bevor der Rest die Modul-Lücken füllt. Die zwei
+Fälle „Zähler füllt eine Lücke + BKW" standen bis dahin als ``xfail(strict=True)`` hier
+(1045 statt 1000) — sie sind jetzt gewöhnliche Fälle der Symmetrie-Probe.
 """
 from __future__ import annotations
 
@@ -194,12 +195,6 @@ async def _nach_dem_abschluss(db, monkeypatch, *, strings: dict, mit_bkw: bool, 
     return await am.get_aktueller_monat(anlage_id=aid, jahr=jahr, monat=monat, db=db)
 
 
-_N611 = pytest.mark.xfail(
-    strict=True,
-    reason="N-611: der abgeschlossene Monat liest den Anlagenzähler als „nur Module“ und addiert das BKW "
-           "obendrauf (1045 statt 1000) — bekannte Abweichung bis zum Fix dort",
-)
-
 _FAELLE = [
     pytest.param({"s1": 550.0, "s2": 380.0}, False, id="alle"),
     pytest.param({"s1": 550.0}, False, id="einer"),
@@ -241,13 +236,11 @@ async def test_d_der_monat_rechnet_wie_der_tag(db, monkeypatch, strings, mit_bkw
     assert res.pv_erzeugung_kwh == tag
 
 
-@pytest.mark.parametrize("strings, mit_bkw", [
-    p if p.id not in ("einer+bkw", "keiner+bkw") else pytest.param(*p.values, id=p.id, marks=_N611)
-    for p in _FAELLE
-])
+@pytest.mark.parametrize("strings, mit_bkw", _FAELLE)
 async def test_d_der_monat_nennt_vor_und_nach_dem_abschluss_dieselbe_pv(db, monkeypatch, strings, mit_bkw):
-    """(d) Symmetrie gegen den abgeschlossenen Monat (Monats-Fakten/P7, Schreibpfad N-533). Die zwei
-    BKW-Lückenfälle sind N-611 (xfail strict) — fixt N-611 sie, wird die Markierung rot und muss weg."""
+    """(d) Symmetrie gegen den abgeschlossenen Monat (Monats-Fakten/P7, Schreibpfad N-533) — alle sechs
+    Fälle, seit N-611 auch die zwei, in denen der Zähler eine Lücke füllt und ein BKW einen eigenen Wert hat
+    (vorher 1045 gegen 1000)."""
     vorher = await _monat_ohne_abschluss(db, monkeypatch, strings=strings, mit_bkw=mit_bkw, laufend=False)
     nachher = await _nach_dem_abschluss(db, monkeypatch, strings=strings, mit_bkw=mit_bkw)
     assert vorher.pv_erzeugung_kwh == nachher.pv_erzeugung_kwh

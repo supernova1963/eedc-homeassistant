@@ -215,3 +215,170 @@ async def test_gegenprobe_ohne_zugeordneten_anlagenzaehler_bleibt_alles_wie_bish
     assert vorschau.monate[0].aktion == "ueberspringen"
     await import_ha_statistics(a.id, ImportRequest(monate=[{"jahr": JAHR, "monat": MONAT}]), db)
     assert (await _modulwerte(db, invs)) == {"Ost": (None, None), "West": (None, None)}
+
+
+# ── N-611: der Zähler misst ALLE PV-Quellen — der eigene BKW-Wert mindert seinen Rest ──────────────
+
+
+async def _mit_bkw(db, a, *, sensor: str | None):
+    """Ein Balkonkraftwerk (0,8 kWp) an der Anlage, optional mit eigenem Erzeugungs-Sensor."""
+    bkw = Investition(anlage_id=a.id, typ="balkonkraftwerk", bezeichnung="Balkon",
+                      anschaffungsdatum=date(2020, 1, 1), leistung_kwp=0.8)
+    db.add(bkw)
+    await db.flush()
+    if sensor:
+        a.sensor_mapping["investitionen"][str(bkw.id)] = {"felder": {"pv_erzeugung_kwh": _sensor(sensor)}}
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(a, "sensor_mapping")
+        await db.flush()
+    return bkw
+
+
+async def _monat_pv(db, anlage_id):
+    from backend.services.monats_fakten import lade_monats_fakten
+    fakt = (await lade_monats_fakten(db, anlage_id, von=(JAHR, MONAT), bis=(JAHR, MONAT)))[0]
+    return round(fakt.erzeugung.pv_kwh, 6)
+
+
+async def test_n611_ein_string_und_bkw_mit_sensor_der_zaehler_fuellt_nur_den_rest(db, monkeypatch):
+    """F1: Ost misst 55, das BKW 4,5, der Zähler 100 ⇒ West bekommt 40,5 (vorher 45) und der Monat 100 (vorher 104,5)."""
+    a, invs = await _anlage(db, module=[("Ost", 6.0, "sensor.pv_ost"), ("West", 4.0, None)])
+    await _mit_bkw(db, a, sensor="sensor.pv_balkon")
+    await _frank_monat(db, a.id)
+    _patch_stats(monkeypatch, {**HA, "sensor.pv_ost": 55.0, "sensor.pv_balkon": 4.5})
+
+    await import_ha_statistics(a.id, ImportRequest(monate=[{"jahr": JAHR, "monat": MONAT}]), db)
+
+    assert await _modulwerte(db, invs) == {"Ost": (55.0, None), "West": (40.5, None)}
+    assert await _monat_pv(db, a.id) == 100.0
+
+
+async def test_n611_keine_strings_und_bkw_mit_sensor(db, monkeypatch):
+    """F2: kein String misst, das BKW 4,5 ⇒ 95,5 nach kWp auf Ost/West (57,3 / 38,2), der Monat 100."""
+    a, invs = await _anlage(db, module=[("Ost", 6.0, None), ("West", 4.0, None)])
+    await _mit_bkw(db, a, sensor="sensor.pv_balkon")
+    await _frank_monat(db, a.id)
+    _patch_stats(monkeypatch, {**HA, "sensor.pv_balkon": 4.5})
+
+    await import_ha_statistics(a.id, ImportRequest(monate=[{"jahr": JAHR, "monat": MONAT}]), db)
+
+    assert await _modulwerte(db, invs) == {"Ost": (57.3, ABGELEITET_KWP_ANTEIL), "West": (38.2, ABGELEITET_KWP_ANTEIL)}
+    assert await _monat_pv(db, a.id) == 100.0
+
+
+async def test_n611_ein_bkw_ohne_wert_mindert_den_rest_nicht(db, monkeypatch):
+    """F6a: das BKW hat keinen Sensor ⇒ die Module tragen den ganzen Zähler (kein Anteil fürs BKW, S1)."""
+    a, invs = await _anlage(db, module=[("Ost", 6.0, None), ("West", 4.0, None)])
+    await _mit_bkw(db, a, sensor=None)
+    await _frank_monat(db, a.id)
+    _patch_stats(monkeypatch, HA)
+
+    await import_ha_statistics(a.id, ImportRequest(monate=[{"jahr": JAHR, "monat": MONAT}]), db)
+
+    assert await _modulwerte(db, invs) == {"Ost": (60.0, ABGELEITET_KWP_ANTEIL), "West": (40.0, ABGELEITET_KWP_ANTEIL)}
+    assert await _monat_pv(db, a.id) == 100.0
+
+
+async def test_n611_nach_dem_import_stimmt_die_vorschau_mit_bkw_ueberein(db, monkeypatch):
+    """Die Vorschau vergleicht den Zähler mit Module + BKW — dieselbe Zahl wie die Monats-Fakten.
+    Nur Module verglichen, meldete sie nach jedem korrekten Import einen Konflikt von 4,5."""
+    a, _ = await _anlage(db, module=[("Ost", 6.0, None), ("West", 4.0, None)])
+    await _mit_bkw(db, a, sensor="sensor.pv_balkon")
+    await _frank_monat(db, a.id)
+    _patch_stats(monkeypatch, {**HA, "sensor.pv_balkon": 4.5})
+    await import_ha_statistics(a.id, ImportRequest(monate=[{"jahr": JAHR, "monat": MONAT}]), db)
+
+    m = (await get_import_vorschau(a.id, db)).monate[0]
+
+    assert m.aktion == "ueberspringen", m.grund
+    assert m.vorhandene_werte[PV_LABEL] == pytest.approx(100.0)
+
+
+async def test_n611_die_vorschau_zeigt_den_alten_doppelt_gezaehlten_bestand_als_konflikt(db, monkeypatch):
+    """Bestand aus der Zeit vor N-611 (West trägt den BKW-Anteil mit: 45 statt 40,5) ⇒ lokal 104,5 gegen
+    den Zähler 100 — die Vorschau zeigt es als Abweichung, statt „stimmt überein" zu melden."""
+    a, invs = await _anlage(db, module=[("Ost", 6.0, "sensor.pv_ost"), ("West", 4.0, None)])
+    bkw = await _mit_bkw(db, a, sensor="sensor.pv_balkon")
+    await _frank_monat(db, a.id)
+    for inv_id, kwh in ((invs[0].id, 55.0), (invs[1].id, 45.0), (bkw.id, 4.5)):
+        db.add(InvestitionMonatsdaten(investition_id=inv_id, jahr=JAHR, monat=MONAT,
+                                      verbrauch_daten={"pv_erzeugung_kwh": kwh}))
+    await db.flush()
+    _patch_stats(monkeypatch, {**HA, "sensor.pv_ost": 55.0, "sensor.pv_balkon": 4.5})
+
+    m = (await get_import_vorschau(a.id, db)).monate[0]
+
+    assert m.aktion == "konflikt", m.grund
+    assert m.vorhandene_werte[PV_LABEL] == pytest.approx(104.5)
+
+
+async def _bestand(db, invs, bkw, werte: dict[str, tuple[float, str | None]]):
+    """Modulwerte wie sie der Import vor N-611 geschrieben hat (Writer `ha_statistics_import`)."""
+    from backend.services.provenance import seed_provenance
+    for inv in invs:
+        kwh, marke = werte[inv.bezeichnung]
+        imd = InvestitionMonatsdaten(investition_id=inv.id, jahr=JAHR, monat=MONAT,
+                                     verbrauch_daten={"pv_erzeugung_kwh": kwh})
+        db.add(imd)
+        await db.flush()
+        seed_provenance(imd, source="external:ha_statistics", writer="ha_statistics_import",
+                        json_subkeys={"verbrauch_daten": ["pv_erzeugung_kwh"]},
+                        abgeleitet_je_subkey={"pv_erzeugung_kwh": marke} if marke else None)
+    db.add(InvestitionMonatsdaten(investition_id=bkw.id, jahr=JAHR, monat=MONAT,
+                                  verbrauch_daten={"pv_erzeugung_kwh": 4.5}))
+    await db.flush()
+
+
+async def test_n611_alter_bestand_auf_zwei_module_verteilt_heilt_beim_erneuten_import(db, monkeypatch):
+    """Vor N-611 verteilt: Ost/West 60/40 (markiert) + BKW 4,5 ⇒ Monat 104,5. Der erneute Import aus der
+    Oberfläche (sie schickt „überschreiben") verteilt 95,5 neu ⇒ 57,3 / 38,2, Monat 100."""
+    a, invs = await _anlage(db, module=[("Ost", 6.0, None), ("West", 4.0, None)])
+    bkw = await _mit_bkw(db, a, sensor="sensor.pv_balkon")
+    await _frank_monat(db, a.id)
+    await _bestand(db, invs, bkw, {"Ost": (60.0, ABGELEITET_KWP_ANTEIL), "West": (40.0, ABGELEITET_KWP_ANTEIL)})
+    _patch_stats(monkeypatch, {**HA, "sensor.pv_balkon": 4.5})
+    assert await _monat_pv(db, a.id) == 104.5
+
+    await import_ha_statistics(
+        a.id, ImportRequest(monate=[{"jahr": JAHR, "monat": MONAT}], ueberschreiben=True), db,
+    )
+
+    assert await _modulwerte(db, invs) == {"Ost": (57.3, ABGELEITET_KWP_ANTEIL), "West": (38.2, ABGELEITET_KWP_ANTEIL)}
+    assert await _monat_pv(db, a.id) == 100.0
+
+
+async def test_n611_alter_bestand_auf_ein_modul_bleibt_auch_nach_erneutem_import(db, monkeypatch):
+    """Festgehalten, nicht gewollt (HA-Bauform S1): hatte nur EIN Modul keinen eigenen Sensor, schrieb der
+    Import ihm den Rest ohne Marke — als Messung. Ein erneuter Import ersetzt sie nicht; der Monat bleibt 104,5."""
+    a, invs = await _anlage(db, module=[("Ost", 6.0, "sensor.pv_ost"), ("West", 4.0, None)])
+    bkw = await _mit_bkw(db, a, sensor="sensor.pv_balkon")
+    await _frank_monat(db, a.id)
+    await _bestand(db, invs, bkw, {"Ost": (55.0, None), "West": (45.0, None)})
+    _patch_stats(monkeypatch, {**HA, "sensor.pv_ost": 55.0, "sensor.pv_balkon": 4.5})
+
+    await import_ha_statistics(
+        a.id, ImportRequest(monate=[{"jahr": JAHR, "monat": MONAT}], ueberschreiben=True), db,
+    )
+
+    assert await _modulwerte(db, invs) == {"Ost": (55.0, None), "West": (45.0, None)}
+    assert await _monat_pv(db, a.id) == 104.5
+
+
+async def test_n611_ein_unvollstaendiger_monat_bleibt_in_der_vorschau_fehlt_lokal(db, monkeypatch):
+    """Fall B: Ost misst, West hat keinen Wert, das BKW 4,5, lokal kein Anlagenwert ⇒ die Modul-Summe ist
+    unvollständig. Der BKW-Wert macht den Monat nicht „voll" — die Vorschau bleibt bei „importieren / fehlt lokal"
+    (statt eines Konflikts aus 4,5 gegen 100)."""
+    a, invs = await _anlage(db, module=[("Ost", 6.0, "sensor.pv_ost"), ("West", 4.0, None)])
+    bkw = await _mit_bkw(db, a, sensor="sensor.pv_balkon")
+    await _frank_monat(db, a.id)
+    for inv_id, kwh in ((invs[0].id, 55.0), (bkw.id, 4.5)):
+        db.add(InvestitionMonatsdaten(investition_id=inv_id, jahr=JAHR, monat=MONAT,
+                                      verbrauch_daten={"pv_erzeugung_kwh": kwh}))
+    await db.flush()
+    _patch_stats(monkeypatch, {**HA, "sensor.pv_ost": 55.0, "sensor.pv_balkon": 4.5})
+
+    m = (await get_import_vorschau(a.id, db)).monate[0]
+
+    assert m.aktion == "importieren", m.grund
+    assert PV_LABEL in m.grund
+    assert m.vorhandene_werte[PV_LABEL] is None

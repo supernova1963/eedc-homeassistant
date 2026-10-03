@@ -137,8 +137,8 @@ async def test_anlagen_gesamtwert_sperrt_die_bkw_addition(db, monkeypatch):
     Jetzt gewinnen die Einzelwerte, der Zähler füllt nur Lücken; das BKW gehört zur Grundgesamtheit und
     kommt nicht zusätzlich obendrauf. In dieser Fixture hat jede Quelle einen Wert, die Zahl ist daher
     dieselbe — 724 = 679 (String) + 45 (BKW), nicht mehr 724 als Zählerwert. Der Fall „Zähler füllt eine
-    Lücke + BKW" steht in ``test_n587_pv_strings_vor_anlagenzaehler.py``; im abgeschlossenen Monat ist er
-    N-611.
+    Lücke + BKW" steht in ``test_n587_pv_strings_vor_anlagenzaehler.py``; der abgeschlossene Monat rechnet
+    ihn seit N-611 genauso (``test_n611_anlagenwert_alle_pv_quellen.py``).
     """
     import backend.api.routes.aktueller_monat as am
     now = datetime.now()

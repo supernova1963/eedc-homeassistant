@@ -102,8 +102,17 @@ async def lade_monats_fakten(
     # PV über den Read-time-SoT (P7): gemessene Modulwerte + Lücken aus dem
     # Anlagen-Aggregat. NIE die Rohspalte direkt — sie ist entweder eine
     # Teilsumme oder sie überschreibt Messungen.
+    #
+    # N-611: der Anlagenwert steht für ALLE PV-Quellen. Das Balkonkraftwerk geht
+    # hier nicht in die Modul-Auflösung (es kommt in `bau.py` als `bkw_erzeugung`
+    # dazu), sein eigener Wert mindert aber den Anlagenwert, bevor der Rest die
+    # Modul-Lücken füllt — sonst stünde es zweimal in `pv_kwh`. Dafür reicht die
+    # Schicht ihre Investitionen UNGEFILTERT durch; Zeitfilter und Abtretung
+    # entscheidet `lade_pv_je_monat` je Monat (ADR-002/P11, N-386, #123).
     pv_module = [i for i in investitionen if i.typ == "pv-module"]
-    pv_je_modul = await lade_pv_je_monat(db, anlage_id, pv_module, jahr=_ein_jahr(von, bis))
+    pv_je_modul = await lade_pv_je_monat(
+        db, anlage_id, pv_module, jahr=_ein_jahr(von, bis), investitionen=investitionen,
+    )
     pv_summen = pv_summe_je_monat(pv_je_modul)
 
     # N-266: Balkonkraftwerke, unter denen `pv-module` hängen. Ihre Erzeugung

@@ -402,8 +402,8 @@ async def get_cockpit_uebersicht(
     netzbezug = sum(f.zaehler.netzbezug_kwh for f in md_pv)
 
     # PV je Monat über den Read-time-SoT der Schicht: gemessene Modulwerte +
-    # Lücken aus dem Anlagen-Aggregat, plus das BKW (das Aggregat deckt nur
-    # `pv-module` ab). Ersetzt das globale Entweder-oder
+    # Lücken aus dem Anlagen-Aggregat, plus das BKW (das Aggregat steht für alle
+    # PV-Quellen; der eigene BKW-Wert ist vor der Lückenfüllung abgezogen, N-611). Ersetzt das globale Entweder-oder
     # (`pv_erzeugung_inv if pv_erzeugung_inv > 0 else pv_erzeugung_md`), das eine
     # Anlage mit gemischter Historie um ihre Aggregat-Monate brachte.
     pv_erzeugung = sum(f.erzeugung.pv_kwh for f in fakten)

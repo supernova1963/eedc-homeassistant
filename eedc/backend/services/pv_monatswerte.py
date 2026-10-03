@@ -23,18 +23,24 @@ die Summenbildung läuft über ``pv_summe_je_monat``, das Unvollständigkeit als
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Mapping, Optional, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
+from backend.core.berechnungen.erzeuger_traeger import (
+    BKW_TYP,
+    PV_MODUL_TYP,
+    abgetretene_bkw_ids,
+    erzeuger_traeger,
+)
 from backend.core.berechnungen import (
     PvModul,
     PvModulWert,
     ist_vollstaendig,
     resolve_pv_je_modul,
 )
+from backend.core.field_definitions import get_pv_erzeugung_kwh
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.monatsdaten import Monatsdaten
 from backend.utils.investition_value import get_inv_value
@@ -48,6 +54,8 @@ async def lade_pv_je_monat(
     anlage_id: int,
     pv_module: list[Investition],
     jahr: Optional[int] = None,
+    *,
+    investitionen: Optional[Sequence[Investition]] = None,
 ) -> PvMonate:
     """Aufgelöste Pro-Modul-PV je Monat — Messwerte + Aggregat-Lückenfüllung.
 
@@ -56,15 +64,28 @@ async def lade_pv_je_monat(
         anlage_id: Anlage.
         pv_module: PV-Erzeuger der Anlage. **Der Typ-Filter ist Sache des
             Aufrufers**, und das ist eine Entscheidung, keine Nachlässigkeit:
-            die meisten Aufrufer übergeben nur ``pv-module``, weil das
-            Balkonkraftwerk dort eine eigene Zeile hat und sonst doppelt zählte
-            (so etwa ``investitionen/roi.py::berechne_pv_einsparung…``). Die
-            String-Sichten (``cockpit/pv_strings.py``) übergeben seit F-10
-            **beide** Erzeuger-Typen — dort ist das BKW eine Erzeuger-Zeile wie
-            ein String, und ohne es bliebe eine reine BKW-Anlage leer.
+            die Monats-Fakten und der HA-Statistik-Import übergeben nur
+            ``pv-module``, weil das Balkonkraftwerk dort eine eigene Zeile hat
+            (``bkw_erzeugung``) bzw. kein Empfänger des Zählers ist und sonst
+            doppelt zählte. Die String-Sichten
+            (``cockpit/pv_strings.py``), der Daten-Checker und
+            ``GET /monatsdaten/{id}`` übergeben seit F-10 bzw. N-386 **beide**
+            Erzeuger-Typen — dort ist das BKW eine Erzeuger-Zeile wie ein
+            String, und ohne es bliebe eine reine BKW-Anlage leer.
             Die Auflösung selbst ist typ-blind und bleibt es: sie kennt nur
             „hat einen eigenen Wert" gegen „bekommt einen Anteil am Rest".
+            **Was der Aufrufer weglässt, verschwindet trotzdem nicht aus dem
+            Anlagenwert (N-611):** der steht für ALLE PV-Quellen der Anlage.
+            Ein Balkonkraftwerk, das in diesem Monat selbst trägt und hier
+            nicht übergeben ist, mindert den Anlagenwert um seinen eigenen
+            Wert, bevor der Rest die Modul-Lücken füllt — siehe unten.
         jahr: optional auf ein Jahr einschränken.
+        investitionen: alle Investitionen der Anlage, **ungefiltert** (kein
+            Aktiv-, Datums- oder Abtretungsfilter — den Zeitfilter und die
+            Abtretung entscheidet dieser Pfad je Monat, ADR-002/P11). Nur
+            gebraucht, wenn ein Monat einen Anlagenwert trägt; wer sie schon
+            geladen hat (die Monats-Fakten), reicht sie durch und spart die
+            Abfrage. ``None`` = der Pfad lädt sie bei Bedarf selbst.
 
     Returns:
         ``{(jahr, monat): {inv_id: PvModulWert}}``. Monate ohne jede PV-Quelle
@@ -89,6 +110,22 @@ async def lade_pv_je_monat(
     stünde ``pv_kwh = pv_modul_summe + bkw_erzeugung`` auf der doppelten
     Erzeugung — mit Folgen für Autarkie, Eigenverbrauchsquote, CO₂, Finanzen,
     Community-Payload und HA-Export.
+
+    **N-611 — der Anlagenwert steht für alle PV-Quellen.** Stufe 3 bekommt
+    nicht den rohen ``Monatsdaten.pv_erzeugung_kwh``, sondern
+    ``max(0, Anlagenwert − Σ eigene Werte der Balkonkraftwerke)`` — gezählt
+    werden die BKW, die im Monat aktiv sind, selbst tragen (nicht an Kinder
+    abgetreten) und vom Aufrufer **nicht** übergeben wurden (übergebene stehen
+    mit ihrem Wert schon in der Auflösung). Gelesen wird ihr Wert genau wie in
+    ``monats_fakten/roh.py::falte`` (``get_pv_erzeugung_kwh``, beide
+    Schreibweisen), denn genau diese Zahl addiert ``monats_fakten/bau.py``
+    danach als ``bkw_erzeugung`` wieder dazu: ``pv_kwh = Module + BKW`` ergibt
+    so den Anlagenwert und nicht Anlagenwert + BKW. Ohne Abzug zählte das BKW
+    doppelt — einmal als Anteil, den der Anlagenwert auf die Module verteilt,
+    einmal als eigene Zeile. Ein BKW **ohne** eigenen Wert bekommt keinen
+    Anteil am Rest (der bliebe ein Faktenfeld ohne Speicherort; die Familie
+    geht an HA-Bauform S1). **Ohne Anlagenwert läuft nichts davon** — keine
+    zusätzliche Abfrage, jede Zahl wie vorher.
     """
     if not pv_module:
         return {}
@@ -122,6 +159,31 @@ async def lade_pv_je_monat(
         (md.jahr, md.monat): md.pv_erzeugung_kwh
         for md in (await db.execute(md_query)).scalars().all()
     }
+
+    # N-611: die eigenen Monatswerte der Balkonkraftwerke, die der Aufrufer NICHT
+    # übergeben hat — nur geladen, wenn überhaupt ein Monat einen Anlagenwert
+    # trägt (sonst bleibt der Pfad Abfrage für Abfrage, was er war).
+    pv_quellen_anlage: list[Investition] = []
+    bkw_daten: dict[tuple[int, int], dict[int, Optional[dict]]] = {}
+    if any(v is not None for v in aggregat.values()):
+        if investitionen is None:
+            investitionen = (await db.execute(
+                select(Investition).where(Investition.anlage_id == anlage_id)
+            )).scalars().all()
+        pv_quellen_anlage = [
+            i for i in investitionen
+            if i.typ in (PV_MODUL_TYP, BKW_TYP)
+        ]
+        # Übergebene BKW stehen mit ihrem Wert schon in der Auflösung — nur die übrigen.
+        bkw_ids = [i.id for i in pv_quellen_anlage if i.typ == BKW_TYP and i.id not in pv_ids]
+        if bkw_ids:
+            bkw_query = select(InvestitionMonatsdaten).where(
+                InvestitionMonatsdaten.investition_id.in_(bkw_ids)
+            )
+            if jahr is not None:
+                bkw_query = bkw_query.where(InvestitionMonatsdaten.jahr == jahr)
+            for imd in (await db.execute(bkw_query)).scalars().all():
+                bkw_daten.setdefault((imd.jahr, imd.monat), {})[imd.investition_id] = imd.verbrauch_daten
 
     # N-266/E4 — Stufe 2 der Präzedenz: die Monatswerte der Balkonkraftwerke,
     # unter denen Module hängen. Sie werden hier NICHT summiert, sondern als
@@ -192,8 +254,14 @@ async def lade_pv_je_monat(
                 # per Konstruktion proportional zur kWp sind.
                 abgeleitet_monat = abgeleitet_monat | {k.id}
 
+        anlagenwert = aggregat.get((j, monat))
+        if anlagenwert is not None and bkw_daten.get((j, monat)):
+            anlagenwert = max(0.0, anlagenwert - eigene_bkw_erzeugung_kwh(
+                [i for i in pv_quellen_anlage if i.ist_aktiv_im_monat(j, monat)],
+                bkw_daten[(j, monat)],
+            ))
         out[(j, monat)] = resolve_pv_je_modul(
-            aggregat_kwh=aggregat.get((j, monat)),
+            aggregat_kwh=anlagenwert,
             module=[
                 PvModul(
                     inv_id=m.id,
@@ -205,6 +273,38 @@ async def lade_pv_je_monat(
             ],
         )
     return out
+
+
+def eigene_bkw_erzeugung_kwh(
+    aktive: Sequence[Investition],
+    daten_je_investition: Mapping[int, Optional[dict]],
+) -> float:
+    """Σ der eigenen Monatswerte der Balkonkraftwerke, die selbst tragen (N-611).
+
+    Der Abzug, der aus dem Anlagenwert den Rest für die Modul-Lücken macht —
+    an EINER Stelle, weil Leseseite (``lade_pv_je_monat``), Schreibweg
+    (``ha_statistics._verteile_anlagen_pv``) und Import-Vorschau dieselbe Zahl
+    brauchen.
+
+    Args:
+        aktive: die im Monat **aktiven** Investitionen (Zeitfilter beim
+            Aufrufer). Sie müssen die `pv-module` mit enthalten, sonst ist die
+            Abtretung nicht zu erkennen (ADR-002/P11, Zeitfilter → Selektor).
+        daten_je_investition: ``{inv_id: verbrauch_daten}`` des Monats. Ein BKW,
+            das schon selbst in einer Auflösung steht, gehört NICHT hinein —
+            sein Wert wäre sonst zweimal abgezogen (``lade_pv_je_monat`` lädt
+            deshalb nur die Zeilen der nicht übergebenen BKW).
+
+    Ein abtretendes BKW (N-266) zählt nicht — sein Wert füllt schon die Lücken
+    seiner Kinder. Gelesen wird über ``get_pv_erzeugung_kwh`` wie in
+    ``monats_fakten/roh.py::falte``; ein BKW ohne Wert trägt 0 bei.
+    """
+    abgetreten = abgetretene_bkw_ids(aktive)
+    return sum(
+        get_pv_erzeugung_kwh(daten_je_investition.get(i.id) or {})
+        for i in aktive
+        if i.typ == BKW_TYP and i.id not in abgetreten
+    )
 
 
 async def _lade_bkw_aggregate(

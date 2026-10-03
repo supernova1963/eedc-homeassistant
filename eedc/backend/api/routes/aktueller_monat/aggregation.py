@@ -155,9 +155,9 @@ def aggregiere_typen(*, investitionen, jahr, monat, resolved, teilzeitraum):
     # (Σ `resolve_pv_je_modul`, typ-blind): alle Quellen mit eigenem Wert ⇒ Σ Einzelwerte; fehlt einer der
     # Wert ⇒ Σ gemessene + max(0, Zähler − Σ gemessene). Das BKW kommt danach NICHT noch einmal dazu —
     # es steckt im Zähler; seine eigene Zeile `bkw_erzeugung_kwh` bleibt sein eigener Wert.
-    # ⚠ Der abgeschlossene Monat (Monats-Fakten) liest den Zähler heute noch als „nur Module" und addiert
-    # das BKW obendrauf — die Abweichung in der Zusammenstellung „Zähler füllt eine Lücke + BKW" ist
-    # N-611 und wird dort behoben, nicht hier.
+    # Der abgeschlossene Monat (Monats-Fakten) liest den Zähler seit N-611 genauso: der eigene BKW-Wert
+    # mindert ihn, bevor der Rest die Modul-Lücken füllt (`pv_monatswerte.lade_pv_je_monat`); vorher
+    # addierte er das BKW obendrauf.
     # ⚠ Nur diese zwei Quellen. Der gespeicherte Wert (`"gespeichert"`) ist schon aufgelöst und bleibt
     # unberührt — die Quellen-Präzedenz der Route ändert sich nicht. Das Connector-Delta
     # (`"local_connector"`) ist ein eigener Fall: `test_aktueller_monat_datenquellen_prioritaet.py::

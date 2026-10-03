@@ -77,7 +77,7 @@ Manchmal will man nur **eine** Anzeige sehen — den Energiefluss auf dem Wandta
 
 1. In eedc die gewünschte Anzeige über **⤢ Fokus / Vollbild** öffnen.
 2. In der Kopfzeile auf **„Link / Einbetten"** klicken und die Adresse **kopieren**.
-3. In Home Assistant: **Dashboard bearbeiten → Karte hinzufügen → Webseite** und die Adresse einfügen. Die Kartenhöhe stellst du dort ein (`aspect_ratio`).
+3. In Home Assistant: **Dashboard bearbeiten → Karte hinzufügen** und die Adresse einfügen — in die **eedc-Karte** (`custom:eedc-card`, empfohlen beim Betrieb als App, siehe unten) oder in eine **Webseiten-Karte**. Die Kartenhöhe stellst du dort ein (`aspect_ratio`).
 
 Die Karte zeigt dann **nur diese Anzeige** — ohne Navigation, ohne „Zurück", ohne Theme-Umschalter. Das ist Absicht: In einem Dashboard ist die Karte ein Baustein, kein zweites Programm; der Rückweg ist das Dashboard drumherum. Das **Theme folgt dem Gerät** (hell/dunkel), damit die Karte zum übrigen Dashboard passt.
 
@@ -98,7 +98,15 @@ Jede Anzeige mit einem ⤢ hat eine solche Adresse — die Liste oben sind nur d
 
 **Was du dazu wissen solltest:**
 
-- **Die Karte braucht eine Verbindung zum Add-on, und die legt Home Assistant nur beim Öffnen des eedc-Panels an.** Nach jedem **Neustart von Browser oder Home-Assistant-App** — auch wenn du dabei angemeldet bleibst — und auf einem neuen Gerät zeigt die Karte deshalb „401: Unauthorized". Dann einmal **eedc** in der Seitenleiste öffnen und das Dashboard neu laden. Danach hält die Verbindung — im Test war eine Karte auch nach einer Viertelstunde ohne geöffnetes Panel noch erreichbar und ließ sich neu laden. Zeigt die Karte stattdessen einen eedc-Fehler wie „nicht erreichbar", ist das Add-on gerade nicht da (Neustart, Update); sie holt sich die Anzeige beim nächsten Abruf von selbst.
+- **Am besten mit der eedc-Karte.** Die Webseiten-Karte braucht eine Verbindung zum Add-on, und die legt Home Assistant nur beim Öffnen des eedc-Panels an. Nach jedem **Neustart von Browser oder Home-Assistant-App** — auch wenn du dabei angemeldet bleibst — und auf einem neuen Gerät zeigt sie deshalb „401: Unauthorized", bis du eedc einmal in der Seitenleiste öffnest. Die **eedc-Karte** ([eedc-card](https://github.com/supernova1963/eedc-card); wie du sie installierst, steht dort) legt diese Verbindung selbst an und hält sie, solange das Dashboard angezeigt wird — mit derselben Adresse aus „Link / Einbetten":
+
+  ```yaml
+  type: custom:eedc-card
+  url: <Adresse aus „Link / Einbetten">
+  ```
+
+  Geprüft haben wir die eedc-Karte im Browser; in der Home-Assistant-App auf Handy oder Tablet steht die Prüfung noch aus.
+- **Bleibst du bei der Webseiten-Karte:** nach einem Neustart einmal **eedc** in der Seitenleiste öffnen und das Dashboard neu laden. Danach hält die Verbindung — im Test war eine Karte auch nach einer Viertelstunde ohne geöffnetes Panel noch erreichbar und ließ sich neu laden. Zeigt die Karte stattdessen einen eedc-Fehler wie „nicht erreichbar", ist das Add-on gerade nicht da (Neustart, Update); sie holt sich die Anzeige beim nächsten Abruf von selbst.
 - **Chart ⇄ Tabelle und die Zeitraum-Auswahl bleiben bedienbar.** In den Bilanzen blätterst du also auch in der Karte durch Tage, Monate oder Jahre.
 - **Geparktes bleibt geparkt — und in der Karte lässt sich nichts zurückholen** (der Parkplatz liegt außerhalb des Vollbilds). Schneide die Anzeige deshalb **vorher** in eedc zu; beim Börsenpreis-Block etwa lassen sich einzelne Kennzahlen und die Kurve getrennt parken. Geparkt wird pro Gerät und Browser: Ein Wandtablet kann eine andere Auswahl zeigen als dein Rechner.
 - **Ein fester Zeitraum:** `datum`, `jahr`, `monat` und `h` laufen weiter mit. `#/cockpit/monat?jahr=2025&monat=3&fokus=bilanz` zeigt immer den März 2025. Ohne diese Angaben zeigt die Karte den laufenden Zeitraum — meistens das, was man will.

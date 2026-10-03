@@ -359,7 +359,7 @@ Wie du die eingerichteten Daten dann **ansiehst und auswertest** (Cockpit, Kompo
 
 **Problem:** Eine eedc-Anzeige als Webseiten-Karte im HA-Dashboard zeigt „401: Unauthorized" — meist nach einem Neustart von Browser oder Home-Assistant-App.
 
-**Lösung:** Siehe [Teil II: Bedienung §1.5](HANDBUCH_BEDIENUNG.md#15-eine-eedc-anzeige-im-home-assistant-dashboard) — einmal **eedc** in der Seitenleiste öffnen, dann das Dashboard neu laden.
+**Lösung:** Statt der Webseiten-Karte die **eedc-Karte** verwenden (siehe [Teil II: Bedienung §1.5](HANDBUCH_BEDIENUNG.md#15-eine-eedc-anzeige-im-home-assistant-dashboard)) — sie baut die Verbindung selbst auf. Mit der Webseiten-Karte: einmal **eedc** in der Seitenleiste öffnen, dann das Dashboard neu laden.
 
 ### Backup-/CSV-/PDF-Download zeigt 401 in der HA-Companion-App
 

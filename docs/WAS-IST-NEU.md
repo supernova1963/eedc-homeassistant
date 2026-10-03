@@ -107,6 +107,14 @@ jetzt Gesamtverbrauch.
   Monatsabschluss die Summe der Strings — vorher den Anlagenzähler, und die Zahl sprang beim
   Abschluss. Der Anlagenzähler steht für die ganze Anlage (Strings und Balkonkraftwerk) und
   füllt nur noch, was die Quellen mit eigenem Zähler nicht erklären.
+- **Balkonkraftwerk neben einem Wert für die ganze Anlage:** Hat dein Balkonkraftwerk einen
+  eigenen Zähler (oder einen eingetragenen Monatswert) und deine Anlage zusätzlich einen
+  PV-Gesamtzähler, zählte ein abgeschlossener Monat das Balkonkraftwerk doppelt — im Beispiel
+  1045 statt 1000 kWh, Eigenverbrauch und Autarkie zu hoch. Jetzt geht der Wert des
+  Balkonkraftwerks zuerst vom Gesamtzähler ab, nur der Rest wird auf die Module ohne eigenen
+  Zähler verteilt. Hat der Statistik-Import solche Monate schon verteilt, zeigt seine Vorschau
+  sie jetzt als Konflikt; ein erneuter Import dieses Monats verteilt sie richtig, wenn mehrere
+  Module keinen eigenen Zähler haben.
 - **Vorjahresvergleich:** Der Vergleichswert ist jetzt genau derselbe Monat des Vorjahres,
   wie du ihn direkt aufrufst — vorher konnte er davon abweichen.
 - **Mehrere Wärmepumpen:** Die Ersparnis in der Kachel ist jetzt die Summe der Geräte —
