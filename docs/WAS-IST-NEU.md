@@ -99,6 +99,11 @@ jetzt Gesamtverbrauch.
   Jahresbericht. Vorher stand dort eine zu hohe Ersparnis. Auch der **Vorjahresvergleich**
   rechnet die Stromrechnung des Vorjahresmonats jetzt mit denselben gemessenen Preisen wie
   der Monat selbst.
+- **E-Auto mit Rückspeisung ins Haus (V2H):** *Cockpit → Monat* und *→ Jahr* zählen die
+  Rückspeisung jetzt zum Eigenverbrauch — wie Übersicht und Jahresbericht schon immer.
+  Eigenverbrauch, Autarkie und Ergebnis steigen dort um diesen Anteil.
+- **Vorjahresvergleich:** Der Vergleichswert ist jetzt genau derselbe Monat des Vorjahres,
+  wie du ihn direkt aufrufst — vorher konnte er davon abweichen.
 - **Mehrere Wärmepumpen:** Die Ersparnis in der Kachel ist jetzt die Summe der Geräte —
   dieselbe Zahl wie im T-Konto darunter.
 - **Speicher mit Netzladung:** Die Komponenten-Finanztabelle zieht die Netzladung nicht mehr

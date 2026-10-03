@@ -8,8 +8,7 @@ Werte-Extraktion (mit `get_val`) und die berechneten Bilanzwerte.
 from typing import Optional
 from backend.core.berechnungen.waermepumpe_kennzahl import heizwaerme_kwh, waerme_gesamt_kwh
 from backend.core.berechnungen import (
-    autarkie_prozent,
-    eigenverbrauchsquote_prozent,
+    berechne_verbrauchs_kennzahlen,
     erzeugung_hinter_zaehler_kwh,
 )
 from backend.services.monats_fakten import pv_unvollstaendig_hinweis
@@ -597,10 +596,19 @@ def extrahiere_werte(*, monats_fakt, resolved):
     return {k: _loc[k] for k in ("abgabe_dritte", "einspeisung", "erzeugung_bilanz", "get_val", "hinweise", "netzbezug", "pv", "sonstiges_erz_bilanz", "speicher_entladung", "speicher_ladung",) if k in _loc}
 
 
-def berechne_bilanzwerte(*, abgabe_dritte, einspeisung, erzeugung_bilanz, netzbezug, pv, sonstiges_erz_bilanz, speicher_entladung, speicher_ladung):
-    """Berechnete Werte: Eigenverbrauch, Direktverbrauch, Gesamtverbrauch, Autarkie, EV-Quote.
+def berechne_bilanzwerte(*, abgabe_dritte, einspeisung, erzeugung_bilanz, netzbezug, pv, sonstiges_erz_bilanz, speicher_entladung, speicher_ladung, v2h_entladung=0.0):
+    """Berechnete Werte: Eigenverbrauch, Direktverbrauch, Gesamtverbrauch, Autarkie, EV-Quote — ÜBER DEN LAYER.
 
-    Aus `get_aktueller_monat` Zeilen 1109-1130 (Stand vor dem Umzug) byte-identisch herausgeloest — Vorlage 2.
+    N-610 (03.10.2026): bis dahin stand hier eine eigene Formel (`direkt + speicher_entladung − abgabe`) — die Kopie, die
+    die V2H-Erweiterung des Layers nie bekam: ein E-Auto, das ins Haus zurückspeist, fehlte im Eigenverbrauch von
+    Cockpit → Monat und → Jahr (r28 A1 2025: Σ 6 996,5 kWh gegen 7 331,4 kWh in Übersicht und Monatsreihe; Δ = 335 kWh V2H).
+    Jetzt ruft die Route `core/berechnungen/verbrauch.py::berechne_verbrauchs_kennzahlen` — dieselbe Funktion wie die
+    Monats-Fakten, Übersicht, Monatsreihe, PDF und HA-Export (ADR-001 Pflicht 2). Die V2H-Menge kommt aus dem Monats-Fakt
+    (`monats_fakt.emob.v2h_entladung_kwh`, gespeicherte Gerätewerte); die Vier-Quellen-Auflösung kennt kein V2H-Feld —
+    im laufenden Monat ohne gespeicherten Wert ist sie 0.
+
+    Die None-Gates der Route bleiben UM den Aufruf: keine Bilanz ohne Erzeugung bzw. Einspeisung; Gesamtverbrauch und
+    Autarkie nur mit Netzbezug; EV-Quote nur mit Erzeugung > 0. Gerundet wird am Rand wie bisher (2 Stellen bzw. 1 Stelle).
     """
     # ── Berechnete Werte ──
     eigenverbrauch = None
@@ -610,19 +618,25 @@ def berechne_bilanzwerte(*, abgabe_dritte, einspeisung, erzeugung_bilanz, netzbe
     ev_quote = None
 
     if (pv is not None or sonstiges_erz_bilanz > 0) and einspeisung is not None:
-        ladung = speicher_ladung or 0
-        entladung = speicher_entladung or 0
-        direktverbrauch = round(max(0, erzeugung_bilanz - einspeisung - ladung), 2)
-        # §9.2: dieselbe Formel wie der Layer — Abgabe an Dritte ist kein Eigenverbrauch.
-        eigenverbrauch = round(max(0, direktverbrauch + entladung - abgabe_dritte), 2)
+        kz = berechne_verbrauchs_kennzahlen(
+            pv_erzeugung_kwh=erzeugung_bilanz,
+            einspeisung_kwh=einspeisung,
+            netzbezug_kwh=netzbezug or 0.0,
+            speicher_ladung_kwh=speicher_ladung or 0.0,
+            speicher_entladung_kwh=speicher_entladung or 0.0,
+            v2h_entladung_kwh=v2h_entladung or 0.0,
+            abgabe_dritte_kwh=abgabe_dritte or 0.0,
+        )
+        direktverbrauch = round(kz.direktverbrauch_kwh, 2)
+        eigenverbrauch = round(kz.eigenverbrauch_kwh, 2)
 
         if netzbezug is not None:
-            gesamtverbrauch = round(eigenverbrauch + netzbezug, 2)
-            if gesamtverbrauch > 0:
-                autarkie = round(autarkie_prozent(eigenverbrauch, gesamtverbrauch), 1)
+            gesamtverbrauch = round(kz.gesamtverbrauch_kwh, 2)
+            if kz.gesamtverbrauch_kwh > 0:
+                autarkie = round(kz.autarkie_prozent, 1)
 
         if erzeugung_bilanz > 0:
-            ev_quote = round(eigenverbrauchsquote_prozent(eigenverbrauch, erzeugung_bilanz), 1)
+            ev_quote = round(kz.eigenverbrauchsquote_prozent, 1)
     _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
     return {k: _loc[k] for k in ("autarkie", "direktverbrauch", "eigenverbrauch", "ev_quote", "gesamtverbrauch",) if k in _loc}
 

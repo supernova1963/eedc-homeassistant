@@ -731,6 +731,12 @@ def falte_zeitraum(
             gewichtet(netzbezug_preis_effektiv, f("netzbezug_kwh"))
             if any(m.get("netzbezug_durchschnittspreis_cent") is not None for m in monate) else None
         ),
+        # N-610-Nacharbeit: dieselbe Regel für die gepflegte Einspeisevergütung — trägt ein Monat sie, ist der Jahreswert der
+        # einspeisegewichtete Ø des aufgelösten Satzes (`einspeise_preis_cent` = gepflegt, sonst Tarif), sonst None.
+        "einspeise_durchschnittspreis_cent": (
+            gewichtet(f("einspeise_preis_cent"), f("einspeisung_kwh"))
+            if any(m.get("einspeise_durchschnittspreis_cent") is not None for m in monate) else None
+        ),
         "grundgebuehr_euro": summe(f("grundgebuehr_euro")),
         "zaehlergebuehr_euro_jahr": next(
             (v for v in reversed(f("zaehlergebuehr_euro_jahr")) if v is not None), None),

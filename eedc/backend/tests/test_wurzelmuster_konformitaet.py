@@ -2095,11 +2095,8 @@ P10_SCHREIBEN_IMPORT_CHECKER: frozenset[str] = frozenset({
 #: (bzw. brauchen keine); selbst gefaltet wird nur, was an einem einzelnen Gerät
 #: hängt. Der Eintrag fällt, sobald `MonatsFakt` eine per-Investition-Gruppe hat.
 P10_PER_INVESTITION: frozenset[str] = frozenset({
-    # C1c: alle anlagenweiten Mengen (PV · Speicher · WP · E-Mob · sonstiger
-    # Erzeuger · Eigenverbrauch/Autarkie) kommen aus `lade_monats_fakten`.
-    # Selbst geladen wird nur die Zuordnung `inv → verbrauch_daten` für die
-    # eMob-Zeilen des Vorjahres-T-Kontos.
-    "backend/api/routes/aktueller_monat/vergleich.py::_load_vorjahr",
+    # (Bis 03.10.2026 stand hier `aktueller_monat/vergleich.py::_load_vorjahr` — N-610: das Vorjahr ruft die
+    # Monatsfunktion und lädt selbst keine `InvestitionMonatsdaten` mehr; der Eintrag ist gefallen.)
     # C1d (2026-08-04): der Komponenten-Detailblock ist umgehängt — Speicher,
     # WP, E-Mob, BKW und die sechs Sonstiges-Mengen kommen aus
     # `lade_monats_fakten`. Selbst geladen wird nur noch die Zuordnung
@@ -2269,9 +2266,9 @@ _P10_FALT_SICHTFELD: tuple[str, ...] = ("backend/api/", "backend/services/")
 #: Liste leer von so etwas.
 P10_PER_INVESTITION_PHASE: dict[str, str] = {
     # T-Konto je Investition: die Financial-Zeile EINES Geräts aus der
-    # übergebenen `verbrauch_daten`. Zweiter Aufrufer mit demselben Recht ist
-    # `aktueller_monat/vergleich.py::_load_vorjahr` (ebenfalls gelistet) —
-    # genannt ist der Lader des Haupt-Pfades (Cockpit → Monat).
+    # übergebenen `verbrauch_daten`. Einziger Lader ist der Haupt-Pfad (Cockpit → Monat);
+    # bis 03.10.2026 rief auch `aktueller_monat/vergleich.py::_load_vorjahr` die Funktion
+    # mit eigener IMD-Ladung — seit N-610 rechnet das Vorjahr über die Monatsfunktion.
     "backend/api/routes/aktueller_monat/tkonto.py::_baue_investition_financial":
         "backend/api/routes/aktueller_monat/finanzen.py::t_konto_je_investition",
     # Vorlage 8b: Phase des Anlagen-Rechners. Faltet `historische_inv_daten`,

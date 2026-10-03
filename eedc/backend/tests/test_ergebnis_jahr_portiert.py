@@ -29,6 +29,17 @@ def _m(monat: int, **felder):
 
 # ── Tarif-Zeile (JahrAggregat.preise.test.tsx) ──────────────────────────────────────────────────────────────────────
 
+def test_einspeise_durchschnittspreis_wird_gefaltet():
+    """N-610-Nacharbeit: der gepflegte Einspeise-Ø des Monats (`einspeise_durchschnittspreis_cent`, bis dahin nur im
+    Vorjahres-Block) steht auch im Jahr — einspeisegewichtet über den aufgelösten Satz, sobald ein Monat ihn trägt (dieselbe
+    Regel wie `netzbezug_durchschnittspreis_cent`); ohne Pflege in keinem Monat bleibt er None."""
+    j = falte_zeitraum([_m(1, einspeisung_kwh=100, einspeise_preis_cent=10, einspeise_durchschnittspreis_cent=10),
+                        _m(2, einspeisung_kwh=300, einspeise_preis_cent=8)], 2025)
+    assert j["einspeise_durchschnittspreis_cent"] == pytest.approx((100 * 10 + 300 * 8) / 400)
+    ohne = falte_zeitraum([_m(1, einspeisung_kwh=100, einspeise_preis_cent=8)], 2025)
+    assert ohne["einspeise_durchschnittspreis_cent"] is None
+
+
 def test_preise_netzbezug_mengengewichtet():
     j = falte_zeitraum([_m(1, netzbezug_kwh=400, netzbezug_preis_cent=40),
                         _m(7, netzbezug_kwh=100, netzbezug_preis_cent=20)], 2025)

@@ -632,6 +632,7 @@ async def _berechne_monat(
     db: AsyncSession,
     *,
     kontext: Optional[MonatsKontext] = None,
+    ohne_vorjahr: bool = False,
 ) -> AktuellerMonatResponse:
     """
     Übersicht eines Monats mit Daten aus allen verfügbaren Quellen.
@@ -825,7 +826,7 @@ async def _berechne_monat(
     if "speicher_entladung" in _out: speicher_entladung = _out["speicher_entladung"]
     if "speicher_ladung" in _out: speicher_ladung = _out["speicher_ladung"]
     # ── berechne_bilanzwerte (Vorlage 2: Abschnitt in aggregation.py, Schnittstelle 8 ein / 5 aus) ──
-    _out = berechne_bilanzwerte(abgabe_dritte=abgabe_dritte, einspeisung=einspeisung, erzeugung_bilanz=erzeugung_bilanz, netzbezug=netzbezug, pv=pv, sonstiges_erz_bilanz=sonstiges_erz_bilanz, speicher_entladung=speicher_entladung, speicher_ladung=speicher_ladung)
+    _out = berechne_bilanzwerte(abgabe_dritte=abgabe_dritte, einspeisung=einspeisung, erzeugung_bilanz=erzeugung_bilanz, netzbezug=netzbezug, pv=pv, sonstiges_erz_bilanz=sonstiges_erz_bilanz, speicher_entladung=speicher_entladung, speicher_ladung=speicher_ladung, v2h_entladung=(monats_fakt.emob.v2h_entladung_kwh if monats_fakt is not None else 0.0))
     if "autarkie" in _out: autarkie = _out["autarkie"]
     if "direktverbrauch" in _out: direktverbrauch = _out["direktverbrauch"]
     if "eigenverbrauch" in _out: eigenverbrauch = _out["eigenverbrauch"]
@@ -946,10 +947,13 @@ async def _berechne_monat(
     if "wp_starts_max_tag" in _out: wp_starts_max_tag = _out["wp_starts_max_tag"]
     if "wp_starts_summe_monat" in _out: wp_starts_summe_monat = _out["wp_starts_summe_monat"]
     # ── Vergleichsdaten ──
-    vorjahr = await _load_vorjahr(
+    # N-610 (03.10.2026): der Vorjahresmonat ist derselbe Monat, über diese Funktion gerechnet (`_load_vorjahr` ruft
+    # `_berechne_monat(jahr−1, ohne_vorjahr=True)`). `ohne_vorjahr` schneidet die Rekursion ab und spart der Jahresroute
+    # zwölf Vorjahresmonate, die sie nicht braucht.
+    vorjahr = None if ohne_vorjahr else await _load_vorjahr(
         anlage_id, investitionen, jahr, monat, db,
         fakt=kontext.fakten.get((jahr - 1, monat)), ust_satz=kontext.ust_satz_vj,
-        tarif_cache=kontext.tarif_cache,
+        tarif_cache=kontext.tarif_cache, kontext=kontext, hinweise=hinweise,
     )
     soll_pv = await _load_soll_pv(anlage_id, jahr, monat, db, fenster)
 
@@ -1199,6 +1203,12 @@ async def _berechne_monat(
         netzbezug_preis_zeittarif=hat_zeitfenster(allgemein_tarif),
         einspeise_preis_cent=einspeise_cent if allgemein_tarif else None,
         netzbezug_durchschnittspreis_cent=netzbezug_durchschnittspreis,
+        # N-610: bis dahin nur im Vorjahres-Block — der gepflegte Monatswert (#392), NICHT der aufgelöste Satz
+        # `einspeise_preis_cent` (Gegenstück zu `netzbezug_durchschnittspreis_cent` neben `netzbezug_preis_cent`).
+        einspeise_durchschnittspreis_cent=(
+            monats_fakt.meta.monatsdaten.einspeise_durchschnittspreis_cent
+            if monats_fakt is not None and monats_fakt.meta.monatsdaten is not None else None
+        ),
         grundgebuehr_euro=grundgebuehr,
         zaehlergebuehr_euro_jahr=zaehlergebuehr_jahr,
         # Vergleiche

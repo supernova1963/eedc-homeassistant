@@ -101,3 +101,22 @@ async def test_n608_vorjahr_bezugspreis_aus_derselben_kaskade(db):
     assert vj["netzbezug_kosten_euro"] == pytest.approx(direkt.netzbezug_kosten_euro)
     assert direkt.ergebnis_euro == pytest.approx(-2.0)
     assert vj["ergebnis_euro"] == pytest.approx(direkt.ergebnis_euro)
+
+
+@pytest.mark.asyncio
+async def test_n607_bkw_zeile_im_t_konto_traegt_den_ev_preis(db):
+    """Die Balkonkraftwerk-Zeile des T-Kontos ist ein Teil der Eigenverbrauchs-Ersparnis (sie wird dort herausgeschnitten)
+    und trägt deshalb denselben Preis — den EV-gewichteten (10 ct), nicht den Bezugs-Ø (40 ct). Nachmessung C5:
+    bis dahin ungesichert (`_p = netz_p` blieb grün)."""
+    aid = await _anlage(db)
+    bkw = Investition(anlage_id=aid, typ="balkonkraftwerk", bezeichnung="Balkon", leistung_kwp=0.8,
+                      anschaffungsdatum=date(2024, 1, 1))
+    db.add(bkw)
+    await db.flush()
+    db.add(InvestitionMonatsdaten(investition_id=bkw.id, jahr=2025, monat=7, verbrauch_daten={"pv_erzeugung_kwh": 50.0}))
+    await db.commit()
+    m = await get_aktueller_monat(anlage_id=aid, jahr=2025, monat=7, db=db)
+    zeile = next(z for z in m.investitionen_financials if z.typ == "balkonkraftwerk")
+    assert m.ev_preis_cent == pytest.approx(10.0)
+    assert zeile.ersparnis_euro == pytest.approx(5.0), "50 kWh × 10 ct — mit dem Bezugs-Ø wären es 20,00 €"
+    assert "vermiedenen Stunden" in (zeile.formel or "")

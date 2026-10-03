@@ -151,7 +151,8 @@ async def baue_jahr(db: AsyncSession, anlage_id: int, jahr: int, *, heute: Optio
     fehlgeschlagen: list[int] = []
     for m in zu_ladende_monate(zeilen, jahr, heute):
         try:
-            antwort = await _berechne_monat(anlage_id, jahr, m, db, kontext=kontext)
+            # N-610: das Jahr braucht keinen Vorjahresmonat je Monat (sein Vergleich läuft über `jahr_vergleich_aus`).
+            antwort = await _berechne_monat(anlage_id, jahr, m, db, kontext=kontext, ohne_vorjahr=True)
         except Exception:
             # Ein Monat kippt das Jahr nicht (wie der Client bis 03.10.2026) — aber er fehlt nicht STILL (ADR-002/P4,
             # Nachmessung 03.10.): er steht unten in `hinweise` und in `fehlende_posten` des Kopfs.
@@ -180,12 +181,28 @@ async def baue_jahr(db: AsyncSession, anlage_id: int, jahr: int, *, heute: Optio
     if satz:
         zusatz.append(satz)
     if fehlgeschlagen:
+        einer = len(fehlgeschlagen) == 1
         zusatz.append(
-            f"{_monate_text(fehlgeschlagen)} {jahr} konnte nicht berechnet werden und fehlt in den Summen des Jahres."
+            f"{_monate_text(fehlgeschlagen)} {jahr} "
+            + ("konnte nicht berechnet werden und fehlt" if einer else "konnten nicht berechnet werden und fehlen")
+            + " in den Summen des Jahres."
         )
-        kopf["fehlende_posten"] = [
-            *kopf.get("fehlende_posten", []), *(f"Monat {MONAT_KURZ[m]} {jahr}" for m in fehlgeschlagen),
-        ]
+        # G2 (Nachmessung C5, 03.10.2026): ein Monat der Grundgesamtheit fehlt — dann gibt es, wie bei einer fehlenden
+        # Stromrechnung, kein Ergebnis vor Betriebskosten und kein Jahresergebnis (Stufe 2/3 `None`, Grund in
+        # `fehlende_posten`). Stufe 1 bleibt die Summe der berechneten Monate und trägt den Hinweis oben (wie G2).
+        for teil in (kopf, vergleich):
+            if teil is None:
+                continue
+            teil["fehlende_posten"] = [
+                *(teil.get("fehlende_posten") or []), *(f"Monat {MONAT_KURZ[m]} {jahr}" for m in fehlgeschlagen),
+            ]
+            teil["ergebnis_vor_betriebskosten_euro"] = None
+            teil["ergebnis_euro"] = None
+            herl = teil.get("ergebnis_herleitung")
+            if isinstance(herl, dict):
+                for stufe in ("vor_betriebskosten", "ergebnis"):
+                    if isinstance(herl.get(stufe), dict):
+                        herl[stufe]["ergebnis_euro"] = None
     if zusatz:
         kopf["hinweise"] = [*(kopf.get("hinweise") or []), *zusatz]
     vj = jahr_vergleich_aus(zeilen, jahr - 1, vergleichs_monate)

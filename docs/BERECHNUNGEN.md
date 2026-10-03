@@ -205,6 +205,18 @@ CO2-Einsparung (kg)      = PV_Erzeugung * 0.38               (VERALTET — s. Ka
 > Der **Vorjahresmonat** löst seinen Bezugspreis seit 03.10.2026 über dieselbe Kaskade (`aufgeloester_monatspreis`) — bis
 > dahin fehlte ihm die Stufe „gemessen" (Probe: 70,00 € als Vorjahr gegen 90,00 € direkt).
 >
+> **Cockpit → Monat rechnet die Bilanz über den Layer (03.10.2026).** Eigenverbrauch, Direktverbrauch, Gesamtverbrauch,
+> Autarkie und EV-Quote des Monats kommen aus `berechne_verbrauchs_kennzahlen` — dieselbe Funktion wie Monats-Fakten,
+> Übersicht, Monatsreihe, PDF und HA-Export. Bis dahin stand in `aktueller_monat/aggregation.py` eine eigene Formel ohne
+> die **V2H-Entladung**: was ein E-Auto ins Haus zurückspeist, fehlte im Eigenverbrauch von Cockpit → Monat und → Jahr
+> (Demo-Anlage 2025: 6 996,5 statt 7 331,4 kWh, Δ = 335 kWh V2H). Die V2H-Menge kommt aus den gespeicherten Gerätewerten
+> des Monats; im laufenden Monat ohne gespeicherten Wert zählt sie 0. **Der Vorjahresvergleich ist seither derselbe
+> Monat:** der Vorjahres-Block wird aus der Monatsantwort des Vorjahresmonats gelesen, nicht mehr eigens gerechnet
+> (Mengen mit zwei statt einer Nachkommastelle). Damit läuft der Vorjahresmonat auch durch die Quellen-Kaskade des
+> Monats (gespeicherte Werte, Connector, Home-Assistant-Statistik): mit angebundenem Home Assistant fragt ein Aufruf von
+> Cockpit → Monat die Statistik jetzt für zwei Monate ab statt für einen. Schlägt die Berechnung des Vorjahresmonats
+> fehl, antwortet der Monat ohne Vorjahresvergleich und nennt das in seinen Hinweisen.
+>
 > **Hinweis „Eigenverbrauch".** Der Eigenverbrauch, der zu **Geld** wird, ist derselbe wie der in
 > der Mengen-Bilanz: die Erzeugung **hinter dem Zähler** — PV-Module, Balkonkraftwerk **und** ein
 > Erzeuger unter *Sonstiges* (BHKW, Windrad, Wasserkraft). Der Zähler am einen Netzanschluss misst

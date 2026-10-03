@@ -487,6 +487,10 @@ class AktuellerMonatResponse(BaseModel):
     netzbezug_preis_zeittarif: bool = False
     einspeise_preis_cent: Optional[float] = None
     netzbezug_durchschnittspreis_cent: Optional[float] = None  # Flexibler Tarif (Monatsdurchschnitt)
+    #: Gepflegte variable Einspeisevergütung des Monats (#392, `Monatsdaten`; ``None`` ohne Pflege) — bis N-610 nur im
+    #: Vorjahres-Block. Eine andere Größe als ``einspeise_preis_cent`` (der aufgelöste Satz: gepflegt, sonst Tarif) —
+    #: dasselbe Paar wie ``netzbezug_durchschnittspreis_cent`` / ``netzbezug_preis_cent``.
+    einspeise_durchschnittspreis_cent: Optional[float] = None
     #: **Der Preis, mit dem das Geld dieses Monats gerechnet wurde** — das
     #: Ergebnis der vollen Kaskade (`aufgeloester_monatspreis`), zu dem die
     #: beiden Felder darunter (`_herkunft`, `_abdeckung`) gehören.

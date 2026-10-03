@@ -408,7 +408,10 @@ Die **Jahr/Gesamt**-Sicht fasst die Anlage über ein ganzes Jahr zusammen — vo
 > Werten aus Home Assistant (bzw. MQTT oder einem Connector) mit und sagt es über dem Vergleich: „1 Monat ohne
 > Monatsabschluss (Sep), Werte aus Home Assistant — Übersicht und Jahresbericht zählen ihn nicht mit." Die Übersicht,
 > der Jahresbericht und der HA-Sensor rechnen nur mit abgeschlossenen Monaten. Kann ein Monat gar nicht berechnet
-> werden, nennt die Zeile ihn ebenfalls, und das Jahresergebnis führt ihn als fehlenden Posten. Der Finanzen-Block als Komponenten-Finanz-Tabelle erscheint auch in Jahr/Gesamt.
+> werden, nennt die Zeile ihn ebenfalls; das Jahresergebnis bleibt dann — wie bei einer fehlenden Stromrechnung — leer
+> („—“) und nennt den Monat als fehlenden Posten.
+
+Der Finanzen-Block als Komponenten-Finanz-Tabelle erscheint auch in Jahr/Gesamt.
 
 **PV-Verteilung** — ein Balken, der zeigt, wohin der erzeugte Strom geflossen ist (Direktverbrauch / Speicher / Einspeisung). Daneben stehen die Kachel **Grundlast SOLL/IST** und der Hinweis, aus welchen Geräten die PV-Erzeugung stammt.
 

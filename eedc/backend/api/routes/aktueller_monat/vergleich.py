@@ -13,28 +13,17 @@ from datetime import date
 from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from backend.models.investition import Investition, InvestitionMonatsdaten
+from backend.models.investition import Investition
 from backend.services.prognose_auswahl import lade_aktive_monatsprognosen
-from backend.services.strompreis_aggregator import aufgeloester_monatspreis, wirksamer_arbeitspreis_cent
-from backend.api.routes.strompreise import lade_tarife_fuer_anlage
+from backend.services.strompreis_aggregator import wirksamer_arbeitspreis_cent
 from backend.core.berechnungen import (
     Monatsfenster,
     anteilig,
     berechne_netzbezug_kosten,
     einspeise_erloes_euro,
 )
-from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
-from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
-from backend.services.eauto_wirtschaftlichkeit import (
-    compute_emob_pool_attribution,
-    entscheide_emob_heimladung,
-)
-from backend.services.emob_kontext import lade_emob_kontext
 from backend.services.monats_fakten import lade_monats_fakten
-from backend.core.wirtschaftlichkeit_defaults import EINSPEISEVERGUETUNG_DEFAULT_CENT
-from backend.core.investition_parameter import ist_dienstlich
 from backend.api.routes.aktueller_monat.schemas import SollPv
-from backend.api.routes.aktueller_monat.tkonto import _baue_investition_financial
 
 logger = logging.getLogger(__name__)
 
@@ -76,341 +65,116 @@ async def _zeittarif_preis(
 _UNGELADEN = object()
 
 
+# Der Vorjahres-Block — Feldnamen und ANWESENHEITSREGELN genau wie im eigenen Pfad bis 03.10.2026 (gelesen gegen
+# `b8c59b08:…/vergleich.py`), damit T-Konto, Kacheln und PDF unverändert lesen. Nur die Werte kommen jetzt aus der
+# Monatsantwort des Vorjahresmonats (N-610).
+
+#: Immer gesetzt (auch als ``None``).
+VORJAHR_IMMER: tuple[str, ...] = (
+    "einspeisung_kwh", "netzbezug_kwh", "netzbezug_durchschnittspreis_cent", "einspeise_durchschnittspreis_cent",
+    "eigenverbrauch_kwh", "direktverbrauch_kwh", "gesamtverbrauch_kwh", "autarkie_prozent",
+)
+#: Mengen — nur gesetzt, wenn > 0 („eine 0 setzt kein Feld").
+VORJAHR_MENGE_POSITIV: tuple[str, ...] = (
+    "pv_erzeugung_kwh", "speicher_ladung_kwh", "speicher_entladung_kwh", "wp_strom_kwh", "wp_waerme_kwh",
+    "wp_modus_kuehlen_kwh", "emob_ladung_kwh", "emob_km",
+)
+#: Vorjahres-Feldname → Feld der Monatsantwort, wo die Namen verschieden sind (Regel 0a: im Monat EIN Name je Größe).
+VORJAHR_QUELLFELD: dict[str, str] = {"wp_modus_kuehlen_kwh": "wp_modus_strom_kuehlen_kwh"}
+#: Der Finanzblock — nur mit Tarif (bis dahin: `if tarif_vj:`).
+VORJAHR_FINANZ_IMMER: tuple[str, ...] = (
+    "netto_ertrag_euro", "ust_eigenverbrauch_euro", "bkw_ersparnis_euro", "erzeuger_erloes_euro", "sonstige_netto_euro",
+    "betriebskosten_anteilig_euro", "ergebnis_vor_betriebskosten_euro", "ergebnis_euro", "ergebnis_herleitung",
+    "fehlende_posten",
+)
+#: Finanzfelder mit eigener Bedingung: Erlös/Ersparnis, sobald die MENGE > 0 ist (auch 0,00 €); WP/E-Mob, sobald ≠ 0
+#: (auch negativ); Stromrechnung, sobald sie einen Wert hat (Netzbezug bekannt, E5).
+VORJAHR_FINANZ_BEI_MENGE: dict[str, str] = {"einspeise_erloes_euro": "einspeisung_kwh", "ev_ersparnis_euro": "eigenverbrauch_kwh"}
+VORJAHR_FINANZ_UNGLEICH_NULL: tuple[str, ...] = ("wp_ersparnis_euro", "emob_ersparnis_euro")
+VORJAHR_FINANZ_MIT_WERT: tuple[str, ...] = ("netzbezug_kosten_euro", "netzbezug_arbeitspreis_kosten_euro")
+VORJAHR_FELDER: tuple[str, ...] = (
+    VORJAHR_IMMER + VORJAHR_MENGE_POSITIV + VORJAHR_FINANZ_IMMER + tuple(VORJAHR_FINANZ_BEI_MENGE)
+    + VORJAHR_FINANZ_UNGLEICH_NULL + VORJAHR_FINANZ_MIT_WERT
+)
+
+
+def vorjahr_aus_monat(antwort: dict) -> dict:
+    """Der Vorjahres-Block aus der Monatsantwort des Vorjahresmonats — Namen, Typen und Anwesenheit wie bisher."""
+    def wert(feld: str):
+        return antwort.get(VORJAHR_QUELLFELD.get(feld, feld))
+
+    result: dict = {k: wert(k) for k in VORJAHR_IMMER}
+    gv = result.get("gesamtverbrauch_kwh")
+    if gv is None or gv <= 0:  # bis dahin: `round(gv, 1) if gv > 0 else None`, ebenso die Autarkie
+        result["gesamtverbrauch_kwh"] = None
+        result["autarkie_prozent"] = None
+    for k in VORJAHR_MENGE_POSITIV:
+        v = wert(k)
+        if v is not None and v > 0:
+            result[k] = v
+    # Ohne Tarif gab es keinen Finanzblock (die Monatsroute setzt ihren Preis nur mit Tarif).
+    if antwort.get("netzbezug_preis_effektiv_cent") is None:
+        return result
+    for k in VORJAHR_FINANZ_IMMER:
+        result[k] = wert(k)
+    for k, menge in VORJAHR_FINANZ_BEI_MENGE.items():
+        m = antwort.get(menge)
+        if m is not None and m > 0 and wert(k) is not None:
+            result[k] = wert(k)
+    for k in VORJAHR_FINANZ_UNGLEICH_NULL:
+        v = wert(k)
+        if v:  # ≠ 0, auch negativ
+            result[k] = v
+    for k in VORJAHR_FINANZ_MIT_WERT:
+        if wert(k) is not None:
+            result[k] = wert(k)
+    return result
+
+
 async def _load_vorjahr(
     anlage_id: int, investitionen: list[Investition], jahr: int, monat: int, db: AsyncSession,
-    *, fakt=_UNGELADEN, ust_satz=None, tarif_cache: Optional[dict] = None,
+    *, fakt=_UNGELADEN, ust_satz=None, tarif_cache: Optional[dict] = None, kontext=None,
+    hinweise: Optional[list] = None,
 ) -> Optional[dict]:
-    """Lädt Vorjahres-Monatsdaten für Vergleich (Energie + Finanzen).
+    """Der Vorjahresmonat — DERSELBE Monat, über dieselbe Funktion gerechnet (N-610, 03.10.2026).
 
-    Die **anlagenweiten** Mengen kommen aus den Monats-Fakten (ADR-002/**P10**).
-    Damit fallen drei Divergenzen, die hier als „D6 / IST-Stand erhalten"
-    konserviert waren und den Vorjahresvergleich systematisch zu niedrig
-    zeigten — jede davon ist eine sichtbare Zahl:
+    Bis 03.10.2026 stand hier ein eigener Pfad (Mengen aus den Monats-Fakten, eigene Preisauflösung, eigene WP-/E-Mob-
+    Zeilen, eigene Leiter-Füllung). Er glich seinem Monat nicht: N-608 (Bezugspreis ohne Stufe „gemessen": 70 € statt
+    90 €), und umgekehrt trug ER den Eigenverbrauch richtig, während die Monatsroute die V2H-Entladung vergaß
+    (r28 7 von 37, r27 10 von 26 Paaren). Statt eines Einzelfixes je Abweichung ruft das Vorjahr jetzt
+    ``_berechne_monat(jahr − 1, monat, ohne_vorjahr=True)`` (kein Vorjahr des Vorjahres, keine Rekursion) und liest die
+    Felder des Vorjahres-Blocks aus dieser Antwort (`vorjahr_aus_monat`). Die Symmetrie hält
+    `tests/test_n610_v2h_im_monat_und_vorjahr.py` über alle Felder.
 
-    - **PV:** je Modul roh gelesen, **ohne** P7-Auflösung. Wer nur das
-      Anlagen-Aggregat pflegt, hatte im Vorjahr 0 kWh stehen.
-    - **Eigenverbrauch/Autarkie:** handgerechnet **ohne V2H**. Was das E-Auto
-      ins Haus zurückspeist, zählt im laufenden Monat, im Vorjahr nicht.
-    - **E-Mob-Ladung:** ``max(E-Auto, Wallbox)`` je Feld statt der kanonischen
-      Trias aus EINER Quelle (#262) — dieselbe Falle, die der aktuelle Monat
-      längst über ``get_emob_heimladung_canonical`` vermeidet.
-
-    Selbst geladen wird nur noch, was **je Investition** hängt: die eMob-Zeilen
-    des T-Kontos brauchen die Zuordnung ``inv → verbrauch_daten``, die
-    ``MonatsFakt`` mangels per-Investition-Sicht (Register N-2) nicht hergibt.
+    Ohne Zählerzeile im Vorjahresmonat gibt es — wie bisher — keinen Vergleich (`None`). ``investitionen``, ``ust_satz``
+    und ``tarif_cache`` bleiben in der Signatur (Aufrufer, Proben); gerechnet wird mit dem Kontext des Vorjahres.
     """
-    from datetime import date as date_type
-    vj = jahr - 1
+    from backend.api.routes.aktueller_monat import _berechne_monat
+    from backend.api.routes.aktueller_monat.kontext import MonatsKontext
 
-    # Ein Tarif-Cache für beides: die Schicht löst den Stichtag (P8) ohnehin
-    # auf, der Finanzblock unten liest denselben Eintrag statt ein zweites Mal
-    # zu laden.
-    #
-    # Paket „Ergebnisgrößen" (B2/G5): die Route reicht den Vorjahresmonat aus EINEM Fakten-Bereich J−1…J herein und
-    # dazu den USt-Satz des Vorjahres; ohne Übergabe (Tests, Einzelaufruf) lädt der Pfad wie bisher selbst.
-    if tarif_cache is None:
-        tarif_cache = {}
-    # N-267: eigener Cache je Aufruf — begruendet im Block ueber `_zeittarif_preis`
-    # bzw. ausfuehrlich in `monats_fakten/` ueber `_komponenten_preis`.
-    _zt_cache: dict = {}
+    vj = jahr - 1
     if fakt is _UNGELADEN:
-        fakten_vj = await lade_monats_fakten(
-            db, anlage_id, von=(vj, monat), bis=(vj, monat), tarif_cache=tarif_cache
-        )
+        fakten_vj = await lade_monats_fakten(db, anlage_id, von=(vj, monat), bis=(vj, monat))
         fakt = fakten_vj[0] if fakten_vj else None
-    # Ohne Zählerzeile gibt es keinen Vergleich — unverändert die Bedingung,
-    # unter der die Route bisher `None` lieferte.
     if fakt is None or fakt.meta.monatsdaten is None:
         return None
-    md = fakt.meta.monatsdaten
-
-    result: dict = {
-        "einspeisung_kwh": md.einspeisung_kwh,
-        "netzbezug_kwh": md.netzbezug_kwh,
-        "netzbezug_durchschnittspreis_cent": md.netzbezug_durchschnittspreis_cent,
-        # #392: variable Einspeisevergütung des Vorjahresmonats
-        "einspeise_durchschnittspreis_cent": md.einspeise_durchschnittspreis_cent,
-    }
-
-    if fakt.erzeugung.pv_kwh > 0:
-        result["pv_erzeugung_kwh"] = round(fakt.erzeugung.pv_kwh, 1)
-    if fakt.speicher.ladung_kwh > 0:
-        result["speicher_ladung_kwh"] = round(fakt.speicher.ladung_kwh, 1)
-    if fakt.speicher.entladung_kwh > 0:
-        result["speicher_entladung_kwh"] = round(fakt.speicher.entladung_kwh, 1)
-    if fakt.wp.strom_kwh > 0:
-        result["wp_strom_kwh"] = round(fakt.wp.strom_kwh, 1)
-    if fakt.wp.waerme_kwh > 0:
-        result["wp_waerme_kwh"] = round(fakt.wp.waerme_kwh, 1)
-    if fakt.wp.modus_strom_kuehlen_kwh > 0:
-        result["wp_modus_kuehlen_kwh"] = round(fakt.wp.modus_strom_kuehlen_kwh, 1)
-    if fakt.emob.ladung_kwh > 0:
-        result["emob_ladung_kwh"] = round(fakt.emob.ladung_kwh, 1)
-    if fakt.emob.km > 0:
-        result["emob_km"] = round(fakt.emob.km, 1)
-
-    # Per-Investition: die eMob-Zeilen des T-Kontos brauchen die Zuordnung
-    # `inv → verbrauch_daten`. DI-2-C: Vor-Anschaffungs-/Nach-Stilllegungs-
-    # Monate überspringen — die Anschaffungsdatum-Grenze gilt für ALLE
-    # Auswertungen ([[feedback_anschaffungsdatum_grenze]], #236).
-    imd_data_by_inv_vj: dict[int, dict] = {}
-    _emob_entscheid_vj = None
-    emob_inv_ids = [
-        i.id for i in investitionen if i.typ in ("e-auto", "wallbox")
-    ]
-    if emob_inv_ids:
-        imd_result = await db.execute(
-            select(InvestitionMonatsdaten).where(
-                InvestitionMonatsdaten.investition_id.in_(emob_inv_ids),
-                InvestitionMonatsdaten.jahr == vj,
-                InvestitionMonatsdaten.monat == monat,
-            )
+    # Der Kontext des laufenden Jahres trägt die Fakten J−1…J und den Satz von J−1 — daraus der Kontext des Vorjahres,
+    # ohne zweite Ladung (ein eigener Kontext lüde J−2…J−1; der USt-Rückfall auf J−2 bliebe dann der einzige Unterschied).
+    kontext_vj = None
+    if kontext is not None:
+        kontext_vj = MonatsKontext(
+            jahr=vj, fakten=kontext.fakten, ust_satz=kontext.ust_satz_vj, ust_satz_vj=None,
+            tarif_cache=kontext.tarif_cache,
         )
-        # F-16 + N-555: auch die Vorjahres-Zeile bekommt den abgeleiteten PV-Anteil, und
-        # der Vorjahresmonat entscheidet über den einen Kontext (`services/emob_kontext.py`)
-        # — mit Dienstwagen, dienstlicher Wallbox und Herkunft (Konzept Regel 2, 3, 8). Sie
-        # speist die Vorjahres-eMob-Ersparnis, die in Cockpit → Monat direkt neben der
-        # laufenden steht — anders entschieden daneben wäre der Vergleich eine Aussage über
-        # die Rechenweise statt über das Jahr.
-        _kontext_vj = await lade_emob_kontext(
-            db, anlage_id, investitionen, imd_result.scalars().all(),
-        )
-        _privat_vj = {
-            i.id for i in investitionen
-            if i.typ in ("e-auto", "wallbox") and not ist_dienstlich(i)
-        }
-        imd_data_by_inv_vj = {
-            inv_id: daten for (inv_id, _j, _m), daten in _kontext_vj.daten.items()
-            if inv_id in _privat_vj
-        }
-        _emob_entscheid_vj = _kontext_vj.ctx.entscheide.get((vj, monat))
-
-    # Berechnete Energie-Werte — aus der Schicht, also inkl. V2H (Entladung ins
-    # Haus zählt wie Speicher-Entladung) und inkl. sonstiger Erzeuger hinter dem
-    # Zähler. `pv_erzeugung_kwh` im Result bleibt daneben rein.
-    kz = fakt.kennzahlen
-    einsp = result.get("einspeisung_kwh", 0) or 0
-    netz = result.get("netzbezug_kwh", 0) or 0
-    ev = kz.eigenverbrauch_kwh
-    gv = kz.gesamtverbrauch_kwh
-    result["eigenverbrauch_kwh"] = round(ev, 1)
-    result["direktverbrauch_kwh"] = round(kz.direktverbrauch_kwh, 1)
-    result["gesamtverbrauch_kwh"] = round(gv, 1) if gv > 0 else None
-    result["autarkie_prozent"] = round(kz.autarkie_prozent, 1) if gv > 0 else None
-
-    # Finanzen mit historisch korrektem Tarif berechnen
     try:
-        stichtag_vj = date_type(vj, monat, 1)
-        tarife_vj = tarif_cache.get(stichtag_vj) or await lade_tarife_fuer_anlage(
-            db, anlage_id, target_date=stichtag_vj
-        )
-        tarif_vj = tarife_vj.get("allgemein")
-        if tarif_vj:
-            # N-608 (03.10.2026): der Bezugspreis des Vorjahresmonats aus DERSELBEN Kaskade wie der Monat selbst
-            # (`finanzen.py`, `aufgeloester_monatspreis`: gepflegt → gemessen → Zeitfenster → Stamm). Bis dahin ein eigener
-            # Pfad (`_zeittarif_preis` + gepflegter Flex-Ø) OHNE die Stufe „gemessen" — der Vorjahresmonat glich sich
-            # selbst nicht (Probe: Stromrechnung 70,00 € als Vorjahr gegen 90,00 € direkt). Der EV-gewichtete Preis (A-2,
-            # N-607) kommt aus derselben Auflösung.
-            _preis_vj = await aufgeloester_monatspreis(db, anlage_id, vj, monat, md, tarif_vj)
-            netz_preis = _preis_vj.cent
-            # `is not None` statt truthy — dieselbe Regel wie beim Flex-Tarif
-            # vier Zeilen tiefer: seit 08.08.2026 ist **0** die Vorbelegung
-            # eines neuen Tarifs (eedc rät keinen EEG-Satz mehr). Mit `or`
-            # rechnete genau diese Vorjahres-Zeile still mit 8,2 ct weiter,
-            # während alle anderen Sichten 0 nehmen.
-            einsp_preis = (
-                tarif_vj.einspeiseverguetung_cent_kwh
-                if tarif_vj.einspeiseverguetung_cent_kwh is not None
-                else EINSPEISEVERGUETUNG_DEFAULT_CENT
-            )
-            grundpreis = tarif_vj.grundpreis_euro_monat or 0
-            # Der gepflegte Flex-Ø (`netzbezug_durchschnittspreis_cent`) ist Stufe 1 derselben Kaskade — er steht seit N-608
-            # nicht mehr als eigener Überschreib-Schritt hier.
-            # #392: der Vergütungssatz des Vorjahresmonats schlägt den
-            # Stammwert — dieselbe `is not None`-Regel wie zwei Zeilen darüber.
-            if result.get("einspeise_durchschnittspreis_cent") is not None:
-                einsp_preis = result["einspeise_durchschnittspreis_cent"]
-            if einsp > 0:
-                # §51 EEG: Einspeisung in Negativpreis-Stunden ist seit
-                # Solarpaket I unvergütet. Wenn das Tages-Aggregat fehlt
-                # (Anwender ohne Strompreis-Sensor), greift die alte
-                # Berechnung unverändert (None → kein Abzug).
-                m_neg = await get_neg_preis_einspeisung_monat(db, anlage_id, vj, monat)
-                m_erloes = einspeise_erloes_euro(
-                    einspeisung_kwh=einsp,
-                    neg_preis_kwh=m_neg,
-                    verguetung_ct_kwh=einsp_preis,
-                )
-                result["einspeise_erloes_euro"] = round(m_erloes.erloes_euro, 2)
-            # E5 (03.10.2026): die Stromrechnung entsteht, sobald der Netzbezug BEKANNT ist — auch bei 0 kWh (dann
-            # trägt sie den Grundpreis, wie im laufenden Monat). Bis dahin `netz > 0`: ein Vorjahresmonat mit 0 kWh
-            # hatte keine Stromrechnung, und `netz_k … or 0` unten machte daraus ein Ergebnis ohne Grundpreis.
-            if md.netzbezug_kwh is not None:
-                result["netzbezug_kosten_euro"] = round(
-                    berechne_netzbezug_kosten(netz, netz_preis, grundpreis), 2
-                )
-                # Arbeitspreis-Anteil ohne Grundpreis — symmetrisch zum
-                # laufenden Monat, damit die Jahres-Summe beide Felder findet.
-                result["netzbezug_arbeitspreis_kosten_euro"] = round(
-                    netz * netz_preis / 100, 2
-                )
-            # N-607 (A-2): die Eigenverbrauchs-Ersparnis des Vorjahresmonats mit dem EV-gewichteten Ø seiner gemessenen
-            # Stundenpreise, sonst mit dem Bezugspreis — dieselbe Regel wie der Monat und die Monats-Fakten.
-            ev_preis_vj = _preis_vj.ev_cent if _preis_vj.ev_cent is not None else netz_preis
-            if ev > 0:
-                result["ev_ersparnis_euro"] = round(ev * ev_preis_vj / 100, 2)
-            # E5: fehlt die Stromrechnung, gibt es kein Ergebnis — kein `or 0` mehr (dieselbe Regel wie im Monat).
-            netz_k = result.get("netzbezug_kosten_euro")
+        antwort = await _berechne_monat(anlage_id, vj, monat, db, kontext=kontext_vj, ohne_vorjahr=True)
+    except Exception:  # noqa: BLE001 — der Vergleich darf den Monat nicht kippen (wie der alte Finanz-Zweig)
+        logger.warning("Vorjahresvergleich %02d/%s nicht berechenbar", monat, vj, exc_info=True)
+        if hinweise is not None:
+            hinweise.append(f"Vorjahresvergleich für {monat:02d}/{vj} nicht berechenbar.")
+        return None
+    return vorjahr_aus_monat(antwort.model_dump())
 
-            # DI-5 (G20-3): das Vorjahres-Ergebnis SYMMETRISCH zum aktuellen Monat —
-            # inkl. WP- und E-Mob-Ersparnis. Vorher fehlten beide im Vorjahr →
-            # das T-Konto-Δ verglich Äpfel (Monat mit WP/eMob) mit Birnen
-            # (Vorjahr ohne). Es werden dieselben Leaf-Helfer wie im aktuellen
-            # Monat mit den Vorjahres-Tarifen/-Preisen genutzt (kein Formel-Dupli).
-            monats_gaspreis_vj = md.gaspreis_cent_kwh
-            monats_benzinpreis_vj = md.kraftstoffpreis_euro
-
-            # WP-Ersparnis über die WP-Mengen des Monats — dieselben, die oben
-            # angezeigt werden. Der Filter „nur im Vorjahres-Monat AKTIVE WPs"
-            # (#236/[[feedback_anschaffungsdatum_grenze]]) steckt in der Schicht;
-            # bis C1c stand er hier als zweiter, handgeführter Loop über
-            # dieselben Zeilen und lieferte per Konstruktion dieselbe Summe.
-            wp_waerme_fin = fakt.wp.waerme_kwh
-            wp_strom_fin = fakt.wp.strom_kwh
-
-            wp_ersparnis_vj = 0.0
-            if wp_waerme_fin > 0 and wp_strom_fin > 0:
-                wp_p_vj = await _zeittarif_preis(
-                    db, anlage_id, vj, monat, tarife_vj.get("waermepumpe"),
-                    netz_preis, _zt_cache,
-                )
-                wp_invs_vj = [
-                    i for i in investitionen
-                    if i.typ == "waermepumpe" and i.ist_aktiv_im_monat(vj, monat)
-                ]
-                wp_r_vj = berechne_wp_ersparnis(
-                    wp_waerme_kwh=wp_waerme_fin,
-                    wp_strom_kwh=wp_strom_fin,
-                    wp_strompreis_cent=wp_p_vj,
-                    wp_parameter=wp_invs_vj[0].parameter if wp_invs_vj else None,
-                    monats_gaspreis_cent=monats_gaspreis_vj,
-                    # B5/X-5: E-B auch im Vorjahr — der laufende Monat zog den
-                    # Kühlstrom ab, sein Vergleichswert ein Jahr davor nicht.
-                    strom_kuehlen_kwh=fakt.wp.modus_strom_kuehlen_kwh,
-                )
-                wp_ersparnis_vj = round(wp_r_vj.ersparnis_euro, 2)
-
-            # N-605: wie im laufenden Monat die Σ der WP-Zeilen je Gerät (Bauform G20-2) — sonst verglich das Vorjahres-Δ
-            # eine Geräte-Summe mit einem Aggregat über den Parametersatz der ersten Wärmepumpe.
-            _wp_aktiv_vj = [
-                i for i in investitionen if i.typ == "waermepumpe" and i.ist_aktiv_im_monat(vj, monat)
-            ]
-            if _wp_aktiv_vj:
-                from backend.api.routes.aktueller_monat.finanzen import wp_aggregat_aus_zeilen
-                _wp_imd_vj = await db.execute(
-                    select(InvestitionMonatsdaten).where(
-                        InvestitionMonatsdaten.investition_id.in_([i.id for i in _wp_aktiv_vj]),
-                        InvestitionMonatsdaten.jahr == vj,
-                        InvestitionMonatsdaten.monat == monat,
-                    )
-                )
-                _wp_daten_vj = {z.investition_id: z.verbrauch_daten or {} for z in _wp_imd_vj.scalars().all()}
-                _wp_p_zeilen_vj = await _zeittarif_preis(
-                    db, anlage_id, vj, monat, tarife_vj.get("waermepumpe"), netz_preis, _zt_cache,
-                )
-                _wp_zeilen_vj = [
-                    _baue_investition_financial(
-                        i, _wp_daten_vj[i.id], netz_p=netz_preis, einsp_p=einsp_preis, wp_p=_wp_p_zeilen_vj,
-                        wb_p=netz_preis, monats_gaspreis=monats_gaspreis_vj, monats_benzinpreis=monats_benzinpreis_vj,
-                        emob_pool_attr=None,
-                    )
-                    for i in _wp_aktiv_vj if i.id in _wp_daten_vj
-                ]
-                wp_ersparnis_vj, _ = wp_aggregat_aus_zeilen(
-                    [z for z in _wp_zeilen_vj if z is not None], wp_ersparnis_vj, None,
-                )
-
-            emob_ersparnis_vj = 0.0
-            wb_p_vj = await _zeittarif_preis(
-                db, anlage_id, vj, monat, tarife_vj.get("wallbox"),
-                netz_preis, _zt_cache,
-            )
-            _emob_aktiv = [
-                i for i in investitionen
-                if i.typ in ("e-auto", "wallbox")
-                and not ist_dienstlich(i)
-                and i.ist_aktiv_im_monat(vj, monat)
-                and i.id in imd_data_by_inv_vj
-            ]
-            _ea_data_vj = [imd_data_by_inv_vj[i.id] for i in _emob_aktiv if i.typ == "e-auto"]
-            _wb_data_vj = [imd_data_by_inv_vj[i.id] for i in _emob_aktiv if i.typ == "wallbox"]
-            _emob_pool_attr_vj = compute_emob_pool_attribution(
-                eauto_imd_data=_ea_data_vj,
-                wallbox_imd_data=_wb_data_vj,
-            )
-            # N-555: der Entscheid des Vorjahresmonats kommt aus dem Kontext oben —
-            # dieselbe eine Funktion. Ohne Zeile im Monat: leer entschieden.
-            if _emob_entscheid_vj is None:
-                _emob_entscheid_vj = entscheide_emob_heimladung(
-                    eauto_je_inv={}, wallbox_zeilen=[],
-                )
-            for i in _emob_aktiv:
-                _d_vj = _baue_investition_financial(
-                    i,
-                    imd_data_by_inv_vj[i.id],
-                    netz_p=netz_preis,
-                    einsp_p=einsp_preis,
-                    wp_p=netz_preis,     # für eMob-Zweig irrelevant
-                    wb_p=wb_p_vj,
-                    monats_gaspreis=monats_gaspreis_vj,
-                    monats_benzinpreis=monats_benzinpreis_vj,
-                    emob_pool_attr=_emob_pool_attr_vj,
-                    emob_entscheid=_emob_entscheid_vj,
-                )
-                if (
-                    _d_vj is not None
-                    and _d_vj.ersparnis_label == "Ersparnis vs. Verbrenner"
-                    and _d_vj.ersparnis_euro is not None
-                ):
-                    emob_ersparnis_vj += _d_vj.ersparnis_euro
-            emob_ersparnis_vj = round(emob_ersparnis_vj, 2)
-
-            if wp_ersparnis_vj:
-                result["wp_ersparnis_euro"] = wp_ersparnis_vj
-            if emob_ersparnis_vj:
-                result["emob_ersparnis_euro"] = emob_ersparnis_vj
-
-            # ── Ergebnis-Leiter des Vorjahresmonats — dieselbe Füllregel wie der Monat (E5, G5) ──
-            from backend.api.routes.aktueller_monat.finanzen import (
-                betriebskosten_des_monats, ergebnis_des_monats,
-            )
-            _bk_vj, _bk_vj_jahr, _bk_vj_anzahl = betriebskosten_des_monats(investitionen, vj, monat)
-            _erg_vj = ergebnis_des_monats(
-                eigenverbrauch=ev,
-                # Pflichtposten: bekannt, sobald die Menge bekannt ist — eine gemessene 0 ist ein Wert.
-                einspeise_erloes=(
-                    result.get("einspeise_erloes_euro", 0.0) if md.einspeisung_kwh is not None else None
-                ),
-                ev_ersparnis=result.get("ev_ersparnis_euro", 0.0),
-                monats_fakt=fakt, ev_preis_cent=ev_preis_vj,
-                sonstige_netto=fakt.sonstiges.netto_euro,
-                wp_ersparnis=result.get("wp_ersparnis_euro"), emob_ersparnis=result.get("emob_ersparnis_euro"),
-                netzbezug_kosten=netz_k, betriebskosten=_bk_vj, ust_satz=ust_satz,
-            )
-            result["netto_ertrag_euro"] = _erg_vj["netto_ertrag"]
-            result["ust_eigenverbrauch_euro"] = _erg_vj["ust_anteil"]
-            result["bkw_ersparnis_euro"] = _erg_vj["bkw_ersparnis"]
-            result["erzeuger_erloes_euro"] = _erg_vj["erzeuger_erloes"]
-            result["sonstige_netto_euro"] = fakt.sonstiges.netto_euro
-            result["betriebskosten_anteilig_euro"] = _bk_vj
-            result["ergebnis_vor_betriebskosten_euro"] = _erg_vj["ergebnis_vor_betriebskosten"]
-            result["ergebnis_euro"] = _erg_vj["ergebnis"]
-            result["ergebnis_herleitung"] = _erg_vj["ergebnis_herleitung"]
-            result["fehlende_posten"] = _erg_vj["fehlende_posten"]
-    except Exception:
-        logger.warning("Vorjahr-Finanzen konnten nicht berechnet werden")
-
-    return result
 
 async def _load_soll_pv(
     anlage_id: int, jahr: int, monat: int, db: AsyncSession, fenster: Monatsfenster,
