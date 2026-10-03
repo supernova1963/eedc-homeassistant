@@ -50,10 +50,14 @@ Der messbare Schaden dabei ist eng, aber echt:
 * **Die Stundenkurve** (``TagesEnergieProfil.komponenten``, Peaks) kommt aus
   ``get_tagesverlauf`` = **HA-History**, und die reicht nur so weit wie
   ``purge_keep_days`` (HA-Default 10).
-* Ist die Kurve **leer**, steigt ``aggregate_day`` mit ``return None`` aus,
+* Ist die Kurve **leer** (keine Punkte), steigt ``aggregate_day`` mit ``return None`` aus,
   **bevor** gelöscht wird — der Tag bleibt unangetastet. Das ist sicher, und
   es ist zugleich der Normalfall reiner MQTT-Anlagen (dort greifen die
   synthetischen Slots); deshalb ist eine leere Kurve **kein** Abbruchgrund.
+  ⚠ **Berichtigt 03.10.2026 (N-599):** „leer" hieß hier „keine Punkte". Der HA-Zweig liefert für einen
+  gepurgten Tag aber das volle Raster ohne einen Leistungswert — eine Kurve ist für diesen Job leer, wenn
+  sie keinen **Leistungswert** trägt (dieselbe Regel wie ``aggregator.kurve_traegt_leistung``, N-596; dort
+  bleibt ein solcher Tag seit N-596 stehen). ``kurven_stunden`` zählt deshalb nur Slots mit Leistungswert.
 * Ist sie **teilweise** da — Recorder-Grenze mitten im Tag, also
   ``purge_keep_days`` ≈ 6 —, würde ein **verkürzter** Tag einen vollständigen
   ersetzen.
@@ -131,7 +135,7 @@ from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusamme
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.core.berechnungen.performance_ratio import berechne_performance_ratio
 from backend.utils.investition_filter import aktiv_jetzt
-from backend.services.energie_profil.aggregator import aggregate_day
+from backend.services.energie_profil.aggregator import _KURVEN_OVERLAY_SCHLUESSEL, aggregate_day
 from backend.services.energie_profil.source import Source
 from backend.services.energie_profil._helpers import _fetch_wetter
 from backend.services.wetter_backfill_service import (
@@ -171,9 +175,21 @@ def kurven_stunden(
 
     ``0`` bei leerer Kurve — das ist **kein** Vorflug-Abbruch, sondern der
     Normalfall reiner MQTT-Anlagen; siehe Modul-Docstring.
+
+    ⛔ N-599 (03.10.2026): **nur Slots mit einem Leistungswert zählen** (Overlays wie der Börsenpreis nicht). Bis dahin
+    zählte die Funktion Punkte: ein teilweise gepurgter Tag lieferte das volle Raster, sie meldete 24 Stunden, und
+    „Kurve geschrumpft" konnte nie eintreten — der Vorflug ließ einen verkürzten Tag einen vollständigen ersetzen.
     """
+    def traegt_leistung(p: dict) -> bool:
+        return any(
+            k not in _KURVEN_OVERLAY_SCHLUESSEL and w is not None
+            for k, w in ((p or {}).get("werte") or {}).items()
+        )
+
     slots: set[int] = set()
     for p in punkte or []:
+        if not traegt_leistung(p):
+            continue
         try:
             stunde = int(str(p["zeit"]).split(":")[0])
         except (KeyError, TypeError, ValueError):
@@ -181,7 +197,7 @@ def kurven_stunden(
         slot = leistungspfad_slot(stunde)
         if slot is not None:
             slots.add(slot)
-    if vortagsrand:
+    if any(traegt_leistung(p) for p in vortagsrand or []):
         slots.add(0)
     if slots:
         slots.add(0)

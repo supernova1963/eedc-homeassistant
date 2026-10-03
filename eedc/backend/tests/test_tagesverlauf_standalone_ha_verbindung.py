@@ -135,8 +135,12 @@ async def test_leerer_ha_weg_faellt_auf_mqtt_zurueck(db, monkeypatch, ha_verbind
     """
     ha_verbindung("langlebiger-token")
 
-    async def mqtt_mit_daten(anlage, db, tage_zurueck=0):
-        return {"serien": [{"key": "netz"}], "punkte": [{"zeit": "10:00", "werte": {}}]}
+    # ⚠ N-598 (03.10.2026): diese Probe war bis dahin nur grün, WEIL der Rückfall nie lief — der HA-Weg lieferte auch
+    # ohne Verlauf ein volles Raster, `if not punkte` war falsch, und die Attrappe hier wurde nie gerufen (ihre Signatur
+    # kannte `mit_vortagsrand` nicht; gerufen hätte sie mit TypeError geendet). Die Behauptung „MQTT-Kurve" prüfte
+    # deshalb das leere HA-Raster. Jetzt: Signatur wie der Vertrag, und die Probe erkennt die MQTT-Antwort am Inhalt.
+    async def mqtt_mit_daten(anlage, db, tage_zurueck=0, *, mit_vortagsrand=False):
+        return {"serien": [{"key": "netz"}], "punkte": [{"zeit": "10:00", "werte": {"netz": 1.5}}]}
 
     monkeypatch.setattr(ltv, "_get_tagesverlauf_mqtt", mqtt_mit_daten)
 
@@ -148,7 +152,9 @@ async def test_leerer_ha_weg_faellt_auf_mqtt_zurueck(db, monkeypatch, ha_verbind
 
     ergebnis = await ltv.get_tagesverlauf(_anlage_mit_live_zuordnung(), db)
 
-    assert ergebnis["punkte"], "MQTT-Rückfall greift nicht, wenn der HA-Weg leer bleibt"
+    assert ergebnis["punkte"] == [{"zeit": "10:00", "werte": {"netz": 1.5}}], (
+        "MQTT-Rückfall greift nicht, wenn der HA-Weg keinen Leistungswert trägt (N-598)"
+    )
 
 
 @pytest.mark.asyncio
@@ -169,3 +175,29 @@ async def test_ohne_zuordnung_wird_gar_kein_weg_gegangen(db, monkeypatch, ha_ver
 
     assert ergebnis == {"serien": [], "punkte": []}
     assert merker.mqtt_gerufen == 0
+
+
+@pytest.mark.asyncio
+async def test_n598_vergangener_tag_ohne_ha_verlauf_faellt_auf_mqtt_zurueck(db, monkeypatch, ha_verbindung):
+    """N-598: ein VERGANGENER Tag ohne HA-Verlauf liefert das volle Raster (144 Punkte + Vortagsrand) ohne einen
+    Leistungswert — der Rückfall muss trotzdem greifen. Gefragt wird nach Leistungswerten, nicht nach Punkten
+    (`aggregator.kurve_traegt_leistung`, dieselbe Regel wie N-596)."""
+    ha_verbindung("langlebiger-token")
+    gerufen = []
+
+    async def mqtt_mit_daten(anlage, db, tage_zurueck=0, *, mit_vortagsrand=False):
+        gerufen.append((tage_zurueck, mit_vortagsrand))
+        return {"serien": [{"key": "netz"}], "punkte": [{"zeit": "10:00", "werte": {"netz": 1.5}}], "vortagsrand": []}
+
+    monkeypatch.setattr(ltv, "_get_tagesverlauf_mqtt", mqtt_mit_daten)
+
+    async def leere_history(ids, start, end):
+        return ({}, {})
+
+    monkeypatch.setattr(ltv, "get_history_normalized", leere_history)
+    _ohne_marktabruf(monkeypatch)
+
+    ergebnis = await ltv.get_tagesverlauf(_anlage_mit_live_zuordnung(), db, 3, mit_vortagsrand=True)
+
+    assert gerufen == [(3, True)], "der MQTT-Rückfall wurde nicht gerufen"
+    assert ergebnis["punkte"] == [{"zeit": "10:00", "werte": {"netz": 1.5}}]

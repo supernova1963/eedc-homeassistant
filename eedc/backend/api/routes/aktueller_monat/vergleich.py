@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.services.prognose_auswahl import lade_aktive_monatsprognosen
-from backend.services.strompreis_aggregator import wirksamer_arbeitspreis_cent
+from backend.services.strompreis_aggregator import aufgeloester_monatspreis, wirksamer_arbeitspreis_cent
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage
 from backend.core.berechnungen import (
     Monatsfenster,
@@ -31,10 +31,7 @@ from backend.services.eauto_wirtschaftlichkeit import (
 )
 from backend.services.emob_kontext import lade_emob_kontext
 from backend.services.monats_fakten import lade_monats_fakten
-from backend.core.wirtschaftlichkeit_defaults import (
-    EINSPEISEVERGUETUNG_DEFAULT_CENT,
-    NETZBEZUG_DEFAULT_CENT,
-)
+from backend.core.wirtschaftlichkeit_defaults import EINSPEISEVERGUETUNG_DEFAULT_CENT
 from backend.core.investition_parameter import ist_dienstlich
 from backend.api.routes.aktueller_monat.schemas import SollPv
 from backend.api.routes.aktueller_monat.tkonto import _baue_investition_financial
@@ -209,9 +206,13 @@ async def _load_vorjahr(
         )
         tarif_vj = tarife_vj.get("allgemein")
         if tarif_vj:
-            netz_preis = await _zeittarif_preis(
-                db, anlage_id, vj, monat, tarif_vj, NETZBEZUG_DEFAULT_CENT, _zt_cache,
-            )
+            # N-608 (03.10.2026): der Bezugspreis des Vorjahresmonats aus DERSELBEN Kaskade wie der Monat selbst
+            # (`finanzen.py`, `aufgeloester_monatspreis`: gepflegt → gemessen → Zeitfenster → Stamm). Bis dahin ein eigener
+            # Pfad (`_zeittarif_preis` + gepflegter Flex-Ø) OHNE die Stufe „gemessen" — der Vorjahresmonat glich sich
+            # selbst nicht (Probe: Stromrechnung 70,00 € als Vorjahr gegen 90,00 € direkt). Der EV-gewichtete Preis (A-2,
+            # N-607) kommt aus derselben Auflösung.
+            _preis_vj = await aufgeloester_monatspreis(db, anlage_id, vj, monat, md, tarif_vj)
+            netz_preis = _preis_vj.cent
             # `is not None` statt truthy — dieselbe Regel wie beim Flex-Tarif
             # vier Zeilen tiefer: seit 08.08.2026 ist **0** die Vorbelegung
             # eines neuen Tarifs (eedc rät keinen EEG-Satz mehr). Mit `or`
@@ -223,12 +224,8 @@ async def _load_vorjahr(
                 else EINSPEISEVERGUETUNG_DEFAULT_CENT
             )
             grundpreis = tarif_vj.grundpreis_euro_monat or 0
-            # Flexibler Tarif überschreibt wenn vorhanden. `is not None` statt
-            # truthy: ein Monats-Ø von 0,0 ct ist bei dynamischem Tarif real
-            # (viele Negativpreis-Stunden) und wäre sonst still auf den
-            # Tarifpreis zurückgefallen.
-            if result.get("netzbezug_durchschnittspreis_cent") is not None:
-                netz_preis = result["netzbezug_durchschnittspreis_cent"]
+            # Der gepflegte Flex-Ø (`netzbezug_durchschnittspreis_cent`) ist Stufe 1 derselben Kaskade — er steht seit N-608
+            # nicht mehr als eigener Überschreib-Schritt hier.
             # #392: der Vergütungssatz des Vorjahresmonats schlägt den
             # Stammwert — dieselbe `is not None`-Regel wie zwei Zeilen darüber.
             if result.get("einspeise_durchschnittspreis_cent") is not None:
@@ -257,8 +254,11 @@ async def _load_vorjahr(
                 result["netzbezug_arbeitspreis_kosten_euro"] = round(
                     netz * netz_preis / 100, 2
                 )
+            # N-607 (A-2): die Eigenverbrauchs-Ersparnis des Vorjahresmonats mit dem EV-gewichteten Ø seiner gemessenen
+            # Stundenpreise, sonst mit dem Bezugspreis — dieselbe Regel wie der Monat und die Monats-Fakten.
+            ev_preis_vj = _preis_vj.ev_cent if _preis_vj.ev_cent is not None else netz_preis
             if ev > 0:
-                result["ev_ersparnis_euro"] = round(ev * netz_preis / 100, 2)
+                result["ev_ersparnis_euro"] = round(ev * ev_preis_vj / 100, 2)
             # E5: fehlt die Stromrechnung, gibt es kein Ergebnis — kein `or 0` mehr (dieselbe Regel wie im Monat).
             netz_k = result.get("netzbezug_kosten_euro")
 
@@ -299,6 +299,36 @@ async def _load_vorjahr(
                     strom_kuehlen_kwh=fakt.wp.modus_strom_kuehlen_kwh,
                 )
                 wp_ersparnis_vj = round(wp_r_vj.ersparnis_euro, 2)
+
+            # N-605: wie im laufenden Monat die Σ der WP-Zeilen je Gerät (Bauform G20-2) — sonst verglich das Vorjahres-Δ
+            # eine Geräte-Summe mit einem Aggregat über den Parametersatz der ersten Wärmepumpe.
+            _wp_aktiv_vj = [
+                i for i in investitionen if i.typ == "waermepumpe" and i.ist_aktiv_im_monat(vj, monat)
+            ]
+            if _wp_aktiv_vj:
+                from backend.api.routes.aktueller_monat.finanzen import wp_aggregat_aus_zeilen
+                _wp_imd_vj = await db.execute(
+                    select(InvestitionMonatsdaten).where(
+                        InvestitionMonatsdaten.investition_id.in_([i.id for i in _wp_aktiv_vj]),
+                        InvestitionMonatsdaten.jahr == vj,
+                        InvestitionMonatsdaten.monat == monat,
+                    )
+                )
+                _wp_daten_vj = {z.investition_id: z.verbrauch_daten or {} for z in _wp_imd_vj.scalars().all()}
+                _wp_p_zeilen_vj = await _zeittarif_preis(
+                    db, anlage_id, vj, monat, tarife_vj.get("waermepumpe"), netz_preis, _zt_cache,
+                )
+                _wp_zeilen_vj = [
+                    _baue_investition_financial(
+                        i, _wp_daten_vj[i.id], netz_p=netz_preis, einsp_p=einsp_preis, wp_p=_wp_p_zeilen_vj,
+                        wb_p=netz_preis, monats_gaspreis=monats_gaspreis_vj, monats_benzinpreis=monats_benzinpreis_vj,
+                        emob_pool_attr=None,
+                    )
+                    for i in _wp_aktiv_vj if i.id in _wp_daten_vj
+                ]
+                wp_ersparnis_vj, _ = wp_aggregat_aus_zeilen(
+                    [z for z in _wp_zeilen_vj if z is not None], wp_ersparnis_vj, None,
+                )
 
             emob_ersparnis_vj = 0.0
             wb_p_vj = await _zeittarif_preis(
@@ -362,7 +392,7 @@ async def _load_vorjahr(
                     result.get("einspeise_erloes_euro", 0.0) if md.einspeisung_kwh is not None else None
                 ),
                 ev_ersparnis=result.get("ev_ersparnis_euro", 0.0),
-                monats_fakt=fakt, netzbezug_preis_effektiv_cent=netz_preis,
+                monats_fakt=fakt, ev_preis_cent=ev_preis_vj,
                 sonstige_netto=fakt.sonstiges.netto_euro,
                 wp_ersparnis=result.get("wp_ersparnis_euro"), emob_ersparnis=result.get("emob_ersparnis_euro"),
                 netzbezug_kosten=netz_k, betriebskosten=_bk_vj, ust_satz=ust_satz,

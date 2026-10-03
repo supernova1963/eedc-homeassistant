@@ -154,6 +154,42 @@ function alsMonatRef(m: MonatRef | null): MonatRef | null {
   return m ? { jahr: m.jahr, monat: m.monat } : null
 }
 
+/**
+ * „Ø gleicher Monat" (andere Jahre) für die Vergleichsspalte von Cockpit → Monat (N-604, 03.10.2026).
+ *
+ * Als reine Funktion herausgezogen, damit die Regel eine Probe hat (`CockpitMonatV4.glMonStats.test.ts`): eine gemessene
+ * 0 zählt mit, die Ø-Autarkie ist eine Quote über die Jahre, die BEIDE Größen tragen.
+ */
+export function gleicheMonatStats(
+  alleMonate: readonly AggregierteMonatsdaten[],
+  angezeigterMonat: { jahr: number; monat: number } | null | undefined,
+): GleicheMonatStats | null {
+  if (!angezeigterMonat) return null
+  const ms = alleMonate.filter((m) => m.monat === angezeigterMonat.monat && m.jahr !== angezeigterMonat.jahr)
+  if (ms.length === 0) return null
+  const avg = (vals: number[]) => (vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null)
+  // N-604 (03.10.2026): eine gemessene 0 ist ein Wert — bis dahin warf `v > 0` eine 0-kWh-Einspeisung (Schnee,
+  // Volleinspeiser ohne Bezug) aus dem Mittel (CLAUDE.md „0-Werte prüfen").
+  const pick = (f: (m: AggregierteMonatsdaten) => number | null | undefined) =>
+    avg(ms.map(f).filter((v): v is number => v != null))
+  // Die Ø-Autarkie ist eine Quote aus Summen über die Jahre, die BEIDE Größen tragen (R-Q, dieselbe Regel wie
+  // das Jahr im Backend) — nicht das Mittel der Monats-Prozente. ⚠ Klassifizierte Ausnahme von
+  // `check:ergebnis-roh`, bis die Monatsreihe eine Backend-Vergleichsroute hat (Register N-604).
+  const paar = ms.filter((m) => m.eigenverbrauch_kwh != null && m.gesamtverbrauch_kwh != null)
+  const evPaar = paar.reduce((s, m) => s + (m.eigenverbrauch_kwh ?? 0), 0)
+  const gvPaar = paar.reduce((s, m) => s + (m.gesamtverbrauch_kwh ?? 0), 0)
+  return {
+    pv: pick((m) => m.pv_erzeugung_kwh),
+    ev: pick((m) => m.eigenverbrauch_kwh),
+    direkt: pick((m) => m.direktverbrauch_kwh),
+    einsp: pick((m) => m.einspeisung_kwh),
+    netz: pick((m) => m.netzbezug_kwh),
+    gesamt: pick((m) => m.gesamtverbrauch_kwh),
+    autarkie: gvPaar > 0 ? (evPaar / gvPaar) * 100 : null,
+    count: ms.length,
+  }
+}
+
 export default function CockpitMonatV4(props: { anlageId: number | undefined }) {
   // ParkProvider muss den Body umschließen, damit `usePark` (Kennzahlen-Filter,
   // ParkFuss) im selben Baum greift. SLICE 1 — Referenz-Sicht.
@@ -340,32 +376,7 @@ function CockpitMonatInner({ anlageId }: { anlageId: number | undefined }) {
     return alleMonate.find((m) => m.jahr === vm.jahr && m.monat === vm.monat) ?? null
   }, [alleMonate, angezeigterMonat])
 
-  const glMonStats = useMemo<GleicheMonatStats | null>(() => {
-    if (!angezeigterMonat) return null
-    const ms = alleMonate.filter((m) => m.monat === angezeigterMonat.monat && m.jahr !== angezeigterMonat.jahr)
-    if (ms.length === 0) return null
-    const avg = (vals: number[]) => (vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null)
-    // N-604 (03.10.2026): eine gemessene 0 ist ein Wert — bis dahin warf `v > 0` eine 0-kWh-Einspeisung (Schnee,
-    // Volleinspeiser ohne Bezug) aus dem Mittel (CLAUDE.md „0-Werte prüfen").
-    const pick = (f: (m: AggregierteMonatsdaten) => number | null | undefined) =>
-      avg(ms.map(f).filter((v): v is number => v != null))
-    // Die Ø-Autarkie ist eine Quote aus Summen über die Jahre, die BEIDE Größen tragen (R-Q, dieselbe Regel wie
-    // das Jahr im Backend) — nicht das Mittel der Monats-Prozente. ⚠ Klassifizierte Ausnahme von
-    // `check:ergebnis-roh`, bis die Monatsreihe eine Backend-Vergleichsroute hat (Register N-604).
-    const paar = ms.filter((m) => m.eigenverbrauch_kwh != null && m.gesamtverbrauch_kwh != null)
-    const evPaar = paar.reduce((s, m) => s + (m.eigenverbrauch_kwh ?? 0), 0)
-    const gvPaar = paar.reduce((s, m) => s + (m.gesamtverbrauch_kwh ?? 0), 0)
-    return {
-      pv: pick((m) => m.pv_erzeugung_kwh),
-      ev: pick((m) => m.eigenverbrauch_kwh),
-      direkt: pick((m) => m.direktverbrauch_kwh),
-      einsp: pick((m) => m.einspeisung_kwh),
-      netz: pick((m) => m.netzbezug_kwh),
-      gesamt: pick((m) => m.gesamtverbrauch_kwh),
-      autarkie: gvPaar > 0 ? (evPaar / gvPaar) * 100 : null,
-      count: ms.length,
-    }
-  }, [alleMonate, angezeigterMonat])
+  const glMonStats = useMemo(() => gleicheMonatStats(alleMonate, angezeigterMonat), [alleMonate, angezeigterMonat])
 
   // Rail-Einträge = **Vereinigung** beider Grundgesamtheiten + laufender Monat:
   // die Monats-Fakten (Abschlüsse, Import, Komponenten-Zeilen) UND die lokale

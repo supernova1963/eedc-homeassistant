@@ -511,6 +511,11 @@ class AktuellerMonatResponse(BaseModel):
     #: Formel-Zeile der Kachel nannte bis 11.09.2026 beide „Arbeitspreis aus dem
     #: Strompreis-Tarif" (P4: die Antwort sagt, was sie ist).
     netzbezug_preis_herkunft: Optional[str] = None
+    #: N-607 (A-2): der Preis, mit dem die Eigenverbrauchs-Ersparnis bewertet ist — EV-gewichteter Ø der gemessenen
+    #: Stundenpreise, sonst der Bezugspreis (`netzbezug_preis_effektiv_cent`). ``ev_preis_herkunft``: „ev_gemessen" oder
+    #: die Herkunft des Bezugspreises. Im Jahr ``None``.
+    ev_preis_cent: Optional[float] = None
+    ev_preis_herkunft: Optional[str] = None
     #: Anteil der Monatsstunden mit Preisdaten (0..1) — **nur** bei
     #: ``gemessen``. Ein Ø aus 40 % der Stunden hat dieselbe Herkunft wie einer
     #: aus 98 %, aber nicht dieselbe Belastbarkeit; im **laufenden** Monat ist

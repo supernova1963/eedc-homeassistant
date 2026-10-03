@@ -402,7 +402,13 @@ Die **Jahr/Gesamt**-Sicht fasst die Anlage über ein ganzes Jahr zusammen — vo
 
 - **Autarkie** (%), **Spezifischer Ertrag** (kWh/kWp), **Netto-Ertrag** (€)
 
-> Der **Netto-Ertrag** hier ist derselbe wie im Monat und unter *Komponenten → PV-Anlage* — die **Erzeugungs-Größe** der Ergebnis-Leiter (siehe [§2.3](#23-monat), „Die Ergebnis-Leiter in vier Zeilen"). Das **Jahresergebnis** folgt derselben Regel wie das Monatsergebnis: Fehlt einem Monat die Stromrechnung, steht „—" mit dem Monat im Tooltip. Der Finanzen-Block als Komponenten-Finanz-Tabelle erscheint auch in Jahr/Gesamt.
+> Der **Netto-Ertrag** hier ist derselbe wie im Monat und unter *Komponenten → PV-Anlage* — die **Erzeugungs-Größe** der Ergebnis-Leiter (siehe [§2.3](#23-monat), „Die Ergebnis-Leiter in vier Zeilen"). Das **Jahresergebnis** folgt derselben Regel wie das Monatsergebnis: Fehlt einem Monat die Stromrechnung, steht „—" mit dem Monat im Tooltip.
+
+> **Monate ohne Monatsabschluss.** Hat ein vergangener Monat noch keinen Monatsabschluss, rechnet das Jahr ihn mit den
+> Werten aus Home Assistant (bzw. MQTT oder einem Connector) mit und sagt es über dem Vergleich: „1 Monat ohne
+> Monatsabschluss (Sep), Werte aus Home Assistant — Übersicht und Jahresbericht zählen ihn nicht mit." Die Übersicht,
+> der Jahresbericht und der HA-Sensor rechnen nur mit abgeschlossenen Monaten. Kann ein Monat gar nicht berechnet
+> werden, nennt die Zeile ihn ebenfalls, und das Jahresergebnis führt ihn als fehlenden Posten. Der Finanzen-Block als Komponenten-Finanz-Tabelle erscheint auch in Jahr/Gesamt.
 
 **PV-Verteilung** — ein Balken, der zeigt, wohin der erzeugte Strom geflossen ist (Direktverbrauch / Speicher / Einspeisung). Daneben stehen die Kachel **Grundlast SOLL/IST** und der Hinweis, aus welchen Geräten die PV-Erzeugung stammt.
 

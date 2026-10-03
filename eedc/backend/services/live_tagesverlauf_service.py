@@ -685,7 +685,13 @@ async def get_tagesverlauf(
     # für ihn eine Verschlechterung; mit ihm kann niemand schlechter dastehen
     # als vorher. Der MQTT-Zweig liefert selbst leer, wenn keine Snapshots da
     # sind — er kostet dann eine Query und ändert nichts.
-    if not punkte:
+    #
+    # ⛔ N-598 (03.10.2026): gefragt wird, ob die Kurve LEISTUNG trägt, nicht ob sie Punkte hat. Der HA-Zweig liefert
+    # für einen Tag ohne HA-Verlauf trotzdem das volle Raster (144 Punkte + 6 Vortagsrand, nur Börsenpreis-Overlay) —
+    # mit `if not punkte` griff der Rückfall deshalb nie. Dieselbe Regel wie `aggregator.kurve_traegt_leistung` (N-596).
+    from backend.services.energie_profil.aggregator import kurve_traegt_leistung
+
+    if not kurve_traegt_leistung(punkte, vortagsrand, serien):
         mqtt = await _get_tagesverlauf_mqtt(
             anlage, db, tage_zurueck, mit_vortagsrand=mit_vortagsrand,
         )

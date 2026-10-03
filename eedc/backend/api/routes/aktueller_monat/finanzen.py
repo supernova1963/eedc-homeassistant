@@ -53,6 +53,8 @@ async def finanzen_des_monats(*, _zt_cache, anlage_id, db, eigenverbrauch, einsp
     netzbezug_preis_effektiv_cent = None
     netzbezug_preis_herkunft = None
     netzbezug_preis_abdeckung = None
+    ev_preis_cent = None
+    ev_preis_herkunft = None
     einspeise_cent = None
     grundgebuehr = None
     zaehlergebuehr_jahr = None
@@ -130,6 +132,13 @@ async def finanzen_des_monats(*, _zt_cache, anlage_id, db, eigenverbrauch, einsp
         netzbezug_preis_effektiv_cent = _preis.cent
         netzbezug_preis_herkunft = _preis.herkunft
         netzbezug_preis_abdeckung = _preis.abdeckung
+        # N-607 (03.10.2026, SOLL Flex-Tarife A-2): die Eigenverbrauchs-Ersparnis bewertet VERMIEDENEN Bezug — mit dem
+        # EV-gewichteten Ø der gemessenen Stundenpreise, wenn es ihn gibt, sonst mit dem Bezugspreis. Dieselbe Regel wie
+        # die Monats-Fakten (`finanz_zeilen.py`, `finanz_aggregat.py`), die Übersicht, Monatsreihe, PDF und HA-Export
+        # speisen. Bis dahin nahm diese Route den bezugsgewichteten Ø (Probe: 160,00 € gegen 40,00 €). Die
+        # Stromrechnung bleibt beim Bezugspreis.
+        ev_preis_cent = _preis.ev_cent if _preis.ev_cent is not None else netzbezug_preis_effektiv_cent
+        ev_preis_herkunft = "ev_gemessen" if _preis.ev_cent is not None else netzbezug_preis_herkunft
 
         if einspeisung is not None:
             # §51 EEG: siehe `_load_vorjahr` für Begründung.
@@ -164,12 +173,12 @@ async def finanzen_des_monats(*, _zt_cache, anlage_id, db, eigenverbrauch, einsp
             # in netzbezug_kosten (kein zweiter Posten, nur Annotation).
             grundgebuehr = round(grundpreis, 2)
         if eigenverbrauch is not None:
-            ev_ersparnis = round(eigenverbrauch * netzbezug_preis_effektiv_cent / 100, 2)
+            ev_ersparnis = round(eigenverbrauch * ev_preis_cent / 100, 2)
         # Der Netto-Ertrag entsteht hier NICHT mehr (bis 03.10.2026: `einspeise_erloes + ev_ersparnis`, ohne USt,
         # BKW-Rest, Erlös eigener Satz und Sonstiges — N-601). Er ist Stufe 1 der Ergebnis-Leiter und wird in
         # `ergebnis_des_monats` über den Layer gebildet, sobald alle Posten feststehen.
     _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
-    return {k: _loc[k] for k in ("allgemein_tarif", "einspeise_cent", "einspeise_erloes", "einspeisung_neg_preis", "ev_ersparnis", "grundgebuehr", "monats_benzinpreis", "monats_gaspreis", "netzbezug_arbeitspreis_kosten", "netzbezug_durchschnittspreis", "netzbezug_kosten", "netzbezug_preis_abdeckung", "netzbezug_preis_cent", "netzbezug_preis_effektiv_cent", "netzbezug_preis_herkunft", "nicht_vergueteter_erloes", "tarife", "zaehlergebuehr_jahr",) if k in _loc}
+    return {k: _loc[k] for k in ("allgemein_tarif", "einspeise_cent", "einspeise_erloes", "einspeisung_neg_preis", "ev_ersparnis", "ev_preis_cent", "ev_preis_herkunft", "grundgebuehr", "monats_benzinpreis", "monats_gaspreis", "netzbezug_arbeitspreis_kosten", "netzbezug_durchschnittspreis", "netzbezug_kosten", "netzbezug_preis_abdeckung", "netzbezug_preis_cent", "netzbezug_preis_effektiv_cent", "netzbezug_preis_herkunft", "nicht_vergueteter_erloes", "tarife", "zaehlergebuehr_jahr",) if k in _loc}
 
 
 def komponenten_ersparnis(*, get_val):
@@ -251,7 +260,7 @@ def betriebskosten_und_sonstige_positionen(*, investitionen, monats_fakt, jahr, 
     return {k: _loc[k] for k in ("anlage_sonstige_ausgaben", "anlage_sonstige_ertraege", "betriebskosten_anteilig", "betriebskosten_anteilig_anzahl", "betriebskosten_anteilig_jahr", "sonstige_ausgaben_total", "sonstige_ertraege_total", "sonstige_netto_total",) if k in _loc}
 
 
-async def t_konto_je_investition(*, _zt_cache, allgemein_tarif, anlage_id, db, einspeise_cent, investitionen, jahr, monat, monats_benzinpreis, monats_gaspreis, netzbezug_preis_effektiv_cent, tarife):
+async def t_konto_je_investition(*, _zt_cache, allgemein_tarif, anlage_id, db, einspeise_cent, investitionen, jahr, monat, monats_benzinpreis, monats_gaspreis, netzbezug_preis_effektiv_cent, tarife, ev_preis_cent=None):
     """Per-Investition Finanzdetails (T-Konto) — laedt die InvestitionMonatsdaten je Investition (P10-Ausnahme PER_INVESTITION).
 
     Aus `get_aktueller_monat` Zeilen 1817-1930 (Stand vor dem Umzug) byte-identisch herausgeloest — Vorlage 2.
@@ -361,6 +370,7 @@ async def t_konto_je_investition(*, _zt_cache, allgemein_tarif, anlage_id, db, e
                 monats_benzinpreis=monats_benzinpreis,
                 emob_pool_attr=emob_pool_attr,
                 emob_entscheid=emob_entscheid,
+                ev_p=ev_preis_cent,
             )
             if detail is not None:
                 investitionen_financials.append(detail)
@@ -376,6 +386,31 @@ async def t_konto_je_investition(*, _zt_cache, allgemein_tarif, anlage_id, db, e
         )
     _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
     return {k: _loc[k] for k in ("investitionen_financials", "speicher_ersparnis",) if k in _loc}
+
+
+def wp_aggregat_aus_zeilen(investitionen_financials, wp_ersparnis, wp_ersparnis_berechnung_text):
+    """N-605 (03.10.2026): die Wärmepumpen-Ersparnis des Monats = Σ der WP-Zeilen des T-Kontos — Bauform G20-2.
+
+    Bis dahin nahm die Kachel (und damit die Ergebnis-Leiter) ein Aggregat über die Summenmengen mit dem Parametersatz
+    der ERSTEN Wärmepumpe (`waerme.py`, `wp_ref_parameter`), während das T-Konto je Gerät mit dessen Parametern
+    rechnete — bei mehreren Wärmepumpen zwei Zahlen (r28 2026-02: 114,37 € im T-Konto gegen 78,82 € in der Kachel;
+    43 Monate, Σ 1 117,02 €). Dieselbe Klasse, die G20-2 für die E-Mobilität geschlossen hat.
+
+    Gibt es keine WP-Zeile mit Ersparnis (z. B. laufender Monat ohne Gerätewerte), bleibt das Aggregat stehen.
+    Herleitung aus denselben Zeilen (je Gerät benannt, sobald es mehrere sind).
+    """
+    zeilen = [
+        d for d in investitionen_financials
+        if d.typ == "waermepumpe" and d.ersparnis_euro is not None
+    ]
+    if not zeilen:
+        return wp_ersparnis, wp_ersparnis_berechnung_text
+    summe = round(sum(d.ersparnis_euro for d in zeilen), 2)
+    text = "\n".join(
+        f"{d.bezeichnung}: {d.berechnung}" if len(zeilen) > 1 else d.berechnung
+        for d in zeilen if d.berechnung
+    ) or wp_ersparnis_berechnung_text
+    return summe, text
 
 
 def emob_aggregat_und_kennzahlen(*, anlage, einspeise_erloes, emob_ladung_extern=None, emob_ersparnis, ev_ersparnis, get_val, investitionen, investitionen_financials, jahr, monat, netzbezug_kosten, pv, wp_ersparnis):
@@ -458,7 +493,7 @@ def emob_aggregat_und_kennzahlen(*, anlage, einspeise_erloes, emob_ladung_extern
 
 
 def ergebnis_des_monats(
-    *, eigenverbrauch, einspeise_erloes, ev_ersparnis, monats_fakt, netzbezug_preis_effektiv_cent,
+    *, eigenverbrauch, einspeise_erloes, ev_ersparnis, monats_fakt, ev_preis_cent,
     sonstige_netto, wp_ersparnis, emob_ersparnis, netzbezug_kosten, betriebskosten, ust_satz,
     hat_waermepumpe=False, hat_emobilitaet=False,
 ):
@@ -484,12 +519,12 @@ def ergebnis_des_monats(
     erzeuger_erloes = None
     if monats_fakt is not None:
         rest = monats_fakt.bkw.rest_eigenverbrauch_kwh
-        if rest and rest > 0 and netzbezug_preis_effektiv_cent is not None:
-            bkw_ersparnis = round(rest * netzbezug_preis_effektiv_cent / 100, 2)
+        if rest and rest > 0 and ev_preis_cent is not None:
+            bkw_ersparnis = round(rest * ev_preis_cent / 100, 2)
             # A6: die eingesetzten Werte der T-Konto-Zeile „BKW-Ersparnis" (A2, 03.10.2026) — der Client rechnet sie nicht
             # aus dem gerundeten Euro-Betrag zurück.
             bkw_ersparnis_berechnung = (
-                f"{fmt_zahl(rest, 1)} kWh × {fmt_zahl(netzbezug_preis_effektiv_cent, 2)} ct/kWh"
+                f"{fmt_zahl(rest, 1)} kWh × {fmt_zahl(ev_preis_cent, 2)} ct/kWh"
             )
         if monats_fakt.sonstiges.einspeise_erloes_euro:
             erzeuger_erloes = round(monats_fakt.sonstiges.einspeise_erloes_euro, 2)

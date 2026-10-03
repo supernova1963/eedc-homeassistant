@@ -177,6 +177,11 @@ export function baueTKonto(d: AktuellerMonatResponse, sonderkosten: number | nul
   // §51 EEG greift nur, wenn tatsächlich zu Negativpreisen eingespeist wurde —
   // bei 0 kWh gäbe es sonst einen „§51-Verlust: 0,00 €"-Hinweis ohne Inhalt.
   const hatNeg51 = (d.einspeisung_neg_preis_kwh ?? 0) > 0
+  // N-607 (03.10.2026, A-2): die Eigenverbrauchs-Ersparnis ist mit dem Preis der VERMIEDENEN Stunden bewertet
+  // (`ev_preis_cent`, EV-gewichteter Ø der gemessenen Stundenpreise), nicht mit dem Bezugspreis daneben — die
+  // Herleitung nennt den Preis, mit dem die Zahl entstanden ist.
+  const evPreis = d.ev_preis_cent ?? netzPreis
+  const evPreisBez = d.ev_preis_herkunft === 'ev_gemessen' ? 'Ø-Preis der vermiedenen Stunden' : preisBez
 
   const habenPosten: TKontoPosten[] = [
     // ── Einspeise-Erlöse (immer) ──
@@ -209,9 +214,9 @@ export function baueTKonto(d: AktuellerMonatResponse, sonderkosten: number | nul
       wert: pvEvResidual,
       vjWert: undefined as number | null | undefined,
       color: 'text-blue-600 dark:text-blue-400',
-      formel: `PV-Eigenverbrauch × ${preisBez}${evHinweis}`,
-      berechnung: d.eigenverbrauch_kwh != null && netzPreis != null && !hatSonstigeErzeuger
-        ? `${fmt(d.eigenverbrauch_kwh - evInErsparnis / (netzPreis / 100), 1)} kWh × ${fmtCalc(netzPreis, 2)} ct/kWh`
+      formel: `PV-Eigenverbrauch × ${evPreisBez}${evHinweis}`,
+      berechnung: d.eigenverbrauch_kwh != null && evPreis != null && !hatSonstigeErzeuger
+        ? `${fmt(d.eigenverbrauch_kwh - evInErsparnis / (evPreis / 100), 1)} kWh × ${fmtCalc(evPreis, 2)} ct/kWh`
         : undefined,
       ergebnis: `= ${fmtCalc(pvEvResidual, 2)} €`,
     } as TKontoPosten] : !hasPerInv ? [{
@@ -219,9 +224,9 @@ export function baueTKonto(d: AktuellerMonatResponse, sonderkosten: number | nul
       wert: d.ev_ersparnis_euro ?? 0,
       vjWert: vj?.ev_ersparnis_euro,
       color: 'text-blue-600 dark:text-blue-400',
-      formel: `${hatSonstigeErzeuger ? 'PV-Eigenverbrauch' : 'Eigenverbrauch'} × ${preisBez}${evHinweis}`,
-      berechnung: d.eigenverbrauch_kwh != null && netzPreis != null && !hatSonstigeErzeuger
-        ? `${fmt(d.eigenverbrauch_kwh, 1)} kWh × ${fmtCalc(netzPreis, 2)} ct/kWh`
+      formel: `${hatSonstigeErzeuger ? 'PV-Eigenverbrauch' : 'Eigenverbrauch'} × ${evPreisBez}${evHinweis}`,
+      berechnung: d.eigenverbrauch_kwh != null && evPreis != null && !hatSonstigeErzeuger
+        ? `${fmt(d.eigenverbrauch_kwh, 1)} kWh × ${fmtCalc(evPreis, 2)} ct/kWh`
         : undefined,
       ergebnis: `= ${fmtCalc(d.ev_ersparnis_euro, 2)} €`,
     } as TKontoPosten] : []),

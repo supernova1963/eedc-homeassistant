@@ -105,6 +105,7 @@ from backend.api.routes.aktueller_monat.finanzen import (  # Vorlage 2
     betriebskosten_und_sonstige_positionen,
     ergebnis_des_monats,
     emob_aggregat_und_kennzahlen,
+    wp_aggregat_aus_zeilen,
     finanzen_des_monats,
     komponenten_ersparnis,
     t_konto_je_investition,
@@ -847,6 +848,8 @@ async def _berechne_monat(
     if "netzbezug_preis_cent" in _out: netzbezug_preis_cent = _out["netzbezug_preis_cent"]
     if "netzbezug_preis_effektiv_cent" in _out: netzbezug_preis_effektiv_cent = _out["netzbezug_preis_effektiv_cent"]
     if "netzbezug_preis_herkunft" in _out: netzbezug_preis_herkunft = _out["netzbezug_preis_herkunft"]
+    ev_preis_cent = _out.get("ev_preis_cent")
+    ev_preis_herkunft = _out.get("ev_preis_herkunft")
     if "nicht_vergueteter_erloes" in _out: nicht_vergueteter_erloes = _out["nicht_vergueteter_erloes"]
     if "tarife" in _out: tarife = _out["tarife"]
     if "zaehlergebuehr_jahr" in _out: zaehlergebuehr_jahr = _out["zaehlergebuehr_jahr"]
@@ -1001,9 +1004,13 @@ async def _berechne_monat(
             komponenten_geraete.setdefault(_inv.typ, []).append(_inv.bezeichnung)
 
     # ── t_konto_je_investition (Vorlage 2: Abschnitt in finanzen.py, Schnittstelle 12 ein / 2 aus) ──
-    _out = await t_konto_je_investition(_zt_cache=_zt_cache, allgemein_tarif=allgemein_tarif, anlage_id=anlage_id, db=db, einspeise_cent=einspeise_cent, investitionen=investitionen, jahr=jahr, monat=monat, monats_benzinpreis=monats_benzinpreis, monats_gaspreis=monats_gaspreis, netzbezug_preis_effektiv_cent=netzbezug_preis_effektiv_cent, tarife=tarife)
+    _out = await t_konto_je_investition(_zt_cache=_zt_cache, allgemein_tarif=allgemein_tarif, anlage_id=anlage_id, db=db, einspeise_cent=einspeise_cent, investitionen=investitionen, jahr=jahr, monat=monat, monats_benzinpreis=monats_benzinpreis, monats_gaspreis=monats_gaspreis, netzbezug_preis_effektiv_cent=netzbezug_preis_effektiv_cent, tarife=tarife, ev_preis_cent=ev_preis_cent)
     if "investitionen_financials" in _out: investitionen_financials = _out["investitionen_financials"]
     if "speicher_ersparnis" in _out: speicher_ersparnis = _out["speicher_ersparnis"]
+    # N-605: WP-Ersparnis = Σ der WP-Zeilen des T-Kontos (Bauform G20-2), vor Kachel und Ergebnis-Leiter.
+    wp_ersparnis, wp_ersparnis_berechnung_text = wp_aggregat_aus_zeilen(
+        investitionen_financials, wp_ersparnis, wp_ersparnis_berechnung_text,
+    )
     # ── emob_aggregat_und_kennzahlen (Vorlage 2: Abschnitt in finanzen.py, Schnittstelle 12 ein / 4 aus) ──
     _out = emob_aggregat_und_kennzahlen(anlage=anlage, emob_ladung_extern=emob_ladung_extern, einspeise_erloes=einspeise_erloes, emob_ersparnis=emob_ersparnis, ev_ersparnis=ev_ersparnis, get_val=get_val, investitionen=investitionen, investitionen_financials=investitionen_financials, jahr=jahr, monat=monat, netzbezug_kosten=netzbezug_kosten, pv=pv, wp_ersparnis=wp_ersparnis)
     if "emob_eff" in _out: emob_eff = _out["emob_eff"]
@@ -1014,7 +1021,7 @@ async def _berechne_monat(
     # ── Ergebnis-Leiter (Paket „Ergebnisgrößen", 03.10.2026): Netto-Ertrag, Ergebnis, Herleitung aus dem Layer ──
     _erg = ergebnis_des_monats(
         eigenverbrauch=eigenverbrauch, einspeise_erloes=einspeise_erloes, ev_ersparnis=ev_ersparnis,
-        monats_fakt=monats_fakt, netzbezug_preis_effektiv_cent=netzbezug_preis_effektiv_cent,
+        monats_fakt=monats_fakt, ev_preis_cent=ev_preis_cent,
         sonstige_netto=sonstige_netto_total, wp_ersparnis=wp_ersparnis, emob_ersparnis=emob_ersparnis,
         netzbezug_kosten=netzbezug_kosten, betriebskosten=betriebskosten_anteilig, ust_satz=kontext.ust_satz,
         hat_waermepumpe=hat_waermepumpe, hat_emobilitaet=hat_emobilitaet,
@@ -1185,6 +1192,8 @@ async def _berechne_monat(
         # eine Zahl, die die Antwort nicht enthält (SOLL Flex-Tarife H-2).
         netzbezug_preis_effektiv_cent=netzbezug_preis_effektiv_cent,
         netzbezug_preis_herkunft=netzbezug_preis_herkunft,
+        ev_preis_cent=ev_preis_cent,
+        ev_preis_herkunft=ev_preis_herkunft,
         netzbezug_preis_abdeckung=netzbezug_preis_abdeckung,
         # N-267: sagt der Anzeige, dass der Preis daneben gewichtet ist.
         netzbezug_preis_zeittarif=hat_zeitfenster(allgemein_tarif),

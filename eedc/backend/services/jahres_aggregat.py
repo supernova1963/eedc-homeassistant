@@ -27,7 +27,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from backend.core.berechnungen.ergebnis import falte_zeitraum, jahr_vergleich_aus, mittel_jahre
+from backend.core.berechnungen.ergebnis import MONAT_KURZ, _js_round, falte_zeitraum, jahr_vergleich_aus, mittel_jahre
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +67,64 @@ def abgeschlossene_monate(monate: Iterable[int], jahr: int, heute: date) -> list
     return [m for m in monate if m < heute.month]
 
 
+def runde_rand(d: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    """Die Rundung der Jahresfaltung am Antwortrand (G8: der Layer rundet nicht — Nachmessung 03.10.2026).
+
+    Bis dahin rundete ``falte_zeitraum`` zwei Felder selbst (``sonstiges_geraete.*`` auf Cent bzw. Zehntel-kWh,
+    ``grundlast_anteil_prozent`` auf eine Stelle) — Port der Client-Rundung aus ``JahrAggregat.tsx`` für die
+    P6-Bitgleichheit. Dieselbe Rundung (``_js_round``, JS-``Math.round``) steht jetzt hier, also bleibt die Antwort
+    der Route bitgleich (P6 nachgefahren), und die Faltung liefert ungerundete Floats wie die Leiter.
+    """
+    if d is None:
+        return d
+    for g in d.get("sonstiges_geraete") or []:
+        for k, v in list(g.items()):
+            if isinstance(v, float):
+                g[k] = _js_round(v * 100) / 100
+    if d.get("grundlast_anteil_prozent") is not None:
+        d["grundlast_anteil_prozent"] = _js_round(d["grundlast_anteil_prozent"] * 10) / 10
+    return d
+
+
+#: Die Quellen einer Monatsantwort (``quellen``) in Anwenderwörtern — für den E11-Hinweis.
+_QUELLEN_WORTE: tuple[tuple[str, str], ...] = (
+    ("ha_statistics", "Home Assistant"), ("mqtt_inbound", "MQTT"), ("connector", "einem Connector"),
+    ("tagesebene", "den Tageswerten"),
+)
+
+
+def _monate_text(monate: Sequence[int]) -> str:
+    return ", ".join(MONAT_KURZ[m] for m in monate if 1 <= m <= 12)
+
+
+def hinweis_ohne_abschluss(
+    zeilen: Sequence[Mapping[str, Any]], antworten: Sequence[Mapping[str, Any]], jahr: int, abgeschlossen: Sequence[int],
+) -> Optional[str]:
+    """E11 (Entscheid Gernot 03.10.2026, N-584): der Satz für abgeschlossene Monate OHNE Monatsabschluss.
+
+    Cockpit → Jahr behält solche Monate mit ihren Werten aus Home Assistant (bzw. MQTT, Connector, Tageswerten — N-65),
+    Übersicht, PDF und HA-Sensor rechnen nur mit abgeschlossenen Monaten. Die Zeile sagt, welche Monate das sind und
+    woher ihre Werte kommen (ADR-002/P4: beschriften, nicht unterdrücken). Der laufende Monat zählt NICHT mit — er hat
+    naturgemäß noch keinen Abschluss und trägt seine Kennzeichnung über das Kennzahlen-Fenster.
+    ``None`` heißt: jeder abgeschlossene Monat hat seinen Abschluss.
+    """
+    mit_abschluss = {r["monat"] for r in zeilen if r["jahr"] == jahr and r.get("id") is not None}
+    ohne = [m for m in abgeschlossen if m not in mit_abschluss]
+    if not ohne:
+        return None
+    quellen: list[str] = []
+    for d in antworten:
+        if d["monat"] in ohne:
+            for schluessel, wort in _QUELLEN_WORTE:
+                if (d.get("quellen") or {}).get(schluessel) and wort not in quellen:
+                    quellen.append(wort)
+    herkunft = f", Werte aus {' und '.join(quellen)}" if quellen else ""
+    anzahl = f"{len(ohne)} Monat" if len(ohne) == 1 else f"{len(ohne)} Monate"
+    pronomen = "ihn" if len(ohne) == 1 else "sie"
+    return (f"{anzahl} ohne Monatsabschluss ({_monate_text(ohne)}){herkunft} — "
+            f"Übersicht und Jahresbericht zählen {pronomen} nicht mit.")
+
+
 async def baue_jahr(db: AsyncSession, anlage_id: int, jahr: int, *, heute: Optional[date] = None) -> dict[str, Any]:
     """Die Jahresantwort: zwölf Monatsantworten (in derselben Sitzung, sequenziell), Kopf, Vergleich, Vorjahr, Ø-Jahr."""
     from backend.api.routes.aktueller_monat import _berechne_monat
@@ -90,11 +148,15 @@ async def baue_jahr(db: AsyncSession, anlage_id: int, jahr: int, *, heute: Optio
     ]
     kontext = await lade_monats_kontext(db, anlage, jahr)
     antworten: list[dict[str, Any]] = []
+    fehlgeschlagen: list[int] = []
     for m in zu_ladende_monate(zeilen, jahr, heute):
         try:
             antwort = await _berechne_monat(anlage_id, jahr, m, db, kontext=kontext)
-        except Exception:  # pragma: no cover - ein Monat kippt das Jahr nicht (wie der Client)
+        except Exception:
+            # Ein Monat kippt das Jahr nicht (wie der Client bis 03.10.2026) — aber er fehlt nicht STILL (ADR-002/P4,
+            # Nachmessung 03.10.): er steht unten in `hinweise` und in `fehlende_posten` des Kopfs.
             logger.exception("Jahresroute: Monat %s/%s nicht berechenbar", m, jahr)
+            fehlgeschlagen.append(m)
             continue
         d = antwort.model_dump()
         if monat_hat_daten(d):
@@ -107,11 +169,25 @@ async def baue_jahr(db: AsyncSession, anlage_id: int, jahr: int, *, heute: Optio
 
     monate_nr = [d["monat"] for d in antworten]
     vergleichs_monate = abgeschlossene_monate(monate_nr, jahr, heute)
-    kopf = falte_zeitraum(antworten, jahr, kennzahlen)
+    kopf = runde_rand(falte_zeitraum(antworten, jahr, kennzahlen))
     vergleich = (
         None if vergleichs_monate == monate_nr
-        else falte_zeitraum([d for d in antworten if d["monat"] in vergleichs_monate], jahr)
+        else runde_rand(falte_zeitraum([d for d in antworten if d["monat"] in vergleichs_monate], jahr))
     )
+    # E11 und P4: was die Kopfzahl enthält und was ihr fehlt, steht in der Antwort selbst.
+    zusatz: list[str] = []
+    satz = hinweis_ohne_abschluss(zeilen, antworten, jahr, vergleichs_monate)
+    if satz:
+        zusatz.append(satz)
+    if fehlgeschlagen:
+        zusatz.append(
+            f"{_monate_text(fehlgeschlagen)} {jahr} konnte nicht berechnet werden und fehlt in den Summen des Jahres."
+        )
+        kopf["fehlende_posten"] = [
+            *kopf.get("fehlende_posten", []), *(f"Monat {MONAT_KURZ[m]} {jahr}" for m in fehlgeschlagen),
+        ]
+    if zusatz:
+        kopf["hinweise"] = [*(kopf.get("hinweise") or []), *zusatz]
     vj = jahr_vergleich_aus(zeilen, jahr - 1, vergleichs_monate)
     andere = sorted({z["jahr"] for z in zeilen} - {jahr})
     oe = mittel_jahre([jahr_vergleich_aus(zeilen, j, vergleichs_monate) for j in andere], vergleichs_monate)

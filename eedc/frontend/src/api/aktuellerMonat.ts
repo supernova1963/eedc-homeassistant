@@ -393,6 +393,10 @@ export interface AktuellerMonatResponse {
   bkw_ersparnis_euro?: number | null
   /** Eingesetzte Werte zur BKW-Ersparnis („40,0 kWh × 30,00 ct/kWh“), A6; im Jahr null. */
   bkw_ersparnis_berechnung?: string | null
+  /** N-607 (A-2): Preis der Eigenverbrauchs-Ersparnis — EV-gewichteter Ø der gemessenen Stunden, sonst Bezugspreis. */
+  ev_preis_cent?: number | null
+  /** „ev_gemessen“ oder die Herkunft des Bezugspreises. */
+  ev_preis_herkunft?: string | null
   /** Erlös von Erzeugern mit eigenem Vergütungssatz. */
   erzeuger_erloes_euro?: number | null
   /** Stufe 2 — ohne eigenen UI-Namen, nur Zwischenzeile der Herleitung. */

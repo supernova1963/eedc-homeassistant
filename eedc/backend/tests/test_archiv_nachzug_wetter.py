@@ -362,17 +362,32 @@ def test_kurven_stunden_spiegelt_die_bucket_regel_des_aggregators() -> None:
     dieser Regel wäre die Klasse, aus der N-382 entstanden ist — eine Zeile,
     zwei verschiedene Stunden.
     """
-    voll = [{"zeit": f"{h:02d}:00", "werte": {}} for h in range(24)]
+    # N-599 (03.10.2026): die Punkte tragen jetzt einen Leistungswert — bis dahin standen hier `werte: {}`, und die
+    # Probe war nur deshalb grün, weil die Funktion Punkte statt Leistungswerte zählte (der Defekt selbst).
+    voll = [{"zeit": f"{h:02d}:00", "werte": {"pv_1": 1.0}} for h in range(24)]
     # 00..22 → Slots 1..23, Label 23 fällt in den Folgetag, Slot 0 kommt dazu.
-    assert kurven_stunden(voll, [{"zeit": "23:00", "werte": {}}]) == 24
+    assert kurven_stunden(voll, [{"zeit": "23:00", "werte": {"pv_1": 0.0}}]) == 24
     assert kurven_stunden(voll, []) == 24, (
         "Slot 0 existiert auch ohne Vortagsrand — sonst verlöre die Zeile 0 "
         "ihre Zähler-, Wetter- und Preiswerte."
     )
     assert kurven_stunden([], []) == 0
     # Recorder-Grenze mitten am Tag: nur noch ab 12:00.
-    teil = [{"zeit": f"{h:02d}:00", "werte": {}} for h in range(12, 24)]
+    teil = [{"zeit": f"{h:02d}:00", "werte": {"pv_1": 1.0}} for h in range(12, 24)]
     assert kurven_stunden(teil, []) == 12  # Slots 13..23 plus Slot 0
+
+
+def test_n599_kurven_stunden_zaehlt_nur_slots_mit_leistungswert() -> None:
+    """N-599: der HA-Zweig liefert für einen (teilweise) gepurgten Tag das VOLLE Raster — gezählt wird, wo Leistung
+    steht. Ein Börsenpreis allein ist keine Leistung (Overlay), eine gemessene 0 ist eine."""
+    raster_leer = [{"zeit": f"{h:02d}:{m:02d}", "werte": {"strompreis": 12.0}} for h in range(24) for m in (0, 10)]
+    rand_leer = [{"zeit": "23:00", "werte": {"strompreis": 11.0}}]
+    assert kurven_stunden(raster_leer, rand_leer) == 0, "ganz gepurgt: keine Stunde mit Leistung"
+    teil = [
+        {"zeit": f"{h:02d}:00", "werte": {"strompreis": 12.0, **({"pv_1": 0.0} if h >= 12 else {})}}
+        for h in range(24)
+    ]
+    assert kurven_stunden(teil, rand_leer) == 12, "Recorder-Grenze 12 Uhr: Slots 13..23 plus Slot 0"
 
 
 @pytest.mark.asyncio
@@ -484,3 +499,23 @@ async def test_tag_ohne_zusammenfassung_wird_nicht_neu_erfunden(db, job_session)
     assert (await db.execute(select(TagesZusammenfassung).where(
         TagesZusammenfassung.anlage_id == anlage.id,
     ))).scalars().first() is None
+
+
+@pytest.mark.asyncio
+async def test_n599_vorflug_erkennt_den_teilweise_gepurgten_tag_im_vollen_raster(db, job_session) -> None:
+    """N-599: dieselbe Lage wie oben, aber in der Form, in der der HA-Zweig sie WIRKLICH liefert — das volle Raster
+    von 0 bis 23 Uhr, Leistungswerte nur ab der Recorder-Grenze (12 Uhr), davor nur der Börsenpreis. Bis 03.10.2026
+    zählte der Vorflug 24 Stunden und ließ neu schreiben; jetzt erkennt er „Kurve geschrumpft"."""
+    heute = date(2026, 9, 4)
+    grenztag = archiv_grenztag(heute)
+    anlage = await _anlage_mit_tag(db, "VorflugRaster", grenztag, gti=GTI_VORLAEUFIG)
+
+    raster = [
+        {"zeit": f"{h:02d}:00", "werte": {"strompreis": 12.0, **({"pv_1": 1.0} if h >= 12 else {})}}
+        for h in range(24)
+    ]
+    with _quellen_mocks(GTI_ARCHIV, punkte=raster):
+        ergebnis = await archiv_nachzug_all(heute)
+
+    assert ergebnis[anlage.id]["status"] == "uebersprungen"
+    assert ergebnis[anlage.id]["grund"] == "kurve_geschrumpft"

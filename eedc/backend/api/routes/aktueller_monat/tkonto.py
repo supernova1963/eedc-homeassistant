@@ -51,6 +51,7 @@ def _baue_investition_financial(
     monats_benzinpreis: Optional[float],
     emob_pool_attr,
     emob_entscheid=None,
+    ev_p: Optional[float] = None,
 ) -> Optional[InvestitionFinancialDetail]:
     """Baut das T-Konto-Detail (InvestitionFinancialDetail) EINER Investition.
 
@@ -88,10 +89,14 @@ def _baue_investition_financial(
         ev_kwh = data.get("eigenverbrauch_kwh") or data.get("pv_erzeugung_kwh")
         einsp_kwh = data.get("einspeisung_kwh")
         if ev_kwh:
-            inv_ersparnis = round(ev_kwh * netz_p / 100, 2)
+            # N-607 (A-2): die Zeile ist ein Teil der Eigenverbrauchs-Ersparnis (T-Konto/Tabelle schneiden sie dort
+            # heraus) und trägt deshalb DENSELBEN Preis — den EV-gewichteten, wenn es ihn gibt.
+            _p = ev_p if ev_p is not None else netz_p
+            inv_ersparnis = round(ev_kwh * _p / 100, 2)
             inv_label = "Eigenverbrauch-Ersparnis"
-            inv_formel = "BKW-Eigenverbrauch × Netzbezugspreis"
-            inv_berechnung = f"{fmt_zahl(ev_kwh, 1)} kWh × {fmt_zahl(netz_p, 2)} ct/kWh"
+            inv_formel = ("BKW-Eigenverbrauch × Ø-Preis der vermiedenen Stunden" if ev_p is not None and ev_p != netz_p
+                          else "BKW-Eigenverbrauch × Netzbezugspreis")
+            inv_berechnung = f"{fmt_zahl(ev_kwh, 1)} kWh × {fmt_zahl(_p, 2)} ct/kWh"
         if einsp_kwh and einsp_kwh > 0:
             inv_erloes = round(einsp_kwh * einsp_p / 100, 2)
             # A6: Formel und eingesetzte Werte in GETRENNTE Felder — beides in

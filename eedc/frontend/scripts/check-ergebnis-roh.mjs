@@ -71,7 +71,7 @@ export const AUSNAHMEN = {
   'src/v4/JahresRail.tsx::JahresRail': 'Balkenbreite der Rail (Anzeige, keine Kennzahl)',
   'src/v4/CockpitJahrV4.tsx::railEntries':
     'Rail-Σ PV je Jahr aus der Monatsreihe (Mini-Balken + Titel der Jahres-Rail) — eine Zeitleisten-Anzeige, keine Ergebnisgröße',
-  'src/v4/CockpitMonatV4.tsx::glMonStats':
+  'src/v4/CockpitMonatV4.tsx::gleicheMonatStats':
     'N-604: „Ø gleicher Monat" (Mittel über andere Jahre, Autarkie paarweise) — Client-Rechnung, bis die Monatsreihe eine '
     + 'Backend-Vergleichsroute hat (Register N-604, Trigger dort)',
 }

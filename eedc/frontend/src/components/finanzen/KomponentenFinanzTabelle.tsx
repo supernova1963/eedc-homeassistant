@@ -96,7 +96,9 @@ function zeilenAus(d: AktuellerMonatResponse): FinanzZeile[] {
       einsparungen: evPv,
       aufwand: ust,
       tooltip: 'Erträge: Einspeise-Erlös (Einspeisung × Vergütung). '
-        + 'Einsparungen: Eigenverbrauch × Netzbezugspreis (vermiedener Netzbezug)'
+        + (d.ev_preis_herkunft === 'ev_gemessen'
+          ? `Einsparungen: Eigenverbrauch × Ø-Preis der vermiedenen Stunden (${fmtCalc(d.ev_preis_cent ?? 0, 2)} ct/kWh)`
+          : 'Einsparungen: Eigenverbrauch × Netzbezugspreis (vermiedener Netzbezug)')
         + (abgezogen > 0
           ? ` — ohne ${fmtCalc(abgezogen, 2)} €, die unten als eigene Zeile stehen.`
           : '.')
@@ -106,9 +108,12 @@ function zeilenAus(d: AktuellerMonatResponse): FinanzZeile[] {
     })
   }
 
-  // Speicher-Netzladungs-Kosten (Anlage-Ebene, tatsächliche Ausgabe) fließen in die
-  // Aufwand-Spalte der ERSTEN Speicher-Zeile — sie stecken NICHT im Haus-Netzbezug
-  // (getrennte Messung), also kein Doppelzählen mit der nachrichtlichen Netzbezug-Zeile.
+  // Speicher-Netzladungs-Kosten: NUR AUSWEIS an der ersten Speicher-Zeile, KEIN Aufwand (N-606, 03.10.2026).
+  // Die Netzladung läuft über den Hauszähler und steckt damit schon in der Stromrechnung (`netzbezug_kosten_euro`) —
+  // dieselbe Regel wie das T-Konto (R15-5b: „steckt bereits in diesen Kosten (Hauszähler), KEIN zusätzlicher Posten").
+  // ⛔ Hier stand bis dahin das Gegenteil („stecken NICHT im Haus-Netzbezug (getrennte Messung)") und die Kosten
+  // standen im Aufwand der Speicher-Zeile; die Haushaltsperspektive zog danach die volle Stromrechnung ab — doppelt
+  // (gemessen an r28 + r27: 30 Monate, Σ 290,10 €).
   let netzladungKosten = d.speicher_ladung_netz_kosten_euro ?? 0
 
   // A2 (03.10.2026): die BKW-Zeile trägt nur den Anteil, der im Eigenverbrauch der Anlage steckt — geklemmt wie die
@@ -137,8 +142,8 @@ function zeilenAus(d: AktuellerMonatResponse): FinanzZeile[] {
     const ertraege = (f.erloes_euro ?? 0) + (f.sonstige_ertraege_euro ?? 0)
     const bkwGekappt = f.typ === 'balkonkraftwerk' && bkw.faktor < 1
     const einsparungen = (f.ersparnis_euro ?? 0) * (bkwGekappt ? bkw.faktor : 1)
-    const aufwand = (f.betriebskosten_monat_euro ?? 0) + (f.sonstige_ausgaben_euro ?? 0) + netzladung
-    if (ertraege === 0 && einsparungen === 0 && aufwand === 0) continue
+    const aufwand = (f.betriebskosten_monat_euro ?? 0) + (f.sonstige_ausgaben_euro ?? 0)
+    if (ertraege === 0 && einsparungen === 0 && aufwand === 0 && netzladung === 0) continue
     // Herleitung der kalkulatorischen Einsparung als Tooltip (vorhandene Felder).
     const tooltipTeile: string[] = []
     if (einsparungen !== 0 && f.ersparnis_label) {
@@ -146,10 +151,10 @@ function zeilenAus(d: AktuellerMonatResponse): FinanzZeile[] {
       if (f.berechnung && !bkwGekappt) tooltipTeile.push(f.berechnung)
     }
     if (bkwGekappt) tooltipTeile.push(`gekappt auf den Eigenverbrauch der Anlage (Gerät: ${fmtCalc(f.ersparnis_euro ?? 0, 2)} €)`)
-    if (netzladung > 0) tooltipTeile.push(`inkl. Netzladung ${fmtCalc(netzladung, 2)} € (${fmtCalc(d.speicher_ladung_netz_kwh ?? 0, 1)} kWh Netz)`)
+    if (netzladung > 0) tooltipTeile.push(`Netzladung ${fmtCalc(netzladung, 2)} € (${fmtCalc(d.speicher_ladung_netz_kwh ?? 0, 1)} kWh Netz) — steckt in der Stromrechnung, nicht im Aufwand dieser Zeile`)
     const hinweise: string[] = []
     if ((f.betriebskosten_monat_euro ?? 0) > 0) hinweise.push('Betriebskosten anteilig')
-    if (netzladung > 0) hinweise.push('inkl. Netzladung')
+    if (netzladung > 0) hinweise.push(`davon Netzladung ${fmtCalc(netzladung, 2)} € in der Stromrechnung`)
     zeilen.push({
       key: `inv-${f.investition_id}`,
       label: f.bezeichnung,
@@ -162,19 +167,9 @@ function zeilenAus(d: AktuellerMonatResponse): FinanzZeile[] {
     })
   }
 
-  // Sicherung: kein Speicher-Financial-Zeile vorhanden, aber Netzladungs-Kosten da
-  // → eigene Zeile, damit die tatsächliche Ausgabe nicht still verschwindet.
-  if (netzladungKosten > 0) {
-    zeilen.push({
-      key: 'speicher-netzladung',
-      label: 'Speicher — Netzladung',
-      typ: 'speicher',
-      ertraege: 0,
-      einsparungen: 0,
-      aufwand: netzladungKosten,
-      tooltip: `Netzladung ${fmtCalc(netzladungKosten, 2)} € (${fmtCalc(d.speicher_ladung_netz_kwh ?? 0, 1)} kWh Netz × Strompreis)`,
-    })
-  }
+  // Bis 03.10.2026 stand hier eine Sicherungszeile „Speicher — Netzladung" mit den Netzladungs-Kosten als Aufwand,
+  // falls keine Speicher-Zeile existierte. Sie entfällt mit N-606: die Kosten stehen in der Stromrechnung, und eine
+  // Zeile ohne eigenen Betrag wäre Ausweis ohne Gegenstand.
 
   // Anlage-übergreifende Sonstige Positionen — eigene Zeile, nur wenn ≠ 0.
   const aErt = d.anlage_sonstige_ertraege_euro ?? 0

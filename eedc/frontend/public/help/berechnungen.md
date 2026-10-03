@@ -198,6 +198,12 @@ CO2-Einsparung (kg)      = PV_Erzeugung * 0.38               (VERALTET — s. Ka
 > durch. **P-1:** Ein gepflegter (abgerechneter) Bezugs-Ø stellt den Bezugspreis, für die Ersparnis ist
 > er nur der Rückfall — unterhalb der Abrechnung gilt die Messung. Ohne Stundenpreise (Festpreis)
 > bleibt es beim Netzbezug_Preis; dort bewegt sich keine Zahl.
+> ⚠ **Cockpit → Monat folgt der Regel erst seit 03.10.2026** (samt Vorjahresmonat und der Balkonkraftwerk-Zeile des
+> T-Kontos): bis dahin nahm diese Route den bezugsgewichteten Ø — im Probemonat 160,00 € statt 40,00 €, während
+> Übersicht und Monatsreihe schon 40,00 € nannten. Die Antwort trägt den Preis jetzt als `ev_preis_cent` mit Herkunft
+> (`ev_preis_herkunft`: „ev_gemessen" oder die Herkunft des Bezugspreises); die Stromrechnung bleibt beim Bezugspreis.
+> Der **Vorjahresmonat** löst seinen Bezugspreis seit 03.10.2026 über dieselbe Kaskade (`aufgeloester_monatspreis`) — bis
+> dahin fehlte ihm die Stufe „gemessen" (Probe: 70,00 € als Vorjahr gegen 90,00 € direkt).
 >
 > **Hinweis „Eigenverbrauch".** Der Eigenverbrauch, der zu **Geld** wird, ist derselbe wie der in
 > der Mengen-Bilanz: die Erzeugung **hinter dem Zähler** — PV-Module, Balkonkraftwerk **und** ein
@@ -544,14 +550,17 @@ Jahres-Rendite (%)  = Kumulative_Ersparnis / Investition_gesamt * 100
 > **Cockpit-Finanzen-Block = Komponenten-Finanz-Tabelle (G20-1, ab v4.0; fortgeschrieben 03.10.2026):** Der
 > Finanzen-Block in Cockpit-Monat/-Jahr zeigt **eine Zeile je Komponente** (Reihenfolge = Typ-SoT) mit den Spalten
 > **Erträge** (tatsächliche Zahlungsflüsse) · **Einsparungen** (kalkulatorisch/vermiedene Kosten) · **Aufwand** (inkl.
-> anteilig umgelegter Betriebskosten, Speicher-Zeile inkl. Netzladungs-Kosten, PV-Zeile bei Regelbesteuerung inkl. USt
-> auf den Eigenverbrauch) · **Saldo**; die **Summenzeile ist die Block-Kopf-Kennzahl** (Kopf == sichtbare Summe). Bis
+> anteilig umgelegter Betriebskosten, PV-Zeile bei Regelbesteuerung inkl. USt auf den Eigenverbrauch; die
+> Netzladung des Speichers steht an seiner Zeile nur als Ausweis — sie läuft über den Hauszähler und steckt in der
+> Stromrechnung, wie im T-Konto) · **Saldo**; die **Summenzeile ist die Block-Kopf-Kennzahl** (Kopf == sichtbare Summe). Bis
 > 03.10.2026 stand hier, die Tabellen-Summe sei „bewusst eine dritte Netto-Semantik" — mit #402 (02.09.) trägt das nicht
 > mehr: eine Attribution verteilt einen Betrag, sie vervielfacht ihn nicht. Die Tabelle verteilt dieselben Posten wie
 > die **Ergebnis-Leiter** (oben) auf die Komponenten; ihre Zusatzzeile heißt seither **„Monatsergebnis"/„Jahresergebnis"**
-> und **liest** `ergebnis_euro` (bis dahin „Ergebnis nach Stromrechnung" = Saldo − Netzbezug-Kosten, G20-4). Ob beide
-> Wege auf dieselbe Zahl führen, misst die Probe P8 des Ergebnisgrößen-Pakets; zwei vorbestehende Abweichungen
-> (Wärmepumpen-Ersparnis je Gerät gegen Aggregat; Speicher-Netzladung in Aufwand UND Stromrechnung) sind dort benannt.
+> und **liest** `ergebnis_euro` (bis dahin „Ergebnis nach Stromrechnung" = Saldo − Netzbezug-Kosten, G20-4). Beide
+> Wege führen auf dieselbe Zahl — die Probe P8 misst es an echten Antworten. Die zwei Abweichungen, die sie beim Bau
+> fand, sind seit 03.10.2026 geschlossen: die **Wärmepumpen-Ersparnis** der Kachel ist die Σ der Gerätezeilen (Bauform
+> wie die E-Mobilität, G20-2; vorher ein Aggregat mit dem Parametersatz der ersten Wärmepumpe), und die
+> **Speicher-Netzladung** steht nicht mehr zusätzlich im Aufwand der Speicher-Zeile.
 > *(Bis 03.10.2026 stand hier außerdem, die Vergleichs-Asymmetrie `gesamtnettoertrag` Monat vs. Vorjahr sei „kein
 > Bug". Sie war einer: ein Vorjahr mit fehlender Stromrechnung zählte sie als 0. Seit der Ergebnis-Leiter folgt das
 > Vorjahr derselben Regel wie der Monat; das Feld `gesamtnettoertrag_euro` ist entfallen.)*

@@ -35,7 +35,8 @@
 import { fmtCalc } from '../components/ui'
 import { Table, TableHead, TableBody } from '../components/ui/Table'
 import { ZELLE, KOPF_ZELLE } from '../components/ui/tabelleMasse'
-import { VerteilungsBalken, GeraeteHinweis, GrundlastSollIstKachel } from '../components/blocks'
+import { VerteilungsBalken, GeraeteHinweis, GrundlastSollIstKachel, HerkunftZeile } from '../components/blocks'
+import { unvollstaendigHerkunft } from '../lib/prognoseHinweise'
 import { Parkbar } from '../components/park'
 import { DATENROLLE } from '../lib'
 import { KOMPONENTEN_FARBEN } from '../lib/colors'
@@ -256,10 +257,16 @@ export function JahrBilanz({
     ...(d.komponenten_geraete?.['wechselrichter'] ?? []),
   ]
 
+  // E11 / P4 (03.10.2026): die Hinweise des Jahres — Monate ohne Monatsabschluss (Werte aus Home Assistant), ein
+  // nicht berechenbarer Monat, PV-Teilsummen der Monate — kommen fertig formuliert aus der Jahresroute
+  // (`services/jahres_aggregat.py`, `falte_zeitraum`) und stehen über derselben Zeile wie im Monat.
+  const jahrHerkunft = unvollstaendigHerkunft(d.hinweise, 'Jahr')
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
       {/* IST / Vorjahr / Ø-Jahr-Vergleich — eigene Parkbar (Doktrin). */}
       <Parkbar id="el:bilanz-vergleich" titel="Vergleich (IST/VJ/Ø)" className="lg:col-span-2">
+        {jahrHerkunft && <HerkunftZeile herkunft={jahrHerkunft} className="mb-2" />}
         {/* Mobil (< sm): gestapelte Karten + Vergleichs-Chips. */}
         <div className="sm:hidden divide-y divide-gray-100 dark:divide-gray-700/50">
           {rows.map((row) => (

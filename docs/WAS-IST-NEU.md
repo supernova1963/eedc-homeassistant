@@ -92,6 +92,27 @@ jetzt Gesamtverbrauch.
 
 → *[Glossar](GLOSSAR.md)* · *[Bedienung §2.1 Live](HANDBUCH_BEDIENUNG.md#21-live)*
 
+**Weitere Korrekturen in dieser Version**
+
+- **Dynamischer Tarif:** *Cockpit → Monat* bewertet deinen Eigenverbrauch jetzt mit dem
+  Preis der Stunden, in denen er Netzbezug ersetzt hat (meist mittags) — wie Übersicht und
+  Jahresbericht. Vorher stand dort eine zu hohe Ersparnis. Auch der **Vorjahresvergleich**
+  rechnet die Stromrechnung des Vorjahresmonats jetzt mit denselben gemessenen Preisen wie
+  der Monat selbst.
+- **Mehrere Wärmepumpen:** Die Ersparnis in der Kachel ist jetzt die Summe der Geräte —
+  dieselbe Zahl wie im T-Konto darunter.
+- **Speicher mit Netzladung:** Die Komponenten-Finanztabelle zieht die Netzladung nicht mehr
+  doppelt ab; sie steht nur noch als Hinweis an der Speicher-Zeile.
+- **Cockpit → Jahr** nennt einen vergangenen Monat ohne Monatsabschluss in einer Zeile über
+  dem Vergleich — er zählt weiter mit, Übersicht und Jahresbericht zählen ihn nicht.
+- **CSV-Export von *Auswertungen → Finanzen*:** Die Spalte „Netto nach Sonderkosten" entfällt
+  — sie war dieselbe Zahl wie „Netto-Ertrag", der die Sonstigen Positionen jetzt enthält. Die
+  Spalten heißen „Netto-Ertrag PV inkl. Sonstige (€)" und „davon Sonderkosten (€)". Wer die
+  CSV weiterverarbeitet, passt die Spaltennamen an.
+- **Tagesverlauf ohne Home-Assistant-Verlauf** fällt wieder auf MQTT zurück, und der
+  nächtliche Wetter-Nachzug ersetzt keinen vollständigen Tag mehr durch einen teilweise
+  gelöschten.
+
 ---
 
 ## v4.1.1 — 2. Oktober 2026

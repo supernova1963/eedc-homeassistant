@@ -38,7 +38,10 @@ Vorjahr streicht, nur mit Ausweis — dieselbe Lücke hätte drei Regeln bekomme
 
 Die Aufrufer runden heute an verschiedenen Stellen (Monatsroute je Posten auf 2 Stellen, Übersicht erst am
 Antwortrand, HA-Sensor nie, Tag gar nicht). Ein rundender Layer wäre höchstens zu einer Seite bitgleich. Er rechnet
-deshalb mit den Floats, die er bekommt; gerundet wird am Antwortrand wie bisher.
+deshalb mit den Floats, die er bekommt; gerundet wird am Antwortrand wie bisher. Das gilt seit der Nachmessung
+(03.10.2026) auch für ``falte_zeitraum``: die zwei Client-Rundungen, die sie für die P6-Bitgleichheit portiert hatte
+(``sonstiges_geraete.*``, ``grundlast_anteil_prozent``), stehen jetzt am Rand der Jahresroute
+(``services/jahres_aggregat.py::runde_rand``) — P6 danach erneut bitgleich.
 
 ## USt-Anteil eines Monats (E1/G1)
 
@@ -529,7 +532,8 @@ def falte_zeitraum(
                                     **{x: 0 for x in sg_felder}})
             for x in sg_felder:
                 a[x] = a[x] + (g.get(x) if g.get(x) is not None else 0)
-    nz = lambda v: _js_round(v * 100) / 100 if v > 0 else None  # noqa: E731
+    # Rundung am Rand (G8, Nachmessung 03.10.): hier nur „0 ⇒ kein Wert", gerundet wird in `jahres_aggregat.runde_rand`.
+    nz = lambda v: v if v > 0 else None  # noqa: E731
     sonstiges_geraete = [
         {"bezeichnung": g["bezeichnung"], "kategorie": g["kategorie"], **{x: nz(g[x]) for x in sg_felder}}
         for g in sg.values()
@@ -544,7 +548,7 @@ def falte_zeitraum(
     gl_kwh = summe(f("grundlast_kwh"))
     gl_basis = summe(m.get("gesamtverbrauch_kwh") for m in monate if m.get("grundlast_kwh") is not None)
     gl_anteil = (
-        _js_round((gl_kwh / gl_basis) * 1000) / 10
+        (gl_kwh / gl_basis) * 100
         if gl_kwh is not None and gl_basis is not None and gl_basis > 0 else None
     )
 
