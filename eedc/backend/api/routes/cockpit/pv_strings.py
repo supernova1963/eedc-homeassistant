@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from backend.core.exceptions import not_found
-from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
+from backend.core.berechnungen.erzeuger_traeger import abgetretene_bkw_ids, erzeuger_traeger
 from backend.core.investition_kennwerte import get_erzeuger_kwp
 from backend.api.deps import get_db
 from backend.core.berechnungen import (
@@ -112,6 +112,77 @@ def _rollup_quelle(quellen: Iterable[str]) -> str:
     if all(q == PV_QUELLE_GEMESSEN for q in qs):
         return PV_QUELLE_GEMESSEN
     return PV_QUELLE_FEHLT
+
+
+def _selbst_tragende_bkw(alle: list[Any], jahr: int, monat: int) -> frozenset:
+    """IDs der Balkonkraftwerke mit Modul-Kindern, die in diesem Monat noch SELBST tragen.
+
+    **N-613.** Die Abtretung (N-266) gilt je Monat, nicht für die Anlage
+    (ADR-002/P11, Reihenfolge Zeitfilter → Selektor, N-386): Hat ein BKW seine
+    Modul-Kinder erst später bekommen, trägt es in den Monaten davor Erzeugung
+    und kWp noch selbst. Dieselbe Entscheidung trifft
+    ``services/pv_monatswerte.py::lade_pv_je_monat`` für die IST-Werte — hier
+    steht sie, damit Zeilen und kWp-Nenner der Sicht aus derselben Menge kommen.
+
+    Leer für jede Anlage ohne abtretendes BKW und für jeden Monat, in dem die
+    Kinder schon aktiv sind — dann bleibt die Sicht bitgleich zu vorher.
+    """
+    abgetreten = abgetretene_bkw_ids(alle)
+    if not abgetreten:
+        return frozenset()
+    aktive = [i for i in alle if i.ist_aktiv_im_monat(jahr, monat)]
+    im_monat = abgetretene_bkw_ids(aktive)
+    return frozenset(
+        i.id for i in aktive if i.id in abgetreten and i.id not in im_monat
+    )
+
+
+def _menge_im_monat(alle: list[Any], struktur: list[Any], selbst: frozenset) -> list[Any]:
+    """Die Erzeuger-Menge eines Monats für den kWp-Nenner (N-613).
+
+    Ausgang ist die **Struktur** (``erzeuger_traeger`` über alle Erzeuger, ohne
+    Zeitfilter — Issue #123: die Sicht blendet stillgelegte und spätere Strings
+    nicht aus, und ihr Nenner tat das nie). Ein BKW, das im Monat selbst trägt,
+    **ersetzt** darin seine Kinder: beide zugleich wären dieselbe Nennleistung
+    zweimal, und jede Zeile bekäme zu wenig SOLL.
+    """
+    if not selbst:
+        return struktur
+    in_struktur = {i.id for i in struktur}
+    return [
+        i for i in alle
+        if i.id in selbst
+        or (i.id in in_struktur and not (
+            i.typ == "pv-module" and i.parent_investition_id in selbst
+        ))
+    ]
+
+
+def _zeilen(alle: list[Any], struktur: list[Any], selbst: frozenset) -> list[Any]:
+    """Die Erzeuger-Zeilen der Sicht: die Struktur plus jedes BKW, das im Zeitraum selbst trägt.
+
+    Reihenfolge wie ``alle`` (die Datenbank-Reihenfolge, wie bisher). Das BKW
+    steht dort, wo es ohne Kinder stünde; seine Kinder bleiben Zeilen — in den
+    Monaten, in denen das BKW selbst trägt, haben sie keine Werte, genau wie
+    ein später zugebauter String vor seiner Anschaffung.
+    """
+    if not selbst:
+        return struktur
+    in_struktur = {i.id for i in struktur}
+    return [i for i in alle if i.id in in_struktur or i.id in selbst]
+
+
+def _kwp_nenner(menge: list[Any], anlage: Anlage) -> float:
+    """Σ kWp einer Erzeuger-Menge über den SoT-Dispatcher, sonst der gepflegte Wert."""
+    # kWp über den SoT-Dispatcher (ADR-002/P3-a): ein nur im `parameter`
+    # gepflegtes Modul (#229) zählte hier 0 — damit war der Nenner zu klein und
+    # ALLE übrigen Strings bekamen zu viel SOLL zugerechnet. `get_erzeuger_kwp`
+    # statt `get_pv_kwp`, weil das Balkonkraftwerk seine kWp aus
+    # `leistung_wp × anzahl` bezieht (F-10) und sonst mit 0 im Nenner stünde.
+    kwp = sum(get_erzeuger_kwp(m) for m in menge)
+    if kwp == 0:
+        kwp = anlage.leistung_kwp or 1
+    return kwp
 
 
 def _ranking(
@@ -364,9 +435,19 @@ async def get_pv_strings(
     # Melder-Wunsch: zwei Ausrichtungen an einem BKW). Bliebe es drin, wäre es
     # eine Zeile zu viel UND der Verteilungsnenner `gesamt_kwp` doppelt, sodass
     # jeder String zu wenig SOLL bekäme.
-    pv_module = erzeuger_traeger(result.scalars().all())
+    # ⛔ N-613: Das gilt je MONAT, nicht für die Anlage. Bis 03.10.2026 stand
+    # der Selektor hier einmal über alle Investitionen — ein BKW, dem später
+    # Module zugeordnet wurden, hatte damit in KEINEM Monat eine Zeile, und in
+    # den Monaten davor fehlte seine Erzeugung in der Summe (gemessen: 930 gegen
+    # 1860 kWh der Monats-Fakten). Jetzt: `struktur` ist die heutige Zuordnung
+    # (Anlagen-Nenner, Plausibilität), die Monate entscheiden selbst
+    # (`_selbst_tragende_bkw`), und die IST-Werte lädt `lade_pv_je_monat` mit
+    # ALLEN Erzeugern — dort läuft der Selektor schon je Monat nach dem
+    # Zeitfilter (ADR-002/P11).
+    alle = list(result.scalars().all())
+    struktur = erzeuger_traeger(alle)
 
-    if not pv_module:
+    if not alle:
         return PVStringsResponse(
             anlage_id=anlage_id, jahr=jahr, hat_prognose=False,
             anlagen_leistung_kwp=anlage.leistung_kwp or 0,
@@ -374,6 +455,9 @@ async def get_pv_strings(
             abweichung_gesamt_prozent=None, strings=[],
             bester_string=None, schlechtester_string=None,
         )
+
+    selbst_je_monat = {m: _selbst_tragende_bkw(alle, jahr, m) for m in range(1, 13)}
+    pv_module = _zeilen(alle, struktur, frozenset().union(*selbst_je_monat.values()))
 
     wr_ids = [m.parent_investition_id for m in pv_module if m.parent_investition_id]
     wechselrichter_map = {}
@@ -402,17 +486,18 @@ async def get_pv_strings(
             except (ValueError, TypeError):
                 pass
 
-    # kWp über den SoT-Dispatcher (ADR-002/P3-a): ein nur im `parameter`
-    # gepflegtes Modul (#229) zählte hier 0 — damit war der Nenner zu klein und
-    # ALLE übrigen Strings bekamen zu viel SOLL zugerechnet. `get_erzeuger_kwp`
-    # statt `get_pv_kwp`, weil das Balkonkraftwerk seine kWp aus
-    # `leistung_wp × anzahl` bezieht (F-10) und sonst mit 0 im Nenner stünde.
-    gesamt_kwp = sum(get_erzeuger_kwp(m) for m in pv_module)
-    if gesamt_kwp == 0:
-        gesamt_kwp = anlage.leistung_kwp or 1
+    # Anlagen-Nenner der heutigen Zuordnung (Plausibilität, `anlagen_leistung_kwp`)
+    # und je Monat der Nenner der Menge, die in diesem Monat trägt (N-613):
+    # ohne selbst tragendes BKW ist das dieselbe Zahl.
+    gesamt_kwp = _kwp_nenner(struktur, anlage)
+    nenner_je_monat = {
+        m: gesamt_kwp if not selbst else _kwp_nenner(_menge_im_monat(alle, struktur, selbst), anlage)
+        for m, selbst in selbst_je_monat.items()
+    }
 
-    # IST je Modul über den Read-time-SoT (A4/b1) statt roh aus den IMD.
-    werte_je_modul, ist_quellen = await _lade_ist_je_modul(db, anlage_id, pv_module, jahr=jahr)
+    # IST je Modul über den Read-time-SoT (A4/b1) statt roh aus den IMD — mit
+    # ALLEN Erzeugern; die Abtretung entscheidet der Ladepfad je Monat (N-613).
+    werte_je_modul, ist_quellen = await _lade_ist_je_modul(db, anlage_id, alle, jahr=jahr)
     md_by_inv: dict[int, dict[int, float]] = {
         m.id: werte_je_modul.get(m.id, {}).get(jahr, {}) for m in pv_module
     }
@@ -423,7 +508,6 @@ async def get_pv_strings(
 
     for modul in pv_module:
         modul_kwp = get_erzeuger_kwp(modul)
-        kwp_anteil = modul_kwp / gesamt_kwp if gesamt_kwp > 0 else 0
         params = modul.parameter or {}
         ausrichtung = modul.ausrichtung or params.get("ausrichtung")
         neigung = modul.neigung_grad or params.get("neigung_grad")
@@ -438,6 +522,8 @@ async def get_pv_strings(
                 if modul_prognose is not None:
                     prog_monat = modul_prognose.get(monat, 0)
                 else:
+                    nenner = nenner_je_monat[monat]
+                    kwp_anteil = modul_kwp / nenner if nenner > 0 else 0
                     prog_monat = prognose_monate.get(monat, 0) * kwp_anteil
                 # F-34: im Anschaffungs-/Stilllegungsmonat lief das Modul nur
                 # einen Teil des Monats — das SOLL wird darauf gekürzt.
@@ -529,7 +615,9 @@ async def get_pv_strings_gesamtlaufzeit(
     # Melder-Wunsch: zwei Ausrichtungen an einem BKW). Bliebe es drin, wäre es
     # eine Zeile zu viel UND der Verteilungsnenner `gesamt_kwp` doppelt, sodass
     # jeder String zu wenig SOLL bekäme.
-    pv_module = erzeuger_traeger(result.scalars().all())
+    # ⛔ N-613: je Monat, nicht für die Anlage — siehe `get_pv_strings`.
+    alle = list(result.scalars().all())
+    struktur = erzeuger_traeger(alle)
 
     _empty = PVStringsGesamtlaufzeitResponse(
         anlage_id=anlage_id, hat_prognose=False,
@@ -541,15 +629,8 @@ async def get_pv_strings_gesamtlaufzeit(
         strings=[], saisonal_aggregiert=[],
         bester_string=None, schlechtester_string=None,
     )
-    if not pv_module:
+    if not alle:
         return _empty
-
-    wr_ids = [m.parent_investition_id for m in pv_module if m.parent_investition_id]
-    wechselrichter_map = {}
-    if wr_ids:
-        result = await db.execute(select(Investition).where(Investition.id.in_(wr_ids)))
-        for wr in result.scalars().all():
-            wechselrichter_map[wr.id] = wr.bezeichnung
 
     # Dieselbe Auswahlregel wie in der Jahressicht darüber — beide über den
     # Auswahl-SoT, damit zwei Sichten derselben Anlage nicht auf
@@ -571,23 +652,45 @@ async def get_pv_strings_gesamtlaufzeit(
             except (ValueError, TypeError):
                 pass
 
-    # kWp über den SoT-Dispatcher (ADR-002/P3-a): ein nur im `parameter`
-    # gepflegtes Modul (#229) zählte hier 0 — damit war der Nenner zu klein und
-    # ALLE übrigen Strings bekamen zu viel SOLL zugerechnet. `get_erzeuger_kwp`
-    # statt `get_pv_kwp`, weil das Balkonkraftwerk seine kWp aus
-    # `leistung_wp × anzahl` bezieht (F-10) und sonst mit 0 im Nenner stünde.
-    gesamt_kwp = sum(get_erzeuger_kwp(m) for m in pv_module)
-    if gesamt_kwp == 0:
-        gesamt_kwp = anlage.leistung_kwp or 1
+    gesamt_kwp = _kwp_nenner(struktur, anlage)
 
     # IST je Modul über den Read-time-SoT (A4/b1) statt roh aus den IMD: die
     # Laufzeit-Jahre entstehen jetzt aus allen Monaten MIT PV-Quelle — also auch
     # aus reinen Aggregat-Monaten, die vorher zu einer leeren Antwort führten.
-    md_by_inv, ist_quellen = await _lade_ist_je_modul(db, anlage_id, pv_module)
+    # Mit ALLEN Erzeugern: die Abtretung entscheidet der Ladepfad je Monat (N-613).
+    md_by_inv, ist_quellen = await _lade_ist_je_modul(db, anlage_id, alle)
 
     jahre = sorted({j for (_, j, _) in ist_quellen})
     if not jahre:
         return _empty
+
+    # N-613: Zeilen und Monats-Nenner aus derselben Menge wie die IST-Werte.
+    selbst_je_monat = {
+        (j, m): _selbst_tragende_bkw(alle, j, m) for j in jahre for m in range(1, 13)
+    }
+    pv_module = _zeilen(alle, struktur, frozenset().union(*selbst_je_monat.values()))
+    nenner_je_monat = {
+        jm: gesamt_kwp if not selbst else _kwp_nenner(_menge_im_monat(alle, struktur, selbst), anlage)
+        for jm, selbst in selbst_je_monat.items()
+    }
+    in_struktur = {i.id for i in struktur}
+    # Eine „Familie" für die Jahreszahl des saisonalen Mittels: ein abtretendes
+    # BKW und seine Kinder sind EIN Erzeuger, der den Träger gewechselt hat —
+    # die Jahre der BKW-Zeile und die der Kinder-Zeilen zählen zusammen, sonst
+    # teilte das Mittel zwei Jahre Erzeugung durch eins.
+    abgetreten = abgetretene_bkw_ids(alle)
+
+    def _familie(inv: Any) -> Any:
+        if inv.typ == "pv-module" and inv.parent_investition_id in abgetreten:
+            return inv.parent_investition_id
+        return inv.id
+
+    wr_ids = [m.parent_investition_id for m in pv_module if m.parent_investition_id]
+    wechselrichter_map = {}
+    if wr_ids:
+        result = await db.execute(select(Investition).where(Investition.id.in_(wr_ids)))
+        for wr in result.scalars().all():
+            wechselrichter_map[wr.id] = wr.bezeichnung
 
     erstes_jahr = jahre[0]
     letztes_jahr = jahre[-1]
@@ -600,9 +703,12 @@ async def get_pv_strings_gesamtlaufzeit(
     prognose_gesamt_total = 0
     ist_gesamt_total = 0
     saisonal_agg: dict[int, dict] = {m: {"prognose": 0, "ist_summe": 0, "anzahl": 0} for m in range(1, 13)}
+    saisonal_jahre: dict[int, dict[Any, set]] = {m: {} for m in range(1, 13)}
 
     for modul in pv_module:
         modul_kwp = get_erzeuger_kwp(modul)
+        # Saisonal-SOLL („wie fällt der Mai typischerweise aus") gegen die heutige
+        # Zuordnung — er hat kein Jahr, also auch keinen Monats-Nenner.
         kwp_anteil = modul_kwp / gesamt_kwp if gesamt_kwp > 0 else 0
         params = modul.parameter or {}
         ausrichtung = modul.ausrichtung or params.get("ausrichtung")
@@ -625,9 +731,14 @@ async def get_pv_strings_gesamtlaufzeit(
                     for m in months_with_data_year
                 )
             else:
+                # N-613: je Monat der Nenner der Menge, die in diesem Monat trägt.
                 prognose_jahr = sum(
                     _soll_im_laufmonat(
-                        prognose_monate.get(m, 0) * kwp_anteil, modul, jahr, m
+                        prognose_monate.get(m, 0) * (
+                            modul_kwp / nenner_je_monat[(jahr, m)]
+                            if nenner_je_monat[(jahr, m)] > 0 else 0
+                        ),
+                        modul, jahr, m,
                     )
                     for m in months_with_data_year
                 )
@@ -655,6 +766,7 @@ async def get_pv_strings_gesamtlaufzeit(
                 if ist_monat > 0 or monat in md_by_inv.get(modul.id, {}).get(jahr, {}):
                     string_saisonal[monat]["ist_summe"] += ist_monat
                     string_saisonal[monat]["anzahl"] += 1
+                    saisonal_jahre[monat].setdefault(_familie(modul), set()).add(jahr)
 
         saisonalwerte = []
         for monat in range(1, 13):
@@ -677,9 +789,12 @@ async def get_pv_strings_gesamtlaufzeit(
                 ist_durchschnitt_kwh=round(ist_durchschnitt, 1),
                 ist_summe_kwh=round(ist_summe, 1), anzahl_jahre=anzahl,
             ))
-            saisonal_agg[monat]["prognose"] += prognose_monat
+            # Das Anlagen-SOLL des typischen Monats ist das der heutigen Zuordnung:
+            # ein BKW, das seine Größen inzwischen an Kinder abgetreten hat, steht
+            # darin über die Kinder — seine eigene Zeile zählt nur mit ihrem IST.
+            if modul.id in in_struktur:
+                saisonal_agg[monat]["prognose"] += prognose_monat
             saisonal_agg[monat]["ist_summe"] += ist_summe
-            saisonal_agg[monat]["anzahl"] = max(saisonal_agg[monat]["anzahl"], anzahl)
 
         abweichung_gesamt_pct = ((ist_string_gesamt - prognose_string_gesamt) / prognose_string_gesamt * 100) if prognose_string_gesamt > 0 else None
         perf_ratio_gesamt = (ist_string_gesamt / prognose_string_gesamt) if prognose_string_gesamt > 0 else None
@@ -703,7 +818,9 @@ async def get_pv_strings_gesamtlaufzeit(
     for monat in range(1, 13):
         prognose_s = saisonal_agg[monat]["prognose"]
         ist_summe = saisonal_agg[monat]["ist_summe"]
-        anzahl = saisonal_agg[monat]["anzahl"]
+        # Jahre je Erzeuger-Familie, davon das Maximum — ohne abtretendes BKW ist
+        # jede Familie eine Zeile und die Zahl dieselbe wie bisher (max der Zeilen).
+        anzahl = max((len(j) for j in saisonal_jahre[monat].values()), default=0)
         ist_durchschnitt = ist_summe / anzahl if anzahl > 0 else 0
         saisonal_aggregiert.append(PVStringSaisonalwert(
             monat=monat, monat_name=MONATSNAMEN[monat],

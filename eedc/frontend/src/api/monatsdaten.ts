@@ -95,7 +95,9 @@ export interface AggregierteMonatsdaten {
   netzbezug_durchschnittspreis_cent?: number | null
   /**
    * F-58 — Nenner des spezifischen Ertrags DIESES Monats: Σ der im Monat
-   * aktiven PV-Module (ohne Balkonkraftwerk, passend zu `pv_erzeugung_kwh`).
+   * aktiven PV-Erzeuger MIT Balkonkraftwerk, passend zu `pv_erzeugung_kwh`
+   * (Module + BKW). Bis 03.10.2026 ohne BKW — der spezifische Ertrag der
+   * Tabelle lag dann um den BKW-Anteil über dem Cockpit (N-612).
    * null = keine Erzeuger-Investitionen gepflegt.
    *
    * Kommt vom Backend, weil der Client sonst `Anlage.leistung_kwp` nähme —

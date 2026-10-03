@@ -115,6 +115,14 @@ jetzt Gesamtverbrauch.
   Zähler verteilt. Hat der Statistik-Import solche Monate schon verteilt, zeigt seine Vorschau
   sie jetzt als Konflikt; ein erneuter Import dieses Monats verteilt sie richtig, wenn mehrere
   Module keinen eigenen Zähler haben.
+- **Spezifischer Ertrag in *Auswertungen → Tabelle*:** Mit einem Balkonkraftwerk lag die
+  (standardmäßig ausgeblendete) Spalte „Spez. Ertrag" um dessen Anteil zu hoch — die
+  Erzeugung zählte das Balkonkraftwerk mit, die Nennleistung nicht (im Beispiel 100,0 statt
+  92,6 kWh/kWp). Jetzt nennt die Tabelle denselben Wert wie das Cockpit.
+- **PV-Strings mit nachträglich zugeordneten Modulen:** Hast du deinem Balkonkraftwerk
+  später PV-Module zugeordnet, fehlte in *Komponenten → PV-Strings* seine Erzeugung aus der
+  Zeit davor. Jetzt steht das Balkonkraftwerk für diese Monate mit eigener Zeile da, und die
+  Summe stimmt mit dem Cockpit überein — auch unter *Alle Jahre* und in der Gesamtlaufzeit.
 - **Vorjahresvergleich:** Der Vergleichswert ist jetzt genau derselbe Monat des Vorjahres,
   wie du ihn direkt aufrufst — vorher konnte er davon abweichen.
 - **Mehrere Wärmepumpen:** Die Ersparnis in der Kachel ist jetzt die Summe der Geräte —

@@ -238,7 +238,9 @@ class AggregierteMonatsdatenResponse(BaseModel):
     # #392: Monatssatz der variablen Einspeisevergütung (None = Stammwert gilt)
     einspeise_durchschnittspreis_cent: Optional[float]
     # F-58: Nenner des spezifischen Ertrags DIESES Monats — Σ der im Monat
-    # aktiven PV-Module (ohne BKW, wie `pv_erzeugung_kwh` daneben). Er steht
+    # aktiven PV-Erzeuger **mit** Balkonkraftwerk, denn `pv_erzeugung_kwh`
+    # daneben ist Module + BKW (Zähler und Nenner dieselbe Grundgesamtheit;
+    # bis 03.10.2026 stand hier „ohne BKW", N-612). Er steht
     # hier, weil der Client ihn sonst selbst bilden müsste und dafür nur den
     # gepflegten `Anlage.leistung_kwp` zur Hand hat: einen zeitlosen Skalar, der
     # Zubau und Stilllegung nicht kennt. `None` = keine Erzeuger gepflegt.
@@ -745,13 +747,20 @@ async def list_monatsdaten_aggregiert(
             pv_vollstaendig=f.erzeugung.pv_vollstaendig,
             einspeisung_kwh=round(einspeisung, 1),
             netzbezug_kwh=round(netzbezug, 1),
-            # F-58: Nenner des spez. Ertrags je Monat. `mit_bkw=False`, weil
-            # `pv_erzeugung_kwh` dieser Zeile die Modul-PV ist.
+            # F-58: Nenner des spez. Ertrags je Monat. `mit_bkw=True`, weil
+            # `pv_erzeugung_kwh` dieser Zeile `f.erzeugung.pv_kwh` ist — Module
+            # UND Balkonkraftwerk. ⛔ Bis 03.10.2026 stand hier `mit_bkw=False`
+            # mit der Begründung „die Zeile trägt die Modul-PV": falsch, und die
+            # Spalte „Spez. Ertrag" lag bei 10 kWp + 0,8 kWp BKW um den
+            # BKW-Anteil über Cockpit → Monat (100,0 gegen 92,6 kWh/kWp, N-612).
+            # Derselbe Nenner wie `get_monatsdaten` und Cockpit → Monat; die
+            # Abtretung an Modul-Kinder entscheidet `summe_erzeuger_kwp` je
+            # Stichtag (N-266).
             anlagen_kwp=(
                 berechne_anlagen_kwp(
                     inv_rows,
                     date(f.jahr, f.monat, monthrange(f.jahr, f.monat)[1]),
-                    mit_bkw=False,
+                    mit_bkw=True,
                 ) or None
             ),
             globalstrahlung_kwh_m2=md.globalstrahlung_kwh_m2 if md is not None else None,

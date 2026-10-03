@@ -54,7 +54,19 @@ export function usePvStrings(anlageId: number, selectedYear: number | 'all', ver
         if (dataMap.size > 0) {
           const firstYearData = dataMap.get(verfuegbareJahre[0])
           if (firstYearData) {
-            const aggStrings = firstYearData.strings.map(s => {
+            // N-613: Die Zeilen sind nicht in jedem Jahr dieselben — ein Balkonkraftwerk,
+            // das seine Erzeugung erst später an Modul-Kinder abgetreten hat, steht nur in
+            // den Jahren, in denen es selbst trägt. Deshalb die Vereinigung über alle Jahre
+            // (in Jahresreihenfolge), nicht die Zeilen des ersten Jahres: sonst fehlte seine
+            // Erzeugung im Gesamtwert. Sind die Zeilen überall gleich, ist das dieselbe Liste.
+            const zeilen: PVStringsResponse['strings'] = []
+            const gesehen = new Set<number>()
+            for (const jahr of verfuegbareJahre) {
+              for (const s of dataMap.get(jahr)?.strings ?? []) {
+                if (!gesehen.has(s.investition_id)) { gesehen.add(s.investition_id); zeilen.push(s) }
+              }
+            }
+            const aggStrings = zeilen.map(s => {
               let totalPrognose = 0, totalIst = 0
               dataMap.forEach((yearData) => {
                 const sd = yearData.strings.find(ys => ys.investition_id === s.investition_id)

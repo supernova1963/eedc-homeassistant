@@ -169,7 +169,8 @@ export function createMonatsZeitreihe(
     const autarkie = md.autarkie_prozent ?? calcAutarkie(eigenverbrauch, gesamtverbrauch)
     const evQuote = md.eigenverbrauchsquote_prozent ?? calcEigenverbrauchsquote(eigenverbrauch, erzeugung)
     // F-58: der Monats-Nenner kommt vom Backend (Σ der im Monat aktiven
-    // Module). `anlage?.leistung_kwp` bleibt Fallback für Antworten ohne
+    // Erzeuger MIT Balkonkraftwerk — dieselbe Menge wie `erzeugung`, N-612).
+    // `anlage?.leistung_kwp` bleibt Fallback für Antworten ohne
     // das Feld — Bestandsverhalten, kein zweiter Rechenweg.
     const spezErtrag = calcSpezifischerErtrag(erzeugung, md.anlagen_kwp ?? anlage?.leistung_kwp)
 
