@@ -1,18 +1,17 @@
-"""N-557: `core/berechnungen/emob.py::eauto_effizienz_zeitraum` == `lib/emobEffizienz.ts`.
+"""N-557: `core/berechnungen/emob.py::eauto_effizienz_zeitraum` — die Zeitraum-Regel der E-Auto-Effizienz.
 
-*Cockpit → Jahr* baut das Jahr im Client aus zwölf Monatsantworten und hat keine
-Backend-Zahl für die Jahres-kWh/100 km. Die Regel (Konzept Heimladung/Fahrverbrauch,
-Regel 10: Σ Monatswerte ÷ Σ km, „gemessen" nur, wenn jeder Monat mit km gemessen ist)
-braucht dort eine zweite **Heimat**; damit keine zweite **Definition** daraus wird,
-stehen die Fixtures wortgleich in `frontend/src/lib/emobEffizienz.test.ts`.
-Gleiches Muster wie `test_speicher_wirkungsgrad_symmetrie.py`.
+Die Regel (Konzept Heimladung/Fahrverbrauch, Regel 10): Σ Monatswerte ÷ Σ km, „gemessen" nur, wenn jeder Monat
+mit km gemessen ist.
+
+⚑ **Seit 03.10.2026 nur noch die Backend-Seite.** Bis dahin baute *Cockpit → Jahr* das Jahr im Client aus zwölf
+Monatsantworten (`v4/JahrAggregat.tsx`) und brauchte die Regel ein zweites Mal (`lib/emobEffizienz.ts`); diese
+Datei hielt die Fixtures beider Seiten wortgleich. Mit dem Paket „Ergebnisgrößen Monat/Jahr in den Layer" faltet die
+Jahresroute im Backend (`core/berechnungen/ergebnis.py::falte_zeitraum` ruft `eauto_effizienz_zeitraum` selbst) —
+der Client-Spiegel war ohne Laufzeit-Konsumenten und ist entfernt, der Wortgleichheits-Test mit ihm. Die
+Jahres-Seite der Regel prüfen jetzt die portierten Proben in `test_ergebnis_jahr_portiert.py`.
 """
 
 from __future__ import annotations
-
-import json
-import re
-from pathlib import Path
 
 import pytest
 
@@ -22,7 +21,7 @@ from backend.core.berechnungen import (
     eauto_effizienz_zeitraum,
 )
 
-#: ([[basis_kwh, km, quelle], …], erwartet_wert, erwartete_quelle) — wortgleich im TS-Test.
+#: ([[basis_kwh, km, quelle], …], erwartet_wert, erwartete_quelle).
 FIXTURES = [
     ([[300.0, 1500.0, "ladung"], [270.0, 1500.0, "gemessen"]], 19.0, "ladung"),
     ([[270.0, 1500.0, "gemessen"], [180.0, 1000.0, "gemessen"]], 18.0, "gemessen"),
@@ -31,9 +30,6 @@ FIXTURES = [
     ([[None, 0.0, "keine"]], None, "keine"),
     ([], None, "keine"),
 ]
-
-_FRONTEND = Path(__file__).resolve().parents[2] / "frontend/src/lib"
-FRONTEND_TEST = _FRONTEND / "emobEffizienz.test.ts"
 
 
 def _monat(basis, km, quelle) -> EffizienzWert:
@@ -63,18 +59,3 @@ def test_die_monatsregel_liefert_die_basis_die_der_zeitraum_summiert():
     assert (naeherung.basis_kwh, naeherung.km, naeherung.quelle) == (300.0, 1500.0, "ladung")
     ohne = eauto_effizienz_100km(0.0, 0.0, 500.0)
     assert (ohne.basis_kwh, ohne.km, ohne.quelle) == (None, 500.0, "keine")
-
-
-def test_die_fixtures_stehen_wortgleich_im_client_test():
-    """Der Beleg, dass „gespiegelt" nicht nur behauptet ist."""
-    assert FRONTEND_TEST.exists(), "Spiegel-Test fehlt"
-    ts = FRONTEND_TEST.read_text(encoding="utf-8")
-    block = re.search(r"const FIXTURES[^=]*=\s*(\[[\s\S]*?\n\])", ts)
-    assert block, "FIXTURES-Block im Client-Test nicht gefunden"
-    roh = re.sub(r"//[^\n]*", "", block.group(1))
-    roh = roh.replace("undefined", "null").replace("'", '"')
-    roh = re.sub(r",(\s*[\]\}])", r"\1", roh)
-    ts_fixtures = [(m, w, q) for m, w, q in json.loads(roh)]
-    assert ts_fixtures == [(m, w, q) for m, w, q in FIXTURES], (
-        "Die Fixtures beider Seiten sind auseinandergelaufen."
-    )

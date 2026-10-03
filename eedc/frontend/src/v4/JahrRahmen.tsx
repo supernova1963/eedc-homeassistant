@@ -21,7 +21,7 @@ export function JahrHeader({ jahr, laedtJahr, laufend, d, onReload, reloading }:
   onReload?: () => void
   reloading?: boolean
 }) {
-  // #360/E3 bewusst OHNE Monatskontext: `JahrAggregat` faltet zwölf Monate zu
+  // #360/E3 bewusst OHNE Monatskontext: die Jahresroute faltet zwölf Monate zu
   // EINER Badge-Liste. Ein Connector-Zeitraum je Quelle wäre hier entweder falsch
   // (welcher Monat?) oder eine Liste von zwölf — die Teilabdeckung gehört in die
   // Monats-Sicht, wo sie zu genau einem Wert gehört.

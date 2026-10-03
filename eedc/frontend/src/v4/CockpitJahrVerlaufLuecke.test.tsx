@@ -67,22 +67,35 @@ vi.mock('../api/monatsdaten', () => ({
   monatsdatenApi: { listAggregiert: (...a: [number, number?, { inklOhneZaehlerzeile?: boolean }?]) => listAggregiert(...a) },
 }))
 vi.mock('../api/aktuellerMonat', () => ({
-  aktuellerMonatApi: { getData: (_id: number, j: number, m: number) => Promise.resolve(monatsAntwort(j, m)) },
+  aktuellerMonatApi: { getData: vi.fn(() => Promise.reject(new Error('Cockpit → Jahr lädt keine Einzelmonate mehr'))) },
 }))
 const leereNachhaltigkeit: Nachhaltigkeit = {
   anlage_id: 1, co2_gesamt_kg: 0, co2_pv_kg: 0, co2_wp_kg: 0, co2_emob_kg: 0,
   aequivalent_baeume: 0, aequivalent_auto_km: 0, aequivalent_fluege_km: 0,
   autarkie_durchschnitt_prozent: 0, monatswerte: [],
 }
+/** Die Jahresroute: hier nur der Kopf (die Proben lesen Verlauf und Rail aus der Monatsreihe). */
+const jahrAntwort = (j: number) => {
+  const n = j === 2026 ? 8 : 12
+  return cockpitJahr(j, {
+    monate: Array.from({ length: n }, (_, i) => monatsAntwort(j, i + 1)),
+    kopf: {
+      anlage_name: 'Demo', pv_erzeugung_kwh: KWH[j] * n, einspeisung_kwh: (KWH[j] / 2) * n, netzbezug_kwh: 50 * n,
+      eigenverbrauch_kwh: (KWH[j] / 2) * n, direktverbrauch_kwh: (KWH[j] / 4) * n,
+      gesamtverbrauch_kwh: (KWH[j] / 2 + 50) * n, autarkie_prozent: 75, eigenverbrauch_quote_prozent: 50,
+    },
+  })
+}
 vi.mock('../api/cockpit', () => ({
-  // B4 (05.09.2026): das Jahr ruft zusätzlich die Jahresroute (WP-Kennzahlen aus dem
-  // Layer); ohne Antwort bleiben die Kennzahlen weg — diese Proben messen Mengen.
-  cockpitApi: { getNachhaltigkeit: vi.fn(() => Promise.resolve(leereNachhaltigkeit)), getUebersicht: vi.fn(() => Promise.resolve(null)) },
+  cockpitApi: {
+    getNachhaltigkeit: vi.fn(() => Promise.resolve(leereNachhaltigkeit)),
+    getJahr: vi.fn((_id: number, j: number) => Promise.resolve(jahrAntwort(j))),
+  },
 }))
 
 import CockpitJahrV4 from './CockpitJahrV4'
 import { renderMitProvidern, stubMatchMedia } from '../test/render'
-import { aktuellerMonat, monatsZeile } from '../test/factories'
+import { aktuellerMonat, cockpitJahr, monatsZeile } from '../test/factories'
 
 function renderView() {
   return renderMitProvidern(<CockpitJahrV4 anlageId={1} />)

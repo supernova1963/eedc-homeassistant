@@ -49,7 +49,7 @@ class InvestitionFinancialDetail(BaseModel):
     #: (A6: die Kachel nennt „Betriebskosten/Jahr ÷ 12", der Jahreswert stand
     #: bis 2026-09-13 auf keiner Fläche). Quelle ist dieselbe wie oben —
     #: `Investition.betriebskosten_jahr`; der Client teilt NICHT selbst.
-    betriebskosten_jahr_euro: float = 0.0
+    betriebskosten_jahr_euro: Optional[float] = 0.0  # im Jahr `None`: ein Jahresbetrag je Monat ergibt keine Jahres-Σ
     erloes_euro: Optional[float] = None      # z.B. BKW-Einspeisung
     #: Herleitung der Erlös-Zeile. Sie ist NICHT für alle Typen dieselbe: beim
     #: BKW rechnet eedc `Einspeisung × Vergütung`, bei einem sonstigen Erzeuger
@@ -105,6 +105,29 @@ class SonstigesGeraet(BaseModel):
     bezug_netz_kwh: Optional[float] = None
 
 
+class ErgebnisPostenWert(BaseModel):
+    """Ein Summand der Ergebnis-Herleitung — Betrag MIT Vorzeichen, Antwortfeld als Quelle."""
+    name: str
+    betrag_euro: Optional[float] = None
+    feld: str
+    #: +1 Ertrag, −1 Aufwand (ein Aufwand von 0,00 € bleibt ein Aufwand).
+    vorzeichen: int = 1
+
+
+class ErgebnisStufe(BaseModel):
+    """Eine Stufe der Ergebnis-Leiter (`core/berechnungen/ergebnis.py`) — Formel, eingesetzte Werte, Ergebnis."""
+    formel: str
+    eingesetzte_werte: list[ErgebnisPostenWert] = []
+    ergebnis_euro: Optional[float] = None
+
+
+class ErgebnisHerleitung(BaseModel):
+    """Herleitung aller drei Stufen aus derselben Rechnung wie der Wert (Style-Guide A6, N-600)."""
+    netto_ertrag: ErgebnisStufe
+    vor_betriebskosten: ErgebnisStufe
+    ergebnis: ErgebnisStufe
+
+
 class AktuellerMonatResponse(BaseModel):
     """Aggregierte Übersicht des aktuellen Monats."""
     anlage_id: int
@@ -143,6 +166,16 @@ class AktuellerMonatResponse(BaseModel):
     # Quoten (%)
     autarkie_prozent: Optional[float] = None
     eigenverbrauch_quote_prozent: Optional[float] = None
+    #: Nur im Jahr gefüllt (R-Q, N-584): Zähler, Nenner und Fenster der paarweise gebildeten Quoten.
+    autarkie_zaehler_kwh: Optional[float] = None
+    autarkie_nenner_kwh: Optional[float] = None
+    autarkie_fenster: Optional[str] = None
+    eigenverbrauch_quote_zaehler_kwh: Optional[float] = None
+    eigenverbrauch_quote_nenner_kwh: Optional[float] = None
+    eigenverbrauch_quote_fenster: Optional[str] = None
+    speicher_auslastung_zaehler_kwh: Optional[float] = None
+    speicher_auslastung_nenner_kwh: Optional[float] = None
+    speicher_auslastung_fenster: Optional[str] = None
     # Spezifischer Ertrag kWh/kWp — gleiche Basis wie der Community-Vergleich
     # (anlage.leistung_kwp), damit die Abweichung zum Community-Median stimmt.
     spez_ertrag: Optional[float] = None
@@ -412,8 +445,7 @@ class AktuellerMonatResponse(BaseModel):
     emob_ersparnis_berechnung: Optional[str] = None
     # Sonstige Positionen aggregiert (z.B. AG-Vergütung Dienstwagen, THG-Quote,
     # Reparaturen). Detail-Zeilen pro Investition stehen in
-    # investitionen_financials. Frontend addiert sonstige_netto auf
-    # nettoNachAllem; gesamtnettoertrag enthält sie bewusst NICHT (Backward-Compat).
+    # investitionen_financials. Seit 03.10.2026 Posten der Ergebnis-Leiter (Stufe 1, `netto_ertrag_euro`).
     sonstige_ertraege_euro: float = 0.0
     sonstige_ausgaben_euro: float = 0.0
     sonstige_netto_euro: float = 0.0
@@ -422,7 +454,28 @@ class AktuellerMonatResponse(BaseModel):
     # sonstige_*-Totals enthalten (kein zweiter Posten, R15-5-Muster).
     anlage_sonstige_ertraege_euro: float = 0.0
     anlage_sonstige_ausgaben_euro: float = 0.0
-    gesamtnettoertrag_euro: Optional[float] = None  # Erlöse + Einsparungen − Kosten
+    # ── Ergebnis-Leiter (Paket „Ergebnisgrößen", 03.10.2026; Layer `core/berechnungen/ergebnis.py`) ──
+    #: `netto_ertrag_euro` ist seit 03.10.2026 die GLOSSAR-Definition (Stufe 1): + BKW-Rest-Ersparnis + Erlös eigener
+    #: Satz + Sonstige Positionen − USt-Anteil auf den Eigenverbrauch (N-601). Das frühere Feld `gesamtnettoertrag_euro`
+    #: (Einspeise + EV + WP + E-Mob − Stromrechnung, ohne Sonstiges) ist entfallen, als kein Leser mehr zugriff (G4);
+    #: sein Nachfolger mit vollständigen Posten ist `ergebnis_vor_betriebskosten_euro`.
+    #: USt-Anteil des Monats: EV × Satz des Jahres (`services/ust_satz.py`). `None` ohne Regelbesteuerung.
+    ust_eigenverbrauch_euro: Optional[float] = None
+    #: Satz und Grundlage als Satz (z. B. „… ct je kWh Eigenverbrauch (Grundlage Jan–Sep 2026)").
+    ust_herleitung: Optional[str] = None
+    #: BKW-Rest-Ersparnis (ADR-002/P9): nur in BKW-Monaten OHNE erfasste Erzeugung, sonst steckt sie in der EV-Ersparnis.
+    bkw_ersparnis_euro: Optional[float] = None
+    #: Eingesetzte Werte dazu („40,0 kWh × 30,00 ct/kWh") für die T-Konto-Zeile (A6); im Jahr ``None`` (Σ).
+    bkw_ersparnis_berechnung: Optional[str] = None
+    #: Gepflegter Erlös von Erzeugern mit eigenem Vergütungssatz (Konzept §9 Weg 2).
+    erzeuger_erloes_euro: Optional[float] = None
+    #: Stufe 2 — Netto-Ertrag + WP- + E-Mob-Ersparnis − Stromrechnung. Im UI ohne eigenen Namen (nur Zwischenzeile).
+    ergebnis_vor_betriebskosten_euro: Optional[float] = None
+    #: Stufe 3 — das Monats-/Jahresergebnis (Kachel, T-Konto-Summe, PDF-Zeile).
+    ergebnis_euro: Optional[float] = None
+    ergebnis_herleitung: Optional[ErgebnisHerleitung] = None
+    #: Posten, die fehlen (Pflicht ⇒ Stufe `None`; optional ⇒ als 0 gerechnet, hier genannt) — ADR-002/P4.
+    fehlende_posten: list[str] = []
 
     # Tarif-Info
     netzbezug_preis_cent: Optional[float] = None      # Verwendeter Tarif
@@ -490,6 +543,10 @@ class AktuellerMonatResponse(BaseModel):
     # Monatsersten das 28- bis 31-Fache (gemessen: 1388,0 statt 1387,9 am 4.).
     # Im abgeschlossenen Monat ist der Wert identisch mit `soll_pv_kwh`.
     soll_pv_kwh_monat: Optional[float] = None
+    #: SOLL-Erfüllung aus dem Layer (`soll_erfuellung`, N-356) — Browser und PDF lesen nur noch.
+    soll_erfuellung_prozent: Optional[float] = None
+    soll_erfuellung_monat_prozent: Optional[float] = None
+    soll_fenster_text: Optional[str] = None
 
     # Grundlast (Nacht-Sockel; R12-1 ersetzt PVGIS-SOLL/IST). `grundlast_kwh` ist
     # additiv → Cockpit/Jahr summiert die Monate (analog soll_pv_kwh).
@@ -497,7 +554,7 @@ class AktuellerMonatResponse(BaseModel):
     grundlast_kwh: Optional[float] = None             # geschätzte Grundlast-Energie (kW × 24 × Tage)
     grundlast_anteil_prozent: Optional[float] = None  # Anteil am Gesamtverbrauch
 
-    # Betriebskosten (anteilig, Σ betriebskosten_jahr / 12 aller aktiven Investitionen)
+    # Betriebskosten (anteilig, Σ betriebskosten_jahr / 12 der im Monat aktiven Investitionen — N-602)
     betriebskosten_anteilig_euro: Optional[float] = None
     #: Die beiden Summanden der Zeile darüber (A6). Die T-Konto-Zeile
     #: „Betriebskosten (anteilig)" erscheint GENAU DANN, wenn es keine

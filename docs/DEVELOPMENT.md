@@ -574,7 +574,7 @@ eedc-homeassistant/                  ← Source of Truth (alle Änderungen hier)
             │   ├── TagStepper.tsx · TagLeerGrund.tsx · TagesverlaufChart.tsx
             │   ├── MonatRahmen.tsx · MonatBilanz.tsx · MonatsRail.tsx · MonatStepper.tsx
             │   ├── MonatAuswertungBloecke.tsx · KomponentenMonatsTabelle.tsx
-            │   ├── JahrRahmen.tsx · JahrBilanz.tsx · JahrAggregat.tsx · JahresRail.tsx
+            │   ├── JahrRahmen.tsx · JahrBilanz.tsx · JahresRail.tsx
             │   ├── JahrStepper.tsx · JahrVerlaufChart.tsx · JahrCo2Chart.tsx
             │   ├── JahrSpeicherTabelle.tsx · SpeicherVerlaufIST.tsx
             │   ├── KomponentenV4.tsx # Was? — je Gerätetyp Status → Verlauf → Vergleich → ROI

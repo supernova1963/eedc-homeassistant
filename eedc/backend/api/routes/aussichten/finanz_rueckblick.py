@@ -25,11 +25,7 @@ from backend.core.berechnungen import (
 )
 from backend.services.finanz_zeilen import baue_finanz_zeile
 from backend.services.monats_fakten import finanz_zeile_eingabe
-from backend.core.berechnungen.ust_eigenverbrauch import (
-    UstJahresanteil,
-    bemessungsgrundlage_aus_investitionen,
-    ust_eigenverbrauch_fuer_anlage,
-)
+from backend.services.ust_satz import ust_eigenverbrauch_zeitraum
 from backend.core.berechnungen.waermepumpe_kennzahl import heizwaerme_kwh, waerme_gesamt_kwh
 from backend.core.field_definitions import get_wp_warmwasser_kwh
 from backend.services.eauto_wirtschaftlichkeit import (
@@ -447,29 +443,12 @@ def bisherige_ertraege_summe(
     # nur bei gesetztem Filter. `sum(pv_pro_monat.values())` stand als
     # „Jahres-Erzeugung" gegen eine Ein-Jahres-AfA. N-129: Bemessungsgrundlage
     # über den Layer-SoT (Mehrkosten) statt der Vollkosten.
-    _pv_je_jahr: dict[int, float] = defaultdict(float)
-    for (_j, _m), _pv in pv_pro_monat.items():
-        _pv_je_jahr[_j] += _pv
-    # Bauschritt 5: als eigene Größe, weil die Zerlegung sie braucht — die USt
-    # hängt am Eigenverbrauch und damit an der ERZEUGUNGS-Seite, sie muss also
-    # denselben Weg gehen wie Einspeise-Erlös und EV-Ersparnis. Vorher stand
-    # hier ein direktes `-=`; der Betrag war danach nicht mehr greifbar.
-    bisherige_ust_eigenverbrauch = ust_eigenverbrauch_fuer_anlage(
-        anlage,
-        jahresanteile=[
-            UstJahresanteil(
-                jahr=_j,
-                eigenverbrauch_kwh=berechne_finanz_aggregat(
-                    finanz_zeilen_je_jahr[_j]
-                ).eigenverbrauch_kwh,
-                pv_kwh=_pv_je_jahr.get(_j, 0.0),
-                monate=len(finanz_zeilen_je_jahr[_j]),
-            )
-            for _j in sorted(finanz_zeilen_je_jahr)
-        ],
-        bemessungsgrundlage_euro=bemessungsgrundlage_aus_investitionen(alle_investitionen),
-        betriebskosten_jahr_euro=betriebskosten_ges,
-    )
+    # G1 (03.10.2026): der Satz aus dem EINEN Eingang `services/ust_satz.py` — je Kalenderjahr die im Jahr aktiven
+    # Investitionen für Bemessung UND Betriebskosten (bis dahin: alle für die Bemessung, die heute aktiven für die
+    # Betriebskosten), Grundgesamtheit = abgeschlossene Monate mit aktivem Erzeuger, Σ der Monats-Eigenverbräuche.
+    # Bauschritt 5: als eigene Größe, weil die Zerlegung sie braucht — die USt hängt am Eigenverbrauch und damit an
+    # der ERZEUGUNGS-Seite, sie geht denselben Weg wie Einspeise-Erlös und EV-Ersparnis.
+    bisherige_ust_eigenverbrauch = ust_eigenverbrauch_zeitraum(anlage, alle_investitionen, fakten)
     bisherige_ertraege -= bisherige_ust_eigenverbrauch
     _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
     return {k: _loc[k] for k in ("_finanz", "betriebskosten_hist_je_inv", "bisherige_bkw_ersparnis", "bisherige_dienstlich_ladekosten", "bisherige_ertraege", "bisherige_sonstige_ausgaben", "bisherige_sonstige_ertraege", "bisherige_ust_eigenverbrauch",) if k in _loc}

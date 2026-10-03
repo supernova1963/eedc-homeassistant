@@ -5,7 +5,7 @@
  */
 
 import { api } from './client'
-import type { WpGeraetZeile, WpMoeglichZeile } from './aktuellerMonat'
+import type { AktuellerMonatResponse, WpGeraetZeile, WpMoeglichZeile } from './aktuellerMonat'
 
 // =============================================================================
 // Types
@@ -43,7 +43,7 @@ export interface CockpitUebersicht {
   hat_waermepumpe: boolean
   /** B4 (05.09.2026, C-1): der ganze Kennzahl-Satz der Wärmepumpe für Cockpit → Jahr,
    *  aus dem Layer (SOLL §3.3: im Jahr NEU gerechnet, nie gemittelt — und nie im Client).
-   *  `baueJahrAlsMonat` liest ihn; bis B4 fielen 16 WP-Felder im Client-Aggregat weg. */
+   *  Die Jahresroute reicht ihn durch; bis B4 fielen 16 WP-Felder im (bis 03.10.2026) Client-Aggregat weg. */
   wp_cop_grund?: string | null
   wp_cop_hinweis?: string | null
   wp_jaz_zaehler_kwh?: number | null
@@ -454,6 +454,49 @@ export interface PrognoseVergleich {
 }
 
 // =============================================================================
+// Cockpit → Jahr (Jahresroute, 03.10.2026)
+// =============================================================================
+
+/** Σ der Monatsreihe EINES Jahres über die Vergleichs-Grundgesamtheit (Autarkie paarweise, Backend-Layer). */
+export interface JahrVergleich {
+  jahr: number
+  pv: number | null
+  ev: number | null
+  direkt: number | null
+  einsp: number | null
+  netz: number | null
+  gesamt: number | null
+  autarkie: number | null
+  autarkie_zaehler?: number | null
+  autarkie_nenner?: number | null
+  /** Die Monate, die eingegangen sind; leer ⇒ keine Überschneidung, kein Vergleich. */
+  monate: number[]
+}
+
+/** Ø über die übrigen Jahre, die die Grundgesamtheit GANZ abdecken. */
+export interface JahrVergleichMittel extends JahrVergleich {
+  count: number
+}
+
+/**
+ * Antwort der Jahresroute `GET /cockpit/jahr/{id}?jahr=` — die Monatsantworten UND ihre Faltung im Backend-Layer
+ * (`core/berechnungen/ergebnis.py::falte_zeitraum`). Bis 03.10.2026 faltete der Browser (`v4/JahrAggregat.tsx`).
+ */
+export interface CockpitJahr {
+  jahr: number
+  /** Die geladenen Monatsantworten (nur Monate mit gemessenen Mengen), aufsteigend. */
+  monate: AktuellerMonatResponse[]
+  /** „Das Jahr bis heute" — alle Monate, mit den WP-Kennzahlen der Übersicht. */
+  kopf: AktuellerMonatResponse
+  /** Nur die abgeschlossenen Monate; `null` ⇒ dieselben Monate wie `kopf`. */
+  vergleich: AktuellerMonatResponse | null
+  monate_nr: number[]
+  vergleichs_monate: number[]
+  vorjahr: JahrVergleich | null
+  oe_jahr: JahrVergleichMittel | null
+}
+
+// =============================================================================
 // API Functions
 // =============================================================================
 
@@ -464,6 +507,13 @@ export const cockpitApi = {
   async getUebersicht(anlageId: number, jahr?: number): Promise<CockpitUebersicht> {
     const params = jahr ? `?jahr=${jahr}` : ''
     return api.get<CockpitUebersicht>(`/cockpit/uebersicht/${anlageId}${params}`)
+  },
+
+  /**
+   * Cockpit → Jahr: Monatsantworten + Jahres-Faltung aus dem Backend (ein Abruf statt zwölf).
+   */
+  async getJahr(anlageId: number, jahr: number): Promise<CockpitJahr> {
+    return api.get<CockpitJahr>(`/cockpit/jahr/${anlageId}?jahr=${jahr}`)
   },
 
   /**

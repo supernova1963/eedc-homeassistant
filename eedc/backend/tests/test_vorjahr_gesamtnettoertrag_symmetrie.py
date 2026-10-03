@@ -1,6 +1,12 @@
 """DI-5 (= G20-3) — Kennzahlen-Drift-Inventur: der Vorjahres-Vergleichspfad
-bildet `gesamtnettoertrag_euro` mit DERSELBEN Zusammensetzung wie der aktuelle
-Monat (inkl. WP- und E-Mob-Ersparnis).
+bildet sein Ergebnis mit DERSELBEN Zusammensetzung wie der aktuelle Monat (inkl.
+WP- und E-Mob-Ersparnis).
+
+⚑ Seit 03.10.2026 (Paket „Ergebnisgrößen") über die Ergebnis-Leiter: das Feld
+`gesamtnettoertrag_euro` ist entfallen; geprüft wird seine Nachfolge-Stufe
+`ergebnis_vor_betriebskosten_euro` (Netto-Ertrag + WP + E-Mob − Stromrechnung) —
+dieselbe Symmetrie, jetzt mit vollständigen Posten. Schwesterdatei:
+test_ergebnis_monat_probe.py (P5).
 
 Vorher rechnete `_load_vorjahr` `einspeise + ev − netzbezug` OHNE WP/E-Mob,
 während der aktuelle Monat `einspeise + ev + wp + emob − netzbezug` bildet
@@ -11,7 +17,7 @@ sobald WP oder E-Auto existieren.
 Symmetrie-Test bei KONSTANTEM Tarif (damit die orthogonale, vorbestehende
 Tarif-Stichtags-Frage — der aktuelle Monat nutzt heute-Tarife, das Vorjahr
 historische — nicht mit hineinspielt): der Vorjahres-Block für Jahr J muss
-denselben `gesamtnettoertrag` liefern wie der aktuelle-Monat-Pfad für J−1.
+dasselbe Ergebnis liefern wie der aktuelle-Monat-Pfad für J−1.
 """
 
 from __future__ import annotations
@@ -82,16 +88,17 @@ async def test_vorjahr_gesamtnetto_symmetrisch_zum_aktuellen_monat(db):
     assert vj.get("emob_ersparnis_euro") is not None
 
     # Bei konstantem Tarif == aktueller-Monat-Pfad für 2024
-    assert vj.get("gesamtnettoertrag_euro") == pytest.approx(
-        r2024.gesamtnettoertrag_euro, abs=0.02
+    assert vj.get("ergebnis_vor_betriebskosten_euro") == pytest.approx(
+        r2024.ergebnis_vor_betriebskosten_euro, abs=0.02
     )
+    assert vj.get("ergebnis_euro") == pytest.approx(r2024.ergebnis_euro, abs=0.02)
     # ... und die WP-/eMob-Komponenten decken sich
     assert vj.get("wp_ersparnis_euro") == pytest.approx(r2024.wp_ersparnis_euro, abs=0.02)
     assert vj.get("emob_ersparnis_euro") == pytest.approx(r2024.emob_ersparnis_euro, abs=0.02)
 
 
 async def test_vorjahr_gesamtnetto_formel_ist_summe_der_komponenten(db):
-    """gesamtnettoertrag == einspeise + ev + wp + emob − netzbezug (Vorjahr)."""
+    """Stufe 2 == einspeise + ev + wp + emob − netzbezug (Vorjahr; die Fixture hat weder BKW, Sonstiges noch USt)."""
     from backend.api.routes.aktueller_monat import get_aktueller_monat
 
     anlage_id = await _seed(db)
@@ -105,7 +112,7 @@ async def test_vorjahr_gesamtnetto_formel_ist_summe_der_komponenten(db):
         - (vj.get("netzbezug_kosten_euro") or 0),
         2,
     )
-    assert vj.get("gesamtnettoertrag_euro") == pytest.approx(erwartet, abs=0.02)
+    assert vj.get("ergebnis_vor_betriebskosten_euro") == pytest.approx(erwartet, abs=0.02)
 
 
 async def test_vorjahr_wp_respektiert_anschaffungsdatum(db):

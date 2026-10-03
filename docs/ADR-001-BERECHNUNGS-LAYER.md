@@ -133,6 +133,28 @@ Wächter der Bauart „diese Formel darf nur in Datei X stehen" (`test_inline_ga
 3. **Zeilenweise Regex nur mit Gegenprobe.** Eine Regex auf `== "oel"` hätte drei von vier Duplikaten durchgelassen, weil sie `WIRKUNGSGRAD` erst in der Folgezeile nannten. Wer einen Muster-Wächter schreibt, prüft ihn gegen die realen Altfälle, bevor er ihn für Deckung hält.
 4. **Restlücken benennen.** Der η-Wächter greift über die Konstanten; eine hartkodierte `0.85` fängt er nicht — das steht so in seinem Docstring, statt als Deckung durchzugehen.
 
+## Eine Aggregation im Client ist ein zweiter Code-Pfad — D3 zurückgenommen (Nachtrag 2026-10-03)
+
+**D3 (24.06.2026, Doc-Kopf von `v4/JahrAggregat.tsx`):** „Konvergenz statt zweiter Code-Pfad — ein Jahr ist die Summe
+seiner zwölf Monate, deshalb kein neuer Endpoint; der Browser summiert die kanonischen Monatsantworten." Die Begründung
+war richtig, der **Ort** nicht: Die Feld-für-Feld-Faltung im Browser **war** der zweite Code-Pfad — 690 Zeilen
+Aggregation außerhalb des Layers und außerhalb jedes Backend-Wächters. Sie bildete Quoten über verschiedene
+Monatsmengen (Σ Eigenverbrauch über neun Monate ÷ Σ Gesamtverbrauch über acht: **198 % Autarkie**, #421, N-584) und das
+Jahresergebnis aus einem Sammelfeld, dessen Stromrechnung im Tooltip unsichtbar war (#398, N-600).
+
+**Seit dem Paket „Ergebnisgrößen Monat/Jahr in den Layer"** rechnet das Jahr das Backend: `GET /api/cockpit/jahr/{id}?jahr=`
+lädt dieselben Monatsantworten (sequenziell, in derselben Sitzung, mit einem Vorlade-Kontext) und faltet sie im Layer
+(`core/berechnungen/ergebnis.py::falte_zeitraum` — Quoten **paarweise** über die Monate, die beide Größen tragen;
+Ergebnisgrößen über die Ergebnis-Leiter mit **derselben None-Regel** wie Monat und Vorjahr). Die Monatsantworten gehen
+mit, weil Wärme-Verlauf und Speicher-Monatstabelle sie roh lesen. Gemessen beim Bau (vier GM-Kopien, Jahr gegen den
+aufgezeichneten Client-Fold): **bitgleich außer** der Erwartungsliste (Netto-Ertrag nach der Leiter, Betriebskosten nur
+aktiver Komponenten, Ø-Jahr-Autarkie als Quote) — und schneller als der 6er-Fan-out des Browsers.
+
+**Die Regel dahinter, ohne Ausnahme für „ist doch nur eine Summe":** Wer im Client Antwortfelder addiert, teilt oder
+mittelt, um eine *Kennzahl* zu bilden, betreibt einen zweiten Code-Pfad. Darstellung (Balkenbreite, Δ-Anzeige,
+Kontenform derselben Posten) ist keine Kennzahl. Wächter: `check:ergebnis-roh` (Client) und
+`test_ergebnis_leiter_nur_im_layer.py` (Backend), beide mit klassifizierten Ausnahmen.
+
 ## Migration bestehender Konsumenten
 
 Step-by-step, opportunistisch beim nächsten Touch des betroffenen Codes. Übersicht der bekannten offenen Stellen: siehe Memory `project_berechnungs_layer_offen.md` und `INLINE_PATTERN_GRANDFATHERED` in `tests/test_berechnungs_layer_konformitaet.py`.

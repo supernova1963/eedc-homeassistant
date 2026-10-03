@@ -41,6 +41,8 @@ from backend.core.berechnungen import (
 )
 from backend.core.monatswert_grund import monatswert_grund, monatswert_grund_text
 from backend.services.monats_fakten import MonatsFakt, lade_monats_fakten
+from backend.core.berechnungen.ergebnis import soll_erfuellung
+from backend.api.routes.aktueller_monat.kontext import MonatsKontext, lade_monats_kontext
 from backend.api.routes.aktueller_monat.schemas import (  # noqa: F401 — Re-Export fuer Tests und Aufrufer
     AktuellerMonatResponse,
     DatenquelleInfo,
@@ -80,6 +82,7 @@ __all__ = [
     '_zeittarif_preis',
     'datetime',
     'get_aktueller_monat',
+    '_berechne_monat',
     'router',
 ]
 
@@ -100,6 +103,7 @@ from backend.api.routes.aktueller_monat.aggregation import (  # Vorlage 2
 )
 from backend.api.routes.aktueller_monat.finanzen import (  # Vorlage 2
     betriebskosten_und_sonstige_positionen,
+    ergebnis_des_monats,
     emob_aggregat_und_kennzahlen,
     finanzen_des_monats,
     komponenten_ersparnis,
@@ -611,6 +615,23 @@ async def get_aktueller_monat(
     monat: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
 ):
+    """Übersicht eines Monats — die Rechnung steht in `_berechne_monat` (Docstring dort).
+
+    Die Route bleibt eine dünne Hülle mit unveränderter Signatur: ein zusätzlicher Parameter hier würde von FastAPI
+    als Query-/Body-Parameter ausgelegt (Gegenprüfung G3). Die Jahresroute ruft deshalb die Innenfunktion mit einem
+    Vorlade-Kontext (`kontext.py`), damit die zwölf Monate die Fakten J−1…J nur EINMAL laden.
+    """
+    return await _berechne_monat(anlage_id, jahr, monat, db)
+
+
+async def _berechne_monat(
+    anlage_id: int,
+    jahr: Optional[int],
+    monat: Optional[int],
+    db: AsyncSession,
+    *,
+    kontext: Optional[MonatsKontext] = None,
+) -> AktuellerMonatResponse:
     """
     Übersicht eines Monats mit Daten aus allen verfügbaren Quellen.
 
@@ -683,10 +704,13 @@ async def get_aktueller_monat(
     # Route mischt vier Quellen, von denen die Schicht ausdrücklich nur EINE
     # kennt (die DB — Live/Connector sind Nicht-Ziel, KONZEPT-MONATS-FAKTEN §4).
     # Also kommt der DB-Zweig aus den Fakten, die Präzedenz bleibt hier.
-    monats_fakten = await lade_monats_fakten(
-        db, anlage_id, von=(jahr, monat), bis=(jahr, monat)
-    )
-    monats_fakt = monats_fakten[0] if monats_fakten else None
+    #
+    # Paket „Ergebnisgrößen" (03.10.2026, B2): EIN Fakten-Bereich `(jahr−1, 1)…(jahr, 12)` statt des einen Monats —
+    # der USt-Anteil des Monats braucht den Satz des Jahres (E1/G1), der Vorjahresmonat den Satz SEINES Jahres (G5).
+    # Die Jahresroute reicht den Kontext an alle zwölf Monate durch (`kontext.py`).
+    if kontext is None or kontext.jahr != jahr:
+        kontext = await lade_monats_kontext(db, anlage, jahr)
+    monats_fakt = kontext.fakten.get((jahr, monat))
 
     saved = _collect_saved_data(monats_fakt)
     connector = await _collect_connector_data(anlage, jahr, monat)
@@ -816,7 +840,6 @@ async def get_aktueller_monat(
     if "grundgebuehr" in _out: grundgebuehr = _out["grundgebuehr"]
     if "monats_benzinpreis" in _out: monats_benzinpreis = _out["monats_benzinpreis"]
     if "monats_gaspreis" in _out: monats_gaspreis = _out["monats_gaspreis"]
-    if "netto_ertrag" in _out: netto_ertrag = _out["netto_ertrag"]
     if "netzbezug_arbeitspreis_kosten" in _out: netzbezug_arbeitspreis_kosten = _out["netzbezug_arbeitspreis_kosten"]
     if "netzbezug_durchschnittspreis" in _out: netzbezug_durchschnittspreis = _out["netzbezug_durchschnittspreis"]
     if "netzbezug_kosten" in _out: netzbezug_kosten = _out["netzbezug_kosten"]
@@ -847,13 +870,12 @@ async def get_aktueller_monat(
     if "wp_waerme_abgeleitet_kwh" in _out: wp_waerme_abgeleitet_kwh = _out["wp_waerme_abgeleitet_kwh"]
     if "wp_waerme_herkunft" in _out: wp_waerme_herkunft = _out["wp_waerme_herkunft"]
     # ── betriebskosten_und_sonstige_positionen (Vorlage 2: Abschnitt in finanzen.py, Schnittstelle 2 ein / 9 aus) ──
-    _out = betriebskosten_und_sonstige_positionen(investitionen=investitionen, monats_fakt=monats_fakt)
+    _out = betriebskosten_und_sonstige_positionen(investitionen=investitionen, monats_fakt=monats_fakt, jahr=jahr, monat=monat)
     if "anlage_sonstige_ausgaben" in _out: anlage_sonstige_ausgaben = _out["anlage_sonstige_ausgaben"]
     if "anlage_sonstige_ertraege" in _out: anlage_sonstige_ertraege = _out["anlage_sonstige_ertraege"]
     if "betriebskosten_anteilig" in _out: betriebskosten_anteilig = _out["betriebskosten_anteilig"]
     if "betriebskosten_anteilig_anzahl" in _out: betriebskosten_anteilig_anzahl = _out["betriebskosten_anteilig_anzahl"]
     if "betriebskosten_anteilig_jahr" in _out: betriebskosten_anteilig_jahr = _out["betriebskosten_anteilig_jahr"]
-    if "gesamtnettoertrag" in _out: gesamtnettoertrag = _out["gesamtnettoertrag"]
     if "sonstige_ausgaben_total" in _out: sonstige_ausgaben_total = _out["sonstige_ausgaben_total"]
     if "sonstige_ertraege_total" in _out: sonstige_ertraege_total = _out["sonstige_ertraege_total"]
     if "sonstige_netto_total" in _out: sonstige_netto_total = _out["sonstige_netto_total"]
@@ -921,7 +943,11 @@ async def get_aktueller_monat(
     if "wp_starts_max_tag" in _out: wp_starts_max_tag = _out["wp_starts_max_tag"]
     if "wp_starts_summe_monat" in _out: wp_starts_summe_monat = _out["wp_starts_summe_monat"]
     # ── Vergleichsdaten ──
-    vorjahr = await _load_vorjahr(anlage_id, investitionen, jahr, monat, db)
+    vorjahr = await _load_vorjahr(
+        anlage_id, investitionen, jahr, monat, db,
+        fakt=kontext.fakten.get((jahr - 1, monat)), ust_satz=kontext.ust_satz_vj,
+        tarif_cache=kontext.tarif_cache,
+    )
     soll_pv = await _load_soll_pv(anlage_id, jahr, monat, db, fenster)
 
     # ── Grundlast (Nacht-Sockel, R12-1: ersetzt PVGIS-SOLL/IST in Cockpit/Monat
@@ -984,8 +1010,19 @@ async def get_aktueller_monat(
     if "emob_ladung_gesamt" in _out: emob_ladung_gesamt = _out["emob_ladung_gesamt"]
     emob_ersparnis_berechnung = _out.get("emob_ersparnis_berechnung")
     if "emob_ersparnis" in _out: emob_ersparnis = _out["emob_ersparnis"]
-    if "gesamtnettoertrag" in _out: gesamtnettoertrag = _out["gesamtnettoertrag"]
     if "spez_ertrag" in _out: spez_ertrag = _out["spez_ertrag"]
+    # ── Ergebnis-Leiter (Paket „Ergebnisgrößen", 03.10.2026): Netto-Ertrag, Ergebnis, Herleitung aus dem Layer ──
+    _erg = ergebnis_des_monats(
+        eigenverbrauch=eigenverbrauch, einspeise_erloes=einspeise_erloes, ev_ersparnis=ev_ersparnis,
+        monats_fakt=monats_fakt, netzbezug_preis_effektiv_cent=netzbezug_preis_effektiv_cent,
+        sonstige_netto=sonstige_netto_total, wp_ersparnis=wp_ersparnis, emob_ersparnis=emob_ersparnis,
+        netzbezug_kosten=netzbezug_kosten, betriebskosten=betriebskosten_anteilig, ust_satz=kontext.ust_satz,
+        hat_waermepumpe=hat_waermepumpe, hat_emobilitaet=hat_emobilitaet,
+    )
+    # SOLL-Erfüllung aus dem Layer (N-356) — aus genau den Werten, die die Antwort trägt.
+    _soll_pv_tage = fenster.tage if soll_pv.anteilig is not None else None
+    _soll_pv_tage_gesamt = fenster.tage_gesamt if soll_pv.anteilig is not None else None
+    _soll = soll_erfuellung(pv, soll_pv.anteilig, _soll_pv_tage, _soll_pv_tage_gesamt, soll_pv.monat)
     # ── Antwort ──
     return AktuellerMonatResponse(
         anlage_id=anlage.id,
@@ -1121,7 +1158,16 @@ async def get_aktueller_monat(
         netzbezug_kosten_euro=netzbezug_kosten,
         netzbezug_arbeitspreis_kosten_euro=netzbezug_arbeitspreis_kosten,
         ev_ersparnis_euro=ev_ersparnis,
-        netto_ertrag_euro=netto_ertrag,
+        netto_ertrag_euro=_erg["netto_ertrag"],
+        ust_eigenverbrauch_euro=_erg["ust_anteil"],
+        ust_herleitung=_erg["ust_herleitung"],
+        bkw_ersparnis_euro=_erg["bkw_ersparnis"],
+        bkw_ersparnis_berechnung=_erg["bkw_ersparnis_berechnung"],
+        erzeuger_erloes_euro=_erg["erzeuger_erloes"],
+        ergebnis_vor_betriebskosten_euro=_erg["ergebnis_vor_betriebskosten"],
+        ergebnis_euro=_erg["ergebnis"],
+        ergebnis_herleitung=_erg["ergebnis_herleitung"],
+        fehlende_posten=_erg["fehlende_posten"],
         wp_ersparnis_euro=wp_ersparnis,
         emob_ersparnis_euro=emob_ersparnis,
         emob_ersparnis_berechnung=emob_ersparnis_berechnung,
@@ -1130,7 +1176,6 @@ async def get_aktueller_monat(
         sonstige_netto_euro=sonstige_netto_total,
         anlage_sonstige_ertraege_euro=anlage_sonstige_ertraege,
         anlage_sonstige_ausgaben_euro=anlage_sonstige_ausgaben,
-        gesamtnettoertrag_euro=gesamtnettoertrag,
         betriebskosten_anteilig_euro=betriebskosten_anteilig,
         betriebskosten_anteilig_jahr_euro=betriebskosten_anteilig_jahr,
         betriebskosten_anteilig_anzahl=betriebskosten_anteilig_anzahl,
@@ -1150,9 +1195,12 @@ async def get_aktueller_monat(
         # Vergleiche
         vorjahr=vorjahr,
         soll_pv_kwh=soll_pv.anteilig,
-        soll_pv_tage=fenster.tage if soll_pv.anteilig is not None else None,
-        soll_pv_tage_gesamt=fenster.tage_gesamt if soll_pv.anteilig is not None else None,
+        soll_pv_tage=_soll_pv_tage,
+        soll_pv_tage_gesamt=_soll_pv_tage_gesamt,
         soll_pv_kwh_monat=soll_pv.monat,
+        soll_erfuellung_prozent=_soll.prozent,
+        soll_erfuellung_monat_prozent=_soll.monat_prozent,
+        soll_fenster_text=_soll.fenster_text,
         grundlast_kw=grundlast.grundlast_kw,
         grundlast_kwh=grundlast.grundlast_kwh,
         grundlast_anteil_prozent=grundlast.grundlast_anteil_prozent,

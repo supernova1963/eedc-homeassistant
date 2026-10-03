@@ -7,6 +7,8 @@ import { aktuellerMonat } from '../test/factories'
 
 const d = aktuellerMonat(2025, 7, {
   netto_ertrag_euro: 128, einspeise_erloes_euro: 15, ev_ersparnis_euro: 120, netzbezug_kosten_euro: 7,
+  // Das Monatsergebnis aus der Ergebnis-Leiter (Backend): 15 + 120 − 7 = 128.
+  ergebnis_euro: 128,
   autarkie_prozent: 61, eigenverbrauch_quote_prozent: 54, einspeisung_kwh: 189, netzbezug_kwh: 143,
 })
 
@@ -49,13 +51,15 @@ describe('finanzTeaserBlock', () => {
     expect(screen.getByText('Saldo (€)')).toBeInTheDocument()
   })
 
-  it('G20-4: Haushaltsperspektive — Ergebnis nach Stromrechnung = Saldo − Netzbezug', () => {
+  // Bis 03.10.2026 hieß die Zeile „Ergebnis nach Stromrechnung" und war eine eigene Differenz im Client. Seit E2
+  // (Ergebnisgrößen-Paket) heißt sie „Monatsergebnis" und LIEST `ergebnis_euro`; dieselbe Zahl (135 − 7 = 128).
+  it('G20-4: Haushaltsperspektive — die Zeile „Monatsergebnis" liest das Ergebnis der Leiter', () => {
     // PV-Anlage-Saldo 135 (15 + 120), Netzbezug-Kosten 7 → Ergebnis 128,00 €.
     const node = finanzTeaserBlock(d)!.render(false)
     if (!isValidElement(node)) throw new Error('render() ergab kein Element')
     render(node)
     expect(screen.getByText('Haushaltsperspektive')).toBeInTheDocument()
-    expect(screen.getByText('= Ergebnis nach Stromrechnung')).toBeInTheDocument()
+    expect(screen.getByText('= Monatsergebnis')).toBeInTheDocument()
     // Kopf-Kennzahl (Komponenten-Saldo) bleibt unverändert 135,00 €.
     expect(finanzTeaserBlock(d)!.summary).toMatch(/\+135,00 € Saldo/)
     // Zusatz-Zeile trägt das Haushaltsergebnis (135 − 7).

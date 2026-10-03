@@ -8,7 +8,6 @@ Ladekosten, die Investitions-KPIs (Mehrkosten N-352, Betriebskosten, Jahres-Ertr
 # Schluesselwort-Parameter und Rueckgabe-Dict; der Rechner orchestriert. Kein Verhaltenswechsel —
 # Gate ist `plans/skript-golden-master-ha-export.py` (alte gegen neue Antworten, bitgleich).
 
-from collections import defaultdict
 from backend.core.berechnungen import (
     DienstlicheLadungZeile,
     FinanzMonatsZeile,
@@ -31,11 +30,8 @@ from backend.core.berechnungen.investitions_jahresertrag import (
     jahresertrag_posten,
 )
 from backend.models.investition import ERTRAGSFELD_TYPEN
-from backend.core.berechnungen.ust_eigenverbrauch import (
-    UstJahresanteil,
-    bemessungsgrundlage_aus_investitionen,
-    ust_eigenverbrauch_fuer_anlage,
-)
+from backend.core.berechnungen.ergebnis import ErgebnisEingang, berechne_ergebnis
+from backend.services.ust_satz import ust_eigenverbrauch_zeitraum
 
 
 async def monatsfakten_und_energie(*, anlage, db, investitionen, monatsdaten):
@@ -215,7 +211,11 @@ async def finanz_aggregat(*, _preis_messung, _tarif_cache, anlage, db, fakten, s
 
     einspeise_erloes = 0
     ev_ersparnis = 0
-    netto_ertrag = sonstige_netto_gesamt
+    # Ohne Tarif gibt es keinen bewerteten Strom — dann tragen nur die Sonstigen Positionen (wie bisher: auch der
+    # Erzeuger-Erlös zählte in diesem Fall nicht). Der Netto-Ertrag selbst entsteht in `investitionen_und_ust` über
+    # die Ergebnis-Leiter (03.10.2026), sobald die USt feststeht.
+    bkw_ersparnis = 0.0
+    erzeuger_erloes = 0.0
     if strompreis:
         # #326: FinanzMonatsZeile über den gemeinsamen Builder (einzige erlaubte
         # Konstruktions-Stelle, Wächter) — er löst den Tarif PRO MONAT auf
@@ -239,12 +239,16 @@ async def finanz_aggregat(*, _preis_messung, _tarif_cache, anlage, db, fakten, s
         )
         einspeise_erloes = _finanz.einspeise_erloes_euro
         ev_ersparnis = _finanz.ev_ersparnis_euro
-        netto_ertrag = _finanz.netto_ertrag_euro
+        bkw_ersparnis = _finanz.bkw_ersparnis_euro
+        erzeuger_erloes = _finanz.erzeuger_erloes_euro
     _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
-    return {k: _loc[k] for k in ("einspeise_erloes", "ev_ersparnis", "netto_ertrag", "sonstige_ausgaben_gesamt", "sonstige_ertraege_gesamt", "sonstige_netto_gesamt",) if k in _loc}
+    return {k: _loc[k] for k in ("bkw_ersparnis", "einspeise_erloes", "erzeuger_erloes", "ev_ersparnis", "sonstige_ausgaben_gesamt", "sonstige_ertraege_gesamt", "sonstige_netto_gesamt",) if k in _loc}
 
 
-def investitionen_und_ust(*, anlage, fakten, investitionen, monatsdaten, netto_ertrag):
+def investitionen_und_ust(
+    *, anlage, fakten, investitionen, monatsdaten, alle_investitionen,
+    einspeise_erloes, ev_ersparnis, bkw_ersparnis, erzeuger_erloes, sonstige_netto_gesamt,
+):
     """Investitionssumme, relevante Kosten (Layer-SoT, N-352), Betriebskosten und Jahres-Ertrag der heute aktiven
     Investitionen (§8/2), USt auf den Eigenverbrauch je Kalenderjahr (N-129/N-130) — mindert den Netto-Ertrag.
 
@@ -302,61 +306,19 @@ def investitionen_und_ust(*, anlage, fakten, investitionen, monatsdaten, netto_e
     ]
     jahres_ertraege_ges = jahres_ersparnis_euro(_ertrag_posten)
 
-    # #326-Inventur Dimension 2: USt auf Eigenverbrauch bei Regelbesteuerung.
-    # Cockpit und Aussichten ziehen sie ab, der HA-Export bisher nicht — der
-    # Sensor `netto_ertrag_euro` stand damit um den USt-Betrag über der Kachel,
-    # auf die er sich bezieht. Vorprüfung im SoT-Helper.
-    #
-    # N-129 + N-130: Bemessungsgrundlage jetzt Mehrkosten statt Vollkosten, und
-    # gerechnet wird je Kalenderjahr. Der Export kennt keinen Jahres-Filter — er
-    # liefert IMMER den Gesamtzeitraum und war deshalb von der Zeitraum-Kollaps-
-    # Klasse durchgehend betroffen, nicht nur bei gesetztem Filter.
-    # Eingänge je Jahr wie die Perioden-Kennzahlen oben, inkl. derselben
-    # Legacy-Fallbacks (dort periodenweit, hier je Jahr geprüft).
-    monatsdaten_je_jahr: dict[int, list] = defaultdict(list)
-    for _md in monatsdaten:
-        monatsdaten_je_jahr[_md.jahr].append(_md)
-    fakten_je_jahr: dict[int, list] = defaultdict(list)
-    for _f in fakten:
-        fakten_je_jahr[_f.jahr].append(_f)
-
-    ust_jahresanteile: list[UstJahresanteil] = []
-    for _jahr in sorted(set(monatsdaten_je_jahr) | set(fakten_je_jahr)):
-        _f_jahr = fakten_je_jahr.get(_jahr, [])
-        _md_jahr = monatsdaten_je_jahr.get(_jahr, [])
-        _eins_jahr = sum(m.einspeisung_kwh or 0 for m in _md_jahr)
-        _pv_jahr = sum(f.erzeugung.pv_kwh for f in _f_jahr)
-        if _pv_jahr == 0:
-            _pv_jahr = _eins_jahr + sum(m.eigenverbrauch_kwh or 0 for m in _md_jahr)
-        _lad_jahr = sum(f.speicher.ladung_kwh for f in _f_jahr)
-        _entl_jahr = sum(f.speicher.entladung_kwh for f in _f_jahr)
-        if _lad_jahr == 0 and _entl_jahr == 0:
-            _lad_jahr = sum(m.batterie_ladung_kwh or 0 for m in _md_jahr)
-            _entl_jahr = sum(m.batterie_entladung_kwh or 0 for m in _md_jahr)
-        _kz_jahr = berechne_verbrauchs_kennzahlen(
-            pv_erzeugung_kwh=erzeugung_hinter_zaehler_kwh(
-                _pv_jahr, sum(f.sonstiges.erzeugung_kwh for f in _f_jahr)
-            ),
-            einspeisung_kwh=_eins_jahr,
-            netzbezug_kwh=sum(m.netzbezug_kwh or 0 for m in _md_jahr),
-            speicher_ladung_kwh=_lad_jahr,
-            speicher_entladung_kwh=_entl_jahr,
-            v2h_entladung_kwh=sum(f.emob.v2h_entladung_kwh for f in _f_jahr),
-            abgabe_dritte_kwh=sum(f.sonstiges.abgabe_kwh for f in _f_jahr),
-        )
-        ust_jahresanteile.append(UstJahresanteil(
-            jahr=_jahr,
-            eigenverbrauch_kwh=_kz_jahr.eigenverbrauch_kwh,
-            pv_kwh=_pv_jahr,
-            monate=max(len(_f_jahr), len(_md_jahr)),
-        ))
-    ust_eigenverbrauch = ust_eigenverbrauch_fuer_anlage(
-        anlage,
-        jahresanteile=ust_jahresanteile,
-        bemessungsgrundlage_euro=bemessungsgrundlage_aus_investitionen(investitionen),
-        betriebskosten_jahr_euro=betriebskosten_ges,
-    )
-    netto_ertrag -= ust_eigenverbrauch
+    # USt auf den Eigenverbrauch — der EINE Eingang `services/ust_satz.py` (G1/E9, 03.10.2026): je Kalenderjahr die IM
+    # JAHR aktiven Investitionen (deshalb `alle_investitionen` — `investitionen` ist hier `aktiv_jetzt()`-gefiltert),
+    # die abgeschlossenen Monate mit aktivem Erzeuger und die Σ der Monats-Eigenverbräuche. Bis dahin: heute aktive
+    # Investitionen, Perioden-EV und ein Monatsdaten-Rückfall je Jahr — eine dritte Lesart desselben Satzes.
+    ust_eigenverbrauch = ust_eigenverbrauch_zeitraum(anlage, alle_investitionen, fakten)
+    # Stufe 1 der Ergebnis-Leiter — dieselbe Funktion wie Übersicht, PDF und Cockpit → Monat/Jahr (Sensor
+    # `netto_ertrag_euro`). Die Herleitung geht als `berechnung`-Attribut mit (alle Posten, nicht nur drei).
+    _leiter = berechne_ergebnis(ErgebnisEingang(
+        einspeise_erloes=einspeise_erloes, ev_ersparnis=ev_ersparnis, bkw_rest_ersparnis=bkw_ersparnis,
+        erzeuger_erloes=erzeuger_erloes, sonstige_netto=sonstige_netto_gesamt, ust_anteil=ust_eigenverbrauch,
+    ))
+    netto_ertrag = _leiter.netto_ertrag
+    netto_herleitung = _leiter.herleitung["netto_ertrag"]
     _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
-    return {k: _loc[k] for k in ("betriebskosten_ges", "investition_gesamt", "jahres_ertraege_ges", "netto_ertrag", "relevante_kosten",) if k in _loc}
+    return {k: _loc[k] for k in ("betriebskosten_ges", "investition_gesamt", "jahres_ertraege_ges", "netto_ertrag", "netto_herleitung", "relevante_kosten",) if k in _loc}
 

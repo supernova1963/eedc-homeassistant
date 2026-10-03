@@ -9,7 +9,6 @@ Reine Datenschicht — keine HTTP-, keine Render-Aufrufe.
 """
 from __future__ import annotations
 
-from collections import defaultdict
 from calendar import monthrange
 from datetime import date, datetime
 from typing import Optional
@@ -23,7 +22,6 @@ from backend.core.berechnungen import (
     autarkie_prozent,
     berechne_finanz_aggregat,
     eigenverbrauchsquote_prozent,
-    einspeise_erloes_euro,
     relevante_kosten_aus_investitionen,
     spezifischer_ertrag_kwh_kwp,
     vollzyklen as berechne_vollzyklen,
@@ -37,10 +35,11 @@ from backend.core.calculations import (
     CO2_FAKTOR_STROM_KG_KWH,
     co2_wp_ersparnis_kg,
 )
-from backend.core.berechnungen.ust_eigenverbrauch import (
-    UstJahresanteil,
-    bemessungsgrundlage_aus_investitionen,
-    ust_eigenverbrauch_fuer_anlage,
+from backend.core.berechnungen.ergebnis import ErgebnisEingang, berechne_ergebnis, ust_anteil_euro
+from backend.services.ust_satz import (
+    grundgesamtheit as ust_grundgesamtheit,
+    ust_eigenverbrauch_zeitraum,
+    ust_satz_des_jahres,
 )
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
@@ -184,6 +183,11 @@ async def build_jahresbericht_context(
         bis=None if ist_gesamtzeitraum else (jahr, 12),
     )
     fakten_by_ym = {f.schluessel: f for f in fakten}
+    # USt auf den Eigenverbrauch — der EINE Eingang (`services/ust_satz.py`, G1, 03.10.2026): Satz je Kalenderjahr,
+    # angewandt auf die Monate der Grundgesamtheit (abgeschlossen, Erzeuger aktiv). So ist Σ der Monatszeilen der
+    # KPI-Betrag (E6a der Vorlage Ergebnisgrößen) — vorher fehlte die USt in den Zeilen ganz.
+    _ust_saetze = {_j: ust_satz_des_jahres(anlage, investitionen, fakten, _j) for _j in sorted({f.jahr for f in fakten})}
+    _ust_monate = {f.schluessel for _j in _ust_saetze for f in ust_grundgesamtheit(fakten, _j)}
 
     # ── 6. Monatsdaten (Zähler-Werte) ───────────────────────────────────
     if ist_gesamtzeitraum:
@@ -224,13 +228,12 @@ async def build_jahresbericht_context(
     # Dieser Builder übergab den Rest-Term bisher gar nicht: ein BKW, das nur
     # `eigenverbrauch_kwh` führt, fehlte im Jahresbericht komplett, während
     # Cockpit und Aussichten es (unterschiedlich) berücksichtigten.
-    pv_by_year_month = {f.schluessel: f.erzeugung.pv_kwh for f in fakten}
     bkw_rest_ev_by_ym = {f.schluessel: f.bkw.rest_eigenverbrauch_kwh for f in fakten}
 
     # N93: Sonstige Erzeuger (z. B. Mini-BHKW) speisen hinter DENSELBEN
     # Hauszähler — ihre Erzeugung gehört in die EV-/Autarkie-Ableitung, sonst
     # drückt der gemessene Einspeise-Zähler die Bilanz still zu niedrig.
-    # **Bewusst getrennt von `pv_by_year_month`:** die PV-EIGENEN Kennzahlen
+    # **Bewusst getrennt von der PV (`fakt.erzeugung.pv_kwh`):** die PV-EIGENEN Kennzahlen
     # (spezifischer Ertrag, SOLL/IST, String-Vergleich) bleiben rein PV — ein
     # Brennstoff-Erzeuger im PV-Nenner wäre ein stiller Rechenfehler. Genau
     # deshalb trägt die Schicht beide Summen getrennt (`pv_kwh` vs.
@@ -303,10 +306,6 @@ async def build_jahresbericht_context(
     _tarif_cache: dict[date, dict] = {}
     monats_zeilen: list[dict] = []
     finanz_zeilen: list[FinanzMonatsZeile] = []
-    # Dieselben Zeilen, nur nach Kalenderjahr sortiert — für die USt, die je
-    # Jahr rechnet (N-130). `eigenverbrauch_kwh` des Aggregats ist die Summe der
-    # Monatswerte, das Zerlegen ist also exakt und keine Näherung.
-    finanz_zeilen_je_jahr: dict[int, list[FinanzMonatsZeile]] = defaultdict(list)
 
     def _leere_zeile(j: int, m: int) -> dict:
         """Anzeige-Zeile für einen Monat ganz ohne Spur (kein Zähler, kein IMD).
@@ -348,15 +347,24 @@ async def build_jahresbericht_context(
             db, anlage_id, finanz_zeile_eingabe(fakt), tarif_cache=_tarif_cache
         )
         finanz_zeilen.append(zeile)
-        finanz_zeilen_je_jahr[j].append(zeile)
-        # Display aus der Zeile (gleicher Tarif wie der Aggregat-Helper):
-        einsp_eur = einspeise_erloes_euro(
-            einspeisung_kwh=einsp,
-            neg_preis_kwh=fakt.eeg.neg_preis_kwh,
-            verguetung_ct_kwh=zeile.einspeiseverguetung_cent,
-        ).erloes_euro
-        ev_eur = ev * zeile.netzbezug_preis_cent / 100
+        # Display aus der Zeile — über DENSELBEN Aggregat-Helper wie der KPI (eine Zeile), damit Σ Zeilen = KPI auch
+        # bei gemessenen Stundenpreisen gilt (EV-Ersparnis mit dem EV-gewichteten Preis, A-2). Bis 03.10.2026 rechnete
+        # die Zeile `EV × Netzbezugspreis` selbst — bitgleich, solange es keinen eigenen EV-Preis gibt.
+        _fz = berechne_finanz_aggregat([zeile])
+        einsp_eur = _fz.einspeise_erloes_euro
+        ev_eur = _fz.ev_ersparnis_euro
         sonstige_eur = fakt.sonstiges.netto_euro
+        _satz = _ust_saetze.get(j)
+        _ust_m = (
+            ust_anteil_euro(_fz.eigenverbrauch_kwh, _satz.euro_je_kwh)
+            if _satz is not None and (j, m) in _ust_monate else None
+        )
+        # Netto-Ertrag der Zeile = Stufe 1 der Ergebnis-Leiter (mit BKW-Rest, Erlös eigener Satz, Sonstigem, USt) —
+        # bis 03.10.2026 `einsp + ev + sonstige`: Σ der Zeilen wich vom KPI darunter um USt, BKW-Rest und Erzeuger ab.
+        _netto_m = berechne_ergebnis(ErgebnisEingang(
+            einspeise_erloes=einsp_eur, ev_ersparnis=ev_eur, bkw_rest_ersparnis=_fz.bkw_ersparnis_euro,
+            erzeuger_erloes=fakt.sonstiges.einspeise_erloes_euro, sonstige_netto=sonstige_eur, ust_anteil=_ust_m,
+        )).netto_ertrag
         pv_gesamt += pv
         erz_bilanz_gesamt += erzeugung_bilanz
         einsp_gesamt += einsp
@@ -376,7 +384,7 @@ async def build_jahresbericht_context(
             "einsp_erloes_euro": einsp_eur,
             "ev_ersparnis_euro": ev_eur,
             "sonstige_netto_euro": sonstige_eur,
-            "netto_ertrag_euro": einsp_eur + ev_eur + sonstige_eur,
+            "netto_ertrag_euro": _netto_m,
         }
 
     if ist_gesamtzeitraum:
@@ -422,7 +430,6 @@ async def build_jahresbericht_context(
     )
     einspeise_erloes = _finanz.einspeise_erloes_euro
     ev_ersparnis = _finanz.ev_ersparnis_euro
-    netto_ertrag = _finanz.netto_ertrag_euro
 
     investition_gesamt = sum(i.anschaffungskosten_gesamt or 0 for i in investitionen)
     # N-136: über den Layer-SoT, nicht als eigene Form daneben. Hier stand bis
@@ -459,27 +466,16 @@ async def build_jahresbericht_context(
     # Entscheidung für die ungeklemmte Form — und sie hat den Befund N-136
     # dreiundzwanzig Tage lang als gewollt gelesen aussehen lassen. Beide
     # Größen kommen jetzt aus dem Layer (s. `investition_mehrkosten` oben).
-    pv_je_jahr: dict[int, float] = defaultdict(float)
-    for (_j, _m), _pv in pv_by_year_month.items():
-        pv_je_jahr[_j] += _pv
-    ust_jahresanteile = [
-        UstJahresanteil(
-            jahr=_j,
-            eigenverbrauch_kwh=berechne_finanz_aggregat(
-                finanz_zeilen_je_jahr[_j]
-            ).eigenverbrauch_kwh,
-            pv_kwh=pv_je_jahr.get(_j, 0.0),
-            monate=len(finanz_zeilen_je_jahr[_j]),
-        )
-        for _j in sorted(finanz_zeilen_je_jahr)
-    ]
-    ust_eigenverbrauch = ust_eigenverbrauch_fuer_anlage(
-        anlage,
-        jahresanteile=ust_jahresanteile,
-        bemessungsgrundlage_euro=bemessungsgrundlage_aus_investitionen(investitionen),
-        betriebskosten_jahr_euro=betriebskosten_jahr,
-    )
-    netto_ertrag -= ust_eigenverbrauch
+    # G1 (03.10.2026): der Satz aus dem EINEN Eingang `services/ust_satz.py` — im Jahr aktive Investitionen für
+    # Bemessung UND Betriebskosten (Regel 05.06.2026), Grundgesamtheit = abgeschlossene Monate mit aktivem Erzeuger,
+    # Σ der Monats-Eigenverbräuche. Bis dahin: alle Investitionen, alle Fakten-Monate dieses Builders.
+    ust_eigenverbrauch = ust_eigenverbrauch_zeitraum(anlage, investitionen, fakten)
+    # Stufe 1 der Ergebnis-Leiter — dieselbe Funktion wie Übersicht, HA-Sensor und Cockpit → Monat/Jahr.
+    netto_ertrag = berechne_ergebnis(ErgebnisEingang(
+        einspeise_erloes=_finanz.einspeise_erloes_euro, ev_ersparnis=_finanz.ev_ersparnis_euro,
+        bkw_rest_ersparnis=_finanz.bkw_ersparnis_euro, erzeuger_erloes=_finanz.erzeuger_erloes_euro,
+        sonstige_netto=_finanz.sonstige_netto_euro, ust_anteil=ust_eigenverbrauch,
+    )).netto_ertrag
 
     anzahl_monate = len(monats_zeilen)
     betriebskosten_zeitraum = betriebskosten_jahr * anzahl_monate / 12 if anzahl_monate else 0

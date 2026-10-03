@@ -50,5 +50,42 @@ export function evInKomponentenzeilen(fins: InvestitionFinancialDetail[]): numbe
  */
 export function pvEigenverbrauchRestEuro(d: AktuellerMonatResponse): number {
   const fins = d.investitionen_financials ?? []
-  return Math.max(0, (d.ev_ersparnis_euro ?? 0) - evInKomponentenzeilen(fins))
+  const b = bkwAufteilung(d)
+  // Der BKW-Anteil zählt nur, soweit er tatsächlich im Eigenverbrauch der Anlage steckt (A2, s. `bkwAufteilung`).
+  return Math.max(0, (d.ev_ersparnis_euro ?? 0) - (evInKomponentenzeilen(fins) - b.geraete + b.imEigenverbrauch))
+}
+
+/**
+ * Balkonkraftwerk: welcher Teil seiner Gerätezeilen in `ev_ersparnis_euro` steckt — und welcher daneben steht (A2).
+ *
+ * Paket „Ergebnisgrößen" (03.10.2026, Entscheid Fable-Master zu A2). Die Ergebnis-Leiter rechnet
+ * `Eigenverbrauchs-Ersparnis + BKW-Ersparnis` — die zweite ist der P9-Rest (`bkw_ersparnis_euro`): der gemessene
+ * BKW-Eigenverbrauch in Monaten OHNE erfasste BKW-Erzeugung; er steckt NICHT im Eigenverbrauch der Anlage (der
+ * entsteht aus der Erzeugung hinter dem Zähler). Die Gerätezeile (`investitionen_financials`, „Balkon —
+ * Eigenverbrauch-Ersparnis") trägt dagegen die ganze BKW-Ersparnis des Geräts. Bis hierher zog das T-Konto sie
+ * vollständig aus der Eigenverbrauchs-Ersparnis heraus — gemessen an der W3-Fixture:
+ *
+ *  * **Klemm-Monat** (Einspeisung > Erzeugung, Eigenverbrauch 0): Gerätezeile 15 € bei Eigenverbrauchs-Ersparnis 0 —
+ *    das Hauptbuch lag 15 € ÜBER dem Ergebnis.
+ *  * **Datenlücken-Monat** (BKW ohne Erzeugungswert): Gerätezeile 12 € wurde aus 105 € herausgeschnitten, obwohl
+ *    sie gar nicht darin steckte, und der P9-Rest fehlte — 12 € UNTER dem Ergebnis.
+ *
+ * Die Regel jetzt: `imEigenverbrauch = min(Σ Gerätezeilen − P9-Rest, Eigenverbrauchs-Ersparnis − Speicher/Wallbox)`,
+ * mindestens 0 — geklemmt wie die PV-Restzeile. Die Gerätezeilen werden mit `faktor` auf diesen Anteil gesetzt
+ * (bei mehreren BKW gleichmäßig — die Antwort trennt den Rest nicht je Gerät), der P9-Rest steht als eigene Zeile.
+ * Summe der Zeilen = Eigenverbrauchs-Ersparnis + BKW-Ersparnis = die Posten der Leiter.
+ */
+export function bkwAufteilung(d: AktuellerMonatResponse): {
+  geraete: number
+  imEigenverbrauch: number
+  rest: number
+  faktor: number
+} {
+  const fins = d.investitionen_financials ?? []
+  const geraete = fins.filter((inv) => inv.typ === 'balkonkraftwerk').reduce((s, inv) => s + (inv.ersparnis_euro ?? 0), 0)
+  const andere = evInKomponentenzeilen(fins) - geraete
+  const rest = d.bkw_ersparnis_euro ?? 0
+  const budget = Math.max(0, (d.ev_ersparnis_euro ?? 0) - andere)
+  const imEigenverbrauch = Math.min(Math.max(0, geraete - rest), budget)
+  return { geraete, imEigenverbrauch, rest, faktor: geraete > 0 ? imEigenverbrauch / geraete : 1 }
 }

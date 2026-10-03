@@ -14,7 +14,7 @@ const basis = aktuellerMonat(2025, 5, {
   einspeisung_kwh: 100, einspeise_preis_cent: 8, einspeise_erloes_euro: 8,
   eigenverbrauch_kwh: 120, ev_ersparnis_euro: 36,
   netzbezug_kwh: 50, netzbezug_preis_cent: 30, netzbezug_kosten_euro: 15,
-  netto_ertrag_euro: 29, gesamtnettoertrag_euro: 29,
+  netto_ertrag_euro: 29,
 })
 
 describe('TKonto', () => {
@@ -193,16 +193,18 @@ describe('TKonto — sonstiger Erzeuger: die Beschriftung sagt, was bewertet ist
 
 describe('TKonto — Vergleichs-Badge gegen die angezeigten Beträge', () => {
   // Der Netto-Wert des T-Kontos entsteht aus den ZEILEN: Haben (8 + 36) − Soll (15)
-  // = 29,00 €. Verglichen wird er gegen `vorjahr.gesamtnettoertrag_euro`; beide
-  // stehen mit zwei Nachkommastellen als Euro-Betrag nebeneinander.
+  // = 29,00 €. Verglichen wird er seit 03.10.2026 gegen `vorjahr.ergebnis_euro` (das
+  // Vorjahres-Ergebnis der Ergebnis-Leiter, E2/G4) — bis dahin gegen
+  // `vorjahr.gesamtnettoertrag_euro`, ein Feld ohne Betriebskosten, Sonstiges und USt.
+  // Beide stehen mit zwei Nachkommastellen als Euro-Betrag nebeneinander.
   const gegenVj = (vjNetto: number) =>
     aktuellerMonat(2025, 5, {
       anlage_name: 'Demo',
       einspeisung_kwh: 100, einspeise_preis_cent: 8, einspeise_erloes_euro: 8,
       eigenverbrauch_kwh: 120, ev_ersparnis_euro: 36,
       netzbezug_kwh: 50, netzbezug_preis_cent: 30, netzbezug_kosten_euro: 15,
-      netto_ertrag_euro: 29, gesamtnettoertrag_euro: 29,
-      vorjahr: { gesamtnettoertrag_euro: vjNetto },
+      netto_ertrag_euro: 29,
+      vorjahr: { ergebnis_euro: vjNetto },
     })
 
   it('sichtbar verschiedene Beträge behalten ihre Richtung', () => {

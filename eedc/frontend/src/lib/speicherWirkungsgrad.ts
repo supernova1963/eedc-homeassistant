@@ -3,8 +3,9 @@
  * `backend/core/berechnungen/speicher_wirkungsgrad.py` (ADR-001).
  *
  * **Warum es diesen Spiegel gibt.** Zwei Sichten bilden den η aus Summen, die
- * erst im Client entstehen: *Cockpit → Jahr* (`v4/JahrAggregat.tsx` addiert N
- * Monats-Antworten) und *Auswertungen → Tabelle* (`pages/auswertung/types.ts`).
+ * erst im Client entstehen: *Auswertungen → Tabelle* (`pages/auswertung/types.ts`)
+ * und bis 03.10.2026 *Cockpit → Jahr* (`v4/JahrAggregat.tsx`; seither faltet die
+ * Jahresroute im Backend, `core/berechnungen/ergebnis.py::falte_zeitraum`).
  * Für sie gibt es keine Backend-Zahl, die sie lesen könnten — also braucht die
  * Regel eine zweite Heimat, keine zweite Definition. Gleiches Muster wie
  * `lib/monatsLuecken.ts` ↔ `core/monats_luecken.py`, gewächtert durch

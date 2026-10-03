@@ -92,6 +92,7 @@ async def sensorwerte_erstellen(
     kapitaleinsatz,
     monatsdaten,
     netto_ertrag,
+    netto_herleitung,
     netzbezug,
     pv_erzeugung,
     relevante_kosten,
@@ -150,7 +151,18 @@ async def sensorwerte_erstellen(
                 )
         elif sensor.key == "netto_ertrag_euro":
             value = netto_ertrag
-            berechnung = f"{fmt_zahl(einspeise_erloes, 2)} + {fmt_zahl(ev_ersparnis, 2)} + {fmt_zahl(sonstige_netto_gesamt, 2)} (sonstige)"
+            # Die Herleitung aus der Ergebnis-Leiter (03.10.2026): alle Posten, die etwas beitragen — bis dahin drei
+            # (Einspeise, EV, Sonstiges), während der Wert auch BKW-Rest, Erlös eigener Satz und USt trug.
+            # Das Rechenzeichen folgt dem Betrag (Sonstige Positionen können netto negativ sein); nur bei 0,00 €
+            # entscheidet die Rolle des Postens.
+            def _negativ(w) -> bool:
+                return w.betrag < 0 or (w.betrag == 0 and w.vorzeichen < 0)
+
+            berechnung = " ".join(
+                (("−" if _negativ(w) else "+") + " " if i else ("− " if _negativ(w) else ""))
+                + f"{fmt_zahl(abs(w.betrag), 2)} ({w.name})"
+                for i, w in enumerate(netto_herleitung.eingesetzte_werte)
+            )
         elif sensor.key == "einspeise_erloes_euro":
             value = einspeise_erloes
             if strompreis and getattr(strompreis, "einspeisung_variabel", False):

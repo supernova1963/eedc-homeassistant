@@ -10,11 +10,7 @@ und sonstige laufende Posten, der Jahres-Netto-Ertrag abzüglich USt.
 
 from typing import Optional
 from backend.core.berechnungen import einspeise_erloes_euro, gas_kosten_altanlage
-from backend.core.berechnungen.ust_eigenverbrauch import (
-    UstJahresanteil,
-    bemessungsgrundlage_aus_investitionen,
-    ust_eigenverbrauch_fuer_anlage,
-)
+from backend.services.ust_satz import ust_hochrechnung
 from backend.utils.investition_value import param_zahl
 from backend.core.investition_parameter import PARAM_WAERMEPUMPE, PARAM_WAERMEPUMPE_DEFAULTS
 from backend.services.wetter.pvgis import get_pvgis_tmy_defaults
@@ -524,16 +520,10 @@ def jahres_alternativkosten(
     # N-130 greift hier NICHT: `jahres_*` sind auf zwölf Monate hochgerechnete
     # Jahresmengen, kein Zeitraum-Aggregat ⇒ genau EIN Anteil mit `monate=12`.
     # Geändert hat sich nur die Bemessungsgrundlage (N-129).
-    ust_eigenverbrauch = ust_eigenverbrauch_fuer_anlage(
-        anlage,
-        jahresanteile=[UstJahresanteil(
-            jahr=heute.year,
-            eigenverbrauch_kwh=jahres_eigenverbrauch,
-            pv_kwh=jahres_erzeugung,
-            monate=12,
-        )],
-        bemessungsgrundlage_euro=bemessungsgrundlage_aus_investitionen(alle_investitionen),
-        betriebskosten_jahr_euro=betriebskosten_ges,
+    # G1 (03.10.2026): Investitionsmenge aus dem EINEN Eingang (`services/ust_satz.py`) — im Kalenderjahr aktiv, für
+    # Bemessung UND Betriebskosten; bis dahin alle für die Bemessung und die heute aktiven für die Betriebskosten.
+    ust_eigenverbrauch = ust_hochrechnung(
+        anlage, alle_investitionen, heute.year, jahres_eigenverbrauch, jahres_erzeugung,
     )
     jahres_netto_ertrag -= ust_eigenverbrauch
     _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal

@@ -8,10 +8,9 @@
  * - {@link JahrBilanz}: IST / Vorjahr / Ø-Jahr-Vergleichstabelle + SOLL/IST-
  *   Fortschritt (Σ PVGIS) + PV-Verteilungs-Balken.
  *
- * Quelle = der Jahres-Aggregat-Shape (`baueJahrAlsMonat`, Σ der 12 Monate),
- * identisch zum Monat (gleiche Bauer-Bildsprache). Vergleichs-Chips (Delta/
- * VglChip) aus `MonatBilanz` wiederverwendet (eine SoT-Komponente). Vorjahr/
- * Ø-Jahr = Σ der aggregierten Monatszeilen je Jahr (`jahrVergleichAus`).
+ * Quelle = der Jahres-Aggregat-Shape aus der Jahresroute (`GET /cockpit/jahr`, Faltung im Backend-Layer seit
+ * 03.10.2026), identisch zum Monat (gleiche Bauer-Bildsprache). Vergleichs-Chips (Delta/VglChip) aus `MonatBilanz`
+ * wiederverwendet (eine SoT-Komponente). Vorjahr/Ø-Jahr kommen aus derselben Antwort.
  *
  * Vergleichs-Fenster (Fund N-37): Vorjahr und Ø-Jahr sind auf die Monate
  * beschnitten, für die das angezeigte Jahr Daten hat — sonst stünden im laufenden
@@ -46,7 +45,8 @@ import { DATENROLLEN_ICONS } from '../lib/komponentenStyle'
 import { sollErfuellungProzent, sollFensterText } from '../lib/sollErfuellung'
 import type { KpiStripItem } from '../components/blocks'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
-import type { JahrVergleich } from './JahrAggregat'
+import type { JahrVergleich } from '../api/cockpit'
+import { berechnungAus, ergebnisMitLuecken, ergebnisZeile, fehlendHinweis } from '../lib/ergebnisHerleitung'
 
 const fmt = (v: number | null | undefined, dec = 0) => fmtCalc(v, dec, '—')
 
@@ -81,11 +81,10 @@ export function baueJahrKpis(
     ? `SOLL ${fmt(d.soll_pv_kwh)} kWh · ${fmt(sollPct)} %`
     : vj?.pv != null ? `${VJ}: ${fmt(vj.pv)} kWh` : undefined
 
-  // Jahresergebnis = nach Betriebskosten (verhaltensgleich Monat: Gesamt-
-  // Nettoertrag − Betriebskosten + Sonstiges). `!= null`, damit 0 € nicht verschwindet.
-  const jahresergebnis = d.gesamtnettoertrag_euro != null
-    ? d.gesamtnettoertrag_euro - (d.betriebskosten_anteilig_euro ?? 0) + (d.sonstige_netto_euro ?? 0)
-    : null
+  // Netto-Ertrag und Jahresergebnis samt Herleitung aus der Ergebnis-Leiter des Backends (Jahressummen der Posten,
+  // dieselbe None-Regel wie im Monat: fehlt einem Monat die Stromrechnung, gibt es kein Jahresergebnis — G2/E10).
+  const herl = d.ergebnis_herleitung
+  const jahresergebnis = d.ergebnis_euro ?? null
 
   return [
     {
@@ -101,8 +100,12 @@ export function baueJahrKpis(
       title: 'Autarkie', value: fmt(d.autarkie_prozent), unit: '%', color: 'green', icon: DATENROLLEN_ICONS.autarkie,
       subtitle: vj?.autarkie != null ? `${VJ}: ${fmt(vj.autarkie)} %` : undefined,
       formel: 'Eigenverbrauch ÷ Gesamtverbrauch × 100',
-      berechnung: d.eigenverbrauch_kwh != null && d.gesamtverbrauch_kwh != null
-        ? `${fmt(d.eigenverbrauch_kwh)} ÷ ${fmt(d.gesamtverbrauch_kwh)} kWh` : undefined,
+      // R-Q (N-584): Zähler und Nenner der PAARWEISE gebildeten Quote — über genau die Monate, die beide Größen
+      // tragen. Die freien Summen (Σ EV über alle Monate ÷ Σ GV über weniger Monate) führten auf 198 %, und ihre
+      // Herleitung „1.108 ÷ 559" ebenso. Das Fenster („aus 8 von 9 Monaten") steht dabei.
+      berechnung: d.autarkie_zaehler_kwh != null && d.autarkie_nenner_kwh != null
+        ? `${fmt(d.autarkie_zaehler_kwh)} ÷ ${fmt(d.autarkie_nenner_kwh)} kWh${d.autarkie_fenster ? ` (${d.autarkie_fenster})` : ''}`
+        : undefined,
       ergebnis: d.autarkie_prozent != null ? `= ${fmtCalc(d.autarkie_prozent, 1)} %` : undefined,
     },
     {
@@ -119,25 +122,25 @@ export function baueJahrKpis(
     },
     {
       title: 'Netto-Ertrag', value: fmtCalc(d.netto_ertrag_euro, 2, '—'), unit: '€', color: 'blue', icon: DATENROLLEN_ICONS.nettoErtrag,
-      subtitle: 'vor Betriebskosten', formel: 'Einspeise-Erlös + Eigenverbrauchs-Ersparnis',
-      // A6 — wortgleich zu `MonatBilanz`: dieselben Feldnamen, im Jahr aus der
-      // Σ-12-Aggregation (`JahrAggregat`). Kein `?? 0`, s. dort.
-      berechnung: (d.einspeise_erloes_euro != null && d.ev_ersparnis_euro != null)
-        ? `${fmtCalc(d.einspeise_erloes_euro, 2)} € Einspeise-Erlös + ${fmtCalc(d.ev_ersparnis_euro, 2)} € Eigenverbrauchs-Ersparnis`
-        : undefined,
-      ergebnis: (d.einspeise_erloes_euro != null && d.ev_ersparnis_euro != null && d.netto_ertrag_euro != null)
-        ? `= ${fmtCalc(d.netto_ertrag_euro, 2)} €`
-        : undefined,
+      subtitle: 'vor Betriebskosten',
+      // A6 — dieselbe Bauform wie `MonatBilanz`: Formel und Summanden aus der Leiter (Jahressummen der Posten).
+      formel: herl?.netto_ertrag.formel ?? 'Einspeise-Erlös + Eigenverbrauchs-Ersparnis',
+      berechnung: d.netto_ertrag_euro != null ? berechnungAus(herl?.netto_ertrag) : undefined,
+      ergebnis: herl?.netto_ertrag.ergebnis_euro != null ? ergebnisZeile(d.netto_ertrag_euro) : undefined,
     },
     {
       title: 'Jahresergebnis', value: fmtCalc(jahresergebnis, 2, '—'), unit: '€',
       color: jahresergebnis != null && jahresergebnis < 0 ? 'red' : 'green', icon: DATENROLLEN_ICONS.ergebnis,
-      subtitle: 'nach Betriebskosten', formel: 'Gesamt-Nettoertrag − Betriebskosten + Sonstiges',
-      // A6 — dieselben drei Felder und derselbe Guard wie oben bei `jahresergebnis`.
-      berechnung: d.gesamtnettoertrag_euro != null
-        ? `${fmtCalc(d.gesamtnettoertrag_euro, 2)} € − ${fmtCalc(d.betriebskosten_anteilig_euro ?? 0, 2)} € + ${fmtCalc(d.sonstige_netto_euro ?? 0, 2)} €`
+      subtitle: 'nach Betriebskosten',
+      // Ohne Wert keine Formel, dafür der Grund — z. B. „fehlt: Stromrechnung (Sep 2026)" (G2/E10).
+      formel: jahresergebnis != null ? (herl?.ergebnis.formel ?? 'Netto-Ertrag − Stromrechnung − Betriebskosten') : undefined,
+      berechnung: jahresergebnis != null
+        ? berechnungAus(herl?.ergebnis, {
+          vorFeld: 'betriebskosten_anteilig_euro', wert: d.ergebnis_vor_betriebskosten_euro, label: 'vor Betriebskosten',
+        })
         : undefined,
-      ergebnis: jahresergebnis != null ? `= ${fmtCalc(jahresergebnis, 2)} €` : undefined,
+      ergebnis: ergebnisMitLuecken(jahresergebnis, d.fehlende_posten),
+      hinweis: jahresergebnis == null ? fehlendHinweis(d.fehlende_posten) : undefined,
     },
     // R15-1: Kosten-Kacheln (geteilter Bauer, Jahres-Aggregat = Monats-Shape).
     ...baueNetzKostenKpis(d),
@@ -191,8 +194,6 @@ export function JahrBilanz({
       besserVj: evBesser(vj?.autarkie), besserOj: evBesser(oj?.autarkie) },
     { label: 'Direktverbrauch', ist: dv.direktverbrauch_kwh, vj: vj?.direkt ?? null, oj: oj?.direkt ?? null, unit: 'kWh' },
     { label: 'Einspeisung',     ist: dv.einspeisung_kwh,     vj: vj?.einsp ?? null,  oj: oj?.einsp ?? null,  unit: 'kWh' },
-    // §9.2 — der dritte Weg der Verwendung (Σ der Monate); nur, wo es ihn gibt.
-    ...(dv.abgabe_dritte_kwh != null ? [{ label: 'Abgabe an Dritte', ist: dv.abgabe_dritte_kwh, vj: null, oj: null, unit: 'kWh' } as BilanzRow] : []),
     // §9.2 — der dritte Weg der Verwendung (Σ der Monate); nur, wo es ihn gibt.
     ...(dv.abgabe_dritte_kwh != null ? [{ label: 'Abgabe an Dritte', ist: dv.abgabe_dritte_kwh, vj: null, oj: null, unit: 'kWh' } as BilanzRow] : []),
     { label: 'Netzbezug',       ist: dv.netzbezug_kwh,       vj: vj?.netz ?? null,   oj: oj?.netz ?? null,   unit: 'kWh', inv: true },

@@ -204,7 +204,10 @@ for (const datei of dateien(SRC)) {
       if (fp) {
         const init = ts.isPropertyAssignment(fp) ? fp.initializer : fp.name
         if (!istNullish(init)) {
-          const bp = prop('berechnung')
+          // `eingesetzte_werte` ist dieselbe Aussage in strukturierter Form: die Herleitung der Ergebnis-Leiter
+          // (`ErgebnisStufe`, Backend `core/berechnungen/ergebnis.py`, 03.10.2026) trägt Formel UND die Liste der
+          // eingesetzten Werte; der Anzeigetext entsteht daraus erst beim Formatieren (`lib/ergebnisHerleitung.ts`).
+          const bp = prop('berechnung') ?? prop('eingesetzte_werte')
           const binit = bp ? (ts.isPropertyAssignment(bp) ? bp.initializer : bp.name) : null
           traeger.push({
             marke: markeFuerObjekt(node, init, rel, sf),

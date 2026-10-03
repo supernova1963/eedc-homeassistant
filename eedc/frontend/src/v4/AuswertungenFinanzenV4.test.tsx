@@ -35,11 +35,15 @@ const basisMock = {
 }
 const basis = () => basisMock as unknown as AuswertungBasis
 
-vi.mock('../api/cockpit', () => ({ cockpitApi: { getKomponentenZeitreihe: vi.fn().mockResolvedValue({ monatswerte: [] }) } }))
+// A1 (03.10.2026): die Komponenten-Zeitreihe liefert die Sonstigen Positionen nur noch zum AUSWEIS. Der Mock ist
+// umschaltbar, damit die W3-Probe unten April (Ausgabe 120 €) und Juni (Ertrag 150 €) mitgeben kann.
+const komponentenZeitreihe = vi.hoisted(() => ({ monatswerte: [] as Array<Record<string, number>> }))
+vi.mock('../api/cockpit', () => ({ cockpitApi: { getKomponentenZeitreihe: vi.fn(async () => komponentenZeitreihe) } }))
 vi.mock('../api/aktuellerMonat', () => ({ aktuellerMonatApi: { getData: vi.fn().mockResolvedValue(null) } }))
 vi.mock('../api/import', () => ({ importApi: { getPdfZipExportUrl: () => '/api/export.zip' } }))
 
 import AuswertungenFinanzenV4 from './AuswertungenFinanzenV4'
+import w3 from '../test/w3-antworten.fixture.json'
 
 describe('AuswertungenFinanzenV4 (Sub 3)', () => {
   it('rendert die 3 Blöcke; Einspeiseerlös in € (R1); KEIN Jahr-Select in der Sicht (R5/R18-3)', async () => {
@@ -149,5 +153,35 @@ describe('AuswertungenFinanzenV4 (Sub 3)', () => {
     expect(refresh).toHaveBeenCalledTimes(1)
     cleanup()
     Object.assign(basisMock, { error: null, refresh: undefined })
+  })
+
+  // ── A1 (Entscheid Fable-Master 03.10.2026): die Sicht LIEST den Netto-Ertrag der Monatsreihe ──────────────
+  // Die Reihe trägt die Sonstigen Positionen seit A1 im Feld (Stufe 1 der Ergebnis-Leiter). Bis dahin addierte diese
+  // Sicht `netto_ertrag + sonstige_netto` aus der Komponenten-Zeitreihe — mit dem neuen Feld wäre das +30 € an der
+  // W3-Fixture (`backend/tests/test_ergebnis_symmetrie_monat_jahr.py::anlage_alle_achsen`, 12 Monate 2025).
+  it('W3/A1: Σ Netto-Ertrag (PV) der Sicht == Σ Monat der Ergebnis-Leiter (1.462,46 €), Sonstige nur ausgewiesen', async () => {
+    const fixture = w3 as unknown as { reihe: Array<Record<string, number>>; monate: Array<Record<string, number>> }
+    komponentenZeitreihe.monatswerte = fixture.monate.map((m) => ({
+      jahr: m.jahr, monat: m.monat,
+      sonstige_ertraege_euro: m.sonstige_ertraege_euro ?? 0, sonstige_ausgaben_euro: m.sonstige_ausgaben_euro ?? 0,
+      sonstige_netto_euro: m.sonstige_netto_euro ?? 0,
+    }))
+    const summeMonat = fixture.monate.reduce((s, m) => s + m.netto_ertrag_euro, 0)
+    expect(summeMonat).toBeCloseTo(1462.46, 2)
+    const w3Basis = {
+      ...basisMock,
+      daten: fixture.reihe, gefiltert: fixture.reihe,
+      stats: { anzahlMonate: 12, gesamtEinspeisung: 5200, gesamtEigenverbrauch: 0, gesamtNetzbezug: 4150 },
+    } as unknown as AuswertungBasis
+    render(<AuswertungenFinanzenV4 basis={w3Basis} />)
+    await screen.findByText('Finanz-Übersicht')
+    // Der Ausweis ist da (Untertitel der Kachel), sobald die Komponenten-Zeitreihe geladen ist …
+    await screen.findByText(/inkl\. \+150 € \/ −120 € Sonstige/)
+    // … und die Zahl ist die Σ des Felds — nicht Σ Feld + 30 €.
+    const text = tooltipTextVon('Netto-Ertrag (PV)')
+    expect(text).toContain('= 1.462,46 €')
+    expect(text).toContain('150,00 € Sonstige Erträge')
+    expect(text).toContain('120,00 € Sonderkosten')
+    komponentenZeitreihe.monatswerte = []
   })
 })

@@ -162,13 +162,13 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
 
     # ── Anlagen-Ebene: Monatswerte ───────────────────────────────────────────
     (TYP_ANLAGE, "einspeisung_kwh"): (
-        _a(COCKPIT_MONAT, "api/routes/aktueller_monat/__init__.py", "get_aktueller_monat"),
+        _a(COCKPIT_MONAT, "api/routes/aktueller_monat/__init__.py", "_berechne_monat"),
         _a(COCKPIT_JAHR, "api/routes/cockpit/uebersicht.py", "get_cockpit_uebersicht"),
         _a(AUSW_TABELLE, "api/routes/monatsdaten.py", "list_monatsdaten_aggregiert"),
         _a(HA_SENSOREN, "api/routes/ha_export/anlage_energie.py", "monatsfakten_und_energie"),
     ),
     (TYP_ANLAGE, "netzbezug_kwh"): (
-        _a(COCKPIT_MONAT, "api/routes/aktueller_monat/__init__.py", "get_aktueller_monat"),
+        _a(COCKPIT_MONAT, "api/routes/aktueller_monat/__init__.py", "_berechne_monat"),
         _a(COCKPIT_JAHR, "api/routes/cockpit/uebersicht.py", "get_cockpit_uebersicht"),
         _a(AUSW_TABELLE, "api/routes/monatsdaten.py", "list_monatsdaten_aggregiert"),
         _a(HA_SENSOREN, "api/routes/ha_export/anlage_energie.py", "monatsfakten_und_energie"),
@@ -197,7 +197,7 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
 
     # ── Anlagen-Ebene: Preise je Monat (ADR-002/P8) ──────────────────────────
     (TYP_ANLAGE, "netzbezug_durchschnittspreis_cent"): (
-        _a(COCKPIT_MONAT, "api/routes/aktueller_monat/__init__.py", "get_aktueller_monat"),
+        _a(COCKPIT_MONAT, "api/routes/aktueller_monat/__init__.py", "_berechne_monat"),
         # ADR-002/P8 — der wirksame Arbeitspreis DIESES Monats, nicht der heutige.
         _a(AUSW_FINANZEN, "services/strompreis_aggregator.py", "wirksamer_arbeitspreis_cent"),
     ),
@@ -449,7 +449,7 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
     ),
     ("e-auto", "ladung_extern_kwh"): (
         _a(KOMP_EAUTO, "api/routes/investitionen/dashboard_eauto.py", "get_eauto_dashboard"),
-        _a(COCKPIT_MONAT, "api/routes/aktueller_monat/__init__.py", "get_aktueller_monat"),
+        _a(COCKPIT_MONAT, "api/routes/aktueller_monat/__init__.py", "_berechne_monat"),
     ),
     ("e-auto", "ladung_extern_euro"): (
         _a(KOMP_EAUTO, "api/routes/investitionen/dashboard_eauto.py", "get_eauto_dashboard"),

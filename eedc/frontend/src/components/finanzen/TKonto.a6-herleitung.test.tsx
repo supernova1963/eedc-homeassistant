@@ -37,7 +37,7 @@ const basis = aktuellerMonat(2025, 5, {
   einspeisung_kwh: 100, einspeise_preis_cent: 8, einspeise_erloes_euro: 8,
   eigenverbrauch_kwh: 120, ev_ersparnis_euro: 36,
   netzbezug_kwh: 50, netzbezug_preis_cent: 30, netzbezug_kosten_euro: 15,
-  netto_ertrag_euro: 29, gesamtnettoertrag_euro: 29,
+  netto_ertrag_euro: 29,
 })
 
 /** Rendert das T-Konto und öffnet den Tooltip am Label dieser Zeile. */
@@ -102,7 +102,7 @@ describe('A6 — T-Konto Betriebskosten', () => {
 
   it('ohne gelieferten Jahresbetrag bleibt die Rechnung weg (Jahres-T-Konto)', () => {
     // Im Jahres-Aggregat ist der Betrag daneben die Σ über zwölf Monate;
-    // „X €/Jahr ÷ 12" führte dort auf eine andere Zahl. `JahrAggregat` leert
+    // „X €/Jahr ÷ 12" führte dort auf eine andere Zahl. Die Jahresfaltung (Backend `falte_zeitraum`) leert
     // das Feld deshalb — hier wird geprüft, dass der Client das respektiert
     // statt selbst `monat × 12` zu bilden.
     zeigeTooltip({
@@ -136,7 +136,7 @@ describe('A6 — T-Konto Betriebskosten', () => {
     // V-WK04-6: Dasselbe T-Konto trägt Monat UND Jahr. Im Jahr ist der Betrag
     // daneben die Σ über zwölf Monatszwölftel — „Betriebskosten/Jahr ÷ 12"
     // beschreibt dort eine andere Rechnung als die Zahl. Marke ist `monat: 0`
-    // (die bestehende Kennzeichnung aus `JahrAggregat.baueJahrAlsMonat`).
+    // (die Kennzeichnung der Jahresfaltung, seit 03.10.2026 Backend `falte_zeitraum`).
     zeigeTooltip({
       ...basis, monat: 0, monat_name: '2025',
       investitionen_financials: [{

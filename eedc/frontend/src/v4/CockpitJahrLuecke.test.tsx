@@ -12,15 +12,19 @@
  *  - der Unterschied steht an der Kachel, über der IST-Spalte und im Fuß.
  *
  * Eigene Datei statt Ausbau von `CockpitJahrV4.test.tsx`: die Fixture braucht eine
- * feste Systemzeit und einen Endpoint, der zwischen „Monat mit Daten" und „Monat vor
- * der Inbetriebnahme" unterscheidet.
+ * feste Systemzeit.
+ *
+ * ⭐ Seit 03.10.2026 entscheidet die **Jahresroute** (Backend), welche Monate gefragt werden
+ * und welche zählen (`zu_ladende_monate`, `monat_hat_daten`, `abgeschlossene_monate`) — die
+ * Proben dazu stehen mit denselben Zahlen in `backend/tests/test_ergebnis_jahr_portiert.py`.
+ * Hier bleibt, was die SICHT mit der Antwort tut: Kachel = Kopf (Jan–Aug), Tabelle =
+ * Vergleich (Jan–Jul) auf beiden Seiten, Fenster und Grund an Kachel, Spalte und Fuß.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { screen, fireEvent, within } from '@testing-library/react'
-import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 import type { Nachhaltigkeit } from '../api/cockpit'
-import { aktuellerMonat, monatsZeile } from '../test/factories'
+import { cockpitJahr, jahrVergleich, monatsZeile } from '../test/factories'
 import { renderMitProvidern, stubMatchMedia } from '../test/render'
 
 const bis = (n: number) => Array.from({ length: n }, (_, i) => i + 1)
@@ -40,42 +44,65 @@ const aggregiert: AggregierteMonatsdaten[] = [
   ...bis(12).map((m) => zeile(2025, m)),
 ]
 
-/** Monate MIT gemessenen Daten — 2026 bis August, 2025 voll. Veränderbar, damit
- *  ein Test einen gefragten, aber leeren Monat nachstellen kann. */
-let hatDaten = new Set<string>()
-const HAT_DATEN_STANDARD = [
-  ...bis(8).map((m) => `2026-${m}`),
-  ...bis(12).map((m) => `2025-${m}`),
-]
-
-/** Antwort für einen Monat vor der Inbetriebnahme: nur Stammdaten-Ableitungen. */
-const ohneDaten = (jahr: number, monat: number): AktuellerMonatResponse =>
-  aktuellerMonat(jahr, monat, {
-    anlage_name: 'Demo', monat_name: String(monat),
-    soll_pv_kwh: 400, netzbezug_preis_cent: 40, einspeise_preis_cent: 8.2,
-  })
-
 /** SOLL ist standardmäßig aus: sonst belegt die SOLL-Annotation die PV-Zweitzeile
  *  und die Vorjahres-Angabe wäre dort nicht ablesbar. Ein Test schaltet es an. */
 let sollAktiv = false
+/** Juli ohne Mengen (die Antwort der Box für einen Monat vor der Inbetriebnahme) — die Route lässt ihn weg. */
+let juliLeer = false
 
-const mitDaten = (jahr: number, monat: number): AktuellerMonatResponse => ({
-  ...ohneDaten(jahr, monat),
-  soll_pv_kwh: sollAktiv ? 250 : null,
-  pv_erzeugung_kwh: KWH[jahr], einspeisung_kwh: KWH[jahr] / 2, netzbezug_kwh: 50,
-  eigenverbrauch_kwh: KWH[jahr] / 2, direktverbrauch_kwh: KWH[jahr] / 4,
-  gesamtverbrauch_kwh: KWH[jahr] / 2 + 50,
+/** Σ über n Monate des Jahres 2026 (je 300 kWh PV, 150 EV, 75 Direkt, 150 Einspeisung, 50 Netz, 200 GV). */
+const summe2026 = (n: number) => ({
+  anlage_name: 'Demo',
+  pv_erzeugung_kwh: 300 * n, einspeisung_kwh: 150 * n, netzbezug_kwh: 50 * n,
+  eigenverbrauch_kwh: 150 * n, direktverbrauch_kwh: 75 * n, gesamtverbrauch_kwh: 200 * n,
   autarkie_prozent: 75, eigenverbrauch_quote_prozent: 50,
 })
 
-const getData = vi.fn((_id: number, j: number, m: number) =>
-  Promise.resolve(hatDaten.has(`${j}-${m}`) ? mitDaten(j, m) : ohneDaten(j, m)))
+/** Die Jahresroute für 2026 am 02.08.: Kopf Jan–Aug, Vergleich Jan–Jul, Vorjahr 2025 über Jan–Jul (7 × 200 kWh). */
+function jahr2026() {
+  const kopfMonate = juliLeer ? [1, 2, 3, 4, 5, 6, 8] : bis(8)
+  const vglMonate = kopfMonate.filter((m) => m < 8)
+  const vj = jahrVergleich(2025, {
+    pv: 200 * vglMonate.length, ev: 100 * vglMonate.length, direkt: 50 * vglMonate.length,
+    einsp: 100 * vglMonate.length, netz: 50 * vglMonate.length, gesamt: 150 * vglMonate.length,
+    autarkie: (100 / 150) * 100, monate: vglMonate,
+  })
+  return cockpitJahr(2026, {
+    monate_nr: kopfMonate,
+    vergleichs_monate: vglMonate,
+    kopf: {
+      ...summe2026(kopfMonate.length),
+      // SOLL an: 8 × 250 = 2.000 kWh, Quote 8 × 300 ÷ 2.000 = 120 % (aus der Antwort, N-356).
+      soll_pv_kwh: sollAktiv ? 250 * kopfMonate.length : null,
+      soll_erfuellung_prozent: sollAktiv ? 120 : null,
+    },
+    vergleich: {
+      ...summe2026(vglMonate.length),
+      soll_pv_kwh: sollAktiv ? 250 * vglMonate.length : null,
+      soll_erfuellung_prozent: sollAktiv ? 120 : null,
+    },
+    vorjahr: vj,
+    oe_jahr: { ...vj, jahr: 0, count: 1 },
+  })
+}
+
+/** 2025 abgeschlossen: Kopf = Vergleich = 12 × 200 kWh; kein Vorjahr (2024 ohne Daten), kein Ø (2026 deckt nicht). */
+const jahr2025 = () => cockpitJahr(2025, {
+  monate_nr: bis(12),
+  kopf: {
+    anlage_name: 'Demo', pv_erzeugung_kwh: 2400, einspeisung_kwh: 1200, netzbezug_kwh: 600,
+    eigenverbrauch_kwh: 1200, direktverbrauch_kwh: 600, gesamtverbrauch_kwh: 1800,
+    autarkie_prozent: (1200 / 1800) * 100, eigenverbrauch_quote_prozent: 50,
+  },
+})
+
+const getJahr = vi.fn((_id: number, j: number) => Promise.resolve(j === 2025 ? jahr2025() : jahr2026()))
 
 vi.mock('../api/monatsdaten', () => ({
   monatsdatenApi: { listAggregiert: vi.fn(() => Promise.resolve(aggregiert)) },
 }))
 vi.mock('../api/aktuellerMonat', () => ({
-  aktuellerMonatApi: { getData: (...a: [number, number, number]) => getData(...a) },
+  aktuellerMonatApi: { getData: vi.fn(() => Promise.reject(new Error('Cockpit → Jahr lädt keine Einzelmonate mehr'))) },
 }))
 const leereNachhaltigkeit: Nachhaltigkeit = {
   anlage_id: 1, co2_gesamt_kg: 0, co2_pv_kg: 0, co2_wp_kg: 0, co2_emob_kg: 0,
@@ -83,9 +110,10 @@ const leereNachhaltigkeit: Nachhaltigkeit = {
   autarkie_durchschnitt_prozent: 0, monatswerte: [],
 }
 vi.mock('../api/cockpit', () => ({
-  // B4 (05.09.2026): das Jahr ruft zusätzlich die Jahresroute (WP-Kennzahlen aus dem
-  // Layer); ohne Antwort bleiben die Kennzahlen weg — diese Proben messen Mengen.
-  cockpitApi: { getNachhaltigkeit: vi.fn(() => Promise.resolve(leereNachhaltigkeit)), getUebersicht: vi.fn(() => Promise.resolve(null)) },
+  cockpitApi: {
+    getNachhaltigkeit: vi.fn(() => Promise.resolve(leereNachhaltigkeit)),
+    getJahr: (...a: [number, number]) => getJahr(...a),
+  },
 }))
 
 import CockpitJahrV4 from './CockpitJahrV4'
@@ -102,8 +130,8 @@ async function oeffneBilanz() {
 describe('Cockpit/Jahr — laufendes Jahr mit unabgeschlossenem Monat (N-65)', () => {
   beforeEach(() => {
     localStorage.clear()
-    getData.mockClear()
-    hatDaten = new Set(HAT_DATEN_STANDARD)
+    getJahr.mockClear()
+    juliLeer = false
     sollAktiv = false
     vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.setSystemTime(new Date(2026, 7, 2, 12, 0, 0))
@@ -117,8 +145,9 @@ describe('Cockpit/Jahr — laufendes Jahr mit unabgeschlossenem Monat (N-65)', (
     // Jan–Aug × 300 kWh = 2.400. Bis v4.0.6 waren es 2.100 (Jan–Jun + Aug):
     // der volle Juli fehlte, der angefangene August war drin.
     expect(within(karte).getByText('2.400')).toBeInTheDocument()
-    // Juli wurde wirklich gefragt, obwohl er keine Zeile hat.
-    expect(getData.mock.calls.filter((c) => c[1] === 2026).map((c) => c[2])).toEqual(bis(8))
+    // EIN Abruf für das Jahr — dass die Route den Juli ohne Zeile mitfragt, prüft
+    // `test_ergebnis_jahr_portiert.py::test_menge_luecke_bis_heute` (dieselbe Lage).
+    expect(getJahr.mock.calls.filter((c) => c[1] === 2026)).toHaveLength(1)
   })
 
   it('die Block-Kopfzeile nennt das Fenster der Kacheln — und warum es weiter reicht', async () => {
@@ -195,7 +224,7 @@ describe('Cockpit/Jahr — laufendes Jahr mit unabgeschlossenem Monat (N-65)', (
     // Juli antwortet ohne Mengen (nur SOLL + Tarif) — genau die Antwort, die die Box
     // für Monate vor der Inbetriebnahme gibt. Er darf weder in die Kopfzahl noch in
     // die Grundgesamtheit, sonst bliese er das SOLL auf.
-    hatDaten.delete('2026-7')
+    juliLeer = true
     renderView()
     const karte = (await screen.findByText('PV-Erzeugung')).closest('div')!
     // Jan–Jun + Aug = 7 × 300 = 2.100, und das Fenster hat die Lücke.
@@ -207,8 +236,8 @@ describe('Cockpit/Jahr — laufendes Jahr mit unabgeschlossenem Monat (N-65)', (
 describe('Cockpit/Jahr — REGRESSION: abgeschlossenes Jahr unverändert', () => {
   beforeEach(() => {
     localStorage.clear()
-    getData.mockClear()
-    hatDaten = new Set(HAT_DATEN_STANDARD)
+    getJahr.mockClear()
+    juliLeer = false
     sollAktiv = false
     vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.setSystemTime(new Date(2026, 7, 2, 12, 0, 0))
@@ -228,8 +257,8 @@ describe('Cockpit/Jahr — REGRESSION: abgeschlossenes Jahr unverändert', () =>
     expect(screen.queryByText(/IST Jan–/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Kennzahlen oben/)).not.toBeInTheDocument()
     expect(screen.queryByText(/beschnitten/)).not.toBeInTheDocument()
-    // Und genau zwölf Requests, kein Mehraufwand für vergangene Jahre.
-    expect(getData.mock.calls.filter((c) => c[1] === 2025)).toHaveLength(12)
+    // EIN Abruf je Jahr (bis 03.10.2026: zwölf Monats-Requests).
+    expect(getJahr.mock.calls.filter((c) => c[1] === 2025)).toHaveLength(1)
     // Die Block-Kopfzeilen tragen kein Fenster — und der Bilanz-Kopf behält sein SOLL.
     expect(screen.getByText('5 Energie-Kennzahlen + Netto-Ertrag + Jahresergebnis + Netz-Kosten'))
       .toBeInTheDocument()

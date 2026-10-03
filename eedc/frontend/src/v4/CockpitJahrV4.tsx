@@ -11,13 +11,14 @@
  *    → Finanzen — über die GETEILTEN Monat-Bauer (`baueKomponentenBloecke('jahr')`,
  *    `finanzTeaserBlock`).
  *
- * Datenpfade — kein neuer Endpoint (D3):
- *  - Voll-Aggregat (KPIs/Komponenten/Finanzen/SOLL) = Σ der kanonischen
- *    Monats-Antworten `aktuellerMonatApi.getData` (nur Monate mit Daten) via
- *    {@link baueJahrAlsMonat}. So existieren ALLE Komponenten-KPIs (anders als Tag).
- *    Welche Monate das sind, entscheidet seit P-12 (N-65) `zuLadendeMonate` +
- *    `monatHatDaten` — NICHT die Existenz einer aggregierten Zeile: die entsteht
- *    erst beim Monatsabschluss.
+ * Datenpfade — seit 03.10.2026 EINE Jahresroute (D3 zurückgenommen, ADR-001-Nachtrag):
+ *  - Voll-Aggregat (KPIs/Komponenten/Finanzen/SOLL) = `cockpitApi.getJahr(anlage, jahr)`. Das Backend lädt die
+ *    Monatsantworten (dieselbe Monatsmenge wie bisher: `zu_ladende_monate` + `monat_hat_daten`, N-65), faltet sie im
+ *    Layer (`core/berechnungen/ergebnis.py::falte_zeitraum` — Quoten paarweise, N-584; Ergebnis über die Leiter mit
+ *    derselben None-Regel wie im Monat) und liefert die Monatsantworten MIT (Wärme-Verlauf, Speicher-Tabelle). Bis
+ *    dahin faltete diese Sicht selbst (`JahrAggregat.tsx`, entfallen) — eine Aggregation außerhalb jedes
+ *    Backend-Wächters; „Konvergenz statt zweiter Code-Pfad" (D3) verlangte genau diesen Umzug.
+ *  - Vorjahr / Ø-Jahr kommen aus derselben Antwort (Monatsreihe, Autarkie paarweise).
  *  - Verlauf-Chart + Jahres-Rail + Vorjahr/Ø-Jahr-Vergleich =
  *    `monatsdatenApi.listAggregiert` (Σ der IMD je Monat), einmal je Anlage
  *    geladen — seit N-68 **inklusive der Monate ohne Zählerzeile**, damit sie
@@ -48,13 +49,10 @@ import { verlaufTabellenSpalten } from './verlaufVergleich'
 import { JahresRail, type JahrRailEintrag } from './JahresRail'
 import { JahrStepper } from './JahrStepper'
 import { JahrHeader } from './JahrRahmen'
-import {
-  abgeschlosseneMonate, baueJahrAlsMonat, jahrVergleichAus, kennzahlenFensterAus, mittelJahre,
-  monatHatDaten, monatsFenster, monatsFensterAus, zuLadendeMonate, type JahrVergleich,
-} from './JahrAggregat'
-import { aktuellerMonatApi, type AktuellerMonatResponse } from '../api/aktuellerMonat'
+import { kennzahlenFensterAus, monatsFenster, monatsFensterAus } from '../lib/monatsFenster'
+import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
-import { cockpitApi } from '../api/cockpit'
+import { cockpitApi, type JahrVergleich, type JahrVergleichMittel } from '../api/cockpit'
 import { mitAnzahl } from '../lib/plural'
 
 // persistKey-SoT der Sicht — geteilt von BlockShell (Block-Ebene) und ParkProvider
@@ -81,6 +79,9 @@ interface JahrLadung {
    *  Kacheln darüber, deshalb kein zusätzlicher Abruf und keine zweite
    *  Wahrheit. */
   antworten: AktuellerMonatResponse[]
+  /** Vorjahr / Ø-Jahr aus derselben Antwort (Backend, Autarkie paarweise). */
+  vorjahr: JahrVergleich | null
+  oeJahr: JahrVergleichMittel | null
 }
 
 export default function CockpitJahrV4(props: { anlageId: number | undefined }) {
@@ -142,26 +143,19 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
   // (`monatHatDaten` — der Endpoint beantwortet auch Monate vor der Inbetriebnahme,
   // dann aber nur mit Stammdaten-Ableitungen wie SOLL und Tarif).
   const ladeJahr = useCallback(async (anlage: number, j: number): Promise<JahrLadung> => {
-    const heute = new Date()
-    // B4 (C-1): Die Jahresroute liefert die WP-Kennzahlen aus dem Layer; die
-    // Monatsantworten liefern weiter die Mengen. Ein gescheiterter Abruf lässt
-    // die Kennzahlen weg (der Zustand vor B4), nicht das Jahr.
-    const [antworten, kennzahlen] = await Promise.all([
-      Promise.all(
-        zuLadendeMonate(alleMonate, j, heute).map((m) => aktuellerMonatApi.getData(anlage, j, m).catch(() => null)),
-      ).then((ms) => ms.filter((m): m is AktuellerMonatResponse => m != null && monatHatDaten(m))),
-      cockpitApi.getUebersicht(anlage, j).catch(() => null),
-    ])
-    const monate = antworten.map((m) => m.monat)
-    const vergleichsMonate = abgeschlosseneMonate(monate, j, heute)
-    const d = baueJahrAlsMonat(antworten, j, kennzahlen)
-    // Der Vergleichs-Ausschnitt (nur abgeschlossene Monate) hat keine eigene
-    // Route — er trägt die Mengen, keine Kennzahlen.
-    const dVgl = vergleichsMonate.length === monate.length
-      ? d
-      : baueJahrAlsMonat(antworten.filter((m) => vergleichsMonate.includes(m.monat)), j)
-    return { jahr: j, d, dVgl, monate, vergleichsMonate, antworten }
-  }, [alleMonate])
+    // EIN Abruf: Monatsantworten + Faltung im Backend-Layer (Jahresroute, 03.10.2026).
+    const r = await cockpitApi.getJahr(anlage, j)
+    return {
+      jahr: r.jahr,
+      d: r.kopf,
+      dVgl: r.vergleich ?? r.kopf,
+      monate: r.monate_nr,
+      vergleichsMonate: r.vergleichs_monate,
+      antworten: r.monate,
+      vorjahr: r.vorjahr,
+      oeJahr: r.oe_jahr,
+    }
+  }, [])
 
   // keepPreviousData: Jahreswechsel aktualisiert den Block-Stack in-place statt
   // Skeleton (detLAN D7-2) — auch ohne Cache-Stand für das Ziel-Jahr.
@@ -170,7 +164,7 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
     [anlageId, jahr, ladeJahr],
     {
       enabled: !!anlageId && jahr != null && alleMonate.length > 0,
-      swrKey: `v4-jahr:${anlageId}:${jahr}`,
+      swrKey: `v4-jahr-route:${anlageId}:${jahr}`,
       keepPreviousData: true,
     },
   )
@@ -296,21 +290,10 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
   )
   // Fenster der IST-Spalte der Vergleichstabelle = die Grundgesamtheit selbst.
   const istFenster = useMemo(() => monatsFensterAus(vergleichsMonate), [vergleichsMonate])
-  const vorjahr = useMemo<JahrVergleich | null>(() => {
-    if (angezeigtesJahr == null) return null
-    const vj = jahrVergleichAus(alleMonate, angezeigtesJahr - 1, vergleichsMonate)
-    // Keine Überschneidung (Anlage erst im angezeigten Jahr in Betrieb) ⇒ KEIN
-    // Vergleich, nicht eine Spalte aus lauter 0.
-    return vj.monate.length > 0 ? vj : null
-  }, [alleMonate, angezeigtesJahr, vergleichsMonate])
-  const oeJahr = useMemo(() => {
-    if (angezeigtesJahr == null) return null
-    const andere = [...new Set(alleMonate.map((m) => m.jahr))].filter((j) => j !== angezeigtesJahr)
-    // In den Ø geht nur ein Jahr ein, das die Grundgesamtheit GANZ abdeckt —
-    // sonst mischte sich eine Ein-Monats-Summe (Anlage lief 2023 erst ab Juni) in
-    // einen Sechs-Monats-Ø. `count` fällt entsprechend.
-    return mittelJahre(andere.map((j) => jahrVergleichAus(alleMonate, j, vergleichsMonate)), vergleichsMonate)
-  }, [alleMonate, angezeigtesJahr, vergleichsMonate])
+  // Vorjahr / Ø-Jahr: aus der Jahresroute (Monatsreihe, beschnitten auf die Grundgesamtheit N-37; Autarkie paarweise).
+  // „Keine Überschneidung ⇒ KEIN Vergleich" entscheidet das Backend (`vorjahr: null`).
+  const vorjahr = jahrQ.data?.vorjahr ?? null
+  const oeJahr = jahrQ.data?.oeJahr ?? null
   // Das Fenster, auf das sich die Vergleichszahl bezieht — `null` bei einem vollen
   // Jahr (dann ist nichts zu beschriften).
   const vjFenster = useMemo(() => monatsFenster(vorjahr), [vorjahr])
@@ -364,8 +347,8 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
     // Bei abgeschlossenem Jahr fallen beide Fenster zusammen ⇒ Anzeige wie bisher.
     const bilanzSummary = b
       ? mitFenster(mitGrund(istFenster, 'abgeschlossen'), `${fmtCalc(b.pv_erzeugung_kwh, 0, '—')} kWh PV · ${fmtCalc(b.autarkie_prozent, 0, '—')} % Autarkie${
-          istFenster == null && b.soll_pv_kwh != null && b.pv_erzeugung_kwh != null && b.soll_pv_kwh > 0
-            ? ` · SOLL ${fmtCalc((b.pv_erzeugung_kwh / b.soll_pv_kwh) * 100, 0, '—')} %`
+          istFenster == null && b.soll_erfuellung_prozent != null
+            ? ` · SOLL ${fmtCalc(b.soll_erfuellung_prozent, 0, '—')} %`
             : ''}`)
       : 'IST / Vorjahr / Ø-Jahr'
     const kennzahlenSummary = mitFenster(

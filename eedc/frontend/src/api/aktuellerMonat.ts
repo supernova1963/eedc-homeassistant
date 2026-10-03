@@ -104,6 +104,28 @@ export interface WpMoeglichZeile {
   link?: string | null
 }
 
+/** Ein Summand der Ergebnis-Herleitung — Betrag MIT Vorzeichen, Antwortfeld als Quelle (A6). */
+export interface ErgebnisPostenWert {
+  name: string
+  betrag_euro: number | null
+  feld: string
+  /** +1 Ertrag, −1 Aufwand — unabhängig vom Betrag. */
+  vorzeichen: number
+}
+
+/** Eine Stufe der Ergebnis-Leiter: Formel, eingesetzte Werte, Ergebnis — aus derselben Rechnung wie der Wert. */
+export interface ErgebnisStufe {
+  formel: string
+  eingesetzte_werte: ErgebnisPostenWert[]
+  ergebnis_euro: number | null
+}
+
+export interface ErgebnisHerleitung {
+  netto_ertrag: ErgebnisStufe
+  vor_betriebskosten: ErgebnisStufe
+  ergebnis: ErgebnisStufe
+}
+
 export interface AktuellerMonatResponse {
   anlage_id: number
   anlage_name: string
@@ -127,6 +149,16 @@ export interface AktuellerMonatResponse {
   // Quoten (%)
   autarkie_prozent: number | null
   eigenverbrauch_quote_prozent: number | null
+  /** Nur im Jahr (R-Q, N-584): Zähler, Nenner, Fenster der paarweise gebildeten Quoten. */
+  autarkie_zaehler_kwh?: number | null
+  autarkie_nenner_kwh?: number | null
+  autarkie_fenster?: string | null
+  eigenverbrauch_quote_zaehler_kwh?: number | null
+  eigenverbrauch_quote_nenner_kwh?: number | null
+  eigenverbrauch_quote_fenster?: string | null
+  speicher_auslastung_zaehler_kwh?: number | null
+  speicher_auslastung_nenner_kwh?: number | null
+  speicher_auslastung_fenster?: string | null
   // Spez. Ertrag kWh/kWp (Community-Basis) — für die Median-Abweichung im Community-Block.
   spez_ertrag?: number | null
 
@@ -303,7 +335,7 @@ export interface AktuellerMonatResponse {
    *  T-Konto rechnen mit ihr). Optional: der Tag kennt kein Extern. */
   emob_ladung_gesamt_kwh?: number | null
   /** N-557: die Menge hinter `emob_verbrauch_100km` — damit ein Zeitraum
-   *  Σ Monatswerte ÷ Σ km bilden kann (`lib/emobEffizienz.ts`). */
+   *  Σ Monatswerte ÷ Σ km bilden kann (Backend `eauto_effizienz_zeitraum`, Jahresroute). */
   emob_verbrauch_basis_kwh?: number | null
   hat_emobilitaet: boolean
 
@@ -351,7 +383,25 @@ export interface AktuellerMonatResponse {
   // sonstige_*-Totals enthalten.
   anlage_sonstige_ertraege_euro: number
   anlage_sonstige_ausgaben_euro: number
-  gesamtnettoertrag_euro: number | null
+  // ── Ergebnis-Leiter (Backend-Layer `core/berechnungen/ergebnis.py`, 03.10.2026) ──
+  // Der Client RECHNET diese Größen nicht (Wächter `check:ergebnis-roh`); er liest Wert und Herleitung.
+  /** USt-Anteil auf den Eigenverbrauch (EV × Satz des Jahres); `null` ohne Regelbesteuerung. */
+  ust_eigenverbrauch_euro?: number | null
+  /** Satz und Grundlage als fertiger Satz. */
+  ust_herleitung?: string | null
+  /** BKW-Rest-Ersparnis (nur BKW-Monate ohne erfasste Erzeugung, P9). */
+  bkw_ersparnis_euro?: number | null
+  /** Eingesetzte Werte zur BKW-Ersparnis („40,0 kWh × 30,00 ct/kWh“), A6; im Jahr null. */
+  bkw_ersparnis_berechnung?: string | null
+  /** Erlös von Erzeugern mit eigenem Vergütungssatz. */
+  erzeuger_erloes_euro?: number | null
+  /** Stufe 2 — ohne eigenen UI-Namen, nur Zwischenzeile der Herleitung. */
+  ergebnis_vor_betriebskosten_euro?: number | null
+  /** Stufe 3 — das Monats-/Jahresergebnis. */
+  ergebnis_euro?: number | null
+  ergebnis_herleitung?: ErgebnisHerleitung | null
+  /** Fehlende Posten (Pflicht ⇒ Stufe `null`; optional ⇒ als 0 gerechnet, hier genannt). */
+  fehlende_posten?: string[]
   betriebskosten_anteilig_euro: number | null
   /** Σ der Jahresbeträge hinter `betriebskosten_anteilig_euro` und ihre Anzahl (A6). */
   betriebskosten_anteilig_jahr_euro?: number | null
@@ -405,13 +455,27 @@ export interface AktuellerMonatResponse {
     netzbezug_kosten_euro?: number
     netzbezug_arbeitspreis_kosten_euro?: number
     ev_ersparnis_euro?: number
-    gesamtnettoertrag_euro?: number
     netzbezug_durchschnittspreis_cent?: number
+    /** Ergebnis-Leiter des Vorjahresmonats — dieselbe Regel wie der Monat (E5): ohne Stromrechnung kein Ergebnis. */
+    netto_ertrag_euro?: number | null
+    ust_eigenverbrauch_euro?: number | null
+    bkw_ersparnis_euro?: number | null
+    erzeuger_erloes_euro?: number | null
+    sonstige_netto_euro?: number | null
+    betriebskosten_anteilig_euro?: number | null
+    ergebnis_vor_betriebskosten_euro?: number | null
+    ergebnis_euro?: number | null
+    ergebnis_herleitung?: ErgebnisHerleitung | null
+    fehlende_posten?: string[]
   } | null
   // PVGIS-SOLL. Im LAUFENDEN Monat nur der Anteil der abgelaufenen Tage (N-69) —
   // `soll_pv_tage < soll_pv_tage_gesamt` heißt „anteilig". Wer die Zahl anzeigt,
   // nimmt `lib/sollErfuellung.ts`, nicht die Felder direkt.
   soll_pv_kwh: number | null
+  /** SOLL-Erfüllung aus dem Layer (`soll_erfuellung`) — der Client teilt nicht selbst (N-356). */
+  soll_erfuellung_prozent?: number | null
+  soll_erfuellung_monat_prozent?: number | null
+  soll_fenster_text?: string | null
   soll_pv_tage?: number | null
   soll_pv_tage_gesamt?: number | null
   /** Dasselbe SOLL ungekürzt = Prognose für den ganzen Monat (dietmar1968,
@@ -421,7 +485,7 @@ export interface AktuellerMonatResponse {
   soll_pv_kwh_monat?: number | null
 
   // Grundlast (Nacht-Sockel; R12-1 ersetzt PVGIS-SOLL/IST). grundlast_kwh additiv
-  // → Cockpit/Jahr (JahrAggregat) summiert die Monate.
+  // → Cockpit/Jahr (Jahresroute, `falte_zeitraum`) summiert die Monate.
   grundlast_kw?: number | null              // Median der Nacht-Stunden-Leistung
   grundlast_kwh?: number | null             // geschätzte Grundlast-Energie (kW × 24 × Tage)
   grundlast_anteil_prozent?: number | null  // Anteil am Gesamtverbrauch

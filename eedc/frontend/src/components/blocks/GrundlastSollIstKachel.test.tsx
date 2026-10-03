@@ -1,13 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { GrundlastSollIstKachel, MonatsprognoseKachel } from './GrundlastSollIstKachel'
-import { baueJahrAlsMonat } from '../../v4/JahrAggregat'
 import type { AktuellerMonatResponse } from '../../api/aktuellerMonat'
 import { aktuellerMonat } from '../../test/factories'
 
 const d = (over: Partial<AktuellerMonatResponse> = {}) =>
   aktuellerMonat(2026, 8, {
     pv_erzeugung_kwh: 400, gesamtverbrauch_kwh: 1460, soll_pv_kwh: 450,
+    // Seit 03.10.2026 liefert das Backend Quote und Fenster (Layer `soll_erfuellung`) — die Fixture trägt sie mit.
+    soll_erfuellung_prozent: (400 / 450) * 100,
     ...over,
   })
 
@@ -26,7 +27,7 @@ describe('GrundlastSollIstKachel', () => {
   })
 
   it('zeigt Leer-Hinweis, wenn weder Grundlast noch PVGIS vorliegen', () => {
-    render(<GrundlastSollIstKachel d={d({ grundlast_kw: null, soll_pv_kwh: null })} />)
+    render(<GrundlastSollIstKachel d={d({ grundlast_kw: null, soll_pv_kwh: null, soll_erfuellung_prozent: null })} />)
     expect(screen.getByText(/Keine Grundlast- oder PVGIS-Daten/)).toBeInTheDocument()
   })
 })
@@ -36,7 +37,9 @@ describe('MonatsprognoseKachel (Melder dietmar1968, T89667 #155)', () => {
   // Monatsprognose 1387,9 kWh, IST 264,75 kWh.
   const laufend = (over: Partial<AktuellerMonatResponse> = {}) => d({
     pv_erzeugung_kwh: 264.75, soll_pv_kwh: 179.1, soll_pv_kwh_monat: 1387.9,
-    soll_pv_tage: 4, soll_pv_tage_gesamt: 31, ...over,
+    soll_pv_tage: 4, soll_pv_tage_gesamt: 31,
+    soll_erfuellung_prozent: (264.75 / 179.1) * 100, soll_erfuellung_monat_prozent: (264.75 / 1387.9) * 100,
+    soll_fenster_text: 'anteilig · 4 von 31 Tagen', ...over,
   })
 
   it('zeigt den Fortschritt gegen den GANZEN Monat und benennt ihn', () => {
@@ -59,31 +62,14 @@ describe('MonatsprognoseKachel (Melder dietmar1968, T89667 #155)', () => {
     const { container: fertig } = render(<MonatsprognoseKachel d={d({
       pv_erzeugung_kwh: 1843.25, soll_pv_kwh: 1509, soll_pv_kwh_monat: 1509,
       soll_pv_tage: 31, soll_pv_tage_gesamt: 31,
+      soll_erfuellung_prozent: (1843.25 / 1509) * 100, soll_erfuellung_monat_prozent: (1843.25 / 1509) * 100,
+      soll_fenster_text: null,
     })} />)
     expect(fertig).toBeEmptyDOMElement()
-    const { container: ohne } = render(<MonatsprognoseKachel d={d({ soll_pv_kwh: null })} />)
+    const { container: ohne } = render(<MonatsprognoseKachel d={d({ soll_pv_kwh: null, soll_erfuellung_prozent: null })} />)
     expect(ohne).toBeEmptyDOMElement()
   })
 })
 
-describe('baueJahrAlsMonat — Grundlast-Aggregation (R12-1)', () => {
-  it('summiert grundlast_kwh additiv, Anteil nur über Monate MIT Grundlast-Daten', () => {
-    const monate = [
-      d({ jahr: 2026, monat: 1, grundlast_kw: 0.4, grundlast_kwh: 288, gesamtverbrauch_kwh: 1000 }),
-      d({ jahr: 2026, monat: 2, grundlast_kw: 0.5, grundlast_kwh: 372, gesamtverbrauch_kwh: 900 }),
-      // Monat ohne Stundendaten — fließt NICHT in den Anteils-Nenner ein:
-      d({ jahr: 2026, monat: 3, grundlast_kw: null, grundlast_kwh: null, gesamtverbrauch_kwh: 500 }),
-    ]
-    const jahr = baueJahrAlsMonat(monate, 2026)
-    expect(jahr.grundlast_kwh).toBe(660)                  // 288 + 372 (null ignoriert)
-    expect(jahr.grundlast_kw).toBeCloseTo(0.45, 2)        // Ø der Monats-Mediane (0,4 / 0,5)
-    expect(jahr.grundlast_anteil_prozent).toBeCloseTo(34.7, 1) // 660 / 1900 (nur Monate 1+2)
-  })
-
-  it('ohne jegliche Grundlast-Daten → alle Grundlast-Felder null', () => {
-    const monate = [d({ jahr: 2026, monat: 1, grundlast_kw: null, grundlast_kwh: null })]
-    const jahr = baueJahrAlsMonat(monate, 2026)
-    expect(jahr.grundlast_kwh).toBeNull()
-    expect(jahr.grundlast_anteil_prozent).toBeNull()
-  })
-})
+// Die Jahres-Grundlast (Σ kWh, Ø kW, Anteil nur über Monate MIT Grundlast-Daten) faltet seit 03.10.2026 das
+// Backend: `backend/tests/test_ergebnis_jahr_portiert.py::test_grundlast_*` (dieselben Zahlen 660 · 0,45 · 34,7).

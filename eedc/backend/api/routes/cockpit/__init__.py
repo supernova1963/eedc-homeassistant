@@ -19,6 +19,7 @@ from backend.api.routes.cockpit.prognose import router as prognose_router
 from backend.api.routes.cockpit.nachhaltigkeit import router as nachhaltigkeit_router
 from backend.api.routes.cockpit.komponenten import router as komponenten_router
 from backend.api.routes.cockpit.pv_strings import router as pv_strings_router
+from backend.api.routes.cockpit.jahr import router as jahr_router
 
 router = APIRouter()
 router.include_router(uebersicht_router)
@@ -26,3 +27,4 @@ router.include_router(prognose_router)
 router.include_router(nachhaltigkeit_router)
 router.include_router(komponenten_router)
 router.include_router(pv_strings_router)
+router.include_router(jahr_router)

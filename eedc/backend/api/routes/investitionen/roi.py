@@ -696,11 +696,7 @@ async def get_roi_dashboard(
         ROIDashboardResponse: Vollständige ROI-Übersicht
     """
     from backend.core.calculations import berechne_roi
-    from backend.core.berechnungen.ust_eigenverbrauch import (
-        UstJahresanteil,
-        bemessungsgrundlage_aus_investitionen,
-        berechne_ust_eigenverbrauch,
-    )
+    from backend.services.ust_satz import ust_hochrechnung
     from backend.core.berechnungen.kapitalrechnung import (
         amortisations_verlauf,
         annahme_dauer_text,
@@ -883,35 +879,14 @@ async def get_roi_dashboard(
             select(Investition).where(Investition.anlage_id == anlage_id)
         )
         alle_inv = alle_inv_result.scalars().all()
-        # N-228: die USt-Bemessung ist eine JAHRES-Größe — stillgelegte
-        # Komponenten verursachen keine laufenden Kosten mehr. `ha_export/anlage_energie.py`
-        # filtert an derselben Stelle seit jeher; die vier Sichten waren
-        # darüber uneins.
-        _heute_bk = date.today()
-        betriebskosten_ges = sum(
-            i.betriebskosten_jahr or 0
-            for i in alle_inv
-            if i.ist_aktiv_im_monat(_heute_bk.year, _heute_bk.month)
-        )
-        _ust = getattr(anlage, 'ust_satz_prozent', None)
-        # N-130 greift hier NICHT: `*_kwh_jahr` ist bereits eine auf zwölf
-        # Monate hochgerechnete Jahresmenge (`faktor` weiter oben), kein
-        # Zeitraum-Aggregat — deshalb genau EIN Jahresanteil mit `monate=12`.
-        # Geändert hat sich nur die Bemessungsgrundlage (N-129: Mehrkosten
-        # statt Vollkosten).
-        ust_abzug = berechne_ust_eigenverbrauch(
-            # `jahr` ist hier nur ein Etikett für die Diagnose. `isinstance`
-            # statt `jahr or …`, weil `= Query(None, …)` beim direkten
-            # Funktionsaufruf das truthy `Query`-Objekt ablegt (N-111).
-            [UstJahresanteil(
-                jahr=jahr if isinstance(jahr, int) else date.today().year,
-                eigenverbrauch_kwh=pv_detail.get('eigenverbrauch_kwh_jahr', 0),
-                pv_kwh=pv_detail.get('erzeugung_kwh_jahr', 0),
-                monate=12,
-            )],
-            bemessungsgrundlage_euro=bemessungsgrundlage_aus_investitionen(alle_inv),
-            betriebskosten_jahr_euro=betriebskosten_ges,
-            ust_satz_prozent=_ust if _ust is not None else 19.0,
+        # G1 (03.10.2026): Investitionsmenge aus dem EINEN Eingang `services/ust_satz.py` — im Kalenderjahr aktiv, für
+        # Bemessung UND Betriebskosten (bis dahin: alle für die Bemessung, die heute aktiven für die Betriebskosten,
+        # N-228). `*_kwh_jahr` ist eine auf zwölf Monate hochgerechnete Jahresmenge ⇒ ein Anteil, `monate=12`.
+        # `jahr` ist hier nur das Etikett des Jahres; `isinstance` statt `jahr or …`, weil `= Query(None, …)` beim
+        # direkten Funktionsaufruf das truthy `Query`-Objekt ablegt (N-111).
+        ust_abzug = ust_hochrechnung(
+            anlage, alle_inv, jahr if isinstance(jahr, int) else date.today().year,
+            pv_detail.get('eigenverbrauch_kwh_jahr', 0), pv_detail.get('erzeugung_kwh_jahr', 0),
         )
         gesamt_einsparung -= ust_abzug
 

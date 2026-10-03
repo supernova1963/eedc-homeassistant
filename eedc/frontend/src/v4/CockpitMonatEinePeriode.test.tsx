@@ -67,7 +67,7 @@ function monatsAntwort(jahr: number, monat: number) {
     direktverbrauch_kwh: 40, gesamtverbrauch_kwh: 90, autarkie_prozent: 60,
     eigenverbrauch_quote_prozent: 55,
     wp_strom_kwh: 60, wp_waerme_kwh: 180, hat_waermepumpe: true,
-    netto_ertrag_euro: 20, gesamtnettoertrag_euro: 20,
+    netto_ertrag_euro: 20,
   })
 }
 

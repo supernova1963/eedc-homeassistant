@@ -20,6 +20,8 @@ const d = (over: Partial<AktuellerMonatResponse> = {}) =>
     pv_erzeugung_kwh: 264.75, eigenverbrauch_kwh: null, einspeisung_kwh: null,
     soll_pv_kwh: 179.1, soll_pv_kwh_monat: 1387.9,
     soll_pv_tage: 4, soll_pv_tage_gesamt: 31,
+    soll_erfuellung_prozent: (264.75 / 179.1) * 100, soll_erfuellung_monat_prozent: (264.75 / 1387.9) * 100,
+    soll_fenster_text: 'anteilig · 4 von 31 Tagen',
     ...over,
   })
 
@@ -34,6 +36,7 @@ describe('monatBilanzParkIds', () => {
   it('lässt sie weg, wo die Kachel selbst schweigt (abgeschlossener Monat)', () => {
     const fertig = d({
       soll_pv_kwh: 1509, soll_pv_kwh_monat: 1509, soll_pv_tage: 31, soll_pv_tage_gesamt: 31,
+      soll_erfuellung_monat_prozent: 122.15, soll_fenster_text: null,
     })
     expect(monatBilanzParkIds(fertig)).not.toContain('el:bilanz-monatsprognose')
   })

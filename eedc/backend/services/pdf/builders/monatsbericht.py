@@ -38,16 +38,14 @@ selbst (ADR-002/**P10**):
   die einzige Konstruktions-Stelle, und der Wächter ``check:co2-roh`` hält die
   Client-Hälfte derselben Linie. Der Abruf entfällt, wenn das Thema abgewählt ist.
 
-## Die zwei Ausnahmen, und warum sie benannt sind
+## Die zwei früheren Ausnahmen — seit 03.10.2026 keine mehr (N-356)
 
-Zwei Zahlen der Monatsansicht sind **Zusammensetzungen** aus gelieferten
-Feldern und haben keinen Layer-SoT: die **SOLL-Erfüllung** (``lib/sollErfuellung.ts``)
-und das **Monatsergebnis** (``v4/MonatBilanz.tsx::baueMonatKpis``). Beide stehen
-im Bericht, weil eine Monatsansicht ohne sie nicht „im Stile der Cockpit
-Monats Ansicht" ist — beide sind hier aus **gelieferten** Feldern gebildet, mit
-den Wächtern der Client-Seite (``soll_pv_kwh <= 0 → keine Quote``; ``!= None``
-statt Falsy, damit 0 € nicht verschwindet). Das ist eine **zweite
-Bildungsstelle**, und sie ist als solche im Fundregister vermerkt.
+**SOLL-Erfüllung** und **Monatsergebnis** waren bis 03.10.2026 Zusammensetzungen aus gelieferten Feldern, hier als
+Spiegel von ``lib/sollErfuellung.ts`` und ``v4/MonatBilanz.tsx`` gebildet — eine zweite Bildungsstelle (N-356). Seit
+dem Paket „Ergebnisgrößen Monat/Jahr in den Layer" liefert die Route beide als Felder aus dem Layer
+(``core/berechnungen/ergebnis.py``: ``soll_erfuellung``, ``berechne_ergebnis``), samt Herleitung; dieser Builder
+schreibt sie nur noch ab. Der Rückfall ist baulich gesperrt: der Wächter
+``test_ergebnis_leiter_nur_im_layer.py`` findet jede neue Bildung einer Ergebnisgröße außerhalb des Layers.
 """
 from __future__ import annotations
 
@@ -170,49 +168,6 @@ def _hat(zeilen: Iterable[Zeile]) -> bool:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Die zwei Zusammensetzungen — hier, damit sie EINEN Ort haben (s. Modul-Kopf)
-# ─────────────────────────────────────────────────────────────────────────────
-
-def soll_erfuellung_prozent(d: Any) -> Optional[float]:
-    """Spiegel von ``lib/sollErfuellung.ts::sollErfuellungProzent``.
-
-    Der ``<= 0``-Zweig ist nicht Kosmetik: ein SOLL von 0 (Monat in der Zukunft,
-    null abgelaufene Tage) hat keine Erfüllungsquote — eine Division stünde dort
-    als „∞ %"."""
-    if d.soll_pv_kwh is None or d.pv_erzeugung_kwh is None or d.soll_pv_kwh <= 0:
-        return None
-    return d.pv_erzeugung_kwh / d.soll_pv_kwh * 100
-
-
-def soll_fenster_text(d: Any) -> Optional[str]:
-    """Spiegel von ``lib/sollErfuellung.ts::sollFensterText``.
-
-    Ohne diesen Text behauptet die kWh-Zahl im laufenden Monat ein zu niedriges
-    Monats-SOLL (N-69)."""
-    if (
-        d.soll_pv_tage is None
-        or d.soll_pv_tage_gesamt is None
-        or d.soll_pv_tage >= d.soll_pv_tage_gesamt
-    ):
-        return None
-    return f"anteilig · {d.soll_pv_tage} von {d.soll_pv_tage_gesamt} Tagen"
-
-
-def monatsergebnis_euro(d: Any) -> Optional[float]:
-    """Spiegel von ``v4/MonatBilanz.tsx::baueMonatKpis`` („Monatsergebnis").
-
-    ``is not None`` statt Falsy-Prüfung — sonst verschwände ein Ergebnis von
-    0 € (CLAUDE.md, „0-Werte prüfen")."""
-    if d.gesamtnettoertrag_euro is None:
-        return None
-    return (
-        d.gesamtnettoertrag_euro
-        - (d.betriebskosten_anteilig_euro or 0)
-        + (d.sonstige_netto_euro or 0)
-    )
-
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Abschnitte
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -282,11 +237,12 @@ def _abschnitte_energie(d: Any) -> list[Abschnitt]:
             park_id="el:bilanz-vergleich",
         ))
 
-    fenster = soll_fenster_text(d)
+    # N-356: Fenstertext und Quote kommen als Felder aus dem Layer (`soll_erfuellung`).
+    fenster = d.soll_fenster_text
     prognose = [
         _z("PVGIS-SOLL", fmt_kwh(d.soll_pv_kwh, 1), hinweis=fenster),
         _z("PVGIS-SOLL (ganzer Monat)", fmt_kwh(d.soll_pv_kwh_monat, 1)),
-        _z("SOLL-Erfüllung", fmt_pct(soll_erfuellung_prozent(d)),
+        _z("SOLL-Erfüllung", fmt_pct(d.soll_erfuellung_prozent),
            hinweis="PV-Ertrag ÷ PVGIS-SOLL × 100"),
     ]
     if _hat(prognose):
@@ -499,19 +455,28 @@ def _abschnitte_komponenten(d: Any) -> list[Abschnitt]:
 def _abschnitte_finanzen(d: Any) -> list[Abschnitt]:
     aus: list[Abschnitt] = []
 
+    # Die Ergebnis-Leiter (N-600/N-356): jede Zeile ist ein Posten aus der Antwort, die Summenzeilen sind die Stufen
+    # des Layers. Optionale Posten erscheinen nur, wenn sie etwas beitragen — wie im Tooltip der Kachel.
+    herl = d.ergebnis_herleitung
     bilanz = [
         _z("Einspeise-Erlös", fmt_euro(d.einspeise_erloes_euro)),
         _z("Eigenverbrauchs-Ersparnis", fmt_euro(d.ev_ersparnis_euro)),
+        *([_z("BKW-Ersparnis", fmt_euro(d.bkw_ersparnis_euro),
+              hinweis="Balkonkraftwerk-Monat ohne erfasste Erzeugung")] if d.bkw_ersparnis_euro else []),
+        *([_z("Erlös eigener Satz", fmt_euro(d.erzeuger_erloes_euro))] if d.erzeuger_erloes_euro else []),
+        _z("Sonstige Positionen (netto)", fmt_euro(d.sonstige_netto_euro)),
+        *([_z("USt auf Eigenverbrauch", fmt_euro(d.ust_eigenverbrauch_euro), hinweis=d.ust_herleitung)]
+          if d.ust_eigenverbrauch_euro else []),
+        _z("Netto-Ertrag", fmt_euro(d.netto_ertrag_euro),
+           hinweis=herl.netto_ertrag.formel if herl else None),
+        *([_z("WP-Ersparnis", fmt_euro(d.wp_ersparnis_euro))] if d.wp_ersparnis_euro else []),
+        *([_z("E-Mobilität-Ersparnis", fmt_euro(d.emob_ersparnis_euro))] if d.emob_ersparnis_euro else []),
         _z("Netzbezugskosten", fmt_euro(d.netzbezug_kosten_euro)),
         _z("davon Grundgebühr", fmt_euro(d.grundgebuehr_euro)),
-        _z("Netto-Ertrag", fmt_euro(d.netto_ertrag_euro),
-           hinweis="vor Betriebskosten"),
-        _z("Gesamt-Nettoertrag", fmt_euro(d.gesamtnettoertrag_euro),
-           hinweis="Erlöse + Einsparungen − Kosten"),
+        _z("Zwischensumme vor Betriebskosten", fmt_euro(d.ergebnis_vor_betriebskosten_euro)),
         _z("Betriebskosten (anteilig)", fmt_euro(d.betriebskosten_anteilig_euro)),
-        _z("Sonstige Positionen (netto)", fmt_euro(d.sonstige_netto_euro)),
-        _z("Monatsergebnis", fmt_euro(monatsergebnis_euro(d)),
-           hinweis="Gesamt-Nettoertrag − Betriebskosten + Sonstiges"),
+        _z("Monatsergebnis", fmt_euro(d.ergebnis_euro),
+           hinweis=herl.ergebnis.formel if herl else None),
     ]
     if d.nicht_vergueteter_erloes_euro is not None:
         bilanz.append(_z(

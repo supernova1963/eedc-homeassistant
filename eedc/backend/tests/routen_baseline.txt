@@ -41,6 +41,7 @@ GET /api/aussichten/wetter/{anlage_id}
 GET /api/cloud-import/credentials/{anlage_id}
 GET /api/cloud-import/fetch-status/{job_id}
 GET /api/cloud-import/providers
+GET /api/cockpit/jahr/{anlage_id}
 GET /api/cockpit/komponenten-zeitreihe/{anlage_id}
 GET /api/cockpit/nachhaltigkeit/{anlage_id}
 GET /api/cockpit/prognose-vergleich/{anlage_id}

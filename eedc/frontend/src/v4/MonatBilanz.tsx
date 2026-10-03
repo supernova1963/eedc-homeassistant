@@ -30,6 +30,7 @@ import { KOMPONENTEN_FARBEN } from '../lib/colors'
 // R3b S7/A5: Datenrollen-Icons aus der SoT-Map (eine Datenrolle = ein Icon).
 import { DATENROLLEN_ICONS } from '../lib/komponentenStyle'
 import { sollErfuellungProzent, sollFensterText } from '../lib/sollErfuellung'
+import { berechnungAus, ergebnisMitLuecken, ergebnisZeile, fehlendHinweis } from '../lib/ergebnisHerleitung'
 import type { KpiStripItem } from '../components/blocks'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
@@ -69,12 +70,12 @@ export function baueMonatKpis(
     : vm ? `VM: ${fmt(vm.pv_erzeugung_kwh)} kWh` : undefined
   const sollFenster = sollFensterText(d)
 
-  // Monatsergebnis = nach Betriebskosten (verhaltensgleich zu MonatsabschlussView
-  // `nettoNachAllem`, Donor): Gesamt-Nettoertrag − Betriebskosten + Sonstiges.
-  // `!= null` statt Falsy-Check, damit 0 € nicht verschwindet (CLAUDE.md 0-Werte).
-  const monatsergebnis = d.gesamtnettoertrag_euro != null
-    ? d.gesamtnettoertrag_euro - (d.betriebskosten_anteilig_euro ?? 0) + (d.sonstige_netto_euro ?? 0)
-    : null
+  // Netto-Ertrag und Monatsergebnis kommen samt Herleitung aus der Ergebnis-Leiter des Backends
+  // (`core/berechnungen/ergebnis.py`, 03.10.2026). Bis dahin bildete diese Datei das Monatsergebnis selbst
+  // (`Gesamt-Nettoertrag − Betriebskosten + Sonstiges`) und der Tooltip setzte ein Sammelfeld ein, in dem die
+  // Stromrechnung unsichtbar steckte (N-600, #398). Hier wird nur noch gelesen und formatiert.
+  const herl = d.ergebnis_herleitung
+  const monatsergebnis = d.ergebnis_euro ?? null
 
   // N-472: Warum eine Kachel leer bleibt. Der **Satz kommt aus der Antwort**
   // (`core/monatswert_grund.py`) — hier wird nur der Slot bedient, den die
@@ -124,31 +125,33 @@ export function baueMonatKpis(
     {
       title: 'Netto-Ertrag', value: fmtCalc(d.netto_ertrag_euro, 2, '—'), unit: '€', color: 'blue', icon: DATENROLLEN_ICONS.nettoErtrag,
       subtitle: 'vor Betriebskosten',
-      formel: 'Einspeise-Erlös + Eigenverbrauchs-Ersparnis',
-      // A6: die beiden Summanden aus DERSELBEN Antwort, die auch den Wert
-      // daneben trägt (`netto_ertrag_euro = einspeise_erloes + ev_ersparnis`,
-      // `aktueller_monat.py`). Kein `?? 0`: fehlt einer der beiden, bleibt die
-      // Herleitung leer, statt eine Rechnung aus „—" zu bauen.
-      berechnung: (d.einspeise_erloes_euro != null && d.ev_ersparnis_euro != null)
-        ? `${fmtCalc(d.einspeise_erloes_euro, 2)} € Einspeise-Erlös + ${fmtCalc(d.ev_ersparnis_euro, 2)} € Eigenverbrauchs-Ersparnis`
-        : undefined,
-      ergebnis: (d.einspeise_erloes_euro != null && d.ev_ersparnis_euro != null && d.netto_ertrag_euro != null)
-        ? `= ${fmtCalc(d.netto_ertrag_euro, 2)} €`
-        : undefined,
+      // A6: Formel und Summanden aus DERSELBEN Rechnung, die den Wert daneben trägt (Stufe 1 der Leiter —
+      // mit BKW-Rest, Erlös eigener Satz, Sonstigem und USt-Anteil, sobald sie etwas beitragen). Ohne Wert keine
+      // Rechnung: neben „—" steht nichts.
+      formel: herl?.netto_ertrag.formel ?? 'Einspeise-Erlös + Eigenverbrauchs-Ersparnis',
+      berechnung: d.netto_ertrag_euro != null ? berechnungAus(herl?.netto_ertrag) : undefined,
+      ergebnis: herl?.netto_ertrag.ergebnis_euro != null ? ergebnisZeile(d.netto_ertrag_euro) : undefined,
     },
     {
       title: 'Monatsergebnis',
       value: fmtCalc(monatsergebnis, 2, '—'), unit: '€',
       color: monatsergebnis != null && monatsergebnis < 0 ? 'red' : 'green', icon: DATENROLLEN_ICONS.ergebnis,
+      // „nach Stromrechnung und Betriebskosten" (37 Zeichen) passt nicht in die Zweitzeile (`truncate`, rund 22
+      // Zeichen, gemessen 02.08. an `JahrBilanz`) — die Stromrechnung steht dafür als eigener Summand im Tooltip.
       subtitle: 'nach Betriebskosten',
-      formel: 'Gesamt-Nettoertrag − Betriebskosten + Sonstiges',
-      // A6: dieselben drei Felder, aus denen `monatsergebnis` oben entsteht —
-      // derselbe Guard (`gesamtnettoertrag_euro != null`), damit die Rechnung
-      // nicht neben einem „—" steht.
-      berechnung: d.gesamtnettoertrag_euro != null
-        ? `${fmtCalc(d.gesamtnettoertrag_euro, 2)} € − ${fmtCalc(d.betriebskosten_anteilig_euro ?? 0, 2)} € + ${fmtCalc(d.sonstige_netto_euro ?? 0, 2)} €`
+      // Ohne Wert keine Formel, dafür der Grund (`hinweis` wirkt im KPICard nur ohne `formel`): fehlt eine
+      // Pflichtgröße (Stromrechnung), gibt es kein Ergebnis — dieselbe Regel für Monat, Vorjahr und Jahr (E5/E10).
+      formel: monatsergebnis != null ? (herl?.ergebnis.formel ?? 'Netto-Ertrag − Stromrechnung − Betriebskosten') : undefined,
+      // A6/N-600: jeder Summand einzeln — Einspeise-Erlös, EV-Ersparnis, Stromrechnung, Betriebskosten; WP und
+      // E-Mobilität nur, wenn sie etwas beitragen (Zuschnitt Gernot 02.10.). Der Zwischenstand vor den
+      // Betriebskosten steht IN der Zeile — er hat im UI keinen eigenen Namen (G4).
+      berechnung: monatsergebnis != null
+        ? berechnungAus(herl?.ergebnis, {
+          vorFeld: 'betriebskosten_anteilig_euro', wert: d.ergebnis_vor_betriebskosten_euro, label: 'vor Betriebskosten',
+        })
         : undefined,
-      ergebnis: monatsergebnis != null ? `= ${fmtCalc(monatsergebnis, 2)} €` : undefined,
+      ergebnis: ergebnisMitLuecken(monatsergebnis, d.fehlende_posten),
+      hinweis: monatsergebnis == null ? fehlendHinweis(d.fehlende_posten) : undefined,
     },
     // Performance Ratio Ø des Monats (M1-Wiederherstellung) — neutrale Kachel, nur
     // wenn ableitbar. Physikalische Kennzahl (keine Datenrolle) → raw Gauge-Icon

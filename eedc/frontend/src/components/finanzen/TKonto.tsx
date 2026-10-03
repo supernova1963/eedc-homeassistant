@@ -4,9 +4,9 @@
  * Verhaltensgleich ausgelagert aus `pages/MonatsabschlussView.tsx` → von der
  * IST-Monatsabschluss-Sicht UND der v4-Auswertung „Finanzen" geteilt (eine
  * Code-Wahrheit). Eingabe ist EIN `AktuellerMonatResponse`-Period-Shape: im
- * Monat die kanonische Monats-Antwort, im Jahr die Σ-12-Aggregation
- * (`baueJahrAlsMonat`). Vorjahr-Δ kommt aus `d.vorjahr` (Monat: Vorjahres-Monat;
- * Jahr: null → kein Δ). `sonderkosten` = Fallback-Aggregat, wenn keine
+ * Monat die kanonische Monats-Antwort, im Jahr der Kopf der Jahresroute (Faltung im
+ * Backend-Layer). Vorjahr-Δ kommt aus `d.vorjahr` (Monat: Vorjahres-Monat mit seiner
+ * eigenen Ergebnis-Leiter; Jahr: null → kein Δ). `sonderkosten` = Fallback-Aggregat, wenn keine
  * Per-Investition-Financials vorliegen.
  */
 import React from 'react'
@@ -14,17 +14,20 @@ import { FormelTooltip, fmtCalc } from '../ui'
 import { TYP_TEXT_CLASS } from '../../lib'
 import type { AktuellerMonatResponse } from '../../api/aktuellerMonat'
 import { angezeigtesDelta } from '../../lib/werte'
-import { evInKomponentenzeilen, pvEigenverbrauchRestEuro } from './evAufteilung'
+import { bkwAufteilung, evInKomponentenzeilen, pvEigenverbrauchRestEuro } from './evAufteilung'
 
 const fmt = (v: number | null | undefined, d = 1) => fmtCalc(v, d, '—')
 
 // R18-9 (Rainer-PN 2026-07-25): Die Ergebniszeile war die einzige Zeile ohne
-// Herleitung — und sie trägt einen ANDEREN Netto-Begriff als die Kachel
-// „Netto-Ertrag (PV)" im Block darüber. Beides steht jetzt im Tooltip.
+// Herleitung. Seit 03.10.2026 (Paket „Ergebnisgrößen", E2) ist sie das
+// Monats-/Jahresergebnis der Ergebnis-Leiter in Kontenform — dieselbe Zahl wie die
+// Kachel, nur auf SOLL und HABEN verteilt. Bis dahin stand hier „andere Abgrenzung":
+// das T-Konto kannte die USt auf den Eigenverbrauch nicht und wich bei
+// Regelbesteuerung um genau diesen Betrag von der Kachel ab.
 const ERGEBNIS_FORMEL =
-  'HABEN − SOLL = Einspeiseerlös + EV-Ersparnis + Wärmepumpen-/E-Mobilitäts-Ersparnis − Netzbezug-Kosten − Sonstige Ausgaben'
+  'HABEN − SOLL = Erlöse + Ersparnisse + Sonstige Erträge − Stromrechnung − Betriebskosten − Sonstige Ausgaben − USt auf Eigenverbrauch'
 const ERGEBNIS_ABGRENZUNG =
-  'Andere Abgrenzung als „Netto-Ertrag (PV)" oben: hier zählen Netzbezug-Kosten und Wärmepumpe/E-Mobilität mit.'
+  'Dasselbe Ergebnis wie die Kachel „Monatsergebnis" bzw. „Jahresergebnis" — hier auf die Konten verteilt.'
 
 /**
  * Vergleichs-Badge des T-Kontos.
@@ -60,22 +63,28 @@ function Δ({ a, b, inv = false, dec = 2 }: { a: number | null | undefined; b: n
   )
 }
 
-export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; sonderkosten?: number | null }) {
+// ── T-Konto Datenstruktur ──────────────────────────────
+export type TKontoPosten = {
+  label: string
+  wert: number
+  vjWert?: number | null
+  formel?: string
+  berechnung?: string
+  ergebnis?: string
+  color: string
+  /** Nachrichtliche Unterzeile („davon …") — reiner Ausweis, zählt NICHT in die Summe. */
+  hinweis?: string
+}
+
+/**
+ * Die Posten des T-Kontos und seine Hauptbuch-Summe (`nettoT` = Σ HABEN − Σ SOLL) — als reine Funktion, damit
+ * die Probe P8 (Paket „Ergebnisgrößen", E2) die Gleichheit „Hauptbuch == Monats-/Jahresergebnis der Leiter" an
+ * echten Antworten messen kann, ohne die Komponente zu rendern. Verhalten unverändert gegenüber der Fassung im
+ * Komponentenrumpf (bis 03.10.2026).
+ */
+export function baueTKonto(d: AktuellerMonatResponse, sonderkosten: number | null = null) {
   const vj = d.vorjahr
   const netzPreis = d.netzbezug_durchschnittspreis_cent ?? d.netzbezug_preis_cent
-
-  // ── T-Konto Datenstruktur ──────────────────────────────
-  type TKontoPosten = {
-    label: string
-    wert: number
-    vjWert?: number | null
-    formel?: string
-    berechnung?: string
-    ergebnis?: string
-    color: string
-    /** Nachrichtliche Unterzeile („davon …") — reiner Ausweis, zählt NICHT in die Summe. */
-    hinweis?: string
-  }
 
   // Farbe je Investitionstyp
   // Identitätsfarbe je Typ aus der Kanon-SoT (TYP_TEXT_CLASS, Regel A) —
@@ -85,10 +94,10 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
   const fins = d.investitionen_financials ?? []
   const hasPerInv = fins.length > 0
 
-  // ⚠ **Dasselbe T-Konto trägt Monat UND Jahr** — die Jahres-Sicht reicht das
-  // Σ-12-Aggregat aus `JahrAggregat.baueJahrAlsMonat` durch. Dessen Marke ist
-  // `monat: 0` (ein echter Monat ist 1–12; das Aggregat setzt zusätzlich
-  // `monat_name = String(jahr)`). Sie existiert seit dem Aggregat und wird hier
+  // ⚠ **Dasselbe T-Konto trägt Monat UND Jahr** — die Jahres-Sicht reicht den
+  // Kopf der Jahresroute durch (Faltung im Backend-Layer, bis 03.10.2026
+  // `JahrAggregat.baueJahrAlsMonat`). Dessen Marke ist `monat: 0` (ein echter
+  // Monat ist 1–12; das Aggregat setzt zusätzlich `monat_name = String(jahr)`). Sie existiert seit dem Aggregat und wird hier
   // nur gelesen — eine neue Prop wäre eine zweite Wahrheit über denselben Zustand.
   //
   // Gebraucht wird sie für die Betriebskosten-FORMEL: Im Jahr ist der Betrag
@@ -105,7 +114,9 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
   //
   // ⚑ Die Regel steht seit #402 in `evAufteilung.ts` — die Komponenten-Finanztabelle
   // hängt an derselben Antwort und muss dieselbe Aufteilung sehen (sie tat es nicht).
-  const evInErsparnis = hasPerInv ? evInKomponentenzeilen(fins) : 0
+  // A2 (03.10.2026): der BKW-Anteil nur, soweit er im Eigenverbrauch steckt; der P9-Rest steht als eigene Zeile.
+  const bkw = bkwAufteilung(d)
+  const evInErsparnis = hasPerInv ? evInKomponentenzeilen(fins) - bkw.geraete + bkw.imEigenverbrauch : 0
   const pvEvResidual = pvEigenverbrauchRestEuro(d)
 
   // N-131: Hat die Anlage einen Erzeuger unter *Sonstiges* — BHKW, Windrad,
@@ -214,6 +225,19 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
         : undefined,
       ergebnis: `= ${fmtCalc(d.ev_ersparnis_euro, 2)} €`,
     } as TKontoPosten] : []),
+    // ── BKW-Ersparnis aus Monaten ohne Erzeugungswert (P9-Rest, Posten der Ergebnis-Leiter) ──
+    // Steckt NICHT in der Eigenverbrauchs-Ersparnis darüber (s. `bkwAufteilung`); ohne diese Zeile lag das Hauptbuch
+    // im Datenlücken-Monat um genau diesen Betrag unter dem Monatsergebnis (A2, W3(f)).
+    ...(bkw.rest !== 0 ? [{
+      label: 'BKW-Ersparnis (Monat ohne Erzeugungswert)',
+      wert: bkw.rest,
+      vjWert: vj?.bkw_ersparnis_euro,
+      color: typColor('balkonkraftwerk'),
+      formel: 'Gemessener BKW-Eigenverbrauch × Netzbezugspreis — für ein Balkonkraftwerk ohne erfasste Erzeugung; '
+        + 'er steckt deshalb nicht im Eigenverbrauch der Anlage',
+      berechnung: d.bkw_ersparnis_berechnung ?? undefined,
+      ergebnis: `= ${fmtCalc(bkw.rest, 2)} €`,
+    } as TKontoPosten] : []),
     // ── Per-Investition: BKW, Speicher, WP, eMob, Sonstiges ──
     ...fins.flatMap((inv): TKontoPosten[] => {
       const rows: TKontoPosten[] = []
@@ -236,19 +260,26 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
           // Feld statt im Formeltext — dort standen sie unter der Überschrift
           // „Formel", während jede andere Zeile „Berechnung" daneben führt.
           // `null` in den gepflegt-Zweigen (Herkunftsangabe, keine Rechnung)
-          // und im Jahres-Σ (`JahrAggregat`: der Monatswert passt nicht zur Σ).
+          // und im Jahres-Σ (Jahresroute: der Monatswert passt nicht zur Σ).
           berechnung: inv.erloes_berechnung ?? undefined,
           ergebnis: `= ${fmtCalc(inv.erloes_euro, 2)} €`,
         })
       }
-      if (inv.ersparnis_euro != null) {
+      // A2: die BKW-Gerätezeile trägt nur den Anteil, der im Eigenverbrauch der Anlage steckt (`bkwAufteilung`) —
+      // geklemmt wie die PV-Restzeile; ist er 0 (Klemm-Monat, Monat ohne Erzeugungswert), entfällt die Zeile.
+      const gekappt = inv.typ === 'balkonkraftwerk' && bkw.faktor < 1
+      const ersparnis = inv.ersparnis_euro != null && gekappt ? inv.ersparnis_euro * bkw.faktor : inv.ersparnis_euro
+      if (ersparnis != null && !(gekappt && ersparnis === 0)) {
         rows.push({
           label: `${inv.bezeichnung} — ${inv.ersparnis_label || 'Ersparnis'}`,
-          wert: inv.ersparnis_euro,
+          wert: ersparnis,
           color: typColor(inv.typ),
           formel: inv.formel ?? undefined,
-          berechnung: inv.berechnung ?? undefined,
-          ergebnis: `= ${fmtCalc(inv.ersparnis_euro, 2)} €`,
+          berechnung: gekappt ? undefined : (inv.berechnung ?? undefined),
+          ergebnis: `= ${fmtCalc(ersparnis, 2)} €`,
+          hinweis: gekappt
+            ? `gekappt auf den Eigenverbrauch der Anlage (Gerät: ${fmtCalc(inv.ersparnis_euro, 2)} €)`
+            : undefined,
         })
       }
       if ((inv.sonstige_ertraege_euro ?? 0) > 0) {
@@ -339,6 +370,18 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
         ? `davon Batterieladung Netz: ${fmtCalc(d.speicher_ladung_netz_kosten_euro, 2)} € (${fmt(d.speicher_ladung_netz_kwh, 1)} kWh)`
         : undefined,
     },
+    // ── USt auf den Eigenverbrauch (Regelbesteuerung) — Posten der Ergebnis-Leiter (E2/G4, 03.10.2026) ──
+    // Ohne diese Zeile wich die Hauptbuch-Summe bei Regelbesteuerung um genau diesen Betrag vom
+    // Monatsergebnis ab. Satz und Grundlage kommen als Satz aus der Antwort (`services/ust_satz.py`).
+    ...((d.ust_eigenverbrauch_euro ?? 0) > 0 ? [{
+      label: 'USt auf Eigenverbrauch',
+      wert: d.ust_eigenverbrauch_euro!,
+      vjWert: vj?.ust_eigenverbrauch_euro,
+      color: 'text-red-500',
+      formel: 'Eigenverbrauch × Selbstkosten je kWh des Jahres × USt-Satz (§ 3 Abs. 1b UStG)',
+      berechnung: d.ust_herleitung ?? undefined,
+      ergebnis: `= ${fmtCalc(d.ust_eigenverbrauch_euro, 2)} €`,
+    } as TKontoPosten] : []),
     // ── Betriebskosten: per Investition wenn Daten da, sonst Aggregat ──
     ...(hasPerInv
       ? fins
@@ -352,7 +395,7 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
               : 'Betriebskosten/Jahr ÷ 12',
             // A6: der Jahresbetrag kommt aus derselben Antwort
             // (`betriebskosten_jahr_euro`) und stand bis 2026-09-13 auf keiner
-            // Fläche. Im Jahres-T-Konto bleibt das Feld leer (`JahrAggregat`) —
+            // Fläche. Im Jahres-T-Konto bleibt das Feld leer (Jahresroute) —
             // dort ist der Betrag daneben die Σ über die Monate, „÷ 12" führte
             // dann auf eine andere Zahl.
             berechnung: inv.betriebskosten_jahr_euro
@@ -417,9 +460,23 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
 
 
 
-  // VJ-Summen
-  const vjSumSoll  = vj?.netzbezug_kosten_euro != null ? (vj.netzbezug_kosten_euro + Math.max(0, vj.gesamtnettoertrag_euro ?? 0)) : null
-  const vjSumHaben = vj?.einspeise_erloes_euro != null ? ((vj.einspeise_erloes_euro ?? 0) + (vj.ev_ersparnis_euro ?? 0) + Math.max(0, -(vj.gesamtnettoertrag_euro ?? 0))) : null
+  return { vj, habenPosten, sollPosten, rawSoll, rawHaben, nettoT, gewinnSeite, sumSoll, sumHaben }
+}
+
+export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; sonderkosten?: number | null }) {
+  const { vj, habenPosten, sollPosten, rawSoll, rawHaben, nettoT, gewinnSeite, sumSoll, sumHaben } =
+    baueTKonto(d, sonderkosten)
+
+  // VJ-Summen: die Herleitung des Vorjahres-Ergebnisses in Kontenform — Posten mit positivem Betrag ins HABEN,
+  // mit negativem ins SOLL, das Ergebnis auf die schwächere Seite (dieselbe Bilanzregel wie oben). Bis 03.10.2026
+  // standen hier Teilsummen aus `gesamtnettoertrag_euro` (ohne Betriebskosten, Sonstiges, USt) — eine VJ-Summe,
+  // die zu keinem Vorjahres-Hauptbuch passte.
+  const vjErg = vj?.ergebnis_euro ?? null
+  const vjWerte = vj?.ergebnis_herleitung?.ergebnis.eingesetzte_werte ?? null
+  const vjHabenRoh = vjWerte ? vjWerte.reduce((s, w) => s + Math.max(0, w.betrag_euro ?? 0), 0) : null
+  const vjSollRoh = vjWerte ? vjWerte.reduce((s, w) => s + Math.max(0, -(w.betrag_euro ?? 0)), 0) : null
+  const vjSumSoll  = vjErg != null && vjSollRoh != null ? vjSollRoh + Math.max(0, vjErg) : null
+  const vjSumHaben = vjErg != null && vjHabenRoh != null ? vjHabenRoh + Math.max(0, -vjErg) : null
 
   return (
     <div className="mt-3">
@@ -463,10 +520,10 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
                   {fmtCalc(Math.abs(nettoT), 2)} €
                 </td>
                 <td className="py-2 pr-2 text-right tabular-nums whitespace-nowrap text-xs text-gray-400 dark:text-gray-500 border-b border-gray-200 dark:border-gray-600">
-                  {vj?.gesamtnettoertrag_euro != null ? `VJ: ${fmtCalc(vj.gesamtnettoertrag_euro, 2)} €` : ''}
+                  {vjErg != null ? `VJ: ${fmtCalc(vjErg, 2)} €` : ''}
                 </td>
                 <td className="py-2 pr-4 text-right whitespace-nowrap border-b border-gray-200 dark:border-gray-600">
-                  {vj?.gesamtnettoertrag_euro != null ? <Δ a={nettoT} b={vj.gesamtnettoertrag_euro} /> : null}
+                  {vjErg != null ? <Δ a={nettoT} b={vjErg} /> : null}
                 </td>
               </>
             }
@@ -590,7 +647,7 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
                             )}
                           </React.Fragment>
                         ))}
-                        {mobileRow('Summe Kosten', rawSoll, vj?.netzbezug_kosten_euro, '', true, true, sumRow)}
+                        {mobileRow('Summe Kosten', rawSoll, vjSollRoh, '', true, true, sumRow)}
                       </tbody>
                     </table>
                     {/* Erlöse + Einsparungen */}
@@ -618,9 +675,9 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
                         {mobileRow(
                           'Summe Erträge',
                           rawHaben,
-                          (vj?.einspeise_erloes_euro != null || vj?.ev_ersparnis_euro != null)
-                            ? (vj.einspeise_erloes_euro ?? 0) + (vj.ev_ersparnis_euro ?? 0)
-                            : null,
+                          // VJ: die Erträge der Vorjahres-Leiter (dieselbe Summe wie am Desktop) — bis
+                          // 03.10.2026 nur Einspeise-Erlös + EV-Ersparnis, ohne WP/E-Mob/Sonstiges.
+                          vjHabenRoh,
                           '', true, false, sumRow,
                         )}
                       </tbody>
@@ -642,10 +699,10 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
                             <div className={`tabular-nums whitespace-nowrap font-bold ${nettoT >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                               {fmtCalc(Math.abs(nettoT), 2)} €
                             </div>
-                            {vj?.gesamtnettoertrag_euro != null && (
+                            {vjErg != null && (
                               <div className="flex items-center gap-1 justify-end mt-0.5 text-[11px] text-gray-400 dark:text-gray-500 tabular-nums whitespace-nowrap">
-                                <span>VJ: {fmtCalc(vj.gesamtnettoertrag_euro, 2)} €</span>
-                                <Δ a={nettoT} b={vj.gesamtnettoertrag_euro} />
+                                <span>VJ: {fmtCalc(vjErg, 2)} €</span>
+                                <Δ a={nettoT} b={vjErg} />
                               </div>
                             )}
                           </td>

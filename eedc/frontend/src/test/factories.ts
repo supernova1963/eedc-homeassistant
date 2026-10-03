@@ -31,6 +31,7 @@
  * Bestandsdatei umhängt, prüft ihre Fallzahl vor und nach dem Eingriff.
  */
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
+import type { CockpitJahr, JahrVergleich } from '../api/cockpit'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 import type { TagWerte } from '../api/energie_profil'
 
@@ -116,7 +117,14 @@ const MONAT_BASIS = {
   sonstige_netto_euro: 0,
   anlage_sonstige_ertraege_euro: 0,
   anlage_sonstige_ausgaben_euro: 0,
-  gesamtnettoertrag_euro: null,
+  ust_eigenverbrauch_euro: null,
+  ust_herleitung: null,
+  bkw_ersparnis_euro: null,
+  erzeuger_erloes_euro: null,
+  ergebnis_vor_betriebskosten_euro: null,
+  ergebnis_euro: null,
+  ergebnis_herleitung: null,
+  fehlende_posten: [],
   betriebskosten_anteilig_euro: null,
   netzbezug_preis_cent: null,
   einspeise_preis_cent: null,
@@ -273,4 +281,64 @@ export function monatsZeile(
 /** Ein Tag aus `GET /energie-profil/werte`. `datum` als `YYYY-MM-DD`. */
 export function tagWerte(datum: string, over: Partial<TagWerte> = {}): TagWerte {
   return { ...TAG_BASIS, datum, ...over }
+}
+
+/**
+ * Eine Ergebnis-Herleitung, wie das Backend sie liefert (`core/berechnungen/ergebnis.py`) — für Proben der
+ * LESENDEN Seite. Die Posten werden so übernommen, wie sie hier stehen; gerechnet wird nur die Stufen-Summe, damit
+ * die Fixture in sich stimmt (die Leiter selbst prüfen die pytest-Proben).
+ */
+export function ergebnisHerleitung(
+  posten: Array<{ name: string; betrag: number; feld: string; stufe: 1 | 2 | 3 }>,
+): NonNullable<AktuellerMonatResponse['ergebnis_herleitung']> {
+  const stufe = (bis: 1 | 2 | 3, formelNamen: string[]) => {
+    const werte = posten.filter((p) => p.stufe <= bis)
+      .map((p) => ({ name: p.name, betrag_euro: p.betrag, feld: p.feld, vorzeichen: p.betrag < 0 || p.feld === 'betriebskosten_anteilig_euro' || p.feld === 'netzbezug_kosten_euro' ? -1 : 1 }))
+    return {
+      formel: formelNamen.join(' '),
+      eingesetzte_werte: werte,
+      ergebnis_euro: Math.round(werte.reduce((s, w) => s + w.betrag_euro, 0) * 100) / 100,
+    }
+  }
+  const namen = (bis: number) => posten.filter((p) => p.stufe <= bis).map((p, i) => (i ? (p.betrag < 0 || p.feld.includes('kosten') ? '− ' : '+ ') : '') + p.name)
+  return {
+    netto_ertrag: stufe(1, namen(1)),
+    vor_betriebskosten: stufe(2, namen(2)),
+    ergebnis: stufe(3, namen(3)),
+  }
+}
+
+/**
+ * Eine Antwort der Jahresroute (`GET /cockpit/jahr`) — für Proben der Sicht. Die Faltung selbst rechnet seit
+ * 03.10.2026 das Backend (`falte_zeitraum`, Proben in `backend/tests/test_ergebnis_jahr_portiert.py`); hier stehen
+ * ihre Ergebnisse als Literale, damit eine Sicht-Probe nicht still eine zweite Faltung im Test nachbaut.
+ */
+export function cockpitJahr(
+  jahr: number,
+  over: Partial<Omit<CockpitJahr, 'kopf' | 'vergleich'>> & {
+    kopf?: Partial<AktuellerMonatResponse>
+    vergleich?: Partial<AktuellerMonatResponse> | null
+  } = {},
+): CockpitJahr {
+  const { kopf, vergleich, ...rest } = over
+  const monateNr = rest.monate_nr ?? (rest.monate ?? []).map((m) => m.monat)
+  return {
+    jahr,
+    monate: [],
+    monate_nr: monateNr,
+    vergleichs_monate: rest.vergleichs_monate ?? monateNr,
+    vorjahr: null,
+    oe_jahr: null,
+    ...rest,
+    kopf: aktuellerMonat(jahr, 0, { monat_name: String(jahr), ...kopf }),
+    vergleich: vergleich ? aktuellerMonat(jahr, 0, { monat_name: String(jahr), ...vergleich }) : null,
+  }
+}
+
+/** Ein Vergleichsjahr der Jahresroute (Σ der Monatsreihe über die Grundgesamtheit). */
+export function jahrVergleich(jahr: number, over: Partial<JahrVergleich> = {}): JahrVergleich {
+  return {
+    jahr, pv: null, ev: null, direkt: null, einsp: null, netz: null, gesamt: null, autarkie: null, monate: [],
+    ...over,
+  }
 }

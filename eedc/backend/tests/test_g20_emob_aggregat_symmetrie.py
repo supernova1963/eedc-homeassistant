@@ -12,7 +12,8 @@ Diese Tests fixieren:
      ([[feedback_aggregator_symmetrie]]).
   2. Der frühere Referenz-Parameter-Lauf hätte ÜBERSCHÄTZT (Symmetrie war verletzt).
   3. Regression: bei GENAU EINEM E-Auto bleibt das Ergebnis bitgleich.
-  4. `gesamtnettoertrag_euro` nutzt die (jetzt korrekte) Summe.
+  4. das Ergebnis vor Betriebskosten (Stufe 2 der Ergebnis-Leiter, bis 03.10.2026 `gesamtnettoertrag_euro`) nutzt die
+     (jetzt korrekte) Summe.
 """
 
 from __future__ import annotations
@@ -60,7 +61,7 @@ async def _add_eauto(db, anlage, *, km: float, verbrauch: float) -> int:
 
 
 async def _add_pv(db, anlage, *, erzeugung: float) -> int:
-    """PV-Modul, damit Eigenverbrauch (→ ev_ersparnis → gesamtnettoertrag) berechenbar ist."""
+    """PV-Modul, damit Eigenverbrauch (→ ev_ersparnis → Ergebnis-Leiter) berechenbar ist."""
     inv = Investition(anlage_id=anlage.id, typ="pv-module", bezeichnung="Dach",
                       anschaffungsdatum=date(2024, 1, 1), leistung_kwp=10.0)
     db.add(inv)
@@ -118,9 +119,9 @@ async def test_ein_eauto_bleibt_bitgleich(db):
 
 
 async def test_gesamtnettoertrag_nutzt_summierte_emob(db):
-    """`gesamtnettoertrag_euro` enthält die korrigierte eMob-Summe: der Anteil
-    ohne eMob ist bei zwei vs. einem baugleichen Auto identisch, sodass die
-    Differenz der gesamtnettoerträge == die Differenz der eMob-Summen ist."""
+    """Das Ergebnis vor Betriebskosten (Stufe 2 der Leiter; bis 03.10.2026 das Feld `gesamtnettoertrag_euro`, das mit
+    dem Paket „Ergebnisgrößen" entfiel) enthält die korrigierte eMob-Summe: der Anteil ohne eMob ist bei zwei vs.
+    einem baugleichen Auto identisch, sodass die Differenz der Stufe 2 == die Differenz der eMob-Summen ist."""
     a1 = await _seed_anlage(db)
     await _add_pv(db, a1, erzeugung=500.0)
     await _add_eauto(db, a1, km=651.0, verbrauch=7.5)
@@ -135,10 +136,10 @@ async def test_gesamtnettoertrag_nutzt_summierte_emob(db):
     res2 = await get_aktueller_monat(anlage_id=a2.id, jahr=JAHR, monat=MONAT, db=db)
 
     # Beide haben denselben Nicht-eMob-Teil (gleiche Monatsdaten) → die Differenz
-    # der gesamtnettoerträge ist exakt die Differenz der eMob-Summen.
-    assert res1.gesamtnettoertrag_euro is not None
-    assert res2.gesamtnettoertrag_euro is not None
-    d_gesamt = round(res2.gesamtnettoertrag_euro - res1.gesamtnettoertrag_euro, 2)
+    # der Stufe 2 ist exakt die Differenz der eMob-Summen.
+    assert res1.ergebnis_vor_betriebskosten_euro is not None
+    assert res2.ergebnis_vor_betriebskosten_euro is not None
+    d_gesamt = round(res2.ergebnis_vor_betriebskosten_euro - res1.ergebnis_vor_betriebskosten_euro, 2)
     d_emob = round((res2.emob_ersparnis_euro or 0) - (res1.emob_ersparnis_euro or 0), 2)
     assert d_gesamt == d_emob
 

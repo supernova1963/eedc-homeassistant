@@ -20,6 +20,7 @@ from backend.core.berechnungen import (
     spezifischer_ertrag_kwh_kwp,
 )
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
+from backend.core.zahlenformat import fmt_zahl
 from backend.services.eauto_wirtschaftlichkeit import (
     compute_emob_pool_attribution,
     entscheide_emob_heimladung,
@@ -37,7 +38,7 @@ from backend.api.routes.aktueller_monat.vergleich import _zeittarif_preis
 
 
 async def finanzen_des_monats(*, _zt_cache, anlage_id, db, eigenverbrauch, einspeisung, jahr, monat, netzbezug):
-    """Finanzen: Tarife, Netzbezugskosten, Einspeise-Erloes, EV-Ersparnis, Netto-Ertrag (N-267: eigener Tarif-Cache je Aufruf).
+    """Finanzen: Tarife, Netzbezugskosten, Einspeise-Erloes, EV-Ersparnis (N-267: eigener Tarif-Cache je Aufruf).
 
     Aus `get_aktueller_monat` Zeilen 772-899 (Stand vor dem Umzug) byte-identisch herausgeloest — Vorlage 2.
     """
@@ -48,7 +49,6 @@ async def finanzen_des_monats(*, _zt_cache, anlage_id, db, eigenverbrauch, einsp
     netzbezug_kosten = None
     netzbezug_arbeitspreis_kosten = None
     ev_ersparnis = None
-    netto_ertrag = None
     netzbezug_preis_cent = None
     netzbezug_preis_effektiv_cent = None
     netzbezug_preis_herkunft = None
@@ -165,11 +165,11 @@ async def finanzen_des_monats(*, _zt_cache, anlage_id, db, eigenverbrauch, einsp
             grundgebuehr = round(grundpreis, 2)
         if eigenverbrauch is not None:
             ev_ersparnis = round(eigenverbrauch * netzbezug_preis_effektiv_cent / 100, 2)
-
-        if einspeise_erloes is not None and ev_ersparnis is not None:
-            netto_ertrag = round(einspeise_erloes + ev_ersparnis, 2)
+        # Der Netto-Ertrag entsteht hier NICHT mehr (bis 03.10.2026: `einspeise_erloes + ev_ersparnis`, ohne USt,
+        # BKW-Rest, Erlös eigener Satz und Sonstiges — N-601). Er ist Stufe 1 der Ergebnis-Leiter und wird in
+        # `ergebnis_des_monats` über den Layer gebildet, sobald alle Posten feststehen.
     _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
-    return {k: _loc[k] for k in ("allgemein_tarif", "einspeise_cent", "einspeise_erloes", "einspeisung_neg_preis", "ev_ersparnis", "grundgebuehr", "monats_benzinpreis", "monats_gaspreis", "netto_ertrag", "netzbezug_arbeitspreis_kosten", "netzbezug_durchschnittspreis", "netzbezug_kosten", "netzbezug_preis_abdeckung", "netzbezug_preis_cent", "netzbezug_preis_effektiv_cent", "netzbezug_preis_herkunft", "nicht_vergueteter_erloes", "tarife", "zaehlergebuehr_jahr",) if k in _loc}
+    return {k: _loc[k] for k in ("allgemein_tarif", "einspeise_cent", "einspeise_erloes", "einspeisung_neg_preis", "ev_ersparnis", "grundgebuehr", "monats_benzinpreis", "monats_gaspreis", "netzbezug_arbeitspreis_kosten", "netzbezug_durchschnittspreis", "netzbezug_kosten", "netzbezug_preis_abdeckung", "netzbezug_preis_cent", "netzbezug_preis_effektiv_cent", "netzbezug_preis_herkunft", "nicht_vergueteter_erloes", "tarife", "zaehlergebuehr_jahr",) if k in _loc}
 
 
 def komponenten_ersparnis(*, get_val):
@@ -192,35 +192,42 @@ def komponenten_ersparnis(*, get_val):
     return {k: _loc[k] for k in ("emob_ersparnis", "wp_ersparnis", "wp_ersparnis_berechnung_text", "wp_strom", "wp_waerme",) if k in _loc}
 
 
-def betriebskosten_und_sonstige_positionen(*, investitionen, monats_fakt):
-    """Betriebskosten anteilig, sonstige Ertraege/Ausgaben ueber alle Investitionen, Gesamtnettoertrag (Startwert).
+def betriebskosten_des_monats(investitionen, jahr: int, monat: int) -> tuple[Optional[float], Optional[float], Optional[int]]:
+    """(Σ Monatsanteil, Σ Jahresbetrag, Anzahl) der Betriebskosten der IM MONAT aktiven Investitionen.
 
-    Aus `get_aktueller_monat` Zeilen 1186-1235 (Stand vor dem Umzug) byte-identisch herausgeloest — Vorlage 2.
+    N-602 (03.10.2026): bis dahin zählte die Kachel „Monatsergebnis" jede aktive Investition mit Betriebskosten in
+    JEDEN Monat — auch Jahre vor ihrer Anschaffung (Probe: PV 120 €/J seit 2024, E-Auto 600 €/J ab 14.08.2026,
+    September 2025 ⇒ 60 € statt 10 €), während die T-Konto-Zeile darunter seit #402 über `ist_aktiv_im_monat` filtert.
+    Dieselbe Klasse eine Stelle später. Gerufen vom Monat UND vom Vorjahresmonat (`vergleich._load_vorjahr`).
+
+    A6: dieselbe Filtermenge trägt Σ Monatsanteil UND Σ Jahresbetrag/Anzahl — ein zweiter Durchlauf mit anderem
+    Filter wäre eine Herleitung, die auf eine andere Zahl führt als die Zeile daneben.
     """
-    # ── Betriebskosten anteilig ──
-    betriebskosten_anteilig = None
-    betriebskosten_anteilig_jahr = None
-    betriebskosten_anteilig_anzahl = None
-    # A6: dieselbe Filtermenge trägt Σ Monatsanteil UND Σ Jahresbetrag/Anzahl —
-    # ein zweiter Durchlauf mit anderem Filter wäre eine Herleitung, die auf
-    # eine andere Zahl führt als die Zeile daneben.
     bk_jahre = [
         (i.betriebskosten_jahr or 0)
         for i in investitionen
-        if (i.betriebskosten_jahr or 0) > 0
+        if (i.betriebskosten_jahr or 0) > 0 and i.ist_aktiv_im_monat(jahr, monat)
     ]
     bk_summe = sum(j / 12 for j in bk_jahre)
     if bk_summe > 0:
-        betriebskosten_anteilig = round(bk_summe, 2)
-        betriebskosten_anteilig_jahr = round(sum(bk_jahre), 2)
-        betriebskosten_anteilig_anzahl = len(bk_jahre)
+        return round(bk_summe, 2), round(sum(bk_jahre), 2), len(bk_jahre)
+    return None, None, None
+
+
+def betriebskosten_und_sonstige_positionen(*, investitionen, monats_fakt, jahr, monat):
+    """Betriebskosten anteilig (nur im Monat aktive Investitionen, N-602) und die sonstigen Ertraege/Ausgaben.
+
+    Aus `get_aktueller_monat` Zeilen 1186-1235 (Stand vor dem Umzug) herausgeloest — Vorlage 2.
+    """
+    # ── Betriebskosten anteilig ──
+    betriebskosten_anteilig, betriebskosten_anteilig_jahr, betriebskosten_anteilig_anzahl = (
+        betriebskosten_des_monats(investitionen, jahr, monat)
+    )
 
     # ── Sonstige Erträge / Ausgaben über alle Investitionen aggregieren ──
     # Pro Investition gehen Detail-Zeilen ins T-Konto (siehe
     # investitionen_financials weiter unten). Aggregate als eigenes Feld
-    # exponiert, damit das Frontend Monatsergebnis-Korrekturen sauber rechnen
-    # kann ohne `gesamtnettoertrag` zu verschieben (verhindert Drift mit
-    # bestehender `sonderkosten`-Logik in MonatsabschlussView).
+    # exponiert; seit 03.10.2026 gehen sie als Posten in die Ergebnis-Leiter (Stufe 1), der Client rechnet nicht mehr.
     #
     # Aus den Monats-Fakten (P10): dort gilt die Sichtbarkeitsregel einmal
     # (`aktiv` = wie gelöscht **plus** Laufzeit Anschaffung→Stilllegung, detLAN
@@ -240,14 +247,8 @@ def betriebskosten_und_sonstige_positionen(*, investitionen, monats_fakt):
     anlage_sonstige_ertraege = _sonstiges_fakten.anlage_ertraege_euro
     anlage_sonstige_ausgaben = _sonstiges_fakten.anlage_ausgaben_euro
 
-    # ── Gesamtnettoertrag = Erlöse + Einsparungen − Kosten ──
-    # G20-2: erst NACH den Per-Investition-Financials berechnet, damit
-    # `emob_ersparnis` die Summe der Fahrzeug-Zeilen ist (siehe unten). Sonstige
-    # Positionen werden NICHT eingerechnet — sie werden separat im T-Konto
-    # gerendert und im Monatsergebnis (nettoNachAllem) addiert.
-    gesamtnettoertrag = None
     _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
-    return {k: _loc[k] for k in ("anlage_sonstige_ausgaben", "anlage_sonstige_ertraege", "betriebskosten_anteilig", "betriebskosten_anteilig_anzahl", "betriebskosten_anteilig_jahr", "gesamtnettoertrag", "sonstige_ausgaben_total", "sonstige_ertraege_total", "sonstige_netto_total",) if k in _loc}
+    return {k: _loc[k] for k in ("anlage_sonstige_ausgaben", "anlage_sonstige_ertraege", "betriebskosten_anteilig", "betriebskosten_anteilig_anzahl", "betriebskosten_anteilig_jahr", "sonstige_ausgaben_total", "sonstige_ertraege_total", "sonstige_netto_total",) if k in _loc}
 
 
 async def t_konto_je_investition(*, _zt_cache, allgemein_tarif, anlage_id, db, einspeise_cent, investitionen, jahr, monat, monats_benzinpreis, monats_gaspreis, netzbezug_preis_effektiv_cent, tarife):
@@ -378,7 +379,7 @@ async def t_konto_je_investition(*, _zt_cache, allgemein_tarif, anlage_id, db, e
 
 
 def emob_aggregat_und_kennzahlen(*, anlage, einspeise_erloes, emob_ladung_extern=None, emob_ersparnis, ev_ersparnis, get_val, investitionen, investitionen_financials, jahr, monat, netzbezug_kosten, pv, wp_ersparnis):
-    """G20-2: eMob-Ersparnis-Aggregat = Summe der Fahrzeug-Zeilen, Gesamtnettoertrag, E-Auto-Effizienz, spezifischer Ertrag.
+    """G20-2: eMob-Ersparnis-Aggregat = Summe der Fahrzeug-Zeilen, E-Auto-Effizienz, spezifischer Ertrag.
 
     Aus `get_aktueller_monat` Zeilen 1931-1990 (Stand vor dem Umzug) byte-identisch herausgeloest — Vorlage 2.
     """
@@ -404,15 +405,9 @@ def emob_aggregat_und_kennzahlen(*, anlage, einspeise_erloes, emob_ladung_extern
             for d in _emob_rows if d.berechnung
         ) or None
 
-    # Gesamtnettoertrag jetzt bilden (emob_ersparnis = Summe der Fahrzeug-Zeilen).
-    if einspeise_erloes is not None and ev_ersparnis is not None and netzbezug_kosten is not None:
-        gesamtnettoertrag = round(
-            einspeise_erloes + ev_ersparnis
-            + (wp_ersparnis or 0)
-            + (emob_ersparnis or 0)
-            - netzbezug_kosten,
-            2,
-        )
+    # Bis 03.10.2026 entstand hier `gesamtnettoertrag` (Einspeise + EV + WP + E-Mob − Stromrechnung). Das Feld ist mit
+    # der Ergebnis-Leiter entfallen — sein Nachfolger mit vollständigen Posten ist `ergebnis_vor_betriebskosten_euro`
+    # (`ergebnis_des_monats`, Layer `core/berechnungen/ergebnis.py`), kein Leser greift mehr darauf zu (G4).
 
     # N-557 (Konzept Regel 10): „Ladung gesamt" = Heimladung + Extern, soweit
     # Extern bekannt ist. Eine eigene Größe — `emob_ladung_kwh` bleibt Heim.
@@ -458,5 +453,81 @@ def emob_aggregat_und_kennzahlen(*, anlage, einspeise_erloes, emob_ladung_extern
         ),
     )
     _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
-    return {k: _loc[k] for k in ("emob_eff", "emob_ersparnis", "emob_ersparnis_berechnung", "emob_ladung_gesamt", "gesamtnettoertrag", "spez_ertrag",) if k in _loc}
+    return {k: _loc[k] for k in ("emob_eff", "emob_ersparnis", "emob_ersparnis_berechnung", "emob_ladung_gesamt", "spez_ertrag",) if k in _loc}
 
+
+
+def ergebnis_des_monats(
+    *, eigenverbrauch, einspeise_erloes, ev_ersparnis, monats_fakt, netzbezug_preis_effektiv_cent,
+    sonstige_netto, wp_ersparnis, emob_ersparnis, netzbezug_kosten, betriebskosten, ust_satz,
+    hat_waermepumpe=False, hat_emobilitaet=False,
+):
+    """Die Ergebnis-Leiter des Monats (Layer `core/berechnungen/ergebnis.py`) — Paket „Ergebnisgrößen", 03.10.2026.
+
+    Füllt die Posten, die nur diese Route kennt, und ruft den Layer; gerundet wird HIER, am Antwortrand (G8):
+    die Posten kommen gerundet herein (wie bisher je Posten auf 2 Stellen), die Stufen werden auf 2 Stellen gerundet
+    ausgeliefert. Gerufen vom Monat und vom Vorjahresmonat — EINE Füllregel für beide (E5).
+
+    * **BKW-Rest** — ``monats_fakt.bkw.rest_eigenverbrauch_kwh`` (P9, `bkw_finanz_beitrag` je BKW und Monat in der
+      Schicht) × dem Preis, mit dem die EV-Ersparnis desselben Monats bewertet ist.
+    * **Erlös eigener Satz** — ``monats_fakt.sonstiges.einspeise_erloes_euro`` (Konzept §9 Weg 2).
+    * **USt-Anteil** — EV des Monats × Satz des Jahres (`services/ust_satz.py`, G1). ``ust_satz is None`` heißt
+      „keine Regelbesteuerung" (kein Posten); ein Satz ohne Wert heißt „nicht ermittelbar" (fehlender Posten, P4).
+    * Laufender Monat ohne Monats-Fakt: BKW-Rest, Erzeuger-Erlös und Sonstiges sind 0 — **kein** fehlender Posten.
+    """
+    from backend.core.berechnungen.ergebnis import (
+        ErgebnisEingang, berechne_ergebnis, herleitung_als_dict, ust_anteil_euro,
+    )
+
+    bkw_ersparnis = None
+    bkw_ersparnis_berechnung = None
+    erzeuger_erloes = None
+    if monats_fakt is not None:
+        rest = monats_fakt.bkw.rest_eigenverbrauch_kwh
+        if rest and rest > 0 and netzbezug_preis_effektiv_cent is not None:
+            bkw_ersparnis = round(rest * netzbezug_preis_effektiv_cent / 100, 2)
+            # A6: die eingesetzten Werte der T-Konto-Zeile „BKW-Ersparnis" (A2, 03.10.2026) — der Client rechnet sie nicht
+            # aus dem gerundeten Euro-Betrag zurück.
+            bkw_ersparnis_berechnung = (
+                f"{fmt_zahl(rest, 1)} kWh × {fmt_zahl(netzbezug_preis_effektiv_cent, 2)} ct/kWh"
+            )
+        if monats_fakt.sonstiges.einspeise_erloes_euro:
+            erzeuger_erloes = round(monats_fakt.sonstiges.einspeise_erloes_euro, 2)
+
+    ust_anteil = None
+    ust_herleitung = None
+    if ust_satz is not None:
+        anteil = ust_anteil_euro(eigenverbrauch, ust_satz.euro_je_kwh)
+        ust_anteil = round(anteil, 2) if anteil is not None else None
+        ust_herleitung = ust_satz.herleitung(eigenverbrauch)
+
+    komponenten = frozenset(
+        k for k, da in (("waermepumpe", hat_waermepumpe), ("emob", hat_emobilitaet), ("ust", ust_satz is not None))
+        if da
+    )
+    leiter = berechne_ergebnis(ErgebnisEingang(
+        einspeise_erloes=einspeise_erloes,
+        ev_ersparnis=ev_ersparnis,
+        bkw_rest_ersparnis=bkw_ersparnis,
+        erzeuger_erloes=erzeuger_erloes,
+        sonstige_netto=sonstige_netto,
+        ust_anteil=ust_anteil,
+        wp_ersparnis=wp_ersparnis,
+        emob_ersparnis=emob_ersparnis,
+        stromkosten=netzbezug_kosten,
+        betriebskosten=betriebskosten,
+        komponenten_vorhanden=komponenten,
+    ))
+    _r = lambda v: round(v, 2) if v is not None else None  # noqa: E731
+    return {
+        "netto_ertrag": _r(leiter.netto_ertrag),
+        "ergebnis_vor_betriebskosten": _r(leiter.vor_betriebskosten),
+        "ergebnis": _r(leiter.ergebnis),
+        "ergebnis_herleitung": herleitung_als_dict(leiter, runde=2),
+        "fehlende_posten": list(leiter.fehlende_posten),
+        "bkw_ersparnis": bkw_ersparnis,
+        "bkw_ersparnis_berechnung": bkw_ersparnis_berechnung,
+        "erzeuger_erloes": erzeuger_erloes,
+        "ust_anteil": ust_anteil,
+        "ust_herleitung": ust_herleitung,
+    }

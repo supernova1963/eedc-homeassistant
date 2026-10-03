@@ -14,6 +14,13 @@
  * **kWh-Zahl** ist im laufenden Monat kein Monats-SOLL mehr. Wer sie ohne das
  * Fenster hinschreibt, behauptet ein zu niedriges SOLL — deshalb liegt der Text
  * hier und nicht viermal inline (die N-138-Klasse).
+ *
+ * ⭐ **Seit 03.10.2026 rechnet diese Datei nicht mehr** (N-356): Quote, Monats-Quote und Fenstertext kommen fertig
+ * aus der Antwort (`soll_erfuellung_prozent`, `soll_erfuellung_monat_prozent`, `soll_fenster_text` — Backend-Layer
+ * `core/berechnungen/ergebnis.py::soll_erfuellung`, Monat UND Jahr). Bis dahin stand dieselbe Rechnung hier und
+ * als „Spiegel" im PDF-Monatsbericht — zwei Bildungsstellen, deren Wächter von Hand mitkopiert waren. Die
+ * Funktionen bleiben als **Leser** mit unveränderten Signaturen, damit die Aufrufer (Kacheln, Park-IDs) nicht
+ * wissen müssen, woher die Zahl kommt.
  */
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 
@@ -21,93 +28,52 @@ import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 export type SollQuelle = Pick<
   AktuellerMonatResponse,
   'soll_pv_kwh' | 'pv_erzeugung_kwh' | 'soll_pv_tage' | 'soll_pv_tage_gesamt'
-  | 'soll_pv_kwh_monat'
+  | 'soll_pv_kwh_monat' | 'soll_erfuellung_prozent' | 'soll_erfuellung_monat_prozent' | 'soll_fenster_text'
 >
 
-/** Deckt das SOLL nur einen Teil des Zeitraums ab? */
+/** Deckt das SOLL nur einen Teil des Zeitraums ab? (Der Fenstertext ist genau dann gesetzt.) */
 export function istSollAnteilig(d: SollQuelle): boolean {
-  return (
-    d.soll_pv_tage != null &&
-    d.soll_pv_tage_gesamt != null &&
-    d.soll_pv_tage < d.soll_pv_tage_gesamt
-  )
+  return d.soll_fenster_text != null
 }
 
 /**
- * SOLL-Erfüllung in Prozent — `null`, wenn kein SOLL vorliegt.
- *
- * Ein SOLL von 0 (Monat in der Zukunft: null abgelaufene Tage) ergibt bewusst
- * `null` statt einer Division: eine Erfüllungsquote für einen Monat, der noch
- * nicht stattgefunden hat, gibt es nicht.
+ * SOLL-Erfüllung in Prozent — `null`, wenn kein SOLL vorliegt (auch bei SOLL 0: ein Monat, der noch nicht
+ * stattgefunden hat, hat keine Erfüllungsquote). Wert aus der Antwort.
  */
 export function sollErfuellungProzent(d: SollQuelle): number | null {
-  if (d.soll_pv_kwh == null || d.pv_erzeugung_kwh == null || d.soll_pv_kwh <= 0) return null
-  return (d.pv_erzeugung_kwh / d.soll_pv_kwh) * 100
+  return d.soll_erfuellung_prozent ?? null
 }
 
 /**
- * Das Fenster als Text — `null` bei vollem Zeitraum (dann ist nichts zu sagen).
- *
- * Beispiel: `anteilig · 4 von 31 Tagen`. Im Jahres-Aggregat summieren sich die
- * Tage über die Monate (`216 von 243 Tagen`), weil die SOLL-Summe genauso
- * entsteht.
+ * Das Fenster als Text — `null` bei vollem Zeitraum. Beispiel: `anteilig · 4 von 31 Tagen`; im Jahr summieren sich
+ * die Tage über die Monate (`216 von 243 Tagen`). Text aus der Antwort.
  */
 export function sollFensterText(d: SollQuelle): string | null {
-  if (!istSollAnteilig(d)) return null
-  return `anteilig · ${d.soll_pv_tage} von ${d.soll_pv_tage_gesamt} Tagen`
+  return d.soll_fenster_text ?? null
 }
 
 /**
- * Das SOLL des **ganzen** Monats — die Zahl, die vor N-69 in der Kachel stand.
- *
- * Melder dietmar1968 (T89667 #155, 14.08.2026): *„Deshalb fand ich den
- * Fortschrittsbalken in Bezug auf die gesamte Monatsprognose extrem hilfreich.
- * Leider wurde dies verändert."* N-69 hat den Nenner bewusst auf die
- * abgelaufenen Tage gekürzt (die Quote stimmte vorher nicht) — die **Frage**
- * dahinter ist damit aber nicht falsch geworden, sie hat nur keine Anzeige mehr.
- *
- * Die Zahl kommt **fertig aus derselben Antwort** (`soll_pv_kwh_monat`) und
- * wird hier nicht zurückgerechnet. Rechnerisch ginge das — die Kürzung ist
- * linear (`core/berechnungen/monatsfenster.py::anteilig` = `wert × tage ÷
- * tage_gesamt`) —, aber `soll_pv_kwh` wird **auf eine Stelle gerundet**
- * ausgeliefert, und die Umkehrung multipliziert diesen Rest mit
- * `tage_gesamt ÷ tage`: am 4. August wurde aus 1387,9 so 1388,0, am
- * Monatsersten wäre es das 28- bis 31-Fache des Rundungsrests. Ein
- * zusätzlicher Abruf entsteht dadurch nicht — nur ein Feld mehr in derselben
- * Antwort.
- *
- * `null`, wenn kein SOLL vorliegt (auch im Jahres-Aggregat, das die Größe nicht
- * trägt) — ein „Monat" ist dort nicht definiert.
+ * Das SOLL des **ganzen** Monats — die Zahl, die vor N-69 in der Kachel stand (dietmar1968, T89667 #155). Kommt
+ * fertig aus der Antwort (`soll_pv_kwh_monat`) und wird nicht aus `soll_pv_kwh` zurückgerechnet (Rundung × Tage).
+ * `null` im Jahres-Aggregat — ein „Monat" ist dort nicht definiert.
  */
 export function sollMonatGesamtKwh(d: SollQuelle): number | null {
   return d.soll_pv_kwh_monat ?? null
 }
 
 /**
- * Erreichter Anteil der **vollen Monatsprognose** in Prozent.
- *
- * Bewusst eine zweite Größe neben {@link sollErfuellungProzent} und keine
- * Ablösung: die eine beantwortet „liefert die Anlage, was sie bis heute
- * liefern sollte?", die andere „wie weit ist der Monat?". Beide tragen in der
- * Anzeige ihr Fenster im Untertitel, sonst stünden zwei Prozentzahlen ohne
- * Unterschied nebeneinander.
+ * Erreichter Anteil der **vollen Monatsprognose** in Prozent — bewusst eine zweite Größe neben
+ * {@link sollErfuellungProzent} („liefert die Anlage, was sie bis heute liefern sollte?" vs. „wie weit ist der
+ * Monat?"). Wert aus der Antwort.
  */
 export function sollErfuellungMonatProzent(d: SollQuelle): number | null {
-  const gesamt = sollMonatGesamtKwh(d)
-  if (gesamt == null || gesamt <= 0 || d.pv_erzeugung_kwh == null) return null
-  return (d.pv_erzeugung_kwh / gesamt) * 100
+  return d.soll_erfuellung_monat_prozent ?? null
 }
 
 /**
- * Hat die Monatsprognose-Anzeige etwas zu sagen? **Ein** Gate für zwei
- * Aufrufer — die Kachel selbst und die Park-ID-Liste des Bilanz-Blocks
- * (`v4/bilanzParkIds`). Stünde die Bedingung zweimal da, könnte der Block auf
- * das Parken eines Elements warten, das gar nicht gerendert wird.
- *
- * Nur im **angefangenen** Monat: im abgeschlossenen sind „bis heute" und
- * „ganzer Monat" dieselbe Zahl.
+ * Hat die Monatsprognose-Anzeige etwas zu sagen? **Ein** Gate für zwei Aufrufer — die Kachel selbst und die
+ * Park-ID-Liste des Bilanz-Blocks (`v4/bilanzParkIds`). Nur im **angefangenen** Monat.
  */
 export function zeigeMonatsprognose(d: SollQuelle): boolean {
   return istSollAnteilig(d) && sollErfuellungMonatProzent(d) != null
 }
-

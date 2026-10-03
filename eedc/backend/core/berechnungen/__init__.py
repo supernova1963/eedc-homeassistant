@@ -38,6 +38,11 @@ Submodule:
 - `heizgradtage` — Heizgrenze + Heizgradtage je Tag/Monat und die Normierung
   „Menge je Kd" (die EINE Definition für Verbrauchsprognose und
   wetternormierten Vergleich)
+- `ergebnis` — die Ergebnis-Leiter (Netto-Ertrag → vor Betriebskosten →
+  Monats-/Jahresergebnis, mit Herleitung), USt je kWh Eigenverbrauch, SOLL-Erfüllung
+  und die Zeitraum-Faltung von Monatsantworten (Quoten paarweise, N-584) —
+  Paket „Ergebnisgrößen Monat/Jahr in den Layer" (03.10.2026); Wächter
+  `test_ergebnis_leiter_nur_im_layer.py`
 
 Geplant (step-by-step, wenn Konsumenten angefasst werden):
 - `peaks` — Peak-Werte (peak_pv/bezug/einspeisung)
@@ -87,6 +92,17 @@ from backend.core.berechnungen.dienstliche_ladekosten import (
 from backend.core.berechnungen.einspeise_erloes import (
     EinspeiseErloes,
     einspeise_erloes_euro,
+)
+from backend.core.berechnungen.ergebnis import (
+    ErgebnisEingang,
+    ErgebnisLeiter,
+    SollErfuellung,
+    berechne_ergebnis,
+    falte_zeitraum,
+    quote_paarweise,
+    soll_erfuellung,
+    ust_anteil_euro,
+    ust_satz_euro_je_kwh,
 )
 from backend.core.berechnungen.finanz_aggregat import (
     FinanzAggregat,
@@ -393,6 +409,15 @@ __all__ = [
     "FinanzAggregat",
     "FinanzMonatsZeile",
     "berechne_finanz_aggregat",
+    "ErgebnisEingang",
+    "ErgebnisLeiter",
+    "SollErfuellung",
+    "berechne_ergebnis",
+    "falte_zeitraum",
+    "quote_paarweise",
+    "soll_erfuellung",
+    "ust_anteil_euro",
+    "ust_satz_euro_je_kwh",
     "AFA_JAHRE",
     "UstJahresanteil",
     "AmortisationsFortschritt",

@@ -408,7 +408,10 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
             { label: 'Einspeise-Erlös', euro: u.einspeise_erloes_euro, farbe: SEG.einspeisung },
           ],
           gesamt: { label: 'Netto-Ertrag', euro: u.netto_ertrag_euro },
-          hinweis: 'Netto-Ertrag nach Betriebskosten und USt auf Eigenverbrauch.',
+          // Bis 03.10.2026 stand hier „nach Betriebskosten und USt" — Betriebskosten zieht die Übersicht im
+          // Netto-Ertrag nie ab (Vorlage Ergebnisgrößen §1 Nr. 5). Der Satz nennt, was die Zahl über die zwei
+          // Posten hinaus enthält.
+          hinweis: 'Netto-Ertrag inkl. Sonstiger Positionen, bei Regelbesteuerung nach USt auf den Eigenverbrauch.',
         } : undefined,
         struktur: hatTopo ? topo : undefined,
         // Einstellungen: alle aktiven PV-System-Investitionen (WR/Module/Speicher).

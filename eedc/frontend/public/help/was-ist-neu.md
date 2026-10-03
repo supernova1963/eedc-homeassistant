@@ -9,6 +9,91 @@
 
 ---
 
+## Unreleased
+
+**In dieser Version:** Netto-Ertrag, Monats- und Jahresergebnis rechnen überall gleich — mit der Umsatzsteuer bei Regelbesteuerung, mit allen Posten im Tooltip · ein Jahr zeigt keine Autarkie über 100 % mehr · „Hausverbrauch" heißt jetzt Gesamtverbrauch oder Restverbrauch, mit Formel
+
+**Netto-Ertrag, Ergebnis, Jahr: eine Rechnung für alles**
+
+**Betrifft dich das?** Ja, wenn eines davon auf dich zutrifft:
+
+- deine Anlage ist **regelbesteuert** (Umsatzsteuer auf den Eigenverbrauch),
+- in manchen Monaten fehlt der **Netzbezug** — etwa bei einer Volleinspeisung oder
+  einem Monat, den Home Assistant nur teilweise kennt,
+- du hast eine Komponente **nach der PV-Anlage gekauft** oder stillgelegt und für
+  sie Betriebskosten eingetragen.
+
+**Was war:** *Cockpit → Monat* und *Cockpit → Jahr* rechneten den Netto-Ertrag
+anders als die Übersicht, der Jahresbericht und der Sensor in Home Assistant: Die
+Umsatzsteuer auf den Eigenverbrauch fehlte. Für denselben Monat standen so zwei
+Zahlen nebeneinander, zum Beispiel 212,00 € im Monat und 206,30 € in der
+Übersicht. Das Jahr zählte zwölf Monatswerte im Browser zusammen; fehlte in einem
+Monat der Netzbezug, teilte es den Eigenverbrauch aller Monate durch den Verbrauch
+der übrigen — bis zu **198 % Autarkie** —, und die fehlende Stromrechnung zählte
+still als 0 €. Betriebskosten einer Komponente standen auch in Monaten vor ihrer
+Anschaffung im Monatsergebnis.
+
+**Was jetzt:**
+
+- **Ein Netto-Ertrag.** Er enthält überall dieselben Posten: Einspeisung,
+  Eigenverbrauch, den Rest des Balkonkraftwerks, den Erlös eines Geräts mit eigenem
+  Vergütungssatz, sonstige Erträge und Ausgaben — und bei Regelbesteuerung abzüglich
+  der Umsatzsteuer auf den Eigenverbrauch. Darauf bauen **Monats- und
+  Jahresergebnis** auf: plus die Ersparnis von Wärmepumpe und E-Mobilität, minus
+  Stromrechnung und Betriebskosten. Der Tooltip zeigt jeden Posten mit Betrag.
+- **Das Jahr rechnet eedc selbst**, nicht mehr dein Browser. Autarkie und
+  Eigenverbrauchsquote nehmen nur Monate, die beide Werte haben, und sagen, wie viele
+  das sind („aus 8 von 9 Monaten"). Fehlt in einem Monat die Stromrechnung, zeigt das
+  Jahr kein Ergebnis und nennt den Monat, statt eine zu hohe Zahl.
+- **Betriebskosten** zählen ab der Anschaffung und bis zur Stilllegung.
+- In *Auswertungen → Tabelle* enthält der **Netto-Ertrag** jetzt auch die Sonstigen
+  Erträge und Ausgaben (wie im Cockpit); *Auswertungen → Finanzen* zeigt dieselbe
+  Zahl und nennt Sonstige Erträge und Sonderkosten als Bestandteil.
+- Die Komponenten-Finanztabelle endet mit **„Monatsergebnis"** bzw.
+  **„Jahresergebnis"** — dieselbe Zahl wie die Kachel darüber. Bei Regelbesteuerung
+  steht die Umsatzsteuer als Aufwand in der PV-Zeile und im T-Konto als eigene Zeile.
+  Mit einem **Balkonkraftwerk** trägt dessen Zeile nur, was wirklich im
+  Eigenverbrauch steckt; ein Monat, in dem es keinen Erzeugungswert hat, steht als
+  eigene Zeile da.
+
+**Welche Zahlen sich ändern:** Bei regelbesteuerten Anlagen sinkt der Netto-Ertrag in
+*Cockpit → Monat* und *→ Jahr* um die Umsatzsteuer auf den Eigenverbrauch. Wer
+Betriebskosten für eine später gekaufte Komponente eingetragen hat, sieht in den
+Monaten davor ein höheres Monatsergebnis. Hat eine regelbesteuerte Anlage
+deaktivierte oder stillgelegte Komponenten mit Betriebskosten oder einen sonstigen
+Erzeuger (etwa ein BHKW), kann sich der Umsatzsteuer-Anteil — und damit der
+Netto-Ertrag der Übersicht — auch dort, im Jahresbericht und im Sensor einmal
+verschieben — in der Langzeitstatistik von Home Assistant ist
+das ein einmaliger Sprung, kein Messfehler.
+
+→ *[Bedienung §2.3](HANDBUCH_BEDIENUNG.md#23-monat)* · *[Glossar: Netto-Ertrag](GLOSSAR.md#strompreise--tarife)*
+
+**Gesamtverbrauch und Restverbrauch statt „Hausverbrauch"**
+
+**Betrifft dich das?** Ja, wenn du *Cockpit → Live* oder *Cockpit → Tag* benutzt.
+
+**Was war:** Das Wort „Hausverbrauch" stand für zwei verschiedene Zahlen. Die
+Kachel unter dem Energiefluss meinte damit alles, was das Haus verbraucht hat; die
+Stundentabelle in *Cockpit → Tag* meinte den Teil, den kein einzeln erfasstes Gerät
+erklärt. Im Energiefluss hieß derselbe Rest „Haushalt" — und sein Tooltip zeigte
+darunter als „Heute" den Gesamtverbrauch des Tages.
+
+**Was jetzt:** Zwei Wörter für zwei Zahlen, jede mit ihrer Formel im Tooltip:
+
+- **Gesamtverbrauch** = Eigenverbrauch + Netzbezug — die Live-Kachel, die Spalte in
+  der Stundentabelle, die Bilanzen von Tag, Monat und Jahr.
+- **Restverbrauch** = Gesamtverbrauch − separat erfasste Verbraucher (Wärmepumpe,
+  Wallbox, Geräte mit eigenem Zähler) — die Mitte des Energieflusses, der
+  Live-Tagesverlauf, das Verbrauchsprofil, die Stundentabelle und der
+  Stundenverlauf in *Cockpit → Tag*, die Monatsauswertung „Verbrauch nach Kategorie".
+
+Die Zahlen selbst ändern sich nicht. Auch die Meldungen des Daten-Checkers sagen
+jetzt Gesamtverbrauch.
+
+→ *[Glossar](GLOSSAR.md)* · *[Bedienung §2.1 Live](HANDBUCH_BEDIENUNG.md#21-live)*
+
+---
+
 ## v4.1.1 — 2. Oktober 2026
 
 **In dieser Version:** das Speichern eines Monats überschreibt ältere Tage nicht mehr — Gerätewerte und Aufteilung Heizen/Kühlen bleiben · die Verbrauchsprognose gibt es auch für morgen · die Wärmepumpe verschiebt die Verbrauchsprognose nicht mehr in die Nacht · die Wetter-Monatsreihe steht auf einem Lineal, mit neuem Block „Sonnenangebot" · warum eine eingebettete Karte „401" zeigt · ein „—" in einer Kachel zeigt keine Rechnung mehr.

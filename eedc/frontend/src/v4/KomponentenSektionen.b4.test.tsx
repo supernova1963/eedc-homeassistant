@@ -7,7 +7,8 @@
  * für Monat und Jahr aus EINER Fabrik.
  *
  * Schwesterdateien: KomponentenSektionen.soll-waerme-klima.test.tsx (S2/S3 derselben
- * Fabrik), JahrAggregat.b4.test.tsx (woher das Jahr die Felder bekommt).
+ * Fabrik), backend/tests/test_ergebnis_jahr_portiert.py (woher das Jahr die Felder bekommt — bis 03.10.2026
+ * JahrAggregat.b4.test.tsx, mit der Faltung ins Backend gezogen).
  */
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'

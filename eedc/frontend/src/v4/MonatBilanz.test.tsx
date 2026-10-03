@@ -13,6 +13,8 @@ const d = (over: Partial<AktuellerMonatResponse> = {}) =>
     autarkie_prozent: 61, eigenverbrauch_quote_prozent: 54,
     direktverbrauch_kwh: 180,
     netto_ertrag_euro: 128, soll_pv_kwh: 450,
+    // SOLL-Erfüllung aus der Antwort (Backend-Layer, N-356): 412 / 450 = 91,6 %.
+    soll_erfuellung_prozent: (412 / 450) * 100,
     ...over,
   })
 
@@ -29,16 +31,19 @@ describe('baueMonatKpis', () => {
     ])
   })
 
-  it('Monatsergebnis = Gesamt-Nettoertrag − Betriebskosten + Sonstiges (nach BK)', () => {
-    const me = baueMonatKpis(d({ gesamtnettoertrag_euro: 150, betriebskosten_anteilig_euro: 30, sonstige_netto_euro: 5 }), vm)
+  // Bis 03.10.2026: „Monatsergebnis = Gesamt-Nettoertrag − Betriebskosten + Sonstiges" — gerechnet in dieser Datei.
+  // Seit der Ergebnis-Leiter (Backend-Layer) liest die Kachel `ergebnis_euro`; die Erwartung ist dieselbe Zahl
+  // (150 − 30 + 5 = 125), jetzt als gelieferter Wert.
+  it('Monatsergebnis liest `ergebnis_euro` (nach Betriebskosten)', () => {
+    const me = baueMonatKpis(d({ ergebnis_euro: 125 }), vm)
       .find((x) => x.title === 'Monatsergebnis')!
     expect(me.unit).toBe('€')
-    expect(me.value).toBe('125,00') // 150 − 30 + 5
+    expect(me.value).toBe('125,00')
     expect(me.subtitle).toBe('nach Betriebskosten')
   })
 
-  it('Monatsergebnis bleibt — wenn Gesamt-Nettoertrag fehlt', () => {
-    const me = baueMonatKpis(d({ gesamtnettoertrag_euro: null }), vm).find((x) => x.title === 'Monatsergebnis')!
+  it('Monatsergebnis bleibt — wenn die Leiter keins liefert', () => {
+    const me = baueMonatKpis(d({ ergebnis_euro: null }), vm).find((x) => x.title === 'Monatsergebnis')!
     expect(me.value).toBe('—')
   })
 
@@ -48,7 +53,7 @@ describe('baueMonatKpis', () => {
   })
 
   it('ohne SOLL fällt die PV-Card auf den Vormonat zurück', () => {
-    const pv = baueMonatKpis(d({ soll_pv_kwh: null }), vm)[0]
+    const pv = baueMonatKpis(d({ soll_pv_kwh: null, soll_erfuellung_prozent: null }), vm)[0]
     expect(pv.subtitle).toMatch(/VM: 380 kWh/)
   })
 

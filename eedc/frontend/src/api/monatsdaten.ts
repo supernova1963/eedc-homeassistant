@@ -172,9 +172,10 @@ export interface AggregierteMonatsdaten {
   einspeise_nicht_verguetet_euro: number
   ev_ersparnis_euro: number
   // Konzept §9 Weg 2: Σ der gepflegten Erlöse von Erzeugern mit EIGENEM
-  // Einspeisetarif. Steckt bewusst weder in `einspeise_erloes_euro` noch in
-  // `netto_ertrag_euro` — jene bewerten den Anlagenzähler mit dem einen Satz
-  // der Anlage. Hier nur, damit die Sicht ihre Abgrenzung benennen kann (#402).
+  // Einspeisetarif und der Abgabe an Dritte. Steckt NICHT in `einspeise_erloes_euro`
+  // (Anlagenzähler × der eine Satz der Anlage), WOHL ABER in `netto_ertrag_euro`
+  // (seit 06.09.2026, §9.2; Posten „Erlös eigener Satz" der Ergebnis-Leiter). Einzeln
+  // hier, damit die Sicht ihn in der Netto-Herleitung nennen kann (#402).
   erzeuger_erloes_euro: number
   // Nur für BKW-Monate ohne erfasste Erzeugung besetzt (Datenlücke, ADR-002/P9).
   bkw_ersparnis_euro: number
@@ -182,8 +183,11 @@ export interface AggregierteMonatsdaten {
   ust_eigenverbrauch_euro: number
   // Arbeitspreis × kWh + Grundpreis des Monats.
   netzbezug_kosten_euro: number
-  // Erlös + EV- + BKW-Ersparnis − USt. OHNE „Sonstige Erträge & Ausgaben".
+  // Stufe 1 der Ergebnis-Leiter: Erlös + EV- + BKW-Ersparnis + Erlös eigener Satz + Sonstige Positionen − USt —
+  // dieselbe Zahl wie Cockpit → Monat. Seit 03.10.2026 MIT den Sonstigen Positionen (A1); der Client addiert sie
+  // nirgends mehr selbst.
   netto_ertrag_euro: number
+  // Netto-Ertrag − Netzbezugskosten (eigene Größe der Tabelle; seit A1 über den Netto-Ertrag inkl. Sonstiger).
   netto_bilanz_euro: number
   // Effektiver Arbeitspreis des Monats (Flex-Ø vor Stammdaten-Tarif, P8).
   netzbezug_preis_cent: number

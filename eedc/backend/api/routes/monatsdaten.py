@@ -33,11 +33,8 @@ from backend.core.berechnungen import (
     berechne_finanz_aggregat,
     berechne_netzbezug_kosten,
 )
-from backend.core.berechnungen.ust_eigenverbrauch import (
-    UstJahresanteil,
-    bemessungsgrundlage_aus_investitionen,
-    ust_eigenverbrauch_fuer_anlage,
-)
+from backend.core.berechnungen.ergebnis import ErgebnisEingang, berechne_ergebnis, ust_anteil_euro
+from backend.services.ust_satz import grundgesamtheit as ust_grundgesamtheit, ust_satz_des_jahres
 from backend.services.finanz_zeilen import baue_finanz_zeile
 from backend.services.strompreis_aggregator import lade_preis_aggregate_je_monat
 from backend.utils.sonstige_positionen import ist_gueltige_position
@@ -361,14 +358,15 @@ class AggregierteMonatsdatenResponse(BaseModel):
     einspeise_nicht_verguetet_euro: float
     ev_ersparnis_euro: float
     #: Konzept §9 Weg 2 — Σ der **gepflegten** Erlöse von Erzeugern mit eigenem
-    #: Einspeisetarif (Mieterstrom, Allgemeinstrom, Nachbarhaus). Rein
-    #: informativ: der Wert steckt **weder** in ``einspeise_erloes_euro``
-    #: **noch** in ``netto_ertrag_euro`` dieser Antwort, und das ist Absicht —
-    #: jene bewerten den **Anlagenzähler** mit dem EINEN Satz der Anlage
-    #: (`finanz_aggregat`-Docstring), dieser trägt einen Betrag mit eigenem
-    #: Vergütungssatz, den eedc nicht nachrechnet.
+    #: Einspeisetarif (Mieterstrom, Allgemeinstrom, Nachbarhaus) und der Abgabe an
+    #: Dritte. Er steckt **nicht** in ``einspeise_erloes_euro`` (der bewertet den
+    #: **Anlagenzähler** mit dem EINEN Satz der Anlage), **wohl aber** in
+    #: ``netto_ertrag_euro`` — seit ``93ad4eba`` (06.09.2026, §9.2 Geldseite) als
+    #: fünfter Summand von ``berechne_finanz_aggregat`` und seit 03.10.2026 als Posten
+    #: „Erlös eigener Satz" der Ergebnis-Leiter. Bis 03.10.2026 stand hier „weder …
+    #: noch" — die Zahl trug ihn längst (gemessen an der W3-Fixture).
     #:
-    #: ⚑ Er steht hier, damit die Sicht ihre **Abgrenzung aussprechen** kann:
+    #: ⚑ Er steht einzeln hier, damit die Sicht ihn **benennen** kann:
     #: Ohne dieses Feld weiß der Client nicht einmal, ob es solche Erzeuger
     #: gibt, und kann deshalb nicht sagen, was in der Kachel fehlt. Genau
     #: daran ist rilmor-mhrs am 06.09.2026 hängengeblieben (#402) — seine
@@ -381,16 +379,17 @@ class AggregierteMonatsdatenResponse(BaseModel):
     bkw_ersparnis_euro: float
     # Unentgeltliche Wertabgabe § 3 Abs. 1b UStG, **nur** bei
     # `steuerliche_behandlung == "regelbesteuerung"`, sonst 0,0. Je Monat aus dem
-    # Eigenverbrauch dieses Monats × Selbstkosten je kWh; der Nenner der
-    # Selbstkosten ist die **Jahres**-PV der ausgelieferten Monate, damit
-    # Σ USt_m == USt(Σ EV_m) eines Jahres bleibt.
+    # Eigenverbrauch dieses Monats × USt je kWh des Jahres (`services/ust_satz.py`,
+    # seit 03.10.2026 der eine Eingang für alle Sichten), damit Σ USt_m == Jahres-USt.
     ust_eigenverbrauch_euro: float
     netzbezug_kosten_euro: float
-    # Einspeise-Erlös + EV- + BKW-Ersparnis − USt. **Ohne** „Sonstige Erträge &
-    # Ausgaben" (die kommen aus der Komponenten-Zeitreihe und werden erst in der
-    # Finanz-Sicht aufgeschlagen) — das ist der Unterschied zur Cockpit-Kachel.
+    # Einspeise-Erlös + EV- + BKW-Ersparnis + Erlös eigener Satz + Sonstige Positionen (netto) − USt — die Stufe 1 der
+    # Ergebnis-Leiter, dieselbe Zahl wie die Cockpit-Kachel des Monats (GLOSSAR „Netto-Ertrag (PV)"). Bis 03.10.2026
+    # ohne die Sonstigen Positionen; die Finanz-Sicht schlug sie selbst auf (A1). Sie LIEST das Feld seither nur.
     netto_ertrag_euro: float
-    # Netto-Ertrag − Netzbezugskosten (die T-Konto-Ergebniszeile des Monats).
+    # Netto-Ertrag − Netzbezugskosten — eine eigene Größe dieser Tabelle (ohne WP-/E-Mob-Ersparnis, ohne
+    # Betriebskosten; Sonstige Positionen seit 03.10.2026 über den Netto-Ertrag MIT), NICHT die Stufe 2 der
+    # Ergebnis-Leiter und nicht das T-Konto-Ergebnis (Wächter W1: Ausnahme).
     netto_bilanz_euro: float
     # Der **effektive** Arbeitspreis des Monats: abgerechneter Flex-Ø vor dem
     # Stammdaten-Tarif (`resolve_netzbezug_preis_cent`, ADR-002/**P8**). Ohne
@@ -523,20 +522,16 @@ async def list_monatsdaten_aggregiert(
     inv_rows = (
         await db.execute(select(Investition).where(Investition.anlage_id == anlage_id))
     ).scalars().all()
-    ust_bemessungsgrundlage_euro = bemessungsgrundlage_aus_investitionen(inv_rows)
-    betriebskosten_jahr_euro = sum(i.betriebskosten_jahr or 0 for i in inv_rows)
-    # Nenner der Selbstkosten je kWh ist eine **Jahres**-Erzeugung. Je
-    # Kalenderjahr über die ausgelieferten Monate summiert, damit die Summe der
-    # Monats-USt genau die Jahres-USt ergibt (die Formel ist linear im
-    # Eigenverbrauch). Ein angefangenes Jahr trägt seinen angefangenen Nenner —
-    # und seit 04.08. auch nur den entsprechenden Anteil an AfA und
-    # Betriebskosten (`monate`), sonst stünden zwölf Monate Abschreibung gegen
-    # sieben Monate Ertrag.
-    pv_je_jahr: dict[int, float] = {}
-    monate_je_jahr: dict[int, int] = {}
-    for f in fakten:
-        pv_je_jahr[f.jahr] = pv_je_jahr.get(f.jahr, 0.0) + f.erzeugung.pv_kwh
-        monate_je_jahr[f.jahr] = monate_je_jahr.get(f.jahr, 0) + 1
+    # USt-Satz je Kalenderjahr aus dem EINEN Eingang `services/ust_satz.py` (G1/E9, 03.10.2026): im Jahr aktive
+    # Investitionen für Bemessung UND Betriebskosten (Regel 05.06.2026; bis dahin hier ALLE, auch `aktiv=False`),
+    # Grundgesamtheit = abgeschlossene Monate mit aktivem Erzeuger. Ein Monat außerhalb der Grundgesamtheit (ohne
+    # Zählerzeile — nur mit den inkl-Schaltern ausgeliefert — oder vor dem ersten Erzeuger) trägt keinen USt-Anteil;
+    # so ist Σ der Monatsanteile eines Jahres der Jahreswert der Übersicht.
+    _ust_saetze = (
+        {_j: ust_satz_des_jahres(anlage_obj, inv_rows, fakten, _j) for _j in sorted({f.jahr for f in fakten})}
+        if anlage_obj is not None else {}
+    )
+    _ust_monate = {f.schluessel for _j in _ust_saetze for f in ust_grundgesamtheit(fakten, _j)}
 
     # #377 — Zählerstände am Monatsende, **einmal** für alle Monate geladen.
     # Je Monat der letzte bekannte Stand; Monate ohne Messung fehlen einfach.
@@ -695,23 +690,20 @@ async def list_monatsdaten_aggregiert(
         netzbezug_kosten = berechne_netzbezug_kosten(
             netzbezug, f.tarif.netzbezug_preis_cent, f.tarif.grundpreis_euro_monat
         )
-        ust_eigenverbrauch = (
-            ust_eigenverbrauch_fuer_anlage(
-                anlage_obj,
-                jahresanteile=[UstJahresanteil(
-                    jahr=f.jahr,
-                    eigenverbrauch_kwh=finanz.eigenverbrauch_kwh,
-                    pv_kwh=pv_je_jahr.get(f.jahr, 0.0),
-                    monate=monate_je_jahr.get(f.jahr, 12),
-                )],
-                bemessungsgrundlage_euro=ust_bemessungsgrundlage_euro,
-                betriebskosten_jahr_euro=betriebskosten_jahr_euro,
-            )
-            if anlage_obj is not None else 0.0
+        _satz = _ust_saetze.get(f.jahr)
+        _ust = (
+            ust_anteil_euro(finanz.eigenverbrauch_kwh, _satz.euro_je_kwh)
+            if _satz is not None and f.schluessel in _ust_monate else None
         )
-        # `netto_ertrag_euro` des Aggregats ist die naive Summe der vier
-        # Komponenten (Sonstige = 0, die kommen aus der Komponenten-Zeitreihe).
-        netto_ertrag = finanz.netto_ertrag_euro - ust_eigenverbrauch
+        ust_eigenverbrauch = _ust if _ust is not None else 0.0
+        # Stufe 1 der Ergebnis-Leiter — dieselbe Definition wie Cockpit, Übersicht, PDF und HA-Sensor (GLOSSAR
+        # „Netto-Ertrag (PV)"), seit 03.10.2026 MIT den Sonstigen Positionen des Monats (A1, Entscheid Fable-Master).
+        # Bis dahin fehlten sie hier und *Auswertungen → Finanzen* schlug sie aus der Komponenten-Zeitreihe selbst auf.
+        netto_ertrag = berechne_ergebnis(ErgebnisEingang(
+            einspeise_erloes=finanz.einspeise_erloes_euro, ev_ersparnis=finanz.ev_ersparnis_euro,
+            bkw_rest_ersparnis=finanz.bkw_ersparnis_euro, erzeuger_erloes=finanz.erzeuger_erloes_euro,
+            sonstige_netto=f.sonstiges.netto_euro, ust_anteil=ust_eigenverbrauch,
+        )).netto_ertrag
 
         # ADR-002/P12: Die Arbeitszahl dieses Monats — aus dem Layer, mit allen
         # R2-Sperren, die Cockpit und Hub auch ziehen.

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { baueMonatKpis } from './MonatBilanz'
 import { baueJahrKpis } from './JahrBilanz'
-import { aktuellerMonat } from '../test/factories'
+import { aktuellerMonat, ergebnisHerleitung } from '../test/factories'
 import type { KpiStripItem } from '../components/blocks'
 
 /**
@@ -29,51 +29,90 @@ const finde = (ks: KpiStripItem[], titel: string) => {
   return k!
 }
 
+/** Liest eine Rechenzeile und summiert ihre Summanden mit Vorzeichen — der Zwischenstand
+ *  (`= x € vor Betriebskosten`) ist ein Zwischenergebnis und zählt nicht mit. */
+const summeDerZeile = (zeile: string): number => {
+  const ohneZwischen = zeile.replace(/ = -?[\d.]+,\d{2} € vor Betriebskosten/g, '')
+  let summe = 0
+  for (const m of ohneZwischen.matchAll(/(^|[+−] )([\d.]+,\d{2}) €/g)) {
+    const zahl = Number(m[2].replace(/\./g, '').replace(',', '.'))
+    summe += m[1].startsWith('−') ? -zahl : zahl
+  }
+  return Math.round(summe * 100) / 100
+}
+const alsZahl = (v: string | number) => Number(String(v).replace(/\./g, '').replace(',', '.'))
+
+// Die Antwort, wie das Backend sie seit 03.10.2026 liefert: Wert UND Herleitung aus der Ergebnis-Leiter.
+// (Zahlen bewusst „krumm" und mit Sonstigem, damit die Probe nicht zufällig grün ist.)
+const POSTEN = [
+  { name: 'Einspeise-Erlös', betrag: 148.2, feld: 'einspeise_erloes_euro', stufe: 1 as const },
+  { name: 'Eigenverbrauchs-Ersparnis', betrag: 96.4, feld: 'ev_ersparnis_euro', stufe: 1 as const },
+  { name: 'Sonstige Positionen', betrag: 12.3, feld: 'sonstige_netto_euro', stufe: 1 as const },
+  { name: 'WP-Ersparnis', betrag: 40.0, feld: 'wp_ersparnis_euro', stufe: 2 as const },
+  { name: 'Stromrechnung', betrag: -53.48, feld: 'netzbezug_kosten_euro', stufe: 2 as const },
+  { name: 'Betriebskosten', betrag: -41.67, feld: 'betriebskosten_anteilig_euro', stufe: 3 as const },
+]
+const HERL = ergebnisHerleitung(POSTEN)
 const GELD = {
   einspeise_erloes_euro: 148.2,
   ev_ersparnis_euro: 96.4,
-  netto_ertrag_euro: 244.6,
-  gesamtnettoertrag_euro: 310.5,
-  betriebskosten_anteilig_euro: 41.67,
   sonstige_netto_euro: 12.3,
+  wp_ersparnis_euro: 40.0,
+  netzbezug_kosten_euro: 53.48,
+  betriebskosten_anteilig_euro: 41.67,
+  netto_ertrag_euro: HERL.netto_ertrag.ergebnis_euro,
+  ergebnis_vor_betriebskosten_euro: HERL.vor_betriebskosten.ergebnis_euro,
+  ergebnis_euro: HERL.ergebnis.ergebnis_euro,
+  ergebnis_herleitung: HERL,
 }
 
 describe('A6 — Cockpit/Monat nennt die eingesetzten Werte', () => {
-  it('Netto-Ertrag zeigt beide Summanden einzeln und das Ergebnis', () => {
+  // Bis 03.10.2026 lautete die Erwartung hier „310,50 € − 41,67 € + 12,30 €" — Gesamt-Nettoertrag − BK + Sonstiges.
+  // Sie war nur wahr, weil der Client das Sammelfeld einsetzte, in dem die Stromrechnung unsichtbar steckte (N-600,
+  // #398). Die SUBSTANZ der Regel bleibt und ist jetzt die Probe: jeder Summand einzeln, und die Rechnung führt auf
+  // die Zahl daneben (Gernot 02.10., [[feedback_regel_war_nur_wahr_wegen_des_defekts]]).
+  it('Netto-Ertrag nennt jeden Summanden der Leiter und führt auf die Zahl daneben', () => {
     const k = finde(baueMonatKpis(aktuellerMonat(2026, 8, GELD), null), 'Netto-Ertrag')
-    expect(k.formel).toBe('Einspeise-Erlös + Eigenverbrauchs-Ersparnis')
-    expect(k.berechnung).toBe('148,20 € Einspeise-Erlös + 96,40 € Eigenverbrauchs-Ersparnis')
-    expect(k.ergebnis).toBe('= 244,60 €')
+    expect(k.formel).toBe('Einspeise-Erlös + Eigenverbrauchs-Ersparnis + Sonstige Positionen')
+    expect(k.berechnung).toBe('148,20 € Einspeise-Erlös + 96,40 € Eigenverbrauchs-Ersparnis + 12,30 € Sonstige Positionen')
+    expect(summeDerZeile(k.berechnung!)).toBe(alsZahl(k.value))
+    expect(k.ergebnis).toBe(`= ${k.value} €`)
   })
 
-  it('fehlt ein Summand, steht KEINE Rechnung da (kein „0,00 €")', () => {
-    // Zweite Regelhälfte, eigene Probe: die erste wäre auch grün, wenn ein
-    // fehlender Eingang als 0 € erschiene — eine Rechnung, die der Layer nie
-    // angestellt hat. Präzedenz: `MonatBilanz` baut keine Rechnung aus „—".
+  it('ohne Netto-Ertrag steht KEINE Rechnung da (kein „0,00 €")', () => {
+    // Zweite Regelhälfte: fehlt ein Pflichtposten, liefert die Leiter keinen Wert — und neben „—" steht nichts.
+    const leer = { ...HERL, netto_ertrag: { ...HERL.netto_ertrag, ergebnis_euro: null } }
     const k = finde(
-      baueMonatKpis(aktuellerMonat(2026, 8, { ...GELD, ev_ersparnis_euro: null }), null),
+      baueMonatKpis(aktuellerMonat(2026, 8, { ...GELD, ev_ersparnis_euro: null, netto_ertrag_euro: null, ergebnis_herleitung: leer }), null),
       'Netto-Ertrag',
     )
-    expect(k.formel).toBe('Einspeise-Erlös + Eigenverbrauchs-Ersparnis')
     expect(k.berechnung).toBeUndefined()
     expect(k.ergebnis).toBeUndefined()
   })
 
-  it('Monatsergebnis nennt alle drei Posten einzeln', () => {
+  it('Monatsergebnis nennt Einspeise-Erlös, EV-Ersparnis, Stromrechnung und Betriebskosten einzeln (N-600)', () => {
     const k = finde(baueMonatKpis(aktuellerMonat(2026, 8, GELD), null), 'Monatsergebnis')
-    expect(k.berechnung).toBe('310,50 € − 41,67 € + 12,30 €')
-    // Die Rechnung muss auf die Zahl daneben führen: 310,50 − 41,67 + 12,30.
-    expect(k.value).toBe('281,13')
-    expect(k.ergebnis).toBe('= 281,13 €')
+    for (const name of ['Einspeise-Erlös', 'Eigenverbrauchs-Ersparnis', 'Stromrechnung', 'Betriebskosten', 'WP-Ersparnis']) {
+      expect(k.berechnung).toContain(name)
+    }
+    expect(k.berechnung).not.toContain('Gesamt-Nettoertrag')
+    // Der Zwischenstand vor den Betriebskosten steht in der Zeile (Stufe 2 hat im UI keinen eigenen Namen, G4).
+    expect(k.berechnung).toContain(`= ${HERL.vor_betriebskosten.ergebnis_euro!.toLocaleString('de-DE', { minimumFractionDigits: 2 })} € vor Betriebskosten`)
+    // Die Rechnung führt auf die Zahl daneben: 148,20 + 96,40 + 12,30 + 40,00 − 53,48 − 41,67 = 201,75.
+    expect(k.value).toBe('201,75')
+    expect(summeDerZeile(k.berechnung!)).toBe(alsZahl(k.value))
+    expect(k.ergebnis).toBe('= 201,75 €')
   })
 
-  it('ohne Gesamt-Nettoertrag bleibt die Monatsergebnis-Rechnung leer', () => {
+  it('ohne Ergebnis bleibt die Rechnung leer und der Grund steht da', () => {
     const k = finde(
-      baueMonatKpis(aktuellerMonat(2026, 8, { ...GELD, gesamtnettoertrag_euro: null }), null),
+      baueMonatKpis(aktuellerMonat(2026, 8, { ...GELD, ergebnis_euro: null, fehlende_posten: ['Stromrechnung'] }), null),
       'Monatsergebnis',
     )
+    expect(k.value).toBe('—')
     expect(k.berechnung).toBeUndefined()
     expect(k.ergebnis).toBeUndefined()
+    expect(k.hinweis).toBe('fehlt: Stromrechnung')
   })
 
   it('Performance Ratio nennt die Zahl der Tage, über die gemittelt wurde', () => {
@@ -99,24 +138,48 @@ describe('A6 — Cockpit/Monat nennt die eingesetzten Werte', () => {
 })
 
 describe('A6 — Cockpit/Jahr nennt dieselben Werte', () => {
-  it('Netto-Ertrag und Jahresergebnis tragen ihre Summanden', () => {
-    // Andere Zahlen als im Monat, damit die Probe nicht zufällig grün ist,
-    // wenn jemand den Monats-Strip zurückgibt.
-    const jahr = {
-      einspeise_erloes_euro: 1780.4,
-      ev_ersparnis_euro: 1160.9,
-      netto_ertrag_euro: 2941.3,
-      gesamtnettoertrag_euro: 3722.0,
-      betriebskosten_anteilig_euro: 500.04,
-      sonstige_netto_euro: 148.5,
-    }
-    const ks = baueJahrKpis(aktuellerMonat(2026, 12, jahr), null)
-    expect(finde(ks, 'Netto-Ertrag').berechnung)
-      .toBe('1.780,40 € Einspeise-Erlös + 1.160,90 € Eigenverbrauchs-Ersparnis')
-    expect(finde(ks, 'Netto-Ertrag').ergebnis).toBe('= 2.941,30 €')
+  // Andere Zahlen als im Monat, damit die Probe nicht zufällig grün ist, wenn jemand den Monats-Strip zurückgibt.
+  // Bis 03.10.2026: „3.722,00 € − 500,04 € + 148,50 €" (Σ Gesamt-Nettoertrag − BK + Sonstiges, im Client) — die
+  // Stromrechnung steckte unsichtbar im ersten Summanden (N-600). Jetzt die Jahressummen der Posten aus der Leiter.
+  const JAHR_POSTEN = [
+    { name: 'Einspeise-Erlös', betrag: 1780.4, feld: 'einspeise_erloes_euro', stufe: 1 as const },
+    { name: 'Eigenverbrauchs-Ersparnis', betrag: 1160.9, feld: 'ev_ersparnis_euro', stufe: 1 as const },
+    { name: 'Sonstige Positionen', betrag: 148.5, feld: 'sonstige_netto_euro', stufe: 1 as const },
+    { name: 'WP-Ersparnis', betrag: 1240.6, feld: 'wp_ersparnis_euro', stufe: 2 as const },
+    { name: 'Stromrechnung', betrag: -459.9, feld: 'netzbezug_kosten_euro', stufe: 2 as const },
+    { name: 'Betriebskosten', betrag: -500.04, feld: 'betriebskosten_anteilig_euro', stufe: 3 as const },
+  ]
+  const H = ergebnisHerleitung(JAHR_POSTEN)
+  const jahr = {
+    einspeise_erloes_euro: 1780.4, ev_ersparnis_euro: 1160.9, sonstige_netto_euro: 148.5,
+    netto_ertrag_euro: H.netto_ertrag.ergebnis_euro,
+    ergebnis_vor_betriebskosten_euro: H.vor_betriebskosten.ergebnis_euro,
+    ergebnis_euro: H.ergebnis.ergebnis_euro,
+    ergebnis_herleitung: H,
+  }
+
+  it('Netto-Ertrag und Jahresergebnis tragen ihre Summanden und führen auf die Zahl daneben', () => {
+    const ks = baueJahrKpis(aktuellerMonat(2026, 0, jahr), null)
+    const ne = finde(ks, 'Netto-Ertrag')
+    expect(ne.berechnung).toBe('1.780,40 € Einspeise-Erlös + 1.160,90 € Eigenverbrauchs-Ersparnis + 148,50 € Sonstige Positionen')
+    expect(summeDerZeile(ne.berechnung!)).toBe(alsZahl(ne.value))
+    expect(ne.ergebnis).toBe('= 3.089,80 €')
     const erg = finde(ks, 'Jahresergebnis')
-    expect(erg.berechnung).toBe('3.722,00 € − 500,04 € + 148,50 €')
+    for (const name of ['Einspeise-Erlös', 'Eigenverbrauchs-Ersparnis', 'Stromrechnung', 'Betriebskosten']) {
+      expect(erg.berechnung).toContain(name)
+    }
     expect(erg.value).toBe('3.370,46')
+    expect(summeDerZeile(erg.berechnung!)).toBe(alsZahl(erg.value))
     expect(erg.ergebnis).toBe('= 3.370,46 €')
+  })
+
+  it('ohne Jahresergebnis (eine Stromrechnung fehlt) der Grund statt einer Zahl (G2/E10)', () => {
+    const ks = baueJahrKpis(aktuellerMonat(2026, 0, {
+      ...jahr, ergebnis_euro: null, fehlende_posten: ['Stromrechnung (Sep 2026)'],
+    }), null)
+    const erg = finde(ks, 'Jahresergebnis')
+    expect(erg.value).toBe('—')
+    expect(erg.berechnung).toBeUndefined()
+    expect(erg.hinweis).toBe('fehlt: Stromrechnung (Sep 2026)')
   })
 })

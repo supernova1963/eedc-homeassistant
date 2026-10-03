@@ -14,124 +14,21 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { ThemeProvider } from '../context/ThemeContext'
-import { jahrVergleichAus, mittelJahre, monatsFenster } from './JahrAggregat'
+import { monatsFenster } from '../lib/monatsFenster'
+import type { JahrVergleich } from '../api/cockpit'
 import { baueJahrKpis, JahrBilanz } from './JahrBilanz'
-import { aktuellerMonat, monatsZeile } from '../test/factories'
+import { aktuellerMonat } from '../test/factories'
 import { stubMatchMedia } from '../test/render'
-import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 
-/** Eine aggregierte Monatszeile mit gleichmäßigen Werten — Summen sind so
- *  ablesbar (n × 100 kWh PV), ohne dass der Test rechnet. */
-const zeile = (jahr: number, monat: number) =>
-  monatsZeile(jahr, monat, {
-    pv_erzeugung_kwh: 100, eigenverbrauch_kwh: 60, direktverbrauch_kwh: 40,
-    einspeisung_kwh: 40, netzbezug_kwh: 30, gesamtverbrauch_kwh: 90,
-  })
-
-const jahresZeilen = (jahr: number, monate: number[]) => monate.map((m) => zeile(jahr, m))
 const bis = (n: number) => Array.from({ length: n }, (_, i) => i + 1)
 
-describe('jahrVergleichAus — Beschneidung auf die Grundgesamtheit', () => {
-  it('laufendes Jahr mit 7 Monaten ⇒ das Vorjahr summiert dieselben 7', () => {
-    const rows = [...jahresZeilen(2026, bis(7)), ...jahresZeilen(2025, bis(12))]
-    const vj = jahrVergleichAus(rows, 2025, bis(7))
-
-    expect(vj.monate).toEqual(bis(7))
-    expect(vj.pv).toBe(700)
-    expect(vj.ev).toBe(420)
-    // Die Quote wird aus den beschnittenen Summen NEU gebildet, nicht gemittelt.
-    expect(vj.autarkie).toBeCloseTo((420 / 630) * 100, 6)
-
-    // Gegenprobe: ohne Auswahl stünde weiterhin das volle Jahr da — das war N-37.
-    expect(jahrVergleichAus(rows, 2025).pv).toBe(1200)
-  })
-
-  it('Lücke im angezeigten Jahr nimmt denselben Monat auch dem Vergleichsjahr', () => {
-    // 2026 ohne März: die Regel ist „gleiche Monate", nicht „die ersten N".
-    const g = [1, 2, 4, 5, 6, 7]
-    const rows = [...jahresZeilen(2026, g), ...jahresZeilen(2025, bis(12))]
-    const vj = jahrVergleichAus(rows, 2025, g)
-
-    expect(vj.monate).toEqual(g)
-    expect(vj.pv).toBe(600)
-    // Kein volles Jahr ⇒ das Fenster steht dran, Lücke inklusive.
-    expect(monatsFenster(vj)).toBe('Jan–Feb, Apr–Jul')
-  })
-
-  it('Lücke im VERGLEICHSjahr verkleinert das Fenster — und wird beschriftet', () => {
-    // 2026 Jan–Jul, 2025 erst ab März in Betrieb: der Schnitt liegt in der
-    // Überschneidung, nicht in der Grundgesamtheit.
-    const rows = [...jahresZeilen(2026, bis(7)), ...jahresZeilen(2025, [3, 4, 5, 6, 7])]
-    const vj = jahrVergleichAus(rows, 2025, bis(7))
-
-    expect(vj.monate).toEqual([3, 4, 5, 6, 7])
-    expect(vj.pv).toBe(500)
-    expect(monatsFenster(vj)).toBe('Mär–Jul')
-  })
-
-  it('REGRESSION — abgeschlossenes Jahr: Werte identisch zu vorher, keine Beschriftung', () => {
-    // Beide Jahre voll ⇒ die Beschneidung ist wirkungslos. Dieser Test sichert
-    // ausdrücklich, dass die bestehende Anzeige sich NICHT ändert.
-    const rows = [...jahresZeilen(2025, bis(12)), ...jahresZeilen(2024, bis(12))]
-    const ohne = jahrVergleichAus(rows, 2024)
-    const mit = jahrVergleichAus(rows, 2024, bis(12))
-
-    expect(mit).toEqual(ohne)
-    expect(mit.pv).toBe(1200)
-    expect(monatsFenster(mit)).toBeNull()
-  })
-
-  it('kein überschneidender Monat ⇒ leeres Fenster und null — nicht 0', () => {
-    // Anlage erst im angezeigten Jahr in Betrieb (bzw. Vorjahr nur im Spätherbst).
-    const rows = [...jahresZeilen(2026, bis(7)), ...jahresZeilen(2025, [11, 12])]
-    const vj = jahrVergleichAus(rows, 2025, bis(7))
-
-    expect(vj.monate).toEqual([])
-    expect(vj.pv).toBeNull()
-    expect(vj.autarkie).toBeNull()
-    expect(monatsFenster(vj)).toBeNull()   // nichts zu beschriften, es gibt keinen Vergleich
-  })
-})
-
-describe('mittelJahre — Ø nur über die Jahre, die die Grundgesamtheit decken', () => {
-  // Nachgestellt: Anlage Winterborn (Box 10.100.1.13) — 2023 ab Juni, 2026 bis Juni.
-  const winterborn = [
-    ...jahresZeilen(2026, bis(6)),
-    ...jahresZeilen(2025, bis(12)),
-    ...jahresZeilen(2024, bis(12)),
-    ...jahresZeilen(2023, [6, 7, 8, 9, 10, 11, 12]),
-  ]
-  const oJahre = (rows: AggregierteMonatsdaten[], jahre: number[], g: number[]) =>
-    mittelJahre(jahre.map((j) => jahrVergleichAus(rows, j, g)), g)
-
-  it('teilweise Überschneidung zählt NICHT mit — sie wäre der Fund eine Ebene tiefer', () => {
-    // 2023 deckt von Jan–Jun nur den Juni ab: eine Ein-Monats-Summe in einem
-    // Sechs-Monats-Ø. Raus damit, und `count` sagt es.
-    const oj = oJahre(winterborn, [2025, 2024, 2023], bis(6))
-
-    expect(oj).not.toBeNull()
-    expect(oj!.count).toBe(2)
-    expect(oj!.pv).toBe(600)            // Ø aus 600 und 600 — nicht (600+600+100)/3
-    expect(oj!.monate).toEqual(bis(6))
-    expect(monatsFenster(oj)).toBe('Jan–Jun')
-  })
-
-  it('gar keine Überschneidung fällt genauso raus', () => {
-    const rows = [...jahresZeilen(2026, bis(7)), ...jahresZeilen(2025, [11, 12])]
-    expect(mittelJahre([jahrVergleichAus(rows, 2025, bis(7))], bis(7))).toBeNull()
-  })
-
-  it('REGRESSION — abgeschlossenes Jahr: volle Jahre, `count` und Werte wie bisher', () => {
-    const oj = oJahre(winterborn, [2024, 2023], bis(12))
-    // 2023 (Jun–Dez) deckt ein volles Kalenderjahr nicht ab → nur 2024 trägt.
-    expect(oj!.count).toBe(1)
-    expect(oj!.pv).toBe(1200)
-    expect(monatsFenster(oj)).toBeNull()
-  })
-})
+// `jahrVergleichAus` / `mittelJahre` (Beschneidung auf die Grundgesamtheit, Ø nur über deckende Jahre) sind seit
+// 03.10.2026 Backend-Layer (`core/berechnungen/ergebnis.py`): ihre Proben stehen mit denselben Zahlen in
+// `backend/tests/test_ergebnis_jahr_portiert.py::test_vergleich_*` / `test_mittel_*`. Hier bleiben Beschriftung
+// und Anzeige.
 
 describe('monatsFenster — Beschriftung', () => {
-  const mitMonaten = (monate: number[]) => ({ monate } as ReturnType<typeof jahrVergleichAus>)
+  const mitMonaten = (monate: number[]) => ({ monate } as JahrVergleich)
 
   it('fasst zusammenhängende Läufe zusammen', () => {
     expect(monatsFenster(mitMonaten(bis(7)))).toBe('Jan–Jul')
@@ -160,7 +57,7 @@ const jahresAggregat = () =>
     autarkie_prozent: 72.7, eigenverbrauch_quote_prozent: 57.1,
   })
 
-const vergleich2025 = { jahr: 2025, pv: 3890, ev: 2200, direkt: 1400, einsp: 1690, netz: 850, gesamt: 3050, autarkie: 72.1, monate: bis(7) }
+const vergleich2025: JahrVergleich = { jahr: 2025, pv: 3890, ev: 2200, direkt: 1400, einsp: 1690, netz: 850, gesamt: 3050, autarkie: 72.1, monate: bis(7) }
 
 describe('baueJahrKpis — Kachel nennt das Fenster', () => {
   it('mit Fenster: „VJ (Jan–Jul): …" an PV, Autarkie, EV, Einspeisung, Netzbezug', () => {

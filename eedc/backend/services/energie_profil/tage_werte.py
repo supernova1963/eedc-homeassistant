@@ -44,6 +44,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.energie_profil._shared import TagWerteResponse
+from backend.core.berechnungen.ergebnis import ErgebnisEingang, berechne_ergebnis
 from backend.core.berechnungen.kennzahlen import autarkie_prozent, eigenverbrauchsquote_prozent
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.core.berechnungen.slot_konvention import forward_werte_je_backward_zeile
@@ -426,7 +427,13 @@ async def baue_tage_werte(
         # Beide Summen erben die Lücke ihres Summanden. Ohne das wanderte der
         # Widerspruch nur eine Kachel weiter: „Netto-Ertrag 1,28 €" über einer
         # Bilanz-Tabelle, in der die EV-Ersparnis mit „—" dasteht.
-        netto_ertrag = finanz.netto_ertrag_euro if ev_ersparnis is not None else None
+        # Stufe 1 der Ergebnis-Leiter (03.10.2026) — ohne USt-Anteil: ein Tag kennt keine Jahresgröße, Σ Tage ≠ Monat
+        # bleibt dokumentiert (BERECHNUNGEN §Tag). Pflichtposten wie im Monat: ohne EV-Ersparnis kein Netto-Ertrag.
+        netto_ertrag = berechne_ergebnis(ErgebnisEingang(
+            einspeise_erloes=finanz.einspeise_erloes_euro, ev_ersparnis=ev_ersparnis,
+            bkw_rest_ersparnis=finanz.bkw_ersparnis_euro, erzeuger_erloes=finanz.erzeuger_erloes_euro,
+            sonstige_netto=finanz.sonstige_netto_euro,
+        )).netto_ertrag
         netto_bilanz = (
             netto_ertrag - netzbezug_kosten
             if netto_ertrag is not None and netzbezug_kosten is not None else None

@@ -18,6 +18,7 @@
     "check:roh-controls": "node scripts/check-roh-controls.mjs",
     "check:kennwert-roh": "node scripts/check-kennwert-roh.mjs",
     "check:co2-roh": "node scripts/check-co2-roh.mjs",
+    "check:ergebnis-roh": "node scripts/check-ergebnis-roh.mjs",
     "check:cop-roh": "node scripts/check-cop-roh.mjs",
     "check:bauart-roh": "node scripts/check-bauart-roh.mjs",
     "check:finanz-roh": "node scripts/check-finanz-roh.mjs",

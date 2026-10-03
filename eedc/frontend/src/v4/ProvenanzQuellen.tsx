@@ -86,7 +86,7 @@ function teilzeitraum(
  * `feld_quellen` → Liste der beteiligten Quellen (je Quelle einmal).
  *
  * Ohne `monat` bleibt es bei den reinen Labels — so ruft die Jahres-Sicht auf
- * (E3): `JahrAggregat` faltet zwölf Monate zu EINER Badge-Liste, ein Zeitraum je
+ * (E3): die Jahresroute faltet zwölf Monate zu EINER Badge-Liste, ein Zeitraum je
  * Quelle wäre dort entweder falsch (welcher Monat?) oder eine Liste von zwölf.
  */
 export function provenanzQuellen(

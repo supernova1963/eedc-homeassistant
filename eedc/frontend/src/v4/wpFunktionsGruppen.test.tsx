@@ -3,11 +3,9 @@ import { render, screen } from '@testing-library/react'
 import { wpFunktionsGruppen, zeigtStromJeFunktion } from './wpFunktionsGruppen'
 import { baueKomponentenBloecke } from './KomponentenSektionen'
 import { baueTagAlsMonat } from './TagKomponenten'
-import { baueJahrAlsMonat } from './JahrAggregat'
 import type { ParkApi } from '../components/park'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 import type { TagDetail } from '../api/energie_profil'
-import type { CockpitUebersicht } from '../api/cockpit'
 import { aktuellerMonat, tagWerte } from '../test/factories'
 
 /**
@@ -136,7 +134,7 @@ describe('Der Block — Liste je Funktion statt Wärme-Balken (E1 (b)), Titel na
   })
 })
 
-describe('Die Kälte erreicht Tag und Jahr', () => {
+describe('Die Kälte erreicht den Tag (das Jahr: Backend-Probe)', () => {
   it('Tag: baueTagAlsMonat reicht die Kältemenge der Tagesantwort durch', () => {
     const tag = baueTagAlsMonat(
       tagWerte('2026-08-29', { wp_strom: 30.0 }), [], [],
@@ -145,22 +143,7 @@ describe('Die Kälte erreicht Tag und Jahr', () => {
     expect(tag.wp_kaelte_kwh).toBe(18)
   })
 
-  const monate = [
-    aktuellerMonat(2026, 7, { wp_kaelte_kwh: 400 }),
-    aktuellerMonat(2026, 8, { wp_kaelte_kwh: 500 }),
-  ]
-
-  it('Jahr: die Menge kommt aus der Route, nicht als Σ im Client', () => {
-    const k = { wp_kaelte_kwh: 888 } as CockpitUebersicht
-    expect(baueJahrAlsMonat(monate, 2026, k).wp_kaelte_kwh).toBe(888)
-  })
-
-  it('Jahr: sagt die Route „keine Kälte", bleibt es dabei', () => {
-    const k = { wp_kaelte_kwh: null } as CockpitUebersicht
-    expect(baueJahrAlsMonat(monate, 2026, k).wp_kaelte_kwh).toBeNull()
-  })
-
-  it('Jahr ohne Route: Rückfall auf die Σ der Monate, wie Heizwärme und Strom daneben', () => {
-    expect(baueJahrAlsMonat(monate, 2026).wp_kaelte_kwh).toBe(900)
-  })
+  // Die drei Jahr-Proben (Kälte aus der Route · Route sagt „keine" · Rückfall Σ ohne Route) sind mit der Faltung
+  // ins Backend gezogen: `backend/tests/test_ergebnis_jahr_portiert.py::test_kaelte_aus_der_route_oder_summe`
+  // (dieselben Zahlen 400/500 → 888 · null · 900).
 })

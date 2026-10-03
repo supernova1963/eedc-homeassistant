@@ -76,7 +76,13 @@ async def _zeittarif_preis(
     )
 
 
-async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: int, monat: int, db: AsyncSession) -> Optional[dict]:
+_UNGELADEN = object()
+
+
+async def _load_vorjahr(
+    anlage_id: int, investitionen: list[Investition], jahr: int, monat: int, db: AsyncSession,
+    *, fakt=_UNGELADEN, ust_satz=None, tarif_cache: Optional[dict] = None,
+) -> Optional[dict]:
     """Lädt Vorjahres-Monatsdaten für Vergleich (Energie + Finanzen).
 
     Die **anlagenweiten** Mengen kommen aus den Monats-Fakten (ADR-002/**P10**).
@@ -102,14 +108,19 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
     # Ein Tarif-Cache für beides: die Schicht löst den Stichtag (P8) ohnehin
     # auf, der Finanzblock unten liest denselben Eintrag statt ein zweites Mal
     # zu laden.
-    tarif_cache: dict[date, dict] = {}
+    #
+    # Paket „Ergebnisgrößen" (B2/G5): die Route reicht den Vorjahresmonat aus EINEM Fakten-Bereich J−1…J herein und
+    # dazu den USt-Satz des Vorjahres; ohne Übergabe (Tests, Einzelaufruf) lädt der Pfad wie bisher selbst.
+    if tarif_cache is None:
+        tarif_cache = {}
     # N-267: eigener Cache je Aufruf — begruendet im Block ueber `_zeittarif_preis`
     # bzw. ausfuehrlich in `monats_fakten/` ueber `_komponenten_preis`.
     _zt_cache: dict = {}
-    fakten_vj = await lade_monats_fakten(
-        db, anlage_id, von=(vj, monat), bis=(vj, monat), tarif_cache=tarif_cache
-    )
-    fakt = fakten_vj[0] if fakten_vj else None
+    if fakt is _UNGELADEN:
+        fakten_vj = await lade_monats_fakten(
+            db, anlage_id, von=(vj, monat), bis=(vj, monat), tarif_cache=tarif_cache
+        )
+        fakt = fakten_vj[0] if fakten_vj else None
     # Ohne Zählerzeile gibt es keinen Vergleich — unverändert die Bedingung,
     # unter der die Route bisher `None` lieferte.
     if fakt is None or fakt.meta.monatsdaten is None:
@@ -234,7 +245,10 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
                     verguetung_ct_kwh=einsp_preis,
                 )
                 result["einspeise_erloes_euro"] = round(m_erloes.erloes_euro, 2)
-            if netz > 0:
+            # E5 (03.10.2026): die Stromrechnung entsteht, sobald der Netzbezug BEKANNT ist — auch bei 0 kWh (dann
+            # trägt sie den Grundpreis, wie im laufenden Monat). Bis dahin `netz > 0`: ein Vorjahresmonat mit 0 kWh
+            # hatte keine Stromrechnung, und `netz_k … or 0` unten machte daraus ein Ergebnis ohne Grundpreis.
+            if md.netzbezug_kwh is not None:
                 result["netzbezug_kosten_euro"] = round(
                     berechne_netzbezug_kosten(netz, netz_preis, grundpreis), 2
                 )
@@ -245,11 +259,10 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
                 )
             if ev > 0:
                 result["ev_ersparnis_euro"] = round(ev * netz_preis / 100, 2)
-            einspeise_e = result.get("einspeise_erloes_euro", 0) or 0
-            ev_e = result.get("ev_ersparnis_euro", 0) or 0
-            netz_k = result.get("netzbezug_kosten_euro", 0) or 0
+            # E5: fehlt die Stromrechnung, gibt es kein Ergebnis — kein `or 0` mehr (dieselbe Regel wie im Monat).
+            netz_k = result.get("netzbezug_kosten_euro")
 
-            # DI-5 (G20-3): gesamtnettoertrag SYMMETRISCH zum aktuellen Monat —
+            # DI-5 (G20-3): das Vorjahres-Ergebnis SYMMETRISCH zum aktuellen Monat —
             # inkl. WP- und E-Mob-Ersparnis. Vorher fehlten beide im Vorjahr →
             # das T-Konto-Δ verglich Äpfel (Monat mit WP/eMob) mit Birnen
             # (Vorjahr ohne). Es werden dieselben Leaf-Helfer wie im aktuellen
@@ -336,10 +349,34 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
                 result["wp_ersparnis_euro"] = wp_ersparnis_vj
             if emob_ersparnis_vj:
                 result["emob_ersparnis_euro"] = emob_ersparnis_vj
-            if einspeise_e or ev_e:
-                result["gesamtnettoertrag_euro"] = round(
-                    einspeise_e + ev_e + wp_ersparnis_vj + emob_ersparnis_vj - netz_k, 2
-                )
+
+            # ── Ergebnis-Leiter des Vorjahresmonats — dieselbe Füllregel wie der Monat (E5, G5) ──
+            from backend.api.routes.aktueller_monat.finanzen import (
+                betriebskosten_des_monats, ergebnis_des_monats,
+            )
+            _bk_vj, _bk_vj_jahr, _bk_vj_anzahl = betriebskosten_des_monats(investitionen, vj, monat)
+            _erg_vj = ergebnis_des_monats(
+                eigenverbrauch=ev,
+                # Pflichtposten: bekannt, sobald die Menge bekannt ist — eine gemessene 0 ist ein Wert.
+                einspeise_erloes=(
+                    result.get("einspeise_erloes_euro", 0.0) if md.einspeisung_kwh is not None else None
+                ),
+                ev_ersparnis=result.get("ev_ersparnis_euro", 0.0),
+                monats_fakt=fakt, netzbezug_preis_effektiv_cent=netz_preis,
+                sonstige_netto=fakt.sonstiges.netto_euro,
+                wp_ersparnis=result.get("wp_ersparnis_euro"), emob_ersparnis=result.get("emob_ersparnis_euro"),
+                netzbezug_kosten=netz_k, betriebskosten=_bk_vj, ust_satz=ust_satz,
+            )
+            result["netto_ertrag_euro"] = _erg_vj["netto_ertrag"]
+            result["ust_eigenverbrauch_euro"] = _erg_vj["ust_anteil"]
+            result["bkw_ersparnis_euro"] = _erg_vj["bkw_ersparnis"]
+            result["erzeuger_erloes_euro"] = _erg_vj["erzeuger_erloes"]
+            result["sonstige_netto_euro"] = fakt.sonstiges.netto_euro
+            result["betriebskosten_anteilig_euro"] = _bk_vj
+            result["ergebnis_vor_betriebskosten_euro"] = _erg_vj["ergebnis_vor_betriebskosten"]
+            result["ergebnis_euro"] = _erg_vj["ergebnis"]
+            result["ergebnis_herleitung"] = _erg_vj["ergebnis_herleitung"]
+            result["fehlende_posten"] = _erg_vj["fehlende_posten"]
     except Exception:
         logger.warning("Vorjahr-Finanzen konnten nicht berechnet werden")
 

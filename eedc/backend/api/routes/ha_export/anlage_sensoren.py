@@ -173,6 +173,11 @@ async def calculate_anlage_sensors(
         .where(aktiv_jetzt())
     )
     investitionen = result.scalars().all()
+    # Alle Investitionen der Anlage (ohne Heute-Filter) — der USt-Satz eines Jahres zählt, was IN DIESEM JAHR aktiv war
+    # (`services/ust_satz.py`, G1, 03.10.2026); eine 2025 stillgelegte Komponente fehlt in `investitionen`.
+    alle_investitionen = (await db.execute(
+        select(Investition).where(Investition.anlage_id == anlage.id)
+    )).scalars().all()
 
     # ── monatsfakten_und_energie (Vorlage 8b: Phase in anlage_energie.py, Schnittstelle 4 ein / 15 aus) ──
     _out = await monatsfakten_und_energie(
@@ -205,9 +210,10 @@ async def calculate_anlage_sensors(
         fakten=fakten,
         strompreis=strompreis,
     )
+    if "bkw_ersparnis" in _out: bkw_ersparnis = _out["bkw_ersparnis"]
     if "einspeise_erloes" in _out: einspeise_erloes = _out["einspeise_erloes"]
+    if "erzeuger_erloes" in _out: erzeuger_erloes = _out["erzeuger_erloes"]
     if "ev_ersparnis" in _out: ev_ersparnis = _out["ev_ersparnis"]
-    if "netto_ertrag" in _out: netto_ertrag = _out["netto_ertrag"]
     if "sonstige_ausgaben_gesamt" in _out: sonstige_ausgaben_gesamt = _out["sonstige_ausgaben_gesamt"]
     if "sonstige_ertraege_gesamt" in _out: sonstige_ertraege_gesamt = _out["sonstige_ertraege_gesamt"]
     if "sonstige_netto_gesamt" in _out: sonstige_netto_gesamt = _out["sonstige_netto_gesamt"]
@@ -217,12 +223,18 @@ async def calculate_anlage_sensors(
         fakten=fakten,
         investitionen=investitionen,
         monatsdaten=monatsdaten,
-        netto_ertrag=netto_ertrag,
+        alle_investitionen=alle_investitionen,
+        einspeise_erloes=einspeise_erloes,
+        ev_ersparnis=ev_ersparnis,
+        bkw_ersparnis=bkw_ersparnis,
+        erzeuger_erloes=erzeuger_erloes,
+        sonstige_netto_gesamt=sonstige_netto_gesamt,
     )
     if "betriebskosten_ges" in _out: betriebskosten_ges = _out["betriebskosten_ges"]
     if "investition_gesamt" in _out: investition_gesamt = _out["investition_gesamt"]
     if "jahres_ertraege_ges" in _out: jahres_ertraege_ges = _out["jahres_ertraege_ges"]
     if "netto_ertrag" in _out: netto_ertrag = _out["netto_ertrag"]
+    if "netto_herleitung" in _out: netto_herleitung = _out["netto_herleitung"]
     if "relevante_kosten" in _out: relevante_kosten = _out["relevante_kosten"]
     # ── historische_komponenten (Vorlage 8b: Phase in anlage_komponenten.py, Schnittstelle 6 ein / 10 aus) ──
     _out = await historische_komponenten(
@@ -316,6 +328,7 @@ async def calculate_anlage_sensors(
         kapitaleinsatz=kapitaleinsatz,
         monatsdaten=monatsdaten,
         netto_ertrag=netto_ertrag,
+        netto_herleitung=netto_herleitung,
         netzbezug=netzbezug,
         pv_erzeugung=pv_erzeugung,
         relevante_kosten=relevante_kosten,

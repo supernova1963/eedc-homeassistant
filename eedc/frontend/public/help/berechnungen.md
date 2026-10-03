@@ -163,6 +163,7 @@ Erzeugung_gesamt    = PV_Erzeugung + BKW + sonstige_Erzeuger   (hinter dem Zähl
 Direktverbrauch     = max(0, Erzeugung_gesamt - Einspeisung - Batterie_Ladung)
 Eigenverbrauch      = Direktverbrauch + Batterie_Entladung + V2H_Entladung − Abgabe_an_Dritte   (§9.2, seit 05.09.2026)
 Gesamtverbrauch     = Eigenverbrauch + Netzbezug
+Restverbrauch       = Gesamtverbrauch − Wärmepumpe − Wallbox/E-Auto − sonstige erfasste Verbraucher   (nur Stunde/Live, s. u.)
 EV-Quote (%)        = Eigenverbrauch / Erzeugung_gesamt * 100   (wenn Erzeugung > 0)
 Autarkie (%)        = Eigenverbrauch / Gesamtverbrauch * 100    (wenn GV > 0)
 Spez. Ertrag        = PV_Erzeugung / Leistung_kWp              (kWh/kWp, NUR PV; zwei Varianten, s. u.)
@@ -171,9 +172,21 @@ Einspeise-Erlös (EUR)    = (Einspeisung - Einspeisung_neg_Preis) * Einspeisever
 Netzbezug-Kosten (EUR)   = Netzbezug * Netzbezug_Preis / 100 + Grundpreis
 Arbeitspreis-Kosten (EUR)= Netzbezug * Netzbezug_Preis / 100            (ohne Grundpreis, reiner Ausweis)
 EV-Ersparnis (EUR)       = PV_Eigenverbrauch * EV_Preis / 100          (s. Hinweis; EV_Preis = EV-gewichteter Ø der Stundenpreise, sonst Netzbezug_Preis)
-Netto-Ertrag (EUR)       = Einspeise-Erlös + EV-Ersparnis
+Netto-Ertrag (EUR)       = Einspeise-Erlös + EV-Ersparnis + BKW-Rest-Ersparnis + Erlös_eigener_Satz
+                           + Sonstige_Netto − USt-Anteil_Eigenverbrauch     (Stufe 1 der Ergebnis-Leiter, §3.2)
 CO2-Einsparung (kg)      = PV_Erzeugung * 0.38               (VERALTET — s. Kasten)
 ```
+
+> **Gesamtverbrauch und Restverbrauch — zwei Wörter, zwei Zahlen (N-603, 03.10.2026).** Der **Gesamtverbrauch** ist
+> alles, was das Haus verbraucht hat (Eigenverbrauch + Netzbezug) — Live-Kachel, Tag/Monat/Jahr-Bilanz. Der
+> **Restverbrauch** ist der Teil davon, den kein einzeln erfasstes Gerät erklärt. Er entsteht **je Stunde** im Client
+> (`components/tag/TagWerteTabelle.tsx::berechneHausverbrauch`, dieselbe Differenz im Stundenverlauf) und **live** als
+> Residual der Leistungen (`services/live_komponenten_builder.py`, Tagesverlauf `services/live_tagesverlauf_service.py`).
+> **Je Monat oder Jahr gibt es ihn nicht als eigene Kennzahl** (nur als Kategorie „Restverbrauch" in der
+> Monatsauswertung „Verbrauch nach Kategorie"). Bis 03.10.2026 hießen beide stellenweise „Hausverbrauch" bzw.
+> „Haushalt" — die Live-Kachel meinte den Gesamt-, die Tagessicht den Restverbrauch. Das Wort „Hausverbrauch" steht
+> seither nur noch als Herstellerbegriff in Anführungszeichen (s. u.); Wächter `npm run check:begriffe` und
+> `backend/tests/test_begriffe_anwendertexte.py`.
 
 > **Hinweis „EV_Preis" (SOLL Flex-Tarife A-2, Tag seit v4.0.46, Monat/Jahr seit 18.09.2026).** Die Ersparnis
 > bewertet **vermiedenen** Bezug, und der fällt zu anderen Zeiten an als der tatsächliche: Eigenverbrauch
@@ -397,6 +410,59 @@ durch eine zweite Datenquelle ersetzt.
 
 ### 3.2 Finanzen (Cockpit)
 
+#### Die Ergebnis-Leiter — Monat, Jahr und Gesamt aus einer Rechnung (seit 03.10.2026)
+
+**SoT:** `core/berechnungen/ergebnis.py` (`berechne_ergebnis`, `soll_erfuellung`, `falte_zeitraum`), der USt-Satz aus
+`services/ust_satz.py`. Bis dahin entstanden Netto-Ertrag, Monats-/Jahresergebnis und SOLL-Erfüllung an zwölf
+Stellen mit verschiedener Zusammensetzung — Cockpit → Monat nannte bei Regelbesteuerung für denselben Monat 212,00 €,
+die Übersicht 206,30 €.
+
+```
+Stufe 1  Netto-Ertrag (PV)           = Einspeise-Erlös + EV-Ersparnis + BKW-Rest-Ersparnis + Erlös eigener Satz
+                                       + Sonstige Positionen (netto) − USt-Anteil auf den Eigenverbrauch
+Stufe 2  (Zwischenstand)             = Netto-Ertrag + WP-Ersparnis + E-Mob-Ersparnis − Stromrechnung (inkl. Grundgebühr)
+Stufe 3  Monats-/Jahresergebnis      = Stufe 2 − Betriebskosten (anteilig, nur im Monat aktive Komponenten)
+```
+
+* **Ein Name je Stufe.** Stufe 1 ist der „Netto-Ertrag" überall — Cockpit → Monat/Jahr, Komponenten → PV-Anlage,
+  PDF-Jahresbericht, HA-Sensor `netto_ertrag_euro`. Stufe 2 hat im UI keinen eigenen Namen; sie steht nur als
+  Zwischenstand in der Herleitung (Antwortfeld `ergebnis_vor_betriebskosten_euro`). Stufe 3 ist das
+  **Monatsergebnis** bzw. **Jahresergebnis** (Feld `ergebnis_euro`).
+* **Herleitung aus derselben Rechnung (A6).** Die Antwort trägt je Stufe Formel und eingesetzte Werte
+  (`ergebnis_herleitung`); der Tooltip nennt jeden Summanden einzeln — WP-, E-Mob-, BKW-, Erzeuger-, Sonstige- und
+  USt-Posten nur, wenn sie etwas beitragen.
+* **Fehlende Eingänge — eine Regel für Monat, Vorjahr und Jahr.** Eine Stufe gibt es nicht (`—`), wenn einer ihrer
+  Pflichtposten fehlt: Stufe 1 braucht Einspeise-Erlös und EV-Ersparnis, Stufe 2 zusätzlich die Stromrechnung.
+  Optionale Posten gehen als 0 ein und werden in `fehlende_posten` genannt, wenn die Komponente existiert, aber keinen
+  Wert hat. Der **Vorjahresmonat** folgt derselben Regel; ein Vorjahresmonat mit 0 kWh Netzbezug trägt dabei die
+  Grundgebühr als Stromrechnung, wie der laufende Monat auch (bis 03.10.2026 zählte die Stromrechnung dort als 0).
+* **Betriebskosten des Monats** zählen nur Komponenten, die im Monat aktiv waren (Anschaffungs- und
+  Stilllegungsdatum) — dieselbe Filtermenge wie die T-Konto-Zeilen.
+* **USt-Anteil eines Monats** = Eigenverbrauch des Monats × USt je kWh **des Jahres** (§3.7). Σ der Monatsanteile
+  eines Jahres = der Jahreswert der Übersicht. Im laufenden Jahr wandert der Satz mit jedem Abschluss um Cent-Beträge
+  (eine Jahressteuer); die Herleitung nennt Satz und Grundlage. Hat das Jahr noch keinen Abschluss, gilt der Satz des
+  Vorjahres; gibt es auch den nicht, wird kein USt-Anteil gerechnet, und die Herleitung sagt es.
+* **SOLL-Erfüllung** (`soll_erfuellung_prozent`, `soll_erfuellung_monat_prozent`, `soll_fenster_text`) kommt ebenfalls
+  fertig aus der Antwort — Cockpit und PDF-Monatsbericht rechnen sie nicht mehr selbst.
+* **Der Layer rundet nicht**; gerundet wird am Antwortrand (Cockpit → Monat je Posten auf Cent).
+
+**Das Jahr (Cockpit → Jahr, Auswertungen → Finanzen im Jahr-Modus)** rechnet seit 03.10.2026 das Backend:
+`GET /api/cockpit/jahr/{anlage_id}?jahr=` lädt die Monatsantworten des Jahres (dieselbe Monatsmenge wie bisher: jeder
+Monat zwischen Inbetriebnahme und heute, der gemessene Mengen trägt — auch ohne Monatsabschluss) und faltet sie
+(`falte_zeitraum`):
+
+* **Summen** (kWh, €) über alle Monate; **Quoten paarweise** — Autarkie, EV-Quote, Speicher-Auslastung und der
+  Netzlade-Ø-Preis entstehen aus Summen über genau die Monate, die **beide** Größen tragen. Ein Monat mit
+  Eigenverbrauch, aber ohne Gesamtverbrauch, fällt aus Zähler und Nenner (vorher: 198 % Autarkie, #421). Zähler,
+  Nenner und Fenster („aus 8 von 9 Monaten") stehen in der Antwort und im Tooltip.
+* **Ergebnisgrößen über die Leiter** auf den Jahressummen ihrer Posten, mit derselben None-Regel: fehlt einem Monat die
+  Stromrechnung, gibt es kein Jahresergebnis (`fehlende_posten` nennt den Monat). Der Netto-Ertrag hängt nicht an der
+  Stromrechnung.
+* **Vorjahr / Ø-Jahr** aus der Monatsreihe, beschnitten auf die gemeinsamen Monate (N-37); die Ø-Autarkie ist die Quote
+  der gemittelten Mengen, nicht das Mittel der Prozente.
+* Kopfzahl = das Jahr bis heute (inkl. laufendem Monat); Vergleich, Vorjahr, Ø-Jahr nur über abgeschlossene Monate.
+
+
 **Endpoint:** `GET /api/cockpit/uebersicht/{anlage_id}` in `cockpit.py`
 
 Die Cockpit-Übersicht aggregiert alle Monatsdaten für ein Jahr (oder alle Jahre) und berechnet:
@@ -473,23 +539,22 @@ Jahres-Rendite (%)  = Kumulative_Ersparnis / Investition_gesamt * 100
 > (Monat + Jahr) weist sie zusätzlich **nachrichtlich** aus („davon Grundgebühr: … €"). Die **Zählergebühr**
 > (neues optionales Tarif-Feld `Strompreis.zaehlergebuehr_euro_jahr`) wird im Jahr-Modus als „Zählergebühr:
 > … €/Jahr (nachrichtlich)" gezeigt, aber **nicht** in Kosten/Netto verrechnet — eine Einrechnung wäre ein
-> eigener Kennzahlen-Entscheid. `baueJahrAlsMonat`: Grundgebühr = Σ, Zählergebühr = letzter Wert.
+> eigener Kennzahlen-Entscheid. Jahresfaltung (`falte_zeitraum`, Backend seit 03.10.2026): Grundgebühr = Σ, Zählergebühr = letzter Wert.
 
-> **Cockpit-Finanzen-Block = Komponenten-Finanz-Tabelle (G20-1, ab v4.0):** Der Finanzen-Block in
-> Cockpit-Monat/-Jahr zeigt **eine Zeile je Komponente** (Reihenfolge = Typ-SoT) mit den Spalten
-> **Erträge** (tatsächliche Zahlungsflüsse) · **Einsparungen** (kalkulatorisch/vermiedene Kosten) ·
-> **Aufwand** (inkl. anteilig umgelegter Betriebskosten, Speicher-Zeile inkl. Netzladungs-Kosten) ·
-> **Saldo**; die **Summenzeile ist die Block-Kopf-Kennzahl** (Kopf == sichtbare Summe). Diese Tabellen-
-> Summe ist bewusst eine **dritte, komponenten-attribuierte Netto-Semantik** neben (a) dem kanonischen
-> `netto_ertrag_euro` (PV-Anlage: Einspeise-Erlös + EV-Ersparnis + BKW-Ersparnis + Sonstige-Netto) und
-> (b) `gesamtnettoertrag_euro` (Einspeise-Erlös + EV-Ersparnis + WP-Ersparnis + E-Mob-Ersparnis −
-> Netzbezug-Kosten). Sie fasst die Beiträge **aller** Komponenten zusammen und wird **rein aus den
-> vorhandenen T-Konto-Posten** gebaut — **keine neue Berechnung**: `netto_ertrag_euro`, der HA-Export-
-> Sensor und der PDF-Jahresbericht bleiben unangetastet. Netzbezug-Kosten und Grundgebühr stehen
-> nachrichtlich (nicht im Saldo). Zusätzlich weist der Block als **zweite Perspektive** die Zeile
-> **„Ergebnis nach Stromrechnung" = Tabellen-Saldo − Netzbezug-Kosten** (G20-4) aus — das Haushalts-
-> ergebnis; der Komponenten-Saldo bleibt davon unberührt und ist weiterhin die Kopf-Kennzahl. *(Die Vergleichs-Asymmetrie
-> `gesamtnettoertrag` Monat vs. Vorjahr ist ein offener Punkt der Kennzahlen-Drift-Inventur, kein Bug.)*
+> **Cockpit-Finanzen-Block = Komponenten-Finanz-Tabelle (G20-1, ab v4.0; fortgeschrieben 03.10.2026):** Der
+> Finanzen-Block in Cockpit-Monat/-Jahr zeigt **eine Zeile je Komponente** (Reihenfolge = Typ-SoT) mit den Spalten
+> **Erträge** (tatsächliche Zahlungsflüsse) · **Einsparungen** (kalkulatorisch/vermiedene Kosten) · **Aufwand** (inkl.
+> anteilig umgelegter Betriebskosten, Speicher-Zeile inkl. Netzladungs-Kosten, PV-Zeile bei Regelbesteuerung inkl. USt
+> auf den Eigenverbrauch) · **Saldo**; die **Summenzeile ist die Block-Kopf-Kennzahl** (Kopf == sichtbare Summe). Bis
+> 03.10.2026 stand hier, die Tabellen-Summe sei „bewusst eine dritte Netto-Semantik" — mit #402 (02.09.) trägt das nicht
+> mehr: eine Attribution verteilt einen Betrag, sie vervielfacht ihn nicht. Die Tabelle verteilt dieselben Posten wie
+> die **Ergebnis-Leiter** (oben) auf die Komponenten; ihre Zusatzzeile heißt seither **„Monatsergebnis"/„Jahresergebnis"**
+> und **liest** `ergebnis_euro` (bis dahin „Ergebnis nach Stromrechnung" = Saldo − Netzbezug-Kosten, G20-4). Ob beide
+> Wege auf dieselbe Zahl führen, misst die Probe P8 des Ergebnisgrößen-Pakets; zwei vorbestehende Abweichungen
+> (Wärmepumpen-Ersparnis je Gerät gegen Aggregat; Speicher-Netzladung in Aufwand UND Stromrechnung) sind dort benannt.
+> *(Bis 03.10.2026 stand hier außerdem, die Vergleichs-Asymmetrie `gesamtnettoertrag` Monat vs. Vorjahr sei „kein
+> Bug". Sie war einer: ein Vorjahr mit fehlender Stromrechnung zählte sie als 0. Seit der Ergebnis-Leiter folgt das
+> Vorjahr derselben Regel wie der Monat; das Feld `gesamtnettoertrag_euro` ist entfallen.)*
 
 > **Anschaffungsdatum-Grenze auch im Vorjahres-Vergleich (DI-5/DI-2-C):** Der Trend-Pfeil zum Vorjahr
 > zieht die Vorjahres-Werte **symmetrisch** zum laufenden Monat — WP- und E-Mob-Ersparnis fließen nur
@@ -635,7 +700,7 @@ Die Ladungs-Näherung **überschätzt** den echten Fahrverbrauch (AC-Ladung an d
 
 **Zeitraum (Jahr, Übersicht, Hub, Auswertungen) — ab N-557:** Jeder Monat entscheidet für sich (Regel oben), der
 Zeitraum ist die **Summe der Monatswerte geteilt durch die Summe der Kilometer**
-(`eauto_effizienz_zeitraum`; im Client für *Cockpit → Jahr* gespiegelt in `lib/emobEffizienz.ts`). Monate ohne jede
+(`eauto_effizienz_zeitraum`; *Cockpit → Jahr* ruft sie seit 03.10.2026 über die Jahresroute, der frühere Client-Spiegel ist entfallen). Monate ohne jede
 Energiemenge zählen weder im Zähler noch im Nenner. „gemessen" steht nur, wenn **jeder** Monat mit Kilometern gemessen
 ist, sonst „Näherung über die Ladung". Bis v4.0.50 teilte das Aggregat den Fahrverbrauch der Monate **mit** Sensor
 durch die Kilometer **aller** Monate — mit einem Verbrauchssensor ab Juli also rund die halbe Zahl, beschriftet
@@ -1280,7 +1345,7 @@ Start-Migrationslauf:** die Heilung überschreibt Messwerte und bleibt eine Ents
 Anwenders.
 
 **Auch in der Live-Bilanz bucht die Wallbox (Cockpit → Live, N-575).** Ist eine Wallbox erfasst,
-ist die Heimladung eines E-Autos Hausverbrauch — auch beim V2H-fähigen Auto, nie Batterie-Ladung.
+ist die Heimladung eines E-Autos Gesamtverbrauch — auch beim V2H-fähigen Auto, nie Batterie-Ladung.
 Liefert die Wallbox einen Wert, bucht sie, und das Auto steht nur als ihr Kind daneben; liefert sie
 gerade keinen, zählt das Auto selbst als Verbraucher. Eine gemessene V2H-**Entladung** zählt wie
 eine Speicher-Entladung zum Eigenverbrauch, und zwar einmal: Meldet die Wallbox den negativen Wert,

@@ -37,7 +37,6 @@ import { aktuellerMonatApi, type AktuellerMonatResponse } from '../api/aktueller
 import { cockpitApi, type KomponentenZeitreihe } from '../api/cockpit'
 import { importApi } from '../api/import'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
-import { baueJahrAlsMonat } from './JahrAggregat'
 import { STEUER_H } from '../lib/komponentenStyle'
 import { useApiData, useLegendenToggle, useSelectedAnlage, useSchmaleAchse } from '../hooks'
 import type { AuswertungBasis } from './useAuswertungBasis'
@@ -46,7 +45,6 @@ import { ZeitraumHinweis } from './ZeitraumHinweis'
 import { AnlageLeer } from './OnboardingLeer'
 
 const SICHT_KEY = 'v4-auswertungen-finanzen'
-const MONATE_1_12 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 const euroTick = (v: number) => fmtZahl(v, 0)
 
 export default function AuswertungenFinanzenV4({ basis }: { basis: AuswertungBasis }) {
@@ -83,13 +81,17 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
     [basis.gefiltert, basis.strompreis],
   )
 
+  // Sonstige Erträge und Sonderkosten je Monat — NUR zum Ausweis (Balken „Sonderkosten", Hinweis, Untertitel, Tooltip).
+  // ⛔ Seit 03.10.2026 (A1, Entscheid Fable-Master) werden sie nirgends mehr auf den Netto-Ertrag addiert: das Feld
+  // `netto_ertrag_euro` der Monatsreihe ENTHÄLT sie (Stufe 1 der Ergebnis-Leiter, GLOSSAR). Bis dahin stand hier
+  // `netto_ertrag + sonstige_netto` — mit dem neuen Feld wäre das eine Doppelzählung. Quelle beider Wege ist dieselbe
+  // Monats-Fakt-Größe (`fakt.sonstiges.ertraege_euro/ausgaben_euro`; Komponenten-Zeitreihe `cockpit/komponenten.py`).
   const sonstigeByMonth = useMemo(() => {
-    const map = new Map<string, { ertraege: number; ausgaben: number; netto: number }>()
+    const map = new Map<string, { ertraege: number; ausgaben: number }>()
     sonderkostenData?.monatswerte?.forEach((m) => {
       map.set(`${m.jahr}-${m.monat}`, {
         ertraege: m.sonstige_ertraege_euro || 0,
         ausgaben: m.sonstige_ausgaben_euro || 0,
-        netto: m.sonstige_netto_euro || 0,
       })
     })
     return map
@@ -98,10 +100,8 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
   const chartData = useMemo(() => {
     let kumuliert = 0
     return zeitreihe.map((z) => {
-      const s = sonstigeByMonth.get(`${z.jahr}-${z.monat}`)
-      const nettoMitSonder = z.netto_ertrag + (s?.netto || 0)
-      kumuliert += nettoMitSonder
-      return { ...z, sonderkosten: s?.ausgaben || 0, netto_nach_sonderkosten: nettoMitSonder, kumuliert_ertrag: kumuliert }
+      kumuliert += z.netto_ertrag
+      return { ...z, sonderkosten: sonstigeByMonth.get(`${z.jahr}-${z.monat}`)?.ausgaben || 0, kumuliert_ertrag: kumuliert }
     })
   }, [zeitreihe, sonstigeByMonth])
 
@@ -119,16 +119,17 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
     // Netto-Ertrag der Zeile — deshalb Σ der Zeilen statt der Neuaufbau aus
     // Erlös + Ersparnis, sonst stünde hier wieder eine dritte Zahl.
     const ust = chartData.reduce((s, z) => s + (z.ust_eigenverbrauch || 0), 0)
+    // Σ des Felds — es enthält Sonstige Erträge und Sonderkosten schon (A1); `sonstigeErtraege`/`sonderkosten` oben
+    // sind nur ihr Ausweis.
     const nettoErtrag = chartData.reduce((s, z) => s + z.netto_ertrag, 0)
-    const nettoNachSonderkosten = nettoErtrag + sonstigeErtraege - sonderkosten
     // #402 (rilmor-mhrs): Erzeuger mit EIGENEM Vergütungssatz (Mieterstrom,
     // Allgemeinstrom, Nachbarhaus) tragen einen gepflegten Erlös, den eedc
-    // nicht nachrechnet. Er gehört NICHT in die Kacheln oben — die bewerten
-    // den Anlagenzähler mit dem einen Satz der Anlage —, steht aber im
-    // T-Konto darunter. Ohne diese Summe wüsste die Sicht nicht einmal, ob es
-    // solche Erzeuger gibt, und könnte ihre Grenze nicht aussprechen.
+    // nicht nachrechnet. Er steckt NICHT im Einspeise-Erlös (Anlagenzähler × der
+    // eine Satz), WOHL ABER in `netto_ertrag` der Zeile (seit 06.09.2026, §9.2) —
+    // deshalb nennt ihn die Netto-Kachel unten („inkl. … eigener Vergütungssatz").
+    // Ohne diese Summe könnte die Sicht den Summanden nicht aussprechen.
     const erzeugerErloes = chartData.reduce((s, z) => s + (z.erzeuger_erloes || 0), 0)
-    return { einspeiseErloes, netzbezugKosten, eigenverbrauchErsparnis, sonderkosten, sonstigeErtraege, ust, nettoErtrag, nettoNachSonderkosten, nichtVerguetet, neg51Kwh, erzeugerErloes }
+    return { einspeiseErloes, netzbezugKosten, eigenverbrauchErsparnis, sonderkosten, sonstigeErtraege, ust, nettoErtrag, nichtVerguetet, neg51Kwh, erzeugerErloes }
   }, [chartData, sonstigeByMonth])
 
   const monate = basis.stats.anzahlMonate || 1
@@ -136,10 +137,12 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
   const strompreis = basis.strompreis
 
   const handleCsv = useCallback(() => {
+    // A1 (03.10.2026): „Netto-Ertrag PV" ist das Feld der Reihe und enthält die Sonstigen Positionen; die frühere
+    // Spalte „Netto nach Sonderkosten" war dieselbe Zahl und entfällt. „Sonderkosten" bleibt als Ausweis.
     const headers = ['Monat', 'Einspeiseerlös (€)', 'EV-Ersparnis (€)', 'Netzbezug-Kosten (€)',
-      'Netto-Ertrag PV (€)', 'Sonderkosten (€)', 'Netto nach Sonderkosten (€)', 'Kumulierter Ertrag (€)']
+      'Netto-Ertrag PV inkl. Sonstige (€)', 'davon Sonderkosten (€)', 'Kumulierter Ertrag (€)']
     const rows = chartData.map((z) => [z.name, z.einspeise_erloes, z.ev_ersparnis, z.netzbezug_kosten,
-      z.netto_ertrag, z.sonderkosten, z.netto_nach_sonderkosten, z.kumuliert_ertrag])
+      z.netto_ertrag, z.sonderkosten, z.kumuliert_ertrag])
     exportToCSV(headers, rows, 'finanzen_export.csv')
   }, [chartData])
 
@@ -194,7 +197,7 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
         // Ergebniszeile des T-Kontos darunter ab — dort zählen Netzbezug-Kosten
         // und Wärmepumpe/E-Mobilität mit, hier bewusst nicht (BERECHNUNGEN.md:
         // Netzbezug-Kosten fielen auch ohne PV an).
-        title: 'Netto-Ertrag (PV)', value: formatGeld(gesamt.nettoNachSonderkosten).wert, unit: '€', color: 'blue', icon: Euro,
+        title: 'Netto-Ertrag (PV)', value: formatGeld(gesamt.nettoErtrag).wert, unit: '€', color: 'blue', icon: Euro,
         parkId: 'kpi:netto',
         subtitle: gesamt.sonstigeErtraege > 0 && gesamt.sonderkosten > 0
           ? `inkl. +${fmtZahl(gesamt.sonstigeErtraege, 0)} € / −${fmtZahl(gesamt.sonderkosten, 0)} € Sonstige`
@@ -221,15 +224,19 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
           + (gesamt.erzeugerErloes > 0
               ? ` · inkl. ${fmtZahl(gesamt.erzeugerErloes, 2)} € Abgabe an Dritte / eigener Vergütungssatz`
               : ''),
+        // A1: Sonstige Erträge und Sonderkosten sind Bestandteil der Zahl (Feld der Reihe) — sie stehen hier als
+        // eingesetzte Werte, gerechnet wird nichts.
         berechnung: `${fmtZahl(gesamt.einspeiseErloes, 2)} € + ${fmtZahl(gesamt.eigenverbrauchErsparnis, 2)} €`
+          + (gesamt.sonstigeErtraege > 0 ? ` + ${fmtZahl(gesamt.sonstigeErtraege, 2)} € Sonstige Erträge` : '')
+          + (gesamt.sonderkosten > 0 ? ` − ${fmtZahl(gesamt.sonderkosten, 2)} € Sonderkosten` : '')
           + (gesamt.ust > 0 ? ` − ${fmtZahl(gesamt.ust, 2)} € USt` : ''),
-        ergebnis: `= ${fmtZahl(gesamt.nettoNachSonderkosten, 2)} €`,
+        ergebnis: `= ${fmtZahl(gesamt.nettoErtrag, 2)} €`,
       },
     ]
 
     const blockUebersicht: Block = {
       id: 'uebersicht', title: 'Finanz-Übersicht', icon: Wallet, farbe: 'text-green-500',
-      summary: `Netto ${formatGeld(gesamt.nettoNachSonderkosten).text} · ${monate} Monate`, defaultOpen: true,
+      summary: `Netto ${formatGeld(gesamt.nettoErtrag).text} · ${monate} Monate`, defaultOpen: true,
       render: () => (
         <div className="space-y-4">
           <KpiStrip kpis={kpis} />
@@ -288,7 +295,7 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
               </div>
               <div className="mt-2 flex items-center justify-center gap-3 text-sm">
                 <span className="text-gray-500 dark:text-gray-400">Gesamt nach {monate} Monaten:</span>
-                <span className={`text-lg font-semibold ${GELD_TEXT_CLASS.netto}`}>{fmtZahl(gesamt.nettoNachSonderkosten, 0)} €</span>
+                <span className={`text-lg font-semibold ${GELD_TEXT_CLASS.netto}`}>{fmtZahl(gesamt.nettoErtrag, 0)} €</span>
               </div>
             </div>
           </Parkbar>
@@ -306,8 +313,8 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
                     <Tooltip {...eedcTooltipProps({ unit: '€', decimals: 2 })} />
                     {/* D12-5: Legende fehlte (2 Serien Netto-Ertrag + Trend) — wie Chart 1. */}
                     <Legend content={<ChartLegende onItemClick={(e) => nettoLegende.toggleSerie(String(e.value))} />} />
-                    <Bar dataKey="netto_nach_sonderkosten" name="Netto-Ertrag" fill={COLORS.feedin} opacity={0.7} hide={nettoLegende.istVersteckt('Netto-Ertrag')} />
-                    <Line type="monotone" dataKey="netto_nach_sonderkosten" name="Trend" stroke={COLORS.solar} strokeWidth={2} dot={false} hide={nettoLegende.istVersteckt('Trend')} />
+                    <Bar dataKey="netto_ertrag" name="Netto-Ertrag" fill={COLORS.feedin} opacity={0.7} hide={nettoLegende.istVersteckt('Netto-Ertrag')} />
+                    <Line type="monotone" dataKey="netto_ertrag" name="Trend" stroke={COLORS.solar} strokeWidth={2} dot={false} hide={nettoLegende.istVersteckt('Trend')} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
@@ -325,7 +332,7 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
               {gesamt.sonderkosten > 0 && (
                 <div><p className="text-gray-500 dark:text-gray-400">Ø Sonderkosten/Monat</p><p className="font-medium text-amber-600 dark:text-amber-400">{fmtZahl(gesamt.sonderkosten / monate, 0)} €</p></div>
               )}
-              <div><p className="text-gray-500 dark:text-gray-400">Ø Netto-Ertrag (PV)/Monat</p><p className={`font-medium ${GELD_TEXT_CLASS.netto}`}>{fmtZahl(gesamt.nettoNachSonderkosten / monate, 0)} €</p></div>
+              <div><p className="text-gray-500 dark:text-gray-400">Ø Netto-Ertrag (PV)/Monat</p><p className={`font-medium ${GELD_TEXT_CLASS.netto}`}>{fmtZahl(gesamt.nettoErtrag / monate, 0)} €</p></div>
             </div>
           </div>
           </Parkbar>
@@ -415,7 +422,7 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
 }
 
 /** T-Konto mit Monat|Jahr-Umschalter. Das Jahr kommt vom Sicht-Kopf (R5, Prop `jahr`),
- *  der Block wählt nur Monat-im-Jahr vs. Ganzjahr-Σ (`baueJahrAlsMonat`, kein Backend). */
+ *  der Block wählt nur Monat-im-Jahr vs. Ganzjahr (Kopf der Jahresroute `GET /cockpit/jahr`). */
 function TKontoPeriode({ anlageId, daten, jahr }: {
   anlageId: number | undefined | null
   daten: AggregierteMonatsdaten[]
@@ -452,9 +459,11 @@ function TKontoPeriode({ anlageId, daten, jahr }: {
         ])
         return { d: resp, sonderkosten: sk }
       }
-      const resps = await Promise.all(MONATE_1_12.map((m) => aktuellerMonatApi.getData(anlageId!, jahr!, m).catch(() => null)))
-      const ok = resps.filter((r): r is AktuellerMonatResponse => r != null)
-      return { d: ok.length ? baueJahrAlsMonat(ok, jahr!) : null, sonderkosten: null }
+      // Jahr: dieselbe Jahresroute wie Cockpit → Jahr (03.10.2026) — eine Faltung im Backend-Layer statt zwölf
+      // Abrufen und einer zweiten Faltung hier. Bis dahin lud diese Sicht ALLE zwölf Monate, auch künftige des
+      // laufenden Jahres, und zählte deren anteilige Betriebskosten mit.
+      const r = await cockpitApi.getJahr(anlageId!, jahr!).catch(() => null)
+      return { d: r && r.monate_nr.length ? r.kopf : null, sonderkosten: null }
     },
     [anlageId, modus, jahr, monat],
     {

@@ -124,7 +124,7 @@ Live zeigt **Echtzeit-Leistungsdaten** deiner gesamten Anlage und aktualisiert s
 
 **Energiefluss-Diagramm** — das zentrale, animierte Element (ähnlich dem HA Energy Dashboard):
 
-- **Haus** in der Mitte als Senke
+- **Haus** in der Mitte als Senke — die Zahl darin ist der **Restverbrauch** (= Gesamtverbrauch − separat erfasste Verbraucher wie Wallbox oder Wärmepumpe); der Tooltip nennt die Formel und darunter den Gesamtverbrauch des Tages
 - **Erzeuger** (PV-Module, Balkonkraftwerk) oben
 - **Netz** links (bidirektional: Bezug / Einspeisung)
 - **Speicher** rechts (bidirektional: Laden / Entladen)
@@ -168,7 +168,7 @@ Eine Gruppenkachel erkennst du an den zwei versetzten Rahmen dahinter („hier l
 2. **Batterie** (Lade- und Entladebilanz)
 3. **Eigenverbrauch** (in % der PV-Erzeugung, gedeckelt auf 100 % — durch zusätzliche Batterie-Entladung aus Vortagen kann die Quote rechnerisch darüber laufen, das ist visuell nicht sinnvoll)
 4. **Netzbezug**
-5. **Hausverbrauch**
+5. **Gesamtverbrauch** = Eigenverbrauch + Netzbezug (alles, was das Haus heute verbraucht hat)
 6. **Einspeisung** (PV-Überschuss ins Netz)
 
 **Tagesverlauf-Diagramm** — Linien-/Flächendiagramm für PV/Verbrauch/Speicher, mit gepunkteter **Strompreis-Linie** auf zweiter Y-Achse:
@@ -255,7 +255,10 @@ auf einer durchgehenden Zeitachse:
 
 Die **Tag**-Sicht bringt den feingranularen Stunden-Tag ins Cockpit: ein ausgewählter Kalendertag mit Stunden-Auflösung. Über die Datums-Navigation blätterst du zu beliebigen Tagen.
 
-- **Stunden-Verlauf** von Erzeugung, Verbrauch und Speicher
+- **Stunden-Verlauf** von Erzeugung, Verbrauch und Speicher — die graue Fläche **Restverbrauch** ist der Verbrauch, den
+  kein einzeln erfasstes Gerät erklärt
+- **Stundenwerte-Tabelle** mit den Spalten **Gesamtverbrauch** (= Eigenverbrauch + Netzbezug) und **Restverbrauch**
+  (= Gesamtverbrauch − Wärmepumpe − Wallbox − sonstige erfasste Verbraucher); die Formel steht im Tooltip des Spaltenkopfs
 - **Tagesbilanz** als Kennzahl-Strip (Summen des Tages)
 - Detail-Sektionen je nach vorhandenen Komponenten
 
@@ -366,7 +369,7 @@ Aus dem feingranularen Stunden-Bestand des Monats zeigt die Sicht zusätzlich:
 
 > **Aus der alten „Energieprofil (Beta)"-Sicht bewusst nicht übernommen:** die Tag×Stunde-Heatmap (kommt später neu gestaltet zurück) und der Wochentag-Wochenvergleich (entfällt — der Ø-gleiche-Wochentag-Rückblick in der Tag-Sicht deckt den Kern).
 
-**Finanzen-Block** — der Monat (und analog [Jahr/Gesamt](#24-jahrgesamt)) trägt einen eigenen Finanzen-Block als **Komponenten-Finanz-Tabelle**: eine Zeile je Komponente (PV-Anlage, Speicher, Wärmepumpe, E-Auto …) mit den Spalten **Erträge** (tatsächliche Zahlungsflüsse), **Einsparungen** (kalkulatorisch — vermiedene Kosten), **Aufwand** und **Saldo**. Die **Summenzeile ist die Block-Kopf-Kennzahl** (Kopf == sichtbare Summe). ⚑ **Die Zeile „PV-Anlage" trägt dabei nur ihren eigenen Anteil an der Eigenverbrauchs-Ersparnis:** Was Speicher, Balkonkraftwerk und die PV-Ladung der Wallbox beitragen, steht in deren eigenen Zeilen und ist oben abgezogen — sonst stünde dieselbe Kilowattstunde zweimal in der Summe. Wo etwas abgezogen wurde, sagt die Zeile es („ohne Anteil der Komponenten unten"), und die Summe stimmt dann mit dem T-Konto in *Auswertungen → Finanzen* überein. Spaltenköpfe und Zeilen zeigen ihre Herleitung im **Tooltip** (Hover/Tipp). Netzbezug-Kosten und Grundgebühr stehen **nachrichtlich** darunter, nicht im Saldo verrechnet. Eine zusätzliche Zeile **„Ergebnis nach Stromrechnung"** (= Saldo − Netzbezug-Kosten) zeigt als **zweite Perspektive** das Haushaltsergebnis; der Komponenten-Saldo bleibt davon unberührt und ist weiterhin die Kopf-Kennzahl. Die **volle Finanzrechnung** (T-Konto je Investition, zeitraum-fähig) und die Finanz-Prognose liegen in [Auswertungen → Finanzen](#41-finanzen); der Block verlinkt direkt dorthin.
+**Finanzen-Block** — der Monat (und analog [Jahr/Gesamt](#24-jahrgesamt)) trägt einen eigenen Finanzen-Block als **Komponenten-Finanz-Tabelle**: eine Zeile je Komponente (PV-Anlage, Speicher, Wärmepumpe, E-Auto …) mit den Spalten **Erträge** (tatsächliche Zahlungsflüsse), **Einsparungen** (kalkulatorisch — vermiedene Kosten), **Aufwand** und **Saldo**. Die **Summenzeile ist die Block-Kopf-Kennzahl** (Kopf == sichtbare Summe). ⚑ **Die Zeile „PV-Anlage" trägt dabei nur ihren eigenen Anteil an der Eigenverbrauchs-Ersparnis:** Was Speicher, Balkonkraftwerk und die PV-Ladung der Wallbox beitragen, steht in deren eigenen Zeilen und ist oben abgezogen — sonst stünde dieselbe Kilowattstunde zweimal in der Summe. Wo etwas abgezogen wurde, sagt die Zeile es („ohne Anteil der Komponenten unten"), und die Summe stimmt dann mit dem T-Konto in *Auswertungen → Finanzen* überein. Spaltenköpfe und Zeilen zeigen ihre Herleitung im **Tooltip** (Hover/Tipp). Netzbezug-Kosten und Grundgebühr stehen **nachrichtlich** darunter, nicht im Saldo verrechnet. Eine zusätzliche Zeile **„Monatsergebnis"** (im Jahr: „Jahresergebnis") zeigt als **zweite Perspektive** das Haushaltsergebnis — dieselbe Zahl wie die Kachel oben; bei Regelbesteuerung steht die USt auf den Eigenverbrauch als Aufwand der PV-Anlage. Der Komponenten-Saldo bleibt davon unberührt und ist weiterhin die Kopf-Kennzahl. Die **volle Finanzrechnung** (T-Konto je Investition, zeitraum-fähig) und die Finanz-Prognose liegen in [Auswertungen → Finanzen](#41-finanzen); der Block verlinkt direkt dorthin.
 
 > **Die Kachel „Ø-Preis Netz" zeigt unter dem Preis die Arbeitspreis-Kosten** (`Netzbezug ×
 > Ø-Preis`) — nicht die Gesamtsumme der Stromrechnung. So geht die Division auf: kWh und €
@@ -376,7 +379,14 @@ Aus dem feingranularen Stunden-Bestand des Monats zeigt die Sicht zusätzlich:
 > verbrauchsgewichtete Monatsdurchschnitt; mit ihm rechnen dann auch Kosten und
 > Eigenverbrauchs-Ersparnis dieses Monats.
 
-> **Zwei Netto-Größen nicht verwechseln:** Die Hero-Kennzahl **„Netto-Ertrag"** (z. B. in Jahr/Gesamt) ist **Einspeise-Erlös + Eigenverbrauchs-Ersparnis** — die Erzeugungs-Seite deiner Anlage — und ist bewusst **nicht** identisch mit dem **Finanz-Block-Saldo**, der **alle Komponenten** (Wärmepumpe-, E-Auto-, Speicher-Beiträge und Sonstige Positionen) attribuiert zusammenfasst. Beide Zahlen sind korrekt — sie beantworten verschiedene Fragen (was deine Erzeugung einbringt vs. Gesamt-Saldo aller Komponenten). ⚑ **Hast du einen Erzeuger unter *Sonstiges*** (BHKW, Windrad, Wasserkraft), **zählt sein Strom in dieser Zahl mit** — er speist hinter denselben Hauszähler, und was er einspeist oder ersetzt, ist in Erlös und Ersparnis deiner Anlage enthalten. Bewertet wird dabei das **Gerät** nicht (siehe [§3.8](#38-sonstiges)). Die volle Herleitung steht in [Berechnungen §3.2](BERECHNUNGEN.md#32-finanzen-cockpit).
+> **Die Ergebnis-Leiter in vier Zeilen** (Netto-Ertrag und Monatsergebnis rechnet eedc für Monat, Jahr und Gesamt gleich):
+>
+> 1. **Netto-Ertrag** = Einspeise-Erlös + Eigenverbrauchs-Ersparnis (+ Balkonkraftwerk-Rest, + Erlös eines Geräts mit eigenem Vergütungssatz, + Sonstige Positionen) − bei Regelbesteuerung die USt auf den Eigenverbrauch. Das ist, was deine **Erzeugung** einbringt — dieselbe Zahl wie unter *Komponenten → PV-Anlage*, im PDF-Jahresbericht und im HA-Sensor.
+> 2. **+ Wärmepumpen- und E-Mobilitäts-Ersparnis − Stromrechnung** (Netzbezug inkl. Grundgebühr) — ein Zwischenstand, den der Tooltip zeigt.
+> 3. **− Betriebskosten** der Komponenten, die in diesem Monat schon (und noch) in Betrieb waren.
+> 4. = **Monatsergebnis**. Fehlt die Stromrechnung eines Monats, steht dort „—" mit dem Grund im Tooltip — eedc rechnet sie nicht als 0.
+>
+> Der **Finanz-Block-Saldo** darunter (Komponenten-Tabelle) verteilt dieselben Posten auf die Komponenten. ⚑ **Hast du einen Erzeuger unter *Sonstiges*** (BHKW, Windrad, Wasserkraft), **zählt sein Strom im Netto-Ertrag mit** — er speist hinter denselben Hauszähler. Bewertet wird dabei das **Gerät** nicht (siehe [§3.8](#38-sonstiges)). Die volle Herleitung steht in [Berechnungen §3.2](BERECHNUNGEN.md#32-finanzen-cockpit).
 
 Die **Erfassung** eines Monats (Zählerstände, Monatsabschluss) läuft über das Formular unter [Einstellungen → Daten → Monatsdaten](HANDBUCH_EINSTELLUNGEN.md); ein offener Monatsabschluss wird zusätzlich in der Status-Fußzeile angezeigt.
 
@@ -384,7 +394,7 @@ Die **Erfassung** eines Monats (Zählerstände, Monatsabschluss) läuft über da
 
 ### 2.4 Jahr/Gesamt
 
-Die **Jahr/Gesamt**-Sicht fasst die Anlage über ein ganzes Jahr zusammen (Summe der Monate). Über den Selektor an der Seite — mobil über die Jahres-Leiste — wählst du das Jahr; die Kennzahlen tragen einen Trend-Pfeil zum Vorjahr.
+Die **Jahr/Gesamt**-Sicht fasst die Anlage über ein ganzes Jahr zusammen — vom Backend über die Monate gerechnet: Mengen und Beträge als Summe, Quoten wie Autarkie aus den Monaten, die beide Größen tragen (steht ein Monat ohne Netzbezugswert im Jahr, sagt der Tooltip „aus 8 von 9 Monaten"). Über den Selektor an der Seite — mobil über die Jahres-Leiste — wählst du das Jahr; die Kennzahlen tragen einen Trend-Pfeil zum Vorjahr.
 
 > **„Gesamt" ist heute kein eigener Zeitraum, sondern steckt in einzelnen Kennzahlen.** Wo eine Zahl über die volle Laufzeit gilt, sagt sie es selbst — die Kachel **CO₂ kumuliert** trägt den Vermerk „gesamte Historie — nicht jahresgebunden" und bleibt beim Jahreswechsel stehen. Eine Selektor-Stellung, die die **ganze Seite** auf die Gesamtlaufzeit umschaltet, gibt es nicht; sie steht auf der Roadmap.
 
@@ -392,7 +402,7 @@ Die **Jahr/Gesamt**-Sicht fasst die Anlage über ein ganzes Jahr zusammen (Summe
 
 - **Autarkie** (%), **Spezifischer Ertrag** (kWh/kWp), **Netto-Ertrag** (€)
 
-> Der **Netto-Ertrag** hier ist die **Erzeugungs-Größe** (Einspeise-Erlös + Eigenverbrauchs-Ersparnis) — nicht der komponenten-übergreifende **Finanz-Block-Saldo** (siehe [§2.3](#23-monat), „Zwei Netto-Größen nicht verwechseln"). Der Finanzen-Block als Komponenten-Finanz-Tabelle erscheint auch in Jahr/Gesamt, dann über alle Monate summiert.
+> Der **Netto-Ertrag** hier ist derselbe wie im Monat und unter *Komponenten → PV-Anlage* — die **Erzeugungs-Größe** der Ergebnis-Leiter (siehe [§2.3](#23-monat), „Die Ergebnis-Leiter in vier Zeilen"). Das **Jahresergebnis** folgt derselben Regel wie das Monatsergebnis: Fehlt einem Monat die Stromrechnung, steht „—" mit dem Monat im Tooltip. Der Finanzen-Block als Komponenten-Finanz-Tabelle erscheint auch in Jahr/Gesamt.
 
 **PV-Verteilung** — ein Balken, der zeigt, wohin der erzeugte Strom geflossen ist (Direktverbrauch / Speicher / Einspeisung). Daneben stehen die Kachel **Grundlast SOLL/IST** und der Hinweis, aus welchen Geräten die PV-Erzeugung stammt.
 
@@ -741,11 +751,16 @@ Die Finanz-Sicht ist der Ort für **Erlöse, Einsparungen, Kosten und die Amorti
 - **Grund- und Zählergebühren** — separat ausgewiesen
 - **Netto-Einsparung** = Erlöse + Einsparungen − Kosten
 
-> **Zwei Netto-Begriffe, wortgleich in KPI, Charts, Ø-Karte, CSV und Werte-Tabelle:**
-> **„Netto-Ertrag (PV)"** = Einspeiseerlös + Eigenverbrauchs-Ersparnis + Sonstige − Sonderkosten,
-> **ohne** Netzbezug-Kosten und **ohne** Wärmepumpe/E-Mobilität. **„Gewinn/Verlust (Haushalt)"** ist
-> die Ergebniszeile des T-Kontos und rechnet beides mit. Beide stehen bewusst nebeneinander und im
-> [Glossar](GLOSSAR.md#strompreise--tarife); jede Zeile trägt ihre Herleitung im Tooltip.
+> **Eine Ergebnis-Leiter, wortgleich in KPI, Charts, Ø-Karte, CSV und Werte-Tabelle:**
+> **„Netto-Ertrag (PV)"** = Einspeiseerlös + Eigenverbrauchs-Ersparnis (+ Balkonkraftwerk-Rest, + Erlös eines Geräts mit
+> eigenem Satz, + Sonstige Erträge − Sonderkosten), bei Regelbesteuerung abzüglich der USt auf den Eigenverbrauch —
+> **ohne** Netzbezug-Kosten und **ohne** Wärmepumpe/E-Mobilität. **„Gewinn/Verlust (Haushalt)"** ist die Ergebniszeile
+> des T-Kontos: das **Monats- bzw. Jahresergebnis** in Kontenform (zusätzlich Wärmepumpen-/E-Mobilitäts-Ersparnis,
+> abzüglich Stromrechnung und Betriebskosten). Die Leiter steht in [§2.3](#23-monat) und im
+> [Glossar](GLOSSAR.md#strompreise--tarife); jede Zeile trägt ihre Herleitung im Tooltip. Überall dieselbe Zahl: auch
+> die Werte-Tabelle (*Auswertungen → Tabelle*) und *Auswertungen → Finanzen* zeigen den Netto-Ertrag **mit** den
+> Sonstigen Positionen (seit Oktober 2026; vorher fehlten sie in der Tabelle, und die Finanz-Sicht rechnete sie selbst
+> dazu). Sonstige Erträge und Sonderkosten stehen daneben als eigene Posten — als Bestandteil, nicht als Zuschlag.
 - **T-Konto** — Erlöse und Einsparungen den Kosten gegenübergestellt, mit Vorjahresvergleich (Δ). Auf Mobilgeräten als 2-Spalten-Layout (Label | Wert + Vorjahr + Δ).
 - **Amortisations-Fortschritt** — wie viel % der Investition bereits zurückgeflossen sind (kumuliert, nicht Jahres-Rendite)
 

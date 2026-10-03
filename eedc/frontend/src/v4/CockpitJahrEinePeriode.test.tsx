@@ -9,8 +9,9 @@
  * statt über eine Antwortzeit.
  *
  * Fünf Proben, je eine Klausel: Paarung · Vorhalt · Kopf · Nachlauf ·
- * Zählerstände. Aufbau: die Monats-Abrufe des Ziel-Jahres werden angehalten
- * (damit hängt `jahrQ` als Ganzes), alles andere antwortet sofort.
+ * Zählerstände. Aufbau: der Abruf der Jahresroute für das Ziel-Jahr wird angehalten
+ * (damit hängt `jahrQ` als Ganzes), alles andere antwortet sofort. Bis 03.10.2026
+ * hingen hier die zwölf Monats-Abrufe — seit der Jahresroute ist es EIN Abruf.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { screen, fireEvent, act } from '@testing-library/react'
@@ -31,11 +32,11 @@ const ZAEHLER_ENDE: Record<number, number> = { 2025: 1234, 2024: 5678 }
 
 const H = vi.hoisted(() => ({
   wartend: new Map<string, () => void>(),
-  /** Für diese Jahre antworten die Monats-Abrufe erst auf Zuruf. */
+  /** Für diese Jahre antwortet die Jahresroute erst auf Zuruf. */
   angehalten: new Set<number>(),
 }))
 
-import { aktuellerMonat, monatsZeile } from '../test/factories'
+import { aktuellerMonat, cockpitJahr, monatsZeile } from '../test/factories'
 import { renderMitProvidern, stubMatchMedia } from '../test/render'
 import { _clearSwrCacheForTests } from '../hooks/useApiData'
 
@@ -56,7 +57,7 @@ function monatsAntwort(jahr: number, monat: number) {
     einspeisung_kwh: 120, netzbezug_kwh: 90, eigenverbrauch_kwh: 180,
     direktverbrauch_kwh: 140, gesamtverbrauch_kwh: 270, autarkie_prozent: 66,
     eigenverbrauch_quote_prozent: 60,
-    netto_ertrag_euro: 35, gesamtnettoertrag_euro: 35,
+    netto_ertrag_euro: 35,
   })
 }
 
@@ -87,19 +88,30 @@ vi.mock('../api/monatsdaten', () => ({
   monatsdatenApi: { listAggregiert: vi.fn(() => Promise.resolve(aggregiert)) },
 }))
 
+/** Die Jahresroute für ein Jahr: Kopf = Σ der Monate mit Daten (2025 → 900 kWh · 2024 → 200 kWh). */
+function jahrAntwort(jahr: number) {
+  const n = MONATE_JE_JAHR[jahr].length
+  return cockpitJahr(jahr, {
+    monate: MONATE_JE_JAHR[jahr].map((m) => monatsAntwort(jahr, m)),
+    kopf: {
+      anlage_name: 'Demo', pv_erzeugung_kwh: PV_JE_MONAT[jahr] * n, einspeisung_kwh: 120 * n, netzbezug_kwh: 90 * n,
+      eigenverbrauch_kwh: 180 * n, direktverbrauch_kwh: 140 * n, gesamtverbrauch_kwh: 270 * n,
+      autarkie_prozent: (180 / 270) * 100, eigenverbrauch_quote_prozent: 60, netto_ertrag_euro: 35 * n,
+    },
+  })
+}
+
 vi.mock('../api/aktuellerMonat', () => ({
-  aktuellerMonatApi: {
-    getData: vi.fn((_id: number, j: number, m: number) => {
-      if (!H.angehalten.has(j)) return Promise.resolve(monatsAntwort(j, m))
-      return new Promise((res) => { H.wartend.set(`${j}-${m}`, () => res(monatsAntwort(j, m))) })
-    }),
-  },
+  aktuellerMonatApi: { getData: vi.fn(() => Promise.reject(new Error('Cockpit → Jahr lädt keine Einzelmonate mehr'))) },
 }))
 
 vi.mock('../api/cockpit', () => ({
   cockpitApi: {
     getNachhaltigkeit: vi.fn(() => Promise.resolve(nachhaltigkeit)),
-    getUebersicht: vi.fn(() => Promise.resolve(null)),
+    getJahr: vi.fn((_id: number, j: number) => {
+      if (!H.angehalten.has(j)) return Promise.resolve(jahrAntwort(j))
+      return new Promise((res) => { H.wartend.set(`${j}`, () => res(jahrAntwort(j))) })
+    }),
   },
 }))
 
@@ -127,7 +139,7 @@ describe('Cockpit → Jahr: alle Blöcke gehören demselben Jahr', () => {
   })
 
   /** Sicht öffnen (Default = 2025), aufklappen, auf 2024 blättern — dessen
-   *  Monats-Abrufe hängen, alles Client-Abgeleitete wäre sofort umgesprungen. */
+   *  Jahres-Abruf hängt, alles Client-Abgeleitete wäre sofort umgesprungen. */
   async function blaettereAufNeu() {
     H.angehalten.add(NEU)
     renderMitProvidern(<CockpitJahrV4 anlageId={1} />)
@@ -140,9 +152,7 @@ describe('Cockpit → Jahr: alle Blöcke gehören demselben Jahr', () => {
   }
 
   function loeseNeuAus() {
-    for (const m of MONATE_JE_JAHR[NEU]) H.wartend.get(`${NEU}-${m}`)?.()
-    // Auch die Monate ohne Daten hängen — sie gehören zum selben `Promise.all`.
-    for (const [k, f] of H.wartend) if (k.startsWith(`${NEU}-`)) f()
+    H.wartend.get(`${NEU}`)?.()
   }
 
   it('① Paarung: die CO₂-Reihe des gewählten Jahres steht nicht unter den alten Kacheln', async () => {

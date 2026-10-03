@@ -2,7 +2,8 @@
  * CockpitJahrV4 — Struktur-Smoke-Test: Jahr als Monat-Variante.
  * Sichert: Jahres-Auswahl-Kopf (Status-Badge + Rail/Stepper) + die Monat-Block-
  * Reihe auf Jahresebene (Kennzahlen / Energie-Bilanz / Verlauf / CO₂-Bilanz /
- * Komponenten / Finanzen), gespeist aus Σ der Monats-Antworten + der aggregierten
+ * Komponenten / Finanzen), gespeist aus der Jahresroute (Kopf, Vergleich, Vorjahr und
+ * die Monatsantworten — gefaltet im Backend seit 03.10.2026) + der aggregierten
  * Monatsreihe + der CO₂-Zeitreihe.
  *
  * jsdom-Grenze (bekannt): Recharts misst seinen Container über `ResponsiveContainer`
@@ -14,7 +15,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { screen, fireEvent } from '@testing-library/react'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 import type { Nachhaltigkeit, NachhaltigkeitMonat } from '../api/cockpit'
-import { aktuellerMonat, monatsZeile } from '../test/factories'
+import { aktuellerMonat, cockpitJahr, jahrVergleich, monatsZeile } from '../test/factories'
 import { renderMitProvidern, stubMatchMedia } from '../test/render'
 
 // Zwei vergangene Jahre (2024/2025) → Default = neuestes mit Daten = 2025
@@ -42,7 +43,7 @@ const monatsAntwort = (jahr: number, monat: number) =>
     wp_strom_kwh: 60, wp_waerme_kwh: 180, wp_heizung_kwh: 140, wp_warmwasser_kwh: 40,
     hat_waermepumpe: true,
     einspeise_erloes_euro: 12, netzbezug_kosten_euro: 27, ev_ersparnis_euro: 50,
-    netto_ertrag_euro: 35, gesamtnettoertrag_euro: 35, betriebskosten_anteilig_euro: 5,
+    netto_ertrag_euro: 35 , betriebskosten_anteilig_euro: 5,
     soll_pv_kwh: 320,
   })
 
@@ -50,21 +51,33 @@ vi.mock('../api/monatsdaten', () => ({
   monatsdatenApi: { listAggregiert: vi.fn(() => Promise.resolve(aggregiert)) },
 }))
 
-// Monate ohne Zeile antworten wie die Box: nur Stammdaten-Ableitungen (SOLL/Tarif),
-// keine gemessenen Mengen. Seit P-12 fragt die Sicht das ganze Jahr ab und filtert
-// über `monatHatDaten` — eine Fixture, die für JEDEN Monat Werte liefert, würde die
-// Jahres-Summen still vervierfachen.
-const MIT_DATEN = new Set(aggregiert.map((m) => `${m.jahr}-${m.monat}`))
-const ohneDaten = (jahr: number, monat: number) =>
-  aktuellerMonat(jahr, monat, {
-    anlage_name: 'Demo', monat_name: String(monat), soll_pv_kwh: 320,
-  })
+// Die Jahresroute, wie das Backend sie für diese Fixture liefert (Faltung im Layer, Proben dazu im Backend):
+// 2025 = drei Monate mit Daten (3 × die Monatsantwort), Vorjahr 2024 beschnitten auf die gemeinsamen Monate
+// Jan–Feb (N-37: 2 × 300 kWh PV, 2 × 120 kWh Einspeisung …), kein Ø-Jahr (2024 deckt Jan–Mär nicht ganz ab).
+const jahr2025 = cockpitJahr(2025, {
+  monate: [1, 2, 3].map((m) => monatsAntwort(2025, m)),
+  kopf: {
+    anlage_name: 'Demo',
+    pv_erzeugung_kwh: 900, einspeisung_kwh: 360, netzbezug_kwh: 270,
+    eigenverbrauch_kwh: 540, direktverbrauch_kwh: 420, gesamtverbrauch_kwh: 810,
+    autarkie_prozent: (540 / 810) * 100, eigenverbrauch_quote_prozent: 60,
+    speicher_ladung_kwh: 150, speicher_entladung_kwh: 129, speicher_wirkungsgrad_prozent: 86,
+    speicher_vollzyklen: 12, speicher_kapazitaet_kwh: 10, hat_speicher: true,
+    wp_strom_kwh: 180, wp_waerme_kwh: 540, wp_heizung_kwh: 420, wp_warmwasser_kwh: 120, hat_waermepumpe: true,
+    einspeise_erloes_euro: 36, netzbezug_kosten_euro: 81, ev_ersparnis_euro: 150,
+    netto_ertrag_euro: 105, betriebskosten_anteilig_euro: 15, soll_pv_kwh: 960,
+  },
+  vorjahr: jahrVergleich(2024, {
+    pv: 600, ev: 360, direkt: 280, einsp: 240, netz: 180, gesamt: 540, autarkie: (360 / 540) * 100, monate: [1, 2],
+  }),
+})
+const jahr2024 = cockpitJahr(2024, {
+  monate: [1, 2].map((m) => monatsAntwort(2024, m)),
+  kopf: { anlage_name: 'Demo', pv_erzeugung_kwh: 600, einspeisung_kwh: 240, netzbezug_kwh: 180 },
+})
 
 vi.mock('../api/aktuellerMonat', () => ({
-  aktuellerMonatApi: {
-    getData: vi.fn((_id: number, j: number, m: number) =>
-      Promise.resolve(MIT_DATEN.has(`${j}-${m}`) ? monatsAntwort(j, m) : ohneDaten(j, m))),
-  },
+  aktuellerMonatApi: { getData: vi.fn(() => Promise.reject(new Error('Cockpit → Jahr lädt keine Einzelmonate mehr'))) },
 }))
 
 // CO₂-Zeitreihe: der Endpoint liefert die GANZE Historie ohne `?jahr=` — die
@@ -91,9 +104,10 @@ const nachhaltigkeit: Nachhaltigkeit = {
 }
 
 vi.mock('../api/cockpit', () => ({
-  // B4 (05.09.2026): das Jahr ruft zusätzlich die Jahresroute (WP-Kennzahlen aus dem
-  // Layer); ohne Antwort bleiben die Kennzahlen weg — diese Proben messen Mengen.
-  cockpitApi: { getNachhaltigkeit: vi.fn(() => Promise.resolve(nachhaltigkeit)), getUebersicht: vi.fn(() => Promise.resolve(null)) },
+  cockpitApi: {
+    getNachhaltigkeit: vi.fn(() => Promise.resolve(nachhaltigkeit)),
+    getJahr: vi.fn((_id: number, j: number) => Promise.resolve(j === 2025 ? jahr2025 : jahr2024)),
+  },
 }))
 
 import CockpitJahrV4 from './CockpitJahrV4'
