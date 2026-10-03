@@ -25,6 +25,10 @@ from backend.core.field_definitions import (
     wp_strom_aufteilung,
 )
 from backend.core.investition_parameter import ist_dienstlich
+from backend.core.berechnungen.pv_verteilung import PvModul, gesamt_pv_kwh
+from backend.core.investition_kennwerte import get_erzeuger_kwp
+from backend.core.berechnungen.anlagen_kwp import BKW_TYP, PV_MODUL_TYP
+from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
 
 
 #: Der Schluessel, unter dem die **Vorausloesung** der Waerme je Geraet ihr
@@ -44,6 +48,12 @@ _WP_WAERME_D1_SUFFIX: str = "_waerme_d1_kwh"
 #: ⚠ Dieselbe Warnung wie oben — **kein Registry-Feld**, kein Sensor- oder
 #: MQTT-Name; er lebt nur zwischen ``_wp_strom_k3`` und ``typ_aggregation``.
 _WP_STROM_K3_SUFFIX: str = "_strom_k3_kwh"
+
+#: N-587: die Quellen, über die der Anlagen-PV-Zähler der Datenquellen (`basis.pv_gesamt`) im Monat ankommt —
+#: HA-Statistik (`_collect_ha_statistics_data`) und MQTT-Inbound (`pv_gesamt_kwh`). Nur deren Anlagenwert wird
+#: mit den Einzelwerten der PV-Quellen aufgelöst (Begründung am Aufruf).
+_ANLAGEN_PV_ZAEHLER_QUELLEN: frozenset[str] = frozenset({"ha_statistics", "mqtt_inbound"})
+
 
 def aggregiere_typen(*, investitionen, jahr, monat, resolved, teilzeitraum):
     """Investitions-Felder in Top-Level aggregieren (typabhaengig) — inkl. der D1-/K3-Vorausloesung je Waermepumpe.
@@ -129,6 +139,67 @@ def aggregiere_typen(*, investitionen, jahr, monat, resolved, teilzeitraum):
     # (nicht addiert, das wäre die Doppelzählung, die die Sperre verhindert).
     direct_fields = set(resolved.keys()) - teilzeitraum
     ersetzbar = set(teilzeitraum)
+
+    # ── N-587: der Anlagen-PV-Zähler füllt nur die Lücken der PV-Quellen ──
+    # Der Anlagen-PV-Zähler der Datenquellen (`basis.pv_gesamt` — über die HA-Statistik oder MQTT
+    # `pv_gesamt_kwh`) stand hier bis 03.10.2026 als **Direktwert** und sperrte die Aggregation der
+    # Einzelwerte: wer Strings UND einen Anlagenzähler zugeordnet hatte, sah im Monat ohne Abschluss den
+    # Anlagenzähler, nach dem Abschluss die Strings — die Zahl sprang (gemessen: 1000 statt 930 kWh).
+    #
+    # ⭐ **Der Anlagen-PV-Zähler umfasst ALLE PV-Quellen der Anlage — PV-Module UND Balkonkraftwerke**
+    # (Entscheid Gernot 03.10.2026, Variante B). So lesen ihn die Tagesregel
+    # (`pv_tages_praezedenz.erwartete_erzeuger_ids`), die Datenquellen-Prüfung
+    # (`datenquellen_validierung._PV_KOMPONENTEN_TYPEN`) und das Handbuch §7.6. Die Grundgesamtheit ist
+    # deshalb dieselbe wie am Tag: aktive `pv-module` + `balkonkraftwerk`, über `erzeuger_traeger` (ein BKW
+    # mit Modul-Kindern tritt an sie ab, N-266). Die Rechnung ist die P7-Formel `gesamt_pv_kwh`
+    # (Σ `resolve_pv_je_modul`, typ-blind): alle Quellen mit eigenem Wert ⇒ Σ Einzelwerte; fehlt einer der
+    # Wert ⇒ Σ gemessene + max(0, Zähler − Σ gemessene). Das BKW kommt danach NICHT noch einmal dazu —
+    # es steckt im Zähler; seine eigene Zeile `bkw_erzeugung_kwh` bleibt sein eigener Wert.
+    # ⚠ Der abgeschlossene Monat (Monats-Fakten) liest den Zähler heute noch als „nur Module" und addiert
+    # das BKW obendrauf — die Abweichung in der Zusammenstellung „Zähler füllt eine Lücke + BKW" ist
+    # N-611 und wird dort behoben, nicht hier.
+    # ⚠ Nur diese zwei Quellen. Der gespeicherte Wert (`"gespeichert"`) ist schon aufgelöst und bleibt
+    # unberührt — die Quellen-Präzedenz der Route ändert sich nicht. Das Connector-Delta
+    # (`"local_connector"`) ist ein eigener Fall: `test_aktueller_monat_datenquellen_prioritaet.py::
+    # test_laufender_monat_connector_mit_abdeckung_sperrt_pv_aggregation_weiter` (#361) legt fest, dass
+    # sein monatsdeckender Anlagenwert gilt — nicht Teil von N-587. Ohne aktive PV-Quelle bleibt der
+    # Anlagenwert wie bisher stehen.
+    _pv_anlage = resolved.get("pv_erzeugung_kwh")
+    if (
+        _pv_anlage is not None
+        and "pv_erzeugung_kwh" in direct_fields
+        and _pv_anlage[1].quelle in _ANLAGEN_PV_ZAEHLER_QUELLEN
+    ):
+        _quellen = erzeuger_traeger([
+            inv for inv in investitionen
+            if inv.typ in (PV_MODUL_TYP, BKW_TYP) and inv.ist_aktiv_im_monat(jahr, monat)
+        ])
+        if _quellen:
+            _eigen = {inv.id: resolved.get(f"inv_{inv.id}_pv_erzeugung_kwh") for inv in _quellen}
+            # `gesamt_pv_kwh` = Σ `resolve_pv_je_modul` (Σ-Invariante dort); mit einem Anlagenwert ist jede Quelle
+            # aufgelöst (gemessen oder verteilt). `None` käme nur ohne Zahl im Anlagenwert — dann bleibt alles wie bisher.
+            _summe = gesamt_pv_kwh(
+                aggregat_kwh=_pv_anlage[0],
+                module=[
+                    PvModul(
+                        inv_id=inv.id,
+                        leistung_kwp=get_erzeuger_kwp(inv),
+                        eigen_kwh=_eigen[inv.id][0] if _eigen[inv.id] is not None else None,
+                    )
+                    for inv in _quellen
+                ],
+            )
+            # Die Herkunfts-Marke: der Anlagenzähler, sobald er etwas beigetragen hat; sonst die der
+            # letzten gemessenen Quelle (wie `_aggregate` sie hinterließe).
+            _gemessen = [e for e in _eigen.values() if e is not None]
+            _quelle = (
+                _gemessen[-1][1]
+                if len(_gemessen) == len(_quellen) else _pv_anlage[1]
+            )
+            if _summe is not None:
+                # Bleibt in `direct_fields`: die Sperre in `_aggregate` hält Strings und BKW aus der PV-Achse
+                # heraus (sie stecken in `_summe`); `bkw_erzeugung_kwh` läuft unberührt weiter.
+                resolved["pv_erzeugung_kwh"] = (_summe, _quelle)
 
     def _wp_heizwaerme_eintrag(inv_id: int):
         """Die Heizwaerme dieses Geraets aus den Nicht-DB-Quellen (N-398).

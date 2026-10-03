@@ -102,6 +102,11 @@ jetzt Gesamtverbrauch.
 - **E-Auto mit Rückspeisung ins Haus (V2H):** *Cockpit → Monat* und *→ Jahr* zählen die
   Rückspeisung jetzt zum Eigenverbrauch — wie Übersicht und Jahresbericht schon immer.
   Eigenverbrauch, Autarkie und Ergebnis steigen dort um diesen Anteil.
+- **Strings und Anlagen-PV-Zähler:** Hast du deinen Strings eigene Zähler und zusätzlich einen
+  Zähler für die ganze Anlage zugeordnet, zeigt *Cockpit → Monat* jetzt schon vor dem
+  Monatsabschluss die Summe der Strings — vorher den Anlagenzähler, und die Zahl sprang beim
+  Abschluss. Der Anlagenzähler steht für die ganze Anlage (Strings und Balkonkraftwerk) und
+  füllt nur noch, was die Quellen mit eigenem Zähler nicht erklären.
 - **Vorjahresvergleich:** Der Vergleichswert ist jetzt genau derselbe Monat des Vorjahres,
   wie du ihn direkt aufrufst — vorher konnte er davon abweichen.
 - **Mehrere Wärmepumpen:** Die Ersparnis in der Kachel ist jetzt die Summe der Geräte —

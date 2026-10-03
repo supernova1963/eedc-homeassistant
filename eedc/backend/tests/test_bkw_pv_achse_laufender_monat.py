@@ -126,12 +126,19 @@ async def test_laufender_monat_ohne_bkw_unveraendert(db, monkeypatch):
 
 
 async def test_anlagen_gesamtwert_sperrt_die_bkw_addition(db, monkeypatch):
-    """Ein direkter Anlagen-Gesamtwert misst das BKW bereits mit — dann darf
-    nicht zusätzlich aggregiert werden.
+    """Anlagen-Gesamtwert UND Einzelwerte zugeordnet — keine Doppelzählung: 724, nicht 769 und nicht 1448.
 
-    Das ist die eigentliche Doppelzählungs-Gefahr dieses Baus: Wer einen
-    Gesamt-Erzeugungssensor gemappt hat, bekommt ``pv_erzeugung_kwh`` direkt
-    gesetzt; die ``direct_fields``-Sperre in ``_aggregate`` muss dann greifen.
+    **Die Zusage bleibt, der Mechanismus ist seit N-587 (03.10.2026) ein anderer.** Der Anlagen-PV-Zähler
+    misst alle PV-Quellen der Anlage, Module UND Balkonkraftwerk (Entscheid Gernot, Variante B — so lesen
+    ihn auch Tagesregel, Datenquellen-Prüfung und Handbuch §7.6). Bis N-587 stand er als Direktwert in
+    ``pv_erzeugung_kwh``, und die ``direct_fields``-Sperre hielt Strings und BKW heraus — damit nahm der
+    Monat ohne Abschluss den Zähler auch dann, wenn jede Quelle einen eigenen Wert hatte.
+
+    Jetzt gewinnen die Einzelwerte, der Zähler füllt nur Lücken; das BKW gehört zur Grundgesamtheit und
+    kommt nicht zusätzlich obendrauf. In dieser Fixture hat jede Quelle einen Wert, die Zahl ist daher
+    dieselbe — 724 = 679 (String) + 45 (BKW), nicht mehr 724 als Zählerwert. Der Fall „Zähler füllt eine
+    Lücke + BKW" steht in ``test_n587_pv_strings_vor_anlagenzaehler.py``; im abgeschlossenen Monat ist er
+    N-611.
     """
     import backend.api.routes.aktueller_monat as am
     now = datetime.now()
