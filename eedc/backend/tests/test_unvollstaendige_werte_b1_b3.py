@@ -9,7 +9,8 @@ keiner Route gelesen (0 Treffer in `backend/api`, gemessen 29.08.2026).
 Diese Datei hält beide Richtungen der Regel fest:
 
 * **Richtung 1** (unbekannt → 0): eine PV-Teilsumme bleibt stehen — sie ist
-  additiv und damit richtungssicher zu niedrig — **und sagt es** (N-95·N-94/B1).
+  additiv und damit nie zu hoch (zu niedrig, falls dem Modul Erzeugung fehlt;
+  seit N-626 sagt der Satz das bedingt) — **und sagt es** (N-95·N-94/B1).
 * **Richtung 2** (0 → unbekannt): eine **gemessene** Null bleibt eine 0 und wird
   nicht zu „—" (N-52 = N-344 Teil 1/B3).
 
@@ -84,8 +85,10 @@ async def test_b1_teilluecke_wird_beschriftet_und_nennt_ihre_folge(db):
     hinweis = pv_unvollstaendig_hinweis(fakten)
     assert hinweis is not None
     assert "06/2025" in hinweis
-    # Die Folge, nicht nur der Zustand — das ist der Prüfgegenstand.
-    assert "Teilsumme" in hinweis and "zu niedrig" in hinweis
+    # Die Folge, nicht nur der Zustand — das ist der Prüfgegenstand. Seit N-626 bedingt: ein
+    # Modul ohne Wert kann wirklich außer Betrieb gewesen sein (dann stimmt die Zahl).
+    assert "Teilsumme" in hinweis
+    assert "außer Betrieb" in hinweis and "fehlt seine Erzeugung" in hinweis
 
 
 @pytest.mark.asyncio
@@ -169,27 +172,25 @@ async def test_b1_flag_erreicht_die_monatstabelle(db):
     assert je_monat[6].pv_vollstaendig is False
     assert je_monat[7].pv_vollstaendig is True
 
-    # ⚠ GEMESSEN, nicht angenommen: **diese** Route zeigt für die Teil-Lücke
-    # ohne BKW schon heute „—" (`hat_pv_imd` verlangt `pv_module_kwh is not
-    # None`). Das Flag ersetzt die Unterdrückung hier also nicht, es **erklärt**
-    # sie — ein „—" ohne Grund war die Lehre aus dem N-346-Rückbau.
-    assert je_monat[6].pv_erzeugung_kwh is None
+    # ⚠ Seit N-626 (Gernot 04.10.2026) zeigt die Zeile der Teil-Lücke die
+    # vorhandenen Werte (500) statt „—" — und das Flag sagt, dass einer fehlt.
+    # Bis dahin unterdrückte die Route die Zahl (`hat_pv_imd` verlangte
+    # `pv_module_kwh is not None`), und das Flag erklärte nur das „—".
+    assert je_monat[6].pv_erzeugung_kwh == pytest.approx(500.0)
     assert je_monat[7].pv_erzeugung_kwh == pytest.approx(900.0)
 
 
 @pytest.mark.asyncio
 async def test_b1_mit_balkonkraftwerk_wird_die_teilsumme_wirklich_gezeigt(db):
-    """Der Fall, in dem eine Teilsumme als Zahl **dasteht** — und das ist der Befund.
+    """Der Fall, in dem eine Teilsumme als Zahl **dasteht** — und die Zeile es sagt.
 
-    Sobald ein Balkonkraftwerk im Monat eine Zeile hat, ist `hat_pv_imd` wahr,
-    obwohl die Modul-Auflösung eine Lücke hat. Die Route liefert dann
-    `pv_kwh = 0 + BKW` als PV-Erzeugung der **Anlage** und `pv_module_kwh` als
-    **0,0** — eine Zahl, die wie eine Messung aussieht und keine ist.
+    Ein Modul ohne Wert, kein Anlagenwert, ein Balkonkraftwerk mit Zeile. Seit
+    N-626 (Gernot 04.10.2026) trägt der Monat die **vorhandenen** Werte:
+    Süd 500 + BKW 60 = 560, `pv_module_kwh` 500, `pv_vollstaendig=False`.
 
-    ⛔ Ohne diesen Prüfer wäre der Fund an der falschen Stelle belegt: Die
-    Route ohne BKW unterdrückt bereits von selbst. Am 29.08.2026 beim Bau
-    gemessen, nachdem die erste Fassung dieses Tests aus genau diesem Grund
-    rot wurde.
+    Bis dahin lieferte die Route `pv_kwh = 0 + BKW` (60) und `pv_module_kwh` 0,0 —
+    die 500 kWh des gemessenen Strings fielen weg (N42). Was von der Substanz
+    bleibt: die Teilsumme steht als Zahl da **und die Zeile sagt es**.
     """
     from backend.api.routes.monatsdaten import list_monatsdaten_aggregiert
 
@@ -214,9 +215,9 @@ async def test_b1_mit_balkonkraftwerk_wird_die_teilsumme_wirklich_gezeigt(db):
 
     rows = await list_monatsdaten_aggregiert(anlage_id=anlage.id, jahr=2025, db=db)
     juni = rows[0]
-    # Die 500 kWh des Süd-Strings fehlen in beiden Zahlen — DAS ist die Teilsumme.
-    assert juni.pv_erzeugung_kwh == pytest.approx(60.0)
-    assert juni.pv_module_kwh == pytest.approx(0.0)
+    # Die vorhandenen Werte: Süd 500 + BKW 60 — der fehlende Nord-String trägt nichts bei.
+    assert juni.pv_erzeugung_kwh == pytest.approx(560.0)
+    assert juni.pv_module_kwh == pytest.approx(500.0)
     # ... und die Zeile sagt es jetzt.
     assert juni.pv_vollstaendig is False
 
@@ -274,15 +275,17 @@ def test_b3_eine_gemessene_stunde_genuegt():
 
 @pytest.mark.asyncio
 async def test_b1_cockpit_jahr_summiert_die_teilsumme_und_sagt_es(db):
-    """Cockpit → Jahr ist die Stelle, an der die Teilsumme **ungebremst** ankommt.
+    """Cockpit → Jahr summiert die Teilsumme — und sagt es.
 
-    `pv_erzeugung = sum(f.erzeugung.pv_kwh for f in fakten)` hat keinen Guard —
-    ein Monat mit Modul-Lücke trägt nur bei, was messbar war. Die Kopfzahl war
-    damit still zu niedrig, und daran hängen spezifischer Ertrag und SOLL/IST.
+    `pv_erzeugung = sum(f.erzeugung.pv_kwh for f in fakten)` — ein Monat mit
+    Modul-Lücke trägt bei, was gemessen ist: seit N-626 (Gernot 04.10.2026) die
+    vorhandenen Modulwerte (500; bis dahin fiel die ganze Modulsumme weg, 0).
+    Daran hängen spezifischer Ertrag und SOLL/IST.
 
-    Der Hinweis unterdrückt sie **nicht**: eine additive Summe ist
-    richtungssicher zu niedrig, der Nutzer weiß also, in welche Richtung er
-    korrigieren muss (§3). Er wird beschriftet.
+    Der Hinweis unterdrückt sie **nicht**: eine additive Summe ist nie zu hoch
+    (zu niedrig, falls dem Modul Erzeugung fehlt — war es außer Betrieb, stimmt
+    sie), der Nutzer weiß also, in welche Richtung er korrigieren muss (§3). Er
+    wird beschriftet.
     """
     from backend.api.routes.cockpit.uebersicht import get_cockpit_uebersicht
 
@@ -297,7 +300,7 @@ async def test_b1_cockpit_jahr_summiert_die_teilsumme_und_sagt_es(db):
 
     antwort = await get_cockpit_uebersicht(anlage_id=anlage.id, jahr=2025, db=db)
 
-    assert antwort.pv_erzeugung_kwh == pytest.approx(0.0)   # die Teilsumme
+    assert antwort.pv_erzeugung_kwh == pytest.approx(500.0)   # die Teilsumme der vorhandenen Werte
     assert len(antwort.hinweise) == 1
     assert "06/2025" in antwort.hinweise[0]
     assert "Teilsumme" in antwort.hinweise[0]

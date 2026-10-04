@@ -42,6 +42,7 @@ from backend.core.berechnungen import (
 from backend.core.monatswert_grund import monatswert_grund, monatswert_grund_text
 from backend.services.monats_fakten import MonatsFakt, lade_monats_fakten
 from backend.core.berechnungen.ergebnis import soll_erfuellung
+from backend.core.berechnungen.erzeuger_traeger import abgetretene_bkw_ids
 from backend.api.routes.aktueller_monat.kontext import MonatsKontext, lade_monats_kontext
 from backend.api.routes.aktueller_monat.schemas import (  # noqa: F401 — Re-Export fuer Tests und Aufrufer
     AktuellerMonatResponse,
@@ -492,6 +493,7 @@ async def _collect_tagesebene_data(
     wp_mengen: Optional[dict] = None,
     wp_von: Optional[date] = None,
     wp_bis: Optional[date] = None,
+    abgetretene_bkw: frozenset = frozenset(),
 ) -> dict[str, tuple[float, DatenquelleInfo]]:
     """Die **fünfte** Quelle: die lokale Tagesebene (Konfidenz 80 %, N-472).
 
@@ -573,7 +575,18 @@ async def _collect_tagesebene_data(
         ("netzbezug_kwh", getattr(summe, "netzbezug_kwh", 0.0)),
         # `pv_kwh` ist Module + BKW — dieselbe PV-Achse wie im DB-Zweig.
         ("pv_erzeugung_kwh", summe.pv_kwh if summe is not None else 0.0),
-        ("bkw_erzeugung_kwh", getattr(summe, "bkw_kwh", 0.0)),
+        # N-628: die eigene BKW-Zeile nennt nur GEMESSENE Tageswerte — ein
+        # Balkonkraftwerk ohne eigenen Zähler hat im Aggregat-Fall einen
+        # `bkw_<id>`-Key mit seinem kWp-Anteil (Marke `kwp_anteil`); der gehört
+        # in die PV-Achse (`pv_kwh` oben), nicht in die Zeile — wie im
+        # abgeschlossenen Monat (`monats_fakten/fakten.py`).
+        # N-627: ein im Monat an seine Modul-Kinder abgetretenes Balkonkraftwerk
+        # nennt keine eigene Zeile — sein Tages-Key ist der E4-Rest, im Monat
+        # tragen die Kinder (ADR-002/P11).
+        ("bkw_erzeugung_kwh", sum(
+            v for k, v in (summe.bkw_gemessen_je_inv or {}).items()
+            if k not in {str(i) for i in abgetretene_bkw}
+        ) if summe is not None else 0.0),
         ("speicher_ladung_kwh", getattr(summe, "speicher_ladung_kwh", 0.0)),
         ("speicher_entladung_kwh", getattr(summe, "speicher_entladung_kwh", 0.0)),
     ):
@@ -756,6 +769,10 @@ async def _berechne_monat(
         await _collect_tagesebene_data(
             db, anlage_id, jahr, monat,
             wp_mengen=_tages_wp_mengen, wp_von=_tages_wp_von, wp_bis=_tages_wp_bis,
+            abgetretene_bkw=abgetretene_bkw_ids([
+                i for i in investitionen
+                if i.typ in ("pv-module", "balkonkraftwerk") and i.ist_aktiv_im_monat(jahr, monat)
+            ]),
         )
         if ist_aktueller_monat else {}
     )

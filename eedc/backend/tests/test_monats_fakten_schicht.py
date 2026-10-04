@@ -147,11 +147,13 @@ async def test_f5_nur_anlagen_aggregat_gepflegt_pv_faellt_nicht_auf_null(db):
 
 
 @pytest.mark.asyncio
-async def test_teilluecke_ohne_aggregat_ist_luecke_keine_teilsumme(db):
-    """N42: ein Modul misst, das andere nicht, kein Aggregat → `None`.
+async def test_teilluecke_ohne_aggregat_traegt_die_vorhandenen_werte_und_sagt_es(db):
+    """N-626 (Gernot 04.10.2026, hebt N42 für die Anzeige-Summe auf): ein Modul misst, das andere
+    nicht, kein Aggregat → die Summe trägt den vorhandenen Wert (700), das Flag sagt „unvollständig".
 
-    Eine Teilsumme als Anlagenerzeugung wäre irreführend; die Schicht reicht die
-    Unvollständigkeit als Flag durch, statt sie zu 0 zu machen.
+    Bis dahin war `pv_module_kwh` hier `None` und die ganze Modulsumme fiel aus der PV-Achse. Was von
+    der Substanz bleibt: die Schicht reicht die Unvollständigkeit als Flag durch (Schicht und Meta),
+    und die Pro-Modul-Sicht behält ihren Messwert.
     """
     anlage = await _anlage(db)
     sued = await _inv(db, anlage, "pv-module", "Süd", leistung_kwp=6.0)
@@ -161,7 +163,8 @@ async def test_teilluecke_ohne_aggregat_ist_luecke_keine_teilsumme(db):
 
     fakt = _fakt(await lade_monats_fakten(db, anlage.id), 2025, 5)
 
-    assert fakt.erzeugung.pv_module_kwh is None
+    assert fakt.erzeugung.pv_module_kwh == pytest.approx(700.0)
+    assert fakt.erzeugung.pv_kwh == pytest.approx(700.0)
     assert fakt.erzeugung.pv_vollstaendig is False
     assert fakt.meta.pv_vollstaendig is False
     # Die Pro-Modul-Sicht behält ihren Messwert (P2-A).

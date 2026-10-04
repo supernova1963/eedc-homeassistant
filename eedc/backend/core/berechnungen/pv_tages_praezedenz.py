@@ -47,17 +47,38 @@ Stunde aus, fällt der ganze Tag auf das Aggregat zurück, obwohl 23 Stunden
 gemessen waren. Das ist kein Verlust — das Aggregat misst dieselbe Anlage —,
 aber es ist gröber als eine slotweise Wahl. Bewusst so gewählt.
 
+**Der Aggregat-Tag löst auf Träger-Ebene auf (N-623, Bauplan Fassung 2,
+04.10.2026).** Trägt der Anlagenzähler den Tag, behält ein Erzeuger mit eigenem
+Zähler seinen **Tageswert** — die Summe aller seiner brauchbaren Slots, die in
+keine Stunde geht (die Stundenachse bleibt die Aggregat-Summe). Gemessen ist er,
+wenn kein Slot verworfen wurde und seine unsichere Energie höchstens
+``DAEMMERUNGSREST_ANTEIL`` des Tages ist (``gemessene_tageswerte``); die übrigen
+Träger teilen den Rest nach kWp, und Σ der Träger ist immer das Aggregat
+(``loese_aggregat_tag_auf``). Bis dahin verwarf die Tagesebene die Messung und gab
+jedem den kWp-Anteil — ein Balkonkraftwerk mit eigenem Zähler stand mit 1,56 statt
+3,0 kWh im Tag.
+
 Architektur-Anker: ADR-001 (``core/berechnungen``); dieses Modul kennt keine
 Sessions, keine Sensoren und kein ``sensor_mapping`` — es bekommt Zahlen.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass, replace
 from datetime import date
-from typing import Any, Optional, Sequence
+from typing import Any, Collection, Optional, Sequence
 
 from backend.core.berechnungen.anlagen_kwp import BKW_TYP, PV_MODUL_TYP
-from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
+from backend.core.berechnungen.erzeuger_traeger import (
+    abgetretene_bkw_ids,
+    erzeuger_traeger,
+)
+from backend.core.berechnungen.pv_verteilung import (
+    QUELLE_VERTEILT,
+    PvModul,
+    resolve_pv_je_modul,
+)
+from backend.core.investition_kennwerte import get_erzeuger_kwp
 
 # Welche Quelle trägt den Tag.
 QUELLE_EINZEL = "einzel"
@@ -157,3 +178,148 @@ def waehle_pv_quelle(
     if einzel_hat_daten:
         return QUELLE_EINZEL
     return QUELLE_KEINE
+
+
+# ── Aggregat-Tag: gemessene Erzeuger behalten ihren Tageswert (N-623) ──────────
+
+#: Wie viel unsichere Energie ein Erzeuger am Tag tragen darf und trotzdem als
+#: **gemessen** gilt — Anteil am Anlagen-Tageswert (Bauplan N-623 Fassung 2,
+#: Regel 2 b). Technischer Grund: eine Stunde ohne eigenen Slot, in der die
+#: Anlage erzeugt hat, kann eigene Erzeugung enthalten, die der Zähler am Tag
+#: nicht nachliefert; ein Bündel-Slot (n > 1) kann Energie von vor dem Tag
+#: tragen. Nachtstunden und der Dämmerungsrest sollen nicht zählen. 1 % ist eine
+#: **Setzung** aus der Nachstellung (kleinster Wert ohne Rückfalltage); an einer
+#: echten Anlage mit schlafendem Zähler nachmessen, sobald erreichbar.
+DAEMMERUNGSREST_ANTEIL = 0.01
+
+
+def gemessene_tageswerte(
+    *,
+    aggregat_kwh: float,
+    aggregat_je_stunde: dict[int, float],
+    eigen_kwh: dict[str, float],
+    eigen_stunden: dict[str, Collection[int]],
+    eigen_buendel_kwh: dict[str, float],
+    gesperrt: Collection[str],
+) -> dict[str, float]:
+    """Welche Erzeuger sind am Aggregat-Tag **gemessen** — und mit welchem Wert?
+
+    Args:
+        aggregat_kwh: der Anlagen-Tageswert (Σ der verwendeten Aggregat-Slots).
+        aggregat_je_stunde: ``{h: kWh}`` der verwendeten Aggregat-Slots.
+        eigen_kwh: ``{inv_id: Tageswert}`` — Σ aller brauchbaren Slots des
+            eigenen Zählers (beim Balkonkraftwerk mit Kindern der Rest je Slot, E4).
+        eigen_stunden: ``{inv_id: Stunden mit eigenem Slot}``.
+        eigen_buendel_kwh: ``{inv_id: Energie der eigenen Bündel-Slots (n > 1)}``.
+        gesperrt: inv_ids mit einem verworfenen Slot (R3, R4) oder einem
+            Tagesreset — am Tag ohne Aussage.
+
+    Gemessen ist ein Erzeuger, wenn er nicht gesperrt ist und seine **unsichere
+    Energie** — Anlagen-Energie der Stunden ohne eigenen Slot plus eigene
+    Bündel-Energie — höchstens ``DAEMMERUNGSREST_ANTEIL × aggregat_kwh`` ist.
+
+    ⛔ Kein Stundenabgleich mit dem Aggregat: fehlt dem Anlagenzähler eine Zeile,
+    steht ihre Energie im nächsten Slot (R1); den eigenen Wert der Stunde
+    wegzulassen machte die Messung zu klein (Gegenprüfung W2). Und keine Deckung
+    „jede Aggregat-Stunde": ein Zähler ohne Nachtzeilen wäre sonst nie gemessen (W1).
+    """
+    grenze = DAEMMERUNGSREST_ANTEIL * aggregat_kwh
+    out: dict[str, float] = {}
+    for inv_id, wert in eigen_kwh.items():
+        if inv_id in gesperrt:
+            continue
+        stunden = eigen_stunden.get(inv_id) or ()
+        unsicher = sum(v for h, v in aggregat_je_stunde.items() if h not in stunden)
+        unsicher += eigen_buendel_kwh.get(inv_id, 0.0)
+        if unsicher > grenze + 1e-9:
+            continue
+        out[inv_id] = wert
+    return out
+
+
+@dataclass(frozen=True)
+class AggregatTagAufloesung:
+    """Ergebnis von ``loese_aggregat_tag_auf``.
+
+    ``werte``: ``{inv_id: kWh}`` je Träger mit Tages-Key (Σ == Aggregat).
+    ``verteilt``: inv_ids, deren Wert eine kWp-Zerlegung ist (Marke ``kwp_anteil``).
+    ``faktor``: der gemeinsame Abgleich-Faktor (Regel 4), sonst ``None``.
+    """
+
+    werte: dict[int, float]
+    verteilt: frozenset
+    faktor: Optional[float] = None
+
+
+def loese_aggregat_tag_auf(
+    *,
+    aggregat_kwh: float,
+    gemessen: dict[str, float],
+    mit_zaehler: Collection[str],
+    investitionen: Sequence[Any],
+    datum: date,
+) -> AggregatTagAufloesung:
+    """Der Aggregat-Tag auf **Träger-Ebene** (Bauplan N-623 Fassung 2, Regeln 3–5).
+
+    Bekommt nur Zahlen und entscheidet nicht noch einmal über die Quelle — die
+    Wahl „Aggregat trägt den Tag" ist gefallen (``waehle_pv_quelle``).
+
+    * **Träger.** Jeder gemessene Erzeuger mit seinem Wert (auch ein abgetretenes
+      Balkonkraftwerk mit seinem Rest, E4). Ein Kind ohne eigenen Zähler unter
+      einem gemessenen Balkonkraftwerk ist keine Lücke und bekommt keinen Key
+      (E4, P16 — der BKW-Rest deckt es). Alle übrigen am Tag aktiven Träger sind
+      **Lücken** und teilen den Rest nach kWp (``resolve_pv_je_modul``). Ohne
+      Erzeuger kein Key.
+    * **Abgleich statt Rückfall (Regel 4).** Übersteigt Σ gemessen das Aggregat,
+      oder gibt es keine Lücke und Σ gemessen ≠ Aggregat, werden die gemessenen
+      Werte mit ``Aggregat / Σ gemessen`` skaliert, Lücken bekommen 0. Grund: die
+      Invariante Σ Keys == Σ Stunden verlangt Σ == Aggregat; ein Rückfall auf kWp
+      verwürfe alle Messungen und spränge an der Grenze, der gemeinsame Faktor
+      lässt ihr Verhältnis stehen und ist an der Grenze 1. Σ gemessen = 0 ohne
+      Lücke ⇒ alle nach kWp wie bisher.
+    * **Marken (Regel 5).** ``verteilt`` nur für Lücken; gemessene und
+      abgeglichene Werte sind keine Zerlegung.
+
+    ``gemessen``/``mit_zaehler`` tragen inv_ids als ``str`` (Sensor-Key-Form).
+    """
+    erzeuger = [i for i in investitionen if getattr(i, "typ", None) in (PV_MODUL_TYP, BKW_TYP)]
+    am_tag = [i for i in erzeuger if i.ist_aktiv_an(datum)]
+    aktiv = {i.id for i in am_tag}
+    abgetreten = abgetretene_bkw_ids(am_tag)
+
+    module: list[PvModul] = []
+    for inv in erzeuger:
+        sid = str(inv.id)
+        eigen = gemessen.get(sid)
+        if eigen is not None:                      # gemessen: immer Träger (auch BKW-Rest, E4)
+            module.append(PvModul(inv.id, get_erzeuger_kwp(inv), float(eigen)))
+            continue
+        if inv.id not in aktiv:
+            continue
+        if inv.typ == BKW_TYP and inv.id in abgetreten:
+            continue                               # Träger sind die Kinder
+        parent = getattr(inv, "parent_investition_id", None)
+        if (inv.typ == PV_MODUL_TYP and parent in abgetreten
+                and str(parent) in gemessen and sid not in mit_zaehler):
+            continue                               # vom BKW-Rest gedeckt (E4): keine Zerlegung
+        module.append(PvModul(inv.id, get_erzeuger_kwp(inv), None))
+
+    if not module:
+        return AggregatTagAufloesung({}, frozenset())
+    summe_eigen = sum(m.eigen_kwh for m in module if m.eigen_kwh is not None)
+    luecken = [m for m in module if m.eigen_kwh is None]
+    hat_gemessen = len(luecken) < len(module)
+    if hat_gemessen and (summe_eigen > aggregat_kwh or (not luecken and summe_eigen != aggregat_kwh)):
+        if summe_eigen > 0:
+            faktor = aggregat_kwh / summe_eigen
+            return AggregatTagAufloesung(
+                {m.inv_id: (m.eigen_kwh * faktor if m.eigen_kwh is not None else 0.0) for m in module},
+                frozenset(m.inv_id for m in luecken),
+                faktor,
+            )
+        module = [replace(m, eigen_kwh=None) for m in module]   # Σ gemessen = 0: alle nach kWp wie bisher
+    aufgeloest = resolve_pv_je_modul(aggregat_kwh=aggregat_kwh, module=module)
+    return AggregatTagAufloesung(
+        {i: w.pv_erzeugung_kwh for i, w in aufgeloest.items()},
+        frozenset(i for i, w in aufgeloest.items() if w.quelle == QUELLE_VERTEILT),
+    )

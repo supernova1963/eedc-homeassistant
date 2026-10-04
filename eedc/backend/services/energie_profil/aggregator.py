@@ -22,6 +22,7 @@ from sqlalchemy import and_, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
+from backend.core.berechnungen.energie import PV_KOMPONENTEN_PREFIXE
 from backend.core.berechnungen.performance_ratio import berechne_performance_ratio
 from backend.core.berechnungen.slot_konvention import leistungspfad_slot
 from backend.core.berechnungen.speicher import anlagen_soc_prozent
@@ -1641,6 +1642,20 @@ async def komponenten_tagesgesamt_und_peaks(
             )
     for key, val in boundary_kwh.items():
         akku.komponenten_summen[key] = val
+    # N-625: liefert die Zählertabelle die PV-Achse des Tages, stehen in
+    # `komponenten_kwh` NUR ihre PV-Keys. Ohne HA-Stundenwerte summiert
+    # `summiere_live_komponenten` die Leistungs-Serien der Kurve als kWh — die
+    # Gesamtleistung `pv_gesamt`, aber auch eine Einzel-Serie `pv_<bkw>` neben dem
+    # Zähler-Key `bkw_<bkw>`; das Überschreiben oben trifft nur gleiche Keys, der Rest
+    # blieb daneben stehen und `lade_monats_summen_aus_tagen` zählte ihn mit (laufender
+    # Monat 126 statt 63). Die Stundenachse kommt nur aus Zählern (Σ Stunden == Σ Keys);
+    # eine Leistungs-Serie, die die Zähler nicht kennen, ist dort keine Erzeugung,
+    # sondern eine zweite Fassung derselben. Ohne PV-Key der Zählertabelle bleibt
+    # alles wie bisher (reine Leistungs-Anlage).
+    if any(str(k).startswith(PV_KOMPONENTEN_PREFIXE) for k in boundary_kwh):
+        for key in [k for k in akku.komponenten_summen
+                    if str(k).startswith(PV_KOMPONENTEN_PREFIXE) and k not in boundary_kwh]:
+            del akku.komponenten_summen[key]
 
     # ── Peak-Werte aus HA-LTS-Min/Max (Etappe 5 v3.31.0) ─────────────────
     # HA-Recorder schreibt für has_mean=True-Sensoren die im 5-Sekunden-Bucket

@@ -86,6 +86,45 @@ def summe_bkw_kwh(komponenten_kwh: Optional[dict]) -> float:
     return _summe_prefix(komponenten_kwh, ("bkw_",), nur_positiv=True)
 
 
+#: Die Herkunftsmarke eines verteilten Tageswerts (`services/provenance.py::ABGELEITET_KWP_ANTEIL`
+#: — dort definiert, hier gespiegelt, weil der Layer `services/` nicht importiert).
+_MARKE_KWP_ANTEIL = "kwp_anteil"
+
+
+def bkw_gemessen_kwh_je_investition(
+    komponenten_kwh: Optional[dict],
+    source_provenance: Optional[dict],
+) -> dict[str, float]:
+    """Σ der **gemessenen** `bkw_<id>`-Tageswerte je Balkonkraftwerk (N-628).
+
+    Trägt der Anlagenzähler den Tag, bekommt ein Balkonkraftwerk ohne eigenen Wert
+    seinen kWp-Anteil am Rest — der Key heißt dann trotzdem `bkw_<id>`, nur die
+    Marke `komponenten_kwh.bkw_<id>.abgeleitet = "kwp_anteil"` in
+    `TagesZusammenfassung.source_provenance` sagt, dass er eine Zerlegung ist
+    (#406). Die eigene BKW-Zeile nennt nur Gemessenes — wie im abgeschlossenen
+    Monat, wo der Anteil in `bkw_aus_anlagenwert_kwh` steht und die Zeile leer
+    bleibt (`monats_fakten/fakten.py`, IST-Quelle je Typ). Die PV-Summe ist davon
+    unberührt; sie zählt jeden Key ({@link summe_pv_bkw_kwh}).
+
+    Schlüssel ist die Investitions-ID als String; nur positive Werte.
+    """
+    if not komponenten_kwh:
+        return {}
+    prov = source_provenance or {}
+    je_inv: dict[str, float] = {}
+    for key, wert in komponenten_kwh.items():
+        if not isinstance(wert, (int, float)) or wert <= 0:
+            continue
+        praefix, _, rest = str(key).rpartition("_")
+        if praefix != "bkw" or not rest.isdigit():
+            continue
+        marke = prov.get(f"komponenten_kwh.{key}")
+        if isinstance(marke, dict) and marke.get("abgeleitet") == _MARKE_KWP_ANTEIL:
+            continue
+        je_inv[rest] = je_inv.get(rest, 0.0) + float(wert)
+    return je_inv
+
+
 def erzeuger_kwh_je_investition(komponenten_kwh: Optional[dict]) -> dict[str, float]:
     """Erzeugung **je Erzeuger-Investition** aus einem Komponenten-JSON (#350).
 

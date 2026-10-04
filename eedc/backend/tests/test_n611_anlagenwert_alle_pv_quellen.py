@@ -110,13 +110,17 @@ def _je_modul(fakt, ids):
 
 @pytest.mark.parametrize("seed, erwartet, je_modul_leer", [
     pytest.param(dict(s1=550.0, s2=380.0), (930.0, 930.0, 0.0), False, id="A-alle-Strings-BKW-ohne-Wert"),
-    pytest.param(dict(s1=550.0, bkw=45.0), (45.0, None, 45.0), False, id="B-Stringluecke-BKW-45"),
+    # N-626 (Gernot 04.10.2026): eine String-Lücke ohne Anlagenwert trägt nichts bei, der gemessene
+    # String bleibt in der Summe — 595 / 550 / 45 (vor N-626: 45 / None / 45, N42). N-611 selbst
+    # wirkt ohne Anlagenwert weiter nicht: kein Abzug, kein BKW-Anteil.
+    pytest.param(dict(s1=550.0, bkw=45.0), (595.0, 550.0, 45.0), False, id="B-Stringluecke-BKW-45"),
     pytest.param(dict(bkw=45.0), (45.0, None, 45.0), True, id="C-keine-Strings-BKW-45"),
     pytest.param(dict(s1=550.0, s2=380.0, bkw_daten={"erzeugung_kwh": 45.0}), (975.0, 930.0, 45.0), False,
                  id="E-BKW-nur-Legacy-Schluessel"),
 ])
 async def test_ohne_anlagenwert_bleibt_jede_zahl_wie_vorher(db, seed, erwartet, je_modul_leer):
-    """Gemessen vor dem Bau auf `ca7bb065` mit denselben Seeds — die Zahlen sind die von damals."""
+    """Gemessen vor dem Bau auf `ca7bb065` mit denselben Seeds — die Zahlen sind die von damals (Fall B seit N-626
+    mit der Teilsumme der vorhandenen Werte)."""
     aid, _ = await _seed(db, **seed)
     fakt = await _fakt(db, aid)
     assert _zahlen(fakt) == erwartet
@@ -247,8 +251,8 @@ async def test_abtretung(db, seed, erwartet):
 
 async def test_gemischte_historie_ein_monat_ohne_anlagenwert_bleibt_wie_vorher(db):
     """Die Abzugsdaten werden geladen, sobald IRGENDEIN Monat einen Anlagenwert trägt — ein Monat ohne eigenen
-    Anlagenwert daneben bleibt trotzdem bitgleich: Mai (Süd 550, West Lücke, BKW 45, kein Anlagenwert) 45 / None / 45,
-    Juni (BKW 45, Anlagenwert 1000) 1000 / 955 / 45."""
+    Anlagenwert daneben bleibt unberührt von ihm: Mai (Süd 550, West Lücke, BKW 45, kein Anlagenwert) 595 / 550 / 45
+    (seit N-626 die vorhandenen Werte; vorher 45 / None / 45), Juni (BKW 45, Anlagenwert 1000) 1000 / 955 / 45."""
     aid, ids = await _seed(db, s1=550.0, bkw=45.0)
     db.add(Monatsdaten(anlage_id=aid, jahr=J, monat=6, einspeisung_kwh=400.0, netzbezug_kwh=200.0,
                        pv_erzeugung_kwh=1000.0))
@@ -258,5 +262,6 @@ async def test_gemischte_historie_ein_monat_ohne_anlagenwert_bleibt_wie_vorher(d
 
     fakten = {(f.jahr, f.monat): f for f in await lade_monats_fakten(db, aid, von=(J, 5), bis=(J, 6))}
 
-    assert _zahlen(fakten[(J, 5)]) == (45.0, None, 45.0)
+    assert _zahlen(fakten[(J, 5)]) == (595.0, 550.0, 45.0)
+    assert fakten[(J, 5)].erzeugung.pv_vollstaendig is False
     assert _zahlen(fakten[(J, 6)]) == (1000.0, 955.0, 45.0)

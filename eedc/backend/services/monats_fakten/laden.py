@@ -29,7 +29,12 @@ from backend.services.energie_profil.monats_aus_tagen import (
     TagesMonatsSumme,
     lade_monats_summen_aus_tagen,
 )
-from backend.services.pv_monatswerte import BkwAnteile, lade_pv_je_monat, pv_summe_je_monat
+from backend.services.pv_monatswerte import (
+    BkwAnteile,
+    lade_pv_je_monat,
+    pv_summe_je_monat,
+    pv_teilsumme_je_monat,
+)
 from backend.services.monats_fakten.bau import _baue_fakt
 from backend.services.monats_fakten.fakten import MonatsFakt, MonatsSchluessel
 from backend.services.monats_fakten.roh import _RohMonat, _ein_jahr, _im_fenster, _lade_imd, _lade_monatsdaten
@@ -123,6 +128,9 @@ async def lade_monats_fakten(
         bkw_anteile=bkw_anteile,
     )
     pv_summen = pv_summe_je_monat(pv_je_modul)
+    # N-626: die Anzeige-Summe eines Monats mit Modul-Lücke ohne Anlagenwert (die vorhandenen Werte);
+    # `bau.py` nimmt sie erst nach der vollständigen Summe und dem Tageswert.
+    pv_teilsummen = pv_teilsumme_je_monat(pv_je_modul)
 
     # N-266: Balkonkraftwerke, unter denen `pv-module` hängen. Ihre Erzeugung
     # steckt seit E4 in `pv_je_modul` (der BKW-Monatswert füllt dort die Lücken
@@ -362,6 +370,7 @@ async def lade_monats_fakten(
                 roh.get(schluessel, _RohMonat()),
                 monatsdaten=monatsdaten_by_ym.get(schluessel),
                 pv_modul_summe=pv_summen.get(schluessel),
+                pv_modul_teilsumme=pv_teilsummen.get(schluessel),
                 pv_je_modul=pv_je_modul.get(schluessel, {}),
                 bkw_aus_anlagenwert=bkw_anteile.get(schluessel, {}),
                 investitionen=investitionen,

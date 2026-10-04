@@ -902,6 +902,14 @@ def loese_pv_tageswerte_auf(
 ) -> tuple[dict[str, float], dict[str, str]]:
     """Präzedenz + Auflösung der PV-Tageswerte in `komponenten_kwh` (#406).
 
+    ⚠ **Nicht mehr der Weg der Tagestabelle (N-623, 04.10.2026).** Diese Funktion
+    sieht nur die fertigen Keys — welche davon gemessen sind, weiß sie nicht mehr:
+    im Aggregat-Fall standen dort keine Einzelwerte, und jeder Erzeuger bekam den
+    kWp-Anteil. `snapshot/tages_tabelle.py::baue_tagestabelle` (HA- und
+    Snapshot-Pfad) löst den Aggregat-Tag seither mit den Tageswerten der Zähler
+    selbst auf (`pv_tages_praezedenz.loese_aggregat_tag_auf`). Hier ruft nur noch
+    der Boundary-Diff `snapshot/aggregator.py::get_komponenten_tageskwh`.
+
     **Die zweite Hälfte zu `pv_tages_praezedenz`, auf der Tagesebene.** Der
     Aufrufer hat beide Quellen eingesammelt — den Anlagen-Zähler unter
     `pv_gesamt` und die Erzeuger unter `pv_<id>`/`bkw_<id>`. Hier fällt die

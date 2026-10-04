@@ -59,10 +59,12 @@ class ErzeugungFakten:
 
     Drei Summen, die **nicht** dasselbe sind und deshalb getrennt stehen:
 
-    - ``pv_module_kwh`` — die P7-aufgelöste Modul-PV. ``None`` heißt „mindestens
-      ein aktives Modul ohne Wert und ohne Aggregat" (N42) — eine Teilsumme wäre
-      als Anlagenerzeugung irreführend. Wer summiert, behandelt ``None`` als
-      Lücke, **nie** als 0. Ein Anlagen-Aggregat steht für alle PV-Quellen: die
+    - ``pv_module_kwh`` — die P7-aufgelöste Modul-PV. Fehlt einem aktiven Modul der
+      Wert und gibt es kein Aggregat, trägt sie seit N-626 (Gernot 04.10.2026) die
+      **vorhandenen** Werte (``pv_teilsumme_je_monat``) und ``pv_vollstaendig`` ist
+      ``False``; bis dahin war sie dort ``None`` (N42) und mit ihr fiel die ganze
+      Modulsumme aus ``pv_kwh``. ``None`` heißt jetzt: kein Modul hat einen Wert.
+      Wer summiert, behandelt ``None`` als Lücke, **nie** als 0. Ein Anlagen-Aggregat steht für alle PV-Quellen: die
       Module bekommen nur, was nach Abzug der eigenen BKW-Werte bleibt (N-611),
       und teilen diesen Rest nach kWp mit den Balkonkraftwerken ohne eigenen
       Wert (N-621, ``bkw_aus_anlagenwert_kwh``).

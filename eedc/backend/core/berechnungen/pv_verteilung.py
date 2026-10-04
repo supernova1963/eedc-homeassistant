@@ -147,25 +147,22 @@ def resolve_pv_je_modul(
     Returns:
         ``{inv_id: PvModulWert}``. Σ der Werte == Gesamterzeugung.
 
-    **Teil-Lücke ohne Aggregat — die Σ-Abweichung dort ist GEWOLLT (N42):**
+    **Teil-Lücke ohne Aggregat:**
 
     Messen nur MANCHE Module und es gibt kein Aggregat, behalten die messenden
-    Module ihren Wert (Regel 1), die übrigen bleiben ``QUELLE_FEHLT``/``0.0``.
-    Die **Anlagen-Summe** darf daraus nicht gebildet werden — sie wäre eine
-    Teilsumme, sähe wie die Gesamterzeugung aus und wäre systematisch zu klein.
-    Dafür gibt es ``ist_vollstaendig``; Anlagen-Read-Sites fragen sie, bevor sie
-    summieren (so gebaut in ``api/routes/monatsdaten.py``).
+    Module ihren Wert (Regel 1), die übrigen bleiben ``QUELLE_FEHLT``/``0.0``;
+    ``ist_vollstaendig`` ist ``False``.
 
-    Folge: **Σ pv_strings ≠ Σ /monatsdaten/aggregiert** — die Pro-Modul-Sicht
-    zeigt die Messwerte, die Anlagen-Summe zeigt nichts. Das ist **kein
-    Aggregations-Drift** und darf nicht „geheilt" werden: die beiden Sichten
-    antworten auf verschiedene Fragen. Festgehalten in
-    ``test_teilluecke_ohne_aggregat_behaelt_messwert``.
-
-    Wer einen Σ-Symmetrie-Wächter für diese beiden Endpoints baut
-    ([[feedback_aggregator_symmetrie]] verlangt einen), **muss diesen Fall
-    ausnehmen** — sonst schlägt er auf der gewollten Asymmetrie an, und der
-    nächste Durchgang „korrigiert" die Ausnahme zurück (A14/N42).
+    ⭐ **Seit N-626 (Gernot 04.10.2026) ist die Anzeige-Summe dieses Monats die
+    Σ der vorhandenen Werte** (``pv_monatswerte.pv_teilsumme_je_monat``): „Ein
+    möglicher Modul-Ausfall kann ja auch korrekt sein … der Daten-Checker muss
+    darauf hinweisen." Die Monats-Fakten tragen sie mit ``pv_vollstaendig=False``,
+    der Hinweis „Teilsumme" und der Daten-Checker sagen, dass ein Wert fehlt.
+    Bis dahin galt N42 — die Anlagen-Summe zeigte NICHTS, und **Σ pv_strings ≠
+    Σ /monatsdaten/aggregiert** war gewollt; jetzt stimmen beide überein
+    (``test_wurzelmuster_p2_symmetrie.py``). Die **Prüf-Leser** (Daten-Checker-
+    PV-Map, Import-Vorschau, ``gesamt_pv_kwh``) bleiben bei „nur vollständig":
+    gegen eine Teilsumme geprüft, meldeten sie Abweichungen, die es nicht gibt.
     """
     if not module:
         return {}
@@ -206,12 +203,44 @@ def resolve_pv_je_modul(
     return out
 
 
+def bkw_kinder_luecken_kwh(
+    *,
+    bkw_kwh: float,
+    kinder: list[PvModul],
+) -> dict[int, float]:
+    """Stufe 2 der P7-Präzedenz: ein Balkonkraftwerk füllt die Lücken SEINER Kinder (N-266/E4).
+
+    Hängen `pv-module` unter einem Balkonkraftwerk, ist dessen Monatswert für sie,
+    was der Anlagenwert für die ganze Anlage ist: ein Aggregat, das nur die Lücken
+    füllt. Gemessene Kinder behalten ihren Wert, die übrigen teilen
+    ``max(0, bkw_kwh − Σ gemessene Kinder)`` nach kWp (``resolve_pv_je_modul``).
+
+    ⚠ **Alle** Kinder übergeben, nicht nur die lückenhaften — sonst wäre Σ der
+    gemessenen 0 und eine Lücke bekäme den ganzen BKW-Wert.
+
+    Returns:
+        ``{inv_id: kWh}`` nur für die Kinder ohne eigenen Wert (``eigen_kwh is
+        None``). Ohne Lücke ``{}``. Der Wert ist eine kWp-Zerlegung, keine Messung —
+        der Aufrufer markiert ihn so (#352).
+
+    Zwei Aufrufer, eine Formel: ``services/pv_monatswerte.py::lade_pv_je_monat``
+    (abgeschlossener Monat) und ``api/routes/aktueller_monat/aggregation.py``
+    (Monat ohne Abschluss, N-627).
+    """
+    luecken = [k.inv_id for k in kinder if k.eigen_kwh is None]
+    if not luecken:
+        return {}
+    verteilt = resolve_pv_je_modul(aggregat_kwh=bkw_kwh, module=kinder)
+    return {i: verteilt[i].pv_erzeugung_kwh for i in luecken if i in verteilt}
+
+
 def ist_vollstaendig(werte: dict[int, PvModulWert]) -> bool:
     """Ist die Σ der aufgelösten Werte eine **Anlagensumme**?
 
     Nur wenn jedes Modul aufgelöst ist (gemessen oder verteilt). Bleibt eines
-    auf ``fehlt``, ist die Σ eine Teilsumme — die darf keine Read-Site als
-    Gesamterzeugung ausweisen (N42). Leere Modul-Liste → ``False``: „keine
+    auf ``fehlt``, ist die Σ eine Teilsumme — als Anzeige-Summe gezeigt nur mit
+    der Kennzeichnung ``pv_vollstaendig=False`` (N-626), als Prüfgröße gar nicht
+    (N42). Leere Modul-Liste → ``False``: „keine
     Module" ist keine vollständige Erzeugung, sondern gar keine Aussage.
     """
     return bool(werte) and all(w.quelle != QUELLE_FEHLT for w in werte.values())

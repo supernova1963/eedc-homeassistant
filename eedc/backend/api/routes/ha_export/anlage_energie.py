@@ -228,8 +228,8 @@ async def finanz_aggregat(*, _preis_messung, _tarif_cache, anlage, db, fakten, s
         # Strompreis für alle Jahre. Deckungsgleich mit Cockpit/Jahresbericht
         # (rilmor-mhrs: Jahres-Tarife 23,90→32,80 ct). Die Eingabe entsteht aus
         # dem Monats-Fakt (P10) statt aus fünf site-eigenen Maps; `pv_kwh` darin
-        # ist „Module + BKW" (P9) mit `None`-Auflösung als 0 statt als Teilsumme
-        # (N42). Nur Monate MIT Zählerzeile — ohne gemessene Einspeisung/Bezug
+        # ist „Module + BKW" (P9); fehlt einem Modul der Wert ohne Anlagenwert, trägt
+        # sie seit N-626 die vorhandenen Werte. Nur Monate MIT Zählerzeile — ohne gemessene Einspeisung/Bezug
         # gibt es keine Finanz-Zeile.
         finanz_zeilen: list[FinanzMonatsZeile] = [
             await baue_finanz_zeile(

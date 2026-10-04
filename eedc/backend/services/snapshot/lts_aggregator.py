@@ -148,8 +148,10 @@ async def lts_tagestabelle(
        n > 1. **R6**: Verbrauch nur bei gleicher Spanne von pv/netzbezug/
        einspeisung; Batterie mit anderer Spanne ⇒ `None`, fehlend ⇒ 0.
     7. **R5b** `komponenten_kwh` = Σ der verwendeten Gerätewerte je Ziel-Key;
-       nur im PV-Aggregat-Fall `loese_pv_tageswerte_auf`. **E4**: im
-       Einzelfall trägt der BKW-Key Σ seines Rests (je Slot ≥ 0 geklemmt).
+       im PV-Aggregat-Fall die Träger-Auflösung (N-623: gemessene Erzeuger
+       behalten ihren Tageswert, die übrigen teilen den Rest nach kWp,
+       `pv_tages_praezedenz.loese_aggregat_tag_auf`). **E4**: der BKW-Key
+       trägt Σ seines Rests (je Slot ≥ 0 geklemmt).
 
     ``zusatz_schluessel`` (N-555 Stufe 3, Konzept 7.2 Anhang D, D-6): weitere
     HA-Entities — die Heimlade-Zähler je Auto —, die **im selben Lesezugriff**

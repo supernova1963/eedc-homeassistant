@@ -11,7 +11,7 @@
 
 ## Unreleased
 
-**In dieser Version:** Netto-Ertrag, Monats- und Jahresergebnis rechnen überall gleich — mit der Umsatzsteuer bei Regelbesteuerung, mit allen Posten im Tooltip · ein Jahr zeigt keine Autarkie über 100 % mehr · „Hausverbrauch" heißt jetzt Gesamtverbrauch oder Restverbrauch, mit Formel
+**In dieser Version:** Netto-Ertrag, Monats- und Jahresergebnis rechnen überall gleich — mit der Umsatzsteuer bei Regelbesteuerung, mit allen Posten im Tooltip · ein Jahr zeigt keine Autarkie über 100 % mehr · „Hausverbrauch" heißt jetzt Gesamtverbrauch oder Restverbrauch, mit Formel · die PV-Erzeugung mit Strings, Balkonkraftwerk und Gesamtzähler nennt am Tag, im laufenden und im abgeschlossenen Monat dieselben Zahlen (außer nach einem Abschluss über den Statistik-Import)
 
 **Netto-Ertrag, Ergebnis, Jahr: eine Rechnung für alles**
 
@@ -106,7 +106,36 @@ jetzt Gesamtverbrauch.
   Zähler für die ganze Anlage zugeordnet, zeigt *Cockpit → Monat* jetzt schon vor dem
   Monatsabschluss die Summe der Strings — vorher den Anlagenzähler, und die Zahl sprang beim
   Abschluss. Der Anlagenzähler steht für die ganze Anlage (Strings und Balkonkraftwerk) und
-  füllt nur noch, was die Quellen mit eigenem Zähler nicht erklären.
+  füllt nur noch, was die Quellen mit eigenem Zähler nicht erklären. **Im laufenden Monat**
+  wirkt das erst jetzt richtig: Bisher ersetzte *Cockpit → Monat* dort den Anlagenzähler aus
+  Home Assistant durch den Zähler einer einzelnen Quelle — mit Gesamtzähler, Balkonkraftwerk-Zähler
+  und Strings ohne eigenen Zähler standen nach drei Tagen 9 statt 63 kWh da, Eigenverbrauch und
+  Autarkie 0. Jetzt zählt der Anlagenzähler im laufenden Monat genauso wie nach einem Abschluss mit
+  „Aus HA laden" — nicht wie nach dem Statistik-Import, der den Gesamtzähler nicht speichert (dort
+  zeigt der abgeschlossene Monat weiter weniger, im Beispiel 930 statt 1000 kWh).
+- **Cockpit → Tag mit Gesamtzähler:** Hat eine PV-Quelle (etwa dein Balkonkraftwerk) einen
+  eigenen Zähler und deine Anlage zusätzlich einen Gesamtzähler, behält sie am Tag jetzt ihren
+  gemessenen Wert — vorher bekam sie nur ihren Anteil nach Leistung (im Beispiel 1,56 statt
+  3,0 kWh). Nur Quellen ohne eigenen Zähler teilen sich den Rest. Der heutige Tag rechnet sofort
+  so; ältere Tage ändern sich, wenn du sie unter *Einstellungen → Daten → Energieprofil-Pflege*
+  neu berechnen lässt.
+- **PV doppelt am Tag ohne Stundenwerte aus Home Assistant:** Summiert eedc die Leistung deiner
+  Anlage selbst über den Tag und hast du daneben kWh-Zähler für die PV, standen beide Summen im
+  Tag — der laufende Monat zeigte das Doppelte (im Beispiel 126 statt 63 kWh). Jetzt zählen nur die
+  Zähler. Ältere Tage ändern sich durch Neuberechnen.
+- **Balkonkraftwerk mit eigenen PV-Modulen:** Im laufenden Monat und vor dem Monatsabschluss
+  zählte *Cockpit → Monat* den Zähler des Balkonkraftwerks **und** die gemessenen Module darunter
+  (im Beispiel 72 statt 63 kWh). Jetzt gibt das Balkonkraftwerk seine Erzeugung im Monat an seine
+  Module ab — vor und nach dem Abschluss dieselbe Zahl, die Zeile „Balkonkraftwerk" bleibt leer.
+  Ohne eigenen Zähler nennt diese Zeile im laufenden Monat auch keinen geschätzten Anteil mehr.
+- **Ein String ohne Monatswert:** Fehlt einem String der Wert eines Monats und gibt es keinen
+  Gesamtwert, zeigt der abgeschlossene Monat jetzt die Erzeugung der übrigen Strings — vorher fiel
+  die ganze String-Summe weg und es stand nur das Balkonkraftwerk da (im Beispiel 90 statt
+  450 kWh, Eigenverbrauch 0). *Cockpit → Monat* und *→ Jahr* sagen, dass es eine Teilsumme
+  ist: War der String in dem Monat wirklich außer Betrieb, stimmt die Zahl, sonst fehlt seine
+  Erzeugung. Der [Daten-Checker](HANDBUCH_DATEN_CHECKER.md) nennt den Monat.
+- **Statistik-Import, Anlage nur mit Balkonkraftwerk:** Die Vorschau schlug abgeschlossene Monate
+  zum Import vor, obwohl sie Werte hatten. Jetzt erkennt sie den Wert des Balkonkraftwerks.
 - **Balkonkraftwerk neben einem Wert für die ganze Anlage:** Hat dein Balkonkraftwerk einen
   eigenen Zähler (oder einen eingetragenen Monatswert) und deine Anlage zusätzlich einen
   PV-Gesamtzähler, zählte ein abgeschlossener Monat das Balkonkraftwerk doppelt — im Beispiel

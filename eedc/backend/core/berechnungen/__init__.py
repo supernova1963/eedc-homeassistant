@@ -74,6 +74,7 @@ from backend.core.berechnungen.counter import (
 )
 from backend.core.berechnungen.datenquellen import (
     connector_deckt_monatsanfang,
+    gewinner_je_feld,
     merge_datenquellen,
     mqtt_teilzeitraum_felder,
     teilzeitraum_felder,
@@ -183,6 +184,7 @@ from backend.core.berechnungen.energie import (
     WALLBOX_KOMPONENTEN_PREFIXE,
     SonstigesTagesSummen,
     batterie_kw_spalte,
+    bkw_gemessen_kwh_je_investition,
     erzeuger_kwh_je_investition,
     erzeugung_hinter_zaehler_kwh,
     sonstiges_kwh_je_richtung,
@@ -397,6 +399,7 @@ __all__ = [
     "pruefe_counter_konsistent",
     "verteile_counter_auf_stunden",
     "connector_deckt_monatsanfang",
+    "gewinner_je_feld",
     "merge_datenquellen",
     "mqtt_teilzeitraum_felder",
     "teilzeitraum_felder",
@@ -477,6 +480,7 @@ __all__ = [
     "summe_pv_bkw_kwh",
     "summe_pv_anlage_kwh",
     "summe_bkw_kwh",
+    "bkw_gemessen_kwh_je_investition",
     "erzeuger_kwh_je_investition",
     "erzeugung_hinter_zaehler_kwh",
     "SONSTIGES_KOMPONENTEN_PREFIX",

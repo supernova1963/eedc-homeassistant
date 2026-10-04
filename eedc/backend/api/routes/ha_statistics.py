@@ -37,7 +37,12 @@ from backend.services.import_hauszaehler import warnung_monate_ohne_zaehlerwerte
 from backend.services.monatswert_deckel import deckel_je_sensor
 from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
 from backend.core.berechnungen.pv_verteilung import PvModul, QUELLE_GEMESSEN, resolve_pv_je_modul
-from backend.services.pv_monatswerte import eigene_bkw_erzeugung_kwh, lade_pv_je_monat, pv_summe_je_monat
+from backend.services.pv_monatswerte import (
+    bkw_ohne_eigenen_wert,
+    eigene_bkw_erzeugung_kwh,
+    lade_pv_je_monat,
+    pv_summe_je_monat,
+)
 from backend.core.investition_kennwerte import get_pv_kwp
 from backend.services.provenance import ABGELEITET_KWP_ANTEIL
 from backend.services.provenance import (
@@ -728,6 +733,35 @@ async def get_import_vorschau(
                 inv.id: vorhandene_imd[(inv.id, j, m)].verbrauch_daten
                 for inv in aktive if (inv.id, j, m) in vorhandene_imd
             }) + sum(vorschau_bkw_anteile.get((j, m), {}).values())
+
+        # N-629: Monate OHNE aktives `pv-module` (eine Anlage nur mit Balkonkraftwerk) haben in der
+        # Modul-Auflösung keinen Eintrag — lokal ist dort, was die Balkonkraftwerke tragen: ihre eigenen
+        # Werte plus ihr Anteil am gespeicherten Anlagenwert, über dieselben Helfer wie oben (P11-Selektor).
+        # Bis 04.10.2026 galt ein solcher abgeschlossener Monat als „fehlt lokal“ und wurde zum Import
+        # vorgeschlagen. ⚠ Monate MIT Modul bleiben bei `pv_summe_je_monat`: eine Modul-Lücke ohne
+        # Anlagenwert bleibt „fehlt lokal → importieren“ (der Import schließt sie) — nicht die
+        # Anzeige-Summe der Monats-Fakten, die dort seit N-626 eine Teilsumme trägt.
+        for (j, m) in sorted(
+            {(jj, mm) for (_i, jj, mm) in vorhandene_imd} | set(vorschau_bkw_anteile)
+        ):
+            if (j, m) in pv_summen:
+                continue
+            aktive = [inv for inv in investitionen.values() if inv.ist_aktiv_im_monat(j, m)]
+            if any(inv.typ == "pv-module" for inv in aktive):
+                continue
+            daten = {
+                inv.id: vorhandene_imd[(inv.id, j, m)].verbrauch_daten
+                for inv in aktive if (inv.id, j, m) in vorhandene_imd
+            }
+            ohne_wert = {inv.id for inv in bkw_ohne_eigenen_wert(aktive, daten)}
+            # Träger der Erzeugung über den P11-Selektor — ohne Modul im Monat sind das alle BKW.
+            mit_wert = [
+                inv for inv in erzeuger_traeger(aktive)
+                if inv.typ == "balkonkraftwerk" and inv.id not in ohne_wert
+            ]
+            anteile = vorschau_bkw_anteile.get((j, m), {})
+            if mit_wert or anteile:
+                pv_summen[(j, m)] = eigene_bkw_erzeugung_kwh(aktive, daten) + sum(anteile.values())
 
     # Jeden Monat analysieren
     monate_status: list[MonatImportStatus] = []

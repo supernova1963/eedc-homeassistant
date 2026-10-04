@@ -501,24 +501,22 @@ async def test_nur_aggregat_investitions_roi_traegt_die_ev_ersparnis(db):
 
 
 @pytest.mark.asyncio
-async def test_n42_teilluecke_ohne_aggregat_gehoert_nicht_zu_dieser_achse(db):
+async def test_teilluecke_ohne_aggregat_vier_sichten_einig_seit_n626(db):
     """Abgrenzung nach ADR-002/**P2-A** (Pflicht Nr. 4) — bewusst geprüft.
 
     Zwei Module, eines gemessen (600 kWh), das andere ohne Wert, und **kein**
     Anlagen-Aggregat. Das ist NICHT der F-5-Fall: es gibt nichts, worauf
-    zurückgefallen werden könnte. `pv_summe_je_monat` liefert hier bewusst
-    `None` („mindestens ein aktives Modul ohne Wert und ohne Aggregat"), eine
-    Teilsumme als Anlagenerzeugung wäre irreführend.
+    zurückgefallen werden könnte.
 
-    Geprüft wird deshalb nur das, was diese Achse zusichern kann: die vier
-    Sichten bleiben **untereinander einig** und nennen den Einspeise-Erlös
-    allein (400 × 0,08 = 32,00 €). Die asymmetrische Erwartung zwischen
-    Pro-Modul-Sicht und Anlagen-Summe gehört zu P2-A und wird dort geprüft
-    (`test_pv_strings_kwp_verteilung.py`), nicht hier.
+    **Seit N-626 (Gernot 04.10.2026) trägt der Monat die vorhandenen Werte** — die
+    Anzeige-Summe ist 600 kWh (`pv_teilsumme_je_monat`), `pv_vollstaendig` bleibt
+    False und der Daten-Checker nennt den Monat. Damit nennen alle vier Sichten
+    Eigenverbrauch 200 kWh × 0,30 € + Einspeise-Erlös 400 × 0,08 € = **92,00 €**
+    (bis 04.10.2026: 32,00 €, der Erlös allein, N42).
 
-    **Auch hier bewegt sich eine Zahl** — nach unten: Aussichten und PDF nahmen
-    bis 2026-07-31 die Teilsumme (600 kWh) als Anlagenerzeugung und kamen auf
-    92,00 €. Cockpit und HA-Export haben diesen Fall nie mitgerechnet.
+    Was von der Substanz bleibt und hier geprüft wird: die vier Sichten bleiben
+    **untereinander einig** — die Achse, die dieser Test zusichert. Die Prüf-Leser
+    (`pv_summe_je_monat`, Daten-Checker-PV-Map) bleiben bei „nur vollständig".
     """
     anlage = Anlage(anlagenname="N42-Teilluecke", leistung_kwp=10.0)
     db.add(anlage)
@@ -541,7 +539,7 @@ async def test_n42_teilluecke_ohne_aggregat_gehoert_nicht_zu_dieser_achse(db):
                                   verbrauch_daten={"pv_erzeugung_kwh": 600.0}))
     await db.commit()
 
-    _einig(await _vier_netto_ertraege(db, anlage.id), 32.0)
+    _einig(await _vier_netto_ertraege(db, anlage.id), 92.0)
 
 
 # ============================================================================

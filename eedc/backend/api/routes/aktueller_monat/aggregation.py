@@ -25,10 +25,10 @@ from backend.core.field_definitions import (
     wp_strom_aufteilung,
 )
 from backend.core.investition_parameter import ist_dienstlich
-from backend.core.berechnungen.pv_verteilung import PvModul, gesamt_pv_kwh
+from backend.core.berechnungen.pv_verteilung import PvModul, bkw_kinder_luecken_kwh, gesamt_pv_kwh
 from backend.core.investition_kennwerte import get_erzeuger_kwp
 from backend.core.berechnungen.anlagen_kwp import BKW_TYP, PV_MODUL_TYP
-from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
+from backend.core.berechnungen.erzeuger_traeger import abgetretene_bkw_ids, erzeuger_traeger
 
 
 #: Der Schluessel, unter dem die **Vorausloesung** der Waerme je Geraet ihr
@@ -137,6 +137,39 @@ def aggregiere_typen(*, investitionen, jahr, monat, resolved, teilzeitraum):
     # kein Ersatz für die Komponenten-Summe — es sperrt die Aggregation daher
     # NICHT. Der Bruchstück-Wert wird beim ersten aggregierten Beitrag ersetzt
     # (nicht addiert, das wäre die Doppelzählung, die die Sperre verhindert).
+    # ── N-627: der Monat tritt ab — auch ohne Abschluss ──
+    # Ein Balkonkraftwerk mit `pv-module`-Kindern, die IN DIESEM MONAT aktiv sind (ADR-002/P11, Zeitfilter vor
+    # dem Selektor), hat seine Erzeugungsgrößen an sie abgetreten (N-266). Sein Wert ist das Aggregat seiner
+    # Kinder: er füllt ihre Lücken (Stufe 2 der P7-Präzedenz, `bkw_kinder_luecken_kwh` — dieselbe Formel wie
+    # `pv_monatswerte.lade_pv_je_monat` im abgeschlossenen Monat), gemessene Kinder gewinnen. Danach trägt das
+    # BKW weder die PV-Achse noch eine eigene Zeile (Typ-Schleife unten). Bis 04.10.2026 zählte der Monat ohne
+    # Abschluss BKW-Zähler UND gemessene Kinder (66,6 / 72 statt 63), und die HA-Statistik füllte im
+    # abgeschlossenen Monat die BKW-Zeile neben den Kindern (90 statt 0). Der Tag bleibt bei E4.
+    # Vorauflösung je Gerät wie `_wp_waerme_d1`: das Ergebnis steht unter dem Feld des Kindes in `resolved`.
+    _pv_aktiv = [
+        inv for inv in investitionen
+        if inv.typ in (PV_MODUL_TYP, BKW_TYP) and inv.ist_aktiv_im_monat(jahr, monat)
+    ]
+    _abgetreten = abgetretene_bkw_ids(_pv_aktiv)
+    for _bkw_id in _abgetreten:
+        _bkw_wert = resolved.get(f"inv_{_bkw_id}_pv_erzeugung_kwh")
+        if _bkw_wert is None:
+            continue
+        _kinder = [k for k in _pv_aktiv if k.typ == PV_MODUL_TYP and k.parent_investition_id == _bkw_id]
+        for _kind_id, _kwh in bkw_kinder_luecken_kwh(
+            bkw_kwh=_bkw_wert[0],
+            kinder=[
+                PvModul(
+                    inv_id=k.id,
+                    leistung_kwp=get_erzeuger_kwp(k),
+                    eigen_kwh=(resolved[f"inv_{k.id}_pv_erzeugung_kwh"][0]
+                               if f"inv_{k.id}_pv_erzeugung_kwh" in resolved else None),
+                )
+                for k in _kinder
+            ],
+        ).items():
+            resolved[f"inv_{_kind_id}_pv_erzeugung_kwh"] = (_kwh, _bkw_wert[1])
+
     direct_fields = set(resolved.keys()) - teilzeitraum
     ersetzbar = set(teilzeitraum)
 
@@ -382,6 +415,8 @@ def aggregiere_typen(*, investitionen, jahr, monat, resolved, teilzeitraum):
         if inv.typ == "waermepumpe":
             _wp_waerme_d1(inv.id)
             _wp_strom_k3(inv.id, inv.parameter)
+        if inv.typ == BKW_TYP and inv.id in _abgetreten:
+            continue  # N-627: abgetreten — seine Kinder tragen (Vorauflösung oben), keine eigene Zeile
         agg_map = typ_aggregation.get(inv.typ, {})
         for inv_suffix, ziel_felder in agg_map.items():
             for top_level_feld in ziel_felder:

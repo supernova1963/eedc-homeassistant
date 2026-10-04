@@ -71,8 +71,11 @@ export interface AggregierteMonatsdaten {
   /**
    * `false` = die PV-Achse dieses Monats ist eine **Teilsumme**: mindestens ein
    * aktives Modul ohne Wert und kein Gesamtwert zum Verteilen. Die Zahl bleibt
-   * stehen — eine additive Summe ist richtungssicher zu niedrig und wird
+   * stehen — eine additive Summe ist nie zu hoch (zu niedrig, falls dem Modul
+   * Erzeugung fehlt; war es außer Betrieb, stimmt sie) und wird
    * **beschriftet**, nicht unterdrückt (`KONZEPT-UNVOLLSTAENDIGE-WERTE.md` §3).
+   * Gelesen wird das Feld im Client derzeit nicht; den Hinweis zeigen Cockpit →
+   * Monat und → Jahr über `hinweise` (Backend `pv_unvollstaendig_hinweis`).
    * Fehlt das Feld (alter Server), gilt „vollständig".
    */
   pv_vollstaendig?: boolean

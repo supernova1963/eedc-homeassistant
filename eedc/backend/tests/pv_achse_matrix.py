@@ -177,6 +177,10 @@ FORMEN: dict[str, Form] = {f.fid: f for f in (
     Form("F14", "ohne BKW: Gesamt + Süd mit, West ohne", (_sued(True), _west()), 3.0, anlage_kwp=10.0),
     Form("F15", "Kontrollform: zwei Strings, beide gemessen, kein Gesamt", (_sued(True), _west(True)), None,
          anlage_kwp=10.0),
+    # N-626 (Gegenprüfung, Zusatzform): wie F07 ohne Balkonkraftwerk — ohne die Teilsumme in
+    # `pv_module_kwh` blieben Tabelle leer und ROI 0.
+    Form("F16", "ohne Gesamt, ohne BKW: Süd mit Zähler, West ohne (Lücke ohne Anlagenwert)",
+         (_sued(True), _west()), None, anlage_kwp=10.0),
 )}
 
 
@@ -367,13 +371,18 @@ async def seed_anlage(db: AsyncSession, form: Form) -> tuple[int, dict[str, int]
     return a.id, ids
 
 
-def seed_ha(form: Form):
+def seed_ha(form: Form, *, abweichung: Optional[dict] = None):
     """Die HA-Langzeitstatistik der Form: eine Zeile je Stunde und Zähler.
 
     Recorder-Konvention: ``start_ts = t`` trägt den Stand am Ende der Stunde ``t``.
+    ``abweichung``: ``{sensor_id: (rate_fn | None, ohne_fn | None)}`` ersetzt Rate bzw.
+    fehlende Zeilen einzelner Zähler (Bündel, Abriss, Sprung, Zähler ohne Nachtzeilen) —
+    für Einzelproben, die Matrix selbst ruft ohne.
     """
     svc = ha_lts_helfer.mach_service(thread_sicher=True)
     for sid, (rate_fn, ohne_fn, _key) in _reihen(form).items():
+        rate_neu, ohne_neu = (abweichung or {}).get(sid, (None, None))
+        rate_fn, ohne_fn = rate_neu or rate_fn, ohne_neu or ohne_fn
         mid = ha_lts_helfer.sensor(svc, sid, "kWh", has_sum=True)
         stand = 1000.0
         zeilen = []
@@ -420,8 +429,9 @@ def _kurve(form: Form) -> dict:
     die ``lts_tagesverlauf``/``live_tagesverlauf_service`` aus einem Gesamtleistungs-Sensor
     bauen, wenn kein Erzeuger eine eigene Leistungs-Serie hat (``live_tagesverlauf_service.py:398-410``).
     Ohne Anlagenzähler trägt sie keine PV-Serie (nur Zählerstände, keine Leistungssensoren).
-    Im HA-Betrieb bestimmt die Kurve nur Spitzenwerte; im Standalone-Betrieb summiert
-    ``summiere_live_komponenten`` sie zusätzlich in ``komponenten_kwh`` (``aggregator.py:394-410``).
+    Im HA-Betrieb bestimmt die Kurve nur Spitzenwerte; ohne HA-Stunden summiert
+    ``summiere_live_komponenten`` sie zusätzlich in ``komponenten_kwh`` — liefert die
+    Zählertabelle die PV-Achse, fällt diese Summe seit N-625 wieder heraus.
     """
     serien, werte = [], (lambda h: {})
     if form.gesamt is not None:
@@ -925,7 +935,10 @@ async def messe_ha(form: Form, m: Messung) -> None:
 
 
 async def messe_sa(form: Form, m: Messung) -> None:
-    """Datenstand Standalone: kein HA, Zählerstände in ``sensor_snapshots``, S3 von Hand."""
+    """Datenstand „Leistungs-Zuordnung ohne HA-Stunden": kein HA, Zählerstände in
+    ``sensor_snapshots`` (Snapshot-Pfad), die Kurve trägt bei einem Anlagenzähler die
+    Gesamtleistung (``_kurve``); S3 von Hand. Das ist NICHT jede Standalone-Anlage — eine reine
+    MQTT-Anlage ohne ``live``-Zuordnung hat keine PV-Serie in der Kurve (Bauplan PV-Achse T2)."""
     import shutil
     import tempfile
 

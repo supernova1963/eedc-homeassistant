@@ -1412,6 +1412,11 @@ P7_BASELINE_AUSNAHMEN: frozenset[str] = frozenset({
     # `Monatsdaten.pv_erzeugung_kwh`. Die Regel wird also nicht umgangen,
     # sondern auf einer zweiten Zeitachse angewandt.
     "backend/services/snapshot/komponenten_beitraege.py::wert",
+    # Dito, die Träger-Auflösung des Aggregat-Tags (N-623, 04.10.2026):
+    # `loese_aggregat_tag_auf` ruft `resolve_pv_je_modul` mit dem TAGES-Zählerstand
+    # `basis:pv_gesamt` und den gemessenen Tageswerten und liest dessen Ergebnis
+    # (`PvModulWert`). Keine `Monatsdaten`-Zeile, dieselbe Regel auf der Tagesachse.
+    "backend/core/berechnungen/pv_tages_praezedenz.py::w",
     # Dito, aus den Monats-Fakten (`erzeugung.pv_je_modul`) statt aus
     # `lade_pv_je_monat` direkt — dieselbe Auflösung, eine Schicht weiter oben
     # (ADR-002/P10). Trägt den String-Vergleich SOLL/IST im Jahresbericht.

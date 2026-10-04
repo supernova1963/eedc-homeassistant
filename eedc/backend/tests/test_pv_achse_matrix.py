@@ -2,15 +2,16 @@
 
 Baustein (Formen, Seed, Schreibwege, Messfunktionen, Soll-Regel): ``pv_achse_matrix.py``.
 
-**Was eine Zelle ist.** Form (F01–F15, 22 Ausprägungen) × Weg × Invariante (I1–I6). Weg ist
+**Was eine Zelle ist.** Form (F01–F16, 23 Ausprägungen) × Weg × Invariante (I1–I6). Weg ist
 entweder ein **Datenstand** — ``HA`` (HA-Statistik + Tageszeilen) oder ``SA`` (Standalone,
 Snapshot-Pfad) — für den Tag und den laufenden Monat, oder ein **Schreibweg** des
 abgeschlossenen Monats — ``S1`` „Aus HA laden", ``S2`` HA-Statistik-Sammelimport, ``S3``
 Handeingabe ohne HA. Jede Zelle prüft ALLE Sichten ihrer Invariante; was sie zählt, steht in
 ``bewerte``.
 
-**Rote Zellen gegen HEAD** stehen in ``BEKANNT`` — mit der Menge der roten Sichten, dem Grund
-und der Zuordnung (N-623 · N-624 · HA-Bauform-Rest mit Verweis · KANDIDAT). Die Zelle läuft dann
+**Rote Zellen** stehen in ``BEKANNT`` — mit der Menge der roten Sichten, dem Grund und der
+Zuordnung (seit dem Bau der PV-Achse, 04.10.2026, nur noch der Sammelimport, HA-Bauform S1, als
+benannte Erwartung mit Verweis). Die Zelle läuft dann
 als ``xfail(strict=True, raises=BekannterMangel)``: Sie ist nur „erwartet rot", wenn GENAU diese
 Sichten rot sind. Heilt ein Bau eine davon, wird die Zelle ROT (XPASS strict bzw. eine
 ``AssertionError``, die nicht ``BekannterMangel`` ist) und zwingt die Markierung weg; kippt eine
@@ -266,7 +267,10 @@ def bewerte(fid: str, weg: str, inv: str, m: mx.Messung) -> list[Zelle]:  # noqa
                                                     if n in bkw_namen)))
             bkw = next((g for g in form.geraete if g.typ == "balkonkraftwerk"), None)
             if bkw is not None:
-                eigen = mx.tagesmenge(bkw.rate) * 3 if bkw.zaehler else 0.0
+                # Die eigene Zeile nennt nur Gemessenes (N-628), und ein im Monat an seine Modul-Kinder
+                # abgetretenes BKW keine (N-627, ADR-002/P11 — der Monat tritt ab, auch der laufende).
+                abgetreten = bool(mx._kinder_von(form, bkw, mx.TAGE_JULI[-1]))
+                eigen = mx.tagesmenge(bkw.rate) * 3 if (bkw.zaehler and not abgetreten) else 0.0
                 z.append(_z("laufend:cockpit_monat:bkw_eigen", (lf["monat"] or {}).get("bkw") or 0.0, eigen))
         elif inv == "I5":
             for t in tage:
@@ -350,12 +354,15 @@ def bewerte(fid: str, weg: str, inv: str, m: mx.Messung) -> list[Zelle]:  # noqa
         # Tageswert-Rückfall (vor dem Abschluss): die Fakten führen dort keine Werte je Modul, nur
         # die Gruppen Module (`pv_module_kwh`) und Balkonkraftwerk (`bkw_kwh`) — Soll ist die
         # Σ der Tages-Keys nach der Tagesregel (E4: ein BKW-Key trägt den Rest seiner Kinder).
+        # Ein im Monat abgetretenes BKW (Kinder aktiv) gibt sein Segment an die Module — die
+        # Monatsregel gilt auch hier (Bauplan PV-Achse T4, Zusatz Master: vor = nach dem Abschluss).
         tw = vor["fakten_tw"] or {}
-        bkw_namen = {g.name for g in form.geraete if g.typ == "balkonkraftwerk"}
+        bkw_namen = {g.name for g in form.geraete if g.typ == "balkonkraftwerk"
+                     and not mx._kinder_von(form, g, mx.TAGE_JUNI[-1])}
         soll_bkw = sum(v for t in mx.TAGE_JUNI for n, v in mx.soll_tag(form, t).je_geraet.items() if n in bkw_namen)
         soll_mod = sum(v for t in mx.TAGE_JUNI for n, v in mx.soll_tag(form, t).je_geraet.items() if n not in bkw_namen)
         z.append(_z("fakten_tageswert:module", tw.get("pv_module") or 0.0, soll_mod, tol=_TOL_TAGE))
-        if bkw_namen:
+        if any(g.typ == "balkonkraftwerk" for g in form.geraete):
             z.append(_z("fakten_tageswert:bkw", tw.get("bkw") or 0.0, soll_bkw, tol=_TOL_TAGE))
         z.append(_z("fakten:Σgeraete=summe", round(sum(v or 0.0 for v in je.values()), 4), fk.get("pv")))
         z.append(_z("pv_strings:Σgeraete=summe",
@@ -395,7 +402,7 @@ class BekannterMangel(AssertionError):
 @dataclass(frozen=True)
 class Mangel:
     sichten: frozenset[str]
-    zuordnung: str   # "N-623" · "N-624" · "HA-Bauform" · "KANDIDAT"
+    zuordnung: str   # seit dem Bau der PV-Achse nur noch "HA-Bauform S1 (Sammelimport)"
     grund: str
 
 
@@ -405,257 +412,29 @@ class Ursache:
     grund: str
 
 
-#: Die Ursachen der roten Zellen gegen HEAD ``737f476d`` (04.10.2026). Bericht mit Ist/Soll je
-#: Zelle: ``~/.claude/plans/opus-berichte/PV-ACHSE-MATRIX.md``. Nur zeigen, nicht bauen.
+#: Die Ursachen der roten Zellen — Stand nach dem Bau der PV-Achse (Bauplan
+#: ``~/.claude/plans/bauplan-pv-achse-regelfehler.md``, T1–T7, 04.10.2026; Bericht
+#: ``~/.claude/plans/opus-berichte/PV-ACHSE-BAU.md``). Gegen ``737f476d`` waren es 242 Zellen mit
+#: neun Ursachen; geheilt sind N-623 (Tag im Aggregat-Fall), N-624 (Teilzeitraum-Marke), K1/N-625
+#: (Leistungs-Summe neben der Zählertabelle), K2/N-626 (Teilsumme), „HA-Bauform (c)" + K3/N-627
+#: (der Monat tritt ab), K4/N-629 (Vorschau ohne Modul) und K5/N-628 (BKW-Zeile nur gemessen).
+#: Erhebung je Zelle: ``opus-berichte/PV-ACHSE-MATRIX.md`` (vorher) und ``PV-ACHSE-BAU.md`` (nachher).
 URSACHE: dict[str, Ursache] = {
-    "N624": Ursache(
-        "N-624",
-        "laufender Monat mit Tageszeilen: der Anlagen-PV-Zähler aus der HA-Monatsstatistik wird als "
-        "Teilzeitraum markiert und durch die Einzelzähler ersetzt (core/berechnungen/datenquellen.py::"
-        "mqtt_teilzeitraum_felder ⇒ aktueller_monat/aggregation.py)",
-    ),
-    "N623": Ursache(
-        "N-623",
-        "Tag im Aggregat-Fall: gemessene Erzeuger bekommen ihren kWp-Anteil statt ihres Zählerwerts "
-        "(snapshot/tages_tabelle.py:321 ⇒ loese_pv_tageswerte_auf); BKW mit Modul-Kindern ohne bkw_-Key "
-        "(Gegenprüfung W5). Folgt in den Tageswert-Rückfall der Monats-Fakten und in die Standalone-Tagesebene",
-    ),
-    "HABF_C": Ursache(
-        "HA-Bauform-Rest (c)",
-        "folge-prompt-ha-bauform.md, Nachtrag 03.10. abends (c): die BKW-Kinder-Stufe von P7 (N-266/E4) fehlt "
-        "im Monat ohne Abschluss ⇒ BKW-Zähler und gemessene Kinder zählen beide",
-    ),
-    "HABF_S2": Ursache(
-        "HA-Bauform-Rest S1/S2",
-        "folge-prompt-ha-bauform.md, Nachtrag 03.10. nachts (S1-Pflichtpunkt BKW ohne eigenen Wert, S2 "
-        "Import-Verteilung), Handbuch Einstellungen §7.6: der Sammelimport speichert den Anlagenzähler nicht "
-        "und verteilt ihn nur auf Module ohne eigenen Wert (BKW ohne Wert 0, Kinder unter gemessenem BKW "
-        "bekommen einen Anteil). Folgen: der Tageswert-Rückfall füllt die BKW-Gruppe aus den Tagen "
-        "(Jahr-Verlauf über dem Monat), der Daten-Checker lässt den Monat aus",
-    ),
-    "K1": Ursache(
-        "KANDIDAT K1",
-        "Standalone: die Gesamtleistungs-Serie `pv_gesamt` der Kurve wird in `summiere_live_komponenten` "
-        "(energie_profil/aggregator.py:394-410) als kWh in `komponenten_kwh` summiert und bleibt neben den "
-        "`pv_<id>`-Keys der Zählertabelle stehen (:1642 überschreibt nur deren Keys); "
-        "`lade_monats_summen_aus_tagen` zählt jeden `pv_`-Key ⇒ Tagesebene doppelt",
-    ),
-    "K2": Ursache(
-        "KANDIDAT K2",
-        "Teilsumme: monats_fakten/bau.py:107 `pv_kwh = (pv_modul_summe or 0.0) + …` verwirft die gemessenen "
-        "Module, sobald ein Modul ohne Wert und ohne Anlagenwert ist (KONZEPT-UNVOLLSTAENDIGE-WERTE §2.1 nennt "
-        "die Zeile, kein offener Fund) ⇒ Monat 90 statt 450, EV 0",
-    ),
-    "K3": Ursache(
-        "KANDIDAT K3",
-        "abgeschlossener Monat, BKW mit Modul-Kindern: Cockpit → Monat füllt `bkw_erzeugung_kwh` per "
-        "setdefault aus dem HA-BKW-Zähler, obwohl das BKW im Monat abgetreten hat (Monats-Fakten 0, ADR-002/P11)",
-    ),
-    "K4": Ursache(
-        "KANDIDAT K4",
-        "Import-Vorschau einer reinen BKW-Anlage mit Anlagenzähler: der lokale Gesamtwert entsteht nur aus "
-        "`pv-module` (api/routes/ha_statistics.py:706-723) ⇒ „Fehlt lokal: PV Erzeugung Gesamt“, Aktion "
-        "„importieren“, obwohl der Monat abgeschlossen ist",
-    ),
-    "K5": Ursache(
-        "KANDIDAT K5",
-        "laufender Monat: ein BKW ohne eigenen Zähler bekommt aus der Tagesebene seinen kWp-Anteil als "
-        "`bkw_erzeugung_kwh` (aktueller_monat/__init__.py:576); im abgeschlossenen Monat steht der Anteil in "
-        "`bkw_aus_anlagenwert_kwh`, die eigene Zeile bleibt 0 (monats_fakten/fakten.py:90-99)",
+    "SAMMELIMPORT": Ursache(
+        "HA-Bauform S1 (Sammelimport)",
+        "folge-prompt-ha-bauform.md (S1-Pflichtpunkt), Handbuch Einstellungen §7.6: der HA-Statistik-"
+        "Sammelimport speichert den Anlagenzähler nicht (P7 verbietet das programmatische Füllen) und "
+        "verteilt ihn nur auf Module ohne eigenen Wert — ein Balkonkraftwerk ohne Wert bekommt 0, Kinder "
+        "unter einem gemessenen BKW einen Anteil. Folgen (gemessen nach dem Bau): Werte je Gerät weichen "
+        "ab (z. B. F04 West 270 statt 225, Balkon 0 statt 45), der Jahr-Verlauf füllt die BKW-Gruppe aus "
+        "den Tagen (675/676,8 statt 630), F05 nennt nach dem Import 540 statt 630, der Daten-Checker lässt "
+        "den Monat aus. Kein Regelfehler der Lesewege, sondern ein fehlender Speicherort",
     ),
 }
 
 #: ``Ursache → {(Form, Weg, Invariante): rote Sichten}`` — gemessen, nicht hergeleitet.
 ROT: dict[str, dict[tuple[str, str, str], tuple[str, ...]]] = {
-    'N624': {
-        ('F03', 'HA', 'I1'): ('laufend:jahr_verlauf', 'laufend:jahr_verlauf_segmente',),
-        ('F03', 'HA', 'I2'): ('laufend:cockpit_monat=Σtage',),
-        ('F03', 'HA', 'I3'): ('laufend:cockpit_monat',),
-        ('F03', 'HA', 'I5'): ('laufend:cockpit_jahr:ev>0', 'laufend:cockpit_monat:ev>0',),
-        ('F03', 'S1', 'I3'): ('cockpit_jahr:kopf',),
-        ('F03', 'S2', 'I3'): ('cockpit_jahr:kopf',),
-        ('F04', 'HA', 'I1'): ('laufend:jahr_verlauf', 'laufend:jahr_verlauf_segmente',),
-        ('F04', 'HA', 'I2'): ('laufend:cockpit_monat=Σtage',),
-        ('F04', 'HA', 'I3'): ('laufend:cockpit_monat',),
-        ('F04', 'S1', 'I3'): ('cockpit_jahr:kopf',),
-        ('F04', 'S2', 'I3'): ('cockpit_jahr:kopf',),
-        ('F05', 'HA', 'I1'): ('laufend:jahr_verlauf', 'laufend:jahr_verlauf_segmente',),
-        ('F05', 'HA', 'I2'): ('laufend:cockpit_monat=Σtage',),
-        ('F05', 'HA', 'I3'): ('laufend:cockpit_monat',),
-        ('F05', 'S1', 'I3'): ('cockpit_jahr:kopf',),
-        ('F05', 'S2', 'I3'): ('cockpit_jahr:kopf',),
-        ('F08b', 'HA', 'I1'): ('laufend:jahr_verlauf', 'laufend:jahr_verlauf_segmente',),
-        ('F08b', 'HA', 'I2'): ('laufend:cockpit_monat=Σtage',),
-        ('F08b', 'HA', 'I3'): ('laufend:cockpit_monat',),
-        ('F08b', 'HA', 'I5'): ('laufend:cockpit_jahr:ev>0', 'laufend:cockpit_monat:ev>0',),
-        ('F08b', 'S1', 'I3'): ('cockpit_jahr:kopf',),
-        ('F08b', 'S2', 'I3'): ('cockpit_jahr:kopf',),
-        ('F09a-G', 'HA', 'I1'): ('laufend:jahr_verlauf', 'laufend:jahr_verlauf_segmente',),
-        ('F09a-G', 'HA', 'I2'): ('laufend:cockpit_monat=Σtage',),
-        ('F09a-G', 'HA', 'I3'): ('laufend:cockpit_monat',),
-        ('F09a-G', 'HA', 'I5'): ('laufend:cockpit_jahr:ev>0', 'laufend:cockpit_monat:ev>0',),
-        ('F09a-G', 'S1', 'I3'): ('cockpit_jahr:kopf',),
-        ('F09a-G', 'S2', 'I3'): ('cockpit_jahr:kopf',),
-        ('F09b-G', 'HA', 'I1'): ('laufend:jahr_verlauf', 'laufend:jahr_verlauf_segmente',),
-        ('F09b-G', 'HA', 'I2'): ('laufend:cockpit_monat=Σtage',),
-        ('F09b-G', 'HA', 'I3'): ('laufend:cockpit_monat',),
-        ('F09b-G', 'HA', 'I5'): ('laufend:cockpit_jahr:ev>0', 'laufend:cockpit_monat:ev>0',),
-        ('F09b-G', 'S1', 'I3'): ('cockpit_jahr:kopf',),
-        ('F09b-G', 'S2', 'I3'): ('cockpit_jahr:kopf',),
-        ('F09c-G', 'HA', 'I1'): ('laufend:jahr_verlauf', 'laufend:jahr_verlauf_segmente',),
-        ('F09c-G', 'HA', 'I2'): ('laufend:cockpit_monat=Σtage',),
-        ('F09c-G', 'HA', 'I3'): ('laufend:cockpit_monat',),
-        ('F09c-G', 'HA', 'I5'): ('laufend:cockpit_jahr:ev>0', 'laufend:cockpit_monat:ev>0',),
-        ('F09c-G', 'S1', 'I3'): ('cockpit_jahr:kopf',),
-        ('F09c-G', 'S2', 'I3'): ('cockpit_jahr:kopf',),
-        ('F12', 'HA', 'I1'): ('laufend:jahr_verlauf', 'laufend:jahr_verlauf_segmente',),
-        ('F12', 'HA', 'I2'): ('laufend:cockpit_monat=Σtage',),
-        ('F12', 'HA', 'I3'): ('laufend:cockpit_monat',),
-        ('F12', 'S1', 'I3'): ('cockpit_jahr:kopf',),
-        ('F12', 'S2', 'I3'): ('cockpit_jahr:kopf',),
-        ('F14', 'HA', 'I1'): ('laufend:jahr_verlauf', 'laufend:jahr_verlauf_segmente',),
-        ('F14', 'HA', 'I2'): ('laufend:cockpit_monat=Σtage',),
-        ('F14', 'HA', 'I3'): ('laufend:cockpit_monat',),
-        ('F14', 'S1', 'I3'): ('cockpit_jahr:kopf',),
-        ('F14', 'S2', 'I3'): ('cockpit_jahr:kopf',),
-    },
-    'N623': {
-        ('F03', 'HA', 'I4'): (
-            'tag:cockpit:Balkon', 'tag:cockpit:Süd', 'tag:cockpit:West', 'tag:cockpit:bkw', 'tag:cockpit:pv_anlage',
-            'tag:keys:Balkon', 'tag:keys:Süd', 'tag:keys:West',
-        ),
-        ('F03', 'S1', 'I4'): ('fakten_tageswert:bkw', 'fakten_tageswert:module',),
-        ('F03', 'S2', 'I4'): ('fakten_tageswert:bkw', 'fakten_tageswert:module',),
-        ('F03', 'SA', 'I4'): (
-            'laufend:cockpit_monat:bkw_eigen', 'tag:cockpit:Balkon', 'tag:cockpit:Süd', 'tag:cockpit:West',
-            'tag:cockpit:bkw', 'tag:cockpit:pv_anlage', 'tag:keys:Balkon', 'tag:keys:Süd', 'tag:keys:West',
-        ),
-        ('F03', 'S3', 'I4'): ('fakten_tageswert:bkw', 'fakten_tageswert:module',),
-        ('F04', 'HA', 'I4'): (
-            'tag:cockpit:Balkon', 'tag:cockpit:Süd', 'tag:cockpit:West', 'tag:cockpit:bkw', 'tag:cockpit:pv_anlage',
-            'tag:keys:Balkon', 'tag:keys:Süd', 'tag:keys:West',
-        ),
-        ('F04', 'S1', 'I4'): ('fakten_tageswert:bkw', 'fakten_tageswert:module',),
-        ('F04', 'S2', 'I4'): ('fakten_tageswert:bkw', 'fakten_tageswert:module',),
-        ('F04', 'SA', 'I4'): (
-            'tag:cockpit:Balkon', 'tag:cockpit:Süd', 'tag:cockpit:West', 'tag:cockpit:bkw', 'tag:cockpit:pv_anlage',
-            'tag:keys:Balkon', 'tag:keys:Süd', 'tag:keys:West',
-        ),
-        ('F04', 'S3', 'I4'): ('fakten_tageswert:bkw', 'fakten_tageswert:module',),
-        ('F05', 'HA', 'I4'): (
-            'tag:cockpit:Balkon', 'tag:cockpit:Süd', 'tag:cockpit:West', 'tag:cockpit:bkw', 'tag:cockpit:pv_anlage',
-            'tag:keys:Balkon', 'tag:keys:Süd', 'tag:keys:West',
-        ),
-        ('F05', 'S1', 'I4'): ('fakten_tageswert:bkw', 'fakten_tageswert:module',),
-        ('F05', 'S2', 'I4'): ('fakten_tageswert:bkw', 'fakten_tageswert:module',),
-        ('F05', 'SA', 'I4'): (
-            'tag:cockpit:Balkon', 'tag:cockpit:Süd', 'tag:cockpit:West', 'tag:cockpit:bkw', 'tag:cockpit:pv_anlage',
-            'tag:keys:Balkon', 'tag:keys:Süd', 'tag:keys:West',
-        ),
-        ('F05', 'S3', 'I4'): ('fakten_tageswert:bkw', 'fakten_tageswert:module',),
-        ('F08a', 'HA', 'I4'): (
-            'tag:cockpit:Balkon', 'tag:cockpit:Süd', 'tag:cockpit:West', 'tag:cockpit:bkw', 'tag:cockpit:pv_anlage',
-            'tag:keys:Balkon', 'tag:keys:Süd', 'tag:keys:West',
-        ),
-        ('F08a', 'S1', 'I4'): ('fakten_tageswert:bkw', 'fakten_tageswert:module',),
-        ('F08a', 'S2', 'I4'): ('fakten_tageswert:bkw', 'fakten_tageswert:module',),
-        ('F08a', 'SA', 'I4'): (
-            'laufend:cockpit_monat:bkw_eigen', 'tag:cockpit:Balkon', 'tag:cockpit:Süd', 'tag:cockpit:West',
-            'tag:cockpit:bkw', 'tag:cockpit:pv_anlage', 'tag:keys:Balkon', 'tag:keys:Süd', 'tag:keys:West',
-        ),
-        ('F08a', 'S3', 'I4'): ('fakten_tageswert:bkw', 'fakten_tageswert:module',),
-        ('F08b', 'HA', 'I4'): (
-            'tag:cockpit:Balkon', 'tag:cockpit:Süd', 'tag:cockpit:West', 'tag:cockpit:bkw', 'tag:cockpit:pv_anlage',
-            'tag:keys:Balkon', 'tag:keys:Süd', 'tag:keys:West',
-        ),
-        ('F08b', 'S1', 'I4'): ('fakten_tageswert:bkw', 'fakten_tageswert:module',),
-        ('F08b', 'S2', 'I4'): ('fakten_tageswert:bkw', 'fakten_tageswert:module',),
-        ('F08b', 'SA', 'I4'): (
-            'laufend:cockpit_monat:bkw_eigen', 'tag:cockpit:Balkon', 'tag:cockpit:Süd', 'tag:cockpit:West',
-            'tag:cockpit:bkw', 'tag:cockpit:pv_anlage', 'tag:keys:Balkon', 'tag:keys:Süd', 'tag:keys:West',
-        ),
-        ('F08b', 'S3', 'I4'): ('fakten_tageswert:bkw', 'fakten_tageswert:module',),
-        ('F09a-G', 'HA', 'I4'): (
-            'tag:cockpit:Balkon', 'tag:cockpit:Kind 1', 'tag:cockpit:Kind 2', 'tag:cockpit:Süd', 'tag:cockpit:West',
-            'tag:cockpit:bkw', 'tag:cockpit:pv_anlage', 'tag:keys:Balkon', 'tag:keys:Kind 1', 'tag:keys:Kind 2',
-            'tag:keys:Süd', 'tag:keys:West',
-        ),
-        ('F09a-G', 'S1', 'I4'): ('fakten_tageswert:bkw', 'fakten_tageswert:module',),
-        ('F09a-G', 'S2', 'I4'): ('fakten_tageswert:bkw', 'fakten_tageswert:module',),
-        ('F09a-G', 'SA', 'I4'): (
-            'tag:cockpit:Balkon', 'tag:cockpit:Kind 1', 'tag:cockpit:Kind 2', 'tag:cockpit:Süd', 'tag:cockpit:West',
-            'tag:cockpit:bkw', 'tag:cockpit:pv_anlage', 'tag:keys:Balkon', 'tag:keys:Kind 1', 'tag:keys:Kind 2',
-            'tag:keys:Süd', 'tag:keys:West',
-        ),
-        ('F09a-G', 'S3', 'I4'): ('fakten_tageswert:bkw', 'fakten_tageswert:module',),
-        ('F09b-G', 'HA', 'I4'): (
-            'tag:cockpit:Balkon', 'tag:cockpit:Kind 1', 'tag:cockpit:Kind 2', 'tag:cockpit:Süd', 'tag:cockpit:West',
-            'tag:cockpit:bkw', 'tag:cockpit:pv_anlage', 'tag:keys:Balkon', 'tag:keys:Kind 1', 'tag:keys:Kind 2',
-            'tag:keys:Süd', 'tag:keys:West',
-        ),
-        ('F09b-G', 'S1', 'I4'): ('fakten_tageswert:bkw', 'fakten_tageswert:module',),
-        ('F09b-G', 'S2', 'I4'): ('fakten_tageswert:bkw', 'fakten_tageswert:module',),
-        ('F09b-G', 'SA', 'I4'): (
-            'tag:cockpit:Balkon', 'tag:cockpit:Kind 1', 'tag:cockpit:Kind 2', 'tag:cockpit:Süd', 'tag:cockpit:West',
-            'tag:cockpit:bkw', 'tag:cockpit:pv_anlage', 'tag:keys:Balkon', 'tag:keys:Kind 1', 'tag:keys:Kind 2',
-            'tag:keys:Süd', 'tag:keys:West',
-        ),
-        ('F09b-G', 'S3', 'I4'): ('fakten_tageswert:bkw', 'fakten_tageswert:module',),
-        ('F09c-G', 'HA', 'I4'): (
-            'tag:cockpit:Kind 1', 'tag:cockpit:Kind 2', 'tag:cockpit:Süd', 'tag:cockpit:West', 'tag:keys:Kind 1',
-            'tag:keys:Kind 2', 'tag:keys:Süd', 'tag:keys:West',
-        ),
-        ('F09c-G', 'SA', 'I4'): (
-            'tag:cockpit:Kind 1', 'tag:cockpit:Kind 2', 'tag:cockpit:Süd', 'tag:cockpit:West',
-            'tag:cockpit:pv_anlage', 'tag:keys:Kind 1', 'tag:keys:Kind 2', 'tag:keys:Süd', 'tag:keys:West',
-        ),
-        ('F09c-G', 'S3', 'I4'): ('fakten_tageswert:module',),
-        ('F12', 'HA', 'I4'): (
-            'tag:cockpit:Balkon', 'tag:cockpit:Süd', 'tag:cockpit:West', 'tag:cockpit:bkw', 'tag:cockpit:pv_anlage',
-            'tag:keys:Balkon', 'tag:keys:Süd', 'tag:keys:West',
-        ),
-        ('F12', 'S1', 'I4'): ('fakten_tageswert:bkw', 'fakten_tageswert:module',),
-        ('F12', 'S2', 'I4'): ('fakten_tageswert:bkw', 'fakten_tageswert:module',),
-        ('F12', 'SA', 'I4'): (
-            'tag:cockpit:Balkon', 'tag:cockpit:Süd', 'tag:cockpit:West', 'tag:cockpit:bkw', 'tag:cockpit:pv_anlage',
-            'tag:keys:Balkon', 'tag:keys:Süd', 'tag:keys:West',
-        ),
-        ('F12', 'S3', 'I4'): ('fakten_tageswert:bkw', 'fakten_tageswert:module',),
-        ('F14', 'HA', 'I4'): ('tag:cockpit:Süd', 'tag:cockpit:West', 'tag:keys:Süd', 'tag:keys:West',),
-        ('F14', 'SA', 'I4'): (
-            'tag:cockpit:Süd', 'tag:cockpit:West', 'tag:cockpit:pv_anlage', 'tag:keys:Süd', 'tag:keys:West',
-        ),
-        ('F14', 'S3', 'I4'): ('fakten_tageswert:module',),
-    },
-    'HABF_C': {
-        ('F09b-G', 'HA', 'I1'): ('laufend:jahr_verlauf', 'laufend:jahr_verlauf_segmente',),
-        ('F09b-G', 'HA', 'I2'): ('laufend:cockpit_monat=Σtage',),
-        ('F09b-G', 'HA', 'I3'): ('laufend:cockpit_monat',),
-        ('F09b-G', 'HA', 'I5'): ('laufend:cockpit_jahr:ev>0', 'laufend:cockpit_monat:ev>0',),
-        ('F09b-G', 'S1', 'I3'): ('cockpit_jahr:kopf',),
-        ('F09b-G', 'S2', 'I3'): ('cockpit_jahr:kopf',),
-        ('F09c-G', 'HA', 'I1'): ('laufend:jahr_verlauf', 'laufend:jahr_verlauf_segmente',),
-        ('F09c-G', 'HA', 'I2'): ('laufend:cockpit_monat=Σtage',),
-        ('F09c-G', 'HA', 'I3'): ('laufend:cockpit_monat',),
-        ('F09c-G', 'HA', 'I5'): ('laufend:cockpit_jahr:ev>0', 'laufend:cockpit_monat:ev>0',),
-        ('F09c-G', 'S1', 'I3'): ('cockpit_jahr:kopf',),
-        ('F09c-G', 'S2', 'I3'): ('cockpit_jahr:kopf',),
-        ('F09b-oG', 'HA', 'I1'): ('laufend:jahr_verlauf', 'laufend:jahr_verlauf_segmente',),
-        ('F09b-oG', 'HA', 'I2'): ('laufend:cockpit_monat=Σtage',),
-        ('F09b-oG', 'HA', 'I3'): ('laufend:cockpit_monat',),
-        ('F09b-oG', 'S1', 'I2'): ('cockpit_monat:vor=nach',),
-        ('F09b-oG', 'S1', 'I3'): ('cockpit_jahr:kopf', 'cockpit_monat:vor',),
-        ('F09b-oG', 'S2', 'I2'): ('cockpit_monat:vor=nach',),
-        ('F09b-oG', 'S2', 'I3'): ('cockpit_jahr:kopf', 'cockpit_monat:vor',),
-        ('F09c-oG', 'HA', 'I1'): ('laufend:jahr_verlauf', 'laufend:jahr_verlauf_segmente',),
-        ('F09c-oG', 'HA', 'I2'): ('laufend:cockpit_monat=Σtage',),
-        ('F09c-oG', 'HA', 'I3'): ('laufend:cockpit_monat',),
-        ('F09c-oG', 'S1', 'I2'): ('cockpit_monat:vor=nach',),
-        ('F09c-oG', 'S1', 'I3'): ('cockpit_jahr:kopf', 'cockpit_monat:vor',),
-        ('F09c-oG', 'S2', 'I2'): ('cockpit_monat:vor=nach',),
-        ('F09c-oG', 'S2', 'I3'): ('cockpit_jahr:kopf', 'cockpit_monat:vor',),
-    },
-    'HABF_S2': {
+    'SAMMELIMPORT': {
         ('F01', 'S2', 'I1'): ('daten_checker', 'jahr_verlauf', 'jahr_verlauf_segmente',),
         ('F01', 'S2', 'I2'): ('jahr_verlauf:vor=nach',),
         ('F01', 'S2', 'I4'): (
@@ -671,17 +450,14 @@ ROT: dict[str, dict[tuple[str, str, str], tuple[str, ...]]] = {
         ),
         ('F04', 'S2', 'I6'): ('nach:checker',),
         ('F05', 'S2', 'I1'): ('daten_checker', 'jahr_verlauf', 'jahr_verlauf_segmente',),
-        ('F05', 'S2', 'I2'): (
-            'cockpit_monat:vor=nach', 'fakten:tageswert=gespeichert', 'jahr_verlauf:vor=nach',
-            'Σtage_juni=cockpit_monat',
-        ),
+        ('F05', 'S2', 'I2'): ('cockpit_monat:vor=nach', 'fakten:tageswert=gespeichert', 'Σtage_juni=cockpit_monat',),
         ('F05', 'S2', 'I3'): ('cockpit_jahr:kopf', 'cockpit_monat:nach', 'fakten',),
         ('F05', 'S2', 'I4'): ('fakten:Balkon', 'pdf_string_vergleich:Balkon', 'pv_strings:Balkon',),
         ('F05', 'S2', 'I6'): ('nach:checker',),
         ('F09a-G', 'S2', 'I4'): (
             'fakten:Kind 1', 'fakten:Kind 2', 'fakten:Süd', 'fakten:West', 'pdf_string_vergleich:Kind 1',
-            'pdf_string_vergleich:Kind 2', 'pdf_string_vergleich:Süd', 'pdf_string_vergleich:West',
-            'pv_strings:Kind 1', 'pv_strings:Kind 2', 'pv_strings:Süd', 'pv_strings:West',
+            'pdf_string_vergleich:Kind 2', 'pdf_string_vergleich:Süd', 'pdf_string_vergleich:West', 'pv_strings:Kind 1',
+            'pv_strings:Kind 2', 'pv_strings:Süd', 'pv_strings:West',
         ),
         ('F09b-G', 'S2', 'I4'): (
             'fakten:Kind 2', 'fakten:Süd', 'fakten:West', 'pdf_string_vergleich:Kind 2', 'pdf_string_vergleich:Süd',
@@ -694,184 +470,6 @@ ROT: dict[str, dict[tuple[str, str, str], tuple[str, ...]]] = {
             'pv_strings:Balkon', 'pv_strings:West',
         ),
         ('F12', 'S2', 'I6'): ('nach:checker',),
-    },
-    'K1': {
-        ('F01', 'SA', 'I1'): ('tag:cockpit:pv_anlage+bkw',),
-        ('F01', 'SA', 'I2'): ('laufend:cockpit_monat=Σtage', 'laufend:jahr_verlauf=Σtage',),
-        ('F01', 'SA', 'I3'): ('laufend:cockpit_monat',),
-        ('F01', 'SA', 'I4'): ('tag:cockpit:pv_anlage',),
-        ('F01', 'S3', 'I2'): ('fakten:tageswert=gespeichert', 'jahr_verlauf:vor=nach',),
-        ('F01', 'S3', 'I3'): ('cockpit_jahr:kopf',),
-        ('F01', 'S3', 'I4'): ('fakten_tageswert:module',),
-        ('F02', 'SA', 'I1'): ('tag:cockpit:pv_anlage+bkw',),
-        ('F02', 'SA', 'I2'): ('laufend:cockpit_monat=Σtage', 'laufend:jahr_verlauf=Σtage',),
-        ('F02', 'SA', 'I3'): ('laufend:cockpit_monat',),
-        ('F02', 'SA', 'I4'): ('tag:cockpit:pv_anlage',),
-        ('F02', 'S3', 'I2'): ('fakten:tageswert=gespeichert', 'jahr_verlauf:vor=nach',),
-        ('F02', 'S3', 'I3'): ('cockpit_jahr:kopf',),
-        ('F02', 'S3', 'I4'): ('fakten_tageswert:module',),
-        ('F03', 'SA', 'I1'): ('tag:cockpit:pv_anlage+bkw',),
-        ('F03', 'SA', 'I2'): ('laufend:cockpit_monat=Σtage', 'laufend:jahr_verlauf=Σtage',),
-        ('F03', 'SA', 'I3'): ('laufend:cockpit_monat',),
-        ('F03', 'SA', 'I4'): ('tag:cockpit:pv_anlage',),
-        ('F03', 'S3', 'I2'): ('fakten:tageswert=gespeichert', 'jahr_verlauf:vor=nach',),
-        ('F03', 'S3', 'I3'): ('cockpit_jahr:kopf',),
-        ('F03', 'S3', 'I4'): ('fakten_tageswert:module',),
-        ('F04', 'SA', 'I1'): ('tag:cockpit:pv_anlage+bkw',),
-        ('F04', 'SA', 'I2'): ('laufend:cockpit_monat=Σtage', 'laufend:jahr_verlauf=Σtage',),
-        ('F04', 'SA', 'I3'): ('laufend:cockpit_monat',),
-        ('F04', 'SA', 'I4'): ('tag:cockpit:pv_anlage',),
-        ('F04', 'S3', 'I2'): ('fakten:tageswert=gespeichert', 'jahr_verlauf:vor=nach',),
-        ('F04', 'S3', 'I3'): ('cockpit_jahr:kopf',),
-        ('F04', 'S3', 'I4'): ('fakten_tageswert:module',),
-        ('F05', 'SA', 'I1'): ('tag:cockpit:pv_anlage+bkw',),
-        ('F05', 'SA', 'I2'): ('laufend:cockpit_monat=Σtage', 'laufend:jahr_verlauf=Σtage',),
-        ('F05', 'SA', 'I3'): ('laufend:cockpit_monat',),
-        ('F05', 'SA', 'I4'): ('tag:cockpit:pv_anlage',),
-        ('F05', 'S3', 'I2'): ('fakten:tageswert=gespeichert', 'jahr_verlauf:vor=nach',),
-        ('F05', 'S3', 'I3'): ('cockpit_jahr:kopf',),
-        ('F05', 'S3', 'I4'): ('fakten_tageswert:module',),
-        ('F08a', 'SA', 'I1'): ('tag:cockpit:pv_anlage+bkw',),
-        ('F08a', 'SA', 'I2'): ('laufend:cockpit_monat=Σtage', 'laufend:jahr_verlauf=Σtage',),
-        ('F08a', 'SA', 'I3'): ('laufend:cockpit_monat',),
-        ('F08a', 'SA', 'I4'): ('tag:cockpit:pv_anlage',),
-        ('F08a', 'S3', 'I2'): ('fakten:tageswert=gespeichert', 'jahr_verlauf:vor=nach',),
-        ('F08a', 'S3', 'I3'): ('cockpit_jahr:kopf',),
-        ('F08a', 'S3', 'I4'): ('fakten_tageswert:module',),
-        ('F08b', 'SA', 'I1'): ('tag:cockpit:pv_anlage+bkw',),
-        ('F08b', 'SA', 'I2'): ('laufend:cockpit_monat=Σtage', 'laufend:jahr_verlauf=Σtage',),
-        ('F08b', 'SA', 'I3'): ('laufend:cockpit_monat',),
-        ('F08b', 'SA', 'I4'): ('tag:cockpit:pv_anlage',),
-        ('F08b', 'S3', 'I2'): ('fakten:tageswert=gespeichert', 'jahr_verlauf:vor=nach',),
-        ('F08b', 'S3', 'I3'): ('cockpit_jahr:kopf',),
-        ('F08b', 'S3', 'I4'): ('fakten_tageswert:module',),
-        ('F09a-G', 'SA', 'I1'): ('tag:cockpit:pv_anlage+bkw',),
-        ('F09a-G', 'SA', 'I2'): ('laufend:cockpit_monat=Σtage', 'laufend:jahr_verlauf=Σtage',),
-        ('F09a-G', 'SA', 'I3'): ('laufend:cockpit_monat',),
-        ('F09a-G', 'SA', 'I4'): ('tag:cockpit:pv_anlage',),
-        ('F09a-G', 'S3', 'I2'): ('fakten:tageswert=gespeichert', 'jahr_verlauf:vor=nach',),
-        ('F09a-G', 'S3', 'I3'): ('cockpit_jahr:kopf',),
-        ('F09a-G', 'S3', 'I4'): ('fakten_tageswert:module',),
-        ('F09b-G', 'SA', 'I1'): ('tag:cockpit:pv_anlage+bkw',),
-        ('F09b-G', 'SA', 'I2'): ('laufend:cockpit_monat=Σtage', 'laufend:jahr_verlauf=Σtage',),
-        ('F09b-G', 'SA', 'I3'): ('laufend:cockpit_monat',),
-        ('F09b-G', 'SA', 'I4'): ('tag:cockpit:pv_anlage',),
-        ('F09b-G', 'S3', 'I2'): ('fakten:tageswert=gespeichert', 'jahr_verlauf:vor=nach',),
-        ('F09b-G', 'S3', 'I3'): ('cockpit_jahr:kopf',),
-        ('F09b-G', 'S3', 'I4'): ('fakten_tageswert:module',),
-        ('F09c-G', 'SA', 'I1'): ('tag:cockpit:pv_anlage+bkw',),
-        ('F09c-G', 'SA', 'I2'): ('laufend:cockpit_monat=Σtage', 'laufend:jahr_verlauf=Σtage',),
-        ('F09c-G', 'SA', 'I3'): ('laufend:cockpit_monat',),
-        ('F09c-G', 'SA', 'I4'): ('tag:cockpit:pv_anlage',),
-        ('F09c-G', 'S3', 'I2'): ('fakten:tageswert=gespeichert', 'jahr_verlauf:vor=nach',),
-        ('F09c-G', 'S3', 'I3'): ('cockpit_jahr:kopf',),
-        ('F09c-G', 'S3', 'I4'): ('fakten_tageswert:module',),
-        ('F10', 'SA', 'I1'): ('tag:cockpit:pv_anlage+bkw',),
-        ('F10', 'SA', 'I2'): ('laufend:cockpit_monat=Σtage', 'laufend:jahr_verlauf=Σtage',),
-        ('F10', 'SA', 'I3'): ('laufend:cockpit_monat',),
-        ('F10', 'SA', 'I4'): ('tag:cockpit:pv_anlage',),
-        ('F10', 'S3', 'I2'): ('fakten:tageswert=gespeichert', 'jahr_verlauf:vor=nach',),
-        ('F10', 'S3', 'I3'): ('cockpit_jahr:kopf',),
-        ('F10', 'S3', 'I4'): ('fakten_tageswert:module',),
-        ('F11', 'SA', 'I1'): ('tag:cockpit:pv_anlage+bkw',),
-        ('F11', 'SA', 'I2'): ('laufend:cockpit_monat=Σtage', 'laufend:jahr_verlauf=Σtage',),
-        ('F11', 'SA', 'I3'): ('laufend:cockpit_monat',),
-        ('F11', 'SA', 'I4'): ('tag:cockpit:pv_anlage',),
-        ('F11', 'S3', 'I1'): ('jahr_verlauf', 'jahr_verlauf_segmente',),
-        ('F11', 'S3', 'I2'): ('fakten:tageswert=gespeichert',),
-        ('F11', 'S3', 'I3'): ('cockpit_jahr:kopf',),
-        ('F11', 'S3', 'I4'): ('fakten_tageswert:module',),
-        ('F12', 'SA', 'I1'): ('tag:cockpit:pv_anlage+bkw',),
-        ('F12', 'SA', 'I2'): ('laufend:cockpit_monat=Σtage', 'laufend:jahr_verlauf=Σtage',),
-        ('F12', 'SA', 'I3'): ('laufend:cockpit_monat',),
-        ('F12', 'SA', 'I4'): ('tag:cockpit:pv_anlage',),
-        ('F12', 'S3', 'I2'): ('fakten:tageswert=gespeichert', 'jahr_verlauf:vor=nach',),
-        ('F12', 'S3', 'I3'): ('cockpit_jahr:kopf',),
-        ('F12', 'S3', 'I4'): ('fakten_tageswert:module',),
-        ('F13a', 'SA', 'I1'): ('tag:cockpit:pv_anlage+bkw',),
-        ('F13a', 'SA', 'I2'): ('laufend:cockpit_monat=Σtage', 'laufend:jahr_verlauf=Σtage',),
-        ('F13a', 'SA', 'I3'): ('laufend:cockpit_monat',),
-        ('F13a', 'SA', 'I4'): ('tag:cockpit:pv_anlage',),
-        ('F13a', 'S3', 'I2'): ('fakten:tageswert=gespeichert', 'jahr_verlauf:vor=nach',),
-        ('F13a', 'S3', 'I3'): ('cockpit_jahr:kopf',),
-        ('F13a', 'S3', 'I4'): ('fakten_tageswert:module',),
-        ('F13b', 'SA', 'I1'): ('tag:cockpit:pv_anlage+bkw',),
-        ('F13b', 'SA', 'I2'): ('laufend:cockpit_monat=Σtage', 'laufend:jahr_verlauf=Σtage',),
-        ('F13b', 'SA', 'I3'): ('laufend:cockpit_monat',),
-        ('F13b', 'SA', 'I4'): ('tag:cockpit:pv_anlage',),
-        ('F13b', 'S3', 'I2'): ('fakten:tageswert=gespeichert', 'jahr_verlauf:vor=nach',),
-        ('F13b', 'S3', 'I3'): ('cockpit_jahr:kopf',),
-        ('F13b', 'S3', 'I4'): ('fakten_tageswert:module',),
-        ('F14', 'SA', 'I1'): ('tag:cockpit:pv_anlage+bkw',),
-        ('F14', 'SA', 'I2'): ('laufend:cockpit_monat=Σtage', 'laufend:jahr_verlauf=Σtage',),
-        ('F14', 'SA', 'I3'): ('laufend:cockpit_monat',),
-        ('F14', 'SA', 'I4'): ('tag:cockpit:pv_anlage',),
-        ('F14', 'S3', 'I2'): ('fakten:tageswert=gespeichert', 'jahr_verlauf:vor=nach',),
-        ('F14', 'S3', 'I3'): ('cockpit_jahr:kopf',),
-        ('F14', 'S3', 'I4'): ('fakten_tageswert:module',),
-    },
-    'K2': {
-        ('F07', 'S1', 'I1'): (
-            'jahr_verlauf', 'jahr_verlauf_segmente', 'komponenten_verlauf_erzeugung',
-            'komponenten_verlauf_verwendung', 'pdf_string_vergleich', 'pv_strings_gesamtlaufzeit', 'pv_strings_jahr',
-        ),
-        ('F07', 'S1', 'I2'): ('cockpit_monat:vor=nach', 'fakten:tageswert=gespeichert', 'Σtage_juni=cockpit_monat',),
-        ('F07', 'S1', 'I3'): ('cockpit_jahr:kopf', 'cockpit_monat:nach', 'fakten',),
-        ('F07', 'S1', 'I4'): ('fakten:Σgeraete=summe',),
-        ('F07', 'S1', 'I5'): (
-            'community:ev>0', 'ha_export:ev>0', 'jahr:ev>0', 'monat:ev>0', 'pdf:ev>0', 'tabelle:ev>0',
-            'uebersicht:ev>0',
-        ),
-        ('F07', 'S2', 'I1'): (
-            'jahr_verlauf', 'jahr_verlauf_segmente', 'komponenten_verlauf_erzeugung',
-            'komponenten_verlauf_verwendung', 'pdf_string_vergleich', 'pv_strings_gesamtlaufzeit', 'pv_strings_jahr',
-        ),
-        ('F07', 'S2', 'I2'): ('cockpit_monat:vor=nach', 'fakten:tageswert=gespeichert', 'Σtage_juni=cockpit_monat',),
-        ('F07', 'S2', 'I3'): ('cockpit_jahr:kopf', 'cockpit_monat:nach', 'fakten',),
-        ('F07', 'S2', 'I4'): ('fakten:Σgeraete=summe',),
-        ('F07', 'S2', 'I5'): (
-            'community:ev>0', 'ha_export:ev>0', 'jahr:ev>0', 'monat:ev>0', 'pdf:ev>0', 'tabelle:ev>0',
-            'uebersicht:ev>0',
-        ),
-        ('F07', 'S3', 'I1'): (
-            'jahr_verlauf', 'jahr_verlauf_segmente', 'komponenten_verlauf_erzeugung',
-            'komponenten_verlauf_verwendung', 'pdf_string_vergleich', 'pv_strings_gesamtlaufzeit', 'pv_strings_jahr',
-        ),
-        ('F07', 'S3', 'I2'): ('fakten:tageswert=gespeichert', 'Σtage_juni=cockpit_monat',),
-        ('F07', 'S3', 'I3'): ('cockpit_jahr:kopf', 'cockpit_monat:nach', 'fakten',),
-        ('F07', 'S3', 'I4'): ('fakten:Σgeraete=summe',),
-        ('F07', 'S3', 'I5'): (
-            'community:ev>0', 'ha_export:ev>0', 'jahr:ev>0', 'monat:ev>0', 'pdf:ev>0', 'tabelle:ev>0',
-            'uebersicht:ev>0',
-        ),
-    },
-    'K3': {
-        ('F09a-G', 'S1', 'I4'): ('cockpit_monat:bkw_eigen',),
-        ('F09a-G', 'S2', 'I4'): ('cockpit_monat:bkw_eigen',),
-        ('F09b-G', 'S1', 'I4'): ('cockpit_monat:bkw_eigen',),
-        ('F09b-G', 'S2', 'I4'): ('cockpit_monat:bkw_eigen',),
-        ('F09c-G', 'S1', 'I4'): ('cockpit_monat:bkw_eigen',),
-        ('F09c-G', 'S2', 'I4'): ('cockpit_monat:bkw_eigen',),
-        ('F09a-oG', 'S1', 'I4'): ('cockpit_monat:bkw_eigen',),
-        ('F09a-oG', 'S2', 'I4'): ('cockpit_monat:bkw_eigen',),
-        ('F09b-oG', 'S1', 'I4'): ('cockpit_monat:bkw_eigen',),
-        ('F09b-oG', 'S2', 'I4'): ('cockpit_monat:bkw_eigen',),
-        ('F09c-oG', 'S1', 'I4'): ('cockpit_monat:bkw_eigen',),
-        ('F09c-oG', 'S2', 'I4'): ('cockpit_monat:bkw_eigen',),
-    },
-    'K4': {
-        ('F11', 'S1', 'I1'): ('import_vorschau_lokal',),
-        ('F11', 'S2', 'I1'): ('import_vorschau_lokal',),
-    },
-    'K5': {
-        ('F01', 'HA', 'I4'): ('laufend:cockpit_monat:bkw_eigen',),
-        ('F01', 'SA', 'I4'): ('laufend:cockpit_monat:bkw_eigen',),
-        ('F04', 'HA', 'I4'): ('laufend:cockpit_monat:bkw_eigen',),
-        ('F04', 'SA', 'I4'): ('laufend:cockpit_monat:bkw_eigen',),
-        ('F05', 'HA', 'I4'): ('laufend:cockpit_monat:bkw_eigen',),
-        ('F05', 'SA', 'I4'): ('laufend:cockpit_monat:bkw_eigen',),
-        ('F12', 'HA', 'I4'): ('laufend:cockpit_monat:bkw_eigen',),
-        ('F12', 'SA', 'I4'): ('laufend:cockpit_monat:bkw_eigen',),
     },
 }
 
@@ -907,20 +505,14 @@ _U_SA_VOR = (
     "Cockpit → Jahr → Verlauf denselben Monat aus den Tageswerten zeigt (N-121). Ob „nichts verschwindet“ "
     "hier gilt oder die N-472-Begründung, ist nicht entschieden."
 )
-_U_KINDER_LAUFEND = (
-    "BKW mit Modul-Kindern im laufenden Monat: der Monat tritt ab (ADR-002/P11 ⇒ eigene Zeile 0), der Tag "
-    "zeigt das Gerät mit dem Rest seiner Kinder (E4) — die Tagesebene speist den laufenden Monat. Welche "
-    "Regel dort gilt, ist offen (HA-Bauform Nachtrag 03.10. (c), Einwertung K-C)."
-)
 for _f in ("F01", "F02", "F03", "F04", "F05", "F06", "F07", "F08a", "F08b", "F09a-G", "F09b-G", "F09c-G",
-           "F09a-oG", "F09b-oG", "F09c-oG", "F10", "F11", "F12", "F13a", "F13b", "F14", "F15"):
+           "F09a-oG", "F09b-oG", "F09c-oG", "F10", "F11", "F12", "F13a", "F13b", "F14", "F15", "F16"):
     SOLL_UNKLAR[(_f, "S3", "I2", "cockpit_monat:vor=nach")] = _U_SA_VOR
     SOLL_UNKLAR[(_f, "S3", "I3", "cockpit_monat:vor")] = _U_SA_VOR
     SOLL_UNKLAR[(_f, "S3", "I5", "cockpit_monat:vor")] = _U_SA_VOR
     SOLL_UNKLAR[(_f, "S3", "I6", "vor:cockpit_monat")] = _U_SA_VOR
-for _f in ("F09a-G", "F09b-G", "F09c-G", "F09a-oG", "F09b-oG", "F09c-oG", "F10"):
-    for _w in ("HA", "SA"):
-        SOLL_UNKLAR[(_f, _w, "I4", "laufend:cockpit_monat:bkw_eigen")] = _U_KINDER_LAUFEND
+# „Soll unklar 2" (BKW-Zeile im laufenden Monat bei Modul-Kindern) ist seit dem Bau der PV-Achse
+# (Bauplan T4, 04.10.2026) festes Soll 0: der Monat tritt ab, auch der laufende (N-627) — in `bewerte`.
 
 
 WEGE = ("HA", "S1", "S2", "SA", "S3")

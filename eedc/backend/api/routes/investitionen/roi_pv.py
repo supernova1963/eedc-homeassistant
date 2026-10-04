@@ -113,8 +113,9 @@ async def pv_einsparung_und_speicher_ist(
             `erzeugung.pv_module_kwh` ist bewusst die **Modul**-Summe, nicht
             `pv_kwh`: das Balkonkraftwerk hat in diesem Dashboard eine eigene
             ROI-Zeile (`standalone`), seine Erzeugung zählte hier sonst zweimal.
-            `None` heißt N42-Lücke (mindestens ein aktives Modul ohne Wert und
-            ohne Aggregat) und wird — wie bisher — als 0 verrechnet.
+            `None` heißt: kein Modul hat einen Wert und es gibt kein Aggregat — als 0
+            verrechnet. Fehlt nur EINEM Modul der Wert, trägt `pv_module_kwh` seit
+            N-626 die vorhandenen Werte (Teilsumme, `pv_vollstaendig=False`).
             """
             if not pv_module_ids:
                 return {}

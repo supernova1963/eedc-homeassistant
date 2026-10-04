@@ -81,7 +81,7 @@ standen in keinem Register.
 | --- | --- |
 | `core/berechnungen/verbrauch.py:66-71` | **Der Kern.** `berechne_verbrauchs_kennzahlen` nimmt sechs `float` und macht aus jedem `None` per `or 0.0` eine 0. Die **Signatur hat keinen Platz für „unbekannt"** — ab hier ist die Information weg, für alle fünf Aufrufer |
 | ~~`services/monats_fakten/`: `einspeisung_kwh=(monatsdaten.einspeisung_kwh or 0.0) …`~~ | ⛔ **Am 2026-08-29 am Code widerlegt — die Begründung stimmte nicht.** Hier stand „Die NULL-Spalte in `Monatsdaten` **weiß** es; die Schicht wirft es hier weg". Gemessen: `einspeisung_kwh` und `netzbezug_kwh` sind `nullable=False, default=0` — im Modell **und** in drei echten Datenbanken (`NOT NULL`, 0 NULL-Zeilen). Das `or 0.0` kann dort nichts wegwerfen. Was tatsächlich Information verliert, ist der andere Zweig — `if monatsdaten else 0.0`, also ein Monat **ohne Zählerzeile** —, und **den führt die Schicht bereits**: `MetaFakten.hat_zaehlerzeile`, gelesen von acht Stellen unter `backend/api/`. *Eine Inventur-Zeile, die eine Spalte für nullable hält, ohne ins Modell zu sehen* |
-| `services/monats_fakten/bau.py::_baue_fakt` | `pv_kwh = (pv_modul_summe or 0.0) + roh.bkw_erzeugung` — **die Schicht bricht ihre eigene, ausgeschriebene Regel** (s. §2.3) |
+| ~~`services/monats_fakten/bau.py::_baue_fakt`~~ | ✅ **Entschieden und gebaut 04.10.2026 (Gernot, N-626).** War: `pv_kwh = (pv_modul_summe or 0.0) + roh.bkw_erzeugung` — fehlte einem Modul der Wert ohne Gesamtwert, war `pv_modul_summe` `None` und mit ihr fielen **alle** Modulwerte aus der Summe (gemessen: Süd 360 + Balkonkraftwerk 90 ⇒ 90 statt 450, Eigenverbrauch 0). Jetzt trägt die Summe die vorhandenen Werte (`pv_monatswerte.pv_teilsumme_je_monat`, in `pv_module_kwh`), `pv_vollstaendig` bleibt `False` — die additive Teilsumme wird **beschriftet** (§3), nicht vernichtet und nicht unterdrückt. Entscheid s. §3 |
 | `services/monats_fakten/ableitungen.py::kennzahlen_aus_fakten` | `kennzahlen_aus_fakten` summiert über Monate; ein Monat ohne Zählerzeile geht als 0 ein |
 | `core/calculations.py:157-161` | Legacy-Pfad, gar keine Guards |
 | `api/routes/cockpit/uebersicht.py:328` · `ha_export.py:389` · `monatsdaten.py:504` · `core/berechnungen/finanz_aggregat.py:120` | die vier Aufrufer des Kerns — erben dessen Blindheit unverändert |
@@ -199,7 +199,7 @@ das ist keine Ausflucht, sondern folgt aus einer Eigenschaft der Formel:
 
 | Formelform | Teilergebnis ist | Empfehlung |
 | --- | --- | --- |
-| **additive Summe** (PV über Strings, Σ über Stunden) | **richtungssicher zu niedrig** — nie zu hoch | **beschriften** (Kandidat b) |
+| **additive Summe** (PV über Strings, Σ über Stunden) | **richtungssicher zu niedrig** — nie zu hoch (für die PV-Summe eines Monats eingeschränkt: war das Modul ohne Wert wirklich außer Betrieb, stimmt sie — s. „Entschieden für die PV-Summe eines Monats" unten, Gernot 04.10.2026) | **beschriften** (Kandidat b) |
 | **Differenz** (`PV − Einspeisung − Ladung`) | Richtung **unbestimmt**: fehlt die Einspeisung, zu hoch; fehlt die PV, zu niedrig | **unterdrücken** (Kandidat a) |
 | **Quotient** (Autarkie, EV-Quote) | Zähler und Nenner können verschiedene Abdeckung haben | **unterdrücken** |
 
@@ -226,6 +226,19 @@ Daten-Checker und keine Anzeigefrage.
 **Ergänzend, gegen Richtung 2:** Unterdrückung wird **nur** an `is not None`
 entschieden, nie an `> 0`. Eine gemessene 0 ist eine Aussage und wird als „0"
 angezeigt, nicht als „—".
+
+**Entschieden für die PV-Summe eines Monats (Gernot, 04.10.2026):** *„Ein möglicher
+Modul-Ausfall kann ja auch korrekt sein. Ich habe an sich immer darauf bestanden, dass
+der Daten-Checker darauf hinweisen muss. Das reicht imo zur Lösung."* Fehlt einem Modul
+der Monatswert und gibt es keinen Gesamtwert, nimmt die **Anzeige-Summe** die vorhandenen
+Werte (ein fehlender trägt nichts bei). Gesagt wird es zweifach, ohne neue Kennzeichnung:
+`pv_vollstaendig=False` mit dem bestehenden Hinweis „Teilsumme" (`pv_unvollstaendig_hinweis`)
+und der Daten-Checker („PV-Erzeugung unvollständig in N Monat(en) … kein Gesamtwert zum
+Verteilen hinterlegt", mit Link zum Monat). Die **Prüf-Leser** (Daten-Checker-PV-Map,
+Import-Vorschau, `gesamt_pv_kwh`) bleiben bei „nur vollständig" — eine Prüfung gegen eine
+Teilsumme meldete Abweichungen, die es nicht gibt. Damit ist die frühere Regel N42
+(„Teil-Lücke ohne Aggregat ist Lücke, keine Teilsumme") für die Anzeige-Summe aufgehoben;
+sie war die Ausnahme zu diesem Abschnitt, nicht seine Folge.
 
 **Zwei Regeln, die aus §2.5 und §2.4 folgen:**
 

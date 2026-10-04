@@ -207,7 +207,8 @@ class AggregierteMonatsdatenResponse(BaseModel):
     monat: int
     #: `False` = die PV-Achse dieses Monats ist eine **Teilsumme**: mindestens
     #: ein aktives Modul ohne Wert und kein Gesamtwert zum Verteilen. Die Zahl
-    #: bleibt stehen (additive Summe ⇒ richtungssicher zu niedrig,
+    #: bleibt stehen (additive Summe ⇒ nie zu hoch; zu niedrig, falls dem Modul
+    #: Erzeugung fehlt — war es außer Betrieb, stimmt sie, N-626;
     #: `docs/KONZEPT-UNVOLLSTAENDIGE-WERTE.md` §3), sie wird nur beschriftet.
     #: Trägt `ErzeugungFakten.pv_vollstaendig` — bis 29.08.2026 hatte das Flag
     #: **keinen einzigen Leser** und war damit selbst der Befund, den §2.4

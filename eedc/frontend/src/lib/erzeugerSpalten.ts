@@ -4,10 +4,13 @@
  *
  * Auslöser ist Rainers Frage nach dem Ertrag „meines BKW im Vorgarten, meines
  * Süd-Ost-Dachs, meines Nord-West-Dachs" **je Tag**. Die Werte liegen vor
- * (`TagWerte.erzeuger_kwh`), aber nur für Geräte mit **eigenem Sensor**: auf
- * Tagesebene verteilt das Backend bewusst nichts nach kWp — anders als im Monat
- * (`resolve_pv_je_modul`). Eine fehlende Spalte ist deshalb eine Aussage über
- * die Messung, nicht über den Ertrag, und wird benannt statt verschwiegen.
+ * (`TagWerte.erzeuger_kwh`) für Geräte mit **eigenem Sensor** — und, wenn ein
+ * Anlagen-Gesamtzähler den Tag trägt, auch für die übrigen: die bekommen dann
+ * ihren kWp-Anteil am Rest (Backend `pv_tages_praezedenz.loese_aggregat_tag_auf`,
+ * Marke `kwp_anteil`), ein Gerät mit eigenem Zähler behält seinen gemessenen
+ * Tageswert (N-623, 04.10.2026). **Ohne** Gesamtzähler verteilt der Tag nichts —
+ * eine fehlende Spalte ist dann eine Aussage über die Messung, nicht über den
+ * Ertrag, und wird benannt statt verschwiegen.
  *
  * Zwei Grenzen stecken hier und nirgends sonst:
  *  - **Ab zwei Erzeugern.** Bei genau einem Gerät ist die Gerätespalte die

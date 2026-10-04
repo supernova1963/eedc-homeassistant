@@ -10,15 +10,15 @@ beiden Sichten wieder selbst rechnet statt den Read-time-SoT
 `resolve_pv_je_modul` zu lesen. Genau diese Drift-Form hat den kWp-Komplex über
 zehn Vorfälle getragen ([[feedback_aggregations_drift]]).
 
-**Die benannte Ausnahme N42 (§3.2) ist Teil der Regel, nicht ihr Gegner.**
+**Die frühere Ausnahme N42 (§3.2) ist seit N-626 aufgehoben (Gernot 04.10.2026).**
 Bei einer **Teil-Lücke ohne Aggregat** — ein Modul gemessen, das andere nicht,
-und kein Anlagen-Gesamtwert — behält die Pro-Modul-Sicht ihren Messwert, während
-die Anlagen-Summe bewusst **nichts** zeigt: eine Teilsumme als „Gesamt-PV"
-auszuweisen wäre irreführend, einen Messwert wegzuwerfen wäre Datenverlust.
-`Σ pv_strings ≠ Σ /aggregiert` ist dort **gewollt**. Dieser Wächter nimmt den
-Fall deshalb ausdrücklich aus (`_N42_TEILLUECKE`) und prüft ihn stattdessen auf
-seine eigene, asymmetrische Erwartung — sonst „repariert" der nächste Durchgang
-die Regel weg. Belege: Docstring an `resolve_pv_je_modul` und der Test
+und kein Anlagen-Gesamtwert — zeigte die Anlagen-Summe bis dahin bewusst
+**nichts** (`Σ pv_strings ≠ Σ /aggregiert`, gewollt). Seither trägt sie die
+vorhandenen Werte (``pv_teilsumme_je_monat``), sagt mit ``pv_vollstaendig=False``,
+dass einer fehlt, und der Daten-Checker nennt den Monat — die Symmetrie gilt damit
+auch dort. Der Fall steht an EINER Stelle: in seiner eigenen Probe
+(`test_teilluecke_ohne_aggregat_ist_seit_n626_symmetrisch_und_sagt_es`), die die
+Symmetrie UND das Flag prüft. Belege: `pv_monatswerte.pv_teilsumme_je_monat` und
 `test_pv_strings_kwp_verteilung.py::test_teilluecke_ohne_aggregat_behaelt_messwert`.
 
 Baseline zum Bauzeitpunkt: **0 Verstöße** über alle geprüften Konstellationen.
@@ -95,6 +95,8 @@ _SYMMETRISCH = [
                  id="teilluecke-MIT-aggregat"),
     pytest.param({"aggregat": None, "pro_modul": None},
                  id="gar-keine-quelle"),
+    # Die Teil-Lücke OHNE Aggregat (seit N-626 ebenfalls symmetrisch) hat ihre eigene Probe
+    # unten, die zusätzlich das Flag `pv_vollstaendig=False` prüft.
 ]
 
 
@@ -115,31 +117,30 @@ async def test_summe_pro_modul_gleich_anlagen_summe(db, fall):
     assert pro_modul == pytest.approx(anlage), (
         f"P2-Symmetrie verletzt: Σ pv_strings={pro_modul}, "
         f"Σ /aggregiert.pv_module_kwh={anlage}. Entweder liest eine der beiden "
-        f"Sichten nicht mehr über `resolve_pv_je_modul`, oder es ist der "
-        f"N42-Fall (Teil-Lücke OHNE Aggregat) — der gehört in `_N42_TEILLUECKE`, "
-        f"nicht in diese Liste."
+        f"Sichten nicht mehr über `resolve_pv_je_modul`."
     )
 
 
-# ── Die benannte Ausnahme N42 — gewollte Asymmetrie ────────────────────────
+# ── Teil-Lücke ohne Aggregat — bis 04.10.2026 die Ausnahme N42, seit N-626 symmetrisch ──
 
-_N42_TEILLUECKE = {"aggregat": None, "pro_modul": {"Süd": 700.0}}
+_TEILLUECKE_OHNE_AGGREGAT = {"aggregat": None, "pro_modul": {"Süd": 700.0}}
 
 
-async def test_n42_teilluecke_ohne_aggregat_ist_bewusst_asymmetrisch(db):
-    """**Kein Verstoß, sondern die Regel:** ein Modul gemessen, das andere nicht,
-    kein Anlagen-Gesamtwert. Die Pro-Modul-Sicht behält den Messwert (700), die
-    Anlagen-Summe zeigt nichts (0) — eine Teilsumme als Gesamt-PV wäre
-    systematisch zu klein und sähe wie die volle Erzeugung aus.
+async def test_teilluecke_ohne_aggregat_ist_seit_n626_symmetrisch_und_sagt_es(db):
+    """Ein Modul gemessen, das andere nicht, kein Anlagen-Gesamtwert.
 
-    Wer diesen Test „grün macht", indem er eine der beiden Seiten angleicht,
-    dreht die Regel um. Begründung: `resolve_pv_je_modul`-Docstring, Sweep §3.2.
+    Bis 04.10.2026 (N42) war das die gewollte Asymmetrie: Pro-Modul 700, Anlagen-Summe 0.
+    Seit N-626 (Gernot: „Ein möglicher Modul-Ausfall kann ja auch korrekt sein … der
+    Daten-Checker muss darauf hinweisen") trägt die Anlagen-Summe die vorhandenen Werte
+    (700) — und was von der Substanz bleibt: der Messwert geht nicht verloren, und die
+    Zeile sagt mit `pv_vollstaendig=False`, dass die Summe eine Teilsumme ist.
     """
-    anlage_id = await _anlage(db, **_N42_TEILLUECKE)
+    anlage_id = await _anlage(db, **_TEILLUECKE_OHNE_AGGREGAT)
 
     pro_modul = await _summe_pro_modul(db, anlage_id)
     anlage = await _summe_anlage(db, anlage_id)
 
     assert pro_modul == pytest.approx(700.0)
-    assert anlage == pytest.approx(0.0)
-    assert pro_modul != pytest.approx(anlage)  # gewollt, siehe Docstring
+    assert anlage == pytest.approx(700.0)
+    rows = await list_monatsdaten_aggregiert(anlage_id=anlage_id, jahr=None, db=db)
+    assert [r.pv_vollstaendig for r in rows] == [False]

@@ -52,7 +52,7 @@ weiterhin unsichtbar; sein Reparaturweg ist der Vollbackfill aus LTS.
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from typing import Optional
 
@@ -61,6 +61,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.berechnungen import (
     bilanz_aus_stundenrows,
+    bkw_gemessen_kwh_je_investition,
     monatsbilanz_aus_tagen,
     summe_bkw_kwh,
     summe_pv_anlage_kwh,
@@ -89,6 +90,14 @@ class TagesMonatsSumme:
     netzbezug_kwh: float = 0.0
     pv_module_kwh: float = 0.0
     bkw_kwh: float = 0.0
+    #: Σ der **gemessenen** `bkw_<id>`-Tageswerte je Balkonkraftwerk (ohne Marke
+    #: `kwp_anteil`, N-628) — die eigene BKW-Zeile des laufenden Monats. ``bkw_kwh``
+    #: daneben zählt jeden Key und bleibt Teil der PV-Achse (``pv_kwh``).
+    bkw_gemessen_je_inv: dict[str, float] = field(default_factory=dict)
+    #: Σ ALLER `bkw_<id>`-Tageswerte je Balkonkraftwerk (N-627) — für den
+    #: Tageswert-Rückfall der Monats-Fakten, der das Segment eines im Monat
+    #: abgetretenen Balkonkraftwerks den Modulen zuschlägt.
+    bkw_je_inv: dict[str, float] = field(default_factory=dict)
     speicher_ladung_kwh: float = 0.0
     speicher_entladung_kwh: float = 0.0
     #: Abgeleiteter PV-/Netz-Anteil der Heimladung (N-141 Weg c). ⚠ **Das ist
@@ -260,6 +269,8 @@ async def lade_monats_summen_aus_tagen(
     verworfen_je_tag: dict[date, Optional[dict]] = {}
     pv_je_monat: dict[MonatsSchluessel, float] = defaultdict(float)
     bkw_je_monat: dict[MonatsSchluessel, float] = defaultdict(float)
+    bkw_gemessen_je_monat: dict[MonatsSchluessel, dict[str, float]] = defaultdict(dict)
+    bkw_alle_je_monat: dict[MonatsSchluessel, dict[str, float]] = defaultdict(dict)
     lade_pv_je_monat: dict[MonatsSchluessel, float] = defaultdict(float)
     lade_netz_je_monat: dict[MonatsSchluessel, float] = defaultdict(float)
     lade_speicher_je_monat: dict[MonatsSchluessel, float] = {}
@@ -267,6 +278,15 @@ async def lade_monats_summen_aus_tagen(
         schluessel = (tz.datum.year, tz.datum.month)
         pv_je_monat[schluessel] += summe_pv_anlage_kwh(tz.komponenten_kwh)
         bkw_je_monat[schluessel] += summe_bkw_kwh(tz.komponenten_kwh)
+        _gemessen = bkw_gemessen_je_monat[schluessel]
+        for inv_id, wert in bkw_gemessen_kwh_je_investition(
+            tz.komponenten_kwh, tz.source_provenance,
+        ).items():
+            _gemessen[inv_id] = _gemessen.get(inv_id, 0.0) + wert
+        # Ohne Provenienz kennt der Helfer keine Marke — er liefert dann JEDEN `bkw_`-Key je Gerät.
+        _alle = bkw_alle_je_monat[schluessel]
+        for inv_id, wert in bkw_gemessen_kwh_je_investition(tz.komponenten_kwh, None).items():
+            _alle[inv_id] = _alle.get(inv_id, 0.0) + wert
         # `or 0.0` ist hier korrekt und NICHT die `is not None`-Falle: eine
         # Tageszeile ohne Ableitung trägt None, und None trägt zur Summe
         # nichts bei. Ob der Monat überhaupt eine Aussage hat, entscheidet
@@ -301,6 +321,8 @@ async def lade_monats_summen_aus_tagen(
             netzbezug_kwh=bilanz.netzbezug_kwh,
             pv_module_kwh=pv_je_monat.get(schluessel, 0.0),
             bkw_kwh=bkw_je_monat.get(schluessel, 0.0),
+            bkw_gemessen_je_inv=dict(bkw_gemessen_je_monat.get(schluessel, {})),
+            bkw_je_inv=dict(bkw_alle_je_monat.get(schluessel, {})),
             speicher_ladung_kwh=bilanz.speicher_ladung_kwh,
             speicher_entladung_kwh=bilanz.speicher_entladung_kwh,
             emob_ladung_pv_abgeleitet_kwh=lade_pv_je_monat.get(schluessel, 0.0),

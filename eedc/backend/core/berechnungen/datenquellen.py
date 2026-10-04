@@ -43,6 +43,15 @@ eine Lücke füllen darf. `teilzeitraum_felder` weist genau diese Felder aus —
 der Aufrufer unterdrückt damit **nicht** die Aggregation der Komponenten-Werte,
 die den Monat vollständig kennen (#361).
 
+**Eine Präzedenz, zwei Antworten (N-624, 04.10.2026).** `gewinner_je_feld` sagt
+je Feld, welche Quelle gewinnt; `merge_datenquellen` (welcher Wert) und
+`teilzeitraum_felder` (misst er nur einen Teil des Monats?) entstehen beide
+daraus. Bis dahin markierte die Teilzeitraum-Regel JEDES Feld, das die
+Tagesebene kannte — auch dort, wo die HA-Statistik das Feld gewonnen hatte. Im
+Betrieb gibt es im laufenden Monat immer Tageszeilen; der Anlagen-PV-Zähler aus
+der HA-Monatsstatistik wurde so wie ein Bruchstück behandelt und durch den
+ersten Einzelzähler ersetzt (PV 9 statt 63, Eigenverbrauch 0).
+
 Werte sind `(float, DatenquelleInfo)`-Tupel; diese Funktion bewegt sie nur und
 ist daher bewusst typ-agnostisch über das zweite Tupel-Element (kein Import aus
 api/routes → keine Layer-Inversion). Die Abdeckung kommt deshalb als eigenes
@@ -80,6 +89,10 @@ def mqtt_teilzeitraum_felder(
 ) -> set[str]:
     """Felder, deren Endwert **nicht** den ganzen Monat misst (N-472).
 
+    ⚠ **Fragt die Herkunft, nicht den Gewinner** — `teilzeitraum_felder` ruft sie
+    deshalb seit N-624 nicht mehr, sondern fragt `gewinner_je_feld`: dass die
+    Tagesebene ein Feld KENNT, heißt nicht, dass ihr Wert gewinnt.
+
     Zwei Herkünfte, dieselbe Eigenschaft:
 
     * **MQTT mit Rückfall** — der Stand am Monatsersten fehlte, gemessen ist
@@ -103,6 +116,48 @@ def mqtt_teilzeitraum_felder(
     if tagesebene:
         felder |= set(tagesebene)
     return felder
+
+
+#: Namen der Quellen in `gewinner_je_feld`.
+QUELLE_GESPEICHERT = "saved"
+QUELLE_CONNECTOR = "connector"
+QUELLE_MQTT = "mqtt"
+QUELLE_HA_STATISTIK = "ha_stats"
+QUELLE_TAGESEBENE = "tagesebene"
+
+
+def gewinner_je_feld(
+    *,
+    saved: dict[str, _V],
+    connector: dict[str, _V],
+    mqtt_energy: dict[str, _V],
+    ha_stats: dict[str, _V],
+    ist_aktueller_monat: bool,
+    connector_abdeckung_von: datetime | None = None,
+    monat_start: datetime | None = None,
+    tagesebene: dict[str, _V] | None = None,
+) -> dict[str, str]:
+    """Feld → Name der Quelle, deren Wert gewinnt — DIE Präzedenz (Modul-Docstring).
+
+    Reine Funktion. `merge_datenquellen` nimmt je Feld den Wert dieser Quelle,
+    `teilzeitraum_felder` fragt, ob dieser Gewinner nur einen Teil des Monats misst.
+    Die Reihenfolge der Felder ist die des Merge (zuerst eingefügt, zuerst genannt).
+    """
+    g: dict[str, str] = {k: QUELLE_GESPEICHERT for k in saved}
+    if ist_aktueller_monat and connector_deckt_monatsanfang(connector_abdeckung_von, monat_start):
+        g.update({k: QUELLE_CONNECTOR for k in connector})
+    else:
+        for k in connector:
+            g.setdefault(k, QUELLE_CONNECTOR)
+    g.update({k: QUELLE_MQTT for k in mqtt_energy})
+    if ist_aktueller_monat:
+        g.update({k: QUELLE_HA_STATISTIK for k in ha_stats})
+    else:
+        for k in ha_stats:
+            g.setdefault(k, QUELLE_HA_STATISTIK)
+    for k in (tagesebene or {}):
+        g.setdefault(k, QUELLE_TAGESEBENE)
+    return g
 
 
 def teilzeitraum_felder(
@@ -132,26 +187,43 @@ def teilzeitraum_felder(
     `setdefault`-Zweig, MQTT und (im laufenden Monat) HA-Statistik
     überschreiben ihn danach.
 
-    **MQTT-Rückfall und Tagesebene** kommen über {@link mqtt_teilzeitraum_felder}
-    dazu (N-472) — dort steht, warum sie dieselbe Behandlung brauchen. Ein
-    MQTT-Feld, das den Monatsersten als linken Rand hat, ist **kein**
-    Teilzeitraum; ohne `mqtt_ab_monatsbeginn` gilt es aus Vorsicht als einer
-    (der Aufrufer hat dann keine Auskunft gegeben).
+    **MQTT-Rückfall und Tagesebene** (N-472, {@link mqtt_teilzeitraum_felder}):
+    ein MQTT-Feld aus dem Rückfall ist ein Teilzeitraum, eines mit dem
+    Monatsersten als linkem Rand nicht; ohne `mqtt_ab_monatsbeginn` hat der
+    Aufrufer keine Auskunft gegeben, und kein MQTT-Feld zählt.
+
+    **Die Marke folgt dem Gewinner (N-624).** Ein Teilzeitraum ist ein Feld nur,
+    wenn sein **Gewinner** einer ist: die Tagesebene, der MQTT-Rückfall, der
+    Connector ohne Abdeckung des Monatsanfangs. Im laufenden Monat bleiben für
+    Felder, die die Tagesebene ebenfalls kennt, außerdem der gespeicherte Wert
+    (er misst bis zum Speichern) und der Connector mit Abdeckung (er misst bis
+    zum letzten Abruf) ersetzbar — wie bisher. Die HA-Statistik und MQTT ab dem
+    Monatsersten messen den Monat bis jetzt und sperren.
+
+    ⚠ **Benannte Grenze:** entsteht der HA-Sensor des Anlagenzählers erst im
+    Monat, misst seine Monatsstatistik nur den Rest — sie trägt keine
+    Abdeckungs-Auskunft, die das hier sichtbar machen könnte.
     """
-    teil = mqtt_teilzeitraum_felder(
-        mqtt_energy=mqtt_energy if mqtt_ab_monatsbeginn is not None else {},
-        mqtt_ab_monatsbeginn=mqtt_ab_monatsbeginn,
+    gewinner = gewinner_je_feld(
+        saved=saved, connector=connector, mqtt_energy=mqtt_energy, ha_stats=ha_stats,
+        ist_aktueller_monat=ist_aktueller_monat,
+        connector_abdeckung_von=connector_abdeckung_von, monat_start=monat_start,
         tagesebene=tagesebene,
     )
-    if not connector:
-        return teil
-    if connector_deckt_monatsanfang(connector_abdeckung_von, monat_start):
-        return teil
-
-    ueberschrieben = set(mqtt_energy)
-    if ist_aktueller_monat:
-        ueberschrieben |= set(ha_stats)
-    return teil | {k for k in connector if k not in saved and k not in ueberschrieben}
+    deckt = connector_deckt_monatsanfang(connector_abdeckung_von, monat_start)
+    teil: set[str] = set()
+    for k, quelle in gewinner.items():
+        if quelle == QUELLE_TAGESEBENE:
+            teil.add(k)
+        elif quelle == QUELLE_MQTT:
+            if mqtt_ab_monatsbeginn is not None and k not in mqtt_ab_monatsbeginn:
+                teil.add(k)
+        elif quelle == QUELLE_CONNECTOR and not deckt:
+            teil.add(k)
+        elif (quelle in (QUELLE_GESPEICHERT, QUELLE_CONNECTOR)
+              and ist_aktueller_monat and k in (tagesebene or {})):
+            teil.add(k)
+    return teil
 
 
 def merge_datenquellen(
@@ -179,40 +251,21 @@ def merge_datenquellen(
     **immer** per ``setdefault`` angewendet — sie füllt, was keine der vier
     direkten Quellen beantwortet hat, und verdrängt nie. Ohne sie ist das
     Ergebnis bitgleich zu vorher.
+
+    Die Präzedenz selbst steht in `gewinner_je_feld` (N-624): laufender Monat
+    mit Connector-Abdeckung ab dem Monatsersten ⇒ der Connector überschreibt
+    den gespeicherten Wert (Vorschau), sonst füllt er nur (#325); MQTT
+    überschreibt; HA-Statistik überschreibt im laufenden Monat und füllt im
+    abgeschlossenen (#118); die Tagesebene füllt zuletzt (N-472).
     """
-    resolved: dict[str, _V] = {}
-    resolved.update(saved)
-
-    if ist_aktueller_monat and connector_deckt_monatsanfang(
-        connector_abdeckung_von, monat_start
-    ):
-        # Laufender Monat mit Abdeckung ab dem Monatsersten: Connector
-        # (Konfidenz 90 %) ist frischer als die gespeicherten Werte und darf
-        # sie überschreiben (Vorschau).
-        resolved.update(connector)
-    else:
-        # Abgeschlossener Monat (#325, detlefh68) — oder laufender Monat, dessen
-        # Connector-Delta erst mitten im Monat beginnt: gespeicherte Monatsdaten
-        # sind authoritativ, der Connector füllt nur fehlende Felder.
-        for k, v in connector.items():
-            resolved.setdefault(k, v)
-
-    resolved.update(mqtt_energy)
-
-    if ist_aktueller_monat:
-        # Laufender Monat: HA-Stats sind die frischeste Quelle (Live-Sensoren).
-        resolved.update(ha_stats)
-    else:
-        # Vergangener Monat: HA-Stats nur als Fallback für fehlende Felder —
-        # kein rückwirkender Override (#118).
-        for k, v in ha_stats.items():
-            resolved.setdefault(k, v)
-
-    # N-472: die lokale Tagesebene ganz zuletzt und nur füllend. Sie ist die
-    # abgeleitete Quelle (Σ der Tage mit Spur) — wo eine direkte Quelle den
-    # Monat kennt, hat die den Vorrang, und zwar auch dann, wenn ihre Zahl
-    # kleiner ist.
-    for k, v in (tagesebene or {}).items():
-        resolved.setdefault(k, v)
-
-    return resolved
+    quellen: dict[str, dict[str, _V]] = {
+        QUELLE_GESPEICHERT: saved, QUELLE_CONNECTOR: connector, QUELLE_MQTT: mqtt_energy,
+        QUELLE_HA_STATISTIK: ha_stats, QUELLE_TAGESEBENE: tagesebene or {},
+    }
+    gewinner = gewinner_je_feld(
+        saved=saved, connector=connector, mqtt_energy=mqtt_energy, ha_stats=ha_stats,
+        ist_aktueller_monat=ist_aktueller_monat,
+        connector_abdeckung_von=connector_abdeckung_von, monat_start=monat_start,
+        tagesebene=tagesebene,
+    )
+    return {k: quellen[quelle][k] for k, quelle in gewinner.items()}

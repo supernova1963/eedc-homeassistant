@@ -40,6 +40,7 @@ from backend.core.berechnungen import (
     ist_vollstaendig,
     resolve_pv_je_modul,
 )
+from backend.core.berechnungen.pv_verteilung import QUELLE_FEHLT, bkw_kinder_luecken_kwh
 from backend.core.field_definitions import get_pv_erzeugung_kwh
 from backend.core.investition_kennwerte import get_erzeuger_kwp
 from backend.models.investition import Investition, InvestitionMonatsdaten
@@ -271,21 +272,18 @@ async def lade_pv_je_monat(
         # `roh_monat` — damit greift darunter Stufe 3 (Anlagen-Aggregat) nur
         # noch für Module, die auch dann noch offen sind. Die Reihenfolge ist
         # die Aussage: das nähere Aggregat gewinnt.
+        # Die Formel ist seit N-627 die Layer-Funktion `bkw_kinder_luecken_kwh` — dieselbe, die
+        # Cockpit → Monat im Monat ohne Abschluss ruft (vorher stand sie nur hier, inline).
+        # ⚠ **ALLE** Kinder übergeben, nicht nur die lückenhaften: der verteilte Rest ist
+        # `Aggregat − Σ der gemessenen Werte`, und ohne die gemessenen Geschwister wäre diese Σ 0.
+        # Bei 100 kWh am BKW und 70 kWh gemessen am ersten Modul bekäme das zweite dann 100 statt
+        # 30 — die Anlagensumme stünde auf 170. Beim Bau tatsächlich so gebaut und von
+        # `test_gemessener_modulwert_gewinnt_gegen_den_bkw_wert` gefangen.
         for bkw_id, bkw_kwh in bkw_aggregate.get((j, monat), {}).items():
             kinder = [m for m in aktive if m.parent_investition_id == bkw_id]
-            luecken = [k for k in kinder if k.id not in roh_monat]
-            if not luecken:
-                continue
-            # ⚠ **ALLE** Kinder übergeben, nicht nur die lückenhaften: der
-            # verteilte Rest ist `Aggregat − Σ der gemessenen Werte`, und ohne
-            # die gemessenen Geschwister wäre diese Σ 0. Bei 100 kWh am BKW und
-            # 70 kWh gemessen am ersten Modul bekäme das zweite dann 100 statt
-            # 30 — die Anlagensumme stünde auf 170. Beim Bau tatsächlich so
-            # gebaut und von `test_gemessener_modulwert_gewinnt_gegen_den_bkw_wert`
-            # gefangen.
-            verteilt = resolve_pv_je_modul(
-                aggregat_kwh=bkw_kwh,
-                module=[
+            for k_id, kwh in bkw_kinder_luecken_kwh(
+                bkw_kwh=bkw_kwh,
+                kinder=[
                     PvModul(
                         inv_id=k.id,
                         leistung_kwp=_kwp_gewicht(k),
@@ -294,16 +292,12 @@ async def lade_pv_je_monat(
                     )
                     for k in kinder
                 ],
-            )
-            for k in luecken:
-                wert = verteilt.get(k.id)
-                if wert is None:
-                    continue
-                roh_monat[k.id] = wert.pv_erzeugung_kwh
+            ).items():
+                roh_monat[k_id] = kwh
                 # Der Wert ist eine kWp-Zerlegung, keine Messung (#352): sonst
                 # kürt das String-Ranking einen „besten String" aus Zahlen, die
                 # per Konstruktion proportional zur kWp sind.
-                abgeleitet_monat = abgeleitet_monat | {k.id}
+                abgeleitet_monat = abgeleitet_monat | {k_id}
 
         # Stufe 3: der Anlagenwert (schon um die eigenen BKW-Werte gemindert, N-611) füllt die Lücken —
         # die der Module UND, seit N-621, die der Balkonkraftwerke ohne eigenen Wert. EINE Auflösung, damit
@@ -488,12 +482,38 @@ def pv_summe_je_monat(monate: PvMonate) -> dict[tuple[int, int], Optional[float]
     """Anlagen-PV je Monat — ``None``, wo die Auflösung unvollständig ist.
 
     ``None`` heißt „mindestens ein aktives Modul ohne Wert und ohne Aggregat".
-    Eine Teilsumme wäre als Anlagenerzeugung irreführend (N42); der Aufrufer
-    entscheidet, ob er den Monat auslässt oder ihn als Lücke ausweist — er darf
-    ihn nur nicht als 0 verrechnen.
+    Das ist die Summe der **Prüf-Leser** (Daten-Checker-PV-Map, Import-Vorschau):
+    gegen eine Teilsumme geprüft, meldeten sie Abweichungen, die es nicht gibt (N42).
+    Die **Anzeige-Summe** eines solchen Monats ist seit N-626
+    ``pv_teilsumme_je_monat`` (die vorhandenen Werte).
     """
     return {
         key: (sum(w.pv_erzeugung_kwh for w in werte.values())
               if ist_vollstaendig(werte) else None)
+        for key, werte in monate.items()
+    }
+
+
+def pv_teilsumme_je_monat(monate: PvMonate) -> dict[tuple[int, int], Optional[float]]:
+    """Σ der **vorhandenen** Modulwerte je Monat — die Anzeige-Summe (N-626, Gernot 04.10.2026).
+
+    Neben ``pv_summe_je_monat``, nicht statt ihrer: Fehlt einem Modul der Wert und
+    gibt es keinen Anlagenwert, trägt es hier nichts bei, und die übrigen Werte
+    bleiben stehen — ein Modul-Ausfall kann auch korrekt sein; dass ein Wert fehlt,
+    sagt der Daten-Checker („PV-Erzeugung unvollständig …", mit Reparaturweg) und
+    das Flag ``pv_vollstaendig=False`` der Monats-Fakten. Bis dahin fiel die ganze
+    Modulsumme weg (N42 „Teillücke ohne Aggregat ist Lücke, keine Teilsumme"), und
+    der Monat zeigte nur das Balkonkraftwerk (90 statt 450, Eigenverbrauch 0).
+
+    **Prüf-Leser bleiben bei ``pv_summe_je_monat``** (Daten-Checker-PV-Map,
+    Import-Vorschau, ``gesamt_pv_kwh``): eine Prüfung gegen eine Teilsumme meldete
+    Abweichungen, die es nicht gibt.
+
+    ``None``, wo kein Modul einen Wert hat (alle ``fehlt``) — dann gibt es nichts
+    anzuzeigen, wie bisher.
+    """
+    return {
+        key: (sum(w.pv_erzeugung_kwh for w in werte.values() if w.quelle != QUELLE_FEHLT)
+              if any(w.quelle != QUELLE_FEHLT for w in werte.values()) else None)
         for key, werte in monate.items()
     }

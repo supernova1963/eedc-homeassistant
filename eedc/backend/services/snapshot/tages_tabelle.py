@@ -10,7 +10,14 @@ Slots ``{h: (delta, n)}``; **ab hier ist die Rechnung dieselbe**:
 * PV-Präzedenz je Tag und BKW-Rest je Slot (#406, N-536),
 * Achsen-Spanne (max n der verwendeten Sensor-Slots) und R6-Verbrauch,
 * `komponenten_kwh` = Σ der in den Stunden verwendeten Gerätewerte (R5b),
-  `loese_pv_tageswerte_auf` nur im Aggregat-Fall, E4 BKW-Rest.
+  E4 BKW-Rest.
+* **Aggregat-Fall (N-623, Bauplan Fassung 2):** die Stundenachse ist die
+  Aggregat-Summe; ein Erzeuger mit eigenem Zähler behält seinen **Tageswert**
+  (Σ seiner brauchbaren Slots, in keiner Stunde), wenn er gemessen ist
+  (`pv_tages_praezedenz.gemessene_tageswerte`), die übrigen Träger teilen den
+  Rest nach kWp (`pv_tages_praezedenz.loese_aggregat_tag_auf`). Σ Keys ==
+  Σ Stunden. Bis 04.10.2026 (seit v4.0.51) verwarf dieser Fall die Messungen
+  und gab jedem Erzeuger den kWp-Anteil.
 
 ⛔ Eine zweite Fassung dieser Rechnung im Snapshot-Pfad wäre die F-56-Klasse,
 die bis 29.08.2026 schon einmal mit der Verbrauchsformel entstanden war.
@@ -31,6 +38,8 @@ from backend.core.berechnungen.pv_tages_praezedenz import (
     QUELLE_AGGREGAT,
     QUELLE_EINZEL,
     erwartete_erzeuger_ids,
+    gemessene_tageswerte,
+    loese_aggregat_tag_auf,
     waehle_pv_quelle,
 )
 from backend.core.berechnungen.spannen import (
@@ -44,8 +53,9 @@ from backend.core.berechnungen.stundenbilanz import (
     stunden_verbrauch_kwh,
 )
 from backend.services.snapshot.keys import PV_AGGREGAT_BASIS_FELD
+from backend.services.provenance import ABGELEITET_KWP_ANTEIL
 from backend.services.snapshot.komponenten_beitraege import (
-    loese_pv_tageswerte_auf,
+    _TYP_KEY_PREFIX,
     resolve_either_or_eintraege,
 )
 from backend.services.snapshot.plausibility import (
@@ -80,8 +90,9 @@ class TagesTabelle:
     batterie_netto, wp, wallbox, verbrauch_sonstiges, verbrauch, spannen}}`` —
     dasselbe Format wie bisher, dazu ``spannen`` (``{achse: n}`` nur für n > 1).
     ``komponenten_kwh``: Σ der in den Stunden verwendeten Gerätewerte je
-    Ziel-Key (R5b); der PV-Aggregat-Fall ist über `loese_pv_tageswerte_auf`
-    aufgelöst. ``pv_marken``: #406-Herkunftsmarken. ``verworfen``:
+    Ziel-Key (R5b); im PV-Aggregat-Fall die Auflösung auf Träger-Ebene
+    (N-623: gemessene Erzeuger mit ihrem Tageswert, die übrigen mit dem
+    kWp-Anteil am Rest). ``pv_marken``: #406-Herkunftsmarken. ``verworfen``:
     ``{achse: kWh}`` verworfener Mengen (R4) — ``{}`` heißt „nichts verworfen".
     ``nachtrag``: ``{achse: kWh}`` der Stunden, die **nur durch das Deckel-Fenster**
     passiert sind (N-567) — Menge über Schwelle × n, aber nicht über Schwelle × Fenster
@@ -136,6 +147,9 @@ def baue_tagestabelle(
     def _verwerfe(achse: str, kwh: float) -> None:
         verworfen[achse] = verworfen.get(achse, 0.0) + abs(kwh)
 
+    # N-623: Zähler mit einem verworfenen Slot tragen am Aggregat-Tag keinen Tageswert.
+    verworfene_schluessel: set[str] = set()
+
     # ── 3. Sensor-Slots filtern (R4 negativ, R3 je Sensor-Slot) ─────────────
     # je Stunde: Liste (eintrag, delta, n) der brauchbaren Sensor-Slots
     brauchbar: dict[int, list[tuple[TabellenEintrag, float, int]]] = {h: [] for h in range(24)}
@@ -158,6 +172,7 @@ def baue_tagestabelle(
                     f"negatives Zähler-Delta {delta:.3f} — verworfen (R4)"
                 )
                 _verwerfe(achse, delta)
+                verworfene_schluessel.add(e.schluessel)
                 continue
             if achse in ACHSEN_MIT_DECKEL:
                 schwelle = schwelle_pv_einspeisung_stunde_kwh(
@@ -168,6 +183,7 @@ def baue_tagestabelle(
                     stunde=h, kategorie=f"{achse}:{e.schluessel}",
                 ) is None:
                     _verwerfe(achse, delta)
+                    verworfene_schluessel.add(e.schluessel)
                     continue
             brauchbar[h].append((e, delta, n))
 
@@ -201,6 +217,15 @@ def baue_tagestabelle(
     # Aussage — eine Teilsumme der übrigen Summanden wäre eine Behauptung.
     ohne_ziel = {e.target_key for e in eintraege if e.schluessel in ohne_tageswert}
     stunden: dict[int, dict[str, Optional[float]]] = {}
+    # N-623, Aggregat-Fall: je Erzeuger mit eigenem Zähler der Tageswert (Σ seiner
+    # brauchbaren Slots, BKW mit Kindern als Rest je Slot), die Stunden mit eigenem
+    # Slot, seine Bündel-Energie und seine Schlüssel; dazu die verwendeten
+    # Aggregat-Slots. Nichts davon geht in eine Stunde.
+    eigen_kwh: dict[str, float] = {}
+    eigen_stunden: dict[str, set[int]] = {}
+    eigen_buendel: dict[str, float] = {}
+    eigen_schluessel: dict[str, set[str]] = {}
+    aggregat_je_stunde: dict[int, float] = {}
     for h in range(24):
         # Verwendete Gerätewerte dieser Stunde je Achse: [(target_key, wert, n)]
         je_achse: dict[str, list[tuple[str, float, int]]] = {}
@@ -219,7 +244,7 @@ def baue_tagestabelle(
                 if e.sensor_key == f"basis:{PV_AGGREGAT_BASIS_FELD}":
                     if pv_quelle == QUELLE_AGGREGAT:
                         _nimm("pv", "pv", e.target_key, delta, n, fenster_je[(e.schluessel, h)])
-                elif pv_quelle == QUELLE_EINZEL:
+                elif pv_quelle in (QUELLE_EINZEL, QUELLE_AGGREGAT):
                     inv_id = e.sensor_key.split(":", 2)[1]
                     einzel_eintraege.setdefault(inv_id, []).append((e, delta, n))
                 continue
@@ -231,6 +256,15 @@ def baue_tagestabelle(
             rest = bkw_restwerte(_alle_invs, einzel)       # E4: je Slot ≥ 0 geklemmt
             for inv_id, lst in einzel_eintraege.items():
                 wert = rest.get(inv_id, einzel[inv_id])
+                if pv_quelle == QUELLE_AGGREGAT:
+                    # N-623: Tageswert des eigenen Zählers — geht in KEINE Stunde.
+                    eigen_kwh[inv_id] = eigen_kwh.get(inv_id, 0.0) + wert
+                    eigen_stunden.setdefault(inv_id, set()).add(h)
+                    eigen_schluessel.setdefault(inv_id, set()).update(_e.schluessel for _e, _d, _n in lst)
+                    eigen_buendel[inv_id] = eigen_buendel.get(inv_id, 0.0) + sum(
+                        abs(_d) for _e, _d, _n in lst if _n > 1
+                    )
+                    continue
                 n_max = max(n for _e, _d, n in lst)
                 f_max = max(fenster_je[(_e.schluessel, h)] for _e, _d, _n in lst)
                 _nimm("pv", "pv", lst[0][0].target_key, wert, n_max, f_max)
@@ -268,6 +302,10 @@ def baue_tagestabelle(
                 if target in ohne_ziel:
                     continue
                 komponenten[target] = komponenten.get(target, 0.0) + wert
+
+        for target, wert, _n in je_achse.get("pv", []):
+            if target == PV_AGGREGAT_BASIS_FELD:
+                aggregat_je_stunde[h] = aggregat_je_stunde.get(h, 0.0) + wert
 
         # ── 6. Spannen + Stundenwerte ─────────────────────────────────────
         spannen = {
@@ -319,7 +357,28 @@ def baue_tagestabelle(
 
     pv_marken: dict[str, str] = {}
     if pv_quelle == QUELLE_AGGREGAT and PV_AGGREGAT_BASIS_FELD in komponenten:
-        komponenten, pv_marken = loese_pv_tageswerte_auf(komponenten, investitionen_by_id, datum)
+        aggregat = komponenten.pop(PV_AGGREGAT_BASIS_FELD)
+        gesperrte_schluessel = verworfene_schluessel | set(ohne_tageswert)
+        gemessen = gemessene_tageswerte(
+            aggregat_kwh=aggregat,
+            aggregat_je_stunde=aggregat_je_stunde,
+            eigen_kwh=eigen_kwh,
+            eigen_stunden=eigen_stunden,
+            eigen_buendel_kwh=eigen_buendel,
+            gesperrt={i for i, s in eigen_schluessel.items() if s & gesperrte_schluessel},
+        )
+        aufloesung = loese_aggregat_tag_auf(
+            aggregat_kwh=aggregat, gemessen=gemessen, mit_zaehler=set(eigen_kwh),
+            investitionen=_alle_invs, datum=datum,
+        )
+        typ_je_id = {inv.id: getattr(inv, "typ", None) for inv in _alle_invs}
+        for inv_id, wert in aufloesung.werte.items():
+            praefix = _TYP_KEY_PREFIX.get(typ_je_id.get(inv_id))
+            if praefix is None:
+                continue
+            komponenten[f"{praefix}{inv_id}"] = wert
+            if inv_id in aufloesung.verteilt:
+                pv_marken[f"{praefix}{inv_id}"] = ABGELEITET_KWP_ANTEIL
     else:
         komponenten.pop(PV_AGGREGAT_BASIS_FELD, None)
 

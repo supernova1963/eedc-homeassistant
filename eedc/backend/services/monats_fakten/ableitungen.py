@@ -200,8 +200,11 @@ def pv_unvollstaendig_monate(fakten: Iterable[MonatsFakt]) -> list[MonatsSchlues
     ``pv_vollstaendig is False`` heißt: mindestens ein im Monat aktives Modul
     hat keinen Wert und es gibt kein Anlagen-Aggregat, das die Lücke füllt
     (``pv_summe_je_monat`` → ``None``). ``ErzeugungFakten.pv_kwh`` trägt dann
-    nur, was messbar war — bei einer Anlage mit Balkonkraftwerk also dessen
-    Erzeugung allein.
+    die vorhandenen Werte (seit N-626: die gemessenen Module plus Balkonkraftwerk;
+    bis 04.10.2026 fiel die ganze Modulsumme weg und mit einem BKW stand dessen
+    Erzeugung allein da) — eine Teilsumme. Sie ist nie zu hoch; ob sie zu niedrig
+    ist, hängt am fehlenden Modul: war es im Monat wirklich außer Betrieb, stimmt
+    sie (Gernot zu N-626, 04.10.2026: ein Modul-Ausfall kann auch korrekt sein).
     """
     return [
         (f.jahr, f.monat) for f in fakten if not f.erzeugung.pv_vollstaendig
@@ -221,9 +224,11 @@ def pv_unvollstaendig_hinweis(fakten: Iterable[MonatsFakt]) -> Optional[str]:
     es im selben Schritt aus.
 
     **Beschriften, nicht unterdrücken** — ``pv_kwh`` ist eine **additive Summe**
-    und damit richtungssicher zu niedrig (§3). Der Nutzer weiß, in welche
-    Richtung er korrigieren muss; eine Unterdrückung nähme ihm eine brauchbare
-    Zahl. Die Gegenprobe steht eine Ebene tiefer: ``tagesbilanz`` unterdrückt
+    und damit nie zu hoch (§3): fehlt dem Modul Erzeugung, ist sie zu niedrig;
+    war es wirklich außer Betrieb, stimmt sie (N-626). Der Satz sagt deshalb
+    beides, bedingt — nicht mehr „zu niedrig" schlechthin. Der Nutzer weiß, in
+    welche Richtung er korrigieren muss; eine Unterdrückung nähme ihm eine
+    brauchbare Zahl. Die Gegenprobe steht eine Ebene tiefer: ``tagesbilanz`` unterdrückt
     ``eigenverbrauch``, weil das eine **Differenz** ist.
 
     ⛔ **Ausdrücklich KEIN zweiter Melder.** Dass PV-Werte fehlen, meldet der
@@ -244,9 +249,9 @@ def pv_unvollstaendig_hinweis(fakten: Iterable[MonatsFakt]) -> Optional[str]:
     if len(monate) > 6:
         namen += f" (+{len(monate) - 6} weitere)"
     return (
-        f"Die PV-Erzeugung ist in {len(monate)} Monat(en) unvollständig erfasst "
-        f"({namen}): dort fehlt mindestens einem Modul der Wert und es gibt "
-        "keinen Gesamtwert zum Verteilen. Erzeugung, spezifischer Ertrag und "
-        "der daraus gerechnete Ertrag sind deshalb eine Teilsumme und zu "
-        "niedrig — nicht falsch gemessen, sondern unvollständig."
+        f"Die PV-Erzeugung ist in {len(monate)} Monat(en) eine Teilsumme "
+        f"({namen}): dort fehlt mindestens einem Modul der Monatswert und es gibt "
+        "keinen Gesamtwert zum Verteilen. War das Modul in diesem Monat wirklich "
+        "außer Betrieb, stimmt die Zahl; sonst fehlt seine Erzeugung — in der "
+        "PV-Erzeugung, im spezifischen Ertrag und im daraus gerechneten Ertrag."
     )
