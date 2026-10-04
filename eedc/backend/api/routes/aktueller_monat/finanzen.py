@@ -260,10 +260,13 @@ def betriebskosten_und_sonstige_positionen(*, investitionen, monats_fakt, jahr, 
     return {k: _loc[k] for k in ("anlage_sonstige_ausgaben", "anlage_sonstige_ertraege", "betriebskosten_anteilig", "betriebskosten_anteilig_anzahl", "betriebskosten_anteilig_jahr", "sonstige_ausgaben_total", "sonstige_ertraege_total", "sonstige_netto_total",) if k in _loc}
 
 
-async def t_konto_je_investition(*, _zt_cache, allgemein_tarif, anlage_id, db, einspeise_cent, investitionen, jahr, monat, monats_benzinpreis, monats_gaspreis, netzbezug_preis_effektiv_cent, tarife, ev_preis_cent=None):
+async def t_konto_je_investition(*, monats_fakt=None, _zt_cache, allgemein_tarif, anlage_id, db, einspeise_cent, investitionen, jahr, monat, monats_benzinpreis, monats_gaspreis, netzbezug_preis_effektiv_cent, tarife, ev_preis_cent=None):
     """Per-Investition Finanzdetails (T-Konto) — laedt die InvestitionMonatsdaten je Investition (P10-Ausnahme PER_INVESTITION).
 
     Aus `get_aktueller_monat` Zeilen 1817-1930 (Stand vor dem Umzug) byte-identisch herausgeloest — Vorlage 2.
+
+    N-609: die WP-Zeile liest ihre Mengen aus ``monats_fakt.wp.je_geraet`` (dieselben wie Übersicht und
+    Komponenten-Zeitreihe); ohne Fakten-Eintrag aus der IMD-Zeile wie bisher.
     """
     # ── Per-Investition Finanzdetails (T-Konto) ──
     investitionen_financials: list[InvestitionFinancialDetail] = []
@@ -371,6 +374,10 @@ async def t_konto_je_investition(*, _zt_cache, allgemein_tarif, anlage_id, db, e
                 emob_pool_attr=emob_pool_attr,
                 emob_entscheid=emob_entscheid,
                 ev_p=ev_preis_cent,
+                wp_fakt=(
+                    monats_fakt.wp.je_geraet.get(inv.id)
+                    if monats_fakt is not None and inv.typ == "waermepumpe" else None
+                ),
             )
             if detail is not None:
                 investitionen_financials.append(detail)

@@ -215,6 +215,28 @@ jetzt Gesamtverbrauch.
 - **Tagesverlauf ohne Home-Assistant-Verlauf** fällt wieder auf MQTT zurück, und der
   nächtliche Wetter-Nachzug ersetzt keinen vollständigen Tag mehr durch einen teilweise
   gelöschten.
+- **Gemessen 0 ist 0:** Zeigt dein Zähler aus Home Assistant im laufenden Monat keinen
+  Zuwachs — der Netzbezug in einem autarken Monat oder die Einspeisung bei Nulleinspeisung —,
+  zeigt *Cockpit → Monat* jetzt 0 kWh statt „—" und rechnet weiter: im Beispiel Autarkie
+  100 %, Stromrechnung 0,00 € und Ergebnis 16,20 €, und der Rat „Zähler zuordnen" verschwindet.
+  Dasselbe gilt für einen vergangenen Monat ohne Abschluss — und für einen abgeschlossenen
+  Monat, in dem dein Monatsabschluss bei Balkonkraftwerk, Speicher oder PV-Gesamtzähler 0
+  gespeichert hat: wo dort bisher „—“ stand, steht jetzt 0. Das gilt für Einspeisung,
+  Netzbezug, den PV-Gesamtzähler, Speicher, Balkonkraftwerk, Wallbox und E-Auto; für
+  Wärmepumpe und einzelne Strings noch nicht.
+- **Mehrere Wärmepumpen, eine Ersparnis überall:** Auch im laufenden Monat und in einem Monat
+  ohne Abschluss ist die Wärmepumpen-Ersparnis in *Cockpit → Monat* jetzt die Summe deiner
+  Geräte, jedes mit seinen eigenen Angaben und den Preisen des Monats — im Beispiel mit zwei
+  Wärmepumpen 5,76 € statt 1,44 € im laufenden Monat. Sichtbar wird es im laufenden Monat mit
+  mehreren Wärmepumpen und im Monat ohne Abschluss; trägt eedc den Kühlanteil eines Monats aus
+  dem Betriebsmodus nach, zieht ihn jetzt auch das T-Konto ab (im Beispiel 124 € statt 115 €).
+- **Verbrauchsprognose mit Wärmepumpe:** Warmwasser und Kühlen werden nicht mehr mit der
+  Außentemperatur hoch- oder heruntergerechnet — ein Warmwasser-Zyklus braucht an einem warmen
+  Tag nicht ein Zehntel. Im Beispiel steht an einem Tag mit 16 °C 2,7 statt 0,9 kWh
+  Wärmepumpen-Strom, an einem Tag mit 0 °C 23 statt 27 kWh; nach einer milden Woche bleibt die
+  Prognose bei gleichem Wetter, wie sie ist. Getrennt wird nur, wenn deine Wärmepumpe Warmwasser
+  oder Kühlen je Stunde erkennen lässt (Betriebsmodus-Sensor oder getrennte Leistungssensoren);
+  nach einer milden Lernwoche ändert sich die Prognose für alle Wärmepumpen leicht.
 
 ---
 

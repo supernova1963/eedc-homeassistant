@@ -59,7 +59,7 @@ from backend.services.monats_fakten import (
 )
 from backend.core.investition_parameter import ist_dienstlich
 from backend.core.wirtschaftlichkeit_defaults import NETZBEZUG_DEFAULT_CENT
-from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
+from backend.services.wp_wirtschaftlichkeit import wp_ersparnis_monat
 from backend.services.eauto_wirtschaftlichkeit import (
     berechne_eauto_ersparnis_periode,
     fossil_getankte_liter,
@@ -262,11 +262,9 @@ async def get_cockpit_uebersicht(
     # bzw. über `baue_finanz_zeile` — beide mit dem Monats-Stichtag (ADR-002/P8).
     tarife = await lade_tarife_fuer_anlage(db, anlage_id)
     allgemein_tarif = tarife.get("allgemein")
-    wp_tarif = tarife.get("waermepumpe")
     wallbox_tarif = tarife.get("wallbox")
 
     netzbezug_preis_cent = allgemein_tarif.netzbezug_arbeitspreis_cent_kwh if allgemein_tarif else NETZBEZUG_DEFAULT_CENT
-    wp_preis_cent = wp_tarif.netzbezug_arbeitspreis_cent_kwh if wp_tarif else netzbezug_preis_cent
     wallbox_preis_cent = wallbox_tarif.netzbezug_arbeitspreis_cent_kwh if wallbox_tarif else netzbezug_preis_cent
 
     # Monats-Tarif-Auflösung (ein Cache für den ganzen Request) — geteilt mit
@@ -606,19 +604,12 @@ async def get_cockpit_uebersicht(
     _wp_abgeleitet = _wpk.abgeleitet
     _wp_herkunft = _wpk.herkunft
     _wp_vorbehalt = _wpk.vorbehalt
-    # Multi-WP: erste WP als Parameter-Referenz (Wirkungsgrad/Gas-Default).
-    # Drift-Audit Domäne A1 / Issue #178: vorher 10ct hartcodiert + ignorierte
-    # User-Param `alter_preis_cent_kwh`.
-    wp_ref_parameter = wp_invs[0].parameter if wp_invs else None
-    wp_ersparnis_result = berechne_wp_ersparnis(
-        wp_waerme_kwh=wp_waerme,
-        wp_strom_kwh=wp_strom,
-        wp_strompreis_cent=wp_preis_cent,
-        wp_parameter=wp_ref_parameter,
-        # E-B: Kühlen ersetzt keine Heizung (#263 K-2).
-        strom_kuehlen_kwh=sum(f.wp.modus_strom_kuehlen_kwh for f in fakten),
-    )
-    wp_ersparnis = wp_ersparnis_result.ersparnis_euro
+    # ⭐ N-609 (04.10.2026): die WP-Ersparnis ist die Σ der Gerätezeilen je Monat — dieselbe Zeile wie im T-Konto
+    # von Cockpit → Monat (N-605), mit den Parametern JEDES Geräts, dem WP-Tarif und dem Gaspreis DES MONATS (P8).
+    # Hier stand bis dahin ein Aggregat über die Jahresmengen mit dem Parametersatz der ERSTEN Wärmepumpe und dem
+    # HEUTIGEN Tarif, ohne Monats-Gaspreis: zwei WP 50 statt 110 €, Tarifwechsel 0 statt 25 €, Gaspreis 25 statt
+    # 65 €, Zusatzkosten 85 statt 105 €. Die Zahl geht in `kumulative_ersparnis` → `jahres_rendite_prozent`.
+    wp_ersparnis = sum(wp_ersparnis_monat(f, inv_by_id) or 0.0 for f in fakten)
 
     emob_invs = [
         i for i in investitionen

@@ -30,7 +30,7 @@ from backend.services.emob_ladeanteil import reichere_ladezeilen_an
 from backend.services.energie_profil.monats_aus_tagen import TagesMonatsSumme
 from backend.utils.sonstige_positionen import berechne_md_sonstige_summen
 from backend.services.monats_fakten.fakten import BkwFakten, EegFakten, EmobFakten, ErzeugungFakten, MetaFakten, MonatsFakt, MonatsSchluessel, SonstigesFakten, SonstigesGeraetFakten, SpeicherFakten, TAGESWERT_BKW, TAGESWERT_EMOB_ANTEIL, TAGESWERT_PV, TAGESWERT_SPEICHER, TAGESWERT_ZAEHLER, ZaehlerFakten
-from backend.services.monats_fakten.fakten_wp import WpFakten
+from backend.services.monats_fakten.fakten_wp import WpFakten, WpGeraetFakten
 from backend.services.monats_fakten.roh import _RohMonat, _erzeuger_aktiv
 from backend.services.monats_fakten.tarif import _lade_tarif
 
@@ -358,6 +358,10 @@ async def _baue_fakt(
         speicher=speicher,
         emob=emob,
         wp=WpFakten(
+            je_geraet={
+                inv_id: WpGeraetFakten(strom_kwh=s, waerme_kwh=w, strom_kuehlen_kwh=k)
+                for inv_id, (s, w, k) in roh.wp_je_geraet.items()
+            },
             strom_kwh=roh.wp_strom,
             strom_mit_ersatz_kwh=roh.wp_strom_mit_ersatz,
             waerme_mit_ersatz_kwh=roh.wp_waerme_mit_ersatz,

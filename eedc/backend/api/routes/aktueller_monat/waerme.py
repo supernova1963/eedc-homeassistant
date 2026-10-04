@@ -20,12 +20,13 @@ from backend.core.berechnungen.waermepumpe_kennzahl import (
     systemarbeitszahl,
     waerme_gesamt_kwh,
 )
-from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis, wp_ersparnis_berechnung
+from backend.services.wp_wirtschaftlichkeit import wp_ersparnis_berechnung, wp_ersparnis_zeile
+from backend.api.routes.aktueller_monat.aggregation import _WP_STROM_K3_SUFFIX, _WP_WAERME_D1_SUFFIX
 from backend.core.investition_parameter import ist_dienstlich
 from backend.api.routes.aktueller_monat.vergleich import _zeittarif_preis
 
 
-async def waerme_klima_monat(*, _tages_wp_mengen, _zt_cache, allgemein_tarif, anlage_id, db, get_val, investitionen, jahr, monat, monats_fakt, monats_gaspreis, netzbezug_preis_effektiv_cent, tarife, teilzeitraum, wp_strom, wp_waerme):
+async def waerme_klima_monat(*, resolved=None, _tages_wp_mengen, _zt_cache, allgemein_tarif, anlage_id, db, get_val, investitionen, jahr, monat, monats_fakt, monats_gaspreis, netzbezug_preis_effektiv_cent, tarife, teilzeitraum, wp_strom, wp_waerme):
     """Arbeitszahl (R2/W-3), die drei R2-Lagen ueber die eine Layer-Stelle, E1b-Schranke, Tagesebene im laufenden Monat (N-472/A-5), S5 anlagenweit (WK-16i), SOLL 3.2b: welche Funktionen die Verletzung trifft.
 
     Aus `get_aktueller_monat` Zeilen 807-1080 (Stand vor dem Umzug) byte-identisch herausgeloest — Vorlage 2.
@@ -267,7 +268,17 @@ async def waerme_klima_monat(*, _tages_wp_mengen, _zt_cache, allgemein_tarif, an
         abgrenzung=monats_fakt.wp.abgrenzung_stoerung if monats_fakt is not None else None,
     )
 
-    if wp_waerme is not None and wp_strom is not None and allgemein_tarif:
+    if allgemein_tarif:
+        # ⭐ N-609 (04.10.2026): auch ohne Gerätezeile ist die WP-Ersparnis die Σ der Gerätezeilen — je
+        # Wärmepumpe mit IHREN Parametern über die eine Zeilenregel (`wp_ersparnis_zeile`). Hier stand bis dahin
+        # ein Aggregat über die Summenmengen mit dem Parametersatz der ERSTEN Wärmepumpe: laufender Monat mit
+        # zwei WP 1,44 statt 5,76 €, Juni ohne Abschluss 14,40 statt 57,60 €. Gibt es T-Konto-Zeilen, gewinnen
+        # sie danach (`wp_aggregat_aus_zeilen`) — dieser Wert ist der Monat OHNE Gerätezeile.
+        #
+        # Die Mengen je Gerät kommen aus der Quellen-Kaskade (`resolved`, K3/D1-Vorauflösung je Gerät) — NICHT aus
+        # `wp_geraete` der Antwort: die gibt es nur im laufenden Monat und dort aus der Tagesebene, die erst ab
+        # ihrem ersten Tag misst (gemessen: Juni None, Tagesspur ab 02.07. 10,08 statt 5,76 €).
+        #
         # Ohne eigenen WP-Tarif gilt der allgemeine Bezugspreis — bei flexiblem
         # Tarif also der Monatsdurchschnitt, wie im per-Investition-Block
         # (`wp_p`) schon immer. N-267: ein eigener WP-Tarif kann eigene Fenster
@@ -276,22 +287,45 @@ async def waerme_klima_monat(*, _tages_wp_mengen, _zt_cache, allgemein_tarif, an
             db, anlage_id, jahr, monat, tarife.get("waermepumpe"),
             netzbezug_preis_effektiv_cent, _zt_cache,
         )
-        wp_invs = [i for i in investitionen if i.typ == "waermepumpe"]
-        wp_ref_parameter = wp_invs[0].parameter if wp_invs else None
-
-        wp_ersparnis_result = berechne_wp_ersparnis(
-            wp_waerme_kwh=wp_waerme,
-            wp_strom_kwh=wp_strom,
-            wp_strompreis_cent=wp_preis_cent,
-            wp_parameter=wp_ref_parameter,
-            monats_gaspreis_cent=monats_gaspreis,
-            # E-B: Kühlen ersetzt keine Heizung (#263 K-2).
-            strom_kuehlen_kwh=get_val("wp_modus_kuehlen_kwh") or 0.0,
-        )
-        wp_ersparnis = round(wp_ersparnis_result.ersparnis_euro, 2)
-        wp_ersparnis_berechnung_text = wp_ersparnis_berechnung(
-            wp_ersparnis_result, wp_waerme, wp_strom, wp_preis_cent, wp_ref_parameter,
-        )
+        _resolved = resolved or {}
+        _wp_aktiv = [
+            i for i in investitionen
+            if i.typ == "waermepumpe" and i.ist_aktiv_im_monat(jahr, monat)
+        ]
+        _zeilen = []
+        for _inv in _wp_aktiv:
+            _w = _resolved.get(f"inv_{_inv.id}_{_WP_WAERME_D1_SUFFIX}")
+            _s = _resolved.get(f"inv_{_inv.id}_{_WP_STROM_K3_SUFFIX}")
+            # E-B: Kühlen ersetzt keine Heizung (#263 K-2). Der Kühlanteil je Gerät aus der Tagesebene; bei genau
+            # EINER Wärmepumpe ist der anlagenweite Kühlanteil der ihre.
+            _tm = (_tages_wp_mengen or {}).get(str(_inv.id))
+            _kuehl = (
+                _tm.modus_strom_kuehlen_kwh if _tm is not None
+                else ((get_val("wp_modus_kuehlen_kwh") or 0.0) if len(_wp_aktiv) == 1 else 0.0)
+            )
+            _waerme_g = _w[0] if _w is not None else None
+            _strom_g = _s[0] if _s is not None else None
+            _z = wp_ersparnis_zeile(
+                waerme_kwh=_waerme_g,
+                strom_kwh=_strom_g,
+                strom_kuehlen_kwh=_kuehl,
+                strompreis_cent=wp_preis_cent,
+                parameter=_inv.parameter,
+                gaspreis_cent=monats_gaspreis,
+            )
+            if _z is not None:
+                _zeilen.append((_inv, _z, _waerme_g, _strom_g))
+        if _zeilen:
+            wp_ersparnis = round(sum(round(_z.ersparnis_euro, 2) for _, _z, _, _ in _zeilen), 2)
+            # Die Herleitung nennt bei mehreren Geräten jedes — dieselbe Form wie `wp_aggregat_aus_zeilen`.
+            wp_ersparnis_berechnung_text = "\n".join(
+                (f"{_inv.bezeichnung}: " if len(_zeilen) > 1 else "")
+                + wp_ersparnis_berechnung(_z, _waerme_g, _strom_g, wp_preis_cent, _inv.parameter)
+                for _inv, _z, _waerme_g, _strom_g in _zeilen
+            )
+        else:
+            wp_ersparnis = None
+            wp_ersparnis_berechnung_text = None
 
     # G20-2 (Gernot 2026-07-20): Die eMob-Ersparnis-Aggregation folgt weiter unten
     # als **Summe der Per-Fahrzeug-Ersparnisse** (dieselben Werte wie die

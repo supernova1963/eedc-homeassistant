@@ -390,9 +390,11 @@ Aus dem feingranularen Stunden-Bestand des Monats zeigt die Sicht zusätzlich:
 > **Die Ergebnis-Leiter in vier Zeilen** (Netto-Ertrag und Monatsergebnis rechnet eedc für Monat, Jahr und Gesamt gleich):
 >
 > 1. **Netto-Ertrag** = Einspeise-Erlös + Eigenverbrauchs-Ersparnis (+ Balkonkraftwerk-Rest, + Erlös eines Geräts mit eigenem Vergütungssatz, + Sonstige Positionen) − bei Regelbesteuerung die USt auf den Eigenverbrauch. Das ist, was deine **Erzeugung** einbringt — dieselbe Zahl wie unter *Komponenten → PV-Anlage*, im PDF-Jahresbericht und im HA-Sensor.
-> 2. **+ Wärmepumpen- und E-Mobilitäts-Ersparnis − Stromrechnung** (Netzbezug inkl. Grundgebühr) — ein Zwischenstand, den der Tooltip zeigt.
+> 2. **+ Wärmepumpen- und E-Mobilitäts-Ersparnis − Stromrechnung** (Netzbezug inkl. Grundgebühr) — ein Zwischenstand, den der Tooltip zeigt. Die Wärmepumpen-Ersparnis ist die Summe deiner Geräte, jedes mit seinen eigenen Angaben (alte Heizung, Preis, Zusatzkosten) und den Preisen des Monats — in Monat, Jahr und Übersicht dieselbe Zahl, auch im laufenden Monat.
 > 3. **− Betriebskosten** der Komponenten, die in diesem Monat schon (und noch) in Betrieb waren.
 > 4. = **Monatsergebnis**. Fehlt die Stromrechnung eines Monats, steht dort „—" mit dem Grund im Tooltip — eedc rechnet sie nicht als 0.
+>
+> **Gemessen 0 ist 0.** Hat dein Zähler im Monat gemessen, aber keinen Zuwachs — etwa der Netzbezug in einem autarken Monat oder die Einspeisung bei Nulleinspeisung —, steht dort 0 kWh, und Autarkie, Stromrechnung und Ergebnis werden gerechnet (Autarkie 100 %, Stromrechnung 0,00 €). „—" mit dem Rat, einen Zähler zuzuordnen, erscheint nur, wenn wirklich keine Messung da ist. Das gilt im laufenden Monat und in einem vergangenen Monat ohne Abschluss (in einem abgeschlossenen Monat auch dort, wo der Abschluss bei Balkonkraftwerk, Speicher oder PV-Gesamtzähler 0 gespeichert hat) für Einspeisung, Netzbezug, den PV-Gesamtzähler, Speicher, Balkonkraftwerk, Wallbox und E-Auto; für Wärmepumpe und einzelne Strings noch nicht.
 >
 > Der **Finanz-Block-Saldo** darunter (Komponenten-Tabelle) verteilt dieselben Posten auf die Komponenten. ⚑ **Hast du einen Erzeuger unter *Sonstiges*** (BHKW, Windrad, Wasserkraft), **zählt sein Strom im Netto-Ertrag mit** — er speist hinter denselben Hauszähler. Bewertet wird dabei das **Gerät** nicht (siehe [§3.8](#38-sonstiges)). Die volle Herleitung steht in [Berechnungen §3.2](BERECHNUNGEN.md#32-finanzen-cockpit).
 

@@ -60,6 +60,7 @@ und zum Verständnis der Datenflüsse.
 > - **Tag, Anlagenzähler trägt ihn** (nicht jeder Erzeuger misst den ganzen Tag): ein Erzeuger mit eigenem Zähler behält seinen **Tageswert** (Σ seiner brauchbaren Stunden-Slots; ein Balkonkraftwerk mit Modul-Kindern den Rest nach ihnen, E4). Gemessen ist er, wenn kein Slot verworfen wurde, kein Tagesreset vorliegt und die Anlagen-Energie seiner Stunden ohne eigenen Slot plus seine Bündel-Energie höchstens **1 %** des Tages ist (`DAEMMERUNGSREST_ANTEIL`, eine Setzung). Die übrigen Träger teilen den Rest nach kWp (Marke `kwp_anteil`); übersteigen die Messungen den Anlagenzähler — oder misst jeder, aber mit anderer Summe —, werden sie gemeinsam auf ihn skaliert. Σ Tages-Keys = Σ Stunden. Layer: `core/berechnungen/pv_tages_praezedenz.py` (`gemessene_tageswerte`, `loese_aggregat_tag_auf`). Bis dahin bekam im Aggregat-Fall jeder Erzeuger nur den kWp-Anteil (seit v4.0.51; gespeicherte Tage heilen durch „Tag neu aggregieren" bzw. die Reparatur-Werkbank).
 > - **Tag ohne HA-Stundenwerte:** liefert die Zählertabelle die PV-Achse, stehen in `komponenten_kwh` nur ihre PV-Keys — eine Leistungs-Summe der Kurve (`pv_gesamt`, `pv_<bkw>` neben `bkw_<bkw>`) fällt heraus (seit v3.26.8 stand sie daneben und zählte doppelt).
 > - **Laufender Monat (Cockpit → Monat):** die Quellen-Präzedenz steht in `core/berechnungen/datenquellen.py::gewinner_je_feld`; Merge und Teilzeitraum-Marke entstehen beide daraus. Ein Anlagenzähler aus der HA-Monatsstatistik oder MQTT ab Monatsbeginn misst den Monat bis jetzt und geht durch die P7-Auflösung (Quellen mit eigenem Wert gewinnen, er füllt den Rest). Ersetzbar bleiben Tagesebene, MQTT-Rückfall, Connector ohne Abdeckung und im laufenden Monat auch der gespeicherte Zwischenstand und der Connector mit Abdeckung. Die eigene BKW-Zeile aus der Tagesebene nennt nur gemessene Tageswerte (`energie.bkw_gemessen_kwh_je_investition`).
+> - **Gemessene 0 (Cockpit → Monat, laufend und ohne Abschluss, seit 04.10.2026):** hat eine Quelle im Monat **gemessen**, gilt ihr Wert auch, wenn er 0 ist — für Einspeisung, Netzbezug und den Anlagen-PV-Zähler sowie die Gerätefelder von Speicher, Balkonkraftwerk, Wallbox und E-Auto. Gemessen heißt bei der HA-Statistik mindestens **ein Intervall** (`SensorMonatswert.intervalle ≥ 1`: Anker + eine Zeile oder zwei Zeilen — eine einzelne Zeile misst nichts), bei der Tagesebene mindestens eine Stunde mit Wert (`TagesMonatsSumme.einspeisung_erfasst`/`netzbezug_erfasst`, nur diese zwei Felder). Ein nicht zugeordneter Zähler und einer ohne Zeilen im Monat bleiben `None` mit Grund. Auch im abgeschlossenen Monat mit Abschluss wirkt sie, wenn die gespeicherte Zeile für das Feld 0 trägt (Balkonkraftwerk, Speicher, Anlagen-PV-Zähler): das Feld zeigt dann 0,0 mit Herkunft Home Assistant statt „kein Wert“; eine gespeicherte Zahl über 0 wird nie verdrängt. Beispiel: Netzbezug-Zähler flach, drei Juli-Tage ⇒ Netzbezug 0,0 · Gesamtverbrauch 42,0 · Autarkie 100 % · Stromrechnung 0,00 € · Ergebnis 16,20 € (vorher alles „—“ und der Rat „Zähler zuordnen“). ⛔ **Nicht** für Wärmepumpe und einzelne Strings: eine WP-0 bräuchte eine Darstellungsregel für „kein Betrieb“, eine String-0 neben dem Anlagenzähler nähme dem String seinen Rest — beide bleiben bei „über 0“. Benannt: ein eingefrorener Sensor mit weiterlaufenden Zeilen ist 0 (wie HA ihn zeigt); im laufenden Monat schlägt eine HA-0 den gespeicherten Zwischenstand wie jeder HA-Wert. Proben: `test_n585_gemessene_null.py`.
 > - **Balkonkraftwerk mit Modul-Kindern:** der Monat tritt ab, in jeder Form — laufend, ohne Abschluss, abgeschlossen und im Tageswert-Rückfall der Monats-Fakten (`pv_verteilung.bkw_kinder_luecken_kwh`, Stufe 2 von P7). Der Tag bleibt bei E4.
 > - **Modul ohne Wert, kein Gesamtwert:** die **Anzeige-Summe** nimmt die vorhandenen Werte (`pv_monatswerte.pv_teilsumme_je_monat`, `pv_vollstaendig=False`, Hinweis „Teilsumme"; der Daten-Checker nennt den Monat). Die **Prüf-Summe** `pv_summe_je_monat` bleibt `None` — Daten-Checker-PV-Map, Import-Vorschau und `gesamt_pv_kwh` prüfen nur vollständige Monate (Gernot 04.10.2026; N42 gilt nur noch für die Prüf-Leser).
 
@@ -601,18 +602,35 @@ Jahres-Rendite (%)  = Kumulative_Ersparnis / Investition_gesamt * 100
 > Dienstwagen (`ist_dienstlich`) bleiben in beiden Jahren aus den E-Mob-Bilanzen. So vergleicht der
 > Pfeil gleiche Komponenten-Mengen, statt Alt-Werte vor der Anschaffung mitzuzählen.
 
-#### WP-Ersparnis im Cockpit
+#### WP-Ersparnis im Cockpit — Σ der Gerätezeilen je Monat
 
 ```
-WP-Ersparnis = (WP_Wärme / 0.9 * Gas_Preis - WP_Strom * WP_Preis) / 100
+Zeile(Gerät, Monat) = (Wärme / η × Gaspreis + Zusatzkosten / 12) − (Strom − Kühlstrom) × WP-Preis
+                      — nur bei Wärme > 0 UND Strom > 0, je Zeile auf 2 Stellen gerundet
+WP-Ersparnis        = Σ Monate Σ Geräte Zeile
 ```
 
 Wobei:
-- `WP_Wärme` = Σ(heizenergie_kwh + warmwasser_kwh) aus InvestitionMonatsdaten
-- `WP_Strom` = Σ(stromverbrauch_kwh) aus InvestitionMonatsdaten
-- `0.9` = angenommener Gasheizungs-Wirkungsgrad
-- `Gas_Preis` = 10.0 ct/kWh (hardcodiert)
-- `WP_Preis` = Spezialtarif waermepumpe (Fallback: allgemein)
+- **Mengen je Gerät** — Monat mit Gerätezeile: Monats-Fakten `WpFakten.je_geraet` (Strom nach K3, Wärme nach D1,
+  Kühlanteil nach der Betriebsart-Weiche, auch der nachgetragene Modus-Split eines Monats ohne Abschluss); Monat ohne
+  Gerätezeile (laufend, bzw. abgeschlossen ohne Abschluss): die Quellen-Kaskade je Gerät
+  (`inv_<id>__strom_k3_kwh` / `inv_<id>__waerme_d1_kwh`).
+- **η, Gaspreis-Default, Zusatzkosten** aus den Parametern **des Geräts** (`berechne_wp_ersparnis`).
+- **Gaspreis** des Monats (`Monatsdaten.gaspreis_cent_kwh`), sonst der des Geräts.
+- **WP-Preis** des Monats: WP-Tarif, sonst allgemeiner Tarif, am Stichtag des Monats (ADR-002/P8), mit Zeitfenstern.
+
+**Eine Zeilenregel** (`services/wp_wirtschaftlichkeit.py::wp_ersparnis_zeile`, Monatssumme `wp_ersparnis_monat`) für
+T-Konto und Kachel in *Cockpit → Monat* (auch ohne Gerätezeile), *Cockpit → Jahr* (Σ Monate), *Cockpit → Übersicht*
+(Feld `wp_ersparnis_euro`, geht in `jahres_rendite_prozent`) und *Auswertungen → Komponenten*. Grund: zwei Wärmepumpen
+haben keine gemeinsame Referenz-WP — bis 04.10.2026 rechneten Übersicht, Komponenten-Zeitreihe und der Monat ohne
+Gerätezeile ein Aggregat mit dem Parametersatz der ersten Wärmepumpe, die Übersicht dazu mit dem heutigen Tarif und
+ohne Monats-Gaspreis. Beispiel (zwei WP, Gas 10 bzw. 16 ct, je 900 kWh Wärme / 250 kWh Strom, 30 ct): Zeilen 25 € +
+85 € = **110 €** in Monat, Jahr, Übersicht und Komponenten (vorher Übersicht 50 €); laufender Monat mit zwei WP
+**5,76 €** (vorher 1,44 €). Die Zeilenrundung hält Σ Zeilen = Sicht: fünf Monate à 10,81 € sind 54,05 €, nicht 54,07 €.
+
+Benannte Grenze: Ein Monat mit WP-Strom ohne Wärme (Standby) hat keine Zeile; HA-Export und Aussichten belasten dort
+den Strom (gemessen 25 € gegen 19 €). Proben: `test_n605_wp_ersparnis_aus_geraetezeilen.py`,
+`test_n609_wp_ersparnis_je_geraet.py`.
 
 #### E-Mob-Ersparnis im Cockpit
 
@@ -3471,6 +3489,42 @@ Intervall `[Vortag 23:00, 00:00)` trägt. Gepinnt in
 Symmetrie-Test „gleiche Wirklichkeit, drei Messarten ⇒ **ein** Profil"
 (`feedback_aggregator_symmetrie`).
 
+#### Temperaturkorrektur des Wärmepumpen-Anteils (N-593, N-594)
+
+Das Profil trägt den Wärmepumpen-Anteil je Stunde (`wp_werktag` / `wp_wochenende`, Zählermenge
+`TagesEnergieProfil.waermepumpe_kw`) und die Heizgradtage der Lernwoche (`referenz_hdd_kd`, Mittel der
+Tages-Heizgradtage). Der Prognosetag bekommt **einen** Faktor aus dem Tagesmittel seiner Temperaturvorhersage
+(`core/berechnungen/heizgradtage.py::wp_tagesfaktor`):
+
+```
+Referenz ≥ 1 Kd:  Faktor = HDD_Tag / HDD_Ref
+Referenz < 1 Kd:  Faktor = 1 + max(0; HDD_Tag − HDD_Ref) × 0,15          (milde Lernwoche)
+gekappt auf 0,1 … 3,0
+```
+
+Skaliert wird **nur der wetterabhängige Teil** der Stunde (`wp_strom_skaliert`):
+
+```
+fest      = Kühlen + Warmwasser         (Referenz ≥ 1 Kd)
+          = Kühlen                      (milde Lernwoche: dort trägt das Profil keinen Heizanteil)
+WP_Stunde = fest + (WP − fest) × Faktor     (fest gedeckelt auf WP)
+```
+
+Warmwasser und Kühlen lernt der DB-Pfad (`_profil_from_db`) als **Teilmengen** der WP-Reihe über dieselben
+Stichproben (`wp_ww_<tagtyp>`, `wp_kuehlen_<tagtyp>`, nur wenn die Lernwoche eine davon trägt): aus getrennten
+Leistungssensoren (`waermepumpe_<id>_warmwasser` / `_kuehlen`) oder aus dem Betriebsmodus-Etikett der Stunde × der
+Stundenmenge des Geräts (Leistungssensor; bei genau einer aktiven Wärmepumpe die Zählermenge). Nie aus der Bauart
+(ADR-002/P13). Keine Kühlgrenze. Beispiel (Lernwoche Ø 10 °C = 5 Kd, Heizen 7 × 1,0 kWh, Warmwasser 2,0 kWh): Tag
+mit Ø 16 °C **2,7 kWh** (vorher 0,9 — der Warmwasser-Zyklus fiel auf 0,2), Tag mit Ø 0 °C **23 kWh** (vorher 27);
+milde Lernwoche (0,5 Kd) bei gleichem Wetter **9,0 kWh** (vorher 9,64), danach ein Tag mit 5 °C 21,79 kWh.
+
+Benannte Grenzen: mehrere Wärmepumpen ohne Leistungssensor ⇒ keine Trennung (die Zählermenge gehört keinem Gerät);
+Betriebsart-Zähler und getrennte Strom-Zähler trennen hier nicht; das Etikett ist der überwiegende Modus der Stunde;
+die Lerner aus HA-Verlauf und MQTT trennen nicht; der Sprung bei 1,0 Kd bleibt. Leser: Kachel und Live-Kurve
+(`live_wetter._berechne_verbrauchsprofil`), Sensor „Verbrauchsprognose heute/morgen“ und die WP-Stundenreihe des
+HA-Exports samt Heizfenster (`verbrauchsprognose_heute._rechne_tagesprognose`). Proben:
+`test_n593_wp_tagesfaktor.py`, `test_n594_wp_korrektur_nur_wetterabhaengig.py`.
+
 #### Wann eine Stunde als unvollständig gilt (v4.0.6)
 
 Die Zuordnung allein genügt nicht — die drei Quellen müssen sich auch einig sein, **wann eine Stunde
@@ -3562,7 +3616,7 @@ komponenten_kwh = Σ derselben Geräte-Slots (R5)
 - **Tagesverbrauch** (R7) nach der HA-Formel über den Tag; `None` nur im Total-Fall. **Eigenverbrauch** = max(0, ΣPV − ΣEinsp). Autarkie = (GV − Netzbezug) / GV. Unterdrückt werden EV/EV-Quote bei `verworfen` auf PV oder Einspeisung, die Autarkie bei `verworfen` auf PV, Netzbezug, Einspeisung oder Batterie.
 - **Monat** (R8, `monatsbilanz_aus_tagen`): faltet Tagesbilanzen; ein Total-Fall-Tag propagiert nicht; EV ebenfalls bei 0 geklemmt.
 - **Regelmarke** (R9): `TagesZusammenfassung.verworfen` ist für jeden neu geschriebenen Tag mindestens `{}`; NULL = Altbestand, der bis zur Neuaggregation N-92 rechnet (Daten-Checker §4.6 nennt ihn).
-- **Monatswert aus der HA-Statistik** (R10, `get_sensor_monatswert`): Σ der Stundenänderungen ab dem letzten Stand **vor** dem Monat, mit derselben Verwerfung (Rücksprung immer, Deckel × Fenster für PV/Einspeisung aus der Anlagen-kWp). Damit zählt die erste Stunde des Monats (N-563), und eine Lücke über die Monatsgrenze landet im Folgemonat.
+- **Monatswert aus der HA-Statistik** (R10, `get_sensor_monatswert`): Σ der Stundenänderungen ab dem letzten Stand **vor** dem Monat, mit derselben Verwerfung (Rücksprung immer, Deckel × Fenster für PV/Einspeisung aus der Anlagen-kWp). Damit zählt die erste Stunde des Monats (N-563), und eine Lücke über die Monatsgrenze landet im Folgemonat. `intervalle` nennt die Zahl der Stützstellen-Paare hinter dem Wert; 0 heißt „eine einzige Zeile, nichts gemessen“.
 - **Stundenzeilen:** jeder Slot mit Zählerwert bekommt eine Zeile, auch ohne Leistungspunkt (dort keine `komponenten`, keine Spitze).
 - **Leser:** Stunde-gegen-Stunde-Auswertungen lassen Zeilen mit `spannen > 1` als Stichprobe aus; Tag-gegen-Tag-Auswertungen (Lernfaktor, Prognose-Genauigkeit, PR-Check) lassen beide Tage um ein Mitternachtsbündel mit Energie aus. Die Energie zählt in jeder Summe. Helfer: `core/berechnungen/spannen.py`.
 - **Eingefrorener Stand:** Liefert HA Stunden mit unverändertem `sum` und danach den Nachtrag in einer Zeile, bleiben die Nullzeilen Nullstunden und die Menge steht in der Nachtragsstunde (n = 1, wie HA). Der Deckel rechnet dort mit dem Fenster seit der letzten Änderung — der Nachtrag bleibt Menge (Lab 24.05.2026: +37 kWh nach drei stillen Stunden). Grenze: nach einer Nacht mit echten Nullen passiert ein Sprung bis Schwelle × (Nullstunden + 1) — am Tag ab dem Anker Vortag 22:00 (Winter ≈ 150 kWh bei 10 kWp), im Monat bis zur Kappe von 24 Stunden (360 kWh); dazwischen verwirft der Tag, der Monat nimmt (benannte Asymmetrie). Der Spike-Checker (§4.7 im Daten-Checker-Handbuch) liest dieselbe Regel.

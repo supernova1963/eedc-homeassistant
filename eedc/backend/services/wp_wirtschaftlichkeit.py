@@ -260,3 +260,75 @@ def berechne_wp_ersparnis(
         verwendeter_wirkungsgrad=wirkungsgrad,
         kuehl_kosten_euro=kuehl_kosten,
     )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# N-609 — die EINE Gerätezeile und die Σ der Gerätezeilen eines Monats
+# ═════════════════════════════════════════════════════════════════════════════
+#
+# Regel (N-605/N-609): die WP-Ersparnis einer Anlage ist in JEDER Sicht die Σ der Gerätezeilen je Monat. Die
+# Gerätezeile hat EINE Fassung — diese Funktion —, und jede Sicht ruft sie: T-Konto (Cockpit → Monat), der Monat
+# ohne Gerätezeile (laufend bzw. ohne Abschluss), Übersicht und Komponenten-Zeitreihe. Bis 04.10.2026 rechneten
+# Übersicht, Komponenten-Zeitreihe und der Monat ohne Gerätezeile ein Aggregat über die Summenmengen mit dem
+# Parametersatz der ERSTEN Wärmepumpe — zwei Geräte haben aber keine gemeinsame Referenz-WP (gemessen 50 statt 110 €;
+# laufender Monat 1,44 statt 5,76 €). Die Übersicht rechnete dazu mit dem HEUTIGEN Tarif (P8, Tarifwechsel 0 statt
+# 25 €) und ohne Monats-Gaspreis (25 statt 65 €).
+#
+# Technischer Grund für „je Zeile auf 2 Stellen gerundet": die Zeile ist ein ausgewiesener Betrag (T-Konto); die
+# Summe der Sicht muss die Summe der ausgewiesenen Beträge sein, sonst steht neben fünf Zeilen à 10,81 € eine
+# Jahreszahl von 54,07 € (gemessen).
+
+
+def wp_ersparnis_zeile(
+    *,
+    waerme_kwh: Optional[float],
+    strom_kwh: Optional[float],
+    strom_kuehlen_kwh: Optional[float],
+    strompreis_cent: float,
+    parameter: Optional[dict],
+    gaspreis_cent: Optional[float],
+) -> Optional[WPErsparnisErgebnis]:
+    """Die Ersparnis-Zeile EINES Geräts in EINEM Monat — oder ``None``, wenn es keine Zeile gibt.
+
+    Eine Zeile entsteht nur bei **Wärme > 0 und Strom > 0** (die Bedingung der T-Konto-Zeile seit N-391): ein Monat
+    ohne Wärme hat keine Bezugsgröße, ein Monat ohne Strom keinen Betrieb. Parameter des **Geräts**, Strompreis und
+    Gaspreis **des Monats** (P8). ``strom_kuehlen_kwh`` ist die Teilmenge des Stroms im Kühlbetrieb (E-B).
+    """
+    if waerme_kwh is None or strom_kwh is None or waerme_kwh <= 0 or strom_kwh <= 0:
+        return None
+    return berechne_wp_ersparnis(
+        wp_waerme_kwh=waerme_kwh,
+        wp_strom_kwh=strom_kwh,
+        wp_strompreis_cent=strompreis_cent,
+        wp_parameter=parameter,
+        monats_gaspreis_cent=gaspreis_cent,
+        strom_kuehlen_kwh=strom_kuehlen_kwh or 0.0,
+    )
+
+
+def wp_ersparnis_monat(fakt, inv_by_id: dict) -> Optional[float]:
+    """Σ der Gerätezeilen EINES Monats aus den Monats-Fakten (ADR-002/P10) — je Zeile auf 2 Stellen gerundet.
+
+    Mengen aus ``fakt.wp.je_geraet``, Preis ``fakt.tarif.wp_preis_cent`` (Komponenten-Kaskade WP-Tarif → allgemein
+    am Stichtag des Monats, mit Zeitfenstern — dieselbe Tarifzeile und derselbe Helfer wie die T-Konto-Zeile),
+    Gaspreis ``fakt.tarif.gaspreis_cent_kwh``. ``inv_by_id`` liefert die Parameter je Gerät.
+
+    Returns:
+        Die Summe, oder ``None``, wenn der Monat keine einzige Zeile trägt (z. B. Standby-Monat: Strom ohne Wärme).
+    """
+    summe: Optional[float] = None
+    for inv_id, g in sorted(fakt.wp.je_geraet.items()):
+        inv = inv_by_id.get(inv_id)
+        if inv is None:
+            continue
+        zeile = wp_ersparnis_zeile(
+            waerme_kwh=g.waerme_kwh,
+            strom_kwh=g.strom_kwh,
+            strom_kuehlen_kwh=g.strom_kuehlen_kwh,
+            strompreis_cent=fakt.tarif.wp_preis_cent,
+            parameter=inv.parameter,
+            gaspreis_cent=fakt.tarif.gaspreis_cent_kwh,
+        )
+        if zeile is not None:
+            summe = (summe or 0.0) + round(zeile.ersparnis_euro, 2)
+    return None if summe is None else round(summe, 2)

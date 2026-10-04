@@ -45,6 +45,19 @@ from typing import Final, Mapping, Optional, Sequence
 #: Unterhalb dieser Außentemperatur wird geheizt (Gradtag-Konvention, DACH).
 HEIZGRENZE_C: Final[float] = 15.0
 
+#: Unterhalb dieser Referenz (Kd je Tag der Lernwoche) gilt die Lernwoche als **mild**: die Wärmepumpe lief
+#: praktisch nur für Warmwasser (und Kühlen), ein Verhältnis der Heizgradtage liefe gegen unendlich. Die
+#: Entscheidung mild/normal steht NUR hier (``_referenz_mild``) — ``wp_tagesfaktor`` und ``wp_strom_skaliert``
+#: fragen dieselbe Funktion (N-594).
+MILDE_REFERENZ_KD: Final[float] = 1.0
+#: Zuschlag je Heizgradtag über der Referenz im milden Zweig (C-F3).
+MILDER_ZUSCHLAG_JE_KD: Final[float] = 0.15
+
+
+def _referenz_mild(referenz_hdd_kd: Optional[float]) -> bool:
+    """Ist die Lernwoche mild (Referenz unter ``MILDE_REFERENZ_KD``)? ``None`` ist nicht mild."""
+    return referenz_hdd_kd is not None and float(referenz_hdd_kd) < MILDE_REFERENZ_KD
+
 
 def heizgradtage_tag(tagesmittel_c: float) -> float:
     """Heizgradtage eines Tages: ``max(0; 15 °C − Tagesmittel)``.
@@ -119,8 +132,19 @@ def wp_tagesfaktor(
     Wärmepumpe lief praktisch nur für Warmwasser), liefe ein Verhältnis gegen
     unendlich — und hochskalieren ergäbe keinen Sinn, weil im Referenzprofil
     gar kein Heizanteil steckt, den man strecken könnte. Für diesen Fall ein
-    sanfter Zuschlag von 15 % je Heizgradtag des Prognosetags. Beides gekappt
+    sanfter Zuschlag von 15 % je Heizgradtag **über der Referenz**:
+    ``1 + max(0; HDD_Tag − HDD_Ref) × 0,15`` (N-594, C-F3). Beides gekappt
     auf ``0,1…3,0``, damit kein Ausreißertag das Profil kippt.
+
+    ⛔ **Bis 04.10.2026 rechnete der milde Zweig ``1 + HDD_Tag × 0,15``** — der
+    Zuschlag auf die Heizgradtage des Prognosetags, nicht auf ihre Differenz zur
+    Referenz. Das verletzte die Invarianz: bei **unverändertem** Wetter einer
+    Lernwoche mit 0,5 Kd stieg der Wärmepumpen-Strom um 7,5 % (9,0 ⇒ 9,64 kWh),
+    bei 0,9 Kd um 13,5 % (⇒ 10,18). Mit der Differenz bleibt das gelernte Profil
+    bei gleichem Wetter unverändert, wie im normalen Zweig.
+
+    Was der Faktor skaliert, entscheidet ``wp_strom_skaliert`` — nur den Teil
+    der Stunde, der von der Außentemperatur abhängt.
 
     ⭐ **Warum das hier steht und nicht in einem Leser:** Kachel und Live-Kurve
     (``api/routes/live_wetter.py::_berechne_verbrauchsprofil``), die
@@ -145,13 +169,46 @@ def wp_tagesfaktor(
         return 1.0
     hdd_ref = float(referenz_hdd_kd)
     hdd_tag = heizgradtage_tag(sum(werte) / len(werte))
-    if hdd_ref >= 1.0:
+    if not _referenz_mild(hdd_ref):
         faktor = hdd_tag / hdd_ref
-    elif hdd_tag > 0:
-        faktor = 1.0 + hdd_tag * 0.15
     else:
-        faktor = 1.0
+        faktor = 1.0 + max(0.0, hdd_tag - hdd_ref) * MILDER_ZUSCHLAG_JE_KD
     return max(0.1, min(3.0, faktor))
+
+
+def wp_strom_skaliert(
+    wp_kw: float,
+    faktor: float,
+    referenz_hdd_kd: Optional[float],
+    *,
+    warmwasser_kw: float = 0.0,
+    kuehlen_kw: float = 0.0,
+) -> float:
+    """Der Wärmepumpen-Strom EINER Prognosestunde: nur der wetterabhängige Teil wird mit ``faktor`` skaliert (N-594).
+
+    **Regel (C-F1).** Unverändert bleiben gemessenes Warmwasser und Kühlen — beides hängt nicht von den
+    Heizgradtagen ab: ein Warmwasser-Zyklus läuft an einem warmen Oktobertag wie an einem kalten, und Kühlstrom
+    ist an einem kühleren Tag nicht 30 % höher. Im **milden** Zweig (``referenz_hdd_kd < 1``, C-F3 b) bleibt nur
+    das Kühlen fest: eine milde Lernwoche trägt keinen Heizanteil, den der Zuschlag strecken könnte — er wirkt dort
+    auf Warmwasser und Rest gemeinsam. **Keine Kühlgrenze** — Kühlen bleibt in jedem Zweig fest, statt an einer
+    erfundenen Grenztemperatur zu wachsen.
+
+    ``warmwasser_kw`` und ``kuehlen_kw`` sind **Teilmengen** von ``wp_kw`` (der Lerner bildet sie über denselben
+    Nenner); hier noch einmal auf ``wp_kw`` gedeckelt, damit ein Aufrufer mit anderer Herkunft nie mehr festhält, als
+    die Stunde trägt.
+
+    Ergebnis ``fest + (wp_kw − fest) × faktor``. Ohne Teilmengen (0, 0) ist das ``wp_kw × faktor`` — bitgleich zur
+    Skalierung vor N-594.
+
+    Gemessen (Lernwoche Ø 10 °C, Heizen 7 × 1,0 kWh, Warmwasser 2,0 kWh um 14 Uhr): Übergangstag 16 °C 0,9 ⇒ 2,7
+    kWh; kalter Tag 0 °C 27 ⇒ 23 kWh.
+    """
+    wp = max(0.0, float(wp_kw or 0.0))
+    fest = max(0.0, float(kuehlen_kw or 0.0))
+    if not _referenz_mild(referenz_hdd_kd):
+        fest += max(0.0, float(warmwasser_kw or 0.0))
+    fest = min(fest, wp)
+    return fest + (wp - fest) * faktor
 
 
 @dataclass(frozen=True)

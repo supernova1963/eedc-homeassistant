@@ -124,11 +124,44 @@ from backend.api.routes.aktueller_monat.komponenten import (  # Vorlage 2
 # Datensammlung
 # =============================================================================
 
+#: N-585 — Felder, deren **gemessene 0** ein Monatswert ist (``KONZEPT-UNVOLLSTAENDIGE-WERTE.md`` §3): die
+#: Basis-Zähler (Einspeisung, Netzbezug, Anlagen-PV-Zähler) …
+_NULL_IST_MESSWERT_BASIS = frozenset({"einspeisung_kwh", "netzbezug_kwh", "pv_erzeugung_kwh"})
+#: … und die Gerätefelder dieser Typen. ⛔ **Nicht** Wärmepumpe und PV-String (Bauplan N-585, „Nicht in diesem
+#: Bau"): für eine WP-0 fehlt eine Darstellungsregel für „kein Betrieb" — die Grund-Texte sagten „kein
+#: Stromverbrauch erfasst", die Ergebnis-Leiter „WP-Ersparnis fehlt" (Betriebsart-Kanäle der HA-Bauform). Vor N-609
+#: (Teil B) hätte eine durchgelassene WP-0 über den damaligen Aggregat-Zweig zusätzlich eine Phantom-Ersparnis
+#: erzeugt (gemessen 8,64 / 86,40 €). Eine String-0 neben dem Anlagenzähler nähme dem String dessen Rest — eine
+#: sichtbare Änderung der PV-Achse ohne Matrix-Form. Für beide bleibt es bei „über 0".
+_NULL_IST_MESSWERT_TYPEN = frozenset({"speicher", "balkonkraftwerk", "wallbox", "e-auto"})
+
+
+def _null_ist_messwert(feld_name: str, typ_je_inv: dict[str, str]) -> bool:
+    """Gilt eine gemessene 0 dieses Felds als Wert? Basisfelder immer, Gerätefelder je Typ (N-585).
+
+    ``typ_je_inv`` kommt aus den geladenen Investitionen der Anlage; sind sie nicht geladen, ist es leer und es
+    gelten nur die Basisfelder.
+    """
+    if feld_name in _NULL_IST_MESSWERT_BASIS:
+        return True
+    if feld_name.startswith("inv_"):
+        inv_id = feld_name[len("inv_"):].split("_", 1)[0]
+        return typ_je_inv.get(inv_id) in _NULL_IST_MESSWERT_TYPEN
+    return False
+
+
 async def _collect_ha_statistics_data(anlage: Anlage, jahr: int, monat: int) -> dict[str, tuple[float, DatenquelleInfo]]:
     """Sammelt Daten aus der HA Recorder-Statistik-DB (Konfidenz 92%).
 
     Liest MAX(state) - MIN(state) pro Sensor aus der HA statistics-Tabelle.
     Funktioniert für total_increasing UND measurement Sensoren (Fallback).
+
+    ⭐ **N-585: eine gemessene 0 bleibt eine 0** — für die Felder aus ``_NULL_IST_MESSWERT_BASIS`` und die
+    Gerätefelder der Typen in ``_NULL_IST_MESSWERT_TYPEN``. Gemessen heißt: mindestens ein Intervall
+    (``SensorMonatswert.intervalle ≥ 1`` — Anker + eine Zeile oder zwei Zeilen); eine einzelne Zeile misst
+    nichts, ihre 0 wäre erfunden (Netzbezug 0,0 und Autarkie 100 % aus einer Zeile). Alle anderen Felder kommen
+    weiter nur mit Werten über 0 — eine 0 dort verdrängte fremde Felder bzw. bräuchte erst eine Darstellungsregel.
+    Ein Feld ohne Zeilen im Monat fehlt im Ergebnis (``None`` in der Antwort, mit Grund).
     """
     # N-156/F-26: das frühere Gate auf `HA_INTEGRATION_AVAILABLE`
     # (= SUPERVISOR_TOKEN) stand unmittelbar vor der Frage, die es beantworten
@@ -199,9 +232,16 @@ async def _collect_ha_statistics_data(anlage: Anlage, jahr: int, monat: int) -> 
     now_str = datetime.now().isoformat()
     quelle = DatenquelleInfo(quelle="ha_statistics", konfidenz=92, zeitpunkt=now_str)
 
+    typ_je_inv = {str(i.id): i.typ for i in _invs}
     for sensor_wert in result.sensoren:
         feld_name = sensor_to_feld.get(sensor_wert.sensor_id)
-        if feld_name and sensor_wert.differenz is not None and sensor_wert.differenz > 0:
+        if not feld_name or sensor_wert.differenz is None:
+            continue
+        if sensor_wert.differenz > 0 or (
+            sensor_wert.differenz == 0
+            and sensor_wert.intervalle >= 1
+            and _null_ist_messwert(feld_name, typ_je_inv)
+        ):
             resolved[feld_name] = (sensor_wert.differenz, quelle)
 
     return resolved
@@ -213,10 +253,12 @@ async def _ha_heimlade_felder_mit_daten(anlage: Anlage, investitionen, jahr: int
     N-555, Konzept Regel 1: *„Ergänzt eine Sicht einen abgeschlossenen Monat ohne
     Monatsabschluss aus der HA-Statistik (Cockpit → Monat), zählt deren Wert wie ein
     gespeicherter, auch 0, sofern die Statistik für den Monat Daten hat."*
-    ``_collect_ha_statistics_data`` führt als Quelle der Präzedenz-Kaskade nur Werte
-    über 0 (eine 0 dort verdrängte fremde Felder); die Heimladung fragt deshalb
-    getrennt — nur die Heimlade-Felder privater E-Autos und Wallboxen, und nur, wenn
-    ihnen ein Sensor zugeordnet ist.
+    ``_collect_ha_statistics_data`` führt als Quelle der Präzedenz-Kaskade eine 0 nur für
+    die Felder, deren gemessene 0 ein Wert ist (N-585: Basis-Zähler, Speicher, Balkonkraftwerk,
+    Wallbox, E-Auto — und nur mit mindestens einem Intervall); die Heimladung fragt hier
+    weiter getrennt — nur die Heimlade-Felder privater E-Autos und Wallboxen, und nur, wenn
+    ihnen ein Sensor zugeordnet ist. Ihre Menge „hatte Daten" gilt ohne Intervall-Schranke
+    (Konzept Regel 1: „sofern die Statistik für den Monat Daten hat").
 
     Returns:
         ``{"inv_<id>_<feld>", …}``.
@@ -536,8 +578,9 @@ async def _collect_tagesebene_data(
     der N-121 entschieden wurde, und sie gilt hier genauso.
 
     Returns:
-        ``{feld: (menge, DatenquelleInfo)}`` — nur Größen mit ``> 0``, wie in
-        allen vier Collectoren. Keine Tagesspur ⇒ leeres Dict.
+        ``{feld: (menge, DatenquelleInfo)}`` — Größen mit ``> 0``; Einspeisung und
+        Netzbezug auch mit gemessener 0 (mindestens eine Stunde mit Wert, N-585).
+        Keine Tagesspur ⇒ leeres Dict.
     """
     from backend.services.energie_profil.monats_aus_tagen import (
         lade_monats_summen_aus_tagen,
@@ -590,7 +633,13 @@ async def _collect_tagesebene_data(
         ("speicher_ladung_kwh", getattr(summe, "speicher_ladung_kwh", 0.0)),
         ("speicher_entladung_kwh", getattr(summe, "speicher_entladung_kwh", 0.0)),
     ):
-        if wert > 0:
+        # N-585: Einspeisung und Netzbezug tragen auch eine gemessene 0 — gemessen heißt hier: mindestens eine
+        # Stunde des Monats mit Wert (`*_erfasst`). Ohne das Flag wäre ein nicht zugeordneter Zähler 0,0 kWh und
+        # Autarkie 100 % (alle Stunden ohne Wert summieren sich zu 0,0). Die übrigen Größen bleiben bei „über 0".
+        if wert > 0 or (
+            feld in ("einspeisung_kwh", "netzbezug_kwh")
+            and bool(getattr(summe, feld.replace("_kwh", "_erfasst"), False))
+        ):
             resolved[feld] = (wert, quelle)
 
     # ── Wärme/Klima je Gerät (A-5) ──
@@ -668,6 +717,16 @@ async def _berechne_monat(
     Was „fehlend" heißt, entscheiden die `> 0`-Gates in `_collect_saved_data`:
     eine gespeicherte 0,0 gilt der Kaskade nicht als Wert und darf gefüllt
     werden. Begründung im Docstring dort.
+
+    ⭐ **Eine gemessene 0 der Quellen HA-Statistik und Tagesebene ist ein Wert**
+    (N-585, ``KONZEPT-UNVOLLSTAENDIGE-WERTE.md`` §3) — für Einspeisung,
+    Netzbezug und den Anlagen-PV-Zähler, bei der HA-Statistik auch für die
+    Gerätefelder von Speicher, Balkonkraftwerk, Wallbox und E-Auto. Gemessen
+    heißt: mindestens ein Intervall (HA) bzw. eine Stunde mit Wert (Tagesebene).
+    Ein autarker Monat zeigt damit Netzbezug 0, Autarkie 100 % und eine
+    Stromrechnung von 0,00 € statt „kein Wert"; ein Feld ohne Messung bleibt
+    ``None`` mit Grund. Wärmepumpe und PV-String bleiben bei „über 0"
+    (Begründung an ``_NULL_IST_MESSWERT_TYPEN``).
 
     **Nur diese Route.** Auf der **Schreib**-Seite gilt die Aussage nicht:
     `external:portal_import` (Cloud-/Portal-Import) und `external:ha_statistics`
@@ -879,7 +938,7 @@ async def _berechne_monat(
     if "wp_strom" in _out: wp_strom = _out["wp_strom"]
     if "wp_waerme" in _out: wp_waerme = _out["wp_waerme"]
     # ── waerme_klima_monat (Vorlage 2: Abschnitt in waerme.py, Schnittstelle 16 ein / 10 aus) ──
-    _out = await waerme_klima_monat(_tages_wp_mengen=_tages_wp_mengen, _zt_cache=_zt_cache, allgemein_tarif=allgemein_tarif, anlage_id=anlage_id, db=db, get_val=get_val, investitionen=investitionen, jahr=jahr, monat=monat, monats_fakt=monats_fakt, monats_gaspreis=monats_gaspreis, netzbezug_preis_effektiv_cent=netzbezug_preis_effektiv_cent, tarife=tarife, teilzeitraum=teilzeitraum, wp_strom=wp_strom, wp_waerme=wp_waerme)
+    _out = await waerme_klima_monat(resolved=resolved, _tages_wp_mengen=_tages_wp_mengen, _zt_cache=_zt_cache, allgemein_tarif=allgemein_tarif, anlage_id=anlage_id, db=db, get_val=get_val, investitionen=investitionen, jahr=jahr, monat=monat, monats_fakt=monats_fakt, monats_gaspreis=monats_gaspreis, netzbezug_preis_effektiv_cent=netzbezug_preis_effektiv_cent, tarife=tarife, teilzeitraum=teilzeitraum, wp_strom=wp_strom, wp_waerme=wp_waerme)
     if "_wp_abgrenzung_je_funktion" in _out: _wp_abgrenzung_je_funktion = _out["_wp_abgrenzung_je_funktion"]
     if "_wp_funktion" in _out: _wp_funktion = _out["_wp_funktion"]
     if "_wp_kennzahlen_je_geraet" in _out: _wp_kennzahlen_je_geraet = _out["_wp_kennzahlen_je_geraet"]
@@ -1025,7 +1084,7 @@ async def _berechne_monat(
             komponenten_geraete.setdefault(_inv.typ, []).append(_inv.bezeichnung)
 
     # ── t_konto_je_investition (Vorlage 2: Abschnitt in finanzen.py, Schnittstelle 12 ein / 2 aus) ──
-    _out = await t_konto_je_investition(_zt_cache=_zt_cache, allgemein_tarif=allgemein_tarif, anlage_id=anlage_id, db=db, einspeise_cent=einspeise_cent, investitionen=investitionen, jahr=jahr, monat=monat, monats_benzinpreis=monats_benzinpreis, monats_gaspreis=monats_gaspreis, netzbezug_preis_effektiv_cent=netzbezug_preis_effektiv_cent, tarife=tarife, ev_preis_cent=ev_preis_cent)
+    _out = await t_konto_je_investition(monats_fakt=monats_fakt, _zt_cache=_zt_cache, allgemein_tarif=allgemein_tarif, anlage_id=anlage_id, db=db, einspeise_cent=einspeise_cent, investitionen=investitionen, jahr=jahr, monat=monat, monats_benzinpreis=monats_benzinpreis, monats_gaspreis=monats_gaspreis, netzbezug_preis_effektiv_cent=netzbezug_preis_effektiv_cent, tarife=tarife, ev_preis_cent=ev_preis_cent)
     if "investitionen_financials" in _out: investitionen_financials = _out["investitionen_financials"]
     if "speicher_ersparnis" in _out: speicher_ersparnis = _out["speicher_ersparnis"]
     # N-605: WP-Ersparnis = Σ der WP-Zeilen des T-Kontos (Bauform G20-2), vor Kachel und Ergebnis-Leiter.

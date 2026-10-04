@@ -418,6 +418,9 @@ async def _ergaenze_modus_split_ohne_abschluss(
             r = roh.setdefault(schluessel, _RohMonat())
             r.wp_modus_strom_heizen += split.heizen_kwh
             r.wp_modus_strom_kuehlen += split.kuehlen_kwh
+            # N-609: der nachgetragene Kühlanteil gehört auch zur Zeile SEINES Geräts — sonst rechnete die
+            # Gerätezeile mit vollem Strom, die Anlagensumme ohne Kühlstrom (gemessen 115 gegen 124 €).
+            r.wp_je_geraet.setdefault(int(inv_id), [0.0, 0.0, 0.0])[2] += split.kuehlen_kwh
             r.wp_modus_strom_warmwasser += split.warmwasser_kwh
             # ⭐ **SOLL-§9-E7/Option A — auch hier, und hier ist es immer der
             # abgeleitete Zweig.** `lade_modus_split_ohne_abschluss` trägt

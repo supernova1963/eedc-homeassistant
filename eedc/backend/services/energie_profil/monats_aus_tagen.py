@@ -100,6 +100,11 @@ class TagesMonatsSumme:
     bkw_je_inv: dict[str, float] = field(default_factory=dict)
     speicher_ladung_kwh: float = 0.0
     speicher_entladung_kwh: float = 0.0
+    #: N-585: hat mindestens eine Stunde des Monats einen Einspeise- bzw. Netzbezugswert getragen — auch 0?
+    #: (``MonatsBilanz.*_erfasst``). ⚠ Die Mengen darüber sind ohne jede Messung ebenfalls 0,0; erst dieses Flag
+    #: trennt „gemessen 0" (flacher Zähler) von „nicht zugeordnet" (alle Stunden ohne Wert).
+    einspeisung_erfasst: bool = False
+    netzbezug_erfasst: bool = False
     #: Abgeleiteter PV-/Netz-Anteil der Heimladung (N-141 Weg c). ⚠ **Das ist
     #: die einzige E-Mob-Größe hier, und sie ist mit Bedacht keine Ladungs-
     #: MENGE**, sondern eine Aufteilung: die Menge bleibt Sache der
@@ -325,6 +330,8 @@ async def lade_monats_summen_aus_tagen(
             bkw_je_inv=dict(bkw_alle_je_monat.get(schluessel, {})),
             speicher_ladung_kwh=bilanz.speicher_ladung_kwh,
             speicher_entladung_kwh=bilanz.speicher_entladung_kwh,
+            einspeisung_erfasst=bilanz.einspeisung_erfasst,
+            netzbezug_erfasst=bilanz.netzbezug_erfasst,
             emob_ladung_pv_abgeleitet_kwh=lade_pv_je_monat.get(schluessel, 0.0),
             emob_ladung_netz_abgeleitet_kwh=lade_netz_je_monat.get(schluessel, 0.0),
             emob_ladung_speicher_abgeleitet_kwh=lade_speicher_je_monat.get(schluessel),

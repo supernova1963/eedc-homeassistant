@@ -22,7 +22,7 @@ from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.core.config import settings
 from backend.core.berechnungen.energie import summe_pv_bkw_kwh
-from backend.core.berechnungen.heizgradtage import wp_tagesfaktor
+from backend.core.berechnungen.heizgradtage import wp_strom_skaliert, wp_tagesfaktor
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.utils.investition_filter import aktiv_jetzt
@@ -276,6 +276,8 @@ def _berechne_verbrauchsprofil(
     individuelles_profil: Optional[dict] = None,
     wp_profil: Optional[dict] = None,
     referenz_hdd_kd: Optional[float] = None,
+    wp_ww_profil: Optional[dict] = None,
+    wp_kuehlen_profil: Optional[dict] = None,
 ) -> tuple[list[dict], Optional[float], Optional[float], bool]:
     """
     Berechnet stündliches PV-Ertrag + Verbrauchsprofil.
@@ -292,6 +294,9 @@ def _berechne_verbrauchsprofil(
         referenz_hdd_kd: Heizgradtage der Lernwoche des Profils (Mittel der
             Tages-Heizgradtage, ``referenz_heizgradtage``) — ``None`` ⇒ keine
             Wärmepumpen-Korrektur.
+        wp_ww_profil, wp_kuehlen_profil: Warmwasser- und Kühl-Anteil des
+            WP-Profils (Teilmengen, N-594) — sie bleiben bei der Korrektur fest
+            (``heizgradtage.wp_strom_skaliert``). ``None`` ⇒ ganze Reihe skaliert.
 
     Returns:
         (profil, pv_prognose_kwh, grundlast_kw, ist_individuell)
@@ -354,7 +359,14 @@ def _berechne_verbrauchsprofil(
                     # Nachbauten hiessen zwei Heizstrom-Zahlen unter einem Namen.
                     wp_kw = wp_profil.get(h, wp_profil.get(str(h), 0.0))
                     haus_kw = max(0.0, verbrauch_kw - wp_kw)
-                    verbrauch_kw = round(max(0.0, haus_kw + wp_kw * wp_faktor), 2)
+                    # N-594: nur der wetterabhängige Teil (ohne gemessenes
+                    # Warmwasser/Kühlen) folgt dem Tagesfaktor.
+                    wp_neu = wp_strom_skaliert(
+                        wp_kw, wp_faktor, referenz_hdd_kd,
+                        warmwasser_kw=(wp_ww_profil or {}).get(h, (wp_ww_profil or {}).get(str(h), 0.0)) or 0.0,
+                        kuehlen_kw=(wp_kuehlen_profil or {}).get(h, (wp_kuehlen_profil or {}).get(str(h), 0.0)) or 0.0,
+                    )
+                    verbrauch_kw = round(max(0.0, haus_kw + wp_neu), 2)
         else:
             # BDEW H0 Fallback
             verbrauch_kw = round(_LASTPROFIL_KW.get(h, 0.3) * tages_faktor, 2)
@@ -1417,6 +1429,7 @@ async def get_live_wetter(
         profil, pv_prognose, grundlast, ist_ind = _berechne_verbrauchsprofil(
             alle_stunden, kwp, individuelles_profil=ind_stunden_profil,
             wp_profil=wp_stunden_profil, referenz_hdd_kd=referenz_hdd_kd,
+            wp_ww_profil=wahl.wp_ww_profil, wp_kuehlen_profil=wahl.wp_kuehlen_profil,
         )
 
         # Defaults, bevor der Kanon-Zweig sie setzt: fehlt der Kanon (kein

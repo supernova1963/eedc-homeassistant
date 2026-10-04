@@ -7,8 +7,23 @@ Deckungs-/Bauart-Properties (Konzept §3, KONZEPT-WAERME-KLIMA).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
+
+
+@dataclass(frozen=True)
+class WpGeraetFakten:
+    """Die drei Mengen EINES Geräts im Monat, aus denen seine Ersparnis-Zeile entsteht (N-605/N-609).
+
+    Aus demselben ``ImdTypBeitrag``, der die Summen von ``WpFakten`` bildet — Strom nach K3, Wärme nach D1
+    (Innengeräte eingeschlossen), Kühlanteil nach der Betriebsart-Weiche (gemessen oder abgeleitet), dazu der
+    nachgetragene Modus-Split eines Monats ohne Abschluss (F-52). ⚠ ``strom_kuehlen_kwh`` ist eine **Teilmenge** von
+    ``strom_kwh``, kein Summand.
+    """
+
+    strom_kwh: float = 0.0
+    waerme_kwh: float = 0.0
+    strom_kuehlen_kwh: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -202,6 +217,12 @@ class WpFakten:
     geraete_q_warmwasser: frozenset[int] = frozenset()
     geraete_e_kuehlen: frozenset[int] = frozenset()
     geraete_q_kuehlen: frozenset[int] = frozenset()
+    #: **N-609 — die Mengen je Gerät**, gekeyt nach ``Investition.id``. ⭐ Die WP-Ersparnis einer Anlage ist in jeder
+    #: Sicht die Σ der Gerätezeilen je Monat (N-605): zwei Wärmepumpen haben keine gemeinsame Referenz-WP, ihre
+    #: Parameter (Altheizung, Wirkungsgrad, Zusatzkosten) gelten je Gerät. Bis 04.10.2026 rechneten Übersicht und
+    #: Komponenten-Zeitreihe ein Aggregat mit dem Parametersatz der ERSTEN Wärmepumpe (gemessen 50 statt 110 €).
+    #: Die Ersparnis selbst rechnet ``services/wp_wirtschaftlichkeit.py::wp_ersparnis_monat`` — hier stehen nur Mengen.
+    je_geraet: dict[int, WpGeraetFakten] = field(default_factory=dict)
 
     def funktion_sauber_abgegrenzt(self, funktion: str) -> bool:
         """Tragen dieselben Geräte Zähler **und** Nenner dieser Funktion? (**R2**)

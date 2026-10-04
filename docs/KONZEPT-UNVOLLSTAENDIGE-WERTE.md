@@ -227,6 +227,19 @@ Daten-Checker und keine Anzeigefrage.
 entschieden, nie an `> 0`. Eine gemessene 0 ist eine Aussage und wird als „0"
 angezeigt, nicht als „—".
 
+**Stand der Umsetzung „gemessene 0" in *Cockpit → Monat* (04.10.2026).** Die Sammler des laufenden
+Monats und des abgeschlossenen Monats ohne Abschluss ließen nur Werte über 0 durch; ein autarker Monat
+verlor Gesamtverbrauch, Autarkie, Stromrechnung und Ergebnis und bekam den Rat „Zähler zuordnen". Seither
+trägt ein Feld, für das eine Quelle **gemessen** hat, auch eine 0 — gemessen heißt bei der HA-Statistik
+mindestens ein Intervall (`SensorMonatswert.intervalle ≥ 1`; eine einzelne Zeile misst nichts), bei der
+Tagesebene mindestens eine Stunde mit Wert (`TagesMonatsSumme.*_erfasst`). Umgesetzt für Einspeisung,
+Netzbezug, den Anlagen-PV-Zähler und die Gerätefelder von Speicher, Balkonkraftwerk, Wallbox und E-Auto aus
+der HA-Statistik, auf der Tagesebene für Einspeisung und Netzbezug. Auch im abgeschlossenen Monat mit Abschluss wirkt sie, wenn die gespeicherte Zeile für das Feld 0 trägt (Balkonkraftwerk, Speicher, Anlagen-PV-Zähler): das Feld zeigt dann 0,0 mit Herkunft Home Assistant statt „kein Wert“; eine gespeicherte Zahl über 0 wird nie verdrängt. **Offen, mit Grund:** Wärmepumpe (eine
+WP-0 braucht erst eine Darstellungsregel für „kein Betrieb" — Betriebsart-Kanäle der HA-Bauform), einzelne
+PV-Strings (eine String-0 neben dem Anlagenzähler nähme dem String seinen Rest), die MQTT-Sammler, der
+Monatsabschluss-Vorschlag, die Gerätefelder der Tagesebene und die `> 0`-Schranke der gespeicherten Zeile
+(dort ist „0" von „fehlt" nicht unterscheidbar). Probe: `test_n585_gemessene_null.py`.
+
 **Entschieden für die PV-Summe eines Monats (Gernot, 04.10.2026):** *„Ein möglicher
 Modul-Ausfall kann ja auch korrekt sein. Ich habe an sich immer darauf bestanden, dass
 der Daten-Checker darauf hinweisen muss. Das reicht imo zur Lösung."* Fehlt einem Modul
@@ -379,6 +392,10 @@ Dazu die Regressionen am Ergebnis (gemessen 2026-08-29):
 
 - `backend/tests/test_tagesbilanz_pv_nicht_erfasst.py` — eine additive Größe ohne Messung wird
   unterdrückt statt als 0 geführt.
+- `backend/tests/test_n585_gemessene_null.py` — *Cockpit → Monat* mit produktivem Datenstand
+  (HA-Statistik + Tageszeilen): ein flacher Zähler ist 0, nicht „—" (Netzbezug, Einspeisung,
+  Volleinspeiser, Speicher, Balkonkraftwerk, Wallbox, Anlagen-PV-Zähler, Standalone); ein nicht
+  zugeordneter Zähler, einer ohne Zeilen und eine einzelne Zeile ohne Anker bleiben `None`.
 - `backend/tests/test_live_tageswerte_luecken.py` — der Auslöserfall (Rainer): fällt ein Summand
   aus, verschwindet die Differenz, statt zu hoch zu stehen.
 - `backend/tests/test_monatsauswertung_abdeckung_n92.py` — eine Summe darf 0 bleiben, eine

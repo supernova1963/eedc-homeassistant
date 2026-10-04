@@ -193,6 +193,17 @@ async def _profil_from_db(
 
     ``TagesEnergieProfil.stunde`` ist bereits ein Backward-Slot (der Aggregator
     schreibt ihn über ``lts_boundary_index``) — hier wird nichts umgerechnet.
+
+    ⭐ **N-594: Warmwasser und Kühlen als Teilmengen der WP-Reihe.** Die
+    Temperaturkorrektur der Prognose skaliert nur, was von der Außentemperatur
+    abhängt (``heizgradtage.wp_strom_skaliert``). Dafür lernt dieser Pfad je
+    Stunde zusätzlich ``wp_ww_<tagtyp>`` und ``wp_kuehlen_<tagtyp>`` —
+    **Teilmengen** von ``wp_<tagtyp>`` über **dieselben** Stichproben (eine
+    Stunde ohne Warmwasser trägt 0,0 bei, sonst wäre die Teilmenge größer als
+    die Reihe). ``wp_<tagtyp>`` selbst bleibt unverändert. Die zwei Reihen gibt es
+    nur, wenn in der Lernwoche eine davon > 0 ist. Woher die Trennung einer
+    Stunde kommt: ``_wp_teilmengen_der_stunde``. ``_profil_from_ha`` und
+    ``_profil_from_mqtt`` trennen nicht (benannte Grenze).
     """
     from backend.models.tages_energie_profil import TagesEnergieProfil
 
@@ -207,6 +218,8 @@ async def _profil_from_db(
             TagesEnergieProfil.waermepumpe_kw,
             TagesEnergieProfil.temperatur_c,
             TagesEnergieProfil.spannen,
+            TagesEnergieProfil.betriebsmodus_je_wp,
+            TagesEnergieProfil.komponenten,
         ).where(
             TagesEnergieProfil.anlage_id == anlage_id,
             TagesEnergieProfil.datum >= start_date,
@@ -243,6 +256,15 @@ async def _profil_from_db(
     # Heizgradtage (K-2), nicht das Mittel aller Stunden.
     temp_je_tag: dict[date, list[float]] = {}
     hat_wp = False
+    # N-594: Teilmengen der WP-Reihe je Tagtyp (False = Werktag, True = Wochenende) — gleiche Stichproben, gleiche
+    # Nenner wie `wp_*_sums`.
+    ww_sums = {False: {h: [] for h in range(24)}, True: {h: [] for h in range(24)}}
+    kuehl_sums = {False: {h: [] for h in range(24)}, True: {h: [] for h in range(24)}}
+    hat_teilmenge = False
+    # „Genau EINE aktive Wärmepumpe" — dann ist die Zählermenge der Stunde ihre Menge (C-F2 ii).
+    eine_wp = len((await db.execute(select(Investition.id).where(
+        Investition.anlage_id == anlage_id, Investition.typ == "waermepumpe", aktiv_jetzt(),
+    ))).all()) == 1
 
     from backend.core.berechnungen.spannen import verbrauch_gebuendelt
 
@@ -257,6 +279,15 @@ async def _profil_from_db(
 
         ist_wochenende = datum.weekday() >= 5
         tag_str = datum.isoformat()
+
+        if waermepumpe_kw is not None:
+            # N-594: auch 0,0 anhängen — derselbe Nenner wie die WP-Reihe.
+            _ww, _kuehl = _wp_teilmengen_der_stunde(
+                waermepumpe_kw, row.betriebsmodus_je_wp, row.komponenten, eine_wp=eine_wp,
+            )
+            ww_sums[ist_wochenende][stunde].append(_ww)
+            kuehl_sums[ist_wochenende][stunde].append(_kuehl)
+            hat_teilmenge = hat_teilmenge or _ww > 0 or _kuehl > 0
 
         if ist_wochenende:
             wochenende_sums[stunde].append(verbrauch_kw)
@@ -274,12 +305,78 @@ async def _profil_from_db(
         if temperatur_c is not None:
             temp_je_tag.setdefault(datum, []).append(temperatur_c)
 
-    return _build_profil_result(
+    ergebnis = _build_profil_result(
         werktag_sums, wochenende_sums, werktage_set, wochenende_set, "db",
         wp_werktag_sums=wp_werktag_sums if hat_wp else None,
         wp_wochenende_sums=wp_wochenende_sums if hat_wp else None,
         referenz_hdd_kd=referenz_heizgradtage(temp_je_tag),
     )
+    if ergebnis is not None and hat_wp and hat_teilmenge:
+        for tagtyp, ist_we in (("werktag", False), ("wochenende", True)):
+            hat_reihe = ergebnis.get(f"wp_{tagtyp}") is not None
+            ergebnis[f"wp_ww_{tagtyp}"] = _mittel_je_stunde(ww_sums[ist_we]) if hat_reihe else None
+            ergebnis[f"wp_kuehlen_{tagtyp}"] = _mittel_je_stunde(kuehl_sums[ist_we]) if hat_reihe else None
+    return ergebnis
+
+
+def _mittel_je_stunde(sums: dict[int, list[float]]) -> dict[int, float]:
+    """Stundenmittel wie ``_build_profil_result.avg`` (3 Stellen) — nur Stunden mit Stichprobe."""
+    return {h: round(sum(v) / len(v), 3) for h, v in sums.items() if v}
+
+
+def _wp_teilmengen_der_stunde(
+    wp_kw: float, modi: Optional[dict], komponenten: Optional[dict], *, eine_wp: bool,
+) -> tuple[float, float]:
+    """``(warmwasser_kw, kuehlen_kw)`` EINER Lernstunde — Teilmengen der Zählermenge ``wp_kw`` (N-594, C-F2).
+
+    Die Menge der Stunde ist die **Zählermenge** ``TagesEnergieProfil.waermepumpe_kw`` — ``komponenten`` trägt eine
+    Wärmepumpe nur, wenn ihr ein Leistungssensor zugeordnet ist. Die Trennung, je Gerät:
+
+    (i) **getrennte Leistungssensoren:** der Betrag von ``komponenten["waermepumpe_<id>_warmwasser"]`` bzw.
+        ``…_kuehlen``;
+    (ii) **Betriebsmodus-Etikett** der Stunde (``betriebsmodus_je_wp``, überwiegender Modus) ``warmwasser`` bzw.
+        ``kuehlen`` × die Stundenmenge des Geräts — aus ``komponenten["waermepumpe_<id>"]``, wenn ein
+        Leistungssensor zugeordnet ist; bei genau EINER aktiven Wärmepumpe die Zählermenge selbst.
+
+    Beides gedeckelt auf ``wp_kw``. ⛔ **Nie aus der Bauart** (``wp_art``, ADR-002/P13): ob eine Stunde Warmwasser
+    oder Kühlen war, sagt nur die Messung, nicht die Gerätegattung. Mehrere Wärmepumpen ohne Leistungssensor: keine
+    Trennung (benannte Grenze) — die Zählermenge lässt sich keinem Gerät zuordnen.
+    """
+    from backend.core.berechnungen.energie import waermepumpe_kwh_je_investition
+    from backend.core.betriebsmodus import KUEHLEN, WARMWASSER
+
+    if not wp_kw or wp_kw <= 0:
+        return 0.0, 0.0
+    komp = komponenten or {}
+    ww = kuehl = 0.0
+    getrennt: set[str] = set()
+    for key, wert in komp.items():
+        if not isinstance(wert, (int, float)) or not str(key).startswith("waermepumpe_"):
+            continue
+        inv_id, _, suffix = str(key)[len("waermepumpe_"):].partition("_")
+        if not suffix:
+            continue
+        getrennt.add(inv_id)
+        if suffix == "warmwasser":
+            ww += abs(float(wert))
+        elif suffix == "kuehlen":
+            kuehl += abs(float(wert))
+    menge_je_inv = waermepumpe_kwh_je_investition(komp)
+    for inv_id, modus in (modi or {}).items():
+        if modus not in (WARMWASSER, KUEHLEN) or str(inv_id) in getrennt:
+            continue
+        menge = menge_je_inv.get(str(inv_id))
+        if menge is None and eine_wp:
+            menge = wp_kw
+        if menge is None:
+            continue
+        if modus == WARMWASSER:
+            ww += menge
+        else:
+            kuehl += menge
+    ww = min(ww, wp_kw)
+    kuehl = min(kuehl, wp_kw - ww)
+    return ww, kuehl
 
 
 async def _profil_from_ha(

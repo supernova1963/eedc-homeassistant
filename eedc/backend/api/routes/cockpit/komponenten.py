@@ -23,7 +23,7 @@ from backend.core.berechnungen.waermepumpe_kennzahl import (
 )
 from backend.api.routes.cockpit._shared import MONATSNAMEN
 from backend.services.monats_fakten import MonatsFakt, lade_monats_fakten
-from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
+from backend.services.wp_wirtschaftlichkeit import wp_ersparnis_monat
 
 router = APIRouter()
 
@@ -168,6 +168,7 @@ async def get_komponenten_zeitreihe(
         inv_stmt = inv_stmt.where(aktiv_im_jahr(jahr))
     inv_result = await db.execute(inv_stmt)
     investitionen = inv_result.scalars().all()
+    inv_by_id = {i.id: i for i in investitionen}
 
     hat_speicher = any(i.typ == "speicher" for i in investitionen)
     hat_waermepumpe = any(i.typ == "waermepumpe" for i in investitionen)
@@ -286,25 +287,10 @@ async def get_komponenten_zeitreihe(
             m_netzbezug_kosten = 0.0
             m_einspeise_erloes = 0.0
 
-        # WP-Ersparnis pro Monat (Drift-Audit A1, Issue #178).
-        # Aggregat über alle WPs, Parameter aus erster aktiver WP als Referenz.
-        m_wp_ersparnis = 0.0
-        if wp.waerme_kwh > 0:
-            wp_invs_in_monat = [
-                i for i in investitionen
-                if i.typ == "waermepumpe" and i.ist_aktiv_im_monat(jahr, monat)
-            ]
-            wp_ref_param = wp_invs_in_monat[0].parameter if wp_invs_in_monat else None
-            wp_result = berechne_wp_ersparnis(
-                wp_waerme_kwh=wp.waerme_kwh,
-                wp_strom_kwh=wp.strom_kwh,
-                wp_strompreis_cent=tarif.wp_preis_cent,
-                wp_parameter=wp_ref_param,
-                monats_gaspreis_cent=tarif.gaspreis_cent_kwh,
-                # E-B: Der Kühlstrom hat kein fossiles Gegenstück.
-                strom_kuehlen_kwh=wp.modus_strom_kuehlen_kwh,
-            )
-            m_wp_ersparnis = wp_result.ersparnis_euro
+        # WP-Ersparnis pro Monat = Σ der Gerätezeilen (N-605/N-609) — dieselbe Zeile wie im T-Konto von Cockpit →
+        # Monat, je Gerät mit SEINEN Parametern. Bis 04.10.2026 ein Aggregat über alle WPs mit dem Parametersatz
+        # der ersten aktiven WP (zwei WP: 50 statt 110 €). Ein Monat ohne Zeile (Standby) trägt 0 wie bisher.
+        m_wp_ersparnis = wp_ersparnis_monat(f, inv_by_id) or 0.0
 
         monatswerte.append(KomponentenMonat(
             jahr=jahr, monat=monat, monat_name=MONATSNAMEN[monat],

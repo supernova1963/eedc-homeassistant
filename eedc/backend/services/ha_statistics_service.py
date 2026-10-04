@@ -70,6 +70,11 @@ class SensorMonatswert(BaseModel):
     #: hat (über Schwelle × n, nicht über Schwelle × Fenster). `differenz` ENTHÄLT sie —
     #: eedc folgt HA; das Feld benennt sie nur (Gegenstück zu `verworfen_kwh`).
     nachtrag_kwh: float = 0.0
+    #: N-585: Zahl der Intervalle hinter ``differenz`` — Paare benachbarter Stützstellen (``sum``-Pfad: Anker +
+    #: Zeilen − 1; ``state``-Pfad: Zeilen − 1). **0 heißt: eine einzige Zeile, nichts gemessen** — ihre
+    #: ``differenz`` 0,0 ist dann keine Messung, sondern das Fehlen eines zweiten Standes. Ab 1 ist auch eine 0
+    #: ein Messwert (ein flacher Zähler über den Monat).
+    intervalle: int = 0
 
 
 class MonatswertResponse(BaseModel):
@@ -744,7 +749,9 @@ class HAStatisticsService:
         ist die Summe und weicht von ihrer Differenz genau um
         ``verworfen_kwh`` ab. ``nachtrag_kwh`` (N-567) benennt die Stunden, die nur
         dank des Fensters passiert sind — sie stehen IN ``differenz``. Werte werden nach
-        kWh konvertiert (Wh, MWh, …).
+        kWh konvertiert (Wh, MWh, …). ``intervalle`` (N-585) sagt, über wie viele
+        Stützstellen-Paare ``differenz`` gebildet ist — 0 bei einer einzigen Zeile ohne
+        Anker: dann ist ``differenz`` 0,0 keine Messung.
         """
         ts_start, ts_ende = _monatsgrenzen_ts(jahr, monat)
         faktor = _ENERGY_UNIT_TO_KWH.get(meta.unit, 1.0) if meta.unit else 1.0
@@ -784,6 +791,7 @@ class HAStatisticsService:
             start_wert = reihe[0][1] * faktor
             end_wert = reihe[-1][1] * faktor
             differenz = 0.0
+            intervalle = len(reihe) - 1
             # R3, Nachträge II: Stunden unveränderten Standes vor einer Änderung
             # (Nullzeilen eines eingefrorenen Zählers) verlängern das Fenster.
             null_lauf_h = 0.0
@@ -815,6 +823,7 @@ class HAStatisticsService:
             start_wert = min(states) * faktor
             end_wert = max(states) * faktor
             differenz = end_wert - start_wert
+            intervalle = len(states) - 1
 
         return SensorMonatswert(
             sensor_id=sensor_id,
@@ -823,6 +832,7 @@ class HAStatisticsService:
             differenz=round(differenz, 2),
             verworfen_kwh=round(verworfen, 3),
             nachtrag_kwh=round(nachtrag, 3),
+            intervalle=intervalle,
         )
 
     def get_monatswerte(

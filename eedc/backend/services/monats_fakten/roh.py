@@ -173,6 +173,8 @@ class _RohMonat:
         #: Zähler trägt, hat keine belastbare Gesamt-Arbeitszahl, auch wenn das
         #: zweite Gerät sauber misst.
         self.wp_abgrenzung: Optional[str] = None
+        #: N-609: je ``Investition.id`` ``[strom, wärme, kühlstrom]`` — dieselben Beiträge wie die Summen.
+        self.wp_je_geraet: dict[int, list[float]] = {}
         self.eauto_ladedaten: list[dict] = []
         #: N-555: dieselben E-Auto-Zeilen je ``Investition.id`` — die eine Funktion
         #: (``entscheide_emob_heimladung``) entscheidet je Auto, und ihre Schätzung
@@ -340,6 +342,11 @@ class _RohMonat:
                 self.speicher_preis_gewicht += b.speicher_arbitrage
 
         elif inv.typ == "waermepumpe":
+            # N-609: die Mengen je Gerät aus DEMSELBEN Beitrag wie die Summen darunter (K3 · D1 · Kühlanteil).
+            _geraet = self.wp_je_geraet.setdefault(inv.id, [0.0, 0.0, 0.0])
+            _geraet[0] += b.wp_strom
+            _geraet[1] += b.wp_waerme
+            _geraet[2] += b.wp_modus_strom_kuehlen
             self.wp_strom += b.wp_strom
             # WK-16d: der Rest der Summanden-Achsen, je Geraet aufgeloest und
             # erst danach summiert — wie die Menge darueber. Auf der

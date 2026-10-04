@@ -65,6 +65,11 @@ class ProfilWahl:
     profil_tage: Optional[int] = None
     profil_slots: Optional[int] = None
     wp_profil: Optional[dict] = None
+    #: N-594: Warmwasser- und Kühl-Anteil des Tagtyps — **Teilmengen** von ``wp_profil`` (je Stunde ≤), vom Lerner
+    #: nur geliefert, wenn die Lernwoche eine davon trägt. Sie bleiben bei der Temperaturkorrektur fest
+    #: (``heizgradtage.wp_strom_skaliert``).
+    wp_ww_profil: Optional[dict] = None
+    wp_kuehlen_profil: Optional[dict] = None
     #: Heizgradtage der Lernwoche (Mittel der Tages-Heizgradtage, N-593) —
     #: bis 01.10.2026 ``referenz_temp_c`` (Mittel aller Stundentemperaturen).
     referenz_hdd_kd: Optional[float] = None
@@ -119,8 +124,10 @@ async def waehle_verbrauchsprofil(
         wahl.profil_tage = ind_profil_data["tage_werktag"]
         wahl.profil_slots = ind_profil_data.get("slots_werktag")
 
-    wp_key = "wp_wochenende" if ist_wochenende else "wp_werktag"
-    wahl.wp_profil = ind_profil_data.get(wp_key)
+    tagtyp = "wochenende" if ist_wochenende else "werktag"
+    wahl.wp_profil = ind_profil_data.get(f"wp_{tagtyp}")
+    wahl.wp_ww_profil = ind_profil_data.get(f"wp_ww_{tagtyp}")
+    wahl.wp_kuehlen_profil = ind_profil_data.get(f"wp_kuehlen_{tagtyp}")
     wahl.referenz_hdd_kd = ind_profil_data.get("referenz_hdd_kd")
     return wahl
 
@@ -252,6 +259,13 @@ async def verbrauchsprognose_heute(
     return _rechne_tagesprognose(wahl, stunden, kwp)
 
 
+def _stundenwert(profil: Optional[dict], h: int) -> float:
+    """Wert der Stunde ``h`` eines gelernten Profils — Schlüssel ``int`` oder ``str`` (Cache/JSON), fehlend ⇒ 0."""
+    if not profil:
+        return 0.0
+    return float(profil.get(h, profil.get(str(h), 0.0)) or 0.0)
+
+
 def _rechne_tagesprognose(
     wahl: ProfilWahl,
     stunden: list[dict],
@@ -273,6 +287,7 @@ def _rechne_tagesprognose(
     profil, _pv, _grundlast, _ist_ind = _berechne_verbrauchsprofil(
         stunden, kwp, individuelles_profil=wahl.ind_stunden_profil,
         wp_profil=wahl.wp_profil, referenz_hdd_kd=wahl.referenz_hdd_kd,
+        wp_ww_profil=wahl.wp_ww_profil, wp_kuehlen_profil=wahl.wp_kuehlen_profil,
     )
     if not profil:
         return None
@@ -297,18 +312,21 @@ def _rechne_tagesprognose(
         # eigener Faktor hier hiesse: die Kachel in Cockpit → Live und das
         # Heizfenster-Attribut daneben nennen verschiedene Heizstrom-Mengen
         # für dieselbe Stunde. Eine Stunde ohne Temperatur bleibt unkorrigiert
-        # — dieselbe Regel wie dort.
-        from backend.core.berechnungen.heizgradtage import wp_tagesfaktor
+        # — dieselbe Regel wie dort. N-594: skaliert wird nur der
+        # wetterabhängige Teil (`wp_strom_skaliert`, ebenfalls aus dem Layer).
+        from backend.core.berechnungen.heizgradtage import wp_strom_skaliert, wp_tagesfaktor
 
         faktor = wp_tagesfaktor(wahl.referenz_hdd_kd, temperaturen)
         wp_reihe = []
         for i, eintrag in enumerate(profil):
             h = int(eintrag["zeit"].split(":")[0])
-            roh = wahl.wp_profil.get(h, wahl.wp_profil.get(str(h), 0.0)) or 0.0
+            roh = _stundenwert(wahl.wp_profil, h)
             temp = temperaturen[i] if i < len(temperaturen) else None
-            wp_reihe.append(round(
-                float(roh) * (faktor if temp is not None else 1.0), 2
-            ))
+            wp_reihe.append(round(wp_strom_skaliert(
+                roh, faktor if temp is not None else 1.0, wahl.referenz_hdd_kd,
+                warmwasser_kw=_stundenwert(wahl.wp_ww_profil, h),
+                kuehlen_kw=_stundenwert(wahl.wp_kuehlen_profil, h),
+            ), 2))
 
     return VerbrauchsprognoseHeute(
         datum=datum,
