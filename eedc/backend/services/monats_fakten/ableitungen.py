@@ -165,6 +165,35 @@ def kennzahlen_aus_fakten(fakten: Iterable[MonatsFakt]) -> VerbrauchsKennzahlen:
         abgabe_dritte_kwh=sum(f.sonstiges.abgabe_kwh for f in fakten),
     )
 
+def pv_erzeugungs_monate(fakten: Iterable[MonatsFakt]) -> set[MonatsSchluessel]:
+    """Die Monate, in denen die Anlage PV erzeugt hat — der Nenner des spezifischen Ertrags.
+
+    Ein Monat zählt, wenn die Modul-Auflösung einen Eintrag hat (gemessen, über den
+    Anlagenwert verteilt oder als Lücke), ein Balkonkraftwerk einen eigenen Wert > 0
+    meldet oder ein Balkonkraftwerk ohne eigenen Wert seinen Anteil am gespeicherten
+    Anlagenwert trägt (N-621, ``ErzeugungFakten.bkw_aus_anlagenwert_kwh``). Ein Monat
+    ohne jede dieser Spuren trägt 0 zur PV-Summe bei und würde als Nenner-Monat den
+    Jahreswert verzerren.
+
+    ⭐ **Eine Stelle für die Kachel und den HA-Sensor** (N-621 H1, Entscheid des Masters
+    04.10.2026): *Cockpit → Übersicht* (``cockpit/uebersicht.py``) und der HA-Sensor
+    ``spezifischer_ertrag_kwh_kwp`` (``ha_export/anlage_energie.py``) nennen für dieselbe
+    Anlage denselben Wert, also dieselbe Monatsmenge. Bis dahin zählte der HA-Export nur
+    Monate mit Modul-Eintrag: eine reine Balkonkraftwerk-Anlage stand dort bei 143,75
+    statt 586,73 kWh/kWp (Übersicht), und mit dem BKW-Anteil aus N-621 allein wären es
+    1 105,77 geworden.
+
+    Nicht dieselbe Frage wie ``hat_pv_imd`` in ``api/routes/monatsdaten.py``: dort geht es
+    je **Zeile** um „Wert oder Lücke anzeigen" (P4, ``None`` statt 0) — eine BKW-Zeile mit
+    gepflegter 0 und die Tagesebene zählen dort mit, hier nicht.
+    """
+    return {
+        f.schluessel for f in fakten
+        if f.erzeugung.pv_je_modul
+        or f.bkw.erzeugung_kwh > 0
+        or f.erzeugung.bkw_aus_anlagenwert_kwh > 0
+    }
+
 def pv_unvollstaendig_monate(fakten: Iterable[MonatsFakt]) -> list[MonatsSchluessel]:
     """Die Monate, deren PV-Achse eine **Teilsumme** ist — chronologisch.
 

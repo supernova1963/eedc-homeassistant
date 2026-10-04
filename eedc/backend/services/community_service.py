@@ -189,8 +189,14 @@ async def prepare_community_data(
 
     # Wallbox Ladeleistung — Bug #6 v3.25.0: vorher 'ladeleistung_kw' (toter Key,
     # weder Form noch Wizard noch Schema → Community-Datensatz lieferte immer wallbox_kw=None).
+    #
+    # N-617: nur die heute vorhandenen Wallboxen — dieselbe Regel wie der
+    # Speicher darüber (F-24). Bis 04.10.2026 lief das Maximum über jede je
+    # erfasste: nach einem Tausch 22 kW → 11 kW stand im Benchmark 22 kW, auch
+    # wenn die alte Box stillgelegt oder deaktiviert war (gemessen über
+    # `prepare_community_data`).
     wallbox_kw = None
-    wallboxen = [inv for inv in investitionen if inv.typ == "wallbox"]
+    wallboxen = [inv for inv in investitionen if inv.typ == "wallbox" and inv.ist_aktiv_an(heute_)]
     if wallboxen:
         wallbox_kw = max(
             (inv.parameter or {}).get(PARAM_WALLBOX["MAX_LADELEISTUNG_KW"], 0) or 0
@@ -209,12 +215,20 @@ async def prepare_community_data(
     # Zeit vor der Zuordnung. Das ist die einzige N-266-Stelle, deren Zahl das
     # Haus verlässt — sie bestimmt im öffentlichen Benchmark die
     # Vergleichsgruppe, und der Server rechnet nichts nach.
+    #
+    # N-617: nur heute vorhandene Balkonkraftwerke und, für die Ableitung, nur
+    # heute vorhandene Modul-Kinder — wie Speicher und Wallbox. Bis 04.10.2026
+    # zählte ein stillgelegtes altes BKW neben dem neuen mit (600 + 800 =
+    # 1.400 Wp) und ein erst künftig angeschafftes schon heute (800 Wp statt
+    # keins). Ein Kind mit Anschaffung in der Zukunft hat die Leistung heute
+    # noch nicht übernommen; dann gilt die eigene Pflege des BKW.
     bkw_wp = None
-    bkws = [inv for inv in investitionen if inv.typ == "balkonkraftwerk"]
+    investitionen_heute = [inv for inv in investitionen if inv.ist_aktiv_an(heute_)]
+    bkws = [inv for inv in investitionen_heute if inv.typ == "balkonkraftwerk"]
     if bkws:
         bkw_wp = 0.0
         for inv in bkws:
-            aus_kindern = bkw_kwp_aus_kindern(inv, investitionen)
+            aus_kindern = bkw_kwp_aus_kindern(inv, investitionen_heute)
             if aus_kindern:
                 bkw_wp += aus_kindern * 1000
                 continue
@@ -246,8 +260,16 @@ async def prepare_community_data(
     # Ausrichtung abgetreten. Bliebe es drin, ginge seine EINE (alte) Ausrichtung
     # als zusätzlicher Summand in den Ø ein und verschöbe die Vergleichsgruppe
     # genau gegen die Module, deren Ausrichtungen der Melder erst erfassen wollte.
+    #
+    # ⛔ N-617: erst der Zeitfilter (`ist_aktiv_an(heute)`), dann der Selektor —
+    # wie Speicher, Wallbox und BKW-Leistung darüber und wie jede andere
+    # Jetzt-Menge vor `erzeuger_traeger` (ADR-002/P11, Abgrenzung a). Bis
+    # 04.10.2026 gingen stillgelegte, künftige und deaktivierte Erzeuger in den
+    # Ø ein: ein stillgelegter Ost-String machte aus „30°, süd" ein „20°,
+    # gemischt" (gemessen über `prepare_community_data`). Der Datensatz
+    # beschreibt die heutige Ausstattung; der Server rechnet nichts nach.
     pv_module = erzeuger_traeger(
-        [inv for inv in investitionen if inv.typ in PV_ERZEUGER_TYPEN]
+        [inv for inv in investitionen_heute if inv.typ in PV_ERZEUGER_TYPEN]
     )
     if pv_module:
         # Über den SoT-Helper (Spalte → `parameter`): beim BKW kann die Neigung

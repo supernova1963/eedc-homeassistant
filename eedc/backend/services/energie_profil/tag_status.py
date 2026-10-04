@@ -224,7 +224,16 @@ async def _erwartete_keys(
     inv_result = await db.execute(
         select(Investition).where(Investition.anlage_id == anlage.id)
     )
-    invs_by_id = {str(inv.id): inv for inv in inv_result.scalars().all()}
+    # N-619: dieselbe Menge wie `aggregate_day` (`aktiv_am_tag(datum)`; hier die
+    # In-Memory-Zwillingsdefinition `ist_aktiv_an`). Sie geht auch in den
+    # HA-Lesezugriff unten — mit allen Investitionen las er Sensoren von
+    # Geräten, die es an diesem Tag noch nicht gab, und nannte deren Werte statt
+    # derer, die der Lauf schreibt (gemessen: Balkonkraftwerk mit Modul-Kindern
+    # ab einem späteren Datum, deren Sensoren schon Historie haben — „Kind 1,
+    # Kind 2" statt „Balkon"). Die erwarteten Keys filtern ohnehin je Tag.
+    invs_by_id = {
+        str(inv.id): inv for inv in inv_result.scalars().all() if inv.ist_aktiv_an(datum)
+    }
     keys = set(erwartete_komponenten_keys(anlage.sensor_mapping or {}, invs_by_id, datum))
     return invs_by_id, keys
 

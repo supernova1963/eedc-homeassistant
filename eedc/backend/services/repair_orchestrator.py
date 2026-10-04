@@ -249,7 +249,12 @@ async def _plan_reaggregate_day(
     inv_res = await db.execute(
         select(Investition).where(Investition.anlage_id == req.anlage_id)
     )
-    invs_by_id = {str(inv.id): inv for inv in inv_res.scalars().all()}
+    # N-619: nur die am Tag aktiven Investitionen — dieselbe Menge, mit der der
+    # Lauf (`aggregate_day`, `aktiv_am_tag`) rechnet. Mit allen nannte die
+    # Vorschau Zählerzeilen von Geräten, die es an diesem Tag noch nicht gab.
+    invs_by_id = {
+        str(inv.id): inv for inv in inv_res.scalars().all() if inv.ist_aktiv_an(datum)
+    }
 
     preview = await get_reaggregate_preview(db, anlage, invs_by_id, datum)
 

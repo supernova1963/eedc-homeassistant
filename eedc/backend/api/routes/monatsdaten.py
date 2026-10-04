@@ -272,8 +272,18 @@ class AggregierteMonatsdatenResponse(BaseModel):
     # Wechselrichter, Module, Speicher UND Balkonkraftwerk), das Feld aber das
     # Gegenteil meint: Module OHNE BKW. Genau diese Verwechslung kostete `4ec3db60`
     # (zwei Stapel, die nicht zusammenpassten).
-    pv_module_kwh: Optional[float]  # nur PV-Module (ohne BKW)
-    bkw_kwh: Optional[float]  # nur Balkonkraftwerk(e)
+    # N-621: zwei Segmente, Σ == `pv_erzeugung_kwh`: `pv_module_kwh` (nur Module) und
+    # `bkw_kwh` (Balkonkraftwerke: eigene Werte UND der Anteil eines BKW ohne eigenen
+    # Wert am gespeicherten Anlagenwert). `bkw_aus_anlagenwert_kwh` sagt, wie viel von
+    # `bkw_kwh` aus dem Anlagenwert verteilt ist (für eine Kennzeichnung) — es ist
+    # kein drittes Segment. ⛔ Bis zur Nachmessung N-621 stand der Anteil im Segment
+    # „PV-Module": *Komponenten → PV-Anlage → Verlauf* nahm die Module aus PV-Strings
+    # und das BKW aus `bkw_kwh` — der Erzeugungs-Stapel verlor ihn (gemessen 930 gegen
+    # 1000 im Verwendungs-Stapel). Das BKW-Segment kommt fertig aus dem Backend, weil
+    # der Client keine Antwortfelder verrechnet (`check:ergebnis-roh`, W2).
+    pv_module_kwh: Optional[float]  # nur PV-Module
+    bkw_kwh: Optional[float]  # Balkonkraftwerk(e): eigene Werte + Anteil am Anlagenwert
+    bkw_aus_anlagenwert_kwh: Optional[float] = None  # davon aus dem Anlagenwert verteilt (N-621)
     # Sonstige Erzeuger (typ=`sonstiges` + Kategorie `erzeuger`, z. B. BHKW) —
     # NICHT in `pv_erzeugung_kwh` enthalten (die bleibt rein PV), aber Teil der
     # Netzpunkt-Bilanz `erzeugung_hinter_zaehler_kwh` (v3.45.4), aus der
@@ -596,9 +606,17 @@ async def list_monatsdaten_aggregiert(
         # IMD-Zeile — sonst käme ein belegter Wert als `None` heraus, und die
         # Sicht zeichnete wieder nichts.
         aus_tagen = f.meta.tageswert_gruppen
+        # N-621: auch der Anteil eines Balkonkraftwerks am gespeicherten
+        # Anlagenwert — sonst stünde eine reine BKW-Anlage in einem Monat mit
+        # Anlagenwert und ohne BKW-Zeile als „keine PV" in der Tabelle.
+        # Bewusst NICHT `monats_fakten.pv_erzeugungs_monate` (Nenner des spez.
+        # Ertrags in Übersicht und HA-Sensor): hier geht es je Zeile um „Wert oder
+        # Lücke anzeigen" (P4) — eine BKW-Zeile mit gepflegter 0 und die
+        # Tagesebene zählen hier mit, dort nicht.
         hat_pv_imd = (
             "balkonkraftwerk" in typen
             or f.erzeugung.pv_module_kwh is not None
+            or f.erzeugung.bkw_aus_anlagenwert_kwh > 0
             or TAGESWERT_PV in aus_tagen
             or TAGESWERT_BKW in aus_tagen
         )
@@ -777,9 +795,18 @@ async def list_monatsdaten_aggregiert(
             # Sommer 0 kWh Heizung).
             pv_erzeugung_kwh=round(f.erzeugung.pv_kwh, 1) if hat_pv_imd else None,
             pv_module_kwh=(
-                round(f.erzeugung.pv_kwh - f.erzeugung.bkw_kwh, 1) if hat_pv_imd else None
+                round(
+                    f.erzeugung.pv_kwh - f.erzeugung.bkw_kwh
+                    - f.erzeugung.bkw_aus_anlagenwert_kwh, 1,
+                ) if hat_pv_imd else None
             ),
-            bkw_kwh=round(f.erzeugung.bkw_kwh, 1) if hat_pv_imd else None,
+            bkw_kwh=(
+                round(f.erzeugung.bkw_kwh + f.erzeugung.bkw_aus_anlagenwert_kwh, 1)
+                if hat_pv_imd else None
+            ),
+            bkw_aus_anlagenwert_kwh=(
+                round(f.erzeugung.bkw_aus_anlagenwert_kwh, 1) if hat_pv_imd else None
+            ),
             sonstige_erzeugung_kwh=(
                 round(f.erzeugung.sonstige_erzeuger_kwh, 1)
                 if f.sonstiges.hat_erzeuger_zeile else None

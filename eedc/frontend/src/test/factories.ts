@@ -150,6 +150,7 @@ const ZEILE_BASIS = {
   pv_erzeugung_kwh: null,
   pv_module_kwh: null,
   bkw_kwh: null,
+  bkw_aus_anlagenwert_kwh: null,
   sonstige_erzeugung_kwh: null,
   sonstige_verbrauch_kwh: null,
   erzeugung_hinter_zaehler_kwh: null,

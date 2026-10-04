@@ -194,8 +194,16 @@ class TageChecks:
         SCHWELLE_KWH = 1.0
         for datum_, leere_keys in gepruefte:
             try:
+                # N-619: am Tag aktive Investitionen — dieselbe Menge wie
+                # `aggregate_day` (`aktiv_am_tag`) und wie `_erwartet_am_tag`
+                # oben. Mit allen las der Check Sensoren von Geräten, die es am
+                # Tag noch nicht gab, und verlor dafür den Wert eines Geräts,
+                # das der Lauf schreibt (Balkonkraftwerk vor der Anschaffung
+                # seiner Modul-Kinder: „Balkon" fehlte in der Liste).
                 ha_komp = await get_komponenten_tageskwh_lts(
-                    anlage, invs_by_id, datum_,
+                    anlage,
+                    {k: v for k, v in invs_by_id.items() if v.ist_aktiv_an(datum_)},
+                    datum_,
                 )
             except Exception as e:
                 logger.debug(

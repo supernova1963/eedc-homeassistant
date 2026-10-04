@@ -361,6 +361,7 @@ from backend.core.berechnungen.monatsfenster import (
     anteilig,
     monatsfenster,
     monatsfenster_investition,
+    soll_im_laufmonat,
 )
 
 __all__ = [
@@ -372,6 +373,7 @@ __all__ = [
     "anteilig",
     "monatsfenster",
     "monatsfenster_investition",
+    "soll_im_laufmonat",
     "MonatsBilanz",
     "TagesBilanz",
     "bilanz_aus_stundenrows",

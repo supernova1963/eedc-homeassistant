@@ -121,7 +121,11 @@ export interface AggregierteMonatsdaten {
   // Hieß bis A17 `pv_anlage_kwh` — „PV-Anlage" ist im Produkt überall die
   // GANZE Anlage (inkl. BKW), das Feld meint aber Module OHNE BKW.
   pv_module_kwh: number | null
+  /** Balkonkraftwerk(e): eigene Werte UND (N-621) der Anteil eines BKW ohne eigenen Wert am
+   *  gespeicherten Anlagen-PV-Wert. pv_module_kwh + bkw_kwh == pv_erzeugung_kwh. */
   bkw_kwh: number | null
+  /** N-621: davon aus dem Anlagenwert verteilt (in bkw_kwh enthalten, kein eigenes Segment). */
+  bkw_aus_anlagenwert_kwh: number | null
   // Sonstige Erzeuger (typ `sonstiges` + Kategorie `erzeuger`, z. B. BHKW).
   // NICHT in pv_erzeugung_kwh (die bleibt rein PV), aber Teil der
   // Netzpunkt-Bilanz, aus der direktverbrauch/eigenverbrauch gerechnet sind.

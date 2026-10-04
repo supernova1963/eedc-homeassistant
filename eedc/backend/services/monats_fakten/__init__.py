@@ -95,6 +95,7 @@ from backend.services.monats_fakten.ableitungen import (  # noqa: F401 — Re-Ex
     ist_pv_ladeanteil_prozent,
     finanz_zeile_eingabe,
     kennzahlen_aus_fakten,
+    pv_erzeugungs_monate,
     pv_unvollstaendig_monate,
     pv_unvollstaendig_hinweis,
 )
@@ -123,6 +124,7 @@ __all__ = [
     "ist_pv_ladeanteil_prozent",
     "finanz_zeile_eingabe",
     "kennzahlen_aus_fakten",
+    "pv_erzeugungs_monate",
     "pv_unvollstaendig_monate",
     "pv_unvollstaendig_hinweis",
 ]

@@ -23,7 +23,8 @@ class Monatsdaten(Base):
         pv_erzeugung_kwh: MANUELLES/importiertes Gesamt-Aggregat der Anlage
             (Legacy-Feld). Es steht für ALLE PV-Quellen — Module und
             Balkonkraftwerke (N-611): der eigene Wert eines selbst tragenden
-            BKW geht ab, bevor der Rest die Modul-Lücken füllt
+            BKW geht ab, bevor der Rest die Lücken füllt — die der Module und
+            seit N-621 die eines selbst tragenden BKW ohne eigenen Wert
             (`services/pv_monatswerte.py`). ⚠️ Nicht zu verwechseln mit dem gleichnamigen
             Response-Feld von `/monatsdaten/aggregiert`, das **Module + BKW**
             aus den InvestitionMonatsdaten meint — siehe dort. Diese Spalte ist

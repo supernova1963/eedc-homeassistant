@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { baueJahrChartDaten } from './JahrVerlaufChart'
+import { render, screen } from '@testing-library/react'
+import { baueJahrChartDaten, jahrTooltipWert } from './JahrVerlaufChart'
+import { verlaufTabellenSpalten } from './verlaufVergleich'
+import { ChartTooltip } from '../components/ui'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 import { monatsZeile } from '../test/factories'
 
@@ -32,6 +35,36 @@ describe('baueJahrChartDaten', () => {
     expect(d[0].neg51).toBe(5)
     expect(d[0].netzladung).toBe(8)
     expect(d[0].eautoKm).toBe(400)
+  })
+
+  // N-621: der Anteil eines Balkonkraftwerks ohne eigenen Wert am gespeicherten Anlagenwert steckt im
+  // `bkw_kwh` der Antwort (eigene 20 + Anteil 50), nicht in `pv_module_kwh` — PV-Anlage + BKW = Erzeugung (1000).
+  it('BKW-Serie trägt den Anteil am Anlagenwert mit, Σ mit PV-Anlage = Erzeugung (N-621)', () => {
+    const d = baueJahrChartDaten([md(2025, 5, {
+      pv_erzeugung_kwh: 1000, pv_module_kwh: 930, bkw_kwh: 70, bkw_aus_anlagenwert_kwh: 50,
+    })])
+    expect(d[0].pvAnlage).toBe(930)
+    expect(d[0].bkw).toBe(70)
+    expect(d[0].pvAnlage + d[0].bkw).toBe(1000)
+  })
+
+  // N-621 (Fachentscheid Master): der Anteil am Anlagenwert in der BKW-Serie ist geschätzt und wird so genannt —
+  // im Tooltip und in der Tabellenansicht, nur wenn er > 0 ist. Der Client zeigt das Feld, er rechnet es nicht.
+  it('Tooltip der BKW-Serie nennt „davon geschätzt (kWp-Anteil)" aus dem gelieferten Feld (N-621)', () => {
+    const [p] = baueJahrChartDaten([md(2025, 5, { pv_module_kwh: 930, bkw_kwh: 70, bkw_aus_anlagenwert_kwh: 50 })])
+    expect(p.bkwGeschaetzt).toBe(50)
+    render(<ChartTooltip active label="Mai"
+      payload={[{ name: 'Balkonkraftwerk', value: p.bkw, payload: p as unknown as Record<string, unknown> }]}
+      formatter={jahrTooltipWert} />)
+    expect(screen.getByText('70,0 kWh · davon geschätzt (kWp-Anteil): 50,0 kWh')).toBeTruthy()
+  })
+
+  it('ohne Anteil bleibt der Tooltip der BKW-Serie ohne Zusatz, die Tabelle ohne Spalte (N-621)', () => {
+    const [p] = baueJahrChartDaten([md(2025, 5, { bkw_kwh: 20, bkw_aus_anlagenwert_kwh: 0 })])
+    expect(jahrTooltipWert(p.bkw, 'Balkonkraftwerk', p as unknown as Record<string, unknown>)).toBe('20,0 kWh')
+    expect(verlaufTabellenSpalten(true).some((s) => s.key === 'bkwGeschaetzt')).toBe(false)
+    expect(verlaufTabellenSpalten(true, true).find((s) => s.key === 'bkwGeschaetzt')?.label)
+      .toBe('Balkonkraftwerk, davon geschätzt (kWp-Anteil)')
   })
 
   // N-121: ein Monat ohne Monatsabschluss wird aus der lokalen Tagesebene

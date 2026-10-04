@@ -55,6 +55,7 @@ from backend.services.monats_fakten import (
     finanz_zeile_eingabe,
     lade_monats_fakten,
     pv_unvollstaendig_hinweis,
+    pv_erzeugungs_monate,
 )
 from backend.core.investition_parameter import ist_dienstlich
 from backend.core.wirtschaftlichkeit_defaults import NETZBEZUG_DEFAULT_CENT
@@ -410,11 +411,10 @@ async def get_cockpit_uebersicht(
     # Monate, in denen überhaupt PV aufgelöst wurde — gemessen ODER über das
     # Aggregat gefüllt. Ein BKW-Monat ohne erfasste Erzeugung zählt hier nicht
     # mit: er trägt 0 zu `pv_erzeugung` bei und würde als Nenner-Monat den
-    # spezifischen Ertrag verzerren.
-    pv_monate = {
-        f.schluessel for f in fakten
-        if f.erzeugung.pv_je_modul or f.bkw.erzeugung_kwh > 0
-    }
+    # spezifischen Ertrag verzerren. Die Regel steht an EINER Stelle
+    # (`monats_fakten.pv_erzeugungs_monate`, N-621 H1) — der HA-Sensor
+    # „spezifischer Ertrag" fragt dieselbe Funktion.
+    pv_monate = pv_erzeugungs_monate(fakten)
 
     # Netzpunkt-Bilanz: sonstige Erzeuger (z. B. BHKW) speisen hinter denselben
     # Zähler → ihre Erzeugung gehört in die EV/Autarkie-Ableitung, sonst drückt

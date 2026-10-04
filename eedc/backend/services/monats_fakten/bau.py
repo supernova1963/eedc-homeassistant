@@ -43,6 +43,7 @@ async def _baue_fakt(
     pv_modul_summe: Optional[float],
     pv_je_modul: dict[int, PvModulWert],
     investitionen: list[Investition],
+    bkw_aus_anlagenwert: Optional[dict[int, float]] = None,
     neg_preis_kwh: Optional[float],
     tarif_cache: dict[date, dict],
     zeittarif_cache: dict,
@@ -82,17 +83,28 @@ async def _baue_fakt(
     else:
         pv_vollstaendig = pv_modul_summe is not None or not pv_je_modul
 
-    # BKW nur ohne eigene IMD-Zeile im Monat.
+    # N-621: der Anteil der Balkonkraftwerke ohne eigenen Wert am gespeicherten
+    # Anlagenwert (`pv_monatswerte.lade_pv_je_monat`, `bkw_anteile`). Leer ohne
+    # Anlagenwert — dann ist jede Zahl unten dieselbe wie vorher.
+    bkw_anteil = dict(bkw_aus_anlagenwert or {})
+    bkw_aus_anlagenwert_kwh = sum(bkw_anteil.values())
+
+    # BKW nur ohne eigene IMD-Zeile im Monat — und nicht neben einem Anteil am
+    # Anlagenwert (N-621, Tageswert-Vorrang): der gespeicherte Anlagenwert steht
+    # für ALLE PV-Quellen und hat das BKW schon bedacht; der Tageswert käme
+    # obendrauf (gemessen vorher: Anlagenwert 1000, Strings 550 + 380, BKW-Tag
+    # 45 ⇒ mit Tagesebene 975, nach dem Bau sonst 1045).
     bkw_erzeugung = roh.bkw_erzeugung
     if (
         "balkonkraftwerk" not in roh.typen_mit_zeile
+        and not bkw_anteil
         and tages_summe is not None
         and tages_summe.bkw_kwh > 0
     ):
         bkw_erzeugung = tages_summe.bkw_kwh
         tageswert_gruppen.add(TAGESWERT_BKW)
 
-    pv_kwh = (pv_modul_summe or 0.0) + bkw_erzeugung
+    pv_kwh = (pv_modul_summe or 0.0) + bkw_erzeugung + bkw_aus_anlagenwert_kwh
     erzeugung = ErzeugungFakten(
         pv_module_kwh=pv_modul_summe,
         bkw_kwh=bkw_erzeugung,
@@ -102,6 +114,7 @@ async def _baue_fakt(
         hinter_zaehler_kwh=erzeugung_hinter_zaehler_kwh(pv_kwh, roh.sonstiges_erzeugung),
         pv_je_modul=pv_je_modul,
         pv_vollstaendig=pv_vollstaendig,
+        bkw_aus_anlagenwert_kwh=bkw_aus_anlagenwert_kwh,
     )
 
     # ── PV-Anteil der Heimladung: echter Wert gewinnt, sonst ableiten ──────

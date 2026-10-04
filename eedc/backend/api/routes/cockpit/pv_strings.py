@@ -47,7 +47,7 @@ from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.services.prognose_auswahl import lade_aktive_prognose
 from backend.services.pv_monatswerte import lade_pv_je_monat
-from backend.core.berechnungen import anteilig, monatsfenster_investition
+from backend.core.berechnungen import soll_im_laufmonat
 from backend.api.routes.cockpit._shared import MONATSNAMEN
 
 router = APIRouter()
@@ -68,40 +68,10 @@ RANKING_NICHT_MOEGLICH = (
 
 
 
-def _soll_im_laufmonat(
-    soll_kwh: float,
-    modul: Any,
-    jahr: int,
-    monat: int,
-) -> float:
-    """Das Monats-SOLL, auf die Laufzeit des Moduls in diesem Monat gekürzt.
-
-    **F-34 (#366, azywietz-web).** Ein Modul, das am 19.03. in Betrieb ging,
-    bekam den **vollen** PVGIS-März gegenübergestellt: 175,1 kWh SOLL gegen
-    60,8 gemessene, Performance Ratio 0,347 — während dieselbe Anlage in jedem
-    vollen Monat über 1,0 lag. Der Vergleich maß das Inbetriebnahme-Datum,
-    nicht die Anlage, und zog das Jahres-PR sichtbar nach unten.
-
-    Der Nenner wird gekürzt, nicht der Monat ausgelassen — derselbe Entscheid
-    wie bei N-69 für das obere Monatsende (Gernot, 2026-08-04): sonst verlöre
-    der Anschaffungsmonat seine einzige Einordnung. Gleichverteilung innerhalb
-    des Monats ist eine Näherung, siehe `anteilig`; im Frühjahr fällt das
-    gekürzte SOLL eher zu niedrig aus, die Quote also eher zu günstig.
-
-    ⚠ Bewusst **nur** die Investitions-Kanten (Anschaffung · Stilllegung). Das
-    obere Ende des **laufenden** Monats ist die andere Frage und hat mit
-    `monatsfenster` ihre eigene Formel — hier zu mischen wäre genau die
-    Vertauschung der zwei Datums-Ebenen, vor der `CLAUDE.md` warnt.
-    """
-    fenster = monatsfenster_investition(
-        jahr,
-        monat,
-        ab=getattr(modul, "anschaffungsdatum", None),
-        bis=getattr(modul, "stilllegungsdatum", None),
-    )
-    if not fenster.ist_angefangen:
-        return soll_kwh
-    return anteilig(soll_kwh, fenster) or 0.0
+# F-34: Das Monats-SOLL einer Zeile wird auf ihre Laufzeit im Anschaffungs-/
+# Stilllegungsmonat gekürzt — `soll_im_laufmonat`, seit N-616 (04.10.2026) im
+# Layer (`core/berechnungen/monatsfenster.py`), weil das Jahresbericht-PDF
+# („String-Vergleich") dieselbe Regel braucht.
 
 
 def _rollup_quelle(quellen: Iterable[str]) -> str:
@@ -471,7 +441,7 @@ async def get_pv_strings(
                     prog_monat = prognose_monate.get(monat, 0) * kwp_anteil
                 # F-34: im Anschaffungs-/Stilllegungsmonat lief das Modul nur
                 # einen Teil des Monats — das SOLL wird darauf gekürzt.
-                prog_monat = _soll_im_laufmonat(prog_monat, modul, jahr, monat)
+                prog_monat = soll_im_laufmonat(prog_monat, modul, jahr, monat)
             else:
                 prog_monat = 0.0
             ist_monat = md_by_inv.get(modul.id, {}).get(monat, 0)
@@ -671,13 +641,13 @@ async def get_pv_strings_gesamtlaufzeit(
             # schiefen Vergleich wie die Monatssicht.
             if modul_prognose is not None:
                 prognose_jahr = sum(
-                    _soll_im_laufmonat(modul_prognose.get(m, 0), modul, jahr, m)
+                    soll_im_laufmonat(modul_prognose.get(m, 0), modul, jahr, m)
                     for m in months_with_data_year
                 )
             else:
                 # N-613: je Monat der Nenner der Menge, die in diesem Monat trägt.
                 prognose_jahr = sum(
-                    _soll_im_laufmonat(
+                    soll_im_laufmonat(
                         prognose_monate.get(m, 0) * (
                             modul_kwp / nenner_je_monat[(jahr, m)]
                             if nenner_je_monat[(jahr, m)] > 0 else 0

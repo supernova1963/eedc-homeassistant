@@ -41,12 +41,18 @@ from backend.core.berechnungen import (
     resolve_pv_je_modul,
 )
 from backend.core.field_definitions import get_pv_erzeugung_kwh
+from backend.core.investition_kennwerte import get_erzeuger_kwp
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.monatsdaten import Monatsdaten
 from backend.utils.investition_value import get_inv_value
 
 # {(jahr, monat): {inv_id: PvModulWert}}
 PvMonate = dict[tuple[int, int], dict[int, PvModulWert]]
+
+#: {(jahr, monat): {bkw_id: kWh}} — der Anteil am gespeicherten Anlagenwert, den ein selbst tragendes
+#: Balkonkraftwerk OHNE eigenen Wert in diesem Monat bekommt (N-621). Nur Monate mit Anlagenwert und
+#: nur BKW, die der Aufrufer NICHT selbst in die Auflösung gegeben hat.
+BkwAnteile = dict[tuple[int, int], dict[int, float]]
 
 
 async def lade_pv_je_monat(
@@ -56,6 +62,7 @@ async def lade_pv_je_monat(
     jahr: Optional[int] = None,
     *,
     investitionen: Optional[Sequence[Investition]] = None,
+    bkw_anteile: Optional[BkwAnteile] = None,
 ) -> PvMonate:
     """Aufgelöste Pro-Modul-PV je Monat — Messwerte + Aggregat-Lückenfüllung.
 
@@ -86,6 +93,17 @@ async def lade_pv_je_monat(
             gebraucht, wenn ein Monat einen Anlagenwert trägt; wer sie schon
             geladen hat (die Monats-Fakten), reicht sie durch und spart die
             Abfrage. ``None`` = der Pfad lädt sie bei Bedarf selbst.
+        bkw_anteile: **Ausgabe-Dict** (N-621). Wer es mitgibt, bekommt darin
+            je Monat den Anteil am Anlagenwert, den ein nicht übergebenes,
+            selbst tragendes Balkonkraftwerk ohne eigenen Wert bekommt
+            (``BkwAnteile``). Die Modul-Einträge des Rückgabewerts sind mit und
+            ohne Argument dieselben — der Anteil ist eine Eigenschaft der
+            Auflösung, nicht des Aufrufers; das Argument entscheidet nur, ob der
+            Aufrufer ihn auch zu sehen bekommt. Warum ein Ausgabe-Parameter und
+            kein zweiter Rückgabewert: die Signatur ``-> PvMonate`` hat sieben
+            Produktiv-Aufrufer, gebraucht wird der Anteil von zweien (Monats-
+            Fakten, Import-Vorschau) — dieselbe Bauform wie ``kontext_out`` in
+            ``ha_export/anlage_sensoren.py::calculate_anlage_sensors``.
 
     Returns:
         ``{(jahr, monat): {inv_id: PvModulWert}}``. Monate ohne jede PV-Quelle
@@ -122,12 +140,33 @@ async def lade_pv_je_monat(
     danach als ``bkw_erzeugung`` wieder dazu: ``pv_kwh = Module + BKW`` ergibt
     so den Anlagenwert und nicht Anlagenwert + BKW. Ohne Abzug zählte das BKW
     doppelt — einmal als Anteil, den der Anlagenwert auf die Module verteilt,
-    einmal als eigene Zeile. Ein BKW **ohne** eigenen Wert bekommt keinen
-    Anteil am Rest (der bliebe ein Faktenfeld ohne Speicherort; die Familie
-    geht an HA-Bauform S1). **Ohne Anlagenwert läuft nichts davon** — keine
+    einmal als eigene Zeile. **Ohne Anlagenwert läuft nichts davon** — keine
     zusätzliche Abfrage, jede Zahl wie vorher.
+
+    **N-621 — ein Balkonkraftwerk ohne eigenen Wert bekommt seinen Anteil.**
+    Trägt ein Monat einen Anlagenwert, ist ein selbst tragendes BKW ohne
+    eigenen Wert eine Lücke wie ein Modul ohne Wert: die Auflösung läuft über
+    die Module UND diese BKW, der Rest (Anlagenwert − Σ eigene Werte aller
+    Quellen, nie unter 0) geht nach kWp auf alle Quellen ohne eigenen Wert.
+    Zurück kommen die Modul-Einträge wie bisher (``pv_je_modul`` enthält nur
+    ``pv-module``, F-10) und der BKW-Anteil getrennt in ``bkw_anteile``.
+    Vorher bekam das BKW nichts — hatte kein Modul eine Lücke, fiel sein
+    Anteil aus der Monatssumme (gespeicherter Anlagenwert 1000, Strings
+    550 + 380 ⇒ 930), während PV-Strings und der Monat ohne Abschluss 1000
+    nannten. **Kandidatenregel:** ohne Anlagenwert gibt es keine Lücke, die
+    ein BKW füllen könnte — der Pfad läuft dann exakt wie vorher, und ein BKW
+    öffnet nie einen Monat in ``pv_je_modul``. Was bleibt, ist der
+    HA-Statistik-Sammelimport, der den Zähler nicht speichert (P7): ohne
+    gespeicherten Anlagenwert gibt es zur Lesezeit nichts zu verteilen
+    (HA-Bauform S1).
+
+    **Gewicht:** ein Balkonkraftwerk wird über ``get_erzeuger_kwp`` gewichtet
+    (Spalte → ``parameter`` → ``leistung_wp × anzahl``), Module wie bisher über
+    ``get_inv_value`` (``_kwp_gewicht``). Bis N-621 las auch das BKW
+    ``get_inv_value`` — bei ``leistung_wp × anzahl`` 0 kWp, es bekam vom Rest
+    nichts, obwohl die String-Sicht es als „geschätzt" auswies.
     """
-    if not pv_module:
+    if not pv_module and bkw_anteile is None:
         return {}
 
     pv_ids = [m.id for m in pv_module]
@@ -145,7 +184,8 @@ async def lade_pv_je_monat(
     # DERSELBEN Zeile (`source_provenance`) — kein zusätzlicher Query, die Row
     # liegt hier ohnehin vor.
     abgeleitet: dict[tuple[int, int], set[int]] = {}
-    for imd in (await db.execute(imd_query)).scalars().all():
+    # N-621: ohne Module (reine BKW-Anlage, nur mit `bkw_anteile`) gibt es nichts zu laden.
+    for imd in ((await db.execute(imd_query)).scalars().all() if pv_ids else ()):
         wert = (imd.verbrauch_daten or {}).get("pv_erzeugung_kwh")
         if wert is None:
             continue
@@ -210,7 +250,18 @@ async def lade_pv_je_monat(
         # damit **rückwirkend** in jedem Vormonat — und weil alle Sichten
         # denselben zu kleinen Wert nannten, gab es keinen Widerspruch zu sehen.
         aktive = erzeuger_traeger(aktive)
-        if not aktive:
+        anlagenwert = aggregat.get((j, monat))
+        # N-621: ohne Anlagenwert keine BKW-Lücke — `bkw_empfaenger` bleibt leer und der Monat läuft wie vorher.
+        bkw_empfaenger: list[Investition] = []
+        daten_monat = bkw_daten.get((j, monat), {})
+        bkw_eigen = 0.0
+        if anlagenwert is not None:
+            alle_aktiv = [i for i in pv_quellen_anlage if i.ist_aktiv_im_monat(j, monat)]
+            if daten_monat:
+                bkw_eigen = eigene_bkw_erzeugung_kwh(alle_aktiv, daten_monat)
+                anlagenwert = max(0.0, anlagenwert - bkw_eigen)
+            bkw_empfaenger = bkw_ohne_eigenen_wert(alle_aktiv, daten_monat, uebergeben=pv_ids)
+        if not aktive and not bkw_empfaenger:
             continue
         roh_monat = dict(roh.get((j, monat), {}))
         abgeleitet_monat = abgeleitet.get((j, monat), set())
@@ -237,7 +288,7 @@ async def lade_pv_je_monat(
                 module=[
                     PvModul(
                         inv_id=k.id,
-                        leistung_kwp=get_inv_value(k, "leistung_kwp"),
+                        leistung_kwp=_kwp_gewicht(k),
                         eigen_kwh=roh_monat.get(k.id),
                         eigen_ist_abgeleitet=k.id in abgeleitet_monat,
                     )
@@ -254,25 +305,93 @@ async def lade_pv_je_monat(
                 # per Konstruktion proportional zur kWp sind.
                 abgeleitet_monat = abgeleitet_monat | {k.id}
 
-        anlagenwert = aggregat.get((j, monat))
-        if anlagenwert is not None and bkw_daten.get((j, monat)):
-            anlagenwert = max(0.0, anlagenwert - eigene_bkw_erzeugung_kwh(
-                [i for i in pv_quellen_anlage if i.ist_aktiv_im_monat(j, monat)],
-                bkw_daten[(j, monat)],
-            ))
-        out[(j, monat)] = resolve_pv_je_modul(
+        # Stufe 3: der Anlagenwert (schon um die eigenen BKW-Werte gemindert, N-611) füllt die Lücken —
+        # die der Module UND, seit N-621, die der Balkonkraftwerke ohne eigenen Wert. EINE Auflösung, damit
+        # beide denselben Rest nach kWp teilen (Σ-Invariante über alle Quellen).
+        aufgeloest = resolve_pv_je_modul(
             aggregat_kwh=anlagenwert,
             module=[
                 PvModul(
                     inv_id=m.id,
-                    leistung_kwp=get_inv_value(m, "leistung_kwp"),
+                    leistung_kwp=_kwp_gewicht(m),
                     eigen_kwh=roh_monat.get(m.id),
                     eigen_ist_abgeleitet=m.id in abgeleitet_monat,
                 )
                 for m in aktive
+            ] + [
+                PvModul(inv_id=b.id, leistung_kwp=_kwp_gewicht(b), eigen_kwh=None)
+                for b in bkw_empfaenger
             ],
         )
+        if aktive:
+            out[(j, monat)] = {m.id: aufgeloest[m.id] for m in aktive}
+        if bkw_empfaenger and bkw_anteile is not None:
+            anteile = {b.id: aufgeloest[b.id].pv_erzeugung_kwh for b in bkw_empfaenger}
+            # Rundungsrest (Nacharbeit nach der Nachmessung N-621): drei Teile nach kWp ergeben in
+            # Gleitkomma oft nicht exakt den Anlagenwert (gemessen 999,9999999999998 statt 1000;
+            # `int()` in `cockpit/nachhaltigkeit.py` rundet so etwas nach unten ab). Der letzte
+            # BKW-Empfänger bekommt deshalb die Differenz — in derselben Summenfolge, in der
+            # `monats_fakten/bau.py` die Monatssumme bildet (Module, eigene BKW-Werte, Anteile).
+            # Nur wenn der Rest > 0 ist (sonst sind alle Anteile 0) und nur hier, nicht in
+            # `resolve_pv_je_modul`: die P7-Formel und ihre übrigen Aufrufer bleiben, wie sie sind.
+            brutto = aggregat.get((j, monat))
+            if anlagenwert and brutto is not None:
+                letzter = bkw_empfaenger[-1].id
+                davor = sum(w.pv_erzeugung_kwh for w in out.get((j, monat), {}).values()) + bkw_eigen
+                andere = sum(v for k, v in anteile.items() if k != letzter)
+                anteile[letzter] = max(0.0, brutto - davor - andere)
+            bkw_anteile[(j, monat)] = anteile
     return out
+
+
+def _kwp_gewicht(inv: Investition) -> float:
+    """kWp-Gewicht einer PV-Quelle in der Auflösung (N-621).
+
+    Ein Balkonkraftwerk über den Typ-Dispatcher ``get_erzeuger_kwp`` — er kennt
+    auch die dritte Pflegeform ``leistung_wp × anzahl``. ``get_inv_value`` kennt
+    sie nicht und lieferte dort 0: das BKW bekam in der String-Sicht vom Rest
+    nichts (gemessen Balkon 68 statt 192,7 kWh). Module bleiben bei
+    ``get_inv_value`` — für sie ändert sich keine Zahl.
+    """
+    if inv.typ == BKW_TYP:
+        return get_erzeuger_kwp(inv)
+    return get_inv_value(inv, "leistung_kwp")
+
+
+def _bkw_hat_eigenen_wert(daten: Optional[dict]) -> bool:
+    """Trägt die Monatszeile eines Balkonkraftwerks eine eigene Erzeugung — auch 0?
+
+    Beide Schreibweisen wie ``get_pv_erzeugung_kwh`` (Kanon ``pv_erzeugung_kwh``,
+    Altbestand ``erzeugung_kwh``); eine gepflegte 0 ist ein Wert (``is not None``).
+    Eine Zeile nur mit Eigenverbrauch ist **keine** Erzeugung — genau die
+    Datenlücke, für die P9 den Ersatzträger kennt.
+    """
+    d = daten or {}
+    return d.get("pv_erzeugung_kwh") is not None or d.get("erzeugung_kwh") is not None
+
+
+def bkw_ohne_eigenen_wert(
+    aktive: Sequence[Investition],
+    daten_je_investition: Mapping[int, Optional[dict]],
+    *,
+    uebergeben: Sequence[int] = (),
+) -> list[Investition]:
+    """Die Balkonkraftwerke, die im Monat einen Anteil am Anlagenwert bekommen (N-621).
+
+    Selbst tragend (nicht an Modul-Kinder abgetreten, ADR-002/P11 — der
+    Aufrufer übergibt dafür die im Monat **aktiven** Investitionen samt
+    `pv-module`), nicht schon vom Aufrufer in die Auflösung gegeben
+    (``uebergeben``) und ohne eigenen Wert in ``daten_je_investition``
+    (``_bkw_hat_eigenen_wert``). Ein BKW ganz ohne Monatszeile gehört dazu.
+    """
+    abgetreten = abgetretene_bkw_ids(aktive)
+    return [
+        i for i in aktive
+        if i.typ == BKW_TYP
+        and i.id not in abgetreten
+        and i.id not in uebergeben
+        and not _bkw_hat_eigenen_wert(daten_je_investition.get(i.id))
+    ]
 
 
 def eigene_bkw_erzeugung_kwh(

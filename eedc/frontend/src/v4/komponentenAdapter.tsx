@@ -282,10 +282,10 @@ function pvVerlauf(
   // (A26/N106). Auf der Rohspalte bekam ein nur im `parameter` gepflegtes Modul
   // (#229) hier 0 zugeteilt — und die übrigen Module entsprechend zu viel.
   const totalKwp = module.reduce((s, m) => s + (m.leistung_kwp_effektiv ?? 0), 0)
-  type JahrWerte = { erz: number; direkt: number; speicher: number; einsp: number; zusatz: Record<string, number> }
+  type JahrWerte = { erz: number; direkt: number; speicher: number; einsp: number; zusatz: Record<string, number>; bkwGeschaetzt: number }
   const jahr = new Map<number, JahrWerte>()
   for (const r of agg) {
-    const y = jahr.get(r.jahr) ?? { erz: 0, direkt: 0, speicher: 0, einsp: 0, zusatz: {} }
+    const y = jahr.get(r.jahr) ?? { erz: 0, direkt: 0, speicher: 0, einsp: 0, zusatz: {}, bkwGeschaetzt: 0 }
     // Bezugsgröße der Modul-Zerlegung ist die PV-Anlage OHNE BKW — sonst
     // verteilt der Fallback die BKW-Erzeugung auf die Dachflächen mit und
     // doppelt sie gegen das eigene BKW-Segment.
@@ -298,6 +298,9 @@ function pvVerlauf(
     y.speicher += r.speicher_ladung_kwh ?? 0
     y.einsp += r.einspeisung_kwh ?? 0
     for (const z of ERZ_ZUSATZ) y.zusatz[z.key] = (y.zusatz[z.key] ?? 0) + z.wert(r)
+    // N-621: wie viel vom BKW-Segment geschätzt ist (Anteil am Anlagenwert, `bkw_kwh` enthält ihn) — nur
+    // für die Kennzeichnung im Tooltip, Jahressumme der gelieferten Monatswerte wie die Segmente darüber.
+    y.bkwGeschaetzt += r.bkw_aus_anlagenwert_kwh ?? 0
     jahr.set(r.jahr, y)
   }
   // Nur tatsächlich vorhandene Zusatz-Erzeuger bekommen Balken/Segment — eine
@@ -320,7 +323,10 @@ function pvVerlauf(
     : PV_MODUL_HERKUNFT
   const bars: VerlaufBar[] = [
     ...module.map((m, i) => ({ key: `m${m.id}`, label: m.bezeichnung, farbe: PV_MODUL_FARBEN[i % PV_MODUL_FARBEN.length], stapel: 'erz' })),
-    ...zusatzAktiv.map((z) => ({ key: z.key, label: z.label, farbe: z.hex, stapel: 'erz' })),
+    ...zusatzAktiv.map((z) => ({
+      key: z.key, label: z.label, farbe: z.hex, stapel: 'erz',
+      ...(z.key === 'bkw' ? { davonGeschaetzt: 'bkwGeschaetzt' } : {}),
+    })),
     { key: 'direkt', label: 'Direktverbrauch', farbe: CHART_COLORS.eigenverbrauch, stapel: 'verw' },
     { key: 'sladung', label: 'Speicherladung', farbe: CHART_COLORS.speicherLadung, stapel: 'verw' },
     { key: 'einsp', label: 'Einspeisung', farbe: CHART_COLORS.einspeisung, stapel: 'verw' },
@@ -330,6 +336,7 @@ function pvVerlauf(
     const row: VerlaufRow = { name: String(j), direkt: Math.round(y.direkt), sladung: Math.round(y.speicher), einsp: Math.round(y.einsp) }
     for (const m of module) row[`m${m.id}`] = Math.round(modulWert(m, j, y.erz))
     for (const z of zusatzAktiv) row[z.key] = Math.round(y.zusatz[z.key] ?? 0)
+    if (y.bkwGeschaetzt > 0) row.bkwGeschaetzt = Math.round(y.bkwGeschaetzt)
     return row
   })
   const ges = [...jahr.values()].reduce((a, v) => ({ erz: a.erz + v.erz, direkt: a.direkt + v.direkt, speicher: a.speicher + v.speicher, einsp: a.einsp + v.einsp }), { erz: 0, direkt: 0, speicher: 0, einsp: 0 })

@@ -478,7 +478,7 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
           <ChartDatenTabelle
             xLabel="Monat"
             xKey="monat"
-            spalten={verlaufTabellenSpalten(true)}
+            spalten={verlaufTabellenSpalten(true, monatsZeilen.some((m) => (m.bkw_aus_anlagenwert_kwh ?? 0) > 0))}
             daten={baueJahrChartDaten(monatsZeilen)}
             csvDateiname={`verlauf_${angezeigtesJahr}.csv`}
           />

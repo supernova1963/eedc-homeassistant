@@ -10,18 +10,34 @@ import {
 import { xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP } from '../lib'
 import { useLegendenToggle, useSchmaleAchse } from '../hooks'
 import { ChartLegende, eedcTooltipProps } from '../components/ui'
+import { fmtZahl } from '../lib'
+import { bkwAnteilZusatz } from '../lib/pvHerkunft'
 
 export interface VerlaufBar {
   key: string; label: string; farbe: string
   /** Stapel-Gruppe: Bars gleicher `stapel` stapeln sich; verschiedene stehen
    *  nebeneinander (z. B. PV „Erzeugung" je Modul ⟷ „Verwendung"). */
   stapel?: string
+  /** N-621: Feld der Zeile, das „davon geschätzt (kWp-Anteil)" dieser Serie trägt — der Tooltip nennt es
+   *  in derselben Zeile, wenn es > 0 ist (Balkonkraftwerk mit Anteil am Anlagenwert). */
+  davonGeschaetzt?: string
 }
 export interface VerlaufRow { name: string; [serie: string]: number | string }
 
 /** Lange Serien-Bezeichnungen im Tooltip auf eine Zeile kürzen (mit „…"). */
 function kuerze(label: string, max = 22): string {
   return label.length > max ? `${label.slice(0, max - 1)}…` : label
+}
+
+/** Tooltip-Wert je Serie: Zahl mit Einheit, bei einer Serie mit `davonGeschaetzt` dazu
+ *  „davon geschätzt (kWp-Anteil): X" (N-621). Exportiert für die Probe. */
+export function verlaufTooltipWert(bars: VerlaufBar[], einheit: string) {
+  return (value: number, name: string, zeile?: Record<string, unknown>): string => {
+    const wert = `${fmtZahl(value, 0)} ${einheit}`
+    const feld = bars.find((b) => b.label === name)?.davonGeschaetzt
+    const zusatz = feld ? bkwAnteilZusatz(zeile?.[feld], (v) => `${fmtZahl(v, 0)} ${einheit}`) : null
+    return zusatz ? `${wert} · ${zusatz}` : wert
+  }
 }
 
 export function KomponentenVerlaufChart({
@@ -42,7 +58,7 @@ export function KomponentenVerlaufChart({
           <YAxis {...yAchse(schmal, 44)} tickFormatter={achsenTick} label={achsenEinheit(einheit)} />
           {/* ChartTooltip-SoT (S1: Viereck-Swatch, monochromer Wert); Serien-Name
               gekürzt, Wert gerundet mit Einheit. */}
-          <Tooltip {...eedcTooltipProps({ unit: einheit, decimals: 0, nameFormatter: kuerze })} />
+          <Tooltip {...eedcTooltipProps({ nameFormatter: kuerze, formatter: verlaufTooltipWert(bars, einheit) })} />
           <Legend wrapperStyle={{ fontSize: 11 }} content={<ChartLegende onItemClick={bars.length > 1 ? legende.onItemClick : undefined} />} />
           {bars.map((b) => (
             // stapel-Gruppe gewinnt (paarweise Stapel); sonst gestapelt=false → gruppiert, true → ein Stapel.

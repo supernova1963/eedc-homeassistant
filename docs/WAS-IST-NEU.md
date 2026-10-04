@@ -115,6 +115,22 @@ jetzt Gesamtverbrauch.
   Zähler verteilt. Hat der Statistik-Import solche Monate schon verteilt, zeigt seine Vorschau
   sie jetzt als Konflikt; ein erneuter Import dieses Monats verteilt sie richtig, wenn mehrere
   Module keinen eigenen Zähler haben.
+- **Balkonkraftwerk ohne eigenen Wert:** Ist für einen Monat ein PV-Gesamtwert gespeichert
+  (eingetragen oder importiert) und hat dein Balkonkraftwerk keinen eigenen Wert, fehlte seine
+  Erzeugung im abgeschlossenen Monat, sobald alle Strings einen Wert hatten — im Beispiel 930
+  statt 1000 kWh, und die Zahl sprang beim Monatsabschluss. Jetzt bekommt es seinen Anteil
+  nach Leistung, überall so wie in *Komponenten → PV-Strings*; Eigenverbrauch, Autarkie und
+  Ersparnis steigen entsprechend. Im Verlauf steht der Anteil beim Balkonkraftwerk, und der
+  Tooltip sagt „davon geschätzt (kWp-Anteil)"; die Werte des Balkonkraftwerks selbst bleiben die
+  gemessenen. Wie bisher bleibt es, wenn der Gesamtzähler aus Home Assistant
+  kommt — der Statistik-Import und „Aus HA laden" speichern ihn nicht. Gib dem Balkonkraftwerk
+  dafür einen eigenen Zähler oder trage seinen Monatswert ein.
+- **HA-Sensor „spezifischer Ertrag" mit Balkonkraftwerk:** Hat deine Anlage **nur** ein
+  Balkonkraftwerk, nennt der Sensor jetzt dieselbe Zahl wie die Kachel in *Cockpit → Übersicht*
+  und verschiebt sich dafür einmalig (im Beispiel von 143,75 auf 586,73 kWh/kWp). Dasselbe gilt,
+  wenn in einzelnen Monaten nur dein Balkonkraftwerk einen Wert hat und die Module keinen — etwa
+  bevor die Module dazukamen. Der Sensor kann dadurch sinken (im Beispiel von 821 auf 385); fehlen
+  in solchen Monaten nur die Modulwerte, trag sie nach.
 - **Spezifischer Ertrag in *Auswertungen → Tabelle*:** Mit einem Balkonkraftwerk lag die
   (standardmäßig ausgeblendete) Spalte „Spez. Ertrag" um dessen Anteil zu hoch — die
   Erzeugung zählte das Balkonkraftwerk mit, die Nennleistung nicht (im Beispiel 100,0 statt
@@ -127,6 +143,20 @@ jetzt Gesamtverbrauch.
   Gesamtlaufzeit. Beide Sichten zeigen dieselben Zeilen. Und hast du **alle** Module eines
   Balkonkraftwerks deaktiviert, zählt unter *Auswertungen → CO₂* seine graue Energie wieder
   mit, statt ganz zu fehlen — „klimapositiv ab" rückt dadurch etwas nach hinten.
+- **Jahresbericht-PDF, „String-Vergleich":** Jeder String wird nur über die Monate
+  verglichen, in denen er einen Wert hat — im laufenden Jahr, im Jahr der Inbetriebnahme oder
+  nach einem Zubau stand dort bisher das SOLL des ganzen Jahres gegen die erfassten Monate
+  (im Beispiel −52 % statt −2 %). Wie viele Monate es sind, steht an der Zeile. Der
+  spezifische Ertrag im Gesamtzeitraum ist jetzt derselbe saisonal gewichtete Jahreswert wie
+  die Kachel im Cockpit. Und die Werte je String sind
+  dieselben wie unter *Komponenten → PV-Strings*, auch bei einem Balkonkraftwerk ohne eigenen
+  Wert — ein nach kWp verteilter Wert heißt dort wie hier „geschätzt (kWp-Anteil)".
+- **Community:** Ausrichtung, Neigung, Wallbox- und Balkonkraftwerk-Leistung im geteilten
+  Datensatz zählen nur noch die Geräte, die du heute hast — stillgelegte oder ersetzte
+  Geräte verschoben sie bisher (im Beispiel „20°, gemischt" statt „30°, Süd").
+- **Tage vor einer Anschaffung:** Tag-Status, der Daten-Checker-Hinweis zu Tagen ohne Werte
+  und die Vorschauen der Reparatur-Werkbank und von „Tag neu berechnen" nennen für einen Tag
+  nur die Geräte, die es an diesem Tag schon gab.
 - **Vorjahresvergleich:** Der Vergleichswert ist jetzt genau derselbe Monat des Vorjahres,
   wie du ihn direkt aufrufst — vorher konnte er davon abweichen.
 - **Mehrere Wärmepumpen:** Die Ersparnis in der Kachel ist jetzt die Summe der Geräte —

@@ -134,10 +134,13 @@ async def test_k3_bkw_traegt_bis_august_summe_gleich_monatstabelle(db):
     for jahr in (2025, None):
         ctx, ist, tabelle, fakten = await _summen(db, aid, jahr)
         assert (ist, tabelle, fakten) == (1860.0, 1860.0, 1860.0), jahr
-        # SOLL der BKW-Zeile: nur Jan–Aug (Σ e_m = 8360) × 0,8 / 10,8; Kinder Sep–Dez (4420) × 0,4 / 10,8.
+        # Seit N-616 (04.10.2026) zählt jede Zeile nur die Monate, in denen sie einen Wert hat — hier nur den
+        # Mai (e_m 1050, Nenner der tragenden Menge Süd + West + BKW = 10,8). Bis dahin stand hier das SOLL
+        # Jan–Aug (BKW 619,26) bzw. das volle Jahr (Süd 7100) gegen einen einzigen gemessenen Monat; die
+        # Kinder ohne einen einzigen Wert hatten SOLL ohne IST und fallen jetzt weg (keine Zeile ohne SOLL
+        # und IST — Bestand). Gehalten bleibt die N-614-Substanz: das BKW hat eine eigene Zeile, Σ = Tabelle.
         assert _zeilen(ctx) == [
-            ("Süd", 6.0, 7100.0, 550.0), ("West", 4.0, 4733.33, 380.0),
-            ("Balkon", 0.8, 619.26, 930.0), ("Kind 1", 0.4, 163.7, 0.0), ("Kind 2", 0.4, 163.7, 0.0),
+            ("Süd", 6.0, 583.33, 550.0), ("West", 4.0, 388.89, 380.0), ("Balkon", 0.8, 77.78, 930.0),
         ], jahr
 
 
@@ -149,8 +152,9 @@ async def test_k4_dach_luecke_mit_anlagenwert(db):
     for jahr in (2025, None):
         ctx, ist, tabelle, fakten = await _summen(db, aid, jahr)
         assert (ist, tabelle, fakten) == (2000.0, 2000.0, 2000.0), jahr
+        # N-616: die Kinder haben im Zeitraum keinen Monat mit Wert ⇒ weder SOLL noch IST ⇒ keine Zeile.
         assert [(z[0], z[3]) for z in _zeilen(ctx)] == [
-            ("Süd", 642.0), ("West", 428.0), ("Balkon", 930.0), ("Kind 1", 0.0), ("Kind 2", 0.0),
+            ("Süd", 642.0), ("West", 428.0), ("Balkon", 930.0),
         ], jahr
 
 
@@ -164,9 +168,11 @@ async def test_kinder_mitten_im_jahr_einzeljahr_und_gesamtzeitraum(db):
         assert (ist, tabelle, fakten) == (summe, summe, summe), jahr
     ctx = await build_jahresbericht_context(db, aid, None)
     zeilen = {z[0]: z for z in _zeilen(ctx)}
-    # BKW: 2024 voll (12 780 × 0,8 / 10,8 = 946,67) + 2025 Jan–Aug (619,26); Kinder: 2025 Sep–Dez + 2026 voll.
+    # BKW: 2024 voll (12 780 × 0,8 / 10,8 = 946,67) + 2025 Jan–Aug (619,26); Kinder: 2025 Sep–Dez + 2026
+    # Jan–Jun — seit N-616 nur die Monate mit Wert ((4420 + 6210) × 0,4 / 10,8 = 393,70; bis dahin das volle
+    # Jahr 2026, 637,04, gegen sechs gemessene Monate).
     assert zeilen["Balkon"] == ("Balkon", 0.8, 1565.93, 1514.0)
-    assert zeilen["Kind 1"][2] == 637.04
+    assert zeilen["Kind 1"][2] == 393.7
 
 
 @pytest.mark.asyncio

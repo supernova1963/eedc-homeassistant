@@ -11,6 +11,7 @@
  */
 import { CHART_COLORS } from '../lib'
 import type { ChartTabelleSpalte } from '../components/ui'
+import { KWP_ANTEIL_GESCHAETZT } from '../lib/pvHerkunft'
 
 export interface VergleichSerie {
   /** dataKey im ChartPunkt (beide Charts liefern denselben Key). */
@@ -84,7 +85,7 @@ export const VERLAUF_PRESETS: VergleichPreset[] = [
  * Autarkie-Linie), Labels identisch zu den Chart-Serien (Regel D). `nurJahr`-Serien
  * fehlen in der Monat-Sicht — dieselbe Datengrenze wie im Chart.
  */
-export function verlaufTabellenSpalten(istJahr: boolean): ChartTabelleSpalte[] {
+export function verlaufTabellenSpalten(istJahr: boolean, bkwGeschaetzt = false): ChartTabelleSpalte[] {
   return [
     { key: 'eigenverbrauch', label: 'Eigenverbrauch', einheit: 'kWh' },
     { key: 'einspeisung', label: 'Einspeisung', einheit: 'kWh' },
@@ -93,6 +94,8 @@ export function verlaufTabellenSpalten(istJahr: boolean): ChartTabelleSpalte[] {
     { key: 'speicherEntladung', label: 'Speicher-Entladung', einheit: 'kWh' },
     { key: 'pvAnlage', label: 'PV-Anlage', einheit: 'kWh' },
     { key: 'bkw', label: 'Balkonkraftwerk', einheit: 'kWh' },
+    // N-621: nur wenn ein Monat einen Anteil am Anlagenwert trägt — dieselbe Kennzeichnung wie im Tooltip.
+    ...(bkwGeschaetzt ? [{ key: 'bkwGeschaetzt', label: `Balkonkraftwerk, davon ${KWP_ANTEIL_GESCHAETZT}`, einheit: 'kWh' }] : []),
     { key: 'neg51', label: '§51-Abzug', einheit: 'kWh' },
     { key: 'speicherLadung', label: 'Speicher-Ladung', einheit: 'kWh' },
     ...(istJahr

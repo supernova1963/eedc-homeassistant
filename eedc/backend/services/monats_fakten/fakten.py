@@ -63,9 +63,13 @@ class ErzeugungFakten:
       ein aktives Modul ohne Wert und ohne Aggregat" (N42) — eine Teilsumme wäre
       als Anlagenerzeugung irreführend. Wer summiert, behandelt ``None`` als
       Lücke, **nie** als 0. Ein Anlagen-Aggregat steht für alle PV-Quellen: die
-      Module bekommen nur, was nach Abzug der eigenen BKW-Werte bleibt (N-611).
-    - ``pv_kwh`` — Module + Balkonkraftwerk. Die PV-Achse: spezifischer Ertrag,
-      Performance Ratio, SOLL/IST **und** der Eingang der Finanz-Zeile (P9).
+      Module bekommen nur, was nach Abzug der eigenen BKW-Werte bleibt (N-611),
+      und teilen diesen Rest nach kWp mit den Balkonkraftwerken ohne eigenen
+      Wert (N-621, ``bkw_aus_anlagenwert_kwh``).
+    - ``pv_kwh`` — Module + Balkonkraftwerk (eigener Wert ``bkw_kwh`` **und**
+      Anteil am Anlagenwert ``bkw_aus_anlagenwert_kwh``). Die PV-Achse:
+      spezifischer Ertrag, Performance Ratio, SOLL/IST **und** der Eingang der
+      Finanz-Zeile (P9).
     - ``hinter_zaehler_kwh`` — zusätzlich die sonstigen Erzeuger (BHKW/Mini-KWK).
       **Nur** diese Summe geht in Eigenverbrauch/Autarkie: an EINEM Netzanschluss
       messen die Zähler die Summe aller dahinter liegenden Erzeuger (v3.45.4).
@@ -83,6 +87,16 @@ class ErzeugungFakten:
     pv_je_modul: dict[int, PvModulWert] = field(default_factory=dict)
     #: False = die Modul-Auflösung hat eine Lücke (``pv_module_kwh is None``).
     pv_vollstaendig: bool = True
+    #: N-621: Σ der Anteile, die Balkonkraftwerke OHNE eigenen Wert in einem
+    #: Monat mit **gespeichertem** Anlagenwert (``Monatsdaten.pv_erzeugung_kwh``)
+    #: bekommen — der kWp-Anteil am Rest, den die eigenen Werte aller Quellen
+    #: nicht erklären. Additiv in ``pv_kwh`` und ``hinter_zaehler_kwh``; ohne
+    #: Anlagenwert 0.0. Bewusst **nicht** in ``bkw_kwh`` und nicht in
+    #: ``BkwFakten``: das sind die eigenen Werte des Geräts (IST-Quelle je Typ),
+    #: und die BKW-Finanzzeile bekäme sonst eine verteilte Zahl als eigenen
+    #: Ertrag. Ein BKW mit Anteil trägt im Monat keinen Ersatz-Eigenverbrauch
+    #: (P9-Zusatzregel, ``roh.py::falte``) und keinen Tageswert (``bau.py``).
+    bkw_aus_anlagenwert_kwh: float = 0.0
 
 @dataclass(frozen=True)
 class BkwFakten:

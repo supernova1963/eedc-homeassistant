@@ -29,7 +29,7 @@ from backend.services.energie_profil.monats_aus_tagen import (
     TagesMonatsSumme,
     lade_monats_summen_aus_tagen,
 )
-from backend.services.pv_monatswerte import lade_pv_je_monat, pv_summe_je_monat
+from backend.services.pv_monatswerte import BkwAnteile, lade_pv_je_monat, pv_summe_je_monat
 from backend.services.monats_fakten.bau import _baue_fakt
 from backend.services.monats_fakten.fakten import MonatsFakt, MonatsSchluessel
 from backend.services.monats_fakten.roh import _RohMonat, _ein_jahr, _im_fenster, _lade_imd, _lade_monatsdaten
@@ -109,9 +109,18 @@ async def lade_monats_fakten(
     # Modul-Lücken füllt — sonst stünde es zweimal in `pv_kwh`. Dafür reicht die
     # Schicht ihre Investitionen UNGEFILTERT durch; Zeitfilter und Abtretung
     # entscheidet `lade_pv_je_monat` je Monat (ADR-002/P11, N-386, #123).
+    #
+    # N-621: ein Balkonkraftwerk OHNE eigenen Wert bekommt in einem Monat mit
+    # gespeichertem Anlagenwert seinen kWp-Anteil am Rest — dieselbe Auflösung
+    # wie die Modul-Lücken, nur getrennt zurückgegeben (`bkw_anteile`), damit
+    # `pv_je_modul` bei den Modulen bleibt (F-10). Er geht in `bau.py` als
+    # `bkw_aus_anlagenwert_kwh` in `pv_kwh` und verdrängt im selben Monat den
+    # Rest-Eigenverbrauch (P9, unten in der Faltung) und den BKW-Tageswert.
     pv_module = [i for i in investitionen if i.typ == "pv-module"]
+    bkw_anteile: BkwAnteile = {}
     pv_je_modul = await lade_pv_je_monat(
         db, anlage_id, pv_module, jahr=_ein_jahr(von, bis), investitionen=investitionen,
+        bkw_anteile=bkw_anteile,
     )
     pv_summen = pv_summe_je_monat(pv_je_modul)
 
@@ -162,6 +171,7 @@ async def lade_monats_fakten(
         roh.setdefault((imd.jahr, imd.monat), _RohMonat()).falte(
             inv, daten,
             abgetretene_bkw=abgetretene_bkw_im_monat(imd.jahr, imd.monat),
+            bkw_mit_anlagenanteil=frozenset(bkw_anteile.get((imd.jahr, imd.monat), {})),
             source_provenance=imd.source_provenance,
         )
         if inv.typ == "waermepumpe":
@@ -261,6 +271,7 @@ async def lade_monats_fakten(
         set(monatsdaten_by_ym)
         | set(pv_summen)
         | set(pv_je_modul)
+        | set(bkw_anteile)
         | set(roh)
         # ⚠ Nur mit dem Flag erweitert die Tagesebene die Grundgesamtheit. Wurde
         # sie allein für den Ladeanteil geholt, darf sie KEINE zusätzlichen
@@ -352,6 +363,7 @@ async def lade_monats_fakten(
                 monatsdaten=monatsdaten_by_ym.get(schluessel),
                 pv_modul_summe=pv_summen.get(schluessel),
                 pv_je_modul=pv_je_modul.get(schluessel, {}),
+                bkw_aus_anlagenwert=bkw_anteile.get(schluessel, {}),
                 investitionen=investitionen,
                 neg_preis_kwh=(neg_preis_je_monat or {}).get(schluessel),
                 tarif_cache=tarif_cache,

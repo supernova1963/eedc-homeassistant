@@ -23,6 +23,7 @@ import { useLegendenToggle, useSchmaleAchse } from '../hooks'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 import { vergleichBalken } from './VergleichBalken'
 import { verfuegbarePresets, monatDrillInPfad } from './verlaufVergleich'
+import { bkwAnteilZusatz } from '../lib/pvHerkunft'
 
 type BilanzView = 'erzeugung' | 'verbrauch' | 'vergleich'
 
@@ -40,6 +41,8 @@ interface ChartPunkt {
   // R17/Vergleich-Modus (ungestackt) — Serien-Keys aus verlaufVergleich.
   pvAnlage: number
   bkw: number
+  /** N-621: davon geschätzt (kWp-Anteil) — der Anteil am Anlagenwert, so wie das Backend ihn liefert. */
+  bkwGeschaetzt: number
   neg51: number
   speicherLadung: number
   netzladung: number
@@ -67,6 +70,7 @@ export function baueJahrChartDaten(monate: AggregierteMonatsdaten[]): ChartPunkt
       autarkie: m.autarkie_prozent != null ? round1(m.autarkie_prozent) : null,
       pvAnlage: round1(m.pv_module_kwh),
       bkw: round1(m.bkw_kwh),
+      bkwGeschaetzt: round1(m.bkw_aus_anlagenwert_kwh),
       neg51: round1(m.einspeisung_neg_preis_kwh),
       speicherLadung: round1(m.speicher_ladung_kwh),
       netzladung: round1(m.speicher_netzladung_kwh),
@@ -74,6 +78,17 @@ export function baueJahrChartDaten(monate: AggregierteMonatsdaten[]): ChartPunkt
       eautoKm: round1(m.eauto_km),
       ausTageswerten: (m.aus_tageswerten?.length ?? 0) > 0,
     }))
+}
+
+/** Tooltip-Wert je Serie des Jahr-Verlaufs; die Balkonkraftwerk-Serie trägt den Anteil am Anlagenwert mit
+ *  und nennt ihn als „davon geschätzt (kWp-Anteil)" (N-621). Exportiert für die Probe. */
+export function jahrTooltipWert(value: number, name: string, zeile?: Record<string, unknown>): string {
+  if (name === 'Autarkie') return `${fmtZahl(value, 1)} %`
+  if (name === 'Fahrleistung') return `${fmtZahl(value, 0)} km`
+  const zusatz = name === 'Balkonkraftwerk'
+    ? bkwAnteilZusatz(zeile?.bkwGeschaetzt, (v) => `${fmtZahl(v, 1)} kWh`)
+    : null
+  return zusatz ? `${fmtZahl(value, 1)} kWh · ${zusatz}` : `${fmtZahl(value, 1)} kWh`
 }
 
 export function JahrVerlaufChart({ monate }: { monate: AggregierteMonatsdaten[] }) {
@@ -150,10 +165,7 @@ export function JahrVerlaufChart({ monate }: { monate: AggregierteMonatsdaten[] 
               <YAxis yAxisId="pct" orientation="right" domain={[0, 100]} {...yAchse(schmal, 40)} tickFormatter={achsenTick} label={achsenEinheit('%', 'rechts')} />
             )}
             <Tooltip {...eedcTooltipProps({
-              formatter: (value: number, name: string) =>
-                name === 'Autarkie' ? `${fmtZahl(value, 1)} %`
-                  : name === 'Fahrleistung' ? `${fmtZahl(value, 0)} km`
-                    : `${fmtZahl(value, 1)} kWh`,
+              formatter: jahrTooltipWert,
               // N-121: sagen, woher die Zahl kommt. Ein Monat ohne Abschluss
               // wird aus der lokalen Tagesebene gerechnet — additiv, also
               // beschriften statt unterdrücken (KONZEPT-UNVOLLSTAENDIGE-WERTE).

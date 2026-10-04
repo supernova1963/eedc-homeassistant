@@ -53,7 +53,7 @@ und zum Verständnis der Datenflüsse.
 
 **Legacy-Felder (NICHT neu befüllen):**
 - `Monatsdaten.batterie_*` - Nutze `InvestitionMonatsdaten` (Speicher)
-- `Monatsdaten.pv_erzeugung_kwh` - **kein Schreibziel** für neuen Code (Pro-Modul-Werte gehören in `InvestitionMonatsdaten`) und seit 2026-07-29 auch **keine allgemeine Lesequelle** mehr: das Feld trägt den manuell erfassten oder importierten **PV-Gesamtwert** eines Monats und ist **ausschließlich Eingang** des Read-time-SoT `core/berechnungen/pv_verteilung.py` (`resolve_pv_je_modul`). Der füllt damit die Lücken der Module ohne eigenen Wert und kennzeichnet sie als gerechnet. Der Gesamtwert steht für **alle** PV-Quellen der Anlage: bevor er die Lücken füllt, geht der eigene Monatswert jedes Balkonkraftwerks ab, das in diesem Monat selbst trägt (nicht an Modul-Kinder abgetreten) — das BKW kommt in `pv_erzeugung_kwh = pv_module_kwh + bkw_kwh` als eigener Summand dazu und stünde sonst zweimal darin. Ein BKW **ohne** eigenen Wert bekommt keinen Anteil. Wer nur einen Gesamt-Sensor hat, pflegt weiterhin ausschließlich hier. Jede einzelne Berechnung liest die Pro-Modul-Schicht bzw. deren Summe — nie das Feld selbst. Ladepfad: `services/pv_monatswerte.py`.
+- `Monatsdaten.pv_erzeugung_kwh` - **kein Schreibziel** für neuen Code (Pro-Modul-Werte gehören in `InvestitionMonatsdaten`) und seit 2026-07-29 auch **keine allgemeine Lesequelle** mehr: das Feld trägt den manuell erfassten oder importierten **PV-Gesamtwert** eines Monats und ist **ausschließlich Eingang** des Read-time-SoT `core/berechnungen/pv_verteilung.py` (`resolve_pv_je_modul`). Der füllt damit die Lücken der Module ohne eigenen Wert und kennzeichnet sie als gerechnet. Der Gesamtwert steht für **alle** PV-Quellen der Anlage: bevor er die Lücken füllt, geht der eigene Monatswert jedes Balkonkraftwerks ab, das in diesem Monat selbst trägt (nicht an Modul-Kinder abgetreten) — das BKW kommt in `pv_erzeugung_kwh = pv_module_kwh + bkw_kwh` als eigener Summand dazu und stünde sonst zweimal darin. Ein BKW **ohne** eigenen Wert, das im Monat selbst trägt, ist seit 04.10.2026 (N-621) eine Lücke wie ein Modul ohne Wert: es bekommt seinen kWp-Anteil am Rest (Gewicht `get_erzeuger_kwp`, auch `leistung_wp × anzahl`), geführt als `erzeugung.bkw_aus_anlagenwert_kwh` und additiv in `pv_kwh` — nicht in `bkw_kwh`, nicht in `pv_je_modul`, nicht in `BkwFakten` (die tragen die eigenen Werte). Ein BKW mit Anteil trägt im Monat keinen Ersatz-Eigenverbrauch (P9) und keinen Tageswert. Nur wo der Gesamtwert **gespeichert** ist; der HA-Statistik-Import speichert ihn nicht und verteilt beim Import nur auf Module (HA-Bauform S1). Wer nur einen Gesamt-Sensor hat, pflegt weiterhin ausschließlich hier. Jede einzelne Berechnung liest die Pro-Modul-Schicht bzw. deren Summe — nie das Feld selbst. Ladepfad: `services/pv_monatswerte.py`.
 
 > **Seit 2026-07-31 ist die Lesequelle nicht mehr `lade_pv_je_monat`, sondern eine Schicht darüber:** `services/monats_fakten/::lade_monats_fakten` (ADR-002/**P10**, [Konzept](KONZEPT-MONATS-FAKTEN.md)). Sie liefert die **ganze** Monatszeile kanonisch aufgelöst — die PV ist darin ein Feld (`erzeugung.pv_module_kwh` bzw. `erzeugung.pv_kwh`), daneben stehen Zähler, Speicher, E-Mobilität, Wärmepumpe, Sonstiges, Tarif, §51 und die Verbrauchs-Kennzahlen. Sie **ruft** `lade_pv_je_monat` (die P7-Regel bleibt unverändert), wendet aber zusätzlich **einmal** alle Zeitfilter (`aktiv` · Anschaffung · Stilllegung) und den Dienstwagen-Filter an. Wer eine abgeleitete Monatsgröße auswertet, nimmt sie von dort; `lade_pv_je_monat` direkt zu rufen bleibt richtig, wo **nur** die Pro-Modul-PV gebraucht wird (String-Vergleich, PV-Diagnose). Ausgenommen sind Schreib-, Import- und Checker-Pfade — die Schicht ist reines Lesen.
 >
@@ -331,7 +331,8 @@ Die Felder derselben Antwort:
 > 2. der **Monatswert des Balkonkraftwerks** füllt die Lücken *seiner* Module (nach kWp verteilt),
 > 3. das **Anlagen-Aggregat** `Monatsdaten.pv_erzeugung_kwh` füllt, was danach noch offen ist —
 >    gemindert um die eigenen Werte der Balkonkraftwerke, die in diesem Monat **selbst** tragen
->    (ein abtretendes BKW steckt schon in Stufe 2).
+>    (ein abtretendes BKW steckt schon in Stufe 2); ein selbst tragendes BKW **ohne** eigenen Wert
+>    teilt sich den Rest nach kWp mit den Modul-Lücken (N-621).
 >
 > Der Monatswert am Balkonkraftwerk bleibt also voll erfassbar und zuordenbar — bei einem Set ist
 > der Wechselrichter oft der einzige Zähler, und die Module darunter haben gar keinen eigenen. Er
@@ -382,6 +383,12 @@ Live, PDF-Jahresbericht, HA-Sensoren) dieselbe Größe.
 
 Beide Zahlen sind richtig, sie beantworten verschiedene Fragen. Eine Angleichung der Rechnung steht
 aus, weil dieselbe Kennzahl im Community-Vergleich steht.
+
+Welche Monate der annualisierte Wert zählt, entscheidet für Cockpit-Kachel und HA-Sensor **eine** Funktion
+(`services/monats_fakten/ableitungen.py::pv_erzeugungs_monate`, seit 04.10.2026): ein Monat mit Modul-Eintrag,
+mit eigenem Balkonkraftwerk-Wert > 0 oder mit dem Anteil eines Balkonkraftwerks am gespeicherten Anlagenwert.
+Bis dahin ließ der HA-Sensor Monate aus, in denen nur ein Balkonkraftwerk erzeugt hat — reine
+Balkonkraftwerk-Anlage: 143,75 statt 586,73 kWh/kWp.
 
 **Achsen-Trennung (bewusst):** PV-**eigene** Kennzahlen (spez. Ertrag, Performance-
 Ratio, SOLL/IST, kWp) nutzen **nur** `PV_Erzeugung`, nicht `Erzeugung_gesamt` — ein
@@ -2353,7 +2360,8 @@ Flug-km        = CO2_gesamt / 0.25     (kg/km)
 > [HANDBUCH_EINSTELLUNGEN §3.5](HANDBUCH_EINSTELLUNGEN.md#35-balkonkraftwerk-mit-mehreren-ausrichtungen--und-wann-wechselrichter--pv-module).
 >
 > **Dieselbe Erzeuger-Abgrenzung gilt für die Community-Stammdaten** (`services/community_service.py`):
-> Neigung und Ausrichtung werden über beide Typen gemittelt. Vorher fiel eine reine
+> Neigung und Ausrichtung werden über beide Typen gemittelt — seit N-617 nur über die heute aktiven
+> Erzeuger (erst `ist_aktiv_an(heute)`, dann der Selektor; ebenso Wallbox- und Balkonkraftwerk-Leistung). Vorher fiel eine reine
 > Balkonkraftwerk-Anlage auf die Annahme *30° / Süd* zurück — der Community-Server rechnet nichts
 > nach, die Anlage wurde also gegen die falsche Vergleichsgruppe gemessen.
 
@@ -2434,6 +2442,19 @@ Abweichung gegenüber dem Cockpit).
 
 **Faire Vergleichsbasis (ab v2.3.2):**
 SOLL wird NUR für Monate gezählt, die auch IST-Daten haben. Verhindert aufgeblähten SOLL bei Teil-Jahren.
+Seit 04.10.2026 (N-616) gilt das auch im Abschnitt „String-Vergleich" des Jahresbericht-PDF — vorher stand dort
+je String das SOLL des ganzen Jahres (im Gesamtzeitraum × Jahre) gegen die erfassten Monate. Beide Sichten
+nehmen „Monat mit Wert" aus derselben Auflösung (`lade_pv_je_monat`, Quelle gemessen oder verteilt) und kürzen
+den Anschaffungs-/Stilllegungsmonat mit derselben Funktion (`core/berechnungen/monatsfenster.py::soll_im_laufmonat`).
+Das PDF nennt an der Zeile „n von N Monaten", wenn es weniger als der Berichtszeitraum sind. Sein spezifischer
+Ertrag ist im Einzeljahr IST ÷ kWp, im Gesamtzeitraum der saisonal gewichtete Jahreswert der Cockpit-Kachel
+(`core/berechnungen/spez_ertrag.py::berechne_spez_ertrag_annualisiert`), je String über seine Monate und mit seinem
+Monats-SOLL als Gewicht; ohne Erzeugung oder Nennleistung steht „–".
+Das IST je String kommt seit N-620 ebenfalls aus dieser Auflösung — auch für ein Balkonkraftwerk ohne eigenen Wert
+in einem Monat mit Anlagenwert: es bekommt den Anteil, den `lade_pv_je_monat` ihm gibt, und ist „geschätzt
+(kWp-Anteil)" gekennzeichnet. Gewichtet wird ein Balkonkraftwerk seit N-621 über `get_erzeuger_kwp` — auch wenn seine
+Leistung nur in `leistung_wp × anzahl` steht (vorher 0 kWp, Anteil 0). Die Monats-Fakten teilen den Rest seit N-621
+genauso (`erzeugung.bkw_aus_anlagenwert_kwh`), Σ des Abschnitts = Monatstabelle = PV-Strings.
 
 **Der laufende Monat zählt anteilig (ab v4.0.9, N-69):**
 PVGIS liefert Monatssummen — im laufenden Monat stünde diese volle Summe als Nenner über einem
@@ -2546,7 +2567,8 @@ Der IST-Wert je Modul kommt aus dem Read-time-SoT `core/berechnungen/pv_verteilu
 1. Messwert       InvestitionMonatsdaten.verbrauch_daten["pv_erzeugung_kwh"]
                   → Quelle „gemessen" — IMMER und AUSNAHMSLOS
 2. Lücke füllen   (Monatsdaten.pv_erzeugung_kwh − Σ eigene BKW-Werte − Σ gemessene) × kWp_Anteil,
-                  nur auf die Module OHNE eigenen Wert (Rest nie unter 0)
+                  auf die Module UND die selbst tragenden Balkonkraftwerke OHNE eigenen Wert
+                  (Rest nie unter 0; BKW-Gewicht über get_erzeuger_kwp, N-621)
                   → Quelle „geschätzt (kWp-Anteil)", in der Anzeige gekennzeichnet
 3. keine Quelle   kein Wert (kein 0)
 ```

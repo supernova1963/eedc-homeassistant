@@ -219,18 +219,39 @@
   <tbody>
     {% for s in string_vergleiche %}
     <tr>
-      <td>{{ s.bezeichnung }}</td>
+      <td>{{ s.bezeichnung }}{% if s.monate < string_vergleich_monate_zeitraum %}<br><span class="muted">{{ s.monate }} von {{ string_vergleich_monate_zeitraum }} Monaten</span>{% endif %}</td>
       <td>{{ fmt_num(s.leistung_kwp, 2) }}</td>
       <td>{{ s.ausrichtung or "–" }}</td>
       <td>{{ fmt_num(s.neigung_grad, 0) }}°</td>
       <td>{{ fmt_kwh(s.prognose_kwh) }}</td>
-      <td>{{ fmt_kwh(s.ist_kwh) }}</td>
+      <td>{{ fmt_kwh(s.ist_kwh) }}{% if s.ist_verteilt %}<br><span class="muted">geschätzt (kWp-Anteil)</span>{% endif %}</td>
       <td>{{ fmt_pct(s.abweichung_prozent) }}</td>
-      <td>{{ fmt_num(s.spezifischer_ertrag) }} kWh/kWp</td>
+      <td>{{ fmt_num(s.spezifischer_ertrag) }}{% if s.spezifischer_ertrag is not none %} kWh/kWp{% endif %}</td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
+{# N-616: SOLL, IST und spez. Ertrag einer Zeile zählen nur die Monate, in denen
+   sie einen Wert hat (dieselbe Regel wie Komponenten → PV-Strings). Sind es
+   weniger als der Berichtszeitraum, steht die Zahl an der Zeile und hier, warum.
+   N-620: das IST je Zeile kommt aus derselben Auflösung wie PV-Strings; ein nach
+   kWp verteilter Wert trägt dieselbe Kennzeichnung wie dort. #}
+{% if string_vergleich_verteilt %}
+<p class="muted" style="font-size:8pt; margin-top:2mm;">
+  „geschätzt (kWp-Anteil)": Für diesen String ist in mindestens einem Monat kein eigener Wert erfasst — sein Anteil ist
+  nach kWp aus einem Gesamtwert (Anlage oder Balkonkraftwerk) verteilt, wie unter Komponenten → PV-Strings. Für
+  gemessene Werte je String braucht jeder einen eigenen Erzeugungs-Sensor.
+</p>
+{% endif %}
+{% if string_vergleich_teilzeitraum %}
+<p class="muted" style="font-size:8pt; margin-top:2mm;">
+  SOLL und IST eines Strings zählen nur die Monate, in denen für ihn ein Wert erfasst ist — bei einem
+  laufenden Jahr, einer Inbetriebnahme, einem Zubau oder einer Stilllegung im Zeitraum sind das weniger
+  als {{ string_vergleich_monate_zeitraum }}. Der Vergleich nennt dann keine Abweichung, die nur aus fehlenden Monaten entsteht.
+  {%- if ist_gesamtzeitraum %} Der spez. Ertrag ist hier ein Jahreswert, saisonal gewichtet wie die Kachel im Cockpit: ein Sommermonat
+  zählt mehr vom Jahr als ein Wintermonat. Ohne Erzeugung oder Nennleistung steht „–".{% endif %}
+</p>
+{% endif %}
 {% endif %}
 
 <div class="page-break"></div>

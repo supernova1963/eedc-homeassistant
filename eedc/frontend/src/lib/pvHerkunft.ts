@@ -11,6 +11,7 @@
  * auf einen anderen Ausschnitt bezieht.
  */
 import type { WertHerkunft } from '../components/blocks'
+import { ZUSTAND_META } from '../components/ui/ErfassungZustandBadge'
 
 export const PV_MODUL_VERTEILT_HERKUNFT: Omit<WertHerkunft, 'bezug'> = {
   zustand: 'geschaetzt',
@@ -18,6 +19,17 @@ export const PV_MODUL_VERTEILT_HERKUNFT: Omit<WertHerkunft, 'bezug'> = {
   hinweis: 'Werte je Modul sind nicht gemessen, sondern anteilig nach kWp aus der '
     + 'Gesamterzeugung verteilt — Pro-String-Genauigkeit eingeschränkt. Für gemessene '
     + 'Werte je String braucht jedes Modul einen eigenen Erzeugungs-Sensor.',
+}
+
+/** Der Wortlaut des Badges „geschätzt (kWp-Anteil)" als Text — für Stellen ohne Badge (Tooltip-Zeile,
+ *  Tabellenspalte). Aus denselben zwei Teilen wie das Badge, damit beide gleich heißen. */
+export const KWP_ANTEIL_GESCHAETZT = `${ZUSTAND_META.geschaetzt.label} (${PV_MODUL_VERTEILT_HERKUNFT.quelleLabel})`
+
+/** N-621: Tooltip-Zusatz einer Balkonkraftwerk-Serie, die den Anteil am Anlagenwert mitträgt —
+ *  „davon geschätzt (kWp-Anteil): X kWh". `null` ohne Anteil (dann keine Zeile). Der Wert kommt
+ *  unverändert aus dem Feld `bkw_aus_anlagenwert_kwh` der Antwort; hier wird nur formatiert. */
+export function bkwAnteilZusatz(anteil: unknown, fmt: (v: number) => string): string | null {
+  return typeof anteil === 'number' && anteil > 0 ? `davon ${KWP_ANTEIL_GESCHAETZT}: ${fmt(anteil)}` : null
 }
 
 /** Kennzeichnung mit sicht-eigenem Bezugslabel. */

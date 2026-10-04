@@ -687,8 +687,15 @@ async def get_import_vorschau(
     pv_summen: dict[tuple[int, int], Optional[float]] = {}
     if ((anlage.sensor_mapping.get("basis") or {}).get("pv_gesamt") or {}).get("sensor_id"):
         pv_module_der_anlage = [inv for inv in investitionen.values() if inv.typ == "pv-module"]
+        # N-621: in einem Monat mit gespeichertem Anlagenwert teilen sich die Module den Rest mit den
+        # Balkonkraftwerken ohne eigenen Wert — deren Anteil gehört zur lokalen Zahl wie in den
+        # Monats-Fakten (`pv_kwh = Module + BKW-Wert + BKW-Anteil`). Ohne ihn fiele die Modul-Summe um
+        # den Anteil, und ein übereinstimmender Monat stünde als Konflikt da (gemessen: Anlagenwert 1000,
+        # Süd 550, West und BKW ohne Wert ⇒ lokal 925 statt 1000).
+        vorschau_bkw_anteile: dict = {}
         pv_summen = pv_summe_je_monat(await lade_pv_je_monat(
             db, anlage_id, pv_module_der_anlage, investitionen=list(investitionen.values()),
+            bkw_anteile=vorschau_bkw_anteile,
         ))
         # N-611: der Anlagen-PV-Zähler misst ALLE PV-Quellen — verglichen wird er deshalb mit
         # Module + eigenem Wert der selbst tragenden Balkonkraftwerke, also mit derselben Zahl,
@@ -702,7 +709,7 @@ async def get_import_vorschau(
             pv_summen[(j, m)] = summe + eigene_bkw_erzeugung_kwh(aktive, {
                 inv.id: vorhandene_imd[(inv.id, j, m)].verbrauch_daten
                 for inv in aktive if (inv.id, j, m) in vorhandene_imd
-            })
+            }) + sum(vorschau_bkw_anteile.get((j, m), {}).values())
 
     # Jeden Monat analysieren
     monate_status: list[MonatImportStatus] = []
@@ -913,7 +920,9 @@ async def _verteile_anlagen_pv(
     Zahl wie auf der Leseseite). Bis dahin landete der BKW-Wert als Anteil in den Modulwerten und
     stand danach in `pv_kwh = Module + BKW` ein zweites Mal. Empfänger bleiben nur die Module:
     ein BKW ohne eigenen Wert bekommt keinen Anteil (der Zählerwert selbst wird nicht gespeichert,
-    P7 — die Familie geht an HA-Bauform S1).
+    P7 — die Familie geht an HA-Bauform S1). **N-621 ändert diesen Weg nicht:** die Leseseite gibt
+    einem BKW ohne eigenen Wert seinen Anteil nur, wo ein Anlagenwert GESPEICHERT ist — nach diesem
+    Import gibt es keinen.
     """
     inv_result = await db.execute(
         select(Investition).where(

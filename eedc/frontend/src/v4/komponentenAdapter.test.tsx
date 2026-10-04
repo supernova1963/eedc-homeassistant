@@ -30,6 +30,7 @@ vi.mock('../api/cockpit', () => ({ cockpitApi: {
 vi.mock('../api/monatsdaten', () => ({ monatsdatenApi: { listAggregiert: (...a: unknown[]) => listAggregiert(...a) } }))
 
 import { KOMPONENTEN_ADAPTER } from './komponentenAdapter'
+import { verlaufTooltipWert } from './KomponentenVerlaufChart'
 
 const inv = (over = {}) => ({ id: 1, anlage_id: 1, typ: 'x', bezeichnung: 'Gerät A', aktiv: true, ...over })
 const titles = (ks: { title: string }[]) => ks.map((k) => k.title)
@@ -458,6 +459,69 @@ describe('KOMPONENTEN_ADAPTER', () => {
     const summe = (segmente: { wert?: number | null }[]) => segmente.reduce((s, x) => s + (x.wert ?? 0), 0)
     expect(summe(erzeugung.segmente)).toBe(1500)
     expect(summe(verwendung.segmente)).toBe(1500)
+  })
+
+  /** N-621: Anlagenwert 1000, Strings 550 + 380 gemessen, Balkonkraftwerk ohne eigenen Wert. Der Anteil (70) steckt im
+   *  `bkw_kwh` der Antwort (davon `bkw_aus_anlagenwert_kwh` 70); `pv_module_kwh` trägt nur die Module. Bis zur
+   *  Nachmessung fehlte er im Erzeugungs-Stapel (930 gegen 1000 in der Verwendung). */
+  const f5Zeile = (over = {}) => ({
+    jahr: 2025, pv_erzeugung_kwh: 1000, pv_module_kwh: 930, bkw_kwh: 70, bkw_aus_anlagenwert_kwh: 70,
+    sonstige_erzeugung_kwh: 0, direktverbrauch_kwh: 600, eigenverbrauch_kwh: 600,
+    speicher_ladung_kwh: 0, speicher_entladung_kwh: 0, einspeisung_kwh: 400, ...over,
+  })
+  const stapel = (g: Awaited<ReturnType<typeof KOMPONENTEN_ADAPTER['pv-module']['fetch']>>[number]) => {
+    const row = g.verlauf!.rows[0]
+    const summe = (s: string) => g.verlauf!.bars.filter((b) => b.stapel === s).reduce((a, b) => a + (row[b.key] as number), 0)
+    return { row, erz: summe('erz'), verw: summe('verw') }
+  }
+
+  it('PV ④ Verlauf: BKW ohne eigenen Wert — sein Anteil am Anlagenwert steht im BKW-Segment, Stapel summengleich (N-621)', async () => {
+    getUebersicht.mockResolvedValue({ anlagenleistung_kwp: 10.8 })
+    list.mockResolvedValue([
+      inv({ id: 11, typ: 'pv-module', bezeichnung: 'Süd', leistung_kwp: 6, leistung_kwp_effektiv: 6 }),
+      inv({ id: 12, typ: 'pv-module', bezeichnung: 'West', leistung_kwp: 4, leistung_kwp_effektiv: 4 }),
+    ])
+    listAggregiert.mockResolvedValue([f5Zeile()])
+    getPVStringsGesamtlaufzeit.mockResolvedValue(
+      pvStringsAntwort([{ id: 11, jahr: 2025, ist: 550 }, { id: 12, jahr: 2025, ist: 380 }]))
+    const [g] = await KOMPONENTEN_ADAPTER['pv-module'].fetch(1)
+    const { row, erz, verw } = stapel(g)
+    expect(row).toMatchObject({ m11: 550, m12: 380, bkw: 70 })
+    expect(erz).toBe(1000)
+    expect(verw).toBe(1000)
+    // Fachentscheid Master: das BKW-Segment nennt im Tooltip, wie viel davon geschätzt ist.
+    expect(row.bkwGeschaetzt).toBe(70)
+    const bkwBar = g.verlauf!.bars.find((b) => b.key === 'bkw')!
+    expect(bkwBar.davonGeschaetzt).toBe('bkwGeschaetzt')
+    expect(verlaufTooltipWert(g.verlauf!.bars, 'kWh')(70, bkwBar.label, row))
+      .toBe('70 kWh · davon geschätzt (kWp-Anteil): 70 kWh')
+  })
+
+  it('PV ④ Verlauf: ein BKW mit eigenem Wert und ohne Anteil bekommt keinen Zusatz (N-621)', async () => {
+    getUebersicht.mockResolvedValue({ anlagenleistung_kwp: 10.8 })
+    list.mockResolvedValue([inv({ id: 11, typ: 'pv-module', bezeichnung: 'Süd', leistung_kwp: 6, leistung_kwp_effektiv: 6 })])
+    listAggregiert.mockResolvedValue([f5Zeile({ pv_module_kwh: 930, bkw_kwh: 45, bkw_aus_anlagenwert_kwh: 0 })])
+    const [g] = await KOMPONENTEN_ADAPTER['pv-module'].fetch(1)
+    const row = g.verlauf!.rows[0]
+    expect(row.bkwGeschaetzt).toBeUndefined()
+    const bkwBar = g.verlauf!.bars.find((b) => b.key === 'bkw')!
+    expect(verlaufTooltipWert(g.verlauf!.bars, 'kWh')(45, bkwBar.label, row)).toBe('45 kWh')
+  })
+
+  it('PV ④ Verlauf: kWp-Fallback verteilt nur die Module, der BKW-Anteil bleibt beim BKW (F5b, N-621)', async () => {
+    getUebersicht.mockResolvedValue({ anlagenleistung_kwp: 10.8 })
+    list.mockResolvedValue([
+      inv({ id: 11, typ: 'pv-module', bezeichnung: 'Süd', leistung_kwp: 6, leistung_kwp_effektiv: 6 }),
+      inv({ id: 12, typ: 'pv-module', bezeichnung: 'West', leistung_kwp: 4, leistung_kwp_effektiv: 4 }),
+    ])
+    // F5b: Süd 550 gemessen, West und BKW ohne Wert ⇒ Module 925, BKW-Anteil 75.
+    listAggregiert.mockResolvedValue([f5Zeile({ pv_module_kwh: 925, bkw_kwh: 75, bkw_aus_anlagenwert_kwh: 75 })])
+    getPVStringsGesamtlaufzeit.mockResolvedValue(null)
+    const [g] = await KOMPONENTEN_ADAPTER['pv-module'].fetch(1)
+    const { row, erz, verw } = stapel(g)
+    expect(row).toMatchObject({ m11: 555, m12: 370, bkw: 75 })
+    expect(erz).toBe(1000)
+    expect(verw).toBe(1000)
   })
 
   it('PV ④ Verlauf: kWp-Fallback verteilt nur die Modul-Erzeugung, nicht das BKW — A15/N43', async () => {

@@ -15,9 +15,10 @@ Probe in ``test_n533_…``) rechnen dieselbe Zahl (``eigene_bkw_erzeugung_kwh``)
 
 **Was bewusst bleibt, wie es ist** — und hier festgehalten, damit es niemand „mitrepariert":
 
-* Ein BKW **ohne** eigenen Wert bekommt keinen Anteil am Anlagenwert (F3, F5: 930). Sein
-  Anteil bräuchte ein eigenes Faktenfeld und eine P9-Zusatzregel; die Familie geht an
-  HA-Bauform **S1**.
+* Ein BKW **ohne** eigenen Wert bekommt seinen Anteil nur, wo der Anlagenwert **gespeichert**
+  ist — seit **N-621** (``test_n621_bkw_anteil_am_anlagenwert.py``; F5: 930 → 1000). Ohne
+  gespeicherten Wert (HA-Statistik-Sammelimport, F3: 930) gibt es zur Lesezeit nichts zu
+  verteilen; das bleibt bei HA-Bauform **S1**.
 * Haben Import oder Connector die Modulwerte schon verteilt (Portal-Stand, Marke
   ``kwp_anteil``), sind sie eigene Werte; der Monat bleibt 1045 (**S2**).
 * **Ohne Anlagenwert** läuft nichts davon — jede Zahl wie vorher (Fälle A, B, C, E und
@@ -196,11 +197,14 @@ async def test_ein_bkw_wert_ueber_dem_anlagenwert_klemmt_den_rest_bei_null(db):
 
 
 @pytest.mark.parametrize("seed, erwartet", [
-    pytest.param(dict(agg=1000.0, s1=550.0, s2=380.0), (930.0, 930.0, 0.0), id="F5-Anlagenwert-BKW-ohne-Wert"),
+    # N-621 (04.10.2026): bis dahin 930 — der Anteil des BKW fiel heraus, weil kein Modul eine Lücke hatte.
+    pytest.param(dict(agg=1000.0, s1=550.0, s2=380.0), (1000.0, 930.0, 0.0), id="F5-Anlagenwert-BKW-ohne-Wert"),
     pytest.param(dict(s1=550.0, s2=380.0, n533=True), (930.0, 930.0, 0.0), id="F3-Zaehler-N533-BKW-ohne-Wert"),
 ])
-async def test_ein_bkw_ohne_eigenen_wert_bekommt_keinen_anteil(db, seed, erwartet):
-    """Festgehalten, nicht gewollt: der BKW-Anteil am Anlagenwert bleibt offen bis HA-Bauform S1."""
+async def test_ein_bkw_ohne_eigenen_wert_bekommt_den_anteil_nur_bei_gespeichertem_anlagenwert(db, seed, erwartet):
+    """F5 (Anlagenwert gespeichert): das BKW bekommt den Rest 70 — Module 930, Monat 1000 (N-621). F3 (HA-Sammelimport,
+    der Zähler wird nicht gespeichert): zur Lesezeit gibt es keinen Anlagenwert, der Monat bleibt 930 — offen bis
+    HA-Bauform S1, festgehalten, nicht gewollt."""
     aid, _ = await _seed(db, **seed)
     assert _zahlen(await _fakt(db, aid)) == erwartet
 

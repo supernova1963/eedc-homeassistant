@@ -83,6 +83,9 @@ _BASELINE: dict[str, int] = {
     "test_daten_checker_emob_doppelzaehlung_tage.py": 7,
     "test_daten_checker_emob_pool_pflege.py": 1,
     "test_daten_checker_leere_tage_trotz_zaehler.py": 11,
+    # N-619 (04.10.2026): der Leere-Tage-Check prüft die letzten 90 Tage ab der Prozessuhr — dieselbe Lage wie die
+    # Zeile darüber; Tag-Status und Werkbank-Vorschau derselben Datei laufen auf festen Tagen.
+    "test_n619_tages_sichten_am_tag_aktiv.py": 1,
     "test_daten_checker_provenance_detail.py": 2,
     "test_daten_checker_pv_ueber_erfassung.py": 12,
     "test_daten_checker_stilllegung.py": 6,

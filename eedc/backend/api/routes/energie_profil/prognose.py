@@ -211,11 +211,14 @@ async def get_tagesprognose(
                 )
             )
             invs = inv_result.scalars().all()
-            # Nur aktive (nicht stillgelegte) Investitionen
-            aktive_invs = [
-                inv for inv in invs
-                if not inv.stilllegungsdatum or inv.stilllegungsdatum >= datum
-            ]
+            # Nur die am Zieltag aktiven Investitionen — Anschaffung UND
+            # Stilllegung (`ist_aktiv_an`). Bis 04.10.2026 prüfte dieser Pfad nur
+            # die Stilllegung: ein String mit Anschaffungsdatum nach dem Zieltag
+            # ging schon mit seiner kWp in die Prognose ein (gemessen über
+            # `get_tagesprognose` mit gestellter Wetterprognose: Gruppen 6 + 4
+            # statt 6 kWp, der 4-kWp-String kommt erst in fünf Tagen). Der Kanon
+            # darüber filtert je Tag schon so (`prognose_kanon`).
+            aktive_invs = [inv for inv in invs if inv.ist_aktiv_an(datum)]
 
             if aktive_invs:
                 # Einheitlich kWp + Neigung + Azimut aus Top-Level-Spalten ODER

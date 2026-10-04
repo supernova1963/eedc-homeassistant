@@ -38,9 +38,13 @@ async def _seed(db) -> int:
                     standort_plz="10115", latitude=48.0, longitude=11.0)
     db.add(anlage)
     await db.flush()
+    # PV-Anlagenwert in jedem Monat: seit N-616 (04.10.2026) zählt der String-Vergleich das SOLL einer Zeile
+    # nur über Monate, in denen sie einen Wert hat. Ohne PV-Wert stünde dort keine Zeile mehr — die Probe
+    # unten („dieselbe Prognose wie die Monatstabelle") wäre nur wegen des alten Defekts (volles SOLL gegen
+    # null erfasste Monate) prüfbar gewesen.
     for m in range(1, 13):
         db.add(Monatsdaten(anlage_id=anlage.id, jahr=2025, monat=m,
-                           einspeisung_kwh=400.0, netzbezug_kwh=300.0))
+                           einspeisung_kwh=400.0, netzbezug_kwh=300.0, pv_erzeugung_kwh=1500.0))
     db.add(Investition(
         anlage_id=anlage.id, typ="pv-module", bezeichnung="Süddach",
         anschaffungsdatum=date(2024, 1, 1), leistung_kwp=15.0,

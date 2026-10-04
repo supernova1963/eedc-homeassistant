@@ -23,7 +23,7 @@ from backend.services.prognose_auswahl import lade_aktive_prognose
 from datetime import date
 from backend.services.strompreis_aggregator import lade_preis_aggregate_je_monat
 from backend.services.finanz_zeilen import baue_finanz_zeile
-from backend.services.monats_fakten import finanz_zeile_eingabe, lade_monats_fakten
+from backend.services.monats_fakten import finanz_zeile_eingabe, lade_monats_fakten, pv_erzeugungs_monate
 from backend.core.berechnungen.kapitalrechnung import jahres_ersparnis_euro
 from backend.core.berechnungen.investitions_jahresertrag import (
     BEZEICHNUNG_ERTRAGSFELD,
@@ -145,7 +145,12 @@ async def monatsfakten_und_energie(*, anlage, db, investitionen, monatsdaten):
     # Zwei-Wege-Aufbau (IMD-Monate, sonst Monate mit Legacy-PV>0) ließ bei
     # gemischter Historie die Aggregat-Monate aus und machte den spezifischen
     # Ertrag dadurch zu hoch.
-    spez_covered_months = {f.schluessel for f in fakten if f.erzeugung.pv_je_modul}
+    # ⭐ N-621 H1 (Entscheid des Masters 04.10.2026): dieselbe Monatsmenge wie die
+    # Kachel in *Cockpit → Übersicht* — EINE Funktion (`monats_fakten.pv_erzeugungs_monate`).
+    # Bis dahin zählte hier nur ein Monat mit Modul-Eintrag: Monate, in denen nur ein
+    # Balkonkraftwerk erzeugt hat, fehlten im Nenner, während ihre kWh in `pv_erzeugung`
+    # standen (reine BKW-Anlage: 143,75 statt 586,73 kWh/kWp).
+    spez_covered_months = pv_erzeugungs_monate(fakten)
     spez_gewichte = None
     if spez_covered_months:
         pvgis = await lade_aktive_prognose(db, anlage.id)
