@@ -53,7 +53,8 @@ export interface MonatsdatenSubmitData {
   monat: number
   einspeisung_kwh: number
   netzbezug_kwh: number
-  pv_erzeugung_kwh?: number
+  /** `null` = gespeicherten Anlagenwert entfernen (N-622), fehlend = unverändert lassen. */
+  pv_erzeugung_kwh?: number | null
   batterie_ladung_kwh?: number
   batterie_entladung_kwh?: number
   netzbezug_durchschnittspreis_cent?: number
@@ -214,6 +215,16 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
   // DB-Feldnamen (`einspeisung_kwh`); mit den Mapping-Kurzformen blieb die
   // Vorbelegung seit v2.5.3 leer.
   const getHaBasisWert = (feld: string): string => haBasisWert(haVorausfuellung?.basis, feld)
+  // N-622: hat „Aus HA laden" den PV-Gesamtzähler geliefert, bekommt er eine eigene
+  // Zeile — auch wenn Module/Wechselrichter Werte haben und das Feld sonst nur als
+  // „PV-Erzeugung (berechnet)" erschiene. Der Anwender bestätigt den Wert mit dem
+  // Speichern (ADR-002/P7: nie unsichtbar gefüllt); eine leere Zeile speichert nichts.
+  const haPvGesamt = getHaBasisWert('pv_erzeugung_kwh') !== ''
+  // N-622 Nacharbeit: ein GESPEICHERTER Anlagenwert wirkt (er füllt die Lücken der
+  // Quellen ohne eigenen Wert) — dann muss er auch sichtbar und änderbar sein, nicht
+  // nur unsichtbar mitgesendet werden. Dieselbe Zeile, neutral beschriftet.
+  const gespeicherterPvGesamt = monatsdaten?.pv_erzeugung_kwh != null
+  const zeigePvGesamtZeile = haPvGesamt || gespeicherterPvGesamt
 
   // Basis-Formulardaten
   const [formData, setFormData] = useState({
@@ -221,7 +232,8 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
     monat: haVorausfuellung?.monat?.toString() || monatsdaten?.monat?.toString() || voreingestellterMonat?.monat?.toString() || currentMonth.toString(),
     einspeisung_kwh: getHaBasisWert('einspeisung_kwh') || monatsdaten?.einspeisung_kwh?.toString() || '',
     netzbezug_kwh: getHaBasisWert('netzbezug_kwh') || monatsdaten?.netzbezug_kwh?.toString() || '',
-    // N-534: der Anlagen-PV-Zähler aus HA ist das importierte Anlagen-Aggregat (ADR-002/P7).
+    // N-534/N-622: der Anlagen-PV-Zähler aus HA ist das importierte Anlagen-Aggregat (ADR-002/P7).
+    // Er steht dann immer in einer eigenen, sichtbaren Zeile (`haPvGesamt` unten).
     pv_erzeugung_kwh: getHaBasisWert('pv_erzeugung_kwh') || monatsdaten?.pv_erzeugung_kwh?.toString() || '',
     batterie_ladung_kwh: monatsdaten?.batterie_ladung_kwh?.toString() || '',
     batterie_entladung_kwh: monatsdaten?.batterie_entladung_kwh?.toString() || '',
@@ -923,9 +935,12 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
       // NIE programmatisch aus der Modul-Summe gefüllt (kWp-Verteilung-Design,
       // [[project_kwp_verteilung_aggregator]]). Die Pro-Modul-Werte gehen über
       // investitionen_daten; die Aggregat-Verteilung passiert beim Lesen.
+      // N-622 Nacharbeit: Hatte der Monat einen gespeicherten Anlagenwert und ist die
+      // Zeile jetzt leer, geht ein ausdrückliches `null` raus — die Schreibroute
+      // (`exclude_unset`) ließe einen fehlenden Schlüssel stehen, `null` löscht.
       const pvErz = formData.pv_erzeugung_kwh
         ? parseFloat(formData.pv_erzeugung_kwh)
-        : undefined
+        : (gespeicherterPvGesamt ? null : undefined)
 
       await onSubmit({
         anlage_id: anlageId,
@@ -1084,8 +1099,17 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                 Aus {hatPVModule ? 'PV-Modulen' : 'Wechselrichtern'}: {fmtZahl(berechneteWerte.pvErzeugung, 1)} kWh
               </p>
+              {/* N-622: steht daneben ein abweichender Gesamtzähler der Anlage, sagt die
+                  Anzeige es — keine Rechnung, nur beide Zahlen in derselben Formatierung. */}
+              {formData.pv_erzeugung_kwh !== ''
+                && fmtZahl(parseFloat(formData.pv_erzeugung_kwh), 1) !== fmtZahl(berechneteWerte.pvErzeugung, 1) && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {haPvGesamt ? 'Gesamtzähler' : 'Gesamtwert'} der Anlage: {fmtZahl(parseFloat(formData.pv_erzeugung_kwh), 1)} kWh — Quellen mit eigenem Wert
+                  gewinnen, er füllt nur, was sie nicht erklären.
+                </p>
+              )}
             </div>
-          ) : (
+          ) : !zeigePvGesamtZeile && (
             <Input
               label={hatPVModule || hatWechselrichter ? "PV-Erzeugung (aus Modulen unten)" : "PV-Erzeugung (optional)"}
               name="pv_erzeugung_kwh"
@@ -1096,6 +1120,24 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
               onChange={handleChange}
               placeholder="z.B. 800"
               hint={hatPVModule || hatWechselrichter ? "Wird aus PV-Modulen berechnet" : "Manuell eingeben wenn keine PV-Module definiert"}
+            />
+          )}
+          {zeigePvGesamtZeile && (
+            <Input
+              label={haPvGesamt ? 'PV-Gesamtzähler aus Home Assistant' : 'PV-Gesamtwert der Anlage'}
+              name="pv_erzeugung_kwh"
+              type="number"
+              step="0.01"
+              min="0"
+              value={formData.pv_erzeugung_kwh}
+              onChange={handleChange}
+              hint={
+                'Monatswert in kWh für die ganze Anlage: Quellen mit eigenem Wert gewinnen, der Gesamtwert füllt nur, '
+                + 'was sie nicht erklären. Ist das Feld beim Speichern leer, hat der Monat keinen Gesamtwert.'
+                + (haPvGesamt && gespeicherterPvGesamt
+                  ? ` Bisher gespeichert: ${fmtZahl(monatsdaten?.pv_erzeugung_kwh, 1)} kWh.`
+                  : '')
+              }
             />
           )}
         </div>

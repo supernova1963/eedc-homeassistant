@@ -1,0 +1,70 @@
+{
+  "anlage_id": 1,
+  "anlage_name": "N-622",
+  "jahr": 2025,
+  "monat": 5,
+  "monat_name": "Mai",
+  "basis": [
+    {
+      "feld": "einspeisung_kwh",
+      "feld_label": "Einspeisung",
+      "sensor_id": "sensor.einspeisung",
+      "start_wert": 0.0,
+      "end_wert": 400.0,
+      "differenz": 400.0,
+      "einheit": "kWh"
+    },
+    {
+      "feld": "netzbezug_kwh",
+      "feld_label": "Netzbezug",
+      "sensor_id": "sensor.netzbezug",
+      "start_wert": 0.0,
+      "end_wert": 200.0,
+      "differenz": 200.0,
+      "einheit": "kWh"
+    },
+    {
+      "feld": "pv_erzeugung_kwh",
+      "feld_label": "PV Erzeugung Gesamt",
+      "sensor_id": "sensor.pv_gesamt",
+      "start_wert": 0.0,
+      "end_wert": 1000.0,
+      "differenz": 1000.0,
+      "einheit": "kWh"
+    }
+  ],
+  "investitionen": [
+    {
+      "investition_id": 1,
+      "bezeichnung": "Süd",
+      "typ": "pv-module",
+      "felder": [
+        {
+          "feld": "pv_erzeugung_kwh",
+          "feld_label": "Erzeugung",
+          "sensor_id": "sensor.pv_sued",
+          "start_wert": 0.0,
+          "end_wert": 550.0,
+          "differenz": 550.0,
+          "einheit": "kWh"
+        }
+      ]
+    },
+    {
+      "investition_id": 2,
+      "bezeichnung": "West",
+      "typ": "pv-module",
+      "felder": [
+        {
+          "feld": "pv_erzeugung_kwh",
+          "feld_label": "Erzeugung",
+          "sensor_id": "sensor.pv_west",
+          "start_wert": 0.0,
+          "end_wert": 380.0,
+          "differenz": 380.0,
+          "einheit": "kWh"
+        }
+      ]
+    }
+  ]
+}

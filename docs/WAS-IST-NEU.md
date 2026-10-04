@@ -122,9 +122,23 @@ jetzt Gesamtverbrauch.
   nach Leistung, überall so wie in *Komponenten → PV-Strings*; Eigenverbrauch, Autarkie und
   Ersparnis steigen entsprechend. Im Verlauf steht der Anteil beim Balkonkraftwerk, und der
   Tooltip sagt „davon geschätzt (kWp-Anteil)"; die Werte des Balkonkraftwerks selbst bleiben die
-  gemessenen. Wie bisher bleibt es, wenn der Gesamtzähler aus Home Assistant
-  kommt — der Statistik-Import und „Aus HA laden" speichern ihn nicht. Gib dem Balkonkraftwerk
-  dafür einen eigenen Zähler oder trage seinen Monatswert ein.
+  gemessenen. Kommt der Gesamtzähler aus Home Assistant, gilt das jetzt auch nach „Aus HA
+  laden" (nächster Punkt). Nur der Statistik-Import speichert ihn weiterhin nicht — wer so
+  abschließt, gibt dem Balkonkraftwerk einen eigenen Zähler oder trägt seinen Monatswert ein.
+- **„Aus HA laden" übernimmt den PV-Gesamtzähler:** Hast du in Home Assistant einen
+  PV-Gesamtzähler zugeordnet, steht er nach „Aus HA laden" im Formular in einer eigenen Zeile
+  „PV-Gesamtzähler aus Home Assistant" — auch wenn deine Module eigene Werte haben. Gespeichert
+  wird, was in der Zeile steht; ist sie beim Speichern leer, hat der Monat keinen Gesamtwert.
+  Ein schon gespeicherter Gesamtwert steht beim Bearbeiten jetzt immer sichtbar da — auch ohne
+  „Aus HA laden", als „PV-Gesamtwert der Anlage" — und lässt sich ändern oder entfernen; bisher
+  ging er unsichtbar mit, sobald deine Module Werte hatten. Bisher kam der Zähler dort nie an: Mit Strings 550 + 380 kWh,
+  Balkonkraftwerk ohne Zähler und Gesamtzähler 1000 kWh zeigte der abgeschlossene Monat 930
+  statt 1000 kWh, mit einem String ohne eigenen Sensor stand er in Übersicht und Tabelle ganz
+  ohne PV da, mit Balkonkraftwerk-Zähler (45 kWh) und Strings ohne Sensor bei 45 statt 1000 kWh.
+  Jetzt nennt der Monat vor und nach dem Abschluss dieselbe Zahl. Weicht der Gesamtzähler von
+  „PV-Erzeugung (berechnet)" ab, steht er darunter. Einen schon abgeschlossenen Monat ergänzt
+  du über „Aus HA laden" → „Mit HA-Werten fortfahren" → Speichern. „Monat einfügen" und der
+  Statistik-Import schlagen ihn weiterhin nicht vor bzw. speichern ihn nicht.
 - **HA-Sensor „spezifischer Ertrag" mit Balkonkraftwerk:** Hat deine Anlage **nur** ein
   Balkonkraftwerk, nennt der Sensor jetzt dieselbe Zahl wie die Kachel in *Cockpit → Übersicht*
   und verschiebt sich dafür einmalig (im Beispiel von 143,75 auf 586,73 kWh/kWp). Dasselbe gilt,
@@ -1126,7 +1140,9 @@ Formular dahinter blieb leer. Gemeldet von Frank85.
 wie im Monatsabschluss nach kWp auf die aktiven Module verteilt, als Zerlegung
 gekennzeichnet; Module mit eigenem Sensor behalten ihren Messwert. Der Dialog
 zeigt jedes zugeordnete Zählerfeld samt PV-Gesamtzähler und belegt das Formular
-damit vor. **Wer betroffen ist:** einmal die Vorschau des Statistik-Imports
+mit Einspeisung und Netzbezug vor. *(Korrigiert: Hier stand, auch der PV-Gesamtzähler
+werde vorbelegt — das kam erst nach 4.1.1, siehe dort „Aus HA laden" übernimmt den
+PV-Gesamtzähler.)* **Wer betroffen ist:** einmal die Vorschau des Statistik-Imports
 öffnen — die Monate ohne PV stehen dann auf „importieren".
 
 ---

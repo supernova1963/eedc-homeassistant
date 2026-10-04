@@ -12,7 +12,8 @@ export interface MonatsdatenCreate {
   monat: number
   einspeisung_kwh: number
   netzbezug_kwh: number
-  pv_erzeugung_kwh?: number
+  /** `null` = gespeicherten Anlagenwert entfernen (N-622), fehlend = unverändert. */
+  pv_erzeugung_kwh?: number | null
   batterie_ladung_kwh?: number
   batterie_entladung_kwh?: number
   batterie_ladung_netz_kwh?: number
@@ -34,7 +35,8 @@ export interface MonatsdatenCreate {
 export interface MonatsdatenUpdate {
   einspeisung_kwh?: number
   netzbezug_kwh?: number
-  pv_erzeugung_kwh?: number
+  /** `null` = gespeicherten Anlagenwert entfernen (N-622), fehlend = unverändert. */
+  pv_erzeugung_kwh?: number | null
   batterie_ladung_kwh?: number
   batterie_entladung_kwh?: number
   batterie_ladung_netz_kwh?: number

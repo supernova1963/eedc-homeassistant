@@ -2,11 +2,17 @@
  * N-534 (Frank85, T89667 #349): die Vergleichszeilen des Dialogs „Aus HA laden".
  *
  * Das Backend liefert die Basis-Zählerfelder unter ihrem Datenbanknamen
- * (`einspeisung_kwh`, `netzbezug_kwh`, `pv_erzeugung_kwh` — seit v2.5.3,
- * `MAPPING_KEY_TO_DB_FELD`). Der Dialog suchte bis zum 19.09.2026 `einspeisung`
- * und `netzbezug`, fand nie etwas und zeigte bei jedem Anwender „–"; den
- * PV-Gesamtzähler kannte er gar nicht. Deshalb: eine Zeile je geliefertem Feld,
- * der lokale Wert über denselben Datenbanknamen aus der Monatsdaten-Zeile.
+ * (`einspeisung_kwh`, `netzbezug_kwh` seit v2.5.3, `MAPPING_KEY_TO_DB_FELD`).
+ * Der Dialog suchte bis zum 19.09.2026 `einspeisung` und `netzbezug`, fand nie
+ * etwas und zeigte bei jedem Anwender „–". Deshalb: eine Zeile je geliefertem
+ * Feld, der lokale Wert über denselben Datenbanknamen aus der Monatsdaten-Zeile.
+ *
+ * N-622 (04.10.2026): den PV-Gesamtzähler lieferte das Backend bis dahin als
+ * `pv_gesamt` — sein lokaler Wert stand im Dialog immer als „–", und die
+ * Formular-Vorbelegung (`pv_erzeugung_kwh`) blieb leer. Seitdem kommt er als
+ * `pv_erzeugung_kwh`; die Proben füttern die Form, die die Route wirklich sendet
+ * (`test/ha-monatswerte-n622.fixture.json`, Backend-Gegenstück
+ * `test_n622_ha_monatswerte_pv_gesamtzaehler.py`).
  */
 
 export interface HaBasisFeld {

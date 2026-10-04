@@ -2,38 +2,47 @@
  * N-534: Dialog „Aus HA laden" — die Zeilen entstehen aus den Feldnamen, die das
  * Backend wirklich liefert (`einspeisung_kwh`), nicht aus den Mapping-Kurzformen.
  * Mit den alten Namen (`einspeisung`) wäre jede Zeile leer — genau das Bild seit v2.5.3.
+ *
+ * ⚠ N-622: hier stand bis 04.10.2026 eine handgeschriebene Basis mit
+ * `{ feld: 'pv_erzeugung_kwh' }` — das Backend sendete `pv_gesamt`, der Dialog zeigte für
+ * den PV-Gesamtzähler produktiv immer „–". Die Eingabe ist jetzt die Fixture, die
+ * `test_n622_ha_monatswerte_pv_gesamtzaehler.py` bitgleich gegen die Route hält, über den
+ * Client-Weg der App (`haStatisticsApi.getMonatswerte`).
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import fixture from '../test/ha-monatswerte-n622.fixture.json'
 import { haBasisWert, haBasisZeilen } from './haVergleich'
 
-const backendBasis = [
-  { feld: 'einspeisung_kwh', label: 'Einspeisung', wert: 1343.91 },
-  { feld: 'netzbezug_kwh', label: 'Netzbezug', wert: 10.31 },
-  { feld: 'pv_erzeugung_kwh', label: 'PV Erzeugung Gesamt', wert: 16.3 },
-]
+vi.mock('../api/client', () => ({
+  api: { get: () => Promise.resolve(structuredClone(fixture)) },
+}))
 
-describe('haBasisZeilen (N-534)', () => {
+const { haStatisticsApi } = await import('../api/haStatistics')
+const backendBasis = (await haStatisticsApi.getMonatswerte(1, 2025, 5)).basis
+
+describe('haBasisZeilen (N-534, N-622)', () => {
   it('liefert je geliefertem Feld eine Zeile mit HA-Wert und lokalem Wert über den DB-Feldnamen', () => {
-    const zeilen = haBasisZeilen(backendBasis, { einspeisung_kwh: 1343.9, netzbezug_kwh: 10.3, pv_erzeugung_kwh: null })
+    const zeilen = haBasisZeilen(backendBasis, { einspeisung_kwh: 399.9, netzbezug_kwh: 200.1, pv_erzeugung_kwh: 990 })
     expect(zeilen).toEqual([
-      { feld: 'einspeisung_kwh', label: 'Einspeisung', vorhanden: 1343.9, haWert: 1343.91 },
-      { feld: 'netzbezug_kwh', label: 'Netzbezug', vorhanden: 10.3, haWert: 10.31 },
-      { feld: 'pv_erzeugung_kwh', label: 'PV Erzeugung Gesamt', vorhanden: null, haWert: 16.3 },
+      { feld: 'einspeisung_kwh', label: 'Einspeisung', vorhanden: 399.9, haWert: 400 },
+      { feld: 'netzbezug_kwh', label: 'Netzbezug', vorhanden: 200.1, haWert: 200 },
+      { feld: 'pv_erzeugung_kwh', label: 'PV Erzeugung Gesamt', vorhanden: 990, haWert: 1000 },
     ])
   })
 
-  it('zeigt den PV-Gesamtzähler, den der alte Dialog gar nicht kannte', () => {
-    expect(haBasisZeilen(backendBasis, {}).map((z) => z.label)).toContain('PV Erzeugung Gesamt')
+  it('der PV-Gesamtzähler findet seinen gespeicherten Anlagenwert (bis N-622 stand dort immer „–")', () => {
+    const pv = haBasisZeilen(backendBasis, { pv_erzeugung_kwh: 990 }).find((z) => z.label === 'PV Erzeugung Gesamt')
+    expect(pv?.vorhanden).toBe(990)
   })
 
   it('Gegenprobe: die Mapping-Kurzform findet nichts — so entstand das Strich-Bild', () => {
-    const alt = backendBasis.find((b) => b.feld === 'einspeisung')
-    expect(alt).toBeUndefined()
+    expect(backendBasis.find((b) => b.feld === 'einspeisung' || b.feld === 'pv_gesamt')).toBeUndefined()
     expect(haBasisWert(backendBasis, 'einspeisung')).toBe('')
-    expect(haBasisWert(backendBasis, 'einspeisung_kwh')).toBe('1343.91')
+    expect(haBasisWert(backendBasis, 'einspeisung_kwh')).toBe('400')
+    expect(haBasisWert(backendBasis, 'pv_erzeugung_kwh')).toBe('1000')
   })
 
   it('verträgt eine fehlende Monatsdaten-Zeile', () => {
-    expect(haBasisZeilen(backendBasis, null)[0]).toEqual({ feld: 'einspeisung_kwh', label: 'Einspeisung', vorhanden: null, haWert: 1343.91 })
+    expect(haBasisZeilen(backendBasis, null)[0]).toEqual({ feld: 'einspeisung_kwh', label: 'Einspeisung', vorhanden: null, haWert: 400 })
   })
 })

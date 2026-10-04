@@ -23,7 +23,7 @@ from backend.core.exceptions import bad_request, ha_db_unavailable, not_found
 from backend.api.deps import get_db
 from backend.services.activity_service import log_activity
 from backend.core.field_definitions import FELD_LABELS as _FELD_LABELS_REGISTRY
-from backend.core.field_definitions import ist_heimlade_mengen_feld, ist_zaehler_differenz_feld
+from backend.core.field_definitions import basis_feld_key, ist_heimlade_mengen_feld, ist_zaehler_differenz_feld
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
@@ -114,11 +114,19 @@ class StatusResponse(BaseModel):
 # =============================================================================
 # Mapping: sensor_mapping-Key → DB-Feldname (für Monatsabschluss-Kompatibilität)
 # sensor_mapping nutzt Kurzformen ("einspeisung"), DB hat "einspeisung_kwh"
+#
+# N-622 (04.10.2026): `pv_gesamt` fehlte hier seit v2.5.3 — `/monatswerte` lieferte
+# den Anlagen-PV-Zähler als `feld: "pv_gesamt"`, das Formular „Aus HA laden" sucht
+# die Spalte `pv_erzeugung_kwh` und blieb leer (N-534 wirkte für PV nie). Der Wert
+# ist das Anlagen-Aggregat (ADR-002/P7): das Formular zeigt ihn als eigene Zeile,
+# gespeichert wird nur, was der Anwender dort stehen lässt. Einzige Leser dieser
+# Tabelle: `map_sensor_values_to_fields` für `/monatswerte` und `/alle-monatswerte`.
 # =============================================================================
 
 MAPPING_KEY_TO_DB_FELD = {
     "einspeisung": "einspeisung_kwh",
     "netzbezug": "netzbezug_kwh",
+    "pv_gesamt": "pv_erzeugung_kwh",
     "globalstrahlung": "globalstrahlung_kwh_m2",
     "sonnenstunden": "sonnenstunden",
     "temperatur": "durchschnittstemperatur",
@@ -198,8 +206,16 @@ def map_sensor_values_to_fields(
     inv_liste: list[InvestitionMitFelder] = []
 
     # Basis-Felder
+    # N-622 (Härtung): nur Zählerfelder — dieselbe Regel wie Monatsabschluss-Vorschlag,
+    # Import-Vorschau und Sammelimport (`ist_zaehler_differenz_feld`). Der Wert ist eine
+    # Zählerdifferenz (MAX−MIN); bei einem Preis-Sensor (`basis.strompreis`, Geräte-Feld
+    # `speicher_ladepreis_cent`) wäre er die Monatsspanne und landete im Formular.
+    # Innengeräte-Keys (`…_kwh-3`) werden über `basis_feld_key` aufgelöst, damit sie
+    # hier nicht still herausfallen.
     basis = sensor_mapping.get("basis", {})
     for mapping_key, config in basis.items():
+        if not ist_zaehler_differenz_feld(mapping_key):
+            continue
         if config and config.get("strategie") == "sensor":
             sensor_id = config.get("sensor_id")
             if sensor_id and sensor_id in sensor_values:
@@ -224,6 +240,8 @@ def map_sensor_values_to_fields(
         felder: list[MappedMonatswert] = []
 
         for feld, config in felder_config.items():
+            if not ist_zaehler_differenz_feld(basis_feld_key(feld)):
+                continue
             if config and config.get("strategie") == "sensor":
                 sensor_id = config.get("sensor_id")
                 if sensor_id and sensor_id in sensor_values:
