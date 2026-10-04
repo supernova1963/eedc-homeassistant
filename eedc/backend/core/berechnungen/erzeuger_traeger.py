@@ -132,6 +132,96 @@ def erzeuger_traeger(investitionen: Sequence[Any]) -> list:
     ]
 
 
+# ── Je Monat: der Zeitfilter vor dem Selektor (N-613, N-614) ─────────────────
+#
+# Die Abtretung gilt je MONAT, nicht für die Anlage (ADR-002/P11, Abgrenzung
+# (a)): Hat ein Balkonkraftwerk seine Modul-Kinder erst später bekommen, trägt
+# es in den Monaten davor Erzeugung und kWp noch selbst. Die String-Sichten
+# (Komponenten → PV-Strings, Jahresbericht-PDF „String-Vergleich") zeigen
+# Zeilen und verteilen ein Anlagen-SOLL nach kWp; sie brauchen dafür drei
+# Mengen, und die stehen hier, damit beide Sichten dieselben Zeilen und
+# denselben Nenner bekommen. Bis 03.10.2026 lagen sie privat in der Route
+# `cockpit/pv_strings.py` (N-613) — das PDF hätte sie nur über einen
+# Route-zu-Route-Import erreicht oder nachbauen müssen.
+#
+# `struktur` ist in allen drei die heutige Zuordnung (`erzeuger_traeger` über
+# die Erzeuger der Sicht, ohne Zeitfilter); `selbst` die Antwort von
+# `selbst_tragende_bkw_ids` für einen Monat. Ohne abtretendes BKW ist `selbst`
+# leer, und jede Funktion gibt `struktur` unverändert zurück — Bestand bitgleich.
+
+
+def selbst_tragende_bkw_ids(investitionen: Sequence[Any], jahr: int, monat: int) -> frozenset:
+    """IDs der Balkonkraftwerke mit Modul-Kindern, die in diesem Monat noch SELBST tragen.
+
+    Erst der Zeitfilter (``ist_aktiv_im_monat``), dann ``abgetretene_bkw_ids``
+    auf der aktiven Menge — dieselbe Reihenfolge wie
+    ``services/pv_monatswerte.py::lade_pv_je_monat`` für die IST-Werte. Leer
+    für jede Anlage ohne abtretendes BKW und für jeden Monat, in dem die
+    Kinder schon aktiv sind.
+    """
+    abgetreten = abgetretene_bkw_ids(investitionen)
+    if not abgetreten:
+        return frozenset()
+    aktive = [i for i in investitionen if i.ist_aktiv_im_monat(jahr, monat)]
+    im_monat = abgetretene_bkw_ids(aktive)
+    return frozenset(
+        i.id for i in aktive if i.id in abgetreten and i.id not in im_monat
+    )
+
+
+def traeger_im_monat(investitionen: Sequence[Any], struktur: Sequence[Any], selbst: frozenset) -> list:
+    """Die Erzeuger-Menge, die in einem Monat trägt — Zeilen-Teilmenge und kWp-Nenner.
+
+    Ausgang ist die **Struktur** (die String-Sichten blenden stillgelegte und
+    spätere Strings nicht aus, Issue #123, und ihr Nenner tat das nie). Ein
+    BKW, das im Monat selbst trägt, **ersetzt** darin seine Kinder: beide
+    zugleich wären dieselbe Nennleistung zweimal, und jede Zeile bekäme zu
+    wenig SOLL.
+    """
+    if not selbst:
+        return list(struktur)
+    in_struktur = {i.id for i in struktur}
+    return [
+        i for i in investitionen
+        if i.id in selbst
+        or (i.id in in_struktur and not (
+            i.typ == PV_MODUL_TYP and i.parent_investition_id in selbst
+        ))
+    ]
+
+
+def traeger_zeilen(investitionen: Sequence[Any], struktur: Sequence[Any], selbst: frozenset) -> list:
+    """Die Zeilen einer String-Sicht: die Struktur plus jedes BKW, das im Zeitraum selbst trägt.
+
+    ``selbst`` ist hier die Vereinigung über die Monate des Zeitraums.
+    Reihenfolge wie ``investitionen`` (Datenbank-Reihenfolge). Das BKW steht
+    dort, wo es ohne Kinder stünde; seine Kinder bleiben Zeilen — in den
+    Monaten, in denen das BKW selbst trägt, haben sie keine Werte, genau wie
+    ein später zugebauter String vor seiner Anschaffung.
+    """
+    if not selbst:
+        return list(struktur)
+    in_struktur = {i.id for i in struktur}
+    return [i for i in investitionen if i.id in in_struktur or i.id in selbst]
+
+
+def verteilungsnenner_kwp(menge: Sequence[Any], referenzwert: Optional[float]) -> float:
+    """Σ kWp einer Erzeuger-Menge über den SoT-Dispatcher, sonst der gepflegte Wert, sonst 1.
+
+    Der Nenner, mit dem eine String-Sicht ein Anlagen-SOLL nach kWp auf ihre
+    Zeilen verteilt. ``get_erzeuger_kwp`` statt der Spalte (ADR-002/P3-a): ein
+    nur im ``parameter`` gepflegtes Modul (#229) zählte sonst 0, und das
+    Balkonkraftwerk bezieht seine kWp aus ``leistung_wp × anzahl`` (F-10).
+    ``referenzwert`` ist ``Anlage.leistung_kwp`` und greift nur bei Σ = 0.
+    """
+    from backend.core.investition_kennwerte import get_erzeuger_kwp
+
+    kwp = sum(get_erzeuger_kwp(m) for m in menge)
+    if kwp == 0:
+        kwp = referenzwert or 1
+    return kwp
+
+
 def modul_kinder(bkw_id: Any, investitionen: Sequence[Any]) -> list:
     """Die `pv-module` aus ``investitionen``, die an ``bkw_id`` hängen.
 

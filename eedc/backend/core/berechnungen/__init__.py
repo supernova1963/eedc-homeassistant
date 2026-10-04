@@ -286,7 +286,11 @@ from backend.core.berechnungen.erzeuger_traeger import (
     kuerze_bkw_in_werte_map,
     erzeuger_traeger,
     modul_kinder,
+    selbst_tragende_bkw_ids,
+    traeger_im_monat,
+    traeger_zeilen,
     traegt_erzeugungsgroessen_selbst,
+    verteilungsnenner_kwp,
 )
 from backend.core.berechnungen.spez_ertrag import (
     MONATSGEWICHTE_52N,
@@ -537,7 +541,11 @@ __all__ = [
     "kuerze_bkw_in_werte_map",
     "erzeuger_traeger",
     "modul_kinder",
+    "selbst_tragende_bkw_ids",
+    "traeger_im_monat",
+    "traeger_zeilen",
     "traegt_erzeugungsgroessen_selbst",
+    "verteilungsnenner_kwp",
     "MONATSGEWICHTE_52N",
     "PV_ERZEUGER_TYPEN",
     "berechne_spez_ertrag_annualisiert",

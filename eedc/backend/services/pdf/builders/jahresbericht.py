@@ -50,7 +50,13 @@ from backend.models.investition import Investition, InvestitionTyp
 from backend.models.monatsdaten import Monatsdaten
 from backend.services.prognose_auswahl import lade_aktive_prognose
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
-from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
+from backend.core.berechnungen.erzeuger_traeger import (
+    erzeuger_traeger,
+    selbst_tragende_bkw_ids,
+    traeger_im_monat,
+    traeger_zeilen,
+    verteilungsnenner_kwp,
+)
 from backend.core.investition_kennwerte import get_erzeuger_kwp
 from backend.models.strompreis import Strompreis
 
@@ -594,21 +600,48 @@ async def build_jahresbericht_context(
     # ── 10. String-Vergleich SOLL/IST ───────────────────────────────────
     # Erzeuger, nicht nur `pv-module` (F-10): eine reine Balkonkraftwerk-Anlage
     # bekam hier eine leere Tabelle, obwohl sie seit #367 ein PVGIS-SOLL hat.
-    # Derselbe Schnitt wie im API-Pfad `api/routes/cockpit/pv_strings.py`, damit
-    # PDF und Cockpit dieselben Zeilen zeigen.
+    # Dieselben Zeilen und derselbe Nenner wie Komponenten → PV-Strings
+    # (`api/routes/cockpit/pv_strings.py`) — beide über dieselben Funktionen
+    # des Selektor-Moduls (N-614).
     # N-266: `erzeuger_traeger` — ein Balkonkraftwerk mit Modul-Kindern ist hier
     # keine eigene String-Zeile mehr, seine Kinder sind es. Bliebe es drin,
     # stünde es doppelt in der Tabelle UND verdoppelte den Verteilungsnenner
     # `gesamt_kwp` darunter, sodass jeder String zu wenig SOLL bekäme.
-    pv_module = erzeuger_traeger(
-        [i for i in investitionen if i.typ in PV_ERZEUGER_TYPEN]
-    )
+    # ⛔ N-614: Das gilt je MONAT, nicht für den Berichtszeitraum. Bis 03.10.2026
+    # lief der Selektor hier einmal über alle Erzeuger: ein BKW, dem im
+    # Berichtszeitraum Module zugeordnet wurden, hatte keine Zeile, und seine
+    # Erzeugung aus den Monaten davor fehlte in der Summe des Abschnitts
+    # (gemessen: 930 gegen 1860 kWh der Monatstabelle desselben PDFs).
+    # `struktur` bleibt die Zuordnung über alle Erzeuger des Berichts (zeitblind
+    # wie bisher, Issue #123); welche BKW in welchem Monat noch selbst tragen,
+    # entscheidet `selbst_tragende_bkw_ids` — Zeitfilter vor dem Selektor.
+    erzeuger_alle = [i for i in investitionen if i.typ in PV_ERZEUGER_TYPEN]
+    struktur = erzeuger_traeger(erzeuger_alle)
+    # Die Monate des Berichts — dieselben, über die das SOLL unten zählt
+    # (Gesamtzeitraum: `anzahl_jahre` volle Jahre).
+    bericht_monate = [(j, m) for j in alle_jahre for m in range(1, 13)]
+    selbst_je_monat = {
+        jm: selbst_tragende_bkw_ids(erzeuger_alle, *jm) for jm in bericht_monate
+    }
+    selbst_im_zeitraum = frozenset().union(*selbst_je_monat.values())
+    pv_module = traeger_zeilen(erzeuger_alle, struktur, selbst_im_zeitraum)
     # kWp über den SoT-Dispatcher (Spalte → parameter-JSON, beim BKW
     # `leistung_wp × anzahl`) — sonst ist der SOLL-Verteilungs-Nenner bei
     # `parameter`-gepflegten Modulen eine Teilsumme, und der
     # `or anlage.leistung_kwp`-Fallback greift nur bei Summe 0, nicht bei
     # gemischter Pflege (N73/P3).
-    gesamt_kwp = sum(get_erzeuger_kwp(i) for i in pv_module) or (anlage.leistung_kwp or 1)
+    gesamt_kwp = verteilungsnenner_kwp(struktur, anlage.leistung_kwp)
+    # N-614: je Monat die Menge, die trägt, und ihr Nenner — ein BKW, das im
+    # Monat selbst trägt, ersetzt darin seine Kinder (nie beide im Nenner).
+    traeger_je_monat = {
+        jm: traeger_im_monat(erzeuger_alle, struktur, selbst)
+        for jm, selbst in selbst_je_monat.items()
+    }
+    traeger_ids_je_monat = {jm: {i.id for i in menge} for jm, menge in traeger_je_monat.items()}
+    nenner_je_monat = {
+        jm: verteilungsnenner_kwp(menge, anlage.leistung_kwp)
+        for jm, menge in traeger_je_monat.items()
+    }
     # Dieselbe Prognose wie in Abschnitt 4 — sonst widerspräche der
     # String-Vergleich der Monatstabelle desselben PDFs.
     prognose_monate: dict[int, float] = {}
@@ -660,7 +693,23 @@ async def build_jahresbericht_context(
                 if modul_id == inv.id
             )
         modul_prognose = prognose_per_modul.get(inv.id)
-        if modul_prognose is not None:
+        if selbst_im_zeitraum:
+            # N-614: Monat für Monat — eine Zeile bekommt das SOLL nur der
+            # Monate, in denen sie trägt (das BKW bis zur Abtretung, seine
+            # Kinder danach), und der kWp-Anteil steht über dem Nenner der
+            # Menge, die in diesem Monat trägt. Ohne selbst tragendes BKW ist
+            # die Menge jedes Monats die Struktur; die Summe ist dann die
+            # Jahresformel darunter.
+            prognose_kwh = 0.0
+            for (j, m) in bericht_monate:
+                if inv.id not in traeger_ids_je_monat[(j, m)]:
+                    continue
+                if modul_prognose is not None:
+                    prognose_kwh += modul_prognose.get(m, 0)
+                else:
+                    nenner = nenner_je_monat[(j, m)]
+                    prognose_kwh += prognose_monate.get(m, 0) * (kwp / nenner if nenner else 0)
+        elif modul_prognose is not None:
             prognose_kwh = sum(modul_prognose.values()) * anzahl_jahre
         else:
             prognose_kwh = sum(prognose_monate.values()) * anteil * anzahl_jahre

@@ -945,6 +945,8 @@ def loese_pv_tageswerte_auf(
         waehle_pv_quelle,
     )
     from backend.core.berechnungen.erzeuger_traeger import (
+        BKW_TYP,
+        PV_MODUL_TYP,
         abgetretene_bkw_ids,
         modul_kinder,
     )
@@ -961,7 +963,18 @@ def loese_pv_tageswerte_auf(
         praefix = _TYP_KEY_PREFIX.get(getattr(inv, "typ", None))
         return f"{praefix}{inv.id}" if praefix else None
 
-    alle_invs = list(investitionen_by_id.values())
+    # ⛔ N-615: Zeitfilter VOR dem Selektor (ADR-002/P11, Abgrenzung (a)) —
+    # dieselbe Menge wie `erwartete_erzeuger_ids` darüber. Bis 03.10.2026 lief
+    # `abgetretene_bkw_ids` hier über ALLE Investitionen: an einem Tag vor der
+    # Anschaffung der Modul-Kinder landete der Wert des Balkonkraftwerks per
+    # kWp-Anteil bei Kindern, die es noch nicht gab (3,0 kWh → 1,5 + 1,5).
+    # Der Schreibpfad (`aggregate_day`) lädt seine Investitionen ohnehin mit
+    # `aktiv_am_tag` — für ihn ändert sich nichts; die Regel gehört trotzdem
+    # hierher und nicht an jeden Aufrufer.
+    am_tag = [
+        inv for inv in investitionen_by_id.values()
+        if getattr(inv, "typ", None) in (PV_MODUL_TYP, BKW_TYP) and inv.ist_aktiv_an(datum)
+    ]
     marken: dict[str, str] = {}
 
     # ── N-536, Stufe 2: das Balkonkraftwerk ist das Aggregat SEINER Kinder ──
@@ -977,7 +990,7 @@ def loese_pv_tageswerte_auf(
     # Boundary-Pfad (`bkw_<id>`) oder vom Live-Pfad (`pv_<id>` für jeden
     # Erzeuger) geschrieben sein. Genau dieser Mismatch war der
     # BKW-Doppelzählungs-Bug vom 2026-05-19 (`core/berechnungen/energie.py`).
-    for bkw_id in abgetretene_bkw_ids(alle_invs):
+    for bkw_id in abgetretene_bkw_ids(am_tag):
         bkw_key = next(
             (k for k in (f"bkw_{bkw_id}", f"pv_{bkw_id}") if k in out), None
         )
@@ -986,7 +999,7 @@ def loese_pv_tageswerte_auf(
         bkw_wert = out.get(bkw_key)
         if not isinstance(bkw_wert, (int, float)):
             continue
-        kinder = [k for k in modul_kinder(bkw_id, alle_invs) if _key(k) is not None]
+        kinder = [k for k in modul_kinder(bkw_id, am_tag) if _key(k) is not None]
         if not kinder:
             continue
         aufgeloest_bkw = resolve_pv_je_modul(

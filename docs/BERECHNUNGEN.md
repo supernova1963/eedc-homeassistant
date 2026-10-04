@@ -2337,11 +2337,20 @@ Flug-km        = CO2_gesamt / 0.25     (kg/km)
 > Erzeugung dort doppelt. Wer die Sicht erweitert, erweitert deshalb **nicht** `pv_je_modul`.
 > Gewächtert in `tests/test_bkw_erzeuger_sichten_f10.py`.
 >
-> **Kein zweiter Erfassungsweg.** `pv-module` unter `balkonkraftwerk` bleibt verboten
-> (`models/investition.py::ERLAUBTE_PARENT_TYPEN`): das wäre dieselbe Erzeugung zweimal erfasst,
-> mit doppelter kWp als Folge — der Workaround, den der Melder selbst zurückgenommen hat. Wer
-> mehrere Ausrichtungen hat, erfasst **Wechselrichter + PV-Module**; die Abgrenzung steht in
-> [HANDBUCH_EINSTELLUNGEN §3.5](HANDBUCH_EINSTELLUNGEN.md#35-balkonkraftwerk-oder-wechselrichter--pv-module).
+> **PV-Module unter einem Balkonkraftwerk sind erlaubt — und zählen trotzdem nur einmal.** Seit N-266
+> darf ein `pv-module` das `balkonkraftwerk` als Parent haben (`models/investition.py::ERLAUBTE_PARENT_TYPEN`)
+> — der Weg, auf dem ein Balkonkraftwerk mit Modulen über Eck mehrere Ausrichtungen trägt. Hier stand
+> bis 03.10.2026 noch „bleibt verboten"; das war der Stand vor N-266. Doppelt erfasst wird dadurch
+> nichts: das Balkonkraftwerk **tritt** Nennleistung, Erzeugung und Ausrichtung an seine Kinder **ab**
+> (Selektor `core/berechnungen/erzeuger_traeger.py`, [ADR-002/P11](ADR-002-WURZELMUSTER.md)), seine
+> AC-Grenze behält es. In der String-Sicht ist es damit keine eigene Zeile mehr, seine Module sind es.
+> ⚠ **Die Abtretung gilt je Monat** (N-613, N-614): Hat das Balkonkraftwerk seine Module erst später
+> bekommen, trägt es in den Monaten davor Erzeugung und kWp noch selbst — es steht dann in
+> *Komponenten → PV-Strings* und im Abschnitt „String-Vergleich" des Jahresbericht-PDF als eigene
+> Zeile für genau diese Monate, und im Verteilungsnenner des SOLL steht in jedem Monat entweder das
+> Balkonkraftwerk oder seine Module, nie beide. Welcher Weg wann passt (Balkonkraftwerk allein,
+> Balkonkraftwerk + PV-Module, Wechselrichter + PV-Module), steht in
+> [HANDBUCH_EINSTELLUNGEN §3.5](HANDBUCH_EINSTELLUNGEN.md#35-balkonkraftwerk-mit-mehreren-ausrichtungen--und-wann-wechselrichter--pv-module).
 >
 > **Dieselbe Erzeuger-Abgrenzung gilt für die Community-Stammdaten** (`services/community_service.py`):
 > Neigung und Ausrichtung werden über beide Typen gemittelt. Vorher fiel eine reine

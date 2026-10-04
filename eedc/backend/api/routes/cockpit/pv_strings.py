@@ -27,7 +27,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from backend.core.exceptions import not_found
-from backend.core.berechnungen.erzeuger_traeger import abgetretene_bkw_ids, erzeuger_traeger
+from backend.core.berechnungen.erzeuger_traeger import (
+    abgetretene_bkw_ids,
+    erzeuger_traeger,
+    selbst_tragende_bkw_ids,
+    traeger_im_monat,
+    traeger_zeilen,
+    verteilungsnenner_kwp,
+)
 from backend.core.investition_kennwerte import get_erzeuger_kwp
 from backend.api.deps import get_db
 from backend.core.berechnungen import (
@@ -114,75 +121,12 @@ def _rollup_quelle(quellen: Iterable[str]) -> str:
     return PV_QUELLE_FEHLT
 
 
-def _selbst_tragende_bkw(alle: list[Any], jahr: int, monat: int) -> frozenset:
-    """IDs der Balkonkraftwerke mit Modul-Kindern, die in diesem Monat noch SELBST tragen.
-
-    **N-613.** Die Abtretung (N-266) gilt je Monat, nicht für die Anlage
-    (ADR-002/P11, Reihenfolge Zeitfilter → Selektor, N-386): Hat ein BKW seine
-    Modul-Kinder erst später bekommen, trägt es in den Monaten davor Erzeugung
-    und kWp noch selbst. Dieselbe Entscheidung trifft
-    ``services/pv_monatswerte.py::lade_pv_je_monat`` für die IST-Werte — hier
-    steht sie, damit Zeilen und kWp-Nenner der Sicht aus derselben Menge kommen.
-
-    Leer für jede Anlage ohne abtretendes BKW und für jeden Monat, in dem die
-    Kinder schon aktiv sind — dann bleibt die Sicht bitgleich zu vorher.
-    """
-    abgetreten = abgetretene_bkw_ids(alle)
-    if not abgetreten:
-        return frozenset()
-    aktive = [i for i in alle if i.ist_aktiv_im_monat(jahr, monat)]
-    im_monat = abgetretene_bkw_ids(aktive)
-    return frozenset(
-        i.id for i in aktive if i.id in abgetreten and i.id not in im_monat
-    )
-
-
-def _menge_im_monat(alle: list[Any], struktur: list[Any], selbst: frozenset) -> list[Any]:
-    """Die Erzeuger-Menge eines Monats für den kWp-Nenner (N-613).
-
-    Ausgang ist die **Struktur** (``erzeuger_traeger`` über alle Erzeuger, ohne
-    Zeitfilter — Issue #123: die Sicht blendet stillgelegte und spätere Strings
-    nicht aus, und ihr Nenner tat das nie). Ein BKW, das im Monat selbst trägt,
-    **ersetzt** darin seine Kinder: beide zugleich wären dieselbe Nennleistung
-    zweimal, und jede Zeile bekäme zu wenig SOLL.
-    """
-    if not selbst:
-        return struktur
-    in_struktur = {i.id for i in struktur}
-    return [
-        i for i in alle
-        if i.id in selbst
-        or (i.id in in_struktur and not (
-            i.typ == "pv-module" and i.parent_investition_id in selbst
-        ))
-    ]
-
-
-def _zeilen(alle: list[Any], struktur: list[Any], selbst: frozenset) -> list[Any]:
-    """Die Erzeuger-Zeilen der Sicht: die Struktur plus jedes BKW, das im Zeitraum selbst trägt.
-
-    Reihenfolge wie ``alle`` (die Datenbank-Reihenfolge, wie bisher). Das BKW
-    steht dort, wo es ohne Kinder stünde; seine Kinder bleiben Zeilen — in den
-    Monaten, in denen das BKW selbst trägt, haben sie keine Werte, genau wie
-    ein später zugebauter String vor seiner Anschaffung.
-    """
-    if not selbst:
-        return struktur
-    in_struktur = {i.id for i in struktur}
-    return [i for i in alle if i.id in in_struktur or i.id in selbst]
-
-
-def _kwp_nenner(menge: list[Any], anlage: Anlage) -> float:
-    """Σ kWp einer Erzeuger-Menge über den SoT-Dispatcher, sonst der gepflegte Wert."""
-    # kWp über den SoT-Dispatcher (ADR-002/P3-a): ein nur im `parameter`
-    # gepflegtes Modul (#229) zählte hier 0 — damit war der Nenner zu klein und
-    # ALLE übrigen Strings bekamen zu viel SOLL zugerechnet. `get_erzeuger_kwp`
-    # statt `get_pv_kwp`, weil das Balkonkraftwerk seine kWp aus
-    # `leistung_wp × anzahl` bezieht (F-10) und sonst mit 0 im Nenner stünde.
-    kwp = sum(get_erzeuger_kwp(m) for m in menge)
-    if kwp == 0:
-        kwp = anlage.leistung_kwp or 1
-    return kwp
+# N-613/N-614: Die Monatsform der Abtretung (welche BKW tragen in diesem Monat
+# noch selbst, welche Menge trägt, welche Zeilen zeigt die Sicht, welcher
+# kWp-Nenner) steht seit 03.10.2026 im Selektor-Modul
+# `core/berechnungen/erzeuger_traeger.py` — das Jahresbericht-PDF
+# („String-Vergleich") nutzt dieselben Funktionen, damit beide Sichten
+# dieselben Zeilen und denselben Nenner haben.
 
 
 def _ranking(
@@ -441,7 +385,7 @@ async def get_pv_strings(
     # den Monaten davor fehlte seine Erzeugung in der Summe (gemessen: 930 gegen
     # 1860 kWh der Monats-Fakten). Jetzt: `struktur` ist die heutige Zuordnung
     # (Anlagen-Nenner, Plausibilität), die Monate entscheiden selbst
-    # (`_selbst_tragende_bkw`), und die IST-Werte lädt `lade_pv_je_monat` mit
+    # (`selbst_tragende_bkw_ids`), und die IST-Werte lädt `lade_pv_je_monat` mit
     # ALLEN Erzeugern — dort läuft der Selektor schon je Monat nach dem
     # Zeitfilter (ADR-002/P11).
     alle = list(result.scalars().all())
@@ -456,8 +400,8 @@ async def get_pv_strings(
             bester_string=None, schlechtester_string=None,
         )
 
-    selbst_je_monat = {m: _selbst_tragende_bkw(alle, jahr, m) for m in range(1, 13)}
-    pv_module = _zeilen(alle, struktur, frozenset().union(*selbst_je_monat.values()))
+    selbst_je_monat = {m: selbst_tragende_bkw_ids(alle, jahr, m) for m in range(1, 13)}
+    pv_module = traeger_zeilen(alle, struktur, frozenset().union(*selbst_je_monat.values()))
 
     wr_ids = [m.parent_investition_id for m in pv_module if m.parent_investition_id]
     wechselrichter_map = {}
@@ -489,9 +433,9 @@ async def get_pv_strings(
     # Anlagen-Nenner der heutigen Zuordnung (Plausibilität, `anlagen_leistung_kwp`)
     # und je Monat der Nenner der Menge, die in diesem Monat trägt (N-613):
     # ohne selbst tragendes BKW ist das dieselbe Zahl.
-    gesamt_kwp = _kwp_nenner(struktur, anlage)
+    gesamt_kwp = verteilungsnenner_kwp(struktur, anlage.leistung_kwp)
     nenner_je_monat = {
-        m: gesamt_kwp if not selbst else _kwp_nenner(_menge_im_monat(alle, struktur, selbst), anlage)
+        m: gesamt_kwp if not selbst else verteilungsnenner_kwp(traeger_im_monat(alle, struktur, selbst), anlage.leistung_kwp)
         for m, selbst in selbst_je_monat.items()
     }
 
@@ -652,7 +596,7 @@ async def get_pv_strings_gesamtlaufzeit(
             except (ValueError, TypeError):
                 pass
 
-    gesamt_kwp = _kwp_nenner(struktur, anlage)
+    gesamt_kwp = verteilungsnenner_kwp(struktur, anlage.leistung_kwp)
 
     # IST je Modul über den Read-time-SoT (A4/b1) statt roh aus den IMD: die
     # Laufzeit-Jahre entstehen jetzt aus allen Monaten MIT PV-Quelle — also auch
@@ -666,11 +610,11 @@ async def get_pv_strings_gesamtlaufzeit(
 
     # N-613: Zeilen und Monats-Nenner aus derselben Menge wie die IST-Werte.
     selbst_je_monat = {
-        (j, m): _selbst_tragende_bkw(alle, j, m) for j in jahre for m in range(1, 13)
+        (j, m): selbst_tragende_bkw_ids(alle, j, m) for j in jahre for m in range(1, 13)
     }
-    pv_module = _zeilen(alle, struktur, frozenset().union(*selbst_je_monat.values()))
+    pv_module = traeger_zeilen(alle, struktur, frozenset().union(*selbst_je_monat.values()))
     nenner_je_monat = {
-        jm: gesamt_kwp if not selbst else _kwp_nenner(_menge_im_monat(alle, struktur, selbst), anlage)
+        jm: gesamt_kwp if not selbst else verteilungsnenner_kwp(traeger_im_monat(alle, struktur, selbst), anlage.leistung_kwp)
         for jm, selbst in selbst_je_monat.items()
     }
     in_struktur = {i.id for i in struktur}

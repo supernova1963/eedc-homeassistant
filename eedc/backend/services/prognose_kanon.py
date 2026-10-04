@@ -322,9 +322,12 @@ def _kappungs_mitglieder(
     # (`zuordne_grenzen` gibt ihm deshalb keine Zeile). Bliebe es drin und
     # stimmte seine alte Ausrichtung zufällig mit der eines Kindes überein,
     # stünde es mit voller kWp im Kappungs-Pool und verschöbe die Aufteilung.
-    for inv in erzeuger_traeger(invs):
-        if not inv.ist_aktiv_an(tag):
-            continue
+    # N-614 (Klasse „Selektor vor Zeitfilter", ADR-002/P11 (a)): erst die am
+    # `tag` aktiven, dann der Selektor — dieselbe Reihenfolge wie
+    # `_tages_gewichte`. An einem Tag vor der Anschaffung der Kinder ist das BKW
+    # noch Mitglied; vorher fehlte es dort, wo es eine Gruppe mit gekappten
+    # Mitgliedern teilt (der Kappungs-Zweig ersetzt das kWp-Tagesgewicht).
+    for inv in erzeuger_traeger([i for i in invs if i.ist_aktiv_an(tag)]):
         abrufe = erzeuger_abrufe(inv)
         if not abrufe:
             continue

@@ -150,9 +150,13 @@ def summe_graue_last(
     # Herstellungs-Last des Mikro-Wechselrichters geht dabei nicht verloren: der
     # Faktor ist ein kWp-Richtwert für die **Anlage**, nicht für das Modul allein
     # (`core/calculations.py::GRAUE_LAST_PV_KG_PRO_KWP`).
-    for inv in erzeuger_traeger(investitionen):
-        if not _ist_beruecksichtigt(inv, stichtag):
-            continue
+    # N-614 (Klasse „Selektor vor Zeitfilter", ADR-002/P11 (a)): erst der Filter,
+    # dann der Selektor — mit Stichtag vor der Anschaffung der Modul-Kinder trägt
+    # das BKW seine graue Last noch selbst; ein Kind mit `aktiv=False` gilt als
+    # gelöscht und nimmt sie ihm auch nicht ab. Ohne Stichtag (der einzige
+    # heutige Aufrufer, `investitionen/dashboards.py`) unverändert, solange kein
+    # Modul-Kind auf `aktiv=False` steht.
+    for inv in erzeuger_traeger([i for i in investitionen if _ist_beruecksichtigt(i, stichtag)]):
         last, quelle = graue_last_einzeln(inv)
         posten.append(
             GraueLastPosten(

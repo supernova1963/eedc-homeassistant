@@ -120,9 +120,13 @@ jetzt Gesamtverbrauch.
   Erzeugung zählte das Balkonkraftwerk mit, die Nennleistung nicht (im Beispiel 100,0 statt
   92,6 kWh/kWp). Jetzt nennt die Tabelle denselben Wert wie das Cockpit.
 - **PV-Strings mit nachträglich zugeordneten Modulen:** Hast du deinem Balkonkraftwerk
-  später PV-Module zugeordnet, fehlte in *Komponenten → PV-Strings* seine Erzeugung aus der
-  Zeit davor. Jetzt steht das Balkonkraftwerk für diese Monate mit eigener Zeile da, und die
-  Summe stimmt mit dem Cockpit überein — auch unter *Alle Jahre* und in der Gesamtlaufzeit.
+  später PV-Module zugeordnet, fehlte in *Komponenten → PV-Strings* und im Abschnitt
+  „String-Vergleich" des Jahresbericht-PDF seine Erzeugung aus der Zeit davor. Jetzt steht das
+  Balkonkraftwerk für diese Monate mit eigener Zeile da, und die Summe stimmt mit dem Cockpit
+  und mit der Monatstabelle des Berichts überein — auch unter *Alle Jahre* und in der
+  Gesamtlaufzeit. Beide Sichten zeigen dieselben Zeilen. Und hast du **alle** Module eines
+  Balkonkraftwerks deaktiviert, zählt unter *Auswertungen → CO₂* seine graue Energie wieder
+  mit, statt ganz zu fehlen — „klimapositiv ab" rückt dadurch etwas nach hinten.
 - **Vorjahresvergleich:** Der Vergleichswert ist jetzt genau derselbe Monat des Vorjahres,
   wie du ihn direkt aufrufst — vorher konnte er davon abweichen.
 - **Mehrere Wärmepumpen:** Die Ersparnis in der Kachel ist jetzt die Summe der Geräte —
