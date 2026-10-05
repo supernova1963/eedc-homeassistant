@@ -213,6 +213,25 @@ def _folge(sicht: str, d: Optional[dict], einsp: float, netz: float) -> list[Zel
     return out
 
 
+#: Formen, deren Geld-Sichten gemessen und gezeigt werden (Auftrag Achsen-Matrix 2, „Zusatz an der PV-Matrix").
+GELD_SICHTEN_FORMEN = ("F13a",)
+
+
+def _geld_sichten(nach: dict) -> list[Zelle]:
+    """Ersparnis aus Eigenverbrauch und CO₂ je Sicht, neben dem Eigenverbrauch derselben Sicht. Ihr Soll legt der
+    Bauplan der HA-Bauform fest (N-588: Σ Einzelzähler > Anlagenzähler ⇒ Wandlungsverluste) — hier nur gemessen.
+    Gezeigt wird als „soll" die Rechnung EV × 30 ct derselben Sicht (Tarif der Form), nicht ein Urteil."""
+    out = []
+    for k in ("monat", "uebersicht", "tabelle", "pdf", "ha_export"):
+        d = nach[k] or {}
+        ev = d.get("ev")
+        out.append(Zelle(f"geld:{k}:ev_ersparnis", d.get("ev_ersparnis"),
+                         None if ev is None else round(ev * 0.30, 2), "ok", "EV × 30 ct derselben Sicht"))
+    for k in ("uebersicht", "ha_export", "community"):
+        out.append(Zelle(f"geld:{k}:co2", (nach[k] or {}).get("co2"), None, "ok", "N-588"))
+    return out
+
+
 def bewerte(fid: str, weg: str, inv: str, m: mx.Messung) -> list[Zelle]:  # noqa: C901 — eine Tafel, kein Algorithmus
     form = mx.FORMEN[fid]
     juni = mx.soll_monat(form, mx.TAGE_JUNI)
@@ -378,6 +397,8 @@ def bewerte(fid: str, weg: str, inv: str, m: mx.Messung) -> list[Zelle]:  # noqa
         for k in ("monat", "uebersicht", "jahr", "tabelle", "verlauf", "pdf", "ha_export", "community"):
             z += _folge(k, nach[k], e_juni, n_juni)
         z.append(_z("ha_export:spez=uebersicht", nach["ha_export"]["spez"], nach["uebersicht"]["spez"], tol=0.15))
+        if fid in GELD_SICHTEN_FORMEN:
+            z += _geld_sichten(nach)
     elif inv == "I6":
         werte = {"vor:cockpit_monat": _pv(vor["monat"]), "vor:jahr_verlauf": _pv(vor["verlauf"]),
                  "vor:fakten_tageswert": _pv(vor["fakten_tw"])}
@@ -511,6 +532,17 @@ for _f in ("F01", "F02", "F03", "F04", "F05", "F06", "F07", "F08a", "F08b", "F09
     SOLL_UNKLAR[(_f, "S3", "I3", "cockpit_monat:vor")] = _U_SA_VOR
     SOLL_UNKLAR[(_f, "S3", "I5", "cockpit_monat:vor")] = _U_SA_VOR
     SOLL_UNKLAR[(_f, "S3", "I6", "vor:cockpit_monat")] = _U_SA_VOR
+_U_N588 = (
+    "N-588 (Auftrag Achsen-Matrix 2, Zusatz F13a): Σ Einzelzähler 21 > Anlagenzähler 19,8 je Sonnentag — der "
+    "Unterschied sind Wandlungsverluste. Ob Ersparnis und CO₂ auf dem Eigenverbrauch aus Σ Einzel oder aus dem "
+    "Anlagenzähler (abzüglich Verluste) rechnen, legt der Bauplan der HA-Bauform fest. Gemessen, nicht bewertet."
+)
+for _f in GELD_SICHTEN_FORMEN:
+    for _w in ("S1", "S2", "S3"):
+        for _k in ("monat", "uebersicht", "tabelle", "pdf", "ha_export"):
+            SOLL_UNKLAR[(_f, _w, "I5", f"geld:{_k}:ev_ersparnis")] = _U_N588
+        for _k in ("uebersicht", "ha_export", "community"):
+            SOLL_UNKLAR[(_f, _w, "I5", f"geld:{_k}:co2")] = _U_N588
 # „Soll unklar 2" (BKW-Zeile im laufenden Monat bei Modul-Kindern) ist seit dem Bau der PV-Achse
 # (Bauplan T4, 04.10.2026) festes Soll 0: der Monat tritt ab, auch der laufende (N-627) — in `bewerte`.
 

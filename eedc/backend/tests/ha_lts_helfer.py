@@ -161,6 +161,62 @@ def zeile(
         )
 
 
+# ── Zustands-Verlauf (nicht-numerische Sensoren): Betriebsart einer Wärmepumpe ──
+
+
+class ZustandsVerlauf:
+    """Ein erreichbarer ``HAStateService`` mit festem Zustands-Verlauf (zweite Abnahme-Matrix, 05.10.2026).
+
+    **Warum es diese Attrappe gibt.** Ein ``climate``-Zustand hat in Home Assistant **keine**
+    Langzeitstatistik (keine ``state_class``); eedc liest das Betriebsart-Etikett einer Wärmepumpe aus
+    dem Zustands-Verlauf (``get_zustand_history`` über ``/api/history/period``,
+    ``energie_profil/_helpers.py::_get_betriebsmodus_history``). Das Recorder-Schema oben trägt ihn
+    nicht — der Verlauf kommt also aus dieser Attrappe, mit der Semantik, die HA liefert: Punkte im
+    Zeitraum, davor der letzte Zustand **vor** dem Start als erster Punkt (HAs ``history/period``
+    beginnt mit dem Zustand zum Startzeitpunkt).
+
+    Daneben steht sie für „HA ist erreichbar" (``is_available``), was ``_get_strompreis_stunden``
+    abfragt, bevor es einen Preissensor aus der Statistik liest. Alle übrigen Abfragen antworten leer
+    — das ist „HA kennt den Sensor nicht", nicht erfunden.
+
+    ``zustaende``: ``{entity_id: [(zeitpunkt, roher_zustand), …]}`` nach Zeit sortiert.
+    """
+
+    is_available = True
+
+    def __init__(self, zustaende: dict | None = None):
+        self.zustaende = dict(zustaende or {})
+
+    async def get_zustand_history(self, entity_ids, start, end=None):
+        out = {}
+        for eid in entity_ids:
+            pts = [(ts, roh, None) for ts, roh in self.zustaende.get(eid, [])]
+            davor = [p for p in pts if p[0] < start]
+            im = [p for p in pts if start <= p[0] < (end or datetime.max)]
+            if davor:
+                im = [(start, davor[-1][1], None), *im]
+            out[eid] = im
+        return out
+
+    async def get_sensor_history(self, entity_ids, start, end=None):
+        return {}
+
+    async def get_sensor_units(self, entity_ids):
+        return {}
+
+    async def get_sensor_state(self, entity_id):
+        return None
+
+    async def get_sensor_state_with_unit(self, entity_id):
+        return None
+
+    async def get_sensor_states_batch(self, entity_ids):
+        return {}
+
+    async def get_zustand_states_batch(self, entity_ids):
+        return {}
+
+
 # ── Zählerlücken wie HA (Schnitt 4): Slot-Tabelle aus Stunden-Deltas ─────────
 
 

@@ -650,6 +650,8 @@ async def miss_cockpit_monat(db: AsyncSession, anlage_id: int, monat: int) -> di
     r = await am.get_aktueller_monat(anlage_id=anlage_id, jahr=JAHR, monat=monat, db=db)
     return {"pv": _r(r.pv_erzeugung_kwh), "bkw": _r(r.bkw_erzeugung_kwh), "ev": _r(r.eigenverbrauch_kwh),
             "bkw_ersparnis": _r(getattr(r, "bkw_ersparnis_euro", None)),
+            # Geld-Sichten (Auftrag Achsen-Matrix 2, F13a/N-588): gemessen, nicht bewertet.
+            "ev_ersparnis": _r(getattr(r, "ev_ersparnis_euro", None)),
             "einsp": _r(r.einspeisung_kwh), "netz": _r(r.netzbezug_kwh), "autarkie": _r(r.autarkie_prozent),
             "pv_quelle": ((r.feld_quellen or {}).get("pv_erzeugung_kwh") or {}).get("quelle")
             if isinstance((r.feld_quellen or {}).get("pv_erzeugung_kwh"), dict)
@@ -689,6 +691,7 @@ async def miss_aggregiert(db: AsyncSession, anlage_id: int, monat: int, *, voll:
             "bkw_anteil": _r(z.bkw_aus_anlagenwert_kwh), "ev": _r(z.eigenverbrauch_kwh),
             "einsp": _r(z.einspeisung_kwh), "netz": _r(z.netzbezug_kwh), "autarkie": _r(z.autarkie_prozent),
             "direkt": _r(z.direktverbrauch_kwh), "speicher_ladung": _r(getattr(z, "speicher_ladung_kwh", None)),
+            "ev_ersparnis": _r(getattr(z, "ev_ersparnis_euro", None)),
             "sonstige": _r(getattr(z, "sonstige_erzeugung_kwh", None)),
             # Cockpit → Jahr → Verlauf stapelt `pvAnlage = pv_module_kwh` und `bkw = bkw_kwh`
             # (`JahrVerlaufChart.tsx::baueJahrChartDaten`, :70-71).
@@ -714,7 +717,8 @@ async def miss_uebersicht(db: AsyncSession, anlage_id: int) -> dict:
     u = await get_cockpit_uebersicht(anlage_id=anlage_id, jahr=JAHR, db=db)
     return {"pv": _r(u.pv_erzeugung_kwh), "ev": _r(u.eigenverbrauch_kwh), "autarkie": _r(u.autarkie_prozent),
             "einsp": _r(getattr(u, "einspeisung_kwh", None)), "netz": _r(getattr(u, "netzbezug_kwh", None)),
-            "spez": _r(u.spezifischer_ertrag_kwh_kwp), "bkw": _r(u.bkw_erzeugung_kwh)}
+            "spez": _r(u.spezifischer_ertrag_kwh_kwp), "bkw": _r(u.bkw_erzeugung_kwh),
+            "ev_ersparnis": _r(getattr(u, "ev_ersparnis_euro", None)), "co2": _r(getattr(u, "co2_pv_kg", None))}
 
 
 async def miss_pv_strings(db: AsyncSession, anlage_id: int, ids: dict[str, int]) -> dict:
@@ -794,6 +798,7 @@ async def miss_pdf(db: AsyncSession, anlage_id: int, ids: dict[str, int]) -> dic
     juni = next((z for z in ctx.get("monats_zeilen") or [] if z.get("monat") == JUNI), {})
     sv = {rev_bez.get(s["bezeichnung"], s["bezeichnung"]): _r(s.get("ist_kwh")) for s in ctx.get("string_vergleiche") or []}
     return {"pv": _r(juni.get("pv_erzeugung_kwh")), "ev": _r(juni.get("eigenverbrauch_kwh")),
+            "ev_ersparnis": _r(juni.get("ev_ersparnis_euro")),
             "autarkie": _r(juni.get("autarkie_prozent")), "string_je_geraet": sv,
             "string_summe": _r(sum(v for v in sv.values() if v is not None)) if sv else None}
 
@@ -804,7 +809,8 @@ async def miss_ha_export(db: AsyncSession, anlage_id: int) -> dict:
     anlage = (await db.execute(select(Anlage).where(Anlage.id == anlage_id))).scalar_one()
     werte = {s.definition.key: s.value for s in await calculate_anlage_sensors(db, anlage, skip_jitter=True, jetzt=JETZT)}
     return {"pv": _r(werte.get("pv_erzeugung_gesamt_kwh")), "ev": _r(werte.get("eigenverbrauch_gesamt_kwh")),
-            "autarkie": _r(werte.get("autarkie_prozent")), "spez": _r(werte.get("spezifischer_ertrag_kwh_kwp"))}
+            "autarkie": _r(werte.get("autarkie_prozent")), "spez": _r(werte.get("spezifischer_ertrag_kwh_kwp")),
+            "ev_ersparnis": _r(werte.get("eigenverbrauch_ersparnis_euro")), "co2": _r(werte.get("co2_ersparnis_kg"))}
 
 
 async def miss_community(db: AsyncSession, anlage_id: int) -> dict:
@@ -813,7 +819,8 @@ async def miss_community(db: AsyncSession, anlage_id: int) -> dict:
     c = await prepare_community_data(db, anlage_id) or {}
     mw = next((m for m in c.get("monatswerte") or [] if m.get("jahr") == JAHR and m.get("monat") == JUNI), {})
     return {"pv": _r(mw.get("ertrag_kwh")), "bkw": _r(mw.get("bkw_erzeugung_kwh")),
-            "ev": _r(mw.get("eigenverbrauch_kwh")), "autarkie": _r(mw.get("autarkie_prozent"))}
+            "ev": _r(mw.get("eigenverbrauch_kwh")), "autarkie": _r(mw.get("autarkie_prozent")),
+            "co2": _r(mw.get("co2_vermieden_kg"))}
 
 
 async def miss_checker(db: AsyncSession, anlage_id: int) -> dict:
