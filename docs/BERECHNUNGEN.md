@@ -182,9 +182,32 @@ Netzbezug-Kosten (EUR)   = Netzbezug * Netzbezug_Preis / 100 + Grundpreis
 Arbeitspreis-Kosten (EUR)= Netzbezug * Netzbezug_Preis / 100            (ohne Grundpreis, reiner Ausweis)
 EV-Ersparnis (EUR)       = PV_Eigenverbrauch * EV_Preis / 100          (s. Hinweis; EV_Preis = EV-gewichteter Ø der Stundenpreise, sonst Netzbezug_Preis)
 Netto-Ertrag (EUR)       = Einspeise-Erlös + EV-Ersparnis + BKW-Rest-Ersparnis + Erlös_eigener_Satz
-                           + Sonstige_Netto − USt-Anteil_Eigenverbrauch     (Stufe 1 der Ergebnis-Leiter, §3.2)
+                           + Sonstige_Netto − Dienstliche_Ladekosten − USt-Anteil_Eigenverbrauch
+                                                                          (Stufe 1 der Ergebnis-Leiter, §3.2)
 CO2-Einsparung (kg)      = PV_Erzeugung * 0.38               (VERALTET — s. Kasten)
 ```
+
+> **Eine Eigenverbrauchs-Formel auf jeder Zeitebene (N-635, 05.10.2026).** Die Formel oben gilt für Monat, Jahr, Live
+> **und den Tag**: Cockpit → Tag (Kachel, Bilanz-Zeile, Tageswerte-Tabelle), die Tagessumme im Verlauf von Cockpit → Monat,
+> der Monat aus Tageswerten (ohne Abschluss) und die Tagesprognose rechnen sie über dieselbe Layer-Funktion
+> `berechne_verbrauchs_kennzahlen` (Tag: `core/berechnungen/tagesbilanz.py`). Das ist auch die Formel des
+> HA-Energie-Dashboards (`used_solar` + `used_battery`). Bis 05.10.2026 rechnete der Tag `PV − Einspeisung` und hieß
+> deshalb „PV-Eigenverbrauch · inkl. Speicherladung" (F3, 29.07.): mit Speicher zählte er die **Ladung** statt der
+> **Entladung**, lag an Ladetagen über dem Gesamtverbrauch und summierte sich nicht zum Monat (Beispiel: PV 18,
+> Einspeisung 6, Ladung 3, Entladung 2 ⇒ 12 statt 11 kWh bei 11 kWh Gesamtverbrauch; drei solche Tage 36 statt 33).
+> Ohne Speicher sind beide Formeln gleich. Mit dem Tages-Eigenverbrauch rechnen EV-Quote, CO₂ (PV) und
+> Eigenverbrauchs-Ersparnis des Tages (die Tagesfinanz bekommt Ladung und Entladung mit); der Tag kennt kein V2H und zieht
+> die Abgabe an Dritte als gemessene Tagesmenge ab. Der Verlauf in Cockpit → Monat stapelt die Erzeugung deshalb als
+> **Direktverbrauch + Speicherladung + Einspeisung** (wie die Verwendung im PV-Hub), nicht mehr als Eigenverbrauch +
+> Einspeisung.
+>
+> **Benannte Rest-Abweichung — Σ Tage ≠ Monat an Tagen mit Netzladung.** Lädt der Speicher an einem Tag mehr, als PV nach
+> der Einspeisung übrig ist (Netzladung), klemmt der Tag den Direktverbrauch bei 0; der Monat rechnet aus den Summen und
+> verrechnet die Netzladung mit dem PV-Überschuss anderer Tage. Zwei Tage: Tag 1 PV 1, Netzbezug 10, Ladung 5 ⇒ EV 0;
+> Tag 2 PV 10, Einspeisung 2, Netzbezug 1, Ladung 1, Entladung 5 ⇒ EV 12. Σ Tage 12, Monat (11 − 2 − 6) + 5 = 8.
+> Dieselbe Netzladung steht im Verlauf als Speicherladung — an solchen Tagen liegt der Stapel um sie über der PV.
+> Ein Tag aus dem Altbestand (ohne Regelmarke) mit mehr Einspeisung als PV nennt seit N-635 den Eigenverbrauch 0 statt
+> einer negativen Zahl — dieselbe Klemme wie Tag und Monat nach R7 (Vorlage §10).
 
 > **Gesamtverbrauch und Restverbrauch — zwei Wörter, zwei Zahlen (N-603, 03.10.2026).** Der **Gesamtverbrauch** ist
 > alles, was das Haus verbraucht hat (Eigenverbrauch + Netzbezug) — Live-Kachel, Tag/Monat/Jahr-Bilanz. Der
@@ -455,7 +478,8 @@ die Übersicht 206,30 €.
 
 ```
 Stufe 1  Netto-Ertrag (PV)           = Einspeise-Erlös + EV-Ersparnis + BKW-Rest-Ersparnis + Erlös eigener Satz
-                                       + Sonstige Positionen (netto) − USt-Anteil auf den Eigenverbrauch
+                                       + Sonstige Positionen (netto) − Dienstliche Ladekosten
+                                       − USt-Anteil auf den Eigenverbrauch
 Stufe 2  (Zwischenstand)             = Netto-Ertrag + WP-Ersparnis + E-Mob-Ersparnis − Stromrechnung (inkl. Grundgebühr)
 Stufe 3  Monats-/Jahresergebnis      = Stufe 2 − Betriebskosten (anteilig, nur im Monat aktive Komponenten)
 ```
@@ -465,8 +489,16 @@ Stufe 3  Monats-/Jahresergebnis      = Stufe 2 − Betriebskosten (anteilig, nur
   Zwischenstand in der Herleitung (Antwortfeld `ergebnis_vor_betriebskosten_euro`). Stufe 3 ist das
   **Monatsergebnis** bzw. **Jahresergebnis** (Feld `ergebnis_euro`).
 * **Herleitung aus derselben Rechnung (A6).** Die Antwort trägt je Stufe Formel und eingesetzte Werte
-  (`ergebnis_herleitung`); der Tooltip nennt jeden Summanden einzeln — WP-, E-Mob-, BKW-, Erzeuger-, Sonstige- und
-  USt-Posten nur, wenn sie etwas beitragen.
+  (`ergebnis_herleitung`); der Tooltip nennt jeden Summanden einzeln — WP-, E-Mob-, BKW-, Erzeuger-, Sonstige-,
+  Dienstwagen- und USt-Posten nur, wenn sie etwas beitragen.
+* **Dienstliche Ladekosten sind ein eigener Posten (N-633, 05.10.2026).** Die Monats-Fakten bilden ihn
+  (`EmobFakten.dienstliche_ladekosten_euro`, Formel §3.10); Cockpit → Monat und → Jahr, Auswertungen → Tabelle und
+  → Finanzen, Monats- und Jahresbericht führen ihn als Zeile bzw. Summanden „Dienstliche Ladekosten" (T-Konto SOLL,
+  Komponenten-Finanztabelle als Aufwand, nur wenn ≠ 0). Bis dahin zogen nur Übersicht, HA-Sensor und Aussichten ihn ab —
+  dieselbe Anlage hatte dort 104,40 €, in Cockpit → Monat/Jahr, Tabelle und PDF 122,40 € (Beispiel: 60 kWh × 30 ct).
+  Übersicht, HA-Sensor und Aussichten lesen seither denselben Wert aus den Monats-Fakten, falten ihn aber wie zuvor in
+  ihre Sonstigen Positionen (der Netto-Ertrag ist in beiden Formen derselbe). Er steht **nicht** in den Sonstigen
+  Ausgaben des Monats — die sind Eingang des Kapitaleinsatzes (F-19), der Posten ist laufender Aufwand.
 * **Fehlende Eingänge — eine Regel für Monat, Vorjahr und Jahr.** Eine Stufe gibt es nicht (`—`), wenn einer ihrer
   Pflichtposten fehlt: Stufe 1 braucht Einspeise-Erlös und EV-Ersparnis, Stufe 2 zusätzlich die Stromrechnung.
   Optionale Posten gehen als 0 ein und werden in `fehlende_posten` genannt, wenn die Komponente existiert, aber keinen
@@ -641,7 +673,7 @@ Strom_Kosten        = (Ladung_gesamt - Ladung_PV) * Wallbox_Preis / 100
 E-Mob-Ersparnis     = Benzin_Kosten - Strom_Kosten
 ```
 
-**Hinweis:** Dienstliche E-Autos/Wallboxen (`ist_dienstlich = true`) werden NICHT in die E-Mob-Ersparnis eingerechnet. Deren Ladekosten fließen als kalkulatorische Ausgaben in `sonstige_ausgaben_gesamt` — Formel und Begründung stehen in §3.10 „Sonstige Positionen" unter **Dienstliche Ladekosten** — der PV-Anteil zählt dort zum **Netzbezugspreis**, nicht zur Einspeisevergütung.
+**Hinweis:** Dienstliche E-Autos/Wallboxen (`ist_dienstlich = true`) werden NICHT in die E-Mob-Ersparnis eingerechnet. Deren Ladekosten sind ein eigener Posten der Ergebnis-Leiter („Dienstliche Ladekosten", §3.2, seit N-633) — Formel und Begründung stehen in §3.10 unter **Dienstliche Ladekosten** — der PV-Anteil zählt dort zum **Netzbezugspreis**, nicht zur Einspeisevergütung.
 
 > **G20-2 — Aggregat bei mehreren E-Autos = Σ der Einzel-Fahrzeuge:** Die Gesamt-E-Mob-Ersparnis wird als **Summe der pro Fahrzeug** gerechneten Ersparnisse gebildet — jedes E-Auto mit seinem **eigenen** Vergleichsverbrauch (L/100 km) und Benzinpreis. Sie ist NICHT ein Einmal-Lauf über die Gesamt-Kilometer mit dem Parametersatz des ersten Fahrzeugs (das überschätzte die Ersparnis, sobald zwei E-Autos unterschiedliche Vergleichsverbräuche hatten). Bei genau **einem** E-Auto ist das Ergebnis unverändert. Die Per-Fahrzeug-Zeilen (T-Konto) rechneten schon immer je Fahrzeug korrekt; nur das aggregierte Cockpit-Feld ist jetzt symmetrisch dazu.
 
@@ -1076,10 +1108,13 @@ wieder vom Pflegezustand abhängig machte.
 
 **Nebenwirkung der Vorschau, die dazugehört:** dieselbe Simulation liefert auch Einspeisung,
 Eigenverbrauch und Autarkie des Vorschautags. Ein kleinerer Puffer nimmt weniger Überschuss auf —
-mehr geht ins Netz, weniger bleibt im Haus. Gemessen an der Demo-Anlage (15,4 kWh brutto gegen
-13,9 kWh netto, 28.07.–02.08.2026): Einspeisung +0,75 bis +1,08 kWh/Tag, Eigenverbrauch entsprechend
-niedriger, Autarkie −1,7 bis −3,2 Prozentpunkte, „Speicher voll" an einem der sechs Tage eine Stunde
-früher (die Stundenauflösung verschluckt den Effekt an den übrigen).
+mehr geht ins Netz. Gemessen an der Demo-Anlage (15,4 kWh brutto gegen
+13,9 kWh netto, 28.07.–02.08.2026): Einspeisung +0,75 bis +1,08 kWh/Tag,
+Autarkie −1,7 bis −3,2 Prozentpunkte, „Speicher voll" an einem der sechs Tage eine Stunde
+früher (die Stundenauflösung verschluckt den Effekt an den übrigen). Der **Eigenverbrauch** sinkt seit N-635
+(05.10.2026, Direktverbrauch + Entladung statt PV − Einspeisung) nur noch, wenn der kleinere Speicher den Abend
+nicht mehr trägt; trägt er ihn, bleibt er gleich (vorher zählte die Ladung mit, und der größere Speicher
+„verbrauchte" mehr).
 
 **Woher die Kapazität kommt (SoT seit A31-1):** `core/investition_kennwerte.py::get_speicher_kapazitaet_kwh`
 — brutto (`kapazitaet_kwh`), nur aus dem `parameter`-JSON, **ohne Default**. Ist nichts gepflegt,
@@ -2826,7 +2861,8 @@ Sonstige_Netto    = Erträge - Ausgaben
 > **Sichtbarkeits-/Doppelzählungs-Regel:** Die Aggregation filtert nach `aktiv` + Laufzeit-Fenster (Anschaffung → Stilllegung) wie jede andere Position; der Caller übergibt das bereits gefilterte `sonstige_netto` als Skalar an das Finanz-Aggregat. Basis-Positionen zählen **genau einmal** in die Totals; die T-Konto-Zeilen sind reiner Ausweis (kein zweiter Kostenposten).
 
 **Dienstliche Ladekosten:**
-Bei `ist_dienstlich == true` (E-Auto/Wallbox) werden Ladekosten als kalkulatorische Ausgaben verbucht:
+Bei `ist_dienstlich == true` (E-Auto/Wallbox) werden Ladekosten als kalkulatorischer Aufwand verbucht — seit N-633
+(05.10.2026) als eigener Posten der Ergebnis-Leiter (§3.2), nicht mehr in den Sonstigen Positionen:
 ```
 Dienstlich_Ladekosten = Netz_kWh * Wallbox_Preis + PV_kWh * Netzbezugspreis
 ```
@@ -2846,7 +2882,7 @@ Dienstlich_Ladekosten = Netz_kWh * Wallbox_Preis + PV_kWh * Netzbezugspreis
 >
 > **Netzanteil:** Wallbox-Stromvertrag, wenn vorhanden, sonst Anlagentarif — jeweils der Monats-Flexpreis vor dem Stammdaten-Arbeitspreis (P8). Die Aussichten nahmen dafür bis 2026-07-31 den allgemeinen Arbeitspreis, das Cockpit den Wallbox-Preis; Kanon ist das Cockpit.
 >
-> **SoT:** `core/berechnungen/dienstliche_ladekosten.py` (ADR-001). Alle drei Sichten — Cockpit/Übersicht, Aussichten/Finanz-Prognose und der HA-Sensor `netto_ertrag_euro` — rufen ihn; der HA-Export zog die Kosten bis 2026-07-31 **gar nicht** ab und stand damit über der Kachel, auf die er sich bezieht.
+> **SoT:** `core/berechnungen/dienstliche_ladekosten.py` (ADR-001). Seit N-633 (05.10.2026) ruft ihn **eine** Stelle: die Monats-Fakten-Schicht (`services/monats_fakten/bau.py`, mit dem Tarif des Monats), Feld `EmobFakten.dienstliche_ladekosten_euro`. Daraus lesen alle Sichten — Cockpit → Monat und → Jahr, Auswertungen → Tabelle/Finanzen, Monats- und Jahresbericht als Posten der Leiter, Cockpit → Übersicht, Aussichten/Finanz-Prognose und der HA-Sensor `netto_ertrag_euro` als Abzug in ihren Sonstigen Positionen. Bis dahin riefen die letzten drei die Formel je selbst, und die ersten führten den Posten gar nicht (104,40 € gegen 122,40 €); der HA-Export zog die Kosten bis 2026-07-31 **gar nicht** ab und stand damit über der Kachel, auf die er sich bezieht. Hinweis an der Zeile (wortgleich in Backend und Oberfläche): „Strom für den Dienstwagen: Netzanteil zum Wallbox-Tarif, PV-Anteil zum Netzbezugspreis. Die Erstattung des Arbeitgebers steht unter den sonstigen Erträgen."
 
 ---
 
@@ -3613,8 +3649,8 @@ komponenten_kwh = Σ derselben Geräte-Slots (R5)
 ```
 
 - **Stundenverbrauch** (R6) nur, wenn PV, Netzbezug und Einspeisung **dieselbe** Spanne tragen; eine fehlende Batterie zählt 0, eine Batterie mit anderer Spanne ⇒ `None`.
-- **Tagesverbrauch** (R7) nach der HA-Formel über den Tag; `None` nur im Total-Fall. **Eigenverbrauch** = max(0, ΣPV − ΣEinsp). Autarkie = (GV − Netzbezug) / GV. Unterdrückt werden EV/EV-Quote bei `verworfen` auf PV oder Einspeisung, die Autarkie bei `verworfen` auf PV, Netzbezug, Einspeisung oder Batterie.
-- **Monat** (R8, `monatsbilanz_aus_tagen`): faltet Tagesbilanzen; ein Total-Fall-Tag propagiert nicht; EV ebenfalls bei 0 geklemmt.
+- **Tagesverbrauch** (R7) nach der HA-Formel über den Tag; `None` nur im Total-Fall. **Eigenverbrauch** = max(0, ΣPV − ΣEinsp − ΣLadung) + ΣEntladung (seit N-635, 05.10.2026; vorher max(0, ΣPV − ΣEinsp), s. §3.1). Eine fehlende Batterie zählt 0, `verworfen` auf der Batterie sperrt den Eigenverbrauch nicht (wie beim Gesamtverbrauch). Autarkie = (GV − Netzbezug) / GV. Unterdrückt werden EV/EV-Quote bei `verworfen` auf PV oder Einspeisung, die Autarkie bei `verworfen` auf PV, Netzbezug, Einspeisung oder Batterie.
+- **Monat** (R8, `monatsbilanz_aus_tagen`): faltet Tagesbilanzen; ein Total-Fall-Tag propagiert nicht; EV mit derselben Formel aus den Summen der Tage (Rest-Abweichung an Tagen mit Netzladung, §3.1).
 - **Regelmarke** (R9): `TagesZusammenfassung.verworfen` ist für jeden neu geschriebenen Tag mindestens `{}`; NULL = Altbestand, der bis zur Neuaggregation N-92 rechnet (Daten-Checker §4.6 nennt ihn).
 - **Monatswert aus der HA-Statistik** (R10, `get_sensor_monatswert`): Σ der Stundenänderungen ab dem letzten Stand **vor** dem Monat, mit derselben Verwerfung (Rücksprung immer, Deckel × Fenster für PV/Einspeisung aus der Anlagen-kWp). Damit zählt die erste Stunde des Monats (N-563), und eine Lücke über die Monatsgrenze landet im Folgemonat. `intervalle` nennt die Zahl der Stützstellen-Paare hinter dem Wert; 0 heißt „eine einzige Zeile, nichts gemessen“.
 - **Stundenzeilen:** jeder Slot mit Zählerwert bekommt eine Zeile, auch ohne Leistungspunkt (dort keine `komponenten`, keine Spitze).

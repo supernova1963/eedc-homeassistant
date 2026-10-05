@@ -42,6 +42,12 @@ class StundenBilanz:
     netzbezug_kwh: float
     einspeisung_kwh: float
     soc_prozent: Optional[float]   # None wenn kein Speicher vorhanden
+    #: Was in dieser Stunde in den Speicher ging (Eingangsseite, vor η) bzw. aus
+    #: ihm ins Haus kam. Seit N-635 (05.10.2026) mitgeführt, damit die Tagesvorschau den
+    #: Eigenverbrauch mit der einen Formel bildet (Direktverbrauch + Entladung,
+    #: ``verbrauch.berechne_verbrauchs_kennzahlen``). Ohne Speicher 0.
+    ladung_kwh: float = 0.0
+    entladung_kwh: float = 0.0
 
 
 #: Ab diesem Ladestand gilt der Speicher in der Simulation als **voll**.
@@ -165,6 +171,8 @@ def simuliere_speicher_tag(
         netto = pv - vb
         netzbezug = 0.0
         einspeisung = 0.0
+        ladung = 0.0
+        entladung = 0.0
         soc_h: Optional[float] = None
 
         if hat_speicher:
@@ -205,6 +213,8 @@ def simuliere_speicher_tag(
             netzbezug_kwh=netzbezug,
             einspeisung_kwh=einspeisung,
             soc_prozent=soc_h,
+            ladung_kwh=ladung,
+            entladung_kwh=entladung,
         ))
 
     return SpeicherSimErgebnis(voll, leer, round(soc, 1), soc_pro_stunde, stunden_bilanz)

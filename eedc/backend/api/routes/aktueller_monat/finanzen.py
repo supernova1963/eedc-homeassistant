@@ -515,7 +515,11 @@ def ergebnis_des_monats(
     * **Erlös eigener Satz** — ``monats_fakt.sonstiges.einspeise_erloes_euro`` (Konzept §9 Weg 2).
     * **USt-Anteil** — EV des Monats × Satz des Jahres (`services/ust_satz.py`, G1). ``ust_satz is None`` heißt
       „keine Regelbesteuerung" (kein Posten); ein Satz ohne Wert heißt „nicht ermittelbar" (fehlender Posten, P4).
-    * Laufender Monat ohne Monats-Fakt: BKW-Rest, Erzeuger-Erlös und Sonstiges sind 0 — **kein** fehlender Posten.
+    * **Dienstliche Ladekosten** (N-633) — ``monats_fakt.emob.dienstliche_ladekosten_euro`` (die Schicht bewertet sie mit
+      dem Tarif des Monats, ``core/berechnungen/dienstliche_ladekosten.py``), auf 2 Stellen gerundet wie die übrigen
+      Posten. Derselbe Wert, den Übersicht, HA-Export und Aussichten lesen.
+    * Laufender Monat ohne Monats-Fakt: BKW-Rest, Erzeuger-Erlös, Sonstiges und dienstliche Ladekosten sind 0 — **kein**
+      fehlender Posten.
     """
     from backend.core.berechnungen.ergebnis import (
         ErgebnisEingang, berechne_ergebnis, herleitung_als_dict, ust_anteil_euro,
@@ -524,7 +528,20 @@ def ergebnis_des_monats(
     bkw_ersparnis = None
     bkw_ersparnis_berechnung = None
     erzeuger_erloes = None
+    dienstliche_ladekosten = 0.0
+    dienstliche_ladekosten_berechnung = None
     if monats_fakt is not None:
+        dienstliche_ladekosten = round(monats_fakt.emob.dienstliche_ladekosten_euro, 2)
+        # A6: die eingesetzten Werte der T-Konto-Zeile „Dienstliche Ladekosten" (N-633) — dieselben Mengen und Preise,
+        # mit denen die Schicht den Betrag gebildet hat (`dienstliche_ladekosten.py`); Text, keine zweite Rechnung.
+        _e, _t = monats_fakt.emob, monats_fakt.tarif
+        _teile = [
+            *([f"{fmt_zahl(_e.dienstlich_ladung_pv_kwh, 1)} kWh PV × {fmt_zahl(_t.netzbezug_preis_cent, 2)} ct/kWh"]
+              if _e.dienstlich_ladung_pv_kwh else []),
+            *([f"{fmt_zahl(_e.dienstlich_ladung_netz_kwh, 1)} kWh Netz × {fmt_zahl(_t.wallbox_preis_effektiv_cent, 2)} ct/kWh"]
+              if _e.dienstlich_ladung_netz_kwh else []),
+        ]
+        dienstliche_ladekosten_berechnung = " + ".join(_teile) or None
         rest = monats_fakt.bkw.rest_eigenverbrauch_kwh
         if rest and rest > 0 and ev_preis_cent is not None:
             bkw_ersparnis = round(rest * ev_preis_cent / 100, 2)
@@ -553,6 +570,7 @@ def ergebnis_des_monats(
         bkw_rest_ersparnis=bkw_ersparnis,
         erzeuger_erloes=erzeuger_erloes,
         sonstige_netto=sonstige_netto,
+        dienstliche_ladekosten=dienstliche_ladekosten,
         ust_anteil=ust_anteil,
         wp_ersparnis=wp_ersparnis,
         emob_ersparnis=emob_ersparnis,
@@ -570,6 +588,8 @@ def ergebnis_des_monats(
         "bkw_ersparnis": bkw_ersparnis,
         "bkw_ersparnis_berechnung": bkw_ersparnis_berechnung,
         "erzeuger_erloes": erzeuger_erloes,
+        "dienstliche_ladekosten": dienstliche_ladekosten,
+        "dienstliche_ladekosten_berechnung": dienstliche_ladekosten_berechnung,
         "ust_anteil": ust_anteil,
         "ust_herleitung": ust_herleitung,
     }

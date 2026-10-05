@@ -378,6 +378,11 @@ export interface AktuellerMonatResponse {
   sonstige_ertraege_euro: number
   sonstige_ausgaben_euro: number
   sonstige_netto_euro: number
+  /** N-633: dienstliche Ladekosten (Aufwand, positiv) — eigener Posten der Ergebnis-Leiter, NICHT in den
+   *  `sonstige_*`-Feldern. Optional für Antworten vor diesem Feld. */
+  dienstliche_ladekosten_euro?: number
+  /** Eingesetzte Werte dazu (A6), z. B. „60,0 kWh PV × 30,00 ct/kWh + 30,0 kWh Netz × 30,00 ct/kWh"; im Jahr null. */
+  dienstliche_ladekosten_berechnung?: string | null
   // G19-1: davon Anlage-Ebene (Monatsdaten.sonstige_positionen) — reiner
   // Ausweis für die T-Konto-Zeile „Anlage — Sonstige …", bereits in den
   // sonstige_*-Totals enthalten.
@@ -466,6 +471,7 @@ export interface AktuellerMonatResponse {
     bkw_ersparnis_euro?: number | null
     erzeuger_erloes_euro?: number | null
     sonstige_netto_euro?: number | null
+    dienstliche_ladekosten_euro?: number | null
     betriebskosten_anteilig_euro?: number | null
     ergebnis_vor_betriebskosten_euro?: number | null
     ergebnis_euro?: number | null

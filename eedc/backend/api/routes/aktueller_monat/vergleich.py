@@ -84,6 +84,7 @@ VORJAHR_QUELLFELD: dict[str, str] = {"wp_modus_kuehlen_kwh": "wp_modus_strom_kue
 #: Der Finanzblock — nur mit Tarif (bis dahin: `if tarif_vj:`).
 VORJAHR_FINANZ_IMMER: tuple[str, ...] = (
     "netto_ertrag_euro", "ust_eigenverbrauch_euro", "bkw_ersparnis_euro", "erzeuger_erloes_euro", "sonstige_netto_euro",
+    "dienstliche_ladekosten_euro",  # N-633: Posten der Leiter, Vorjahres-Δ der T-Konto-Zeile
     "betriebskosten_anteilig_euro", "ergebnis_vor_betriebskosten_euro", "ergebnis_euro", "ergebnis_herleitung",
     "fehlende_posten",
 )

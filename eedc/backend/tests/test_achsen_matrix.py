@@ -1017,13 +1017,6 @@ URSACHE: dict[str, Ursache] = {
         "und Erzeugung hinter dem Zähler des Monats ohne Abschluss rechnen ohne das BHKW. Cockpit → Monat nennt "
         "daneben für WP-Strom/-Wärme und (mit HA) die Lademenge den Wert der Tagesebene",
     ),
-    "KANDIDAT-TAG-EV-SPEICHER": Ursache(
-        "KANDIDAT (nur gezeigt)",
-        "Eigenverbrauch mit Speicher: der Tag rechnet EV = PV − Einspeisung (Tagesregel R7, "
-        "`core/berechnungen/tagesbilanz.py:160-164`), der Monat EV = Direkt + Entladung "
-        "(`core/berechnungen/verbrauch.py`). Ladeverlust und ΔSoC zählen am Tag als Eigenverbrauch: Σ Tage 36 "
-        "gegen Monat 33 (M02), 36 gegen 28,5 (M04); am Tag selbst EV 12 > Gesamtverbrauch 11",
-    ),
     "KANDIDAT-EMOB-LAUFEND-NETZ": Ursache(
         "KANDIDAT (nur gezeigt)",
         "Wallbox-Ladung im Monat ohne Abschluss (HA-Weg von Cockpit → Monat): die ganze Lademenge steht als "
@@ -1037,12 +1030,6 @@ URSACHE: dict[str, Ursache] = {
         "Kälte und die Heiz-Nutzenergie des Klimageräts (Heizwärme 54 statt 59,4, ohne HA auch die Wärme 64,8 statt "
         "70,2); im vergangenen Monat vor dem Abschluss (HA-Weg) fehlen Heiz-/Warmwasser-Strom und -Wärme, "
         "Betriebsart-Ströme und Kälte ganz, während Strom- und Wärmemenge da sind",
-    ),
-    "KANDIDAT-DIENSTWAGEN-NETTO": Ursache(
-        "KANDIDAT (nur gezeigt)",
-        "Netto-Ertrag mit Dienstwagen: Cockpit → Übersicht und HA-Export ziehen die dienstlichen Ladekosten ab "
-        "(104,4 €, `core/berechnungen/dienstliche_ladekosten.py`), Cockpit → Monat, Cockpit → Jahr, Tabelle und "
-        "PDF nicht (122,4 €) — dieselbe Größe, zwei Zahlen",
     ),
 }
 
@@ -1405,55 +1392,11 @@ ROT: dict[str, dict[tuple[str, str, str, str], tuple[str, ...]]] = {
             'verbrauch:cockpit_jahr', 'verbrauch:cockpit_monat', 'verbrauch:fakten_tw', 'verbrauch:jahr_verlauf',
         ),
     },
-    'KANDIDAT-DIENSTWAGEN-NETTO': {
-        ('M09', 'preis', 'S1', 'I1'): ('netto_ertrag:ha_export', 'netto_ertrag:uebersicht',),
-        ('M09', 'preis', 'S2', 'I1'): ('netto_ertrag:ha_export', 'netto_ertrag:uebersicht',),
-        ('M09', 'preis', 'S3', 'I1'): ('netto_ertrag:ha_export', 'netto_ertrag:uebersicht',),
-    },
     'KANDIDAT-EMOB-LAUFEND-NETZ': {
         ('M02', 'emob', 'HA', 'I3'): ('heim_netz:cockpit_monat', 'heim_pv:cockpit_monat',),
         ('M02', 'emob', 'S1', 'I2'): ('heim_netz:cockpit_monat:vor=nach', 'heim_pv:cockpit_monat:vor=nach',),
         ('M02', 'emob', 'S2', 'I2'): ('heim_netz:cockpit_monat:vor=nach', 'heim_pv:cockpit_monat:vor=nach',),
         ('M08', 'emob', 'HA', 'I3'): ('heim_netz:cockpit_monat', 'heim_pv:cockpit_monat',),
-    },
-    'KANDIDAT-TAG-EV-SPEICHER': {
-        ('M02', 'netz', 'HA', 'I2'): (
-            'eigenverbrauch:cockpit_monat=Σtage', 'eigenverbrauch:fakten_tw=Σtage',
-            'eigenverbrauch:jahr_verlauf=Σtage',
-        ),
-        ('M02', 'netz', 'HA', 'I3'): ('eigenverbrauch:tag',),
-        ('M02', 'netz', 'HA', 'I5'): ('tag:folge',),
-        ('M02', 'netz', 'S1', 'I2'): ('eigenverbrauch:Σtage_juni=fakten',),
-        ('M02', 'netz', 'S2', 'I2'): ('eigenverbrauch:Σtage_juni=fakten',),
-        ('M02', 'netz', 'S3', 'I2'): ('eigenverbrauch:Σtage_juni=fakten',),
-        ('M02', 'netz', 'SA', 'I2'): (
-            'eigenverbrauch:cockpit_monat=Σtage', 'eigenverbrauch:fakten_tw=Σtage',
-            'eigenverbrauch:jahr_verlauf=Σtage',
-        ),
-        ('M02', 'netz', 'SA', 'I3'): ('eigenverbrauch:tag',),
-        ('M02', 'netz', 'SA', 'I5'): ('tag:folge',),
-        ('M04', 'netz', 'HA', 'I2'): (
-            'eigenverbrauch:cockpit_monat=Σtage', 'eigenverbrauch:fakten_tw=Σtage',
-            'eigenverbrauch:jahr_verlauf=Σtage',
-        ),
-        ('M04', 'netz', 'HA', 'I3'): ('eigenverbrauch:tag',),
-        ('M04', 'netz', 'HA', 'I5'): ('tag:folge',),
-        ('M04', 'netz', 'S1', 'I2'): ('eigenverbrauch:Σtage_juni=fakten',),
-        ('M04', 'netz', 'S2', 'I2'): ('eigenverbrauch:Σtage_juni=fakten',),
-        ('M04', 'netz', 'S3', 'I2'): ('eigenverbrauch:Σtage_juni=fakten',),
-        ('M04', 'netz', 'SA', 'I2'): (
-            'eigenverbrauch:cockpit_monat=Σtage', 'eigenverbrauch:fakten_tw=Σtage',
-            'eigenverbrauch:jahr_verlauf=Σtage',
-        ),
-        ('M04', 'netz', 'SA', 'I3'): ('eigenverbrauch:tag',),
-        ('M04', 'netz', 'SA', 'I5'): ('tag:folge',),
-        ('M10', 'netz', 'HA', 'I3'): ('eigenverbrauch:tag',),
-        ('M10', 'netz', 'HA', 'I5'): ('tag:folge',),
-        ('M10', 'netz', 'S1', 'I2'): ('eigenverbrauch:Σtage_juni=fakten',),
-        ('M10', 'netz', 'S2', 'I2'): ('eigenverbrauch:Σtage_juni=fakten',),
-        ('M10', 'netz', 'S3', 'I2'): ('eigenverbrauch:Σtage_juni=fakten',),
-        ('M10', 'netz', 'SA', 'I3'): ('eigenverbrauch:tag',),
-        ('M10', 'netz', 'SA', 'I5'): ('tag:folge',),
     },
     'KANDIDAT-WP-ACHSEN-OHNE-ABSCHLUSS': {
         ('M06', 'wp', 'HA', 'I3'): (

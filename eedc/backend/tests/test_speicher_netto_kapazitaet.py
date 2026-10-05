@@ -238,9 +238,19 @@ async def test_tagesvorschau_riegelt_bei_der_nutzbaren_kapazitaet_ab(db, monkeyp
     assert ohne_netto.speicher_kapazitaet_kwh == pytest.approx(_BRUTTO_KWH)
 
     # Die Nebenwirkung ist real und geht in die Antwort: weniger Puffer ⇒ mehr
-    # Einspeisung, weniger PV-Eigenverbrauch.
+    # Einspeisung.
     assert mit_netto.einspeisung_summe_kwh > ohne_netto.einspeisung_summe_kwh
-    assert mit_netto.eigenverbrauch_kwh < ohne_netto.eigenverbrauch_kwh
+    # Der Eigenverbrauch dagegen ist beidseitig gleich und = der Tagesverbrauch:
+    # beide Speicher tragen den Tag ohne Netzbezug (unten), also hat das Haus in
+    # beiden Fällen alles selbst gedeckt. Bis N-635 (05.10.2026) stand hier
+    # `mit_netto.eigenverbrauch_kwh < ohne_netto.eigenverbrauch_kwh` und war
+    # grün, weil die Vorschau den Eigenverbrauch als `PV − Einspeisung` bildete
+    # und damit die Speicher-LADUNG zählte — der größere Speicher nahm mehr auf
+    # und „verbrauchte" mehr. Dieselbe Bauform wie der N129-Fall unten: die
+    # Assertion prüfte die alte Formel, nicht den Eigenverbrauch. Jetzt die eine
+    # Formel (Direktverbrauch + Entladung, `berechne_verbrauchs_kennzahlen`).
+    assert mit_netto.eigenverbrauch_kwh == pytest.approx(ohne_netto.eigenverbrauch_kwh)
+    assert mit_netto.eigenverbrauch_kwh == pytest.approx(mit_netto.verbrauch_summe_kwh, abs=0.01)
 
     # Die AUTARKIE dagegen bleibt hier beidseitig 100 % — und das ist richtig:
     # dieser Tag kommt in beiden Fällen ohne Netzbezug aus, und wer nichts aus

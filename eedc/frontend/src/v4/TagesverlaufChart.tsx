@@ -5,7 +5,14 @@
  * („Energie-Bilanz pro Monat", `pages/auswertung/EnergieTab.tsx`), hier aber auf
  * die TAGE des gewählten Monats angewandt (granularitäts-agnostisches Prinzip:
  * Monat→Tage, später Tag→Stunden / Jahr→Monate). Toggles:
- *   • Erzeugung  — Eigenverbrauch + Einspeisung gestapelt (= PV) · Netzbezug separat
+ *   • Erzeugung  — Direktverbrauch + Speicherladung + Einspeisung gestapelt (= PV),
+ *                  wie die Verwendung im PV-Hub (`komponentenAdapter.tsx::pvVerlauf`) ·
+ *                  Netzbezug separat. Bis N-635 (05.10.2026) stand hier
+ *                  „Eigenverbrauch + Einspeisung = PV" — das galt nur, solange der Tag
+ *                  den Eigenverbrauch als PV − Einspeisung rechnete. Seit er
+ *                  Direktverbrauch + Entladung rechnet (wie Monat und HA), geht die
+ *                  Summe mit Speicher nicht mehr auf die PV. An Tagen mit Netzladung
+ *                  liegt der Stapel um sie über der PV (die Speicherladung enthält sie).
  *   • Verbrauch  — Direktverbrauch + Speicher-Entladung + Netzbezug gestapelt
  *                  (= Gesamtverbrauch) · Einspeisung separat  ← Direktverbrauch-Detail
  *   • Autarkie % — optionale Linie auf zweiter (%)-Achse
@@ -80,6 +87,9 @@ export function TagesverlaufChart({ tage }: { tage: TagWerte[] }) {
   // SoT-Hook). Reset bei Modus-/Preset-Wechsel — der Serien-Satz ändert sich.
   const legende = useLegendenToggle(`${view}:${presetKey}`)
   const daten = useMemo(() => baueChartDaten(tage), [tage])
+  // Ohne Speicher-Ladung im Monat kein Segment — sonst stünde in Legende und
+  // Tooltip eine Reihe, die es an dieser Anlage nicht gibt.
+  const hatSpeicherLadung = daten.some((d) => d.speicherLadung > 0)
   const presets = verfuegbarePresets(false)
   const aktPreset = presets.find((p) => p.key === presetKey) ?? presets[0]
 
@@ -123,7 +133,9 @@ export function TagesverlaufChart({ tage }: { tage: TagWerte[] }) {
 
       <p className="text-xs text-gray-400 dark:text-gray-500">
         {view === 'erzeugung'
-          ? 'Gestapelt: Eigenverbrauch + Einspeisung = PV-Erzeugung'
+          ? (hatSpeicherLadung
+              ? 'Gestapelt: Direktverbrauch + Speicherladung + Einspeisung = PV-Erzeugung'
+              : 'Gestapelt: Direktverbrauch + Einspeisung = PV-Erzeugung')
           : view === 'verbrauch'
             ? 'Gestapelt: Direktverbrauch + Speicher-Entladung + Netzbezug = Gesamtverbrauch'
             : 'Ungestackt — je Kennzahl ein Balken, zum Vergleich der Tage'}
@@ -158,7 +170,13 @@ export function TagesverlaufChart({ tage }: { tage: TagWerte[] }) {
               })
             ) : view === 'erzeugung' ? (
               <>
-                <Bar yAxisId="kwh" dataKey="eigenverbrauch" name="Eigenverbrauch" stackId="pv" fill={CHART_COLORS.eigenverbrauch} hide={legende.istVersteckt('eigenverbrauch')} />
+                {/* Farben wie im PV-Hub: Direktverbrauch in der Eigenverbrauchs-Rolle
+                    (`CHART_COLORS.direktverbrauch` ist derselbe Orange-Ton wie die
+                    Speicherladung und fiele im selben Stapel mit ihr zusammen). */}
+                <Bar yAxisId="kwh" dataKey="direktverbrauch" name="Direktverbrauch" stackId="pv" fill={CHART_COLORS.eigenverbrauch} hide={legende.istVersteckt('direktverbrauch')} />
+                {hatSpeicherLadung && (
+                  <Bar yAxisId="kwh" dataKey="speicherLadung" name="Speicherladung" stackId="pv" fill={CHART_COLORS.speicherLadung} hide={legende.istVersteckt('speicherLadung')} />
+                )}
                 <Bar yAxisId="kwh" dataKey="einspeisung" name="Einspeisung" stackId="pv" fill={CHART_COLORS.einspeisung} hide={legende.istVersteckt('einspeisung')} />
                 <Bar yAxisId="kwh" dataKey="netzbezug" name="Netzbezug" fill={CHART_COLORS.netzbezug} hide={legende.istVersteckt('netzbezug')} />
               </>

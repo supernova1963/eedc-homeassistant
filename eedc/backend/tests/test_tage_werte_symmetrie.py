@@ -18,6 +18,7 @@ from datetime import date
 import pytest
 
 from backend.api.routes.energie_profil.views import get_monatsauswertung
+from backend.core.berechnungen.verbrauch import berechne_verbrauchs_kennzahlen
 from backend.models import Anlage, Investition, Monatsdaten, Strompreis
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 from backend.services.energie_profil.tage_werte import baue_tage_werte
@@ -100,8 +101,19 @@ async def test_tage_werte_summe_gleich_monat(db):
     assert summe("netzbezug") == monat.netzbezug_kwh
     assert summe("ueberschuss_kwh") == monat.ueberschuss_kwh
     assert summe("defizit_kwh") == monat.defizit_kwh
-    # Eigenverbrauch additiv (= Σ pv − Σ einspeisung)
-    assert summe("eigenverbrauch") == round(monat.pv_kwh - monat.einspeisung_kwh, 2)
+    # Eigenverbrauch: Σ Tage == die eine Formel aus den Monatssummen (N-635,
+    # 05.10.2026: Direktverbrauch + Speicher-Entladung). Bis dahin stand hier
+    # `Σ pv − Σ einspeisung` — die alte Tagesregel, die mit Speicher die LADUNG
+    # statt der Entladung zählte: 9,0 statt 8,0 in diesem Datensatz (Ladung 2,5,
+    # Entladung 1,5). Kein Tag lädt hier mehr, als PV nach der Einspeisung übrig
+    # ist, deshalb gilt Σ Tage = Monat exakt.
+    ev_monat = berechne_verbrauchs_kennzahlen(
+        pv_erzeugung_kwh=monat.pv_kwh, einspeisung_kwh=monat.einspeisung_kwh,
+        netzbezug_kwh=monat.netzbezug_kwh,
+        speicher_ladung_kwh=monat.batterie_ladung_kwh or 0.0,
+        speicher_entladung_kwh=monat.batterie_entladung_kwh or 0.0,
+    ).eigenverbrauch_kwh
+    assert summe("eigenverbrauch") == round(ev_monat, 2) == 8.0
 
 
 @pytest.mark.asyncio

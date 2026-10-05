@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.berechnungen.kennzahlen import autarkie_prozent
 from backend.core.berechnungen.speicher_simulation import simuliere_speicher_tag
+from backend.core.berechnungen.verbrauch import berechne_verbrauchs_kennzahlen
 from backend.core.exceptions import not_found
 from backend.core.investition_kennwerte import aggregiere_speicher_basis
 from backend.api.deps import get_db
@@ -428,10 +429,18 @@ async def get_tagesprognose(
                 soc_prozent=b.soc_prozent,
             ))
 
-        # `eigenverbrauch` ist der PV-Eigenverbrauch (was die Anlage selbst nutzt,
-        # inklusive der Speicherladung) — dieselbe Größe wie in
-        # `core/berechnungen/tagesbilanz.py`, deshalb gleich benannt.
-        eigenverbrauch = sum_pv - sum_einspeisung
+        # `eigenverbrauch` ist dieselbe Größe wie in
+        # `core/berechnungen/tagesbilanz.py`, deshalb gleich benannt — und seit
+        # N-635 (05.10.2026) auch dieselbe Formel: Direktverbrauch + Speicher-
+        # Entladung (`berechne_verbrauchs_kennzahlen`). Bis dahin stand hier
+        # `PV − Einspeisung`, das die Speicher-Ladung statt der Entladung zählt.
+        eigenverbrauch = berechne_verbrauchs_kennzahlen(
+            pv_erzeugung_kwh=sum_pv,
+            einspeisung_kwh=sum_einspeisung,
+            netzbezug_kwh=sum_netzbezug,
+            speicher_ladung_kwh=sum(b.ladung_kwh for b in sim.stunden_bilanz),
+            speicher_entladung_kwh=sum(b.entladung_kwh for b in sim.stunden_bilanz),
+        ).eigenverbrauch_kwh
         # N129: die Autarkie hat einen ANDEREN Zähler — den netzunabhängig
         # gedeckten Verbrauch. Bis 2026-07-28 stand hier der PV-Eigenverbrauch,
         # und weil der bei ladendem Speicher den Tagesverbrauch übersteigen kann,

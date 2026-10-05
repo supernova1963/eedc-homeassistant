@@ -119,6 +119,9 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
     // Netto-Ertrag der Zeile — deshalb Σ der Zeilen statt der Neuaufbau aus
     // Erlös + Ersparnis, sonst stünde hier wieder eine dritte Zahl.
     const ust = chartData.reduce((s, z) => s + (z.ust_eigenverbrauch || 0), 0)
+    // N-633: dieselbe Begründung für die dienstlichen Ladekosten — Posten der Ergebnis-Leiter, in `netto_ertrag` schon
+    // abgezogen; ohne ihn ginge der Rechenweg der Kachel bei einem Dienstwagen um genau diesen Betrag nicht auf.
+    const dienstlich = chartData.reduce((s, z) => s + (z.dienstliche_ladekosten || 0), 0)
     // Σ des Felds — es enthält Sonstige Erträge und Sonderkosten schon (A1); `sonstigeErtraege`/`sonderkosten` oben
     // sind nur ihr Ausweis.
     const nettoErtrag = chartData.reduce((s, z) => s + z.netto_ertrag, 0)
@@ -129,7 +132,7 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
     // deshalb nennt ihn die Netto-Kachel unten („inkl. … eigener Vergütungssatz").
     // Ohne diese Summe könnte die Sicht den Summanden nicht aussprechen.
     const erzeugerErloes = chartData.reduce((s, z) => s + (z.erzeuger_erloes || 0), 0)
-    return { einspeiseErloes, netzbezugKosten, eigenverbrauchErsparnis, sonderkosten, sonstigeErtraege, ust, nettoErtrag, nichtVerguetet, neg51Kwh, erzeugerErloes }
+    return { einspeiseErloes, netzbezugKosten, eigenverbrauchErsparnis, sonderkosten, sonstigeErtraege, ust, dienstlich, nettoErtrag, nichtVerguetet, neg51Kwh, erzeugerErloes }
   }, [chartData, sonstigeByMonth])
 
   const monate = basis.stats.anzahlMonate || 1
@@ -210,6 +213,7 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
           // sonst stünde in jeder Herleitung ein Posten, den es nicht gibt. Ohne
           // die Nennung wäre die kleinere Zahl unerklärt (N-22).
           + (gesamt.ust > 0 ? ' − USt auf Eigenverbrauch' : '')
+          + (gesamt.dienstlich !== 0 ? ' − Dienstliche Ladekosten' : '')
           + ' · ohne Netzbezug-Kosten, ohne Wärmepumpe/E-Mobilität'
           // #402 / §9.2 Geldseite (E1, 06.09.2026): Der gepflegte Erlös eines
           // Erzeugers mit eigenem Vergütungssatz — und der einer *Abgabe an
@@ -229,7 +233,8 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
         berechnung: `${fmtZahl(gesamt.einspeiseErloes, 2)} € + ${fmtZahl(gesamt.eigenverbrauchErsparnis, 2)} €`
           + (gesamt.sonstigeErtraege > 0 ? ` + ${fmtZahl(gesamt.sonstigeErtraege, 2)} € Sonstige Erträge` : '')
           + (gesamt.sonderkosten > 0 ? ` − ${fmtZahl(gesamt.sonderkosten, 2)} € Sonderkosten` : '')
-          + (gesamt.ust > 0 ? ` − ${fmtZahl(gesamt.ust, 2)} € USt` : ''),
+          + (gesamt.ust > 0 ? ` − ${fmtZahl(gesamt.ust, 2)} € USt` : '')
+          + (gesamt.dienstlich !== 0 ? ` − ${fmtZahl(gesamt.dienstlich, 2)} € Dienstliche Ladekosten` : ''),
         ergebnis: `= ${fmtZahl(gesamt.nettoErtrag, 2)} €`,
       },
     ]

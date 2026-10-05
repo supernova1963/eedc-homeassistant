@@ -74,22 +74,35 @@ describe('baueTagKpis — Kosten-Kacheln', () => {
   })
 })
 
-describe('baueTagKpis — die beiden Eigenverbrauchs-Begriffe (F3)', () => {
-  it('nennt den Tages-Wert „PV-Eigenverbrauch" und sagt „inkl. Speicherladung"', () => {
-    // Der Tag rechnet PV − Einspeisung, der Kanon (Live/Monat/Jahr/ROI) den
-    // PV-gedeckten Hausverbrauch. Zwei Größen, ein Name — das war der Befund.
+describe('baueTagKpis — ein Eigenverbrauch, dieselbe Formel wie Monat und Live (N-635)', () => {
+  // Bis 05.10.2026 (F3, 29.07.) hieß die Kachel „PV-Eigenverbrauch · inkl.
+  // Speicherladung" und rechnete „PV − Einspeisung" vor — der Tag hatte eine
+  // andere Formel als Live/Monat/Jahr. Seit N-635 rechnet er Direktverbrauch +
+  // Speicher-Entladung (Entscheid Gernot: umrechnen statt benennen).
+  it('nennt den Tages-Wert „Eigenverbrauch", ohne „inkl. Speicherladung"', () => {
     const kpis = baueTagKpis(tag(), null)
-    expect(kachel(kpis, 'Eigenverbrauch')).toBeUndefined()
-    const k = kachel(kpis, 'PV-Eigenverbrauch')!
+    expect(kachel(kpis, 'PV-Eigenverbrauch')).toBeUndefined()
+    const k = kachel(kpis, 'Eigenverbrauch')!
     expect(k.value).toBe('2')
-    expect(k.subtitle).toContain('inkl. Speicherladung')
-    expect(k.formel).toContain('inkl. Speicherladung')
+    expect(k.subtitle).not.toContain('Speicherladung')
+    expect(k.formel).toBe('Direktverbrauch + Speicher-Entladung')
   })
 
-  it('rechnet den PV-Eigenverbrauch aus PV − Einspeisung vor', () => {
-    const k = kachel(baueTagKpis(tag({ erzeugung: 7, einspeisung: 5, eigenverbrauch: 2 }), null), 'PV-Eigenverbrauch')!
-    expect(k.berechnung).toBe('7 − 5 kWh')
-    expect(k.ergebnis).toBe('= 2 kWh')
+  it('rechnet mit Speicher (PV − Einspeisung − Ladung) + Entladung vor', () => {
+    const k = kachel(baueTagKpis(tag({
+      erzeugung: 18, einspeisung: 6, speicher_ladung: 3, speicher_entladung: 2, eigenverbrauch: 11,
+    }), null), 'Eigenverbrauch')!
+    expect(k.berechnung).toBe('(18 − 6 − 3) + 2 kWh')
+    expect(k.ergebnis).toBe('= 11 kWh')
+  })
+
+  it('ohne Speicher-Bewegung bleibt der kurze Rechenweg PV − Einspeisung', () => {
+    for (const ohne of [{ speicher_ladung: null, speicher_entladung: null }, { speicher_ladung: 0, speicher_entladung: 0 }]) {
+      const k = kachel(baueTagKpis(tag({ erzeugung: 7, einspeisung: 5, eigenverbrauch: 2, ...ohne }), null), 'Eigenverbrauch')!
+      expect(k.formel).toBe('PV-Erzeugung − Einspeisung')
+      expect(k.berechnung).toBe('7 − 5 kWh')
+      expect(k.ergebnis).toBe('= 2 kWh')
+    }
   })
 })
 
@@ -119,7 +132,7 @@ describe('baueTagKpis — ohne erfasste PV wird nichts behauptet', () => {
   it('zeigt „—" statt 0 kWh bei Erzeugung und Eigenverbrauch', () => {
     const kpis = baueTagKpis(ohnePv(), null)
     expect(kachel(kpis, 'PV-Erzeugung')!.value).toBe('—')
-    expect(kachel(kpis, 'PV-Eigenverbrauch')!.value).toBe('—')
+    expect(kachel(kpis, 'Eigenverbrauch')!.value).toBe('—')
     // Die gemessene Einspeisung bleibt sichtbar — sie ist kein Teil der Lücke.
     expect(kachel(kpis, 'Einspeisung')!.value).toBe('25')
   })

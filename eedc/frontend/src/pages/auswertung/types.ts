@@ -103,6 +103,8 @@ export interface MonatsZeitreihe {
    * beim ausgewiesenen §51-Abzug.
    */
   ust_eigenverbrauch: number
+  /** N-633: dienstliche Ladekosten, bereits **in `netto_ertrag` abgezogen** — einzeln, damit der Rechenweg aufgeht. */
+  dienstliche_ladekosten?: number
   /** Real verrechneter Monats-Ø-Netzbezugspreis (Flex-Ø oder statischer Tarif, #326). */
   netzbezug_preis_cent: number | null
   /** Durch §51 EEG entgangener Erlös in € (0, wenn die Anlage nicht betroffen ist). */
@@ -269,6 +271,7 @@ export function createMonatsZeitreihe(
       netto_ertrag: md.netto_ertrag_euro,
       netto_bilanz: md.netto_bilanz_euro,
       ust_eigenverbrauch: md.ust_eigenverbrauch_euro,
+      dienstliche_ladekosten: md.dienstliche_ladekosten_euro ?? 0,
       netzbezug_preis_cent: md.netzbezug_preis_cent,
       einspeise_nicht_verguetet_euro: md.einspeise_nicht_verguetet_euro,
       einspeise_neg_preis_kwh: md.einspeisung_neg_preis_kwh,

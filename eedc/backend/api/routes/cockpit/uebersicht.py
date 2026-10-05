@@ -19,9 +19,7 @@ from backend.models.investition import Investition
 from backend.services.prognose_auswahl import lade_aktive_prognose
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage
 from backend.core.berechnungen import (
-    DienstlicheLadungZeile,
     FinanzMonatsZeile,
-    berechne_dienstliche_ladekosten,
     berechne_finanz_aggregat,
     berechne_spez_ertrag_annualisiert,
     berechne_verbrauchs_kennzahlen,
@@ -375,15 +373,12 @@ async def get_cockpit_uebersicht(
     # ließ dem Dienstwagen netto +22 ct je verschenkter kWh (N-18).
     # Die ENERGIEBILANZ oben bleibt davon unberührt: energetisch ist die Ladung
     # Eigenverbrauch hinter dem Zähler.
-    dienstlich_ladekosten_euro = berechne_dienstliche_ladekosten(
-        DienstlicheLadungZeile(
-            ladung_pv_kwh=f.emob.dienstlich_ladung_pv_kwh,
-            ladung_netz_kwh=f.emob.dienstlich_ladung_netz_kwh,
-            netzbezug_preis_cent=f.tarif.netzbezug_preis_cent,
-            wallbox_preis_cent=f.tarif.wallbox_preis_effektiv_cent,
-        )
-        for f in fakten
-    ).gesamt_euro
+    # ⭐ N-633 (05.10.2026): der Posten kommt aus den Monats-Fakten (`EmobFakten.dienstliche_ladekosten_euro`, dort
+    # über dieselbe Layer-Formel gebildet) — derselbe Wert, den Cockpit → Monat/Jahr, Tabelle und PDF als eigenen
+    # Posten der Ergebnis-Leiter führen. Diese Sicht faltet ihn wie bisher in die Sonstigen Ausgaben (ihr Antwortfeld
+    # `sonstige_netto_euro` trägt ihn, Bestandsproben `test_dienstliche_ladekosten_drei_sichten.py`,
+    # `test_aussichten_finanz_aggregat_symmetrie.py`); der Netto-Ertrag ist in beiden Formen derselbe.
+    dienstlich_ladekosten_euro = sum(f.emob.dienstliche_ladekosten_euro for f in fakten)
     sonstige_ausgaben_gesamt += dienstlich_ladekosten_euro
 
     # Anschaffungsdatum-Grenze: Energiebilanz + Erträge nur über Monate, in denen

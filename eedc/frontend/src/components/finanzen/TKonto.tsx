@@ -15,6 +15,7 @@ import { TYP_TEXT_CLASS } from '../../lib'
 import type { AktuellerMonatResponse } from '../../api/aktuellerMonat'
 import { angezeigtesDelta } from '../../lib/werte'
 import { bkwAufteilung, evInKomponentenzeilen, pvEigenverbrauchRestEuro } from './evAufteilung'
+import { DIENSTLICHE_LADEKOSTEN_HINWEIS, DIENSTLICHE_LADEKOSTEN_LABEL } from './dienstlicheLadekosten'
 
 const fmt = (v: number | null | undefined, d = 1) => fmtCalc(v, d, '—')
 
@@ -26,6 +27,7 @@ const fmt = (v: number | null | undefined, d = 1) => fmtCalc(v, d, '—')
 // Regelbesteuerung um genau diesen Betrag von der Kachel ab.
 const ERGEBNIS_FORMEL =
   'HABEN − SOLL = Erlöse + Ersparnisse + Sonstige Erträge − Stromrechnung − Betriebskosten − Sonstige Ausgaben − USt auf Eigenverbrauch'
+  + ' − Dienstliche Ladekosten'
 const ERGEBNIS_ABGRENZUNG =
   'Dasselbe Ergebnis wie die Kachel „Monatsergebnis" bzw. „Jahresergebnis" — hier auf die Konten verteilt.'
 
@@ -386,6 +388,19 @@ export function baueTKonto(d: AktuellerMonatResponse, sonderkosten: number | nul
       formel: 'Eigenverbrauch × Selbstkosten je kWh des Jahres × USt-Satz (§ 3 Abs. 1b UStG)',
       berechnung: d.ust_herleitung ?? undefined,
       ergebnis: `= ${fmtCalc(d.ust_eigenverbrauch_euro, 2)} €`,
+    } as TKontoPosten] : []),
+    // ── Dienstliche Ladekosten — Posten der Ergebnis-Leiter (N-633, 05.10.2026), nur wenn ≠ 0 ──
+    // Ohne diese Zeile lag das Hauptbuch bei einem Dienstwagen um genau diesen Betrag neben dem Monatsergebnis. Er
+    // steht NICHT in den Sonstigen Ausgaben darunter (die gehen in den Kapitaleinsatz, F-19).
+    ...((d.dienstliche_ladekosten_euro ?? 0) !== 0 ? [{
+      label: DIENSTLICHE_LADEKOSTEN_LABEL,
+      wert: d.dienstliche_ladekosten_euro!,
+      vjWert: vj?.dienstliche_ladekosten_euro,
+      color: 'text-red-500',
+      formel: DIENSTLICHE_LADEKOSTEN_HINWEIS,
+      // A6: Mengen × Preise aus der Antwort; im Jahres-T-Konto leer (Σ über Monate mit je eigenem Preis).
+      berechnung: d.dienstliche_ladekosten_berechnung ?? undefined,
+      ergebnis: `= ${fmtCalc(d.dienstliche_ladekosten_euro, 2)} €`,
     } as TKontoPosten] : []),
     // ── Betriebskosten: per Investition wenn Daten da, sonst Aggregat ──
     ...(hasPerInv

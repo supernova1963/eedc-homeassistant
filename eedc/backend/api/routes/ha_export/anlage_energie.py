@@ -9,9 +9,7 @@ Ladekosten, die Investitions-KPIs (Mehrkosten N-352, Betriebskosten, Jahres-Ertr
 # Gate ist `plans/skript-golden-master-ha-export.py` (alte gegen neue Antworten, bitgleich).
 
 from backend.core.berechnungen import (
-    DienstlicheLadungZeile,
     FinanzMonatsZeile,
-    berechne_dienstliche_ladekosten,
     berechne_finanz_aggregat,
     berechne_spez_ertrag_annualisiert,
     berechne_verbrauchs_kennzahlen,
@@ -199,20 +197,12 @@ async def finanz_aggregat(*, _preis_messung, _tarif_cache, anlage, db, fakten, s
     sonstige_ertraege_gesamt = sum(f.sonstiges.ertraege_euro for f in fakten)
 
     # Dienstliche Ladekosten — bis 2026-07-31 hat der HA-Export sie als einzige
-    # der drei Sichten **gar nicht** abgezogen (N-13): der Sensor
-    # `netto_ertrag_euro` stand bei Dienstwagen-Anlagen über der Cockpit-Kachel,
-    # auf die er sich bezieht. Gleiche Formel, gleicher Layer-SoT
-    # (ADR-001) wie Cockpit/Übersicht und Aussichten; die Mengen kommen aus den
-    # Monats-Fakten (Dienstwagen-Filter + PV/Netz-Split, P10).
-    sonstige_netto_gesamt -= berechne_dienstliche_ladekosten(
-        DienstlicheLadungZeile(
-            ladung_pv_kwh=f.emob.dienstlich_ladung_pv_kwh,
-            ladung_netz_kwh=f.emob.dienstlich_ladung_netz_kwh,
-            netzbezug_preis_cent=f.tarif.netzbezug_preis_cent,
-            wallbox_preis_cent=f.tarif.wallbox_preis_effektiv_cent,
-        )
-        for f in fakten
-    ).gesamt_euro
+    # der drei Sichten **gar nicht** abgezogen (N-13). ⭐ Seit N-633 (05.10.2026)
+    # der eine Posten aus den Monats-Fakten (`EmobFakten.dienstliche_ladekosten_euro`,
+    # dort über die Layer-Formel gebildet), den auch Cockpit, Tabelle und PDF lesen.
+    # Diese Sicht faltet ihn wie bisher in die Sonstigen (Sensor `netto_ertrag_euro`
+    # und sein `berechnung`-Attribut unverändert).
+    sonstige_netto_gesamt -= sum(f.emob.dienstliche_ladekosten_euro for f in fakten)
 
     einspeise_erloes = 0
     ev_ersparnis = 0

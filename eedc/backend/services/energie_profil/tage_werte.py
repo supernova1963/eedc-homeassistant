@@ -9,10 +9,11 @@ Energie-Bilanz kommt aus dem SoT-Helper `bilanz_aus_stundenrows`
 (core/berechnungen, identische Σ-Semantik wie der Monats-Endpoint
 `get_monatsauswertung` → additive Symmetrie, vom Symmetrie-Test abgesichert).
 Die Finanzen laufen über den `baue_finanz_zeile`-SoT (#326, je-Monat-Tarif);
-Speicher/V2H/BKW werden bewusst mit 0 eingespeist, weil `einspeisung`/
-`netzbezug` aus den stündlichen Netto-Flüssen kommen (Speicher ist dort schon
-eingerechnet) — so ist die Finanz-Eigenverbrauchsmenge == der Energie-Spalte
-`eigenverbrauch` (= PV − Einspeisung), keine Doppelzählung. Der Grundpreis ist
+die Speicher-Ladung und -Entladung des Tages gehen mit (N-635, 05.10.2026), V2H
+und BKW bleiben 0 — so ist die Finanz-Eigenverbrauchsmenge == der Energie-Spalte
+`eigenverbrauch` (= Direktverbrauch + Speicher-Entladung, dieselbe Formel wie im
+Monat). Bis dahin ging der Speicher mit 0 ein und beide Seiten rechneten
+`PV − Einspeisung` — gleich miteinander, aber nicht mit dem Monat. Der Grundpreis ist
 monatlich-fix und wird auf Tagesebene **nicht** anteilig verteilt.
 
 **CO₂ — eine Definition, ein bewusst benannter Teil-Umfang (F-6, 2026-07-31).**
@@ -388,7 +389,12 @@ async def baue_tage_werte(
             pv_erzeugung_kwh=bilanz.erzeugung_kwh,
             abgabe_dritte_kwh=abgabe_tag,
             neg_preis_kwh=neg_preis_kwh,
-            # Speicher/V2H/BKW = 0: Netto-Flüsse bilden Speicher schon ab.
+            # N-635: Ladung und Entladung des Tages gehen mit, damit die
+            # Finanz-Eigenverbrauchsmenge dieselbe Formel rechnet wie die
+            # Energie-Spalte `eigenverbrauch` (Direktverbrauch + Entladung).
+            # V2H/BKW bleiben 0 — die Stunden kennen sie nicht.
+            speicher_ladung_kwh=bilanz.speicher_ladung_kwh,
+            speicher_entladung_kwh=bilanz.speicher_entladung_kwh,
             monatsdaten=md_pro_monat.get((tag.year, tag.month)),
             # A-2: Die Ersparnis bewertet VERMIEDENEN Bezug — sie wird deshalb
             # mit dem Preis der Slots gewichtet, in denen er vermieden wurde,

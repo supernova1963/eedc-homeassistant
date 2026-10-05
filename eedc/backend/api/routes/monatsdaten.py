@@ -395,6 +395,9 @@ class AggregierteMonatsdatenResponse(BaseModel):
     # Eigenverbrauch dieses Monats × USt je kWh des Jahres (`services/ust_satz.py`,
     # seit 03.10.2026 der eine Eingang für alle Sichten), damit Σ USt_m == Jahres-USt.
     ust_eigenverbrauch_euro: float
+    # N-633: dienstliche Ladekosten des Monats (Aufwand, positiv) — Posten der Ergebnis-Leiter, bereits in
+    # `netto_ertrag_euro` abgezogen; einzeln hier, damit *Auswertungen → Finanzen* ihn im Rechenweg nennen kann.
+    dienstliche_ladekosten_euro: float = 0.0
     netzbezug_kosten_euro: float
     # Einspeise-Erlös + EV- + BKW-Ersparnis + Erlös eigener Satz + Sonstige Positionen (netto) − USt — die Stufe 1 der
     # Ergebnis-Leiter, dieselbe Zahl wie die Cockpit-Kachel des Monats (GLOSSAR „Netto-Ertrag (PV)"). Bis 03.10.2026
@@ -723,7 +726,9 @@ async def list_monatsdaten_aggregiert(
         netto_ertrag = berechne_ergebnis(ErgebnisEingang(
             einspeise_erloes=finanz.einspeise_erloes_euro, ev_ersparnis=finanz.ev_ersparnis_euro,
             bkw_rest_ersparnis=finanz.bkw_ersparnis_euro, erzeuger_erloes=finanz.erzeuger_erloes_euro,
-            sonstige_netto=f.sonstiges.netto_euro, ust_anteil=ust_eigenverbrauch,
+            sonstige_netto=f.sonstiges.netto_euro,
+            # N-633: derselbe Posten wie Cockpit, Übersicht, PDF und HA-Sensor (Monats-Fakten).
+            dienstliche_ladekosten=f.emob.dienstliche_ladekosten_euro, ust_anteil=ust_eigenverbrauch,
         )).netto_ertrag
 
         # ADR-002/P12: Die Arbeitszahl dieses Monats — aus dem Layer, mit allen
@@ -867,6 +872,7 @@ async def list_monatsdaten_aggregiert(
             erzeuger_erloes_euro=round(f.sonstiges.einspeise_erloes_euro, 2),
             bkw_ersparnis_euro=round(finanz.bkw_ersparnis_euro, 2),
             ust_eigenverbrauch_euro=round(ust_eigenverbrauch, 2),
+            dienstliche_ladekosten_euro=round(f.emob.dienstliche_ladekosten_euro, 2),
             netzbezug_kosten_euro=round(netzbezug_kosten, 2),
             netto_ertrag_euro=round(netto_ertrag, 2),
             netto_bilanz_euro=round(netto_ertrag - netzbezug_kosten, 2),

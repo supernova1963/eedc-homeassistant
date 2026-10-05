@@ -263,6 +263,7 @@
     <tr><th>Einspeise-Erlös</th><td>{{ fmt_eur(kpis.einspeise_erloes_euro) }}</td></tr>
     <tr><th>Eigenverbrauchs-Ersparnis</th><td>{{ fmt_eur(kpis.ev_ersparnis_euro) }}</td></tr>
     {% if kpis.sonstige_netto_euro %}<tr><th>Sonstige Erträge/Ausgaben</th><td>{{ fmt_eur(kpis.sonstige_netto_euro) }}</td></tr>{% endif %}
+    {% if kpis.dienstliche_ladekosten_euro %}<tr><th>Dienstliche Ladekosten<br><span class="muted">{{ kpis.dienstliche_ladekosten_hinweis }}</span></th><td>{{ fmt_eur(kpis.dienstliche_ladekosten_euro) }}</td></tr>{% endif %}
     <tr><th>Netto-Ertrag (vor Betriebskosten)</th><td>{{ fmt_eur(kpis.netto_ertrag_euro) }}</td></tr>
     <tr><th>Betriebskosten anteilig</th><td>{{ fmt_eur(kpis.betriebskosten_zeitraum_euro) }}</td></tr>
     <tr><th>Netto nach Betriebskosten</th><td>{{ fmt_eur(kpis.netto_nach_bk_euro) }}</td></tr>

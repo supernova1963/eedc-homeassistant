@@ -64,6 +64,15 @@ from dataclasses import dataclass
 from typing import Iterable
 
 
+#: N-633 (05.10.2026, Wortlaut freigegeben von Gernot): der Hinweis zur Zeile „Dienstliche Ladekosten" — dieselbe
+#: Formulierung im Monats- und Jahresbericht (PDF); die Web-Oberfläche trägt sie wortgleich in
+#: `frontend/src/components/finanzen/dienstlicheLadekosten.ts` (⚠ wer den einen Text ändert, ändert den anderen mit).
+DIENSTLICHE_LADEKOSTEN_HINWEIS = (
+    "Strom für den Dienstwagen: Netzanteil zum Wallbox-Tarif, PV-Anteil zum Netzbezugspreis. Die E"
+    "rstattung des Arbeitgebers steht unter den sonstigen Erträgen."
+)
+
+
 @dataclass(frozen=True)
 class DienstlicheLadungZeile:
     """Ein Monat dienstlicher Ladung mit den Preisen **dieses** Monats (P8).

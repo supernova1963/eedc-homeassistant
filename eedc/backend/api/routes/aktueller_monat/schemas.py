@@ -454,6 +454,11 @@ class AktuellerMonatResponse(BaseModel):
     # sonstige_*-Totals enthalten (kein zweiter Posten, R15-5-Muster).
     anlage_sonstige_ertraege_euro: float = 0.0
     anlage_sonstige_ausgaben_euro: float = 0.0
+    #: N-633: dienstliche Ladekosten des Monats (Aufwand, positiv) — eigener Posten der Ergebnis-Leiter (Stufe 1, −),
+    #: aus `EmobFakten.dienstliche_ladekosten_euro`. NICHT in `sonstige_ausgaben_euro` enthalten.
+    dienstliche_ladekosten_euro: float = 0.0
+    #: Eingesetzte Werte dazu („60,0 kWh PV × 30,00 ct/kWh + 30,0 kWh Netz × 30,00 ct/kWh", A6); im Jahr ``None`` (Σ).
+    dienstliche_ladekosten_berechnung: Optional[str] = None
     # ── Ergebnis-Leiter (Paket „Ergebnisgrößen", 03.10.2026; Layer `core/berechnungen/ergebnis.py`) ──
     #: `netto_ertrag_euro` ist seit 03.10.2026 die GLOSSAR-Definition (Stufe 1): + BKW-Rest-Ersparnis + Erlös eigener
     #: Satz + Sonstige Positionen − USt-Anteil auf den Eigenverbrauch (N-601). Das frühere Feld `gesamtnettoertrag_euro`

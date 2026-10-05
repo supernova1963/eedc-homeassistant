@@ -192,6 +192,9 @@ export interface AggregierteMonatsdaten {
   bkw_ersparnis_euro: number
   // Bereits in `netto_ertrag_euro` abgezogen; 0 außerhalb der Regelbesteuerung.
   ust_eigenverbrauch_euro: number
+  // N-633: dienstliche Ladekosten (Aufwand, positiv), bereits in `netto_ertrag_euro` abgezogen. Optional für
+  // Antworten vor diesem Feld.
+  dienstliche_ladekosten_euro?: number
   // Arbeitspreis × kWh + Grundpreis des Monats.
   netzbezug_kosten_euro: number
   // Stufe 1 der Ergebnis-Leiter: Erlös + EV- + BKW-Ersparnis + Erlös eigener Satz + Sonstige Positionen − USt —

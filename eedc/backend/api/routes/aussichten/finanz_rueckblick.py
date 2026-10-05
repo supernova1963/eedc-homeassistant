@@ -17,9 +17,7 @@ from backend.api.routes.strompreise import (
     resolve_strompreis_for_komponente,
 )
 from backend.core.berechnungen import (
-    DienstlicheLadungZeile,
     FinanzMonatsZeile,
-    berechne_dienstliche_ladekosten,
     berechne_finanz_aggregat,
     berechne_wp_alternativkosten_ersparnis,
 )
@@ -381,15 +379,12 @@ def bisherige_ertraege_summe(
     # Arbeitspreis statt zum Wallbox-Tarif (N-12) und den PV-Anteil zur
     # Einspeisevergütung statt zum Netzbezugspreis (N-18). Das Cockpit ist der
     # Kanon (Gernot 2026-07-31), hier läuft jetzt dieselbe Formel.
-    bisherige_dienstlich_ladekosten = berechne_dienstliche_ladekosten(
-        DienstlicheLadungZeile(
-            ladung_pv_kwh=f.emob.dienstlich_ladung_pv_kwh,
-            ladung_netz_kwh=f.emob.dienstlich_ladung_netz_kwh,
-            netzbezug_preis_cent=f.tarif.netzbezug_preis_cent,
-            wallbox_preis_cent=f.tarif.wallbox_preis_effektiv_cent,
-        )
-        for f in fakten
-    ).gesamt_euro
+    # ⭐ N-633 (05.10.2026): nicht mehr hier gerechnet, sondern der eine Posten aus
+    # den Monats-Fakten (`EmobFakten.dienstliche_ladekosten_euro`), den auch Cockpit,
+    # Tabelle, PDF, Übersicht und HA-Sensor lesen. Diese Sicht hat keine Ergebnis-
+    # Leiter, sondern `berechne_finanz_aggregat` mit einem Sonstige-Eingang — dort
+    # geht er weiter als Abzug hinein (Zahl unverändert).
+    bisherige_dienstlich_ladekosten = sum(f.emob.dienstliche_ladekosten_euro for f in fakten)
     bisherige_sonstige_netto -= bisherige_dienstlich_ladekosten
 
     # Finanz-Aggregat (Einspeise-Erlös §51 + EV- + BKW-Ersparnis + Sonstige)

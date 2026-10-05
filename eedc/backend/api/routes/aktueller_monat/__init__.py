@@ -1251,6 +1251,8 @@ async def _berechne_monat(
         bkw_ersparnis_euro=_erg["bkw_ersparnis"],
         bkw_ersparnis_berechnung=_erg["bkw_ersparnis_berechnung"],
         erzeuger_erloes_euro=_erg["erzeuger_erloes"],
+        dienstliche_ladekosten_euro=_erg["dienstliche_ladekosten"],
+        dienstliche_ladekosten_berechnung=_erg["dienstliche_ladekosten_berechnung"],
         ergebnis_vor_betriebskosten_euro=_erg["ergebnis_vor_betriebskosten"],
         ergebnis_euro=_erg["ergebnis"],
         ergebnis_herleitung=_erg["ergebnis_herleitung"],

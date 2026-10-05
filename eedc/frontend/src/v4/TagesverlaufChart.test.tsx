@@ -58,9 +58,16 @@ describe('baueChartDaten', () => {
 describe('TagesverlaufChart', () => {
   it('Toggle Erzeugung ⇄ Verbrauch ändert die Stapel-Beschreibung (Direktverbrauch)', () => {
     renderChart([tw('2026-05-10')])
-    expect(screen.getByText(/Eigenverbrauch \+ Einspeisung = PV-Erzeugung/)).toBeInTheDocument()
+    // N-635: die Erzeugung stapelt die Verwendung wie im PV-Hub; ohne Speicher-Ladung
+    // im Monat ohne dieses Glied (bis 05.10.2026: „Eigenverbrauch + Einspeisung").
+    expect(screen.getByText(/^Gestapelt: Direktverbrauch \+ Einspeisung = PV-Erzeugung$/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Verbrauch' }))
     expect(screen.getByText(/Direktverbrauch \+ Speicher-Entladung \+ Netzbezug = Gesamtverbrauch/)).toBeInTheDocument()
+  })
+
+  it('mit Speicher-Ladung stapelt die Erzeugung Direktverbrauch + Speicherladung + Einspeisung (N-635)', () => {
+    renderChart([tw('2026-05-10', { speicher_ladung: 3, speicher_entladung: 2 }), tw('2026-05-11')])
+    expect(screen.getByText(/Direktverbrauch \+ Speicherladung \+ Einspeisung = PV-Erzeugung/)).toBeInTheDocument()
   })
 
   it('Autarkie %-Toggle vorhanden', () => {

@@ -144,6 +144,28 @@ describe('AuswertungenFinanzenV4 (Sub 3)', () => {
     expect(tooltipTextVon('Netto-Ertrag (PV)')).not.toContain('Abgabe an Dritte')
   })
 
+  it('N-633: Netto-Ertrag (PV) nennt die dienstlichen Ladekosten im Rechenweg — und nur, wenn es sie gibt', async () => {
+    // Der Vertrag der Route: `netto_ertrag_euro` ist SCHON um den Posten gekürzt (780 − 78 = 702).
+    const mitDienstwagen = {
+      ...basisMock,
+      gefiltert: [{
+        ...finanzBasis(0).gefiltert[0],
+        netto_ertrag_euro: 702, netto_bilanz_euro: 502, dienstliche_ladekosten_euro: 78,
+      }],
+    } as unknown as AuswertungBasis
+    render(<AuswertungenFinanzenV4 basis={mitDienstwagen} />)
+    await screen.findByText('Finanz-Übersicht')
+    const text = tooltipTextVon('Netto-Ertrag (PV)')
+    expect(text).toContain('− Dienstliche Ladekosten')
+    expect(text).toContain('− 78,00 € Dienstliche Ladekosten')
+    expect(text).toContain('= 702,00 €')
+    cleanup()
+
+    render(<AuswertungenFinanzenV4 basis={finanzBasis(0)} />)
+    await screen.findByText('Finanz-Übersicht')
+    expect(tooltipTextVon('Netto-Ertrag (PV)')).not.toContain('Dienstliche Ladekosten')
+  })
+
   it('zeigt bei Basis-Fetch-Fehler den B8-Fehler-Baustein mit Retry statt 0-KPIs (S15)', () => {
     const refresh = vi.fn()
     Object.assign(basisMock, { error: 'Fehler beim Laden der aggregierten Daten', refresh })

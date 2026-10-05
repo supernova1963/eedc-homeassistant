@@ -12,7 +12,8 @@ Jahr mit einem Monat ohne Netzbezugswert 198 % Autarkie (N-584, #421).
 ::
 
     Stufe 1  Netto-Ertrag (PV)            = Einspeise-Erlös + EV-Ersparnis + BKW-Rest-Ersparnis + Erlös eigener Satz
-                                            + Sonstige Positionen (netto) − USt-Anteil auf den Eigenverbrauch
+                                            + Sonstige Positionen (netto) − Dienstliche Ladekosten
+                                            − USt-Anteil auf den Eigenverbrauch
     Stufe 2  Ergebnis vor Betriebskosten  = Netto-Ertrag + WP-Ersparnis + E-Mob-Ersparnis − Stromrechnung (inkl. Grundgebühr)
     Stufe 3  Monats-/Jahresergebnis       = Stufe 2 − Betriebskosten (anteilig, nur im Zeitraum aktive Komponenten)
 
@@ -21,6 +22,12 @@ Jahr mit einem Monat ohne Netzbezugswert 198 % Autarkie (N-584, #421).
 * Stufe 2 hat im UI **keinen eigenen Namen** (Antwortfeld ``ergebnis_vor_betriebskosten_euro``); sie steht nur als
   Zwischenzeile in der Herleitung. „Ergebnis nach Stromrechnung" ist der Name, den die Komponenten-Tabelle bisher für
   eine Zahl **nach** Betriebskosten benutzte — also Stufe 3 (Gegenprüfung G4).
+* **Dienstliche Ladekosten** (N-633, 05.10.2026) sind ein eigener Posten der Stufe 1: was ein Dienstwagen zu Hause
+  geladen hat, PV-Anteil zum Netzbezugspreis (nimmt die EV-Gutschrift zurück), Netzanteil zum Wallbox-Tarif
+  (``dienstliche_ladekosten.py``, Entscheid 31.07.). Die Monats-Fakten bilden ihn (``EmobFakten.
+  dienstliche_ladekosten_euro``); alle Sichten lesen dasselbe Feld. Bis dahin falteten Übersicht, HA-Export und
+  Aussichten ihn in die Sonstigen Positionen, Cockpit → Monat/Jahr, Tabelle und PDF führten ihn nicht (M09: 104,40 €
+  gegen 122,40 €). Er steht NICHT in den Sonstigen Ausgaben: die sind Eingang des Kapitaleinsatzes (F-19).
 * **Speicher-Ersparnis** steht nicht in der Leiter: sie ist eine Zuordnung innerhalb der EV-Ersparnis
   (``KomponentenFinanzTabelle.tsx``); **Netzladung** steckt in der Stromrechnung.
 
@@ -117,6 +124,7 @@ POSTEN: tuple[tuple[str, str, int, int, bool, Optional[str], str], ...] = (
     ("bkw_rest_ersparnis", "BKW-Ersparnis", +1, 1, False, "balkonkraftwerk", "bkw_ersparnis_euro"),
     ("erzeuger_erloes", "Erlös eigener Satz", +1, 1, False, "erzeuger", "erzeuger_erloes_euro"),
     ("sonstige_netto", "Sonstige Positionen", +1, 1, False, "sonstiges", "sonstige_netto_euro"),
+    ("dienstliche_ladekosten", "Dienstliche Ladekosten", -1, 1, False, "emob", "dienstliche_ladekosten_euro"),
     ("ust_anteil", "USt auf Eigenverbrauch", -1, 1, False, "ust", "ust_eigenverbrauch_euro"),
     ("wp_ersparnis", "WP-Ersparnis", +1, 2, False, "waermepumpe", "wp_ersparnis_euro"),
     ("emob_ersparnis", "E-Mobilität-Ersparnis", +1, 2, False, "emob", "emob_ersparnis_euro"),
@@ -126,7 +134,8 @@ POSTEN: tuple[tuple[str, str, int, int, bool, Optional[str], str], ...] = (
 
 #: Posten, die in der Herleitung NUR erscheinen, wenn sie ≠ 0 sind (N-600-Zuschnitt 02.10., Gernot).
 NUR_WENN_UNGLEICH_NULL = frozenset({
-    "bkw_rest_ersparnis", "erzeuger_erloes", "sonstige_netto", "ust_anteil", "wp_ersparnis", "emob_ersparnis",
+    "bkw_rest_ersparnis", "erzeuger_erloes", "sonstige_netto", "dienstliche_ladekosten", "ust_anteil", "wp_ersparnis",
+    "emob_ersparnis",
 })
 
 STUFEN_NAME = {1: "Netto-Ertrag", 2: "Ergebnis vor Betriebskosten", 3: "Ergebnis"}
@@ -141,6 +150,8 @@ class ErgebnisEingang:
     bkw_rest_ersparnis: Optional[float] = None
     erzeuger_erloes: Optional[float] = None
     sonstige_netto: Optional[float] = None
+    #: N-633: Aufwand, positiv übergeben (die Leiter zieht ihn ab).
+    dienstliche_ladekosten: Optional[float] = None
     ust_anteil: Optional[float] = None
     wp_ersparnis: Optional[float] = None
     emob_ersparnis: Optional[float] = None
@@ -431,6 +442,7 @@ def ergebnis_eingang_aus_antwort(d: Mapping[str, Any], komponenten: frozenset[st
         bkw_rest_ersparnis=d.get("bkw_ersparnis_euro"),
         erzeuger_erloes=d.get("erzeuger_erloes_euro"),
         sonstige_netto=d.get("sonstige_netto_euro"),
+        dienstliche_ladekosten=d.get("dienstliche_ladekosten_euro"),
         ust_anteil=d.get("ust_eigenverbrauch_euro"),
         wp_ersparnis=d.get("wp_ersparnis_euro"),
         emob_ersparnis=d.get("emob_ersparnis_euro"),
@@ -714,6 +726,7 @@ def falte_zeitraum(
         "sonstige_ertraege_euro": _oder0(summe(f("sonstige_ertraege_euro"))),
         "sonstige_ausgaben_euro": _oder0(summe(f("sonstige_ausgaben_euro"))),
         "sonstige_netto_euro": _oder0(summe(f("sonstige_netto_euro"))),
+        "dienstliche_ladekosten_euro": _oder0(summe(f("dienstliche_ladekosten_euro"))),
         "anlage_sonstige_ertraege_euro": _oder0(summe(f("anlage_sonstige_ertraege_euro"))),
         "anlage_sonstige_ausgaben_euro": _oder0(summe(f("anlage_sonstige_ausgaben_euro"))),
         "betriebskosten_anteilig_euro": summe(f("betriebskosten_anteilig_euro")),

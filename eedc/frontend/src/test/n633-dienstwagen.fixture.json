@@ -1,0 +1,613 @@
+{
+ "jahr": {
+  "abgabe_dritte_kwh": null,
+  "aktualisiert_um": "2026-10-05T10:18:39.241015",
+  "anlage_id": 1,
+  "anlage_name": "N633-True",
+  "anlage_sonstige_ausgaben_euro": 0.0,
+  "anlage_sonstige_ertraege_euro": 0.0,
+  "autarkie_fenster": null,
+  "autarkie_nenner_kwh": 900.0,
+  "autarkie_prozent": 66.66666666666666,
+  "autarkie_zaehler_kwh": 600.0,
+  "betriebskosten_anteilig_euro": null,
+  "bkw_eigenverbrauch_kwh": null,
+  "bkw_ersparnis_euro": null,
+  "bkw_erzeugung_kwh": null,
+  "dienstliche_ladekosten_euro": 78.0,
+  "direktverbrauch_kwh": 600.0,
+  "eigenverbrauch_kwh": 600.0,
+  "eigenverbrauch_quote_fenster": null,
+  "eigenverbrauch_quote_nenner_kwh": 1000.0,
+  "eigenverbrauch_quote_prozent": 60.0,
+  "eigenverbrauch_quote_zaehler_kwh": 600.0,
+  "einspeise_durchschnittspreis_cent": null,
+  "einspeise_erloes_euro": 32.0,
+  "einspeise_preis_cent": 8.0,
+  "einspeisung_kwh": 400.0,
+  "einspeisung_neg_preis_kwh": null,
+  "emob_ersparnis_euro": null,
+  "emob_km": null,
+  "emob_ladung_extern_kwh": null,
+  "emob_ladung_gesamt_kwh": null,
+  "emob_ladung_kwh": null,
+  "emob_ladung_netz_kwh": null,
+  "emob_ladung_pv_kwh": null,
+  "emob_v2h_kwh": null,
+  "emob_verbrauch_100km": null,
+  "emob_verbrauch_basis_kwh": null,
+  "emob_verbrauch_quelle": "keine",
+  "ergebnis_euro": 44.0,
+  "ergebnis_herleitung": {
+   "ergebnis": {
+    "eingesetzte_werte": [
+     {
+      "betrag_euro": 32.0,
+      "feld": "einspeise_erloes_euro",
+      "name": "Einspeise-Erlös",
+      "vorzeichen": 1
+     },
+     {
+      "betrag_euro": 180.0,
+      "feld": "ev_ersparnis_euro",
+      "name": "Eigenverbrauchs-Ersparnis",
+      "vorzeichen": 1
+     },
+     {
+      "betrag_euro": -78.0,
+      "feld": "dienstliche_ladekosten_euro",
+      "name": "Dienstliche Ladekosten",
+      "vorzeichen": -1
+     },
+     {
+      "betrag_euro": -90.0,
+      "feld": "netzbezug_kosten_euro",
+      "name": "Stromrechnung",
+      "vorzeichen": -1
+     },
+     {
+      "betrag_euro": -0.0,
+      "feld": "betriebskosten_anteilig_euro",
+      "name": "Betriebskosten",
+      "vorzeichen": -1
+     }
+    ],
+    "ergebnis_euro": 44.0,
+    "formel": "Einspeise-Erlös + Eigenverbrauchs-Ersparnis − Dienstliche Ladekosten − Stromrechnung − Betriebskosten"
+   },
+   "netto_ertrag": {
+    "eingesetzte_werte": [
+     {
+      "betrag_euro": 32.0,
+      "feld": "einspeise_erloes_euro",
+      "name": "Einspeise-Erlös",
+      "vorzeichen": 1
+     },
+     {
+      "betrag_euro": 180.0,
+      "feld": "ev_ersparnis_euro",
+      "name": "Eigenverbrauchs-Ersparnis",
+      "vorzeichen": 1
+     },
+     {
+      "betrag_euro": -78.0,
+      "feld": "dienstliche_ladekosten_euro",
+      "name": "Dienstliche Ladekosten",
+      "vorzeichen": -1
+     }
+    ],
+    "ergebnis_euro": 134.0,
+    "formel": "Einspeise-Erlös + Eigenverbrauchs-Ersparnis − Dienstliche Ladekosten"
+   },
+   "vor_betriebskosten": {
+    "eingesetzte_werte": [
+     {
+      "betrag_euro": 32.0,
+      "feld": "einspeise_erloes_euro",
+      "name": "Einspeise-Erlös",
+      "vorzeichen": 1
+     },
+     {
+      "betrag_euro": 180.0,
+      "feld": "ev_ersparnis_euro",
+      "name": "Eigenverbrauchs-Ersparnis",
+      "vorzeichen": 1
+     },
+     {
+      "betrag_euro": -78.0,
+      "feld": "dienstliche_ladekosten_euro",
+      "name": "Dienstliche Ladekosten",
+      "vorzeichen": -1
+     },
+     {
+      "betrag_euro": -90.0,
+      "feld": "netzbezug_kosten_euro",
+      "name": "Stromrechnung",
+      "vorzeichen": -1
+     }
+    ],
+    "ergebnis_euro": 44.0,
+    "formel": "Einspeise-Erlös + Eigenverbrauchs-Ersparnis − Dienstliche Ladekosten − Stromrechnung"
+   }
+  },
+  "ergebnis_vor_betriebskosten_euro": 44.0,
+  "erzeuger_erloes_euro": null,
+  "ev_ersparnis_euro": 180.0,
+  "fehlende_posten": [],
+  "feld_quellen": {
+   "einspeisung_kwh": {
+    "abdeckung_bis": null,
+    "abdeckung_von": null,
+    "konfidenz": 85,
+    "quelle": "gespeichert",
+    "zeitpunkt": "2026-10-05T10:18:39.126362"
+   },
+   "netzbezug_kwh": {
+    "abdeckung_bis": null,
+    "abdeckung_von": null,
+    "konfidenz": 85,
+    "quelle": "gespeichert",
+    "zeitpunkt": "2026-10-05T10:18:39.126362"
+   },
+   "pv_erzeugung_kwh": {
+    "abdeckung_bis": null,
+    "abdeckung_von": null,
+    "konfidenz": 85,
+    "quelle": "gespeichert",
+    "zeitpunkt": "2026-10-05T10:18:39.126362"
+   }
+  },
+  "gesamtverbrauch_kwh": 900.0,
+  "grundgebuehr_euro": 0.0,
+  "grundlast_anteil_prozent": null,
+  "grundlast_kw": null,
+  "grundlast_kwh": null,
+  "hat_balkonkraftwerk": false,
+  "hat_emobilitaet": false,
+  "hat_sonstiges": false,
+  "hat_speicher": false,
+  "hat_waermepumpe": false,
+  "hinweise": [],
+  "investitionen_financials": [],
+  "jahr": 2026,
+  "komponenten_geraete": {
+   "e-auto": [
+    "Firmenwagen"
+   ],
+   "pv-module": [
+    "Dach"
+   ]
+  },
+  "monat": 0,
+  "monat_name": "2026",
+  "netto_ertrag_euro": 134.0,
+  "netzbezug_arbeitspreis_kosten_euro": 90.0,
+  "netzbezug_durchschnittspreis_cent": null,
+  "netzbezug_kosten_euro": 90.0,
+  "netzbezug_kwh": 300.0,
+  "netzbezug_preis_cent": 30.0,
+  "nicht_vergueteter_erloes_euro": null,
+  "pv_erzeugung_kwh": 1000.0,
+  "quellen": {
+   "connector": false,
+   "gespeichert": true,
+   "ha_statistics": false,
+   "mqtt_inbound": false,
+   "tagesebene": false
+  },
+  "soll_erfuellung_monat_prozent": null,
+  "soll_erfuellung_prozent": null,
+  "soll_fenster_text": null,
+  "soll_pv_kwh": null,
+  "soll_pv_tage": null,
+  "soll_pv_tage_gesamt": null,
+  "sonstige_ausgaben_euro": 0.0,
+  "sonstige_ertraege_euro": 0.0,
+  "sonstige_netto_euro": 0.0,
+  "sonstiges_bezug_netz_kwh": null,
+  "sonstiges_bezug_pv_kwh": null,
+  "sonstiges_eigenverbrauch_kwh": null,
+  "sonstiges_einspeisung_kwh": null,
+  "sonstiges_erzeugung_kwh": null,
+  "sonstiges_geraete": [],
+  "sonstiges_verbrauch_kwh": null,
+  "speicher_auslastung_fenster": "aus 0 von 1 Monaten",
+  "speicher_auslastung_nenner_kwh": null,
+  "speicher_auslastung_prozent": null,
+  "speicher_auslastung_zaehler_kwh": null,
+  "speicher_auslastungs_basis_kwh": null,
+  "speicher_effektiver_ladepreis_cent": null,
+  "speicher_effektiver_ladepreis_quelle": null,
+  "speicher_entladung_kwh": null,
+  "speicher_ersparnis_euro": null,
+  "speicher_kapazitaet_kwh": null,
+  "speicher_ladung_kwh": null,
+  "speicher_ladung_netz_kosten_euro": null,
+  "speicher_ladung_netz_kwh": null,
+  "speicher_ladung_netz_preis_cent": null,
+  "speicher_ladung_netz_preis_quelle": null,
+  "speicher_soc_drift_signifikant": false,
+  "speicher_vollzyklen": null,
+  "speicher_wirkungsgrad_prozent": null,
+  "speicher_wirkungsgrad_quelle": "keine-ladung",
+  "spez_ertrag": 100.0,
+  "ust_eigenverbrauch_euro": null,
+  "vorjahr": null,
+  "wp_betriebsstunden_max_tag": null,
+  "wp_betriebsstunden_summe_monat": null,
+  "wp_ersparnis_euro": null,
+  "wp_ersparnis_vorbehalt": null,
+  "wp_geraete": [],
+  "wp_heizung_kwh": null,
+  "wp_jaz": null,
+  "wp_jaz_grund": "kein Stromverbrauch erfasst",
+  "wp_jaz_heizen": null,
+  "wp_jaz_heizen_grund": "Strom nicht getrennt je Funktion gemessen",
+  "wp_jaz_hinweis": null,
+  "wp_jaz_ist_schranke": false,
+  "wp_jaz_kuehlen": null,
+  "wp_jaz_kuehlen_grund": "kein Kühlbetrieb in diesem Zeitraum",
+  "wp_jaz_nenner_kwh": null,
+  "wp_jaz_schranke_hinweis": null,
+  "wp_jaz_warmwasser": null,
+  "wp_jaz_warmwasser_grund": "Strom nicht getrennt je Funktion gemessen",
+  "wp_jaz_zaehler_kwh": null,
+  "wp_kaelte_kwh": null,
+  "wp_modus_abdeckung_h": null,
+  "wp_modus_gemessen": false,
+  "wp_modus_nicht_aufgeteilt_kwh": 0,
+  "wp_modus_nutzenergie_entfeuchten_kwh": null,
+  "wp_modus_nutzenergie_lueften_kwh": null,
+  "wp_modus_strom_bezug_kwh": null,
+  "wp_modus_strom_entfeuchten_kwh": null,
+  "wp_modus_strom_heizen_kwh": null,
+  "wp_modus_strom_kuehlen_kwh": null,
+  "wp_modus_strom_lueften_kwh": null,
+  "wp_modus_strom_warmwasser_kwh": null,
+  "wp_moeglich": [
+   {
+    "groesse": "Arbeitszahl",
+    "groessen": [
+     "Arbeitszahl"
+    ],
+    "grund": "kein Stromverbrauch erfasst",
+    "handgriff": "Stromzähler zuordnen oder den Monatswert pflegen",
+    "link": "#/einstellungen/datenquellen"
+   },
+   {
+    "groesse": "Arbeitszahl Heizen · Arbeitszahl Warmwasser",
+    "groessen": [
+     "Arbeitszahl Heizen",
+     "Arbeitszahl Warmwasser"
+    ],
+    "grund": "Strom nicht getrennt je Funktion gemessen",
+    "handgriff": "Getrennte Strommessung einschalten und beide Zähler zuordnen",
+    "link": "#/einstellungen/datenquellen"
+   }
+  ],
+  "wp_starts_max_tag": null,
+  "wp_starts_summe_monat": null,
+  "wp_strom_heizen_kwh": null,
+  "wp_strom_kwh": null,
+  "wp_strom_warmwasser_kwh": null,
+  "wp_waerme_abgeleitet": false,
+  "wp_waerme_herkunft": "gemessen",
+  "wp_waerme_kwh": null,
+  "wp_warmwasser_kwh": null,
+  "zaehlergebuehr_euro_jahr": null
+ },
+ "monat": {
+  "abgabe_dritte_kwh": null,
+  "aktualisiert_um": "2026-10-05T10:18:39.131678",
+  "anlage_id": 1,
+  "anlage_name": "N633-True",
+  "anlage_sonstige_ausgaben_euro": 0.0,
+  "anlage_sonstige_ertraege_euro": 0.0,
+  "autarkie_fenster": null,
+  "autarkie_nenner_kwh": null,
+  "autarkie_prozent": 66.7,
+  "autarkie_zaehler_kwh": null,
+  "betriebskosten_anteilig_anzahl": null,
+  "betriebskosten_anteilig_euro": null,
+  "betriebskosten_anteilig_jahr_euro": null,
+  "bkw_eigenverbrauch_kwh": null,
+  "bkw_ersparnis_berechnung": null,
+  "bkw_ersparnis_euro": null,
+  "bkw_erzeugung_kwh": null,
+  "datenlage_gruende": {},
+  "dienstliche_ladekosten_berechnung": "200,0 kWh PV × 30,00 ct/kWh + 100,0 kWh Netz × 18,00 ct/kWh",
+  "dienstliche_ladekosten_euro": 78.0,
+  "direktverbrauch_kwh": 600.0,
+  "eigenverbrauch_kwh": 600.0,
+  "eigenverbrauch_quote_fenster": null,
+  "eigenverbrauch_quote_nenner_kwh": null,
+  "eigenverbrauch_quote_prozent": 60.0,
+  "eigenverbrauch_quote_zaehler_kwh": null,
+  "einspeise_durchschnittspreis_cent": null,
+  "einspeise_erloes_euro": 32.0,
+  "einspeise_preis_cent": 8.0,
+  "einspeisung_kwh": 400.0,
+  "einspeisung_neg_preis_kwh": null,
+  "emob_ersparnis_berechnung": null,
+  "emob_ersparnis_euro": null,
+  "emob_km": null,
+  "emob_ladung_extern_kwh": null,
+  "emob_ladung_gesamt_kwh": null,
+  "emob_ladung_kwh": null,
+  "emob_ladung_netz_kwh": null,
+  "emob_ladung_pv_kwh": null,
+  "emob_v2h_kwh": null,
+  "emob_verbrauch_100km": null,
+  "emob_verbrauch_basis_kwh": null,
+  "emob_verbrauch_quelle": "keine",
+  "ergebnis_euro": 44.0,
+  "ergebnis_herleitung": {
+   "ergebnis": {
+    "eingesetzte_werte": [
+     {
+      "betrag_euro": 32.0,
+      "feld": "einspeise_erloes_euro",
+      "name": "Einspeise-Erlös",
+      "vorzeichen": 1
+     },
+     {
+      "betrag_euro": 180.0,
+      "feld": "ev_ersparnis_euro",
+      "name": "Eigenverbrauchs-Ersparnis",
+      "vorzeichen": 1
+     },
+     {
+      "betrag_euro": -78.0,
+      "feld": "dienstliche_ladekosten_euro",
+      "name": "Dienstliche Ladekosten",
+      "vorzeichen": -1
+     },
+     {
+      "betrag_euro": -90.0,
+      "feld": "netzbezug_kosten_euro",
+      "name": "Stromrechnung",
+      "vorzeichen": -1
+     },
+     {
+      "betrag_euro": -0.0,
+      "feld": "betriebskosten_anteilig_euro",
+      "name": "Betriebskosten",
+      "vorzeichen": -1
+     }
+    ],
+    "ergebnis_euro": 44.0,
+    "formel": "Einspeise-Erlös + Eigenverbrauchs-Ersparnis − Dienstliche Ladekosten − Stromrechnung − Betriebskosten"
+   },
+   "netto_ertrag": {
+    "eingesetzte_werte": [
+     {
+      "betrag_euro": 32.0,
+      "feld": "einspeise_erloes_euro",
+      "name": "Einspeise-Erlös",
+      "vorzeichen": 1
+     },
+     {
+      "betrag_euro": 180.0,
+      "feld": "ev_ersparnis_euro",
+      "name": "Eigenverbrauchs-Ersparnis",
+      "vorzeichen": 1
+     },
+     {
+      "betrag_euro": -78.0,
+      "feld": "dienstliche_ladekosten_euro",
+      "name": "Dienstliche Ladekosten",
+      "vorzeichen": -1
+     }
+    ],
+    "ergebnis_euro": 134.0,
+    "formel": "Einspeise-Erlös + Eigenverbrauchs-Ersparnis − Dienstliche Ladekosten"
+   },
+   "vor_betriebskosten": {
+    "eingesetzte_werte": [
+     {
+      "betrag_euro": 32.0,
+      "feld": "einspeise_erloes_euro",
+      "name": "Einspeise-Erlös",
+      "vorzeichen": 1
+     },
+     {
+      "betrag_euro": 180.0,
+      "feld": "ev_ersparnis_euro",
+      "name": "Eigenverbrauchs-Ersparnis",
+      "vorzeichen": 1
+     },
+     {
+      "betrag_euro": -78.0,
+      "feld": "dienstliche_ladekosten_euro",
+      "name": "Dienstliche Ladekosten",
+      "vorzeichen": -1
+     },
+     {
+      "betrag_euro": -90.0,
+      "feld": "netzbezug_kosten_euro",
+      "name": "Stromrechnung",
+      "vorzeichen": -1
+     }
+    ],
+    "ergebnis_euro": 44.0,
+    "formel": "Einspeise-Erlös + Eigenverbrauchs-Ersparnis − Dienstliche Ladekosten − Stromrechnung"
+   }
+  },
+  "ergebnis_vor_betriebskosten_euro": 44.0,
+  "erzeuger_erloes_euro": null,
+  "ev_ersparnis_euro": 180.0,
+  "ev_preis_cent": 30.0,
+  "ev_preis_herkunft": "stamm",
+  "fehlende_posten": [],
+  "feld_quellen": {
+   "einspeisung_kwh": {
+    "abdeckung_bis": null,
+    "abdeckung_von": null,
+    "konfidenz": 85,
+    "quelle": "gespeichert",
+    "zeitpunkt": "2026-10-05T10:18:39.126362"
+   },
+   "netzbezug_kwh": {
+    "abdeckung_bis": null,
+    "abdeckung_von": null,
+    "konfidenz": 85,
+    "quelle": "gespeichert",
+    "zeitpunkt": "2026-10-05T10:18:39.126362"
+   },
+   "pv_erzeugung_kwh": {
+    "abdeckung_bis": null,
+    "abdeckung_von": null,
+    "konfidenz": 85,
+    "quelle": "gespeichert",
+    "zeitpunkt": "2026-10-05T10:18:39.126362"
+   }
+  },
+  "gesamtverbrauch_kwh": 900.0,
+  "grundgebuehr_euro": 0.0,
+  "grundlast_anteil_prozent": null,
+  "grundlast_kw": null,
+  "grundlast_kwh": null,
+  "hat_balkonkraftwerk": false,
+  "hat_emobilitaet": false,
+  "hat_sonstiges": false,
+  "hat_speicher": false,
+  "hat_waermepumpe": false,
+  "hinweise": [],
+  "investitionen_financials": [],
+  "jahr": 2026,
+  "komponenten_geraete": {
+   "e-auto": [
+    "Firmenwagen"
+   ],
+   "pv-module": [
+    "Dach"
+   ]
+  },
+  "monat": 6,
+  "monat_name": "Juni",
+  "netto_ertrag_euro": 134.0,
+  "netzbezug_arbeitspreis_kosten_euro": 90.0,
+  "netzbezug_durchschnittspreis_cent": null,
+  "netzbezug_kosten_euro": 90.0,
+  "netzbezug_kwh": 300.0,
+  "netzbezug_preis_abdeckung": null,
+  "netzbezug_preis_cent": 30.0,
+  "netzbezug_preis_effektiv_cent": 30.0,
+  "netzbezug_preis_herkunft": "stamm",
+  "netzbezug_preis_zeittarif": false,
+  "nicht_vergueteter_erloes_euro": null,
+  "pv_erzeugung_kwh": 1000.0,
+  "quellen": {
+   "connector": false,
+   "gespeichert": true,
+   "ha_statistics": false,
+   "mqtt_inbound": false,
+   "tagesebene": false
+  },
+  "soll_erfuellung_monat_prozent": null,
+  "soll_erfuellung_prozent": null,
+  "soll_fenster_text": null,
+  "soll_pv_kwh": null,
+  "soll_pv_kwh_monat": null,
+  "soll_pv_tage": null,
+  "soll_pv_tage_gesamt": null,
+  "sonstige_ausgaben_euro": 0.0,
+  "sonstige_ertraege_euro": 0.0,
+  "sonstige_netto_euro": 0.0,
+  "sonstiges_bezug_netz_kwh": null,
+  "sonstiges_bezug_pv_kwh": null,
+  "sonstiges_eigenverbrauch_kwh": null,
+  "sonstiges_einspeisung_kwh": null,
+  "sonstiges_erzeugung_kwh": null,
+  "sonstiges_geraete": [],
+  "sonstiges_verbrauch_kwh": null,
+  "speicher_auslastung_fenster": null,
+  "speicher_auslastung_nenner_kwh": null,
+  "speicher_auslastung_prozent": null,
+  "speicher_auslastung_zaehler_kwh": null,
+  "speicher_auslastungs_basis_kwh": null,
+  "speicher_effektiver_ladepreis_cent": null,
+  "speicher_effektiver_ladepreis_quelle": null,
+  "speicher_entladung_kwh": null,
+  "speicher_ersparnis_euro": null,
+  "speicher_kapazitaet_kwh": null,
+  "speicher_ladung_kwh": null,
+  "speicher_ladung_netz_kosten_euro": null,
+  "speicher_ladung_netz_kwh": null,
+  "speicher_ladung_netz_preis_cent": null,
+  "speicher_ladung_netz_preis_quelle": null,
+  "speicher_soc_drift_signifikant": false,
+  "speicher_vollzyklen": null,
+  "speicher_wirkungsgrad_prozent": null,
+  "speicher_wirkungsgrad_quelle": null,
+  "spez_ertrag": 100.0,
+  "ust_eigenverbrauch_euro": null,
+  "ust_herleitung": null,
+  "vorjahr": null,
+  "wp_betriebsstunden_max_tag": null,
+  "wp_betriebsstunden_summe_monat": null,
+  "wp_ersparnis_berechnung": null,
+  "wp_ersparnis_euro": null,
+  "wp_ersparnis_vorbehalt": null,
+  "wp_geraete": [],
+  "wp_heizung_kwh": null,
+  "wp_hub_hilft": false,
+  "wp_jaz": null,
+  "wp_jaz_grund": "kein Stromverbrauch erfasst",
+  "wp_jaz_heizen": null,
+  "wp_jaz_heizen_grund": "Strom nicht getrennt je Funktion gemessen",
+  "wp_jaz_hinweis": null,
+  "wp_jaz_ist_schranke": false,
+  "wp_jaz_kuehlen": null,
+  "wp_jaz_kuehlen_grund": "kein Kühlbetrieb in diesem Zeitraum",
+  "wp_jaz_nenner_kwh": null,
+  "wp_jaz_schranke_hinweis": null,
+  "wp_jaz_warmwasser": null,
+  "wp_jaz_warmwasser_grund": "Strom nicht getrennt je Funktion gemessen",
+  "wp_jaz_zaehler_kwh": null,
+  "wp_kaelte_kwh": null,
+  "wp_modus_abdeckung_h": null,
+  "wp_modus_gemessen": null,
+  "wp_modus_nicht_aufgeteilt_kwh": null,
+  "wp_modus_nutzenergie_entfeuchten_kwh": null,
+  "wp_modus_nutzenergie_lueften_kwh": null,
+  "wp_modus_strom_bezug_kwh": null,
+  "wp_modus_strom_entfeuchten_kwh": null,
+  "wp_modus_strom_heizen_kwh": null,
+  "wp_modus_strom_kuehlen_kwh": null,
+  "wp_modus_strom_lueften_kwh": null,
+  "wp_modus_strom_warmwasser_kwh": null,
+  "wp_moeglich": [
+   {
+    "groesse": "Arbeitszahl",
+    "groessen": [
+     "Arbeitszahl"
+    ],
+    "grund": "kein Stromverbrauch erfasst",
+    "handgriff": "Stromzähler zuordnen oder den Monatswert pflegen",
+    "link": "#/einstellungen/datenquellen"
+   },
+   {
+    "groesse": "Arbeitszahl Heizen · Arbeitszahl Warmwasser",
+    "groessen": [
+     "Arbeitszahl Heizen",
+     "Arbeitszahl Warmwasser"
+    ],
+    "grund": "Strom nicht getrennt je Funktion gemessen",
+    "handgriff": "Getrennte Strommessung einschalten und beide Zähler zuordnen",
+    "link": "#/einstellungen/datenquellen"
+   }
+  ],
+  "wp_starts_max_tag": null,
+  "wp_starts_summe_monat": null,
+  "wp_strom_heizen_kwh": null,
+  "wp_strom_kwh": null,
+  "wp_strom_warmwasser_kwh": null,
+  "wp_waerme_abgeleitet": false,
+  "wp_waerme_abgeleitet_kwh": null,
+  "wp_waerme_herkunft": "gemessen",
+  "wp_waerme_kwh": null,
+  "wp_warmwasser_kwh": null,
+  "zaehlergebuehr_euro_jahr": null
+ }
+}

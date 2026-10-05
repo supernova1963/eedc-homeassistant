@@ -56,6 +56,7 @@ from typing import Any, Iterable, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.berechnungen.dienstliche_ladekosten import DIENSTLICHE_LADEKOSTEN_HINWEIS
 from backend.models.anlage import Anlage
 from backend.services.pdf.formatierung import (
     LEER,
@@ -465,6 +466,9 @@ def _abschnitte_finanzen(d: Any) -> list[Abschnitt]:
               hinweis="Balkonkraftwerk-Monat ohne erfasste Erzeugung")] if d.bkw_ersparnis_euro else []),
         *([_z("Erlös eigener Satz", fmt_euro(d.erzeuger_erloes_euro))] if d.erzeuger_erloes_euro else []),
         _z("Sonstige Positionen (netto)", fmt_euro(d.sonstige_netto_euro)),
+        # N-633: eigener Posten der Leiter, nur wenn ≠ 0 (Aufwand, positiv wie USt und Netzbezugskosten).
+        *([_z("Dienstliche Ladekosten", fmt_euro(d.dienstliche_ladekosten_euro), hinweis=DIENSTLICHE_LADEKOSTEN_HINWEIS)]
+          if getattr(d, "dienstliche_ladekosten_euro", 0) else []),
         *([_z("USt auf Eigenverbrauch", fmt_euro(d.ust_eigenverbrauch_euro), hinweis=d.ust_herleitung)]
           if d.ust_eigenverbrauch_euro else []),
         _z("Netto-Ertrag", fmt_euro(d.netto_ertrag_euro),

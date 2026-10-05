@@ -32,6 +32,7 @@ import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { GELD_TEXT_CLASS, compareTyp } from '../../lib'
 import type { AktuellerMonatResponse, InvestitionFinancialDetail } from '../../api/aktuellerMonat'
 import { bkwAufteilung, pvEigenverbrauchRestEuro } from './evAufteilung'
+import { DIENSTLICHE_LADEKOSTEN_HINWEIS, DIENSTLICHE_LADEKOSTEN_LABEL } from './dienstlicheLadekosten'
 
 const num = (v: number) => fmtCalc(v, 2, '—')
 const saldoFarbe = (v: number) => (v >= 0 ? GELD_TEXT_CLASS.netto : GELD_TEXT_CLASS.kosten)
@@ -170,6 +171,21 @@ function zeilenAus(d: AktuellerMonatResponse): FinanzZeile[] {
   // Bis 03.10.2026 stand hier eine Sicherungszeile „Speicher — Netzladung" mit den Netzladungs-Kosten als Aufwand,
   // falls keine Speicher-Zeile existierte. Sie entfällt mit N-606: die Kosten stehen in der Stromrechnung, und eine
   // Zeile ohne eigenen Betrag wäre Ausweis ohne Gegenstand.
+
+  // N-633 (05.10.2026): dienstliche Ladekosten — Posten der Ergebnis-Leiter, eigene Aufwandszeile, nur wenn ≠ 0.
+  // Ohne sie führte „Komponenten-Saldo − Stromrechnung" bei einem Dienstwagen nicht auf `ergebnis_euro`.
+  const dienstlich = d.dienstliche_ladekosten_euro ?? 0
+  if (dienstlich !== 0) {
+    zeilen.push({
+      key: 'dienstliche-ladekosten',
+      label: DIENSTLICHE_LADEKOSTEN_LABEL,
+      typ: 'e-auto',
+      ertraege: 0,
+      einsparungen: 0,
+      aufwand: dienstlich,
+      tooltip: [DIENSTLICHE_LADEKOSTEN_HINWEIS, d.dienstliche_ladekosten_berechnung].filter(Boolean).join(' — '),
+    })
+  }
 
   // Anlage-übergreifende Sonstige Positionen — eigene Zeile, nur wenn ≠ 0.
   const aErt = d.anlage_sonstige_ertraege_euro ?? 0

@@ -7,12 +7,15 @@ Zeitfilter und Dienstwagen-Filter genau hier).
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.services.strompreis_aggregator import PreisMessung
 from backend.core.berechnungen import (
+    DienstlicheLadungZeile,
     PvModulWert,
+    berechne_dienstliche_ladekosten,
     berechne_verbrauchs_kennzahlen,
     erzeugung_hinter_zaehler_kwh,
 )
@@ -336,6 +339,17 @@ async def _baue_fakt(
             entladung_kwh=tages_summe.speicher_entladung_kwh,
         )
         tageswert_gruppen.add(TAGESWERT_SPEICHER)
+
+    # N-633: der Posten „Dienstliche Ladekosten" — bewertet mit dem Tarif DIESES Monats (P8), über die eine
+    # Layer-Formel. Hier statt im EmobFakten-Aufbau oben, weil der Tarif erst danach geladen ist.
+    emob = replace(emob, dienstliche_ladekosten_euro=berechne_dienstliche_ladekosten([
+        DienstlicheLadungZeile(
+            ladung_pv_kwh=emob.dienstlich_ladung_pv_kwh,
+            ladung_netz_kwh=emob.dienstlich_ladung_netz_kwh,
+            netzbezug_preis_cent=tarif.netzbezug_preis_cent,
+            wallbox_preis_cent=tarif.wallbox_preis_effektiv_cent,
+        ),
+    ]).gesamt_euro)
 
     return MonatsFakt(
         jahr=jahr,

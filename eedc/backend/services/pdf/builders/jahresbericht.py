@@ -31,6 +31,7 @@ from backend.core.berechnungen import (
     spezifischer_ertrag_kwh_kwp,
     vollzyklen as berechne_vollzyklen,
 )
+from backend.core.berechnungen.dienstliche_ladekosten import DIENSTLICHE_LADEKOSTEN_HINWEIS
 from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
 from backend.core.investition_parameter import ist_dienstlich
 from backend.services.waermepumpe_jahreskennzahlen import waermepumpe_jahreskennzahlen
@@ -375,7 +376,9 @@ async def build_jahresbericht_context(
         # bis 03.10.2026 `einsp + ev + sonstige`: Σ der Zeilen wich vom KPI darunter um USt, BKW-Rest und Erzeuger ab.
         _netto_m = berechne_ergebnis(ErgebnisEingang(
             einspeise_erloes=einsp_eur, ev_ersparnis=ev_eur, bkw_rest_ersparnis=_fz.bkw_ersparnis_euro,
-            erzeuger_erloes=fakt.sonstiges.einspeise_erloes_euro, sonstige_netto=sonstige_eur, ust_anteil=_ust_m,
+            erzeuger_erloes=fakt.sonstiges.einspeise_erloes_euro, sonstige_netto=sonstige_eur,
+            # N-633: derselbe Posten wie Cockpit → Monat und Übersicht (Monats-Fakten).
+            dienstliche_ladekosten=fakt.emob.dienstliche_ladekosten_euro, ust_anteil=_ust_m,
         )).netto_ertrag
         pv_gesamt += pv
         erz_bilanz_gesamt += erzeugung_bilanz
@@ -433,6 +436,8 @@ async def build_jahresbericht_context(
     # `sonstiges.netto_euro` faltet IMD- und G19-1-Basis-Positionen — per
     # Konstruktion deckungsgleich mit den Monatszeilen.
     sonstige_netto_gesamt = sum(sonstige_by_ym.values())
+    # N-633: dienstliche Ladekosten — eigener Posten der Leiter, nicht Teil der Sonstigen (Kapitaleinsatz, F-19).
+    dienstliche_ladekosten_gesamt = sum(f.emob.dienstliche_ladekosten_euro for f in fakten)
     # #326: Finanz-Summary über den SoT-Helper = Σ der per-Monat-Zeilen (EV mit
     # Monats-Flexpreis + §51-bereinigter Einspeise-Erlös) + Sonstige.
     _finanz = berechne_finanz_aggregat(
@@ -486,7 +491,8 @@ async def build_jahresbericht_context(
     netto_ertrag = berechne_ergebnis(ErgebnisEingang(
         einspeise_erloes=_finanz.einspeise_erloes_euro, ev_ersparnis=_finanz.ev_ersparnis_euro,
         bkw_rest_ersparnis=_finanz.bkw_ersparnis_euro, erzeuger_erloes=_finanz.erzeuger_erloes_euro,
-        sonstige_netto=_finanz.sonstige_netto_euro, ust_anteil=ust_eigenverbrauch,
+        sonstige_netto=_finanz.sonstige_netto_euro, dienstliche_ladekosten=dienstliche_ladekosten_gesamt,
+        ust_anteil=ust_eigenverbrauch,
     )).netto_ertrag
 
     anzahl_monate = len(monats_zeilen)
@@ -868,6 +874,8 @@ async def build_jahresbericht_context(
             "einspeise_erloes_euro": einspeise_erloes,
             "ev_ersparnis_euro": ev_ersparnis,
             "sonstige_netto_euro": sonstige_netto_gesamt,
+            "dienstliche_ladekosten_euro": dienstliche_ladekosten_gesamt,
+            "dienstliche_ladekosten_hinweis": DIENSTLICHE_LADEKOSTEN_HINWEIS,
             "netto_ertrag_euro": netto_ertrag,
             "betriebskosten_zeitraum_euro": betriebskosten_zeitraum,
             "netto_nach_bk_euro": netto_nach_bk,

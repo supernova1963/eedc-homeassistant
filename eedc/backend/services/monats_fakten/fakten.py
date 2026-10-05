@@ -199,9 +199,13 @@ class EmobFakten:
     zeigte 0 % neben dem abgeleiteten Anteil derselben Größe.
 
     ``dienstlich_*`` ist der herausgefilterte Anteil — nicht verworfen, sondern
-    getrennt ausgewiesen, weil er als *Ausgabe* (dienstliche Ladekosten) in die
-    Sonstige-Summen gehört. Die Bewertung in Euro bleibt beim Aufrufer, weil sie
-    den Monatstarif braucht (der liegt in ``TarifFakten``).
+    getrennt ausgewiesen, weil er als *Ausgabe* (dienstliche Ladekosten) bewertet
+    wird. Seit N-633 (05.10.2026) bewertet ihn die Schicht selbst
+    (``dienstliche_ladekosten_euro``, Layer-Formel ``berechne_dienstliche_ladekosten``
+    mit den Preisen aus ``TarifFakten`` desselben Monats) — der eine Posten, den alle
+    Sichten lesen. Bis dahin rechneten Übersicht, HA-Export und Aussichten ihn je
+    selbst und falteten ihn in die Sonstigen Positionen; Cockpit → Monat/Jahr,
+    Tabelle und PDF führten ihn gar nicht.
     """
 
     ladung_kwh: float = 0.0
@@ -241,6 +245,12 @@ class EmobFakten:
     #: dieselbe wie vor N-555 (Konzept Regel 2-Ü: Dienstwagen unverändert); das
     #: Kennzeichen sagt nur, dass sie eine Schätzung ist, statt es zu verschweigen.
     dienstlich_geschaetzt: bool = False
+    #: N-633: die dienstlichen Ladekosten des Monats in € (PV-Anteil × Netzbezugspreis +
+    #: Netzanteil × effektiver Wallbox-Preis, ``core/berechnungen/dienstliche_ladekosten.py``),
+    #: ungerundet. Posten „Dienstliche Ladekosten" der Ergebnis-Leiter (Stufe 1, −).
+    #: ⛔ NICHT Teil von ``SonstigesFakten.ausgaben_euro`` — die ist Eingang des
+    #: Kapitaleinsatzes (F-19), der Posten ist laufender Aufwand.
+    dienstliche_ladekosten_euro: float = 0.0
     #: ⭐ N-555 Stufe 2 (Konzept Regel 2/3): die Heimladung JEDES privaten Autos im Monat
     #: (``inv_id → AutoHeimladung``: gemessen, Rest-Anteil nach km, Schätzung oder 0) — aus
     #: der einen Funktion. Wer je Fahrzeug rechnet (Übersicht, Jahresbericht), liest hier.
