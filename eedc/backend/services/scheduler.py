@@ -576,6 +576,7 @@ async def sensor_snapshot_job() -> None:
         from sqlalchemy import select
         from backend.core.database import get_session
         from backend.models.anlage import Anlage
+        from backend.services.kanal.schreiber import schreibe_kanaele_im_stundenlauf
         from backend.services.sensor_snapshot_service import snapshot_anlage
 
         now = datetime.now()
@@ -600,6 +601,9 @@ async def sensor_snapshot_job() -> None:
                         f"Snapshot für Anlage {anlage.id} fehlgeschlagen: "
                         f"{type(e).__name__}: {e}"
                     )
+                # HA-Bauform E1: Kanalstatistik NACH dem Bestand, in derselben Sitzung — eigener
+                # SAVEPOINT, Fehler werden dort geloggt und vermerkt, nie hierher durchgereicht.
+                await schreibe_kanaele_im_stundenlauf(db, anlage, zeitpunkt)
 
         if total_snapshots > 0:
             logger.info(

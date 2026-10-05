@@ -1561,6 +1561,102 @@ class HAStatisticsService:
             wert *= faktor
         return round(wert, 3)
 
+    # ------------------------------------------------------------------
+    # Kanalstatistik (HA-Bauform E1): Stundenzeilen WÖRTLICH für den Spiegel
+    # ------------------------------------------------------------------
+
+    _ROH_SPALTEN: tuple[str, ...] = ("state", "sum", "mean", "min", "max")
+
+    def get_stundenzeilen_mehrere(
+        self, ts_nach_je_sensor: dict[str, float], ts_bis: float,
+    ) -> dict[str, tuple[SensorMeta, list[dict]]]:
+        """Stundenzeilen mehrerer Sensoren mit ``ts_nach < start_ts <= ts_bis`` — roh, ohne Umrechnung,
+        in EINER Abfrage (bzw. einem WS-Aufruf).
+
+        Für den Kanal-Spiegel (``services/kanal/schreiber.py``): ``start_ts`` wie HA, ``state``,
+        ``sum``, ``mean``, ``min``, ``max`` so, wie sie in ``statistics`` stehen. Die
+        Einheiten-Umrechnung des heutigen Lesers (``_value_at_wert``) wendet der Schreiber an, nicht
+        diese Funktion — sie liefert dafür die ``SensorMeta`` mit.
+
+        Je Sensor gilt seine eigene Untergrenze ``ts_nach`` (exklusiv); gelesen wird ab der
+        kleinsten und danach je Sensor beschnitten. Sensoren, die HA nicht kennt, fehlen im
+        Ergebnis. Fehler beim Lesen gehen an den Aufrufer.
+        """
+        if not self.is_available or not ts_nach_je_sensor:
+            return {}
+        ts_von = min(ts_nach_je_sensor.values())
+        out: dict[str, tuple[SensorMeta, list[dict]]] = {}
+        with self._verbindung() as conn:
+            metas = {sid: m for sid in ts_nach_je_sensor if (m := self.get_metadata(conn, sid))}
+            if not metas:
+                return {}
+            if conn is None:
+                roh = self._ws_zeilen(list(metas), ts_von, ts_bis, types=list(self._ROH_SPALTEN))
+                for sid, meta in metas.items():
+                    zeilen = sorted(
+                        ({"start_ts": float(z["start_ts"]), **{s: z.get(s) for s in self._ROH_SPALTEN}}
+                         for z in roh.get(sid, []) if ts_nach_je_sensor[sid] < z["start_ts"] <= ts_bis),
+                        key=lambda z: z["start_ts"],
+                    )
+                    out[sid] = (meta, zeilen)
+                return out
+            id_zu_sid = {m.id: sid for sid, m in metas.items()}
+            params: dict = {f"m{i}": mid for i, mid in enumerate(id_zu_sid)}
+            params.update({"von": ts_von, "bis": ts_bis})
+            platz = ", ".join(f":m{i}" for i in range(len(id_zu_sid)))
+            rows = conn.execute(
+                text(
+                    "SELECT metadata_id, start_ts, state, sum, mean, min, max FROM statistics "
+                    f"WHERE metadata_id IN ({platz}) AND start_ts > :von AND start_ts <= :bis "
+                    "ORDER BY metadata_id, start_ts"
+                ),
+                params,
+            ).fetchall()
+            for sid, meta in metas.items():
+                out[sid] = (meta, [])
+            for r in rows:
+                sid = id_zu_sid[r[0]]
+                if r[1] > ts_nach_je_sensor[sid]:
+                    out[sid][1].append({"start_ts": float(r[1]), "state": r[2], "sum": r[3],
+                                        "mean": r[4], "min": r[5], "max": r[6]})
+            return out
+
+    def get_stundenzeile_bis(self, sensor_id: str, ts: float) -> Optional[dict]:
+        """Letzte Stundenzeile eines Sensors mit ``start_ts <= ts`` (Anker beim Sensortausch), roh.
+
+        SQL: eine Zeile über den Index ``(metadata_id, start_ts)``. WS: wachsende Fenster wie
+        ``_letzter_sum_vor`` (1 · 8 · 32 · 128 · 1024 Tage), Abbruch beim ersten Treffer.
+        """
+        if not self.is_available:
+            return None
+        with self._verbindung() as conn:
+            meta = self.get_metadata(conn, sensor_id)
+            if not meta:
+                return None
+            if conn is None:
+                for tage in _WS_ANKER_FENSTER_TAGE:
+                    zeilen = [
+                        z for z in self._ws_zeilen(
+                            [sensor_id], ts - tage * 86400, ts, types=list(self._ROH_SPALTEN),
+                        ).get(sensor_id, [])
+                        if z["start_ts"] <= ts
+                    ]
+                    if zeilen:
+                        z = max(zeilen, key=lambda z: z["start_ts"])
+                        return {"start_ts": float(z["start_ts"]), **{s: z.get(s) for s in self._ROH_SPALTEN}}
+                return None
+            r = conn.execute(
+                text(
+                    "SELECT start_ts, state, sum, mean, min, max FROM statistics "
+                    "WHERE metadata_id = :mid AND start_ts <= :ts ORDER BY start_ts DESC LIMIT 1"
+                ),
+                {"mid": meta.id, "ts": ts},
+            ).fetchone()
+            if r is None:
+                return None
+            return {"start_ts": float(r[0]), "state": r[1], "sum": r[2], "mean": r[3],
+                    "min": r[4], "max": r[5]}
+
     def get_hourly_kwh_deltas_for_day(
         self,
         sensor_ids: list[str],

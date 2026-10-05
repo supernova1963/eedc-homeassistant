@@ -531,6 +531,27 @@ Die folgenden Felder (`stamm_*`, `ansprechpartner_*`, `wartung_*`) wurden aus de
 | thumbnail | LARGEBINARY | Vorschaubild (nur für Bilder) |
 | created_at | DATETIME | Erstellungsdatum |
 
+#### Kanalstatistik — Stand E1: wird geschrieben, noch nicht gelesen
+
+Drei Tabellen nach dem Vorbild der HA-Langzeitstatistik (Umbau „eedc nach HA-Bauform", Etappe E1). **Keine Sicht,
+keine Route und kein Export liest sie**; Stunden- und Tageszeilen sowie `sensor_snapshots` laufen unverändert weiter.
+
+| Tabelle | Inhalt |
+| --- | --- |
+| `kanal` | eine Größe einer Anlage: `key` im Snapshot-Schema (`basis:<feld>`, `inv:<id>:<feld>`, `modus:inv:<id>:<betriebsart>`), `art` ∈ `sum` · `mean` · `stand`, `einheit` |
+| `kanal_quelle` | Herkunft ab `gueltig_ab`: Familie (`spiegel` · `bestand` · `mitschrift` · `abgeleitet`), HA-`statistic_id` bzw. MQTT-Schlüssel, `offset` (Sensortausch: Kanalwert = Zeile + `offset`, die Zeile bleibt wörtlich) |
+| `kanal_statistik` | eine Zeile je Kanal und Stunde (`start_ts` = Stundenbeginn, Unix-Sekunden), `sum` · `state` · `mean` · `min` · `max`, eindeutig über `(kanal_id, start_ts)` |
+
+Welche Art ein Feld bekommt, leitet `services/kanal/katalog.py` aus der Feld-Registry ab (Wächter
+`test_kanal_feld_deckung.py`, Baseline 0). Geschrieben wird im Stundenlauf :05 nach `snapshot_anlage` (HA-Spiegel; ohne HA die
+eigene Summe aus MQTT-Rohständen nach HAs Reset-Regel, `core/berechnungen/ha_summe.py`) und in `aggregate_day` (Betriebsart als
+Anteil der Stunde) — beides in derselben Sitzung, in einem eigenen SAVEPOINT: ein Fehler dort berührt den Bestand nicht.
+Mittelwerte (Leistung, Ladestand, Temperatur, Preis) werden gespiegelt, wo der Sensor eine HA-Langzeitstatistik hat —
+`mean`/`min`/`max` wörtlich in HAs Einheit (die Kanal-Einheit ist die beim Anlegen; eine spätere andere Einheit wird nicht
+geschrieben, nicht umgerechnet). Mittelwerte ohne Langzeitstatistik und die abgeleiteten Kanäle sind im Katalog benannt, in E1
+aber ohne Schreiber. Eine gelöschte Anlage räumt ihre Kanäle
+(`ON DELETE CASCADE`) wie ihre Snapshots; eine gelöschte Investition räumt — wie bei den Snapshots — keine.
+
 ### Parent-Child Beziehungen
 
 ```

@@ -422,6 +422,10 @@ async def _get_betriebsmodus_history(
         )
 
         ergebnis: dict = {}
+        # HA-Bauform E1: die Verweildauern, aus denen der Gewinner unten entsteht, als „Anteil der
+        # Stunde je Betriebsart" — für die Kanal-Mitschrift (`services/kanal/schreiber.py`). Der
+        # Gewinner und damit `betriebsmodus_je_wp` bleiben unberührt.
+        anteile: dict = {}
         for entity_id in modus_entities:
             punkte = history.get(entity_id, [])
             if not punkte:
@@ -485,14 +489,38 @@ async def _get_betriebsmodus_history(
                 # Kanon-Reihenfolge, damit dieselbe Stunde nicht je nach
                 # Dict-Laufrichtung anders ausfällt.
                 gewinner = max(dauer.items(), key=lambda kv: (kv[1], -_KANON_RANG(kv[0])))[0]
+                stunde_s = (h_end - h_start).total_seconds()
                 for inv_id in entity_zu_inv[entity_id]:
                     ergebnis.setdefault(h, {})[inv_id] = gewinner
+                    anteile.setdefault(h, {})[inv_id] = {m: d / stunde_s for m, d in dauer.items()}
 
-        return ergebnis
+        return ModusJeStunde(
+            ergebnis,
+            anteile=anteile,
+            entitaeten={inv_id: eid for eid, ids in entity_zu_inv.items() for inv_id in ids},
+        )
 
     except Exception as e:
         logger.debug(f"Betriebsmodus-History für {datum}: {e}")
         return {}
+
+
+class ModusJeStunde(dict):
+    """``{stunde: {investition_id: modus}}`` — wertgleich das bisherige Ergebnis von
+    `_get_betriebsmodus_history`, dazu zwei Attribute für die Kanal-Mitschrift (HA-Bauform E1):
+
+    * ``anteile``: ``{stunde: {investition_id: {modus: anteil}}}`` — die Verweildauer je Kanon-Modus
+      als Bruchteil der Stunde (aus derselben Schleife wie der Gewinner).
+    * ``entitaeten``: ``{investition_id: entity_id}`` der `climate`-Quelle.
+
+    Ein dict-Unterklasse, damit jeder heutige Leser (Stundenzeile, Rettung N-595, Proben, die die
+    Funktion ersetzen und ein einfaches dict liefern) unverändert bleibt.
+    """
+
+    def __init__(self, werte: dict, *, anteile: dict, entitaeten: dict):
+        super().__init__(werte)
+        self.anteile = anteile
+        self.entitaeten = entitaeten
 
 
 def _KANON_RANG(modus: str) -> int:

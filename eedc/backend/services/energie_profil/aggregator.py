@@ -2024,6 +2024,9 @@ async def aggregate_day(
         pv_keys, netz_keys, _sonderschluessel, wetter_stunden,
         soc_je_stunde, soc_stunden, betriebsmodus_je_stunde, strompreis_stunden,
     ) = await lade_stammdaten(anlage, datum, db, serien, sensor_mapping)
+    # HA-Bauform E1: die Betriebsart, wie die Quelle sie liefert — VOR der Rettung (N-595) unten,
+    # damit die Kanal-Mitschrift nie einen geretteten Altwert als Messung übernimmt.
+    betriebsmodus_aus_quelle = betriebsmodus_je_stunde
 
     (
         invs, invs_by_id, kwh_pro_stunde, kwh_source_label,
@@ -2136,6 +2139,12 @@ async def aggregate_day(
     )
 
     await pruefe_invarianten(anlage, datum, db, zusammenfassung, invs_by_id)
+
+    # HA-Bauform E1: Betriebsart-Mitschrift („Anteil der Stunde je Betriebsart") — NACH dem
+    # Bestand, in derselben Sitzung, eigener SAVEPOINT; ein Fehler dort berührt keine Zeile oben.
+    # Stand E1: wird geschrieben, von keiner Sicht gelesen.
+    from backend.services.kanal.schreiber import schreibe_betriebsart_mitschrift_sicher
+    await schreibe_betriebsart_mitschrift_sicher(db, anlage, datum, betriebsmodus_aus_quelle)
 
     logger.info(
         f"Anlage {anlage.id}, {datum}: {akku.stunden_count}h aggregiert, "

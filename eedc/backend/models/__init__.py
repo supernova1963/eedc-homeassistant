@@ -12,6 +12,7 @@ from backend.models.infothek import InfothekEintrag, InfothekDatei
 from backend.models.korrekturprofil import Korrekturprofil
 from backend.models.data_provenance_log import DataProvenanceLog
 from backend.models.emob_ladeblock import EmobLadeblock
+from backend.models.kanal import Kanal, KanalQuelle, KanalStatistik
 
 __all__ = [
     "Anlage",
@@ -34,4 +35,7 @@ __all__ = [
     "Korrekturprofil",
     "DataProvenanceLog",
     "EmobLadeblock",
+    "Kanal",
+    "KanalQuelle",
+    "KanalStatistik",
 ]
