@@ -531,9 +531,9 @@ Die folgenden Felder (`stamm_*`, `ansprechpartner_*`, `wartung_*`) wurden aus de
 | thumbnail | LARGEBINARY | Vorschaubild (nur für Bilder) |
 | created_at | DATETIME | Erstellungsdatum |
 
-#### Kanalstatistik — Stand E2: wird geschrieben und nachgefüllt, noch nicht gelesen
+#### Kanalstatistik — Stand E3: Lese-Schicht vorhanden, noch von keiner Sicht benutzt
 
-Drei Tabellen nach dem Vorbild der HA-Langzeitstatistik (Umbau „eedc nach HA-Bauform", Etappen E1/E2). **Keine Sicht,
+Drei Tabellen nach dem Vorbild der HA-Langzeitstatistik (Umbau „eedc nach HA-Bauform", Etappen E1–E3). **Keine Sicht,
 keine Route und kein Export liest sie**; Stunden- und Tageszeilen sowie `sensor_snapshots` laufen unverändert weiter.
 
 | Tabelle | Inhalt |
@@ -574,8 +574,25 @@ noch ab einem späteren Zeitpunkt —, bleibt der Spiegel davor stehen; ist HA u
 `start_ts`: `core/berechnungen/slot_konvention.py::slot_start_ts`, die Umkehrung von `lts_boundary_index` (doppelte
 Herbststunde ⇒ die spätere, fehlende Frühjahrsstunde ⇒ kein `start_ts`); das Tagesfenster `[Vortag 23:00, 23:00)` ist
 `tagesfenster_start_ts`. Auch die Betriebsart-Mitschrift rechnet darüber. Der Wächter `test_kanal_symmetrie.py` prüft auf den Datenständen beider Abnahme-Matrizen je Tag
-Kanal-Δ ≡ `komponenten_kwh` (Toleranz 0,005 kWh, benannte und gezählte Ausnahmeklassen); die Lese-Hilfe dafür
-(`services/kanal/lesen.py`) benutzt keine Sicht.
+Kanal-Δ ≡ `komponenten_kwh` (Toleranz 0,005 kWh, benannte und gezählte Ausnahmeklassen); seit E3 liest er über die
+Lese-Schicht.
+
+**Lese-Schicht (E3).** `services/kanal/lesen.py` hat vier Lesefunktionen, je auch als Stapel über viele Kanäle in einem
+Aufruf: `zeitraum` (Δ über `[von, bis)`), `reihe` (dasselbe je Intervall, über n+1 Randstände), `stunden` (Zuwachs je
+belegter Stunde wie HAs `change`) und `mittel` (mean/min/max wörtlich in der Einheit des Kanals). Zeitgrenzen sind absolute
+Zeit; der Stand vor `t` ist die letzte Zeile mit `start_ts < t`, wie in HA. Kanalwert: `sum` ⇒ `sum + offset`, `stand` ⇒
+`state` roh (`offset` nur als Brücke für das Δ über eine Quellgrenze). **Jedes Ergebnis trägt seine Abdeckung**
+(`gedeckt_von`, `gedeckt_bis`, `rand_spanne`, `voll`, Grund): voll gedeckt ist ein Zeitraum, wenn der Kanal einen
+Stand vor `von` hat, sein Stand das Ende erreicht (im laufenden Zeitraum mit Toleranz für den Schreibverzug des
+Stundenlaufs) und der Zeitraum nicht feiner ist als die Spanne zweier Stände, in der einer seiner Ränder liegt. Eine Lücke
+im Inneren ist keine fehlende Abdeckung — ihre Menge steht in der Folgestunde, wie in HA —; sie nennt `stunden` je Stunde.
+`zeitraum` und `reihe` lesen dafür nur die Randstände: zwei Index-Schritte je Kanal und Grenze, eine SQL-Anweisung je
+Aufruf, gleich wie lang der Zeitraum ist. Ohne volle Abdeckung gibt es keinen Wert, nur eine benannte Teilsumme.
+`fenster.py` bildet Tages- und Monatsfenster so, wie der Bestand sie hat (`[Vortag 23:00, 23:00)`, Monat = Tage des
+Monats), dazu den Kalendermonat des HA-Monatslesers (`[1. 00:00, 1. 00:00)`) für die Leser, die heute mit ihm rechnen; `quellenwahl.py` sagt je Zeitraum „Kanal" (jeder benötigte
+Kanal deckt voll) oder „Bestand" (mit Grund je Kanal); `monatsraster.py` liefert je Monat Δ, Abdeckung und diese eine
+Wahl — die Überlagerung „gespeichert schlägt gerechnet" bleibt Sache der Monats-Fakten. Außerhalb `services/kanal/`
+importiert die Schicht noch niemand (Wächter `test_kanal_lesen_waechter.py`); das Umhängen der Leser folgt in E4.
 
 ### Parent-Child Beziehungen
 

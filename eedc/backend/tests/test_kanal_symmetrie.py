@@ -3,7 +3,8 @@
 Auf den Datenständen beider Abnahme-Matrizen (HA-Langzeitstatistik im echten Recorder-Schema,
 ``achsen_matrix`` und ``pv_achse_matrix``): Spiegel aus HA nachgefüllt (``nachfuellen_spiegel``),
 Tageszeilen über den echten ``aggregate_day``; dann je Anlage, Tag und ``komponenten_kwh``-Schlüssel
-Tageswert gegen Kanal-Δ über das Tagesfenster ``[Vortag 23:00, 23:00)``. Was verglichen wird, welche
+Tageswert gegen Kanal-Δ über das Tagesfenster ``[Vortag 23:00, 23:00)`` — seit E3 über die Lese-Schicht
+(``lesen.zeitraum_stapel``) und die Fenster-Helfer (``fenster.tagesfenster``): Fenster-Helfer == Bestand. Was verglichen wird, welche
 Toleranz und welche Ausnahmeklassen: ``kanal_symmetrie.py``.
 
 **Dauerhaft:** jede Abweichung außerhalb einer benannten Klasse ist rot; jede Klasse ist gezählt und
@@ -78,6 +79,10 @@ async def _lauf(matrix: str, fid: str, *, stoerung=None):
 #: ``zerlegung`` = je Tag ein PV-Schlüssel ohne eigenen Zähler (kWp-Anteil am Gesamtzähler, #406);
 #: ``verworfen`` = M03 an den zwei Sprungtagen (15.06., 02.07.) je Einspeisung und PV (N-586: HAs ``sum``
 #: trägt den Sprung, der Tagespfad verwirft ihn). Eine Form ohne Eintrag hat keine Ausnahme.
+#: ``ohne_kanal`` = F08a/F08b am LETZTEN Tag (03.07.): der BKW-Zähler schläft 21:00–05:00, die Reihe endet am 04.07.
+#: 00:00 — sein letzter Stand (21:00) erreicht das Tagesende 23:00 nicht, und es gibt keine spätere Zeile. Seit E3
+#: liest der Wächter über die Lese-Schicht, und die sagt dort „deckt nicht" (Regel (b), ``endet_vor_bis``; die
+#: Quellenwahl nähme den Bestand). Die E2-Hilfe rechnete den Tag still mit. Gemessen 06.10.2026.
 _KLASSEN_SOLL: dict[tuple[str, str], dict[str, int]] = {
     ("achsen", "M01"): {"zerlegung": 33},
     ("achsen", "M02"): {"zerlegung": 33},
@@ -93,7 +98,8 @@ _KLASSEN_SOLL: dict[tuple[str, str], dict[str, int]] = {
     ("pv", "F03"): {"zerlegung": 66},
     ("pv", "F04"): {"zerlegung": 66},
     ("pv", "F05"): {"zerlegung": 33},
-    ("pv", "F08b"): {"zerlegung": 66},
+    ("pv", "F08a"): {"ohne_kanal": 1},
+    ("pv", "F08b"): {"zerlegung": 66, "ohne_kanal": 1},
     ("pv", "F09a-G"): {"zerlegung": 66},
     ("pv", "F09b-G"): {"zerlegung": 66},
     ("pv", "F09c-G"): {"zerlegung": 66},

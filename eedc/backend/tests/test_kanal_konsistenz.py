@@ -27,7 +27,7 @@ from backend.models.kanal import (
     KanalStatistik,
 )
 from backend.services.kanal.konsistenz import konsistenz_alle, konsistenz_anlage
-from backend.services.kanal.lesen import delta, kanalwert
+from backend.services.kanal.lesen import stunden, zeitraum
 from backend.services.kanal.nachfuellen import nachfuellen_spiegel
 from backend.tests import ha_lts_helfer
 from backend.tests.test_kanal_nachfuellen import (  # noqa: F401 — Fixtures
@@ -60,6 +60,23 @@ async def _kanal(sitzungen, aid, key) -> Kanal:
 
 def _roh(z: dict) -> dict:
     return {t: (r.sum, r.state, r.familie) for t, r in z.items()}
+
+
+#: Alle Zeiträume dieser Proben sind abgeschlossen (die Daten enden vor ``JETZT``); ``jetzt`` fest gesetzt, keine Uhr.
+_JETZT_TS = 4_102_444_800   # 2100-01-01
+
+
+async def delta(s, kanal, ts_von: int, ts_bis: int):
+    """Δ zwischen den Zeilen ``ts_von`` und ``ts_bis`` über die Lese-Schicht (E3): der Stand einer Zeile gilt am
+    Ende ihrer Stunde, der Zeitraum ist deshalb ``[ts_von + 1 h, ts_bis + 1 h)``. ``None`` ohne volle Abdeckung."""
+    z = await zeitraum(s, kanal, ts_von + 3600, ts_bis + 3600, jetzt=_JETZT_TS)
+    return z.delta
+
+
+async def kanalwert(s, kanal, start_ts: int):
+    """Die Zeile genau dieser Stunde über ``stunden`` (Kanalwert + Familie); ``None`` ohne Zeile."""
+    st = await stunden(s, kanal, start_ts, start_ts + 3600, jetzt=_JETZT_TS)
+    return st.werte[0] if st.werte else None
 
 
 async def test_pflichtprobe_versatz_minus_480_steht_an_der_ursprungsstunde(ha, datei):
@@ -182,7 +199,7 @@ async def test_versatz_vor_einem_sensortausch_verschiebt_die_spaeteren_quellen(h
     assert q_nachher[0] == q_vorher[0]
     assert q_nachher[1][2] == pytest.approx(q_vorher[1][2] - 480.0)
     async with sitzungen() as s:
-        # Lese-Hilfe `kanalwert`: die eine Zeile der Stunde, Rohwert + offset der geltenden Quelle, Familie dabei.
+        # Lese-Schicht `stunden`: die eine Zeile der Stunde, Rohwert + offset der geltenden Quelle, Familie dabei.
         w_naht = await kanalwert(s, kanal, t_naht)
         assert (w_naht.familie, w_naht.wert) == (FAMILIE_SPIEGEL, pytest.approx(neu[t_naht]["sum"] + q_nachher[1][2]))
         w_alt = await kanalwert(s, kanal, t_naht - 3600)

@@ -17,7 +17,8 @@ Drei Tabellen nach dem Vorbild von Home Assistants Langzeitstatistik:
   Unix-Sekunden (UTC, absolut; örtliche Zeit nur bei Anzeige). Eindeutig über
   ``(kanal_id, start_ts)``: je Kanal und Stunde genau EINE Familie (Rangfolge Bauplan §2).
 
-**Stand E2: wird geschrieben und nachgefüllt, noch von keiner Sicht gelesen.** Der Bestand
+**Stand E3: wird geschrieben und nachgefüllt; die Lese-Schicht (``services/kanal/lesen.py``) ist vorhanden, aber
+noch von keiner Sicht benutzt.** Der Bestand
 (``sensor_snapshots``, Stunden- und Tageszeilen) läuft unverändert weiter.
 
 Löschen: alle drei Tabellen hängen per ``ON DELETE CASCADE`` an der Anlage — dasselbe Verhalten

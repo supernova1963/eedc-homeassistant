@@ -12,8 +12,9 @@ besteht, über das Tagesfenster des Bestands ``[Vortag 23:00, 23:00)``
   ``lts_aggregator._lts_eintraege`` (Beitragsschicht: Whitelist · Either-Or · Parent · K3 · Wallbox-Regel)
   samt ``resolve_either_or_eintraege``. ``Σ vorzeichen × Δ(inv:<id>:<feld>)`` — so entstehen etwa
   ``batterie_<id>`` (−Ladung + Entladung) und ``waermepumpe_<id>`` (Heizen + Warmwasser).
-* **Lese-Hilfe:** ``services/kanal/lesen.py::delta`` (Rangfolge über die eine Zeile je Stunde, ``offset``
-  der geltenden Quelle).
+* **Lese-Schicht (E3):** ``services/kanal/lesen.py::zeitraum_stapel`` über ``fenster.tagesfenster`` — dieselbe
+  Schicht und dieselben Fenster-Helfer, die E4 benutzt (Auftrag E3: „der Symmetrie-Wächter läuft jetzt über die neue
+  Schicht"). Ein Kanal-Δ zählt nur bei voller Abdeckung (``Zeitraum.voll``).
 * **Toleranz 0,005 kWh** (+ Rechenrauschen): ``komponenten_kwh`` wird beim Schreiben auf 0,01 gerundet
   (``energie_profil/aggregator.py::baue_zusammenfassung``, ``round(v, 2)``) — die halbe Rundungsstufe.
 
@@ -25,7 +26,8 @@ besteht, über das Tagesfenster des Bestands ``[Vortag 23:00, 23:00)``
   haben (R9/N-92); dort weiß ein Spiegel mehr.
 * ``zerlegung`` — ``komponenten_kwh.<key>`` trägt die Marke ``kwp_anteil`` (#406): der Wert ist der
   kWp-Anteil am Anlagen-Zähler, keine Messung dieses Geräts.
-* ``ohne_kanal`` — ein beitragender Zähler hat (noch) keinen Kanal oder keine Zeile im Fenster.
+* ``ohne_kanal`` — ein beitragender Zähler hat (noch) keinen Kanal oder deckt das Tagesfenster nicht voll
+  (Regel ``lesen.py``: Stand vor dem Fenster, Stand am Ende, keine Spanne über das Fenster hinaus).
 
 Die dritte Klasse des Auftrags, **Stunden mit geleertem ``komponenten``**, hätte nur eine Familie Bestand
 betroffen (aus den Stundenzeilen gebildet) — die bleibt unbelegt (Bauplan §3b, 06.10.), und der Spiegel liest
@@ -41,13 +43,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.berechnungen.erzeuger_traeger import bkw_restwerte
-from backend.core.berechnungen.slot_konvention import tagesfenster_start_ts
 from backend.core.berechnungen.spannen import achse_der_kategorie
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.models.kanal import Kanal
 from backend.models.tages_energie_profil import TagesZusammenfassung
-from backend.services.kanal.lesen import delta
+from backend.services.kanal.fenster import tagesfenster
+from backend.services.kanal.lesen import zeitraum_stapel
 from backend.services.provenance import ABGELEITET_KWP_ANTEIL
 from backend.services.snapshot.komponenten_beitraege import resolve_either_or_eintraege
 from backend.services.snapshot.lts_aggregator import _lts_eintraege
@@ -56,6 +58,10 @@ from backend.services.snapshot.lts_aggregator import _lts_eintraege
 TOLERANZ_KWH = 0.005 + 1e-9
 
 KLASSEN = ("verworfen", "ohne_regelmarke", "zerlegung", "ohne_kanal")
+
+#: Die Matrix-Tage liegen alle in der Vergangenheit; ``jetzt`` weit danach ⇒ jedes Tagesfenster ist abgeschlossen
+#: (kein Schreibverzug im Spiel, keine echte Uhr).
+_NACH_ALLEM = 4_102_444_800   # 2100-01-01
 
 
 @dataclass
@@ -81,18 +87,11 @@ async def symmetrie_spiegel(db: AsyncSession, anlage_id: int) -> Bericht:
         if not werte:
             continue
         b.tage += 1
-        von, bis = tagesfenster_start_ts(tz.datum)
-        deltas: dict[str, float | None] = {}
-
-        async def _d(sk: str):
-            if sk not in deltas:
-                k = kanaele.get(sk)
-                deltas[sk] = None if k is None else await delta(db, k, von, bis)
-            return deltas[sk]
-
+        von, bis = tagesfenster(tz.datum)
         roh = _lts_eintraege(anlage, invs, tz.datum)
-        for e in roh:
-            await _d(e.sensor_key)
+        mit_kanal = [kanaele[sk] for sk in dict.fromkeys(e.sensor_key for e in roh) if sk in kanaele]
+        lese = await zeitraum_stapel(db, mit_kanal, von, bis, jetzt=_NACH_ALLEM) if mit_kanal else {}
+        deltas: dict[str, float | None] = {sk: (z.delta if z.voll else None) for sk, z in lese.items()}
         eintraege = resolve_either_or_eintraege(
             roh, gruppe_fn=lambda e: e.gruppe, hat_tagesdaten_fn=lambda e: deltas.get(e.sensor_key) is not None,
         )
