@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Oktober 2026 (v4.1.1)
+> **Stand:** Oktober 2026 (v4.1.2)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -9,7 +9,7 @@
 
 ---
 
-## Unreleased
+## v4.1.2 — 5. Oktober 2026
 
 **In dieser Version:** Netto-Ertrag, Monats- und Jahresergebnis rechnen überall gleich — mit der Umsatzsteuer bei Regelbesteuerung, mit allen Posten im Tooltip · ein Jahr zeigt keine Autarkie über 100 % mehr · „Hausverbrauch" heißt jetzt Gesamtverbrauch oder Restverbrauch, mit Formel · die PV-Erzeugung mit Strings, Balkonkraftwerk und Gesamtzähler nennt am Tag, im laufenden und im abgeschlossenen Monat dieselben Zahlen (außer nach einem Abschluss über den Statistik-Import)
 

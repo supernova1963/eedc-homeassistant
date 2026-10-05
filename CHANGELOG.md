@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.1.2] - 2026-10-05 — Eine Rechnung für Netto-Ertrag und Ergebnis, PV mit Balkonkraftwerk und Gesamtzähler zählt überall gleich, „Hausverbrauch" wird Gesamt- und Restverbrauch
 
 ### Fixed
 
