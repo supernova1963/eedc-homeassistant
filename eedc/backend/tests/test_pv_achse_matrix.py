@@ -54,6 +54,7 @@ except ImportError:  # pragma: no cover — Windows: dann misst jeder Prozess se
     fcntl = None  # type: ignore[assignment]
 
 from backend.tests import pv_achse_matrix as mx
+from backend.tests.matrix_haltewerte import PV_HALTEWERTE
 
 # ── Messung je Lauf einmal ──────────────────────────────────────────────────
 #
@@ -603,6 +604,29 @@ async def test_soll_unklar_ist_noch_eine_messung(schluessel, _matrix_ordner):
     fid, weg, inv, sicht = schluessel
     m = await _messung(fid, _teil(weg), _matrix_ordner)
     assert sicht in {x.sicht for x in bewerte(fid, weg, inv, m)}, f"{schluessel} misst nichts mehr"
+
+
+def _haltewert_gleich(ist, gehalten) -> bool:
+    if ist is None or gehalten is None:
+        return ist is None and gehalten is None
+    return abs(float(ist) - float(gehalten)) <= 1e-6
+
+
+@pytest.mark.parametrize("schluessel", sorted(SOLL_UNKLAR), ids=lambda s: "-".join(s))
+async def test_soll_unklar_haltewert(schluessel, _matrix_ordner):
+    """Haltewert (HA-Bauform E0): eine „Soll unklar"-Sicht misst, was am 05.10.2026 gemessen wurde
+    (``matrix_haltewerte.PV_HALTEWERTE``) — der Umbau ändert sie nicht still. Kein Soll, ein Festwert."""
+    assert schluessel in PV_HALTEWERTE, f"{schluessel}: „Soll unklar“ ohne Haltewert"
+    fid, weg, inv, sicht = schluessel
+    m = await _messung(fid, _teil(weg), _matrix_ordner)
+    ist = {x.sicht: x.ist for x in bewerte(fid, weg, inv, m)}.get(sicht)
+    assert _haltewert_gleich(ist, PV_HALTEWERTE[schluessel]), (
+        f"{schluessel}: gemessen {ist}, festgehalten {PV_HALTEWERTE[schluessel]}")
+
+
+def test_haltewerte_nur_fuer_soll_unklar():
+    """Jeder Haltewert gehört zu einer „Soll unklar"-Sicht — fällt sie heraus, fällt ihr Haltewert mit."""
+    assert set(PV_HALTEWERTE) == set(SOLL_UNKLAR), sorted(set(PV_HALTEWERTE) ^ set(SOLL_UNKLAR))
 
 
 def test_register_zeigt_nur_auf_bestehende_zellen():

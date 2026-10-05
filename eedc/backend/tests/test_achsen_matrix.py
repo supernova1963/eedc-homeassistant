@@ -45,6 +45,7 @@ except ImportError:  # pragma: no cover
 
 from backend.tests import achsen_matrix as am
 from backend.tests import pv_achse_matrix as mx
+from backend.tests.matrix_haltewerte import ACHSEN_HALTEWERTE
 
 # ── Messung je Lauf einmal (Bauform der PV-Matrix) ──────────────────────────
 
@@ -1566,6 +1567,39 @@ async def test_jede_regel_trifft_noch(_matrix_ordner):
     tot = ([("su", k) for k in SOLL_UNKLAR if ("su", k) not in getroffen]
            + [("sum", k) for k in SOLL_UNKLAR_MENGE if ("sum", k) not in getroffen])
     assert not tot, tot
+
+
+def _haltewert_gleich(ist, gehalten) -> bool:
+    if ist is None or gehalten is None:
+        return ist is None and gehalten is None
+    return abs(float(ist) - float(gehalten)) <= 1e-6
+
+
+@pytest.mark.parametrize("schluessel", sorted(ACHSEN_HALTEWERTE), ids=lambda s: "-".join(s))
+async def test_soll_unklar_haltewert(schluessel, _matrix_ordner):
+    """Haltewert (HA-Bauform E0): eine „Soll unklar"-Sicht misst, was am 05.10.2026 gemessen wurde
+    (``matrix_haltewerte.ACHSEN_HALTEWERTE``) — der Umbau ändert sie nicht still. Kein Soll, ein Festwert."""
+    fid, groesse, weg, inv, sicht = schluessel
+    assert _soll_unklar(fid, groesse, weg, inv, sicht), f"{schluessel}: nicht mehr „Soll unklar“ — Haltewert entfernen"
+    m = await _messung(fid, _teil(weg), _matrix_ordner)
+    zellen = {x.sicht: x for x in bewerte(fid, groesse, weg, inv, m)}
+    assert sicht in zellen, f"{schluessel} misst nichts mehr"
+    ist = zellen[sicht].ist
+    assert _haltewert_gleich(ist, ACHSEN_HALTEWERTE[schluessel]), (
+        f"{schluessel}: gemessen {ist}, festgehalten {ACHSEN_HALTEWERTE[schluessel]}")
+
+
+async def test_jede_soll_unklar_sicht_hat_haltewert(_matrix_ordner):
+    """Jede gemessene „Soll unklar"-Sicht hat einen Haltewert — eine neue (andere Messung, neue Regel) ohne
+    Eintrag ist rot, damit sie nicht ungehalten durch den Umbau läuft."""
+    ohne = []
+    for fid, groesse, weg, inv in _zellen():
+        m = await _messung(fid, _teil(weg), _matrix_ordner)
+        for x in bewerte(fid, groesse, weg, inv, m):
+            k = (fid, groesse, weg, inv, x.sicht)
+            if _soll_unklar(*k) and k not in ACHSEN_HALTEWERTE:
+                ohne.append(k)
+    assert not ohne, ohne
 
 
 def test_register_zeigt_nur_auf_bestehende_zellen():
