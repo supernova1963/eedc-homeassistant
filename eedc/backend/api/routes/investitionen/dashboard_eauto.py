@@ -253,6 +253,9 @@ async def get_eauto_dashboard(
         # N-557: kWh/100 km je Monat nach der Layer-Regel, der Zeitraum ist
         # Σ Monatswerte ÷ Σ km (`eauto_effizienz_zeitraum`).
         effizienz_monate = []
+        # N-634: die Regel-3-Menge des Dienstwagens je Monat — dieselbe Zahl, die die Kachel
+        # unten summiert, trägt auch seine Tabellenzeile (``(pv, netz, gemessen)``).
+        dienst_je_monat: dict[tuple[int, int], tuple[float, float, bool]] = {}
         for md in monatsdaten:
             # F-16: mit abgeleitetem PV-Anteil, wo keiner gepflegt ist.
             d = _emob_daten_von(eauto, md)
@@ -274,8 +277,10 @@ async def get_eauto_dashboard(
                 ) or dienstliche_ladung_der_zeile(d)
                 if _entscheid is not None and eauto.id not in _entscheid.dienstlich_je_inv:
                     pv = netz = 0.0
+                    dienst_je_monat[(md.jahr, md.monat)] = (0.0, 0.0, True)
                 else:
                     pv, netz = _dl.pv_kwh, _dl.netz_kwh
+                    dienst_je_monat[(md.jahr, md.monat)] = (pv, netz, _dl.gemessen)
             else:
                 pv, netz = emob_heimladung_im_monat(
                     emob_ctx, eauto.id, km_this, md.jahr, md.monat, d,
@@ -529,6 +534,20 @@ async def get_eauto_dashboard(
                     if _a.art == ART_SCHAETZUNG:
                         d['ladung_geschaetzt'] = True
                 _bloecke_kennzeichnen(d, _e, eauto.id)
+            else:
+                # ⭐ N-634 (05.10.2026): die Zeile des Dienstwagens trägt seine Lademenge wie die
+                # eines privaten Autos — F-7 oben behält „die physischen Größen (km, Ladung,
+                # PV-Anteil, V2H)" ausdrücklich; weg fällt nur die Ersparnis. Bis dahin fehlte
+                # `ladung_kwh` in der Zeile, während die Kachel 60 kWh nannte. PV/Netz sind die
+                # Regel-3-Menge der Kachel (`dienst_je_monat`), damit Kachel = Σ Tabelle (N-564)
+                # auch hier gilt; der Fahrverbrauch als Schätzung (kein Ladefeld) ist
+                # gekennzeichnet wie beim privaten Auto.
+                _pv, _netz, _gemessen = dienst_je_monat.get((md.jahr, md.monat), (0.0, 0.0, True))
+                d['ladung_pv_kwh'] = round(_pv, 2)
+                d['ladung_netz_kwh'] = round(_netz, 2)
+                d['ladung_kwh'] = round(_pv + _netz, 2)
+                if not _gemessen and _pv + _netz > 0:
+                    d['ladung_geschaetzt'] = True
             monatsdaten_response.append(InvestitionMonatsdatenResponse(
                 id=md.id,
                 investition_id=md.investition_id,

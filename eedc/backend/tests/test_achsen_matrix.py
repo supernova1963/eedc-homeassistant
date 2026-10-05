@@ -1024,12 +1024,6 @@ URSACHE: dict[str, Ursache] = {
         "(`core/berechnungen/verbrauch.py`). Ladeverlust und ΔSoC zählen am Tag als Eigenverbrauch: Σ Tage 36 "
         "gegen Monat 33 (M02), 36 gegen 28,5 (M04); am Tag selbst EV 12 > Gesamtverbrauch 11",
     ),
-    "KANDIDAT-COMMUNITY-NULL": Ursache(
-        "KANDIDAT (nur gezeigt)",
-        "Community-Payload: ein gemessener Netzbezug von 0 (N2, Zähler flach) wird `netzbezug_kwh = None` "
-        "(`services/community_service.py`), Monats-Fakten und alle anderen Sichten nennen 0 — dieselbe Klasse "
-        "wie N-585, an einer Stelle, die dessen Bau nicht erreicht hat",
-    ),
     "KANDIDAT-EMOB-LAUFEND-NETZ": Ursache(
         "KANDIDAT (nur gezeigt)",
         "Wallbox-Ladung im Monat ohne Abschluss (HA-Weg von Cockpit → Monat): die ganze Lademenge steht als "
@@ -1043,11 +1037,6 @@ URSACHE: dict[str, Ursache] = {
         "Kälte und die Heiz-Nutzenergie des Klimageräts (Heizwärme 54 statt 59,4, ohne HA auch die Wärme 64,8 statt "
         "70,2); im vergangenen Monat vor dem Abschluss (HA-Weg) fehlen Heiz-/Warmwasser-Strom und -Wärme, "
         "Betriebsart-Ströme und Kälte ganz, während Strom- und Wärmemenge da sind",
-    ),
-    "KANDIDAT-EAUTO-DIENST-MONATSZEILE": Ursache(
-        "KANDIDAT (nur gezeigt)",
-        "E-Auto-Dashboard: die Monatszeile des Dienstwagens trägt keine `ladung_kwh` (die des privaten Autos ja, "
-        "`dashboard_eauto.py` reichert nur sie an); die Zusammenfassung nennt 60 kWh",
     ),
     "KANDIDAT-DIENSTWAGEN-NETTO": Ursache(
         "KANDIDAT (nur gezeigt)",
@@ -1416,23 +1405,10 @@ ROT: dict[str, dict[tuple[str, str, str, str], tuple[str, ...]]] = {
             'verbrauch:cockpit_jahr', 'verbrauch:cockpit_monat', 'verbrauch:fakten_tw', 'verbrauch:jahr_verlauf',
         ),
     },
-    'KANDIDAT-COMMUNITY-NULL': {
-        ('M02', 'netz', 'S1', 'I1'): ('netzbezug:community',),
-        ('M02', 'netz', 'S1', 'I5'): ('null:netzbezug:community',),
-        ('M02', 'netz', 'S2', 'I1'): ('netzbezug:community',),
-        ('M02', 'netz', 'S2', 'I5'): ('null:netzbezug:community',),
-        ('M02', 'netz', 'S3', 'I1'): ('netzbezug:community',),
-        ('M02', 'netz', 'S3', 'I5'): ('null:netzbezug:community',),
-    },
     'KANDIDAT-DIENSTWAGEN-NETTO': {
         ('M09', 'preis', 'S1', 'I1'): ('netto_ertrag:ha_export', 'netto_ertrag:uebersicht',),
         ('M09', 'preis', 'S2', 'I1'): ('netto_ertrag:ha_export', 'netto_ertrag:uebersicht',),
         ('M09', 'preis', 'S3', 'I1'): ('netto_ertrag:ha_export', 'netto_ertrag:uebersicht',),
-    },
-    'KANDIDAT-EAUTO-DIENST-MONATSZEILE': {
-        ('M09', 'emob', 'S1', 'I4'): ('ladung:dashboard_summe:Dienst',),
-        ('M09', 'emob', 'S2', 'I4'): ('ladung:dashboard_summe:Dienst',),
-        ('M09', 'emob', 'S3', 'I4'): ('ladung:dashboard_summe:Dienst',),
     },
     'KANDIDAT-EMOB-LAUFEND-NETZ': {
         ('M02', 'emob', 'HA', 'I3'): ('heim_netz:cockpit_monat', 'heim_pv:cockpit_monat',),

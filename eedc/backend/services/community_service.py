@@ -443,12 +443,20 @@ def _monatswert(
     )
     ev_quote = kennzahlen.eigenverbrauchsquote_prozent
 
+    # N-632 (05.10.2026, Regel N-585): eine gemessene 0 bleibt 0 — bis dahin stand hier
+    # `round(x, 1) if x else None`, und ein Monat ohne Netzbezug ging als „kein Wert" hinaus,
+    # während dieselbe Nutzlast eine Autarkie von 100 % aus genau dieser 0 meldete. „Erfasst" ist
+    # hier die Zählerzeile (`meta.hat_zaehlerzeile`, Filter oben): ihre beiden Spalten sind
+    # `NOT NULL` (`models/monatsdaten.py`), die Schicht trägt also für beide Größen einen Wert,
+    # nie eine Lücke. Der Server nimmt die 0 an (`MonatswertInput`: `ge=0`, `None` erlaubt), der
+    # Benchmark zählt sie über `is not None` als Datenpunkt, die Statistik summiert ohnehin mit
+    # `coalesce(…, 0)` — keine Server-Änderung.
     monatswert_data = {
         "jahr": fakt.jahr,
         "monat": fakt.monat,
         "ertrag_kwh": round(pv_erzeugung, 1),
-        "einspeisung_kwh": round(einspeisung, 1) if einspeisung else None,
-        "netzbezug_kwh": round(netzbezug, 1) if netzbezug else None,
+        "einspeisung_kwh": round(einspeisung, 1),
+        "netzbezug_kwh": round(netzbezug, 1),
         "autarkie_prozent": round(autarkie, 1) if autarkie is not None else None,
         "eigenverbrauch_prozent": round(ev_quote, 1) if ev_quote is not None else None,
         # Der Eigenverbrauch in kWh, nicht nur als Quote (F-47): der Server hat

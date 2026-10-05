@@ -119,3 +119,65 @@ async def test_dienstwagen_bekommt_keine_restzeile(db):
     assert _karte(karten, "DW").monatsdaten == []
     k = _karte(karten, "A")
     assert _summe(k, "ladung_kwh") == pytest.approx(k.zusammenfassung["ladung_heim_kwh"])
+
+
+# ── N-634 (05.10.2026): auch die Zeile eines Dienstwagens trägt seine Lademenge ────────────
+# Abnahme-Matrix 2, Ursache KANDIDAT-EAUTO-DIENST-MONATSZEILE: die Kachel nannte 60 kWh, die
+# Monatszeile trug nur `ladung_pv_kwh`/`ladung_netz_kwh`. F-7 (Docstring der Route) behält die
+# physischen Größen ausdrücklich, weg fällt nur die Ersparnis. Die Zeile trägt die Regel-3-Menge
+# der Kachel — Kachel = Σ Tabelle gilt damit für den Dienstwagen wie für jedes private Auto.
+
+
+def _kachel_gleich_tabelle(k):
+    z = k.zusammenfassung
+    assert _summe(k, "ladung_pv_kwh") == pytest.approx(z["ladung_pv_kwh"])
+    assert _summe(k, "ladung_netz_kwh") == pytest.approx(z["ladung_netz_kwh"])
+    assert _summe(k, "ladung_kwh") == pytest.approx(z["ladung_heim_kwh"])
+
+
+@pytest.mark.asyncio
+async def test_n634_dienstwagen_gemessen_zeile_traegt_die_ladung(db):
+    a, ids = await _anlage(db, {"DW": {4: {"km_gefahren": 500.0, "ladung_pv_kwh": 30.0,
+                                           "ladung_netz_kwh": 30.0}}}, wallbox_monate=())
+    k = _karte(await get_eauto_dashboard(anlage_id=a.id, strompreis_cent=None, db=db), "DW")
+    assert k.zusammenfassung["dienstlich"] is True
+    (zeile,) = k.monatsdaten
+    assert zeile.verbrauch_daten["ladung_kwh"] == pytest.approx(60.0)
+    assert not zeile.verbrauch_daten.get("ladung_geschaetzt")
+    _kachel_gleich_tabelle(k)
+    # Die Ersparnis bleibt unberührt (dienstlich = keine private Ersparnis).
+    assert k.zusammenfassung["gesamt_ersparnis_euro"] == pytest.approx(0.0)
+
+
+@pytest.mark.asyncio
+async def test_n634_dienstwagen_ohne_ladefeld_schaetzung_gekennzeichnet(db):
+    """Ohne Ladefeld zählt die Kachel den Fahrverbrauch als Netz (Regel 3, ungemessen) — die Zeile
+    nennt dieselbe Menge und sagt, dass sie geschätzt ist."""
+    a, ids = await _anlage(db, {"DW": {4: {"km_gefahren": 900.0, "verbrauch_kwh": 160.0}}},
+                           wallbox_monate=())
+    k = _karte(await get_eauto_dashboard(anlage_id=a.id, strompreis_cent=None, db=db), "DW")
+    (zeile,) = k.monatsdaten
+    assert zeile.verbrauch_daten["ladung_kwh"] == pytest.approx(160.0)
+    assert zeile.verbrauch_daten["ladung_netz_kwh"] == pytest.approx(160.0)
+    assert zeile.verbrauch_daten.get("ladung_geschaetzt") is True
+    _kachel_gleich_tabelle(k)
+
+
+@pytest.mark.asyncio
+async def test_n634_dienstwagen_neben_dienstlicher_wallbox_zaehlt_die_wallbox(db):
+    """Neben einer dienstlichen Wallbox in Betrieb ist SIE die dienstliche Ladung (Regel 3): die
+    Felder des Wagens zählen nicht — Kachel 0, Zeile 0, nicht die alten Felder."""
+    a, ids = await _anlage(db, {"DW": {4: {"km_gefahren": 500.0, "ladung_pv_kwh": 30.0,
+                                           "ladung_netz_kwh": 30.0}}}, wallbox_monate=())
+    dwb = Investition(anlage_id=a.id, typ="wallbox", bezeichnung="WB dienstlich",
+                      anschaffungsdatum=date(2024, 1, 1), parameter={"ist_dienstlich": True})
+    db.add(dwb)
+    await db.flush()
+    db.add(InvestitionMonatsdaten(investition_id=dwb.id, jahr=2026, monat=4,
+                                  verbrauch_daten={"ladung_kwh": 120.0, "ladung_pv_kwh": 20.0}))
+    await db.commit()
+    k = _karte(await get_eauto_dashboard(anlage_id=a.id, strompreis_cent=None, db=db), "DW")
+    _kachel_gleich_tabelle(k)
+    (zeile,) = k.monatsdaten
+    assert k.zusammenfassung["ladung_heim_kwh"] == pytest.approx(0.0)
+    assert zeile.verbrauch_daten["ladung_kwh"] == pytest.approx(0.0)

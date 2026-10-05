@@ -7,6 +7,13 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Community: ein Monat ohne Netzbezug oder ohne Einspeisung wird als 0 kWh geteilt.** Bisher ging eine gemessene 0 als „kein Wert" an den Community-Server, während dieselbe Meldung die Autarkie von 100 % aus genau dieser 0 nannte. Jetzt steht die 0 in der Meldung, und der Monatsvergleich der Community zählt die Anlage mit. Die Änderung wirkt beim nächsten Teilen.
+- **Komponenten → E-Auto: die Monatstabelle eines Dienstwagens nennt die Lademenge.** Die Kachel darüber zeigte sie schon, in der Tabelle fehlte sie. Jetzt steht in beiden dieselbe Zahl; eine aus dem Fahrverbrauch geschätzte Menge ist gekennzeichnet. Die Ersparnis bleibt bei einem Dienstwagen 0.
+
 ## [4.1.2] - 2026-10-05 — Eine Rechnung für Netto-Ertrag und Ergebnis, PV mit Balkonkraftwerk und Gesamtzähler zählt überall gleich, „Hausverbrauch" wird Gesamt- und Restverbrauch
 
 ### Fixed
