@@ -134,7 +134,7 @@ class KanalZuweisung:
 
     Genau eines von ``art`` und ``ausnahme`` ist gesetzt. ``familien`` nennt die Roh-Familien, aus
     denen der Kanal geschrieben werden darf (Spiegel = HA wörtlich, Mitschrift = eedc schreibt
-    selbst mit); ``bestand`` (E2) ist hier nicht aufgeführt, weil E1 nichts nachfüllt.
+    selbst mit); ``bestand`` ist hier nicht aufgeführt — die Familie bleibt unbelegt (Bauplan §3b, 06.10.).
     """
 
     liste: str

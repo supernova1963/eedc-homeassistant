@@ -221,6 +221,46 @@ def lts_boundary_index(start_ts_dt: datetime, datum: date) -> int:
     return (boundary_dt.date() - datum).days * 24 + boundary_dt.hour
 
 
+def slot_start_ts(datum: date, slot: int) -> int | None:
+    """Backward-Slot ``slot`` des Tages ``datum`` → ``start_ts`` der HA-Stundenzeile, die ihn schließt.
+
+    **Die genaue Umkehrung von** :func:`lts_boundary_index` (HA-Bauform E2, Bericht Etappe 1 H2) — die
+    EINE Stelle, an der eine Slot-Angabe der Stundenzeilen (``datum``, ``stunde``) zu einer absoluten
+    Stunde (``kanal_statistik.start_ts``) wird. Slot ``h`` = Energie ``[h-1, h)`` Ortszeit; geschlossen
+    wird er von der Zeile mit Ortszeit-Beginn ``(h-1):00`` (``Zähler(h) = sum @ start_ts=(h-1)``).
+
+    An den Umstellungstagen folgt sie der Hinrichtung, statt eine eigene Regel zu setzen:
+
+    * **Doppelte Wanduhr (Herbst):** beide Zeilen fallen dort auf denselben Index, und „es gilt die
+      spätere" (``get_hourly_slots_for_day``) ⇒ hier die **spätere** (``fold=1``).
+    * **Fehlende Wanduhr (Frühjahr):** dort bleibt der Index leer ⇒ hier ``None`` — der Slot hat keine
+      eigene Stunde.
+
+    Kein ``fold=0`` blind (``datetime.timestamp()`` einer nicht existenten Wanduhr liefert den
+    Zeitstempel der NACHBARstunde — zwei Slots bekämen denselben ``start_ts``).
+    """
+    wand = datetime.combine(datum, datetime.min.time()) + timedelta(hours=slot - 1)
+    treffer = {
+        ts for ts in (int(round(wand.replace(fold=f).timestamp())) for f in (0, 1))
+        if datetime.fromtimestamp(ts) == wand          # naive Vergleiche ignorieren `fold`
+    }
+    return max(treffer) if treffer else None
+
+
+def tagesfenster_start_ts(datum: date) -> tuple[int, int]:
+    """Das Rückwärts-Tagesfenster ``[Vortag 23:00, 23:00)`` (N-434) als Rand-Zeilen der Stundenstatistik.
+
+    Δ des Tages = Wert der letzten Zeile mit ``start_ts ≤ bis`` − Wert der letzten mit ``start_ts ≤ von``
+    — ``von`` schließt Slot 23 des Vortags, ``bis`` Slot 23 des Tages (beide Wanduhr 22:00). Dieselbe
+    Rechnung wie Σ Slot 0…23 in ``get_hourly_slots_for_day`` (Anker = letzte vorhandene Zeile davor).
+    """
+    von = slot_start_ts(datum - timedelta(days=1), 23)
+    bis = slot_start_ts(datum, 23)
+    if von is None or bis is None:   # 22:00 fällt in keiner Zone mit Umstellung um 02:00/03:00 aus
+        raise ValueError(f"Tagesfenster {datum}: Wanduhr 22:00 existiert in dieser Zeitzone nicht")
+    return von, bis
+
+
 def backward_slot_aus_period_start(period_start: datetime) -> tuple[date, int]:
     """Backward-Slot für ein **periodenbeginnendes** Bucket ``[period_start, …)``.
 

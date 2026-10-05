@@ -1657,6 +1657,40 @@ class HAStatisticsService:
             return {"start_ts": float(r[0]), "state": r[1], "sum": r[2], "mean": r[3],
                     "min": r[4], "max": r[5]}
 
+    def get_stundenzeilen_kennzahlen(self, sensor_id: str, ts_nach: float, ts_bis: float) -> Optional[dict]:
+        """Kennzahlen der Stundenzeilen mit ``ts_nach < start_ts <= ts_bis`` — Konsistenzlauf (HA-Bauform E2).
+
+        ``{"anzahl", "summe_sum", "summe_state", "erste_ts"}``, roh in HAs Einheit: Zahl der Zeilen, ``SUM(sum)``
+        und ``SUM(state)`` (``NULL`` zählt nicht mit, wie in SQL; ohne Werte ``None``) und der kleinste
+        ``start_ts``. Die beiden Summen fangen zwei sich aufhebende Anpassungen (−x ab t1, +x ab t2): Endwert
+        und Zahl stimmen dann wieder, die Vorsumme nicht. ``None``: HA kennt den Sensor nicht.
+
+        SQL: EIN Aggregat über den Index ``(metadata_id, start_ts)``. WS: es gibt keinen Aggregat-Befehl — die
+        Zeilen des Fensters werden geholt (derselbe ``statistics_during_period``) und hier ebenso gerechnet.
+        """
+        if not self.is_available:
+            return None
+        with self._verbindung() as conn:
+            meta = self.get_metadata(conn, sensor_id)
+            if not meta:
+                return None
+            if conn is None:
+                zeilen = [z for z in self._ws_zeilen([sensor_id], ts_nach, ts_bis, types=["sum", "state"]).get(sensor_id, [])
+                          if ts_nach < z["start_ts"] <= ts_bis]
+                sums = [float(z["sum"]) for z in zeilen if z.get("sum") is not None]
+                states = [float(z["state"]) for z in zeilen if z.get("state") is not None]
+                return {"anzahl": len(zeilen), "summe_sum": sum(sums) if sums else None,
+                        "summe_state": sum(states) if states else None,
+                        "erste_ts": min((float(z["start_ts"]) for z in zeilen), default=None)}
+            r = conn.execute(
+                text("SELECT COUNT(*), SUM(sum), SUM(state), MIN(start_ts) FROM statistics WHERE metadata_id = :mid "
+                     "AND start_ts > :nach AND start_ts <= :bis"),
+                {"mid": meta.id, "nach": ts_nach, "bis": ts_bis},
+            ).fetchone()
+            return {"anzahl": int(r[0]), "summe_sum": None if r[1] is None else float(r[1]),
+                    "summe_state": None if r[2] is None else float(r[2]),
+                    "erste_ts": None if r[3] is None else float(r[3])}
+
     def get_hourly_kwh_deltas_for_day(
         self,
         sensor_ids: list[str],

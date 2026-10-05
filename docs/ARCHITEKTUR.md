@@ -531,9 +531,9 @@ Die folgenden Felder (`stamm_*`, `ansprechpartner_*`, `wartung_*`) wurden aus de
 | thumbnail | LARGEBINARY | Vorschaubild (nur für Bilder) |
 | created_at | DATETIME | Erstellungsdatum |
 
-#### Kanalstatistik — Stand E1: wird geschrieben, noch nicht gelesen
+#### Kanalstatistik — Stand E2: wird geschrieben und nachgefüllt, noch nicht gelesen
 
-Drei Tabellen nach dem Vorbild der HA-Langzeitstatistik (Umbau „eedc nach HA-Bauform", Etappe E1). **Keine Sicht,
+Drei Tabellen nach dem Vorbild der HA-Langzeitstatistik (Umbau „eedc nach HA-Bauform", Etappen E1/E2). **Keine Sicht,
 keine Route und kein Export liest sie**; Stunden- und Tageszeilen sowie `sensor_snapshots` laufen unverändert weiter.
 
 | Tabelle | Inhalt |
@@ -551,6 +551,31 @@ Mittelwerte (Leistung, Ladestand, Temperatur, Preis) werden gespiegelt, wo der S
 geschrieben, nicht umgerechnet). Mittelwerte ohne Langzeitstatistik und die abgeleiteten Kanäle sind im Katalog benannt, in E1
 aber ohne Schreiber. Eine gelöschte Anlage räumt ihre Kanäle
 (`ON DELETE CASCADE`) wie ihre Snapshots; eine gelöschte Investition räumt — wie bei den Snapshots — keine.
+
+**Nachfüllen (E2).** Eine Hintergrund-Aufgabe (`services/kanal/nachfuellen.py`, nach dem Start für alle Zuordnungen, nach
+jedem Stundenlauf angestoßen für neu angelegte Kanäle; Marke `kanal_nachfuellung` je Kanal und Entity — ein Kanal mit Marke
+wird nicht erneut bei HA angefragt, ein später zugeordneter Sensor oder eine neue Entity bekommt ihre Vorgeschichte beim
+nächsten Lauf) holt für jeden Spiegel-Kanal die ganze Historie der heutigen HA-Entity —
+rückwärts vor die erste Kanal-Zeile, in Blöcken von 31 Tagen, je Block eine kurze eigene Schreib-Transaktion; HA wird nur
+zwischen zwei Transaktionen gelesen, der Stundenlauf wartet also nie auf HA. Ein abgebrochener Lauf setzt an der ersten
+vorhandenen Zeile fort, ein zweiter schreibt nichts; fällt HA unterwegs aus, bekommt der Kanal keine Marke. Fortschritt und
+Ergebnis stehen im Aktivitätsprotokoll. **Die Familie `bestand` bleibt unbelegt** (Entscheid 06.10., Bauplan §3b): die
+bisherigen Stunden- und Tageszeilen werden nicht in Kanäle umgewandelt — sie bleiben die Quelle für Zeiträume, die die Kanäle
+nicht voll decken (je Tag bzw. Monat EINE Quellenwahl).
+
+**Konsistenzlauf (E2).** Täglich 02:45 (`services/kanal/konsistenz.py`, eigener Job neben dem unveränderten Tages-Nachlauf):
+je Spiegel-Kanal und Quelle vergleicht er die gespeicherten Zeilen mit HA (letzte Zeile, Zeilenzahl und Vorsumme), sucht bei Abweichung
+die erste abweichende Stunde per Halbierung und spiegelt ab dort neu — so zieht eine „Summe anpassen" in HA (Versatz auf alle
+Folgezeilen) oder eine nachgereichte Stunde nach. Ersetzt werden nur Spiegelzeilen; spätere Quellen bekommen die Änderung in
+ihren `offset`, jedes Δ nach einem Sensortausch bleibt, wie HA es nennt. Liefert HA für eine Quelle nichts mehr — oder nur
+noch ab einem späteren Zeitpunkt —, bleibt der Spiegel davor stehen; ist HA unterwegs nicht erreichbar, ändert der Lauf nichts.
+
+**Stunde und Slot.** Eine Stundenzeile des Bestands (Rückwärts-Slot `h` = `[h−1, h)`, #144) wird an genau einer Stelle zu
+`start_ts`: `core/berechnungen/slot_konvention.py::slot_start_ts`, die Umkehrung von `lts_boundary_index` (doppelte
+Herbststunde ⇒ die spätere, fehlende Frühjahrsstunde ⇒ kein `start_ts`); das Tagesfenster `[Vortag 23:00, 23:00)` ist
+`tagesfenster_start_ts`. Auch die Betriebsart-Mitschrift rechnet darüber. Der Wächter `test_kanal_symmetrie.py` prüft auf den Datenständen beider Abnahme-Matrizen je Tag
+Kanal-Δ ≡ `komponenten_kwh` (Toleranz 0,005 kWh, benannte und gezählte Ausnahmeklassen); die Lese-Hilfe dafür
+(`services/kanal/lesen.py`) benutzt keine Sicht.
 
 ### Parent-Child Beziehungen
 

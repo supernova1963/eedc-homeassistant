@@ -17,7 +17,7 @@ Drei Tabellen nach dem Vorbild von Home Assistants Langzeitstatistik:
   Unix-Sekunden (UTC, absolut; örtliche Zeit nur bei Anzeige). Eindeutig über
   ``(kanal_id, start_ts)``: je Kanal und Stunde genau EINE Familie (Rangfolge Bauplan §2).
 
-**Stand E1: wird geschrieben, noch von keiner Sicht gelesen.** Der Bestand
+**Stand E2: wird geschrieben und nachgefüllt, noch von keiner Sicht gelesen.** Der Bestand
 (``sensor_snapshots``, Stunden- und Tageszeilen) läuft unverändert weiter.
 
 Löschen: alle drei Tabellen hängen per ``ON DELETE CASCADE`` an der Anlage — dasselbe Verhalten
@@ -28,7 +28,7 @@ löscht keine ``sensor_snapshots``-Zeile).
 
 from typing import Optional
 
-from sqlalchemy import Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import JSON, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.core.database import Base
@@ -42,6 +42,8 @@ KANAL_ARTEN: frozenset[str] = frozenset({ART_SUM, ART_MEAN, ART_STAND})
 #: Familien einer Zeile (Bauplan §2, G1). ``abgeleitet`` steht im Auftrag E1 für Kanäle wie
 #: ``kosten:*`` — E1 schreibt keinen davon.
 FAMILIE_SPIEGEL = "spiegel"
+#: ``bestand`` bleibt UNBELEGT (Entscheid Gernot 06.10., Bauplan §3b): die bisherigen Stunden- und Tageszeilen
+#: werden nicht in Kanäle umgewandelt; sie bleiben die Quelle für Zeiträume, die die Kanäle nicht voll decken.
 FAMILIE_BESTAND = "bestand"
 FAMILIE_MITSCHRIFT = "mitschrift"
 FAMILIE_ABGELEITET = "abgeleitet"
@@ -104,3 +106,30 @@ class KanalStatistik(Base):
     # Der Primärschlüssel (kanal_id, start_ts) IST der eindeutige Index des Auftrags — SQLite legt
     # ihn als `sqlite_autoindex_kanal_statistik_1` an. Ein zweiter, gleich gebauter Index verdoppelte
     # nur den Platzbedarf der größten Tabelle.
+
+
+class KanalNachfuellung(Base):
+    """Marke „Vorgeschichte nachgefüllt" je KANAL und Entity (HA-Bauform E2, Auftrag Punkt 3; Entscheid Master 06.10.).
+
+    Eine Zeile = für diesen Kanal ist die Vorgeschichte der Entity ``statistic_id`` aus HA geholt (oder
+    geprüft und als nicht füllbar befunden — Grund in ``ergebnis``). Das Nachfüllen
+    (``services/kanal/nachfuellen.py``) fragt einen Kanal mit Marke für seine heutige Entity **nicht** mehr
+    bei HA an. Fehlt die Marke — neuer Kanal, oder die Zuordnung zeigt auf eine andere Entity (neue
+    ``kanal_quelle``) —, holt der nächste Lauf (Startlauf oder vom Stundenlauf angestoßen) sie nach. Ein
+    abgebrochener Lauf setzt keine Marke; der Fortschritt steckt in den Zeilen selbst.
+
+    Bis 06.10. war die Marke je Anlage und Familie — ein später zugeordneter Sensor bekam dann nie seine
+    Vorgeschichte. E2 ist nicht ausgeliefert: die Tabelle gab es beim Anwender nie, es braucht keine Migration.
+    """
+
+    __tablename__ = "kanal_nachfuellung"
+
+    kanal_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("kanal.id", ondelete="CASCADE"), primary_key=True
+    )
+    #: Die Entity, deren Vorgeschichte gefüllt bzw. geprüft ist.
+    statistic_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: Unix-Sekunden des Abschlusses.
+    abgeschlossen_ts: Mapped[int] = mapped_column(Integer, nullable=False)
+    #: Zählung für diesen Kanal (Zeilen, Blöcke, ggf. Grund, warum nichts zu füllen war).
+    ergebnis: Mapped[Optional[dict]] = mapped_column(JSON(none_as_null=True), nullable=True)

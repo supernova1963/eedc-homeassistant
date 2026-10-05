@@ -77,6 +77,11 @@ IMMER_REGISTRIERT = {
     # Er ist zudem die Bedingung, unter der die Vormonats-Vorbelegung der
     # Wetterfelder wegfallen durfte: ohne ihn bliebe ein Monat ohne Klick leer.
     "wetter_luecken",
+    # HA-Bauform E2 (06.10.2026): der Konsistenzlauf der Kanalstatistik läuft BEDINGUNGSLOS. #322 fragt
+    # „soll er das?" — ja: ohne HA nimmt er sich selbst zurück (`ha_nicht_erreichbar`, keine Abfrage), mit HA
+    # kostet ein gleicher Spiegel vier Abfragen je Kanal-Abschnitt (gemessen, `test_kanal_konsistenz.py`).
+    # Ein Schalter davor hieße, dass eine Korrektur in HA je nach Konfiguration nie ankommt.
+    "kanal_konsistenz",
 }
 
 #: Erst über `add_mqtt_snapshot_jobs()` (#322).
@@ -158,6 +163,7 @@ class TestTakteDerNeunUngedecktenJobs:
             ("energie_profil_aggregation_recovery", "2", "15"),
             ("energie_profil_archiv_nachzug", "2", "20"),
             ("korrekturprofil_aggregation", "2", "30"),
+            ("kanal_konsistenz", "2", "45"),
             ("api_cache_cleanup", "4", "0"),
         ],
     )

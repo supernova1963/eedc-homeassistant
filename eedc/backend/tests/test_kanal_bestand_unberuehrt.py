@@ -9,6 +9,8 @@
   Sitzung vermerkt (N-532).
 * **Löschen:** eine gelöschte Anlage räumt ihre Kanäle wie ihre Snapshots (``ON DELETE CASCADE``);
   eine gelöschte Investition räumt weder das eine noch das andere (heutiges Verhalten, gemessen).
+* **E2:** dasselbe Bitgleich mit Nachfüllen Spiegel und Konsistenzlauf (samt einer Korrektur in HA)
+  zwischen Stundenlauf und Tagesaggregation — beide schreiben nur Kanal-Tabellen.
 
 Schwesterdateien: test_kanal_spiegel.py, test_kanal_eigene_summe.py, test_kanal_mitschrift_betriebsart.py, test_kanal_feld_deckung.py; Datenstand: test_achsen_matrix.py.
 """
@@ -78,7 +80,8 @@ def _mqtt_zeilen(form, aid: int, ids: dict) -> list[dict]:
     return zeilen
 
 
-async def _lauf(form, *, ha: bool, mit_kanal: bool, mitschrift: bool = True, stoerung=None) -> dict:
+async def _lauf(form, *, ha: bool, mit_kanal: bool, mitschrift: bool = True, stoerung=None,
+                nachfuellen: bool = False, ha_korrektur: bool = False) -> dict:
     verz = tempfile.mkdtemp(prefix="eedc-kanal-bestand-")
     try:
         engine, db = await mx._neue_db(f"{verz}/x.db")
@@ -105,6 +108,8 @@ async def _lauf(form, *, ha: bool, mit_kanal: bool, mitschrift: bool = True, sto
                         if mit_kanal:
                             await schreibe_kanaele_im_stundenlauf(db, anlage, zp)
                         await db.commit()
+                    if nachfuellen or ha_korrektur:
+                        out_e2 = await _e2_laeufe(engine, svc, aid, kanal=nachfuellen)
                     await mx.aggregiere_tage(db, form.pvform, aid, TAGE)
                 finally:
                     if not mitschrift:
@@ -114,6 +119,8 @@ async def _lauf(form, *, ha: bool, mit_kanal: bool, mitschrift: bool = True, sto
             out["kanal_statistik"] = await _dump(db, "kanal_statistik")
             out["aktivitaet"] = [(a.aktion, a.erfolg, a.details) for a in
                                  (await db.execute(select(ActivityLog))).scalars().all()]
+            if nachfuellen or ha_korrektur:
+                out["e2"] = out_e2
             return out
         finally:
             await db.close()
@@ -124,6 +131,36 @@ async def _lauf(form, *, ha: bool, mit_kanal: bool, mitschrift: bool = True, sto
 
 async def _kein_schreiben(*_a, **_k):
     return 0
+
+
+async def _e2_laeufe(engine, svc, aid: int, *, kanal: bool) -> dict:
+    """E2: Nachfüllen Spiegel, dann eine Korrektur in HA (``sum`` ab Stunde 20 um −480) und der
+    Konsistenzlauf — über eigene Sitzungen auf derselben Datei, wie im Betrieb. Die Korrektur in HA kommt
+    in BEIDEN Läufen (sonst läse der Tageslauf verschiedene HA-Daten); Nachfüllen und Konsistenzlauf nur
+    mit ``kanal``."""
+    from contextlib import asynccontextmanager
+
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+    from backend.services.kanal.konsistenz import konsistenz_anlage
+    from backend.services.kanal.nachfuellen import nachfuellen_spiegel
+
+    macher = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    @asynccontextmanager
+    async def sitzungen():
+        async with macher() as s:
+            yield s
+            await s.commit()
+
+    nf = await nachfuellen_spiegel(sitzungen, aid, jetzt=START + timedelta(hours=STUNDEN), ha_svc=svc) if kanal else None
+    ab = int((START + timedelta(hours=20)).timestamp())
+    with svc._engine.begin() as conn:
+        conn.execute(text("UPDATE statistics SET sum = sum - 480 WHERE metadata_id = 1 AND start_ts >= :t"), {"t": ab})
+    if not kanal:
+        return {}
+    ko = await konsistenz_anlage(sitzungen, aid, ha_svc=svc)
+    return {"nachgefuellt": nf.zeilen, "fehler": nf.fehler + ko.fehler, "korrigiert": len(ko.korrigiert)}
 
 
 class _nichts:
@@ -252,3 +289,16 @@ async def test_investition_loeschen_raeumt_weder_kanal_noch_snapshot(db):
     await delete_investition(inv.id, db)
     await db.commit()
     assert await _anzahl(db) == (1, 1, 1, 1)
+
+
+@pytest.mark.parametrize("fid", ["M04", "M05", "M06"])
+async def test_bestand_bitgleich_mit_nachfuellen_und_konsistenzlauf(fid):
+    """E2 (Auftrag „Bestand bitgleich, um das Nachfüllen erweitert"): Nachfüllen aus HA und ein
+    Konsistenzlauf mit Korrektur ändern keine Zeile des Bestands."""
+    form = am.FORMEN[fid]
+    mit = await _lauf(form, ha=True, mit_kanal=True, nachfuellen=True)
+    ohne = await _lauf(form, ha=True, mit_kanal=False, mitschrift=False, ha_korrektur=True)
+    for t in _BESTAND:
+        assert mit[t] == ohne[t], f"{fid}: {t} weicht ab"
+        assert mit[t], f"{fid}: {t} ist leer — die Probe hätte nichts verglichen"
+    assert mit["e2"]["nachgefuellt"] > 0 and mit["e2"]["korrigiert"] >= 1 and mit["e2"]["fehler"] == 0, mit["e2"]

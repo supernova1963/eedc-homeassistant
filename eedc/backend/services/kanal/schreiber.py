@@ -52,6 +52,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.berechnungen.ha_summe import PeriodenSumme, ha_summe_der_periode
+from backend.core.berechnungen.slot_konvention import slot_start_ts
 from backend.core.berechnungen.spannen import (
     ACHSEN_MIT_DECKEL,
     DECKEL_FENSTER_MAX_STUNDEN,
@@ -675,7 +676,8 @@ async def schreibe_betriebsart_mitschrift(
     ``.entitaeten``. Ohne beides (z. B. eine ersetzte Probe, ein leerer Verlauf) schreibt die Funktion
     nichts.
 
-    Slot ``h`` beschreibt ``[h-1, h)`` (BACKWARD, N-382). Geschrieben wird nur ein Slot, dessen Ende
+    Slot ``h`` beschreibt ``[h-1, h)`` (BACKWARD, N-382); sein ``start_ts`` kommt aus der einen Umrechnung
+    ``slot_start_ts`` (Frühjahrs-Slot ohne reale Stunde ⇒ keine Zeile). Geschrieben wird nur ein Slot, dessen Ende
     vor ``jetzt`` liegt — die Fortschreibung des letzten Zustands über eine laufende Stunde wäre eine
     Behauptung über die Zukunft und würde, einmal geschrieben, nie mehr korrigiert.
     Je Slot und Gerät entsteht eine Zeile in JEDEM Kanon-Modus (0 = gemessen nicht in diesem Modus);
@@ -685,13 +687,19 @@ async def schreibe_betriebsart_mitschrift(
     entitaeten = getattr(modus_je_stunde, "entitaeten", None) or {}
     if not anteile:
         return 0
-    jetzt = jetzt or datetime.now()
-    tag0 = datetime.combine(datum, datetime.min.time())
+    jetzt_ts = _unix(jetzt or datetime.now())
     je_geraet: dict[int, list[tuple[int, dict]]] = {}
     for h, geraete in anteile.items():
-        if tag0 + timedelta(hours=h) > jetzt:
+        # Die EINE Umrechnung Slot → start_ts (`slot_konvention.slot_start_ts`, Umkehrung von
+        # `lts_boundary_index`; HA-Bauform E2, B2). Frühjahr: die Wanduhr des Slots gibt es nicht ⇒ der Slot
+        # beschreibt keine reale Zeit (seine „Anteile" wären nur der fortgeschriebene Zustand eines
+        # leeren Fensters) und bekommt keine Zeile. Herbst: die SPÄTERE der beiden 02:00.
+        # ⛔ Hier stand `_unix(tag0 + timedelta(hours=h - 1))` (fold=0): am 29.03. bekamen Slot 2 und 3
+        # denselben Zeitstempel, `slots.sort()` verglich dann zwei dicts und warf — die ganze Tages-
+        # Mitschrift rollte zurück.
+        start_ts = slot_start_ts(datum, int(h))
+        if start_ts is None or start_ts + _STUNDE > jetzt_ts:
             continue
-        start_ts = _unix(tag0 + timedelta(hours=h - 1))
         for inv_id, je_modus in geraete.items():
             je_geraet.setdefault(int(inv_id), []).append((start_ts, je_modus))
     if not je_geraet:
@@ -711,7 +719,7 @@ async def schreibe_betriebsart_mitschrift(
     )).all())
     zeilen: list[dict] = []
     for inv_id, slots in sorted(je_geraet.items()):
-        slots.sort()
+        slots.sort(key=lambda z: z[0])        # start_ts ist je Slot eindeutig (slot_start_ts)
         entity = entitaeten.get(inv_id)
         for modus in BETRIEBSMODUS_KANON:
             kanal = kanaele[modus_kanal_key(inv_id, modus)]

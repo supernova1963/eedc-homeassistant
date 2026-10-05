@@ -294,6 +294,18 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.debug(f"Kraftstoffpreis-Startlauf nicht gestartet: {e}")
 
+    # HA-Bauform E2: Kanalstatistik aus HAs Langzeitstatistik nachfüllen — einmal je Anlage (Marke
+    # `kanal_nachfuellung`), als Hintergrund-Aufgabe: blockiert weder den Start noch den Stundenlauf
+    # (kurze Schreib-Transaktionen je Block, HA-Abrufe außerhalb). Nicht im Scheduler-Zweig, aus
+    # demselben Grund wie der Kraftstoffpreis-Startlauf darüber; im Demo-Modus nicht.
+    if not _disable_scheduler:
+        try:
+            from backend.services.kanal.nachfuellen import nachfuellen_nach_dem_start
+
+            asyncio.create_task(nachfuellen_nach_dem_start())
+        except Exception as e:
+            logger.debug(f"Kanal-Nachfüllen nicht gestartet: {e}")
+
     # MQTT-Inbound starten (DB-Settings haben Vorrang vor Env-Vars)
     mqtt_inbound = None
     mqtt_cfg = await _load_mqtt_config()

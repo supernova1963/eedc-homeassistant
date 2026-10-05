@@ -1340,6 +1340,7 @@ async def init_db():
     # (erzeugt nur Fehlendes; kein ALTER nötig, weil es sie vorher nicht gab).
     from backend.models import emob_ladeblock  # noqa: F401
     # HA-Bauform E1: `kanal` · `kanal_quelle` · `kanal_statistik` — neue Tabellen, gleiche Mechanik.
+    # E2: dazu `kanal_nachfuellung` (Marke je Kanal und Entity) im selben Modul.
     from backend.models import kanal  # noqa: F401
 
     async with engine.begin() as conn:

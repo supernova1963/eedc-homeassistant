@@ -267,6 +267,17 @@ class EEDCScheduler:
                 replace_existing=True,
             )
 
+            # HA-Bauform E2: Konsistenzlauf der Kanalstatistik um 02:45 — eine EIGENE Aufgabe im
+            # Tages-Nachlauf, die nichts am Bestand ersetzt (Auftrag E2 Punkt 4). Nach dem Self-Healing
+            # (02:15) und der Korrekturprofil-Aggregation (02:30), damit sie nicht gleichzeitig schreiben.
+            self._scheduler.add_job(
+                kanal_konsistenz_job,
+                CronTrigger(hour=2, minute=45),
+                id="kanal_konsistenz",
+                name="Kanalstatistik: Spiegel gegen HA prüfen (02:45)",
+                replace_existing=True,
+            )
+
             # Connector-Tagesabruf: Täglich um 03:30 (#300). Bewusst hier und
             # NICHT in add_mqtt_snapshot_jobs(): die Connector-Bridge pollt nur
             # bei aktivem MQTT-Inbound — ohne MQTT blieben Connector-Anlagen
@@ -605,6 +616,15 @@ async def sensor_snapshot_job() -> None:
                 # SAVEPOINT, Fehler werden dort geloggt und vermerkt, nie hierher durchgereicht.
                 await schreibe_kanaele_im_stundenlauf(db, anlage, zeitpunkt)
 
+        # HA-Bauform E2: Kanäle ohne Nachfüll-Marke (eben angelegt oder neue Entity) im Hintergrund nachfüllen —
+        # NACH der Sitzung oben, damit kein HA-Abruf in ihrer Schreib-Transaktion liegt. Kanäle mit Marke
+        # kosten dort keine HA-Abfrage.
+        try:
+            from backend.services.kanal.nachfuellen import nachfuellen_anstossen
+            nachfuellen_anstossen()
+        except Exception as e:
+            logger.debug(f"Kanal-Nachfüllen nicht angestoßen: {type(e).__name__}: {e}")
+
         if total_snapshots > 0:
             logger.info(
                 f"Sensor-Snapshots geschrieben: {total_snapshots} Werte für "
@@ -888,6 +908,27 @@ async def _run_yesterday_aggregation(label: str) -> None:
         await log_activity(
             kategorie="scheduler",
             aktion=f"Energie-Profil {label} fehlgeschlagen",
+            erfolg=False,
+            details=f"{type(e).__name__}: {e}",
+        )
+
+
+async def kanal_konsistenz_job() -> None:
+    """Spiegel der Kanalstatistik gegen HA prüfen und ab der ersten Abweichung neu spiegeln (HA-Bauform E2).
+
+    Details: ``services/kanal/konsistenz.py``. Eine Korrektur protokolliert der Lauf selbst, in der Sitzung,
+    die sie schreibt; hier nur der Rahmen-Fehler (nach dem Block, ohne offene Sitzung).
+    """
+    try:
+        from backend.core.database import get_session
+        from backend.services.kanal.konsistenz import konsistenz_alle
+
+        await konsistenz_alle(get_session)
+    except Exception as e:
+        logger.warning(f"Kanal-Konsistenzlauf fehlgeschlagen: {type(e).__name__}: {e}")
+        await log_activity(
+            kategorie="scheduler",
+            aktion="Kanalstatistik: Konsistenzlauf fehlgeschlagen",
             erfolg=False,
             details=f"{type(e).__name__}: {e}",
         )

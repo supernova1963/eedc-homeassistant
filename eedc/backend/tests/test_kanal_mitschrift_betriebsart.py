@@ -130,3 +130,41 @@ async def test_ohne_anteile_schreibt_die_mitschrift_nichts(db):
     a, wp = await _anlage(db)
     assert await schreibe_betriebsart_mitschrift(db, a, TAG, {6: {wp.id: "heizen"}}, jetzt=T0 + timedelta(days=1)) == 0
     assert (await db.execute(select(Kanal))).first() is None
+
+
+# ── Umstellungstage: die EINE Umrechnung Slot → start_ts (HA-Bauform E2, B2) ──────────────────────
+
+_UMSTELLUNG = (date(2026, 3, 29), date(2026, 10, 25), date(2026, 4, 5), date(2026, 9, 27))
+
+
+@pytest.mark.parametrize("tag", _UMSTELLUNG, ids=str)
+async def test_umstellungstag_jede_reale_stunde_genau_eine_zeile(db, tag):
+    """Je Slot ein unterscheidbarer Anteil; geschrieben über den Einstieg der Tagesaggregation.
+
+    In JEDER Zone (die Datei läuft in Berlin, UTC und Auckland): jede Zeile steht auf
+    ``slot_start_ts(tag, h)`` — Herbst: die spätere 02:00, Frühjahr: der Slot ohne reale Stunde hat keine
+    Zeile —, kein Zeitstempel doppelt, kein Slot mit realer Stunde fehlt, kein Fehlervermerk. In Berlin am
+    29.03. warf die alte Umrechnung (fold=0: Slot 2 und 3 auf 1774742400) und die ganze Mitschrift des
+    Tages rollte zurück.
+    """
+    from backend.core.berechnungen.slot_konvention import lts_boundary_index, slot_start_ts
+    from backend.models.activity_log import ActivityLog
+    from backend.services.energie_profil._helpers import ModusJeStunde
+    from backend.services.kanal.schreiber import schreibe_betriebsart_mitschrift_sicher
+
+    a, wp = await _anlage(db)
+    m = ModusJeStunde({h: {wp.id: "heizen"} for h in range(24)},
+                      anteile={h: {wp.id: {"heizen": h / 100, "aus": 1 - h / 100}} for h in range(24)},
+                      entitaeten={wp.id: "climate.wp"})
+    jetzt = datetime.combine(tag + timedelta(days=1), datetime.min.time()) + timedelta(hours=12)
+    with patch("backend.services.kanal.schreiber.datetime") as dt:
+        dt.now.return_value = jetzt
+        dt.combine, dt.min = datetime.combine, datetime.min
+        n = await schreibe_betriebsart_mitschrift_sicher(db, a, tag, m)
+    await db.commit()
+    soll = {slot_start_ts(tag, h): h / 100 for h in range(24) if slot_start_ts(tag, h) is not None}
+    z = await _zeilen(db, a, wp.id)
+    assert z["heizen"] == soll
+    assert n == len(soll) * len(BETRIEBSMODUS_KANON)
+    assert all(lts_boundary_index(datetime.fromtimestamp(ts), tag) == round(w * 100) for ts, w in z["heizen"].items())
+    assert not (await db.execute(select(ActivityLog))).scalars().all()
