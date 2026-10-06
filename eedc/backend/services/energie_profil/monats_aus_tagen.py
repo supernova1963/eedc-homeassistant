@@ -136,6 +136,10 @@ class TagesMonatsSumme:
     #: HA-Bauform E4b: Σ der Geräte-Werte (String-Zähler) desselben Kanal-Monats — der Bezug der Prozentangabe
     #: (``pv_verteilung.wandlungsverluste_prozent``); ``None``, wo ``wandlungsverluste_kwh`` ``None`` ist.
     wandlungsverluste_bezug_kwh: Optional[float] = None
+    #: HA-Bauform E4c (nur Kanal-Monate): die Erzeugung je Sonstiges-Erzeuger hinter dem Zähler (``sonstige_<id>`` der
+    #: Bilanz-Komposition, Entweder-oder W2-R4 schon angewandt) — ``{inv_id: kWh}``. Leer im Bestand: dort führen die
+    #: Monats-Fakten den Erzeuger nur aus der Monatszeile (heutiger Leser, Lesart 1).
+    sonstige_erzeuger_je_inv: dict[str, float] = field(default_factory=dict)
 
     @property
     def pv_kwh(self) -> float:

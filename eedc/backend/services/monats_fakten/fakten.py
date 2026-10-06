@@ -40,6 +40,10 @@ TAGESWERT_SPEICHER = "speicher"
 #: sondern nur die *Aufteilung* der Heimladung in PV und Netz (N-141 Weg c).
 #: Die Ladungsmenge selbst stammt weiter aus der Monatszeile.
 TAGESWERT_EMOB_ANTEIL = "emob_anteil"
+#: HA-Bauform E4c: die Lademengen (Wallbox/E-Auto) aus der E-Mob-Gruppe der Kanäle, nicht aus einer Monatszeile.
+TAGESWERT_EMOB = "emob"
+#: HA-Bauform E4c: die Sonstiges-Geräte (Verbraucher aus ihrer Gruppe, Erzeuger aus dem Kanal-Monat der Bilanz).
+TAGESWERT_SONSTIGES = "sonstiges"
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Feldgruppen (KONZEPT-MONATS-FAKTEN.md §3)

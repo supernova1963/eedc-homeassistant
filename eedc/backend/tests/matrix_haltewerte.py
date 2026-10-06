@@ -540,5 +540,5 @@ ACHSEN_HALTEWERTE: dict[tuple[str, str, str, str, str], Optional[float]] = {
     ('W2-E', 'netz', 'S3', 'I2', 'netzbezug:cockpit_monat:vor=nach'): None,
     ('W2-E', 'netz', 'S3', 'I2', 'pv:cockpit_monat:vor=nach'): None,
     ('W2-E', 'sonstiges', 'S3', 'I2', 'erzeugung:cockpit_monat:vor=nach'): None,
-    ('W2-E', 'sonstiges', 'S3', 'I2', 'verbrauch:cockpit_monat:vor=nach'): None,
+    # E4c (W2-E-KATALOG berichtigt): die Menge „verbrauch“ gibt es beim Erzeuger nicht mehr — ihr Haltewert entfällt.
 }

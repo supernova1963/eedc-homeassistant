@@ -272,8 +272,11 @@ def als_monatssumme(jahr: int, monat: int, k: BilanzZeitraum, *, jetzt: int) -> 
                     tageszeilen=[TagesZeile(datum=d0, komponenten_kwh=k.komponenten, source_provenance=prov)])
     se = soll_ende(jetzt)
     tage = [t for t in _tage(d0, _letzter_tag(jahr, monat)) if tagesfenster(t)[0] < se]
+    # E4c: die Sonstiges-Erzeuger der Komposition — in der Bilanz-Gruppe stehen nur Erzeuger hinter dem Zähler
+    # (Kategorie `erzeugung_sonstiges`), ihr Ziel ist `sonstige_<id>`.
+    erzeuger = {kk[len("sonstige_"):]: v for kk, v in k.komponenten.items() if kk.startswith("sonstige_")}
     return dataclasses.replace(s, tage=len(tage), stunden=0, erster_tag=tage[0] if tage else None,
-                               letzter_tag=tage[-1] if tage else None,
+                               letzter_tag=tage[-1] if tage else None, sonstige_erzeuger_je_inv=erzeuger,
                                wandlungsverluste_kwh=k.pv.wandlungsverluste_kwh if k.pv else None,
                                wandlungsverluste_bezug_kwh=(k.pv.geraete_kwh if k.pv and k.pv.wandlungsverluste_kwh
                                                             is not None else None))
@@ -281,7 +284,9 @@ def als_monatssumme(jahr: int, monat: int, k: BilanzZeitraum, *, jetzt: int) -> 
 
 # ── Fassaden für die Sichten ────────────────────────────────────────────────
 
-#: Felder der Monatssumme, die NICHT zur Bilanz-Gruppe gehören (E-Mob-Aufteilung) — bleiben aus dem Bestand (D2).
+#: Felder der Monatssumme, die NICHT zur Bilanz-Gruppe gehören (E-Mob-Aufteilung) — bleiben aus dem Bestand (D2). Seit
+#: E4c nehmen die Monats-Fakten für einen Monat, dessen E-Mob-Gruppe die Kanäle decken, den Anteil des abgeleiteten
+#: Kanals (`kanal/geraete_leser.py`); diese Felder tragen dann nur noch „davon aus dem Speicher" (Ausweis).
 _NICHT_GRUPPE = ("emob_ladung_pv_abgeleitet_kwh", "emob_ladung_netz_abgeleitet_kwh",
                  "emob_ladung_speicher_abgeleitet_kwh")
 

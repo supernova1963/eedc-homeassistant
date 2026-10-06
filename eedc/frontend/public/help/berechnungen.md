@@ -1420,6 +1420,39 @@ oft aus dem Hausakku — den Fall sah die Messung vom 08.08. kaum.
 ⚠ **Keine rückwirkende Berechnung.** Der Wert entsteht beim Aggregieren eines Tages; Zeiträume vor
 diesem Feature tragen `NULL`, und `NULL` heißt „keine Aussage", nicht „keine Sonne".
 
+> **E-Mobilität und Sonstiges aus Zeitraum-Differenzen (HA-Bauform E4c, Stand 06.10.2026).** Mit Home Assistant (bzw.
+> der eigenen Summe aus MQTT) führt eedc die Aufteilung der Heimladung als **abgeleiteten Kanal** je Gerät:
+> `abgeleitet:inv:<id>:ladung_pv_kwh` (`services/kanal/abgeleitet.py`). Der Stundenlauf schreibt ihn nach dem Spiegel
+> fort — je Stunde dieselbe Regel wie oben (`pv_anteil_ladung.pv_der_stunde`, Einspeise-Deckung) auf die Δ der Stunde:
+> `L` = Σ Ladung der Wallbox-Achse (Auswahl des Tagespfads, also mit Wallbox-Regel und Heimlade-Kaskade),
+> `PV = pv_der_stunde(L, Netzbezug, Einspeisung)`, je Gerät **ohne** gemessene Aufteilung `Ladung_Gerät × PV / L`. Ein
+> Gerät mit eigenem „Heim: PV"/„Heim: Netz"-Zähler bekommt keinen Kanal (der gepflegte bzw. gemessene Wert gewinnt).
+> Ein Zeitraum — Tag, Monat, Kalendermonat — nennt seinen Anteil damit als **ein Δ**: `Σ Δ abgeleitet / Σ Δ Ladung`.
+>
+> * **Derselbe Anteil mit und ohne Abschluss** (N-631): deckt die E-Mob-Gruppe den Monat, nehmen die Monats-Fakten,
+>   *Cockpit → Monat* und die Sichten außerhalb der Fakten (`lade_abgeleitete_ladeanteile`: Komponenten-Hub, Aussichten,
+>   HA-Export) diesen Anteil; sonst die Quote der Tagesebene wie bisher. Angewandt wird er wie bisher auf die Ladung der
+>   Zeilen ohne eigene Aufteilung (Punkt 3).
+> * **Die Lademengen eines Monats ohne Abschluss** kommen aus den Kanälen der E-Mob-Gruppe (je Gerät jedes Energiefeld
+>   mit Zähler — die Felder, die ein Abschluss schriebe) und laufen durch dieselbe Faltung und dieselbe eine Funktion wie
+>   eine gespeicherte Monatszeile: Wallbox-Regel, Pool, Rest nach km, Dienstwagen getrennt. Ein Monat mit Zeile behält
+>   sie (gespeichert schlägt gerechnet).
+> * **Quellenwahl je Monat und Gruppe**, getrennt von der Bilanz-Gruppe: `kanal` nur, wenn jeder Kanal der Gruppe
+>   (auch der abgeleitete) den Monat voll deckt — sonst rechnet der Monat wie bisher.
+> * **Grenze — eine Stunde ohne Aussage** (fehlende Netzbezugs- oder Einspeisezeile, Zählerlücke über mehr als eine
+>   Stunde) trägt im Kanal keinen PV-Teil — ihre Ladung zählt im Anteil zum Netz. Die Tagesebene ließ eine solche Stunde
+>   ganz aus (Entscheid: so belassen; die Abweichung irrt zur kleineren Ersparnis).
+> * **Rückwirkung nur für den laufenden Monat:** ein neuer Kanal beginnt beim ersten Lauf mit dem laufenden Monat
+>   (`aufbaubar_ab` eine Stunde vor dem Monatsfenster), sobald der Spiegel die Stunden trägt; kein abgeschlossener Monat
+>   wird aus ihm neu gerechnet. Korrigiert der Konsistenzlauf den Spiegel, wird der Kanal ab der korrigierten Stunde neu
+>   geschrieben, nie davor.
+> * **„Davon aus dem Speicher"** (Ausweis) und die **Ladeblöcke je Auto** bleiben bei der Tagesebene.
+>
+> **Sonstiges** genauso: die Verbraucher (und die Abgabe an Dritte) eines Monats ohne Abschluss aus ihrer Gruppe — je
+> Gerät die Energiefelder in der Reihenfolge seiner Kategorie, der erste mit voller Deckung trägt (Entweder-oder) —, die
+> **Erzeuger hinter dem Zähler** aus dem Kanal-Monat der Bilanz-Gruppe (§3.1). Damit rechnen Eigenverbrauch, Autarkie
+> und „Erzeugung hinter dem Zähler" eines Monats ohne Abschluss mit dem BHKW, wie nach dem Abschluss.
+
 ⚠ **Die Auflösung begrenzt die Genauigkeit.** Meldet ein Wallbox-Zähler nur ganze Kilowattstunden
 (an der Referenzanlage 218 von 218 Stunden-Deltas ganzzahlig), trifft keine Rechnung die einzelne
 Stunde — über den Monat ist die Ableitung brauchbar, über die Stunde nicht.

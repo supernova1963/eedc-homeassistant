@@ -263,11 +263,23 @@ async def _ha_statistik_aus_kanaelen(
     überhaupt geliefert hat (HA erreichbar); dieselbe Regel für die gemessene 0 (N-585) wie dort."""
     if not ha_stats:
         return ha_stats
+    out, _ersetzt = await _ha_statistik_aus_kanaelen_mit_marke(db, anlage, investitionen, jahr, monat, ha_stats)
+    return out
+
+
+async def _ha_statistik_aus_kanaelen_mit_marke(
+    db: AsyncSession, anlage: Anlage, investitionen, jahr: int, monat: int,
+    ha_stats: dict[str, tuple[float, DatenquelleInfo]],
+) -> tuple[dict[str, tuple[float, DatenquelleInfo]], bool]:
+    """Wie ``_ha_statistik_aus_kanaelen``, dazu die Marke „die Bilanz-Gruppe kam aus den Kanälen" (HA-Bauform E4c:
+    der Sonstiges-Erzeuger des Monats ohne Abschluss zählt nur dann, Lesart 1)."""
+    if not ha_stats:
+        return ha_stats, False
     from backend.services.kanal.bilanz_leser import kanal_kalendermonate
 
     ersatz = (await kanal_kalendermonate(db, anlage.id, [(jahr, monat)])).get((jahr, monat))
     if not ersatz:
-        return ha_stats
+        return ha_stats, False
     sensor_to_feld = _sensor_to_feld(anlage)
     typ_je_inv = {str(i.id): i.typ for i in investitionen}
     quelle = next(iter(ha_stats.values()))[1]
@@ -280,7 +292,80 @@ async def _ha_statistik_aus_kanaelen(
             out[feld] = (w.differenz, quelle)
         else:
             out.pop(feld, None)
-    return out
+    return out, True
+
+
+async def _geraete_aus_kanaelen(
+    db: AsyncSession, anlage: Anlage, investitionen, jahr: int, monat: int,
+    ha_stats: dict[str, tuple[float, DatenquelleInfo]], *, monats_fakt, bilanz_ersetzt: bool,
+):
+    """HA-Bauform E4c (U5/U6): die E-Mob- und die Sonstiges-Gruppe des Kalendermonats aus den Kanälen.
+
+    Nur auf dem HA-Weg (``ha_stats`` geliefert) und nur, wo der Monat für die Gruppe KEINE Zeile trägt (gespeichert
+    schlägt gerechnet, P8). Je Gruppe die Quellenwahl des Lesers (``kanal/geraete_leser.geraete_kalendermonate``):
+
+    * **E-Mob** gedeckt ⇒ die Gerätefelder (``inv_<id>_<feld>``) sind das Kanal-Δ des Kalendermonats (ohne Deckel, ohne
+      Rücksprung-Verwurf, wie die Bilanz-Gruppe B-2), und der PV-Anteil der Heimladung ist der des abgeleiteten Kanals
+      — dieselbe Aufteilung wie die Monats-Fakten (N-631: vorher stand die ganze Ladung als Netz, weil dieser Weg keine
+      Quote kannte). Die Regeln (Wallbox-Regel, Pool, Dienstwagen) entscheidet weiter ``emob_heimladung_pool``.
+    * **Sonstiges** — Verbraucher aus ihrer Gruppe (Entweder-oder W2-R4), Erzeuger aus den Kanal-Werten der
+      Bilanz-Gruppe (nur wenn die Bilanz-Gruppe den Monat aus den Kanälen nahm, ``bilanz_ersetzt``) — als Zeilen durch
+      dieselbe Faltung wie der Fakt (``monats_fakten.sonstiges_aus_zeilen``). Vorher führte Cockpit → Monat Sonstiges
+      nur aus dem Monats-Fakt, ohne Abschluss also gar nicht (EV/Autarkie ohne BHKW).
+
+    Returns: ``(ha_stats', emob, sonstiges)`` — ``emob`` = ``(gedeckt, quote)``, ``sonstiges`` = ``SonstigesFakten``
+    oder ``None``.
+    """
+    if not ha_stats:
+        return ha_stats, (False, None), None
+    typen = {getattr(i, "typ", None) for i in investitionen}
+    if not typen & {"e-auto", "wallbox", "sonstiges"}:
+        return ha_stats, (False, None), None
+    from backend.services.kanal.geraete_leser import geraete_kalendermonate
+    from backend.services.monats_fakten import sonstiges_aus_zeilen
+    from backend.services.snapshot.keys import KUMULATIVE_ZAEHLER_FELDER, _categorize_counter
+
+    g = (await geraete_kalendermonate(db, anlage.id, [(jahr, monat)])).get((jahr, monat))
+    zeilen_typen = set(monats_fakt.meta.typen_mit_zeile) if monats_fakt is not None else set()
+    emob_zeile = monats_fakt is not None and bool(
+        monats_fakt.emob.ladedaten_je_inv or monats_fakt.emob.dienstlich_ladedaten_je_inv)
+    out = dict(ha_stats)
+    quelle = next(iter(ha_stats.values()))[1]
+    typ_je_inv = {str(i.id): i.typ for i in investitionen}
+
+    emob = (False, None)
+    if g is not None and g.emob.kanal and not emob_zeile:
+        for inv_id, zeile in g.emob.zeilen.items():
+            for feld, wert in zeile.items():
+                key = f"inv_{inv_id}_{feld}"
+                wert = round(wert, 2)
+                if wert > 0 or (wert == 0 and _null_ist_messwert(key, typ_je_inv)):
+                    out[key] = (wert, quelle)
+                else:
+                    out.pop(key, None)
+        emob = (True, g.emob.quote)
+
+    sonstiges = None
+    if "sonstiges" not in zeilen_typen:
+        zeilen: dict[int, dict] = {}
+        if g is not None and g.sonstiges.kanal:
+            zeilen.update({i: dict(z) for i, z in g.sonstiges.zeilen.items()})
+        if bilanz_ersetzt:
+            for inv in investitionen:
+                if inv.typ != "sonstiges" or not inv.ist_aktiv_im_monat(jahr, monat):
+                    continue
+                params = inv.parameter if isinstance(inv.parameter, dict) else {}
+                for feld in KUMULATIVE_ZAEHLER_FELDER.get("sonstiges", ()):
+                    key = f"inv_{inv.id}_{feld}"
+                    if key in out and _categorize_counter(feld, "sonstiges", params) == "erzeugung_sonstiges":
+                        zeilen.setdefault(inv.id, {})[feld] = out[key][0]
+        if zeilen:
+            sonstiges = sonstiges_aus_zeilen(investitionen, (jahr, monat), zeilen)
+            for feld, wert in (("sonstiges_erzeugung_kwh", sonstiges.erzeugung_kwh),
+                               ("sonstiges_abgabe_kwh", sonstiges.abgabe_kwh)):
+                if wert > 0:
+                    out[feld] = (round(wert, 2), quelle)
+    return out, emob, sonstiges
 
 
 async def _ha_heimlade_felder_mit_daten(anlage: Anlage, investitionen, jahr: int, monat: int) -> set[str]:
@@ -848,7 +933,13 @@ async def _berechne_monat(
         if ist_aktueller_monat else {}
     )
     ha_stats = await _collect_ha_statistics_data(anlage, jahr, monat)
-    ha_stats = await _ha_statistik_aus_kanaelen(db, anlage, investitionen, jahr, monat, ha_stats)
+    ha_stats, _bilanz_aus_kanaelen = await _ha_statistik_aus_kanaelen_mit_marke(
+        db, anlage, investitionen, jahr, monat, ha_stats)
+    # HA-Bauform E4c: E-Mob- und Sonstiges-Gruppe des Kalendermonats aus den Kanälen (Docstring dort).
+    ha_stats, _emob_kanal, _sonstiges_kanal = await _geraete_aus_kanaelen(
+        db, anlage, investitionen, jahr, monat, ha_stats,
+        monats_fakt=monats_fakt, bilanz_ersetzt=_bilanz_aus_kanaelen,
+    )
     # N-555: welche Heimlade-Felder hat die HA-Statistik in einem ABGESCHLOSSENEN
     # Monat überhaupt (auch mit 0)? Im laufenden Monat genügt die Quelle.
     ha_felder_mit_daten: set[str] = (
@@ -943,6 +1034,8 @@ async def _berechne_monat(
         # N-555 Stufe 3: die geltenden Ladeblöcke des Monats (W-C geprüft) — dieselbe
         # Messung je Auto wie in den Monats-Fakten, auch wenn hier entschieden wird.
         bloecke=await _emob_bloecke_des_monats(db, anlage.id, investitionen, jahr, monat),
+        # HA-Bauform E4c (N-631): der PV-Anteil aus dem abgeleiteten Kanal, wenn die E-Mob-Gruppe den Monat deckt.
+        kanal_quote=_emob_kanal,
     )
     emob_entscheid = _out.get("emob_entscheid")
     # ── extrahiere_werte (Vorlage 2: Abschnitt in aggregation.py, Schnittstelle 2 ein / 10 aus) ──
@@ -1020,6 +1113,8 @@ async def _berechne_monat(
     if "mf_bkw" in _out: mf_bkw = _out["mf_bkw"]
     if "mf_emob" in _out: mf_emob = _out["mf_emob"]
     if "mf_sonstiges" in _out: mf_sonstiges = _out["mf_sonstiges"]
+    if _sonstiges_kanal is not None:
+        mf_sonstiges = _sonstiges_kanal      # E4c: der Monat ohne Sonstiges-Zeile aus den Kanälen
     if "mf_wp" in _out: mf_wp = _out["mf_wp"]
     if "speicher_auslastung" in _out: speicher_auslastung = _out["speicher_auslastung"]
     if "speicher_auslastungs_basis" in _out: speicher_auslastungs_basis = _out["speicher_auslastungs_basis"]

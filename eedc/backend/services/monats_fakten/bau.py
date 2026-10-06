@@ -59,6 +59,8 @@ async def _baue_fakt(
     heimlade_quellen: frozenset = frozenset(),
     bloecke: Optional[dict] = None,
     verluste_summe: Optional[TagesMonatsSumme] = None,
+    emob_kanal=None,
+    kanal_gruppen: frozenset = frozenset(),
 ) -> MonatsFakt:
     jahr, monat = schluessel
 
@@ -67,7 +69,7 @@ async def _baue_fakt(
     # **Lücken**, sie überschreiben nichts — und zwar feldgruppen-weise, nicht
     # monatsweise: ein Monat, dessen einzige DB-Spur eine Sonstiges-Zeile ist,
     # bekommt dadurch seine PV, statt sie still als 0 zu zeichnen.
-    tageswert_gruppen: set[str] = set()
+    tageswert_gruppen: set[str] = set(kanal_gruppen)
 
     zaehler = ZaehlerFakten(
         einspeisung_kwh=(monatsdaten.einspeisung_kwh or 0.0) if monatsdaten else 0.0,
@@ -179,10 +181,17 @@ async def _baue_fakt(
         and i.ist_aktiv_im_monat(jahr, monat)
         for i in investitionen
     )
+    # HA-Bauform E4c (N-631): deckt die E-Mob-Gruppe den Monat aus den Kanälen, ist der Anteil der des abgeleiteten
+    # Kanals (Σ Δ abgeleitet / Σ Δ Ladung, `kanal/geraete_leser.py`) — mit UND ohne Abschluss derselbe; sonst die Quote
+    # der Tagesebene wie bisher (Lesart 1). `None` heißt in beiden Fällen „keine Aussage".
+    pv_quote = (
+        emob_kanal.quote if emob_kanal is not None
+        else (tages_summe.abgeleiteter_pv_anteil if tages_summe is not None else None)
+    )
     eauto_ladedaten, wallbox_ladedaten, anteil_abgeleitet = reichere_ladezeilen_an(
         eauto_daten=roh.eauto_ladedaten,
         wallbox_daten=roh.wallbox_ladedaten,
-        quote=tages_summe.abgeleiteter_pv_anteil if tages_summe is not None else None,
+        quote=pv_quote,
         wallbox_in_betrieb=wallbox_in_betrieb,
     )
     if anteil_abgeleitet:
@@ -213,7 +222,7 @@ async def _baue_fakt(
         dienstliche_wallbox_in_betrieb=dienstliche_wallbox_in_betrieb,
         # Nur im laufenden Monat nicht leer (Regel 1: dort zählt auch eine Quelle).
         heimlade_quellen=heimlade_quellen,
-        pv_quote=tages_summe.abgeleiteter_pv_anteil if tages_summe is not None else None,
+        pv_quote=pv_quote,
         # Regel 8 (E5): welches `ladung_kwh` „Heim: gesamt" ist — nach Herkunft.
         heim_gesamt=roh.heim_gesamt_ids,
         # Wessen Quelle ist eine Wallbox-Quelle? (Die Quellen tragen seit Stufe 2 auch
@@ -427,37 +436,7 @@ async def _baue_fakt(
             geraete_luft_wasser=roh.wp_geraete_luft_wasser,
             abgrenzung_stoerung=roh.wp_abgrenzung,
         ),
-        sonstiges=SonstigesFakten(
-            erzeugung_kwh=roh.sonstiges_erzeugung,
-            abgabe_kwh=roh.sonstiges_abgabe,
-            verbrauch_kwh=roh.sonstiges_verbrauch,
-            eigenverbrauch_kwh=roh.sonstiges_eigenverbrauch,
-            einspeisung_kwh=roh.sonstiges_einspeisung,
-            bezug_pv_kwh=roh.sonstiges_bezug_pv,
-            bezug_netz_kwh=roh.sonstiges_bezug_netz,
-            einspeise_erloes_euro=roh.sonstiges_einspeise_erloes_euro,
-            je_geraet={
-                inv_id: SonstigesGeraetFakten(
-                    erzeugung_kwh=g["erzeugung"],
-                    verbrauch_kwh=g["verbrauch"],
-                    eigenverbrauch_kwh=g["eigenverbrauch"],
-                    einspeisung_kwh=g["einspeisung"],
-                    bezug_pv_kwh=g["bezug_pv"],
-                    bezug_netz_kwh=g["bezug_netz"],
-                    einspeise_erloes_euro=g.get("einspeise_erloes_euro", 0.0),
-                    hat_einspeise_erloes=bool(g.get("hat_einspeise_erloes")),
-                    abgabe_kwh=g.get("abgabe", 0.0),
-                )
-                for inv_id, g in roh.sonstiges_je_geraet.items()
-            },
-            ertraege_euro=round(ertraege, 2),
-            ausgaben_euro=round(ausgaben, 2),
-            netto_euro=round(ertraege - ausgaben, 2),
-            anlage_ertraege_euro=round(md_summen["ertraege_euro"], 2) if md_summen else 0.0,
-            anlage_ausgaben_euro=round(md_summen["ausgaben_euro"], 2) if md_summen else 0.0,
-            hat_erzeuger_zeile=roh.hat_sonstigen_erzeuger,
-            hat_verbraucher_zeile=roh.hat_sonstigen_verbraucher,
-        ),
+        sonstiges=_sonstiges_fakten(roh, md_summen, ertraege, ausgaben),
         tarif=tarif,
         eeg=EegFakten(neg_preis_kwh=neg_preis_kwh),
         kennzahlen=berechne_verbrauchs_kennzahlen(
@@ -481,3 +460,57 @@ async def _baue_fakt(
             tageswert_gruppen=frozenset(tageswert_gruppen),
         ),
     )
+
+
+def _sonstiges_fakten(roh: _RohMonat, md_summen: Optional[dict], ertraege: float, ausgaben: float) -> SonstigesFakten:
+    """Die Sonstiges-Gruppe eines Rohmonats — EINE Stelle für den Fakt und für Zeilen aus den Kanälen
+    (``sonstiges_aus_zeilen``, HA-Bauform E4c)."""
+    return SonstigesFakten(
+        erzeugung_kwh=roh.sonstiges_erzeugung,
+        abgabe_kwh=roh.sonstiges_abgabe,
+        verbrauch_kwh=roh.sonstiges_verbrauch,
+        eigenverbrauch_kwh=roh.sonstiges_eigenverbrauch,
+        einspeisung_kwh=roh.sonstiges_einspeisung,
+        bezug_pv_kwh=roh.sonstiges_bezug_pv,
+        bezug_netz_kwh=roh.sonstiges_bezug_netz,
+        einspeise_erloes_euro=roh.sonstiges_einspeise_erloes_euro,
+        je_geraet={
+            inv_id: SonstigesGeraetFakten(
+                erzeugung_kwh=g["erzeugung"],
+                verbrauch_kwh=g["verbrauch"],
+                eigenverbrauch_kwh=g["eigenverbrauch"],
+                einspeisung_kwh=g["einspeisung"],
+                bezug_pv_kwh=g["bezug_pv"],
+                bezug_netz_kwh=g["bezug_netz"],
+                einspeise_erloes_euro=g.get("einspeise_erloes_euro", 0.0),
+                hat_einspeise_erloes=bool(g.get("hat_einspeise_erloes")),
+                abgabe_kwh=g.get("abgabe", 0.0),
+            )
+            for inv_id, g in roh.sonstiges_je_geraet.items()
+        },
+        ertraege_euro=round(ertraege, 2),
+        ausgaben_euro=round(ausgaben, 2),
+        netto_euro=round(ertraege - ausgaben, 2),
+        anlage_ertraege_euro=round(md_summen["ertraege_euro"], 2) if md_summen else 0.0,
+        anlage_ausgaben_euro=round(md_summen["ausgaben_euro"], 2) if md_summen else 0.0,
+        hat_erzeuger_zeile=roh.hat_sonstigen_erzeuger,
+        hat_verbraucher_zeile=roh.hat_sonstigen_verbraucher,
+    )
+
+
+def sonstiges_aus_zeilen(
+    investitionen: list[Investition], schluessel: MonatsSchluessel, zeilen: dict[int, dict],
+) -> SonstigesFakten:
+    """Die Sonstiges-Gruppe eines Monats aus Zeilen ``{inv_id: {feld: kWh}}``, die KEINE Monatszeile sind —
+    HA-Bauform E4c: Cockpit → Monat ohne Abschluss mit den Kalendermonats-Zeilen der Kanäle. Dieselbe Faltung
+    (``_RohMonat.falte`` → ``imd_typ_beitrag``) und dieselbe Gruppe wie der Fakt; Geld trägt eine solche Zeile nicht."""
+    from backend.services.kanal.geraete_leser import herkunft_der_zeile
+
+    roh = _RohMonat()
+    je_id = {i.id: i for i in investitionen}
+    for inv_id, zeile in sorted(zeilen.items()):
+        inv = je_id.get(int(inv_id))
+        if inv is None or inv.typ != "sonstiges" or not inv.ist_aktiv_im_monat(*schluessel) or not zeile:
+            continue
+        roh.falte(inv, zeile, source_provenance=herkunft_der_zeile(zeile))
+    return _sonstiges_fakten(roh, None, 0.0, 0.0)

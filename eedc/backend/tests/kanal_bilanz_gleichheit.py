@@ -175,6 +175,7 @@ async def datenstand(matrix: str, fid: str, art: str, *, ha_abweichung: Optional
                 with umgebung:
                     erg = await nachfuellen_spiegel(sitzungen, aid, jetzt=mx.JETZT, ha_svc=svc)
                     assert erg.fehler == 0 and erg.zeilen > 0
+                    await mx.baue_abgeleitete(sitzungen, aid)     # E4c: der abgeleitete Kanal wie im Produkt
                     await mx.aggregiere_tage(db, pf, aid, TAGE)
             else:
                 svc = mx._ha_aus()
@@ -195,6 +196,7 @@ async def datenstand(matrix: str, fid: str, art: str, *, ha_abweichung: Optional
                     for zp in laeufe:
                         await schreibe_eigene_summe(db, anlage, zp)
                         await db.commit()
+                    await mx.baue_abgeleitete(sitzungen, aid)     # E4c: aus der eigenen Summe, wie im Stundenlauf
                     await mx.aggregiere_tage(db, pf, aid, TAGE)
             yield Datenstand(matrix, fid, art, db, aid, ids, svc)
         finally:

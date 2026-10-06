@@ -73,6 +73,8 @@ from backend.services.monats_fakten.fakten import (  # noqa: F401 — Re-Export
     TAGESWERT_BKW,
     TAGESWERT_SPEICHER,
     TAGESWERT_EMOB_ANTEIL,
+    TAGESWERT_EMOB,
+    TAGESWERT_SONSTIGES,
     ZaehlerFakten,
     ErzeugungFakten,
     BkwFakten,
@@ -91,6 +93,9 @@ from backend.services.monats_fakten.roh import (  # noqa: F401 — Re-Export
 from backend.services.monats_fakten.laden import (  # noqa: F401 — Re-Export
     lade_monats_fakten,
 )
+from backend.services.monats_fakten.bau import (  # noqa: F401 — Re-Export
+    sonstiges_aus_zeilen,
+)
 from backend.services.monats_fakten.ableitungen import (  # noqa: F401 — Re-Export
     ist_pv_ladeanteil_prozent,
     finanz_zeile_eingabe,
@@ -108,6 +113,8 @@ __all__ = [
     "TAGESWERT_BKW",
     "TAGESWERT_SPEICHER",
     "TAGESWERT_EMOB_ANTEIL",
+    "TAGESWERT_EMOB",
+    "TAGESWERT_SONSTIGES",
     "ZaehlerFakten",
     "ErzeugungFakten",
     "BkwFakten",
@@ -121,6 +128,7 @@ __all__ = [
     "MonatsFakt",
     "_RohMonat",
     "lade_monats_fakten",
+    "sonstiges_aus_zeilen",
     "ist_pv_ladeanteil_prozent",
     "finanz_zeile_eingabe",
     "kennzahlen_aus_fakten",

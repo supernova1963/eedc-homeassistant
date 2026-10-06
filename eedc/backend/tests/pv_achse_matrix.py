@@ -646,6 +646,18 @@ async def fuelle_spiegel(engine, anlage_id: int, svc) -> None:
 
     erg = await nachfuellen_spiegel(sitzungen, anlage_id, jetzt=JETZT, ha_svc=svc)
     assert erg.fehler == 0 and erg.zeilen > 0, erg
+    await baue_abgeleitete(sitzungen, anlage_id)
+
+
+async def baue_abgeleitete(sitzungen, anlage_id: int) -> int:
+    """HA-Bauform E4c: die abgeleiteten Kanäle (PV-Anteil der Heimladung, ``kanal/abgeleitet.py``) über die ganze
+    Reihe — der Zustand eines Produkts, dessen Stundenlauf seit Beginn der Reihe läuft (der Stundenlauf baut NICHT
+    rückwirkend; ``ab_ts`` setzt die erste Stunde). Ein Seed, kein Soll; ohne Wallbox/E-Auto schreibt er nichts."""
+    from backend.services.kanal.abgeleitet import schreibe_abgeleitete
+
+    async with sitzungen() as s:
+        anlage = (await s.execute(select(Anlage).where(Anlage.id == anlage_id))).scalar_one()
+        return await schreibe_abgeleitete(s, anlage, JETZT, ab_ts=int(REIHE_VON.timestamp()))
 
 
 async def aggregiere_tage(db: AsyncSession, form: Form, anlage_id: int, tage) -> None:

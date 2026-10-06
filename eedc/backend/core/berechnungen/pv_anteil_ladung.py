@@ -165,6 +165,24 @@ class AbgeleiteterLadeAnteil:
         return self.pv_kwh + self.netz_kwh
 
 
+def pv_der_stunde(
+    ladung: Optional[float], netzbezug: Optional[float], einspeisung: Optional[float],
+) -> Optional[float]:
+    """Der PV-Teil der Ladung EINER Stunde nach der Einspeise-Deckung (N-569, Anhang E) — die eine Stundenregel.
+
+    ``None`` heißt: die Stunde trägt keine Aussage — keine Ladung (``≤ _LADUNG_EPSILON``) oder ein fehlender
+    Eingang (Netzbezug/Einspeisung nicht erhoben). ``leite_pv_anteil_ab`` faltet damit die Stunden eines Tages; der
+    abgeleitete Kanal der HA-Bauform (``services/kanal/abgeleitet.py``, E4c) schreibt damit je Stunde fort — beide
+    rufen diese Funktion, keiner rechnet die Regel nach.
+    """
+    if ladung is None or ladung <= _LADUNG_EPSILON:
+        return None
+    if netzbezug is None or einspeisung is None:
+        return None
+    ungedeckt = max(0.0, ladung - max(0.0, netzbezug))
+    return min(ladung, ungedeckt + max(0.0, einspeisung))
+
+
 def leite_pv_anteil_ab(
     stunden: list[dict[str, Optional[float]]],
 ) -> Optional[AbgeleiteterLadeAnteil]:
@@ -225,8 +243,8 @@ def leite_pv_anteil_ab(
         if netzbezug is None or einspeisung is None:
             continue
 
-        ungedeckt = max(0.0, ladung - max(0.0, netzbezug))
-        pv = min(ladung, ungedeckt + max(0.0, einspeisung))
+        # Die Regel der Stunde steht EINMAL (`pv_der_stunde`, HA-Bauform E4c) — der abgeleitete Kanal ruft sie auch.
+        pv = pv_der_stunde(ladung, netzbezug, einspeisung)
 
         pv_summe += pv
         netz_summe += ladung - pv

@@ -105,8 +105,10 @@ _BEDINGUNG_ZU_O: dict[str, str] = {
 #: Einheiten, die Bauplan §3 auf ``mean`` legt: Leistung, Ladestand, Temperatur, Preis.
 _MEAN_EINHEITEN: frozenset[str] = frozenset({"W", "kW", "%", "°C", "ct/kWh"})
 
-#: Geplante abgeleitete Kanäle (Bauplan §2, §3a O8) — im Katalog benannt, in E1 nicht geschrieben.
+#: Abgeleitete Kanäle (Bauplan §2, §3a O8) — im Katalog benannt; geschrieben wird seit E4c nur der erste.
 ABGELEITETE_KANAELE: dict[str, str] = {
+    "abgeleitet:inv:{id}:ladung_pv_kwh": "E4c (geschrieben): PV-Teil der Heimladung je Gerät ohne gemessene "
+                                         "Aufteilung, Einspeise-Deckung je Stunde (``abgeleitet.py``)",
     "kosten:*": "Kosten je Stunde bei Stundenpreis (stundengepaartes Produkt, G1)",
     "kwh_betriebsart:inv:{id}:{betriebsart}": "kWh je Betriebsart aus Anteil × Strom der Stunde",
     "leistung_summe:inv:{id}": "O8: Summenkanal aus Leistung (Stundenmittel × 1 h) für Geräte ohne kWh-Zähler",

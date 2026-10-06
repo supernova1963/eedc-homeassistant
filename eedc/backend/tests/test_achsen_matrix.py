@@ -390,8 +390,10 @@ KATALOG: dict[str, list[Menge]] = {
               lambda f, t, w, g=None: _wp_soll(f, "waerme", t, name=g), geraet=True),
     ],
     "emob": [
+        # E4c: `fakten_tw` fehlte — die Sicht „vor dem Abschluss" (`fakten:tageswert=gespeichert`) las immer None.
         Menge("wallbox", {"tabelle": "wallbox_ladung_kwh", "jahr_verlauf": "wallbox_ladung_kwh",
-                          "fakten": "emob_wallbox_summe/ladung_kwh", "community": "wallbox_ladung_kwh"},
+                          "fakten": "emob_wallbox_summe/ladung_kwh", "fakten_tw": "emob_wallbox_summe/ladung_kwh",
+                          "community": "wallbox_ladung_kwh"},
               lambda f, t, w: _feld(f, "wallbox", "ladung_kwh", t), nur=_hat_typ("wallbox"),
               tag=lambda d: sum(v for k, v in (d.get("keys") or {}).items() if k.startswith("wallbox:") and v)
               or None),
@@ -413,9 +415,10 @@ KATALOG: dict[str, list[Menge]] = {
                             "fakten": "emob_je_auto/{g}/pv_kwh"},
               lambda f, t, w, g=None: _emob_soll(f, "pv", t, name=g), geraet=True, nur=_hat_typ("e-auto")),
     ] + [
-        Menge("dienst_pv", {"fakten": "emob/dienstlich_ladung_pv_kwh"}, lambda f, t, w: _dienst_soll(f, "pv", t),
+        Menge("dienst_pv", {"fakten": "emob/dienstlich_ladung_pv_kwh", "fakten_tw": "emob/dienstlich_ladung_pv_kwh"},
+              lambda f, t, w: _dienst_soll(f, "pv", t),
               nur=lambda f: any((g.parameter or {}).get("ist_dienstlich") for g in f.typ("e-auto"))),
-        Menge("dienst_netz", {"fakten": "emob/dienstlich_ladung_netz_kwh"},
+        Menge("dienst_netz", {"fakten": "emob/dienstlich_ladung_netz_kwh", "fakten_tw": "emob/dienstlich_ladung_netz_kwh"},
               lambda f, t, w: _dienst_soll(f, "netz", t),
               nur=lambda f: any((g.parameter or {}).get("ist_dienstlich") for g in f.typ("e-auto"))),
     ],
@@ -430,7 +433,10 @@ KATALOG: dict[str, list[Menge]] = {
                             "tabelle": "sonstige_verbrauch_kwh", "jahr_verlauf": "sonstige_verbrauch_kwh",
                             "community": "sonstiges_verbrauch_kwh"},
               lambda f, t, w: _sonst(f, "verbrauch", t), tag=lambda d: _p(d, "tw/sonstiges_verbrauch"),
-              nur=_hat_feld("sonstiges", "verbrauch_sonstig_kwh", "verbrauch_kwh")),
+              # E4c (W2-E-KATALOG): ein Verbrauchsfeld eines ERZEUGERS ist der Ersatz seiner Erzeugung
+              # (`sonstiges_feld_reihenfolge("erzeuger")`, `_categorize_counter` → erzeugung_sonstiges), kein Verbrauch.
+              nur=_hat_feld("sonstiges", "verbrauch_sonstig_kwh", "verbrauch_kwh",
+                            wert=lambda g: (g.parameter or {}).get("kategorie") != "erzeuger")),
         Menge("hinter_zaehler", {"fakten": "erzeugung/hinter_zaehler_kwh", "fakten_tw": "erzeugung/hinter_zaehler_kwh",
                                  "tabelle": "erzeugung_hinter_zaehler_kwh",
                                  "jahr_verlauf": "erzeugung_hinter_zaehler_kwh"},
@@ -531,6 +537,26 @@ def _dienst_soll(form, menge: str, tage) -> float:
         if (g.parameter or {}).get("ist_dienstlich"):
             s += am.menge(g.felder.get(f"ladung_{menge}_kwh", am.null), tage)
     return round(s, 6)
+
+
+def _sonst_teiltag(form, menge: str, stunden) -> float:
+    """E4c: die Mengen der Sonstiges-Gruppe in den Teiltag-Stunden (``TEILTAG_STUNDEN``) aus denselben Raten — der
+    laufende Monat der Monats-Fakten reicht bis zum letzten geschriebenen Stand (wie die Bilanz-Gruppe, E4a-2)."""
+    erz = sum(_stunde(g.felder["erzeugung_kwh"], stunden) for g in form.typ("sonstiges")
+              if (g.parameter or {}).get("kategorie") == "erzeuger" and "erzeugung_kwh" in g.felder)
+    if menge == "erzeugung":
+        return erz
+    if menge == "hinter_zaehler":
+        return erz + _pv_stunden(form.pvform, stunden)
+    if menge == "verbrauch":
+        out = 0.0
+        for g in form.typ("sonstiges"):
+            if (g.parameter or {}).get("kategorie") == "erzeuger":
+                continue
+            f = "verbrauch_sonstig_kwh" if "verbrauch_sonstig_kwh" in g.felder else "verbrauch_kwh"
+            out += _stunde(g.felder[f], stunden) if f in g.felder else 0.0
+        return out
+    return 0.0
 
 
 def _sonst_geraet(form, name, tage) -> float:
@@ -741,6 +767,9 @@ def bewerte(fid: str, groesse: str, weg: str, inv: str, m: am.Messung) -> list[Z
                 if groesse == "netz" and weg == "HA" and s == "fakten_tw" and q.name in _BIL_SCHLUESSEL:
                     # E4a-2 (Weg 2, §6b): die Monats-Fakten des laufenden Monats aus den Kanälen tragen den Teiltag.
                     soll_s = bilanz_soll(form, tage_monat, weg, extra_stunden=TEILTAG_STUNDEN)[_BIL_SCHLUESSEL[q.name]]
+                elif groesse == "sonstiges" and weg == "HA" and s == "fakten_tw" and soll is not UNKLAR:
+                    # E4c: die Sonstiges-Gruppe des laufenden Monats aus den Kanälen trägt denselben Teiltag.
+                    soll_s = round(soll + _sonst_teiltag(form, q.name, TEILTAG_STUNDEN), 6)
                 z.append(Zelle(f"{q.name}:{s}", _wert(wurzeln, q, s), "unklar", "unklar")
                          if soll is UNKLAR else _z(f"{q.name}:{s}", _wert(wurzeln, q, s), soll_s))
             if datenstand and q.tag is not None and soll is not UNKLAR:
@@ -1065,7 +1094,9 @@ URSACHE: dict[str, Ursache] = {
         "trägt. Monats-Fakten, Übersicht, Dashboard nennen 0 (Halteprobe `test_n585_gemessene_null.py`)",
     ),
     "OHNE-ABSCHLUSS": Ursache(
-        "Ausgangszustand (Auftrag): ohne Abschluss nicht geführt",
+        "Ausgangszustand (Auftrag): ohne Abschluss nicht geführt — seit HA-Bauform E4c für E-Mobilität und Sonstiges "
+        "mit HA (Kanäle, Wege HA/S1/S2) geheilt; es bleiben Wärmepumpe (E4d), Speicher-Netzladung und die Wege ohne "
+        "Kanäle (SA/S3, Lesart 1)",
         "Größen, die im Monat ohne Abschluss nicht aus der Tagesebene gefüllt werden: Wärmepumpen-Mengen und "
         "-Achsen, Sonstiges, E-Mob-Lademenge, Speicher-Netzladung (Monats-Fakten mit Tageswerten und "
         "Jahr-Verlauf nennen 0/nichts; Sonstiges und Netzladung auch Cockpit → Monat; E-Mob ohne HA auch Cockpit "
@@ -1074,7 +1105,8 @@ URSACHE: dict[str, Ursache] = {
         "daneben für WP-Strom/-Wärme und (mit HA) die Lademenge den Wert der Tagesebene",
     ),
     "KANDIDAT-EMOB-LAUFEND-NETZ": Ursache(
-        "KANDIDAT (nur gezeigt)",
+        "KANDIDAT (nur gezeigt) — N-631, seit HA-Bauform E4c geheilt (eine Aufteilung aus dem abgeleiteten Kanal für "
+        "den Monat mit und ohne Abschluss); keine Zelle mehr",
         "Wallbox-Ladung im Monat ohne Abschluss (HA-Weg von Cockpit → Monat): die ganze Lademenge steht als "
         "Netz-Ladung (9,0 / 90,0 kWh), PV 0 — obwohl die Ladestunden ohne Netzbezug in der Sonne liegen; nach dem "
         "Abschluss nennen alle Sichten 100 % PV. Gilt für die laufende (Juli) und die abgeschlossene Zeit vor dem "
@@ -1128,10 +1160,6 @@ ROT: dict[str, dict[tuple[str, str, str, str], tuple[str, ...]]] = {
             'autarkie:fakten_tw', 'autarkie:jahr_verlauf', 'gesamtverbrauch:fakten_tw', 'gesamtverbrauch:jahr_verlauf',
             'netzbezug:fakten_tw', 'netzbezug:jahr_verlauf',
         ),
-        ('M10', 'netz', 'HA', 'I1'): (
-            'autarkie:fakten_tw', 'autarkie:jahr_verlauf', 'gesamtverbrauch:fakten_tw', 'gesamtverbrauch:jahr_verlauf',
-            'netzbezug:fakten_tw', 'netzbezug:jahr_verlauf',
-        ),
         ('M01', 'preis', 'HA', 'I1'): ('kosten:jahr_verlauf',),
         ('M03', 'preis', 'HA', 'I1'): ('kosten:jahr_verlauf',),
         ('M04', 'preis', 'HA', 'I1'): ('kosten:jahr_verlauf',),
@@ -1139,8 +1167,16 @@ ROT: dict[str, dict[tuple[str, str, str, str], tuple[str, ...]]] = {
         ('M06', 'preis', 'HA', 'I1'): ('kosten:jahr_verlauf',),
         ('M07', 'preis', 'HA', 'I1'): ('kosten:jahr_verlauf',),
         ('M08', 'preis', 'HA', 'I1'): ('kosten:jahr_verlauf',),
+        ('M07', 'sonstiges', 'HA', 'I1'): ('verbrauch:fakten_tw', 'verbrauch:jahr_verlauf'),
         ('M09', 'preis', 'HA', 'I1'): ('kosten:jahr_verlauf',),
-        ('M10', 'preis', 'HA', 'I1'): ('kosten:jahr_verlauf',),
+        ('M10', 'netz', 'HA', 'I1'): (
+            'autarkie:fakten_tw', 'autarkie:jahr_verlauf', 'eigenverbrauch:fakten_tw', 'eigenverbrauch:jahr_verlauf',
+            'gesamtverbrauch:fakten_tw', 'gesamtverbrauch:jahr_verlauf', 'netzbezug:fakten_tw',
+            'netzbezug:jahr_verlauf',
+        ),
+        ('M10', 'netz', 'HA', 'I2'): ('gesamtverbrauch:fakten_tw=Σtage', 'gesamtverbrauch:jahr_verlauf=Σtage'),
+        ('M10', 'sonstiges', 'HA', 'I1'): ('erzeugung:fakten_tw', 'erzeugung:jahr_verlauf'),
+        ('M10', 'preis', 'HA', 'I1'): ('kosten:jahr_verlauf', 'netto_ertrag:jahr_verlauf'),
     },
     'N-585-REST': {
         ('M07', 'wp', 'HA', 'I1'): ('strom:fakten_tw', 'waerme:fakten_tw',),
@@ -1194,28 +1230,11 @@ ROT: dict[str, dict[tuple[str, str, str, str], tuple[str, ...]]] = {
         ),
     },
     'OHNE-ABSCHLUSS': {
-        ('M02', 'emob', 'HA', 'I1'): ('heim_netz:fakten_tw', 'heimladung:fakten_tw',),
-        ('M02', 'emob', 'HA', 'I2'): ('wallbox:jahr_verlauf=Σtage',),
-        ('M02', 'emob', 'HA', 'I3'): ('heim_pv:fakten_tw', 'heimladung:fakten_tw',),
-        ('M02', 'emob', 'HA', 'I6'): ('heim_netz:fakten_tw', 'heimladung:fakten_tw', 'wallbox:jahr_verlauf',),
-        ('M02', 'emob', 'S1', 'I2'): (
-            'heim_pv:fakten:tageswert=gespeichert', 'heimladung:fakten:tageswert=gespeichert',
-            'wallbox:fakten:tageswert=gespeichert', 'wallbox:jahr_verlauf:vor=nach',
-        ),
-        ('M02', 'emob', 'S2', 'I2'): (
-            'heim_pv:fakten:tageswert=gespeichert', 'heimladung:fakten:tageswert=gespeichert',
-            'wallbox:fakten:tageswert=gespeichert', 'wallbox:jahr_verlauf:vor=nach',
-        ),
         ('M02', 'emob', 'S3', 'I2'): (
             'heim_pv:fakten:tageswert=gespeichert', 'heimladung:fakten:tageswert=gespeichert',
             'wallbox:fakten:tageswert=gespeichert', 'wallbox:jahr_verlauf:vor=nach',
         ),
         ('M02', 'emob', 'SA', 'I1'): ('heimladung:fakten_tw',),
-        ('M02', 'emob', 'SA', 'I2'): ('heimladung:cockpit_monat=Σtage', 'wallbox:jahr_verlauf=Σtage',),
-        ('M02', 'emob', 'SA', 'I3'): (
-            'heim_pv:cockpit_monat', 'heim_pv:fakten_tw', 'heimladung:cockpit_monat', 'heimladung:fakten_tw',
-        ),
-        ('M02', 'emob', 'SA', 'I6'): ('wallbox:jahr_verlauf',),
         ('M04', 'speicher', 'HA', 'I1'): ('netzladung:fakten_tw', 'netzladung:jahr_verlauf',),
         ('M04', 'speicher', 'HA', 'I3'): ('netzladung:cockpit_monat', 'netzladung:fakten_tw',),
         ('M04', 'speicher', 'S1', 'I2'): (
@@ -1310,23 +1329,6 @@ ROT: dict[str, dict[tuple[str, str, str, str], tuple[str, ...]]] = {
             'strom_heizen:fakten_tw', 'strom_heizen:jahr_verlauf', 'strom_warmwasser:fakten_tw',
             'strom_warmwasser:jahr_verlauf', 'waerme:fakten_tw', 'warmwasser:fakten_tw', 'warmwasser:jahr_verlauf',
         ),
-        ('M07', 'sonstiges', 'HA', 'I1'): ('verbrauch:fakten_tw',),
-        ('M07', 'sonstiges', 'HA', 'I2'): (
-            'verbrauch:cockpit_monat=Σtage', 'verbrauch:fakten_tw=Σtage', 'verbrauch:jahr_verlauf=Σtage',
-        ),
-        ('M07', 'sonstiges', 'HA', 'I3'): ('verbrauch:cockpit_monat', 'verbrauch:fakten_tw',),
-        ('M07', 'sonstiges', 'HA', 'I4'): ('geraet:cockpit_monat:Pool',),
-        ('M07', 'sonstiges', 'HA', 'I6'): (
-            'verbrauch:cockpit_jahr', 'verbrauch:cockpit_monat', 'verbrauch:fakten_tw', 'verbrauch:jahr_verlauf',
-        ),
-        ('M07', 'sonstiges', 'S1', 'I2'): (
-            'verbrauch:cockpit_monat:vor=nach', 'verbrauch:fakten:tageswert=gespeichert',
-            'verbrauch:jahr_verlauf:vor=nach',
-        ),
-        ('M07', 'sonstiges', 'S2', 'I2'): (
-            'verbrauch:cockpit_monat:vor=nach', 'verbrauch:fakten:tageswert=gespeichert',
-            'verbrauch:jahr_verlauf:vor=nach',
-        ),
         ('M07', 'sonstiges', 'S3', 'I2'): (
             'verbrauch:fakten:tageswert=gespeichert', 'verbrauch:jahr_verlauf:vor=nach',
         ),
@@ -1339,32 +1341,8 @@ ROT: dict[str, dict[tuple[str, str, str, str], tuple[str, ...]]] = {
         ('M07', 'sonstiges', 'SA', 'I6'): (
             'verbrauch:cockpit_jahr', 'verbrauch:cockpit_monat', 'verbrauch:fakten_tw', 'verbrauch:jahr_verlauf',
         ),
-        ('M08', 'emob', 'HA', 'I1'): ('heim_netz:fakten_tw', 'heimladung:fakten_tw',),
-        ('M08', 'emob', 'HA', 'I2'): ('wallbox:jahr_verlauf=Σtage',),
-        ('M08', 'emob', 'HA', 'I3'): ('heim_pv:fakten_tw', 'heimladung:fakten_tw',),
-        ('M08', 'emob', 'HA', 'I6'): ('heim_netz:fakten_tw', 'heimladung:fakten_tw', 'wallbox:jahr_verlauf',),
-        ('M08', 'emob', 'S1', 'I2'): ('wallbox:fakten:tageswert=gespeichert', 'wallbox:jahr_verlauf:vor=nach',),
-        ('M08', 'emob', 'S2', 'I2'): ('wallbox:fakten:tageswert=gespeichert', 'wallbox:jahr_verlauf:vor=nach',),
         ('M08', 'emob', 'S3', 'I2'): ('wallbox:fakten:tageswert=gespeichert', 'wallbox:jahr_verlauf:vor=nach',),
         ('M08', 'emob', 'SA', 'I1'): ('heimladung:fakten_tw',),
-        ('M08', 'emob', 'SA', 'I2'): ('heimladung:cockpit_monat=Σtage', 'wallbox:jahr_verlauf=Σtage',),
-        ('M08', 'emob', 'SA', 'I3'): (
-            'heim_pv:cockpit_monat', 'heim_pv:fakten_tw', 'heimladung:cockpit_monat', 'heimladung:fakten_tw',
-        ),
-        ('M08', 'emob', 'SA', 'I6'): ('wallbox:jahr_verlauf',),
-        ('M09', 'emob', 'HA', 'I1'): ('heim_netz:fakten_tw', 'heim_pv:fakten_tw', 'heimladung:fakten_tw',),
-        ('M09', 'emob', 'HA', 'I3'): ('heim_netz:fakten_tw', 'heim_pv:fakten_tw', 'heimladung:fakten_tw',),
-        ('M09', 'emob', 'HA', 'I6'): ('heim_netz:fakten_tw', 'heim_pv:fakten_tw', 'heimladung:fakten_tw',),
-        ('M09', 'emob', 'S1', 'I2'): (
-            'dienst_netz:fakten:tageswert=gespeichert', 'dienst_pv:fakten:tageswert=gespeichert',
-            'heim_netz:fakten:tageswert=gespeichert', 'heim_pv:fakten:tageswert=gespeichert',
-            'heimladung:fakten:tageswert=gespeichert',
-        ),
-        ('M09', 'emob', 'S2', 'I2'): (
-            'dienst_netz:fakten:tageswert=gespeichert', 'dienst_pv:fakten:tageswert=gespeichert',
-            'heim_netz:fakten:tageswert=gespeichert', 'heim_pv:fakten:tageswert=gespeichert',
-            'heimladung:fakten:tageswert=gespeichert',
-        ),
         ('M09', 'emob', 'S3', 'I2'): (
             'dienst_netz:fakten:tageswert=gespeichert', 'dienst_pv:fakten:tageswert=gespeichert',
             'heim_netz:fakten:tageswert=gespeichert', 'heim_pv:fakten:tageswert=gespeichert',
@@ -1372,33 +1350,6 @@ ROT: dict[str, dict[tuple[str, str, str, str], tuple[str, ...]]] = {
         ),
         ('M09', 'emob', 'SA', 'I1'): ('heimladung:fakten_tw',),
         ('M09', 'emob', 'SA', 'I2'): ('heimladung:cockpit_monat=Σtage',),
-        ('M09', 'emob', 'SA', 'I3'): (
-            'heim_netz:cockpit_monat', 'heim_netz:fakten_tw', 'heim_pv:cockpit_monat', 'heim_pv:fakten_tw',
-            'heimladung:cockpit_monat', 'heimladung:fakten_tw',
-        ),
-        ('M10', 'netz', 'HA', 'I2'): (
-            'eigenverbrauch:cockpit_monat=Σtage', 'eigenverbrauch:fakten_tw=Σtage',
-            'eigenverbrauch:jahr_verlauf=Σtage', 'gesamtverbrauch:cockpit_monat=Σtage',
-            'gesamtverbrauch:fakten_tw=Σtage', 'gesamtverbrauch:jahr_verlauf=Σtage',
-        ),
-        ('M10', 'netz', 'HA', 'I3'): (
-            'autarkie:cockpit_monat', 'autarkie:fakten_tw', 'eigenverbrauch:cockpit_monat',
-            'eigenverbrauch:fakten_tw', 'gesamtverbrauch:cockpit_monat', 'gesamtverbrauch:fakten_tw',
-        ),
-        ('M10', 'netz', 'S1', 'I2'): (
-            'autarkie:cockpit_monat:vor=nach', 'autarkie:fakten:tageswert=gespeichert',
-            'autarkie:jahr_verlauf:vor=nach', 'eigenverbrauch:cockpit_monat:vor=nach',
-            'eigenverbrauch:fakten:tageswert=gespeichert', 'eigenverbrauch:jahr_verlauf:vor=nach',
-            'gesamtverbrauch:cockpit_monat:vor=nach', 'gesamtverbrauch:fakten:tageswert=gespeichert',
-            'gesamtverbrauch:jahr_verlauf:vor=nach',
-        ),
-        ('M10', 'netz', 'S2', 'I2'): (
-            'autarkie:cockpit_monat:vor=nach', 'autarkie:fakten:tageswert=gespeichert',
-            'autarkie:jahr_verlauf:vor=nach', 'eigenverbrauch:cockpit_monat:vor=nach',
-            'eigenverbrauch:fakten:tageswert=gespeichert', 'eigenverbrauch:jahr_verlauf:vor=nach',
-            'gesamtverbrauch:cockpit_monat:vor=nach', 'gesamtverbrauch:fakten:tageswert=gespeichert',
-            'gesamtverbrauch:jahr_verlauf:vor=nach',
-        ),
         ('M10', 'netz', 'S3', 'I2'): (
             'autarkie:fakten:tageswert=gespeichert', 'autarkie:jahr_verlauf:vor=nach',
             'eigenverbrauch:fakten:tageswert=gespeichert', 'eigenverbrauch:jahr_verlauf:vor=nach',
@@ -1412,32 +1363,6 @@ ROT: dict[str, dict[tuple[str, str, str, str], tuple[str, ...]]] = {
         ('M10', 'netz', 'SA', 'I3'): (
             'autarkie:cockpit_monat', 'autarkie:fakten_tw', 'eigenverbrauch:cockpit_monat',
             'eigenverbrauch:fakten_tw', 'gesamtverbrauch:cockpit_monat', 'gesamtverbrauch:fakten_tw',
-        ),
-        ('M10', 'sonstiges', 'HA', 'I1'): ('erzeugung:fakten_tw', 'verbrauch:fakten_tw',),
-        ('M10', 'sonstiges', 'HA', 'I2'): (
-            'erzeugung:cockpit_monat=Σtage', 'erzeugung:fakten_tw=Σtage', 'erzeugung:jahr_verlauf=Σtage',
-            'verbrauch:cockpit_monat=Σtage', 'verbrauch:fakten_tw=Σtage', 'verbrauch:jahr_verlauf=Σtage',
-        ),
-        ('M10', 'sonstiges', 'HA', 'I3'): (
-            'erzeugung:cockpit_monat', 'erzeugung:fakten_tw', 'hinter_zaehler:fakten_tw', 'verbrauch:cockpit_monat',
-            'verbrauch:fakten_tw',
-        ),
-        ('M10', 'sonstiges', 'HA', 'I4'): ('geraet:cockpit_monat:BHKW', 'geraet:cockpit_monat:Sauna',),
-        ('M10', 'sonstiges', 'HA', 'I6'): (
-            'erzeugung:cockpit_jahr', 'erzeugung:cockpit_monat', 'erzeugung:fakten_tw', 'erzeugung:jahr_verlauf',
-            'verbrauch:cockpit_jahr', 'verbrauch:cockpit_monat', 'verbrauch:fakten_tw', 'verbrauch:jahr_verlauf',
-        ),
-        ('M10', 'sonstiges', 'S1', 'I2'): (
-            'erzeugung:cockpit_monat:vor=nach', 'erzeugung:fakten:tageswert=gespeichert',
-            'erzeugung:jahr_verlauf:vor=nach', 'hinter_zaehler:fakten:tageswert=gespeichert',
-            'hinter_zaehler:jahr_verlauf:vor=nach', 'verbrauch:cockpit_monat:vor=nach',
-            'verbrauch:fakten:tageswert=gespeichert', 'verbrauch:jahr_verlauf:vor=nach',
-        ),
-        ('M10', 'sonstiges', 'S2', 'I2'): (
-            'erzeugung:cockpit_monat:vor=nach', 'erzeugung:fakten:tageswert=gespeichert',
-            'erzeugung:jahr_verlauf:vor=nach', 'hinter_zaehler:fakten:tageswert=gespeichert',
-            'hinter_zaehler:jahr_verlauf:vor=nach', 'verbrauch:cockpit_monat:vor=nach',
-            'verbrauch:fakten:tageswert=gespeichert', 'verbrauch:jahr_verlauf:vor=nach',
         ),
         ('M10', 'sonstiges', 'S3', 'I2'): (
             'erzeugung:fakten:tageswert=gespeichert', 'erzeugung:jahr_verlauf:vor=nach',
@@ -1458,12 +1383,28 @@ ROT: dict[str, dict[tuple[str, str, str, str], tuple[str, ...]]] = {
             'erzeugung:cockpit_jahr', 'erzeugung:cockpit_monat', 'erzeugung:fakten_tw', 'erzeugung:jahr_verlauf',
             'verbrauch:cockpit_jahr', 'verbrauch:cockpit_monat', 'verbrauch:fakten_tw', 'verbrauch:jahr_verlauf',
         ),
+        ('M02', 'emob', 'SA', 'I2'): (
+            'heimladung:cockpit_monat=Σtage', 'wallbox:fakten_tw=Σtage', 'wallbox:jahr_verlauf=Σtage',
+        ),
+        ('M02', 'emob', 'SA', 'I3'): (
+            'heim_pv:cockpit_monat', 'heim_pv:fakten_tw', 'heimladung:cockpit_monat', 'heimladung:fakten_tw',
+            'wallbox:fakten_tw',
+        ),
+        ('M02', 'emob', 'SA', 'I6'): ('wallbox:fakten_tw', 'wallbox:jahr_verlauf'),
+        ('M08', 'emob', 'SA', 'I2'): (
+            'heimladung:cockpit_monat=Σtage', 'wallbox:fakten_tw=Σtage', 'wallbox:jahr_verlauf=Σtage',
+        ),
+        ('M08', 'emob', 'SA', 'I3'): (
+            'heim_pv:cockpit_monat', 'heim_pv:fakten_tw', 'heimladung:cockpit_monat', 'heimladung:fakten_tw',
+            'wallbox:fakten_tw',
+        ),
+        ('M08', 'emob', 'SA', 'I6'): ('wallbox:fakten_tw', 'wallbox:jahr_verlauf'),
+        ('M09', 'emob', 'SA', 'I3'): (
+            'dienst_netz:fakten_tw', 'dienst_pv:fakten_tw', 'heim_netz:cockpit_monat', 'heim_netz:fakten_tw',
+            'heim_pv:cockpit_monat', 'heim_pv:fakten_tw', 'heimladung:cockpit_monat', 'heimladung:fakten_tw',
+        ),
     },
     'KANDIDAT-EMOB-LAUFEND-NETZ': {
-        ('M02', 'emob', 'HA', 'I3'): ('heim_netz:cockpit_monat', 'heim_pv:cockpit_monat',),
-        ('M02', 'emob', 'S1', 'I2'): ('heim_netz:cockpit_monat:vor=nach', 'heim_pv:cockpit_monat:vor=nach',),
-        ('M02', 'emob', 'S2', 'I2'): ('heim_netz:cockpit_monat:vor=nach', 'heim_pv:cockpit_monat:vor=nach',),
-        ('M08', 'emob', 'HA', 'I3'): ('heim_netz:cockpit_monat', 'heim_pv:cockpit_monat',),
     },
     'KANDIDAT-WP-ACHSEN-OHNE-ABSCHLUSS': {
         ('M06', 'wp', 'HA', 'I3'): (
@@ -1486,6 +1427,9 @@ ROT: dict[str, dict[tuple[str, str, str, str], tuple[str, ...]]] = {
             'modus_kuehlen:cockpit_monat', 'waerme:cockpit_monat',
         ),
         ('M06', 'wp', 'SA', 'I4'): ('waerme:cockpit_monat:Klima',),
+    },
+    'E4E-DIENSTLICHE-LADEKOSTEN': {
+        ('M09', 'preis', 'HA', 'I1'): ('netto_ertrag:jahr_verlauf',),
     },
 }
 
@@ -1553,7 +1497,8 @@ def _soll_unklar(fid, groesse, weg, inv, sicht: str) -> Optional[str]:
 #: gemessen 06.10.2026 nach dem Umschalten, Klassifikation im Bericht ``opus-berichte/HA-BAUFORM-E4A2.md``.
 URSACHE.update({
     "W2-E-KATALOG": Ursache(
-        "Katalog der Achsen-Matrix",
+        "Katalog der Achsen-Matrix — seit HA-Bauform E4c berichtigt (die Menge „verbrauch“ nur bei einem Gerät, das "
+        "kein Erzeuger ist); keine Zelle mehr",
         "Der Katalog liest das zweite Feld der Ersatzgruppe eines Sonstiges-Erzeugers (`verbrauch_sonstig_kwh`) als "
         "Verbrauch und erwartet 0; im Erzeuger ist es der Ersatz der Erzeugung (`sonstiges_feld_reihenfolge"
         "('erzeuger')`), die Sichten führen keinen Verbrauch",
@@ -1569,56 +1514,51 @@ URSACHE.update({
         "6,24 statt Weg 2 A 0 / 12,0)",
     ),
 })
+URSACHE["E4E-DIENSTLICHE-LADEKOSTEN"] = Ursache(
+    "HA-Bauform E4e (Preis und Kosten)",
+    "Seit E4c führen die Monats-Fakten des laufenden Monats den Dienstwagen aus den Kanälen und ziehen seine "
+    "dienstlichen Ladekosten ab (Jahr-Verlauf 10,44 €); Cockpit → Monat ohne Monats-Fakt liest die dienstlichen "
+    "Ladekosten nur aus dem Fakt (`aktueller_monat/finanzen.py`) und zieht sie im Monat ohne Abschluss nicht ab "
+    "(12,24 €). Nach dem Abschluss nennen beide dasselbe. Geld — nicht Teil von E4c",
+)
 _ROT_W2: dict[str, dict[tuple[str, str, str, str], tuple[str, ...]]] = {
     'OHNE-ABSCHLUSS': {
-        ('W2-E', 'netz', 'HA', 'I2'): ('eigenverbrauch:cockpit_monat=Σtage', 'eigenverbrauch:fakten_tw=Σtage', 'eigenverbrauch:jahr_verlauf=Σtage', 'gesamtverbrauch:cockpit_monat=Σtage', 'gesamtverbrauch:fakten_tw=Σtage', 'gesamtverbrauch:jahr_verlauf=Σtage'),
-        ('W2-E', 'netz', 'HA', 'I3'): ('autarkie:cockpit_monat', 'autarkie:fakten_tw', 'eigenverbrauch:cockpit_monat', 'eigenverbrauch:fakten_tw', 'gesamtverbrauch:cockpit_monat', 'gesamtverbrauch:fakten_tw'),
-        ('W2-E', 'netz', 'S1', 'I2'): ('autarkie:cockpit_monat:vor=nach', 'autarkie:fakten:tageswert=gespeichert', 'autarkie:jahr_verlauf:vor=nach', 'eigenverbrauch:cockpit_monat:vor=nach', 'eigenverbrauch:fakten:tageswert=gespeichert', 'eigenverbrauch:jahr_verlauf:vor=nach', 'gesamtverbrauch:cockpit_monat:vor=nach', 'gesamtverbrauch:fakten:tageswert=gespeichert', 'gesamtverbrauch:jahr_verlauf:vor=nach'),
-        ('W2-E', 'netz', 'S2', 'I2'): ('autarkie:cockpit_monat:vor=nach', 'autarkie:fakten:tageswert=gespeichert', 'autarkie:jahr_verlauf:vor=nach', 'eigenverbrauch:cockpit_monat:vor=nach', 'eigenverbrauch:fakten:tageswert=gespeichert', 'eigenverbrauch:jahr_verlauf:vor=nach', 'gesamtverbrauch:cockpit_monat:vor=nach', 'gesamtverbrauch:fakten:tageswert=gespeichert', 'gesamtverbrauch:jahr_verlauf:vor=nach'),
         ('W2-E', 'netz', 'S3', 'I2'): ('autarkie:fakten:tageswert=gespeichert', 'autarkie:jahr_verlauf:vor=nach', 'eigenverbrauch:fakten:tageswert=gespeichert', 'eigenverbrauch:jahr_verlauf:vor=nach', 'eigenverbrauch:Σtage_juni=fakten', 'gesamtverbrauch:fakten:tageswert=gespeichert', 'gesamtverbrauch:jahr_verlauf:vor=nach', 'gesamtverbrauch:Σtage_juni=fakten'),
         ('W2-E', 'netz', 'SA', 'I2'): ('eigenverbrauch:cockpit_monat=Σtage', 'eigenverbrauch:fakten_tw=Σtage', 'eigenverbrauch:jahr_verlauf=Σtage', 'gesamtverbrauch:cockpit_monat=Σtage', 'gesamtverbrauch:fakten_tw=Σtage', 'gesamtverbrauch:jahr_verlauf=Σtage'),
         ('W2-E', 'netz', 'SA', 'I3'): ('autarkie:cockpit_monat', 'autarkie:fakten_tw', 'eigenverbrauch:cockpit_monat', 'eigenverbrauch:fakten_tw', 'gesamtverbrauch:cockpit_monat', 'gesamtverbrauch:fakten_tw'),
-        ('W2-E', 'sonstiges', 'HA', 'I1'): ('erzeugung:fakten_tw',),
-        ('W2-E', 'sonstiges', 'HA', 'I2'): ('erzeugung:cockpit_monat=Σtage', 'erzeugung:fakten_tw=Σtage', 'erzeugung:jahr_verlauf=Σtage'),
-        ('W2-E', 'sonstiges', 'HA', 'I3'): ('erzeugung:cockpit_monat', 'erzeugung:fakten_tw', 'hinter_zaehler:fakten_tw'),
-        ('W2-E', 'sonstiges', 'HA', 'I4'): ('geraet:cockpit_monat:BHKW',),
-        ('W2-E', 'sonstiges', 'HA', 'I6'): ('erzeugung:cockpit_jahr', 'erzeugung:cockpit_monat', 'erzeugung:fakten_tw', 'erzeugung:jahr_verlauf'),
-        ('W2-E', 'sonstiges', 'S1', 'I2'): ('erzeugung:cockpit_monat:vor=nach', 'erzeugung:fakten:tageswert=gespeichert', 'erzeugung:jahr_verlauf:vor=nach', 'hinter_zaehler:fakten:tageswert=gespeichert', 'hinter_zaehler:jahr_verlauf:vor=nach'),
-        ('W2-E', 'sonstiges', 'S2', 'I2'): ('erzeugung:cockpit_monat:vor=nach', 'erzeugung:fakten:tageswert=gespeichert', 'erzeugung:jahr_verlauf:vor=nach', 'hinter_zaehler:fakten:tageswert=gespeichert', 'hinter_zaehler:jahr_verlauf:vor=nach'),
-        ('W2-E', 'sonstiges', 'S3', 'I2'): ('erzeugung:fakten:tageswert=gespeichert', 'erzeugung:jahr_verlauf:vor=nach', 'erzeugung:Σtage_juni=fakten', 'hinter_zaehler:fakten:tageswert=gespeichert', 'hinter_zaehler:jahr_verlauf:vor=nach'),
-        ('W2-E', 'sonstiges', 'SA', 'I1'): ('erzeugung:fakten_tw',),
-        ('W2-E', 'sonstiges', 'SA', 'I2'): ('erzeugung:cockpit_monat=Σtage', 'erzeugung:fakten_tw=Σtage', 'erzeugung:jahr_verlauf=Σtage'),
-        ('W2-E', 'sonstiges', 'SA', 'I3'): ('erzeugung:cockpit_monat', 'erzeugung:fakten_tw', 'hinter_zaehler:fakten_tw'),
         ('W2-E', 'sonstiges', 'SA', 'I4'): ('geraet:cockpit_monat:BHKW',),
         ('W2-E', 'sonstiges', 'SA', 'I6'): ('erzeugung:cockpit_jahr', 'erzeugung:cockpit_monat', 'erzeugung:fakten_tw', 'erzeugung:jahr_verlauf'),
+        ('W2-E', 'sonstiges', 'SA', 'I1'): ('erzeugung:fakten_tw',),
+        ('W2-E', 'sonstiges', 'SA', 'I2'): (
+            'erzeugung:cockpit_monat=Σtage', 'erzeugung:fakten_tw=Σtage', 'erzeugung:jahr_verlauf=Σtage',
+        ),
+        ('W2-E', 'sonstiges', 'SA', 'I3'): (
+            'erzeugung:cockpit_monat', 'erzeugung:fakten_tw', 'hinter_zaehler:fakten_tw',
+        ),
+        ('W2-E', 'sonstiges', 'S3', 'I2'): (
+            'erzeugung:fakten:tageswert=gespeichert', 'erzeugung:jahr_verlauf:vor=nach',
+            'erzeugung:Σtage_juni=fakten', 'hinter_zaehler:fakten:tageswert=gespeichert',
+            'hinter_zaehler:jahr_verlauf:vor=nach',
+        ),
     },
     'W2-BESTAND-SPEICHER': {
         ('W2-E', 'sonstiges', 'HA', 'I4'): ('geraet:tag:BHKW',),
     },
     'W2-E-KATALOG': {
-        ('W2-E', 'sonstiges', 'HA', 'I1'): ('verbrauch:fakten_tw',),
-        ('W2-E', 'sonstiges', 'HA', 'I2'): ('verbrauch:fakten_tw=Σtage',),
-        ('W2-E', 'sonstiges', 'HA', 'I3'): ('verbrauch:cockpit_monat', 'verbrauch:tag'),
-        ('W2-E', 'sonstiges', 'S1', 'I1'): ('verbrauch:cockpit_jahr', 'verbrauch:cockpit_monat', 'verbrauch:community', 'verbrauch:tabelle'),
-        ('W2-E', 'sonstiges', 'S1', 'I2'): ('verbrauch:Σtage_juni=fakten',),
-        ('W2-E', 'sonstiges', 'S1', 'I3'): ('verbrauch:cockpit_monat',),
-        ('W2-E', 'sonstiges', 'S2', 'I1'): ('verbrauch:cockpit_jahr', 'verbrauch:cockpit_monat', 'verbrauch:community', 'verbrauch:tabelle'),
-        ('W2-E', 'sonstiges', 'S2', 'I2'): ('verbrauch:Σtage_juni=fakten',),
-        ('W2-E', 'sonstiges', 'S2', 'I3'): ('verbrauch:cockpit_monat',),
-        ('W2-E', 'sonstiges', 'S3', 'I1'): ('verbrauch:cockpit_jahr', 'verbrauch:cockpit_monat', 'verbrauch:community', 'verbrauch:tabelle'),
-        ('W2-E', 'sonstiges', 'S3', 'I2'): ('verbrauch:Σtage_juni=fakten',),
-        ('W2-E', 'sonstiges', 'S3', 'I3'): ('verbrauch:cockpit_monat',),
-        ('W2-E', 'sonstiges', 'SA', 'I1'): ('verbrauch:fakten_tw',),
-        ('W2-E', 'sonstiges', 'SA', 'I2'): ('verbrauch:fakten_tw=Σtage',),
-        ('W2-E', 'sonstiges', 'SA', 'I3'): ('verbrauch:cockpit_monat', 'verbrauch:tag'),
     },
     'W2-SA-BESTAND': {
         ('W2-E', 'netz', 'SA', 'I3'): ('autarkie:tag', 'eigenverbrauch:tag', 'gesamtverbrauch:tag'),
-        ('W2-E', 'sonstiges', 'SA', 'I3'): ('erzeugung:tag',),
         ('W2-E', 'sonstiges', 'SA', 'I4'): ('geraet:tag:BHKW',),
+        ('W2-E', 'sonstiges', 'SA', 'I3'): ('erzeugung:tag',),
     },
     'TEILTAG-ZWEI-MONATSGRENZEN': {
-        ('W2-E', 'netz', 'HA', 'I1'): ('autarkie:fakten_tw', 'autarkie:jahr_verlauf', 'gesamtverbrauch:fakten_tw', 'gesamtverbrauch:jahr_verlauf', 'netzbezug:fakten_tw', 'netzbezug:jahr_verlauf'),
+        ('W2-E', 'netz', 'HA', 'I1'): (
+            'autarkie:fakten_tw', 'autarkie:jahr_verlauf', 'eigenverbrauch:fakten_tw', 'eigenverbrauch:jahr_verlauf',
+            'gesamtverbrauch:fakten_tw', 'gesamtverbrauch:jahr_verlauf', 'netzbezug:fakten_tw',
+            'netzbezug:jahr_verlauf',
+        ),
+        ('W2-E', 'netz', 'HA', 'I2'): ('gesamtverbrauch:fakten_tw=Σtage', 'gesamtverbrauch:jahr_verlauf=Σtage'),
+        ('W2-E', 'sonstiges', 'HA', 'I1'): ('erzeugung:fakten_tw', 'erzeugung:jahr_verlauf'),
     },
 }
 for _u, _zellen in _ROT_W2.items():

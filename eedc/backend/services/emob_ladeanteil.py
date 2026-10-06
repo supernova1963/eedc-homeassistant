@@ -269,11 +269,22 @@ async def lade_abgeleitete_ladeanteile(
         Tagesspur **fehlen** — Abwesenheit ist „keine Aussage", nicht 0.
     """
     summen = await lade_monats_summen_aus_tagen(db, anlage_id, von=von, bis=bis)
-    return {
+    quoten = {
         schluessel: quote
         for schluessel, summe in summen.items()
         if (quote := summe.abgeleiteter_pv_anteil) is not None
     }
+    # HA-Bauform E4c (N-631, F-16): deckt die E-Mob-Gruppe einen Monat aus den Kanälen, gilt — wie in den
+    # Monats-Fakten — der Anteil des abgeleiteten Kanals; sonst die Quote der Tagesebene (Lesart 1). Dieselbe Quelle
+    # für alle Sichten, sonst stünde im Komponenten-Hub eine andere Aufteilung als in Cockpit → Jahr.
+    from backend.services.kanal.geraete_leser import emob_quoten
+
+    for schluessel, quote in (await emob_quoten(db, anlage_id, von=von, bis=bis)).items():
+        if quote is None:
+            quoten.pop(schluessel, None)
+        else:
+            quoten[schluessel] = quote
+    return quoten
 
 
 async def reichere_monatszeilen_an(

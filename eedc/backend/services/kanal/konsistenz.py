@@ -218,6 +218,13 @@ async def konsistenz_anlage(sitzungen: Sitzungen, anlage_id: int, *, ha_svc=None
                 erg.fehler += 1
                 logger.warning("Kanal-Konsistenzlauf %s (Anlage %s): %s: %s",
                                kanal.key, anlage_id, type(e).__name__, e)
+    if erg.korrigiert:
+        # HA-Bauform E4c: der abgeleitete Kanal rechnet aus dem Spiegel — ab der ersten korrigierten Stunde neu
+        # (nie vor seinem `aufbaubar_ab`); der nächste Stundenlauf schreibt ihn aus dem neuen Spiegel fort.
+        from backend.services.kanal.abgeleitet import verwerfe_ab
+
+        async with sitzungen() as db:
+            await verwerfe_ab(db, anlage_id, min(int(k["ab_ts"]) for k in erg.korrigiert))
     return erg
 
 

@@ -1,6 +1,7 @@
 """Kanal-Schreiber — parallel zum Bestand (HA-Bauform E1, Bauplan §4; Auftrag E1 Punkt 4).
 
-Drei Roh-Familien, keine abgeleiteten Kanäle:
+Drei Roh-Familien; seit HA-Bauform E4c dazu EIN abgeleiteter Kanal, den der Stundenlauf nach ihnen fortschreibt
+(``abgeleitet.py``: PV-Anteil der Heimladung je Gerät):
 
 * **Spiegel (HA)** — je zugeordnetem Zähler (``snapshot/writer._build_counter_map``, dieselbe
   Auswahl wie der Bestand, inklusive Stilllegung und ``quellen``-Read-Through) die Stundenzeilen der
@@ -763,6 +764,11 @@ async def schreibe_kanaele_im_stundenlauf(db: AsyncSession, anlage, zeitpunkt: d
             k = await _kontext(db, anlage, zeitpunkt)
             n = await schreibe_spiegel(db, anlage, zeitpunkt, kontext=k)
             n += await schreibe_eigene_summe(db, anlage, zeitpunkt, kontext=k)
+            # HA-Bauform E4c: der abgeleitete PV-Anteil der Heimladung — NACH den Roh-Familien, aus deren Zeilen er
+            # die Stunde rechnet (``abgeleitet.py``).
+            from backend.services.kanal.abgeleitet import schreibe_abgeleitete
+
+            n += await schreibe_abgeleitete(db, anlage, zeitpunkt, invs=list(k.invs.values()))
         return n
     except Exception as e:  # noqa: BLE001 — der Bestand darf vom neuen Teil nichts merken
         await _fehler_vermerken(db, anlage_id, "Stundenlauf", e)

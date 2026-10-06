@@ -454,7 +454,7 @@ def emob_heimladung_pool(
     *, direct_fields, investitionen, jahr, monat, resolved,
     monats_fakt=None, ist_aktueller_monat=True,
     heimlade_quellen=frozenset(), ha_felder_mit_daten=frozenset(),
-    bloecke=None,
+    bloecke=None, kanal_quote=(False, None),
 ):
     """E-Mobilitaet: Heimladung nach der **einen Funktion** (veraendert `resolved` in place).
 
@@ -588,6 +588,19 @@ def emob_heimladung_pool(
                 if werte.get(suffix):
                     emob_quelle = werte[suffix][1]
                     break
+    # HA-Bauform E4c (N-631): deckt die E-Mob-Gruppe den Monat aus den Kanälen, gilt ihr PV-Anteil — angewandt wie in
+    # den Monats-Fakten (`bau.py`): erst auf die Zeilen ohne eigene Aufteilung (`reichere_ladezeilen_an`), dann als
+    # Quote der einen Funktion. Sonst die Quote einer gespeicherten Schätzung wie bisher.
+    _kanal_gedeckt, _kanal_quote = kanal_quote
+    if _kanal_gedeckt:
+        from backend.services.emob_ladeanteil import reichere_ladezeilen_an
+
+        _ea_ids = list(eauto_je_inv)
+        _ea, wallbox_daten, _ = reichere_ladezeilen_an(
+            eauto_daten=[eauto_je_inv[i] for i in _ea_ids], wallbox_daten=wallbox_daten,
+            quote=_kanal_quote, wallbox_in_betrieb=wallbox_in_betrieb,
+        )
+        eauto_je_inv = dict(zip(_ea_ids, _ea))
     entscheid = entscheide_emob_heimladung(
         eauto_je_inv=eauto_je_inv,
         wallbox_zeilen=wallbox_daten,
@@ -602,7 +615,8 @@ def emob_heimladung_pool(
         # Die Quote der gespeicherten Schaetzung gilt weiter; eine andere kennt
         # dieser Zweig nicht (die Tagesebene liest die Schicht).
         pv_quote=(
-            gespeichert.ladung_pv_kwh / gespeichert.ladung_kwh
+            _kanal_quote if _kanal_gedeckt
+            else gespeichert.ladung_pv_kwh / gespeichert.ladung_kwh
             if gespeichert is not None and gespeichert_quelle == QUELLE_SCHAETZUNG
             and gespeichert.ladung_anteil_abgeleitet and gespeichert.ladung_kwh > 0
             else None

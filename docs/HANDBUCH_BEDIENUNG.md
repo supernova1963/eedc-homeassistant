@@ -376,6 +376,13 @@ Die **Monat**-Sicht ist das Referenz-Muster der Zeit-Achse: ein ausgewählter Mo
 > Und wenn gar keine Quelle etwas liefert, sagt die leere Kachel jetzt warum: Fahr mit der
 > Maus über das „—", und dort steht, ob für diesen Monat noch überhaupt nichts vorliegt oder
 > ob nur dieser einen Größe die Zuordnung fehlt — samt dem Weg dorthin.
+>
+> **E-Mobilität und Sonstiges ohne Abschluss.** Mit Home Assistant nennt der laufende Monat (und ein vergangener Monat
+> ohne Abschluss) die Ladung deiner Wallbox und deiner E-Autos, ihren Sonnenanteil, die dienstliche Ladung, deine
+> sonstigen Verbraucher und den Strom eines Erzeugers wie BHKW aus den Zählerständen — und zwar dieselben Zahlen, die
+> nach dem Abschluss dastehen. Den Sonnenanteil der Ladung rechnet eedc Stunde für Stunde mit (wie viel der Ladung
+> nicht aus dem Netz kam); er gilt ab dem Monat des Updates; frühere Monate rechnet eedc nicht neu. Hast du einen Erzeuger unter
+> *Sonstiges*, zählt sein Strom damit auch ohne Abschluss in Eigenverbrauch und Autarkie.
 
 Aus dem feingranularen Stunden-Bestand des Monats zeigt die Sicht zusätzlich:
 
