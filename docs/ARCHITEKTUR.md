@@ -594,6 +594,18 @@ Kanal deckt voll) oder „Bestand" (mit Grund je Kanal); `monatsraster.py` liefe
 Wahl — die Überlagerung „gespeichert schlägt gerechnet" bleibt Sache der Monats-Fakten. Außerhalb `services/kanal/`
 importiert die Schicht noch niemand (Wächter `test_kanal_lesen_waechter.py`); das Umhängen der Leser folgt in E4.
 
+**Adapter der Bilanz-Gruppe (E4a, Teil 1 — gebaut, noch von niemandem benutzt).** Netz, PV/Balkonkraftwerk, Speicher und
+Erzeuger hinter dem Zähler sind gemeinsame Eingänge der Bilanz-Formel und wechseln deshalb gemeinsam.
+`services/kanal/bilanz_adapter.py` liefert aus den Kanälen dieselben Formen wie die heutigen Leser, je in deren Fenster: den
+Tag wie Tageszeile + Stundenbilanz (`tagesfenster`), den Monat wie `lade_monats_summen_aus_tagen` (über dieselbe Faltung
+`monats_aus_tagen.falte_monat`) und den Kalendermonat je Sensor wie `get_monatswerte`. Zwei benannte Fassungen: **„wie
+Bestand"** legt die Kanal-Zeilen dem unveränderten HA-Leser vor und rechnet den Tag mit `baue_tagestabelle` — keine Regel
+steht ein zweites Mal im Baum; **„wie HA"** komponiert das Kanal-Δ des Fensters ohne Deckel und Rücksprung-Regel, mit
+denselben Layer-Funktionen (die PV-Tages-Präzedenz und N-623 fragen je Stunde und bekommen dafür die Stunden der Kanäle).
+`bilanz_quellenwahl.py` wählt je Tag und Monat EINE Quelle für alle Eingänge der Gruppe. Die Gleichheitsprobe
+`test_kanal_bilanz_gleichheit.py` hält auf allen 33 Formen beider Abnahme-Matrizen (Datenstände HA und MQTT) fest:
+„wie Bestand" == heutiger Leser ohne Ausnahme; „wie HA" == „wie Bestand" außer am Zählersprung (N-586).
+
 ### Parent-Child Beziehungen
 
 ```

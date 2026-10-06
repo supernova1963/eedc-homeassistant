@@ -60,6 +60,7 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.berechnungen import (
+    TagesBilanz,
     bilanz_aus_stundenrows,
     bkw_gemessen_kwh_je_investition,
     monatsbilanz_aus_tagen,
@@ -262,85 +263,116 @@ async def lade_monats_summen_aus_tagen(
     # Stundenzeilen je Monat sammeln — die Faltung macht danach der Layer-Helfer
     # über den ganzen Monatsblock (Σ über Stunden ist assoziativ, s. Modul-Kopf).
     stunden_je_monat: dict[MonatsSchluessel, list] = defaultdict(list)
-    tage_je_monat: dict[MonatsSchluessel, set[date]] = defaultdict(set)
     if tep_query is not None:
         tep_result = await db.execute(tep_query)
         for row in tep_result.all():
-            schluessel = (row.datum.year, row.datum.month)
-            stunden_je_monat[schluessel].append(row)
-            tage_je_monat[schluessel].add(row.datum)
+            stunden_je_monat[(row.datum.year, row.datum.month)].append(row)
 
     tz_result = await db.execute(tz_query)
-    verworfen_je_tag: dict[date, Optional[dict]] = {}
-    pv_je_monat: dict[MonatsSchluessel, float] = defaultdict(float)
-    bkw_je_monat: dict[MonatsSchluessel, float] = defaultdict(float)
-    bkw_gemessen_je_monat: dict[MonatsSchluessel, dict[str, float]] = defaultdict(dict)
-    bkw_alle_je_monat: dict[MonatsSchluessel, dict[str, float]] = defaultdict(dict)
-    lade_pv_je_monat: dict[MonatsSchluessel, float] = defaultdict(float)
-    lade_netz_je_monat: dict[MonatsSchluessel, float] = defaultdict(float)
-    lade_speicher_je_monat: dict[MonatsSchluessel, float] = {}
+    tz_je_monat: dict[MonatsSchluessel, list] = defaultdict(list)
     for tz in tz_result.scalars().all():
-        schluessel = (tz.datum.year, tz.datum.month)
-        pv_je_monat[schluessel] += summe_pv_anlage_kwh(tz.komponenten_kwh)
-        bkw_je_monat[schluessel] += summe_bkw_kwh(tz.komponenten_kwh)
-        _gemessen = bkw_gemessen_je_monat[schluessel]
+        tz_je_monat[(tz.datum.year, tz.datum.month)].append(tz)
+
+    summen: dict[MonatsSchluessel, TagesMonatsSumme] = {}
+    for schluessel in sorted(set(stunden_je_monat) | set(tz_je_monat)):
+        stunden = stunden_je_monat.get(schluessel, [])
+        stunden_je_tag: dict[date, list] = defaultdict(list)
+        for row in stunden:
+            stunden_je_tag[row.datum].append(row)
+        verworfen_je_tag = {tz.datum: tz.verworfen for tz in tz_je_monat.get(schluessel, [])}
+        summen[schluessel] = falte_monat(
+            stunden_tage=[
+                (tag, bilanz_aus_stundenrows(rows, verworfen=verworfen_je_tag.get(tag)), len(rows))
+                for tag, rows in sorted(stunden_je_tag.items())
+            ],
+            tageszeilen=[
+                TagesZeile(
+                    datum=tz.datum, komponenten_kwh=tz.komponenten_kwh,
+                    source_provenance=tz.source_provenance,
+                    emob_ladung_pv_abgeleitet_kwh=tz.emob_ladung_pv_abgeleitet_kwh,
+                    emob_ladung_netz_abgeleitet_kwh=tz.emob_ladung_netz_abgeleitet_kwh,
+                    emob_ladung_speicher_abgeleitet_kwh=tz.emob_ladung_speicher_abgeleitet_kwh,
+                )
+                for tz in tz_je_monat.get(schluessel, [])
+            ],
+        )
+    return summen
+
+
+@dataclass(frozen=True)
+class TagesZeile:
+    """Was die Monatsfaltung aus EINER Tageszeile liest — die Felder von ``TagesZusammenfassung``, die
+    ``falte_monat`` braucht. Eigene Form, damit dieselbe Faltung Tageszeilen aus einer anderen Quelle nimmt
+    (HA-Bauform E4a: die Tageswerte aus den Kanälen, ``services/kanal/bilanz_adapter.py``)."""
+
+    datum: date
+    komponenten_kwh: Optional[dict] = None
+    source_provenance: Optional[dict] = None
+    emob_ladung_pv_abgeleitet_kwh: Optional[float] = None
+    emob_ladung_netz_abgeleitet_kwh: Optional[float] = None
+    emob_ladung_speicher_abgeleitet_kwh: Optional[float] = None
+
+
+def falte_monat(
+    *, stunden_tage: list[tuple[date, TagesBilanz, int]], tageszeilen: list[TagesZeile],
+) -> TagesMonatsSumme:
+    """Die EINE Faltung eines Monats aus seinen Tagen (bis 06.10.2026 im Rumpf von
+    ``lade_monats_summen_aus_tagen``; herausgelöst für den Kanal-Adapter der HA-Bauform E4a, damit es keine
+    zweite Faltung gibt — [[feedback_aggregations_drift]]).
+
+    Args:
+        stunden_tage: je Tag MIT Stundenzeilen ``(datum, Tagesbilanz, Zahl der Stundenzeilen)``, aufsteigend;
+            die Tagesbilanz nach der Regelmarke ihrer Tageszeile (``bilanz_aus_stundenrows(…, verworfen=…)``).
+        tageszeilen: die Tageszeilen des Monats.
+    """
+    # ⭐ Zählerlücken wie HA (R8): der Monat faltet TAGESbilanzen — jeder
+    # Tag nach seiner Regelmarke. Für die Mengen dieser Summe ist das
+    # bitgleich zur Σ über die Stunden (Σ ist assoziativ); es ist dieselbe
+    # Faltung wie im Monats-Endpunkt, damit keine zweite entsteht.
+    bilanz = monatsbilanz_aus_tagen(b for _tag, b, _n in stunden_tage)
+    pv = bkw = lade_pv = lade_netz = 0.0
+    lade_speicher: Optional[float] = None
+    bkw_gemessen: dict[str, float] = {}
+    bkw_alle: dict[str, float] = {}
+    for tz in tageszeilen:
+        pv += summe_pv_anlage_kwh(tz.komponenten_kwh)
+        bkw += summe_bkw_kwh(tz.komponenten_kwh)
         for inv_id, wert in bkw_gemessen_kwh_je_investition(
             tz.komponenten_kwh, tz.source_provenance,
         ).items():
-            _gemessen[inv_id] = _gemessen.get(inv_id, 0.0) + wert
+            bkw_gemessen[inv_id] = bkw_gemessen.get(inv_id, 0.0) + wert
         # Ohne Provenienz kennt der Helfer keine Marke — er liefert dann JEDEN `bkw_`-Key je Gerät.
-        _alle = bkw_alle_je_monat[schluessel]
         for inv_id, wert in bkw_gemessen_kwh_je_investition(tz.komponenten_kwh, None).items():
-            _alle[inv_id] = _alle.get(inv_id, 0.0) + wert
+            bkw_alle[inv_id] = bkw_alle.get(inv_id, 0.0) + wert
         # `or 0.0` ist hier korrekt und NICHT die `is not None`-Falle: eine
         # Tageszeile ohne Ableitung trägt None, und None trägt zur Summe
         # nichts bei. Ob der Monat überhaupt eine Aussage hat, entscheidet
         # danach `abgeleiteter_pv_anteil` an der Gesamtsumme — nicht dieses
         # Feld je Tag.
-        lade_pv_je_monat[schluessel] += tz.emob_ladung_pv_abgeleitet_kwh or 0.0
-        lade_netz_je_monat[schluessel] += tz.emob_ladung_netz_abgeleitet_kwh or 0.0
+        lade_pv += tz.emob_ladung_pv_abgeleitet_kwh or 0.0
+        lade_netz += tz.emob_ladung_netz_abgeleitet_kwh or 0.0
         if tz.emob_ladung_speicher_abgeleitet_kwh is not None:
-            lade_speicher_je_monat[schluessel] = (
-                lade_speicher_je_monat.get(schluessel, 0.0) + tz.emob_ladung_speicher_abgeleitet_kwh
-            )
-        tage_je_monat[schluessel].add(tz.datum)
-        verworfen_je_tag[tz.datum] = tz.verworfen
-
-    summen: dict[MonatsSchluessel, TagesMonatsSumme] = {}
-    for schluessel in sorted(set(stunden_je_monat) | set(pv_je_monat) | set(bkw_je_monat)):
-        stunden = stunden_je_monat.get(schluessel, [])
-        # ⭐ Zählerlücken wie HA (R8): der Monat faltet TAGESbilanzen — jeder
-        # Tag nach seiner Regelmarke. Für die Mengen dieser Summe ist das
-        # bitgleich zur Σ über die Stunden (Σ ist assoziativ); es ist dieselbe
-        # Faltung wie im Monats-Endpunkt, damit keine zweite entsteht.
-        stunden_je_tag: dict[date, list] = defaultdict(list)
-        for row in stunden:
-            stunden_je_tag[row.datum].append(row)
-        bilanz = monatsbilanz_aus_tagen(
-            bilanz_aus_stundenrows(rows, verworfen=verworfen_je_tag.get(tag))
-            for tag, rows in sorted(stunden_je_tag.items())
-        )
-        tage = tage_je_monat.get(schluessel, set())
-        summen[schluessel] = TagesMonatsSumme(
-            einspeisung_kwh=bilanz.einspeisung_kwh,
-            netzbezug_kwh=bilanz.netzbezug_kwh,
-            pv_module_kwh=pv_je_monat.get(schluessel, 0.0),
-            bkw_kwh=bkw_je_monat.get(schluessel, 0.0),
-            bkw_gemessen_je_inv=dict(bkw_gemessen_je_monat.get(schluessel, {})),
-            bkw_je_inv=dict(bkw_alle_je_monat.get(schluessel, {})),
-            speicher_ladung_kwh=bilanz.speicher_ladung_kwh,
-            speicher_entladung_kwh=bilanz.speicher_entladung_kwh,
-            einspeisung_erfasst=bilanz.einspeisung_erfasst,
-            netzbezug_erfasst=bilanz.netzbezug_erfasst,
-            emob_ladung_pv_abgeleitet_kwh=lade_pv_je_monat.get(schluessel, 0.0),
-            emob_ladung_netz_abgeleitet_kwh=lade_netz_je_monat.get(schluessel, 0.0),
-            emob_ladung_speicher_abgeleitet_kwh=lade_speicher_je_monat.get(schluessel),
-            tage=len(tage),
-            stunden=len(stunden),
-            erster_tag=min(tage) if tage else None,
-            letzter_tag=max(tage) if tage else None,
-        )
-    return summen
+            lade_speicher = (lade_speicher or 0.0) + tz.emob_ladung_speicher_abgeleitet_kwh
+    tage = {tag for tag, _b, _n in stunden_tage} | {tz.datum for tz in tageszeilen}
+    return TagesMonatsSumme(
+        einspeisung_kwh=bilanz.einspeisung_kwh,
+        netzbezug_kwh=bilanz.netzbezug_kwh,
+        pv_module_kwh=pv,
+        bkw_kwh=bkw,
+        bkw_gemessen_je_inv=bkw_gemessen,
+        bkw_je_inv=bkw_alle,
+        speicher_ladung_kwh=bilanz.speicher_ladung_kwh,
+        speicher_entladung_kwh=bilanz.speicher_entladung_kwh,
+        einspeisung_erfasst=bilanz.einspeisung_erfasst,
+        netzbezug_erfasst=bilanz.netzbezug_erfasst,
+        emob_ladung_pv_abgeleitet_kwh=lade_pv,
+        emob_ladung_netz_abgeleitet_kwh=lade_netz,
+        emob_ladung_speicher_abgeleitet_kwh=lade_speicher,
+        tage=len(tage),
+        stunden=sum(n for _tag, _b, n in stunden_tage),
+        erster_tag=min(tage) if tage else None,
+        letzter_tag=max(tage) if tage else None,
+    )
 
 
 # ═════════════════════════════════════════════════════════════════════════════
