@@ -15,6 +15,7 @@
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Card, Alert, fmtCalc, FehlerZustand } from '../components/ui'
+import { SimpleTooltip } from '../components/ui/FormelTooltip'
 import ScrollSchatten from '../components/ui/ScrollSchatten'
 import { BlockShell, BlockStackSkeleton, HerkunftZeile, KpiStrip, VerteilungsBalken, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark, type ParkApi } from '../components/park'
@@ -645,7 +646,8 @@ export function geraetBloecke(g: KompGeraet, typ: string, anlageId: number, park
   const verlaufVerstecken = analyse?.verlauf
     ? regVerstecken('verlauf')
     : alleGeparkt(g.verlauf
-      ? ['el:verlauf', ...(g.verlauf.verteilungen?.map((_, i) => `el:verlauf-vert-${i}`) ?? []), ...(typ !== 'pv-module' ? ['el:verlauf-tabelle'] : [])]
+      ? ['el:verlauf', ...(g.verlauf.verteilungen?.map((_, i) => `el:verlauf-vert-${i}`) ?? []), ...(typ !== 'pv-module' ? ['el:verlauf-tabelle'] : []),
+        ...(g.verlauf.zeile ? ['el:verlauf-zeile'] : [])]
       : ['el:verlauf-hinweis'])
   if (!verlaufVerstecken) bloecke.push({
     id: 'verlauf', title: 'Verlauf (gesamte Historie)', ...BLOCK_IDENTITAET.verlauf,
@@ -662,6 +664,15 @@ export function geraetBloecke(g: KompGeraet, typ: string, anlageId: number, park
               <HerkunftZeile herkunft={g.verlauf.herkunft} className="mb-2" />
               <KomponentenVerlaufChart rows={g.verlauf.rows} bars={g.verlauf.bars} einheit={g.verlauf.einheit} gestapelt={g.verlauf.gestapelt} tall={fokus} />
             </Parkbar>
+            {/* E4b: eine Textzeile über die gesamte Historie (PV: Wandlungsverluste), Hinweistext als Tooltip —
+                dieselbe Unterzeilen-Bauform wie unter „PV-Erzeugung" in Cockpit → Monat/Jahr. */}
+            {g.verlauf.zeile && (
+              <Parkbar id="el:verlauf-zeile" titel={g.verlauf.zeile.titel}>
+                <p className="text-xs text-gray-400 dark:text-gray-500">
+                  <SimpleTooltip text={g.verlauf.zeile.hinweis}>{g.verlauf.zeile.text}</SimpleTooltip>
+                </p>
+              </Parkbar>
+            )}
             {g.verlauf.verteilungen && g.verlauf.verteilungen.length > 0 && (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {g.verlauf.verteilungen.map((v, i) => (

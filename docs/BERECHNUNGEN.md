@@ -53,7 +53,7 @@ und zum Verständnis der Datenflüsse.
 
 **Legacy-Felder (NICHT neu befüllen):**
 - `Monatsdaten.batterie_*` - Nutze `InvestitionMonatsdaten` (Speicher)
-- `Monatsdaten.pv_erzeugung_kwh` - **kein Schreibziel** für neuen Code (Pro-Modul-Werte gehören in `InvestitionMonatsdaten`) und seit 2026-07-29 auch **keine allgemeine Lesequelle** mehr: das Feld trägt den manuell erfassten oder importierten **PV-Gesamtwert** eines Monats und ist **ausschließlich Eingang** des Read-time-SoT `core/berechnungen/pv_verteilung.py` (`resolve_pv_je_modul`). Der füllt damit die Lücken der Module ohne eigenen Wert und kennzeichnet sie als gerechnet. Der Gesamtwert steht für **alle** PV-Quellen der Anlage: bevor er die Lücken füllt, geht der eigene Monatswert jedes Balkonkraftwerks ab, das in diesem Monat selbst trägt (nicht an Modul-Kinder abgetreten) — das BKW kommt in `pv_erzeugung_kwh = pv_module_kwh + bkw_kwh` als eigener Summand dazu und stünde sonst zweimal darin. Ein BKW **ohne** eigenen Wert, das im Monat selbst trägt, ist seit 04.10.2026 (N-621) eine Lücke wie ein Modul ohne Wert: es bekommt seinen kWp-Anteil am Rest (Gewicht `get_erzeuger_kwp`, auch `leistung_wp × anzahl`), geführt als `erzeugung.bkw_aus_anlagenwert_kwh` und additiv in `pv_kwh` — nicht in `bkw_kwh`, nicht in `pv_je_modul`, nicht in `BkwFakten` (die tragen die eigenen Werte). Ein BKW mit Anteil trägt im Monat keinen Ersatz-Eigenverbrauch (P9) und keinen Tageswert. Nur wo der Gesamtwert **gespeichert** ist; der HA-Statistik-Import speichert ihn nicht und verteilt beim Import nur auf Module (HA-Bauform S1). Wer nur einen Gesamt-Sensor hat, pflegt weiterhin ausschließlich hier. Jede einzelne Berechnung liest die Pro-Modul-Schicht bzw. deren Summe — nie das Feld selbst. Ladepfad: `services/pv_monatswerte.py`.
+- `Monatsdaten.pv_erzeugung_kwh` - **kein Schreibziel** für neuen Code (Pro-Modul-Werte gehören in `InvestitionMonatsdaten`) und seit 2026-07-29 auch **keine allgemeine Lesequelle** mehr: das Feld trägt den manuell erfassten oder importierten **PV-Gesamtwert** eines Monats und ist **ausschließlich Eingang** des Read-time-SoT `core/berechnungen/pv_verteilung.py` (`resolve_pv_je_modul`). Der füllt damit die Lücken der Module ohne eigenen Wert und kennzeichnet sie als gerechnet. Der Gesamtwert steht für **alle** PV-Quellen der Anlage: bevor er die Lücken füllt, geht der eigene Monatswert jedes Balkonkraftwerks ab, das in diesem Monat selbst trägt (nicht an Modul-Kinder abgetreten) — das BKW kommt in `pv_erzeugung_kwh = pv_module_kwh + bkw_kwh` als eigener Summand dazu und stünde sonst zweimal darin. Ein BKW **ohne** eigenen Wert, das im Monat selbst trägt, ist seit 04.10.2026 (N-621) eine Lücke wie ein Modul ohne Wert: es bekommt seinen kWp-Anteil am Rest (Gewicht `get_erzeuger_kwp`, auch `leistung_wp × anzahl`), geführt als `erzeugung.bkw_aus_anlagenwert_kwh` und additiv in `pv_kwh` — nicht in `bkw_kwh`, nicht in `pv_je_modul`, nicht in `BkwFakten` (die tragen die eigenen Werte). Ein BKW mit Anteil trägt im Monat keinen Ersatz-Eigenverbrauch (P9) und keinen Tageswert. Nur wo der Gesamtwert **gespeichert** ist — von Hand, mit „Aus HA laden" (N-622), seit HA-Bauform E4b auch über den HA-Statistik-Import (bis dahin verteilte der Import den Zähler selbst nur auf Module, und ein BKW ohne Wert bekam 0). Wer nur einen Gesamt-Sensor hat, pflegt weiterhin ausschließlich hier. Jede einzelne Berechnung liest die Pro-Modul-Schicht bzw. deren Summe — nie das Feld selbst. Ladepfad: `services/pv_monatswerte.py`.
 
 > **PV je Gerät aus Zeitraum-Differenzen — Regel W2 (HA-Bauform E4a-2, Stand 06.10.2026, Entscheid Gernot).** Wo die
 > Kanäle der Bilanz-Gruppe (Netz, PV/Balkonkraftwerk samt Anlagenzähler, Speicher, Erzeuger hinter dem Zähler) einen
@@ -70,6 +70,19 @@ und zum Verständnis der Datenflüsse.
 >    Liegt Σ Geräte über ihm, wird die Differenz als Wandlungsverluste geführt (`wandlungsverluste_kwh`), nicht
 >    bewertet (N-588, offen bis nach dem Umbau). Beispiel Volleinspeiser mit DC-String-Zählern: am Schattentag melden
 >    die Strings 12,6 kWh, der AC-Zähler 12,096 — die PV-Summe ist 12,6, der Eigenverbrauch 0,504.
+>
+>    **Wandlungsverluste als geführte Größe (HA-Bauform E4b, Stand 06.10.2026).** `wandlungsverluste_kwh = max(0, Σ
+>    Geräte − Δ Anlagenzähler)` je Zeitraum, mit dem Bezug Σ Geräte (= Σ der String-Zähler vor dem Wechselrichter);
+>    Prozent = Verluste ÷ Σ Geräte × 100 (`pv_verteilung.wandlungsverluste_prozent`, Layer). Weg: Kanal-Leser
+>    (`services/kanal/bilanz_leser.als_monatssumme`) → Monats-Fakten `ErzeugungFakten.wandlungsverluste_kwh` /
+>    `_bezug_kwh` — **auch für abgeschlossene Monate**, deren Mengen aus der Zählerzeile kommen (die Fakten lesen den
+>    Kanal-Monat zusätzlich, wenn die Anlage einen Kanal `basis:pv_gesamt` hat) → *Cockpit → Monat*, *Cockpit → Jahr*
+>    (Σ der Monate mit Wert, Prozent über die Monate, die Verluste UND Bezug tragen — `quote_paarweise`), Übersicht
+>    (Gesamtzeitraum) und die Monatsreihe `/monatsdaten/aggregiert`. `None` ohne Anlagenzähler und ohne Kanal-Deckung
+>    — der Bestandspfad liefert keinen Wert. **Nicht bewertet:** PV-Summe, Eigenverbrauch, Autarkie, Ersparnis, CO₂
+>    und Ergebnis-Leiter rechnen weiter mit Σ Geräte (Entscheid B2; N-588 bleibt offen). Beispiel: Strings 360 + 180 +
+>    Balkonkraftwerk 90 = 630 kWh, Anlagenzähler 594 ⇒ Wandlungsverluste 36,0 kWh (5,7 %); Eigenverbrauch und Ersparnis
+>    bleiben auf 630.
 > 4. **Entweder-oder:** je Zeitraum der erste Kanal einer Ersatzgruppe mit voller Deckung.
 > 5. **Untergrenze 0 einmal je Zeitraum** — Σ Tage ≠ Monat nur in der Aufteilung je Gerät an Tagen, an denen der
 >    Rest klemmt.

@@ -309,3 +309,22 @@ def warnung_monate_ohne_zaehlerwerte(
         "ordne einen HA-Sensor am Hausanschluss zu; der Daten-Checker führt dich "
         "über „Messwerte ohne Monatszeile“ direkt zum Formular."
     )
+
+
+def warnung_pv_gesamt_ohne_zaehlerzeile(monate: list[tuple[int, int]]) -> Optional[str]:
+    """Warntext für Monate, deren PV-Gesamtzähler der HA-Sammelimport NICHT gespeichert hat (HA-Bauform E4b, H-A1).
+
+    Der Zähler gehört als Anlagenwert in die Zählerzeile (``Monatsdaten.pv_erzeugung_kwh``); gibt es für den Monat
+    keine und legt der Import auch keine an (Einspeisung/Netzbezug nicht ausgewählt oder nicht zugeordnet — eine
+    erfundene 0/0-Zeile verbietet N-240), hat er keinen Ort. Bis E4b wurde er dann auf die Module verteilt; jetzt sagt
+    es dieser Satz. ``None``, wenn nichts zu melden ist.
+    """
+    if not monate:
+        return None
+    geordnet = sorted(set(monate))
+    liste = ", ".join(f"{j:04d}-{m:02d}" for j, m in geordnet)
+    if len(geordnet) == 1:
+        return (f"Monat {liste}: PV-Gesamtzähler nicht gespeichert — der Monat hat keine Zählerzeile "
+                "(Einspeisung/Netzbezug); erst Einspeisung und Netzbezug importieren oder den Monat anlegen")
+    return (f"Monate {liste}: PV-Gesamtzähler nicht gespeichert — die Monate haben keine Zählerzeile "
+            "(Einspeisung/Netzbezug); erst Einspeisung und Netzbezug importieren oder die Monate anlegen")

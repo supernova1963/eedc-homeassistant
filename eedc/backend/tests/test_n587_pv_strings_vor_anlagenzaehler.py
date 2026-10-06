@@ -176,20 +176,19 @@ async def test_das_balkonkraftwerk_gehoert_zur_grundgesamtheit_des_zaehlers(db, 
 
 
 async def _nach_dem_abschluss(db, monkeypatch, *, strings: dict, mit_bkw: bool, ha_werte_fn=None):
-    """Derselbe Monat abgeschlossen: Stringwerte gespeichert, der Anlagenzähler über den echten
-    Schreibpfad (`ha_statistics._verteile_anlagen_pv`, N-533) auf die Lücken verteilt."""
+    """Derselbe Monat abgeschlossen: Stringwerte gespeichert, der Anlagenzähler als Anlagenwert in der Zählerzeile —
+    so speichert ihn der HA-Sammelimport seit HA-Bauform E4b (vorher `_verteile_anlagen_pv`, N-533: auf die Lücken
+    verteilt) und „Aus HA laden" seit N-622; die Monats-Fakten lösen ihn auf (P7)."""
     import backend.api.routes.aktueller_monat as am
-    from backend.api.routes.ha_statistics import _verteile_anlagen_pv
 
     jahr, monat = 2025, 5
     aid, s1, s2, bkw = await _seed(db, mit_bkw=mit_bkw)
-    db.add(Monatsdaten(anlage_id=aid, jahr=jahr, monat=monat, einspeisung_kwh=400.0, netzbezug_kwh=200.0))
+    db.add(Monatsdaten(anlage_id=aid, jahr=jahr, monat=monat, einspeisung_kwh=400.0, netzbezug_kwh=200.0,
+                       pv_erzeugung_kwh=ANLAGENZAEHLER))
     for inv_id, kwh in ((s1, strings.get("s1")), (s2, strings.get("s2")), (bkw, 45.0 if mit_bkw else None)):
         if kwh is not None:
             db.add(InvestitionMonatsdaten(investition_id=inv_id, jahr=jahr, monat=monat,
                                           verbrauch_daten={"pv_erzeugung_kwh": kwh}))
-    await db.commit()
-    await _verteile_anlagen_pv(db, aid, jahr, monat, ANLAGENZAEHLER, ueberschreiben=False)
     await db.commit()
     _quellen_still(am, monkeypatch, ha_werte_fn(am, s1, s2, bkw) if ha_werte_fn else {})
     return await am.get_aktueller_monat(anlage_id=aid, jahr=jahr, monat=monat, db=db)

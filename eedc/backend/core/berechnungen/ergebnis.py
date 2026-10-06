@@ -104,6 +104,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Iterable, Mapping, Optional, Sequence
 
 from backend.core.berechnungen.emob import EffizienzWert, eauto_effizienz_zeitraum
+from backend.core.berechnungen.pv_verteilung import wandlungsverluste_prozent
 from backend.core.berechnungen.speicher_wirkungsgrad import speicher_wirkungsgrad
 from backend.core.berechnungen.ust_eigenverbrauch import (
     UstJahresanteil,
@@ -503,6 +504,9 @@ def falte_zeitraum(
     q_ev_quote = quote_paarweise(monate, "eigenverbrauch_kwh", "pv_erzeugung_kwh")
     q_auslastung = quote_paarweise(monate, "speicher_entladung_kwh", "speicher_auslastungs_basis_kwh")
     q_netzladung = quote_paarweise(monate, "speicher_ladung_netz_kosten_euro", "speicher_ladung_netz_kwh")
+    # HA-Bauform E4b (N-588, nur geführt): Wandlungsverluste des Zeitraums = Σ der Monatswerte (``None``, wenn kein Monat
+    # einen trägt); Prozent über die Monate, die Verluste UND Bezug tragen.
+    q_verluste = quote_paarweise(monate, "wandlungsverluste_kwh", "wandlungsverluste_bezug_kwh")
 
     netzbezug_preis_effektiv = [
         m.get("netzbezug_durchschnittspreis_cent") if m.get("netzbezug_durchschnittspreis_cent") is not None
@@ -601,6 +605,9 @@ def falte_zeitraum(
         "eigenverbrauch_kwh": ev,
         "direktverbrauch_kwh": summe(f("direktverbrauch_kwh")),
         "gesamtverbrauch_kwh": summe(f("gesamtverbrauch_kwh")),
+        "wandlungsverluste_kwh": summe(f("wandlungsverluste_kwh")),
+        "wandlungsverluste_bezug_kwh": q_verluste.nenner,
+        "wandlungsverluste_prozent": wandlungsverluste_prozent(q_verluste.zaehler, q_verluste.nenner),
         "autarkie_prozent": q_autarkie.wert,
         "autarkie_zaehler_kwh": q_autarkie.zaehler,
         "autarkie_nenner_kwh": q_autarkie.nenner,

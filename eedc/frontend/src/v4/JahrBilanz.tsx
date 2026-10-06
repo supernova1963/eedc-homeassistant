@@ -40,7 +40,8 @@ import { unvollstaendigHerkunft } from '../lib/prognoseHinweise'
 import { Parkbar } from '../components/park'
 import { DATENROLLE } from '../lib'
 import { KOMPONENTEN_FARBEN } from '../lib/colors'
-import { Delta, VglChip, baueNetzKostenKpis } from './MonatBilanz'
+import { BilanzUnterzeile, Delta, VglChip, baueNetzKostenKpis } from './MonatBilanz'
+import { wandlungsverlusteUnterzeile, type Unterzeile } from '../lib/wandlungsverluste'
 // R3b S7/A5: Datenrollen-Icons aus der SoT-Map (eine Datenrolle = ein Icon).
 import { DATENROLLEN_ICONS } from '../lib/komponentenStyle'
 import { sollErfuellungProzent, sollFensterText } from '../lib/sollErfuellung'
@@ -157,6 +158,8 @@ interface BilanzRow {
   inv?: boolean
   besserVj?: boolean
   besserOj?: boolean
+  /** Unterzeile am Label — die Wandlungsverluste unter „PV-Erzeugung" (HA-Bauform E4b, Bauform wie im Monat). */
+  unterzeile?: Unterzeile | null
 }
 
 export function JahrBilanz({
@@ -190,7 +193,9 @@ export function JahrBilanz({
   const evBesser = (vglAutarkie: number | null | undefined): boolean | undefined =>
     dv.autarkie_prozent != null && vglAutarkie != null ? dv.autarkie_prozent >= vglAutarkie : undefined
   const rows: BilanzRow[] = [
-    { label: 'PV-Erzeugung',    ist: dv.pv_erzeugung_kwh,   vj: vj?.pv ?? null,     oj: oj?.pv ?? null,     unit: 'kWh' },
+    // E4b: die Verluste derselben Grundgesamtheit wie die IST-Zahl dieser Zeile (`dv`, abgeschlossene Monate).
+    { label: 'PV-Erzeugung',    ist: dv.pv_erzeugung_kwh,   vj: vj?.pv ?? null,     oj: oj?.pv ?? null,     unit: 'kWh',
+      unterzeile: wandlungsverlusteUnterzeile(dv) },
     { label: 'Eigenverbrauch',  ist: dv.eigenverbrauch_kwh,  vj: vj?.ev ?? null,     oj: oj?.ev ?? null,     unit: 'kWh',
       besserVj: evBesser(vj?.autarkie), besserOj: evBesser(oj?.autarkie) },
     { label: 'Direktverbrauch', ist: dv.direktverbrauch_kwh, vj: vj?.direkt ?? null, oj: oj?.direkt ?? null, unit: 'kWh' },
@@ -277,6 +282,7 @@ export function JahrBilanz({
                   {fmt(row.ist, dec(row))} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">{row.unit}</span>
                 </span>
               </div>
+              <BilanzUnterzeile unterzeile={row.unterzeile} />
               <div className="flex flex-wrap gap-1.5 mt-1">
                 {/* Mobil bleibt das Kürzel kurz; das Fenster steht im Tooltip und —
                     immer sichtbar — in der Fußnote unter der Anzeige. */}
@@ -304,7 +310,10 @@ export function JahrBilanz({
                 // Regel T); zusätzlicher `border-b` kollidiert (Dark-Mode-Linie nur
                 // unter Zeile 1, gemessen 2026-07-11).
                 <tr key={row.label}>
-                  <td className={`${ZELLE} text-gray-600 dark:text-gray-400`}>{row.label}</td>
+                  <td className={`${ZELLE} text-gray-600 dark:text-gray-400`}>
+                    {row.label}
+                    <BilanzUnterzeile unterzeile={row.unterzeile} />
+                  </td>
                   <td className={`${ZELLE} text-right font-semibold text-gray-900 dark:text-white tabular-nums`}>
                     {fmt(row.ist, dec(row))}
                   </td>

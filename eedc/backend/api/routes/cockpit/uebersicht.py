@@ -32,7 +32,8 @@ from backend.core.berechnungen import (
     vollzyklen as berechne_vollzyklen,
 )
 from backend.core.berechnungen import relevante_kosten_aus_investitionen
-from backend.core.berechnungen.ergebnis import ErgebnisEingang, berechne_ergebnis
+from backend.core.berechnungen.ergebnis import ErgebnisEingang, berechne_ergebnis, quote_paarweise
+from backend.core.berechnungen.pv_verteilung import wandlungsverluste_prozent
 from backend.services.ust_satz import ust_eigenverbrauch_zeitraum
 from backend.core.calculations import berechne_co2_bilanz
 from backend.services.strompreis_aggregator import lade_preis_aggregate_je_monat
@@ -76,6 +77,12 @@ class CockpitUebersichtResponse(BaseModel):
     einspeisung_kwh: float
     direktverbrauch_kwh: float
     eigenverbrauch_kwh: float
+    #: HA-Bauform E4b (N-588 — angezeigt, NICHT bewertet): Wandlungsverluste des Zeitraums (Σ der Monate mit Wert aus
+    #: dem Kanal-Leser), ihr Bezug (Σ String-Zähler derselben Monate) und Prozent (Layer). ``None`` ohne Anlagenzähler
+    #: bzw. ohne einen Monat mit Kanal-Deckung. Trägt die Zeile im PV-Hub (Block „Verlauf", gesamte Historie).
+    wandlungsverluste_kwh: Optional[float] = None
+    wandlungsverluste_bezug_kwh: Optional[float] = None
+    wandlungsverluste_prozent: Optional[float] = None
 
     # Quoten (%)
     autarkie_prozent: float
@@ -408,6 +415,13 @@ async def get_cockpit_uebersicht(
     # (`monats_fakten.pv_erzeugungs_monate`, N-621 H1) — der HA-Sensor
     # „spezifischer Ertrag" fragt dieselbe Funktion.
     pv_monate = pv_erzeugungs_monate(fakten)
+
+    # HA-Bauform E4b: Wandlungsverluste über die Monate, die Verluste UND Bezug tragen (paarweise wie das Jahr,
+    # `ergebnis.falte_zeitraum`); nur geführt — in keiner Bilanz, Ersparnis oder CO₂-Größe darunter.
+    _q_verluste = quote_paarweise([
+        {"monat": f.monat, "v": f.erzeugung.wandlungsverluste_kwh, "b": f.erzeugung.wandlungsverluste_bezug_kwh}
+        for f in fakten
+    ], "v", "b")
 
     # Netzpunkt-Bilanz: sonstige Erzeuger (z. B. BHKW) speisen hinter denselben
     # Zähler → ihre Erzeugung gehört in die EV/Autarkie-Ableitung, sonst drückt
@@ -874,6 +888,9 @@ async def get_cockpit_uebersicht(
         einspeisung_kwh=round(einspeisung, 1),
         direktverbrauch_kwh=round(direktverbrauch, 1),
         eigenverbrauch_kwh=round(eigenverbrauch, 1),
+        wandlungsverluste_kwh=_q_verluste.zaehler,
+        wandlungsverluste_bezug_kwh=_q_verluste.nenner,
+        wandlungsverluste_prozent=wandlungsverluste_prozent(_q_verluste.zaehler, _q_verluste.nenner),
         autarkie_prozent=round(autarkie, 1),
         eigenverbrauch_quote_prozent=round(ev_quote, 1),
         direktverbrauch_quote_prozent=round(dv_quote, 1),

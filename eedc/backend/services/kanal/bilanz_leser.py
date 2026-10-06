@@ -274,7 +274,9 @@ def als_monatssumme(jahr: int, monat: int, k: BilanzZeitraum, *, jetzt: int) -> 
     tage = [t for t in _tage(d0, _letzter_tag(jahr, monat)) if tagesfenster(t)[0] < se]
     return dataclasses.replace(s, tage=len(tage), stunden=0, erster_tag=tage[0] if tage else None,
                                letzter_tag=tage[-1] if tage else None,
-                               wandlungsverluste_kwh=k.pv.wandlungsverluste_kwh if k.pv else None)
+                               wandlungsverluste_kwh=k.pv.wandlungsverluste_kwh if k.pv else None,
+                               wandlungsverluste_bezug_kwh=(k.pv.geraete_kwh if k.pv and k.pv.wandlungsverluste_kwh
+                                                            is not None else None))
 
 
 # ── Fassaden für die Sichten ────────────────────────────────────────────────
@@ -292,6 +294,16 @@ async def _erster_kanal_monat(db: AsyncSession, anlage_id: int) -> Optional[Mona
         return None
     d = datetime.fromtimestamp(int(ts)).date()
     return d.year, d.month
+
+
+async def hat_anlagenzaehler_kanal(db: AsyncSession, anlage_id: int) -> bool:
+    """Hat die Anlage einen Kanal für den Anlagen-PV-Zähler (``basis:pv_gesamt``)? — die Vorfrage der
+    Wandlungsverluste (HA-Bauform E4b, B-1): ohne ihn sind sie ``None``, und niemand muss die Kanal-Monate laden."""
+    from backend.models.kanal import Kanal
+
+    return (await db.execute(select(Kanal.id).where(
+        Kanal.anlage_id == anlage_id, Kanal.key == _AGGREGAT_KEY,
+    ).limit(1))).scalar_one_or_none() is not None
 
 
 async def kanal_monate(

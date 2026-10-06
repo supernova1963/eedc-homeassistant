@@ -145,6 +145,11 @@ export interface AktuellerMonatResponse {
   eigenverbrauch_kwh: number | null
   direktverbrauch_kwh: number | null  // PV direkt verbraucht (ohne Speicher) = EV − Speicher-Entladung
   gesamtverbrauch_kwh: number | null
+  /** HA-Bauform E4b (N-588 — angezeigt, nicht bewertet): Σ String-Zähler − Anlagenzähler; `null` ohne
+   *  Anlagenzähler oder ohne Kanal-Deckung. Prozent aus dem Layer (Bezug: Σ der String-Zähler). */
+  wandlungsverluste_kwh?: number | null
+  wandlungsverluste_bezug_kwh?: number | null
+  wandlungsverluste_prozent?: number | null
 
   // Quoten (%)
   autarkie_prozent: number | null

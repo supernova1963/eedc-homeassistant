@@ -133,6 +133,9 @@ class TagesMonatsSumme:
     #: HA-Bauform E4a-2 (Weg 2, nur Kanal-Monate): ``max(0, Σ Geräte − Anlagenzähler)`` — geführt, nicht bewertet
     #: (N-588, Bewertung nach dem Umbau); ``None`` im Bestand und ohne Anlagenzähler.
     wandlungsverluste_kwh: Optional[float] = None
+    #: HA-Bauform E4b: Σ der Geräte-Werte (String-Zähler) desselben Kanal-Monats — der Bezug der Prozentangabe
+    #: (``pv_verteilung.wandlungsverluste_prozent``); ``None``, wo ``wandlungsverluste_kwh`` ``None`` ist.
+    wandlungsverluste_bezug_kwh: Optional[float] = None
 
     @property
     def pv_kwh(self) -> float:

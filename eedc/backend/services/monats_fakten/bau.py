@@ -58,6 +58,7 @@ async def _baue_fakt(
     preis_messung: Optional[PreisMessung] = None,
     heimlade_quellen: frozenset = frozenset(),
     bloecke: Optional[dict] = None,
+    verluste_summe: Optional[TagesMonatsSumme] = None,
 ) -> MonatsFakt:
     jahr, monat = schluessel
 
@@ -145,6 +146,12 @@ async def _baue_fakt(
         pv_je_modul=pv_je_modul,
         pv_vollstaendig=pv_vollstaendig,
         bkw_aus_anlagenwert_kwh=bkw_aus_anlagenwert_kwh,
+        # HA-Bauform E4b: nur geführt — aus dem Kanal-Monat (`verluste_summe`), unabhängig davon, woher die Mengen
+        # dieses Monats kommen; der Bestandspfad liefert keinen Wert.
+        wandlungsverluste_kwh=verluste_summe.wandlungsverluste_kwh if verluste_summe is not None else None,
+        wandlungsverluste_bezug_kwh=(
+            verluste_summe.wandlungsverluste_bezug_kwh if verluste_summe is not None else None
+        ),
     )
 
     # ── PV-Anteil der Heimladung: echter Wert gewinnt, sonst ableiten ──────

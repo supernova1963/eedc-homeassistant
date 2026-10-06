@@ -323,6 +323,7 @@ Die **Monat**-Sicht ist das Referenz-Muster der Zeit-Achse: ein ausgewählter Mo
 
 - **Kennzahl-Strip** oben — die wichtigsten Monatswerte mit Δ zum Vormonat
 - **Energiebilanz** — PV-Erzeugung, Direktverbrauch, Einspeisung, Netzbezug
+- **Wandlungsverluste** — misst deine Anlage ihre Strings mit eigenen Zählern **und** hat sie einen Anlagenzähler hinter dem Wechselrichter, steht in der Vergleichstabelle unter „PV-Erzeugung" eine Unterzeile, z. B. **„Wandlungsverluste 36,0 kWh (5,7 %)"** — die Prozentzahl bezieht sich auf die Summe der String-Zähler. Der Hinweis an der Zeile: „Differenz zwischen der Summe der String-Zähler (vor dem Wechselrichter) und dem Anlagenzähler (dahinter). Wird angezeigt, nicht bewertet: Ersparnis und CO₂ rechnen weiter mit der Summe der Strings." Ohne Anlagenzähler oder wenn die Strings nicht mehr zählen als der Anlagenzähler, erscheint keine Zeile. Die Zahl kommt aus den Zählerständen (mit Home Assistant aus dessen Langzeitstatistik); ein Monat, den eedc nur aus den Tageswerten kennt, zeigt keine.
 - **Finanzen** — Komponenten-Finanz-Tabelle (Saldo je Komponente) mit Sprung in die volle Finanzrechnung (siehe unten)
 - **Komponenten-Sektionen** — Status je vorhandener Komponente mit kWh-Werten
 - **Datenquellen-Kennzeichnung** — pro Feld ist die Herkunft der Werte sichtbar (HA-Statistik, MQTT, Connector, gespeichert)
@@ -434,7 +435,7 @@ Der Finanzen-Block als Komponenten-Finanz-Tabelle erscheint auch in Jahr/Gesamt.
 
 **PV-Verteilung** — ein Balken, der zeigt, wohin der erzeugte Strom geflossen ist (Direktverbrauch / Speicher / Einspeisung). Daneben stehen die Kachel **Grundlast SOLL/IST** und der Hinweis, aus welchen Geräten die PV-Erzeugung stammt.
 
-**Energiebilanz** — PV-Erzeugung, Direktverbrauch, Einspeisung, Netzbezug, dazu der Block **Vergleich (IST/VJ/Ø)**: jede Kennzahl neben ihrem Vorjahreswert und dem Mittel der übrigen Jahre, jeweils mit Differenz.
+**Energiebilanz** — PV-Erzeugung, Direktverbrauch, Einspeisung, Netzbezug, dazu der Block **Vergleich (IST/VJ/Ø)**: jede Kennzahl neben ihrem Vorjahreswert und dem Mittel der übrigen Jahre, jeweils mit Differenz. Unter „PV-Erzeugung" steht dort — wie im Monat — die Unterzeile **„Wandlungsverluste …"**, wenn deine Anlage Strings und einen Anlagenzähler misst: die Summe der Monate des IST-Fensters mit Wert, Prozent bezogen auf die Summe ihrer String-Zähler. Angezeigt, nicht bewertet.
 
 > **Warum weicht der Gesamtverbrauch von meinem Herstellerportal ab?** eedc bilanziert den Verbrauch aus deinen Werten: `Erzeugung − Einspeisung − Speicher-Ladung + Speicher-Entladung + Netzbezug`. Viele Hybrid-Wechselrichter (z. B. E3DC) messen PV und Speicher **DC-seitig**, Einspeisung und Netzbezug aber **AC-seitig** — dann enthält der Gesamtverbrauch die Wandlungsverluste und liegt rund **3–5 % der Erzeugung** über dem „Hausverbrauch" im Portal, das seine Verluste herausrechnet. Beide Werte stimmen: eedc zeigt, was deine Anlage liefern musste (die richtige Basis für Autarkie und Wirtschaftlichkeit — bezahlt werden muss auch der Verlust), das Portal, was die Verbraucher gezogen haben. Details und ein Rechenrezept zum Nachprüfen stehen in der [Berechnungsreferenz 3.1](BERECHNUNGEN.md#31-energie-bilanz-monatskennzahlen).
 
@@ -556,6 +557,7 @@ Der PV-Reiter fasst **Wechselrichter, zugeordnete Module und DC-Speicher** zu ei
 - **Spezifischer Ertrag** (kWh/kWp) — wichtig für Vergleiche
 - **SOLL/IST** gegen die Solarprognose; konsistente Farben (SOLL blau, IST amber, positive Abweichung grün)
 - **Performance Ratio** auf Basis der Global Tilted Irradiance (GTI) — bei steilen Modulen und tiefer Wintersonne realistischer als auf GHI-Basis (verhindert physikalisch unmögliche PR-Werte > 1)
+- **Wandlungsverluste** im Block **„Verlauf"** — eine Zeile unter dem Diagramm über die gesamte Historie, z. B. **„Wandlungsverluste 36,0 kWh (5,7 %)"**: wie viel die String-Zähler zusammen mehr gezählt haben als der Anlagenzähler hinter dem Wechselrichter, in Prozent der String-Summe. Hinweis an der Zeile: „Differenz zwischen der Summe der String-Zähler (vor dem Wechselrichter) und dem Anlagenzähler (dahinter). Wird angezeigt, nicht bewertet: Ersparnis und CO₂ rechnen weiter mit der Summe der Strings." Die Zeile erscheint nur mit Anlagenzähler und einem Wert über 0; sie ist einzeln parkbar.
 
 Bei **Einzel-String-Anlagen** (genau eine PV-Modul-Investition) entfällt die redundante „Stringsumme"-Zeile.
 

@@ -271,6 +271,22 @@ class PvZeitraum:
     wandlungsverluste_kwh: Optional[float]
 
 
+def wandlungsverluste_prozent(verluste_kwh: Optional[float], strings_kwh: Optional[float]) -> Optional[float]:
+    """Wandlungsverluste in Prozent der Summe der String-Zähler (HA-Bauform E4b, N-588 — geführt, nicht bewertet).
+
+    ``verluste_kwh`` = ``max(0, Σ Geräte − Anlagenzähler)`` eines Zeitraums (``PvZeitraum.wandlungsverluste_kwh``),
+    ``strings_kwh`` = Σ der Geräte-Werte DESSELBEN Zeitraums (``PvZeitraum.geraete_kwh`` — die Zähler vor dem
+    Wechselrichter). Beispiel: Strings 630 kWh, Anlagenzähler 594 ⇒ 36 ÷ 630 × 100 = 5,71 %. Für mehrere Monate
+    ruft der Aufrufer die Funktion mit den Summen der Monate, die BEIDE Größen tragen (``quote_paarweise``).
+    Der Client rechnet das nicht nach (ADR-001, Klasse ``check:kennwert-roh``/``co2-roh``).
+
+    ``None`` ohne Verluste-Wert (kein Anlagenzähler, keine Kanal-Deckung) oder ohne positive String-Summe.
+    """
+    if verluste_kwh is None or strings_kwh is None or strings_kwh <= 0:
+        return None
+    return verluste_kwh / strings_kwh * 100
+
+
 def loese_pv_zeitraum_auf(
     *,
     traeger: list[PvTraeger],

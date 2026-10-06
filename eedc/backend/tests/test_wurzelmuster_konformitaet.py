@@ -1401,10 +1401,8 @@ P7_BASELINE_AUSNAHMEN: frozenset[str] = frozenset({
     # `PvModulWert` — das ERGEBNIS der Auflösung. Genau der Weg, den die Regel
     # vorschreibt; die Summe daraus ist die Anlagen-PV.
     "backend/api/routes/cockpit/pv_strings.py::w",
-    # Dito im HA-Statistik-Import (N-533, 19.09.2026): `modulwert` ist das
-    # `PvModulWert` aus `lade_pv_je_monat` (was ist gemessen?) bzw. aus
-    # `resolve_pv_je_modul` (wie viel bekommt jede Lücke vom Anlagen-Zähler?).
-    "backend/api/routes/ha_statistics.py::modulwert",
+    # (Hier stand bis HA-Bauform E4b `ha_statistics.py::modulwert` — das `PvModulWert` des Verteil-Schreibwegs
+    # `_verteile_anlagen_pv` (N-533). Der Weg ist mit E4b entfallen, die Fundstelle mit ihm.)
     # Dito auf der TAGESEBENE (#406): `loese_pv_tageswerte_auf` ruft denselben
     # SoT `resolve_pv_je_modul` mit Tageswerten statt Monatswerten und liest sein
     # Ergebnis (`PvModulWert`). Es gibt dort keine `Monatsdaten`-Zeile — das
@@ -1458,6 +1456,12 @@ P7_BASELINE_AUSNAHMEN: frozenset[str] = frozenset({
     # Spalte wandern — der Export VERÄNDERTE die Daten (dieselbe Begründung wie
     # P3A_BASELINE_AUSNAHMEN für `json_operations.py::inv`).
     "backend/api/routes/import_export/json_operations.py::md",
+    # HA-Bauform E4b Teil A (06.10.2026): der Sammelimport SCHREIBT den Anlagen-PV-Zähler in die Zählerzeile und
+    # fragt vorher, ob dort schon ein Wert steht (Vorbestand bleibt ohne „überschreiben", wie Einspeisung und
+    # Netzbezug). Die Frage handelt VOM gespeicherten Feld — Diagnose über das Feld, keine Anlagen-PV; ein
+    # aufgelöster Wert beantwortete sie nicht. Eigener Empfängername (`_hat_anlagenwert(vorbestand)`), damit die
+    # Freistellung nicht jedes `md` der Datei (Vorschau!) mitnimmt.
+    "backend/api/routes/ha_statistics.py::vorbestand",
     # Drei Rollen in einer Datei, alle drei gedeckt (Granularität ist
     # `modul::empfänger`, feiner geht die Allowlist nicht). **Zeilennummern
     # bewusst weggelassen** — sie standen hier und waren schon vor dem
@@ -2050,10 +2054,12 @@ P10_SCHREIBEN_IMPORT_CHECKER: frozenset[str] = frozenset({
     # Import / Export / Migration.
     "backend/api/routes/ha_statistics.py::get_import_vorschau",
     "backend/api/routes/ha_statistics.py::import_ha_statistics",
-    # N-533 (19.09.2026): schreibt den Anlagen-PV-Zähler eines Monats als Modulwerte
-    # (Import-Pfad). Lädt die Gerätezeilen des Monats nur, um sie zu BESCHREIBEN;
-    # was gemessen ist, fragt sie bei `lade_pv_je_monat` (P7), nicht selbst.
-    "backend/api/routes/ha_statistics.py::_verteile_anlagen_pv",
+    # HA-Bauform E4b Teil A (06.10.2026, Entscheid H-A2): LÖSCHPFAD. Entfernt die Modulwerte eines Monats, die der
+    # Sammelimport früher als Zerlegung des Anlagen-PV-Zählers geschrieben hat (Schreiber `ha_statistics_import` UND
+    # Marke `kwp_anteil`) — seit E4b steht der Zähler als Anlagenwert in der Zählerzeile. Liest die Gerätezeilen nur,
+    # um ihre PROVENIENZ zu prüfen und den Sub-Key zu entfernen; keine Monatsgröße entsteht. Ersetzt den Eintrag
+    # `::_verteile_anlagen_pv` (N-533, der Verteil-Schreibweg ist mit E4b entfallen).
+    "backend/api/routes/ha_statistics.py::_entferne_eigene_zerlegung",
     "backend/api/routes/import_export/csv_operations.py::export_csv",
     "backend/api/routes/import_export/json_operations.py::_export_anlage_full_impl",
     "backend/services/migrations/migrate_emob_canonical_source.py::migrate_emob_canonical_source",

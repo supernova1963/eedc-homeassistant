@@ -25,6 +25,7 @@ from backend.core.calculations import (
 )
 # Alias: das Response-Feld unten heißt genauso wie die Funktion.
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp as berechne_anlagen_kwp
+from backend.core.berechnungen.pv_verteilung import wandlungsverluste_prozent
 from backend.core.berechnungen.waermepumpe_kennzahl import (
     abgrenzungs_grund,
     arbeitszahl,
@@ -285,6 +286,11 @@ class AggregierteMonatsdatenResponse(BaseModel):
     pv_module_kwh: Optional[float]  # nur PV-Module
     bkw_kwh: Optional[float]  # Balkonkraftwerk(e): eigene Werte + Anteil am Anlagenwert
     bkw_aus_anlagenwert_kwh: Optional[float] = None  # davon aus dem Anlagenwert verteilt (N-621)
+    # HA-Bauform E4b (N-588 — angezeigt, NICHT bewertet): Wandlungsverluste des Monats aus dem Kanal-Leser
+    # (`max(0, Σ String-Zähler − Anlagenzähler)`), Prozent über `pv_verteilung.wandlungsverluste_prozent`. `None` ohne
+    # Anlagenzähler oder ohne Kanal-Deckung. In keiner Bilanzgröße dieser Zeile enthalten.
+    wandlungsverluste_kwh: Optional[float] = None
+    wandlungsverluste_prozent: Optional[float] = None
     # Sonstige Erzeuger (typ=`sonstiges` + Kategorie `erzeuger`, z. B. BHKW) —
     # NICHT in `pv_erzeugung_kwh` enthalten (die bleibt rein PV), aber Teil der
     # Netzpunkt-Bilanz `erzeugung_hinter_zaehler_kwh` (v3.45.4), aus der
@@ -812,6 +818,10 @@ async def list_monatsdaten_aggregiert(
             ),
             bkw_aus_anlagenwert_kwh=(
                 round(f.erzeugung.bkw_aus_anlagenwert_kwh, 1) if hat_pv_imd else None
+            ),
+            wandlungsverluste_kwh=f.erzeugung.wandlungsverluste_kwh,
+            wandlungsverluste_prozent=wandlungsverluste_prozent(
+                f.erzeugung.wandlungsverluste_kwh, f.erzeugung.wandlungsverluste_bezug_kwh,
             ),
             sonstige_erzeugung_kwh=(
                 round(f.erzeugung.sonstige_erzeuger_kwh, 1)

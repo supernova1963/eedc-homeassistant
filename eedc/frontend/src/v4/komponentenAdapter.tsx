@@ -31,6 +31,7 @@ import { SPEICHER_KOPPLUNG_LABELS, aufgeloesteSpeicherKopplung, speicherParamete
 import { cockpitApi, type PVStringsGesamtlaufzeitResponse } from '../api/cockpit'
 import { investitionenApi, type InvestitionMonatsdaten } from '../api/investitionen'
 import { istRestZeile, speicherUnterzeile } from '../components/eauto/EAutoCharts'
+import { wandlungsverlusteVerlaufZeile, type Unterzeile } from '../lib/wandlungsverluste'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
 import {
   PV_ANLAGE_KPI, SPEICHER_KPI, WP_KPI, EAUTO_KPI, WALLBOX_KPI, BKW_KPI,
@@ -99,6 +100,9 @@ export interface KompGeraet {
     bars: VerlaufBar[]; rows: VerlaufRow[]; einheit?: string; gestapelt?: boolean
     herkunft?: WertHerkunft
     verteilungen?: { titel: string; einheit?: string; segmente: VerteilungSegment[]; herkunft?: WertHerkunft }[]
+    /** Eine Textzeile unter dem Chart (gesamte Historie) mit Hinweistext als Tooltip — heute nur die
+     *  Wandlungsverluste der PV-Anlage (HA-Bauform E4b); `null`/fehlend = keine Zeile. */
+    zeile?: (Unterzeile & { titel: string }) | null
   }
   /** Block ⑤ Vergleich (dünn): Jahressummen einer Leitkennzahl je Jahr. */
   vergleich?: { label: string; einheit: string; farbe: string; jahre: { jahr: number; summe: number }[] }
@@ -404,7 +408,9 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
           ],
         } : undefined,
         // ④ Verlauf = Erzeugung je Modul ⟷ Verwendung (paarweise Stapel) + %-Aufteilungen.
-        verlauf: (agg.length && mv) ? mv : undefined,
+        // E4b: dazu die Wandlungsverluste über die gesamte Historie — Summe und Prozent aus der Übersicht (Layer),
+        // derselbe Zeitraum wie die Erzeugung oben; ohne Anlagenzähler bzw. bei 0 keine Zeile.
+        verlauf: (agg.length && mv) ? { ...mv, zeile: wandlungsverlusteVerlaufZeile(u) } : undefined,
         // ⑤ Vergleich = echte IST-Analyse SOLL-IST pro String (komponentenAnalyse-Registry).
         vergleich: undefined,
         // Wirtschaftlichkeit = Ertrags-Zusammensetzung: EV-Ersparnis (vermiedener

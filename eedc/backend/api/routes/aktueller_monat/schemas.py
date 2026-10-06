@@ -162,6 +162,14 @@ class AktuellerMonatResponse(BaseModel):
     eigenverbrauch_kwh: Optional[float] = None
     direktverbrauch_kwh: Optional[float] = None  # PV direkt verbraucht (ohne Speicher): EV − Speicher-Entladung; günstigster Verbrauch (nur entgangene Einspeisung)
     gesamtverbrauch_kwh: Optional[float] = None
+    #: HA-Bauform E4b (N-588 — angezeigt, NICHT bewertet): Wandlungsverluste = ``max(0, Σ String-Zähler −
+    #: Anlagenzähler)`` aus dem Kanal-Leser; ``None`` ohne Anlagenzähler oder ohne Kanal-Deckung. Steckt in keiner
+    #: Ersparnis, keinem CO₂ und keiner Bilanz — ``pv_erzeugung_kwh`` bleibt die Σ der Strings. ``_bezug_kwh`` ist
+    #: die Σ der String-Zähler desselben Zeitraums, ``_prozent`` = Verluste ÷ Bezug × 100 (Layer,
+    #: ``pv_verteilung.wandlungsverluste_prozent``; im Jahr über die Monate, die beide tragen).
+    wandlungsverluste_kwh: Optional[float] = None
+    wandlungsverluste_bezug_kwh: Optional[float] = None
+    wandlungsverluste_prozent: Optional[float] = None
 
     # Quoten (%)
     autarkie_prozent: Optional[float] = None

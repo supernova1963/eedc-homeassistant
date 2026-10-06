@@ -11,7 +11,7 @@ Handeingabe ohne HA. Jede Zelle prüft ALLE Sichten ihrer Invariante; was sie z�
 
 **Rote Zellen** stehen in ``BEKANNT`` — mit der Menge der roten Sichten, dem Grund und der
 Zuordnung (seit dem Bau der PV-Achse, 04.10.2026, nur noch der Sammelimport, HA-Bauform S1, als
-benannte Erwartung mit Verweis). Die Zelle läuft dann
+benannte Erwartung mit Verweis; der Sammelimport ist seit HA-Bauform E4b geheilt). Die Zelle läuft dann
 als ``xfail(strict=True, raises=BekannterMangel)``: Sie ist nur „erwartet rot", wenn GENAU diese
 Sichten rot sind. Heilt ein Bau eine davon, wird die Zelle ROT (XPASS strict bzw. eine
 ``AssertionError``, die nicht ``BekannterMangel`` ist) und zwingt die Markierung weg; kippt eine
@@ -217,6 +217,10 @@ def _folge(sicht: str, d: Optional[dict], einsp: float, netz: float, *, volleins
 #: Formen, deren Geld-Sichten gemessen und gezeigt werden (Auftrag Achsen-Matrix 2, „Zusatz an der PV-Matrix").
 GELD_SICHTEN_FORMEN = ("F13a",)
 
+#: HA-Bauform E4b: Formen, deren Wandlungsverluste (`miss_fakten`, Kanal-Leser) gemessen und bewertet werden —
+#: Σ Strings > Anlagenzähler (F13a, Juni 36,0), Σ Strings < Anlagenzähler (F13b, 0) und der Volleinspeiser (W2-V).
+WANDLUNGSVERLUSTE_FORMEN = ("F13a", "F13b", "W2-V")
+
 
 def _geld_sichten(nach: dict) -> list[Zelle]:
     """Ersparnis aus Eigenverbrauch und CO₂ je Sicht, neben dem Eigenverbrauch derselben Sicht. Ihr Soll legt der
@@ -380,6 +384,12 @@ def bewerte(fid: str, weg: str, inv: str, m: mx.Messung) -> list[Zelle]:  # noqa
               _z("cockpit_jahr:kopf", nach.get("jahr_kopf"), juni.summe + juli.summe, tol=_TOL_TAGE),
               Zelle("fakten:vollstaendig", fk.get("vollstaendig"), juni.vollstaendig,
                     "ok" if fk.get("vollstaendig") == juni.vollstaendig else "rot")]
+        if fid in WANDLUNGSVERLUSTE_FORMEN:
+            # E4b: die Verluste kommen aus den Kanälen — mit HA (S1/S2) vor UND nach dem Abschluss; ohne HA (S3, keine
+            # Kanäle) gibt es keinen Wert (der Bestandspfad liefert keinen).
+            v_soll = mx.soll_wandlungsverluste(form, mx.TAGE_JUNI) if weg in ("S1", "S2") else None
+            z += [_z("fakten:wandlungsverluste", fk.get("wandlungsverluste"), v_soll),
+                  _z("fakten_tw:wandlungsverluste", (vor["fakten_tw"] or {}).get("wandlungsverluste"), v_soll)]
     elif inv == "I4":
         bkws = [g for g in form.geraete if g.typ == "balkonkraftwerk"]
         je = dict(fk.get("je_geraet") or {})
@@ -447,7 +457,7 @@ class BekannterMangel(AssertionError):
 @dataclass(frozen=True)
 class Mangel:
     sichten: frozenset[str]
-    zuordnung: str   # seit dem Bau der PV-Achse nur noch "HA-Bauform S1 (Sammelimport)"
+    zuordnung: str   # Klartext der Ursache (`URSACHE[…].zuordnung`)
     grund: str
 
 
@@ -465,16 +475,6 @@ class Ursache:
 #: (der Monat tritt ab), K4/N-629 (Vorschau ohne Modul) und K5/N-628 (BKW-Zeile nur gemessen).
 #: Erhebung je Zelle: ``opus-berichte/PV-ACHSE-MATRIX.md`` (vorher) und ``PV-ACHSE-BAU.md`` (nachher).
 URSACHE: dict[str, Ursache] = {
-    "SAMMELIMPORT": Ursache(
-        "HA-Bauform S1 (Sammelimport)",
-        "folge-prompt-ha-bauform.md (S1-Pflichtpunkt), Handbuch Einstellungen §7.6: der HA-Statistik-"
-        "Sammelimport speichert den Anlagenzähler nicht (P7 verbietet das programmatische Füllen) und "
-        "verteilt ihn nur auf Module ohne eigenen Wert — ein Balkonkraftwerk ohne Wert bekommt 0, Kinder "
-        "unter einem gemessenen BKW einen Anteil. Folgen (gemessen nach dem Bau): Werte je Gerät weichen "
-        "ab (z. B. F04 West 270 statt 225, Balkon 0 statt 45), der Jahr-Verlauf füllt die BKW-Gruppe aus "
-        "den Tagen (675/676,8 statt 630), F05 nennt nach dem Import 540 statt 630, der Daten-Checker lässt "
-        "den Monat aus. Kein Regelfehler der Lesewege, sondern ein fehlender Speicherort",
-    ),
     # ── HA-Bauform E4a-2: die neuen Formen nach Weg 2 (Markierung bei NEUEN Formen, Freigabe Master 06.10.2026) ──
     "N-588": Ursache(
         "N-588 (Wandlungsverluste, Bewertung nach dem Umbau — Entscheid B2)",
@@ -502,48 +502,8 @@ URSACHE: dict[str, Ursache] = {
 
 #: ``Ursache → {(Form, Weg, Invariante): rote Sichten}`` — gemessen, nicht hergeleitet.
 ROT: dict[str, dict[tuple[str, str, str], tuple[str, ...]]] = {
-    'SAMMELIMPORT': {
-        ('F01', 'S2', 'I1'): ('daten_checker', 'jahr_verlauf', 'jahr_verlauf_segmente',),
-        ('F01', 'S2', 'I2'): ('jahr_verlauf:vor=nach',),
-        ('F01', 'S2', 'I4'): (
-            'fakten:Balkon', 'fakten:Süd', 'fakten:West', 'pdf_string_vergleich:Balkon', 'pdf_string_vergleich:Süd',
-            'pdf_string_vergleich:West', 'pv_strings:Balkon', 'pv_strings:Süd', 'pv_strings:West',
-        ),
-        ('F01', 'S2', 'I6'): ('nach:checker',),
-        ('F04', 'S2', 'I1'): ('daten_checker', 'jahr_verlauf', 'jahr_verlauf_segmente',),
-        ('F04', 'S2', 'I2'): ('jahr_verlauf:vor=nach',),
-        ('F04', 'S2', 'I4'): (
-            'fakten:Balkon', 'fakten:West', 'pdf_string_vergleich:Balkon', 'pdf_string_vergleich:West',
-            'pv_strings:Balkon', 'pv_strings:West',
-        ),
-        ('F04', 'S2', 'I6'): ('nach:checker',),
-        ('F05', 'S2', 'I1'): ('daten_checker', 'jahr_verlauf', 'jahr_verlauf_segmente',),
-        ('F05', 'S2', 'I2'): ('cockpit_monat:vor=nach', 'fakten:tageswert=gespeichert', 'Σtage_juni=cockpit_monat',),
-        ('F05', 'S2', 'I3'): ('cockpit_jahr:kopf', 'cockpit_monat:nach', 'fakten',),
-        ('F05', 'S2', 'I4'): ('fakten:Balkon', 'pdf_string_vergleich:Balkon', 'pv_strings:Balkon',),
-        ('F05', 'S2', 'I6'): ('nach:checker',),
-        ('F09a-G', 'S2', 'I4'): (
-            'fakten:Kind 1', 'fakten:Kind 2', 'fakten:Süd', 'fakten:West', 'pdf_string_vergleich:Kind 1',
-            'pdf_string_vergleich:Kind 2', 'pdf_string_vergleich:Süd', 'pdf_string_vergleich:West', 'pv_strings:Kind 1',
-            'pv_strings:Kind 2', 'pv_strings:Süd', 'pv_strings:West',
-        ),
-        ('F09b-G', 'S2', 'I4'): (
-            'fakten:Kind 2', 'fakten:Süd', 'fakten:West', 'pdf_string_vergleich:Kind 2', 'pdf_string_vergleich:Süd',
-            'pdf_string_vergleich:West', 'pv_strings:Kind 2', 'pv_strings:Süd', 'pv_strings:West',
-        ),
-        ('F12', 'S2', 'I1'): ('daten_checker', 'jahr_verlauf', 'jahr_verlauf_segmente',),
-        ('F12', 'S2', 'I2'): ('jahr_verlauf:vor=nach',),
-        ('F12', 'S2', 'I4'): (
-            'fakten:Balkon', 'fakten:West', 'pdf_string_vergleich:Balkon', 'pdf_string_vergleich:West',
-            'pv_strings:Balkon', 'pv_strings:West',
-        ),
-        ('F12', 'S2', 'I6'): ('nach:checker',),
-        ('W2-L', 'S2', 'I1'): ('daten_checker', 'jahr_verlauf', 'jahr_verlauf_segmente',),
-        ('W2-L', 'S2', 'I2'): ('cockpit_monat:vor=nach', 'fakten:tageswert=gespeichert', 'Σtage_juni=cockpit_monat',),
-        ('W2-L', 'S2', 'I3'): ('cockpit_jahr:kopf', 'cockpit_monat:nach', 'fakten',),
-        ('W2-L', 'S2', 'I4'): ('fakten:Balkon', 'pdf_string_vergleich:Balkon', 'pv_strings:Balkon',),
-        ('W2-L', 'S2', 'I6'): ('nach:checker',),
-    },
+    # 'SAMMELIMPORT' (24 Zellen F01/F04/F05/F09a-G/F09b-G/F12/W2-L auf S2) — GEHEILT mit HA-Bauform E4b Teil A
+    # (06.10.2026): der Sammelimport speichert den Anlagen-PV-Zähler als Anlagenwert wie „Aus HA laden" (N-622).
     'N-588': {
         ('W2-V', 'HA', 'I5'): ('tag:volleinspeiser:ev=0',),
     },

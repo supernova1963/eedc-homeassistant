@@ -10,15 +10,17 @@ verteilten die vollen 1000 auf die Strings und addierten das BKW danach als eige
 ALLE PV-Quellen): Bevor der Anlagenwert die Lücken der Module füllt, wird er um die eigenen
 Werte der Balkonkraftwerke gemindert, die im Monat selbst tragen. Rest = max(0, Anlagenwert −
 Σ eigene Werte), nach kWp auf die Module ohne eigenen Wert. Leseseite
-(``pv_monatswerte.lade_pv_je_monat``) und Schreibweg (``ha_statistics._verteile_anlagen_pv``,
-Probe in ``test_n533_…``) rechnen dieselbe Zahl (``eigene_bkw_erzeugung_kwh``).
+(``pv_monatswerte.lade_pv_je_monat``) und Import-Vorschau rechnen dieselbe Zahl
+(``eigene_bkw_erzeugung_kwh``); der Verteil-Schreibweg des Sammelimports (``_verteile_anlagen_pv``)
+ist mit HA-Bauform E4b entfallen — der Import speichert den Zähler als Anlagenwert.
 
 **Was bewusst bleibt, wie es ist** — und hier festgehalten, damit es niemand „mitrepariert":
 
 * Ein BKW **ohne** eigenen Wert bekommt seinen Anteil nur, wo der Anlagenwert **gespeichert**
   ist — seit **N-621** (``test_n621_bkw_anteil_am_anlagenwert.py``; F5: 930 → 1000). Ohne
-  gespeicherten Wert (HA-Statistik-Sammelimport, F3: 930) gibt es zur Lesezeit nichts zu
-  verteilen; das bleibt bei HA-Bauform **S1**.
+  gespeicherten Wert gibt es zur Lesezeit nichts zu verteilen. ⚑ Der HA-Statistik-Sammelimport
+  speichert den Zähler seit HA-Bauform E4b als Anlagenwert (vorher verteilte er ihn auf die Module,
+  F3 blieb 930) — ``n533=True`` sät deshalb jetzt den gespeicherten Anlagenwert 1000.
 * Haben Import oder Connector die Modulwerte schon verteilt (Portal-Stand, Marke
   ``kwp_anteil``), sind sie eigene Werte; der Monat bleibt 1045 (**S2**).
 * **Ohne Anlagenwert** läuft nichts davon — jede Zahl wie vorher (Fälle A, B, C, E und
@@ -68,6 +70,9 @@ async def _seed(db, *, s1=None, s2=None, bkw=None, bkw_daten=None, agg=None, mar
             db.add(kind)
             await db.flush()
             ids[name] = kind.id
+    if n533:
+        # Der HA-Sammelimport seit E4b (Teil A): der Zähler 1000 steht als Anlagenwert in der Zählerzeile.
+        agg = 1000.0
     db.add(Monatsdaten(anlage_id=a.id, jahr=J, monat=M, einspeisung_kwh=400.0, netzbezug_kwh=200.0,
                        pv_erzeugung_kwh=agg))
     for name, kwh in (("Süd", s1), ("West", s2)):
@@ -83,10 +88,6 @@ async def _seed(db, *, s1=None, s2=None, bkw=None, bkw_daten=None, agg=None, mar
         db.add(TagesZusammenfassung(anlage_id=a.id, datum=date(J, M, 3),
                                     komponenten_kwh={f"bkw_{balkon.id}": tages_bkw}))
     await db.commit()
-    if n533:
-        from backend.api.routes.ha_statistics import _verteile_anlagen_pv
-        await _verteile_anlagen_pv(db, a.id, J, M, 1000.0, ueberschreiben=False)
-        await db.commit()
     return a.id, ids
 
 
@@ -197,30 +198,33 @@ async def test_ein_bkw_wert_ueber_dem_anlagenwert_klemmt_den_rest_bei_null(db):
     assert _zahlen(await _fakt(db, aid)) == (1200.0, 0.0, 1200.0)
 
 
-# ── Bewusst unverändert (S1 / S2) ────────────────────────────────────────────────────────────────
+# ── Sammelimport (seit E4b gespeichert) und Portal-Stand (S2) ────────────────────────────────────────────────────────────────
 
 
 @pytest.mark.parametrize("seed, erwartet", [
     # N-621 (04.10.2026): bis dahin 930 — der Anteil des BKW fiel heraus, weil kein Modul eine Lücke hatte.
     pytest.param(dict(agg=1000.0, s1=550.0, s2=380.0), (1000.0, 930.0, 0.0), id="F5-Anlagenwert-BKW-ohne-Wert"),
-    pytest.param(dict(s1=550.0, s2=380.0, n533=True), (930.0, 930.0, 0.0), id="F3-Zaehler-N533-BKW-ohne-Wert"),
+    # E4b Teil A: der Sammelimport speichert den Zähler — F3 rechnet jetzt wie F5 (bis dahin 930, „offen bis S1").
+    pytest.param(dict(s1=550.0, s2=380.0, n533=True), (1000.0, 930.0, 0.0), id="F3-Zaehler-Sammelimport-BKW-ohne-Wert"),
 ])
 async def test_ein_bkw_ohne_eigenen_wert_bekommt_den_anteil_nur_bei_gespeichertem_anlagenwert(db, seed, erwartet):
-    """F5 (Anlagenwert gespeichert): das BKW bekommt den Rest 70 — Module 930, Monat 1000 (N-621). F3 (HA-Sammelimport,
-    der Zähler wird nicht gespeichert): zur Lesezeit gibt es keinen Anlagenwert, der Monat bleibt 930 — offen bis
-    HA-Bauform S1, festgehalten, nicht gewollt."""
+    """F5 (Anlagenwert gespeichert): das BKW bekommt den Rest 70 — Module 930, Monat 1000 (N-621). F3 (HA-Sammelimport):
+    seit E4b steht der Zähler ebenfalls als Anlagenwert in der Zeile — dieselbe Zahl."""
     aid, _ = await _seed(db, **seed)
     assert _zahlen(await _fakt(db, aid)) == erwartet
 
 
-@pytest.mark.parametrize("seed", [
-    pytest.param(dict(n533=True), id="F6a-keine-Strings"),
-    pytest.param(dict(s1=550.0, n533=True), id="F6b-Sued-550"),
+@pytest.mark.parametrize("seed, erwartet", [
+    # 1000 nach kWp auf Süd 6 · West 4 · BKW 0,8 ⇒ Module 1000 × 10/10,8.
+    pytest.param(dict(n533=True), (1000.0, 925.925926, 0.0), id="F6a-keine-Strings"),
+    # Rest 450 nach kWp auf West 4 · BKW 0,8 ⇒ West 375, BKW 75 ⇒ Module 550 + 375.
+    pytest.param(dict(s1=550.0, n533=True), (1000.0, 925.0, 0.0), id="F6b-Sued-550"),
 ])
-async def test_ohne_bkw_wert_fuellt_der_zaehler_die_module_ganz(db, seed):
-    """F6a/F6b: ein BKW ohne Wert mindert den Rest NICHT — die Module tragen den Zähler (1000)."""
+async def test_nach_dem_sammelimport_bekommt_ein_bkw_ohne_wert_seinen_anteil(db, seed, erwartet):
+    """F6a/F6b: bis E4b verteilte der Sammelimport den Zähler nur auf die Module (1000 / 1000 / 0, das BKW 0). Seit E4b
+    steht er als Anlagenwert in der Zeile, und das BKW ohne Wert teilt den Rest mit den Modul-Lücken (N-621)."""
     aid, _ = await _seed(db, **seed)
-    assert _zahlen(await _fakt(db, aid)) == (1000.0, 1000.0, 0.0)
+    assert _zahlen(await _fakt(db, aid)) == erwartet
 
 
 async def test_schon_verteilte_modulwerte_sind_eigene_werte(db):

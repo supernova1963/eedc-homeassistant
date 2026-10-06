@@ -156,10 +156,10 @@ async def lade_pv_je_monat(
     550 + 380 ⇒ 930), während PV-Strings und der Monat ohne Abschluss 1000
     nannten. **Kandidatenregel:** ohne Anlagenwert gibt es keine Lücke, die
     ein BKW füllen könnte — der Pfad läuft dann exakt wie vorher, und ein BKW
-    öffnet nie einen Monat in ``pv_je_modul``. Was bleibt, ist der
-    HA-Statistik-Sammelimport, der den Zähler nicht speichert (P7): ohne
-    gespeicherten Anlagenwert gibt es zur Lesezeit nichts zu verteilen
-    (HA-Bauform S1).
+    öffnet nie einen Monat in ``pv_je_modul``. Seit HA-Bauform E4b (Teil A)
+    speichert auch der HA-Statistik-Sammelimport den Zähler als Anlagenwert
+    (wie „Aus HA laden", N-622) — bis dahin verteilte er ihn selbst auf die
+    Module, und ein BKW ohne Wert bekam dort 0.
 
     **Gewicht:** ein Balkonkraftwerk wird über ``get_erzeuger_kwp`` gewichtet
     (Spalte → ``parameter`` → ``leistung_wp × anzahl``), Module wie bisher über
@@ -395,9 +395,9 @@ def eigene_bkw_erzeugung_kwh(
     """Σ der eigenen Monatswerte der Balkonkraftwerke, die selbst tragen (N-611).
 
     Der Abzug, der aus dem Anlagenwert den Rest für die Modul-Lücken macht —
-    an EINER Stelle, weil Leseseite (``lade_pv_je_monat``), Schreibweg
-    (``ha_statistics._verteile_anlagen_pv``) und Import-Vorschau dieselbe Zahl
-    brauchen.
+    an EINER Stelle, weil Leseseite (``lade_pv_je_monat``) und Import-Vorschau
+    dieselbe Zahl brauchen (der Verteil-Schreibweg ``_verteile_anlagen_pv`` des
+    Sammelimports ist mit HA-Bauform E4b entfallen).
 
     Args:
         aktive: die im Monat **aktiven** Investitionen (Zeitfilter beim

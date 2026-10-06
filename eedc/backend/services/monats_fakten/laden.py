@@ -277,6 +277,18 @@ async def lade_monats_fakten(
             db, anlage_id, von=von, bis=bis, stunden_nur_fuer=stunden_nur_fuer,
         )
 
+    # HA-Bauform E4b (Entscheid B-1): die Wandlungsverluste (N-588, nur geführt) kommen aus dem Kanal-Monat — auch für
+    # abgeschlossene Monate, deren Mengen aus der Zählerzeile stammen. Wurde die Tagesebene oben geladen, trägt sie die
+    # Kanal-Monate schon (`lade_monats_summen`); sonst EIN zusätzlicher `kanal_monate`-Aufruf, und nur, wenn die Anlage
+    # einen Anlagenzähler-Kanal hat (ohne ihn ist der Wert ohnehin `None`). ⚑ Laufzeit: Vormerkung E4f „Monatsreihe je
+    # Anfrage einmal laden".
+    verluste_summen: dict[MonatsSchluessel, TagesMonatsSumme] = tages_summen
+    from backend.services.kanal.bilanz_leser import hat_anlagenzaehler_kanal, kanal_monate
+
+    if not tages_summen and await hat_anlagenzaehler_kanal(db, anlage_id):
+
+        verluste_summen = await kanal_monate(db, anlage_id, von=von, bis=bis)
+
     kandidaten = (
         set(monatsdaten_by_ym)
         | set(pv_summen)
@@ -384,6 +396,7 @@ async def lade_monats_fakten(
                 preis_messung=preis_messung,
                 heimlade_quellen=_laufend_quellen if schluessel == _laufend else frozenset(),
                 bloecke=_bloecke.get(schluessel),
+                verluste_summe=verluste_summen.get(schluessel),
             )
         )
     return fakten

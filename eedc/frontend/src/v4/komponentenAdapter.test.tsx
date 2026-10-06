@@ -351,6 +351,16 @@ describe('KOMPONENTEN_ADAPTER', () => {
     ])
   }
 
+  it('PV ④ Verlauf: die Wandlungsverluste-Zeile kommt aus der Übersicht (E4b) — nur mit Wert > 0', async () => {
+    zweiModule()
+    getUebersicht.mockResolvedValue({ anlagenleistung_kwp: 10, wandlungsverluste_kwh: 36, wandlungsverluste_prozent: 36 / 630 * 100 })
+    const [g] = await KOMPONENTEN_ADAPTER['pv-module'].fetch(1)
+    expect(g.verlauf?.zeile?.text).toBe('Wandlungsverluste 36,0 kWh (5,7 %)')
+    getUebersicht.mockResolvedValue({ anlagenleistung_kwp: 10, wandlungsverluste_kwh: null, wandlungsverluste_prozent: null })
+    const [ohne] = await KOMPONENTEN_ADAPTER['pv-module'].fetch(1)
+    expect(ohne.verlauf?.zeile).toBeNull()
+  })
+
   it('PV ④ Verlauf: Modul-Balken sind GEMESSEN (700/300), nicht kWp-verteilt (600/400) — A4/b2', async () => {
     zweiModule()
     getPVStringsGesamtlaufzeit.mockResolvedValue(

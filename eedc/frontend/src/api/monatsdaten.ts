@@ -131,6 +131,9 @@ export interface AggregierteMonatsdaten {
   bkw_kwh: number | null
   /** N-621: davon aus dem Anlagenwert verteilt (in bkw_kwh enthalten, kein eigenes Segment). */
   bkw_aus_anlagenwert_kwh: number | null
+  /** HA-Bauform E4b (N-588 — angezeigt, nicht bewertet): Wandlungsverluste des Monats + Prozent aus dem Layer. */
+  wandlungsverluste_kwh?: number | null
+  wandlungsverluste_prozent?: number | null
   // Sonstige Erzeuger (typ `sonstiges` + Kategorie `erzeuger`, z. B. BHKW).
   // NICHT in pv_erzeugung_kwh (die bleibt rein PV), aber Teil der
   // Netzpunkt-Bilanz, aus der direktverbrauch/eigenverbrauch gerechnet sind.

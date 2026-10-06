@@ -42,6 +42,7 @@ from backend.core.berechnungen import (
 from backend.core.monatswert_grund import monatswert_grund, monatswert_grund_text
 from backend.services.monats_fakten import MonatsFakt, lade_monats_fakten
 from backend.core.berechnungen.ergebnis import soll_erfuellung
+from backend.core.berechnungen.pv_verteilung import wandlungsverluste_prozent
 from backend.core.berechnungen.erzeuger_traeger import abgetretene_bkw_ids
 from backend.api.routes.aktueller_monat.kontext import MonatsKontext, lade_monats_kontext
 from backend.api.routes.aktueller_monat.schemas import (  # noqa: F401 — Re-Export fuer Tests und Aufrufer
@@ -720,6 +721,27 @@ async def get_aktueller_monat(
     return await _berechne_monat(anlage_id, jahr, monat, db)
 
 
+async def _wandlungsverluste_des_monats(
+    db: AsyncSession, anlage_id: int, jahr: int, monat: int, fakt,
+) -> tuple[Optional[float], Optional[float]]:
+    """Wandlungsverluste und ihr Bezug (Σ String-Zähler) des Monats — HA-Bauform E4b, N-588 (geführt, nicht bewertet).
+
+    Quelle ist der Kanal-Monat (W2-R3), unabhängig davon, welche der Quellen dieser Route die Mengen trägt. Mit
+    Monats-Fakt aus den Fakten (die den Kanal-Monat seit E4b auch für abgeschlossene Monate lesen); ohne Fakt — der
+    laufende Monat ohne Zeile, ein Monat nur aus HA — direkt aus ``kanal_monate`` für diesen einen Monat, und nur, wenn
+    die Anlage einen Anlagenzähler-Kanal hat. Ohne Anlagenzähler oder ohne Kanal-Deckung ``(None, None)``."""
+    if fakt is not None:
+        return fakt.erzeugung.wandlungsverluste_kwh, fakt.erzeugung.wandlungsverluste_bezug_kwh
+    from backend.services.kanal.bilanz_leser import hat_anlagenzaehler_kanal, kanal_monate
+
+    if not await hat_anlagenzaehler_kanal(db, anlage_id):
+        return None, None
+    summe = (await kanal_monate(db, anlage_id, von=(jahr, monat), bis=(jahr, monat))).get((jahr, monat))
+    if summe is None:
+        return None, None
+    return summe.wandlungsverluste_kwh, summe.wandlungsverluste_bezug_kwh
+
+
 async def _berechne_monat(
     anlage_id: int,
     jahr: Optional[int],
@@ -1144,6 +1166,8 @@ async def _berechne_monat(
     _soll_pv_tage = fenster.tage if soll_pv.anteilig is not None else None
     _soll_pv_tage_gesamt = fenster.tage_gesamt if soll_pv.anteilig is not None else None
     _soll = soll_erfuellung(pv, soll_pv.anteilig, _soll_pv_tage, _soll_pv_tage_gesamt, soll_pv.monat)
+    # HA-Bauform E4b: Wandlungsverluste — nur geführt und angezeigt (N-588), aus dem Kanal-Leser über die Fakten.
+    _verluste, _verluste_bezug = await _wandlungsverluste_des_monats(db, anlage_id, jahr, monat, monats_fakt)
     # ── Antwort ──
     return AktuellerMonatResponse(
         anlage_id=anlage.id,
@@ -1162,6 +1186,9 @@ async def _berechne_monat(
         eigenverbrauch_kwh=eigenverbrauch,
         direktverbrauch_kwh=direktverbrauch,
         gesamtverbrauch_kwh=gesamtverbrauch,
+        wandlungsverluste_kwh=_verluste,
+        wandlungsverluste_bezug_kwh=_verluste_bezug,
+        wandlungsverluste_prozent=wandlungsverluste_prozent(_verluste, _verluste_bezug),
         autarkie_prozent=autarkie,
         eigenverbrauch_quote_prozent=ev_quote,
         spez_ertrag=round(spez_ertrag, 1) if spez_ertrag is not None else None,

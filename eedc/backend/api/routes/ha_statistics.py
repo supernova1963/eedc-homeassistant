@@ -33,19 +33,18 @@ from backend.services.ha_statistics_service import (
     AlleMonateResponse,
     SensorMonatswert,
 )
-from backend.services.import_hauszaehler import warnung_monate_ohne_zaehlerwerte
+from backend.services.import_hauszaehler import warnung_monate_ohne_zaehlerwerte, warnung_pv_gesamt_ohne_zaehlerzeile
 from backend.services.monatswert_deckel import deckel_je_sensor
 from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
-from backend.core.berechnungen.pv_verteilung import PvModul, QUELLE_GEMESSEN, resolve_pv_je_modul
 from backend.services.pv_monatswerte import (
     bkw_ohne_eigenen_wert,
     eigene_bkw_erzeugung_kwh,
     lade_pv_je_monat,
     pv_summe_je_monat,
 )
-from backend.core.investition_kennwerte import get_pv_kwp
 from backend.services.provenance import ABGELEITET_KWP_ANTEIL
 from backend.services.provenance import (
+    remove_json_subkey_with_provenance,
     seed_provenance,
     write_json_subkey_with_provenance,
     write_with_provenance,
@@ -638,8 +637,9 @@ class ImportResultat(BaseModel):
     uebersprungen: int
     ueberschrieben: int
     fehler: list[str]
-    #: N-240: Sachverhalte, die kein Fehler sind, aber Folgen haben — heute genau
-    #: einer: Monate, in denen nur Gerätewerte entstanden (keine Zählerzeile).
+    #: N-240: Sachverhalte, die kein Fehler sind, aber Folgen haben — Monate, in denen nur
+    #: Gerätewerte entstanden (keine Zählerzeile), und seit HA-Bauform E4b Monate, deren
+    #: PV-Gesamtzähler mangels Zählerzeile nicht gespeichert wurde.
     #: Getrennt von `fehler`, weil der Lauf erfolgreich war: `erfolg` bleibt True.
     warnungen: list[str] = []
 
@@ -967,102 +967,57 @@ async def get_import_vorschau(
 # Import Execute Endpoint
 # =============================================================================
 
-async def _verteile_anlagen_pv(
-    db: AsyncSession, anlage_id: int, jahr: int, monat: int, pv_gesamt: float, *, ueberschreiben: bool,
-) -> bool:
-    """Schreibt den Anlagen-PV-Zähler eines Monats als Modulwerte (N-533).
+async def _entferne_eigene_zerlegung(db: AsyncSession, anlage_id: int, jahr: int, monat: int) -> int:
+    """Entfernt die Modulwerte eines Monats, die DIESER Import früher als Zerlegung des Anlagen-PV-Zählers
+    geschrieben hat (HA-Bauform E4b Teil A, Entscheid H-A2).
 
-    Dieselbe Regel wie der Monatsabschluss (`monatsabschluss/views.py`, `_mapped_or_distribute`)
-    und die Leseseite (`resolve_pv_je_modul`, ADR-002/P7): Module mit eigenem Messwert behalten
-    ihn, der Rest des Zählers geht nach kWp auf die Module ohne Messwert. Genau ein Empfänger
-    bekommt den Wert als Messung ohne Marke; ab zwei Empfängern trägt jeder Anteil
-    ``ABGELEITET_KWP_ANTEIL`` — der Daten-Checker klassifiziert den Monat dann als „verteilt“,
-    nicht als „fehlt“. Liefert True, wenn mindestens ein Modulwert geschrieben wurde.
+    Bis E4b verteilte der Sammelimport den Zähler auf die Module ohne eigenen Wert (N-533, ``_verteile_anlagen_pv``)
+    und speicherte ihn selbst nicht. Seit E4b steht er als Anlagenwert in der Zählerzeile — eine alte Zerlegung daneben
+    wäre derselbe Zähler ein zweites Mal: die Leseseite behält einen gespeicherten Wert MIT Marke als Zahl (#352,
+    ``resolve_pv_je_modul``), der Anlagenwert füllte nur noch, was übrig bleibt (gemessen: Ost/West 60/40 + BKW 4,5
+    ⇒ Monat 104,5 statt 100; ein Balkonkraftwerk ohne Wert behielt 0).
 
-    **N-611 — der Zähler misst alle PV-Quellen.** Rest = Zähler − Σ gemessene Module − Σ eigene
-    Werte der selbst tragenden Balkonkraftwerke, nie unter 0 (`eigene_bkw_erzeugung_kwh`, dieselbe
-    Zahl wie auf der Leseseite). Bis dahin landete der BKW-Wert als Anteil in den Modulwerten und
-    stand danach in `pv_kwh = Module + BKW` ein zweites Mal. Empfänger bleiben nur die Module:
-    ein BKW ohne eigenen Wert bekommt keinen Anteil (der Zählerwert selbst wird nicht gespeichert,
-    P7 — die Familie geht an HA-Bauform S1). **N-621 ändert diesen Weg nicht:** die Leseseite gibt
-    einem BKW ohne eigenen Wert seinen Anteil nur, wo ein Anlagenwert GESPEICHERT ist — nach diesem
-    Import gibt es keinen.
+    Entfernt wird nur, was BEIDES trägt: Schreiber ``ha_statistics_import`` UND Marke ``kwp_anteil``. Messwerte
+    (ohne Marke — auch die früheren Ein-Empfänger-Werte, die sich von einer Messung nicht unterscheiden lassen),
+    Handeingaben und Werte anderer Schreiber bleiben. Der Aufrufer ruft nur mit „überschreiben" (der Anwender hat
+    den Monat ausdrücklich neu angefordert). Liefert die Zahl der entfernten Werte.
     """
-    inv_result = await db.execute(
-        select(Investition).where(
+    zeilen = (await db.execute(
+        select(InvestitionMonatsdaten).join(Investition, Investition.id == InvestitionMonatsdaten.investition_id).where(
             and_(
                 Investition.anlage_id == anlage_id,
-                Investition.typ.in_(("pv-module", "balkonkraftwerk")),
-            )
-        )
-    )
-    # ADR-002/P11: erst der Zeitfilter, dann der Selektor — ein BKW, das in diesem Monat an
-    # Modul-Kinder abgetreten hat, steht schon in deren Werten und mindert den Zähler nicht.
-    aktive = erzeuger_traeger(
-        [inv for inv in inv_result.scalars().all() if inv.ist_aktiv_im_monat(jahr, monat)]
-    )
-    module = [inv for inv in aktive if inv.typ == "pv-module"]
-    if not module:
-        return False
-    imd_result = await db.execute(
-        select(InvestitionMonatsdaten).where(
-            and_(
-                InvestitionMonatsdaten.investition_id.in_([inv.id for inv in aktive]),
+                Investition.typ == "pv-module",
                 InvestitionMonatsdaten.jahr == jahr,
                 InvestitionMonatsdaten.monat == monat,
             )
         )
-    )
-    imd_map = {imd.investition_id: imd for imd in imd_result.scalars().all()}
-    bkw_eigen = eigene_bkw_erzeugung_kwh(
-        aktive, {inv_id: imd.verbrauch_daten for inv_id, imd in imd_map.items()},
-    )
-    # Was gemessen ist, sagt die P7-Auflösung — nicht die Rohspalte: ein gespeicherter
-    # Wert mit Zerlegungsmarke (#352) ist eine Lücke, die neu verteilt wird.
-    lokal = (await lade_pv_je_monat(db, anlage_id, module, jahr)).get((jahr, monat), {})
-
-    def _gemessen(inv_id: int) -> Optional[float]:
-        modulwert = lokal.get(inv_id)
-        if modulwert is None or modulwert.quelle != QUELLE_GEMESSEN:
-            return None
-        return modulwert.pv_erzeugung_kwh
-
-    pv_module = [PvModul(inv.id, get_pv_kwp(inv), _gemessen(inv.id)) for inv in module]
-    aufgeloest = resolve_pv_je_modul(aggregat_kwh=max(0.0, pv_gesamt - bkw_eigen), module=pv_module)
-    luecken = [inv for inv in module if _gemessen(inv.id) is None]
-    if not luecken:
-        return False
-    marke = ABGELEITET_KWP_ANTEIL if len(luecken) > 1 else None
-    geschrieben = False
-    for inv in luecken:
-        modulwert = aufgeloest[inv.id]
-        wert = round(modulwert.pv_erzeugung_kwh, 2)
-        imd = imd_map.get(inv.id)
-        if imd is None:
-            imd = InvestitionMonatsdaten(
-                investition_id=inv.id, jahr=jahr, monat=monat,
-                verbrauch_daten={"pv_erzeugung_kwh": wert},
-            )
-            db.add(imd)
-            await db.flush()
-            seed_provenance(
-                imd, source=_HA_STATS_SOURCE, writer=_HA_STATS_WRITER,
-                json_subkeys={"verbrauch_daten": ["pv_erzeugung_kwh"]},
-                abgeleitet_je_subkey={"pv_erzeugung_kwh": marke} if marke else None,
-            )
-            geschrieben = True
+    )).scalars().all()
+    entfernt = 0
+    for imd in zeilen:
+        eintrag = (imd.source_provenance or {}).get("verbrauch_daten.pv_erzeugung_kwh")
+        if not isinstance(eintrag, dict):
             continue
-        if imd.verbrauch_daten is None:
-            imd.verbrauch_daten = {}
-        vorhanden = imd.verbrauch_daten.get("pv_erzeugung_kwh")
-        if vorhanden is None or vorhanden == 0 or ueberschreiben:
-            res = await write_json_subkey_with_provenance(
-                db, imd, "verbrauch_daten", "pv_erzeugung_kwh", wert,
-                source=_HA_STATS_SOURCE, writer=_HA_STATS_WRITER, abgeleitet=marke,
-            )
-            if res.applied:
-                geschrieben = True
-    return geschrieben
+        if eintrag.get("writer") != _HA_STATS_WRITER or eintrag.get("abgeleitet") != ABGELEITET_KWP_ANTEIL:
+            continue
+        if await remove_json_subkey_with_provenance(
+            db, imd, "verbrauch_daten", "pv_erzeugung_kwh",
+            source=_HA_STATS_SOURCE, writer=_HA_STATS_WRITER,
+            decision_reason=(
+                "Zerlegung des Anlagen-PV-Zählers entfernt (HA-Bauform E4b) — der Zähler steht jetzt als Anlagenwert "
+                "in der Zählerzeile, die Leseseite verteilt ihn"
+            ),
+        ) is not None:
+            entfernt += 1
+    return entfernt
+
+
+def _hat_anlagenwert(vorbestand: Monatsdaten) -> bool:
+    """Trägt die Zählerzeile schon einen Anlagen-PV-Wert? (E4b Teil A — Vorbestands-Regel des Sammelimports.)
+
+    Liest die Rohspalte ``Monatsdaten.pv_erzeugung_kwh`` bewusst: die Frage handelt VOM gespeicherten Feld („steht
+    dort schon etwas, das ohne ‚überschreiben' bleiben muss?"), nicht von der Anlagen-PV — ein aufgelöster Wert
+    (P7) beantwortete sie nicht. Dieselbe Schwelle wie bei Einspeisung und Netzbezug (0,1 kWh)."""
+    return (vorbestand.pv_erzeugung_kwh or 0) > 0.1
 
 
 @router.post("/import/{anlage_id}", response_model=ImportResultat)
@@ -1105,6 +1060,8 @@ async def import_ha_statistics(
     # N-240: Monate, die nur Gerätewerte bekommen haben — gesammelt statt je
     # Monat gemeldet, sonst stünde derselbe Satz zwölfmal im Ergebnis.
     monate_ohne_zaehlerwerte: list[tuple[int, int]] = []
+    # E4b Teil A, Entscheid H-A1: Monate, deren PV-Gesamtzähler mangels Zählerzeile nicht gespeichert wurde.
+    pv_ohne_zeile_monate: list[tuple[int, int]] = []
 
     for monat_req in request.monate:
         jahr = monat_req.jahr
@@ -1147,6 +1104,13 @@ async def import_ha_statistics(
                 einspeisung = sensor_values.get(basis_mapping["einspeisung"]["sensor_id"])
             if import_netzbezug and basis_mapping.get("netzbezug", {}).get("sensor_id"):
                 netzbezug = sensor_values.get(basis_mapping["netzbezug"]["sensor_id"])
+            # HA-Bauform E4b Teil A: der Anlagen-PV-Zähler (`basis.pv_gesamt`) gehört in die Zählerzeile — als
+            # Anlagenwert `Monatsdaten.pv_erzeugung_kwh`, genau wie „Aus HA laden" ihn seit N-622 über das Formular
+            # speichert. Er ist dort EINGANG der P7-Auflösung (`resolve_pv_je_modul`): Geräte mit eigenem Wert
+            # behalten ihn, der Rest geht nach kWp auf Module UND Balkonkraftwerke ohne eigenen Wert (N-611/N-621).
+            pv_gesamt = None
+            if _basis_aktiv("pv_gesamt") and basis_mapping.get("pv_gesamt", {}).get("sensor_id"):
+                pv_gesamt = sensor_values.get(basis_mapping["pv_gesamt"]["sensor_id"])
 
             # Monatsdaten laden oder erstellen — nur wenn Basis-Felder importiert
             # werden UND tatsächlich ein Zählerwert vorliegt.
@@ -1162,7 +1126,10 @@ async def import_ha_statistics(
                 (import_einspeisung and einspeisung is not None)
                 or (import_netzbezug and netzbezug is not None)
             )
-            if hat_zaehlerwert:
+            # E4b Teil A: der Anlagenwert allein legt keine Zeile an (er hat keine Einspeisung und keinen Netzbezug,
+            # N-240) — er wird aber in eine VORHANDENE Zeile geschrieben, auch wenn nur er ausgewählt ist.
+            md = None
+            if hat_zaehlerwert or pv_gesamt is not None:
                 result = await db.execute(
                     select(Monatsdaten).where(
                         and_(
@@ -1173,6 +1140,8 @@ async def import_ha_statistics(
                     )
                 )
                 md = result.scalar_one_or_none()
+            pv_ohne_zeile = pv_gesamt is not None and md is None and not hat_zaehlerwert
+            if hat_zaehlerwert or md is not None:
 
                 if md is None:
                     # Neu erstellen — fresh row, kein Hierarchie-Konflikt möglich
@@ -1182,6 +1151,7 @@ async def import_ha_statistics(
                         monat=monat,
                         einspeisung_kwh=einspeisung if import_einspeisung else 0,
                         netzbezug_kwh=netzbezug if import_netzbezug else 0,
+                        pv_erzeugung_kwh=pv_gesamt,
                         datenquelle="ha_statistics"
                     )
                     db.add(md)
@@ -1190,7 +1160,7 @@ async def import_ha_statistics(
                         f for f in ("einspeisung_kwh", "netzbezug_kwh")
                         if (f == "einspeisung_kwh" and import_einspeisung)
                         or (f == "netzbezug_kwh" and import_netzbezug)
-                    ]
+                    ] + (["pv_erzeugung_kwh"] if pv_gesamt is not None else [])
                     if fresh_fields:
                         seed_provenance(
                             md, source=_HA_STATS_SOURCE, writer=_HA_STATS_WRITER,
@@ -1223,8 +1193,26 @@ async def import_ha_statistics(
                             if result.applied:
                                 basis_importiert = True
 
+                    # E4b Teil A: ein gespeicherter Anlagenwert bleibt ohne „überschreiben" stehen — dieselbe
+                    # Vorbestands-Regel wie Einspeisung und Netzbezug darüber (Schwelle 0,1 kWh).
+                    if pv_gesamt is not None:
+                        if not _hat_anlagenwert(md) or request.ueberschreiben:
+                            result = await write_with_provenance(
+                                db, md, "pv_erzeugung_kwh", pv_gesamt,
+                                source=_HA_STATS_SOURCE, writer=_HA_STATS_WRITER,
+                            )
+                            if result.applied:
+                                basis_importiert = True
+
                     if basis_importiert:
                         md.datenquelle = "ha_statistics"
+
+            # E4b Teil A, Entscheid H-A2: mit „überschreiben" fällt die frühere Zerlegung desselben Zählers weg — der
+            # Anlagenwert steht jetzt in der Zeile, die Leseseite verteilt ihn (sonst bliebe ein Altbestand-Monat wie
+            # er war: Module mit dem ganzen Zähler, ein BKW ohne Wert bei 0, ein BKW mit Wert doppelt).
+            if request.ueberschreiben and pv_gesamt is not None and md is not None and _hat_anlagenwert(md):
+                if await _entferne_eigene_zerlegung(db, anlage_id, jahr, monat):
+                    basis_importiert = True
 
             # InvestitionMonatsdaten verarbeiten
             inv_mapping = sensor_mapping.get("investitionen", {})
@@ -1331,19 +1319,11 @@ async def import_ha_statistics(
                             if result.applied:
                                 inv_importiert = True
 
-            # N-533: der Anlagen-PV-Zähler (`basis.pv_gesamt`) — bis 19.09.2026 stand er
-            # in der Vorschau und wurde beim Import nirgendwohin geschrieben. Jetzt wie der
-            # Monatsabschluss und der Tagespfad: nach kWp auf die aktiven PV-Module ohne
-            # eigenen Messwert verteilen, als Zerlegung gekennzeichnet (P7: Messwerte je
-            # Modul haben Vorrang, der Zähler füllt nur die Lücken).
-            pv_gesamt = None
-            if _basis_aktiv("pv_gesamt") and basis_mapping.get("pv_gesamt", {}).get("sensor_id"):
-                pv_gesamt = sensor_values.get(basis_mapping["pv_gesamt"]["sensor_id"])
-            if pv_gesamt is not None:
-                if await _verteile_anlagen_pv(
-                    db, anlage_id, jahr, monat, pv_gesamt, ueberschreiben=request.ueberschreiben,
-                ):
-                    inv_importiert = True
+            # E4b Teil A, Entscheid H-A1: ohne Zählerzeile hat der Anlagenwert keinen Ort (Einspeisung/Netzbezug sind
+            # Pflicht, eine 0/0-Zeile wäre erfunden — N-240). Er wird NICHT gespeichert und nicht auf Module verteilt
+            # (bis E4b: `_verteile_anlagen_pv`); der Monat steht in der Warnung.
+            if pv_ohne_zeile:
+                pv_ohne_zeile_monate.append((jahr, monat))
 
             # N-240: Gerätewerte angekommen, aber keine Zählerzeile für den Monat
             # — der Zustand aus #349, hier auf dem HA-Weg. Geprüft wird die
@@ -1382,12 +1362,15 @@ async def import_ha_statistics(
         db=db,
     )
 
-    warnung = warnung_monate_ohne_zaehlerwerte(monate_ohne_zaehlerwerte)
+    warnungen = [w for w in (
+        warnung_monate_ohne_zaehlerwerte(monate_ohne_zaehlerwerte),
+        warnung_pv_gesamt_ohne_zaehlerzeile(pv_ohne_zeile_monate),
+    ) if w]
     return ImportResultat(
         erfolg=len(fehler) == 0,
         importiert=importiert,
         uebersprungen=uebersprungen,
         ueberschrieben=ueberschrieben,
         fehler=fehler,
-        warnungen=[warnung] if warnung else [],
+        warnungen=warnungen,
     )

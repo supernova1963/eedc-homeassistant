@@ -349,6 +349,17 @@ def soll_monat(form: Form, tage: tuple[date, ...], *, mit_anlagenwert: bool = Tr
     return Soll(max(g_monat, gemessen), je, frozenset(ohne))
 
 
+def soll_wandlungsverluste(form: Form, tage: tuple[date, ...]) -> Optional[float]:
+    """HA-Bauform E4b: ``max(0, Σ Geräte − Anlagenzähler)`` des Zeitraums (W2-R3; ``None`` ohne Anlagenzähler) —
+    unabhängig nachgerechnet: Σ der Geräte nach der Regel (``soll_monat``) gegen den Zähler über dieselben Zeilen."""
+    if form.gesamt is None:
+        return None
+    von, bis = _tagesfenster_dt(tage[0])[0], _tagesfenster_dt(tage[-1])[1]
+    az = (zaehler_delta(form, "sensor.pv_gesamt", von, bis) if "sensor.pv_gesamt" in form.abweichung
+          else tagesmenge(form.gesamt) * len(tage))
+    return max(0.0, sum(soll_monat(form, tage).je_geraet.values()) - az)
+
+
 def soll_einspeisung(form: Form, n_tage: int) -> float:
     if form.w2 and "sensor.einsp" in form.abweichung and n_tage in (30, 3):
         tage = TAGE_JUNI if n_tage == 30 else TAGE_JULI
@@ -812,7 +823,9 @@ async def miss_fakten(db: AsyncSession, anlage_id: int, ids: dict[str, int], mon
         je[rev.get(str(i), str(i))] = _r((je.get(rev.get(str(i), str(i))) or 0.0) + v)
     return {"pv": _r(e.pv_kwh), "pv_module": _r(e.pv_module_kwh), "bkw": _r(e.bkw_kwh),
             "bkw_anteil": _r(e.bkw_aus_anlagenwert_kwh), "vollstaendig": e.pv_vollstaendig,
-            "je_geraet": je, "ev": _r(fk[0].kennzahlen.eigenverbrauch_kwh)}
+            "je_geraet": je, "ev": _r(fk[0].kennzahlen.eigenverbrauch_kwh),
+            # HA-Bauform E4b (N-588, nur geführt): Wandlungsverluste aus dem Kanal-Leser.
+            "wandlungsverluste": _r(e.wandlungsverluste_kwh)}
 
 
 async def miss_aggregiert(db: AsyncSession, anlage_id: int, monat: int, *, voll: bool) -> Optional[dict]:

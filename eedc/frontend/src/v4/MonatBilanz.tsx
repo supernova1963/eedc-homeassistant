@@ -21,6 +21,7 @@ import { angezeigtesDelta } from '../lib/werte'
 import { Table, TableHead, TableBody } from '../components/ui/Table'
 import { ZELLE, KOPF_ZELLE } from '../components/ui/tabelleMasse'
 import { SimpleTooltip } from '../components/ui/FormelTooltip'
+import { wandlungsverlusteUnterzeile, type Unterzeile } from '../lib/wandlungsverluste'
 import { VerteilungsBalken, GeraeteHinweis, GrundlastSollIstKachel, MonatsprognoseKachel, HerkunftZeile } from '../components/blocks'
 import { unvollstaendigHerkunft } from '../lib/prognoseHinweise'
 import { zeigeMonatsprognose } from '../lib/sollErfuellung'
@@ -345,6 +346,19 @@ interface BilanzRow {
   besserVm?: boolean
   besserVj?: boolean
   besserGm?: boolean
+  /** Unterzeile am Label (Bauform `KomponentenFinanzTabelle`), mit Hinweistext als Tooltip — heute nur die
+   *  Wandlungsverluste unter „PV-Erzeugung" (HA-Bauform E4b). */
+  unterzeile?: Unterzeile | null
+}
+
+/** Die Unterzeile einer Bilanz-Zeile — eine Bauform für Monat und Jahr, mobil und Tabelle. */
+export function BilanzUnterzeile({ unterzeile }: { unterzeile?: Unterzeile | null }) {
+  if (!unterzeile) return null
+  return (
+    <span className="block text-xs text-gray-400 dark:text-gray-500">
+      <SimpleTooltip text={unterzeile.hinweis}>{unterzeile.text}</SimpleTooltip>
+    </span>
+  )
 }
 
 // Park-IDs des Bilanz-Blocks → `./bilanzParkIds` (reines Modul, kein react-refresh-Treffer).
@@ -363,7 +377,8 @@ export function MonatBilanz({
   const evBesser = (vglAutarkie: number | null | undefined): boolean | undefined =>
     d.autarkie_prozent != null && vglAutarkie != null ? d.autarkie_prozent >= vglAutarkie : undefined
   const rows: BilanzRow[] = [
-    { label: 'PV-Erzeugung',    ist: d.pv_erzeugung_kwh,   vm: vm?.pv_erzeugung_kwh,   vj: vj?.pv_erzeugung_kwh,   gm: glMonStats?.pv ?? null,       unit: 'kWh' },
+    { label: 'PV-Erzeugung',    ist: d.pv_erzeugung_kwh,   vm: vm?.pv_erzeugung_kwh,   vj: vj?.pv_erzeugung_kwh,   gm: glMonStats?.pv ?? null,       unit: 'kWh',
+      unterzeile: wandlungsverlusteUnterzeile(d) },
     { label: 'Eigenverbrauch',  ist: d.eigenverbrauch_kwh,  vm: vm?.eigenverbrauch_kwh, vj: vj?.eigenverbrauch_kwh, gm: glMonStats?.ev ?? null,       unit: 'kWh',
       besserVm: evBesser(vm?.autarkie_prozent), besserVj: evBesser(vj?.autarkie_prozent), besserGm: evBesser(glMonStats?.autarkie) },
     // Direktverbrauch = PV direkt (ohne Speicher), Teilmenge des Eigenverbrauchs;
@@ -424,6 +439,7 @@ export function MonatBilanz({
                   {fmt(row.ist, dec(row))} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">{row.unit}</span>
                 </span>
               </div>
+              <BilanzUnterzeile unterzeile={row.unterzeile} />
               <div className="flex flex-wrap gap-1.5 mt-1">
                 <VglChip prefix="VM" lang="Vormonat" ist={row.ist} val={row.vm} unit={row.unit} dec={dec(row)} inv={row.inv} besser={row.besserVm} />
                 <VglChip prefix="VJ" lang="Vorjahr" ist={row.ist} val={row.vj} unit={row.unit} dec={dec(row)} inv={row.inv} besser={row.besserVj} />
@@ -452,7 +468,10 @@ export function MonatBilanz({
               // Regel T); ein zusätzlicher `border-b` kollidiert damit (Dark-Mode-
               // Linie nur unter Zeile 1, gemessen 2026-07-11).
               <tr key={row.label}>
-                <td className={`${ZELLE} text-gray-600 dark:text-gray-400`}>{row.label}</td>
+                <td className={`${ZELLE} text-gray-600 dark:text-gray-400`}>
+                  {row.label}
+                  <BilanzUnterzeile unterzeile={row.unterzeile} />
+                </td>
                 {/* IST: Zahl rechtsbündig + Einheit als eigene linksbündige Spalte. */}
                 <td className={`${ZELLE} text-right font-semibold text-gray-900 dark:text-white tabular-nums`}>
                   {fmt(row.ist, dec(row))}

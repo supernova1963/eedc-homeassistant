@@ -6,11 +6,17 @@ Wer nur einen gemeinsamen PV-Zähler in HA hat (Kanon „Über den Anlagen-Zähl
 abgedeckt"), bekam Monate ohne PV: der Daten-Checker meldete „PV-Erzeugung fehlt" und
 riet zu genau diesem Import. Bei Frank85 waren es 40 von 40 Monaten.
 
-Die Regel folgt dem Monatsabschluss und der Leseseite (ADR-002/P7, `resolve_pv_je_modul`):
-Module mit eigenem Messwert behalten ihn, der Rest des Zählers geht nach kWp auf die
-Module ohne Messwert; ab zwei Empfängern als Zerlegung markiert (`kwp_anteil`), bei genau
-einem Empfänger als Messung. Und in der Vorschau ist ein Feld mit HA-Wert ohne lokalen
-Wert ein Import — kein „stimmt überein".
+Die Regel folgt der Leseseite (ADR-002/P7, `resolve_pv_je_modul`): Module mit eigenem
+Messwert behalten ihn, der Rest des Zählers geht nach kWp auf die Quellen ohne Messwert.
+Und in der Vorschau ist ein Feld mit HA-Wert ohne lokalen Wert ein Import — kein „stimmt
+überein".
+
+⚑ **Seit HA-Bauform E4b Teil A (06.10.2026) speichert der Import den Zähler als Anlagenwert**
+(`Monatsdaten.pv_erzeugung_kwh`) — wie „Aus HA laden" seit N-622 — statt ihn selbst auf die
+Module zu verteilen. Die Auflösung geschieht beim Lesen (Monats-Fakten): dieselben Zahlen je
+Modul wie vorher, dazu bekommt jetzt auch ein Balkonkraftwerk ohne eigenen Wert seinen Anteil
+(N-621; vorher 0 — Ursache SAMMELIMPORT der PV-Matrix). Die Proben messen deshalb die
+aufgelöste Zahl (`_aufgeloest`), nicht mehr die geschriebenen Gerätezeilen.
 """
 
 from __future__ import annotations
@@ -122,6 +128,21 @@ async def _modulwerte(db, invs):
     return out
 
 
+async def _aufgeloest(db, anlage_id, invs) -> dict[str, tuple[float, str]]:
+    """Die PV je Modul, wie die Monats-Fakten sie auflösen (P7) — `(kWh auf 0,01, Quelle)`."""
+    from backend.services.monats_fakten import lade_monats_fakten
+    fakt = (await lade_monats_fakten(db, anlage_id, von=(JAHR, MONAT), bis=(JAHR, MONAT)))[0]
+    namen = {inv.id: inv.bezeichnung for inv in invs}
+    return {namen[i]: (round(w.pv_erzeugung_kwh, 2), w.quelle)
+            for i, w in fakt.erzeugung.pv_je_modul.items() if i in namen}
+
+
+async def _anlagenwert(db, anlage_id):
+    md = (await db.execute(select(Monatsdaten).where(Monatsdaten.anlage_id == anlage_id))).scalar_one()
+    await db.refresh(md)
+    return md.pv_erzeugung_kwh
+
+
 HA = {"sensor.einsp": 1.2, "sensor.netz": 345.1, "sensor.pv_gesamt": 100.0}
 
 
@@ -140,7 +161,10 @@ async def test_vorschau_ein_fehlender_pv_wert_ist_ein_import_kein_stimmt_ueberei
     assert vorschau.anzahl_importieren == 1 and vorschau.anzahl_ueberspringen == 0
 
 
-async def test_import_verteilt_den_anlagenzaehler_nach_kwp_als_zerlegung(db, monkeypatch):
+async def test_import_speichert_den_anlagenzaehler_und_die_leseseite_verteilt_nach_kwp(db, monkeypatch):
+    """E4b Teil A: der Zähler steht als Anlagenwert in der Zählerzeile; die Module bekommen beim Lesen ihren
+    kWp-Anteil (60/40, verteilt). Der Import schreibt keine Gerätezeile mehr — eine zweite Ablage desselben
+    Zählers neben dem Anlagenwert gibt es damit nicht (vorher: Modulwerte, KEIN Anlagenwert)."""
     a, invs = await _anlage(db, module=[("Ost", 6.0, None), ("West", 4.0, None)])
     await _frank_monat(db, a.id)
     _patch_stats(monkeypatch, HA)
@@ -148,10 +172,9 @@ async def test_import_verteilt_den_anlagenzaehler_nach_kwp_als_zerlegung(db, mon
     res = await import_ha_statistics(a.id, ImportRequest(monate=[{"jahr": JAHR, "monat": MONAT}]), db)
 
     assert res.importiert == 1 and res.fehler == []
-    werte = await _modulwerte(db, invs)
-    assert werte == {"Ost": (60.0, ABGELEITET_KWP_ANTEIL), "West": (40.0, ABGELEITET_KWP_ANTEIL)}
-    md = (await db.execute(select(Monatsdaten).where(Monatsdaten.anlage_id == a.id))).scalar_one()
-    assert md.pv_erzeugung_kwh is None, "kein zweites Aggregat neben den Modulwerten"
+    assert await _anlagenwert(db, a.id) == 100.0
+    assert await _modulwerte(db, invs) == {"Ost": (None, None), "West": (None, None)}
+    assert await _aufgeloest(db, a.id, invs) == {"Ost": (60.0, "verteilt"), "West": (40.0, "verteilt")}
 
 
 async def test_nach_dem_import_stimmt_die_vorschau_ueberein(db, monkeypatch):
@@ -177,17 +200,21 @@ async def test_ein_modul_mit_eigenem_sensor_behaelt_seinen_messwert(db, monkeypa
 
     werte = await _modulwerte(db, invs)
     assert werte["Ost"] == (70.0, None)
-    assert werte["West"] == (30.0, None), "ein einziger Empfänger des Rests ist eine Messung, keine Zerlegung"
+    # E4b: West bekommt den Rest beim Lesen (vorher als Gerätezeile ohne Marke — eine „Messung", die keine war).
+    assert werte["West"] == (None, None)
+    assert await _aufgeloest(db, a.id, invs) == {"Ost": (70.0, "gemessen"), "West": (30.0, "verteilt")}
 
 
-async def test_ein_einzelnes_modul_bekommt_den_zaehler_als_messung(db, monkeypatch):
+async def test_ein_einzelnes_modul_bekommt_den_zaehler_beim_lesen(db, monkeypatch):
     a, invs = await _anlage(db, module=[("Dach", 10.0, None)])
     await _frank_monat(db, a.id)
     _patch_stats(monkeypatch, HA)
 
     await import_ha_statistics(a.id, ImportRequest(monate=[{"jahr": JAHR, "monat": MONAT}]), db)
 
-    assert (await _modulwerte(db, invs))["Dach"] == (100.0, None)
+    assert (await _modulwerte(db, invs))["Dach"] == (None, None)
+    assert (await _aufgeloest(db, a.id, invs))["Dach"][0] == 100.0
+    assert await _anlagenwert(db, a.id) == 100.0
 
 
 async def test_die_feldauswahl_kann_den_anlagenzaehler_ausschliessen(db, monkeypatch):
@@ -200,6 +227,7 @@ async def test_die_feldauswahl_kann_den_anlagenzaehler_ausschliessen(db, monkeyp
     )
 
     assert (await _modulwerte(db, invs)) == {"Ost": (None, None), "West": (None, None)}
+    assert await _anlagenwert(db, a.id) is None
 
 
 async def test_gegenprobe_ohne_zugeordneten_anlagenzaehler_bleibt_alles_wie_bisher(db, monkeypatch):
@@ -249,7 +277,8 @@ async def test_n611_ein_string_und_bkw_mit_sensor_der_zaehler_fuellt_nur_den_res
 
     await import_ha_statistics(a.id, ImportRequest(monate=[{"jahr": JAHR, "monat": MONAT}]), db)
 
-    assert await _modulwerte(db, invs) == {"Ost": (55.0, None), "West": (40.5, None)}
+    assert await _modulwerte(db, invs) == {"Ost": (55.0, None), "West": (None, None)}
+    assert await _aufgeloest(db, a.id, invs) == {"Ost": (55.0, "gemessen"), "West": (40.5, "verteilt")}
     assert await _monat_pv(db, a.id) == 100.0
 
 
@@ -262,12 +291,16 @@ async def test_n611_keine_strings_und_bkw_mit_sensor(db, monkeypatch):
 
     await import_ha_statistics(a.id, ImportRequest(monate=[{"jahr": JAHR, "monat": MONAT}]), db)
 
-    assert await _modulwerte(db, invs) == {"Ost": (57.3, ABGELEITET_KWP_ANTEIL), "West": (38.2, ABGELEITET_KWP_ANTEIL)}
+    assert await _aufgeloest(db, a.id, invs) == {"Ost": (57.3, "verteilt"), "West": (38.2, "verteilt")}
     assert await _monat_pv(db, a.id) == 100.0
 
 
-async def test_n611_ein_bkw_ohne_wert_mindert_den_rest_nicht(db, monkeypatch):
-    """F6a: das BKW hat keinen Sensor ⇒ die Module tragen den ganzen Zähler (kein Anteil fürs BKW, S1)."""
+async def test_n611_ein_bkw_ohne_wert_bekommt_seinen_anteil(db, monkeypatch):
+    """F6a: das BKW hat keinen Sensor. Bis E4b trugen die Module den ganzen Zähler (60/40) und das BKW bekam 0 —
+    der Import speicherte keinen Anlagenwert, und N-621 gibt den Anteil nur, wo einer gespeichert ist (die Lücke
+    „HA-Bauform S1"). Jetzt: 100 nach kWp auf Ost 6 · West 4 · BKW 0,8 ⇒ 55,56 / 37,04 / 7,41; der Monat bleibt 100."""
+    from backend.services.monats_fakten import lade_monats_fakten
+
     a, invs = await _anlage(db, module=[("Ost", 6.0, None), ("West", 4.0, None)])
     await _mit_bkw(db, a, sensor=None)
     await _frank_monat(db, a.id)
@@ -275,7 +308,9 @@ async def test_n611_ein_bkw_ohne_wert_mindert_den_rest_nicht(db, monkeypatch):
 
     await import_ha_statistics(a.id, ImportRequest(monate=[{"jahr": JAHR, "monat": MONAT}]), db)
 
-    assert await _modulwerte(db, invs) == {"Ost": (60.0, ABGELEITET_KWP_ANTEIL), "West": (40.0, ABGELEITET_KWP_ANTEIL)}
+    assert await _aufgeloest(db, a.id, invs) == {"Ost": (55.56, "verteilt"), "West": (37.04, "verteilt")}
+    fakt = (await lade_monats_fakten(db, a.id, von=(JAHR, MONAT), bis=(JAHR, MONAT)))[0]
+    assert fakt.erzeugung.bkw_aus_anlagenwert_kwh == pytest.approx(100.0 * 0.8 / 10.8)
     assert await _monat_pv(db, a.id) == 100.0
 
 
@@ -331,7 +366,8 @@ async def _bestand(db, invs, bkw, werte: dict[str, tuple[float, str | None]]):
 
 async def test_n611_alter_bestand_auf_zwei_module_verteilt_heilt_beim_erneuten_import(db, monkeypatch):
     """Vor N-611 verteilt: Ost/West 60/40 (markiert) + BKW 4,5 ⇒ Monat 104,5. Der erneute Import aus der
-    Oberfläche (sie schickt „überschreiben") verteilt 95,5 neu ⇒ 57,3 / 38,2, Monat 100."""
+    Oberfläche (sie schickt „überschreiben") speichert den Anlagenwert 100; die markierten Zeilen sind Lücken, die
+    Leseseite füllt sie mit dem Rest 95,5 ⇒ 57,3 / 38,2, Monat 100 (E4b: die Zeilen selbst bleiben stehen)."""
     a, invs = await _anlage(db, module=[("Ost", 6.0, None), ("West", 4.0, None)])
     bkw = await _mit_bkw(db, a, sensor="sensor.pv_balkon")
     await _frank_monat(db, a.id)
@@ -343,7 +379,7 @@ async def test_n611_alter_bestand_auf_zwei_module_verteilt_heilt_beim_erneuten_i
         a.id, ImportRequest(monate=[{"jahr": JAHR, "monat": MONAT}], ueberschreiben=True), db,
     )
 
-    assert await _modulwerte(db, invs) == {"Ost": (57.3, ABGELEITET_KWP_ANTEIL), "West": (38.2, ABGELEITET_KWP_ANTEIL)}
+    assert await _aufgeloest(db, a.id, invs) == {"Ost": (57.3, "verteilt"), "West": (38.2, "verteilt")}
     assert await _monat_pv(db, a.id) == 100.0
 
 
@@ -382,3 +418,85 @@ async def test_n611_ein_unvollstaendiger_monat_bleibt_in_der_vorschau_fehlt_loka
     assert m.aktion == "importieren", m.grund
     assert PV_LABEL in m.grund
     assert m.vorhandene_werte[PV_LABEL] is None
+
+
+# ── HA-Bauform E4b Teil A: Entscheide H-A1 (kein Ort ohne Zählerzeile) und H-A2 (alte Zerlegung fällt weg) ─────
+
+
+async def _zeile(db, inv, kwh, *, writer: str, marke: str | None):
+    """Eine Modulzeile mit Herkunft — wie sie ein früherer Schreiber hinterlassen hat."""
+    quelle = {"monatsdaten_form": "manual:form", "ha_statistics_import": "external:ha_statistics"}.get(writer, writer)
+    eintrag = {"source": quelle, "writer": writer, "at": "2026-01-01T00:00:00Z", **({"abgeleitet": marke} if marke else {})}
+    db.add(InvestitionMonatsdaten(investition_id=inv.id, jahr=JAHR, monat=MONAT,
+                                  verbrauch_daten={"pv_erzeugung_kwh": kwh},
+                                  source_provenance={"verbrauch_daten.pv_erzeugung_kwh": eintrag}))
+    await db.flush()
+
+
+async def test_e4b_ohne_zaehlerzeile_wird_der_gesamtzaehler_nicht_gespeichert_und_genannt(db, monkeypatch):
+    """H-A1: nur „PV Erzeugung Gesamt" ausgewählt, der Monat hat keine Zählerzeile ⇒ keine Zeile (N-240: keine
+    erfundene 0/0), keine Verteilung auf Module (bis E4b: `_verteile_anlagen_pv`), und die Warnung nennt den Monat."""
+    a, invs = await _anlage(db, module=[("Ost", 6.0, None), ("West", 4.0, None)])
+    _patch_stats(monkeypatch, HA)
+
+    res = await import_ha_statistics(
+        a.id, ImportRequest(monate=[{"jahr": JAHR, "monat": MONAT, "basis_felder": [PV_LABEL]}]), db,
+    )
+
+    assert (await db.execute(select(Monatsdaten).where(Monatsdaten.anlage_id == a.id))).scalar_one_or_none() is None
+    assert await _modulwerte(db, invs) == {"Ost": (None, None), "West": (None, None)}
+    assert res.erfolg and res.importiert == 0 and res.uebersprungen == 1
+    assert res.warnungen == [
+        "Monat 2023-05: PV-Gesamtzähler nicht gespeichert — der Monat hat keine Zählerzeile (Einspeisung/Netzbezug); "
+        "erst Einspeisung und Netzbezug importieren oder den Monat anlegen"
+    ]
+
+
+async def test_e4b_nur_der_gesamtzaehler_ausgewaehlt_geht_in_eine_vorhandene_zeile(db, monkeypatch):
+    """Gegenstück zu H-A1: gibt es die Zeile schon, landet der Zähler dort, auch wenn nur er ausgewählt ist."""
+    a, _ = await _anlage(db, module=[("Ost", 6.0, None), ("West", 4.0, None)])
+    await _frank_monat(db, a.id)
+    _patch_stats(monkeypatch, HA)
+
+    res = await import_ha_statistics(
+        a.id, ImportRequest(monate=[{"jahr": JAHR, "monat": MONAT, "basis_felder": [PV_LABEL]}]), db,
+    )
+
+    assert await _anlagenwert(db, a.id) == 100.0
+    assert res.importiert == 1 and res.warnungen == []
+
+
+async def test_e4b_ueberschreiben_entfernt_nur_die_eigene_zerlegung(db, monkeypatch):
+    """H-A2: West trägt eine frühere Zerlegung DIESES Imports (Schreiber `ha_statistics_import` + `kwp_anteil`) — sie
+    fällt mit „überschreiben" weg. Ost trägt eine Zerlegung eines ANDEREN Schreibers (Portal, ebenfalls `kwp_anteil`) —
+    sie bleibt. Ohne „überschreiben" bleibt alles."""
+    a, invs = await _anlage(db, module=[("Ost", 6.0, None), ("West", 4.0, None)])
+    await _frank_monat(db, a.id)
+    await _zeile(db, invs[0], 60.0, writer="portal_apply:x", marke=ABGELEITET_KWP_ANTEIL)
+    await _zeile(db, invs[1], 40.0, writer="ha_statistics_import", marke=ABGELEITET_KWP_ANTEIL)
+    _patch_stats(monkeypatch, {**HA, "sensor.pv_gesamt": 90.0})
+
+    await import_ha_statistics(a.id, ImportRequest(monate=[{"jahr": JAHR, "monat": MONAT}]), db)
+    assert await _modulwerte(db, invs) == {"Ost": (60.0, ABGELEITET_KWP_ANTEIL), "West": (40.0, ABGELEITET_KWP_ANTEIL)}
+
+    await import_ha_statistics(a.id, ImportRequest(monate=[{"jahr": JAHR, "monat": MONAT}], ueberschreiben=True), db)
+    assert await _modulwerte(db, invs) == {"Ost": (60.0, ABGELEITET_KWP_ANTEIL), "West": (None, None)}
+    assert await _anlagenwert(db, a.id) == 90.0
+    # Ost behält seine 60 (als Zahl, #352), West bekommt den Rest 30.
+    assert await _aufgeloest(db, a.id, invs) == {"Ost": (60.0, "verteilt"), "West": (30.0, "verteilt")}
+
+
+async def test_e4b_ueberschreiben_laesst_eine_handeingabe_stehen(db, monkeypatch):
+    """H-A2: eine Handeingabe (Formular, ohne Marke) ist eine Messung des Anwenders und bleibt — nur die eigene
+    Zerlegung des Imports daneben fällt weg; die Leseseite gibt West den Rest 100 − 70."""
+    a, invs = await _anlage(db, module=[("Ost", 6.0, None), ("West", 4.0, None)])
+    await _frank_monat(db, a.id)
+    await _zeile(db, invs[0], 70.0, writer="monatsdaten_form", marke=None)
+    await _zeile(db, invs[1], 40.0, writer="ha_statistics_import", marke=ABGELEITET_KWP_ANTEIL)
+    _patch_stats(monkeypatch, HA)
+
+    await import_ha_statistics(a.id, ImportRequest(monate=[{"jahr": JAHR, "monat": MONAT}], ueberschreiben=True), db)
+
+    assert await _modulwerte(db, invs) == {"Ost": (70.0, None), "West": (None, None)}
+    assert await _aufgeloest(db, a.id, invs) == {"Ost": (70.0, "gemessen"), "West": (30.0, "verteilt")}
+    assert await _monat_pv(db, a.id) == 100.0
