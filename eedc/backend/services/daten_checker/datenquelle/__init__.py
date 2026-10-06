@@ -15,6 +15,7 @@ from .klima import KlimaChecks
 from .connector import ConnectorChecks
 from .zeitzone import ZeitzoneChecks
 from .ruecksprung import RuecksprungChecks
+from .ha_sprung import HaZaehlersprungChecks
 
 
 class DatenquelleChecks(
@@ -25,6 +26,7 @@ class DatenquelleChecks(
     ConnectorChecks,
     ZeitzoneChecks,
     RuecksprungChecks,
+    HaZaehlersprungChecks,
 ):
     """Prüfungen zu Quellen-Konflikten und HA-LTS-Datenquellen-Pfad."""
 

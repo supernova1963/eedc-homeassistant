@@ -24,6 +24,7 @@ import pytest
 from sqlalchemy import delete, select
 
 from backend.core.berechnungen.verbrauch import berechne_verbrauchs_kennzahlen
+from backend.models.investition import Investition
 from backend.models.kanal import Kanal, KanalStatistik
 from backend.services.kanal.bilanz_adapter import (
     FASSUNG_WIE_BESTAND,
@@ -67,11 +68,87 @@ def _namen(ds) -> dict[str, str]:
     return out
 
 
+#: E4a-2 — die Abweichungen des Kanal-Lesers (Weg 2) von heute (Fassung (a)) je Datenstand und Klasse, gemessen
+#: 06.10.2026. ``N-586``: der Sprung steht in Tag und Monat (Deckel fällt, Bauplan §7). ``BKW-Kinder``: die Kinder
+#: ohne Zähler sind die Lücke ihres BKW (W2-R2), das BKW trägt keinen Schlüssel. ``Teiltag``: der laufende Monat reicht
+#: bis zum letzten geschriebenen Stand (Uhr 00:30, eine Stunde des 04.07.). Eine neue Klasse ⇒ rot.
+#: Feldsatz wie die Probe Weg 2 (Tag: Schlüssel, Marken, Bilanz samt EV-Quote; Monat: Mengen und `bkw_je_inv`/
+#: `bkw_gemessen_je_inv`): Σ 1 224 = BKW-Kinder 1 144 · N-586 21 · Teiltag 59 — PROBE-WEG2 zählt 1 144 / 20 / 60, weil
+#: dort die Teiltag-Stunde des M03-Juli bei „Teiltag" steht; hier fällt jede M03-HA-Abweichung unter N-586.
+W2_KLASSEN: dict[tuple[str, str, str], dict[str, int]] = {
+    ('achsen', 'M01', 'HA'): {'Teiltag': 1},
+    ('achsen', 'M01', 'MQTT'): {'Teiltag': 1},
+    ('achsen', 'M03', 'HA'): {'N-586': 21},
+    ('achsen', 'M03', 'MQTT'): {'Teiltag': 1},
+    ('achsen', 'M04', 'HA'): {'Teiltag': 1},
+    ('achsen', 'M04', 'MQTT'): {'Teiltag': 1},
+    ('achsen', 'M05', 'HA'): {'Teiltag': 1},
+    ('achsen', 'M05', 'MQTT'): {'Teiltag': 1},
+    ('achsen', 'M06', 'HA'): {'Teiltag': 1},
+    ('achsen', 'M06', 'MQTT'): {'Teiltag': 1},
+    ('achsen', 'M07', 'HA'): {'Teiltag': 1},
+    ('achsen', 'M07', 'MQTT'): {'Teiltag': 1},
+    ('achsen', 'M08', 'HA'): {'Teiltag': 1},
+    ('achsen', 'M08', 'MQTT'): {'Teiltag': 1},
+    ('achsen', 'M09', 'HA'): {'Teiltag': 1},
+    ('achsen', 'M09', 'MQTT'): {'Teiltag': 1},
+    ('achsen', 'M10', 'HA'): {'Teiltag': 1},
+    ('achsen', 'M10', 'MQTT'): {'Teiltag': 1},
+    ('pv', 'F01', 'HA'): {'Teiltag': 1},
+    ('pv', 'F01', 'MQTT'): {'Teiltag': 1},
+    ('pv', 'F02', 'HA'): {'Teiltag': 1},
+    ('pv', 'F02', 'MQTT'): {'Teiltag': 1},
+    ('pv', 'F03', 'HA'): {'Teiltag': 1},
+    ('pv', 'F03', 'MQTT'): {'Teiltag': 1},
+    ('pv', 'F04', 'HA'): {'Teiltag': 1},
+    ('pv', 'F04', 'MQTT'): {'Teiltag': 1},
+    ('pv', 'F05', 'HA'): {'Teiltag': 1},
+    ('pv', 'F05', 'MQTT'): {'Teiltag': 1},
+    ('pv', 'F06', 'HA'): {'Teiltag': 1},
+    ('pv', 'F06', 'MQTT'): {'Teiltag': 1},
+    ('pv', 'F07', 'HA'): {'Teiltag': 1},
+    ('pv', 'F07', 'MQTT'): {'Teiltag': 1},
+    ('pv', 'F09a-G', 'HA'): {'BKW-Kinder': 140, 'Teiltag': 1},
+    ('pv', 'F09a-G', 'MQTT'): {'BKW-Kinder': 140, 'Teiltag': 1},
+    ('pv', 'F09a-oG', 'HA'): {'BKW-Kinder': 140, 'Teiltag': 1},
+    ('pv', 'F09a-oG', 'MQTT'): {'BKW-Kinder': 140, 'Teiltag': 1},
+    ('pv', 'F09b-G', 'HA'): {'BKW-Kinder': 107, 'Teiltag': 1},
+    ('pv', 'F09b-G', 'MQTT'): {'BKW-Kinder': 107, 'Teiltag': 1},
+    ('pv', 'F09b-oG', 'HA'): {'BKW-Kinder': 107, 'Teiltag': 1},
+    ('pv', 'F09b-oG', 'MQTT'): {'BKW-Kinder': 107, 'Teiltag': 1},
+    ('pv', 'F09c-G', 'HA'): {'BKW-Kinder': 33, 'Teiltag': 1},
+    ('pv', 'F09c-G', 'MQTT'): {'BKW-Kinder': 33, 'Teiltag': 1},
+    ('pv', 'F09c-oG', 'HA'): {'BKW-Kinder': 33, 'Teiltag': 1},
+    ('pv', 'F09c-oG', 'MQTT'): {'BKW-Kinder': 33, 'Teiltag': 1},
+    ('pv', 'F10', 'HA'): {'BKW-Kinder': 12, 'Teiltag': 1},
+    ('pv', 'F10', 'MQTT'): {'BKW-Kinder': 12, 'Teiltag': 1},
+    ('pv', 'F11', 'HA'): {'Teiltag': 1},
+    ('pv', 'F11', 'MQTT'): {'Teiltag': 1},
+    ('pv', 'F12', 'HA'): {'Teiltag': 1},
+    ('pv', 'F12', 'MQTT'): {'Teiltag': 1},
+    ('pv', 'F13a', 'HA'): {'Teiltag': 1},
+    ('pv', 'F13a', 'MQTT'): {'Teiltag': 1},
+    ('pv', 'F13b', 'HA'): {'Teiltag': 1},
+    ('pv', 'F13b', 'MQTT'): {'Teiltag': 1},
+    ('pv', 'F14', 'HA'): {'Teiltag': 1},
+    ('pv', 'F14', 'MQTT'): {'Teiltag': 1},
+    ('pv', 'F15', 'HA'): {'Teiltag': 1},
+    ('pv', 'F15', 'MQTT'): {'Teiltag': 1},
+    ('pv', 'F16', 'HA'): {'Teiltag': 1},
+    ('pv', 'F16', 'MQTT'): {'Teiltag': 1},
+}
+
+
 @pytest.mark.parametrize("matrix,fid,art", _FAELLE, ids=[f"{a}-{m}-{f}" for m, f, a in _FAELLE])
 async def test_adapter_der_bilanz_gruppe_gleich_dem_heutigen_leser(matrix, fid, art):
     async with kg.datenstand(matrix, fid, art) as ds:
         ba, bb = await kg.probe(ds)
+        w2_abw, w2_klassen, w2_n = await kg.probe_w2(ds)
         namen = _namen(ds)
+    # E4a-2: der Kanal-Leser trifft die eingefrorene W2-Referenz (Probe-Funktion `weg2.py`) Feld für Feld …
+    assert w2_n["referenz"] > 0 and w2_abw == [], w2_abw[:5]
+    # … und weicht von heute nur in den benannten Klassen ab, in der gezählten Menge.
+    assert dict(w2_klassen) == W2_KLASSEN.get((matrix, fid, art), {}), (matrix, fid, art, dict(w2_klassen))
     # (a) == Bestand: jede Ebene verglichen, keine Abweichung, keine Ausnahme.
     assert ba.verglichen["tag"] > 0 and ba.verglichen["monat"] > 0
     assert (ba.verglichen["sensor"] > 0) == (art == "HA")
@@ -175,3 +252,209 @@ async def test_adapter_lesen_keine_mittelwert_kanaele_und_kennen_nur_zwei_fassun
     """Die Bilanz-Gruppe kennt nur Mengen-Kanäle; eine unbekannte Fassung ist ein Fehler, kein stiller Rückfall."""
     with pytest.raises(ValueError):
         await tage_aus_kanaelen(db, 1, date(2026, 6, 1), date(2026, 6, 1), fassung="irgendwie", jetzt=kg.JETZT_TS)
+
+
+# ── E4a-2: die drei neuen Formen (Vorlage `probe-weg2/neue_formen.py`) ────────────────────────────────────────────
+#
+# Fassung (a) bleibt gleich dem heutigen Leser; der Kanal-Leser trifft das unabhängig nachgerechnete W2-Soll
+# (`pv_achse_matrix.soll_w2`, `achsen_matrix.w2_menge`). Die Abnahme-Matrizen führen dieselben Formen mit allen Wegen.
+
+
+def _w2_tag_soll(form, tag):
+    return mx.soll_tag(form, tag)
+
+
+@pytest.mark.parametrize("matrix,fid", [("pv", "W2-V"), ("pv", "W2-L"), ("achsen", "W2-E")])
+async def test_neue_formen_kanal_leser_trifft_weg2_und_a_bleibt_der_bestand(matrix, fid):
+    from backend.services.kanal import bilanz_leser as bl
+
+    async with kg.datenstand(matrix, fid, "HA") as ds:
+        ba, _bb = await kg.probe(ds)
+        tage = await bl.kanal_tage(ds.db, ds.aid, kg.TAGE[0], kg.TAGE[-1], jetzt=kg.JETZT_TS)
+        monate = await bl.kanal_monate(ds.db, ds.aid, von=kg.MONATE[0], bis=kg.MONATE[-1], jetzt=kg.JETZT_TS)
+        ids = dict(ds.ids)
+    assert ba.abweichungen == [], ba.abweichungen[:3]
+    assert set(tage) == set(kg.TAGE), sorted(set(kg.TAGE) - set(tage))   # Lückentag (T4): auch 10./11.06. Kanal
+    if matrix == "pv":
+        form = mx.MATRIX_FORMEN[fid]
+        for t in kg.TAGE:
+            soll = mx.soll_tag(form, t)
+            ist = {g.name: tage[t].komponenten_kwh.get(f"pv_{ids[g.name]}", tage[t].komponenten_kwh.get(
+                f"bkw_{ids[g.name]}", 0.0)) for g in form.geraete}
+            assert ist == pytest.approx({g.name: soll.je_geraet.get(g.name, 0.0) for g in form.geraete}, abs=0.006), t
+            assert tage[t].bilanz.erzeugung_kwh == pytest.approx(soll.summe, abs=1e-6), t
+        juni = mx.soll_monat(form, mx.TAGE_JUNI)
+        assert monate[(2026, 6)].pv_kwh == pytest.approx(juni.summe, abs=1e-6)
+    else:
+        form = am.MATRIX_FORMEN[fid]
+        g = form.geraet("BHKW")
+        for t in kg.TAGE:
+            soll = am.w2_menge(g.felder["erzeugung_kwh"], g.ohne.get("erzeugung_kwh"), (t,))
+            assert tage[t].komponenten_kwh.get(f"sonstige_{ids['BHKW']}") == pytest.approx(soll, abs=0.006), t
+
+
+async def test_lueckentag_traegt_die_luecke_wie_ha():
+    """Auftrag Punkt 4 (Gegenprüfung „Übersehen", T4): Süd hat vom 10.06. 08:00 bis 11.06. 13:00 keine Zeile. Der
+    10.06. nennt Süd 0 (der Zähler stand still), der 11.06. die ganze Lückenmenge 24 — wie das HA-Energie-Dashboard;
+    der Anlagenzähler füllt nur die Lücke (das BKW ohne Zähler: 15 bzw. 0). Der Monat ist unverändert 360/180/90.
+    Ohne T4 nähme die Quellenwahl beide Tage aus dem Bestand (Süd ``feiner_als_spanne``)."""
+    from backend.services.kanal import bilanz_leser as bl
+
+    async with kg.datenstand("pv", "W2-L", "HA") as ds:
+        t = await bl.kanal_tage(ds.db, ds.aid, date(2026, 6, 10), date(2026, 6, 11), jetzt=kg.JETZT_TS)
+        m = (await bl.kanal_monate(ds.db, ds.aid, von=(2026, 6), bis=(2026, 6), jetzt=kg.JETZT_TS))[(2026, 6)]
+        ids = dict(ds.ids)
+    sued, west, bkw = f"pv_{ids['Süd']}", f"pv_{ids['West']}", f"bkw_{ids['Balkon']}"
+    assert (t[date(2026, 6, 10)].komponenten_kwh[sued], t[date(2026, 6, 10)].komponenten_kwh[bkw]) == (0.0, 15.0)
+    assert (t[date(2026, 6, 11)].komponenten_kwh[sued], t[date(2026, 6, 11)].komponenten_kwh[bkw]) == (24.0, 0.0)
+    assert t[date(2026, 6, 11)].komponenten_kwh[west] == 6.0
+    assert (m.pv_module_kwh, m.bkw_kwh) == pytest.approx((540.0, 90.0))
+
+
+async def test_jede_umschaltstelle_nennt_den_sprung_aus_ha_m03():
+    """E4a-2, Auftrag Punkt 3: jede der vier Umschaltstellen liest die Bilanz-Gruppe aus den Kanälen — sichtbar an
+    M03 (Sprung von 250 kWh auf Einspeisung und PV-Gesamtzähler am 15.06. und 02.07., der Spiegel trägt ihn wie HA):
+    (1) Monats-Fakten mit Tageswerten, Juli · (2) Cockpit → Monat Tagesebene, Juli · (3) Kalendermonat je Sensor
+    („Aus HA laden"), Juni · (4) Tages-Leser — Cockpit → Tag, Energieprofil Tage und Monat. Der Bestand nennt überall
+    die gedeckelten Werte (Juni 179, 15.06. 5, Juli 17). Je Stelle ein Sprengsatz im Bericht E4a-2."""
+    from backend.api.routes.aktueller_monat import _collect_tagesebene_data
+    from backend.api.routes.energie_profil.monat import get_monatsauswertung
+    from backend.api.routes.energie_profil.tage import get_tages_zusammenfassungen
+    from backend.api.routes.ha_statistics import get_monatswerte
+    from backend.models.anlage import Anlage
+    from backend.services.energie_profil.tage_werte import baue_tage_werte
+    from backend.services.monats_fakten import lade_monats_fakten
+
+    async with kg.datenstand("achsen", "M03", "HA") as ds:
+        form = am.FORMEN["M03"]
+        with am.umgebung(form, ds.svc):
+            fakt = (await lade_monats_fakten(ds.db, ds.aid, von=(2026, 7), bis=(2026, 7), inkl_nur_tageswerte=True))[0]
+            tagesebene = await _collect_tagesebene_data(ds.db, ds.aid, 2026, 7)
+            aus_ha = await get_monatswerte(ds.aid, 2026, 6, ds.db)
+            anlage = (await ds.db.execute(select(Anlage).where(Anlage.id == ds.aid))).scalar_one()
+            tw = {z.datum: z for z in await baue_tage_werte(ds.db, anlage, date(2026, 6, 15), date(2026, 6, 15))}
+            tz = await get_tages_zusammenfassungen(ds.aid, date(2026, 6, 15), date(2026, 6, 15), ds.db)
+            monat = await get_monatsauswertung(ds.aid, 2026, 6, 10, ds.db)
+    assert fakt.zaehler.einspeisung_kwh == pytest.approx(268.0)                               # (1)
+    assert tagesebene["einspeisung_kwh"][0] == pytest.approx(268.0)                           # (2)
+    assert {b.feld: b.differenz for b in aus_ha.basis}["einspeisung_kwh"] == pytest.approx(430.0)   # (3)
+    assert tw[date(2026, 6, 15)].einspeisung == pytest.approx(256.0)                         # (4) Cockpit → Tag
+    assert tz[0].komponenten_kwh["einspeisung"] == pytest.approx(256.0)                      # (4) Tage
+    assert monat.einspeisung_kwh == pytest.approx(430.0)                                     # (4) Monat
+
+
+#: Ein Rücksprung in HAs Summe (10.06. 12:00: −2 statt +1 kWh auf der Einspeisung). Der HA-Leser verwirft ihn (R4):
+#: Juni 179; der Spiegel trägt ihn wie HA: 180 − 1 − 2 = 177. Unterscheidet die Kalendermonats-Wege (M03 nicht: der
+#: Monats-Deckel lässt den Sprung nach der Nacht durch — Bericht E0/E4a-1).
+_RUECKSPRUNG = datetime(2026, 6, 10, 12)
+
+
+async def test_kalendermonats_wege_nehmen_das_kanal_delta_ohne_rueckspruch_verwurf():
+    """E4a-2, Umschaltstelle 3 (B-2): „Aus HA laden", alle Monatswerte, Import-Vorschau, Sammelimport,
+    Monatsabschluss-Vorschlag und der HA-Weg von Cockpit → Monat nennen für den Kalendermonat das Kanal-Δ, wenn die
+    Spiegel aller Bilanz-Sensoren ihn voll decken — ohne Rücksprung-Verwurf und Deckel."""
+    from backend.api.routes import aktueller_monat as amr
+    from backend.api.routes.ha_statistics import (
+        ImportRequest, MonatFeldAuswahl, get_alle_monatswerte, get_import_vorschau, get_monatswerte,
+        import_ha_statistics,
+    )
+    from backend.api.routes.monatsabschluss.views import lade_ha_statistik_werte
+    from backend.models.anlage import Anlage
+    from backend.models.monatsdaten import Monatsdaten
+    from backend.services.monatswert_deckel import deckel_je_sensor
+
+    def _einsp(t):
+        return -2.0 if t == _RUECKSPRUNG else (1.0 if t.hour in mx.PROD_STUNDEN else 0.0)
+
+    async with kg.datenstand("pv", "F01", "HA", ha_abweichung={"sensor.einsp": (_einsp, None)}) as ds:
+        with mx._umgebung(ds.svc):
+            ha_leser = {w.sensor_id: w.differenz for w in ds.svc.get_monatswerte(["sensor.einsp"], 2026, 6).sensoren}
+            route = {b.feld: b.differenz for b in (await get_monatswerte(ds.aid, 2026, 6, ds.db)).basis}
+            alle = {(r.jahr, r.monat): {b.feld: b.differenz for b in r.basis}
+                    for r in await get_alle_monatswerte(ds.aid, None, None, ds.db)}
+            vorschau = next(m for m in (await get_import_vorschau(ds.aid, ds.db)).monate if (m.jahr, m.monat) == (2026, 6))
+            anlage = (await ds.db.execute(select(Anlage).where(Anlage.id == ds.aid))).scalar_one()
+            invs = (await ds.db.execute(select(Investition).where(Investition.anlage_id == ds.aid))).scalars().all()
+            vorschlag = await lade_ha_statistik_werte(
+                anlage.sensor_mapping["basis"], anlage.sensor_mapping["investitionen"], 2026, 6,
+                deckel_je_sensor=deckel_je_sensor(anlage, invs), db=ds.db, anlage_id=ds.aid)
+            cockpit = await amr.get_aktueller_monat(anlage_id=ds.aid, jahr=2026, monat=6, db=ds.db)
+            await import_ha_statistics(ds.aid, ImportRequest(monate=[MonatFeldAuswahl(jahr=2026, monat=6)]), ds.db)
+            await ds.db.commit()
+            gespeichert = (await ds.db.execute(select(Monatsdaten).where(
+                Monatsdaten.anlage_id == ds.aid, Monatsdaten.jahr == 2026, Monatsdaten.monat == 6))).scalar_one()
+    assert ha_leser["sensor.einsp"] == pytest.approx(179.0)          # der HA-Leser verwirft den Rücksprung
+    assert route["einspeisung_kwh"] == pytest.approx(177.0)          # „Aus HA laden"
+    assert alle[(2026, 6)]["einspeisung_kwh"] == pytest.approx(177.0)
+    assert 177.0 in [round(v, 2) for v in (vorschau.ha_werte or {}).values() if isinstance(v, (int, float))]
+    assert vorschlag["sensor.einsp"] == pytest.approx(177.0)          # Monatsabschluss-Vorschlag
+    assert cockpit.einspeisung_kwh == pytest.approx(177.0)            # Cockpit → Monat, HA-Weg
+    assert gespeichert.einspeisung_kwh == pytest.approx(177.0)        # Sammelimport (D3: gespeichert, wie HA)
+
+
+async def test_kalendermonat_ohne_volle_deckung_bleibt_der_ha_leser():
+    """F08a, laufender Juli: der BKW-Zähler schläft nachts und erreicht das Soll-Ende nicht (`endet_vor_bis`) — der
+    Kalendermonat bleibt beim HA-Leser, für ALLE Bilanz-Sensoren (eine Wahl)."""
+    from backend.api.routes.ha_statistics import get_monatswerte
+
+    async with kg.datenstand("pv", "F08a", "HA") as ds:
+        with mx._umgebung(ds.svc):
+            route = (await get_monatswerte(ds.aid, 2026, 7, ds.db))
+            sids, deckel = await kg.zaehler_sensoren(ds.db, ds.aid)
+            leser = {w.sensor_id: w for w in ds.svc.get_monatswerte(sids, 2026, 7, deckel_je_sensor=deckel).sensoren}
+    for b in route.basis:
+        if b.sensor_id in leser:
+            assert b.differenz == pytest.approx(leser[b.sensor_id].differenz), b.feld
+
+
+async def test_sammelimport_ist_ein_schreibweg_und_ueberschreibt_nur_mit_dem_flag():
+    """Nachmessung E4a-2, Punkt 4: der Sammelimport SCHREIBT (anders als „Aus HA laden" und die Vorschau, die nur
+    vorschlagen). E4a-2 tauscht nur seine Wertquelle (Kanal-Δ 177 statt HA-Leser 179); die Logik von HEAD bleibt:
+    ein gespeicherter Monat bleibt ohne `ueberschreiben` unverändert und wird nur mit dem Flag ersetzt."""
+    from backend.api.routes.ha_statistics import ImportRequest, MonatFeldAuswahl, import_ha_statistics
+    from backend.models.monatsdaten import Monatsdaten
+
+    def _einsp(t):
+        return -2.0 if t == _RUECKSPRUNG else (1.0 if t.hour in mx.PROD_STUNDEN else 0.0)
+
+    async with kg.datenstand("pv", "F01", "HA", ha_abweichung={"sensor.einsp": (_einsp, None)}) as ds:
+        ds.db.add(Monatsdaten(anlage_id=ds.aid, jahr=2026, monat=6, einspeisung_kwh=999.0, netzbezug_kwh=888.0))
+        await ds.db.commit()
+        werte = []
+        with mx._umgebung(ds.svc):
+            for flag in (False, True):
+                await import_ha_statistics(ds.aid, ImportRequest(
+                    monate=[MonatFeldAuswahl(jahr=2026, monat=6)], ueberschreiben=flag), ds.db)
+                await ds.db.commit()
+                md = (await ds.db.execute(select(Monatsdaten).where(
+                    Monatsdaten.anlage_id == ds.aid, Monatsdaten.jahr == 2026, Monatsdaten.monat == 6))).scalar_one()
+                await ds.db.refresh(md)
+                werte.append((md.einspeisung_kwh, md.netzbezug_kwh))
+    assert werte[0] == (999.0, 888.0)                                 # ohne Flag: der Vorbestand bleibt
+    assert werte[1] == (pytest.approx(177.0), pytest.approx(216.0))  # mit Flag: das Kanal-Δ (ohne Rücksprung-Verwurf)
+
+
+async def test_kalendermonat_sensormenge_folgt_anschaffung_und_stilllegung_des_monats():
+    """Nachmessung E4a-2, Punkt 5: die Bilanz-Sensoren eines Kalendermonats gelten nach den Filtern aktiv · Anschaffung ·
+    Stilllegung DIESES Monats (P10), nicht nach dem heutigen Tag.
+
+    * West wird am 01.07. angeschafft, sein Zähler liefert ab dem 30.06. 22:00 — der Juni verlangt ihn nicht und nimmt
+      die Kanäle (mit dem Stichtag „heute" verlangte er ihn, fand keinen Stand vor dem Monat und fiel ganz auf den
+      HA-Leser zurück).
+    * Das Balkonkraftwerk wird am 30.06. stillgelegt, sein Zähler endet mit dem Juni — der Juni verlangt und ersetzt
+      ihn (mit „heute" fehlte er im Juni und blieb beim HA-Leser), der Juli verlangt ihn nicht."""
+    from backend.services.kanal.bilanz_leser import kanal_kalendermonate
+
+    abw = {"sensor.pv_west": (None, lambda t: t < datetime(2026, 6, 30, 22)),
+           "sensor.pv_balkon": (None, lambda t: t >= datetime(2026, 7, 1))}
+    async with kg.datenstand("pv", "F02", "HA", ha_abweichung=abw) as ds:
+        for name, feld, wert in (("West", "anschaffungsdatum", date(2026, 7, 1)),
+                                 ("Balkon", "stilllegungsdatum", date(2026, 6, 30))):
+            inv = (await ds.db.execute(select(Investition).where(Investition.id == ds.ids[name]))).scalar_one()
+            setattr(inv, feld, wert)
+        await ds.db.commit()
+        ersatz = await kanal_kalendermonate(ds.db, ds.aid, [(2026, 6), (2026, 7)], jetzt=kg.JETZT_TS)
+    assert set(ersatz) == {(2026, 6), (2026, 7)}, sorted(ersatz)
+    assert "sensor.pv_west" not in ersatz[(2026, 6)] and "sensor.pv_west" in ersatz[(2026, 7)]
+    assert "sensor.pv_balkon" in ersatz[(2026, 6)] and "sensor.pv_balkon" not in ersatz[(2026, 7)]
+    assert ersatz[(2026, 6)]["sensor.pv_balkon"].differenz == pytest.approx(90.0)

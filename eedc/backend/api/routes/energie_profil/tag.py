@@ -120,6 +120,13 @@ async def get_tag_detail(
         )
     )).one_or_none()
     tz_komp = tz_zeile[0] if tz_zeile else None
+    # HA-Bauform E4a-2 (Umschaltstelle 4): an einem Kanal-Tag kommen die Bilanz-Schlüssel aus den Kanälen (B-3);
+    # gelesen werden hier heute nur die WP-Schlüssel, die aus der Tageszeile bleiben.
+    from backend.services.kanal.bilanz_leser import bilanz_ziele, kanal_tage, mische_komponenten
+
+    _kanal = (await kanal_tage(db, anlage_id, datum, datum)).get(datum)
+    if _kanal is not None:
+        tz_komp = mische_komponenten(tz_komp, _kanal, (await bilanz_ziele(db, anlage_id, [datum]))[datum])
     tz_rueckwaerts = tageszeile_ist_rueckwaerts(
         tz_zeile[1] if tz_zeile else None, tz_zeile[2] if tz_zeile else None,
     )

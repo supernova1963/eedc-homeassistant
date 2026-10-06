@@ -150,6 +150,33 @@ def _null_ist_messwert(feld_name: str, typ_je_inv: dict[str, str]) -> bool:
     return False
 
 
+def _sensor_to_feld(anlage: Anlage) -> dict[str, str]:
+    """``{sensor_id: feld}`` der HA-Zuordnung (Basis-Zähler und Gerätefelder) — der HA-Weg des Monats."""
+    mapping = anlage.sensor_mapping or {}
+    basis = mapping.get("basis", {})
+    inv_mapping = mapping.get("investitionen", {})
+    # Sensor-IDs sammeln und Rückmapping erstellen: sensor_id → feld_name
+    sensor_to_feld: dict[str, str] = {}
+
+    basis_feld_map = {
+        "einspeisung": "einspeisung_kwh",
+        "netzbezug": "netzbezug_kwh",
+        "pv_gesamt": "pv_erzeugung_kwh",
+    }
+    for mapping_key, feld_name in basis_feld_map.items():
+        feld_mapping = basis.get(mapping_key)
+        if feld_mapping and feld_mapping.get("strategie") == "sensor" and feld_mapping.get("sensor_id"):
+            sensor_to_feld[feld_mapping["sensor_id"]] = feld_name
+
+    for inv_id_str, inv_data in inv_mapping.items():
+        felder = inv_data.get("felder", {})
+        for feld_key, feld_config in felder.items():
+            if feld_config and feld_config.get("strategie") == "sensor" and feld_config.get("sensor_id"):
+                sensor_to_feld[feld_config["sensor_id"]] = f"inv_{inv_id_str}_{feld_key}"
+
+    return sensor_to_feld
+
+
 async def _collect_ha_statistics_data(anlage: Anlage, jahr: int, monat: int) -> dict[str, tuple[float, DatenquelleInfo]]:
     """Sammelt Daten aus der HA Recorder-Statistik-DB (Konfidenz 92%).
 
@@ -173,28 +200,7 @@ async def _collect_ha_statistics_data(anlage: Anlage, jahr: int, monat: int) -> 
     # `is_available` baut im Zweifel eine Verbindung auf und zahlt bei nicht
     # erreichbarer HA einen vollen Timeout. Eine Anlage ohne einen einzigen
     # Sensor-Feld-Eintrag hat hier nichts zu holen — die darf das nicht kosten.
-    mapping = anlage.sensor_mapping or {}
-    basis = mapping.get("basis", {})
-    inv_mapping = mapping.get("investitionen", {})
-
-    # Sensor-IDs sammeln und Rückmapping erstellen: sensor_id → feld_name
-    sensor_to_feld: dict[str, str] = {}
-
-    basis_feld_map = {
-        "einspeisung": "einspeisung_kwh",
-        "netzbezug": "netzbezug_kwh",
-        "pv_gesamt": "pv_erzeugung_kwh",
-    }
-    for mapping_key, feld_name in basis_feld_map.items():
-        feld_mapping = basis.get(mapping_key)
-        if feld_mapping and feld_mapping.get("strategie") == "sensor" and feld_mapping.get("sensor_id"):
-            sensor_to_feld[feld_mapping["sensor_id"]] = feld_name
-
-    for inv_id_str, inv_data in inv_mapping.items():
-        felder = inv_data.get("felder", {})
-        for feld_key, feld_config in felder.items():
-            if feld_config and feld_config.get("strategie") == "sensor" and feld_config.get("sensor_id"):
-                sensor_to_feld[feld_config["sensor_id"]] = f"inv_{inv_id_str}_{feld_key}"
+    sensor_to_feld = _sensor_to_feld(anlage)
 
     if not sensor_to_feld:
         return {}
@@ -245,6 +251,35 @@ async def _collect_ha_statistics_data(anlage: Anlage, jahr: int, monat: int) -> 
             resolved[feld_name] = (sensor_wert.differenz, quelle)
 
     return resolved
+
+
+async def _ha_statistik_aus_kanaelen(
+    db: AsyncSession, anlage: Anlage, investitionen, jahr: int, monat: int,
+    ha_stats: dict[str, tuple[float, DatenquelleInfo]],
+) -> dict[str, tuple[float, DatenquelleInfo]]:
+    """HA-Bauform E4a-2 (Umschaltstelle 3, B-2): decken die Spiegel ALLER Bilanz-Sensoren den Kalendermonat voll,
+    gilt ihr Kanal-Δ statt des HA-Lesers — ohne Deckel, ohne Rücksprung-Verwurf (R-5, HA-Teil). Nur wo der HA-Weg
+    überhaupt geliefert hat (HA erreichbar); dieselbe Regel für die gemessene 0 (N-585) wie dort."""
+    if not ha_stats:
+        return ha_stats
+    from backend.services.kanal.bilanz_leser import kanal_kalendermonate
+
+    ersatz = (await kanal_kalendermonate(db, anlage.id, [(jahr, monat)])).get((jahr, monat))
+    if not ersatz:
+        return ha_stats
+    sensor_to_feld = _sensor_to_feld(anlage)
+    typ_je_inv = {str(i.id): i.typ for i in investitionen}
+    quelle = next(iter(ha_stats.values()))[1]
+    out = dict(ha_stats)
+    for sid, w in ersatz.items():
+        feld = sensor_to_feld.get(sid)
+        if not feld:
+            continue
+        if w.differenz > 0 or (w.differenz == 0 and w.intervalle >= 1 and _null_ist_messwert(feld, typ_je_inv)):
+            out[feld] = (w.differenz, quelle)
+        else:
+            out.pop(feld, None)
+    return out
 
 
 async def _ha_heimlade_felder_mit_daten(anlage: Anlage, investitionen, jahr: int, monat: int) -> set[str]:
@@ -582,13 +617,11 @@ async def _collect_tagesebene_data(
         Netzbezug auch mit gemessener 0 (mindestens eine Stunde mit Wert, N-585).
         Keine Tagesspur ⇒ leeres Dict.
     """
-    from backend.services.energie_profil.monats_aus_tagen import (
-        lade_monats_summen_aus_tagen,
-    )
+    # HA-Bauform E4a-2 (Umschaltstelle 2): dieselbe Quellenwahl je Monat wie die Monats-Fakten — deckt jeder Kanal
+    # der Bilanz-Gruppe den Monat, kommt er aus den Kanälen (Weg 2), sonst unverändert aus der Tagesebene.
+    from backend.services.kanal.bilanz_leser import lade_monats_summen
 
-    summen = await lade_monats_summen_aus_tagen(
-        db, anlage_id, von=(jahr, monat), bis=(jahr, monat)
-    )
+    summen = await lade_monats_summen(db, anlage_id, von=(jahr, monat), bis=(jahr, monat))
     summe = summen.get((jahr, monat))
     wp_mengen = wp_mengen or {}
 
@@ -793,6 +826,7 @@ async def _berechne_monat(
         if ist_aktueller_monat else {}
     )
     ha_stats = await _collect_ha_statistics_data(anlage, jahr, monat)
+    ha_stats = await _ha_statistik_aus_kanaelen(db, anlage, investitionen, jahr, monat, ha_stats)
     # N-555: welche Heimlade-Felder hat die HA-Statistik in einem ABGESCHLOSSENEN
     # Monat überhaupt (auch mit 0)? Im laufenden Monat genügt die Quelle.
     ha_felder_mit_daten: set[str] = (

@@ -606,6 +606,19 @@ denselben Layer-Funktionen (die PV-Tages-Präzedenz und N-623 fragen je Stunde u
 `test_kanal_bilanz_gleichheit.py` hält auf allen 33 Formen beider Abnahme-Matrizen (Datenstände HA und MQTT) fest:
 „wie Bestand" == heutiger Leser ohne Ausnahme; „wie HA" == „wie Bestand" außer am Zählersprung (N-586).
 
+**Umgeschaltet (E4a-2, Weg 2, Stand 06.10.2026).** Die Bilanz-Gruppe liest seit E4a-2 über EINE Fassade,
+`services/kanal/bilanz_leser.py`: je Tag bzw. Monat die Zähler der Gruppe (je Menge aktiver Investitionen einmal), ihre
+Δ über `lesen.reihe_stapel` (eine Anweisung für alle Zeiträume), die Quellenwahl (Ersatzgruppe gedeckt, wenn ein Kanal
+der Gruppe voll deckt) und bei `kanal` die Komposition im Layer (`core/berechnungen/bilanz_zeitraum.py`, Regeln
+W2-R1…R5, BERECHNUNGEN „PV je Gerät aus Zeitraum-Differenzen"). Umschaltstellen: Monats-Fakten (`laden.py` →
+`lade_monats_summen`), *Cockpit → Monat* Tagesebene, die Kalendermonats-Wege (*Cockpit → Monat* HA-Weg, „Aus HA laden",
+alle Monatswerte, Import-Vorschau, Sammelimport, Monatsabschluss-Vorschlag — `monatswerte_mit_kanaelen`) und die
+Tages-Leser (`tage_werte`, `energie_profil/tag`, `tage`, `monat`). Kein Deckel und kein Rücksprung-Verwurf für den
+HA-Spiegel; ein Lückentag trägt die Lückenmenge. Was die Kanäle nicht voll decken, rechnet der Bestandspfad unverändert.
+Bleibt bis E4c/S3: E-Mob-Aufteilung, stundengepaarte Spalten, Stundenprofile. Laufzeit (Kunst-DB, 145 Monate):
+Quellenwahl + Monatsreihe 28,5 ms, Tagesleser eines Monats 6,2 ms. Daten-Checker „Zählersprung in HA"
+(`daten_checker/datenquelle/ha_sprung.py`). Die Adapter aus E4a-1 bleiben nur für die Gleichheitsprobe.
+
 ### Parent-Child Beziehungen
 
 ```

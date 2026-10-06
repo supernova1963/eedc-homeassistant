@@ -123,6 +123,15 @@ class Form:
     gesamt: Optional[float]
     einsp_rate: float = 1.0
     anlage_kwp: float = 10.8
+    #: HA-Bauform E4a-2, neue Formen (``FORMEN_W2``): ``{sensor_id: (Rate | None, ohne_Zeile | None)}`` — gilt für
+    #: HA-Statistik, Standalone-Stände und die Handeingabe; das Soll dieser Formen folgt Weg 2 (``soll_w2``).
+    abweichung: dict = field(default_factory=dict, compare=False)
+    #: Volleinspeiser: die ganze Erzeugung geht ins Netz, physikalisch kein Eigenverbrauch (N-588-Zelle).
+    volleinspeiser: bool = False
+
+    @property
+    def w2(self) -> bool:
+        return self.fid.startswith("W2-")
 
     def geraet(self, name: str) -> Geraet:
         return next(g for g in self.geraete if g.name == name)
@@ -184,6 +193,46 @@ FORMEN: dict[str, Form] = {f.fid: f for f in (
 )}
 
 
+# ── Neue Formen nach Weg 2 (HA-Bauform E4a-2, Auftrag Punkt 6) ────────────────
+#
+# Vorlage ``plans/ha-bauform-werkzeug/probe-weg2/neue_formen.py``. Sie stehen NICHT in ``FORMEN`` (andere Proben
+# iterieren ``FORMEN`` mit ihren eigenen Regeln), sondern in ``FORMEN_W2``; die Abnahme-Matrix nimmt ``MATRIX_FORMEN``.
+
+
+def _v_sued(t):
+    return 2.1 if t.hour in PROD_STUNDEN else 0.0
+
+
+def _v_schatten(t) -> bool:
+    return t.date().day % 3 == 0
+
+
+def _v_west(t):
+    return 0.0 if (t.hour not in PROD_STUNDEN or _v_schatten(t)) else 0.9
+
+
+def _v_ac(t):
+    return round(0.96 * (_v_sued(t) + _v_west(t)), 6)
+
+
+#: L: der Süd-Zähler hat vom 10.06. 08:00 bis 11.06. 13:00 keine Zeile (30 h); seine Menge steht in 11.06. 14:00.
+L_VON, L_BIS = datetime(2026, 6, 10, 8), datetime(2026, 6, 11, 14)
+
+FORMEN_W2: dict[str, Form] = {f.fid: f for f in (
+    Form("W2-V", "Volleinspeiser: AC-Anlagenzähler = Einspeisung, Süd DC gemessen, West ohne, jeder 3. Tag verschattet",
+         (Geraet("Süd", "pv-module", 6.0, 2.1, True), Geraet("West", "pv-module", 4.0, 0.9)), 2.88,
+         einsp_rate=2.88, anlage_kwp=10.0, volleinspeiser=True,
+         abweichung={"sensor.pv_sued": (_v_sued, None), "sensor.pv_gesamt": (_v_ac, None),
+                     "sensor.einsp": (_v_ac, None), "sensor.netz": (lambda _t: 0.4, None)}),
+    Form("W2-L", "wie F05, Süd-Zähler 30 h ohne Zeile (Lücke > 24 h, 10.06. 08:00 – 11.06. 13:00)",
+         (_sued(True), _west(True), _bkw()), 3.5,
+         abweichung={"sensor.pv_sued": (None, lambda t: L_VON <= t < L_BIS)}),
+)}
+
+#: Alle Formen der Abnahme-Matrix.
+MATRIX_FORMEN: dict[str, Form] = {**FORMEN, **FORMEN_W2}
+
+
 # ── Soll aus der Regel ──────────────────────────────────────────────────────
 
 
@@ -221,6 +270,8 @@ def soll_tag(form: Form, tag: date) -> Soll:
     gemessene behalten ihren Wert, die Lücken teilen ``max(0, G − Σ gemessen)`` nach kWp.
     Ohne Anlagenzähler bleibt die Lücke ohne Key.
     """
+    if form.w2:
+        return soll_w2(form, *_tagesfenster_dt(tag))
     je: dict[str, float] = {}
     ohne: set[str] = set()
     gemessen = 0.0
@@ -262,6 +313,8 @@ def soll_monat(form: Form, tage: tuple[date, ...], *, mit_anlagenwert: bool = Tr
     nicht erklären, nach kWp auf Module UND Balkonkraftwerke ohne eigenen Wert.
     ``mit_anlagenwert=False``: der Monat kennt den Anlagenzähler nicht (Lücke ⇒ Teilsumme).
     """
+    if form.w2:
+        return soll_w2(form, _tagesfenster_dt(tage[0])[0], _tagesfenster_dt(tage[-1])[1])
     n = len(tage)
     letzter = tage[-1]
     je: dict[str, float] = {}
@@ -297,11 +350,65 @@ def soll_monat(form: Form, tage: tuple[date, ...], *, mit_anlagenwert: bool = Tr
 
 
 def soll_einspeisung(form: Form, n_tage: int) -> float:
+    if form.w2 and "sensor.einsp" in form.abweichung and n_tage in (30, 3):
+        tage = TAGE_JUNI if n_tage == 30 else TAGE_JULI
+        return zaehler_delta(form, "sensor.einsp", _tagesfenster_dt(tage[0])[0], _tagesfenster_dt(tage[-1])[1])
     return tagesmenge(form.einsp_rate) * n_tage
 
 
-def soll_netzbezug(n_tage: int) -> float:
+def soll_netzbezug(n_tage: int, form: Optional[Form] = None) -> float:
+    if form is not None and form.w2 and "sensor.netz" in form.abweichung and n_tage in (30, 3, 1):
+        return 0.4 * 24 * n_tage
     return NETZ_NACHT * (24 - len(PROD_STUNDEN)) * n_tage
+
+
+# ── Weg 2 als Soll (nur ``FORMEN_W2``) ──────────────────────────────────────
+
+
+def _tagesfenster_dt(tag: date) -> tuple[datetime, datetime]:
+    """Das Tagesfenster des Bestands als Wanduhr ``[Vortag 23:00, 23:00)`` (``kanal/fenster.tagesfenster``)."""
+    t = datetime.combine(tag, datetime.min.time())
+    return t - timedelta(hours=1), t + timedelta(hours=23)
+
+
+def zaehler_delta(form: Form, sid: str, von: datetime, bis: datetime) -> float:
+    """Δ eines Zählers der Form über ``[von, bis)`` wie die Lese-Schicht: Stand vor ``bis`` − Stand vor ``von``, wobei
+    eine Zeile der Stunde ``t`` den Stand am Ende von ``t`` trägt und fehlende Zeilen nichts trägen (ihre Menge steht
+    in der nächsten Zeile). Unabhängig vom Produktcode — Summe der Raten über die Zeilen."""
+    rate, ohne, _key = _reihen(form)[sid]
+    stand, letzter_vor_von, letzter_vor_bis = 0.0, None, None
+    t = REIHE_VON
+    while t < REIHE_BIS:
+        stand += rate(t)
+        if not ohne(t):
+            ende = t + timedelta(hours=1)
+            if ende <= von:
+                letzter_vor_von = stand
+            if ende <= bis:
+                letzter_vor_bis = stand
+        t += timedelta(hours=1)
+    return (letzter_vor_bis or 0.0) - (letzter_vor_von or 0.0)
+
+
+def soll_w2(form: Form, von: datetime, bis: datetime) -> Soll:
+    """Weg 2 (Bauplan §6b, Wortlaut nach H2) unabhängig nachgerechnet: gemessene Geräte tragen ihr Δ (W2-R1, auch
+    über eine Randlücke — Lückentag wie HA), der Rest des Anlagenzählers geht nach kWp auf die Geräte ohne Zähler
+    (W2-R2, Untergrenze 0 einmal je Zeitraum), die PV-Summe ist Σ Geräte (W2-R3). Formen ohne Modul-Kinder."""
+    je: dict[str, float] = {}
+    luecken: list[Geraet] = []
+    for g in form.geraete:
+        if not _aktiv(g, von.date() + timedelta(days=1)):
+            continue
+        if g.zaehler:
+            je[g.name] = zaehler_delta(form, g.sensor_id, von, bis)
+        else:
+            luecken.append(g)
+    if luecken and form.gesamt is not None:
+        rest = max(0.0, zaehler_delta(form, "sensor.pv_gesamt", von, bis) - sum(je.values()))
+        je.update(_kwp_anteile(rest, luecken))
+    elif luecken:
+        return Soll(sum(je.values()), je, frozenset(g.name for g in luecken), vollstaendig=False)
+    return Soll(sum(je.values()), je)
 
 
 # ── Seed ────────────────────────────────────────────────────────────────────
@@ -333,6 +440,9 @@ def _reihen(form: Form) -> dict[str, tuple]:
                 (lambda t: t.hour >= 21 or t.hour <= 5) if g.nachtluecke else nie,
                 g.name,  # wird nach dem Anlegen durch `inv:<id>:pv_erzeugung_kwh` ersetzt
             )
+    for sid, (rate_neu, ohne_neu) in form.abweichung.items():   # neue Formen (E4a-2)
+        rate, ohne, key = reihen[sid]
+        reihen[sid] = (rate_neu or rate, ohne_neu or ohne, key)
     return reihen
 
 
@@ -468,6 +578,8 @@ def _umgebung(svc) -> ExitStack:
     st = ExitStack()
     st.enter_context(patch.object(hss, "_ha_statistics_service", svc))
     st.enter_context(patch.object(am, "datetime", _FesteUhr))
+    # E4a-2: die Uhr der Kanal-Leser (Quellenwahl laufender Tag/Monat) ist dieselbe gestellte Uhr.
+    st.enter_context(patch("backend.services.kanal.bilanz_leser.uhr", lambda: int(JETZT.timestamp())))
     st.enter_context(patch(
         "backend.services.energie_profil._helpers._get_strompreis_stunden",
         new=AsyncMock(return_value=StrompreisStunden(sensor={}, boerse={})),
@@ -503,6 +615,26 @@ async def _neue_db(pfad: str):
 async def _oeffne_db(pfad: str):
     engine = _engine(pfad)
     return engine, async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)()
+
+
+async def fuelle_spiegel(engine, anlage_id: int, svc) -> None:
+    """HA-Bauform E4a-2 (Bestätigung B-1): der Spiegel der HA-Langzeitstatistik, wie ihn das Produkt nach dem Start
+    nachfüllt (``kanal/nachfuellen.nachfuellen_spiegel``) — ohne ihn wählte jede Sicht den Bestand, und die Matrix
+    sähe nicht, was der Anwender mit HA sieht. Ein Seed, kein Soll."""
+    from contextlib import asynccontextmanager
+
+    from backend.services.kanal.nachfuellen import nachfuellen_spiegel
+
+    macher = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    @asynccontextmanager
+    async def sitzungen():
+        async with macher() as s:
+            yield s
+            await s.commit()
+
+    erg = await nachfuellen_spiegel(sitzungen, anlage_id, jetzt=JETZT, ha_svc=svc)
+    assert erg.fehler == 0 and erg.zeilen > 0, erg
 
 
 async def aggregiere_tage(db: AsyncSession, form: Form, anlage_id: int, tage) -> None:
@@ -570,13 +702,19 @@ async def schreibe_s3_von_hand(db: AsyncSession, form: Form, anlage_id: int, ids
     n = len(TAGE_JUNI)
     nutzlast: dict[str, Any] = {
         "anlage_id": anlage_id, "jahr": JAHR, "monat": JUNI,
-        "einspeisung_kwh": soll_einspeisung(form, n), "netzbezug_kwh": soll_netzbezug(n),
+        "einspeisung_kwh": soll_einspeisung(form, n), "netzbezug_kwh": soll_netzbezug(n, form),
         "geprueft_gegen": {},
     }
     if form.gesamt is not None:
         nutzlast["pv_erzeugung_kwh"] = tagesmenge(form.gesamt) * n
     inv = {str(ids[g.name]): {"pv_erzeugung_kwh": tagesmenge(g.rate) * n, "geprueft_gegen": {}}
            for g in form.geraete if g.zaehler}
+    if form.w2:   # die abgelesenen Monatsmengen der Zähler (Raten je Stunde, E4a-2)
+        von, bis = _tagesfenster_dt(TAGE_JUNI[0])[0], _tagesfenster_dt(TAGE_JUNI[-1])[1]
+        if form.gesamt is not None:
+            nutzlast["pv_erzeugung_kwh"] = zaehler_delta(form, "sensor.pv_gesamt", von, bis)
+        inv = {str(ids[g.name]): {"pv_erzeugung_kwh": zaehler_delta(form, g.sensor_id, von, bis),
+                                  "geprueft_gegen": {}} for g in form.geraete if g.zaehler}
     if inv:
         nutzlast["investitionen_daten"] = inv
     await create_monatsdaten(MonatsdatenCreate.model_validate(nutzlast), None, db)
@@ -916,6 +1054,7 @@ async def messe_ha(form: Form, m: Messung) -> None:
         try:
             aid, ids = await seed_anlage(db, form)
             with _umgebung(svc):
+                await fuelle_spiegel(engine, aid, svc)
                 await aggregiere_tage(db, form, aid, TAGE_JUNI + TAGE_JULI)
                 m.tage["HA"] = await miss_tage(db, aid, ids, TAGE_JUNI + TAGE_JULI)
                 m.laufend["HA"] = await _sichten_laufend(db, aid, ids)

@@ -365,6 +365,10 @@ async def get_monatswerte(
             sensor_ids, jahr, monat,
             deckel_je_sensor=deckel_je_sensor(anlage, investitionen_db.values()),
         )
+        # HA-Bauform E4a-2 (Umschaltstelle 3, B-2): Kanal-Δ der Bilanz-Sensoren, wenn ihre Spiegel den
+        # Kalendermonat alle voll decken (ohne Deckel); sonst bleibt der HA-Leser.
+        from backend.services.kanal.bilanz_leser import monatswerte_mit_kanaelen
+        (response,) = await monatswerte_mit_kanaelen(db, anlage_id, [response], monate=[(jahr, monat)])
     except Exception as e:
         await log_activity(
             kategorie="ha_statistics",
@@ -497,6 +501,10 @@ async def get_alle_monatswerte(
             sensor_ids, ab_datum,
             deckel_je_sensor=deckel_je_sensor(anlage, investitionen_db.values()),
         )
+        # HA-Bauform E4a-2 (Umschaltstelle 3, B-2): Kanal-Δ der Bilanz-Sensoren, wenn ihre Spiegel den
+        # Kalendermonat alle voll decken (ohne Deckel); sonst bleibt der HA-Leser.
+        from backend.services.kanal.bilanz_leser import monatswerte_mit_kanaelen
+        raw_responses = await monatswerte_mit_kanaelen(db, anlage_id, raw_responses)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -676,6 +684,10 @@ async def get_import_vorschau(
     )).scalars().all())
     try:
         ha_monate = service.get_alle_monatswerte(sensor_ids, deckel_je_sensor=_deckel)
+        # HA-Bauform E4a-2 (Umschaltstelle 3, B-2): Kanal-Δ der Bilanz-Sensoren, wenn ihre Spiegel den
+        # Kalendermonat alle voll decken (ohne Deckel); sonst bleibt der HA-Leser.
+        from backend.services.kanal.bilanz_leser import monatswerte_mit_kanaelen
+        ha_monate = await monatswerte_mit_kanaelen(db, anlage_id, ha_monate)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -1105,6 +1117,10 @@ async def import_ha_statistics(
             ha_response = service.get_monatswerte(
                 sensor_ids, jahr, monat, deckel_je_sensor=_deckel,
             )
+            # HA-Bauform E4a-2 (Umschaltstelle 3, B-2): Kanal-Δ der Bilanz-Sensoren, wenn ihre Spiegel den
+            # Kalendermonat alle voll decken (ohne Deckel); sonst bleibt der HA-Leser.
+            from backend.services.kanal.bilanz_leser import monatswerte_mit_kanaelen
+            (ha_response,) = await monatswerte_mit_kanaelen(db, anlage_id, [ha_response], monate=[(jahr, monat)])
 
             # Sensor-Werte zu Dict mappen
             sensor_values = {s.sensor_id: s.differenz for s in ha_response.sensoren}

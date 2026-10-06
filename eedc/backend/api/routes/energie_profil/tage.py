@@ -57,6 +57,15 @@ async def get_tages_zusammenfassungen(
         .order_by(TagesZusammenfassung.datum)
     )
     tage = result.scalars().all()
+    # HA-Bauform E4a-2 (Umschaltstelle 4): an Kanal-Tagen die Bilanz-Schlüssel aus den Kanälen (B-3).
+    from backend.services.kanal.bilanz_leser import bilanz_ziele, kanal_tage, mische_komponenten
+
+    kanal_je_tag = await kanal_tage(db, anlage_id, von, bis)
+    ziele = await bilanz_ziele(db, anlage_id, kanal_je_tag) if kanal_je_tag else {}
+
+    def _komp(t):
+        k = kanal_je_tag.get(t.datum)
+        return t.komponenten_kwh if k is None else mische_komponenten(t.komponenten_kwh, k, ziele[t.datum])
 
     return [
         TagesZusammenfassungResponse(
@@ -74,7 +83,7 @@ async def get_tages_zusammenfassungen(
             performance_ratio=t.performance_ratio,
             stunden_verfuegbar=t.stunden_verfuegbar,
             datenquelle=t.datenquelle,
-            komponenten_kwh=t.komponenten_kwh,
+            komponenten_kwh=_komp(t),
             komponenten_starts=t.komponenten_starts,
             boersenpreis_avg_cent=t.boersenpreis_avg_cent,
             boersenpreis_min_cent=t.boersenpreis_min_cent,

@@ -531,4 +531,14 @@ ACHSEN_HALTEWERTE: dict[tuple[str, str, str, str, str], Optional[float]] = {
     ('M10', 'sonstiges', 'S3', 'I2', 'verbrauch:cockpit_monat:vor=nach'): None,
     ('M10', 'speicher', 'S3', 'I2', 'entladung:cockpit_monat:vor=nach'): None,
     ('M10', 'speicher', 'S3', 'I2', 'ladung:cockpit_monat:vor=nach'): None,
+    # HA-Bauform E4a-2: neue Form W2-E (Entweder-oder) — dieselbe „Soll unklar"-Lage SA vor dem Abschluss, gemessen
+    # 06.10.2026 (Cockpit → Monat ohne HA im vergangenen Monat: nichts). Neu angelegt, keine bestehende Zeile geändert.
+    ('W2-E', 'netz', 'S3', 'I2', 'autarkie:cockpit_monat:vor=nach'): None,
+    ('W2-E', 'netz', 'S3', 'I2', 'eigenverbrauch:cockpit_monat:vor=nach'): None,
+    ('W2-E', 'netz', 'S3', 'I2', 'einspeisung:cockpit_monat:vor=nach'): None,
+    ('W2-E', 'netz', 'S3', 'I2', 'gesamtverbrauch:cockpit_monat:vor=nach'): None,
+    ('W2-E', 'netz', 'S3', 'I2', 'netzbezug:cockpit_monat:vor=nach'): None,
+    ('W2-E', 'netz', 'S3', 'I2', 'pv:cockpit_monat:vor=nach'): None,
+    ('W2-E', 'sonstiges', 'S3', 'I2', 'erzeugung:cockpit_monat:vor=nach'): None,
+    ('W2-E', 'sonstiges', 'S3', 'I2', 'verbrauch:cockpit_monat:vor=nach'): None,
 }

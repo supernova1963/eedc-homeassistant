@@ -259,6 +259,10 @@ def bkw_restwerte(
     beruht der Kern der P11-Ausnahme 4b: der Wechselrichter eines
     Balkonkraftwerks ist bei den meisten Anlagen die EINZIGE Live-Quelle.
 
+    ⚑ **Im Tageswert Regel des Bestandspfads** (HA-Bauform E4a-2): an Kanal-Tagen sind die Kinder ohne Zähler die
+    Lücke ihres BKW und teilen dessen Wert nach kWp (W2-R2, ``pv_verteilung.loese_pv_zeitraum_auf``) — am Tag wie im
+    Monat. Live und Stunde bleiben bei dieser Funktion.
+
     ⛔ **Der Rest wird hier NICHT verteilt.** Die kWp-Gewichtung ist eine
     Tages-Aussage (``snapshot/komponenten_beitraege``: über einen Tag mittelt
     sich Ost/West aus, über eine Stunde nicht). Wer einen Momentan- oder

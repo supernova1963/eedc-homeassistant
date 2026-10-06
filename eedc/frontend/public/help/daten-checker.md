@@ -21,6 +21,7 @@
    7. [Energieprofil – Plausibilität](#47-energieprofil--plausibilitaet)
    8. [MQTT-Topic-Abdeckung](#48-mqtt-topic-abdeckung)
    8a. [Zählerstände – Rücksprung](#48a-zaehlerstaende--ruecksprung)
+   8b. [Zählerstände – Sprung in Home Assistant](#48b-zaehlerstaende--sprung-in-home-assistant)
    9. [Sensor-Mapping – HA-Statistics](#49-sensor-mapping--ha-statistics)
    10. [Energieprofil – fehlende Tageswerte](#410-energieprofil--fehlende-tageswerte)
    11. [Geräte-Connector ohne Monatswert](#411-geraete-connector-ohne-monatswert)
@@ -114,6 +115,7 @@ eedc prüft **26 Kategorien**. Die meisten greifen in jeder Installation identis
 | 8 | Energieprofil – Plausibilität (§4.7) | greift | greift |
 | 9 | **MQTT-Topic-Abdeckung** (§4.8) | nur wenn MQTT-Import aktiv | nur wenn MQTT-Import aktiv |
 | 9a | **Zählerstände – Rücksprung** (§4.8a) | nur wenn MQTT-Import aktiv | nur wenn MQTT-Import aktiv |
+| 9b | **Zählerstände – Sprung in Home Assistant** (§4.8b) | greift | **wird übersprungen** (keine HA-Statistik) |
 | 10 | **Sensor-Mapping – HA-Statistics** (§4.9) | greift | **wird übersprungen** (keine HA-LTS verfügbar) |
 | 11 | Energieprofil – fehlende Tageswerte (§4.10) | greift | greift |
 | 12 | Geräte-Connector ohne Monatswert (§4.11) | greift | greift |
@@ -540,6 +542,28 @@ Ein Monat besteht in eedc aus zwei Teilen: der **Zählerzeile** der Anlage (Eins
 | **N Zähler-Feld(er) werden zwischendurch zurückgesetzt** | ⚠️ WARNING | Die Standreihe dieser Felder fällt innerhalb der letzten 30 Tage mindestens einmal. Die Meldung nennt die betroffenen Felder, wie oft es passiert ist, und belegt den jüngsten Fall mit beiden Ständen. | Schicke den **fortlaufenden** Stand statt des Tageswerts. Kommt der Wert aus einem Home-Assistant-Helfer: *Einstellungen → Geräte & Dienste → Helfer*, Verbrauchszähler öffnen, Zurücksetzen auf **„nie" (ohne Zyklus)** stellen. Kommt er aus einer eigenen App oder einem Skript, sende den Lebenszählerstand. eedc bildet Tag, Monat und Jahr daraus selbst — und exakt. |
 
 > **Kein Reparatur-Knopf, und das ist kein Versehen.** eedc kann einen Rücksprung nicht heilen: Die fehlende Energie steht in keiner Quelle. Die Reparatur liegt beim Absender. Sobald die Reihe wieder fortlaufend ist, verschwindet der Befund von selbst — es gibt nichts zu quittieren.
+
+---
+
+### 4.8b Zählerstände – Sprung in Home Assistant <a name="48b-zaehlerstaende--sprung-in-home-assistant"></a>
+
+Seit HA-Bauform E4a-2 übernimmt eedc die Langzeitstatistik von Home Assistant so, wie das Energie-Dashboard sie zeigt —
+ohne Obergrenze je Stunde. Meldet ein Sensor kurz 0 (Wechselrichter nachts „nicht verfügbar", Neustart) und springt danach
+in einer Stunde auf seinen alten Stand zurück, hält Home Assistant das für einen neuen Zähler und bucht beim
+Zurückkehren den ganzen Zählerstand als Zuwachs dieser Stunde. Dieser Sprung steht dann in Tag, Monat und Jahr — in
+eedc wie in Home Assistant. Ein Zähler, der nach dem Zurücksetzen wieder hochzählt (ein täglich zurückgesetzter
+Helfer, ein neuer Zähler nach einem Tausch), ist kein Befund: dort entsteht kein Sprung.
+
+#### Befunde
+
+| Befund | Schwere | Bedeutung |
+| --- | --- | --- |
+| **N Zählersprung/-sprünge in der Home-Assistant-Statistik** | ⚠️ WARNING | Für jeden Fund der letzten 30 Tage: Sensor, Tag, Stunde und die Phantommenge (Beispiel: `sensor.pv_gesamt am 15.06.2026, Stunde ab 10:00: +5.020,0 kWh`). |
+
+**Reparatur in Home Assistant:** *Entwicklerwerkzeuge → Statistik* → den Sensor suchen → beim Symbol „Wert anpassen"
+die genannte Stunde wählen und den Zuwachs auf die echte Menge setzen. eedc gleicht die korrigierte Statistik beim
+nächtlichen Abgleich (02:45) von selbst ab. Hast du einen betroffenen Monat schon gespeichert („Aus HA laden" oder
+Import), übernimm ihn danach im Monatsabschluss neu — ein gespeicherter Monat ändert sich nicht von allein.
 
 ---
 
@@ -1000,6 +1024,8 @@ homeassistant:
 
 Der Zählerstand unter *Anlage (Basis) → PV-Erzeugung Zählerstand (kWh)* versorgt **Monat, Tag und Stunde** als **Summe der ganzen Anlage**. Wenn dein Wechselrichter nur einen Gesamtzähler liefert, ist das eine vollständige Erfassung — du musst nichts weiter einrichten. Was dir fehlt, ist die **Aufschlüsselung je Erzeuger**: eedc kann dann nicht sagen, wie viel „Dach Süd" und wie viel „Dach West" beigetragen hat.
 
+> ⭐ **Mit Home Assistant (seit HA-Bauform E4a-2):** eedc nimmt je Sensor seine Messung wie das Energie-Dashboard von Home Assistant. Jeder Erzeuger mit eigenem Zähler behält seinen Wert — auch wenn ihm einzelne Stunden fehlen —, und der Anlagen-Zählerstand füllt nur, was die Erzeuger ohne eigenen Zähler beigetragen haben, im Verhältnis ihrer kWp. Beispiel: Anlagenzähler 21 kWh, Süd misst 12, West misst 6, das Balkonkraftwerk hat keinen Zähler — es bekommt 3 kWh, gekennzeichnet als geschätzt. Der Kasten darunter beschreibt, wie eedc Tage ohne Home-Assistant-Statistik rechnet.
+>
 > ⚠ **Es zählt immer nur eine Seite — aber du verlierst nichts.** Für jeden Tag entscheidet eedc: Liefern **alle** deine Erzeuger den ganzen Tag über einen eigenen Zähler, gelten ihre Werte. Sonst gilt der **Anlagen-Zählerstand** — und eedc rechnet daraus aus, wie viel auf die einzelnen Erzeuger entfällt: Wer selbst gemessen hat, behält seinen Wert; die übrigen bekommen den Rest im Verhältnis ihrer kWp. Solche abgeleiteten Werte sind als abgeleitet gekennzeichnet, deine **Anlagensumme stimmt in jedem Fall** — und deine Monatswerte ohnehin.
 >
 > ⚑ Das gilt seit eedc 4.0.39 (gemeldet über GitHub #406). **Vorher** schaltete schon ein einziger eigener Zähler den Anlagen-Zählerstand für Tag und Stunde ab: Wer einem von drei Strings einen Zähler zuordnete, sah in *Cockpit → Tag* nur noch diesen einen. Und wer die Zuordnung mitten am Tag anlegte — der Zähler liefert dann erst ab dieser Stunde —, verlor die gemessene PV der Stunden davor. Beides ist behoben; ein betroffener Tag lässt sich unter *Einstellungen → Datenverwaltung → Mehrere Tage neu aggregieren* zurückholen.

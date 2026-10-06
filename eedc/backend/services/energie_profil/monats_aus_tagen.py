@@ -130,6 +130,9 @@ class TagesMonatsSumme:
     #: an; dafür ist der Daten-Checker zuständig, der fehlende Tage meldet.
     erster_tag: Optional[date] = None
     letzter_tag: Optional[date] = None
+    #: HA-Bauform E4a-2 (Weg 2, nur Kanal-Monate): ``max(0, Σ Geräte − Anlagenzähler)`` — geführt, nicht bewertet
+    #: (N-588, Bewertung nach dem Umbau); ``None`` im Bestand und ohne Anlagenzähler.
+    wandlungsverluste_kwh: Optional[float] = None
 
     @property
     def pv_kwh(self) -> float:

@@ -25,10 +25,7 @@ from backend.core.field_definitions import get_wp_strom_kwh, nenner_ist_feine_su
 from backend.models.investition import Investition
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_je_monat
 from backend.services.energie_profil.modus_split_monat import lade_modus_split_ohne_abschluss
-from backend.services.energie_profil.monats_aus_tagen import (
-    TagesMonatsSumme,
-    lade_monats_summen_aus_tagen,
-)
+from backend.services.energie_profil.monats_aus_tagen import TagesMonatsSumme
 from backend.services.pv_monatswerte import (
     BkwAnteile,
     lade_pv_je_monat,
@@ -271,7 +268,12 @@ async def lade_monats_fakten(
                 if k not in monatsdaten_by_ym
                 or "speicher" not in roh.get(k, _RohMonat()).typen_mit_zeile
             }
-        tages_summen = await lade_monats_summen_aus_tagen(
+        # HA-Bauform E4a-2 (Umschaltstelle 1): je Monat EINE Quellenwahl der Bilanz-Gruppe — Monate, deren
+        # Kanäle voll decken, aus den Kanälen (Weg 2, `services/kanal/bilanz_leser.py`), die übrigen unverändert
+        # aus der Tagesebene (Lesart 1); die E-Mob-Aufteilung bleibt aus der Tagesebene (D2).
+        from backend.services.kanal.bilanz_leser import lade_monats_summen
+
+        tages_summen = await lade_monats_summen(
             db, anlage_id, von=von, bis=bis, stunden_nur_fuer=stunden_nur_fuer,
         )
 

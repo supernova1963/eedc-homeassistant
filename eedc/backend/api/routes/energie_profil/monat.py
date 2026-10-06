@@ -236,12 +236,25 @@ async def get_monatsauswertung(
     for r in stunden_rows:
         stunden_je_tag[r.datum].append(r)
     tz_je_tag = {t.datum: t for t in tag_rows}
+    # HA-Bauform E4a-2 (Umschaltstelle 4): je Tag EINE Quellenwahl der Bilanz-Gruppe — ein Kanal-Tag bringt Mengen,
+    # Eigenverbrauch und Quoten aus den Kanälen (Weg 2, kein Deckel), die stundengepaarten Größen aus den Stunden
+    # (B-3, D4). Der Monat faltet die Tage über dieselbe Layer-Funktion wie `monats_aus_tagen.falte_monat`.
+    from backend.services.kanal.bilanz_leser import bilanz_ziele, kanal_tage, mische_bilanz, mische_komponenten
+
+    kanal_je_tag = await kanal_tage(db, anlage_id, von, bis)
+    ziele_je_tag = await bilanz_ziele(db, anlage_id, kanal_je_tag) if kanal_je_tag else {}
+
+    def _tagesbilanz(d):
+        b = bilanz_aus_stundenrows(stunden_je_tag.get(d, []),
+                                   verworfen=(tz_je_tag[d].verworfen if d in tz_je_tag else None))
+        return mische_bilanz(kanal_je_tag[d].bilanz, b) if d in kanal_je_tag else b
+
     mb = monatsbilanz_aus_tagen(
-        bilanz_aus_stundenrows(
-            rows, verworfen=(tz_je_tag[d].verworfen if d in tz_je_tag else None),
-        )
-        for d, rows in sorted(stunden_je_tag.items())
+        _tagesbilanz(d) for d in sorted(set(stunden_je_tag) | set(kanal_je_tag))
     )
+    for d, k in kanal_je_tag.items():
+        if k.bilanz.pv_erfasst:
+            pv_pro_tag[d] = k.bilanz.erzeugung_kwh
     pv_sum = mb.erzeugung_kwh
     einspeisung_sum = mb.einspeisung_kwh
     netzbezug_sum = mb.netzbezug_kwh
@@ -315,10 +328,13 @@ async def get_monatsauswertung(
     }
 
     komponenten_sum: dict[str, float] = defaultdict(float)
-    for t in tag_rows:
-        if not t.komponenten_kwh:
+    _komp_je_tag = {t.datum: t.komponenten_kwh for t in tag_rows}
+    for d, k in kanal_je_tag.items():
+        _komp_je_tag[d] = mische_komponenten(_komp_je_tag.get(d), k, ziele_je_tag.get(d, set()))
+    for _d, _komp in sorted(_komp_je_tag.items()):
+        if not _komp:
             continue
-        for k, v in t.komponenten_kwh.items():
+        for k, v in _komp.items():
             if v is not None:
                 komponenten_sum[k] += v
 

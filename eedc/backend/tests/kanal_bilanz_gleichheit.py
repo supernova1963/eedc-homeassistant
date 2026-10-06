@@ -86,7 +86,7 @@ SENSOR_FELDER = ("start_wert", "end_wert", "differenz", "verworfen_kwh", "nachtr
 
 
 def _form(matrix: str, fid: str):
-    return am.FORMEN[fid] if matrix == "achsen" else mx.FORMEN[fid]
+    return am.MATRIX_FORMEN[fid] if matrix == "achsen" else mx.MATRIX_FORMEN[fid]
 
 
 def _pvform(matrix: str, form):
@@ -379,3 +379,114 @@ async def probe(ds: Datenstand) -> tuple[Bericht, Bericht]:
                 # (b) verwirft nichts und zählt keine Zeilenpaare — benannt, nicht verglichen.
                 bb.klassen["b_sensor_ohne_verworfen_nachtrag_intervalle"] += 1
     return ba, bb
+
+
+# ── E4a-2: Kanal-Leser (Weg 2) gegen die eingefrorene Referenz und gegen heute ──────────────────────────────────
+#
+# **Referenz** ``fixtures/kanal_w2_referenz.json``: die Werte der Probe-Funktion ``plans/ha-bauform-werkzeug/probe-weg2/
+# weg2.py`` (W2-1…3, gemessen 06.10.2026, Werkzeug ``scratchpad/e4a2/w2_referenz.py``) je Form und Datenstand — nur die
+# Bilanz-Gruppe, nur Tage/Monate mit Quellenwahl ``kanal``; je Tag ``[komponenten, Marken, Erzeugung, Einspeisung,
+# Netzbezug, Eigenverbrauch]``, gleiche Tage zusammengefasst; je Monat die sechs Mengen von ``MONAT_FELDER``. Die
+# Probe-Funktion ist nicht Produktcode — die Referenz ist eine unabhängige Rechnung derselben Regel.
+#
+# **Klassen gegen heute** (Fassung (a) = heutiger Leser): jede Abweichung des Kanal-Lesers von (a) gehört zu einer
+# benannten Klasse; ihre Zahl je Datenstand ist eingefroren (``test_kanal_bilanz_gleichheit.W2_KLASSEN``). Eine neue
+# Klasse oder eine andere Zahl ⇒ rot.
+
+import json as _json
+from pathlib import Path as _Path
+
+W2_REFERENZ = _json.loads((_Path(__file__).parent / "fixtures" / "kanal_w2_referenz.json").read_text(encoding="utf-8"))
+W2_TOL = 0.0015       # die Referenz trägt drei Nachkommastellen (Schlüssel zwei)
+W2_TOL_KOMP = 0.005 + 1e-9
+#: Die Formen mit Modul-Kindern unter einem BKW (W2-R2: die Kinder sind dessen Lücke; F09c: alle Kinder messen —
+#: heute trägt das BKW einen Schlüssel 0, unter W2 keinen).
+BKW_KINDER_FORMEN = {"F09a-G", "F09a-oG", "F09b-G", "F09b-oG", "F09c-G", "F09c-oG", "F10"}
+_TAG_BILANZ = ("erzeugung_kwh", "einspeisung_kwh", "netzbezug_kwh", "eigenverbrauch_kwh", "gesamtverbrauch_kwh",
+               "autarkie_prozent", "ev_quote_prozent")
+
+
+def _namen_alle(ds) -> dict[str, str]:
+    out = {}
+    for name, inv_id in ds.ids.items():
+        for p in ("pv_", "bkw_", "batterie_", "sonstige_"):
+            out[f"{p}{inv_id}"] = f"{p}{name}"
+    return out
+
+
+def w2_klasse(ds, ebene: str, wann, feld: str) -> str:
+    """Die benannte Klasse einer Abweichung Kanal-Leser gegen heute (Fassung (a))."""
+    if ds.fid == "M03" and ds.art == "HA" and (ebene == "monat" or wann in (date(2026, 6, 15), date(2026, 7, 2))):
+        return "N-586"
+    if ds.fid in BKW_KINDER_FORMEN and (feld.startswith("komp.") or feld in (
+            "pv_module_kwh", "bkw_kwh", "marken") or feld.startswith(("bkw_je_inv", "bkw_gemessen_je_inv"))):
+        return "BKW-Kinder"
+    if ebene == "monat" and wann == (2026, 7):
+        return "Teiltag"
+    return "neu"
+
+
+async def probe_w2(ds) -> tuple[list, Counter, Counter]:
+    """(Abweichungen von der Referenz, Klassen gegen heute, Zahl der Vergleiche)."""
+    from backend.services.kanal import bilanz_leser as bl
+
+    db, aid = ds.db, ds.aid
+    nm = _namen_alle(ds)
+    ref = W2_REFERENZ[f"{ds.art}-{ds.matrix}-{ds.fid}"]
+    ref_tage = {f"2026-{t}": werte for tage, werte in ref["tage"] for t in tage}
+    tb = await bl.tage_bilanz(db, aid, TAGE[0], TAGE[-1], jetzt=JETZT_TS)
+    mb = await bl.monate_bilanz(db, aid, MONATE[0], MONATE[-1], jetzt=JETZT_TS)
+    ka = await tage_aus_kanaelen(db, aid, TAGE[0], TAGE[-1], fassung=FASSUNG_WIE_BESTAND, jetzt=JETZT_TS)
+    ma = await monats_summen_aus_kanaelen(db, aid, von=MONATE[0], bis=MONATE[-1], fassung=FASSUNG_WIE_BESTAND,
+                                          jetzt=JETZT_TS)
+    abw: list = []
+    klassen: Counter = Counter()
+    n: Counter = Counter()
+
+    def _v(ebene, wann, feld, soll, ist, tol, gegen):
+        n[gegen] += 1
+        if _gleich(soll, ist, tol):
+            return
+        if gegen == "referenz":
+            abw.append((ebene, wann, feld, soll, ist))
+        else:
+            klassen[w2_klasse(ds, ebene, wann, feld)] += 1
+
+    kanal_tage = {d for d, kz in tb.items() if kz.wahl.quelle == QUELLE_KANAL}
+    assert {d.isoformat() for d in kanal_tage} == set(ref_tage), "Kanal-Tage weichen von der Referenz ab"
+    for d in sorted(kanal_tage):
+        k = bl.als_kanaltag(d, tb[d].komposition)
+        ziele = {e.ziel for e in tb[d].komposition.mit_wert}
+        komp, marken, erz, einsp, netz, ev = ref_tage[d.isoformat()]
+        ist_komp = {nm.get(x, x): v for x, v in k.komponenten_kwh.items()}
+        _v("tag", d, "komp", komp, ist_komp, W2_TOL_KOMP, "referenz")
+        _v("tag", d, "marken", marken or {}, {nm.get(x, x): v for x, v in k.pv_marken.items()}, 0, "referenz")
+        for feld, soll in zip(("erzeugung_kwh", "einspeisung_kwh", "netzbezug_kwh", "eigenverbrauch_kwh"),
+                              (erz, einsp, netz, ev)):
+            _v("tag", d, feld, soll, getattr(k.bilanz, feld), W2_TOL, "referenz")
+        a = ka.get(d)
+        if a is None:
+            continue
+        a_komp = {x: v for x, v in a.komponenten_kwh.items() if bl.ist_bilanz_schluessel(x, ziele)}
+        for key in sorted(set(a_komp) | set(k.komponenten_kwh)):
+            _v("tag", d, f"komp.{nm.get(key, key)}", a_komp.get(key), k.komponenten_kwh.get(key), TOL_KOMP, "heute")
+        _v("tag", d, "marken", a.pv_marken, k.pv_marken, 0, "heute")
+        for feld in _TAG_BILANZ:
+            _v("tag", d, feld, getattr(a.bilanz, feld), getattr(k.bilanz, feld), TOL_B_TAG, "heute")
+    for m, kz in mb.items():
+        if kz.wahl.quelle != QUELLE_KANAL:
+            continue
+        w = bl.als_monatssumme(*m, kz.komposition, jetzt=JETZT_TS)
+        r = ref["monate"].get(f"{m[0]}-{m[1]:02d}")
+        _v("monat", m, "vorhanden", True, r is not None, 0, "referenz")
+        for i, feld in enumerate(MONAT_FELDER):
+            if r is not None:
+                _v("monat", m, feld, r[i], getattr(w, feld), W2_TOL, "referenz")
+            if m in ma:
+                _v("monat", m, feld, getattr(ma[m], feld), getattr(w, feld), TOL_B_MONAT, "heute")
+        if m in ma:
+            for feld in MONAT_JE_GERAET:       # bkw_je_inv, bkw_gemessen_je_inv — je Gerät, wie die Probe Weg 2
+                a_je, w_je = getattr(ma[m], feld), getattr(w, feld)
+                for key in sorted(set(a_je) | set(w_je)):
+                    _v("monat", m, f"{feld}.{key}", a_je.get(key), w_je.get(key), TOL_B_MONAT, "heute")
+    return abw, klassen, n

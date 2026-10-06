@@ -42,6 +42,8 @@ export const KATEGORIE_LABELS: Record<string, string> = {
   // Label nennt die Sache aus Sicht des Anwenders — er sieht ein leeres Feld,
   // nicht eine verletzte Monotonie.
   zaehler_ruecksprung: 'Zählerstände – Rücksprung',
+  // N-586 (HA-Bauform E4a-2): Phantomsprung in der HA-Statistik — eedc zeigt ihn wie HA und nennt den Reparaturweg.
+  ha_zaehlersprung: 'Zählerstände – Sprung in Home Assistant',
   sensor_mapping_lts: 'Sensor-Mapping – HA-Statistics',
   sensor_mapping_einheit: 'Sensor-Mapping – Einheiten (Leistung/Energie)',
   provenance_conflict: 'Daten-Quellen – Konflikte',
@@ -87,6 +89,7 @@ export const KATEGORIE_REIHENFOLGE: string[] = [
   'energieprofil_plausibilitaet',
   'mqtt_topic_abdeckung',
   'zaehler_ruecksprung',
+  'ha_zaehlersprung',
   'sensor_mapping_lts',
   'sensor_mapping_einheit',
   'provenance_conflict',

@@ -111,6 +111,9 @@ class Geraet:
     live: Optional[dict] = None
     #: S3: was der Anwender von Hand einträgt (``None`` = die Monatsmenge der Zähler).
     hand: Optional[dict] = None
+    #: HA-Bauform E4a-2 (Form W2-E): ``{feld: ohne_Zeile(t)}`` — Stunden, für die der Zähler keine Zeile hat (HA und
+    #: Standalone); die Menge steht in der nächsten Zeile.
+    ohne: dict = field(default_factory=dict, compare=False)
 
     def sid(self, feld: str) -> str:
         return f"sensor.{self.name.lower().replace(' ', '_').replace('-', '_')}_{feld}"
@@ -137,7 +140,11 @@ class Form:
 
     @property
     def pvform(self) -> mx.Form:
-        return mx.FORMEN[self.pv]
+        return mx.MATRIX_FORMEN[self.pv]
+
+    @property
+    def w2(self) -> bool:
+        return self.fid.startswith("W2-")
 
     @property
     def ha_zustand(self) -> bool:
@@ -270,6 +277,45 @@ FORMEN: dict[str, Form] = {f.fid: f for f in (
 )}
 
 
+# ── Neue Form nach Weg 2 (HA-Bauform E4a-2, Auftrag Punkt 6) ────────────────
+#
+# Vorlage ``probe-weg2/neue_formen.py`` (Form E). Ein Sonstiges-Erzeuger (BHKW) mit zwei Zählern EINER Ersatzgruppe
+# (``sonstiges_feld_reihenfolge('erzeuger')``: ``erzeugung_kwh`` vor ``verbrauch_sonstig_kwh``): A 0,25 kWh je Stunde,
+# B 0,26 (zweites Messgerät, +4 %). A hat für die 24 Stunden des Tagesfensters 10.06. keine Zeile; seine Menge steht in
+# der Folgezeile. Steht NICHT in ``FORMEN`` (andere Proben iterieren sie), sondern in ``FORMEN_W2``.
+
+E_AUSFALL = (datetime(2026, 6, 9, 23), datetime(2026, 6, 10, 23))
+
+FORMEN_W2: dict[str, Form] = {f.fid: f for f in (
+    Form("W2-E", "Sonstiges-Erzeuger mit zwei Zählern einer Ersatzgruppe, A ohne Zeilen im Tagesfenster 10.06.",
+         ("netz", "sonstiges"), ("S1",), pv="F14",
+         geraete=(Geraet("BHKW", "sonstiges", {"erzeugung_kwh": immer(0.25), "verbrauch_sonstig_kwh": immer(0.26)},
+                         parameter={"kategorie": "erzeuger"},
+                         ohne={"erzeugung_kwh": lambda t: E_AUSFALL[0] <= t < E_AUSFALL[1]}),)),
+)}
+
+#: Alle Formen der Abnahme-Matrix.
+MATRIX_FORMEN: dict[str, Form] = {**FORMEN, **FORMEN_W2}
+
+
+def w2_menge(fn: RateFn, ohne: Optional[Callable], tage) -> float:
+    """Weg 2 als Soll: Δ eines Zählers über die Tagesfenster ``tage`` (``[Vortag 23:00, 23:00)``) wie die Lese-Schicht
+    — Stand vor dem Ende minus Stand vor dem Anfang; fehlende Zeilen tragen nichts, ihre Menge steht in der nächsten
+    vorhandenen (Lückentag wie HA). Unabhängig vom Produktcode."""
+    von = datetime.combine(tage[0], datetime.min.time()) - timedelta(hours=1)
+    bis = datetime.combine(tage[-1], datetime.min.time()) + timedelta(hours=23)
+    stand, vor_von, vor_bis, t = 0.0, None, None, mx.REIHE_VON
+    while t < mx.REIHE_BIS:
+        stand += fn(t)
+        if not (ohne and ohne(t)):
+            if t + timedelta(hours=1) <= von:
+                vor_von = stand
+            if t + timedelta(hours=1) <= bis:
+                vor_bis = stand
+        t += timedelta(hours=1)
+    return round((vor_bis or 0.0) - (vor_von or 0.0), 6)
+
+
 # ── Seed ────────────────────────────────────────────────────────────────────
 
 
@@ -330,7 +376,7 @@ def seed_ha(form: Form):
     svc = mx.seed_ha(form.pvform, abweichung=abw)
     for g in form.geraete:
         for feld, fn in g.felder.items():
-            _zaehler_reihe(svc, g.sid(feld), fn)
+            _zaehler_reihe(svc, g.sid(feld), fn, g.ohne.get(feld))
     if form.preis is not None:
         mid = ha_lts_helfer.sensor(svc, "sensor.strompreis", "ct/kWh", has_sum=False)
         zeilen, t = [], mx.REIHE_VON
@@ -343,11 +389,14 @@ def seed_ha(form: Form):
     return svc
 
 
-def _zaehler_reihe(svc, sid: str, fn: RateFn) -> None:
+def _zaehler_reihe(svc, sid: str, fn: RateFn, ohne: Optional[Callable] = None) -> None:
     mid = ha_lts_helfer.sensor(svc, sid, "kWh", has_sum=True)
     stand, zeilen, t = 500.0, [], mx.REIHE_VON
     while t < mx.REIHE_BIS:
         stand += fn(t)
+        if ohne is not None and ohne(t):
+            t += timedelta(hours=1)
+            continue
         zeilen.append({"m": mid, "t": _zeit.mktime(t.timetuple()), "w": round(stand, 4)})
         t += timedelta(hours=1)
     with svc._engine.begin() as conn:
@@ -361,13 +410,20 @@ async def seed_snapshots(db: AsyncSession, form: Form, aid: int, ids: dict[str, 
     for sid, (fn, _ohne, key) in mx._reihen(form.pvform).items():
         sk = key if key.startswith("basis:") else f"inv:{ids[key]}:pv_erzeugung_kwh"
         reihen[sk] = basis_reihen(form, mit_sprung=False).get(sid, fn)
+    ohne_je: dict[str, Callable] = {}
     for g in form.geraete:
         for feld, fn in g.felder.items():
             reihen[f"inv:{ids[g.name]}:{feld}"] = fn
+            if feld in g.ohne:
+                ohne_je[f"inv:{ids[g.name]}:{feld}"] = g.ohne[feld]
     zeilen = []
     for sk, fn in reihen.items():
         stand, t = 1000.0, mx.REIHE_VON
         while t <= mx.REIHE_BIS:
+            if sk in ohne_je and ohne_je[sk](t - timedelta(hours=1)):   # E4a-2 (W2-E): keine Zeile
+                stand += fn(t)
+                t += timedelta(hours=1)
+                continue
             zeilen.append({"anlage_id": aid, "sensor_key": sk, "zeitpunkt": t, "wert_kwh": round(stand, 4),
                            "quelle": "mqtt_inbound"})
             stand += fn(t)
@@ -386,6 +442,8 @@ def umgebung(form: Form, svc) -> ExitStack:
     st = ExitStack()
     st.enter_context(patch.object(hss, "_ha_statistics_service", svc))
     st.enter_context(patch.object(am, "datetime", mx._FesteUhr))
+    # E4a-2: die Uhr der Kanal-Leser ist dieselbe gestellte Uhr.
+    st.enter_context(patch("backend.services.kanal.bilanz_leser.uhr", lambda: int(mx.JETZT.timestamp())))
     if form.preis is None or not svc.is_available:
         from backend.services.energie_profil._helpers import StrompreisStunden
         st.enter_context(patch(
@@ -796,6 +854,7 @@ async def messe_ha(form: Form, m: Messung) -> None:
             aid, ids = await seed_anlage(db, form)
             m.ids = ids
             with umgebung(form, svc):
+                await mx.fuelle_spiegel(engine, aid, svc)   # E4a-2, B-1: Spiegel wie im Produkt mit HA
                 await mx.aggregiere_tage(db, form.pvform, aid, TAGE_JUNI + TAGE_JULI)
                 m.tage["HA"] = await miss_tage(db, aid, ids, TAGE_JUNI + TAGE_JULI)
                 m.laufend["HA"] = await _sichten_laufend(db, aid, ids)

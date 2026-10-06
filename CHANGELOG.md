@@ -9,6 +9,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Changed
+
+- **eedc nimmt je Sensor seine Messung wie das HA-Energie-Dashboard; der Anlagenzähler füllt nur Lücken; ein Zählersprung aus HA steht in Tag und Monat und wird im Daten-Checker benannt.** Mit Home Assistant rechnet eedc Tag, Monat und Jahr jetzt aus den Zählerständen der HA-Langzeitstatistik über den ganzen Zeitraum, für Netz, PV, Balkonkraftwerk, Speicher und Erzeuger hinter dem Zähler. Ein String mit eigenem Zähler behält seinen Wert auch dann, wenn ihm einzelne Stunden fehlen; bisher fiel der ganze Tag dann auf den Anlagenzähler zurück und der String bekam einen kWp-Anteil. Beispiel: Anlagenzähler 21 kWh, Süd misst 12, West 6, das Balkonkraftwerk hat keinen Zähler — Süd 12, West 6, Balkonkraftwerk 3 (geschätzt). Module, die unter einem Balkonkraftwerk hängen, teilen sich dessen Messung jetzt auch am Tag nach kWp, nicht erst im Monat. Eine Obergrenze je Stunde gibt es für die Home-Assistant-Daten nicht mehr: meldet ein Sensor kurz 0 und kehrt dann zurück, bucht Home Assistant den ganzen Zählerstand als Zuwachs — eedc zeigt diesen Sprung jetzt wie das Energie-Dashboard in Tag und Monat, und der Daten-Checker nennt Sensor, Stunde und Menge mit dem Weg zur Korrektur in Home Assistant („Zählerstände – Sprung in Home Assistant"). Fehlen einem Zähler mehr als 24 Stunden, trägt der erste Tag danach die ganze Menge. Zwischen 00:05 und etwa 01:10 nennt der laufende Monat eine Stunde mehr als die Summe seiner Tage (die erste Stunde des neuen Tages). Ohne Home Assistant und für Tage, die die Statistik nicht ganz abdeckt, rechnet eedc wie bisher.
+
 ### Fixed
 
 - **Community: ein Monat ohne Netzbezug oder ohne Einspeisung wird als 0 kWh geteilt.** Bisher ging eine gemessene 0 als „kein Wert" an den Community-Server, während dieselbe Meldung die Autarkie von 100 % aus genau dieser 0 nannte. Jetzt steht die 0 in der Meldung, und der Monatsvergleich der Community zählt die Anlage mit. Die Änderung wirkt beim nächsten Teilen.

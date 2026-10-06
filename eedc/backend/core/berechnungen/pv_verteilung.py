@@ -234,6 +234,129 @@ def bkw_kinder_luecken_kwh(
     return {i: verteilt[i].pv_erzeugung_kwh for i in luecken if i in verteilt}
 
 
+#: Typen der PV-Träger (wie ``erzeuger_traeger.PV_MODUL_TYP``/``BKW_TYP``; hier als Literal, weil
+#: ``erzeuger_traeger`` dieses Modul nicht kennt und das Modul ohne Importe auskommt).
+_PV_MODUL = "pv-module"
+_BKW = "balkonkraftwerk"
+
+
+@dataclass(frozen=True)
+class PvTraeger:
+    """Ein im Zeitraum aktiver PV-Erzeuger — nur Stammdaten (Zeitfilter aktiv · Anschaffung · Stilllegung beim
+    Aufrufer). ``kwp`` ist das Gewicht der Verteilung (``services/pv_monatswerte._kwp_gewicht``, dasselbe wie im
+    Monat); ``parent_id`` das Balkonkraftwerk eines Modul-Kinds (N-266)."""
+
+    inv_id: int
+    typ: str
+    kwp: float
+    parent_id: Optional[int] = None
+
+
+@dataclass(frozen=True)
+class PvZeitraum:
+    """Ergebnis von ``loese_pv_zeitraum_auf``.
+
+    ``werte``: ``{inv_id: kWh}`` je Träger mit Wert (Module samt Kindern, selbst tragende Balkonkraftwerke; ein an
+    seine Kinder abgetretenes BKW trägt keinen Eintrag). ``verteilt``: Marke ``kwp_anteil`` (kWp-Anteil am Rest des
+    Anlagenzählers bzw. des BKW). ``fehlt``: Module ohne Wert und ohne Anlagenzähler (Teilsumme). ``geraete_kwh``:
+    Σ ``werte``. ``bilanz_kwh``: die PV-Summe der Bilanz (W2-R3: Σ Geräte). ``wandlungsverluste_kwh``: ``Σ Geräte −
+    Anlagenzähler``, wenn positiv (N-588 — nur geführt, nicht bewertet; E4b); 0 bei Σ Geräte ≤ Anlagenzähler,
+    ``None`` ohne Anlagenzähler."""
+
+    werte: dict[int, float]
+    verteilt: frozenset
+    fehlt: frozenset
+    geraete_kwh: float
+    bilanz_kwh: Optional[float]
+    wandlungsverluste_kwh: Optional[float]
+
+
+def loese_pv_zeitraum_auf(
+    *,
+    traeger: list[PvTraeger],
+    eigen: dict[int, float],
+    anlagenzaehler_kwh: Optional[float],
+) -> PvZeitraum:
+    """Die PV eines beliebigen Zeitraums aus Zeitraum-Differenzen — **Weg 2** (Bauplan HA-Bauform §6b, Entscheid
+    Gernot 06.10.2026). Dieselbe Regel für Tag, Monat und jeden anderen Zeitraum; sie ist die Monatsregel P7
+    (``resolve_pv_je_modul`` und Stufe 2 ``bkw_kinder_luecken_kwh``, wie ``services/pv_monatswerte.lade_pv_je_monat``
+    sie für den gespeicherten Monat anwendet) auf die Δ des Zeitraums verallgemeinert — keine zweite Fassung:
+
+    * **W2-R1 Quelle je Gerät.** ``eigen`` trägt je Gerät das Δ seines Kanals, nur wenn der Kanal den Zeitraum voll
+      deckt (Abdeckungsregel der Lese-Schicht); fehlende Stunden im Inneren stecken in der Folgestunde (wie HA). Ein
+      Gerät mit Δ trägt es — gemessene Werte werden nie skaliert.
+    * **W2-R2 Rest des Anlagenzählers.** ``max(0, Anlagenzähler − Σ gemessene Geräte)`` geht EINMAL je Zeitraum nach
+      kWp auf die Geräte ohne Δ (``resolve_pv_je_modul``). Kinder eines Balkonkraftwerks sind dessen Lücke — am Tag
+      wie im Monat: ein abtretendes BKW mit Δ füllt die Lücken seiner Kinder (``bkw_kinder_luecken_kwh``, Marke
+      ``kwp_anteil``) und gilt damit als gemessen; ein selbst tragendes BKW mit Δ ist ein gemessenes Gerät (N-611),
+      ohne Δ eine Lücke des Anlagenzählers (N-621).
+    * **W2-R3 PV-Summe** (Wortlaut Master 06.10.2026 nach Halt H2; B2 vom 05.10. und P7 gelten): die PV-Summe eines
+      Zeitraums ist Σ der Geräte-Werte nach R1/R2 — der Anlagenzähler ist NUR Füller, nie Ersatz der Geräte-Summe.
+      ``wandlungsverluste_kwh`` = ``max(0, Σ Geräte − Anlagenzähler)`` wird geführt, nicht bewertet (N-588, Klasse
+      offen bis nach dem Umbau); ohne Anlagenzähler ``None``. Einzige Ausnahme: ohne jeden PV-Träger hat der Zähler
+      niemanden zu füllen und ist die Summe (wie Fassung (b)).
+    * **W2-R5 Untergrenze 0 einmal je Zeitraum** (die Klemmung des Rests in ``resolve_pv_je_modul``).
+
+    W2-R4 (Entweder-oder) wirkt VOR dieser Funktion — beim Aufrufer über ``resolve_either_or_eintraege`` mit
+    „Kanal deckt voll" (``core/berechnungen/bilanz_zeitraum.py``).
+
+    Ersetzt für Kanal-Zeiträume die Tagesregeln #406 „Wahl je Tag" (``pv_tages_praezedenz.waehle_pv_quelle``) und
+    N-623 (``gemessene_tageswerte``, ``loese_aggregat_tag_auf``); die gelten weiter für den Bestandspfad (Lesart 1).
+    """
+    module = [t for t in traeger if t.typ == _PV_MODUL]
+    bkws = [t for t in traeger if t.typ == _BKW]
+    bkw_ids = {b.inv_id for b in bkws}
+    abgetreten = {m.parent_id for m in module if m.parent_id in bkw_ids}
+
+    roh: dict[int, float] = {m.inv_id: eigen[m.inv_id] for m in module if m.inv_id in eigen}
+    abgeleitet: set[int] = set()
+    # Stufe 2 (N-266/E4): das abtretende BKW füllt die Lücken SEINER Kinder — alle Kinder übergeben.
+    for b in bkws:
+        if b.inv_id in abgetreten and b.inv_id in eigen:
+            kinder = [m for m in module if m.parent_id == b.inv_id]
+            for k_id, kwh in bkw_kinder_luecken_kwh(
+                bkw_kwh=eigen[b.inv_id],
+                kinder=[PvModul(k.inv_id, k.kwp, roh.get(k.inv_id)) for k in kinder],
+            ).items():
+                roh[k_id] = kwh
+                abgeleitet.add(k_id)
+    selbst = [b for b in bkws if b.inv_id not in abgetreten]
+    anlagenwert = anlagenzaehler_kwh
+    empfaenger: list[PvTraeger] = []
+    if anlagenzaehler_kwh is not None:
+        # N-611: das Δ der selbst tragenden BKW ist ein gemessenes Gerät — es mindert den Rest.
+        anlagenwert = max(0.0, anlagenzaehler_kwh - sum(eigen[b.inv_id] for b in selbst if b.inv_id in eigen))
+        empfaenger = [b for b in selbst if b.inv_id not in eigen]          # N-621
+    aufgeloest = resolve_pv_je_modul(
+        aggregat_kwh=anlagenwert,
+        module=[PvModul(m.inv_id, m.kwp, roh.get(m.inv_id), m.inv_id in abgeleitet) for m in module]
+        + [PvModul(b.inv_id, b.kwp, None) for b in empfaenger],
+    )
+    werte: dict[int, float] = {}
+    verteilt: set[int] = set()
+    fehlt: set[int] = set()
+    for i, w in aufgeloest.items():
+        if w.quelle == QUELLE_FEHLT:
+            fehlt.add(i)
+            continue
+        werte[i] = w.pv_erzeugung_kwh
+        if w.quelle == QUELLE_VERTEILT:
+            verteilt.add(i)
+    for b in selbst:
+        if b.inv_id in eigen:
+            werte[b.inv_id] = eigen[b.inv_id]
+    geraete = sum(werte.values())
+    if werte or eigen:
+        bilanz: Optional[float] = geraete
+    elif not traeger and anlagenzaehler_kwh is not None:
+        # Kein PV-Träger gepflegt: der Zähler hat niemanden zu füllen und ist die einzige Aussage (wie Fassung (b)).
+        bilanz = anlagenzaehler_kwh
+    else:
+        bilanz = None
+    verluste = max(0.0, geraete - anlagenzaehler_kwh) if anlagenzaehler_kwh is not None else None
+    return PvZeitraum(werte, frozenset(verteilt), frozenset(fehlt), geraete, bilanz, verluste)
+
+
 def ist_vollstaendig(werte: dict[int, PvModulWert]) -> bool:
     """Ist die Σ der aufgelösten Werte eine **Anlagensumme**?
 

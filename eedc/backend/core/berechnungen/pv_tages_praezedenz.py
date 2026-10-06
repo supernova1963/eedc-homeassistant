@@ -1,5 +1,11 @@
 """Welche PV-Quelle trägt einen Tag — die Einzelzähler oder das Aggregat? (#406)
 
+⚑ **Regel des Bestandspfads, seit HA-Bauform E4a-2 (06.10.2026) für Kanal-Zeiträume ersetzt durch W2**
+(``pv_verteilung.loese_pv_zeitraum_auf``, ``bilanz_zeitraum.komponiere_bilanz_zeitraum``; Bauplan §6b). Sie gilt weiter
+für Tage, deren Kanäle den Tag nicht voll decken — dort rechnet der heutige Leser aus Stunden- und Tageszeilen
+(Lesart 1, §3b). Für Kanal-Tage gibt es keine Wahl Einzel/Aggregat je Tag, kein 1-%-Kriterium (N-623 Regel 2) und
+keinen Abgleich gemessener Werte (N-623 Regel 4).
+
 **Die Entsprechung der Monatspräzedenz auf der Tages-/Stundenebene.** Im Monat
 löst ``pv_verteilung.resolve_pv_je_modul`` auf: ein Modul mit eigenem Wert
 gewinnt immer, das Aggregat füllt nur die **Lücken** der übrigen. Auf der

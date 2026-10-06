@@ -45,6 +45,10 @@ class CheckKategorie(str, Enum):
     # falschen bereits zugeordnet hat, erfuhr es nie. Dieselbe Klasse wie W-18:
     # ein erkannter Zustand, der nur als Logzeile existierte.
     ZAEHLER_RUECKSPRUNG = "zaehler_ruecksprung"
+    # N-586 (HA-Bauform E4a-2): ein Phantomsprung in HAs Statistik (Sensor meldet kurz 0 und kehrt zurück, HA
+    # bucht den Zählerstand als Zuwachs). eedc rechnet seither wie das HA-Energie-Dashboard ohne Deckel — der
+    # Sprung steht in Tag und Monat, diese Kategorie benennt ihn und den Reparaturweg in HA.
+    HA_ZAEHLERSPRUNG = "ha_zaehlersprung"
     # v3.24.1: Sensoren im Mapping, die nicht in HA-Long-Term-Statistics landen
     # (kein state_class) — Korrektur-Werkzeuge in der Datenverwaltung wirken
     # auf solche Sensoren nicht (Vollbackfill, Verlauf nachrechnen,

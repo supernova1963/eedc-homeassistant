@@ -55,6 +55,37 @@ und zum Verständnis der Datenflüsse.
 - `Monatsdaten.batterie_*` - Nutze `InvestitionMonatsdaten` (Speicher)
 - `Monatsdaten.pv_erzeugung_kwh` - **kein Schreibziel** für neuen Code (Pro-Modul-Werte gehören in `InvestitionMonatsdaten`) und seit 2026-07-29 auch **keine allgemeine Lesequelle** mehr: das Feld trägt den manuell erfassten oder importierten **PV-Gesamtwert** eines Monats und ist **ausschließlich Eingang** des Read-time-SoT `core/berechnungen/pv_verteilung.py` (`resolve_pv_je_modul`). Der füllt damit die Lücken der Module ohne eigenen Wert und kennzeichnet sie als gerechnet. Der Gesamtwert steht für **alle** PV-Quellen der Anlage: bevor er die Lücken füllt, geht der eigene Monatswert jedes Balkonkraftwerks ab, das in diesem Monat selbst trägt (nicht an Modul-Kinder abgetreten) — das BKW kommt in `pv_erzeugung_kwh = pv_module_kwh + bkw_kwh` als eigener Summand dazu und stünde sonst zweimal darin. Ein BKW **ohne** eigenen Wert, das im Monat selbst trägt, ist seit 04.10.2026 (N-621) eine Lücke wie ein Modul ohne Wert: es bekommt seinen kWp-Anteil am Rest (Gewicht `get_erzeuger_kwp`, auch `leistung_wp × anzahl`), geführt als `erzeugung.bkw_aus_anlagenwert_kwh` und additiv in `pv_kwh` — nicht in `bkw_kwh`, nicht in `pv_je_modul`, nicht in `BkwFakten` (die tragen die eigenen Werte). Ein BKW mit Anteil trägt im Monat keinen Ersatz-Eigenverbrauch (P9) und keinen Tageswert. Nur wo der Gesamtwert **gespeichert** ist; der HA-Statistik-Import speichert ihn nicht und verteilt beim Import nur auf Module (HA-Bauform S1). Wer nur einen Gesamt-Sensor hat, pflegt weiterhin ausschließlich hier. Jede einzelne Berechnung liest die Pro-Modul-Schicht bzw. deren Summe — nie das Feld selbst. Ladepfad: `services/pv_monatswerte.py`.
 
+> **PV je Gerät aus Zeitraum-Differenzen — Regel W2 (HA-Bauform E4a-2, Stand 06.10.2026, Entscheid Gernot).** Wo die
+> Kanäle der Bilanz-Gruppe (Netz, PV/Balkonkraftwerk samt Anlagenzähler, Speicher, Erzeuger hinter dem Zähler) einen
+> Zeitraum **voll decken** — mit Home Assistant der Spiegel seiner Langzeitstatistik —, rechnet eedc Tag, Monat und Jahr
+> aus den Differenzen der Zählerstände über den Zeitraum, und zwar mit **einer** Regel für jeden Zeitraum
+> (`core/berechnungen/bilanz_zeitraum.py::komponiere_bilanz_zeitraum`, PV-Teil `pv_verteilung.py::loese_pv_zeitraum_auf`):
+>
+> 1. **Quelle je Gerät:** ein Gerät, dessen Kanal den Zeitraum voll deckt, trägt sein Δ — auch wenn im Inneren Stunden
+>    fehlen (ihre Menge steht wie in HA in der Folgestunde). Gemessene Werte werden nie skaliert.
+> 2. **Rest des Anlagenzählers:** `max(0, Δ Anlagenzähler − Σ Δ gemessene Geräte)` geht einmal je Zeitraum nach kWp
+>    auf die Geräte ohne deckenden Kanal (Marke „geschätzt (kWp-Anteil)"). Die Modul-Kinder eines Balkonkraftwerks sind
+>    dessen Lücke — am Tag wie im Monat.
+> 3. **PV-Summe:** Σ der Geräte-Werte nach 1 und 2. Der Anlagenzähler ist nur Füller, nie Ersatz der Geräte-Summe.
+>    Liegt Σ Geräte über ihm, wird die Differenz als Wandlungsverluste geführt (`wandlungsverluste_kwh`), nicht
+>    bewertet (N-588, offen bis nach dem Umbau). Beispiel Volleinspeiser mit DC-String-Zählern: am Schattentag melden
+>    die Strings 12,6 kWh, der AC-Zähler 12,096 — die PV-Summe ist 12,6, der Eigenverbrauch 0,504.
+> 4. **Entweder-oder:** je Zeitraum der erste Kanal einer Ersatzgruppe mit voller Deckung.
+> 5. **Untergrenze 0 einmal je Zeitraum** — Σ Tage ≠ Monat nur in der Aufteilung je Gerät an Tagen, an denen der
+>    Rest klemmt.
+>
+> **Kein Deckel, kein Rücksprung-Verwurf:** eedc nimmt je Sensor seine Messung wie das HA-Energie-Dashboard. Ein
+> Zählersprung aus HA steht deshalb in Tag und Monat; der Daten-Checker benennt ihn (Kategorie „Zählerstände – Sprung
+> in Home Assistant", Muster Reset und Rückkehr auf den alten Stand). **Lückentag wie HA:** fehlen einem Zähler mehr
+> als 24 Stunden, trägt der erste beendete Tag danach die ganze Lückenmenge; ein Tag ganz in der Lücke trägt 0 (er kommt trotzdem
+> aus den Kanälen, nicht aus dem Bestand).
+> **Quellenwahl:** je Tag und je Monat EINE Wahl für alle Eingänge der Gruppe — die Kanäle nur, wenn jeder benötigte
+> Kanal den Zeitraum voll deckt; sonst rechnet der bisherige Leser den ganzen Zeitraum aus Tages- und Stundenzeilen
+> mit den unten beschriebenen Regeln (**Bestandspfad**, Übergang bis S5). Nicht umgestellt sind die E-Mobilitäts-
+> Aufteilung derselben Monatszeile und die stundengepaarten Spalten (Direktverbrauch, Überschuss, Defizit) — sie
+> bleiben aus den Stundenzeilen. Der Kalendermonat je Sensor („Aus HA laden", Import, Monatsabschluss-Vorschlag,
+> HA-Weg von *Cockpit → Monat*) nimmt das Kanal-Δ, wenn die Spiegel aller Bilanz-Sensoren den Kalendermonat decken.
+
 > **Die PV-Achse über Tag, laufenden und abgeschlossenen Monat** (Stand 04.10.2026, Bau der sieben Regelfehler; Richter ist die Abnahme-Matrix `backend/tests/test_pv_achse_matrix.py`):
 >
 > - **Tag, Anlagenzähler trägt ihn** (nicht jeder Erzeuger misst den ganzen Tag): ein Erzeuger mit eigenem Zähler behält seinen **Tageswert** (Σ seiner brauchbaren Stunden-Slots; ein Balkonkraftwerk mit Modul-Kindern den Rest nach ihnen, E4). Gemessen ist er, wenn kein Slot verworfen wurde, kein Tagesreset vorliegt und die Anlagen-Energie seiner Stunden ohne eigenen Slot plus seine Bündel-Energie höchstens **1 %** des Tages ist (`DAEMMERUNGSREST_ANTEIL`, eine Setzung). Die übrigen Träger teilen den Rest nach kWp (Marke `kwp_anteil`); übersteigen die Messungen den Anlagenzähler — oder misst jeder, aber mit anderer Summe —, werden sie gemeinsam auf ihn skaliert. Σ Tages-Keys = Σ Stunden. Layer: `core/berechnungen/pv_tages_praezedenz.py` (`gemessene_tageswerte`, `loese_aggregat_tag_auf`). Bis dahin bekam im Aggregat-Fall jeder Erzeuger nur den kWp-Anteil (seit v4.0.51; gespeicherte Tage heilen durch „Tag neu aggregieren" bzw. die Reparatur-Werkbank).
@@ -2756,6 +2787,10 @@ ist allein die Aufschlüsselung je Erzeuger (obenstehende Formel liefert für ih
 > `services/pv_orientation.py` gruppiert je Investition nach (Neigung, Azimut), eine
 > zusammengelegte Anlage bekäme einen systematisch falschen Tagesgang im gesamten
 > Prognose-Kanon inklusive HA-Prognose-Sensoren und PVGIS-SOLL.
+
+> ⚑ **Seit HA-Bauform E4a-2 (06.10.2026) ist der folgende Absatz die Regel des Bestandspfads** — Tage, deren
+> Kanäle den Tag nicht voll decken (ohne HA-Statistik, vor dem Spiegel, Lücke). Für Kanal-Tage gilt W2 (oben):
+> keine Wahl Einzel/Aggregat je Tag, kein 1-%-Kriterium, keine Skalierung gemessener Werte.
 
 **Die Regel ist die Präzedenz je Tag (ab 2026-09-04, #406).** Sie ist die Entsprechung der
 Monatsregel `resolve_pv_je_modul`, auf den Tag übertragen — SoT
