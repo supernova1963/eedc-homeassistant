@@ -105,6 +105,7 @@ from backend.api.routes.aktueller_monat.aggregation import (  # Vorlage 2
 )
 from backend.api.routes.aktueller_monat.finanzen import (  # Vorlage 2
     betriebskosten_und_sonstige_positionen,
+    dienstliche_ladung_ohne_fakt,
     ergebnis_des_monats,
     emob_aggregat_und_kennzahlen,
     wp_aggregat_aus_zeilen,
@@ -1348,12 +1349,19 @@ async def _berechne_monat(
     if "emob_ersparnis" in _out: emob_ersparnis = _out["emob_ersparnis"]
     if "spez_ertrag" in _out: spez_ertrag = _out["spez_ertrag"]
     # ── Ergebnis-Leiter (Paket „Ergebnisgrößen", 03.10.2026): Netto-Ertrag, Ergebnis, Herleitung aus dem Layer ──
+    # HA-Bauform E4e (N-633): ohne Monats-Fakt die dienstlichen Ladekosten wie die Fakten — Mengen der Entscheidung oben,
+    # Tarif und Bewertung der Schicht.
+    _dienstlich = (
+        await dienstliche_ladung_ohne_fakt(db=db, anlage_id=anlage_id, jahr=jahr, monat=monat,
+                                           emob_entscheid=emob_entscheid)
+        if monats_fakt is None else None
+    )
     _erg = ergebnis_des_monats(
         eigenverbrauch=eigenverbrauch, einspeise_erloes=einspeise_erloes, ev_ersparnis=ev_ersparnis,
         monats_fakt=monats_fakt, ev_preis_cent=ev_preis_cent,
         sonstige_netto=sonstige_netto_total, wp_ersparnis=wp_ersparnis, emob_ersparnis=emob_ersparnis,
         netzbezug_kosten=netzbezug_kosten, betriebskosten=betriebskosten_anteilig, ust_satz=kontext.ust_satz,
-        hat_waermepumpe=hat_waermepumpe, hat_emobilitaet=hat_emobilitaet,
+        hat_waermepumpe=hat_waermepumpe, hat_emobilitaet=hat_emobilitaet, dienstlich_ohne_fakt=_dienstlich,
     )
     # SOLL-Erfüllung aus dem Layer (N-356) — aus genau den Werten, die die Antwort trägt.
     _soll_pv_tage = fenster.tage if soll_pv.anteilig is not None else None

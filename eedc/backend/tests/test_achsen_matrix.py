@@ -1341,8 +1341,10 @@ ROT: dict[str, dict[tuple[str, str, str, str], tuple[str, ...]]] = {
     # und Cockpit → Monat) — keine Zelle mehr; die Sichten ohne Kanäle (SA) stehen unter OHNE-ABSCHLUSS (Lesart 1).
     'KANDIDAT-WP-ACHSEN-OHNE-ABSCHLUSS': {
     },
+    # E4E-DIENSTLICHE-LADEKOSTEN (N-633): seit HA-Bauform E4e geheilt (Cockpit → Monat ohne Monats-Fakt zieht die
+    # dienstlichen Ladekosten wie die Fakten ab: Mengen der einen Entscheidung, Tarif und Bewertung der Schicht) — keine
+    # Zelle mehr. Die Teiltag-Sicht `kosten:jahr_verlauf` derselben Zelle bleibt unter TEILTAG-ZWEI-MONATSGRENZEN.
     'E4E-DIENSTLICHE-LADEKOSTEN': {
-        ('M09', 'preis', 'HA', 'I1'): ('netto_ertrag:jahr_verlauf',),
     },
 }
 
@@ -1431,7 +1433,8 @@ URSACHE.update({
     ),
 })
 URSACHE["E4E-DIENSTLICHE-LADEKOSTEN"] = Ursache(
-    "HA-Bauform E4e (Preis und Kosten)",
+    "HA-Bauform E4e (Preis und Kosten) — seit E4e geheilt (Cockpit → Monat ohne Monats-Fakt rechnet den Posten wie die "
+    "Monats-Fakten, 10,44 € in beiden); keine Zelle mehr",
     "Seit E4c führen die Monats-Fakten des laufenden Monats den Dienstwagen aus den Kanälen und ziehen seine "
     "dienstlichen Ladekosten ab (Jahr-Verlauf 10,44 €); Cockpit → Monat ohne Monats-Fakt liest die dienstlichen "
     "Ladekosten nur aus dem Fakt (`aktueller_monat/finanzen.py`) und zieht sie im Monat ohne Abschluss nicht ab "

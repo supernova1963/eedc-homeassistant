@@ -119,6 +119,17 @@ beschriftet.
 | **Tag** | Σ(Preis_s × Menge_s) ÷ Σ Menge_s über die Slots **dieses Tages** | aus der Slot-Ebene |
 | **Monat** | **abgerechnet:** aus der Rechnung des Versorgers · **gemessen:** Σ(Preis_s × Menge_s) ÷ Σ Menge_s über den Monat | Anwendereingabe bzw. Slot-Ebene |
 
+> **Woher die Stufe „gemessen" des Monats kommt (HA-Bauform E4e, 06.10.2026).** Hat die Anlage einen Preissensor
+> mit Home-Assistant-Langzeitstatistik, führt eedc wie HAs Energie-Dashboard **Kosten-Kanäle**: je Stunde
+> Bezug × Stundenpreis, aufsummiert, daneben die bewertete Menge (nur Stunden mit Preis) und dasselbe für den
+> vermiedenen Bezug (A-2), dazu Σ Preis und Zahl der Stunden mit Preis (für das arithmetische Mittel und die Abdeckung).
+> Der gemessene Monats-Ø ist dann **Δ Kosten ÷ Δ bewertete kWh** des Monats — dieselbe Zahl
+> wie die Summe über die Stundenzeilen (A-3), aus zwei Ständen statt aus allen Stunden. Deckt der Kanal einen Monat
+> nicht ganz (kein Preissensor, Sensor ohne Statistik, Beginn mitten im Monat), rechnet der Monat wie bisher aus den
+> Stundenzeilen. **Die Kaskade ist unverändert** (gepflegt → gemessen → Zeitfenster → Stamm, P-6); nur die Quelle der
+> Stufe „gemessen" ist der Kanal, und die Stufe „Zeitfenster" gewichtet mit dem Netzbezug je Stunde aus den Kanälen,
+> wo sie den Monat decken. Tag (Slot-Ebene) und §51 bleiben bei den Stundenzeilen (der Börsenpreis ist kein Kanal).
+
 **Regel A-1 — Ein Durchschnittspreis ist immer mengengewichtet, nie arithmetisch.** [F]
 Das arithmetische Mittel beantwortet eine Frage, die niemand stellt („was kostete ein
 durchschnittlicher Slot") statt der, um die es geht („was kostete die Energie, die geflossen

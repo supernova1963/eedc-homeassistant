@@ -105,11 +105,28 @@ _BEDINGUNG_ZU_O: dict[str, str] = {
 #: Einheiten, die Bauplan §3 auf ``mean`` legt: Leistung, Ladestand, Temperatur, Preis.
 _MEAN_EINHEITEN: frozenset[str] = frozenset({"W", "kW", "%", "°C", "ct/kWh"})
 
-#: Abgeleitete Kanäle (Bauplan §2, §3a O8) — im Katalog benannt; geschrieben wird seit E4c nur der erste.
+#: Abgeleitete Kanäle (Bauplan §2, §3a O8) — im Katalog benannt; geschrieben werden die mit „(geschrieben)“ (E4c, E4d,
+#: E4e), die übrigen sind vorgesehen.
 ABGELEITETE_KANAELE: dict[str, str] = {
     "abgeleitet:inv:{id}:ladung_pv_kwh": "E4c (geschrieben): PV-Teil der Heimladung je Gerät ohne gemessene "
                                          "Aufteilung, Einspeise-Deckung je Stunde (``abgeleitet.py``)",
-    "kosten:*": "Kosten je Stunde bei Stundenpreis (stundengepaartes Produkt, G1)",
+    "kosten:*": "Familie der Kosten-Kanäle bei Stundenpreis (stundengepaartes Produkt, G1) — seit E4e die sechs "
+                "geschriebenen ``abgeleitet:basis:…``-Schlüssel darunter",
+    "abgeleitet:basis:kosten_netzbezug": "E4e (geschrieben): Netzbezugskosten in € = Σ max(0, Δ Netzbezug) × "
+                                          "Stundenpreis des Preis-Kanals ``basis:strompreis`` / 100 — nur mit "
+                                          "Preis-Kanal (``kosten.py``)",
+    "abgeleitet:basis:netzbezug_bewertet_kwh": "E4e (geschrieben): der bewertete Netzbezug in kWh (Stunden MIT Preis) — "
+                                               "Gewicht des Bezugs-Ø (``kosten.py``)",
+    "abgeleitet:basis:kosten_ev_vermieden": "E4e (geschrieben): Wert des vermiedenen Bezugs in € = Σ max(0, Δ PV − "
+                                            "Δ Einspeisung) × Stundenpreis / 100 (A-2, ``kosten.py``)",
+    "abgeleitet:basis:ev_bewertet_kwh": "E4e (geschrieben): der bewertete vermiedene Bezug in kWh — Gewicht des EV-Ø "
+                                        "(``kosten.py``)",
+    "abgeleitet:basis:preis_summe": "E4e (geschrieben): Σ Stundenpreis in ct der Stunden mit Preis — Zähler des "
+                                    "arithmetischen Ø (``kosten.py``)",
+    "abgeleitet:basis:preis_stunden": "E4e (geschrieben): Zahl der Stunden mit Preis (h) — Nenner des arithmetischen Ø, "
+                                      "abgedeckte Stunden (``kosten.py``)",
+    "abgeleitet:basis:erloes_einspeisung": "geplant, kein Schreiber (Entscheid Master zu E4e): Einspeise-Erlös in € — "
+                                           "erst mit Leser und Neuaufbau bei Tarifänderung in einem Zug",
     "abgeleitet:inv:{id}:modus_strom_{betriebsart}_kwh": "E4d (geschrieben): Strom der Wärmepumpe je Betriebsart "
                                                          "(heizen · warmwasser · kuehlen · lueften · entfeuchten · "
                                                          "rest) = K3-Menge der Stunde × Anteil der Mitschrift; nur "

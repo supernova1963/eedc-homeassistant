@@ -359,6 +359,32 @@ CO2-Einsparung (kg)      = PV_Erzeugung * 0.38               (VERALTET — s. Ka
 > WP-Tarif — auch für die WP-Ersparnis. Bis v4.0.6 nahm der **laufende** Monat hier
 > den Tarifpreis, während Vorjahres-Vergleich und die per-Investition-Details schon den
 > Durchschnitt nahmen; derselbe Monat trug damit je nach Sicht zwei Beträge.
+>
+> **Der gemessene Ø aus Kosten-Kanälen (HA-Bauform E4e).** Mit einem Preissensor, für den Home Assistant
+> eine Langzeitstatistik führt, schreibt eedc stündlich dieselben Summen wie HAs Kostensensor:
+>
+> ```
+> Kosten_Netzbezug (€)   += max(0, Δ Netzbezug_h) × Preis_h / 100       — nur Stunden mit Preis
+> Netzbezug_bewertet     += max(0, Δ Netzbezug_h)                        — nur Stunden mit Preis
+> Kosten_EV_vermieden (€)+= max(0, Δ PV_h − Δ Einspeisung_h) × Preis_h / 100
+> EV_bewertet            += max(0, Δ PV_h − Δ Einspeisung_h)
+> Preis_Summe (ct)       += Preis_h                                       — nur Stunden mit Preis
+> Preis_Stunden (h)      += 1                                             — nur Stunden mit Preis
+>
+> Ø gemessen (Monat)     = Δ Kosten_Netzbezug × 100 / Δ Netzbezug_bewertet
+> EV-Ø (Monat)           = Δ Kosten_EV_vermieden × 100 / Δ EV_bewertet
+> Ø arithmetisch (Monat) = Δ Preis_Summe / Δ Preis_Stunden;  Stunden mit Preis = Δ Preis_Stunden
+> ```
+>
+> Einen Kanal für den Einspeise-Erlös gibt es bewusst nicht: der Erlös rechnet weiter Einspeisung × Satz des Monats
+> − §51; als Kanal käme er nur mit eigenem Leser und Neuaufbau bei einer Tarifänderung.
+>
+> Preis_h ist das Stundenmittel des Sensors (Einheit wie die Mitschrift: €/kWh × 100), PV_h die PV der Stunde samt
+> Erzeugern hinter dem Zähler nach derselben Regel wie Tag und Monat (der Anlagenzähler füllt nur Geräte ohne eigenen
+> Zähler). Ein Monat kommt aus den Kanälen nur, wenn **alle** diese Summen ihn ganz decken;
+> sonst rechnet er wie bisher aus den Stundenzeilen. Gleiche Zahlen, nur schneller: Monat für Monat zwei Stände
+> statt aller Stunden (12 Jahre, Kanäle über die ganze Zeit: 386 → 23 ms, gemessen an der Prüfkopie). Der Kanal beginnt mit dem Monat des
+> Updates; frühere Monate rechnet die Stundentabelle. Tag (Slot-Kosten) und §51 bleiben bei den Stundenzeilen.
 
 **§51 EEG im Einspeise-Erlös:** `Einspeisung_neg_Preis` sind die kWh, die in Stunden
 mit negativem Börsenpreis eingespeist wurden — für betroffene Anlagen entfällt dafür
@@ -3007,7 +3033,7 @@ Dienstlich_Ladekosten = Netz_kWh * Wallbox_Preis + PV_kWh * Netzbezugspreis
 >
 > **Netzanteil:** Wallbox-Stromvertrag, wenn vorhanden, sonst Anlagentarif — jeweils der Monats-Flexpreis vor dem Stammdaten-Arbeitspreis (P8). Die Aussichten nahmen dafür bis 2026-07-31 den allgemeinen Arbeitspreis, das Cockpit den Wallbox-Preis; Kanon ist das Cockpit.
 >
-> **SoT:** `core/berechnungen/dienstliche_ladekosten.py` (ADR-001). Seit N-633 (05.10.2026) ruft ihn **eine** Stelle: die Monats-Fakten-Schicht (`services/monats_fakten/bau.py`, mit dem Tarif des Monats), Feld `EmobFakten.dienstliche_ladekosten_euro`. Daraus lesen alle Sichten — Cockpit → Monat und → Jahr, Auswertungen → Tabelle/Finanzen, Monats- und Jahresbericht als Posten der Leiter, Cockpit → Übersicht, Aussichten/Finanz-Prognose und der HA-Sensor `netto_ertrag_euro` als Abzug in ihren Sonstigen Positionen. Bis dahin riefen die letzten drei die Formel je selbst, und die ersten führten den Posten gar nicht (104,40 € gegen 122,40 €); der HA-Export zog die Kosten bis 2026-07-31 **gar nicht** ab und stand damit über der Kachel, auf die er sich bezieht. Hinweis an der Zeile (wortgleich in Backend und Oberfläche): „Strom für den Dienstwagen: Netzanteil zum Wallbox-Tarif, PV-Anteil zum Netzbezugspreis. Die Erstattung des Arbeitgebers steht unter den sonstigen Erträgen."
+> **SoT:** `core/berechnungen/dienstliche_ladekosten.py` (ADR-001). Seit N-633 (05.10.2026) ruft ihn **eine** Stelle: die Monats-Fakten-Schicht (`services/monats_fakten/bau.py`, mit dem Tarif des Monats), Feld `EmobFakten.dienstliche_ladekosten_euro`. Daraus lesen alle Sichten — Cockpit → Monat und → Jahr, Auswertungen → Tabelle/Finanzen, Monats- und Jahresbericht als Posten der Leiter, Cockpit → Übersicht, Aussichten/Finanz-Prognose und der HA-Sensor `netto_ertrag_euro` als Abzug in ihren Sonstigen Positionen. Seit HA-Bauform E4e rechnet *Cockpit → Monat* den Posten auch für einen Monat **ohne** Monats-Fakt (laufender Monat ohne Abschluss) wie die Schicht — Mengen aus derselben Entscheidung (`entscheide_emob_heimladung`), Tarif und Bewertung über `monats_fakten.tarif_des_monats` und `dienstliche_ladekosten_euro` (im Beispiel 12,24 € → 10,44 €, gleich dem Jahresverlauf). Bis dahin riefen die letzten drei die Formel je selbst, und die ersten führten den Posten gar nicht (104,40 € gegen 122,40 €); der HA-Export zog die Kosten bis 2026-07-31 **gar nicht** ab und stand damit über der Kachel, auf die er sich bezieht. Hinweis an der Zeile (wortgleich in Backend und Oberfläche): „Strom für den Dienstwagen: Netzanteil zum Wallbox-Tarif, PV-Anteil zum Netzbezugspreis. Die Erstattung des Arbeitgebers steht unter den sonstigen Erträgen."
 
 ---
 

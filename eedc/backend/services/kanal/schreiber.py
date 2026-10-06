@@ -2,7 +2,7 @@
 
 Drei Roh-Familien; seit HA-Bauform E4c dazu abgeleitete Kanäle, die der Stundenlauf nach ihnen fortschreibt
 (``abgeleitet.py``: PV-Anteil der Heimladung je Gerät; seit E4d ``modus_strom.py``: Strom der Wärmepumpe je Betriebsart,
-den auch die Mitschrift nach ihrem Schreiben fortschreibt):
+den auch die Mitschrift nach ihrem Schreiben fortschreibt; seit E4e ``kosten.py``: Kosten-Kanäle bei Stundenpreis):
 
 * **Spiegel (HA)** — je zugeordnetem Zähler (``snapshot/writer._build_counter_map``, dieselbe
   Auswahl wie der Bestand, inklusive Stilllegung und ``quellen``-Read-Through) die Stundenzeilen der
@@ -775,6 +775,11 @@ async def schreibe_kanaele_im_stundenlauf(db: AsyncSession, anlage, zeitpunkt: d
             from backend.services.kanal.modus_strom import schreibe_modus_strom
 
             n += await schreibe_modus_strom(db, anlage, zeitpunkt, invs=list(k.invs.values()))
+            # HA-Bauform E4e: die Kosten-Kanäle bei Stundenpreis — NACH dem Preis-Spiegel und den Mengen der Stunde
+            # (``kosten.py``); ohne Preis-Kanal schreibt er nichts.
+            from backend.services.kanal.kosten import schreibe_kosten
+
+            n += await schreibe_kosten(db, anlage, zeitpunkt)
         return n
     except Exception as e:  # noqa: BLE001 — der Bestand darf vom neuen Teil nichts merken
         await _fehler_vermerken(db, anlage_id, "Stundenlauf", e)

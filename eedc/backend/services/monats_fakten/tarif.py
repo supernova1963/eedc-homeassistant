@@ -19,6 +19,10 @@ from backend.services.strompreis_aggregator import (
     aufgeloester_monatspreis,
     wirksamer_arbeitspreis_cent,
 )
+from backend.core.berechnungen.dienstliche_ladekosten import (
+    DienstlicheLadungZeile,
+    berechne_dienstliche_ladekosten,
+)
 from backend.core.wirtschaftlichkeit_defaults import EINSPEISEVERGUETUNG_DEFAULT_CENT
 from backend.models.monatsdaten import Monatsdaten
 from backend.services.monats_fakten.fakten import MonatsSchluessel, TarifFakten
@@ -141,3 +145,26 @@ async def _lade_tarif(
         kraftstoffpreis_euro=monatsdaten.kraftstoffpreis_euro if monatsdaten else None,
         gaspreis_cent_kwh=monatsdaten.gaspreis_cent_kwh if monatsdaten else None,
     )
+
+
+async def tarif_des_monats(
+    db: AsyncSession, anlage_id: int, jahr: int, monat: int, monatsdaten: Optional[Monatsdaten] = None,
+) -> TarifFakten:
+    """Der Monatstarif, wie die Monats-Fakten ihn bilden (``_lade_tarif``: Stichtag P8, die ganze Kaskade, Wallbox-Preis
+    mit Flex-Ø) — für eine Sicht, die einen Monat OHNE Fakt rechnet (HA-Bauform E4e: Cockpit → Monat ohne Abschluss,
+    dienstliche Ladekosten). Eigene Caches je Aufruf; dieselbe Auflösung wie die Schicht, keine zweite."""
+    return await _lade_tarif(db, anlage_id, (jahr, monat), monatsdaten, {}, {})
+
+
+def dienstliche_ladekosten_euro(pv_kwh: float, netz_kwh: float, tarif: TarifFakten) -> float:
+    """Der Posten „Dienstliche Ladekosten" eines Monats (N-633) aus den Mengen und dem Monatstarif — die EINE
+    Bewertung, die ``bau.py`` für den Fakt und Cockpit → Monat ohne Fakt rufen (Layer-Formel
+    ``berechne_dienstliche_ladekosten``: PV-Anteil zum Netzbezugspreis, Netzanteil zum effektiven Wallbox-Preis)."""
+    return berechne_dienstliche_ladekosten([
+        DienstlicheLadungZeile(
+            ladung_pv_kwh=pv_kwh,
+            ladung_netz_kwh=netz_kwh,
+            netzbezug_preis_cent=tarif.netzbezug_preis_cent,
+            wallbox_preis_cent=tarif.wallbox_preis_effektiv_cent,
+        ),
+    ]).gesamt_euro

@@ -181,9 +181,18 @@ async def berechne_monats_durchschnittspreis(
     Nur Stunden mit `strompreis_cent IS NOT NULL` werden berücksichtigt.
     Negativer Netzbezug wird auf 0 geclampt (Daten-Glitches).
 
+    ⭐ **HA-Bauform E4e:** deckt der Kosten-Kanal (``services/kanal/kosten.py``) den Monat, kommt das Aggregat aus den
+    Kanal-Δ (``kanal/preis_leser.py``, Δ Kosten ÷ Δ bewertete kWh wie HAs Kostensensor) — sonst wie bisher aus den
+    Stundenzeilen (Lesart 1). Dieselbe Wahl wie ``lade_preis_aggregate_je_monat``.
+
     Returns:
         StrompreisAggregat oder None wenn keine Preisdaten vorhanden.
     """
+    from backend.services.kanal.preis_leser import preis_monat
+
+    gedeckt, aus_kanal = await preis_monat(db, anlage_id, jahr, monat)
+    if gedeckt:
+        return aus_kanal
     _von, _bis = monats_fenster(jahr, monat)
     # N-387: Menge backward, Preis forward — gepaart über die Vorzeile.
     rows = [
@@ -301,17 +310,40 @@ async def lade_preis_aggregate_je_monat(
 
     Die Gleichheit beider Wege hält ``backend/tests/test_preis_aggregat_symmetrie.py``
     fest.
+
+    ⭐ **HA-Bauform E4e — die gedeckten Monate aus den Kosten-Kanälen.** Deckt der
+    Kosten-Kanal (``services/kanal/kosten.py``, HAs Kostensensor-Muster) einen Monat
+    voll, kommt sein Aggregat aus den Kanal-Δ (``kanal/preis_leser.preis_monate``:
+    gewichtet = Δ Kosten ÷ Δ bewertete kWh, arithmetisch = Mittel des Preis-Kanals,
+    abgedeckte Stunden = Stunden mit Preis, EV-Ø = Δ Kosten des vermiedenen Bezugs ÷
+    Δ vermiedener Bezug) — EINE Quellenwahl je Monat für alle Eingänge (Bauplan §3b).
+    Die übrigen Monate rechnet die Stundentabelle wie bisher (Lesart 1); die Zeilen
+    gedeckter Monate lädt sie nicht (disjunkte Datumsbereiche). Signatur und
+    Ergebnisform unverändert — alle Aufrufer bleiben, wie sie sind.
     """
+    from backend.services.kanal.preis_leser import preis_monate
+
+    aus_kanal, _ab_monat = await preis_monate(db, anlage_id, von=von, bis=bis)
+    # Die Stundenzeilen nur für die Monate, die der Kanal NICHT deckt — als disjunkte Datumsbereiche
+    # (dieselbe Zerlegung wie der Modus-Split der Wärmepumpe, E4d). Ohne Kanal ist das genau EIN Bereich und
+    # damit die eine Abfrage von bisher (Budget `test_query_budget_monats_fakten.py`).
+    from backend.services.energie_profil.modus_split_monat import _bereiche_ohne
+
+    bereiche = _bereiche_ohne(von, bis, frozenset(aus_kanal)) if aus_kanal else [(von, bis)]
     # N-387: Menge backward, Preis forward — dieselbe Paarung wie im
     # Einzelmonat, über denselben Lader. Die Aggregation steht seither in
-    # Python statt in `GROUP BY`; die **Zahl der Abfragen** (eine) und damit
-    # das Budget aus `test_query_budget_monats_fakten.py` bleibt unverändert.
+    # Python statt in `GROUP BY`.
     summen: dict[tuple[int, int], list[float]] = {}
-    for z, preis in await _zeilen_mit_gepaartem_preis(
-        db, anlage_id, ab=von, bis_exklusive=bis, nur_wenn_gemessen=True
-    ):
+    zeilen = []
+    for _ab, _vor in bereiche:
+        zeilen.extend(await _zeilen_mit_gepaartem_preis(
+            db, anlage_id, ab=_ab, bis_exklusive=_vor, nur_wenn_gemessen=True
+        ))
+    for z, preis in zeilen:
         if preis is None:
             continue
+        if (z.datum.year, z.datum.month) in aus_kanal:
+            continue  # gedeckt — der Kanal sagt es (Quellenwahl je Monat)
         # Negativen Netzbezug auf 0 klemmen — der Clamp trägt (s. Docstring).
         kw = max(0.0, float(z.netzbezug_kw or 0.0))
         # A-2: vermiedener Bezug je Slot = max(0, PV − Einspeisung) — dieselbe
@@ -339,6 +371,7 @@ async def lade_preis_aggregate_je_monat(
                 round(summe_ev_kosten / summe_ev, 2) if summe_ev > 0 else None
             ),
         )
+    je_monat.update({m: a for m, a in aus_kanal.items() if a is not None})
     return PreisMessung(anlage_id, je_monat)
 
 
@@ -622,21 +655,28 @@ async def wirksamer_arbeitspreis_cent(
     if cache is not None and schluessel in cache:
         return cache[schluessel]
 
-    _von, _bis = monats_fenster(jahr, monat)
-    result = await db.execute(
-        select(
-            TagesEnergieProfil.datum,
-            TagesEnergieProfil.stunde,
-            TagesEnergieProfil.netzbezug_kw,
-        ).where(
-            and_(
-                TagesEnergieProfil.anlage_id == anlage_id,
-                TagesEnergieProfil.datum >= _von,
-                TagesEnergieProfil.datum < _bis,
+    # HA-Bauform E4e: die Messung (der Netzbezug je Stunde) aus den Kanälen, wenn sie den Monat decken — sonst aus den
+    # Stundenzeilen wie bisher (Lesart 1). Dieselbe Formel auf beiden (`gewichteter_arbeitspreis_cent`).
+    from backend.services.kanal.preis_leser import netzbezug_slots_des_monats
+
+    slots = await netzbezug_slots_des_monats(db, anlage_id, jahr, monat)
+    if slots is None:
+        _von, _bis = monats_fenster(jahr, monat)
+        result = await db.execute(
+            select(
+                TagesEnergieProfil.datum,
+                TagesEnergieProfil.stunde,
+                TagesEnergieProfil.netzbezug_kw,
+            ).where(
+                and_(
+                    TagesEnergieProfil.anlage_id == anlage_id,
+                    TagesEnergieProfil.datum >= _von,
+                    TagesEnergieProfil.datum < _bis,
+                )
             )
         )
-    )
-    gewichtet = gewichteter_arbeitspreis_cent(tarif, result.all())
+        slots = result.all()
+    gewichtet = gewichteter_arbeitspreis_cent(tarif, slots)
     preis = stammpreis if gewichtet is None else round(gewichtet, 4)
 
     if cache is not None:

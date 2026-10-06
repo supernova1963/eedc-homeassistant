@@ -287,8 +287,9 @@ async def verwerfe_ab(db: AsyncSession, anlage_id: int, ab_ts: int) -> int:
     ohnehin stehen (Bauplan §2). Returns: Zahl der gelöschten Zeilen."""
     kanaele = (await db.execute(select(Kanal).where(and_(
         # HA-Bauform E4d: ALLE abgeleiteten Kanäle der Anlage — der PV-Anteil der Heimladung und der Strom je
-        # Betriebsart der Wärmepumpe (``modus_strom.py``) rechnen beide aus dem Spiegel.
-        Kanal.anlage_id == anlage_id, Kanal.key.like("abgeleitet:inv:%"),
+        # Betriebsart der Wärmepumpe (``modus_strom.py``) rechnen beide aus dem Spiegel; seit E4e auch die
+        # Kosten-Kanäle der Anlage (``abgeleitet:basis:…``, ``kosten.py``).
+        Kanal.anlage_id == anlage_id, Kanal.key.like("abgeleitet:%"),
     )))).scalars().all()
     n = 0
     for k in kanaele:

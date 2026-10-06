@@ -654,11 +654,15 @@ async def baue_abgeleitete(sitzungen, anlage_id: int) -> int:
     Reihe — der Zustand eines Produkts, dessen Stundenlauf seit Beginn der Reihe läuft (der Stundenlauf baut NICHT
     rückwirkend; ``ab_ts`` setzt die erste Stunde). Ein Seed, kein Soll; ohne Wallbox/E-Auto schreibt er nichts."""
     from backend.services.kanal.abgeleitet import schreibe_abgeleitete
+    from backend.services.kanal.kosten import schreibe_kosten
     from backend.services.kanal.modus_strom import schreibe_modus_strom
 
     async with sitzungen() as s:
         anlage = (await s.execute(select(Anlage).where(Anlage.id == anlage_id))).scalar_one()
         n = await schreibe_abgeleitete(s, anlage, JETZT, ab_ts=int(REIHE_VON.timestamp()))
+        # HA-Bauform E4e: die Kosten-Kanäle bei Stundenpreis (nur mit Preis-Kanal, ``kanal/kosten.py``) — aus Spiegel
+        # und Preis-Spiegel, idempotent ab der letzten Zeile.
+        n += await schreibe_kosten(s, anlage, JETZT, ab_ts=int(REIHE_VON.timestamp()))
         # HA-Bauform E4d: Strom je Betriebsart der Wärmepumpe — braucht die Mitschrift, die erst die Tagesaggregation
         # schreibt; vor ihr schreibt er nichts (``baue_abgeleitete_nach_tagen``).
         return n + await schreibe_modus_strom(s, anlage, JETZT, ab_ts=int(REIHE_VON.timestamp()))

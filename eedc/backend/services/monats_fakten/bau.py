@@ -13,9 +13,7 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.services.strompreis_aggregator import PreisMessung
 from backend.core.berechnungen import (
-    DienstlicheLadungZeile,
     PvModulWert,
-    berechne_dienstliche_ladekosten,
     berechne_verbrauchs_kennzahlen,
     erzeugung_hinter_zaehler_kwh,
 )
@@ -35,7 +33,7 @@ from backend.utils.sonstige_positionen import berechne_md_sonstige_summen
 from backend.services.monats_fakten.fakten import BkwFakten, EegFakten, EmobFakten, ErzeugungFakten, MetaFakten, MonatsFakt, MonatsSchluessel, SonstigesFakten, SonstigesGeraetFakten, SpeicherFakten, TAGESWERT_BKW, TAGESWERT_EMOB_ANTEIL, TAGESWERT_PV, TAGESWERT_SPEICHER, TAGESWERT_ZAEHLER, ZaehlerFakten
 from backend.services.monats_fakten.fakten_wp import WpFakten, WpGeraetFakten
 from backend.services.monats_fakten.roh import _RohMonat, _erzeuger_aktiv
-from backend.services.monats_fakten.tarif import _lade_tarif
+from backend.services.monats_fakten.tarif import _lade_tarif, dienstliche_ladekosten_euro
 
 
 async def _baue_fakt(
@@ -358,14 +356,10 @@ async def _baue_fakt(
 
     # N-633: der Posten „Dienstliche Ladekosten" — bewertet mit dem Tarif DIESES Monats (P8), über die eine
     # Layer-Formel. Hier statt im EmobFakten-Aufbau oben, weil der Tarif erst danach geladen ist.
-    emob = replace(emob, dienstliche_ladekosten_euro=berechne_dienstliche_ladekosten([
-        DienstlicheLadungZeile(
-            ladung_pv_kwh=emob.dienstlich_ladung_pv_kwh,
-            ladung_netz_kwh=emob.dienstlich_ladung_netz_kwh,
-            netzbezug_preis_cent=tarif.netzbezug_preis_cent,
-            wallbox_preis_cent=tarif.wallbox_preis_effektiv_cent,
-        ),
-    ]).gesamt_euro)
+    # HA-Bauform E4e: dieselbe Bewertung ruft Cockpit → Monat für einen Monat ohne Fakt (`tarif.dienstliche_ladekosten_euro`).
+    emob = replace(emob, dienstliche_ladekosten_euro=dienstliche_ladekosten_euro(
+        emob.dienstlich_ladung_pv_kwh, emob.dienstlich_ladung_netz_kwh, tarif,
+    ))
 
     return MonatsFakt(
         jahr=jahr,
