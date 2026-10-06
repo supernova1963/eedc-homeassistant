@@ -415,6 +415,8 @@ def mische_bilanz(kanal, stunden):
     return dataclasses.replace(
         kanal, direktverbrauch_kwh=stunden.direktverbrauch_kwh, ueberschuss_kwh=stunden.ueberschuss_kwh,
         defizit_kwh=stunden.defizit_kwh, wp_strom_kwh=stunden.wp_strom_kwh, stunden=stunden.stunden,
+        # E4d: mit dem WP-Strom seine Marke „gemessen" (eine gemessene 0 ist erfasst, Bauplan §8a).
+        wp_erfasst=getattr(stunden, "wp_erfasst", False),
     )
 
 

@@ -44,6 +44,9 @@ TAGESWERT_EMOB_ANTEIL = "emob_anteil"
 TAGESWERT_EMOB = "emob"
 #: HA-Bauform E4c: die Sonstiges-Geräte (Verbraucher aus ihrer Gruppe, Erzeuger aus dem Kanal-Monat der Bilanz).
 TAGESWERT_SONSTIGES = "sonstiges"
+#: HA-Bauform E4d: die Wärmepumpen (Strom, Wärme, Betriebsart-Strom, Kälte, Strom je Betriebsart) aus der WP-Gruppe der
+#: Kanäle, nicht aus einer Monatszeile.
+TAGESWERT_WP = "waermepumpe"
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Feldgruppen (KONZEPT-MONATS-FAKTEN.md §3)

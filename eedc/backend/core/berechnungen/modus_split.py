@@ -261,6 +261,53 @@ def falte_modus_split_tag(
     )
 
 
+#: Die Betriebsarten, für die der abgeleitete Kanal „Strom je Betriebsart" eine Menge führt (HA-Bauform E4d). Heizen,
+#: Warmwasser und Kühlen sind die Teilmengen, die der Monatsabschluss speichert (``AUFGETEILTE_MODI``); Lüften und
+#: Entfeuchten werden **erfasst, nicht bewertet** (Konzept Wärme/Klima §5.4) — kein Leser faltet sie in eine Zahl, sie
+#: stehen im Rest des Monats wie bisher (D11). ``aus`` und ``unbestimmt`` haben keine Menge: ihr Strom ist Rest.
+MODUS_STROM_ERFASST: tuple[str, ...] = ("heizen", "warmwasser", "kuehlen", "lueften", "entfeuchten")
+#: Schlüssel des Rests in {@link modus_strom_der_stunde}: Strom der Stunde ohne Betriebsart-Aussage (keine Mitschrift,
+#: ``aus``/``unbestimmt``, unvollständig belegte Stunde, Zählerlücke).
+MODUS_STROM_REST: str = "rest"
+
+
+def modus_strom_der_stunde(
+    strom_kwh: Optional[float], anteile: Optional[dict[str, float]], *, stunde_eindeutig: bool = True,
+) -> tuple[dict[str, float], float]:
+    """Der Strom EINER Stunde je Betriebsart — die Regel des abgeleiteten Kanals (HA-Bauform E4d, Bauplan §8a).
+
+    ``Strom der Stunde × Anteil der Betriebsart`` aus der Mitschrift (HA-Bauform E1: Verweildauer je Kanon-Modus als
+    Bruchteil der Stunde). Was keinen Anteil einer erfassten Betriebsart trägt, ist Rest (K5, *nicht aufgeteilt*):
+    eine Stunde ohne Mitschrift („nicht hingesehen"), die Anteile von ``aus``/``unbestimmt``, ein unvollständig belegter
+    Rest der Stunde. ⚠ Nichts wird hochgerechnet — dieselbe Zusicherung wie {@link falte_modus_split_tag}.
+
+    Args:
+        strom_kwh: die Menge der Stunde (K3 — der Aufrufer fragt ``wp_strom_aufteilung``), ``None`` = keine.
+        anteile: ``{modus: anteil}`` der Mitschrift dieser Stunde, ``None`` = keine Mitschrift-Zeile.
+        stunde_eindeutig: ``False``, wenn die Menge mehr als diese eine Stunde trägt (Zählerlücke: der Zuwachs der
+            fehlenden Stunden steht in dieser Zeile) — dann gibt es keine Betriebsart-Aussage über sie, alles ist Rest.
+
+    Returns:
+        ``({modus: kWh} für MODUS_STROM_ERFASST, rest_kWh)``; Σ = ``strom_kwh`` (bzw. 0). Die Abdeckung (Stunden mit
+        Signal) zählt der Aufrufer an der Mitschrift, nicht an der Menge — wie ``ModusSplit.abdeckung_h``.
+
+    ⭐ **Gleich der Bestands-Faltung, wo die Stunde einen Modus hat.** ``falte_modus_split_tag`` legt die ganze Menge
+    der Stunde auf ihren Gewinner; mit Anteil 1,0 ist das dieselbe Zahl. In einer Wechselstunde (zwei Modi in einer
+    Stunde) teilt der Kanal nach Verweildauer, der Bestand gibt alles dem länger gelaufenen — die Abweichung je Stunde
+    ist höchstens die Menge dieser Stunde (Gleichheitsprobe ``test_kanal_modus_strom.py``).
+    """
+    menge = max(0.0, float(strom_kwh or 0.0))
+    je = {m: 0.0 for m in MODUS_STROM_ERFASST}
+    if not stunde_eindeutig or not anteile:
+        return je, menge
+    belegt = 0.0
+    for m in MODUS_STROM_ERFASST:
+        a = max(0.0, float(anteile.get(m) or 0.0))
+        je[m] = menge * a
+        belegt += je[m]
+    return je, max(0.0, menge - belegt)
+
+
 def summiere_modus_split(splits: Iterable[ModusSplit]) -> ModusSplit:
     """Addiert Tages-Splits zu einem Zeitraum-Split (Σ über Tage ist assoziativ).
 

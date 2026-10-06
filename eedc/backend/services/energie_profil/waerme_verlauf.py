@@ -325,6 +325,9 @@ class WaermeMonatsMengenJeGeraet:
     kaelte_kwh: float = 0.0
     modus_strom_kuehlen_kwh: float = 0.0
     funktionsfremd_abzug_kwh: float = 0.0
+    #: HA-Bauform E4d (Bauplan §8a, Rest N-585): die Felder, für die mindestens ein Tag einen Wert trug — auch 0.
+    #: Die Mengen darüber sind ``float`` mit 0-Default; eine gemessene 0 und „kein Zähler" sähen dort gleich aus.
+    gemessen: frozenset[str] = frozenset()
 
 
 #: Die Strom-Achsen je Funktion — dieselbe Ausgabe-Tabelle, anderer Ausschnitt.
@@ -388,8 +391,12 @@ async def lade_waerme_monatsmengen_je_geraet(
         return {}, None, None
 
     roh: dict[str, dict[str, float]] = {}
+    gemessen: dict[str, set[str]] = {}
 
     def _addiere(inv_id: str, feld: str, wert: Optional[float]) -> None:
+        if wert is not None:
+            gemessen.setdefault(inv_id, set()).add(feld)
+            roh.setdefault(inv_id, {})
         if wert:
             roh.setdefault(inv_id, {})[feld] = roh.setdefault(inv_id, {}).get(feld, 0.0) + float(wert)
 
@@ -421,7 +428,9 @@ async def lade_waerme_monatsmengen_je_geraet(
 
     return (
         {
-            inv_id: WaermeMonatsMengenJeGeraet(inv_id=inv_id, **felder)
+            inv_id: WaermeMonatsMengenJeGeraet(
+                inv_id=inv_id, gemessen=frozenset(gemessen.get(inv_id, ())), **felder,
+            )
             for inv_id, felder in roh.items()
         },
         tage[0],

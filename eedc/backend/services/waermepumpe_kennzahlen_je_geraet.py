@@ -67,8 +67,10 @@ from backend.core.berechnungen.waermepumpe_kennzahl import (
     arbeitszahl_je_funktion,
     arbeitszahl_kuehlen,
     heizwaerme_kwh,
+    kein_betrieb_grund_der_achsen,
     waerme_gesamt_kwh,
 )
+from backend.core.berechnungen.imd_monatsaggregat import imd_typ_beitrag
 from backend.core.field_definitions import (
     WP_WAERME_ACHSEN_BEIDE,
     get_wp_strom_kwh,
@@ -137,6 +139,22 @@ class GeraetMengen:
     #: ``heizen``). Dieselbe Trennlinie zieht ``crud.py::_achse_gilt`` seit
     #: WK-15c; ihr Docstring benennt sie.
     waerme_achsen: frozenset[str] = WP_WAERME_ACHSEN_BEIDE
+    #: HA-Bauform E4d (Bauplan §8a, Rest N-585): Strom bzw. Wärme GEMESSEN, auch 0? Die Mengen darüber sind ``float``
+    #: mit 0-Default — erst diese Marken trennen „kein Betrieb im Zeitraum" (beide gemessen 0) von „kein Zähler".
+    strom_gemessen: bool = False
+    waerme_gemessen: bool = False
+
+    @property
+    def kein_betrieb(self) -> bool:
+        """Strom UND Wärme gemessen 0 — das Gerät lief im Zeitraum nicht (§8a: Stufe 3, Mengen 0)."""
+        return (self.strom_gemessen and self.waerme_gemessen
+                and self.strom_kwh == 0 and self.waerme_kwh == 0)
+
+    @property
+    def strom_null_waerme_fehlt(self) -> bool:
+        """Gegenfall (§8a, Nachtrag aus der Nachmessung E4d): Strom gemessen 0, Wärme NICHT erfasst ⇒ Stufe 5."""
+        return (self.strom_gemessen and self.strom_kwh == 0
+                and not self.waerme_gemessen and self.waerme_kwh == 0)
 
     @property
     def hat_waermemessung(self) -> bool:
@@ -211,7 +229,12 @@ def kennzahlen_aus_mengen(m: GeraetMengen) -> GeraetKennzahlen:
     """
     _stoerung = GRUND_JE_ABGRENZUNG.get(m.abgrenzung_stoerung or "")
     gesamt = arbeitszahl(
-        m.waerme_kwh, m.strom_kwh,
+        # Gegenfall (§8a, Nachtrag): Strom gemessen 0, Wärme nicht erfasst ⇒ die Wärme geht als ``None`` in den Layer,
+        # der nennt Stufe 5 „kein Wärmemengenzähler zugeordnet" statt Stufe 1.
+        None if m.strom_null_waerme_fehlt else m.waerme_kwh, m.strom_kwh,
+        # E4d (Bauplan §8a): Strom 0 und Wärme 0 GEMESSEN ⇒ Stufe 3 mit dem vorhandenen Zeitraum-Grund der Achsen.
+        kein_betrieb_grund=(kein_betrieb_grund_der_achsen(m.waerme_achsen)
+                            if (m.kein_betrieb or m.strom_null_waerme_fehlt) else None),
         waerme_abgeleitet_kwh=1.0 if m.waerme_abgeleitet else 0.0,
         strom_funktionsfremd_kwh=m.funktionsfremd_abzug_kwh,
         # N-441: die Perioden-Lage erreicht auch die Geräte-Gesamtzahl. Über
@@ -306,8 +329,13 @@ def mengen_aus_monatszeilen(
     #: erst ÜBER die Zeilen und ist an einer einzelnen nicht sichtbar (N-441).
     zeilen: list[tuple[float, float]] = []
 
+    strom_gemessen = waerme_gemessen = False
     for md in monatsdaten:
         d = md.verbrauch_daten or {}
+        # E4d: Strom/Wärme gemessen — dieselbe Frage wie `imd_typ_beitrag` (die eine Lesetür).
+        _b = imd_typ_beitrag(wp, d, md.source_provenance)
+        strom_gemessen = strom_gemessen or _b.wp_strom_gemessen
+        waerme_gemessen = waerme_gemessen or _b.wp_waerme_gemessen
         # **Gemessen schlägt abgeleitet**, je Monatszeile — über den SoT, nicht
         # über eine nachgebaute Weiche (F-56).
         _zeile = modus_strom_zeile(d)
@@ -446,6 +474,8 @@ def mengen_aus_monatszeilen(
         abgrenzung_stoerung=_stoerung,
         hat_warmwasser_groesse=hat_warmwasser,
         waerme_achsen=_achsen,
+        strom_gemessen=strom_gemessen,
+        waerme_gemessen=waerme_gemessen,
     )
     f = GeraetFaltung(
         modus_heizen_kwh=modus_heizen,
@@ -477,6 +507,8 @@ def mengen_aus_tageswerten(
     modus_strom_kuehlen_kwh: float,
     funktionsfremd_abzug_kwh: float,
     waerme_ist_gesamt: bool,
+    strom_gemessen: bool = False,
+    waerme_gemessen: bool = False,
 ) -> GeraetMengen:
     """Die Mengen **eines Tages** je Gerät — die zweite Herkunft (s. Modulkopf).
 
@@ -518,6 +550,8 @@ def mengen_aus_tageswerten(
             "waermepumpe", "warmwasser_kwh", wp.parameter,
         ),
         waerme_achsen=wp_waerme_achsen(wp.parameter),
+        strom_gemessen=strom_gemessen,
+        waerme_gemessen=waerme_gemessen,
     )
 
 

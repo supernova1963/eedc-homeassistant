@@ -35,7 +35,8 @@ erste Stunde eines NEUEN Kanals ausdrücklich (Matrix-Seed: „das Produkt lief 
 **Isolation:** gerufen aus ``schreiber.schreibe_kanaele_im_stundenlauf`` im selben SAVEPOINT wie Spiegel und eigene
 Summe, NACH ihnen (die Eingänge der Stunde müssen geschrieben sein).
 
-Schwesterdateien: ``schreiber.py``, ``geraete_leser.py`` (Leser der E-Mob-Gruppe), ``lesen.py``.
+Schwesterdateien: ``schreiber.py``, ``geraete_leser.py`` (Leser der E-Mob-Gruppe), ``lesen.py``, ``modus_strom.py``
+(der zweite abgeleitete Kanal, E4d — ``verwerfe_ab`` hier verwirft beide).
 """
 
 from __future__ import annotations
@@ -285,7 +286,9 @@ async def verwerfe_ab(db: AsyncSession, anlage_id: int, ab_ts: int) -> int:
     schreibt sie aus dem korrigierten Spiegel neu. Eine Zeile vor ``aufbaubar_ab`` gibt es nicht; eine davor bleibt
     ohnehin stehen (Bauplan §2). Returns: Zahl der gelöschten Zeilen."""
     kanaele = (await db.execute(select(Kanal).where(and_(
-        Kanal.anlage_id == anlage_id, Kanal.key.like("abgeleitet:inv:%:ladung_pv_kwh"),
+        # HA-Bauform E4d: ALLE abgeleiteten Kanäle der Anlage — der PV-Anteil der Heimladung und der Strom je
+        # Betriebsart der Wärmepumpe (``modus_strom.py``) rechnen beide aus dem Spiegel.
+        Kanal.anlage_id == anlage_id, Kanal.key.like("abgeleitet:inv:%"),
     )))).scalars().all()
     n = 0
     for k in kanaele:

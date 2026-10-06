@@ -287,13 +287,25 @@ def wp_ersparnis_zeile(
     strompreis_cent: float,
     parameter: Optional[dict],
     gaspreis_cent: Optional[float],
+    null_ist_kein_betrieb: bool = False,
 ) -> Optional[WPErsparnisErgebnis]:
     """Die Ersparnis-Zeile EINES Geräts in EINEM Monat — oder ``None``, wenn es keine Zeile gibt.
 
     Eine Zeile entsteht nur bei **Wärme > 0 und Strom > 0** (die Bedingung der T-Konto-Zeile seit N-391): ein Monat
     ohne Wärme hat keine Bezugsgröße, ein Monat ohne Strom keinen Betrieb. Parameter des **Geräts**, Strompreis und
     Gaspreis **des Monats** (P8). ``strom_kuehlen_kwh`` ist die Teilmenge des Stroms im Kühlbetrieb (E-B).
+
+    ⭐ **HA-Bauform E4d (Bauplan §8a, Rest N-585): kein Betrieb ist eine Ersparnis von 0 €.** Sind Strom UND Wärme
+    GEMESSEN 0 (beide nicht ``None``) und kann der Aufrufer „gemessen 0" von „nicht erfasst" unterscheiden
+    (``null_ist_kein_betrieb``), entsteht die Zeile mit 0 € — die Ergebnis-Leiter führt sie dann nicht als „fehlt".
+    ⚠ Strom 0 bei Wärme > 0 und Strom > 0 bei Wärme 0 (Standby, W-B4) bleiben ohne Zeile.
     """
+    if (null_ist_kein_betrieb and waerme_kwh is not None and strom_kwh is not None
+            and float(waerme_kwh) == 0.0 and float(strom_kwh) == 0.0):
+        return berechne_wp_ersparnis(
+            wp_waerme_kwh=0.0, wp_strom_kwh=0.0, wp_strompreis_cent=strompreis_cent,
+            wp_parameter=parameter, monats_gaspreis_cent=gaspreis_cent, strom_kuehlen_kwh=0.0,
+        )
     if waerme_kwh is None or strom_kwh is None or waerme_kwh <= 0 or strom_kwh <= 0:
         return None
     return berechne_wp_ersparnis(

@@ -221,7 +221,7 @@ Das ist die unangenehmste Eigenschaft dieser Fläche und zugleich ihre wichtigst
 
 | Grund in der App | Was dahintersteckt | Was du tun kannst |
 |------------------|--------------------|-------------------|
-| **kein Stromverbrauch erfasst** | Für den Zeitraum liegt kein Strom vor. | Zähler zuordnen oder Monatswert pflegen |
+| **kein Stromverbrauch erfasst** | Für den Zeitraum liegt kein Strom vor — der Zähler fehlt oder hat nichts geliefert. ⚠ Eine **gemessene 0** ist erfasst: Zeigen Strom- und Wärmezähler im Zeitraum beide 0, steht hier *kein Heizbetrieb in diesem Zeitraum* (bei einer Brauchwasser-Wärmepumpe *keine Warmwasserbereitung in diesem Zeitraum*), die Mengen stehen mit 0 da und die Ersparnis mit 0,00 €. Zeigt der Stromzähler 0 und ist kein Wärmemengenzähler zugeordnet, steht hier *kein Wärmemengenzähler zugeordnet* — der Strom ist erfasst, es fehlt die Wärme. | Zähler zuordnen oder Monatswert pflegen |
 | **kein Wärmemengenzähler zugeordnet** | Es gibt keine gemessene Wärme. | Zähler zuordnen — oder die gepflegte Arbeitszahl nutzen (dann ist die Wärme *abgeleitet*) |
 | **kein Heizbetrieb in diesem Zeitraum** | Der Wärmemengenzähler ist zugeordnet und meldet für den Zeitraum **null** — das Gerät hat schlicht nicht geheizt. Typisch für einen Sommertag: Auf dem Stromzähler steht trotzdem etwas, das ist Standby und Umwälzung. | nichts, das ist die Wahrheit über den Tag. **Nicht mit *kein Wärmemengenzähler zugeordnet* verwechseln** — dort fehlt die Messung, hier ist sie da und sagt null |
 | **keine Warmwasserbereitung in diesem Zeitraum** | Dasselbe für den Warmwasserkreis. | dito |

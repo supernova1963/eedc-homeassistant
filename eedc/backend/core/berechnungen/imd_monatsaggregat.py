@@ -32,6 +32,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+from backend.core.field_definitions.wp_strom import WP_GESAMT_STROM_FELDER
 from backend.core.berechnungen.betriebsart_gemessen import (
     betriebsart_nutzenergie_kwh,
     nutzenergie_ohne_kennzahl_kwh,
@@ -125,6 +126,12 @@ class ImdTypBeitrag:
     wp_warmwasser_gemessen: bool = False
     wp_strom_heizen_gemessen: bool = False
     wp_strom_warmwasser_gemessen: bool = False
+    #: **HA-Bauform E4d (Bauplan §8a, Rest N-585) — die MENGEN gemessen?** Trägt die Zeile irgendeinen Strom- bzw.
+    #: Wärmewert, auch 0? Dieselbe Frage wie die vier Funktions-Marken darüber, eine Ebene höher: eine gemessene 0
+    #: beim Strom ist erfasst (F-5) — Strom 0 und Wärme 0 heißt „kein Betrieb", nicht „kein Zähler". Ohne die Marke
+    #: sehen beide in ``wp_strom``/``wp_waerme`` gleich aus (``0.0``).
+    wp_strom_gemessen: bool = False
+    wp_waerme_gemessen: bool = False
     wp_hat_split: bool = False
     #: N-391: Trägt die Zeile eine **gemessene Gesamtwärme** (Feld
     #: ``waerme_kwh``, EIN gemeinsamer Wärmemengenzähler)? Dann gilt sie (D1) —
@@ -376,6 +383,14 @@ def imd_typ_beitrag(
             wp_warmwasser_gemessen=hat_wp_warmwasser_wert(data, params),
             wp_strom_heizen_gemessen=_hat(data, "strom_heizen_kwh"),
             wp_strom_warmwasser_gemessen=_hat(data, "strom_warmwasser_kwh"),
+            # E4d: Strom gemessen = irgendein Strom-Feld der Zeile trägt einen Wert (Gesamt · Summanden · gemessene
+            # Betriebsart); Wärme gemessen = Gesamtwärme oder eine Funktions-Wärme trägt einen Wert.
+            wp_strom_gemessen=any(_hat(data, f) for f in (
+                *WP_GESAMT_STROM_FELDER, "strom_heizen_kwh", "strom_warmwasser_kwh",
+            )) or _gemessen,
+            wp_waerme_gemessen=(
+                _hat(data, "waerme_kwh") or _heizung_roh is not None or hat_wp_warmwasser_wert(data, params)
+            ),
             wp_hat_split=hat_split,
             # N-391: die Herkunft der Wärme, nicht ihre Menge — s. Feld-Docstring.
             wp_waerme_ist_gesamt=bool(_waerme_gesamt),

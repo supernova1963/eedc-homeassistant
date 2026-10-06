@@ -177,6 +177,7 @@ async def datenstand(matrix: str, fid: str, art: str, *, ha_abweichung: Optional
                     assert erg.fehler == 0 and erg.zeilen > 0
                     await mx.baue_abgeleitete(sitzungen, aid)     # E4c: der abgeleitete Kanal wie im Produkt
                     await mx.aggregiere_tage(db, pf, aid, TAGE)
+                    await mx.baue_abgeleitete(sitzungen, aid)     # E4d: Strom je Betriebsart aus der Mitschrift
             else:
                 svc = mx._ha_aus()
                 aid, ids = await (am.seed_anlage(db, form) if matrix == "achsen" else mx.seed_anlage(db, form))
@@ -198,6 +199,7 @@ async def datenstand(matrix: str, fid: str, art: str, *, ha_abweichung: Optional
                         await db.commit()
                     await mx.baue_abgeleitete(sitzungen, aid)     # E4c: aus der eigenen Summe, wie im Stundenlauf
                     await mx.aggregiere_tage(db, pf, aid, TAGE)
+                    await mx.baue_abgeleitete(sitzungen, aid)     # E4d: Strom je Betriebsart aus der Mitschrift
             yield Datenstand(matrix, fid, art, db, aid, ids, svc)
         finally:
             await db.close()

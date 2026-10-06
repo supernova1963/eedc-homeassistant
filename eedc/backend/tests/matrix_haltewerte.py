@@ -140,7 +140,7 @@ PV_HALTEWERTE: dict[tuple[str, str, str, str], Optional[float]] = {
     ('F16', 'S3', 'I6', 'vor:cockpit_monat'): None,
 }
 
-#: ``(Form, Größe, Weg, Invariante, Sicht) → gemessener Wert`` — Achsen-Matrix, 389 Sichten.
+#: ``(Form, Größe, Weg, Invariante, Sicht) → gemessener Wert`` — Achsen-Matrix, 415 Sichten (E4d: +26).
 ACHSEN_HALTEWERTE: dict[tuple[str, str, str, str, str], Optional[float]] = {
     ('M01', 'netz', 'S3', 'I2', 'autarkie:cockpit_monat:vor=nach'): None,
     ('M01', 'netz', 'S3', 'I2', 'eigenverbrauch:cockpit_monat:vor=nach'): None,
@@ -192,20 +192,20 @@ ACHSEN_HALTEWERTE: dict[tuple[str, str, str, str, str], Optional[float]] = {
     ('M05', 'preis', 'S3', 'I2', 'preis_effektiv:cockpit_monat:vor=nach'): 30.0,
     ('M05', 'wp', 'HA', 'I1', 'heizung:cockpit_jahr'): None,
     ('M05', 'wp', 'HA', 'I1', 'heizung:fakten_tw'): 0.0,
-    ('M05', 'wp', 'HA', 'I1', 'heizung:jahr_verlauf'): None,
-    ('M05', 'wp', 'HA', 'I1', 'modus_heizen:cockpit_jahr'): None,
-    ('M05', 'wp', 'HA', 'I1', 'modus_heizen:fakten_tw'): 0.0,
-    ('M05', 'wp', 'HA', 'I1', 'modus_warmwasser:cockpit_jahr'): None,
-    ('M05', 'wp', 'HA', 'I1', 'modus_warmwasser:fakten_tw'): 0.0,
+    ('M05', 'wp', 'HA', 'I1', 'heizung:jahr_verlauf'): 0.0,  # E4d: war None (Kanal-Leser, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'HA', 'I1', 'modus_heizen:cockpit_jahr'): 19.5,  # E4d: war None (Kanal-Leser, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'HA', 'I1', 'modus_heizen:fakten_tw'): 19.8,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'HA', 'I1', 'modus_warmwasser:cockpit_jahr'): 1.8,  # E4d: war None (Kanal-Leser, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'HA', 'I1', 'modus_warmwasser:fakten_tw'): 1.8,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
     ('M05', 'wp', 'HA', 'I1', 'warmwasser:cockpit_jahr'): None,
     ('M05', 'wp', 'HA', 'I1', 'warmwasser:fakten_tw'): 0.0,
-    ('M05', 'wp', 'HA', 'I1', 'warmwasser:jahr_verlauf'): None,
+    ('M05', 'wp', 'HA', 'I1', 'warmwasser:jahr_verlauf'): 0.0,  # E4d: war None (Kanal-Leser, Bericht HA-BAUFORM-E4D)
     ('M05', 'wp', 'HA', 'I3', 'heizung:cockpit_monat'): None,
     ('M05', 'wp', 'HA', 'I3', 'heizung:fakten_tw'): 0.0,
-    ('M05', 'wp', 'HA', 'I3', 'modus_heizen:cockpit_monat'): None,
-    ('M05', 'wp', 'HA', 'I3', 'modus_heizen:fakten_tw'): 0.0,
-    ('M05', 'wp', 'HA', 'I3', 'modus_warmwasser:cockpit_monat'): None,
-    ('M05', 'wp', 'HA', 'I3', 'modus_warmwasser:fakten_tw'): 0.0,
+    ('M05', 'wp', 'HA', 'I3', 'modus_heizen:cockpit_monat'): 19.5,  # E4d: war None (Kanal-Leser, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'HA', 'I3', 'modus_heizen:fakten_tw'): 19.8,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'HA', 'I3', 'modus_warmwasser:cockpit_monat'): 1.8,  # E4d: war None (Kanal-Leser, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'HA', 'I3', 'modus_warmwasser:fakten_tw'): 1.8,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
     ('M05', 'wp', 'HA', 'I3', 'warmwasser:cockpit_monat'): None,
     ('M05', 'wp', 'HA', 'I3', 'warmwasser:fakten_tw'): 0.0,
     ('M05', 'wp', 'S1', 'I1', 'heizung:cockpit_jahr'): None,
@@ -215,14 +215,14 @@ ACHSEN_HALTEWERTE: dict[tuple[str, str, str, str, str], Optional[float]] = {
     ('M05', 'wp', 'S1', 'I1', 'heizung:tabelle'): 0.0,
     ('M05', 'wp', 'S1', 'I1', 'heizung:uebersicht'): 0.0,
     ('M05', 'wp', 'S1', 'I1', 'heizung:zeitreihe'): 0.0,
-    ('M05', 'wp', 'S1', 'I1', 'modus_heizen:cockpit_jahr'): 0.0,
-    ('M05', 'wp', 'S1', 'I1', 'modus_heizen:cockpit_monat'): 0.0,
-    ('M05', 'wp', 'S1', 'I1', 'modus_heizen:uebersicht'): 0.0,
-    ('M05', 'wp', 'S1', 'I1', 'modus_heizen:zeitreihe'): 0.0,
-    ('M05', 'wp', 'S1', 'I1', 'modus_warmwasser:cockpit_jahr'): 0.0,
-    ('M05', 'wp', 'S1', 'I1', 'modus_warmwasser:cockpit_monat'): 0.0,
-    ('M05', 'wp', 'S1', 'I1', 'modus_warmwasser:uebersicht'): 0.0,
-    ('M05', 'wp', 'S1', 'I1', 'modus_warmwasser:zeitreihe'): 0.0,
+    ('M05', 'wp', 'S1', 'I1', 'modus_heizen:cockpit_jahr'): 198.0,  # E4d: war 0.0 (H-1: Abschluss schreibt den Kanal-Split, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S1', 'I1', 'modus_heizen:cockpit_monat'): 198.0,  # E4d: war 0.0 (H-1: Abschluss schreibt den Kanal-Split, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S1', 'I1', 'modus_heizen:uebersicht'): 217.8,  # E4d: war 0.0 (Kanal-Leser; H-1: Abschluss schreibt den Kanal-Split, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S1', 'I1', 'modus_heizen:zeitreihe'): 198.0,  # E4d: war 0.0 (H-1: Abschluss schreibt den Kanal-Split, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S1', 'I1', 'modus_warmwasser:cockpit_jahr'): 18.0,  # E4d: war 0.0 (H-1: Abschluss schreibt den Kanal-Split, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S1', 'I1', 'modus_warmwasser:cockpit_monat'): 18.0,  # E4d: war 0.0 (H-1: Abschluss schreibt den Kanal-Split, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S1', 'I1', 'modus_warmwasser:uebersicht'): 19.8,  # E4d: war 0.0 (Kanal-Leser; H-1: Abschluss schreibt den Kanal-Split, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S1', 'I1', 'modus_warmwasser:zeitreihe'): 18.0,  # E4d: war 0.0 (H-1: Abschluss schreibt den Kanal-Split, Bericht HA-BAUFORM-E4D)
     ('M05', 'wp', 'S1', 'I1', 'warmwasser:cockpit_jahr'): None,
     ('M05', 'wp', 'S1', 'I1', 'warmwasser:cockpit_monat'): None,
     ('M05', 'wp', 'S1', 'I1', 'warmwasser:community'): None,
@@ -232,20 +232,20 @@ ACHSEN_HALTEWERTE: dict[tuple[str, str, str, str, str], Optional[float]] = {
     ('M05', 'wp', 'S1', 'I1', 'warmwasser:zeitreihe'): 0.0,
     ('M05', 'wp', 'S1', 'I2', 'heizung:cockpit_monat:vor=nach'): None,
     ('M05', 'wp', 'S1', 'I2', 'heizung:fakten:tageswert=gespeichert'): 0.0,
-    ('M05', 'wp', 'S1', 'I2', 'heizung:jahr_verlauf:vor=nach'): None,
-    ('M05', 'wp', 'S1', 'I2', 'modus_heizen:cockpit_monat:vor=nach'): None,
-    ('M05', 'wp', 'S1', 'I2', 'modus_heizen:fakten:tageswert=gespeichert'): 0.0,
-    ('M05', 'wp', 'S1', 'I2', 'modus_warmwasser:cockpit_monat:vor=nach'): None,
-    ('M05', 'wp', 'S1', 'I2', 'modus_warmwasser:fakten:tageswert=gespeichert'): 0.0,
+    ('M05', 'wp', 'S1', 'I2', 'heizung:jahr_verlauf:vor=nach'): 0.0,  # E4d: war None (Kanal-Leser, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S1', 'I2', 'modus_heizen:cockpit_monat:vor=nach'): 198.0,  # E4d: war None (Kanal-Leser, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S1', 'I2', 'modus_heizen:fakten:tageswert=gespeichert'): 198.0,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S1', 'I2', 'modus_warmwasser:cockpit_monat:vor=nach'): 18.0,  # E4d: war None (Kanal-Leser, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S1', 'I2', 'modus_warmwasser:fakten:tageswert=gespeichert'): 18.0,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
     ('M05', 'wp', 'S1', 'I2', 'warmwasser:cockpit_monat:vor=nach'): None,
     ('M05', 'wp', 'S1', 'I2', 'warmwasser:fakten:tageswert=gespeichert'): 0.0,
-    ('M05', 'wp', 'S1', 'I2', 'warmwasser:jahr_verlauf:vor=nach'): None,
+    ('M05', 'wp', 'S1', 'I2', 'warmwasser:jahr_verlauf:vor=nach'): 0.0,  # E4d: war None (Kanal-Leser, Bericht HA-BAUFORM-E4D)
     ('M05', 'wp', 'S1', 'I3', 'heizung:cockpit_monat'): None,
     ('M05', 'wp', 'S1', 'I3', 'heizung:fakten'): 0.0,
-    ('M05', 'wp', 'S1', 'I3', 'modus_heizen:cockpit_monat'): 0.0,
-    ('M05', 'wp', 'S1', 'I3', 'modus_heizen:fakten'): 0.0,
-    ('M05', 'wp', 'S1', 'I3', 'modus_warmwasser:cockpit_monat'): 0.0,
-    ('M05', 'wp', 'S1', 'I3', 'modus_warmwasser:fakten'): 0.0,
+    ('M05', 'wp', 'S1', 'I3', 'modus_heizen:cockpit_monat'): 198.0,  # E4d: war 0.0 (H-1: Abschluss schreibt den Kanal-Split, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S1', 'I3', 'modus_heizen:fakten'): 198.0,  # E4d: war 0.0 (H-1: Abschluss schreibt den Kanal-Split, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S1', 'I3', 'modus_warmwasser:cockpit_monat'): 18.0,  # E4d: war 0.0 (H-1: Abschluss schreibt den Kanal-Split, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S1', 'I3', 'modus_warmwasser:fakten'): 18.0,  # E4d: war 0.0 (H-1: Abschluss schreibt den Kanal-Split, Bericht HA-BAUFORM-E4D)
     ('M05', 'wp', 'S1', 'I3', 'warmwasser:cockpit_monat'): None,
     ('M05', 'wp', 'S1', 'I3', 'warmwasser:fakten'): 0.0,
     ('M05', 'wp', 'S1', 'I6', 'heizung:cockpit_jahr'): None,
@@ -263,14 +263,14 @@ ACHSEN_HALTEWERTE: dict[tuple[str, str, str, str, str], Optional[float]] = {
     ('M05', 'wp', 'S2', 'I1', 'heizung:tabelle'): 0.0,
     ('M05', 'wp', 'S2', 'I1', 'heizung:uebersicht'): 0.0,
     ('M05', 'wp', 'S2', 'I1', 'heizung:zeitreihe'): 0.0,
-    ('M05', 'wp', 'S2', 'I1', 'modus_heizen:cockpit_jahr'): 0.0,
-    ('M05', 'wp', 'S2', 'I1', 'modus_heizen:cockpit_monat'): 0.0,
-    ('M05', 'wp', 'S2', 'I1', 'modus_heizen:uebersicht'): 0.0,
-    ('M05', 'wp', 'S2', 'I1', 'modus_heizen:zeitreihe'): 0.0,
-    ('M05', 'wp', 'S2', 'I1', 'modus_warmwasser:cockpit_jahr'): 0.0,
-    ('M05', 'wp', 'S2', 'I1', 'modus_warmwasser:cockpit_monat'): 0.0,
-    ('M05', 'wp', 'S2', 'I1', 'modus_warmwasser:uebersicht'): 0.0,
-    ('M05', 'wp', 'S2', 'I1', 'modus_warmwasser:zeitreihe'): 0.0,
+    ('M05', 'wp', 'S2', 'I1', 'modus_heizen:cockpit_jahr'): 198.0,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S2', 'I1', 'modus_heizen:cockpit_monat'): 198.0,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S2', 'I1', 'modus_heizen:uebersicht'): 217.8,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S2', 'I1', 'modus_heizen:zeitreihe'): 198.0,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S2', 'I1', 'modus_warmwasser:cockpit_jahr'): 18.0,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S2', 'I1', 'modus_warmwasser:cockpit_monat'): 18.0,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S2', 'I1', 'modus_warmwasser:uebersicht'): 19.8,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S2', 'I1', 'modus_warmwasser:zeitreihe'): 18.0,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
     ('M05', 'wp', 'S2', 'I1', 'warmwasser:cockpit_jahr'): None,
     ('M05', 'wp', 'S2', 'I1', 'warmwasser:cockpit_monat'): None,
     ('M05', 'wp', 'S2', 'I1', 'warmwasser:community'): None,
@@ -280,20 +280,20 @@ ACHSEN_HALTEWERTE: dict[tuple[str, str, str, str, str], Optional[float]] = {
     ('M05', 'wp', 'S2', 'I1', 'warmwasser:zeitreihe'): 0.0,
     ('M05', 'wp', 'S2', 'I2', 'heizung:cockpit_monat:vor=nach'): None,
     ('M05', 'wp', 'S2', 'I2', 'heizung:fakten:tageswert=gespeichert'): 0.0,
-    ('M05', 'wp', 'S2', 'I2', 'heizung:jahr_verlauf:vor=nach'): None,
-    ('M05', 'wp', 'S2', 'I2', 'modus_heizen:cockpit_monat:vor=nach'): None,
-    ('M05', 'wp', 'S2', 'I2', 'modus_heizen:fakten:tageswert=gespeichert'): 0.0,
-    ('M05', 'wp', 'S2', 'I2', 'modus_warmwasser:cockpit_monat:vor=nach'): None,
-    ('M05', 'wp', 'S2', 'I2', 'modus_warmwasser:fakten:tageswert=gespeichert'): 0.0,
+    ('M05', 'wp', 'S2', 'I2', 'heizung:jahr_verlauf:vor=nach'): 0.0,  # E4d: war None (Kanal-Leser, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S2', 'I2', 'modus_heizen:cockpit_monat:vor=nach'): 198.0,  # E4d: war None (Kanal-Leser, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S2', 'I2', 'modus_heizen:fakten:tageswert=gespeichert'): 198.0,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S2', 'I2', 'modus_warmwasser:cockpit_monat:vor=nach'): 18.0,  # E4d: war None (Kanal-Leser, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S2', 'I2', 'modus_warmwasser:fakten:tageswert=gespeichert'): 18.0,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
     ('M05', 'wp', 'S2', 'I2', 'warmwasser:cockpit_monat:vor=nach'): None,
     ('M05', 'wp', 'S2', 'I2', 'warmwasser:fakten:tageswert=gespeichert'): 0.0,
-    ('M05', 'wp', 'S2', 'I2', 'warmwasser:jahr_verlauf:vor=nach'): None,
+    ('M05', 'wp', 'S2', 'I2', 'warmwasser:jahr_verlauf:vor=nach'): 0.0,  # E4d: war None (Kanal-Leser, Bericht HA-BAUFORM-E4D)
     ('M05', 'wp', 'S2', 'I3', 'heizung:cockpit_monat'): None,
     ('M05', 'wp', 'S2', 'I3', 'heizung:fakten'): 0.0,
-    ('M05', 'wp', 'S2', 'I3', 'modus_heizen:cockpit_monat'): 0.0,
-    ('M05', 'wp', 'S2', 'I3', 'modus_heizen:fakten'): 0.0,
-    ('M05', 'wp', 'S2', 'I3', 'modus_warmwasser:cockpit_monat'): 0.0,
-    ('M05', 'wp', 'S2', 'I3', 'modus_warmwasser:fakten'): 0.0,
+    ('M05', 'wp', 'S2', 'I3', 'modus_heizen:cockpit_monat'): 198.0,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S2', 'I3', 'modus_heizen:fakten'): 198.0,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S2', 'I3', 'modus_warmwasser:cockpit_monat'): 18.0,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S2', 'I3', 'modus_warmwasser:fakten'): 18.0,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
     ('M05', 'wp', 'S2', 'I3', 'warmwasser:cockpit_monat'): None,
     ('M05', 'wp', 'S2', 'I3', 'warmwasser:fakten'): 0.0,
     ('M05', 'wp', 'S2', 'I6', 'heizung:cockpit_jahr'): None,
@@ -380,7 +380,7 @@ ACHSEN_HALTEWERTE: dict[tuple[str, str, str, str, str], Optional[float]] = {
     ('M06', 'netz', 'S3', 'I2', 'pv:cockpit_monat:vor=nach'): None,
     ('M06', 'preis', 'S3', 'I2', 'kosten:cockpit_monat:vor=nach'): None,
     ('M06', 'preis', 'S3', 'I2', 'preis_effektiv:cockpit_monat:vor=nach'): 30.0,
-    ('M06', 'wp', 'HA', 'I5', 'cockpit_monat:jaz:Klima'): None,
+    ('M06', 'wp', 'HA', 'I5', 'cockpit_monat:jaz:Klima'): 3.0,  # E4d: war None (Kanal-Leser, Bericht HA-BAUFORM-E4D)
     ('M06', 'wp', 'S1', 'I5', 'cockpit_monat:jaz:Klima'): 3.0,
     ('M06', 'wp', 'S2', 'I5', 'cockpit_monat:jaz:Klima'): 3.0,
     ('M06', 'wp', 'S3', 'I2', 'heizung:cockpit_monat:vor=nach'): None,
@@ -405,10 +405,10 @@ ACHSEN_HALTEWERTE: dict[tuple[str, str, str, str, str], Optional[float]] = {
     ('M07', 'sonstiges', 'S3', 'I2', 'verbrauch:cockpit_monat:vor=nach'): None,
     ('M07', 'wp', 'HA', 'I1', 'heizung:cockpit_jahr'): None,
     ('M07', 'wp', 'HA', 'I1', 'heizung:fakten_tw'): 0.0,
-    ('M07', 'wp', 'HA', 'I1', 'heizung:jahr_verlauf'): None,
+    ('M07', 'wp', 'HA', 'I1', 'heizung:jahr_verlauf'): 0.0,  # E4d: war None (Kanal-Leser, Bericht HA-BAUFORM-E4D)
     ('M07', 'wp', 'HA', 'I1', 'warmwasser:cockpit_jahr'): None,
     ('M07', 'wp', 'HA', 'I1', 'warmwasser:fakten_tw'): 0.0,
-    ('M07', 'wp', 'HA', 'I1', 'warmwasser:jahr_verlauf'): None,
+    ('M07', 'wp', 'HA', 'I1', 'warmwasser:jahr_verlauf'): 0.0,  # E4d: war None (Kanal-Leser, Bericht HA-BAUFORM-E4D)
     ('M07', 'wp', 'HA', 'I3', 'heizung:cockpit_monat'): None,
     ('M07', 'wp', 'HA', 'I3', 'heizung:fakten_tw'): 0.0,
     ('M07', 'wp', 'HA', 'I3', 'warmwasser:cockpit_monat'): None,
@@ -429,10 +429,10 @@ ACHSEN_HALTEWERTE: dict[tuple[str, str, str, str, str], Optional[float]] = {
     ('M07', 'wp', 'S1', 'I1', 'warmwasser:zeitreihe'): 0.0,
     ('M07', 'wp', 'S1', 'I2', 'heizung:cockpit_monat:vor=nach'): None,
     ('M07', 'wp', 'S1', 'I2', 'heizung:fakten:tageswert=gespeichert'): 0.0,
-    ('M07', 'wp', 'S1', 'I2', 'heizung:jahr_verlauf:vor=nach'): None,
+    ('M07', 'wp', 'S1', 'I2', 'heizung:jahr_verlauf:vor=nach'): 0.0,  # E4d: war None (Kanal-Leser, Bericht HA-BAUFORM-E4D)
     ('M07', 'wp', 'S1', 'I2', 'warmwasser:cockpit_monat:vor=nach'): None,
     ('M07', 'wp', 'S1', 'I2', 'warmwasser:fakten:tageswert=gespeichert'): 0.0,
-    ('M07', 'wp', 'S1', 'I2', 'warmwasser:jahr_verlauf:vor=nach'): None,
+    ('M07', 'wp', 'S1', 'I2', 'warmwasser:jahr_verlauf:vor=nach'): 0.0,  # E4d: war None (Kanal-Leser, Bericht HA-BAUFORM-E4D)
     ('M07', 'wp', 'S1', 'I3', 'heizung:cockpit_monat'): None,
     ('M07', 'wp', 'S1', 'I3', 'heizung:fakten'): 0.0,
     ('M07', 'wp', 'S1', 'I3', 'warmwasser:cockpit_monat'): None,
@@ -453,10 +453,10 @@ ACHSEN_HALTEWERTE: dict[tuple[str, str, str, str, str], Optional[float]] = {
     ('M07', 'wp', 'S2', 'I1', 'warmwasser:zeitreihe'): 0.0,
     ('M07', 'wp', 'S2', 'I2', 'heizung:cockpit_monat:vor=nach'): None,
     ('M07', 'wp', 'S2', 'I2', 'heizung:fakten:tageswert=gespeichert'): 0.0,
-    ('M07', 'wp', 'S2', 'I2', 'heizung:jahr_verlauf:vor=nach'): None,
+    ('M07', 'wp', 'S2', 'I2', 'heizung:jahr_verlauf:vor=nach'): 0.0,  # E4d: war None (Kanal-Leser, Bericht HA-BAUFORM-E4D)
     ('M07', 'wp', 'S2', 'I2', 'warmwasser:cockpit_monat:vor=nach'): None,
     ('M07', 'wp', 'S2', 'I2', 'warmwasser:fakten:tageswert=gespeichert'): 0.0,
-    ('M07', 'wp', 'S2', 'I2', 'warmwasser:jahr_verlauf:vor=nach'): None,
+    ('M07', 'wp', 'S2', 'I2', 'warmwasser:jahr_verlauf:vor=nach'): 0.0,  # E4d: war None (Kanal-Leser, Bericht HA-BAUFORM-E4D)
     ('M07', 'wp', 'S2', 'I3', 'heizung:cockpit_monat'): None,
     ('M07', 'wp', 'S2', 'I3', 'heizung:fakten'): 0.0,
     ('M07', 'wp', 'S2', 'I3', 'warmwasser:cockpit_monat'): None,
@@ -541,4 +541,32 @@ ACHSEN_HALTEWERTE: dict[tuple[str, str, str, str, str], Optional[float]] = {
     ('W2-E', 'netz', 'S3', 'I2', 'pv:cockpit_monat:vor=nach'): None,
     ('W2-E', 'sonstiges', 'S3', 'I2', 'erzeugung:cockpit_monat:vor=nach'): None,
     # E4c (W2-E-KATALOG berichtigt): die Menge „verbrauch“ gibt es beim Erzeuger nicht mehr — ihr Haltewert entfällt.
+    # HA-Bauform E4d: neue „Soll unklar"-Sichten (W1, M05: der Strom je Betriebsart kommt ohne Abschluss aus dem
+    # abgeleiteten Kanal und ist > 0 — I6 „nichts verschwindet" misst ihn jetzt). Bericht HA-BAUFORM-E4D.
+    ('M05', 'wp', 'HA', 'I6', 'modus_heizen:cockpit_jahr'): 19.5,
+    ('M05', 'wp', 'HA', 'I6', 'modus_heizen:cockpit_monat'): 19.5,
+    ('M05', 'wp', 'HA', 'I6', 'modus_heizen:fakten_tw'): 19.8,
+    ('M05', 'wp', 'HA', 'I6', 'modus_warmwasser:cockpit_jahr'): 1.8,
+    ('M05', 'wp', 'HA', 'I6', 'modus_warmwasser:cockpit_monat'): 1.8,
+    ('M05', 'wp', 'HA', 'I6', 'modus_warmwasser:fakten_tw'): 1.8,
+    ('M05', 'wp', 'S1', 'I6', 'modus_heizen:cockpit_jahr'): 198.0,
+    ('M05', 'wp', 'S1', 'I6', 'modus_heizen:cockpit_monat'): 198.0,
+    ('M05', 'wp', 'S1', 'I6', 'modus_heizen:fakten'): 198.0,
+    ('M05', 'wp', 'S1', 'I6', 'modus_heizen:uebersicht'): 217.8,
+    ('M05', 'wp', 'S1', 'I6', 'modus_heizen:zeitreihe'): 198.0,
+    ('M05', 'wp', 'S1', 'I6', 'modus_warmwasser:cockpit_jahr'): 18.0,
+    ('M05', 'wp', 'S1', 'I6', 'modus_warmwasser:cockpit_monat'): 18.0,
+    ('M05', 'wp', 'S1', 'I6', 'modus_warmwasser:fakten'): 18.0,
+    ('M05', 'wp', 'S1', 'I6', 'modus_warmwasser:uebersicht'): 19.8,
+    ('M05', 'wp', 'S1', 'I6', 'modus_warmwasser:zeitreihe'): 18.0,
+    ('M05', 'wp', 'S2', 'I6', 'modus_heizen:cockpit_jahr'): 198.0,
+    ('M05', 'wp', 'S2', 'I6', 'modus_heizen:cockpit_monat'): 198.0,
+    ('M05', 'wp', 'S2', 'I6', 'modus_heizen:fakten'): 198.0,
+    ('M05', 'wp', 'S2', 'I6', 'modus_heizen:uebersicht'): 217.8,
+    ('M05', 'wp', 'S2', 'I6', 'modus_heizen:zeitreihe'): 198.0,
+    ('M05', 'wp', 'S2', 'I6', 'modus_warmwasser:cockpit_jahr'): 18.0,
+    ('M05', 'wp', 'S2', 'I6', 'modus_warmwasser:cockpit_monat'): 18.0,
+    ('M05', 'wp', 'S2', 'I6', 'modus_warmwasser:fakten'): 18.0,
+    ('M05', 'wp', 'S2', 'I6', 'modus_warmwasser:uebersicht'): 19.8,
+    ('M05', 'wp', 'S2', 'I6', 'modus_warmwasser:zeitreihe'): 18.0,
 }

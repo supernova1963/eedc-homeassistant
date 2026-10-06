@@ -488,7 +488,10 @@ def _monatswert(
             monatswert_data["speicher_ladung_netz_kwh"] = round(speicher.netzladung_kwh, 1)
 
     wp = fakt.wp
-    if wp.strom_kwh > 0:
+    # HA-Bauform E4d (Bauplan §8a, Rest N-585): ein GEMESSENER Strom von 0 ist ein Wert (`strom_gemessen`) — der Monat
+    # „ohne Betrieb" geht mit 0 statt ohne Feld; der Server zählt eine Zeile ohne Wärme ohnehin nicht in die Kennzahl
+    # (`core/wp_jaz.py`, Riegel „Wärme > 0") und eine Menge 0 ändert keine Summe.
+    if wp.strom_kwh > 0 or wp.strom_gemessen:
         monatswert_data["wp_stromverbrauch_kwh"] = round(wp.strom_kwh, 1)
         # ⭐ **N-391 (14.09.2026): die Gesamtwärme erreicht das Feld, wenn es
         # keinen Heiz-Einzelwert gibt.** Wer Heizung und Warmwasser über EINEN

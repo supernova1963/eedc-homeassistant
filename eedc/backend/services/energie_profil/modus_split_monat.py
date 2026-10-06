@@ -70,8 +70,32 @@ def _monatsgrenzen(
     return erster, date(jahr, monat, 1)
 
 
+def _bereiche_ohne(
+    ab: Optional[date], vor: Optional[date], ohne_monate: frozenset,
+) -> list[tuple[Optional[date], Optional[date]]]:
+    """``[ab, vor)`` ohne die Monate ``ohne_monate`` — als Liste disjunkter Datumsbereiche (``None`` = offen).
+
+    HA-Bauform E4d: Monate, deren WP-Gruppe die Kanäle decken, liest der Kanal-Leser; der Bestand lädt sie nicht
+    (Lesart 1, Bauplan §3b) — die Stundenzeilen eines gedeckten Monats zu laden kostete die Übersicht den großen Posten
+    (Konzept §3: 1 235 ms für zwölf Jahre)."""
+    bereiche: list[tuple[Optional[date], Optional[date]]] = [(ab, vor)]
+    for jahr, monat in sorted(ohne_monate):
+        m_ab, m_vor = _monatsgrenzen((jahr, monat), (jahr, monat))
+        neu: list[tuple[Optional[date], Optional[date]]] = []
+        for a, v in bereiche:
+            if (v is not None and v <= m_ab) or (a is not None and a >= m_vor):
+                neu.append((a, v))
+                continue
+            if a is None or a < m_ab:
+                neu.append((a, m_ab))
+            if v is None or v > m_vor:
+                neu.append((m_vor, v))
+        bereiche = neu
+    return [(a, v) for a, v in bereiche if a is None or v is None or a < v]
+
+
 async def _lade_tages_eingaenge(
-    db: AsyncSession, anlage_id: int, ab, vor,
+    db: AsyncSession, anlage_id: int, ab, vor, *, ohne_monate: frozenset = frozenset(),
 ) -> tuple[dict[date, "_TagesEingang"], dict[date, dict[str, float]]]:
     """Stundenzeilen + Tages-Zählersummen laden — der Teil, den Monat und Tag teilen.
 
@@ -106,14 +130,29 @@ async def _lade_tages_eingaenge(
     tz_query = select(
         TagesZusammenfassung.datum, TagesZusammenfassung.komponenten_kwh
     ).where(TagesZusammenfassung.anlage_id == anlage_id)
-    if ab is not None:
-        tage_query = tage_query.where(TagesEnergieProfil.datum >= ab)
-        tep_query = tep_query.where(TagesEnergieProfil.datum >= ab)
-        tz_query = tz_query.where(TagesZusammenfassung.datum >= ab)
-    if vor is not None:
-        tage_query = tage_query.where(TagesEnergieProfil.datum < vor)
-        tep_query = tep_query.where(TagesEnergieProfil.datum < vor)
-        tz_query = tz_query.where(TagesZusammenfassung.datum < vor)
+    if ohne_monate:
+        from sqlalchemy import and_, or_, true
+
+        bereiche = _bereiche_ohne(ab, vor, ohne_monate)
+        if not bereiche:
+            return {}, {}
+
+        def _im(spalte):
+            return or_(*[and_(spalte >= a if a is not None else true(), spalte < v if v is not None else true())
+                         for a, v in bereiche])
+
+        tage_query = tage_query.where(_im(TagesEnergieProfil.datum))
+        tep_query = tep_query.where(_im(TagesEnergieProfil.datum))
+        tz_query = tz_query.where(_im(TagesZusammenfassung.datum))
+    else:
+        if ab is not None:
+            tage_query = tage_query.where(TagesEnergieProfil.datum >= ab)
+            tep_query = tep_query.where(TagesEnergieProfil.datum >= ab)
+            tz_query = tz_query.where(TagesZusammenfassung.datum >= ab)
+        if vor is not None:
+            tage_query = tage_query.where(TagesEnergieProfil.datum < vor)
+            tep_query = tep_query.where(TagesEnergieProfil.datum < vor)
+            tz_query = tz_query.where(TagesZusammenfassung.datum < vor)
 
     tage = {d for (d,) in (await db.execute(tage_query)).all()}
     if not tage:
@@ -173,6 +212,7 @@ async def lade_modus_split_je_monat(
     *,
     von: Optional[MonatsSchluessel] = None,
     bis: Optional[MonatsSchluessel] = None,
+    ohne_monate: frozenset = frozenset(),
 ) -> SplitJeMonat:
     """Faltet die Stundenzeilen je Monat und Wärmepumpe.
 
@@ -193,7 +233,7 @@ async def lade_modus_split_je_monat(
     (``core/berechnungen/modus_split.py``, Modul-Kopf Punkt 3).
     """
     ab, vor = _monatsgrenzen(von, bis)
-    je_tag, zaehler_je_tag = await _lade_tages_eingaenge(db, anlage_id, ab, vor)
+    je_tag, zaehler_je_tag = await _lade_tages_eingaenge(db, anlage_id, ab, vor, ohne_monate=ohne_monate)
     if not je_tag:
         return {}
 
@@ -373,8 +413,12 @@ async def lade_modus_split_ohne_abschluss(
     gespeichert: dict[MonatsSchluessel, dict[str, tuple[bool, float]]],
     von: Optional[MonatsSchluessel] = None,
     bis: Optional[MonatsSchluessel] = None,
+    ohne_monate: frozenset = frozenset(),
 ) -> dict[MonatsSchluessel, dict[str, AngewandterSplit]]:
     """Der **zweite Aufrufer** aus dem Modul-Kopf — für Monate ohne Abschluss (F-52).
+
+    ``ohne_monate`` (HA-Bauform E4d): Monate, deren WP-Gruppe die Kanäle decken — sie werden nicht geladen; ihren
+    Split trägt ``kanal_split_ohne_abschluss`` nach denselben zwei Regeln (Lesart 1, Bauplan §3b).
 
     **Warum das eine Funktion ist und keine zwei.** Sie hat selbst zwei
     Aufrufer: die Monats-Fakten-Schicht (Komponenten-Hub, Cockpit Monat/Jahr)
@@ -403,7 +447,7 @@ async def lade_modus_split_ohne_abschluss(
       *verworfene* Splits hinterlassen keine Spur (``_entferne_split``); ohne
       erneute Prüfung kämen sie über diesen Weg zurück.
     """
-    splits = await lade_modus_split_je_monat(db, anlage_id, von=von, bis=bis)
+    splits = await lade_modus_split_je_monat(db, anlage_id, von=von, bis=bis, ohne_monate=ohne_monate)
     if not splits:
         return {}
 
@@ -423,6 +467,61 @@ async def lade_modus_split_ohne_abschluss(
             if not teilmengen_passen(split, bezug):
                 continue
             ergebnis.setdefault(schluessel, {})[inv_id_str] = AngewandterSplit(
+                heizen_kwh=split.teilmenge_kwh(HEIZEN),
+                kuehlen_kwh=split.teilmenge_kwh(KUEHLEN),
+                warmwasser_kwh=split.teilmenge_kwh(WARMWASSER),
+                abdeckung_h=split.abdeckung_h,
+                bezug_kwh=float(bezug or 0.0),
+            )
+    return ergebnis
+
+
+def kanal_split_ohne_abschluss(
+    wp_kanal: dict,
+    *,
+    inv_by_id: dict,
+    gespeichert: dict[MonatsSchluessel, dict[str, tuple[bool, float]]],
+) -> dict[MonatsSchluessel, dict[str, AngewandterSplit]]:
+    """Der Split der Monate, deren WP-Gruppe die Kanäle decken (HA-Bauform E4d) — DIESELBEN zwei Regeln wie
+    {@link lade_modus_split_ohne_abschluss}, nur aus dem abgeleiteten Kanal „Strom je Betriebsart"
+    (``kanal/modus_strom.py``) statt aus den Stundenzeilen:
+
+    * **gespeichert schlägt gerechnet** (P8) — ein Gerät mit gespeicherter oder gemessener Aufteilung bekommt keinen;
+    * **die Teilmengen-Invariante** — Bezug ist der gepflegte Strom der Zeile, sonst die K3-Menge der Kanal-Zeile.
+
+    Ein Gerät ohne eine einzige Stunde mit Signal bekommt keinen Split (P4, wie ``ModusSplit.ist_leer``).
+
+    Args:
+        wp_kanal: ``kanal/wp_leser.wp_monate`` — je Monat ein ``WpZeitraum``; nur Monate mit Wahl ``kanal`` zählen.
+    """
+    from backend.core.field_definitions import get_wp_strom_kwh
+
+    ergebnis: dict[MonatsSchluessel, dict[str, AngewandterSplit]] = {}
+    for schluessel, z in sorted(wp_kanal.items()):
+        if not z.kanal:
+            continue
+        for inv_id in sorted(z.abgeleitet):
+            inv = inv_by_id.get(int(inv_id))
+            zeile = z.zeilen.get(inv_id) or {}
+            if inv is None or not inv.ist_aktiv_im_monat(*schluessel):
+                continue
+            hat_gespeicherten, gepflegter_strom = gespeichert.get(schluessel, {}).get(str(inv_id), (False, 0.0))
+            if hat_gespeicherten:
+                continue
+            split = ModusSplit(
+                kwh_je_modus={
+                    HEIZEN: float(zeile.get("modus_strom_heizen_kwh") or 0.0),
+                    KUEHLEN: float(zeile.get("modus_strom_kuehlen_kwh") or 0.0),
+                    WARMWASSER: float(zeile.get("modus_strom_warmwasser_kwh") or 0.0),
+                },
+                abdeckung_h=float(zeile.get("modus_abdeckung_h") or 0.0),
+            )
+            if split.ist_leer:
+                continue
+            bezug = gepflegter_strom if gepflegter_strom > 0 else get_wp_strom_kwh(zeile, inv.parameter)
+            if not teilmengen_passen(split, bezug):
+                continue
+            ergebnis.setdefault(schluessel, {})[str(inv_id)] = AngewandterSplit(
                 heizen_kwh=split.teilmenge_kwh(HEIZEN),
                 kuehlen_kwh=split.teilmenge_kwh(KUEHLEN),
                 warmwasser_kwh=split.teilmenge_kwh(WARMWASSER),

@@ -904,7 +904,11 @@ async def build_jahresbericht_context(
             # trägt einen Monatswert ebenfalls nur `if wert > 0` ein — deshalb
             # sagen Cockpit → Monat und (darüber aggregiert) → Jahr längst „—".
             # Das PDF war der einzige Konsument, der es nicht tat.
-            "waerme_kwh": wp_waerme if wp_waerme > 0 else None,
+            # HA-Bauform E4d (Bauplan §8a, Rest N-585): eine GEMESSENE 0 ist ein Wert — „0 kWh" statt „—", wenn ein
+            # Monat des Berichts die Wärme gemessen hat (`WpFakten.waerme_gemessen`; „kein Betrieb", kein fehlender Zähler).
+            "waerme_kwh": (
+                wp_waerme if wp_waerme > 0 or any(f.wp.waerme_gemessen for f in fakten) else None
+            ),
             "heizung_kwh": wp_heizung if wp_heizung > 0 else None,
             "warmwasser_kwh": wp_warmwasser if wp_warmwasser > 0 else None,
             "strom_kwh": wp_strom,

@@ -10,7 +10,8 @@ Nulleinspeisung verlor Eigenverbrauch, Quote, Erlös und Netto-Ertrag.
 Intervall (Anker + eine Zeile oder zwei Zeilen — ``SensorMonatswert.intervalle``), bei der Tagesebene mindestens eine
 Stunde mit Wert (``*_erfasst``). Eine einzelne Statistik-Zeile misst kein Intervall; ihre 0 wäre erfunden. Die 0 gilt für
 Einspeisung, Netzbezug, den Anlagen-PV-Zähler und die Gerätefelder von Speicher, Balkonkraftwerk, Wallbox und E-Auto —
-**nicht** für Wärmepumpe und PV-String (zwei Halteproben unten, Gründe im Bauplan).
+**nicht** für den PV-String (Halteprobe unten, Grund im Bauplan). Die Wärmepumpe folgt seit HA-Bauform E4d (Bauplan §8a,
+Rest N-585): Strom 0 und Wärme 0 gemessen ist „kein Betrieb im Zeitraum".
 
 **Datenstand wie im Betrieb** (Matrix-Bausteine, ``pv_achse_matrix.py``): HA-Langzeitstatistik im Recorder-Schema mit
 dem echten ``HAStatisticsService``, Tageszeilen über den echten ``aggregate_day`` für Juni und die drei Juli-Tage — HA
@@ -253,21 +254,151 @@ async def test_korb_gemessene_null(fall):
             assert ist == {k: round(v * mal, 2) for k, v in soll.items()}, (fall, monat, ist)
 
 
-# ── Halteproben: Wärmepumpe und PV-String bleiben bei „über 0" ─────────────────────────────────────────────────────
+# ── Wärmepumpe: eine gemessene 0 ist erfasst (HA-Bauform E4d, Bauplan §8a, Rest N-585) ──────────────────────────────
+
+
+async def test_wp_kein_betrieb_strom_und_waerme_gemessen_null():
+    """Strom 0 UND Wärme 0 gemessen: Mengen 0 (nicht leer), Arbeitszahl „—" mit dem Zeitraum-Grund der Kette (Stufe 3,
+    „kein Heizbetrieb in diesem Zeitraum", Klasse Zeitraum), Ersparnis 0 €, die Ergebnis-Leiter führt die Zeile nicht
+    als „fehlt" — im laufenden Monat und im Juni ohne Abschluss (Bauplan §8a)."""
+    from backend.core.berechnungen.waermepumpe_kennzahl import GRUND_KEIN_HEIZBETRIEB, grund_klasse
+
+    zusatz = _zusatz(WP=("waermepumpe", None, {"stromverbrauch_kwh": _null, "waerme_kwh": _null}))
+    async with _Lauf("F06", zusatz) as (db, aid, _ids):
+        for monat in (mx.JULI, mx.JUNI):
+            d = await _monat(db, aid, monat)
+            assert (d["wp_strom_kwh"], d["wp_waerme_kwh"]) == (0.0, 0.0), (monat, d["wp_strom_kwh"], d["wp_waerme_kwh"])
+            assert d["wp_jaz"] is None and d["wp_jaz_grund"] == GRUND_KEIN_HEIZBETRIEB, (monat, d["wp_jaz_grund"])
+            assert grund_klasse(d["wp_jaz_grund"]) == "zeitraum"
+            assert d["wp_ersparnis_euro"] == 0.0, (monat, d["wp_ersparnis_euro"])
+            assert not any("WP" in p for p in d["fehlende_posten"]), (monat, d["fehlende_posten"])
+
+
+async def test_wp_kein_betrieb_je_geraet_und_im_abgeschlossenen_monat():
+    """Dieselbe Regel je Gerät (Tabelle „Zahlen je Gerät": Zeile mit 0/0 und dem Zeitraum-Grund) und im Monat MIT
+    Monatszeile (Strom 0 und Wärme 0 gespeichert): die T-Konto-Zeile nennt 0,00 €, nicht „fehlt"."""
+    from backend.core.berechnungen.waermepumpe_kennzahl import GRUND_KEIN_HEIZBETRIEB
+    from backend.models import InvestitionMonatsdaten
+
+    zusatz = _zusatz(WP=("waermepumpe", None, {"stromverbrauch_kwh": _null, "waerme_kwh": _null}))
+    async with _Lauf("F06", zusatz) as (db, aid, ids):
+        d = await _monat(db, aid, mx.JULI)
+        zeile = next(g for g in d["wp_geraete"] if g["investition_id"] == ids["WP"])
+        assert (zeile["strom_kwh"], zeile["waerme_kwh"], zeile["jaz"], zeile["jaz_grund"]) == (
+            0.0, 0.0, None, GRUND_KEIN_HEIZBETRIEB), zeile
+        db.add(InvestitionMonatsdaten(investition_id=ids["WP"], jahr=mx.JAHR, monat=mx.JUNI,
+                                      verbrauch_daten={"stromverbrauch_kwh": 0.0, "waerme_kwh": 0.0}))
+        await db.commit()
+        d = await _monat(db, aid, mx.JUNI)
+        wp_zeile = next(f for f in d["investitionen_financials"] if f["typ"] == "waermepumpe")
+        assert wp_zeile["ersparnis_euro"] == 0.0, wp_zeile
+        assert (d["wp_strom_kwh"], d["wp_waerme_kwh"], d["wp_ersparnis_euro"]) == (0.0, 0.0, 0.0)
+        assert not any("WP" in p for p in d["fehlende_posten"]), d["fehlende_posten"]
+
+
+async def test_wp_kein_betrieb_im_jahr_uebersicht_und_cockpit_jahr():
+    """H-4 (Entscheid Master, §8a gilt für alle Sichten): ein Jahr, dessen Monat mit Zeile Strom 0 und Wärme 0 trägt,
+    nennt in der Übersicht und in Cockpit → Jahr den Zeitraum-Grund wie Cockpit → Monat — ohne Zeile („nicht
+    erfasst") bleibt es bei Stufe 1."""
+    from backend.api.routes.cockpit.uebersicht import get_cockpit_uebersicht
+    from backend.core.berechnungen.waermepumpe_kennzahl import GRUND_KEIN_HEIZBETRIEB, GRUND_KEIN_STROM
+    from backend.models import InvestitionMonatsdaten
+    from backend.services.jahres_aggregat import baue_jahr
+
+    zusatz = _zusatz(WP=("waermepumpe", None, {"stromverbrauch_kwh": _null, "waerme_kwh": _null}))
+    async with _Lauf("F06", zusatz) as (db, aid, ids):
+        u = await get_cockpit_uebersicht(anlage_id=aid, jahr=mx.JAHR, db=db)
+        assert (u.wp_cop, u.wp_cop_grund) == (None, GRUND_KEIN_STROM)        # ohne Zeile: nicht erfasst
+        db.add(InvestitionMonatsdaten(investition_id=ids["WP"], jahr=mx.JAHR, monat=mx.JUNI,
+                                      verbrauch_daten={"stromverbrauch_kwh": 0.0, "waerme_kwh": 0.0}))
+        await db.commit()
+        u = await get_cockpit_uebersicht(anlage_id=aid, jahr=mx.JAHR, db=db)
+        assert (u.wp_cop, u.wp_cop_grund) == (None, GRUND_KEIN_HEIZBETRIEB)
+        j = await baue_jahr(db, aid, mx.JAHR, heute=mx.JETZT.date())
+        kopf = j["kopf"] if isinstance(j["kopf"], dict) else j["kopf"].model_dump()
+        assert (kopf["wp_jaz"], kopf["wp_jaz_grund"]) == (None, GRUND_KEIN_HEIZBETRIEB), kopf["wp_jaz_grund"]
+
+
+def test_wp_strom_null_ohne_waerme_layer():
+    """Gegenfall (Bauplan §8a, Nachtrag aus der Nachmessung E4d) am Layer: Strom GEMESSEN 0 und Wärme NICHT erfasst ⇒
+    Stufe 5 „kein Wärmemengenzähler zugeordnet" (bzw. der Wärme-Grund des Aufrufers) — Stufe 1 trifft nur den nicht
+    erfassten Strom."""
+    from backend.core.berechnungen.waermepumpe_kennzahl import (
+        GRUND_KEIN_HEIZBETRIEB, GRUND_KEIN_STROM, GRUND_KEINE_WAERMEMESSUNG, arbeitszahl, grund_klasse, systemarbeitszahl,
+    )
+
+    assert systemarbeitszahl(None, 0.0).grund == GRUND_KEINE_WAERMEMESSUNG
+    assert systemarbeitszahl(None, 0.0, waerme_fehlt_grund="Zählerrücksprung").grund == "Zählerrücksprung"
+    assert grund_klasse(GRUND_KEINE_WAERMEMESSUNG) == "ausstattung"
+    # Gegenproben: Strom nicht erfasst bleibt Stufe 1, beide gemessen 0 bleibt Stufe 3, Wärme > 0 bleibt Stufe 1 (H-2)
+    assert systemarbeitszahl(None, None).grund == GRUND_KEIN_STROM
+    assert systemarbeitszahl(0.0, 0.0, kein_betrieb_grund=GRUND_KEIN_HEIZBETRIEB).grund == GRUND_KEIN_HEIZBETRIEB
+    assert systemarbeitszahl(100.0, 0.0, kein_betrieb_grund=GRUND_KEIN_HEIZBETRIEB).grund == GRUND_KEIN_STROM
+    # arbeitszahl (je Gerät, je Funktion): mit dem Riegel des Aufrufers (kein_betrieb_grund)
+    assert arbeitszahl(None, 0.0, kein_betrieb_grund=GRUND_KEIN_HEIZBETRIEB).grund == GRUND_KEINE_WAERMEMESSUNG
+    assert arbeitszahl(0.0, 0.0, kein_betrieb_grund=GRUND_KEIN_HEIZBETRIEB,
+                       waerme_fehlt_grund="kein Wert für diesen Tag").grund == "kein Wert für diesen Tag"
+    assert arbeitszahl(0.0, 0.0, kein_betrieb_grund=GRUND_KEIN_HEIZBETRIEB).grund == GRUND_KEIN_HEIZBETRIEB
+    assert arbeitszahl(None, 0.0).grund == GRUND_KEIN_STROM
+
+
+async def test_wp_strom_null_ohne_waermezaehler_monat_geraet_und_jahr():
+    """Gegenfall in den Sichten: eine Wärmepumpe mit Stromzähler (gemessen 0) und OHNE Wärmemengenzähler nennt in
+    Cockpit → Monat (laufend und Juni ohne Abschluss), in der Übersicht und im Kopf von Cockpit → Jahr „kein
+    Wärmemengenzähler zugeordnet" — vorher „kein Stromverbrauch erfasst". (Die Tabelle „Zahlen je Gerät" führt ein Gerät
+    ohne Menge über 0 nur bei „kein Betrieb" — unverändert; die Geräte-Kennzahl prüft die Probe darunter.)"""
+    from backend.api.routes.cockpit.uebersicht import get_cockpit_uebersicht
+    from backend.core.berechnungen.waermepumpe_kennzahl import GRUND_KEINE_WAERMEMESSUNG
+    from backend.models import InvestitionMonatsdaten
+    from backend.services.jahres_aggregat import baue_jahr
+
+    zusatz = _zusatz(WP=("waermepumpe", None, {"stromverbrauch_kwh": _null}))
+    async with _Lauf("F06", zusatz) as (db, aid, ids):
+        for monat in (mx.JULI, mx.JUNI):
+            d = await _monat(db, aid, monat)
+            assert (d["wp_strom_kwh"], d["wp_waerme_kwh"]) == (0.0, None), (monat, d["wp_strom_kwh"], d["wp_waerme_kwh"])
+            assert (d["wp_jaz"], d["wp_jaz_grund"]) == (None, GRUND_KEINE_WAERMEMESSUNG), (monat, d["wp_jaz_grund"])
+        db.add(InvestitionMonatsdaten(investition_id=ids["WP"], jahr=mx.JAHR, monat=mx.JUNI,
+                                      verbrauch_daten={"stromverbrauch_kwh": 0.0}))
+        await db.commit()
+        u = await get_cockpit_uebersicht(anlage_id=aid, jahr=mx.JAHR, db=db)
+        assert (u.wp_cop, u.wp_cop_grund) == (None, GRUND_KEINE_WAERMEMESSUNG)
+        j = await baue_jahr(db, aid, mx.JAHR, heute=mx.JETZT.date())
+        kopf = j["kopf"] if isinstance(j["kopf"], dict) else j["kopf"].model_dump()
+        assert (kopf["wp_jaz"], kopf["wp_jaz_grund"]) == (None, GRUND_KEINE_WAERMEMESSUNG), kopf["wp_jaz_grund"]
+
+
+def test_wp_strom_null_ohne_waerme_je_geraet():
+    """Gegenfall je Gerät (`kennzahlen_aus_mengen`, die eine Rechenstelle für Hub, Tabelle und Monat): Strom gemessen 0,
+    Wärme nicht erfasst ⇒ „kein Wärmemengenzähler zugeordnet"; beide gemessen 0 ⇒ „kein Heizbetrieb …"; ohne Marke
+    bleibt Stufe 1."""
+    from backend.core.berechnungen.waermepumpe_kennzahl import (
+        GRUND_KEIN_HEIZBETRIEB, GRUND_KEIN_STROM, GRUND_KEINE_WAERMEMESSUNG,
+    )
+    from backend.services.waermepumpe_kennzahlen_je_geraet import GeraetMengen, kennzahlen_aus_mengen
+
+    def _g(**kw):
+        return kennzahlen_aus_mengen(GeraetMengen(inv_id=1, name="WP", **kw)).gesamt.grund
+
+    assert _g(strom_gemessen=True) == GRUND_KEINE_WAERMEMESSUNG
+    assert _g(strom_gemessen=True, waerme_gemessen=True) == GRUND_KEIN_HEIZBETRIEB
+    assert _g() == GRUND_KEIN_STROM
+    assert _g(waerme_gemessen=True) == GRUND_KEIN_STROM
 
 
 async def test_halteprobe_wp_strom_flach_bei_waerme():
-    """WP-Strom gemessen 0 bei gemessener Wärme: keine 0 im Strom, keine Ersparnis (Bauplan „Nicht in diesem Bau").
+    """WP-Strom gemessen 0 bei gemessener Wärme: die 0 ist erfasst (F-5, Bauplan §8a) und wird gezeigt — eine Ersparnis
+    entsteht nicht (die eine Zeilenregel `wp_ersparnis_zeile`: Strom > 0 und Wärme > 0).
 
-    Tragender Grund: für eine WP-0 fehlt eine Darstellungsregel für „kein Betrieb" — Grund-Texte („kein
-    Stromverbrauch erfasst") und Ergebnis-Leiter („WP-Ersparnis fehlt") passen nicht dazu. Im Endstand ergibt die
-    Liste „alle Felder" `wp_strom_kwh` 0,0 bei Ersparnis None; vor N-609 (Teil B) entstand über den damaligen
-    Aggregat-Zweig zusätzlich eine Phantom-Ersparnis von 8,64 / 86,40 €."""
+    ⚑ **Halteprobe, kein Soll:** für Strom 0 bei Wärme > 0 (physikalisch eine fehlerhafte Messung) gibt es keine
+    Darstellungsregel — §8a regelt nur Strom 0 UND Wärme 0. Bis E4d stand hier `wp_strom_kwh is None` (vor N-609
+    entstand über den damaligen Aggregat-Zweig zusätzlich eine Phantom-Ersparnis von 8,64 / 86,40 €). Offen im
+    Bericht E4d; der Grund der Arbeitszahl bleibt Stufe 1 („kein Stromverbrauch erfasst")."""
     zusatz = _zusatz(WP=("waermepumpe", None, {"stromverbrauch_kwh": _null, "waerme_kwh": lambda t: 0.9}))
     async with _Lauf("F06", zusatz) as (db, aid, _ids):
         for monat in (mx.JULI, mx.JUNI):
             d = await _monat(db, aid, monat)
-            assert d["wp_strom_kwh"] is None, (monat, d["wp_strom_kwh"])
+            assert d["wp_strom_kwh"] == 0.0, (monat, d["wp_strom_kwh"])
             assert d["wp_ersparnis_euro"] is None, (monat, d["wp_ersparnis_euro"])
 
 

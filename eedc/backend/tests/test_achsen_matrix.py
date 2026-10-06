@@ -463,17 +463,21 @@ KATALOG: dict[str, list[Menge]] = {
 }
 
 
-def _wp_soll(form, menge: str, tage, *, name: Optional[str] = None) -> Any:
+def _wp_soll(form, menge: str, tage, *, name: Optional[str] = None, stunden=None) -> Any:
     """Wärmepumpe nach K1–K5 (``docs/KONZEPT-WAERME-KLIMA.md`` §3). Was die Kanon-Regeln NICHT festlegen
     (Aufteilung nach dem Etikett bei Gesamtstrom; Wärme-Aufteilung ohne getrennte Wärmezähler), ist
-    ``UNKLAR`` — Fachfrage des Masters."""
+    ``UNKLAR`` — Fachfrage des Masters. ``stunden`` (HA-Bauform E4d): dieselben Mengen über einzelne Stunden statt
+    über Tage — der Teiltag des laufenden Monats der Monats-Fakten (``TEILTAG_STUNDEN``)."""
     out = 0.0
     for g in form.typ("waermepumpe"):
         if name is not None and g.name != name:
             continue
         f = g.felder
         hat = lambda k: k in f  # noqa: E731
-        m = lambda k: am.menge(f[k], tage) if k in f else 0.0  # noqa: E731
+        if stunden is not None:
+            m = lambda k: _stunde(f[k], stunden) if k in f else 0.0  # noqa: E731
+        else:
+            m = lambda k: am.menge(f[k], tage) if k in f else 0.0  # noqa: E731
         ba_strom = sum(m(k) for k in f if k.startswith("betriebsart_strom_"))
         if menge == "strom":       # K1 Gesamtzähler · K3 Regel 3 Summanden · Regel 4 Betriebsart-Zähler
             v = m("stromverbrauch_kwh") if hat("stromverbrauch_kwh") else (
@@ -770,6 +774,9 @@ def bewerte(fid: str, groesse: str, weg: str, inv: str, m: am.Messung) -> list[Z
                 elif groesse == "sonstiges" and weg == "HA" and s == "fakten_tw" and soll is not UNKLAR:
                     # E4c: die Sonstiges-Gruppe des laufenden Monats aus den Kanälen trägt denselben Teiltag.
                     soll_s = round(soll + _sonst_teiltag(form, q.name, TEILTAG_STUNDEN), 6)
+                elif groesse == "wp" and weg == "HA" and s == "fakten_tw" and soll is not UNKLAR:
+                    # E4d: die WP-Gruppe des laufenden Monats aus den Kanälen trägt denselben Teiltag.
+                    soll_s = round(soll + _wp_soll(form, q.name, (), stunden=TEILTAG_STUNDEN), 6)
                 z.append(Zelle(f"{q.name}:{s}", _wert(wurzeln, q, s), "unklar", "unklar")
                          if soll is UNKLAR else _z(f"{q.name}:{s}", _wert(wurzeln, q, s), soll_s))
             if datenstand and q.tag is not None and soll is not UNKLAR:
@@ -1085,18 +1092,21 @@ URSACHE: dict[str, Ursache] = {
         "geschriebenen Stand und tragen damit schon die erste Stunde des neuen Tagesfensters (Netzbezug 0,4 kWh); "
         "Cockpit → Monat nimmt den HA-Weg über den Kalendermonat (ab 1. 00:00) ohne diese Stunde. Zwei "
         "Monatsgrenzen (Bauplan E3-Nachtrag 2); sie fallen erst mit R-3 „Kalendertag\" in S4 zusammen. Entscheid "
-        "Master 06.10.2026: bleibt bis dahin, benannt. Kosten folgen dem Netzbezug",
+        "Master 06.10.2026: bleibt bis dahin, benannt. Kosten folgen dem Netzbezug. Seit E4d dieselbe Stunde für die "
+        "Wärmepumpe (Strom, Wärme und Funktionsmengen; 0,3 kWh Strom in M05)",
     ),
     "N-585-REST": Ursache(
-        "HA-Bauform S1+S2 (Pflicht)",
+        "HA-Bauform S1+S2 (Pflicht) — seit HA-Bauform E4d geheilt (Bauplan §8a); keine Zelle mehr",
         "Wärmepumpe ohne Betrieb (W5, Strom 0 und Wärme 0 gemessen): Cockpit → Monat/Jahr, Community und PDF nennen "
         "keine 0, sondern nichts; der Tag nennt `wp_strom` nicht, obwohl die Tageszeile `waermepumpe_<id> = 0` "
         "trägt. Monats-Fakten, Übersicht, Dashboard nennen 0 (Halteprobe `test_n585_gemessene_null.py`)",
     ),
     "OHNE-ABSCHLUSS": Ursache(
-        "Ausgangszustand (Auftrag): ohne Abschluss nicht geführt — seit HA-Bauform E4c für E-Mobilität und Sonstiges "
-        "mit HA (Kanäle, Wege HA/S1/S2) geheilt; es bleiben Wärmepumpe (E4d), Speicher-Netzladung und die Wege ohne "
-        "Kanäle (SA/S3, Lesart 1)",
+        "Ausgangszustand (Auftrag): ohne Abschluss nicht geführt — seit HA-Bauform E4c für E-Mobilität und Sonstiges, "
+        "seit E4d für die Wärmepumpe mit HA (Kanäle, Wege HA/S1/S2) geheilt; es bleiben Speicher-Netzladung und die "
+        "Wege ohne Kanäle (SA/S3, Lesart 1 — dort auch die Wärmepumpe: Monats-Fakten und Jahr-Verlauf ohne Abschluss "
+        "ohne WP-Mengen, Cockpit → Monat aus der Tagesebene ohne Betriebsart-Strom, Kälte und Heiz-Nutzenergie des "
+        "Klimageräts)",
         "Größen, die im Monat ohne Abschluss nicht aus der Tagesebene gefüllt werden: Wärmepumpen-Mengen und "
         "-Achsen, Sonstiges, E-Mob-Lademenge, Speicher-Netzladung (Monats-Fakten mit Tageswerten und "
         "Jahr-Verlauf nennen 0/nichts; Sonstiges und Netzladung auch Cockpit → Monat; E-Mob ohne HA auch Cockpit "
@@ -1113,7 +1123,7 @@ URSACHE: dict[str, Ursache] = {
         "Abschluss (Juni)",
     ),
     "KANDIDAT-WP-ACHSEN-OHNE-ABSCHLUSS": Ursache(
-        "KANDIDAT (nur gezeigt)",
+        "KANDIDAT (nur gezeigt) — N-630, seit HA-Bauform E4d geheilt (die WP-Gruppe aus den Kanälen); keine Zelle mehr",
         "Cockpit → Monat ohne Abschluss führt die feinen WP-Achsen unvollständig: laufend fehlen Betriebsart-Ströme, "
         "Kälte und die Heiz-Nutzenergie des Klimageräts (Heizwärme 54 statt 59,4, ohne HA auch die Wärme 64,8 statt "
         "70,2); im vergangenen Monat vor dem Abschluss (HA-Weg) fehlen Heiz-/Warmwasser-Strom und -Wärme, "
@@ -1177,57 +1187,17 @@ ROT: dict[str, dict[tuple[str, str, str, str], tuple[str, ...]]] = {
         ('M10', 'netz', 'HA', 'I2'): ('gesamtverbrauch:fakten_tw=Σtage', 'gesamtverbrauch:jahr_verlauf=Σtage'),
         ('M10', 'sonstiges', 'HA', 'I1'): ('erzeugung:fakten_tw', 'erzeugung:jahr_verlauf'),
         ('M10', 'preis', 'HA', 'I1'): ('kosten:jahr_verlauf', 'netto_ertrag:jahr_verlauf'),
+        ('M05', 'wp', 'HA', 'I1'): ('strom:fakten_tw', 'strom:jahr_verlauf', 'waerme:fakten_tw'),
+        ('M06', 'wp', 'HA', 'I1'): (
+            'heizung:fakten_tw', 'heizung:jahr_verlauf', 'strom:fakten_tw', 'strom:jahr_verlauf',
+            'strom_heizen:fakten_tw', 'strom_heizen:jahr_verlauf', 'waerme:fakten_tw', 'warmwasser:fakten_tw',
+            'warmwasser:jahr_verlauf',
+        ),
     },
+    # N-585-REST: seit HA-Bauform E4d geheilt (Bauplan §8a: eine gemessene 0 ist erfasst; Strom 0 und Wärme 0 = Stufe 3,
+    # Mengen 0, Ersparnis 0 €) — keine Zelle mehr. Die Sichten der Wege ohne Kanäle, die die 0 vor dem Abschluss nicht
+    # kennen (Jahr-Verlauf aus den Monats-Fakten, Lesart 1), stehen unter OHNE-ABSCHLUSS.
     'N-585-REST': {
-        ('M07', 'wp', 'HA', 'I1'): ('strom:fakten_tw', 'waerme:fakten_tw',),
-        ('M07', 'wp', 'HA', 'I2'): ('strom:fakten_tw=Σtage',),
-        ('M07', 'wp', 'HA', 'I3'): ('strom:cockpit_monat', 'strom:tag', 'waerme:cockpit_monat',),
-        ('M07', 'wp', 'HA', 'I4'): ('strom:cockpit_monat:WP still', 'waerme:cockpit_monat:WP still',),
-        ('M07', 'wp', 'HA', 'I5'): (
-            'null:strom:cockpit_jahr', 'null:strom:cockpit_monat', 'null:strom:jahr_verlauf',
-            'null:waerme:cockpit_jahr', 'null:waerme:cockpit_monat',
-        ),
-        ('M07', 'wp', 'S1', 'I1'): (
-            'strom:cockpit_jahr', 'strom:cockpit_monat', 'strom:community', 'waerme:cockpit_jahr',
-            'waerme:cockpit_monat', 'waerme:pdf_kopf',
-        ),
-        ('M07', 'wp', 'S1', 'I2'): ('strom:jahr_verlauf:vor=nach', 'strom:Σtage_juni=fakten',),
-        ('M07', 'wp', 'S1', 'I3'): ('strom:cockpit_monat', 'waerme:cockpit_monat',),
-        ('M07', 'wp', 'S1', 'I4'): ('strom:cockpit_monat:WP still', 'waerme:cockpit_monat:WP still',),
-        ('M07', 'wp', 'S1', 'I5'): (
-            'null:strom:cockpit_jahr', 'null:strom:cockpit_monat', 'null:strom:community',
-            'null:waerme:cockpit_jahr', 'null:waerme:cockpit_monat', 'null:waerme:pdf_kopf',
-        ),
-        ('M07', 'wp', 'S2', 'I1'): (
-            'strom:cockpit_jahr', 'strom:cockpit_monat', 'strom:community', 'waerme:cockpit_jahr',
-            'waerme:cockpit_monat', 'waerme:pdf_kopf',
-        ),
-        ('M07', 'wp', 'S2', 'I2'): ('strom:jahr_verlauf:vor=nach', 'strom:Σtage_juni=fakten',),
-        ('M07', 'wp', 'S2', 'I3'): ('strom:cockpit_monat', 'waerme:cockpit_monat',),
-        ('M07', 'wp', 'S2', 'I4'): ('strom:cockpit_monat:WP still', 'waerme:cockpit_monat:WP still',),
-        ('M07', 'wp', 'S2', 'I5'): (
-            'null:strom:cockpit_jahr', 'null:strom:cockpit_monat', 'null:strom:community',
-            'null:waerme:cockpit_jahr', 'null:waerme:cockpit_monat', 'null:waerme:pdf_kopf',
-        ),
-        ('M07', 'wp', 'S3', 'I1'): (
-            'strom:cockpit_jahr', 'strom:cockpit_monat', 'strom:community', 'waerme:cockpit_jahr',
-            'waerme:cockpit_monat', 'waerme:pdf_kopf',
-        ),
-        ('M07', 'wp', 'S3', 'I2'): ('strom:jahr_verlauf:vor=nach', 'strom:Σtage_juni=fakten',),
-        ('M07', 'wp', 'S3', 'I3'): ('strom:cockpit_monat', 'waerme:cockpit_monat',),
-        ('M07', 'wp', 'S3', 'I4'): ('strom:cockpit_monat:WP still', 'waerme:cockpit_monat:WP still',),
-        ('M07', 'wp', 'S3', 'I5'): (
-            'null:strom:cockpit_jahr', 'null:strom:cockpit_monat', 'null:strom:community',
-            'null:waerme:cockpit_jahr', 'null:waerme:cockpit_monat', 'null:waerme:pdf_kopf',
-        ),
-        ('M07', 'wp', 'SA', 'I1'): ('strom:fakten_tw', 'waerme:fakten_tw',),
-        ('M07', 'wp', 'SA', 'I2'): ('strom:fakten_tw=Σtage',),
-        ('M07', 'wp', 'SA', 'I3'): ('strom:cockpit_monat', 'strom:tag', 'waerme:cockpit_monat',),
-        ('M07', 'wp', 'SA', 'I4'): ('strom:cockpit_monat:WP still', 'waerme:cockpit_monat:WP still',),
-        ('M07', 'wp', 'SA', 'I5'): (
-            'null:strom:cockpit_jahr', 'null:strom:cockpit_monat', 'null:strom:jahr_verlauf',
-            'null:waerme:cockpit_jahr', 'null:waerme:cockpit_monat',
-        ),
     },
     'OHNE-ABSCHLUSS': {
         ('M02', 'emob', 'S3', 'I2'): (
@@ -1250,18 +1220,6 @@ ROT: dict[str, dict[tuple[str, str, str, str], tuple[str, ...]]] = {
         ),
         ('M04', 'speicher', 'SA', 'I1'): ('netzladung:fakten_tw', 'netzladung:jahr_verlauf',),
         ('M04', 'speicher', 'SA', 'I3'): ('netzladung:cockpit_monat', 'netzladung:fakten_tw',),
-        ('M05', 'wp', 'HA', 'I1'): ('strom:fakten_tw', 'strom:jahr_verlauf', 'waerme:fakten_tw',),
-        ('M05', 'wp', 'HA', 'I2'): ('strom:fakten_tw=Σtage', 'strom:jahr_verlauf=Σtage',),
-        ('M05', 'wp', 'HA', 'I3'): ('strom:fakten_tw', 'waerme:fakten_tw',),
-        ('M05', 'wp', 'HA', 'I6'): ('strom:fakten_tw', 'strom:jahr_verlauf', 'waerme:fakten_tw',),
-        ('M05', 'wp', 'S1', 'I2'): (
-            'strom:fakten:tageswert=gespeichert', 'strom:jahr_verlauf:vor=nach',
-            'waerme:fakten:tageswert=gespeichert',
-        ),
-        ('M05', 'wp', 'S2', 'I2'): (
-            'strom:fakten:tageswert=gespeichert', 'strom:jahr_verlauf:vor=nach',
-            'waerme:fakten:tageswert=gespeichert',
-        ),
         ('M05', 'wp', 'S3', 'I2'): (
             'strom:fakten:tageswert=gespeichert', 'strom:jahr_verlauf:vor=nach',
             'waerme:fakten:tageswert=gespeichert',
@@ -1270,40 +1228,6 @@ ROT: dict[str, dict[tuple[str, str, str, str], tuple[str, ...]]] = {
         ('M05', 'wp', 'SA', 'I2'): ('strom:fakten_tw=Σtage', 'strom:jahr_verlauf=Σtage',),
         ('M05', 'wp', 'SA', 'I3'): ('strom:fakten_tw', 'waerme:fakten_tw',),
         ('M05', 'wp', 'SA', 'I6'): ('strom:fakten_tw', 'strom:jahr_verlauf', 'waerme:fakten_tw',),
-        ('M06', 'wp', 'HA', 'I1'): (
-            'heizung:fakten_tw', 'heizung:jahr_verlauf', 'modus_heizen:fakten_tw', 'modus_kuehlen:fakten_tw',
-            'strom:fakten_tw', 'strom:jahr_verlauf', 'strom_heizen:fakten_tw', 'strom_heizen:jahr_verlauf',
-            'strom_warmwasser:fakten_tw', 'strom_warmwasser:jahr_verlauf', 'waerme:fakten_tw',
-            'warmwasser:fakten_tw', 'warmwasser:jahr_verlauf',
-        ),
-        ('M06', 'wp', 'HA', 'I2'): ('strom:fakten_tw=Σtage', 'strom:jahr_verlauf=Σtage',),
-        ('M06', 'wp', 'HA', 'I3'): (
-            'heizung:fakten_tw', 'modus_heizen:fakten_tw', 'modus_kuehlen:fakten_tw', 'strom:fakten_tw',
-            'strom_heizen:fakten_tw', 'strom_warmwasser:fakten_tw', 'waerme:fakten_tw', 'warmwasser:fakten_tw',
-        ),
-        ('M06', 'wp', 'HA', 'I6'): (
-            'heizung:fakten_tw', 'heizung:jahr_verlauf', 'strom:fakten_tw', 'strom:jahr_verlauf',
-            'strom_heizen:fakten_tw', 'strom_heizen:jahr_verlauf', 'strom_warmwasser:fakten_tw',
-            'strom_warmwasser:jahr_verlauf', 'waerme:fakten_tw', 'warmwasser:fakten_tw', 'warmwasser:jahr_verlauf',
-        ),
-        ('M06', 'wp', 'S1', 'I2'): (
-            'heizung:fakten:tageswert=gespeichert', 'heizung:jahr_verlauf:vor=nach',
-            'modus_heizen:fakten:tageswert=gespeichert', 'modus_kuehlen:fakten:tageswert=gespeichert',
-            'strom:fakten:tageswert=gespeichert', 'strom:jahr_verlauf:vor=nach',
-            'strom_heizen:fakten:tageswert=gespeichert', 'strom_heizen:jahr_verlauf:vor=nach',
-            'strom_warmwasser:fakten:tageswert=gespeichert', 'strom_warmwasser:jahr_verlauf:vor=nach',
-            'waerme:fakten:tageswert=gespeichert', 'warmwasser:fakten:tageswert=gespeichert',
-            'warmwasser:jahr_verlauf:vor=nach',
-        ),
-        ('M06', 'wp', 'S2', 'I2'): (
-            'heizung:fakten:tageswert=gespeichert', 'heizung:jahr_verlauf:vor=nach',
-            'modus_heizen:fakten:tageswert=gespeichert', 'modus_kuehlen:fakten:tageswert=gespeichert',
-            'strom:fakten:tageswert=gespeichert', 'strom:jahr_verlauf:vor=nach',
-            'strom_heizen:fakten:tageswert=gespeichert', 'strom_heizen:jahr_verlauf:vor=nach',
-            'strom_warmwasser:fakten:tageswert=gespeichert', 'strom_warmwasser:jahr_verlauf:vor=nach',
-            'waerme:fakten:tageswert=gespeichert', 'warmwasser:fakten:tageswert=gespeichert',
-            'warmwasser:jahr_verlauf:vor=nach',
-        ),
         ('M06', 'wp', 'S3', 'I2'): (
             'heizung:fakten:tageswert=gespeichert', 'heizung:jahr_verlauf:vor=nach',
             'modus_heizen:fakten:tageswert=gespeichert', 'modus_kuehlen:fakten:tageswert=gespeichert',
@@ -1320,10 +1244,6 @@ ROT: dict[str, dict[tuple[str, str, str, str], tuple[str, ...]]] = {
             'warmwasser:fakten_tw', 'warmwasser:jahr_verlauf',
         ),
         ('M06', 'wp', 'SA', 'I2'): ('strom:fakten_tw=Σtage', 'strom:jahr_verlauf=Σtage',),
-        ('M06', 'wp', 'SA', 'I3'): (
-            'heizung:fakten_tw', 'modus_heizen:fakten_tw', 'modus_kuehlen:fakten_tw', 'strom:fakten_tw',
-            'strom_heizen:fakten_tw', 'strom_warmwasser:fakten_tw', 'waerme:fakten_tw', 'warmwasser:fakten_tw',
-        ),
         ('M06', 'wp', 'SA', 'I6'): (
             'heizung:fakten_tw', 'heizung:jahr_verlauf', 'strom:fakten_tw', 'strom:jahr_verlauf',
             'strom_heizen:fakten_tw', 'strom_heizen:jahr_verlauf', 'strom_warmwasser:fakten_tw',
@@ -1403,30 +1323,23 @@ ROT: dict[str, dict[tuple[str, str, str, str], tuple[str, ...]]] = {
             'dienst_netz:fakten_tw', 'dienst_pv:fakten_tw', 'heim_netz:cockpit_monat', 'heim_netz:fakten_tw',
             'heim_pv:cockpit_monat', 'heim_pv:fakten_tw', 'heimladung:cockpit_monat', 'heimladung:fakten_tw',
         ),
+        ('M06', 'wp', 'SA', 'I3'): (
+            'heizung:cockpit_monat', 'heizung:fakten_tw', 'kaelte:cockpit_monat', 'modus_heizen:cockpit_monat',
+            'modus_heizen:fakten_tw', 'modus_kuehlen:cockpit_monat', 'modus_kuehlen:fakten_tw', 'strom:fakten_tw',
+            'strom_heizen:fakten_tw', 'strom_warmwasser:fakten_tw', 'waerme:cockpit_monat', 'waerme:fakten_tw',
+            'warmwasser:fakten_tw',
+        ),
+        ('M06', 'wp', 'SA', 'I4'): ('waerme:cockpit_monat:Klima',),
+        ('M07', 'wp', 'SA', 'I1'): ('strom:jahr_verlauf',),
+        ('M07', 'wp', 'SA', 'I2'): ('strom:jahr_verlauf=Σtage',),
+        ('M07', 'wp', 'SA', 'I5'): ('null:strom:jahr_verlauf',),
+        ('M07', 'wp', 'S3', 'I2'): ('strom:jahr_verlauf:vor=nach',),
     },
     'KANDIDAT-EMOB-LAUFEND-NETZ': {
     },
+    # KANDIDAT-WP-ACHSEN-OHNE-ABSCHLUSS (N-630): seit HA-Bauform E4d geheilt (die WP-Gruppe aus den Kanälen in Monats-Fakten
+    # und Cockpit → Monat) — keine Zelle mehr; die Sichten ohne Kanäle (SA) stehen unter OHNE-ABSCHLUSS (Lesart 1).
     'KANDIDAT-WP-ACHSEN-OHNE-ABSCHLUSS': {
-        ('M06', 'wp', 'HA', 'I3'): (
-            'heizung:cockpit_monat', 'kaelte:cockpit_monat', 'modus_heizen:cockpit_monat',
-            'modus_kuehlen:cockpit_monat',
-        ),
-        ('M06', 'wp', 'HA', 'I4'): ('waerme:cockpit_monat:Klima',),
-        ('M06', 'wp', 'S1', 'I2'): (
-            'heizung:cockpit_monat:vor=nach', 'kaelte:cockpit_monat:vor=nach', 'modus_heizen:cockpit_monat:vor=nach',
-            'modus_kuehlen:cockpit_monat:vor=nach', 'strom_heizen:cockpit_monat:vor=nach',
-            'strom_warmwasser:cockpit_monat:vor=nach', 'warmwasser:cockpit_monat:vor=nach',
-        ),
-        ('M06', 'wp', 'S2', 'I2'): (
-            'heizung:cockpit_monat:vor=nach', 'kaelte:cockpit_monat:vor=nach', 'modus_heizen:cockpit_monat:vor=nach',
-            'modus_kuehlen:cockpit_monat:vor=nach', 'strom_heizen:cockpit_monat:vor=nach',
-            'strom_warmwasser:cockpit_monat:vor=nach', 'warmwasser:cockpit_monat:vor=nach',
-        ),
-        ('M06', 'wp', 'SA', 'I3'): (
-            'heizung:cockpit_monat', 'kaelte:cockpit_monat', 'modus_heizen:cockpit_monat',
-            'modus_kuehlen:cockpit_monat', 'waerme:cockpit_monat',
-        ),
-        ('M06', 'wp', 'SA', 'I4'): ('waerme:cockpit_monat:Klima',),
     },
     'E4E-DIENSTLICHE-LADEKOSTEN': {
         ('M09', 'preis', 'HA', 'I1'): ('netto_ertrag:jahr_verlauf',),
@@ -1436,10 +1349,13 @@ ROT: dict[str, dict[tuple[str, str, str, str], tuple[str, ...]]] = {
 
 #: **Soll unklar je Menge** — ``(Form, Größe, Menge) → Grund``: alle Zellen dieser Menge werden gemessen und
 #: gezeigt, nicht bewertet (Fachfragen Wärme/Klima entscheidet der Master).
-_U_W1 = ("W1 (Gesamtstrom + Gesamtwärme, Betriebsart nur als Etikett): K1–K5 legen nicht fest, ob und wie das Etikett "
-         "Strom und Wärme auf Heizen/Warmwasser aufteilt — Fachfrage des Masters. Gemessen: ohne Abschluss keine "
-         "Aufteilung, nach dem Abschluss Modus Heizen 0 · Warmwasser 0 · nicht aufgeteilt = Gesamtstrom (Abdeckung "
-         "720 h); Heizwärme: Monats-Fakten 0, Cockpit → Monat keine, Community die ganze Wärme als Heizwärme")
+_U_W1 = ("W1 (Gesamtstrom + Gesamtwärme, Betriebsart nur als Etikett) — entschieden (Master, 06.10.2026, Bauplan §8a "
+         "„Etikett“): der Betriebsmodus teilt den STROM je Stunde auf, die Wärme nicht (ein Wärmezähler ohne "
+         "Funktionstrennung bleibt Gesamtwärme, Kennzahl nur gesamt). Soll Strom je Betriebsart: ohne Abschluss aus dem "
+         "abgeleiteten Kanal, nach dem Abschluss derselbe Wert über den Kanal-Split (HA-Bauform E4d, H-1) — Juni "
+         "Heizen 198 · Warmwasser 18 (Abdeckung 720 h). Die Zellen bleiben gemessen mit Haltewert; Heizwärme: "
+         "Monats-Fakten 0, Cockpit → Monat keine, Community die ganze Wärme als Heizwärme (Community-Zuordnung: "
+         "Haltewert/Beobachtung, §8a)")
 _U_W5_SPLIT = ("W5 (nur Gesamtstrom und Gesamtwärme, beide 0): ohne Heiz-/Warmwasser-Zähler legt K1–K5 keine "
                "Aufteilung fest — ob sie 0 oder „keine Angabe“ heißt, ist eine Fachfrage")
 _U_KLIMA_JAZ = ("Arbeitszahl eines Klimageräts mit Heiz- UND Kühlbetrieb: ob die Geräte-Zahl Kälte einrechnet oder "

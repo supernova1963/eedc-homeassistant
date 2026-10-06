@@ -515,7 +515,8 @@ async def baue_tage_werte(
                     for i in speicher_invs if i.ist_aktiv_an(tag)
                 ),
             ), 2),
-            wp_strom=_nz(bilanz.wp_strom_kwh),
+            # E4d (Bauplan §8a, Rest N-585): eine gemessene 0 ist erfasst — 0 statt „—" (`wp_erfasst`).
+            wp_strom=(round(bilanz.wp_strom_kwh, 3) if getattr(bilanz, "wp_erfasst", False) else None),
             sonstiges_erzeugung=_r(sonstiges.erzeugung_kwh, 3),
             sonstiges_verbrauch=_r(sonstiges.verbrauch_kwh, 3),
             sonstiges_abgabe=_r(sonstiges.abgabe_kwh, 3),

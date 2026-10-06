@@ -581,8 +581,23 @@ async def get_cockpit_uebersicht(
     )
     # D-Sicht 3: EINMAL gebaut — Tabelle und Kasten lesen dieselben Zeilen (R-4).
     _wp_block_geraete = geraete_zeilen(_wp_kennzahlen_je_geraet)
+    # HA-Bauform E4d (Bauplan §8a, Entscheid Master H-4): Strom UND Wärme im Fenster GEMESSEN 0 ⇒ Stufe 3 mit dem
+    # Zeitraum-Grund wie in Cockpit → Monat. Die Summen der Fakten sind `float` mit 0-Default — erst die Marken
+    # `strom_gemessen`/`waerme_gemessen` sagen, ob die 0 gemessen ist; ohne Messung bleibt es bei Stufe 1.
+    from backend.core.berechnungen.waermepumpe_kennzahl import kein_betrieb_grund_der_achsen
+
+    _wp_strom_gemessen = any(f.wp.strom_gemessen for f in fakten)
+    _wp_waerme_gemessen = any(f.wp.waerme_gemessen for f in fakten)
+    _wp_null_gemessen = _wp_strom_gemessen and _wp_waerme_gemessen
+    # Gegenfall (§8a, Nachtrag): eine 0 ohne Marke ist „nicht erfasst" und geht als ``None`` in den Layer — Strom
+    # gemessen 0 bei nicht erfasster Wärme ⇒ Stufe 5 „kein Wärmemengenzähler zugeordnet" statt Stufe 1. Über 0
+    # bleibt jeder Wert, wie er ist.
     _wp_az = systemarbeitszahl(
-        _wpk.waerme_kwh, _wpk.strom_kwh,
+        _wpk.waerme_kwh if (_wpk.waerme_kwh or _wp_waerme_gemessen) else None,
+        _wpk.strom_kwh if (_wpk.strom_kwh or _wp_strom_gemessen) else None,
+        kein_betrieb_grund=(
+            kein_betrieb_grund_der_achsen(achsen_der_anlage(_wp_kennzahlen_je_geraet)) if _wp_null_gemessen else None
+        ),
         waerme_abgeleitet_kwh=_wpk.waerme_abgeleitet_kwh,
         kuehlstrom_kwh=_wpk.funktionsfremd_abzug_kwh,
         strom_ohne_waerme_kwh=_wp_strom_ohne_waerme,

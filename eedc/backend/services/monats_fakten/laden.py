@@ -221,10 +221,31 @@ async def lade_monats_fakten(
     # NULL`. Eine Anlage ohne Modus-Zuordnung bricht dort ab und lädt nichts
     # (`modus_split_monat.py`, Modul-Kopf) — deshalb genügt als Vorbedingung,
     # dass es überhaupt eine Wärmepumpe gibt.
+    #
+    # ── HA-Bauform E4d: die WP-Gruppe aus den Kanälen (Bauplan §6 U4, §8a; Lesart 1) ──────────────────────────────
+    # Je Monat EINE Quellenwahl der WP-Gruppe (`kanal/wp_leser.py`). Deckt sie den Monat und trägt der Monat KEINE
+    # WP-Zeile (gespeichert schlägt gerechnet, P8 — die Gruppe als Ganzes, wie E-Mob/Sonstiges in E4c), faltet die
+    # Schicht je Gerät die Kanal-Zeile in der Form einer Abschluss-Zeile ein (Strom, Wärme je Feld, Betriebsart-Strom,
+    # Kälte, Strom je Betriebsart, Abdeckung); neue Monate nur mit dem Flag (N-121), geladen nur wo die Tagesebene
+    # ohnehin geladen wird (dieselbe Bedingung wie E4c). Der Modus-Split der übrigen Monate ohne Abschluss kommt für
+    # gedeckte Monate aus dem Kanal, sonst unverändert aus der Tagesebene (`_ergaenze_modus_split_ohne_abschluss`).
+    nur_fuer_ladeanteil = not inkl_nur_tageswerte and any(
+        m.emob_ladung_ohne_pv_anteil for m in roh.values()
+    )
+    wp_kanal: dict = {}
+    wp_gruppen: dict[MonatsSchluessel, set[str]] = {}
     if any(i.typ == "waermepumpe" for i in investitionen):
+        from backend.services.kanal.wp_leser import wp_monate
+
+        wp_kanal = await wp_monate(db, anlage_id, von=von, bis=bis)
+        if inkl_nur_tageswerte or nur_fuer_ladeanteil:
+            wp_gruppen = _falte_wp_kanal(
+                roh, wp_kanal, inv_by_id, wp_je_monat, wp_nenner_fein,
+                offen=lambda m: inkl_nur_tageswerte or m in monatsdaten_by_ym,
+            )
         await _ergaenze_modus_split_ohne_abschluss(
             db, anlage_id, roh, wp_je_monat, inv_by_id,
-            wp_nenner_fein=wp_nenner_fein, von=von, bis=bis,
+            wp_nenner_fein=wp_nenner_fein, von=von, bis=bis, wp_kanal=wp_kanal,
         )
 
     # Die lokale Tagesebene als **zusätzliche** Grundgesamtheit (N-121). Ohne
@@ -242,9 +263,6 @@ async def lade_monats_fakten(
     # überhaupt Heimladung ohne gepflegten PV-Anteil trägt. Eine Anlage ohne
     # Wallbox und ohne E-Auto zahlt dafür nichts (Entscheid Gernot 2026-08-08).
     tages_summen: dict[MonatsSchluessel, TagesMonatsSumme] = {}
-    nur_fuer_ladeanteil = not inkl_nur_tageswerte and any(
-        m.emob_ladung_ohne_pv_anteil for m in roh.values()
-    )
     if inkl_nur_tageswerte or nur_fuer_ladeanteil:
         # ⭐ Wird die Tagesebene NUR für den Ladeanteil gebraucht, genügen die
         # Tageszusammenfassungen — die Quote steht dort. Die **Stunden**ebene
@@ -311,6 +329,9 @@ async def lade_monats_fakten(
     # Kanal-Monate schon (`lade_monats_summen`); sonst EIN zusätzlicher `kanal_monate`-Aufruf, und nur, wenn die Anlage
     # einen Anlagenzähler-Kanal hat (ohne ihn ist der Wert ohnehin `None`). ⚑ Laufzeit: Vormerkung E4f „Monatsreihe je
     # Anfrage einmal laden".
+    for m, marken in wp_gruppen.items():
+        kanal_gruppen.setdefault(m, set()).update(marken)
+
     verluste_summen: dict[MonatsSchluessel, TagesMonatsSumme] = tages_summen
     from backend.services.kanal.bilanz_leser import hat_anlagenzaehler_kanal, kanal_monate
 
@@ -488,6 +509,44 @@ def _falte_kanal_gruppen(roh, geraete, tages_summen, inv_by_id, *, offen):
             gruppen.setdefault(m, set()).add(TAGESWERT_SONSTIGES)
     return emob_kanal, gruppen
 
+def _falte_wp_kanal(roh, wp_kanal, inv_by_id, wp_je_monat, wp_nenner_fein, *, offen) -> dict[MonatsSchluessel, set[str]]:
+    """HA-Bauform E4d: die Zeilen der WP-Gruppe aus den Kanälen in die Rohmonate falten.
+
+    ``wp_kanal``: ``kanal/wp_leser.wp_monate`` je Monat. ``offen(m)``: darf die Schicht diesen Monat führen, auch wenn
+    er bisher keine Spur hat (nur mit ``inkl_nur_tageswerte``, N-121)? Je Monat mit Wahl ``kanal`` und OHNE WP-Zeile
+    (P8, die Gruppe als Ganzes) je Gerät die Kanal-Zeile in der Form, die der Abschluss schriebe
+    (``bau.wp_kanal_zeile``: Herkunft ``kanal``, abgeleitete Heizwärme wie beim Abschluss) — durch denselben
+    ``_RohMonat.falte`` wie eine Monatszeile. Die Buchführung für den Modus-Split (``wp_je_monat``) und die Stufe des
+    Nenners (``wp_nenner_fein``, N-462) entstehen aus derselben Zeile, wie im IMD-Durchlauf.
+
+    Returns: je Monat die Marke ``TAGESWERT_WP``, wo gefaltet wurde.
+    """
+    from backend.services.monats_fakten.bau import wp_kanal_zeile
+    from backend.services.monats_fakten.fakten import TAGESWERT_WP
+
+    vorher = set(roh)
+    gruppen: dict[MonatsSchluessel, set[str]] = {}
+    for m, z in sorted(wp_kanal.items()):
+        if not z.kanal or not (offen(m) or m in vorher):
+            continue
+        r = roh.get(m)
+        if r is not None and "waermepumpe" in r.typen_mit_zeile:
+            continue
+        for inv_id, zeile in sorted(z.zeilen.items()):
+            inv = inv_by_id.get(int(inv_id))
+            if inv is None or not inv.ist_aktiv_im_monat(*m) or not zeile:
+                continue
+            daten, herkunft = wp_kanal_zeile(inv, zeile)
+            roh.setdefault(m, _RohMonat()).falte(inv, daten, source_provenance=herkunft)
+            wp_je_monat.setdefault(m, {})[str(inv.id)] = (
+                float(daten.get(MODUS_ABDECKUNG_FELD) or 0) > 0 or hat_gemessene_betriebsart(daten),
+                get_wp_strom_kwh(daten, inv.parameter),
+            )
+            wp_nenner_fein.setdefault(m, {})[str(inv.id)] = nenner_ist_feine_summe(daten, inv.parameter)
+            gruppen.setdefault(m, set()).add(TAGESWERT_WP)
+    return gruppen
+
+
 async def _ergaenze_modus_split_ohne_abschluss(
     db: AsyncSession,
     anlage_id: int,
@@ -498,6 +557,7 @@ async def _ergaenze_modus_split_ohne_abschluss(
     wp_nenner_fein: dict[MonatsSchluessel, dict[str, bool]],
     von: Optional[MonatsSchluessel],
     bis: Optional[MonatsSchluessel],
+    wp_kanal: Optional[dict] = None,
 ) -> None:
     """Trägt den Modus-Split der Tagesebene nach, wo kein Abschluss ihn hält (F-52).
 
@@ -511,11 +571,20 @@ async def _ergaenze_modus_split_ohne_abschluss(
     Stundenzeilen statt in einer Monatszeile. Das ist nicht die N-121-Falle
     (dort ging es um Monate mit reiner Tagesspur ohne jeden Gerätebezug).
     """
+    # HA-Bauform E4d (Lesart 1): Monate, deren WP-Gruppe die Kanäle decken, aus dem abgeleiteten Kanal — dieselben
+    # zwei Regeln (`kanal_split_ohne_abschluss`); die übrigen unverändert aus der Tagesebene, die gedeckten Monate
+    # lädt der Bestand nicht.
+    gedeckt = frozenset(m for m, z in (wp_kanal or {}).items() if z.kanal)
     angewandt = await lade_modus_split_ohne_abschluss(
         db, anlage_id, inv_by_id=inv_by_id, gespeichert=wp_je_monat,
-        von=von, bis=bis,
+        von=von, bis=bis, ohne_monate=gedeckt,
     )
-    for schluessel, je_inv in angewandt.items():
+    if gedeckt:
+        from backend.services.energie_profil.modus_split_monat import kanal_split_ohne_abschluss
+
+        for m, je in kanal_split_ohne_abschluss(wp_kanal, inv_by_id=inv_by_id, gespeichert=wp_je_monat).items():
+            angewandt.setdefault(m, {}).update(je)
+    for schluessel, je_inv in sorted(angewandt.items()):
         for inv_id, split in je_inv.items():
             r = roh.setdefault(schluessel, _RohMonat())
             r.wp_modus_strom_heizen += split.heizen_kwh

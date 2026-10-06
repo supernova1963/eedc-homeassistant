@@ -93,6 +93,9 @@ class _RohMonat:
         self.wp_heizung_gemessen = False
         self.wp_warmwasser_gemessen = False
         self.wp_strom_heizen_gemessen = False
+        #: E4d (Bauplan §8a): Strom bzw. Wärme irgendeines aktiven Geräts gemessen, auch 0.
+        self.wp_strom_gemessen = False
+        self.wp_waerme_gemessen = False
         self.wp_strom_warmwasser_gemessen = False
         #: N-391: mindestens ein Gerät des Monats misst die Wärme mit EINEM
         #: gemeinsamen Zähler (Feld ``waerme_kwh``).
@@ -376,6 +379,8 @@ class _RohMonat:
                 self.wp_warmwasser_gemessen or b.wp_warmwasser_gemessen)
             self.wp_strom_heizen_gemessen = (
                 self.wp_strom_heizen_gemessen or b.wp_strom_heizen_gemessen)
+            self.wp_strom_gemessen = self.wp_strom_gemessen or b.wp_strom_gemessen
+            self.wp_waerme_gemessen = self.wp_waerme_gemessen or b.wp_waerme_gemessen
             self.wp_strom_warmwasser_gemessen = (
                 self.wp_strom_warmwasser_gemessen or b.wp_strom_warmwasser_gemessen)
             self.wp_hat_split = self.wp_hat_split or b.wp_hat_split

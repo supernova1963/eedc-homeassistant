@@ -654,10 +654,31 @@ async def baue_abgeleitete(sitzungen, anlage_id: int) -> int:
     Reihe — der Zustand eines Produkts, dessen Stundenlauf seit Beginn der Reihe läuft (der Stundenlauf baut NICHT
     rückwirkend; ``ab_ts`` setzt die erste Stunde). Ein Seed, kein Soll; ohne Wallbox/E-Auto schreibt er nichts."""
     from backend.services.kanal.abgeleitet import schreibe_abgeleitete
+    from backend.services.kanal.modus_strom import schreibe_modus_strom
 
     async with sitzungen() as s:
         anlage = (await s.execute(select(Anlage).where(Anlage.id == anlage_id))).scalar_one()
-        return await schreibe_abgeleitete(s, anlage, JETZT, ab_ts=int(REIHE_VON.timestamp()))
+        n = await schreibe_abgeleitete(s, anlage, JETZT, ab_ts=int(REIHE_VON.timestamp()))
+        # HA-Bauform E4d: Strom je Betriebsart der Wärmepumpe — braucht die Mitschrift, die erst die Tagesaggregation
+        # schreibt; vor ihr schreibt er nichts (``baue_abgeleitete_nach_tagen``).
+        return n + await schreibe_modus_strom(s, anlage, JETZT, ab_ts=int(REIHE_VON.timestamp()))
+
+
+async def baue_abgeleitete_nach_tagen(engine, anlage_id: int) -> int:
+    """HA-Bauform E4d: die abgeleiteten Kanäle NACH der Tagesaggregation fortschreiben — der Strom je Betriebsart
+    rechnet aus der Betriebsart-Mitschrift (E1), die ``aggregate_day`` schreibt. Idempotent ab der letzten Zeile (der
+    PV-Anteil der Heimladung steht dann schon). Ein Seed, kein Soll."""
+    from contextlib import asynccontextmanager
+
+    macher = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    @asynccontextmanager
+    async def sitzungen():
+        async with macher() as s:
+            yield s
+            await s.commit()
+
+    return await baue_abgeleitete(sitzungen, anlage_id)
 
 
 async def aggregiere_tage(db: AsyncSession, form: Form, anlage_id: int, tage) -> None:

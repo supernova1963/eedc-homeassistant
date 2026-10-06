@@ -1,7 +1,8 @@
 """Kanal-Schreiber — parallel zum Bestand (HA-Bauform E1, Bauplan §4; Auftrag E1 Punkt 4).
 
-Drei Roh-Familien; seit HA-Bauform E4c dazu EIN abgeleiteter Kanal, den der Stundenlauf nach ihnen fortschreibt
-(``abgeleitet.py``: PV-Anteil der Heimladung je Gerät):
+Drei Roh-Familien; seit HA-Bauform E4c dazu abgeleitete Kanäle, die der Stundenlauf nach ihnen fortschreibt
+(``abgeleitet.py``: PV-Anteil der Heimladung je Gerät; seit E4d ``modus_strom.py``: Strom der Wärmepumpe je Betriebsart,
+den auch die Mitschrift nach ihrem Schreiben fortschreibt):
 
 * **Spiegel (HA)** — je zugeordnetem Zähler (``snapshot/writer._build_counter_map``, dieselbe
   Auswahl wie der Bestand, inklusive Stilllegung und ``quellen``-Read-Through) die Stundenzeilen der
@@ -769,6 +770,11 @@ async def schreibe_kanaele_im_stundenlauf(db: AsyncSession, anlage, zeitpunkt: d
             from backend.services.kanal.abgeleitet import schreibe_abgeleitete
 
             n += await schreibe_abgeleitete(db, anlage, zeitpunkt, invs=list(k.invs.values()))
+            # HA-Bauform E4d: Strom je Betriebsart der Wärmepumpe — NACH Spiegel und eigener Summe (die Strom-Kanäle
+            # der Stunde) und aus der Mitschrift, soweit sie schon geschrieben ist (``modus_strom.py``).
+            from backend.services.kanal.modus_strom import schreibe_modus_strom
+
+            n += await schreibe_modus_strom(db, anlage, zeitpunkt, invs=list(k.invs.values()))
         return n
     except Exception as e:  # noqa: BLE001 — der Bestand darf vom neuen Teil nichts merken
         await _fehler_vermerken(db, anlage_id, "Stundenlauf", e)
@@ -784,7 +790,18 @@ async def schreibe_betriebsart_mitschrift_sicher(
     anlage_id = anlage.id
     try:
         async with db.begin_nested():
-            return await schreibe_betriebsart_mitschrift(db, anlage, datum, modus_je_stunde)
+            n = await schreibe_betriebsart_mitschrift(db, anlage, datum, modus_je_stunde)
     except Exception as e:  # noqa: BLE001
         await _fehler_vermerken(db, anlage_id, f"Betriebsart-Mitschrift {datum}", e)
         return None
+    # HA-Bauform E4d: die Mitschrift kommt aus der Tagesaggregation (alle 15 Minuten), oft NACH dem :05-Lauf — der
+    # abgeleitete Kanal „Strom je Betriebsart" schreibt deshalb auch hier fort (idempotent ab seiner letzten Zeile).
+    # Eigener SAVEPOINT: ein Fehler darin nimmt der Mitschrift nichts.
+    try:
+        async with db.begin_nested():
+            from backend.services.kanal.modus_strom import schreibe_modus_strom
+
+            n += await schreibe_modus_strom(db, anlage, datetime.now())
+    except Exception as e:  # noqa: BLE001
+        await _fehler_vermerken(db, anlage_id, f"Strom je Betriebsart {datum}", e)
+    return n

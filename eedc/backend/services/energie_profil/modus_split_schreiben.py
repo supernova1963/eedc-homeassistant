@@ -92,7 +92,12 @@ async def schreibe_modus_split_monat(
     Kein Commit — der Aufrufer entscheidet über die Transaktionsgrenze.
     """
     ergebnis = ModusSplitSchreibErgebnis()
-    splits = await lade_modus_split_monat(db, anlage_id, jahr, monat)
+    # HA-Bauform E4d (Bauplan §9 B1 „Schritt 4 wird Kanal-Leser", Entscheid Master H-1): deckt die WP-Gruppe den Monat
+    # aus den Kanälen, schreibt der Abschluss den Split des abgeleiteten Kanals „Strom je Betriebsart" — dieselbe Zahl, die
+    # der Monat vor dem Abschluss nannte; sonst wie bisher aus der Tagesebene.
+    splits = await kanal_split_des_monats(db, anlage_id, jahr, monat)
+    if splits is None:
+        splits = await lade_modus_split_monat(db, anlage_id, jahr, monat)
     if not splits:
         return ergebnis
 
@@ -137,6 +142,38 @@ async def schreibe_modus_split_monat(
             ergebnis.waerme_abgeleitet += 1
 
     return ergebnis
+
+
+async def kanal_split_des_monats(
+    db: AsyncSession, anlage_id: int, jahr: int, monat: int
+) -> Optional[dict[str, ModusSplit]]:
+    """Der Split des Monats aus dem abgeleiteten Kanal (HA-Bauform E4d) — ``None``, wenn die WP-Gruppe den Monat nicht
+    deckt (dann gilt die Tagesebene, Lesart 1).
+
+    Je Gerät mit abgeleitetem Kanal die Teilmengen Heizen · Warmwasser · Kühlen (Δ über das Monatsfenster, die Grenze
+    der Monats-Fakten), die Abdeckung und als Bezug die K3-Menge der Kanal-Zeile; ein Gerät ohne Stunde mit Signal fehlt
+    (P4, wie ``lade_modus_split_monat``). ⚠ Ein Gerät mit gemessenen Betriebsart-Zählern hat keinen abgeleiteten Kanal und
+    bekommt im gedeckten Monat keinen Split — seine gemessene Aufteilung gewinnt beim Lesen ohnehin (K2).
+    """
+    from backend.core.betriebsmodus import HEIZEN, KUEHLEN, WARMWASSER
+    from backend.services.kanal.wp_leser import wp_monate
+
+    z = (await wp_monate(db, anlage_id, von=(jahr, monat), bis=(jahr, monat))).get((jahr, monat))
+    if z is None or not z.kanal:
+        return None
+    inv_result = await db.execute(select(Investition).where(Investition.id.in_(list(z.abgeleitet) or [-1])))
+    params = {i.id: i.parameter for i in inv_result.scalars().all()}
+    out: dict[str, ModusSplit] = {}
+    for inv_id in sorted(z.abgeleitet):
+        zeile = z.zeilen.get(inv_id) or {}
+        split = ModusSplit(
+            kwh_je_modus={m: float(zeile.get(MODUS_STROM_FELD[m]) or 0.0) for m in (HEIZEN, WARMWASSER, KUEHLEN)},
+            abdeckung_h=float(zeile.get(MODUS_ABDECKUNG_FELD) or 0.0),
+            bezug_kwh=get_wp_strom_kwh(zeile, params.get(inv_id)),
+        )
+        if not split.ist_leer:
+            out[str(inv_id)] = split
+    return out
 
 
 async def _lade_imd(

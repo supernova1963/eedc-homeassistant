@@ -66,6 +66,11 @@ class WpFakten:
     warmwasser_gemessen: bool = False
     strom_heizen_gemessen: bool = False
     strom_warmwasser_gemessen: bool = False
+    #: **HA-Bauform E4d (Bauplan §8a, Rest N-585):** hat mindestens ein aktives Gerät Strom bzw. Wärme GEMESSEN, auch
+    #: wenn dabei 0 herauskam? Eine gemessene 0 beim Strom ist erfasst (F-5) — eine Sicht nennt dann 0 statt nichts,
+    #: und Strom 0 bei Wärme 0 ist „kein Betrieb im Zeitraum" (Stufe 3 der Grund-Kette), nicht „kein Zähler".
+    strom_gemessen: bool = False
+    waerme_gemessen: bool = False
     #: True, sobald **eine** aktive WP getrennte Strommessung führt.
     hat_split: bool = False
     #: N-391: True, sobald **eine** aktive WP ihre Wärme mit EINEM gemeinsamen

@@ -110,7 +110,12 @@ ABGELEITETE_KANAELE: dict[str, str] = {
     "abgeleitet:inv:{id}:ladung_pv_kwh": "E4c (geschrieben): PV-Teil der Heimladung je Gerät ohne gemessene "
                                          "Aufteilung, Einspeise-Deckung je Stunde (``abgeleitet.py``)",
     "kosten:*": "Kosten je Stunde bei Stundenpreis (stundengepaartes Produkt, G1)",
-    "kwh_betriebsart:inv:{id}:{betriebsart}": "kWh je Betriebsart aus Anteil × Strom der Stunde",
+    "abgeleitet:inv:{id}:modus_strom_{betriebsart}_kwh": "E4d (geschrieben): Strom der Wärmepumpe je Betriebsart "
+                                                         "(heizen · warmwasser · kuehlen · lueften · entfeuchten · "
+                                                         "rest) = K3-Menge der Stunde × Anteil der Mitschrift; nur "
+                                                         "ohne gemessene Betriebsart-Zähler (``modus_strom.py``)",
+    "abgeleitet:inv:{id}:modus_abdeckung_h": "E4d (geschrieben): Stunden mit Betriebsart-Signal, kumulativ "
+                                             "(``modus_strom.py``)",
     "leistung_summe:inv:{id}": "O8: Summenkanal aus Leistung (Stundenmittel × 1 h) für Geräte ohne kWh-Zähler",
     "ueberschuss": "Überschuss je Stunde",
     "defizit": "Defizit je Stunde",

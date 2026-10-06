@@ -216,14 +216,19 @@ def geraete_zeilen(
     zeilen: list[WpGeraetZeile] = []
     for k in kennzahlen:
         m = k.mengen
-        if m.strom_kwh <= 0 and m.waerme_kwh <= 0:
+        # E4d (Bauplan §8a, Rest N-585): ein Gerät, dessen Strom UND Wärme gemessen 0 sind, bleibt als Zeile stehen —
+        # „kein Betrieb im Zeitraum" ist eine Auskunft mit Mengen 0 (und dem Zeitraum-Grund „—" ohne Text), kein
+        # stillstehendes Gerät ohne Messung.
+        if m.strom_kwh <= 0 and m.waerme_kwh <= 0 and not getattr(m, "kein_betrieb", False):
             continue
         zeilen.append(WpGeraetZeile(
             investition_id=m.inv_id,
             name=m.name,
             strom_kwh=_r(m.strom_kwh, 1),
-            # P4: eine fehlende Wärme ist keine 0 — sie ist keine Zahl.
-            waerme_kwh=_r(m.waerme_kwh, 1) if m.waerme_kwh > 0 else None,
+            # P4: eine fehlende Wärme ist keine 0 — sie ist keine Zahl. Eine GEMESSENE 0 schon (E4d).
+            waerme_kwh=(
+                _r(m.waerme_kwh, 1) if m.waerme_kwh > 0 or getattr(m, "kein_betrieb", False) else None
+            ),
             waerme_grund=(
                 k.gesamt.grund
                 if (m.waerme_kwh <= 0 and m.strom_kwh > 0) else None

@@ -856,6 +856,7 @@ async def messe_ha(form: Form, m: Messung) -> None:
             with umgebung(form, svc):
                 await mx.fuelle_spiegel(engine, aid, svc)   # E4a-2, B-1: Spiegel wie im Produkt mit HA
                 await mx.aggregiere_tage(db, form.pvform, aid, TAGE_JUNI + TAGE_JULI)
+                await mx.baue_abgeleitete_nach_tagen(engine, aid)   # E4d: Strom je Betriebsart aus der Mitschrift
                 m.tage["HA"] = await miss_tage(db, aid, ids, TAGE_JUNI + TAGE_JULI)
                 m.laufend["HA"] = await _sichten_laufend(db, aid, ids)
         finally:

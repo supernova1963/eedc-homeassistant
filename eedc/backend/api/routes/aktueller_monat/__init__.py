@@ -134,7 +134,11 @@ _NULL_IST_MESSWERT_BASIS = frozenset({"einspeisung_kwh", "netzbezug_kwh", "pv_er
 #: (Teil B) hätte eine durchgelassene WP-0 über den damaligen Aggregat-Zweig zusätzlich eine Phantom-Ersparnis
 #: erzeugt (gemessen 8,64 / 86,40 €). Eine String-0 neben dem Anlagenzähler nähme dem String dessen Rest — eine
 #: sichtbare Änderung der PV-Achse ohne Matrix-Form. Für beide bleibt es bei „über 0".
-_NULL_IST_MESSWERT_TYPEN = frozenset({"speicher", "balkonkraftwerk", "wallbox", "e-auto"})
+_NULL_IST_MESSWERT_TYPEN = frozenset({"speicher", "balkonkraftwerk", "wallbox", "e-auto", "waermepumpe"})
+#: ⭐ **Seit HA-Bauform E4d auch die Wärmepumpe** (Bauplan §8a, Rest N-585): die Darstellungsregel steht — eine gemessene
+#: 0 beim Strom ist erfasst (F-5); Strom 0 und Wärme 0 sind Stufe 3 der Grund-Kette („kein Heizbetrieb in diesem
+#: Zeitraum" bzw. „keine Warmwasserbereitung …", Klasse Zeitraum), Mengen 0, Ersparnis 0 €, die Ergebnis-Leiter führt
+#: die Zeile nicht als „fehlt". Der Absatz oben beschreibt den Stand davor.
 
 
 def _null_ist_messwert(feld_name: str, typ_je_inv: dict[str, str]) -> bool:
@@ -368,6 +372,66 @@ async def _geraete_aus_kanaelen(
     return out, emob, sonstiges
 
 
+async def _wp_aus_kanaelen(
+    db: AsyncSession, anlage: Anlage, investitionen, jahr: int, monat: int,
+    ha_stats: dict[str, tuple[float, DatenquelleInfo]], *, monats_fakt,
+):
+    """HA-Bauform E4d (U4, N-630): die WP-Gruppe des Kalendermonats aus den Kanälen.
+
+    Nur auf dem HA-Weg (``ha_stats`` geliefert) und nur, wo der Monat KEINE WP-Zeile trägt (gespeichert schlägt
+    gerechnet, P8). Deckt die WP-Gruppe den Kalendermonat (``kanal/wp_leser.wp_kalendermonate``):
+
+    * die Gerätefelder (``inv_<id>_<feld>``: Strom, Wärme je Feld, Betriebsart-Strom, Kälte) sind das Kanal-Δ des
+      Kalendermonats — ohne Deckel, ohne Rücksprung-Verwurf, wie die Bilanz-Gruppe (B-2); K3/D1 fallen danach wie für
+      jede Quelle in ``aggregiere_typen``;
+    * die WP-Feldgruppe (``WpFakten``: Funktionsmengen, Betriebsart-Strom, Kälte, Strom je Betriebsart, Abdeckung,
+      Mengen je Gerät) entsteht aus denselben Zeilen über die Faltung der Monats-Fakten (``monats_fakten.wp_aus_zeilen``)
+      — vorher führte Cockpit → Monat sie nur aus dem Monats-Fakt, ohne Abschluss also gar nicht (N-630).
+
+    Returns: ``(ha_stats', wp, zeilen)`` — ``wp`` = ``WpFakten`` oder ``None``, ``zeilen`` = die Kanal-Zeilen je Gerät.
+    """
+    if not ha_stats or not any(getattr(i, "typ", None) == "waermepumpe" for i in investitionen):
+        return ha_stats, None, {}
+    if monats_fakt is not None and "waermepumpe" in monats_fakt.meta.typen_mit_zeile:
+        return ha_stats, None, {}
+    from backend.core.betriebsmodus import MODUS_ABDECKUNG_FELD, MODUS_STROM_FELD
+    from backend.services.kanal.wp_leser import wp_kalendermonate
+    from backend.services.monats_fakten import wp_aus_zeilen
+
+    z = (await wp_kalendermonate(db, anlage.id, [(jahr, monat)])).get((jahr, monat))
+    if z is None or not z.kanal:
+        return ha_stats, None, {}
+    abgeleitet = set(MODUS_STROM_FELD.values()) | {MODUS_ABDECKUNG_FELD}
+    out = dict(ha_stats)
+    quelle = next(iter(ha_stats.values()))[1]
+    typ_je_inv = {str(i.id): i.typ for i in investitionen}
+    for inv_id, zeile in z.zeilen.items():
+        for feld, wert in zeile.items():
+            if feld in abgeleitet:
+                continue                      # Teilmengen und Abdeckung sind keine Felder der Quellen-Kaskade
+            key = f"inv_{inv_id}_{feld}"
+            wert = round(wert, 2)
+            if wert > 0 or (wert == 0 and _null_ist_messwert(key, typ_je_inv)):
+                out[key] = (wert, quelle)
+            else:
+                out.pop(key, None)
+    return out, wp_aus_zeilen(investitionen, (jahr, monat), z.zeilen), dict(z.zeilen)
+
+
+def _wp_sicht(monats_fakt, wp):
+    """Der Monats-Fakt, wie ihn die WP-Abschnitte lesen: mit der WP-Gruppe aus den Kanälen, wo es sie gibt (E4d).
+    ⚠ Nur für die Wärme/Klima-Abschnitte — sie lesen ausschließlich ``.wp``; jede andere Gruppe bleibt der Fakt."""
+    if wp is None:
+        return monats_fakt
+    if monats_fakt is not None:
+        import dataclasses
+
+        return dataclasses.replace(monats_fakt, wp=wp)
+    from types import SimpleNamespace
+
+    return SimpleNamespace(wp=wp)
+
+
 async def _ha_heimlade_felder_mit_daten(anlage: Anlage, investitionen, jahr: int, monat: int) -> set[str]:
     """Die Heimlade-Felder, für die die HA-Statistik im Monat **Daten** hat — auch mit 0.
 
@@ -535,8 +599,30 @@ def _collect_saved_data(
     ):
         if wert > 0:
             resolved[feld] = (wert, quelle)
-
     return resolved
+
+
+def _wp_gemessene_null_aus_fakt(resolved: dict, fakt: Optional[MonatsFakt]) -> None:
+    """HA-Bauform E4d (Bauplan §8a, Rest N-585): die GEMESSENE 0 der Wärmepumpe aus der Monatszeile — als LETZTE Quelle.
+
+    Die Zeile trägt Strom bzw. Wärme mit 0 (``WpFakten.strom_gemessen``/``waerme_gemessen``): „kein Betrieb im
+    Zeitraum", kein fehlender Zähler. ⚠ **Nicht in ``_collect_saved_data``** — dort sind die ``> 0``-Gates die
+    Präzedenz der Kaskade (eine gespeicherte 0 darf eine stärkere Quelle nicht sperren, Docstring dort). Deshalb erst
+    NACH der Kaskade und NACH der Aggregation der Gerätefelder: nur ein Feld, das keine Quelle gefüllt hat, bekommt die
+    gemessene 0 der Zeile. Ändert ``resolved`` an Ort und Stelle."""
+    if fakt is None:
+        return
+    md = fakt.meta.monatsdaten
+    quelle = DatenquelleInfo(
+        quelle="gespeichert", konfidenz=85,
+        zeitpunkt=md.updated_at.isoformat() if md is not None and getattr(md, "updated_at", None) else None,
+    )
+    for feld, wert, gemessen in (
+        ("wp_strom_kwh", fakt.wp.strom_kwh, fakt.wp.strom_gemessen),
+        ("wp_waerme_kwh", fakt.wp.waerme_kwh, fakt.wp.waerme_gemessen),
+    ):
+        if feld not in resolved and wert == 0 and gemessen:
+            resolved[feld] = (0.0, quelle)
 
 
 async def _collect_mqtt_inbound_data(
@@ -776,7 +862,10 @@ async def _collect_tagesebene_data(
             ("strom_warmwasser_kwh", m.strom_warmwasser_kwh),
             ("kaelte_kwh", m.kaelte_kwh),
         ):
-            if wert > 0:
+            # E4d (Bauplan §8a, Rest N-585): Strom und Wärme einer WP tragen auch eine gemessene 0 (mindestens ein Tag
+            # mit Wert); die Funktions-Achsen und die Kälte bleiben bei „über 0" (keine Matrix-Form, keine Regel).
+            if wert > 0 or (wert == 0 and feld in ("stromverbrauch_kwh", "waerme_kwh")
+                            and _TAGES_WP_FELD.get(feld, feld) in getattr(m, "gemessen", frozenset())):
                 resolved[f"inv_{inv_id}_{feld}"] = (wert, quelle)
     # Der Kühlanteil als Anlagensumme — Eingang der Ersparnis-Rechnung, wie im
     # DB-Zweig (`fakt.wp.modus_strom_kuehlen_kwh`). Er ist eine **Teilmenge**
@@ -785,6 +874,9 @@ async def _collect_tagesebene_data(
     if _kuehl > 0:
         resolved["wp_modus_kuehlen_kwh"] = (_kuehl, quelle)
     return resolved
+
+#: Die Felder der Tagesebene (``WaermeMonatsMengenJeGeraet``) zu den Registry-Feldern der Quellen-Kaskade.
+_TAGES_WP_FELD = {"stromverbrauch_kwh": "strom_kwh", "waerme_kwh": "waerme_kwh"}
 
 # =============================================================================
 # Endpoint
@@ -940,6 +1032,10 @@ async def _berechne_monat(
         db, anlage, investitionen, jahr, monat, ha_stats,
         monats_fakt=monats_fakt, bilanz_ersetzt=_bilanz_aus_kanaelen,
     )
+    # HA-Bauform E4d: die WP-Gruppe des Kalendermonats aus den Kanälen (Docstring dort, N-630).
+    ha_stats, _wp_kanal, _wp_kanal_zeilen = await _wp_aus_kanaelen(
+        db, anlage, investitionen, jahr, monat, ha_stats, monats_fakt=monats_fakt,
+    )
     # N-555: welche Heimlade-Felder hat die HA-Statistik in einem ABGESCHLOSSENEN
     # Monat überhaupt (auch mit 0)? Im laufenden Monat genügt die Quelle.
     ha_felder_mit_daten: set[str] = (
@@ -1038,6 +1134,8 @@ async def _berechne_monat(
         kanal_quote=_emob_kanal,
     )
     emob_entscheid = _out.get("emob_entscheid")
+    # HA-Bauform E4d: die gemessene WP-0 der Monatszeile als letzte Quelle (Docstring dort).
+    _wp_gemessene_null_aus_fakt(resolved, monats_fakt)
     # ── extrahiere_werte (Vorlage 2: Abschnitt in aggregation.py, Schnittstelle 2 ein / 10 aus) ──
     _out = extrahiere_werte(monats_fakt=monats_fakt, resolved=resolved)
     if "abgabe_dritte" in _out: abgabe_dritte = _out["abgabe_dritte"]
@@ -1087,7 +1185,7 @@ async def _berechne_monat(
     if "wp_strom" in _out: wp_strom = _out["wp_strom"]
     if "wp_waerme" in _out: wp_waerme = _out["wp_waerme"]
     # ── waerme_klima_monat (Vorlage 2: Abschnitt in waerme.py, Schnittstelle 16 ein / 10 aus) ──
-    _out = await waerme_klima_monat(resolved=resolved, _tages_wp_mengen=_tages_wp_mengen, _zt_cache=_zt_cache, allgemein_tarif=allgemein_tarif, anlage_id=anlage_id, db=db, get_val=get_val, investitionen=investitionen, jahr=jahr, monat=monat, monats_fakt=monats_fakt, monats_gaspreis=monats_gaspreis, netzbezug_preis_effektiv_cent=netzbezug_preis_effektiv_cent, tarife=tarife, teilzeitraum=teilzeitraum, wp_strom=wp_strom, wp_waerme=wp_waerme)
+    _out = await waerme_klima_monat(resolved=resolved, _tages_wp_mengen=_tages_wp_mengen, kanal_wp_zeilen=_wp_kanal_zeilen, _zt_cache=_zt_cache, allgemein_tarif=allgemein_tarif, anlage_id=anlage_id, db=db, get_val=get_val, investitionen=investitionen, jahr=jahr, monat=monat, monats_fakt=_wp_sicht(monats_fakt, _wp_kanal), monats_gaspreis=monats_gaspreis, netzbezug_preis_effektiv_cent=netzbezug_preis_effektiv_cent, tarife=tarife, teilzeitraum=teilzeitraum, wp_strom=wp_strom, wp_waerme=wp_waerme)
     if "_wp_abgrenzung_je_funktion" in _out: _wp_abgrenzung_je_funktion = _out["_wp_abgrenzung_je_funktion"]
     if "_wp_funktion" in _out: _wp_funktion = _out["_wp_funktion"]
     if "_wp_kennzahlen_je_geraet" in _out: _wp_kennzahlen_je_geraet = _out["_wp_kennzahlen_je_geraet"]
@@ -1109,7 +1207,7 @@ async def _berechne_monat(
     if "sonstige_ertraege_total" in _out: sonstige_ertraege_total = _out["sonstige_ertraege_total"]
     if "sonstige_netto_total" in _out: sonstige_netto_total = _out["sonstige_netto_total"]
     # ── komponenten_detail (Vorlage 2: Abschnitt in komponenten.py, Schnittstelle 15 ein / 33 aus) ──
-    _out = await komponenten_detail(_wp_abgrenzung_je_funktion=_wp_abgrenzung_je_funktion, _wp_funktion=_wp_funktion, _wp_kennzahlen_je_geraet=_wp_kennzahlen_je_geraet, anlage_id=anlage_id, db=db, fenster=fenster, investitionen=investitionen, jahr=jahr, monat=monat, monats_fakt=monats_fakt, speicher_entladung=speicher_entladung, speicher_ladung=speicher_ladung, wp_abgrenzung_verletzt=wp_abgrenzung_verletzt, wp_arbeitszahl=wp_arbeitszahl, wp_waerme_abgeleitet_kwh=wp_waerme_abgeleitet_kwh)
+    _out = await komponenten_detail(_wp_abgrenzung_je_funktion=_wp_abgrenzung_je_funktion, _wp_funktion=_wp_funktion, _wp_kennzahlen_je_geraet=_wp_kennzahlen_je_geraet, anlage_id=anlage_id, db=db, fenster=fenster, investitionen=investitionen, jahr=jahr, monat=monat, monats_fakt=monats_fakt, wp_fakten=_wp_kanal, speicher_entladung=speicher_entladung, speicher_ladung=speicher_ladung, wp_abgrenzung_verletzt=wp_abgrenzung_verletzt, wp_arbeitszahl=wp_arbeitszahl, wp_waerme_abgeleitet_kwh=wp_waerme_abgeleitet_kwh)
     if "mf_bkw" in _out: mf_bkw = _out["mf_bkw"]
     if "mf_emob" in _out: mf_emob = _out["mf_emob"]
     if "mf_sonstiges" in _out: mf_sonstiges = _out["mf_sonstiges"]

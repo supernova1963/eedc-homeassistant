@@ -993,6 +993,11 @@ def arbeitszahl(
         # liefert 0, ob gemessen oder nie erfasst.
         if (kein_betrieb_grund and strom_kwh is not None
                 and float(strom_kwh) == 0.0):
+            # ⭐ **Gegenfall (Bauplan §8a, Nachtrag aus der Nachmessung E4d):** Strom gemessen 0, die Wärme aber NICHT
+            # erfasst (kein Wert oder ein Grund, warum sie fehlt) ⇒ Stufe 5 mit dem Wärme-Grund. Der Strom ist erfasst
+            # — Stufe 1 träfe ihn zu Unrecht; „kein Betrieb" wüsste ohne Wärmemessung niemand.
+            if waerme_kwh is None or waerme_fehlt_grund:
+                return Arbeitszahl(None, waerme_fehlt_grund or GRUND_KEINE_WAERMEMESSUNG)
             return Arbeitszahl(None, kein_betrieb_grund)
         return Arbeitszahl(None, GRUND_KEIN_STROM)
     if e <= 0:
@@ -1117,6 +1122,7 @@ def systemarbeitszahl(
     abgrenzung_verletzt: Optional[str] = None,
     waerme_fehlt_grund: Optional[str] = None,
     strom_fehlt_grund: Optional[str] = None,
+    kein_betrieb_grund: Optional[str] = None,
 ) -> Systemarbeitszahl:
     """Σ gemessene Wärme ÷ (Σ Strom − Kühlstrom) — die **Systemarbeitszahl** (E1b).
 
@@ -1201,6 +1207,22 @@ def systemarbeitszahl(
     # aus einer anderen Quelle ziehen.
     e = e_gesamt - min(max(kuehlstrom_kwh, 0.0), max(e_gesamt, 0.0))
     if e_gesamt <= 0:
+        # ⭐ **HA-Bauform E4d (Bauplan §8a, Rest N-585): eine gemessene 0 ist erfasst.** Stufe 1 („kein Stromverbrauch
+        # erfasst") gilt nur, wo der Strom FEHLT (``None``). Sind Strom UND Wärme gemessen 0, lief das Gerät in diesem
+        # Zeitraum nicht — dann gilt Stufe 3 mit dem vorhandenen Grund des Aufrufers (``kein_betrieb_grund``, Klasse
+        # Zeitraum: „—" ohne Text, {@link kein_betrieb_grund_der_achsen}). Dieselben zwei Riegel wie bei
+        # ``arbeitszahl``: exakt 0, nicht ``None``, UND ein Aufrufer, der „gemessen 0" von „nie erfasst" unterscheiden
+        # kann (er reicht dann den Grund herein). ⚠ Strom 0 bei Wärme > 0 bleibt bei Stufe 1 (Entscheid Master H-2,
+        # Kandidat Daten-Checker „Wärme ohne Strom").
+        # ⭐ **Gegenfall (§8a, Nachtrag aus der Nachmessung E4d):** Strom gemessen 0 (nicht ``None``) und Wärme NICHT
+        # erfasst (``None``) ⇒ Stufe 5 „kein Wärmemengenzähler zugeordnet" bzw. der Grund des Aufrufers — der Strom ist
+        # erfasst, es fehlt die Wärme. Ohne Riegel: jeder Aufrufer führt eine 0 nur, wo gemessen wurde (Cockpit → Monat:
+        # Quellen-Kaskade; Tag: ``or None``; Übersicht: ``None`` ohne Marke ``strom_gemessen``/``waerme_gemessen``).
+        if strom_kwh is not None and float(strom_kwh) == 0.0 and waerme_gemessen_kwh is None:
+            return Systemarbeitszahl(None, grund=waerme_fehlt_grund or GRUND_KEINE_WAERMEMESSUNG)
+        if (kein_betrieb_grund and strom_kwh is not None and float(strom_kwh) == 0.0
+                and waerme_gemessen_kwh is not None and float(waerme_gemessen_kwh) == 0.0):
+            return Systemarbeitszahl(None, grund=kein_betrieb_grund)
         return Systemarbeitszahl(None, grund=strom_fehlt_grund or GRUND_KEIN_STROM)
     if e <= 0:
         return Systemarbeitszahl(None, grund=GRUND_NUR_KUEHLBETRIEB)
@@ -1233,6 +1255,17 @@ def systemarbeitszahl(
 #: **Kurz und mit Ausweg**, wie jeder Sperrgrund (S3): Er sagt nicht nur, dass
 #: die Zahl fehlt, sondern woran es liegt.
 GRUND_STROM_NICHT_JE_FUNKTION = "Strom nicht getrennt je Funktion gemessen"
+
+
+def kein_betrieb_grund_der_achsen(achsen) -> str:
+    """Der Grund „kein Betrieb im Zeitraum" für eine GESAMT-Zahl aus Strom 0 und Wärme 0 (HA-Bauform E4d, Bauplan §8a).
+
+    **Kein neuer Grund-Text** (§8a): die zwei vorhandenen Zeitraum-Gründe der Kette. Hat die Ausstattung eine
+    Heiz-Achse, ist es „kein Heizbetrieb in diesem Zeitraum"; eine Einheit nur mit Warmwasser-Achse (Brauchwasser-WP,
+    §5.1a) sagt „keine Warmwasserbereitung in diesem Zeitraum" — eine Heiz-Aussage über ein Gerät ohne Heizkreis wäre
+    eine Aussage über eine Achse, die es nicht gibt (WK-15c).
+    """
+    return GRUND_KEIN_HEIZBETRIEB if HEIZEN in (achsen or ()) else GRUND_KEINE_WARMWASSERBEREITUNG
 
 #: Das Gegenstück auf der **Wärme**seite (N-391, 14.09.2026) — derselbe Satzbau,
 #: weil es derselbe Sachverhalt in der anderen Größe ist: Der Quotient je

@@ -185,14 +185,23 @@ def _baue_investition_financial(
             waerme_total = wp_fakt.waerme_kwh
             strom = wp_fakt.strom_kwh or None
             kuehlstrom = wp_fakt.strom_kuehlen_kwh
+        # HA-Bauform E4d (Bauplan §8a, Rest N-585): Strom UND Wärme der Zeile GEMESSEN 0 ⇒ „kein Betrieb", Ersparnis 0 €
+        # (die eine Lesetür `imd_typ_beitrag` sagt, ob die Zeile die Mengen trägt — auch mit 0).
+        from backend.core.berechnungen.imd_monatsaggregat import imd_typ_beitrag
+
+        _b = imd_typ_beitrag(inv, data)
+        _kein_betrieb = bool(
+            _b.wp_strom_gemessen and _b.wp_waerme_gemessen and not (waerme_total or 0) and not (strom or 0)
+        )
         # N-609: die EINE Zeilenregel (Wärme > 0 und Strom > 0, Parameter des Geräts, Preise des Monats).
         wp_result = wp_ersparnis_zeile(
-            waerme_kwh=waerme_total,
-            strom_kwh=strom,
+            waerme_kwh=0.0 if _kein_betrieb else waerme_total,
+            strom_kwh=0.0 if _kein_betrieb else strom,
             strom_kuehlen_kwh=kuehlstrom,
             strompreis_cent=wp_p,
             parameter=inv.parameter,
             gaspreis_cent=monats_gaspreis,
+            null_ist_kein_betrieb=_kein_betrieb,
         )
         if wp_result is not None:
             inv_ersparnis = round(wp_result.ersparnis_euro, 2)
@@ -208,7 +217,8 @@ def _baue_investition_financial(
             # hierher stand ein Text, der bei F8 10 € ergab, neben dem Wert 100 €.
             inv_formel = WP_ERSPARNIS_FORMEL
             inv_berechnung = wp_ersparnis_berechnung(
-                wp_result, waerme_total, strom, wp_p, inv.parameter,
+                wp_result, 0.0 if _kein_betrieb else waerme_total, 0.0 if _kein_betrieb else strom, wp_p,
+                inv.parameter,
             )
 
     elif inv.typ in ("e-auto", "wallbox") and not ist_dienstlich(inv):

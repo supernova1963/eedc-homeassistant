@@ -28,7 +28,7 @@ from backend.api.routes.aktueller_monat.schemas import SonstigesGeraet
 logger = logging.getLogger(__name__)
 
 
-async def komponenten_detail(*, _wp_abgrenzung_je_funktion, _wp_funktion, _wp_kennzahlen_je_geraet, anlage_id, db, fenster, investitionen, jahr, monat, monats_fakt, speicher_entladung, speicher_ladung, wp_abgrenzung_verletzt, wp_arbeitszahl, wp_waerme_abgeleitet_kwh):
+async def komponenten_detail(*, _wp_abgrenzung_je_funktion, _wp_funktion, _wp_kennzahlen_je_geraet, anlage_id, db, fenster, investitionen, jahr, monat, monats_fakt, wp_fakten=None, speicher_entladung, speicher_ladung, wp_abgrenzung_verletzt, wp_arbeitszahl, wp_waerme_abgeleitet_kwh):
     """Komponenten-Detail aus den Monats-Fakten (ADR-002/P10, C1d): Speicher, Waermepumpe je Modus, BKW, E-Mob, Sonstiges.
 
     Aus `get_aktueller_monat` Zeilen 834-1150 (Stand vor dem Umzug) byte-identisch herausgeloest — Vorlage 2.
@@ -50,6 +50,8 @@ async def komponenten_detail(*, _wp_abgrenzung_je_funktion, _wp_funktion, _wp_ke
     # Detailblock war immer schon reiner DB-Zweig.
     mf_speicher = monats_fakt.speicher if monats_fakt else None
     mf_wp = monats_fakt.wp if monats_fakt else None
+    if wp_fakten is not None:
+        mf_wp = wp_fakten      # HA-Bauform E4d: der Monat ohne WP-Zeile aus den Kanälen (`_wp_aus_kanaelen`)
     mf_emob = monats_fakt.emob if monats_fakt else None
     mf_bkw = monats_fakt.bkw if monats_fakt else None
     mf_sonstiges = monats_fakt.sonstiges if monats_fakt else None

@@ -1768,6 +1768,50 @@ SoT: `core/berechnungen/modus_split.py` (rein) · `services/energie_profil/modus
 > einer Zahl, die zu klein sein kann, und einer, die einen Tag mit 36 Stunden behauptet, ist die
 > Wahl keine Geschmacksfrage.
 
+> **Strom je Betriebsart aus Zeitraum-Differenzen (HA-Bauform E4d, Stand 06.10.2026).** Mit Home Assistant (bzw. der
+> eigenen Summe aus MQTT) führt eedc für jede Wärmepumpe mit Betriebsart-Signal und **ohne** eigene Betriebsart-Zähler
+> einen **abgeleiteten Kanal** je Betriebsart (`services/kanal/modus_strom.py`):
+>
+> ```text
+> je Stunde h, je Gerät i (nur ohne gemessene Betriebsart-Zähler — K2):
+>   strom_h       = K3-Menge der Stunde (wp_strom_aufteilung auf die Δ von Gesamtzähler / Strom Heizen + Warmwasser)
+>   anteil_h[m]   = Verweildauer der Betriebsart m in der Stunde / 3600   # Mitschrift aus dem Betriebsmodus
+>   strom[m]     += strom_h × anteil_h[m]        # m ∈ heizen · warmwasser · kuehlen · lueften · entfeuchten
+>   rest         += strom_h − Σ_m …              # ohne Signal, „aus", „unbestimmt", Zählerlücke
+>   abdeckung    += 1, wenn die Stunde ein Signal hat
+> ```
+>
+> Ein Zeitraum nennt die Aufteilung damit als **ein Δ** je Kanal, wie jede andere Menge. Die Regel der Stunde steht im
+> Layer (`modus_split.modus_strom_der_stunde`). Wechselt die Betriebsart innerhalb einer Stunde, teilt der Kanal nach der
+> Verweildauer; die Tagesebene oben gibt die ganze Stunde dem länger gelaufenen Modus.
+>
+> * **Monat ohne Abschluss:** deckt die **WP-Gruppe** (alle Strom-, Wärme- und Betriebsart-Zähler der aktiven
+>   Wärmepumpen und die abgeleiteten Kanäle, `kanal/wp_leser.py`) den Monat, nehmen die Monats-Fakten und *Cockpit →
+>   Monat* Strom, Wärme je Feld, Betriebsart-Strom, Kälte, Strom je Betriebsart und Abdeckung aus den Kanälen — in der
+>   Form, die der Abschluss in die Monatszeile schriebe, durch dieselbe Faltung. Die Wärme wird dabei **nicht** nach der
+>   Betriebsart geteilt: ein Wärmezähler ohne Funktionstrennung bleibt Gesamtwärme. Wie beim Abschluss entsteht aus dem
+>   abgeleiteten Heizstrom eine **geschätzte** Heizwärme (`Heizstrom × gepflegte JAZ`, gekennzeichnet, nie
+>   Kennzahl-Basis, §3.5c), wenn kein Heizwärme-Zähler da ist.
+> * **Abgeschlossene Monate bleiben**, wie sie sind (gespeichert schlägt gerechnet). Trägt eine Monatszeile keine
+>   gespeicherte Aufteilung, kommt die Ergänzung im gedeckten Monat aus dem Kanal (dieselben Regeln wie oben), sonst aus
+>   der Tagesebene — und die Tagesebene lädt gedeckte Monate gar nicht mehr.
+> * **Beginn:** ein neuer Kanal beginnt beim ersten Lauf mit dem laufenden Monat, frühestens mit der Betriebsart-
+>   Mitschrift; frühere Monate rechnet eedc nicht neu. Geschrieben wird eine Stunde erst, wenn die Mitschrift sie erreicht
+>   hat; hört die Mitschrift auf, bleibt der Kanal stehen und der Monat rechnet wie bisher.
+> * **Der Monatsabschluss schreibt im gedeckten Monat dieselbe Aufteilung** (`modus_split_schreiben.kanal_split_des_monats`):
+>   Strom je Betriebsart und Abdeckung kommen aus dem abgeleiteten Kanal, derselbe Monat nennt vor und nach dem
+>   Abschluss dieselben Zahlen. Deckt die WP-Gruppe den Monat nicht, schreibt er die Aufteilung der Tagesebene
+>   (Leistungspfad) wie bisher.
+
+> **Kein Betrieb ist eine Messung (HA-Bauform E4d, Rest N-585).** Eine **gemessene 0** beim Strom ist erfasst: Sind
+> Strom **und** Wärme einer Wärmepumpe im Zeitraum gemessen 0, zeigen Monat, Jahr, Tag, Community-Meldung und PDF die
+> Mengen mit 0 (nicht leer), die Arbeitszahl steht als „—" mit dem Zeitraum-Grund *„kein Heizbetrieb in diesem
+> Zeitraum"* (eine Brauchwasser-WP: *„keine Warmwasserbereitung in diesem Zeitraum"*; im Jahr und in der Übersicht, wenn
+> jede Messung des Zeitraums 0 ist und eine Strom- und eine Wärmemessung darunter sind), die Ersparnis ist 0 € und die
+> Ergebnis-Leiter führt die Zeile nicht als fehlend. Ohne Messung bleibt es bei „kein Stromverbrauch erfasst". Strom 0
+> bei gemessener Wärme hat keine eigene Regel (keine Ersparnis-Zeile). Strom gemessen 0 **ohne** Wärmemessung nennt
+> „kein Wärmemengenzähler zugeordnet" — der Strom ist erfasst, es fehlt die Wärme.
+
 #### 3.5b-E1b Die **Systemarbeitszahl der Wärmeerzeugung** — die Zahl der ANLAGE (14.09.2026)
 
 Neben der Arbeitszahl **eines Geräts** gibt es seit v4.0.45 eine zweite, anders

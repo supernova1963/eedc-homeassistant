@@ -384,6 +384,15 @@ Die **Monat**-Sicht ist das Referenz-Muster der Zeit-Achse: ein ausgewählter Mo
 > nicht aus dem Netz kam); er gilt ab dem Monat des Updates; frühere Monate rechnet eedc nicht neu. Hast du einen Erzeuger unter
 > *Sonstiges*, zählt sein Strom damit auch ohne Abschluss in Eigenverbrauch und Autarkie.
 
+> **Wärmepumpe ohne Abschluss.** Mit Home Assistant nennt der laufende Monat (und ein vergangener Monat ohne Abschluss)
+> Strom und Wärme deiner Wärmepumpen, Heizstrom und Warmwasserstrom, Heizwärme und Warmwasser-Wärme, den Strom je
+> Betriebsart (Heizen, Kühlen …) und die Kälte eines Klimageräts aus den Zählerständen — dieselben Zahlen, die nach dem
+> Abschluss dastehen. Hast du den Betriebsmodus zugeordnet, teilt eedc den Strom Stunde für Stunde nach der Betriebsart
+> auf (wie lange das Gerät in der Stunde geheizt, Warmwasser bereitet oder gekühlt hat); die Wärme teilt der
+> Betriebsmodus nicht. Das gilt ab dem Monat des Updates, frühestens ab dem Zeitpunkt, ab dem eedc den Betriebsmodus
+> mitschreibt; frühere Monate rechnet eedc nicht neu. Zeigen Strom und Wärme in einem Monat beide 0, steht dort 0 und
+> *kein Heizbetrieb in diesem Zeitraum* — die Wärmepumpe lief nicht, es fehlt kein Zähler.
+
 Aus dem feingranularen Stunden-Bestand des Monats zeigt die Sicht zusätzlich:
 
 - **Performance Ratio (Ø Monat)** als Kennzahl

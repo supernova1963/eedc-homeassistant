@@ -26,7 +26,7 @@ from backend.core.investition_parameter import ist_dienstlich
 from backend.api.routes.aktueller_monat.vergleich import _zeittarif_preis
 
 
-async def waerme_klima_monat(*, resolved=None, _tages_wp_mengen, _zt_cache, allgemein_tarif, anlage_id, db, get_val, investitionen, jahr, monat, monats_fakt, monats_gaspreis, netzbezug_preis_effektiv_cent, tarife, teilzeitraum, wp_strom, wp_waerme):
+async def waerme_klima_monat(*, resolved=None, _tages_wp_mengen, kanal_wp_zeilen=None, _zt_cache, allgemein_tarif, anlage_id, db, get_val, investitionen, jahr, monat, monats_fakt, monats_gaspreis, netzbezug_preis_effektiv_cent, tarife, teilzeitraum, wp_strom, wp_waerme):
     """Arbeitszahl (R2/W-3), die drei R2-Lagen ueber die eine Layer-Stelle, E1b-Schranke, Tagesebene im laufenden Monat (N-472/A-5), S5 anlagenweit (WK-16i), SOLL 3.2b: welche Funktionen die Verletzung trifft.
 
     Aus `get_aktueller_monat` Zeilen 807-1080 (Stand vor dem Umzug) byte-identisch herausgeloest — Vorlage 2.
@@ -145,6 +145,30 @@ async def waerme_klima_monat(*, resolved=None, _tages_wp_mengen, _zt_cache, allg
     # ⚠ **Ersetzt wird nur, was leer ist.** Trägt ein Gerät für diesen Monat
     # schon eine Zeile (gepflegter Teilmonat, Import), gewinnt sie — dieselbe
     # Präzedenz wie oben in der Quellen-Kaskade.
+    # ── HA-Bauform E4d: im Monat ohne WP-Zeile aus den Kanal-Zeilen — VOR der Tagesebene ──
+    # Dieselbe Faltung wie eine Monatszeile (``mengen_aus_monatszeilen``), weil die Kanal-Zeile deren Form hat
+    # (``monats_fakten.wp_kanal_zeile``). Ersetzt wird nur, was leer ist; die Tagesebene darunter bleibt der Rückfall.
+    if kanal_wp_zeilen:
+        from types import SimpleNamespace
+
+        from backend.services.monats_fakten import wp_kanal_zeile
+        from backend.services.waermepumpe_kennzahlen_je_geraet import (
+            kennzahlen_aus_mengen,
+            mengen_aus_monatszeilen,
+        )
+        _wp_invs_by_id_k = {i.id: i for i in _wp_invs_fuer_block}
+        _ersetzt_k: list = []
+        for _k in _wp_kennzahlen_je_geraet:
+            _z = kanal_wp_zeilen.get(_k.inv_id)
+            _inv = _wp_invs_by_id_k.get(_k.inv_id)
+            if _z is None or _inv is None or traegt_menge(_k.mengen):
+                _ersetzt_k.append(_k)
+                continue
+            _daten, _herkunft = wp_kanal_zeile(_inv, _z)
+            _ersetzt_k.append(kennzahlen_aus_mengen(mengen_aus_monatszeilen(_inv, [SimpleNamespace(
+                verbrauch_daten=_daten, source_provenance=_herkunft, jahr=jahr, monat=monat,
+            )])[0]))
+        _wp_kennzahlen_je_geraet = _ersetzt_k
     if _tages_wp_mengen:
         from backend.services.waermepumpe_kennzahlen_je_geraet import (
             kennzahlen_aus_mengen,
@@ -174,6 +198,10 @@ async def waerme_klima_monat(*, resolved=None, _tages_wp_mengen, _zt_cache, allg
                 modus_strom_kuehlen_kwh=_m.modus_strom_kuehlen_kwh,
                 funktionsfremd_abzug_kwh=_m.funktionsfremd_abzug_kwh,
                 waerme_ist_gesamt=bool(_m.waerme_kwh),
+                # E4d: gemessene 0 (mindestens ein Tag mit Wert) — „kein Betrieb" statt „kein Zähler".
+                strom_gemessen="strom_kwh" in getattr(_m, "gemessen", ()),
+                waerme_gemessen=bool({"waerme_kwh", "heizung_kwh", "warmwasser_kwh"}
+                                     & set(getattr(_m, "gemessen", ()))),
             )))
         _wp_kennzahlen_je_geraet = _ersetzt
     # ── S5 anlagenweit (WK-16i, N-503): die Eingänge der Funktions-Zahlen ──
@@ -241,8 +269,14 @@ async def waerme_klima_monat(*, resolved=None, _tages_wp_mengen, _zt_cache, allg
             monats_fakt is not None and monats_fakt.wp.geraete_verschieden
         ),
     )
+    from backend.core.berechnungen.waermepumpe_kennzahl import kein_betrieb_grund_der_achsen
+    from backend.services.waerme_klima_block import achsen_der_anlage
+
     wp_arbeitszahl = systemarbeitszahl(
         wp_waerme, wp_strom,
+        # E4d (Bauplan §8a): Strom 0 und Wärme 0 GEMESSEN (beide nicht None — die Quellen-Kaskade führt eine 0 nur, wo
+        # gemessen wurde) ⇒ Stufe 3 „kein Heizbetrieb …" statt „kein Stromverbrauch erfasst".
+        kein_betrieb_grund=kein_betrieb_grund_der_achsen(achsen_der_anlage(_wp_kennzahlen_je_geraet)),
         waerme_abgeleitet_kwh=wp_waerme_abgeleitet_kwh,
         kuehlstrom_kwh=wp_strom_funktionsfremd_kwh,
         strom_ohne_waerme_kwh=_wp_strom_ohne_waerme,
@@ -299,8 +333,13 @@ async def waerme_klima_monat(*, resolved=None, _tages_wp_mengen, _zt_cache, allg
             # E-B: Kühlen ersetzt keine Heizung (#263 K-2). Der Kühlanteil je Gerät aus der Tagesebene; bei genau
             # EINER Wärmepumpe ist der anlagenweite Kühlanteil der ihre.
             _tm = (_tages_wp_mengen or {}).get(str(_inv.id))
+            _kg = (
+                monats_fakt.wp.je_geraet.get(_inv.id)
+                if kanal_wp_zeilen and monats_fakt is not None else None
+            )
             _kuehl = (
-                _tm.modus_strom_kuehlen_kwh if _tm is not None
+                _kg.strom_kuehlen_kwh if _kg is not None      # E4d: der Kühlanteil des Geräts aus den Kanal-Zeilen
+                else _tm.modus_strom_kuehlen_kwh if _tm is not None
                 else ((get_val("wp_modus_kuehlen_kwh") or 0.0) if len(_wp_aktiv) == 1 else 0.0)
             )
             _waerme_g = _w[0] if _w is not None else None
@@ -312,6 +351,9 @@ async def waerme_klima_monat(*, resolved=None, _tages_wp_mengen, _zt_cache, allg
                 strompreis_cent=wp_preis_cent,
                 parameter=_inv.parameter,
                 gaspreis_cent=monats_gaspreis,
+                # E4d: die Quellen-Kaskade führt eine WP-0 nur, wo gemessen wurde (`_NULL_IST_MESSWERT_TYPEN`,
+                # `_collect_saved_data`) — Strom 0 und Wärme 0 ist hier also „kein Betrieb", Ersparnis 0 €.
+                null_ist_kein_betrieb=True,
             )
             if _z is not None:
                 _zeilen.append((_inv, _z, _waerme_g, _strom_g))

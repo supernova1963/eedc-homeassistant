@@ -127,6 +127,10 @@ class TagesBilanz:
     verbrauch_erfasst: bool = False
     einspeisung_erfasst: bool = False
     netzbezug_erfasst: bool = False
+    # HA-Bauform E4d (Bauplan §8a, Rest N-585): dieselbe Trennung für den Wärmepumpen-Strom — eine Stunde mit
+    # `waermepumpe_kw is not None` trug einen Wert, auch 0. Eine gemessene 0 ist erfasst (F-5): „kein Betrieb", nicht
+    # „keine Wärmepumpe" — die Anzeige liest dieses Feld, nicht `wp_strom_kwh > 0`.
+    wp_erfasst: bool = False
     # **Abdeckung je Achse in Stunden** (N-92, 2026-08-22). `stunden` oben zählt
     # **Rows**, nicht Feld-Abdeckung — und beantwortet damit die Frage nicht, die
     # eine Differenz stellt: *haben beide Summanden dieselbe Grundlage?* Die
@@ -218,6 +222,7 @@ def bilanz_aus_stundenrows(
     batt_lade_sum = 0.0
     batt_entlade_sum = 0.0
     wp_sum = 0.0
+    wp_erfasst = False
     n = 0
 
     for r in rows:
@@ -252,6 +257,7 @@ def bilanz_aus_stundenrows(
             verb_netz_n += 1
         if wp is not None:
             wp_sum += wp
+            wp_erfasst = True
 
         if pv is not None and verbrauch is not None:
             ueberschuss = pv - verbrauch
@@ -403,6 +409,7 @@ def bilanz_aus_stundenrows(
         verbrauch_erfasst=verbrauch_erfasst,
         einspeisung_erfasst=einspeisung_erfasst,
         netzbezug_erfasst=netzbezug_erfasst,
+        wp_erfasst=wp_erfasst,
         regelmarke=regelmarke,
         verworfen=verw,
     )

@@ -494,14 +494,29 @@ in der sie greift (erzeugt aus dem Layer):
 
 | # | Lage | Ergebnis |
 | --- | --- | --- |
-| 1 | kein Strom erfasst | „kein Stromverbrauch erfasst" |
+| 1 | kein Strom erfasst (der Strom **fehlt** — eine gemessene 0 ist erfasst und trifft diese Stufe nicht) | „kein Stromverbrauch erfasst" |
 | 2 | der ganze Strom ist funktionsfremd | „nur Kühlbetrieb in diesem Zeitraum" |
 | 3 | Wärme **gemessen** 0, Grund bekannt | „kein Heizbetrieb in diesem Zeitraum" bzw. „keine Warmwasserbereitung in diesem Zeitraum" |
 | 4 | Wärme fehlt, besserer Grund gereicht | dieser Grund (z. B. Zählerrücksprung) |
 | 5 | Wärme fehlt, kein Grund bekannt | „kein Wärmemengenzähler zugeordnet" |
+| 5′ | Strom **gemessen** 0, Wärme **nicht erfasst** (Gegenfall, §8a-Nachtrag) | Stufe 4/5: der gereichte Wärme-Grund, sonst „kein Wärmemengenzähler zugeordnet" (Klasse Ausstattung) — der Strom ist erfasst, es fehlt die Wärme |
 | 6 | Wärme ist abgeleitet | „Wärme ist gerechnet, nicht gemessen" |
 | 7 | Abgrenzung verletzt | der Grund aus 4.2 |
 | 8 | sonst | **die Zahl**, dazu Zähler und Nenner (A6) und unter 2,0 der Heizstab-Hinweis |
+
+⭐ **Eine gemessene 0 ist erfasst; bei Strom 0 und Wärme 0 gilt Stufe 3** (HA-Bauform E4d, Bauplan §8a, Rest N-585):
+Stufe 1 trifft nur den **nicht erfassten** Strom (kein Wert) — nie eine gemessene 0. Sind Strom und Wärme gemessen 0,
+lief das Gerät nicht — die Kette nennt den
+vorhandenen Zeitraum-Grund („kein Heizbetrieb in diesem Zeitraum", an einer Einheit nur mit Warmwasser-Achse „keine
+Warmwasserbereitung in diesem Zeitraum"; `waermepumpe_kennzahl.kein_betrieb_grund_der_achsen`), die Mengen stehen mit
+0, die Ersparnis ist 0 € und die Ergebnis-Leiter führt die Zeile nicht als „fehlt". Kein neuer Grund-Text. ⚠ Strom 0
+bei Wärme > 0 regelt dieser Satz nicht (es bleibt bei Stufe 1, ohne Ersparnis-Zeile; Entscheid H-2, Kandidat
+Daten-Checker „Wärme ohne Strom"), Strom > 0 bei Wärme 0 (Standby) ist Stufe 5. **Gegenfall** (Zeile 5′, Nachtrag §8a
+aus der Nachmessung E4d): Strom gemessen 0 und Wärme **nicht erfasst** ⇒ Stufe 5 „kein Wärmemengenzähler zugeordnet"
+(bzw. der gereichte Wärme-Grund) — wahr ist, dass die Wärmemessung fehlt, nicht der Strom. Am Layer
+`systemarbeitszahl` (Wärme `None`) und `arbeitszahl` (mit dem Riegel `kein_betrieb_grund`: Wärme `None` oder ein
+Wärme-Grund), je Gerät über `GeraetMengen.strom_null_waerme_fehlt`, in der Übersicht über die Marken
+`strom_gemessen`/`waerme_gemessen` (eine 0 ohne Marke geht als `None` in den Layer).
 
 ⚠ **Warum bei 3 kein Quotient statt eines Grundes.** 0 kWh Wärme ÷ 1 kWh Strom ergibt 0 — wahr und
 trotzdem irreführend: Der Strom ist Standby und Umwälzung, kein misslungenes Heizen. Eine 0 an der
@@ -1542,6 +1557,7 @@ oder im Bericht, nicht hier.
 | **K5** — der Rest heißt *nicht aufgeteilt* | `core/betriebsmodus.py`, Modus-Split | `test_263_k2_modus_split.py`; `test_soll_waerme_klima_e4_lueften_entfeuchten.py::test_e4_restmenge_zieht_die_neuen_segmente_ab` | Regression |
 | **Gesamtwert vor Summanden (Wärme) — je Gerät** | `core/berechnungen/waermepumpe_kennzahl.py::waerme_gesamt_kwh` (Monat · Hub · HA-Export · Checker · Community) und die Geräte-Auflösung im Tag | `test_n391_gesamtwaerme.py` (15 Proben: Hub · Monat · Jahr · Tag · HA-Sensoren · Community · Checker · Invariante · CSV-Rundlauf · Client-Spiegel · Gruppen-Deckung; Lage D behält ihre Zahl); Mischfall zwei Geräte: `test_n391b_tag_je_geraet.py` (Kachel · Stundenlinie · Tagesliste · **Tag = Monat**); Geldpfade und Nicht-DB-Pfad: `test_n391c_geldpfade_d1.py` (Cockpit → Monat · Jahresformel · Aussichten · `typ_aggregation` mit Lage BEIDES, je Lage B = Lage D) | Regression |
 | **Σ Teilmengen ≤ Gesamt** | Modus-Split-Normierung | `test_263_innengeraete_varianten.py::test_teilmengen_ueberschreiten_nie_den_gesamtwert` | Regression |
+| **Strom je Betriebsart als abgeleiteter Kanal — K3-Menge der Stunde × Anteil, K2 (gemessen ⇒ kein Kanal), gleich der Tagesebene auf denselben Stunden** (HA-Bauform E4d) | `core/berechnungen/modus_split.py::modus_strom_der_stunde`, `services/kanal/modus_strom.py`, Leser `services/kanal/wp_leser.py`, Monatsabschluss `services/energie_profil/modus_split_schreiben.py::kanal_split_des_monats` | `test_kanal_modus_strom.py` (11 Proben: Regel der Stunde · Gleichheit mit `falte_modus_split_tag` · K3 je Stunde · Σ = Strom · Mitschrift-Verzug · K2 · Neuaufbau · beide Einstiege · Beginn mit dem laufenden Monat · abgeleitete Heizwärme wie beim Abschluss); `test_kanal_wp_gleichheit.py` (12 Proben: Wahl · Kanal-Monat ohne Abschluss = nach Abschluss = Bestand · ohne HA · Cockpit → Monat N-630 · der Bestand lädt gedeckte Monate nicht · der Abschluss schreibt im gedeckten Monat den Kanal-Split); die Matrix-Formen M05–M07 (`test_achsen_matrix.py`) | Regression |
 | **Tagesreset-Zähler bekommt keine Menge** | Monats- und Tagespfad | `test_n341_reset_zaehler_wird_abgelehnt.py` (eedc liefert **keine Zahl**) und `test_n341_checker_zaehler_ruecksprung.py` (der Anwender **erfährt warum** — WARNING); `test_soll_waerme_klima_achse3_aufloesung.py::test_iii1a…test_iii1d` (fünf Lagen inkl. „ruhendes Gerät behält seine Null") | Regression |
 | **Registry-Keys tragen keinen Bindestrich** (Voraussetzung der Innengeräte-Auflösung) | `field_definitions.basis_feld_key` | `test_263_innengeraete.py::test_kein_registry_feld_traegt_einen_bindestrich` (16 Proben in der Datei, je Eigenschaft eine) | **Wächter** (über die Registry) |
 | **Ein thermisches Feld nennt seine Größe im Label, nicht nur im Hinweis** | Registry-Labels der Wärme-/Kältefelder | `test_thermische_felder_benennen_ihre_groesse.py` — vier Proben über alle thermischen Felder und ihre elektrischen Schwestern | **Wächter** |
@@ -1554,6 +1570,7 @@ oder im Bericht, nicht hier.
 | **Je Funktion eine eigene Zahl** | `waermepumpe_kennzahl.py::arbeitszahl_je_funktion` | `test_soll_waerme_klima_w4_arbeitszahl_je_funktion.py` (8 Proben) | Regression |
 | **Die Achsen des Geräts entscheiden — und ein Ein-Achsen-Gerät trägt seine Gesamtzahl als Funktions-Zahl** ([5.1a](#51a--die-achsen-des-geräts-entscheiden-welche-funktions-zahl-es-gibt-e1--r1-15092026)) | die Frage in `field_definitions/bedingungen.py::wp_waerme_achsen` (Registry, `feld_urteil == URTEIL_GILT`), die Folge in `waermepumpe_kennzahl.py::arbeitszahl_je_funktion(achsen=…, gesamt=…)` — **eine** Stelle, kein Nachbau je Read-Site; anlagenweit `waerme_klima_block.py::achsen_der_anlage`; die Namen kommen aus dem Kanon (`betriebsmodus.WAERME_ACHSEN`) | `test_wk16h_achsen_der_kennzahl.py` (29 Proben: Registry je Bauart · Brauchwasser = Gesamt · nicht geltende Achse ohne Grund · **Gegenprobe** „ersetzt einen Grund, nie eine Zahl“ · zwei Achsen **bitgleich** · Schranke geht nicht mit · Beitrag statt Bestand mit Gegenprobe · Monat · Jahr · **Tag** · Kasten mit Gerätenamen und Dedup) | Regression |
 | **Kühl-Kennzahl aus der Kältemenge** | `::arbeitszahl_kuehlen` | `test_soll_waerme_klima_w5_arbeitszahl_kuehlen.py` (7 Proben) | Regression |
+| **Eine gemessene 0 ist erfasst; Strom 0 und Wärme 0 ⇒ Stufe 3** ([4.3](#43-die-datenlage-geht-der-abgrenzung-vor), HA-Bauform E4d) | `::systemarbeitszahl(kein_betrieb_grund=…)` · `::kein_betrieb_grund_der_achsen` · `GeraetMengen.kein_betrieb` · `wp_wirtschaftlichkeit.wp_ersparnis_zeile(null_ist_kein_betrieb=…)`; die Marken `WpFakten.strom_gemessen`/`waerme_gemessen`; im Jahr `cockpit/uebersicht.py` (Übersicht und Kopf von Cockpit → Jahr) | `test_n585_gemessene_null.py::test_wp_kein_betrieb_*` (laufender Monat, Juni ohne Abschluss, je Gerät, Monat mit Zeile, Jahr in Übersicht und Cockpit → Jahr); Gegenfall Strom 0 ohne Wärme `::test_wp_strom_null_ohne_*` (Layer, je Gerät, Monat und Jahr); Matrix-Form M07 (`test_achsen_matrix.py`, 25 Zellen) | Regression |
 | **E7 — der Nenner ist der gemessene Strom dieser Funktion** | `hat_split`-Tor in `arbeitszahl_je_funktion`; `imd_monatsaggregat.py` | `test_soll_waerme_klima_w4_*::test_w4_ohne_getrennte_strommessung_gibt_es_die_zahlen_nicht` · `::test_w4_zieht_keinen_funktionsfremden_strom_ab` | Regression |
 | **Abgezogen wird nur, was im Nenner steht** | `betriebsart_gemessen.py::funktionsfremd_abzug_kwh` + `field_definitions/wp_strom.py::nenner_ist_feine_summe` | `test_n445_kuehlstrom_im_f5_heizstrom.py`; `test_n445_nachtrag_pfad_abzug.py`; `test_n451_monatspfad_k3.py::test_k8_*` · `::test_k9_*`; Community-Seite `test_community_funktionsfremd_abzug.py` | Regression |
 | **E4 — Lüften/Entfeuchten erfassen, nicht bewerten** | Modus-Split + Nenner-Abzug | `test_soll_waerme_klima_e4_lueften_entfeuchten.py` (8 Proben) | Regression |
