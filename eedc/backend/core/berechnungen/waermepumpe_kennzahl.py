@@ -996,6 +996,14 @@ def arbeitszahl(
             # ⭐ **Gegenfall (Bauplan §8a, Nachtrag aus der Nachmessung E4d):** Strom gemessen 0, die Wärme aber NICHT
             # erfasst (kein Wert oder ein Grund, warum sie fehlt) ⇒ Stufe 5 mit dem Wärme-Grund. Der Strom ist erfasst
             # — Stufe 1 träfe ihn zu Unrecht; „kein Betrieb" wüsste ohne Wärmemessung niemand.
+            # ⭐ **Ausnahme (Fachentscheid Master zu E4f, H-3, 07.10.2026): die Wärme ist gemessen, nur nicht je Funktion**
+            # (``GRUND_WAERME_NICHT_JE_FUNKTION``, ein gemeinsamer Wärmemengenzähler). Ist der Funktions-Strom bekannt
+            # und 0, ist „kein Heizbetrieb" / „keine Warmwasserbereitung" (Klasse Zeitraum, stilles „—") die Aussage —
+            # ein Zeitraum ohne Betrieb hat keinen Handgriff, den der Anwender tun könnte; der Ausstattungs-Satz wäre
+            # dort falsch. Konzept Wärme/Klima §4.3: die Datenlage geht der Abgrenzung vor (Stufe 2/3 vor 5/6). Fehlt
+            # die Wärme ganz (kein Zähler, keine Zählerstände), bleibt Stufe 5 mit dem Wärme-Grund (§8a-Nachtrag).
+            if waerme_fehlt_grund == GRUND_WAERME_NICHT_JE_FUNKTION:
+                return Arbeitszahl(None, kein_betrieb_grund)
             if waerme_kwh is None or waerme_fehlt_grund:
                 return Arbeitszahl(None, waerme_fehlt_grund or GRUND_KEINE_WAERMEMESSUNG)
             return Arbeitszahl(None, kein_betrieb_grund)

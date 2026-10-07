@@ -556,6 +556,24 @@ async def einstellungs_sperre(request: Request, call_next):
 
 
 # =============================================================================
+# Lade-Kontext der Kanal-Leser je lesender Anfrage (HA-Bauform E4f)
+# =============================================================================
+
+
+@app.middleware("http")
+async def kanal_lade_kontext(request: Request, call_next):
+    """Jede GET-Anfrage bekommt EINEN Lade-Kontext der Kanal-Leser (``services/kanal/lade_kontext.py``): Randstände,
+    Stammdaten und Quellenwahl je Gruppe werden in ihr einmal gelesen, nicht je Fakten-Aufruf. Schreibende Methoden
+    bekommen ihn nicht; er überdauert die Anfrage nie."""
+    if request.method != "GET":
+        return await call_next(request)
+    from backend.services.kanal.lade_kontext import lese_anfrage
+
+    with lese_anfrage():
+        return await call_next(request)
+
+
+# =============================================================================
 # API Routes - Core (immer verfügbar)
 # =============================================================================
 

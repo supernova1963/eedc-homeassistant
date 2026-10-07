@@ -387,6 +387,15 @@ async def lade_monats_fakten(
         tarif_cache.update(
             await lade_tarife_je_stichtag(db, anlage_id, _offene_stichtage)
         )
+    # HA-Bauform E4f (Auftrag Punkt 3b): die Monate, in denen ein Zeitfenster-Tarif (HT/NT) gilt, brauchen den
+    # Netzbezug je Stunde als Gewicht — im Lade-Kontext der Anfrage holt der erste Abruf alle in EINER Anweisung.
+    from backend.core.berechnungen.zeittarif import hat_zeitfenster
+    from backend.services.kanal.preis_leser import netzbezug_vormerken
+
+    netzbezug_vormerken(db, anlage_id, [
+        k for k in kandidaten if _im_fenster(k, von, bis)
+        and any(hat_zeitfenster(t) for t in (tarif_cache.get(date(k[0], k[1], 1)) or {}).values())
+    ])
 
     # N-555 (Konzept Regel 1): der LAUFENDE Monat fragt zusätzlich, ob einem
     # Heimlade-Feld eine Quelle zugeordnet ist — sonst stünde in Übersicht, Hubs und

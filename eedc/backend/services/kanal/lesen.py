@@ -107,7 +107,11 @@ def soll_ende(jetzt: int) -> int:
 
 
 def _jetzt(jetzt: Optional[int]) -> int:
-    return int(time.time()) if jetzt is None else int(jetzt)
+    if jetzt is not None:
+        return int(jetzt)
+    from backend.services.kanal.lade_kontext import uhr_der_anfrage
+
+    return uhr_der_anfrage(lambda: int(time.time()))
 
 
 # ── Ergebnisse ──────────────────────────────────────────────────────────────
@@ -200,13 +204,34 @@ class Mittel:
 
 
 async def kanaele_laden(db: AsyncSession, anlage_id: int, keys: Iterable[str]) -> dict[str, Kanal]:
-    """Die Kanäle ``keys`` einer Anlage in EINER Abfrage; ein Schlüssel ohne Kanal fehlt im Ergebnis."""
+    """Die Kanäle ``keys`` einer Anlage in EINER Abfrage; ein Schlüssel ohne Kanal fehlt im Ergebnis. Im Lade-Kontext
+    einer Anfrage (``lade_kontext``) nur die Schlüssel, die diese Anfrage noch nicht gefragt hat."""
+    from backend.services.kanal.lade_kontext import kontext
+
     keys = list(dict.fromkeys(keys))
     if not keys:
         return {}
-    return {k.key: k for k in (await db.execute(
-        select(Kanal).where(and_(Kanal.anlage_id == anlage_id, Kanal.key.in_(keys)))
-    )).scalars().all()}
+    k = kontext(db)
+    if k is None:
+        return {kn.key: kn for kn in (await db.execute(
+            select(Kanal).where(and_(Kanal.anlage_id == anlage_id, Kanal.key.in_(keys)))
+        )).scalars().all()}
+    gen = k.generation
+    offen = [key for key in keys if ("kanal", anlage_id, key) not in k.werte]
+    neu: dict[str, Kanal] = {}
+    if offen:
+        neu = {kn.key: kn for kn in (await db.execute(
+            select(Kanal).where(and_(Kanal.anlage_id == anlage_id, Kanal.key.in_(offen)))
+        )).scalars().all()}
+        if k.generation == gen:
+            for key in offen:
+                k.werte[("kanal", anlage_id, key)] = neu.get(key)
+    out: dict[str, Kanal] = {}
+    for key in keys:
+        kn = neu.get(key) if key in neu else k.werte.get(("kanal", anlage_id, key))
+        if kn is not None:
+            out[key] = kn
+    return out
 
 
 def _kanal_json(kanaele: Sequence[Kanal]) -> str:
@@ -275,13 +300,46 @@ def _brueckenwert(st: _Stand) -> float:
     return st.roh + st.offset
 
 
-async def _randstaende(db: AsyncSession, kanaele: Sequence[Kanal], grenzen: Sequence[int]):
+async def _randstaende_laden(db: AsyncSession, kanaele: Sequence[Kanal], grenzen: Sequence[int]):
     res = await db.execute(text(_RAND_SQL), {"kanaele": _kanal_json(kanaele), "grenzen": json.dumps(list(grenzen))})
     vor: dict[tuple[int, int], Optional[_Stand]] = {}
     nach: dict[tuple[int, int], Optional[_Stand]] = {}
     for kid, j, v_ts, v_roh, v_off, n_ts, n_roh, n_off in res.all():
         vor[(kid, grenzen[j])] = _stand(v_ts, v_roh, v_off)
         nach[(kid, grenzen[j])] = _stand(n_ts, n_roh, n_off)
+    return vor, nach
+
+
+async def _randstaende(db: AsyncSession, kanaele: Sequence[Kanal], grenzen: Sequence[int]):
+    """Stand vor und erste Zeile ab jedem Zeitpunkt je Kanal — EINE Anweisung. Ein Randstand hängt nur am Kanal und am
+    Zeitpunkt (nicht an den übrigen Grenzen): im Lade-Kontext einer Anfrage (``lade_kontext``, HA-Bauform E4f) liest
+    jede Gruppe und jedes Fenster nur die Paare, die die Anfrage noch nicht kennt — „die Monatsreihe einmal je
+    Anfrage"."""
+    from backend.services.kanal.lade_kontext import kontext
+
+    k = kontext(db)
+    if k is None:
+        return await _randstaende_laden(db, kanaele, grenzen)
+    gen = k.generation
+    offen_k = [kn for kn in kanaele if any((kn.id, t) not in k.rand for t in grenzen)]
+    vor: dict[tuple[int, int], Optional[_Stand]] = {}
+    nach: dict[tuple[int, int], Optional[_Stand]] = {}
+    if offen_k:
+        offen_t = sorted({t for t in grenzen for kn in offen_k if (kn.id, t) not in k.rand})
+        v, n = await _randstaende_laden(db, offen_k, offen_t)
+        if k.generation == gen:
+            for kn in offen_k:
+                for t in offen_t:
+                    k.rand[(kn.id, t)] = (v.get((kn.id, t)), n.get((kn.id, t)))
+        vor.update(v)
+        nach.update(n)
+    for kn in kanaele:
+        for t in grenzen:
+            if (kn.id, t) in vor or (kn.id, t) in nach:
+                continue
+            paar = k.rand.get((kn.id, t))
+            if paar is not None:
+                vor[(kn.id, t)], nach[(kn.id, t)] = paar
     return vor, nach
 
 
@@ -477,6 +535,55 @@ async def stunden_stapel(
     return out
 
 
+# ── Zuwachs je (Wochentag, Uhrstunde) — die Gewichte eines Zeitfenster-Tarifs (HA-Bauform E4f) ──────────────────
+
+_ZELLEN_SQL = f"""
+WITH w(kid, vz, mi, von, bis) AS (
+    SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]'), json_extract(value, '$[2]'),
+           json_extract(value, '$[3]'), json_extract(value, '$[4]') FROM json_each(:wahl)
+), z AS (
+    SELECT w.kid, w.vz, w.mi, w.von, s.start_ts AS ts, s.sum + COALESCE({_offset_sql('w.kid', 's.start_ts')}, 0) AS wert
+    FROM w JOIN kanal_statistik s ON s.kanal_id = w.kid
+        AND s.start_ts >= COALESCE((SELECT MAX(s2.start_ts) FROM kanal_statistik s2 WHERE s2.kanal_id = w.kid
+                                    AND s2.start_ts < w.von AND s2.sum IS NOT NULL), w.von)
+        AND s.start_ts < w.bis AND s.sum IS NOT NULL
+), d AS (
+    SELECT mi, von, ts, vz * (wert - LAG(wert) OVER (PARTITION BY mi, kid ORDER BY ts)) AS ch FROM z
+), h AS (
+    SELECT mi, ts, SUM(ch) AS kwh FROM d WHERE ts >= von AND ch IS NOT NULL GROUP BY mi, ts
+)
+SELECT mi, CAST(strftime('%w', ts, 'unixepoch', 'localtime') AS INTEGER),
+       CAST(strftime('%H', ts, 'unixepoch', 'localtime') AS INTEGER), SUM(MAX(0.0, kwh))
+FROM h GROUP BY 1, 2, 3
+"""
+
+
+async def zellen_stapel(
+    db: AsyncSession, wahl: Sequence[tuple[Kanal, float, int, int, int]],
+) -> dict[int, list[tuple[int, int, float]]]:
+    """Der Zuwachs je (Wochentag, Uhrstunde) mehrerer Zeiträume in EINER Anweisung — die Gewichte, mit denen ein
+    Zeitfenster-Tarif (HT/NT) einen Monat bewertet (``strompreis_aggregator.wirksamer_arbeitspreis_cent``).
+
+    ``wahl``: je Eintrag ``(kanal, vorzeichen, zeitraum_nr, von, bis)``. Je Zeitraum und Stunde mit Zeile wird wie
+    ``stunden`` der Zuwachs gebildet (HAs ``change``, auch über den Stand vor ``von``; ``sum + offset``), über die
+    Kanäle des Zeitraums mit Vorzeichen summiert, auf 0 geklemmt und nach (Wochentag, Uhrstunde) der STUNDE (Beginn,
+    örtliche Zeit der Prozesszone — wie ``datetime.fromtimestamp``) zusammengefasst. Nur Mengen-Kanäle (``sum``).
+
+    Returns: ``{zeitraum_nr: [(wochentag, stunde, kWh), …]}`` — ``wochentag`` wie ``datetime.weekday()`` (0 = Montag).
+    """
+    if not wahl:
+        return {}
+    for kn, *_ in wahl:
+        if kn.art != ART_SUM:
+            raise ValueError(f"Kanal {kn.key}: Zellen nur für Mengen-Kanäle (sum)")
+    res = await db.execute(text(_ZELLEN_SQL), {"wahl": json.dumps(
+        [[kn.id, float(vz), int(mi), int(von), int(bis)] for kn, vz, mi, von, bis in wahl])})
+    out: dict[int, list[tuple[int, int, float]]] = {}
+    for mi, w_sqlite, stunde, kwh in res.all():
+        out.setdefault(int(mi), []).append(((int(w_sqlite) + 6) % 7, int(stunde), float(kwh or 0.0)))
+    return out
+
+
 async def stunden(db: AsyncSession, kanal: Kanal, von: int, bis: int, *, jetzt: Optional[int] = None) -> Stunden:
     return (await stunden_stapel(db, [kanal], von, bis, jetzt=jetzt))[kanal.key]
 
@@ -568,5 +675,5 @@ __all__ = [
     "GRUND_BEGINNT_NACH_VON", "GRUND_ENDET_VOR_BIS", "GRUND_FEINER_ALS_SPANNE", "GRUND_KEIN_KANAL",
     "GRUND_KEINE_ZEILE", "Mittel", "SCHREIBVERZUG_S", "Stunden", "Stundenwert", "Zeitraum", "kanaele_laden",
     "mittel", "mittel_stapel", "reihe", "reihe_stapel", "soll_ende", "stunden", "stunden_stapel", "zeitraum",
-    "zeitraum_stapel",
+    "zeitraum_stapel", "zellen_stapel",
 ]

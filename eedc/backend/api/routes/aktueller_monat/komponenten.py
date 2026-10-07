@@ -328,11 +328,16 @@ async def komponenten_detail(*, _wp_abgrenzung_je_funktion, _wp_funktion, _wp_ke
         # Aussage über das Gerät — sie setzt voraus, dass Zähler **und** Nenner
         # dastanden und null meldeten. Bei gemessener Wärme ohne Heizstrom ist
         # „kein Stromverbrauch erfasst" der genauere Satz und behält Vorrang.
+        # ⭐ **H-3 zu HA-Bauform E4f (Fachentscheid Master, 07.10.2026):** als „Wärme gemessen" zählt auch die
+        # gemessene GESAMT-Wärme eines gemeinsamen Zählers (``waerme_ist_gesamt``). Ist dann der Funktions-Strom
+        # gemessen 0, gilt „kein Heizbetrieb" vor „Wärme nicht je Funktion gemessen" (``arbeitszahl``) — der Zähler
+        # stand da und der Zeitraum hatte keinen Betrieb dieser Funktion.
         null_ist_gemessen_heizen=(
-            _wp_funktion.heizung_gemessen and _wp_funktion.strom_heizen_gemessen
+            (_wp_funktion.heizung_gemessen or _wp_funktion.waerme_ist_gesamt)
+            and _wp_funktion.strom_heizen_gemessen
         ),
         null_ist_gemessen_warmwasser=(
-            _wp_funktion.warmwasser_gemessen
+            (_wp_funktion.warmwasser_gemessen or _wp_funktion.waerme_ist_gesamt)
             and _wp_funktion.strom_warmwasser_gemessen
         ),
         # N-391: Misst EIN gemeinsamer Wärmemengenzähler beide Funktionen, gibt

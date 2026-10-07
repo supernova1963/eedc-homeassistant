@@ -379,6 +379,9 @@ async def test_die_kanal_messung_gewinnt_in_beiden_lesern():
 async def test_zeitfenster_gewicht_aus_den_kanaelen():
     """Stufe „Zeitfenster" (HT/NT): der Netzbezug je Stunde aus den Kanälen == aus den Stundenzeilen (M01, Netzbezug nur
     außerhalb der Sonne); NT 22–06 zu 20 ct, sonst 30 ct."""
+    from backend.core.berechnungen.zeittarif import (
+        gewichteter_arbeitspreis_aus_zellen, gewichteter_arbeitspreis_cent, uhrzeit_des_slots,
+    )
     from backend.models.strompreis import Strompreis, StrompreisZeitfenster
     from backend.services import strompreis_aggregator as sa
     from backend.services.kanal import preis_leser
@@ -397,8 +400,18 @@ async def test_zeitfenster_gewicht_aus_den_kanaelen():
         with am.umgebung(am.MATRIX_FORMEN["M01"], ds.svc):
             slots = await preis_leser.netzbezug_slots_des_monats(ds.db, ds.aid, 2026, 6)
             assert slots is not None and len(slots) == 720
+            # HA-Bauform E4f (Auftrag Punkt 3b): der Preis-Weg liest die Gewichte je (Wochentag, Uhrstunde) in EINER
+            # Anweisung — sie sind die je Zelle summierten, auf 0 geklemmten Slots.
+            zellen = await preis_leser.netzbezug_zellen_des_monats(ds.db, ds.aid, 2026, 6)
+            aus_slots: dict = {}
+            for d, st, kwh in slots:
+                u = uhrzeit_des_slots(d, st)
+                aus_slots[(u.weekday(), u.hour)] = aus_slots.get((u.weekday(), u.hour), 0.0) + max(0.0, kwh)
+            assert {(w, h): round(v, 9) for w, h, v in zellen} == {k: round(v, 9) for k, v in aus_slots.items()}
+            assert gewichteter_arbeitspreis_aus_zellen(tarif, zellen) == pytest.approx(
+                gewichteter_arbeitspreis_cent(tarif, slots), abs=1e-9)
             kanal = await sa.wirksamer_arbeitspreis_cent(ds.db, ds.aid, 2026, 6, tarif)
-            with patch.object(preis_leser, "netzbezug_slots_des_monats", new=lambda *a, **k: _keine()):
+            with patch.object(preis_leser, "netzbezug_zellen_des_monats", new=lambda *a, **k: _keine()):
                 bestand = await sa.wirksamer_arbeitspreis_cent(ds.db, ds.aid, 2026, 6, tarif)
         assert kanal == bestand and 20.0 < kanal < 30.0, (kanal, bestand)
         # Deckt ein Netzbezugs-Kanal den Monat nicht (Anfang fehlt), kommt die Messung aus den Stundenzeilen.
@@ -411,6 +424,7 @@ async def test_zeitfenster_gewicht_aus_den_kanaelen():
         await ds.db.commit()
         with am.umgebung(am.MATRIX_FORMEN["M01"], ds.svc):
             assert await preis_leser.netzbezug_slots_des_monats(ds.db, ds.aid, 2026, 6) is None
+            assert await preis_leser.netzbezug_zellen_des_monats(ds.db, ds.aid, 2026, 6) is None
             assert await sa.wirksamer_arbeitspreis_cent(ds.db, ds.aid, 2026, 6, tarif) == bestand
 
 

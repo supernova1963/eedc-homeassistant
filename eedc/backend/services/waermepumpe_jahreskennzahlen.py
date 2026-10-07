@@ -294,12 +294,13 @@ def waermepumpe_jahreskennzahlen(
         # Zeitraum messbar macht: „im Sommer nicht geheizt" ist dann die richtige
         # Auskunft, „kein Zähler zugeordnet" die falsche.
         # ⚠ **BEIDE Seiten** (N-438/S3): siehe die Begründung im Monat.
+        # H-3 zu E4f: die gemessene Gesamtwärme zählt als „Wärme gemessen" (wie im Monat, ``komponenten.py``).
         null_ist_gemessen_heizen=any(
-            f.wp.heizung_gemessen and f.wp.strom_heizen_gemessen
+            (f.wp.heizung_gemessen or f.wp.waerme_ist_gesamt) and f.wp.strom_heizen_gemessen
             for f in fakten if f.wp.hat_split
         ),
         null_ist_gemessen_warmwasser=any(
-            f.wp.warmwasser_gemessen and f.wp.strom_warmwasser_gemessen
+            (f.wp.warmwasser_gemessen or f.wp.waerme_ist_gesamt) and f.wp.strom_warmwasser_gemessen
             for f in fakten if f.wp.hat_split
         ),
         # N-391: gefragt sind dieselben Monate wie oben — nur die mit getrennter

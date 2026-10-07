@@ -51,6 +51,33 @@ und zum Verständnis der Datenflüsse.
 | `TagesEnergieProfil` | `pv_kw`, `verbrauch_kw`, `einspeisung_kw`, `netzbezug_kw`, `batterie_kw`, `soc_prozent`, `komponenten` (JSON) | Scheduler/Monatsabschluss | 24 Zeilen/Tag, stündliche kW-Werte + Wetter |
 | `TagesZusammenfassung` | `ueberschuss_kwh`, `defizit_kwh`, `peak_pv_kw`, `batterie_vollzyklen`, `performance_ratio` | Aggregiert aus TagesEnergieProfil | 1 Zeile/Tag, Tagessummen + KPIs |
 
+> **Grundsatz: ein Zeitraum ist die Differenz zweier Stände** (HA-Bauform, erstes Paket S1/S2, ausgeliefert mit E4a–E4f,
+> Stand 07.10.2026). Mit Home Assistant spiegelt eedc für jeden zugeordneten Zähler dessen Langzeitstatistik Stunde für
+> Stunde (`kanal_statistik`; ohne HA die eigene Summe aus den MQTT-Rohständen nach HAs Reset-Regel). Die Menge eines
+> Tages, Monats oder Jahres ist dann **Stand am Ende − Stand am Anfang** — wie im HA-Energie-Dashboard, ohne Deckel und
+> ohne Rücksprung-Verwurf; eine fehlende Stunde im Inneren steckt in der Folgestunde, wie in HA.
+>
+> * **Abdeckung:** ein Kanal deckt einen Zeitraum voll, wenn er einen Stand vor dem Anfang hat, sein Stand das Ende
+>   erreicht (im laufenden Zeitraum mit 70 Minuten Schreibverzug) und der Zeitraum nicht feiner ist als die Spanne
+>   zweier Stände über einen Rand. Ohne volle Abdeckung gibt es keinen Kanal-Wert.
+> * **Quellenwahl je Zeitraum** (ADR-002/**P14**): je Tag bzw. Monat und Gruppe EINE Wahl — die Kanäle nur, wenn
+>   **jeder** Eingang der Formel deckt (in einer Entweder-oder-Gruppe der erste deckende); sonst rechnet der bisherige
+>   Leser den **ganzen** Zeitraum aus Stunden-, Tages- und Monatszeilen (*Lesart 1*). Gruppen: Bilanz (Netz ·
+>   PV/Balkonkraftwerk samt Anlagenzähler · Speicher · Erzeuger hinter dem Zähler), E-Mobilität, Sonstiges, Wärmepumpe,
+>   Preis. *Gespeichert schlägt gerechnet* (P8): ein abgeschlossener Monat behält seine gespeicherten Mengen.
+> * **Abgeleitete Kanäle** schreibt eedc im Stundenlauf aus den gespiegelten: den PV-Anteil der Heimladung je Gerät,
+>   den Strom je Betriebsart der Wärmepumpe und die Kosten-Summen bei Stundenpreis. Sie beginnen mit dem Monat des
+>   Updates (frühere Monate rechnet eedc nicht neu).
+> * **Verweise je Größe:** Netz, PV, Balkonkraftwerk, Speicher, Erzeuger hinter dem Zähler — Kasten „PV je Gerät aus
+>   Zeitraum-Differenzen — Regel W2" (unten) · Preis und Kosten — §3.1, Kasten „Der gemessene Ø aus Kosten-Kanälen" ·
+>   E-Mobilität und Sonstiges — §3.4, Kasten „E-Mobilität und Sonstiges aus Zeitraum-Differenzen" · Wärmepumpe — §3.5,
+>   Kasten „Strom je Betriebsart aus Zeitraum-Differenzen" und „Kein Betrieb ist eine Messung" · Zeitfenster-Tarif
+>   (HT/NT) — §3.1 (das Gewicht ist der Netzbezug je Wochentag und Uhrstunde aus den Kanälen, eine Abfrage je Seite).
+> * **Was (noch) nicht so rechnet:** Stundenprofile, Kurven, Energieprofil-Stunden, die stundengepaarten Spalten
+>   (Direktverbrauch, Überschuss, Defizit), die Tagesebene der E-Mob-Aufteilung, Reparatur-Werkbank und Prognose-Leser
+>   bleiben auf den Stunden- und Tageszeilen (nächste Stufe S3). Der Monatsabschluss-Nachlauf rechnet seit E4f nur
+>   noch Tage, die fehlen und die HA noch im Verlauf hat (§6b).
+
 **Legacy-Felder (NICHT neu befüllen):**
 - `Monatsdaten.batterie_*` - Nutze `InvestitionMonatsdaten` (Speicher)
 - `Monatsdaten.pv_erzeugung_kwh` - **kein Schreibziel** für neuen Code (Pro-Modul-Werte gehören in `InvestitionMonatsdaten`) und seit 2026-07-29 auch **keine allgemeine Lesequelle** mehr: das Feld trägt den manuell erfassten oder importierten **PV-Gesamtwert** eines Monats und ist **ausschließlich Eingang** des Read-time-SoT `core/berechnungen/pv_verteilung.py` (`resolve_pv_je_modul`). Der füllt damit die Lücken der Module ohne eigenen Wert und kennzeichnet sie als gerechnet. Der Gesamtwert steht für **alle** PV-Quellen der Anlage: bevor er die Lücken füllt, geht der eigene Monatswert jedes Balkonkraftwerks ab, das in diesem Monat selbst trägt (nicht an Modul-Kinder abgetreten) — das BKW kommt in `pv_erzeugung_kwh = pv_module_kwh + bkw_kwh` als eigener Summand dazu und stünde sonst zweimal darin. Ein BKW **ohne** eigenen Wert, das im Monat selbst trägt, ist seit 04.10.2026 (N-621) eine Lücke wie ein Modul ohne Wert: es bekommt seinen kWp-Anteil am Rest (Gewicht `get_erzeuger_kwp`, auch `leistung_wp × anzahl`), geführt als `erzeugung.bkw_aus_anlagenwert_kwh` und additiv in `pv_kwh` — nicht in `bkw_kwh`, nicht in `pv_je_modul`, nicht in `BkwFakten` (die tragen die eigenen Werte). Ein BKW mit Anteil trägt im Monat keinen Ersatz-Eigenverbrauch (P9) und keinen Tageswert. Nur wo der Gesamtwert **gespeichert** ist — von Hand, mit „Aus HA laden" (N-622), seit HA-Bauform E4b auch über den HA-Statistik-Import (bis dahin verteilte der Import den Zähler selbst nur auf Module, und ein BKW ohne Wert bekam 0). Wer nur einen Gesamt-Sensor hat, pflegt weiterhin ausschließlich hier. Jede einzelne Berechnung liest die Pro-Modul-Schicht bzw. deren Summe — nie das Feld selbst. Ladepfad: `services/pv_monatswerte.py`.
@@ -385,6 +412,13 @@ CO2-Einsparung (kg)      = PV_Erzeugung * 0.38               (VERALTET — s. Ka
 > sonst rechnet er wie bisher aus den Stundenzeilen. Gleiche Zahlen, nur schneller: Monat für Monat zwei Stände
 > statt aller Stunden (12 Jahre, Kanäle über die ganze Zeit: 386 → 23 ms, gemessen an der Prüfkopie). Der Kanal beginnt mit dem Monat des
 > Updates; frühere Monate rechnet die Stundentabelle. Tag (Slot-Kosten) und §51 bleiben bei den Stundenzeilen.
+>
+> **Zeitfenster-Tarif (HT/NT, Stufe 3 der Kaskade, seit E4f).** Das Gewicht ist der gemessene Netzbezug je Stunde. Aus
+> den Kanälen kommt er je **(Wochentag, Uhrstunde)** zusammengefasst — Σ der auf 0 geklemmten Stunden-Zuwächse — und
+> der Preis je Zelle aus dem Fenster (`zeittarif.gewichteter_arbeitspreis_aus_zellen`; ein Fenster hängt nur an
+> Wochentag und Uhrzeit, deshalb ist Σ Preis × kWh über die Zellen dieselbe Zahl wie über die Stunden). Alle Monate
+> einer Seite, in denen ein Zeitfenster-Tarif gilt, kommen in EINER Abfrage (vorher je Monat und Tarif eine, an der
+> Prüfkopie 104 je Übersicht). Deckt ein Netzbezugs-Zähler den Monat nicht, gewichten die Stundenzeilen wie bisher.
 
 **§51 EEG im Einspeise-Erlös:** `Einspeisung_neg_Preis` sind die kWh, die in Stunden
 mit negativem Börsenpreis eingespeist wurden — für betroffene Anlagen entfällt dafür
@@ -1837,6 +1871,9 @@ SoT: `core/berechnungen/modus_split.py` (rein) · `services/energie_profil/modus
 > Ergebnis-Leiter führt die Zeile nicht als fehlend. Ohne Messung bleibt es bei „kein Stromverbrauch erfasst". Strom 0
 > bei gemessener Wärme hat keine eigene Regel (keine Ersparnis-Zeile). Strom gemessen 0 **ohne** Wärmemessung nennt
 > „kein Wärmemengenzähler zugeordnet" — der Strom ist erfasst, es fehlt die Wärme.
+> Liegt eine **Gesamtwärme** vor (ein Wärmezähler ohne Funktionstrennung) und ist der gemessene Strom der Funktion im
+> Zeitraum 0, gilt der Zeitraum-Grund *„kein Heizbetrieb in diesem Zeitraum"* vor dem Ausstattungs-Grund *„Wärme nicht je
+> Funktion gemessen"* (Konzept §4.3 Zeile 3′): ein Zeitraum ohne Betrieb hat keinen Handgriff.
 
 #### 3.5b-E1b Die **Systemarbeitszahl der Wärmeerzeugung** — die Zahl der ANLAGE (14.09.2026)
 
@@ -3956,6 +3993,17 @@ Aggregiert alle `TagesZusammenfassung` eines Monats in `Monatsdaten`-Felder:
 | `peak_netzbezug_kw` | max(Tages-Peak) | Maximaler Netzbezug im Monat |
 
 **Auslöser:** Wird beim Monatsabschluss nach `backfill_range()` aufgerufen, um fehlende Tage nachzuberechnen (begrenzt durch HA-History ~10 Tage).
+
+> **Was der Monatsabschluss nachrechnet (HA-Bauform E4f, 07.10.2026).** Der Nachlauf nach dem Speichern eines Monats
+> (`services/monatsabschluss_aggregator.py`) rechnet nur noch **Tage ohne Tageszeile**, und nur, solange Home Assistant
+> sie im Verlauf hat — erkannt an derselben Stelle wie N-596 (die Leistungskurve trägt noch einen Wert;
+> `aggregate_day(nur_mit_verlauf=True)`), kein fester Tageswert, denn die Aufbewahrung (`purge_keep_days`, Standard 10
+> Tage) ist je Installation anders. **Ein vorhandener Tag wird nie neu gerechnet** — bis E4f schrieb der Nachlauf jeden
+> Tag des Monats neu und damit Tage ohne HA-Verlauf mit leerer Leistungskurve (#422). Danach `rollup_month()` (oben) und
+> das Festschreiben der Aufteilung nach Betriebsart (§3.5). Der einmalige Auto-Vollbackfill beim ersten Abschluss nach
+> einem Upgrade ist entfallen: die Summen der Sichten kommen aus den Kanälen, Lücken der Tageszeilen füllt die
+> Reparatur-Werkbank („Lücken aus HA-LTS nachfüllen") auf Knopfdruck. Ohne Home Assistant (MQTT-Zähler) gibt es keinen
+> Verlauf, der verfallen könnte: ein fehlender Tag wird wie bisher aus den Zählerständen angelegt.
 
 ---
 

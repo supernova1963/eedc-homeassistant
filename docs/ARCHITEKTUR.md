@@ -531,10 +531,14 @@ Die folgenden Felder (`stamm_*`, `ansprechpartner_*`, `wartung_*`) wurden aus de
 | thumbnail | LARGEBINARY | Vorschaubild (nur für Bilder) |
 | created_at | DATETIME | Erstellungsdatum |
 
-#### Kanalstatistik — Stand E3: Lese-Schicht vorhanden, noch von keiner Sicht benutzt
+#### Kanalstatistik — Summen wie das HA-Energie-Dashboard (erstes Paket der HA-Bauform, Stand E4f)
 
-Drei Tabellen nach dem Vorbild der HA-Langzeitstatistik (Umbau „eedc nach HA-Bauform", Etappen E1–E3). **Keine Sicht,
-keine Route und kein Export liest sie**; Stunden- und Tageszeilen sowie `sensor_snapshots` laufen unverändert weiter.
+Drei Tabellen nach dem Vorbild der HA-Langzeitstatistik (Umbau „eedc nach HA-Bauform", Etappen E1–E4f, Bauplan
+`bauplan-ha-bauform-s1-s2`). Seit E4 lesen **alle Tages-, Monats- und Jahressummen** daraus, wo die Kanäle den Zeitraum
+voll decken (je Zeitraum und Gruppe eine Wahl, ADR-002/**P14**); sonst rechnet der bisherige Leser aus Stunden-, Tages-
+und Monatszeilen. Stundenprofile, Kurven, Energieprofil-Stunden, die stundengepaarten Spalten, die Werkbank und die
+Prognose-Leser bleiben bis S3 auf dem Bestand; `TagesEnergieProfil`, `TagesZusammenfassung` und `sensor_snapshots` laufen
+unverändert weiter (bis S5 wird keine Spalte gelöscht, kein Schreiber abgeschaltet).
 
 | Tabelle | Inhalt |
 | --- | --- |
@@ -542,15 +546,31 @@ keine Route und kein Export liest sie**; Stunden- und Tageszeilen sowie `sensor_
 | `kanal_quelle` | Herkunft ab `gueltig_ab`: Familie (`spiegel` · `bestand` · `mitschrift` · `abgeleitet`), HA-`statistic_id` bzw. MQTT-Schlüssel, `offset` (Sensortausch: Kanalwert = Zeile + `offset`, die Zeile bleibt wörtlich) |
 | `kanal_statistik` | eine Zeile je Kanal und Stunde (`start_ts` = Stundenbeginn, Unix-Sekunden), `sum` · `state` · `mean` · `min` · `max`, eindeutig über `(kanal_id, start_ts)` |
 
-Welche Art ein Feld bekommt, leitet `services/kanal/katalog.py` aus der Feld-Registry ab (Wächter
-`test_kanal_feld_deckung.py`, Baseline 0). Geschrieben wird im Stundenlauf :05 nach `snapshot_anlage` (HA-Spiegel; ohne HA die
-eigene Summe aus MQTT-Rohständen nach HAs Reset-Regel, `core/berechnungen/ha_summe.py`) und in `aggregate_day` (Betriebsart als
-Anteil der Stunde) — beides in derselben Sitzung, in einem eigenen SAVEPOINT: ein Fehler dort berührt den Bestand nicht.
-Mittelwerte (Leistung, Ladestand, Temperatur, Preis) werden gespiegelt, wo der Sensor eine HA-Langzeitstatistik hat —
-`mean`/`min`/`max` wörtlich in HAs Einheit (die Kanal-Einheit ist die beim Anlegen; eine spätere andere Einheit wird nicht
-geschrieben, nicht umgerechnet). Mittelwerte ohne Langzeitstatistik und die abgeleiteten Kanäle sind im Katalog benannt, in E1
-aber ohne Schreiber. Eine gelöschte Anlage räumt ihre Kanäle
-(`ON DELETE CASCADE`) wie ihre Snapshots; eine gelöschte Investition räumt — wie bei den Snapshots — keine.
+**Familien.** `spiegel` = HAs `sum`/`state`/`mean` wörtlich (Zähler, Zählwerke, Mittelwerte mit Langzeitstatistik);
+`mitschrift` = was HA nicht dauerhaft hält — die Betriebsart einer Wärmepumpe als Anteil der Stunde je Betriebsart
+(`modus:inv:<id>:<betriebsart>`) und ohne HA die eigene Summe aus den MQTT-Rohständen nach HAs Reset-Regel
+(`core/berechnungen/ha_summe.py`, der Deckel bleibt dort Schreibfilter); `abgeleitet` = aus anderen Kanälen je Stunde
+gerechnet, mit `aufbaubar_ab`. **Die Familie `bestand` bleibt unbelegt** (Entscheid 06.10., Bauplan §3b): die bisherigen
+Stunden- und Tageszeilen werden nicht umgewandelt — sie bleiben die Quelle für Zeiträume, die die Kanäle nicht voll
+decken (*Lesart 1*). Mittelwerte ohne Langzeitstatistik bekommen keinen Kanal und keine Mitschrift (Entscheid 06.10.).
+Welche Art und Familie ein Feld bekommt, leitet `services/kanal/katalog.py` aus der Feld-Registry ab (Wächter
+`test_kanal_feld_deckung.py`, Baseline 0).
+
+**Schreiber.** Stündlich :05 nach `snapshot_anlage` (`services/kanal/schreiber.py::schreibe_kanaele_im_stundenlauf`, in
+derselben Sitzung, eigener SAVEPOINT — ein Fehler dort berührt den Bestand nicht): Spiegel fortschreiben, ohne HA die
+eigene Summe, dann die abgeleiteten Kanäle in dieser Reihenfolge —
+* **PV-Anteil der Heimladung** je Wallbox/E-Auto ohne gemessene Aufteilung (`abgeleitet.py`, `abgeleitet:inv:<id>:
+  ladung_pv_kwh`, Regel der Stunde `core/berechnungen/pv_anteil_ladung.py`: was nicht aus dem Netz kam; E4c);
+* **Strom je Betriebsart** der Wärmepumpe (`modus_strom.py`, `abgeleitet:inv:<id>:modus_strom_<betriebsart>_kwh` und
+  `…:modus_abdeckung_h` = Δ Gesamtstrom × Anteil aus der Mitschrift; gemessene Betriebsart-Zähler und getrennte
+  Strommessung haben Vorrang; E4d);
+* **Kosten-Summen** bei Stundenpreis (`kosten.py`, sechs Kanäle `abgeleitet:basis:kosten_netzbezug` ·
+  `netzbezug_bewertet_kwh` · `kosten_ev_vermieden` · `ev_bewertet_kwh` · `preis_summe` · `preis_stunden`, Regel der
+  Stunde `core/berechnungen/kosten_stunde.py`; einen Einspeise-Erlös-Kanal gibt es bewusst nicht; E4e).
+Ein neuer abgeleiteter Kanal beginnt beim ersten Lauf mit dem laufenden Monat (eine Stunde vor seinem Monatsfenster, ab
+der ersten Stunde mit Vorstand aller Eingänge) — ein abgeschlossener Monat wird nie rückwirkend gedeckt. Die
+Betriebsart-Mitschrift schreibt `aggregate_day`. Eine gelöschte Anlage räumt ihre Kanäle (`ON DELETE CASCADE`) wie ihre
+Snapshots; eine gelöschte Investition räumt — wie bei den Snapshots — keine.
 
 **Nachfüllen (E2).** Eine Hintergrund-Aufgabe (`services/kanal/nachfuellen.py`, nach dem Start für alle Zuordnungen, nach
 jedem Stundenlauf angestoßen für neu angelegte Kanäle; Marke `kanal_nachfuellung` je Kanal und Entity — ein Kanal mit Marke
@@ -568,7 +588,8 @@ je Spiegel-Kanal und Quelle vergleicht er die gespeicherten Zeilen mit HA (letzt
 die erste abweichende Stunde per Halbierung und spiegelt ab dort neu — so zieht eine „Summe anpassen" in HA (Versatz auf alle
 Folgezeilen) oder eine nachgereichte Stunde nach. Ersetzt werden nur Spiegelzeilen; spätere Quellen bekommen die Änderung in
 ihren `offset`, jedes Δ nach einem Sensortausch bleibt, wie HA es nennt. Liefert HA für eine Quelle nichts mehr — oder nur
-noch ab einem späteren Zeitpunkt —, bleibt der Spiegel davor stehen; ist HA unterwegs nicht erreichbar, ändert der Lauf nichts.
+noch ab einem späteren Zeitpunkt —, bleibt der Spiegel davor stehen; ist HA unterwegs nicht erreichbar, ändert der Lauf nichts. Mit jeder Korrektur verwirft er die abgeleiteten Kanäle ab der korrigierten Stunde
+(`abgeleitet.verwerfe_ab`, alle `abgeleitet:%`); der Stundenlauf baut sie von dort neu auf.
 
 **Stunde und Slot.** Eine Stundenzeile des Bestands (Rückwärts-Slot `h` = `[h−1, h)`, #144) wird an genau einer Stelle zu
 `start_ts`: `core/berechnungen/slot_konvention.py::slot_start_ts`, die Umkehrung von `lts_boundary_index` (doppelte
@@ -592,32 +613,51 @@ Aufruf, gleich wie lang der Zeitraum ist. Ohne volle Abdeckung gibt es keinen We
 Monats), dazu den Kalendermonat des HA-Monatslesers (`[1. 00:00, 1. 00:00)`) für die Leser, die heute mit ihm rechnen; `quellenwahl.py` sagt je Zeitraum „Kanal" (jeder benötigte
 Kanal deckt voll) oder „Bestand" (mit Grund je Kanal); `monatsraster.py` liefert je Monat Δ, Abdeckung und diese eine
 Wahl — die Überlagerung „gespeichert schlägt gerechnet" bleibt Sache der Monats-Fakten. Außerhalb `services/kanal/`
-importiert die Schicht noch niemand (Wächter `test_kanal_lesen_waechter.py`); das Umhängen der Leser folgt in E4.
+importieren die Schicht nur die Monats-Fakten und benannte Tages-Leser (Wächter `test_kanal_lesen_waechter.py`). Seit E4f
+fasst `zellen_stapel` den Zuwachs mehrerer Zeiträume je (Wochentag, Uhrstunde) in einer Anweisung zusammen — die Gewichte
+eines Zeitfenster-Tarifs.
 
-**Adapter der Bilanz-Gruppe (E4a, Teil 1 — gebaut, noch von niemandem benutzt).** Netz, PV/Balkonkraftwerk, Speicher und
-Erzeuger hinter dem Zähler sind gemeinsame Eingänge der Bilanz-Formel und wechseln deshalb gemeinsam.
-`services/kanal/bilanz_adapter.py` liefert aus den Kanälen dieselben Formen wie die heutigen Leser, je in deren Fenster: den
-Tag wie Tageszeile + Stundenbilanz (`tagesfenster`), den Monat wie `lade_monats_summen_aus_tagen` (über dieselbe Faltung
-`monats_aus_tagen.falte_monat`) und den Kalendermonat je Sensor wie `get_monatswerte`. Zwei benannte Fassungen: **„wie
-Bestand"** legt die Kanal-Zeilen dem unveränderten HA-Leser vor und rechnet den Tag mit `baue_tagestabelle` — keine Regel
-steht ein zweites Mal im Baum; **„wie HA"** komponiert das Kanal-Δ des Fensters ohne Deckel und Rücksprung-Regel, mit
-denselben Layer-Funktionen (die PV-Tages-Präzedenz und N-623 fragen je Stunde und bekommen dafür die Stunden der Kanäle).
-`bilanz_quellenwahl.py` wählt je Tag und Monat EINE Quelle für alle Eingänge der Gruppe. Die Gleichheitsprobe
-`test_kanal_bilanz_gleichheit.py` hält auf allen 33 Formen beider Abnahme-Matrizen (Datenstände HA und MQTT) fest:
-„wie Bestand" == heutiger Leser ohne Ausnahme; „wie HA" == „wie Bestand" außer am Zählersprung (N-586).
+**Quellenwahl je Zeitraum (ADR-002/P14) und die Leser je Gruppe.** Je Tag, Monat (Monatsfenster des Bestands,
+`[Vortag 23:00, letzter Tag 23:00)`) bzw. Kalendermonat (`[1. 00:00, 1. 00:00)`) und Gruppe EINE Wahl: `kanal` nur, wenn
+jeder Eingang der Formel voll deckt (in einer Entweder-oder-Gruppe der erste deckende, W2-R4), sonst `bestand` für den
+ganzen Zeitraum. Die Gruppen sind getrennt — eine kann decken, die andere nicht:
 
-**Umgeschaltet (E4a-2, Weg 2, Stand 06.10.2026).** Die Bilanz-Gruppe liest seit E4a-2 über EINE Fassade,
-`services/kanal/bilanz_leser.py`: je Tag bzw. Monat die Zähler der Gruppe (je Menge aktiver Investitionen einmal), ihre
-Δ über `lesen.reihe_stapel` (eine Anweisung für alle Zeiträume), die Quellenwahl (Ersatzgruppe gedeckt, wenn ein Kanal
-der Gruppe voll deckt) und bei `kanal` die Komposition im Layer (`core/berechnungen/bilanz_zeitraum.py`, Regeln
-W2-R1…R5, BERECHNUNGEN „PV je Gerät aus Zeitraum-Differenzen"). Umschaltstellen: Monats-Fakten (`laden.py` →
-`lade_monats_summen`), *Cockpit → Monat* Tagesebene, die Kalendermonats-Wege (*Cockpit → Monat* HA-Weg, „Aus HA laden",
-alle Monatswerte, Import-Vorschau, Sammelimport, Monatsabschluss-Vorschlag — `monatswerte_mit_kanaelen`) und die
-Tages-Leser (`tage_werte`, `energie_profil/tag`, `tage`, `monat`). Kein Deckel und kein Rücksprung-Verwurf für den
-HA-Spiegel; ein Lückentag trägt die Lückenmenge. Was die Kanäle nicht voll decken, rechnet der Bestandspfad unverändert.
-Bleibt bis E4c/S3: E-Mob-Aufteilung, stundengepaarte Spalten, Stundenprofile. Laufzeit (Kunst-DB, 145 Monate):
-Quellenwahl + Monatsreihe 28,5 ms, Tagesleser eines Monats 6,2 ms. Daten-Checker „Zählersprung in HA"
-(`daten_checker/datenquelle/ha_sprung.py`). Die Adapter aus E4a-1 bleiben nur für die Gleichheitsprobe.
+| Gruppe | Leser | Was er liefert |
+| --- | --- | --- |
+| Bilanz (Netz · PV/Balkonkraftwerk samt Anlagenzähler · Speicher · Erzeuger hinter dem Zähler) | `bilanz_leser.py` | je Tag `KanalTag`, je Monat `TagesMonatsSumme` über die Komposition `core/berechnungen/bilanz_zeitraum.py` (Regeln W2-R1…R5; Wandlungsverluste geführt, nicht bewertet); Kalendermonat je Sensor (`kanal_kalendermonate`) |
+| E-Mobilität (Lademengen, gemessene Aufteilung, abgeleiteter PV-Anteil) · Sonstiges | `geraete_leser.py` | je Monat bzw. Kalendermonat die Zeilen `{feld: Δ}` je Gerät und der PV-Anteil; Wallbox-Regel, Pool, Dienstwagen entscheiden die Monats-Fakten zur Lesezeit (P10) |
+| Wärmepumpe (Strom, Wärme je Funktion, Betriebsart-Zähler, Strom je Betriebsart) | `wp_leser.py` | je Monat bzw. Kalendermonat die Zeile je Gerät in der Form einer Abschluss-Zeile; gemessene 0 ist Betrieb ohne Wärme |
+| Preis (sechs Kosten-Kanäle) | `preis_leser.py` | je Monat ein `StrompreisAggregat` (gewichtet = Δ Kosten ÷ Δ bewertete kWh); die Netzbezugs-Gewichte des Zeitfenster-Tarifs je (Wochentag, Uhrstunde) |
+
+**Umschaltstellen.** Die Monats-Fakten (`services/monats_fakten/laden.py`: `lade_monats_summen`, `geraete_monate`,
+`wp_monate`; *gespeichert schlägt gerechnet* je Gruppe, P8), *Cockpit → Monat* (Tagesebene und HA-Weg des
+Kalendermonats: `_ha_statistik_aus_kanaelen_mit_marke`, `_geraete_aus_kanaelen`, `_wp_aus_kanaelen`), der Preis-Leser
+`strompreis_aggregator.lade_preis_aggregate_je_monat`/`berechne_monats_durchschnittspreis`/`wirksamer_arbeitspreis_cent`,
+die Tages-Leser (`tage_werte`, `energie_profil/tag`, `tage`, `monat`) und die **Kalendermonats-Schreibwege** („Aus HA
+laden", alle Monatswerte, Import-Vorschau, Sammelimport, Monatsabschluss-Vorschlag) über EINE Stelle,
+`bilanz_leser.monatswerte_mit_kanaelen`: Bilanz-, E-Mob- und Sonstiges-Sensoren bekommen das Kanal-Δ, wo ihre Gruppe den
+Kalendermonat deckt (seit E4f auch E-Mob und Sonstiges); Wärmepumpen- und Preis-Sensoren bleiben dort beim HA-Leser.
+Einen gespeicherten Vorbestand ersetzt der Sammelimport nur mit „überschreiben". **Kein Deckel, kein Rücksprung-Verwurf**
+für den HA-Spiegel: ein Zählersprung steht in Tag und Monat, der Daten-Checker benennt ihn
+(`daten_checker/datenquelle/ha_sprung.py`, „Zählerstände – Sprung in Home Assistant").
+
+**Lade-Kontext je Anfrage (E4f).** Jede GET-Anfrage bekommt EINEN Kontext der Kanal-Leser
+(`services/kanal/lade_kontext.py`, Middleware `kanal_lade_kontext` in `main.py`): jeder Randstand (Kanal × Zeitpunkt)
+wird in der Anfrage einmal gelesen und von allen Gruppen, Fenstern und Fakten-Aufrufen geteilt — ein weiteres Fenster
+liest nur die Zeitpunkte, die die Anfrage noch nicht kennt —, ebenso Kanäle, Stammdaten, die Quellenwahl je Fenster und
+die Gewichte des Zeitfenster-Tarifs (alle vorgemerkten Monate in einer Abfrage); die Uhr der Leser steht in der Anfrage
+still. (Gemessen und verworfen: die Ränder aller Kanäle der Anlage vorab in einer Anweisung — +50 ms je Route.) Jede
+schreibende Anweisung der Sitzung, `commit` und `rollback` leeren ihn; er überdauert die Anfrage nie (kein Modul-Cache).
+Schreibende Routen, Scheduler, Stundenlauf, Nachfüllen und Konsistenzlauf laufen ohne ihn. Mit und ohne ihn dieselben
+Zahlen (`test_e4f_lade_kontext.py`, auch das Abfrage-Budget: Anweisungen gegen `kanal_statistik` je Route konstant über
+Monate und Stunden).
+
+**Wächter und Proben.** `test_kanal_lesen_waechter.py` (wer die Schicht importiert), `test_kanal_feld_deckung.py`
+(Katalog ↔ Registry), `test_kanal_symmetrie.py` (Kanal-Δ je Tag ≡ Bestand), die Gleichheitsproben
+`test_kanal_{bilanz,geraete,wp,kosten}_gleichheit.py`, die Wahl-Proben `test_kanal_quellenwahl.py`,
+`test_kanal_bilanz_leser_wahl.py`, `test_kanal_geraete_leser.py` und als Richter die Abnahme-Matrizen
+`test_pv_achse_matrix.py` und `test_achsen_matrix.py`. Laufzeit an der Zwölf-Jahres-Kopie: Werkzeug
+`plans/ha-bauform-werkzeug/laufzeit-grundlinie.py` (mit und ohne Kanäle, Bericht E4f).
 
 ### Parent-Child Beziehungen
 
@@ -1439,7 +1479,7 @@ die Fassade, die die öffentlichen Namen re-exportiert), `backend/models/tages_e
 | --- | --- |
 | `aggregator.py` | `aggregate_day()` — **der einzige Schreiber** von `TagesEnergieProfil` + `TagesZusammenfassung` |
 | `scheduler_jobs.py` | `aggregate_today_all()` (laufender Tag), `aggregate_yesterday_all()` (Vortag) |
-| `backfill.py` | `backfill_range()` — Vollbackfill aus HA-LTS, ruft `aggregate_day` je Tag |
+| `backfill.py` | `backfill_range()` — Datumsbereich über `aggregate_day` (Monatsabschluss: nur fehlende Tage, seit E4f); `backfill_from_statistics()` / `resolve_and_backfill_from_statistics()` — Vollbackfill aus HA-LTS (Werkbank) |
 | `lts_tagesverlauf.py` | die Stunden-Leistungskurve aus HA-LTS (ein gebündelter Read je Bereich) |
 | `aggregations_quelle.py` | Vorbedingung: gibt es überhaupt eine Quelle für diesen Tag? |
 | `rollup.py` | `rollup_month()` — Tageszeilen → `Monatsdaten`-Felder |
@@ -1571,7 +1611,8 @@ Teilabdeckung bleibt stehen und wird nicht wegretuschiert.
 | `aggregate_today_all()` | Scheduler alle 15 min | Der **laufende** Tag für alle Anlagen — er wird dabei jedes Mal vollständig neu gerechnet |
 | `aggregate_yesterday_all()` | Scheduler 00:15 + 02:15 | Vortag für alle Anlagen mit Sensor-Mapping; 02:15 ist der zweite Anlauf (#136) |
 | `archiv_nachzug_all()` | Scheduler 02:20 | Der Wetter-Grenztag (`heute − ARCHIVE_LAG_TAGE − 1`) für alle Anlagen. Ruft **denselben** `aggregate_day` — der Endpunkt-Wechsel Forecast→Archiv passiert in `_get_wetter_ist` von selbst, es gibt keinen zweiten Rechenweg für Einstrahlung, GTI oder PR |
-| `backfill_range()` | Monatsabschluss, Vollbackfill | Datumsbereich nachrechnen. Holt die Stunden-Leistungskurve **gebündelt** aus HA-LTS (`lade_tagesverlauf_aus_lts`) und reicht sie je Tag durch — nicht limitiert auf die ~10 Tage HA-History |
+| `backfill_range()` | Monatsabschluss | Datumsbereich über `aggregate_day` je Tag (Leistungskurve aus dem HA-Verlauf, ~10 Tage). Seit E4f mit `nur_fehlende=True`: nur Tage ohne Tageszeile, und nur, solange HA sie im Verlauf hat (`aggregate_day(nur_mit_verlauf=True)`) |
+| `backfill_from_statistics()` | Werkbank „Lücken aus HA-LTS nachfüllen" | Holt die Stunden-Leistungskurve **gebündelt** aus HA-LTS (`lade_tagesverlauf_aus_lts`) und reicht sie je fehlendem Tag durch — nicht limitiert auf die ~10 Tage HA-History, strikt additiv (#190) |
 | `rollup_month()` | Monatsabschluss | Aggregiert `TagesZusammenfassung` → `Monatsdaten`-Felder (Summe/Durchschnitt/Max) |
 
 **Berechnungsdetails:**
@@ -1590,11 +1631,20 @@ Teilabdeckung bleibt stehen und wird nicht wegretuschiert.
   kapazitätsgewichtet über alle Geräte (N-239), die Aufschlüsselung steht daneben in
   `soc_je_speicher`
 
-**Integration mit Monatsabschluss:**
+**Integration mit Monatsabschluss (Nachlauf, `services/monatsabschluss_aggregator.py`, Stand E4f):**
 
-Beim Monatsabschluss werden zwei Schritte ausgeführt:
-1. `backfill_range()` — Fehlende Tage nachberechnen (soweit HA-History reicht)
-2. `rollup_month()` — Tagesdaten in Monatsdaten verdichten
+Nach jedem Speichern eines Monats laufen im Hintergrund (Nummern aus Bauplan HA-Bauform §9 B1 / Konzept R-13):
+1. `backfill_range(nur_fehlende=True)` — **nur Tage ohne Tageszeile**, und nur, solange Home Assistant sie im Verlauf
+   hat (Grenze an derselben Stelle wie N-596: die Leistungskurve trägt noch einen Wert). Ein vorhandener Tag wird nie neu
+   gerechnet — bis E4f schrieb dieser Schritt jeden Tag des Monats neu, auch gepurgte (#422, N-596).
+2. `rollup_month()` — Tagesdaten in Monatsdaten verdichten (Vollzyklen, Spitzen, PR hängen an Stundenwerten — bis S3).
+3. *entfallen mit E4f:* der einmalige Auto-Vollbackfill beim ersten Abschluss nach einem Upgrade (Flag
+   `Anlage.vollbackfill_durchgefuehrt` bleibt als Spalte, ohne Leser). Lücken füllt die Werkbank auf Knopfdruck.
+4. `schreibe_modus_split_monat()` — die Aufteilung nach Betriebsart festschreiben; deckt die WP-Gruppe den Monat aus den
+   Kanälen, aus dem abgeleiteten Kanal „Strom je Betriebsart" (E4d), sonst aus den Stundenzeilen.
+
+Daneben (unverändert, `monatsabschluss/wizard.py::_post_save_hintergrund`): MQTT-Publish, Community-Teilen,
+Aktivitätseintrag.
 
 ---
 

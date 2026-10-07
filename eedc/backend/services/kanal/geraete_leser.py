@@ -121,12 +121,17 @@ class _Stamm:
 
 
 async def _stamm(db: AsyncSession, anlage_id: int) -> _Stamm:
+    """Stammdaten samt Verfügbarkeit; im Lade-Kontext einer Anfrage einmal (samt Ladeauswahl je Tag)."""
     from backend.models.anlage import Anlage
     from backend.models.investition import Investition
+    from backend.services.kanal.lade_kontext import gemerkt
 
-    anlage = (await db.execute(select(Anlage).where(Anlage.id == anlage_id))).scalar_one()
-    invs = list((await db.execute(select(Investition).where(Investition.anlage_id == anlage_id))).scalars().all())
-    return _Stamm(anlage, invs, await verfuegbarkeit(db, anlage))
+    async def _laden() -> _Stamm:
+        anlage = (await db.execute(select(Anlage).where(Anlage.id == anlage_id))).scalar_one()
+        invs = list((await db.execute(select(Investition).where(Investition.anlage_id == anlage_id))).scalars().all())
+        return _Stamm(anlage, invs, await verfuegbarkeit(db, anlage))
+
+    return await gemerkt(db, ("geraete_stamm", anlage_id), _laden)
 
 
 def _emob_felder(inv, hat_feld) -> list[str]:
@@ -233,9 +238,19 @@ def _letzter_tag(jahr: int, monat: int) -> date:
 async def _je_zeitraum(
     db: AsyncSession, stamm: _Stamm, fenster: dict[MonatsSchluessel, tuple[int, int]], jetzt: int,
 ) -> dict[MonatsSchluessel, GeraeteZeitraum]:
-    """Je Monat (mit seinem Fenster) die Wahl beider Gruppen — EINE Lese-Anweisung für alle Monate (die Ränder)."""
+    """Je Monat (mit seinem Fenster) die Wahl beider Gruppen — EINE Lese-Anweisung für alle Monate (die Ränder). Im
+    Lade-Kontext einer Anfrage einmal je Fenstersatz (HA-Bauform E4f)."""
+    from backend.services.kanal.lade_kontext import gemerkt
+
     if not fenster:
         return {}
+    schluessel = ("geraete_je_zeitraum", stamm.anlage.id, tuple(sorted(fenster.items())), jetzt)
+    return dict(await gemerkt(db, schluessel, lambda: _je_zeitraum_rechnen(db, stamm, fenster, jetzt)))
+
+
+async def _je_zeitraum_rechnen(
+    db: AsyncSession, stamm: _Stamm, fenster: dict[MonatsSchluessel, tuple[int, int]], jetzt: int,
+) -> dict[MonatsSchluessel, GeraeteZeitraum]:
     bedarf = {m: await _bedarf(db, stamm, lambda i, m=m: i.ist_aktiv_im_monat(*m), _letzter_tag(*m))
               for m in fenster}
     keys = {k for e, s in bedarf.values() for k in e.keys() | s.keys()}
@@ -298,6 +313,60 @@ async def geraete_kalendermonate(
     return await _je_zeitraum(db, stamm, fenster, jetzt)
 
 
+async def geraete_sensorwerte_kalendermonate(
+    db: AsyncSession, anlage_id: int, monate_liste: Sequence[MonatsSchluessel], *, jetzt: Optional[int] = None,
+) -> dict[MonatsSchluessel, dict[str, Any]]:
+    """HA-Bauform E4f (Auftrag Punkt 2, E4c H-5): die Kalendermonats-Schreibwege für E-Mob und Sonstiges.
+
+    Je Kalendermonat und Gruppe (E-Mob · Sonstiges) DIESELBE Quellenwahl wie ``geraete_kalendermonate`` (Cockpit →
+    Monat, E4c): deckt eine Gruppe den Kalendermonat aus den Kanälen — die E-Mob-Gruppe nur samt dem abgeleiteten
+    PV-Anteil der Geräte, die ihn brauchen —, wird für jedes Feld ihrer Zeilen (E-Mob: jedes Zählerfeld; Sonstiges: je
+    Ersatzgruppe das gewählte, W2-R4) der HA-Sensor des Feldes (``sensor_mapping``, Strategie ``sensor``) als
+    ``{HA-Entity: SensorMonatswert}`` aus dem Kanal-Δ genannt — ohne Deckel, ohne Rücksprung-Verwurf, wie die
+    Bilanz-Gruppe (``bilanz_leser.kanal_kalendermonate``, B-2). Eine Gruppe ohne volle Deckung fehlt (dort bleibt der
+    HA-Leser, Lesart 1).
+
+    ⚠ Der abgeleitete PV-Anteil selbst ist kein Sensor und wird hier NICHT als Wert genannt: die Monats-Fakten wenden
+    ihn zur Lesezeit auch auf gespeicherte Monate an (E4c, N-631 „eine Aufteilung mit und ohne Abschluss").
+    """
+    from backend.services.ha_statistics_service import SensorMonatswert
+
+    if not monate_liste:
+        return {}
+    je = await geraete_kalendermonate(db, anlage_id, monate_liste, jetzt=jetzt)
+    if not je:
+        return {}
+    from backend.models.anlage import Anlage
+
+    anlage = (await db.execute(select(Anlage).where(Anlage.id == anlage_id))).scalar_one()
+    inv_map = ((anlage.sensor_mapping or {}).get("investitionen") or {})
+
+    def _sensor(inv_id: int, feld: str) -> Optional[str]:
+        cfg = (((inv_map.get(str(inv_id)) or {}).get("felder") or {}).get(feld)) or {}
+        return cfg.get("sensor_id") if cfg.get("strategie") == "sensor" else None
+
+    out: dict[MonatsSchluessel, dict[str, Any]] = {}
+    for m, g in je.items():
+        werte: dict[str, Any] = {}
+        for gruppe in (g.emob, g.sonstiges):
+            if not gruppe.kanal:
+                continue
+            for inv_id, zeile in gruppe.zeilen.items():
+                for feld in zeile:
+                    sid = _sensor(inv_id, feld)
+                    z = gruppe.wahl.ergebnisse.get(f"inv:{inv_id}:{feld}")
+                    if sid is None or z is None or z.delta is None:
+                        continue
+                    werte[sid] = SensorMonatswert(
+                        sensor_id=sid, start_wert=round(z.wert_von, 3), end_wert=round(z.wert_bis, 3),
+                        differenz=round(z.delta, 2), verworfen_kwh=0.0, nachtrag_kwh=0.0,
+                        intervalle=max(1, round((z.gedeckt_bis - z.gedeckt_von) / 3600)),
+                    )
+        if werte:
+            out[m] = werte
+    return out
+
+
 async def emob_quoten(
     db: AsyncSession, anlage_id: int, *, von: Optional[MonatsSchluessel] = None,
     bis: Optional[MonatsSchluessel] = None,
@@ -310,5 +379,6 @@ async def emob_quoten(
 
 __all__ = [
     "GeraeteZeitraum", "GruppeZeitraum", "HERKUNFT_KANAL", "emob_quoten", "geraete_kalendermonate", "geraete_monate",
+    "geraete_sensorwerte_kalendermonate",
     "herkunft_der_zeile", "uhr", "waehle_gruppe",
 ]

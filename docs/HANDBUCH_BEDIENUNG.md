@@ -377,6 +377,27 @@ Die **Monat**-Sicht ist das Referenz-Muster der Zeit-Achse: ein ausgewählter Mo
 > Maus über das „—", und dort steht, ob für diesen Monat noch überhaupt nichts vorliegt oder
 > ob nur dieser einen Größe die Zuordnung fehlt — samt dem Weg dorthin.
 >
+> **Summen wie das HA-Energie-Dashboard.** Mit Home Assistant rechnet eedc Tag, Monat und Jahr aus den Zählerständen
+> der HA-Langzeitstatistik: die Menge eines Zeitraums ist der Stand am Ende minus der Stand am Anfang — für Netz, PV,
+> Balkonkraftwerk, Speicher, Erzeuger hinter dem Zähler, Wallbox und E-Auto, sonstige Geräte und Wärmepumpe, beim
+> dynamischen Tarif auch für die Kosten. Für jeden Zeitraum entscheidet eedc **einmal**, woher die Zahlen kommen: aus
+> den Zählerständen nur, wenn sie den ganzen Zeitraum für **alle** Größen einer Rechnung abdecken; sonst wie bisher
+> aus den Tages- und Stundenwerten. Was du dabei siehst:
+>
+> * **Dieselben Zahlen wie im Energie-Dashboard** — auch einen Zählersprung, den Home Assistant gebucht hat (ein Sensor
+>   meldet kurz 0 und kehrt zurück). Der [Daten-Checker](HANDBUCH_DATEN_CHECKER.md#48b-zaehlerstaende--sprung-in-home-assistant)
+>   nennt ihn unter *Zählerstände – Sprung in Home Assistant* mit dem Weg zur Korrektur in Home Assistant.
+> * **Wandlungsverluste**, wenn deine Strings eigene Zähler haben und ein Anlagenzähler hinter dem Wechselrichter misst
+>   (Unterzeile unter „PV-Erzeugung", siehe oben).
+> * **Der laufende Monat und Monate ohne Abschluss** nennen dieselben Werte wie nach dem Abschluss (Abschnitte unten).
+> * **Ab dem Monat des Updates** gilt das für alles, was eedc Stunde für Stunde selbst mitrechnet: den Sonnenanteil der
+>   Wallbox-Ladung, den Strom je Betriebsart der Wärmepumpe und die Kosten beim dynamischen Tarif. Frühere Monate rechnet
+>   eedc dafür nicht neu — sie bleiben bei der bisherigen Rechnung.
+> * **Schneller**, je mehr Monate die Zählerstände abdecken: je Monat liest eedc zwei Stände statt aller Stunden.
+>
+> Ohne Home Assistant, vor deinem ersten zugeordneten Zähler und für Größen ohne Langzeitstatistik rechnet eedc wie
+> bisher. Abgeschlossene Monate behalten, was du gespeichert hast.
+
 > **E-Mobilität und Sonstiges ohne Abschluss.** Mit Home Assistant nennt der laufende Monat (und ein vergangener Monat
 > ohne Abschluss) die Ladung deiner Wallbox und deiner E-Autos, ihren Sonnenanteil, die dienstliche Ladung, deine
 > sonstigen Verbraucher und den Strom eines Erzeugers wie BHKW aus den Zählerständen — und zwar dieselben Zahlen, die

@@ -131,8 +131,10 @@ async def delete_rohdaten(
     # Rest folgenlos (ohne Tageszeilen mit Regelmarke gelten keine Blöcke, W-C); der
     # Scheduler bildet sie mit den Tagen neu.
     await db.execute(delete(EmobLadeblock).where(EmobLadeblock.anlage_id == anlage_id))
-    # Flag zurücksetzen, damit der nächste Monatsabschluss den Auto-Vollbackfill
-    # aus HA Statistics erneut anstößt
+    # Flag zurücksetzen (Bestand). ⚠ Seit HA-Bauform E4f liest es niemand mehr: der
+    # Monatsabschluss stößt keinen Auto-Vollbackfill mehr an (`monatsabschluss_aggregator`,
+    # Schritt 3 entfallen) — die gelöschten Tage füllt die Werkbank „Lücken aus HA-LTS
+    # nachfüllen", die Summen der Sichten kommen aus den Kanälen.
     anlage.vollbackfill_durchgefuehrt = False
     await db.commit()
 
@@ -556,8 +558,8 @@ async def delete_alle_rohdaten(
     del_tage = await db.execute(delete(TagesZusammenfassung))
     # N-555 Stufe 3 (NF-1): mit allen Tagen gehen alle Ladeblöcke (s. `delete_rohdaten`).
     await db.execute(delete(EmobLadeblock))
-    # Flag bei ALLEN Anlagen zurücksetzen, damit der nächste Monatsabschluss
-    # den Auto-Vollbackfill aus HA Statistics erneut anstößt
+    # Flag bei ALLEN Anlagen zurücksetzen (Bestand; seit HA-Bauform E4f ohne Leser, s.
+    # `delete_rohdaten`)
     await db.execute(update(Anlage).values(vollbackfill_durchgefuehrt=False))
     await db.commit()
 

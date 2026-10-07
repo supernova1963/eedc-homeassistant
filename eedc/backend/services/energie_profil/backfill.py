@@ -57,26 +57,48 @@ async def backfill_range(
     von: date,
     bis: date,
     db: AsyncSession,
+    *,
+    nur_fehlende: bool = False,
 ) -> int:
     """
     Nachberechnung für einen Datumsbereich (z.B. beim Monatsabschluss).
 
     Nur möglich wenn HA-History noch verfügbar ist (~10 Tage).
 
+    ⭐ ``nur_fehlende`` (HA-Bauform E4f, Monatsabschluss-Nachlauf Schritt 1, Bauplan §9 B1): nur Tage
+    OHNE Tageszeile (``TagesZusammenfassung``) werden gerechnet, und nur solange Home Assistant
+    sie im Verlauf hat (``aggregate_day(nur_mit_verlauf=True)`` — die Grenze der
+    Recorder-Aufbewahrung, an derselben Stelle wie N-596 erkannt). Ein vorhandener Tag wird nie
+    neu gerechnet: die Klasse #422/N-596 (gepurgter Tag leer überschrieben) kann über den
+    Nachlauf nicht wiederkehren; der N-596-Riegel in ``hole_tagesverlauf`` bleibt die zweite
+    Sicherung für alle übrigen Aufrufer.
+
     Args:
         anlage: Die Anlage
         von/bis: Datumsbereich (inklusiv)
         db: DB-Session
+        nur_fehlende: s. oben.
 
     Returns:
         Anzahl erfolgreich aggregierter Tage
     """
+    vorhanden: set[date] = set()
+    if nur_fehlende:
+        vorhanden = set((await db.execute(sa_select(TagesZusammenfassung.datum).where(sa_and(
+            TagesZusammenfassung.anlage_id == anlage.id,
+            TagesZusammenfassung.datum >= von,
+            TagesZusammenfassung.datum <= bis,
+        )))).scalars().all())
     count = 0
     current = von
     while current <= bis:
+        if current in vorhanden:
+            current += timedelta(days=1)
+            continue
         try:
             result = await aggregate_day(
                 anlage, current, db, source=Source.MONATSABSCHLUSS_BACKFILL,
+                nur_mit_verlauf=nur_fehlende,
             )
             if result:
                 count += 1

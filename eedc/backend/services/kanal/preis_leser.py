@@ -92,7 +92,20 @@ async def preis_monate(
         ``(je_monat, ab_monat)`` — ``je_monat``: gedeckter Monat → ``StrompreisAggregat`` (``None``: gedeckt, aber
         ohne Stunde mit Preis — der Aufrufer führt ihn wie der Bestand nicht); ``ab_monat``: der früheste Monat, ab dem JEDER Monat bis zum laufenden gedeckt ist (der Bestand
         braucht ihn nicht mehr zu laden), sonst ``None``.
+
+    Im Lade-Kontext einer Anfrage einmal je Fenster (HA-Bauform E4f).
     """
+    from backend.services.kanal.lade_kontext import gemerkt
+
+    jetzt = uhr() if jetzt is None else int(jetzt)
+    je, ab = await gemerkt(db, ("preis_monate", anlage_id, von, bis, jetzt),
+                           lambda: _preis_monate(db, anlage_id, von, bis, jetzt))
+    return dict(je), ab
+
+
+async def _preis_monate(
+    db: AsyncSession, anlage_id: int, von: Optional[date], bis: Optional[date], jetzt: int,
+) -> tuple[dict[MonatsSchluessel, object], Optional[MonatsSchluessel]]:
     kanaele = await kanaele_laden(db, anlage_id, MENGEN_KEYS)
     if KOSTEN_NETZBEZUG_KEY not in kanaele:
         return {}, None
@@ -207,4 +220,105 @@ async def netzbezug_slots_des_monats(
     return out
 
 
-__all__ = ["MENGEN_KEYS", "aggregat_aus_kanaelen", "netzbezug_slots_des_monats", "preis_monat", "preis_monate", "uhr"]
+async def _netzbezug_wahl(db: AsyncSession, anlage_id: int, monate_liste, jetzt: int) -> dict:
+    """Je Monat (Monatsfenster des Bestands) die Netzbezugs-Zähler, die ihn tragen — ``None``, wenn nicht JEDER
+    benötigte Zähler das Fenster voll deckt (dieselbe Wahl wie ``netzbezug_slots_des_monats``): ``{monat: None |
+    [(kanal, vorzeichen)]}``. EINE Anweisung für die Ränder aller Monate."""
+    from backend.services.kanal.bilanz_leser import _letzter_tag, _stamm
+    from backend.services.kanal.fenster import monatsfenster
+    from backend.services.snapshot.komponenten_beitraege import resolve_either_or_eintraege
+
+    se = soll_ende(jetzt)
+    stamm = await _stamm(db, anlage_id)
+    eintraege = {}
+    for (j, m) in monate_liste:
+        if monatsfenster(j, m)[0] >= se:
+            eintraege[(j, m)] = []
+            continue
+        eintraege[(j, m)] = [e for e in await stamm.eintraege(db, lambda i, j=j, m=m: i.ist_aktiv_im_monat(j, m),
+                                                               _letzter_tag(j, m)) if e.kategorie == "netzbezug"]
+    kanaele = await kanaele_laden(db, anlage_id, {e.schluessel for lst in eintraege.values() for e in lst})
+    mengen = [k for k in kanaele.values() if k.art == ART_SUM]
+    fenster = {mo: monatsfenster(*mo) for mo, lst in eintraege.items() if lst}
+    grenzen = sorted({g for f in fenster.values() for g in f})
+    pos = {g: i for i, g in enumerate(grenzen)}
+    je = await reihe_stapel(db, mengen, grenzen, jetzt=jetzt) if mengen and len(grenzen) >= 2 else {}
+    out: dict = {}
+    for mo in monate_liste:
+        lst = eintraege.get(mo) or []
+        if not lst or not mengen or mo not in fenster:
+            out[mo] = None
+            continue
+        von, bis = fenster[mo]
+        if pos[bis] != pos[von] + 1:
+            # Monat nicht als einzelnes Intervall der gemeinsamen Grenzen (nicht aneinanderliegende Monate): eigenes
+            # Fenster — derselbe Leser, nur für ihn.
+            z = {k: v[0] for k, v in (await reihe_stapel(db, mengen, [von, bis], jetzt=jetzt)).items()}
+        else:
+            z = {k: v[pos[von]] for k, v in je.items()}
+        voll = {k for k, x in z.items() if x.voll}
+        gewaehlt = resolve_either_or_eintraege(lst, gruppe_fn=lambda e: e.gruppe,
+                                               hat_tagesdaten_fn=lambda e: e.schluessel in voll)
+        if any(e.schluessel not in voll for e in gewaehlt):
+            out[mo] = None
+            continue
+        out[mo] = [(kanaele[e.schluessel], e.vorzeichen) for e in gewaehlt]
+    return out
+
+
+async def _netzbezug_zellen_laden(db: AsyncSession, anlage_id: int, monate_liste, jetzt: int) -> dict:
+    from backend.services.kanal.fenster import monatsfenster
+    from backend.services.kanal.lesen import zellen_stapel
+
+    wahl = await _netzbezug_wahl(db, anlage_id, monate_liste, jetzt)
+    nummer = {mo: i for i, mo in enumerate(monate_liste)}
+    eintraege = [(kn, vz, nummer[mo], *monatsfenster(*mo)) for mo, w in wahl.items() if w for kn, vz in w]
+    zellen = await zellen_stapel(db, eintraege)
+    return {mo: (None if w is None else zellen.get(nummer[mo], [])) for mo, w in wahl.items()}
+
+
+def netzbezug_vormerken(db: AsyncSession, anlage_id: int, monate_liste) -> None:
+    """Im Lade-Kontext einer Anfrage: diese Monate brauchen die Netzbezugs-Gewichte (ein Zeitfenster-Tarif gilt in
+    ihnen). Der erste Abruf holt dann ALLE vorgemerkten in EINER Anweisung (``netzbezug_zellen_des_monats``). Ohne
+    Kontext ein No-op."""
+    from backend.services.kanal.lade_kontext import kontext
+
+    k = kontext(db)
+    if k is None:
+        return
+    vorgemerkt = k.werte.setdefault(("netzbezug_vorgemerkt", anlage_id), set())
+    vorgemerkt.update(tuple(m) for m in monate_liste)
+
+
+async def netzbezug_zellen_des_monats(
+    db: AsyncSession, anlage_id: int, jahr: int, monat: int, *, jetzt: Optional[int] = None,
+) -> Optional[list[tuple[int, int, float]]]:
+    """Der gemessene Netzbezug des Monats je (Wochentag, Uhrstunde) aus den Kanälen — die Gewichte des
+    Zeitfenster-Tarifs (HA-Bauform E4f, Auftrag Punkt 3b; vorher je Monat jede Stunde, ``netzbezug_slots_des_monats``).
+
+    Dieselbe Wahl der Zähler und dieselbe Deckungsregel wie ``netzbezug_slots_des_monats`` (Monatsfenster des
+    Bestands, Zählerwahl am letzten Tag, Entweder-oder); dieselbe Menge je Stunde, auf 0 geklemmt, nach Zelle
+    zusammengefasst (``core/berechnungen/zeittarif.gewichteter_arbeitspreis_aus_zellen``). ``None`` ⇒ der Aufrufer
+    liest die Stundenzeilen (Lesart 1). Im Lade-Kontext einer Anfrage holt der erste Abruf den Monat und alle
+    vorgemerkten (``netzbezug_vormerken``) in EINER Anweisung; jeder weitere Monat derselben Anfrage ist gelesen."""
+    from backend.services.kanal.lade_kontext import kontext
+
+    jetzt = uhr() if jetzt is None else int(jetzt)
+    mo = (jahr, monat)
+    k = kontext(db)
+    if k is None:
+        return (await _netzbezug_zellen_laden(db, anlage_id, [mo], jetzt))[mo]
+    vorrat = k.werte.setdefault(("netzbezug_zellen", anlage_id, jetzt), {})
+    if mo not in vorrat:
+        gen = k.generation
+        offen = sorted({mo} | {m for m in k.werte.get(("netzbezug_vorgemerkt", anlage_id), set()) if m not in vorrat})
+        neu = await _netzbezug_zellen_laden(db, anlage_id, offen, jetzt)
+        if k.generation != gen:
+            return neu[mo]
+        vorrat = k.werte.setdefault(("netzbezug_zellen", anlage_id, jetzt), {})
+        vorrat.update(neu)
+    return vorrat[mo]
+
+
+__all__ = ["MENGEN_KEYS", "aggregat_aus_kanaelen", "netzbezug_slots_des_monats", "netzbezug_vormerken",
+           "netzbezug_zellen_des_monats", "preis_monat", "preis_monate", "uhr"]

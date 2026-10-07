@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.berechnungen.slot_konvention import forward_werte_je_backward_zeile
 from backend.core.berechnungen.zeittarif import (
+    gewichteter_arbeitspreis_aus_zellen,
     gewichteter_arbeitspreis_cent,
     hat_zeitfenster,
     preis_je_slot,
@@ -656,11 +657,16 @@ async def wirksamer_arbeitspreis_cent(
         return cache[schluessel]
 
     # HA-Bauform E4e: die Messung (der Netzbezug je Stunde) aus den Kanälen, wenn sie den Monat decken — sonst aus den
-    # Stundenzeilen wie bisher (Lesart 1). Dieselbe Formel auf beiden (`gewichteter_arbeitspreis_cent`).
-    from backend.services.kanal.preis_leser import netzbezug_slots_des_monats
+    # Stundenzeilen wie bisher (Lesart 1). Seit E4f liefern die Kanäle sie je (Wochentag, Uhrstunde) zusammengefasst —
+    # in EINER Anweisung für alle Monate einer Anfrage (`preis_leser.netzbezug_zellen_des_monats`); dieselbe Formel
+    # (`gewichteter_arbeitspreis_aus_zellen` ≡ `gewichteter_arbeitspreis_cent`, der Preis hängt nur an Wochentag und
+    # Stunde).
+    from backend.services.kanal.preis_leser import netzbezug_zellen_des_monats
 
-    slots = await netzbezug_slots_des_monats(db, anlage_id, jahr, monat)
-    if slots is None:
+    zellen = await netzbezug_zellen_des_monats(db, anlage_id, jahr, monat)
+    if zellen is not None:
+        gewichtet = gewichteter_arbeitspreis_aus_zellen(tarif, zellen)
+    else:
         _von, _bis = monats_fenster(jahr, monat)
         result = await db.execute(
             select(
@@ -675,8 +681,7 @@ async def wirksamer_arbeitspreis_cent(
                 )
             )
         )
-        slots = result.all()
-    gewichtet = gewichteter_arbeitspreis_cent(tarif, slots)
+        gewichtet = gewichteter_arbeitspreis_cent(tarif, result.all())
     preis = stammpreis if gewichtet is None else round(gewichtet, 4)
 
     if cache is not None:

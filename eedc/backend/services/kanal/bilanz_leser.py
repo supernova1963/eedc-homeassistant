@@ -99,9 +99,15 @@ class _Stamm:
 
 
 async def _stamm(db: AsyncSession, anlage_id: int) -> _Stamm:
-    anlage = (await db.execute(select(Anlage).where(Anlage.id == anlage_id))).scalar_one()
-    invs = list((await db.execute(select(Investition).where(Investition.anlage_id == anlage_id))).scalars().all())
-    return _Stamm(anlage, invs, {})
+    """Stammdaten der Anlage; im Lade-Kontext einer Anfrage einmal (samt Zählern je Menge, ``_Stamm.eintraege``)."""
+    from backend.services.kanal.lade_kontext import gemerkt
+
+    async def _laden() -> _Stamm:
+        anlage = (await db.execute(select(Anlage).where(Anlage.id == anlage_id))).scalar_one()
+        invs = list((await db.execute(select(Investition).where(Investition.anlage_id == anlage_id))).scalars().all())
+        return _Stamm(anlage, invs, {})
+
+    return await gemerkt(db, ("bilanz_stamm", anlage_id), _laden)
 
 
 def _traeger(invs: Iterable, aktiv) -> list[PvTraeger]:
@@ -186,8 +192,11 @@ def _tage(von: date, bis: date) -> list[date]:
 
 
 def uhr() -> int:
-    """Die Uhr der Leser (Unix-Sekunden) — EINE Stelle, damit Proben mit gestellter Uhr (Matrizen) sie stellen."""
-    return int(_time.time())
+    """Die Uhr der Leser (Unix-Sekunden) — EINE Stelle, damit Proben mit gestellter Uhr (Matrizen) sie stellen.
+    Innerhalb einer Anfrage steht sie still (``lade_kontext.uhr_der_anfrage``, HA-Bauform E4f)."""
+    from backend.services.kanal.lade_kontext import uhr_der_anfrage
+
+    return uhr_der_anfrage(lambda: int(_time.time()))
 
 
 def _jetzt(jetzt: Optional[int]) -> int:
@@ -225,8 +234,18 @@ async def monate_bilanz(
     db: AsyncSession, anlage_id: int, von: MonatsSchluessel, bis: MonatsSchluessel, *, jetzt: Optional[int] = None,
 ) -> dict[MonatsSchluessel, KanalZeitraum]:
     """Je Monat (``fenster.monatsfenster`` — die Grenze von ``lade_monats_summen_aus_tagen``) mit fälliger Stunde EIN
-    Δ je Kanal und EINE Komposition. Der laufende Monat reicht bis zum letzten geschriebenen Stand."""
+    Δ je Kanal und EINE Komposition. Der laufende Monat reicht bis zum letzten geschriebenen Stand. Im Lade-Kontext
+    einer Anfrage einmal je Fenster (HA-Bauform E4f)."""
+    from backend.services.kanal.lade_kontext import gemerkt
+
     jetzt = _jetzt(jetzt)
+    return dict(await gemerkt(db, ("monate_bilanz", anlage_id, von, bis, jetzt),
+                              lambda: _monate_bilanz(db, anlage_id, von, bis, jetzt)))
+
+
+async def _monate_bilanz(
+    db: AsyncSession, anlage_id: int, von: MonatsSchluessel, bis: MonatsSchluessel, jetzt: int,
+) -> dict[MonatsSchluessel, KanalZeitraum]:
     se = soll_ende(jetzt)
     liste = monate(von, bis)
     if not liste:
@@ -292,9 +311,14 @@ _NICHT_GRUPPE = ("emob_ladung_pv_abgeleitet_kwh", "emob_ladung_netz_abgeleitet_k
 
 
 async def _erster_kanal_monat(db: AsyncSession, anlage_id: int) -> Optional[MonatsSchluessel]:
-    ts = (await db.execute(text(
-        "SELECT MIN((SELECT MIN(s.start_ts) FROM kanal_statistik s WHERE s.kanal_id = k.id)) "
-        "FROM kanal k WHERE k.anlage_id = :a"), {"a": anlage_id})).scalar()
+    from backend.services.kanal.lade_kontext import gemerkt
+
+    async def _frage():
+        return (await db.execute(text(
+            "SELECT MIN((SELECT MIN(s.start_ts) FROM kanal_statistik s WHERE s.kanal_id = k.id)) "
+            "FROM kanal k WHERE k.anlage_id = :a"), {"a": anlage_id})).scalar()
+
+    ts = await gemerkt(db, ("erster_kanal_ts", anlage_id), _frage)
     if ts is None:
         return None
     d = datetime.fromtimestamp(int(ts)).date()
@@ -305,10 +329,14 @@ async def hat_anlagenzaehler_kanal(db: AsyncSession, anlage_id: int) -> bool:
     """Hat die Anlage einen Kanal für den Anlagen-PV-Zähler (``basis:pv_gesamt``)? — die Vorfrage der
     Wandlungsverluste (HA-Bauform E4b, B-1): ohne ihn sind sie ``None``, und niemand muss die Kanal-Monate laden."""
     from backend.models.kanal import Kanal
+    from backend.services.kanal.lade_kontext import gemerkt
 
-    return (await db.execute(select(Kanal.id).where(
-        Kanal.anlage_id == anlage_id, Kanal.key == _AGGREGAT_KEY,
-    ).limit(1))).scalar_one_or_none() is not None
+    async def _frage() -> bool:
+        return (await db.execute(select(Kanal.id).where(
+            Kanal.anlage_id == anlage_id, Kanal.key == _AGGREGAT_KEY,
+        ).limit(1))).scalar_one_or_none() is not None
+
+    return await gemerkt(db, ("hat_anlagenzaehler_kanal", anlage_id), _frage)
 
 
 async def kanal_monate(
@@ -445,11 +473,21 @@ async def kanal_kalendermonate(
     Monats (``ist_aktiv_im_monat``, wie die Monats-Fakten, P10) — ein Gerät, das es im Monat nicht gab, verlangt keinen
     Kanal, eines, das es gab, schon (Nachmessung E4a-2, Punkt 5). EINE Anweisung für alle Monate (die Monatsränder
     als Grenzen)."""
-    from backend.services.ha_statistics_service import SensorMonatswert
+    from backend.services.kanal.lade_kontext import gemerkt
 
     if not monate_liste:
         return {}
     jetzt = _jetzt(jetzt)
+    je = await gemerkt(db, ("kanal_kalendermonate", anlage_id, frozenset(monate_liste), jetzt),
+                       lambda: _kanal_kalendermonate(db, anlage_id, monate_liste, jetzt))
+    return {m: dict(w) for m, w in je.items()}
+
+
+async def _kanal_kalendermonate(
+    db: AsyncSession, anlage_id: int, monate_liste: Sequence[MonatsSchluessel], jetzt: int,
+) -> dict[MonatsSchluessel, dict[str, Any]]:
+    from backend.services.ha_statistics_service import SensorMonatswert
+
     se = soll_ende(jetzt)
     fenster = {m: kalendermonatsfenster(*m) for m in set(monate_liste)}
     fenster = {m: f for m, f in fenster.items() if f[0] < se}
@@ -493,14 +531,24 @@ async def monatswerte_mit_kanaelen(
     jetzt: Optional[int] = None,
 ) -> list:
     """``MonatswertResponse`` je Monat (wie ``get_monatswerte``/``get_alle_monatswerte``) mit dem Kanal-Δ der
-    Bilanz-Sensoren, wo ``kanal_kalendermonate`` den Monat nennt; Nicht-Bilanz-Sensoren und alle übrigen Monate
-    bleiben, wie der HA-Leser sie liefert. ``monate``: der Monat je Antwort (sonst ``antwort.jahr/monat``).
-    Rückgabe in derselben Reihenfolge."""
+    Bilanz-Sensoren, wo ``kanal_kalendermonate`` den Monat nennt, und — seit HA-Bauform E4f (E4c H-5) — dem Kanal-Δ
+    der E-Mob- und der Sonstiges-Sensoren, wo ihre Gruppe den Monat deckt (``geraete_leser.
+    geraete_sensorwerte_kalendermonate``, dieselbe Quellenwahl je Gruppe wie Cockpit → Monat). Je Gruppe EINE Wahl,
+    getrennt voneinander; alle übrigen Sensoren (Wärmepumpe, Preis) und Monate bleiben, wie der HA-Leser sie liefert.
+    Damit gilt die Wahl für alle fünf Kalendermonats-Wege („Aus HA laden", alle Monatswerte, Import-Vorschau,
+    Sammelimport, Monatsabschluss-Vorschlag); einen gespeicherten Vorbestand ersetzt der Sammelimport weiter nur mit
+    ``ueberschreiben``. ``monate``: der Monat je Antwort (sonst ``antwort.jahr/monat``). Rückgabe in derselben
+    Reihenfolge."""
+    from backend.services.kanal.geraete_leser import geraete_sensorwerte_kalendermonate
+
     antworten = list(antworten)
     if monate is None:
         monate = [(getattr(a, "jahr", None), getattr(a, "monat", None)) for a in antworten]
     monate = list(monate)
-    ersatz = await kanal_kalendermonate(db, anlage_id, [m for m in monate if None not in m], jetzt=jetzt)
+    gueltig = [m for m in monate if None not in m]
+    ersatz = await kanal_kalendermonate(db, anlage_id, gueltig, jetzt=jetzt)
+    for m, werte in (await geraete_sensorwerte_kalendermonate(db, anlage_id, gueltig, jetzt=jetzt)).items():
+        ersatz.setdefault(m, {}).update(werte)
     out = []
     for a, m in zip(antworten, monate):
         e = ersatz.get(m)

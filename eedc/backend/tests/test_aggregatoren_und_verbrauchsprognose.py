@@ -305,29 +305,26 @@ class TestMonatsabschlussPipeline:
 
     @pytest.fixture
     def schritte(self, monkeypatch):
-        """Ersetzt die vier Pipeline-Schritte durch zählbare Attrappen."""
+        """Ersetzt die Pipeline-Schritte durch zählbare Attrappen (HA-Bauform E4f: Schritt 3, der
+        Auto-Vollbackfill, ist entfallen — seine Attrappe hängt am Paket und zählt, ob ihn noch
+        jemand ruft)."""
         protokoll: list[str] = []
         modul = "backend.services.monatsabschluss_aggregator"
-
-        class _Backfill:
-            status, geschrieben, verarbeitet = "ok", 3, 5
-            von = bis = date(2026, 6, 1)
-            missing_eids: list = []
 
         class _Split:
             geschrieben, widerspruch = 2, []
 
-        async def _backfill_range(anlage, von, bis, db):
-            protokoll.append(f"backfill:{von}..{bis}")
+        async def _backfill_range(anlage, von, bis, db, *, nur_fehlende=False):
+            protokoll.append(f"backfill:{von}..{bis}:nur_fehlende={nur_fehlende}")
             return 4
 
         async def _rollup(anlage_id, jahr, monat, db):
             protokoll.append("rollup")
             return True
 
-        async def _voll(anlage, db, *, bis):
+        async def _voll(*a, **k):
             protokoll.append("vollbackfill")
-            return _Backfill()
+            raise AssertionError("der Nachlauf ruft keinen Auto-Vollbackfill mehr")
 
         async def _split(db, anlage_id, jahr, monat):
             protokoll.append("split")
@@ -336,22 +333,24 @@ class TestMonatsabschlussPipeline:
         monkeypatch.setattr(f"{modul}.backfill_range", _backfill_range)
         monkeypatch.setattr(f"{modul}.rollup_month", _rollup)
         monkeypatch.setattr(
-            f"{modul}.resolve_and_backfill_from_statistics", _voll
+            "backend.services.energie_profil.resolve_and_backfill_from_statistics", _voll
+        )
+        monkeypatch.setattr(
+            "backend.services.energie_profil.backfill.resolve_and_backfill_from_statistics", _voll
         )
         monkeypatch.setattr(f"{modul}.schreibe_modus_split_monat", _split)
         return protokoll, monkeypatch, modul
 
     @pytest.mark.asyncio
-    async def test_alle_vier_schritte_laufen_und_berichten(self, db, schritte):
+    async def test_die_drei_schritte_laufen_und_berichten(self, db, schritte):
         protokoll, _mp, _modul = schritte
         a = await anlage(db, vollbackfill_durchgefuehrt=False)
         ergebnis = await run_post_monatsabschluss_aggregation(a, 2026, 6, db)
         assert protokoll == [
-            "backfill:2026-06-01..2026-06-30", "rollup", "vollbackfill", "split",
+            "backfill:2026-06-01..2026-06-30:nur_fehlende=True", "rollup", "split",
         ]
         assert ergebnis.backfill_count == 4
         assert ergebnis.rollup_ok is True
-        assert ergebnis.vollbackfill_status == "ok"
         assert ergebnis.modus_split_geschrieben == 2
 
     @pytest.mark.asyncio
@@ -359,33 +358,20 @@ class TestMonatsabschlussPipeline:
         protokoll, _mp, _modul = schritte
         a = await anlage(db, vollbackfill_durchgefuehrt=True)
         await run_post_monatsabschluss_aggregation(a, 2026, 12, db)
-        assert protokoll[0] == "backfill:2026-12-01..2026-12-31"
+        assert protokoll[0] == "backfill:2026-12-01..2026-12-31:nur_fehlende=True"
 
     @pytest.mark.asyncio
-    async def test_vollbackfill_laeuft_nur_beim_ersten_mal(self, db, schritte):
+    async def test_kein_auto_vollbackfill_mehr_und_das_flag_bleibt_unberuehrt(self, db, schritte):
+        """HA-Bauform E4f (Bauplan §9 B1): Schritt 3 ist entfallen — auch beim ersten Abschluss
+        nach einem Upgrade (Flag ``False``) läuft kein Vollbackfill, und der Nachlauf schreibt
+        das Flag nicht mehr."""
         protokoll, _mp, _modul = schritte
-        a = await anlage(db, vollbackfill_durchgefuehrt=True)
-        await run_post_monatsabschluss_aggregation(a, 2026, 6, db)
-        assert "vollbackfill" not in protokoll
-
-    @pytest.mark.asyncio
-    async def test_das_flag_wird_AUCH_BEI_FEHLER_gesetzt(self, db, schritte):
-        """Sonst Endlos-Retry bei defekter HA-Datenbank — die Kernzusage."""
-        protokoll, mp, modul = schritte
-
-        async def _kaputt(anlage, db, *, bis):
-            protokoll.append("vollbackfill-crash")
-            raise RuntimeError("HA-DB unerreichbar")
-
-        mp.setattr(f"{modul}.resolve_and_backfill_from_statistics", _kaputt)
         a = await anlage(db, vollbackfill_durchgefuehrt=False)
         await db.commit()
-
         await run_post_monatsabschluss_aggregation(a, 2026, 6, db)
-
         await db.refresh(a)
-        assert a.vollbackfill_durchgefuehrt is True
-        assert "vollbackfill-crash" in protokoll
+        assert "vollbackfill" not in protokoll
+        assert a.vollbackfill_durchgefuehrt is False
 
     @pytest.mark.asyncio
     async def test_ein_gescheiterter_rollup_entwertet_die_pipeline_nicht(
@@ -400,8 +386,7 @@ class TestMonatsabschlussPipeline:
         a = await anlage(db, vollbackfill_durchgefuehrt=False)
         ergebnis = await run_post_monatsabschluss_aggregation(a, 2026, 6, db)
         assert ergebnis.rollup_ok is False
-        assert ergebnis.vollbackfill_status == "ok"      # Schritt 3 lief trotzdem
-        assert ergebnis.modus_split_geschrieben == 2     # Schritt 4 ebenfalls
+        assert ergebnis.modus_split_geschrieben == 2     # Schritt 4 lief trotzdem
 
     @pytest.mark.asyncio
     async def test_ein_gescheiterter_modus_split_entwertet_nichts(

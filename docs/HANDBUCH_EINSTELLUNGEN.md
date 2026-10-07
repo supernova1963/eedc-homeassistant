@@ -575,6 +575,26 @@ Der Block zeigt die Tabelle aller erfassten Monate inline (sortierbar, mit Spalt
 
 **Werte aus Home Assistant holen:** Neben „Monat einfügen" gibt es „Aus HA laden". Bei einem **neuen** Monat werden die Werte direkt ins Formular übernommen; bei einem **existierenden** Monat zeigt ein Vergleichs-Modal die Unterschiede (Vorhanden / HA-Statistik / Diff, farbig hervorgehoben ab 0,1 kWh Unterschied) für jedes zugeordnete Zählerfeld, auch den PV-Gesamtzähler der Anlage, mit „Mit HA-Werten fortfahren" oder „Abbrechen". Bei E-Auto- bzw. WP-Komponenten schlägt eedc den Ø Benzin- bzw. Gaspreis vor.
 
+**„Aus HA laden" nimmt die Zählerstände wie das Energie-Dashboard.** Deckt die Langzeitstatistik den Kalendermonat für
+alle Zähler einer Gruppe ab, kommen die Werte als Differenz der Stände — für Einspeisung, Netzbezug, PV und Balkonkraftwerk,
+Speicher, Erzeuger hinter dem Zähler, Wallbox, E-Auto und sonstige Geräte (Wärmepumpe und Preis noch nicht); ein Zählersprung, den Home Assistant gebucht hat, steht dann auch im
+Vorschlag (der Daten-Checker nennt ihn). Fehlt einem Zähler der Gruppe ein Teil des Monats, holt eedc die Werte wie
+bisher aus der Statistik. Dasselbe gilt für die Import-Vorschau, den Statistik-Import und die Vorschläge im
+Monatsabschluss. Einen schon gespeicherten Wert ersetzt der Import nur mit „Vorhandene überschreiben".
+
+**Was nach dem Speichern eines Monats im Hintergrund passiert.** eedc
+* rechnet **Tage nach, die fehlen** — aber nur, solange Home Assistant sie noch im Verlauf hat (die Aufbewahrung
+  deines Recorders, Standard 10 Tage). Ein Tag, den eedc schon hat, wird nicht neu gerechnet, und ein fehlender Tag
+  außerhalb der Aufbewahrung wird nicht angelegt. Bis 4.1.2 schrieb das Speichern jeden Tag des Monats neu (bis 4.1.0
+  verloren Tage, die Home Assistant nicht mehr kannte, dabei ihre Gerätewerte je Stunde und die Betriebsart, #422).
+* verdichtet die Tageswerte in Kennzahlen des Monats (Überschuss, Defizit, Vollzyklen, Spitzen, Performance Ratio),
+* speichert die Aufteilung der Wärmepumpe nach Betriebsart,
+* veröffentlicht den Monat per MQTT, teilt ihn mit der Community (wenn eingeschaltet) und schreibt einen Eintrag ins
+  Aktivitätsprotokoll.
+
+Den früheren einmaligen „Auto-Vollbackfill" beim ersten Abschluss nach einem Update gibt es nicht mehr. Lücken der
+Tageswerte füllst du bei Bedarf unter [Energieprofil-Pflege](#52-energieprofil-pflege) mit „Lücken aus HA-LTS nachfüllen".
+
 **Der PV-Gesamtzähler aus Home Assistant hat im Formular eine eigene Zeile.** Ist deiner Anlage ein PV-Gesamtzähler zugeordnet, steht er nach „Aus HA laden" als **„PV-Gesamtzähler aus Home Assistant"** im Formular — auch dann, wenn deine PV-Module eigene Werte haben und das Formular daneben „PV-Erzeugung (berechnet)" zeigt. Gespeichert wird, was in dieser Zeile steht: Du kannst den Wert ändern oder die Zeile leeren. Ist die Zeile beim Speichern leer, hat der Monat keinen Gesamtwert — auch ein vorher gespeicherter ist dann entfernt (die Zeile nennt ihn als „Bisher gespeichert"). Der Wert steht für die **ganze Anlage**: Quellen mit eigenem Wert gewinnen, der Gesamtwert füllt nur, was sie nicht erklären ([§7.6](#76-validierung--probleme-je-feld)). Weicht er von „PV-Erzeugung (berechnet)" ab, nennt die Anzeige ihn darunter („Gesamtzähler der Anlage", wenn er aus Home Assistant kommt, sonst „Gesamtwert der Anlage"). **Hat ein Monat schon einen gespeicherten Gesamtwert** (von Hand, per Import oder über „Aus HA laden"), steht er beim Bearbeiten auch ohne „Aus HA laden" in einer Zeile **„PV-Gesamtwert der Anlage"** — ändern und entfernen wie eben beschrieben. Bis 4.1.1 ging ein solcher Wert unsichtbar mit, sobald die Module Werte hatten. Einen schon abgeschlossenen Monat ergänzt du auf demselben Weg: „Aus HA laden" → „Mit HA-Werten fortfahren" → Speichern. Bis 4.1.1 kam der Gesamtzähler im Formular nie an (im Vergleich stand sein gespeicherter Wert als „–"); bis 4.0.47 galt das auch für Einspeisung und Netzbezug. **„Monat einfügen", das Erfassen-Symbol einer Lücke und das Bearbeiten ohne „Aus HA laden" schlagen den Gesamtzähler nicht vor** — dort gibt es das PV-Feld nur, solange die Module keine Werte haben oder der Monat schon einen Gesamtwert hat.
 
 **Wetter-Autofill:** Der Knopf **„Auto-Fill"** im Abschnitt *Wetterdaten* füllt **Globalstrahlung**, **Sonnenstunden** und **Ø Temperatur**. Strahlung und Sonnenstunden kommen aus dem Archiv (Open-Meteo historisch bzw. Bright Sky, sonst PVGIS TMY). Die **Ø Temperatur** nimmt eedc **zuerst aus deinen eigenen gemessenen Außentemperaturen** des Monats (stündliche Werte, ersatzweise Tages-Min/Max) — sie wurden an deinem Standort gemessen und sind für den laufenden Monat die einzige Quelle; erst ohne sie kommt der Archivwert. Unter dem Knopf steht, welche der beiden es war. ⛔ **Der Auto-Fill füllt nur leere Felder — in allen drei.** Ein selbst eingetragener Wert bleibt stehen, egal um welches der drei es geht; unter dem Knopf steht dann in einem Satz, was übernommen wurde und was unverändert blieb (*„Globalstrahlung und Sonnenstunden übernommen, Ø Temperatur unverändert — der eingetragene Wert bleibt stehen."*). Wer einen Wert doch ersetzen will, **leert das Feld und klickt erneut**. Von Hand änderbar bleiben alle drei immer.

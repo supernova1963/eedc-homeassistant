@@ -9,6 +9,75 @@
 
 ---
 
+## Unreleased
+
+**In dieser Version:** eedc rechnet Tag, Monat und Jahr mit Home Assistant aus den Zählerständen der Langzeitstatistik —
+dieselben Summen wie das Energie-Dashboard, auch im laufenden Monat und in Monaten ohne Abschluss · der Eigenverbrauch
+des Tages rechnet mit Speicher wie der Monat · ein Dienstwagen hat überall denselben Netto-Ertrag · das Speichern eines
+Monats rechnet nur noch fehlende Tage nach
+
+**eedc rechnet Summen wie das HA-Energie-Dashboard**
+
+**Betrifft dich das?** Ja, wenn deine Zähler über Home Assistant zugeordnet sind und Home Assistant für sie eine
+Langzeitstatistik führt (das sind fast alle kWh-Zähler mit `state_class: total_increasing`).
+
+**Was war:** eedc rechnete Tag und Monat aus seinen eigenen Stunden- und Tageswerten — mit einer Obergrenze je Stunde,
+eigenen Regeln für Zählerlücken und einer Aufteilung je Tag. Meistens kam dieselbe Zahl heraus wie im Energie-Dashboard,
+manchmal nicht: Ein String ohne einzelne Stunden fiel auf einen geschätzten Anteil zurück, ein laufender Monat kannte
+die Wallbox-Ladung, sonstige Verbraucher, ein BHKW oder die Wärmepumpe nicht, die Wallbox-Ladung stand vor dem
+Abschluss ganz als Netzstrom da.
+
+**Was jetzt:** Die Menge eines Zeitraums ist der Zählerstand am Ende minus der am Anfang — wie in Home Assistant. Für
+jeden Tag und Monat entscheidet eedc **einmal**, woher die Zahlen kommen: aus den Zählerständen nur, wenn sie den ganzen
+Zeitraum für **alle** Größen einer Rechnung abdecken, sonst wie bisher.
+
+- **Netz, PV, Balkonkraftwerk, Speicher, Erzeuger hinter dem Zähler:** jeder Sensor behält seine Messung; der
+  Anlagenzähler füllt nur, was Geräte ohne eigenen Zähler erzeugt haben. Ein **Zählersprung**, den Home Assistant gebucht
+  hat (ein Sensor meldet kurz 0 und kehrt zurück), steht wie im Energie-Dashboard in Tag und Monat; der Daten-Checker
+  nennt Sensor, Stunde und Menge mit dem Weg zur Korrektur in Home Assistant.
+- **Wandlungsverluste:** haben deine Strings eigene Zähler und misst ein Anlagenzähler hinter dem Wechselrichter, zeigt
+  eedc die Differenz — angezeigt, nicht bewertet.
+- **Laufender Monat und Monate ohne Abschluss:** Wallbox- und E-Auto-Ladung mit ihrem Sonnenanteil, dienstliche Ladung,
+  sonstige Verbraucher, BHKW, Wärmepumpe (Strom, Wärme, Strom je Betriebsart, Kälte) stehen da — dieselben Zahlen wie
+  nach dem Abschluss.
+- **Dynamischer Tarif:** der Monatspreis entsteht aus stündlich summierten Kosten wie bei HAs Kostensensoren.
+- **„Aus HA laden", Statistik-Import und Vorschläge im Monatsabschluss** nehmen die Zählerstände auf dieselbe Weise;
+  der Import speichert einen PV-Gesamtzähler als Gesamtwert des Monats.
+- **Schneller**, je mehr Monate die Zählerstände abdecken.
+
+**Ab wann:** Die Zählerstände holt eedc nach dem Update einmal für die ganze Historie aus Home Assistant. Was eedc
+Stunde für Stunde selbst mitrechnet — der Sonnenanteil der Wallbox-Ladung, der Strom je Betriebsart, die Kosten beim
+dynamischen Tarif — gilt **ab dem Monat des Updates**; frühere Monate bleiben dafür bei der bisherigen Rechnung.
+Abgeschlossene Monate behalten, was du gespeichert hast. Ohne Home Assistant ändert sich nichts.
+
+→ *[Bedienung §2.3](HANDBUCH_BEDIENUNG.md#23-monat)* · *[Daten-Checker §4.8b](HANDBUCH_DATEN_CHECKER.md#48b-zaehlerstaende--sprung-in-home-assistant)*
+
+**Speichern eines Monats rechnet nur noch fehlende Tage nach**
+
+**Betrifft dich das?** Ja, wenn du Monate im Monatsabschluss speicherst und Home Assistant nutzt.
+
+**Was war:** Nach dem Speichern rechnete eedc jeden Tag des Monats neu — auch Tage, die Home Assistant nicht mehr im
+Verlauf hatte. Seit 4.1.1 blieben dabei Tage mit Gerätewerten stehen, die übrigen wurden trotzdem neu geschrieben.
+
+**Was jetzt:** eedc rechnet nur Tage nach, die **fehlen**, und nur solange Home Assistant sie noch im Verlauf hat. Ein
+Tag, den eedc schon hat, bleibt, wie er ist. Den früheren einmaligen Auto-Vollbackfill beim ersten Abschluss nach einem
+Update gibt es nicht mehr — Lücken füllt *Einstellungen → Daten → Energieprofil-Pflege* auf Knopfdruck.
+
+→ *[Einstellungen §5.1](HANDBUCH_EINSTELLUNGEN.md#51-monatsdaten--monatsabschluss)*
+
+**Weitere Korrekturen in dieser Version**
+
+- **Eigenverbrauch mit Speicher am Tag:** *Cockpit → Tag* zählte die Speicherladung mit; jetzt rechnet der Tag wie
+  Monat, Jahr, Live und das Energie-Dashboard (direkt verbrauchter PV-Strom plus das, was der Speicher ins Haus abgibt).
+- **Dienstwagen:** der Netto-Ertrag ist in allen Sichten derselbe; die dienstlichen Ladekosten stehen als eigene Zeile
+  im T-Konto, in der Finanztabelle und im Monats- und Jahresbericht — auch im laufenden Monat.
+- **Community:** ein Monat ohne Netzbezug oder ohne Einspeisung wird als 0 kWh geteilt, nicht als „kein Wert".
+- **Komponenten → E-Auto:** die Monatstabelle eines Dienstwagens nennt die Lademenge.
+- **Wärmepumpe ohne Betrieb:** zeigen Strom- und Wärmezähler 0, steht 0 kWh da und „kein Heizbetrieb in diesem
+  Zeitraum" statt „kein Stromverbrauch erfasst".
+
+---
+
 ## v4.1.2 — 5. Oktober 2026
 
 **In dieser Version:** Netto-Ertrag, Monats- und Jahresergebnis rechnen überall gleich — mit der Umsatzsteuer bei Regelbesteuerung, mit allen Posten im Tooltip · ein Jahr zeigt keine Autarkie über 100 % mehr · „Hausverbrauch" heißt jetzt Gesamtverbrauch oder Restverbrauch, mit Formel · die PV-Erzeugung mit Strings, Balkonkraftwerk und Gesamtzähler nennt am Tag, im laufenden und im abgeschlossenen Monat dieselben Zahlen (außer nach einem Abschluss über den Statistik-Import)

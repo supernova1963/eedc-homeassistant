@@ -165,9 +165,19 @@ async def _stamm(db: AsyncSession, anlage_id: int) -> _WpStamm:
 async def _je_zeitraum(
     db: AsyncSession, stamm: _WpStamm, fenster: dict[MonatsSchluessel, tuple[int, int]], jetzt: int,
 ) -> dict[MonatsSchluessel, WpZeitraum]:
-    """Je Monat (mit seinem Fenster) die Wahl der WP-Gruppe — EINE Lese-Anweisung für alle Monate (die Ränder)."""
+    """Je Monat (mit seinem Fenster) die Wahl der WP-Gruppe — EINE Lese-Anweisung für alle Monate (die Ränder). Im
+    Lade-Kontext einer Anfrage einmal je Fenstersatz (HA-Bauform E4f)."""
+    from backend.services.kanal.lade_kontext import gemerkt
+
     if not fenster:
         return {}
+    schluessel = ("wp_je_zeitraum", stamm.anlage.id, tuple(sorted(fenster.items())), jetzt)
+    return dict(await gemerkt(db, schluessel, lambda: _je_zeitraum_rechnen(db, stamm, fenster, jetzt)))
+
+
+async def _je_zeitraum_rechnen(
+    db: AsyncSession, stamm: _WpStamm, fenster: dict[MonatsSchluessel, tuple[int, int]], jetzt: int,
+) -> dict[MonatsSchluessel, WpZeitraum]:
     bedarf = {m: await _bedarf(db, stamm, lambda i, m=m: i.ist_aktiv_im_monat(*m)) for m in fenster}
     keys = {k for b in bedarf.values() for k in b.keys()}
     if not keys:
@@ -193,7 +203,14 @@ def uhr() -> int:
 
 
 async def hat_wp_kanaele(db: AsyncSession, anlage_id: int) -> bool:
-    """Hat die Anlage überhaupt einen Kanal einer Wärmepumpe? (billiger Vorfilter, ein Index-Schritt)"""
+    """Hat die Anlage überhaupt einen Kanal einer Wärmepumpe? (billiger Vorfilter, ein Index-Schritt; im Lade-Kontext
+    einmal je Anfrage)"""
+    from backend.services.kanal.lade_kontext import gemerkt
+
+    return await gemerkt(db, ("hat_wp_kanaele", anlage_id), lambda: _hat_wp_kanaele(db, anlage_id))
+
+
+async def _hat_wp_kanaele(db: AsyncSession, anlage_id: int) -> bool:
     from sqlalchemy import and_, select
 
     from backend.models.investition import Investition

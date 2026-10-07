@@ -103,11 +103,49 @@ def preis_je_slot(tarif: _Tarif, datum: date, stunde: int) -> float:
     **erste** deckende Fenster gewinnt; überlappende Fenster sind damit nicht
     verboten, sondern geordnet (``order_by von_stunde`` an der Beziehung).
     """
-    zeitpunkt = uhrzeit_des_slots(datum, stunde)
+    return preis_je_uhrzeit(tarif, uhrzeit_des_slots(datum, stunde))
+
+
+def preis_je_uhrzeit(tarif: _Tarif, zeitpunkt: datetime) -> float:
+    """Der Arbeitspreis (ct/kWh) der Uhr-Stunde, die bei ``zeitpunkt`` beginnt — die Regel von ``preis_je_slot``
+    ohne den Slot-Index."""
     for fenster in getattr(tarif, "zeitfenster", None) or ():
         if fenster.deckt_uhrzeit(zeitpunkt):
             return fenster.arbeitspreis_cent_kwh
     return tarif.netzbezug_arbeitspreis_cent_kwh
+
+
+#: Ein Montag 00:00 — Bezugspunkt der Zellen (Wochentag, Stunde): ``_MONTAG + wochentag Tage + stunde Stunden``.
+_MONTAG = datetime(2024, 1, 1)
+
+
+def gewichteter_arbeitspreis_aus_zellen(
+    tarif: _Tarif,
+    zellen: Iterable[tuple[int, int, Optional[float]]],
+) -> Optional[float]:
+    """Dasselbe Ø wie :func:`gewichteter_arbeitspreis_cent`, aus dem Netzbezug je Zelle ``(wochentag, stunde)``.
+
+    ``wochentag`` wie ``datetime.weekday()`` (0 = Montag), ``stunde`` = die Uhr-Stunde, in der das Intervall
+    **beginnt** (``uhrzeit_des_slots`` — nicht der Slot-Index). Der Preis einer Stunde hängt nur an diesen beiden
+    (``StrompreisZeitfenster.deckt_uhrzeit``: Wochentag-Maske und Uhrzeit), deshalb ist Σ(preis × kWh) über die Slots
+    gleich Σ(preis × Σ kWh) über die Zellen. Die Zelle trägt die Summe der schon auf 0 geklemmten Slot-Mengen
+    (HA-Bauform E4f: der Aufrufer fasst sie in EINER Anweisung über alle Monate zusammen, statt jeden Slot zu laden).
+
+    Returns: ct/kWh — oder ``None`` ohne gemessenen Netzbezug (wie :func:`gewichteter_arbeitspreis_cent`).
+    """
+    summe_menge = 0.0
+    summe_kosten = 0.0
+    for wochentag, stunde, menge in zellen:
+        if menge is None:
+            continue
+        kwh = max(0.0, menge)
+        if kwh <= 0:
+            continue
+        summe_menge += kwh
+        summe_kosten += kwh * preis_je_uhrzeit(tarif, _MONTAG + timedelta(days=int(wochentag), hours=int(stunde)))
+    if summe_menge <= 0:
+        return None
+    return summe_kosten / summe_menge
 
 
 def gewichteter_arbeitspreis_cent(

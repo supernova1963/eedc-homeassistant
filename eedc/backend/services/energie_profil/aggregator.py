@@ -589,6 +589,7 @@ async def hole_tagesverlauf(
     *,
     source: Optional[Source] = None,
     leere_kurve_erlaubt: bool = False,
+    nur_mit_verlauf: bool = False,
 ) -> Optional[tuple]:
     """Eingang und Rohverlauf — Prefetch-Zweig, Live-Zweig, synthetische Slots.
 
@@ -612,6 +613,14 @@ async def hole_tagesverlauf(
        ohne Gerätewerte hat nichts zu verlieren, und eine Anlage, deren Leistungssensoren
        keine Historie haben (Recorder-Ausschluss, umbenannte Entity), friert sonst nach dem
        ersten Lauf des Tages ein.
+
+    ⭐ HA-Bauform E4f (Bauplan §9 B1, R-13): mit ``nur_mit_verlauf`` gilt c) NICHT — eine Kurve
+    ohne Leistungswert liefert ``None``, auch für einen Tag ohne Zeilen. Das ist die Grenze der
+    Recorder-Aufbewahrung von Home Assistant, an DERSELBEN Stelle wie N-596 erkannt (kein fester
+    Tageswert, ``purge_keep_days`` ist je Installation anders): Der Monatsabschluss-Nachlauf legt
+    einen fehlenden Tag nur an, solange HA ihn noch im Verlauf hat. MQTT-Energie ohne
+    Leistungszuordnung und die synthetischen Slots berührt das nicht — dort gibt es keinen
+    Verlauf, der verfallen könnte.
 
     Returns:
         ``(serien, punkte_raw, vortagsrand_raw, synthetische_slots)`` oder ``None``.
@@ -689,6 +698,12 @@ async def hole_tagesverlauf(
         and not has_mqtt_energy
         and not kurve_traegt_leistung(punkte_raw, vortagsrand_raw, serien)
     ):
+        if nur_mit_verlauf:
+            logger.info(
+                f"Anlage {anlage.id}, {datum}: Leistungskurve ohne Wert (außerhalb der Recorder-"
+                "Aufbewahrung) — fehlender Tag wird nicht angelegt"
+            )
+            return None
         if source is not None and source.is_manual_repair() and not leere_kurve_erlaubt:
             logger.info(
                 f"Anlage {anlage.id}, {datum}: Leistungskurve ohne Wert "
@@ -1958,6 +1973,7 @@ async def aggregate_day(
     source: Source,
     prefetched_tagesverlauf: Optional[dict] = None,
     leere_kurve_erlaubt: bool = False,
+    nur_mit_verlauf: bool = False,
 ) -> Optional[TagesZusammenfassung]:
     """
     Aggregiert Energiedaten eines Tages und speichert sie persistent.
@@ -1997,6 +2013,10 @@ async def aggregate_day(
             immer aus (damit der Rückfall zuerst versucht wird); mit ``True`` gilt für ihn
             dieselbe Regel wie für alle anderen Aufrufer: Tag mit gespeicherten
             Gerätewerten bleibt stehen, Tag ohne wird aus den Zählern geschrieben.
+        nur_mit_verlauf: HA-Bauform E4f, nur für den Monatsabschluss-Nachlauf (fehlende Tage):
+            trägt die Leistungskurve keinen Wert — der Tag liegt außerhalb der
+            Recorder-Aufbewahrung —, wird nichts geschrieben (``None``), auch nicht aus den
+            Zählern (s. ``hole_tagesverlauf``).
 
     Returns:
         TagesZusammenfassung oder ``None`` — bei Fehler, ohne Quelle (F-26) oder wenn eine Kurve
@@ -2012,6 +2032,7 @@ async def aggregate_day(
     rohdaten = await hole_tagesverlauf(
         anlage, datum, db, prefetched_tagesverlauf,
         source=source, leere_kurve_erlaubt=leere_kurve_erlaubt,
+        nur_mit_verlauf=nur_mit_verlauf,
     )
     if rohdaten is None:
         return None
