@@ -27,6 +27,13 @@
  *
  *   # a) Demo-Datenbank als KOPIE — nie die Produktiv-DB, nie eine echte Anlage
  *   cp <eine Demo-DB> /tmp/galerie.db
+ *   # ⛔ Broker-Eintrag in der KOPIE entschaerfen (gemessen 07.10.2026): `devbox-r28-demo.db`
+ *   #    traegt `settings.mqtt_inbound` mit `enabled: true` und dem PRODUKTIV-Broker 10.100.1.22
+ *   #    samt Zugangsdaten — ein Start gegen die unveraenderte Kopie verbindet sich dorthin.
+ *   #    In der Kopie `enabled` auf false setzen; zusaetzlich die Umgebung des Servers mit
+ *   #    `MQTT_ENABLED=false MQTT_HOST=127.0.0.255 MQTT_PORT=1` fahren und im Server-Log
+ *   #    0 MQTT-Zeilen pruefen. Fuer das Datenquellen-Bild (Quelle „Inbound" sichtbar) danach
+ *   #    in der Kopie `enabled: true` mit totem Host 127.0.0.1:1 setzen, OHNE Neustart.
  *
  *   # b) Frontend MIT Demo-Flag bauen (siehe §2 — ohne das Flag ist Cockpit/Live leer)
  *   cd eedc/frontend && VITE_DEMO_DEFAULT=true npm run build
