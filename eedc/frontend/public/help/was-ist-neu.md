@@ -9,7 +9,7 @@
 
 ---
 
-## Unreleased
+## v4.1.3 — 7. Oktober 2026
 
 **In dieser Version:** eedc rechnet Tag, Monat und Jahr mit Home Assistant aus den Zählerständen der Langzeitstatistik —
 dieselben Summen wie das Energie-Dashboard, auch im laufenden Monat und in Monaten ohne Abschluss · der Eigenverbrauch

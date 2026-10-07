@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased] — eedc rechnet Summen wie das HA-Energie-Dashboard
+## [4.1.3] - 2026-10-07 — eedc rechnet Summen wie das HA-Energie-Dashboard
 
 ### Added
 
