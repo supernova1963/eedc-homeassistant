@@ -443,11 +443,17 @@ export const EINSTELLUNGEN_KATALOG: EinstellungEintrag[] = [
     id: 'berichte', name: 'Berichte & Dokumente', icon: FileText, kategorie: 'infothek',
     // Noch keine eigene IST-Route (DokumentationsDialog-Hub) → primär auf Infothek verankert.
     route: 'einstellungen/infothek', hilfe: 'Hilfe: Berichte',
-    schlagworte: ['pdf', 'jahresbericht', 'dossier', 'zip', 'export'],
+    // RalfZ (PV-Forum, 06.10.2026): die Suche matcht nur Name, Kategorie und
+    // Schlagworte (`sucheEintraege`) — jedes Dokument des Dialogs steht deshalb
+    // hier mit seinem Namen, sonst findet „Monatsbericht“ die Kachel nicht.
+    schlagworte: [
+      'pdf', 'jahresbericht', 'jahresberichte', 'monatsbericht', 'monatsberichte',
+      'finanzbericht', 'anlagendokumentation', 'infothek-dossier', 'zip', 'export', 'download', 'herunterladen',
+    ],
     inhalt: (_f, ctx) => (
       <StandardInhalt
-        beschreibung="Anlagengebundene PDF-Berichte und Dossiers — einzeln oder als ZIP, mit Jahr-Auswahl."
-        punkte={['Jahresbericht', 'Anlagendokumentation', 'Finanzbericht', 'Infothek-Dossier']}
+        beschreibung="Anlagengebundene PDF-Berichte und Dossiers — einzeln oder als ZIP, mit Jahr- und Monatsauswahl (den Monatsbericht nur einzeln)."
+        punkte={['Jahresbericht', 'Monatsbericht', 'Anlagendokumentation', 'Finanzbericht', 'Infothek-Dossier']}
         aktion="Berichte & ZIP erstellen" aktionIcon={FileText}
         onAktion={ctx.oeffneBerichte}
       />

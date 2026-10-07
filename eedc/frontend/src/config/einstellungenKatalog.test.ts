@@ -54,4 +54,13 @@ describe('einstellungenKatalog (Routen-Inventur + Struktur)', () => {
     expect(sucheEintraege('mqtt').length).toBeGreaterThan(0)
     expect(sucheEintraege('')).toEqual([])
   })
+
+  // RalfZ (PV-Forum, 06.10.2026): „Monatsbericht“ fand nichts, obwohl der Dialog hinter
+  // „Berichte & Dokumente“ ihn anbietet. Jedes Dokument des Dialogs findet die Kachel.
+  it.each(['Monatsbericht', 'Jahresbericht', 'Finanzbericht', 'Anlagendokumentation', 'Infothek-Dossier', 'Dossier'])(
+    'Suche „%s“ findet die Kachel „Berichte & Dokumente“',
+    (wort) => {
+      expect(sucheEintraege(wort).some((e) => e.id === 'berichte')).toBe(true)
+    },
+  )
 })
