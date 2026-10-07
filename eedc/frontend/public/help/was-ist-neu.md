@@ -75,6 +75,10 @@ Update gibt es nicht mehr — Lücken füllt *Einstellungen → Daten → Energi
 - **Komponenten → E-Auto:** die Monatstabelle eines Dienstwagens nennt die Lademenge.
 - **Wärmepumpe ohne Betrieb:** zeigen Strom- und Wärmezähler 0, steht 0 kWh da und „kein Heizbetrieb in diesem
   Zeitraum" statt „kein Stromverbrauch erfasst".
+- **Balkonkraftwerk-Eigenverbrauch:** der Monatsabschluss sagt jetzt „optional — leer lassen, eedc leitet ihn aus der
+  Bilanz am Hauszähler ab"; der frühere Rat, ihn zu schätzen oder gleich der Erzeugung zu setzen, wirkte nicht.
+- **Komponenten → Balkonkraftwerk:** Verlauf und Jahresvergleich zeigen dieselben Zahlen wie die Kennzahlen darüber —
+  vorher stand die Erzeugung dort auf 0, und ohne eingetragenen Eigenverbrauch blieb das Diagramm leer.
 
 ---
 

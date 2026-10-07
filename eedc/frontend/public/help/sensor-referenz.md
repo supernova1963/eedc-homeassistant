@@ -90,7 +90,7 @@
 | Feld | Label | Einheit | Sensortyp | Beschreibung | Ausgewertet in |
 |------|-------|---------|-----------|-------------|-----------------|
 | `pv_erzeugung_kwh` | PV-Erzeugung | kWh | Kumulativ oder Tagessensor | Erzeugte Energie dieses PV-Strings/Moduls. Muss ≥ 0 sein. Alternativ: automatische kWp-Verteilung aus dem Gesamt-PV-Sensor. | Komponenten → PV-Module · Cockpit → Monat · HA-Sensoren |
-| `eigenverbrauch_kwh` | Eigenverbrauch | kWh | Kumulativ oder Tagessensor | Nur BKW: Direkt im Haushalt verbrauchte BKW-Erzeugung. Optional, **nur Monatswert** (siehe Kasten). | Komponenten → Balkonkraftwerk · Auswertungen → Finanzen |
+| `eigenverbrauch_kwh` | Eigenverbrauch | kWh | Kumulativ oder Tagessensor | Nur BKW: Direkt im Haushalt verbrauchte BKW-Erzeugung. Optional, **nur Monatswert**, wirkt nur in einem Monat ohne Erzeugung (siehe Kasten). | Komponenten → Balkonkraftwerk · Auswertungen → Finanzen |
 | `speicher_ladung_kwh` | Speicher Ladung | kWh | **kein Sensor** — nur manuell/Import | Nur BKW mit Speicher: Ins BKW-Akku geladene Energie. Altbestand, siehe Kasten. | Cockpit → Monat · Komponenten → Balkonkraftwerk |
 | `speicher_entladung_kwh` | Speicher Entladung | kWh | **kein Sensor** — nur manuell/Import | Nur BKW mit Speicher: Aus BKW-Akku entladene Energie. Altbestand, siehe Kasten. | Cockpit → Monat · Komponenten → Balkonkraftwerk |
 
@@ -108,11 +108,13 @@
 > Umstellungsweg; es geht dabei nichts verloren.
 >
 > **`eigenverbrauch_kwh`** bleibt zuordenbar, liefert aber ebenfalls **nur** den
-> Monatswert (HA-Langzeitstatistik oder von Hand/per Import). Es ist kein Bilanz-Zähler,
-> sondern eine optionale Verfeinerung — normalerweise leitet eedc den BKW-Eigenverbrauch
-> aus Erzeugung − Einspeisung ab. Wer es per **MQTT** publiziert hat: das Topic wurde bis
-> v4.0.4 fälschlich auf den Erzeugungs-Kanal gelegt und konnte die „Heute"-PV-Kachel
-> überschreiben; das ist behoben.
+> Monatswert (HA-Langzeitstatistik oder von Hand/per Import). Es ist kein Bilanz-Zähler und
+> in der Regel leer zu lassen: eedc leitet den BKW-Eigenverbrauch aus der Bilanz am
+> Hauszähler ab (der Anteil des Balkonkraftwerks an der Erzeugung hinter dem Zähler) und
+> nimmt einen eingetragenen Wert nur in einem Monat, in dem die Erzeugung fehlt. Dieselbe
+> Entity wie bei der Erzeugung hier zuzuordnen bringt deshalb nichts. Wer es per **MQTT**
+> publiziert hat: das Topic wurde bis v4.0.4 fälschlich auf den Erzeugungs-Kanal gelegt und
+> konnte die „Heute"-PV-Kachel überschreiben; das ist behoben.
 
 > **`pv_erzeugung_kwh` steht für drei verschiedene Größen — je nachdem, wo es auftaucht.** Hier in der
 > Monatserfassung ist es die Erzeugung **dieses einen** Moduls. Daneben gibt es den monatlichen

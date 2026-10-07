@@ -752,9 +752,11 @@ In der Monatstabelle steht ein Monat, in dem das Auto nur einen Anteil am Rest d
 ### 3.7 Balkonkraftwerk
 
 - **Erzeugung** (kWh)
-- **Eigenverbrauch** (kWh)
+- **Eigenverbrauch** (kWh) — der Anteil des Balkonkraftwerks an der Bilanz am Hauszähler: Liefert es 10 % der Erzeugung hinter dem Zähler, trägt es 10 % des Eigenverbrauchs. Einen eingetragenen Eigenverbrauch nimmt eedc nur in einem Monat ohne Erzeugung. Ohne Zählerzeile im Monat (kein Einspeise-/Bezugszähler) ist er nicht ableitbar und steht im Verlauf als „—"
 - **Einspeisung** (kWh, = Erzeugung − Eigenverbrauch, in der Regel unvergütet)
 - optional: gekoppelte Speicher-Nutzung (Ladung/Entladung)
+
+**Verlauf und Vergleich zeigen dieselbe Rechnung wie die Kennzahlen oben:** Die Monate im Diagramm und in der Tabelle ergeben zusammen die Erzeugung und den Eigenverbrauch der Kacheln, und die Eigenverbrauchsquote im Jahresvergleich entsteht aus denselben Monatswerten.
 
 ### 3.8 Sonstiges
 

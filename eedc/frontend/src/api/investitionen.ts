@@ -653,9 +653,27 @@ export interface WallboxDashboardResponse {
   }
 }
 
+/** Ein Monat des Balkonkraftwerks, so wie die Kopfzahlen ihn rechnen (N-638) —
+ *  Σ Monate = `gesamt_erzeugung_kwh` bzw. `gesamt_eigenverbrauch_kwh`. `null` heißt
+ *  „nicht ableitbar" (keine Zählerzeile, ADR-002/P4), nicht 0. */
+export interface BkwMonatsWert {
+  jahr: number
+  monat: number
+  erzeugung_kwh: number
+  eigenverbrauch_kwh: number | null
+  eigenverbrauch_quelle: 'gemessen' | 'anteilig' | 'nicht_bewertbar'
+  einspeisung_kwh: number | null
+  einspeisung_quelle: 'gemessen' | 'abgeleitet' | null
+  /** BKW-eigene Speicherfelder, unverändert (Altbestand). */
+  speicher_ladung_kwh: number
+  speicher_entladung_kwh: number
+}
+
 export interface BalkonkraftwerkDashboardResponse {
   investition: Investition
   monatsdaten: InvestitionMonatsdaten[]
+  /** N-638: Hub-Verlauf und -Vergleich lesen diese Reihe, nicht `monatsdaten[].verbrauch_daten`. */
+  monatsreihe: BkwMonatsWert[]
   zusammenfassung: {
     gesamt_erzeugung_kwh: number
     gesamt_eigenverbrauch_kwh: number

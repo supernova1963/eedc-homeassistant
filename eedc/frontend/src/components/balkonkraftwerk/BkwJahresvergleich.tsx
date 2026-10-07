@@ -14,7 +14,7 @@ import { ChartLegende, eedcTooltipProps, Table, TableHead, TableBody } from '../
 import { useLegendenToggle } from '../../hooks'
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { Parkbar } from '../park'
-import type { InvestitionMonatsdaten } from '../../api/investitionen'
+import type { BkwMonatsWert } from '../../api/investitionen'
 import { mitAnzahl } from '../../lib/plural'
 
 const KEINE_IDS: string[] = []
@@ -27,12 +27,15 @@ const SERIEN = [
   { key: 'einspeisung', name: 'Einspeisung', farbe: CHART_COLORS.einspeisung },
 ] as const
 
-export function prepBkwJahresVerwendung(monatsdaten: InvestitionMonatsdaten[]): JahrVerwendung[] {
+/** N-638: aus der bewerteten Monatsreihe (`monatsreihe`), wie die Kopfzahlen — nicht aus
+ *  den rohen `verbrauch_daten`, die ohne Handpflege keinen Eigenverbrauch tragen. Ein nicht
+ *  bewertbarer Monat (`null`) trägt nichts bei; die Quote bezieht sich auf die bewerteten. */
+export function prepBkwJahresVerwendung(monatsreihe: BkwMonatsWert[]): JahrVerwendung[] {
   const m = new Map<number, JahrVerwendung>()
-  for (const md of monatsdaten) {
+  for (const md of monatsreihe) {
     const y = m.get(md.jahr) ?? { jahr: md.jahr, eigenverbrauch: 0, einspeisung: 0, gesamt: 0 }
-    const ev = md.verbrauch_daten.eigenverbrauch_kwh || 0
-    const einsp = md.verbrauch_daten.einspeisung_kwh || 0
+    const ev = md.eigenverbrauch_kwh ?? 0
+    const einsp = md.einspeisung_kwh ?? 0
     y.eigenverbrauch += ev; y.einspeisung += einsp; y.gesamt += ev + einsp
     m.set(md.jahr, y)
   }
@@ -42,8 +45,8 @@ export function prepBkwJahresVerwendung(monatsdaten: InvestitionMonatsdaten[]): 
 const fmt = (v: number) => Math.round(v).toLocaleString('de-DE')
 const pct = (v: number, ganz: number) => (ganz > 0 ? `${fmtZahl((v / ganz) * 100, 0)} %` : '—')
 
-export function BkwJahresvergleich({ monatsdaten, embed = false, melde }: { monatsdaten: InvestitionMonatsdaten[]; embed?: boolean; melde?: (ids: string[]) => void }) {
-  const daten = prepBkwJahresVerwendung(monatsdaten)
+export function BkwJahresvergleich({ monatsreihe, embed = false, melde }: { monatsreihe: BkwMonatsWert[]; embed?: boolean; melde?: (ids: string[]) => void }) {
+  const daten = prepBkwJahresVerwendung(monatsreihe)
   const legende = useLegendenToggle()
   const leer = daten.length === 0
   useEffect(() => { melde?.(leer ? KEINE_IDS : JAHRES_IDS) }, [melde, leer])

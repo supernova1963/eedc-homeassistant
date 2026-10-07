@@ -30,10 +30,43 @@ from backend.api.routes.investitionen.dashboard_basis import InvestitionMonatsda
 router = APIRouter()
 
 
+class BkwMonatsWert(BaseModel):
+    """Ein Monat des Balkonkraftwerks, so wie die Kopfzahlen ihn rechnen (N-638).
+
+    Der Hub-Verlauf las bis 4.1.3 die rohen ``verbrauch_daten`` — die Erzeugung unter
+    einem Schlüssel, den das BKW nicht trägt (``erzeugung_kwh`` statt
+    ``pv_erzeugung_kwh``, immer 0), Eigenverbrauch und Einspeisung nur aus Handpflege.
+    Die Kopfzahlen rechneten daneben je Monat bewertet. Diese Reihe ist dieselbe
+    Rechnung je Monat; Σ Monate = Kopfzahl (``gesamt_erzeugung_kwh``,
+    ``gesamt_eigenverbrauch_kwh``).
+
+    ``None`` heißt „nicht ableitbar" (ADR-002/P4), nicht 0: ohne Zählerzeile gibt es
+    keine Hausbilanz, aus der ein Eigenverbrauch folgen könnte.
+    """
+    jahr: int
+    monat: int
+    #: aufgelöst (``ImdTypBeitrag.bkw_erzeugung``, beide Schreibweisen)
+    erzeugung_kwh: float
+    #: ``bkw_eigenverbrauch_anteil`` — ``None`` bei ``nicht_bewertbar``
+    eigenverbrauch_kwh: Optional[float]
+    #: ``gemessen`` · ``anteilig`` · ``nicht_bewertbar``
+    eigenverbrauch_quelle: str
+    #: gemessen, sonst Erzeugung − Eigenverbrauch (nie < 0); ``None`` ohne beides
+    einspeisung_kwh: Optional[float]
+    #: ``gemessen`` · ``abgeleitet`` · ``None``
+    einspeisung_quelle: Optional[str]
+    #: BKW-eigene Speicherfelder, unverändert (Altbestand, ``nur_manuell``)
+    speicher_ladung_kwh: float
+    speicher_entladung_kwh: float
+
+
 class BalkonkraftwerkDashboardResponse(BaseModel):
     """Balkonkraftwerk Dashboard Daten."""
     investition: InvestitionResponse
     monatsdaten: list[InvestitionMonatsdatenResponse]
+    #: N-638: die bewertete Monatsreihe — Hub-Verlauf und -Vergleich lesen sie statt
+    #: ``monatsdaten[].verbrauch_daten``.
+    monatsreihe: list[BkwMonatsWert] = []
     zusammenfassung: dict[str, Any]
 
 @router.get("/dashboard/balkonkraftwerk/{anlage_id}", response_model=list[BalkonkraftwerkDashboardResponse])
@@ -122,6 +155,7 @@ async def get_balkonkraftwerk_dashboard(
         ev_bewertet_kwh = 0.0
         ersparnis_eigenverbrauch = 0.0
         ev_monate_nicht_bewertbar = 0
+        monatsreihe: list[BkwMonatsWert] = []
 
         for md in monatsdaten:
             d = md.verbrauch_daten or {}
@@ -157,6 +191,7 @@ async def get_balkonkraftwerk_dashboard(
                 else (fakt.tarif.netzbezug_preis_cent if fakt else NETZBEZUG_DEFAULT_CENT)
             )
             ersparnis_eigenverbrauch += anteil.kwh * preis_cent / 100
+            monatsreihe.append(_monatswert(md, d, beitrag, anteil))
 
         # Parameter
         params = bkw.parameter or {}
@@ -248,7 +283,41 @@ async def get_balkonkraftwerk_dashboard(
         dashboards.append(BalkonkraftwerkDashboardResponse(
             investition=bkw,
             monatsdaten=monatsdaten,
+            monatsreihe=monatsreihe,
             zusammenfassung=zusammenfassung,
         ))
 
     return dashboards
+
+
+def _monatswert(md, d: dict, beitrag, anteil) -> BkwMonatsWert:
+    """Ein Monat der Reihe aus denselben Werten, die die Kopfzahlen summieren (N-638).
+
+    Eigenverbrauch und seine Quelle kommen unverändert aus ``bkw_eigenverbrauch_anteil``
+    (ADR-001-SoT, ``core/berechnungen/bkw_finanz.py``). Die Einspeisung ist die
+    gemessene der Zeile, wo eine steht (Altbestand/Import — das BKW hat kein solches
+    Erfassungsfeld); sonst der Rest der Erzeugung nach dem Eigenverbrauch, wie die
+    Kopfzahl ihn bildet. Ist der Eigenverbrauch nicht bewertbar, ist es dieser Rest
+    auch — ``None`` statt einer Erzeugung, die als Einspeisung ausgegeben würde (P4).
+    """
+    ev_kwh = anteil.kwh if anteil.quelle != "nicht_bewertbar" else None
+    einsp_gemessen = d.get("einspeisung_kwh")
+    if einsp_gemessen is not None:
+        einsp_kwh: Optional[float] = float(einsp_gemessen)
+        einsp_quelle: Optional[str] = "gemessen"
+    elif ev_kwh is not None:
+        einsp_kwh = max(0.0, beitrag.bkw_erzeugung - ev_kwh)
+        einsp_quelle = "abgeleitet"
+    else:
+        einsp_kwh, einsp_quelle = None, None
+    return BkwMonatsWert(
+        jahr=md.jahr,
+        monat=md.monat,
+        erzeugung_kwh=beitrag.bkw_erzeugung,
+        eigenverbrauch_kwh=ev_kwh,
+        eigenverbrauch_quelle=anteil.quelle,
+        einspeisung_kwh=einsp_kwh,
+        einspeisung_quelle=einsp_quelle,
+        speicher_ladung_kwh=beitrag.bkw_speicher_ladung,
+        speicher_entladung_kwh=beitrag.bkw_speicher_entladung,
+    )

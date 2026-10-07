@@ -642,7 +642,7 @@ INVESTITION_FELDER: dict = {
         {
             "feld": "eigenverbrauch_kwh", "label": "Eigenverbrauch", "einheit": "kWh",
             "csv_suffix": "Eigenverbrauch_kWh",
-            "hinweis": "Direkt im Haushalt verbrauchte BKW-Erzeugung (kWh, kumulativ oder Tagessensor). Optional — sonst aus Erzeugung − Einspeisung berechnet.",
+            "hinweis": "Direkt im Haushalt verbrauchte BKW-Erzeugung (kWh, kumulativ oder Tagessensor). Optional — leer lassen: eedc leitet den Eigenverbrauch aus der Bilanz am Hauszähler ab. Nur eintragen, wenn für den Monat keine Erzeugung vorliegt.",
         },
         # Konditionell — nur wenn hat_speicher=true. ALTBESTAND, `nur_manuell`:
         # Der Kanon für einen BKW-Akku ist seit 2026-07-31 die **eigene

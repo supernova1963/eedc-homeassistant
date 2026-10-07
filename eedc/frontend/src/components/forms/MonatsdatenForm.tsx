@@ -1321,9 +1321,10 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           istBestaetigt={istInvBestaetigt}
           onBestaetigen={bestaetigeInvFelder}
           subtitleFn={bkwLeistung}
-          hinweisFn={(inv) => inv.parameter?.hat_speicher
-            ? 'Mit Speicher: Bei Nulleinspeisung entspricht Eigenverbrauch meist der Erzeugung.'
-            : 'Ohne Speicher: Eigenverbrauch ist der direkt genutzte Anteil (typisch 30-40% der Erzeugung).'}
+          // N-636: ein Satz für jedes BKW. eedc liest den Eigenverbrauch nur, wenn die Erzeugung
+          // fehlt (`core/berechnungen/bkw_finanz.py`); sonst leitet es ihn aus der Hausbilanz ab —
+          // eine Schätzung wie früher „typisch 30-40 %" würde ignoriert und lädt zur Doppelzuordnung ein.
+          hinweisFn={() => 'Eigenverbrauch optional — leer lassen: eedc leitet ihn aus der Bilanz am Hauszähler ab. Nur eintragen, wenn für den Monat keine Erzeugung vorliegt.'}
         />
       )}
 

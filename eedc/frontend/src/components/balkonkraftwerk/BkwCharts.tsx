@@ -13,24 +13,32 @@ import { ChartLegende, Table, TableHead, TableBody } from '../ui'
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { MONAT_KURZ, CHART_COLORS, CHART_HOVER_CURSOR, DATENROLLE, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useLegendenToggle, useSchmaleAchse } from '../../hooks'
-import type { InvestitionMonatsdaten } from '../../api/investitionen'
+import type { BkwMonatsWert } from '../../api/investitionen'
 
-export function prepBkwMonate(monatsdaten: InvestitionMonatsdaten[]) {
-  return monatsdaten.map((md) => ({
-    name: `${MONAT_KURZ[md.monat]} ${md.jahr.toString().slice(2)}`,
-    erzeugung: md.verbrauch_daten.erzeugung_kwh || 0,
-    eigenverbrauch: md.verbrauch_daten.eigenverbrauch_kwh || 0,
-    einspeisung: md.verbrauch_daten.einspeisung_kwh || 0,
-    speicher_ladung: md.verbrauch_daten.speicher_ladung_kwh || 0,
-    speicher_entladung: md.verbrauch_daten.speicher_entladung_kwh || 0,
+/**
+ * N-638: liest die bewertete Monatsreihe des Backends (`monatsreihe`), nicht mehr die
+ * rohen `verbrauch_daten`. Dort stand die Erzeugung unter `pv_erzeugung_kwh` (gelesen
+ * wurde `erzeugung_kwh` — immer 0), Eigenverbrauch und Einspeisung nur aus Handpflege;
+ * die Kopfzahlen rechneten daneben anteilig an der Hausbilanz. Jetzt zeigen Verlauf und
+ * Kopf dieselbe Rechnung. `null` bleibt `null` (nicht bewertbar, ADR-002/P4) — die
+ * Tabelle zeigt dafür „—", das Diagramm eine Lücke, keine 0.
+ */
+export function prepBkwMonate(monatsreihe: BkwMonatsWert[]) {
+  return monatsreihe.map((m) => ({
+    name: `${MONAT_KURZ[m.monat]} ${m.jahr.toString().slice(2)}`,
+    erzeugung: m.erzeugung_kwh,
+    eigenverbrauch: m.eigenverbrauch_kwh,
+    einspeisung: m.einspeisung_kwh,
+    speicher_ladung: m.speicher_ladung_kwh,
+    speicher_entladung: m.speicher_entladung_kwh,
   }))
 }
 
 /** Erzeugung pro Monat (Eigenverbrauch + Einspeisung gestapelt). */
-export function BkwErzeugungVerlauf({ monatsdaten }: { monatsdaten: InvestitionMonatsdaten[] }) {
+export function BkwErzeugungVerlauf({ monatsreihe }: { monatsreihe: BkwMonatsWert[] }) {
   const schmal = useSchmaleAchse()
   const legende = useLegendenToggle()
-  const data = prepBkwMonate(monatsdaten)
+  const data = prepBkwMonate(monatsreihe)
   return (
     <div className="h-64">
       <ResponsiveContainer width="100%" height="100%">
@@ -49,10 +57,10 @@ export function BkwErzeugungVerlauf({ monatsdaten }: { monatsdaten: InvestitionM
 }
 
 /** Integrierter Speicher: Ladung/Entladung pro Monat (Bar). */
-export function BkwSpeicherVerlauf({ monatsdaten }: { monatsdaten: InvestitionMonatsdaten[] }) {
+export function BkwSpeicherVerlauf({ monatsreihe }: { monatsreihe: BkwMonatsWert[] }) {
   const schmal = useSchmaleAchse()
   const legende = useLegendenToggle()
-  const data = prepBkwMonate(monatsdaten)
+  const data = prepBkwMonate(monatsreihe)
   return (
     <div className="h-48">
       <ResponsiveContainer width="100%" height="100%">
@@ -71,8 +79,8 @@ export function BkwSpeicherVerlauf({ monatsdaten }: { monatsdaten: InvestitionMo
 }
 
 /** Monatsdaten-Tabelle: Erzeugung · Eigenverbrauch · Einspeisung [· Speicher]. */
-export function BkwMonatsTabelle({ monatsdaten, hatSpeicher }: { monatsdaten: InvestitionMonatsdaten[]; hatSpeicher?: boolean }) {
-  const data = prepBkwMonate(monatsdaten)
+export function BkwMonatsTabelle({ monatsreihe, hatSpeicher }: { monatsreihe: BkwMonatsWert[]; hatSpeicher?: boolean }) {
+  const data = prepBkwMonate(monatsreihe)
   return (
     <Table>
       <TableHead>

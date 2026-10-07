@@ -1001,6 +1001,40 @@ async def miss_ha_export(db: AsyncSession, anlage_id: int) -> dict:
             "ev_ersparnis": _r(werte.get("eigenverbrauch_ersparnis_euro")), "co2": _r(werte.get("co2_ersparnis_kg"))}
 
 
+async def miss_bkw_hub(db: AsyncSession, anlage_id: int, ids: dict[str, int]) -> dict:
+    """Komponenten → Balkonkraftwerk → Verlauf (N-638): je BKW die Monatsreihe der Route (Juni und Σ) neben ihren
+    Kopfzahlen, dazu der Anlagen-Kontext des Juni aus den Monats-Fakten — aus ihm folgt das Soll des Eigenverbrauchs
+    (``bkw_eigenverbrauch_anteil``, ADR-001-SoT). Ohne BKW in der Form: ``{}``."""
+    from backend.api.routes.investitionen.dashboard_balkonkraftwerk import get_balkonkraftwerk_dashboard
+    from backend.services.monats_fakten import lade_monats_fakten
+
+    rev = _namen(ids)
+    dashboards = await get_balkonkraftwerk_dashboard(anlage_id=anlage_id, strompreis_cent=None, db=db)
+    if not dashboards:
+        return {}
+    fk = await lade_monats_fakten(db, anlage_id, von=(JAHR, JUNI), bis=(JAHR, JUNI))
+    f = fk[0] if fk else None
+    geraete = {}
+    for ds in dashboards:
+        z, reihe = ds.zusammenfassung, ds.monatsreihe
+        juni = next((w for w in reihe if (w.jahr, w.monat) == (JAHR, JUNI)), None)
+        geraete[rev.get(str(ds.investition.id), ds.investition.bezeichnung)] = {
+            "kopf_erzeugung": z["gesamt_erzeugung_kwh"], "kopf_ev": z["gesamt_eigenverbrauch_kwh"],
+            "kopf_einsp": z["gesamt_einspeisung_kwh"], "monate": len(reihe),
+            "reihe_erzeugung": _r(sum(w.erzeugung_kwh for w in reihe)),
+            "reihe_ev": _r(sum(w.eigenverbrauch_kwh or 0.0 for w in reihe)),
+            "reihe_einsp": _r(sum(w.einspeisung_kwh or 0.0 for w in reihe)),
+            "juni": None if juni is None else {
+                "erzeugung": _r(juni.erzeugung_kwh), "ev": _r(juni.eigenverbrauch_kwh),
+                "ev_quelle": juni.eigenverbrauch_quelle, "einsp": _r(juni.einspeisung_kwh),
+                "einsp_quelle": juni.einspeisung_quelle},
+        }
+    return {"geraete": geraete, "kontext": {
+        "hinter_zaehler": _r(f.erzeugung.hinter_zaehler_kwh) if f else None,
+        "ev_gesamt": _r(f.kennzahlen.eigenverbrauch_kwh) if f else None,
+        "hat_zaehlerzeile": bool(f and f.meta.hat_zaehlerzeile)}}
+
+
 async def miss_community(db: AsyncSession, anlage_id: int) -> dict:
     from backend.services.community_service import prepare_community_data
 
@@ -1082,6 +1116,7 @@ async def _sichten_nach(db, aid, ids, *, mit_ha: bool) -> dict:
         "komp_verlauf": await miss_komponenten_verlauf(db, aid),
         "pdf": await miss_pdf(db, aid, ids),
         "ha_export": await miss_ha_export(db, aid),
+        "bkw_hub": await miss_bkw_hub(db, aid, ids),
         "community": await miss_community(db, aid),
         "checker": await miss_checker(db, aid),
     }
