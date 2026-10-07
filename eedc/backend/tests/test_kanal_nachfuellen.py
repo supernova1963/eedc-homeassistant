@@ -469,6 +469,35 @@ async def test_anstoss_fragt_sensoren_ohne_kanal_nicht_ab(ha, datei):
     assert gezaehlt.abrufe == ["sensor.unbekannt"] and start.markiert == 0
 
 
+async def test_sensor_ohne_statistik_startlauf_stundenlauf_anstoss_legt_keinen_kanal_an(ha, datei):
+    """Lab-Durchlauf 4.1.3-rc1 (07.10.2026), Anlage 4 (Demo-Sensoren ohne HA-Statistik) — die Reihenfolge des
+    Produkts: Startlauf → Stundenlauf → Anstoß. Bis dahin legte der Zähler-Spiegel (``schreiber._spiegel``) den
+    Kanal an, BEVOR HA geliefert hatte; der Anstoß fand dann einen Kanal ohne Marke, fragte HA ein zweites Mal
+    und protokollierte „Nachfüllen … begonnen / 0 von N gefüllt" ein zweites Mal — zurück blieben leere Kanäle
+    ohne ``kanal_quelle``. Soll (wie ``_mean_spiegel`` und der Docstring von ``nachfuellen_spiegel``): ein Kanal
+    entsteht erst, wenn HA für ihn liefert."""
+    from backend.services.kanal.nachfuellen import nachfuellen_anstossen
+
+    svc, _ = ha
+    sitzungen, _pfad, aid, _ = datei
+    async with sitzungen() as s:
+        a = (await s.execute(select(Anlage).where(Anlage.id == aid))).scalar_one()
+        a.sensor_mapping = {**a.sensor_mapping, "basis": {**a.sensor_mapping["basis"], "pv_gesamt": _s("sensor.unbekannt")}}
+        flag_modified(a, "sensor_mapping")
+    await nachfuellen_anlage(sitzungen, aid, jetzt=JETZT, ha_svc=svc)
+    async with sitzungen() as s:
+        protokoll_vorher = len((await s.execute(select(ActivityLog))).scalars().all())
+    await _stundenlauf(sitzungen, aid, svc, JETZT + timedelta(hours=1))
+    async with sitzungen() as s:
+        assert (await s.execute(select(Kanal).where(
+            Kanal.anlage_id == aid, Kanal.key == "basis:pv_gesamt"))).scalar_one_or_none() is None
+    gezaehlt = _Abrufe(svc)
+    await nachfuellen_anstossen(sitzungen, jetzt=JETZT + timedelta(hours=1), ha_svc=gezaehlt)
+    assert gezaehlt.abrufe == []
+    async with sitzungen() as s:
+        assert len((await s.execute(select(ActivityLog))).scalars().all()) == protokoll_vorher
+
+
 async def test_startlauf_fuellt_jeden_kanal_ohne_marke(ha, datei, monkeypatch):
     """``nachfuellen_nach_dem_start`` (Hintergrund-Aufgabe aus ``main.py``) über die Sitzungen des Produkts."""
     import backend.core.database as dbmod

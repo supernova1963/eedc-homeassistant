@@ -51,7 +51,9 @@ from backend.core.field_definitions import (
 #                     erst, wenn es im Monat keine Lücke mehr gibt — sonst rät
 #                     die Fläche, genau die Quelle abzuschalten, aus der die
 #                     Anlagensumme kommt (Stufe 3 → QUELLE_FEHLT → 0 für die
-#                     ganze Anlage).
+#                     ganze Anlage). ⚠ Seit HA-Bauform E4b ist es auch dann
+#                     NICHT wirkungslos: es ist die zweite Seite der
+#                     Wandlungsverluste — gemeldet wird `info`, kein Knopf.
 #   Netz kombi      — `_collect_values`: kombi nur wenn einspeisung_w UND
 #                     netzbezug_w fehlen → ≥1 Split-Feld belegt = wirkungslos.
 #
@@ -249,6 +251,15 @@ def _liefert(feld: dict) -> bool:
     return bool(feld.get("belegt")) and bool(feld.get("hat_wert", True))
 
 
+#: Text am Anlagenzähler (`pv_gesamt_kwh`), wenn jede PV-Quelle einen eigenen kWh-Zähler hat (HA-Bauform E4b).
+#: Er sagt die WIRKUNG — Vergleich und Füller —, keine Aufforderung (s. `finde_redundante_aggregate`).
+_ANLAGENZAEHLER_VERGLEICH_TEXT = (
+    "Jede PV-Quelle hat einen eigenen Zähler. Der Anlagenzähler dient hier dem Vergleich mit den "
+    "String-Zählern (Wandlungsverluste) und füllt nur noch Zeiträume, in denen einer von ihnen keine "
+    "Werte hat."
+)
+
+
 def finde_redundante_aggregate(felder: list[dict]) -> dict[str, dict]:
     """Belegte Aggregat-Felder, die durch belegte Komponenten wirkungslos sind (C).
 
@@ -268,6 +279,8 @@ def finde_redundante_aggregate(felder: list[dict]) -> dict[str, dict]:
     Erwartet die Felder ALLER aktiven Investitionen — auch die unbelegten: die
     kWh-Bedingung („keine Lücke mehr") ist sonst nicht entscheidbar.
     Returns {aggregat_field_id: {"art":"redundant","schwere":"warning","grund","wirksame_felder":[…],"text"}}.
+    Ausnahme: der kWh-Anlagenzähler bei voller String-Deckung meldet ``art: "anlagenzaehler_vergleich"``,
+    ``schwere: "info"`` — er ist dort nicht wirkungslos (Wandlungsverluste, E4b; Begründung am Zweig).
     """
     # Live: ein einziges belegtes `leistung_w` genügt (Engine-Vorrang).
     pv_komp_live = [
@@ -308,12 +321,18 @@ def finde_redundante_aggregate(felder: list[dict]) -> dict[str, dict]:
             }
         elif (feld == _PV_AGGREGAT_FELD_MONAT and f.get("typ") == "basis"
                 and pv_monat_vollstaendig):
+            # ⛔ **Nicht `redundant`** (seit HA-Bauform E4b, Lab-Durchlauf 4.1.3-rc1, 07.10.2026). Bis
+            # dahin stand hier „Wirkungslos … Auf ‚keine‘ setzen" mit dem Inline-Knopf. Seit E4b ist der
+            # Anlagenzähler in genau dieser Lage nicht wirkungslos: er ist die zweite Seite der
+            # Wandlungsverluste (`pv_verteilung.loese_pv_zeitraum_auf`: Σ Geräte − Anlagenzähler, ohne
+            # Anlagenzähler `None` ⇒ keine Zeile), und er füllt weiter jeden Zeitraum, den ein
+            # String-Kanal nicht voll deckt (W2-R1/R2 — dort fehlt das Δ des Geräts, es bekommt seinen
+            # kWp-Anteil am Rest). Wer dem alten Rat folgte, verlor beides. `info`: kein Problem und kein
+            # Handgriff, nur die Wirkung der Zuordnung — Bauform wie `bkw_fuellt_luecken`.
             out[f["id"]] = {
-                "art": "redundant", "schwere": "warning", "grund": "pv_aggregat",
+                "art": "anlagenzaehler_vergleich", "schwere": "info", "grund": "pv_aggregat",
                 "wirksame_felder": [k["id"] for k in pv_komp_monat_belegt],
-                "text": "Wirkungslos: jede PV-Quelle hat eine eigene Erzeugungs-"
-                        "Zuordnung — die gesamt-Zuordnung wird ignoriert. "
-                        "Auf „keine“ setzen.",
+                "text": _ANLAGENZAEHLER_VERGLEICH_TEXT,
             }
         elif feld in _NETZ_AGGREGAT_FELDER and netz_split:
             out[f["id"]] = {

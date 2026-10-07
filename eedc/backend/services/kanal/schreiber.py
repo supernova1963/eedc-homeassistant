@@ -275,11 +275,27 @@ async def _spiegel(db: AsyncSession, k: _Kontext, ha_svc) -> int:
         gewuenscht[sensor_key] = (art, einheit)
     if not gewuenscht:
         return 0
-    staende = await _staende(db, k.anlage.id, gewuenscht, ts_bis - _NAH_STUNDEN * _STUNDE)
+    # ⭐ **Nur die Kanäle, die es schon gibt** (Lab-Durchlauf 4.1.3-rc1, 07.10.2026). Ein fehlender Kanal entsteht
+    # erst unten, wenn HA für seinen Sensor eine Zeile liefert — wie in `_mean_spiegel` und wie es
+    # `nachfuellen_spiegel(nur_vorhandene=True)` voraussetzt. Bis dahin legte `_staende` (über `kanaele_holen`)
+    # jeden zugeordneten Zähler sofort an, auch ohne Langzeitstatistik: zurück blieb ein leerer Kanal ohne
+    # `kanal_quelle`, der Anstoß fand ihn ohne Marke, fragte HA ein zweites Mal und protokollierte das Nachfüllen
+    # ein zweites Mal (gemessen an Anlage 4 im Lab). Probe:
+    # `test_kanal_nachfuellen.py::test_sensor_ohne_statistik_startlauf_stundenlauf_anstoss_legt_keinen_kanal_an`.
+    da = {kn.key: kn for kn in (await db.execute(
+        select(Kanal).where(and_(Kanal.anlage_id == k.anlage.id, Kanal.key.in_(list(gewuenscht))))
+    )).scalars().all()}
+    ids = [kn.id for kn in da.values()]
+    letzte = await letzte_zeilen(db, ids, nah_ab=ts_bis - _NAH_STUNDEN * _STUNDE)
+    quellen = await aktuelle_quellen(db, ids)
+    staende: dict[str, _KanalStand] = {
+        key: _KanalStand(kn, letzte.get(kn.id), quellen.get(kn.id)) for key, kn in da.items()
+    }
 
     # Erster Lauf eines Kanals: nur die eben abgeschlossene Stunde — kein Nachfüllen (E2).
     ts_nach: dict[str, int] = {
-        key: (st.letzte.start_ts if st.letzte is not None else ts_bis - 1) for key, st in staende.items()
+        key: (staende[key].letzte.start_ts if key in staende and staende[key].letzte is not None else ts_bis - 1)
+        for key in gewuenscht
     }
     je_entity: dict[str, float] = {}
     for key, ab in ts_nach.items():
@@ -291,7 +307,7 @@ async def _spiegel(db: AsyncSession, k: _Kontext, ha_svc) -> int:
     gelesen = await asyncio.to_thread(ha_svc.get_stundenzeilen_mehrere, je_entity, ts_bis)
 
     neue_zeilen: list[dict] = []
-    for key, st in staende.items():
+    for key in gewuenscht:
         eid = k.counter_map[key]
         if eid not in gelesen:
             continue
@@ -299,10 +315,14 @@ async def _spiegel(db: AsyncSession, k: _Kontext, ha_svc) -> int:
         roh = [z for z in roh if z["start_ts"] > ts_nach[key]]
         if not roh:
             continue
-        art = st.kanal.art
+        st = staende.get(key)
+        art = st.kanal.art if st is not None else gewuenscht[key][0]
         faktor = 1.0 if art == ART_STAND else _mengen_faktor(meta)   # ein Stand wird nie umgerechnet (F-58)
         if faktor is None:
             continue
+        if st is None:
+            st = _KanalStand((await kanaele_holen(db, k.anlage.id, {key: gewuenscht[key]}))[key], None, None)
+            staende[key] = st
         zeilen = [_zeile(st.kanal.id, int(round(z["start_ts"])), FAMILIE_SPIEGEL,
                          sum=_mal(z["sum"], faktor), state=_mal(z["state"], faktor)) for z in roh]
         if st.quelle is None or st.quelle.familie != FAMILIE_SPIEGEL or st.quelle.statistic_id != eid:

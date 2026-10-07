@@ -32,7 +32,6 @@ from sqlalchemy import text
 from backend.core.zahlenformat import fmt_zahl
 from backend.models.anlage import Anlage
 from backend.services.daten_checker.kategorien import (
-    LINK_DATENQUELLEN,
     CheckErgebnis,
     CheckKategorie,
     CheckSeverity,
@@ -147,7 +146,12 @@ class HaZaehlersprungChecks:
                 "die korrigierte Statistik beim nächsten nächtlichen Abgleich von selbst ab. Hast du den Monat schon "
                 "mit dem Sprung gespeichert („Aus HA laden“ oder Import), übernimm ihn danach im Monatsabschluss neu."
             ),
-            link=LINK_DATENQUELLEN,
+            # ⛔ **Kein „Beheben"-Link** (Lab-Durchlauf 4.1.3-rc1, 07.10.2026). Bis dahin zeigte der Knopf auf
+            # die eedc-Datenquellen (`/einstellungen/datenquellen`); die Korrektur liegt aber in Home Assistant
+            # (Entwicklerwerkzeuge → Statistik), und an der Zuordnung ist nichts falsch. Auf HAs Werkzeug kann
+            # der Knopf nicht zeigen — `DatenCheckerTeile.tsx` navigiert nur innerhalb von eedc (`navigate`),
+            # und unter Ingress wie standalone kennt die Meldung HAs Adresse nicht. Der Weg steht im Text.
+            link=None,
         )]
 
 

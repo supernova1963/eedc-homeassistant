@@ -62,6 +62,27 @@ def test_pv_gesamt_redundant_wenn_alle_einzeln_belegt():
     assert "inv_energy_2_pv_erzeugung_kwh" in red["basis_energy_pv_gesamt_kwh"]["wirksame_felder"]
     # Die Komponente selbst ist nicht redundant
     assert "inv_energy_2_pv_erzeugung_kwh" not in red
+    # Live-Aggregat: weiter wirkungslos mit Knopf
+    assert red["basis_live_pv_gesamt_w"]["art"] == "redundant"
+
+
+def test_pv_gesamt_kwh_bei_voller_deckung_ist_vergleich_kein_rat():
+    """HA-Bauform E4b (Lab-Durchlauf 4.1.3-rc1, 07.10.2026): misst jede PV-Quelle selbst, ist der
+    kWh-Anlagenzähler NICHT wirkungslos — er ist die zweite Seite der Wandlungsverluste
+    (Σ Geräte − Anlagenzähler) und füllt Zeiträume ohne String-Werte. Bis dahin meldete die Fläche
+    „Wirkungslos … Auf ‚keine‘ setzen" (`art: redundant` ⇒ Inline-Knopf, der das Feld leert) — wer
+    folgte, verlor die Wandlungsverluste-Zeile. Jetzt `info` ohne Knopf, Text nennt den Vergleich."""
+    felder = [
+        _f("basis_energy_pv_gesamt_kwh", "pv_gesamt_kwh", "basis", True),
+        _f("inv_energy_2_pv_erzeugung_kwh", "pv_erzeugung_kwh", "pv-module", True),
+        _f("inv_energy_3_pv_erzeugung_kwh", "pv_erzeugung_kwh", "pv-module", True),
+        _f("inv_energy_5_pv_erzeugung_kwh", "pv_erzeugung_kwh", "balkonkraftwerk", True),
+    ]
+    p = finde_redundante_aggregate(felder)["basis_energy_pv_gesamt_kwh"]
+    assert p["art"] == "anlagenzaehler_vergleich"   # nicht `redundant` ⇒ kein „auf keine setzen"
+    assert p["schwere"] == "info"
+    assert "Wandlungsverluste" in p["text"]
+    assert "Wirkungslos" not in p["text"] and "keine“ setzen" not in p["text"]
 
 
 def test_pv_gesamt_kwh_bei_teil_abdeckung_nicht_redundant():

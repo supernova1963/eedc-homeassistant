@@ -118,6 +118,11 @@ export interface FeldProblem {
      *  wäre bei teilweise gemessenen Modulen falscher Rat, weil der Wert dann
      *  die einzige Quelle für das ungemessene Modul ist. */
     | 'bkw_fuellt_luecken'
+    /** HA-Bauform E4b (Lab 4.1.3-rc1): der kWh-Anlagenzähler, wenn jede PV-Quelle
+     *  einen eigenen Zähler hat — Vergleichsseite der Wandlungsverluste und Füller
+     *  für Zeiträume ohne String-Werte. **Bewusst nicht `redundant`**: dessen Knopf
+     *  „auf keine setzen" nähme die Wandlungsverluste-Zeile weg. */
+    | 'anlagenzaehler_vergleich'
   /** `info`: kein Fehler, nur eine Folge der Zuordnung (Bauschnitt 7). */
   schwere: 'error' | 'warning' | 'info'
   text: string
