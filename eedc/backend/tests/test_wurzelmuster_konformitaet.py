@@ -2868,14 +2868,15 @@ P11_AUSNAHMEN: frozenset[str] = frozenset({
     "backend/services/prognose_kanon.py::pv_invs_im_horizont",
     # ⭐ N-386 (2026-09-04): dieselbe Kategorie, aber aus dem ZEITGRUND, den
     # die Fehlermeldung dieses Wächters selbst nennt („der Selektor läuft NACH
-    # dem Zeitfilter"). Beide Stellen geben ihre Menge an
+    # dem Zeitfilter"). Die Stelle gibt ihre Menge an
     # `pv_monatswerte.lade_pv_je_monat` weiter, und der Selektor sitzt dort in
     # der MONATSSCHLEIFE — hinter `ist_aktiv_im_monat`. Ein Aufruf hier liefe
     # davor und nähme einem Balkonkraftwerk seine Erzeugung auch in Monaten,
     # in denen es seine Modul-Kinder noch gar nicht gab; genau dieser Zustand
     # war bis zum 04.09. ausgeliefert (rückwirkender Verlust nach dem Zuordnen).
     "backend/api/routes/monatsdaten.py::get_monatsdaten",
-    "backend/services/daten_checker/_helpers.py::_get_pv_erzeugung_map",
+    # `daten_checker/_helpers.py::_get_pv_erzeugung_map` stand bis 08.10.2026 hier (N-386); seit N-640 liest die Map
+    # aus den Monats-Fakten und bildet die Erzeuger-Menge nicht mehr (Abtretung je Monat in den Fakten).
 })
 
 

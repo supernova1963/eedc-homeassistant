@@ -49,6 +49,10 @@ class CheckKategorie(str, Enum):
     # bucht den Zählerstand als Zuwachs). eedc rechnet seither wie das HA-Energie-Dashboard ohne Deckel — der
     # Sprung steht in Tag und Monat, diese Kategorie benennt ihn und den Reparaturweg in HA.
     HA_ZAEHLERSPRUNG = "ha_zaehlersprung"
+    # N-639 (Frank85, 08.10.2026): HAs Summe eines Sensors FÄLLT in einer Stunde (Anpassung nach unten, `total`-Sensor
+    # mit negativem Delta). eedc rechnet wie das HA-Energie-Dashboard ohne Rücksprung-Verwurf — die Stunde steht negativ
+    # in Tag und Monat; diese Kategorie benennt sie über den ganzen Spiegel und den Reparaturweg in HA.
+    HA_ZAEHLER_RUECKGANG = "ha_zaehler_rueckgang"
     # v3.24.1: Sensoren im Mapping, die nicht in HA-Long-Term-Statistics landen
     # (kein state_class) — Korrektur-Werkzeuge in der Datenverwaltung wirken
     # auf solche Sensoren nicht (Vollbackfill, Verlauf nachrechnen,

@@ -95,7 +95,7 @@ class _CheckHelpers:
         return monat_map
 
     async def _get_pv_erzeugung_map(self, anlage: Anlage) -> dict[tuple[int, int], float]:
-        """Anlagen-PV je Monat über den EINEN Ladepfad ``pv_monatswerte``.
+        """Anlagen-PV je Monat aus den Monats-Fakten (seit N-640, 08.10.2026; vorher über ``pv_monatswerte``).
 
         Bis 2026-07-29 summierte diese Methode die IMD-Werte **roh** und die
         beiden Konsumenten fielen bei fehlender Summe auf
@@ -140,18 +140,30 @@ class _CheckHelpers:
             Monat: eine Teilsumme wäre als Anlagenerzeugung irreführend (N42).
             Die Konsumenten überspringen den Monat, statt mit 0 zu rechnen.
         """
-        from backend.services.pv_monatswerte import lade_pv_je_monat, pv_summe_je_monat
+        # ⭐ N-640 (Frank85, Entscheid Master 08.10.2026, ADR-002/P10): die PV des Monats kommt aus den Monats-Fakten —
+        # derselben Aufbereitung wie Kopf, Tabelle, Monatsleiste und Cockpit → Jahr (`inkl_nur_tageswerte`: wie die
+        # Leiste). Bis dahin löste die Map selbst über `pv_monatswerte` auf (P7 auf gespeicherten Werten) und kannte den
+        # Anlagenzähler der Tage nicht: Module mit gespeichertem Monatswert, ein Balkonkraftwerk ohne eigenen Zähler und
+        # kein Anlagenwert ⇒ der Monat galt als nicht auflösbar und fehlte, obwohl jede Sicht ihn vollständig nennt.
+        # Abtretung (P11, je Monat), Zeitfilter und Lifecycle stecken in den Fakten (N-386 bleibt erfüllt).
+        # ⚠ Ohne `inkl_nur_tageswerte` (Messung 08.10.2026): mit ihm füllte die Tagesebene eine Modul-Teilsumme und
+        # meldete sie als vollständig — eine Teilsumme ginge wieder in PR- und Plausibilitätsprüfungen (Matrix F07/F16,
+        # `test_n626_teilsumme_und_checker.py`). N-640 Variante 1 ist ohne Tageswerte schon vollständig.
+        # ⏱ Laufzeit (gemessen 08.10.2026, Demo-Kopie r28, im Lade-Kontext): vorher ≈ 4 ms (Anlage 1) bzw. 1,5 ms
+        # (Anlage 2) für `pv_monatswerte`, nachher ≈ 125–145 ms je Anlage — EIN Aufruf `lade_monats_fakten`; der ganze
+        # Checker-Lauf 151 → 278 ms bzw. 124 → 245 ms. Hingenommen (Entscheid Master, Nachtrag 3): ein Monat, den PR-,
+        # SOLL/IST- und Plausibilitätsprüfungen still übergehen, wiegt schwerer als ≈ 0,13 s in einem Lauf auf Klick bzw.
+        # im asynchron ladenden Hub-Block „Daten-Qualität". Hebel: Beobachtungsliste 08.10.2026.
+        # „Auflösbar" = `pv_vollstaendig` UND eine PV-Quelle hat einen Wert — ein Monat ohne jeden PV-Wert (keine Module,
+        # kein BKW-Wert, kein Anteil) ist keine gemessene 0 und bleibt draußen wie bisher (N42).
+        from backend.services.monats_fakten import lade_monats_fakten
 
-        # ⚑ Die Abtretung an Modul-Kinder (ADR-002/P11) entscheidet
-        # `lade_pv_je_monat` **je Monat** — hier wird deshalb NICHT vorgefiltert.
-        # Ein Selektor an dieser Stelle liefe vor dem Zeitfilter und nähme einem
-        # Balkonkraftwerk seine Erzeugung auch in Monaten, in denen es seine
-        # Kinder noch gar nicht gab (N-386).
-        pv_erzeuger = [
-            i for i in anlage.investitionen
-            if i.typ in ("pv-module", "balkonkraftwerk")
-        ]
-        summen = pv_summe_je_monat(
-            await lade_pv_je_monat(self.db, anlage.id, pv_erzeuger)
-        )
-        return {key: wert for key, wert in summen.items() if wert is not None}
+        out: dict[tuple[int, int], float] = {}
+        for f in await lade_monats_fakten(self.db, anlage.id):
+            e = f.erzeugung
+            if not e.pv_vollstaendig:
+                continue
+            if e.pv_module_kwh is None and not (e.bkw_kwh or e.bkw_aus_anlagenwert_kwh):
+                continue
+            out[(f.jahr, f.monat)] = e.pv_kwh
+        return out

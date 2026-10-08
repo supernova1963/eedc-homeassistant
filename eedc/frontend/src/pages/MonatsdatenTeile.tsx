@@ -36,7 +36,7 @@ import {
   monatIndex,
   type MonatRef,
 } from '../lib/monatsLuecken'
-import { haBasisZeilen } from '../lib/haVergleich'
+import { HA_RUECKGANG_HINWEIS, haBasisZeilen, haNegativeFelder } from '../lib/haVergleich'
 
 // ─── Spalten-SoT ──────────────────────────────────────────────────────────────
 
@@ -897,6 +897,14 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
                   ))
                 }
               </div>
+            )}
+
+            {/* N-639: ein negativer HA-Wert ist ein Rückgang der HA-Statistik — eedc übernimmt ihn wie das
+                Energie-Dashboard; der Hinweis nennt die Felder und den Weg in HA (Kurzform der Checker-Meldung). */}
+            {haNegativeFelder(haVergleichsDaten.haWerte).length > 0 && (
+              <Alert type="warning" title={`Rückgang in Home Assistant: ${haNegativeFelder(haVergleichsDaten.haWerte).join(', ')}`}>
+                {HA_RUECKGANG_HINWEIS}
+              </Alert>
             )}
 
             <div className="flex justify-end gap-3 pt-4 border-t dark:border-gray-700">

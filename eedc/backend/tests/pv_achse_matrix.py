@@ -107,6 +107,9 @@ class Geraet:
     kwp_als_wp: bool = False
     #: F08: der Zähler (Wechselrichter) schläft nachts — keine Zeilen 21:00–05:00.
     nachtluecke: bool = False
+    #: N-640 (Frank85): ein gespeicherter Monatswert des abgeschlossenen Monats OHNE Sensor (Bestand, kein HA-Mapping)
+    #: — am Tag ist das Gerät eine Lücke (kein Zähler), im Juni trägt es seinen gespeicherten Wert (``soll_monat``).
+    monatswert: bool = False
 
     @property
     def sensor_id(self) -> str:
@@ -128,6 +131,13 @@ class Form:
     abweichung: dict = field(default_factory=dict, compare=False)
     #: Volleinspeiser: die ganze Erzeugung geht ins Netz, physikalisch kein Eigenverbrauch (N-588-Zelle).
     volleinspeiser: bool = False
+    #: N-640 Variante 1: der Anlagen-PV-Zähler ist zugeordnet (HA kennt ihn, die Tage verteilen ihn), der
+    #: abgeschlossene Monat trägt aber KEINEN Anlagenwert (Frank85: „PV Erzeugung Gesamt — Vorhanden –").
+    anlagenwert_gespeichert: bool = True
+
+    @property
+    def n640(self) -> bool:
+        return self.fid.startswith("N640-")
 
     @property
     def w2(self) -> bool:
@@ -229,8 +239,36 @@ FORMEN_W2: dict[str, Form] = {f.fid: f for f in (
          abweichung={"sensor.pv_sued": (None, lambda t: L_VON <= t < L_BIS)}),
 )}
 
+# ── N-640: Franks Lage (PN 08.10.2026, `juni2025.txt`) ─────────────────────────
+#
+# Zwei Module mit gespeicherten Monatswerten (Bestand, ohne Sensor — „Investition #5/#8, nur Bestandsdaten, kein
+# HA-Mapping"), ein Balkonkraftwerk ohne kWh-Sensor, dessen Erzeugung NUR über die Tagesebene kommt. **Wie das im
+# HA-Betrieb entsteht** (gemessen am Code, Bericht BAU-N639-N640): ein Leistungssensor ergibt mit HA-Stunden KEINEN
+# Tageswert (`energie_profil/aggregator.py::summiere_live_komponenten`, nur ohne `external:ha_statistics:hourly`);
+# einen Tageswert ohne eigenen Zähler bekommt ein BKW nur als kWp-Anteil des Anlagen-PV-Zählers an der Tageslücke
+# (#406, `soll_tag`). Deshalb ist der Gesamtzähler in allen drei Varianten zugeordnet; sie unterscheiden sich im
+# gespeicherten Anlagenwert des Juni:
+#   V1 kein Anlagenwert gespeichert (Gesamtzähler = Σ Module, Franks Stand), V2 Anlagenwert = Σ Module (161,4-Fall),
+#   V3 Anlagenwert = Σ Module + BKW. Das BKW erzeugt physikalisch 0,5 kWh je Sonnenstunde in allen drei.
+# Sie stehen NICHT in ``FORMEN`` (andere Proben iterieren ``FORMEN`` mit eigenen Regeln).
+
+
+def _modul_bestand(name: str, kwp: float, rate: float) -> Geraet:
+    return Geraet(name, "pv-module", kwp, rate, False, monatswert=True)
+
+
+FORMEN_N640: dict[str, Form] = {f.fid: f for f in (
+    Form("N640-1", "Module mit Monatswert ohne Sensor, BKW nur Tagesebene, Gesamtzähler = Σ Module, KEIN Anlagenwert",
+         (_modul_bestand("Süd", 6.0, 2.0), _modul_bestand("West", 4.0, 1.0), _bkw()), 3.0,
+         anlagenwert_gespeichert=False),
+    Form("N640-2", "Module mit Monatswert ohne Sensor, BKW nur Tagesebene, Anlagenwert = Σ Module",
+         (_modul_bestand("Süd", 6.0, 2.0), _modul_bestand("West", 4.0, 1.0), _bkw()), 3.0),
+    Form("N640-3", "Module mit Monatswert ohne Sensor, BKW nur Tagesebene, Anlagenwert = Σ Module + BKW",
+         (_modul_bestand("Süd", 6.0, 2.0), _modul_bestand("West", 4.0, 1.0), _bkw()), 3.5),
+)}
+
 #: Alle Formen der Abnahme-Matrix.
-MATRIX_FORMEN: dict[str, Form] = {**FORMEN, **FORMEN_W2}
+MATRIX_FORMEN: dict[str, Form] = {**FORMEN, **FORMEN_W2, **FORMEN_N640}
 
 
 # ── Soll aus der Regel ──────────────────────────────────────────────────────
@@ -321,10 +359,19 @@ def soll_monat(form: Form, tage: tuple[date, ...], *, mit_anlagenwert: bool = Tr
     ohne: set[str] = set()
     gemessen = 0.0
     luecken: list[Geraet] = []
+    # N-640: gespeicherte Monatswerte (und der Anlagenwert) gibt es nur im abgeschlossenen Juni; der laufende Monat
+    # und ein einzelner Tag kennen sie nicht — dort sind die Geräte Lücken des Anlagenzählers.
+    # V1 ohne gespeicherten Anlagenwert hat dasselbe Soll wie V2 (Entscheid Master 08.10.2026, Bauplan §6b W2-R2): der
+    # Anlagenzähler der Tage ist durch die gespeicherten Modulwerte erklärt, das BKW ohne eigenen Zähler bekommt den Rest.
+    gespeichert = tage == TAGE_JUNI
     for g in form.geraete:
         if not _aktiv(g, letzter) or g.parent is not None:
             continue
         menge = tagesmenge(g.rate) * n
+        if g.monatswert and gespeichert:
+            je[g.name] = menge
+            gemessen += menge
+            continue
         if g.typ == "balkonkraftwerk":
             kinder = _kinder_von(form, g, letzter)
             if kinder and g.zaehler:
@@ -698,7 +745,8 @@ async def aggregiere_tage(db: AsyncSession, form: Form, anlage_id: int, tage) ->
 # ── Schreibwege des abgeschlossenen Monats ──────────────────────────────────
 
 
-async def schreibe_s1_aus_ha_laden(db: AsyncSession, anlage_id: int) -> dict:
+async def schreibe_s1_aus_ha_laden(db: AsyncSession, anlage_id: int, form: Optional[Form] = None,
+                                   ids: Optional[dict[str, int]] = None) -> dict:
     """S1: „Aus HA laden" → Formular-Nutzlast → ``create_monatsdaten`` → Nachlauf.
 
     Die Nutzlast bildet ``MonatsdatenForm.tsx::handleSubmit`` (:828-975) nach: die sichtbare
@@ -722,6 +770,13 @@ async def schreibe_s1_aus_ha_laden(db: AsyncSession, anlage_id: int) -> dict:
         nutzlast["pv_erzeugung_kwh"] = basis["pv_erzeugung_kwh"]
     inv = {str(i.investition_id): {**{f.feld: f.differenz for f in i.felder}, "geprueft_gegen": {}}
            for i in antwort.investitionen}
+    if form is not None and form.n640:
+        # N-640: das Formular behält die Bestandswerte der Module ohne Sensor („nur Bestandsdaten, kein HA-Mapping"
+        # im Vergleichsdialog); Variante 1 speichert den Monat ohne Anlagenwert — so liegt er bei Frank (vor N-622,
+        # 04.10.2026, lieferte „Aus HA laden" den Gesamtzähler gar nicht ins Formular).
+        inv.update(_bestandswerte(form, ids or {}))
+        if not form.anlagenwert_gespeichert:
+            nutzlast.pop("pv_erzeugung_kwh", None)
     if inv:
         nutzlast["investitionen_daten"] = inv
     await create_monatsdaten(MonatsdatenCreate.model_validate(nutzlast), None, db)
@@ -729,11 +784,36 @@ async def schreibe_s1_aus_ha_laden(db: AsyncSession, anlage_id: int) -> dict:
     return nutzlast
 
 
-async def schreibe_s2_sammelimport(db: AsyncSession, anlage_id: int) -> dict:
-    """S2: HA-Statistik-Sammelimport des Juni, alle Felder (``import_ha_statistics``)."""
+def _bestandswerte(form: Form, ids: dict[str, int]) -> dict[str, dict]:
+    """N-640: die gespeicherten Monatswerte der Geräte ohne Sensor (``Geraet.monatswert``) als Formular-Nutzlast."""
+    n = len(TAGE_JUNI)
+    return {str(ids[g.name]): {"pv_erzeugung_kwh": tagesmenge(g.rate) * n, "geprueft_gegen": {}}
+            for g in form.geraete if g.monatswert}
+
+
+async def schreibe_s2_sammelimport(db: AsyncSession, anlage_id: int, form: Optional[Form] = None,
+                                   ids: Optional[dict[str, int]] = None) -> dict:
+    """S2: HA-Statistik-Sammelimport des Juni, alle Felder (``import_ha_statistics``).
+
+    N-640: der Import trifft Franks Bestandsmonat — Zählerzeile und Modulwerte stehen schon (von Hand oder per Import
+    gespeichert, ohne Anlagenwert); der Import schreibt den Anlagenwert in die vorhandene Zeile (E4b Teil A).
+    Variante 1 importiert ohne den Gesamtzähler (Basis-Auswahl Einspeisung + Netzbezug)."""
     from backend.api.routes.ha_statistics import ImportRequest, MonatFeldAuswahl, import_ha_statistics
 
-    r = await import_ha_statistics(anlage_id, ImportRequest(monate=[MonatFeldAuswahl(jahr=JAHR, monat=JUNI)]), db)
+    auswahl = MonatFeldAuswahl(jahr=JAHR, monat=JUNI)
+    if form is not None and form.n640:
+        from backend.api.routes.monatsdaten import MonatsdatenCreate, create_monatsdaten
+
+        n = len(TAGE_JUNI)
+        await create_monatsdaten(MonatsdatenCreate.model_validate({
+            "anlage_id": anlage_id, "jahr": JAHR, "monat": JUNI,
+            "einspeisung_kwh": soll_einspeisung(form, n), "netzbezug_kwh": soll_netzbezug(n, form),
+            "geprueft_gegen": {}, "investitionen_daten": _bestandswerte(form, ids or {}),
+        }), None, db)
+        await _nachlauf(db, anlage_id)
+        if not form.anlagenwert_gespeichert:
+            auswahl = MonatFeldAuswahl(jahr=JAHR, monat=JUNI, basis_felder=["einspeisung", "netzbezug"])
+    r = await import_ha_statistics(anlage_id, ImportRequest(monate=[auswahl]), db)
     await db.commit()
     return {"erfolg": r.erfolg, "importiert": r.importiert, "fehler": list(r.fehler)}
 
@@ -753,10 +833,11 @@ async def schreibe_s3_von_hand(db: AsyncSession, form: Form, anlage_id: int, ids
         "einspeisung_kwh": soll_einspeisung(form, n), "netzbezug_kwh": soll_netzbezug(n, form),
         "geprueft_gegen": {},
     }
-    if form.gesamt is not None:
+    if form.gesamt is not None and form.anlagenwert_gespeichert:
         nutzlast["pv_erzeugung_kwh"] = tagesmenge(form.gesamt) * n
     inv = {str(ids[g.name]): {"pv_erzeugung_kwh": tagesmenge(g.rate) * n, "geprueft_gegen": {}}
            for g in form.geraete if g.zaehler}
+    inv.update(_bestandswerte(form, ids))   # N-640: Module mit Monatswert ohne Sensor (sonst leer)
     if form.w2:   # die abgelesenen Monatsmengen der Zähler (Raten je Stunde, E4a-2)
         von, bis = _tagesfenster_dt(TAGE_JUNI[0])[0], _tagesfenster_dt(TAGE_JUNI[-1])[1]
         if form.gesamt is not None:
@@ -1154,9 +1235,9 @@ async def messe_ha(form: Form, m: Messung) -> None:
                 with _umgebung(svc):
                     m.vor[weg] = await _sichten_vor(db, aid, ids)
                     if weg == "S1":
-                        m.nutzlast[weg] = await schreibe_s1_aus_ha_laden(db, aid)
+                        m.nutzlast[weg] = await schreibe_s1_aus_ha_laden(db, aid, form, ids)
                     else:
-                        m.nutzlast[weg] = await schreibe_s2_sammelimport(db, aid)
+                        m.nutzlast[weg] = await schreibe_s2_sammelimport(db, aid, form, ids)
                     m.nach[weg] = await _sichten_nach(db, aid, ids, mit_ha=True)
             finally:
                 await db.close()

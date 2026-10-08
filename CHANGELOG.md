@@ -7,6 +7,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Daten-Checker „Zählerstände – Rückgang in Home Assistant".** Fällt die Summe eines Sensors in der Langzeitstatistik von Home Assistant, statt zu steigen — meist nach einer Anpassung in Home Assistant nach unten —, steht die Stunde in eedc wie im Energie-Dashboard als negative Menge in Tag, Monat und Jahr, und „Aus HA laden" schlägt für den Monat einen negativen Wert vor. Bisher sagte das niemand. Jetzt nennt der Daten-Checker Sensor, Tag, Menge und Stunde (Beispiel: `sensor.netzbezug am 05.06.2025: −540,0 kWh`) mit dem Weg zur Korrektur in Home Assistant, und zwar über die ganze Statistik, nicht nur die letzten 30 Tage. eedc gleicht die korrigierte Statistik nachts von selbst ab; einen schon gespeicherten Monat übernimmst du danach im Monatsabschluss neu. Lädst du einen solchen Monat mit „Aus HA laden", nennt auch der Vergleichsdialog die Felder mit negativem Wert und den Weg.
+
+### Fixed
+
+- **Balkonkraftwerk ohne eigenen Zähler zählt in der Monatsleiste nicht mehr doppelt.** Hatten die PV-Module eines abgeschlossenen Monats gespeicherte Werte und der Monat keinen Gesamtwert, setzte die Monatsleiste in *Cockpit → Monat* und *Cockpit → Jahr* den Tagesanteil des Balkonkraftwerks noch obendrauf — im Beispiel 215,2 kWh in der Leiste gegen 161,4 kWh in Kennzahl und Tabelle, obwohl der Gesamtzähler 161,4 kWh gezählt hat. Dieser Anteil ist ein Teil des Gesamtzählers, keine zweite Messung: Das Balkonkraftwerk bekommt jetzt nur, was der Gesamtzähler über die gespeicherten Modulwerte hinaus gezählt hat, und alle Sichten nennen dieselbe Zahl; der Daten-Checker prüft solche Monate wieder. Ein Balkonkraftwerk mit eigenem Zähler behält seinen Tageswert wie bisher.
+
 ## [4.1.3] - 2026-10-07 — eedc rechnet Summen wie das HA-Energie-Dashboard
 
 ### Added

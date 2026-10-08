@@ -499,6 +499,13 @@ def bewerte(fid: str, weg: str, inv: str, m: mx.Messung) -> list[Zelle]:  # noqa
             werte.pop("nach:checker")   # N42: eine Teilsumme hat in der PV-Map keinen Eintrag (I1 prüft das)
         if any(v for v in werte.values()):
             z += [Zelle(k, v, "> 0", "ok" if v else "rot") for k, v in werte.items()]
+        if form.n640:
+            # N-640 (Frank85): derselbe abgeschlossene Monat nennt in der Monatsleiste (Cockpit → Monat/Jahr,
+            # `inkl_ohne_zaehlerzeile` + `inkl_nur_tageswerte`), im Kopf (`get_aktueller_monat`) und in der Tabelle
+            # (strenge Liste) EINE PV — welche, entscheidet I1/I3; hier zählt nur, dass es eine ist.
+            leiste, kopf, tabelle = _pv(nach["verlauf"]), _pv(nach["monat"]), _pv(nach["tabelle"])
+            z += [_z("n640:leiste=kopf", leiste, kopf), _z("n640:leiste=tabelle", leiste, tabelle),
+                  _z("n640:kopf=tabelle", kopf, tabelle)]
     return z
 
 
@@ -621,11 +628,14 @@ _U_SA_VOR = (
     "hier gilt oder die N-472-Begründung, ist nicht entschieden."
 )
 for _f in ("F01", "F02", "F03", "F04", "F05", "F06", "F07", "F08a", "F08b", "F09a-G", "F09b-G", "F09c-G",
-           "F09a-oG", "F09b-oG", "F09c-oG", "F10", "F11", "F12", "F13a", "F13b", "F14", "F15", "F16"):
+           "F09a-oG", "F09b-oG", "F09c-oG", "F10", "F11", "F12", "F13a", "F13b", "F14", "F15", "F16",
+           "N640-1", "N640-2", "N640-3"):
     SOLL_UNKLAR[(_f, "S3", "I2", "cockpit_monat:vor=nach")] = _U_SA_VOR
     SOLL_UNKLAR[(_f, "S3", "I3", "cockpit_monat:vor")] = _U_SA_VOR
     SOLL_UNKLAR[(_f, "S3", "I5", "cockpit_monat:vor")] = _U_SA_VOR
     SOLL_UNKLAR[(_f, "S3", "I6", "vor:cockpit_monat")] = _U_SA_VOR
+# N-640 Variante 1 (Frank85): Soll seit dem Entscheid Master 08.10.2026 wie Variante 2 — 540 in allen Sichten, der
+# kWp-Anteil des BKW an den Tagen ist keine zweite Quelle (Bauplan §6b W2-R2, `monats_fakten/bau.py`). Keine Markierung.
 _U_N588 = (
     "N-588 (Auftrag Achsen-Matrix 2, Zusatz F13a): Σ Einzelzähler 21 > Anlagenzähler 19,8 je Sonnentag — der "
     "Unterschied sind Wandlungsverluste. Ob Ersparnis und CO₂ auf dem Eigenverbrauch aus Σ Einzel oder aus dem "

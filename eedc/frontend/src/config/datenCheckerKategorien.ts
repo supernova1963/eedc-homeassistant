@@ -44,6 +44,8 @@ export const KATEGORIE_LABELS: Record<string, string> = {
   zaehler_ruecksprung: 'Zählerstände – Rücksprung',
   // N-586 (HA-Bauform E4a-2): Phantomsprung in der HA-Statistik — eedc zeigt ihn wie HA und nennt den Reparaturweg.
   ha_zaehlersprung: 'Zählerstände – Sprung in Home Assistant',
+  // N-639: HAs Summe fällt (Anpassung nach unten) — eedc zeigt die negative Menge wie HA und nennt den Weg.
+  ha_zaehler_rueckgang: 'Zählerstände – Rückgang in Home Assistant',
   sensor_mapping_lts: 'Sensor-Mapping – HA-Statistics',
   sensor_mapping_einheit: 'Sensor-Mapping – Einheiten (Leistung/Energie)',
   provenance_conflict: 'Daten-Quellen – Konflikte',
@@ -90,6 +92,7 @@ export const KATEGORIE_REIHENFOLGE: string[] = [
   'mqtt_topic_abdeckung',
   'zaehler_ruecksprung',
   'ha_zaehlersprung',
+  'ha_zaehler_rueckgang',
   'sensor_mapping_lts',
   'sensor_mapping_einheit',
   'provenance_conflict',

@@ -144,6 +144,8 @@ class DatenChecker(
         ergebnisse.extend(await self._check_mqtt_topic_abdeckung(anlage))
         ergebnisse.extend(await self._check_zaehler_ruecksprung(anlage))
         ergebnisse.extend(await self._check_ha_zaehlersprung(anlage))
+        # N-639: Rückgang von HAs Summe — über den ganzen Spiegel (ein alter Monat trifft „Aus HA laden" genauso).
+        ergebnisse.extend(await self._check_ha_rueckgang(anlage))
         ergebnisse.extend(await self._check_sensor_mapping_lts(anlage))
         ergebnisse.extend(await self._check_sensor_mapping_einheit(anlage))
         ergebnisse.extend(await self._check_provenance_conflicts(anlage))

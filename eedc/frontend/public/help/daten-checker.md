@@ -22,6 +22,7 @@
    8. [MQTT-Topic-Abdeckung](#48-mqtt-topic-abdeckung)
    8a. [Zählerstände – Rücksprung](#48a-zaehlerstaende--ruecksprung)
    8b. [Zählerstände – Sprung in Home Assistant](#48b-zaehlerstaende--sprung-in-home-assistant)
+   8c. [Zählerstände – Rückgang in Home Assistant](#48c-zaehlerstaende--rueckgang-in-home-assistant)
    9. [Sensor-Mapping – HA-Statistics](#49-sensor-mapping--ha-statistics)
    10. [Energieprofil – fehlende Tageswerte](#410-energieprofil--fehlende-tageswerte)
    11. [Geräte-Connector ohne Monatswert](#411-geraete-connector-ohne-monatswert)
@@ -116,6 +117,7 @@ eedc prüft **26 Kategorien**. Die meisten greifen in jeder Installation identis
 | 9 | **MQTT-Topic-Abdeckung** (§4.8) | nur wenn MQTT-Import aktiv | nur wenn MQTT-Import aktiv |
 | 9a | **Zählerstände – Rücksprung** (§4.8a) | nur wenn MQTT-Import aktiv | nur wenn MQTT-Import aktiv |
 | 9b | **Zählerstände – Sprung in Home Assistant** (§4.8b) | greift | **wird übersprungen** (keine HA-Statistik) |
+| 9c | **Zählerstände – Rückgang in Home Assistant** (§4.8c) | greift | **wird übersprungen** (keine HA-Statistik) |
 | 10 | **Sensor-Mapping – HA-Statistics** (§4.9) | greift | **wird übersprungen** (keine HA-LTS verfügbar) |
 | 11 | Energieprofil – fehlende Tageswerte (§4.10) | greift | greift |
 | 12 | Geräte-Connector ohne Monatswert (§4.11) | greift | greift |
@@ -564,6 +566,36 @@ Helfer, ein neuer Zähler nach einem Tausch), ist kein Befund: dort entsteht kei
 die genannte Stunde wählen und den Zuwachs auf die echte Menge setzen. eedc gleicht die korrigierte Statistik beim
 nächtlichen Abgleich (02:45) von selbst ab. Hast du einen betroffenen Monat schon gespeichert („Aus HA laden" oder
 Import), übernimm ihn danach im Monatsabschluss neu — ein gespeicherter Monat ändert sich nicht von allein.
+
+---
+
+### 4.8c Zählerstände – Rückgang in Home Assistant <a name="48c-zaehlerstaende--rueckgang-in-home-assistant"></a>
+
+Das Gegenstück zum Sprung: Die Summe eines Sensors in der Langzeitstatistik von Home Assistant **fällt** in einer
+Stunde, statt zu steigen. Meist wurde der Wert in Home Assistant nachträglich nach unten angepasst (*Entwicklerwerkzeuge
+→ Statistik → „Wert anpassen"* mit einer zu großen Korrektur oder an der falschen Stunde), oder ein Sensor hat einen
+kleineren Zählerstand gemeldet. Home Assistant bucht das als negative Menge, und eedc übernimmt die Statistik so, wie
+das Energie-Dashboard sie zeigt — der Rückgang steht als negative Menge in Tag, Monat und Jahr, und „Aus HA laden"
+schlägt für den Monat einen zu kleinen oder negativen Wert vor.
+
+Geprüft wird die **ganze** von eedc gespiegelte Statistik, nicht nur die letzten 30 Tage: Ein Rückgang aus einem alten
+Monat trifft jede Sicht und „Aus HA laden" genauso wie ein frischer. Ein täglich zurückgesetzter Helfer ist kein Befund
+(sein Stand fällt jede Nacht, die Summe in Home Assistant zählt weiter), ein Zählersprung (§4.8b) auch nicht — dort
+steigt die Summe.
+
+#### Befunde
+
+| Befund | Schwere | Bedeutung |
+| --- | --- | --- |
+| **N Tag(e) mit Rückgang in der Home-Assistant-Statistik** | ⚠️ WARNING | Je Sensor und Tag die Menge und die Stunde (Beispiel: `sensor.netzbezug am 05.06.2025: −540,0 kWh (Stunde ab 14:00)`). Der Tag ist der, an dem *Cockpit → Tag* die Menge zeigt; die Stunde ab 23:00 gehört dort zum Folgetag und wird mit vollem Datum genannt. |
+
+**Reparatur in Home Assistant:** wie beim Sprung — *Entwicklerwerkzeuge → Statistik* → den Sensor suchen → beim Symbol
+„Wert anpassen" die genannte Stunde wählen und die Menge auf den echten Wert setzen. eedc gleicht die korrigierte
+Statistik beim nächtlichen Abgleich (02:45) von selbst ab. Einen Monat, den du mit dem Rückgang schon gespeichert hast
+(„Aus HA laden" oder Import), übernimm danach im Monatsabschluss neu — ein gespeicherter Monat ändert sich nicht von
+allein. Lädst du einen solchen Monat mit „Aus HA laden" in einen Monat, der schon Daten hat, nennt der Vergleichsdialog die
+Felder mit negativem Wert unter „Rückgang in Home Assistant" und denselben Weg. eedc verwirft den Rückgang nicht selbst und hat keinen Reparatur-Knopf dafür: die Quelle ist die Statistik in
+Home Assistant.
 
 ---
 

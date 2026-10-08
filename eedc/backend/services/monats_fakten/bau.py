@@ -85,7 +85,7 @@ async def _baue_fakt(
     # sie abgetreten (ADR-002/P11); sein Tages-Key (der E4-Rest) gehört im Monat zur Gruppe der
     # Module, nicht zur BKW-Zeile — sonst nennte derselbe Monat vor dem Abschluss BKW 90 / Module
     # 540 und danach 0 / 630. Eine Umbuchung zwischen den zwei Gruppen; die Summe bleibt.
-    tages_module = tages_bkw = 0.0
+    tages_module = tages_bkw = tages_bkw_gemessen = 0.0
     if tages_summe is not None:
         _abgetreten = abgetretene_bkw_ids([
             i for i in investitionen
@@ -96,13 +96,21 @@ async def _baue_fakt(
         )
         tages_module = tages_summe.pv_module_kwh + _abgetreten_tag
         tages_bkw = max(0.0, tages_summe.bkw_kwh - _abgetreten_tag)
+        # N-640: davon die eigene MESSUNG der Balkonkraftwerke (Tages-Keys ohne Marke `kwp_anteil`, N-628) — der Rest
+        # der BKW-Tageswerte ist ein kWp-Anteil am Anlagenzähler des Tages, keine zweite Quelle.
+        tages_bkw_gemessen = min(tages_bkw, sum(
+            v for k, v in (tages_summe.bkw_gemessen_je_inv or {}).items()
+            if not (k.isdigit() and int(k) in _abgetreten)
+        ))
 
     # PV nur, wenn die P7-Auflösung nichts ergab (`None` = kein Modulwert und
     # kein Anlagen-Aggregat). Ein aufgelöster Wert — auch ein teilweise
     # geschätzter — bleibt unangetastet.
+    pv_aus_tagen = False
     if pv_modul_summe is None and tages_summe is not None and tages_module > 0:
         pv_modul_summe = tages_module
         pv_vollstaendig = True
+        pv_aus_tagen = True
         tageswert_gruppen.add(TAGESWERT_PV)
     else:
         pv_vollstaendig = pv_modul_summe is not None or not pv_je_modul
@@ -125,6 +133,14 @@ async def _baue_fakt(
     # für ALLE PV-Quellen und hat das BKW schon bedacht; der Tageswert käme
     # obendrauf (gemessen vorher: Anlagenwert 1000, Strings 550 + 380, BKW-Tag
     # 45 ⇒ mit Tagesebene 975, nach dem Bau sonst 1045).
+    #
+    # N-640 (Frank85, Entscheid Master 08.10.2026, Bauplan §6b W2-R2): ist der BKW-Tageswert NICHT gemessen, sondern ein
+    # kWp-Anteil am Anlagenzähler der Tage (Balkonkraftwerk ohne eigenen kWh-Zähler), trägt er nicht als eigene Menge
+    # neben gespeicherten Modulwerten. Das Balkonkraftwerk bekommt den REST des Anlagenzählers: Σ der Tageswerte (das
+    # ist der Anlagenzähler, auf die Lücken verteilt) − Σ der gespeicherten Modulwerte − die gemessenen BKW-Tageswerte,
+    # nie < 0. Ohne diese Regel setzte die Monatsleiste den Anteil obendrauf (Frank: 215,2 = 161,4 + 53,8 gegen Kopf
+    # und Tabelle 161,4, Gesamtzähler 161,4). Kommen die Module selbst aus der Tagesebene (`pv_aus_tagen`) oder sind
+    # sie nur eine Teilsumme, bleibt der Tageswert wie bisher — dann sind beide Seiten Anteile derselben Tage.
     bkw_erzeugung = roh.bkw_erzeugung
     if (
         "balkonkraftwerk" not in roh.typen_mit_zeile
@@ -132,8 +148,14 @@ async def _baue_fakt(
         and tages_summe is not None
         and tages_bkw > 0
     ):
-        bkw_erzeugung = tages_bkw
-        tageswert_gruppen.add(TAGESWERT_BKW)
+        bkw_tag = tages_bkw
+        if (tages_bkw > tages_bkw_gemessen and not pv_aus_tagen and pv_modul_summe is not None
+                and pv_vollstaendig):
+            bkw_tag = tages_bkw_gemessen + max(
+                0.0, tages_module + tages_bkw - pv_modul_summe - tages_bkw_gemessen)
+        if bkw_tag > 0:
+            bkw_erzeugung = bkw_tag
+            tageswert_gruppen.add(TAGESWERT_BKW)
 
     pv_kwh = (pv_modul_summe or 0.0) + bkw_erzeugung + bkw_aus_anlagenwert_kwh
     erzeugung = ErzeugungFakten(

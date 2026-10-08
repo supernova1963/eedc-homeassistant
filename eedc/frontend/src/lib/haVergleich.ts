@@ -49,3 +49,30 @@ export function haBasisWert(basis: HaBasisFeld[] | undefined | null, feld: strin
   const found = basis?.find((b) => b.feld === feld)
   return found?.wert !== null && found?.wert !== undefined ? found.wert.toString() : ''
 }
+
+/**
+ * N-639 (Frank85, 08.10.2026): die Felder, für die Home Assistant im Monat einen NEGATIVEN Wert liefert — die Summe
+ * des Sensors ist in der Langzeitstatistik gefallen (Anpassung nach unten). eedc rechnet wie das HA-Energie-Dashboard
+ * und übernimmt den Rückgang; der Vergleichsdialog nennt die Felder und den Weg (Daten-Checker „Zählerstände – Rückgang
+ * in Home Assistant", `daten_checker/datenquelle/ha_rueckgang.py`). Komponentenfelder mit Gerätenamen davor.
+ */
+export function haNegativeFelder(werte: {
+  basis: HaBasisFeld[]
+  investitionen: { bezeichnung: string; felder: HaBasisFeld[] }[]
+}): string[] {
+  const negativ = (f: HaBasisFeld) => typeof f.wert === 'number' && f.wert < 0
+  return [
+    ...werte.basis.filter(negativ).map((f) => f.label ?? f.feld),
+    ...werte.investitionen.flatMap((inv) =>
+      inv.felder.filter(negativ).map((f) => `${inv.bezeichnung}: ${f.label ?? f.feld}`),
+    ),
+  ]
+}
+
+/** Der Hinweis im Vergleichsdialog — Kurzform der Daten-Checker-Meldung (N-639). */
+export const HA_RUECKGANG_HINWEIS =
+  'Home Assistant liefert hier einen negativen Wert: Die Summe des Sensors ist in der Langzeitstatistik von Home ' +
+  'Assistant in diesem Monat gefallen, statt zu steigen — meist nach einer Anpassung nach unten. Korrigieren kannst ' +
+  'du das in Home Assistant unter Entwicklerwerkzeuge → Statistik → beim Sensor „Wert anpassen“; eedc gleicht die ' +
+  'korrigierte Statistik nachts von selbst ab, danach lädst du den Monat neu. Tag und Stunde nennt der Daten-Checker ' +
+  '(„Zählerstände – Rückgang in Home Assistant“).'
