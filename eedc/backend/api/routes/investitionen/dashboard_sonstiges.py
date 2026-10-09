@@ -40,10 +40,36 @@ from backend.api.routes.investitionen.dashboard_basis import InvestitionMonatsda
 router = APIRouter()
 
 
+class SonstigesMonatsWert(BaseModel):
+    """Ein Monat eines sonstigen **Verbrauchers**, so wie die Kopfzahlen ihn rechnen (N-645; Bauform N-638).
+
+    Der Hub-Vergleich summierte bis 4.1.3 den Legacy-Zwilling ``verbrauch_kwh`` (Kopf und Lesetür nehmen den Kanon
+    ``verbrauch_sonstig_kwh`` zuerst): wer nur den Kanon pflegt, sah 0, wer beide hat, den alten Wert. Der Verlauf
+    stapelte PV- und Netzbezug — ein Verbraucher ohne diese Messung hatte dort kein Segment, obwohl der Kopf seinen
+    Verbrauch nennt. **Fachentscheid Master 09.10.2026:** der Teil des Verbrauchs, den keine PV-/Netz-Messung
+    aufteilt, steht als eigenes Segment *nicht aufgeteilt* (K5-Bauform: die Aufteilung steht neben der Gesamtmenge,
+    nie über ihr). Σ Monate = ``gesamt_verbrauch_kwh``, ``bezug_pv_kwh``, ``bezug_netz_kwh``.
+
+    Nur die Kategorie *Verbraucher* trägt die Reihe: Erzeuger, Speicher und Zähler lesen ihren Verlauf weiter aus den
+    Monatszeilen, und dort ist der Kopf dasselbe Rohfeld.
+    """
+    jahr: int
+    monat: int
+    #: ``get_sonstiges_verbrauch_kwh`` (Kanon ``verbrauch_sonstig_kwh`` zuerst)
+    verbrauch_kwh: float
+    bezug_pv_kwh: float
+    bezug_netz_kwh: float
+    #: Verbrauch − PV − Netz, nie < 0 — ohne PV-/Netz-Messung der ganze Verbrauch
+    nicht_aufgeteilt_kwh: float
+
+
 class SonstigesDashboardResponse(BaseModel):
     """Sonstiges Dashboard Daten."""
     investition: InvestitionResponse
     monatsdaten: list[InvestitionMonatsdatenResponse]
+    #: N-645: die bewertete Monatsreihe eines Verbrauchers — Hub-Verlauf und -Vergleich lesen sie statt
+    #: ``monatsdaten[].verbrauch_daten``. Leer für Erzeuger, Speicher und Zähler.
+    monatsreihe: list[SonstigesMonatsWert] = []
     zusammenfassung: dict[str, Any]
 
 def _monatsverbrauch_aus_verlauf(fenster) -> list[dict]:
@@ -182,6 +208,7 @@ async def get_sonstiges_dashboard(
         # trägt keinen Preis bei — sonst zöge ein datenloser Altmonat mit
         # altem Tarif den Ø nach unten.
         preis_gewichte: dict[tuple[int, int], float] = {}
+        monatsreihe: list[SonstigesMonatsWert] = []
 
         for md in monatsdaten:
             d = md.verbrauch_daten or {}
@@ -198,6 +225,8 @@ async def get_sonstiges_dashboard(
                 gesamt_verbrauch += get_sonstiges_verbrauch_kwh(d)
                 gesamt_bezug_pv += d.get('bezug_pv_kwh', 0)
                 gesamt_bezug_netz += d.get('bezug_netz_kwh', 0)
+                # N-645: dieselben drei Werte je Monat, dazu der Rest ohne Aufteilung.
+                monatsreihe.append(_verbraucher_monatswert(md, d))
                 preis_gewichte[(md.jahr, md.monat)] = (
                     (d.get('bezug_netz_kwh', 0) or 0) + (d.get('bezug_pv_kwh', 0) or 0)
                 )
@@ -374,7 +403,28 @@ async def get_sonstiges_dashboard(
         dashboards.append(SonstigesDashboardResponse(
             investition=inv,
             monatsdaten=monatsdaten,
+            monatsreihe=monatsreihe,
             zusammenfassung=zusammenfassung,
         ))
 
     return dashboards
+
+
+def _verbraucher_monatswert(md, d: dict) -> SonstigesMonatsWert:
+    """Ein Monat eines Verbrauchers aus denselben Werten, die die Kopfzahlen summieren (N-645).
+
+    Verbrauch über die Lesetür (Kanon vor Legacy), PV- und Netzbezug wie der Kopf; was beide nicht erklären, ist
+    *nicht aufgeteilt* — ohne Messung der ganze Verbrauch, mit Teilmessung der Rest, nie negativ (eine Aufteilung,
+    die mehr misst als der Verbrauch, wird nicht „korrigiert", der Rest ist dann 0).
+    """
+    verbrauch = float(get_sonstiges_verbrauch_kwh(d))
+    pv = float(d.get('bezug_pv_kwh', 0) or 0)
+    netz = float(d.get('bezug_netz_kwh', 0) or 0)
+    return SonstigesMonatsWert(
+        jahr=md.jahr,
+        monat=md.monat,
+        verbrauch_kwh=verbrauch,
+        bezug_pv_kwh=pv,
+        bezug_netz_kwh=netz,
+        nicht_aufgeteilt_kwh=max(0.0, verbrauch - pv - netz),
+    )

@@ -669,6 +669,8 @@ Typische Abweichungen: ±5 % normal (Wetter), ±10–15 % prüfen (Verschattung?
 - **„Hätte mehr Kapazität geholfen?"** (Block *Wirtschaftlichkeit*) — die Sizing-Frage, beantwortet aus deinen Stundenwerten. Siehe unten.
 - **„Größerer Speicher?"** (eigener Block) — die Anschlussfrage *wie viel* und *zu welchem Preis*, mit Schieberegler. Siehe unten.
 
+**Verlauf und Vergleich zeigen dieselbe Rechnung wie die Kennzahlen oben:** Die Vollzyklen je Monat sind entladene Energie ÷ Kapazität und ergeben zusammen die Kachel *Vollzyklen*; Ladung, Entladung und Netzladung je Monat ergeben die Summen, mit denen die Kacheln und die Arbitrage-Analyse rechnen.
+
 #### Hätte mehr Kapazität geholfen?
 
 Die Auswertung zählt **nicht** einfach, wie viel Strom ins Netz ging, während der Speicher voll war. Diese Zahl steht zwar da — aber ausdrücklich als **Obergrenze**, denn sie überschätzt den Nutzen systematisch: Zusätzliche Kapazität bringt nur dann etwas, wenn der Speicher vor dem nächsten Sonnenaufgang auch **leer läuft**. Tut er das nicht, hätte ein größerer Speicher morgens bloß mehr Restladung — und niemand hätte sie abgenommen.
@@ -724,6 +726,8 @@ Kennzahl-Reihenfolge (durchgängig gleich über Cockpit, diesen Reiter und die A
 
 Zusätzlich: **JAZ Heizen / JAZ Warmwasser getrennt** (nur wenn du Strom je Funktion getrennt misst — sonst steht dort der Grund statt einer Zahl), Saison-/Monatsvergleich, Detailtabellen mit JAZ pro Monat sowie — optional pro Wärmepumpe — die **Kompressor-Starts** (über einen kumulativen Zähler-Sensor).
 
+**Verlauf und Monatstabelle zeigen dieselbe Rechnung wie die Kennzahlen oben:** Strom, Heizung, Warmwasser und Wärme je Monat ergeben zusammen die Kacheln. Misst das Gerät kein Warmwasser für sich, heißt die Fläche „Wärme" und trägt die ganze Wärme — auch bei einem gemeinsamen Wärmezähler für Heizung und Warmwasser. Die erwartete Heizsaison in *Cockpit → Aussicht* entsteht aus denselben Monatswerten.
+
 > **JAZ vs. COP:** Für Perioden-Kennzahlen nutzt eedc durchgängig **JAZ** (ggf. periodenanteilig). **COP** bleibt technischen Backend-Berechnungen vorbehalten.
 
 > **Anschaffungsdatum-Filter:** Aggregate (JAZ, Wärme, Strom, Ersparnis) ignorieren Monatsdaten **vor** dem Anschaffungsdatum. Wechselst du z. B. von der WP-eigenen Strommessung auf einen Shelly-Zähler, bleiben alte Werte historisch erhalten, verfälschen aber die aktuelle JAZ nicht.
@@ -761,6 +765,8 @@ In der Monatstabelle steht ein Monat, in dem das Auto nur einen Anteil am Rest d
 ### 3.8 Sonstiges
 
 Für sonstige **Erzeuger** — ein BHKW, ein Windrad, eine kleine Wasserkraftanlage — und sonstige **Verbraucher** mit komponentenspezifischen Kennzahlen.
+
+**Bei einem Verbraucher zeigen Verlauf und Vergleich dieselbe Rechnung wie die Kennzahlen oben:** Der Verlauf stapelt je Monat den Bezug aus PV und aus dem Netz; was sich nicht danach aufteilen lässt — etwa weil das Gerät nur einen Verbrauchszähler hat —, steht als Balken „nicht aufgeteilt" darüber. Zusammen ergeben die Monate den Verbrauch der Kachel.
 
 **Energetisch zählt ein sonstiger Erzeuger voll mit:** Er speist hinter deinen Hauszähler, und der misst die Summe aller Erzeuger dahinter. Seine Kilowattstunden stehen deshalb in Eigenverbrauch, Autarkie und Eigenverbrauchsquote.
 

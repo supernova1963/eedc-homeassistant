@@ -252,9 +252,24 @@ export interface EAutoDashboardResponse {
   }
 }
 
+/** Ein Monat der Wärmepumpe, so wie die Kopfzahlen ihn rechnen (N-643/N-644) — Σ Monate =
+ *  `gesamt_stromverbrauch_kwh` · `gesamt_heizenergie_kwh` · `gesamt_warmwasser_kwh` · `gesamt_waerme_kwh`.
+ *  `waerme_kwh` ist die Wärme gesamt (Gesamtwert vor Summanden, D1) — ohne Warmwasser-Achse trägt die
+ *  Fläche „Wärme" diesen Wert, auch bei einem gemeinsamen Wärmezähler. */
+export interface WpMonatsWert {
+  jahr: number
+  monat: number
+  strom_kwh: number
+  heizung_kwh: number
+  warmwasser_kwh: number
+  waerme_kwh: number
+}
+
 export interface WaermepumpeDashboardResponse {
   investition: Investition
   monatsdaten: InvestitionMonatsdaten[]
+  /** N-643/N-644: Hub-Verlauf, Monatstabelle und Aussicht lesen diese Reihe, nicht `monatsdaten[].verbrauch_daten`. */
+  monatsreihe: WpMonatsWert[]
   zusammenfassung: {
     gesamt_stromverbrauch_kwh: number
     gesamt_heizenergie_kwh: number
@@ -555,9 +570,24 @@ export interface SpeicherSizingResponse {
   richtpreis_eur_je_kwh: number
 }
 
+/** Ein Monat des Speichers, so wie die Kopfzahlen ihn rechnen (N-641/N-642) — Σ Monate =
+ *  `gesamt_ladung_kwh` · `gesamt_entladung_kwh` · `arbitrage_kwh` · `vollzyklen`. `vollzyklen` ist
+ *  Entladung ÷ Kapazität (Layer), `null` ohne gepflegte Kapazität (N127). */
+export interface SpeicherMonatsWert {
+  jahr: number
+  monat: number
+  ladung_kwh: number
+  entladung_kwh: number
+  netzladung_kwh: number
+  pv_ladung_kwh: number
+  vollzyklen: number | null
+}
+
 export interface SpeicherDashboardResponse {
   investition: Investition
   monatsdaten: InvestitionMonatsdaten[]
+  /** N-641/N-642: Hub-Verlauf und Jahresbilanz lesen diese Reihe, nicht `monatsdaten[].verbrauch_daten`. */
+  monatsreihe: SpeicherMonatsWert[]
   zusammenfassung: {
     gesamt_ladung_kwh: number
     gesamt_entladung_kwh: number
@@ -699,9 +729,23 @@ export interface BalkonkraftwerkDashboardResponse {
   }
 }
 
+/** Ein Monat eines sonstigen Verbrauchers, so wie die Kopfzahlen ihn rechnen (N-645) — Σ Monate =
+ *  `gesamt_verbrauch_kwh` · `bezug_pv_kwh` · `bezug_netz_kwh`. `nicht_aufgeteilt_kwh` ist der Teil des
+ *  Verbrauchs, den keine PV-/Netz-Messung aufteilt (ohne Messung der ganze Verbrauch). */
+export interface SonstigesMonatsWert {
+  jahr: number
+  monat: number
+  verbrauch_kwh: number
+  bezug_pv_kwh: number
+  bezug_netz_kwh: number
+  nicht_aufgeteilt_kwh: number
+}
+
 export interface SonstigesDashboardResponse {
   investition: Investition
   monatsdaten: InvestitionMonatsdaten[]
+  /** N-645: Verlauf und Vergleich eines Verbrauchers lesen diese Reihe; leer für Erzeuger, Speicher und Zähler. */
+  monatsreihe: SonstigesMonatsWert[]
   zusammenfassung: {
     kategorie: 'erzeuger' | 'verbraucher' | 'speicher' | 'zaehler'
     beschreibung: string

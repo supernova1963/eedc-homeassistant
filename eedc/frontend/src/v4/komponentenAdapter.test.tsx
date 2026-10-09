@@ -300,6 +300,7 @@ describe('KOMPONENTEN_ADAPTER', () => {
       zusammenfassung: { kategorie: 'verbraucher', beschreibung: 'Pool', gesamt_verbrauch_kwh: 320,
         pv_anteil_prozent: 72, kosten_netz_euro: 40, ersparnis_pv_euro: 96, sonderkosten_euro: 0 },
       monatsdaten: [],
+      monatsreihe: [],
     }])
     const [g] = await KOMPONENTEN_ADAPTER.sonstiges.fetch(1)
     expect(titles(g.status)).toEqual(['Verbrauch', 'PV-Anteil', 'Netzkosten', 'PV-Ersparnis'])
@@ -965,6 +966,7 @@ describe('KOMPONENTEN_ADAPTER — Monatszeilen-Zähler (N-247)', () => {
       investition: inv({ typ }),
       zusammenfassung: { kategorie: 'verbraucher' },
       monatsdaten: [],
+      monatsreihe: [],
     }])
     const [g] = await KOMPONENTEN_ADAPTER[typ].fetch(1)
     expect(g.monatswerte).toBe(0)
@@ -978,6 +980,7 @@ describe('KOMPONENTEN_ADAPTER — Monatszeilen-Zähler (N-247)', () => {
         { jahr: 2025, monat: 10, verbrauch_daten: {} },
         { jahr: 2025, monat: 11, verbrauch_daten: {} },
       ],
+      monatsreihe: [],
     }])
     const [g] = await KOMPONENTEN_ADAPTER[typ].fetch(1)
     expect(g.monatswerte).toBe(2)

@@ -751,36 +751,46 @@ def _hub_reihe(zeilen: list[dict], leser: dict[str, Callable[[dict], Any]]) -> d
 #: (``frontend/src/…``). ``test_achsen_matrix.test_hub_leser_nachbildung_steht_im_quelltext`` prüft, dass sie dort noch
 #: stehen: ändert jemand den Leser (etwa beim Heilen eines ``KANDIDAT-HUB-*``), wird die Probe rot, und die Nachbildung
 #: zieht im selben Zug mit — sonst bliebe die Zelle still auf dem alten Leser stehen.
+#:
+#: ⭐ **Seit dem Bau N-641 … N-645 (09.10.2026)** lesen Speicher, Wärmepumpe (samt Aussicht) und Sonstiges-Verbraucher
+#: die bewertete ``monatsreihe`` der Route (Bauform N-638), nicht mehr ``monatsdaten[].verbrauch_daten`` — die Anker
+#: stehen auf den neuen Ausdrücken. E-Auto, Wallbox und Sonstiges-Erzeuger lesen weiter die Rohzeile (grün, nicht Teil
+#: des Baus).
 HUB_LESER_QUELLTEXT: dict[str, tuple[str, ...]] = {
     "components/speicher/SpeicherVerlaufCharts.tsx": (
-        "const ladung = md.verbrauch_daten.ladung_kwh || 0",
-        "const entladung = md.verbrauch_daten.entladung_kwh || 0",
-        "const arbitrage = md.verbrauch_daten.speicher_ladung_netz_kwh || 0",
-        "zyklen: z.kapazitaet_kwh != null && z.kapazitaet_kwh > 0 ? ladung / z.kapazitaet_kwh : 0",
+        "ladung: m.ladung_kwh",
+        "entladung: m.entladung_kwh",
+        "arbitrage: m.netzladung_kwh",
+        "zyklen: m.vollzyklen ?? 0",
         "const arbitrageAktiv = z.arbitrage_faehig && z.arbitrage_kwh > 0",
     ),
     "components/speicher/SpeicherJahresbilanz.tsx": (
-        "const ladung = md.verbrauch_daten.ladung_kwh || 0",
-        "const netz = md.verbrauch_daten.speicher_ladung_netz_kwh || 0",
-        "y.pvLadung += Math.max(0, ladung - netz)",
+        "y.pvLadung += mw.pv_ladung_kwh",
+        "y.netzLadung += mw.netzladung_kwh",
+        "y.ladungGesamt += mw.ladung_kwh",
     ),
     "components/waermepumpe/WaermepumpeCharts.tsx": (
-        "heizung: md.verbrauch_daten.heizenergie_kwh || 0",
-        "warmwasser: hatWarmwasserAchse ? (md.verbrauch_daten.warmwasser_kwh || 0) : 0",
-        "const strom = stromLayer ?? (md.verbrauch_daten.stromverbrauch_kwh || 0)",
-        "const heiz = md.verbrauch_daten.heizenergie_kwh || 0",
+        "heizung: m.heizung_kwh",
+        "warmwasser: hatWarmwasserAchse ? m.warmwasser_kwh : 0",
+        "waerme: m.waerme_kwh",
+        '<Area type="monotone" dataKey="waerme"',
+        "const strom = md.strom_kwh",
+        "const heiz = hatWarmwasserAchse ? md.heizung_kwh : md.waerme_kwh",
     ),
     "v4/WaermepumpeHubBloecke.tsx": (
         "hatWarmwasserAchse={ds.zusammenfassung.hat_warmwasser_achse !== false}",
+        "<WaermepumpeMonatsverlauf monatsreihe={ds.monatsreihe}",
     ),
     "components/aussicht/AussichtTeile.tsx": (
-        "m.verbrauch_daten.stromverbrauch_kwh || 0",
-        "(m.verbrauch_daten.heizenergie_kwh || 0) + (m.verbrauch_daten.warmwasser_kwh || 0)",
+        "const md = [...wp.monatsreihe]",
+        "mittel(heiz.map((m) => m.strom_kwh))",
+        "mittel(heiz.map((m) => m.waerme_kwh))",
     ),
     "v4/komponentenAdapter.tsx": (
-        "{ key: 'pv', wert: (vd) => vd.bezug_pv_kwh }",
-        "{ key: 'netz', wert: (vd) => vd.bezug_netz_kwh }",
-        "jahre: jahresSummen(md, (vd) => vd.verbrauch_kwh)",
+        "pv: Math.max(0, m.bezug_pv_kwh)",
+        "netz: Math.max(0, m.bezug_netz_kwh)",
+        "rest: Math.max(0, m.nicht_aufgeteilt_kwh)",
+        "Math.max(0, r.verbrauch_kwh)",
         "rows: rowsAusMd(md, [{ key: 'erz', wert: (vd) => vd.erzeugung_kwh }])",
         "rows: rowsAusMd(md, [{ key: 'heim', wert: (vd) => vd.ladung_kwh }])",
     ),
@@ -800,10 +810,11 @@ HUB_LESER_QUELLTEXT: dict[str, tuple[str, ...]] = {
 async def miss_hub(db, aid: int, ids: dict, form: Form) -> dict:
     """Komponenten → <Typ> → Verlauf (Hub-Verlauf, Vorhaben nach 4.1.3; Vorbild ``pv_achse_matrix.miss_bkw_hub``).
 
-    Je Gerät: die Monatsreihe, wie der **Frontend-Leser** sie aus ``monatsdaten[].verbrauch_daten`` liest (Nachbildung
-    mit denselben Schlüsseln, Fundstelle je Serie), ihre Σ neben den **Kopfzahlen** derselben Antwort und der Juni nach
-    der **Lesetür** auf derselben Zeile. Die Monats-Fakten des Juni stehen daneben (``fakten``), damit I1 sie vergleichen
-    kann. Kein Leser wird umgebaut, keine Reihe gebaut — gemessen wird, was heute ankommt."""
+    Je Gerät: die Monatsreihe, wie der **Frontend-Leser** sie liest (Nachbildung mit denselben Schlüsseln, Fundstelle je
+    Serie) — seit N-641 … N-645 aus der ``monatsreihe`` der Route (``r``), bei E-Auto, Wallbox und Sonstiges-Erzeuger
+    weiter aus ``monatsdaten[].verbrauch_daten`` (``vd``) —, ihre Σ neben den **Kopfzahlen** derselben Antwort und der
+    Juni nach der **Lesetür** auf derselben Rohzeile. Die Monats-Fakten des Juni stehen daneben (``fakten``), damit I1
+    sie vergleichen kann. Gemessen wird, was heute ankommt."""
     from backend.api.routes.investitionen.dashboard_eauto import get_eauto_dashboard
     from backend.api.routes.investitionen.dashboard_sonstiges import get_sonstiges_dashboard
     from backend.api.routes.investitionen.dashboard_speicher import get_speicher_dashboard
@@ -825,7 +836,10 @@ async def miss_hub(db, aid: int, ids: dict, form: Form) -> dict:
         return [d if isinstance(d, dict) else d.model_dump(mode="json") for d in (res or [])]
 
     def _zeilen(dd: dict) -> list[dict]:
-        return [{"jahr": m.get("jahr"), "monat": m.get("monat"), "vd": m.get("verbrauch_daten") or {}}
+        """Je Rohzeile ``vd`` (``verbrauch_daten``) und ``r``, der Monat der ``monatsreihe`` (leer, wo es keinen gibt)."""
+        reihe = {(m.get("jahr"), m.get("monat")): m for m in dd.get("monatsreihe") or []}
+        return [{"jahr": m.get("jahr"), "monat": m.get("monat"), "vd": m.get("verbrauch_daten") or {},
+                 "r": reihe.get((m.get("jahr"), m.get("monat"))) or {}}
                 for m in dd.get("monatsdaten") or []]
 
     def _name(dd: dict) -> str:
@@ -840,13 +854,13 @@ async def miss_hub(db, aid: int, ids: dict, form: Form) -> dict:
             z = dd.get("zusammenfassung") or {}
             kap = z.get("kapazitaet_kwh")
             leser = {
-                # SpeicherVerlaufCharts.tsx:45-47, :55 (`prepSpeicherMonate`)
-                "ladung": lambda r: _js_oder_0(r["vd"].get("ladung_kwh")),
-                "entladung": lambda r: _js_oder_0(r["vd"].get("entladung_kwh")),
-                "arbitrage": lambda r: _js_oder_0(r["vd"].get("speicher_ladung_netz_kwh")),
-                "zyklen": lambda r, k=kap: (_js_oder_0(r["vd"].get("ladung_kwh")) / k) if k is not None and k > 0 else 0.0,
-                # SpeicherJahresbilanz.tsx:46-48 (`prepSpeicherJahresbilanz`)
-                "jb_netz": lambda r: _js_oder_0(r["vd"].get("speicher_ladung_netz_kwh")),
+                # SpeicherVerlaufCharts.tsx `prepSpeicherMonate` (N-641/N-642: aus `monatsreihe`)
+                "ladung": lambda r: _js_oder_0(r["r"].get("ladung_kwh")),
+                "entladung": lambda r: _js_oder_0(r["r"].get("entladung_kwh")),
+                "arbitrage": lambda r: _js_oder_0(r["r"].get("netzladung_kwh")),
+                "zyklen": lambda r: _js_oder_0(r["r"].get("vollzyklen")),           # `m.vollzyklen ?? 0`
+                # SpeicherJahresbilanz.tsx `prepSpeicherJahresbilanz`
+                "jb_netz": lambda r: _js_oder_0(r["r"].get("netzladung_kwh")),
                 # Lesetüren auf derselben Zeile (Soll)
                 "tuer_netzladung": lambda r: get_speicher_netzladung_kwh(r["vd"]),
                 "tuer_zyklen": lambda r, k=kap: berechne_vollzyklen(
@@ -868,19 +882,22 @@ async def miss_hub(db, aid: int, ids: dict, form: Form) -> dict:
                 return (j.get((r["jahr"], r["monat"])) or {}).get(k)
 
             leser = {
-                # WaermepumpeCharts.tsx:35-39 (`WaermepumpeMonatsverlauf`) — auch Tabelle :211, :214
-                "heizung": lambda r: _js_oder_0(r["vd"].get("heizenergie_kwh")),
-                "warmwasser": lambda r, w=hat_ww: _js_oder_0(r["vd"].get("warmwasser_kwh")) if w else 0.0,
-                # WaermepumpeCharts.tsx:209-210 (`WaermepumpeMonatsTabelle`: Strom aus `jaz_je_monat`, `??` Rohspalte)
-                "strom": lambda r, j=_jaz: j(r, "strom_kwh") if j(r, "strom_kwh") is not None
-                else _js_oder_0(r["vd"].get("stromverbrauch_kwh")),
+                # WaermepumpeCharts.tsx `prepWpMonate` (N-643: aus `monatsreihe`) — die Felder der Zeile; gezeichnet
+                # werden mit Warmwasser-Achse `heizung` + `warmwasser`, ohne sie EINE Fläche `waerme`
+                "heizung": lambda r: _js_oder_0(r["r"].get("heizung_kwh")),
+                "warmwasser": lambda r, w=hat_ww: _js_oder_0(r["r"].get("warmwasser_kwh")) if w else 0.0,
+                # die gezeichnete Wärme: Σ der Flächen (mit Achse Heizung + Warmwasser, ohne die Wärme gesamt)
+                "waerme": lambda r, w=hat_ww: (_js_oder_0(r["r"].get("heizung_kwh"))
+                                               + _js_oder_0(r["r"].get("warmwasser_kwh"))) if w
+                else _js_oder_0(r["r"].get("waerme_kwh")),
+                # WaermepumpeCharts.tsx `WaermepumpeMonatsTabelle`: `const strom = md.strom_kwh`
+                "strom": lambda r: _js_oder_0(r["r"].get("strom_kwh")),
                 "jaz_zaehler": lambda r, j=_jaz: j(r, "zaehler_kwh"),
                 "jaz_nenner": lambda r, j=_jaz: j(r, "nenner_kwh"),
-                # AussichtTeile.tsx:486-487 (`WpAussicht`, Zeilen-Leser; der Filter HEIZ_MONATE :485 ist nicht
-                # nachgebildet — die Matrix trägt nur den Juni, dieselbe Zeile stünde im Januar so da)
-                "aussicht_strom": lambda r: _js_oder_0(r["vd"].get("stromverbrauch_kwh")),
-                "aussicht_waerme": lambda r: _js_oder_0(r["vd"].get("heizenergie_kwh"))
-                + _js_oder_0(r["vd"].get("warmwasser_kwh")),
+                # AussichtTeile.tsx `WpAussicht` (N-644, Zeilen-Leser; der Filter HEIZ_MONATE ist nicht nachgebildet —
+                # die Matrix trägt nur den Juni, dieselbe Zeile stünde im Januar so da)
+                "aussicht_strom": lambda r: _js_oder_0(r["r"].get("strom_kwh")),
+                "aussicht_waerme": lambda r: _js_oder_0(r["r"].get("waerme_kwh")),
                 # Lesetüren auf derselben Zeile (Soll)
                 "tuer_heizung": lambda r: heizwaerme_kwh(r["vd"]),
                 "tuer_warmwasser": lambda r, p=params: get_wp_warmwasser_kwh(r["vd"], p),
@@ -896,10 +913,12 @@ async def miss_hub(db, aid: int, ids: dict, form: Form) -> dict:
                                                        einspeiseverguetung_cent=None, db=db)):
             z = dd.get("zusammenfassung") or {}
             leser = {
-                # komponentenAdapter.tsx:929-933 (Verbraucher, Verlauf PV/Netz) · :937 (Vergleich)
-                "bezug_pv": lambda r: max(0.0, _js_oder_0(r["vd"].get("bezug_pv_kwh"))),
-                "bezug_netz": lambda r: max(0.0, _js_oder_0(r["vd"].get("bezug_netz_kwh"))),
-                "vergleich_verbrauch": lambda r: max(0.0, _js_oder_0(r["vd"].get("verbrauch_kwh"))),
+                # komponentenAdapter.tsx `verbraucherVerlauf` / `verbraucherJahre` (N-645: aus `monatsreihe`) —
+                # Verlauf PV · Netz · nicht aufgeteilt, Vergleich Σ Verbrauch je Jahr
+                "bezug_pv": lambda r: max(0.0, _js_oder_0(r["r"].get("bezug_pv_kwh"))),
+                "bezug_netz": lambda r: max(0.0, _js_oder_0(r["r"].get("bezug_netz_kwh"))),
+                "nicht_aufgeteilt": lambda r: max(0.0, _js_oder_0(r["r"].get("nicht_aufgeteilt_kwh"))),
+                "vergleich_verbrauch": lambda r: max(0.0, _js_oder_0(r["r"].get("verbrauch_kwh"))),
                 # komponentenAdapter.tsx:1062, :1066 (Erzeuger, Verlauf und Vergleich)
                 "erzeugung": lambda r: max(0.0, _js_oder_0(r["vd"].get("erzeugung_kwh"))),
                 # Lesetür auf derselben Zeile (Soll)

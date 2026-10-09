@@ -17,7 +17,7 @@ import { ChartLegende, eedcTooltipProps, Table, TableHead, TableBody } from '../
 import { useLegendenToggle } from '../../hooks'
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { Parkbar } from '../park'
-import type { InvestitionMonatsdaten } from '../../api/investitionen'
+import type { SpeicherMonatsWert } from '../../api/investitionen'
 import { mitAnzahl } from '../../lib/plural'
 
 const KEINE_IDS: string[] = []
@@ -39,19 +39,21 @@ const SERIEN = [
   { key: 'verlust', name: 'Verlust', stapel: 'ent', farbe: VERLUST_FARBE },
 ] as const
 
-/** Jahresbilanz aus den Monatsdaten (PV/Netz-Ladung, Entladung, Verlust). */
-export function prepSpeicherJahresbilanz(monatsdaten: InvestitionMonatsdaten[]): JahrBilanz[] {
+/** Jahresbilanz aus der bewerteten Monatsreihe (PV/Netz-Ladung, Entladung, Verlust).
+ *
+ * N-642: die Netzladung kommt aus `monatsreihe[].netzladung_kwh` (Lesetür
+ * `get_speicher_netzladung_kwh`, dieselbe wie die Kachel „Arbitrage") — hier stand der
+ * Legacy-Schlüssel `speicher_ladung_netz_kwh`, den eedc seit v3.25 nicht mehr schreibt:
+ * M04 Juni Netz-Ladung 0 statt 30, PV-Ladung 120 statt 90. */
+export function prepSpeicherJahresbilanz(monatsreihe: SpeicherMonatsWert[]): JahrBilanz[] {
   const m = new Map<number, JahrBilanz>()
-  for (const md of monatsdaten) {
-    const ladung = md.verbrauch_daten.ladung_kwh || 0
-    const entladung = md.verbrauch_daten.entladung_kwh || 0
-    const netz = md.verbrauch_daten.speicher_ladung_netz_kwh || 0
-    const y = m.get(md.jahr) ?? { jahr: md.jahr, pvLadung: 0, netzLadung: 0, entladung: 0, verlust: 0, ladungGesamt: 0 }
-    y.pvLadung += Math.max(0, ladung - netz)
-    y.netzLadung += netz
-    y.entladung += entladung
-    y.ladungGesamt += ladung
-    m.set(md.jahr, y)
+  for (const mw of monatsreihe) {
+    const y = m.get(mw.jahr) ?? { jahr: mw.jahr, pvLadung: 0, netzLadung: 0, entladung: 0, verlust: 0, ladungGesamt: 0 }
+    y.pvLadung += mw.pv_ladung_kwh
+    y.netzLadung += mw.netzladung_kwh
+    y.entladung += mw.entladung_kwh
+    y.ladungGesamt += mw.ladung_kwh
+    m.set(mw.jahr, y)
   }
   for (const y of m.values()) y.verlust = Math.max(0, y.ladungGesamt - y.entladung)
   return [...m.values()].sort((a, b) => a.jahr - b.jahr)
@@ -60,8 +62,8 @@ export function prepSpeicherJahresbilanz(monatsdaten: InvestitionMonatsdaten[]):
 const fmt = (v: number) => Math.round(v).toLocaleString('de-DE')
 const pct = (v: number, ganz: number) => (ganz > 0 ? `${fmtZahl((v / ganz) * 100, 0)} %` : '—')
 
-export function SpeicherJahresbilanz({ monatsdaten, embed = false, melde }: { monatsdaten: InvestitionMonatsdaten[]; embed?: boolean; melde?: (ids: string[]) => void }) {
-  const daten = prepSpeicherJahresbilanz(monatsdaten)
+export function SpeicherJahresbilanz({ monatsreihe, embed = false, melde }: { monatsreihe: SpeicherMonatsWert[]; embed?: boolean; melde?: (ids: string[]) => void }) {
+  const daten = prepSpeicherJahresbilanz(monatsreihe)
   const legende = useLegendenToggle()
   const leer = daten.length === 0
   // v4-Hub-Auto-Hide: 3 feste Anzeigen (Hinweis · Chart · Tabelle); leer → nichts melden.

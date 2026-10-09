@@ -55,10 +55,36 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+class SpeicherMonatsWert(BaseModel):
+    """Ein Monat des Speichers, so wie die Kopfzahlen ihn rechnen (N-641, N-642; Bauform N-638).
+
+    Der Hub-Verlauf (``SpeicherVerlaufCharts``) und die Jahresbilanz (``SpeicherJahresbilanz``) lasen bis 4.1.3 die
+    rohen ``verbrauch_daten``: die Vollzyklen als LADUNG ÷ Kapazität (Kopf und Layer: Entladung, Kanon seit
+    28.07.2026) und die Netzladung unter dem Legacy-Schlüssel ``speicher_ladung_netz_kwh`` (die Zeile trägt seit
+    v3.25 den Kanon ``ladung_netz_kwh``) — Netzladung 0, die ganze Ladung als PV-Ladung. Diese Reihe ist dieselbe
+    Rechnung je Monat; Σ Monate = Kopfzahl (``gesamt_ladung_kwh``, ``gesamt_entladung_kwh``, ``arbitrage_kwh``,
+    ``vollzyklen``).
+    """
+    jahr: int
+    monat: int
+    ladung_kwh: float
+    entladung_kwh: float
+    #: Lesetür ``get_speicher_netzladung_kwh`` (Kanon zuerst, Legacy als Rückfall) — wie ``arbitrage_kwh``
+    netzladung_kwh: float
+    #: Ladung − Netzladung, nie < 0
+    pv_ladung_kwh: float
+    #: ``berechne_vollzyklen`` (Entladung ÷ Brutto-Kapazität), 0 ohne Entladung; ``None`` ohne Kapazität (N127) — wie
+    #: der Kopf ``vollzyklen``
+    vollzyklen: Optional[float]
+
+
 class SpeicherDashboardResponse(BaseModel):
     """Speicher Dashboard Daten."""
     investition: InvestitionResponse
     monatsdaten: list[InvestitionMonatsdatenResponse]
+    #: N-641/N-642: die bewertete Monatsreihe — Hub-Verlauf und Jahresbilanz lesen sie statt
+    #: ``monatsdaten[].verbrauch_daten``.
+    monatsreihe: list[SpeicherMonatsWert] = []
     zusammenfassung: dict[str, Any]
     # Gleitende 12-Monats-Effizienz (carry-over-immun) — ersetzt die naive
     # Pro-Monats-Effizienz, die durch den SoC-Übertrag >100 % zappeln konnte.
@@ -189,6 +215,9 @@ async def get_speicher_dashboard(
         arbitrage_count = 0
 
         monats_reihe: list[tuple[int, int, float, float]] = []
+        #: N-641/N-642: je Monat dieselben Werte, die die Kopfzahlen summieren (Jahr, Monat, Ladung, Entladung,
+        #: Netzladung) — die Vollzyklen folgen nach der Kapazität unten.
+        hub_reihe: list[tuple[int, int, float, float, float]] = []
         for md in monatsdaten:
             d = md.verbrauch_daten or {}
             md_ladung = d.get('ladung_kwh', 0) or 0
@@ -200,6 +229,7 @@ async def get_speicher_dashboard(
             # `ladung_netz_kwh` + Legacy-Fallback über den SoT-Helper; der
             # rohe Legacy-Read las nach der v3.26-Key-Migration immer 0.
             netzladung = get_speicher_netzladung_kwh(d)
+            hub_reihe.append((md.jahr, md.monat, md_ladung, md_entladung, netzladung if netzladung > 0 else 0.0))
             if netzladung > 0:
                 gesamt_arbitrage_kwh += netzladung
                 # ⛔ **Der Rückfall auf `netzbezug_durchschnittspreis_cent` ist
@@ -430,8 +460,35 @@ async def get_speicher_dashboard(
         dashboards.append(SpeicherDashboardResponse(
             investition=speicher,
             monatsdaten=monatsdaten,
+            monatsreihe=_monatsreihe(hub_reihe, kapazitaet),
             zusammenfassung=zusammenfassung,
             effizienz_verlauf=[asdict(m) for m in verlauf],
         ))
 
     return dashboards
+
+
+def _monatsreihe(
+    hub_reihe: list[tuple[int, int, float, float, float]], kapazitaet: Optional[float],
+) -> list[SpeicherMonatsWert]:
+    """Die Monatsreihe aus denselben Werten, die die Kopfzahlen summieren (N-641, N-642).
+
+    Die Vollzyklen je Monat folgen der Kopf-Regel wörtlich: ``berechne_vollzyklen`` (Entladung ÷ Kapazität, Layer-SoT)
+    und ``0`` für einen Monat ohne Entladung, aber ``None``, wenn keine Kapazität gepflegt ist (N127 — „unbekannt",
+    nicht „nie zyklisiert"). Der Layer ist linear in der Entladung, Σ Monate = Kopf ``vollzyklen``.
+    """
+    return [
+        SpeicherMonatsWert(
+            jahr=jahr,
+            monat=monat,
+            ladung_kwh=ladung,
+            entladung_kwh=entladung,
+            netzladung_kwh=netz,
+            pv_ladung_kwh=max(0.0, ladung - netz),
+            vollzyklen=(
+                (berechne_vollzyklen(entladung, kapazitaet) or 0.0)
+                if kapazitaet is not None else None
+            ),
+        )
+        for jahr, monat, ladung, entladung, netz in hub_reihe
+    ]

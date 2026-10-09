@@ -22,7 +22,7 @@ import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { Parkbar } from '../park'
 import { MONAT_KURZ, CHART_COLORS, COLORS, CHART_HOVER_CURSOR, DATENROLLE, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useLegendenToggle, useSchmaleAchse } from '../../hooks'
-import type { InvestitionMonatsdaten, SpeicherDashboardResponse } from '../../api/investitionen'
+import type { SpeicherDashboardResponse, SpeicherMonatsWert } from '../../api/investitionen'
 
 type Zusammenfassung = SpeicherDashboardResponse['zusammenfassung']
 type EffizienzVerlauf = SpeicherDashboardResponse['effizienz_verlauf']
@@ -31,7 +31,8 @@ type EffizienzVerlauf = SpeicherDashboardResponse['effizienz_verlauf']
 const VERLAUF_IDS = ['chart:speicher-ladung', 'chart:speicher-zyklen', 'chart:speicher-effizienz', 'tabelle:speicher-monate']
 
 export interface SpeicherVerlaufProps {
-  monatsdaten: InvestitionMonatsdaten[]
+  /** N-641/N-642: die bewertete Monatsreihe des Backends (`monatsreihe`), nicht `monatsdaten[].verbrauch_daten`. */
+  monatsreihe: SpeicherMonatsWert[]
   zusammenfassung: Zusammenfassung
   effizienzVerlauf: EffizienzVerlauf
   embed?: boolean
@@ -39,34 +40,38 @@ export interface SpeicherVerlaufProps {
   melde?: (ids: string[]) => void
 }
 
-/** Monatszeilen für die drei Charts + Tabelle (chronologisch, wie IST). */
-export function prepSpeicherMonate(monatsdaten: InvestitionMonatsdaten[], z: Zusammenfassung) {
-  return monatsdaten.map((md) => {
-    const ladung = md.verbrauch_daten.ladung_kwh || 0
-    const entladung = md.verbrauch_daten.entladung_kwh || 0
-    const arbitrage = md.verbrauch_daten.speicher_ladung_netz_kwh || 0
-    return {
-      name: `${MONAT_KURZ[md.monat]} ${md.jahr.toString().slice(2)}`,
-      ladung, entladung, arbitrage,
-      pvLadung: ladung - arbitrage,
-      // N127: ohne gepflegte Kapazität ist `kapazitaet_kwh` null — der
-      // Vergleich fällt dann wie bisher auf 0 (kein Balken), nur eben ohne die
-      // erfundene 10-kWh-Basis dahinter.
-      zyklen: z.kapazitaet_kwh != null && z.kapazitaet_kwh > 0 ? ladung / z.kapazitaet_kwh : 0,
-    }
-  })
+/** Monatszeilen für die drei Charts + Tabelle (chronologisch, wie IST).
+ *
+ * N-641/N-642: liest die bewertete Monatsreihe des Backends (`monatsreihe`), nicht mehr die
+ * rohen `verbrauch_daten`. Dort rechnete der Verlauf die Vollzyklen als LADUNG ÷ Kapazität
+ * (Kachel und Layer: Entladung, Kanon seit 28.07.2026 — M02: 9,0 gegen 6,0) und las die
+ * Netzladung unter dem Legacy-Schlüssel `speicher_ladung_netz_kwh` (die Zeile trägt seit v3.25
+ * `ladung_netz_kwh` — Netzladung 0, alles PV-Ladung). Jetzt zeigen Verlauf und Kachel
+ * dieselbe Rechnung, und die Monate ergeben zusammen die Kachel.
+ */
+export function prepSpeicherMonate(monatsreihe: SpeicherMonatsWert[]) {
+  return monatsreihe.map((m) => ({
+    name: `${MONAT_KURZ[m.monat]} ${m.jahr.toString().slice(2)}`,
+    ladung: m.ladung_kwh,
+    entladung: m.entladung_kwh,
+    arbitrage: m.netzladung_kwh,
+    pvLadung: m.pv_ladung_kwh,
+    // N127: ohne gepflegte Kapazität ist `vollzyklen` null — der Verlauf fällt
+    // dann wie bisher auf 0 (kein Balken), ohne eine erfundene Basis dahinter.
+    zyklen: m.vollzyklen ?? 0,
+  }))
 }
 
 function ChartKopf({ children }: { children: string }) {
   return <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">{children}</h3>
 }
 
-export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizienzVerlauf, embed = false, melde }: SpeicherVerlaufProps) {
+export function SpeicherVerlaufCharts({ monatsreihe, zusammenfassung: z, effizienzVerlauf, embed = false, melde }: SpeicherVerlaufProps) {
   const schmal = useSchmaleAchse()
   const legende = useLegendenToggle()
   // v4-Hub-Auto-Hide: die 4 Anzeigen sind fest → statische ID-Meldung (Gernot 2026-07-09).
   useEffect(() => { melde?.(VERLAUF_IDS) }, [melde])
-  const monthlyData = prepSpeicherMonate(monatsdaten, z)
+  const monthlyData = prepSpeicherMonate(monatsreihe)
   const effizienzData = effizienzVerlauf.map((e) => ({
     name: `${MONAT_KURZ[e.monat]} ${e.jahr.toString().slice(2)}`,
     effizienz: e.effizienz_prozent,
@@ -147,7 +152,7 @@ export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizie
       <Parkbar id="tabelle:speicher-monate" titel="Monatsdaten-Tabelle">
       <details className="border-t border-gray-100 dark:border-gray-800 pt-3">
         <summary className="cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
-          Monatsdaten anzeigen ({monatsdaten.length})
+          Monatsdaten anzeigen ({monatsreihe.length})
         </summary>
         <Table aussenClassName="mt-3">
           <TableHead>

@@ -44,14 +44,14 @@ function Leer({ text }: { text: string }) {
 /** Block ④ Verlauf: 3 IST-Charts (η-12M, Vollzyklen, Ladung/Entladung+Arbitrage) + Tabelle. */
 export function SpeicherVerlaufIST({ anlageId, inv, melde }: { anlageId: number; inv?: Investition; melde?: MeldeFn }) {
   const { ds, loading } = useSpeicherGeraet(anlageId, inv)
-  const leer = loading || !ds || ds.monatsdaten.length === 0
+  const leer = loading || !ds || ds.monatsreihe.length === 0
   // Lade-/Leerzustand meldet leere ID-Menge; mit Daten meldet das Composite selbst.
   useEffect(() => { if (leer) melde?.(KEINE) }, [leer, melde])
   if (loading) return <Lade />
-  if (!ds || ds.monatsdaten.length === 0) return <Leer text="Keine Verlaufsdaten erfasst." />
+  if (!ds || ds.monatsreihe.length === 0) return <Leer text="Keine Verlaufsdaten erfasst." />
   return (
     <SpeicherVerlaufCharts
-      monatsdaten={ds.monatsdaten}
+      monatsreihe={ds.monatsreihe}
       zusammenfassung={ds.zusammenfassung}
       effizienzVerlauf={ds.effizienz_verlauf}
       embed
@@ -63,9 +63,10 @@ export function SpeicherVerlaufIST({ anlageId, inv, melde }: { anlageId: number;
 /** Block ⑤ Vergleich: Jahresbilanz (Ladung nach Herkunft ⟷ Entladung + Verlust). */
 export function SpeicherVergleichIST({ anlageId, inv, melde }: { anlageId: number; inv?: Investition; melde?: MeldeFn }) {
   const { ds, loading } = useSpeicherGeraet(anlageId, inv)
-  const leer = loading || !ds || ds.monatsdaten.length === 0
+  const leer = loading || !ds || ds.monatsreihe.length === 0
   useEffect(() => { if (leer) melde?.(KEINE) }, [leer, melde])
   if (loading) return <Lade />
-  if (!ds || ds.monatsdaten.length === 0) return <Leer text="Keine Jahresdaten erfasst." />
-  return <SpeicherJahresbilanz monatsdaten={ds.monatsdaten} embed melde={melde} />
+  if (!ds || ds.monatsreihe.length === 0) return <Leer text="Keine Jahresdaten erfasst." />
+  // N-641/N-642: die bewertete Monatsreihe (dieselbe Rechnung wie die Kacheln), nicht `verbrauch_daten`.
+  return <SpeicherJahresbilanz monatsreihe={ds.monatsreihe} embed melde={melde} />
 }

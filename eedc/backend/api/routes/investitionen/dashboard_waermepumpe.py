@@ -45,10 +45,36 @@ from backend.api.routes.investitionen.dashboard_basis import InvestitionMonatsda
 router = APIRouter()
 
 
+class WpMonatsWert(BaseModel):
+    """Ein Monat der Wärmepumpe, so wie die Kopfzahlen ihn rechnen (N-643, N-644; Bauform N-638).
+
+    Der Hub-Verlauf („Wärmeerzeugung pro Monat", Monatstabelle) und die Aussicht lasen bis 4.1.3
+    ``heizenergie_kwh``/``warmwasser_kwh``/``stromverbrauch_kwh`` roh — ein gemeinsamer Wärmezähler
+    (``waerme_kwh``), die Heizwärme aus Betriebsart-Zählern (N-398) und die getrennte Strommessung standen
+    dort als 0. Die Reihe kommt aus der Faltung, die auch die Kopfzahlen bildet
+    (``waermepumpe_kennzahlen_je_geraet.mengen_aus_monatszeilen``); Σ Monate = ``gesamt_stromverbrauch_kwh``,
+    ``gesamt_heizenergie_kwh``, ``gesamt_warmwasser_kwh``, ``gesamt_waerme_kwh``.
+    """
+    jahr: int
+    monat: int
+    #: ``get_wp_strom_kwh`` — dieselbe Strom-Definition wie Nenner und Monats-Fakten (W-15)
+    strom_kwh: float
+    #: ``heizwaerme_kwh`` (Gerätefeld, sonst Betriebsart-Nutzenergie Heizen), 0 ohne Zähler — wie der Kopf
+    heizung_kwh: float
+    #: ``get_wp_warmwasser_kwh``
+    warmwasser_kwh: float
+    #: ``waerme_gesamt_kwh`` — Gesamtwert vor Summanden (D1). Ohne Warmwasser-Achse trägt die Fläche „Wärme"
+    #: diesen Wert (S2: ein gemeinsamer Zähler ist Gesamtwärme, keine Heizwärme)
+    waerme_kwh: float
+
+
 class WaermepumpeDashboardResponse(BaseModel):
     """Wärmepumpe Dashboard Daten."""
     investition: InvestitionResponse
     monatsdaten: list[InvestitionMonatsdatenResponse]
+    #: N-643/N-644: die bewertete Monatsreihe — Hub-Verlauf, Monatstabelle und Aussicht lesen sie statt
+    #: ``monatsdaten[].verbrauch_daten``.
+    monatsreihe: list[WpMonatsWert] = []
     zusammenfassung: dict[str, Any]
 
 @router.get("/dashboard/waermepumpe/{anlage_id}", response_model=list[WaermepumpeDashboardResponse])
@@ -644,6 +670,7 @@ async def get_waermepumpe_dashboard(
         dashboards.append(WaermepumpeDashboardResponse(
             investition=wp,
             monatsdaten=monatsdaten,
+            monatsreihe=_faltung.monatsreihe,
             zusammenfassung=zusammenfassung,
         ))
 

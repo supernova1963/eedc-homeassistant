@@ -477,14 +477,18 @@ export function WpAussicht({ wpDashboards }: { wpDashboards: WaermepumpeDashboar
     <div className="space-y-3">
       {wpDashboards.map((wp, i) => {
         const z = wp.zusammenfassung
-        const md = [...wp.monatsdaten].sort((a, b) => (a.jahr !== b.jahr ? a.jahr - b.jahr : a.monat - b.monat))
+        // N-644: die Monatswerte der bewerteten Reihe (dieselbe Faltung wie die Kacheln im
+        // Wärmepumpen-Hub) — hier standen `stromverbrauch_kwh` und `heizenergie_kwh +
+        // warmwasser_kwh` roh: bei getrennter Strommessung 0 kWh Strom, bei gemeinsamem
+        // Wärmezähler oder Betriebsart-Zählern 0 kWh Wärme.
+        const md = [...wp.monatsreihe].sort((a, b) => (a.jahr !== b.jahr ? a.jahr - b.jahr : a.monat - b.monat))
         const t = wpTrend(
           [...(z.jaz_je_monat ?? [])]
             .sort((a, b) => (a.jahr !== b.jahr ? a.jahr - b.jahr : a.monat - b.monat)),
         )
         const heiz = md.filter((m) => HEIZ_MONATE.includes(m.monat))
-        const avgStrom = mittel(heiz.map((m) => m.verbrauch_daten.stromverbrauch_kwh || 0))
-        const avgWaerme = mittel(heiz.map((m) => (m.verbrauch_daten.heizenergie_kwh || 0) + (m.verbrauch_daten.warmwasser_kwh || 0)))
+        const avgStrom = mittel(heiz.map((m) => m.strom_kwh))
+        const avgWaerme = mittel(heiz.map((m) => m.waerme_kwh))
         const TrendIcon = t.richtung === 'steigend' ? TrendingUp : t.richtung === 'sinkend' ? TrendingDown : Minus
         // A2/S18: Trend-Wertung aus TREND_TEXT_CLASS — steigende JAZ = positiv (Richtung bestimmt der Konsument).
         const trendFarbe = t.richtung === 'steigend' ? TREND_TEXT_CLASS.positiv

@@ -25,7 +25,7 @@ vi.mock('../ui', async (echt) => ({
 
 import { WaermepumpeMonatsTabelle, WaermepumpeKostenvergleich } from './WaermepumpeCharts'
 import { stromDesMonats } from './WaermepumpeVergleich'
-import type { InvestitionMonatsdaten } from '../../api/investitionen'
+import type { InvestitionMonatsdaten, WpMonatsWert } from '../../api/investitionen'
 
 /** F7: getrennte Strommessung — KEIN `stromverbrauch_kwh`, der Strom steht je Funktion. */
 const f7 = (jahr: number, monat: number) => ({
@@ -35,9 +35,15 @@ const f7 = (jahr: number, monat: number) => ({
 
 const zeitreihe = [{ jahr: 2025, monat: 7, wert: 3.6, grund: null, zaehler_kwh: 3600, nenner_kwh: 1000, strom_kwh: 1000 }]
 
+/** Derselbe F7-Monat als bewertete Reihe (N-643): der Strom ist die Summe der getrennten Zähler
+ *  (`get_wp_strom_kwh`) — die Rohspalte `stromverbrauch_kwh` ist leer. */
+const f7Reihe = (jahr: number, monat: number): WpMonatsWert => ({
+  jahr, monat, strom_kwh: 1000, heizung_kwh: 3000, warmwasser_kwh: 600, waerme_kwh: 3600,
+})
+
 describe('B3/H-1b — der Strom kommt aus der Layer-Zeitreihe', () => {
-  it('Monatstabelle: Strom-Spalte 1.000 bei getrennter Messung (vorher 0)', () => {
-    render(<WaermepumpeMonatsTabelle monatsdaten={[f7(2025, 7)]} jazJeMonat={zeitreihe} />)
+  it('Monatstabelle: Strom-Spalte 1.000 bei getrennter Messung (vorher 0) — seit N-643 aus der Monatsreihe', () => {
+    render(<WaermepumpeMonatsTabelle monatsreihe={[f7Reihe(2025, 7)]} jazJeMonat={zeitreihe} />)
     expect(screen.getByText('1.000')).toBeInTheDocument()
     expect(screen.queryByText('0')).not.toBeInTheDocument()
   })
@@ -59,14 +65,14 @@ describe('B3/H-1b — der Strom kommt aus der Layer-Zeitreihe', () => {
 
 describe('B3/N-391 — ohne Warmwasser-Achse ist es „Wärme", nicht „Heizung"', () => {
   it('Tabellenkopf', () => {
-    render(<WaermepumpeMonatsTabelle monatsdaten={[f7(2025, 7)]} jazJeMonat={zeitreihe} hatWarmwasserAchse={false} />)
+    render(<WaermepumpeMonatsTabelle monatsreihe={[f7Reihe(2025, 7)]} jazJeMonat={zeitreihe} hatWarmwasserAchse={false} />)
     expect(screen.getByText('Wärme (kWh)')).toBeInTheDocument()
     expect(screen.queryByText('Heizung (kWh)')).not.toBeInTheDocument()
     expect(screen.queryByText('Warmwasser (kWh)')).not.toBeInTheDocument()
   })
 
   it('mit beiden Achsen bleibt „Heizung" (vertraute Anzeige)', () => {
-    render(<WaermepumpeMonatsTabelle monatsdaten={[f7(2025, 7)]} jazJeMonat={zeitreihe} />)
+    render(<WaermepumpeMonatsTabelle monatsreihe={[f7Reihe(2025, 7)]} jazJeMonat={zeitreihe} />)
     expect(screen.getByText('Heizung (kWh)')).toBeInTheDocument()
   })
 })

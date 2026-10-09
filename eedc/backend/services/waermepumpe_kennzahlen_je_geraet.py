@@ -211,6 +211,11 @@ class GeraetFaltung:
     warmwasser_je_erfasst: bool = False
     #: Die Arbeitszahl **je Monatszeile** (ADR-002/P12) für den Saison-Vergleich.
     jaz_je_monat: list[dict] = field(default_factory=list)
+    #: **N-643/N-644:** die Mengen **je Monatszeile** aus denselben Lesetüren wie die Summen in
+    #: {@link GeraetMengen} — Strom (``get_wp_strom_kwh``), Heizwärme (``heizwaerme_kwh``),
+    #: Warmwasser (``get_wp_warmwasser_kwh``) und Wärme gesamt (``waerme_gesamt_kwh``, D1). Der
+    #: Hub-Verlauf und die Aussicht lasen bis 4.1.3 die Rohfelder; Σ Zeilen = die Summen.
+    monatsreihe: list[dict] = field(default_factory=list)
 
 
 def kennzahlen_aus_mengen(m: GeraetMengen) -> GeraetKennzahlen:
@@ -325,6 +330,7 @@ def mengen_aus_monatszeilen(
     modus_abdeckung = modus_bezug = 0.0
     modus_gemessen = ww_je_erfasst = False
     jaz_je_monat: list[dict] = []
+    monatsreihe: list[dict] = []
     #: (Wärme, Strom) je Zeile — die Grundlage der Perioden-Lage. Sie entsteht
     #: erst ÜBER die Zeilen und ist an einer einzelnen nicht sichtbar (N-441).
     zeilen: list[tuple[float, float]] = []
@@ -384,6 +390,14 @@ def mengen_aus_monatszeilen(
             d.get('waerme_kwh'), heizwaerme_kwh(d), _ww,
         )
         zeilen.append((_md_waerme, _zeilen_strom))
+        # N-643/N-644: dieselben vier Werte, die oben in die Summen gehen — je Zeile, ungerundet.
+        monatsreihe.append({
+            'jahr': md.jahr, 'monat': md.monat,
+            'strom_kwh': float(_zeilen_strom),
+            'heizung_kwh': float(heizwaerme_kwh(d) or 0.0),
+            'warmwasser_kwh': float(_ww),
+            'waerme_kwh': float(_md_waerme),
+        })
         # P12: dieselbe Rechnung wie die Gesamtzahl, nur je Zeile.
         # `waerme_abgeleitet` wird **je Monat** gefragt (nicht die kumulierte
         # Marke): ein einzelner abgeleiteter Monat darf die übrigen nicht
@@ -490,6 +504,7 @@ def mengen_aus_monatszeilen(
         modus_gemessen=modus_gemessen,
         warmwasser_je_erfasst=ww_je_erfasst,
         jaz_je_monat=jaz_je_monat,
+        monatsreihe=monatsreihe,
     )
     return mengen, f
 

@@ -24,19 +24,19 @@ vi.mock('../ui', async (echt) => ({
 }))
 
 import { WaermepumpeMonatsTabelle } from './WaermepumpeCharts'
-import type { InvestitionMonatsdaten } from '../../api/investitionen'
+import type { WpMonatsWert } from '../../api/investitionen'
 
-const md = (jahr: number, monat: number, strom: number, heiz: number, ww: number) => ({
-  id: jahr * 100 + monat, jahr, monat,
-  verbrauch_daten: { stromverbrauch_kwh: strom, heizenergie_kwh: heiz, warmwasser_kwh: ww },
-}) as unknown as InvestitionMonatsdaten
+/** Ein Monat der bewerteten Reihe (`monatsreihe`, N-643) — die Mengen, die das Backend aus den Lesetüren faltet. */
+const md = (jahr: number, monat: number, strom: number, heiz: number, ww: number): WpMonatsWert => ({
+  jahr, monat, strom_kwh: strom, heizung_kwh: heiz, warmwasser_kwh: ww, waerme_kwh: heiz + ww,
+})
 
 describe('N-370 — die Arbeitszahl je Monat ist nachrechenbar', () => {
   it('SPRENGSATZ 1 — bereinigter Nenner: die Herleitung steht da', () => {
     // dietmar1968s Fall (T89667 #290): 316 kWh Strom, davon rund 220 für die
     // Klimaanlage. Der Layer rechnet mit 96, die Spalte zeigt 316.
     render(<WaermepumpeMonatsTabelle
-      monatsdaten={[md(2026, 8, 316, 150, 60)]}
+      monatsreihe={[md(2026, 8, 316, 150, 60)]}
       jazJeMonat={[{
         jahr: 2026, monat: 8, wert: 2.2, grund: null,
         zaehler_kwh: 210, nenner_kwh: 96,
@@ -53,7 +53,7 @@ describe('N-370 — die Arbeitszahl je Monat ist nachrechenbar', () => {
     // Wer die Herleitung aus `(heiz + ww)` und `strom` nachbaut, schreibt hier
     // „210 ÷ 316" — eine Rechnung, die auf 0,66 führt statt auf die 2,20 daneben.
     render(<WaermepumpeMonatsTabelle
-      monatsdaten={[md(2026, 8, 316, 150, 60)]}
+      monatsreihe={[md(2026, 8, 316, 150, 60)]}
       jazJeMonat={[{
         jahr: 2026, monat: 8, wert: 2.2, grund: null,
         zaehler_kwh: 210, nenner_kwh: 96,
@@ -67,7 +67,7 @@ describe('N-370 — die Arbeitszahl je Monat ist nachrechenbar', () => {
     // Zeile mit denselben Zahlen wäre Rauschen (Präzedenz W-17b,
     // `WaermepumpeModusSplit`: „Stimmen beide überein, entfällt die Zeile").
     render(<WaermepumpeMonatsTabelle
-      monatsdaten={[md(2026, 8, 100, 150, 60)]}
+      monatsreihe={[md(2026, 8, 100, 150, 60)]}
       jazJeMonat={[{
         jahr: 2026, monat: 8, wert: 2.1, grund: null,
         zaehler_kwh: 210, nenner_kwh: 100,
@@ -85,7 +85,7 @@ describe('N-370 — die Arbeitszahl je Monat ist nachrechenbar', () => {
     // Herleitung sichtbar dasselbe wie die Zeile — und der Leser suchte den
     // Unterschied, den es nicht gibt.
     render(<WaermepumpeMonatsTabelle
-      monatsdaten={[md(2026, 8, 316, 150, 60)]}
+      monatsreihe={[md(2026, 8, 316, 150, 60)]}
       jazJeMonat={[{
         jahr: 2026, monat: 8, wert: 0.67, grund: null,
         zaehler_kwh: 210, nenner_kwh: 315.6,
@@ -97,7 +97,7 @@ describe('N-370 — die Arbeitszahl je Monat ist nachrechenbar', () => {
   it('gesperrte Arbeitszahl: keine Herleitung aus einem „—"', () => {
     // Präzedenz `MonatBilanz.tsx:156` / `fa270c6f`: ohne Wert keine Rechnung.
     render(<WaermepumpeMonatsTabelle
-      monatsdaten={[md(2026, 8, 316, 150, 60)]}
+      monatsreihe={[md(2026, 8, 316, 150, 60)]}
       jazJeMonat={[{
         jahr: 2026, monat: 8, wert: null, grund: 'Wärme ist gerechnet, nicht gemessen',
         zaehler_kwh: null, nenner_kwh: null,
@@ -131,7 +131,7 @@ describe('N-374 — die gesperrte Arbeitszahl nennt ihren Grund sichtbar', () =>
 
   it('der Grund steht als sichtbarer Text unter der Tabelle', () => {
     render(<WaermepumpeMonatsTabelle
-      monatsdaten={[md(2026, 8, 316, 0, 0)]}
+      monatsreihe={[md(2026, 8, 316, 0, 0)]}
       jazJeMonat={[{ jahr: 2026, monat: 8, wert: null, grund: GRUND, zaehler_kwh: null, nenner_kwh: null }]}
     />)
     expect(screen.getByText(`Arbeitszahl nicht gebildet — ${GRUND}`)).toBeInTheDocument()
@@ -141,7 +141,7 @@ describe('N-374 — die gesperrte Arbeitszahl nennt ihren Grund sichtbar', () =>
     // Der Grund folgt aus der Anlagenkonfiguration und wiederholt sich damit über
     // alle Zeilen; zwölfmal derselbe Satz wäre Rauschen statt Auskunft.
     render(<WaermepumpeMonatsTabelle
-      monatsdaten={[md(2026, 7, 300, 0, 0), md(2026, 8, 316, 0, 0)]}
+      monatsreihe={[md(2026, 7, 300, 0, 0), md(2026, 8, 316, 0, 0)]}
       jazJeMonat={[
         { jahr: 2026, monat: 7, wert: null, grund: GRUND, zaehler_kwh: null, nenner_kwh: null },
         { jahr: 2026, monat: 8, wert: null, grund: GRUND, zaehler_kwh: null, nenner_kwh: null },
@@ -153,7 +153,7 @@ describe('N-374 — die gesperrte Arbeitszahl nennt ihren Grund sichtbar', () =>
 
   it('zwei verschiedene Gründe stehen beide da', () => {
     render(<WaermepumpeMonatsTabelle
-      monatsdaten={[md(2026, 7, 300, 0, 0), md(2026, 8, 316, 0, 0)]}
+      monatsreihe={[md(2026, 7, 300, 0, 0), md(2026, 8, 316, 0, 0)]}
       jazJeMonat={[
         { jahr: 2026, monat: 7, wert: null, grund: GRUND, zaehler_kwh: null, nenner_kwh: null },
         { jahr: 2026, monat: 8, wert: null, grund: 'nur Kühlbetrieb in diesem Zeitraum', zaehler_kwh: null, nenner_kwh: null },
@@ -165,7 +165,7 @@ describe('N-374 — die gesperrte Arbeitszahl nennt ihren Grund sichtbar', () =>
 
   it('Gegenprobe: eine gebildete Arbeitszahl erzeugt keinen Sperr-Satz', () => {
     render(<WaermepumpeMonatsTabelle
-      monatsdaten={[md(2026, 8, 316, 150, 60)]}
+      monatsreihe={[md(2026, 8, 316, 150, 60)]}
       jazJeMonat={[{ jahr: 2026, monat: 8, wert: 2.2, grund: GRUND, zaehler_kwh: 210, nenner_kwh: 96 }]}
     />)
     expect(screen.getByText('2,20')).toBeInTheDocument()

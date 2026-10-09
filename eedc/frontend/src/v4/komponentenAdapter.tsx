@@ -29,7 +29,7 @@ import { pvVerteiltHerkunft } from '../lib/pvHerkunft'
 import { istZaehlerKategorie } from '../lib/fieldDefinitions'
 import { SPEICHER_KOPPLUNG_LABELS, aufgeloesteSpeicherKopplung, speicherParameter } from '../lib/investitionParameter'
 import { cockpitApi, type PVStringsGesamtlaufzeitResponse } from '../api/cockpit'
-import { investitionenApi, type InvestitionMonatsdaten } from '../api/investitionen'
+import { investitionenApi, type InvestitionMonatsdaten, type SonstigesMonatsWert } from '../api/investitionen'
 import { istRestZeile, speicherUnterzeile } from '../components/eauto/EAutoCharts'
 import { wandlungsverlusteVerlaufZeile, type Unterzeile } from '../lib/wandlungsverluste'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
@@ -147,6 +147,46 @@ function rowsAusMd(
       for (const s of serien) row[s.key] = Math.max(0, s.wert(m.verbrauch_daten) || 0)
       return row
     })
+}
+
+/** N-645: Verlauf und Vergleich eines sonstigen Verbrauchers aus der bewerteten Monatsreihe
+ *  (`monatsreihe`, dieselbe Rechnung wie die Kacheln) — nicht aus `verbrauch_daten`.
+ *
+ *  Bis 4.1.3 summierte der Vergleich den Legacy-Zwilling `verbrauch_kwh` (M07 Pool 108 statt 72,
+ *  M10 Sauna 0 statt 24), und der Verlauf stapelte nur PV- und Netzbezug — ein Verbraucher ohne
+ *  diese Messung hatte keinen Balken, obwohl die Kachel seinen Verbrauch nannte. **Fachentscheid
+ *  Master 09.10.2026:** was keine PV-/Netz-Messung aufteilt, steht als EIN Segment „nicht
+ *  aufgeteilt" in der Farbe des sonstigen Verbrauchers (vorhandene Datenrolle, kein neues
+ *  Muster). PV/Netz erscheinen, sobald ein Monat sie trägt; „nicht aufgeteilt", sobald ein Monat
+ *  einen Rest hat. Σ Segmente je Monat = Verbrauch des Monats; Σ Monate = Kachel. */
+function verbraucherVerlauf(reihe: SonstigesMonatsWert[]): KompGeraet['verlauf'] {
+  if (!reihe.length) return undefined
+  const sortiert = [...reihe].sort((a, b) => (a.jahr !== b.jahr ? a.jahr - b.jahr : a.monat - b.monat))
+  const hatQuelle = sortiert.some((m) => m.bezug_pv_kwh > 0 || m.bezug_netz_kwh > 0)
+  const hatRest = sortiert.some((m) => m.nicht_aufgeteilt_kwh > 0)
+  const bars: VerlaufBar[] = [
+    ...(hatQuelle || !hatRest ? [
+      { key: 'pv', label: 'PV', farbe: LADEQUELLEN_FARBEN.pv },
+      { key: 'netz', label: 'Netz', farbe: LADEQUELLEN_FARBEN.netz },
+    ] : []),
+    ...(hatRest ? [{ key: 'rest', label: 'nicht aufgeteilt', farbe: CHART_COLORS.modusNichtAufgeteilt }] : []),
+  ]
+  return {
+    bars,
+    rows: sortiert.map((m) => ({
+      name: `${MONAT_KURZ[m.monat]} ${String(m.jahr).slice(2)}`,
+      pv: Math.max(0, m.bezug_pv_kwh),
+      netz: Math.max(0, m.bezug_netz_kwh),
+      rest: Math.max(0, m.nicht_aufgeteilt_kwh),
+    })),
+  }
+}
+
+/** N-645: Jahressummen des Verbrauchs aus der Reihe (Lesetür `get_sonstiges_verbrauch_kwh`). */
+function verbraucherJahre(reihe: SonstigesMonatsWert[]): { jahr: number; summe: number }[] {
+  const m = new Map<number, number>()
+  for (const r of reihe) m.set(r.jahr, (m.get(r.jahr) ?? 0) + Math.max(0, r.verbrauch_kwh))
+  return [...m.entries()].sort((a, b) => a[0] - b[0]).map(([jahr, summe]) => ({ jahr, summe }))
 }
 
 export interface KompAdapter {
@@ -899,7 +939,7 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
   sonstiges: {
     async fetch(anlageId) {
       const ds = await investitionenApi.getSonstigesDashboard(anlageId)
-      return ds.map(({ investition: inv, zusammenfassung: z, monatsdaten: md }) => {
+      return ds.map(({ investition: inv, zusammenfassung: z, monatsdaten: md, monatsreihe: reihe }) => {
         // Kategorie-Badge (Selektor-Differenzierung, SoT-Map R3b S7) + Sonderkosten-Alert (IST-getreu).
         const selektorBadge = SONSTIGES_KATEGORIE_LABELS[z.kategorie] ?? 'Sonstiges'
         const hinweise: KompGeraet['hinweise'] = (z.sonderkosten_euro ?? 0) > 0
@@ -921,20 +961,12 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
                 { label: 'Netz', wert: z.bezug_netz_kwh, farbe: SEG.netz },
               ],
             } : undefined,
-            // ④ Verlauf: Strombezug je Monat nach Quelle (PV ⟷ Netz, gestapelt).
-            verlauf: md.length ? {
-              bars: [
-                { key: 'pv', label: 'PV', farbe: LADEQUELLEN_FARBEN.pv },
-                { key: 'netz', label: 'Netz', farbe: LADEQUELLEN_FARBEN.netz },
-              ],
-              rows: rowsAusMd(md, [
-                { key: 'pv', wert: (vd) => vd.bezug_pv_kwh },
-                { key: 'netz', wert: (vd) => vd.bezug_netz_kwh },
-              ]),
-            } : undefined,
-            vergleich: md.length ? {
+            // ④ Verlauf: Verbrauch je Monat nach Quelle (PV ⟷ Netz ⟷ nicht aufgeteilt, gestapelt) —
+            //    N-645: aus der bewerteten Monatsreihe, s. `verbraucherVerlauf`.
+            verlauf: verbraucherVerlauf(reihe),
+            vergleich: reihe.length ? {
               label: 'Verbrauch', einheit: 'kWh', farbe: CHART_COLORS.netzbezug,
-              jahre: jahresSummen(md, (vd) => vd.verbrauch_kwh),
+              jahre: verbraucherJahre(reihe),
             } : undefined,
             // Wirtschaftlichkeit = Ertrags-Zusammensetzung: PV-Ersparnis (PV-Bezug
             // statt Netz) — 1 Posten.

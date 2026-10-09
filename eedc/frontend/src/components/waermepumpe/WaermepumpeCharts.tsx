@@ -14,11 +14,28 @@ import { ChartLegende, Table, TableHead, TableBody } from '../ui'
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { MONAT_KURZ, CHART_COLORS, GELD_COLORS, GELD_TEXT_CLASS, CHART_HOVER_CURSOR, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useLegendenToggle, useSchmaleAchse } from '../../hooks'
-import type { InvestitionMonatsdaten, WaermepumpeDashboardResponse } from '../../api/investitionen'
+import type { WaermepumpeDashboardResponse, WpMonatsWert } from '../../api/investitionen'
 
 type Zusammenfassung = WaermepumpeDashboardResponse['zusammenfassung']
 
-/** Wärmeerzeugung pro Monat (Heizung + Warmwasser gestapelt).
+/** Monatszeilen des Wärme-Verlaufs aus der bewerteten Monatsreihe (N-643).
+ *
+ * Bis 4.1.3 las der Verlauf `heizenergie_kwh`/`warmwasser_kwh` roh: ein gemeinsamer
+ * Wärmezähler (`waerme_kwh`, M05: 648 kWh) und die Heizwärme eines Klimageräts aus den
+ * Betriebsart-Zählern (N-398, M06: 54 kWh) standen als 0 da, während die Kacheln darüber
+ * dieselbe Wärme zählten. Jetzt kommen alle drei Größen aus der Faltung der Kopfzahlen
+ * (`monatsreihe`); `waerme` ist die Wärme gesamt (Gesamtwert vor Summanden, D1).
+ */
+export function prepWpMonate(monatsreihe: WpMonatsWert[], hatWarmwasserAchse = true) {
+  return monatsreihe.map((m) => ({
+    name: `${MONAT_KURZ[m.monat]} ${m.jahr.toString().slice(2)}`,
+    heizung: m.heizung_kwh,
+    warmwasser: hatWarmwasserAchse ? m.warmwasser_kwh : 0,
+    waerme: m.waerme_kwh,
+  }))
+}
+
+/** Wärmeerzeugung pro Monat (Heizung + Warmwasser gestapelt; ohne Warmwasser-Achse EINE Fläche „Wärme").
  *
  * N-379 / SOLL §3.3/S2: `hatWarmwasserAchse=false` nimmt die zweite Fläche samt
  * Legendeneintrag heraus — eine Split-Klimaanlage hat keinen Warmwasserkreis
@@ -27,17 +44,13 @@ type Zusammenfassung = WaermepumpeDashboardResponse['zusammenfassung']
  * bleibt alles, wie es war.
  */
 export function WaermepumpeMonatsverlauf(
-  { monatsdaten, hatWarmwasserAchse = true }: {
-    monatsdaten: InvestitionMonatsdaten[]; hatWarmwasserAchse?: boolean
+  { monatsreihe, hatWarmwasserAchse = true }: {
+    monatsreihe: WpMonatsWert[]; hatWarmwasserAchse?: boolean
   },
 ) {
   const schmal = useSchmaleAchse()
   const legende = useLegendenToggle()
-  const data = monatsdaten.map((md) => ({
-    name: `${MONAT_KURZ[md.monat]} ${md.jahr.toString().slice(2)}`,
-    heizung: md.verbrauch_daten.heizenergie_kwh || 0,
-    warmwasser: hatWarmwasserAchse ? (md.verbrauch_daten.warmwasser_kwh || 0) : 0,
-  }))
+  const data = prepWpMonate(monatsreihe, hatWarmwasserAchse)
   return (
     <div className="h-64">
       <ResponsiveContainer width="100%" height="100%">
@@ -50,10 +63,16 @@ export function WaermepumpeMonatsverlauf(
           {/* B3/N-391: Ohne Warmwasser-Achse trägt diese Fläche die GESAMTE Wärme
               des Geräts — ob nur Heizung (8ear) oder Heizung und Warmwasser durch
               einen Zähler (Lage B) weiß eedc nicht. „Wärme" ist in beiden Lagen
-              wahr, „Heizung" nur in einer (SOLL §3.3/S2). */}
-          <Area type="monotone" dataKey="heizung" stackId="1" fill={CHART_COLORS.wpWaerme} stroke={CHART_COLORS.wpWaerme} name={hatWarmwasserAchse ? 'Heizung' : 'Wärme'} hide={legende.istVersteckt('heizung')} />
-          {hatWarmwasserAchse && (
-            <Area type="monotone" dataKey="warmwasser" stackId="1" fill={CHART_COLORS.wpWarmwasser} stroke={CHART_COLORS.wpWarmwasser} name="Warmwasser" hide={legende.istVersteckt('warmwasser')} />
+              wahr, „Heizung" nur in einer (SOLL §3.3/S2). N-643: sie zeichnet
+              deshalb die Wärme gesamt (`waerme`), nicht die Heizwärme — bei einem
+              gemeinsamen Wärmezähler ist die Heizwärme 0. */}
+          {hatWarmwasserAchse ? (
+            <>
+              <Area type="monotone" dataKey="heizung" stackId="1" fill={CHART_COLORS.wpWaerme} stroke={CHART_COLORS.wpWaerme} name="Heizung" hide={legende.istVersteckt('heizung')} />
+              <Area type="monotone" dataKey="warmwasser" stackId="1" fill={CHART_COLORS.wpWarmwasser} stroke={CHART_COLORS.wpWarmwasser} name="Warmwasser" hide={legende.istVersteckt('warmwasser')} />
+            </>
+          ) : (
+            <Area type="monotone" dataKey="waerme" stackId="1" fill={CHART_COLORS.wpWaerme} stroke={CHART_COLORS.wpWaerme} name="Wärme" hide={legende.istVersteckt('waerme')} />
           )}
         </AreaChart>
       </ResponsiveContainer>
@@ -183,8 +202,9 @@ const rundKwh = (x: number) => Math.round(x)
  * Hub für einen Monat nicht mehr zwei verschiedene Arbeitszahlen (die **W-15**-Klasse).
  */
 export function WaermepumpeMonatsTabelle(
-  { monatsdaten, jazJeMonat, hatWarmwasserAchse = true }: {
-    monatsdaten: InvestitionMonatsdaten[]
+  { monatsreihe, jazJeMonat, hatWarmwasserAchse = true }: {
+    /** N-643: die bewertete Monatsreihe (`monatsreihe`) — dieselbe Faltung wie die Kacheln. */
+    monatsreihe: WpMonatsWert[]
     jazJeMonat?: JazMonat[]
     /** N-379 / SOLL §3.3/S2: Hat das Gerät die Warmwasser-Achse überhaupt? Eine
      *  Split-Klimaanlage hat keinen Warmwasserkreis (N-304) — dietmar1968 sah
@@ -200,18 +220,19 @@ export function WaermepumpeMonatsTabelle(
   // N-370: Zeilen vorab bilden, damit die Fußnote weiß, ob überhaupt eine
   // Herleitung vorkommt — sie soll nicht unter einer Tabelle stehen, in der
   // jede Zeile ohne sie aufgeht.
-  const zeilen = monatsdaten.map((md) => {
-    // B3/H-1b: der Strom kommt aus derselben Layer-Zeitreihe wie die JAZ. Die
-    // Rohspalte ist bei getrennter Strommessung LEER (der Strom steht in
-    // `strom_heizen_kwh`/`strom_warmwasser_kwh`) — bis B3 stand hier 0 neben
-    // einer richtigen Arbeitszahl. Rohspalte nur als Fallback für eine ältere
-    // Antwort ohne das Feld.
-    const stromLayer = jazMap.get(jazKey(md.jahr, md.monat))?.strom_kwh
-    const strom = stromLayer ?? (md.verbrauch_daten.stromverbrauch_kwh || 0)
-    const heiz = md.verbrauch_daten.heizenergie_kwh || 0
+  const zeilen = monatsreihe.map((md) => {
+    // B3/H-1b → N-643: Strom, Heizung und Warmwasser kommen aus der Monatsreihe —
+    // derselben Faltung wie die Kacheln und die JAZ (`get_wp_strom_kwh`, Lesetüren
+    // `heizwaerme_kwh`/`get_wp_warmwasser_kwh`). Die Rohspalte war bei getrennter
+    // Strommessung leer (0 neben einer richtigen Arbeitszahl), die Heizwärme bei
+    // einem gemeinsamen Wärmezähler oder aus Betriebsart-Zählern ebenso.
+    const strom = md.strom_kwh
+    // B3/N-391: ohne Warmwasser-Achse heißt die Spalte „Wärme" und trägt die Wärme
+    // gesamt — bei einem gemeinsamen Wärmezähler ist die Heizwärme 0 (N-643).
+    const heiz = hatWarmwasserAchse ? md.heizung_kwh : md.waerme_kwh
     // N-379: an einem Gerät ohne Warmwasserkreis liest auch die Zeile nichts —
     // sonst stünde die Zahl in der Herleitungsprobe darunter wieder im Zähler.
-    const ww = hatWarmwasserAchse ? (md.verbrauch_daten.warmwasser_kwh || 0) : 0
+    const ww = hatWarmwasserAchse ? md.warmwasser_kwh : 0
     // N-369: gelesen, nicht gerechnet. Fehlt der Eintrag (älterer Monat
     // ohne Layer-Antwort), steht „—" — nie eine erfundene Zahl.
     const jaz = jazMap.get(jazKey(md.jahr, md.monat))
@@ -268,7 +289,7 @@ export function WaermepumpeMonatsTabelle(
       </TableHead>
       <TableBody>
         {zeilen.map(({ md, strom, heiz, ww, jaz, herleitung }) => (
-          <tr key={md.id ?? `${md.jahr}-${md.monat}`} className="border-b border-gray-100 dark:border-gray-800">
+          <tr key={`${md.jahr}-${md.monat}`} className="border-b border-gray-100 dark:border-gray-800">
             <td className={ZELLE}>{MONAT_KURZ[md.monat]} {md.jahr}</td>
             <td className={`${ZELLE} text-right`}>{fmtZahl(strom, 0)}</td>
             {/* Heizung = WP-Rot, Warmwasser = blau (= CHART_COLORS.wpWaerme/wpWarmwasser; Gernot 2026-06-25 nach detLAN). */}

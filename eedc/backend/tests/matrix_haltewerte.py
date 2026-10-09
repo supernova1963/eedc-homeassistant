@@ -287,8 +287,8 @@ PV_HALTEWERTE: dict[tuple[str, str, str, str], Optional[float]] = {
     ('N640-3', 'S3', 'I6', 'vor:cockpit_monat'): None,
 }
 
-#: ``(Form, Größe, Weg, Invariante, Sicht) → gemessener Wert`` — Achsen-Matrix, 415 Sichten (E4d: +26) + 6 Sichten
-#: Hub-Verlauf (letzter Block).
+#: ``(Form, Größe, Weg, Invariante, Sicht) → gemessener Wert`` — Achsen-Matrix, 415 Sichten (E4d: +26); die 6 Sichten
+#: Hub-Verlauf (letzter Block) sind mit N-645 entfallen.
 ACHSEN_HALTEWERTE: dict[tuple[str, str, str, str, str], Optional[float]] = {
     ('M01', 'netz', 'S3', 'I2', 'autarkie:cockpit_monat:vor=nach'): None,
     ('M01', 'netz', 'S3', 'I2', 'eigenverbrauch:cockpit_monat:vor=nach'): None,
@@ -717,12 +717,7 @@ ACHSEN_HALTEWERTE: dict[tuple[str, str, str, str, str], Optional[float]] = {
     ('M05', 'wp', 'S2', 'I6', 'modus_warmwasser:fakten'): 18.0,
     ('M05', 'wp', 'S2', 'I6', 'modus_warmwasser:uebersicht'): 19.8,
     ('M05', 'wp', 'S2', 'I6', 'modus_warmwasser:zeitreihe'): 18.0,
-    # Sicht „Hub-Verlauf" (Vorhaben nach 4.1.3, gemessen 08.10.2026 gegen `beef97cf`, Bericht
-    # `opus-berichte/HUB-VERLAUF-MATRIX.md`): Verlauf eines Sonstiges-Verbrauchers ohne PV-/Netz-Messung — Σ (PV + Netz).
-    ('M07', 'hub_sonstiges', 'S1', 'I4', 'verbrauch_verlauf:Σreihe=kopf:Pool'): 0.0,
-    ('M07', 'hub_sonstiges', 'S2', 'I4', 'verbrauch_verlauf:Σreihe=kopf:Pool'): 0.0,
-    ('M07', 'hub_sonstiges', 'S3', 'I4', 'verbrauch_verlauf:Σreihe=kopf:Pool'): 0.0,
-    ('M10', 'hub_sonstiges', 'S1', 'I4', 'verbrauch_verlauf:Σreihe=kopf:Sauna'): 0.0,
-    ('M10', 'hub_sonstiges', 'S2', 'I4', 'verbrauch_verlauf:Σreihe=kopf:Sauna'): 0.0,
-    ('M10', 'hub_sonstiges', 'S3', 'I4', 'verbrauch_verlauf:Σreihe=kopf:Sauna'): 0.0,
+    # Sicht „Hub-Verlauf": die sechs Haltewerte `verbrauch_verlauf:Σreihe=kopf` (M07 Pool, M10 Sauna; 0,0 gegen Kopf
+    # 72 / 24) sind mit N-645 entfallen — Fachentscheid Master 09.10.2026, Soll „Verlauf = Kopf" (Segment „nicht
+    # aufgeteilt"); die Sichten sind seither bewertet und grün.
 }
