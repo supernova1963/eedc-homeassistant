@@ -683,6 +683,9 @@ def _sigma_zelle(sicht: str, monat, werte: list) -> Zelle:
 
 
 def bewerte(fid: str, groesse: str, weg: str, inv: str, m: am.Messung) -> list[Zelle]:  # noqa: C901
+    if groesse in HUB_GROESSEN:
+        return _bewerte_hub(fid, groesse, weg, inv, m) or [Zelle("nicht_pruefbar", None, None, "nicht_pruefbar",
+                                                                 NICHT_PRUEFBAR_GRUND.get((groesse, inv), "—"))]
     form = am.MATRIX_FORMEN[fid]
     z: list[Zelle] = []
     juni, juli = am.TAGE_JUNI, am.TAGE_JULI
@@ -837,6 +840,8 @@ NICHT_PRUEFBAR_GRUND: dict[tuple[str, str], str] = {
                     "die Tagesebene trägt sie je Auto (`eauto_<id>`, I4)",
     ("sonstiges", "I5"): "im laufenden Monat führt keine Sicht Sonstiges (ohne Abschluss nicht geführt) — die "
                          "Folgekennzahl (Erzeugung hinter dem Zähler) gibt es dort nicht",
+    ("hub_sonstiges", "I5"): "der Hub eines Sonstiges-Erzeugers nennt keine Folgekennzahl aus einer gemessenen Menge "
+                             "(Eigenverbrauch/Einspeisung je Gerät nicht gemessen, „je Gerät nicht gemessen“ im Kopf)",
 }
 
 
@@ -1059,6 +1064,181 @@ def _gemessen_null(form, groesse, name) -> bool:
     if groesse == "wp":
         return any(all(am.menge(fn, am.TAGE_JUNI) == 0 for fn in g.felder.values()) for g in form.typ("waermepumpe"))
     return False
+
+
+# ── Sicht „Hub-Verlauf" (Vorhaben nach 4.1.3, Vorbild `bkw_hub:*` der PV-Matrix, N-638) ─────────────────────────
+#
+# Komponenten → <Typ> → Verlauf/Vergleich: die Monatsreihe, die der Frontend-Leser aus `monatsdaten[].verbrauch_daten`
+# liest (Nachbildung in `achsen_matrix.miss_hub`, Schlüssel und Fundstelle dort je Serie zitiert), gegen die Kopfzahlen
+# derselben Antwort (I4: Σ Verlauf = Kopf), gegen die Monats-Fakten und die Lesetür auf derselben Zeile (I1: eine Zahl)
+# und ihre Folgekennzahlen (I5). **Eigene Zellen** (Größe `hub_<typ>`), nicht in den bestehenden: eine rote Hub-Sicht
+# macht so keine bisher grüne Zelle rot. Nur nach dem Abschluss (S1 · S2 · S3) — vor dem Abschluss und im laufenden
+# Monat trägt der Hub keine Monatszeile (gemessen, Bericht `opus-berichte/HUB-VERLAUF-MATRIX.md`).
+
+#: Hub-Größe → Investitionstypen, deren Hub sie misst.
+HUB_GROESSEN: dict[str, tuple[str, ...]] = {
+    "hub_speicher": ("speicher",), "hub_wp": ("waermepumpe",), "hub_sonstiges": ("sonstiges",),
+    "hub_emob": ("e-auto", "wallbox"),
+}
+HUB_WEGE = ("S1", "S2", "S3")
+HUB_INVARIANTEN = ("I1", "I4", "I5")
+#: Kopfzahlen der Komponenten-Routen runden auf 0,1 — Σ der ungerundeten Reihe liegt höchstens 0,05 daneben.
+_TOL_KOPF = 0.051
+
+
+def _hub_geraete(form: am.Form, hub: dict, typ: str, z: list):
+    """Je Gerät dieses Typs der Hub-Eintrag; fehlt er, ist das eine rote Sicht (die Route nennt das Gerät nicht)."""
+    for g in form.typ(typ):
+        d = (hub.get(typ) or {}).get(g.name)
+        if d is None:
+            z.append(Zelle(f"eintrag:{typ}:{g.name}", None, "Eintrag je Gerät", "rot", "die Route nennt das Gerät nicht"))
+            continue
+        yield g, d["kopf"], d["summe"], d["juni"] or {}, d
+
+
+def _bewerte_hub(fid: str, groesse: str, weg: str, inv: str, m: am.Messung) -> list[Zelle]:  # noqa: C901 — eine Tafel
+    from backend.core.berechnungen import vollzyklen as berechne_vollzyklen
+
+    form = am.MATRIX_FORMEN[fid]
+    hub = m.nach[weg].get("hub") or {}
+    fk = hub.get("fakten") or {}
+    z: list[Zelle] = []
+    if groesse == "hub_speicher":
+        juni_teile = []
+        for g, k, s, j, _d in _hub_geraete(form, hub, "speicher", z):
+            juni_teile.append(j)
+            # Der Netz-Stapel im Verlauf steht nur bei `arbitrage_faehig` und Netzladung (SpeicherVerlaufCharts.tsx:74);
+            # die Jahresbilanz zeigt ihn immer, sobald ein Monat Netzladung trägt (SpeicherJahresbilanz.tsx:72-73).
+            verlauf_netz = bool(k.get("arbitrage_faehig")) and (k.get("arbitrage_kwh") or 0) > 0
+            if inv == "I4":
+                z += [_z(f"ladung:Σreihe=kopf:{g.name}", s["ladung"], k.get("gesamt_ladung_kwh"), tol=_TOL_KOPF),
+                      _z(f"entladung:Σreihe=kopf:{g.name}", s["entladung"], k.get("gesamt_entladung_kwh"), tol=_TOL_KOPF),
+                      _z(f"netzladung_jahresbilanz:Σreihe=kopf:{g.name}", s["jb_netz"], k.get("arbitrage_kwh"),
+                         tol=_TOL_KOPF, notiz="Kopf `arbitrage_kwh` (Lesetür)"),
+                      _z(f"zyklen:Σreihe=kopf:{g.name}", s["zyklen"], k.get("vollzyklen"), tol=_TOL_KOPF,
+                         notiz="Kopf `vollzyklen` = Entladung ÷ Kapazität")]
+                if verlauf_netz:
+                    z.append(_z(f"netzladung_verlauf:Σreihe=kopf:{g.name}", s["arbitrage"], k.get("arbitrage_kwh"),
+                                tol=_TOL_KOPF))
+            elif inv == "I1":
+                z.append(_z(f"netzladung_jahresbilanz:juni=tuer:{g.name}", j.get("jb_netz"), j.get("tuer_netzladung"),
+                            notiz="Lesetür `get_speicher_netzladung_kwh` derselben Zeile"))
+                if verlauf_netz:
+                    z.append(_z(f"netzladung_verlauf:juni=tuer:{g.name}", j.get("arbitrage"), j.get("tuer_netzladung")))
+            elif inv == "I5":
+                kap = k.get("kapazitaet_kwh")
+                z.append(_z(f"zyklen:juni=vollzyklen(entladung):{g.name}", j.get("zyklen"), j.get("tuer_zyklen"),
+                            tol=0.01, notiz="`berechne_vollzyklen` auf der Entladung derselben Zeile"))
+                if j:
+                    lad = j.get("ladung") or 0.0
+                    z.append(_z(f"pv_ladung_jahresbilanz:juni=ladung−netzladung:{g.name}", max(0.0, lad - (j.get("jb_netz") or 0)),
+                                max(0.0, lad - (j.get("tuer_netzladung") or 0))))
+                if kap:
+                    vz = berechne_vollzyklen(k.get("gesamt_entladung_kwh") or 0.0, kap)
+                    z.append(_z(f"vollzyklen:kopf=vollzyklen(kopf_entladung):{g.name}", k.get("vollzyklen"),
+                                round(vz or 0.0, 1), tol=0.06))
+        if inv == "I1":
+            for menge, leser, fakt in (("ladung", "ladung", "ladung_kwh"), ("entladung", "entladung", "entladung_kwh"),
+                                       ("netzladung_jahresbilanz", "jb_netz", "netzladung_kwh")):
+                z.append(_z(f"{menge}:Σgeraete_juni=fakten", round(sum(t.get(leser) or 0.0 for t in juni_teile), 4),
+                            _p(fk, f"speicher/{fakt}")))
+    elif groesse == "hub_wp":
+        heiz, ww = [], []
+        for g, k, s, j, d in _hub_geraete(form, hub, "waermepumpe", z):
+            hat_ww = d.get("hat_ww")
+            heiz.append(j.get("heizung") or 0.0)
+            ww.append(j.get("warmwasser") or 0.0)
+            if inv == "I4":
+                z += [_z(f"strom:Σreihe=kopf:{g.name}", s["strom"], k.get("gesamt_stromverbrauch_kwh"), tol=_TOL_KOPF),
+                      _z(f"heizung:Σreihe=kopf:{g.name}", s["heizung"], k.get("gesamt_heizenergie_kwh"), tol=_TOL_KOPF),
+                      _z(f"waerme:Σreihe=kopf:{g.name}", round(s["heizung"] + s["warmwasser"], 4),
+                         k.get("gesamt_waerme_kwh"), tol=_TOL_KOPF,
+                         notiz="ohne Warmwasser-Achse trägt die Fläche die ganze Wärme (WaermepumpeCharts.tsx:50-54)")]
+                if hat_ww:
+                    z.append(_z(f"warmwasser:Σreihe=kopf:{g.name}", s["warmwasser"], k.get("gesamt_warmwasser_kwh"),
+                                tol=_TOL_KOPF))
+            elif inv == "I1":
+                z += [_z(f"strom:juni=fakten:{g.name}", j.get("strom"), _p(fk, f"wp_je_geraet/{g.name}/strom_kwh")),
+                      _z(f"waerme:juni=fakten:{g.name}", round((j.get("heizung") or 0.0) + (j.get("warmwasser") or 0.0), 4)
+                         if j else None, _p(fk, f"wp_je_geraet/{g.name}/waerme_kwh")),
+                      _z(f"heizung:juni=tuer:{g.name}", j.get("heizung"), j.get("tuer_heizung") or 0.0 if j else None,
+                         notiz="Lesetür `heizwaerme_kwh` derselben Zeile"),
+                      _z(f"aussicht_strom:juni=tuer:{g.name}", j.get("aussicht_strom"), j.get("tuer_strom"),
+                         notiz="Zeilen-Leser der Aussicht; HEIZ_MONATE nicht nachgebildet"),
+                      _z(f"aussicht_waerme:juni=tuer:{g.name}", j.get("aussicht_waerme"), j.get("tuer_waerme"),
+                         notiz="Zeilen-Leser der Aussicht; HEIZ_MONATE nicht nachgebildet")]
+                if hat_ww:
+                    z.append(_z(f"warmwasser:juni=tuer:{g.name}", j.get("warmwasser"), j.get("tuer_warmwasser")))
+            elif inv == "I5":
+                nenner = s.get("jaz_nenner")
+                z.append(_z(f"jaz:kopf=Σzaehler/Σnenner:{g.name}", k.get("durchschnitt_cop"),
+                            round(s["jaz_zaehler"] / nenner, 2) if nenner else None, tol=0.02))
+        if inv == "I1":
+            z += [_z("heizung:Σgeraete_juni=fakten", round(sum(heiz), 4), _p(fk, "wp/heizung_kwh")),
+                  _z("warmwasser:Σgeraete_juni=fakten", round(sum(ww), 4), _p(fk, "wp/warmwasser_kwh"))]
+    elif groesse == "hub_sonstiges":
+        for g, k, s, j, _d in _hub_geraete(form, hub, "sonstiges", z):
+            if (g.parameter or {}).get("kategorie") == "erzeuger":
+                if inv == "I4":
+                    z.append(_z(f"erzeugung:Σreihe=kopf:{g.name}", s["erzeugung"], k.get("gesamt_erzeugung_kwh"),
+                                tol=_TOL_KOPF))
+                elif inv == "I1":
+                    z.append(_z(f"erzeugung:juni=fakten:{g.name}", j.get("erzeugung"),
+                                _p(fk, f"sonstiges_je_geraet/{g.name}/erzeugung_kwh")))
+                continue
+            if inv == "I4":
+                z += [_z(f"verbrauch_vergleich:Σreihe=kopf:{g.name}", s["vergleich_verbrauch"],
+                         k.get("gesamt_verbrauch_kwh"), tol=_TOL_KOPF, notiz="Vergleich: Σ `verbrauch_kwh` je Jahr"),
+                      _z(f"verbrauch_verlauf:Σreihe=kopf:{g.name}", round(s["bezug_pv"] + s["bezug_netz"], 4),
+                         k.get("gesamt_verbrauch_kwh"), tol=_TOL_KOPF, notiz="Verlauf: PV + Netz gestapelt"),
+                      _z(f"bezug_pv:Σreihe=kopf:{g.name}", s["bezug_pv"], k.get("bezug_pv_kwh"), tol=_TOL_KOPF),
+                      _z(f"bezug_netz:Σreihe=kopf:{g.name}", s["bezug_netz"], k.get("bezug_netz_kwh"), tol=_TOL_KOPF)]
+            elif inv == "I1":
+                z += [_z(f"verbrauch_vergleich:juni=fakten:{g.name}", j.get("vergleich_verbrauch"),
+                         _p(fk, f"sonstiges_je_geraet/{g.name}/verbrauch_kwh")),
+                      _z(f"verbrauch_vergleich:juni=tuer:{g.name}", j.get("vergleich_verbrauch"), j.get("tuer_verbrauch"),
+                         notiz="Lesetür `get_sonstiges_verbrauch_kwh` derselben Zeile")]
+            elif inv == "I5":
+                v = k.get("gesamt_verbrauch_kwh") or 0.0
+                z.append(_z(f"pv_anteil:kopf=bezug_pv/verbrauch:{g.name}", k.get("pv_anteil_prozent"),
+                            round(100.0 * (k.get("bezug_pv_kwh") or 0.0) / v, 1) if v else 0.0, tol=0.06))
+    elif groesse == "hub_emob":
+        dienst_juni = {"pv": 0.0, "netz": 0.0}
+        for g, k, s, j, _d in _hub_geraete(form, hub, "e-auto", z):
+            dienst = bool((g.parameter or {}).get("ist_dienstlich"))
+            if inv == "I4":
+                z += [_z(f"ladung_pv:Σreihe=kopf:{g.name}", s["pv"], k.get("ladung_pv_kwh"), tol=_TOL_KOPF),
+                      _z(f"ladung_netz:Σreihe=kopf:{g.name}", s["netz"], k.get("ladung_netz_kwh"), tol=_TOL_KOPF),
+                      _z(f"ladung_extern:Σreihe=kopf:{g.name}", s["extern"], k.get("ladung_extern_kwh"), tol=_TOL_KOPF),
+                      _z(f"ladung:Σreihe=kopf:{g.name}", round(s["pv"] + s["netz"] + s["extern"], 4),
+                         k.get("gesamt_ladung_kwh"), tol=_TOL_KOPF)]
+            elif inv == "I1":
+                if dienst:
+                    dienst_juni["pv"] += j.get("pv") or 0.0
+                    dienst_juni["netz"] += j.get("netz") or 0.0
+                else:
+                    z += [_z(f"ladung_pv:juni=fakten:{g.name}", j.get("pv"), _p(fk, f"emob_je_auto/{g.name}/pv_kwh")),
+                          _z(f"ladung_netz:juni=fakten:{g.name}", j.get("netz"), _p(fk, f"emob_je_auto/{g.name}/netz_kwh"))]
+            elif inv == "I5":
+                heim = (k.get("ladung_pv_kwh") or 0.0) + (k.get("ladung_netz_kwh") or 0.0)
+                z.append(_z(f"pv_anteil:kopf=pv/(pv+netz):{g.name}", k.get("pv_anteil_heim_prozent"),
+                            round(100.0 * (k.get("ladung_pv_kwh") or 0.0) / heim, 1) if heim else 0.0, tol=0.06))
+        if inv == "I1" and any((g.parameter or {}).get("ist_dienstlich") for g in form.typ("e-auto")):
+            z += [_z("dienst_pv:Σdienst_juni=fakten", round(dienst_juni["pv"], 4), _p(fk, "emob/dienstlich_ladung_pv_kwh")),
+                  _z("dienst_netz:Σdienst_juni=fakten", round(dienst_juni["netz"], 4),
+                     _p(fk, "emob/dienstlich_ladung_netz_kwh"))]
+        wb_juni = []
+        for g, k, s, j, _d in _hub_geraete(form, hub, "wallbox", z):
+            wb_juni.append(j.get("heim") or 0.0)
+            if inv == "I4":
+                z.append(_z(f"heimladung:Σreihe=kopf:{g.name}", s["heim"], k.get("gesamt_heim_ladung_kwh"), tol=_TOL_KOPF))
+            elif inv == "I5":
+                z.append(_z(f"heimladung:kopf=pv+netz:{g.name}", k.get("gesamt_heim_ladung_kwh"),
+                            round((k.get("ladung_pv_kwh") or 0.0) + (k.get("ladung_netz_kwh") or 0.0), 4), tol=_TOL_KOPF))
+        if inv == "I1" and form.typ("wallbox"):
+            z.append(_z("heimladung:Σwallbox_juni=fakten", round(sum(wb_juni), 4),
+                        _p(fk, "emob_wallbox_summe/ladung_kwh")))
+    return z
 
 
 # ── Register: rote Zellen, ohne Abschluss nicht geführt, Soll unklar ───────
@@ -1362,10 +1542,17 @@ _U_W5_SPLIT = ("W5 (nur Gesamtstrom und Gesamtwärme, beide 0): ohne Heiz-/Warmw
                "Aufteilung fest — ob sie 0 oder „keine Angabe“ heißt, ist eine Fachfrage")
 _U_KLIMA_JAZ = ("Arbeitszahl eines Klimageräts mit Heiz- UND Kühlbetrieb: ob die Geräte-Zahl Kälte einrechnet oder "
                 "nur die Heizseite nennt, legen K1–K5 nicht fest (gemessen 3,0 = Heizen 54/18 = Kühlen 108/36)")
+_U_HUB_SONST_BEZUG = ("Hub-Verlauf (Vorhaben nach 4.1.3): Komponenten → Sonstiges → Verlauf eines Verbrauchers stapelt "
+                      "`bezug_pv_kwh` + `bezug_netz_kwh` (komponentenAdapter.tsx:931-932). Ohne PV-/Netz-Messung des Geräts "
+                      "sind beide leer — der Verlauf zeigt 0, der Kopf den Verbrauch (72 / 24 kWh); die Monats-Fakten "
+                      "führen `bezug_pv/netz` ebenfalls 0. Ob der Verlauf dann den Verbrauch ungeteilt, eine abgeleitete "
+                      "Aufteilung oder nichts zeigen soll, legt keine Regel fest — gemessen mit Haltewert, nicht bewertet.")
 SOLL_UNKLAR_MENGE: dict[tuple[str, str, str], str] = {
     ("M05", "wp", "heizung"): _U_W1, ("M05", "wp", "warmwasser"): _U_W1,
     ("M05", "wp", "modus_heizen"): _U_W1, ("M05", "wp", "modus_warmwasser"): _U_W1,
     ("M07", "wp", "heizung"): _U_W5_SPLIT, ("M07", "wp", "warmwasser"): _U_W5_SPLIT,
+    ("M07", "hub_sonstiges", "verbrauch_verlauf"): _U_HUB_SONST_BEZUG,
+    ("M10", "hub_sonstiges", "verbrauch_verlauf"): _U_HUB_SONST_BEZUG,
 }
 
 #: ``(Form, Größe, Weg, Invariante, Sicht) → Grund``: die Regel legt das Soll dieser Sicht nicht fest.
@@ -1484,6 +1671,122 @@ for _u, _zellen in _ROT_W2.items():
     ROT.setdefault(_u, {}).update(_zellen)
 
 
+#: Sicht „Hub-Verlauf" (Vorhaben nach 4.1.3) — gemessen 08.10.2026 gegen HEAD `beef97cf`, Bericht
+#: ``~/.claude/plans/opus-berichte/HUB-VERLAUF-MATRIX.md``. Nur gezeigt, nichts gebaut; kein Leser wurde umgebaut.
+URSACHE.update({
+    "KANDIDAT-HUB-SPEICHER-ZYKLEN": Ursache(
+        "KANDIDAT (nur gezeigt) — Hub-Verlauf Speicher",
+        "Komponenten → Speicher → Verlauf rechnet „Vollzyklen pro Monat“ (Chart und Monatstabelle) als LADUNG ÷ Kapazität "
+        "(`SpeicherVerlaufCharts.tsx:55`); Kopf `vollzyklen` und der Kanon `berechne_vollzyklen` nehmen die ENTLADUNG "
+        "(Entscheid 28.07.2026, `core/berechnungen/speicher.py`). M02 Juni: Reihe 9,0 · Kopf 6,0 (Ladung 90, Entladung "
+        "60, 10 kWh); M04 Akku A 12,0 gegen 6,0; M10 BKW-Akku 18,0 gegen 9,0",
+    ),
+    "KANDIDAT-HUB-SPEICHER-NETZLADUNG": Ursache(
+        "KANDIDAT (nur gezeigt) — Hub-Verlauf Speicher",
+        "Komponenten → Speicher → Vergleich (Jahresbilanz) liest die Netzladung aus dem Legacy-Schlüssel "
+        "`speicher_ladung_netz_kwh` (`SpeicherJahresbilanz.tsx:48`, ebenso `SpeicherVerlaufCharts.tsx:47`); die Zeile "
+        "trägt den Kanon `ladung_netz_kwh`, Kopf `arbitrage_kwh`, Lesetür `get_speicher_netzladung_kwh` und Monats-Fakten "
+        "nennen ihn. M04 Akku A Juni: Netz-Ladung 0 statt 30, PV-Ladung 120 statt 90. Der Netz-Stapel im Verlauf-Chart "
+        "steht nur bei `arbitrage_faehig` (`SpeicherVerlaufCharts.tsx:74`) — in keiner Form gesetzt, dort nicht gemessen",
+    ),
+    "KANDIDAT-HUB-WP-WAERME": Ursache(
+        "KANDIDAT (nur gezeigt) — Hub-Verlauf Wärmepumpe",
+        "Komponenten → Wärmepumpe → Verlauf („Wärmeerzeugung pro Monat“, Monatstabelle) liest `heizenergie_kwh` roh "
+        "(`WaermepumpeCharts.tsx:38`, `:211`) statt der Lesetür `heizwaerme_kwh` bzw. der Gesamtwärme "
+        "(`waerme_gesamt_kwh`) — der Kopf derselben Antwort rechnet mit beiden. W1 (M05, gemeinsamer Wärmezähler "
+        "`waerme_kwh`): Fläche „Wärme“ 0 statt 648, obwohl der Kommentar `:50-53` sagt, sie trage ohne Warmwasser-Achse "
+        "die ganze Wärme; Klimagerät (M06 Klima, Heizwärme aus `betriebsart_nutzenergie_heizen_kwh`, N-398): Heizung 0 "
+        "statt 54, Σ Geräte 540 statt 594 der Monats-Fakten",
+    ),
+    "KANDIDAT-HUB-WP-AUSSICHT": Ursache(
+        "KANDIDAT (nur gezeigt) — Cockpit → Aussicht, Wärmepumpe",
+        "`WpAussicht` (`AussichtTeile.tsx:486-487`) liest je Zeile `stromverbrauch_kwh` und `heizenergie_kwh + "
+        "warmwasser_kwh` roh: getrennte Strommessung (M06 WP HW) Strom 0 statt 216, Betriebsart-Zähler (M06 Klima) "
+        "Strom 0 statt 54 und Wärme 0 statt 54, gemeinsamer Wärmezähler (M05) Wärme 0 statt 648. Gemessen am Zeilen-"
+        "Leser: der Filter HEIZ_MONATE (`:485`) ist nicht nachgebildet — die Matrix trägt nur den Juni, dieselbe Zeile "
+        "stünde in einem Heizmonat so in der Erwartung „~X kWh Strom · ~Y kWh Wärme“",
+    ),
+    "KANDIDAT-HUB-SONSTIGES-VERGLEICH": Ursache(
+        "KANDIDAT (nur gezeigt) — Hub-Vergleich Sonstiges",
+        "Komponenten → Sonstiges → Vergleich eines Verbrauchers summiert `verbrauch_kwh` (`komponentenAdapter.tsx:937`), "
+        "den Legacy-Zwilling; Kopf `gesamt_verbrauch_kwh`, Lesetür `get_sonstiges_verbrauch_kwh` und Monats-Fakten "
+        "nehmen den Kanon `verbrauch_sonstig_kwh` zuerst. M07 Pool (beide Namen gemessen): 108 statt 72; M10 Sauna (nur "
+        "der Kanon): 0 statt 24",
+    ),
+})
+_ROT_HUB: dict[str, dict[tuple[str, str, str, str], tuple[str, ...]]] = {
+    'KANDIDAT-HUB-SONSTIGES-VERGLEICH': {
+        ('M07', 'hub_sonstiges', 'S1', 'I1'): ('verbrauch_vergleich:juni=fakten:Pool', 'verbrauch_vergleich:juni=tuer:Pool'),
+        ('M07', 'hub_sonstiges', 'S1', 'I4'): ('verbrauch_vergleich:Σreihe=kopf:Pool',),
+        ('M07', 'hub_sonstiges', 'S2', 'I1'): ('verbrauch_vergleich:juni=fakten:Pool', 'verbrauch_vergleich:juni=tuer:Pool'),
+        ('M07', 'hub_sonstiges', 'S2', 'I4'): ('verbrauch_vergleich:Σreihe=kopf:Pool',),
+        ('M07', 'hub_sonstiges', 'S3', 'I1'): ('verbrauch_vergleich:juni=fakten:Pool', 'verbrauch_vergleich:juni=tuer:Pool'),
+        ('M07', 'hub_sonstiges', 'S3', 'I4'): ('verbrauch_vergleich:Σreihe=kopf:Pool',),
+        ('M10', 'hub_sonstiges', 'S1', 'I1'): ('verbrauch_vergleich:juni=fakten:Sauna', 'verbrauch_vergleich:juni=tuer:Sauna'),
+        ('M10', 'hub_sonstiges', 'S1', 'I4'): ('verbrauch_vergleich:Σreihe=kopf:Sauna',),
+        ('M10', 'hub_sonstiges', 'S2', 'I1'): ('verbrauch_vergleich:juni=fakten:Sauna', 'verbrauch_vergleich:juni=tuer:Sauna'),
+        ('M10', 'hub_sonstiges', 'S2', 'I4'): ('verbrauch_vergleich:Σreihe=kopf:Sauna',),
+        ('M10', 'hub_sonstiges', 'S3', 'I1'): ('verbrauch_vergleich:juni=fakten:Sauna', 'verbrauch_vergleich:juni=tuer:Sauna'),
+        ('M10', 'hub_sonstiges', 'S3', 'I4'): ('verbrauch_vergleich:Σreihe=kopf:Sauna',),
+    },
+    'KANDIDAT-HUB-SPEICHER-NETZLADUNG': {
+        ('M04', 'hub_speicher', 'S1', 'I1'): ('netzladung_jahresbilanz:juni=tuer:Akku A', 'netzladung_jahresbilanz:Σgeraete_juni=fakten'),
+        ('M04', 'hub_speicher', 'S1', 'I4'): ('netzladung_jahresbilanz:Σreihe=kopf:Akku A',),
+        ('M04', 'hub_speicher', 'S1', 'I5'): ('pv_ladung_jahresbilanz:juni=ladung−netzladung:Akku A',),
+        ('M04', 'hub_speicher', 'S2', 'I1'): ('netzladung_jahresbilanz:juni=tuer:Akku A', 'netzladung_jahresbilanz:Σgeraete_juni=fakten'),
+        ('M04', 'hub_speicher', 'S2', 'I4'): ('netzladung_jahresbilanz:Σreihe=kopf:Akku A',),
+        ('M04', 'hub_speicher', 'S2', 'I5'): ('pv_ladung_jahresbilanz:juni=ladung−netzladung:Akku A',),
+        ('M04', 'hub_speicher', 'S3', 'I1'): ('netzladung_jahresbilanz:juni=tuer:Akku A', 'netzladung_jahresbilanz:Σgeraete_juni=fakten'),
+        ('M04', 'hub_speicher', 'S3', 'I4'): ('netzladung_jahresbilanz:Σreihe=kopf:Akku A',),
+        ('M04', 'hub_speicher', 'S3', 'I5'): ('pv_ladung_jahresbilanz:juni=ladung−netzladung:Akku A',),
+    },
+    'KANDIDAT-HUB-SPEICHER-ZYKLEN': {
+        ('M02', 'hub_speicher', 'S1', 'I4'): ('zyklen:Σreihe=kopf:Akku',),
+        ('M02', 'hub_speicher', 'S1', 'I5'): ('zyklen:juni=vollzyklen(entladung):Akku',),
+        ('M02', 'hub_speicher', 'S2', 'I4'): ('zyklen:Σreihe=kopf:Akku',),
+        ('M02', 'hub_speicher', 'S2', 'I5'): ('zyklen:juni=vollzyklen(entladung):Akku',),
+        ('M02', 'hub_speicher', 'S3', 'I4'): ('zyklen:Σreihe=kopf:Akku',),
+        ('M02', 'hub_speicher', 'S3', 'I5'): ('zyklen:juni=vollzyklen(entladung):Akku',),
+        ('M04', 'hub_speicher', 'S1', 'I4'): ('zyklen:Σreihe=kopf:Akku A', 'zyklen:Σreihe=kopf:Akku B'),
+        ('M04', 'hub_speicher', 'S1', 'I5'): ('zyklen:juni=vollzyklen(entladung):Akku A', 'zyklen:juni=vollzyklen(entladung):Akku B'),
+        ('M04', 'hub_speicher', 'S2', 'I4'): ('zyklen:Σreihe=kopf:Akku A', 'zyklen:Σreihe=kopf:Akku B'),
+        ('M04', 'hub_speicher', 'S2', 'I5'): ('zyklen:juni=vollzyklen(entladung):Akku A', 'zyklen:juni=vollzyklen(entladung):Akku B'),
+        ('M04', 'hub_speicher', 'S3', 'I4'): ('zyklen:Σreihe=kopf:Akku A', 'zyklen:Σreihe=kopf:Akku B'),
+        ('M04', 'hub_speicher', 'S3', 'I5'): ('zyklen:juni=vollzyklen(entladung):Akku A', 'zyklen:juni=vollzyklen(entladung):Akku B'),
+        ('M10', 'hub_speicher', 'S1', 'I4'): ('zyklen:Σreihe=kopf:BKW-Akku',),
+        ('M10', 'hub_speicher', 'S1', 'I5'): ('zyklen:juni=vollzyklen(entladung):BKW-Akku',),
+        ('M10', 'hub_speicher', 'S2', 'I4'): ('zyklen:Σreihe=kopf:BKW-Akku',),
+        ('M10', 'hub_speicher', 'S2', 'I5'): ('zyklen:juni=vollzyklen(entladung):BKW-Akku',),
+        ('M10', 'hub_speicher', 'S3', 'I4'): ('zyklen:Σreihe=kopf:BKW-Akku',),
+        ('M10', 'hub_speicher', 'S3', 'I5'): ('zyklen:juni=vollzyklen(entladung):BKW-Akku',),
+    },
+    'KANDIDAT-HUB-WP-AUSSICHT': {
+        ('M05', 'hub_wp', 'S1', 'I1'): ('aussicht_waerme:juni=tuer:WP',),
+        ('M05', 'hub_wp', 'S2', 'I1'): ('aussicht_waerme:juni=tuer:WP',),
+        ('M05', 'hub_wp', 'S3', 'I1'): ('aussicht_waerme:juni=tuer:WP',),
+        ('M06', 'hub_wp', 'S1', 'I1'): ('aussicht_strom:juni=tuer:Klima', 'aussicht_strom:juni=tuer:WP HW', 'aussicht_waerme:juni=tuer:Klima'),
+        ('M06', 'hub_wp', 'S2', 'I1'): ('aussicht_strom:juni=tuer:Klima', 'aussicht_strom:juni=tuer:WP HW', 'aussicht_waerme:juni=tuer:Klima'),
+        ('M06', 'hub_wp', 'S3', 'I1'): ('aussicht_strom:juni=tuer:Klima', 'aussicht_strom:juni=tuer:WP HW', 'aussicht_waerme:juni=tuer:Klima'),
+    },
+    'KANDIDAT-HUB-WP-WAERME': {
+        ('M05', 'hub_wp', 'S1', 'I1'): ('waerme:juni=fakten:WP',),
+        ('M05', 'hub_wp', 'S1', 'I4'): ('waerme:Σreihe=kopf:WP',),
+        ('M05', 'hub_wp', 'S2', 'I1'): ('waerme:juni=fakten:WP',),
+        ('M05', 'hub_wp', 'S2', 'I4'): ('waerme:Σreihe=kopf:WP',),
+        ('M05', 'hub_wp', 'S3', 'I1'): ('waerme:juni=fakten:WP',),
+        ('M05', 'hub_wp', 'S3', 'I4'): ('waerme:Σreihe=kopf:WP',),
+        ('M06', 'hub_wp', 'S1', 'I1'): ('heizung:juni=tuer:Klima', 'heizung:Σgeraete_juni=fakten', 'waerme:juni=fakten:Klima'),
+        ('M06', 'hub_wp', 'S1', 'I4'): ('heizung:Σreihe=kopf:Klima', 'waerme:Σreihe=kopf:Klima'),
+        ('M06', 'hub_wp', 'S2', 'I1'): ('heizung:juni=tuer:Klima', 'heizung:Σgeraete_juni=fakten', 'waerme:juni=fakten:Klima'),
+        ('M06', 'hub_wp', 'S2', 'I4'): ('heizung:Σreihe=kopf:Klima', 'waerme:Σreihe=kopf:Klima'),
+        ('M06', 'hub_wp', 'S3', 'I1'): ('heizung:juni=tuer:Klima', 'heizung:Σgeraete_juni=fakten', 'waerme:juni=fakten:Klima'),
+        ('M06', 'hub_wp', 'S3', 'I4'): ('heizung:Σreihe=kopf:Klima', 'waerme:Σreihe=kopf:Klima'),
+    },
+}
+for _u, _zellen in _ROT_HUB.items():
+    ROT.setdefault(_u, {}).update(_zellen)
+
+
 def _baue_bekannt() -> dict:
     sichten: dict = {}
     kennungen: dict = {}
@@ -1513,6 +1816,13 @@ def _zellen():
             for weg in WEGE:
                 for inv in INVARIANTEN:
                     if _hat_zelle(form, groesse, inv):
+                        yield fid, groesse, weg, inv
+    # Sicht „Hub-Verlauf": eigene Zellen je Typ, den die Form trägt (nach den bestehenden, deren IDs bleiben).
+    for fid, form in am.MATRIX_FORMEN.items():
+        for groesse, typen in HUB_GROESSEN.items():
+            if any(form.typ(t) for t in typen):
+                for weg in HUB_WEGE:
+                    for inv in HUB_INVARIANTEN:
                         yield fid, groesse, weg, inv
 
 
@@ -1601,6 +1911,16 @@ async def test_jede_soll_unklar_sicht_hat_haltewert(_matrix_ordner):
             if _soll_unklar(*k) and k not in ACHSEN_HALTEWERTE:
                 ohne.append(k)
     assert not ohne, ohne
+
+
+def test_hub_leser_nachbildung_steht_im_quelltext():
+    """Sicht „Hub-Verlauf": die Nachbildung der Frontend-Leser (`achsen_matrix.miss_hub`) liest dieselben Schlüssel wie
+    die Komponente — jeder nachgebildete Ausdruck steht wörtlich in seiner Datei (`achsen_matrix.HUB_LESER_QUELLTEXT`).
+    Wird ein Leser geändert, ist diese Probe rot, bis die Nachbildung (und ggf. das Register) mitgezogen ist."""
+    wurzel = Path(__file__).resolve().parents[2] / "frontend" / "src"
+    fehlt = [(datei, ausdruck) for datei, ausdruecke in am.HUB_LESER_QUELLTEXT.items()
+             for ausdruck in ausdruecke if ausdruck not in (wurzel / datei).read_text(encoding="utf-8")]
+    assert not fehlt, fehlt
 
 
 def test_register_zeigt_nur_auf_bestehende_zellen():

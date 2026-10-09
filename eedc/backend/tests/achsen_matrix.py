@@ -727,6 +727,218 @@ async def miss_dashboards(db, aid: int, ids: dict, form: Form) -> dict:
     return out
 
 
+def _js_oder_0(v) -> float:
+    """``x || 0`` des Frontends: jede falsy Angabe (``None``, 0, fehlend) ist 0."""
+    try:
+        return float(v) if v else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _hub_reihe(zeilen: list[dict], leser: dict[str, Callable[[dict], Any]]) -> dict:
+    """Die Monatsreihe eines Hub-Lesers: je Serie die Σ über alle Zeilen und der Juni (``None`` = keine Juni-Zeile)."""
+    juni = next((z for z in zeilen if (z.get("jahr"), z.get("monat")) == (JAHR, JUNI)), None)
+    out: dict = {"monate": len(zeilen), "summe": {}, "juni": None}
+    for k, fn in leser.items():
+        werte = [fn(z) for z in zeilen]
+        out["summe"][k] = _r(sum(w for w in werte if isinstance(w, (int, float))))
+    if juni is not None:
+        out["juni"] = {k: _r(fn(juni)) for k, fn in leser.items()}
+    return out
+
+
+#: Die Ausdrücke der Frontend-Leser, die ``miss_hub`` nachbildet — wörtlich aus der Komponente
+#: (``frontend/src/…``). ``test_achsen_matrix.test_hub_leser_nachbildung_steht_im_quelltext`` prüft, dass sie dort noch
+#: stehen: ändert jemand den Leser (etwa beim Heilen eines ``KANDIDAT-HUB-*``), wird die Probe rot, und die Nachbildung
+#: zieht im selben Zug mit — sonst bliebe die Zelle still auf dem alten Leser stehen.
+HUB_LESER_QUELLTEXT: dict[str, tuple[str, ...]] = {
+    "components/speicher/SpeicherVerlaufCharts.tsx": (
+        "const ladung = md.verbrauch_daten.ladung_kwh || 0",
+        "const entladung = md.verbrauch_daten.entladung_kwh || 0",
+        "const arbitrage = md.verbrauch_daten.speicher_ladung_netz_kwh || 0",
+        "zyklen: z.kapazitaet_kwh != null && z.kapazitaet_kwh > 0 ? ladung / z.kapazitaet_kwh : 0",
+        "const arbitrageAktiv = z.arbitrage_faehig && z.arbitrage_kwh > 0",
+    ),
+    "components/speicher/SpeicherJahresbilanz.tsx": (
+        "const ladung = md.verbrauch_daten.ladung_kwh || 0",
+        "const netz = md.verbrauch_daten.speicher_ladung_netz_kwh || 0",
+        "y.pvLadung += Math.max(0, ladung - netz)",
+    ),
+    "components/waermepumpe/WaermepumpeCharts.tsx": (
+        "heizung: md.verbrauch_daten.heizenergie_kwh || 0",
+        "warmwasser: hatWarmwasserAchse ? (md.verbrauch_daten.warmwasser_kwh || 0) : 0",
+        "const strom = stromLayer ?? (md.verbrauch_daten.stromverbrauch_kwh || 0)",
+        "const heiz = md.verbrauch_daten.heizenergie_kwh || 0",
+    ),
+    "v4/WaermepumpeHubBloecke.tsx": (
+        "hatWarmwasserAchse={ds.zusammenfassung.hat_warmwasser_achse !== false}",
+    ),
+    "components/aussicht/AussichtTeile.tsx": (
+        "m.verbrauch_daten.stromverbrauch_kwh || 0",
+        "(m.verbrauch_daten.heizenergie_kwh || 0) + (m.verbrauch_daten.warmwasser_kwh || 0)",
+    ),
+    "v4/komponentenAdapter.tsx": (
+        "{ key: 'pv', wert: (vd) => vd.bezug_pv_kwh }",
+        "{ key: 'netz', wert: (vd) => vd.bezug_netz_kwh }",
+        "jahre: jahresSummen(md, (vd) => vd.verbrauch_kwh)",
+        "rows: rowsAusMd(md, [{ key: 'erz', wert: (vd) => vd.erzeugung_kwh }])",
+        "rows: rowsAusMd(md, [{ key: 'heim', wert: (vd) => vd.ladung_kwh }])",
+    ),
+    "components/eauto/EAutoCharts.tsx": (
+        "pv: md.verbrauch_daten.ladung_pv_kwh || 0",
+        "netz: md.verbrauch_daten.ladung_netz_kwh || 0",
+        "extern: md.verbrauch_daten.ladung_extern_kwh || 0",
+    ),
+    "components/eauto/EAutoJahresvergleich.tsx": (
+        "const pv = md.verbrauch_daten.ladung_pv_kwh || 0",
+        "const netz = md.verbrauch_daten.ladung_netz_kwh || 0",
+        "const extern = md.verbrauch_daten.ladung_extern_kwh || 0",
+    ),
+}
+
+
+async def miss_hub(db, aid: int, ids: dict, form: Form) -> dict:
+    """Komponenten → <Typ> → Verlauf (Hub-Verlauf, Vorhaben nach 4.1.3; Vorbild ``pv_achse_matrix.miss_bkw_hub``).
+
+    Je Gerät: die Monatsreihe, wie der **Frontend-Leser** sie aus ``monatsdaten[].verbrauch_daten`` liest (Nachbildung
+    mit denselben Schlüsseln, Fundstelle je Serie), ihre Σ neben den **Kopfzahlen** derselben Antwort und der Juni nach
+    der **Lesetür** auf derselben Zeile. Die Monats-Fakten des Juni stehen daneben (``fakten``), damit I1 sie vergleichen
+    kann. Kein Leser wird umgebaut, keine Reihe gebaut — gemessen wird, was heute ankommt."""
+    from backend.api.routes.investitionen.dashboard_eauto import get_eauto_dashboard
+    from backend.api.routes.investitionen.dashboard_sonstiges import get_sonstiges_dashboard
+    from backend.api.routes.investitionen.dashboard_speicher import get_speicher_dashboard
+    from backend.api.routes.investitionen.dashboard_waermepumpe import get_waermepumpe_dashboard
+    from backend.api.routes.investitionen.dashboard_wallbox import get_wallbox_dashboard
+    from backend.core.berechnungen import vollzyklen as berechne_vollzyklen
+    from backend.core.berechnungen.waermepumpe_kennzahl import heizwaerme_kwh, waerme_gesamt_kwh
+    from backend.core.field_definitions import (
+        get_sonstiges_verbrauch_kwh,
+        get_speicher_netzladung_kwh,
+        get_wp_strom_kwh,
+        get_wp_warmwasser_kwh,
+    )
+    from backend.services.monats_fakten import lade_monats_fakten
+
+    rev = _namen(ids)
+
+    def _liste(res) -> list[dict]:
+        return [d if isinstance(d, dict) else d.model_dump(mode="json") for d in (res or [])]
+
+    def _zeilen(dd: dict) -> list[dict]:
+        return [{"jahr": m.get("jahr"), "monat": m.get("monat"), "vd": m.get("verbrauch_daten") or {}}
+                for m in dd.get("monatsdaten") or []]
+
+    def _name(dd: dict) -> str:
+        inv = dd.get("investition") or {}
+        return rev.get(str(inv.get("id")), inv.get("bezeichnung") or "?")
+
+    out: dict = {}
+    if form.typ("speicher"):
+        je = {}
+        for dd in _liste(await get_speicher_dashboard(anlage_id=aid, strompreis_cent=None,
+                                                      einspeiseverguetung_cent=None, db=db)):
+            z = dd.get("zusammenfassung") or {}
+            kap = z.get("kapazitaet_kwh")
+            leser = {
+                # SpeicherVerlaufCharts.tsx:45-47, :55 (`prepSpeicherMonate`)
+                "ladung": lambda r: _js_oder_0(r["vd"].get("ladung_kwh")),
+                "entladung": lambda r: _js_oder_0(r["vd"].get("entladung_kwh")),
+                "arbitrage": lambda r: _js_oder_0(r["vd"].get("speicher_ladung_netz_kwh")),
+                "zyklen": lambda r, k=kap: (_js_oder_0(r["vd"].get("ladung_kwh")) / k) if k is not None and k > 0 else 0.0,
+                # SpeicherJahresbilanz.tsx:46-48 (`prepSpeicherJahresbilanz`)
+                "jb_netz": lambda r: _js_oder_0(r["vd"].get("speicher_ladung_netz_kwh")),
+                # Lesetüren auf derselben Zeile (Soll)
+                "tuer_netzladung": lambda r: get_speicher_netzladung_kwh(r["vd"]),
+                "tuer_zyklen": lambda r, k=kap: berechne_vollzyklen(
+                    _js_oder_0(r["vd"].get("entladung_kwh")), k) if k else None,
+            }
+            je[_name(dd)] = {"kopf": _flach(z), **_hub_reihe(_zeilen(dd), leser)}
+        out["speicher"] = je
+    if form.typ("waermepumpe"):
+        je = {}
+        invs = {i.id: i for i in (await db.execute(select(Investition).where(
+            Investition.anlage_id == aid, Investition.typ == "waermepumpe"))).scalars().all()}
+        for dd in _liste(await get_waermepumpe_dashboard(anlage_id=aid, strompreis_cent=None, db=db)):
+            z = dd.get("zusammenfassung") or {}
+            params = (invs.get((dd.get("investition") or {}).get("id")) or Investition()).parameter
+            hat_ww = z.get("hat_warmwasser_achse") is not False      # WaermepumpeHubBloecke.tsx:61
+            jaz = {(j.get("jahr"), j.get("monat")): j for j in z.get("jaz_je_monat") or []}
+
+            def _jaz(r, k, j=jaz):
+                return (j.get((r["jahr"], r["monat"])) or {}).get(k)
+
+            leser = {
+                # WaermepumpeCharts.tsx:35-39 (`WaermepumpeMonatsverlauf`) — auch Tabelle :211, :214
+                "heizung": lambda r: _js_oder_0(r["vd"].get("heizenergie_kwh")),
+                "warmwasser": lambda r, w=hat_ww: _js_oder_0(r["vd"].get("warmwasser_kwh")) if w else 0.0,
+                # WaermepumpeCharts.tsx:209-210 (`WaermepumpeMonatsTabelle`: Strom aus `jaz_je_monat`, `??` Rohspalte)
+                "strom": lambda r, j=_jaz: j(r, "strom_kwh") if j(r, "strom_kwh") is not None
+                else _js_oder_0(r["vd"].get("stromverbrauch_kwh")),
+                "jaz_zaehler": lambda r, j=_jaz: j(r, "zaehler_kwh"),
+                "jaz_nenner": lambda r, j=_jaz: j(r, "nenner_kwh"),
+                # AussichtTeile.tsx:486-487 (`WpAussicht`, Zeilen-Leser; der Filter HEIZ_MONATE :485 ist nicht
+                # nachgebildet — die Matrix trägt nur den Juni, dieselbe Zeile stünde im Januar so da)
+                "aussicht_strom": lambda r: _js_oder_0(r["vd"].get("stromverbrauch_kwh")),
+                "aussicht_waerme": lambda r: _js_oder_0(r["vd"].get("heizenergie_kwh"))
+                + _js_oder_0(r["vd"].get("warmwasser_kwh")),
+                # Lesetüren auf derselben Zeile (Soll)
+                "tuer_heizung": lambda r: heizwaerme_kwh(r["vd"]),
+                "tuer_warmwasser": lambda r, p=params: get_wp_warmwasser_kwh(r["vd"], p),
+                "tuer_strom": lambda r, p=params: get_wp_strom_kwh(r["vd"], p),
+                "tuer_waerme": lambda r, p=params: waerme_gesamt_kwh(
+                    r["vd"].get("waerme_kwh"), heizwaerme_kwh(r["vd"]), get_wp_warmwasser_kwh(r["vd"], p)),
+            }
+            je[_name(dd)] = {"kopf": _flach(z), "hat_ww": hat_ww, **_hub_reihe(_zeilen(dd), leser)}
+        out["waermepumpe"] = je
+    if form.typ("sonstiges"):
+        je = {}
+        for dd in _liste(await get_sonstiges_dashboard(anlage_id=aid, strompreis_cent=None,
+                                                       einspeiseverguetung_cent=None, db=db)):
+            z = dd.get("zusammenfassung") or {}
+            leser = {
+                # komponentenAdapter.tsx:929-933 (Verbraucher, Verlauf PV/Netz) · :937 (Vergleich)
+                "bezug_pv": lambda r: max(0.0, _js_oder_0(r["vd"].get("bezug_pv_kwh"))),
+                "bezug_netz": lambda r: max(0.0, _js_oder_0(r["vd"].get("bezug_netz_kwh"))),
+                "vergleich_verbrauch": lambda r: max(0.0, _js_oder_0(r["vd"].get("verbrauch_kwh"))),
+                # komponentenAdapter.tsx:1062, :1066 (Erzeuger, Verlauf und Vergleich)
+                "erzeugung": lambda r: max(0.0, _js_oder_0(r["vd"].get("erzeugung_kwh"))),
+                # Lesetür auf derselben Zeile (Soll)
+                "tuer_verbrauch": lambda r: get_sonstiges_verbrauch_kwh(r["vd"]),
+            }
+            je[_name(dd)] = {"kopf": _flach(z), **_hub_reihe(_zeilen(dd), leser)}
+        out["sonstiges"] = je
+    if form.typ("e-auto"):
+        je = {}
+        for dd in _liste(await get_eauto_dashboard(anlage_id=aid, strompreis_cent=None, db=db)):
+            leser = {
+                # EAutoCharts.tsx:79-81 (`EAutoLadungVerlauf`), EAutoJahresvergleich.tsx:36-38
+                "pv": lambda r: _js_oder_0(r["vd"].get("ladung_pv_kwh")),
+                "netz": lambda r: _js_oder_0(r["vd"].get("ladung_netz_kwh")),
+                "extern": lambda r: _js_oder_0(r["vd"].get("ladung_extern_kwh")),
+            }
+            je[_name(dd)] = {"kopf": _flach(dd.get("zusammenfassung") or {}), **_hub_reihe(_zeilen(dd), leser)}
+        out["e-auto"] = je
+    if form.typ("wallbox"):
+        je = {}
+        for dd in _liste(await get_wallbox_dashboard(anlage_id=aid, strompreis_cent=None, db=db)):
+            leser = {
+                # komponentenAdapter.tsx:832 (Verlauf) · :836 (Vergleich)
+                "heim": lambda r: max(0.0, _js_oder_0(r["vd"].get("ladung_kwh"))),
+            }
+            je[_name(dd)] = {"kopf": _flach(dd.get("zusammenfassung") or {}), **_hub_reihe(_zeilen(dd), leser)}
+        out["wallbox"] = je
+    fk = await lade_monats_fakten(db, aid, von=(JAHR, JUNI), bis=(JAHR, JUNI))
+    f = fk[0] if fk else None
+    out["fakten"] = None if f is None else {
+        "speicher": _flach(f.speicher), "wp": _flach(f.wp), "sonstiges": _flach(f.sonstiges),
+        "emob": _flach(f.emob), "emob_wallbox_summe": _flach(f.emob.wallbox_summe),
+        "wp_je_geraet": {rev.get(str(i), str(i)): _flach(g) for i, g in (f.wp.je_geraet or {}).items()},
+        "sonstiges_je_geraet": {rev.get(str(i), str(i)): _flach(g) for i, g in (f.sonstiges.je_geraet or {}).items()},
+        "emob_je_auto": {rev.get(str(i), str(i)): _flach(g) for i, g in (f.emob.je_auto or {}).items()},
+    }
+    return out
+
+
 async def miss_ha_export(db, aid: int, ids: dict) -> dict:
     from backend.api.routes.ha_export.anlage_sensoren import calculate_anlage_sensors
     from backend.api.routes.ha_export.emob import _load_emob_pool_ctx
@@ -841,7 +1053,8 @@ async def _sichten_nach(db, aid, ids, form) -> dict:
             "community": await miss_community(db, aid),
             "pdf": await miss_pdf(db, aid),
             "aussichten": await miss_aussichten(db, aid),
-            "preis": await miss_preis(db, aid)}
+            "preis": await miss_preis(db, aid),
+            "hub": await miss_hub(db, aid, ids, form)}
 
 
 async def messe_ha(form: Form, m: Messung) -> None:
