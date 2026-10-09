@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.1.4] - 2026-10-09 — Verläufe rechnen wie die Kacheln, ein Rückgang der HA-Statistik wird benannt
 
 ### Added
 

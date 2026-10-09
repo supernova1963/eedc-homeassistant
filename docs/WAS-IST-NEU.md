@@ -9,6 +9,21 @@
 
 ---
 
+## v4.1.4 — 9. Oktober 2026
+
+**In dieser Version:** die Verlaufs-Diagramme und Monatstabellen der Komponenten-Hubs (Speicher, Wärmepumpe, Sonstiges,
+Balkonkraftwerk) zeigen je Monat dieselbe Rechnung wie die Kennzahlen darüber · ein Balkonkraftwerk ohne eigenen Zähler
+zählt in der Monatsleiste nicht mehr doppelt · der Daten-Checker benennt einen Rückgang der Home-Assistant-Statistik mit
+Sensor, Tag und Menge, und „Aus HA laden" sagt es im Vergleichsdialog · der Eigenverbrauch des Balkonkraftwerks heißt
+im Monatsabschluss „optional, wird abgeleitet" · die Einstellungs-Suche findet den Monatsbericht.
+
+**Weitere Korrekturen:** Speicher-Vollzyklen im Verlauf aus der Entladung wie die Kachel · Netzladung des Speichers im
+Vergleich und im Ladungs-Diagramm · Wärme der Wärmepumpe im Verlauf auch bei gemeinsamem Wärmezähler, die Aussicht
+rechnet die Heizsaison damit · ein sonstiger Verbraucher ohne PV/Netz-Aufteilung bekommt im Verlauf seinen Balken
+„nicht aufgeteilt".
+
+Alle Details im [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md).
+
 ## v4.1.3 — 7. Oktober 2026
 
 **In dieser Version:** eedc rechnet Tag, Monat und Jahr mit Home Assistant aus den Zählerständen der Langzeitstatistik —
