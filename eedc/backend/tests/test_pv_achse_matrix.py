@@ -215,27 +215,101 @@ def _folge(sicht: str, d: Optional[dict], einsp: float, netz: float, *, volleins
     return out
 
 
-#: Formen, deren Geld-Sichten gemessen und gezeigt werden (Auftrag Achsen-Matrix 2, „Zusatz an der PV-Matrix").
-GELD_SICHTEN_FORMEN = ("F13a",)
+#: Formen, deren Geld-Sichten bewertet werden — N-588 (Vorlage Fassung 2 B4, Entscheide Master 10.10.2026): der
+#: Messpunkt-Vertrag erfüllt (F13a, W2-V), nichts abzuziehen (F13b, F15), der Vertrag fällt (W2-D, W2-B, W2-B7).
+GELD_SICHTEN_FORMEN = ("F13a", "F13b", "F15", "W2-V", "W2-D", "W2-B", "W2-B7")
 
 #: HA-Bauform E4b: Formen, deren Wandlungsverluste (`miss_fakten`, Kanal-Leser) gemessen und bewertet werden —
 #: Σ Strings > Anlagenzähler (F13a, Juni 36,0), Σ Strings < Anlagenzähler (F13b, 0) und der Volleinspeiser (W2-V).
 WANDLUNGSVERLUSTE_FORMEN = ("F13a", "F13b", "W2-V")
 
+#: N-588: Der erwartete Grund, warum die Verluste der Form NICHT bewertet werden (``None`` = bewertet bzw. keine) —
+#: eine Tabelle, weil er aus der Konstruktion der Form folgt, nicht aus einer Rechnung (Kommentar an `FORMEN_N588`).
+VERLUSTE_GRUND_SOLL: dict[str, Optional[str]] = {
+    "F13a": None, "F13b": None, "F15": None, "W2-V": None,
+    "W2-D": "dc_speicher", "W2-B": "ueber_schwelle", "W2-B7": "bkw_ausserhalb",
+}
+#: N-588 F5: die Regeln der Kategorie „Messpunkt", die für den abgeschlossenen Juni melden (mit Kanälen: HA, S1, S2).
+MESSPUNKT_SOLL: dict[str, list[str]] = {
+    "F13a": [], "F13b": ["b"], "F15": [], "W2-V": [], "W2-D": ["c'"], "W2-B": ["a", "a'"], "W2-B7": ["a'"],
+}
+#: Preis der Formen (Tarif 30 ct) und Strommix-Faktor (DI-2) — die Matrix rechnet das Soll unabhängig nach.
+_PREIS, _CO2 = 0.30, 0.38
 
-def _geld_sichten(nach: dict) -> list[Zelle]:
-    """Ersparnis aus Eigenverbrauch und CO₂ je Sicht, neben dem Eigenverbrauch derselben Sicht. Ihr Soll legt der
-    Bauplan der HA-Bauform fest (N-588: Σ Einzelzähler > Anlagenzähler ⇒ Wandlungsverluste) — hier nur gemessen.
-    Gezeigt wird als „soll" die Rechnung EV × 30 ct derselben Sicht (Tarif der Form), nicht ein Urteil."""
+
+def _abzug(fid: str, weg: str, tage: tuple) -> float:
+    """Die bewertbaren Wandlungsverluste eines Zeitraums nach der Regel: Verluste der Form (unabhängig aus den
+    Zählerreihen, `soll_wandlungsverluste`), wenn der Datenstand Kanäle hat (HA, S1, S2) und der Vertrag hält."""
+    if weg not in ("HA", "S1", "S2") or VERLUSTE_GRUND_SOLL[fid] is not None:
+        return 0.0
+    return mx.soll_wandlungsverluste(mx.MATRIX_FORMEN[fid], tage) or 0.0
+
+
+def _geld_sichten(fid: str, weg: str, nach: dict) -> list[Zelle]:
+    """N-588: Ersparnis und CO₂ je Sicht auf dem Eigenverbrauch OHNE die bewertbaren Wandlungsverluste (F1, DI-2: eine
+    Eingabe) — der Eigenverbrauch der Sicht selbst ist Bilanz (F2) und prüft I5 `_folge`. F13a S1/S2: (450 − 36) ×
+    30 ct = 124,20 €, × 0,38 = 157,32 kg; S3 ohne Kanäle 135,00 € / 171 kg (F3). ROI: die PV-Zeile rechnet die Monate
+    der Form auf zwölf hoch (ein Monat ⇒ × 12) und zieht die bewertbaren Verluste vor der Hochrechnung ab; ihr CO₂
+    rechnet bis B7 die Erzeugung (N-647, „Soll unklar")."""
     out = []
+    abzug = _abzug(fid, weg, mx.TAGE_JUNI)
     for k in ("monat", "uebersicht", "tabelle", "pdf", "ha_export"):
         d = nach[k] or {}
         ev = d.get("ev")
-        out.append(Zelle(f"geld:{k}:ev_ersparnis", d.get("ev_ersparnis"),
-                         None if ev is None else round(ev * 0.30, 2), "ok", "EV × 30 ct derselben Sicht"))
+        soll = None if ev is None else round(max(0.0, ev - abzug) * _PREIS, 2)
+        out.append(_z(f"geld:{k}:ev_ersparnis", d.get("ev_ersparnis"), soll, notiz=f"(EV − {abzug:g}) × 30 ct"))
+    ev_fakt = (nach["fakten"] or {}).get("ev")
     for k in ("uebersicht", "ha_export", "community"):
-        out.append(Zelle(f"geld:{k}:co2", (nach[k] or {}).get("co2"), None, "ok", "N-588"))
+        soll = None if ev_fakt is None else max(0.0, ev_fakt - abzug) * _CO2
+        if k == "community" and ev_fakt is not None and ev_fakt <= 0:
+            soll = None   # die Community-Nutzlast trägt ohne Eigenverbrauch keine CO₂-Zahl
+        out.append(_z(f"geld:{k}:co2", (nach[k] or {}).get("co2"), soll, tol=0.06,
+                      notiz=f"(EV − {abzug:g}) × 0,38"))
+    roi = nach.get("roi") or {}
+    if roi.get("ev_kwh_jahr") is not None:
+        soll_roi = round(max(0.0, roi["ev_kwh_jahr"] - abzug * 12) * _PREIS, 2)
+        out.append(_z("geld:roi:ev_ersparnis", roi.get("ev_ersparnis"), soll_roi, tol=0.2,
+                      notiz=f"(EV-Jahr − {abzug:g} × 12) × 30 ct"))
+    out.append(Zelle("geld:roi:co2", roi.get("co2"), None, "ok", "N-647 (B7)"))
+    # BKW-Hub (Entscheid Master 10.10.2026, F-1 (A)): Eigenverbrauch/Einspeisung bleiben der Bilanz-Anteil (I4,
+    # `_bkw_hub_zellen`); Ersparnis und CO₂ der Kopfzahlen bewerten den Anteil am Eigenverbrauch OHNE die Verluste.
+    from backend.core.berechnungen import bkw_eigenverbrauch_anteil
+
+    form = mx.MATRIX_FORMEN[fid]
+    hub = nach.get("bkw_hub") or {}
+    kx = hub.get("kontext") or {}
+    von, bis = mx._tagesfenster_dt(mx.TAGE_JUNI[0])[0], mx._tagesfenster_dt(mx.TAGE_JUNI[-1])[1]
+    for b in (g for g in form.geraete if g.typ == "balkonkraftwerk" and g.zaehler):
+        d = (hub.get("geraete") or {}).get(b.name) or {}
+        erz = mx.zaehler_delta(form, b.sensor_id, von, bis) if form.w2 else mx.tagesmenge(b.rate) * 30
+        ev_g = kx.get("ev_gesamt")
+        a = bkw_eigenverbrauch_anteil(
+            bkw_erzeugung_kwh=erz, bkw_eigenverbrauch_gemessen_kwh=0.0,
+            erzeugung_hinter_zaehler_kwh=kx.get("hinter_zaehler"),
+            eigenverbrauch_gesamt_kwh=None if ev_g is None else max(0.0, ev_g - abzug),
+            hat_zaehlerzeile=bool(kx.get("hat_zaehlerzeile")))
+        out.append(_z(f"geld:bkw_hub:{b.name}:ersparnis", d.get("kopf_ersparnis"), round(a.kwh * _PREIS, 2),
+                      tol=0.011, notiz="Anteil am EV ohne Verluste × 30 ct"))
+        out.append(_z(f"geld:bkw_hub:{b.name}:co2", d.get("kopf_co2"), round(a.kwh * _CO2, 1), tol=0.051))
     return out
+
+
+def _messpunkt_zelle(fid: str, weg: str, nach: dict) -> Zelle:
+    """N-588 F5: welche Regeln der Kategorie „Messpunkt" melden — ohne Kanäle (S3) keine."""
+    ist = (nach.get("checker") or {}).get("messpunkt")
+    soll = sorted(MESSPUNKT_SOLL[fid]) if weg in ("S1", "S2") else []
+    return Zelle("checker:messpunkt", ist, soll, "ok" if ist == soll else "rot")
+
+
+def _geld_tag(fid: str, weg: str, m: mx.Messung, tage) -> Zelle:
+    """N-588: Cockpit → Tag, Ersparnis je Tag = (Eigenverbrauch − bewertbare Verluste des Tages) × 30 ct — W2-V am
+    Schattentag 0,00 statt 0,15 (Untergrenze der echten Verluste, Entscheid W1); F13a 13,8 × 0,30 = 4,14 je
+    Sonnentag."""
+    def soll(t):
+        ev = m.tage[weg][t.isoformat()]["tw_eigenverbrauch"]
+        return None if ev is None else round(max(0.0, ev - _abzug(fid, weg, (t,))) * _PREIS, 2)
+
+    return _tage_zellen("geld:tag:ev_ersparnis", m, weg, tage, lambda d, t: d["tw_ev_ersparnis"], soll, tol=0.011)
 
 
 #: Kopfzahlen der BKW-Route runden auf 0,1 kWh — Σ der ungerundeten Monatsreihe liegt höchstens 0,05 daneben.
@@ -376,10 +450,14 @@ def bewerte(fid: str, weg: str, inv: str, m: mx.Messung) -> list[Zelle]:  # noqa
             else:
                 z.append(Zelle("tag:cockpit:folge", "EV/Autarkie je Tag", "folgen der PV", "ok"))
             if form.volleinspeiser:
-                # Ein Volleinspeiser verbraucht nichts selbst — physikalisch EV 0. W2 nennt am Schattentag Σ Strings
-                # (DC) minus AC-Einspeisung = 0,504 (N-588, Wandlungsverluste nicht bewertet, Entscheid B2).
-                z.append(_tage_zellen("tag:volleinspeiser:ev=0", m, weg, tage,
-                                      lambda d, t: d["tw_eigenverbrauch"] or 0.0, lambda t: 0.0))
+                # Ein Volleinspeiser verbraucht nichts selbst. Die BILANZ nennt am Schattentag Σ Strings (DC) minus
+                # AC-Einspeisung = 0,504 (F2: sie trägt die Wandlungsverluste — `_folge` oben prüft das); in GELD ist es
+                # seit N-588 0 (der Abzug, Entscheid W1). Bis 10.10.2026 stand hier `tag:volleinspeiser:ev=0` als rote
+                # Zelle mit Ursache N-588 („Bewertung nach dem Umbau").
+                z.append(_tage_zellen("tag:volleinspeiser:ev_ersparnis=0", m, weg, tage,
+                                      lambda d, t: d["tw_ev_ersparnis"] or 0.0, lambda t: 0.0, tol=0.005))
+            if fid in GELD_SICHTEN_FORMEN:
+                z.append(_geld_tag(fid, weg, m, tage))
             z += _folge("laufend:cockpit_monat", lf["monat"], e_juli, n_juli, volleinspeiser=form.volleinspeiser)
             z += _folge("laufend:cockpit_jahr", lf["jahr"], e_juli, n_juli, volleinspeiser=form.volleinspeiser)
             z += _folge("laufend:jahr_verlauf", lf["verlauf"], e_juli, n_juli, volleinspeiser=form.volleinspeiser)
@@ -487,7 +565,8 @@ def bewerte(fid: str, weg: str, inv: str, m: mx.Messung) -> list[Zelle]:  # noqa
             z += _folge(k, nach[k], e_juni, n_juni, volleinspeiser=form.volleinspeiser)
         z.append(_z("ha_export:spez=uebersicht", nach["ha_export"]["spez"], nach["uebersicht"]["spez"], tol=0.15))
         if fid in GELD_SICHTEN_FORMEN:
-            z += _geld_sichten(nach)
+            z += _geld_sichten(fid, weg, nach)
+            z.append(_messpunkt_zelle(fid, weg, nach))
     elif inv == "I6":
         werte = {"vor:cockpit_monat": _pv(vor["monat"]), "vor:jahr_verlauf": _pv(vor["verlauf"]),
                  "vor:fakten_tageswert": _pv(vor["fakten_tw"])}
@@ -538,12 +617,6 @@ class Ursache:
 #: Erhebung je Zelle: ``opus-berichte/PV-ACHSE-MATRIX.md`` (vorher) und ``PV-ACHSE-BAU.md`` (nachher).
 URSACHE: dict[str, Ursache] = {
     # ── HA-Bauform E4a-2: die neuen Formen nach Weg 2 (Markierung bei NEUEN Formen, Freigabe Master 06.10.2026) ──
-    "N-588": Ursache(
-        "N-588 (Wandlungsverluste, Bewertung nach dem Umbau — Entscheid B2)",
-        "Volleinspeiser: physikalisch kein Eigenverbrauch. Am Schattentag melden die DC-Strings 12,6 kWh, der "
-        "AC-Anlagenzähler 12,096; W2-R3 (Wortlaut Master nach H2) nimmt Σ Geräte als PV-Summe, der Anlagenzähler "
-        "füllt nur — EV 0,504. Die Differenz ist geführt (`wandlungsverluste_kwh`), nicht bewertet",
-    ),
     "W2-BESTAND-SPEICHER": Ursache(
         "HA-Bauform S3/S5 (gespeicherte Tages-/Stundenzeilen)",
         "Die gespeicherte Tageszeile (`komponenten_kwh`) und die Stundenzeilen schreibt weiter `aggregate_day` nach den "
@@ -566,9 +639,8 @@ URSACHE: dict[str, Ursache] = {
 ROT: dict[str, dict[tuple[str, str, str], tuple[str, ...]]] = {
     # 'SAMMELIMPORT' (24 Zellen F01/F04/F05/F09a-G/F09b-G/F12/W2-L auf S2) — GEHEILT mit HA-Bauform E4b Teil A
     # (06.10.2026): der Sammelimport speichert den Anlagen-PV-Zähler als Anlagenwert wie „Aus HA laden" (N-622).
-    'N-588': {
-        ('W2-V', 'HA', 'I5'): ('tag:volleinspeiser:ev=0',),
-    },
+    # 'N-588' (W2-V HA I5 `tag:volleinspeiser:ev=0`) — GEHEILT mit N-588 (10.10.2026): die Bilanz trägt die Verluste
+    # (F2, geprüft von `_folge`), die Geld-Zelle `tag:volleinspeiser:ev_ersparnis=0` ist grün.
     'W2-BESTAND-SPEICHER': {
         ('W2-V', 'HA', 'I3'): ('tag:keys', 'tag:stunden',),
         ('W2-V', 'HA', 'I4'): ('tag:keys:Süd',),
@@ -629,24 +701,23 @@ _U_SA_VOR = (
 )
 for _f in ("F01", "F02", "F03", "F04", "F05", "F06", "F07", "F08a", "F08b", "F09a-G", "F09b-G", "F09c-G",
            "F09a-oG", "F09b-oG", "F09c-oG", "F10", "F11", "F12", "F13a", "F13b", "F14", "F15", "F16",
-           "N640-1", "N640-2", "N640-3"):
+           "N640-1", "N640-2", "N640-3", "W2-D", "W2-B", "W2-B7"):
     SOLL_UNKLAR[(_f, "S3", "I2", "cockpit_monat:vor=nach")] = _U_SA_VOR
     SOLL_UNKLAR[(_f, "S3", "I3", "cockpit_monat:vor")] = _U_SA_VOR
     SOLL_UNKLAR[(_f, "S3", "I5", "cockpit_monat:vor")] = _U_SA_VOR
     SOLL_UNKLAR[(_f, "S3", "I6", "vor:cockpit_monat")] = _U_SA_VOR
 # N-640 Variante 1 (Frank85): Soll seit dem Entscheid Master 08.10.2026 wie Variante 2 — 540 in allen Sichten, der
 # kWp-Anteil des BKW an den Tagen ist keine zweite Quelle (Bauplan §6b W2-R2, `monats_fakten/bau.py`). Keine Markierung.
-_U_N588 = (
-    "N-588 (Auftrag Achsen-Matrix 2, Zusatz F13a): Σ Einzelzähler 21 > Anlagenzähler 19,8 je Sonnentag — der "
-    "Unterschied sind Wandlungsverluste. Ob Ersparnis und CO₂ auf dem Eigenverbrauch aus Σ Einzel oder aus dem "
-    "Anlagenzähler (abzüglich Verluste) rechnen, legt der Bauplan der HA-Bauform fest. Gemessen, nicht bewertet."
+# N-588 (10.10.2026): die 24 Geld-Sichten von F13a haben ein Soll (`_geld_sichten`) — `_U_N588` ist entfallen. Bis B7
+# offen ist nur das CO₂ der ROI-Zeile: es rechnet die Erzeugung × 0,38 statt den Kanon (N-647, eigener Bauschritt).
+_U_N647 = (
+    "N-647 (Bauschritt B7 der N-588-Vorlage): die PV-Zeile in Auswertungen → ROI rechnet CO₂ = Erzeugung × 0,38 "
+    "(inkl. Einspeisung) statt `berechne_co2_bilanz` auf dem Eigenverbrauch ohne Wandlungsverluste. Soll ab B7: "
+    "(Eigenverbrauch-Jahr − bewertbare Verluste × 12) × 0,38."
 )
 for _f in GELD_SICHTEN_FORMEN:
     for _w in ("S1", "S2", "S3"):
-        for _k in ("monat", "uebersicht", "tabelle", "pdf", "ha_export"):
-            SOLL_UNKLAR[(_f, _w, "I5", f"geld:{_k}:ev_ersparnis")] = _U_N588
-        for _k in ("uebersicht", "ha_export", "community"):
-            SOLL_UNKLAR[(_f, _w, "I5", f"geld:{_k}:co2")] = _U_N588
+        SOLL_UNKLAR[(_f, _w, "I5", "geld:roi:co2")] = _U_N647
 # N-638, Entscheid Master 07.10.2026 (Option b): die Hub-Sicht `bkw_hub:*` legt für zwei Formklassen kein Soll fest.
 # Gemessen wird, was der Hub zeigt (die Zeile des Geräts); ob er stattdessen den Wert der Monats-Fakten zeigen soll,
 # ist nicht entschieden — eine Zelle mit Soll „eigene Messung" schriebe das heutige Verhalten fest, nicht die

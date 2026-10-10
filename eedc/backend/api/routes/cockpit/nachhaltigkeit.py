@@ -27,6 +27,7 @@ from pydantic import BaseModel
 
 from backend.api.deps import get_db
 from backend.models.investition import Investition
+from backend.core.berechnungen import eigenverbrauch_ohne_verluste_kwh
 from backend.core.calculations import berechne_co2_bilanz
 from backend.services.eauto_wirtschaftlichkeit import (
     fossil_getankte_liter,
@@ -137,7 +138,11 @@ async def get_nachhaltigkeit(
         # Erzeuger hinter dem Zähler und die P7-Auflösung; die Netzladung ist der
         # attribuierte Pool-Anteil (#262), nicht `ladung − pv`.
         bilanz = berechne_co2_bilanz(
-            eigenverbrauch_kwh=fakt.kennzahlen.eigenverbrauch_kwh,
+            # N-588 (P15): ohne Wandlungsverluste, wenn der Messpunkt-Vertrag hält (dieselbe Menge wie die Ersparnis).
+            eigenverbrauch_kwh=eigenverbrauch_ohne_verluste_kwh(
+                fakt.kennzahlen.eigenverbrauch_kwh, fakt.erzeugung.wandlungsverluste_kwh,
+                fakt.erzeugung.verluste_grund,
+            ),
             wp_waerme_kwh=fakt.wp.waerme_kwh,
             wp_strom_kwh=fakt.wp.strom_kwh,
             # #263 K-2 (E-B): Kühlen ersetzt keine Heizung — sein Strom

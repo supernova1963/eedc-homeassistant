@@ -18,6 +18,7 @@ from backend.core.wirtschaftlichkeit_defaults import NETZBEZUG_DEFAULT_CENT
 from backend.services.monats_fakten import lade_monats_fakten
 from backend.core.calculations import CO2_FAKTOR_STROM_KG_KWH
 from backend.core.berechnungen import (
+    eigenverbrauch_ohne_verluste_kwh,
     bkw_eigenverbrauch_anteil,
     imd_typ_beitrag,
     eigenverbrauchsquote_prozent,
@@ -153,6 +154,8 @@ async def get_balkonkraftwerk_dashboard(
         gesamt_speicher_entladung = 0
         # F-4: die bewertete Menge und ihr Preis, beide je Monat aufgelöst.
         ev_bewertet_kwh = 0.0
+        # N-588: dieselbe Menge ohne die bewertbaren Wandlungsverluste — Eingang von Ersparnis und CO₂.
+        eigenverbrauch_ohne_verluste_bkw_kwh = 0.0
         ersparnis_eigenverbrauch = 0.0
         ev_monate_nicht_bewertbar = 0
         monatsreihe: list[BkwMonatsWert] = []
@@ -169,20 +172,37 @@ async def get_balkonkraftwerk_dashboard(
             gesamt_einspeisung += d.get('einspeisung_kwh', 0) or 0
 
             fakt = fakten_je_monat.get((md.jahr, md.monat))
+            ev_anlage = fakt.kennzahlen.eigenverbrauch_kwh if fakt else 0.0
             anteil = bkw_eigenverbrauch_anteil(
                 bkw_erzeugung_kwh=beitrag.bkw_erzeugung,
                 bkw_eigenverbrauch_gemessen_kwh=beitrag.bkw_eigenverbrauch,
                 erzeugung_hinter_zaehler_kwh=(
                     fakt.erzeugung.hinter_zaehler_kwh if fakt else 0.0
                 ),
+                eigenverbrauch_gesamt_kwh=ev_anlage,
+                hat_zaehlerzeile=bool(fakt and fakt.meta.hat_zaehlerzeile),
+            )
+            # N-588 (Entscheid Master 10.10.2026, F-1 (A)): zwei Anteile. Der Bilanz-Anteil oben trägt Eigenverbrauch,
+            # Einspeisung und Monatsreihe des Hubs (F2: die Bilanz trägt die Wandlungsverluste); Ersparnis und CO₂
+            # bewerten den Anteil am Eigenverbrauch OHNE die Verluste, wenn der Messpunkt-Vertrag hält — sonst
+            # sind beide gleich.
+            anteil_bewertet = bkw_eigenverbrauch_anteil(
+                bkw_erzeugung_kwh=beitrag.bkw_erzeugung,
+                bkw_eigenverbrauch_gemessen_kwh=beitrag.bkw_eigenverbrauch,
+                erzeugung_hinter_zaehler_kwh=(
+                    fakt.erzeugung.hinter_zaehler_kwh if fakt else 0.0
+                ),
                 eigenverbrauch_gesamt_kwh=(
-                    fakt.kennzahlen.eigenverbrauch_kwh if fakt else 0.0
+                    eigenverbrauch_ohne_verluste_kwh(
+                        ev_anlage, fakt.erzeugung.wandlungsverluste_kwh, fakt.erzeugung.verluste_grund,
+                    ) if fakt else 0.0
                 ),
                 hat_zaehlerzeile=bool(fakt and fakt.meta.hat_zaehlerzeile),
             )
             if not anteil.bewertbar and beitrag.bkw_erzeugung > 0:
                 ev_monate_nicht_bewertbar += 1
             ev_bewertet_kwh += anteil.kwh
+            eigenverbrauch_ohne_verluste_bkw_kwh += anteil_bewertet.kwh
             # P8: der Preis DIESES Monats, nicht der heutige — ein Tarifwechsel
             # hätte sonst die ganze Historie rückwirkend neu bewertet.
             preis_cent = (
@@ -190,7 +210,7 @@ async def get_balkonkraftwerk_dashboard(
                 if strompreis_cent is not None
                 else (fakt.tarif.netzbezug_preis_cent if fakt else NETZBEZUG_DEFAULT_CENT)
             )
-            ersparnis_eigenverbrauch += anteil.kwh * preis_cent / 100
+            ersparnis_eigenverbrauch += anteil_bewertet.kwh * preis_cent / 100
             monatsreihe.append(_monatswert(md, d, beitrag, anteil))
 
         # Parameter
@@ -237,7 +257,7 @@ async def get_balkonkraftwerk_dashboard(
         # CO2-Einsparung für Eigenverbrauch — dieselbe Menge wie die Ersparnis.
         # Der Kanon rechnet CO₂-PV auf dem EIGENVERBRAUCH (`berechne_co2_bilanz`,
         # DI-2); eingespeister Strom ist nicht die eigene Ersparnis.
-        co2_ersparnis = ev_bewertet_kwh * CO2_FAKTOR_STROM_KG_KWH
+        co2_ersparnis = eigenverbrauch_ohne_verluste_bkw_kwh * CO2_FAKTOR_STROM_KG_KWH
 
         # Spezifischer Ertrag (kWh pro kWp)
         spezifischer_ertrag = spezifischer_ertrag_kwh_kwp(

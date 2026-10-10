@@ -260,8 +260,9 @@ class PvZeitraum:
     seine Kinder abgetretenes BKW trägt keinen Eintrag). ``verteilt``: Marke ``kwp_anteil`` (kWp-Anteil am Rest des
     Anlagenzählers bzw. des BKW). ``fehlt``: Module ohne Wert und ohne Anlagenzähler (Teilsumme). ``geraete_kwh``:
     Σ ``werte``. ``bilanz_kwh``: die PV-Summe der Bilanz (W2-R3: Σ Geräte). ``wandlungsverluste_kwh``: ``Σ Geräte −
-    Anlagenzähler``, wenn positiv (N-588 — nur geführt, nicht bewertet; E4b); 0 bei Σ Geräte ≤ Anlagenzähler,
-    ``None`` ohne Anlagenzähler."""
+    Anlagenzähler``, wenn positiv (E4b); 0 bei Σ Geräte ≤ Anlagenzähler, ``None`` ohne Anlagenzähler.
+    ``verluste_grund``: warum diese Verluste NICHT bewertet werden (Messpunkt-Vertrag, N-588 —
+    ``wandlungsverluste_grund``); ``None`` = sie werden bewertet bzw. es gibt keine."""
 
     werte: dict[int, float]
     verteilt: frozenset
@@ -269,10 +270,131 @@ class PvZeitraum:
     geraete_kwh: float
     bilanz_kwh: Optional[float]
     wandlungsverluste_kwh: Optional[float]
+    verluste_grund: Optional[str] = None
+    #: Die Eingänge des Vertrags, für den Daten-Checker „Messpunkt" (N-588 F5): Δ des Anlagenzählers (``None`` ohne),
+    #: Σ der Balkonkraftwerk-Δ, der an Geräte ohne eigenes Δ verteilte Rest des Anlagenzählers, der DC-Speicher-Grund
+    #: des Zeitraums (auch ohne Verluste — Checker (b) schweigt bei DC-Speicher).
+    anlagenzaehler_kwh: Optional[float] = None
+    bkw_kwh: float = 0.0
+    verteilter_rest_kwh: float = 0.0
+    dc_grund: Optional[str] = None
+
+
+# ── Messpunkt-Vertrag der Wandlungsverluste (N-588, Vorlage Fassung 2 F1, Entscheide Master 10.10.2026) ────────────
+
+#: (iv) Obergrenze: Verluste über diesem Anteil der Σ String-Zähler sind ein Messpunkt-Widerspruch, keine Zahl, mit
+#: der eedc rechnet. ⚠ Nicht an einer realen Anlage gemessen (einzige Zahl im Projekt: 3,7 % inkl. Batterie-Rundlauf,
+#: E3DC) — eine konservative Obergrenze, keine Physik. Die Daten-Checker-Kategorie „Messpunkt" (a) liest dieselbe.
+WANDLUNGSVERLUSTE_SCHWELLE_PROZENT = 10.0
+#: (v) Verluste ≥ diesem Anteil der Σ Balkonkraftwerk-Δ ⇒ der Anlagenzähler misst das Balkonkraftwerk offenbar nicht
+#: (Checker „Messpunkt" (a'), dieselbe Konstante).
+WANDLUNGSVERLUSTE_BKW_ANTEIL_PROZENT = 80.0
+
+#: Die Gründe, aus denen eedc Wandlungsverluste nur anzeigt und nicht bewertet — in der Prüfreihenfolge. Einen Grund
+#: „Teil-Deckung" gibt es nicht (Entscheid Master 10.10.2026): siehe (ii) in ``wandlungsverluste_grund``.
+VERLUSTE_GRUND_DC_SPEICHER = "dc_speicher"
+#: Wie ``dc_speicher``, aber die Kopplung ist nicht gepflegt — abgeleitet aus der Zuordnung zum Wechselrichter
+#: (``investition_kennwerte.get_speicher_kopplung``). Getrennt, damit Anzeige und Checker den Handgriff nennen können.
+VERLUSTE_GRUND_DC_SPEICHER_ANGENOMMEN = "dc_speicher_angenommen"
+VERLUSTE_GRUND_UEBER_SCHWELLE = "ueber_schwelle"
+VERLUSTE_GRUND_BKW_AUSSERHALB = "bkw_ausserhalb"
+VERLUSTE_GRUENDE = (
+    VERLUSTE_GRUND_DC_SPEICHER, VERLUSTE_GRUND_DC_SPEICHER_ANGENOMMEN,
+    VERLUSTE_GRUND_UEBER_SCHWELLE, VERLUSTE_GRUND_BKW_AUSSERHALB,
+)
+
+
+def wandlungsverluste_grund(
+    *,
+    verluste_kwh: Optional[float],
+    strings_kwh: Optional[float],
+    bkw_kwh: float = 0.0,
+    dc_grund: Optional[str] = None,
+) -> Optional[str]:
+    """Der Messpunkt-Vertrag (N-588 F1): ist die Differenz Σ Geräte − Anlagenzähler ein Wechselrichterverlust, den eedc
+    bewerten darf? ``None`` = ja (oder es gibt nichts zu bewerten); sonst der ERSTE verletzte Punkt:
+
+    * (i) Anlagenzähler-Kanal und voll gedeckter Zeitraum (P14) — Voraussetzung dafür, dass ``verluste_kwh`` überhaupt
+      eine Zahl ist; ohne ihn ``None`` und kein Grund.
+    * (ii′) Teil-Deckung braucht **keinen eigenen Grund** (Entscheide Master 10.10.2026, W1 und Etappe 2): bekommt ein
+      Gerät ohne eigenes Δ einen Rest des Anlagenzählers > 0, dann ist Σ Geräte = Anlagenzähler und die Differenz 0 —
+      es gibt nichts zu bewerten. Bei Rest 0 (Klemmtag: Σ gemessene ≥ Anlagenzähler) erklärt der Anlagenzähler nichts
+      über die gemessenen Strings hinaus, und die Differenz ist eine **Untergrenze** der echten Verluste: mit
+      Anlagenzähler = η·(M + U), M den gemessenen und U den ungemessenen DC-Mengen, gilt Differenz = M − η·(M + U) =
+      (1−η)·M − η·U ≤ (1−η)·(M + U) — der Abzug kann dort keine echte Ersparnis vernichten (Volleinspeiser am
+      Schattentag: 0 € statt Cent-Beträgen).
+    * (iii) ``dc_speicher`` / ``dc_speicher_angenommen`` — ein DC-gekoppelter Speicher ist im Zeitraum aktiv
+      (``dc_grund`` vom Kanal-Leser): der AC-Zähler misst dann Batterieflüsse mit (PV 1000, Ladung 300, Entladung 250,
+      WR 3 % ⇒ 50 kWh Batterie-Saldo in der Differenz).
+    * (iv) ``ueber_schwelle`` — Verluste > ``WANDLUNGSVERLUSTE_SCHWELLE_PROZENT`` der Σ Strings.
+    * (v) ``bkw_ausserhalb`` — mindestens ein Balkonkraftwerk mit eigenem Δ (``bkw_kwh`` > 0) und Verluste ≥
+      ``WANDLUNGSVERLUSTE_BKW_ANTEIL_PROZENT`` der Σ BKW-Δ: der Anlagenzähler misst das Balkonkraftwerk offenbar nicht
+      (15 kWp + 600 Wp: Verluste 7 % — (iv) bliebe stumm, 19,50 €/Monat BKW-Ersparnis wären weg; Entscheid Master
+      10.10.2026, W2). ⚠ Benannte Grenze: neben großen Strings können echte WR-Verluste allein ≥ 80 % eines sehr kleinen
+      Balkonkraftwerks sein (1 500 kWh Strings, 3 % = 45 kWh, BKW 300 Wp ≈ 32 kWh) — dann entfällt der Abzug zu
+      Unrecht; das ist die konservative Richtung (F3: im Zweifel nichts abziehen).
+
+    Reihenfolge (iii) → (iv) → (v): die Struktur vor den Schwellen, (iv) vor (v), damit ein Zeitraum über der Schwelle
+    als Widerspruch und nicht als Balkonkraftwerks-Frage benannt wird. Verluste ``None`` oder ≤ 0 ⇒ ``None``.
+    """
+    if verluste_kwh is None or verluste_kwh <= 0:
+        return None
+    if dc_grund is not None:
+        return dc_grund
+    quote = wandlungsverluste_prozent(verluste_kwh, strings_kwh)
+    if quote is not None and quote > WANDLUNGSVERLUSTE_SCHWELLE_PROZENT:
+        return VERLUSTE_GRUND_UEBER_SCHWELLE
+    if bkw_kwh > 0 and verluste_kwh >= bkw_kwh * WANDLUNGSVERLUSTE_BKW_ANTEIL_PROZENT / 100:
+        return VERLUSTE_GRUND_BKW_AUSSERHALB
+    return None
+
+
+def verluste_grund_zeitraum(paare) -> Optional[str]:
+    """Der Messpunkt-Grund eines Zeitraums aus mehreren Monaten (Jahr, Übersicht): ``paare`` = ``(verluste_kwh,
+    verluste_grund)`` je Monat. ``None``, wenn jede Verlustmenge bewertet wurde; sonst der Grund, der die größte Σ
+    NICHT bewerteter Verluste trägt (bei Gleichstand der erste in ``VERLUSTE_GRUENDE``) — die Anzeige nennt einen
+    Grund, nicht eine Liste."""
+    je: dict[str, float] = {}
+    for verluste, grund in paare:
+        if grund is not None and verluste is not None and verluste > 0:
+            je[grund] = je.get(grund, 0.0) + verluste
+    if not je:
+        return None
+    return max(VERLUSTE_GRUENDE, key=lambda g: (je.get(g, -1.0), -VERLUSTE_GRUENDE.index(g)))
+
+
+def bewertbare_wandlungsverluste_kwh(verluste_kwh: Optional[float], verluste_grund: Optional[str]) -> float:
+    """Der Teil der Wandlungsverluste, den Geld, USt und CO₂ abziehen (N-588 F1): die Verluste bei erfülltem
+    Messpunkt-Vertrag, sonst 0 — **nie geschätzt** (F3: ohne gemessene Verluste kein Abzug)."""
+    if verluste_kwh is None or verluste_grund is not None or verluste_kwh <= 0:
+        return 0.0
+    return verluste_kwh
+
+
+def eigenverbrauch_ohne_verluste_kwh(
+    eigenverbrauch_kwh: float, verluste_kwh: Optional[float], verluste_grund: Optional[str],
+) -> float:
+    """Der Eigenverbrauch, den Ersparnis, USt und CO₂ bewerten — ohne Wandlungsverluste (N-588, ADR-002/P15).
+
+    * **F1** Eine Ersparnis ist vermiedener Bezug („hätte ich diese kWh ohne PV-Anlage gekauft?" — eine im
+      Wechselrichter verlorene nie); dieselbe Regel wie beim Speicher (``verbrauch.py``: Rundlaufverluste sind aus dem
+      Eigenverbrauch heraus). Abgezogen wird nur, was eedc als Wechselrichterverlust **weiß** — unter dem
+      Messpunkt-Vertrag (``wandlungsverluste_grund`` ist ``None``); sonst bleibt der Eigenverbrauch bitgleich.
+    * **F2** Die Energiebilanz (EV, Autarkie, EV-Quote, Community-``eigenverbrauch_kwh``) trägt die Verluste weiter —
+      diese Funktion ist der Bewertungs-Eingang, keine zweite Bilanz-Zahl.
+    * **F3** Ohne gemessene Verluste (kein Anlagenzähler, keine Kanal-Deckung: ``verluste_kwh`` ``None``) kein Abzug.
+    * **F4** Die USt bemisst die entnommene Menge — dieselbe Zahl.
+
+    Beispiel F13a: EV 450, Verluste 36, Vertrag erfüllt ⇒ 414 (× 30 ct = 124,20 €, × 0,38 = 157,32 kg). Untergrenze 0.
+    """
+    abzug = bewertbare_wandlungsverluste_kwh(verluste_kwh, verluste_grund)
+    if abzug <= 0:
+        return eigenverbrauch_kwh
+    return max(0.0, eigenverbrauch_kwh - abzug)
 
 
 def wandlungsverluste_prozent(verluste_kwh: Optional[float], strings_kwh: Optional[float]) -> Optional[float]:
-    """Wandlungsverluste in Prozent der Summe der String-Zähler (HA-Bauform E4b, N-588 — geführt, nicht bewertet).
+    """Wandlungsverluste in Prozent der Summe der String-Zähler (HA-Bauform E4b; Bewertung: ``wandlungsverluste_grund``).
 
     ``verluste_kwh`` = ``max(0, Σ Geräte − Anlagenzähler)`` eines Zeitraums (``PvZeitraum.wandlungsverluste_kwh``),
     ``strings_kwh`` = Σ der Geräte-Werte DESSELBEN Zeitraums (``PvZeitraum.geraete_kwh`` — die Zähler vor dem
@@ -292,6 +414,7 @@ def loese_pv_zeitraum_auf(
     traeger: list[PvTraeger],
     eigen: dict[int, float],
     anlagenzaehler_kwh: Optional[float],
+    dc_grund: Optional[str] = None,
 ) -> PvZeitraum:
     """Die PV eines beliebigen Zeitraums aus Zeitraum-Differenzen — **Weg 2** (Bauplan HA-Bauform §6b, Entscheid
     Gernot 06.10.2026). Dieselbe Regel für Tag, Monat und jeden anderen Zeitraum; sie ist die Monatsregel P7
@@ -308,8 +431,9 @@ def loese_pv_zeitraum_auf(
       ohne Δ eine Lücke des Anlagenzählers (N-621).
     * **W2-R3 PV-Summe** (Wortlaut Master 06.10.2026 nach Halt H2; B2 vom 05.10. und P7 gelten): die PV-Summe eines
       Zeitraums ist Σ der Geräte-Werte nach R1/R2 — der Anlagenzähler ist NUR Füller, nie Ersatz der Geräte-Summe.
-      ``wandlungsverluste_kwh`` = ``max(0, Σ Geräte − Anlagenzähler)`` wird geführt, nicht bewertet (N-588, Klasse
-      offen bis nach dem Umbau); ohne Anlagenzähler ``None``. Einzige Ausnahme: ohne jeden PV-Träger hat der Zähler
+      ``wandlungsverluste_kwh`` = ``max(0, Σ Geräte − Anlagenzähler)``; ohne Anlagenzähler ``None``. Ob Geld, USt
+      und CO₂ sie abziehen, sagt ``verluste_grund`` (Messpunkt-Vertrag, ``wandlungsverluste_grund``; ``dc_grund``
+      liefert der Kanal-Leser, der die Speicher kennt). Einzige Ausnahme: ohne jeden PV-Träger hat der Zähler
       niemanden zu füllen und ist die Summe (wie Fassung (b)).
     * **W2-R5 Untergrenze 0 einmal je Zeitraum** (die Klemmung des Rests in ``resolve_pv_je_modul``).
 
@@ -370,7 +494,17 @@ def loese_pv_zeitraum_auf(
     else:
         bilanz = None
     verluste = max(0.0, geraete - anlagenzaehler_kwh) if anlagenzaehler_kwh is not None else None
-    return PvZeitraum(werte, frozenset(verteilt), frozenset(fehlt), geraete, bilanz, verluste)
+    # N-588 (ii′, Checker F5): der Rest des Anlagenzählers, der an Geräte OHNE eigenes Δ ging (Module ohne Wert,
+    # BKW-Empfänger) — nicht die kWp-Zerlegung eines gemessenen Balkonkraftwerks auf seine Kinder (die ist dessen
+    # Messung). Kein Vertragsgrund (Rest > 0 ⇒ Differenz 0), aber Vorbedingung der Checker-Regeln.
+    az_luecken = {m.inv_id for m in module if m.inv_id not in roh} | {b.inv_id for b in empfaenger}
+    rest = sum(werte.get(i, 0.0) for i in az_luecken) if anlagenzaehler_kwh is not None else 0.0
+    bkw_summe = sum(eigen[b.inv_id] for b in bkws if b.inv_id in eigen)
+    grund = wandlungsverluste_grund(
+        verluste_kwh=verluste, strings_kwh=geraete, bkw_kwh=bkw_summe, dc_grund=dc_grund,
+    )
+    return PvZeitraum(werte, frozenset(verteilt), frozenset(fehlt), geraete, bilanz, verluste, grund,
+                      anlagenzaehler_kwh, bkw_summe, rest, dc_grund)
 
 
 def ist_vollstaendig(werte: dict[int, PvModulWert]) -> bool:

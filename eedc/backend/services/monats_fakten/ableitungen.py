@@ -9,7 +9,11 @@ from __future__ import annotations
 
 from typing import Iterable, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from backend.core.berechnungen import VerbrauchsKennzahlen, berechne_verbrauchs_kennzahlen
+from backend.core.berechnungen import (
+    VerbrauchsKennzahlen,
+    berechne_verbrauchs_kennzahlen,
+    bewertbare_wandlungsverluste_kwh,
+)
 from backend.services.finanz_zeilen import FinanzZeileEingabe
 from backend.services.monats_fakten.fakten import MonatsFakt, MonatsSchluessel
 from backend.services.monats_fakten.laden import lade_monats_fakten
@@ -141,6 +145,9 @@ def finanz_zeile_eingabe(fakt: MonatsFakt) -> FinanzZeileEingabe:
         bkw_eigenverbrauch_kwh=fakt.bkw.rest_eigenverbrauch_kwh,
         neg_preis_kwh=fakt.eeg.neg_preis_kwh,
         monatsdaten=fakt.meta.monatsdaten,
+        # N-588: der Aggregat-Helper bewertet den Eigenverbrauch ohne die Wandlungsverluste, wenn der Vertrag hält.
+        wandlungsverluste_kwh=fakt.erzeugung.wandlungsverluste_kwh,
+        verluste_grund=fakt.erzeugung.verluste_grund,
     )
 
 def kennzahlen_aus_fakten(fakten: Iterable[MonatsFakt]) -> VerbrauchsKennzahlen:
@@ -164,6 +171,20 @@ def kennzahlen_aus_fakten(fakten: Iterable[MonatsFakt]) -> VerbrauchsKennzahlen:
         v2h_entladung_kwh=sum(f.emob.v2h_entladung_kwh for f in fakten),
         abgabe_dritte_kwh=sum(f.sonstiges.abgabe_kwh for f in fakten),
     )
+
+def bewertbare_wandlungsverluste_aus_fakten(fakten: Iterable[MonatsFakt]) -> float:
+    """Σ der Wandlungsverluste, die Geld, USt und CO₂ abziehen (N-588) — je Monat nach dem Messpunkt-Vertrag
+    (``bewertbare_wandlungsverluste_kwh``), dann summiert.
+
+    Für Sichten, die den Eigenverbrauch über MEHRERE Monate aus Perioden-Summen bilden (``kennzahlen_aus_fakten``,
+    Übersicht, HA-Export): ``eigenverbrauch_ohne_verluste_kwh(ev, bewertbare_wandlungsverluste_aus_fakten(f), None)``
+    — der Vertrag ist dann schon je Monat entschieden (``None`` = „gilt"). Ohne Verluste 0, der Eigenverbrauch bleibt
+    bitgleich."""
+    return sum(
+        bewertbare_wandlungsverluste_kwh(f.erzeugung.wandlungsverluste_kwh, f.erzeugung.verluste_grund)
+        for f in fakten
+    )
+
 
 def pv_erzeugungs_monate(fakten: Iterable[MonatsFakt]) -> set[MonatsSchluessel]:
     """Die Monate, in denen die Anlage PV erzeugt hat — der Nenner des spezifischen Ertrags.

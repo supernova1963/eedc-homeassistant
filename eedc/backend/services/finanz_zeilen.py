@@ -70,6 +70,10 @@ class FinanzZeileEingabe:
     #: **A-2** — gewichtet wird mit der Menge, die bewertet wird, und der
     #: vermiedene Bezug fällt zu anderen Zeiten an als der tatsächliche.
     ev_preis_cent: Optional[float] = None
+    #: N-588: Wandlungsverluste des Zeitraums und Messpunkt-Vertrag (``ErzeugungFakten`` bzw. ``KanalTag``) — der
+    #: Aggregat-Helper bewertet den Eigenverbrauch ohne sie, wenn der Vertrag hält. ``None`` ⇒ bitgleich.
+    wandlungsverluste_kwh: Optional[float] = None
+    verluste_grund: Optional[str] = None
 
 
 async def baue_finanz_zeile(
@@ -140,4 +144,6 @@ async def baue_finanz_zeile(
         netzbezug_preis_herkunft=preis.herkunft,
         einspeiseverguetung_cent=verg_cent,
         neg_preis_kwh=eingabe.neg_preis_kwh,
+        wandlungsverluste_kwh=eingabe.wandlungsverluste_kwh,
+        verluste_grund=eingabe.verluste_grund,
     )

@@ -1,4 +1,5 @@
-"""HA-Bauform E4b Teil B: Wandlungsverluste werden geführt und angezeigt — NICHT bewertet (N-588, Entscheid B2).
+"""HA-Bauform E4b Teil B: Wandlungsverluste werden geführt und angezeigt; seit N-588 (10.10.2026) bewertet unter dem
+Messpunkt-Vertrag — die Bilanz trägt sie weiter (F2), Ersparnis und CO₂ rechnen ohne sie (F1).
 
 Wandlungsverluste = ``max(0, Σ String-Zähler − Anlagenzähler)`` eines Zeitraums (W2-R3, ``pv_verteilung``). Der Weg:
 Kanal-Leser (``bilanz_leser.als_monatssumme``) → Monats-Fakten (``ErzeugungFakten.wandlungsverluste_kwh`` samt Bezug,
@@ -6,8 +7,10 @@ auch für abgeschlossene Monate, Entscheid B-1) → Cockpit → Monat, Cockpit �
 (Gesamtzeitraum für den PV-Hub) und die Monatsreihe ``/monatsdaten/aggregiert``. Prozent = Verluste ÷ Σ Strings × 100
 aus dem Layer (``wandlungsverluste_prozent``) — der Client rechnet nichts.
 
-**Keine Bewertung:** Eigenverbrauch, Ersparnis und CO₂ rechnen weiter mit der Σ der Strings — die Probe
-``test_keine_bewertung_*`` hält das an F13a fest (Strings 630, Anlagenzähler 594, Verluste 36).
+**Bewertung (N-588):** PV und Eigenverbrauch bleiben die Σ der Strings (Bilanz, F2); Ersparnis und CO₂ rechnen mit
+dem Eigenverbrauch ohne die Verluste — die Probe ``test_bilanz_traegt_die_verluste_*`` hält das an F13a fest (Strings
+630, Anlagenzähler 594, Verluste 36 ⇒ 414 kWh, 124,20 €, 157,32 kg). Bis 10.10.2026 stand hier die Gegenprobe „keine
+Bewertung" (Entscheid B2 vom 05.10.); ihr Docstring verlangte, sie beim Bewerten bewusst umzustellen — das ist sie.
 
 Schwesterdateien: ``test_bilanz_zeitraum.py`` (die Regel W2-R3 als reine Funktion), ``test_pv_achse_matrix.py``
 (Messung ``fakten:wandlungsverluste`` für F13a/F13b/W2-V), ``test_kanal_bilanz_gleichheit.py`` (Datenstände).
@@ -149,13 +152,13 @@ async def test_ohne_kanal_deckung_liefert_der_bestandspfad_keinen_wert():
     assert f.erzeugung.wandlungsverluste_kwh is None
 
 
-# ── Keine Bewertung (Entscheid B2, N-588 bleibt offen) ──────────────────────
+# ── Bewertung (N-588, Vorlage Fassung 2): Bilanz trägt die Verluste, Geld und CO₂ nicht ──────────────
 
 
-async def test_keine_bewertung_eigenverbrauch_ersparnis_und_co2_rechnen_mit_der_summe_der_strings():
-    """F13a Juni nach dem Abschluss: Verluste 36 > 0, aber PV = Σ Strings 630, Eigenverbrauch = 630 − Einspeisung,
-    die Ersparnis = EV × 30 ct (Tarif der Form) und das CO₂ der Übersicht auf DIESEM Eigenverbrauch — die Verluste
-    mindern nichts davon. Wer sie bewertet (N-588), muss diese Probe bewusst umstellen."""
+async def test_bilanz_traegt_die_verluste_ersparnis_und_co2_rechnen_ohne_sie():
+    """F13a Juni nach dem Abschluss: Verluste 36 > 0, PV = Σ Strings 630, Eigenverbrauch = 630 − Einspeisung (Bilanz,
+    F2 — unverändert); die Ersparnis = (EV − 36) × 30 ct und das CO₂ der Übersicht auf derselben Menge (F1, DI-2: eine
+    Eingabe). Umgestellt am 10.10.2026 aus der Probe „keine Bewertung" (Entscheid B2), wie ihr Docstring verlangte."""
     from backend.api.routes.cockpit.uebersicht import get_cockpit_uebersicht
 
     async with kg.datenstand("pv", "F13a", "HA") as ds:
@@ -167,8 +170,10 @@ async def test_keine_bewertung_eigenverbrauch_ersparnis_und_co2_rechnen_mit_der_
     assert monat.wandlungsverluste_kwh == pytest.approx(36.0)
     assert monat.pv_erzeugung_kwh == pytest.approx(630.0)
     assert monat.eigenverbrauch_kwh == pytest.approx(630.0 - einspeisung)
-    assert monat.ev_ersparnis_euro == pytest.approx(round((630.0 - einspeisung) * 0.30, 2), abs=0.01)
+    assert monat.eigenverbrauch_ohne_verluste_kwh == pytest.approx(630.0 - einspeisung - 36.0)
+    assert monat.verluste_grund is None
+    assert monat.ev_ersparnis_euro == pytest.approx(round((630.0 - einspeisung - 36.0) * 0.30, 2), abs=0.01)
     assert uebersicht.eigenverbrauch_kwh == pytest.approx(630.0 - einspeisung, abs=0.05)
-    # Haltewerte der Matrix (SOLL_UNKLAR N-588, `matrix_haltewerte.PV_HALTEWERTE`): 135,00 € / 171 kg.
-    assert uebersicht.ev_ersparnis_euro == pytest.approx(135.0, abs=0.01)
-    assert uebersicht.co2_pv_kg == pytest.approx(171.0, abs=0.5)
+    # Bis 10.10.2026 die Haltewerte der Matrix (135,00 € / 171 kg); jetzt das Soll der Vorlage: 124,20 € / 157,32 kg.
+    assert uebersicht.ev_ersparnis_euro == pytest.approx(124.2, abs=0.01)
+    assert uebersicht.co2_pv_kg == pytest.approx(157.32, abs=0.05)

@@ -64,7 +64,6 @@ from backend.services.provenance import (
     write_with_provenance,
 )
 from backend.services.mitteltemperatur import lade_monatsmittel_temperatur
-from backend.services.pv_monatswerte import lade_pv_je_monat, pv_summe_je_monat
 from backend.services.zaehlerstaende import lade_zaehlerstaende
 
 logger = logging.getLogger(__name__)
@@ -286,11 +285,15 @@ class AggregierteMonatsdatenResponse(BaseModel):
     pv_module_kwh: Optional[float]  # nur PV-Module
     bkw_kwh: Optional[float]  # Balkonkraftwerk(e): eigene Werte + Anteil am Anlagenwert
     bkw_aus_anlagenwert_kwh: Optional[float] = None  # davon aus dem Anlagenwert verteilt (N-621)
-    # HA-Bauform E4b (N-588 — angezeigt, NICHT bewertet): Wandlungsverluste des Monats aus dem Kanal-Leser
-    # (`max(0, Σ String-Zähler − Anlagenzähler)`), Prozent über `pv_verteilung.wandlungsverluste_prozent`. `None` ohne
-    # Anlagenzähler oder ohne Kanal-Deckung. In keiner Bilanzgröße dieser Zeile enthalten.
+    # HA-Bauform E4b: Wandlungsverluste des Monats aus dem Kanal-Leser (`max(0, Σ String-Zähler − Anlagenzähler)`),
+    # Prozent über `pv_verteilung.wandlungsverluste_prozent`. `None` ohne Anlagenzähler oder ohne Kanal-Deckung. In
+    # keiner Bilanzgröße dieser Zeile enthalten; Ersparnis, USt und CO₂ ziehen sie ab, wo der Messpunkt-Vertrag hält.
     wandlungsverluste_kwh: Optional[float] = None
     wandlungsverluste_prozent: Optional[float] = None
+    # N-588 (P15): der bewertete Eigenverbrauch des Monats (Menge hinter `ev_ersparnis_euro`) und der Grund, warum
+    # Wandlungsverluste angezeigt, aber nicht bewertet werden (`None` = bewertet bzw. keine).
+    eigenverbrauch_ohne_verluste_kwh: Optional[float] = None
+    verluste_grund: Optional[str] = None
     # Sonstige Erzeuger (typ=`sonstiges` + Kategorie `erzeuger`, z. B. BHKW) —
     # NICHT in `pv_erzeugung_kwh` enthalten (die bleibt rein PV), aber Teil der
     # Netzpunkt-Bilanz `erzeugung_hinter_zaehler_kwh` (v3.45.4), aus der
@@ -722,7 +725,8 @@ async def list_monatsdaten_aggregiert(
         )
         _satz = _ust_saetze.get(f.jahr)
         _ust = (
-            ust_anteil_euro(finanz.eigenverbrauch_kwh, _satz.euro_je_kwh)
+            # N-588 (F4): die USt bemisst die entnommene Menge — der Eigenverbrauch ohne Wandlungsverluste.
+            ust_anteil_euro(finanz.eigenverbrauch_ohne_verluste_kwh, _satz.euro_je_kwh)
             if _satz is not None and f.schluessel in _ust_monate else None
         )
         ust_eigenverbrauch = _ust if _ust is not None else 0.0
@@ -823,6 +827,8 @@ async def list_monatsdaten_aggregiert(
             wandlungsverluste_prozent=wandlungsverluste_prozent(
                 f.erzeugung.wandlungsverluste_kwh, f.erzeugung.wandlungsverluste_bezug_kwh,
             ),
+            eigenverbrauch_ohne_verluste_kwh=round(finanz.eigenverbrauch_ohne_verluste_kwh, 1),
+            verluste_grund=f.erzeugung.verluste_grund,
             sonstige_erzeugung_kwh=(
                 round(f.erzeugung.sonstige_erzeuger_kwh, 1)
                 if f.sonstiges.hat_erzeuger_zeile else None
@@ -993,9 +999,13 @@ async def get_monatsdaten(monatsdaten_id: int, db: AsyncSession = Depends(get_db
             Investition.typ.in_(("pv-module", "balkonkraftwerk")),
         )
     )).scalars().all())
-    pv_kwh = pv_summe_je_monat(
-        await lade_pv_je_monat(db, md.anlage_id, pv_erzeuger, md.jahr)
-    ).get((md.jahr, md.monat))
+    # N-588: der Monat kommt aus den Monats-Fakten (P10) statt aus `lade_pv_je_monat` — sie tragen dieselbe PV-Achse
+    # (P7, Module + BKW, Abtretung je Monat) und dazu die Wandlungsverluste samt Messpunkt-Vertrag, mit denen die
+    # Ersparnis unten den Eigenverbrauch bewertet.
+    _fakt = next(iter(await lade_monats_fakten(
+        db, md.anlage_id, von=(md.jahr, md.monat), bis=(md.jahr, md.monat),
+    )), None)
+    pv_kwh = _fakt.erzeugung.pv_kwh if _fakt is not None else None
 
     # Kennzahlen berechnen
     kennzahlen = berechne_monatskennzahlen(
@@ -1040,6 +1050,8 @@ async def get_monatsdaten(monatsdaten_id: int, db: AsyncSession = Depends(get_db
             mit_bkw=True,
             referenzwert=anlage.leistung_kwp,
         ),
+        wandlungsverluste_kwh=_fakt.erzeugung.wandlungsverluste_kwh if _fakt is not None else None,
+        verluste_grund=_fakt.erzeugung.verluste_grund if _fakt is not None else None,
     )
 
     response = MonatsdatenMitKennzahlen.model_validate(md)

@@ -11,6 +11,16 @@
 
 ## Unreleased
 
+**Wandlungsverluste kosten kein Geld mehr, das du nie gespart hast:** Misst deine Anlage ihre Strings mit eigenen
+Zählern **und** hat sie einen Anlagenzähler hinter dem Wechselrichter, rechnen Ersparnis, Umsatzsteuer auf den
+Eigenverbrauch und CO₂ jetzt mit dem Eigenverbrauch **ohne** die Wandlungsverluste — eine im Wechselrichter verlorene
+Kilowattstunde hättest du ohne PV-Anlage nie gekauft. Beispiel: 450 kWh Eigenverbrauch, 36 kWh Verluste ⇒ 414 kWh
+bewertet, 124,20 € statt 135,00 €. Bilanz, Autarkie und Eigenverbrauchsquote bleiben, wie sie sind. Mit einem
+DC-gekoppelten Speicher, bei mehr als 10 % Differenz oder wenn der Anlagenzähler dein Balkonkraftwerk nicht mitmisst,
+zieht eedc nichts ab und sagt warum — die neue Daten-Checker-Kategorie **„PV – Messpunkt"** nennt den Grund und den
+Handgriff (z. B. die Speicher-Kopplung eintragen oder, als Volleinspeiser, den AC-Ertragszähler des Wechselrichters als
+„PV gesamt" zuordnen). Ohne Anlagenzähler ändert sich nichts.
+
 **Daten-Checker:** Die Warnung „Rückgang in Home Assistant" sagt jetzt in der Überschrift, dass ein **Zählerstand gefallen**
 ist, statt von einer „negativen Menge" zu sprechen — das wurde als Vorzeichen für Entladen gelesen. Lade-, Entlade- und
 Einspeisezähler laufen nur nach oben; fällt einer, ist das kein Entladen, sondern ein gesunkener Zählerstand.

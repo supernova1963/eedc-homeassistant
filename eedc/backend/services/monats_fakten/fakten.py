@@ -106,13 +106,18 @@ class ErzeugungFakten:
     #: Ertrag. Ein BKW mit Anteil trägt im Monat keinen Ersatz-Eigenverbrauch
     #: (P9-Zusatzregel, ``roh.py::falte``) und keinen Tageswert (``bau.py``).
     bkw_aus_anlagenwert_kwh: float = 0.0
-    #: HA-Bauform E4b (N-588 — geführt, NICHT bewertet): ``max(0, Σ String-Zähler − Anlagenzähler)`` des Monats aus
-    #: dem Kanal-Leser (``services/kanal/bilanz_leser``, W2-R3). ``None`` ohne Anlagenzähler oder ohne Kanal-Deckung
-    #: des Monats — der Bestandspfad (gespeicherte Werte, Tageszeilen) liefert keinen Wert. Geht in keine Bilanz,
-    #: keine Ersparnis und kein CO₂: ``pv_kwh``, Eigenverbrauch und Ergebnis-Leiter bleiben die Σ der Strings.
+    #: HA-Bauform E4b: ``max(0, Σ String-Zähler − Anlagenzähler)`` des Monats aus dem Kanal-Leser
+    #: (``services/kanal/bilanz_leser``, W2-R3). ``None`` ohne Anlagenzähler oder ohne Kanal-Deckung des Monats — der
+    #: Bestandspfad (gespeicherte Werte, Tageszeilen) liefert keinen Wert. Geht in keine BILANZ (F2): ``pv_kwh``,
+    #: Eigenverbrauch, Autarkie und EV-Quote bleiben die Σ der Strings. Geld, USt und CO₂ bewerten den Eigenverbrauch
+    #: OHNE sie, wenn der Messpunkt-Vertrag hält (N-588, ``pv_verteilung.eigenverbrauch_ohne_verluste_kwh``).
     wandlungsverluste_kwh: Optional[float] = None
     #: Σ der Geräte-Werte desselben Kanal-Monats — Bezug der Prozentangabe (``wandlungsverluste_prozent``).
     wandlungsverluste_bezug_kwh: Optional[float] = None
+    #: N-588: warum die Verluste dieses Monats NICHT bewertet werden (``pv_verteilung.wandlungsverluste_grund``:
+    #: ``dc_speicher`` · ``dc_speicher_angenommen`` · ``ueber_schwelle`` · ``bkw_ausserhalb``);
+    #: ``None`` = bewertet bzw. keine Verluste.
+    verluste_grund: Optional[str] = None
 
 @dataclass(frozen=True)
 class BkwFakten:

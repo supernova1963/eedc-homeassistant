@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from typing import Mapping
 
+from backend.core.berechnungen import eigenverbrauch_ohne_verluste_kwh
 from backend.core.calculations import Co2Bilanz, berechne_co2_bilanz
 from backend.services.eauto_wirtschaftlichkeit import (
     fossil_getankte_liter,
@@ -59,7 +60,11 @@ def co2_bilanz_aus_fakt(
         ]
     )
     return berechne_co2_bilanz(
-        eigenverbrauch_kwh=fakt.kennzahlen.eigenverbrauch_kwh,
+        # N-588 (P15): CO₂ folgt der Geldregel (DI-2: eine Eingabe) — der Eigenverbrauch ohne Wandlungsverluste,
+        # wenn der Messpunkt-Vertrag hält.
+        eigenverbrauch_kwh=eigenverbrauch_ohne_verluste_kwh(
+            fakt.kennzahlen.eigenverbrauch_kwh, fakt.erzeugung.wandlungsverluste_kwh, fakt.erzeugung.verluste_grund,
+        ),
         wp_waerme_kwh=fakt.wp.waerme_kwh,
         wp_strom_kwh=fakt.wp.strom_kwh,
         # #263 K-2 (E-B): Kühlen ersetzt keine Heizung — sein Strom gehört

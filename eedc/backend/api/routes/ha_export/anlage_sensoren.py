@@ -193,6 +193,7 @@ async def calculate_anlage_sensors(
     if "batterie_ladung" in _out: batterie_ladung = _out["batterie_ladung"]
     if "direktverbrauch" in _out: direktverbrauch = _out["direktverbrauch"]
     if "eigenverbrauch" in _out: eigenverbrauch = _out["eigenverbrauch"]
+    if "eigenverbrauch_ohne_verluste" in _out: eigenverbrauch_ohne_verluste = _out["eigenverbrauch_ohne_verluste"]
     if "einspeisung" in _out: einspeisung = _out["einspeisung"]
     if "erzeugung_bilanz" in _out: erzeugung_bilanz = _out["erzeugung_bilanz"]
     if "ev_quote" in _out: ev_quote = _out["ev_quote"]
@@ -214,6 +215,7 @@ async def calculate_anlage_sensors(
     if "einspeise_erloes" in _out: einspeise_erloes = _out["einspeise_erloes"]
     if "erzeuger_erloes" in _out: erzeuger_erloes = _out["erzeuger_erloes"]
     if "ev_ersparnis" in _out: ev_ersparnis = _out["ev_ersparnis"]
+    if "ev_wandlungsverluste" in _out: ev_wandlungsverluste = _out["ev_wandlungsverluste"]
     if "sonstige_ausgaben_gesamt" in _out: sonstige_ausgaben_gesamt = _out["sonstige_ausgaben_gesamt"]
     if "sonstige_ertraege_gesamt" in _out: sonstige_ertraege_gesamt = _out["sonstige_ertraege_gesamt"]
     if "sonstige_netto_gesamt" in _out: sonstige_netto_gesamt = _out["sonstige_netto_gesamt"]
@@ -258,7 +260,7 @@ async def calculate_anlage_sensors(
     # ── alternativkosten_und_co2 (Vorlage 8b: Phase in anlage_komponenten.py, Schnittstelle 11 ein / 5 aus) ──
     _out = alternativkosten_und_co2(
         e_autos=e_autos,
-        eigenverbrauch=eigenverbrauch,
+        eigenverbrauch_ohne_verluste=eigenverbrauch_ohne_verluste,
         emob_ctx=emob_ctx,
         historische_inv_daten=historische_inv_daten,
         inv_by_id_export=inv_by_id_export,
@@ -341,6 +343,7 @@ async def calculate_anlage_sensors(
         speicher_zyklen=speicher_zyklen,
         spez_ertrag=spez_ertrag,
         strompreis=strompreis,
+        ev_wandlungsverluste=ev_wandlungsverluste,
     )
     if "sensor_values" in _out: sensor_values = _out["sensor_values"]
     # ── prognose_und_preis_sensoren (Vorlage 8b: Phase in anlage_sensorwerte.py, Schnittstelle 3 ein / 2 aus) ──

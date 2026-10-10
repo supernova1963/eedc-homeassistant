@@ -39,6 +39,7 @@ from datetime import date
 from typing import Iterable, Optional, Sequence
 
 from backend.core.berechnungen.ergebnis import MONAT_KURZ, ust_satz_euro_je_kwh
+from backend.core.berechnungen.pv_verteilung import eigenverbrauch_ohne_verluste_kwh
 from backend.core.berechnungen.ust_eigenverbrauch import (
     UstJahresanteil,
     bemessungsgrundlage_aus_investitionen,
@@ -72,12 +73,18 @@ def grundgesamtheit(fakten: Iterable, jahr: int) -> list:
 
 
 def ust_jahresanteil(fakten: Iterable, jahr: int) -> UstJahresanteil:
-    """EV, PV und Monatszahl des Jahres — der Eingang der Jahresformel (G1)."""
+    """EV, PV und Monatszahl des Jahres — der Eingang der Jahresformel (G1).
+
+    N-588 (F4): die USt bemisst die **entnommene** Menge — eine im Wechselrichter verlorene kWh ist nicht entnommen.
+    Summiert wird deshalb der Eigenverbrauch ohne Wandlungsverluste (bei erfülltem Messpunkt-Vertrag; sonst bitgleich).
+    Die PV (Nenner der Selbstkosten je kWh) bleibt die Σ der Strings: die Anlage hat sie erzeugt."""
     g = grundgesamtheit(fakten, jahr)
     ev = 0.0
     pv = 0.0
     for f in g:
-        ev += f.kennzahlen.eigenverbrauch_kwh
+        ev += eigenverbrauch_ohne_verluste_kwh(
+            f.kennzahlen.eigenverbrauch_kwh, f.erzeugung.wandlungsverluste_kwh, f.erzeugung.verluste_grund,
+        )
         pv += f.erzeugung.pv_kwh
     return UstJahresanteil(jahr=jahr, eigenverbrauch_kwh=ev, pv_kwh=pv, monate=len(g))
 

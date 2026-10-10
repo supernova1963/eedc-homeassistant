@@ -130,9 +130,10 @@ class TagesMonatsSumme:
     #: an; dafür ist der Daten-Checker zuständig, der fehlende Tage meldet.
     erster_tag: Optional[date] = None
     letzter_tag: Optional[date] = None
-    #: HA-Bauform E4a-2 (Weg 2, nur Kanal-Monate): ``max(0, Σ Geräte − Anlagenzähler)`` — geführt, nicht bewertet
-    #: (N-588, Bewertung nach dem Umbau); ``None`` im Bestand und ohne Anlagenzähler.
+    #: HA-Bauform E4a-2 (Weg 2, nur Kanal-Monate): ``max(0, Σ Geräte − Anlagenzähler)``; ``None`` im Bestand und ohne
+    #: Anlagenzähler. Bewertet nur unter dem Messpunkt-Vertrag (N-588); ``verluste_grund`` nennt, warum nicht.
     wandlungsverluste_kwh: Optional[float] = None
+    verluste_grund: Optional[str] = None
     #: HA-Bauform E4b: Σ der Geräte-Werte (String-Zähler) desselben Kanal-Monats — der Bezug der Prozentangabe
     #: (``pv_verteilung.wandlungsverluste_prozent``); ``None``, wo ``wandlungsverluste_kwh`` ``None`` ist.
     wandlungsverluste_bezug_kwh: Optional[float] = None

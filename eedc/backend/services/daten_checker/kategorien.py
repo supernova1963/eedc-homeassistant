@@ -83,6 +83,11 @@ class CheckKategorie(str, Enum):
     # (z. B. BKW-Sensor im WR-Smart-Meter schon enthalten + zusätzlich
     # gemappt). Diagnose statt stillem Cap — feedback_grenze_externe_daten_diagnose.
     PV_UEBER_ERFASSUNG = "pv_ueber_erfassung"
+    # N-588 F5 (10.10.2026): Messpunkt — Anlagenzähler gegen String-Zähler. Seit N-588 bewerten Ersparnis, USt und
+    # CO₂ den Eigenverbrauch ohne Wandlungsverluste, wenn der Messpunkt-Vertrag hält; diese Kategorie nennt, warum er
+    # nicht hält (> 10 %, Balkonkraftwerk außerhalb des Anlagenzählers, DC-Speicher), wenn der Anlagenzähler mehr zählt
+    # als die Strings, und den Handgriff für einen Volleinspeiser ohne Anlagenzähler. Kein Reparatur-Knopf.
+    MESSPUNKT = "messpunkt"
     # Wallbox/E-Auto Phase 2a aus KONZEPT-WALLBOX-EAUTO.md: wenn EAuto-
     # Investition UND Wallbox-Investition beide Heimladungs-Werte tragen,
     # messen sie häufig denselben Stromfluss aus zwei Perspektiven. Die

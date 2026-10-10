@@ -10,12 +10,15 @@ variieren (rilmor-mhrs #326: Sommer-EV fällt aus der netzbezug-Gewichtung).
 
 Dieser Helper rechnet **ausschließlich per-Monat** und summiert:
 
-    ev_ersparnis   = Σ( eigenverbrauch_m × netzbezug_preis_cent_m / 100 )
+    ev_ersparnis   = Σ( eigenverbrauch_ohne_verluste_m × netzbezug_preis_cent_m / 100 )
     bkw_ersparnis  = Σ( bkw_eigenverbrauch_m × netzbezug_preis_cent_m / 100 )
     einspeise_erloes = Σ einspeise_erloes_euro(...)   (§51-bereinigt)
 
 - Eigenverbrauch pro Monat über den kanonischen `berechne_verbrauchs_kennzahlen`
-  (inkl. Speicher- + V2H-Entladung).
+  (inkl. Speicher- + V2H-Entladung). **Bewertet** wird er ohne die Wandlungsverluste
+  des Monats, wenn der Messpunkt-Vertrag hält (N-588, ADR-002/**P15**,
+  ``pv_verteilung.eigenverbrauch_ohne_verluste_kwh``) — nur der ``ev``-Posten: der
+  BKW-Rest ist eine AC-Messung am Gerät, kein String, und bleibt.
 - `bkw_eigenverbrauch_kwh` ist **kein Zusatzposten**, sondern der Ersatzträger
   für BKW-Monate ohne erfasste Erzeugung — sonst zählte derselbe Fluss zweimal
   (ADR-002/**P9**, `bkw_finanz_beitrag` entscheidet das je Zeile, s. u.).
@@ -42,6 +45,7 @@ from dataclasses import dataclass
 from typing import Iterable, Optional
 
 from backend.core.berechnungen.einspeise_erloes import einspeise_erloes_euro
+from backend.core.berechnungen.pv_verteilung import eigenverbrauch_ohne_verluste_kwh
 from backend.core.berechnungen.verbrauch import berechne_verbrauchs_kennzahlen
 
 
@@ -96,6 +100,10 @@ class FinanzMonatsZeile:
     netzbezug_preis_herkunft: Optional[str] = None
     einspeiseverguetung_cent: float = 0.0
     neg_preis_kwh: Optional[float] = None
+    #: N-588: die Wandlungsverluste des Monats (Kanal-Leser, ``ErzeugungFakten.wandlungsverluste_kwh``) und der
+    #: Messpunkt-Vertrag (``verluste_grund``). ``None`` ⇒ kein Abzug (F3), der Eigenverbrauch bleibt bitgleich.
+    wandlungsverluste_kwh: Optional[float] = None
+    verluste_grund: Optional[str] = None
 
 
 @dataclass
@@ -116,6 +124,11 @@ class FinanzAggregat:
     nicht_vergueteter_erloes_euro: float
     nicht_verguetete_kwh: float
     hat_neg_preis_daten: bool
+    #: N-588: Σ des bewerteten Eigenverbrauchs (``eigenverbrauch_kwh`` ohne die bewertbaren Wandlungsverluste) — die
+    #: Menge hinter ``ev_ersparnis_euro`` und der Eingang der USt (F4). Ohne Verluste = ``eigenverbrauch_kwh``.
+    eigenverbrauch_ohne_verluste_kwh: float = 0.0
+    #: N-588: Σ der abgezogenen Wandlungsverluste (0, wo der Messpunkt-Vertrag nicht hält oder keine gemessen sind).
+    wandlungsverluste_kwh: float = 0.0
 
 
 def berechne_finanz_aggregat(
@@ -147,6 +160,7 @@ def berechne_finanz_aggregat(
     ev = 0.0
     bkw = 0.0
     ev_kwh = 0.0
+    ev_ohne_verluste_kwh = 0.0
     nicht_verg_erloes = 0.0
     nicht_verg_kwh = 0.0
     hat_neg = False
@@ -162,12 +176,18 @@ def berechne_finanz_aggregat(
             abgabe_dritte_kwh=z.abgabe_dritte_kwh,
         )
         ev_kwh += kz.eigenverbrauch_kwh
+        # N-588 (P15): bewertet wird der Eigenverbrauch ohne die Wandlungsverluste,
+        # wenn der Messpunkt-Vertrag hält — sonst bitgleich.
+        ev_bewertet = eigenverbrauch_ohne_verluste_kwh(
+            kz.eigenverbrauch_kwh, z.wandlungsverluste_kwh, z.verluste_grund
+        )
+        ev_ohne_verluste_kwh += ev_bewertet
         # A-2: der EV-gewichtete Preis, wenn der Aufrufer ihn kennt — sonst
         # unverändert der Bezugspreis.
         ev_preis = (
             z.ev_preis_cent if z.ev_preis_cent is not None else z.netzbezug_preis_cent
         )
-        ev += kz.eigenverbrauch_kwh * ev_preis / 100
+        ev += ev_bewertet * ev_preis / 100
         # Nur der Rest-Eigenverbrauch aus BKW-Monaten OHNE erfasste Erzeugung
         # (P9-Kontrakt der Zeile) — mit Erzeugung steckt er bereits in `ev`.
         # Er ist dieselbe Größe wie `ev` und trägt deshalb denselben Preis.
@@ -197,4 +217,6 @@ def berechne_finanz_aggregat(
         nicht_vergueteter_erloes_euro=nicht_verg_erloes,
         nicht_verguetete_kwh=nicht_verg_kwh,
         hat_neg_preis_daten=hat_neg,
+        eigenverbrauch_ohne_verluste_kwh=ev_ohne_verluste_kwh,
+        wandlungsverluste_kwh=ev_kwh - ev_ohne_verluste_kwh,
     )

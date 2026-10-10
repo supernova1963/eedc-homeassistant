@@ -94,9 +94,10 @@ und zum Verständnis der Datenflüsse.
 >    auf die Geräte ohne deckenden Kanal (Marke „geschätzt (kWp-Anteil)"). Die Modul-Kinder eines Balkonkraftwerks sind
 >    dessen Lücke — am Tag wie im Monat.
 > 3. **PV-Summe:** Σ der Geräte-Werte nach 1 und 2. Der Anlagenzähler ist nur Füller, nie Ersatz der Geräte-Summe.
->    Liegt Σ Geräte über ihm, wird die Differenz als Wandlungsverluste geführt (`wandlungsverluste_kwh`), nicht
->    bewertet (N-588, offen bis nach dem Umbau). Beispiel Volleinspeiser mit DC-String-Zählern: am Schattentag melden
->    die Strings 12,6 kWh, der AC-Zähler 12,096 — die PV-Summe ist 12,6, der Eigenverbrauch 0,504.
+>    Liegt Σ Geräte über ihm, wird die Differenz als Wandlungsverluste geführt (`wandlungsverluste_kwh`) und — unter
+>    dem Messpunkt-Vertrag unten — in Geld, USt und CO₂ abgezogen (N-588). Beispiel Volleinspeiser mit DC-String-Zählern:
+>    am Schattentag melden die Strings 12,6 kWh, der AC-Zähler 12,096 — die PV-Summe ist 12,6, der Eigenverbrauch der
+>    Bilanz 0,504, die Ersparnis 0,00 € (die 0,504 kWh sind Wandlungsverluste).
 >
 >    **Wandlungsverluste als geführte Größe (HA-Bauform E4b, Stand 06.10.2026).** `wandlungsverluste_kwh = max(0, Σ
 >    Geräte − Δ Anlagenzähler)` je Zeitraum, mit dem Bezug Σ Geräte (= Σ der String-Zähler vor dem Wechselrichter);
@@ -106,10 +107,25 @@ und zum Verständnis der Datenflüsse.
 >    Kanal-Monat zusätzlich, wenn die Anlage einen Kanal `basis:pv_gesamt` hat) → *Cockpit → Monat*, *Cockpit → Jahr*
 >    (Σ der Monate mit Wert, Prozent über die Monate, die Verluste UND Bezug tragen — `quote_paarweise`), Übersicht
 >    (Gesamtzeitraum) und die Monatsreihe `/monatsdaten/aggregiert`. `None` ohne Anlagenzähler und ohne Kanal-Deckung
->    — der Bestandspfad liefert keinen Wert. **Nicht bewertet:** PV-Summe, Eigenverbrauch, Autarkie, Ersparnis, CO₂
->    und Ergebnis-Leiter rechnen weiter mit Σ Geräte (Entscheid B2; N-588 bleibt offen). Beispiel: Strings 360 + 180 +
->    Balkonkraftwerk 90 = 630 kWh, Anlagenzähler 594 ⇒ Wandlungsverluste 36,0 kWh (5,7 %); Eigenverbrauch und Ersparnis
->    bleiben auf 630.
+>    — der Bestandspfad liefert keinen Wert. **Bilanz und Bewertung (N-588, 10.10.2026, ADR-002/P15):** PV-Summe,
+>    Eigenverbrauch, Autarkie und Eigenverbrauchsquote rechnen weiter mit Σ Geräte — die Bilanz trägt die Verluste
+>    („was musste die Anlage liefern"). **Ersparnis, Umsatzsteuer auf den Eigenverbrauch und CO₂** bewerten dagegen den
+>    Eigenverbrauch **ohne** sie (`pv_verteilung.eigenverbrauch_ohne_verluste_kwh`): eine im Wechselrichter verlorene
+>    kWh hätte ohne PV-Anlage niemand gekauft — dieselbe Regel wie beim Speicher, dessen Rundlaufverluste aus dem
+>    Eigenverbrauch heraus sind. Abgezogen wird nur unter dem **Messpunkt-Vertrag** (`wandlungsverluste_grund`):
+>    (i) Anlagenzähler-Kanal mit voller Deckung; (iii) kein im Zeitraum aktiver DC-gekoppelter Speicher (sonst misst der
+>    AC-Zähler Batterieflüsse mit; eine nicht gepflegte Kopplung gilt als DC, sobald der Speicher einem Wechselrichter
+>    zugeordnet ist); (iv) Verluste ≤ 10 % der Σ Strings; (v) nicht ≥ 80 % der Erzeugung eines gemessenen
+>    Balkonkraftwerks (dann misst der Anlagenzähler es offenbar nicht). Ein Gerät ohne eigenen Zähler braucht keinen
+>    eigenen Punkt: bekommt es einen Rest des Anlagenzählers > 0, ist die Differenz 0; bei Rest 0 ist sie eine
+>    Untergrenze der echten Verluste. Ohne gemessene Verluste kein Abzug — kein Verlustfaktor, keine Schätzung. Hält
+>    der Vertrag nicht, nennt `verluste_grund` den Grund, und der Daten-Checker (Kategorie „Messpunkt") sagt, was zu
+>    tun ist. Beispiel: Strings 360 + 180 + Balkonkraftwerk 90 = 630 kWh, Anlagenzähler 594 ⇒ Wandlungsverluste
+>    36,0 kWh (5,7 %); Eigenverbrauch der Bilanz 450 kWh, bewertet 414 kWh ⇒ 124,20 € statt 135,00 € (30 ct) und
+>    157,32 kg statt 171 kg CO₂. ⚠ Benannte Grenzen: die Schwellen 10 % und 80 % sind konservativ gesetzt, nicht an
+>    einer realen Anlage gemessen; bei einem sehr kleinen Balkonkraftwerk neben großen Strings kann (v) auch mit echten
+>    Verlusten greifen — dann entfällt der Abzug (die vorsichtige Richtung). Die **Prognose** (Aussichten) nimmt ihre
+>    Eigenverbrauchsquote weiter aus der Historie inklusive Verluste.
 > 4. **Entweder-oder:** je Zeitraum der erste Kanal einer Ersatzgruppe mit voller Deckung.
 > 5. **Untergrenze 0 einmal je Zeitraum** — Σ Tage ≠ Monat nur in der Aufteilung je Gerät an Tagen, an denen der
 >    Rest klemmt.
@@ -547,8 +563,13 @@ Wandlungsverluste der PV- und Speicherstrecke im bilanzierten `Gesamtverbrauch`:
 typischerweise **3–5 % der Erzeugung** über dem „Hausverbrauch", den das Herstellerportal
 ausweist — das rechnet seine Verluste intern heraus. Keiner der beiden Werte ist falsch, sie
 beantworten verschiedene Fragen: eedc „was musste die Anlage liefern" (**inklusive** Verluste
-— die richtige Basis für Autarkie, EV-Quote und Wirtschaftlichkeit, denn erzeugt und bezahlt
-werden muss auch der Verlust), das Portal „was zogen die Verbraucher".
+— die richtige Basis für Autarkie und EV-Quote), das Portal „was zogen die Verbraucher".
+**Für Ersparnis, USt und CO₂ gilt seit N-588 (10.10.2026) das Gegenteil:** eine verlorene kWh hätte
+niemand gekauft — kennt eedc die Wechselrichterverluste (String-Zähler und Anlagenzähler, Messpunkt-
+Vertrag in §1), bewertet es den Eigenverbrauch **ohne** sie. Bis dahin stand hier „richtige Basis
+für … Wirtschaftlichkeit"; diese Hälfte des Entscheids vom 25.07.2026 hat Gernot am 01.10.2026
+abgelöst. Die DC-gemessene Speicherstrecke bleibt davon unberührt: mit einem DC-gekoppelten
+Speicher zieht eedc nichts ab.
 
 *Diagnose-Rezept* für einen abgeschlossenen Tag:
 

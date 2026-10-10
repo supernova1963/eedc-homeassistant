@@ -1,5 +1,5 @@
 /**
- * Wandlungsverluste — angezeigt, nicht bewertet (HA-Bauform E4b, Wortlaut Gernot 06.10.2026, N-588).
+ * Wandlungsverluste — angezeigt (HA-Bauform E4b, Wortlaut Gernot 06.10.2026); seit N-588 bewertet unter dem Messpunkt-Vertrag.
  *
  * Drei Orte, EINE Konstante (`lib/wandlungsverluste.ts`): Unterzeile am Label „PV-Erzeugung" in der Vergleichstabelle
  * von Cockpit → Monat und Cockpit → Jahr, eine Zeile im Block „Verlauf" des PV-Hubs (gesamte Historie). Sichtbar nur
@@ -16,7 +16,8 @@ import { MonatBilanz } from './MonatBilanz'
 import { JahrBilanz } from './JahrBilanz'
 import { geraetBloecke } from './KomponentenTypV4'
 import {
-  WANDLUNGSVERLUSTE_HINWEIS, WANDLUNGSVERLUSTE_LABEL, wandlungsverlusteVerlaufZeile, wandlungsverlusteWert,
+  VERLUSTE_GRUND_TEXT, WANDLUNGSVERLUSTE_HINWEIS, WANDLUNGSVERLUSTE_LABEL, verlusteGrundSatz,
+  wandlungsverlusteUnterzeile, wandlungsverlusteVerlaufZeile, wandlungsverlusteWert,
 } from '../lib/wandlungsverluste'
 import { aktuellerMonat, monatsZeile } from '../test/factories'
 import { stubMatchMedia } from '../test/render'
@@ -29,10 +30,25 @@ const ZEILE = 'Wandlungsverluste 36,0 kWh (5,7 %)'
 describe('lib/wandlungsverluste — Wortlaut und Sichtbarkeit', () => {
   it('Bezeichnung und Hinweistext sind wortgleich mit dem freigegebenen Wortlaut', () => {
     expect(WANDLUNGSVERLUSTE_LABEL).toBe('Wandlungsverluste')
+    // N-588 (Vorlage Fassung 2, B2): Ersparnis, USt und CO₂ ziehen die Verluste ab, die Bilanz trägt sie.
     expect(WANDLUNGSVERLUSTE_HINWEIS).toBe(
       'Differenz zwischen der Summe der String-Zähler (vor dem Wechselrichter) und dem Anlagenzähler (dahinter). '
-      + 'Wird angezeigt, nicht bewertet: Ersparnis und CO₂ rechnen weiter mit der Summe der Strings.',
+      + 'Ersparnis, USt und CO₂ rechnen mit dem Eigenverbrauch ohne diese Verluste; '
+      + 'Bilanz, Autarkie und Eigenverbrauchsquote tragen sie weiter.',
     )
+  })
+
+  it('N-588: mit Grund nennt der Tooltip, warum die Verluste nicht bewertet sind; ohne Grund nicht', () => {
+    const mit = wandlungsverlusteUnterzeile({ wandlungsverluste_kwh: 36, wandlungsverluste_prozent: 5.7,
+      verluste_grund: 'dc_speicher_angenommen' })
+    expect(mit?.hinweis).toBe(`${WANDLUNGSVERLUSTE_HINWEIS} ${verlusteGrundSatz('dc_speicher_angenommen')}`)
+    expect(verlusteGrundSatz('dc_speicher_angenommen')).toContain('Speicher-Kopplung nicht gepflegt, als DC angenommen')
+    expect(wandlungsverlusteUnterzeile({ wandlungsverluste_kwh: 36, wandlungsverluste_prozent: 5.7 })?.hinweis)
+      .toBe(WANDLUNGSVERLUSTE_HINWEIS)
+  })
+
+  it.each(Object.keys(VERLUSTE_GRUND_TEXT))('Grund %s hat einen Satz', (g) => {
+    expect(verlusteGrundSatz(g)).toMatch(/^Angezeigt, nicht bewertet: .+\.$/)
   })
 
   it('formatiert kWh und Prozent mit je einer Nachkommastelle, Leerzeichen vor %', () => {

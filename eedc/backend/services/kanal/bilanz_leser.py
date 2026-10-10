@@ -110,6 +110,28 @@ async def _stamm(db: AsyncSession, anlage_id: int) -> _Stamm:
     return await gemerkt(db, ("bilanz_stamm", anlage_id), _laden)
 
 
+def _dc_grund(invs: Iterable, aktiv) -> Optional[str]:
+    """Messpunkt-Vertrag (iii) der Wandlungsverluste (N-588): ein im Zeitraum aktiver DC-gekoppelter Speicher —
+    ``dc_speicher`` bei gepflegter Kopplung, ``dc_speicher_angenommen``, wenn sie aus der Zuordnung zum Wechselrichter
+    abgeleitet ist (``get_speicher_kopplung``, #351). Sonst ``None``. Hier im Kanal-Leser, weil er die Investitionen
+    kennt; die Komposition (Layer) bekommt nur das Ergebnis."""
+    from backend.core.berechnungen.pv_verteilung import (
+        VERLUSTE_GRUND_DC_SPEICHER,
+        VERLUSTE_GRUND_DC_SPEICHER_ANGENOMMEN,
+    )
+    from backend.core.investition_kennwerte import get_speicher_kopplung, get_speicher_kopplung_gepflegt
+    from backend.core.investition_parameter import SPEICHER_KOPPLUNG_DC
+
+    angenommen = False
+    for i in invs:
+        if getattr(i, "typ", None) != "speicher" or not aktiv(i) or get_speicher_kopplung(i) != SPEICHER_KOPPLUNG_DC:
+            continue
+        if get_speicher_kopplung_gepflegt(i) is not None:
+            return VERLUSTE_GRUND_DC_SPEICHER
+        angenommen = True
+    return VERLUSTE_GRUND_DC_SPEICHER_ANGENOMMEN if angenommen else None
+
+
 def _traeger(invs: Iterable, aktiv) -> list[PvTraeger]:
     from backend.services.pv_monatswerte import _kwp_gewicht
 
@@ -140,8 +162,10 @@ def _gedeckt(z: Optional[Zeitraum], lueckentag: bool) -> tuple[bool, Optional[fl
 
 def waehle_und_komponiere(
     eintraege: Sequence, ergebnisse: dict[str, Zeitraum], traeger: Sequence[PvTraeger], *, lueckentag: bool,
+    dc_grund: Optional[str] = None,
 ) -> KanalZeitraum:
-    """Die Quellenwahl der Gruppe (B-4) und — bei ``kanal`` — W2 auf den Δ. Reine Funktion."""
+    """Die Quellenwahl der Gruppe (B-4) und — bei ``kanal`` — W2 auf den Δ. Reine Funktion. ``dc_grund``: siehe
+    ``_dc_grund`` (Messpunkt-Vertrag (iii), N-588)."""
     if not eintraege:
         return KanalZeitraum(Quellenwahl(QUELLE_BESTAND, {"": "keine_eingaenge"}, {}), None)
     deltas: dict[str, Optional[float]] = {}
@@ -172,7 +196,8 @@ def waehle_und_komponiere(
         if e.kategorie == "pv" and e.sensor_key != _AGGREGAT_KEY:
             pv_id = int(e.sensor_key.split(":", 2)[1])
         eingaenge.append(Eingang(e.kategorie, e.target_key, e.vorzeichen, deltas.get(e.schluessel), pv_id))
-    return KanalZeitraum(Quellenwahl(QUELLE_KANAL, {}, vorhanden), komponiere_bilanz_zeitraum(eingaenge, traeger))
+    return KanalZeitraum(Quellenwahl(QUELLE_KANAL, {}, vorhanden),
+                         komponiere_bilanz_zeitraum(eingaenge, traeger, dc_grund=dc_grund))
 
 
 async def _ergebnisse(db, anlage_id: int, keys: set[str], grenzen: list[int], jetzt: int) -> dict[str, list]:
@@ -221,8 +246,9 @@ async def tage_bilanz(
     out: dict[date, KanalZeitraum] = {}
     for i, t in enumerate(tage):
         ergebnisse = {k: liste[i] for k, liste in je.items()}
-        out[t] = waehle_und_komponiere(je_tag[t], ergebnisse, _traeger(stamm.invs, lambda inv, t=t: inv.ist_aktiv_an(t)),
-                                       lueckentag=True)
+        aktiv_an = (lambda inv, t=t: inv.ist_aktiv_an(t))
+        out[t] = waehle_und_komponiere(je_tag[t], ergebnisse, _traeger(stamm.invs, aktiv_an),
+                                       lueckentag=True, dc_grund=_dc_grund(stamm.invs, aktiv_an))
     return out
 
 
@@ -264,9 +290,10 @@ async def _monate_bilanz(
         if (j, m) not in je_monat:
             continue
         ergebnisse = {k: lst[i] for k, lst in je.items()}
+        aktiv_im_monat = (lambda inv, j=j, m=m: inv.ist_aktiv_im_monat(j, m))
         out[(j, m)] = waehle_und_komponiere(
-            je_monat[(j, m)], ergebnisse, _traeger(stamm.invs, lambda inv, j=j, m=m: inv.ist_aktiv_im_monat(j, m)),
-            lueckentag=False)
+            je_monat[(j, m)], ergebnisse, _traeger(stamm.invs, aktiv_im_monat),
+            lueckentag=False, dc_grund=_dc_grund(stamm.invs, aktiv_im_monat))
     return out
 
 
@@ -278,6 +305,7 @@ def als_kanaltag(datum: date, k: BilanzZeitraum) -> KanalTag:
         datum=datum, fassung=FASSUNG_WEG2, komponenten_kwh={kk: round(v, 2) for kk, v in k.komponenten.items()},
         pv_marken=dict(k.marken), verworfen={}, bilanz=k.bilanz, stunden=0,
         wandlungsverluste_kwh=k.pv.wandlungsverluste_kwh if k.pv else None,
+        verluste_grund=k.pv.verluste_grund if k.pv else None,
     )
 
 
@@ -297,6 +325,7 @@ def als_monatssumme(jahr: int, monat: int, k: BilanzZeitraum, *, jetzt: int) -> 
     return dataclasses.replace(s, tage=len(tage), stunden=0, erster_tag=tage[0] if tage else None,
                                letzter_tag=tage[-1] if tage else None, sonstige_erzeuger_je_inv=erzeuger,
                                wandlungsverluste_kwh=k.pv.wandlungsverluste_kwh if k.pv else None,
+                               verluste_grund=k.pv.verluste_grund if k.pv else None,
                                wandlungsverluste_bezug_kwh=(k.pv.geraete_kwh if k.pv and k.pv.wandlungsverluste_kwh
                                                             is not None else None))
 
@@ -360,6 +389,19 @@ async def kanal_monate(
         if kz.wahl.quelle == QUELLE_KANAL and kz.komposition is not None:
             out[(j, m)] = als_monatssumme(j, m, kz.komposition, jetzt=jetzt)
     return out
+
+
+async def kanal_kompositionen(
+    db: AsyncSession, anlage_id: int, *, bis: MonatsSchluessel, jetzt: Optional[int] = None,
+) -> dict[MonatsSchluessel, BilanzZeitraum]:
+    """Die Komposition (W2) jedes Monats vom ersten Kanal-Stand bis ``bis``, dessen Bilanz-Gruppe aus den Kanälen kommt
+    (Wahl ``kanal``) — für Prüfungen, die die Eingänge selbst brauchen (Daten-Checker „Messpunkt", N-588 F5: Anlagenzähler,
+    Σ Strings, Σ Balkonkraftwerk-Δ, Vertrag). Dieselbe Komposition, aus der die Monats-Fakten ihre Verluste haben."""
+    von = await _erster_kanal_monat(db, anlage_id)
+    if von is None or von > bis:
+        return {}
+    return {m: kz.komposition for m, kz in sorted((await monate_bilanz(db, anlage_id, von, bis, jetzt=jetzt)).items())
+            if kz.wahl.quelle == QUELLE_KANAL and kz.komposition is not None}
 
 
 async def lade_monats_summen(
@@ -558,6 +600,6 @@ async def monatswerte_mit_kanaelen(
 
 __all__ = [
     "FASSUNG_WEG2", "KanalZeitraum", "als_kanaltag", "als_monatssumme", "bilanz_ziele", "ist_bilanz_schluessel",
-    "kanal_kalendermonate", "kanal_monate", "kanal_tage", "lade_monats_summen", "mische_bilanz", "mische_komponenten", "mische_verworfen",
+    "kanal_kalendermonate", "kanal_kompositionen", "kanal_monate", "kanal_tage", "lade_monats_summen", "mische_bilanz", "mische_komponenten", "mische_verworfen",
     "monate_bilanz", "monatswerte_mit_kanaelen", "tage_bilanz", "waehle_und_komponiere",
 ]

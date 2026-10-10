@@ -183,6 +183,11 @@ export function baueTKonto(d: AktuellerMonatResponse, sonderkosten: number | nul
   // (`ev_preis_cent`, EV-gewichteter Ø der gemessenen Stundenpreise), nicht mit dem Bezugspreis daneben — die
   // Herleitung nennt den Preis, mit dem die Zahl entstanden ist.
   const evPreis = d.ev_preis_cent ?? netzPreis
+  // N-588: die Menge, mit der die Ersparnis bewertet ist (Backend) — fehlt sie (ältere Antwort), der Eigenverbrauch.
+  // Verluste sind abgezogen, wenn das Backend Verluste nennt und keinen Grund, sie nicht zu bewerten.
+  const evBewertetKwh = d.eigenverbrauch_ohne_verluste_kwh ?? d.eigenverbrauch_kwh
+  const verlusteAbgezogen = d.eigenverbrauch_kwh != null && d.eigenverbrauch_ohne_verluste_kwh != null
+    && (d.wandlungsverluste_kwh ?? 0) > 0 && !d.verluste_grund
   const evPreisBez = d.ev_preis_herkunft === 'ev_gemessen' ? 'Ø-Preis der vermiedenen Stunden' : preisBez
 
   const habenPosten: TKontoPosten[] = [
@@ -217,8 +222,10 @@ export function baueTKonto(d: AktuellerMonatResponse, sonderkosten: number | nul
       vjWert: undefined as number | null | undefined,
       color: 'text-blue-600 dark:text-blue-400',
       formel: `PV-Eigenverbrauch × ${evPreisBez}${evHinweis}`,
-      berechnung: d.eigenverbrauch_kwh != null && evPreis != null && !hatSonstigeErzeuger
-        ? `${fmt(d.eigenverbrauch_kwh - evInErsparnis / (evPreis / 100), 1)} kWh × ${fmtCalc(evPreis, 2)} ct/kWh`
+      // N-588: Basis ist der BEWERTETE Eigenverbrauch aus der Antwort (ohne Wandlungsverluste, wenn der
+      // Messpunkt-Vertrag hält) — mit dem Bilanz-Eigenverbrauch ginge die Zeile um Verluste × Preis nicht auf.
+      berechnung: evBewertetKwh != null && evPreis != null && !hatSonstigeErzeuger
+        ? `${fmt(evBewertetKwh - evInErsparnis / (evPreis / 100), 1)} kWh × ${fmtCalc(evPreis, 2)} ct/kWh`
         : undefined,
       ergebnis: `= ${fmtCalc(pvEvResidual, 2)} €`,
     } as TKontoPosten] : !hasPerInv ? [{
@@ -227,8 +234,11 @@ export function baueTKonto(d: AktuellerMonatResponse, sonderkosten: number | nul
       vjWert: vj?.ev_ersparnis_euro,
       color: 'text-blue-600 dark:text-blue-400',
       formel: `${hatSonstigeErzeuger ? 'PV-Eigenverbrauch' : 'Eigenverbrauch'} × ${evPreisBez}${evHinweis}`,
-      berechnung: d.eigenverbrauch_kwh != null && evPreis != null && !hatSonstigeErzeuger
-        ? `${fmt(d.eigenverbrauch_kwh, 1)} kWh × ${fmtCalc(evPreis, 2)} ct/kWh`
+      // N-588: die bewertete Menge aus der Antwort; zieht sie Wandlungsverluste ab, nennt die Herleitung beide
+      // Zahlen („414 kWh (450 − 36 Verluste) × 30 ct") — gerechnet wird hier nichts.
+      berechnung: evBewertetKwh != null && evPreis != null && !hatSonstigeErzeuger
+        ? `${fmt(evBewertetKwh, 1)} kWh${verlusteAbgezogen
+          ? ` (${fmt(d.eigenverbrauch_kwh, 1)} − ${fmt(d.wandlungsverluste_kwh, 1)} Verluste)` : ''} × ${fmtCalc(evPreis, 2)} ct/kWh`
         : undefined,
       ergebnis: `= ${fmtCalc(d.ev_ersparnis_euro, 2)} €`,
     } as TKontoPosten] : []),

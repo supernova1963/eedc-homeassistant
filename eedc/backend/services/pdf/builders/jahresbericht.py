@@ -37,10 +37,8 @@ from backend.core.investition_parameter import ist_dienstlich
 from backend.services.waermepumpe_jahreskennzahlen import waermepumpe_jahreskennzahlen
 from backend.services.monats_fakten import finanz_zeile_eingabe, lade_monats_fakten
 from backend.services.monats_co2 import co2_bilanz_aus_fakt
-from backend.core.calculations import (
-    CO2_FAKTOR_STROM_KG_KWH,
-    co2_wp_ersparnis_kg,
-)
+from backend.core.calculations import co2_wp_ersparnis_kg
+from backend.core.berechnungen.pv_verteilung import verluste_grund_zeitraum
 from backend.core.berechnungen.ergebnis import ErgebnisEingang, berechne_ergebnis, ust_anteil_euro
 from backend.services.ust_satz import (
     grundgesamtheit as ust_grundgesamtheit,
@@ -272,6 +270,8 @@ async def build_jahresbericht_context(
     einsp_gesamt = 0.0
     netz_gesamt = 0.0
     ev_gesamt = 0.0
+    # N-588: die Monate, die die Monatstabelle trägt — ihr CO₂-PV kommt je Monat aus dem Kanon (unten, Abschnitt 9).
+    zeilen_fakten: list = []
 
     speicher_ladung_by_ym = {f.schluessel: f.speicher.ladung_kwh for f in fakten}
     speicher_entladung_by_ym = {
@@ -369,7 +369,8 @@ async def build_jahresbericht_context(
         sonstige_eur = fakt.sonstiges.netto_euro
         _satz = _ust_saetze.get(j)
         _ust_m = (
-            ust_anteil_euro(_fz.eigenverbrauch_kwh, _satz.euro_je_kwh)
+            # N-588 (F4): die USt bemisst die entnommene Menge — der Eigenverbrauch ohne Wandlungsverluste.
+            ust_anteil_euro(_fz.eigenverbrauch_ohne_verluste_kwh, _satz.euro_je_kwh)
             if _satz is not None and (j, m) in _ust_monate else None
         )
         # Netto-Ertrag der Zeile = Stufe 1 der Ergebnis-Leiter (mit BKW-Rest, Erlös eigener Satz, Sonstigem, USt) —
@@ -385,6 +386,7 @@ async def build_jahresbericht_context(
         einsp_gesamt += einsp
         netz_gesamt += netz
         ev_gesamt += ev
+        zeilen_fakten.append(fakt)
         return {
             "jahr": j,
             "monat": m,
@@ -506,7 +508,11 @@ async def build_jahresbericht_context(
     # (ohne Wirkungsgrad, ohne Strom-Abzug) → WP-Ersparnis deutlich zu hoch.
     # Komponente roh (kann bei schlechter JAZ negativ sein), Gesamt-Bilanz per
     # max(0, …) geklammert — exakt wie das Cockpit.
-    co2_pv = ev_gesamt * CO2_FAKTOR_STROM_KG_KWH
+    # N-588 (DI-2, P15): der PV-Anteil je Monat aus der EINEN Konstruktions-Stelle (`co2_bilanz_aus_fakt`) — mit dem
+    # Eigenverbrauch ohne Wandlungsverluste, wo der Messpunkt-Vertrag hält. Bis 10.10.2026 stand hier
+    # `ev_gesamt × Faktor` (der Randfall, den DI-2 noch offen ließ); ohne Verluste ist der Wert derselbe.
+    _eauto_parameter = {i.id: i.parameter for i in investitionen if i.typ == "e-auto"}
+    co2_pv = sum(co2_bilanz_aus_fakt(f, _eauto_parameter).co2_pv_kg for f in zeilen_fakten)
     # N-256: die Mengen der **ersetzenden** Geräte, nicht die der Anlage. Bis
     # 2026-08-29 stand hier die anlagenweite Summe, gesperrt nur, wenn KEINE
     # Wärmepumpe etwas ersetzt hatte (`alle_ersetzen_nichts`). Bei der häufigen
@@ -525,7 +531,6 @@ async def build_jahresbericht_context(
     # Cockpit für denselben Zeitraum. Hier stand bis 25.09.2026 `emob_km × 0,12`:
     # eine eigene Konstante, ohne Vergleichs-Verbrenner des Fahrzeugs, ohne den
     # Netzstrom der Ladung und ohne den getankten Anteil eines Plug-in-Hybrids.
-    _eauto_parameter = {i.id: i.parameter for i in investitionen if i.typ == "e-auto"}
     co2_emob = (
         sum(
             max(0.0, co2_bilanz_aus_fakt(f, _eauto_parameter).co2_emob_kg)
@@ -873,6 +878,11 @@ async def build_jahresbericht_context(
             "spezifischer_ertrag": spez_ertrag_jahr,
             "einspeise_erloes_euro": einspeise_erloes,
             "ev_ersparnis_euro": ev_ersparnis,
+            # N-588 (P15): die bewertete Menge hinter `ev_ersparnis_euro` und der Grund nicht bewerteter Verluste.
+            "eigenverbrauch_ohne_verluste_kwh": _finanz.eigenverbrauch_ohne_verluste_kwh,
+            "wandlungsverluste_bewertet_kwh": _finanz.wandlungsverluste_kwh,
+            "verluste_grund": verluste_grund_zeitraum(
+                (f.erzeugung.wandlungsverluste_kwh, f.erzeugung.verluste_grund) for f in zeilen_fakten),
             "sonstige_netto_euro": sonstige_netto_gesamt,
             "dienstliche_ladekosten_euro": dienstliche_ladekosten_gesamt,
             "dienstliche_ladekosten_hinweis": DIENSTLICHE_LADEKOSTEN_HINWEIS,

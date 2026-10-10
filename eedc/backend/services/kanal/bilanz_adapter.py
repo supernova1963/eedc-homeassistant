@@ -210,8 +210,10 @@ class KanalTag:
     #: Zahl der Stundenzeilen, die die Bilanz trägt (Belegdichte wie im Bestand; (b) rechnet ohne Stunden: 0).
     stunden: int = 0
     nachtrag: dict[str, float] = field(default_factory=dict)
-    #: Weg 2 (E4a-2): ``max(0, Σ Geräte − Anlagenzähler)`` — geführt, nicht bewertet (N-588); sonst ``None``.
+    #: Weg 2 (E4a-2): ``max(0, Σ Geräte − Anlagenzähler)``; sonst ``None``. Bewertet nur unter dem Messpunkt-Vertrag
+    #: (N-588, ``pv_verteilung.wandlungsverluste_grund``) — ``verluste_grund`` nennt, warum nicht.
     wandlungsverluste_kwh: Optional[float] = None
+    verluste_grund: Optional[str] = None
 
     @property
     def source_provenance(self) -> dict:

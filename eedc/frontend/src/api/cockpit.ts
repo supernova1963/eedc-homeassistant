@@ -19,11 +19,14 @@ export interface CockpitUebersicht {
   einspeisung_kwh: number
   direktverbrauch_kwh: number
   eigenverbrauch_kwh: number
-  /** HA-Bauform E4b (N-588 — angezeigt, nicht bewertet): Wandlungsverluste des Zeitraums samt Prozent aus dem
+  /** HA-Bauform E4b: Wandlungsverluste des Zeitraums samt Prozent aus dem
    *  Layer; `null` ohne Anlagenzähler bzw. ohne Monat mit Kanal-Deckung. */
   wandlungsverluste_kwh?: number | null
   wandlungsverluste_bezug_kwh?: number | null
   wandlungsverluste_prozent?: number | null
+  /** N-588: bewerteter Eigenverbrauch und Grund nicht bewerteter Wandlungsverluste (Backend). */
+  eigenverbrauch_ohne_verluste_kwh?: number | null
+  verluste_grund?: string | null
 
   // Quoten (%)
   autarkie_prozent: number

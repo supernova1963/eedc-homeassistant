@@ -886,7 +886,9 @@ async def get_roi_dashboard(
         # direkten Funktionsaufruf das truthy `Query`-Objekt ablegt (N-111).
         ust_abzug = ust_hochrechnung(
             anlage, alle_inv, jahr if isinstance(jahr, int) else date.today().year,
-            pv_detail.get('eigenverbrauch_kwh_jahr', 0), pv_detail.get('erzeugung_kwh_jahr', 0),
+            # N-588 (F4): die USt bemisst den Eigenverbrauch ohne Wandlungsverluste — dieselbe Menge wie die Ersparnis.
+            pv_detail.get('eigenverbrauch_ohne_verluste_kwh_jahr', pv_detail.get('eigenverbrauch_kwh_jahr', 0)),
+            pv_detail.get('erzeugung_kwh_jahr', 0),
         )
         gesamt_einsparung -= ust_abzug
 

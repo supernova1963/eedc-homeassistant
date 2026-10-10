@@ -42,7 +42,7 @@ from backend.core.berechnungen import (
 from backend.core.monatswert_grund import monatswert_grund, monatswert_grund_text
 from backend.services.monats_fakten import MonatsFakt, lade_monats_fakten
 from backend.core.berechnungen.ergebnis import soll_erfuellung
-from backend.core.berechnungen.pv_verteilung import wandlungsverluste_prozent
+from backend.core.berechnungen.pv_verteilung import eigenverbrauch_ohne_verluste_kwh, wandlungsverluste_prozent
 from backend.core.berechnungen.erzeuger_traeger import abgetretene_bkw_ids
 from backend.api.routes.aktueller_monat.kontext import MonatsKontext, lade_monats_kontext
 from backend.api.routes.aktueller_monat.schemas import (  # noqa: F401 — Re-Export fuer Tests und Aufrufer
@@ -901,23 +901,26 @@ async def get_aktueller_monat(
 
 async def _wandlungsverluste_des_monats(
     db: AsyncSession, anlage_id: int, jahr: int, monat: int, fakt,
-) -> tuple[Optional[float], Optional[float]]:
-    """Wandlungsverluste und ihr Bezug (Σ String-Zähler) des Monats — HA-Bauform E4b, N-588 (geführt, nicht bewertet).
+) -> tuple[Optional[float], Optional[float], Optional[str]]:
+    """Wandlungsverluste, ihr Bezug (Σ String-Zähler) und der Messpunkt-Vertrag (``verluste_grund``) des Monats —
+    HA-Bauform E4b, N-588. Bewertet werden sie in dieser Route über ``eigenverbrauch_ohne_verluste_kwh`` (Ersparnis,
+    USt); die Bilanz (EV, Autarkie, Quote) bleibt.
 
     Quelle ist der Kanal-Monat (W2-R3), unabhängig davon, welche der Quellen dieser Route die Mengen trägt. Mit
     Monats-Fakt aus den Fakten (die den Kanal-Monat seit E4b auch für abgeschlossene Monate lesen); ohne Fakt — der
     laufende Monat ohne Zeile, ein Monat nur aus HA — direkt aus ``kanal_monate`` für diesen einen Monat, und nur, wenn
-    die Anlage einen Anlagenzähler-Kanal hat. Ohne Anlagenzähler oder ohne Kanal-Deckung ``(None, None)``."""
+    die Anlage einen Anlagenzähler-Kanal hat. Ohne Anlagenzähler oder ohne Kanal-Deckung ``(None, None, None)``."""
     if fakt is not None:
-        return fakt.erzeugung.wandlungsverluste_kwh, fakt.erzeugung.wandlungsverluste_bezug_kwh
+        e = fakt.erzeugung
+        return e.wandlungsverluste_kwh, e.wandlungsverluste_bezug_kwh, e.verluste_grund
     from backend.services.kanal.bilanz_leser import hat_anlagenzaehler_kanal, kanal_monate
 
     if not await hat_anlagenzaehler_kanal(db, anlage_id):
-        return None, None
+        return None, None, None
     summe = (await kanal_monate(db, anlage_id, von=(jahr, monat), bis=(jahr, monat))).get((jahr, monat))
     if summe is None:
-        return None, None
-    return summe.wandlungsverluste_kwh, summe.wandlungsverluste_bezug_kwh
+        return None, None, None
+    return summe.wandlungsverluste_kwh, summe.wandlungsverluste_bezug_kwh, summe.verluste_grund
 
 
 async def _berechne_monat(
@@ -1156,8 +1159,16 @@ async def _berechne_monat(
     if "eigenverbrauch" in _out: eigenverbrauch = _out["eigenverbrauch"]
     if "ev_quote" in _out: ev_quote = _out["ev_quote"]
     if "gesamtverbrauch" in _out: gesamtverbrauch = _out["gesamtverbrauch"]
+    # N-588: Wandlungsverluste VOR den Finanzen — Ersparnis und USt bewerten den Eigenverbrauch ohne sie, wenn der
+    # Messpunkt-Vertrag hält (`eigenverbrauch_ohne_verluste_kwh`, P15); die Bilanz oben bleibt.
+    _verluste, _verluste_bezug, _verluste_grund = await _wandlungsverluste_des_monats(
+        db, anlage_id, jahr, monat, monats_fakt)
+    eigenverbrauch_ohne_verluste = (
+        None if eigenverbrauch is None
+        else eigenverbrauch_ohne_verluste_kwh(eigenverbrauch, _verluste, _verluste_grund)
+    )
     # ── finanzen_des_monats (Vorlage 2: Abschnitt in finanzen.py, Schnittstelle 8 ein / 19 aus) ──
-    _out = await finanzen_des_monats(_zt_cache=_zt_cache, anlage_id=anlage_id, db=db, eigenverbrauch=eigenverbrauch, einspeisung=einspeisung, jahr=jahr, monat=monat, netzbezug=netzbezug)
+    _out = await finanzen_des_monats(_zt_cache=_zt_cache, anlage_id=anlage_id, db=db, eigenverbrauch=eigenverbrauch_ohne_verluste, einspeisung=einspeisung, jahr=jahr, monat=monat, netzbezug=netzbezug)
     if "allgemein_tarif" in _out: allgemein_tarif = _out["allgemein_tarif"]
     if "einspeise_cent" in _out: einspeise_cent = _out["einspeise_cent"]
     if "einspeise_erloes" in _out: einspeise_erloes = _out["einspeise_erloes"]
@@ -1357,7 +1368,8 @@ async def _berechne_monat(
         if monats_fakt is None else None
     )
     _erg = ergebnis_des_monats(
-        eigenverbrauch=eigenverbrauch, einspeise_erloes=einspeise_erloes, ev_ersparnis=ev_ersparnis,
+        # N-588 (F4): die USt bemisst den Eigenverbrauch ohne Wandlungsverluste — dieselbe Menge wie die Ersparnis.
+        eigenverbrauch=eigenverbrauch_ohne_verluste, einspeise_erloes=einspeise_erloes, ev_ersparnis=ev_ersparnis,
         monats_fakt=monats_fakt, ev_preis_cent=ev_preis_cent,
         sonstige_netto=sonstige_netto_total, wp_ersparnis=wp_ersparnis, emob_ersparnis=emob_ersparnis,
         netzbezug_kosten=netzbezug_kosten, betriebskosten=betriebskosten_anteilig, ust_satz=kontext.ust_satz,
@@ -1367,8 +1379,6 @@ async def _berechne_monat(
     _soll_pv_tage = fenster.tage if soll_pv.anteilig is not None else None
     _soll_pv_tage_gesamt = fenster.tage_gesamt if soll_pv.anteilig is not None else None
     _soll = soll_erfuellung(pv, soll_pv.anteilig, _soll_pv_tage, _soll_pv_tage_gesamt, soll_pv.monat)
-    # HA-Bauform E4b: Wandlungsverluste — nur geführt und angezeigt (N-588), aus dem Kanal-Leser über die Fakten.
-    _verluste, _verluste_bezug = await _wandlungsverluste_des_monats(db, anlage_id, jahr, monat, monats_fakt)
     # ── Antwort ──
     return AktuellerMonatResponse(
         anlage_id=anlage.id,
@@ -1390,6 +1400,8 @@ async def _berechne_monat(
         wandlungsverluste_kwh=_verluste,
         wandlungsverluste_bezug_kwh=_verluste_bezug,
         wandlungsverluste_prozent=wandlungsverluste_prozent(_verluste, _verluste_bezug),
+        eigenverbrauch_ohne_verluste_kwh=eigenverbrauch_ohne_verluste,
+        verluste_grund=_verluste_grund,
         autarkie_prozent=autarkie,
         eigenverbrauch_quote_prozent=ev_quote,
         spez_ertrag=round(spez_ertrag, 1) if spez_ertrag is not None else None,

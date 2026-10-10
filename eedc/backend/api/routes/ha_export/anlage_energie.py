@@ -13,6 +13,7 @@ from backend.core.berechnungen import (
     berechne_finanz_aggregat,
     berechne_spez_ertrag_annualisiert,
     berechne_verbrauchs_kennzahlen,
+    eigenverbrauch_ohne_verluste_kwh,
     erzeugung_hinter_zaehler_kwh,
     monatsgewichte_aus_pvgis,
     relevante_kosten_aus_investitionen,
@@ -21,7 +22,12 @@ from backend.services.prognose_auswahl import lade_aktive_prognose
 from datetime import date
 from backend.services.strompreis_aggregator import lade_preis_aggregate_je_monat
 from backend.services.finanz_zeilen import baue_finanz_zeile
-from backend.services.monats_fakten import finanz_zeile_eingabe, lade_monats_fakten, pv_erzeugungs_monate
+from backend.services.monats_fakten import (
+    bewertbare_wandlungsverluste_aus_fakten,
+    finanz_zeile_eingabe,
+    lade_monats_fakten,
+    pv_erzeugungs_monate,
+)
 from backend.core.berechnungen.kapitalrechnung import jahres_ersparnis_euro
 from backend.core.berechnungen.investitions_jahresertrag import (
     BEZEICHNUNG_ERTRAGSFELD,
@@ -131,6 +137,10 @@ async def monatsfakten_und_energie(*, anlage, db, investitionen, monatsdaten):
     )
     direktverbrauch = kennzahlen.direktverbrauch_kwh
     eigenverbrauch = kennzahlen.eigenverbrauch_kwh
+    # N-588 (P15): die Menge, die CO₂ bewertet — ohne die bewertbaren Wandlungsverluste der Monate (Bilanz bleibt).
+    eigenverbrauch_ohne_verluste = eigenverbrauch_ohne_verluste_kwh(
+        eigenverbrauch, bewertbare_wandlungsverluste_aus_fakten(fakten), None,
+    )
     gesamtverbrauch = kennzahlen.gesamtverbrauch_kwh
     autarkie = kennzahlen.autarkie_prozent
     ev_quote = kennzahlen.eigenverbrauchsquote_prozent
@@ -163,7 +173,7 @@ async def monatsfakten_und_energie(*, anlage, db, investitionen, monatsdaten):
         monatsgewichte=spez_gewichte,
     )
     _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
-    return {k: _loc[k] for k in ("_preis_messung", "_tarif_cache", "autarkie", "batterie_entladung", "batterie_ladung", "direktverbrauch", "eigenverbrauch", "einspeisung", "erzeugung_bilanz", "ev_quote", "fakten", "gesamtverbrauch", "netzbezug", "pv_erzeugung", "spez_ertrag",) if k in _loc}
+    return {k: _loc[k] for k in ("_preis_messung", "_tarif_cache", "autarkie", "batterie_entladung", "batterie_ladung", "direktverbrauch", "eigenverbrauch", "eigenverbrauch_ohne_verluste", "einspeisung", "erzeugung_bilanz", "ev_quote", "fakten", "gesamtverbrauch", "netzbezug", "pv_erzeugung", "spez_ertrag",) if k in _loc}
 
 
 async def finanz_aggregat(*, _preis_messung, _tarif_cache, anlage, db, fakten, strompreis):
@@ -211,6 +221,8 @@ async def finanz_aggregat(*, _preis_messung, _tarif_cache, anlage, db, fakten, s
     # die Ergebnis-Leiter (03.10.2026), sobald die USt feststeht.
     bkw_ersparnis = 0.0
     erzeuger_erloes = 0.0
+    # N-588: die in der Ersparnis abgezogenen Wandlungsverluste (Messpunkt-Vertrag) — für den Berechnungstext des Sensors.
+    ev_wandlungsverluste = 0.0
     if strompreis:
         # #326: FinanzMonatsZeile über den gemeinsamen Builder (einzige erlaubte
         # Konstruktions-Stelle, Wächter) — er löst den Tarif PRO MONAT auf
@@ -236,8 +248,9 @@ async def finanz_aggregat(*, _preis_messung, _tarif_cache, anlage, db, fakten, s
         ev_ersparnis = _finanz.ev_ersparnis_euro
         bkw_ersparnis = _finanz.bkw_ersparnis_euro
         erzeuger_erloes = _finanz.erzeuger_erloes_euro
+        ev_wandlungsverluste = _finanz.wandlungsverluste_kwh
     _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
-    return {k: _loc[k] for k in ("bkw_ersparnis", "einspeise_erloes", "erzeuger_erloes", "ev_ersparnis", "sonstige_ausgaben_gesamt", "sonstige_ertraege_gesamt", "sonstige_netto_gesamt",) if k in _loc}
+    return {k: _loc[k] for k in ("bkw_ersparnis", "einspeise_erloes", "erzeuger_erloes", "ev_ersparnis", "ev_wandlungsverluste", "sonstige_ausgaben_gesamt", "sonstige_ertraege_gesamt", "sonstige_netto_gesamt",) if k in _loc}
 
 
 def investitionen_und_ust(

@@ -324,7 +324,7 @@ async def lade_monats_fakten(
             offen=lambda m: inkl_nur_tageswerte or m in monatsdaten_by_ym,
         )
 
-    # HA-Bauform E4b (Entscheid B-1): die Wandlungsverluste (N-588, nur geführt) kommen aus dem Kanal-Monat — auch für
+    # HA-Bauform E4b (Entscheid B-1): die Wandlungsverluste (samt Messpunkt-Vertrag, N-588) kommen aus dem Kanal-Monat — auch für
     # abgeschlossene Monate, deren Mengen aus der Zählerzeile stammen. Wurde die Tagesebene oben geladen, trägt sie die
     # Kanal-Monate schon (`lade_monats_summen`); sonst EIN zusätzlicher `kanal_monate`-Aufruf, und nur, wenn die Anlage
     # einen Anlagenzähler-Kanal hat (ohne ihn ist der Wert ohnehin `None`). ⚑ Laufzeit: Vormerkung E4f „Monatsreihe je

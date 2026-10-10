@@ -33,7 +33,11 @@ from backend.core.berechnungen import (
 )
 from backend.core.berechnungen import relevante_kosten_aus_investitionen
 from backend.core.berechnungen.ergebnis import ErgebnisEingang, berechne_ergebnis, quote_paarweise
-from backend.core.berechnungen.pv_verteilung import wandlungsverluste_prozent
+from backend.core.berechnungen.pv_verteilung import (
+    eigenverbrauch_ohne_verluste_kwh,
+    verluste_grund_zeitraum,
+    wandlungsverluste_prozent,
+)
 from backend.services.ust_satz import ust_eigenverbrauch_zeitraum
 from backend.core.calculations import berechne_co2_bilanz
 from backend.services.strompreis_aggregator import lade_preis_aggregate_je_monat
@@ -51,6 +55,7 @@ from backend.services.waerme_klima_block import (
     was_noch_moeglich,
 )
 from backend.services.monats_fakten import (
+    bewertbare_wandlungsverluste_aus_fakten,
     finanz_zeile_eingabe,
     lade_monats_fakten,
     pv_unvollstaendig_hinweis,
@@ -77,12 +82,16 @@ class CockpitUebersichtResponse(BaseModel):
     einspeisung_kwh: float
     direktverbrauch_kwh: float
     eigenverbrauch_kwh: float
-    #: HA-Bauform E4b (N-588 — angezeigt, NICHT bewertet): Wandlungsverluste des Zeitraums (Σ der Monate mit Wert aus
-    #: dem Kanal-Leser), ihr Bezug (Σ String-Zähler derselben Monate) und Prozent (Layer). ``None`` ohne Anlagenzähler
-    #: bzw. ohne einen Monat mit Kanal-Deckung. Trägt die Zeile im PV-Hub (Block „Verlauf", gesamte Historie).
+    #: HA-Bauform E4b: Wandlungsverluste des Zeitraums (Σ der Monate mit Wert aus dem Kanal-Leser), ihr Bezug (Σ
+    #: String-Zähler derselben Monate) und Prozent (Layer). ``None`` ohne Anlagenzähler bzw. ohne einen Monat mit
+    #: Kanal-Deckung. Trägt die Zeile im PV-Hub (Block „Verlauf", gesamte Historie).
     wandlungsverluste_kwh: Optional[float] = None
     wandlungsverluste_bezug_kwh: Optional[float] = None
     wandlungsverluste_prozent: Optional[float] = None
+    #: N-588 (P15): der Eigenverbrauch, den Ersparnis, USt und CO₂ bewerten (ohne die bewertbaren Wandlungsverluste);
+    #: ``verluste_grund``: warum Verluste NICHT bewertet sind (``pv_verteilung.verluste_grund_zeitraum``).
+    eigenverbrauch_ohne_verluste_kwh: Optional[float] = None
+    verluste_grund: Optional[str] = None
 
     # Quoten (%)
     autarkie_prozent: float
@@ -417,7 +426,8 @@ async def get_cockpit_uebersicht(
     pv_monate = pv_erzeugungs_monate(fakten)
 
     # HA-Bauform E4b: Wandlungsverluste über die Monate, die Verluste UND Bezug tragen (paarweise wie das Jahr,
-    # `ergebnis.falte_zeitraum`); nur geführt — in keiner Bilanz, Ersparnis oder CO₂-Größe darunter.
+    # `ergebnis.falte_zeitraum`) — in keiner Bilanz-Größe; Ersparnis, USt und CO₂ ziehen sie ab, wo der
+    # Messpunkt-Vertrag hält (N-588, je Monat in den Fakten entschieden).
     _q_verluste = quote_paarweise([
         {"monat": f.monat, "v": f.erzeugung.wandlungsverluste_kwh, "b": f.erzeugung.wandlungsverluste_bezug_kwh}
         for f in fakten
@@ -830,8 +840,12 @@ async def get_cockpit_uebersicht(
     )).netto_ertrag
 
     # CO2-Bilanz (DI-2: kanonischer Helper — dieselbe Bilanz wie der HA-Export)
+    # N-588 (P15): die Menge hinter der Ersparnis — ohne die bewertbaren Wandlungsverluste der Monate.
+    eigenverbrauch_ohne_verluste = eigenverbrauch_ohne_verluste_kwh(
+        eigenverbrauch, bewertbare_wandlungsverluste_aus_fakten(fakten), None,
+    )
     _co2 = berechne_co2_bilanz(
-        eigenverbrauch_kwh=eigenverbrauch,
+        eigenverbrauch_kwh=eigenverbrauch_ohne_verluste,
         wp_waerme_kwh=wp_waerme,
         wp_strom_kwh=wp_strom,
         # #263 K-2 (E-B): Kühlen ersetzt keine Heizung.
@@ -906,6 +920,9 @@ async def get_cockpit_uebersicht(
         wandlungsverluste_kwh=_q_verluste.zaehler,
         wandlungsverluste_bezug_kwh=_q_verluste.nenner,
         wandlungsverluste_prozent=wandlungsverluste_prozent(_q_verluste.zaehler, _q_verluste.nenner),
+        eigenverbrauch_ohne_verluste_kwh=round(eigenverbrauch_ohne_verluste, 1),
+        verluste_grund=verluste_grund_zeitraum(
+            (f.erzeugung.wandlungsverluste_kwh, f.erzeugung.verluste_grund) for f in fakten),
         autarkie_prozent=round(autarkie, 1),
         eigenverbrauch_quote_prozent=round(ev_quote, 1),
         direktverbrauch_quote_prozent=round(dv_quote, 1),

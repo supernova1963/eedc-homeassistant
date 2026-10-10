@@ -145,11 +145,16 @@ export interface AktuellerMonatResponse {
   eigenverbrauch_kwh: number | null
   direktverbrauch_kwh: number | null  // PV direkt verbraucht (ohne Speicher) = EV − Speicher-Entladung
   gesamtverbrauch_kwh: number | null
-  /** HA-Bauform E4b (N-588 — angezeigt, nicht bewertet): Σ String-Zähler − Anlagenzähler; `null` ohne
-   *  Anlagenzähler oder ohne Kanal-Deckung. Prozent aus dem Layer (Bezug: Σ der String-Zähler). */
+  /** HA-Bauform E4b: Σ String-Zähler − Anlagenzähler; `null` ohne Anlagenzähler oder ohne Kanal-Deckung. Prozent
+   *  aus dem Layer (Bezug: Σ der String-Zähler). */
   wandlungsverluste_kwh?: number | null
   wandlungsverluste_bezug_kwh?: number | null
   wandlungsverluste_prozent?: number | null
+  /** N-588: der Eigenverbrauch, den Ersparnis, USt und CO₂ bewerten (ohne Wandlungsverluste, wenn der
+   *  Messpunkt-Vertrag hält). Kommt fertig aus dem Backend — der Client rechnet ihn nicht nach. */
+  eigenverbrauch_ohne_verluste_kwh?: number | null
+  /** N-588: warum Wandlungsverluste angezeigt, aber nicht bewertet werden; `null` = bewertet bzw. keine. */
+  verluste_grund?: string | null
 
   // Quoten (%)
   autarkie_prozent: number | null

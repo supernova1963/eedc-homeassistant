@@ -68,6 +68,7 @@ async def grundlast_sensorwert(
 
 async def sensorwerte_erstellen(
     *,
+    ev_wandlungsverluste=0.0,
     amortisation_jahre,
     anlage,
     autarkie,
@@ -177,7 +178,13 @@ async def sensorwerte_erstellen(
                 berechnung = f"{fmt_zahl(einspeisung, 0)} × {fmt_zahl(strompreis.einspeiseverguetung_cent_kwh, 2)} ct/kWh"
         elif sensor.key == "eigenverbrauch_ersparnis_euro":
             value = ev_ersparnis
-            if strompreis:
+            if strompreis and ev_wandlungsverluste and ev_wandlungsverluste > 0:
+                # N-588: die Ersparnis bewertet den Eigenverbrauch ohne die Wandlungsverluste — der Text nennt beides.
+                berechnung = (
+                    f"({fmt_zahl(eigenverbrauch, 0)} − {fmt_zahl(ev_wandlungsverluste, 0)} Verluste) × "
+                    f"{fmt_zahl(strompreis.netzbezug_arbeitspreis_cent_kwh, 2)} ct/kWh"
+                )
+            elif strompreis:
                 berechnung = f"{fmt_zahl(eigenverbrauch, 0)} × {fmt_zahl(strompreis.netzbezug_arbeitspreis_cent_kwh, 2)} ct/kWh"
         elif sensor.key == "co2_ersparnis_kg":
             value = co2_ersparnis

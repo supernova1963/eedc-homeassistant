@@ -624,7 +624,7 @@ ganzen Zeitraum. Die Gruppen sind getrennt — eine kann decken, die andere nich
 
 | Gruppe | Leser | Was er liefert |
 | --- | --- | --- |
-| Bilanz (Netz · PV/Balkonkraftwerk samt Anlagenzähler · Speicher · Erzeuger hinter dem Zähler) | `bilanz_leser.py` | je Tag `KanalTag`, je Monat `TagesMonatsSumme` über die Komposition `core/berechnungen/bilanz_zeitraum.py` (Regeln W2-R1…R5; Wandlungsverluste geführt, nicht bewertet); Kalendermonat je Sensor (`kanal_kalendermonate`) |
+| Bilanz (Netz · PV/Balkonkraftwerk samt Anlagenzähler · Speicher · Erzeuger hinter dem Zähler) | `bilanz_leser.py` | je Tag `KanalTag`, je Monat `TagesMonatsSumme` über die Komposition `core/berechnungen/bilanz_zeitraum.py` (Regeln W2-R1…R5; Wandlungsverluste geführt; Geld, USt und CO₂ ziehen sie ab, wenn der Messpunkt-Vertrag hält (ADR-002/P15, `verluste_grund`), die Bilanz trägt sie); Kalendermonat je Sensor (`kanal_kalendermonate`) |
 | E-Mobilität (Lademengen, gemessene Aufteilung, abgeleiteter PV-Anteil) · Sonstiges | `geraete_leser.py` | je Monat bzw. Kalendermonat die Zeilen `{feld: Δ}` je Gerät und der PV-Anteil; Wallbox-Regel, Pool, Dienstwagen entscheiden die Monats-Fakten zur Lesezeit (P10) |
 | Wärmepumpe (Strom, Wärme je Funktion, Betriebsart-Zähler, Strom je Betriebsart) | `wp_leser.py` | je Monat bzw. Kalendermonat die Zeile je Gerät in der Form einer Abschluss-Zeile; gemessene 0 ist Betrieb ohne Wärme |
 | Preis (sechs Kosten-Kanäle) | `preis_leser.py` | je Monat ein `StrompreisAggregat` (gewichtet = Δ Kosten ÷ Δ bewertete kWh); die Netzbezugs-Gewichte des Zeitfenster-Tarifs je (Wochentag, Uhrstunde) |

@@ -134,6 +134,9 @@ class Form:
     #: N-640 Variante 1: der Anlagen-PV-Zähler ist zugeordnet (HA kennt ihn, die Tage verteilen ihn), der
     #: abgeschlossene Monat trägt aber KEINEN Anlagenwert (Frank85: „PV Erzeugung Gesamt — Vorhanden –").
     anlagenwert_gespeichert: bool = True
+    #: N-588 (W2-D): ein Speicher ohne eigene Zähler mit dieser gepflegten Kopplung (``"dc"``/``"ac"``) — er trägt keine
+    #: Flüsse, nur die Bedingung (iii) des Messpunkt-Vertrags.
+    speicher_kopplung: Optional[str] = None
 
     @property
     def n640(self) -> bool:
@@ -267,8 +270,25 @@ FORMEN_N640: dict[str, Form] = {f.fid: f for f in (
          (_modul_bestand("Süd", 6.0, 2.0), _modul_bestand("West", 4.0, 1.0), _bkw()), 3.5),
 )}
 
+# ── N-588: Messpunkt-Vertrag der Wandlungsverluste (Vorlage Fassung 2 B4, Entscheide Master 10.10.2026) ────────────
+#
+# Alle Geräte gemessen, Anlagenzähler zugeordnet — sie unterscheiden sich im Vertrag:
+#   W2-D  wie F13a (Verluste 36 = 5,7 %) + DC-gekoppelter Speicher (gepflegt) ⇒ `dc_speicher`, Geld bitgleich (135,00);
+#   W2-B  Anlagenzähler 0,96 × (Süd + West) OHNE das Balkonkraftwerk ⇒ 17,7 % ⇒ `ueber_schwelle` (iv);
+#   W2-B7 dasselbe mit kleinem Balkonkraftwerk und 0,97 (Strings 3,0, BKW 0,13 je Stunde ≙ 1 500 + 65 kWh) ⇒ 7,0 %,
+#         Verluste ≥ 80 % der BKW-Menge ⇒ `bkw_ausserhalb` (v) — der Fall, den (iv) nicht fängt.
+# Sie stehen NICHT in ``FORMEN`` (andere Proben iterieren ``FORMEN`` mit eigenen Regeln).
+FORMEN_N588: dict[str, Form] = {f.fid: f for f in (
+    Form("W2-D", "wie F13a, dazu ein DC-gekoppelter Speicher (Kopplung gepflegt, ohne Zähler)",
+         (_sued(True), _west(True), _bkw(True)), 3.3, speicher_kopplung="dc"),
+    Form("W2-B", "alle Geräte gemessen, Anlagenzähler 0,96 × Strings OHNE Balkonkraftwerk (17,7 %)",
+         (_sued(True), _west(True), _bkw(True)), 2.88),
+    Form("W2-B7", "alle Geräte gemessen, kleines Balkonkraftwerk außerhalb des Anlagenzählers (7,0 %)",
+         (_sued(True), _west(True), Geraet("Balkon", "balkonkraftwerk", 0.8, 0.13, True)), 2.91),
+)}
+
 #: Alle Formen der Abnahme-Matrix.
-MATRIX_FORMEN: dict[str, Form] = {**FORMEN, **FORMEN_W2, **FORMEN_N640}
+MATRIX_FORMEN: dict[str, Form] = {**FORMEN, **FORMEN_W2, **FORMEN_N640, **FORMEN_N588}
 
 
 # ── Soll aus der Regel ──────────────────────────────────────────────────────
@@ -526,6 +546,11 @@ async def seed_anlage(db: AsyncSession, form: Form) -> tuple[int, dict[str, int]
         db.add(inv)
         await db.flush()
         ids[g.name] = inv.id
+    if form.speicher_kopplung is not None:
+        db.add(Investition(anlage_id=a.id, typ="speicher", bezeichnung="Speicher", anschaffungsdatum=D0,
+                           anschaffungskosten_gesamt=1000.0,
+                           parameter={"kapazitaet_kwh": 5.0, "kopplung": form.speicher_kopplung}))
+        await db.flush()
     basis = {"einspeisung": _s("sensor.einsp"), "netzbezug": _s("sensor.netz")}
     if form.gesamt is not None:
         basis["pv_gesamt"] = _s("sensor.pv_gesamt")
@@ -903,6 +928,8 @@ async def miss_tage(db: AsyncSession, anlage_id: int, ids: dict[str, int], tage)
             "tw_bkw": _r(getattr(z, "bkw", None)) if z else None,
             "tw_erzeuger": {rev.get(k, k): _r(v) for k, v in ((getattr(z, "erzeuger_kwh", None) or {}) if z else {}).items()},
             "tw_eigenverbrauch": _r(getattr(z, "eigenverbrauch", None)) if z else None,
+            # N-588: Geld-Sicht des Tages (Ersparnis auf dem Eigenverbrauch ohne bewertbare Wandlungsverluste).
+            "tw_ev_ersparnis": _r(getattr(z, "ev_ersparnis", None)) if z else None,
             "tw_einspeisung": _r(getattr(z, "einspeisung", None)) if z else None,
             "tw_netzbezug": _r(getattr(z, "netzbezug", None)) if z else None,
             "tw_autarkie": _r(getattr(z, "autarkie", None)) if z else None,
@@ -917,7 +944,7 @@ async def miss_cockpit_monat(db: AsyncSession, anlage_id: int, monat: int) -> di
     r = await am.get_aktueller_monat(anlage_id=anlage_id, jahr=JAHR, monat=monat, db=db)
     return {"pv": _r(r.pv_erzeugung_kwh), "bkw": _r(r.bkw_erzeugung_kwh), "ev": _r(r.eigenverbrauch_kwh),
             "bkw_ersparnis": _r(getattr(r, "bkw_ersparnis_euro", None)),
-            # Geld-Sichten (Auftrag Achsen-Matrix 2, F13a/N-588): gemessen, nicht bewertet.
+            # Geld-Sichten (N-588): Ersparnis auf dem Eigenverbrauch ohne bewertbare Wandlungsverluste.
             "ev_ersparnis": _r(getattr(r, "ev_ersparnis_euro", None)),
             "einsp": _r(r.einspeisung_kwh), "netz": _r(r.netzbezug_kwh), "autarkie": _r(r.autarkie_prozent),
             "pv_quelle": ((r.feld_quellen or {}).get("pv_erzeugung_kwh") or {}).get("quelle")
@@ -942,7 +969,7 @@ async def miss_fakten(db: AsyncSession, anlage_id: int, ids: dict[str, int], mon
     return {"pv": _r(e.pv_kwh), "pv_module": _r(e.pv_module_kwh), "bkw": _r(e.bkw_kwh),
             "bkw_anteil": _r(e.bkw_aus_anlagenwert_kwh), "vollstaendig": e.pv_vollstaendig,
             "je_geraet": je, "ev": _r(fk[0].kennzahlen.eigenverbrauch_kwh),
-            # HA-Bauform E4b (N-588, nur geführt): Wandlungsverluste aus dem Kanal-Leser.
+            # HA-Bauform E4b: Wandlungsverluste aus dem Kanal-Leser (bewertet unter dem Messpunkt-Vertrag, N-588).
             "wandlungsverluste": _r(e.wandlungsverluste_kwh)}
 
 
@@ -1102,6 +1129,8 @@ async def miss_bkw_hub(db: AsyncSession, anlage_id: int, ids: dict[str, int]) ->
         geraete[rev.get(str(ds.investition.id), ds.investition.bezeichnung)] = {
             "kopf_erzeugung": z["gesamt_erzeugung_kwh"], "kopf_ev": z["gesamt_eigenverbrauch_kwh"],
             "kopf_einsp": z["gesamt_einspeisung_kwh"], "monate": len(reihe),
+            # N-588: Ersparnis und CO₂ des Hubs bewerten den Anteil am Eigenverbrauch OHNE Wandlungsverluste.
+            "kopf_ersparnis": z.get("ersparnis_eigenverbrauch_euro"), "kopf_co2": z.get("co2_ersparnis_kg"),
             "reihe_erzeugung": _r(sum(w.erzeugung_kwh for w in reihe)),
             "reihe_ev": _r(sum(w.eigenverbrauch_kwh or 0.0 for w in reihe)),
             "reihe_einsp": _r(sum(w.einspeisung_kwh or 0.0 for w in reihe)),
@@ -1126,16 +1155,43 @@ async def miss_community(db: AsyncSession, anlage_id: int) -> dict:
             "co2": _r(mw.get("co2_vermieden_kg"))}
 
 
-async def miss_checker(db: AsyncSession, anlage_id: int) -> dict:
-    from backend.services.daten_checker._helpers import _CheckHelpers
+#: N-588 F5: Kürzel der Regeln der Kategorie „Messpunkt" nach dem Anfang ihrer Meldung.
+MESSPUNKT_REGELN = (
+    ("a", "Anlagenzähler und String-Zähler messen verschiedene Dinge"),
+    ("a'", "Der Anlagenzähler misst das Balkonkraftwerk offenbar nicht"),
+    ("b", "Anlagenzähler zählt mehr als die Strings"),
+    ("c'", "Bei DC-gekoppeltem Speicher"),
+    ("d", "Sieht nach Volleinspeisung aus"),
+)
 
-    class _Helfer(_CheckHelpers):
-        def __init__(self, db):
-            self.db = db
+
+async def miss_checker(db: AsyncSession, anlage_id: int) -> dict:
+    from backend.services.daten_checker import DatenChecker
 
     anlage = (await db.execute(select(Anlage).options(selectinload(Anlage.investitionen))
                                .where(Anlage.id == anlage_id))).scalar_one()
-    return {"pv": _r((await _Helfer(db)._get_pv_erzeugung_map(anlage)).get((JAHR, JUNI)))}
+    checker = DatenChecker(db)
+    # N-588 F5: die Regeln der Kategorie „Messpunkt", die für diesen Datenstand melden (abgeschlossener Monat Juni).
+    messpunkt = sorted(k for e in await checker._check_messpunkt(anlage)
+                       for k, anfang in MESSPUNKT_REGELN if e.meldung.startswith(anfang))
+    return {"pv": _r((await checker._get_pv_erzeugung_map(anlage)).get((JAHR, JUNI))), "messpunkt": messpunkt}
+
+
+async def miss_roi(db: AsyncSession, anlage_id: int) -> dict:
+    """Auswertungen → ROI (``get_roi_dashboard``, Jahr 2026): die PV-Zeile — Ersparnis aus Eigenverbrauch (Detail) und
+    CO₂ (N-647 rechnet sie bis B7 aus der Erzeugung). Die Formen haben keinen Wechselrichter: die Module sind
+    „ohne WR"-Zeilen, deren Detail die ganze PV-Einsparung trägt; CO₂ = Σ der Modul-Zeilen."""
+    from backend.api.routes.investitionen.roi import get_roi_dashboard
+
+    r = await get_roi_dashboard(anlage_id=anlage_id, strompreis_cent=None, einspeiseverguetung_cent=None,
+                                benzinpreis_euro=None, jahr=JAHR, db=db)
+    pv = [b for b in r.berechnungen if b.investition_typ in ("pv-module", "pv-system")]
+    if not pv:
+        return {"ev_ersparnis": None, "co2": None, "ev_kwh_jahr": None}
+    d = pv[0].detail_berechnung
+    return {"ev_ersparnis": _r(d.get("ev_ersparnis_euro")), "co2": _r(sum(b.co2_einsparung_kg or 0.0 for b in pv)),
+            "ev_kwh_jahr": _r(d.get("eigenverbrauch_kwh_jahr")),
+            "ev_ohne_verluste_kwh_jahr": _r(d.get("eigenverbrauch_ohne_verluste_kwh_jahr"))}
 
 
 async def miss_vorschau(db: AsyncSession, anlage_id: int) -> dict:
@@ -1200,6 +1256,7 @@ async def _sichten_nach(db, aid, ids, *, mit_ha: bool) -> dict:
         "bkw_hub": await miss_bkw_hub(db, aid, ids),
         "community": await miss_community(db, aid),
         "checker": await miss_checker(db, aid),
+        "roi": await miss_roi(db, aid),
     }
     if mit_ha:
         out["vorschau"] = await miss_vorschau(db, aid)

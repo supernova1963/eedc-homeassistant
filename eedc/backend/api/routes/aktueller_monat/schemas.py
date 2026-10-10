@@ -162,14 +162,21 @@ class AktuellerMonatResponse(BaseModel):
     eigenverbrauch_kwh: Optional[float] = None
     direktverbrauch_kwh: Optional[float] = None  # PV direkt verbraucht (ohne Speicher): EV − Speicher-Entladung; günstigster Verbrauch (nur entgangene Einspeisung)
     gesamtverbrauch_kwh: Optional[float] = None
-    #: HA-Bauform E4b (N-588 — angezeigt, NICHT bewertet): Wandlungsverluste = ``max(0, Σ String-Zähler −
-    #: Anlagenzähler)`` aus dem Kanal-Leser; ``None`` ohne Anlagenzähler oder ohne Kanal-Deckung. Steckt in keiner
-    #: Ersparnis, keinem CO₂ und keiner Bilanz — ``pv_erzeugung_kwh`` bleibt die Σ der Strings. ``_bezug_kwh`` ist
-    #: die Σ der String-Zähler desselben Zeitraums, ``_prozent`` = Verluste ÷ Bezug × 100 (Layer,
-    #: ``pv_verteilung.wandlungsverluste_prozent``; im Jahr über die Monate, die beide tragen).
+    #: HA-Bauform E4b: Wandlungsverluste = ``max(0, Σ String-Zähler − Anlagenzähler)`` aus dem Kanal-Leser; ``None``
+    #: ohne Anlagenzähler oder ohne Kanal-Deckung. Keine Bilanz-Größe (F2) — ``pv_erzeugung_kwh``, Eigenverbrauch,
+    #: Autarkie bleiben die Σ der Strings. ``_bezug_kwh`` ist die Σ der String-Zähler desselben Zeitraums,
+    #: ``_prozent`` = Verluste ÷ Bezug × 100 (Layer, ``pv_verteilung.wandlungsverluste_prozent``; im Jahr über die
+    #: Monate, die beide tragen).
     wandlungsverluste_kwh: Optional[float] = None
     wandlungsverluste_bezug_kwh: Optional[float] = None
     wandlungsverluste_prozent: Optional[float] = None
+    #: N-588 (P15): der Eigenverbrauch, den Ersparnis, USt und CO₂ bewerten — ohne die Wandlungsverluste, wenn der
+    #: Messpunkt-Vertrag hält; sonst = ``eigenverbrauch_kwh``. Die T-Konto-Herleitung nennt diese Menge.
+    eigenverbrauch_ohne_verluste_kwh: Optional[float] = None
+    #: N-588: warum Wandlungsverluste angezeigt, aber NICHT bewertet werden (``dc_speicher`` ·
+    #: ``dc_speicher_angenommen`` · ``ueber_schwelle`` · ``bkw_ausserhalb``); ``None`` = bewertet bzw. keine. Im Jahr
+    #: der Grund mit der größten Σ nicht bewerteter Verluste (``pv_verteilung.verluste_grund_zeitraum``).
+    verluste_grund: Optional[str] = None
 
     # Quoten (%)
     autarkie_prozent: Optional[float] = None

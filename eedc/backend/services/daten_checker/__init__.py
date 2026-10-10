@@ -158,6 +158,8 @@ class DatenChecker(
         ergebnisse.extend(await self._check_klima_modus_sensor(anlage))
         ergebnisse.extend(await self._check_leere_tage_trotz_zaehler(anlage))
         ergebnisse.extend(await self._check_pv_ueber_erfassung(anlage))
+        # N-588 F5: Messpunkt-Vertrag der Wandlungsverluste (Anlagenzähler gegen String-Zähler).
+        ergebnisse.extend(await self._check_messpunkt(anlage))
         ergebnisse.extend(self._check_wp_arbeitszahl_unplausibel(anlage))
         ergebnisse.extend(self._check_emob_pool_pflege(
             anlage, bloecke=await self._emob_bloecke_fuer_pflege(anlage),

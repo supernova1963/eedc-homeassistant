@@ -33,7 +33,7 @@ def test_r1_gemessen_traegt_sein_delta_und_wird_nicht_skaliert():
     assert _r(r.werte) == {SUED: 12.6, WEST: 0.0}
     assert r.verteilt == frozenset({WEST})
     # R3 (Wortlaut nach H2): die PV-Summe ist Σ Geräte; der Anlagenzähler füllt nur. Die Differenz wird als
-    # Wandlungsverluste geführt (N-588, nicht bewertet).
+    # Wandlungsverluste geführt (W2-R3); bewertet werden sie unter dem Messpunkt-Vertrag (N-588, `verluste_grund`).
     assert r.bilanz_kwh == pytest.approx(12.6)
     assert r.geraete_kwh == pytest.approx(12.6)
     assert r.wandlungsverluste_kwh == pytest.approx(0.504)

@@ -39,7 +39,12 @@ from backend.services.speicher_wirtschaftlichkeit import (
 )
 from backend.core.calculations import CO2_FAKTOR_STROM_KG_KWH, berechne_roi
 from backend.services.monats_fakten import lade_monats_fakten
-from backend.core.berechnungen import einspeise_erloes_euro, relevante_kosten_aus_investitionen
+from backend.core.berechnungen import (
+    bewertbare_wandlungsverluste_kwh,
+    eigenverbrauch_ohne_verluste_kwh,
+    einspeise_erloes_euro,
+    relevante_kosten_aus_investitionen,
+)
 from backend.core.berechnungen.kapitalrechnung import annahme_dauer_text, kapitaleinsatz_euro
 from backend.services.prognose_auswahl import lade_aktive_prognose
 from backend.api.routes.investitionen.roi import (
@@ -107,6 +112,8 @@ async def pv_einsparung_und_speicher_ist(
             md_query = md_query.where(Monatsdaten.jahr == jahr)
 
         # 3. PV-Erzeugung je Monat über die Monats-Fakten (ADR-002/P10)
+        verluste_je_monat: dict[tuple[int, int], float] = {}
+
         async def get_pv_erzeugung(filter_jahr: Optional[int] = None) -> dict[tuple[int, int], float]:
             """Modul-PV je Monat, kanonisch aufgelöst (P7).
 
@@ -132,6 +139,15 @@ async def pv_einsparung_und_speicher_ist(
                     von=(filter_jahr, 1) if filter_jahr is not None else None,
                     bis=(filter_jahr, 12) if filter_jahr is not None else None,
                 )
+            nonlocal verluste_je_monat
+            # N-588: die bewertbaren Wandlungsverluste derselben Monate (Messpunkt-Vertrag je Monat) — die
+            # Ersparnis unten bewertet den Eigenverbrauch ohne sie. Die Verluste sind die der Strings (ein
+            # Balkonkraftwerk misst AC am Gerät), sie gehören deshalb in diese Modul-Zeile.
+            verluste_je_monat = {
+                f.schluessel: bewertbare_wandlungsverluste_kwh(
+                    f.erzeugung.wandlungsverluste_kwh, f.erzeugung.verluste_grund,
+                ) for f in fakten
+            }
             return {
                 f.schluessel: (f.erzeugung.pv_module_kwh or 0.0) for f in fakten
             }
@@ -156,11 +172,13 @@ async def pv_einsparung_und_speicher_ist(
             total_erzeugung = sum(pv_erzeugung_data.values())
 
             total_einspeisung = sum(r.einspeisung or 0 for r in md_by_month.values())
+            total_verluste = sum(verluste_je_monat.values())
             anzahl_monate = len(md_by_month)
 
             if anzahl_monate > 0 and anzahl_jahre > 0:
                 avg_einspeisung = total_einspeisung / anzahl_jahre
                 avg_erzeugung = total_erzeugung / anzahl_jahre
+                avg_verluste = total_verluste / anzahl_jahre
                 avg_monate_pro_jahr = total_records / anzahl_jahre
 
                 if avg_monate_pro_jahr < 12:
@@ -172,6 +190,7 @@ async def pv_einsparung_und_speicher_ist(
 
                 einspeisung_jahr = avg_einspeisung * faktor
                 erzeugung_jahr = avg_erzeugung * faktor
+                verluste_jahr = avg_verluste * faktor
                 # Eigenverbrauch = Erzeugung - Einspeisung
                 eigenverbrauch_jahr = max(0, erzeugung_jahr - einspeisung_jahr)
                 hinweis = f'Jahresdurchschnitt (Ø aus {anzahl_jahre} Jahren)'
@@ -190,6 +209,7 @@ async def pv_einsparung_und_speicher_ist(
             total_erzeugung = sum(pv_erzeugung_data.values())
 
             total_einspeisung = sum(r.einspeisung or 0 for r in md_by_month.values())
+            total_verluste = sum(verluste_je_monat.values())
             anzahl_monate = len(md_by_month)
             vorhandene_monate = sorted(md_by_month.keys())
 
@@ -217,6 +237,7 @@ async def pv_einsparung_und_speicher_ist(
 
                 einspeisung_jahr = total_einspeisung * faktor
                 erzeugung_jahr = total_erzeugung * faktor
+                verluste_jahr = total_verluste * faktor
                 # Eigenverbrauch = Erzeugung - Einspeisung
                 eigenverbrauch_jahr = max(0, erzeugung_jahr - einspeisung_jahr)
 
@@ -239,13 +260,17 @@ async def pv_einsparung_und_speicher_ist(
         einspeise_erloes = einspeise_erloes_euro(
             einspeisung_jahr, None, einspeiseverguetung_cent
         ).erloes_euro
-        ev_ersparnis = eigenverbrauch_jahr * strompreis_cent / 100
+        # N-588 (P15): bewertet wird der Eigenverbrauch ohne die bewertbaren Wandlungsverluste — je Monat nach dem
+        # Messpunkt-Vertrag entschieden (`verluste_je_monat`, daher hier „gilt" = None), hochgerechnet wie die Mengen.
+        eigenverbrauch_ohne_verluste_jahr = eigenverbrauch_ohne_verluste_kwh(eigenverbrauch_jahr, verluste_jahr, None)
+        ev_ersparnis = eigenverbrauch_ohne_verluste_jahr * strompreis_cent / 100
         jahres_einsparung = einspeise_erloes + ev_ersparnis
         co2 = erzeugung_jahr * CO2_FAKTOR_STROM_KG_KWH
 
         detail = {
             'einspeisung_kwh_jahr': round(einspeisung_jahr, 0),
             'eigenverbrauch_kwh_jahr': round(eigenverbrauch_jahr, 0),
+            'eigenverbrauch_ohne_verluste_kwh_jahr': round(eigenverbrauch_ohne_verluste_jahr, 0),
             'erzeugung_kwh_jahr': round(erzeugung_jahr, 0),
             'einspeise_erloes_euro': round(einspeise_erloes, 2),
             'ev_ersparnis_euro': round(ev_ersparnis, 2),

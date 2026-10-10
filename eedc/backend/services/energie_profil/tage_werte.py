@@ -56,6 +56,7 @@ from backend.core.berechnungen import (
     berechne_grundlast,
     bilanz_aus_stundenrows,
     delta_soc_kwh,
+    eigenverbrauch_ohne_verluste_kwh,
     erzeuger_kwh_je_investition,
     sonstiges_kwh_je_richtung,
     speicher_wirkungsgrad,
@@ -421,6 +422,10 @@ async def baue_tage_werte(
                 slot_kosten_je_tag[tag].ev_mittel_cent
                 if tag in slot_kosten_je_tag else None
             ),
+            # N-588: an einem Kanal-Tag die Wandlungsverluste des Tages samt Messpunkt-Vertrag — die Ersparnis bewertet
+            # den Eigenverbrauch ohne sie (am Klemmtag des Volleinspeisers 0 statt Cent-Beträgen). Bestand: keine.
+            wandlungsverluste_kwh=kanal_tag.wandlungsverluste_kwh if kanal_tag is not None else None,
+            verluste_grund=kanal_tag.verluste_grund if kanal_tag is not None else None,
         )
         finanz_zeile = await baue_finanz_zeile(
             db, anlage_id, eingabe, tarif_cache=tarif_cache
@@ -547,7 +552,12 @@ async def baue_tage_werte(
             co2_einsparung=(
                 round(
                     berechne_co2_bilanz(
-                        eigenverbrauch_kwh=bilanz.eigenverbrauch_kwh
+                        # N-588 (P15): dieselbe Menge wie die Ersparnis — ohne Wandlungsverluste des Kanal-Tags.
+                        eigenverbrauch_kwh=eigenverbrauch_ohne_verluste_kwh(
+                            bilanz.eigenverbrauch_kwh,
+                            kanal_tag.wandlungsverluste_kwh if kanal_tag is not None else None,
+                            kanal_tag.verluste_grund if kanal_tag is not None else None,
+                        )
                     ).co2_pv_kg,
                     1,
                 )

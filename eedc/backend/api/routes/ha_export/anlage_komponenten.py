@@ -171,7 +171,7 @@ async def historische_komponenten(*, _tarife, anlage, db, investitionen, monatsd
 def alternativkosten_und_co2(
     *,
     e_autos,
-    eigenverbrauch,
+    eigenverbrauch_ohne_verluste,
     emob_ctx,
     historische_inv_daten,
     inv_by_id_export,
@@ -343,7 +343,8 @@ def alternativkosten_und_co2(
     # DI-2: Gesamt-CO₂-Bilanz (PV-Eigenverbrauch + WP + E-Mob) über den
     # kanonischen Helper — deckungsgleich mit der Cockpit-Kachel `co2_gesamt_kg`.
     co2_ersparnis = berechne_co2_bilanz(
-        eigenverbrauch_kwh=eigenverbrauch,
+        # N-588 (P15): der Eigenverbrauch ohne die bewertbaren Wandlungsverluste (`anlage_energie.py`).
+        eigenverbrauch_kwh=eigenverbrauch_ohne_verluste,
         wp_waerme_kwh=co2_wp_waerme_kwh,
         wp_strom_kwh=co2_wp_strom_kwh,
         # #263 K-2 (E-B): Kühlen ersetzt keine Heizung.

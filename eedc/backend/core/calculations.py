@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from backend.core.berechnungen import (
+    eigenverbrauch_ohne_verluste_kwh,
     alter_wirkungsgrad,
     autarkie_prozent,
     berechne_netzbezug_kosten,
@@ -133,6 +134,9 @@ def berechne_monatskennzahlen(
     grundpreis_euro_monat: float = 0,
     # Anlage
     leistung_kwp: Optional[float] = None,
+    # N-588: Wandlungsverluste des Monats + Messpunkt-Vertrag (Monats-Fakten)
+    wandlungsverluste_kwh: Optional[float] = None,
+    verluste_grund: Optional[str] = None,
 ) -> MonatsKennzahlen:
     """
     Berechnet alle Kennzahlen für einen Monat.
@@ -156,6 +160,9 @@ def berechne_monatskennzahlen(
         netzbezug_preis_cent: Strompreis pro kWh in Cent
         grundpreis_euro_monat: Monatlicher Grundpreis in Euro (wird zu Netzbezugskosten addiert)
         leistung_kwp: Anlagenleistung in kWp (für spezifischen Ertrag)
+        wandlungsverluste_kwh, verluste_grund: N-588 — die Ersparnis bewertet den
+            Eigenverbrauch ohne die Wandlungsverluste, wenn der Messpunkt-Vertrag
+            hält (``eigenverbrauch_ohne_verluste_kwh``); die Bilanz bleibt.
 
     Returns:
         MonatsKennzahlen: Alle berechneten Werte
@@ -183,7 +190,9 @@ def berechne_monatskennzahlen(
     netzbezug_kosten = berechne_netzbezug_kosten(
         netzbezug_kwh, netzbezug_preis_cent, grundpreis_euro_monat
     )
-    ev_ersparnis = eigenverbrauch * netzbezug_preis_cent / 100
+    ev_ersparnis = eigenverbrauch_ohne_verluste_kwh(
+        eigenverbrauch, wandlungsverluste_kwh, verluste_grund
+    ) * netzbezug_preis_cent / 100
 
     # Netto-Ertrag der PV-Anlage:
     # = Einspeise-Erlös + Eigenverbrauch-Ersparnis

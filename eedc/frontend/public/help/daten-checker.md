@@ -23,6 +23,7 @@
    8a. [Zählerstände – Rücksprung](#48a-zaehlerstaende--ruecksprung)
    8b. [Zählerstände – Sprung in Home Assistant](#48b-zaehlerstaende--sprung-in-home-assistant)
    8c. [Zählerstände – Rückgang in Home Assistant](#48c-zaehlerstaende--rueckgang-in-home-assistant)
+   8d. [PV – Messpunkt (Anlagenzähler und Strings)](#48d-pv--messpunkt)
    9. [Sensor-Mapping – HA-Statistics](#49-sensor-mapping--ha-statistics)
    10. [Energieprofil – fehlende Tageswerte](#410-energieprofil--fehlende-tageswerte)
    11. [Geräte-Connector ohne Monatswert](#411-geraete-connector-ohne-monatswert)
@@ -39,6 +40,7 @@
    22. [Ladestand bei mehreren Speichern](#422-ladestand-mehrere-speicher)
    23. [Verbrauchszähler – Zählerstände](#423-verbrauchszaehler-zaehlerstaende)
    24. [Vergleichspreise – Ø Benzinpreis](#424-vergleichspreise-benzinpreis)
+   25. [Wetterwerte – fehlende Monatswerte](#425-wetterwerte-fehlende-monatswerte)
 5. [Behebungs-Workflows](#5-behebungs-workflows)
 6. [Beziehung zu anderen Werkzeugen](#6-beziehung-zu-anderen-werkzeugen)
 
@@ -102,7 +104,7 @@ Einzelne Befunde haben über Releases hinweg ihre Stufe gewechselt. Beispiele:
 
 ## 3. Verfügbarkeit nach Installationsvariante <a name="3-verfuegbarkeit-nach-installationsvariante"></a>
 
-eedc prüft **26 Kategorien**. Die meisten greifen in jeder Installation identisch; **fünf** hängen an Voraussetzungen, die je nach Installation gegeben sind oder nicht — sie sind unten fett markiert.
+eedc prüft **32 Kategorien** (Stand 10.10.2026; bis dahin stand hier 26 — die Zahl war mit den jüngeren Kategorien nicht mitgewachsen). Die meisten greifen in jeder Installation identisch; **neun** hängen an Voraussetzungen, die je nach Installation gegeben sind oder nicht — sie sind unten fett markiert. Die Kategorie *Datenquelle – aktiver Pfad* trägt zwei Befund-Familien (Zeile 12 und die Statusmeldungen der Datenquellen) und steht deshalb nur einmal in der Tabelle.
 
 | # | Kategorie | HA Add-on | Standalone (Docker / native) |
 |---|-----------|-----------|------------------------------|
@@ -118,6 +120,7 @@ eedc prüft **26 Kategorien**. Die meisten greifen in jeder Installation identis
 | 9a | **Zählerstände – Rücksprung** (§4.8a) | nur wenn MQTT-Import aktiv | nur wenn MQTT-Import aktiv |
 | 9b | **Zählerstände – Sprung in Home Assistant** (§4.8b) | greift | **wird übersprungen** (keine HA-Statistik) |
 | 9c | **Zählerstände – Rückgang in Home Assistant** (§4.8c) | greift | **wird übersprungen** (keine HA-Statistik) |
+| 9d | **PV – Messpunkt** (§4.8d) | greift, sobald die PV-Zähler Kanäle haben (Spiegel der HA-Statistik) | greift mit MQTT-Zählern (eigene Summe); ohne Zähler-Kanäle **wird übersprungen** |
 | 10 | **Sensor-Mapping – HA-Statistics** (§4.9) | greift | **wird übersprungen** (keine HA-LTS verfügbar) |
 | 11 | Energieprofil – fehlende Tageswerte (§4.10) | greift | greift |
 | 12 | Geräte-Connector ohne Monatswert (§4.11) | greift | greift |
@@ -135,6 +138,8 @@ eedc prüft **26 Kategorien**. Die meisten greifen in jeder Installation identis
 | 24 | Batterie-Vorzeichen in der Historie (§4.21) | greift | greift |
 | 25 | Ladestand bei mehreren Speichern (§4.22) | greift | greift |
 | 26 | Verbrauchszähler – Zählerstände (§4.23) | greift | greift |
+| 27 | Vergleichspreise – Ø Benzinpreis (§4.24) | greift | greift |
+| 28 | Wetterwerte – fehlende Monatswerte (§4.25) | greift | greift |
 
 ### Was bedeutet „wird übersprungen"?
 
@@ -599,6 +604,33 @@ Statistik beim nächtlichen Abgleich (02:45) von selbst ab. Einen Monat, den du 
 allein. Lädst du einen solchen Monat mit „Aus HA laden" in einen Monat, der schon Daten hat, nennt der Vergleichsdialog die
 Felder mit negativem Wert unter „Rückgang in Home Assistant" und denselben Weg. eedc verwirft den Rückgang nicht selbst und hat keinen Reparatur-Knopf dafür: die Quelle ist die Statistik in
 Home Assistant.
+
+---
+
+### 4.8d PV – Messpunkt (Anlagenzähler und Strings) <a name="48d-pv--messpunkt"></a>
+
+Hast du neben den Zählern der einzelnen Strings (oder Module, Balkonkraftwerke) auch einen **Anlagenzähler** im Feld
+*PV gesamt (kWh)* zugeordnet, misst der eine Zähler **vor** dem Wechselrichter (DC) und der andere **danach** (AC). Die
+Differenz zeigt eedc als **Wandlungsverluste**. Ersparnis, Umsatzsteuer auf den Eigenverbrauch und
+CO₂ rechnen mit dem Eigenverbrauch **ohne** diese Verluste — eine im Wechselrichter verlorene Kilowattstunde hättest du ohne
+PV-Anlage nie gekauft. Bilanz, Autarkie und Eigenverbrauchsquote tragen sie weiter.
+
+Abgezogen wird nur, was eedc sicher als Wechselrichterverlust **weiß**. Diese Kategorie nennt die Monate, in denen das
+nicht gilt, und warum — dann zeigt eedc die Verluste an, bewertet sie aber nicht. Geprüft werden die abgeschlossenen
+Monate, deren PV-Zähler eedc lückenlos kennt.
+
+#### Befunde
+
+| Befund | Schwere | Bedeutung |
+| --- | --- | --- |
+| **Anlagenzähler und String-Zähler messen verschiedene Dinge — Ersparnis rechnet ohne Abzug** | ⚠️ WARNING | Die Strings liegen um mehr als 10 % über dem Anlagenzähler. So hohe Wechselrichterverluste sind nicht plausibel — meist misst der Anlagenzähler nicht dieselbe Anlage (ein String fehlt in ihm, oder er misst nach dem Speicher). |
+| **Der Anlagenzähler misst das Balkonkraftwerk offenbar nicht** | ⚠️ WARNING | Die Differenz ist fast so groß wie die Erzeugung des Balkonkraftwerks (mindestens 80 %). eedc zieht nichts ab — sonst wäre die Ersparnis des Balkonkraftwerks weg. ⚠ Neben großen Strings kann ein sehr kleines Balkonkraftwerk die Schwelle auch mit echten Verlusten erreichen; eedc zieht dann vorsichtshalber ebenfalls nichts ab. |
+| **Anlagenzähler zählt mehr als die Strings — Messpunkt prüfen** | ℹ️ INFO | Der Anlagenzähler liegt um mehr als 2 % über der Summe der Strings. Nach dem Wechselrichter kann nicht mehr ankommen, als davor erzeugt wird — meist zählt er eine weitere Quelle mit. Wandlungsverluste gibt es in diesen Monaten keine. |
+| **Bei DC-gekoppeltem Speicher misst der AC-Zähler die Batterie mit — Verluste werden angezeigt, nicht bewertet** | ℹ️ INFO | Mit einem DC-Speicher am Wechselrichter enthält die Differenz auch Lade- und Entlademengen. Ist die Kopplung am Speicher nicht eingetragen, nimmt eedc DC an, sobald der Speicher einem Wechselrichter zugeordnet ist — ist dein Speicher **AC-gekoppelt**, trage die Kopplung am Speicher ein, dann rechnet eedc die Ersparnis ohne Wandlungsverluste. |
+| **Sieht nach Volleinspeisung aus — der AC-Ertragszähler deines Wechselrichters fehlt** | ℹ️ INFO | Kein Anlagenzähler, und in den letzten drei abgeschlossenen Monaten ging fast die ganze Erzeugung ins Netz. Ordne den AC-Ertragszähler deines Wechselrichters (Gesamtertrag nach dem Wechselrichter) als *PV gesamt (kWh)* zu, dann kennt eedc die Wandlungsverluste. Denselben Sensor zusätzlich als Einspeisung zuzuordnen ist **nicht** der Weg — das meldet die Datenquellen-Prüfung zu Recht als Doppelzählung. |
+
+Die Schwellen (10 %, 80 %, 2 %) sind vorsichtig gesetzt und nicht an einer realen Anlage gemessen. Kein Reparatur-Knopf:
+die Antwort ist eine Zuordnung unter *Einstellungen → Datenquellen* bzw. die Kopplung am Speicher.
 
 ---
 

@@ -4,7 +4,7 @@
 Bilanz-Gruppe (Netz, PV/Balkonkraftwerk samt Anlagenzähler, Speicher Ladung/Entladung, Erzeuger hinter dem Zähler)
 das Δ über den Zeitraum — ``None``, wenn sein Kanal den Zeitraum nicht voll deckt —, dazu die Stammdaten der
 PV-Träger. Ausgang: der Wert je Gerät (``komponenten``-Schlüssel wie ``TagesZusammenfassung.komponenten_kwh``), die
-Marke ``kwp_anteil``, die Summen je Kategorie, die PV-Summe der Bilanz (W2-R3: Σ Geräte), die Wandlungsverluste (nur geführt)
+Marke ``kwp_anteil``, die Summen je Kategorie, die PV-Summe der Bilanz (W2-R3: Σ Geräte), die Wandlungsverluste (samt Messpunkt-Vertrag, N-588)
 und die Bilanz selbst (``tagesbilanz.bilanz_aus_stundenrows`` — dieselbe Layer-Funktion wie am Tag des Bestands).
 
 Die fünf Regeln (abgenommen von Gernot 06.10.2026):
@@ -70,10 +70,11 @@ class BilanzZeitraum:
 
 
 def komponiere_bilanz_zeitraum(
-    eingaenge: Sequence[Eingang], traeger: Sequence[PvTraeger],
+    eingaenge: Sequence[Eingang], traeger: Sequence[PvTraeger], *, dc_grund: Optional[str] = None,
 ) -> Optional[BilanzZeitraum]:
     """W2 auf den Δ EINES Zeitraums. ``traeger``: die im Zeitraum aktiven PV-Erzeuger. ``None``, wenn kein Eingang
-    einen Wert hat (keine Aussage — wie ein Tag ohne Tageszeile)."""
+    einen Wert hat (keine Aussage — wie ein Tag ohne Tageszeile). ``dc_grund``: Messpunkt-Vertrag (iii) der
+    Wandlungsverluste (N-588) — ein im Zeitraum aktiver DC-gekoppelter Speicher, vom Kanal-Leser bestimmt."""
     mit = [e for e in eingaenge if e.delta is not None]
     if not mit:
         return None
@@ -98,7 +99,8 @@ def komponiere_bilanz_zeitraum(
     marken: dict[str, str] = {}
     pv: Optional[PvZeitraum] = None
     if eigen or anlagenzaehler is not None:
-        pv = loese_pv_zeitraum_auf(traeger=list(traeger), eigen=eigen, anlagenzaehler_kwh=anlagenzaehler)
+        pv = loese_pv_zeitraum_auf(traeger=list(traeger), eigen=eigen, anlagenzaehler_kwh=anlagenzaehler,
+                                   dc_grund=dc_grund)
         typ_je_id = {t.inv_id: t.typ for t in traeger}
         for inv_id, wert in pv.werte.items():
             praefix = PV_SCHLUESSEL_PRAEFIX.get(typ_je_id.get(inv_id))
