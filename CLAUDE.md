@@ -31,8 +31,9 @@ Version: [CHANGELOG.md](CHANGELOG.md) (oberster Abschnitt) bzw. `eedc/backend/co
 3. **Ein Päckchen = eine Opus-Sitzung** (3–5 Punkte), ohne Vorlage, ohne Gegenprüfung, ohne Nachmessung, ohne Golden Master,
    ohne neue Matrix-Form, ohne neuen Wächter. Bestehende Wächter und Matrizen laufen in CI mit.
 4. **Fable nur zur Triage** auf Gernots Ruf, kurz.
-5. **Commit je Päckchen mit expliziten Pfaden** (nie `git add -A`); **Push erlaubt** (CI prüft, 9 min); Release gebündelt
-   (wöchentlich im Konsolidierungsmonat, danach quartalsweise oder bei Melder-Fix) per `scripts/release.sh <version>` auf Gernots Wort.
+5. **Commit je Päckchen mit expliziten Pfaden** (nie `git add -A`); **kein Push, kein Tag außerhalb von `scripts/release.sh`** (Gernot
+   10.10.: mehrere Repos, nur das Release hält sie gleich; «pushen ohne taggen» hat Probleme gemacht). Volle Backend-Suite lokal am Ende
+   jedes Päckchens mit gekürzter Ausgabe (`| tail -3`). Release gebündelt per `scripts/release.sh <version>` auf Gernots Wort.
 6. **Nichts öffentlich ohne Go** — Issue-Kommentare, Foren-Texte, #110-Änderungen legt die Session vor, Gernot entscheidet (GitHub
    darf die Session nach dem Go selbst posten; Foren postet Gernot).
 7. **Doku gehört zum Fix:** CHANGELOG `[Unreleased]`, `docs/WAS-IST-NEU.md`, betroffenes Handbuch; `./scripts/sync-help.sh` spiegelt.
@@ -46,7 +47,7 @@ uvicorn backend.main:app --reload --port 8099         # Backend;  Frontend: cd e
 python -m pytest backend/tests/<berührte Dateien> -q  # plus die Wächter: backend/tests/test_wurzelmuster_konformitaet.py
 cd eedc/frontend && npm run lint && npx tsc --noEmit && npm run test
 ./scripts/sync-help.sh && (cd website && npm run build)   # nur bei Doku-Änderung
-# Volle Backend-Suite (≈ 9 min, -n 3) vor jedem Release; CI fährt sie bei jedem Push in UTC und Pacific/Auckland (je -n 4).
+# Volle Backend-Suite (≈ 9 min, -n 3) am Ende jedes Päckchens, Ausgabe `| tail -3`; CI fährt sie beim Release-Push in UTC und Auckland.
 ```
 
 Vor einem Release: Kandidat ins HAOS-Lab (`bash ~/.claude/plans/lab-werkzeug/lab-rc.sh <rc> <version>`, Lab `10.100.1.167`),
