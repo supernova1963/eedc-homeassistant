@@ -119,7 +119,8 @@ async def _summen(db, aid, jahr):
     return (
         ctx,
         round(sum(s["ist_kwh"] for s in ctx["string_vergleiche"]), 2),
-        round(sum(z["pv_erzeugung_kwh"] for z in ctx["monats_zeilen"]), 2),
+        # N-650: ein Monat ohne Fakt trägt `None` (Anzeige „–"), er trägt nichts zur Summe bei.
+        round(sum((z["pv_erzeugung_kwh"] or 0.0) for z in ctx["monats_zeilen"]), 2),
         round(sum(f.erzeugung.pv_kwh for f in fakten), 2),
     )
 

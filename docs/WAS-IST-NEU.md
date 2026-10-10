@@ -9,6 +9,12 @@
 
 ---
 
+## Unreleased
+
+**Kleinere Anzeige-Korrekturen:** Monate ohne Werte zeigen in der Monatsleiste und im Jahresbericht einen Strich statt „0 kWh",
+der Zähler-Verlauf unter *Komponenten → Sonstiges* trägt wieder die richtigen Monatsnamen, und mehrere Hinweise (Jahr-Verlauf,
+Ø-Preis mit HT/NT im Jahr, PV-Strings im Mischfall, „PV-Erzeugung (berechnet)") sagen jetzt genau, was die Zahl daneben enthält.
+
 ## v4.1.5 — 10. Oktober 2026
 
 **Wandlungsverluste kosten kein Geld mehr, das du nie gespart hast:** Misst deine Anlage ihre Strings mit eigenen

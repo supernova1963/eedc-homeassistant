@@ -91,6 +91,25 @@ export function jahrTooltipWert(value: number, name: string, zeile?: Record<stri
   return zusatz ? `${fmtZahl(value, 1)} kWh · ${zusatz}` : `${fmtZahl(value, 1)} kWh`
 }
 
+/**
+ * Unterzeile über dem Stapel. N-649 (10.10.2026): hier stand für die Erzeugung
+ * „Eigenverbrauch + Einspeisung = PV-Erzeugung". Die Gleichung gilt nicht — der
+ * Eigenverbrauch ist Direktverbrauch + Speicher-Entladung (+ V2H), auf Basis
+ * der Erzeugung hinter dem Zähler (`core/berechnungen/verbrauch.py`). Mit jedem
+ * Speicher mit Wandlungsverlusten liegt der Stapel unter der PV, mit BHKW oder
+ * V2H darüber. Die Zahlen bleiben; die Zeile behauptet keine Gleichheit mehr
+ * (dieselbe Klasse wie N-635 am Tag-Chart).
+ */
+export function stapelUnterzeile(view: BilanzView): string {
+  if (view === 'erzeugung') {
+    return 'Gestapelt: Eigenverbrauch und Einspeisung — mit Speicher, BHKW oder V2H weicht die Summe von der PV-Erzeugung ab'
+  }
+  if (view === 'verbrauch') {
+    return 'Gestapelt: Direktverbrauch + Speicher-Entladung + Netzbezug = Gesamtverbrauch'
+  }
+  return 'Ungestackt — je Kennzahl ein Balken, zum Vergleich der Monate'
+}
+
 export function JahrVerlaufChart({ monate }: { monate: AggregierteMonatsdaten[] }) {
   const schmal = useSchmaleAchse()
   const navigate = useNavigate()
@@ -148,11 +167,7 @@ export function JahrVerlaufChart({ monate }: { monate: AggregierteMonatsdaten[] 
       </div>
 
       <p className="text-xs text-gray-400 dark:text-gray-500">
-        {view === 'erzeugung'
-          ? 'Gestapelt: Eigenverbrauch + Einspeisung = PV-Erzeugung'
-          : view === 'verbrauch'
-            ? 'Gestapelt: Direktverbrauch + Speicher-Entladung + Netzbezug = Gesamtverbrauch'
-            : 'Ungestackt — je Kennzahl ein Balken, zum Vergleich der Monate'}
+        {stapelUnterzeile(view)}
       </p>
 
       <div className="h-72">

@@ -7,6 +7,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Komponenten → Sonstiges: der Verlauf eines Zählers (Gas, Wasser …) trägt die richtigen Monatsnamen.** Jeder Monat stand einen Monat zu früh beschriftet — der Juni-Verbrauch hieß „Mai", der Januar hatte keinen Namen. Die Werte selbst waren richtig.
+- **Cockpit → Jahr → Verlauf: die Zeile über dem Diagramm behauptet keine Gleichung mehr.** Sie lautete „Eigenverbrauch + Einspeisung = PV-Erzeugung". Das geht schon mit jedem Speicher nicht auf (Wandlungsverluste), mit BHKW oder V2H ebenfalls nicht. Jetzt nennt sie die beiden gestapelten Größen und sagt, dass die Summe dann von der PV-Erzeugung abweicht; die Balken sind unverändert.
+- **Cockpit → Monat (Monatsleiste) und Jahresbericht-PDF: ein Monat ohne Werte zeigt einen Strich statt „0 kWh".** Ein nicht erfasster Monat sah aus wie ein Monat mit 0 kWh, im PDF zusätzlich mit „0,0 %" Autarkie und „0,00 €" Ertrag. Jetzt steht dort der Strich, und die Leiste zeichnet für ihn keinen Balken. Eine gemessene 0 bleibt eine 0; die Summen ändern sich nicht.
+- **Komponenten → PV-Anlage: sind nur einige Strings gemessen, sagt der Hinweis das.** Bisher stand dort auch dann „Werte je Modul sind nicht gemessen", wenn ein Teil der Strings eigene Zähler hat. Jetzt heißt es im Mischfall, dass nicht alle Module gemessene Werte haben und ein Teil nach kWp verteilt ist. Einen besten oder schwächsten String nennt eedc weiterhin erst, wenn alle Strings gemessen sind.
+- **Monatsdaten „Aus HA laden": die Zeile unter „PV-Erzeugung (berechnet)" nennt alle Erzeuger, die in der Summe stecken.** Sie sagte „Aus PV-Modulen", auch wenn das Balkonkraftwerk oder ein sonstiger Erzeuger (BHKW) mitgezählt war. Jetzt nennt sie jede beteiligte Gruppe; die Zahl ist dieselbe.
+- **Cockpit → Jahr mit Zeittarif (HT/NT): der Tooltip am Ø-Preis nennt die richtige Herkunft.** Er sagte „Arbeitspreis aus dem Strompreis-Tarif", obwohl der Ø über die HT/NT-Zeitfenster gewichtet ist; ein im Monatsabschluss gepflegter Ø hieß dort „dynamischer Tarif". Jetzt steht im Jahr dieselbe Herkunft wie im Monat, und stammen die Monate aus verschiedenen Quellen, sagt der Tooltip das. Der Preis selbst ändert sich nicht.
+- **Hilfe: keine „Jahres-Rendite" im Cockpit mehr.** Berechnungen, Bedienungs-Handbuch und Architektur beschrieben eine Rendite-Anzeige im Cockpit, die es nicht gibt. Die Rendite deiner Anlage steht unter *Auswertungen → ROI*.
+
 ## [4.1.5] - 2026-10-10 — Wandlungsverluste zählen nicht mehr als Ersparnis und CO₂, Zählerstand-Meldung klarer, ROI-CO₂ wie das Cockpit
 
 ### Fixed

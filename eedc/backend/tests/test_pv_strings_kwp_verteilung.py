@@ -19,6 +19,8 @@ from datetime import date, datetime
 import pytest
 
 from backend.api.routes.cockpit.pv_strings import (
+    RANKING_NICHT_MOEGLICH,
+    RANKING_TEILWEISE_VERTEILT,
     get_pv_strings,
     get_pv_strings_gesamtlaufzeit,
 )
@@ -173,6 +175,22 @@ async def test_verteilte_werte_kein_ranking(db):
     jahr = await get_pv_strings(anlage_id=anlage_id, jahr=2026, db=db)
     spez = {s.spezifischer_ertrag_kwh_kwp for s in jahr.strings}
     assert len(spez) == 1
+
+
+async def test_n653_mischfall_nennt_den_teilweise_verteilten_satz(db):
+    """N-653: ein String gemessen, einer verteilt — kein Ranking (Regel 26.07.
+    bleibt), aber der Hinweis ist die Mischfall-Fassung, nicht „nicht gemessen".
+    Gegenprobe: alles verteilt behält die bisherige Fassung."""
+    misch = await _anlage_mit_zwei_strings(db, aggregat=1000.0, pro_modul={"Süd": 700.0})
+    for resp in (await get_pv_strings(anlage_id=misch, jahr=2026, db=db),
+                 await get_pv_strings_gesamtlaufzeit(anlage_id=misch, db=db)):
+        assert resp.bester_string is None
+        assert resp.schlechtester_string is None
+        assert resp.vergleich_hinweis == RANKING_TEILWEISE_VERTEILT
+
+    alles_verteilt = await _anlage_mit_zwei_strings(db, aggregat=1000.0)
+    jahr = await get_pv_strings(anlage_id=alles_verteilt, jahr=2026, db=db)
+    assert jahr.vergleich_hinweis == RANKING_NICHT_MOEGLICH
 
 
 async def test_gemessene_werte_erlauben_ranking(db):

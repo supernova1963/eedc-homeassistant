@@ -234,3 +234,39 @@ async def test_jahresbericht_summary_ist_summe_der_monats_zeilen(db):
     assert kpis["netto_ertrag_euro"] == pytest.approx(2192.6, abs=0.05)
     # Gegenprobe alter Summary-Bug: Σ(EV) × statischer Preis = 6600×0,30 = 1.980 €
     assert kpis["ev_ersparnis_euro"] != pytest.approx(1980.0, abs=1.0)
+
+
+# ── N-650: ein Monat ohne Erfassung druckt „–", nicht „0 kWh" ────────────────
+
+async def test_n650_monat_ohne_erfassung_traegt_keinen_wert(db):
+    """Einzeljahr mit einem Monat ganz ohne Spur (März): die Zeile bleibt stehen
+    (SOLL-Monat sichtbar), ihre Messgrößen sind ``None`` und die Tabelle druckt
+    den Leer-Platzhalter. Eine 0 wäre eine Aussage (ADR-002/P4). Die Jahressummen
+    laufen über die Fakten und zählen den März nicht mit — wie bisher."""
+    from sqlalchemy import delete
+
+    from backend.services.pdf.builders.jahresbericht import MONATSNAMEN
+    from backend.services.pdf.engine import _env, _STATIC_DIR
+    from backend.services.pdf.formatierung import LEER
+
+    anlage_id = await _seed(db)
+    await db.execute(delete(Monatsdaten).where(Monatsdaten.monat == 3))
+    await db.execute(delete(InvestitionMonatsdaten).where(InvestitionMonatsdaten.monat == 3))
+    await db.flush()
+    ctx = await build_jahresbericht_context(db, anlage_id, jahr=2025)
+
+    zeilen = ctx["monats_zeilen"]
+    assert len(zeilen) == 12                      # der Monat bleibt in der Tabelle
+    maerz = next(z for z in zeilen if z["monat"] == 3)
+    for feld in ("pv_erzeugung_kwh", "eigenverbrauch_kwh", "einspeisung_kwh", "netzbezug_kwh",
+                 "autarkie_prozent", "netto_ertrag_euro"):
+        assert maerz[feld] is None, feld
+    april = next(z for z in zeilen if z["monat"] == 4)
+    assert april["pv_erzeugung_kwh"] == pytest.approx(1000.0)   # Nachbarmonat unberührt
+    assert ctx["kpis"]["pv_erzeugung_kwh"] == pytest.approx(11 * 1000.0)  # Summe ohne den März
+
+    html = _env.get_template("jahresbericht.html").render(**ctx, static_dir=str(_STATIC_DIR))
+    zeile = re.search(rf"<td>{MONATSNAMEN[3]}</td>(.*?)</tr>", html, re.S)
+    assert zeile is not None
+    zellen = re.findall(r"<td>(.*?)</td>", zeile.group(1), re.S)
+    assert zellen and all(z.strip() == LEER for z in zellen), zellen

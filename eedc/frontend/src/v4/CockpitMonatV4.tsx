@@ -388,24 +388,26 @@ function CockpitMonatInner({ anlageId }: { anlageId: number | undefined }) {
     const hj = heute.getFullYear()
     const hm = heute.getMonth() + 1
     const key = (jahr: number, monat: number) => `${jahr}-${monat}`
-    const pvJeMonat = new Map<string, number>()
+    // N-650: ein Monat ohne PV-Wert trägt `null` (Anzeige „—"), nicht 0 —
+    // eine 0 ist eine Aussage (ADR-002/P4), ein fehlender Wert keine.
+    const pvJeMonat = new Map<string, number | null>()
     const schluessel = new Map<string, { jahr: number; monat: number }>()
     const merke = (jahr: number, monat: number) => {
       const k = key(jahr, monat)
       if (!schluessel.has(k)) schluessel.set(k, { jahr, monat })
     }
     alleMonateVoll.forEach((m) => {
-      pvJeMonat.set(key(m.jahr, m.monat), m.pv_erzeugung_kwh ?? 0)
+      pvJeMonat.set(key(m.jahr, m.monat), m.pv_erzeugung_kwh ?? null)
       merke(m.jahr, m.monat)
     })
     monate.forEach((m) => merke(m.jahr, m.monat))
     const entries: RailEintrag[] = [...schluessel.values()].map(({ jahr: j, monat: m }) => ({
       jahr: j, monat: m,
-      pv_kwh: pvJeMonat.get(key(j, m)) ?? 0,
+      pv_kwh: pvJeMonat.get(key(j, m)) ?? null,
       laufend: j === hj && m === hm,
     }))
     if (!entries.some((e) => e.jahr === hj && e.monat === hm)) {
-      entries.push({ jahr: hj, monat: hm, pv_kwh: 0, laufend: true })
+      entries.push({ jahr: hj, monat: hm, pv_kwh: null, laufend: true })
     }
     return entries
   }, [monate, alleMonateVoll])

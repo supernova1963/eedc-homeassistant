@@ -31,6 +31,8 @@ vi.mock('../api/monatsdaten', () => ({ monatsdatenApi: { listAggregiert: (...a: 
 
 import { KOMPONENTEN_ADAPTER } from './komponentenAdapter'
 import { verlaufTooltipWert } from './KomponentenVerlaufChart'
+import { MONAT_KURZ } from '../lib'
+import { PV_MODUL_TEILWEISE_VERTEILT_HINWEIS, PV_MODUL_VERTEILT_HERKUNFT } from '../lib/pvHerkunft'
 
 const inv = (over = {}) => ({ id: 1, anlage_id: 1, typ: 'x', bezeichnung: 'Gerät A', aktiv: true, ...over })
 const titles = (ks: { title: string }[]) => ks.map((k) => k.title)
@@ -45,12 +47,13 @@ beforeEach(() => {
 /** Antwort von `/cockpit/pv-strings-gesamtlaufzeit` — nur die Felder, die
  *  `pvVerlauf` liest (Modul × Jahr + Herkunft). */
 const pvStringsAntwort = (
-  strings: { id: number; jahr: number; ist: number }[],
+  strings: { id: number; jahr: number; ist: number; quelle?: 'gemessen' | 'verteilt' | 'fehlt' }[],
   ist_quelle: 'gemessen' | 'verteilt' | 'fehlt' = 'gemessen',
 ) => ({
   ist_quelle,
   strings: strings.map((s) => ({
     investition_id: s.id,
+    ist_quelle: s.quelle ?? ist_quelle,
     ist_gesamt_kwh: s.ist,
     jahreswerte: [{ jahr: s.jahr, ist_kwh: s.ist }],
   })),
@@ -322,6 +325,24 @@ describe('KOMPONENTEN_ADAPTER', () => {
     expect(g.hinweise![0].text).toContain('Sonderkosten')
   })
 
+  it('Sonstiges-Zähler (#377): Verlauf beschriftet jeden Monat mit seinem eigenen Namen (N-648)', async () => {
+    getSonstigesDashboard.mockResolvedValue([{
+      investition: inv({ typ: 'sonstiges' }),
+      zusammenfassung: { kategorie: 'zaehler', einheit: 'm³', stand_ende: 1200, differenz: 30,
+        monatsverbrauch: [
+          { jahr: 2026, monat: 1, verbrauch: 12 },
+          { jahr: 2026, monat: 6, verbrauch: 3 },
+          { jahr: 2026, monat: 12, verbrauch: 15 },
+        ] },
+      monatsdaten: [],
+    }])
+    const [g] = await KOMPONENTEN_ADAPTER.sonstiges.fetch(1)
+    expect(g.verlauf?.rows.map((r) => r.name)).toEqual([
+      `${MONAT_KURZ[1]} 26`, `${MONAT_KURZ[6]} 26`, `${MONAT_KURZ[12]} 26`,
+    ])
+    expect(g.verlauf?.rows.map((r) => r.verbrauch)).toEqual([12, 3, 15])
+  })
+
   it('PV-Anlage: cockpit-Übersicht + EV/Einspeisung-Summe aus aggregierten Monaten', async () => {
     getUebersicht.mockResolvedValue({ anlagenleistung_kwp: 9.8, pv_erzeugung_kwh: 38200,
       spezifischer_ertrag_kwh_kwp: 1040, eigenverbrauch_quote_prozent: 54 })
@@ -392,6 +413,24 @@ describe('KOMPONENTEN_ADAPTER', () => {
     // Die gemessene Verwendungs-Aufteilung daneben bleibt UNgekennzeichnet
     const verwendung = g.verlauf?.verteilungen?.find((v) => v.titel === 'Verwendung der Erzeugung')
     expect(verwendung?.herkunft).toBeUndefined()
+  })
+
+  it('PV ④ Verlauf: Mischfall (ein String gemessen, einer verteilt) ⇒ Kennzeichnung mit dem Teilweise-Satz (N-653)', async () => {
+    zweiModule()
+    getPVStringsGesamtlaufzeit.mockResolvedValue(pvStringsAntwort([
+      { id: 11, jahr: 2025, ist: 700, quelle: 'gemessen' },
+      { id: 12, jahr: 2025, ist: 300, quelle: 'verteilt' },
+    ], 'verteilt'))
+    const [g] = await KOMPONENTEN_ADAPTER['pv-module'].fetch(1)
+    expect(g.verlauf?.herkunft?.zustand).toBe('geschaetzt')
+    expect(g.verlauf?.herkunft?.hinweis).toBe(PV_MODUL_TEILWEISE_VERTEILT_HINWEIS)
+    const erzeugung = g.verlauf?.verteilungen?.find((v) => v.titel === 'Erzeugung nach Modul')
+    expect(erzeugung?.herkunft?.hinweis).toBe(PV_MODUL_TEILWEISE_VERTEILT_HINWEIS)
+    // Gegenprobe: alles verteilt behält den bisherigen Satz
+    getPVStringsGesamtlaufzeit.mockResolvedValue(pvStringsAntwort(
+      [{ id: 11, jahr: 2025, ist: 600 }, { id: 12, jahr: 2025, ist: 400 }], 'verteilt'))
+    const [alle] = await KOMPONENTEN_ADAPTER['pv-module'].fetch(1)
+    expect(alle.verlauf?.herkunft?.hinweis).toBe(PV_MODUL_VERTEILT_HERKUNFT.hinweis)
   })
 
   it('PV ④ Verlauf: ohne String-Antwort bleibt die kWp-Zerlegung als Fallback (gekennzeichnet)', async () => {

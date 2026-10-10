@@ -176,6 +176,20 @@ const aufzaehlung = (teile: string[]): string =>
     ? (teile[0] ?? '')
     : `${teile.slice(0, -1).join(', ')} und ${teile[teile.length - 1]}`
 
+/** N-654: Woraus „PV-Erzeugung (berechnet)" besteht — die Summe enthält neben Modulen bzw.
+ *  Wechselrichtern auch Balkonkraftwerk und sonstige Erzeuger (BHKW). Genannt wird jede Gruppe,
+ *  die zur Summe beiträgt; ohne Beitrag bleibt es bei der bisherigen Modul-/WR-Angabe. */
+function pvBerechnetQuellen(
+  beitrag: { pvModule: number; bkw: number; sonstige: number },
+  hatPVModule: boolean,
+): string {
+  const teile: string[] = []
+  if (beitrag.pvModule > 0) teile.push(hatPVModule ? 'PV-Modulen' : 'Wechselrichtern')
+  if (beitrag.bkw > 0) teile.push('Balkonkraftwerk')
+  if (beitrag.sonstige > 0) teile.push('sonstigen Erzeugern')
+  return teile.length ? aufzaehlung(teile) : (hatPVModule ? 'PV-Modulen' : 'Wechselrichtern')
+}
+
 export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCancel, haVorausfuellung, voreingestellterMonat }: MonatsdatenFormProps) {
   const currentYear = new Date().getFullYear()
   const currentMonth = new Date().getMonth() + 1
@@ -508,6 +522,9 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
     let batterieLadung = 0
     let batterieEntladung = 0
     let pvErzeugung = 0
+    // N-654: welche Erzeuger-Gruppen tragen zur Summe bei — die Beschriftung nennt sie
+    // (bis 10.10.2026 stand dort „Aus PV-Modulen", auch mit Balkonkraftwerk/BHKW in der Summe).
+    const beitrag = { pvModule: 0, bkw: 0, sonstige: 0 }
 
     aktiveInvestitionen.forEach(inv => {
       const daten = investitionsDaten[inv.id]
@@ -518,7 +535,10 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
         batterieEntladung += parseFloat(daten.entladung_kwh) || 0
       } else if (inv.typ === 'pv-module' || inv.typ === 'wechselrichter' || inv.typ === 'balkonkraftwerk') {
         // PV-Erzeugung aus allen Quellen summieren
-        pvErzeugung += parseFloat(daten.pv_erzeugung_kwh) || 0
+        const wert = parseFloat(daten.pv_erzeugung_kwh) || 0
+        pvErzeugung += wert
+        if (inv.typ === 'balkonkraftwerk') beitrag.bkw += wert
+        else beitrag.pvModule += wert
         // Balkonkraftwerk mit Speicher
         if (inv.typ === 'balkonkraftwerk' && inv.parameter?.hat_speicher) {
           batterieLadung += parseFloat(daten.speicher_ladung_kwh) || 0
@@ -526,11 +546,13 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
         }
       } else if (inv.typ === 'sonstiges' && inv.parameter?.kategorie === 'erzeuger') {
         // Sonstige Erzeuger zur PV-Erzeugung addieren
-        pvErzeugung += parseFloat(daten.erzeugung_kwh) || 0
+        const wert = parseFloat(daten.erzeugung_kwh) || 0
+        pvErzeugung += wert
+        beitrag.sonstige += wert
       }
     })
 
-    return { batterieLadung, batterieEntladung, pvErzeugung }
+    return { batterieLadung, batterieEntladung, pvErzeugung, beitrag }
   }, [aktiveInvestitionen, investitionsDaten])
 
   // ─── Erfassungs-Assistenz (Monatsabschluss-V4 §4) ──────────────────────────
@@ -1097,7 +1119,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
                 {fmtZahl(berechneteWerte.pvErzeugung, 1)} kWh
               </div>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Aus {hatPVModule ? 'PV-Modulen' : 'Wechselrichtern'}: {fmtZahl(berechneteWerte.pvErzeugung, 1)} kWh
+                Aus {pvBerechnetQuellen(berechneteWerte.beitrag, hatPVModule)}: {fmtZahl(berechneteWerte.pvErzeugung, 1)} kWh
               </p>
               {/* N-622: steht daneben ein abweichender Gesamtzähler der Anlage, sagt die
                   Anzeige es — keine Rechnung, nur beide Zahlen in derselben Formatierung. */}

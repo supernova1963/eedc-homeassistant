@@ -84,6 +84,7 @@ Quote paarweise                         ``autarkie_prozent``, ``eigenverbrauch_q
                                         ``speicher_auslastung_prozent``, ``speicher_ladung_netz_preis_cent``
 mengengewichteter Ø (``gewichtet``)     ``netzbezug_preis_cent``, ``einspeise_preis_cent``,
                                         ``netzbezug_durchschnittspreis_cent`` (nur wenn ein Monat ihn trägt)
+Herkunft der Preiswahl (N-655)          ``netzbezug_preis_herkunft`` (einheitlich, sonst ``gemischt``)
 Mittel der Monate                       ``speicher_effektiver_ladepreis_cent``, ``grundlast_kw``
 Maximum                                 ``speicher_kapazitaet_kwh``, ``wp_starts_max_tag``, ``wp_betriebsstunden_max_tag``
 letzter vorhandener Wert                ``zaehlergebuehr_euro_jahr``
@@ -473,6 +474,33 @@ def falte_posten(monate: Sequence[Mapping[str, Any]], jahr: int) -> ErgebnisEing
     return ErgebnisEingang(**werte, fehlende_posten=tuple(fehlend))
 
 
+def _netzbezug_preis_herkunft_zeitraum(monate: Sequence[Mapping[str, Any]]) -> Optional[str]:
+    """Herkunft des gefalteten Netzbezugspreises (N-655, 10.10.2026).
+
+    Die Faltung nimmt je Monat den gepflegten Ø (``netzbezug_durchschnittspreis_cent``), sonst den Tarifwert
+    ``netzbezug_preis_cent`` — der ist mit Zeitfenstern bereits der über den Netzbezug gewichtete HT/NT-Preis (N-267,
+    ``netzbezug_preis_zeittarif``), sonst die Tarifspalte. Die Herkunft folgt **dieser** Wahl, nicht dem Feld
+    ``netzbezug_preis_herkunft`` des Monats: ein Monat mit gemessenen Stundenpreisen geht mit seinem Tarifwert in den
+    Jahres-Ø ein und darf ihn nicht als „gemessen" beschriften. Gezählt werden die Monate, die das Gewicht tragen
+    (Preis und Netzbezug > 0), ohne jeden Netzbezug alle mit Preis — wie ``gewichtet``. Eine Herkunft ⇒ sie; mehrere ⇒
+    ``"gemischt"``; kein Monat mit Preis ⇒ ``None``. Bis dahin fehlte das Feld im Jahr, und die Kachel fiel auf
+    „Arbeitspreis aus dem Strompreis-Tarif" bzw. „dynamischer Tarif" zurück, auch bei HT/NT oder gepflegtem Ø.
+    """
+    def herkunft(m: Mapping[str, Any]) -> Optional[str]:
+        if m.get("netzbezug_durchschnittspreis_cent") is not None:
+            return "gepflegt"
+        if m.get("netzbezug_preis_cent") is None:
+            return None
+        return "zeitfenster" if m.get("netzbezug_preis_zeittarif") else "stamm"
+
+    mit_preis = [m for m in monate if herkunft(m) is not None]
+    tragend = [m for m in mit_preis if (m.get("netzbezug_kwh") or 0) > 0] or mit_preis
+    arten = {herkunft(m) for m in tragend}
+    if not arten:
+        return None
+    return arten.pop() if len(arten) == 1 else "gemischt"
+
+
 def falte_zeitraum(
     monate: Sequence[Mapping[str, Any]],
     jahr: int,
@@ -513,6 +541,7 @@ def falte_zeitraum(
         else m.get("netzbezug_preis_cent")
         for m in monate
     ]
+    netzbezug_preis_herkunft = _netzbezug_preis_herkunft_zeitraum(monate)
 
     # Per-Investition-Finanzdetails: Σ je Investition, Identität vom ersten Vorkommen; Monats-Formeln entfallen.
     financials: dict[int, dict[str, Any]] = {}
@@ -750,6 +779,8 @@ def falte_zeitraum(
         "soll_fenster_text": soll.fenster_text,
 
         "netzbezug_preis_cent": gewichtet(netzbezug_preis_effektiv, f("netzbezug_kwh")),
+        # N-655: woher der Ø oben stammt — die Formel-Zeile der Kachel liest es (`MonatBilanz.tsx::preisFormel`).
+        "netzbezug_preis_herkunft": netzbezug_preis_herkunft,
         "einspeise_preis_cent": gewichtet(f("einspeise_preis_cent"), f("einspeisung_kwh")),
         "netzbezug_durchschnittspreis_cent": (
             gewichtet(netzbezug_preis_effektiv, f("netzbezug_kwh"))

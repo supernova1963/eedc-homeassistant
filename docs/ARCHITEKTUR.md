@@ -1713,7 +1713,7 @@ if val is not None:  # Richtig!
 
 | Metrik | Wo | Formel | Bedeutung |
 |--------|-----|--------|-----------|
-| **Jahres-Rendite** | Cockpit, Auswertung/Investitionen | `Jahres-Ertrag / Investition × 100` | Rendite pro Jahr (p.a.) |
+| **ROI p.a.** | Auswertungen → ROI | `Jahres-Einsparung / Relevante Kosten × 100` | Rendite pro Jahr (p.a.) — das Cockpit zeigt keine Rendite; `jahres_rendite_prozent` der Übersicht ist ein reines Antwortfeld |
 | **Amortisations-Fortschritt** | Aussichten/Finanzen | `Kum. Erträge / Investition × 100` | Wie viel % bereits abbezahlt |
 
 **Mehrkosten-Ansatz für Investitionen:**

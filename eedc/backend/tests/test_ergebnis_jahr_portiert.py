@@ -74,6 +74,31 @@ def test_preise_durchschnittspreis_vor_tarif():
     assert j["netzbezug_durchschnittspreis_cent"] == pytest.approx(24, abs=1e-6)
 
 
+def test_n655_preis_herkunft_folgt_der_preiswahl_der_faltung():
+    """N-655: die Faltung reicht die Herkunft ihres Ø-Preises durch — HT/NT-Monate ⇒ ``zeitfenster`` (vorher fehlte
+    das Feld, und die Kachel sagte „Arbeitspreis aus dem Strompreis-Tarif"). Ein Monat mit gemessenen Stundenpreisen
+    geht mit seinem Tarifwert ein und zählt deshalb nicht als ``gemessen``; verschiedene Wahlen ⇒ ``gemischt``."""
+    ht_nt = falte_zeitraum([
+        _m(1, netzbezug_kwh=100, netzbezug_preis_cent=31, netzbezug_preis_zeittarif=True, netzbezug_preis_herkunft="zeitfenster"),
+        _m(2, netzbezug_kwh=100, netzbezug_preis_cent=29, netzbezug_preis_zeittarif=True, netzbezug_preis_herkunft="gemessen"),
+    ], 2025)
+    assert ht_nt["netzbezug_preis_herkunft"] == "zeitfenster"
+    assert ht_nt["netzbezug_preis_cent"] == pytest.approx(30, abs=1e-6)   # Wert unverändert
+
+    gepflegt = falte_zeitraum([_m(1, netzbezug_kwh=100, netzbezug_preis_cent=30, netzbezug_durchschnittspreis_cent=22)], 2025)
+    assert gepflegt["netzbezug_preis_herkunft"] == "gepflegt"
+    stamm = falte_zeitraum([_m(1, netzbezug_kwh=100, netzbezug_preis_cent=30)], 2025)
+    assert stamm["netzbezug_preis_herkunft"] == "stamm"
+    gemischt = falte_zeitraum([_m(1, netzbezug_kwh=100, netzbezug_preis_cent=30, netzbezug_durchschnittspreis_cent=22),
+                               _m(2, netzbezug_kwh=100, netzbezug_preis_cent=30)], 2025)
+    assert gemischt["netzbezug_preis_herkunft"] == "gemischt"
+    # Ein Monat ohne Netzbezug trägt kein Gewicht und bestimmt die Herkunft nicht mit.
+    ohne_gewicht = falte_zeitraum([_m(1, netzbezug_kwh=100, netzbezug_preis_cent=30),
+                                   _m(2, netzbezug_kwh=0, netzbezug_preis_cent=30, netzbezug_durchschnittspreis_cent=22)], 2025)
+    assert ohne_gewicht["netzbezug_preis_herkunft"] == "stamm"
+    assert falte_zeitraum([_m(1, netzbezug_kwh=100)], 2025)["netzbezug_preis_herkunft"] is None
+
+
 def test_preise_ohne_durchschnittspreis_leer():
     j = falte_zeitraum([_m(1, netzbezug_kwh=100, netzbezug_preis_cent=30)], 2025)
     assert j["netzbezug_durchschnittspreis_cent"] is None

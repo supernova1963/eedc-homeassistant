@@ -120,7 +120,7 @@ Das Dashboard zeigt auf einen Blick:
 | **Komponenten** | Speicher-Effizienz, WP-JAZ, E-Auto-Quellen, Wallbox, BKW |
 | **Finanzen** | Einspeisung, Einsparungen, Netto-Ertrag, Amortisation |
 | **CO2** | Vermiedene Emissionen, Vergleich zu Netzbezug |
-| **Investitionen** | ROI pro Komponente, Jahres-Rendite p.a. |
+| **Investitionen** | ROI pro Komponente und gesamt (jährliche Einsparung ÷ Kapitaleinsatz), Amortisation |
 | **Tabelle** | Interaktiver Energie-Explorer: 22 Spalten, sortierbar, Vorjahres-Δ |
 
 #### Community (eigener Hauptmenüpunkt, 6 Tabs)

@@ -837,7 +837,7 @@ Die Finanz-Sicht ist der Ort für **Erlöse, Einsparungen, Kosten und die Amorti
 > Sonstigen Positionen (seit Oktober 2026; vorher fehlten sie in der Tabelle, und die Finanz-Sicht rechnete sie selbst
 > dazu). Sonstige Erträge und Sonderkosten stehen daneben als eigene Posten — als Bestandteil, nicht als Zuschlag.
 - **T-Konto** — Erlöse und Einsparungen den Kosten gegenübergestellt, mit Vorjahresvergleich (Δ). Auf Mobilgeräten als 2-Spalten-Layout (Label | Wert + Vorjahr + Δ).
-- **Amortisations-Fortschritt** — wie viel % der Investition bereits zurückgeflossen sind (kumuliert, nicht Jahres-Rendite)
+- **Amortisations-Fortschritt** — wie viel % der Investition bereits zurückgeflossen sind (kumuliert, nicht der ROI pro Jahr)
 
 **Mehrkosten-Ansatz für Investitionen:**
 
@@ -845,7 +845,7 @@ Die Finanz-Sicht ist der Ort für **Erlöse, Einsparungen, Kosten und die Amorti
 - **Wärmepumpe:** Kosten minus Gasheizung (konfigurierbar); optional plus jährliche Zusatzkosten der Alt-Heizung (Schornsteinfeger, Wartung, Gaszähler-Grundpreis) und ein monatlich gepflegter Gaspreis (verhindert, dass ein Tarifwechsel rückwirkend die ganze Historie ändert)
 - **E-Auto:** Kosten minus Verbrenner (konfigurierbar)
 
-> **Zwei Amortisations-Sichten:** Hier siehst du den **kumulierten Fortschritt** (Σ Erträge / Investition). Im Cockpit und unter ROI dagegen die **Jahres-Rendite** (Jahres-Ertrag / Investition). Beide sind korrekt, aber für verschiedene Zwecke — der „Sicht"-Tooltip an jeder Anzeige erklärt die Bezugsbasis.
+> **Zwei Amortisations-Sichten:** Hier siehst du den **kumulierten Fortschritt** (Σ Erträge / Investition). Unter *Auswertungen → ROI* dagegen den **ROI pro Jahr** (jährliche Einsparung / Investition) — das Cockpit zeigt keine Rendite. Beide sind korrekt, aber für verschiedene Zwecke — der „Sicht"-Tooltip an jeder Anzeige erklärt die Bezugsbasis.
 
 ### 4.2 ROI
 

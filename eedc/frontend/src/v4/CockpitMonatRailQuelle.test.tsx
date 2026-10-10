@@ -85,6 +85,7 @@ vi.mock('../api/aktuellerMonat', () => ({
 import CockpitMonatV4 from './CockpitMonatV4'
 import { renderMitProvidern, stubMatchMedia } from '../test/render'
 import { aktuellerMonat, monatsZeile } from '../test/factories'
+import { LEER_TOKEN } from '../lib'
 
 function renderView() {
   return renderMitProvidern(<CockpitMonatV4 anlageId={1} />, { route: '/v4/cockpit/monat' })
@@ -139,6 +140,24 @@ describe('Cockpit/Monat — Rail und Sicht teilen die Grundgesamtheit (T89667/98
       Promise.resolve([{ jahr: 2026, monat: 5, tage: 31 }]),
     )
     renderView()
-    expect(await screen.findAllByTitle('Mai 2026: 0 kWh')).not.toHaveLength(0)
+    // N-650 (10.10.2026): ohne PV-Wert steht der Leer-Token, nicht „0 kWh" —
+    // bis dahin prüfte diese Zeile `'Mai 2026: 0 kWh'`, also genau den Defekt.
+    // Die Substanz (der Monat bleibt in der Rail) ist unverändert.
+    expect(await screen.findAllByTitle(`Mai 2026: ${LEER_TOKEN}`)).not.toHaveLength(0)
+    expect(screen.queryAllByTitle('Mai 2026: 0 kWh')).toHaveLength(0)
+  })
+
+  it('N-650: ein Monat mit Zeile, aber ohne PV-Wert zeigt den Leer-Token; eine gemessene 0 bleibt 0', async () => {
+    // Erster Aufruf = strenge Liste, zweiter = volle Liste der Rail (`monateQ[2]`).
+    listAggregiert.mockImplementationOnce(() => Promise.resolve(ALLE))
+    listAggregiert.mockImplementationOnce(() => Promise.resolve([
+      ...ALLE,
+      monatsZeile(2025, 11, { pv_erzeugung_kwh: null }),
+      monatsZeile(2025, 10, { pv_erzeugung_kwh: 0 }),
+    ]))
+    renderView()
+    expect(await screen.findAllByTitle(`Nov 2025: ${LEER_TOKEN}`)).not.toHaveLength(0)
+    expect(screen.queryAllByTitle('Nov 2025: 0 kWh')).toHaveLength(0)
+    expect(await screen.findAllByTitle('Okt 2025: 0 kWh')).not.toHaveLength(0)
   })
 })

@@ -676,8 +676,12 @@ Kumulative Ersparnis = Netto-Ertrag + WP-Ersparnis + E-Mob-Ersparnis
                        + BKW-Ersparnis + Sonstige-Netto
                        - Betriebskosten_Zeitraum
 
-Jahres-Rendite (%)  = Kumulative_Ersparnis / Investition_gesamt * 100
+Rendite (%)         = Kumulative_Ersparnis / Investition_gesamt * 100   (Antwortfeld jahres_rendite_prozent)
 ```
+
+> **Das Cockpit zeigt diese Rendite nicht an.** `jahres_rendite_prozent` steht nur in der Antwort von
+> `/cockpit/uebersicht`; keine Sicht liest das Feld. Die Rendite einer Anlage steht unter *Auswertungen → ROI*
+> (ROI pro Jahr = jährliche Einsparung ÷ Kapitaleinsatz, s. „ROI & Amortisation“).
 
 > **Die Einspeisevergütung ist ein flacher Satz — eedc kennt keine EEG-Leistungsstaffel.**
 > `Einspeisevergütung` ist genau der Wert aus dem für den Monat gültigen Tarif
@@ -2302,7 +2306,7 @@ Wobei `Betriebskosten_Jahr` = `Investition.betriebskosten_jahr` (Wartung, Versic
 
 | Metrik | Wo angezeigt | Formel | Bedeutung |
 |--------|-------------|--------|-----------|
-| **Jahres-Rendite** | Cockpit | Kumul. Ersparnis / Relevante Kosten * 100 | Wie viel % bereits amortisiert (kumuliert) |
+| **Rendite** (`jahres_rendite_prozent`) | keine Anzeige — nur Antwortfeld von `/cockpit/uebersicht` | Kumul. Ersparnis / Relevante Kosten * 100 | Wie viel % bereits amortisiert (kumuliert) |
 | **ROI p.a.** | Auswertungen → ROI (pro Komponente) | Jahres-Einsparung / Relevante Kosten * 100 | Rendite pro Jahr |
 | **Amortisations-Fortschritt** | Auswertungen → ROI (Kachel), Jahresbericht-PDF | Bisherige Erträge / Relevante Kosten * 100 | Kumulierter Fortschritt |
 

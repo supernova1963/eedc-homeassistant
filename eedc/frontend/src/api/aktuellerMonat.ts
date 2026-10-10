@@ -445,8 +445,9 @@ export interface AktuellerMonatResponse {
    *  `gepflegt` (abgerechneter Ø aus dem Monatsabschluss) · `gemessen` (Ø der
    *  mitgeschriebenen Stundenpreise) · `zeitfenster` (HT/NT, über den Netzbezug
    *  gewichtet) · `stamm` (Tarifspalte). Ohne diese Angabe wäre ein gemessener
-   *  Preis von einem Stammpreis nicht zu unterscheiden. */
-  netzbezug_preis_herkunft?: 'gepflegt' | 'gemessen' | 'zeitfenster' | 'stamm' | null
+   *  Preis von einem Stammpreis nicht zu unterscheiden. `gemischt` nur im Jahr
+   *  (N-655): die gefalteten Monate stammen aus verschiedenen Stufen. */
+  netzbezug_preis_herkunft?: 'gepflegt' | 'gemessen' | 'zeitfenster' | 'stamm' | 'gemischt' | null
   /** Anteil der Monatsstunden mit Preisdaten (0..1) — nur bei `gemessen`. */
   netzbezug_preis_abdeckung?: number | null
   // G19-1 K3: Grundgebühr des Monats (steckt bereits in netzbezug_kosten_euro,

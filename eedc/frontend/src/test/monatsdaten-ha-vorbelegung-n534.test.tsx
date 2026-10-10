@@ -119,6 +119,16 @@ describe('Formular-Vorbelegung aus HA (N-534, N-622)', () => {
     expect(document.body.textContent).toContain('Ist das Feld beim Speichern leer, hat der Monat keinen Gesamtwert.')
   })
 
+  it('N-654: die Herkunftszeile unter „PV-Erzeugung (berechnet)" nennt das Balkonkraftwerk, wenn es in der Summe steckt', async () => {
+    zustand.invs = SUED_WEST_BKW
+    zustand.rows = [...MODUL_ZEILEN, { investition_id: 3, verbrauch_daten: { pv_erzeugung_kwh: 70 } }]
+    await oeffne({ ha: false, monatsdaten: monat() })
+    await waitFor(() => expect(document.body.textContent).toContain('1.000,0 kWh'))   // 550 + 380 + 70
+    const herkunft = [...document.querySelectorAll('p')].find((p) => p.textContent?.startsWith('Aus '))
+    expect(herkunft?.textContent).toContain('Balkonkraftwerk')
+    expect(herkunft?.textContent).toContain('PV-Modulen')
+  })
+
   it('gespeichert wird, was in der Zeile steht — auch ein geänderter Wert', async () => {
     zustand.invs = SUED_WEST_BKW
     const onSubmit = await oeffne({ ha: true })

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { baueJahrChartDaten, jahrTooltipWert } from './JahrVerlaufChart'
+import { baueJahrChartDaten, jahrTooltipWert, stapelUnterzeile } from './JahrVerlaufChart'
 import { verlaufTabellenSpalten } from './verlaufVergleich'
 import { ChartTooltip } from '../components/ui'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
@@ -87,5 +87,15 @@ describe('baueJahrChartDaten', () => {
       md(2026, 3, { aus_tageswerten: [] }),
     ])
     expect(d.every((p) => !p.ausTageswerten)).toBe(true)
+  })
+})
+
+describe('stapelUnterzeile (N-649)', () => {
+  it('die Erzeugungs-Unterzeile behauptet keine Gleichheit mit der PV-Erzeugung', () => {
+    // EV + Einspeisung ≠ PV mit Speicherverlusten, BHKW oder V2H — die Zeile darf
+    // keine Gleichung „… = PV-Erzeugung" mehr tragen (Kategorie, kein Wortlaut-Pin).
+    expect(stapelUnterzeile('erzeugung')).not.toMatch(/=\s*PV-Erzeugung/)
+    expect(stapelUnterzeile('erzeugung')).toMatch(/Eigenverbrauch/)
+    expect(stapelUnterzeile('erzeugung')).toMatch(/Einspeisung/)
   })
 })

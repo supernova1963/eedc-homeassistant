@@ -21,6 +21,15 @@ export const PV_MODUL_VERTEILT_HERKUNFT: Omit<WertHerkunft, 'bezug'> = {
     + 'Werte je String braucht jedes Modul einen eigenen Erzeugungs-Sensor.',
 }
 
+/** N-653 (10.10.2026): der Mischfall — ein Teil der Module gemessen, der Rest nach kWp verteilt.
+ *  Der Satz oben („Werte je Modul sind nicht gemessen …") widerspricht dort den gemessenen Zeilen.
+ *  Spiegel von `RANKING_TEILWEISE_VERTEILT` in `api/routes/cockpit/pv_strings.py` (Block ⑤ liest ihn
+ *  aus `vergleich_hinweis`), hier ohne den Ranking-Satz, weil Block ④ keine Platzierung zeigt. */
+export const PV_MODUL_TEILWEISE_VERTEILT_HINWEIS =
+  'Nicht alle Module haben gemessene Werte — ein Teil ist anteilig nach kWp aus der '
+  + 'Gesamterzeugung verteilt, Pro-String-Genauigkeit eingeschränkt. Für gemessene Werte '
+  + 'je String braucht jedes Modul einen eigenen Erzeugungs-Sensor.'
+
 /** Der Wortlaut des Badges „geschätzt (kWp-Anteil)" als Text — für Stellen ohne Badge (Tooltip-Zeile,
  *  Tabellenspalte). Aus denselben zwei Teilen wie das Badge, damit beide gleich heißen. */
 export const KWP_ANTEIL_GESCHAETZT = `${ZUSTAND_META.geschaetzt.label} (${PV_MODUL_VERTEILT_HERKUNFT.quelleLabel})`

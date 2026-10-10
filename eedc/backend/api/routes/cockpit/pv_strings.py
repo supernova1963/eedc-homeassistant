@@ -66,6 +66,17 @@ RANKING_NICHT_MOEGLICH = (
     "(Einstellungen → Sensor-Zuordnung)."
 )
 
+# N-653 (10.10.2026): der Mischfall — ein Teil der Module gemessen, der Rest
+# verteilt. Der Satz oben („Die Werte je Modul sind nicht gemessen …")
+# widerspricht dort den gemessenen Zeilen darüber. Die Regel bleibt (teilweise
+# verteilt ⇒ kein Ranking, Entscheid 26.07.); nur der Satz sagt, was zutrifft.
+RANKING_TEILWEISE_VERTEILT = (
+    "Nicht alle Module haben gemessene Werte — ein Teil ist anteilig nach kWp "
+    "aus der Gesamterzeugung verteilt. Ein Vergleich einzelner Strings ist "
+    "damit nicht möglich. Dafür braucht jedes Modul einen eigenen "
+    "Erzeugungs-Sensor (Einstellungen → Sensor-Zuordnung)."
+)
+
 
 
 # F-34: Das Monats-SOLL einer Zeile wird auf ihre Laufzeit im Anschaffungs-/
@@ -110,12 +121,14 @@ def _ranking(
     Returns:
         ``(bester, schlechtester, hinweis)``. Ist auch nur ein String nicht
         gemessen, bleibt die Platzierung leer und stattdessen steht der
-        Erklärsatz {@link RANKING_NICHT_MOEGLICH} in ``hinweis``.
+        Erklärsatz {@link RANKING_NICHT_MOEGLICH} in ``hinweis`` — im Mischfall
+        (mindestens ein String gemessen) {@link RANKING_TEILWEISE_VERTEILT} (N-653).
     """
     if len(kandidaten) <= 1:
         return None, None, None
     if any(quelle != PV_QUELLE_GEMESSEN for _, _, quelle in kandidaten):
-        return None, None, RANKING_NICHT_MOEGLICH
+        teilweise = any(quelle == PV_QUELLE_GEMESSEN for _, _, quelle in kandidaten)
+        return None, None, RANKING_TEILWEISE_VERTEILT if teilweise else RANKING_NICHT_MOEGLICH
     mit_perf = [(name, perf) for name, perf, _ in kandidaten if perf]
     if not mit_perf:
         return None, None, None

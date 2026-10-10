@@ -326,15 +326,22 @@ async def build_jahresbericht_context(
         Sie trägt nur den PVGIS-SOLL-Wert; ohne sie fehlten in der Jahres-
         tabelle Monate, in denen noch nichts erfasst ist. In den Finanz-Zeilen
         taucht sie nicht auf — sie wäre dort eine Zeile aus lauter Nullen.
+
+        N-650 (10.10.2026): die Messgrößen stehen auf ``None`` statt 0 — die
+        Tabelle druckt dafür „–" (`formatierung.LEER`), nicht „0 kWh", „0,0 %"
+        und „0,00 €". Eine 0 ist eine Aussage (ADR-002/P4), ein Monat ohne
+        Erfassung keine. Die Jahressummen laufen über die Fakten (`_zeile_fuer`),
+        nicht über diese Zeile, und bleiben unverändert; die Diagramme lesen
+        ``None`` wie bisher die 0 (`charts.py`: ``v or 0``).
         """
         return {
             "jahr": j, "monat": m,
             "monat_name": f"{MONATSNAMEN[m]} {j}" if ist_gesamtzeitraum else MONATSNAMEN[m],
-            "pv_erzeugung_kwh": 0, "pvgis_prognose_kwh": pvgis_by_month.get(m, 0),
-            "eigenverbrauch_kwh": 0, "einspeisung_kwh": 0, "netzbezug_kwh": 0,
-            "autarkie_prozent": autarkie_prozent(0, 0), "spezifischer_ertrag": 0.0,
-            "einsp_erloes_euro": 0.0, "ev_ersparnis_euro": 0.0,
-            "sonstige_netto_euro": 0, "netto_ertrag_euro": 0.0,
+            "pv_erzeugung_kwh": None, "pvgis_prognose_kwh": pvgis_by_month.get(m, 0),
+            "eigenverbrauch_kwh": None, "einspeisung_kwh": None, "netzbezug_kwh": None,
+            "autarkie_prozent": None, "spezifischer_ertrag": None,
+            "einsp_erloes_euro": None, "ev_ersparnis_euro": None,
+            "sonstige_netto_euro": None, "netto_ertrag_euro": None,
         }
 
     async def _zeile_fuer(fakt) -> dict:

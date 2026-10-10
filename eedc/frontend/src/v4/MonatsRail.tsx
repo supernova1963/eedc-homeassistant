@@ -7,14 +7,21 @@
  * Donor `MonatsabschlussView` (`VerticalTimeline`).
  */
 import { useMemo } from 'react'
-import { MONAT_KURZ, DATENROLLE, fmtZahl, LAUFEND_ZUSTAND } from '../lib'
+import { MONAT_KURZ, DATENROLLE, fmtZahl, LAUFEND_ZUSTAND, LEER_TOKEN } from '../lib'
 import ScrollSchatten from '../components/ui/ScrollSchatten'
 
 export interface RailEintrag {
   jahr: number
   monat: number
-  pv_kwh: number
+  /** PV-Erzeugung des Monats; `null` = kein Wert (Anzeige {@link LEER_TOKEN}, kein
+   *  Balken). Eine 0 bleibt eine gemessene 0 (N-650, ADR-002/P4). */
+  pv_kwh: number | null
   laufend?: boolean
+}
+
+/** „1.234 kWh" bzw. „—" ohne Wert — EINE Stelle für Rail und Stepper (N-650). */
+export function railPvText(e: RailEintrag): string {
+  return e.pv_kwh == null ? LEER_TOKEN : `${fmtZahl(e.pv_kwh, 0)} kWh`
 }
 
 interface MonatsRailProps {
@@ -37,14 +44,14 @@ export function MonatsRail({ entries, jahr, monat, onSelect }: MonatsRailProps) 
 
   const maxPvByJahr = useMemo(() => {
     const m = new Map<number, number>()
-    byJahr.forEach((es, j) => m.set(j, Math.max(...es.map((e) => e.pv_kwh), 1)))
+    byJahr.forEach((es, j) => m.set(j, Math.max(...es.map((e) => e.pv_kwh ?? 0), 1)))
     return m
   }, [byJahr])
 
   const jahre = useMemo(() => [...byJahr.keys()].sort((a, b) => b - a), [byJahr])
   const istSel = (e: RailEintrag) => e.jahr === jahr && e.monat === monat
   const titel = (e: RailEintrag) =>
-    e.laufend ? `${MONAT_KURZ[e.monat]} ${e.jahr} — laufender Monat` : `${MONAT_KURZ[e.monat]} ${e.jahr}: ${fmtZahl(e.pv_kwh, 0)} kWh`
+    e.laufend ? `${MONAT_KURZ[e.monat]} ${e.jahr} — laufender Monat` : `${MONAT_KURZ[e.monat]} ${e.jahr}: ${railPvText(e)}`
 
   return (
     <>
@@ -62,7 +69,7 @@ export function MonatsRail({ entries, jahr, monat, onSelect }: MonatsRailProps) 
               {byJahr.get(j)!.map((e) => {
                 const sel = istSel(e)
                 const maxPv = maxPvByJahr.get(j) ?? 1
-                const barW = Math.max(6, Math.round((e.pv_kwh / maxPv) * 100))
+                const barW = Math.max(6, Math.round(((e.pv_kwh ?? 0) / maxPv) * 100))
                 return (
                   <button
                     key={e.monat}
@@ -86,10 +93,10 @@ export function MonatsRail({ entries, jahr, monat, onSelect }: MonatsRailProps) 
                         <span className={`text-xs tabular-nums ${
                           e.laufend ? LAUFEND_ZUSTAND.text : sel ? 'text-blue-500 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'
                         }`}>
-                          {e.laufend ? 'läuft' : `${fmtZahl(e.pv_kwh, 0)} kWh`}
+                          {e.laufend ? 'läuft' : railPvText(e)}
                         </span>
                       </div>
-                      {!e.laufend && (
+                      {!e.laufend && e.pv_kwh != null && (
                         <svg className="mt-0.5 w-full h-1" aria-hidden="true">
                           <rect width="100%" height="4" rx="1" className="fill-gray-100 dark:fill-gray-700" />
                           <rect width={`${barW}%`} height="4" rx="1" className={sel ? 'fill-blue-500' : DATENROLLE.pv.fill} />

@@ -70,6 +70,21 @@ describe('Ø-Preis Netz — die Formel nennt die Herkunft', () => {
     expect(k?.formel).toContain('Arbeitspreis aus dem Strompreis-Tarif')
   })
 
+  it('N-655 Jahr: die gefaltete Herkunft „zeitfenster" ergibt dieselbe Formel wie der Monat', () => {
+    // Bis 10.10.2026 trug die Jahresantwort kein Herkunftsfeld — die Kachel fiel auf den Tarif-Text zurück.
+    const jahr = preisKachel(basis({ netzbezug_preis_herkunft: 'zeitfenster' }))
+    const monat = preisKachel(basis({ netzbezug_preis_herkunft: 'zeitfenster', netzbezug_preis_effektiv_cent: 30 }))
+    expect(jahr?.formel).toBe(monat?.formel)
+    expect(jahr?.formel).not.toBe(preisKachel(basis({ netzbezug_preis_herkunft: 'stamm' }))?.formel)
+  })
+
+  it('N-655 Jahr: „gemischt" behauptet keine einzelne Stufe', () => {
+    const k = preisKachel(basis({ netzbezug_preis_herkunft: 'gemischt' }))
+    for (const einzel of ['gepflegt', 'zeitfenster', 'stamm'] as const) {
+      expect(k?.formel).not.toBe(preisKachel(basis({ netzbezug_preis_herkunft: einzel }))?.formel)
+    }
+  })
+
   it('ohne Herkunft (alte Antwort) behauptet die Kachel keine', () => {
     // ⚠ Eine Antwort ohne das Feld darf nicht plötzlich „gemessen" behaupten —
     // der Client kann es nicht wissen.
