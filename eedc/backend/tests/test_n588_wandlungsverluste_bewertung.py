@@ -277,3 +277,21 @@ async def test_ust_rechnet_auf_dem_eigenverbrauch_ohne_wandlungsverluste():
     assert pv["eigenverbrauch_ohne_verluste_kwh_jahr"] == pytest.approx(3888.0)
     soll_roi = ust_hochrechnung(anlage, invs, 2026, pv["eigenverbrauch_ohne_verluste_kwh_jahr"], pv["erzeugung_kwh_jahr"])
     assert roi_ohne.gesamt_jahres_einsparung - roi_mit.gesamt_jahres_einsparung == pytest.approx(soll_roi, abs=0.02)
+
+
+# ── N-647 (B7): CO₂ der Monatskennzahlen aus dem Kanon ───────────────────────
+
+
+def test_monatskennzahlen_co2_auf_dem_eigenverbrauch_ohne_verluste():
+    """`GET /monatsdaten/{id}` (`berechne_monatskennzahlen`): CO₂ = Eigenverbrauch ohne Wandlungsverluste × 0,38 —
+    nicht mehr Erzeugung × 0,38 (N-647). F13a: PV 630, Einspeisung 180 ⇒ EV 450, Verluste 36 ⇒ 414 × 0,38."""
+    from backend.core.calculations import berechne_monatskennzahlen
+
+    k = berechne_monatskennzahlen(einspeisung_kwh=180.0, netzbezug_kwh=72.0, pv_erzeugung_kwh=630.0,
+                                  netzbezug_preis_cent=30.0, wandlungsverluste_kwh=36.0)
+    assert k.eigenverbrauch_kwh == pytest.approx(450.0)
+    assert k.eigenverbrauch_ersparnis_euro == pytest.approx(124.2)
+    assert k.co2_einsparung_kg == pytest.approx(157.32, abs=0.05)
+    ohne = berechne_monatskennzahlen(einspeisung_kwh=180.0, netzbezug_kwh=72.0, pv_erzeugung_kwh=630.0,
+                                     netzbezug_preis_cent=30.0)
+    assert ohne.co2_einsparung_kg == pytest.approx(171.0, abs=0.05)

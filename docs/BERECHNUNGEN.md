@@ -2523,6 +2523,14 @@ Auswertungen → CO₂, Blöcke „CO₂-Bilanz & Wirkung" und „CO₂-Amortisa
 > `services/energie_profil/tage_werte.py` im Backend — ein Spiegelpaar, Monatstabelle
 > und Tagestabelle). Beide sind auf den Kanon umgestellt. Das war **keine
 > Definitionsfrage, sondern eine unvollendete Migration.**
+>
+> **Die letzten zwei (N-647, 10.10.2026):** die PV-Zeile in **Auswertungen → ROI** (`investitionen/roi_pv.py`)
+> und die Monatskennzahlen von `GET /monatsdaten/{id}` (`core/calculations.py::berechne_monatskennzahlen`)
+> rechneten noch `Erzeugung × 0,38`. Beide nehmen jetzt `berechne_co2_bilanz(...).co2_pv_kg` auf dem
+> Eigenverbrauch ohne Wandlungsverluste (§1). Die ROI-Zeile rechnet die **Module** (das Balkonkraftwerk hat eine
+> eigene Zeile), hochgerechnet auf zwölf Monate wie ihre Ersparnis. Gewächtert von ADR-002/P15: jede
+> `× CO2_FAKTOR_STROM_KG_KWH` in Routen und Services trägt den Beleg oder steht klassifiziert (Komponenten-Bilanzen
+> DI-1, die synthetische BKW-Pauschale).
 
 > **Jahres-Scope:** Der Endpoint kennt **kein** `?jahr=` und liefert die gesamte Historie —
 > der Jahresfilter sitzt in der Sicht (`v4/JahrCo2Chart.tsx::baueJahrCo2ChartDaten` bzw.

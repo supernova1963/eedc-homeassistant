@@ -262,7 +262,7 @@ PV_HALTEWERTE: dict[tuple[str, str, str, str], Optional[float]] = {
     ('N640-3', 'S3', 'I5', 'cockpit_monat:vor'): None,
     ('N640-3', 'S3', 'I6', 'vor:cockpit_monat'): None,
     # N-588 (10.10.2026): die drei Formen des Messpunkt-Vertrags (W2-D, W2-B, W2-B7) unter der S3-Vor-Regel (`_U_SA_VOR`)
-    # und das CO₂ der ROI-Zeile bis B7 (N-647, `_U_N647`) — gemessen gegen den Arbeitsbaum nach B1–B3.
+    # — gemessen gegen den Arbeitsbaum nach B1–B3. (Das CO₂ der ROI-Zeile stand hier bis B7, N-647, als Haltewert.)
     ('W2-D', 'S3', 'I2', 'cockpit_monat:vor=nach'): None,
     ('W2-D', 'S3', 'I3', 'cockpit_monat:vor'): None,
     ('W2-D', 'S3', 'I5', 'cockpit_monat:vor'): None,
@@ -275,27 +275,6 @@ PV_HALTEWERTE: dict[tuple[str, str, str, str], Optional[float]] = {
     ('W2-B7', 'S3', 'I3', 'cockpit_monat:vor'): None,
     ('W2-B7', 'S3', 'I5', 'cockpit_monat:vor'): None,
     ('W2-B7', 'S3', 'I6', 'vor:cockpit_monat'): None,
-    ('F13a', 'S1', 'I5', 'geld:roi:co2'): 2462.4,
-    ('F13a', 'S2', 'I5', 'geld:roi:co2'): 2462.4,
-    ('F13a', 'S3', 'I5', 'geld:roi:co2'): 2462.4,
-    ('F13b', 'S1', 'I5', 'geld:roi:co2'): 2462.4,
-    ('F13b', 'S2', 'I5', 'geld:roi:co2'): 2462.4,
-    ('F13b', 'S3', 'I5', 'geld:roi:co2'): 2462.4,
-    ('F15', 'S1', 'I5', 'geld:roi:co2'): 2462.4,
-    ('F15', 'S2', 'I5', 'geld:roi:co2'): 2462.4,
-    ('F15', 'S3', 'I5', 'geld:roi:co2'): 2462.4,
-    ('W2-V', 'S1', 'I5', 'geld:roi:co2'): 2127.5,
-    ('W2-V', 'S2', 'I5', 'geld:roi:co2'): 2127.5,
-    ('W2-V', 'S3', 'I5', 'geld:roi:co2'): 2127.5,
-    ('W2-D', 'S1', 'I5', 'geld:roi:co2'): 2011.2,
-    ('W2-D', 'S2', 'I5', 'geld:roi:co2'): 2011.2,
-    ('W2-D', 'S3', 'I5', 'geld:roi:co2'): 2011.2,
-    ('W2-B', 'S1', 'I5', 'geld:roi:co2'): 2462.4,
-    ('W2-B', 'S2', 'I5', 'geld:roi:co2'): 2462.4,
-    ('W2-B', 'S3', 'I5', 'geld:roi:co2'): 2462.4,
-    ('W2-B7', 'S1', 'I5', 'geld:roi:co2'): 2462.4,
-    ('W2-B7', 'S2', 'I5', 'geld:roi:co2'): 2462.4,
-    ('W2-B7', 'S3', 'I5', 'geld:roi:co2'): 2462.4,
 }
 
 #: ``(Form, Größe, Weg, Invariante, Sicht) → gemessener Wert`` — Achsen-Matrix, 415 Sichten (E4d: +26); die 6 Sichten

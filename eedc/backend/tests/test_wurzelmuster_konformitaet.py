@@ -2051,6 +2051,68 @@ def test_p15_findet_die_stellen_ueberhaupt():
     assert aufrufe >= 5, aufrufe
 
 
+# N-647 (B7, 10.10.2026): die zweite Form derselben Klasse — `<Menge> × CO2_FAKTOR_STROM_KG_KWH` außerhalb des Layers.
+# `roi_pv.py` (ROI-Seite) und `core/calculations.py::berechne_monatskennzahlen` rechneten damit `Erzeugung × 0,38`.
+# Baumweit über `api/` und `services/` (der Layer `core/` trägt die Komponenten-Formeln DI-1 und den Kanon selbst):
+# jede solche Multiplikation trägt den Beleg im Ausdruck — oder steht, funktions-granular, in der Klassifikation.
+P15_CO2_FAKTOR_KLASSIFIZIERT: dict[str, str] = {
+    "backend/api/routes/investitionen/roi.py::_bkw_pauschal_beitrag":
+        "synthetische BKW-Pauschale ohne Messung (0,9 kWh/Wp, 80 % EV) — Vorlage N-588 §1 „nicht betroffen“",
+    "backend/api/routes/investitionen/dashboard_sonstiges.py::get_sonstiges_dashboard":
+        "eigene Gerätemessung eines sonstigen Erzeugers (DI-1, Komponenten-Bilanz)",
+    "backend/api/routes/investitionen/dashboard_eauto.py::get_eauto_dashboard":
+        "Netzstrom-CO₂ des E-Autos (Verbraucher-Bilanz, DI-1) — keine Eigenverbrauchs-Bewertung",
+}
+
+
+def _p15_co2_faktor_stellen(baeume) -> list[tuple[str, str, int, str]]:
+    """``(modul, funktion, zeile, ausdruck)`` je `… * CO2_FAKTOR_STROM_KG_KWH` in `api/` und `services/`."""
+    out = []
+    for ort, quelltext, baum in baeume:
+        if not ort.startswith(("backend/api/", "backend/services/", "probe")):
+            continue
+
+        def besuche(knoten, funktion):
+            for kind in ast.iter_child_nodes(knoten):
+                f = kind.name if isinstance(kind, (ast.FunctionDef, ast.AsyncFunctionDef)) else funktion
+                if isinstance(kind, ast.BinOp) and isinstance(kind.op, ast.Mult) and any(
+                        isinstance(s, ast.Name) and s.id == "CO2_FAKTOR_STROM_KG_KWH" for s in (kind.left, kind.right)):
+                    out.append((ort, f, kind.lineno, ast.get_source_segment(quelltext, kind) or ""))
+                besuche(kind, f)
+
+        besuche(baum, "<modul>")
+    return out
+
+
+def _p15_co2_faktor_ohne_beleg(baeume) -> list[str]:
+    return [f"{o}:{z} ({f}) → {a}" for o, f, z, a in _p15_co2_faktor_stellen(baeume)
+            if _P15_BELEG not in a and f"{o}::{f}" not in P15_CO2_FAKTOR_KLASSIFIZIERT]
+
+
+def test_p15_co2_faktor_in_routen_und_services_nur_mit_beleg():
+    offen = _p15_co2_faktor_ohne_beleg(_p15_baeume())
+    assert offen == [], (
+        f"{len(offen)} `× CO2_FAKTOR_STROM_KG_KWH` ohne Beleg: {offen}\n"
+        "Die CO₂-Einsparung der Anlage entsteht in `berechne_co2_bilanz` auf dem Eigenverbrauch ohne Wandlungsverluste "
+        "(ADR-001/DI-2, ADR-002/P15) — eine Route rechnet sie nicht selbst (N-647: `Erzeugung × 0,38`). "
+        "Komponenten-Bilanzen mit eigener Regel (DI-1) gehören klassifiziert in `P15_CO2_FAKTOR_KLASSIFIZIERT`."
+    )
+
+
+def test_p15_co2_faktor_klassifikation_ist_noch_belegt():
+    belegt = {f"{o}::{f}" for o, f, _z, _a in _p15_co2_faktor_stellen(_p15_baeume())}
+    verwaist = set(P15_CO2_FAKTOR_KLASSIFIZIERT) - belegt
+    assert not verwaist, f"Klassifizierte Stellen ohne Fundstelle: {sorted(verwaist)} — Eintrag streichen."
+
+
+def test_p15_co2_faktor_gegenprobe():
+    roh = "def get_x():\n    co2 = erzeugung_jahr * CO2_FAKTOR_STROM_KG_KWH\n"
+    assert _p15_co2_faktor_ohne_beleg([("probe.py", roh, ast.parse(roh))]) == [
+        "probe.py:2 (get_x) → erzeugung_jahr * CO2_FAKTOR_STROM_KG_KWH"]
+    gut = "def get_x():\n    co2 = eigenverbrauch_ohne_verluste_bkw_kwh * CO2_FAKTOR_STROM_KG_KWH\n"
+    assert _p15_co2_faktor_ohne_beleg([("probe.py", gut, ast.parse(gut))]) == []
+
+
 def test_p15_gegenprobe_ein_roher_aufruf_wird_rot():
     roh_co2 = "berechne_co2_bilanz(eigenverbrauch_kwh=fakt.kennzahlen.eigenverbrauch_kwh)\n"
     assert _p15_co2_aufrufe_ohne_beleg([("probe.py", roh_co2, ast.parse(roh_co2))]) == [

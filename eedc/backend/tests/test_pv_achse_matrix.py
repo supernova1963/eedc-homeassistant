@@ -250,7 +250,7 @@ def _geld_sichten(fid: str, weg: str, nach: dict) -> list[Zelle]:
     Eingabe) — der Eigenverbrauch der Sicht selbst ist Bilanz (F2) und prüft I5 `_folge`. F13a S1/S2: (450 − 36) ×
     30 ct = 124,20 €, × 0,38 = 157,32 kg; S3 ohne Kanäle 135,00 € / 171 kg (F3). ROI: die PV-Zeile rechnet die Monate
     der Form auf zwölf hoch (ein Monat ⇒ × 12) und zieht die bewertbaren Verluste vor der Hochrechnung ab; ihr CO₂
-    rechnet bis B7 die Erzeugung (N-647, „Soll unklar")."""
+    rechnet seit B7 (N-647) aus dem Kanon auf derselben Menge."""
     out = []
     abzug = _abzug(fid, weg, mx.TAGE_JUNI)
     for k in ("monat", "uebersicht", "tabelle", "pdf", "ha_export"):
@@ -267,10 +267,14 @@ def _geld_sichten(fid: str, weg: str, nach: dict) -> list[Zelle]:
                       notiz=f"(EV − {abzug:g}) × 0,38"))
     roi = nach.get("roi") or {}
     if roi.get("ev_kwh_jahr") is not None:
-        soll_roi = round(max(0.0, roi["ev_kwh_jahr"] - abzug * 12) * _PREIS, 2)
-        out.append(_z("geld:roi:ev_ersparnis", roi.get("ev_ersparnis"), soll_roi, tol=0.2,
+        ev_roi = max(0.0, roi["ev_kwh_jahr"] - abzug * 12)
+        out.append(_z("geld:roi:ev_ersparnis", roi.get("ev_ersparnis"), round(ev_roi * _PREIS, 2), tol=0.2,
                       notiz=f"(EV-Jahr − {abzug:g} × 12) × 30 ct"))
-    out.append(Zelle("geld:roi:co2", roi.get("co2"), None, "ok", "N-647 (B7)"))
+        # N-647 (B7): CO₂ der ROI-Zeile aus dem Kanon auf derselben Menge — die Zeile rechnet nur die Module (das
+        # Balkonkraftwerk hat eine eigene Zeile): F13a (360 − 36) × 12 × 0,38 = 1 477,44 kg, nicht 157,32 × 12. Die
+        # Detail-kWh sind auf 1 kWh gerundet ⇒ Toleranz 0,5 × 0,38.
+        out.append(_z("geld:roi:co2", roi.get("co2"), round(ev_roi * _CO2, 1), tol=0.25,
+                      notiz=f"(EV-Jahr − {abzug:g} × 12) × 0,38"))
     # BKW-Hub (Entscheid Master 10.10.2026, F-1 (A)): Eigenverbrauch/Einspeisung bleiben der Bilanz-Anteil (I4,
     # `_bkw_hub_zellen`); Ersparnis und CO₂ der Kopfzahlen bewerten den Anteil am Eigenverbrauch OHNE die Verluste.
     from backend.core.berechnungen import bkw_eigenverbrauch_anteil
@@ -708,16 +712,8 @@ for _f in ("F01", "F02", "F03", "F04", "F05", "F06", "F07", "F08a", "F08b", "F09
     SOLL_UNKLAR[(_f, "S3", "I6", "vor:cockpit_monat")] = _U_SA_VOR
 # N-640 Variante 1 (Frank85): Soll seit dem Entscheid Master 08.10.2026 wie Variante 2 — 540 in allen Sichten, der
 # kWp-Anteil des BKW an den Tagen ist keine zweite Quelle (Bauplan §6b W2-R2, `monats_fakten/bau.py`). Keine Markierung.
-# N-588 (10.10.2026): die 24 Geld-Sichten von F13a haben ein Soll (`_geld_sichten`) — `_U_N588` ist entfallen. Bis B7
-# offen ist nur das CO₂ der ROI-Zeile: es rechnet die Erzeugung × 0,38 statt den Kanon (N-647, eigener Bauschritt).
-_U_N647 = (
-    "N-647 (Bauschritt B7 der N-588-Vorlage): die PV-Zeile in Auswertungen → ROI rechnet CO₂ = Erzeugung × 0,38 "
-    "(inkl. Einspeisung) statt `berechne_co2_bilanz` auf dem Eigenverbrauch ohne Wandlungsverluste. Soll ab B7: "
-    "(Eigenverbrauch-Jahr − bewertbare Verluste × 12) × 0,38."
-)
-for _f in GELD_SICHTEN_FORMEN:
-    for _w in ("S1", "S2", "S3"):
-        SOLL_UNKLAR[(_f, _w, "I5", "geld:roi:co2")] = _U_N647
+# N-588 (10.10.2026): die 24 Geld-Sichten von F13a haben ein Soll (`_geld_sichten`) — `_U_N588` ist entfallen; mit
+# N-647 (B7) auch das CO₂ der ROI-Zeile (`_U_N647` und seine 21 Haltewerte sind entfallen).
 # N-638, Entscheid Master 07.10.2026 (Option b): die Hub-Sicht `bkw_hub:*` legt für zwei Formklassen kein Soll fest.
 # Gemessen wird, was der Hub zeigt (die Zeile des Geräts); ob er stattdessen den Wert der Monats-Fakten zeigen soll,
 # ist nicht entschieden — eine Zelle mit Soll „eigene Messung" schriebe das heutige Verhalten fest, nicht die

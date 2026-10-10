@@ -1180,7 +1180,8 @@ async def miss_checker(db: AsyncSession, anlage_id: int) -> dict:
 async def miss_roi(db: AsyncSession, anlage_id: int) -> dict:
     """Auswertungen → ROI (``get_roi_dashboard``, Jahr 2026): die PV-Zeile — Ersparnis aus Eigenverbrauch (Detail) und
     CO₂ (N-647 rechnet sie bis B7 aus der Erzeugung). Die Formen haben keinen Wechselrichter: die Module sind
-    „ohne WR"-Zeilen, deren Detail die ganze PV-Einsparung trägt; CO₂ = Σ der Modul-Zeilen."""
+    „ohne WR"-Zeilen, deren Detail die ganze PV-Einsparung trägt. CO₂ = Σ der Modul-Zeilen PLUS der Speicher-Zeilen:
+    der Speicher bekommt seinen Anteil AUS dem PV-Topf (F-37, `roi_pv.py`), die Summe ist der Topf selbst."""
     from backend.api.routes.investitionen.roi import get_roi_dashboard
 
     r = await get_roi_dashboard(anlage_id=anlage_id, strompreis_cent=None, einspeiseverguetung_cent=None,
@@ -1189,7 +1190,10 @@ async def miss_roi(db: AsyncSession, anlage_id: int) -> dict:
     if not pv:
         return {"ev_ersparnis": None, "co2": None, "ev_kwh_jahr": None}
     d = pv[0].detail_berechnung
-    return {"ev_ersparnis": _r(d.get("ev_ersparnis_euro")), "co2": _r(sum(b.co2_einsparung_kg or 0.0 for b in pv)),
+    speicher = [b for b in r.berechnungen if b.investition_typ == "speicher"]
+    return {"ev_ersparnis": _r(d.get("ev_ersparnis_euro")),
+            "co2": _r(sum(b.co2_einsparung_kg or 0.0 for b in pv + speicher)),
+            "co2_speicher": _r(sum(b.co2_einsparung_kg or 0.0 for b in speicher)),
             "ev_kwh_jahr": _r(d.get("eigenverbrauch_kwh_jahr")),
             "ev_ohne_verluste_kwh_jahr": _r(d.get("eigenverbrauch_ohne_verluste_kwh_jahr"))}
 

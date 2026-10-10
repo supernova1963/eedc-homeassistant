@@ -199,8 +199,12 @@ def berechne_monatskennzahlen(
     # OHNE Abzug der Netzbezugskosten (diese wären auch ohne PV angefallen)
     netto_ertrag = einspeise_erloes + ev_ersparnis
 
-    # CO2-Einsparung
-    co2_einsparung = pv_erzeugung_kwh * CO2_FAKTOR_STROM_KG_KWH
+    # CO2-Einsparung — N-647 (ADR-001/DI-2, P15): aus der EINEN Konstruktions-Stelle (`berechne_co2_bilanz`, unten in
+    # dieser Datei) auf dem Eigenverbrauch ohne Wandlungsverluste, wie Cockpit und HA-Export. Bis 10.10.2026 stand hier
+    # `pv_erzeugung_kwh × 0,38` (inkl. Einspeisung) — der letzte Aufrufer der Formel, die DI-2 abgelöst hatte.
+    co2_einsparung = berechne_co2_bilanz(
+        eigenverbrauch_kwh=eigenverbrauch_ohne_verluste_kwh(eigenverbrauch, wandlungsverluste_kwh, verluste_grund),
+    ).co2_pv_kg
 
     return MonatsKennzahlen(
         direktverbrauch_kwh=round(direktverbrauch, 2),

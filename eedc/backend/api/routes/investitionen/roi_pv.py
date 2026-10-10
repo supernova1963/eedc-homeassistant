@@ -37,7 +37,7 @@ from backend.services.speicher_wirtschaftlichkeit import (
     berechne_ist_wirkungsgrad,
     wirkungsgrad_ist_fuer_speicher,
 )
-from backend.core.calculations import CO2_FAKTOR_STROM_KG_KWH, berechne_roi
+from backend.core.calculations import berechne_co2_bilanz, berechne_roi
 from backend.services.monats_fakten import lade_monats_fakten
 from backend.core.berechnungen import (
     bewertbare_wandlungsverluste_kwh,
@@ -265,7 +265,12 @@ async def pv_einsparung_und_speicher_ist(
         eigenverbrauch_ohne_verluste_jahr = eigenverbrauch_ohne_verluste_kwh(eigenverbrauch_jahr, verluste_jahr, None)
         ev_ersparnis = eigenverbrauch_ohne_verluste_jahr * strompreis_cent / 100
         jahres_einsparung = einspeise_erloes + ev_ersparnis
-        co2 = erzeugung_jahr * CO2_FAKTOR_STROM_KG_KWH
+        # N-647 (ADR-001/DI-2, P15): CO₂ aus der EINEN Konstruktions-Stelle auf dem Eigenverbrauch ohne Wandlungsverluste —
+        # dieselbe Menge wie die Ersparnis darüber. Bis 10.10.2026 stand hier `erzeugung_jahr × 0,38`: auch die
+        # eingespeiste kWh bekam die volle Netzstrom-Vermeidung gutgeschrieben (bei 40 % Einspeisequote zwei Drittel zu
+        # viel), und Auswertungen → ROI nannte eine andere CO₂-Zahl als Cockpit → Nachhaltigkeit, HA-Export und PDF.
+        # Die Zeile rechnet nur die Module (`pv_module_kwh`; ein Balkonkraftwerk hat seine eigene Zeile).
+        co2 = berechne_co2_bilanz(eigenverbrauch_kwh=eigenverbrauch_ohne_verluste_jahr).co2_pv_kg
 
         detail = {
             'einspeisung_kwh_jahr': round(einspeisung_jahr, 0),
