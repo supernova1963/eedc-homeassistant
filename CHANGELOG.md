@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.1.5] - 2026-10-10 — Wandlungsverluste zählen nicht mehr als Ersparnis und CO₂, Zählerstand-Meldung klarer, ROI-CO₂ wie das Cockpit
 
 ### Fixed
 
