@@ -21,7 +21,8 @@ Version: [CHANGELOG.md](CHANGELOG.md) (oberster Abschnitt) bzw. `eedc/backend/co
 ## Arbeitsmodus (Entscheid Gernot 10.10.2026)
 
 1. **Eingang nur Melder** (GitHub-Issues, simon42-Forum T89667, photovoltaikforum T258098, community-smarthome T10057, PN) **und
-   die Konsolidierungsliste** `~/.claude/plans/KONSOLIDIERUNG-LISTE-2026-10.md` (von Gernot triagiert: beheben · dokumentieren · verwerfen).
+   die offenen Funde im Fundregister** (`~/.claude/plans/fundregister.yaml` — das EINE Register; Stand 10.10.: N-648…N-665 aus der
+   Konsolidierung, Gernots Streichungen ausstehend). Keine zweite Liste neben dem Register.
    Keine Matrix-Sweeps, keine Beobachtungsliste abarbeiten, keine Refactoring-Serie, kein HA-Bauform-S3, keine Vorhaben aus dem Index.
 2. **Fund nur bei Wirkung:** falsche Zahl, die ein Anwender sieht · Absturz · Datenverlust. Sonst Antwort oder Handgriff.
 3. **Ein Päckchen = eine Opus-Sitzung** (3–5 Punkte), ohne Vorlage, ohne Gegenprüfung, ohne Nachmessung, ohne Golden Master,
