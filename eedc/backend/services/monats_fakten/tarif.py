@@ -116,6 +116,21 @@ async def _lade_tarif(
         db, anlage_id, schluessel[0], schluessel[1], monatsdaten, allgemein,
         cache=preis_cache, messung=preis_messung,
     )
+    # N-663 (10.10.2026): Ohne EIGENEN Wärmepumpen-Tarif hängt die WP am Hauszähler — ihr Preis ist dann der
+    # des Hauszählers, mit der ganzen Kaskade (gepflegt → gemessen → Zeitfenster → Stamm), also `preis.cent`.
+    # Bis dahin stand hier immer `_komponenten_preis(…, "waermepumpe", …)`; der fällt ohne WP-Tarif auf den
+    # Stammpreis zurück und übersprang den gepflegten bzw. gemessenen Monats-Ø (gemessen: Tarif 30 ct, Monats-Ø
+    # 24 ct ⇒ WP 30, Wallbox 24). Dieselbe Regel wie *Cockpit → Monat* ohne Gerätezeile
+    # (`aktueller_monat/waerme.py`: „Ohne eigenen WP-Tarif gilt der allgemeine Bezugspreis — bei flexiblem Tarif
+    # also der Monatsdurchschnitt"). MIT eigenem WP-Tarif bleibt es bei dessen Kaskade (KONZEPT-FLEX-TARIFE P-6:
+    # eine separat belieferte WP hat ihre eigene) — unverändert.
+    _wp_tarif = resolve_tarif_for_komponente(tarife, "waermepumpe")
+    if _wp_tarif is not None and _wp_tarif is not allgemein:
+        wp_preis_cent = await _komponenten_preis(
+            db, anlage_id, schluessel, tarife, "waermepumpe", stammpreis, cache
+        )
+    else:
+        wp_preis_cent = preis.cent
     return TarifFakten(
         netzbezug_preis_cent=preis.cent,
         netzbezug_preis_herkunft=preis.herkunft,
@@ -129,9 +144,7 @@ async def _lade_tarif(
             else EINSPEISEVERGUETUNG_DEFAULT_CENT,
         ),
         grundpreis_euro_monat=(allgemein.grundpreis_euro_monat or 0.0) if allgemein else 0.0,
-        wp_preis_cent=await _komponenten_preis(
-            db, anlage_id, schluessel, tarife, "waermepumpe", stammpreis, cache
-        ),
+        wp_preis_cent=wp_preis_cent,
         wallbox_preis_cent=wallbox_cent,
         # Der Flex-Ø gilt für den ganzen Zähler — auch für die Wallbox.
         # #412: dieselbe Kaskade wie beim Netzbezug eine Zeile darüber — sonst

@@ -521,6 +521,13 @@ def imd_typ_beitrag(
             eigenverbrauch = einspeisung = 0.0
             bezug_pv = bezug_netz = 0.0
         elif kategorie == "erzeuger":
+            # N-667 (10.10.2026): dieselbe Ersatzgruppe wie der Tag (`sonstiges_feld_reihenfolge('erzeuger')`:
+            # `erzeugung_kwh` vor `verbrauch_sonstig_kwh` vor `verbrauch_kwh`, ein Wert je Gerät). Trägt die Zeile
+            # KEIN `erzeugung_kwh`, ist das Ersatzfeld die Erzeugung — bis dahin las der Monat nur `erzeugung_kwh`
+            # und stand bei 0, während der laufende Monat (aus den Tagen) den Wert zeigte. Eine gepflegte 0 in
+            # `erzeugung_kwh` bleibt 0 (`is None`, nicht truthy).
+            if data.get("erzeugung_kwh") is None:
+                erzeugung = verbrauch
             verbrauch = 0.0
             bezug_pv = bezug_netz = 0.0
         elif kategorie == "verbraucher":

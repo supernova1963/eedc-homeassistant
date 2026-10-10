@@ -21,6 +21,10 @@ Innengeräte kommen im Statistik-Import und im Monatsabschluss an; und eine gel�
 mehr an eine neu angelegte. Neu im Daten-Checker: **„PV – Zähler steht"** nennt einen eingefrorenen PV-Gesamtzähler, wenn
 Einspeisung oder String-Zähler weiterlaufen — die Ursache, wenn *Cockpit → Tag* eine negative Autarkie zeigt.
 
+**Daten und Preise:** Scheitert beim stündlichen Mitschreiben das Speichern für eine Anlage, behalten die anderen ihre
+Stunde; eine Wärmepumpe ohne eigenen Tarif rechnet bei flexiblem Strompreis mit deinem Monatsdurchschnitt statt mit dem
+Tarifpreis; und ein sonstiger Erzeuger, dessen Wert im Ersatzfeld steht, zeigt ihn auch im abgeschlossenen Monat.
+
 ## v4.1.5 — 10. Oktober 2026
 
 **Wandlungsverluste kosten kein Geld mehr, das du nie gespart hast:** Misst deine Anlage ihre Strings mit eigenen

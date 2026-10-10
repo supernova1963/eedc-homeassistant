@@ -602,15 +602,31 @@ async def sensor_snapshot_job() -> None:
             anlagen = result.scalars().all()
 
             for anlage in anlagen:
+                # N-656: eigener SAVEPOINT je Anlage. Alle Anlagen teilen EINE Sitzung, `snapshot_anlage` flusht nur,
+                # committet wird am Ende von `get_session`. Ohne SAVEPOINT ließ ein DB-Fehler beim Speichern (z. B.
+                # „database is locked") die Sitzung im Zustand „Rollback ausstehend" zurück: jede folgende Anlage
+                # scheiterte, der Commit auch — die Stunde fehlte für ALLE Anlagen, auch für die schon geschriebenen.
+                # Mit HA heilt die Lesekaskade das aus der Statistik; MQTT-Stunden sind Live-Werte und kommen nicht
+                # wieder (Entscheid Gernot 10.10.2026: Rollback dort, wo die Daten nicht wiederherstellbar sind).
+                anlage_id = anlage.id
                 try:
-                    n = await snapshot_anlage(db, anlage, zeitpunkt=zeitpunkt)
+                    async with db.begin_nested():
+                        n = await snapshot_anlage(db, anlage, zeitpunkt=zeitpunkt)
                     if n > 0:
                         total_snapshots += n
                         total_anlagen += 1
                 except Exception as e:
-                    logger.debug(
-                        f"Snapshot für Anlage {anlage.id} fehlgeschlagen: "
+                    logger.warning(
+                        f"Snapshot für Anlage {anlage_id} fehlgeschlagen: "
                         f"{type(e).__name__}: {e}"
+                    )
+                    await log_activity(
+                        kategorie="scheduler",
+                        aktion="Sensor-Snapshot fehlgeschlagen",
+                        erfolg=False,
+                        details=f"{type(e).__name__}: {e}",
+                        anlage_id=anlage_id,
+                        db=db,
                     )
                 # HA-Bauform E1: Kanalstatistik NACH dem Bestand, in derselben Sitzung — eigener
                 # SAVEPOINT, Fehler werden dort geloggt und vermerkt, nie hierher durchgereicht.
@@ -817,34 +833,41 @@ async def sensor_snapshot_startup_recovery() -> None:
             result = await db.execute(select(Anlage))
             anlagen = result.scalars().all()
             for anlage in anlagen:
+                # N-656: je Schreibaufruf ein SAVEPOINT — wie im Stundenlauf. Dieser Lauf ist der einzige, der die
+                # MQTT-Stunden der Neustart-Lücke nachholt (`snapshot_anlage` liest auch `mqtt_energy_snapshots`);
+                # ohne SAVEPOINT nahm ein DB-Fehler bei einer Anlage den Nachtrag aller Anlagen mit (Commit am Ende).
+                anlage_id = anlage.id
                 for zp in zeitpunkte:
                     try:
-                        n = await snapshot_anlage(db, anlage, zeitpunkt=zp)
+                        async with db.begin_nested():
+                            n = await snapshot_anlage(db, anlage, zeitpunkt=zp)
                         total_stats += n
                     except Exception as e:
                         logger.debug(
-                            f"Recovery snapshot_anlage Anlage {anlage.id} {zp}: "
+                            f"Recovery snapshot_anlage Anlage {anlage_id} {zp}: "
                             f"{type(e).__name__}: {e}"
                         )
                 # Live-Approximation für laufende Stunde (HA Statistics noch leer)
                 try:
-                    n = await live_snapshot_if_missing(
-                        db, anlage, zeitpunkt=aktuelle_stunde
-                    )
+                    async with db.begin_nested():
+                        n = await live_snapshot_if_missing(
+                            db, anlage, zeitpunkt=aktuelle_stunde
+                        )
                     total_live += n
                 except Exception as e:
                     logger.debug(
-                        f"Recovery live_snapshot Anlage {anlage.id}: "
+                        f"Recovery live_snapshot Anlage {anlage_id}: "
                         f"{type(e).__name__}: {e}"
                     )
                 # 5-Min-Slots des heutigen Tages aus HA short_term nachholen
                 for zp in five_min_slots:
                     try:
-                        n = await snapshot_anlage_5min(db, anlage, zeitpunkt=zp)
+                        async with db.begin_nested():
+                            n = await snapshot_anlage_5min(db, anlage, zeitpunkt=zp)
                         total_5min += n
                     except Exception as e:
                         logger.debug(
-                            f"Recovery 5min Anlage {anlage.id} {zp}: "
+                            f"Recovery 5min Anlage {anlage_id} {zp}: "
                             f"{type(e).__name__}: {e}"
                         )
 

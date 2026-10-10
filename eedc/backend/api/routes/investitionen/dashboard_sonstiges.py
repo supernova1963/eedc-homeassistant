@@ -217,7 +217,12 @@ async def get_sonstiges_dashboard(
             gesamt_sonstige_ausgaben += summen["ausgaben_euro"]
 
             if kategorie == 'erzeuger':
-                gesamt_erzeugung += d.get('erzeugung_kwh', 0)
+                # N-667: dieselbe Ersatzgruppe wie Tag und Monats-Fakten (`imd_typ_beitrag`) — ohne `erzeugung_kwh`
+                # ist das Ersatzfeld die Erzeugung; eine gepflegte 0 führt weiter.
+                gesamt_erzeugung += (
+                    d['erzeugung_kwh'] if d.get('erzeugung_kwh') is not None
+                    else get_sonstiges_verbrauch_kwh(d)
+                )
                 gesamt_eigenverbrauch += d.get('eigenverbrauch_kwh', 0)
                 gesamt_einspeisung += d.get('einspeisung_kwh', 0)
                 preis_gewichte[(md.jahr, md.monat)] = d.get('eigenverbrauch_kwh', 0) or 0

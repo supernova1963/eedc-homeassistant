@@ -136,3 +136,17 @@ def test_sonstiges_kategorien(kategorie, erw_erz, erw_verb):
     )
     assert b.sonstiges_erzeugung == erw_erz
     assert b.sonstiges_verbrauch == erw_verb
+
+
+@pytest.mark.parametrize("daten,erw_erz", [
+    ({"verbrauch_sonstig_kwh": 120.0}, 120.0),                          # nur Ersatzfeld ⇒ es IST die Erzeugung
+    ({"verbrauch_kwh": 80.0}, 80.0),                                     # Legacy-Name, dritter der Gruppe
+    ({"erzeugung_kwh": 0.0, "verbrauch_sonstig_kwh": 120.0}, 0.0),       # gepflegte 0 führt (is None, nicht truthy)
+])
+def test_n667_sonstiges_erzeuger_nur_mit_ersatzfeld(daten, erw_erz):
+    """N-667: der Monat übernimmt die Ersatzgruppe des Tages (``sonstiges_feld_reihenfolge('erzeuger')``).
+    Bis 10.10.2026 las er nur ``erzeugung_kwh`` — ein Erzeuger mit nur dem Ersatzfeld stand im abgeschlossenen
+    Monat bei 0, im laufenden Monat (aus den Tagen) beim Wert."""
+    b = imd_typ_beitrag(_inv("sonstiges", {"kategorie": "erzeuger"}), daten)
+    assert b.sonstiges_erzeugung == erw_erz
+    assert b.sonstiges_verbrauch == 0.0

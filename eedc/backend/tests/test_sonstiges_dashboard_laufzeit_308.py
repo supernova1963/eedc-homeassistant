@@ -55,3 +55,28 @@ async def test_sonstiges_dashboard_respektiert_laufzeit(db):
     # Nur die 12 In-Fenster-Monate: 1.200 kWh, nicht 11.200 kWh.
     assert z["gesamt_erzeugung_kwh"] == 1200.0
     assert z["anzahl_monate"] == 12
+
+
+async def test_n667_hub_erzeuger_nur_mit_ersatzfeld(db):
+    """N-667: der Hub liest die Ersatzgruppe wie Tag und Monats-Fakten — ein Erzeuger, dessen Monatszeile nur
+    `verbrauch_sonstig_kwh` trägt, erzeugt diesen Wert; eine gepflegte 0 in `erzeugung_kwh` führt weiter.
+    Bis 10.10.2026 stand der Hub bei 0, während das Cockpit den Wert zeigte."""
+    anlage = Anlage(anlagenname="N667", leistung_kwp=10.0)
+    db.add(anlage)
+    await db.flush()
+    inv = Investition(
+        anlage_id=anlage.id, typ="sonstiges", bezeichnung="BHKW", anschaffungsdatum=date(2025, 1, 1),
+        parameter={"kategorie": "erzeuger"},
+    )
+    db.add(inv)
+    await db.flush()
+    db.add(InvestitionMonatsdaten(investition_id=inv.id, jahr=2025, monat=1,
+                                  verbrauch_daten={"verbrauch_sonstig_kwh": 120.0}))
+    db.add(InvestitionMonatsdaten(investition_id=inv.id, jahr=2025, monat=2,
+                                  verbrauch_daten={"erzeugung_kwh": 0.0, "verbrauch_sonstig_kwh": 50.0}))
+    await db.flush()
+
+    dashboards = await get_sonstiges_dashboard(
+        anlage_id=anlage.id, strompreis_cent=30.0, einspeiseverguetung_cent=8.0, db=db,
+    )
+    assert dashboards[0].zusammenfassung["gesamt_erzeugung_kwh"] == 120.0
