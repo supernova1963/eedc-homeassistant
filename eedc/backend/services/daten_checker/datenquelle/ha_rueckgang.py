@@ -154,14 +154,17 @@ class HaRueckgangChecks:
         return [CheckErgebnis(
             kategorie=CheckKategorie.HA_ZAEHLER_RUECKGANG.value,
             schwere=CheckSeverity.WARNING,
-            meldung=(f"{len(funde)} Tag(e) mit Rückgang in der Home-Assistant-Statistik — Tag und Monat zeigen "
-                     "dort eine negative Menge"),
+            # N-646 (Glen, #423): „negative Menge" in der Überschrift wurde als Vorzeichen (Entladen) gelesen — die
+            # Überschrift nennt jetzt den gefallenen Zählerstand, der Detailtext sagt, dass es keine Richtung ist.
+            meldung=(f"{len(funde)} Tag(e), an denen ein Zählerstand in der Home-Assistant-Statistik gefallen ist — "
+                     "der Rückgang zieht Tag und Monat nach unten"),
             details=(
                 "An diesen Tagen ist die Summe eines Sensors in der Langzeitstatistik von Home Assistant gefallen, "
                 "statt zu steigen — meist, weil der Wert in Home Assistant nachträglich nach unten angepasst wurde "
                 "oder der Sensor einen kleineren Zählerstand gemeldet hat. eedc übernimmt die Statistik so, wie das "
-                "Energie-Dashboard von Home Assistant sie zeigt — der Rückgang steht deshalb als negative Menge in "
-                f"Tag, Monat und Jahr. Gefunden: {namen}. "
+                "Energie-Dashboard von Home Assistant sie zeigt — der Rückgang steht deshalb als Abzug (negative Menge) in "
+                "Tag, Monat und Jahr. Das ist kein Vorzeichen für Entladen oder Einspeisen: Lade-, Entlade- und "
+                f"Einspeisezähler laufen nur nach oben, jede Richtung hat ihr eigenes Feld. Gefunden: {namen}. "
                 "Lösung in Home Assistant: Entwicklerwerkzeuge → Statistik → den Sensor suchen → beim Symbol "
                 "„Wert anpassen“ die genannte Stunde wählen und die Menge auf den echten Wert setzen. eedc gleicht "
                 "die korrigierte Statistik beim nächsten nächtlichen Abgleich von selbst ab. Hast du den Monat schon "

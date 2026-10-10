@@ -82,7 +82,7 @@ async def test_ein_rueckgang_vor_16_monaten_ist_genau_eine_meldung_mit_menge_und
     (e,) = await _Pruefer(db)._check_ha_rueckgang(a)
     assert e.kategorie == CheckKategorie.HA_ZAEHLER_RUECKGANG.value
     assert e.schwere == CheckSeverity.WARNING
-    assert e.meldung.startswith("1 Tag(e) mit Rückgang")
+    assert e.meldung.startswith("1 Tag(e), an denen ein Zählerstand")   # N-646: Überschrift nennt den Zählerstand, nicht die „negative Menge"
     assert "sensor.netzbezug am 05.06.2025: −540,0 kWh (Stunde ab 14:00)" in e.details
     assert "Wert anpassen" in e.details and "nächtlichen Abgleich" in e.details
     assert "Monatsabschluss neu" in e.details

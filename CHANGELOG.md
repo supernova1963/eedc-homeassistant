@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Daten-Checker „Zählerstände – Rückgang in Home Assistant": die Überschrift nennt den gefallenen Zählerstand, nicht mehr eine „negative Menge".** Ein Anwender las „Tag und Monat zeigen dort eine negative Menge" als Vorzeichen und hielt das Entladen seines Akkus für den gemeldeten Fehler. Die Warnung meinte den Zählerstand: Seine zwei Akku-Zähler waren in der HA-Statistik gefallen, weil die Integration sie nach jedem Neustart bei 0 begann und bis August 2026 mit der Zustandsklasse `total` meldete. Überschrift und Text sagen jetzt, dass ein Lade-, Entlade- oder Einspeisezähler nur nach oben läuft und ein Rückgang kein Entladen ist (#423, kingcap1).
+
 ## [4.1.4] - 2026-10-09 — Verläufe rechnen wie die Kacheln, ein Rückgang der HA-Statistik wird benannt
 
 ### Added

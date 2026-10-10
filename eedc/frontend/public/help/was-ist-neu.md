@@ -9,6 +9,12 @@
 
 ---
 
+## Unreleased
+
+**Daten-Checker:** Die Warnung „Rückgang in Home Assistant" sagt jetzt in der Überschrift, dass ein **Zählerstand gefallen**
+ist, statt von einer „negativen Menge" zu sprechen — das wurde als Vorzeichen für Entladen gelesen. Lade-, Entlade- und
+Einspeisezähler laufen nur nach oben; fällt einer, ist das kein Entladen, sondern ein gesunkener Zählerstand.
+
 ## v4.1.4 — 9. Oktober 2026
 
 **In dieser Version:** die Verlaufs-Diagramme und Monatstabellen der Komponenten-Hubs (Speicher, Wärmepumpe, Sonstiges,

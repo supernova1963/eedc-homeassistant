@@ -575,8 +575,11 @@ Das Gegenstück zum Sprung: Die Summe eines Sensors in der Langzeitstatistik von
 Stunde, statt zu steigen. Meist wurde der Wert in Home Assistant nachträglich nach unten angepasst (*Entwicklerwerkzeuge
 → Statistik → „Wert anpassen"* mit einer zu großen Korrektur oder an der falschen Stunde), oder ein Sensor hat einen
 kleineren Zählerstand gemeldet. Home Assistant bucht das als negative Menge, und eedc übernimmt die Statistik so, wie
-das Energie-Dashboard sie zeigt — der Rückgang steht als negative Menge in Tag, Monat und Jahr, und „Aus HA laden"
-schlägt für den Monat einen zu kleinen oder negativen Wert vor.
+das Energie-Dashboard sie zeigt — der Rückgang steht als Abzug (negative Menge) in Tag, Monat und Jahr, und „Aus HA laden"
+schlägt für den Monat einen zu kleinen oder negativen Wert vor. Das ist **kein Vorzeichen** für Entladen oder Einspeisen:
+Lade-, Entlade- und Einspeisezähler laufen nur nach oben, jede Richtung hat ihr eigenes Feld. Fällt ein Entlade-Zähler,
+ist das kein Entladen, sondern ein gesunkener Zählerstand — typisch nach dem Neustart einer Integration, die den Zähler
+selbst hochrechnet und mit der Zustandsklasse `total` statt `total_increasing` meldet.
 
 Geprüft wird die **ganze** von eedc gespiegelte Statistik, nicht nur die letzten 30 Tage: Ein Rückgang aus einem alten
 Monat trifft jede Sicht und „Aus HA laden" genauso wie ein frischer. Ein täglich zurückgesetzter Helfer ist kein Befund
@@ -587,7 +590,7 @@ steigt die Summe.
 
 | Befund | Schwere | Bedeutung |
 | --- | --- | --- |
-| **N Tag(e) mit Rückgang in der Home-Assistant-Statistik** | ⚠️ WARNING | Je Sensor und Tag die Menge und die Stunde (Beispiel: `sensor.netzbezug am 05.06.2025: −540,0 kWh (Stunde ab 14:00)`). Der Tag ist der, an dem *Cockpit → Tag* die Menge zeigt; die Stunde ab 23:00 gehört dort zum Folgetag und wird mit vollem Datum genannt. |
+| **N Tag(e), an denen ein Zählerstand in der Home-Assistant-Statistik gefallen ist** | ⚠️ WARNING | Je Sensor und Tag die Menge und die Stunde (Beispiel: `sensor.netzbezug am 05.06.2025: −540,0 kWh (Stunde ab 14:00)`). Der Tag ist der, an dem *Cockpit → Tag* die Menge zeigt; die Stunde ab 23:00 gehört dort zum Folgetag und wird mit vollem Datum genannt. |
 
 **Reparatur in Home Assistant:** wie beim Sprung — *Entwicklerwerkzeuge → Statistik* → den Sensor suchen → beim Symbol
 „Wert anpassen" die genannte Stunde wählen und die Menge auf den echten Wert setzen. eedc gleicht die korrigierte
