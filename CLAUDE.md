@@ -25,6 +25,9 @@ Version: [CHANGELOG.md](CHANGELOG.md) (oberster Abschnitt) bzw. `eedc/backend/co
    Konsolidierung, Gernots Streichungen ausstehend). Keine zweite Liste neben dem Register.
    Keine Matrix-Sweeps, keine Beobachtungsliste abarbeiten, keine Refactoring-Serie, kein HA-Bauform-S3, keine Vorhaben aus dem Index.
 2. **Fund nur bei Wirkung:** falsche Zahl, die ein Anwender sieht · Absturz · Datenverlust. Sonst Antwort oder Handgriff.
+   **Die Register-Disziplin gilt unverändert** (Gernot 10.10.): kein Eintrag ohne Analyse am HEAD, drei Tore (gemessen · abgeglichen ·
+   Folge nennbar und „schon gedeckt?"), Klassen-Dreifrage, Band, Einwertung durch den Master und Entscheid Gernot — vorher ist es
+   `verdacht`. Keine Sammelaufnahme, keine Sammelkategorie, kein Doku-Abschnitt ohne Genehmigung. Reduziert ist nur der Bau-Apparat (Nr. 3).
 3. **Ein Päckchen = eine Opus-Sitzung** (3–5 Punkte), ohne Vorlage, ohne Gegenprüfung, ohne Nachmessung, ohne Golden Master,
    ohne neue Matrix-Form, ohne neuen Wächter. Bestehende Wächter und Matrizen laufen in CI mit.
 4. **Fable nur zur Triage** auf Gernots Ruf, kurz.
