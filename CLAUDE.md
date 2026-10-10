@@ -1,582 +1,73 @@
-# CLAUDE.md - Entwickler-Kontext für Claude Code
+# CLAUDE.md — eedc (Konsolidierungs- und Wartungsmodus seit 10.10.2026)
 
-> Für Detail-Dokumentation siehe: [Architektur](docs/ARCHITEKTUR.md) | [Entwicklung](docs/DEVELOPMENT.md) | [Benutzerhandbuch](docs/BENUTZERHANDBUCH.md)
+> Das bisherige, ausführliche CLAUDE.md liegt unter [docs/ARCHIV-CLAUDE-2026-10-10.md](docs/ARCHIV-CLAUDE-2026-10-10.md).
+> Es beschreibt den Prüfprozess (Vorlage → Gegenprüfung → Opus-Bau mit Halten → Nachmessung → Golden Master → Matrix-Form),
+> der am 10.10.2026 **ausgesetzt** wurde (Entscheid Gernot: wirtschaftlich nicht mehr tragbar für ein Solo-Open-Source-Projekt).
+> Was dort als Regel steht, gilt als **Hintergrundwissen**, nicht als Pflicht — außer den hier genannten Punkten.
 
-## Projektübersicht
+## Was eedc ist
 
-**eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
+**eedc** (Energie Effizienz Data Center) — PV-Analyse als HA-Add-on und Standalone. FastAPI + React + SQLite.
+Detail: [Architektur](docs/ARCHITEKTUR.md) · [Entwicklung](docs/DEVELOPMENT.md) · [Berechnungen](docs/BERECHNUNGEN.md) ·
+[ADR-001 Layer](docs/ADR-001-BERECHNUNGS-LAYER.md) · [ADR-002 Invarianten](docs/ADR-002-WURZELMUSTER.md) · [Style-Guide](docs/KONZEPT-STYLE-GUIDE.md).
+Version: [CHANGELOG.md](CHANGELOG.md) (oberster Abschnitt) bzw. `eedc/backend/core/config.py::APP_VERSION`.
 
-**Version:** hier bewusst **keine Zahl** — Versions-SoT ist [CHANGELOG.md](CHANGELOG.md) (oberster released Abschnitt) bzw. `eedc/backend/core/config.py::APP_VERSION`. `release.sh` bumpt CLAUDE.md **nicht**; eine Zahl an dieser Stelle veraltet daher garantiert (sie stand bis 2026-07-27 auf 3.45.5, während v4.0.1 released war).
-
-## Verbundene Repositories
-
-| Repository | Zweck | Technik |
-| --- | --- | --- |
-| **eedc-homeassistant** (dieses) | Source of Truth, HA-Add-on, Website, Docs | FastAPI, React, SQLite |
-| **[eedc](https://github.com/supernova1963/eedc)** | Standalone-Distribution für Nutzer ohne HA | Spiegel von eedc/ |
-| **[eedc-community](https://github.com/supernova1963/eedc-community)** | Anonymer Community-Benchmark-Server | FastAPI, React, PostgreSQL |
-
-**Lokale Pfade:**
-- eedc: `/home/gernot/claude/eedc`
-- eedc-community: `/home/gernot/claude/eedc-community`
-
-**Live:** https://energy.raunet.eu (Community) | https://supernova1963.github.io/eedc-homeassistant/ (Website)
-
-## Git-Workflow (WICHTIG – gilt für alle Sessions und Rechner!)
-
-### Regeln
-
-1. **Immer auf `main` arbeiten** — keine Feature-Branches. Einzelentwickler-Projekt.
-2. **eedc-homeassistant ist Source of Truth** — ALLE Änderungen (backend, frontend, docs, HA-Config) hier machen. Nie direkt in `eedc`.
-3. **`eedc`-Repo wird nur per Release-Script synchronisiert** — kein manuelles Editieren, kein Subtree.
-4. **Versionsnummern + Release** nur wenn der User es explizit anfordert.
-5. **`eedc-community`** ist unabhängig, aber bei Datenmodell-Änderungen beide Repos synchron anpassen.
-
-### Verboten!
-
-- **Direkt im `eedc`-Repo arbeiten** — das ist nur ein Spiegel, wird per Script synchronisiert
-- **`git subtree pull/push`** — wird nicht mehr verwendet
-- **Releases, Tags, Versionsnummern ändern** — nur auf explizite User-Aufforderung
-- **`git push`** — nur auf User-Aufforderung oder über `scripts/release.sh`
-
-### Verzeichnisstruktur
-
-```text
-eedc-homeassistant/           ← Source of Truth
-├── eedc/                     ← Gesamte Anwendung
-│   ├── backend/              ← FastAPI Backend (Python)
-│   ├── frontend/             ← React Frontend (TypeScript)
-│   ├── Dockerfile            ← HA-spezifisch (mit Labels, jq, run.sh)
-│   ├── config.yaml           ← HA Add-on Konfiguration
-│   ├── run.sh                ← HA Container-Startscript
-│   ├── icon.png / logo.png   ← HA Add-on Icons
-│   ├── CHANGELOG.md          ← Kopie von Root (per Script)
-│   ├── docker-compose.yml    ← Für Standalone-Nutzung
-│   └── README.md             ← Projekt-README
-├── website/                  ← Astro Starlight Website
-├── scripts/                  ← Release + Utility Scripts
-├── docs/                     ← Single Source of Truth für Dokumentation
-├── CHANGELOG.md              ← Master-CHANGELOG (hier editieren!)
-├── CLAUDE.md
-└── repository.yaml
-```
-
-## Quick Reference
-
-### Entwicklungsserver starten
-
-```bash
-# Backend (Terminal 1) — Dev-Venv laeuft auf Python 3.11 (= Add-on-Image python:3.11-slim und CI; seit 27.09.2026,
-# vorher 3.12 = System-Python der Box). Neu anlegen: `uv venv --python 3.11 backend/venv && uv pip install --python backend/venv/bin/python -r backend/requirements.txt -r backend/requirements-dev.txt`
-cd eedc && source backend/venv/bin/activate
-uvicorn backend.main:app --reload --port 8099
-
-# Frontend (Terminal 2)
-cd eedc/frontend && npm run dev
-
-# URLs: Frontend http://localhost:3000 | API Docs http://localhost:8099/api/docs
-```
-
-### Gates (vor jedem Commit-Paket vollständig laufen lassen)
-
-```bash
-# Backend — EINE Zone (Europe/Berlin), parallelisiert. Diese Box IST die Berlin-Abdeckung;
-# UTC und Pacific/Auckland fährt `tests.yml` bei jedem Push selbst (zwei Matrix-Jobs, je `-n 4`).
-# ⛔ `-n 3` ist an die EINE Zone gekoppelt und nur dann ein Gewinn: drei Zonen sättigen die
-#   vier Kerne bereits, mit je `-n 3` würde es langsamer und nacheinander schlechter als parallel.
-#   Entweder drei Zonen ODER xdist — nicht beides. ⚠ Das gilt NUR für diese Box: in CI hat jeder
-#   Zonen-Job seinen eigenen Runner, dort ist „Zonen parallel UND xdist" richtig (seit 10.10.2026).
-# Dauer: ≈ 525 s bei 10 228 Proben (gemessen 10.10.2026; `-n 4` bringt 457 s, sättigt aber die Box
-#   für parallele Sitzungen — Entscheid Gernot: `-n 3` bleibt). Die Zeit sitzt im Säen der
-#   Abnahme-Matrizen (je Form einmal), nicht in den Zellen (Median 1 ms) — `plans/vorlage-laufzeit-tests.md`.
-cd eedc && source backend/venv/bin/activate
-python -m pytest backend/tests -q -n 3
-
-# Frontend — lint ZUERST (CI ruft ESLint mit --max-warnings 0), tsc OHNE Pipe
-cd eedc/frontend && npm run lint
-cd eedc/frontend && npx tsc --noEmit          # nie durch `| tail` — $? misst sonst tail
-cd eedc/frontend && npm run test              # faehrt seit E8/M14 ALLE 25 Quelltext-check:* mit
-
-# ⛔ Die frueher hier stehende `for s in check:*`-Schleife ist mit E8/M14 ENTFALLEN (24.08.).
-# Sie lief 25 Pruefer ein zweites Mal, die `npm run test` darueber schon gefahren hat — genau
-# der Doppellauf, den dasselbe Paket aus `tests.yml` entfernt hat, nur lokal. Seit M14 hat
-# JEDER check:* aus package.json einen Vitest-Wrapper unter `src/test/`; dass das so bleibt,
-# haelt `src/test/check-einhaengung.test.ts` fest (er meldet rot, sobald einer von `npm test`
-# aus nicht mehr erreichbar ist). Ein rot gemeldeter Pruefer wird im Vitest-Protokoll beim
-# Namen genannt — die Schleife lieferte nichts, was dort fehlt.
-# Ausgenommen bleibt `chart-audit`: er braucht eine laufende Box und steht im eigenen
-# Kasten unter der Liste.
-# ⭐ Seit 06.09. gilt das NUR NOCH FUER IHN. Die Park-Doktrin haengt an keinem Livetest mehr:
-#   `check:park-gate` und `check:park-idliste` pruefen sie am Quelltext und laufen mit
-#   `npm run test`. Der frueher hier stehende Auslöser-Block (Skript `park-ausloeser.sh`)
-#   ist damit ersatzlos entfallen — es gibt nichts mehr auszuloesen.
-
-# Doku-Spiegel ans ENDE, danach inhaltlich per diff prüfen (nicht nur Exit-Code)
-./scripts/sync-help.sh && cd website && npm run build
-```
-
-> ⚠ **Ein Prüfer zählt sich nicht selbst — eine Gegenprobe gehört dazu.** Ein grüner Lauf
-> beweist nur dann etwas, wenn der Prüfer rot melden *kann*: für `check:design` muss der
-> Sprengsatz **außerhalb** `lib/colors.ts` sitzen (dort ist die Hex-Farbe erlaubt, die Gegenprobe
-> greift sonst nicht — gemessen 11.08.). Rückbau per **Dateikopie**, nie `git checkout --`, wenn
-> ungecommittete Arbeit im Baum liegt.
->
-> ⛔ **Und vor jedem Lauf nach einer Sprengsatz-Änderung UND nach jedem Rückbau:**
-> `find . -name __pycache__ -prune -exec rm -rf {} +` (gemessen 04.09., **N-389**). Python hält ein
-> `.pyc` für gültig, solange Quell-**mtime** (in **Sekunden**) und Quell-**Größe** stimmen — eine
-> gleichlange Änderung in derselben Sekunde (die typische Sprengsatz-Form `20`→`45`) wirkt daher
-> nicht, und `diff -q` sagt trotzdem „bitgleich". **`touch` genügt nicht** (setzt dieselbe Sekunde),
-> **`python -B` genügt nicht** (schreibt kein Bytecode, *liest* aber weiter). Die teure Richtung ist
-> nicht der stumme Rückbau, sondern der **scharfe Sprengsatz, der still bleibt** und als „nicht
-> diskriminierend" protokolliert wird.
-
-> ⚠ **`npm run lint` gehört dazu, seit der CI-Lauf zu v4.0.13 daran gescheitert ist** (12.08.): Der Workflow ruft ESLint mit `--max-warnings 0` auf, die Liste hier kannte ihn nicht — eine `react-hooks/exhaustive-deps`-**Warnung** aus `62c680b9` lief damit durch alle lokalen Gates und machte den Tests-Lauf **nach** dem Push rot. Ein Prüfer, den nur CI kennt, fällt zwangsläufig zu spät auf.
->
-> ⚠ **Bei allem Zeitbezogenen zusätzlich `TZ=UTC python -m pytest backend/tests -q` fahren** — seit dem CI-Lauf zu v4.0.14 (13.08.): **Diese Box steht in `Europe/Berlin`, der GitHub-Runner in UTC.** Zwei Fälle aus `test_scheduler_publish_takt.py` waren lokal grün und in CI rot, ohne dass am Produktcode etwas fehlte: `CronTrigger` ohne `timezone`-Argument rechnet in der Zone des **Prozesses**, derselbe korrekte Feuerzeitpunkt heißt dort 10:00:05 und hier 08:00:05. **Ein grüner lokaler Lauf ist auf dieser Box kein grüner CI-Lauf.** Dieselbe Klasse wie der `lint`-Befund darüber — ein Prüfer, den nur CI kennt. ⚑ **Seit 23.08. steht eine DRITTE Zone daneben, und das ist die Antwort auf N-167** — Proben, die die echte **Uhr** statt einer gestellten lesen (vier von 24 Stunden rot ohne Code-Änderung). Berlin und UTC trennen nur **zwei** Stunden; eine stundenabhängige Wette kann darin dauerhaft unentdeckt bleiben. `Pacific/Auckland` liegt 10–12 Stunden entfernt, trifft verlässlich eine andere Stunde und regelmäßig einen anderen **Tag**. ⚠ **Sie läuft auch in CI** (`tests.yml`, Matrix-Job `backend-tests (Pacific/Auckland)`) — eine Zeile, die nur in dieser Liste steht, ist eine Gedächtnisstütze und kein Wächter; genau der `lint`-Befund von oben, nur in der Gegenrichtung. ⭐ **Die Arbeitsteilung, am 23.08. erstmals gemessen:** CI fährt **UTC** (Runner-Default) **und Auckland** bei jedem Push, der `eedc/backend/**` oder `eedc/frontend/**` berührt — **`Europe/Berlin` läuft NUR hier**, diese Box *ist* die Berlin-Abdeckung. ⛔ **Hier stand bis 2026-08-24: „Trotzdem alle drei lokal, und zwar parallel — nacheinander 460 s, parallel 169 s, gegenüber einer einzigen Zone (168 s) also eine Sekunde."** **Diese Zahl war falsch, und sie hat achtzehn Tage lang eine Entscheidung getragen, die sie nicht tragen konnte.** Am 24.08. neu gemessen, kalt und warm identisch: drei Zonen parallel **156 s**, eine Zone **126 s** — die Differenz ist **31 s, nicht 1 s**. Der Parallelwert von damals stimmt fast auf die Sekunde; auseinander läuft nur die **Grundlinie** (168 gegen 126), sie wurde offenbar unter Last erhoben. *Eine Vergleichszahl ist nur so gut wie ihre Grundlinie — wer eine Differenz notiert, notiert beide Messungen und die Bedingungen.* ⭐ **Die Folge (Entscheid Gernot, 24.08.): lokal nur noch `Europe/Berlin`, dafür mit `-n 3` (damals 126 s → 62 s; seit den Abnahme-Matrizen vom Oktober ≈ 525 s, gemessen 10.10.2026).** UTC und Auckland laufen ohnehin in CI, lokal geht also **keine Abdeckung** verloren — nur die Zuordenbarkeit eines zonenspezifischen Fehlschlags zu einem einzelnen ungepushten Commit. ⛔ **Die Kopplung gehört dazu:** `-n 3` zahlt sich **nur** bei einer Zone aus. Drei Zonen sättigen die vier Kerne bereits; mit je `-n 3` wird es langsamer, nacheinander mit `-n 3` sind es 3 × 62 = 186 s und damit schlechter als heute. **Gegenprobe gefahren** (23.08.): ein Test, der nur in Auckland fällt, macht das Sammel-Ergebnis rot — die Auswertung fragt jeden Prozess einzeln ab. **Am 23.08. über sieben Zonen gemessen** (Berlin · UTC · Bogotá 00:11 · Kolkata · Auckland · Honolulu · Marquesas): kein Fehlschlag, sechs verschiedene lokale Stunden, beide Seiten eines Datumswechsels — die Stichprobe enthält mit **05:00 und 17:00** zwei der vier Stunden des Ursprungsfalls, hätte ihn also gefangen. ⚠ **Was sie NICHT erreicht:** die Kalenderkanten (Monatsende, Jahreswechsel, Schaltjahr, Zeitumstellung) — dafür bräuchte es eine gestellte Uhr (`freezegun`). ⛔ **Am 23.08. entschieden (Gernot): `freezegun` wird NICHT aufgenommen** — auch nicht als reine Dev-Abhängigkeit. Die Kalenderkanten bleiben damit ungemessen, und das ist die getroffene Wahl, **keine offene Frage und keine Vertagung**. Hier stand bis dahin „bewusst nicht entschieden" — genau diese Formulierung hat die Frage in jeder neuen Sitzung erneut aufgemacht. **Nicht neu aufrollen**; wer es doch will, bringt eine neue Messung mit, nicht das alte Argument.
-
-> ### ⛔ Die Zeitzone der App wird NICHT festgenagelt (Entscheid Gernot, 2026-08-24)
->
-> **Frage war:** eedc ist ein DACH-Produkt und wird nie international — warum nicht beim Start
-> alles hart auf `Europe/Berlin` heben und die Zonenfrage damit erledigen?
->
-> **Antwort: weil beide Auslieferungswege die Zone bereits setzen und ein Checker den Rest
-> abfängt. Es gäbe niemanden zu retten.** Gemessen am 24.08.:
->
-> * **Standalone** — `docker-compose.yml:11` setzt `TZ=Europe/Berlin`.
-> * **HA-Add-on** — der Supervisor reicht die in HA eingestellte Zone durch. Das steht nicht nur
->   in der HA-Doku, sondern im eigenen Produkt: der Daten-Checker sagt es dem Anwender wörtlich
->   („Das Add-on übernimmt die Zeitzone beim Start von Home Assistant").
-> * **Abweichung** — `daten_checker/datenquelle/zeitzone.py` (Kategorie `ZEITZONE_ABWEICHUNG`) holt
->   `/config` von HA, vergleicht `time_zone` mit der eigenen und warnt samt Reparaturweg.
->
-> **Was die Prozesszone überhaupt entscheidet, und was nicht.** HA liefert absolute
-> Unix-Zeitstempel (`start_ts` aus der recorder-DB) — die sind zonenfrei. Ein Messwert
-> verschiebt sich **nie**. Die Zone entscheidet allein, in welchen Tages- und Stundentopf er
-> fällt (`datetime.fromtimestamp(start_ts)`, `ha_statistics_service.py:946`; 177 solcher
-> prozesslokalen Zugriffe in 77 Produktivdateien, **0** davon auf Modulebene).
->
-> **Der geltende Vertrag lautet „eedc folgt HA", und das ist Absicht.** Ein harter Pin würde ihn
-> umkehren: Wer HA bewusst auf eine Nicht-CET-Zone stellt, sähe eedc und das HA-Energiedashboard
-> dann mit **verschiedenen Tagesgrenzen** — heute stimmen sie überein —, und der Checker oben
-> würde dauerhaft mit einem Ratschlag warnen, der nichts mehr bewirkt.
->
-> **Nicht neu aufrollen.** Weder als harter Pin noch als `setdefault`. Wer es doch will, bringt
-> einen **Anwender** mit, den es trifft — nicht das Argument „dann wäre die Zonenfrage weg".
-> Dieselbe Bauform wie der `freezegun`-Entscheid darüber: entschieden, begründet, geschlossen.
-
-Die Soll-Zahlen (pytest/Vitest) stehen **nicht hier**, sondern im laufenden Master-Register unter `~/.claude/plans/` — sie ändern sich mit jedem Paket. `check:form-controls` meldet „1 offen (WelcomeStep.tsx)" als dokumentierte Baseline.
-
-> ### ⛔ Der Park-Leertest ist abgeschafft — die Doktrin läuft jetzt VOR dem Commit (Entscheid Gernot, 06.09.)
->
-> **`check:park-leertest` gibt es nicht mehr**, ebenso wenig `scripts/park-ausloeser.sh` und die
-> Auslöser-Regel. An seiner Stelle stehen zwei Quelltext-Wächter, die mit `npm run test` laufen:
->
-> | Wächter | Regel |
-> | --- | --- |
-> | **`check:park-gate`** | **R1** jeder Block, der Park-Elemente rendert, hängt gegated im Bau · **R2** jede `<FokusKachel>` mit parkbaren Kindern versteckt sich bei Voll-Park |
-> | **`check:park-idliste`** | **L1** jede ID einer Gate-Liste hat eine Erzeugungsstelle · **L2** eine ID in einer FEST deklarierten Liste wird auch unbedingt gerendert |
->
-> **Was ihn gekippt hat, ist er selbst.** Am 06.09. meldete er **grün über ein Park-Element, das er
-> nie gesehen hat** (`komp-wp-chart-bauart` auf `#/community/komponenten` — eine Sicht, die in seiner
-> `ROUTES`-Liste fehlte). Gemessen: er besuchte **eine** der **sechs** Community-Sichten, während
-> **12 der 17** Auto-Hide-Dateien dort liegen. *Er vermied eine gepflegte ID-Liste und pflegte dafür
-> eine Routen-Liste — dieselbe Drift, eine Ebene höher.*
->
-> ⭐ **Der Ersatz hat beim ersten Lauf drei Befunde gefunden, die der Livetest nie fand** — zwei
-> davon treffen Anwender: die **Zählerstände** ohne Verlauf (Cockpit Tag/Monat/Jahr; sein
-> Demo-Datensatz *trägt* einen Verlauf, er konnte den Fall strukturell nicht sehen) und die
-> **Top-10-Liste** für jeden, der nicht in den Top 10 steht (`#/community/statistiken`, eine der
-> fünf Sichten, die er nie besuchte). Beide sind die Klasse `ueb-schwaechen`: eine feste Liste
-> verlangt eine ID, die nur bedingt gerendert wird ⇒ `alleGeparkt` wird nie wahr ⇒ leerer Block.
->
-> ⚠ **Die ehrliche Grenze, die dazugehört:** Ein Quelltext-Wächter sieht keine Render-Geometrie.
-> Bleibt ein Block leer, weil eine Kind-Komponente unter bestimmten Daten nichts *zeichnet*, obwohl
-> ihre IDs registriert sind, fängt ihn keiner der beiden. Dafür stehen die Render-Proben
-> (`src/test/park-huelle-leer.test.tsx`, `pages/community/waermepumpeBauartVergleich.test.tsx`) —
-> die decken ab, wofür jemand eine Probe schreibt, nicht den ganzen Baum. **Der Tausch ist
-> trotzdem ein Gewinn, und zwar gemessen:** eine von sechs Community-Sichten und fünf Läufe in 150
-> Commits gegen baumweite Deckung bei jedem `npm test`.
->
-> ⛔ **Nicht neu aufrollen** — weder den Livetest zurückholen noch eine Auslöser-Regel bauen. Wer
-> es doch will, bringt einen **Fall** mit, den die vier Wächter nicht sehen. Die Vorgeschichte der
-> vier gefallenen Auslöser-Fassungen (Ermessen → „Datei enthält" → „Zeile enthält" → „Menge wächst")
-> steht in `~/.claude/plans/EINSTIEG-archiv-bis-v4.0.39.md` und im Journal; sie ist mit der
-> Abschaffung erledigt und braucht hier keinen Platz mehr.
-
-**`check:chart-audit`** (35 s) braucht eine laufende Demo-Box und ist damit das **einzige**
-Laufzeit-Gate. Er ist an kein Auslöser-Muster gebunden — wer ihn nicht fährt, sagt das ausdrücklich.
-
-> ⭐ **Seit 06.09. wartet er auf ein KRITERIUM statt auf eine Frist** (N-330): kein Skeleton mehr im
-> DOM **und** die `.recharts-wrapper`-Zahl über zwei Ticks stabil. Vorher stand dort
-> `waitForTimeout(700)` + `(900)`, und dieselbe Box lieferte bei unverändertem Code **43 · 43 · 44**
-> Charts — alle drei Läufe Exit 0 und grün. *Eine Wartezeit ist eine Wette auf die langsamste
-> Maschine.* Im selben Zug sind seine Routen auf die **kanonischen prefix-freien** Pfade umgestellt:
-> zwei der sechzehn (`komponenten/pv-module`, `komponenten/balkonkraftwerk`) sind keine Hub-Keys und
-> landeten über den Unbekannt-Redirect auf der **ersten** Komponenten-Sicht — er maß sie dreifach
-> und die **BKW-Sicht nie**, meldete aber „16 Sichten geprüft".
-
-### Refactoring großer Dateien — das Kriterium ist die Funktion, nicht die Datei (Entscheid Gernot, 19.09.2026)
-
-> **`wc -l` ist kein Kriterium.** Gemessen am 19.09.: `core/berechnungen/waermepumpe_kennzahl.py` hat 1 809 Zeilen, davon
-> **78 % Docstring und Kommentar** — netto 407 Codezeilen, Rang 47 von 435 Backend-Dateien. Sie war als „größte Datei" für
-> Vorlage 11 vorgesehen; **zurückgestellt, nicht neu aufrollen.** Die Begründung im Modul ist die Substanz (ADR-001 verlangt
-> sie im Docstring); eine Bruttogrenze bestraft genau das.
->
-> **Zwei Schwellen, beide netto gemessen** — Werkzeug `~/.claude/plans/refactoring-werkzeug/komplexitaet.py` (lädt radon und
-> cognitive-complexity beim ersten Lauf selbst nach `pylib/`; auf dieser Box hat **kein** Python ein `pip`):
->
-> * **Funktion: kognitive Komplexität > 50** (SonarQubes Metrik; radon nennt dasselbe Rang F). Stand 19.09.: **80 Funktionen
->   in 66 Backend-Dateien**, 10 in 10 Frontend-Dateien (ESLint `complexity`). Reihenfolge absteigend, die 28 über 100 zuerst —
->   Liste, Rollen und Bauform in `~/.claude/plans/auftrag-refactoring-funktionen.md`.
-> * **Datei: netto > 900 Codezeilen** (ohne Kommentar, Docstring, Leerzeile). Stand 19.09.: 5 Dateien. Zum Vergleich: Sonar
->   750 netto, Pylint 1 000 brutto — bei beiden ein Code Smell „Major", nie ein Blocker. **Außen bewertet niemand die
->   Dateilänge, aber jeder die Funktionskomplexität** (Sonar 15, Pylint 12 Verzweigungen, ~5 % unserer Funktionen liegen darüber).
->
-> ⛔ **Gemessen an der eigenen Serie (Vorlagen 1–10):** der Schnitt in Orchestrator + Phasen-Module hat die Funktions**länge**
-> um rund zwei Drittel gesenkt, die **Verzweigungen nicht** — `get_aktueller_monat` 108 → 128, `get_finanz_prognose` 97 → 102.
-> Ausgelagert wurde der lineare Teil, der verzweigte blieb. **Eine Phase ist erst ausgelagert, wenn ihre Verzweigungen
-> mitgehen.** Deshalb ist das Gate je Vorlage die kognitive Komplexität der Funktion **vorher/nachher** mit Zielwert im
-> Auftrag — zusätzlich zu Golden Master, voller Suite und Lab-rc, nicht statt ihrer.
-
-### Release-Workflow (ein Script für alles!)
-
-> ### ⭐ VOR `release.sh`: das Add-on im HAOS-Lab installieren und durchklicken (seit 09.09.)
->
-> **Das Lab existiert genau dafür** — VM 214 `haos-lab` auf `.198`, erreichbar unter
-> `10.100.1.167` (HAOS + Mosquitto + echte Recorder-DB + Winterborn- und Demo-Anlage). Es fängt die
-> Klasse „ausgelieferte Regression", die kein `pytest` und kein `check:*` sieht, weil sie erst beim
-> Einlesen durch einen echten Supervisor oder beim Klicken entsteht. **v4.0.44 ging ohne diesen
-> Durchlauf raus** — das ist der Grund, warum die Praxis jetzt hier steht und nicht in einem Projektplan.
->
-> ```bash
-> # 1. Den GETAGGTEN Stand spiegeln, nicht HEAD (HEAD trägt oft schon Folge-Commits)
-> git archive <tag> eedc/ | tar -x -C /tmp/rc && \
->   rsync -a --delete --exclude config.yaml.original /tmp/rc/eedc/ root@10.100.1.167:/addons/eedc/
-> # 2. ⛔ GATE: die image:-Zeile MUSS in der Lab-Kopie fehlen, sonst zieht der Supervisor das
-> #    veröffentlichte ghcr-Image und man klickt das ALTE Release durch.
-> ssh root@10.100.1.167 'cp /addons/eedc/config.yaml /addons/eedc/config.yaml.original;
->   sed -i "/^image: /d" /addons/eedc/config.yaml; grep -c "^image:" /addons/eedc/config.yaml'   # muss 0 sein
-> # 3. ⚠ `ha store reload` — `ha addons reload` genügt NICHT, der Store-Cache bleibt sonst stehen
-> ssh root@10.100.1.167 'ha store reload && sleep 8 && ha apps update local_eedc'
-> # 4. Prüfen (lokaler Build ≈ 30 s; im Log muss `local/amd64-addon-eedc:<version>` stehen)
-> ssh root@10.100.1.167 'curl -s http://local-eedc:8099/api/health;
->   curl -s http://local-eedc:8099/api/ha-statistics/status'
-> ```
->
-> **Bei einem RC ist die Versionsnummer schon gebumpt** — sonst sieht der Supervisor kein Update.
-> Wer den Durchlauf auslässt, sagt das ausdrücklich; er ist an kein Auslöser-Muster gebunden.
-
-> ### Die Galerie-Bilder altern still — vor `release.sh` auf Nachfrage neu aufnehmen (seit 29.09.)
->
-> `scripts/galerie-screenshots.mjs` erzeugt die fünfzehn Ansichten der öffentlichen
-> [Bildergalerie](https://supernova1963.github.io/eedc-homeassistant/galerie/) (hell und dunkel, WebP)
-> in einem Lauf, rund 16 Minuten. **Vor einem Release anbieten, nicht stillschweigend überspringen** —
-> ⛔ die vorigen Bilder standen vom 23.07. bis 28.09. auf dem v4.0.0-Stand, ohne dass es auffiel: Sie
-> waren von Hand gemacht, und was keinen Anker im Ablauf hat, wird nicht erneuert. Gefahren wird der
-> Lauf **auf Nachfrage** (nicht jedes Release ändert die Oberfläche); der Kopf-Docstring des Skripts
-> sagt, wie die Box aufgesetzt wird.
->
-> ⚠ **Zwei Fallen, beide gemessen (29.09.):** Der Lauf braucht ein Bundle mit `VITE_DEMO_DEFAULT=true`
-> **und** den Demo-Modus der Live-Route — ohne ihn zeigt Cockpit → Live nur „0 W". Und
-> `reducedMotion: 'reduce'` am Browser-Kontext (gegen halb gezeichnete Diagramme) schaltet über
-> `detectLiteDefault()` den **Energiefluss auf „Lite"**; das Skript belegt den Schalter deshalb vor.
-> Danach das Bundle ohne Flag zurückbauen.
-
-```bash
-cd /home/gernot/claude/eedc-homeassistant
-./scripts/release.sh <version>   # Zielversion, z. B. die nächste Patch-Nummer laut CHANGELOG
-```
-
-Das Script macht automatisch:
-1. Bumpt Version in allen 5 Dateien
-2. Kopiert CHANGELOG nach eedc/
-3. Committed + taggt + pusht eedc-homeassistant
-4. Synchronisiert backend/ + frontend/ nach eedc-Standalone
-5. Committed + taggt + pusht eedc
-
-> ⚑ **Bricht `release.sh` beim Tag-Push ab** (`cannot lock ref … reference already exists`),
-> endet es wegen `set -euo pipefail` dort und überspringt Standalone-Sync **und**
-> `warte-auf-image.sh` — der Release-Workflow hört auf das Push-Event und läuft dann nie.
-> **Fix:** `git push --delete origin vX` und identisch neu pushen; Schritt 5–6 aus
-> `release.sh` (Zeilen 314–404) nachfahren. *Einmal aufgetreten (v4.0.38, 02.09.), Ursache
-> ungeklärt, seither vier saubere Läufe (v4.0.39 · .41 · .43 · .44) — nicht neu aufrollen.*
->
-> ⚠ **Prüfer-Hinweis:** Ein `curl` gegen die GHCR-Manifest-API **ohne `Accept`-Header antwortet
-> 404**, auch wenn das Image existiert — wer so misst, meldet ein fehlendes Image, das da ist
-> (am 02.09. genau so passiert). Immer mit
-> `Accept: application/vnd.oci.image.index.v1+json,…` und **immer mit Positivkontrolle gegen
-> die Vorgängerversion**.
-
-**Versionsdateien (5 Stück, alle in eedc/):**
-
-| Datei | Zweck |
+| Repo | Rolle |
 | --- | --- |
-| `backend/core/config.py` | APP_VERSION (Backend) |
-| `frontend/src/config/version.ts` | APP_VERSION (Frontend) |
-| `config.yaml` | HA Add-on Version |
-| `run.sh` | Startup-Banner |
-| `Dockerfile` | `io.hass.version` Label |
+| **eedc-homeassistant** (dieses, `/home/gernot/claude/eedc-homeassistant`) | Source of Truth, HA-Add-on, Website, Docs — **hier arbeiten** |
+| **eedc** (`/home/gernot/claude/eedc`) | Standalone-Spiegel, **nur** per `scripts/release.sh` |
+| **eedc-community** (`/home/gernot/claude/eedc-community`) | Community-Server, eigenes Repo; Deploy nur mit einem Add-on-Release |
 
-> **WICHTIG:** HA Add-ons lesen `eedc/CHANGELOG.md`. Das Release-Script kopiert automatisch.
+## Arbeitsmodus (Entscheid Gernot 10.10.2026)
 
-### Website (Astro Starlight)
+1. **Eingang nur Melder** (GitHub-Issues, simon42-Forum T89667, photovoltaikforum T258098, community-smarthome T10057, PN) **und
+   die Konsolidierungsliste** `~/.claude/plans/KONSOLIDIERUNG-LISTE-2026-10.md` (von Gernot triagiert: beheben · dokumentieren · verwerfen).
+   Keine Matrix-Sweeps, keine Beobachtungsliste abarbeiten, keine Refactoring-Serie, kein HA-Bauform-S3, keine Vorhaben aus dem Index.
+2. **Fund nur bei Wirkung:** falsche Zahl, die ein Anwender sieht · Absturz · Datenverlust. Sonst Antwort oder Handgriff.
+3. **Ein Päckchen = eine Opus-Sitzung** (3–5 Punkte), ohne Vorlage, ohne Gegenprüfung, ohne Nachmessung, ohne Golden Master,
+   ohne neue Matrix-Form, ohne neuen Wächter. Bestehende Wächter und Matrizen laufen in CI mit.
+4. **Fable nur zur Triage** auf Gernots Ruf, kurz.
+5. **Commit je Päckchen mit expliziten Pfaden** (nie `git add -A`); **Push erlaubt** (CI prüft, 9 min); Release gebündelt
+   (wöchentlich im Konsolidierungsmonat, danach quartalsweise oder bei Melder-Fix) per `scripts/release.sh <version>` auf Gernots Wort.
+6. **Nichts öffentlich ohne Go** — Issue-Kommentare, Foren-Texte, #110-Änderungen legt die Session vor, Gernot entscheidet (GitHub
+   darf die Session nach dem Go selbst posten; Foren postet Gernot).
+7. **Doku gehört zum Fix:** CHANGELOG `[Unreleased]`, `docs/WAS-IST-NEU.md`, betroffenes Handbuch; `./scripts/sync-help.sh` spiegelt.
+
+## Entwicklung und Gates
 
 ```bash
-cd website && npm run dev    # http://localhost:4321/eedc-homeassistant/
-cd website && npm run build  # Synct automatisch docs/ → website/ (prebuild: website/scripts/sync-docs.sh)
+cd eedc && source backend/venv/bin/activate          # Python 3.11
+uvicorn backend.main:app --reload --port 8099         # Backend;  Frontend: cd eedc/frontend && npm run dev
+# Gate je Päckchen (lokal):
+python -m pytest backend/tests/<berührte Dateien> -q  # plus die Wächter: backend/tests/test_wurzelmuster_konformitaet.py
+cd eedc/frontend && npm run lint && npx tsc --noEmit && npm run test
+./scripts/sync-help.sh && (cd website && npm run build)   # nur bei Doku-Änderung
+# Volle Backend-Suite (≈ 9 min, -n 3) vor jedem Release; CI fährt sie bei jedem Push in UTC und Pacific/Auckland (je -n 4).
 ```
 
-**Technik:** Astro Starlight (v0.37), GitHub Pages, German-only
-**Deployment:** Automatisch via `.github/workflows/deploy-website.yml` bei Push auf `main`
-**Single Source of Truth:** Dokumentationen in `docs/` pflegen, `website/scripts/sync-docs.sh` (npm-`prebuild`, läuft **im `website/`-Verzeichnis**) generiert Website-Versionen mit Frontmatter.
-
-**Starlight-Hinweis:** Invertierte Farbskala im Light Mode! `--sl-color-white` = Text, `--sl-color-black` = Hintergrund. Grau-Skala in `custom.css` definieren.
-
-## Architektur-Prinzipien
-
-1. **Standalone-First:** Keine HA-Abhängigkeit für Kernfunktionen
-2. **Datenquellen getrennt:** `Monatsdaten` = Zählerwerte, `InvestitionMonatsdaten` = Komponenten-Details
-3. **Legacy-Felder NICHT verwenden:** `Monatsdaten.batterie_*` und das computed-Trio (`eigenverbrauch_kwh`, `direktverbrauch_kwh`, `gesamtverbrauch_kwh`) → erst `InvestitionMonatsdaten`, Legacy nur als expliziter Fallback
-4. **`Monatsdaten.pv_erzeugung_kwh` ist KEIN Legacy-Feld, aber auch keine Lesequelle** (Gernot 2026-07-29, ADR-002/**P7**): manuelles bzw. importiertes Anlagen-Aggregat und **ausschließlich Eingang** von `resolve_pv_je_modul` — geladen über `services/pv_monatswerte.py`, nie direkt verrechnet. Einzelwerte und ihre Summe haben immer Vorrang; das Aggregat füllt nur die Lücken der Module **ohne** eigenen Wert. Programmatisch füllen bleibt verboten. Der baumweite Wächter ist `test_wurzelmuster_konformitaet.py::test_p7_*` (Baseline 0). Detail: [BERECHNUNGEN §1](docs/BERECHNUNGEN.md), [ADR-002](docs/ADR-002-WURZELMUSTER.md)
-5. **Die Monatszeile wird genau einmal aufbereitet** (ADR-002/**P10**): `services/monats_fakten/` löst auf, filtert (`aktiv` · Anschaffung · Stilllegung · Dienstwagen) und **ruft** die Layer-Formeln — keine Read-Site faltet `InvestitionMonatsdaten` mehr selbst. Verallgemeinerung von P7 von einer Größe auf die ganze Zeile; Auslöser war die Drift-Inventur 2026-07-31 (sechs Befunde, **kein** Rechenfehler im Layer). **Seit S5 baumweit gewächtert** (`test_wurzelmuster_konformitaet.py::test_p10_*`, funktions-granular, Baseline 0); **der Bauplan ist mit S6 abgearbeitet**, und mit **C1d** (04.08.) steht `P10_NOCH_NICHT_MIGRIERT` auf **0** — **die anlagenweite Restschuld ist getilgt**, der Test hält die Liste jetzt leer statt sie zu deckeln. Detail: [KONZEPT-MONATS-FAKTEN](docs/KONZEPT-MONATS-FAKTEN.md), [ARCHITEKTUR §7](docs/ARCHITEKTUR.md)
-
-## Drei SoT-Regime — nicht mischen
-
-| Dokument | Regelt | Maschinelles Gegenstück |
-| --- | --- | --- |
-| [`docs/KONZEPT-STYLE-GUIDE.md`](docs/KONZEPT-STYLE-GUIDE.md) (Regel 0/0a) | **Darstellung** — Farben, Komponenten, Typografie, Chart-Konventionen | die `check:*`-Skripte im Frontend (`eedc/frontend/scripts/check-*.mjs`) |
-| [`docs/ADR-001-BERECHNUNGS-LAYER.md`](docs/ADR-001-BERECHNUNGS-LAYER.md) | **Schichtung** — *wo* eine Aggregat-Formel definiert wird (`core/berechnungen/`) | `backend/tests/test_berechnungs_layer_konformitaet.py` |
-| [`docs/ADR-002-WURZELMUSTER.md`](docs/ADR-002-WURZELMUSTER.md) | **Invarianten** — *was* ein Wert behaupten darf und woher er kommen muss (P1–P10) | `backend/tests/test_wurzelmuster_*.py` |
-
-> **Backend-Wächter sind pytest, keine `check:*`-Skripte** — alle `check:*` sind Frontend-Node-Skripte. **Vier** Ausnahmen mit eigener Begründung, alle bewachen die Client-Hälfte einer Backend-Regel: `check:kennwert-roh` für ADR-002/P3-a, `check:co2-roh` für ADR-001/DI-2 (der Client konstruiert keine CO₂-Menge; `CO2_FAKTOR_KG_KWH` darf nur noch *angezeigt* werden), `check:cop-roh` für ADR-002/P12 (keine Arbeitszahl im Client) und `check:bauart-roh` für ADR-002/P13 (die Bauart einer Wärmepumpe entscheidet keine Größe — SOLL Wärme/Klima R1; jede Datei, die `wp_art` liest, ist klassifiziert).
->
-> ADR-002 trägt die Pflicht-Spalte **„gesichert durch"** mit der Unterscheidung **Wächter** (baumweit, fängt auch eine Stelle, die es heute noch nicht gibt) und **Regression** (schützt nur die namentlich aufgerufenen Stellen). Wer die Spalte fortschreibt, trägt die Art der Deckung mit ein — eine Regel ohne Code-Beleg gilt als nicht gesichert.
->
-> **Flächen-Konzept Flex-Tarife:** [`docs/KONZEPT-FLEX-TARIFE.md`](docs/KONZEPT-FLEX-TARIFE.md) — welchen Preis eedc einer Kilowattstunde zuordnet, auf welcher Ebene, aus welcher Quelle (Slot · Tag · Monat; Kaskade gepflegt → gemessen → Zeitfenster → Stamm; EV-Ersparnis mit dem Preis der vermiedenen Stunden). Abgenommen und gebaut 18.09.2026.
->
-> **Flächen-Konzept Wärme/Klima:** [`docs/KONZEPT-WAERME-KLIMA.md`](docs/KONZEPT-WAERME-KLIMA.md) — Heizen · Warmwasser · Kühlen an einem Ort (Grundsatz R1/R2, Erfassungs-Kanon K1–K5, Kennzahlen, Sichten, #263 als Kapitel 8, Wächter-Tabelle mit derselben Spalte); es **setzt die drei Regime oben um** und ersetzt keines.
-
-## Design-Konventionen (Regel 0a — Pflicht bei allem Neuen)
-
-> SoT: [`docs/KONZEPT-STYLE-GUIDE.md`](docs/KONZEPT-STYLE-GUIDE.md) (Regel Nr. 0 + 0a am Anfang). Farb-SoT: `frontend/src/lib/colors.ts`.
-
-Bei **allem mit Darstellung** (Seite, Komponente, Chart, Tabelle, Tooltip, Button, Badge, Bericht, Text, Sensor-Name …) gilt: (1) **Regel/SoT existiert → anwenden** (keine lokale/harte Formatierung daneben); (2) **keine, aber sinnvoll → Regel definieren + Zentrale erweitern in derselben Arbeit**; (3) **echter Einzelfall → Maintainer-Freigabe + Code-Kommentar + Ausnahmen-Liste**.
-
-- **Keine Inline-Hex-Farben** außerhalb `lib/colors.ts`. **Pflicht-Check bei Frontend-Arbeit:** `cd eedc/frontend && npm run check:design` (muss 0 melden) — Allowlist-Eintrag = bewusste Freigabe.
-- **Eine Datenrolle = eine Farbe** (`lib/colors.ts`); **eine Komponenten-Klasse = eine SoT-Komponente** (KPICard, Button, ChartTooltip, Modal …) — nie eine zweite Komponente für ein bestehendes Pattern.
-- **Typ-Reihenfolge** immer aus `INVESTITION_TYP_ORDER`/`compareTyp` bzw. Backend `sort_investitionen_nach_typ`. **Datums-Listen/Tabellen** Default absteigend (neueste zuerst). **% mit Leerzeichen**, **„eedc"** klein.
-
-## Kritische Code-Patterns
-
-### Monatswerte nur aus den Monats-Fakten (ADR-002/P10)
-
-SoT ist `eedc/backend/services/monats_fakten/`. Wer eine abgeleitete Monatsgröße auswertet, faltet `InvestitionMonatsdaten` **nicht selbst**:
-
-```python
-from backend.services.monats_fakten import lade_monats_fakten, finanz_zeile_eingabe
-
-fakten = await lade_monats_fakten(db, anlage_id, von=(2025, 1), bis=(2025, 12))
-for f in fakten:                          # RICHTIG — Zeitfilter + Dienstwagen-
-    pv    = f.erzeugung.pv_kwh            #   Filter + Auflösung sind schon drin
-    bilanz = f.erzeugung.hinter_zaehler_kwh   # EV/Autarkie: inkl. BHKW & Co.
-    zeile  = await baue_finanz_zeile(db, anlage_id, finanz_zeile_eingabe(f), ...)
-
-# FALSCH — die Klasse hinter allen sechs Befunden der Inventur 2026-07-31:
-for imd in await db.execute(select(InvestitionMonatsdaten)...):
-    summe += (imd.verbrauch_daten or {}).get("pv_erzeugung_kwh", 0)
-```
-
-Ausgenommen sind **Schreib-, Import- und Checker-Pfade**. Der baumweite Wächter ist **seit S5 scharf** (`test_wurzelmuster_konformitaet.py::test_p10_*`) — **funktions-granular**, damit eine ausgenommene Datei nicht als Ganzes freigestellt ist, mit drei getrennt klassifizierten Ausnahme-Kategorien (`SCHREIBEN_IMPORT_CHECKER` · `PER_INVESTITION` · `NOCH_NICHT_MIGRIERT`, letztere mit Obergrenze im Test). **Umgehängt seit S2:** Aussichten, Jahresbericht-PDF, Investitions-ROI; **S3** Cockpit/CO₂ + Social; **S4** Cockpit/Übersicht + HA-Export; **S5** Komponenten-Dashboards, dazu die PR-Pfade der Aussichten und Prognose-vs-IST; **S6** Community-Payload — damit ist der Bauplan abgearbeitet. **Teil-migriert** — Monatsgrößen ja, per-Investition-Aggregate nein: `aussichten/finanz_eingaenge.py` (Lade-Phase der Finanz-Prognose, bis 18.09.2026 `aussichten/finanzen.py`), `ha_export/anlage_komponenten.py` + `investition_sensoren.py` (bis 18.09.2026 `ha_export.py`), `investitionen/roi.py` (bis 18.09.2026 `crud.py`), `investitionen/dashboard_<typ>.py` (bis 18.09.2026 `dashboards.py`). **C1a** (03.08.) hat `monatsdaten.py::list_monatsdaten_aggregiert` umgehängt — *Auswertungen → Tabelle* und *Cockpit → Jahr*; **C1b** (03.08.) `cockpit/komponenten.py::get_komponenten_zeitreihe` — *Auswertungen → Komponenten*; **C1c** (03.08.) den DB-Zweig von `aktueller_monat/` (heute `vergleich.py::_load_vorjahr` und die Fassade) — *Cockpit → Monat* (`_collect_saved_data` + `_load_vorjahr` + Sonstige-Positionen; die Präzedenz der vier Quellen bleibt in der Route). **C1d** (04.08.) hat den letzten Posten getilgt — den **Komponenten-Detailblock** von `aktueller_monat/__init__.py::get_aktueller_monat` (N-107). **Die anlagenweite Restschuld ist damit 0**, und der Wächter hält die Liste leer statt sie zu deckeln: `test_wurzelmuster_konformitaet.py` führt `P10_NOCH_NICHT_MIGRIERT` ohne Eintrag und prüft `len(...) == 0` (`:2010`). *Hier stand bis 2026-08-22 „Noch anlagenweit selbst faltend (offene Schuld, 1)“ — eine Doku-Zeile gegen einen scharfen Test, gefunden bei der Fundregister-Inventur.*
-
-### SQLAlchemy JSON-Felder
-
-```python
-from sqlalchemy.orm.attributes import flag_modified
-obj.verbrauch_daten["key"] = value
-flag_modified(obj, "verbrauch_daten")  # Ohne das wird die Änderung NICHT persistiert!
-db.commit()
-```
-
-### 0-Werte prüfen
-
-```python
-# FALSCH: if val:     → 0 wird als False gewertet
-# RICHTIG: if val is not None:
-```
-
-### Schreibrouten committen vor der Antwort (N-530)
-
-```python
-@router.post("/")
-async def create_x(data: XCreate, db: AsyncSession = Depends(get_db, scope="function")):  # RICHTIG
-async def create_x(data: XCreate, db: AsyncSession = Depends(get_db)):                    # FALSCH bei POST/PUT/PATCH/DELETE
-```
-
-`get_db` committet im Teardown der Dependency. Mit dem FastAPI-Default `scope="request"` läuft der erst, **nachdem** die Antwort gesendet ist — ein sofortiger Folgeaufruf sah die eben angelegte Zeile in 0,4 % der Fälle nicht (gemessen 18.09.2026, N-530: 4 und 5 von 600 Runden POST → GET ohne Pause; der Setup-Wizard kettet genau so). `scope="function"` zieht den Teardown vor das Senden. Leserouten bleiben beim Default (streamende Exporte lesen ihre Session während des Sendens). Wächter: `test_n530_schreibrouten_commit_vor_antwort.py` (baumweit, Baseline 0, prüft auch die Gegenrichtung).
-
-### Aktivitätsprotokoll in der Sitzung des Aufrufers (N-532)
-
-```python
-await log_activity("import", "Portal-Import: 3 Monate", anlage_id=anlage.id, db=db)  # RICHTIG — wer eine Sitzung hält, gibt sie mit
-await log_activity("import", "Portal-Import: 3 Monate", anlage_id=anlage.id)         # FALSCH in einer Funktion mit `db`/`session` oder in einem `get_session()`-Block
-```
-
-SQLite kennt **einen** Schreiber. `log_activity` ohne `db` öffnet eine eigene Verbindung; hält die Sitzung des Aufrufers nach einem `flush()` den Schreib-Lock, wartet die zweite den vollen `busy_timeout` (30 s) ab, scheitert mit „database is locked", und die Zeile ist weg — gemessen 19.09.2026 an einer r28-Kopie: Portal-Import-Apply und `PUT`/`POST /api/monatsdaten` je 30,1 s ohne Protokollzeile, mit übergebener Sitzung 0,03 s. Ohne Sitzung (Scheduler-Job nach seinem `get_session()`-Block, MQTT-Gateway) bleibt die eigene Verbindung richtig. Wächter: `test_n532_aktivitaetsprotokoll_in_der_sitzung.py` (baumweit, 25 Stellen, Baseline 0, mit Gegenprobe an einer Datei-Datenbank). **Und der Testlauf berührt `data/eedc.db` nie** — `conftest.py` gibt der Produktiv-Engine eine Wegwerf-Datei je Worker (N-414).
-
-### Investitions-Kennwerte nur über den SoT-Helper (ADR-002/P3-a)
-
-SoT ist `eedc/backend/core/investition_kennwerte.py`:
-
-```python
-from backend.core.investition_kennwerte import get_erzeuger_kwp, get_pv_kwp, get_bkw_kwp
-
-kwp = get_erzeuger_kwp(inv)          # RICHTIG — Typ-Dispatcher (BKW vs. PV-Modul)
-kwp = inv.leistung_kwp               # FALSCH — Spalte allein, die #229-Klasse
-kwp = getattr(inv, "leistung_kwp")   # FALSCH — der Wächter erfasst auch diese Form
-```
-
-Die Nennleistung liegt je nach Herkunft in der **Spalte** `Investition.leistung_kwp` **oder** im `parameter`-JSON. Beide Formen sind gewächtert (`test_wurzelmuster_konformitaet.py::test_p3a_*`, Baseline 0 mit klassifizierten Ausnahmen); im Frontend hält `npm run check:kennwert-roh` dieselbe Trennlinie (**Anzeige/Rechnung** lesen `leistung_kwp_effektiv` aus der Response, **Formulare/Wizards** die Rohspalte). Der `getattr`-Zweig ist nicht optional — über ihn fiel `co2_amortisation.py` durch jede Erhebung.
-
-> `Investition.leistung_kwp` ist ein **Mehrzweckfeld**: beim Speicher trägt dieselbe Spalte kWh, beim Wechselrichter kW (AC). Die Helper gelten nur für Erzeuger-Typen; der Aufrufer filtert.
-
-## Bekannte Fallstricke
-
-| Problem | Lösung |
-|---------|--------|
-| JSON-Änderungen werden nicht gespeichert | `flag_modified(obj, "field_name")` aufrufen |
-| 0-Werte verschwinden | `is not None` statt `if val` |
-| SOLL-IST zeigt falsches Jahr | `jahr` Parameter explizit übergeben |
-| `Monatsdaten.pv_erzeugung_kwh` programmatisch gefüllt **oder direkt gelesen** | Nur manuell/Import; Pro-Modul-Werte nach `InvestitionMonatsdaten`. Lesen ausschließlich über `lade_pv_je_monat`/`pv_summe_je_monat` (P7, s. Prinzip 4) — direkt gelesen ist es entweder eine Teilsumme oder es überschreibt Messungen |
-| ROI-Werte unterschiedlich | Cockpit = Jahres-%, Aussichten = Kumuliert-% |
-| Zwei Sichten nennen verschiedene CO₂-Zahlen | `berechne_co2_bilanz` ist die **einzige** Konstruktions-Stelle (ADR-001/DI-2: Eigenverbrauch × Strommix **+ WP + E-Mob**), ausgeliefert über `/cockpit/nachhaltigkeit`. Der Client rechnet nichts — Wächter `npm run check:co2-roh`. Der **Tages**-Wert trägt bewusst nur `co2_pv_kg` (WP-Wärme/E-Mob-km gibt es nur monatlich) ⇒ Σ Tage ≠ Monat |
-| Erwarteter Monatsbereich beginnt zu früh (fordert Monate vor der Anlage) | **Zwei Datums-Ebenen, zwei Fragen** — nie tauschen: *Zählt diese Investition in diesem Monat?* → `aktiv`/`anschaffungsdatum`/`stilllegungsdatum` **der Investition** (`ist_aktiv_im_zeitraum`). *Welcher Monat soll erfasst sein?* → `Anlage.installationsdatum`, Fallback ältestes Anschaffungsdatum der **Erzeuger** (`core/monats_luecken.py`, Spiegel `lib/monatsLuecken.ts`). `Anlage.installationsdatum` filtert **keine** Auswertung; `Investition` hat gar kein `installationsdatum` (zwei Abstürze). Detail: [ARCHITEKTUR §4](docs/ARCHITEKTUR.md) |
-| Nennleistung ist plötzlich 0 | Bei Import-/Altbestand (#229) steht die kWp **nur im `parameter`-JSON** (`kwp` / `leistung_kwp`) — die Spalte allein zu lesen liefert dort still 0. `get_erzeuger_kwp` statt `inv.leistung_kwp` |
-
-## Community-Datenfluss
-
-```
-eedc Add-on                                   Community Server
-┌───────────────────────────────┐             ┌────────────────────────┐
-│ v4/CommunityShareBlock.tsx    │ ─ POST ───→ │ /api/submit            │
-│   (teilen / rückw. entfernen) │ ─ DELETE ─→ │ /api/submit/{hash}     │
-│ v4/CommunityV4.tsx +          │ ─ Proxy ──→ │ /api/benchmark/        │
-│   pages/community/*Teile.tsx  │             │   anlage/{hash}        │
-│ "Im Browser öffnen"           │ ─ Link ───→ │ /?anlage=HASH          │
-└───────────────────────────────┘             └────────────────────────┘
-```
-
-> Der Client spricht den Community-Server **nie direkt** an — alles läuft über `backend/api/routes/community.py` (Proxy + Aufbereitung).
-
-> **Beachte:** Änderungen am Datenmodell müssen in **beiden** Repositories synchron angepasst werden:
-> Schemas in `eedc-community/backend/schemas.py` und Aufbereitung in `eedc/backend/services/community_service.py`.
->
-> **Der Server rechnet nichts nach** — er hat die Rohdaten nie gesehen. Die Monatswerte kommen seit S6 aus den Monats-Fakten (ADR-002/**P10**), und was ein Feld *bedeutet*, steht als Vertrag im Docstring von `MonatswertInput` (Community-Repo). Wer die Bedeutung ändert, ändert sie dort mit; eine Nachrechnung serverseitig gibt es nicht, Altbestand heilt beim nächsten Voll-Submit.
-
-## Deprecated (nicht löschen!)
-
-> Die alten `ha_sensor_*` Felder im Anlage-Model dürfen NICHT aus der DB/dem Model entfernt werden (bestehende Installationen). Neuer Code nutzt ausschließlich `sensor_mapping`.
-
-## Letzte Änderungen
-
-> **Versions-SoT = [CHANGELOG.md](CHANGELOG.md)** (vollständig, pro Release gepflegt). Dieser Digest ist eine kuratierte Auswahl und kann der Spitze hinterherhinken — `release.sh` bumpt ihn NICHT. Bei Diskrepanz gilt CHANGELOG/`config.py`. **Stand des Digests: v4.0.5** (fortgeschrieben 2026-07-31).
-
-**v4.0.5** (2026-07-31) — Preise je Monat, CO₂ auf dem Eigenverbrauch, eine Zahl je Kennwert:
-
-- **Ein Tarif-Wert trägt den Stichtag seines Monats (ADR-002/P8, gewächtert, Baseline 0):** sechzehn Fundstellen rechneten die Vergangenheit mit dem *heutigen* Tarif — eine Preiserhöhung schrieb die Historie um. Betroffen waren u. a. WP-/Speicher-Dashboard, Monatsbericht, Aussichten-Historie, HA-Export und `GET /monatsdaten/{id}` (dessen handgebaute Query zusätzlich `gueltig_bis` und den `verwendung`-Filter verlor). Dazu: Flex-Ø erreicht die Tagespfade (Σ Tage ≠ Monat war die Folge), „Gültig ab" wird beim ersten Tarif mit dem Inbetriebnahme-Datum vorbelegt, Daten-Checker meldet Monate ohne Tarif-Abdeckung. Auslöser Forum #89667/60 (Algie).
-- **Vier Finanz-Sichten, eine Zahl:** USt auf Eigenverbrauch fehlte in PDF, HA-Sensor und den *bisherigen* Aussichten-Erträgen (→ ROI-Fortschritt); der **BKW-Eigenverbrauch** zählte je nach Sicht doppelt, gar nicht oder nur im ROI-Pfad → neuer SoT `core/berechnungen/bkw_finanz.py` (**ADR-002/P9**, Baseline 0). Symmetrie-Test `test_netto_ertrag_vier_wege_symmetrie.py` deckt beide Achsen.
-- **Dienstwagen kostet, statt zu verdienen:** PV-Ladung wurde als eingesparter Netzbezug gutgeschrieben und nur die entgangene Einspeisung abgezogen — netto +22 ct/kWh für Strom, den das Haus nie verbraucht hat (196 € > 168 € ohne Auto). Neue Layer-Formel `dienstliche_ladekosten.py` für Cockpit · Aussichten · HA-Export (152 €); Komponenten-Hub zieht nach. **Energiebilanz unberührt.**
-- **Eine CO₂-Definition (DI-2 vollendet):** Monatstabelle (Client) und Tagestabelle (Backend) rechneten weiter `Erzeugung × 0,38` — inkl. Einspeisung, ohne WP/E-Mob. Auswertungen → CO₂ liest jetzt `/cockpit/nachhaltigkeit`; Tages-Spalte heißt „CO₂-Einsparung (PV)" (Σ Tage ≠ Monat by design). Wächter `check:co2-roh`. Neu: Block **„CO₂-Bilanz"** in Cockpit → Jahr.
-- **BKW-Akku hat einen Erfassungsweg statt zwei:** Kanon = eigene `speicher`-Investition mit BKW-Parent (Live, SoC, Energiefluss, Zählerpfad). Die BKW-eigenen Monatsfelder bleiben erfassbar (`nur_manuell`), aber nicht mehr zuordenbar; Parent-Regel-SoT `models/investition.py::ERLAUBTE_PARENT_TYPEN`, Setup-Wizard bietet den Parent erstmals an. MQTT-Fix: `eigenverbrauch_kwh` lag auf dem Erzeugungs-Kanal.
-- **Monats-Fakten-Schicht (ADR-002/P10) ausgeliefert** — S1–S6, Wächter scharf, Restschuld 4. Sichtbare Folgen: Aussichten/PDF/ROI/Prognose-vs-IST/Langfrist/CO₂-Zeitreihe finden die PV bei Gesamtwert-Pflege wieder, HA-Sensoren tragen stillgelegte Komponenten, Community-Payload rechnet mit V2H/BHKW und ohne Dienstwagen. **Social-Media-Textvorlage zurückgebaut** (seit v4.0.0 unerreichbar; Community-Teilen unberührt).
-
-**v4.0.2–v4.0.4** (2026-07-28/30) — Speicher rechnet mit der nutzbaren Kapazität · zugeordnete Sensoren wirken überall (#353 coolxmad) · Daten-Checker erklärt leere Sichten und stellt den Reparatur-Knopf daneben · Balkonkraftwerk in der Prognose (#347, Wechselrichter-Grenze stundenweise) · PV je String bleibt gemessen (Rest-Verteilung statt Alles-Verteilung).
-
-**v4.0.1** (2026-07-26) — Prognose-Werte vereinheitlicht + gemessene PV-Modulwerte:
-
-- **Ein Prognose-Kanon für alle Sichten:** 14-Tage-Balken, Stundenwerte, Kacheln „Morgen/Summe/Ø" und die OM-roh-Kurve rechnen jetzt **jede Ausrichtung getrennt** und mit der gelernten eedc-Korrektur — wie Prognosen-Vergleich und HA-Sensoren. Vorher standen für denselben Tag zwei Zahlen auf einer Seite (Rainer). Bei Mehrfach-Ausrichtung ändern sich die Werte sichtbar; GTI in der 14-Tage-Tabelle ist jetzt **kWp-gewichtet** („GTI Modulfläche").
-- **PV-Modulwerte gemessen statt gerechnet:** der Hub-Block „Verlauf" zeigt die Pro-String-Messwerte; wo nur ein Gesamt-Sensor existiert, wird nach kWp verteilt **und gekennzeichnet** („geschätzt (kWp-Anteil)"), statt 0 anzuzeigen. Kein bester/schwächster String, solange verteilt wird.
-- **PVGIS: überall die *aktive* Prognose** (P5) — inkl. DB-Invariante gegen „mehrere aktiv" nach Backup-Restore; Monatsbericht-SOLL war dort verdoppelt.
-- **Unvollständige Antworten sagen es** (P4): Teil-Fan-out der Wetterabrufe wird ausgewiesen statt still zu niedrig geliefert.
-- **Intern:** neue [ADR-002](docs/ADR-002-WURZELMUSTER.md) (sechs Invarianten P1–P6 + Wächter), Anschaffungsdatum ist Pflichtfeld.
-
-**v4.0.0** (2026-07-25) — **IA-V4-Flip: die neue Oberfläche ist ausgeliefert** (Breaking Change, nur UI — Daten unberührt, alte Links werden umgeleitet):
-
-- **Cockpit** (Wann? Live · Tag · Monat · Jahr · Aussicht) · **Komponenten** (Was? je Gerätetyp Status → Verlauf → Vergleich → Wirtschaftlichkeit) · **Auswertungen** (Wie? Finanzen · ROI · Prognose-vs-IST · CO₂ · Tabelle) · Einstellungen als Kachel-Übersicht. Blöcke sind verschiebbar, fokussierbar (⤢) und parkbar.
-- **Monatsabschluss als ein Formular** (statt 7-Schritt-Wizard) · **Datenquellen als eine Fläche** (ein Feld = eine Quelle: HA-Sensor · MQTT · Connector; löst Sensor-Mapping- und MQTT-Wizard ab).
-- **Drift-Inventur Tier-1 (DI/DI-2):** WP-CO₂, HA-Export-CO₂, Dienstwagen-Filter, §14a-WP-Tarif, Vorjahres-Nettoertrag — sichtbare Zahlenkorrekturen inkl. einmaligem LTS-Sprung beim CO₂-Sensor. Historische Tarife im PDF/HA-Export (#326).
-- Der Rückweg bei Problemen ist v3.45.9; ein separates v3.46 gibt es bewusst nicht.
-
-**v3.45.6–v3.45.9** (2026-06-27/29) — Prognose-Kanon „heute" · Speicher-Vorzeichen-Historie als Daten-Checker-Selbstkorrektur (**keine** Start-Migration) · Hotfix Add-on-Startschleife.
-
-**v3.45.5** (2026-06-22) — Live-Tagesverlauf: Nadel-Spikes bei grobem Energie-Zähler weg (#680). Kurve rekonstruiert Leistung aus kWh-Zähler (`ΔkWh×12000`, 5-Min-Annahme); meldet der Zähler seltener, landet der ganze Zuwachs in EINEM Slot → 13-kW-Nadel. Fix: nur die **Kurvenform** fällt stundenweise auf den Live-Leistungssensor zurück (Phantom-Null-Detektor), Stunden-Energie = Zählersumme bleibt LTS-treu (Σ normiert). Intern (damals hinter `VITE_IA_V4` dormant, **ausgeliefert mit v4.0.0**): **IA-V4 A.3 Cockpit/Live** (IST-Layout in v4-Shell, kein Neubau; durchgängig Fokus/Vollbild via geteiltem `FokusVollbild`/`FokusKachel`, BlockShell auf dasselbe Overlay umgestellt) + Komponenten-Hub-Korrekturen.
-
-**v3.45.4** (2026-06-22) — Sonstige Erzeuger (BHKW) in der Energiebilanz: ein Erzeuger unter „Sonstiges" (Kategorie *Erzeuger*) speist hinter den EINEN Hauszähler → seine Erzeugung zählt jetzt in EV/Autarkie in **allen** Bilanz-Pfaden (Monat + Vorjahr, Live, Tag/Energieprofil) via Layer-SoT `erzeugung_hinter_zaehler_kwh`. PV-Kennzahlen (spez. Ertrag/PR) bleiben rein; CO₂/Wirtschaftlichkeit eines Brennstoff-Erzeugers bewusst „nicht bewertet". Lehre: Bilanz-Drift saß in drei getrennten Pfaden — Symptom-Patch hätte nur den Monat erwischt.
-
-> **v3.30–v3.44:** Detail nur noch im [CHANGELOG](CHANGELOG.md) (Digest hier seit v3.29.2 nicht fortgeschrieben).
-
-**v3.29.x** (2026-05-13/14) — Aggregations-Hardening + UX-Bündel vor Menüstruktur-Konzept:
-
-- **Anschaffungs-/Stilllegungsdatum-Filter durchgängig (v3.29.0/v3.29.1, #236 #239):** alle Read-Sites (Cockpit, Energieprofil, HA-Stats-Aggregation, Monatsbericht-Sektionen) respektieren jetzt `inv.installationsdatum`/`stilllegungsdatum`. Folgewelle nach #236 zeigte: Filter auf einer Schicht reicht nicht bei parallelen Pfaden.
-- **SoT-Helper `get_inv_value` für `leistung_kwp` (#229):** PV-String-Verteilung liest jetzt Spalten-Wert mit Fallback auf `parameter`-JSON statt Gleichverteilung.
-- **UX-Cluster #233 (P13–P18):** chirurgische Fixes Display-Token `'—'`, kWh-Einheiten im WP-Dashboard (#237), Daten-Checker Inbetriebnahme-Monat ausgeschlossen (#240), Sparkline-Tooltip mit Monatsname (#241).
-- **eedc-Schreibweise (v3.29.2):** ~130 Treffer in Code + Hilfe-Docs auf Wort „eedc" vereinheitlicht; `\bEEDC\b`-Wortgrenze schützt Identifier wie `EEDC_Prognose` automatisch.
-
-**v3.28.0** (2026-05-13) — Reparatur-Werkbank: Mehrere Tage neu aggregieren (#230).
-
-**v3.27.x** (2026-05-10/12) — Etappe 3d + Tester-Päckchen:
-
-- **Etappe 3d Daten-Provenance & Reparatur-Werkbank (v3.27.0):** Anomalie-Erkennung mit punktuellem Reparatur-Pfad; bewusst KEIN globaler Heiler-Knopf.
-- **UX-Sprint A1+A2+A3 + Power-Sensor-Bug (v3.27.1, #200):** Wizard + Live-Heute + Stats-API ziehen jetzt `_is_energy_sensor` konsistent durch (kW darf nicht in kWh-Slot).
-- **WP-Aggregation: Split-Strommessung + Counter-Spike-Cap (v3.27.4, #230):** MartyBr-Bug-Report mit Screenshot als Vorlage.
-- **UX-Cluster detLAN (v3.27.5, #207 #215 #217 #218 #494) + Folge-Päckchen Tester-Bugs (v3.27.3, #220 #222 #226 #227 #228).**
-
-**v3.26.x** (2026-05-06/09) — Korrekturprofil + HA-Energy-Import + Etappe 3c:
-
-- **EEDC-Korrekturprofil O1+O2 (v3.26.0–v3.26.2):** Päckchen 1 (Recency) + Päckchen 2 (Sonnenstand × Wetter live) parallel zum Legacy-Skalar als Diagnose. Live-Pfad-Switch wird in Prognosequellen-Wahl Schritt 2 mitgemacht.
-- **HA-Energiekonfiguration importieren (v3.26.5, #197):** Setup-Vereinfachung Olli0103 — Energy-Dashboard-Konfig aus HA wird im Setup-Wizard übernommen.
-- **Etappe 3c Energieprofil Read-/Write-Architektur konsolidiert (v3.26.8):** zentraler SoT-Helper statt Drift-Patches; siehe `docs/archive/KONZEPT-DATENPIPELINE.md`.
-- **Reload-Vorschau Counter-Boundary + „Nur neu rechnen" (v3.26.6):** Vorschau heilt sich selbst.
-
-**v3.25.x** (2026-04-29/05-05) — Live-Snapshot 5-Min + Investitions-Parameter-SoT:
-
-- **Live-Snapshot 5-Min Backend (v3.25.3–v3.25.6):** Phase 1 Backend für Live-Tagesverlauf-Service ausgeliefert + validiert (Off-by-one-Fix state→sum). Frontend-Umstellung noch offen.
-- **Investitions-Parameter Single Source of Truth (v3.25.0):** `lib/investitionParameter.ts` + `core/investition_parameter.py` als gemeinsame Konstanten-Map; DB-Migration `_migrate_investitionen_parameter_keys_v325` korrigiert 7 Drift-Bugs (V2H, Jahresfahrleistung, PV-Ladeanteil, Vergleichsverbrauch, Speicher-Arbitrage, Wallbox-Leistung, WP-Preis-Default).
-- **Pool-Bug Quick-Fix Wallbox+E-Auto (v3.25.11):** Drift-Konsistenz zwischen `cockpit/uebersicht.py` und `aktueller_monat._aggregate` angeglichen.
-
-**v3.24.x** (2026-04-27/29) — WP-Kompressor-Starts + In-App-Hilfe + Sensor-LTS:
-
-- **WP-Kompressor-Starts (v3.24.0, #136):** optionaler Total-Increasing-Sensor pro WP, neue `KUMULATIVE_COUNTER_FELDER`-Architektur trennt Counter strikt von kWh-Feldern. KPI-Kacheln in Monatsbericht + WP-Dashboard (v3.24.4, #169).
-- **Sensor-Filter aufgeweicht + „ohne Statistik"-Badge (v3.24.1, #136 Folge):** Nibe-Roh-Counter ohne `state_class` jetzt auswählbar, Frontend-Fallback-Link, Daten-Checker-Kategorie SENSOR_MAPPING_LTS — siehe `feedback_ha_lts_keine_zeitmaschine.md`.
-- **In-App-Hilfe als pflegbares Werk (v3.24.2):** Sweep aller acht Hilfe-Dokumente (BENUTZERHANDBUCH, HANDBUCH_INSTALLATION/BEDIENUNG/EINSTELLUNGEN/INFOTHEK, BERECHNUNGEN, SENSOR-REFERENZ, GLOSSAR) auf v3.24-Stand. Sidebar-Eintrag „Was ist neu" (v3.24.5, Discussion #130 Folge Safi105).
-- **PV-Cockpit: Speicher-Kapazität + WR-Eigenleistung sichtbar (v3.24.4/v3.24.6, #172 detLAN):** Key-Drift `batteriekapazitaet_kwh` vs. `kapazitaet_kwh` korrigiert, Orphan-Speicher-Block ergänzt.
-
-**v3.23.x** (2026-04-25/27) — MAE/MBE + MQTT-Daten-Checker + Mobile-Hardening:
-
-- **MAE + Bias trennen im Genauigkeits-Tracking (v3.22.0/v3.23.x, #151):** drei Quellen (OpenMeteo/EEDC/Solcast), Bias neutral gefärbt, Spaltenstruktur stabil auch ohne Lernfaktor.
-- **MQTT-Topic-Abdeckung im Daten-Checker (v3.23.7, #134):** Drift zwischen dynamischer Konsumenten-Seite und statischer Publisher-Seite wird sichtbar; bei nicht aktivem Subscriber stillschweigend übersprungen (v3.23.8 detLAN/rapahl).
-- **Klickbarer Reparatur-Popover bei IST-Lücke (v3.23.0, #147):** Button „Tag neu berechnen" + Fallback-Link Sensor-Mapping. Restart-Recovery für verpasste :05/:55-Snapshot-Jobs.
-- **iOS Safari `h-dvh` + COP→JAZ-Harmonisierung (v3.23.6/v3.23.4, #161/#167):** siehe `feedback_ios_companion_app.md` und Wizard-Sweep für Key-Drift (`batterie_kwh`→`batteriekapazitaet_kwh` u. a.).
-
-**v3.19.0–v3.22.0** (2026-04-22/25) — Architekturwechsel + Slot-Konvention + WP-Gaspreis:
-
-- **kWh aus Zähler-Snapshots statt Leistungs-Integration (v3.19.0, #135):** kritischer Architekturwechsel — stündliche `sensor_snapshots`-Tabelle, Self-Healing, ±5–15 % Drift weg.
-- **Performance Ratio nutzt GTI statt GHI (v3.20.0, #139):** physikalisch unmögliche PR-Werte >1.2 im Winter korrigiert.
-- **Slot-Konvention auf Backward vereinheitlicht (v3.20.0, #144):** OpenMeteo/Solcast/IST jetzt alle Slot N = Energie [N-1, N), Industriestandard.
-- **WP-Alternativvergleich + Monats-Gaspreis (v3.21.0, #141) + aufklappbare Energieprofil-Sektionen (#148).**
-
-**v3.17.0–v3.18.0** (2026-04-21) — Dynamische Benzinpreise + Energieprofil-Tab:
-
-- **Dynamische Benzinpreise aus EU Weekly Oil Bulletin (v3.17.0):** echte monatliche Kraftstoffpreise statt statischem Parameter, History seit 2005.
-- **Energieprofil-Tab + anlage-spezifische Datenverwaltung (v3.18.0, #133):** Tages-Tabelle mit Spalten-Selektor, Pro-Tag-Reaggregation, Vollbackfill aus HA-Statistik.
-
-**v3.16.x** (April 2026) — Solcast PV Forecast (v3.16.4): Prognosen-Vergleich-Tab (OpenMeteo / EEDC kalibriert / Solcast / IST); Sensor-Mapping Strompreis (Tibber/aWATTar/EPEX), Stündliche Strompreis-Mitschrift; Infothek Etappe 3.6 (v3.16.2).
-
-**Ältere Meilensteine:** PDF-Dokumente + Infothek N:M (v3.15), Stilllegungsdatum (v3.14), Monatsberichte + Energieprofil Etappe 3 (v3.12/3.13), Import-Strategie (v3.10), Live Dashboard Generalüberholung (v3.9), L2-Cache (v3.7), Infothek (v3.5), Wettermodell-Kaskade (v3.4), GTI-Prognose (v3.3), Live Dashboard + MQTT-Inbound (v3.0).
-
-Für Details siehe [CHANGELOG.md](CHANGELOG.md) und [docs/ARCHITEKTUR.md](docs/ARCHITEKTUR.md).
-
-## Roadmap & offene Punkte
-
-Single Source of Truth: **GitHub Issue [#110 — Roadmap Anfrage](https://github.com/supernova1963/eedc-homeassistant/issues/110)**.
-
-Aktuellen Stand bei Bedarf abrufen via `gh issue view 110 --repo supernova1963/eedc-homeassistant`.
+Vor einem Release: Kandidat ins HAOS-Lab (`bash ~/.claude/plans/lab-werkzeug/lab-rc.sh <rc> <version>`, Lab `10.100.1.167`),
+Gernot klickt durch, dann `./scripts/release.sh <version>` (bumpt fünf Versionsdateien, taggt, pusht beide Repos, baut Images).
+Danach `gh run list` in **beiden** Repos prüfen. Galerie-Screenshots nur auf Nachfrage (`scripts/galerie-screenshots.mjs`).
+Produktiv-Box `10.100.1.13:8099` **nur lesen**; `eedc/data/eedc.db` nie anfassen; kein Serverstart gegen die Demo-DB mit Broker.
+
+## Code-Regeln, die bleiben (kurz; Begründung im Archiv)
+
+- **Monatsgrößen nur aus den Monats-Fakten** (`services/monats_fakten/`, ADR-002/P10) — nie `InvestitionMonatsdaten` selbst falten.
+- **`Monatsdaten.pv_erzeugung_kwh` nur über `lade_pv_je_monat`/`pv_summe_je_monat` lesen** (P7), nie programmatisch füllen.
+- **Kennwerte über `core/investition_kennwerte.py`** (`get_erzeuger_kwp` statt `inv.leistung_kwp`, P3-a).
+- **Eine Formel, ein Ort:** Aggregat-Formeln in `core/berechnungen/`; CO₂ nur über `berechne_co2_bilanz` (DI-2); Ersparnis/USt/CO₂
+  auf `eigenverbrauch_ohne_verluste_kwh` (P15); der Client rechnet nichts (`check:co2-roh`, `check:kennwert-roh`).
+- **SQLAlchemy JSON:** nach Änderung `flag_modified(obj, "feld")`. **0-Werte:** `is not None`, nie `if val`.
+- **Schreibrouten:** `Depends(get_db, scope="function")` (N-530). **`log_activity(..., db=db)`** in Funktionen mit Sitzung (N-532).
+- **Design:** keine Hex-Farben außerhalb `lib/colors.ts` (`npm run check:design` = 0); eine Komponenten-Klasse = eine SoT-Komponente;
+  Typ-Reihenfolge `INVESTITION_TYP_ORDER`; „eedc" klein; „% " mit Leerzeichen.
+- **Zeitzone:** eedc folgt HA, kein Pin. **Legacy `ha_sensor_*`-Spalten** bleiben im Model.
+
+## Community
+
+Client ↔ Server nur über `backend/api/routes/community.py` (Proxy); Datenmodell-Änderungen in beiden Repos (`community_service.py`
+↔ `eedc-community/backend/schemas.py::MonatswertInput`). Der Server rechnet nicht nach.
+
+## Roadmap
+
+GitHub [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) — nur auf Gernots Aufforderung ändern.
