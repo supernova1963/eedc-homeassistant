@@ -33,8 +33,41 @@ permissions:
   contents: read
 
 jobs:
+  # ── Zwei Zonen als Matrix-Jobs, je mit xdist (seit 10.10.2026) ────────────
+  # Bis dahin liefen UTC und Pacific/Auckland als zwei Schritte NACHEINANDER in
+  # EINEM Job, jeder ohne `-n` — also auf einem Kern des 4-vCPU-Runners (GitHub-Doku
+  # fuer oeffentliche Repos; der `nproc`-Schritt unten misst es bei jedem Lauf
+  # nach). Gemessen am 09.10.2026 (v4.1.4): 1504 s je Zone, Job 51 min — bei
+  # v4.1.1 (02.10.) waren es 11 min. Gewachsen ist nicht die Zahl der Proben,
+  # sondern das Saeen: die Abnahme-Matrizen (PV-Achse, Achsen) saeen je Form und
+  # Teil einen produktiven Datenstand ueber die echten Dienste, die Zellen selbst
+  # kosten ~1 ms. Lokal faehrt das Gate seit 24.08. `-n 3` (525 s fuer dieselbe
+  # Suite am 10.10.); die Matrix-Fixtures sind xdist-fest gebaut (`_matrix_ordner`,
+  # Datei-Sperre, jede Zelle liest dieselben Bytes), `conftest.py` gibt jedem
+  # Worker eine Wegwerf-DB (N-414).
+  # ⚠ Die CLAUDE.md-Kopplung „entweder drei Zonen ODER xdist" gilt NUR fuer die
+  # vier Kerne der Dev-Box. Hier hat jeder Matrix-Job seinen eigenen Runner —
+  # Zonen parallel UND `-n 4` je Zone ist deshalb richtig, nicht verboten.
+  # Gegenprobe des ersten Laufs: beide Zonen gruen mit DERSELBEN Zaehlung
+  # (10 122 passed · 1 skipped · 105 xfailed am 09.10.), `nproc` = 4 im Log.
+  # Weicht die Zaehlung ab, hat xdist eine Probe verloren — Ursache, kein Re-Push.
   backend-tests:
+    name: backend-tests (${{ matrix.tz }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # N-167: Der Runner steht in UTC, die Entwickler-Box in Europe/Berlin — zwei Zonen,
+        # die sich nur um 2 Stunden unterscheiden und (aeusserst selten) um einen Tag. Eine
+        # Probe, die einen Erwartungswert aus der ECHTEN Uhrzeit ableitet, faellt darin
+        # womoeglich nie auf: Der Ursprungsfall war in 4 von 24 Stunden rot (5, 11, 17, 23) und
+        # wurde nur entdeckt, weil derselbe Baum um 16:5x gruen und um 17:12 rot war.
+        # Auckland liegt 10-12 Stunden entfernt und trifft damit verlaesslich eine ganz andere
+        # Stunde und regelmaessig einen anderen Tag. Am 23.08.2026 ueber sieben Zonen gemessen:
+        # kein Fehlschlag, aber es hielt bis dahin auch nichts. (Uhr-Hermetik)
+        tz: ['UTC', 'Pacific/Auckland']
+    env:
+      TZ: ${{ matrix.tz }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -60,29 +93,21 @@ jobs:
       # eingebundener Router waere unbemerkt durchgelaufen. Und den Pruefer kannte NUR
       # CI, er lief in keinem lokalen Gate (dieselbe Klasse wie der lint-Befund vom
       # 12.08.). Er ist jetzt backend/tests/test_routen_baseline.py: laeuft damit in
-      # beiden pytest-Schritten unten UND lokal, vergleicht gegen eine eingecheckte
+      # beiden Zonen-Jobs UND lokal, vergleicht gegen eine eingecheckte
       # Routen-Liste und nennt die fehlende Route beim Namen statt eine Zahl zu melden.
       # Der App-Boot wird dabei mitgeprueft -- der Test importiert backend.main.
       # (Der alte Schrittname verwies auf smoke.sh Schritt 2; dieses Skript existiert
       # im Repo nicht mehr.)
 
-      - name: Akzeptanz-Tests (pytest)
-        working-directory: eedc
-        run: python -m pytest -q --no-header
+      - name: Kerne und Zone des Runners (Annahme 4 vCPU — hier gemessen, nicht geglaubt)
+        run: |
+          echo "nproc=$(nproc)"
+          echo "TZ=$TZ"
+          date
 
-      # N-167: Der Runner steht in UTC, die Entwickler-Box in Europe/Berlin — zwei Zonen,
-      # die sich nur um 2 Stunden unterscheiden und (auesserst selten) um einen Tag. Eine
-      # Probe, die einen Erwartungswert aus der ECHTEN Uhrzeit ableitet, faellt darin
-      # womoeglich nie auf: Der Ursprungsfall war in 4 von 24 Stunden rot (5, 11, 17, 23) und
-      # wurde nur entdeckt, weil derselbe Baum um 16:5x gruen und um 17:12 rot war.
-      # Auckland liegt 10-12 Stunden entfernt und trifft damit verlaesslich eine ganz andere
-      # Stunde und regelmaessig einen anderen Tag. Am 23.08.2026 ueber sieben Zonen gemessen:
-      # kein Fehlschlag, aber es hielt bis dahin auch nichts.
-      - name: Akzeptanz-Tests in einer fernen Zeitzone (N-167 — Uhr-Hermetik)
+      - name: Akzeptanz-Tests (pytest, ${{ matrix.tz }}, -n 4)
         working-directory: eedc
-        env:
-          TZ: Pacific/Auckland
-        run: python -m pytest -q --no-header
+        run: python -m pytest -q --no-header -n 4
 
   frontend-tests:
     runs-on: ubuntu-latest
