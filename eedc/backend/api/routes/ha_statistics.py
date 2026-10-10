@@ -36,6 +36,9 @@ from backend.services.ha_statistics_service import (
 from backend.services.import_hauszaehler import warnung_monate_ohne_zaehlerwerte, warnung_pv_gesamt_ohne_zaehlerzeile
 from backend.services.monatswert_deckel import deckel_je_sensor
 from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
+from backend.core.berechnungen.pv_verteilung import QUELLE_GEMESSEN
+from backend.core.field_definitions import get_pv_erzeugung_kwh
+from backend.core.zahlenformat import fmt_zahl
 from backend.services.pv_monatswerte import (
     bkw_ohne_eigenen_wert,
     eigene_bkw_erzeugung_kwh,
@@ -601,6 +604,9 @@ class MonatImportStatus(BaseModel):
     ha_werte: dict  # {"einspeisung": 123.4, "netzbezug": 56.7, ...}
     vorhandene_werte: Optional[dict] = None  # Falls Daten existieren
     investitionen: Optional[list[InvestitionImportStatus]] = None  # Komponenten-Vergleich
+    #: N-658: „Σ Geräte − Anlagenzähler" (HA), wenn die Differenz der PV unter dem Messpunkt-Vertrag
+    #: Wandlungsverluste ist — dann kein Konflikt, nur ein Hinweis im `grund`. Sonst `None`.
+    wandlungsverluste_kwh: Optional[float] = None
 
 
 class ImportVorschauResponse(BaseModel):
@@ -647,6 +653,30 @@ class ImportResultat(BaseModel):
 # =============================================================================
 # Import Preview Endpoint
 # =============================================================================
+
+def _sind_wandlungsverluste(
+    *, verluste_kwh: float, geraete_kwh: float, nur_eigene_werte: bool, bkw_kwh: float, aktive: list,
+) -> bool:
+    """N-658: Ist „lokale PV − HA-Anlagenzähler" eines Monats ein Wechselrichterverlust, den der Layer bewertet?
+
+    Dieselbe Frage wie ``pv_verteilung.wandlungsverluste_grund`` (Messpunkt-Vertrag, N-588): ja, wenn die lokale
+    Summe größer ist (Σ Geräte > Anlagenzähler), ganz aus eigenen Gerätewerten besteht (ii′ — sonst ist sie der
+    gespeicherte Anlagenwert selbst) und der Vertrag keinen Grund nennt — kein DC-Speicher (iii), höchstens
+    ``WANDLUNGSVERLUSTE_SCHWELLE_PROZENT`` (iv), Balkonkraftwerk nicht außerhalb (v). Bis 10.10.2026 stand jede
+    solche Differenz als „Konflikt" da — nach jedem korrekten Import (F13a: 630 gegen 594, Δ 36). Σ Geräte <
+    Anlagenzähler bleibt ein Konflikt. ``bkw_kwh``: Σ der eigenen Werte der Balkonkraftwerke des Monats (Eingang (v));
+    ``aktive``: die im Monat aktiven Investitionen (Eingang (iii)).
+    """
+    from backend.core.berechnungen.pv_verteilung import wandlungsverluste_grund
+    from backend.services.kanal.bilanz_leser import _dc_grund
+
+    if verluste_kwh <= 0 or not nur_eigene_werte:
+        return False
+    return wandlungsverluste_grund(
+        verluste_kwh=verluste_kwh, strings_kwh=geraete_kwh, bkw_kwh=bkw_kwh,
+        dc_grund=_dc_grund(aktive, lambda _inv: True),
+    ) is None
+
 
 @router.get("/import-vorschau/{anlage_id}", response_model=ImportVorschauResponse)
 async def get_import_vorschau(
@@ -720,6 +750,11 @@ async def get_import_vorschau(
     # (`basis.pv_gesamt`) — über die P7-Auflösung (`lade_pv_je_monat`), nicht über die
     # Rohspalte: Messwerte je Modul plus Aggregat-Lückenfüllung, `None` bei Unvollständigkeit.
     pv_summen: dict[tuple[int, int], Optional[float]] = {}
+    #: N-658: Monate, deren lokale PV-Summe ganz aus eigenen Gerätewerten besteht — kein Modul und kein
+    #: Balkonkraftwerk trägt dort einen Anteil am Anlagenwert. Nur dort ist „Σ Geräte − Anlagenzähler" eine
+    #: Aussage über Wandlungsverluste (Messpunkt-Vertrag (ii′), `pv_verteilung.wandlungsverluste_grund`);
+    #: mit einem Anteil ist die lokale Summe der gespeicherte Anlagenwert selbst.
+    pv_nur_eigene_werte: set[tuple[int, int]] = set()
     if ((anlage.sensor_mapping.get("basis") or {}).get("pv_gesamt") or {}).get("sensor_id"):
         pv_module_der_anlage = [inv for inv in investitionen.values() if inv.typ == "pv-module"]
         # N-621: in einem Monat mit gespeichertem Anlagenwert teilen sich die Module den Rest mit den
@@ -728,10 +763,15 @@ async def get_import_vorschau(
         # den Anteil, und ein übereinstimmender Monat stünde als Konflikt da (gemessen: Anlagenwert 1000,
         # Süd 550, West und BKW ohne Wert ⇒ lokal 925 statt 1000).
         vorschau_bkw_anteile: dict = {}
-        pv_summen = pv_summe_je_monat(await lade_pv_je_monat(
+        pv_monate = await lade_pv_je_monat(
             db, anlage_id, pv_module_der_anlage, investitionen=list(investitionen.values()),
             bkw_anteile=vorschau_bkw_anteile,
-        ))
+        )
+        pv_summen = pv_summe_je_monat(pv_monate)
+        pv_nur_eigene_werte = {
+            key for key, werte in pv_monate.items()
+            if all(w.quelle == QUELLE_GEMESSEN for w in werte.values()) and not vorschau_bkw_anteile.get(key)
+        }
         # N-611: der Anlagen-PV-Zähler misst ALLE PV-Quellen — verglichen wird er deshalb mit
         # Module + eigenem Wert der selbst tragenden Balkonkraftwerke, also mit derselben Zahl,
         # die die Monats-Fakten nennen (`pv_kwh = Module + BKW`). Nur Module verglichen, meldete
@@ -774,6 +814,8 @@ async def get_import_vorschau(
             anteile = vorschau_bkw_anteile.get((j, m), {})
             if mit_wert or anteile:
                 pv_summen[(j, m)] = eigene_bkw_erzeugung_kwh(aktive, daten) + sum(anteile.values())
+                if not anteile:
+                    pv_nur_eigene_werte.add((j, m))
 
     # Jeden Monat analysieren
     monate_status: list[MonatImportStatus] = []
@@ -805,8 +847,9 @@ async def get_import_vorschau(
             for feld, feld_config in felder.items():
                 # Nur Zählerfelder — s. Import-Pfad weiter unten. Die Vorschau
                 # muss dieselbe Menge zeigen wie der Import schreibt, sonst
-                # steht dort ein Wert, der nie ankommt.
-                if not ist_zaehler_differenz_feld(feld):
+                # steht dort ein Wert, der nie ankommt. N-666: Innengeräte-Keys
+                # (`…_kwh-3`) über `basis_feld_key` — wie „Aus HA laden" (N-622).
+                if not ist_zaehler_differenz_feld(basis_feld_key(feld)):
                     continue
                 if feld_config and feld_config.get("sensor_id"):
                     for sensor in ha_monat.sensoren:
@@ -915,6 +958,7 @@ async def get_import_vorschau(
                 # zwei Zählerfelder unter, und der Monat blieb ohne PV.
                 fehlende: list[str] = []
                 abweichende: list[str] = []
+                wandlungsverluste: Optional[float] = None
                 for feld, ha_wert in ha_basis_werte.items():
                     if ha_wert is None:
                         continue
@@ -923,10 +967,29 @@ async def get_import_vorschau(
                     if vorh is None:
                         fehlende.append(label)
                     elif abs(ha_wert - vorh) >= 1:
+                        aktive = [inv for inv in investitionen.values() if inv.ist_aktiv_im_monat(jahr, monat)]
+                        if feld == "pv_gesamt" and _sind_wandlungsverluste(
+                            verluste_kwh=vorh - ha_wert, geraete_kwh=vorh,
+                            nur_eigene_werte=(jahr, monat) in pv_nur_eigene_werte, aktive=aktive,
+                            bkw_kwh=sum(
+                                get_pv_erzeugung_kwh(vorhandene_imd[(inv.id, jahr, monat)].verbrauch_daten or {})
+                                for inv in aktive
+                                if inv.typ == "balkonkraftwerk" and (inv.id, jahr, monat) in vorhandene_imd
+                            ),
+                        ):
+                            wandlungsverluste = vorh - ha_wert
+                            continue
                         abweichende.append(f"{label} {abs(ha_wert - vorh):.1f}")
+                # N-658: eine Differenz, die Wandlungsverluste IST, ist kein Konflikt — sie steht als Hinweis daneben.
+                verluste_hinweis = (
+                    f"Wandlungsverluste {fmt_zahl(wandlungsverluste, 1)} kWh (Anlagenzähler nach dem Wechselrichter)"
+                    if wandlungsverluste is not None else None
+                )
 
                 if not fehlende and not abweichende and not inv_hat_abweichung:
                     aktion, grund = "ueberspringen", "Daten stimmen überein (Δ < 1)"
+                    if verluste_hinweis:
+                        grund = f"Daten stimmen überein · {verluste_hinweis}"
                     anzahl_ueberspringen += 1
                 elif abweichende or inv_hat_abweichung:
                     grund_teile = []
@@ -936,10 +999,14 @@ async def get_import_vorschau(
                         grund_teile.append("fehlt lokal: " + ", ".join(fehlende))
                     if inv_hat_abweichung:
                         grund_teile.append("Komponenten-Werte weichen ab")
+                    if verluste_hinweis:
+                        grund_teile.append(verluste_hinweis)
                     aktion, grund = "konflikt", " | ".join(grund_teile)
                     anzahl_konflikte += 1
                 else:
                     aktion, grund = "importieren", "Fehlt lokal: " + ", ".join(fehlende)
+                    if verluste_hinweis:
+                        grund += f" · {verluste_hinweis}"
                     anzahl_importieren += 1
                 monate_status.append(MonatImportStatus(
                     jahr=jahr,
@@ -949,7 +1016,8 @@ async def get_import_vorschau(
                     grund=grund,
                     ha_werte=ha_basis_anzeige,
                     vorhandene_werte=vorhandene_anzeige,
-                    investitionen=inv_status_liste if inv_status_liste else None
+                    investitionen=inv_status_liste if inv_status_liste else None,
+                    wandlungsverluste_kwh=round(wandlungsverluste, 1) if wandlungsverluste is not None else None,
                 ))
 
     return ImportVorschauResponse(
@@ -1256,7 +1324,8 @@ async def import_ha_statistics(
                     # `sensor_values` sind Zählerdifferenzen (MAX−MIN). Bei
                     # einem Preis-/Kosten-Feld wäre das die Monats-Spreizung —
                     # und die landete hier persistent in `verbrauch_daten`.
-                    if not ist_zaehler_differenz_feld(feld):
+                    # N-666: Innengeräte-Keys (`…_kwh-3`) über `basis_feld_key`.
+                    if not ist_zaehler_differenz_feld(basis_feld_key(feld)):
                         continue
 
                     if feld_config and feld_config.get("sensor_id"):

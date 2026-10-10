@@ -924,10 +924,14 @@ class MonatsdatenChecks:
         feld_label: str,
         schwere: str,
         monatsdaten: list[Monatsdaten],
+        *,
+        gedeckt: frozenset[tuple[int, int]] = frozenset(),
     ) -> list[CheckErgebnis]:
         """Prüft ob ein Pflichtfeld für alle erwarteten Monate in InvestitionMonatsdaten gefüllt ist.
 
         Erwartete Monate = alle Monatsdaten-Einträge ab anschaffungsdatum der Investition.
+        ``gedeckt``: Monate, in denen ein fehlender Wert keine Lücke ist, weil eine andere Quelle ihn trägt
+        (N-651: das Balkonkraftwerk ohne eigenen Zähler bekommt seinen kWp-Anteil am Anlagenwert, P7/N-621).
         """
         ergebnisse: list[CheckErgebnis] = []
         kat = CheckKategorie.INVESTITIONEN
@@ -944,7 +948,7 @@ class MonatsdatenChecks:
         fehlend: list[str] = []
         for (jahr, monat) in erwartete:
             daten = imd_map.get((jahr, monat), {})
-            if daten.get(pflicht_feld) is None:
+            if daten.get(pflicht_feld) is None and (jahr, monat) not in gedeckt:
                 fehlend.append(f"{monat:02d}/{jahr}")
 
         if fehlend:

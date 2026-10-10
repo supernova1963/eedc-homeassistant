@@ -906,7 +906,8 @@ async def _ergaenze_investitions_vorschlaege(
     null_ist_wert = ist_heimlade_mengen_feld(getattr(inv, "typ", None), feld)
     if (
         strategie == "sensor" and sensor_id and sensor_id in ctx.ha_stats_werte
-        and ist_zaehler_differenz_feld(feld)
+        # N-666: Innengeräte-Keys (`…_kwh-3`) über `basis_feld_key` — wie „Aus HA laden" (N-622).
+        and ist_zaehler_differenz_feld(basis_feld_key(feld))
     ):
         stats_wert = ctx.ha_stats_werte[sensor_id]
         if stats_wert > 0 or (null_ist_wert and stats_wert == 0):

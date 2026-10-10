@@ -238,7 +238,7 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 | Meldung | Severity | Bedeutung | Behebung |
 |---------|----------|-----------|----------|
 | **\[Name\]: Leistung (Wp) fehlt** | ⚠️ WARNING | Ohne `leistung_wp` (× Anzahl) ist die kWp-Summe der Anlage unvollständig. | Komponente öffnen, Wp pro Modul und Modulanzahl eintragen. |
-| **\[Name\]: PV-Erzeugung fehlt in N Monat(en)** | ⚠️ WARNING | Wie PV-Module: `pv_erzeugung_kwh` fehlt in den genannten Monaten. | Monatsdaten nachtragen. |
+| **\[Name\]: PV-Erzeugung fehlt in N Monat(en)** | ⚠️ WARNING | In den genannten Monaten hat das Balkonkraftwerk **weder einen eigenen Wert noch einen Anteil am Anlagenzähler**: es ist kein PV-Gesamtwert der Anlage gespeichert, aus dem es seinen kWp-Anteil bekäme. Ein Monat **mit** gespeichertem Gesamtwert zählt nicht — dort bekommt ein Balkonkraftwerk ohne eigenen Zähler seinen Anteil ([Einstellungen §7.6](HANDBUCH_EINSTELLUNGEN.md#76-validierung--probleme-je-feld)), es fehlt nichts. *(Bis Oktober 2026 meldete die Zeile auch solche Monate.)* | Den Wert des Balkonkraftwerks oder den PV-Gesamtwert der Anlage im Monatsabschluss nachtragen bzw. per „Aus HA laden"/Statistik-Import übernehmen. |
 
 #### 4.3.3 Speicher
 

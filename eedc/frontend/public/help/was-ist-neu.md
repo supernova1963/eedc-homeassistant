@@ -15,6 +15,11 @@
 der Zähler-Verlauf unter *Komponenten → Sonstiges* trägt wieder die richtigen Monatsnamen, und mehrere Hinweise (Jahr-Verlauf,
 Ø-Preis mit HT/NT im Jahr, PV-Strings im Mischfall, „PV-Erzeugung (berechnet)") sagen jetzt genau, was die Zahl daneben enthält.
 
+**Daten-Checker, Import und Löschen:** Ein Balkonkraftwerk ohne eigenen Zähler gilt nicht mehr als „PV-Erzeugung fehlt", wenn
+der Anlagenzähler den Monat trägt; die Import-Vorschau zeigt Wandlungsverluste als Hinweis statt als Konflikt; Zähler einzelner
+Innengeräte kommen im Statistik-Import und im Monatsabschluss an; und eine gelöschte Komponente vererbt ihre Messwerte nicht
+mehr an eine neu angelegte.
+
 ## v4.1.5 — 10. Oktober 2026
 
 **Wandlungsverluste kosten kein Geld mehr, das du nie gespart hast:** Misst deine Anlage ihre Strings mit eigenen

@@ -518,6 +518,38 @@ async def _entferne_gateway_zeilen(db: AsyncSession, gateway_ids: list[int]) -> 
             logger.warning("Gateway-Reload nach dem Aufräumen fehlgeschlagen", exc_info=True)
     return topics
 
+async def _entferne_messreihen(db: AsyncSession, anlage_id: int, investition_id: int) -> tuple[int, int]:
+    """N-668: die Messreihen dieser Investition — ``sensor_snapshots`` (``inv:<id>:<feld>``) und die Kanäle
+    ``inv:<id>:<feld>`` sowie die Betriebsart-Mitschrift ``modus:inv:<id>:<betriebsart>`` samt Quelle, Statistik und
+    Nachfüll-Marke.
+
+    **Warum.** Die Schlüssel tragen nur die ID, und SQLite vergibt die ID der zuletzt angelegten Investition nach dem
+    Löschen neu (``investitionen.id`` ohne AUTOINCREMENT). Blieben die Reihen liegen, läse die nächste Investition, die
+    diese ID bekommt, die Zählerstände der gelöschten als ihre eigenen — dieselbe Klasse wie die feld-zentrischen
+    Ablagen (N-559). Die Kanal-Kinder werden ausdrücklich gelöscht, nicht über ``ON DELETE CASCADE``: der greift nur
+    mit ``PRAGMA foreign_keys=ON`` in genau dieser Verbindung. Gibt ``(Snapshots, Kanäle)`` zurück (für das Protokoll).
+    """
+    from sqlalchemy import delete, or_
+
+    from backend.models.kanal import Kanal, KanalNachfuellung, KanalQuelle, KanalStatistik
+    from backend.models.sensor_snapshot import SensorSnapshot
+
+    praefix = f"inv:{int(investition_id)}:"
+    snapshots = (await db.execute(delete(SensorSnapshot).where(
+        SensorSnapshot.anlage_id == anlage_id, SensorSnapshot.sensor_key.startswith(praefix, autoescape=True),
+    ))).rowcount or 0
+    kanal_ids = list((await db.execute(select(Kanal.id).where(
+        Kanal.anlage_id == anlage_id,
+        or_(Kanal.key.startswith(praefix, autoescape=True),
+            Kanal.key.startswith(f"modus:{praefix}", autoescape=True)),
+    ))).scalars().all())
+    if kanal_ids:
+        for kind in (KanalStatistik, KanalQuelle, KanalNachfuellung):
+            await db.execute(delete(kind).where(kind.kanal_id.in_(kanal_ids)))
+        await db.execute(delete(Kanal).where(Kanal.id.in_(kanal_ids)))
+    return snapshots, len(kanal_ids)
+
+
 @router.delete("/{investition_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_investition(investition_id: int, db: AsyncSession = Depends(get_db, scope="function")):
     """
@@ -558,6 +590,9 @@ async def delete_investition(investition_id: int, db: AsyncSession = Depends(get
         # N-561: und die Gateway-Zeilen dieser Zuordnungen, samt Reload.
         gateway_topics = await _entferne_gateway_zeilen(db, gateway_ids)
 
+    # N-668: Snapshots und Kanäle der Investition — sonst erbt die nächste, die diese ID bekommt, ihre Messreihen.
+    snapshots, kanaele = await _entferne_messreihen(db, inv.anlage_id, investition_id)
+
     # N-560: in DIESER Sitzung (N-532), vor dem Löschen — danach gibt es die
     # Bezeichnung nicht mehr.
     await log_activity(
@@ -566,8 +601,12 @@ async def delete_investition(investition_id: int, db: AsyncSession = Depends(get
         details=_komponente_klartext(anlage, inv) + (
             f" · MQTT-Gateway-Zuordnung entfernt ({', '.join(gateway_topics)})"
             if gateway_topics else ""
+        ) + (
+            f" · Messreihen entfernt ({snapshots} Zählerstände, {kanaele} Kanäle)"
+            if snapshots or kanaele else ""
         ),
-        details_json={"investition_id": inv.id, "typ": inv.typ},
+        details_json={"investition_id": inv.id, "typ": inv.typ,
+                      "snapshots_entfernt": snapshots, "kanaele_entfernt": kanaele},
         anlage_id=inv.anlage_id,
         db=db,
     )

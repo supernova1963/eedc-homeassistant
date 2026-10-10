@@ -1018,7 +1018,9 @@ class EnergieprofilChecks:
         nichts berechenbar = ERROR, konsistent mit „Kein Strompreis").
 
         Scope: PV-Module (Strings). Balkonkraftwerk behält die eigene Pro-
-        Modul-Prüfung (eigener Einzel-Sensor, keine String-Verteilung).
+        Modul-Prüfung (eigener Einzel-Sensor, keine String-Verteilung) — seit
+        N-651 nur für Monate ohne Anlagenwert: mit ihm trägt das BKW ohne
+        eigenen Zähler seinen kWp-Anteil (N-621), es fehlt nichts.
         """
         ergebnisse: list[CheckErgebnis] = []
         kat = CheckKategorie.INVESTITIONEN

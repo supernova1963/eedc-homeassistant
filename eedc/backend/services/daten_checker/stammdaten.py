@@ -1235,8 +1235,17 @@ class StammdatenChecks:
                         ),
                         link="/einstellungen/investitionen",
                     ))
+                # N-651: „PV-Erzeugung fehlt" nur, wenn weder ein eigener Wert noch ein Anlagenwert
+                # (`Monatsdaten.pv_erzeugung_kwh`, der Anlagenzähler) den Monat trägt. Ohne eigenen Zähler bekommt das
+                # Balkonkraftwerk seinen kWp-Anteil am Rest des Anlagenwerts (P7, N-621) — das ist kein Fehlen. Bis
+                # 10.10.2026 meldete der Checker hier eine Lücke neben der OK-Meldung der anlagenweiten PV-Prüfung.
+                mit_anlagenwert = frozenset(
+                    (anlagenzeile.jahr, anlagenzeile.monat) for anlagenzeile in monatsdaten
+                    if anlagenzeile.pv_erzeugung_kwh is not None
+                )
                 ergebnisse.extend(self._check_investition_monatsdaten(
                     inv, name, "pv_erzeugung_kwh", "PV-Erzeugung", CheckSeverity.WARNING, monatsdaten,
+                    gedeckt=mit_anlagenwert,
                 ))
                 ergebnisse.extend(
                     self._check_bkw_akku_erfassungsweg(inv, name, anlage.investitionen)

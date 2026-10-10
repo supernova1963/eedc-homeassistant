@@ -1462,6 +1462,11 @@ P7_BASELINE_AUSNAHMEN: frozenset[str] = frozenset({
     # aufgelöster Wert beantwortete sie nicht. Eigener Empfängername (`_hat_anlagenwert(vorbestand)`), damit die
     # Freistellung nicht jedes `md` der Datei (Vorschau!) mitnimmt.
     "backend/api/routes/ha_statistics.py::vorbestand",
+    # N-651 (10.10.2026): die BKW-Prüfung des Daten-Checkers fragt je Monat, OB ein Anlagenwert gespeichert ist — mit
+    # ihm trägt ein Balkonkraftwerk ohne eigenen Zähler seinen kWp-Anteil (N-621), „PV-Erzeugung fehlt" wäre ein
+    # Fehlalarm. Diagnose über das Feld (Vorhandensein, keine Menge), dieselbe Rolle wie `vorbestand`; eigener
+    # Empfängername, damit die Freistellung kein anderes `md` der Datei mitnimmt.
+    "backend/services/daten_checker/stammdaten.py::anlagenzeile",
     # Drei Rollen in einer Datei, alle drei gedeckt (Granularität ist
     # `modul::empfänger`, feiner geht die Allowlist nicht). **Zeilennummern
     # bewusst weggelassen** — sie standen hier und waren schon vor dem

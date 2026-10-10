@@ -8,7 +8,8 @@
   da, der neue Teil ist ganz zurückgerollt (SAVEPOINT) und der Fehler als Aktivität in DERSELBEN
   Sitzung vermerkt (N-532).
 * **Löschen:** eine gelöschte Anlage räumt ihre Kanäle wie ihre Snapshots (``ON DELETE CASCADE``);
-  eine gelöschte Investition räumt weder das eine noch das andere (heutiges Verhalten, gemessen).
+  eine gelöschte Investition ebenso (seit N-668, 10.10.2026 — bis dahin räumte sie keines von beiden, und die
+  nächste Investition mit derselben ID erbte beide; Probe dazu: ``test_n668_investition_loeschen_messreihen.py``).
 * **E2:** dasselbe Bitgleich mit Nachfüllen Spiegel und Konsistenzlauf (samt einer Korrektur in HA)
   zwischen Stundenlauf und Tagesaggregation — beide schreiben nur Kanal-Tabellen.
 
@@ -280,15 +281,17 @@ async def test_anlage_loeschen_raeumt_kanaele_wie_snapshots(db):
     assert await _anzahl(db) == (0, 0, 0, 0)
 
 
-async def test_investition_loeschen_raeumt_weder_kanal_noch_snapshot(db):
-    """Heutiges Verhalten (``delete_investition`` löscht keine ``sensor_snapshots``-Zeile) —
-    der Kanal folgt ihm, wie der Auftrag es verlangt („gleiches Verhalten")."""
+async def test_investition_loeschen_raeumt_kanal_wie_snapshot(db):
+    """Der Kanal folgt dem Snapshot („gleiches Verhalten", Auftrag E1) — seit N-668 (10.10.2026) räumt
+    ``delete_investition`` beide. Bis dahin stand hier ``(1, 1, 1, 1)``: die Probe hielt das damalige Verhalten fest,
+    das der Fund als Defekt benennt (eine neue Investition mit derselben ID erbte Snapshots und Kanäle). Die Substanz —
+    Kanal und Snapshot verhalten sich beim Löschen gleich — bleibt."""
     from backend.api.routes.investitionen.crud import delete_investition
 
     _, inv = await _mit_kanal_und_snapshot(db)
     await delete_investition(inv.id, db)
     await db.commit()
-    assert await _anzahl(db) == (1, 1, 1, 1)
+    assert await _anzahl(db) == (0, 0, 0, 0)
 
 
 @pytest.mark.parametrize("fid", ["M04", "M05", "M06"])
