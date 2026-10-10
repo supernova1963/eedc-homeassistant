@@ -18,7 +18,8 @@ der Zähler-Verlauf unter *Komponenten → Sonstiges* trägt wieder die richtige
 **Daten-Checker, Import und Löschen:** Ein Balkonkraftwerk ohne eigenen Zähler gilt nicht mehr als „PV-Erzeugung fehlt", wenn
 der Anlagenzähler den Monat trägt; die Import-Vorschau zeigt Wandlungsverluste als Hinweis statt als Konflikt; Zähler einzelner
 Innengeräte kommen im Statistik-Import und im Monatsabschluss an; und eine gelöschte Komponente vererbt ihre Messwerte nicht
-mehr an eine neu angelegte.
+mehr an eine neu angelegte. Neu im Daten-Checker: **„PV – Zähler steht"** nennt einen eingefrorenen PV-Gesamtzähler, wenn
+Einspeisung oder String-Zähler weiterlaufen — die Ursache, wenn *Cockpit → Tag* eine negative Autarkie zeigt.
 
 ## v4.1.5 — 10. Oktober 2026
 

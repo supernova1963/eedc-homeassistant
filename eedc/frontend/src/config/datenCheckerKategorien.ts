@@ -58,6 +58,8 @@ export const KATEGORIE_LABELS: Record<string, string> = {
   pv_ueber_erfassung: 'PV – Doppelerfassungs-Verdacht',
   // N-588 (F5): Anlagenzähler gegen String-Zähler — ob eedc die Wandlungsverluste bewerten darf, und warum nicht.
   messpunkt: 'PV – Messpunkt (Anlagenzähler und Strings)',
+  // N-662: der Anlagenzähler „PV gesamt" steht still, während Einspeisung bzw. Strings wachsen.
+  pv_zaehler_steht: 'PV – Zähler steht',
   emob_pool_pflege: 'E-Mobilität – Pool-Pflege',
   // F-21 (10.08.): beide fehlten hier UND in der Reihenfolge unten. Der
   // Doppelzählungs-Befund trägt einen Reparatur-Knopf („Zeitraum neu
@@ -106,6 +108,7 @@ export const KATEGORIE_REIHENFOLGE: string[] = [
   'klima_modus_sensor',
   'pv_ueber_erfassung',
   'messpunkt',
+  'pv_zaehler_steht',
   'emob_pool_pflege',
   'emob_doppelzaehlung_tage',
   'phev_anteil_unbestimmt',

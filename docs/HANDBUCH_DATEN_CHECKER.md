@@ -24,6 +24,7 @@
    8b. [Zählerstände – Sprung in Home Assistant](#48b-zaehlerstaende--sprung-in-home-assistant)
    8c. [Zählerstände – Rückgang in Home Assistant](#48c-zaehlerstaende--rueckgang-in-home-assistant)
    8d. [PV – Messpunkt (Anlagenzähler und Strings)](#48d-pv--messpunkt)
+   8e. [PV – Zähler steht](#48e-pv--zaehler-steht)
    9. [Sensor-Mapping – HA-Statistics](#49-sensor-mapping--ha-statistics)
    10. [Energieprofil – fehlende Tageswerte](#410-energieprofil--fehlende-tageswerte)
    11. [Geräte-Connector ohne Monatswert](#411-geraete-connector-ohne-monatswert)
@@ -104,7 +105,7 @@ Einzelne Befunde haben über Releases hinweg ihre Stufe gewechselt. Beispiele:
 
 ## 3. Verfügbarkeit nach Installationsvariante <a name="3-verfuegbarkeit-nach-installationsvariante"></a>
 
-eedc prüft **32 Kategorien** (Stand 10.10.2026; bis dahin stand hier 26 — die Zahl war mit den jüngeren Kategorien nicht mitgewachsen). Die meisten greifen in jeder Installation identisch; **neun** hängen an Voraussetzungen, die je nach Installation gegeben sind oder nicht — sie sind unten fett markiert. Die Kategorie *Datenquelle – aktiver Pfad* trägt zwei Befund-Familien (Zeile 12 und die Statusmeldungen der Datenquellen) und steht deshalb nur einmal in der Tabelle.
+eedc prüft **33 Kategorien** (Stand 10.10.2026; bis dahin stand hier 26 — die Zahl war mit den jüngeren Kategorien nicht mitgewachsen; die 33. ist *PV – Zähler steht*). Die meisten greifen in jeder Installation identisch; **zehn** hängen an Voraussetzungen, die je nach Installation gegeben sind oder nicht — sie sind unten fett markiert. Die Kategorie *Datenquelle – aktiver Pfad* trägt zwei Befund-Familien (Zeile 12 und die Statusmeldungen der Datenquellen) und steht deshalb nur einmal in der Tabelle.
 
 | # | Kategorie | HA Add-on | Standalone (Docker / native) |
 |---|-----------|-----------|------------------------------|
@@ -121,6 +122,7 @@ eedc prüft **32 Kategorien** (Stand 10.10.2026; bis dahin stand hier 26 — die
 | 9b | **Zählerstände – Sprung in Home Assistant** (§4.8b) | greift | **wird übersprungen** (keine HA-Statistik) |
 | 9c | **Zählerstände – Rückgang in Home Assistant** (§4.8c) | greift | **wird übersprungen** (keine HA-Statistik) |
 | 9d | **PV – Messpunkt** (§4.8d) | greift, sobald die PV-Zähler Kanäle haben (Spiegel der HA-Statistik) | greift mit MQTT-Zählern (eigene Summe); ohne Zähler-Kanäle **wird übersprungen** |
+| 9e | **PV – Zähler steht** (§4.8e) | greift, sobald die PV-Zähler Kanäle haben (Spiegel der HA-Statistik) | greift mit MQTT-Zählern (eigene Summe); ohne Zähler-Kanäle **wird übersprungen** |
 | 10 | **Sensor-Mapping – HA-Statistics** (§4.9) | greift | **wird übersprungen** (keine HA-LTS verfügbar) |
 | 11 | Energieprofil – fehlende Tageswerte (§4.10) | greift | greift |
 | 12 | Geräte-Connector ohne Monatswert (§4.11) | greift | greift |
@@ -631,6 +633,37 @@ Monate, deren PV-Zähler eedc lückenlos kennt.
 
 Die Schwellen (10 %, 80 %, 2 %) sind vorsichtig gesetzt und nicht an einer realen Anlage gemessen. Kein Reparatur-Knopf:
 die Antwort ist eine Zuordnung unter *Einstellungen → Datenquellen* bzw. die Kopplung am Speicher.
+
+---
+
+### 4.8e PV – Zähler steht <a name="48e-pv--zaehler-steht"></a>
+
+Ein PV-Gesamtzähler (Feld *PV gesamt*), der **eingefroren** ist — der Sensor meldet weiter, aber sein Stand bewegt sich
+nicht —, sieht für eedc aus wie ein Zähler ohne Erzeugung. Läuft dabei die Einspeisung weiter, passt die Tagesbilanz nicht mehr zusammen, und
+*Cockpit → Tag* bzw. *Monat* zeigen unplausible Werte, etwa eine **negative Autarkie**. eedc rechnet diese Werte
+bewusst so, wie sie gemessen sind, und biegt sie nicht zurecht; diese Kategorie nennt die Ursache.
+
+Geprüft werden die letzten 31 abgeschlossenen Tage des Anlagenzählers *PV gesamt*, soweit eedc ihn lückenlos kennt. Die
+Zähler einzelner Strings prüft diese Kategorie nicht: steht ein String, während die anderen erzeugen, ist das meist
+Teilbeschattung oder Schnee auf einem Teil der Module — eine richtige Messung.
+
+#### Befund
+
+| Befund | Schwere | Bedeutung |
+| --- | --- | --- |
+| **PV-Zähler … steht seit … (bzw. stand vom … bis …), obwohl die Einspeisung / die Strings wachsen — Tag und Monat zeigen deshalb unplausible Werte; Sensor in Home Assistant prüfen** | ⚠️ WARNING | Der Anlagenzähler hat sich mindestens **drei volle Tage** nicht bewegt, während im selben Zeitraum erzeugt wurde: die Einspeisung wuchs um mehr als die Entladung deiner Speicher und die Erzeugung der Balkonkraftwerke mit eigenem Zähler (plus 1 kWh), oder die String-Zähler, die er mitmisst, erzeugten im Mittel mehr als 0,5 kWh am Tag. |
+
+**Was diese Meldung bewusst nicht auslöst** — das sind richtige Messungen:
+
+- ein Einspeisezähler, der steht, während die PV erzeugt (**Nulleinspeisung**, Wintertage mit 100 % Eigenverbrauch);
+- ein Netzbezugszähler, der steht (**autarke Tage** mit Speicher);
+- ein PV-Zähler, der steht, während nur der Netzbezug läuft (**Schnee** auf den Modulen);
+- ein einzelner String-Zähler, der steht, während die anderen erzeugen (**Teilbeschattung**, Schnee auf einem Teil der Module);
+- ein Speicher, der bei PV 0 ins Netz entlädt — seine Entladung wird abgezogen. Hat dein Speicher keinen Entladungs-Zähler,
+  nimmt eedc die Einspeisung gar nicht als Vergleich.
+
+**Was tun:** den Sensor in Home Assistant prüfen (Integration hängt, Gerät nicht erreichbar, Zähler zurückgesetzt) bzw.
+im Standalone-Betrieb das MQTT-Topic. Liefert er wieder Werte, zählen die folgenden Tage richtig. Kein Reparatur-Knopf.
 
 ---
 

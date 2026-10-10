@@ -9,6 +9,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Added
+
+- **Daten-Checker: neue Prüfung „PV – Zähler steht".** Friert der PV-Gesamtzähler der Anlage ein — der Sensor meldet weiter, aber sein Stand bewegt sich nicht —, rechnet eedc für diese Tage „keine Erzeugung", und *Cockpit → Tag* oder *Monat* zeigen z. B. eine negative Autarkie. eedc lässt die Zahlen so, wie sie gemessen sind; der Daten-Checker nennt jetzt die Ursache: den Zähler, der seit mindestens drei Tagen steht, obwohl die Einspeisung oder die String-Zähler weiter wachsen. Eine Nulleinspeisung, autarke Tage, Schnee, Teilbeschattung oder ein Speicher, der ins Netz entlädt, lösen die Meldung nicht aus.
+
 ### Fixed
 
 - **Komponenten → Sonstiges: der Verlauf eines Zählers (Gas, Wasser …) trägt die richtigen Monatsnamen.** Jeder Monat stand einen Monat zu früh beschriftet — der Juni-Verbrauch hieß „Mai", der Januar hatte keinen Namen. Die Werte selbst waren richtig.

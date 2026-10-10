@@ -598,8 +598,47 @@ async def monatswerte_mit_kanaelen(
     return out
 
 
+@dataclass(frozen=True)
+class TagesDeltas:
+    """``tagesdeltas``: die abgeschlossenen Tage (aufsteigend), je Mengen-Kanal das Δ je Tag (``None`` ohne volle
+    Abdeckung) und je Kanal die Entität seiner jüngsten Quelle (HA-Entity bzw. MQTT-Schlüssel)."""
+
+    tage: list[date]
+    delta: dict[str, list[Optional[float]]]
+    entitaet: dict[str, str]
+
+
+async def tagesdeltas(
+    db: AsyncSession, anlage_id: int, keys: Iterable[str], anzahl: int, *, jetzt: Optional[int] = None,
+) -> TagesDeltas:
+    """Das Δ je Tag der letzten ``anzahl`` abgeschlossenen Tage für die Mengen-Kanäle ``keys`` (Tagesfenster des
+    Bestands wie Cockpit → Tag, EINE Anweisung) — für den Daten-Checker „PV – Zähler steht" (N-662), der die
+    Lese-Schicht nicht selbst importiert (Wächter ``test_kanal_lesen_waechter``). Ein Schlüssel ohne Kanal fehlt."""
+    from backend.models.kanal import KanalQuelle
+
+    jetzt = _jetzt(jetzt)
+    se = soll_ende(jetzt)
+    heute = datetime.fromtimestamp(jetzt).date()
+    tage = [t for t in (heute - timedelta(days=n) for n in range(anzahl, 0, -1)) if tagesfenster(t)[1] <= se]
+    kanaele = [k for k in (await kanaele_laden(db, anlage_id, keys)).values() if k.art == ART_SUM]
+    if not tage or not kanaele:
+        return TagesDeltas(tage, {}, {})
+    grenzen = [tagesfenster(t)[0] for t in tage] + [tagesfenster(tage[-1])[1]]
+    je = await reihe_stapel(db, kanaele, grenzen, jetzt=jetzt)
+    delta = {k: [z.delta if z.voll else None for z in lst] for k, lst in je.items()}
+    nach_id = {k.id: k.key for k in kanaele}
+    entitaet: dict[str, str] = {}
+    for q in (await db.execute(
+        select(KanalQuelle).where(KanalQuelle.kanal_id.in_(list(nach_id))).order_by(KanalQuelle.gueltig_ab)
+    )).scalars().all():
+        if q.statistic_id:
+            entitaet[nach_id[q.kanal_id]] = q.statistic_id
+    return TagesDeltas(tage, delta, entitaet)
+
+
 __all__ = [
-    "FASSUNG_WEG2", "KanalZeitraum", "als_kanaltag", "als_monatssumme", "bilanz_ziele", "ist_bilanz_schluessel",
+    "FASSUNG_WEG2", "KanalZeitraum", "TagesDeltas", "als_kanaltag", "als_monatssumme", "bilanz_ziele",
+    "ist_bilanz_schluessel", "tagesdeltas",
     "kanal_kalendermonate", "kanal_kompositionen", "kanal_monate", "kanal_tage", "lade_monats_summen", "mische_bilanz", "mische_komponenten", "mische_verworfen",
     "monate_bilanz", "monatswerte_mit_kanaelen", "tage_bilanz", "waehle_und_komponiere",
 ]

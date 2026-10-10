@@ -88,6 +88,12 @@ class CheckKategorie(str, Enum):
     # nicht hält (> 10 %, Balkonkraftwerk außerhalb des Anlagenzählers, DC-Speicher), wenn der Anlagenzähler mehr zählt
     # als die Strings, und den Handgriff für einen Volleinspeiser ohne Anlagenzähler. Kein Reparatur-Knopf.
     MESSPUNKT = "messpunkt"
+    # N-662 (10.10.2026): der Anlagenzähler „PV gesamt" steht über Tage still, während die Einspeisung bzw. die
+    # String-Zähler wachsen — die Ursache negativer Autarkie in Cockpit → Tag/Monat. Die Anzeige bleibt (Entscheid
+    # Gernot), diese Kategorie benennt die Ursache. Bewusst KEINE Regel für Einspeisung, Netzbezug oder Verbraucher
+    # und keine für einzelne Strings (Nulleinspeisung, autarke Tage, Schnee, Teilbeschattung sind richtige
+    # Datenlagen). Kein Reparatur-Knopf.
+    PV_ZAEHLER_STEHT = "pv_zaehler_steht"
     # Wallbox/E-Auto Phase 2a aus KONZEPT-WALLBOX-EAUTO.md: wenn EAuto-
     # Investition UND Wallbox-Investition beide Heimladungs-Werte tragen,
     # messen sie häufig denselben Stromfluss aus zwei Perspektiven. Die

@@ -2932,6 +2932,11 @@ P11_AUSNAHMEN: frozenset[str] = frozenset({
     "backend/services/monats_fakten/roh.py::_erzeuger_aktiv",  # „war einer aktiv?"
     "backend/api/routes/monatsabschluss/views.py::get_naechster_monat",
     "backend/api/routes/monatsdaten.py::list_monatsdaten_aggregiert",  # `pv_ziel_aktiv`
+    # N-662 (10.10.2026): keine Σ einer Erzeugung über die Erzeuger-Menge, sondern zwei getrennte ROLLEN je Typ —
+    # die String-Zähler als Gegengröße des Anlagenzählers (nur Module OHNE Balkonkraftwerk-Parent) und der Abzug von der Einspeisung (je
+    # Balkonkraftwerk sein Kanal ODER, abgetreten ohne eigenen, die Kanäle seiner Kinder — nie beide). Eltern und Kind
+    # können sich so nicht doppeln; der Selektor beantwortete die Frage „wer ist ein String?" nicht.
+    "backend/services/daten_checker/datenquelle/zaehler_steht.py::_check_pv_zaehler_steht",
     "backend/services/energie_profil/_helpers.py::_get_tagespeaks_aus_ha_lts",
     # LADEPFAD, keine Summe: holt die Erzeuger-Zeilen aus der DB und reicht sie
     # weiter. Die Menge wird erst in `soll_fuer_monat` gebildet — dort läuft sie

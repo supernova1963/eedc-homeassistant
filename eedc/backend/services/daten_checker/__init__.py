@@ -160,6 +160,8 @@ class DatenChecker(
         ergebnisse.extend(await self._check_pv_ueber_erfassung(anlage))
         # N-588 F5: Messpunkt-Vertrag der Wandlungsverluste (Anlagenzähler gegen String-Zähler).
         ergebnisse.extend(await self._check_messpunkt(anlage))
+        # N-662: Anlagenzähler steht, obwohl Einspeisung bzw. Strings wachsen (Ursache negativer Autarkie).
+        ergebnisse.extend(await self._check_pv_zaehler_steht(anlage))
         ergebnisse.extend(self._check_wp_arbeitszahl_unplausibel(anlage))
         ergebnisse.extend(self._check_emob_pool_pflege(
             anlage, bloecke=await self._emob_bloecke_fuer_pflege(anlage),
