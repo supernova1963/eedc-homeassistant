@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Wartungsmodus seit Oktober 2026 · Stand 4.1.6</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
+  <strong>Stand 4.1.6</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
 </p>
 
 <p align="center">
@@ -15,9 +15,8 @@
 
 ---
 
-> **Wartungsmodus (seit Oktober 2026):** eedc wird gepflegt, nicht mehr aktiv weiterentwickelt. Gemeldete Fehler werden behoben,
-> Wünsche in [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) gesammelt, aber nicht terminiert. Fehlerberichte
-> mit falscher Zahl, Absturz oder Datenverlust haben Vorrang.
+> eedc ist ausgereift; die Arbeit konzentriert sich auf Fehlerbehebung und Pflege. Fehlerberichte sind willkommen und haben Vorrang,
+> Wünsche werden in [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) gesammelt.
 
 ## Was ist eedc?
 
