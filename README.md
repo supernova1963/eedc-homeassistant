@@ -15,6 +15,10 @@
 
 ---
 
+> **Wartungsmodus (seit Oktober 2026):** eedc wird gepflegt, nicht mehr aktiv weiterentwickelt. Gemeldete Fehler werden behoben,
+> Wünsche in [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) gesammelt, aber nicht terminiert. Fehlerberichte
+> mit falscher Zahl, Absturz oder Datenverlust haben Vorrang.
+
 ## Was ist eedc?
 
 **eedc** (Energie Effizienz Data Center) ist eine lokale Anwendung zur umfassenden Auswertung und Wirtschaftlichkeitsanalyse von Photovoltaik-Anlagen. Die Software läuft standalone oder als Home Assistant App und speichert alle Daten lokal.
