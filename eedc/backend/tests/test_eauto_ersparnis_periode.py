@@ -24,6 +24,7 @@ def test_einzelner_monat_nutzt_lookup_preis():
     erg = berechne_eauto_ersparnis_periode(
         km_pro_monat=[(2026, 3, 1000.0)],
         ladung_netz_kwh_gesamt=100.0,
+        ladung_pv_kwh_gesamt=0.0, pv_strompreis_cent=30.0,  # N-672: ohne PV-Ladung
         ladung_extern_euro_gesamt=0.0,
         wallbox_strompreis_cent=30.0,
         eauto_parameter={"vergleich_verbrauch_l_100km": 7.5},
@@ -45,6 +46,7 @@ def test_drei_monate_unterschiedliche_preise():
             (2026, 3, 2000.0),  # 2000 × 7,5 × 1,90 = 285,0
         ],
         ladung_netz_kwh_gesamt=0.0,
+        ladung_pv_kwh_gesamt=0.0, pv_strompreis_cent=30.0,  # N-672: ohne PV-Ladung
         ladung_extern_euro_gesamt=0.0,
         wallbox_strompreis_cent=0.0,
         eauto_parameter={"vergleich_verbrauch_l_100km": 7.5},
@@ -63,6 +65,7 @@ def test_monat_ohne_lookup_eintrag_faellt_auf_param_zurueck():
     erg = berechne_eauto_ersparnis_periode(
         km_pro_monat=[(2026, 1, 1000.0), (2026, 2, 1000.0)],
         ladung_netz_kwh_gesamt=0.0,
+        ladung_pv_kwh_gesamt=0.0, pv_strompreis_cent=30.0,  # N-672: ohne PV-Ladung
         ladung_extern_euro_gesamt=0.0,
         wallbox_strompreis_cent=0.0,
         eauto_parameter={
@@ -81,6 +84,7 @@ def test_lookup_eintrag_mit_none_faellt_zurueck():
     erg = berechne_eauto_ersparnis_periode(
         km_pro_monat=[(2026, 1, 1000.0)],
         ladung_netz_kwh_gesamt=0.0,
+        ladung_pv_kwh_gesamt=0.0, pv_strompreis_cent=30.0,  # N-672: ohne PV-Ladung
         ladung_extern_euro_gesamt=0.0,
         wallbox_strompreis_cent=0.0,
         eauto_parameter={
@@ -99,6 +103,7 @@ def test_ohne_lookup_und_ohne_params_nimmt_kanon_default():
     erg = berechne_eauto_ersparnis_periode(
         km_pro_monat=[(2026, 1, 1000.0)],
         ladung_netz_kwh_gesamt=0.0,
+        ladung_pv_kwh_gesamt=0.0, pv_strompreis_cent=30.0,  # N-672: ohne PV-Ladung
         ladung_extern_euro_gesamt=0.0,
         wallbox_strompreis_cent=0.0,
     )
@@ -117,6 +122,7 @@ def test_keine_km_im_zeitraum_liefert_null_ergebnis():
     erg = berechne_eauto_ersparnis_periode(
         km_pro_monat=[],
         ladung_netz_kwh_gesamt=50.0,
+        ladung_pv_kwh_gesamt=0.0, pv_strompreis_cent=30.0,  # N-672: ohne PV-Ladung
         ladung_extern_euro_gesamt=10.0,
         wallbox_strompreis_cent=30.0,
         eauto_parameter={"vergleich_verbrauch_l_100km": 7.5},
@@ -126,6 +132,7 @@ def test_keine_km_im_zeitraum_liefert_null_ergebnis():
     assert erg.ersparnis_euro == -25.0
     leer = berechne_eauto_ersparnis_periode(
         km_pro_monat=[], ladung_netz_kwh_gesamt=0.0, ladung_extern_euro_gesamt=0.0,
+        ladung_pv_kwh_gesamt=0.0, pv_strompreis_cent=30.0,  # N-672: ohne PV-Ladung
         wallbox_strompreis_cent=30.0, eauto_parameter={"vergleich_verbrauch_l_100km": 7.5},
     )
     assert (leer.ersparnis_euro, leer.benzin_kosten_euro, leer.strom_kosten_euro) == (0.0, 0.0, 0.0)
@@ -140,6 +147,7 @@ def test_monate_mit_km_0_oder_negativ_werden_uebersprungen():
             (2026, 3, None),  # type: ignore[list-item]
         ],
         ladung_netz_kwh_gesamt=0.0,
+        ladung_pv_kwh_gesamt=0.0, pv_strompreis_cent=30.0,  # N-672: ohne PV-Ladung
         ladung_extern_euro_gesamt=0.0,
         wallbox_strompreis_cent=0.0,
         eauto_parameter={"vergleich_verbrauch_l_100km": 7.5},
@@ -159,6 +167,7 @@ def test_nongjowo_szenario_cockpit_vs_dashboard_konsistenz():
     erg = berechne_eauto_ersparnis_periode(
         km_pro_monat=[(2026, m, 30534.0 / 12) for m in range(1, 13)],
         ladung_netz_kwh_gesamt=4000.0,
+        ladung_pv_kwh_gesamt=0.0, pv_strompreis_cent=30.0,  # N-672: ohne PV-Ladung
         ladung_extern_euro_gesamt=0.0,
         wallbox_strompreis_cent=30.0,
         eauto_parameter={

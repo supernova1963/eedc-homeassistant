@@ -459,6 +459,11 @@ strom_kosten            = (wie heute, aus der tatsächlich gemessenen Ladung)   
 ersparnis = benzin_kosten_vergleich − strom_kosten − fossile_restkosten
 ```
 
+> ⭐ **N-672 (2026-10-11): `strom_kosten` ist die ganze Heimladung — eine kWh ist einmal Geld.** Die
+> Netzladung kostet ihren Preis (Wallbox-Tarif, wo es einen gibt), die **PV-Ladung den Preis, zu dem die
+> Eigenverbrauchs-Ersparnis derselben Sicht sie gutschreibt** — sie steckt dort schon, und „kostenlos"
+> zählte sie zweimal (`core/berechnungen/heimladung_kosten.py`). „Davon aus PV" bleibt Information, kein Geldposten.
+
 Die Frage „was hätte ein Benziner gekostet" bleibt über **alle** Kilometer gestellt — sonst
 verglichen wir ein Auto mit einem halben Auto. Neu ist nur, dass die **real angefallenen**
 Benzinkosten des PHEV als Kosten danebenstehen. Analog CO₂: die vermiedene Emission wird um

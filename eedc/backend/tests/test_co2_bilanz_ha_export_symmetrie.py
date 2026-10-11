@@ -45,13 +45,14 @@ def test_berechne_co2_bilanz_komposition():
     b = berechne_co2_bilanz(
         eigenverbrauch_kwh=1000.0,
         wp_waerme_kwh=12000.0, wp_strom_kwh=3000.0,
-        emob_km=10000.0, emob_netz_ladung_kwh=1000.0,
+        emob_km=10000.0, emob_netz_ladung_kwh=1000.0, emob_pv_ladung_kwh=500.0,
         benzin_verbrauch_liter=750.0,
     )
     assert b.co2_pv_kg == pytest.approx(1000.0 * CO2_FAKTOR_STROM_KG_KWH)
     assert b.co2_wp_kg == pytest.approx(co2_wp_ersparnis_kg(12000.0, 3000.0))
+    # N-672: die GANZE Heimladung (Netz 1000 + PV 500) trägt den Strommix — eine kWh ist einmal CO₂.
     assert b.co2_emob_kg == pytest.approx(
-        750.0 * CO2_FAKTOR_BENZIN_KG_LITER - 1000.0 * CO2_FAKTOR_STROM_KG_KWH
+        750.0 * CO2_FAKTOR_BENZIN_KG_LITER - 1500.0 * CO2_FAKTOR_STROM_KG_KWH
     )
     assert b.co2_gesamt_kg == pytest.approx(
         b.co2_pv_kg + max(0.0, b.co2_wp_kg) + max(0.0, b.co2_emob_kg)
@@ -64,6 +65,7 @@ def test_berechne_co2_bilanz_klammert_negative_komponenten():
         eigenverbrauch_kwh=500.0,
         wp_waerme_kwh=1000.0, wp_strom_kwh=3000.0,   # schlechte JAZ → co2_wp < 0
         emob_km=1000.0, emob_netz_ladung_kwh=5000.0,  # viel Netz → co2_emob < 0
+        emob_pv_ladung_kwh=0.0,
         benzin_verbrauch_liter=10.0,
     )
     assert b.co2_wp_kg < 0 and b.co2_emob_kg < 0
@@ -73,7 +75,7 @@ def test_berechne_co2_bilanz_klammert_negative_komponenten():
 def test_co2_emob_nur_bei_gefahrenen_km():
     b = berechne_co2_bilanz(
         eigenverbrauch_kwh=0.0, emob_km=0.0,
-        emob_netz_ladung_kwh=500.0, benzin_verbrauch_liter=100.0,
+        emob_netz_ladung_kwh=500.0, benzin_verbrauch_liter=100.0, emob_pv_ladung_kwh=0.0,
     )
     assert b.co2_emob_kg == 0.0
 

@@ -82,8 +82,10 @@ async def test_jahresbericht_ignoriert_dienstwagen(db):
     # Verbrenner 10.000 km × 7,5 L/100 km × 2,37 kg/L − Netzladung 800 kWh × 0,38.
     # Die Substanz der Probe — der Dienstwagen (40.000 km, 3.000 kWh Netz) zählt
     # nicht mit — bleibt; mit ihm stünde hier ein Vielfaches.
+    # ⭐ N-672 (eine kWh ist einmal CO₂): die GANZE private Heimladung 2.000 kWh (800 Netz + 1.200 PV)
+    # trägt den Strommix, bis 11.10.2026 nur die 800 kWh Netz.
     assert ctx["co2"]["emob_kg"] == pytest.approx(
-        10000.0 / 100 * 7.5 * 2.37 - 800.0 * 0.38, abs=0.1,
+        10000.0 / 100 * 7.5 * 2.37 - 2000.0 * 0.38, abs=0.1,
     )
 
 

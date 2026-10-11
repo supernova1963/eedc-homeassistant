@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from typing import Any, Optional
+from typing import Any, Iterable, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -147,3 +147,41 @@ async def baue_finanz_zeile(
         wandlungsverluste_kwh=eingabe.wandlungsverluste_kwh,
         verluste_grund=eingabe.verluste_grund,
     )
+
+
+async def ev_preis_je_monat(
+    db: AsyncSession,
+    anlage_id: int,
+    monate: Iterable[tuple[int, int, Any]],
+    *,
+    tarif_cache: dict[date, dict],
+    preis_messung: Optional[PreisMessung] = None,
+) -> dict[tuple[int, int], float]:
+    """Der Preis der **Eigenverbrauchs-Ersparnis** je Monat (ct/kWh) — für die PV-Ladung des E-Autos.
+
+    ⭐ **N-672 (11.10.2026): eine kWh ist einmal Geld.** Die E-Auto-Ersparnis belastet
+    die PV-Ladung mit genau dem Preis, zu dem die Eigenverbrauchs-Ersparnis derselben
+    Sicht sie gutschreibt. Dieser Preis entsteht in ``baue_finanz_zeile`` (Kaskade
+    gepflegt → gemessen → Zeitfenster → Stamm, A-2) und wird von
+    ``ev_preis_der_zeile`` gelesen — hier über **denselben** Weg, damit keine Sicht
+    eine zweite Preisauflösung daneben stellt.
+
+    Args:
+        monate: ``(jahr, monat, monatsdaten_oder_None)`` — die Zählerzeile trägt den
+            gepflegten Flex-Ø (P8, zweite Form), wie in ``finanz_zeile_eingabe``.
+        tarif_cache: der Cache des Aufrufers (derselbe wie für seine Finanz-Zeilen).
+        preis_messung: wer ``lade_monats_fakten`` gerufen hat, reicht dieselbe Messung weiter.
+    """
+    from backend.core.berechnungen.finanz_aggregat import ev_preis_der_zeile
+
+    ergebnis: dict[tuple[int, int], float] = {}
+    for jahr, monat, monatsdaten in monate:
+        if (jahr, monat) in ergebnis:
+            continue
+        zeile = await baue_finanz_zeile(
+            db, anlage_id,
+            FinanzZeileEingabe(jahr=jahr, monat=monat, monatsdaten=monatsdaten),
+            tarif_cache=tarif_cache, preis_messung=preis_messung,
+        )
+        ergebnis[(jahr, monat)] = ev_preis_der_zeile(zeile)
+    return ergebnis

@@ -153,6 +153,8 @@ async def get_nachhaltigkeit(
             wp_strom_kuehlen_kwh=fakt.wp.modus_strom_kuehlen_kwh,
             emob_km=fakt.emob.km,
             emob_netz_ladung_kwh=fakt.emob.ladung_netz_kwh,
+            # N-672: die PV-Ladung trägt den Strommix wie die Netzladung (eine kWh ist einmal CO₂).
+            emob_pv_ladung_kwh=fakt.emob.ladung_pv_kwh,
             benzin_verbrauch_liter=fakt.emob.km / 100 * vergleich_l_100km,
             # #331: der real getankte Anteil eines Plug-in-Hybrids mindert die
             # vermiedene Emission. Für ein BEV ist er 0.

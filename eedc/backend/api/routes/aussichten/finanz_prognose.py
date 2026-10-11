@@ -10,6 +10,7 @@ und sonstige laufende Posten, der Jahres-Netto-Ertrag abzüglich USt.
 
 from typing import Optional
 from backend.core.berechnungen import einspeise_erloes_euro, gas_kosten_altanlage
+from backend.core.berechnungen.heimladung_kosten import heimladung_stromkosten_euro
 from backend.services.ust_satz import ust_hochrechnung
 from backend.utils.investition_value import param_zahl
 from backend.core.investition_parameter import PARAM_WAERMEPUMPE, PARAM_WAERMEPUMPE_DEFAULTS
@@ -435,10 +436,18 @@ def jahres_alternativkosten(
         # Was es mit Benzin kosten würde
         benzin_liter_jahr = km_jahr / 100 * eauto_vergleich_l_100km_agg
         benzin_kosten_jahr = benzin_liter_jahr * prognose_benzinpreis
-        # E-Auto Netz-Stromkosten pro Jahr (PV-Ladung ist in EV-Ersparnis)
+        # E-Auto-Stromkosten pro Jahr — Netz UND PV.
+        # ⭐ N-672 (eine kWh ist einmal Geld): hier stand „Netz-Stromkosten (PV-Ladung ist in EV-Ersparnis)" — der
+        # Kommentar nannte die Doppelzählung selbst: `jahres_ev_ersparnis` bewertet den ganzen Eigenverbrauch zum
+        # Netzpreis, die PV-Ladung steckt darin, und die E-Auto-Zeile ließ sie zusätzlich unbelastet. Jetzt trägt sie
+        # den Preis, mit dem dieselbe Prognose den Eigenverbrauch bewertet (`netzbezug_preis`, Monatsschleife oben).
+        # Dieselbe Klasse wie die WP-Zeile darunter (N-459).
         netz_anteil = gesamt_eauto_netz / (gesamt_eauto_pv + gesamt_eauto_netz) if (gesamt_eauto_pv + gesamt_eauto_netz) > 0 else 0.5
         eauto_netz_kwh_jahr = (jahres_eauto_pv / (1 - netz_anteil) * netz_anteil) if netz_anteil < 1 else 0
-        eauto_stromkosten_netz_jahr = eauto_netz_kwh_jahr * netzbezug_preis / 100
+        eauto_stromkosten_jahr = heimladung_stromkosten_euro(
+            netz_kwh=eauto_netz_kwh_jahr, netz_preis_cent=netzbezug_preis,
+            pv_kwh=jahres_eauto_pv, pv_preis_cent=netzbezug_preis,
+        )
         # #331: die fortgeschriebene Tankrechnung der Plug-in-Hybride. Der
         # Verbrenner-Anteil je Fahrzeug steht aus der Historie oben fest und
         # wird mit derselben Quote hochgerechnet wie die Kilometer.
@@ -453,7 +462,7 @@ def jahres_alternativkosten(
             fossile_kosten_jahr += _agg["fossile_kosten_jahr"]
         # Netto-Ersparnis
         jahres_eauto_km_ersparnis = (
-            benzin_kosten_jahr - eauto_stromkosten_netz_jahr - fossile_kosten_jahr
+            benzin_kosten_jahr - eauto_stromkosten_jahr - fossile_kosten_jahr
         )
         # Per-E-Auto-Aufschlüsselung (für Komponenten-Anzeige).
         # Benzin-Kostenteil: pro E-Auto mit dessen `vergleich_l_100km` exakt.
@@ -469,7 +478,7 @@ def jahres_alternativkosten(
                 continue
             km_jahr_ea = agg["km"] / anzahl_monate_hist * 12
             benzin_kosten_jahr_ea = km_jahr_ea / 100 * agg["vergleich_l_100km"] * prognose_benzinpreis
-            stromkosten_ea = eauto_stromkosten_netz_jahr * (agg["km"] / gesamt_km)
+            stromkosten_ea = eauto_stromkosten_jahr * (agg["km"] / gesamt_km)
             # #331: derselbe Posten wie im Aggregat oben — sonst wäre die Summe
             # der Pro-Fahrzeug-Zeilen nicht mehr das Aggregat.
             agg["jahres_ersparnis"] = (

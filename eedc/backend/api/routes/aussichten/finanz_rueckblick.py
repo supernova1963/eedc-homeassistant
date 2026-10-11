@@ -10,6 +10,7 @@ den Monats-Fakten, anteilige Betriebskosten je Laufzeit (N-228) und die USt auf 
 from collections import defaultdict
 from backend.core.berechnungen.investitions_jahresertrag import jahresertrag_posten
 from backend.core.berechnungen.kapitalrechnung import jahres_ersparnis_euro
+from backend.core.berechnungen.finanz_aggregat import ev_preis_der_zeile
 from backend.models.investition import ERTRAGSFELD_TYPEN
 from backend.api.routes.strompreise import (
     lade_tarife_fuer_anlage,
@@ -21,7 +22,7 @@ from backend.core.berechnungen import (
     berechne_finanz_aggregat,
     berechne_wp_alternativkosten_ersparnis,
 )
-from backend.services.finanz_zeilen import baue_finanz_zeile
+from backend.services.finanz_zeilen import baue_finanz_zeile, ev_preis_je_monat
 from backend.services.monats_fakten import finanz_zeile_eingabe
 from backend.services.ust_satz import ust_eigenverbrauch_zeitraum
 from backend.core.berechnungen.waermepumpe_kennzahl import heizwaerme_kwh, waerme_gesamt_kwh
@@ -128,6 +129,9 @@ async def finanz_zeilen_und_tarife(
     # `eigenverbrauch_kwh` des Aggregats ist die Summe der Monatswerte, das
     # Zerlegen ist also exakt.
     finanz_zeilen_je_jahr: dict[int, list[FinanzMonatsZeile]] = defaultdict(list)
+    # ⭐ N-672 (eine kWh ist einmal Geld): der Preis, zu dem DIESE Zeilen den Eigenverbrauch gutschreiben — die
+    # E-Auto-Ersparnis unten belastet die PV-Ladung desselben Monats mit genau ihm.
+    ev_preis_lookup: dict[tuple[int, int], float] = {}
     for f in fakten:
         if not f.meta.hat_zaehlerzeile or not f.meta.erzeuger_aktiv:
             continue
@@ -137,6 +141,14 @@ async def finanz_zeilen_und_tarife(
         )
         finanz_zeilen.append(_zeile)
         finanz_zeilen_je_jahr[f.jahr].append(_zeile)
+        ev_preis_lookup[f.schluessel] = ev_preis_der_zeile(_zeile)
+    # Monate mit PV-Ladung, aber ohne Finanz-Zeile: derselbe Preis über denselben Builder (`ev_preis_je_monat`).
+    ev_preis_lookup.update(await ev_preis_je_monat(
+        db, anlage_id,
+        [(f.jahr, f.monat, f.meta.monatsdaten) for f in fakten
+         if f.schluessel not in ev_preis_lookup and f.emob.ladung_pv_kwh],
+        tarif_cache=_tarif_cache, preis_messung=_preis_messung,
+    ))
 
     async def _tarife_fuer_stichtag(jahr: int, monat: int) -> dict:
         """Kompletter Tarifsatz des Monats (allgemein + WP/Wallbox).
@@ -151,7 +163,7 @@ async def finanz_zeilen_und_tarife(
         return _tarif_cache[stichtag]
 
     _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
-    return {k: _loc[k] for k in ("_tarife_fuer_stichtag", "betriebskosten_ges", "bisherige_eauto_ersparnis", "bisherige_ertraege", "ertrag_jahr_ges", "finanz_zeilen", "finanz_zeilen_je_jahr",) if k in _loc}
+    return {k: _loc[k] for k in ("_tarife_fuer_stichtag", "betriebskosten_ges", "bisherige_eauto_ersparnis", "bisherige_ertraege", "ertrag_jahr_ges", "ev_preis_lookup", "finanz_zeilen", "finanz_zeilen_je_jahr",) if k in _loc}
 
 
 async def alternativkosten_rueckblick(
@@ -160,6 +172,7 @@ async def alternativkosten_rueckblick(
     e_autos,
     eauto_aggregate,
     emob_pool_ctx,
+    ev_preis_lookup,
     historische_inv_daten,
     inv_by_id_hist,
     monatsdaten,
@@ -260,11 +273,15 @@ async def alternativkosten_rueckblick(
             km = daten.get("km_gefahren", 0) or 0
             # N-199/F-17/N-555: Netz-Anteil DIESES Autos nach dem Entscheid des
             # Monats (Wallbox-Anteil nach km · eigene Heim-Felder · Schätzung · 0).
-            _, netz = emob_heimladung_im_monat(
+            pv, netz = emob_heimladung_im_monat(
                 emob_pool_ctx, inv_id, km, jahr, monat, daten,
             )
             agg["km"] += km
             agg["netz_kwh"] += netz
+            # ⭐ N-672: die PV-Ladung zählt mit — zum Preis der Eigenverbrauchs-Ersparnis des Monats.
+            agg["heim_pv_kwh"] = agg.get("heim_pv_kwh", 0.0) + pv  # eigener Schlüssel: "pv_kwh" ist vorbelegt
+            if pv > 0:
+                agg.setdefault("pv_monate", []).append((jahr, monat, pv))
             # N-555 (§12): externe Ladekosten nach der Topf-Regel, wie Hub und HA-Sensor.
             _, _extern_euro = emob_extern_im_monat(emob_pool_ctx, km, jahr, monat, daten)
             agg["extern_euro"] = agg.get("extern_euro", 0.0) + _extern_euro
@@ -295,11 +312,17 @@ async def alternativkosten_rueckblick(
         # ⭐ N-555 Stufe 2 (Konzept Regel 2, E6): hier stand `if not agg.get("km_monate")`
         # — ein Auto, das geladen hat, aber nie gefahren ist, verlor still seine
         # Stromrechnung (dasselbe `km > 0`-Tor wie in der Übersicht).
-        if not agg.get("km_monate") and not agg.get("netz_monate"):
+        if not agg.get("km_monate") and not agg.get("netz_monate") and not agg.get("pv_monate"):
             continue
         _erg = berechne_eauto_ersparnis_periode(
             km_pro_monat=agg.get("km_monate", []),
             ladung_netz_kwh_gesamt=agg["netz_kwh"],
+            # ⭐ N-672: PV-Ladung zum Preis, mit dem die Finanz-Zeilen oben den Eigenverbrauch gutschreiben;
+            # Monate ohne Finanz-Zeile fallen auf den Stammpreis der Anlage zurück.
+            ladung_pv_kwh_gesamt=agg.get("heim_pv_kwh", 0.0),
+            pv_strompreis_cent=netzbezug_preis,
+            monats_ev_preis_lookup=ev_preis_lookup,
+            pv_pro_monat=agg.get("pv_monate") or None,
             # N-555 (§12, Entscheid Gernot 25.09.2026): externe Ladekosten
             # gehören in die Stromkosten — so rechnen E-Auto-Hub, T-Konto,
             # Cockpit und die HA-Sensoren. Hier stand bis dahin bewusst 0,0

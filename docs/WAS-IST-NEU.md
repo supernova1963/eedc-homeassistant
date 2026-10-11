@@ -40,6 +40,11 @@ Eigenverbrauch.
 Anteil am PV-Gesamtzähler wie das Cockpit, gekennzeichnet als „geschätzt (kWp-Anteil)"; hängen PV-Module daran, steht
 seine Erzeugung nur noch bei den Modulen.
 
+**E-Auto:** Solarstrom, den dein E-Auto lädt, zählt nur noch einmal als Ersparnis — als Eigenverbrauch der Anlage. Die
+Ersparnis gegenüber dem Verbrenner zieht jetzt den Strom der ganzen Ladung ab (die PV-Ladung zum selben Preis, mit dem
+eedc sie als Eigenverbrauch gutschreibt), in ROI, Cockpit, Aussichten, Komponenten → E-Auto und den HA-Sensoren. Die
+CO₂-Einsparung des E-Autos rechnet ebenso mit der ganzen Ladung.
+
 **Hilfe:** Das Handbuch sagt jetzt, warum am Etikett „HA-Statistik" kein Zeitraum steht, wann ein vergangener Monat ohne
 Home Assistant in *Cockpit → Monat* erscheint, was erst mit dem Monatsabschluss zählt, und warum bei
 *Wärme gesamt* neben einem Warmwasser-Zähler die Heizung im Verlauf leer bleibt.

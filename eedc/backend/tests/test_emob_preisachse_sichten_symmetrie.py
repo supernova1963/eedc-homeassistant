@@ -246,10 +246,13 @@ async def test_ohne_tarifwechsel_bewegt_die_umstellung_keine_zahl(db):
         db, await _anlage(db, tarifwechsel=False, mit_wallbox=True)
     )
     # 6 × 500 km = 3000 km × 7,5 L/100km × 1,80 € = 405 € Benzin
-    # 6 × 100 kWh = 600 kWh × 40 ct = 240 € Strom ⇒ 165 € Ersparnis
-    assert sichten["Cockpit"] == pytest.approx(165.0, abs=0.05)
-    assert sichten["Hub"] == pytest.approx(165.0, abs=0.05)
-    assert sichten["HA-Export (Fahrzeug)"] == pytest.approx(165.0, abs=0.05)
+    # 6 × 100 kWh = 600 kWh × 40 ct = 240 € Netzstrom
+    # ⭐ N-672 (eine kWh ist einmal Geld): + 6 × 50 kWh = 300 kWh PV-Ladung × 40 ct (Preis der
+    # Eigenverbrauchs-Ersparnis) = 120 € ⇒ 45 € Ersparnis. Bis 11.10.2026 stand hier 165 € —
+    # die PV-Ladung war kostenlos und zugleich im Eigenverbrauch gutgeschrieben.
+    assert sichten["Cockpit"] == pytest.approx(45.0, abs=0.05)
+    assert sichten["Hub"] == pytest.approx(45.0, abs=0.05)
+    assert sichten["HA-Export (Fahrzeug)"] == pytest.approx(45.0, abs=0.05)
 
 
 @pytest.mark.asyncio

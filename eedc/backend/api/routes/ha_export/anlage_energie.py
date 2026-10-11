@@ -21,7 +21,8 @@ from backend.core.berechnungen import (
 from backend.services.prognose_auswahl import lade_aktive_prognose
 from datetime import date
 from backend.services.strompreis_aggregator import lade_preis_aggregate_je_monat
-from backend.services.finanz_zeilen import baue_finanz_zeile
+from backend.services.finanz_zeilen import baue_finanz_zeile, ev_preis_je_monat
+from backend.core.berechnungen.finanz_aggregat import ev_preis_der_zeile
 from backend.services.monats_fakten import (
     bewertbare_wandlungsverluste_aus_fakten,
     finanz_zeile_eingabe,
@@ -240,6 +241,9 @@ async def finanz_aggregat(*, _preis_messung, _tarif_cache, anlage, db, fakten, s
     erzeuger_erloes = 0.0
     # N-588: die in der Ersparnis abgezogenen Wandlungsverluste (Messpunkt-Vertrag) — für den Berechnungstext des Sensors.
     ev_wandlungsverluste = 0.0
+    # ⭐ N-672 (eine kWh ist einmal Geld): der Preis, zu dem die Zeilen unten den Eigenverbrauch gutschreiben — die
+    # E-Auto-Ersparnis (`alternativkosten_und_co2`) belastet die PV-Ladung desselben Monats mit genau ihm.
+    ev_preis_lookup: dict[tuple[int, int], float] = {}
     if strompreis:
         # #326: FinanzMonatsZeile über den gemeinsamen Builder (einzige erlaubte
         # Konstruktions-Stelle, Wächter) — er löst den Tarif PRO MONAT auf
@@ -262,13 +266,21 @@ async def finanz_aggregat(*, _preis_messung, _tarif_cache, anlage, db, fakten, s
             finanz_zeilen, sonstige_netto_euro=sonstige_netto_gesamt,
             erzeuger_erloes_euro=erzeuger_erloes_gesamt
         )
+        _mit_zeile = [f for f in fakten if f.meta.hat_zaehlerzeile and f.meta.erzeuger_aktiv]
+        ev_preis_lookup = {f.schluessel: ev_preis_der_zeile(z) for f, z in zip(_mit_zeile, finanz_zeilen)}
+        ev_preis_lookup.update(await ev_preis_je_monat(
+            db, anlage.id,
+            [(f.jahr, f.monat, f.meta.monatsdaten) for f in fakten
+             if f.schluessel not in ev_preis_lookup and f.emob.ladung_pv_kwh],
+            tarif_cache=_tarif_cache, preis_messung=_preis_messung,
+        ))
         einspeise_erloes = _finanz.einspeise_erloes_euro
         ev_ersparnis = _finanz.ev_ersparnis_euro
         bkw_ersparnis = _finanz.bkw_ersparnis_euro
         erzeuger_erloes = _finanz.erzeuger_erloes_euro
         ev_wandlungsverluste = _finanz.wandlungsverluste_kwh
     _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
-    return {k: _loc[k] for k in ("bkw_ersparnis", "einspeise_erloes", "erzeuger_erloes", "ev_ersparnis", "ev_wandlungsverluste", "sonstige_ausgaben_gesamt", "sonstige_ertraege_gesamt", "sonstige_netto_gesamt",) if k in _loc}
+    return {k: _loc[k] for k in ("bkw_ersparnis", "einspeise_erloes", "erzeuger_erloes", "ev_ersparnis", "ev_preis_lookup", "ev_wandlungsverluste", "sonstige_ausgaben_gesamt", "sonstige_ertraege_gesamt", "sonstige_netto_gesamt",) if k in _loc}
 
 
 def investitionen_und_ust(

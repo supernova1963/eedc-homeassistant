@@ -98,10 +98,12 @@ async def test_ohne_dienstwagen_kein_posten(db):
 
     Die Aussichten sind hier ausgenommen: mit einem PRIVATEN E-Auto ist ``bisherige_ertraege_euro`` nicht das
     Finanz-Aggregat allein (die Bestandsprobe ``test_dienstliche_ladekosten_drei_sichten.py`` nennt dieselbe Grenze
-    für ihre Vorrichtung) — gemessen 194,00 €, vor und nach N-633 gleich.
+    für ihre Vorrichtung) — gemessen 194,00 €, vor und nach N-633 gleich. ⭐ Seit N-672 (eine kWh ist einmal Geld)
+    **134,00 €** = 212,00 − 100 kWh Netz × 18 ct (Wallbox-Tarif) − 200 kWh PV × 30 ct (Preis der Eigenverbrauchs-
+    Ersparnis): das private Auto ohne km trägt die Stromrechnung seiner ganzen Ladung (E6), nicht mehr nur des Netzteils.
     """
     werte = await _sieben_sichten(db, await _anlage(db, dienstlich=False))
-    assert werte.pop("Aussichten → bisherige Erträge") == pytest.approx(194.0, abs=0.01)
+    assert werte.pop("Aussichten → bisherige Erträge") == pytest.approx(134.0, abs=0.01)
     abw = {k: v for k, v in werte.items() if v != pytest.approx(212.0, abs=0.01)}
     assert not abw, abw
 

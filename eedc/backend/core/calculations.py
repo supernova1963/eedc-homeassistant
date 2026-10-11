@@ -19,6 +19,7 @@ from backend.core.berechnungen import (
     spezifischer_ertrag_kwh_kwp,
 )
 from backend.core.berechnungen.phev_anteil import teile_fahrleistung
+from backend.core.berechnungen.heimladung_kosten import heimladung_stromkosten_euro
 from backend.core.wirtschaftlichkeit_defaults import (
     BENZIN_VERBRAUCH_DEFAULT_L_100KM,
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
@@ -339,6 +340,8 @@ def berechne_eauto_einsparung(
     v2h_preis_cent: float = 0,
     eigener_verbrauch_l_100km: Optional[float] = None,
     elektrischer_fahranteil_prozent: Optional[float] = None,
+    *,
+    pv_strompreis_cent: float,
 ) -> EAutoEinsparung:
     """
     Berechnet jährliche E-Auto Einsparung vs. Verbrenner.
@@ -346,8 +349,16 @@ def berechne_eauto_einsparung(
     Args:
         km_jahr: Jährliche Fahrleistung in km
         verbrauch_kwh_100km: E-Auto Verbrauch pro 100 km
-        pv_anteil_prozent: Anteil PV-Strom am Laden (z.B. 60)
+        pv_anteil_prozent: Anteil PV-Strom am Laden (z.B. 60) — teilt die
+            Ladung in Netz und PV; **beide** kosten Geld (N-672, s. ``pv_strompreis_cent``).
         strompreis_cent: Strompreis für Netzladung in Cent
+        pv_strompreis_cent: Preis, mit dem dieselbe Prognose den Eigenverbrauch
+            bewertet (ct/kWh). ⭐ **N-672 (11.10.2026): eine kWh ist einmal Geld.**
+            Die PV-Ladung steckt im Eigenverbrauch der Anlage und ist dort schon
+            gutgeschrieben; hier stand bis dahin „PV-Strom ist kostenlos", die
+            ROI-Seite zählte sie damit zweimal. **Pflicht ohne Vorgabewert** — jeder
+            Aufrufer muss sagen, welchen Eigenverbrauchspreis seine Sicht ansetzt.
+            Regel: `core/berechnungen/heimladung_kosten.py`.
         benzinpreis_euro_liter: Benzinpreis in Euro
         benzin_verbrauch_liter_100km: Verbrenner-Verbrauch pro 100 km —
             der **fiktive Vergleichs-Benziner**. ⚠ Der Signatur-Default stand
@@ -384,8 +395,15 @@ def berechne_eauto_einsparung(
     pv_anteil = pv_anteil_prozent / 100
     netz_anteil = 1 - pv_anteil
 
-    # PV-Strom ist "kostenlos" (bereits bezahlt durch Anlage)
-    strom_kosten = strom_bedarf_kwh * netz_anteil * strompreis_cent / 100
+    # ⭐ N-672: die PV-Ladung ist NICHT kostenlos — sie trägt den Preis, zu dem die
+    # Eigenverbrauchs-Ersparnis sie schon gutschreibt (eine kWh ist einmal Geld).
+    # Bis 11.10.2026 stand hier „PV-Strom ist kostenlos (bereits bezahlt durch Anlage)".
+    strom_kosten = heimladung_stromkosten_euro(
+        netz_kwh=strom_bedarf_kwh * netz_anteil,
+        netz_preis_cent=strompreis_cent,
+        pv_kwh=strom_bedarf_kwh * pv_anteil,
+        pv_preis_cent=pv_strompreis_cent,
+    )
 
     # Verbrenner-Kosten zum Vergleich — über ALLE Kilometer, sonst verglichen
     # wir ein Auto mit einem halben Auto (Entscheidung 5).
@@ -405,7 +423,10 @@ def berechne_eauto_einsparung(
 
     # CO2-Einsparung
     co2_verbrenner = benzin_verbrauch * CO2_FAKTOR_BENZIN_KG_LITER
-    co2_eauto = strom_bedarf_kwh * netz_anteil * CO2_FAKTOR_STROM_KG_KWH
+    # ⭐ N-672 (CO₂, dieselbe Regel): die GANZE Ladung trägt den Strommix — die PV-CO₂
+    # (`berechne_co2_bilanz`, Eigenverbrauch × Strommix) schreibt die PV-Ladung schon
+    # gut; eine kWh ist einmal CO₂. Bis 11.10.2026 stand hier `× netz_anteil`.
+    co2_eauto = strom_bedarf_kwh * CO2_FAKTOR_STROM_KG_KWH
     co2_einsparung = co2_verbrenner - co2_eauto - fossil_liter * CO2_FAKTOR_BENZIN_KG_LITER
 
     return EAutoEinsparung(
@@ -647,19 +668,28 @@ def co2_emob_ersparnis_kg(
     benzin_verbrauch_liter: float,
     emob_netz_ladung_kwh: float,
     emob_km: float,
+    *,
+    emob_pv_ladung_kwh: float,
 ) -> float:
     """Kanonische CO₂-Ersparnis der E-Mobilität aus GEMESSENEN Werten (kg).
 
     Vermiedenes Verbrenner-CO₂ (Benzinverbrauch des Vergleichs-Verbrenners)
-    MINUS das Netz-CO₂ der Heim-Netzladung. PV-Ladung ist bewusst CO₂-frei
-    (bereits über die PV-Bilanz gutgeschrieben), daher nur der Netz-Anteil.
-    Nur wenn tatsächlich Kilometer gefahren wurden (`emob_km > 0`).
+    MINUS das Strommix-CO₂ der **ganzen** Heimladung (Netz + PV). Nur wenn
+    tatsächlich Kilometer gefahren wurden (`emob_km > 0`).
+
+    ⭐ **N-672 (11.10.2026): eine kWh ist einmal CO₂.** Hier stand „PV-Ladung ist
+    bewusst CO₂-frei (bereits über die PV-Bilanz gutgeschrieben), daher nur der
+    Netz-Anteil" — die Begründung nannte die Doppelzählung selbst: ``co2_pv`` schreibt
+    den ganzen Eigenverbrauch als vermiedenen Netzstrom gut, die PV-Ladung steckt
+    darin, und ein zweites Mal CO₂-frei hier zählte sie doppelt. Dieselbe Regel wie
+    die Wärmepumpe (N-459, ganzer Strom) und wie das Geld (`heimladung_kosten.py`).
 
     Args:
         benzin_verbrauch_liter: Σ über die Fahrzeuge von
             `km/100 × Vergleichsverbrauch_l_100km` (je Fahrzeug sein eigener Wert).
         emob_netz_ladung_kwh: Heim-Netzladung (Pool-Netz-Anteil) in kWh.
         emob_km: gefahrene Kilometer (nur als Aktiv-Schalter).
+        emob_pv_ladung_kwh: Heim-PV-Ladung in kWh — **Pflicht ohne Vorgabewert**.
 
     Returns:
         CO₂-Ersparnis in kg, ungerundet (kann bei viel Netzladung negativ werden).
@@ -668,7 +698,7 @@ def co2_emob_ersparnis_kg(
         return 0.0
     return (
         benzin_verbrauch_liter * CO2_FAKTOR_BENZIN_KG_LITER
-        - emob_netz_ladung_kwh * CO2_FAKTOR_STROM_KG_KWH
+        - (max(0.0, emob_netz_ladung_kwh) + max(0.0, emob_pv_ladung_kwh)) * CO2_FAKTOR_STROM_KG_KWH
     )
 
 
@@ -698,6 +728,7 @@ def berechne_co2_bilanz(
     benzin_verbrauch_liter: float = 0.0,
     fossil_getankt_liter: float = 0.0,
     wp_strom_kuehlen_kwh: float = 0.0,
+    emob_pv_ladung_kwh: Optional[float] = None,
 ) -> Co2Bilanz:
     """Kanonische CO₂-Gesamtbilanz (PV-Eigenverbrauch + WP + E-Mobilität).
 
@@ -716,7 +747,19 @@ def berechne_co2_bilanz(
     Plug-in-Hybrids (#331): er mindert die vermiedene Emission, statt sie zu
     schmälern, indem an der Vergleichsrechnung gedreht würde. Ohne gepflegtes
     `eigener_verbrauch_l_100km` ist er 0 und die Bilanz exakt die von vorher.
+
+    ``emob_pv_ladung_kwh`` (N-672): die PV-Ladung der Heimladung — sie trägt den
+    Strommix wie die Netzladung, weil ``co2_pv`` sie als Eigenverbrauch schon
+    gutschreibt. **Pflicht, sobald E-Mobilität übergeben wird** (km oder Netzladung):
+    ohne sie stünde die PV-Ladung still wieder CO₂-frei da. Reine PV-Aufrufer
+    (ROI-PV-Zeile, Tageswerte) übergeben keine E-Mobilität und brauchen sie nicht.
     """
+    if emob_pv_ladung_kwh is None:
+        if emob_km > 0 or emob_netz_ladung_kwh > 0:
+            raise TypeError(
+                "berechne_co2_bilanz: mit E-Mobilität ist emob_pv_ladung_kwh Pflicht (N-672)"
+            )
+        emob_pv_ladung_kwh = 0.0
     co2_pv = eigenverbrauch_kwh * CO2_FAKTOR_STROM_KG_KWH
     # #263 K-2 (E-B): Kühlstrom ersetzt keine Heizung — er zählt über den
     # Eigenverbrauch in der Bilanz mit, aber nicht als schlechtere Heizbilanz.
@@ -724,7 +767,8 @@ def berechne_co2_bilanz(
         wp_waerme_kwh, wp_strom_kwh, strom_kuehlen_kwh=wp_strom_kuehlen_kwh
     )
     co2_emob = co2_emob_ersparnis_kg(
-        benzin_verbrauch_liter, emob_netz_ladung_kwh, emob_km
+        benzin_verbrauch_liter, emob_netz_ladung_kwh, emob_km,
+        emob_pv_ladung_kwh=emob_pv_ladung_kwh,
     ) - max(0.0, fossil_getankt_liter) * CO2_FAKTOR_BENZIN_KG_LITER
     co2_gesamt = co2_pv + max(0.0, co2_wp) + max(0.0, co2_emob)
     return Co2Bilanz(

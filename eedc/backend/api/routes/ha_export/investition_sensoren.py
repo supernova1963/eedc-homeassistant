@@ -21,6 +21,7 @@ from backend.core.berechnungen.waermepumpe_kennzahl import (
     waerme_gesamt_kwh,
 )
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
+from backend.services.finanz_zeilen import ev_preis_je_monat
 from datetime import date
 from backend.api.routes.strompreise import (
     lade_tarife_fuer_anlage,
@@ -264,16 +265,22 @@ async def calculate_investition_sensors(
                     km_pro_monat_sensor: list[tuple[int, int, float]] = []
                     netz_pro_monat_sensor: list[tuple[int, int, float]] = []
                     netz_total_sensor = 0.0
+                    # ⭐ N-672: die PV-Ladung zählt mit (eine kWh ist einmal Geld).
+                    pv_total_sensor = 0.0
+                    pv_pro_monat_sensor: list[tuple[int, int, float]] = []
                     extern_euro_sensor = 0.0
                     fahrverbrauch_sensor = 0.0
                     monate_sensor: list[tuple[int, int]] = []
                     for _j, _m, d in emob_monate:
                         km = d.get("km_gefahren", 0) or 0
-                        _, netz = _emob_pv_netz_des_monats(
+                        pv, netz = _emob_pv_netz_des_monats(
                             investition, emob_ctx, km, _j, _m, d,
                         )
                         monate_sensor.append((_j, _m))
                         netz_total_sensor += netz
+                        pv_total_sensor += pv
+                        if pv > 0:
+                            pv_pro_monat_sensor.append((_j, _m, pv))
                         # N-555 (§11): externe Ladekosten nach der Topf-Regel.
                         if investition.typ == "e-auto" and not ist_dienstlich(investition):
                             _, extern_euro = _emob_extern_im_monat(
@@ -292,9 +299,19 @@ async def calculate_investition_sensors(
                         db, investition.anlage_id, "wallbox", monate_sensor,
                         fallback_bezug=netzbezug_preis,
                     )
+                    # N-672: der Preis der Eigenverbrauchs-Ersparnis je Monat — derselbe Builder wie der Anlagen-Sensor.
+                    ev_preis_lookup_sensor = await ev_preis_je_monat(
+                        db, investition.anlage_id,
+                        [(_j, _m, anlage_md_dict.get((_j, _m))) for _j, _m, _pv in pv_pro_monat_sensor],
+                        tarif_cache={},
+                    )
                     erg = berechne_eauto_ersparnis_periode(
                         km_pro_monat=km_pro_monat_sensor,
                         ladung_netz_kwh_gesamt=netz_total_sensor,
+                        ladung_pv_kwh_gesamt=pv_total_sensor,
+                        pv_strompreis_cent=netzbezug_preis,
+                        monats_ev_preis_lookup=ev_preis_lookup_sensor,
+                        pv_pro_monat=pv_pro_monat_sensor or None,
                         # N-555 (§11, Entscheid Gernot 25.09.2026 „angleichen"):
                         # externe Ladekosten gehören in die Stromkosten — genau so
                         # rechnen E-Auto-Hub, T-Konto und Cockpit. Hier stand bis
@@ -320,10 +337,16 @@ async def calculate_investition_sensors(
                     # N-555 (§11): `strom_kosten` enthält jetzt die externen
                     # Ladekosten — der Rechenweg nennt sie getrennt, sonst stünden
                     # sie unter „Strom @ … ct/kWh" zum Heimpreis.
-                    heim_kosten = strom_kosten - extern_euro_sensor
+                    # N-672: und die PV-Ladung steht als eigener Teil daneben — zum Preis der Eigenverbrauchs-Ersparnis.
+                    heim_kosten = strom_kosten - extern_euro_sensor - erg.pv_ladung_kosten_euro
                     berechnung = (
                         f"{fmt_zahl(benzin_kosten, 2)} (Benzin) - {fmt_zahl(heim_kosten, 2)} (Strom"
                         f" @ {fmt_zahl(erg.verwendeter_strompreis_cent, 2)} ct/kWh)"
+                        + (
+                            f" - {fmt_zahl(erg.pv_ladung_kosten_euro, 2)} (PV-Ladung"
+                            f" @ {fmt_zahl(erg.verwendeter_pv_strompreis_cent, 2)} ct/kWh)"
+                            if erg.pv_ladung_kosten_euro else ""
+                        )
                         + (f" - {fmt_zahl(extern_euro_sensor, 2)} (extern geladen)" if extern_euro_sensor else "")
                         + (f" - {fmt_zahl(fossile_kosten, 2)} (Kraftstoff)" if fossile_kosten else "")
                     )

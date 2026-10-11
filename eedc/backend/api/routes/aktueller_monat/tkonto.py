@@ -38,6 +38,11 @@ from backend.core.zahlenformat import fmt_euro, fmt_zahl
 from backend.core.investition_parameter import ist_dienstlich
 from backend.api.routes.aktueller_monat.schemas import ERLOES_LABEL_EINSPEISUNG, InvestitionFinancialDetail
 
+#: Der Rechenweg der E-Auto-Zeile (N-672). ⚠ Wortgleich mit dem Fallback in `components/finanzen/TKonto.tsx`.
+EAUTO_ERSPARNIS_FORMEL = (
+    "(km × Verbrauch × Benzinpreis) − Netzladung × Strompreis − PV-Ladung × Preis der Eigenverbrauchs-Ersparnis"
+)
+
 
 def _baue_investition_financial(
     inv,
@@ -256,6 +261,9 @@ def _baue_investition_financial(
         # ⭐ N-555 Stufe 2: das `km > 0`-Tor gilt nicht mehr für ein E-Auto, das geladen
         # hat (Konzept Regel 2, E6): hier stand `if km and km > 0` — ein Auto, das im
         # Monat geladen hat, aber nicht gefahren ist, verlor still seine Stromrechnung.
+        # ⭐ N-672 (eine kWh ist einmal Geld): die PV-Ladung trägt den Preis, zu dem die
+        # Eigenverbrauchs-Ersparnis sie schon gutschreibt — wie die BKW-Zeile oben (N-607).
+        _pv_p = ev_p if ev_p is not None else netz_p
         if (km and km > 0) or heim_des_autos > 0:
             extern_euro = data.get("ladung_extern_euro", 0) or 0
             if inv.typ == "e-auto" and entscheid.quelle == QUELLE_WALLBOX:
@@ -270,6 +278,8 @@ def _baue_investition_financial(
             eauto_result = berechne_eauto_ersparnis(
                 km_gefahren=km,
                 ladung_netz_kwh=max(0, netz_kwh),
+                ladung_pv_kwh=ladung_pv or 0.0,
+                pv_strompreis_cent=_pv_p,
                 ladung_extern_euro=extern_euro,
                 wallbox_strompreis_cent=wb_p,
                 eauto_parameter=inv.parameter,
@@ -281,7 +291,7 @@ def _baue_investition_financial(
             )
             inv_ersparnis = round(eauto_result.ersparnis_euro, 2)
             inv_label = "Ersparnis vs. Verbrenner"
-            inv_formel = "(km × Verbrauch × Benzinpreis) − Netzladung × Strompreis"
+            inv_formel = EAUTO_ERSPARNIS_FORMEL
             inv_berechnung = (
                 # N-555 (§11): deutsche Schreibweise über den Backend-SoT
                 # `core/zahlenformat.py` (Style-Guide 0a) — hier stand
@@ -291,10 +301,14 @@ def _baue_investition_financial(
                 f"{fmt_euro(eauto_result.verwendeter_benzinpreis_euro)}"
             )
         elif inv.typ == "wallbox" and ladung_pv and ladung_pv > 0:
-            inv_ersparnis = round(ladung_pv * wb_p / 100, 2)
+            # Diese Zeile ist ein TEIL der Eigenverbrauchs-Ersparnis — T-Konto und Tabelle schneiden sie dort heraus
+            # (`evAufteilung.ts`), sie ist kein zweiter Posten. ⭐ N-672: deshalb trägt sie denselben Preis wie die
+            # Eigenverbrauchs-Ersparnis (wie die BKW-Zeile, N-607) und nicht den Wallbox-Tarif — genau der Betrag, mit
+            # dem die E-Auto-Zeile dieselbe kWh belastet.
+            inv_ersparnis = round(ladung_pv * _pv_p / 100, 2)
             inv_label = "PV-Ladung-Ersparnis"
-            inv_formel = "PV-Ladung × Netzbezugspreis"
-            inv_berechnung = f"{fmt_zahl(ladung_pv, 1)} kWh × {fmt_zahl(wb_p, 2)} ct/kWh"
+            inv_formel = "PV-Ladung × Preis der Eigenverbrauchs-Ersparnis (Teil davon, kein eigener Posten)"
+            inv_berechnung = f"{fmt_zahl(ladung_pv, 1)} kWh × {fmt_zahl(_pv_p, 2)} ct/kWh"
 
     elif inv.typ == "sonstiges":
         # ⛔ KEINE Eigenverbrauchs-Bewertung je Gerät (N-131, Entscheid Gernot

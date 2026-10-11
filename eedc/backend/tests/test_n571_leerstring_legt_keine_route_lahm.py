@@ -53,6 +53,7 @@ from backend.api.routes.investitionen.dashboard_speicher import get_speicher_das
 from backend.api.routes.investitionen.roi import get_roi_dashboard
 from backend.core import investition_parameter as reg
 from backend.models import Anlage, Investition
+from backend.models.strompreis import Strompreis
 from backend.utils.investition_value import param_zahl
 
 BACKEND = Path(__file__).resolve().parents[1]
@@ -259,13 +260,23 @@ async def test_f15_pv_ladeanteil_null_ist_ein_wert(db):
     anlage, inv = await _anlage_mit(
         db, "e-auto", {**BASIS_E_AUTO, "pv_ladeanteil_prozent": 0},
     )
+    # N-672 (eine kWh ist einmal Geld): seit die PV-Ladung zum Eigenverbrauchspreis kostet, bewegt der Anteil
+    # die Ersparnis nur noch, wo Netzladung und Eigenverbrauch verschiedene Preise haben — ein eigener
+    # Wallbox-Tarif (40 ct gegen 30 ct Stamm). Ohne ihn wären 0 % und 60 % gleich viel wert, und die Probe
+    # könnte den Rückfall auf 60 nicht mehr sehen.
+    db.add(Strompreis(
+        anlage_id=anlage.id, gueltig_ab=date(2023, 1, 1),
+        netzbezug_arbeitspreis_cent_kwh=40.0, einspeiseverguetung_cent_kwh=8.0,
+        verwendung="wallbox",
+    ))
+    await db.flush()
     mit_null = await _roi(db, anlage.id)
     inv.parameter = {**BASIS_E_AUTO, "pv_ladeanteil_prozent": 60}
     await db.flush()
     mit_sechzig = await _roi(db, anlage.id)
     e0 = next(x for x in mit_null.berechnungen if x.investition_id == inv.id)
     e60 = next(x for x in mit_sechzig.berechnungen if x.investition_id == inv.id)
-    # 0 % PV-Ladung ⇒ voller Netzstrompreis ⇒ geringere Ersparnis als bei 60 %.
+    # 0 % PV-Ladung ⇒ alles zum Wallbox-Tarif (40 ct) ⇒ geringere Ersparnis als bei 60 % (davon 30 ct).
     assert e0.jahres_einsparung < e60.jahres_einsparung
 
 

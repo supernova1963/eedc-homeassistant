@@ -216,6 +216,7 @@ async def calculate_anlage_sensors(
     if "erzeuger_erloes" in _out: erzeuger_erloes = _out["erzeuger_erloes"]
     if "ev_ersparnis" in _out: ev_ersparnis = _out["ev_ersparnis"]
     if "ev_wandlungsverluste" in _out: ev_wandlungsverluste = _out["ev_wandlungsverluste"]
+    ev_preis_lookup = _out.get("ev_preis_lookup", {})
     if "sonstige_ausgaben_gesamt" in _out: sonstige_ausgaben_gesamt = _out["sonstige_ausgaben_gesamt"]
     if "sonstige_ertraege_gesamt" in _out: sonstige_ertraege_gesamt = _out["sonstige_ertraege_gesamt"]
     if "sonstige_netto_gesamt" in _out: sonstige_netto_gesamt = _out["sonstige_netto_gesamt"]
@@ -252,6 +253,7 @@ async def calculate_anlage_sensors(
     if "historische_inv_daten" in _out: historische_inv_daten = _out["historische_inv_daten"]
     if "inv_by_id_export" in _out: inv_by_id_export = _out["inv_by_id_export"]
     if "md_by_periode" in _out: md_by_periode = _out["md_by_periode"]
+    netzbezug_preis_cent = _out.get("netzbezug_preis_cent")
     if "waermepumpen" in _out: waermepumpen = _out["waermepumpen"]
     if "wallbox_netzbezug_preis_cent" in _out: wallbox_netzbezug_preis_cent = _out["wallbox_netzbezug_preis_cent"]
     if "wallbox_preis_by_periode" in _out: wallbox_preis_by_periode = _out["wallbox_preis_by_periode"]
@@ -262,9 +264,11 @@ async def calculate_anlage_sensors(
         e_autos=e_autos,
         eigenverbrauch_ohne_verluste=eigenverbrauch_ohne_verluste,
         emob_ctx=emob_ctx,
+        ev_preis_lookup=ev_preis_lookup,
         historische_inv_daten=historische_inv_daten,
         inv_by_id_export=inv_by_id_export,
         md_by_periode=md_by_periode,
+        netzbezug_preis_cent=netzbezug_preis_cent,
         waermepumpen=waermepumpen,
         wallbox_netzbezug_preis_cent=wallbox_netzbezug_preis_cent,
         wallbox_preis_by_periode=wallbox_preis_by_periode,

@@ -165,7 +165,7 @@ async def historische_komponenten(*, _tarife, anlage, db, investitionen, monatsd
         _tarife, "wallbox", fallback=netzbezug_preis_cent
     )
     _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
-    return {k: _loc[k] for k in ("e_autos", "emob_ctx", "historische_inv_daten", "inv_by_id_export", "md_by_periode", "waermepumpen", "wallbox_netzbezug_preis_cent", "wallbox_preis_by_periode", "wp_netzbezug_preis_cent", "wp_preis_by_periode",) if k in _loc}
+    return {k: _loc[k] for k in ("e_autos", "emob_ctx", "historische_inv_daten", "inv_by_id_export", "md_by_periode", "netzbezug_preis_cent", "waermepumpen", "wallbox_netzbezug_preis_cent", "wallbox_preis_by_periode", "wp_netzbezug_preis_cent", "wp_preis_by_periode",) if k in _loc}
 
 
 def alternativkosten_und_co2(
@@ -177,6 +177,8 @@ def alternativkosten_und_co2(
     inv_by_id_export,
     md_by_periode,
     waermepumpen,
+    ev_preis_lookup=None,
+    netzbezug_preis_cent=None,
     wallbox_netzbezug_preis_cent,
     wallbox_preis_by_periode,
     wp_netzbezug_preis_cent,
@@ -229,6 +231,7 @@ def alternativkosten_und_co2(
     # der Benzin-Vergleichsverbrauch in Litern (je Fahrzeug sein eigener Wert).
     co2_emob_km = 0.0
     co2_emob_netz_kwh = 0.0
+    co2_emob_pv_kwh = 0.0
     co2_benzin_liter = 0.0
     # #331: die PHEV-Aufteilung wird NACH der Schleife je Fahrzeug **einmal für
     # den ganzen Zeitraum** bestimmt — exakt wie in
@@ -243,6 +246,9 @@ def alternativkosten_und_co2(
     _ea_km_pro_monat: dict[int, list[tuple[int, int, float]]] = {}
     _ea_netz_pro_monat: dict[int, list[tuple[int, int, float]]] = {}
     _ea_netz_total: dict[int, float] = {}
+    # ⭐ N-672: die PV-Ladung je Fahrzeug (Summe und je Monat) — zum Preis der Eigenverbrauchs-Ersparnis des Monats.
+    _ea_pv_total: dict[int, float] = {}
+    _ea_pv_pro_monat: dict[int, list[tuple[int, int, float]]] = {}
     _ea_fahrverbrauch: dict[int, float] = {}
     _ea_extern_euro: dict[int, float] = {}
     for ea in e_autos:
@@ -258,7 +264,11 @@ def alternativkosten_und_co2(
             km = daten.get("km_gefahren", 0) or 0
             # #262/Phase 2a/N-555: Netz DIESES Autos nach dem Entscheid des
             # Monats — Wallbox-Anteil nach km, eigene Heim-Felder, Schätzung, 0.
-            _, netz = _emob_heimladung_im_monat(emob_ctx, inv_id, km, jahr, monat, daten)
+            pv, netz = _emob_heimladung_im_monat(emob_ctx, inv_id, km, jahr, monat, daten)
+            _ea_pv_total[ea.id] = _ea_pv_total.get(ea.id, 0.0) + pv
+            co2_emob_pv_kwh += pv
+            if pv > 0:
+                _ea_pv_pro_monat.setdefault(ea.id, []).append((jahr, monat, pv))
             # N-555 (§11): externe Ladekosten nach der Topf-Regel (`waehle_extern_paar`).
             _ea_extern_euro[ea.id] = _ea_extern_euro.get(ea.id, 0.0) + _emob_extern_im_monat(
                 emob_ctx, km, jahr, monat, daten,
@@ -291,11 +301,18 @@ def alternativkosten_und_co2(
         # ⭐ N-555 Stufe 2 (Konzept Regel 2, E6): hier stand `if not km_pro_monat` — ein
         # Auto, das geladen hat, aber nie gefahren ist, verlor still seine Stromrechnung
         # (dasselbe `km > 0`-Tor wie in der Übersicht).
-        if not km_pro_monat and not _ea_netz_pro_monat.get(ea.id):
+        if not km_pro_monat and not _ea_netz_pro_monat.get(ea.id) and not _ea_pv_pro_monat.get(ea.id):
             continue
         _erg = berechne_eauto_ersparnis_periode(
             km_pro_monat=km_pro_monat,
             ladung_netz_kwh_gesamt=_ea_netz_total.get(ea.id, 0.0),
+            # ⭐ N-672: PV-Ladung zum Preis, mit dem `finanz_aggregat` den Eigenverbrauch gutschreibt.
+            ladung_pv_kwh_gesamt=_ea_pv_total.get(ea.id, 0.0),
+            pv_strompreis_cent=(
+                netzbezug_preis_cent if netzbezug_preis_cent is not None else wallbox_netzbezug_preis_cent
+            ),
+            monats_ev_preis_lookup=ev_preis_lookup,
+            pv_pro_monat=_ea_pv_pro_monat.get(ea.id) or None,
             # N-555 (§11, Entscheid Gernot 25.09.2026 „angleichen"): externe
             # Ladekosten gehören in die Stromkosten — so rechnen Cockpit, Hub
             # und T-Konto. Hier stand bis dahin bewusst 0,0 (beim Umhängen der
@@ -351,6 +368,8 @@ def alternativkosten_und_co2(
         wp_strom_kuehlen_kwh=co2_wp_kuehlen_kwh,
         emob_km=co2_emob_km,
         emob_netz_ladung_kwh=co2_emob_netz_kwh,
+        # N-672: die PV-Ladung trägt den Strommix wie die Netzladung (eine kWh ist einmal CO₂).
+        emob_pv_ladung_kwh=co2_emob_pv_kwh,
         benzin_verbrauch_liter=co2_benzin_liter,
         fossil_getankt_liter=co2_fossil_liter,
     ).co2_gesamt_kg

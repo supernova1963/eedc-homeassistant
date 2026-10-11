@@ -19,6 +19,7 @@ Geprüft:
 from __future__ import annotations
 
 from datetime import date
+import pytest
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -195,10 +196,12 @@ async def test_aktueller_monat_eauto_komponente_nutzt_wb_pool_bei_evcc(db):
     #   benzin_kosten = 1244 km / 100 × 7.0 L × 1.70 € = 148.04 €
     #   strom_heim    = 300 kWh × 30 ct/kWh / 100 = 90.00 €
     #   strom_extern  = 25.00 €
-    #   ersparnis     = 148.04 − 90.00 − 25.00 = 33.04 €
-    # Vor dem Fix (extern=0, netz=0): ersparnis = 148.04 €.
-    assert 32 <= ea_komp.ersparnis_euro <= 34, (
-        f"E-Auto-Komponente sollte ~33 € sein (Pool-attribuiert), "
+    #   strom_pv      = 200 kWh × 30 ct/kWh / 100 = 60.00 €  (⭐ N-672: eine kWh ist einmal Geld —
+    #                   die PV-Ladung kostet den Preis der Eigenverbrauchs-Ersparnis; bis 11.10.2026 0 €)
+    #   ersparnis     = 148.04 − 90.00 − 25.00 − 60.00 = −26.96 €
+    # Vor dem Pool-Fix (extern=0, netz=0, pv=0): ersparnis = 148.04 €.
+    assert ea_komp.ersparnis_euro == pytest.approx(-26.96, abs=0.05), (
+        f"E-Auto-Komponente sollte −26,96 € sein (Pool-attribuiert, N-672), "
         f"war {ea_komp.ersparnis_euro} € — Drift wie vor dem Fix?"
     )
 
@@ -254,9 +257,9 @@ async def test_aktueller_monat_post_migration_wallbox_quelle(db):
     ea_komp = _eauto_komponente(result.investitionen_financials, "Premium")
     assert ea_komp is not None
 
-    # km-anteilig (1 Auto → 100 %) zieht die Komponente netz=300 + extern=25:
-    #   benzin 148.04 − strom 90 − extern 25 = 33.04 €
-    assert 32 <= ea_komp.ersparnis_euro <= 34
+    # km-anteilig (1 Auto → 100 %) zieht die Komponente netz=300 + pv=200 + extern=25:
+    #   benzin 148.04 − strom 90 − extern 25 − PV 200 × 30 ct = 60 (N-672) = −26.96 €
+    assert ea_komp.ersparnis_euro == pytest.approx(-26.96, abs=0.05)
 
 
 async def test_aktueller_monat_multi_car_km_anteilig(db):

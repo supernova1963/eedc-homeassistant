@@ -136,6 +136,7 @@ def test_beide_achsen_teilen_dieselbe_fahrleistung_gleich():
         wallbox_strompreis_cent=30,
         eauto_parameter=PHEV_GESCHAETZT,
         fahrverbrauch_kwh=None,          # keine Messung ⇒ Prozentweg
+        ladung_pv_kwh=0.0, pv_strompreis_cent=30.0,  # N-672: ohne PV-Ladung
     )
     prognose = berechne_eauto_einsparung(
         km_jahr=10000,
@@ -146,6 +147,7 @@ def test_beide_achsen_teilen_dieselbe_fahrleistung_gleich():
         benzin_verbrauch_liter_100km=7.5,
         eigener_verbrauch_l_100km=6.0,
         elektrischer_fahranteil_prozent=40,
+        pv_strompreis_cent=30,  # N-672
     )
     assert ist.km_elektrisch == pytest.approx(prognose.km_elektrisch)
     assert ist.km_verbrenner == pytest.approx(prognose.km_verbrenner)
@@ -163,12 +165,14 @@ def test_prognose_belastet_nicht_zweimal_dieselbe_strecke():
         km_jahr=10000, verbrauch_kwh_100km=18, pv_anteil_prozent=0,
         strompreis_cent=30, benzinpreis_euro_liter=1.80,
         benzin_verbrauch_liter_100km=7.5,
+        pv_strompreis_cent=30,  # N-672
     )
     halb = berechne_eauto_einsparung(
         km_jahr=10000, verbrauch_kwh_100km=18, pv_anteil_prozent=0,
         strompreis_cent=30, benzinpreis_euro_liter=1.80,
         benzin_verbrauch_liter_100km=7.5,
         eigener_verbrauch_l_100km=6.0, elektrischer_fahranteil_prozent=50,
+        pv_strompreis_cent=30,  # N-672
     )
     assert halb.strom_kosten_euro == pytest.approx(voll.strom_kosten_euro / 2)
     # Der Vergleichs-Benziner bleibt über ALLE km gestellt (Entscheidung 5).
@@ -185,6 +189,7 @@ def test_ist_periode_trifft_ist_einzelmonat():
         km_gefahren=1000, ladung_netz_kwh=100, ladung_extern_euro=0,
         wallbox_strompreis_cent=30, eauto_parameter=PHEV_GEMESSEN,
         monats_benzinpreis_euro=1.90, fahrverbrauch_kwh=90,
+        ladung_pv_kwh=0.0, pv_strompreis_cent=30.0,  # N-672: ohne PV-Ladung
     )
     periode = berechne_eauto_ersparnis_periode(
         km_pro_monat=[(2026, 5, 1000)],
@@ -192,6 +197,7 @@ def test_ist_periode_trifft_ist_einzelmonat():
         wallbox_strompreis_cent=30, eauto_parameter=PHEV_GEMESSEN,
         monats_benzinpreis_lookup={(2026, 5): 1.90},
         fahrverbrauch_kwh_gesamt=90,
+        ladung_pv_kwh_gesamt=0.0, pv_strompreis_cent=30.0,  # N-672: ohne PV-Ladung
     )
     assert periode.fossile_kosten_euro == pytest.approx(einzel.fossile_kosten_euro)
     assert periode.ersparnis_euro == pytest.approx(einzel.ersparnis_euro)
@@ -203,11 +209,13 @@ def test_fossile_kosten_mindern_die_ersparnis_genau_einmal():
         km_gefahren=1000, ladung_netz_kwh=100, ladung_extern_euro=0,
         wallbox_strompreis_cent=30, eauto_parameter=BEV,
         monats_benzinpreis_euro=1.80, fahrverbrauch_kwh=90,
+        ladung_pv_kwh=0.0, pv_strompreis_cent=30.0,  # N-672: ohne PV-Ladung
     )
     mit = berechne_eauto_ersparnis(
         km_gefahren=1000, ladung_netz_kwh=100, ladung_extern_euro=0,
         wallbox_strompreis_cent=30, eauto_parameter=PHEV_GEMESSEN,
         monats_benzinpreis_euro=1.80, fahrverbrauch_kwh=90,
+        ladung_pv_kwh=0.0, pv_strompreis_cent=30.0,  # N-672: ohne PV-Ladung
     )
     # 500 Verbrenner-km × 6 L/100 km × 1,80 € = 54 €
     assert mit.fossile_kosten_euro == pytest.approx(54.0)
@@ -227,11 +235,11 @@ def test_co2_bilanz_zieht_denselben_kraftstoff_ab():
     assert liter == pytest.approx(30.0)          # 500 km × 6 L/100 km
 
     ohne = berechne_co2_bilanz(
-        eigenverbrauch_kwh=0, emob_km=1000, emob_netz_ladung_kwh=0,
+        eigenverbrauch_kwh=0, emob_km=1000, emob_netz_ladung_kwh=0, emob_pv_ladung_kwh=0,
         benzin_verbrauch_liter=75,
     )
     mit = berechne_co2_bilanz(
-        eigenverbrauch_kwh=0, emob_km=1000, emob_netz_ladung_kwh=0,
+        eigenverbrauch_kwh=0, emob_km=1000, emob_netz_ladung_kwh=0, emob_pv_ladung_kwh=0,
         benzin_verbrauch_liter=75, fossil_getankt_liter=liter,
     )
     assert mit.co2_emob_kg < ohne.co2_emob_kg
@@ -269,6 +277,7 @@ def test_bev_bleibt_zahlengleich(params, fahrverbrauch):
         km_gefahren=1000, ladung_netz_kwh=200, ladung_extern_euro=5,
         wallbox_strompreis_cent=30, eauto_parameter=params,
         monats_benzinpreis_euro=1.80, fahrverbrauch_kwh=fahrverbrauch,
+        ladung_pv_kwh=0.0, pv_strompreis_cent=30.0,  # N-672: ohne PV-Ladung
     )
     assert r.fossile_kosten_euro == 0.0
     assert r.ersparnis_euro == pytest.approx(
@@ -289,6 +298,7 @@ def test_bev_prognose_bleibt_zahlengleich_auch_mit_gepflegtem_prozentwert(params
         strompreis_cent=30, benzinpreis_euro_liter=1.80,
         benzin_verbrauch_liter_100km=7.5,
         eigener_verbrauch_l_100km=(params or {}).get("eigener_verbrauch_l_100km"),
+        pv_strompreis_cent=30,  # N-672
     )
     assert r.fossile_kosten_euro == 0.0
     assert r.strom_kosten_euro == pytest.approx(10000 * 18 / 100 * 30 / 100)
@@ -299,10 +309,13 @@ def test_prognose_bev_bleibt_zahlengleich():
         km_jahr=15000, verbrauch_kwh_100km=18, pv_anteil_prozent=60,
         strompreis_cent=30, benzinpreis_euro_liter=1.65,
         benzin_verbrauch_liter_100km=7.5,
+        pv_strompreis_cent=30,  # N-672
     )
     assert r.fossile_kosten_euro == 0.0
     assert r.km_elektrisch == pytest.approx(15000.0)
-    assert r.strom_kosten_euro == pytest.approx(15000 * 18 / 100 * 0.4 * 30 / 100, rel=1e-6)
+    # N-672 (eine kWh ist einmal Geld): auch die 60 % PV-Ladung kosten — zum Eigenverbrauchspreis
+    # (hier ebenfalls 30 ct). Bis 11.10.2026 stand hier `× 0.4` (nur der Netzanteil).
+    assert r.strom_kosten_euro == pytest.approx(15000 * 18 / 100 * 30 / 100, rel=1e-6)
 
 
 def test_signatur_default_ist_der_kanonische_wert():
@@ -314,6 +327,7 @@ def test_signatur_default_ist_der_kanonische_wert():
     ohne_arg = berechne_eauto_einsparung(
         km_jahr=10000, verbrauch_kwh_100km=18, pv_anteil_prozent=0,
         strompreis_cent=0, benzinpreis_euro_liter=1.0,
+        pv_strompreis_cent=30,  # N-672
     )
     assert ohne_arg.benzin_kosten_alternativ_euro == pytest.approx(
         10000 / 100 * BENZIN_VERBRAUCH_DEFAULT_L_100KM

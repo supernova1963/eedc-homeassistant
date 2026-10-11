@@ -131,6 +131,17 @@ class FinanzAggregat:
     wandlungsverluste_kwh: float = 0.0
 
 
+def ev_preis_der_zeile(z: FinanzMonatsZeile) -> float:
+    """Der Preis, mit dem die Eigenverbrauchs-Ersparnis dieser Zeile bewertet wird (ct/kWh).
+
+    ``ev_preis_cent`` (A-2: EV-gewichtet), sonst der Bezugspreis der Zeile. Eine
+    Funktion statt eines Ausdrucks, weil seit N-672 (11.10.2026) ein zweiter Leser
+    denselben Preis braucht: die E-Auto-Ersparnis belastet die PV-Ladung mit genau
+    dem Preis, zu dem sie hier gutgeschrieben wird — eine kWh ist einmal Geld.
+    """
+    return z.ev_preis_cent if z.ev_preis_cent is not None else z.netzbezug_preis_cent
+
+
 def berechne_finanz_aggregat(
     zeilen: Iterable[FinanzMonatsZeile],
     *,
@@ -184,9 +195,7 @@ def berechne_finanz_aggregat(
         ev_ohne_verluste_kwh += ev_bewertet
         # A-2: der EV-gewichtete Preis, wenn der Aufrufer ihn kennt — sonst
         # unverändert der Bezugspreis.
-        ev_preis = (
-            z.ev_preis_cent if z.ev_preis_cent is not None else z.netzbezug_preis_cent
-        )
+        ev_preis = ev_preis_der_zeile(z)
         ev += ev_bewertet * ev_preis / 100
         # Nur der Rest-Eigenverbrauch aus BKW-Monaten OHNE erfasste Erzeugung
         # (P9-Kontrakt der Zeile) — mit Erzeugung steckt er bereits in `ev`.

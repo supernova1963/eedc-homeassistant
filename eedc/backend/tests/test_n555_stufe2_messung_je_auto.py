@@ -371,8 +371,13 @@ async def test_s2_3_schicht_und_co2_rechnen_mit_der_privaten_heimladung(db):
         (params.get(i), km) for i, km in fakt.emob.km_je_fahrzeug.items()
     ])
     benzin = fakt.emob.km / 100 * vergleich
-    assert bilanz.co2_emob_kg == pytest.approx(co2_emob_ersparnis_kg(benzin, 125.0, fakt.emob.km))
-    assert bilanz.co2_emob_kg != pytest.approx(co2_emob_ersparnis_kg(benzin, 200.0, fakt.emob.km))
+    # N-672: die ganze private Heimladung (Netz 125 + PV) trägt den Strommix; die Gegenprobe ist weiter die
+    # Messung der Wallbox mit Gast/Dienstwagen.
+    wb = fakt.emob.wallbox_summe
+    assert bilanz.co2_emob_kg == pytest.approx(co2_emob_ersparnis_kg(
+        benzin, 125.0, fakt.emob.km, emob_pv_ladung_kwh=fakt.emob.ladung_pv_kwh))
+    assert bilanz.co2_emob_kg != pytest.approx(co2_emob_ersparnis_kg(
+        benzin, wb.netz_kwh, fakt.emob.km, emob_pv_ladung_kwh=wb.pv_kwh))
 
 
 @pytest.mark.asyncio
@@ -898,6 +903,7 @@ def test_f4_null_km_nennt_den_gepflegten_vergleichsverbrauch():
     from backend.services.eauto_wirtschaftlichkeit import berechne_eauto_ersparnis
     erg = berechne_eauto_ersparnis(
         km_gefahren=0.0, ladung_netz_kwh=10.0, ladung_extern_euro=0.0,
+        ladung_pv_kwh=0.0, pv_strompreis_cent=30.0,  # N-672: ohne PV-Ladung
         wallbox_strompreis_cent=30.0, eauto_parameter={"vergleich_verbrauch_l_100km": 5.5},
     )
     assert erg.verwendeter_verbrauch_l_100km == pytest.approx(5.5)

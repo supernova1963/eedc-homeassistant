@@ -236,12 +236,14 @@ async def get_finanz_prognose(
     if "ertrag_jahr_ges" in _out: ertrag_jahr_ges = _out["ertrag_jahr_ges"]
     if "finanz_zeilen" in _out: finanz_zeilen = _out["finanz_zeilen"]
     if "finanz_zeilen_je_jahr" in _out: finanz_zeilen_je_jahr = _out["finanz_zeilen_je_jahr"]
+    ev_preis_lookup = _out.get("ev_preis_lookup", {})
     # ── alternativkosten_rueckblick (Vorlage 7b: Phase in finanz_rueckblick.py, Schnittstelle 13 ein / 7 aus) ──
     _out = await alternativkosten_rueckblick(
         _tarife_fuer_stichtag=_tarife_fuer_stichtag,
         e_autos=e_autos,
         eauto_aggregate=eauto_aggregate,
         emob_pool_ctx=emob_pool_ctx,
+        ev_preis_lookup=ev_preis_lookup,
         historische_inv_daten=historische_inv_daten,
         inv_by_id_hist=inv_by_id_hist,
         monatsdaten=monatsdaten,
@@ -430,6 +432,7 @@ async def get_finanz_prognose(
         bezug_preis_cent=netzbezug_preis,
         einspeise_verg_cent=einspeiseverguetung,
     ).ersparnis_euro
+    # N-672: Information, kein Posten — steckt in `jahres_ev_ersparnis` und geht nicht in den Netto-Ertrag.
     eauto_ersparnis_euro = jahres_eauto_pv * netzbezug_preis / 100
     # N-354: `wp_pv_kwh_total` ist Σ der Gerätebeiträge von oben — dieselbe
     # Quelle wie die Liste, keine zweite Bildungsvorschrift.

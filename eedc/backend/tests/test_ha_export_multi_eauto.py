@@ -256,10 +256,12 @@ async def test_evcc_per_device_eauto_zieht_wallbox_pool(db):
     assert _sensor(ohne_pool, "e_auto_pv_anteil_prozent") is None  # leere E-Auto-IMD
 
     # Ersparnis: benzin 12000/100×7×1,70 = 1428 €; mit Pool Netz 1200 kWh ×
-    # 30 ct = 360 € abgezogen → 1068 €. Ohne Pool kein Netz → 1428 €.
+    # 30 ct = 360 € abgezogen und — ⭐ N-672, eine kWh ist einmal Geld — die PV-Ladung
+    # 1200 kWh × 30 ct (Preis der Eigenverbrauchs-Ersparnis) = 360 € → 708 €
+    # (bis 11.10.2026: 1068 €, PV kostenlos). Ohne Pool keine Ladung → 1428 €.
     ers_mit = _sensor(mit_pool, "e_auto_ersparnis_vs_benzin_euro")
     ers_ohne = _sensor(ohne_pool, "e_auto_ersparnis_vs_benzin_euro")
-    assert ers_mit is not None and abs(ers_mit.value - 1068.0) < 1.0
+    assert ers_mit is not None and abs(ers_mit.value - 708.0) < 1.0
     assert ers_ohne is not None and abs(ers_ohne.value - 1428.0) < 1.0
 
 

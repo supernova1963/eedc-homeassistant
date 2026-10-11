@@ -1313,7 +1313,7 @@ async def test_s12_aussichten_ersparnis_gleich_hub_und_ha(db, bau):
 
 async def test_s12_ha_rechenwege_in_deutscher_schreibweise(db):
     """Kein HA-Rechenweg dieser Anlage trägt einen Dezimalpunkt (`1387.50`); die
-    Jahresersparnis steht als „(1.387,50 ÷ 12) × 12 [E-Auto Auto]"."""
+    Jahresersparnis steht als „(1.027,50 ÷ 12) × 12 [E-Auto Auto]" (bis N-672: 1.387,50)."""
     import re
 
     from backend.api.routes.ha_export import calculate_anlage_sensors, calculate_investition_sensors
@@ -1326,7 +1326,8 @@ async def test_s12_ha_rechenwege_in_deutscher_schreibweise(db):
     for inv in invs:
         werte += await calculate_investition_sensors(db, inv, None, emob_ctx=ctx)
     texte = {v.definition.key: v.berechnung for v in werte if v.berechnung}
-    assert texte["jahres_ersparnis_euro"] == "(1.387,50 ÷ 12) × 12 [E-Auto Auto]"
+    # ⭐ N-672: 1.027,50 = 1.387,50 − 12 × 100 kWh PV-Ladung × 30 ct (eine kWh ist einmal Geld).
+    assert texte["jahres_ersparnis_euro"] == "(1.027,50 ÷ 12) × 12 [E-Auto Auto]"
     punkt = {k: t for k, t in texte.items() if re.search(r"\d\.\d{1,2}(?!\d)", t)}
     assert not punkt, punkt
     assert len(texte) >= 5, texte

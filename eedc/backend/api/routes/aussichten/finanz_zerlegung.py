@@ -213,7 +213,9 @@ async def komponenten_beitraege_zusammenstellen(
                     bezeichnung=f"{ea.bezeichnung} (PV-Ladung)",
                     beitrag_kwh_jahr=round(jahres_eauto_pv, 0),
                     beitrag_euro_jahr=round(eauto_ersparnis, 2),
-                    beschreibung="PV-Direktladung statt Netzbezug",
+                    # N-672: eine Aufschlüsselung der Eigenverbrauchs-Ersparnis — kein zusätzlicher Posten;
+                    # die E-Auto-Ersparnis belastet dieselbe kWh mit demselben Preis.
+                    beschreibung="PV-Ladung — Information, kein eigener Posten (steckt in der Eigenverbrauchs-Ersparnis)",
                 ))
 
     # Wärmepumpe — N-354: je Gerät sein eigener Beitrag, nicht das Anlagen-Aggregat

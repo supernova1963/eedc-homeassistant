@@ -115,6 +115,7 @@ def test_periode_ohne_neue_parameter_rechnet_wie_vorher():
     erg = berechne_eauto_ersparnis_periode(
         km_pro_monat=[(2026, 3, 1000.0)],
         ladung_netz_kwh_gesamt=100.0,
+        ladung_pv_kwh_gesamt=0.0, pv_strompreis_cent=30.0,  # N-672: ohne PV-Ladung
         ladung_extern_euro_gesamt=0.0,
         wallbox_strompreis_cent=30.0,
         eauto_parameter={"vergleich_verbrauch_l_100km": 7.5},
@@ -133,6 +134,7 @@ def test_periode_nutzt_die_netzmengen_als_gewicht():
     erg = berechne_eauto_ersparnis_periode(
         km_pro_monat=[(2026, 1, 100.0), (2026, 7, 900.0)],
         ladung_netz_kwh_gesamt=1000.0,
+        ladung_pv_kwh_gesamt=0.0, pv_strompreis_cent=30.0,  # N-672: ohne PV-Ladung
         ladung_extern_euro_gesamt=0.0,
         wallbox_strompreis_cent=40.0,
         eauto_parameter={"vergleich_verbrauch_l_100km": 7.5},
@@ -153,6 +155,7 @@ def test_periode_faellt_ohne_netzaufteilung_auf_die_km_gewichte():
     erg = berechne_eauto_ersparnis_periode(
         km_pro_monat=[(2026, 1, 750.0), (2026, 7, 250.0)],
         ladung_netz_kwh_gesamt=1000.0,
+        ladung_pv_kwh_gesamt=0.0, pv_strompreis_cent=30.0,  # N-672: ohne PV-Ladung
         ladung_extern_euro_gesamt=0.0,
         wallbox_strompreis_cent=40.0,
         eauto_parameter={"vergleich_verbrauch_l_100km": 7.5},
@@ -167,6 +170,7 @@ def test_externe_ladung_bleibt_vom_strompreis_unberuehrt():
     erg = berechne_eauto_ersparnis_periode(
         km_pro_monat=[(2026, 1, 1000.0)],
         ladung_netz_kwh_gesamt=0.0,
+        ladung_pv_kwh_gesamt=0.0, pv_strompreis_cent=30.0,  # N-672: ohne PV-Ladung
         ladung_extern_euro_gesamt=77.0,
         wallbox_strompreis_cent=40.0,
         eauto_parameter={"vergleich_verbrauch_l_100km": 7.5},
@@ -185,6 +189,7 @@ def test_km_pro_monat_darf_ein_generator_sein():
     erg = berechne_eauto_ersparnis_periode(
         km_pro_monat=((2026, m, 100.0) for m in (1, 2)),
         ladung_netz_kwh_gesamt=100.0,
+        ladung_pv_kwh_gesamt=0.0, pv_strompreis_cent=30.0,  # N-672: ohne PV-Ladung
         ladung_extern_euro_gesamt=0.0,
         wallbox_strompreis_cent=30.0,
         eauto_parameter={"vergleich_verbrauch_l_100km": 7.5},
@@ -200,6 +205,7 @@ def test_ohne_km_traegt_das_ergebnis_trotzdem_den_preis():
     erg = berechne_eauto_ersparnis_periode(
         km_pro_monat=[],
         ladung_netz_kwh_gesamt=0.0,
+        ladung_pv_kwh_gesamt=0.0, pv_strompreis_cent=30.0,  # N-672: ohne PV-Ladung
         ladung_extern_euro_gesamt=0.0,
         wallbox_strompreis_cent=31.5,
         monats_strompreis_lookup={(2026, 1): 20.0},

@@ -158,6 +158,7 @@ class TestEmobilitaetKommtAn:
             eigenverbrauch_kwh=0.0,
             emob_km=1000.0,
             emob_netz_ladung_kwh=0.0,
+            emob_pv_ladung_kwh=0.0,
             benzin_verbrauch_liter=1000.0 / 100 * 6.0,
         )
         assert gewichtet.co2_emob_kg == pytest.approx(erwartet.co2_emob_kg)

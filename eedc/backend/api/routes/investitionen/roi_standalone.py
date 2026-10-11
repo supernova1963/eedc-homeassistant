@@ -218,6 +218,9 @@ async def standalone_zeilen(
                 verbrauch_kwh_100km=verbrauch,
                 pv_anteil_prozent=pv_anteil,
                 strompreis_cent=wallbox_strompreis,
+                # ⭐ N-672: die PV-Ladung trägt den Preis, mit dem `roi_pv` den
+                # Eigenverbrauch gutschreibt (`strompreis_cent`) — eine kWh ist einmal Geld.
+                pv_strompreis_cent=strompreis_cent,
                 benzinpreis_euro_liter=preis.preis_euro,
                 benzin_verbrauch_liter_100km=benzin_verbrauch,
                 nutzt_v2h=nutzt_v2h,

@@ -10,7 +10,9 @@ Vorher: vier Code-Pfade, zwei verschiedene Defaults (7 vs. 7,5 L; 1,80 vs.
 
 Formel:
     benzin_kosten  = (km / 100) × verbrauch_l_100km × benzinpreis_euro
-    strom_kosten   = ladung_netz_kwh × wallbox_strompreis_cent / 100 + ladung_extern_euro
+    strom_kosten   = ladung_netz_kwh × wallbox_strompreis_cent / 100
+                   + ladung_pv_kwh × pv_strompreis_cent / 100          (N-672)
+                   + ladung_extern_euro
     fossile_kosten = (km_verbrenner / 100) × eigener_verbrauch_l_100km × benzinpreis_euro
     ersparnis      = benzin_kosten - strom_kosten - fossile_kosten
 
@@ -27,6 +29,13 @@ Strompreis: **der zum jeweiligen Monat gültige** separate Wallbox-Tarif >
             `aufgeloester_strompreis_cent`). Vorher war die Preisachse die
             letzte, die noch vier verschiedene Formen hatte, während die
             Benzinachse längst monatsgenau war — F-18/N-181.
+PV-Ladung:  ⭐ **N-672 (11.10.2026): eine kWh ist einmal Geld.** Die PV-Ladung
+            trägt den Preis, zu dem die Eigenverbrauchs-Ersparnis derselben
+            Sicht sie gutschreibt (``pv_strompreis_cent``, je Monat über
+            ``monats_ev_preis_lookup``). Bis dahin war sie hier „kostenlos" —
+            und stand damit zweimal als Geld da: einmal im Eigenverbrauch der
+            Anlage, einmal als nicht bezahlte Ladung. Regel und Begründung:
+            `core/berechnungen/heimladung_kosten.py`.
 """
 
 from __future__ import annotations
@@ -34,6 +43,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Iterable, Mapping, Optional
 
+from backend.core.berechnungen.heimladung_kosten import heimladung_stromkosten_euro
 from backend.core.berechnungen.phev_anteil import teile_fahrleistung
 from backend.core.field_definitions import (
     get_eauto_ladung_kwh,
@@ -80,6 +90,12 @@ class EAutoErsparnisErgebnis:
     #: in der `berechnung`-Zeile des HA-Exports **sichtbar**, statt sie im
     #: Ergebnis verschwinden zu lassen (genau daran driftete sie unbemerkt).
     verwendeter_strompreis_cent: float = 0.0
+    #: ⭐ N-672: der Anteil der Stromkosten, den die **PV-Ladung** trägt (€) — Teil
+    #: von ``strom_kosten_euro``, kein eigener Posten. Diagnostik wie das Feld darüber.
+    pv_ladung_kosten_euro: float = 0.0
+    #: N-672: der Preis, mit dem die PV-Ladung belastet wurde (ct/kWh) — der Preis der
+    #: Eigenverbrauchs-Ersparnis derselben Sicht, über die Periode PV-gewichtet.
+    verwendeter_pv_strompreis_cent: float = 0.0
 
 
 def _vergleich_verbrauch(eauto_parameter: Optional[dict]) -> float:
@@ -312,6 +328,8 @@ def berechne_eauto_ersparnis(
     *,
     km_gefahren: float,
     ladung_netz_kwh: float,
+    ladung_pv_kwh: float,
+    pv_strompreis_cent: float,
     ladung_extern_euro: float,
     wallbox_strompreis_cent: float,
     eauto_parameter: Optional[dict] = None,
@@ -322,9 +340,13 @@ def berechne_eauto_ersparnis(
 
     Args:
         km_gefahren: Kilometer im Zeitraum
-        ladung_netz_kwh: Heim-Netzladung in kWh (PV-Ladung ist kostenlos und
-            wird hier ignoriert; wer das anders modelliert, übergibt die
-            Gesamtladung als netz-Anteil)
+        ladung_netz_kwh: Heim-Netzladung in kWh
+        ladung_pv_kwh: Heim-PV-Ladung in kWh. ⭐ **N-672: Pflicht ohne
+            Vorgabewert** — bis 11.10.2026 hieß es hier „PV-Ladung ist kostenlos
+            und wird ignoriert", und jede Sicht zählte sie damit zweimal (im
+            Eigenverbrauch der Anlage und als kostenlose Ladung).
+        pv_strompreis_cent: Preis, zu dem die Eigenverbrauchs-Ersparnis derselben
+            Sicht diese kWh gutschreibt (ct/kWh) — belastet = gutgeschrieben.
         ladung_extern_euro: tatsächliche Kosten externer Ladevorgänge in €
         wallbox_strompreis_cent: Strompreis für Heim-Netzladung in ct/kWh
             (separater Wallbox-Tarif oder allgemeiner Tarif als Fallback)
@@ -347,15 +369,22 @@ def berechne_eauto_ersparnis(
         # stehen. Bis 26.09.2026 stand hier „alles 0"; ein gemessenes Auto, das im
         # Monat nicht gefahren ist, verlor so still seine Stromkosten (dasselbe
         # `km > 0`-Tor wie in Übersicht und T-Konto). Ohne Ladung bleibt es bei 0.
-        strom_kosten_0 = (
-            max(0.0, ladung_netz_kwh) * wallbox_strompreis_cent / 100 + ladung_extern_euro
+        pv_kosten_0 = heimladung_stromkosten_euro(
+            netz_kwh=0.0, netz_preis_cent=0.0,
+            pv_kwh=ladung_pv_kwh, pv_preis_cent=pv_strompreis_cent,
         )
+        strom_kosten_0 = heimladung_stromkosten_euro(
+            netz_kwh=ladung_netz_kwh, netz_preis_cent=wallbox_strompreis_cent,
+            pv_kwh=ladung_pv_kwh, pv_preis_cent=pv_strompreis_cent,
+        ) + ladung_extern_euro
         return EAutoErsparnisErgebnis(
             -strom_kosten_0, 0.0, strom_kosten_0,
             # wie die Periode-Variante: der gepflegte Vergleichsverbrauch, nicht der
             # Default (F4 der Nachmessung; bewegt keine Zahl, nur die Diagnostik).
             _vergleich_verbrauch(eauto_parameter),
             BENZIN_PREIS_DEFAULT_EURO_L,
+            pv_ladung_kosten_euro=pv_kosten_0,
+            verwendeter_pv_strompreis_cent=pv_strompreis_cent,
         )
 
     verbrauch_l_100km = _vergleich_verbrauch(eauto_parameter)
@@ -368,7 +397,15 @@ def berechne_eauto_ersparnis(
     # Die Vergleichsfrage bleibt über ALLE Kilometer gestellt (Entscheidung 5):
     # sonst verglichen wir ein Auto mit einem halben Auto.
     benzin_kosten = (km_gefahren / 100) * verbrauch_l_100km * benzinpreis_euro
-    strom_kosten = max(0.0, ladung_netz_kwh) * wallbox_strompreis_cent / 100 + ladung_extern_euro
+    # ⭐ N-672: Netz zum Wallbox-Preis, PV zum Preis der Eigenverbrauchs-Ersparnis.
+    pv_kosten = heimladung_stromkosten_euro(
+        netz_kwh=0.0, netz_preis_cent=0.0,
+        pv_kwh=ladung_pv_kwh, pv_preis_cent=pv_strompreis_cent,
+    )
+    strom_kosten = heimladung_stromkosten_euro(
+        netz_kwh=ladung_netz_kwh, netz_preis_cent=wallbox_strompreis_cent,
+        pv_kwh=ladung_pv_kwh, pv_preis_cent=pv_strompreis_cent,
+    ) + ladung_extern_euro
 
     # #331: die real getankte Rechnung des Verbrenner-Anteils steht als eigene
     # Kostenposition daneben. Ohne gepflegtes `eigener_verbrauch_l_100km` ist
@@ -409,6 +446,8 @@ def berechne_eauto_ersparnis(
         km_verbrenner=anteil.km_verbrenner,
         anteil_quelle=anteil.quelle,
         verwendeter_strompreis_cent=wallbox_strompreis_cent,
+        pv_ladung_kosten_euro=pv_kosten,
+        verwendeter_pv_strompreis_cent=pv_strompreis_cent,
     )
 
 
@@ -484,6 +523,8 @@ def berechne_eauto_ersparnis_periode(
     *,
     km_pro_monat: Iterable[tuple[int, int, float]],
     ladung_netz_kwh_gesamt: float,
+    ladung_pv_kwh_gesamt: float,
+    pv_strompreis_cent: float,
     ladung_extern_euro_gesamt: float,
     wallbox_strompreis_cent: float,
     eauto_parameter: Optional[dict] = None,
@@ -491,6 +532,8 @@ def berechne_eauto_ersparnis_periode(
     fahrverbrauch_kwh_gesamt: Optional[float] = None,
     monats_strompreis_lookup: Optional[dict[tuple[int, int], Optional[float]]] = None,
     netz_pro_monat: Optional[Iterable[tuple[int, int, float]]] = None,
+    monats_ev_preis_lookup: Optional[dict[tuple[int, int], Optional[float]]] = None,
+    pv_pro_monat: Optional[Iterable[tuple[int, int, float]]] = None,
 ) -> EAutoErsparnisErgebnis:
     """E-Auto-Ersparnis über eine Periode mit per-Monat-korrektem Benzinpreis.
 
@@ -511,6 +554,18 @@ def berechne_eauto_ersparnis_periode(
     Args:
         km_pro_monat: Iterable von `(jahr, monat, km)`-Tupeln für die Periode.
         ladung_netz_kwh_gesamt: Heim-Netzladung gesamt in kWh.
+        ladung_pv_kwh_gesamt: Heim-PV-Ladung gesamt in kWh. ⭐ **N-672: Pflicht ohne
+            Vorgabewert** — die PV-Ladung ist nicht kostenlos, sie steckt schon im
+            Eigenverbrauch der Anlage (eine kWh ist einmal Geld).
+        pv_strompreis_cent: Rückfallpreis der PV-Ladung (ct/kWh) — der Preis, mit dem
+            die Eigenverbrauchs-Ersparnis derselben Sicht bewertet, wenn
+            ``monats_ev_preis_lookup`` einen Monat nicht kennt.
+        monats_ev_preis_lookup: ``{(jahr, monat): ev_preis_cent}`` — der Preis der
+            Eigenverbrauchs-Ersparnis DES MONATS (gepflegt · gemessen · Zeitfenster ·
+            Stamm, `services/finanz_zeilen.ev_preis_je_monat`). Gemittelt wird mit
+            ``pv_pro_monat`` (sonst ``km_pro_monat``) — dieselbe Bauform wie der
+            Netzpreis, und für die PV-Gewichte exakt Σ PV_m × Preis_m.
+        pv_pro_monat: ``(jahr, monat, pv_kwh)`` — die Gewichte der PV-Preis-Mittelung.
         ladung_extern_euro_gesamt: tatsächliche Kosten externer Ladung in € (gesamt).
         wallbox_strompreis_cent: Strompreis Heim-Netzladung in ct/kWh.
         eauto_parameter: `Investition.parameter` für Vergleichsverbrauch + Default-Benzinpreis.
@@ -555,6 +610,17 @@ def berechne_eauto_ersparnis_periode(
         monats_strompreis_lookup=monats_strompreis_lookup,
         gewichte=netz_pro_monat if netz_pro_monat is not None else km_liste,
     )
+    # ⭐ N-672: der Preis der PV-Ladung ist der der Eigenverbrauchs-Ersparnis DES MONATS,
+    # PV-gewichtet über die Periode — dieselbe Mittelung wie beim Netzpreis.
+    pv_preis_cent = aufgeloester_strompreis_cent(
+        wallbox_strompreis_cent=pv_strompreis_cent,
+        monats_strompreis_lookup=monats_ev_preis_lookup,
+        gewichte=pv_pro_monat if pv_pro_monat is not None else km_liste,
+    )
+    pv_kosten = heimladung_stromkosten_euro(
+        netz_kwh=0.0, netz_preis_cent=0.0,
+        pv_kwh=ladung_pv_kwh_gesamt, pv_preis_cent=pv_preis_cent,
+    )
 
     monate: list[tuple[float, float]] = []  # (km, preis)
     gesamt_km = 0.0
@@ -575,20 +641,22 @@ def berechne_eauto_ersparnis_periode(
     if gesamt_km <= 0:
         # ⭐ N-555 Stufe 2 (Konzept Regel 2, E6): kein vermiedener Verbrenner, aber die
         # Stromrechnung bleibt — s. `berechne_eauto_ersparnis`. Bis 26.09.2026 „alles 0".
-        strom_kosten_0 = (
-            max(0.0, ladung_netz_kwh_gesamt) * strompreis_cent / 100
-            + ladung_extern_euro_gesamt
-        )
+        strom_kosten_0 = heimladung_stromkosten_euro(
+            netz_kwh=ladung_netz_kwh_gesamt, netz_preis_cent=strompreis_cent,
+            pv_kwh=ladung_pv_kwh_gesamt, pv_preis_cent=pv_preis_cent,
+        ) + ladung_extern_euro_gesamt
         return EAutoErsparnisErgebnis(
             -strom_kosten_0, 0.0, strom_kosten_0,
             verbrauch_l_100km, fallback_preis,
             verwendeter_strompreis_cent=strompreis_cent,
+            pv_ladung_kosten_euro=pv_kosten,
+            verwendeter_pv_strompreis_cent=pv_preis_cent,
         )
 
-    strom_kosten = (
-        max(0.0, ladung_netz_kwh_gesamt) * strompreis_cent / 100
-        + ladung_extern_euro_gesamt
-    )
+    strom_kosten = heimladung_stromkosten_euro(
+        netz_kwh=ladung_netz_kwh_gesamt, netz_preis_cent=strompreis_cent,
+        pv_kwh=ladung_pv_kwh_gesamt, pv_preis_cent=pv_preis_cent,
+    ) + ladung_extern_euro_gesamt
 
     # ⚠ Ohne gepflegten Verbrenner-Verbrauch gar nicht erst aufteilen — s. die
     # Begründung in `berechne_eauto_ersparnis`.
@@ -623,6 +691,8 @@ def berechne_eauto_ersparnis_periode(
         km_verbrenner=anteil.km_verbrenner,
         anteil_quelle=anteil.quelle,
         verwendeter_strompreis_cent=strompreis_cent,
+        pv_ladung_kosten_euro=pv_kosten,
+        verwendeter_pv_strompreis_cent=pv_preis_cent,
     )
 
 

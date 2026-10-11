@@ -185,6 +185,9 @@ class FinanzPrognoseResponse(BaseModel):
     v2h_rueckspeisung_kwh: float = 0
     v2h_ersparnis_euro: float = 0
     eauto_ladung_pv_kwh: float = 0
+    #: PV-Ladung × Strompreis — ⭐ **Information, kein Posten** (N-672): dieser Betrag steckt bereits in
+    #: ``jahres_ev_ersparnis_euro`` (der Eigenverbrauch der Anlage enthält die PV-Ladung) und geht in
+    #: ``jahres_netto_ertrag_euro`` NICHT ein; die E-Auto-Ersparnis belastet dieselbe kWh mit demselben Preis.
     eauto_ersparnis_euro: float = 0
 
     # Wärmepumpe-spezifisch

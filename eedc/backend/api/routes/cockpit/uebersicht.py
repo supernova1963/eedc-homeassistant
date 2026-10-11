@@ -41,7 +41,7 @@ from backend.core.berechnungen.pv_verteilung import (
 from backend.services.ust_satz import ust_eigenverbrauch_zeitraum
 from backend.core.calculations import berechne_co2_bilanz
 from backend.services.strompreis_aggregator import lade_preis_aggregate_je_monat
-from backend.services.finanz_zeilen import baue_finanz_zeile
+from backend.services.finanz_zeilen import baue_finanz_zeile, ev_preis_je_monat
 from backend.services.waermepumpe_jahreskennzahlen import waermepumpe_jahreskennzahlen
 from backend.services.waermepumpe_kennzahlen_je_geraet import (
     lade_kennzahlen_je_geraet,
@@ -701,6 +701,12 @@ async def get_cockpit_uebersicht(
     total_eauto_km = sum(eauto_km_by_inv.values())
     netz_je_inv: dict[int, float] = {}
     netz_pro_monat_je_inv: dict[int, list[tuple[int, int, float]]] = {}
+    # ⭐ N-672 (eine kWh ist einmal Geld): die PV-Ladung jedes Fahrzeugs je Monat — sie trägt den Preis, zu dem die
+    # Eigenverbrauchs-Ersparnis unten (`baue_finanz_zeile`) sie gutschreibt. Bis 11.10.2026 ging nur die Netzladung
+    # hinein, die PV-Ladung war „kostenlos" und stand damit zweimal als Geld im Ergebnis.
+    pv_je_inv: dict[int, float] = {}
+    pv_pro_monat_je_inv: dict[int, list[tuple[int, int, float]]] = {}
+    _pv_monate: dict[tuple[int, int], object] = {}
     for f in fakten:
         for _inv_id, _auto in f.emob.je_auto.items():
             if _auto.netz_kwh:
@@ -708,9 +714,19 @@ async def get_cockpit_uebersicht(
                 netz_pro_monat_je_inv.setdefault(_inv_id, []).append(
                     (f.schluessel[0], f.schluessel[1], _auto.netz_kwh)
                 )
+            if _auto.pv_kwh:
+                pv_je_inv[_inv_id] = pv_je_inv.get(_inv_id, 0.0) + _auto.pv_kwh
+                pv_pro_monat_je_inv.setdefault(_inv_id, []).append(
+                    (f.schluessel[0], f.schluessel[1], _auto.pv_kwh)
+                )
+                _pv_monate[f.schluessel] = f.meta.monatsdaten
+    ev_preis_lookup = await ev_preis_je_monat(
+        db, anlage_id, [(j, m, md) for (j, m), md in _pv_monate.items()],
+        tarif_cache=_tarif_cache, preis_messung=_preis_messung,
+    )
     emob_ersparnis = 0.0
     benzin_verbrauch = 0.0
-    for _inv_id in sorted(set(eauto_km_by_inv) | set(netz_je_inv)):
+    for _inv_id in sorted(set(eauto_km_by_inv) | set(netz_je_inv) | set(pv_je_inv)):
         _km_total = eauto_km_by_inv.get(_inv_id, 0.0)
         _share = _km_total / total_eauto_km if total_eauto_km > 0 else 0.0
         _car_result = berechne_eauto_ersparnis_periode(
@@ -718,6 +734,10 @@ async def get_cockpit_uebersicht(
                 (j, mo, km) for (j, mo), km in eauto_km_pro_monat_by_inv.get(_inv_id, {}).items()
             ],
             ladung_netz_kwh_gesamt=netz_je_inv.get(_inv_id, 0.0),
+            ladung_pv_kwh_gesamt=pv_je_inv.get(_inv_id, 0.0),
+            pv_strompreis_cent=netzbezug_preis_cent,
+            monats_ev_preis_lookup=ev_preis_lookup,
+            pv_pro_monat=pv_pro_monat_je_inv.get(_inv_id) or None,
             ladung_extern_euro_gesamt=emob_extern_euro_total * _share,
             wallbox_strompreis_cent=wallbox_preis_cent,
             eauto_parameter=getattr(inv_by_id.get(_inv_id), "parameter", None),
@@ -865,6 +885,8 @@ async def get_cockpit_uebersicht(
         wp_strom_kuehlen_kwh=sum(f.wp.modus_strom_kuehlen_kwh for f in fakten),
         emob_km=emob_km,
         emob_netz_ladung_kwh=emob_netz_ladung,
+        # N-672: die PV-Ladung trägt den Strommix wie die Netzladung (eine kWh ist einmal CO₂).
+        emob_pv_ladung_kwh=emob_pv_ladung,
         benzin_verbrauch_liter=benzin_verbrauch,
         # #331: derselbe fossile Anteil, den die Ersparnis oben als eigene
         # Kostenposition trägt — sonst hätten Geld und CO₂ zwei Wahrheiten.

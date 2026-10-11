@@ -37,6 +37,7 @@ from backend.services.eauto_wirtschaftlichkeit import (
 )
 from backend.core.wirtschaftlichkeit_defaults import EXTERNE_LADUNG_DEFAULT_EURO_KWH
 from backend.services.emob_kontext import lade_emob_kontext
+from backend.services.finanz_zeilen import ev_preis_je_monat
 from backend.core.berechnungen.speicher_wirtschaftlichkeit import berechne_v2h_ersparnis
 from backend.core.calculations import CO2_FAKTOR_BENZIN_KG_LITER, CO2_FAKTOR_STROM_KG_KWH
 from backend.core.berechnungen import eauto_effizienz_100km, eauto_effizienz_zeitraum
@@ -207,10 +208,12 @@ async def get_eauto_dashboard(
     anlage_md_result = await db.execute(
         select(Monatsdaten).where(Monatsdaten.anlage_id == anlage_id)
     )
+    _anlage_md = {(md.jahr, md.monat): md for md in anlage_md_result.scalars().all()}
     benzinpreis_lookup: dict[tuple[int, int], Optional[float]] = {
-        (md.jahr, md.monat): md.kraftstoffpreis_euro
-        for md in anlage_md_result.scalars().all()
+        k: md.kraftstoffpreis_euro for k, md in _anlage_md.items()
     }
+    # N-672: ein Tarif-Cache für die Preise der Eigenverbrauchs-Ersparnis aller Fahrzeuge dieser Anfrage.
+    _ev_tarif_cache: dict = {}
 
     dashboards = []
     for eauto in eautos:
@@ -242,6 +245,8 @@ async def get_eauto_dashboard(
         # tatsächlich gültigen Monatstarife zu mitteln statt über den heutigen.
         netz_pro_monat: dict[tuple[int, int], float] = {}
         km_gewichte: dict[tuple[int, int], float] = {}
+        # ⭐ N-672: die PV-Ladung je Monat — Gewicht des Preises, mit dem sie belastet wird.
+        pv_pro_monat: dict[tuple[int, int], float] = {}
 
         # N-555 Stufe 2: Heimladung je Monat nach dem Entscheid der einen Funktion
         # (`entscheid.je_auto`) — gemessen, Anteil am Rest der Wallbox nach km (bei 0 km
@@ -290,6 +295,8 @@ async def get_eauto_dashboard(
             gesamt_netz_ladung += netz
             if netz:
                 netz_pro_monat[(md.jahr, md.monat)] = netz
+            if pv and not dienstlich:
+                pv_pro_monat[(md.jahr, md.monat)] = pv_pro_monat.get((md.jahr, md.monat), 0.0) + pv
             gesamt_extern_ladung += d.get('ladung_extern_kwh', 0)
             gesamt_extern_kosten += d.get('ladung_extern_euro', 0)
             gesamt_v2h += d.get('v2h_entladung_kwh', 0)
@@ -319,6 +326,8 @@ async def get_eauto_dashboard(
                 gesamt_netz_ladung += netz
                 if netz:
                     netz_pro_monat[(_j, _m)] = netz
+                if pv:
+                    pv_pro_monat[(_j, _m)] = pv_pro_monat.get((_j, _m), 0.0) + pv
 
         # N-555 F-5: Extern nach der Topf-Regel — das Paar mit den höheren Kosten aus
         # dem km-Anteil am Extern der Wallbox-Zeilen und den eigenen Zeilen des Autos.
@@ -362,9 +371,23 @@ async def get_eauto_dashboard(
         # (#260, NongJoWo): Σ km_monat × verbrauch × preis_monat aus dem
         # benzinpreis_lookup, statt einmaliger Multiplikation mit Default.
         params = eauto.parameter or {}
+        # ⭐ N-672 (eine kWh ist einmal Geld): die PV-Ladung trägt den Preis, zu dem die Eigenverbrauchs-Ersparnis der
+        # Anlage sie im selben Monat gutschreibt (Cockpit, Aussichten, HA-Export lesen denselben Builder). Der
+        # PV-Anteil bleibt als Menge und Prozent in der Zusammenfassung — eine Information, kein eigener Geldposten.
+        _ev_preise = await ev_preis_je_monat(
+            db, anlage_id, [(j, m, _anlage_md.get((j, m))) for (j, m) in pv_pro_monat],
+            tarif_cache=_ev_tarif_cache,
+        )
+        _allgemein_preis = (
+            allgemein_tarif.netzbezug_arbeitspreis_cent_kwh if allgemein_tarif else eauto_strompreis_cent
+        )
         eauto_result = berechne_eauto_ersparnis_periode(
             km_pro_monat=km_pro_monat,
             ladung_netz_kwh_gesamt=gesamt_netz_ladung,
+            ladung_pv_kwh_gesamt=0.0 if dienstlich else gesamt_pv_ladung,
+            pv_strompreis_cent=_allgemein_preis,
+            monats_ev_preis_lookup=_ev_preise,
+            pv_pro_monat=[(j, m, g) for (j, m), g in pv_pro_monat.items()] or None,
             ladung_extern_euro_gesamt=gesamt_extern_kosten,
             wallbox_strompreis_cent=eauto_strompreis_cent,
             eauto_parameter=params,
@@ -482,6 +505,8 @@ async def get_eauto_dashboard(
             'verwendeter_benzinpreis_euro': round(eauto_result.verwendeter_benzinpreis_euro, 2),
             'strom_kosten_heim_euro': round(heim_netz_kosten, 2),
             'strom_kosten_extern_euro': round(gesamt_extern_kosten, 2),
+            # ⭐ N-672: die PV-Ladung zum Preis der Eigenverbrauchs-Ersparnis — Teil von `strom_kosten_gesamt_euro`.
+            'strom_kosten_pv_euro': round(0.0 if dienstlich else eauto_result.pv_ladung_kosten_euro, 2),
             'strom_kosten_gesamt_euro': round(strom_kosten_gesamt, 2),
             'ersparnis_vs_benzin_euro': round(ersparnis_vs_benzin, 2),
             # #331: die real angefallene Tankrechnung des Verbrenner-Anteils —

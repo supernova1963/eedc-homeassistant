@@ -291,13 +291,33 @@ async def test_community_payload_bleibt_gemessen(db):
 # ═══════════════════════════════════════════════════════════════════════
 
 
-async def _roi_stromkosten(db, anlage_id: int) -> float:
-    """Die Netz-Stromkosten des E-Autos aus der ROI-Prognose.
+async def _wallbox_tarif_40(db, anlage_id: int) -> None:
+    """Ein eigener Wallbox-Tarif (40 ct) neben dem Stammpreis (30 ct).
 
-    Die eine Größe der ROI-Zeile, die direkt am PV-Anteil hängt: je mehr Sonne,
-    desto weniger bezahlter Netzstrom.
+    ⭐ N-672 (eine kWh ist einmal Geld): die PV-Ladung kostet seither den Preis der
+    Eigenverbrauchs-Ersparnis. Bei EINEM Preis für Netz und Eigenverbrauch bewegt der
+    PV-Anteil die Stromkosten deshalb gar nicht mehr — die Probe könnte ihn nicht sehen.
+    Erst zwei Preise machen die Aufteilung wieder zu einer Geldfrage.
+    """
+    from backend.models.strompreis import Strompreis
+
+    db.add(Strompreis(
+        anlage_id=anlage_id, gueltig_ab=date(2023, 1, 1),
+        netzbezug_arbeitspreis_cent_kwh=40.0, einspeiseverguetung_cent_kwh=8.0,
+        verwendung="wallbox",
+    ))
+    await db.commit()
+
+
+async def _roi_stromkosten(db, anlage_id: int) -> float:
+    """Die Stromkosten des E-Autos aus der ROI-Prognose.
+
+    Die eine Größe der ROI-Zeile, die direkt am PV-Anteil hängt: Netzladung zum
+    Wallbox-Tarif (40 ct), PV-Ladung zum Eigenverbrauchspreis (30 ct, N-672).
     """
     from backend.api.routes.investitionen.crud import get_roi_dashboard
+
+    await _wallbox_tarif_40(db, anlage_id)
 
     roi = await get_roi_dashboard(
         anlage_id=anlage_id,
@@ -373,9 +393,10 @@ async def test_aussichten_historie_rechnet_mit_dem_abgeleiteten_anteil(db):
         # Schleife liest die Zeile des **Fahrzeugs**. Im evcc-Zuschnitt trägt
         # sie nur km — Netzladung 0, PV-Anteil ohne Wirkung, alle drei Läufe
         # wären gleich und die Probe bewiese nichts.
-        antwort = await get_finanz_prognose(
-            anlage_id=await _seed(db, mit_wallbox=False, **seed), monate=12, db=db
-        )
+        anlage_id = await _seed(db, mit_wallbox=False, **seed)
+        # N-672: zwei Preise, sonst ist die Aufteilung keine Geldfrage mehr (s. `_wallbox_tarif_40`).
+        await _wallbox_tarif_40(db, anlage_id)
+        antwort = await get_finanz_prognose(anlage_id=anlage_id, monate=12, db=db)
         return antwort.bisherige_ertraege_euro
 
     abgeleitet = await _ertraege()

@@ -349,14 +349,18 @@ export function baueTKonto(d: AktuellerMonatResponse, sonderkosten: number | nul
       // N-555 (Nebenfund 2): hier stand „7 L/100km × 1,80 €/L" — zwei feste
       // Werte, mit denen seit dem Drift-Audit A2 nicht mehr gerechnet wird (die
       // Rechnung nimmt je Fahrzeug SEINEN Vergleichsverbrauch und den Benzinpreis
-      // des Monats). ⚠ Wortgleich mit `inv_formel` in `aktueller_monat/tkonto.py`.
-      formel: '(km × Verbrauch × Benzinpreis) − Netzladung × Strompreis',
+      // des Monats). ⚠ Wortgleich mit `EAUTO_ERSPARNIS_FORMEL` in `aktueller_monat/tkonto.py`.
+      // N-672 (eine kWh ist einmal Geld): die PV-Ladung kostet den Preis der
+      // Eigenverbrauchs-Ersparnis — sie steckt dort schon als Ersparnis.
+      formel: '(km × Verbrauch × Benzinpreis) − Netzladung × Strompreis − PV-Ladung × Preis der Eigenverbrauchs-Ersparnis',
       berechnung: d.emob_km != null ? [
         d.emob_ersparnis_berechnung ?? `${fmt(d.emob_km, 0)} km × Vergleichsverbrauch × Benzinpreis`,
         d.emob_ladung_netz_kwh != null
           ? `− ${fmt(d.emob_ladung_netz_kwh, 1)} kWh Netz × ${fmtCalc(netzPreis, 2)} ct`
           : `− ${fmt(d.emob_ladung_kwh, 1)} kWh × ${fmtCalc(netzPreis, 2)} ct`,
-        d.emob_ladung_pv_kwh != null ? `(PV ${fmt(d.emob_ladung_pv_kwh, 1)} kWh kostenlos)` : null,
+        d.emob_ladung_pv_kwh != null
+          ? `− ${fmt(d.emob_ladung_pv_kwh, 1)} kWh PV × ${fmtCalc(d.ev_preis_cent ?? netzPreis, 2)} ct (Preis der Eigenverbrauchs-Ersparnis)`
+          : null,
       ].filter(Boolean).join('\n') : undefined,
       ergebnis: `= ${fmtCalc(d.emob_ersparnis_euro, 2)} €`,
     } as TKontoPosten] : []),

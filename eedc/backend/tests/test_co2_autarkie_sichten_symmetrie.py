@@ -56,13 +56,15 @@ from backend.tests.test_netto_ertrag_vier_wege_symmetrie import (
 #   Autarkie                    = 1.000 / 1.100             =    90,9 %
 #   CO₂ PV                      = 1.000 × 0,38 kg/kWh       =   380,0 kg
 #   Benzin-Vergleich            = 1.000 km × 7,5 l/100 km   =      75 l
-#   CO₂ E-Mob                   = 75 × 2,37 − 50 × 0,38     =  158,75 kg
-#   CO₂ gesamt                                              =  538,75 kg
+#   CO₂ E-Mob                   = 75 × 2,37 − 200 × 0,38    =  101,75 kg
+#     (⭐ N-672: die GANZE Heimladung 150 PV + 50 Netz trägt den Strommix — eine kWh ist
+#      einmal CO₂; bis 11.10.2026 nur die 50 kWh Netz ⇒ 158,75 kg)
+#   CO₂ gesamt                                              =  481,75 kg
 EV_KWH = 1000.0
 AUTARKIE = 90.9
 CO2_PV = 380.0
-CO2_EMOB = 158.75
-CO2_GESAMT = 538.75
+CO2_EMOB = 101.75
+CO2_GESAMT = 481.75
 
 # Und der Stand VOR dem Umbau, als Gegenprobe: PV 1.000 (BHKW fiel weg),
 # Direktverbrauch 600, kein V2H → EV 600 kWh, Autarkie 600/700 = 85,7 %,
@@ -112,7 +114,7 @@ async def test_benzin_vergleich_nutzt_den_gepflegten_verbrauch(db):
     """Der gepflegte `vergleich_verbrauch_l_100km` schlägt die alte 7-l-Konstante.
 
     5 l/100 km × 1.000 km            =  50 l
-    CO₂ E-Mob = 50 × 2,37 − 50 × 0,38 = 118,50 − 19,00 = 99,50 kg
+    CO₂ E-Mob = 50 × 2,37 − 200 × 0,38 = 118,50 − 76,00 = 42,50 kg  (N-672: ganze Heimladung)
 
     Die beiden Gegenproben nennen die Werte, die der Endpoint bis 2026-07-31
     genannt hätte: **146,9 kg** mit der hartkodierten 7 und **158,75 kg**, wenn
@@ -126,8 +128,9 @@ async def test_benzin_vergleich_nutzt_den_gepflegten_verbrauch(db):
 
     co2 = await get_nachhaltigkeit(anlage_id=anlage_id, db=db)
 
-    assert co2.co2_emob_kg == pytest.approx(99.5, abs=0.1)
-    assert abs(co2.co2_emob_kg - 146.9) > 1.0, "rechnet weiter mit 7 l/100 km"
+    assert co2.co2_emob_kg == pytest.approx(42.5, abs=0.1)
+    # 7 l/100 km wären 70 × 2,37 − 76 = 89,90 kg (bis N-672: 146,9 kg mit nur dem Netzanteil).
+    assert abs(co2.co2_emob_kg - 89.9) > 1.0, "rechnet weiter mit 7 l/100 km"
     assert abs(co2.co2_emob_kg - CO2_EMOB) > 1.0, "der gepflegte Wert wird ignoriert"
 
 

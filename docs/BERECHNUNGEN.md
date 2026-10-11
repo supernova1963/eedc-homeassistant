@@ -808,9 +808,19 @@ Zusatzkosten. Bis dahin entstand keine Zeile, und HA-Export und Aussichten zogen
 ```
 Benzin_Verbrauch    = Σ(km_gefahren) * 7 / 100    (7 L/100km Annahme)
 Benzin_Kosten       = Benzin_Verbrauch * 1.80      (1.80 EUR/L Annahme)
-Strom_Kosten        = (Ladung_gesamt - Ladung_PV) * Wallbox_Preis / 100
+Strom_Kosten        = Ladung_Netz * Wallbox_Preis / 100
+                    + Ladung_PV   * EV_Preis      / 100   ← seit N-672 (Preis der Eigenverbrauchs-Ersparnis des Monats)
+                    + Kosten_externe_Ladung
 E-Mob-Ersparnis     = Benzin_Kosten - Strom_Kosten
 ```
+
+> ⭐ **Eine kWh ist einmal Geld (N-672, 11.10.2026).** Die PV-Ladung steckt im Eigenverbrauch der Anlage und ist
+> dort schon zum Strompreis gutgeschrieben. Bis dahin stand hier `(Ladung_gesamt − Ladung_PV) × Wallbox_Preis` — die
+> PV-Ladung war „kostenlos" und damit zweimal Geld (an einer Beispielanlage mit 200 kWh PV-Ladung und 30 ct:
+> 399,50 € statt 339,50 € im Jahr). Sie trägt jetzt genau den Preis, zu dem die Eigenverbrauchs-Ersparnis derselben
+> Sicht sie gutschreibt (gepflegt · gemessen · Zeitfenster · Stamm, §3.1); die Netzladung behält den Wallbox-Tarif.
+> „Davon aus PV" bleibt als Menge und Anteil sichtbar — als Information, nicht als eigener Geldposten. Eine Formel
+> für alle Sichten: `core/berechnungen/heimladung_kosten.py`.
 
 **Hinweis:** Dienstliche E-Autos/Wallboxen (`ist_dienstlich = true`) werden NICHT in die E-Mob-Ersparnis eingerechnet. Deren Ladekosten sind ein eigener Posten der Ergebnis-Leiter („Dienstliche Ladekosten", §3.2, seit N-633) — Formel und Begründung stehen in §3.10 unter **Dienstliche Ladekosten** — der PV-Anteil zählt dort zum **Netzbezugspreis**, nicht zur Einspeisevergütung.
 
@@ -1360,6 +1370,8 @@ PV_Anteil            = pv_ladeanteil_prozent / 100
 Netz_Anteil          = 1 - PV_Anteil
 
 Strom_Kosten         = Strom_Bedarf * Netz_Anteil * Strompreis / 100
+                     + Strom_Bedarf * PV_Anteil   * EV_Preis   / 100   ← N-672: PV-Ladung ist nicht kostenlos
+                       (EV_Preis = der Strompreis, mit dem die ROI-Prognose den Eigenverbrauch bewertet)
 Benzin_Verbrauch     = jahresfahrleistung_km * Vergleich_L_100km / 100   ← ALLE Kilometer
 Benzin_Kosten        = Benzin_Verbrauch * Benzinpreis_EUR
 Fossile_Kosten       = km_verbrenner / 100 * Eigener_L_100km * Benzinpreis_EUR
@@ -1371,7 +1383,7 @@ V2H_Einsparung       = V2H_Entladung_kWh * V2H_Preis / 100    (wenn V2H aktiv)
 Jahres-Einsparung    = Benzin_Kosten - Strom_Kosten - Fossile_Kosten + V2H_Einsparung
 
 CO2_Verbrenner       = Benzin_Verbrauch * 2.37
-CO2_E-Auto           = Strom_Bedarf * Netz_Anteil * 0.38
+CO2_E-Auto           = Strom_Bedarf * 0.38        ← N-672: die GANZE Ladung (die PV-CO₂ schreibt den Eigenverbrauch schon gut)
 CO2_Fossil           = km_verbrenner / 100 * Eigener_L_100km * 2.37
 CO2-Einsparung       = CO2_Verbrenner - CO2_E-Auto - CO2_Fossil
 ```
@@ -1417,6 +1429,7 @@ Für jeden historischen Monat:
               ∨ Investition.parameter.benzinpreis_euro  (Fallback statisch)
   Benzin_Kosten_Monat = km_gefahren / 100 * Vergleich_L_100km * Benzinpreis
   Strom_Kosten_Monat  = ladung_netz_kwh * Netzbezug_Preis / 100   # kanonische Heimladungs-Quelle (Wallbox bzw. E-Auto), s. §3.2
+                      + ladung_pv_kwh   * EV_Preis        / 100   # N-672: Preis der Eigenverbrauchs-Ersparnis des Monats
 
 Für Jahresprognose:
   Prognose_Benzinpreis = Ø(Monatsdaten.kraftstoffpreis_euro)  (historischer Durchschnitt)
@@ -2582,9 +2595,14 @@ addiert, wäre über die Granularitäten nicht summierbar.
 ```
 CO2_PV    = Eigenverbrauch * 0.38                    (vermiedener Netzstrom)
 CO2_WP    = (WP_Wärme / 0.9 * 0.201) - (WP_Strom * 0.38)  (vs. Gasheizung)
-CO2_E-Mob = (Benzin_L * 2.37) - ((Ladung - PV_Ladung) * 0.38)  (vs. Benziner)
+CO2_E-Mob = (Benzin_L * 2.37) - ((Netz_Ladung + PV_Ladung) * 0.38)  (vs. Benziner — die ganze Heimladung, N-672)
 CO2_gesamt = CO2_PV + max(0, CO2_WP) + max(0, CO2_E-Mob)
 ```
+
+> ⭐ **Eine kWh ist einmal CO₂ (N-672, 11.10.2026).** `CO2_PV` schreibt den ganzen Eigenverbrauch als vermiedenen
+> Netzstrom gut — die PV-Ladung des E-Autos steckt darin. Bis dahin stand hier `(Ladung − PV_Ladung) × 0,38`: die
+> PV-Ladung galt zusätzlich als CO₂-frei und zählte doppelt (an einer Beispielanlage mit 200 kWh PV-Ladung 507,5 statt
+> 431,5 kg). Dieselbe Regel wie beim Geld (§3.2) und bei der Wärmepumpe (ganzer WP-Strom, N-459).
 
 > **Kanonische CO₂-Helfer (SoT `core/calculations.py`, DI-1/DI-2):** Diese Bilanz läuft über **genau eine**
 > Helfer-Familie — `berechne_co2_bilanz` (setzt PV + WP + E-Mob zusammen), intern `co2_wp_ersparnis_kg`
