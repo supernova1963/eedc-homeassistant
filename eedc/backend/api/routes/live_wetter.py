@@ -274,6 +274,21 @@ def _get_pv_orientierungsgruppen(pv_module: list) -> list[dict]:
 # 3-stündlich).
 LIVE_WETTER_CACHE_TTL = 3600
 
+# N-701: die Open-Meteo-Felder des Live-Wetter-Abrufs — EINE Liste für den
+# Direktabruf (`_lade_forecast_gecached`) und den Prefetch
+# (`prefetch_service._prefetch_live_wetter`), die unter denselben Schlüssel
+# schreiben. Der Prefetch führte eine eigene Kopie ohne die stündliche
+# `sunshine_duration`; die Route las seinen Eintrag ohne eigenen Abruf, und
+# Sonnenstunden/«bisher»/«Rest» blieben bis zu 60 min leer. Bei genau einer
+# Orientierungsgruppe hängen beide `global_tilted_irradiance` an.
+LIVE_WETTER_HOURLY_FELDER: tuple[str, ...] = (
+    "temperature_2m", "weather_code", "cloud_cover",
+    "precipitation", "shortwave_radiation", "sunshine_duration",
+)
+LIVE_WETTER_DAILY_FELDER: tuple[str, ...] = (
+    "sunshine_duration", "temperature_2m_max", "temperature_2m_min", "sunrise", "sunset",
+)
+
 
 def live_wetter_cache_key(
     latitude: float, longitude: float, gruppen: list[dict], wetter_modell: str,
@@ -1266,10 +1281,7 @@ async def _lade_forecast_gecached(
     elif _error_cache_check(cache_key):
         return None
     else:
-        hourly_vars = [
-            "temperature_2m", "weather_code", "cloud_cover",
-            "precipitation", "shortwave_radiation", "sunshine_duration",
-        ]
+        hourly_vars = list(LIVE_WETTER_HOURLY_FELDER)
         if not hat_multi_string:
             hourly_vars.append("global_tilted_irradiance")
 
@@ -1277,7 +1289,7 @@ async def _lade_forecast_gecached(
             "latitude": anlage.latitude,
             "longitude": anlage.longitude,
             "hourly": ",".join(hourly_vars),
-            "daily": "sunshine_duration,temperature_2m_max,temperature_2m_min,sunrise,sunset",
+            "daily": ",".join(LIVE_WETTER_DAILY_FELDER),
             "timezone": "Europe/Berlin",
             "forecast_days": 1,
         }

@@ -46,6 +46,10 @@ konnte die PV-Prognose in *Cockpit → Live* bis zu einer Stunde aus der horizon
 Hinweis. Jetzt holt eedc die Dachflächen neu und zeigt den Hinweis zum unvollständigen Abruf, bis alle wieder liefern
 ([Bedienung → Live](HANDBUCH_BEDIENUNG.md#21-live)).
 
+**Sonnenstunden immer da:** Bei Anlagen mit einer Dachausrichtung fehlten die Sonnenstunden in *Cockpit → Live* bis zu
+einer Stunde, wenn eedc das Wetter vorab im Hintergrund geholt hatte; jetzt holt der Vorababruf dieselben Daten wie die
+Anzeige ([Bedienung → Live](HANDBUCH_BEDIENUNG.md#21-live)).
+
 ## v4.1.6 — 11. Oktober 2026
 
 **Kleinere Anzeige-Korrekturen:** Monate ohne Werte zeigen in der Monatsleiste und im Jahresbericht einen Strich statt „0 kWh",

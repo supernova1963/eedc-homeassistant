@@ -334,7 +334,8 @@ async def _prefetch_live_wetter(
     statt aus `strings[0]`.
     """
     from backend.api.routes.live_wetter import (
-        LIVE_WETTER_CACHE_TTL, live_wetter_cache_key,
+        LIVE_WETTER_CACHE_TTL, LIVE_WETTER_DAILY_FELDER, LIVE_WETTER_HOURLY_FELDER,
+        live_wetter_cache_key,
     )
 
     hat_multi = len(gruppen) > 1
@@ -346,10 +347,9 @@ async def _prefetch_live_wetter(
     if _cache_get(cache_key) is not None:
         return
 
-    hourly_vars = [
-        "temperature_2m", "weather_code", "cloud_cover",
-        "precipitation", "shortwave_radiation",
-    ]
+    # N-701: dieselbe Feldliste wie der Direktabruf (eine Liste, ein Ort) — die
+    # eigene Kopie hier fragte die stündliche `sunshine_duration` nicht an.
+    hourly_vars = list(LIVE_WETTER_HOURLY_FELDER)
     if not hat_multi:
         hourly_vars.append("global_tilted_irradiance")
 
@@ -357,7 +357,7 @@ async def _prefetch_live_wetter(
         "latitude": latitude,
         "longitude": longitude,
         "hourly": ",".join(hourly_vars),
-        "daily": "sunshine_duration,temperature_2m_max,temperature_2m_min,sunrise,sunset",
+        "daily": ",".join(LIVE_WETTER_DAILY_FELDER),
         "timezone": "Europe/Berlin",
         "forecast_days": 1,
     }
