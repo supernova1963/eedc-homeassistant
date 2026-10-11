@@ -58,6 +58,7 @@ from backend.api.routes.live_wetter_antwort import (
     _sfml_quelle,
     _solcast_quelle,
     _sonnenstunden,
+    _teilsumme_hinweis,
     _wetter_stunden,
 )
 
@@ -120,6 +121,27 @@ class WetterStunde(BaseModel):
     bewoelkung_prozent: Optional[int] = None
     niederschlag_mm: Optional[float] = None
     globalstrahlung_wm2: Optional[float] = None
+    #: Einstrahlung auf die Modulebene (kWp-gewichtet über die Orientierungs-
+    #: gruppen, bei eedc als Quelle × Korrekturfaktor). Stand bis N-689 nur in
+    #: der Rohrückgabe — das Modell strich es (kein Leser im Frontend; es gehört
+    #: hierher, damit Rohrückgabe und Antwort deckungsgleich sind).
+    gti_wm2: Optional[float] = None
+
+
+class PrognoseQuelleTag(BaseModel):
+    """Ein Tag der GEWÄHLTEN Prognosequelle (Solcast/SFML) für die Solar-Aussicht.
+
+    ``rueckfall="eedc"``: so weit reicht die gewählte Quelle nicht — die
+    Anzeige zeigt dann die eedc-Prognose und sagt es. N-689: bis 11.10.2026
+    stand die Liste nur in der Rohrückgabe; ohne dieses Modell strich FastAPI
+    sie aus der Antwort, und die Kachel fiel unter der Quellen-Überschrift
+    stumm auf den eedc-Kanon zurück.
+    """
+    datum: str  # "YYYY-MM-DD"
+    kwh: Optional[float] = None
+    vm_kwh: Optional[float] = None
+    nm_kwh: Optional[float] = None
+    rueckfall: Optional[str] = None  # "eedc" oder None
 
 
 class VerbrauchsStunde(BaseModel):
@@ -155,6 +177,10 @@ class LiveWetterResponse(BaseModel):
     pv_prognose_heute_rollend_kwh: Optional[float] = None
     #: Was heute bis jetzt tatsächlich erzeugt wurde (aus dem Tagesprofil).
     pv_ist_bisher_kwh: Optional[float] = None
+    #: ADR-002 P4 (N-690): gesetzt, wenn Tageswert/PV-Kurve von heute aus einem
+    #: unvollständigen Multi-String-Fan-out stammen (der Kanon hat sie nicht
+    #: ersetzt). Der Wert bleibt stehen — die Antwort sagt es nur selbst.
+    pv_prognose_hinweis: Optional[str] = None
     grundlast_kw: Optional[float] = None
     verbrauchsprofil: list[VerbrauchsStunde] = []
     profil_typ: str = "bdew_h0"  # "individuell_werktag", "individuell_wochenende", "bdew_h0"
@@ -167,6 +193,12 @@ class LiveWetterResponse(BaseModel):
     profil_slots: Optional[int] = None
     prognose_quelle: Optional[str] = None  # Aktive Prognosequelle: "eedc", "solcast", "sfml"
     prognose_quelle_hinweis: Optional[str] = None  # Fallback-Hinweis wenn gewünschte Quelle nicht verfügbar
+    #: Tageszahlen der gewählten Quelle (None bei eedc — dann gilt der Kanon).
+    #: N-689: fehlte bis 11.10.2026 im Modell und wurde aus der Antwort gestrichen.
+    prognose_quelle_tage: Optional[list[PrognoseQuelleTag]] = None
+    #: Hat die gewählte Quelle ein Stundenprofil? False ⇒ kein Rest (statt eines
+    #: aus fremder Kurvenform geschätzten). N-689 wie oben.
+    prognose_quelle_hat_profil: Optional[bool] = None
     sfml_prognose_kwh: Optional[float] = None  # Solar Forecast ML Tagesprognose
     sfml_tomorrow_kwh: Optional[float] = None  # Solar Forecast ML Morgen-Prognose
     sfml_accuracy_pct: Optional[float] = None  # Solar Forecast ML Modellgenauigkeit
@@ -1260,7 +1292,12 @@ async def _lade_forecast_gecached(
                 multi_gti = None
                 multi_vollstaendig = True  # Single-String: kein Fan-out, kein Kollaps-Risiko
 
-        _cache_set(cache_key, (data, multi_gti, multi_vollstaendig), LIVE_WETTER_CACHE_TTL)
+        # N-690: ein unvollständiger Fan-out wird NICHT gecacht — der lokale
+        # Cache hielt ihn sonst LIVE_WETTER_CACHE_TTL (1 h) samt
+        # `vollstaendig=False`, während die ausgefallene Gruppe längst wieder
+        # liefert. Der nächste Aufruf (Kachel alle 5 min) versucht es neu.
+        if multi_vollstaendig:
+            _cache_set(cache_key, (data, multi_gti, multi_vollstaendig), LIVE_WETTER_CACHE_TTL)
     return data, multi_gti, multi_vollstaendig
 
 
@@ -1353,6 +1390,7 @@ async def get_live_wetter(
         )
 
         zahlen = await _kanon_zahlen(db, anlage, profil, pv_prognose)
+        teilsumme_hinweis = _teilsumme_hinweis(multi_gti, multi_vollstaendig, zahlen.kanon_heute)
 
         ha_temp_found = await _ha_aussentemperatur(anlage, aktuelle_stunde)
 
@@ -1389,6 +1427,7 @@ async def get_live_wetter(
         return _antwort(
             anlage, stunden, aktuelle_stunde, daily, sonne, zahlen, pv_prognose_aktiv,
             grundlast, profil, wahl, ist_ind, pq, prognose_quelle_tage, quelle_hat_profil, stand,
+            teilsumme_hinweis,
         )
 
     except httpx.HTTPStatusError as e:

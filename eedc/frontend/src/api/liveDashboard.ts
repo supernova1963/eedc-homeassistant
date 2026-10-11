@@ -144,6 +144,9 @@ export interface LiveWetterResponse {
   pv_prognose_heute_rollend_kwh: number | null
   /** Was heute bis jetzt tatsächlich erzeugt wurde. */
   pv_ist_bisher_kwh: number | null
+  /** ADR-002 P4 (N-690): gesetzt, wenn Tageswert/PV-Kurve von heute aus einem
+   *  unvollständigen Wetterabruf stammen — der Wert bleibt, die Antwort sagt es. */
+  pv_prognose_hinweis?: string | null
   grundlast_kw: number | null
   verbrauchsprofil: VerbrauchsStunde[]
   profil_typ?: string  // "individuell_werktag", "individuell_wochenende", "bdew_h0"

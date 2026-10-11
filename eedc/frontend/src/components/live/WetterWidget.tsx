@@ -764,6 +764,13 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
               {wetter.prognose_quelle_hinweis}
             </p>
           )}
+          {/* N-690 (P4): Tageswert und PV-Kurve stammen aus einem unvollständigen
+              Wetterabruf — die Zahl bleibt, der Satz sagt es (Wortlaut vom Backend). */}
+          {wetter.pv_prognose_hinweis && (
+            <p className="text-[10px] text-center text-amber-500 dark:text-amber-400 mt-0.5">
+              {wetter.pv_prognose_hinweis}
+            </p>
+          )}
         </div>
       )}
     </div>

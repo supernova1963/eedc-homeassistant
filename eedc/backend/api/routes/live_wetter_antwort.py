@@ -269,6 +269,41 @@ async def _kanon_zahlen(db, anlage, profil: list[dict], pv_prognose: Optional[fl
     return _PrognoseZahlen(kanon_heute, pv_prognose, pv_prognose_rest, pv_prognose_rollend, pv_ist_bisher)
 
 
+#: N-690 (ADR-002 P4): der Satz, den die Antwort trägt, wenn die eedc-Werte von
+#: heute aus einem unvollständigen lokalen Fan-out stammen. Wortlaut wie N77 in
+#: ``/solar-prognose`` — der Wert bleibt stehen, er wird nur beschriftet.
+TEILSUMME_HINWEIS = (
+    "Der Wetterabruf war unvollständig: nicht alle PV-Teilanlagen haben eine "
+    "Einstrahlungsprognose geliefert. Die eedc-Werte für heute (Tagesprognose, "
+    "PV-Kurve) sind deshalb unvollständig und können zu niedrig sein — bitte "
+    "später erneut laden."
+)
+
+
+def _teilsumme_hinweis(multi_gti, multi_vollstaendig: bool, kanon_heute) -> Optional[str]:
+    """P4-Hinweis, wenn Tageswert oder PV-Kurve aus einem unvollständigen
+    lokalen Fan-out stehen bleiben — sonst ``None``.
+
+    N-690: ``multi_vollstaendig`` wurde bis 11.10.2026 ausgepackt und nie
+    gelesen. Der Kanon liefert bei einem Teil-Fan-out seit N-423 keinen
+    Tageswert und kein Profil; dann bleibt hier der lokale Wert aus
+    ``_berechne_verbrauchsprofil`` stehen — um die ausgefallenen Gruppen zu
+    klein. Hat der Kanon beides ersetzt, zeigt die Antwort seine (vollständige)
+    Zahl, und es gibt nichts zu sagen. ``multi_gti is None`` heißt: kein lokaler
+    Fan-out (Ein-Gruppen-Anlage oder Prefetch-Eintrag ``(data, None, False)``) —
+    der lokale Pfad rechnet dann mit der Globalstrahlung, eine Teilsumme ist
+    das nicht.
+    """
+    if multi_vollstaendig or multi_gti is None:
+        return None
+    kanon_ersetzt = (
+        kanon_heute is not None
+        and kanon_heute.eedc_kwh is not None
+        and kanon_heute.profil is not None
+    )
+    return None if kanon_ersetzt else TEILSUMME_HINWEIS
+
+
 def _export_slots_ins_profil(profil: list[dict], export_slots) -> None:
     for p in profil:
         h = int(p["zeit"].split(":")[0])
@@ -629,6 +664,7 @@ def _antwort(
     sonne: _Sonnenstunden, zahlen: _PrognoseZahlen, pv_prognose_aktiv: Optional[float],
     grundlast: Optional[float], profil: list[dict], wahl, ist_ind: bool, pq,
     prognose_quelle_tage: Optional[list[dict]], quelle_hat_profil: bool, stand: _QuellenStand,
+    teilsumme_hinweis: Optional[str] = None,
 ) -> dict:
     sunshine_s, sunshine_bisher_s, sunshine_remaining_s = sonne.gesamt_s, sonne.bisher_s, sonne.rest_s
     sfml_kwh, sfml_tomorrow, sfml_accuracy = stand.sfml_kwh, stand.sfml_tomorrow, stand.sfml_accuracy
@@ -655,6 +691,9 @@ def _antwort(
         # die nachgeführte Zahl oben und diese klein daneben.
         "pv_prognose_heute_rollend_kwh": zahlen.rollend,
         "pv_ist_bisher_kwh": zahlen.ist_bisher,
+        # N-690 (P4): stammen Tageswert/PV-Kurve aus einem unvollständigen
+        # lokalen Fan-out, sagt die Antwort es selbst (s. `_teilsumme_hinweis`).
+        "pv_prognose_hinweis": teilsumme_hinweis,
         "grundlast_kw": grundlast,
         "verbrauchsprofil": profil,
         "profil_typ": wahl.profil_typ if ist_ind else "bdew_h0",

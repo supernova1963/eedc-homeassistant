@@ -38,11 +38,30 @@ export default function SolarAussicht3Tage({ prognose3Tage, wetter, heutePvKwh }
   // Tag i, oder `rueckfall: 'eedc'`, wenn sie so weit nicht reicht.
   const quelleTage = wetter?.prognose_quelle_tage ?? null
   const qTag = (i: number) => quelleTage?.[i] ?? null
+  // N-689: Trägt die Antwort für einen Folgetag KEINE Zahl der gewählten Quelle
+  // (Feld fehlt — bis 11.10.2026 strich das Antwortmodell der Route es immer),
+  // steht dort der Kanon. Dann sagt es der Vermerk, statt still eine eedc-Zahl
+  // unter der Quellen-Überschrift zu zeigen. Trägt sie den Tag, entscheidet
+  // allein dessen `rueckfall`.
+  const fremdeQuelle = wetter?.prognose_quelle != null && wetter.prognose_quelle !== 'eedc'
+  const rueckfallEedc = (i: number) => {
+    const q = qTag(i)
+    return q ? q.rueckfall === 'eedc' : fremdeQuelle && i > 0
+  }
   return (
     <div>
       <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
         Solar-Aussicht{wetter?.prognose_quelle && wetter.prognose_quelle !== 'eedc' && ` (${wetter.prognose_quelle === 'solcast' ? 'Solcast' : 'SFML'})`} <SimpleTooltip text={`Alle Zahlen aus derselben Quelle: ${heuteQuelle}. Wo sie einen Tag nicht abdeckt, steht „eedc" dabei (dann: ${folgetageKanon}). „Heute" zeigt den nachgeführten Wert — bisher gemessen plus erwarteter Rest; die ursprüngliche Tagesprognose steht klein darunter. VM/NM = Split an Solar Noon.`}><Info className="inline w-3 h-3 text-gray-400 dark:text-gray-500 opacity-50 cursor-help" /></SimpleTooltip>
       </h3>
+      {/* N-690 (P4): die eedc-Werte von heute stammen aus einem unvollständigen
+          Wetterabruf — der Satz kommt vom Backend, die Zahl bleibt stehen. Bei
+          einer Fremdquelle steht hier keine eedc-Zahl für heute (die Kurve im
+          Wetter-Widget sagt es dort). */}
+      {wetter?.pv_prognose_hinweis && !fremdeQuelle && (
+        <p className="text-[10px] text-amber-500 dark:text-amber-400 mb-1">
+          {wetter.pv_prognose_hinweis}
+        </p>
+      )}
       {prognose3Tage.some(t => pvVormittagKwh(t) != null) && (
         <div className="grid grid-cols-[auto_1fr_7rem] px-3 mb-0.5">
           <span />
@@ -161,7 +180,7 @@ export default function SolarAussicht3Tage({ prognose3Tage, wetter, heutePvKwh }
                     — statt still eine eedc-Zahl unter der Überschrift der
                     Fremdquelle zu zeigen (Burkard #401: „Cockpit → Aussicht
                     folgt der Einstellung gar nicht"). */}
-                {q?.rueckfall === 'eedc' && (
+                {rueckfallEedc(i) && (
                   <span className="ml-1 text-[9px] text-gray-400 dark:text-gray-500"
                         title="Die gewählte Prognosequelle liefert für diesen Tag keinen Wert — hier steht die eedc-Prognose.">
                     eedc

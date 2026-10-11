@@ -86,12 +86,19 @@ async def _get_wetter_ist(
     return je_tag.get(datum, {})
 
 
+class GtiFanoutUnvollstaendig(RuntimeError):
+    """Nicht alle Orientierungsgruppen haben GTI geliefert (N-690) — nur mit
+    ``_fetch_wetter(..., streng=True)``."""
+
+
 async def _fetch_wetter(
     anlage: Anlage,
     url: str,
     base_params: dict,
     pv_module: Optional[list] = None,
     timeout: float = 15.0,
+    *,
+    streng: bool = False,
 ) -> dict[date, dict[int, dict]]:
     """Der eine Open-Meteo-Abruf — für einen Tag oder einen Bereich.
 
@@ -99,6 +106,18 @@ async def _fetch_wetter(
     für den Altbestand holt Monate am Stück, und die GTI-Gruppierung je
     Orientierung (kWp-gewichtet, #139) darf dafür nicht ein zweites Mal gebaut
     werden. Wirft bei HTTP-Fehlern; `_get_wetter_ist` fängt das und liefert `{}`.
+
+    ⛔ **N-690 (ADR-002 P4, Kanon-Regel N-423): ein Teil-Fan-out liefert KEIN
+    GTI.** Bis 11.10.2026 übersprang die Schleife eine Gruppe, deren Abruf
+    scheiterte, still — das kWp-gewichtete GTI war dann um ihr Gewicht zu klein
+    und wurde gespeichert (gemessen: eine von zwei gleichen Gruppen fällt aus ⇒
+    GTI-Tagessumme 7 200 → 3 600 Wh/m², Performance Ratio 0,694 → 1,389, genau
+    die Zahl, aus der der Daten-Checker einen Doppelerfassungs-Verdacht macht).
+    Jetzt gilt derselbe Weg wie beim Ausfall ALLER Gruppen: ``gti_wm2`` bleibt
+    ``None`` (keine PR statt einer falschen); die übrigen Wetterspalten bleiben.
+    ``streng=True`` (Archiv-Nachzug) wirft stattdessen
+    ``GtiFanoutUnvollstaendig`` — dort wäre ein fehlendes GTI dauerhaft, der
+    Aufrufer schreibt dann nichts und versucht es im nächsten Lauf neu.
 
     Returns:
         ``{datum: {stunde: {...}}}`` — dieselben sechs Schlüssel je Stunde wie
@@ -151,6 +170,7 @@ async def _fetch_wetter(
             # kWp-gewichtete Kombination
             kwp_gesamt = sum(g["kwp"] for g in gruppen)
             multi_gti = None  # Länge folgt der Antwort (Bereich = n × 24)
+            gruppen_ok = 0
             for gruppe, resp in zip(gruppen, gti_resps):
                 try:
                     resp.raise_for_status()
@@ -159,6 +179,7 @@ async def _fetch_wetter(
                     continue
                 if not gti_vals or kwp_gesamt <= 0:
                     continue
+                gruppen_ok += 1
                 gewicht = gruppe["kwp"] / kwp_gesamt
                 if multi_gti is None:
                     multi_gti = [0.0] * len(gti_vals)
@@ -166,6 +187,19 @@ async def _fetch_wetter(
                     v = gti_vals[i]
                     if v is not None:
                         multi_gti[i] += v * gewicht
+            if kwp_gesamt > 0 and gruppen_ok < len(gruppen):
+                # N-690: Teilsumme ⇒ kein GTI (s. Docstring), wie beim Totalausfall
+                # (dort war `multi_gti` schon immer None).
+                logger.warning(
+                    "Wetter-IST: GTI-Fan-out unvollständig (%d von %d Orientierungsgruppen) "
+                    "— kein GTI statt einer Teilsumme (N-690)",
+                    gruppen_ok, len(gruppen),
+                )
+                if streng:
+                    raise GtiFanoutUnvollstaendig(
+                        f"{gruppen_ok} von {len(gruppen)} Orientierungsgruppen"
+                    )
+                multi_gti = None
         else:
             haupt_resp = await client.get(url, params=haupt_params)
 

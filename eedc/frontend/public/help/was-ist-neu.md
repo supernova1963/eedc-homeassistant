@@ -20,6 +20,16 @@ im Eigenverbrauch heute ([Bedienung → Live](HANDBUCH_BEDIENUNG.md#21-live)).
 **Solar-Soll im Energiefluss:** Über dem Haus steht jetzt die PV-Leistung, die die Prognose für die laufende Stunde
 erwartet — die Anzeige blieb bisher immer aus ([Bedienung → Live](HANDBUCH_BEDIENUNG.md#21-live)).
 
+**Solar-Aussicht folgt deiner Prognosequelle:** Hast du Solcast oder Solar Forecast ML gewählt, zeigt die Solar-Aussicht
+in *Cockpit → Live* für Morgen und Übermorgen jetzt die Zahlen dieser Quelle — seit v4.0.36 standen dort die eedc-Zahlen
+unter der Überschrift der Quelle. Wo die Quelle einen Tag nicht abdeckt, steht klein „eedc“ dabei
+([Prognosen → Solcast](HANDBUCH_PROGNOSEN.md#23-solcast--optional-dritte-meinung)).
+
+**Unvollständiger Wetterabruf wird gesagt:** Fällt beim Abruf eine von mehreren PV-Dachflächen aus, steht in *Cockpit →
+Live* ein Hinweis unter dem Wetter und in der Solar-Aussicht, statt einer zu niedrigen Tagesprognose ohne Kommentar; der
+nächste Abruf versucht es neu ([Bedienung → Live](HANDBUCH_BEDIENUNG.md#21-live)). Dasselbe gilt für die Einstrahlung im
+Energieprofil: eine ausgefallene Dachfläche ergibt keine zu hohe Performance Ratio mehr, die Zahl bleibt dann leer.
+
 ## v4.1.6 — 11. Oktober 2026
 
 **Kleinere Anzeige-Korrekturen:** Monate ohne Werte zeigen in der Monatsleiste und im Jahresbericht einen Strich statt „0 kWh",

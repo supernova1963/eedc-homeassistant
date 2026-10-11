@@ -400,10 +400,15 @@ async def wetter_nachziehen_bereich(
     }
 
     try:
+        # N-690: `streng` — fällt eine Orientierungsgruppe aus, wirft der Abruf,
+        # statt Tage ohne GTI zu liefern. Hier wäre ein fehlendes GTI dauerhaft
+        # (der Altbestand-Marker stünde danach, der Tag käme nie wieder dran);
+        # über den `fehler`-Zweig unten schreibt der Lauf nichts, setzt keinen
+        # Marker, und die nächste Nacht versucht es neu.
         je_tag = await _fetch_wetter(
             anlage, ARCHIVE_URL,
             {"start_date": tage[0].isoformat(), "end_date": tage[-1].isoformat()},
-            pv_module, timeout=timeout,
+            pv_module, timeout=timeout, streng=True,
         )
     except Exception as e:  # noqa: BLE001 — ein Abruf darf den Job nicht kippen
         logger.warning(
