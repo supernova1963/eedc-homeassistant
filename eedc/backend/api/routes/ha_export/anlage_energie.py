@@ -85,13 +85,25 @@ async def monatsfakten_und_energie(*, anlage, db, investitionen, monatsdaten):
     # Falle 1 der S1-Übergabe: `erzeugung.pv_kwh` für die PV-Achse und die
     # Finanz-Zeile, `erzeugung.hinter_zaehler_kwh` für die Bilanz.
     pv_erzeugung = sum(f.erzeugung.pv_kwh for f in fakten)
-    sonstiges_erzeugung = sum(f.sonstiges.erzeugung_kwh for f in fakten)
+
+    # ⭐ N-659 (Option A, Gernot 11.10.2026): die BILANZ (Eigenverbrauch, Autarkie, EV-Quote, Ersparnis, USt, CO₂,
+    # Wandlungsverluste) rechnet über EINE Fakten-Menge — Monate mit Zählerzeile und aktivem Erzeuger, dieselbe wie
+    # *Cockpit → Übersicht* (`md_pv`) und `ust_satz.grundgesamtheit`. Bis dahin kamen Einspeisung/Netzbezug aus den
+    # Zählerzeilen, die PV aber aus ALLEN Fakten: ein Monat mit Erzeugung ohne Zählerzeile zählte ganz als
+    # Eigenverbrauch, die Ersparnis rechnete ihn nicht, und Ersparnis und CO₂ zogen verschiedene Verlustmengen ab
+    # (426,8 gegen 513,4 kWh). Die ANZEIGE `pv_erzeugung` und der spezifische Ertrag bleiben über alle Fakten.
+    bilanz_fakten = [f for f in fakten if f.meta.hat_zaehlerzeile and f.meta.erzeuger_aktiv]
+    _bilanz_monate = {f.schluessel for f in bilanz_fakten}
+    bilanz_monatsdaten = [m for m in monatsdaten if (m.jahr, m.monat) in _bilanz_monate]
+    pv_bilanz = sum(f.erzeugung.pv_kwh for f in bilanz_fakten)
+    sonstiges_erzeugung = sum(f.sonstiges.erzeugung_kwh for f in bilanz_fakten)
 
     # Fallback: Falls keine InvestitionMonatsdaten vorhanden, berechne aus Einspeisung
-    einspeisung = sum(m.einspeisung_kwh or 0 for m in monatsdaten)
+    einspeisung = sum(f.zaehler.einspeisung_kwh for f in bilanz_fakten)
     if pv_erzeugung == 0:
         # Schätzung: Erzeugung ≈ Einspeisung + geschätzter Eigenverbrauch
-        pv_erzeugung = einspeisung + sum(m.eigenverbrauch_kwh or 0 for m in monatsdaten)
+        pv_erzeugung = einspeisung + sum(m.eigenverbrauch_kwh or 0 for m in bilanz_monatsdaten)
+        pv_bilanz = pv_erzeugung
 
     # #304: netzbezug ist ein Zählerwert aus Monatsdaten (legitim). Eigen-/
     # Direkt-/Gesamtverbrauch NICHT aus den berechneten Legacy-Monatsdaten-
@@ -99,23 +111,28 @@ async def monatsfakten_und_energie(*, anlage, db, investitionen, monatsdaten):
     # Quellen schreiben in InvestitionMonatsdaten), wodurch die Eigenverbrauchs-
     # quote zusammenbricht (2,2 % statt ~40 %). Sie werden unten zentral aus
     # PV(IMD) + Speicher(IMD) + Zählerwerten über den SoT-Helper berechnet.
-    netzbezug = sum(m.netzbezug_kwh or 0 for m in monatsdaten)
+    netzbezug = sum(f.zaehler.netzbezug_kwh for f in bilanz_fakten)
 
     # Speicher-Summen aus den Monats-Fakten (kanonisch über `imd_typ_beitrag`)
     # statt Legacy Monatsdaten. Die frühere Handschrift las die Roh-Schlüssel
-    # `ladung_kwh`/`entladung_kwh` direkt (P6-Klasse).
+    # `ladung_kwh`/`entladung_kwh` direkt (P6-Klasse). Die Sensoren (Effizienz,
+    # Zyklen) über alle Fakten, der Bilanz-Eingang über `bilanz_fakten` (N-659).
     batterie_ladung = sum(f.speicher.ladung_kwh for f in fakten)
     batterie_entladung = sum(f.speicher.entladung_kwh for f in fakten)
+    bilanz_ladung = sum(f.speicher.ladung_kwh for f in bilanz_fakten)
+    bilanz_entladung = sum(f.speicher.entladung_kwh for f in bilanz_fakten)
 
     # Fallback auf Legacy wenn keine InvestitionMonatsdaten
     if batterie_ladung == 0 and batterie_entladung == 0:
         batterie_ladung = sum(m.batterie_ladung_kwh or 0 for m in monatsdaten)
         batterie_entladung = sum(m.batterie_entladung_kwh or 0 for m in monatsdaten)
+        bilanz_ladung = sum(m.batterie_ladung_kwh or 0 for m in bilanz_monatsdaten)
+        bilanz_entladung = sum(m.batterie_entladung_kwh or 0 for m in bilanz_monatsdaten)
 
     # V2H (E-Auto → Haus) wird wie Speicher-Entladung als Eigenverbrauch gezählt.
     # Dienstwagen sind darin nicht mehr enthalten — die Schicht filtert sie,
     # die frühere Schleife hier nicht ([[feedback_dienstwagen_alle_checks]]).
-    v2h_entladung = sum(f.emob.v2h_entladung_kwh for f in fakten)
+    v2h_entladung = sum(f.emob.v2h_entladung_kwh for f in bilanz_fakten)
 
     # #304: Eigenverbrauch/Direktverbrauch/Gesamtverbrauch + Quoten zentral über
     # den SoT-Helper aus IMD-gesourcten Energiemengen (PV + Speicher + V2H) und
@@ -125,21 +142,21 @@ async def monatsfakten_und_energie(*, anlage, db, investitionen, monatsdaten):
     # deckungsgleich mit dem Cockpit (`erzeugung_bilanz`, uebersicht.py:416).
     # `pv_erzeugung` selbst (inkl. BKW, ohne BHKW) bleibt für die PV-eigenen
     # Kennzahlen (spez. Ertrag) und die PV-Erzeugungs-Anzeige.
-    erzeugung_bilanz = erzeugung_hinter_zaehler_kwh(pv_erzeugung, sonstiges_erzeugung)
+    erzeugung_bilanz = erzeugung_hinter_zaehler_kwh(pv_bilanz, sonstiges_erzeugung)
     kennzahlen = berechne_verbrauchs_kennzahlen(
         pv_erzeugung_kwh=erzeugung_bilanz,
         einspeisung_kwh=einspeisung,
         netzbezug_kwh=netzbezug,
-        speicher_ladung_kwh=batterie_ladung,
-        speicher_entladung_kwh=batterie_entladung,
+        speicher_ladung_kwh=bilanz_ladung,
+        speicher_entladung_kwh=bilanz_entladung,
         v2h_entladung_kwh=v2h_entladung,
-        abgabe_dritte_kwh=sum(f.sonstiges.abgabe_kwh for f in fakten),
+        abgabe_dritte_kwh=sum(f.sonstiges.abgabe_kwh for f in bilanz_fakten),
     )
     direktverbrauch = kennzahlen.direktverbrauch_kwh
     eigenverbrauch = kennzahlen.eigenverbrauch_kwh
     # N-588 (P15): die Menge, die CO₂ bewertet — ohne die bewertbaren Wandlungsverluste der Monate (Bilanz bleibt).
     eigenverbrauch_ohne_verluste = eigenverbrauch_ohne_verluste_kwh(
-        eigenverbrauch, bewertbare_wandlungsverluste_aus_fakten(fakten), None,
+        eigenverbrauch, bewertbare_wandlungsverluste_aus_fakten(bilanz_fakten), None,
     )
     gesamtverbrauch = kennzahlen.gesamtverbrauch_kwh
     autarkie = kennzahlen.autarkie_prozent
@@ -232,13 +249,14 @@ async def finanz_aggregat(*, _preis_messung, _tarif_cache, anlage, db, fakten, s
         # dem Monats-Fakt (P10) statt aus fünf site-eigenen Maps; `pv_kwh` darin
         # ist „Module + BKW" (P9); fehlt einem Modul der Wert ohne Anlagenwert, trägt
         # sie seit N-626 die vorhandenen Werte. Nur Monate MIT Zählerzeile — ohne gemessene Einspeisung/Bezug
-        # gibt es keine Finanz-Zeile.
+        # gibt es keine Finanz-Zeile — und mit aktivem Erzeuger (Anschaffungsdatum-Grenze, wie die Übersicht).
         finanz_zeilen: list[FinanzMonatsZeile] = [
             await baue_finanz_zeile(
                 db, anlage.id, finanz_zeile_eingabe(f), tarif_cache=_tarif_cache,
                 preis_messung=_preis_messung,
             )
-            for f in fakten if f.meta.hat_zaehlerzeile
+            # N-659: dieselbe Menge wie die Bilanz in `monatsfakten_und_energie` und die Ersparnis der Übersicht.
+            for f in fakten if f.meta.hat_zaehlerzeile and f.meta.erzeuger_aktiv
         ]
         _finanz = berechne_finanz_aggregat(
             finanz_zeilen, sonstige_netto_euro=sonstige_netto_gesamt,

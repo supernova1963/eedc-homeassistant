@@ -139,10 +139,13 @@ async def get_nachhaltigkeit(
         # attribuierte Pool-Anteil (#262), nicht `ladung − pv`.
         bilanz = berechne_co2_bilanz(
             # N-588 (P15): ohne Wandlungsverluste, wenn der Messpunkt-Vertrag hält (dieselbe Menge wie die Ersparnis).
+            # ⭐ N-659 (Option A, Gernot 11.10.2026): der PV-Anteil nur in Monaten mit Zählerzeile und aktivem
+            # Erzeuger — dieselbe Monatsmenge wie Übersicht (`md_pv`) und HA-Export (`bilanz_fakten`). Ohne
+            # Zählerzeile ist die Einspeisung 0, und die ganze PV des Monats zählte als Eigenverbrauch.
             eigenverbrauch_kwh=eigenverbrauch_ohne_verluste_kwh(
                 fakt.kennzahlen.eigenverbrauch_kwh, fakt.erzeugung.wandlungsverluste_kwh,
                 fakt.erzeugung.verluste_grund,
-            ),
+            ) if fakt.meta.hat_zaehlerzeile and fakt.meta.erzeuger_aktiv else 0.0,
             wp_waerme_kwh=fakt.wp.waerme_kwh,
             wp_strom_kwh=fakt.wp.strom_kwh,
             # #263 K-2 (E-B): Kühlen ersetzt keine Heizung — sein Strom

@@ -295,6 +295,7 @@ from backend.core.berechnungen.erzeuger_traeger import (
     traeger_zeilen,
     traegt_erzeugungsgroessen_selbst,
     verteilungsnenner_kwp,
+    soll_nenner_kwp,
 )
 from backend.core.berechnungen.spez_ertrag import (
     MONATSGEWICHTE_52N,
@@ -554,6 +555,7 @@ __all__ = [
     "traeger_zeilen",
     "traegt_erzeugungsgroessen_selbst",
     "verteilungsnenner_kwp",
+    "soll_nenner_kwp",
     "MONATSGEWICHTE_52N",
     "PV_ERZEUGER_TYPEN",
     "berechne_spez_ertrag_annualisiert",

@@ -2714,6 +2714,13 @@ kWp_Anteil = Modul_kWp / Gesamt_kWp
 SOLL_Monat = PVGISPrognose.monatswerte[monat].e_m * kWp_Anteil
 ```
 
+`Gesamt_kWp` sind seit 11.10.2026 (N-661) die kWp, für die die aktive Prognose gerechnet ist
+(`PVGISPrognose.gesamt_leistung_kwp`, `core/berechnungen/erzeuger_traeger.py::soll_nenner_kwp`) — in *Komponenten → PV-Strings*,
+*Auswertungen → Prognose* und im Jahresbericht-PDF gleich; vorher die Σ aller je vorhandenen bzw. der im Berichtsjahr
+aktiven Strings, sodass ein stillgelegter String das SOLL der übrigen drückte und ein späterer Zubau es im PDF hob. Nur
+eine Prognose ohne gespeicherte kWp fällt auf die Σ der Strings zurück. Das saisonale Mittel („typischer Monat") der
+Gesamtlaufzeit verteilt weiterhin über die heutige Zuordnung.
+
 Der PDF-Jahresbericht nutzt seit v4.0.1 denselben Weg (vorher verteilte sein String-Vergleich die
 Prognose *immer* nach kWp, obwohl die Pro-Modul-Werte gespeichert sind — bei Ost-West-Dächern ~20–25 %
 Abweichung gegenüber dem Cockpit).

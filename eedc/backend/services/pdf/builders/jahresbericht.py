@@ -59,6 +59,7 @@ from backend.core.berechnungen.erzeuger_traeger import (
     erzeuger_traeger,
     selbst_tragende_bkw_ids,
     traeger_im_monat,
+    soll_nenner_kwp,
     traeger_zeilen,
     verteilungsnenner_kwp,
 )
@@ -655,9 +656,14 @@ async def build_jahresbericht_context(
     # `or anlage.leistung_kwp`-Fallback greift nur bei Summe 0, nicht bei
     # gemischter Pflege (N73/P3).
     gesamt_kwp = verteilungsnenner_kwp(struktur, anlage.leistung_kwp)
-    # N-614: je Monat der Nenner der Menge, die trägt — ein BKW, das im Monat
-    # selbst trägt, ersetzt darin seine Kinder (nie beide im Nenner). Ohne
-    # selbst tragendes BKW ist es der Nenner der Struktur (wie PV-Strings).
+    # ⭐ N-661 (Weg C, Gernot 11.10.2026): der SOLL-Nenner je String sind die
+    # kWp, für die die aktive Prognose gerechnet ist (`soll_nenner_kwp`) —
+    # dieselbe Regel wie Komponenten → PV-Strings. Bis dahin standen hier die im
+    # Berichtsjahr aktiven Träger (`aktiv_im_jahr` oben): ein Zubau NACH dem
+    # Berichtsjahr fehlte im Nenner, obwohl die Prognose ihn trägt, und jeder
+    # String bekam zu viel SOLL (gemessen +50 %). Ohne Prognose-kWp gilt der
+    # frühere Nenner — N-614: je Monat der Menge, die trägt (ein BKW, das im
+    # Monat selbst trägt, ersetzt darin seine Kinder, nie beide im Nenner).
     _nenner_cache: dict[tuple[int, int], float] = {}
 
     def _nenner_im_monat(j: int, m: int) -> float:
@@ -665,8 +671,11 @@ async def build_jahresbericht_context(
             selbst = selbst_je_monat.get((j, m))
             if selbst is None:
                 selbst = selbst_tragende_bkw_ids(erzeuger_alle, j, m)
-            _nenner_cache[(j, m)] = gesamt_kwp if not selbst else verteilungsnenner_kwp(
-                traeger_im_monat(erzeuger_alle, struktur, selbst), anlage.leistung_kwp,
+            _nenner_cache[(j, m)] = soll_nenner_kwp(
+                pvgis_prognose,
+                gesamt_kwp if not selbst else verteilungsnenner_kwp(
+                    traeger_im_monat(erzeuger_alle, struktur, selbst), anlage.leistung_kwp,
+                ),
             )
         return _nenner_cache[(j, m)]
 

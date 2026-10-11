@@ -25,6 +25,12 @@ Einspeisung oder String-Zähler weiterlaufen — die Ursache, wenn *Cockpit → 
 Stunde; eine Wärmepumpe ohne eigenen Tarif rechnet bei flexiblem Strompreis mit deinem Monatsdurchschnitt statt mit dem
 Tarifpreis; und ein sonstiger Erzeuger, dessen Wert im Ersatzfeld steht, zeigt ihn auch im abgeschlossenen Monat.
 
+**SOLL und Bilanz:** Das SOLL eines Strings ist jetzt sein Anteil an den kWp, für die die Prognose gerechnet ist — PV-Strings
+und Jahresbericht nennen dieselbe Zahl, auch nach einer Stilllegung oder einem Zubau. Die HA-Sensoren und *Komponenten →
+PV-Anlage* rechnen Eigenverbrauch, Autarkie, Ersparnis und CO₂ nur über Monate mit Einspeise- und Bezugswerten, ebenso
+die CO₂-Einsparung des PV-Stroms in *Auswertungen → CO₂*; ein Monat ohne Monatsabschluss zählt nicht mehr ganz als
+Eigenverbrauch.
+
 ## v4.1.5 — 10. Oktober 2026
 
 **Wandlungsverluste kosten kein Geld mehr, das du nie gespart hast:** Misst deine Anlage ihre Strings mit eigenen

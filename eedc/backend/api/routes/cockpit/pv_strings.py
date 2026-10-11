@@ -32,6 +32,7 @@ from backend.core.berechnungen.erzeuger_traeger import (
     erzeuger_traeger,
     selbst_tragende_bkw_ids,
     traeger_im_monat,
+    soll_nenner_kwp,
     traeger_zeilen,
     verteilungsnenner_kwp,
 )
@@ -413,12 +414,20 @@ async def get_pv_strings(
             except (ValueError, TypeError):
                 pass
 
-    # Anlagen-Nenner der heutigen Zuordnung (Plausibilität, `anlagen_leistung_kwp`)
-    # und je Monat der Nenner der Menge, die in diesem Monat trägt (N-613):
-    # ohne selbst tragendes BKW ist das dieselbe Zahl.
+    # Anlagen-Nenner der heutigen Zuordnung (Plausibilität, `anlagen_leistung_kwp`).
+    # ⭐ N-661 (Weg C, Gernot 11.10.2026): der SOLL-Nenner je String sind die kWp,
+    # für die die aktive Prognose gerechnet ist — dieselbe Regel wie im
+    # Jahresbericht-PDF (`soll_nenner_kwp`). Bis dahin stand hier die Σ ALLER
+    # Träger: ein stillgelegter String drückte das SOLL der übrigen (gemessen
+    # −33 %). Ohne Prognose-kWp gilt der frühere Nenner, je Monat der Menge,
+    # die in diesem Monat trägt (N-613).
     gesamt_kwp = verteilungsnenner_kwp(struktur, anlage.leistung_kwp)
     nenner_je_monat = {
-        m: gesamt_kwp if not selbst else verteilungsnenner_kwp(traeger_im_monat(alle, struktur, selbst), anlage.leistung_kwp)
+        m: soll_nenner_kwp(
+            prognose,
+            gesamt_kwp if not selbst
+            else verteilungsnenner_kwp(traeger_im_monat(alle, struktur, selbst), anlage.leistung_kwp),
+        )
         for m, selbst in selbst_je_monat.items()
     }
 
@@ -596,8 +605,14 @@ async def get_pv_strings_gesamtlaufzeit(
         (j, m): selbst_tragende_bkw_ids(alle, j, m) for j in jahre for m in range(1, 13)
     }
     pv_module = traeger_zeilen(alle, struktur, frozenset().union(*selbst_je_monat.values()))
+    # N-661 (Weg C): je Monat die kWp der aktiven Prognose — wie die Jahressicht
+    # darüber und das PDF; ohne Prognose-kWp der frühere Nenner (N-613).
     nenner_je_monat = {
-        jm: gesamt_kwp if not selbst else verteilungsnenner_kwp(traeger_im_monat(alle, struktur, selbst), anlage.leistung_kwp)
+        jm: soll_nenner_kwp(
+            prognose,
+            gesamt_kwp if not selbst
+            else verteilungsnenner_kwp(traeger_im_monat(alle, struktur, selbst), anlage.leistung_kwp),
+        )
         for jm, selbst in selbst_je_monat.items()
     }
     in_struktur = {i.id for i in struktur}

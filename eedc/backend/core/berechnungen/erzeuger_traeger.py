@@ -222,6 +222,26 @@ def verteilungsnenner_kwp(menge: Sequence[Any], referenzwert: Optional[float]) -
     return kwp
 
 
+def soll_nenner_kwp(prognose: Any, rueckfall_kwp: float) -> float:
+    """Der Nenner, mit dem eine String-Sicht das Anlagen-SOLL nach kWp auf ihre Zeilen verteilt (N-661).
+
+    Die Anlagen-Prognose ist für die kWp gerechnet, die beim Abruf bestanden
+    (``PVGISPrognose.gesamt_leistung_kwp``, die aktive Prognose nach P5). Der
+    Anteil eines Strings an **diesen** kWp ist sein SOLL — weder der Anteil an
+    allen je vorhandenen Trägern (ein stillgelegter String drückte das SOLL der
+    übrigen: −33 % gemessen) noch an den im Zeitraum aktiven (ein späterer Zubau
+    hob es: +50 %). Ein selbst tragendes BKW (N-613/N-614) braucht damit keinen
+    eigenen Monats-Nenner mehr: die Prognose zählt seine Module einmal.
+
+    Ohne gespeicherte Prognose-kWp (ältere Prognosen, keine Prognose) gilt
+    ``rueckfall_kwp`` — der Nenner, den die Sicht bisher bildete.
+    """
+    prognose_kwp = getattr(prognose, "gesamt_leistung_kwp", None) if prognose is not None else None
+    if prognose_kwp is not None and prognose_kwp > 0:
+        return prognose_kwp
+    return rueckfall_kwp
+
+
 def modul_kinder(bkw_id: Any, investitionen: Sequence[Any]) -> list:
     """Die `pv-module` aus ``investitionen``, die an ``bkw_id`` hängen.
 

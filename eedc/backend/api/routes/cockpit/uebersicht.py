@@ -332,7 +332,6 @@ async def get_cockpit_uebersicht(
     sonstiges_verbrauch = sum(f.sonstiges.verbrauch_kwh for f in fakten)
     sonstige_ertraege_gesamt = sum(f.sonstiges.ertraege_euro for f in fakten)
     sonstige_ausgaben_gesamt = sum(f.sonstiges.ausgaben_euro for f in fakten)
-    v2h_entladung = sum(f.emob.v2h_entladung_kwh for f in fakten)
 
     # E-Mobilitäts-Pool: EINE Quelle je Monat liefert die konsistente
     # Heimladungs-Trias (pv + netz == ladung, #262 junky84); externe Lade-Kosten
@@ -438,7 +437,16 @@ async def get_cockpit_uebersicht(
     # der gemessene Einspeise-Zähler die PV-Bilanz still zu niedrig (Konzept
     # Sonstiger Erzeuger). `pv_erzeugung` bleibt rein für PV-Kennzahlen unten
     # (spez. Ertrag/Performance-Ratio/SOLL-IST) — Falle 1 der S1-Übergabe.
-    erzeugung_bilanz = erzeugung_hinter_zaehler_kwh(pv_erzeugung, sonstiges_erzeugung)
+    # ⭐ N-659 (Option A, Gernot 11.10.2026): JEDER Eingang der Bilanz aus derselben Fakten-Menge wie Einspeisung
+    # und Netzbezug (`md_pv`: Zählerzeile + aktiver Erzeuger) — dieselbe Menge wie Ersparnis (unten) und USt
+    # (`ust_satz.grundgesamtheit`) und wie der HA-Export (`ha_export/anlage_energie.py`). Bis dahin kam die PV aus
+    # ALLEN Fakten: ein Monat mit Erzeugung, aber ohne Zählerzeile, zählte ganz als Eigenverbrauch (gemessen 800 statt
+    # 200 kWh, Autarkie 80 statt 50 %), die Ersparnis rechnete ihn nicht. Die ANZEIGE `pv_erzeugung`, der spezifische
+    # Ertrag und die Komponenten-Werte (Speicher, V2H, Sonstiges) bleiben über alle Fakten — eine gemessene Erzeugung
+    # verschwindet nicht, nur weil der Hauszähler fehlt.
+    erzeugung_bilanz = erzeugung_hinter_zaehler_kwh(
+        sum(f.erzeugung.pv_kwh for f in md_pv), sum(f.sonstiges.erzeugung_kwh for f in md_pv),
+    )
 
     # Kanonische Verbrauchs-Kennzahlen über den SoT-Helper (ADR-001) statt der
     # früher hier duplizierten Inline-Formel — inkl. V2H (E-Auto → Haus) als
@@ -447,10 +455,10 @@ async def get_cockpit_uebersicht(
         pv_erzeugung_kwh=erzeugung_bilanz,
         einspeisung_kwh=einspeisung,
         netzbezug_kwh=netzbezug,
-        speicher_ladung_kwh=speicher_ladung,
-        speicher_entladung_kwh=speicher_entladung,
-        v2h_entladung_kwh=v2h_entladung,
-        abgabe_dritte_kwh=sum(f.sonstiges.abgabe_kwh for f in fakten),
+        speicher_ladung_kwh=sum(f.speicher.ladung_kwh for f in md_pv),
+        speicher_entladung_kwh=sum(f.speicher.entladung_kwh for f in md_pv),
+        v2h_entladung_kwh=sum(f.emob.v2h_entladung_kwh for f in md_pv),
+        abgabe_dritte_kwh=sum(f.sonstiges.abgabe_kwh for f in md_pv),
     )
     direktverbrauch = _kz.direktverbrauch_kwh
     eigenverbrauch = _kz.eigenverbrauch_kwh
@@ -841,8 +849,9 @@ async def get_cockpit_uebersicht(
 
     # CO2-Bilanz (DI-2: kanonischer Helper — dieselbe Bilanz wie der HA-Export)
     # N-588 (P15): die Menge hinter der Ersparnis — ohne die bewertbaren Wandlungsverluste der Monate.
+    # N-659: die Verluste derselben Monate wie der Eigenverbrauch (`md_pv`) — wie die Ersparnis.
     eigenverbrauch_ohne_verluste = eigenverbrauch_ohne_verluste_kwh(
-        eigenverbrauch, bewertbare_wandlungsverluste_aus_fakten(fakten), None,
+        eigenverbrauch, bewertbare_wandlungsverluste_aus_fakten(md_pv), None,
     )
     _co2 = berechne_co2_bilanz(
         eigenverbrauch_kwh=eigenverbrauch_ohne_verluste,

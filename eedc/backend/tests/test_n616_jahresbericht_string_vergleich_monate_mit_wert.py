@@ -82,7 +82,10 @@ async def _anlage(db, invs, werte, *, agg=None, modprog=None, bkw_wp=False) -> t
     db.add(PVGISPrognose(
         anlage_id=a.id, abgerufen_am=datetime(2025, 1, 1), latitude=48.0, longitude=11.0,
         neigung_grad=30.0, ausrichtung_grad=0.0, jahresertrag_kwh=12000.0,
-        spezifischer_ertrag_kwh_kwp=1000.0, gesamt_leistung_kwp=12.0,
+        # N-661 (Weg C, 11.10.2026): mit gespeicherten Prognose-kWp ist DIESE Zahl der SOLL-Nenner jeder Zeile
+        # (test_n661_soll_nenner_prognose_kwp.py). Diese Datei prüft den Rückfall ohne sie — den Nenner der
+        # Menge, die je Monat trägt; ihre Zahlen sind unverändert.
+        spezifischer_ertrag_kwh_kwp=1000.0, gesamt_leistung_kwp=None,
         monatswerte=[{"monat": m, "e_m": E_M[m]} for m in range(1, 13)],
         module_monatswerte=(
             {str(ids[n]): [{"monat": m, "e_m": v} for m in range(1, 13)] for n, v in modprog.items()}
