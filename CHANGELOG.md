@@ -13,6 +13,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 - **Cockpit → Live: hast du Netz-Zähler (Einspeisung/Netzbezug in kWh) und einen Kombi-Netzsensor (±) zugeordnet, kommen die Tageswerte jetzt aus den Zählern.** Bisher rechnete eedc Einspeisung, Netzbezug, Eigen- und Gesamtverbrauch für heute und gestern aus der Leistung des Kombi-Sensors (im Beispiel 2,0 statt 4,1 kWh Einspeisung), während *Cockpit → Tag* die Zähler las; jetzt zeigen beide Sichten dieselbe Zahl. Der Kombi-Sensor liefert weiter die Momentanleistung und die Kurve im Tagesverlauf.
 - **Cockpit → Live, Energiefluss: ein sonstiges Gerät mit kWh-Zähler zeigt im Tooltip die gezählte Tagesmenge.** Bisher stand dort die aus der Leistung hochgerechnete Menge — bei kurzen Lastspitzen (Heizstab) deutlich zu viel, im Beispiel 6,8 statt 3,0 kWh —, und bei einem Gerät mit Kategorie „Abgabe" ging sie so auch in den Eigenverbrauch heute ein. Jetzt liest eedc den Zähler, wie schon bei Wallbox und Wärmepumpe und im Tagesverlauf darunter.
+- **Cockpit → Live, Energiefluss: das „Solar Soll ~x kW" über dem Haus erscheint jetzt.** Die Anzeige mit der PV-Leistung, die die Prognose für die laufende Stunde erwartet, blieb bisher immer aus, weil eedc die Stundenangabe der Prognose nicht lesen konnte; jetzt steht dort der Wert der laufenden Stunde (Solar Forecast ML vor der eedc-Prognose, sofern eine Prognose vorliegt).
 
 ### Changed
 

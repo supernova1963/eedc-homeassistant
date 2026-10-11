@@ -40,6 +40,7 @@ import { ChartDatenTabelle } from '../components/ui'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { AnlageLeer } from './OnboardingLeer'
 import { useDemoMode, useReportDatenStatus } from './status/AppStatusContext'
+import { slotAusZeitpunkt } from '../lib'
 
 const REFRESH_INTERVAL = 5_000
 const WETTER_REFRESH_INTERVAL = 300_000
@@ -355,11 +356,16 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
     }
   }, [fetchData, fetchWetter, fetchTagesverlauf, fetchBoersenpreise, fetchZaehlerstaende])
 
-  // PV-SOLL der aktuellen Stunde (SFML → eedc-Fallback) für den Energiefluss.
+  // PV-SOLL der laufenden Stunde (SFML → eedc-Fallback) für den Energiefluss.
+  // `zeit` ist ein Slot-Etikett „HH:00", kein Datum — `new Date("14:00")` ist
+  // `NaN`, und bis N-691 traf deshalb kein Eintrag. Slot und „jetzt" kommen aus
+  // der Backward-SoT (`lib/stundenSlot.ts`, #144/#297): um 14:30 läuft Slot 15
+  // (14:00–15:00), nicht Slot 14 — der trägt die vorige Stunde.
   const pvSollKw = useMemo<number | null>(() => {
     if (!wetter?.verbrauchsprofil?.length) return null
-    const h = new Date().getHours()
-    const stunde = wetter.verbrauchsprofil.find((v) => new Date(v.zeit).getHours() === h)
+    const jetzt = new Date()
+    const slotJetzt = slotAusZeitpunkt(`${jetzt.getHours()}:${String(jetzt.getMinutes()).padStart(2, '0')}`)
+    const stunde = wetter.verbrauchsprofil.find((v) => slotAusZeitpunkt(v.zeit) === slotJetzt)
     if (stunde?.pv_ml_prognose_kw != null && stunde.pv_ml_prognose_kw > 0) return stunde.pv_ml_prognose_kw
     if (stunde && stunde.pv_ertrag_kw > 0) return stunde.pv_ertrag_kw
     return null

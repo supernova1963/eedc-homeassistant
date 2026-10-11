@@ -17,6 +17,9 @@ dieselbe Zahl wie *Cockpit → Tag*; der Kombi-Sensor bleibt für die Leistung u
 mit kWh-Zähler zeigt im Energiefluss-Tooltip die gezählte Tagesmenge statt der hochgerechneten, bei Abgabe-Geräten auch
 im Eigenverbrauch heute ([Bedienung → Live](HANDBUCH_BEDIENUNG.md#21-live)).
 
+**Solar-Soll im Energiefluss:** Über dem Haus steht jetzt die PV-Leistung, die die Prognose für die laufende Stunde
+erwartet — die Anzeige blieb bisher immer aus ([Bedienung → Live](HANDBUCH_BEDIENUNG.md#21-live)).
+
 ## v4.1.6 — 11. Oktober 2026
 
 **Kleinere Anzeige-Korrekturen:** Monate ohne Werte zeigen in der Monatsleiste und im Jahresbericht einen Strich statt „0 kWh",
