@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.1.6] - 2026-10-11 — Konsolidierung: 31 Korrekturen an Anzeige, Daten-Checker, Import und Hubs; eedc im Wartungsmodus
 
 ### Added
 
