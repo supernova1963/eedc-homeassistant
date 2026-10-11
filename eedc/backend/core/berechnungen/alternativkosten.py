@@ -232,6 +232,14 @@ def berechne_wp_alternativkosten_ersparnis(
                 get_wp_warmwasser_kwh(daten, wp.parameter),
             )
             strom = get_wp_strom_kwh(daten, wp.parameter)
+            # N-670 (Fachentscheid Master Wärme/Klima, 11.10.2026): Strom ohne Wärme (Standby) ist eine Gerätezeile
+            # mit 0 € (`services/wp_wirtschaftlichkeit.py::wp_ersparnis_zeile`) — ohne Wärme kein Vergleich, also
+            # weder Stromkosten noch der Zwölftel Zusatzkosten der Altanlage (die Zeile kennt ihn dort auch nicht).
+            # Bis hierher zog diese Summe den Strom des Monats ab: Aussichten, ROI-Fortschritt und die
+            # Jahres-Ersparnis des HA-Exports lagen unter Hub und Cockpit. Ein Monat mit Strom UND Wärme 0 bleibt
+            # wie bisher (er trägt 0 und zählt für die Zusatzkosten).
+            if thermisch <= 0 and strom > 0:
+                continue
             # B5/X-5 (05.09.2026, Entscheid E-B 18.08.): Kühlen ersetzt keine
             # Heizung — sein Strom gehört nicht in den Vergleich. Der Monats-
             # Layer (`berechne_wp_ersparnis`) zog ihn seit dem 19.08. ab, diese

@@ -23,7 +23,9 @@ Einspeisung oder String-Zähler weiterlaufen — die Ursache, wenn *Cockpit → 
 
 **Daten und Preise:** Scheitert beim stündlichen Mitschreiben das Speichern für eine Anlage, behalten die anderen ihre
 Stunde; eine Wärmepumpe ohne eigenen Tarif rechnet bei flexiblem Strompreis mit deinem Monatsdurchschnitt statt mit dem
-Tarifpreis; und ein sonstiger Erzeuger, dessen Wert im Ersatzfeld steht, zeigt ihn auch im abgeschlossenen Monat.
+Tarifpreis; ein sonstiger Erzeuger, dessen Wert im Ersatzfeld steht, zeigt ihn auch im abgeschlossenen Monat; und ein
+Monat, in dem die Wärmepumpe nur Strom ohne Wärme verbraucht (Standby), zählt in Cockpit, HA-Sensor und Aussichten
+gleich: eine Zeile mit 0 € Ersparnis.
 
 **SOLL und Bilanz:** Das SOLL eines Strings ist jetzt sein Anteil an den kWp, für die die Prognose gerechnet ist — PV-Strings
 und Jahresbericht nennen dieselbe Zahl, auch nach einer Stilllegung oder einem Zubau. Die HA-Sensoren und *Komponenten →

@@ -193,15 +193,20 @@ def _baue_investition_financial(
         _kein_betrieb = bool(
             _b.wp_strom_gemessen and _b.wp_waerme_gemessen and not (waerme_total or 0) and not (strom or 0)
         )
+        # N-670 (Fachentscheid Master Wärme/Klima): Strom gemessen > 0, Wärme gemessen 0 ⇒ Standby-Zeile mit 0 € —
+        # dieselbe Lesetür sagt, ob die Wärme-0 gemessen ist (sonst fehlt die Wärme, und die Zeile entsteht nicht).
+        _standby = bool(
+            _b.wp_strom_gemessen and _b.wp_waerme_gemessen and not (waerme_total or 0) and (strom or 0) > 0
+        )
         # N-609: die EINE Zeilenregel (Wärme > 0 und Strom > 0, Parameter des Geräts, Preise des Monats).
         wp_result = wp_ersparnis_zeile(
-            waerme_kwh=0.0 if _kein_betrieb else waerme_total,
+            waerme_kwh=0.0 if (_kein_betrieb or _standby) else waerme_total,
             strom_kwh=0.0 if _kein_betrieb else strom,
             strom_kuehlen_kwh=kuehlstrom,
             strompreis_cent=wp_p,
             parameter=inv.parameter,
             gaspreis_cent=monats_gaspreis,
-            null_ist_kein_betrieb=_kein_betrieb,
+            null_ist_kein_betrieb=_kein_betrieb or _standby,
         )
         if wp_result is not None:
             inv_ersparnis = round(wp_result.ersparnis_euro, 2)
@@ -217,8 +222,8 @@ def _baue_investition_financial(
             # hierher stand ein Text, der bei F8 10 € ergab, neben dem Wert 100 €.
             inv_formel = WP_ERSPARNIS_FORMEL
             inv_berechnung = wp_ersparnis_berechnung(
-                wp_result, 0.0 if _kein_betrieb else waerme_total, 0.0 if _kein_betrieb else strom, wp_p,
-                inv.parameter,
+                wp_result, 0.0 if (_kein_betrieb or _standby) else waerme_total,
+                0.0 if _kein_betrieb else strom, wp_p, inv.parameter,
             )
 
     elif inv.typ in ("e-auto", "wallbox") and not ist_dienstlich(inv):

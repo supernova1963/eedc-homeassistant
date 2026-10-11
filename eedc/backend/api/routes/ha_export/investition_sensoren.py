@@ -600,7 +600,12 @@ async def calculate_investition_sensors(
                         get_wp_warmwasser_kwh(d, investition.parameter),
                     )
                     m_strom = get_wp_strom_kwh(d, investition.parameter)
-                    if m_waerme <= 0 and m_strom <= 0:
+                    # N-670 (Fachentscheid Master Wärme/Klima, 11.10.2026): ein Monat ohne Wärme trägt keinen
+                    # Vergleich — seine Gerätezeile hat 0 € (Standby, `wp_ersparnis_zeile`), Hub und Cockpit
+                    # summieren 0. Bis hierher stand nur „beide 0 ⇒ überspringen": ein Monat mit Strom ohne Wärme
+                    # ging mit `wp_kosten` in `alte − WP` ein und senkte den Sensor um seinen Strom (gemessen
+                    # 20 kWh × 30 ct: 19 statt 25 €).
+                    if m_waerme <= 0:
                         continue
                     m_tarife = await lade_tarife_fuer_anlage(
                         db, investition.anlage_id, target_date=date(md.jahr, md.monat, 1)

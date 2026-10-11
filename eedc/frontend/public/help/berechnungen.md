@@ -789,9 +789,13 @@ ohne Monats-Gaspreis. Beispiel (zwei WP, Gas 10 bzw. 16 ct, je 900 kWh Wärme / 
 85 € = **110 €** in Monat, Jahr, Übersicht und Komponenten (vorher Übersicht 50 €); laufender Monat mit zwei WP
 **5,76 €** (vorher 1,44 €). Die Zeilenrundung hält Σ Zeilen = Sicht: fünf Monate à 10,81 € sind 54,05 €, nicht 54,07 €.
 
-Benannte Grenze: Ein Monat mit WP-Strom ohne Wärme (Standby) hat keine Zeile; HA-Export und Aussichten belasten dort
-den Strom (gemessen 25 € gegen 19 €). Proben: `test_n605_wp_ersparnis_aus_geraetezeilen.py`,
-`test_n609_wp_ersparnis_je_geraet.py`.
+**Standby-Monat** (seit N-670, 11.10.2026): Ein Monat mit gemessenem WP-Strom und gemessener Wärme 0 ist eine Zeile
+mit **0 €** (Etikett „Standby", Stromkosten echt, kein Vergleich gegen die Alternative). Dieselbe Regel gilt im
+HA-Sensor je Wärmepumpe und in der Jahresformel `berechne_wp_alternativkosten_ersparnis` (Aussichten, ROI-Fortschritt,
+Jahres-Ersparnis des HA-Exports): ein Monat mit Strom ohne Wärme trägt dort weder Stromkosten noch den Zwölftel
+Zusatzkosten. Bis dahin entstand keine Zeile, und HA-Export und Aussichten zogen den Strom ab (gemessen 25 € gegen
+19 €). Proben: `test_n605_wp_ersparnis_aus_geraetezeilen.py`, `test_n609_wp_ersparnis_je_geraet.py`,
+`test_n670_wp_standby_zeile.py`.
 
 #### E-Mob-Ersparnis im Cockpit
 

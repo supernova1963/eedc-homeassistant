@@ -8,7 +8,8 @@ Aggregat über die Summenmengen mit dem Parametersatz der ERSTEN Wärmepumpe —
 Gerätezeile (laufend, bzw. abgeschlossen ohne Abschluss) rechnete dasselbe Aggregat: zwei WP 1,44 statt 5,76 €.
 
 **Die Regel** (Bauplan N-609, Fassung 2): die WP-Ersparnis ist in jeder Sicht Σ der Gerätezeilen je Monat. Die
-Gerätezeile ist EINE Layer-Funktion (``wp_ersparnis_zeile``): Zeile nur bei Wärme > 0 und Strom > 0, Parameter des
+Gerätezeile ist EINE Layer-Funktion (``wp_ersparnis_zeile``): Zeile bei Wärme > 0 und Strom > 0 (seit N-670 dazu die
+Standby-Zeile mit 0 €: Strom gemessen > 0, Wärme gemessen 0 — ``test_n670_wp_standby_zeile.py``), Parameter des
 Geräts, WP-Preis und Gaspreis des Monats, je Zeile auf 2 Stellen gerundet. Die Mengen je Gerät kommen je Monat aus EINER
 Quelle — den Monats-Fakten (``WpFakten.je_geraet``), wo der Monat eine Zeile hat; sonst der Quellen-Kaskade.
 
@@ -180,11 +181,10 @@ async def test_eine_ersparnis_in_jeder_sicht(fall, zwei):
     assert round(sum(s["komponenten"].values()), 2) == soll, (fall, zwei, s["komponenten"])
     for k, v in s["monat"].items():
         assert round(s["komponenten"][k], 2) == (v or 0.0), (fall, zwei, k, s["komponenten"], s["monat"])
-    # HA-Export daneben (unverändert, je Gerät kumuliert): dieselbe Zahl bis auf die Rundung je Zeile — außer im
-    # Standby-Monat, wo er den Strom ohne Wärme belastet (benannte Grenze, Bauplan N-609).
-    if fall != "standby-monat":
-        n_zeilen = sum(len(z) for z in s["zeilen"].values())
-        assert abs(sum(s["ha"].values()) - soll) <= 0.005 * n_zeilen + 1e-9, (fall, zwei, s["ha"], soll)
+    # HA-Export daneben (je Gerät kumuliert): dieselbe Zahl bis auf die Rundung je Zeile. Seit N-670 auch im
+    # Standby-Monat — bis dahin belastete er den Strom ohne Wärme (benannte Grenze des N-609-Baus, 19 statt 25 €).
+    n_zeilen = sum(len(z) for z in s["zeilen"].values())
+    assert abs(sum(s["ha"].values()) - soll) <= 0.005 * n_zeilen + 1e-9, (fall, zwei, s["ha"], soll)
 
 
 async def test_zwei_wp_zwei_jahre_rendite():

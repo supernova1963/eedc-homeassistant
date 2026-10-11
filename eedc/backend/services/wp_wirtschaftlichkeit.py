@@ -23,7 +23,7 @@ WP-Strompreis: separater WP-Tarif > allgemeiner Tarif > Default 30 ct.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional
 
 from backend.core.zahlenformat import fmt_euro, fmt_zahl
@@ -76,6 +76,17 @@ class WPErsparnisErgebnis:
     # erfasst", nicht „kostenlos gekühlt".
     kuehl_kosten_euro: float = 0.0
 
+    #: N-670 (Fachentscheid Master Wärme/Klima, 11.10.2026): das Etikett der Gerätezeile, wenn sie keine Ersparnis
+    #: trägt, weil das Gerät im Zeitraum nur Strom ohne Wärme verbraucht hat ({@link WP_ETIKETT_STANDBY}). ``None`` bei
+    #: jeder gewöhnlichen Zeile. Die Herleitung (``wp_ersparnis_berechnung``) nennt es statt einer Rechnung.
+    etikett: Optional[str] = None
+
+
+#: N-670: Etikett der Gerätezeile eines Monats mit gemessenem Strom > 0 und gemessener Wärme 0. Bewusst NICHT „kein
+#: Heizbetrieb in diesem Zeitraum" — der Satz gehört dem Monat, in dem Strom UND Wärme 0 sind (§8a); hier lief das
+#: Gerät, es gab nur keine Nutzenergie ab (Bereitschaft, Steuerung, Umwälzung).
+WP_ETIKETT_STANDBY = "Standby"
+
 
 def _wp_alter_wirkungsgrad(wp_parameter: Optional[dict]) -> float:
     """η der Altanlage aus den WP-Parametern — Wahl über den Layer-SoT.
@@ -115,7 +126,15 @@ def wp_ersparnis_berechnung(
 
     N-555 (§11): Der Docstring versprach schon immer die deutsche Schreibweise, der
     Code schrieb „3500.0 kWh / 0.90"; jetzt über ``core/zahlenformat.py``.
+
+    N-670: Eine Standby-Zeile (``ergebnis.etikett``) trägt keine Rechnung — „0 kWh Wärme … − 40 kWh × 30 ct" ergäbe
+    −12 € neben dem Wert 0 € (Style-Guide A6). Sie nennt Etikett und Mengen.
     """
+    if ergebnis.etikett == WP_ETIKETT_STANDBY:
+        return (
+            f"{WP_ETIKETT_STANDBY}: {fmt_zahl(strom_kwh, 1)} kWh Strom, {fmt_zahl(waerme_kwh, 1)} kWh Wärme"
+            " — ohne Wärme keine Ersparnis gegen die Alternative"
+        )
     zusatz = _wp_zusatzkosten_jahr(wp_parameter) / 12
     alt = (
         f"{fmt_zahl(waerme_kwh, 1)} kWh / {fmt_zahl(ergebnis.verwendeter_wirkungsgrad, 2)}"
@@ -298,13 +317,30 @@ def wp_ersparnis_zeile(
     ⭐ **HA-Bauform E4d (Bauplan §8a, Rest N-585): kein Betrieb ist eine Ersparnis von 0 €.** Sind Strom UND Wärme
     GEMESSEN 0 (beide nicht ``None``) und kann der Aufrufer „gemessen 0" von „nicht erfasst" unterscheiden
     (``null_ist_kein_betrieb``), entsteht die Zeile mit 0 € — die Ergebnis-Leiter führt sie dann nicht als „fehlt".
-    ⚠ Strom 0 bei Wärme > 0 und Strom > 0 bei Wärme 0 (Standby, W-B4) bleiben ohne Zeile.
+    ⭐ **N-670 (Fachentscheid Master Wärme/Klima, 11.10.2026): Standby ist eine Zeile mit 0 €.** Strom GEMESSEN > 0
+    und Wärme GEMESSEN 0 (derselbe Riegel ``null_ist_kein_betrieb``) ⇒ die Zeile entsteht: Strom wie gemessen (die
+    Stromkosten ``wp_kosten_euro`` sind echt), Wärme 0, Ersparnis 0 €, Etikett {@link WP_ETIKETT_STANDBY}. Ohne Wärme
+    gibt es keinen Vergleichsgegenstand (``bewertbar=False``) — der Strom wird deshalb in KEINER Sicht gegen die
+    Alternative belastet (HA-Export und Jahresformel folgen dieser Zeile: ``alternativkosten.py``,
+    ``investition_sensoren.py``). Bis hierher entstand keine Zeile; HA-Export und Aussichten zogen den Strom des
+    Monats von der Ersparnis ab (gemessen 20 kWh × 30 ct: 19 statt 25 €).
+    ⚠ Strom 0 bei Wärme > 0 bleibt ohne Zeile (Entscheid H-2).
     """
     if (null_ist_kein_betrieb and waerme_kwh is not None and strom_kwh is not None
             and float(waerme_kwh) == 0.0 and float(strom_kwh) == 0.0):
         return berechne_wp_ersparnis(
             wp_waerme_kwh=0.0, wp_strom_kwh=0.0, wp_strompreis_cent=strompreis_cent,
             wp_parameter=parameter, monats_gaspreis_cent=gaspreis_cent, strom_kuehlen_kwh=0.0,
+        )
+    if (null_ist_kein_betrieb and waerme_kwh is not None and strom_kwh is not None
+            and float(waerme_kwh) == 0.0 and float(strom_kwh) > 0.0):
+        return replace(
+            berechne_wp_ersparnis(
+                wp_waerme_kwh=0.0, wp_strom_kwh=float(strom_kwh), wp_strompreis_cent=strompreis_cent,
+                wp_parameter=parameter, monats_gaspreis_cent=gaspreis_cent,
+                strom_kuehlen_kwh=strom_kuehlen_kwh or 0.0,
+            ),
+            etikett=WP_ETIKETT_STANDBY,
         )
     if waerme_kwh is None or strom_kwh is None or waerme_kwh <= 0 or strom_kwh <= 0:
         return None
@@ -327,6 +363,10 @@ def wp_ersparnis_monat(fakt, inv_by_id: dict) -> Optional[float]:
 
     Returns:
         Die Summe, oder ``None``, wenn der Monat keine einzige Zeile trägt (z. B. Standby-Monat: Strom ohne Wärme).
+
+    ⚑ N-670: Die Fakten tragen keine Messmarke je Gerät (``WpGeraetFakten`` sind drei Mengen) und können „Wärme
+    gemessen 0" nicht von „nicht erfasst" trennen — der Standby-Monat liefert hier deshalb ``None`` statt der
+    0-€-Zeile. Beide Aufrufer (Übersicht, Komponenten-Zeitreihe) summieren ``or 0.0``: dieselbe Zahl wie die Zeile.
     """
     summe: Optional[float] = None
     for inv_id, g in sorted(fakt.wp.je_geraet.items()):
