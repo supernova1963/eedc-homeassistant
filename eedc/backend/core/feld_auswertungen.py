@@ -233,7 +233,7 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
         _a(COCKPIT_TAG, "services/live_tagesverlauf_service.py", "get_tagesverlauf"),
     ),
     (TYP_ANLAGE, "pv_gesamt_w"): (
-        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "build_komponenten"),
+        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_pv_gesamt_aus_basis"),
         _a(COCKPIT_TAG, "services/live_tagesverlauf_service.py", "get_tagesverlauf"),
     ),
     (TYP_ANLAGE, "aussentemperatur_c"): (
@@ -247,13 +247,13 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
         _a(HA_SENSOREN, "api/routes/ha_export/anlage_energie.py", "monatsfakten_und_energie"),
     ),
     ("pv-module", "leistung_w"): (
-        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "build_komponenten"),
+        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_verbuche_investition"),
     ),
 
     # ── Wechselrichter ───────────────────────────────────────────────────────
     # `pv_erzeugung_kwh` steht bewusst in FELDER_OHNE_AUSWERTUNG_BEKANNT.
     ("wechselrichter", "leistung_w"): (
-        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "build_komponenten"),
+        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_verbuche_investition"),
     ),
 
     # ── Speicher ─────────────────────────────────────────────────────────────
@@ -278,10 +278,10 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
         _a(COCKPIT_MONAT, "core/berechnungen/imd_monatsaggregat.py", "imd_typ_beitrag"),
     ),
     ("speicher", "leistung_w"): (
-        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "build_komponenten"),
+        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_verbuche_investition"),
     ),
     ("speicher", "soc"): (
-        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "build_komponenten"),
+        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_soc_gauge"),
     ),
 
     # ── Wärmepumpe / Klima: Strom ────────────────────────────────────────────
@@ -383,22 +383,22 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
 
     # ── Wärmepumpe / Klima: Live und Zustand ─────────────────────────────────
     ("waermepumpe", "leistung_w"): (
-        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "build_komponenten"),
+        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_verbuche_investition"),
     ),
     ("waermepumpe", "leistung_heizen_w"): (
-        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "build_komponenten"),
+        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_wp_leistung_und_icon"),
         _a(COCKPIT_TAG, "services/live_tagesverlauf_service.py", "_get_tagesverlauf_mqtt"),
     ),
     ("waermepumpe", "leistung_warmwasser_w"): (
-        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "build_komponenten"),
+        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_wp_leistung_und_icon"),
         _a(COCKPIT_TAG, "services/live_tagesverlauf_service.py", "_get_tagesverlauf_mqtt"),
     ),
     ("waermepumpe", "leistung_kuehlen_w"): (
-        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "build_komponenten"),
+        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_wp_leistung_und_icon"),
         _a(COCKPIT_TAG, "services/live_tagesverlauf_service.py", "_get_tagesverlauf_mqtt"),
     ),
     ("waermepumpe", "warmwasser_temperatur_c"): (
-        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "build_komponenten"),
+        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_warmwasser_temperatur"),
     ),
     ("waermepumpe", "soll_temperatur_c"): (
         _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_innengeraete_live"),
@@ -407,7 +407,7 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
         _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_innengeraete_live"),
     ),
     ("waermepumpe", "betriebsmodus"): (
-        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "build_komponenten"),
+        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_buche_verbraucher"),
         _a(KOMP_WP, "services/betriebsmodus_live.py", "lade_betriebsmodus_live"),
     ),
 
@@ -461,10 +461,10 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
         _a(HA_SENSOREN, "api/routes/ha_export/anlage_energie.py", "monatsfakten_und_energie"),
     ),
     ("e-auto", "leistung_w"): (
-        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "build_komponenten"),
+        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_verbuche_investition"),
     ),
     ("e-auto", "soc"): (
-        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "build_komponenten"),
+        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_soc_gauge"),
     ),
 
     # ── Wallbox ──────────────────────────────────────────────────────────────
@@ -480,7 +480,7 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
         _a(KOMP_WALLBOX, "api/routes/investitionen/dashboard_wallbox.py", "get_wallbox_dashboard"),
     ),
     ("wallbox", "leistung_w"): (
-        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "build_komponenten"),
+        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_verbuche_investition"),
     ),
 
     # ── Balkonkraftwerk ──────────────────────────────────────────────────────
@@ -502,7 +502,7 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
         _a(KOMP_BKW, "api/routes/investitionen/dashboard_balkonkraftwerk.py", "get_balkonkraftwerk_dashboard"),
     ),
     ("balkonkraftwerk", "leistung_w"): (
-        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "build_komponenten"),
+        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_verbuche_investition"),
     ),
 
     # ── Sonstiges ────────────────────────────────────────────────────────────
@@ -545,7 +545,7 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
            "ZAEHLERSTAND_FELD"),
     ),
     ("sonstiges", "leistung_w"): (
-        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "build_komponenten"),
+        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_verbuche_investition"),
     ),
 }
 
