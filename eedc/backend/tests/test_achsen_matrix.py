@@ -1588,7 +1588,8 @@ _U_W1 = ("W1 (Gesamtstrom + Gesamtwärme, Betriebsart nur als Etikett) — entsc
          "Heizen 198 · Warmwasser 18 (Abdeckung 720 h). Die Zellen bleiben gemessen mit Haltewert. Heizung/Warmwasser "
          "der Wärme haben seit N-673 ein Soll („keine Angabe“, `_wp_soll`) und stehen nicht mehr hier")
 _U_KLIMA_JAZ = ("Arbeitszahl eines Klimageräts mit Heiz- UND Kühlbetrieb: ob die Geräte-Zahl Kälte einrechnet oder "
-                "nur die Heizseite nennt, legen K1–K5 nicht fest (gemessen 3,0 = Heizen 54/18 = Kühlen 108/36)")
+                "nur die Heizseite nennt, legen K1–K5 nicht fest; entschieden im Bauplan HA-Bauform §8a W3 (06.10.2026): keine "
+                "kombinierte Geräte-Arbeitszahl, je Funktion eine Zahl — der Haltewert bleibt Messung (3,0 = Heizen 54/18 = Kühlen 108/36)")
 SOLL_UNKLAR_MENGE: dict[tuple[str, str, str], str] = {
     # N-673 (11.10.2026): Heizung/Warmwasser von M05 (W1) und M07 (W5) haben jetzt ein Soll — „keine Angabe" ohne
     # Heiz-/WW-Zähler (`_wp_soll`); der Eintrag `_U_W5_SPLIT` und die Heizung/WW-Zeilen von `_U_W1` sind entfallen.
@@ -1599,11 +1600,12 @@ SOLL_UNKLAR_MENGE: dict[tuple[str, str, str], str] = {
 SOLL_UNKLAR: dict[tuple[str, str, str, str, str], str] = {}
 
 #: Wie ``test_pv_achse_matrix._U_SA_VOR``: ohne HA hat ein vergangener Monat vor dem Abschluss in Cockpit →
-#: Monat keine Werte (N-472), Cockpit → Jahr → Verlauf zeigt ihn aus den Tageswerten (N-121) — nicht entschieden.
+#: Monat keine Werte (N-472), Cockpit → Jahr → Verlauf zeigt ihn aus den Tageswerten (N-121) — entschieden (N-677).
 _U_SA_VOR = (
     "Cockpit → Monat sammelt die Tagesebene NUR im laufenden Monat (aktueller_monat/__init__.py, N-472); ohne HA "
     "hat ein vergangener Monat vor dem Abschluss dort keine Werte, Cockpit → Jahr → Verlauf zeigt ihn aus den "
-    "Tageswerten (N-121) — ob „nichts verschwindet“ hier gilt, ist nicht entschieden (wie in der PV-Matrix)."
+    "Tageswerten (N-121) — entschieden wie in der PV-Matrix (N-677, Gernot 10.10.2026): die Antwort ist der "
+    "Monatsabschluss, das Handbuch sagt es."
 )
 
 

@@ -712,7 +712,8 @@ _U_SA_VOR = (
     "N-472: in einem abgeschlossenen Monat wäre sie „eine stille Untertreibung“, die Antwort ist der "
     "Monatsabschluss). Ohne HA hat ein vergangener Monat vor dem Abschluss also keine PV — während "
     "Cockpit → Jahr → Verlauf denselben Monat aus den Tageswerten zeigt (N-121). Ob „nichts verschwindet“ "
-    "hier gilt oder die N-472-Begründung, ist nicht entschieden."
+    "hier gilt oder die N-472-Begründung, ist entschieden (N-677, Gernot 10.10.2026): die Antwort ist der "
+    "Monatsabschluss, das Handbuch sagt es (Kasten «Diese Achse rechnet mit abgeschlossenen Monaten»)."
 )
 for _f in ("F01", "F02", "F03", "F04", "F05", "F06", "F07", "F08a", "F08b", "F09a-G", "F09b-G", "F09c-G",
            "F09a-oG", "F09b-oG", "F09c-oG", "F10", "F11", "F12", "F13a", "F13b", "F14", "F15", "F16",
