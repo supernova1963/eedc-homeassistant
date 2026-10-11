@@ -1460,8 +1460,9 @@ P7_BASELINE_AUSNAHMEN: frozenset[str] = frozenset({
     # fragt vorher, ob dort schon ein Wert steht (Vorbestand bleibt ohne „überschreiben", wie Einspeisung und
     # Netzbezug). Die Frage handelt VOM gespeicherten Feld — Diagnose über das Feld, keine Anlagen-PV; ein
     # aufgelöster Wert beantwortete sie nicht. Eigener Empfängername (`_hat_anlagenwert(vorbestand)`), damit die
-    # Freistellung nicht jedes `md` der Datei (Vorschau!) mitnimmt.
-    "backend/api/routes/ha_statistics.py::vorbestand",
+    # Freistellung nicht jedes `md` der Datei (Vorschau!) mitnimmt. RF-5 (Serie „Funktion vor Datei"): der Schreibweg
+    # des Sammelimports steht seitdem im Schwestermodul `ha_statistics_import.py`.
+    "backend/api/routes/ha_statistics_import.py::vorbestand",
     # N-651 (10.10.2026): die BKW-Prüfung des Daten-Checkers fragt je Monat, OB ein Anlagenwert gespeichert ist — mit
     # ihm trägt ein Balkonkraftwerk ohne eigenen Zähler seinen kWp-Anteil (N-621), „PV-Erzeugung fehlt" wäre ein
     # Fehlalarm. Diagnose über das Feld (Vorhandensein, keine Menge), dieselbe Rolle wie `vorbestand`; eigener
@@ -2226,13 +2227,14 @@ P10_SCHREIBEN_IMPORT_CHECKER: frozenset[str] = frozenset({
     "backend/services/import_writer.py::zaehle_manuelle_werte",
     # Import / Export / Migration.
     "backend/api/routes/ha_statistics.py::get_import_vorschau",
-    "backend/api/routes/ha_statistics.py::import_ha_statistics",
+    # RF-5: der Sammelimport lädt die Gerätezeile in der Phase, die sie anlegt bzw. einbucht (Schreibweg).
+    "backend/api/routes/ha_statistics_import.py::_schreibe_geraetewerte",
     # HA-Bauform E4b Teil A (06.10.2026, Entscheid H-A2): LÖSCHPFAD. Entfernt die Modulwerte eines Monats, die der
     # Sammelimport früher als Zerlegung des Anlagen-PV-Zählers geschrieben hat (Schreiber `ha_statistics_import` UND
     # Marke `kwp_anteil`) — seit E4b steht der Zähler als Anlagenwert in der Zählerzeile. Liest die Gerätezeilen nur,
     # um ihre PROVENIENZ zu prüfen und den Sub-Key zu entfernen; keine Monatsgröße entsteht. Ersetzt den Eintrag
     # `::_verteile_anlagen_pv` (N-533, der Verteil-Schreibweg ist mit E4b entfallen).
-    "backend/api/routes/ha_statistics.py::_entferne_eigene_zerlegung",
+    "backend/api/routes/ha_statistics_import.py::_entferne_eigene_zerlegung",   # RF-5: Schwestermodul
     "backend/api/routes/import_export/csv_operations.py::export_csv",
     "backend/api/routes/import_export/json_operations.py::_export_anlage_full_impl",
     "backend/services/migrations/migrate_emob_canonical_source.py::migrate_emob_canonical_source",
@@ -2499,6 +2501,14 @@ P10_PER_INVESTITION_PHASE: dict[str, str] = {
     # (ebenfalls gelistet).
     "backend/services/waermepumpe_kennzahlen_je_geraet.py::mengen_aus_monatszeilen":
         "backend/services/waermepumpe_kennzahlen_je_geraet.py::lade_kennzahlen_je_geraet",
+    # RF-5 (Serie „Funktion vor Datei"): Phasen der HA-Import-Vorschau. Sie vergleichen die vorhandenen
+    # Gerätewerte mit HA (Import-Pfad, `P10_SCHREIBEN_IMPORT_CHECKER`); die Zeilen lädt die Route selbst.
+    "backend/api/routes/ha_statistics.py::_lokale_pv_summen":
+        "backend/api/routes/ha_statistics.py::get_import_vorschau",
+    "backend/api/routes/ha_statistics.py::_vergleiche_investitionen":
+        "backend/api/routes/ha_statistics.py::get_import_vorschau",
+    "backend/api/routes/ha_statistics.py::_bkw_eigene_werte_kwh":
+        "backend/api/routes/ha_statistics.py::get_import_vorschau",
 }
 
 #: **Checker-Pfade ohne Lader** — die Blindstelle aus dem Prüfbericht

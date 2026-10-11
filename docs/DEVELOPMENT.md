@@ -464,6 +464,7 @@ eedc-homeassistant/                  ← Source of Truth (alle Änderungen hier)
     │   │   ├── datenquellen.py          # Datenquellen-Fläche (ein Feld = eine Quelle)
     │   │   ├── sensor_mapping.py        # HA-Sensor-Zuordnung (nur HA_MODE)
     │   │   ├── ha_integration.py · ha_statistics.py · ha_remote.py
+    │   │   ├── ha_statistics_import.py  # Schreibweg des HA-Statistik-Sammelimports (seit 11.10.2026, RF-5)
     │   │   ├── ha_export/               # HA-Sensor-Export — Paket seit 18.09.2026 (Vorlage 8)
     │   │   │   ├── __init__.py          # Fassade: Router (Präfix /ha/export) + Re-Export
     │   │   │   ├── anlage_sensoren.py · investition_sensoren.py   # die zwei Rechenkerne (Anlage: Orchestrator seit 18.09.2026, Vorlage 8b)
