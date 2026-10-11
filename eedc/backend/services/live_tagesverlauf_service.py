@@ -29,11 +29,10 @@ from backend.services.live_sensor_config import (
 from backend.core.field_definitions import (
     SONSTIGES_KATEGORIE_UNGEPFLEGT,
     ist_zaehler_kategorie,
-    sonstiges_feld_reihenfolge,
 )
 from backend.services.live_history_service import (
-    _MONATSABSCHLUSS_KWH,
     _feld_eid,
+    _verbraucher_zaehler,
     get_history_normalized,
     apply_invert_to_history,
 )
@@ -93,18 +92,18 @@ def _resolve_counter_eid(
     weiter aus dem Leistungssensor (``kurven_leistung_mit_live_fallback``). Wer
     nur den Zähler gemappt hat, bekommt hier nichts Neues; wer nur die Leistung
     hat, bleibt im Mean-Pfad.
+
+    ⭐ **Deckungsgleich per Konstruktion** (N-688, 11.10.2026): WP, Wallbox und
+    Sonstiges wählen ihr Zählerfeld in ``live_history_service._verbraucher_zaehler``
+    — dieselbe Funktion, die ``get_tages_kwh`` für die Kachel ruft. Bis dahin stand
+    der Sonstiges-Zweig nur hier, und der Satz oben war für Sonstiges falsch.
     """
     if typ in ERZEUGER_TYPEN:
         return _feld_eid(felder.get("pv_erzeugung_kwh", {}))
-    if suffix is None and typ in _MONATSABSCHLUSS_KWH:
-        field, _ = _MONATSABSCHLUSS_KWH[typ]
-        return _feld_eid(felder.get(field, {}))
-    if suffix is None and typ == "sonstiges":
-        kategorie = (parameter or {}).get("kategorie")
-        for feld in sonstiges_feld_reihenfolge(kategorie):
-            eid = _feld_eid(felder.get(feld, {}))
-            if eid:
-                return eid
+    if suffix is None:
+        zaehler = _verbraucher_zaehler(typ, felder, (parameter or {}).get("kategorie"))
+        if zaehler is not None:
+            return _feld_eid(felder.get(zaehler[0], {}))
     return None
 
 
@@ -174,7 +173,9 @@ def _baue_short_term_overlays(
         mean_src.setdefault(pv_gesamt_eid, pv_gesamt_eid)
 
     # Netz: getrennte kWh-Zähler bevorzugen (deckungsgleich mit get_tages_kwh),
-    # sonst Mean des Power-Sensors. Kombi-Sensor ist bidirektional → Mean.
+    # sonst Mean des Power-Sensors. Kombi-Sensor ist bidirektional → Mean — auch
+    # wenn Netz-Zähler zugeordnet sind: die Kurve ist Leistung, keine Menge. Die
+    # Tagesmenge der Kacheln liefern dann trotzdem die Zähler (N-687, get_tages_kwh).
     if netz_bezug_eid:
         c = _feld_eid(basis_map.get("netzbezug", {}))
         if c:

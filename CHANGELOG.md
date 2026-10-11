@@ -9,6 +9,11 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Cockpit → Live: hast du Netz-Zähler (Einspeisung/Netzbezug in kWh) und einen Kombi-Netzsensor (±) zugeordnet, kommen die Tageswerte jetzt aus den Zählern.** Bisher rechnete eedc Einspeisung, Netzbezug, Eigen- und Gesamtverbrauch für heute und gestern aus der Leistung des Kombi-Sensors (im Beispiel 2,0 statt 4,1 kWh Einspeisung), während *Cockpit → Tag* die Zähler las; jetzt zeigen beide Sichten dieselbe Zahl. Der Kombi-Sensor liefert weiter die Momentanleistung und die Kurve im Tagesverlauf.
+- **Cockpit → Live, Energiefluss: ein sonstiges Gerät mit kWh-Zähler zeigt im Tooltip die gezählte Tagesmenge.** Bisher stand dort die aus der Leistung hochgerechnete Menge — bei kurzen Lastspitzen (Heizstab) deutlich zu viel, im Beispiel 6,8 statt 3,0 kWh —, und bei einem Gerät mit Kategorie „Abgabe" ging sie so auch in den Eigenverbrauch heute ein. Jetzt liest eedc den Zähler, wie schon bei Wallbox und Wärmepumpe und im Tagesverlauf darunter.
+
 ### Changed
 
 - **Intern: der Feld-Wächter zählt nur noch Code, und die Liste „ausgewertet in“ nennt die wirklichen Leser.** `test_jedes_feld_hat_eine_auswertung` sucht den Feldnamen jetzt im ausführbaren Quelltext des genannten Symbols — Docstring, Kommentar und Funktionsname zählen nicht mehr als Lesen (N-686). Acht Einträge waren nur dadurch grün; sie zeigen jetzt auf die Stelle, die das Feld wirklich liest (Ø-Temperatur, Ø-Netzbezugspreis, Kraftstoff- und Gaspreis, WP-Strom, BKW-Erzeugung, Betriebsmodus, PV-Gesamtzähler — dessen alter Leser wurde seit dem 26.09. nur noch von Tests gerufen). Der Eintrag „Wechselrichter-Leistung → Cockpit → Live“ entfällt: kein Live-Pfad liest sie, und die Datenquellen-Fläche zeigt den Wechselrichter gar nicht (N-685); das Feld steht jetzt mit Begründung in der Ausnahmeliste. Für Anwender ändert sich keine Anzeige.

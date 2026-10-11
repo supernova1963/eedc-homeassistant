@@ -9,6 +9,14 @@
 
 ---
 
+## Unreleased
+
+**Live-Tageswerte aus deinen Zählern:** Hast du Netz-Zähler und einen Kombi-Netzsensor (±) zugeordnet, nimmt
+*Cockpit → Live* Einspeisung, Netzbezug, Eigen- und Gesamtverbrauch für heute und gestern jetzt aus den Zählern —
+dieselbe Zahl wie *Cockpit → Tag*; der Kombi-Sensor bleibt für die Leistung und die Kurve zuständig. Ein sonstiges Gerät
+mit kWh-Zähler zeigt im Energiefluss-Tooltip die gezählte Tagesmenge statt der hochgerechneten, bei Abgabe-Geräten auch
+im Eigenverbrauch heute ([Bedienung → Live](HANDBUCH_BEDIENUNG.md#21-live)).
+
 ## v4.1.6 — 11. Oktober 2026
 
 **Kleinere Anzeige-Korrekturen:** Monate ohne Werte zeigen in der Monatsleiste und im Jahresbericht einen Strich statt „0 kWh",

@@ -179,6 +179,8 @@ Eine Gruppenkachel erkennst du an den zwei versetzten Rahmen dahinter („hier l
 5. **Gesamtverbrauch** = Eigenverbrauch + Netzbezug (alles, was das Haus heute verbraucht hat)
 6. **Einspeisung** (PV-Überschuss ins Netz)
 
+**Woher die Tageswerte kommen:** Ist für eine Größe ein Zählerstand (kWh) zugeordnet — PV, Einspeisung, Netzbezug, Speicher (Ladung/Entladung), Wärmepumpe, Wallbox, sonstige Geräte —, liest eedc den Zuwachs dieses Zählers seit Mitternacht; nur ohne Zähler rechnet es die Menge aus der Leistung hoch. Das gilt auch für den „heute"-Wert im Tooltip eines Geräts und auch dann, wenn das Netz über einen Kombi-Sensor (±) zugeordnet ist. Bei kurzen Lastspitzen (etwa einem Heizstab) kann die hochgerechnete Menge deutlich vom Zähler abweichen.
+
 **Tagesverlauf-Diagramm** — Linien-/Flächendiagramm für PV/Verbrauch/Speicher, mit gepunkteter **Strompreis-Linie** auf zweiter Y-Achse:
 
 - Ist ein eigener Strompreis-Sensor als Datenquelle zugeordnet (Tibber, aWATTar, EPEX, eigener Template-Sensor), heißt die Linie „Strompreis".

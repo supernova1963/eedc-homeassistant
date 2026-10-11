@@ -22,7 +22,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.utils.investition_filter import aktiv_jetzt
-from backend.core.berechnungen.energie import PV_KOMPONENTEN_PREFIXE
+from backend.core.berechnungen.energie import (
+    PV_KOMPONENTEN_PREFIXE,
+    SONSTIGES_KOMPONENTEN_PREFIX,
+)
 from backend.core.berechnungen.erzeuger_traeger import (
     BKW_TYP,
     kuerze_bkw_in_werte_map,
@@ -35,6 +38,7 @@ from backend.services.live_sensor_config import (
     TAGESVERLAUF_KATEGORIE,
     extract_live_config,
 )
+from backend.core.field_definitions import sonstiges_feld_reihenfolge
 from backend.services.snapshot.keys import (
     extract_quellen_energy,
     resolve_energy_ha_eid,
@@ -49,7 +53,8 @@ logger = logging.getLogger(__name__)
 _KWH_UNITS = {"kWh", "Wh", "MWh"}
 _KWH_SCALE = {"kWh": 1.0, "Wh": 0.001, "MWh": 1000.0}
 
-# Monatsabschluss-Sensoren: typ → (sensor_field, comp_key_prefix)
+# Monatsabschluss-Sensoren: typ → (sensor_field, comp_key_prefix). Sonstiges hängt
+# an der Kategorie und läuft deshalb über `_verbraucher_zaehler` (N-688).
 _MONATSABSCHLUSS_KWH: dict[str, tuple[str, str]] = {
     "waermepumpe": ("stromverbrauch_kwh", "waermepumpe"),
     "wallbox":     ("ladung_kwh",          "wallbox"),
@@ -60,6 +65,33 @@ def _feld_eid(conf: object) -> Optional[str]:
     """Extrahiert entity_id aus FeldMapping-Dict {strategie, sensor_id}."""
     if isinstance(conf, dict) and conf.get("strategie") == "sensor":
         return conf.get("sensor_id") or None
+    return None
+
+
+def _verbraucher_zaehler(
+    typ: Optional[str], felder: dict, kategorie: Optional[str],
+) -> Optional[tuple[str, str]]:
+    """(kWh-Zählerfeld, Komponenten-Präfix) eines Verbrauchers — None ⇒ kein Zählerpfad.
+
+    ⭐ **Eine Stelle für Kachel und Kurve** (N-688, 11.10.2026): `get_tages_kwh`
+    (Tagesmenge je Komponente, Energiefluss-Tooltip) und
+    `live_tagesverlauf_service._resolve_counter_eid` (Tagesverlauf-Kurve) fragen
+    beide hier. Bis dahin kannte die Kachel nur `_MONATSABSCHLUSS_KWH` (WP,
+    Wallbox) — ein *Sonstiges*-Gerät mit Zähler bekam dort die integrierte
+    Leistung, während die Kurve darunter seit N-261 den Zähler las.
+
+    *Sonstiges*: das erste zugeordnete Energie-Feld in der Präzedenz seiner
+    Kategorie (Registry-SoT `sonstiges_feld_reihenfolge`; eine Zähler-Kategorie
+    hat keine ⇒ None). Der Präfix ist der Schlüssel, unter dem die Komponente
+    steht (`sonstige_<id>`, `SONSTIGES_KOMPONENTEN_PREFIX` — derselbe, unter dem
+    `live_power_service` die Abgabe-Geräte vom Eigenverbrauch abzieht).
+    """
+    if typ in _MONATSABSCHLUSS_KWH:
+        return _MONATSABSCHLUSS_KWH[typ]
+    if typ == "sonstiges":
+        for feld in sonstiges_feld_reihenfolge(kategorie):
+            if _feld_eid(felder.get(feld, {})):
+                return feld, SONSTIGES_KOMPONENTEN_PREFIX.removesuffix("_")
     return None
 
 
@@ -253,6 +285,25 @@ async def _lade_erzeuger(
     return []
 
 
+async def _lade_sonstiges_kategorien(
+    anlage: Anlage, db: AsyncSession, inv_types: dict[str, str],
+) -> dict[str, Optional[str]]:
+    """Kategorie je *Sonstiges*-Gerät (N-688) — sie wählt dessen Zählerfeld; nur, wenn eines gepflegt ist."""
+    if "sonstiges" not in (inv_types or {}).values():
+        return {}
+    zeilen = await db.execute(
+        select(Investition.id, Investition.parameter).where(
+            Investition.anlage_id == anlage.id,
+            Investition.typ == "sonstiges",
+            aktiv_jetzt(),
+        )
+    )
+    return {
+        str(inv_id): (parameter.get("kategorie") if isinstance(parameter, dict) else None)
+        for inv_id, parameter in zeilen.all()
+    }
+
+
 @dataclass(frozen=True)
 class _TagesQuellen:
     """Welche Entity welchen Tageswert trägt — gesammelt VOR dem History-Abruf."""
@@ -357,8 +408,9 @@ def _inv_kwh_sensoren(
     inv_types: dict[str, str],
     erzeuger_ids: frozenset,
     quellen_energy: dict,
+    sonstiges_kategorien: dict[str, Optional[str]],
 ) -> tuple[dict[str, dict[str, Optional[str]]], dict[str, str]]:
-    """kWh-Zähler je Investition: Speicher (Ladung/Entladung), Erzeuger, WP/Wallbox."""
+    """kWh-Zähler je Investition: Speicher (Ladung/Entladung), Erzeuger, WP/Wallbox/Sonstiges."""
     separate_battery_sensors: dict[str, dict[str, Optional[str]]] = {}
     separate_kwh_sensors: dict[str, str] = {}
     for inv_id, inv_data in mapping_investitionen.items():
@@ -377,8 +429,10 @@ def _inv_kwh_sensoren(
                           _feld_eid(inv_felder.get("pv_erzeugung_kwh", {})))
             if pv_eid:
                 separate_kwh_sensors[f"pv_{inv_id}"] = pv_eid
-        elif typ in _MONATSABSCHLUSS_KWH:
-            sensor_field, prefix = _MONATSABSCHLUSS_KWH[typ]
+        elif (zaehler := _verbraucher_zaehler(
+            typ, inv_felder, sonstiges_kategorien.get(inv_id),
+        )) is not None:
+            sensor_field, prefix = zaehler
             kwh_eid = _eov(quellen_energy, f"inv:{inv_id}:{sensor_field}",
                            _feld_eid(inv_felder.get(sensor_field, {})))
             if kwh_eid:
@@ -448,6 +502,7 @@ def _erhebe_quellen(
     inv_live_map: dict[str, dict[str, str]],
     inv_types: dict[str, str],
     erzeuger_ids: frozenset,
+    sonstiges_kategorien: dict[str, Optional[str]],
 ) -> _TagesQuellen:
     """Alle Entities, aus denen die Tages-kWh entstehen — Kategorien, Komponenten, Zähler."""
     category_entities = _netz_kategorien(basis_live)
@@ -471,6 +526,7 @@ def _erhebe_quellen(
     )
     separate_battery_sensors, separate_kwh_sensors = _inv_kwh_sensoren(
         mapping_full.get("investitionen", {}), inv_types, erzeuger_ids, quellen_energy,
+        sonstiges_kategorien,
     )
     _leistungs_entities(
         inv_live_map, inv_types, erzeuger_ids, separate_battery_sensors,
@@ -523,8 +579,20 @@ def _netz_kombi_kwh(
     entity_ids: list[str],
     history: dict[str, list[tuple[datetime, float]]],
     result: dict[str, Optional[float]],
+    gezaehlt: set[str],
 ) -> None:
-    """Kombinierter Netz-Sensor: positiv = Bezug, negativ = Einspeisung (Trapez)."""
+    """Kombinierter Netz-Sensor: positiv = Bezug, negativ = Einspeisung (Trapez).
+
+    ⛔ **Der Zähler hat Vorrang (N-687, 11.10.2026).** Bis dahin schrieb diese Phase
+    beide Richtungen in jedem Fall — und überschrieb damit den Zählerwert, den
+    `_kategorien_kwh` für Einspeisung/Netzbezug schon eingetragen hatte (Priorität 1).
+    Wer Netz-Zähler UND einen Kombi-Leistungssensor zugeordnet hatte, sah in
+    Cockpit → Live heute/gestern die integrierte Leistung, Cockpit → Tag die Zähler.
+    Regel seit v3.19.0 (#135): kWh aus Zählern, nicht aus Leistungsintegration.
+    Jetzt füllt der Kombi-Sensor nur die Richtung, die in `gezaehlt` fehlt (kein
+    Zähler zugeordnet oder er lieferte nichts) — dieselbe Lage wie bei getrennten
+    W-Sensoren. Für Leistung und Kurvenform bleibt er zuständig.
+    """
     for entity_id in entity_ids:
         if entity_id not in history:
             continue
@@ -533,9 +601,9 @@ def _netz_kombi_kwh(
         einsp_pts = [(t, abs(min(p, 0))) for t, p in pts]
         bezug_kwh = trapez_kwh(bezug_pts)
         einsp_kwh = trapez_kwh(einsp_pts)
-        if bezug_kwh is not None:
+        if bezug_kwh is not None and "netzbezug" not in gezaehlt:
             result["netzbezug"] = round(bezug_kwh, 1)
-        if einsp_kwh is not None:
+        if einsp_kwh is not None and "einspeisung" not in gezaehlt:
             result["einspeisung"] = round(einsp_kwh, 1)
 
 
@@ -638,14 +706,20 @@ def _kategorien_kwh(
     erzeuger: list,
 ) -> None:
     """Kategorie-Summen in `result` schreiben."""
+    # Kategorien, deren Wert ein Zähler trägt — die schlägt kein Kombi-Sensor
+    # (N-687). `netz_kombi` steht in `category_entities` hinter Einspeisung und
+    # Netzbezug (`_netz_kategorien`), die Menge ist also vollständig, wenn er dran ist.
+    gezaehlt: set[str] = set()
     # Aggregierte Kategorien (pv, einspeisung, netzbezug)
     for category, entity_ids in quellen.category_entities.items():
         if category == "netz_kombi":
-            _netz_kombi_kwh(entity_ids, mess.history, result)
+            _netz_kombi_kwh(entity_ids, mess.history, result, gezaehlt)
             continue
 
         # Priorität 1: kumulierter kWh-Sensor
         kwh = _zaehler_kwh(category, quellen, mess, erzeuger)
+        if kwh is not None:
+            gezaehlt.add(category)
         if kwh is None:
             kwh = _kategorie_aus_entities(category, entity_ids, quellen, mess, erzeuger)
         if kwh is not None:
@@ -723,8 +797,8 @@ def _verbraucher_kwh(
     separate_kwh_sensors: dict[str, str],
     mess: _Tagesmessung,
 ) -> Optional[float]:
-    """WP/Wallbox/übrige Komponente: Zähler, sonst kWh-Entity, sonst Trapez."""
-    # WP/Wallbox: kWh-Sensor aus Monatsabschluss bevorzugen (#64 Follow-up)
+    """WP/Wallbox/Sonstiges/übrige Komponente: Zähler, sonst kWh-Entity, sonst Trapez."""
+    # WP/Wallbox/Sonstiges: kWh-Sensor aus Monatsabschluss bevorzugen (#64 Follow-up, N-688)
     sep_eid = separate_kwh_sensors.get(comp_key)
     if sep_eid and sep_eid in mess.history:
         kwh = mess.delta(sep_eid)
@@ -793,7 +867,13 @@ async def get_tages_kwh(
         inv_id for inv_id, typ in inv_types.items() if typ in ERZEUGER_TYPEN
     )
 
-    quellen = _erhebe_quellen(anlage, basis_live, inv_live_map, inv_types, erzeuger_ids)
+    # N-688: die Kategorie eines Sonstiges-Geräts wählt sein Zählerfeld — sie steht
+    # in `Investition.parameter`, nicht in `inv_types`.
+    sonstiges_kategorien = await _lade_sonstiges_kategorien(anlage, db, inv_types)
+
+    quellen = _erhebe_quellen(
+        anlage, basis_live, inv_live_map, inv_types, erzeuger_ids, sonstiges_kategorien,
+    )
     all_ids = quellen.alle_ids()
     if not all_ids:
         return {}
