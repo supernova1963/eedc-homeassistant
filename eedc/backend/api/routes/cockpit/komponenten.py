@@ -69,8 +69,9 @@ class KomponentenMonat(BaseModel):
     #: Warum es die Zahl nicht gibt (**S3**). Bis 02.09.2026 nahm der Hub nur
     #: `.wert`; der Grund entstand im Layer und wurde hier verworfen.
     wp_cop_grund: Optional[str]
-    wp_heizung_kwh: float
-    wp_warmwasser_kwh: float
+    #: N-673: ``None`` = keine Angabe (kein Gerät misst die Achse), nicht 0.
+    wp_heizung_kwh: Optional[float] = None
+    wp_warmwasser_kwh: Optional[float] = None
     wp_strom_heizen_kwh: float
     wp_strom_warmwasser_kwh: float
     # ── Modus-Split (#263 K-2, S4) ──────────────────────────────────────────
@@ -305,8 +306,9 @@ async def get_komponenten_zeitreihe(
             wp_strom_kwh=round(wp.strom_kwh, 1),
             wp_cop=round(wp_cop, 2) if wp_cop else None,
             wp_cop_grund=_wp_az.grund,
-            wp_heizung_kwh=round(wp.heizung_kwh, 1),
-            wp_warmwasser_kwh=round(wp.warmwasser_kwh, 1),
+            # N-673: ohne Messung der Achse keine Angabe statt 0.
+            wp_heizung_kwh=round(wp.heizung_kwh, 1) if wp.heizung_kwh is not None else None,
+            wp_warmwasser_kwh=round(wp.warmwasser_kwh, 1) if wp.warmwasser_kwh is not None else None,
             wp_strom_heizen_kwh=round(wp.strom_heizen_kwh, 1),
             wp_strom_warmwasser_kwh=round(wp.strom_warmwasser_kwh, 1),
             wp_modus_strom_heizen_kwh=(

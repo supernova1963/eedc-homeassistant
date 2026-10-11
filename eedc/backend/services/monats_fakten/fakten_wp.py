@@ -51,8 +51,13 @@ class WpFakten:
     #: weiterhin die vollen Mengen; nur der Vergleich hat eine kleinere Basis.
     strom_mit_ersatz_kwh: float = 0.0
     waerme_mit_ersatz_kwh: float = 0.0
-    heizung_kwh: float = 0.0
-    warmwasser_kwh: float = 0.0
+    #: ⭐ **N-673 (Fachentscheid Master Wärme/Klima, 11.10.2026): eine ungemessene Aufteilung ist keine Angabe.**
+    #: ``None``, wenn kein aktives Gerät des Monats die Achse misst (``heizung_gemessen``/``warmwasser_gemessen``) —
+    #: eine Wärmepumpe nur mit Gesamtwärme hat keine Heizwärme 0, sondern eine unbekannte Aufteilung (K1: nur eine
+    #: gemessene 0 ist 0). Bis dahin stand hier 0.0, und Tabelle, Übersicht, Zeitreihe und Jahr-Verlauf zeigten „0 kWh"
+    #: neben Cockpit → Monat mit „—". Wer summiert, liest ``or 0.0`` und fragt die Marke, ob die Summe eine Angabe ist.
+    heizung_kwh: Optional[float] = None
+    warmwasser_kwh: Optional[float] = None
     strom_heizen_kwh: float = 0.0
     strom_warmwasser_kwh: float = 0.0
     #: **N-479 — „gemessen" je Funktion.** Hat mindestens ein aktives Gerät des

@@ -394,8 +394,9 @@ def mengen_aus_monatszeilen(
         monatsreihe.append({
             'jahr': md.jahr, 'monat': md.monat,
             'strom_kwh': float(_zeilen_strom),
-            'heizung_kwh': float(heizwaerme_kwh(d) or 0.0),
-            'warmwasser_kwh': float(_ww),
+            # N-673: eine Achse, die die Zeile nicht misst, ist keine Angabe (None) — die Summen oben addieren 0.
+            'heizung_kwh': (float(heizwaerme_kwh(d)) if heizwaerme_kwh(d) is not None else None),
+            'warmwasser_kwh': (float(_ww) if hat_wp_warmwasser_wert(d, wp.parameter) else None),
             'waerme_kwh': float(_md_waerme),
         })
         # P12: dieselbe Rechnung wie die Gesamtzahl, nur je Zeile.

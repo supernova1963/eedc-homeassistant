@@ -517,7 +517,8 @@ def _monatswert(
         # Gesamtzähler kommt seine Menge vollständig an, auch wenn nur EINE der
         # beiden Achsen daneben gepflegt ist. Ein blankes „sonst die
         # Gesamtwärme" verlöre in dieser Lage die Differenz.
-        _ww_gesendet = wp.warmwasser_kwh if wp.warmwasser_kwh > 0 else 0.0
+        # N-673: eine ungemessene Warmwasser-Achse ist `None` (keine Angabe) — gesendet wird dann nichts, wie bei 0.
+        _ww_gesendet = wp.warmwasser_kwh if (wp.warmwasser_kwh or 0.0) > 0 else 0.0
         _heiz_gesendet = max(wp.waerme_kwh - _ww_gesendet, 0.0)
         if _heiz_gesendet > 0:
             monatswert_data["wp_heizwaerme_kwh"] = round(_heiz_gesendet, 1)

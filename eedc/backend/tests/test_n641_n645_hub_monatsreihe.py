@@ -121,16 +121,18 @@ async def _wp_karten(db, anlage) -> dict:
 def _wp_summen_wie_kopf(karte) -> None:
     z, r = karte.zusammenfassung, karte.monatsreihe
     assert round(sum(m.strom_kwh for m in r), 1) == z["gesamt_stromverbrauch_kwh"]
-    assert round(sum(m.heizung_kwh for m in r), 1) == z["gesamt_heizenergie_kwh"]
-    assert round(sum(m.warmwasser_kwh for m in r), 1) == z["gesamt_warmwasser_kwh"]
+    # N-673: eine ungemessene Achse ist in der Zeile None (keine Angabe) und trägt zur Kopf-Summe 0 bei.
+    assert round(sum(m.heizung_kwh or 0.0 for m in r), 1) == z["gesamt_heizenergie_kwh"]
+    assert round(sum(m.warmwasser_kwh or 0.0 for m in r), 1) == z["gesamt_warmwasser_kwh"]
     assert round(sum(m.waerme_kwh for m in r), 1) == z["gesamt_waerme_kwh"]
 
 
 @pytest.mark.asyncio
 async def test_n643_gemeinsamer_waermezaehler_traegt_die_gesamtwaerme(db):
     """W1 (M05): Gesamtstrom + EIN Wärmezähler ``waerme_kwh`` — keine Heiz-/Warmwasser-Achse. Der Verlauf las
-    ``heizenergie_kwh`` (0), der Kopf nennt 648. Die Reihe trägt die Gesamtwärme (D1: Gesamtwert vor Summanden),
-    Heizwärme und Warmwasser bleiben 0 wie im Kopf — die Wärme hat keine dritte Achse (Konzept Wärme/Klima §3)."""
+    ``heizenergie_kwh`` (0), der Kopf nennt 648. Die Reihe trägt die Gesamtwärme (D1: Gesamtwert vor Summanden);
+    Heizwärme und Warmwasser sind seit N-673 „keine Angabe" (None) — die Aufteilung ist nicht gemessen (K1: nur eine
+    gemessene 0 ist 0). Die Kopf-Summen bleiben 0 (Σ ohne die ungemessenen Zeilen)."""
     anlage = await _anlage(db, "W1")
     wp = await _inv(db, anlage, "waermepumpe", "WP", alter_energietraeger="gas", alter_preis_cent_kwh=10.0)
     db.add(_zeile(wp, 6, stromverbrauch_kwh=216.0, waerme_kwh=648.0))
@@ -138,7 +140,7 @@ async def test_n643_gemeinsamer_waermezaehler_traegt_die_gesamtwaerme(db):
 
     karte = (await _wp_karten(db, anlage))["WP"]
     (m,) = karte.monatsreihe
-    assert (m.strom_kwh, m.heizung_kwh, m.warmwasser_kwh, m.waerme_kwh) == (216.0, 0.0, 0.0, 648.0)
+    assert (m.strom_kwh, m.heizung_kwh, m.warmwasser_kwh, m.waerme_kwh) == (216.0, None, None, 648.0)
     assert karte.zusammenfassung["hat_warmwasser_achse"] is False
     _wp_summen_wie_kopf(karte)
 

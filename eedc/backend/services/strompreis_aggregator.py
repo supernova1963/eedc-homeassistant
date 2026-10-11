@@ -689,6 +689,37 @@ async def wirksamer_arbeitspreis_cent(
     return preis
 
 
+async def ev_preis_zeitfenster_cent(
+    db: AsyncSession, anlage_id: int, jahr: int, monat: int, tarif,
+) -> Optional[float]:
+    """Der mit dem vermiedenen Bezug gewichtete Ø-Preis eines Monats unter einem Zeitfenster-Tarif (HT/NT), ct/kWh.
+
+    **N-669, Konzept Flex-Tarife A-2 (Bauweg A1):** Σ(EV_s × Preis_s) ÷ Σ EV_s über die Stundenzeilen des Monats, mit
+    ``EV_s = max(0, PV_s − Einspeisung_s)`` und dem Slot-Preis aus dem Vertrag (``preis_je_slot``) — **dieselbe**
+    Funktion, mit der der Tag seinen ``ev_preis_cent`` bildet (``lade_slot_kosten_je_tag``, gruppiert nach ``datum``).
+    Der Monat ist damit die Summe seiner Tage, nicht eine zweite Rechnung daneben.
+
+    ``None`` ohne Stundenzeile mit vermiedenem Bezug (handgetragene Monate) — der Aufrufer fällt dann auf den
+    Bezugs-Ø zurück, wie vor dem Bau. ⚠ Kein abgerechneter Ø als Slot-Stufe: diese Funktion steht in Stufe 3 der
+    Kaskade, ein gepflegter Monats-Ø hat dort schon in Stufe 1 entschieden.
+    """
+    if tarif is None or not hat_zeitfenster(tarif):
+        return None
+    von, bis_excl = monats_fenster(jahr, monat)
+    je_tag = await lade_slot_kosten_je_tag(
+        db, anlage_id, von=von, bis=bis_excl - timedelta(days=1), tarif_fuer=lambda _tag: tarif,
+    )
+    kosten = 0.0
+    menge = 0.0
+    for sk in je_tag.values():
+        if sk.ev_mittel_cent is not None and sk.ev_menge_kwh > 0:
+            kosten += sk.ev_mittel_cent * sk.ev_menge_kwh / 100.0
+            menge += sk.ev_menge_kwh
+    if menge <= 0:
+        return None
+    return round(kosten * 100.0 / menge, 4)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Die vollständige Auflösung des Monats-Netzbezugspreises (#412, 11.09.2026)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -869,6 +900,14 @@ async def _aufgeloester_monatspreis_ungecacht(
 
     # 3 — Zeitfenster (HT/NT).
     if tarif_hat_zeitfenster:
+        # ⭐ N-669 (Konzept Flex-Tarife A-2, Bauweg A1, 11.10.2026): die Ersparnis bewertet den vermiedenen Bezug mit
+        # dem Preis SEINER Stunde — der EV-Ø des Zeitfenster-Tarifs entsteht aus denselben Stundenzeilen und derselben
+        # Slot-Regel wie der Tag (`ev_preis_zeitfenster_cent`) ⇒ Σ Tage = Monat durch die Bauweise. Ohne Stundenzeile
+        # mit vermiedenem Bezug bleibt `ev_cent` None, und die Ersparnis fällt wie bisher auf den Bezugs-Ø zurück.
+        # Vorher stand hier nur der Bezugs-Ø: gemessen 12 kWh EV mittags (HT 30 ct), Bezug abends (NT 15 ct) ⇒
+        # Monat 1,80 €, Σ Tage 3,60 €.
+        if ev_cent is None:
+            ev_cent = await ev_preis_zeitfenster_cent(db, anlage_id, jahr, monat, tarif)
         gewichtet = await wirksamer_arbeitspreis_cent(db, anlage_id, jahr, monat, tarif)
         if gewichtet != stammpreis:
             return MonatsPreis(

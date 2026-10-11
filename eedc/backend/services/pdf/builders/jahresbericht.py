@@ -285,8 +285,11 @@ async def build_jahresbericht_context(
     wp_waerme = sum(f.wp.waerme_kwh for f in fakten)
     # §9.2 — Abgabe an Dritte über den Berichtszeitraum (kein Eigenverbrauch).
     abgabe_gesamt = sum(f.sonstiges.abgabe_kwh for f in fakten)
-    wp_heizung = sum(f.wp.heizung_kwh for f in fakten)
-    wp_warmwasser = sum(f.wp.warmwasser_kwh for f in fakten)
+    # N-673: eine ungemessene Achse ist „keine Angabe" (None) — die Summe gibt es nur, wenn ein Monat sie misst.
+    wp_heizung = (sum(f.wp.heizung_kwh or 0.0 for f in fakten)
+                  if any(f.wp.heizung_kwh is not None for f in fakten) else None)
+    wp_warmwasser = (sum(f.wp.warmwasser_kwh or 0.0 for f in fakten)
+                     if any(f.wp.warmwasser_kwh is not None for f in fakten) else None)
     wp_strom = sum(f.wp.strom_kwh for f in fakten)
     # N-256: die Grundmenge des fossilen Vergleichs — nur Geräte mit Ersatz.
     wp_waerme_mit_ersatz = sum(f.wp.waerme_mit_ersatz_kwh for f in fakten)
@@ -935,8 +938,9 @@ async def build_jahresbericht_context(
             "waerme_kwh": (
                 wp_waerme if wp_waerme > 0 or any(f.wp.waerme_gemessen for f in fakten) else None
             ),
-            "heizung_kwh": wp_heizung if wp_heizung > 0 else None,
-            "warmwasser_kwh": wp_warmwasser if wp_warmwasser > 0 else None,
+            # N-673: dieselbe Trennung für die Aufteilung — gemessen (auch 0) ⇒ Wert, ungemessen ⇒ „—".
+            "heizung_kwh": wp_heizung,
+            "warmwasser_kwh": wp_warmwasser,
             "strom_kwh": wp_strom,
             "cop": wp_cop,
             "cop_grund": _wpk.arbeitszahl.grund,

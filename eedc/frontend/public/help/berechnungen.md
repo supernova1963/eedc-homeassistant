@@ -435,6 +435,12 @@ CO2-Einsparung (kg)      = PV_Erzeugung * 0.38               (VERALTET — s. Ka
 > Wochentag und Uhrzeit, deshalb ist Σ Preis × kWh über die Zellen dieselbe Zahl wie über die Stunden). Alle Monate
 > einer Seite, in denen ein Zeitfenster-Tarif gilt, kommen in EINER Abfrage (vorher je Monat und Tarif eine, an der
 > Prüfkopie 104 je Übersicht). Deckt ein Netzbezugs-Zähler den Monat nicht, gewichten die Stundenzeilen wie bisher.
+> **Die Eigenverbrauchs-Ersparnis** bewertet den vermiedenen Bezug dagegen mit dem HT/NT-Preis **seiner** Stunde
+> (A-2, seit N-669, 11.10.2026): Σ(max(0, PV − Einspeisung) × Fensterpreis) ÷ Σ max(0, PV − Einspeisung) über die
+> Stundenzeilen des Monats — dieselben Zeilen und dieselbe Slot-Regel wie der Tag, deshalb ist die Monats-Ersparnis
+> die Summe der Tage (`strompreis_aggregator.ev_preis_zeitfenster_cent`). Ohne Stundenzeilen bleibt der Bezugs-Ø
+> der Rückfall. Bis dahin nahm der Monat den Bezugs-Ø: Probe Matrix-Form T4 (NT mittags 15 ct, nachts 20 ct, sonst
+> 30 ct) 96,00 € statt 90,00 € = Σ Tage.
 
 **§51 EEG im Einspeise-Erlös:** `Einspeisung_neg_Preis` sind die kWh, die in Stunden
 mit negativem Börsenpreis eingespeist wurden — für betroffene Anlagen entfällt dafür

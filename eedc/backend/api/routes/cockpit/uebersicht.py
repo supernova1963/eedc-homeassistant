@@ -115,8 +115,9 @@ class CockpitUebersichtResponse(BaseModel):
     # Wärmepumpe aggregiert
     wp_waerme_kwh: float
     wp_strom_kwh: float
-    wp_heizung_kwh: float
-    wp_warmwasser_kwh: float
+    #: N-673: ``None`` = keine Angabe (kein Gerät misst die Achse), nicht 0.
+    wp_heizung_kwh: Optional[float] = None
+    wp_warmwasser_kwh: Optional[float] = None
     wp_cop: Optional[float]
     #: Warum es die Zahl nicht gibt (**S3**: „nicht ‚—', sondern der Grund").
     #: Bis 02.09.2026 nahm diese Sicht nur `.wert` — die Sperre wirkte, ihre
@@ -324,8 +325,11 @@ async def get_cockpit_uebersicht(
     # darf nicht wieder durch den Strom geteilt werden — heraus käme exakt die
     # gepflegte JAZ, also eine Zahl, die nichts misst.
     wp_waerme_abgeleitet = sum(f.wp.waerme_abgeleitet_kwh for f in fakten)
-    wp_heizung = sum(f.wp.heizung_kwh for f in fakten)
-    wp_warmwasser = sum(f.wp.warmwasser_kwh for f in fakten)
+    # N-673: eine ungemessene Achse ist „keine Angabe" — die Summe gibt es nur, wenn ein Monat sie misst.
+    wp_heizung = (sum(f.wp.heizung_kwh or 0.0 for f in fakten)
+                  if any(f.wp.heizung_kwh is not None for f in fakten) else None)
+    wp_warmwasser = (sum(f.wp.warmwasser_kwh or 0.0 for f in fakten)
+                     if any(f.wp.warmwasser_kwh is not None for f in fakten) else None)
     bkw_erzeugung = sum(f.bkw.erzeugung_kwh for f in fakten)
     bkw_eigenverbrauch = sum(f.bkw.eigenverbrauch_gemessen_kwh for f in fakten)
     sonstiges_erzeugung = sum(f.sonstiges.erzeugung_kwh for f in fakten)
@@ -948,8 +952,8 @@ async def get_cockpit_uebersicht(
         hat_speicher=hat_speicher,
         wp_waerme_kwh=round(wp_waerme, 1),
         wp_strom_kwh=round(wp_strom, 1),
-        wp_heizung_kwh=round(wp_heizung, 1),
-        wp_warmwasser_kwh=round(wp_warmwasser, 1),
+        wp_heizung_kwh=round(wp_heizung, 1) if wp_heizung is not None else None,
+        wp_warmwasser_kwh=round(wp_warmwasser, 1) if wp_warmwasser is not None else None,
         wp_cop=round(wp_cop, 2) if wp_cop else None,
         wp_cop_grund=_wp_az.grund,
         wp_ersparnis_euro=round(wp_ersparnis, 2),

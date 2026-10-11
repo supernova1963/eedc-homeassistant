@@ -260,8 +260,10 @@ export interface WpMonatsWert {
   jahr: number
   monat: number
   strom_kwh: number
-  heizung_kwh: number
-  warmwasser_kwh: number
+  /** N-673: `null` = keine Angabe — die Zeile misst keine Heizwärme (z. B. nur ein Gesamt-Wärmezähler). */
+  heizung_kwh: number | null
+  /** N-673: `null` = keine Angabe (kein Warmwasser-Wert in der Zeile). */
+  warmwasser_kwh: number | null
   waerme_kwh: number
 }
 

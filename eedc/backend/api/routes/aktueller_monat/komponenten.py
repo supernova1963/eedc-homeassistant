@@ -261,10 +261,14 @@ async def komponenten_detail(*, _wp_abgrenzung_je_funktion, _wp_funktion, _wp_ke
     # Monatszeile, wo sie eine Menge trägt, sonst die Faltung über die
     # Geräte-Mengen. Beide tragen dieselben Feldnamen — deshalb steht hier
     # **kein** zweiter Zweig, der dieselben vier Gates noch einmal schreibt.
-    if _wp_funktion.heizung_kwh > 0:
-        wp_heizung = round(_wp_funktion.heizung_kwh, 2)
-    if _wp_funktion.warmwasser_kwh > 0:
-        wp_warmwasser = round(_wp_funktion.warmwasser_kwh, 2)
+    # N-673 (Fachentscheid Master Wärme/Klima): eine gemessene Achse nennt ihren Wert — auch 0 —, eine ungemessene
+    # „keine Angabe". Bis dahin stand hier `> 0`: eine gemessene 0 hieß „—", während die Monats-Fakten 0 führten.
+    _hz = _wp_funktion.heizung_kwh
+    _ww = _wp_funktion.warmwasser_kwh
+    if _hz is not None and (_hz > 0 or _wp_funktion.heizung_gemessen):
+        wp_heizung = round(_hz, 2)
+    if _ww is not None and (_ww > 0 or _wp_funktion.warmwasser_gemessen):
+        wp_warmwasser = round(_ww, 2)
     if _wp_funktion.hat_split:
         # Auch 0-Werte zurückgeben, damit Frontend "getrennt erfasst, aktuell 0"
         # vs. "gar nicht getrennt erfasst" unterscheiden kann.

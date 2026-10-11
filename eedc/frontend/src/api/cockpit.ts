@@ -229,8 +229,9 @@ export interface KomponentenMonat {
   wp_waerme_kwh: number
   wp_strom_kwh: number
   wp_cop: number | null
-  wp_heizung_kwh: number
-  wp_warmwasser_kwh: number
+  /** N-673: `null` = keine Angabe (kein Gerät misst die Achse), nicht 0. */
+  wp_heizung_kwh: number | null
+  wp_warmwasser_kwh: number | null
   wp_strom_heizen_kwh: number
   wp_strom_warmwasser_kwh: number
   wp_ersparnis_euro: number

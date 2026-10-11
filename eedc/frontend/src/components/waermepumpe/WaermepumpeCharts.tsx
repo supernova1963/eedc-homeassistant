@@ -256,7 +256,7 @@ export function WaermepumpeMonatsTabelle(
     // Aufteilung genau dann, wenn sie vom Gesamtstrom abweicht.
     const herleitung =
       jaz?.wert != null && jaz.zaehler_kwh != null && jaz.nenner_kwh != null
-      && (rundKwh(jaz.zaehler_kwh) !== rundKwh(heiz + ww)
+      && (rundKwh(jaz.zaehler_kwh) !== rundKwh((heiz ?? 0) + (ww ?? 0))
           || rundKwh(jaz.nenner_kwh) !== rundKwh(strom))
         ? `${fmtZahl(jaz.zaehler_kwh, 0)} ÷ ${fmtZahl(jaz.nenner_kwh, 0)} kWh`
         : null

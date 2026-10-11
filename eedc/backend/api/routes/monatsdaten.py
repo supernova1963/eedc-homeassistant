@@ -858,8 +858,11 @@ async def list_monatsdaten_aggregiert(
             wp_strom_warmwasser_kwh=(
                 round(f.wp.strom_warmwasser_kwh, 1) if f.wp.hat_split else None
             ),
-            wp_heizung_kwh=round(f.wp.heizung_kwh, 1) if "waermepumpe" in typen else None,
-            wp_warmwasser_kwh=round(f.wp.warmwasser_kwh, 1) if "waermepumpe" in typen else None,
+            # N-673: ohne Messung der Achse „keine Angabe" statt 0 (die Fakten tragen dann `None`).
+            wp_heizung_kwh=(round(f.wp.heizung_kwh, 1)
+                            if "waermepumpe" in typen and f.wp.heizung_kwh is not None else None),
+            wp_warmwasser_kwh=(round(f.wp.warmwasser_kwh, 1)
+                               if "waermepumpe" in typen and f.wp.warmwasser_kwh is not None else None),
             wp_arbeitszahl=_wp_az.wert if "waermepumpe" in typen else None,
             wp_arbeitszahl_grund=_wp_az.grund if "waermepumpe" in typen else None,
             eauto_ladung_kwh=round(eauto.ladung_kwh, 1) if "e-auto" in typen else None,

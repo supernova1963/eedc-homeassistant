@@ -481,8 +481,9 @@ def _wp_fakten(roh: _RohMonat) -> WpFakten:
         strom_mit_ersatz_kwh=roh.wp_strom_mit_ersatz,
         waerme_mit_ersatz_kwh=roh.wp_waerme_mit_ersatz,
         waerme_kwh=roh.wp_waerme,
-        heizung_kwh=roh.wp_heizung,
-        warmwasser_kwh=roh.wp_warmwasser,
+        # N-673: ohne Messung der Achse keine Angabe (None), eine gemessene 0 bleibt 0.
+        heizung_kwh=roh.wp_heizung if (roh.wp_heizung_gemessen or roh.wp_heizung > 0) else None,
+        warmwasser_kwh=roh.wp_warmwasser if (roh.wp_warmwasser_gemessen or roh.wp_warmwasser > 0) else None,
         strom_heizen_kwh=roh.wp_strom_heizen,
         strom_warmwasser_kwh=roh.wp_strom_warmwasser,
         heizung_gemessen=roh.wp_heizung_gemessen,

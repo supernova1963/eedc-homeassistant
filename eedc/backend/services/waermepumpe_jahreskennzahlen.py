@@ -140,8 +140,9 @@ def waermepumpe_jahreskennzahlen(
     wp_invs = list(wp_invs)
     waerme = sum(f.wp.waerme_kwh for f in fakten)
     strom = sum(f.wp.strom_kwh for f in fakten)
-    heizung = sum(f.wp.heizung_kwh for f in fakten)
-    warmwasser = sum(f.wp.warmwasser_kwh for f in fakten)
+    # N-673: eine ungemessene Achse ist ``None`` (keine Angabe) — in der Summe trägt sie nichts bei.
+    heizung = sum(f.wp.heizung_kwh or 0.0 for f in fakten)
+    warmwasser = sum(f.wp.warmwasser_kwh or 0.0 for f in fakten)
     waerme_abgeleitet = sum(f.wp.waerme_abgeleitet_kwh for f in fakten)
     stoerung = next(
         (f.wp.abgrenzung_stoerung for f in fakten if f.wp.abgrenzung_stoerung), None,
@@ -281,9 +282,9 @@ def waermepumpe_jahreskennzahlen(
     strom_heizen = sum(f.wp.strom_heizen_kwh for f in fakten if f.wp.hat_split)
     strom_ww = sum(f.wp.strom_warmwasser_kwh for f in fakten if f.wp.hat_split)
     je_funktion = arbeitszahl_je_funktion(
-        heizung_kwh=sum(f.wp.heizung_kwh for f in fakten if f.wp.hat_split),
+        heizung_kwh=sum(f.wp.heizung_kwh or 0.0 for f in fakten if f.wp.hat_split),
         strom_heizen_kwh=strom_heizen,
-        warmwasser_kwh=sum(f.wp.warmwasser_kwh for f in fakten if f.wp.hat_split),
+        warmwasser_kwh=sum(f.wp.warmwasser_kwh or 0.0 for f in fakten if f.wp.hat_split),
         strom_warmwasser_kwh=strom_ww,
         hat_split=hat_split,
         # **N-479: das Jahr darf denselben Zeitraum-Grund führen wie der Tag.**

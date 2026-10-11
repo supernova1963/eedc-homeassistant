@@ -59,10 +59,11 @@ class WpMonatsWert(BaseModel):
     monat: int
     #: ``get_wp_strom_kwh`` — dieselbe Strom-Definition wie Nenner und Monats-Fakten (W-15)
     strom_kwh: float
-    #: ``heizwaerme_kwh`` (Gerätefeld, sonst Betriebsart-Nutzenergie Heizen), 0 ohne Zähler — wie der Kopf
-    heizung_kwh: float
-    #: ``get_wp_warmwasser_kwh``
-    warmwasser_kwh: float
+    #: ``heizwaerme_kwh`` (Gerätefeld, sonst Betriebsart-Nutzenergie Heizen). N-673: ``None`` = keine Angabe — die
+    #: Zeile misst keine Heizwärme (z. B. nur ein Gesamt-Wärmezähler); nur eine gemessene 0 ist 0 (K1).
+    heizung_kwh: Optional[float] = None
+    #: ``get_wp_warmwasser_kwh``; N-673: ``None`` ohne Warmwasser-Wert in der Zeile.
+    warmwasser_kwh: Optional[float] = None
     #: ``waerme_gesamt_kwh`` — Gesamtwert vor Summanden (D1). Ohne Warmwasser-Achse trägt die Fläche „Wärme"
     #: diesen Wert (S2: ein gemeinsamer Zähler ist Gesamtwärme, keine Heizwärme)
     waerme_kwh: float

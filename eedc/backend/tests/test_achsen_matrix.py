@@ -33,7 +33,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -460,7 +460,30 @@ KATALOG: dict[str, list[Menge]] = {
               lambda f, t, w: round(_netz(f, t, w) * _preis_soll(f, w) / 100.0, 6),
               tag=lambda d: _p(d, "tw/netzbezug_kosten")),
     ],
+    # Form T4 (N-669): die Eigenverbrauchs-Ersparnis — Soll Σ(EV_h × Preis_h) über die Stunden (Konzept Flex A-2),
+    # und damit = Σ Tage. Die Monats-Fakten tragen kein Geld; Referenz ist Cockpit → Monat.
+    "geld": [
+        Menge("ev_ersparnis", {"cockpit_monat": "ev_ersparnis_euro", "cockpit_jahr": "ev_ersparnis_euro",
+                               "jahr_verlauf": "ev_ersparnis_euro", "tabelle": "ev_ersparnis_euro",
+                               "uebersicht": "ev_ersparnis_euro"},
+              lambda f, t, w: _geld_soll(f, t), tag=lambda d: _p(d, "tw/ev_ersparnis")),
+    ],
 }
+
+
+def _geld_soll(form, tage) -> float:
+    """Σ(EV_h × Preis_h) ÷ 100 über die Uhrstunden der Tage — EV_h = max(0, PV_h − Einspeisung_h), PV aus dem
+    Anlagenzähler der PV-Form (W2-R2: er füllt die Geräte ohne Zähler), Preis aus ``achsen_matrix.preis_zeitfenster``.
+    Unabhängig vom Produktcode (keine Slot-Regel, keine Kaskade)."""
+    pf = form.pvform
+    gesamt = mx._reihen(pf)["sensor.pv_gesamt"][0]
+    out = 0.0
+    for tag in tage:
+        for h in range(24):
+            t = datetime.combine(tag, datetime.min.time()) + timedelta(hours=h)
+            ev = max(0.0, gesamt(t) - form.einsp(t))
+            out += ev * am.preis_zeitfenster(h) / 100.0
+    return round(out, 6)
 
 
 def _wp_soll(form, menge: str, tage, *, name: Optional[str] = None, stunden=None) -> Any:
@@ -469,6 +492,7 @@ def _wp_soll(form, menge: str, tage, *, name: Optional[str] = None, stunden=None
     ``UNKLAR`` — Fachfrage des Masters. ``stunden`` (HA-Bauform E4d): dieselben Mengen über einzelne Stunden statt
     über Tage — der Teiltag des laufenden Monats der Monats-Fakten (``TEILTAG_STUNDEN``)."""
     out = 0.0
+    gemessen = False   # N-673: trägt irgendein Gerät die Achse (heizung/warmwasser)?
     for g in form.typ("waermepumpe"):
         if name is not None and g.name != name:
             continue
@@ -486,12 +510,12 @@ def _wp_soll(form, menge: str, tage, *, name: Optional[str] = None, stunden=None
             v = m("waerme_kwh") if hat("waerme_kwh") else (
                 m("heizenergie_kwh") + m("warmwasser_kwh") + m("betriebsart_nutzenergie_heizen_kwh"))
         elif menge == "heizung":
-            if hat("waerme_kwh") and not hat("heizenergie_kwh"):
-                return UNKLAR      # Gesamtwärme ohne Heiz-/WW-Zähler: die Aufteilung gibt K1–K5 nicht her
+            # N-673 (Fachentscheid Master, 11.10.2026): ohne Heiz-Zähler ist die Aufteilung keine Angabe (None),
+            # nicht 0 — nur eine gemessene 0 ist 0 (K1). Gilt für Gesamtwärme ohne Achsen (W1 · W5) wie für jedes Gerät.
+            gemessen = gemessen or hat("heizenergie_kwh") or hat("betriebsart_nutzenergie_heizen_kwh")
             v = m("heizenergie_kwh") + m("betriebsart_nutzenergie_heizen_kwh")
         elif menge == "warmwasser":
-            if hat("waerme_kwh") and not hat("warmwasser_kwh"):
-                return UNKLAR
+            gemessen = gemessen or hat("warmwasser_kwh")
             v = m("warmwasser_kwh")
         elif menge == "strom_heizen":
             v = m("strom_heizen_kwh")
@@ -507,6 +531,8 @@ def _wp_soll(form, menge: str, tage, *, name: Optional[str] = None, stunden=None
         else:
             raise KeyError(menge)
         out += v
+    if menge in ("heizung", "warmwasser") and not gemessen:
+        return None
     return round(out, 6)
 
 
@@ -715,8 +741,18 @@ def bewerte(fid: str, groesse: str, weg: str, inv: str, m: am.Messung) -> list[Z
                 continue
             ref = _wert(wurzeln, q, r)
             for s in sichten:
-                if s != r:
-                    z.append(_z(f"{q.name}:{s}", _wert(wurzeln, q, s), ref, notiz=f"Referenz {r}"))
+                if s == r:
+                    continue
+                if groesse == "wp" and q.name == "heizung" and s == "community":
+                    # N-673: der Payload ist ein Vertrag, keine Anzeige — `wp_heizwaerme_kwh` trägt bei einem
+                    # gemeinsamen Zähler die Gesamtwärme neben dem Warmwasser (Docstring `MonatswertInput`,
+                    # Community-Repo; `community_service.py`, N-391). Sein Soll: Wärme − Warmwasser, ohne Menge kein Feld.
+                    fk = wurzeln.get("fakten")
+                    rest = round((_p(fk, "wp/waerme_kwh") or 0.0) - (_p(fk, "wp/warmwasser_kwh") or 0.0), 1)
+                    z.append(_z(f"{q.name}:{s}", _wert(wurzeln, q, s), rest if rest > 0 else None,
+                                notiz="Payload-Vertrag (Gesamtwärme bei gemeinsamem Zähler)"))
+                    continue
+                z.append(_z(f"{q.name}:{s}", _wert(wurzeln, q, s), ref, notiz=f"Referenz {r}"))
     elif inv == "I2":
         for q in mengen:
             if q.nur_i1:
@@ -777,7 +813,7 @@ def bewerte(fid: str, groesse: str, weg: str, inv: str, m: am.Messung) -> list[Z
                 elif groesse == "sonstiges" and weg == "HA" and s == "fakten_tw" and soll is not UNKLAR:
                     # E4c: die Sonstiges-Gruppe des laufenden Monats aus den Kanälen trägt denselben Teiltag.
                     soll_s = round(soll + _sonst_teiltag(form, q.name, TEILTAG_STUNDEN), 6)
-                elif groesse == "wp" and weg == "HA" and s == "fakten_tw" and soll is not UNKLAR:
+                elif groesse == "wp" and weg == "HA" and s == "fakten_tw" and soll is not UNKLAR and soll is not None:
                     # E4d: die WP-Gruppe des laufenden Monats aus den Kanälen trägt denselben Teiltag.
                     soll_s = round(soll + _wp_soll(form, q.name, (), stunden=TEILTAG_STUNDEN), 6)
                 z.append(Zelle(f"{q.name}:{s}", _wert(wurzeln, q, s), "unklar", "unklar")
@@ -802,7 +838,10 @@ def bewerte(fid: str, groesse: str, weg: str, inv: str, m: am.Messung) -> list[Z
         for q in mengen:
             if q.nur_i1:
                 continue
-            werte = {s: _wert(wurzeln, q, s) for s in _sichten(q, ebene, wurzeln)}
+            werte = {s: _wert(wurzeln, q, s) for s in _sichten(q, ebene, wurzeln)
+                     # N-673: der Payload-Vertrag `wp_heizwaerme_kwh` trägt bei gemeinsamem Zähler die Gesamtwärme —
+                     # eine andere Menge als die Heizwärme der übrigen Sichten (I1 prüft ihn gegen seinen Vertrag).
+                     if not (groesse == "wp" and q.name == "heizung" and s == "community")}
             if q.tag is not None and datenstand:
                 werte["tag"] = q.tag(w_tage[juli[0].isoformat()])
             if any(isinstance(v, (int, float)) and not isinstance(v, bool) and v for v in werte.values()):
@@ -1146,8 +1185,9 @@ def _bewerte_hub(fid: str, groesse: str, weg: str, inv: str, m: am.Messung) -> l
         heiz, ww = [], []
         for g, k, s, j, d in _hub_geraete(form, hub, "waermepumpe", z):
             hat_ww = d.get("hat_ww")
-            heiz.append(j.get("heizung") or 0.0)
-            ww.append(j.get("warmwasser") or 0.0)
+            heiz.append(j.get("heizung"))
+            # Ohne Warmwasser-Achse führt der Hub keine Warmwasser-Menge (keine Spalte, keine Fläche) — keine Angabe.
+            ww.append(j.get("warmwasser") if hat_ww else None)
             if inv == "I4":
                 z += [_z(f"strom:Σreihe=kopf:{g.name}", s["strom"], k.get("gesamt_stromverbrauch_kwh"), tol=_TOL_KOPF),
                       _z(f"heizung:Σreihe=kopf:{g.name}", s["heizung"], k.get("gesamt_heizenergie_kwh"), tol=_TOL_KOPF),
@@ -1163,7 +1203,8 @@ def _bewerte_hub(fid: str, groesse: str, weg: str, inv: str, m: am.Messung) -> l
                 z += [_z(f"strom:juni=fakten:{g.name}", j.get("strom"), _p(fk, f"wp_je_geraet/{g.name}/strom_kwh")),
                       _z(f"waerme:juni=fakten:{g.name}", j.get("waerme") if j else None,
                          _p(fk, f"wp_je_geraet/{g.name}/waerme_kwh")),
-                      _z(f"heizung:juni=tuer:{g.name}", j.get("heizung"), j.get("tuer_heizung") or 0.0 if j else None,
+                      # N-673: ohne Heiz-Zähler „keine Angabe" (die Lesetür liefert dann None, nicht 0).
+                      _z(f"heizung:juni=tuer:{g.name}", j.get("heizung"), j.get("tuer_heizung") if j else None,
                          notiz="Lesetür `heizwaerme_kwh` derselben Zeile"),
                       _z(f"aussicht_strom:juni=tuer:{g.name}", j.get("aussicht_strom"), j.get("tuer_strom"),
                          notiz="Zeilen-Leser der Aussicht; HEIZ_MONATE nicht nachgebildet"),
@@ -1176,8 +1217,11 @@ def _bewerte_hub(fid: str, groesse: str, weg: str, inv: str, m: am.Messung) -> l
                 z.append(_z(f"jaz:kopf=Σzaehler/Σnenner:{g.name}", k.get("durchschnitt_cop"),
                             round(s["jaz_zaehler"] / nenner, 2) if nenner else None, tol=0.02))
         if inv == "I1":
-            z += [_z("heizung:Σgeraete_juni=fakten", round(sum(heiz), 4), _p(fk, "wp/heizung_kwh")),
-                  _z("warmwasser:Σgeraete_juni=fakten", round(sum(ww), 4), _p(fk, "wp/warmwasser_kwh"))]
+            # N-673: Σ über die Geräte, die die Achse messen — misst keines, ist die Summe keine Angabe.
+            def _sigma(werte):
+                return None if all(w is None for w in werte) else round(sum(w or 0.0 for w in werte), 4)
+            z += [_z("heizung:Σgeraete_juni=fakten", _sigma(heiz), _p(fk, "wp/heizung_kwh")),
+                  _z("warmwasser:Σgeraete_juni=fakten", _sigma(ww), _p(fk, "wp/warmwasser_kwh"))]
     elif groesse == "hub_sonstiges":
         for g, k, s, j, _d in _hub_geraete(form, hub, "sonstiges", z):
             if (g.parameter or {}).get("kategorie") == "erzeuger":
@@ -1541,17 +1585,14 @@ _U_W1 = ("W1 (Gesamtstrom + Gesamtwärme, Betriebsart nur als Etikett) — entsc
          "„Etikett“): der Betriebsmodus teilt den STROM je Stunde auf, die Wärme nicht (ein Wärmezähler ohne "
          "Funktionstrennung bleibt Gesamtwärme, Kennzahl nur gesamt). Soll Strom je Betriebsart: ohne Abschluss aus dem "
          "abgeleiteten Kanal, nach dem Abschluss derselbe Wert über den Kanal-Split (HA-Bauform E4d, H-1) — Juni "
-         "Heizen 198 · Warmwasser 18 (Abdeckung 720 h). Die Zellen bleiben gemessen mit Haltewert; Heizwärme: "
-         "Monats-Fakten 0, Cockpit → Monat keine, Community die ganze Wärme als Heizwärme (Community-Zuordnung: "
-         "Haltewert/Beobachtung, §8a)")
-_U_W5_SPLIT = ("W5 (nur Gesamtstrom und Gesamtwärme, beide 0): ohne Heiz-/Warmwasser-Zähler legt K1–K5 keine "
-               "Aufteilung fest — ob sie 0 oder „keine Angabe“ heißt, ist eine Fachfrage")
+         "Heizen 198 · Warmwasser 18 (Abdeckung 720 h). Die Zellen bleiben gemessen mit Haltewert. Heizung/Warmwasser "
+         "der Wärme haben seit N-673 ein Soll („keine Angabe“, `_wp_soll`) und stehen nicht mehr hier")
 _U_KLIMA_JAZ = ("Arbeitszahl eines Klimageräts mit Heiz- UND Kühlbetrieb: ob die Geräte-Zahl Kälte einrechnet oder "
                 "nur die Heizseite nennt, legen K1–K5 nicht fest (gemessen 3,0 = Heizen 54/18 = Kühlen 108/36)")
 SOLL_UNKLAR_MENGE: dict[tuple[str, str, str], str] = {
-    ("M05", "wp", "heizung"): _U_W1, ("M05", "wp", "warmwasser"): _U_W1,
+    # N-673 (11.10.2026): Heizung/Warmwasser von M05 (W1) und M07 (W5) haben jetzt ein Soll — „keine Angabe" ohne
+    # Heiz-/WW-Zähler (`_wp_soll`); der Eintrag `_U_W5_SPLIT` und die Heizung/WW-Zeilen von `_U_W1` sind entfallen.
     ("M05", "wp", "modus_heizen"): _U_W1, ("M05", "wp", "modus_warmwasser"): _U_W1,
-    ("M07", "wp", "heizung"): _U_W5_SPLIT, ("M07", "wp", "warmwasser"): _U_W5_SPLIT,
 }
 
 #: ``(Form, Größe, Weg, Invariante, Sicht) → Grund``: die Regel legt das Soll dieser Sicht nicht fest.
@@ -1700,6 +1741,8 @@ INVARIANTEN = ("I1", "I2", "I3", "I4", "I5", "I6")
 def _hat_zelle(form: am.Form, groesse: str, inv: str) -> bool:
     if inv == "I4" and groesse in ("netz", "preis"):
         return False
+    if groesse == "geld" and inv not in ("I1", "I2", "I3"):
+        return False      # T4 (N-669): eine Zahl in allen Sichten · Σ Tage · Soll — kein weiterer Ausbau
     return True
 
 
@@ -1823,8 +1866,8 @@ def test_register_zeigt_nur_auf_bestehende_zellen():
 
 
 def test_jede_auspraegung_steht_in_einer_form():
-    """Auftrag: jede Ausprägung (N1 … T3) steht in mindestens einer Form."""
+    """Auftrag: jede Ausprägung (N1 … T4) steht in mindestens einer Form (T4 seit N-669 in ``FORMEN_T4``)."""
     soll = {"N1", "N2", "N3", "P1", "P2", "P3", "P4", "W1", "W2", "W3", "W4", "W5", "E1", "E2", "E3", "E4",
-            "S1", "S2", "S3", "T1", "T2", "T3"}
-    ist = {a for f in am.FORMEN.values() for a in f.ausp}
+            "S1", "S2", "S3", "T1", "T2", "T3", "T4"}
+    ist = {a for f in am.MATRIX_FORMEN.values() for a in f.ausp}
     assert soll <= ist, sorted(soll - ist)

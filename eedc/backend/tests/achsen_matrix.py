@@ -131,7 +131,7 @@ class Form:
     einsp: RateFn = einsp_basis
     #: Abweichende Statistik-Reihe (Zählersprung) je Sensor: ``{sensor_id: Rate}`` — gilt für HA und SA.
     sprung: dict = field(default_factory=dict)
-    tarif: str = "fix"                    # fix · flex_sensor · flex_gepflegt
+    tarif: str = "fix"                    # fix · flex_sensor · flex_gepflegt · zeitfenster (T4, ``ZEITFENSTER``)
     #: Preis je Stunde in ct/kWh (Preissensor), ``None`` = kein Sensor.
     preis: Optional[Callable[[int], float]] = None
     gepflegt_cent: Optional[float] = None
@@ -294,8 +294,34 @@ FORMEN_W2: dict[str, Form] = {f.fid: f for f in (
                          ohne={"erzeugung_kwh": lambda t: E_AUSFALL[0] <= t < E_AUSFALL[1]}),)),
 )}
 
+# ── Form T4 — Zeitfenster-Tarif HT/NT (N-669, K5, 11.10.2026) ─────────────────
+#
+# Fester Arbeitspreis 30 ct mit zwei NT-Fenstern: mittags 12–14 Uhr 15 ct (trifft zwei der sechs PV-Stunden, also den
+# Eigenverbrauch) und nachts 0–6 Uhr 20 ct (trifft sechs der 18 Bezugsstunden). Je PV-Stunde (10–15 Uhr) 3,0 kWh
+# Erzeugung, 1,0 kWh Einspeisung ⇒ 2,0 kWh vermiedener Bezug: EV-Ø 25 ct (4 × 30 + 2 × 15 ÷ 6), Bezugs-Ø 26,67 ct
+# (6 × 20 + 12 × 30 ÷ 18). Bis N-669 bewertete der Monat den Eigenverbrauch mit dem Bezugs-Ø, der Tag mit dem Preis
+# seiner Stunde. Nur die Geld-Größe (``geld``), kein weiterer Ausbau. Steht nicht in ``FORMEN`` (andere Proben
+# iterieren sie).
+
+#: ``(von_stunde, bis_stunde, ct/kWh)`` — Uhrzeit, alle Wochentage.
+ZEITFENSTER: tuple[tuple[int, int, float], ...] = ((12, 14, 15.0), (0, 6, 20.0))
+
+
+def preis_zeitfenster(h: int) -> float:
+    """Preis der Uhrstunde ``[h, h+1)`` unter ``ZEITFENSTER`` (sonst der Stammpreis) — unabhängig vom Produktcode."""
+    for von, bis, ct in ZEITFENSTER:
+        if von <= h < bis:
+            return ct
+    return STAMM_CENT
+
+
+FORMEN_T4: dict[str, Form] = {f.fid: f for f in (
+    Form("T4", "Zeitfenster-Tarif (HT/NT): NT mittags 12–14 Uhr und nachts 0–6 Uhr, fester Arbeitspreis 30 ct",
+         ("geld",), ("T4",), tarif="zeitfenster"),
+)}
+
 #: Alle Formen der Abnahme-Matrix.
-MATRIX_FORMEN: dict[str, Form] = {**FORMEN, **FORMEN_W2}
+MATRIX_FORMEN: dict[str, Form] = {**FORMEN, **FORMEN_W2, **FORMEN_T4}
 
 
 def w2_menge(fn: RateFn, ohne: Optional[Callable], tage) -> float:
@@ -340,7 +366,15 @@ async def seed_anlage(db: AsyncSession, form: Form) -> tuple[int, dict[str, int]
     """PV-Seite über ``pv_achse_matrix.seed_anlage``, dazu Tarif, Geräte und deren Zuordnung."""
     aid, ids = await mx.seed_anlage(db, form.pvform)
     tarif = (await db.execute(select(Strompreis).where(Strompreis.anlage_id == aid))).scalar_one()
-    if form.tarif != "fix":
+    if form.tarif == "zeitfenster":
+        # T4 (N-669): ein FESTER Bezug mit Zeitfenstern — die Eigenschaft hängt am Tarif, nicht an `vertragsart`
+        # (`zeittarif.hat_zeitfenster`).
+        from backend.models.strompreis import StrompreisZeitfenster
+
+        await db.refresh(tarif, ["zeitfenster"])
+        tarif.zeitfenster = [StrompreisZeitfenster(von_stunde=von, bis_stunde=bis, arbeitspreis_cent_kwh=ct,
+                                                   wochentage="0123456") for von, bis, ct in ZEITFENSTER]
+    elif form.tarif != "fix":
         tarif.vertragsart = "dynamisch"
     for g in form.geraete:
         kw: dict[str, Any] = dict(anlage_id=aid, typ=g.typ, bezeichnung=g.name, anschaffungsdatum=mx.D0,
@@ -827,6 +861,7 @@ async def miss_hub(db, aid: int, ids: dict, form: Form) -> dict:
         get_speicher_netzladung_kwh,
         get_wp_strom_kwh,
         get_wp_warmwasser_kwh,
+        hat_wp_warmwasser_wert,
     )
     from backend.services.monats_fakten import lade_monats_fakten
 
@@ -884,8 +919,10 @@ async def miss_hub(db, aid: int, ids: dict, form: Form) -> dict:
             leser = {
                 # WaermepumpeCharts.tsx `prepWpMonate` (N-643: aus `monatsreihe`) — die Felder der Zeile; gezeichnet
                 # werden mit Warmwasser-Achse `heizung` + `warmwasser`, ohne sie EINE Fläche `waerme`
-                "heizung": lambda r: _js_oder_0(r["r"].get("heizung_kwh")),
-                "warmwasser": lambda r, w=hat_ww: _js_oder_0(r["r"].get("warmwasser_kwh")) if w else 0.0,
+                # N-673: die Zeile trägt `None` für eine ungemessene Achse; `prepWpMonate` reicht sie durch, die
+                # Tabelle zeigt „—" (`fmtZahl`) — nachgebildet ohne `|| 0`.
+                "heizung": lambda r: r["r"].get("heizung_kwh"),
+                "warmwasser": lambda r, w=hat_ww: r["r"].get("warmwasser_kwh") if w else 0.0,
                 # die gezeichnete Wärme: Σ der Flächen (mit Achse Heizung + Warmwasser, ohne die Wärme gesamt)
                 "waerme": lambda r, w=hat_ww: (_js_oder_0(r["r"].get("heizung_kwh"))
                                                + _js_oder_0(r["r"].get("warmwasser_kwh"))) if w
@@ -900,7 +937,8 @@ async def miss_hub(db, aid: int, ids: dict, form: Form) -> dict:
                 "aussicht_waerme": lambda r: _js_oder_0(r["r"].get("waerme_kwh")),
                 # Lesetüren auf derselben Zeile (Soll)
                 "tuer_heizung": lambda r: heizwaerme_kwh(r["vd"]),
-                "tuer_warmwasser": lambda r, p=params: get_wp_warmwasser_kwh(r["vd"], p),
+                "tuer_warmwasser": lambda r, p=params: (get_wp_warmwasser_kwh(r["vd"], p)
+                                                        if hat_wp_warmwasser_wert(r["vd"], p) else None),
                 "tuer_strom": lambda r, p=params: get_wp_strom_kwh(r["vd"], p),
                 "tuer_waerme": lambda r, p=params: waerme_gesamt_kwh(
                     r["vd"].get("waerme_kwh"), heizwaerme_kwh(r["vd"]), get_wp_warmwasser_kwh(r["vd"], p)),
