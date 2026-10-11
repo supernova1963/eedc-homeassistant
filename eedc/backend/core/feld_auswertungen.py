@@ -247,7 +247,7 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
         _a(COCKPIT_TAG, "services/live_tagesverlauf_service.py", "get_tagesverlauf"),
     ),
     (TYP_ANLAGE, "aussentemperatur_c"): (
-        _a(COCKPIT_LIVE, "api/routes/live_wetter.py", "get_live_wetter"),
+        _a(COCKPIT_LIVE, "api/routes/live_wetter_antwort.py", "_ha_aussentemperatur"),
     ),
 
     # ── PV-Module ────────────────────────────────────────────────────────────

@@ -460,6 +460,7 @@ eedc-homeassistant/                  ← Source of Truth (alle Änderungen hier)
     │   │   │   └── _shared.py           # Antwortmodelle, SerieInfo-Auflösung
     │   │   ├── live_dashboard.py        # Live-Kern (Fluss, Tagesverlauf, Börsenpreise)
     │   │   ├── live_mqtt_inbound.py · live_wetter.py
+    │   │   ├── live_wetter_antwort.py   # Phasen der Wetter-Route `get_live_wetter` (seit 11.10.2026, RF-7)
     │   │   ├── mqtt_gateway.py · mqtt_presets.py   # beide unter /api/live eingehängt
     │   │   ├── datenquellen.py          # Datenquellen-Fläche (ein Feld = eine Quelle)
     │   │   ├── sensor_mapping.py        # HA-Sensor-Zuordnung (nur HA_MODE)

@@ -135,7 +135,7 @@ def test_route_traegt_die_reihenfolge_im_quelltext():
     """
     from pathlib import Path
     quelle = (Path(__file__).resolve().parents[1]
-              / "api" / "routes" / "live_wetter.py").read_text(encoding="utf-8")
+              / "api" / "routes" / "live_wetter_antwort.py").read_text(encoding="utf-8")
 
     assert 'sfml_disc.wert("uebermorgen_kwh")' in quelle, (
         "die SFML-Rolle für Übermorgen wird nicht mehr gelesen — genau der Befund"
