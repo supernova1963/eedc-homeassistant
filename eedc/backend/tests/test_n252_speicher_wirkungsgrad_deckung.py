@@ -43,6 +43,9 @@ BRAUCHT_DEN_SOT = [
     "services/energie_profil/tage_werte.py",
     # N-264: der letzte Pfad mit eigener Semantik (stilles Cap auf 100 %).
     "services/speicher_wirtschaftlichkeit.py",
+    # N-700 (12.10.2026): der Jahresbericht druckte `_safe_div(entladung, ladung) × 100` — eine Aufrufform, die die
+    # Abwesenheits-Regex `_ROH` nicht sieht („110,0 %" im PDF, Cockpit „nicht ermittelbar").
+    "services/pdf/builders/jahresbericht.py",
 ]
 
 #: Der Daten-Checker ist der **einzige** legitime Verwender des ungekappten

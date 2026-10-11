@@ -30,6 +30,7 @@ from backend.core.berechnungen import (
     relevante_kosten_aus_investitionen,
     soll_im_laufmonat,
     spezifischer_ertrag_kwh_kwp,
+    speicher_wirkungsgrad,
     vollzyklen as berechne_vollzyklen,
 )
 from backend.core.berechnungen.dienstliche_ladekosten import DIENSTLICHE_LADEKOSTEN_HINWEIS
@@ -65,7 +66,6 @@ from backend.core.berechnungen.erzeuger_traeger import (
     verteilungsnenner_kwp,
 )
 from backend.core.investition_kennwerte import get_erzeuger_kwp
-from backend.models.strompreis import Strompreis
 
 from ..charts import autarkie_chart, energie_fluss_chart, pv_erzeugung_chart
 from .finanzbericht import TYP_LABELS as _INV_TYP_LABELS
@@ -107,13 +107,15 @@ async def build_jahresbericht_context(
 
     ist_gesamtzeitraum = jahr is None
 
-    strompreis, netzbezug_cent, einspeise_cent = await _strompreis_kopf(db, anlage_id)
     b = await _bestand(db, anlage, anlage_id, jahr)
     investitionen = b.investitionen
     pvgis_prognose, pvgis_by_month = await _pvgis_monatswerte(db, anlage_id)
     fakten, fakten_by_ym, _ust_saetze, _ust_monate = await _fakten_und_ust(
         db, anlage, anlage_id, jahr, investitionen, ist_gesamtzeitraum,
     )
+    # N-693: der Kopf-Tarif braucht die Monate des Berichts — er steht deshalb hinter den Fakten (bis 12.10.2026
+    # Abschnitt 2 vor allen anderen, als Handquery „jüngster Eintrag").
+    tarif_zeitraeume = await _strompreis_kopf(db, anlage_id, fakten, jahr)
     alle_jahre, start_jahr, end_jahr = await _berichtsjahre(db, anlage, anlage_id, jahr, ist_gesamtzeitraum)
     s = _fakten_summen(fakten)
     t = await _monats_tabelle(
@@ -153,7 +155,7 @@ async def build_jahresbericht_context(
             "latitude": anlage.latitude,
             "longitude": anlage.longitude,
         },
-        "tarif": _kontext_tarif(strompreis, netzbezug_cent, einspeise_cent),
+        "tarif": _kontext_tarif(tarif_zeitraeume),
         "kpis": {
             "pv_erzeugung_kwh": t.pv_gesamt,
             "eigenverbrauch_kwh": t.ev_gesamt,
@@ -223,23 +225,53 @@ async def build_jahresbericht_context(
     }
 
 
-async def _strompreis_kopf(db: AsyncSession, anlage_id: int):
-    """Abschnitt 2 — der Tarif im Berichtskopf: (Strompreis oder None, Netzbezug-Cent, Einspeise-Cent)."""
-    # ── 2. Strompreis (neuester Eintrag — nur für die Tarif-Anzeige im
-    #        Berichtskopf). Die Finanzrechnung pro Monat löst den jeweils
-    #        gültigen Tarif separat über `lade_tarife_fuer_anlage` auf
-    #        (historische Tarife, #326/rilmor-mhrs) — siehe `_tarif_fuer_monat`
-    #        unten. Cockpit/Auswertungen rechnen identisch.
-    res = await db.execute(
-        select(Strompreis)
-        .where(Strompreis.anlage_id == anlage_id)
-        .order_by(Strompreis.gueltig_ab.desc())
-        .limit(1)
-    )
-    strompreis = res.scalar_one_or_none()
-    netzbezug_cent = strompreis.netzbezug_arbeitspreis_cent_kwh if strompreis else NETZBEZUG_DEFAULT_CENT
-    einspeise_cent = strompreis.einspeiseverguetung_cent_kwh if strompreis else EINSPEISEVERGUETUNG_DEFAULT_CENT
-    return strompreis, netzbezug_cent, einspeise_cent
+@dataclass
+class _TarifZeitraum:
+    """Ein Abschnitt des Berichtszeitraums mit demselben Allgemeintarif (oder ohne Tarif)."""
+
+    tarif: Optional[object]
+    von: tuple[int, int]
+    bis: tuple[int, int]
+
+
+async def _strompreis_kopf(db: AsyncSession, anlage_id: int, fakten, jahr: Optional[int]) -> list[_TarifZeitraum]:
+    """Abschnitt 2 — die Allgemeintarife im Berichtskopf: je Monat des Berichts der Tarif seines Stichtags (P8).
+
+    N-693 (12.10.2026): dieselbe Auflösung wie die Monats-Fakten, mit denen jede Zeile des Berichts rechnet
+    (`monats_fakten/tarif.py::_lade_tarif`: `lade_tarife_fuer_anlage(target_date=Monatserster)["allgemein"]`; hier
+    über `lade_tarife_je_stichtag`, das dieselbe Regel `tarife_zum_stichtag` für alle Monate mit EINER Abfrage
+    anwendet). Aufeinanderfolgende Monate mit demselben Tarif bilden einen Zeitraum; ein Monat ohne gültigen Tarif
+    rechnet mit der Vorbelegung und steht als eigener Zeitraum da.
+
+    ⛔ Bis dahin stand hier eine Handquery „jüngster Eintrag" ohne `verwendung` und ohne Stichtag: der Kopf nannte
+    einen WP-, Wallbox- oder künftigen Tarif, und ein Bericht 2024 druckte den Tarif ab 10/2025. Gerechnet wurde mit
+    dem Kopf nie — die Monatszeilen lösen ihren Tarif seit #326 selbst auf.
+
+    Ohne Monate (leerer Bericht) gilt der Stichtag des Berichtsjahres: Dezember des Jahres, höchstens der laufende
+    Monat; im Gesamtzeitraum der laufende Monat.
+    """
+    from backend.api.routes.strompreise import lade_tarife_je_stichtag
+
+    monate = sorted({f.schluessel for f in fakten})
+    if not monate:
+        heute = date.today()
+        laufend = (heute.year, heute.month)
+        monate = [min((jahr, 12), laufend) if jahr is not None else laufend]
+    tarife_je = await lade_tarife_je_stichtag(db, anlage_id, [date(j, m, 1) for j, m in monate])
+
+    zeitraeume: list[_TarifZeitraum] = []
+    for j, m in monate:
+        tarif = tarife_je[date(j, m, 1)]["allgemein"]
+        letzter = zeitraeume[-1] if zeitraeume else None
+        if letzter is not None and _tarif_id(letzter.tarif) == _tarif_id(tarif):
+            letzter.bis = (j, m)
+        else:
+            zeitraeume.append(_TarifZeitraum(tarif=tarif, von=(j, m), bis=(j, m)))
+    return zeitraeume
+
+
+def _tarif_id(tarif) -> Optional[int]:
+    return tarif.id if tarif is not None else None
 
 
 def _kwp_im_monat(investitionen, anlage, j: Optional[int], m: int) -> float:
@@ -829,7 +861,13 @@ def _geraete_kennzahlen(investitionen, fakten, b: _Bestand, s: _FaktenSummen) ->
     emob_pv, emob_ladung = s.emob_pv, s.emob_ladung
     # Vollzyklen = ENTLADUNG ÷ Kapazität über den Layer-SoT (Kanon 2026-07-28).
     speicher_zyklen = berechne_vollzyklen(speicher_entladung, speicher_kapazitaet)
-    speicher_eff = _safe_div(speicher_entladung, speicher_ladung) * 100 if speicher_ladung else None
+    # N-700: η über den Layer-SoT (N-252) wie Cockpit → Übersicht — ein Berichtszeitraum ist lang genug, dass sich
+    # der SoC-Übertrag ausmittelt (`fenster_lang`), die Obergrenze gilt trotzdem: über 100 % kann kein Speicher, der
+    # Bericht druckt dann „–" statt der Zahl. Hier stand `_safe_div(entladung, ladung) × 100` — der Bericht zeigte
+    # „110,0 %", wo das Cockpit „nicht ermittelbar" sagt, und der N-252-Wächter sah die Aufrufform nicht.
+    speicher_eff = speicher_wirkungsgrad(
+        speicher_ladung, speicher_entladung, None, langes_fenster_quelle="fenster_lang",
+    ).prozent
     # ADR-002/P12 (02.09.2026): Die Arbeitszahl entsteht im Layer, nie hier.
     # **Bis dahin stand hier `_safe_div(wp_waerme, wp_strom)`** — von allen
     # R2-Sperren kannte der Bericht nur die abgeleitete Wärme.
@@ -1210,16 +1248,32 @@ def _charts(monats_zeilen, ist_gesamtzeitraum: bool):
     return chart_pv, chart_fluss, chart_autarkie
 
 
-def _kontext_tarif(strompreis, netzbezug_cent, einspeise_cent) -> dict:
-    """Kontext „tarif" — der neueste Tarif der Anlage (Abschnitt 2) oder die Defaults."""
+def _tarif_angaben(strompreis) -> dict:
+    """Anbieter, Name und Preise einer Tarifzeile — ohne Zeile die Vorbelegung, mit der die Monats-Fakten rechnen."""
     return {
         "anbieter": strompreis.anbieter if strompreis else None,
         "tarifname": strompreis.tarifname if strompreis else None,
-        "netzbezug_cent": netzbezug_cent,
-        "einspeise_cent": einspeise_cent,
+        "netzbezug_cent": strompreis.netzbezug_arbeitspreis_cent_kwh if strompreis else NETZBEZUG_DEFAULT_CENT,
+        "einspeise_cent": strompreis.einspeiseverguetung_cent_kwh if strompreis else EINSPEISEVERGUETUNG_DEFAULT_CENT,
         "grundpreis_euro_monat": strompreis.grundpreis_euro_monat if strompreis else None,
         "gueltig_ab": strompreis.gueltig_ab if strompreis else None,
     }
+
+
+def _kontext_tarif(zeitraeume: list[_TarifZeitraum]) -> dict:
+    """Kontext „tarif" (Abschnitt 2) — der Allgemeintarif am Ende des Berichtszeitraums; wechselt er im Zeitraum,
+    dazu ``zeitraeume`` je Abschnitt (sonst leer), damit der Kopf den Wechsel nennt, den die Monatszeilen rechnen."""
+    kontext = _tarif_angaben(zeitraeume[-1].tarif)
+    kontext["zeitraeume"] = [
+        {
+            **_tarif_angaben(z.tarif),
+            "ohne_tarif": z.tarif is None,
+            "von": f"{z.von[1]:02d}/{z.von[0]}",
+            "bis": f"{z.bis[1]:02d}/{z.bis[0]}",
+        }
+        for z in zeitraeume
+    ] if len(zeitraeume) > 1 else []
+    return kontext
 
 
 def _kontext_waermepumpe(

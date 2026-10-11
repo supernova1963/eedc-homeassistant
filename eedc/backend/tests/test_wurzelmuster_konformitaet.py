@@ -1695,6 +1695,14 @@ P8_BASELINE_AUSNAHMEN: frozenset[str] = frozenset({
     # `calculate_investition_sensors` durch — dieselbe Rolle wie die Zeile
     # darüber, eine Ebene höher.
     "backend/api/routes/ha_export/sensoren.py::get_all_sensors",   # Vorlage 8 (18.09.2026): ha_export.py → Paket ha_export/
+    # N-693 (12.10.2026): der MQTT-Publisher reicht DIESELBE Tarifzeile wie die REST-Route an
+    # `calculate_investition_sensors` durch — dieselbe Rolle wie die Zeile darüber. Hier stand eine Handquery
+    # „jüngster Eintrag" ohne Verwendung und Stichtag, die dieser Wächter nicht sah (sein blinder Fleck, s. oben).
+    "backend/services/ha_mqtt_sync.py::publish_anlage_sensors",
+    # N-693 (12.10.2026): Infothek-Vorbelegung „Stromvertrag"/„Einspeisevertrag" — sie beschreibt den LAUFENDEN
+    # Vertrag, kein vergangener Monat. Vorher zwei Handqueries „jüngster Eintrag" (einmal ohne Gültigkeitsfenster,
+    # einmal ohne Verwendung), die dieser Wächter nicht sah.
+    "backend/api/routes/infothek.py::get_vorbelegung",
     # Anzeige des aktuellen Tarifs + Komponenten-Kennwerte.
     "backend/api/routes/cockpit/uebersicht.py::get_cockpit_uebersicht",
     # Hochrechnung + ausgewiesener Tarif der Response.

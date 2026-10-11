@@ -251,8 +251,8 @@ async def publish_anlage_sensors(
     # ⚠ **Sichtbare Folge:** In HA erscheinen bei bestehenden Installationen
     # erstmals Geräte-Entitäten. Das ist ein Zuwachs, kein Umbau — bestehende
     # Entitäten und ihre Langzeitstatistik bleiben unberührt.
+    from backend.api.routes.strompreise import lade_tarife_fuer_anlage
     from backend.models.investition import Investition
-    from backend.models.strompreis import Strompreis
     from sqlalchemy import select
 
     inv_result = await db.execute(
@@ -260,13 +260,12 @@ async def publish_anlage_sensors(
     )
     investitionen = list(inv_result.scalars().all())
     if investitionen:
-        preis_result = await db.execute(
-            select(Strompreis)
-            .where(Strompreis.anlage_id == anlage.id)
-            .order_by(Strompreis.gueltig_ab.desc())
-            .limit(1)
-        )
-        strompreis = preis_result.scalar_one_or_none()
+        # N-693 (12.10.2026): dieselbe Tarifzeile wie der REST-Export (`ha_export/sensoren.py::get_all_sensors`) —
+        # über den SoT mit `verwendung`-Filter und Stichtag heute. Hier stand eine Handquery „jüngster Eintrag",
+        # ohne Verwendung, ohne `gueltig_ab <= heute`, ohne `gueltig_bis` (die Form vor N-200): für Monate vor dem
+        # ersten Tarif rechnete HA damit mit einem WP-, Wallbox- oder künftigen Tarif. Den Ersatzpreis dieser Monate
+        # bestimmt seit N-693 ohnehin nicht mehr die übergebene Zeile, sondern die Monats-Fakten-Regel.
+        strompreis = (await lade_tarife_fuer_anlage(db, anlage.id))["allgemein"]
         emob_ctx = await _load_emob_pool_ctx(db, investitionen)
 
         from backend.services.betriebsmodus_live import lade_betriebsmodus_live

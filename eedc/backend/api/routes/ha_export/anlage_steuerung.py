@@ -357,8 +357,11 @@ async def steuerungs_sensoren(
         je_speicher = {
             k: v for k, v in (je_speicher_roh or {}).items() if str(k) in laufende_ids
         } or None
+        # N-694: der Wert ungerundet — die Export-Grenze rundet % auf eine Stelle, dieselbe Zahl wie die
+        # Vorrundung hier (nur unter 0,05 % greift jetzt die Nullkipp-Regel der Grenze). Das Attribut unten
+        # rundet die Grenze nicht und bleibt gerundet.
         _anhaengen(
-            sensor_values, "eedc_speicher_soc_prozent", round(float(soc), 1),
+            sensor_values, "eedc_speicher_soc_prozent", float(soc),
             {"je_speicher": je_speicher},
             berechnung="Kapazitätsgewichteter Ladestand über alle Speicher der Anlage",
         )
@@ -429,8 +432,12 @@ async def steuerungs_sensoren(
         ueber = [round(max(0.0, pv[i] - verbrauch[i]), 2) for i in range(n)]
         defizit = [round(max(0.0, verbrauch[i] - pv[i]), 2) for i in range(n)]
         bloecke = ueberschuss_bloecke(pv[:n], verbrauch[:n])
+        # N-694: die Summe der UNGERUNDETEN Stunden — gerundet wird einmal an der Export-Grenze (kWh auf
+        # 0 Stellen). Hier stand `round(sum(ueber), 1)` über den auf zwei Stellen gerundeten Stunden des
+        # Attributs: 3,46 → 3,5 → 4 statt 3.
         _anhaengen(
-            sensor_values, "eedc_ueberschuss_prognose_heute_kwh", round(sum(ueber), 1),
+            sensor_values, "eedc_ueberschuss_prognose_heute_kwh",
+            sum(max(0.0, pv[i] - verbrauch[i]) for i in range(n)),
             {
                 "stundenprofil_kwh": ueber,
                 "defizit_stundenprofil_kwh": defizit,

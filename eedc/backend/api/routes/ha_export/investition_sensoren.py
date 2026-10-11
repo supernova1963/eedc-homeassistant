@@ -51,6 +51,7 @@ from backend.models.monatsdaten import Monatsdaten
 from backend.services.energie_profil.modus_split_monat import lade_modus_split_ohne_abschluss
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.strompreis import Strompreis
+from backend.core.wirtschaftlichkeit_defaults import NETZBEZUG_DEFAULT_CENT
 from backend.services.ha_sensors_export import (
     SensorValue,
     INVESTITION_SENSOREN,
@@ -141,7 +142,11 @@ async def calculate_investition_sensors(
     `fenster_ctx` (S3, 21.09.2026): der gemeinsame Eingang der Fenster-Sensoren
     (`services/ha_export_fenster.py::FensterKontext`), **einmal je Publish-Lauf**
     gebildet und hier nur benutzt. Ohne ihn entstehen die Plan-Sensoren P4/P7/P8/P9
-    schlicht nicht — sie sind eine Zugabe, kein Bestandteil der bisherigen Antwort."""
+    schlicht nicht — sie sind eine Zugabe, kein Bestandteil der bisherigen Antwort.
+
+    `strompreis` (N-693, 12.10.2026): wird nicht mehr gelesen. Jeder Monat löst seinen Tarif je Stichtag auf (P8),
+    und für Monate ohne Tarif gilt der Ersatzpreis der Monats-Fakten — nicht der Arbeitspreis einer übergebenen Zeile.
+    REST und MQTT übergeben dieselbe SoT-Zeile (`lade_tarife_fuer_anlage(...)["allgemein"]`)."""
     sensor_values = []
 
     # InvestitionMonatsdaten laden
@@ -159,7 +164,15 @@ async def calculate_investition_sensors(
     ]
 
     params = investition.parameter or {}
-    netzbezug_preis = strompreis.netzbezug_arbeitspreis_cent_kwh if strompreis else 30.0
+    # N-693: der Ersatzpreis für Monate, in denen noch kein Tarif gilt (vor dem ersten Tarif) — EINER, der der
+    # Monats-Fakten (`monats_fakten/tarif.py`: `wirksamer_arbeitspreis_cent(None)` bzw. der Default von
+    # `resolve_strompreis_for_komponente`, die Vorbelegung `NETZBEZUG_DEFAULT_CENT`). Jeder Monat MIT Tarif löst seinen
+    # Preis ohnehin je Stichtag auf (P8); dieser Wert greift nur dort, wo keiner gilt. Bis 12.10.2026 stand hier der
+    # Arbeitspreis von `strompreis` — REST reichte den heutigen Allgemeintarif, MQTT den jüngsten Eintrag JEDER
+    # Verwendung (auch einen WP-, Wallbox- oder künftigen Tarif): drei Zahlen für dieselbe Ersparnis, und im selben
+    # Monat kostete die Netz-Ladung 35 ct, die PV-Ladung 30 ct. `strompreis` bleibt in der Signatur (REST, MQTT und
+    # Tests übergeben ihn positionsgleich), bestimmt den Ersatzpreis aber nicht mehr.
+    netzbezug_preis = NETZBEZUG_DEFAULT_CENT
 
     # ROI-Basisdaten
     sensor_values += _roi_basis_sensoren(investition)
@@ -1300,7 +1313,10 @@ async def _sonstiges_sensoren(*, db, investition, sensor_values, fenster_ctx):
             round(geraet.bezug_pv_kwh / geraet.verbrauch_kwh * 100, 1)
             if geraet.verbrauch_kwh > 0 else None
         )
-        _an("sonstiges_verbrauch_monat_kwh", round(geraet.verbrauch_kwh, 1), {
+        # N-694: der Wert ungerundet — die Export-Grenze rundet ihn einmal (kWh auf 0 Stellen). Hier stand
+        # `round(…, 1)`: 3,46 → 3,5 → 4 statt 3, rund 5 % der Werte um genau 1 kWh daneben. Die Attribute rundet
+        # die Grenze nicht, sie bleiben hier gerundet.
+        _an("sonstiges_verbrauch_monat_kwh", geraet.verbrauch_kwh, {
             "pv_anteil_prozent": pv_anteil,
             "bezug_pv_kwh": round(geraet.bezug_pv_kwh, 1),
             "bezug_netz_kwh": round(geraet.bezug_netz_kwh, 1),

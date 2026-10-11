@@ -44,7 +44,20 @@
       {{ anlage.standort_plz or "" }} {{ anlage.standort_ort or "" }}
     </td></tr>
     {% endif %}
-    {% if tarif.anbieter or tarif.tarifname %}
+    {% if tarif.zeitraeume %}
+    {# N-693: wechselt der Allgemeintarif im Berichtszeitraum, nennt der Kopf jeden Abschnitt — so, wie die
+       Monatszeilen rechnen (Tarif des Monatsersten, ohne Tarif die Vorbelegung). #}
+    <tr><th>Stromtarif</th><td>
+      {% for z in tarif.zeitraeume %}
+      {{ z.von }}{% if z.bis != z.von %}–{{ z.bis }}{% endif %}:
+      {% if z.ohne_tarif %}kein Tarif hinterlegt (Vorbelegung){% elif z.anbieter or z.tarifname %}{{ z.anbieter or "" }}{% if z.tarifname %} – {{ z.tarifname }}{% endif %}{% else %}Tarif ab {{ z.gueltig_ab.strftime("%d.%m.%Y") }}{% endif %}<br>
+      <span class="muted">
+        Bezug {{ fmt_num(z.netzbezug_cent, 2) }} ct/kWh ·
+        Einspeisung {{ fmt_num(z.einspeise_cent, 2) }} ct/kWh
+      </span>{% if not loop.last %}<br>{% endif %}
+      {% endfor %}
+    </td></tr>
+    {% elif tarif.anbieter or tarif.tarifname %}
     <tr><th>Stromtarif</th><td>
       {{ tarif.anbieter or "" }}{% if tarif.tarifname %} – {{ tarif.tarifname }}{% endif %}<br>
       <span class="muted">

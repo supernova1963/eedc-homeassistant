@@ -50,6 +50,19 @@ Hinweis. Jetzt holt eedc die Dachflächen neu und zeigt den Hinweis zum unvollst
 einer Stunde, wenn eedc das Wetter vorab im Hintergrund geholt hatte; jetzt holt der Vorababruf dieselben Daten wie die
 Anzeige ([Bedienung → Live](HANDBUCH_BEDIENUNG.md#21-live)).
 
+**HA-Ersparnis vor dem ersten Tarif wie im Cockpit:** Die HA-Sensoren „Ersparnis vs Benzin" (E-Auto) und „WP Ersparnis"
+rechnen Monate vor deinem ersten eingetragenen Stromtarif jetzt mit derselben Vorbelegung (30 ct) wie Cockpit und Daten-Checker;
+bisher nahm MQTT dafür den jüngsten Tarif-Eintrag (auch einen Wärmepumpen- oder Wallbox-Tarif) und REST den heutigen Tarif —
+einmaliger Sprung in der HA-Langzeitstatistik der beiden Sensoren ([Sensor-Referenz §11](SENSOR-REFERENZ.md#11-export-sensoren-eedc--ha)). Der Kopf des
+Jahresberichts nennt den Allgemeintarif der Berichtsmonate — bei einem Wechsel im Zeitraum beide Abschnitte — statt des
+jüngsten Tarif-Eintrags; die Infothek belegt „Stromvertrag" und „Einspeisevertrag" mit dem heute gültigen Tarif vor.
+
+**Einmal gerundet:** „Verbrauch (Monat)" eines sonstigen Verbrauchers und „Überschuss-Prognose heute" wurden doppelt
+gerundet (3,46 kWh als 4 statt 3 kWh in HA); jetzt rundet eedc einmal, wie bei allen anderen Sensoren.
+
+**Jahresbericht ohne Speicher-Wirkungsgrad über 100 %:** Passen Lade- und Entlademenge nicht zusammen, steht im Bericht jetzt
+ein Strich wie im Cockpit statt z. B. „110,0 %"; die Ursache nennt der Daten-Checker.
+
 ## v4.1.6 — 11. Oktober 2026
 
 **Kleinere Anzeige-Korrekturen:** Monate ohne Werte zeigen in der Monatsleiste und im Jahresbericht einen Strich statt „0 kWh",

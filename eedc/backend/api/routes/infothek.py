@@ -16,14 +16,13 @@ from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.models.infothek import InfothekEintrag, InfothekDatei, InfothekInvestition
 from backend.models.anlage import Anlage
-from backend.models.strompreis import Strompreis
+from backend.api.routes.strompreise import lade_tarife_fuer_anlage
 from backend.models.investition import Investition
 from backend.services.infothek_datei_service import (
     validiere_dateityp, verarbeite_bild, validiere_pdf,
     ERLAUBTE_TYPES, MAX_DATEIEN_PRO_EINTRAG,
 )
 
-from sqlalchemy import desc
 from backend.services.infothek_migration import check_migration_status, migrate_investition
 
 
@@ -597,14 +596,10 @@ async def get_vorbelegung(
     prefill: dict[str, object] = {}
 
     if kategorie == "stromvertrag":
-        # Aktuellsten Strompreis-Tarif laden (verwendung=allgemein)
-        result = await db.execute(
-            select(Strompreis)
-            .where(Strompreis.anlage_id == anlage_id, Strompreis.verwendung == "allgemein")
-            .order_by(desc(Strompreis.gueltig_ab))
-            .limit(1)
-        )
-        tarif = result.scalar_one_or_none()
+        # N-693 (12.10.2026): der HEUTE gültige Allgemeintarif über den SoT — die Vorbelegung beschreibt den
+        # laufenden Vertrag. Hier stand eine Handquery „jüngster Eintrag" ohne Gültigkeitsfenster: ein schon
+        # angelegter künftiger Tarif belegte das Formular vor.
+        tarif = (await lade_tarife_fuer_anlage(db, anlage_id))["allgemein"]
         if tarif:
             if tarif.anbieter:
                 prefill["anbieter"] = tarif.anbieter
@@ -632,14 +627,9 @@ async def get_vorbelegung(
                     prefill["zaehler_nummer"] = erste_nummer
 
     elif kategorie == "einspeisevertrag":
-        # Einspeisevergütung aus Strompreis
-        result = await db.execute(
-            select(Strompreis)
-            .where(Strompreis.anlage_id == anlage_id)
-            .order_by(desc(Strompreis.gueltig_ab))
-            .limit(1)
-        )
-        tarif = result.scalar_one_or_none()
+        # Einspeisevergütung aus dem HEUTE gültigen Allgemeintarif (N-693, SoT) — die Vergütung hängt am
+        # Hauszähler, nicht an einem WP- oder Wallbox-Tarif. Hier stand der jüngste Eintrag JEDER Verwendung.
+        tarif = (await lade_tarife_fuer_anlage(db, anlage_id))["allgemein"]
         # #392: bewusst der Stammwert, KEIN Monatswert — die Vorbelegung eines
         # Rechners beschreibt den Vertrag des Anwenders, keine Abrechnung.
         if tarif and tarif.einspeiseverguetung_cent_kwh is not None:
