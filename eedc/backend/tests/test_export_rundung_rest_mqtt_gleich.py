@@ -243,6 +243,14 @@ def test_produzent_liefert_ungerundet():
             f"{name} rundet wieder selbst — Rundung gehört an die "
             f"Serialisierungsgrenze (SensorExportItem / publish_sensor)."
         )
+    # RF-8: die Phasen des Geraete-Rechners liefern ebenso ungerundet.
+    from backend.api.routes.ha_export import investition_sensoren
+
+    for name in ("_roi_basis_sensoren", "_emob_monate", "_emob_summen", "_emob_sensoren", "_emob_sensorwert",
+                 "_emob_ersparnis_eingaenge", "_emob_ersparnis", "_emob_ersparnis_text", "_wp_sensoren",
+                 "_wp_monatsfaltung", "_wp_nachtrag", "_wp_zaehler", "_wp_sensorwert", "_wp_modus_sensor",
+                 "_wp_arbeitszahl_sensor", "_wp_ersparnis_sensor"):
+        assert "round(" not in inspect.getsource(getattr(investition_sensoren, name)), name
 
 
 # ---------------------------------------------------------------------------

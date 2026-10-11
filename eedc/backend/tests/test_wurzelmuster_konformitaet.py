@@ -2468,6 +2468,12 @@ P10_PER_INVESTITION_PHASE: dict[str, str] = {
     # Blindstelle, gegen die dieser Suchlauf gebaut ist.
     "backend/api/routes/ha_export/investition_sensoren.py::_wp_steuerung_und_plan":
         "backend/api/routes/ha_export/investition_sensoren.py::calculate_investition_sensors",
+    # RF-8 (Serie „Funktion vor Datei"): Phasen des Geraete-Rechners — Faltung der WP-Monatszeilen (Strom, Waerme,
+    # Modus-Teilmengen) und die WP-Ersparnis je Monat. Die Zeilen laedt der Orchestrator selbst.
+    "backend/api/routes/ha_export/investition_sensoren.py::_wp_monatsfaltung":
+        "backend/api/routes/ha_export/investition_sensoren.py::calculate_investition_sensors",
+    "backend/api/routes/ha_export/investition_sensoren.py::_wp_ersparnis_sensor":
+        "backend/api/routes/ha_export/investition_sensoren.py::calculate_investition_sensors",
     # Verschachtelte Phase im E-Auto-Dashboard (E-Auto- und Wallbox-Zeile).
     "backend/api/routes/investitionen/dashboard_eauto.py::_emob_daten_von":
         "backend/api/routes/investitionen/dashboard_eauto.py::get_eauto_dashboard",

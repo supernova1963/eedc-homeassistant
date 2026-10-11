@@ -298,7 +298,7 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
            "get_wp_strom_kwh"),
         _a(COCKPIT_MONAT, "core/berechnungen/imd_monatsaggregat.py", "imd_typ_beitrag",
            "wp_strom_aufteilung"),
-        _a(HA_SENSOREN, "api/routes/ha_export/investition_sensoren.py", "calculate_investition_sensors",
+        _a(HA_SENSOREN, "api/routes/ha_export/investition_sensoren.py", "_wp_monatsfaltung",
            "get_wp_strom_kwh"),
     ),
     ("waermepumpe", "strom_heizen_kwh"): (
@@ -316,7 +316,7 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
     ("waermepumpe", "waerme_kwh"): (
         _a(KOMP_WP, "core/berechnungen/waermepumpe_kennzahl.py", "waerme_gesamt_kwh"),
         _a(COCKPIT_MONAT, "core/berechnungen/imd_monatsaggregat.py", "imd_typ_beitrag"),
-        _a(HA_SENSOREN, "api/routes/ha_export/investition_sensoren.py", "calculate_investition_sensors"),
+        _a(HA_SENSOREN, "api/routes/ha_export/investition_sensoren.py", "_wp_monatsfaltung"),
     ),
     ("waermepumpe", "heizenergie_kwh"): (
         _a(KOMP_WP, "core/berechnungen/waermepumpe_kennzahl.py", "heizwaerme_kwh"),
@@ -438,7 +438,7 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
     ("e-auto", "km_gefahren"): (
         _a(KOMP_EAUTO, "services/eauto_wirtschaftlichkeit.py", "berechne_eauto_ersparnis"),
         _a(COCKPIT_MONAT, "core/berechnungen/imd_monatsaggregat.py", "imd_typ_beitrag"),
-        _a(HA_SENSOREN, "api/routes/ha_export/investition_sensoren.py", "calculate_investition_sensors"),
+        _a(HA_SENSOREN, "api/routes/ha_export/investition_sensoren.py", "_emob_summen"),
     ),
     ("e-auto", "verbrauch_kwh"): (
         _a(KOMP_EAUTO, "api/routes/investitionen/dashboard_eauto.py", "get_eauto_dashboard"),

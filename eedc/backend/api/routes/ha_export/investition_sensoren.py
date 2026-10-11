@@ -8,6 +8,7 @@ Wallbox, Balkonkraftwerk, Sonstiges) aus den Monats-Fakten und dem Layer-SoT.
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import Optional
+from dataclasses import dataclass, field
 from backend.core.zahlenformat import fmt_zahl
 from backend.core.berechnungen import heizwaerme_ist_abgeleitet
 from backend.core.berechnungen.imd_monatsaggregat import imd_typ_beitrag
@@ -157,6 +158,84 @@ async def calculate_investition_sensors(
         if investition.ist_aktiv_im_monat(md.jahr, md.monat)
     ]
 
+    params = investition.parameter or {}
+    netzbezug_preis = strompreis.netzbezug_arbeitspreis_cent_kwh if strompreis else 30.0
+
+    # ROI-Basisdaten
+    sensor_values += _roi_basis_sensoren(investition)
+
+    # E-Auto / Wallbox Sensoren
+    if investition.typ in ("e-auto", "wallbox"):
+        sensor_values += await _emob_sensoren(
+            db, investition, emob_ctx, monatsdaten, params, netzbezug_preis,
+        )
+
+    # Wärmepumpe Sensoren
+    elif investition.typ == "waermepumpe":
+        await _wp_sensoren(
+            db=db,
+            investition=investition,
+            sensor_values=sensor_values,
+            fenster_ctx=fenster_ctx,
+            modus_map=modus_map,
+            monatsdaten=monatsdaten,
+            netzbezug_preis=netzbezug_preis,
+        )
+
+    # ── S3/P9: Sonstige Verbraucher je Gerät ────────────────────────────────
+    elif investition.typ == "sonstiges":
+        await _sonstiges_sensoren(
+            db=db,
+            investition=investition,
+            sensor_values=sensor_values,
+            fenster_ctx=fenster_ctx,
+        )
+
+    return sensor_values
+
+
+# =============================================================================
+# Phasen von `calculate_investition_sensors` (RF-8 der Serie „Funktion vor Datei")
+# =============================================================================
+#
+# Reiner Umzug: jede Phase nimmt ihre Verzweigungen mit; die Zeilen kommen weiter
+# aus dem `select` des Orchestrators (P10_PER_INVESTITION), die Phasen falten sie
+# nur (P10_PER_INVESTITION_PHASE).
+
+
+def _roi_basis_sensoren(investition: Investition) -> list[SensorValue]:
+    """ROI-Basisdaten: `investition_gesamt_euro` mit der Laufzeit als Attribut (N-543)."""
+    out: list[SensorValue] = []
+    if investition.anschaffungskosten_gesamt:
+        for sensor in INVESTITION_SENSOREN:
+            if sensor.key == "investition_gesamt_euro":
+                out.append(SensorValue(
+                    definition=sensor,
+                    value=investition.anschaffungskosten_gesamt,
+                    berechnung=None,
+                    zusatz_attribute=laufzeit_attribute(investition),
+                ))
+    return out
+
+
+@dataclass
+class _EmobSummen:
+    """Die Mengen eines E-Autos/einer Wallbox über seine Monate — Eingang der Sensoren."""
+
+    emob_monate: list
+    gesamt_km: float
+    gesamt_verbrauch: float
+    gesamt_pv_ladung: float
+    gesamt_netz_ladung: float
+    effizienz: object
+    gesamt_ladung: float
+
+
+def _emob_monate(
+    investition: Investition, emob_ctx: Optional[_EmobPoolCtx], monatsdaten: list,
+) -> list[tuple[int, int, dict]]:
+    """Die Monate des Geräts als ``(jahr, monat, daten)`` — mit den Monaten ohne eigene Zeile (N-555 Stufe 2)."""
+
     def _emob_daten(md: InvestitionMonatsdaten) -> dict:
         """F-16: die Zeile mit abgeleitetem PV-Anteil aus dem Pool-Kontext.
 
@@ -171,572 +250,712 @@ async def calculate_investition_sensors(
             (investition.id, md.jahr, md.monat), md.verbrauch_daten or {}
         )
 
-    params = investition.parameter or {}
-    netzbezug_preis = strompreis.netzbezug_arbeitspreis_cent_kwh if strompreis else 30.0
+    # N-555 Stufe 2 (Konzept Regel 2 Schritt 3): ein privates Auto bekommt Rest der
+    # Wallbox auch in Monaten ohne eigene Zeile (`monate_des_autos`) — dieselben
+    # Monate hier und in der Ersparnis unten, sonst ginge die Summe der Fahrzeug-
+    # Sensoren am Anlagen-Topf vorbei.
+    emob_monate = [(md.jahr, md.monat, _emob_daten(md)) for md in monatsdaten]
+    if investition.typ == "e-auto" and not ist_dienstlich(investition):
+        _mit_zeile = {(j, m) for j, m, _ in emob_monate}
+        emob_monate += [
+            (j, m, {}) for j, m, _ in monate_des_autos(emob_ctx, investition.id, {})
+            if (j, m) not in _mit_zeile and investition.ist_aktiv_im_monat(j, m)
+        ]
+    return emob_monate
 
-    # ROI-Basisdaten
-    if investition.anschaffungskosten_gesamt:
-        for sensor in INVESTITION_SENSOREN:
-            if sensor.key == "investition_gesamt_euro":
-                sensor_values.append(SensorValue(
-                    definition=sensor,
-                    value=investition.anschaffungskosten_gesamt,
-                    berechnung=None,
-                    zusatz_attribute=laufzeit_attribute(investition),
-                ))
 
-    # E-Auto / Wallbox Sensoren
-    if investition.typ in ("e-auto", "wallbox"):
-        gesamt_km = 0.0
-        gesamt_verbrauch = 0.0
-        gesamt_pv_ladung = 0.0
-        gesamt_netz_ladung = 0.0
+def _emob_summen(
+    investition: Investition, emob_ctx: Optional[_EmobPoolCtx], emob_monate: list,
+) -> _EmobSummen:
+    """km, Fahrverbrauch, PV-/Netz-Ladung und kWh/100 km über die Monate des Geräts."""
+    gesamt_km = 0.0
+    gesamt_verbrauch = 0.0
+    gesamt_pv_ladung = 0.0
+    gesamt_netz_ladung = 0.0
 
-        # N-555 F-3 (Konzept Regel 10): kWh/100 km je Monat nach der Layer-Regel
-        # (gemessener Fahrverbrauch vor Heim + Extern), der Zeitraum ist
-        # Σ Monatswerte ÷ Σ km — dieselbe Regel wie Cockpit, Hub und Auswertungen.
-        effizienz_monate = []
-        # N-555 Stufe 2 (Konzept Regel 2 Schritt 3): ein privates Auto bekommt Rest der
-        # Wallbox auch in Monaten ohne eigene Zeile (`monate_des_autos`) — dieselben
-        # Monate hier und in der Ersparnis unten, sonst ginge die Summe der Fahrzeug-
-        # Sensoren am Anlagen-Topf vorbei.
-        emob_monate = [(md.jahr, md.monat, _emob_daten(md)) for md in monatsdaten]
-        if investition.typ == "e-auto" and not ist_dienstlich(investition):
-            _mit_zeile = {(j, m) for j, m, _ in emob_monate}
-            emob_monate += [
-                (j, m, {}) for j, m, _ in monate_des_autos(emob_ctx, investition.id, {})
-                if (j, m) not in _mit_zeile and investition.ist_aktiv_im_monat(j, m)
-            ]
-        for _j, _m, d in emob_monate:
-            km_m = d.get("km_gefahren", 0) or 0
-            gesamt_km += km_m
-            gesamt_verbrauch += d.get("verbrauch_kwh", 0) or 0
-            pv, netz = _emob_pv_netz_des_monats(investition, emob_ctx, km_m, _j, _m, d)
-            gesamt_pv_ladung += pv
-            gesamt_netz_ladung += netz
-            effizienz_monate.append(eauto_effizienz_100km(
-                d.get("verbrauch_kwh", 0) or 0,
-                pv + netz + (d.get("ladung_extern_kwh", 0) or 0),
-                km_m,
+    # N-555 F-3 (Konzept Regel 10): kWh/100 km je Monat nach der Layer-Regel
+    # (gemessener Fahrverbrauch vor Heim + Extern), der Zeitraum ist
+    # Σ Monatswerte ÷ Σ km — dieselbe Regel wie Cockpit, Hub und Auswertungen.
+    effizienz_monate = []
+    for _j, _m, d in emob_monate:
+        km_m = d.get("km_gefahren", 0) or 0
+        gesamt_km += km_m
+        gesamt_verbrauch += d.get("verbrauch_kwh", 0) or 0
+        pv, netz = _emob_pv_netz_des_monats(investition, emob_ctx, km_m, _j, _m, d)
+        gesamt_pv_ladung += pv
+        gesamt_netz_ladung += netz
+        effizienz_monate.append(eauto_effizienz_100km(
+            d.get("verbrauch_kwh", 0) or 0,
+            pv + netz + (d.get("ladung_extern_kwh", 0) or 0),
+            km_m,
+        ))
+    effizienz = eauto_effizienz_zeitraum(effizienz_monate)
+
+    gesamt_ladung = gesamt_pv_ladung + gesamt_netz_ladung
+    return _EmobSummen(
+        emob_monate=emob_monate,
+        gesamt_km=gesamt_km,
+        gesamt_verbrauch=gesamt_verbrauch,
+        gesamt_pv_ladung=gesamt_pv_ladung,
+        gesamt_netz_ladung=gesamt_netz_ladung,
+        effizienz=effizienz,
+        gesamt_ladung=gesamt_ladung,
+    )
+
+
+async def _emob_sensoren(
+    db: AsyncSession,
+    investition: Investition,
+    emob_ctx: Optional[_EmobPoolCtx],
+    monatsdaten: list,
+    params: dict,
+    netzbezug_preis: float,
+) -> list[SensorValue]:
+    """E-Auto / Wallbox: je Definition aus `E_AUTO_SENSOREN` ein Wert, in der Reihenfolge der Liste."""
+    s = _emob_summen(investition, emob_ctx, _emob_monate(investition, emob_ctx, monatsdaten))
+    out: list[SensorValue] = []
+    for sensor in E_AUTO_SENSOREN:
+        value, berechnung, zusatz = await _emob_sensorwert(
+            sensor.key, s, db=db, investition=investition, emob_ctx=emob_ctx,
+            monatsdaten=monatsdaten, params=params, netzbezug_preis=netzbezug_preis,
+        )
+
+        if value is not None:
+            out.append(SensorValue(
+                definition=sensor,
+                value=value,
+                berechnung=berechnung,
+                zusatz_attribute=zusatz,
             ))
-        effizienz = eauto_effizienz_zeitraum(effizienz_monate)
+    return out
 
-        gesamt_ladung = gesamt_pv_ladung + gesamt_netz_ladung
 
-        for sensor in E_AUTO_SENSOREN:
-            value = None
-            berechnung = None
-            zusatz: dict = {}
+async def _emob_sensorwert(
+    key: str, s: _EmobSummen, *, db, investition, emob_ctx, monatsdaten, params, netzbezug_preis,
+) -> tuple:
+    """``(value, berechnung, zusatz)`` eines E-Auto-/Wallbox-Sensors — ``value is None`` heißt: kein Sensor."""
+    value = None
+    berechnung = None
+    zusatz: dict = {}
 
-            if sensor.key == "e_auto_km_gesamt":
-                if gesamt_km > 0:
-                    value = gesamt_km
-                    berechnung = f"Summe aus {len(monatsdaten)} Monaten"
-            elif sensor.key == "e_auto_verbrauch_kwh_100km":
-                # ⛔ Bis 25.09.2026: `Σ Fahrverbrauch ÷ Σ km` über ALLE Monate — auch
-                # die ohne Fahrverbrauch. Mit einem Verbrauchssensor ab Juli ergab das
-                # die halbe Zahl. Der Sensor war bis dahin praktisch leer (die
-                # Startroutine buchte jeden Verbrauch in eine Ladung um) und erscheint
-                # mit N-555 neu — ein Sprung in der Langzeitstatistik entsteht nicht.
-                if effizienz.wert is not None:
-                    value = effizienz.wert
-                    berechnung = (
-                        f"{fmt_zahl(effizienz.basis_kwh, 0)} / {fmt_zahl(effizienz.km, 0)} × 100"
-                        f" ({'gemessen' if effizienz.quelle == 'gemessen' else 'Näherung über die Ladung'})"
-                    )
-                    zusatz = {"quelle": effizienz.quelle}
-            elif sensor.key == "e_auto_pv_anteil_prozent":
-                if gesamt_ladung > 0:
-                    value = gesamt_pv_ladung / gesamt_ladung * 100
-                    berechnung = f"{fmt_zahl(gesamt_pv_ladung, 0)} / {fmt_zahl(gesamt_ladung, 0)} × 100"
-            elif sensor.key == "e_auto_ersparnis_vs_benzin_euro":
-                if gesamt_km > 0:
-                    anlage_md_result = await db.execute(
-                        select(Monatsdaten).where(Monatsdaten.anlage_id == investition.anlage_id)
-                    )
-                    anlage_md_dict = {
-                        (m.jahr, m.monat): m for m in anlage_md_result.scalars().all()
-                    }
-                    # N-181/F-18: sechste Kopie der Formel aufgelöst — die
-                    # Rechnung kommt aus dem Layer-SoT, diese Schleife sammelt
-                    # nur die Eingänge. Die Preisachse war hier die letzte, die
-                    # noch den **heutigen** Tarif nahm (`netzbezug_preis`), und
-                    # zwar den ALLGEMEINEN statt des Wallbox-Tarifs.
-                    km_pro_monat_sensor: list[tuple[int, int, float]] = []
-                    netz_pro_monat_sensor: list[tuple[int, int, float]] = []
-                    netz_total_sensor = 0.0
-                    # ⭐ N-672: die PV-Ladung zählt mit (eine kWh ist einmal Geld).
-                    pv_total_sensor = 0.0
-                    pv_pro_monat_sensor: list[tuple[int, int, float]] = []
-                    extern_euro_sensor = 0.0
-                    fahrverbrauch_sensor = 0.0
-                    monate_sensor: list[tuple[int, int]] = []
-                    for _j, _m, d in emob_monate:
-                        km = d.get("km_gefahren", 0) or 0
-                        pv, netz = _emob_pv_netz_des_monats(
-                            investition, emob_ctx, km, _j, _m, d,
-                        )
-                        monate_sensor.append((_j, _m))
-                        netz_total_sensor += netz
-                        pv_total_sensor += pv
-                        if pv > 0:
-                            pv_pro_monat_sensor.append((_j, _m, pv))
-                        # N-555 (§11): externe Ladekosten nach der Topf-Regel.
-                        if investition.typ == "e-auto" and not ist_dienstlich(investition):
-                            _, extern_euro = _emob_extern_im_monat(
-                                emob_ctx, km, _j, _m, d,
-                            )
-                        else:
-                            extern_euro = float(d.get("ladung_extern_euro", 0) or 0)
-                        extern_euro_sensor += extern_euro
-                        if netz > 0:
-                            netz_pro_monat_sensor.append((_j, _m, netz))
-                        if km > 0:
-                            km_pro_monat_sensor.append((_j, _m, km))
-                            fahrverbrauch_sensor += d.get("verbrauch_kwh", 0) or 0
-
-                    preis_lookup_sensor = await monats_strompreis_lookup(
-                        db, investition.anlage_id, "wallbox", monate_sensor,
-                        fallback_bezug=netzbezug_preis,
-                    )
-                    # N-672: der Preis der Eigenverbrauchs-Ersparnis je Monat — derselbe Builder wie der Anlagen-Sensor.
-                    ev_preis_lookup_sensor = await ev_preis_je_monat(
-                        db, investition.anlage_id,
-                        [(_j, _m, anlage_md_dict.get((_j, _m))) for _j, _m, _pv in pv_pro_monat_sensor],
-                        tarif_cache={},
-                    )
-                    erg = berechne_eauto_ersparnis_periode(
-                        km_pro_monat=km_pro_monat_sensor,
-                        ladung_netz_kwh_gesamt=netz_total_sensor,
-                        ladung_pv_kwh_gesamt=pv_total_sensor,
-                        pv_strompreis_cent=netzbezug_preis,
-                        monats_ev_preis_lookup=ev_preis_lookup_sensor,
-                        pv_pro_monat=pv_pro_monat_sensor or None,
-                        # N-555 (§11, Entscheid Gernot 25.09.2026 „angleichen"):
-                        # externe Ladekosten gehören in die Stromkosten — genau so
-                        # rechnen E-Auto-Hub, T-Konto und Cockpit. Hier stand bis
-                        # dahin bewusst 0,0 („beim Umhängen nicht stillschweigend
-                        # dazunehmen"); der Sensor lag damit um genau diese Kosten
-                        # über der Zahl des Hubs. Einmaliger Sprung in der
-                        # HA-Langzeitstatistik, im CHANGELOG angekündigt.
-                        ladung_extern_euro_gesamt=extern_euro_sensor,
-                        wallbox_strompreis_cent=netzbezug_preis,
-                        eauto_parameter=params,
-                        monats_benzinpreis_lookup={
-                            k: m.kraftstoffpreis_euro for k, m in anlage_md_dict.items()
-                        },
-                        fahrverbrauch_kwh_gesamt=fahrverbrauch_sensor or None,
-                        monats_strompreis_lookup=preis_lookup_sensor,
-                        netz_pro_monat=netz_pro_monat_sensor or None,
-                    )
-                    benzin_kosten = erg.benzin_kosten_euro
-                    strom_kosten = erg.strom_kosten_euro
-                    fossile_kosten = erg.fossile_kosten_euro
-
-                    value = erg.ersparnis_euro
-                    # N-555 (§11): `strom_kosten` enthält jetzt die externen
-                    # Ladekosten — der Rechenweg nennt sie getrennt, sonst stünden
-                    # sie unter „Strom @ … ct/kWh" zum Heimpreis.
-                    # N-672: und die PV-Ladung steht als eigener Teil daneben — zum Preis der Eigenverbrauchs-Ersparnis.
-                    heim_kosten = strom_kosten - extern_euro_sensor - erg.pv_ladung_kosten_euro
-                    berechnung = (
-                        f"{fmt_zahl(benzin_kosten, 2)} (Benzin) - {fmt_zahl(heim_kosten, 2)} (Strom"
-                        f" @ {fmt_zahl(erg.verwendeter_strompreis_cent, 2)} ct/kWh)"
-                        + (
-                            f" - {fmt_zahl(erg.pv_ladung_kosten_euro, 2)} (PV-Ladung"
-                            f" @ {fmt_zahl(erg.verwendeter_pv_strompreis_cent, 2)} ct/kWh)"
-                            if erg.pv_ladung_kosten_euro else ""
-                        )
-                        + (f" - {fmt_zahl(extern_euro_sensor, 2)} (extern geladen)" if extern_euro_sensor else "")
-                        + (f" - {fmt_zahl(fossile_kosten, 2)} (Kraftstoff)" if fossile_kosten else "")
-                    )
-
-            if value is not None:
-                sensor_values.append(SensorValue(
-                    definition=sensor,
-                    value=value,
-                    berechnung=berechnung,
-                    zusatz_attribute=zusatz,
-                ))
-
-    # Wärmepumpe Sensoren
-    elif investition.typ == "waermepumpe":
-        # DI-4: WP-Strom mit dem WP-Spezialtarif bewerten (Fallback allgemein),
-        # deckungsgleich mit aktueller_monat.py und der Anlage-Aggregation oben.
-        gesamt_strom = 0.0
-        # N-391: die Wärme des Geräts nach der kanonischen Vorrangregel D1 —
-        # **je Zeile aufgelöst**, nicht am Ende aus zwei Summen gebildet.
-        # ⛔ Hier standen bis zum 14.09.2026 `gesamt_heizung` und
-        # `gesamt_warmwasser`, deren einziger Zweck ihre Summe am Ende war. Eine
-        # Zeile mit gemeinsamem Wärmemengenzähler trug zu beiden nichts bei —
-        # die Wärme-, Arbeitszahl- und Ersparnis-Sensoren dieser Wärmepumpe
-        # meldeten 0 bzw. nichts, während Hub und Cockpit die Zahl zeigten.
-        gesamt_waerme_kanonisch = 0.0
-
-        # #263 K-2 (Konzept §3.5): abgeleitete Wärme trägt keine JAZ — sonst
-        # exportierte eedc die gepflegte JAZ als gemessenen Sensorwert nach HA,
-        # wo sie in Automationen und Langzeitstatistik weiterlebt.
-        waerme_abgeleitet = False
-        # #263 K-2 (S4): Teilmengen nach Betriebsmodus — nie Summanden.
-        gesamt_modus_heizen = 0.0
-        gesamt_modus_kuehlen = 0.0
-        gesamt_modus_warmwasser = 0.0
-        #: ⭐ **SOLL-§9-E7/Option A: was vom Nenner abgezogen werden DARF.**
-        #: ⛔ **Nicht die Summe der funktionsfremden Mengen** — hier stand bis
-        #: zum 12.09.2026 `gesamt_modus_funktionsfremd`, das jede solche Menge
-        #: aufaddierte. Bei getrennter Strommessung mit nur **abgeleiteter**
-        #: Aufteilung ist der Abzug 0: Die Verteilung darf
-        #: `strom_heizen + strom_warmwasser` nicht um eine Menge kürzen, die nie
-        #: dazukam (W-16 addiert nur den **gemessenen** Anteil). Die Mengen
-        #: selbst tragen unverändert die Betriebsart-Sensoren weiter unten (K1)
-        #: — sie stehen in `gesamt_modus_kuehlen` und seinen Nachbarn.
-        gesamt_modus_funktionsfremd_abzug = 0.0
-        gesamt_modus_abdeckung_h = 0.0
-        #: F-56 — trägt irgendeine Zeile GEMESSENE Betriebsart-Zähler? Dann
-        #: dürfen die beiden Sensoren erscheinen, auch ohne Modus-Abdeckung:
-        #: die Abdeckung ist die Zeitbasis des *abgeleiteten* Wegs und bleibt
-        #: bei gemessenen Zählern zu Recht 0.
-        gesamt_modus_gemessen = False
-        #: F-52: Was der Abschluss schon festgeschrieben hat — und der gepflegte
-        #: Gesamtwert je Monat. Beides braucht der Nachtrag unten, um
-        #: „gespeichert schlägt gerechnet" und die Teilmengen-Invariante
-        #: anwenden zu können. Entsteht in DIESEM Durchlauf, damit keine dritte
-        #: Quelle für dieselben Werte aufgemacht wird.
-        gespeichert_je_monat: dict[tuple[int, int], dict[str, tuple[bool, float]]] = {}
-        # B5/X-1: der Kühlstrom je Monat — für E-B in der Ersparnis unten.
-        kuehl_je_monat: dict[tuple[int, int], float] = {}
-        # B5/X-1: der Kühlstrom je Monat — für E-B in der Ersparnis unten.
-        kuehl_je_monat: dict[tuple[int, int], float] = {}
-        #: ⛔ **N-462 (13.09.2026): je Monatszeile, nicht einmal vor der
-        #: Schleife.** SOLL-§9-E7/Option A fragt „steckt der funktionsfremde
-        #: Anteil im Nenner?" — das entscheidet die **Stufe** dieser Zeile (K3),
-        #: nicht das Kennzeichen des Geräts. Der Nachtrag-Block weiter unten
-        #: sieht seine Zeile nicht mehr und liest die Stufe deshalb hier mit.
-        _nenner_fein_je_monat: dict[tuple[int, int], bool] = {}
-        for md in monatsdaten:
-            d = md.verbrauch_daten or {}
-            # F-56: **gemessen schlägt abgeleitet**, über den Layer-SoT —
-            # nicht daneben nachgebaut. Genau dieser Nachbau (`d.get(
-            # MODUS_STROM_FELD[…])` plus eine Abdeckungs-Prüfung ohne den
-            # Gemessen-Zweig) ließ die beiden Sensoren stumm, während Cockpit
-            # und Komponenten-Hub die Aufteilung schon zeigten.
-            _zeile = modus_strom_zeile(d)
-            kuehl_je_monat[(md.jahr, md.monat)] = _zeile.kuehlen_kwh
-            gesamt_modus_heizen += _zeile.heizen_kwh
-            gesamt_modus_kuehlen += _zeile.kuehlen_kwh
-            gesamt_modus_warmwasser += _zeile.warmwasser_kwh
-            # SOLL-§9-E7/Option A — die Regel wird gerufen, nicht nachgebaut.
-            _nenner_fein_je_monat[(md.jahr, md.monat)] = nenner_ist_feine_summe(
-                d, investition.parameter,
+    if key == "e_auto_km_gesamt":
+        if s.gesamt_km > 0:
+            value = s.gesamt_km
+            berechnung = f"Summe aus {len(monatsdaten)} Monaten"
+    elif key == "e_auto_verbrauch_kwh_100km":
+        # ⛔ Bis 25.09.2026: `Σ Fahrverbrauch ÷ Σ km` über ALLE Monate — auch
+        # die ohne Fahrverbrauch. Mit einem Verbrauchssensor ab Juli ergab das
+        # die halbe Zahl. Der Sensor war bis dahin praktisch leer (die
+        # Startroutine buchte jeden Verbrauch in eine Ladung um) und erscheint
+        # mit N-555 neu — ein Sprung in der Langzeitstatistik entsteht nicht.
+        effizienz = s.effizienz
+        if effizienz.wert is not None:
+            value = effizienz.wert
+            berechnung = (
+                f"{fmt_zahl(effizienz.basis_kwh, 0)} / {fmt_zahl(effizienz.km, 0)} × 100"
+                f" ({'gemessen' if effizienz.quelle == 'gemessen' else 'Näherung über die Ladung'})"
             )
-            gesamt_modus_funktionsfremd_abzug += funktionsfremd_abzug_kwh(
-                _zeile, hat_split=_nenner_fein_je_monat[(md.jahr, md.monat)],
+            zusatz = {"quelle": effizienz.quelle}
+    elif key == "e_auto_pv_anteil_prozent":
+        if s.gesamt_ladung > 0:
+            value = s.gesamt_pv_ladung / s.gesamt_ladung * 100
+            berechnung = f"{fmt_zahl(s.gesamt_pv_ladung, 0)} / {fmt_zahl(s.gesamt_ladung, 0)} × 100"
+    elif key == "e_auto_ersparnis_vs_benzin_euro":
+        if s.gesamt_km > 0:
+            value, berechnung = await _emob_ersparnis(
+                db, investition, emob_ctx, s.emob_monate, params, netzbezug_preis,
             )
-            gesamt_modus_abdeckung_h += _zeile.abdeckung_h
-            gesamt_modus_gemessen = gesamt_modus_gemessen or _zeile.gemessen
-            gesamt_strom += get_wp_strom_kwh(d, investition.parameter)
-            gespeichert_je_monat[(md.jahr, md.monat)] = {
-                str(investition.id): (
-                    # ⚠ `hat_aufteilung`, nicht nur die Abdeckung: eine
-                    # gemessene Zeile braucht den gerechneten Split nicht und
-                    # darf ihn nicht zusätzlich bekommen (Doppelzählung).
-                    # `monats_fakten/` wendet dieselbe Weiche an.
-                    _zeile.hat_aufteilung,
-                    get_wp_strom_kwh(d, investition.parameter),
-                )
-            }
-            gesamt_waerme_kanonisch += waerme_gesamt_kwh(
-                d.get("waerme_kwh"),
-                heizwaerme_kwh(d),   # N-398
-                # N-379: die eine Lesetuer — sonst traegt der HA-Sensor eine
-                # Waermemenge, die es am Geraet nicht gibt.
-                get_wp_warmwasser_kwh(d, investition.parameter),
-            )
-            waerme_abgeleitet = waerme_abgeleitet or heizwaerme_ist_abgeleitet(
-                md.source_provenance
-            )
+    return value, berechnung, zusatz
 
-        # F-52: Monate ohne Abschluss tragen ihren Split aus der Tagesebene
-        # nach. **Ohne diesen Block blieben genau diese zwei Sensoren stumm**,
-        # während Komponenten-Hub und Cockpit die Aufteilung schon zeigen —
-        # zwei Zahlen für dieselbe Größe, die Klasse hinter #331 und F-15.
-        # ⚠ Die Regeln stehen NICHT hier, sondern im gemeinsamen Lader; dieser
-        # Pfad faltet je Investition und geht deshalb nicht über die
-        # Monats-Fakten (bekannte P10-Restschuld von `ha_export.py`).
-        nachgetragen = await lade_modus_split_ohne_abschluss(
-            db, investition.anlage_id,
-            inv_by_id={investition.id: investition},
-            gespeichert=gespeichert_je_monat,
+
+@dataclass
+class _EmobErsparnisEingaenge:
+    """Die Eingänge von `berechne_eauto_ersparnis_periode` — gesammelt, nicht gerechnet (N-181/F-18)."""
+
+    km_pro_monat_sensor: list = field(default_factory=list)
+    netz_pro_monat_sensor: list = field(default_factory=list)
+    netz_total_sensor: float = 0.0
+    # ⭐ N-672: die PV-Ladung zählt mit (eine kWh ist einmal Geld).
+    pv_total_sensor: float = 0.0
+    pv_pro_monat_sensor: list = field(default_factory=list)
+    extern_euro_sensor: float = 0.0
+    fahrverbrauch_sensor: float = 0.0
+    monate_sensor: list = field(default_factory=list)
+
+
+def _emob_ersparnis_eingaenge(
+    investition: Investition, emob_ctx: Optional[_EmobPoolCtx], emob_monate: list,
+) -> _EmobErsparnisEingaenge:
+    """Je Monat km, PV-/Netz-Ladung, externe Ladekosten und Fahrverbrauch — die Rechnung macht der Layer."""
+    e = _EmobErsparnisEingaenge()
+    for _j, _m, d in emob_monate:
+        km = d.get("km_gefahren", 0) or 0
+        pv, netz = _emob_pv_netz_des_monats(
+            investition, emob_ctx, km, _j, _m, d,
         )
-        for _schluessel, _je_inv in nachgetragen.items():
-            for _split in _je_inv.values():
-                kuehl_je_monat[_schluessel] = (
-                    kuehl_je_monat.get(_schluessel, 0.0) + _split.kuehlen_kwh
-                )
-                gesamt_modus_heizen += _split.heizen_kwh
-                gesamt_modus_kuehlen += _split.kuehlen_kwh
-                gesamt_modus_warmwasser += _split.warmwasser_kwh
-                # ⚠ Hier zählt `kuehlen_kwh` und nicht die volle Definition —
-                # `AngewandterSplit` hat sie nicht, und das ist richtig so: Der
-                # **abgeleitete** Modus-Split kennt nur Heizen, Kühlen und
-                # Warmwasser (er leitet aus dem Betriebsmodus ab, und
-                # Lüften/Entfeuchten liefern dort keine eigene Menge).
-                # ⭐ **SOLL-§9-E7/Option A, und hier ist der Zweig immer der
-                # abgeleitete** — `lade_modus_split_ohne_abschluss` trägt genau
-                # die Monate ohne gemessene Betriebsart-Zeile nach. Die Regel
-                # wird gerufen, nicht nachgebaut (F-56); `ModusStromZeile` ist
-                # bloß die Übergabeform.
-                gesamt_modus_funktionsfremd_abzug += funktionsfremd_abzug_kwh(
-                    ModusStromZeile(
-                        heizen_kwh=_split.heizen_kwh,
-                        kuehlen_kwh=_split.kuehlen_kwh,
-                        warmwasser_kwh=_split.warmwasser_kwh,
-                        gemessen=False,
-                        abdeckung_h=_split.abdeckung_h,
-                    ),
-                    # N-462: die Stufe DIESES Monats. Trägt er gar keine
-                    # Zeile, gibt es auch keinen Gesamtzähler, auf den er
-                    # zurückfallen könnte — dann bleibt es bei der Lage des
-                    # Kennzeichens, und die ist hier „feine Summe".
-                    hat_split=_nenner_fein_je_monat.get(
-                        _schluessel,
-                        bool((investition.parameter or {})
-                             .get("getrennte_strommessung")),
-                    ),
-                )
-                gesamt_modus_abdeckung_h += _split.abdeckung_h
+        e.monate_sensor.append((_j, _m))
+        e.netz_total_sensor += netz
+        e.pv_total_sensor += pv
+        if pv > 0:
+            e.pv_pro_monat_sensor.append((_j, _m, pv))
+        # N-555 (§11): externe Ladekosten nach der Topf-Regel.
+        if investition.typ == "e-auto" and not ist_dienstlich(investition):
+            _, extern_euro = _emob_extern_im_monat(
+                emob_ctx, km, _j, _m, d,
+            )
+        else:
+            extern_euro = float(d.get("ladung_extern_euro", 0) or 0)
+        e.extern_euro_sensor += extern_euro
+        if netz > 0:
+            e.netz_pro_monat_sensor.append((_j, _m, netz))
+        if km > 0:
+            e.km_pro_monat_sensor.append((_j, _m, km))
+            e.fahrverbrauch_sensor += d.get("verbrauch_kwh", 0) or 0
+    return e
 
-        # N-391: dieselbe Auflösung wie im Hub und in den Monats-Fakten. Ohne sie
-        # meldeten die Sensoren *Wärme erzeugt*, *Arbeitszahl* und *Ersparnis*
-        # einer Wärmepumpe mit gemeinsamem Wärmemengenzähler 0 bzw. nichts.
-        gesamt_waerme = gesamt_waerme_kanonisch
 
-        # Issue #238: Counter-Summen (Starts/Betriebsstunden) dieser WP aus
-        # TagesZusammenfassung.komponenten_starts über die Laufzeit. Nur gesetzt,
-        # wenn der jeweilige Zähler überhaupt Werte geliefert hat.
-        from backend.models.tages_energie_profil import TagesZusammenfassung
-        inv_id_str = str(investition.id)
-        tz_res = await db.execute(
-            select(TagesZusammenfassung.datum, TagesZusammenfassung.komponenten_starts)
-            .where(TagesZusammenfassung.anlage_id == investition.anlage_id)
-            .where(TagesZusammenfassung.komponenten_starts.is_not(None))
+async def _emob_ersparnis(
+    db: AsyncSession,
+    investition: Investition,
+    emob_ctx: Optional[_EmobPoolCtx],
+    emob_monate: list,
+    params: dict,
+    netzbezug_preis: float,
+) -> tuple:
+    """``(value, berechnung)`` von `e_auto_ersparnis_vs_benzin_euro` — Layer-SoT `berechne_eauto_ersparnis_periode`."""
+    anlage_md_result = await db.execute(
+        select(Monatsdaten).where(Monatsdaten.anlage_id == investition.anlage_id)
+    )
+    anlage_md_dict = {
+        (m.jahr, m.monat): m for m in anlage_md_result.scalars().all()
+    }
+    # N-181/F-18: sechste Kopie der Formel aufgelöst — die
+    # Rechnung kommt aus dem Layer-SoT, diese Schleife sammelt
+    # nur die Eingänge. Die Preisachse war hier die letzte, die
+    # noch den **heutigen** Tarif nahm (`netzbezug_preis`), und
+    # zwar den ALLGEMEINEN statt des Wallbox-Tarifs.
+    e = _emob_ersparnis_eingaenge(investition, emob_ctx, emob_monate)
+
+    preis_lookup_sensor = await monats_strompreis_lookup(
+        db, investition.anlage_id, "wallbox", e.monate_sensor,
+        fallback_bezug=netzbezug_preis,
+    )
+    # N-672: der Preis der Eigenverbrauchs-Ersparnis je Monat — derselbe Builder wie der Anlagen-Sensor.
+    ev_preis_lookup_sensor = await ev_preis_je_monat(
+        db, investition.anlage_id,
+        [(_j, _m, anlage_md_dict.get((_j, _m))) for _j, _m, _pv in e.pv_pro_monat_sensor],
+        tarif_cache={},
+    )
+    erg = berechne_eauto_ersparnis_periode(
+        km_pro_monat=e.km_pro_monat_sensor,
+        ladung_netz_kwh_gesamt=e.netz_total_sensor,
+        ladung_pv_kwh_gesamt=e.pv_total_sensor,
+        pv_strompreis_cent=netzbezug_preis,
+        monats_ev_preis_lookup=ev_preis_lookup_sensor,
+        pv_pro_monat=e.pv_pro_monat_sensor or None,
+        # N-555 (§11, Entscheid Gernot 25.09.2026 „angleichen"):
+        # externe Ladekosten gehören in die Stromkosten — genau so
+        # rechnen E-Auto-Hub, T-Konto und Cockpit. Hier stand bis
+        # dahin bewusst 0,0 („beim Umhängen nicht stillschweigend
+        # dazunehmen"); der Sensor lag damit um genau diese Kosten
+        # über der Zahl des Hubs. Einmaliger Sprung in der
+        # HA-Langzeitstatistik, im CHANGELOG angekündigt.
+        ladung_extern_euro_gesamt=e.extern_euro_sensor,
+        wallbox_strompreis_cent=netzbezug_preis,
+        eauto_parameter=params,
+        monats_benzinpreis_lookup={
+            k: m.kraftstoffpreis_euro for k, m in anlage_md_dict.items()
+        },
+        fahrverbrauch_kwh_gesamt=e.fahrverbrauch_sensor or None,
+        monats_strompreis_lookup=preis_lookup_sensor,
+        netz_pro_monat=e.netz_pro_monat_sensor or None,
+    )
+    return erg.ersparnis_euro, _emob_ersparnis_text(erg, e.extern_euro_sensor)
+
+
+def _emob_ersparnis_text(erg, extern_euro_sensor: float) -> str:
+    """Der Rechenweg der E-Auto-Ersparnis — Benzin, Heimstrom, PV-Ladung, extern, Kraftstoff getrennt."""
+    benzin_kosten = erg.benzin_kosten_euro
+    strom_kosten = erg.strom_kosten_euro
+    fossile_kosten = erg.fossile_kosten_euro
+
+    # N-555 (§11): `strom_kosten` enthält jetzt die externen
+    # Ladekosten — der Rechenweg nennt sie getrennt, sonst stünden
+    # sie unter „Strom @ … ct/kWh" zum Heimpreis.
+    # N-672: und die PV-Ladung steht als eigener Teil daneben — zum Preis der Eigenverbrauchs-Ersparnis.
+    heim_kosten = strom_kosten - extern_euro_sensor - erg.pv_ladung_kosten_euro
+    return (
+        f"{fmt_zahl(benzin_kosten, 2)} (Benzin) - {fmt_zahl(heim_kosten, 2)} (Strom"
+        f" @ {fmt_zahl(erg.verwendeter_strompreis_cent, 2)} ct/kWh)"
+        + (
+            f" - {fmt_zahl(erg.pv_ladung_kosten_euro, 2)} (PV-Ladung"
+            f" @ {fmt_zahl(erg.verwendeter_pv_strompreis_cent, 2)} ct/kWh)"
+            if erg.pv_ladung_kosten_euro else ""
         )
-        wp_starts_total = 0
-        wp_stunden_total = 0.0
-        hat_starts = hat_stunden = False
-        for datum_, komp in tz_res.all():
-            if not investition.ist_aktiv_im_monat(datum_.year, datum_.month):
-                continue
-            c = ((komp or {}).get("wp_starts_anzahl") or {}).get(inv_id_str)
-            if isinstance(c, (int, float)) and c > 0:
-                wp_starts_total += int(c)
-                hat_starts = True
-            h = ((komp or {}).get("wp_betriebsstunden") or {}).get(inv_id_str)
-            if isinstance(h, (int, float)) and h > 0:
-                wp_stunden_total += float(h)
-                hat_stunden = True
+        + (f" - {fmt_zahl(extern_euro_sensor, 2)} (extern geladen)" if extern_euro_sensor else "")
+        + (f" - {fmt_zahl(fossile_kosten, 2)} (Kraftstoff)" if fossile_kosten else "")
+    )
 
-        for sensor in WAERMEPUMPE_SENSOREN:
-            value = None
-            berechnung = None
-            zusatz_attribute: dict = {}
 
-            if sensor.key == "wp_cop_durchschnitt":
-                # ADR-002/P12 (02.09.2026): Die Arbeitszahl entsteht im Layer,
-                # nie hier. **Bis dahin stand an dieser Stelle
-                # `gesamt_waerme / gesamt_strom`** — eine eigene Division, die
-                # von allen R2-Sperren nur die abgeleitete Wärme kannte.
-                #
-                # ⛔ **Zwei Größen fehlten, und beide bewegen die Zahl:**
-                # der funktionsfremde Strom (**W-14/E4** — Kühlen, Lüften,
-                # Entfeuchten standen im Nenner, obwohl ihre Nutzenergie in
-                # keinem Wärmemengenzähler landet) und die Anwender-Angabe
-                # „Fremdanteil auf dem Zähler" (**W-7**, Heizstab/bivalent).
-                # Der Hub rechnete beides seit dem 26.08. heraus; dieser Sensor
-                # nicht — **dieselbe Anlage, zwei Aussagen**, und diese hier
-                # verlässt eedc in fremde Dashboards und Automationen.
-                #
-                # ⚠ `bauarten_gemischt` und `geraete_ohne_waerme` gehören hier
-                # **nicht** hinein und ihr Fehlen ist keine Lücke: Der Block
-                # faltet **eine** Investition. Ein Gerät hat nur eine Bauart,
-                # und meldet es keine Wärme, ist `gesamt_waerme` bereits 0.
-                _az = arbeitszahl(
-                    gesamt_waerme, gesamt_strom,
-                    waerme_abgeleitet_kwh=1.0 if waerme_abgeleitet else 0.0,
-                    # SOLL-§9-E7/Option A: der **Abzug**, nicht die Menge.
-                    strom_funktionsfremd_kwh=gesamt_modus_funktionsfremd_abzug,
-                    abgrenzung_verletzt=abgrenzungs_grund(
-                        abgrenzung_stoerung=abgrenzung_stoerung(investition),
-                    ),
-                )
-                if _az.wert is not None:
-                    value = _az.wert
-                    berechnung = (
-                        f"{fmt_zahl(_az.zaehler_kwh, 0)} / {fmt_zahl(_az.nenner_kwh, 0)}"
-                        if _az.zaehler_kwh is not None and _az.nenner_kwh is not None
-                        else None
-                    )
-                elif _az.grund and (gesamt_strom > 0 or gesamt_waerme > 0):
-                    # B5/X-3 (SOLL §3.3 S3, ADR-002/P12): eine GESPERRTE
-                    # Kennzahl ist ein Sensor ohne Wert, der seinen Grund
-                    # nennt — nicht ein Sensor, der fehlt. Fehlte er, bliebe
-                    # in Home Assistant der letzte publizierte Wert stehen
-                    # (retain, kein expire_after) und liefe stündlich in die
-                    # Langzeitstatistik weiter. Nur wo die Eingänge da sind:
-                    # ein Gerät ohne jede Messung (F1) bekommt weiterhin keinen
-                    # Sensor — sonst entstünden Entitäten für nie erfasste
-                    # Größen (#400, Knallfrosch-Klasse).
-                    zusatz_attribute = {"grund": _az.grund}
-            elif sensor.key == "wp_ersparnis_euro":
-                # B5/X-1 (05.09.2026): dieselbe Rechnung wie Hub und Cockpit —
-                # der Layer `berechne_wp_ersparnis`, je Monat mit dem Tarif
-                # seines Stichtags (ADR-002/P8) und ohne den Kühlstrom im
-                # Vergleich (Entscheid E-B, 18.08.).
-                #
-                # ⛔ **Bis hierher stand eine eigene Formel:** `alte Kosten −
-                # Σ Strom × heutiger WP-Tarif`. Gemessen an denselben Sprossen
-                # wie der Hub: F8 (Kühlstrom 300 kWh) 10 € statt 100 €; zwei
-                # Tarife (Juli 30 ct, ab September 40 ct) 66,67 € statt
-                # 166,67 € — der Juli wurde mit dem Septemberpreis bewertet.
-                # Dritte Kopie der Ersparnis-Formel (SOLL §3.3 S1); die
-                # Zusatzkosten der Altheizung, die hier schon standen, trägt
-                # seit X-4 der Layer selbst.
-                #
-                # N-88/F2b bleibt: ohne ersetzte Heizung ist kein Monat
-                # `bewertbar`, und der Sensor bleibt leer statt eine Ersparnis
-                # zu behaupten.
-                anlage_md_result = await db.execute(
-                    select(Monatsdaten).where(Monatsdaten.anlage_id == investition.anlage_id)
-                )
-                anlage_md_dict = {
-                    (m.jahr, m.monat): m for m in anlage_md_result.scalars().all()
-                }
-                alte_kosten = 0.0
-                wp_kosten = 0.0
-                kuehl_kosten = 0.0
-                bewertbar = False
-                for md in monatsdaten:
-                    d = md.verbrauch_daten or {}
-                    m_waerme = waerme_gesamt_kwh(   # N-391 (D1), N-379, N-398
-                        d.get("waerme_kwh"),
-                        heizwaerme_kwh(d),
-                        get_wp_warmwasser_kwh(d, investition.parameter),
-                    )
-                    m_strom = get_wp_strom_kwh(d, investition.parameter)
-                    # N-670 (Fachentscheid Master Wärme/Klima, 11.10.2026): ein Monat ohne Wärme trägt keinen
-                    # Vergleich — seine Gerätezeile hat 0 € (Standby, `wp_ersparnis_zeile`), Hub und Cockpit
-                    # summieren 0. Bis hierher stand nur „beide 0 ⇒ überspringen": ein Monat mit Strom ohne Wärme
-                    # ging mit `wp_kosten` in `alte − WP` ein und senkte den Sensor um seinen Strom (gemessen
-                    # 20 kWh × 30 ct: 19 statt 25 €).
-                    if m_waerme <= 0:
-                        continue
-                    m_tarife = await lade_tarife_fuer_anlage(
-                        db, investition.anlage_id, target_date=date(md.jahr, md.monat, 1)
-                    )
-                    m_preis = resolve_strompreis_for_komponente(
-                        m_tarife, "waermepumpe", fallback=netzbezug_preis
-                    )
-                    amd = anlage_md_dict.get((md.jahr, md.monat))
-                    m_erg = berechne_wp_ersparnis(
-                        wp_waerme_kwh=m_waerme,
-                        wp_strom_kwh=m_strom,
-                        wp_strompreis_cent=m_preis,
-                        wp_parameter=investition.parameter,
-                        monats_gaspreis_cent=(
-                            amd.gaspreis_cent_kwh if amd else None
-                        ),
-                        strom_kuehlen_kwh=kuehl_je_monat.get((md.jahr, md.monat), 0.0),
-                    )
-                    alte_kosten += m_erg.alte_heizung_kosten_euro
-                    wp_kosten += m_erg.wp_kosten_euro
-                    kuehl_kosten += m_erg.kuehl_kosten_euro
-                    bewertbar = bewertbar or m_erg.bewertbar
-                if bewertbar:
-                    value = alte_kosten - (wp_kosten - kuehl_kosten)
-                    berechnung = (
-                        f"{fmt_zahl(alte_kosten, 2)} (alt) - {fmt_zahl(wp_kosten - kuehl_kosten, 2)} (WP)"
-                    )
-                    if kuehl_kosten > 0:
-                        berechnung += (
-                            f" · Kühlstrom {fmt_zahl(kuehl_kosten, 2)} € nicht im Vergleich"
-                        )
-                    # B5/X-2: der Vorbehalt aus dem Layer — dieselben Worte
-                    # wie Hub (B3) und Cockpit (B4). Nur gesetzt, wenn es
-                    # einen gibt; MQTT trägt ihn als Attribut, REST als
-                    # `hinweis`.
-                    _vorbehalt = ersparnis_vorbehalt(
-                        waerme_abgeleitet=waerme_abgeleitet,
-                        abgrenzung=abgrenzung_stoerung(investition),
-                    )
-                    if _vorbehalt:
-                        zusatz_attribute = {"vorbehalt": _vorbehalt}
-            elif sensor.key == "wp_strom_heizen_modus_kwh":  # noqa: E501
-                # Ohne erfassten Modus bleibt der Sensor leer — er behauptete
-                # sonst „0 kWh geheizt" für ein Gerät, das eedc nicht beobachtet
-                # hat. In HA-Langzeitstatistik lebt so eine 0 weiter.
-                if gesamt_modus_abdeckung_h > 0 or gesamt_modus_gemessen:
-                    value = gesamt_modus_heizen
-                    berechnung = f"{fmt_zahl(gesamt_modus_heizen, 1)} von {fmt_zahl(gesamt_strom, 1)} kWh gesamt"
-            elif sensor.key == "wp_strom_kuehlen_modus_kwh":
-                if gesamt_modus_abdeckung_h > 0 or gesamt_modus_gemessen:
-                    value = gesamt_modus_kuehlen
-                    berechnung = f"{fmt_zahl(gesamt_modus_kuehlen, 1)} von {fmt_zahl(gesamt_strom, 1)} kWh gesamt"
-            elif sensor.key == "wp_strom_warmwasser_modus_kwh":
-                # N-336 — dieselbe Leer-Regel wie bei den zwei Nachbarn: ohne
-                # erfassten Modus fehlt der Sensor, statt 0 zu behaupten.
-                if gesamt_modus_abdeckung_h > 0 or gesamt_modus_gemessen:
-                    value = gesamt_modus_warmwasser
-                    berechnung = (
-                        f"{fmt_zahl(gesamt_modus_warmwasser, 1)} von {fmt_zahl(gesamt_strom, 1)} kWh gesamt"
-                    )
-            elif sensor.key == "wp_betriebsmodus":
-                # #398: der EINZIGE Sensor dieser Liste, der KEINE Monatsgröße
-                # ist, sondern ein Zustand. Er kommt deshalb auch nicht aus den
-                # Monatsdaten, sondern aus `betriebsmodus_live` — und fehlt
-                # ganz, wenn es keine Zuordnung gibt (kein „—", keine leere
-                # Entität, die in HA für immer weiterlebt).
-                _modus = (modus_map or {}).get(investition.id)
-                if _modus:
-                    value = BETRIEBSMODUS_LABEL[_modus]
-                    berechnung = f"Kanon-Wert „{_modus}\" der zugeordneten climate-Quelle"
-            elif sensor.key == "wp_kompressor_starts":
-                if hat_starts:
-                    value = wp_starts_total
-                    berechnung = "Σ erfasste Kompressor-Starts"
-            elif sensor.key == "wp_betriebsstunden":
-                if hat_stunden:
-                    value = wp_stunden_total
-                    berechnung = "Σ erfasste Betriebsstunden"
+@dataclass
+class _WpSummen:
+    """Die Faltung der Monatszeilen EINER Wärmepumpe — Zustand zwischen Faltung, Nachtrag, Zählern und Sensoren."""
 
-            if value is not None or zusatz_attribute.get("grund"):
-                sensor_values.append(SensorValue(
-                    definition=sensor,
-                    value=value,
-                    berechnung=berechnung,
-                    zusatz_attribute=zusatz_attribute,
-                ))
+    gesamt_strom: float
+    gesamt_waerme_kanonisch: float
+    waerme_abgeleitet: bool
+    gesamt_modus_heizen: float
+    gesamt_modus_kuehlen: float
+    gesamt_modus_warmwasser: float
+    gesamt_modus_funktionsfremd_abzug: float
+    gesamt_modus_abdeckung_h: float
+    gesamt_modus_gemessen: bool
+    gespeichert_je_monat: dict
+    kuehl_je_monat: dict
+    nenner_fein_je_monat: dict
+    wp_starts_total: int = 0
+    wp_stunden_total: float = 0.0
+    hat_starts: bool = False
+    hat_stunden: bool = False
 
-        # ── S2/S3: Entscheidung und Plan dieser Wärmepumpe ──────────────────
-        await _wp_steuerung_und_plan(
-            db=db,
-            investition=investition,
-            sensor_values=sensor_values,
-            fenster_ctx=fenster_ctx,
-            modus_map=modus_map,
-            monatsdaten=monatsdaten,
-            kuehl_je_monat=kuehl_je_monat,
+
+async def _wp_sensoren(
+    *, db, investition, sensor_values, fenster_ctx, modus_map, monatsdaten, netzbezug_preis,
+):
+    """Wärmepumpe: Faltung, Nachtrag ohne Abschluss, Zähler, je Definition aus `WAERMEPUMPE_SENSOREN` ein Wert, dann S2/S3."""
+    s = _wp_monatsfaltung(investition, monatsdaten)
+    await _wp_nachtrag(db, investition, s)
+    await _wp_zaehler(db, investition, s)
+
+    for sensor in WAERMEPUMPE_SENSOREN:
+        value, berechnung, zusatz_attribute = await _wp_sensorwert(
+            sensor.key, s, db=db, investition=investition, monatsdaten=monatsdaten,
+            modus_map=modus_map, netzbezug_preis=netzbezug_preis,
         )
 
-    # ── S3/P9: Sonstige Verbraucher je Gerät ────────────────────────────────
-    elif investition.typ == "sonstiges":
-        await _sonstiges_sensoren(
-            db=db,
-            investition=investition,
-            sensor_values=sensor_values,
-            fenster_ctx=fenster_ctx,
-        )
+        if value is not None or zusatz_attribute.get("grund"):
+            sensor_values.append(SensorValue(
+                definition=sensor,
+                value=value,
+                berechnung=berechnung,
+                zusatz_attribute=zusatz_attribute,
+            ))
 
-    return sensor_values
+    # ── S2/S3: Entscheidung und Plan dieser Wärmepumpe ──────────────────
+    await _wp_steuerung_und_plan(
+        db=db,
+        investition=investition,
+        sensor_values=sensor_values,
+        fenster_ctx=fenster_ctx,
+        modus_map=modus_map,
+        monatsdaten=monatsdaten,
+        kuehl_je_monat=s.kuehl_je_monat,
+    )
+
+
+def _wp_monatsfaltung(investition: Investition, monatsdaten: list) -> _WpSummen:
+    """Strom, Wärme (D1), Modus-Teilmengen und Nenner-Abzug je Monatszeile — die Regeln kommen aus dem Layer."""
+    # DI-4: WP-Strom mit dem WP-Spezialtarif bewerten (Fallback allgemein),
+    # deckungsgleich mit aktueller_monat.py und der Anlage-Aggregation oben.
+    gesamt_strom = 0.0
+    # N-391: die Wärme des Geräts nach der kanonischen Vorrangregel D1 —
+    # **je Zeile aufgelöst**, nicht am Ende aus zwei Summen gebildet.
+    # ⛔ Hier standen bis zum 14.09.2026 `gesamt_heizung` und
+    # `gesamt_warmwasser`, deren einziger Zweck ihre Summe am Ende war. Eine
+    # Zeile mit gemeinsamem Wärmemengenzähler trug zu beiden nichts bei —
+    # die Wärme-, Arbeitszahl- und Ersparnis-Sensoren dieser Wärmepumpe
+    # meldeten 0 bzw. nichts, während Hub und Cockpit die Zahl zeigten.
+    gesamt_waerme_kanonisch = 0.0
+
+    # #263 K-2 (Konzept §3.5): abgeleitete Wärme trägt keine JAZ — sonst
+    # exportierte eedc die gepflegte JAZ als gemessenen Sensorwert nach HA,
+    # wo sie in Automationen und Langzeitstatistik weiterlebt.
+    waerme_abgeleitet = False
+    # #263 K-2 (S4): Teilmengen nach Betriebsmodus — nie Summanden.
+    gesamt_modus_heizen = 0.0
+    gesamt_modus_kuehlen = 0.0
+    gesamt_modus_warmwasser = 0.0
+    #: ⭐ **SOLL-§9-E7/Option A: was vom Nenner abgezogen werden DARF.**
+    #: ⛔ **Nicht die Summe der funktionsfremden Mengen** — hier stand bis
+    #: zum 12.09.2026 `gesamt_modus_funktionsfremd`, das jede solche Menge
+    #: aufaddierte. Bei getrennter Strommessung mit nur **abgeleiteter**
+    #: Aufteilung ist der Abzug 0: Die Verteilung darf
+    #: `strom_heizen + strom_warmwasser` nicht um eine Menge kürzen, die nie
+    #: dazukam (W-16 addiert nur den **gemessenen** Anteil). Die Mengen
+    #: selbst tragen unverändert die Betriebsart-Sensoren weiter unten (K1)
+    #: — sie stehen in `gesamt_modus_kuehlen` und seinen Nachbarn.
+    gesamt_modus_funktionsfremd_abzug = 0.0
+    gesamt_modus_abdeckung_h = 0.0
+    #: F-56 — trägt irgendeine Zeile GEMESSENE Betriebsart-Zähler? Dann
+    #: dürfen die beiden Sensoren erscheinen, auch ohne Modus-Abdeckung:
+    #: die Abdeckung ist die Zeitbasis des *abgeleiteten* Wegs und bleibt
+    #: bei gemessenen Zählern zu Recht 0.
+    gesamt_modus_gemessen = False
+    #: F-52: Was der Abschluss schon festgeschrieben hat — und der gepflegte
+    #: Gesamtwert je Monat. Beides braucht der Nachtrag unten, um
+    #: „gespeichert schlägt gerechnet" und die Teilmengen-Invariante
+    #: anwenden zu können. Entsteht in DIESEM Durchlauf, damit keine dritte
+    #: Quelle für dieselben Werte aufgemacht wird.
+    gespeichert_je_monat: dict[tuple[int, int], dict[str, tuple[bool, float]]] = {}
+    # B5/X-1: der Kühlstrom je Monat — für E-B in der Ersparnis unten.
+    kuehl_je_monat: dict[tuple[int, int], float] = {}
+    # B5/X-1: der Kühlstrom je Monat — für E-B in der Ersparnis unten.
+    kuehl_je_monat: dict[tuple[int, int], float] = {}
+    #: ⛔ **N-462 (13.09.2026): je Monatszeile, nicht einmal vor der
+    #: Schleife.** SOLL-§9-E7/Option A fragt „steckt der funktionsfremde
+    #: Anteil im Nenner?" — das entscheidet die **Stufe** dieser Zeile (K3),
+    #: nicht das Kennzeichen des Geräts. Der Nachtrag-Block weiter unten
+    #: sieht seine Zeile nicht mehr und liest die Stufe deshalb hier mit.
+    _nenner_fein_je_monat: dict[tuple[int, int], bool] = {}
+    for md in monatsdaten:
+        d = md.verbrauch_daten or {}
+        # F-56: **gemessen schlägt abgeleitet**, über den Layer-SoT —
+        # nicht daneben nachgebaut. Genau dieser Nachbau (`d.get(
+        # MODUS_STROM_FELD[…])` plus eine Abdeckungs-Prüfung ohne den
+        # Gemessen-Zweig) ließ die beiden Sensoren stumm, während Cockpit
+        # und Komponenten-Hub die Aufteilung schon zeigten.
+        _zeile = modus_strom_zeile(d)
+        kuehl_je_monat[(md.jahr, md.monat)] = _zeile.kuehlen_kwh
+        gesamt_modus_heizen += _zeile.heizen_kwh
+        gesamt_modus_kuehlen += _zeile.kuehlen_kwh
+        gesamt_modus_warmwasser += _zeile.warmwasser_kwh
+        # SOLL-§9-E7/Option A — die Regel wird gerufen, nicht nachgebaut.
+        _nenner_fein_je_monat[(md.jahr, md.monat)] = nenner_ist_feine_summe(
+            d, investition.parameter,
+        )
+        gesamt_modus_funktionsfremd_abzug += funktionsfremd_abzug_kwh(
+            _zeile, hat_split=_nenner_fein_je_monat[(md.jahr, md.monat)],
+        )
+        gesamt_modus_abdeckung_h += _zeile.abdeckung_h
+        gesamt_modus_gemessen = gesamt_modus_gemessen or _zeile.gemessen
+        gesamt_strom += get_wp_strom_kwh(d, investition.parameter)
+        gespeichert_je_monat[(md.jahr, md.monat)] = {
+            str(investition.id): (
+                # ⚠ `hat_aufteilung`, nicht nur die Abdeckung: eine
+                # gemessene Zeile braucht den gerechneten Split nicht und
+                # darf ihn nicht zusätzlich bekommen (Doppelzählung).
+                # `monats_fakten/` wendet dieselbe Weiche an.
+                _zeile.hat_aufteilung,
+                get_wp_strom_kwh(d, investition.parameter),
+            )
+        }
+        gesamt_waerme_kanonisch += waerme_gesamt_kwh(
+            d.get("waerme_kwh"),
+            heizwaerme_kwh(d),   # N-398
+            # N-379: die eine Lesetuer — sonst traegt der HA-Sensor eine
+            # Waermemenge, die es am Geraet nicht gibt.
+            get_wp_warmwasser_kwh(d, investition.parameter),
+        )
+        waerme_abgeleitet = waerme_abgeleitet or heizwaerme_ist_abgeleitet(
+            md.source_provenance
+        )
+    return _WpSummen(
+        gesamt_strom=gesamt_strom,
+        gesamt_waerme_kanonisch=gesamt_waerme_kanonisch,
+        waerme_abgeleitet=waerme_abgeleitet,
+        gesamt_modus_heizen=gesamt_modus_heizen,
+        gesamt_modus_kuehlen=gesamt_modus_kuehlen,
+        gesamt_modus_warmwasser=gesamt_modus_warmwasser,
+        gesamt_modus_funktionsfremd_abzug=gesamt_modus_funktionsfremd_abzug,
+        gesamt_modus_abdeckung_h=gesamt_modus_abdeckung_h,
+        gesamt_modus_gemessen=gesamt_modus_gemessen,
+        gespeichert_je_monat=gespeichert_je_monat,
+        kuehl_je_monat=kuehl_je_monat,
+        nenner_fein_je_monat=_nenner_fein_je_monat,
+    )
+
+
+async def _wp_nachtrag(db: AsyncSession, investition: Investition, s: _WpSummen) -> None:
+    """F-52: der Modus-Split der Monate ohne Abschluss — addiert in die Summen der Faltung."""
+    # F-52: Monate ohne Abschluss tragen ihren Split aus der Tagesebene
+    # nach. **Ohne diesen Block blieben genau diese zwei Sensoren stumm**,
+    # während Komponenten-Hub und Cockpit die Aufteilung schon zeigen —
+    # zwei Zahlen für dieselbe Größe, die Klasse hinter #331 und F-15.
+    # ⚠ Die Regeln stehen NICHT hier, sondern im gemeinsamen Lader; dieser
+    # Pfad faltet je Investition und geht deshalb nicht über die
+    # Monats-Fakten (bekannte P10-Restschuld von `ha_export.py`).
+    nachgetragen = await lade_modus_split_ohne_abschluss(
+        db, investition.anlage_id,
+        inv_by_id={investition.id: investition},
+        gespeichert=s.gespeichert_je_monat,
+    )
+    for _schluessel, _je_inv in nachgetragen.items():
+        for _split in _je_inv.values():
+            s.kuehl_je_monat[_schluessel] = (
+                s.kuehl_je_monat.get(_schluessel, 0.0) + _split.kuehlen_kwh
+            )
+            s.gesamt_modus_heizen += _split.heizen_kwh
+            s.gesamt_modus_kuehlen += _split.kuehlen_kwh
+            s.gesamt_modus_warmwasser += _split.warmwasser_kwh
+            # ⚠ Hier zählt `kuehlen_kwh` und nicht die volle Definition —
+            # `AngewandterSplit` hat sie nicht, und das ist richtig so: Der
+            # **abgeleitete** Modus-Split kennt nur Heizen, Kühlen und
+            # Warmwasser (er leitet aus dem Betriebsmodus ab, und
+            # Lüften/Entfeuchten liefern dort keine eigene Menge).
+            # ⭐ **SOLL-§9-E7/Option A, und hier ist der Zweig immer der
+            # abgeleitete** — `lade_modus_split_ohne_abschluss` trägt genau
+            # die Monate ohne gemessene Betriebsart-Zeile nach. Die Regel
+            # wird gerufen, nicht nachgebaut (F-56); `ModusStromZeile` ist
+            # bloß die Übergabeform.
+            s.gesamt_modus_funktionsfremd_abzug += funktionsfremd_abzug_kwh(
+                ModusStromZeile(
+                    heizen_kwh=_split.heizen_kwh,
+                    kuehlen_kwh=_split.kuehlen_kwh,
+                    warmwasser_kwh=_split.warmwasser_kwh,
+                    gemessen=False,
+                    abdeckung_h=_split.abdeckung_h,
+                ),
+                # N-462: die Stufe DIESES Monats. Trägt er gar keine
+                # Zeile, gibt es auch keinen Gesamtzähler, auf den er
+                # zurückfallen könnte — dann bleibt es bei der Lage des
+                # Kennzeichens, und die ist hier „feine Summe".
+                hat_split=s.nenner_fein_je_monat.get(
+                    _schluessel,
+                    bool((investition.parameter or {})
+                         .get("getrennte_strommessung")),
+                ),
+            )
+            s.gesamt_modus_abdeckung_h += _split.abdeckung_h
+
+
+async def _wp_zaehler(db: AsyncSession, investition: Investition, s: _WpSummen) -> None:
+    """Issue #238: Kompressor-Starts und Betriebsstunden dieser WP aus der Tagesebene."""
+    # Issue #238: Counter-Summen (Starts/Betriebsstunden) dieser WP aus
+    # TagesZusammenfassung.komponenten_starts über die Laufzeit. Nur gesetzt,
+    # wenn der jeweilige Zähler überhaupt Werte geliefert hat.
+    from backend.models.tages_energie_profil import TagesZusammenfassung
+    inv_id_str = str(investition.id)
+    tz_res = await db.execute(
+        select(TagesZusammenfassung.datum, TagesZusammenfassung.komponenten_starts)
+        .where(TagesZusammenfassung.anlage_id == investition.anlage_id)
+        .where(TagesZusammenfassung.komponenten_starts.is_not(None))
+    )
+    for datum_, komp in tz_res.all():
+        if not investition.ist_aktiv_im_monat(datum_.year, datum_.month):
+            continue
+        c = ((komp or {}).get("wp_starts_anzahl") or {}).get(inv_id_str)
+        if isinstance(c, (int, float)) and c > 0:
+            s.wp_starts_total += int(c)
+            s.hat_starts = True
+        h = ((komp or {}).get("wp_betriebsstunden") or {}).get(inv_id_str)
+        if isinstance(h, (int, float)) and h > 0:
+            s.wp_stunden_total += float(h)
+            s.hat_stunden = True
+
+
+async def _wp_sensorwert(
+    key: str, s: _WpSummen, *, db, investition, monatsdaten, modus_map, netzbezug_preis,
+) -> tuple:
+    """``(value, berechnung, zusatz_attribute)`` eines Wärmepumpen-Sensors — Sensor entsteht bei Wert oder Grund."""
+    value = None
+    berechnung = None
+    zusatz_attribute: dict = {}
+
+    if key == "wp_cop_durchschnitt":
+        value, berechnung, zusatz_attribute = _wp_arbeitszahl_sensor(investition, s)
+    elif key == "wp_ersparnis_euro":
+        value, berechnung, zusatz_attribute = await _wp_ersparnis_sensor(
+            db, investition, monatsdaten, s, netzbezug_preis,
+        )
+    elif key in ("wp_strom_heizen_modus_kwh", "wp_strom_kuehlen_modus_kwh", "wp_strom_warmwasser_modus_kwh"):
+        value, berechnung = _wp_modus_sensor(key, s)
+    elif key == "wp_betriebsmodus":
+        # #398: der EINZIGE Sensor dieser Liste, der KEINE Monatsgröße
+        # ist, sondern ein Zustand. Er kommt deshalb auch nicht aus den
+        # Monatsdaten, sondern aus `betriebsmodus_live` — und fehlt
+        # ganz, wenn es keine Zuordnung gibt (kein „—", keine leere
+        # Entität, die in HA für immer weiterlebt).
+        _modus = (modus_map or {}).get(investition.id)
+        if _modus:
+            value = BETRIEBSMODUS_LABEL[_modus]
+            berechnung = f"Kanon-Wert „{_modus}\" der zugeordneten climate-Quelle"
+    elif key == "wp_kompressor_starts":
+        if s.hat_starts:
+            value = s.wp_starts_total
+            berechnung = "Σ erfasste Kompressor-Starts"
+    elif key == "wp_betriebsstunden":
+        if s.hat_stunden:
+            value = s.wp_stunden_total
+            berechnung = "Σ erfasste Betriebsstunden"
+    return value, berechnung, zusatz_attribute
+
+
+def _wp_modus_sensor(key: str, s: _WpSummen) -> tuple:
+    """``(value, berechnung)`` der drei Betriebsart-Sensoren (Heizen, Kühlen, Warmwasser)."""
+    value = None
+    berechnung = None
+    if key == "wp_strom_heizen_modus_kwh":  # noqa: E501
+        # Ohne erfassten Modus bleibt der Sensor leer — er behauptete
+        # sonst „0 kWh geheizt" für ein Gerät, das eedc nicht beobachtet
+        # hat. In HA-Langzeitstatistik lebt so eine 0 weiter.
+        if s.gesamt_modus_abdeckung_h > 0 or s.gesamt_modus_gemessen:
+            value = s.gesamt_modus_heizen
+            berechnung = f"{fmt_zahl(s.gesamt_modus_heizen, 1)} von {fmt_zahl(s.gesamt_strom, 1)} kWh gesamt"
+    elif key == "wp_strom_kuehlen_modus_kwh":
+        if s.gesamt_modus_abdeckung_h > 0 or s.gesamt_modus_gemessen:
+            value = s.gesamt_modus_kuehlen
+            berechnung = f"{fmt_zahl(s.gesamt_modus_kuehlen, 1)} von {fmt_zahl(s.gesamt_strom, 1)} kWh gesamt"
+    elif key == "wp_strom_warmwasser_modus_kwh":
+        # N-336 — dieselbe Leer-Regel wie bei den zwei Nachbarn: ohne
+        # erfassten Modus fehlt der Sensor, statt 0 zu behaupten.
+        if s.gesamt_modus_abdeckung_h > 0 or s.gesamt_modus_gemessen:
+            value = s.gesamt_modus_warmwasser
+            berechnung = (
+                f"{fmt_zahl(s.gesamt_modus_warmwasser, 1)} von {fmt_zahl(s.gesamt_strom, 1)} kWh gesamt"
+            )
+    return value, berechnung
+
+
+def _wp_arbeitszahl_sensor(investition: Investition, s: _WpSummen) -> tuple:
+    """``(value, berechnung, zusatz_attribute)`` von `wp_cop_durchschnitt` — die Arbeitszahl entsteht im Layer."""
+    value = None
+    berechnung = None
+    zusatz_attribute: dict = {}
+    # N-391: dieselbe Auflösung wie im Hub und in den Monats-Fakten. Ohne sie
+    # meldeten die Sensoren *Wärme erzeugt*, *Arbeitszahl* und *Ersparnis*
+    # einer Wärmepumpe mit gemeinsamem Wärmemengenzähler 0 bzw. nichts.
+    gesamt_waerme = s.gesamt_waerme_kanonisch
+    gesamt_strom = s.gesamt_strom
+    # ADR-002/P12 (02.09.2026): Die Arbeitszahl entsteht im Layer,
+    # nie hier. **Bis dahin stand an dieser Stelle
+    # `gesamt_waerme / gesamt_strom`** — eine eigene Division, die
+    # von allen R2-Sperren nur die abgeleitete Wärme kannte.
+    #
+    # ⛔ **Zwei Größen fehlten, und beide bewegen die Zahl:**
+    # der funktionsfremde Strom (**W-14/E4** — Kühlen, Lüften,
+    # Entfeuchten standen im Nenner, obwohl ihre Nutzenergie in
+    # keinem Wärmemengenzähler landet) und die Anwender-Angabe
+    # „Fremdanteil auf dem Zähler" (**W-7**, Heizstab/bivalent).
+    # Der Hub rechnete beides seit dem 26.08. heraus; dieser Sensor
+    # nicht — **dieselbe Anlage, zwei Aussagen**, und diese hier
+    # verlässt eedc in fremde Dashboards und Automationen.
+    #
+    # ⚠ `bauarten_gemischt` und `geraete_ohne_waerme` gehören hier
+    # **nicht** hinein und ihr Fehlen ist keine Lücke: Der Block
+    # faltet **eine** Investition. Ein Gerät hat nur eine Bauart,
+    # und meldet es keine Wärme, ist `gesamt_waerme` bereits 0.
+    _az = arbeitszahl(
+        gesamt_waerme, gesamt_strom,
+        waerme_abgeleitet_kwh=1.0 if s.waerme_abgeleitet else 0.0,
+        # SOLL-§9-E7/Option A: der **Abzug**, nicht die Menge.
+        strom_funktionsfremd_kwh=s.gesamt_modus_funktionsfremd_abzug,
+        abgrenzung_verletzt=abgrenzungs_grund(
+            abgrenzung_stoerung=abgrenzung_stoerung(investition),
+        ),
+    )
+    if _az.wert is not None:
+        value = _az.wert
+        berechnung = (
+            f"{fmt_zahl(_az.zaehler_kwh, 0)} / {fmt_zahl(_az.nenner_kwh, 0)}"
+            if _az.zaehler_kwh is not None and _az.nenner_kwh is not None
+            else None
+        )
+    elif _az.grund and (gesamt_strom > 0 or gesamt_waerme > 0):
+        # B5/X-3 (SOLL §3.3 S3, ADR-002/P12): eine GESPERRTE
+        # Kennzahl ist ein Sensor ohne Wert, der seinen Grund
+        # nennt — nicht ein Sensor, der fehlt. Fehlte er, bliebe
+        # in Home Assistant der letzte publizierte Wert stehen
+        # (retain, kein expire_after) und liefe stündlich in die
+        # Langzeitstatistik weiter. Nur wo die Eingänge da sind:
+        # ein Gerät ohne jede Messung (F1) bekommt weiterhin keinen
+        # Sensor — sonst entstünden Entitäten für nie erfasste
+        # Größen (#400, Knallfrosch-Klasse).
+        zusatz_attribute = {"grund": _az.grund}
+    return value, berechnung, zusatz_attribute
+
+
+async def _wp_ersparnis_sensor(
+    db: AsyncSession, investition: Investition, monatsdaten: list, s: _WpSummen, netzbezug_preis: float,
+) -> tuple:
+    """``(value, berechnung, zusatz_attribute)`` von `wp_ersparnis_euro` — Layer `berechne_wp_ersparnis` je Monat (P8)."""
+    value = None
+    berechnung = None
+    zusatz_attribute: dict = {}
+    kuehl_je_monat = s.kuehl_je_monat
+    waerme_abgeleitet = s.waerme_abgeleitet
+    # B5/X-1 (05.09.2026): dieselbe Rechnung wie Hub und Cockpit —
+    # der Layer `berechne_wp_ersparnis`, je Monat mit dem Tarif
+    # seines Stichtags (ADR-002/P8) und ohne den Kühlstrom im
+    # Vergleich (Entscheid E-B, 18.08.).
+    #
+    # ⛔ **Bis hierher stand eine eigene Formel:** `alte Kosten −
+    # Σ Strom × heutiger WP-Tarif`. Gemessen an denselben Sprossen
+    # wie der Hub: F8 (Kühlstrom 300 kWh) 10 € statt 100 €; zwei
+    # Tarife (Juli 30 ct, ab September 40 ct) 66,67 € statt
+    # 166,67 € — der Juli wurde mit dem Septemberpreis bewertet.
+    # Dritte Kopie der Ersparnis-Formel (SOLL §3.3 S1); die
+    # Zusatzkosten der Altheizung, die hier schon standen, trägt
+    # seit X-4 der Layer selbst.
+    #
+    # N-88/F2b bleibt: ohne ersetzte Heizung ist kein Monat
+    # `bewertbar`, und der Sensor bleibt leer statt eine Ersparnis
+    # zu behaupten.
+    anlage_md_result = await db.execute(
+        select(Monatsdaten).where(Monatsdaten.anlage_id == investition.anlage_id)
+    )
+    anlage_md_dict = {
+        (m.jahr, m.monat): m for m in anlage_md_result.scalars().all()
+    }
+    alte_kosten = 0.0
+    wp_kosten = 0.0
+    kuehl_kosten = 0.0
+    bewertbar = False
+    for md in monatsdaten:
+        d = md.verbrauch_daten or {}
+        m_waerme = waerme_gesamt_kwh(   # N-391 (D1), N-379, N-398
+            d.get("waerme_kwh"),
+            heizwaerme_kwh(d),
+            get_wp_warmwasser_kwh(d, investition.parameter),
+        )
+        m_strom = get_wp_strom_kwh(d, investition.parameter)
+        # N-670 (Fachentscheid Master Wärme/Klima, 11.10.2026): ein Monat ohne Wärme trägt keinen
+        # Vergleich — seine Gerätezeile hat 0 € (Standby, `wp_ersparnis_zeile`), Hub und Cockpit
+        # summieren 0. Bis hierher stand nur „beide 0 ⇒ überspringen": ein Monat mit Strom ohne Wärme
+        # ging mit `wp_kosten` in `alte − WP` ein und senkte den Sensor um seinen Strom (gemessen
+        # 20 kWh × 30 ct: 19 statt 25 €).
+        if m_waerme <= 0:
+            continue
+        m_tarife = await lade_tarife_fuer_anlage(
+            db, investition.anlage_id, target_date=date(md.jahr, md.monat, 1)
+        )
+        m_preis = resolve_strompreis_for_komponente(
+            m_tarife, "waermepumpe", fallback=netzbezug_preis
+        )
+        amd = anlage_md_dict.get((md.jahr, md.monat))
+        m_erg = berechne_wp_ersparnis(
+            wp_waerme_kwh=m_waerme,
+            wp_strom_kwh=m_strom,
+            wp_strompreis_cent=m_preis,
+            wp_parameter=investition.parameter,
+            monats_gaspreis_cent=(
+                amd.gaspreis_cent_kwh if amd else None
+            ),
+            strom_kuehlen_kwh=kuehl_je_monat.get((md.jahr, md.monat), 0.0),
+        )
+        alte_kosten += m_erg.alte_heizung_kosten_euro
+        wp_kosten += m_erg.wp_kosten_euro
+        kuehl_kosten += m_erg.kuehl_kosten_euro
+        bewertbar = bewertbar or m_erg.bewertbar
+    if bewertbar:
+        value = alte_kosten - (wp_kosten - kuehl_kosten)
+        berechnung = (
+            f"{fmt_zahl(alte_kosten, 2)} (alt) - {fmt_zahl(wp_kosten - kuehl_kosten, 2)} (WP)"
+        )
+        if kuehl_kosten > 0:
+            berechnung += (
+                f" · Kühlstrom {fmt_zahl(kuehl_kosten, 2)} € nicht im Vergleich"
+            )
+        # B5/X-2: der Vorbehalt aus dem Layer — dieselben Worte
+        # wie Hub (B3) und Cockpit (B4). Nur gesetzt, wenn es
+        # einen gibt; MQTT trägt ihn als Attribut, REST als
+        # `hinweis`.
+        _vorbehalt = ersparnis_vorbehalt(
+            waerme_abgeleitet=waerme_abgeleitet,
+            abgrenzung=abgrenzung_stoerung(investition),
+        )
+        if _vorbehalt:
+            zusatz_attribute = {"vorbehalt": _vorbehalt}
+    return value, berechnung, zusatz_attribute
 
 
 # =============================================================================
