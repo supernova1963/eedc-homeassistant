@@ -418,6 +418,8 @@ Am Gerät gibt es den Schalter **„Getrennte Strommessung"**.
 | **Keiner** | nichts — eedc leitet die Wärme aus *Strom × Arbeitszahl* ab und kennzeichnet sie | Mengen als Modellrechnung, **keine** Arbeitszahl (sie wäre zirkulär) |
 
 > ⚠ **Trag denselben Wert nicht zweimal ein.** Steht in *Wärme gesamt* ein Wert, ist **er** die Wärme des Geräts; *Heizwärme* und *Warmwasser-Wärme* stehen dann nur noch als Aufteilung daneben. Ist die Aufteilung zusammen **größer** als der Gesamtwert, sagt der Daten-Checker es dir — dann meint einer der beiden Werte etwas anderes als gedacht.
+>
+> Hast du *Wärme gesamt* und daneben nur *Warmwasser-Wärme* zugeordnet, zeigen Verlauf und Monatstabelle im Komponenten-Hub die Heizung mit 0 und darüber nur das Warmwasser, zusammen also weniger als *Wärme erzeugt* in der Kachel — es gilt der Gesamtwert, und die Heizwärme rechnet eedc nicht als Differenz aus.
 
 > ⚠ **Besonders beim Import aus einer eigenen Datei.** Viele Hersteller-Exporte führen die abgegebene Wärme in **zwei** Spalten nebeneinander — einmal die vom Gerät erzeugte Wärme, einmal die aus der Umwelt entnommene *Umgebungswärme*. Für eedc zählt die **erzeugte** Wärme; wird die Umgebungswärme mit zugeordnet oder die bereits addierte Summe genommen, steht die Wärmemenge um ein Vielfaches zu hoch.
 >

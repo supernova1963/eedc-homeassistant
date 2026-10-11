@@ -373,6 +373,10 @@ Die **Monat**-Sicht ist das Referenz-Muster der Zeit-Achse: ein ausgewählter Mo
 > „MQTT (14.–30.09.)". **Hochgerechnet wird nichts** — die Zahl ist, was seit diesem
 > Zeitpunkt gelaufen ist, nicht was der Monat vermutlich bringen wird.
 >
+> Nur am Etikett **„HA-Statistik"** steht kein Zeitraum, weil Home Assistant nicht meldet, seit wann ein Sensor zählt:
+> Legst du einen Sensor in Home Assistant erst mitten im Monat an, ist die Zahl dieses Monats die Menge seit seinem
+> ersten Messwert — ohne Hinweis daneben.
+>
 > Und wenn gar keine Quelle etwas liefert, sagt die leere Kachel jetzt warum: Fahr mit der
 > Maus über das „—", und dort steht, ob für diesen Monat noch überhaupt nichts vorliegt oder
 > ob nur dieser einen Größe die Zuordnung fehlt — samt dem Weg dorthin.
@@ -413,6 +417,10 @@ Die **Monat**-Sicht ist das Referenz-Muster der Zeit-Achse: ein ausgewählter Mo
 > Betriebsmodus nicht. Das gilt ab dem Monat des Updates, frühestens ab dem Zeitpunkt, ab dem eedc den Betriebsmodus
 > mitschreibt; frühere Monate rechnet eedc nicht neu. Zeigen Strom und Wärme in einem Monat beide 0, steht dort 0 und
 > *kein Heizbetrieb in diesem Zeitraum* — die Wärmepumpe lief nicht, es fehlt kein Zähler.
+
+> **Ohne Home Assistant** gilt dasselbe für Zähler, die eedc über MQTT mitschreibt, ab dem ersten Monat, den diese
+> Mitschrift ganz abdeckt; davor — und für die Netzladung deines Speichers auch mit Home Assistant — zählen diese Größen
+> erst mit dem Monatsabschluss.
 
 Aus dem feingranularen Stunden-Bestand des Monats zeigt die Sicht zusätzlich:
 
@@ -467,6 +475,9 @@ Die **Jahr/Gesamt**-Sicht fasst die Anlage über ein ganzes Jahr zusammen — vo
 > der Jahresbericht und der HA-Sensor rechnen nur mit abgeschlossenen Monaten. Kann ein Monat gar nicht berechnet
 > werden, nennt die Zeile ihn ebenfalls; das Jahresergebnis bleibt dann — wie bei einer fehlenden Stromrechnung — leer
 > („—“) und nennt den Monat als fehlenden Posten.
+> **Ohne Home Assistant** zeigt *Cockpit → Monat* einen solchen Monat erst nach dem Abschluss — MQTT-Zählerstände und
+> Tageswerte nimmt die Monatssicht nur für den laufenden Monat, von den übrigen Quellen liefert nur ein Geräte-Connector
+> auch vergangene Monate —, während der Verlauf hier im Jahr ihn schon vorher aus den mitgeschriebenen Werten zeigt.
 
 Der Finanzen-Block als Komponenten-Finanz-Tabelle erscheint auch in Jahr/Gesamt.
 

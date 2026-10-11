@@ -34,6 +34,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Komponenten → Balkonkraftwerk ohne eigenen Zähler: Kennzahlen und Verlauf zeigen seinen Anteil am PV-Gesamtzähler.** Hat dein Balkonkraftwerk keinen eigenen Erzeugungs-Sensor, standen dort 0 kWh und „Keine Verlaufsdaten erfasst", während *Cockpit → Monat* ihm seinen Anteil am PV-Gesamtzähler der Anlage (nach kWp) zuschreibt. Jetzt zeigt der Reiter dieselbe Erzeugung wie das Cockpit, samt Eigenverbrauch, Einspeisung, Ersparnis und CO₂, und kennzeichnet sie als „geschätzt (kWp-Anteil)" — wie die PV-Module ohne eigenen Zähler. Mit eigenem Zähler ändert sich nichts.
 - **Komponenten → Balkonkraftwerk mit Modul-Kindern: keine doppelte Erzeugung mehr.** Hängen PV-Module an deinem Balkonkraftwerk, steht seine Erzeugung bei diesen Modulen — das Cockpit zählt sie dort. Der Reiter zeigte sie trotzdem noch einmal am Balkonkraftwerk (z. B. 90 kWh und 19,29 € Ersparnis). Jetzt nennt er dort 0 und sagt, dass die Erzeugung bei den Modul-Kindern steht.
 
+### Changed
+
+- **Hilfe präzisiert:** Zeitraum bei spät angelegtem HA-Sensor, vergangene Monate ohne Abschluss im Standalone-Betrieb, *Wärme gesamt* neben einem Warmwasser-Zähler und was erst mit dem Monatsabschluss zählt (die Netzladung des Speichers, ohne Home Assistant auch Monate vor der vollständigen MQTT-Mitschrift).
+
 ## [4.1.5] - 2026-10-10 — Wandlungsverluste zählen nicht mehr als Ersparnis und CO₂, Zählerstand-Meldung klarer, ROI-CO₂ wie das Cockpit
 
 ### Fixed

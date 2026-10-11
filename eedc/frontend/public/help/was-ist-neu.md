@@ -35,6 +35,10 @@ Eigenverbrauch.
 Anteil am PV-Gesamtzähler wie das Cockpit, gekennzeichnet als „geschätzt (kWp-Anteil)"; hängen PV-Module daran, steht
 seine Erzeugung nur noch bei den Modulen.
 
+**Hilfe:** Das Handbuch sagt jetzt, warum am Etikett „HA-Statistik" kein Zeitraum steht, wann ein vergangener Monat ohne
+Home Assistant in *Cockpit → Monat* erscheint, was erst mit dem Monatsabschluss zählt, und warum bei
+*Wärme gesamt* neben einem Warmwasser-Zähler die Heizung im Verlauf leer bleibt.
+
 ## v4.1.5 — 10. Oktober 2026
 
 **Wandlungsverluste kosten kein Geld mehr, das du nie gespart hast:** Misst deine Anlage ihre Strings mit eigenen
