@@ -15,6 +15,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Fixed
 
+- **Abhängigkeit gedeckelt: `pymodbus<3.16`.** Die am 11.10.2026 erschienene 3.16.0 (transitiv über `pysma-plus`) bricht beim Import ohne das Extra `serial` mit `NameError: pyserial`; ein frisch gebautes Image wäre nicht gestartet. Gefangen vom Prod-Paritäts-Check des Release-Scripts, Obergrenze bis upstream repariert ist.
 - **Komponenten → Sonstiges: der Verlauf eines Zählers (Gas, Wasser …) trägt die richtigen Monatsnamen.** Jeder Monat stand einen Monat zu früh beschriftet — der Juni-Verbrauch hieß „Mai", der Januar hatte keinen Namen. Die Werte selbst waren richtig.
 - **Cockpit → Jahr → Verlauf: die Zeile über dem Diagramm behauptet keine Gleichung mehr.** Sie lautete „Eigenverbrauch + Einspeisung = PV-Erzeugung". Das geht schon mit jedem Speicher nicht auf (Wandlungsverluste), mit BHKW oder V2H ebenfalls nicht. Jetzt nennt sie die beiden gestapelten Größen und sagt, dass die Summe dann von der PV-Erzeugung abweicht; die Balken sind unverändert.
 - **Cockpit → Monat (Monatsleiste) und Jahresbericht-PDF: ein Monat ohne Werte zeigt einen Strich statt „0 kWh".** Ein nicht erfasster Monat sah aus wie ein Monat mit 0 kWh, im PDF zusätzlich mit „0,0 %" Autarkie und „0,00 €" Ertrag. Jetzt steht dort der Strich, und die Leiste zeichnet für ihn keinen Balken. Eine gemessene 0 bleibt eine 0; die Summen ändern sich nicht.

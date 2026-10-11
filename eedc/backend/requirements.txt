@@ -34,6 +34,10 @@ apscheduler>=3.10.0
 
 # SMA Device Connector (ennexOS, WebConnect, Speedwire)
 pysma-plus>=0.4
+# pymodbus ist eine transitive Abhängigkeit von pysma-plus (>=3.11). 3.16.0 (erschienen 2026-10-11) bricht beim Import
+# mit «NameError: pyserial» (serialtransport.py liest pyserial ohne Guard, Extra «serial» nicht installiert) — gefangen vom
+# Prod-Paritäts-Check (smoke.sh [3/4]) beim Release 4.1.6. Obergrenze, bis upstream repariert ist.
+pymodbus>=3.11,<3.16
 
 # Krypto für Anker SOLIX Cloud-Login (ECDH P-256 + AES-256-CBC, #328).
 # Nicht transitiv garantiert — muss explizit dabei sein. Reines
