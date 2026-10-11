@@ -1,8 +1,9 @@
-# CLAUDE.md — eedc (Konsolidierungs- und Wartungsmodus seit 10.10.2026)
+# CLAUDE.md — eedc (Wartungsmodus seit 11.10.2026)
 
 > Das bisherige, ausführliche CLAUDE.md liegt unter [docs/ARCHIV-CLAUDE-2026-10-10.md](docs/ARCHIV-CLAUDE-2026-10-10.md).
 > Es beschreibt den Prüfprozess (Vorlage → Gegenprüfung → Opus-Bau mit Halten → Nachmessung → Golden Master → Matrix-Form),
 > der am 10.10.2026 **ausgesetzt** wurde (Entscheid Gernot: wirtschaftlich nicht mehr tragbar für ein Solo-Open-Source-Projekt).
+> Die Konsolidierung (10./11.10., 31 Funde, v4.1.6) war der Abschluss der aktiven Phase; seitdem **Wartungsmodus**.
 > Was dort als Regel steht, gilt als **Hintergrundwissen**, nicht als Pflicht — außer den hier genannten Punkten.
 
 ## Was eedc ist
@@ -18,11 +19,12 @@ Version: [CHANGELOG.md](CHANGELOG.md) (oberster Abschnitt) bzw. `eedc/backend/co
 | **eedc** (`/home/gernot/claude/eedc`) | Standalone-Spiegel, **nur** per `scripts/release.sh` |
 | **eedc-community** (`/home/gernot/claude/eedc-community`) | Community-Server, eigenes Repo; Deploy nur mit einem Add-on-Release |
 
-## Arbeitsmodus (Entscheid Gernot 10.10.2026)
+## Arbeitsmodus Wartung (Entscheid Gernot 10./11.10.2026)
 
-1. **Eingang nur Melder** (GitHub-Issues, simon42-Forum T89667, photovoltaikforum T258098, community-smarthome T10057, PN) **und
-   die offenen Funde im Fundregister** (`~/.claude/plans/fundregister.yaml` — das EINE Register; Stand 10.10.: N-648…N-665 aus der
-   Konsolidierung, Gernots Streichungen ausstehend). Keine zweite Liste neben dem Register.
+1. **Eingang nur Melder** (GitHub-Issues, simon42-Forum T89667, photovoltaikforum T258098, community-smarthome T10057, PN — **Gernot
+   liest die Kanäle selbst und gibt den Beitrag weiter; keine routinemäßigen Melder-Sweeps durch Agenten**) **und das Fundregister**
+   (`~/.claude/plans/fundregister.yaml` — das EINE Register; Stand 11.10.: 0 offen). Keine zweite Liste neben dem Register. Wünsche
+   stehen in #110 «Gesammelt» ohne Termin.
    Keine Matrix-Sweeps, keine Beobachtungsliste abarbeiten, keine Refactoring-Serie, kein HA-Bauform-S3, keine Vorhaben aus dem Index.
 2. **Fund nur bei Wirkung:** falsche Zahl, die ein Anwender sieht · Absturz · Datenverlust. Sonst Antwort oder Handgriff.
    **Die Register-Disziplin gilt unverändert** (Gernot 10.10.): kein Eintrag ohne Analyse am HEAD, drei Tore (gemessen · abgeglichen ·
@@ -33,7 +35,7 @@ Version: [CHANGELOG.md](CHANGELOG.md) (oberster Abschnitt) bzw. `eedc/backend/co
 4. **Fable nur zur Triage** auf Gernots Ruf, kurz.
 5. **Commit je Päckchen mit expliziten Pfaden** (nie `git add -A`); **kein Push, kein Tag außerhalb von `scripts/release.sh`** (Gernot
    10.10.: mehrere Repos, nur das Release hält sie gleich; «pushen ohne taggen» hat Probleme gemacht). Volle Backend-Suite lokal am Ende
-   jedes Päckchens mit gekürzter Ausgabe (`| tail -3`). Release gebündelt per `scripts/release.sh <version>` auf Gernots Wort.
+   jedes Päckchens mit gekürzter Ausgabe (`| tail -3`). Release, wenn ein Melder-Fix drin ist, sonst quartalsweise — per `scripts/release.sh <version>` auf Gernots Wort.
 6. **Nichts öffentlich ohne Go** — Issue-Kommentare, Foren-Texte, #110-Änderungen legt die Session vor, Gernot entscheidet (GitHub
    darf die Session nach dem Go selbst posten; Foren postet Gernot).
 7. **Doku gehört zum Fix:** CHANGELOG `[Unreleased]`, `docs/WAS-IST-NEU.md`, betroffenes Handbuch; `./scripts/sync-help.sh` spiegelt.
