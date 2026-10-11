@@ -169,6 +169,9 @@ export interface LiveWetterResponse {
     vm_kwh: number | null
     nm_kwh: number | null
     rueckfall: string | null
+    /** N-695: 'eedc' ⇒ die Quelle hat für diesen Tag kein Stundenprofil, VM/NM
+     *  stammen aus dem eedc-Kanon (die Anzeige sagt es an den Teilwerten). */
+    vm_nm_rueckfall?: string | null
   }> | null
   /** Hat die gewählte Quelle ein Stundenprofil? false ⇒ es gibt KEINEN Rest
    *  (statt eines aus fremder Kurvenform geschätzten). */

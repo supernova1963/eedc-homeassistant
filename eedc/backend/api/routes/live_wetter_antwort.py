@@ -428,17 +428,28 @@ def _sfml_ins_profil(profil: list[dict], stand: _QuellenStand) -> None:
                 p["pv_ml_prognose_kw"] = round(p["pv_ertrag_kw"] * sfml_factor, 2)
 
 
-def _pq_nach_sfml(pq, stand: _QuellenStand):
-    """Die effektive Quelle nach dem SFML-Abruf."""
-    # SFML-Fallback: wenn SFML gewählt aber keine Daten → Fallback auf eedc
+def _pq_nach_abruf(pq, stand: _QuellenStand):
+    """Die effektive Quelle nach den Abrufen von SFML und Solcast.
+
+    Eine Regel für beide Fremdquellen (HANDBUCH_PROGNOSEN §2.3/§2.5, Konzept
+    Prognosequellen-Wahl „Fallback bei Sensor-unavailable"): liefert die
+    gewählte Quelle für heute keinen Tageswert, gilt die eedc-Prognose — mit
+    Hinweis, und die Überschrift folgt ihr. N-696: bis 11.10.2026 gab es den
+    Zweig nur für SFML; lieferte Solcast nichts, stand die eedc-Zahl ohne
+    Vermerk unter „(Solcast)" (`_pv_prognose_aktiv` fiel still zurück).
+    """
     if pq.ist_sfml and stand.sfml_kwh is None:
-        from backend.services.prognose_router import PrognoseQuelleResult
-        pq = PrognoseQuelleResult(
-            quelle="eedc", ist_fallback=True,
-            hinweis="SFML liefert aktuell keine Daten, eedc-Prognose aktiv.",
-            gewuenscht="sfml",
-        )
-    return pq
+        name = "SFML"
+    elif pq.ist_solcast and stand.solcast_kwh is None:
+        name = "Solcast"
+    else:
+        return pq
+    from backend.services.prognose_router import PrognoseQuelleResult
+    return PrognoseQuelleResult(
+        quelle="eedc", ist_fallback=True,
+        hinweis=f"{name} liefert aktuell keine Daten, eedc-Prognose aktiv.",
+        gewuenscht=pq.quelle,
+    )
 
 
 # ── Solcast (immer gelesen — Persistenz; Quelle nur bei Wahl) ───────────────
@@ -582,6 +593,13 @@ def _prognose_quelle_tage(
                 # Was die gewählte Quelle nicht liefert, sagt es — statt
                 # still eine eedc-Zahl unter ihrer Überschrift zu zeigen.
                 "rueckfall": None if kwh is not None else "eedc",
+                # N-695: dieselbe Regel je TEILWERT. Hat die Quelle für den Tag
+                # kein Stundenprofil (Solcast im Live-Pfad nur heute, SFML ohne
+                # `forecast`-Attribut an keinem Tag), zeigt die Kachel VM/NM aus
+                # dem eedc-Kanon — neben der Tageszahl der Quelle, die Teile
+                # addieren sich dann nicht zu ihr (#401). HANDBUCH_PROGNOSEN
+                # §2.3: eine Näherung bleibt stehen und wird dazugesagt.
+                "vm_nm_rueckfall": None if vm is not None else "eedc",
             })
     return prognose_quelle_tage
 

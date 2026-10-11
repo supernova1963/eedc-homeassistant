@@ -50,7 +50,7 @@ from backend.api.routes.live_wetter_antwort import (
     _kanon_zahlen,
     _mqtt_aussentemperatur,
     _persistenz_auftrag,
-    _pq_nach_sfml,
+    _pq_nach_abruf,
     _prognose_quelle_tage,
     _pv_prognose_aktiv,
     _pv_stundenprofil,
@@ -142,6 +142,10 @@ class PrognoseQuelleTag(BaseModel):
     vm_kwh: Optional[float] = None
     nm_kwh: Optional[float] = None
     rueckfall: Optional[str] = None  # "eedc" oder None
+    #: N-695: ``"eedc"``, wenn die gewählte Quelle für diesen Tag kein
+    #: Stundenprofil hat — VM/NM der Kachel kommen dann aus dem eedc-Kanon und
+    #: addieren sich nicht zur Tageszahl der Quelle; die Anzeige sagt es.
+    vm_nm_rueckfall: Optional[str] = None
 
 
 class VerbrauchsStunde(BaseModel):
@@ -1240,6 +1244,23 @@ async def _lade_forecast_gecached(
         )
         cached_wetter = None
 
+    # N-698: ein UNVOLLSTÄNDIGER Eintrag wird nicht verwendet — dieselbe Regel
+    # wie beim Schreiben unten (N-690). Der Prefetch legt für Multi-String
+    # `(data, None, False)` unter denselben Schlüssel (er macht keinen Fan-out,
+    # #306) und füllte damit genau die Lücke, die der nicht gecachte
+    # unvollständige Abruf lässt: Fiel eine Gruppe aus und blieb der Kanon
+    # leer, rechnete der lokale Pfad bis zu 60 min mit der Globalstrahlung statt
+    # der Einstrahlung auf die Module, ohne Hinweis (gestellte Ost/West-Anlage,
+    # Analyse/Bau N-698: 31,0 statt 38,8 kWh; der Teil-Abruf selbst zeigt 19,3
+    # MIT Hinweis). Jetzt holt der Aufruf den Fan-out selbst; ist er
+    # vollständig, überschreibt er den Eintrag.
+    if cached_wetter is not None and not cached_wetter[2]:
+        logger.debug(
+            "Live-Wetter: unvollständiger Cache-Eintrag (ohne Multi-String-"
+            f"Fan-out) für Anlage {anlage.id} — eigener Abruf"
+        )
+        cached_wetter = None
+
     if cached_wetter is not None:
         data, multi_gti, multi_vollstaendig = cached_wetter
     elif _error_cache_check(cache_key):
@@ -1396,11 +1417,14 @@ async def get_live_wetter(
 
         stand = _QuellenStand()
         await _sfml_quelle(pq, profil, stand)
-        pq = _pq_nach_sfml(pq, stand)
 
         _mqtt_aussentemperatur(anlage, aktuelle_stunde, ha_temp_found)
 
         await _solcast_quelle(anlage, pq, stand)
+        # N-696: der Rückfall der gewählten Quelle steht hinter BEIDEN Abrufen
+        # (eine Regel für SFML und Solcast); `_solcast_quelle` liest `pq` nur
+        # für `ist_solcast`, das ein SFML-Rückfall nicht berührt.
+        pq = _pq_nach_abruf(pq, stand)
 
         pv_stundenprofil = _pv_stundenprofil(profil)
         pv_prognose_aktiv = _pv_prognose_aktiv(pq, zahlen.pv_prognose, stand)

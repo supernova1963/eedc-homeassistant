@@ -266,6 +266,12 @@ async def test_uebersprungener_grenztag_wird_per_wetterzeile_nachgeholt(db, job_
 async def test_gelungener_grenztag_wird_nicht_doppelt_geholt(db, job_session):
     grenztag = archiv_grenztag(HEUTE)
     anlage = await _anlage_mit_tagen(db, grenztag)
+    # „Gelungen" heißt: die Neuaggregation hat das Archiv-GTI geschrieben. Bis
+    # N-697 stand hier der vorläufige Tag ohne GTI — genau der Zustand, den ein
+    # Wetter-Ausfall am Grenztag hinterlässt und der seither nachgeholt wird
+    # (`test_n697_grenztag_ohne_gti.py`).
+    tz = await _tz(db, anlage.id, grenztag)
+    tz.gti_summe_wh_m2, tz.performance_ratio = 6000.0, 0.167
     await archiv_nachzug.altbestand_merken(db, anlage.id, {"bis": "x", "am": "x", "tage": 0, "status": "ok"})
     await db.commit()
     with patch.object(archiv_nachzug, "_fetch_wetter", new=AsyncMock()) as f:

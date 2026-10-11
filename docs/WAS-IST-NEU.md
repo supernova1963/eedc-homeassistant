@@ -30,6 +30,22 @@ Live* ein Hinweis unter dem Wetter und in der Solar-Aussicht, statt einer zu nie
 nächste Abruf versucht es neu ([Bedienung → Live](HANDBUCH_BEDIENUNG.md#21-live)). Dasselbe gilt für die Einstrahlung im
 Energieprofil: eine ausgefallene Dachfläche ergibt keine zu hohe Performance Ratio mehr, die Zahl bleibt dann leer.
 
+**Solar-Aussicht sagt, woher Vormittag/Nachmittag kommen:** Liefert deine Prognosequelle für einen Tag nur die
+Tagesmenge — Solcast für Morgen und Übermorgen, Solar Forecast ML ohne Stundenverlauf —, kommt die Aufteilung in
+Vormittag/Nachmittag aus der eedc-Prognose und addiert sich nicht zur Tageszahl der Quelle. Das steht jetzt als „eedc“
+an den beiden Werten. Liefert Solcast für heute gar nichts, schaltet die Solar-Aussicht wie bei Solar Forecast ML
+sichtbar auf die eedc-Prognose um und sagt es, statt die eedc-Zahl unter der Überschrift „Solcast“ zu zeigen
+([Prognosen → Solcast](HANDBUCH_PROGNOSEN.md#23-solcast--optional-dritte-meinung)).
+
+**Ausgefallener Wetter-Nachzug wird nachgeholt:** Fiel beim nächtlichen Nachzug aus dem Wetter-Archiv der Abruf ganz
+oder für eine Dachfläche aus, blieb der Tag bisher dauerhaft ohne Einstrahlung und Performance Ratio. Jetzt holt eedc
+ihn in derselben oder einer der folgenden Nächte nach ([Bedienung → Tag](HANDBUCH_BEDIENUNG.md#22-tag)).
+
+**Keine stille Schätzung aus der Globalstrahlung:** Nach einem unvollständigen Wetterabruf bei mehreren Dachflächen
+konnte die PV-Prognose in *Cockpit → Live* bis zu einer Stunde aus der horizontalen Strahlung gerechnet stehen, ohne
+Hinweis. Jetzt holt eedc die Dachflächen neu und zeigt den Hinweis zum unvollständigen Abruf, bis alle wieder liefern
+([Bedienung → Live](HANDBUCH_BEDIENUNG.md#21-live)).
+
 ## v4.1.6 — 11. Oktober 2026
 
 **Kleinere Anzeige-Korrekturen:** Monate ohne Werte zeigen in der Monatsleiste und im Jahresbericht einen Strich statt „0 kWh",

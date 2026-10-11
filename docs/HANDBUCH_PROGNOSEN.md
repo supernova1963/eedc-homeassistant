@@ -63,7 +63,7 @@ Solcast ist ein spezialisierter PV-Forecast-Dienst und liefert ein Konfidenzband
 - **HA-Add-on:** über die Solcast-HACS-Integration (BJReplay), automatisch erkannt. **Kein** eigener Key in eedc nötig.
 - **Standalone:** über die Solcast-REST-API mit eigenem `api_key` + `resource_ids`, hinterlegt in den Anlagenstammdaten ([Einstellungen → Stammdaten → Solarprognose](HANDBUCH_EINSTELLUNGEN.md#23-solarprognose)). Achtung Free-Tier-Limit (10 Abrufe/Tag) — eedc cached entsprechend.
 
-Solcast läuft **ohne** Lernfaktor (es ist bereits ein fertig kalibrierter Dienst). Fehlt der Key oder ist HA nicht erreichbar, fällt eedc still auf die eedc-Quelle zurück und zeigt einen Hinweistext.
+Solcast läuft **ohne** Lernfaktor (es ist bereits ein fertig kalibrierter Dienst). Fehlt der Key, ist HA nicht erreichbar oder liefert Solcast für heute keine Daten, fällt eedc still auf die eedc-Quelle zurück und zeigt einen Hinweistext.
 
 > **Jeder Tag bekommt den Stundenverlauf, den Solcast für ihn liefert.** Die HA-Integration führt je
 > Tages-Sensor ein eigenes Detailprofil, der API-Zugang liefert sieben Tage am Stück — eedc wertet
