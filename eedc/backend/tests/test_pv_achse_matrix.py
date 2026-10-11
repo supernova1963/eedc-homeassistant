@@ -323,28 +323,37 @@ _TOL_KOPF = 0.051
 def _bkw_hub_zellen(form: mx.Form, nach: dict) -> list[Zelle]:
     """N-638, Komponenten → Balkonkraftwerk → Verlauf (I4: Hub-Reihe = Kopfzahl = Monats-Fakten-Anteil).
 
-    Erzeugung des Juni = die eigene Messung des BKW laut Form (der Hub liest die Zeile des Geräts; ein BKW ohne
-    Zähler hat keine — Reihe und Kopf 0). Eigenverbrauch = ``bkw_eigenverbrauch_anteil`` auf dieser Erzeugung und
-    dem Anlagen-Kontext der Monats-Fakten (dieselbe Formel ist erlaubt — sie ist der SoT, ADR-001); nicht bewertbar
-    ⇒ ``None``. Einspeisung = Erzeugung − Eigenverbrauch (die Formen messen keine BKW-Einspeisung). Σ Reihe = Kopf."""
+    Erzeugung des Juni = die eigene Messung des BKW laut Form; seit K4 (N-664/N-671, Entscheid Gernot 10.10.2026:
+    der Hub verfährt wie die anderen Hubs) für ein BKW **ohne** eigenen Zähler sein kWp-Anteil am Anlagenzähler und
+    für ein an Modul-Kinder **abgetretenes** BKW 0 — beides der Wert der Monats-Fakten, hier aus der Regel
+    (``soll_monat``; die I4-Sicht ``fakten`` hält Fakten = Regel). Eigenverbrauch = ``bkw_eigenverbrauch_anteil`` auf
+    dieser Erzeugung und dem Anlagen-Kontext der Monats-Fakten (dieselbe Formel ist erlaubt — sie ist der SoT,
+    ADR-001); nicht bewertbar ⇒ ``None``. Einspeisung = Erzeugung − Eigenverbrauch (die Formen messen keine
+    BKW-Einspeisung). Σ Reihe = Kopf; ``juni_erzeugung_quelle`` = gemessen · kwp_anteil · abgetreten."""
     from backend.core.berechnungen import bkw_eigenverbrauch_anteil
 
     hub = nach.get("bkw_hub") or {}
     kx = hub.get("kontext") or {}
     out: list[Zelle] = []
     von, bis = mx._tagesfenster_dt(mx.TAGE_JUNI[0])[0], mx._tagesfenster_dt(mx.TAGE_JUNI[-1])[1]
+    regel_juni = mx.soll_monat(form, mx.TAGE_JUNI)
     for b in (g for g in form.geraete if g.typ == "balkonkraftwerk"):
         d = (hub.get("geraete") or {}).get(b.name)
         if d is None:
             out.append(Zelle(f"bkw_hub:{b.name}", None, "Eintrag je BKW", "rot", "die Route nennt das Gerät nicht"))
             continue
         juni = d["juni"] or {}
-        if not b.zaehler:
-            erz_soll = 0.0
+        abgetreten = bool(b.zaehler and mx._kinder_von(form, b, mx.TAGE_JUNI[-1]))
+        if abgetreten:
+            erz_soll, erz_quelle = 0.0, "abgetreten"
+        elif not b.zaehler:
+            erz_soll, erz_quelle = regel_juni.je_geraet.get(b.name, 0.0), "kwp_anteil"
         elif form.w2:
             erz_soll = mx.zaehler_delta(form, b.sensor_id, von, bis)
         else:
             erz_soll = mx.tagesmenge(b.rate) * len(mx.TAGE_JUNI)
+        if b.zaehler and not abgetreten:
+            erz_quelle = "gemessen"
         a = bkw_eigenverbrauch_anteil(
             bkw_erzeugung_kwh=erz_soll, bkw_eigenverbrauch_gemessen_kwh=0.0,
             erzeugung_hinter_zaehler_kwh=kx.get("hinter_zaehler"), eigenverbrauch_gesamt_kwh=kx.get("ev_gesamt"),
@@ -355,7 +364,7 @@ def _bkw_hub_zellen(form: mx.Form, nach: dict) -> list[Zelle]:
         einsp_ist = juni.get("einsp") if d["juni"] is not None else 0.0
         out += [
             _z(f"bkw_hub:{b.name}:juni_erzeugung", juni.get("erzeugung") or 0.0, erz_soll,
-               notiz="eigene Messung des BKW laut Form"),
+               notiz=f"Monats-Fakten ({erz_quelle})"),
             _z(f"bkw_hub:{b.name}:juni_ev", ev_ist, ev_soll, notiz=f"Monats-Fakten-Anteil ({a.quelle})"),
             _z(f"bkw_hub:{b.name}:juni_einspeisung", einsp_ist, einsp_soll, notiz="Erzeugung − Eigenverbrauch"),
             _z(f"bkw_hub:{b.name}:Σreihe=kopf_erzeugung", d["reihe_erzeugung"], d["kopf_erzeugung"], tol=_TOL_KOPF),
@@ -365,6 +374,8 @@ def _bkw_hub_zellen(form: mx.Form, nach: dict) -> list[Zelle]:
         if d["juni"] is not None:
             out.append(Zelle(f"bkw_hub:{b.name}:juni_quelle", juni.get("ev_quelle"), a.quelle,
                              "ok" if juni.get("ev_quelle") == a.quelle else "rot"))
+            out.append(Zelle(f"bkw_hub:{b.name}:juni_erzeugung_quelle", juni.get("erz_quelle"), erz_quelle,
+                             "ok" if juni.get("erz_quelle") == erz_quelle else "rot"))
     return out
 
 
@@ -714,33 +725,10 @@ for _f in ("F01", "F02", "F03", "F04", "F05", "F06", "F07", "F08a", "F08b", "F09
 # kWp-Anteil des BKW an den Tagen ist keine zweite Quelle (Bauplan §6b W2-R2, `monats_fakten/bau.py`). Keine Markierung.
 # N-588 (10.10.2026): die 24 Geld-Sichten von F13a haben ein Soll (`_geld_sichten`) — `_U_N588` ist entfallen; mit
 # N-647 (B7) auch das CO₂ der ROI-Zeile (`_U_N647` und seine 21 Haltewerte sind entfallen).
-# N-638, Entscheid Master 07.10.2026 (Option b): die Hub-Sicht `bkw_hub:*` legt für zwei Formklassen kein Soll fest.
-# Gemessen wird, was der Hub zeigt (die Zeile des Geräts); ob er stattdessen den Wert der Monats-Fakten zeigen soll,
-# ist nicht entschieden — eine Zelle mit Soll „eigene Messung" schriebe das heutige Verhalten fest, nicht die
-# Invariante (I6: keine Sicht nennt „nichts", wo eine andere einen Wert nennt). Bewertet bleiben in diesen Formen
-# `Σreihe=kopf_*` (Reihe = Kopf derselben Antwort — dort ist das Soll eindeutig) und `juni_quelle`.
-_U_BKW_HUB_OHNE_ZAEHLER = (
-    "N-638 / Beobachtungsliste 07.10.2026: ein Balkonkraftwerk ohne eigenen Zähler hat keine eigene Monatszeile — "
-    "der Hub zeigt Kopf 0 und keine Reihe, die Monats-Fakten geben ihm einen kWp-Anteil am Anlagenzähler "
-    "(`bkw_aus_anlagenwert_kwh`, Cockpit nennt ihn, N-621). Ob der Hub diesen Anteil zeigen soll, ist nicht entschieden."
-)
-_U_BKW_HUB_ABGETRETEN = (
-    "N-638 / Beobachtungsliste 04.10.2026: ein an Modul-Kinder abgetretenes Balkonkraftwerk zeigt im Hub seinen "
-    "Zähler (90 kWh), die Monats-Fakten führen es mit 0 (die Kinder tragen, ADR-002/P11). Ob der Hub dem folgt, "
-    "ist nicht entschieden."
-)
-_BKW_HUB_UNKLAR = ("juni_erzeugung", "juni_ev", "juni_einspeisung")
-for _f, _form in mx.MATRIX_FORMEN.items():
-    for _b in (g for g in _form.geraete if g.typ == "balkonkraftwerk"):
-        if not _b.zaehler:
-            _grund = _U_BKW_HUB_OHNE_ZAEHLER
-        elif mx._kinder_von(_form, _b, mx.TAGE_JUNI[-1]):
-            _grund = _U_BKW_HUB_ABGETRETEN
-        else:
-            continue
-        for _w in ("S1", "S2", "S3"):
-            for _s in _BKW_HUB_UNKLAR:
-                SOLL_UNKLAR[(_f, _w, "I4", f"bkw_hub:{_b.name}:{_s}")] = _grund
+# N-638 (Option b, 07.10.2026) hatte die Hub-Sicht `bkw_hub:*` für zwei Formklassen ohne Soll gelassen (BKW ohne eigenen
+# Zähler, an Modul-Kinder abgetretenes BKW). Seit K4 (N-664/N-671, Entscheid Gernot 10.10.2026: „BKW-Hub sollte mit den
+# anderen Hubs verfahren") ist das Soll der Wert der Monats-Fakten (`_bkw_hub_zellen`); `_U_BKW_HUB_OHNE_ZAEHLER`,
+# `_U_BKW_HUB_ABGETRETEN` und ihre 126 Haltewerte sind entfallen.
 # „Soll unklar 2" (BKW-Zeile im laufenden Monat bei Modul-Kindern) ist seit dem Bau der PV-Achse
 # (Bauplan T4, 04.10.2026) festes Soll 0: der Monat tritt ab, auch der laufende (N-627) — in `bewerte`.
 

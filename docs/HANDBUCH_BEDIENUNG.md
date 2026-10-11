@@ -762,6 +762,8 @@ In der Monatstabelle steht ein Monat, in dem das Auto nur einen Anteil am Rest d
 
 **Verlauf und Vergleich zeigen dieselbe Rechnung wie die Kennzahlen oben:** Die Monate im Diagramm und in der Tabelle ergeben zusammen die Erzeugung und den Eigenverbrauch der Kacheln, und die Eigenverbrauchsquote im Jahresvergleich entsteht aus denselben Monatswerten.
 
+**Ohne eigenen Zähler ist die Erzeugung geschätzt:** Hat das Balkonkraftwerk keinen eigenen Erzeugungs-Sensor, zeigt der Reiter seinen Anteil am PV-Gesamtzähler der Anlage nach kWp — dieselbe Zahl wie das Cockpit — und kennzeichnet ihn als **„geschätzt (kWp-Anteil)"**. Hängen PV-Module an dem Balkonkraftwerk, steht seine Erzeugung bei diesen Modulen; der Reiter nennt dann 0 und sagt das dazu.
+
 ### 3.8 Sonstiges
 
 Für sonstige **Erzeuger** — ein BHKW, ein Windrad, eine kleine Wasserkraftanlage — und sonstige **Verbraucher** mit komponentenspezifischen Kennzahlen.

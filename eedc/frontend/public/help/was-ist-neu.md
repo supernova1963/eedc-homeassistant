@@ -31,6 +31,10 @@ PV-Anlage* rechnen Eigenverbrauch, Autarkie, Ersparnis und CO₂ nur über Monat
 die CO₂-Einsparung des PV-Stroms in *Auswertungen → CO₂*; ein Monat ohne Monatsabschluss zählt nicht mehr ganz als
 Eigenverbrauch.
 
+**Balkonkraftwerk:** *Komponenten → Balkonkraftwerk* zeigt bei einem Balkonkraftwerk ohne eigenen Zähler denselben
+Anteil am PV-Gesamtzähler wie das Cockpit, gekennzeichnet als „geschätzt (kWp-Anteil)"; hängen PV-Module daran, steht
+seine Erzeugung nur noch bei den Modulen.
+
 ## v4.1.5 — 10. Oktober 2026
 
 **Wandlungsverluste kosten kein Geld mehr, das du nie gespart hast:** Misst deine Anlage ihre Strings mit eigenen

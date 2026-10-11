@@ -106,6 +106,11 @@ class ErzeugungFakten:
     #: Ertrag. Ein BKW mit Anteil trägt im Monat keinen Ersatz-Eigenverbrauch
     #: (P9-Zusatzregel, ``roh.py::falte``) und keinen Tageswert (``bau.py``).
     bkw_aus_anlagenwert_kwh: float = 0.0
+    #: N-664 (K4): dieselben Anteile je Balkonkraftwerk (``{investition_id: kwh}``, Σ = ``bkw_aus_anlagenwert_kwh``) —
+    #: der Komponenten-Hub zeigt sie je Gerät mit Kennzeichen „geschätzt (kWp-Anteil)". Ein Schlüssel heißt: dieses
+    #: BKW ist im Monat Empfänger des Anlagenwerts, auch mit 0 (der Anlagenwert sagt dann, dass es nichts erzeugt hat).
+    #: Leer ohne Anlagenwert. Bewusst neben, nicht in ``BkwFakten`` — Begründung eine Zeile höher.
+    bkw_aus_anlagenwert_je_investition: dict[int, float] = field(default_factory=dict)
     #: HA-Bauform E4b: ``max(0, Σ String-Zähler − Anlagenzähler)`` des Monats aus dem Kanal-Leser
     #: (``services/kanal/bilanz_leser``, W2-R3). ``None`` ohne Anlagenzähler oder ohne Kanal-Deckung des Monats — der
     #: Bestandspfad (gespeicherte Werte, Tageszeilen) liefert keinen Wert. Geht in keine BILANZ (F2): ``pv_kwh``,

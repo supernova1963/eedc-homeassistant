@@ -1135,7 +1135,8 @@ async def miss_bkw_hub(db: AsyncSession, anlage_id: int, ids: dict[str, int]) ->
             "reihe_ev": _r(sum(w.eigenverbrauch_kwh or 0.0 for w in reihe)),
             "reihe_einsp": _r(sum(w.einspeisung_kwh or 0.0 for w in reihe)),
             "juni": None if juni is None else {
-                "erzeugung": _r(juni.erzeugung_kwh), "ev": _r(juni.eigenverbrauch_kwh),
+                "erzeugung": _r(juni.erzeugung_kwh), "erz_quelle": juni.erzeugung_quelle,
+                "ev": _r(juni.eigenverbrauch_kwh),
                 "ev_quelle": juni.eigenverbrauch_quelle, "einsp": _r(juni.einspeisung_kwh),
                 "einsp_quelle": juni.einspeisung_quelle},
         }

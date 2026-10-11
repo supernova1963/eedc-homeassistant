@@ -41,6 +41,25 @@ export function bkwAnteilZusatz(anteil: unknown, fmt: (v: number) => string): st
   return typeof anteil === 'number' && anteil > 0 ? `davon ${KWP_ANTEIL_GESCHAETZT}: ${fmt(anteil)}` : null
 }
 
+/** N-664 (K4): ein Balkonkraftwerk ohne eigenen Zähler — der Hub zeigt seinen kWp-Anteil am Anlagenzähler,
+ *  wie das Cockpit. Dasselbe Badge wie bei den PV-Modulen (Zustand + Quell-Label), eigener Erklärsatz. */
+export const BKW_KWP_ANTEIL_HINWEIS =
+  'Dieses Balkonkraftwerk hat in diesen Monaten keinen eigenen Wert — seine Erzeugung ist anteilig nach kWp aus '
+  + 'dem Anlagenzähler verteilt, nicht gemessen. Eigenverbrauch und Einspeisung folgen daraus. Für gemessene Werte '
+  + 'braucht es einen eigenen Erzeugungs-Sensor.'
+
+/** N-671 (K4): an Modul-Kinder abgetreten (ADR-002/P11) — die Erzeugung steht dort, hier 0 wie in den Monats-Fakten. */
+export const BKW_ABGETRETEN_HINWEIS =
+  'Die Erzeugung dieses Balkonkraftwerks steht bei seinen Modul-Kindern (Komponenten → PV-Module) — '
+  + 'hier zählt sie deshalb nicht noch einmal.'
+
+/** Kennzeichnung des BKW-Verlaufs, wenn mindestens ein Monat den kWp-Anteil trägt; sonst `undefined`. */
+export function bkwAnteilHerkunft(monatsreihe: readonly { erzeugung_quelle?: string }[]): WertHerkunft | undefined {
+  return monatsreihe.some((m) => m.erzeugung_quelle === 'kwp_anteil')
+    ? { ...PV_MODUL_VERTEILT_HERKUNFT, bezug: 'Erzeugung', hinweis: BKW_KWP_ANTEIL_HINWEIS }
+    : undefined
+}
+
 /** Kennzeichnung mit sicht-eigenem Bezugslabel. */
 export function pvVerteiltHerkunft(bezug: string, hinweis?: string | null): WertHerkunft {
   return { ...PV_MODUL_VERTEILT_HERKUNFT, bezug, hinweis: hinweis || PV_MODUL_VERTEILT_HERKUNFT.hinweis }

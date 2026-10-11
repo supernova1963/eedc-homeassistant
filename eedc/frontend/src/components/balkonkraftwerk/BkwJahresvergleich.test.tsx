@@ -2,10 +2,11 @@ import { describe, it, expect } from 'vitest'
 import { prepBkwJahresVerwendung } from './BkwJahresvergleich'
 import { prepBkwMonate } from './BkwCharts'
 import type { BkwMonatsWert } from '../../api/investitionen'
+import { bkwAnteilHerkunft, PV_MODUL_VERTEILT_HERKUNFT } from '../../lib/pvHerkunft'
 
 /** Ein Monat der bewerteten Reihe (`monatsreihe`, N-638) — die Form, die das Backend sendet. */
 const mw = (jahr: number, monat: number, w: Partial<BkwMonatsWert>): BkwMonatsWert => ({
-  jahr, monat, erzeugung_kwh: 0, eigenverbrauch_kwh: 0, eigenverbrauch_quelle: 'anteilig',
+  jahr, monat, erzeugung_kwh: 0, erzeugung_quelle: 'gemessen', eigenverbrauch_kwh: 0, eigenverbrauch_quelle: 'anteilig',
   einspeisung_kwh: 0, einspeisung_quelle: 'abgeleitet', speicher_ladung_kwh: 0, speicher_entladung_kwh: 0, ...w,
 })
 
@@ -52,5 +53,17 @@ describe('prepBkwMonate (N-638)', () => {
     const [z] = prepBkwMonate([mw(2026, 6, { speicher_ladung_kwh: 4.2, speicher_entladung_kwh: 3.9 })])
     expect(z.speicher_ladung).toBe(4.2)
     expect(z.speicher_entladung).toBe(3.9)
+  })
+})
+
+describe('bkwAnteilHerkunft (N-664)', () => {
+  it('ein Monat mit kWp-Anteil ⇒ dasselbe Badge wie im PV-Hub (geschätzt · kWp-Anteil)', () => {
+    const h = bkwAnteilHerkunft([mw(2026, 5, {}), mw(2026, 6, { erzeugung_kwh: 45, erzeugung_quelle: 'kwp_anteil' })])
+    expect(h?.zustand).toBe(PV_MODUL_VERTEILT_HERKUNFT.zustand)
+    expect(h?.quelleLabel).toBe(PV_MODUL_VERTEILT_HERKUNFT.quelleLabel)
+  })
+
+  it('nur gemessene oder abgetretene Monate ⇒ kein Kennzeichen', () => {
+    expect(bkwAnteilHerkunft([mw(2026, 6, {}), mw(2026, 7, { erzeugung_quelle: 'abgetreten' })])).toBeUndefined()
   })
 })

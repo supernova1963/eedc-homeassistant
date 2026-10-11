@@ -14,6 +14,7 @@ import { ChartLegende, eedcTooltipProps, Table, TableHead, TableBody } from '../
 import { useLegendenToggle } from '../../hooks'
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { Parkbar } from '../park'
+import { HerkunftZeile, type WertHerkunft } from '../blocks'
 import type { BkwMonatsWert } from '../../api/investitionen'
 import { mitAnzahl } from '../../lib/plural'
 
@@ -45,7 +46,7 @@ export function prepBkwJahresVerwendung(monatsreihe: BkwMonatsWert[]): JahrVerwe
 const fmt = (v: number) => Math.round(v).toLocaleString('de-DE')
 const pct = (v: number, ganz: number) => (ganz > 0 ? `${fmtZahl((v / ganz) * 100, 0)} %` : '—')
 
-export function BkwJahresvergleich({ monatsreihe, embed = false, melde }: { monatsreihe: BkwMonatsWert[]; embed?: boolean; melde?: (ids: string[]) => void }) {
+export function BkwJahresvergleich({ monatsreihe, embed = false, melde, herkunft }: { monatsreihe: BkwMonatsWert[]; embed?: boolean; melde?: (ids: string[]) => void; herkunft?: WertHerkunft }) {
   const daten = prepBkwJahresVerwendung(monatsreihe)
   const legende = useLegendenToggle()
   const leer = daten.length === 0
@@ -60,6 +61,8 @@ export function BkwJahresvergleich({ monatsreihe, embed = false, melde }: { mona
       </p>
       </Parkbar>
       <Parkbar id="chart:bkw-jahresvergleich" titel="Verwendung der Erzeugung pro Jahr">
+      {/* N-664: dieselbe Kennzeichnung wie Block ④ (zwei Sichten, eine Aussage — wie im PV-Hub). */}
+      <HerkunftZeile herkunft={herkunft} className="mb-2" />
       <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={daten} margin={{ top: ACHSEN_MARGIN_TOP, right: 8, left: 0, bottom: 0 }}>

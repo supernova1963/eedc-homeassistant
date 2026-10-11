@@ -25,7 +25,10 @@ import { fmtCalc } from '../components/ui'
 import { formatEnergie, formatEffizienz } from '../lib/einheiten'
 import { MONAT_KURZ, PV_MODUL_FARBEN, PV_MODUL_BG, SONSTIGES_KATEGORIE_LABELS } from '../lib'
 import { CHART_COLORS, ENERGIE_KATEGORIE, KOMPONENTEN_FARBEN, LADEQUELLEN_FARBEN, ROLLEN_BG, SONSTIGES_ERZEUGER_FARBE } from '../lib/colors'
-import { pvVerteiltHerkunft, PV_MODUL_TEILWEISE_VERTEILT_HINWEIS } from '../lib/pvHerkunft'
+import {
+  pvVerteiltHerkunft, PV_MODUL_TEILWEISE_VERTEILT_HINWEIS, KWP_ANTEIL_GESCHAETZT, BKW_KWP_ANTEIL_HINWEIS,
+  BKW_ABGETRETEN_HINWEIS,
+} from '../lib/pvHerkunft'
 import { istZaehlerKategorie } from '../lib/fieldDefinitions'
 import { SPEICHER_KOPPLUNG_LABELS, aufgeloesteSpeicherKopplung, speicherParameter } from '../lib/investitionParameter'
 import { cockpitApi, type PVStringsGesamtlaufzeitResponse } from '../api/cockpit'
@@ -122,6 +125,17 @@ export interface KompGeraet {
   /** Einstellungen-Block: alle verknüpften Investitionen, deren Parameter +
    *  Sensor-/MQTT-Zuordnungen gezeigt werden (PV = WR+Module+Speicher; sonst [inv]). */
   verknuepfteInvs?: Investition[]
+}
+
+/** N-664 / N-671: der Kopf eines Balkonkraftwerks sagt, woher seine Erzeugung kommt, wenn nicht aus der eigenen
+ *  Messung — kWp-Anteil am Anlagenzähler (geschätzt) bzw. an die Modul-Kinder abgetreten. `undefined` ohne beides. */
+export function bkwHerkunftHinweise(
+  z: { erzeugung_aus_anlagenwert_kwh?: number; monate_abgetreten?: number },
+): KompGeraet['hinweise'] {
+  const h: NonNullable<KompGeraet['hinweise']> = []
+  if ((z.erzeugung_aus_anlagenwert_kwh ?? 0) > 0) h.push({ ton: 'info', text: BKW_KWP_ANTEIL_HINWEIS })
+  if ((z.monate_abgetreten ?? 0) > 0) h.push({ ton: 'info', text: BKW_ABGETRETEN_HINWEIS })
+  return h.length ? h : undefined
 }
 
 /** Jahressummen einer Leitkennzahl aus den Monatsdaten (für Block ⑤ dünn). */
@@ -887,11 +901,18 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
   balkonkraftwerk: {
     async fetch(anlageId) {
       const ds = await investitionenApi.getBalkonkraftwerkDashboard(anlageId)
-      return ds.map(({ investition: inv, zusammenfassung: z, monatsdaten: md }) => ({
+      return ds.map(({ investition: inv, zusammenfassung: z, monatsdaten: md, monatsreihe: reihe }) => ({
         inv, label: inv.bezeichnung,
-        monatswerte: md.length,
+        // N-664: ein BKW ohne eigenen Zähler hat keine Zeile, die Monats-Fakten geben ihm trotzdem Monate
+        // (kWp-Anteil) — dann ist der Hub nicht leer und der Leer-Grund (N-247) stünde über gefüllten Blöcken.
+        monatswerte: md.length || reihe.length,
+        // N-664 / N-671: woher die Erzeugung kommt, wenn nicht aus der eigenen Messung.
+        hinweise: bkwHerkunftHinweise(z),
         status: [
-          kpi(BKW_KPI.erzeugung, n0(z.gesamt_erzeugung_kwh), 'kWh'),
+          {
+            ...kpi(BKW_KPI.erzeugung, n0(z.gesamt_erzeugung_kwh), 'kWh'),
+            ...((z.erzeugung_aus_anlagenwert_kwh ?? 0) > 0 ? { subtitle: KWP_ANTEIL_GESCHAETZT } : {}),
+          },
           kpi(BKW_KPI.eigenverbrauch, n0(z.eigenverbrauch_quote_prozent), '%'),
           kpi(BKW_KPI.ersparnis, n0(z.gesamt_ersparnis_euro), '€'),
           kpi(BKW_KPI.spezErtrag, n0(z.spezifischer_ertrag_kwh_kwp), 'kWh/kWp'),

@@ -18,6 +18,7 @@ from backend.core.wirtschaftlichkeit_defaults import NETZBEZUG_DEFAULT_CENT
 from backend.services.monats_fakten import lade_monats_fakten
 from backend.core.calculations import CO2_FAKTOR_STROM_KG_KWH
 from backend.core.berechnungen import (
+    abgetretene_bkw_ids,
     eigenverbrauch_ohne_verluste_kwh,
     bkw_eigenverbrauch_anteil,
     imd_typ_beitrag,
@@ -29,6 +30,12 @@ from backend.api.routes.investitionen.crud import InvestitionResponse
 from backend.api.routes.investitionen.dashboard_basis import InvestitionMonatsdatenResponse
 
 router = APIRouter()
+
+
+#: N-664/N-671 (K4): woher die Erzeugung eines Monats kommt — aus den Monats-Fakten, wie im Cockpit.
+ERZEUGUNG_GEMESSEN = "gemessen"        # der eigene Wert des Geräts (``BkwFakten.erzeugung_je_investition``)
+ERZEUGUNG_KWP_ANTEIL = "kwp_anteil"    # Anteil am Anlagenzähler nach kWp (``bkw_aus_anlagenwert_je_investition``)
+ERZEUGUNG_ABGETRETEN = "abgetreten"    # an die Modul-Kinder abgetreten (ADR-002/P11) — dort steht sie, hier 0
 
 
 class BkwMonatsWert(BaseModel):
@@ -46,8 +53,11 @@ class BkwMonatsWert(BaseModel):
     """
     jahr: int
     monat: int
-    #: aufgelöst (``ImdTypBeitrag.bkw_erzeugung``, beide Schreibweisen)
+    #: N-664/N-671: aus den Monats-Fakten — der eigene Wert, sonst der kWp-Anteil am Anlagenzähler, 0 wenn an die
+    #: Modul-Kinder abgetreten (bis K4: die eigene Zeile des Geräts, ``ImdTypBeitrag.bkw_erzeugung``)
     erzeugung_kwh: float
+    #: ``gemessen`` · ``kwp_anteil`` (geschätzt, nicht gemessen) · ``abgetreten``
+    erzeugung_quelle: str = ERZEUGUNG_GEMESSEN
     #: ``bkw_eigenverbrauch_anteil`` — ``None`` bei ``nicht_bewertbar``
     eigenverbrauch_kwh: Optional[float]
     #: ``gemessen`` · ``anteilig`` · ``nicht_bewertbar``
@@ -108,13 +118,22 @@ async def get_balkonkraftwerk_dashboard(
     je Monat: gemessener EV bei fehlender Erzeugung, sonst der Anteil an der
     Hausbilanz — und **nicht bewertbar**, wo mangels Zählerzeile keine Bilanz
     existiert (P4), statt still 0 €.
+
+    **N-664 / N-671 (K4, Entscheid Gernot 10.10.2026: „BKW-Hub sollte mit den anderen Hubs verfahren"):** Kopf und
+    Monatsreihe lesen die Erzeugung aus den Monats-Fakten, wie das Cockpit — nicht mehr aus der Zeile des Geräts. Ein
+    BKW ohne eigenen Zähler bekam dort keinen Monat (Kopf 0, „Keine Verlaufsdaten"), während die Fakten ihm seinen
+    kWp-Anteil am Anlagenzähler geben; ein an Modul-Kinder abgetretenes BKW zeigte seinen Zähler (90 kWh), die Fakten
+    führen es mit 0. Je Monat: eigener Wert (``bkw.erzeugung_je_investition``), sonst der Anteil
+    (``erzeugung.bkw_aus_anlagenwert_je_investition``, Kennzeichen ``kwp_anteil``), abgetreten 0. Der gemessene
+    Eigenverbrauch des Geräts gilt wie in der Faltung der Fakten nur ohne beides (P9-Zusatzregel, ``roh.py``).
     """
     inv_result = await db.execute(
-        select(Investition)
-        .where(Investition.anlage_id == anlage_id)
-        .where(Investition.typ == InvestitionTyp.BALKONKRAFTWERK.value)
+        select(Investition).where(Investition.anlage_id == anlage_id)
     )
-    balkonkraftwerke = inv_result.scalars().all()
+    alle_investitionen = list(inv_result.scalars().all())
+    balkonkraftwerke = [
+        i for i in alle_investitionen if i.typ == InvestitionTyp.BALKONKRAFTWERK.value
+    ]
 
     if not balkonkraftwerke:
         return []
@@ -138,6 +157,15 @@ async def get_balkonkraftwerk_dashboard(
     fakten_je_monat = {
         f.schluessel: f for f in await lade_monats_fakten(db, anlage_id)
     }
+    # ADR-002/P11 je Monat (Zeitfilter → Selektor), dieselbe Regel wie `monats_fakten/laden.py`.
+    abgetreten_cache: dict[tuple[int, int], frozenset] = {}
+
+    def abgetreten_im_monat(jahr: int, monat: int) -> frozenset:
+        if (jahr, monat) not in abgetreten_cache:
+            abgetreten_cache[(jahr, monat)] = abgetretene_bkw_ids(
+                [i for i in alle_investitionen if i.ist_aktiv_im_monat(jahr, monat)]
+            )
+        return abgetreten_cache[(jahr, monat)]
 
     dashboards = []
     for bkw in balkonkraftwerke:
@@ -146,6 +174,7 @@ async def get_balkonkraftwerk_dashboard(
             md for md in md_by_inv.get(bkw.id, [])
             if bkw.ist_aktiv_im_monat(md.jahr, md.monat)
         ]
+        md_je_monat = {(md.jahr, md.monat): md for md in monatsdaten}
 
         gesamt_erzeugung = 0
         gesamt_eigenverbrauch = 0
@@ -159,23 +188,48 @@ async def get_balkonkraftwerk_dashboard(
         ersparnis_eigenverbrauch = 0.0
         ev_monate_nicht_bewertbar = 0
         monatsreihe: list[BkwMonatsWert] = []
+        # N-664: davon der kWp-Anteil am Anlagenzähler (geschätzt) · N-671: Monate, in denen die Modul-Kinder tragen.
+        erzeugung_aus_anlagenwert = 0.0
+        monate_abgetreten = 0
 
-        for md in monatsdaten:
-            d = md.verbrauch_daten or {}
-            # Kanonische Auflösung statt Literal-Schlüsseln (ADR-002/P6):
-            # `imd_typ_beitrag` kennt beide Schreibweisen der Erzeugung.
+        # Die Monate der Reihe: jede eigene Zeile des Geräts und jeder Monat, in dem die Fakten ihm einen Anteil am
+        # Anlagenwert geben (ein BKW ohne eigenen Zähler hat keine Zeile, N-664). Chronologisch wie die Fakten.
+        monate = sorted(
+            set(md_je_monat)
+            | {
+                k for k, f in fakten_je_monat.items()
+                if bkw.id in f.erzeugung.bkw_aus_anlagenwert_je_investition and bkw.ist_aktiv_im_monat(*k)
+            }
+        )
+        for schluessel in monate:
+            md = md_je_monat.get(schluessel)
+            d = (md.verbrauch_daten or {}) if md is not None else {}
+            # Kanonische Auflösung statt Literal-Schlüsseln (ADR-002/P6) — für die BKW-eigenen Felder, die die
+            # Schicht nicht je Gerät führt (gemessener Eigenverbrauch, Speicher, gespeicherte Einspeisung).
             beitrag = imd_typ_beitrag(bkw, d)
-            gesamt_erzeugung += beitrag.bkw_erzeugung
-            gesamt_eigenverbrauch += beitrag.bkw_eigenverbrauch
+            fakt = fakten_je_monat.get(schluessel)
+            erzeugung, quelle = _erzeugung_aus_fakten(
+                bkw.id, fakt, beitrag.bkw_erzeugung, bkw.id in abgetreten_im_monat(*schluessel),
+            )
+            # P9-Zusatzregel wie in der Faltung der Fakten (`roh.py::falte`): ein abgetretenes BKW und ein Empfänger
+            # des Anlagenwerts tragen keinen eigenen Ersatz-Eigenverbrauch und keine eigene Einspeisung.
+            eigene_zeile_traegt = quelle == ERZEUGUNG_GEMESSEN
+            ev_gemessen = beitrag.bkw_eigenverbrauch if eigene_zeile_traegt else 0.0
+            if quelle == ERZEUGUNG_KWP_ANTEIL:
+                erzeugung_aus_anlagenwert += erzeugung
+            elif quelle == ERZEUGUNG_ABGETRETEN:
+                monate_abgetreten += 1
+            gesamt_erzeugung += erzeugung
+            gesamt_eigenverbrauch += ev_gemessen
             gesamt_speicher_ladung += beitrag.bkw_speicher_ladung
             gesamt_speicher_entladung += beitrag.bkw_speicher_entladung
-            gesamt_einspeisung += d.get('einspeisung_kwh', 0) or 0
+            if eigene_zeile_traegt:
+                gesamt_einspeisung += d.get('einspeisung_kwh', 0) or 0
 
-            fakt = fakten_je_monat.get((md.jahr, md.monat))
             ev_anlage = fakt.kennzahlen.eigenverbrauch_kwh if fakt else 0.0
             anteil = bkw_eigenverbrauch_anteil(
-                bkw_erzeugung_kwh=beitrag.bkw_erzeugung,
-                bkw_eigenverbrauch_gemessen_kwh=beitrag.bkw_eigenverbrauch,
+                bkw_erzeugung_kwh=erzeugung,
+                bkw_eigenverbrauch_gemessen_kwh=ev_gemessen,
                 erzeugung_hinter_zaehler_kwh=(
                     fakt.erzeugung.hinter_zaehler_kwh if fakt else 0.0
                 ),
@@ -187,8 +241,8 @@ async def get_balkonkraftwerk_dashboard(
             # bewerten den Anteil am Eigenverbrauch OHNE die Verluste, wenn der Messpunkt-Vertrag hält — sonst
             # sind beide gleich.
             anteil_bewertet = bkw_eigenverbrauch_anteil(
-                bkw_erzeugung_kwh=beitrag.bkw_erzeugung,
-                bkw_eigenverbrauch_gemessen_kwh=beitrag.bkw_eigenverbrauch,
+                bkw_erzeugung_kwh=erzeugung,
+                bkw_eigenverbrauch_gemessen_kwh=ev_gemessen,
                 erzeugung_hinter_zaehler_kwh=(
                     fakt.erzeugung.hinter_zaehler_kwh if fakt else 0.0
                 ),
@@ -199,7 +253,7 @@ async def get_balkonkraftwerk_dashboard(
                 ),
                 hat_zaehlerzeile=bool(fakt and fakt.meta.hat_zaehlerzeile),
             )
-            if not anteil.bewertbar and beitrag.bkw_erzeugung > 0:
+            if not anteil.bewertbar and erzeugung > 0:
                 ev_monate_nicht_bewertbar += 1
             ev_bewertet_kwh += anteil.kwh
             eigenverbrauch_ohne_verluste_bkw_kwh += anteil_bewertet.kwh
@@ -211,7 +265,9 @@ async def get_balkonkraftwerk_dashboard(
                 else (fakt.tarif.netzbezug_preis_cent if fakt else NETZBEZUG_DEFAULT_CENT)
             )
             ersparnis_eigenverbrauch += anteil_bewertet.kwh * preis_cent / 100
-            monatsreihe.append(_monatswert(md, d, beitrag, anteil))
+            monatsreihe.append(_monatswert(
+                schluessel, d if eigene_zeile_traegt else {}, beitrag, anteil, erzeugung, quelle,
+            ))
 
         # Parameter
         params = bkw.parameter or {}
@@ -266,6 +322,10 @@ async def get_balkonkraftwerk_dashboard(
 
         zusammenfassung = {
             'gesamt_erzeugung_kwh': round(gesamt_erzeugung, 1),
+            # N-664: davon nicht gemessen, sondern der kWp-Anteil am Anlagenzähler — das Kennzeichen „geschätzt".
+            'erzeugung_aus_anlagenwert_kwh': round(erzeugung_aus_anlagenwert, 1),
+            # N-671: Monate, deren Erzeugung bei den Modul-Kindern steht (der Hub zeigt dort 0, wie die Fakten).
+            'monate_abgetreten': monate_abgetreten,
             # Die BEWERTETE Menge (F-4): gemessen, wo gemessen wurde, sonst der
             # Anteil an der Hausbilanz. Der rohe Messwert steht daneben, damit
             # eine Pflege-Lücke sichtbar bleibt statt als 0 zu verschwinden.
@@ -310,7 +370,25 @@ async def get_balkonkraftwerk_dashboard(
     return dashboards
 
 
-def _monatswert(md, d: dict, beitrag, anteil) -> BkwMonatsWert:
+def _erzeugung_aus_fakten(bkw_id: int, fakt, zeile_kwh: float, abgetreten: bool) -> tuple[float, str]:
+    """Die Erzeugung EINES Balkonkraftwerks in EINEM Monat, wie die Monats-Fakten sie führen (N-664, N-671).
+
+    Abgetreten (ADR-002/P11) ⇒ 0 — die Modul-Kinder tragen sie, die Fakten zählen sie dort. Sonst der eigene Wert
+    (``BkwFakten.erzeugung_je_investition``) und, wo das Gerät Empfänger des Anlagenwerts ist, sein kWp-Anteil
+    (``ErzeugungFakten.bkw_aus_anlagenwert_je_investition``, N-621). Ohne Fakt (gibt es für einen Monat mit Zeile
+    nicht — die Schicht führt jeden Monat mit sichtbarer Zeile) bleibt der Wert der Zeile.
+    """
+    if abgetreten:
+        return 0.0, ERZEUGUNG_ABGETRETEN
+    if fakt is None:
+        return zeile_kwh, ERZEUGUNG_GEMESSEN
+    anteile = fakt.erzeugung.bkw_aus_anlagenwert_je_investition
+    if bkw_id in anteile:
+        return anteile[bkw_id], ERZEUGUNG_KWP_ANTEIL
+    return fakt.bkw.erzeugung_je_investition.get(bkw_id, 0.0), ERZEUGUNG_GEMESSEN
+
+
+def _monatswert(schluessel, d: dict, beitrag, anteil, erzeugung: float, quelle: str) -> BkwMonatsWert:
     """Ein Monat der Reihe aus denselben Werten, die die Kopfzahlen summieren (N-638).
 
     Eigenverbrauch und seine Quelle kommen unverändert aus ``bkw_eigenverbrauch_anteil``
@@ -326,14 +404,15 @@ def _monatswert(md, d: dict, beitrag, anteil) -> BkwMonatsWert:
         einsp_kwh: Optional[float] = float(einsp_gemessen)
         einsp_quelle: Optional[str] = "gemessen"
     elif ev_kwh is not None:
-        einsp_kwh = max(0.0, beitrag.bkw_erzeugung - ev_kwh)
+        einsp_kwh = max(0.0, erzeugung - ev_kwh)
         einsp_quelle = "abgeleitet"
     else:
         einsp_kwh, einsp_quelle = None, None
     return BkwMonatsWert(
-        jahr=md.jahr,
-        monat=md.monat,
-        erzeugung_kwh=beitrag.bkw_erzeugung,
+        jahr=schluessel[0],
+        monat=schluessel[1],
+        erzeugung_kwh=erzeugung,
+        erzeugung_quelle=quelle,
         eigenverbrauch_kwh=ev_kwh,
         eigenverbrauch_quelle=anteil.quelle,
         einspeisung_kwh=einsp_kwh,

@@ -8,6 +8,8 @@ import {
   BkwErzeugungVerlauf, BkwSpeicherVerlauf, BkwMonatsTabelle, BkwJahresvergleich,
 } from '../components/balkonkraftwerk'
 import { Parkbar } from '../components/park'
+import { HerkunftZeile } from '../components/blocks'
+import { bkwAnteilHerkunft } from '../lib/pvHerkunft'
 import { investitionenApi, type BalkonkraftwerkDashboardResponse } from '../api/investitionen'
 import type { MeldeFn } from './komponentenAnalyse'
 import type { Investition } from '../types'
@@ -48,6 +50,8 @@ export function BkwVerlaufIST({ anlageId, inv, melde }: { anlageId: number; inv?
     <div className="space-y-4">
       <Parkbar id="chart:bkw-erzeugung" titel="Erzeugung pro Monat">
       <div>
+        {/* N-664: kWp-Anteil am Anlagenzähler statt Messung — dasselbe Badge wie im PV-Hub (Regel 0a). */}
+        <HerkunftZeile herkunft={bkwAnteilHerkunft(ds.monatsreihe)} className="mb-2" />
         <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Erzeugung pro Monat (Eigenverbrauch + Einspeisung)</h4>
         <BkwErzeugungVerlauf monatsreihe={ds.monatsreihe} />
       </div>
@@ -79,5 +83,5 @@ export function BkwVergleichIST({ anlageId, inv, melde }: { anlageId: number; in
   useEffect(() => { if (leer) melde?.(KEINE) }, [leer, melde])
   if (loading) return <Lade />
   if (!ds || ds.monatsreihe.length === 0) return <Leer text="Keine Vergleichsdaten erfasst." />
-  return <BkwJahresvergleich monatsreihe={ds.monatsreihe} embed melde={melde} />
+  return <BkwJahresvergleich monatsreihe={ds.monatsreihe} embed melde={melde} herkunft={bkwAnteilHerkunft(ds.monatsreihe)} />
 }

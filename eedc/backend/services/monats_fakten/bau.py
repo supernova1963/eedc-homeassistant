@@ -168,6 +168,7 @@ async def _baue_fakt(
         pv_je_modul=pv_je_modul,
         pv_vollstaendig=pv_vollstaendig,
         bkw_aus_anlagenwert_kwh=bkw_aus_anlagenwert_kwh,
+        bkw_aus_anlagenwert_je_investition=bkw_anteil,
         # HA-Bauform E4b: aus dem Kanal-Monat (`verluste_summe`), unabhängig davon, woher die Mengen dieses Monats
         # kommen; der Bestandspfad liefert keinen Wert. N-588: samt Messpunkt-Vertrag (`verluste_grund`) — bewertet
         # werden sie erst beim Konsumenten (`eigenverbrauch_ohne_verluste_kwh`), die Bilanz bleibt.

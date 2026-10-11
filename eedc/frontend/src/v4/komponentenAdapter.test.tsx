@@ -32,7 +32,10 @@ vi.mock('../api/monatsdaten', () => ({ monatsdatenApi: { listAggregiert: (...a: 
 import { KOMPONENTEN_ADAPTER } from './komponentenAdapter'
 import { verlaufTooltipWert } from './KomponentenVerlaufChart'
 import { MONAT_KURZ } from '../lib'
-import { PV_MODUL_TEILWEISE_VERTEILT_HINWEIS, PV_MODUL_VERTEILT_HERKUNFT } from '../lib/pvHerkunft'
+import {
+  PV_MODUL_TEILWEISE_VERTEILT_HINWEIS, PV_MODUL_VERTEILT_HERKUNFT, KWP_ANTEIL_GESCHAETZT, BKW_KWP_ANTEIL_HINWEIS,
+  BKW_ABGETRETEN_HINWEIS,
+} from '../lib/pvHerkunft'
 
 const inv = (over = {}) => ({ id: 1, anlage_id: 1, typ: 'x', bezeichnung: 'Gerät A', aktiv: true, ...over })
 const titles = (ks: { title: string }[]) => ks.map((k) => k.title)
@@ -933,11 +936,38 @@ describe('KOMPONENTEN_ADAPTER — spezifische Blöcke (Inc. 3b)', () => {
         eigenverbrauch_quote_prozent: 75, spezifischer_ertrag_kwh_kwp: 900, gesamt_ersparnis_euro: 200,
         hat_speicher: true, speicher_kapazitaet_wh: 2048, speicher_ladung_kwh: 120, speicher_entladung_kwh: 100, speicher_effizienz_prozent: 83 },
       monatsdaten: [],
+      monatsreihe: [],
     }])
     const [g] = await KOMPONENTEN_ADAPTER.balkonkraftwerk.fetch(1)
     expect(g.subKomponente?.titel).toBe('Integrierter Speicher')
     expect(g.subKomponente?.hinweis).toContain('2.048 Wh')
     expect(titles(g.subKomponente!.kpis)).toEqual(['Ladung', 'Entladung', 'Effizienz'])
+  })
+
+  it('N-664: BKW ohne eigenen Zähler — Kopf trägt das Kennzeichen „geschätzt (kWp-Anteil)", der Hub ist nicht leer', async () => {
+    // F04 der PV-Matrix: keine eigene Zeile (`monatsdaten` leer), die Monats-Fakten geben 45 kWh kWp-Anteil.
+    getBalkonkraftwerkDashboard.mockResolvedValue([{
+      investition: inv({ typ: 'balkonkraftwerk' }),
+      zusammenfassung: { gesamt_erzeugung_kwh: 45, erzeugung_aus_anlagenwert_kwh: 45, monate_abgetreten: 0 },
+      monatsdaten: [],
+      monatsreihe: [{ jahr: 2026, monat: 6, erzeugung_kwh: 45, erzeugung_quelle: 'kwp_anteil' }],
+    }])
+    const [g] = await KOMPONENTEN_ADAPTER.balkonkraftwerk.fetch(1)
+    expect(g.monatswerte).toBe(1)
+    expect(g.status[0].subtitle).toBe(KWP_ANTEIL_GESCHAETZT)
+    expect(g.hinweise).toEqual([{ ton: 'info', text: BKW_KWP_ANTEIL_HINWEIS }])
+  })
+
+  it('N-671: abgetretenes BKW — Hinweis auf die Modul-Kinder, kein Kennzeichen „geschätzt"', async () => {
+    getBalkonkraftwerkDashboard.mockResolvedValue([{
+      investition: inv({ typ: 'balkonkraftwerk' }),
+      zusammenfassung: { gesamt_erzeugung_kwh: 0, erzeugung_aus_anlagenwert_kwh: 0, monate_abgetreten: 1 },
+      monatsdaten: [{ jahr: 2026, monat: 6, verbrauch_daten: { pv_erzeugung_kwh: 90 } }],
+      monatsreihe: [{ jahr: 2026, monat: 6, erzeugung_kwh: 0, erzeugung_quelle: 'abgetreten' }],
+    }])
+    const [g] = await KOMPONENTEN_ADAPTER.balkonkraftwerk.fetch(1)
+    expect(g.status[0].subtitle).toBeUndefined()
+    expect(g.hinweise).toEqual([{ ton: 'info', text: BKW_ABGETRETEN_HINWEIS }])
   })
 
   it('Wallbox ② PV/Netz-Aufteilungs-Referenz (aus E-Auto-Ladedaten)', async () => {
@@ -1070,6 +1100,7 @@ describe('KOMPONENTEN_ADAPTER — Wirtschaftlichkeit + „nicht bewertet" (P2/P4
       zusammenfassung: { gesamt_erzeugung_kwh: 800, gesamt_eigenverbrauch_kwh: 700, gesamt_einspeisung_kwh: 100,
         gesamt_ersparnis_euro: 291, co2_ersparnis_kg: 368, eigenverbrauch_quote_prozent: 88, spezifischer_ertrag_kwh_kwp: 1278 },
       monatsdaten: [],
+      monatsreihe: [],
     }])
     const [g] = await KOMPONENTEN_ADAPTER.balkonkraftwerk.fetch(1)
     expect(g.wirtschaftlichkeit?.posten).toHaveLength(1)
