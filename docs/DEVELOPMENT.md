@@ -1066,3 +1066,29 @@ baumweit gemessen: **16 Stellen im Produktionscode** zeigten dorthin, zwei davon
 ---
 
 *Dieses Dokument trägt keine Versionsnummer — siehe Kopf. Stand der letzten Messung: 2026-08-07, Layer- und Service-Listen 2026-08-11.*
+
+## Wartungsmodus — so läuft eine Fix-Sitzung (seit 11.10.2026)
+
+> eedc wird gepflegt, nicht weiterentwickelt (Entscheid Maintainer 10./11.10.2026; Hintergrund in `ARCHIV-CLAUDE-2026-10-10.md`).
+> Dieser Abschnitt ist der komplette Ablauf, damit eine Sitzung ohne weiteres Vorwissen einen gemeldeten Fehler sauber behebt.
+
+1. **Eingang.** Nur ein Melder-Beitrag (GitHub-Issue, simon42-Thread 89667, photovoltaikforum 258098, community-smarthome 10057, PN) oder
+   ein Eintrag im Fundregister (`~/.claude/plans/fundregister.yaml`, Status `offen`). Wünsche gehen nach #110 «Gesammelt», ohne Termin.
+2. **Analyse vor Eintrag.** Am aktuellen Stand messen, ob der beschriebene Zustand noch existiert (Datei:Zeile, Minimalfall gegen eine
+   Wegwerf-DB); abgleichen mit CHANGELOG, ADR-001/ADR-002, Konzepten; die Folge für den Anwender nennen und prüfen, ob Daten-Checker,
+   Wächter oder Hilfe den Fall schon decken. Erst dann Registereintrag (`status: offen`, Band, Einwertung, Entscheid Maintainer); ohne
+   Analyse ist es `verdacht`. Nach jeder Registeränderung `python3 ~/.claude/plans/skript-artifact-bauen.py` und das Artifact neu publizieren.
+3. **Bau** in einer Opus-Sitzung (`bau-opus`): nur die berührten Testdateien plus `backend/tests/test_wurzelmuster_konformitaet.py`,
+   bei Frontend-Änderung `npm run lint`, `npx tsc --noEmit`, `npm run test`, `npm run check:design` (0), Doku-Spiegel `./scripts/sync-help.sh`;
+   am Ende **einmal** die volle Backend-Suite mit gekürzter Ausgabe:
+   `cd eedc && source backend/venv/bin/activate && find . -name __pycache__ -prune -exec rm -rf {} + && python -m pytest backend/tests -q -n 3 -p no:cacheprovider 2>&1 | tail -3`
+   (≈ 9 min). CHANGELOG `## [Unreleased]` und `docs/WAS-IST-NEU.md` `## Unreleased` je Fix eine Zeile in Anwender-Sprache.
+4. **Commit** mit expliziten Pfaden (nie `git add -A`), **kein Push, kein Tag** außerhalb des Release-Skripts. Register: Status `gebaut`
+   mit Commit-Hash.
+5. **Release** (wenn ein Fix drin ist, sonst quartalsweise): Kandidat ins HAOS-Lab (`bash ~/.claude/plans/lab-werkzeug/lab-rc.sh <rc> <version>`,
+   Lab 10.100.1.167, Durchklick durch den Maintainer), Überschriften `## [<version>] - <Datum>` im CHANGELOG und `## v<version>` in
+   WAS-IST-NEU, dann `./scripts/release.sh <version>` (bumpt fünf Versionsdateien, fährt den Smoke-Check = volle Suite, taggt, pusht beide
+   Repos, wartet auf das Image). Danach `gh run list` in **beiden** Repos (Add-on und Standalone); CI fährt die Suite in UTC und Auckland.
+   Community-Server (`/home/gernot/claude/eedc-community`) nur zusammen mit einem Add-on-Release deployen.
+6. **Nicht tun:** Produktiv-Box `10.100.1.13` schreiben; `eedc/data/eedc.db` anfassen; einen Server gegen die Demo-DB mit Broker starten;
+   neue Wächter, Matrix-Formen, Golden-Master-Läufe oder Gegenprüfungs-Sitzungen anlegen; Listen neben dem Register führen.

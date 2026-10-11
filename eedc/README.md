@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Dokumentationsstand 4.0.0</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
+  <strong>Wartungsmodus seit Oktober 2026 · Stand 4.1.6</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
 </p>
 
 <p align="center">
