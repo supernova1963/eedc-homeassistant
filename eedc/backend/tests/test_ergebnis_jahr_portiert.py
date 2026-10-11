@@ -76,14 +76,28 @@ def test_preise_durchschnittspreis_vor_tarif():
 
 def test_n655_preis_herkunft_folgt_der_preiswahl_der_faltung():
     """N-655: die Faltung reicht die Herkunft ihres Ø-Preises durch — HT/NT-Monate ⇒ ``zeitfenster`` (vorher fehlte
-    das Feld, und die Kachel sagte „Arbeitspreis aus dem Strompreis-Tarif"). Ein Monat mit gemessenen Stundenpreisen
-    geht mit seinem Tarifwert ein und zählt deshalb nicht als ``gemessen``; verschiedene Wahlen ⇒ ``gemischt``."""
+    das Feld, und die Kachel sagte „Arbeitspreis aus dem Strompreis-Tarif"). Die Herkunft folgt der Preiswahl der
+    Faltung; seit N-680 (11.10.2026) ist das je Monat der Kaskaden-Preis (``netzbezug_preis_effektiv_cent``), ein Monat
+    mit gemessenen Stundenpreisen geht also MIT diesem Preis ein und zählt als ``gemessen``. Verschiedene Stufen ⇒
+    ``gemischt``. (Bis N-680 hielt dieser Test fest, dass ein gemessener Monat mit dem Tarifwert eingeht — das war der
+    Defekt.)"""
     ht_nt = falte_zeitraum([
-        _m(1, netzbezug_kwh=100, netzbezug_preis_cent=31, netzbezug_preis_zeittarif=True, netzbezug_preis_herkunft="zeitfenster"),
-        _m(2, netzbezug_kwh=100, netzbezug_preis_cent=29, netzbezug_preis_zeittarif=True, netzbezug_preis_herkunft="gemessen"),
+        _m(1, netzbezug_kwh=100, netzbezug_preis_cent=31, netzbezug_preis_zeittarif=True,
+           netzbezug_preis_effektiv_cent=31, netzbezug_preis_herkunft="zeitfenster"),
+        _m(2, netzbezug_kwh=100, netzbezug_preis_cent=29, netzbezug_preis_zeittarif=True,
+           netzbezug_preis_effektiv_cent=29, netzbezug_preis_herkunft="zeitfenster"),
     ], 2025)
     assert ht_nt["netzbezug_preis_herkunft"] == "zeitfenster"
-    assert ht_nt["netzbezug_preis_cent"] == pytest.approx(30, abs=1e-6)   # Wert unverändert
+    assert ht_nt["netzbezug_preis_cent"] == pytest.approx(30, abs=1e-6)
+
+    mit_messung = falte_zeitraum([
+        _m(1, netzbezug_kwh=100, netzbezug_preis_cent=31, netzbezug_preis_zeittarif=True,
+           netzbezug_preis_effektiv_cent=31, netzbezug_preis_herkunft="zeitfenster"),
+        _m(2, netzbezug_kwh=100, netzbezug_preis_cent=29, netzbezug_preis_zeittarif=True,
+           netzbezug_preis_effektiv_cent=25, netzbezug_preis_herkunft="gemessen"),
+    ], 2025)
+    assert mit_messung["netzbezug_preis_herkunft"] == "gemischt"
+    assert mit_messung["netzbezug_preis_cent"] == pytest.approx(28, abs=1e-6)   # (31 + 25) / 2, nicht (31 + 29) / 2
 
     gepflegt = falte_zeitraum([_m(1, netzbezug_kwh=100, netzbezug_preis_cent=30, netzbezug_durchschnittspreis_cent=22)], 2025)
     assert gepflegt["netzbezug_preis_herkunft"] == "gepflegt"
@@ -97,6 +111,26 @@ def test_n655_preis_herkunft_folgt_der_preiswahl_der_faltung():
                                    _m(2, netzbezug_kwh=0, netzbezug_preis_cent=30, netzbezug_durchschnittspreis_cent=22)], 2025)
     assert ohne_gewicht["netzbezug_preis_herkunft"] == "stamm"
     assert falte_zeitraum([_m(1, netzbezug_kwh=100)], 2025)["netzbezug_preis_herkunft"] is None
+
+
+def test_n680_jahres_preis_nimmt_den_gemessenen_monatspreis():
+    """N-680 (11.10.2026, KONZEPT-FLEX-TARIFE P-6/P-3a): der Jahres-Ø ist Σ(Netzbezug × Preis des Monats) / Σ Netzbezug
+    mit dem Preis, der für den Monat GILT — Jan gemessen 20 ct (Tarif 30), Feb Stamm 30 ct, je 100 kWh ⇒ 25,0 ct, und
+    die Kachel-Zeile „200 kWh × 25,0 ct = 50,00 €" geht auf. Vorher 30,0 ct neben 50,00 € Kosten."""
+    j = falte_zeitraum([
+        _m(1, netzbezug_kwh=100, netzbezug_preis_cent=30, netzbezug_preis_effektiv_cent=20,
+           netzbezug_preis_herkunft="gemessen", netzbezug_arbeitspreis_kosten_euro=20.0),
+        _m(2, netzbezug_kwh=100, netzbezug_preis_cent=30, netzbezug_preis_effektiv_cent=30,
+           netzbezug_preis_herkunft="stamm", netzbezug_arbeitspreis_kosten_euro=30.0),
+    ], 2025)
+    assert j["netzbezug_preis_cent"] == pytest.approx(25.0, abs=1e-6)
+    assert j["netzbezug_arbeitspreis_kosten_euro"] == pytest.approx(50.0, abs=1e-6)
+    assert j["netzbezug_kwh"] * j["netzbezug_preis_cent"] / 100 == pytest.approx(j["netzbezug_arbeitspreis_kosten_euro"])
+    assert j["netzbezug_preis_herkunft"] == "gemischt"
+    # Nur gemessene Monate ⇒ die Herkunft heißt „gemessen", kein Tarifwert mehr.
+    nur = falte_zeitraum([_m(1, netzbezug_kwh=100, netzbezug_preis_cent=30, netzbezug_preis_effektiv_cent=20,
+                             netzbezug_preis_herkunft="gemessen")], 2025)
+    assert (nur["netzbezug_preis_cent"], nur["netzbezug_preis_herkunft"]) == (pytest.approx(20.0), "gemessen")
 
 
 def test_preise_ohne_durchschnittspreis_leer():

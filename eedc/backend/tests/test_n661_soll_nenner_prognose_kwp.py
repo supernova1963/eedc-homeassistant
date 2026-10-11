@@ -84,3 +84,50 @@ async def test_stilllegung_vor_dem_jahr_alle_sichten_5112(db):
     """Ost ist seit 31.12.2024 still, die aktive Prognose ist für 10 kWp: 2025 trägt Süd 6/10 davon."""
     aid = await _anlage(db, ost_still=date(2024, 12, 31), prognose_kwp=10.0)
     assert await _soll_sued(db, aid) == (5112.0, 5112.0, 5112.0)
+
+
+# ── N-683 · N-684 (K8, 11.10.2026): derselbe Stilllegungs-Fall, das saisonale Mittel und die Warnung ──────────────
+
+def _saison(laufzeit, name=None) -> dict[int, float]:
+    werte = (laufzeit.saisonal_aggregiert if name is None
+             else next(s.saisonalwerte for s in laufzeit.strings if s.bezeichnung == name))
+    return {w.monat: round(w.prognose_kwh, 1) for w in werte}
+
+
+@pytest.mark.asyncio
+async def test_n683_saisonales_mittel_nur_ueber_aktive_monate(db):
+    """N-683 (Fachentscheid Master): je String nur die Monate, in denen er aktiv war; die Anlagen-Zeile ist je Monat
+    die Σ der dann aktiven Strings. Ost still seit 31.12.2024, Prognose für 10 kWp: Süd Juni 424,0 (vorher 282,7 =
+    6/15), das Jahr der Saisonwerte = der Jahreswert derselben Sicht (5 112), Anlage Juni 706,7 = PVGIS-Juni der
+    10 kWp (nicht 1 060 mit dem stillgelegten Ost), Ost ohne aktiven Monat ohne Saisonal-SOLL."""
+    aid = await _anlage(db, ost_still=date(2024, 12, 31), prognose_kwp=10.0)
+    laufzeit = await get_pv_strings_gesamtlaufzeit(anlage_id=aid, db=db)
+    jahr = await get_pv_strings(anlage_id=aid, jahr=2025, db=db)
+    sued = _saison(laufzeit, "Süd")
+    assert sued[6] == 424.0
+    assert sued[6] == next(s.monatswerte[5].prognose_kwh for s in jahr.strings if s.bezeichnung == "Süd")
+    assert round(sum(sued.values()), 0) == 5112.0
+    assert _saison(laufzeit)[6] == 706.7
+    assert set(_saison(laufzeit, "Ost").values()) == {0.0}
+
+
+@pytest.mark.asyncio
+async def test_n683_ohne_stilllegung_bleibt_das_saisonale_mittel(db):
+    """Gegenrichtung: alle drei Strings aktiv, Prognose für 15 kWp — Süd Juni 424,0 und Anlage Juni 1 060,0 wie vorher."""
+    aid = await _anlage(db, prognose_kwp=15.0)
+    laufzeit = await get_pv_strings_gesamtlaufzeit(anlage_id=aid, db=db)
+    assert (_saison(laufzeit, "Süd")[6], _saison(laufzeit)[6]) == (424.0, 1060.0)
+
+
+@pytest.mark.asyncio
+async def test_n684_warnung_vergleicht_gegen_die_heute_aktiven_strings(db):
+    """N-684: nach der Stilllegung passt die 10-kWp-Prognose zu den heute aktiven 10 kWp — keine Warnung, in beiden
+    Endpunkten. Gegenrichtung Zubau ohne neuen Abruf (Ost aktiv seit 2025, Prognose 10 kWp): die Warnung bleibt und
+    nennt die heutigen 15,0 kWp."""
+    still = await _anlage(db, ost_still=date(2024, 12, 31), prognose_kwp=10.0)
+    assert (await get_pv_strings(anlage_id=still, jahr=2025, db=db)).prognose_warnung is None
+    assert (await get_pv_strings_gesamtlaufzeit(anlage_id=still, db=db)).prognose_warnung is None
+    zubau = await _anlage(db, ost_ab=date(2025, 1, 1), prognose_kwp=10.0)
+    for antwort in (await get_pv_strings(anlage_id=zubau, jahr=2025, db=db),
+                    await get_pv_strings_gesamtlaufzeit(anlage_id=zubau, db=db)):
+        assert antwort.prognose_warnung is not None and "15.0 kWp" in antwort.prognose_warnung

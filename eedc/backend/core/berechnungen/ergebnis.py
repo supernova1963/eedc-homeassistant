@@ -82,7 +82,7 @@ Alles andere ist Wort für Wort die Client-Regel (Feldtabelle):
 Summe null-bewusst (alle ``None`` ⇒ ``None``)  Mengen (kWh), Geld (€), Zähler, Grundgebühr, SOLL + Fenster-Tage
 Quote paarweise                         ``autarkie_prozent``, ``eigenverbrauch_quote_prozent``,
                                         ``speicher_auslastung_prozent``, ``speicher_ladung_netz_preis_cent``
-mengengewichteter Ø (``gewichtet``)     ``netzbezug_preis_cent``, ``einspeise_preis_cent``,
+mengengewichteter Ø (``gewichtet``)     ``netzbezug_preis_cent`` (je Monat der Kaskaden-Preis, N-680), ``einspeise_preis_cent``,
                                         ``netzbezug_durchschnittspreis_cent`` (nur wenn ein Monat ihn trägt)
 Herkunft der Preiswahl (N-655)          ``netzbezug_preis_herkunft`` (einheitlich, sonst ``gemischt``)
 Mittel der Monate                       ``speicher_effektiver_ladepreis_cent``, ``grundlast_kw``
@@ -474,22 +474,42 @@ def falte_posten(monate: Sequence[Mapping[str, Any]], jahr: int) -> ErgebnisEing
     return ErgebnisEingang(**werte, fehlende_posten=tuple(fehlend))
 
 
-def _netzbezug_preis_herkunft_zeitraum(monate: Sequence[Mapping[str, Any]]) -> Optional[str]:
-    """Herkunft des gefalteten Netzbezugspreises (N-655, 10.10.2026).
+_PREIS_HERKUNFT_STUFEN = ("gepflegt", "gemessen", "zeitfenster", "stamm")
 
-    Die Faltung nimmt je Monat den gepflegten Ø (``netzbezug_durchschnittspreis_cent``), sonst den Tarifwert
-    ``netzbezug_preis_cent`` — der ist mit Zeitfenstern bereits der über den Netzbezug gewichtete HT/NT-Preis (N-267,
-    ``netzbezug_preis_zeittarif``), sonst die Tarifspalte. Die Herkunft folgt **dieser** Wahl, nicht dem Feld
-    ``netzbezug_preis_herkunft`` des Monats: ein Monat mit gemessenen Stundenpreisen geht mit seinem Tarifwert in den
-    Jahres-Ø ein und darf ihn nicht als „gemessen" beschriften. Gezählt werden die Monate, die das Gewicht tragen
-    (Preis und Netzbezug > 0), ohne jeden Netzbezug alle mit Preis — wie ``gewichtet``. Eine Herkunft ⇒ sie; mehrere ⇒
-    ``"gemischt"``; kein Monat mit Preis ⇒ ``None``. Bis dahin fehlte das Feld im Jahr, und die Kachel fiel auf
-    „Arbeitspreis aus dem Strompreis-Tarif" bzw. „dynamischer Tarif" zurück, auch bei HT/NT oder gepflegtem Ø.
+
+def _netzbezug_preis_des_monats(m: Mapping[str, Any]) -> Optional[float]:
+    """Der Bezugspreis, der für den Monat GILT (N-680, 11.10.2026; KONZEPT-FLEX-TARIFE P-6/P-3a).
+
+    Das ist das Ergebnis der vollen Kaskade des Monats, ``netzbezug_preis_effektiv_cent`` (gepflegt → gemessen →
+    Zeitfenster → Stamm, ``strompreis_aggregator.aufgeloester_monatspreis``) — derselbe Preis, mit dem der Monat seine
+    Kosten rechnet und den seine Kachel zeigt. ⛔ Bis 11.10.2026 nahm die Faltung ``gepflegt ?? Tarifwert`` und ließ die
+    Stufe **gemessen** aus: ein Monat mit mitgeschriebenen Stundenpreisen ging mit dem Tarifpreis in den Jahres-Ø ein,
+    während die Jahreskosten (Σ der Monatskosten) den gemessenen Preis trugen — „200 kWh × 30,0 ct = 50,00 €" in einer
+    Kachel (richtig 25,0 ct). Rückfall auf ``gepflegt ?? Tarifwert`` nur für eine Antwort ohne das Feld.
+    """
+    for feld in ("netzbezug_preis_effektiv_cent", "netzbezug_durchschnittspreis_cent", "netzbezug_preis_cent"):
+        if m.get(feld) is not None:
+            return m.get(feld)
+    return None
+
+
+def _netzbezug_preis_herkunft_zeitraum(monate: Sequence[Mapping[str, Any]]) -> Optional[str]:
+    """Herkunft des gefalteten Netzbezugspreises (N-655, 10.10.2026; N-680, 11.10.2026).
+
+    Die Herkunft folgt der Preiswahl der Faltung (``_netzbezug_preis_des_monats``): trägt der Monat seinen
+    Kaskaden-Preis, ist es dessen Stufe (``netzbezug_preis_herkunft`` des Monats — ``gepflegt`` · ``gemessen`` ·
+    ``zeitfenster`` · ``stamm``); eine Antwort ohne ihn fällt auf gepflegt / Zeitfenster-Tarif / Tarifspalte zurück.
+    Gezählt werden die Monate, die das Gewicht tragen (Preis und Netzbezug > 0), ohne jeden Netzbezug alle mit Preis
+    — wie ``gewichtet``. Eine Herkunft ⇒ sie; mehrere ⇒ ``"gemischt"``; kein Monat mit Preis ⇒ ``None``. Bis N-655
+    fehlte das Feld im Jahr, und die Kachel fiel auf „Arbeitspreis aus dem Strompreis-Tarif" zurück, auch bei HT/NT
+    oder gepflegtem Ø; bis N-680 zählte ein gemessener Monat als Tarifwert, weil die Faltung ihn so einrechnete.
     """
     def herkunft(m: Mapping[str, Any]) -> Optional[str]:
+        if m.get("netzbezug_preis_effektiv_cent") is not None and m.get("netzbezug_preis_herkunft") in _PREIS_HERKUNFT_STUFEN:
+            return m.get("netzbezug_preis_herkunft")
         if m.get("netzbezug_durchschnittspreis_cent") is not None:
             return "gepflegt"
-        if m.get("netzbezug_preis_cent") is None:
+        if _netzbezug_preis_des_monats(m) is None:
             return None
         return "zeitfenster" if m.get("netzbezug_preis_zeittarif") else "stamm"
 
@@ -536,11 +556,8 @@ def falte_zeitraum(
     # einen trägt); Prozent über die Monate, die Verluste UND Bezug tragen.
     q_verluste = quote_paarweise(monate, "wandlungsverluste_kwh", "wandlungsverluste_bezug_kwh")
 
-    netzbezug_preis_effektiv = [
-        m.get("netzbezug_durchschnittspreis_cent") if m.get("netzbezug_durchschnittspreis_cent") is not None
-        else m.get("netzbezug_preis_cent")
-        for m in monate
-    ]
+    # N-680: je Monat der Preis, der für ihn gilt (volle Kaskade inkl. „gemessen"), nicht der Tarifwert.
+    netzbezug_preis_effektiv = [_netzbezug_preis_des_monats(m) for m in monate]
     netzbezug_preis_herkunft = _netzbezug_preis_herkunft_zeitraum(monate)
 
     # Per-Investition-Finanzdetails: Σ je Investition, Identität vom ersten Vorkommen; Monats-Formeln entfallen.

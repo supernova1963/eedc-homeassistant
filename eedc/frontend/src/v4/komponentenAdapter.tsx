@@ -783,8 +783,18 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
         // Schalter. Wer es pflegt, hat `gesamt_heizenergie_kwh` = 0 — dieser Zweig
         // greift dann aus dem zweiten Grund nicht, und die Menge steht als
         // *Wärme erzeugt* in der Kachel.
-        aufteilung: (z.hat_warmwasser_achse !== false
-            && (z.gesamt_heizenergie_kwh > 0 || z.gesamt_warmwasser_kwh > 0)) ? {
+        //
+        // N-682 (11.10.2026, KONZEPT-WAERME-KLIMA K1 + N-673): **Nur mit einer
+        // Heizmenge.** Mit *Wärme gesamt* und einem eigenen Warmwasser-Zähler
+        // ist die Heizwärme „keine Angabe" (N-673) — ihre Summe hier also 0,
+        // und der Balken zeigte „Heizung 0 kWh · Warmwasser 100 %" unter
+        // „Wärme erzeugt 300 kWh". Das ist dieselbe Behauptung wie im B3-Fall,
+        // nur mit dem anderen Zweck: ein Segment allein teilt nichts auf. Die
+        // Menge steht in der Kachel; ein Hinweis „nicht aufgeteilt" kommt nicht
+        // dazu — Abdeckung ist Sache des Daten-Checkers (s. o.). Eine gemessene
+        // Warmwasser-0 neben einer Heizmenge bleibt ein Balken (HANDBUCH
+        // WÄRME/KLIMA: „auch mit dem Wert 0 … eine Messung").
+        aufteilung: (z.hat_warmwasser_achse !== false && z.gesamt_heizenergie_kwh > 0) ? {
           titel: 'Wärme nach Zweck', segmente: [
             { label: 'Heizung', wert: z.gesamt_heizenergie_kwh, farbe: SEG.heizung },
             { label: 'Warmwasser', wert: z.gesamt_warmwasser_kwh, farbe: SEG.warmwasser },

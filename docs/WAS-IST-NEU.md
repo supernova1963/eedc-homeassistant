@@ -45,6 +45,11 @@ Ersparnis gegenüber dem Verbrenner zieht jetzt den Strom der ganzen Ladung ab (
 eedc sie als Eigenverbrauch gutschreibt), in ROI, Cockpit, Aussichten, Komponenten → E-Auto und den HA-Sensoren. Die
 CO₂-Einsparung des E-Autos rechnet ebenso mit der ganzen Ladung.
 
+**Preis, Wärme, PV-Strings:** Der Jahres-Ø-Preis in *Cockpit → Jahr* nimmt bei dynamischem Tarif je Monat den gemessenen
+Preis und passt damit zu den Kosten darunter, der Balken *Wärme nach Zweck* behauptet ohne Heizwärme-Messung kein
+„Warmwasser 100 %" mehr, und unter *Komponenten → PV-Anlage* warnt der Prognose-Hinweis nach einer Stilllegung nicht mehr
+grundlos, während der „typische Monat" eines Strings nur noch die Monate zählt, in denen er lief.
+
 **Hilfe:** Das Handbuch sagt jetzt, warum am Etikett „HA-Statistik" kein Zeitraum steht, wann ein vergangener Monat ohne
 Home Assistant in *Cockpit → Monat* erscheint, was erst mit dem Monatsabschluss zählt, und warum bei
 *Wärme gesamt* neben einem Warmwasser-Zähler die Heizung im Verlauf leer bleibt.

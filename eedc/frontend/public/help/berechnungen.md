@@ -2747,7 +2747,13 @@ SOLL_Monat = PVGISPrognose.monatswerte[monat].e_m * kWp_Anteil
 *Auswertungen → Prognose* und im Jahresbericht-PDF gleich; vorher die Σ aller je vorhandenen bzw. der im Berichtsjahr
 aktiven Strings, sodass ein stillgelegter String das SOLL der übrigen drückte und ein späterer Zubau es im PDF hob. Nur
 eine Prognose ohne gespeicherte kWp fällt auf die Σ der Strings zurück. Das saisonale Mittel („typischer Monat") der
-Gesamtlaufzeit verteilt weiterhin über die heutige Zuordnung.
+Gesamtlaufzeit folgt seit 11.10.2026 (N-683) derselben Regel: das SOLL eines Strings ist das Mittel seines Monats-SOLL
+über die Jahre, in denen er in diesem Monat **aktiv** war (Anschaffung, Stilllegung), mit demselben Nenner wie seine
+Jahreswerte; die Anlagen-Zeile ist je Jahr die Σ der in diesem Monat aktiven Strings, über die Jahre gemittelt. Vorher
+verteilte es über alle je vorhandenen Strings, auch stillgelegte — Süd stand im Juni bei 282,7 statt 424,0 kWh, während
+seine Jahreswerte in derselben Sicht stimmten. Ein String ohne aktiven Monat hat dort kein SOLL (0 wie sein IST-Mittel).
+Der Hinweis über der Sicht, die gespeicherte PVGIS-Prognose passe nicht zur Anlage, vergleicht die Prognose-kWp mit den **heute aktiven** Strings (N-684) —
+nach einer Stilllegung warnt er nicht mehr über eine Prognose, die zur verbliebenen Anlage passt.
 
 Der PDF-Jahresbericht nutzt seit v4.0.1 denselben Weg (vorher verteilte sein String-Vergleich die
 Prognose *immer* nach kWp, obwohl die Pro-Modul-Werte gespeichert sind — bei Ost-West-Dächern ~20–25 %
@@ -3617,7 +3623,7 @@ Herkunft wie einer aus 98 %, aber nicht dieselbe Belastbarkeit.
 - In der [Datenquellen-Zuordnung](HANDBUCH_EINSTELLUNGEN.md#7-datenquellen--feld-zentrische-zuordnung) kann ein HA-Sensor (oder MQTT-Topic) für das Feld `strompreis` zugeordnet werden
 - Im [Monatsdaten-Formular](HANDBUCH_EINSTELLUNGEN.md#51-monatsdaten--monatsabschluss) wird der Ø-Preis als Vorschlag angezeigt und ist dort manuell editierbar
 
-> **Der Jahres-Ø ist mengengewichtet.** Die Jahres-/Gesamt-Kachel „Ø-Preis Netz" (und ebenso die Ø-Einspeisevergütung) rechnet `Σ(Preis_Monat × Menge_Monat) / Σ Menge_Monat` — nicht das arithmetische Mittel der Monatspreise. Gewichtet wird der **effektive** Monatspreis (also der Ø-Bezugspreis vor dem Tarif-Arbeitspreis, dieselbe Kette wie oben); sonst fiele ein Jahr mit dynamischem Tarif auf den Referenzpreis zurück, obwohl die Kosten darunter mit dem Stundenpreis gerechnet sind. Monate ohne Menge fallen aus Zähler und Nenner; gibt es im Zeitraum überhaupt keine Menge, bleibt das arithmetische Mittel als Rückfall stehen, statt die Kachel zu leeren. **Ohne die Gewichtung passte der Kopfwert nicht zu den kWh und Euro darunter** — ein teurer Winter- und ein billiger Sommermonat wogen gleich viel (Forum simon42 #89667/67).
+> **Der Jahres-Ø ist mengengewichtet.** Die Jahres-/Gesamt-Kachel „Ø-Preis Netz" (und ebenso die Ø-Einspeisevergütung) rechnet `Σ(Preis_Monat × Menge_Monat) / Σ Menge_Monat` — nicht das arithmetische Mittel der Monatspreise. Gewichtet wird der **effektive** Monatspreis — das Ergebnis der vollen Kaskade des Monats (abgerechneter Ø → gemessene Stundenpreise → Zeittarif HT/NT → Tarif-Arbeitspreis), also genau der Preis, den die Monatskachel zeigt und mit dem der Monat seine Kosten rechnet. Bis 11.10.2026 übersprang die Jahres-Faltung die gemessene Stufe und setzte für einen Monat ohne Abschluss den Tarifpreis ein (N-680) — der Jahres-Ø passte dann nicht zur Kostenzeile derselben Kachel. Ohne diese Kette fiele ein Jahr mit dynamischem Tarif auf den Referenzpreis zurück, obwohl die Kosten darunter mit dem Stundenpreis gerechnet sind. Monate ohne Menge fallen aus Zähler und Nenner; gibt es im Zeitraum überhaupt keine Menge, bleibt das arithmetische Mittel als Rückfall stehen, statt die Kachel zu leeren. **Ohne die Gewichtung passte der Kopfwert nicht zu den kWh und Euro darunter** — ein teurer Winter- und ein billiger Sommermonat wogen gleich viel (Forum simon42 #89667/67).
 
 ---
 

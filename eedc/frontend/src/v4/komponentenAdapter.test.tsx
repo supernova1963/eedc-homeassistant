@@ -854,6 +854,20 @@ describe('KOMPONENTEN_ADAPTER — spezifische Blöcke (Inc. 3b)', () => {
     expect(g.verlauf).toBeUndefined()
   })
 
+  it('WP N-682: Wärme gesamt + nur Warmwasser-Zähler ⇒ kein Balken „Warmwasser 100 %"', async () => {
+    // Gesamt 300 kWh, davon 60 Warmwasser gemessen, Heizung „keine Angabe" (N-673:
+    // die Lebensdauer-Summe ist dann 0). Ein Balken hätte EIN Segment mit 100 %.
+    getWaermepumpeDashboard.mockResolvedValue([{
+      investition: inv({ typ: 'waermepumpe' }),
+      zusammenfassung: { durchschnitt_cop: 3.0, gesamt_waerme_kwh: 300, gesamt_stromverbrauch_kwh: 100,
+        gesamt_heizenergie_kwh: 0, gesamt_warmwasser_kwh: 60, ersparnis_euro: 10, hat_warmwasser_achse: true },
+      monatsdaten: [{ jahr: 2025, monat: 7, verbrauch_daten: { waerme_kwh: 300, warmwasser_kwh: 60 } }],
+    }])
+    const [g] = await KOMPONENTEN_ADAPTER.waermepumpe.fetch(1)
+    expect(g.status.find((k) => k.title === 'Wärme erzeugt')!.value).toContain('300')
+    expect(g.aufteilung).toBeUndefined()
+  })
+
   it('WP N-391: mit gemeinsamem Wärmemengenzähler steht die Menge, aber keine Heizwärme', async () => {
     // Lage B, wie die Route sie seit dem 14.09.2026 liefert: Die Wärme des
     // Geräts steht in `gesamt_waerme_kwh` (3.000), einen Heiz-EINZELwert gibt
