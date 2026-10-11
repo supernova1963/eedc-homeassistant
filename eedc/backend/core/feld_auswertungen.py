@@ -428,7 +428,7 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
     # ── Wärmepumpe: Counter (KUMULATIVE_COUNTER_FELDER) ──────────────────────
     ("waermepumpe", "wp_starts_anzahl"): (
         _a(KOMP_WP, "api/routes/investitionen/dashboard_waermepumpe.py", "get_waermepumpe_dashboard"),
-        _a(JAHRESBERICHT, "services/pdf/builders/jahresbericht.py", "build_jahresbericht_context"),
+        _a(JAHRESBERICHT, "services/pdf/builders/jahresbericht.py", "_wp_zaehler_summen"),   # RF-9: Phase des WP-Counters
     ),
     ("waermepumpe", "wp_betriebsstunden"): (
         _a(KOMP_WP, "api/routes/investitionen/dashboard_waermepumpe.py", "get_waermepumpe_dashboard"),

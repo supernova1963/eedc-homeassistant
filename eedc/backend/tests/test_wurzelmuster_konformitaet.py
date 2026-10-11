@@ -3021,6 +3021,10 @@ P11_AUSNAHMEN: frozenset[str] = frozenset({
     "backend/api/routes/investitionen/schemas.py::leistung_kwp_effektiv",   # Vorlage 5 (18.09.2026): crud.py → schemas.py
     "backend/api/routes/pvgis.py::get_pvgis_modul_prognose",
     "backend/services/pdf/builders/anlagendokumentation.py::_build_investition_tech_grid",
+    # RF-9 (Serie „Funktion vor Datei"): die Komponenten-Auflistung des Jahresberichts — je Investition die
+    # kWp-Spalte der Erzeuger-Typen über `get_erzeuger_kwp`, keine Anlagensumme. Bis RF-9 stand sie in
+    # `build_jahresbericht_context`, das den Selektor (String-Vergleich) selbst rief und damit freigestellt war.
+    "backend/services/pdf/builders/jahresbericht.py::_kontext_investitionen",
 
     # ── 4b. Live-Pfad: eine Entity-Zuordnung, keine Σ einer Größe ──────────
     # ⛔ Hier standen bis N-536 (20.09.2026) VIER Einträge mit der Begründung

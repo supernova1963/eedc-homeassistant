@@ -10,6 +10,7 @@ Reine Datenschicht — keine HTTP-, keine Render-Aufrufe.
 from __future__ import annotations
 
 from calendar import monthrange
+from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Optional
 
@@ -95,6 +96,9 @@ async def build_jahresbericht_context(
     Raises:
         LookupError: Wenn die Anlage nicht existiert.
     """
+    # RF-9 (Serie „Funktion vor Datei"): Orchestrator — die Abschnitte 2–11 sind Phasen-Funktionen in dieser Datei,
+    # in derselben Reihenfolge wie bisher (die Datenbank-Abfragen laufen in derselben Folge). Jede Phase nimmt ihre
+    # Verzweigungen mit; hier steht nur, was die Abschnitte verbindet, und das Kontext-Dict.
     # ── 1. Anlage ───────────────────────────────────────────────────────
     res = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = res.scalar_one_or_none()
@@ -103,6 +107,124 @@ async def build_jahresbericht_context(
 
     ist_gesamtzeitraum = jahr is None
 
+    strompreis, netzbezug_cent, einspeise_cent = await _strompreis_kopf(db, anlage_id)
+    b = await _bestand(db, anlage, anlage_id, jahr)
+    investitionen = b.investitionen
+    pvgis_prognose, pvgis_by_month = await _pvgis_monatswerte(db, anlage_id)
+    fakten, fakten_by_ym, _ust_saetze, _ust_monate = await _fakten_und_ust(
+        db, anlage, anlage_id, jahr, investitionen, ist_gesamtzeitraum,
+    )
+    alle_jahre, start_jahr, end_jahr = await _berichtsjahre(db, anlage, anlage_id, jahr, ist_gesamtzeitraum)
+    s = _fakten_summen(fakten)
+    t = await _monats_tabelle(
+        db, anlage, anlage_id, jahr, investitionen, alle_jahre, fakten_by_ym, pvgis_by_month,
+        _ust_saetze, _ust_monate, ist_gesamtzeitraum,
+    )
+    k = _finanz_kpis(anlage, jahr, investitionen, fakten, s, t)
+    co2_pv, co2_wp, co2_emob, co2_gesamt = _co2_bilanz(investitionen, fakten, t.zeilen_fakten, b, s)
+    g = _geraete_kennzahlen(investitionen, fakten, b, s)
+    wp_starts_summe, wp_betriebsstunden_summe, wp_laufzeit_pro_start = await _wp_zaehler(
+        db, anlage_id, jahr, investitionen, b.hat_waermepumpe,
+    )
+    sv = await _string_vergleich(
+        db, anlage, anlage_id, jahr, investitionen, alle_jahre, pvgis_prognose, ist_gesamtzeitraum,
+    )
+    chart_pv, chart_fluss, chart_autarkie = _charts(t.monats_zeilen, ist_gesamtzeitraum)
+
+    # ── 12. Kontext-Dict ────────────────────────────────────────────────
+    return {
+        "erzeugt_am": datetime.now().strftime("%d.%m.%Y %H:%M"),
+        "ist_gesamtzeitraum": ist_gesamtzeitraum,
+        "jahr": jahr,
+        "start_jahr": start_jahr,
+        "end_jahr": end_jahr,
+        "zeitraum_label": (
+            f"Gesamtzeitraum {start_jahr}–{end_jahr}"
+            if ist_gesamtzeitraum else f"Jahresbericht {jahr}"
+        ),
+        "anlage": {
+            "name": anlage.anlagenname,
+            "leistung_kwp": anlage.leistung_kwp,
+            "installationsdatum": anlage.installationsdatum,
+            "mastr_id": anlage.mastr_id,
+            "standort_plz": anlage.standort_plz,
+            "standort_ort": anlage.standort_ort,
+            "standort_strasse": anlage.standort_strasse,
+            "latitude": anlage.latitude,
+            "longitude": anlage.longitude,
+        },
+        "tarif": _kontext_tarif(strompreis, netzbezug_cent, einspeise_cent),
+        "kpis": {
+            "pv_erzeugung_kwh": t.pv_gesamt,
+            "eigenverbrauch_kwh": t.ev_gesamt,
+            "abgabe_dritte_kwh": s.abgabe_gesamt if s.abgabe_gesamt > 0 else None,
+            "einspeisung_kwh": t.einsp_gesamt,
+            "netzbezug_kwh": t.netz_gesamt,
+            "gesamtverbrauch_kwh": k.gesamtverbrauch,
+            "autarkie_prozent": k.autarkie_jahr,
+            "ev_quote_prozent": k.ev_quote,
+            "spezifischer_ertrag": k.spez_ertrag_jahr,
+            "einspeise_erloes_euro": k.einspeise_erloes,
+            "ev_ersparnis_euro": k.ev_ersparnis,
+            # N-588 (P15): die bewertete Menge hinter `ev_ersparnis_euro` und der Grund nicht bewerteter Verluste.
+            "eigenverbrauch_ohne_verluste_kwh": k.finanz.eigenverbrauch_ohne_verluste_kwh,
+            "wandlungsverluste_bewertet_kwh": k.finanz.wandlungsverluste_kwh,
+            "verluste_grund": verluste_grund_zeitraum(
+                (f.erzeugung.wandlungsverluste_kwh, f.erzeugung.verluste_grund) for f in t.zeilen_fakten),
+            "sonstige_netto_euro": k.sonstige_netto_gesamt,
+            "dienstliche_ladekosten_euro": k.dienstliche_ladekosten_gesamt,
+            "dienstliche_ladekosten_hinweis": DIENSTLICHE_LADEKOSTEN_HINWEIS,
+            "netto_ertrag_euro": k.netto_ertrag,
+            "betriebskosten_zeitraum_euro": k.betriebskosten_zeitraum,
+            "netto_nach_bk_euro": k.netto_nach_bk,
+            "investition_gesamt_euro": k.investition_gesamt,
+            "investition_mehrkosten_euro": k.investition_mehrkosten,
+            "rendite_prozent": k.rendite,
+            "amortisation_prozent": k.amortisation_pct,
+        },
+        "speicher": {
+            "vorhanden": b.hat_speicher,
+            "kapazitaet_kwh": b.speicher_kapazitaet,
+            "ladung_kwh": s.speicher_ladung,
+            "entladung_kwh": s.speicher_entladung,
+            "vollzyklen": g.speicher_zyklen,
+            "effizienz_prozent": g.speicher_eff,
+        },
+        "waermepumpe": _kontext_waermepumpe(
+            b.hat_waermepumpe, fakten, s, g, wp_starts_summe, wp_betriebsstunden_summe, wp_laufzeit_pro_start,
+        ),
+        "emob": {
+            "vorhanden": b.hat_emobilitaet,
+            "km": s.emob_km,
+            "ladung_kwh": s.emob_ladung,
+            "ladung_pv_kwh": s.emob_pv,
+            "ladung_netz_kwh": s.emob_netz,
+            "v2h_kwh": s.emob_v2h,
+            "pv_anteil_prozent": g.emob_pv_anteil,
+        },
+        "bkw": {"vorhanden": b.hat_bkw},
+        "co2": {
+            "pv_kg": co2_pv,
+            "wp_kg": co2_wp,
+            "emob_kg": co2_emob,
+            "gesamt_kg": co2_gesamt,
+        },
+        "monats_zeilen": t.monats_zeilen,
+        "string_vergleiche": sv.string_vergleiche,
+        "string_vergleich_monate_zeitraum": sv.monate_zeitraum,
+        "string_vergleich_teilzeitraum": sv.teilzeitraum,
+        "string_vergleich_verteilt": sv.verteilt,
+        "investitionen": _kontext_investitionen(investitionen, b.inv_by_id),
+        "charts": {
+            "pv_erzeugung": chart_pv,
+            "energie_fluss": chart_fluss,
+            "autarkie": chart_autarkie,
+        },
+    }
+
+
+async def _strompreis_kopf(db: AsyncSession, anlage_id: int):
+    """Abschnitt 2 — der Tarif im Berichtskopf: (Strompreis oder None, Netzbezug-Cent, Einspeise-Cent)."""
     # ── 2. Strompreis (neuester Eintrag — nur für die Tarif-Anzeige im
     #        Berichtskopf). Die Finanzrechnung pro Monat löst den jeweils
     #        gültigen Tarif separat über `lade_tarife_fuer_anlage` auf
@@ -117,7 +239,42 @@ async def build_jahresbericht_context(
     strompreis = res.scalar_one_or_none()
     netzbezug_cent = strompreis.netzbezug_arbeitspreis_cent_kwh if strompreis else NETZBEZUG_DEFAULT_CENT
     einspeise_cent = strompreis.einspeiseverguetung_cent_kwh if strompreis else EINSPEISEVERGUETUNG_DEFAULT_CENT
+    return strompreis, netzbezug_cent, einspeise_cent
 
+
+def _kwp_im_monat(investitionen, anlage, j: Optional[int], m: int) -> float:
+    """Nenner der spezifischen Erträge — Σ der am Monatsende aktiven Erzeuger.
+
+    F-58: Bis 2026-08-24 stand hier der gepflegte `anlage.leistung_kwp`.
+    Der ist ein zeitloser Skalar und kannte weder Zubau noch Stilllegung;
+    seit dem Wegfall des Summenvergleichs (N-76 Stufe 1) hielt ihn zudem
+    nichts mehr gegen die Investitionen. Der Referenzwert bleibt Fallback
+    für Bestände ganz ohne gepflegte Erzeuger.
+    """
+    # `j is None` = Gesamtzeitraum-Bericht (kein Jahr gewählt) — dann
+    # gilt der heutige Bestand, wie beim `stichtag` der Speicher-Kapazität
+    # weiter unten.
+    tag = date(j, m, monthrange(j, m)[1]) if j is not None else date.today()
+    return anlagen_kwp(
+        investitionen, tag, mit_bkw=True, referenzwert=anlage.leistung_kwp,
+    )
+
+
+@dataclass
+class _Bestand:
+    """Abschnitt 3 — die Investitionen des Berichts und was der Kopf aus ihnen liest."""
+
+    investitionen: list
+    inv_by_id: dict
+    hat_speicher: bool
+    hat_waermepumpe: bool
+    hat_emobilitaet: bool
+    hat_bkw: bool
+    speicher_kapazitaet: float
+
+
+async def _bestand(db: AsyncSession, anlage, anlage_id: int, jahr: Optional[int]) -> _Bestand:
+    """Abschnitt 3 — Investitionen laden, Typ-Kennzeichen, Speicher-Kapazität am Stichtag."""
     # ── 3. Investitionen ────────────────────────────────────────────────
     # KEIN aktiv-Filter (Issue #123): Jahresbericht ist historisch, spätere
     # Stilllegung darf Komponenten-Daten nicht rückwirkend entfernen. Wenn ein
@@ -129,23 +286,6 @@ async def build_jahresbericht_context(
     res = await db.execute(inv_stmt)
     investitionen = res.scalars().all()
     inv_by_id = {i.id: i for i in investitionen}
-
-    def _kwp_im_monat(j: Optional[int], m: int) -> float:
-        """Nenner der spezifischen Erträge — Σ der am Monatsende aktiven Erzeuger.
-
-        F-58: Bis 2026-08-24 stand hier der gepflegte `anlage.leistung_kwp`.
-        Der ist ein zeitloser Skalar und kannte weder Zubau noch Stilllegung;
-        seit dem Wegfall des Summenvergleichs (N-76 Stufe 1) hielt ihn zudem
-        nichts mehr gegen die Investitionen. Der Referenzwert bleibt Fallback
-        für Bestände ganz ohne gepflegte Erzeuger.
-        """
-        # `j is None` = Gesamtzeitraum-Bericht (kein Jahr gewählt) — dann
-        # gilt der heutige Bestand, wie beim `stichtag` der Speicher-Kapazität
-        # weiter unten.
-        tag = date(j, m, monthrange(j, m)[1]) if j is not None else date.today()
-        return anlagen_kwp(
-            investitionen, tag, mit_bkw=True, referenzwert=anlage.leistung_kwp,
-        )
 
     hat_speicher = any(i.typ == "speicher" for i in investitionen)
     hat_waermepumpe = any(i.typ == "waermepumpe" for i in investitionen)
@@ -170,7 +310,15 @@ async def build_jahresbericht_context(
     for inv in investitionen:
         if inv.typ == "speicher" and inv.ist_aktiv_an(stichtag):
             speicher_kapazitaet += get_speicher_kapazitaet_kwh(inv) or 0
+    return _Bestand(
+        investitionen=investitionen, inv_by_id=inv_by_id, hat_speicher=hat_speicher,
+        hat_waermepumpe=hat_waermepumpe, hat_emobilitaet=hat_emobilitaet, hat_bkw=hat_bkw,
+        speicher_kapazitaet=speicher_kapazitaet,
+    )
 
+
+async def _pvgis_monatswerte(db: AsyncSession, anlage_id: int):
+    """Abschnitt 4 — die aktive Prognose und ihre Monatswerte je Kalendermonat."""
     # ── 4. PVGIS-Prognose (die aktive) ──────────────────────────────────
     # Auswahlregel über den SoT `services/prognose_auswahl.py` — dieselbe
     # Funktion wie Cockpit, Aussichten, Energieprofil und HA-Export nutzen.
@@ -180,7 +328,13 @@ async def build_jahresbericht_context(
     if pvgis_prognose and pvgis_prognose.monatswerte:
         for mw in pvgis_prognose.monatswerte:
             pvgis_by_month[mw.get("monat", 0)] = mw.get("e_m", 0) or 0
+    return pvgis_prognose, pvgis_by_month
 
+
+async def _fakten_und_ust(
+    db: AsyncSession, anlage, anlage_id: int, jahr: Optional[int], investitionen, ist_gesamtzeitraum: bool,
+):
+    """Abschnitt 5 — die Monats-Fakten des Zeitraums und die USt-Sätze je Kalenderjahr samt ihren Monaten."""
     # ── 5. Monats-Fakten (ADR-002/P10) ──────────────────────────────────
     # Die EINE Aufbereitung der Monatszeile: PV nach P7 aufgelöst (Messwerte +
     # Anlagen-Aggregat als Lückenfüller), Zeitfilter (#236), Dienstwagen-Filter
@@ -200,7 +354,13 @@ async def build_jahresbericht_context(
     # KPI-Betrag (E6a der Vorlage Ergebnisgrößen) — vorher fehlte die USt in den Zeilen ganz.
     _ust_saetze = {_j: ust_satz_des_jahres(anlage, investitionen, fakten, _j) for _j in sorted({f.jahr for f in fakten})}
     _ust_monate = {f.schluessel for _j in _ust_saetze for f in ust_grundgesamtheit(fakten, _j)}
+    return fakten, fakten_by_ym, _ust_saetze, _ust_monate
 
+
+async def _berichtsjahre(
+    db: AsyncSession, anlage, anlage_id: int, jahr: Optional[int], ist_gesamtzeitraum: bool,
+):
+    """Abschnitt 6 — die Jahre des Berichts aus den Zählerzeilen: (alle_jahre, start_jahr, end_jahr)."""
     # ── 6. Monatsdaten (Zähler-Werte) ───────────────────────────────────
     if ist_gesamtzeitraum:
         res = await db.execute(
@@ -230,7 +390,33 @@ async def build_jahresbericht_context(
     md_by_year_month: dict[tuple[int, int], Monatsdaten] = {
         (m.jahr, m.monat): m for m in monatsdaten_list
     }
+    return alle_jahre, start_jahr, end_jahr
 
+
+@dataclass
+class _FaktenSummen:
+    """Abschnitte 6/7 — die Summen über die Monats-Fakten des Zeitraums (ohne die Monatstabelle)."""
+
+    sonstige_by_ym: dict
+    erzeuger_erloes_gesamt: float
+    speicher_ladung: float
+    speicher_entladung: float
+    wp_waerme: float
+    abgabe_gesamt: float
+    wp_heizung: Optional[float]
+    wp_warmwasser: Optional[float]
+    wp_strom: float
+    wp_waerme_mit_ersatz: float
+    wp_strom_mit_ersatz: float
+    emob_km: float
+    emob_v2h: float
+    emob_ladung: float
+    emob_pv: float
+    emob_netz: float
+
+
+def _fakten_summen(fakten) -> _FaktenSummen:
+    """Abschnitte 6/7 — Sonstiges, Speicher, Wärmepumpe und E-Mobilität über den Zeitraum."""
     # PV-Erzeugung pro Jahr/Monat (Module + BKW, Cockpit-Konvention) — aus den
     # Monats-Fakten.
     #
@@ -266,14 +452,6 @@ async def build_jahresbericht_context(
     erzeuger_erloes_gesamt = sum(f.sonstiges.einspeise_erloes_euro for f in fakten)
 
     # ── 7. Aggregate Wärmepumpe / E-Mob / Speicher ──────────────────────
-    pv_gesamt = 0.0
-    erz_bilanz_gesamt = 0.0  # N93: Σ Erzeugung hinter dem Zähler (PV + BHKW)
-    einsp_gesamt = 0.0
-    netz_gesamt = 0.0
-    ev_gesamt = 0.0
-    # N-588: die Monate, die die Monatstabelle trägt — ihr CO₂-PV kommt je Monat aus dem Kanon (unten, Abschnitt 9).
-    zeilen_fakten: list = []
-
     speicher_ladung_by_ym = {f.schluessel: f.speicher.ladung_kwh for f in fakten}
     speicher_entladung_by_ym = {
         f.schluessel: f.speicher.entladung_kwh for f in fakten
@@ -310,6 +488,41 @@ async def build_jahresbericht_context(
     emob_ladung = sum(f.emob.ladung_kwh for f in fakten)
     emob_pv = sum(f.emob.ladung_pv_kwh for f in fakten)
     emob_netz = sum(f.emob.ladung_netz_kwh for f in fakten)
+    return _FaktenSummen(
+        sonstige_by_ym=sonstige_by_ym, erzeuger_erloes_gesamt=erzeuger_erloes_gesamt,
+        speicher_ladung=speicher_ladung, speicher_entladung=speicher_entladung, wp_waerme=wp_waerme,
+        abgabe_gesamt=abgabe_gesamt, wp_heizung=wp_heizung, wp_warmwasser=wp_warmwasser, wp_strom=wp_strom,
+        wp_waerme_mit_ersatz=wp_waerme_mit_ersatz, wp_strom_mit_ersatz=wp_strom_mit_ersatz, emob_km=emob_km,
+        emob_v2h=emob_v2h, emob_ladung=emob_ladung, emob_pv=emob_pv, emob_netz=emob_netz,
+    )
+
+
+@dataclass
+class _Tabelle:
+    """Abschnitt 8 — die Monatszeilen, ihre Finanz-Zeilen und die Summen, die sie tragen."""
+
+    monats_zeilen: list
+    finanz_zeilen: list
+    zeilen_fakten: list
+    pv_gesamt: float
+    erz_bilanz_gesamt: float
+    einsp_gesamt: float
+    netz_gesamt: float
+    ev_gesamt: float
+
+
+async def _monats_tabelle(
+    db: AsyncSession, anlage, anlage_id: int, jahr: Optional[int], investitionen, alle_jahre, fakten_by_ym,
+    pvgis_by_month, _ust_saetze, _ust_monate, ist_gesamtzeitraum: bool,
+) -> _Tabelle:
+    """Abschnitt 8 — je Monat eine Zeile (Einzeljahr: alle zwölf, Gesamtzeitraum: die mit Fakten)."""
+    pv_gesamt = 0.0
+    erz_bilanz_gesamt = 0.0  # N93: Σ Erzeugung hinter dem Zähler (PV + BHKW)
+    einsp_gesamt = 0.0
+    netz_gesamt = 0.0
+    ev_gesamt = 0.0
+    # N-588: die Monate, die die Monatstabelle trägt — ihr CO₂-PV kommt je Monat aus dem Kanon (unten, Abschnitt 9).
+    zeilen_fakten: list = []
 
     # ── 8. Monats-Tabelle aufbauen ──────────────────────────────────────
     # #326: Tarif PRO MONAT (historische Tarife) statt Einheitstarif — die
@@ -366,7 +579,7 @@ async def build_jahresbericht_context(
         # F-58: Nenner ist die Σ der im Monat aktiven Erzeuger. `mit_bkw=True`,
         # weil `pv` hier `fakt.erzeugung.pv_kwh` ist — Module PLUS
         # Balkonkraftwerk (die PV-Achse laut `monats_fakten`).
-        spez = spezifischer_ertrag_kwh_kwp(pv, _kwp_im_monat(fakt.jahr, fakt.monat)) or 0.0
+        spez = spezifischer_ertrag_kwh_kwp(pv, _kwp_im_monat(investitionen, anlage, fakt.jahr, fakt.monat)) or 0.0
         zeile = await baue_finanz_zeile(
             db, anlage_id, finanz_zeile_eingabe(fakt), tarif_cache=_tarif_cache
         )
@@ -427,7 +640,38 @@ async def build_jahresbericht_context(
             monats_zeilen.append(
                 await _zeile_fuer(fakt) if fakt is not None else _leere_zeile(jahr, m)
             )
+    return _Tabelle(
+        monats_zeilen=monats_zeilen, finanz_zeilen=finanz_zeilen, zeilen_fakten=zeilen_fakten,
+        pv_gesamt=pv_gesamt, erz_bilanz_gesamt=erz_bilanz_gesamt, einsp_gesamt=einsp_gesamt,
+        netz_gesamt=netz_gesamt, ev_gesamt=ev_gesamt,
+    )
 
+
+@dataclass
+class _FinanzKpis:
+    """Abschnitt 9 — Energie-Kennzahlen des Zeitraums, Finanz-Summary und Ergebnis-Leiter bis zur Amortisation."""
+
+    gesamtverbrauch: float
+    autarkie_jahr: Optional[float]
+    ev_quote: Optional[float]
+    spez_ertrag_jahr: float
+    sonstige_netto_gesamt: float
+    dienstliche_ladekosten_gesamt: float
+    finanz: object
+    einspeise_erloes: float
+    ev_ersparnis: float
+    investition_gesamt: float
+    investition_mehrkosten: float
+    netto_ertrag: float
+    betriebskosten_zeitraum: float
+    netto_nach_bk: float
+    rendite: Optional[float]
+    amortisation_pct: float
+
+
+def _finanz_kpis(anlage, jahr: Optional[int], investitionen, fakten, s: _FaktenSummen, t: _Tabelle) -> _FinanzKpis:
+    """Abschnitt 9 (erster Teil) — Jahres-KPIs und Finanzen aus den Monatszeilen und den Fakten."""
+    ev_gesamt, netz_gesamt, erz_bilanz_gesamt, pv_gesamt = t.ev_gesamt, t.netz_gesamt, t.erz_bilanz_gesamt, t.pv_gesamt
     # ── 9. Jahres-KPIs / Finanzen / CO₂ ─────────────────────────────────
     gesamtverbrauch = ev_gesamt + netz_gesamt
     autarkie_jahr = autarkie_prozent(ev_gesamt, gesamtverbrauch)
@@ -440,7 +684,7 @@ async def build_jahresbericht_context(
     # Referenzwerts. Stichtag Jahresende, damit ein im Jahr zugebauter String
     # zählt und ein stillgelegter nicht mehr.
     spez_ertrag_jahr = spezifischer_ertrag_kwh_kwp(
-        pv_gesamt, _kwp_im_monat(jahr, 12),
+        pv_gesamt, _kwp_im_monat(investitionen, anlage, jahr, 12),
     ) or 0.0
 
     # #326: Sonstige Erträge/Ausgaben (manuell gepflegt) gehören in den
@@ -448,15 +692,15 @@ async def build_jahresbericht_context(
     # bereits auf den Einsatzzeitraum (ist_aktiv_im_monat, #236) gefiltert;
     # `sonstiges.netto_euro` faltet IMD- und G19-1-Basis-Positionen — per
     # Konstruktion deckungsgleich mit den Monatszeilen.
-    sonstige_netto_gesamt = sum(sonstige_by_ym.values())
+    sonstige_netto_gesamt = sum(s.sonstige_by_ym.values())
     # N-633: dienstliche Ladekosten — eigener Posten der Leiter, nicht Teil der Sonstigen (Kapitaleinsatz, F-19).
     dienstliche_ladekosten_gesamt = sum(f.emob.dienstliche_ladekosten_euro for f in fakten)
     # #326: Finanz-Summary über den SoT-Helper = Σ der per-Monat-Zeilen (EV mit
     # Monats-Flexpreis + §51-bereinigter Einspeise-Erlös) + Sonstige.
     _finanz = berechne_finanz_aggregat(
-        finanz_zeilen,
+        t.finanz_zeilen,
         sonstige_netto_euro=sonstige_netto_gesamt,
-        erzeuger_erloes_euro=erzeuger_erloes_gesamt,
+        erzeuger_erloes_euro=s.erzeuger_erloes_gesamt,
     )
     einspeise_erloes = _finanz.einspeise_erloes_euro
     ev_ersparnis = _finanz.ev_ersparnis_euro
@@ -508,12 +752,26 @@ async def build_jahresbericht_context(
         ust_anteil=ust_eigenverbrauch,
     )).netto_ertrag
 
-    anzahl_monate = len(monats_zeilen)
+    anzahl_monate = len(t.monats_zeilen)
     betriebskosten_zeitraum = betriebskosten_jahr * anzahl_monate / 12 if anzahl_monate else 0
     netto_nach_bk = netto_ertrag - betriebskosten_zeitraum
     rendite = (netto_nach_bk / investition_mehrkosten * 100) if investition_mehrkosten > 0 else None
     amortisation_pct = (netto_nach_bk / investition_mehrkosten * 100) if investition_mehrkosten > 0 else 0
+    return _FinanzKpis(
+        gesamtverbrauch=gesamtverbrauch, autarkie_jahr=autarkie_jahr, ev_quote=ev_quote,
+        spez_ertrag_jahr=spez_ertrag_jahr, sonstige_netto_gesamt=sonstige_netto_gesamt,
+        dienstliche_ladekosten_gesamt=dienstliche_ladekosten_gesamt, finanz=_finanz,
+        einspeise_erloes=einspeise_erloes, ev_ersparnis=ev_ersparnis, investition_gesamt=investition_gesamt,
+        investition_mehrkosten=investition_mehrkosten, netto_ertrag=netto_ertrag,
+        betriebskosten_zeitraum=betriebskosten_zeitraum, netto_nach_bk=netto_nach_bk, rendite=rendite,
+        amortisation_pct=amortisation_pct,
+    )
 
+
+def _co2_bilanz(investitionen, fakten, zeilen_fakten, b: _Bestand, s: _FaktenSummen):
+    """Abschnitt 9 (CO₂) — (PV, Wärmepumpe, E-Mobilität, gesamt) in kg."""
+    hat_waermepumpe, hat_emobilitaet = b.hat_waermepumpe, b.hat_emobilitaet
+    wp_waerme_mit_ersatz, wp_strom_mit_ersatz = s.wp_waerme_mit_ersatz, s.wp_strom_mit_ersatz
     # DI-1: WP-CO₂ über den kanonischen Helper — vermiedenes Gas-CO₂ MINUS
     # WP-Strom-CO₂, deckungsgleich mit Cockpit/Social. Früher `wp_waerme × f_gas`
     # (ohne Wirkungsgrad, ohne Strom-Abzug) → WP-Ersparnis deutlich zu hoch.
@@ -550,7 +808,25 @@ async def build_jahresbericht_context(
         if hat_emobilitaet else 0
     )
     co2_gesamt = co2_pv + max(0, co2_wp) + max(0, co2_emob)
+    return co2_pv, co2_wp, co2_emob, co2_gesamt
 
+
+@dataclass
+class _GeraeteKennzahlen:
+    """Abschnitt 9 — Speicher-Vollzyklen/-Effizienz, Wärmepumpen-Jahreskennzahlen, PV-Anteil der Heimladung."""
+
+    speicher_zyklen: Optional[float]
+    speicher_eff: Optional[float]
+    wpk: object
+    wp_cop: Optional[float]
+    emob_pv_anteil: Optional[float]
+
+
+def _geraete_kennzahlen(investitionen, fakten, b: _Bestand, s: _FaktenSummen) -> _GeraeteKennzahlen:
+    """Abschnitt 9 (Geräte) — die Kennzahlen je Gerätegruppe, alle über ihren Layer bzw. Service."""
+    speicher_ladung, speicher_entladung = s.speicher_ladung, s.speicher_entladung
+    speicher_kapazitaet = b.speicher_kapazitaet
+    emob_pv, emob_ladung = s.emob_pv, s.emob_ladung
     # Vollzyklen = ENTLADUNG ÷ Kapazität über den Layer-SoT (Kanon 2026-07-28).
     speicher_zyklen = berechne_vollzyklen(speicher_entladung, speicher_kapazitaet)
     speicher_eff = _safe_div(speicher_entladung, speicher_ladung) * 100 if speicher_ladung else None
@@ -578,7 +854,14 @@ async def build_jahresbericht_context(
     )
     wp_cop = _wpk.arbeitszahl.wert
     emob_pv_anteil = _safe_div(emob_pv, emob_ladung) * 100 if emob_ladung else None
+    return _GeraeteKennzahlen(
+        speicher_zyklen=speicher_zyklen, speicher_eff=speicher_eff, wpk=_wpk, wp_cop=wp_cop,
+        emob_pv_anteil=emob_pv_anteil,
+    )
 
+
+async def _wp_zaehler(db: AsyncSession, anlage_id: int, jahr: Optional[int], investitionen, hat_waermepumpe: bool):
+    """Abschnitt 9 (WP-Counter) — (Starts, Betriebsstunden, Ø Laufzeit je Start) oder None je Größe."""
     # ── WP-Counter (#238): Kompressor-Starts + Betriebsstunden über den
     # Berichtszeitraum aus TagesZusammenfassung.komponenten_starts summiert.
     # Quelle/Logik analog zum Monatsbericht (aktueller_monat.py); respektiert
@@ -586,45 +869,70 @@ async def build_jahresbericht_context(
     wp_starts_summe: Optional[int] = None
     wp_betriebsstunden_summe: Optional[float] = None
     if hat_waermepumpe:
-        from backend.models.tages_energie_profil import TagesZusammenfassung
-        from sqlalchemy import extract as _extract
-        wp_invs = [i for i in investitionen if i.typ == "waermepumpe"]
-        tz_stmt = (
-            select(TagesZusammenfassung.datum, TagesZusammenfassung.komponenten_starts)
-            .where(TagesZusammenfassung.anlage_id == anlage_id)
-            .where(TagesZusammenfassung.komponenten_starts.is_not(None))
-        )
-        if jahr is not None:
-            tz_stmt = tz_stmt.where(_extract("year", TagesZusammenfassung.datum) == jahr)
-        tz_res = await db.execute(tz_stmt)
-        starts_total = 0
-        stunden_total = 0.0
-        hat_starts = hat_stunden = False
-        for datum_, komp in tz_res.all():
-            aktive_ids = {
-                str(i.id) for i in wp_invs
-                if i.ist_aktiv_im_monat(datum_.year, datum_.month)
-            }
-            if not aktive_ids:
-                continue
-            for inv_id_str, c in ((komp or {}).get("wp_starts_anzahl") or {}).items():
-                if inv_id_str in aktive_ids and isinstance(c, (int, float)) and c > 0:
-                    starts_total += int(c)
-                    hat_starts = True
-            for inv_id_str, h in ((komp or {}).get("wp_betriebsstunden") or {}).items():
-                if inv_id_str in aktive_ids and isinstance(h, (int, float)) and h > 0:
-                    stunden_total += float(h)
-                    hat_stunden = True
-        if hat_starts:
-            wp_starts_summe = starts_total
-        if hat_stunden:
-            wp_betriebsstunden_summe = round(stunden_total, 1)
+        wp_starts_summe, wp_betriebsstunden_summe = await _wp_zaehler_summen(db, anlage_id, jahr, investitionen)
     # Ø Laufzeit pro Start (h) als Auslegungs-Indikator — nur wenn beides vorhanden.
     wp_laufzeit_pro_start = (
         round(wp_betriebsstunden_summe / wp_starts_summe, 2)
         if wp_starts_summe and wp_betriebsstunden_summe else None
     )
+    return wp_starts_summe, wp_betriebsstunden_summe, wp_laufzeit_pro_start
 
+
+async def _wp_zaehler_summen(db: AsyncSession, anlage_id: int, jahr: Optional[int], investitionen):
+    """Die Tageszähler der im jeweiligen Monat aktiven Wärmepumpen — (Starts, Stunden), je None ohne Zähler."""
+    wp_starts_summe: Optional[int] = None
+    wp_betriebsstunden_summe: Optional[float] = None
+    from backend.models.tages_energie_profil import TagesZusammenfassung
+    from sqlalchemy import extract as _extract
+    wp_invs = [i for i in investitionen if i.typ == "waermepumpe"]
+    tz_stmt = (
+        select(TagesZusammenfassung.datum, TagesZusammenfassung.komponenten_starts)
+        .where(TagesZusammenfassung.anlage_id == anlage_id)
+        .where(TagesZusammenfassung.komponenten_starts.is_not(None))
+    )
+    if jahr is not None:
+        tz_stmt = tz_stmt.where(_extract("year", TagesZusammenfassung.datum) == jahr)
+    tz_res = await db.execute(tz_stmt)
+    starts_total = 0
+    stunden_total = 0.0
+    hat_starts = hat_stunden = False
+    for datum_, komp in tz_res.all():
+        aktive_ids = {
+            str(i.id) for i in wp_invs
+            if i.ist_aktiv_im_monat(datum_.year, datum_.month)
+        }
+        if not aktive_ids:
+            continue
+        for inv_id_str, c in ((komp or {}).get("wp_starts_anzahl") or {}).items():
+            if inv_id_str in aktive_ids and isinstance(c, (int, float)) and c > 0:
+                starts_total += int(c)
+                hat_starts = True
+        for inv_id_str, h in ((komp or {}).get("wp_betriebsstunden") or {}).items():
+            if inv_id_str in aktive_ids and isinstance(h, (int, float)) and h > 0:
+                stunden_total += float(h)
+                hat_stunden = True
+    if hat_starts:
+        wp_starts_summe = starts_total
+    if hat_stunden:
+        wp_betriebsstunden_summe = round(stunden_total, 1)
+    return wp_starts_summe, wp_betriebsstunden_summe
+
+
+@dataclass
+class _StringVergleich:
+    """Abschnitt 10 — die Zeilen SOLL/IST und die Hinweise des Abschnitts."""
+
+    string_vergleiche: list
+    monate_zeitraum: int
+    teilzeitraum: bool
+    verteilt: bool
+
+
+async def _string_vergleich(
+    db: AsyncSession, anlage, anlage_id: int, jahr: Optional[int], investitionen, alle_jahre, pvgis_prognose,
+    ist_gesamtzeitraum: bool,
+) -> _StringVergleich:
+    """Abschnitt 10 — String-Vergleich SOLL/IST je Erzeuger-Zeile, dieselbe Regel wie Komponenten → PV-Strings."""
     # ── 10. String-Vergleich SOLL/IST ───────────────────────────────────
     # Erzeuger, nicht nur `pv-module` (F-10): eine reine Balkonkraftwerk-Anlage
     # bekam hier eine leere Tabelle, obwohl sie seit #367 ein PVGIS-SOLL hat.
@@ -659,28 +967,9 @@ async def build_jahresbericht_context(
     # `or anlage.leistung_kwp`-Fallback greift nur bei Summe 0, nicht bei
     # gemischter Pflege (N73/P3).
     gesamt_kwp = verteilungsnenner_kwp(struktur, anlage.leistung_kwp)
-    # ⭐ N-661 (Weg C, Gernot 11.10.2026): der SOLL-Nenner je String sind die
-    # kWp, für die die aktive Prognose gerechnet ist (`soll_nenner_kwp`) —
-    # dieselbe Regel wie Komponenten → PV-Strings. Bis dahin standen hier die im
-    # Berichtsjahr aktiven Träger (`aktiv_im_jahr` oben): ein Zubau NACH dem
-    # Berichtsjahr fehlte im Nenner, obwohl die Prognose ihn trägt, und jeder
-    # String bekam zu viel SOLL (gemessen +50 %). Ohne Prognose-kWp gilt der
-    # frühere Nenner — N-614: je Monat der Menge, die trägt (ein BKW, das im
-    # Monat selbst trägt, ersetzt darin seine Kinder, nie beide im Nenner).
-    _nenner_cache: dict[tuple[int, int], float] = {}
-
-    def _nenner_im_monat(j: int, m: int) -> float:
-        if (j, m) not in _nenner_cache:
-            selbst = selbst_je_monat.get((j, m))
-            if selbst is None:
-                selbst = selbst_tragende_bkw_ids(erzeuger_alle, j, m)
-            _nenner_cache[(j, m)] = soll_nenner_kwp(
-                pvgis_prognose,
-                gesamt_kwp if not selbst else verteilungsnenner_kwp(
-                    traeger_im_monat(erzeuger_alle, struktur, selbst), anlage.leistung_kwp,
-                ),
-            )
-        return _nenner_cache[(j, m)]
+    _nenner_im_monat = _soll_nenner_je_monat(
+        anlage, pvgis_prognose, erzeuger_alle, struktur, selbst_je_monat, gesamt_kwp,
+    )
 
     # ⛔ N-616: Die Monate, über die eine Zeile verglichen wird, sind die Monate,
     # in denen SIE einen Wert hat — dieselbe Regel wie Komponenten → PV-Strings
@@ -709,6 +998,58 @@ async def build_jahresbericht_context(
     if pvgis_prognose and pvgis_prognose.monatswerte:
         for mw in pvgis_prognose.monatswerte:
             prognose_monate[mw.get("monat", 0)] = mw.get("e_m", 0) or 0
+    prognose_per_modul = _prognose_per_modul(pvgis_prognose)
+    monate_zeitraum = len(bericht_monate)
+
+    string_vergleiche = []
+    for inv in pv_module:
+        _string_zeile(
+            string_vergleiche, inv, monate_je_zeile, pv_aufgeloest, prognose_per_modul, prognose_monate,
+            _nenner_im_monat, pvgis_prognose, ist_gesamtzeitraum,
+        )
+    # Wird mindestens eine Zeile über weniger Monate verglichen als der
+    # Berichtszeitraum hat (laufendes Jahr, Inbetriebnahme, Zubau, Stilllegung,
+    # Lücke), sagt der Abschnitt es — sonst läse man eine Teilsumme als Jahr.
+    string_vergleich_teilzeitraum = any(
+        s["monate"] < monate_zeitraum for s in string_vergleiche
+    )
+    string_vergleich_verteilt = any(s["ist_verteilt"] for s in string_vergleiche)
+    return _StringVergleich(
+        string_vergleiche=string_vergleiche, monate_zeitraum=monate_zeitraum,
+        teilzeitraum=string_vergleich_teilzeitraum, verteilt=string_vergleich_verteilt,
+    )
+
+
+def _soll_nenner_je_monat(anlage, pvgis_prognose, erzeuger_alle, struktur, selbst_je_monat, gesamt_kwp):
+    """Der SOLL-Nenner je Monat (N-661, N-614) als Funktion `(j, m) → kWp`, je Monat einmal berechnet."""
+    # ⭐ N-661 (Weg C, Gernot 11.10.2026): der SOLL-Nenner je String sind die
+    # kWp, für die die aktive Prognose gerechnet ist (`soll_nenner_kwp`) —
+    # dieselbe Regel wie Komponenten → PV-Strings. Bis dahin standen hier die im
+    # Berichtsjahr aktiven Träger (`aktiv_im_jahr` oben): ein Zubau NACH dem
+    # Berichtsjahr fehlte im Nenner, obwohl die Prognose ihn trägt, und jeder
+    # String bekam zu viel SOLL (gemessen +50 %). Ohne Prognose-kWp gilt der
+    # frühere Nenner — N-614: je Monat der Menge, die trägt (ein BKW, das im
+    # Monat selbst trägt, ersetzt darin seine Kinder, nie beide im Nenner).
+    _nenner_cache: dict[tuple[int, int], float] = {}
+
+    def _nenner_im_monat(j: int, m: int) -> float:
+        if (j, m) not in _nenner_cache:
+            selbst = selbst_je_monat.get((j, m))
+            if selbst is None:
+                selbst = selbst_tragende_bkw_ids(erzeuger_alle, j, m)
+            _nenner_cache[(j, m)] = soll_nenner_kwp(
+                pvgis_prognose,
+                gesamt_kwp if not selbst else verteilungsnenner_kwp(
+                    traeger_im_monat(erzeuger_alle, struktur, selbst), anlage.leistung_kwp,
+                ),
+            )
+        return _nenner_cache[(j, m)]
+
+    return _nenner_im_monat
+
+
+def _prognose_per_modul(pvgis_prognose) -> dict[int, dict[int, float]]:
+    """Die Pro-Modul-Monatswerte der aktiven Prognose je Investition (leer ohne sie)."""
     # Exakte Pro-Modul-Prognosen (v2.3.2): PVGIS wird je Modulfeld mit dessen
     # eigener Ausrichtung/Neigung abgerufen und unter `module_monatswerte`
     # abgelegt. Ohne sie bleibt nur die kWp-Verteilung des Anlagen-Gesamtwerts —
@@ -725,116 +1066,128 @@ async def build_jahresbericht_context(
                 }
             except (ValueError, TypeError, KeyError):
                 pass
-    monate_zeitraum = len(bericht_monate)
+    return prognose_per_modul
 
-    string_vergleiche = []
-    for inv in pv_module:
-        kwp = get_erzeuger_kwp(inv)
-        # ⛔ N-620: IST je Zeile aus DERSELBEN Auflösung wie Komponenten →
-        # PV-Strings — `lade_pv_je_monat` über Module UND Balkonkraftwerke
-        # (oben, `pv_aufgeloest`). Bis 04.10.2026 kam das IST hier aus den
-        # Monats-Fakten (`erzeugung.pv_je_modul` für Module,
-        # `bkw.erzeugung_je_investition` für BKW). Beide Wege tragen dieselbe
-        # Summe, aber nicht dieselbe Zeile: in einem Monat mit Anlagenwert und
-        # einem BKW ohne eigenen Wert verteilen die Fakten den Rest nur auf die
-        # Module (das BKW ist dort nicht Empfänger), PV-Strings auf Module und
-        # BKW nach kWp (gemessen 2026: Balkon 68 gegen 192,7, WestP 1.726 gegen
-        # 1.602 kWh; Σ beider Sichten 3.976). Der Kommentar oben sagt zu, dass
-        # PDF und PV-Strings dieselben Zeilen zeigen — jetzt auch dieselben
-        # Zahlen. Die Monats-Fakten selbst (`pv_kwh`, `bkw_kwh`, `pv_je_modul`,
-        # P9) bleiben unberührt; nur die Zuordnung je Zeile kommt von hier.
-        # F-10 (das BKW ist eine Erzeuger-Zeile) bleibt damit gewahrt: die
-        # Auflösung liefert ihm seinen eigenen Wert, sonst seinen kWp-Anteil.
-        monate = monate_je_zeile.get(inv.id, [])
-        werte_zeile = [pv_aufgeloest[jm][inv.id] for jm in monate]
-        ist_kwh = sum(w.pv_erzeugung_kwh for w in werte_zeile)
-        # Kennzeichnung wie PV-Strings („geschätzt (kWp-Anteil)"): ein einziger
-        # verteilter Monat macht den Zeitraum verteilt (`_rollup_quelle`).
-        ist_verteilt = any(w.quelle == PV_QUELLE_VERTEILT for w in werte_zeile)
-        modul_prognose = prognose_per_modul.get(inv.id)
-        # SOLL nur über die Monate der Zeile (N-616), je Monat mit dem kWp-Anteil
-        # an der Menge, die in diesem Monat trägt (N-614), und im Anschaffungs-/
-        # Stilllegungsmonat auf die Laufzeit gekürzt (F-34) — dieselbe Regel wie
-        # Komponenten → PV-Strings. Monate eines Jahres mit demselben Anteil
-        # werden erst summiert und dann einmal mit ihm multipliziert: so ist ein
-        # vollständig erfasstes Jahr Rechenschritt für Rechenschritt die frühere
-        # Jahresformel `Σ PVGIS × Anteil` (bitgleich, nicht nur auf die
-        # angezeigte Stelle).
-        summen_je_anteil: dict[tuple[int, float], float] = {}
-        gekuerzte_monate = 0.0
-        for (j, m) in monate:
-            if modul_prognose is not None:
-                prog, faktor = modul_prognose.get(m, 0), 1.0
-            else:
-                nenner = _nenner_im_monat(j, m)
-                prog, faktor = prognose_monate.get(m, 0), (kwp / nenner if nenner > 0 else 0)
-            voll = prog * faktor
-            gekuerzt = soll_im_laufmonat(voll, inv, j, m)
-            if gekuerzt != voll:
-                gekuerzte_monate += gekuerzt
-            else:
-                summen_je_anteil[(j, faktor)] = summen_je_anteil.get((j, faktor), 0.0) + prog
-        prognose_kwh = 0.0
-        for (_, faktor), summe in summen_je_anteil.items():
-            prognose_kwh += summe * faktor
-        prognose_kwh += gekuerzte_monate
-        if prognose_kwh > 0 or ist_kwh > 0:
-            abw = ist_kwh - prognose_kwh
-            abw_pct = (abw / prognose_kwh * 100) if prognose_kwh > 0 else 0
-            # Spezifischer Ertrag. Im Einzeljahr Erzeugung ÷ kWp über die Monate
-            # der Zeile, ohne Hochrechnung (wie PV-Strings und die Kopfkennzahl
-            # „Spez. Ertrag (Zeitraum)"). Im Gesamtzeitraum ein Jahreswert — bis
-            # 04.10.2026 ÷ ALLE Jahre des Berichts, sodass jeder später zugebaute
-            # oder früher abgetretene Erzeuger zu niedrig stand. ⛔ Der Jahreswert
-            # kommt aus DER Layer-Formel der Cockpit-Kachel und des HA-Sensors
-            # (`berechne_spez_ertrag_annualisiert`, saisonal gewichtet), je Zeile
-            # aufgerufen: die Monate mit Wert, die eigene Investition, als
-            # Gewichte das Monats-SOLL dieser Zeile (Modul-Prognose, sonst die
-            # PVGIS-Monatswerte der Anlage, ohne beides die 52°N-Verteilung der
-            # Formel). Eine lineare Hochrechnung (Monate ÷ 12) stand hier einen
-            # Bauschritt lang und lag bei wenigen Monaten weit daneben (gemessen
-            # bei wahren 1.000 kWh/kWp: Mai–Sep 1.464, Okt–Feb 468, nur Juni
-            # 1.620). `None` (kein Wert, keine Leistung) zeigt das PDF als „–".
-            if ist_gesamtzeitraum:
-                if modul_prognose is not None:
-                    gewichte = {m: w for m, w in modul_prognose.items() if w and w > 0} or None
-                else:
-                    gewichte = monatsgewichte_aus_pvgis(
-                        pvgis_prognose.monatswerte if pvgis_prognose else None
-                    ) or None
-                spez = berechne_spez_ertrag_annualisiert(
-                    pv_erzeugung_kwh=ist_kwh,
-                    covered_months=set(monate),
-                    investitionen=[inv],
-                    fallback_kwp=kwp,
-                    monatsgewichte=gewichte,
-                )
-            else:
-                spez = (ist_kwh / kwp) if kwp else 0
-            string_vergleiche.append({
-                "bezeichnung": inv.bezeichnung,
-                "leistung_kwp": kwp,
-                "ausrichtung": inv.ausrichtung,
-                "neigung_grad": inv.neigung_grad,
-                "prognose_kwh": prognose_kwh,
-                "ist_kwh": ist_kwh,
-                "abweichung_kwh": abw,
-                "abweichung_prozent": abw_pct,
-                "spezifischer_ertrag": spez,
-                # N-616: über wie viele Monate diese Zeile verglichen wird — das
-                # Template nennt es, wenn es nicht alle des Zeitraums sind.
-                "monate": len(monate),
-                # N-620: IST in mindestens einem Monat nach kWp verteilt, nicht gemessen.
-                "ist_verteilt": ist_verteilt,
-            })
-    # Wird mindestens eine Zeile über weniger Monate verglichen als der
-    # Berichtszeitraum hat (laufendes Jahr, Inbetriebnahme, Zubau, Stilllegung,
-    # Lücke), sagt der Abschnitt es — sonst läse man eine Teilsumme als Jahr.
-    string_vergleich_teilzeitraum = any(
-        s["monate"] < monate_zeitraum for s in string_vergleiche
-    )
-    string_vergleich_verteilt = any(s["ist_verteilt"] for s in string_vergleiche)
 
+def _string_zeile(
+    string_vergleiche, inv, monate_je_zeile, pv_aufgeloest, prognose_per_modul, prognose_monate, _nenner_im_monat,
+    pvgis_prognose, ist_gesamtzeitraum: bool,
+) -> None:
+    """Eine Zeile des String-Vergleichs — angehängt, wenn SOLL oder IST einen Wert hat."""
+    kwp = get_erzeuger_kwp(inv)
+    # ⛔ N-620: IST je Zeile aus DERSELBEN Auflösung wie Komponenten →
+    # PV-Strings — `lade_pv_je_monat` über Module UND Balkonkraftwerke
+    # (oben, `pv_aufgeloest`). Bis 04.10.2026 kam das IST hier aus den
+    # Monats-Fakten (`erzeugung.pv_je_modul` für Module,
+    # `bkw.erzeugung_je_investition` für BKW). Beide Wege tragen dieselbe
+    # Summe, aber nicht dieselbe Zeile: in einem Monat mit Anlagenwert und
+    # einem BKW ohne eigenen Wert verteilen die Fakten den Rest nur auf die
+    # Module (das BKW ist dort nicht Empfänger), PV-Strings auf Module und
+    # BKW nach kWp (gemessen 2026: Balkon 68 gegen 192,7, WestP 1.726 gegen
+    # 1.602 kWh; Σ beider Sichten 3.976). Der Kommentar oben sagt zu, dass
+    # PDF und PV-Strings dieselben Zeilen zeigen — jetzt auch dieselben
+    # Zahlen. Die Monats-Fakten selbst (`pv_kwh`, `bkw_kwh`, `pv_je_modul`,
+    # P9) bleiben unberührt; nur die Zuordnung je Zeile kommt von hier.
+    # F-10 (das BKW ist eine Erzeuger-Zeile) bleibt damit gewahrt: die
+    # Auflösung liefert ihm seinen eigenen Wert, sonst seinen kWp-Anteil.
+    monate = monate_je_zeile.get(inv.id, [])
+    werte_zeile = [pv_aufgeloest[jm][inv.id] for jm in monate]
+    ist_kwh = sum(w.pv_erzeugung_kwh for w in werte_zeile)
+    # Kennzeichnung wie PV-Strings („geschätzt (kWp-Anteil)"): ein einziger
+    # verteilter Monat macht den Zeitraum verteilt (`_rollup_quelle`).
+    ist_verteilt = any(w.quelle == PV_QUELLE_VERTEILT for w in werte_zeile)
+    modul_prognose = prognose_per_modul.get(inv.id)
+    prognose_kwh = _soll_der_zeile(inv, kwp, monate, modul_prognose, prognose_monate, _nenner_im_monat)
+    if prognose_kwh > 0 or ist_kwh > 0:
+        abw = ist_kwh - prognose_kwh
+        abw_pct = (abw / prognose_kwh * 100) if prognose_kwh > 0 else 0
+        spez = _spez_ertrag_der_zeile(inv, kwp, ist_kwh, monate, modul_prognose, pvgis_prognose, ist_gesamtzeitraum)
+        string_vergleiche.append({
+            "bezeichnung": inv.bezeichnung,
+            "leistung_kwp": kwp,
+            "ausrichtung": inv.ausrichtung,
+            "neigung_grad": inv.neigung_grad,
+            "prognose_kwh": prognose_kwh,
+            "ist_kwh": ist_kwh,
+            "abweichung_kwh": abw,
+            "abweichung_prozent": abw_pct,
+            "spezifischer_ertrag": spez,
+            # N-616: über wie viele Monate diese Zeile verglichen wird — das
+            # Template nennt es, wenn es nicht alle des Zeitraums sind.
+            "monate": len(monate),
+            # N-620: IST in mindestens einem Monat nach kWp verteilt, nicht gemessen.
+            "ist_verteilt": ist_verteilt,
+        })
+
+
+def _soll_der_zeile(inv, kwp, monate, modul_prognose, prognose_monate, _nenner_im_monat) -> float:
+    """Das SOLL einer Zeile über ihre Monate (N-616, N-614, F-34)."""
+    # SOLL nur über die Monate der Zeile (N-616), je Monat mit dem kWp-Anteil
+    # an der Menge, die in diesem Monat trägt (N-614), und im Anschaffungs-/
+    # Stilllegungsmonat auf die Laufzeit gekürzt (F-34) — dieselbe Regel wie
+    # Komponenten → PV-Strings. Monate eines Jahres mit demselben Anteil
+    # werden erst summiert und dann einmal mit ihm multipliziert: so ist ein
+    # vollständig erfasstes Jahr Rechenschritt für Rechenschritt die frühere
+    # Jahresformel `Σ PVGIS × Anteil` (bitgleich, nicht nur auf die
+    # angezeigte Stelle).
+    summen_je_anteil: dict[tuple[int, float], float] = {}
+    gekuerzte_monate = 0.0
+    for (j, m) in monate:
+        if modul_prognose is not None:
+            prog, faktor = modul_prognose.get(m, 0), 1.0
+        else:
+            nenner = _nenner_im_monat(j, m)
+            prog, faktor = prognose_monate.get(m, 0), (kwp / nenner if nenner > 0 else 0)
+        voll = prog * faktor
+        gekuerzt = soll_im_laufmonat(voll, inv, j, m)
+        if gekuerzt != voll:
+            gekuerzte_monate += gekuerzt
+        else:
+            summen_je_anteil[(j, faktor)] = summen_je_anteil.get((j, faktor), 0.0) + prog
+    prognose_kwh = 0.0
+    for (_, faktor), summe in summen_je_anteil.items():
+        prognose_kwh += summe * faktor
+    prognose_kwh += gekuerzte_monate
+    return prognose_kwh
+
+
+def _spez_ertrag_der_zeile(inv, kwp, ist_kwh, monate, modul_prognose, pvgis_prognose, ist_gesamtzeitraum: bool):
+    """Spezifischer Ertrag einer Zeile — Einzeljahr über ihre Monate, Gesamtzeitraum als Jahreswert."""
+    # Spezifischer Ertrag. Im Einzeljahr Erzeugung ÷ kWp über die Monate
+    # der Zeile, ohne Hochrechnung (wie PV-Strings und die Kopfkennzahl
+    # „Spez. Ertrag (Zeitraum)"). Im Gesamtzeitraum ein Jahreswert — bis
+    # 04.10.2026 ÷ ALLE Jahre des Berichts, sodass jeder später zugebaute
+    # oder früher abgetretene Erzeuger zu niedrig stand. ⛔ Der Jahreswert
+    # kommt aus DER Layer-Formel der Cockpit-Kachel und des HA-Sensors
+    # (`berechne_spez_ertrag_annualisiert`, saisonal gewichtet), je Zeile
+    # aufgerufen: die Monate mit Wert, die eigene Investition, als
+    # Gewichte das Monats-SOLL dieser Zeile (Modul-Prognose, sonst die
+    # PVGIS-Monatswerte der Anlage, ohne beides die 52°N-Verteilung der
+    # Formel). Eine lineare Hochrechnung (Monate ÷ 12) stand hier einen
+    # Bauschritt lang und lag bei wenigen Monaten weit daneben (gemessen
+    # bei wahren 1.000 kWh/kWp: Mai–Sep 1.464, Okt–Feb 468, nur Juni
+    # 1.620). `None` (kein Wert, keine Leistung) zeigt das PDF als „–".
+    if ist_gesamtzeitraum:
+        if modul_prognose is not None:
+            gewichte = {m: w for m, w in modul_prognose.items() if w and w > 0} or None
+        else:
+            gewichte = monatsgewichte_aus_pvgis(
+                pvgis_prognose.monatswerte if pvgis_prognose else None
+            ) or None
+        spez = berechne_spez_ertrag_annualisiert(
+            pv_erzeugung_kwh=ist_kwh,
+            covered_months=set(monate),
+            investitionen=[inv],
+            fallback_kwp=kwp,
+            monatsgewichte=gewichte,
+        )
+    else:
+        spez = (ist_kwh / kwp) if kwp else 0
+    return spez
+
+
+def _charts(monats_zeilen, ist_gesamtzeitraum: bool):
+    """Abschnitt 11 — (PV-Erzeugung, Energie-Fluss, Autarkie) als Data-URIs; ohne Monatszeilen je None."""
     # ── 11. Charts (Base64 Data-URIs) ───────────────────────────────────
     monats_labels = [z["monat_name"] for z in monats_zeilen]
     chart_pv = chart_fluss = chart_autarkie = None
@@ -854,173 +1207,104 @@ async def build_jahresbericht_context(
             monats_labels,
             [z["autarkie_prozent"] for z in monats_zeilen],
         )
+    return chart_pv, chart_fluss, chart_autarkie
 
-    # ── 12. Kontext-Dict ────────────────────────────────────────────────
+
+def _kontext_tarif(strompreis, netzbezug_cent, einspeise_cent) -> dict:
+    """Kontext „tarif" — der neueste Tarif der Anlage (Abschnitt 2) oder die Defaults."""
     return {
-        "erzeugt_am": datetime.now().strftime("%d.%m.%Y %H:%M"),
-        "ist_gesamtzeitraum": ist_gesamtzeitraum,
-        "jahr": jahr,
-        "start_jahr": start_jahr,
-        "end_jahr": end_jahr,
-        "zeitraum_label": (
-            f"Gesamtzeitraum {start_jahr}–{end_jahr}"
-            if ist_gesamtzeitraum else f"Jahresbericht {jahr}"
-        ),
-        "anlage": {
-            "name": anlage.anlagenname,
-            "leistung_kwp": anlage.leistung_kwp,
-            "installationsdatum": anlage.installationsdatum,
-            "mastr_id": anlage.mastr_id,
-            "standort_plz": anlage.standort_plz,
-            "standort_ort": anlage.standort_ort,
-            "standort_strasse": anlage.standort_strasse,
-            "latitude": anlage.latitude,
-            "longitude": anlage.longitude,
-        },
-        "tarif": {
-            "anbieter": strompreis.anbieter if strompreis else None,
-            "tarifname": strompreis.tarifname if strompreis else None,
-            "netzbezug_cent": netzbezug_cent,
-            "einspeise_cent": einspeise_cent,
-            "grundpreis_euro_monat": strompreis.grundpreis_euro_monat if strompreis else None,
-            "gueltig_ab": strompreis.gueltig_ab if strompreis else None,
-        },
-        "kpis": {
-            "pv_erzeugung_kwh": pv_gesamt,
-            "eigenverbrauch_kwh": ev_gesamt,
-            "abgabe_dritte_kwh": abgabe_gesamt if abgabe_gesamt > 0 else None,
-            "einspeisung_kwh": einsp_gesamt,
-            "netzbezug_kwh": netz_gesamt,
-            "gesamtverbrauch_kwh": gesamtverbrauch,
-            "autarkie_prozent": autarkie_jahr,
-            "ev_quote_prozent": ev_quote,
-            "spezifischer_ertrag": spez_ertrag_jahr,
-            "einspeise_erloes_euro": einspeise_erloes,
-            "ev_ersparnis_euro": ev_ersparnis,
-            # N-588 (P15): die bewertete Menge hinter `ev_ersparnis_euro` und der Grund nicht bewerteter Verluste.
-            "eigenverbrauch_ohne_verluste_kwh": _finanz.eigenverbrauch_ohne_verluste_kwh,
-            "wandlungsverluste_bewertet_kwh": _finanz.wandlungsverluste_kwh,
-            "verluste_grund": verluste_grund_zeitraum(
-                (f.erzeugung.wandlungsverluste_kwh, f.erzeugung.verluste_grund) for f in zeilen_fakten),
-            "sonstige_netto_euro": sonstige_netto_gesamt,
-            "dienstliche_ladekosten_euro": dienstliche_ladekosten_gesamt,
-            "dienstliche_ladekosten_hinweis": DIENSTLICHE_LADEKOSTEN_HINWEIS,
-            "netto_ertrag_euro": netto_ertrag,
-            "betriebskosten_zeitraum_euro": betriebskosten_zeitraum,
-            "netto_nach_bk_euro": netto_nach_bk,
-            "investition_gesamt_euro": investition_gesamt,
-            "investition_mehrkosten_euro": investition_mehrkosten,
-            "rendite_prozent": rendite,
-            "amortisation_prozent": amortisation_pct,
-        },
-        "speicher": {
-            "vorhanden": hat_speicher,
-            "kapazitaet_kwh": speicher_kapazitaet,
-            "ladung_kwh": speicher_ladung,
-            "entladung_kwh": speicher_entladung,
-            "vollzyklen": speicher_zyklen,
-            "effizienz_prozent": speicher_eff,
-        },
-        "waermepumpe": {
-            "vorhanden": hat_waermepumpe,
-            # F-43: **Anzeige** trennt „nicht gemessen" von „gemessene 0", die
-            # Rechnung oben nicht (dort ist 0 der richtige Summand). `WpFakten`
-            # trägt `float = 0.0` als Default; ohne diese Trennung rendert
-            # `fmt_kwh(0.0)` ein „0 kWh", während der COP daneben korrekt „–"
-            # sagt — dieselbe Tabelle, zwei Wahrheiten. Eine Klimaanlage ohne
-            # Wärmemengenzähler bekam so drei erfundene Nullen.
-            # Konvention übernommen, nicht erfunden: `aktueller_monat.py`
-            # trägt einen Monatswert ebenfalls nur `if wert > 0` ein — deshalb
-            # sagen Cockpit → Monat und (darüber aggregiert) → Jahr längst „—".
-            # Das PDF war der einzige Konsument, der es nicht tat.
-            # HA-Bauform E4d (Bauplan §8a, Rest N-585): eine GEMESSENE 0 ist ein Wert — „0 kWh" statt „—", wenn ein
-            # Monat des Berichts die Wärme gemessen hat (`WpFakten.waerme_gemessen`; „kein Betrieb", kein fehlender Zähler).
-            "waerme_kwh": (
-                wp_waerme if wp_waerme > 0 or any(f.wp.waerme_gemessen for f in fakten) else None
-            ),
-            # N-673: dieselbe Trennung für die Aufteilung — gemessen (auch 0) ⇒ Wert, ungemessen ⇒ „—".
-            "heizung_kwh": wp_heizung,
-            "warmwasser_kwh": wp_warmwasser,
-            "strom_kwh": wp_strom,
-            "cop": wp_cop,
-            "cop_grund": _wpk.arbeitszahl.grund,
-            "cop_hinweis": _wpk.arbeitszahl.hinweis,
-            # Kennzahlen je Funktion nur, wo getrennt gemessen wurde (R2) — sonst
-            # trägt der Grund, warum nicht.
-            "hat_split": _wpk.hat_split,
-            "jaz_heizen": _wpk.je_funktion.heizen.wert,
-            "jaz_heizen_grund": _wpk.je_funktion.heizen.grund,
-            "jaz_warmwasser": _wpk.je_funktion.warmwasser.wert,
-            "jaz_warmwasser_grund": _wpk.je_funktion.warmwasser.grund,
-            # Kühlen wie Heizen/Warmwasser: Zeile mit Wert oder mit Grund (S3) —
-            # dieselbe Regel wie Monatsbericht und Cockpit → Jahr.
-            "jaz_kuehlen": _wpk.kuehlen.wert,
-            "jaz_kuehlen_grund": _wpk.kuehlen.grund,
-            "waerme_herkunft": _wpk.herkunft if _wpk.abgeleitet else None,
-            "ersparnis_vorbehalt": _wpk.vorbehalt,
-            "starts_summe": wp_starts_summe,
-            "betriebsstunden_summe": wp_betriebsstunden_summe,
-            "laufzeit_pro_start_h": wp_laufzeit_pro_start,
-        },
-        "emob": {
-            "vorhanden": hat_emobilitaet,
-            "km": emob_km,
-            "ladung_kwh": emob_ladung,
-            "ladung_pv_kwh": emob_pv,
-            "ladung_netz_kwh": emob_netz,
-            "v2h_kwh": emob_v2h,
-            "pv_anteil_prozent": emob_pv_anteil,
-        },
-        "bkw": {"vorhanden": hat_bkw},
-        "co2": {
-            "pv_kg": co2_pv,
-            "wp_kg": co2_wp,
-            "emob_kg": co2_emob,
-            "gesamt_kg": co2_gesamt,
-        },
-        "monats_zeilen": monats_zeilen,
-        "string_vergleiche": string_vergleiche,
-        "string_vergleich_monate_zeitraum": monate_zeitraum,
-        "string_vergleich_teilzeitraum": string_vergleich_teilzeitraum,
-        "string_vergleich_verteilt": string_vergleich_verteilt,
-        "investitionen": [
-            {
-                "typ": i.typ,
-                "typ_label": _INV_TYP_LABELS.get(i.typ, i.typ),
-                "bezeichnung": i.bezeichnung,
-                "anschaffungsdatum": i.anschaffungsdatum,
-                # `leistung_kwp` ist ein Mehrzweckfeld (N-G): `jahresbericht.html`
-                # rendert dieselbe Spalte als kWh (Speicher), kW AC
-                # (Wechselrichter) und kWp (Rest). Nur für die Erzeuger-Typen
-                # trägt sie PV-Semantik — dort läuft sie über den SoT-Helper,
-                # damit eine nur im `parameter` gepflegte Nennleistung (#229)
-                # nicht als leere Spalte im PDF landet. Für Speicher und
-                # Wechselrichter bleibt die Rohspalte stehen: ein
-                # PV-kWp-Fallback wäre dort schlicht die falsche Größe.
-                "leistung_kwp": (
-                    (get_erzeuger_kwp(i) or None)
-                    if i.typ in ("pv-module", "balkonkraftwerk")
-                    else i.leistung_kwp
-                ),
-                "ausrichtung": i.ausrichtung,
-                "neigung_grad": i.neigung_grad,
-                "parameter": i.parameter or {},
-                # #303 (kingcap1): Komponenten-Auflistung im WeasyPrint-Bericht
-                # mit denselben Feldern wie der reportlab-Pfad — sonst fehlt z. B.
-                # der Speicher als Komponente.
-                "kosten_euro": i.anschaffungskosten_gesamt,
-                "alternativkosten_euro": i.anschaffungskosten_alternativ,
-                "parent_bezeichnung": (
-                    inv_by_id.get(i.parent_investition_id).bezeichnung
-                    if i.parent_investition_id and i.parent_investition_id in inv_by_id
-                    else None
-                ),
-            }
-            for i in investitionen
-        ],
-        "charts": {
-            "pv_erzeugung": chart_pv,
-            "energie_fluss": chart_fluss,
-            "autarkie": chart_autarkie,
-        },
+        "anbieter": strompreis.anbieter if strompreis else None,
+        "tarifname": strompreis.tarifname if strompreis else None,
+        "netzbezug_cent": netzbezug_cent,
+        "einspeise_cent": einspeise_cent,
+        "grundpreis_euro_monat": strompreis.grundpreis_euro_monat if strompreis else None,
+        "gueltig_ab": strompreis.gueltig_ab if strompreis else None,
     }
+
+
+def _kontext_waermepumpe(
+    hat_waermepumpe, fakten, s: _FaktenSummen, g: _GeraeteKennzahlen, wp_starts_summe, wp_betriebsstunden_summe,
+    wp_laufzeit_pro_start,
+) -> dict:
+    """Kontext „waermepumpe" — Mengen, Arbeitszahlen mit Grund, Zähler."""
+    wp_waerme, _wpk = s.wp_waerme, g.wpk
+    return {
+        "vorhanden": hat_waermepumpe,
+        # F-43: **Anzeige** trennt „nicht gemessen" von „gemessene 0", die
+        # Rechnung oben nicht (dort ist 0 der richtige Summand). `WpFakten`
+        # trägt `float = 0.0` als Default; ohne diese Trennung rendert
+        # `fmt_kwh(0.0)` ein „0 kWh", während der COP daneben korrekt „–"
+        # sagt — dieselbe Tabelle, zwei Wahrheiten. Eine Klimaanlage ohne
+        # Wärmemengenzähler bekam so drei erfundene Nullen.
+        # Konvention übernommen, nicht erfunden: `aktueller_monat.py`
+        # trägt einen Monatswert ebenfalls nur `if wert > 0` ein — deshalb
+        # sagen Cockpit → Monat und (darüber aggregiert) → Jahr längst „—".
+        # Das PDF war der einzige Konsument, der es nicht tat.
+        # HA-Bauform E4d (Bauplan §8a, Rest N-585): eine GEMESSENE 0 ist ein Wert — „0 kWh" statt „—", wenn ein
+        # Monat des Berichts die Wärme gemessen hat (`WpFakten.waerme_gemessen`; „kein Betrieb", kein fehlender Zähler).
+        "waerme_kwh": (
+            wp_waerme if wp_waerme > 0 or any(f.wp.waerme_gemessen for f in fakten) else None
+        ),
+        # N-673: dieselbe Trennung für die Aufteilung — gemessen (auch 0) ⇒ Wert, ungemessen ⇒ „—".
+        "heizung_kwh": s.wp_heizung,
+        "warmwasser_kwh": s.wp_warmwasser,
+        "strom_kwh": s.wp_strom,
+        "cop": g.wp_cop,
+        "cop_grund": _wpk.arbeitszahl.grund,
+        "cop_hinweis": _wpk.arbeitszahl.hinweis,
+        # Kennzahlen je Funktion nur, wo getrennt gemessen wurde (R2) — sonst
+        # trägt der Grund, warum nicht.
+        "hat_split": _wpk.hat_split,
+        "jaz_heizen": _wpk.je_funktion.heizen.wert,
+        "jaz_heizen_grund": _wpk.je_funktion.heizen.grund,
+        "jaz_warmwasser": _wpk.je_funktion.warmwasser.wert,
+        "jaz_warmwasser_grund": _wpk.je_funktion.warmwasser.grund,
+        # Kühlen wie Heizen/Warmwasser: Zeile mit Wert oder mit Grund (S3) —
+        # dieselbe Regel wie Monatsbericht und Cockpit → Jahr.
+        "jaz_kuehlen": _wpk.kuehlen.wert,
+        "jaz_kuehlen_grund": _wpk.kuehlen.grund,
+        "waerme_herkunft": _wpk.herkunft if _wpk.abgeleitet else None,
+        "ersparnis_vorbehalt": _wpk.vorbehalt,
+        "starts_summe": wp_starts_summe,
+        "betriebsstunden_summe": wp_betriebsstunden_summe,
+        "laufzeit_pro_start_h": wp_laufzeit_pro_start,
+    }
+
+
+def _kontext_investitionen(investitionen, inv_by_id) -> list[dict]:
+    """Kontext „investitionen" — die Komponenten-Auflistung des Berichts."""
+    return [
+        {
+            "typ": i.typ,
+            "typ_label": _INV_TYP_LABELS.get(i.typ, i.typ),
+            "bezeichnung": i.bezeichnung,
+            "anschaffungsdatum": i.anschaffungsdatum,
+            # `leistung_kwp` ist ein Mehrzweckfeld (N-G): `jahresbericht.html`
+            # rendert dieselbe Spalte als kWh (Speicher), kW AC
+            # (Wechselrichter) und kWp (Rest). Nur für die Erzeuger-Typen
+            # trägt sie PV-Semantik — dort läuft sie über den SoT-Helper,
+            # damit eine nur im `parameter` gepflegte Nennleistung (#229)
+            # nicht als leere Spalte im PDF landet. Für Speicher und
+            # Wechselrichter bleibt die Rohspalte stehen: ein
+            # PV-kWp-Fallback wäre dort schlicht die falsche Größe.
+            "leistung_kwp": (
+                (get_erzeuger_kwp(i) or None)
+                if i.typ in ("pv-module", "balkonkraftwerk")
+                else i.leistung_kwp
+            ),
+            "ausrichtung": i.ausrichtung,
+            "neigung_grad": i.neigung_grad,
+            "parameter": i.parameter or {},
+            # #303 (kingcap1): Komponenten-Auflistung im WeasyPrint-Bericht
+            # mit denselben Feldern wie der reportlab-Pfad — sonst fehlt z. B.
+            # der Speicher als Komponente.
+            "kosten_euro": i.anschaffungskosten_gesamt,
+            "alternativkosten_euro": i.anschaffungskosten_alternativ,
+            "parent_bezeichnung": (
+                inv_by_id.get(i.parent_investition_id).bezeichnung
+                if i.parent_investition_id and i.parent_investition_id in inv_by_id
+                else None
+            ),
+        }
+        for i in investitionen
+    ]
