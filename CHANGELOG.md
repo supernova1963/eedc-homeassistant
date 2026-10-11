@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **Intern: der Feld-Wächter zählt nur noch Code, und die Liste „ausgewertet in“ nennt die wirklichen Leser.** `test_jedes_feld_hat_eine_auswertung` sucht den Feldnamen jetzt im ausführbaren Quelltext des genannten Symbols — Docstring, Kommentar und Funktionsname zählen nicht mehr als Lesen (N-686). Acht Einträge waren nur dadurch grün; sie zeigen jetzt auf die Stelle, die das Feld wirklich liest (Ø-Temperatur, Ø-Netzbezugspreis, Kraftstoff- und Gaspreis, WP-Strom, BKW-Erzeugung, Betriebsmodus, PV-Gesamtzähler — dessen alter Leser wurde seit dem 26.09. nur noch von Tests gerufen). Der Eintrag „Wechselrichter-Leistung → Cockpit → Live“ entfällt: kein Live-Pfad liest sie, und die Datenquellen-Fläche zeigt den Wechselrichter gar nicht (N-685); das Feld steht jetzt mit Begründung in der Ausnahmeliste. Für Anwender ändert sich keine Anzeige.
+
 ## [4.1.6] - 2026-10-11 — Konsolidierung: 31 Korrekturen an Anzeige, Daten-Checker, Import und Hubs; eedc im Wartungsmodus
 
 ### Added

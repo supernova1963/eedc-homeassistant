@@ -11,8 +11,9 @@ Ein Feld, das die Datenquellen-Fläche anbietet, muss in mindestens einer
      ``FELDER_OHNE_AUSWERTUNG_BEKANNT``.
  2   Jede genannte Datei existiert und **definiert** das genannte Symbol.
  3   Der Feldname (oder die Trägertoken aus ``Auswertung.ueber``) kommt im
-     Quelltext genau dieser Funktion vor — *ein Symbol, das das Feld nicht
-     liest, ist kein Leser.*
+     **ausführbaren** Quelltext genau dieser Funktion vor — ohne Docstring,
+     Kommentar und eigenen Funktionsnamen (N-686) — *ein Symbol, das das
+     Feld nicht liest, ist kein Leser.*
 ===  ======================================================================
 
 ## Warum es ein Wächter ist und keine Regression
@@ -31,7 +32,9 @@ unsichtbar; deshalb darf kein ``waermepumpe``-Feld in der Ausnahmeliste stehen.
 
 ## Was er NICHT leisten kann
 
-Er sieht den **Quelltext**, nicht die Oberfläche. Dass ``build_komponenten``
+Er sieht den **Quelltext**, nicht die Oberfläche — und nicht, ob ein Leser
+im Produktionspfad überhaupt noch gerufen wird (gemessen 11.10.2026: zwei
+Einträge zeigten auf eine Funktion, die nur noch Tests riefen). Dass ``build_komponenten``
 ``leistung_kuehlen_w`` liest, beweist er; dass die Zahl am Ende auf einer Kachel
 steht, beweisen die Render-Proben der jeweiligen Sicht. Die Grenze ist dieselbe
 wie bei ``check:park-gate`` und steht aus demselben Grund im Konzept
@@ -41,6 +44,7 @@ wie bei ``check:park-gate`` und steht aus demselben Grund im Konzept
 from __future__ import annotations
 
 import ast
+import copy
 from pathlib import Path
 
 import pytest
@@ -88,6 +92,48 @@ def _symbol_quelle(datei: Path, symbol: str) -> str | None:
         return None
 
     return _suche(baum, kette)
+
+
+def _symbol_code(datei: Path, symbol: str) -> str | None:
+    """Der **ausführbare** Quelltext eines Symbols — ohne Docstrings, ohne
+    Kommentare und ohne den eigenen Namen (N-686).
+
+    ⚠ **Warum nicht ``_symbol_quelle``.** Der Segment-Text trägt Docstring,
+    Kommentare und die ``def``-Zeile mit. Ein Feldname, der nur dort steht, ist
+    eine *Erwähnung*, kein Lesen — gemessen am 11.10.2026 waren 8 von 154
+    Einträgen allein dadurch grün, einer davon (``wirksamer_arbeitspreis_cent``)
+    zeigte auf ein Symbol, dessen Docstring selbst sagt, dass das Feld woanders
+    gelesen wird.
+
+    Bauform: der AST des Symbols, je Funktion/Klasse darin der Docstring
+    entfernt, der Name des Symbols selbst neutralisiert, dann ``ast.unparse`` —
+    Kommentare kennt der AST nicht, sie fallen dabei weg. Kein Regex: ein ``#``
+    in einem String oder ein Docstring mit Anführungszeichen darin bliebe für
+    ihn mehrdeutig.
+    """
+    quelle = datei.read_text(encoding="utf-8")
+    baum = ast.parse(quelle)
+    knoten = None
+    ebene = baum
+    for name in symbol.split("."):
+        knoten = next(
+            (
+                k for k in ast.iter_child_nodes(ebene)
+                if isinstance(k, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                and k.name == name
+            ),
+            None,
+        )
+        if knoten is None:
+            return None
+        ebene = knoten
+    knoten = copy.deepcopy(knoten)
+    for k in ast.walk(knoten):
+        if isinstance(k, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if ast.get_docstring(k, clean=False) is not None:
+                k.body = k.body[1:] or [ast.Pass()]
+    knoten.name = "_"
+    return ast.unparse(knoten)
 
 
 def _alle_eintraege() -> list[tuple[tuple[str, str], Auswertung]]:
@@ -190,11 +236,15 @@ def test_jede_genannte_stelle_existiert_und_liest_das_feld(schluessel, auswertun
         f"`{auswertung.symbol}`."
     )
 
+    # N-686: gesucht wird im ausführbaren Code, nicht in Docstring, Kommentar
+    # oder Funktionsnamen — eine Erwähnung ist kein Lesen.
+    code = _symbol_code(datei, auswertung.symbol)
     token = auswertung.ueber or (feld,)
-    fehlend = [t for t in token if t not in quelle]
+    fehlend = [t for t in token if t not in code]
     assert not fehlend, (
         f"{typ}/{feld}: `{auswertung.symbol}` in {auswertung.datei} nennt "
-        f"{fehlend} nicht — dieses Symbol liest das Feld also nicht. "
+        f"{fehlend} nicht im Code (Docstring, Kommentar und Funktionsname "
+        "zählen nicht) — dieses Symbol liest das Feld also nicht. "
         "Ein Eintrag, der auf die falsche Funktion zeigt, ist schlimmer als "
         "keiner: Er behauptet Deckung."
     )
