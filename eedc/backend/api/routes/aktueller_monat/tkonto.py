@@ -9,7 +9,7 @@ kein Aggregat) — deshalb ein Modul dieses Pakets, nicht `core/berechnungen`.
 
 from typing import Optional
 from backend.core.berechnungen.waermepumpe_kennzahl import heizwaerme_kwh, waerme_gesamt_kwh
-from backend.core.berechnungen import berechne_speicher_ersparnis
+from backend.core.berechnungen import berechne_speicher_ersparnis, betriebskosten_monatsanteil
 from backend.services.wp_wirtschaftlichkeit import (
     WP_ERSPARNIS_FORMEL,
     wp_ersparnis_berechnung,
@@ -80,7 +80,10 @@ def _baue_investition_financial(
     """
     if not inv.aktiv:
         return None
-    bk_monat = round((inv.betriebskosten_jahr or 0) / 12, 2)
+    # N-699: der Monatsanteil aus der Laufzeit-Regel des Layers, ungerundet (gerundet wird an der Darstellung) — sonst
+    # summiert das Jahres-T-Konto gerundete Zwölftel (100 €/Jahr ⇒ 99,96 €) neben einem Kopf mit 100,00 €. Die
+    # Aktivität im Monat prüft der Aufrufer (`ist_aktiv_im_monat`, #402).
+    bk_monat = betriebskosten_monatsanteil(inv.betriebskosten_jahr)
     # Sonstige Erträge/Ausgaben (z.B. AG-Vergütung Dienstwagen, THG-Quote)
     # für JEDE Investition evaluieren — typ-unabhängig, auch wenn der
     # Wirtschaftlichkeits-Zweig unten übersprungen wird (z.B. ist_dienstlich).

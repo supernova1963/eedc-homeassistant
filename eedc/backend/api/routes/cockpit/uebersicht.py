@@ -31,7 +31,7 @@ from backend.core.berechnungen import (
     speicher_wirkungsgrad,
     vollzyklen as berechne_vollzyklen,
 )
-from backend.core.berechnungen import relevante_kosten_aus_investitionen
+from backend.core.berechnungen import betriebskosten_im_zeitraum, relevante_kosten_aus_investitionen
 from backend.core.berechnungen.ergebnis import ErgebnisEingang, berechne_ergebnis, quote_paarweise
 from backend.core.berechnungen.pv_verteilung import (
     eigenverbrauch_ohne_verluste_kwh,
@@ -923,13 +923,9 @@ async def get_cockpit_uebersicht(
     # anlagenweiten Jahressumme über den ganzen Zeitraum. Am Dev-Bestand
     # gemessen: 1.291,67 € gegen 725,00 € bei zwei Komponenten mit gepflegten
     # Betriebskosten — der ROI-Fortschritt war entsprechend zu niedrig.
-    betriebskosten_zeitraum = sum(
-        (i.betriebskosten_jahr or 0)
-        * sum(1 for (_j, _m) in alle_monate if i.ist_aktiv_im_monat(_j, _m))
-        / 12
-        for i in investitionen
-        if i.betriebskosten_jahr
-    )
+    # N-699 (12.10.2026): die Regel steht seitdem EINMAL im Layer (`core/berechnungen/betriebskosten.py`) — PDF,
+    # Aussichten und Cockpit → Monat/Jahr rufen dieselbe Funktion.
+    betriebskosten_zeitraum = betriebskosten_im_zeitraum(investitionen, alle_monate)
     # sonstige_netto steckt bereits in netto_ertrag (#326) — hier NICHT erneut
     # addieren, sonst Doppelzählung im ROI. Dasselbe gilt für `bkw_ersparnis`:
     # er ist seit P9 Teil von `netto_ertrag` (und bei mitgeschriebener BKW-

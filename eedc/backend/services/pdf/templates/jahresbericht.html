@@ -280,8 +280,11 @@
     <tr><th>Netto-Ertrag (vor Betriebskosten)</th><td>{{ fmt_eur(kpis.netto_ertrag_euro) }}</td></tr>
     <tr><th>Betriebskosten anteilig</th><td>{{ fmt_eur(kpis.betriebskosten_zeitraum_euro) }}</td></tr>
     <tr><th>Netto nach Betriebskosten</th><td>{{ fmt_eur(kpis.netto_nach_bk_euro) }}</td></tr>
-    <tr><th>Amortisations-Fortschritt</th><td>{{ fmt_pct(kpis.amortisation_prozent) }}</td></tr>
-    <tr><th>Rendite</th><td>{{ fmt_pct(kpis.rendite_prozent) }}</td></tr>
+    {# N-699: beide Quoten aus der Sicht, die sie definiert — mit ihrem Nenner beschriftet. Die Rendite ist die von
+       Cockpit → Übersicht (Nenner Mehrkosten, Zähler mit WP- und E-Mobilitäts-Ersparnis), der Fortschritt der von
+       Auswertungen → ROI (Nenner Kapitaleinsatz) — im Einzeljahr zum Stand 31.12. Das Template rechnet nichts. #}
+    <tr><th>Amortisations-Fortschritt{% if kpis.amortisation_kapitaleinsatz_euro is not none %}<br><span class="muted">{% if not ist_gesamtzeitraum %}Stand 31.12.{{ jahr }}: {% endif %}bisherige Erträge seit Inbetriebnahme ÷ Kapitaleinsatz {{ fmt_eur(kpis.amortisation_kapitaleinsatz_euro) }} — wie Auswertungen → ROI</span>{% endif %}</th><td>{{ fmt_pct(kpis.amortisation_prozent) }}</td></tr>
+    <tr><th>Rendite<br><span class="muted">(Netto nach Betriebskosten{% if kpis.rendite_wp_ersparnis_euro %} + WP-Ersparnis {{ fmt_eur(kpis.rendite_wp_ersparnis_euro) }}{% endif %}{% if kpis.rendite_emob_ersparnis_euro %} + E-Mobilitäts-Ersparnis {{ fmt_eur(kpis.rendite_emob_ersparnis_euro) }}{% endif %}) ÷ Mehrkosten {{ fmt_eur(kpis.rendite_nenner_euro) }} — wie Cockpit → Übersicht</span></th><td>{{ fmt_pct(kpis.rendite_prozent) }}</td></tr>
   </tbody>
 </table>
 

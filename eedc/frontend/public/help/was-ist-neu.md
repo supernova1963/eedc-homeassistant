@@ -70,6 +70,13 @@ einmalig einen Sprung in der Langzeitstatistik ([Einstellungen §2.2](HANDBUCH_E
 **Einmal gerundet:** „Verbrauch (Monat)" eines sonstigen Verbrauchers und „Überschuss-Prognose heute" wurden doppelt
 gerundet (3,46 kWh als 4 statt 3 kWh in HA); jetzt rundet eedc einmal, wie bei allen anderen Sensoren.
 
+**Jahresbericht rechnet die Finanzen wie Cockpit und Auswertungen:** Die Betriebskosten zählen je Komponente nur über ihre
+aktiven Monate wie in *Cockpit → Jahr* (bisher auch vor der Anschaffung, z. B. 120 statt 20 € bei zwei erfassten
+Monaten). Die „Rendite" ist die von *Cockpit → Übersicht* mit Wärmepumpen- und E-Auto-Ersparnis, der
+„Amortisations-Fortschritt" der von *Auswertungen → ROI*, im Bericht eines einzelnen Jahres zum Stand 31.12. dieses
+Jahres; an beiden Zeilen steht ihr Bezug.
+*Cockpit → Jahr* zeigt die Betriebskosten auf den Cent genau (100,00 statt 99,96 € bei 100 €/Jahr).
+
 **Jahresbericht ohne Speicher-Wirkungsgrad über 100 %:** Passen Lade- und Entlademenge nicht zusammen, steht im Bericht jetzt
 ein Strich wie im Cockpit statt z. B. „110,0 %"; die Ursache nennt der Daten-Checker.
 

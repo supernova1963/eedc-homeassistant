@@ -636,14 +636,18 @@ Stufe 3  Monats-/Jahresergebnis      = Stufe 2 − Betriebskosten (anteilig, nur
   Wert hat. Der **Vorjahresmonat** folgt derselben Regel; ein Vorjahresmonat mit 0 kWh Netzbezug trägt dabei die
   Grundgebühr als Stromrechnung, wie der laufende Monat auch (bis 03.10.2026 zählte die Stromrechnung dort als 0).
 * **Betriebskosten des Monats** zählen nur Komponenten, die im Monat aktiv waren (Anschaffungs- und
-  Stilllegungsdatum) — dieselbe Filtermenge wie die T-Konto-Zeilen.
+  Stilllegungsdatum) — dieselbe Filtermenge wie die T-Konto-Zeilen, gerechnet mit der Laufzeit-Regel
+  (`core/berechnungen/betriebskosten.py`, s. Cockpit-Übersicht unten) und **ungerundet** ausgeliefert: so ist die Summe
+  der Monate eines Jahres der Jahresbetrag (100 €/Jahr ⇒ 100,00 €; bis 12.10.2026 summierte *Cockpit → Jahr* auf Cent
+  gerundete Monate zu 99,96 €, N-699).
 * **USt-Anteil eines Monats** = Eigenverbrauch des Monats × USt je kWh **des Jahres** (§3.7). Σ der Monatsanteile
   eines Jahres = der Jahreswert der Übersicht. Im laufenden Jahr wandert der Satz mit jedem Abschluss um Cent-Beträge
   (eine Jahressteuer); die Herleitung nennt Satz und Grundlage. Hat das Jahr noch keinen Abschluss, gilt der Satz des
   Vorjahres; gibt es auch den nicht, wird kein USt-Anteil gerechnet, und die Herleitung sagt es.
 * **SOLL-Erfüllung** (`soll_erfuellung_prozent`, `soll_erfuellung_monat_prozent`, `soll_fenster_text`) kommt ebenfalls
   fertig aus der Antwort — Cockpit und PDF-Monatsbericht rechnen sie nicht mehr selbst.
-* **Der Layer rundet nicht**; gerundet wird am Antwortrand (Cockpit → Monat je Posten auf Cent).
+* **Der Layer rundet nicht**; gerundet wird am Antwortrand (Cockpit → Monat je Posten auf Cent — außer den
+  Betriebskosten, die erst die Darstellung rundet).
 
 **Das Jahr (Cockpit → Jahr, Auswertungen → Finanzen im Jahr-Modus)** rechnet seit 03.10.2026 das Backend:
 `GET /api/cockpit/jahr/{anlage_id}?jahr=` lädt die Monatsantworten des Jahres (dieselbe Monatsmenge wie bisher: jeder
@@ -676,7 +680,7 @@ Netto-Ertrag        = Einspeise-Erlös + EV-Ersparnis + Erlös_eigener_Satz
 BKW-Ersparnis       = Σ(BKW_Eigenverbrauch) * Netzbezug_Preis / 100
 Sonstige-Netto      = Σ(sonstige_ertraege) - Σ(sonstige_ausgaben)
 
-Betriebskosten_Zeitraum = Σ(Betriebskosten_Jahr) * Anzahl_Monate / 12
+Betriebskosten_Zeitraum = Σ_Komponente Betriebskosten_Jahr × aktive_Monate_im_Zeitraum / 12
 
 Kumulative Ersparnis = Netto-Ertrag + WP-Ersparnis + E-Mob-Ersparnis
                        + BKW-Ersparnis + Sonstige-Netto
@@ -685,8 +689,18 @@ Kumulative Ersparnis = Netto-Ertrag + WP-Ersparnis + E-Mob-Ersparnis
 Rendite (%)         = Kumulative_Ersparnis / Investition_gesamt * 100   (Antwortfeld jahres_rendite_prozent)
 ```
 
-> **Das Cockpit zeigt diese Rendite nicht an.** `jahres_rendite_prozent` steht nur in der Antwort von
-> `/cockpit/uebersicht`; keine Sicht liest das Feld. Die Rendite einer Anlage steht unter *Auswertungen → ROI*
+> **Betriebskosten des Zeitraums — die Laufzeit-Regel (N-228), eine Funktion.** Jede Komponente trägt ihre
+> gepflegten Betriebskosten nur über **ihre** aktiven Monate des Zeitraums (Anschaffung bis Stilllegung), ungerundet:
+> `core/berechnungen/betriebskosten.py::betriebskosten_im_zeitraum` (je Komponente `betriebskosten_je_investition`,
+> ein Monat `betriebskosten_monatsanteil`). Die Monate des Zeitraums sind die der Monats-Fakten. Dieselbe Funktion
+> rufen Cockpit → Übersicht, Cockpit → Monat (und über die Faltung Cockpit → Jahr samt T-Konto-Zeilen), die
+> Aussichten (bisherige Erträge der ROI-Kachel) und der Jahresbericht-PDF. Bis 12.10.2026 stand die Regel dort
+> viermal, und der Jahresbericht rechnete daneben `Σ Jahresbeträge × Monatszeilen ÷ 12` — auch für Monate vor der
+> Anschaffung und nach der Stilllegung (gemessen 120 statt 20 € bei zwei erfassten Monaten, N-699).
+
+> **Das Cockpit zeigt diese Rendite nicht an.** `jahres_rendite_prozent` steht in der Antwort von
+> `/cockpit/uebersicht`; der **Jahresbericht-PDF** druckt sie seit 12.10.2026 als „Rendite" (Berichtsjahr bzw.
+> Gesamtzeitraum, mit ihrem Nenner beschriftet, N-699). Die Rendite einer Anlage steht unter *Auswertungen → ROI*
 > (ROI pro Jahr = jährliche Einsparung ÷ Kapitaleinsatz, s. „ROI & Amortisation“).
 
 > **Die Einspeisevergütung ist ein flacher Satz — eedc kennt keine EEG-Leistungsstaffel.**
@@ -2329,9 +2343,9 @@ Wobei `Betriebskosten_Jahr` = `Investition.betriebskosten_jahr` (Wartung, Versic
 
 | Metrik | Wo angezeigt | Formel | Bedeutung |
 |--------|-------------|--------|-----------|
-| **Rendite** (`jahres_rendite_prozent`) | keine Anzeige — nur Antwortfeld von `/cockpit/uebersicht` | Kumul. Ersparnis / Relevante Kosten * 100 | Wie viel % bereits amortisiert (kumuliert) |
+| **Rendite** (`jahres_rendite_prozent`) | Antwortfeld von `/cockpit/uebersicht`; angezeigt nur im Jahresbericht-PDF („Rendite") | Kumul. Ersparnis / Relevante Kosten * 100 | Wie viel % bereits amortisiert (kumuliert) |
 | **ROI p.a.** | Auswertungen → ROI (pro Komponente) | Jahres-Einsparung / Relevante Kosten * 100 | Rendite pro Jahr |
-| **Amortisations-Fortschritt** | Auswertungen → ROI (Kachel), Jahresbericht-PDF | Bisherige Erträge / Relevante Kosten * 100 | Kumulierter Fortschritt |
+| **Amortisations-Fortschritt** | Auswertungen → ROI (Kachel), Jahresbericht-PDF (Einzeljahr: Stand 31.12.) | Bisherige Erträge / Kapitaleinsatz * 100 | Kumulierter Fortschritt |
 
 > **Ein Nenner für alle drei (N-137, seit 2026-08-04).** „Relevante Kosten" sind die **Mehrkosten**
 > `Σ max(0, anschaffungskosten_gesamt − anschaffungskosten_alternativ)` — SoT
@@ -2421,7 +2435,7 @@ Wobei `Betriebskosten_Jahr` = `Investition.betriebskosten_jahr` (Wartung, Versic
 | Angabe | Wo | Grundlage |
 |---|---|---|
 | **Amortisationsdauer** — Jahre **und Break-Even-Jahr** | Auswertungen → ROI | **MODELL:** `Relevante Kosten ÷ prognostizierte Jahres-Einsparung`, konstant hochgerechnet. Anker des Kalenderjahres ist das **früheste Anschaffungsjahr** der Investitionen; ohne gepflegtes Anschaffungsdatum bleibt es beim Jahres-Index ohne Jahreszahl. |
-| **Amortisations-Fortschritt** | Auswertungen → ROI (Kachel daneben), Jahresbericht-PDF | **MESSUNG:** die tatsächlich erzielten Netto-Erträge seit Inbetriebnahme, geteilt durch dieselben relevanten Kosten. Formel-SoT `core/berechnungen/amortisation.py`. |
+| **Amortisations-Fortschritt** | Auswertungen → ROI (Kachel daneben), Jahresbericht-PDF | **MESSUNG:** die tatsächlich erzielten Netto-Erträge seit Inbetriebnahme, geteilt durch dieselben relevanten Kosten. Formel-SoT `core/berechnungen/amortisation.py`; der Jahresbericht-PDF übernimmt die Zahl der Kachel (`get_finanz_prognose`, seit 12.10.2026 — vorher rechnete er `(Netto − Betriebskosten) ÷ Mehrkosten` selbst, ohne WP- und E-Auto-Ersparnis, N-699): im Gesamtzeitraum bis heute, im **Einzeljahr kumuliert bis zum 31.12. des Berichtsjahres** (`stichtag`: Investitionen mit Anschaffung bis zum Stichtag, Monatswerte und Monats-Fakten bis zu seinem Monat — ein Stand 31.12.2024 kennt kein 2025 gekauftes Auto). |
 | **Amortisation (Prognose)** | PDF-Finanzbericht | **Dieselbe Zahl wie *Auswertungen → ROI*** (seit 2026-08-09). Vorher rechnete das PDF `Gesamt-Anschaffung ÷ Σ einsparung_prognose_jahr` — beide Seiten trugen nicht: der Nenner war die Gesamt- statt der relevanten Kosten, und der Zähler ein Feld **ohne Schreiber** (in keinem Formular, keinem Import, keinem Update-Schema). In der Praxis stand dort deshalb „—". Seit 2026-08-10 ist das Feld als **„Ertrag/Jahr"** pflegbar (Wallbox/Sonstiges) — die Amortisation kommt trotzdem weiter aus dem ROI-Dashboard, damit alle vier Sichten dieselbe Zahl nennen. |
 | **Amortisation (HA-Sensor)** | `sensor.*_amortisation_jahre` | `Kapitaleinsatz ÷ Jahres-Ersparnis`, wobei die Jahres-Ersparnis aus der **gemessenen Historie** annualisiert wird — je Posten mit seiner eigenen Laufzeit. Trägt denselben Nenner wie die drei anderen, aber einen Ist- statt Modell-Zähler; die Zahl liegt deshalb je nach Anlage über oder unter der Modell-Sicht. |
 

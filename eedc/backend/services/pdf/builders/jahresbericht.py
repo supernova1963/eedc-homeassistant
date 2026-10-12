@@ -9,6 +9,7 @@ Reine Datenschicht — keine HTTP-, keine Render-Aufrufe.
 """
 from __future__ import annotations
 
+import logging
 from calendar import monthrange
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -26,6 +27,7 @@ from backend.core.berechnungen import (
     FinanzMonatsZeile,
     autarkie_prozent,
     berechne_finanz_aggregat,
+    betriebskosten_im_zeitraum,
     eigenverbrauchsquote_prozent,
     relevante_kosten_aus_investitionen,
     soll_im_laufmonat,
@@ -69,6 +71,8 @@ from backend.core.investition_kennwerte import get_erzeuger_kwp
 
 from ..charts import autarkie_chart, energie_fluss_chart, pv_erzeugung_chart
 from .finanzbericht import TYP_LABELS as _INV_TYP_LABELS
+
+logger = logging.getLogger(__name__)
 
 MONATSNAMEN = [
     "", "Januar", "Februar", "März", "April", "Mai", "Juni",
@@ -123,6 +127,7 @@ async def build_jahresbericht_context(
         _ust_saetze, _ust_monate, ist_gesamtzeitraum,
     )
     k = _finanz_kpis(anlage, jahr, investitionen, fakten, s, t)
+    rf = await _rendite_und_fortschritt(db, anlage_id, jahr)
     co2_pv, co2_wp, co2_emob, co2_gesamt = _co2_bilanz(investitionen, fakten, t.zeilen_fakten, b, s)
     g = _geraete_kennzahlen(investitionen, fakten, b, s)
     wp_starts_summe, wp_betriebsstunden_summe, wp_laufzeit_pro_start = await _wp_zaehler(
@@ -181,8 +186,12 @@ async def build_jahresbericht_context(
             "netto_nach_bk_euro": k.netto_nach_bk,
             "investition_gesamt_euro": k.investition_gesamt,
             "investition_mehrkosten_euro": k.investition_mehrkosten,
-            "rendite_prozent": k.rendite,
-            "amortisation_prozent": k.amortisation_pct,
+            "rendite_prozent": rf.rendite,
+            "rendite_nenner_euro": rf.rendite_nenner_euro,
+            "rendite_wp_ersparnis_euro": rf.wp_ersparnis_euro,
+            "rendite_emob_ersparnis_euro": rf.emob_ersparnis_euro,
+            "amortisation_prozent": rf.amortisation_pct,
+            "amortisation_kapitaleinsatz_euro": rf.kapitaleinsatz_euro,
         },
         "speicher": {
             "vorhanden": b.hat_speicher,
@@ -697,8 +706,6 @@ class _FinanzKpis:
     netto_ertrag: float
     betriebskosten_zeitraum: float
     netto_nach_bk: float
-    rendite: Optional[float]
-    amortisation_pct: float
 
 
 def _finanz_kpis(anlage, jahr: Optional[int], investitionen, fakten, s: _FaktenSummen, t: _Tabelle) -> _FinanzKpis:
@@ -751,7 +758,6 @@ def _finanz_kpis(anlage, jahr: Optional[int], investitionen, fakten, s: _FaktenS
     # `investitionen/roi.py::get_roi_dashboard`, Aussichten
     # `aussichten/finanz_eingaenge.py::investitionen_und_parameter`, Wallbox-Hub).
     investition_mehrkosten = relevante_kosten_aus_investitionen(investitionen)
-    betriebskosten_jahr = sum(i.betriebskosten_jahr or 0 for i in investitionen)
 
     # #326-Inventur Dimension 2: USt auf Eigenverbrauch bei Regelbesteuerung.
     # Cockpit und Aussichten ziehen sie seit jeher ab, der Bericht nicht — bei
@@ -784,19 +790,86 @@ def _finanz_kpis(anlage, jahr: Optional[int], investitionen, fakten, s: _FaktenS
         ust_anteil=ust_eigenverbrauch,
     )).netto_ertrag
 
-    anzahl_monate = len(t.monats_zeilen)
-    betriebskosten_zeitraum = betriebskosten_jahr * anzahl_monate / 12 if anzahl_monate else 0
+    # N-699 (12.10.2026): die Laufzeit-Regel N-228 aus dem Layer — jede Komponente über IHRE aktiven Monate des
+    # Berichtszeitraums, dieselbe Funktion wie Cockpit → Monat/Jahr, Übersicht und Aussichten. Hier stand bis dahin
+    # `Σ Jahresbeträge × Monatszeilen ÷ 12`: im Einzeljahr immer zwölf Zeilen (auch leere Monate), im Gesamtzeitraum
+    # jede je erfasste Komponente über den ganzen Zeitraum — gemessen 120 statt 20 € (laufendes Jahr, zwei Monate),
+    # 240 statt 120 € (Speicher ab Juli). Die Monate sind die der Monats-Fakten — dieselbe Menge wie die Übersicht.
+    betriebskosten_zeitraum = betriebskosten_im_zeitraum(investitionen, {f.schluessel for f in fakten})
     netto_nach_bk = netto_ertrag - betriebskosten_zeitraum
-    rendite = (netto_nach_bk / investition_mehrkosten * 100) if investition_mehrkosten > 0 else None
-    amortisation_pct = (netto_nach_bk / investition_mehrkosten * 100) if investition_mehrkosten > 0 else 0
     return _FinanzKpis(
         gesamtverbrauch=gesamtverbrauch, autarkie_jahr=autarkie_jahr, ev_quote=ev_quote,
         spez_ertrag_jahr=spez_ertrag_jahr, sonstige_netto_gesamt=sonstige_netto_gesamt,
         dienstliche_ladekosten_gesamt=dienstliche_ladekosten_gesamt, finanz=_finanz,
         einspeise_erloes=einspeise_erloes, ev_ersparnis=ev_ersparnis, investition_gesamt=investition_gesamt,
         investition_mehrkosten=investition_mehrkosten, netto_ertrag=netto_ertrag,
-        betriebskosten_zeitraum=betriebskosten_zeitraum, netto_nach_bk=netto_nach_bk, rendite=rendite,
+        betriebskosten_zeitraum=betriebskosten_zeitraum, netto_nach_bk=netto_nach_bk,
+    )
+
+
+@dataclass
+class _RenditeFortschritt:
+    """Abschnitt 9 (zweiter Teil) — Rendite wie Cockpit → Übersicht, Amortisations-Fortschritt wie Auswertungen → ROI."""
+
+    rendite: Optional[float]
+    rendite_nenner_euro: Optional[float]
+    wp_ersparnis_euro: Optional[float]
+    emob_ersparnis_euro: Optional[float]
+    amortisation_pct: Optional[float]
+    kapitaleinsatz_euro: Optional[float]
+
+
+async def _rendite_und_fortschritt(
+    db: AsyncSession, anlage_id: int, jahr: Optional[int],
+) -> _RenditeFortschritt:
+    """Abschnitt 9 (zweiter Teil) — die beiden Quoten des Berichts aus den Sichten, die sie definieren (N-699).
+
+    * **Rendite** = ``get_cockpit_uebersicht(jahr)`` (Route-Aufruf aus einem Service wie ``services/jahres_aggregat.py``):
+      Zähler Netto-Ertrag + WP- + E-Mobilitäts-Ersparnis − Betriebskosten des Zeitraums, Nenner die Mehrkosten — die
+      WP- und E-Auto-Ersparnis kommen aus den Monats-Fakten der Übersicht, keine Kopie ihrer Periodenrechnung hier.
+    * **Amortisations-Fortschritt** = ``get_finanz_prognose`` (Kachel in *Auswertungen → ROI*, Layer
+      ``core/berechnungen/amortisation.py``): bisherige Erträge ÷ Kapitaleinsatz (F-19) — im Gesamtzeitraum bis heute,
+      im Einzeljahr mit Stichtag 31.12. des Berichtsjahres.
+
+    Bis 12.10.2026 waren beide Zeilen dieselbe Zahl ``(Netto − Betriebskosten) ÷ Mehrkosten`` — ohne WP- und
+    E-Auto-Ersparnis im Zähler, deren Mehrkosten im Nenner standen (gemessen 15,09 statt 21,2 % mit E-Auto).
+
+    Kann eine der beiden Sichten nicht rechnen, steht ihre Zeile als „–" (P4: nicht ermittelbar statt einer eigenen
+    Zahl daneben) und der Grund im Log — der Bericht bricht deshalb nicht ab (wie ``services/jahres_aggregat.py`` mit
+    der Übersicht). Gemessen 12.10.2026: ``get_finanz_prognose`` stürzt bei einer PVGIS-Prognose mit fehlendem
+    Monatswert (``e_m``) ab (``finanz_prognose.py:97``), der Bericht rechnete dort bisher.
+    """
+    from backend.api.routes.cockpit.uebersicht import get_cockpit_uebersicht
+
+    try:
+        u = await get_cockpit_uebersicht(anlage_id=anlage_id, jahr=jahr, db=db)
+    except Exception:  # noqa: BLE001 — eine Sicht, die nicht rechnet, kippt den Bericht nicht
+        logger.exception("Jahresbericht: Cockpit-Übersicht %s für Anlage %s nicht berechenbar", jahr, anlage_id)
+        u = None
+    from backend.api.routes.aussichten.finanzen import get_finanz_prognose
+
+    # Einzeljahr: kumuliert bis zum 31.12. des Berichtsjahres (Entscheid Gernot 12.10.2026) — dieselbe Rechnung mit
+    # Stichtag; ihr Kapitaleinsatz kennt nur die bis dahin angeschafften Investitionen (Entscheid Master).
+    stichtag = date(jahr, 12, 31) if jahr is not None else None
+    amortisation_pct = None
+    kapitaleinsatz = None
+    try:
+        p = await get_finanz_prognose(anlage_id, monate=12, db=db, stichtag=stichtag)
+    except Exception:  # noqa: BLE001 — wie oben
+        logger.exception("Jahresbericht: Finanz-Prognose (Stichtag %s) für Anlage %s nicht berechenbar", stichtag, anlage_id)
+    else:
+        # Nur Quote und Nenner: `bisherige_ertraege_euro` der Antwort ist die Zeitraum-Bilanz, nicht der Zähler der
+        # Quote (der trägt die sonstigen Positionen anders, F-19) — als „Erträge ÷ Kapitaleinsatz" gedruckt ginge
+        # die Rechnung nicht auf (gemessen 1.276 ÷ 10.500 € neben 16,9 %).
+        amortisation_pct = p.amortisations_fortschritt_prozent
+        kapitaleinsatz = p.kapitaleinsatz_euro
+    return _RenditeFortschritt(
+        rendite=u.jahres_rendite_prozent if u is not None else None,
+        rendite_nenner_euro=u.investition_mehrkosten_euro if u is not None else None,
+        wp_ersparnis_euro=u.wp_ersparnis_euro if u is not None else None,
+        emob_ersparnis_euro=u.emob_ersparnis_euro if u is not None else None,
         amortisation_pct=amortisation_pct,
+        kapitaleinsatz_euro=kapitaleinsatz,
     )
 
 

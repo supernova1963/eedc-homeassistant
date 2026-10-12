@@ -104,21 +104,30 @@ async def test_n136_mehrkosten_sind_die_zahl_des_layer_sot(db):
 async def test_n136_rendite_und_amortisation_teilen_durch_denselben_nenner(db):
     """Der Nenner ist die Wirkung — nicht die ausgewiesene Zeile allein.
 
-    Rendite und Amortisation entstehen aus ``netto_nach_bk ÷ mehrkosten``. Ein
-    Fix, der nur die ausgewiesene Zahl korrigiert und den Nenner der beiden
-    Quotienten stehen lässt, wäre hier rot.
+    Rendite und Amortisation teilen durch die Mehrkosten des SoT. Ein Fix, der nur
+    die ausgewiesene Zahl korrigiert und den Nenner der beiden Quotienten stehen
+    lässt, wäre hier rot.
+
+    N-699 (12.10.2026, Entscheid Gernot): die Rendite ist seitdem die von Cockpit →
+    Übersicht (Zähler mit WP- und E-Auto-Ersparnis) und trägt deren Nenner — hier
+    derselbe SoT-Betrag, weil beide Positionen im Berichtsjahr aktiv sind. Bis
+    dahin hieß diese Probe „Rendite = Amortisation = netto_nach_bk ÷ mehrkosten".
     """
+    from backend.api.routes.cockpit.uebersicht import get_cockpit_uebersicht
+
     anlage_id, _ = await _seed(db, alternative_teurer=True)
 
     ctx = await build_jahresbericht_context(db, anlage_id=anlage_id, jahr=2025)
     kpis = ctx["kpis"]
     mehrkosten = kpis["investition_mehrkosten_euro"]
-    netto_nach_bk = kpis["netto_nach_bk_euro"]
+    u = await get_cockpit_uebersicht(anlage_id=anlage_id, jahr=2025, db=db)
 
     assert mehrkosten > 0
-    erwartet = netto_nach_bk / mehrkosten * 100
-    assert kpis["rendite_prozent"] == pytest.approx(erwartet)
-    assert kpis["amortisation_prozent"] == pytest.approx(erwartet)
+    assert kpis["rendite_nenner_euro"] == pytest.approx(mehrkosten)
+    assert kpis["rendite_prozent"] == u.jahres_rendite_prozent
+    # Der Fortschritt ist seit N-699 der Stand der ROI-Sicht zum 31.12. — sein Nenner ist der Kapitaleinsatz über
+    # denselben SoT (hier ohne sonstige Positionen = die Mehrkosten).
+    assert kpis["amortisation_kapitaleinsatz_euro"] == pytest.approx(mehrkosten)
 
 
 @pytest.mark.asyncio

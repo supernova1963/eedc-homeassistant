@@ -117,6 +117,11 @@ from backend.core.berechnungen.amortisation import (
 from backend.core.berechnungen.investitionskosten import (
     relevante_kosten_aus_investitionen,
 )
+from backend.core.berechnungen.betriebskosten import (
+    betriebskosten_im_zeitraum,
+    betriebskosten_je_investition,
+    betriebskosten_monatsanteil,
+)
 from backend.core.berechnungen.kapitalrechnung import (
     ErsparnisPosten,
     annahme_dauer_text,
@@ -435,6 +440,9 @@ __all__ = [
     "AmortisationsFortschritt",
     "berechne_amortisations_fortschritt",
     "relevante_kosten_aus_investitionen",
+    "betriebskosten_im_zeitraum",
+    "betriebskosten_je_investition",
+    "betriebskosten_monatsanteil",
     "ErsparnisPosten",
     "annahme_dauer_text",
     "erklaerung_jahres_ersparnis",

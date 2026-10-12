@@ -16,6 +16,7 @@ Schnittstelle je Phase: Schlüsselwort-Parameter hinein, Rückgabe-Dict heraus; 
 
 import logging
 from collections import defaultdict
+from datetime import date
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
@@ -115,6 +116,7 @@ async def get_finanz_prognose(
     anlage_id: int,
     monate: int = Query(default=12, ge=1, le=24, description="Anzahl Monate (1-24)"),
     db: AsyncSession = Depends(get_db),
+    stichtag: Optional[date] = None,
 ):
     """
     Finanzprognose für PV-Erträge inkl. aller Komponenten.
@@ -125,6 +127,12 @@ async def get_finanz_prognose(
     - E-Auto mit V2H (Rückspeisung ins Haus)
     - Wärmepumpe (PV-Direktverbrauch)
     - ROI-Fortschritt und Amortisations-Prognose
+
+    ``stichtag`` (N-699): Rückblick „Stand <Stichtag>" — Investitionen, Monatswerte und Fakten nur bis zum Monat des
+    Stichtags (`finanz_eingaenge.lade_finanz_eingaenge`). Gelesen wird dann der Fortschritt mit seinem Kapitaleinsatz
+    (Jahresbericht-PDF, Einzeljahr); die Prognose-Felder der Antwort sind für diesen Aufruf ohne Bedeutung. Ohne
+    Stichtag unverändert. Ein schlichter Default statt `Query(None)`, damit der direkte Aufruf kein Query-Objekt
+    ablegt (N-111).
     """
 
     # Anlage laden
@@ -146,7 +154,7 @@ async def get_finanz_prognose(
     wp_netzbezug_preis = wp_tarif.netzbezug_arbeitspreis_cent_kwh if wp_tarif else netzbezug_preis
 
     # ── lade_finanz_eingaenge (Vorlage 7b: Phase in finanz_eingaenge.py, Schnittstelle 3 ein / 25 aus) ──
-    _out = await lade_finanz_eingaenge(anlage=anlage, anlage_id=anlage_id, db=db)
+    _out = await lade_finanz_eingaenge(anlage=anlage, anlage_id=anlage_id, db=db, stichtag=stichtag)
     if "_heute" in _out: _heute = _out["_heute"]
     if "_preis_messung" in _out: _preis_messung = _out["_preis_messung"]
     if "alle_investitionen" in _out: alle_investitionen = _out["alle_investitionen"]

@@ -27,10 +27,9 @@ Handschrift an sechs Read-Sites standen:
 **Angeschnittene Jahre zählen anteilig** (Entscheid Gernot 04.08.): AfA und
 Betriebskosten werden mit `monate / 12` gewichtet. Sonst trägt ein Jahr mit
 sieben Betriebsmonaten zwölf Monate Abschreibung gegen sieben Monate Ertrag und
-die Selbstkosten je kWh steigen künstlich. Dieselbe Gewichtung wenden
-Jahresbericht und Aussichten für die Betriebskosten des Zeitraums längst an
-(`betriebskosten_jahr * anzahl_monate / 12`) — hier ist es dieselbe Regel an der
-einen Stelle.
+die Selbstkosten je kWh steigen künstlich. Dieselbe Gewichtung gilt für die
+Betriebskosten des Zeitraums in Übersicht, Aussichten und Jahresbericht — dort je
+Komponente über ihre aktiven Monate (`core/berechnungen/betriebskosten.py`, N-228/N-699).
 
 **Was diese Funktion NICHT vereinheitlicht:** welche Menge als „Eigenverbrauch"
 eingeht. Cockpit und HA-Export übergeben den **Netzpunkt**-Eigenverbrauch (inkl.

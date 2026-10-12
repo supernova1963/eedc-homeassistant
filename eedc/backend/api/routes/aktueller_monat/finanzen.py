@@ -20,6 +20,7 @@ from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_eins
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.core.berechnungen import (
     berechne_netzbezug_kosten,
+    betriebskosten_je_investition,
     eauto_effizienz_100km,
     einspeise_erloes_euro,
     spezifischer_ertrag_kwh_kwp,
@@ -230,15 +231,17 @@ def betriebskosten_des_monats(investitionen, jahr: int, monat: int) -> tuple[Opt
 
     A6: dieselbe Filtermenge trägt Σ Monatsanteil UND Σ Jahresbetrag/Anzahl — ein zweiter Durchlauf mit anderem
     Filter wäre eine Herleitung, die auf eine andere Zahl führt als die Zeile daneben.
+
+    N-699 (12.10.2026): der Monatsanteil kommt aus der Laufzeit-Regel des Layers (``betriebskosten_je_investition``)
+    und bleibt **ungerundet** — gerundet wird an der Darstellung. Bis dahin stand er hier auf Cent gerundet, und
+    Cockpit → Jahr summierte die gerundeten Monate (100 €/Jahr ⇒ 99,96 statt 100,00 €, wie Übersicht und ROI).
+    Der Jahresbetrag daneben ist eine Eingabe und bleibt auf Cent gerundet.
     """
-    bk_jahre = [
-        (i.betriebskosten_jahr or 0)
-        for i in investitionen
-        if (i.betriebskosten_jahr or 0) > 0 and i.ist_aktiv_im_monat(jahr, monat)
-    ]
-    bk_summe = sum(j / 12 for j in bk_jahre)
+    anteile = betriebskosten_je_investition(investitionen, [(jahr, monat)])
+    bk_jahre = [(i.betriebskosten_jahr or 0) for i in investitionen if i.id in anteile]
+    bk_summe = sum(anteile.values())
     if bk_summe > 0:
-        return round(bk_summe, 2), round(sum(bk_jahre), 2), len(bk_jahre)
+        return bk_summe, round(sum(bk_jahre), 2), len(bk_jahre)
     return None, None, None
 
 
@@ -593,8 +596,8 @@ def ergebnis_des_monats(
     """Die Ergebnis-Leiter des Monats (Layer `core/berechnungen/ergebnis.py`) — Paket „Ergebnisgrößen", 03.10.2026.
 
     Füllt die Posten, die nur diese Route kennt, und ruft den Layer; gerundet wird HIER, am Antwortrand (G8):
-    die Posten kommen gerundet herein (wie bisher je Posten auf 2 Stellen), die Stufen werden auf 2 Stellen gerundet
-    ausgeliefert. Gerufen vom Monat und vom Vorjahresmonat — EINE Füllregel für beide (E5).
+    die Posten kommen gerundet herein (wie bisher je Posten auf 2 Stellen; die Betriebskosten seit N-699 ungerundet,
+    die Laufzeit-Regel rundet nicht), die Stufen werden auf 2 Stellen gerundet ausgeliefert. Gerufen vom Monat und vom Vorjahresmonat — EINE Füllregel für beide (E5).
 
     * **BKW-Rest** — ``monats_fakt.bkw.rest_eigenverbrauch_kwh`` (P9, `bkw_finanz_beitrag` je BKW und Monat in der
       Schicht) × dem Preis, mit dem die EV-Ersparnis desselben Monats bewertet ist.

@@ -17,6 +17,7 @@ from backend.core.berechnungen import (
     FinanzMonatsZeile,
     berechne_finanz_aggregat,
     berechne_wp_alternativkosten_ersparnis,
+    betriebskosten_je_investition,
 )
 from backend.services.finanz_zeilen import baue_finanz_zeile, ev_preis_je_monat
 from backend.services.monats_fakten import finanz_zeile_eingabe, tarife_der_monate
@@ -428,17 +429,11 @@ def bisherige_ertraege_summe(
     # N-228 nicht abtrennen — mit dem alten Abzug trug der Rest der Zerlegung
     # die Differenz systematisch, und ein Rest, der eine bekannte Ursache hat,
     # ist keine Restgröße mehr, sondern ein verstecktes Vorzeichen.
+    # N-699 (12.10.2026): die Regel steht seitdem EINMAL im Layer (`core/berechnungen/betriebskosten.py`).
     _monate_beobachtet = {(f.jahr, f.monat) for f in fakten}
-    betriebskosten_hist_je_inv: dict[int, float] = {}
-    for _inv in alle_investitionen:
-        _bk = _inv.betriebskosten_jahr or 0
-        if not _bk:
-            continue
-        _aktive = sum(
-            1 for (_j, _m) in _monate_beobachtet if _inv.ist_aktiv_im_monat(_j, _m)
-        )
-        if _aktive:
-            betriebskosten_hist_je_inv[_inv.id] = _bk * _aktive / 12
+    betriebskosten_hist_je_inv: dict[int, float] = betriebskosten_je_investition(
+        alle_investitionen, _monate_beobachtet,
+    )
     betriebskosten_hist = sum(betriebskosten_hist_je_inv.values())
     bisherige_ertraege -= betriebskosten_hist
 
