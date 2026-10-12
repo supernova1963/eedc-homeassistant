@@ -29,6 +29,31 @@ from backend.utils.sonstige_positionen import berechne_sonstige_summen
 from backend.services.monats_fakten.fakten import MonatsSchluessel
 
 
+#: Die beiden Hauszähler-Spalten der Monatszeile — ``NOT NULL`` mit DB-Default 0 (``models/monatsdaten.py``).
+NETZFELDER = ("einspeisung_kwh", "netzbezug_kwh")
+
+
+def netzfeld_ist_erfasst(md: Optional[Monatsdaten], feld: str) -> bool:
+    """Trägt die Monatszeile für Einspeisung bzw. Netzbezug einen **erfassten** Wert? (N-734)
+
+    Die Spalten können „nicht geliefert" nicht tragen: eine Zeile, die ein Import nur mit Wallbox- oder PV-Werten
+    angelegt hat, steht mit 0,0 da. Ob die 0 geliefert wurde, sagt allein ``source_provenance``: jeder Schreiber
+    trägt das Feld ein, das er schreibt (auch ``legacy:unknown`` der Etappe-3d-Migration für jede Altzeile). Regel:
+
+    * Eintrag für das Feld vorhanden ⇒ erfasst — auch eine 0 („0 ist ein Wert", N-707/N-714);
+    * Wert ≠ 0 ⇒ erfasst — eine Zahl ungleich 0 kann kein DB-Default sein;
+    * sonst (0 ohne Eintrag) ⇒ **nicht erfasst**: eine stärkere Quelle darf füllen, der Daten-Checker meldet die Lücke.
+
+    ``md is None`` ⇒ nicht erfasst. Einziger Ort dieser Entscheidung (Cockpit → Monat, Daten-Checker).
+    """
+    if md is None:
+        return False
+    if feld in (md.source_provenance or {}):
+        return True
+    wert = getattr(md, feld, None)
+    return wert is not None and wert != 0
+
+
 #: Typen, die hinter denselben Hauszähler speisen und deshalb ein
 #: „PV-Fenster" öffnen (Anschaffungsdatum-Grenze, s. `MetaFakten.erzeuger_aktiv`).
 _ERZEUGER_TYPEN = ("pv-module", "balkonkraftwerk")

@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.aktueller_monat.schemas import DatenquelleInfo
 from backend.models.anlage import Anlage
-from backend.services.monats_fakten import MonatsFakt
+from backend.services.monats_fakten import NETZFELDER, MonatsFakt, netzfeld_ist_erfasst
 
 
 #: N-585 — Felder, deren **gemessene 0** ein Monatswert ist (``KONZEPT-UNVOLLSTAENDIGE-WERTE.md`` §3): die
@@ -263,9 +263,11 @@ def _collect_saved_data(
       Quelle (Connector · MQTT · HA-Statistics) kommen. ``is not None`` daraus
       zu machen wäre eine andere Route, nicht dieselbe mit anderer Herkunft.
     - Einspeisung/Netzbezug kommen weiter direkt von der ``Monatsdaten``-Zeile
-      und **nur, wenn sie dort gesetzt sind**: ``ZaehlerFakten`` macht aus einer
-      fehlenden Zahl eine 0,0, und eine 0,0 aus der schwächsten Quelle würde
-      eine echte Lücke füllen, die eine stärkere Quelle noch schließen könnte.
+      und **nur, wenn sie dort erfasst sind** (``netzfeld_ist_erfasst``, N-734):
+      die Spalten sind ``NOT NULL`` mit Default 0, eine Zeile ohne gelieferte
+      Netzwerte (Import nur mit Wallbox-/PV-Daten) stünde sonst mit 0,0 da —
+      und eine 0,0 aus der schwächsten Quelle sperrte HA-Statistik und
+      Tagesebene. Eine **gelieferte** 0 (Herkunftseintrag) bleibt ein Wert.
 
     Zwei Zahlen ändern sich dadurch sichtbar (beide gewollt, ``C1c``):
     die PV ist **P7-aufgelöst** (das Anlagen-Aggregat füllt Modul-Lücken, statt
@@ -287,13 +289,9 @@ def _collect_saved_data(
     )
 
     if md is not None:
-        for attr, feld in [
-            ("einspeisung_kwh", "einspeisung_kwh"),
-            ("netzbezug_kwh", "netzbezug_kwh"),
-        ]:
-            val = getattr(md, attr, None)
-            if val is not None:
-                resolved[feld] = (val, quelle)
+        for feld in NETZFELDER:
+            if netzfeld_ist_erfasst(md, feld):
+                resolved[feld] = (getattr(md, feld), quelle)
 
     for feld, wert in (
         # Module (P7-aufgelöst) + BKW — die PV-Achse der Anlage.

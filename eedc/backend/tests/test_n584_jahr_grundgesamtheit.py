@@ -37,8 +37,14 @@ async def _anlage(db) -> int:
     await db.flush()
     # Jan–Aug: je 559/8 kWh Eigenverbrauch bei 0 kWh Netzbezug (Volleinspeiser-Muster) ⇒ EV = GV.
     ev_je_monat = 559.0 / 8
+    from backend.services.provenance import seed_provenance
+
     for m in range(1, 9):
-        db.add(Monatsdaten(anlage_id=anlage.id, jahr=JAHR, monat=m, einspeisung_kwh=300.0, netzbezug_kwh=0.0))
+        md = Monatsdaten(anlage_id=anlage.id, jahr=JAHR, monat=m, einspeisung_kwh=300.0, netzbezug_kwh=0.0)
+        db.add(md)
+        await db.flush()
+        # N-734: der Netzbezug 0 ist EINGETRAGEN (Volleinspeiser), nicht der DB-Default — so stempelt ihn das Formular.
+        seed_provenance(md, source="manual:form", writer="test", fields=["einspeisung_kwh", "netzbezug_kwh"])
         db.add(InvestitionMonatsdaten(investition_id=pv.id, jahr=JAHR, monat=m,
                                       verbrauch_daten={"pv_erzeugung_kwh": 300.0 + ev_je_monat}))
     await db.commit()

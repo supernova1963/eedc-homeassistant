@@ -51,11 +51,17 @@ async def _seed(db: AsyncSession, *, netzbezug: float, grundpreis: float,
         einspeiseverguetung_cent_kwh=8.0,
         grundpreis_euro_monat=grundpreis,
     ))
-    db.add(Monatsdaten(
+    from backend.services.provenance import seed_provenance
+
+    md = Monatsdaten(
         anlage_id=anlage.id, jahr=JAHR, monat=MONAT,
         netzbezug_kwh=netzbezug, einspeisung_kwh=0.0,
         netzbezug_durchschnittspreis_cent=durchschnittspreis,
-    ))
+    )
+    db.add(md)
+    await db.flush()
+    # N-734: Netzbezug und Einspeisung sind EINGETRAGEN (auch eine 0) — so stempelt sie das Formular.
+    seed_provenance(md, source="manual:form", writer="test", fields=["einspeisung_kwh", "netzbezug_kwh"])
     await db.commit()
     return anlage
 

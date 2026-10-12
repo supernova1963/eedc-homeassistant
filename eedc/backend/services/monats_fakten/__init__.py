@@ -89,7 +89,9 @@ from backend.services.monats_fakten.fakten import (  # noqa: F401 — Re-Export
     MonatsFakt,
 )
 from backend.services.monats_fakten.roh import (  # noqa: F401 — Re-Export
+    NETZFELDER,
     _RohMonat,
+    netzfeld_ist_erfasst,
 )
 from backend.services.monats_fakten.laden import (  # noqa: F401 — Re-Export
     lade_monats_fakten,
@@ -142,6 +144,8 @@ __all__ = [
     "MetaFakten",
     "MonatsFakt",
     "_RohMonat",
+    "NETZFELDER",
+    "netzfeld_ist_erfasst",
     "lade_monats_fakten",
     "tarif_des_monats",
     "tarife_der_monate",

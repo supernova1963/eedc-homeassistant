@@ -171,6 +171,9 @@ class TagesverlaufResponse(BaseModel):
     datum: str  # "2026-03-14"
     serien: list[TagesverlaufSerie] = []
     punkte: list[TagesverlaufPunkt] = []
+    #: Investitionen ohne HA-Leistungssensor — der Chart nennt sie («Nicht dargestellt …», #109/N-447). Ohne das Feld
+    #: streicht FastAPI die Liste, die der Dienst liefert (T1, seit `b7a225fa` nur im TS-Typ ergänzt).
+    uebersprungen: list[str] = []
 
 
 class BoersenpreisStunde(BaseModel):
@@ -594,6 +597,7 @@ async def get_tagesverlauf(
         "datum": datetime.now().strftime("%Y-%m-%d"),
         "serien": tv_data.get("serien", []),
         "punkte": tv_data.get("punkte", []),
+        "uebersprungen": tv_data.get("uebersprungen", []),
     }
 
 

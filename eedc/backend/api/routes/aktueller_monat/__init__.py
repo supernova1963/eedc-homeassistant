@@ -684,7 +684,9 @@ async def _berechne_monat(
 
     Was „fehlend" heißt, entscheiden die `> 0`-Gates in `_collect_saved_data`:
     eine gespeicherte 0,0 gilt der Kaskade nicht als Wert und darf gefüllt
-    werden. Begründung im Docstring dort.
+    werden — bei Einspeisung und Netzbezug nur, wenn die 0 nicht geliefert
+    ist (`netzfeld_ist_erfasst`, N-734: ohne Herkunftseintrag). Begründung im
+    Docstring dort.
 
     ⭐ **Eine gemessene 0 der Quellen HA-Statistik und Tagesebene ist ein Wert**
     (N-585, ``KONZEPT-UNVOLLSTAENDIGE-WERTE.md`` §3) — für Einspeisung,

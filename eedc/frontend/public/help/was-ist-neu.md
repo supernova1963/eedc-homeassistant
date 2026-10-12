@@ -164,6 +164,12 @@ sonst Autarkie 99,1 % statt 67,6 % ohne Kommentar ([Bedienung → Monat](HANDBUC
 bei einer Wärmepumpe mit Betriebsart-Sensor ohne Leistungssensor dieselben Werte wie *Cockpit → Übersicht* — bisher nach
 einem HA-Statistik-Import 0; die Sensoren springen nach dem Update einmalig.
 
+**Monat ohne erfassten Netzbezug zeigt keine erfundene 0 mehr:** Hat ein Import eine Monatszeile ohne Netzbezug oder Einspeisung angelegt (etwa nur mit Wallbox-Daten), zeigte *Cockpit → Monat* bisher 0 kWh und Autarkie 100 % — und HA-Statistik und Tageswerte kamen nicht mehr zum Zug. Jetzt greifen sie wieder; ohne Quelle bleibt das Feld leer, und der Daten-Checker sagt „Netzbezug nicht erfasst" bzw. „Einspeisung nicht erfasst" samt Handgriff. Eine eingetragene oder importierte 0 bleibt eine 0. Hast du seit Mai 2026 einen Monat neu angelegt und dort 0 eingetragen, meldet der Checker ihn ebenfalls — einmal speichern genügt ([Daten-Checker → Monatsdaten](HANDBUCH_DATEN_CHECKER.md#45-monatsdaten--plausibilitaet)).
+
+**Tagesverlauf nennt Geräte ohne Leistungssensor:** Unter der Überschrift des Tagesverlaufs in *Cockpit → Live* steht
+jetzt „Nicht dargestellt (kein HA-Leistungssensor): …“ mit den Geräten, denen dafür ein Leistungssensor fehlt —
+der Hinweis war seit seiner Einführung nie angekommen ([Bedienung → Live](HANDBUCH_BEDIENUNG.md#21-live)).
+
 ## v4.1.6 — 11. Oktober 2026
 
 **Kleinere Anzeige-Korrekturen:** Monate ohne Werte zeigen in der Monatsleiste und im Jahresbericht einen Strich statt „0 kWh",

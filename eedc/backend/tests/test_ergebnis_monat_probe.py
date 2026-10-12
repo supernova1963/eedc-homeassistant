@@ -55,8 +55,14 @@ async def _anlage_vj(db, *, netzbezug_vj):
                      anschaffungsdatum=date(2024, 1, 1))
     db.add(pv)
     await db.flush()
+    from backend.services.provenance import seed_provenance
+
     for jahr, netz in ((2025, netzbezug_vj), (2026, 100.0)):
-        db.add(Monatsdaten(anlage_id=anlage.id, jahr=jahr, monat=6, einspeisung_kwh=400.0, netzbezug_kwh=netz))
+        md = Monatsdaten(anlage_id=anlage.id, jahr=jahr, monat=6, einspeisung_kwh=400.0, netzbezug_kwh=netz)
+        db.add(md)
+        await db.flush()
+        # N-734: der Netzbezug ist EINGETRAGEN (auch die 0 des Vorjahres) — so stempelt ihn das Formular.
+        seed_provenance(md, source="manual:form", writer="test", fields=["einspeisung_kwh", "netzbezug_kwh"])
         db.add(InvestitionMonatsdaten(investition_id=pv.id, jahr=jahr, monat=6,
                                       verbrauch_daten={"pv_erzeugung_kwh": 1000.0}))
     await db.commit()

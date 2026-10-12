@@ -392,3 +392,45 @@ def test_kein_pfad_baut_die_bedingung_selbst():
     assert src.count("uebersprungene_investitionen(") == 2, "beide Pfade rufen sie"
     assert 'if typ != "waermepumpe":' not in src, "die pauschale WP-Ausnahme ist zurück"
     assert "uebersprungen.append(" not in src, "ein Pfad sammelt wieder selbst"
+
+
+async def test_die_route_reicht_uebersprungen_an_den_chart_durch(db, monkeypatch):
+    """T1 (Handgriff 12.10.2026): der Anwendersatz «Nicht dargestellt (kein HA-Leistungssensor): …» erreicht den Client.
+
+    Der Dienst lieferte ``uebersprungen`` seit #109 (v3.10.3), die Route baute ihre Antwort aber nur aus ``serien`` und
+    ``punkte``, und ``TagesverlaufResponse`` kannte das Feld nicht — FastAPI hätte es auch beim Durchreichen gestrichen.
+    Darum über HTTP mit dem echten Router und ``response_model``; gestellt ist nur der Dienst. Gegenprobe: ohne
+    Schlüssel im Dienst ist die Liste leer, nicht fehlend (der Demo-Zweig liefert sie ebenfalls nicht).
+    """
+    import httpx
+    from fastapi import FastAPI
+
+    from backend.api.deps import get_db
+    from backend.api.routes import live_dashboard
+    from backend.tests import factories
+
+    anlage = await factories.anlage(db, anlagenname="T1")
+    await db.commit()
+    stand = {"tv": {"serien": [], "punkte": [], "uebersprungen": ["Winterborn WP"]}}
+
+    class _Dienst:
+        async def get_tagesverlauf(self, anlage, db):  # noqa: ARG002
+            return stand["tv"]
+
+    monkeypatch.setattr(live_dashboard, "get_live_power_service", lambda: _Dienst())
+    app = FastAPI()
+    app.include_router(live_dashboard.router, prefix="/api/live")
+
+    async def _db():
+        yield db
+
+    app.dependency_overrides[get_db] = _db
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        antwort = await client.get(f"/api/live/{anlage.id}/tagesverlauf")
+        assert antwort.status_code == 200, antwort.text
+        assert antwort.json()["uebersprungen"] == ["Winterborn WP"]
+
+        stand["tv"] = {"serien": [], "punkte": []}
+        antwort = await client.get(f"/api/live/{anlage.id}/tagesverlauf")
+        assert antwort.status_code == 200, antwort.text
+        assert antwort.json()["uebersprungen"] == []

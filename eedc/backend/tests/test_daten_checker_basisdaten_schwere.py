@@ -257,8 +257,14 @@ async def test_beide_kernfelder_0_sagt_was_ohne_handlung_gilt(db):
         geraete=[("pv-module", date(2024, 3, 1))],
         monate=[],
     )
-    db.add(MD(anlage_id=anlage_id, jahr=2024, monat=3,
-              einspeisung_kwh=0.0, netzbezug_kwh=0.0))
+    from backend.services.provenance import seed_provenance
+
+    md = MD(anlage_id=anlage_id, jahr=2024, monat=3, einspeisung_kwh=0.0, netzbezug_kwh=0.0)
+    db.add(md)
+    await db.flush()
+    # N-734: die beiden 0 sind EINGETRAGEN (Insel/außer Betrieb) — so, wie das Formular sie stempelt. Eine 0 ohne
+    # Herkunft meldet stattdessen „… nicht erfasst" (`test_n734_netzfeld_ohne_herkunft.py`).
+    seed_provenance(md, source="manual:form", writer="test", fields=["einspeisung_kwh", "netzbezug_kwh"])
     await db.commit()
 
     ergebnisse = (await DatenChecker(db).check_anlage(anlage_id)).ergebnisse

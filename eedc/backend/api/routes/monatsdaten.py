@@ -1145,6 +1145,9 @@ async def create_monatsdaten(
             fields=auto_fields,
         )
 
+    # N-735: erst schreiben, dann neu laden — `refresh` ohne `flush` verwarf die eben geseedete Provenance
+    # (seit `e527bfe8`, 09.05.2026: jede Formular-Neuanlage stand ohne `manual:form`-Eintrag in der DB).
+    await db.flush()
     await db.refresh(md)
 
     # Investitions-Monatsdaten speichern (E-Auto km, Speicher Ladung, WP Verbrauch, etc.)
