@@ -47,11 +47,12 @@ def test_auto_erkannte_spalten_landen_in_inv_werte():
     monate, _warn, inv_spalten = _apply_mapping(headers, rows, config, auto)
 
     assert len(monate) == 2, f"erwartet 2 Monate, war {len(monate)}"
-    # _convert_unit rundet bestandsgemäß auf 2 Nachkommastellen — Wert kommt aus dem
-    # existierenden Pfad, nicht aus diesem Test.
-    assert monate[0].inv_werte.get("Wollis_ID5_Ladung_PV_kWh") == 94.72
-    assert monate[0].inv_werte["Wollis_ID5_Ladung_Netz_kWh"] == 95.81
-    assert monate[1].inv_werte["Wollis_ID5_Ladung_PV_kWh"] == 161.80
+    # N-706 (12.10.2026): die Vorschau zeigt den Wert, den der Import (v09) schreibt — roh, ohne
+    # `_convert_unit` und ohne dessen Rundung auf 2 Stellen (bis dahin 94.72 in der Vorschau,
+    # 94.71735445 in der Datenbank). Die Tabelle rundet erst bei der Anzeige.
+    assert monate[0].inv_werte.get("Wollis_ID5_Ladung_PV_kWh") == 94.71735445
+    assert monate[0].inv_werte["Wollis_ID5_Ladung_Netz_kWh"] == 95.81364555
+    assert monate[1].inv_werte["Wollis_ID5_Ladung_PV_kWh"] == 161.7951978
     # inv_spalten sortiert
     assert inv_spalten == [
         "Wollis_ID5_Ladung_Netz_kWh",

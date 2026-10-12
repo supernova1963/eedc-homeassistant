@@ -103,3 +103,30 @@ export function mappingZielOptionen(
 
   return items
 }
+
+/**
+ * Eine gespeicherte Vorlage auf die gewählte Anlage zuschneiden (N-705).
+ *
+ * Vorlagen sind global (ohne Anlagen-Bezug), das Löschen einer Investition räumt
+ * sie nicht auf, und SQLite vergibt freie IDs neu. Eine `inv:<id>:<feld>`-Zuordnung,
+ * die diese Anlage nicht anbietet (`analysis.investitions_felder`), zeigte die
+ * Auswahl als „– Ignorieren –" an, blieb aber im Zustand — und der Import schrieb
+ * damit in eine fremde Anlage. Jetzt fällt sie beim Laden heraus, und der Wizard
+ * nennt die betroffenen Spalten. Der Import prüft dieselbe Regel noch einmal.
+ */
+export function vorlageFuerAnlage(
+  mappings: Record<string, string>,
+  analysis: AnalyzeResult,
+): { mappings: Record<string, string>; entfernt: string[] } {
+  const angeboten = new Set((analysis.investitions_felder ?? []).map((f) => f.id))
+  const behalten: Record<string, string> = {}
+  const entfernt: string[] = []
+  for (const [spalte, feld] of Object.entries(mappings)) {
+    if (feld.startsWith('inv:') && !angeboten.has(feld)) {
+      entfernt.push(spalte)
+      continue
+    }
+    behalten[spalte] = feld
+  }
+  return { mappings: behalten, entfernt }
+}

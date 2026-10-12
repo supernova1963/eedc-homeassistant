@@ -12,6 +12,8 @@ import hashlib
 import io
 import json
 import logging
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
 from typing import Optional
 
 from fastapi import HTTPException
@@ -175,6 +177,24 @@ def _convert_unit(value: Optional[float], einheit: str) -> Optional[float]:
     return round(value, 2)
 
 
+def _registry_feld(feld_name: str) -> Optional[dict]:
+    """Das Registry-Feld zu einem Feldnamen, über alle Investitionstypen.
+
+    ⛔ *Sonstiges* führt seine Felder **je Kategorie** (dict statt Liste). Bis 12.10.2026 lief die Suche hier flach
+    über `INVESTITION_FELDER.values()` und iterierte bei Sonstiges die Kategorie-Namen — `AttributeError` für 11 von
+    12 Sonstiges-Feldern, Vorschau 500 (N-704). Ein Feldname trägt in der Registry überall dieselbe Einheit
+    (gemessen 12.10.), die erste Fundstelle genügt also.
+    """
+    from backend.core.field_definitions import INVESTITION_FELDER
+    for typ_felder in INVESTITION_FELDER.values():
+        listen = list(typ_felder.values()) if isinstance(typ_felder, dict) else [typ_felder]
+        for liste in listen:
+            for f in liste:
+                if f.get("feld") == feld_name:
+                    return f
+    return None
+
+
 def _is_energy_target(eedc_feld: str) -> bool:
     """True wenn das Mapping-Target eine Energie-Größe (Wh/kWh/MWh) ist und
     damit `_convert_unit` greifen soll. km, Anzahl, € sollten unkonvertiert
@@ -186,14 +206,11 @@ def _is_energy_target(eedc_feld: str) -> bool:
         parts = eedc_feld.split(":", 2)
         if len(parts) < 3:
             return False
-        feld_name = parts[2]
-        from backend.core.field_definitions import INVESTITION_FELDER
-        for typ_felder in INVESTITION_FELDER.values():
-            for f in typ_felder:
-                if f.get("feld") == feld_name:
-                    einheit = (f.get("einheit") or "").lower()
-                    return einheit in {"kwh", "wh", "mwh"}
-        return False
+        f = _registry_feld(parts[2])
+        if f is None:
+            return False
+        einheit = (f.get("einheit") or "").lower()
+        return einheit in {"kwh", "wh", "mwh"}
     return True
 
 
@@ -238,6 +255,374 @@ def _parse_date_column(value: str, fmt: str) -> tuple[Optional[int], Optional[in
         pass
 
     return None, None
+
+
+# ─── Zeilen-Kern: was Vorschau UND Import aus der Datei lesen (N-706) ─────────
+#
+# ⛔ **Warum es diesen Kern gibt.** Bis 12.10.2026 lasen `preview.py::_apply_mapping` und `apply.py` dieselbe Zeile
+# mit zwei Handschriften (RF-10 §4.6): die Vorschau rechnete automatisch erkannte Geräte-Spalten in Wh um, der
+# Import schrieb sie roh (Vorschau 300, Cockpit 500 000 kWh); die Vorschau bot «Jahr 0» an, der Import übersprang es
+# still; Tageszeilen wurden im Import zum ersten bzw. letzten Tag des Monats. Seitdem gilt: **dieser Kern liefert je
+# Monat, was geschrieben wird — die Vorschau zeigt es, der Import schreibt es** (Prinzip N-666).
+#
+# Regeln (Entscheide Master 12.10.):
+# * Geräte-Spalten (automatisch erkannt, `<Bezeichnung>_<Suffix>`) tragen ihre Einheit im Namen (`_kWh`, `_km`) und
+#   werden NICHT umgerechnet; die globale Einheit (Wh/MWh) gilt nur für Spalten ohne Einheit im Namen (B4).
+# * Mehrere Zeilen desselben Monats (Tageszeilen) werden **summiert** — Vorbild Portal-Import (die Parser in
+#   `services/import_parsers/` summieren Tageswerte je Monat). Summiert wird nur, was ein Mengenwert ist
+#   (Registry `ist_zaehler_differenz_feld`: der Monatswert ist die Differenz eines Zählers = Summe der Tage); ein
+#   Stand, ein Preis, ein €-Betrag oder Sonderkosten in mehreren Zeilen eines Monats ⇒ Zeilenfehler des Monats.
+# * Jahr/Monat: gültig ist, was der Import immer nahm — Jahr ≠ 0, Monat 1…12 (V5).
+# * Eine ausdrückliche `inv:`-Zuordnung muss zur Anlage gehören und ein Feld der Investition treffen, sonst wird sie
+#   ignoriert und gemeldet (N-705); eine ausdrücklich zugeordnete Spalte oder ein ausdrücklich belegtes Ziel wird
+#   nicht zusätzlich aus der automatischen Erkennung geschrieben (N-702, «nie doppelt»).
+
+#: Die Werte, die der Import aus den generischen Spalten kennt (alle Mengen — summierbar).
+_GENERISCHE_FELDER = (
+    "pv_erzeugung_kwh", "einspeisung_kwh", "netzbezug_kwh", "eigenverbrauch_kwh",
+    "batterie_ladung_kwh", "batterie_entladung_kwh",
+    "wallbox_ladung_kwh", "wallbox_ladung_pv_kwh", "wallbox_ladevorgaenge", "eauto_km_gefahren",
+)
+
+
+@dataclass
+class ZeilenPosition:
+    """Jahr und Monat einer Zeile, schrittweise erkannt."""
+
+    jahr: Optional[int] = None
+    monat: Optional[int] = None
+
+
+def _lies_jahr_monat(
+    row: dict[str, str], config: MappingConfig, field_map: dict[str, str], pos: ZeilenPosition,
+) -> None:
+    """Jahr und Monat der Zeile: zuerst die kombinierte Datumsspalte, dann die Jahr-/Monat-Spalten.
+
+    Schreibt schrittweise in `pos` — die Fehlermeldung der Zeile nennt, was bis zu einem Fehler erkannt war.
+    """
+    if config.datum_spalte and config.datum_spalte in row:
+        j, m = _parse_date_column(row[config.datum_spalte], config.datum_format or "")
+        if j and m:
+            pos.jahr, pos.monat = j, m
+
+    for spalte, eedc_feld in field_map.items():
+        raw = row.get(spalte, "")
+        if not raw:
+            continue
+        if eedc_feld == "jahr" and pos.jahr is None:
+            try:
+                pos.jahr = int(float(raw))
+            except (ValueError, TypeError):
+                pass
+        elif eedc_feld == "monat" and pos.monat is None:
+            try:
+                pos.monat = int(float(raw))
+            except (ValueError, TypeError):
+                pass
+
+
+def _ist_menge(feld: Optional[dict]) -> bool:
+    """Darf dieser Wert über mehrere Zeilen eines Monats summiert werden? Nur ein Mengenwert (Registry)."""
+    if feld is None:
+        return False
+    from backend.core.field_definitions import basis_feld_key, ist_zaehler_differenz_feld
+    return ist_zaehler_differenz_feld(basis_feld_key(feld["feld"]))
+
+
+def _als_zelle(wert, dezimalzeichen: str) -> str:
+    """Eine Summe als Zelle, die `_parse_number` mit demselben Dezimalzeichen exakt zurückliest (für v09)."""
+    if isinstance(wert, int):
+        return str(wert)
+    text = repr(float(wert))
+    return text.replace(".", ",") if dezimalzeichen == "komma" else text
+
+
+@dataclass
+class ZuordnungsPlan:
+    """Was das Mapping für jede Zeile bedeutet — einmal je Datei bestimmt, für Vorschau und Import gleich."""
+
+    config: MappingConfig
+    field_map: dict[str, str]
+    invert_map: dict[str, bool]
+    #: Gültige `inv:`-Slots: Spalte → (Investitions-ID, Feldname, Registry-Feld), Reihenfolge des Mappings.
+    inv_slots: dict[str, tuple[int, str, Optional[dict]]]
+    #: Automatisch erkannte Geräte-Spalten, die v09 schreibt: Spalte → Registry-Feld (None = Sonderkosten).
+    geraete_spalten: dict[str, Optional[dict]]
+    #: Erkannte Spalten, die v09 NICHT bekommt: eine ausdrückliche `inv:`-Zuordnung belegt die Spalte oder ihr Ziel.
+    ausgenommen: set[str]
+    #: Wallboxen der Anlage (Ziel der Anlagen-Wallbox-Menge, wie im Portal-Import die erste); None = keine Anlage
+    #: bekannt, nicht prüfbar.
+    wallboxen: Optional[list]
+    warnungen: list[str] = field(default_factory=list)
+
+    def parse_float(self, val: str) -> Optional[float]:
+        return _parse_number(val, self.config.dezimalzeichen)
+
+    def parse_float_inv(self, val: str, spalte: str) -> Optional[float]:
+        """parse_float + Vorzeichen-Inversion wenn konfiguriert."""
+        num = _parse_number(val, self.config.dezimalzeichen)
+        if num is not None and self.invert_map.get(spalte):
+            num = abs(num)
+        return num
+
+
+def plane_zuordnung(
+    config: MappingConfig,
+    investitionen: Optional[Sequence],
+    erkannte: "Mapping[str, tuple[Optional[int], Optional[dict]]] | Iterable[str]" = (),
+) -> ZuordnungsPlan:
+    """Den Plan einer Datei bestimmen.
+
+    `investitionen` sind die der Ziel-Anlage; `None` heißt «keine Anlage bekannt» (Vorschau ohne Anlage) — dann
+    wird eine `inv:`-Zuordnung nicht geprüft. `erkannte` sind die automatisch erkannten Geräte-Spalten
+    (`analyze._erkenne_investitions_spalten`) als Spalte → (Investitions-ID, Registry-Feld); ein bloßes Namens-Set
+    ist erlaubt (ohne Ziel-Abgleich).
+    """
+    from backend.api.routes.import_export.helpers import V09_BASIS_SPALTEN
+    from backend.core.field_definitions import get_alle_felder_fuer_investition
+
+    field_map: dict[str, str] = {m.spalte: m.eedc_feld for m in config.mappings}
+    invert_map: dict[str, bool] = {m.spalte: True for m in config.mappings if m.invertieren}
+    je_id = None if investitionen is None else {inv.id: inv for inv in investitionen}
+
+    inv_slots: dict[str, tuple[int, str, Optional[dict]]] = {}
+    warnungen: list[str] = []
+    for spalte, eedc_feld in field_map.items():
+        if not eedc_feld.startswith("inv:"):
+            continue
+        parts = eedc_feld.split(":", 2)
+        try:
+            inv_id = int(parts[1]) if len(parts) == 3 else None
+        except ValueError:
+            inv_id = None
+        if inv_id is None:
+            continue  # unlesbare Zuordnung — wie vor dem Kern ohne Wirkung (kommt aus der Fläche nicht vor)
+        feld_name = parts[2]
+        if je_id is None:
+            inv_slots[spalte] = (inv_id, feld_name, _registry_feld(feld_name))
+            continue
+        inv = je_id.get(inv_id)
+        if inv is None:
+            warnungen.append(
+                f"Spalte '{spalte}' ist einer Investition zugeordnet, die es in dieser Anlage nicht gibt "
+                f"(ID {inv_id}, z. B. aus einer gespeicherten Vorlage) — die Zuordnung wird ignoriert."
+            )
+            continue
+        feld = next(
+            (f for f in get_alle_felder_fuer_investition(inv.typ, inv.parameter) if f.get("feld") == feld_name),
+            None,
+        )
+        if feld is None:
+            warnungen.append(
+                f"Spalte '{spalte}': '{inv.bezeichnung}' führt kein Feld '{feld_name}' — die Zuordnung wird ignoriert."
+            )
+            continue
+        inv_slots[spalte] = (inv_id, feld_name, feld)
+
+    ziele = {(inv_id, feld_name) for inv_id, feld_name, _ in inv_slots.values()}
+    if not isinstance(erkannte, Mapping):
+        erkannte = {spalte: (None, None) for spalte in erkannte}
+    geraete_spalten: dict[str, Optional[dict]] = {}
+    ausgenommen: set[str] = set()
+    for spalte, (inv_id, feld) in erkannte.items():
+        if spalte in V09_BASIS_SPALTEN:
+            continue  # v09 überspringt sie — die Vorschau zeigt sie dann auch nicht als Geräte-Spalte
+        belegt = feld is not None and (inv_id, feld.get("feld")) in ziele
+        if spalte in inv_slots or belegt:
+            ausgenommen.add(spalte)
+            continue
+        geraete_spalten[spalte] = feld
+
+    wallboxen = None if investitionen is None else [i for i in investitionen if i.typ == "wallbox"]
+    return ZuordnungsPlan(
+        config=config, field_map=field_map, invert_map=invert_map, inv_slots=inv_slots,
+        geraete_spalten=geraete_spalten, ausgenommen=ausgenommen, wallboxen=wallboxen,
+        warnungen=warnungen,
+    )
+
+
+@dataclass
+class ZeilenAbsturz:
+    """Eine Zeile, deren Jahr/Monat-Lesung wirft (`inf`, B7 — verworfen). Sie wirft dort, wo sie steht, wie bisher."""
+
+    pos: ZeilenPosition
+    fehler: BaseException
+
+
+@dataclass
+class MonatsWerte:
+    """Was der Import für einen Monat schreibt — Summe aller Zeilen dieses Monats."""
+
+    jahr: int
+    monat: int
+    zeilen: list[dict[str, str]] = field(default_factory=list)
+    #: Generische Felder (Anlagen-Ebene): eedc_feld → Wert.
+    generisch: dict[str, float] = field(default_factory=dict)
+    #: Gültige `inv:`-Slots: Spalte → Wert (umgerechnet wie geschrieben).
+    inv_werte: dict[str, float] = field(default_factory=dict)
+    #: Geräte-Spalten für v09: Spalte → Zellen (roh) und Wert (wie v09 ihn schreibt; None = nicht gezeigt).
+    geraete_roh: dict[str, list[str]] = field(default_factory=dict)
+    geraete_werte: dict[str, float] = field(default_factory=dict)
+    #: Fehler der einzelnen Zeilen (in Zeilen-Reihenfolge) und des Monats (Summe, Wallbox).
+    fehler_zeilen: list[str] = field(default_factory=list)
+    fehler_monat: list[str] = field(default_factory=list)
+
+    @property
+    def fehler(self) -> list[str]:
+        """Alle Gründe, aus denen der Monat nicht geschrieben wird — der erste ist der Zeilenfehler des Imports."""
+        return self.fehler_zeilen + self.fehler_monat
+
+    def nicht_summierbar(self, spalte: str) -> None:
+        self.fehler_monat.append(
+            f"Spalte '{spalte}' ist kein Mengenwert und steht in mehreren Zeilen dieses Monats — "
+            "er lässt sich nicht summieren (bitte eine Zeile je Monat)"
+        )
+
+    def geraete_zeile(self, plan: ZuordnungsPlan) -> dict[str, str]:
+        """Die Zeile, die v09 bekommt. Eine Zeile im Monat ⇒ die Zeile selbst (ohne ausgenommene Spalten);
+        mehrere ⇒ je Geräte-Spalte die eine Zelle bzw. die Summe als Zelle."""
+        if len(self.zeilen) == 1:
+            return {k: v for k, v in self.zeilen[0].items() if k not in plan.ausgenommen}
+        zeile: dict[str, str] = {}
+        for spalte, roh in self.geraete_roh.items():
+            zeile[spalte] = roh[0] if len(roh) == 1 else _als_zelle(
+                self.geraete_werte[spalte], plan.config.dezimalzeichen,
+            )
+        return zeile
+
+
+def _addiere(ziel: dict, schluessel: str, wert, summierbar: bool, spalte: str, monat: MonatsWerte) -> None:
+    """Einen Zeilenwert in den Monat übernehmen: erste Zeile setzt, weitere addieren (nur Mengen)."""
+    if schluessel not in ziel:
+        ziel[schluessel] = wert
+    elif summierbar:
+        summe = ziel[schluessel] + wert
+        ziel[schluessel] = summe if isinstance(summe, int) else round(summe, 2)
+    else:
+        monat.nicht_summierbar(spalte)
+
+
+def _lies_zeilenwerte(row: dict[str, str], plan: ZuordnungsPlan, monat: MonatsWerte) -> None:
+    """Die Werte EINER Zeile lesen und in ihren Monat übernehmen.
+
+    Fehler-Reihenfolge wie der Schreibweg vor dem Kern: Geräte-Spalten (v09, in Zeilen-Reihenfolge), dann
+    `inv:`-Slots, dann die generischen Felder. Der Import meldet den ersten als Zeilenfehler.
+    """
+    from backend.api.routes.import_export.helpers import lies_geraete_wert, pruefe_nicht_negativ
+
+    monat.zeilen.append(row)
+    fehler_geraete: list[str] = []
+    fehler_inv: list[str] = []
+    fehler_generisch: list[str] = []
+
+    # Geräte-Spalten (v09): Einheit steht im Namen, keine Umrechnung, keine Inversion.
+    for spalte, raw in row.items():
+        if spalte not in plan.geraete_spalten or not raw or not raw.strip():
+            continue
+        feld = plan.geraete_spalten[spalte]
+        if feld is None:
+            # Sonderkosten (`<Bezeichnung>_Sonderkosten_Euro/_Notiz`): v09 schreibt den Betrag, wenn > 0.
+            if spalte in monat.geraete_roh:
+                monat.nicht_summierbar(spalte)
+                continue
+            monat.geraete_roh[spalte] = [raw]
+            betrag = plan.parse_float(raw)
+            if betrag is not None and betrag > 0:
+                monat.geraete_werte[spalte] = betrag
+            continue
+        try:
+            wert = lies_geraete_wert(raw, feld, spalte, plan.parse_float)
+        except (ValueError, OverflowError) as e:
+            fehler_geraete.append(str(e))
+            continue
+        if wert is None:
+            continue
+        monat.geraete_roh.setdefault(spalte, []).append(raw)
+        _addiere(monat.geraete_werte, spalte, wert, _ist_menge(feld), spalte, monat)
+
+    # Ausdrückliche `inv:`-Slots: globale Einheit nach Registry-Einheit, Vorzeichen wie v09 (N-708).
+    for spalte, (_inv_id, feld_name, feld) in plan.inv_slots.items():
+        raw = row.get(spalte, "")
+        if not raw:
+            continue
+        val = _maybe_convert(plan.parse_float_inv(raw, spalte), plan.config.einheit, plan.field_map[spalte])
+        if val is None:
+            continue
+        try:
+            if feld_name == "ladevorgaenge":
+                val = int(val)
+            elif (feld or {}).get("typ", "float") != "int":
+                pruefe_nicht_negativ(val, spalte)
+        except (ValueError, OverflowError) as e:
+            fehler_inv.append(str(e))
+            continue
+        _addiere(monat.inv_werte, spalte, val, _ist_menge(feld), spalte, monat)
+
+    # Generische Felder: je Zeile gewinnt die letzte Spalte eines Feldes, über Zeilen wird summiert.
+    zeile_generisch: dict[str, float] = {}
+    for spalte, eedc_feld in plan.field_map.items():
+        raw = row.get(spalte, "")
+        if not raw or eedc_feld in ("jahr", "monat") or eedc_feld.startswith("inv:"):
+            continue
+        val = _maybe_convert(plan.parse_float_inv(raw, spalte), plan.config.einheit, eedc_feld)
+        if val is None:
+            continue
+        if eedc_feld == "wallbox_ladevorgaenge":
+            try:
+                val = int(val)
+            except OverflowError as e:
+                fehler_generisch.append(str(e))
+                continue
+        zeile_generisch[eedc_feld] = val
+    for eedc_feld, val in zeile_generisch.items():
+        _addiere(monat.generisch, eedc_feld, val, True, eedc_feld, monat)
+
+    monat.fehler_zeilen.extend(fehler_geraete + fehler_inv + fehler_generisch)
+
+
+def _pruefe_wallbox(monat: MonatsWerte, plan: ZuordnungsPlan) -> None:
+    """Die Anlagen-Wallbox-Menge geht auf die Wallbox (Konzept Wallbox/E-Auto: die Wallbox ist die Quelle, Vorbild
+    Portal-Import). Was nicht geschrieben werden kann, ist ein Zeilenfehler — nie still verworfen (N-703, N-302)."""
+    ladung = monat.generisch.get("wallbox_ladung_kwh")
+    ladung_pv = monat.generisch.get("wallbox_ladung_pv_kwh")
+    if ladung_pv is not None and ladung_pv > 0 and not (ladung is not None and ladung > 0):
+        monat.fehler_monat.append(
+            "Wallbox PV-Ladung ohne Wallbox-Ladung (gesamt) — der PV-Anteil braucht die Gesamtmenge"
+        )
+    if ladung is not None and ladung > 0 and plan.wallboxen is not None and not plan.wallboxen:
+        monat.fehler_monat.append(
+            "Wallbox-Ladung angegeben, aber keine Wallbox als Investition angelegt — "
+            "bitte zuerst eine Wallbox unter Investitionen anlegen"
+        )
+
+
+def lies_monate(
+    rows: list[dict[str, str]], plan: ZuordnungsPlan,
+) -> tuple[list["MonatsWerte | ZeilenAbsturz"], int]:
+    """Alle Zeilen → Monate, in der Reihenfolge ihres ersten Auftretens. Zweiter Wert: Zeilen ohne gültiges
+    Jahr/Monat (übersprungen)."""
+    monate: dict[tuple[int, int], MonatsWerte] = {}
+    eintraege: list[MonatsWerte | ZeilenAbsturz] = []
+    ungueltig = 0
+    for row in rows:
+        pos = ZeilenPosition()
+        try:
+            _lies_jahr_monat(row, plan.config, plan.field_map, pos)
+        except Exception as e:  # noqa: BLE001 — wie vor dem Kern: die Zeile wirft an ihrer Stelle
+            eintraege.append(ZeilenAbsturz(pos=pos, fehler=e))
+            continue
+        jahr, monat = pos.jahr, pos.monat
+        if not jahr or not monat or monat < 1 or monat > 12:
+            ungueltig += 1
+            continue
+        mw = monate.get((jahr, monat))
+        if mw is None:
+            mw = monate[(jahr, monat)] = MonatsWerte(jahr=jahr, monat=monat)
+            eintraege.append(mw)
+        _lies_zeilenwerte(row, plan, mw)
+    for mw in monate.values():
+        _pruefe_wallbox(mw, plan)
+    return eintraege, ungueltig
 
 
 # ─── Temporärer Speicher für Upload-Sessions ─────────────────────────────────

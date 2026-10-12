@@ -5,7 +5,7 @@ POST /analyze   — Datei hochladen, Spalten + Auto-Mapping erkennen.
 GET  /fields    — Verfügbare EEDC-Zielfelder.
 """
 
-from typing import Optional
+from typing import Optional, Sequence
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
@@ -160,6 +160,15 @@ async def _detect_investition_spalten(
         select(Investition).where(Investition.anlage_id == anlage_id)
     )
     investitionen = result.scalars().all()
+    return _erkenne_investitions_spalten(headers, investitionen)
+
+
+def _erkenne_investitions_spalten(
+    headers: list[str],
+    investitionen: Sequence[Investition],
+) -> list[InvestitionSpalteInfo]:
+    """Die Erkennung selbst, ohne Datenbank — Vorschau und Import rufen sie mit den schon geladenen Investitionen
+    (N-706: eine Erkennung für beide, keine zusätzliche Abfrage im Schreibweg)."""
     if not investitionen:
         return []
 
@@ -230,6 +239,28 @@ async def _detect_investition_spalten(
                 break
 
     return detected
+
+
+def _erkannte_geraete_spalten(
+    headers: list[str],
+    investitionen: Sequence[Investition],
+) -> dict[str, tuple[int, Optional[dict]]]:
+    """Die erkannten Geräte-Spalten für den Zeilen-Kern (`_shared.plane_zuordnung`): Spalte → (Investitions-ID,
+    Registry-Feld). Das Feld ist das, das v09 für diesen Suffix schreibt (nur Felder mit `csv_suffix`, wie v09);
+    `None` für die Sonderkosten-Spalten, die kein Registry-Feld sind."""
+    je_id = {inv.id: inv for inv in investitionen}
+    erkannte: dict[str, tuple[int, Optional[dict]]] = {}
+    for info in _erkenne_investitions_spalten(headers, investitionen):
+        inv = je_id[info.inv_id]
+        feld = next(
+            (
+                f for f in get_alle_felder_fuer_investition(inv.typ, inv.parameter)
+                if f.get("csv_suffix") and info.suffix in (f.get("csv_suffix"), f.get("csv_suffix_alt"))
+            ),
+            None,
+        )
+        erkannte[info.spalte] = (info.inv_id, feld)
+    return erkannte
 
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────

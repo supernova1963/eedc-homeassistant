@@ -732,10 +732,16 @@ async def _verteile_pv(
     jahr: int, monat: int,
 ) -> Optional[float]:
     """PV-Erzeugung auf die Module verteilen; zurück kommt der Anlagenwert für
-    die Monatszeile."""
-    if monat_input.pv_erzeugung_kwh is None or monat_input.pv_erzeugung_kwh <= 0:
+    die Monatszeile.
+
+    N-707: eine gelieferte **0 ist ein Messwert** und steht danach in der
+    Monatszeile (wie die Batterie); nur ein fehlender Wert bleibt leer. Bis
+    12.10.2026 wurde PV 0 hier zu NULL — der Daten-Checker meldete „PV-Erzeugung
+    fehlt", das Cockpit zeigte „—". Eine 0 verteilt nichts auf die Module.
+    """
+    if monat_input.pv_erzeugung_kwh is None or monat_input.pv_erzeugung_kwh < 0:
         return None
-    if not ktx.pv_module:
+    if not ktx.pv_module or monat_input.pv_erzeugung_kwh == 0:
         return monat_input.pv_erzeugung_kwh
     pv_kwh = monat_input.pv_erzeugung_kwh
     if ktx.zuordnung and ktx.zuordnung.pv:

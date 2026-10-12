@@ -63,6 +63,14 @@ gerundet (3,46 kWh als 4 statt 3 kWh in HA); jetzt rundet eedc einmal, wie bei a
 **Jahresbericht ohne Speicher-Wirkungsgrad über 100 %:** Passen Lade- und Entlademenge nicht zusammen, steht im Bericht jetzt
 ein Strich wie im Cockpit statt z. B. „110,0 %"; die Ursache nennt der Daten-Checker.
 
+**Import aus eigener Datei: Vorschau gleich Import:** Die Vorschau zeigt jetzt genau, was der Import schreibt. Die
+Einheit (Wh/kWh/MWh) gilt nur für Spalten ohne Einheit im Namen — erkannte Geräte-Spalten wie `Sueddach_kWh` tragen ihre
+Einheit selbst und werden nicht umgerechnet (bisher zeigte die Vorschau ein Tausendstel, geschrieben wurde der Dateiwert).
+Tageszeilen werden zum Monat summiert, eine **0 wird als 0 gespeichert** (auch im Portal-Import), Wallbox-Ladung und
+Wallbox-PV-Ladung kommen auf der Wallbox an, eine Spalte zählt nur einmal, auch wenn sie zusätzlich einem Gerät
+zugeordnet ist, sonstige Geräte lassen sich einzeln zuordnen, und eine Vorlage schreibt nicht mehr in eine andere Anlage.
+Jeder Monat wird ganz oder gar nicht geschrieben ([Einstellungen → Import-Assistenten](HANDBUCH_EINSTELLUNGEN.md#65-import-assistenten)).
+
 ## v4.1.6 — 11. Oktober 2026
 
 **Kleinere Anzeige-Korrekturen:** Monate ohne Werte zeigen in der Monatsleiste und im Jahresbericht einen Strich statt „0 kWh",

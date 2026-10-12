@@ -37,6 +37,7 @@ import { useWizardHost } from '../v4/wizardHost'
 import ImportErgebnis from '../components/import/ImportErgebnis'
 import MappingTabelle from '../components/import/custom/MappingTabelle'
 import ImportOptionen from '../components/import/custom/ImportOptionen'
+import { vorlageFuerAnlage } from '../components/import/customFelder'
 import { customImportApi } from '../api/customImport'
 import type {
   AnalyzeResult,
@@ -86,6 +87,9 @@ export default function CustomImportWizard() {
   // Step 4: Ergebnis
   const [isImporting, setIsImporting] = useState(false)
   const [result, setResult] = useState<ApplyResult | null>(null)
+
+  // N-705: Spalten, deren Vorlagen-Zuordnung beim Laden entfernt wurde (fremde/gelöschte Investition)
+  const [vorlageEntfernt, setVorlageEntfernt] = useState<string[]>([])
 
   // Templates laden
   useEffect(() => {
@@ -203,13 +207,16 @@ export default function CustomImportWizard() {
       newMappings[m.spalte] = m.eedc_feld
       if (m.invertieren) newInvertierungen[m.spalte] = true
     }
-    setMappings(newMappings)
+    // N-705: Zuordnungen auf Investitionen, die diese Anlage nicht hat, fallen heraus.
+    const zugeschnitten = analysis ? vorlageFuerAnlage(newMappings, analysis) : { mappings: newMappings, entfernt: [] }
+    setVorlageEntfernt(zugeschnitten.entfernt)
+    setMappings(zugeschnitten.mappings)
     setInvertierungen(newInvertierungen)
     setEinheit(template.mapping.einheit)
     setDezimalzeichen(template.mapping.dezimalzeichen)
     setDatumSpalte(template.mapping.datum_spalte || null)
     setDatumFormat(template.mapping.datum_format || null)
-  }, [])
+  }, [analysis])
 
   const handleSaveTemplate = useCallback(async () => {
     if (!templateName.trim()) return
@@ -451,6 +458,14 @@ export default function CustomImportWizard() {
                 </div>
               </div>
             </Card>
+          )}
+
+          {vorlageEntfernt.length > 0 && (
+            <Alert type="warning" onClose={() => setVorlageEntfernt([])}>
+              Die Vorlage ordnet {vorlageEntfernt.length === 1 ? 'die Spalte' : 'die Spalten'}{' '}
+              {vorlageEntfernt.join(', ')} einer Investition zu, die es in dieser Anlage nicht gibt — diese
+              Zuordnung steht jetzt auf „Ignorieren". Bitte prüfen und neu zuordnen.
+            </Alert>
           )}
 
           {/* Mapping-Tabelle (ausgelagert) */}

@@ -90,6 +90,41 @@ def _parse_datetime(wert) -> Optional["datetime"]:
     return dt
 
 
+# ─── Geräte-Spalten: eine Lese-Regel für v09 und den Custom-Import (N-706/N-708) ─────
+#
+# Bis 12.10.2026 standen Vorzeichen-Regel und Basis-Spalten nur IN v09. Der
+# Custom-Import hat daneben einen zweiten Weg (`inv:`-Slots) und eine Vorschau;
+# beide lasen dieselbe Zelle mit eigener Handschrift — der `inv:`-Slot nahm −77
+# ohne Prüfung an (N-708), die Vorschau rechnete Geräte-Spalten um, die v09 roh
+# schreibt (N-706). Jetzt lesen alle drei über diese Funktionen.
+
+#: Spalten der Standard-CSV, die nie einer Investition gehören — v09 überspringt sie.
+V09_BASIS_SPALTEN: frozenset[str] = frozenset({
+    "Jahr", "Monat", "Einspeisung_kWh", "Netzbezug_kWh",
+    "PV_Erzeugung_kWh", "Batterie_Ladung_kWh", "Batterie_Entladung_kWh",
+    "Globalstrahlung_kWh_m2", "Sonnenstunden", "Notizen",
+})
+
+
+def pruefe_nicht_negativ(wert: Optional[float], spaltenname: str) -> Optional[float]:
+    """Die Vorzeichen-Regel eines Geräte-Werts im Import: negativ ⇒ Zeilenfehler.
+
+    Eine Regel, ein Ort (N-708): v09 und der `inv:`-Slot des Custom-Imports.
+    """
+    if wert is not None and wert < 0:
+        raise ValueError(f"Spalte '{spaltenname}': Wert darf nicht negativ sein ({wert})")
+    return wert
+
+
+def lies_geraete_wert(value: str, feld: dict, spaltenname: str, parse_float):
+    """Eine Zelle einer Geräte-Spalte so, wie v09 sie schreibt: Zähl-Felder (`typ: int`) ganzzahlig und ohne
+    Vorzeichen-Prüfung, alle anderen als Zahl mit `pruefe_nicht_negativ`. `None` = leer bzw. keine Zahl."""
+    if feld.get("typ", "float") == "int":
+        raw = parse_float(value)
+        return None if raw is None else int(raw)
+    return pruefe_nicht_negativ(parse_float(value), spaltenname)
+
+
 async def _upsert_investition_monatsdaten(
     db: AsyncSession,
     investition_id: int,
@@ -167,12 +202,6 @@ async def _import_investition_monatsdaten_v09(
     Raises:
         ValueError: Bei negativen Werten in kWh/km/€-Feldern
     """
-    def parse_float_positive(val: str, spaltenname: str):
-        result = parse_float(val)
-        if result is not None and result < 0:
-            raise ValueError(f"Spalte '{spaltenname}': Wert darf nicht negativ sein ({result})")
-        return result
-
     summen = {key: 0.0 for key in IMPORT_SUMMEN_KEYS}
     collected_data: dict[int, dict] = {}
 
@@ -202,18 +231,11 @@ async def _import_investition_monatsdaten_v09(
         key=len, reverse=True
     )
 
-    # Basis-CSV-Spalten überspringen
-    BASIS_SPALTEN = frozenset({
-        "Jahr", "Monat", "Einspeisung_kWh", "Netzbezug_kWh",
-        "PV_Erzeugung_kWh", "Batterie_Ladung_kWh", "Batterie_Entladung_kWh",
-        "Globalstrahlung_kWh_m2", "Sonnenstunden", "Notizen",
-    })
-
     # ── Spalten matchen und Werte sammeln ────────────────────────────────────
     for col_name, value in row.items():
         if not value or not value.strip():
             continue
-        if col_name in BASIS_SPALTEN:
+        if col_name in V09_BASIS_SPALTEN:
             continue
 
         matched_inv = None
@@ -255,18 +277,9 @@ async def _import_investition_monatsdaten_v09(
 
         # ── Wert parsen ──────────────────────────────────────────────────────
         field_key = matched_feld["feld"]
-        feld_typ = matched_feld.get("typ", "float")
-
-        if feld_typ == "int":
-            raw = parse_float(value)
-            if raw is None:
-                continue
-            field_value = int(raw)
-        else:
-            raw = parse_float_positive(value, col_name)
-            if raw is None:
-                continue
-            field_value = raw
+        field_value = lies_geraete_wert(value, matched_feld, col_name, parse_float)
+        if field_value is None:
+            continue
 
         # ── Aggregat-Summe aktualisieren ─────────────────────────────────────
         aggregiert_in = matched_feld.get("aggregiert_in")
